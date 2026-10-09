@@ -1,0 +1,43 @@
+// 02: multiple traits, `use` on its own line, nested calls, relative indentation in a body
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+    int add(int a, int b);
+}
+
+trait Counter {
+    int count();
+}
+
+struct Person {
+    char *name;
+    int age;
+}
+use Greeter, Counter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+    int add(int a, int b) {
+        if (a > 0) {
+            return a + b;
+        }
+        return b;
+    }
+}
+
+impl Counter for Person {
+    int count() {
+        return self->age;
+    }
+}
+
+int main() {
+    Person p = { .name = "N", .age = 7 };
+    p.greet();
+    int r = p.add(1, p.add(2, 3));
+    printf("%d %d\n", r, p.count());
+    return 0;
+}

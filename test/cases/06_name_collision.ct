@@ -1,0 +1,32 @@
+// 06: a method name declared by two traits resolves to the first trait in `use` order
+#include <stdio.h>
+
+trait Alpha {
+    void info();
+}
+
+trait Beta {
+    void info();
+}
+
+struct Node {
+    char *tag;
+} use Alpha, Beta;
+
+impl Alpha for Node {
+    void info() {
+        printf("alpha %s\n", self->tag);
+    }
+}
+
+impl Beta for Node {
+    void info() {
+        printf("beta %s\n", self->tag);
+    }
+}
+
+int main() {
+    Node n = { .tag = "n" };
+    n.info();
+    return 0;
+}

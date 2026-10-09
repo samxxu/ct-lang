@@ -1,0 +1,11 @@
+trader alice: coins=20
+trader bob: coins=3
+shop fruit: units=5 price=4 coins=0
+shop fruit sells 2
+shop fruit receives 8
+trader bob is short by 9
+shop fruit sells 1
+shop fruit receives 4
+trader alice: coins=6
+trader bob: coins=5
+shop fruit: units=2 price=4 coins=12

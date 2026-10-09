@@ -1,0 +1,1 @@
+error: struct 'S' does not use trait 'T'

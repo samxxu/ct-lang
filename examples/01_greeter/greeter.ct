@@ -1,0 +1,30 @@
+// greeter.ct — 最小可运行示例：一个 trait、一个 struct、一次实现、两个调用
+// 展开规则见 docs/language-spec.md；运行方式见 examples/../README.md
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Greeter {
+    void greet();
+    void greet_name(char *name);
+}
+
+struct Person {
+    char *name;
+    int age;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("Hello, I'm %s, age %d\n", self->name, self->age);
+    }
+    void greet_name(char *name) {
+        printf("Hello %s, I'm %s\n", name, self->name);
+    }
+}
+
+int main() {
+    Person p = { .name = "Tom", .age = 36 };
+    p.greet();
+    p.greet_name("Jerry");
+    return 0;
+}

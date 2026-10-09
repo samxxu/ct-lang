@@ -1,0 +1,25 @@
+// 04: signature shapes — void parameter, multi-word types, empty structs, nested braces
+#include <stddef.h>
+
+trait Hashable {
+    unsigned long hash(const char *key, unsigned len);
+    void reset(void);
+}
+
+struct Dict {
+} use Hashable;
+
+struct Empty {
+};
+
+impl Hashable for Dict {
+    unsigned long hash(const char *key, unsigned len) {
+        unsigned long h = 0;
+        while (len--) {
+            h = h * 31 + (unsigned char)*key++;
+        }
+        return h;
+    }
+    void reset(void) {
+    }
+}

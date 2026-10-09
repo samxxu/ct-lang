@@ -1,0 +1,12 @@
+trait T {
+    void f();
+}
+
+struct S {
+    int x;
+}
+
+impl T for S {
+    void f() {
+    }
+}

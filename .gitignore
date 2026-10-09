@@ -1,0 +1,17 @@
+# Build products — never committed (see AGENTS.md §2).
+# Only the root compiler binary is ignored by name; ctc.c itself stays tracked.
+/ctc
+*.o
+a.out
+
+# Generated C for the examples: each example dir carries only <name>.ct and
+# <name>.expected.out. Note that test/cases/*.expected.c and *.expected.h are
+# golden fixtures on purpose — do NOT add a global *.c / *.h rule.
+examples/*/*.c
+examples/*/*.h
+
+# Editor and OS junk
+.DS_Store
+*.swp
+*.swo
+*~

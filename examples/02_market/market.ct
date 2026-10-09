@@ -1,0 +1,131 @@
+// market.ct — 多个对象相互调用：钱包、货架、状态汇报
+//
+// 三个 trait 落在两个 struct 上：
+//   Trader 有 Purse（钱包）与 Reporter（汇报）能力
+//   Shop   有 Shelf（货架）、Purse、Reporter 能力
+// 同一个 trait 在两个类型上给出不同实现（Shop 的 spend 永远拒绝），这正是 trait 的用途。
+//
+// 对象间的交互写在普通 C 代码里（main）：取货 -> 按货架价格扣款 -> 店家入账，
+// 返回值在对象之间流转，并包含嵌套调用 `bob.earn(alice.spend(6))`。
+//
+// 注意：impl 方法体内部的 `self->m()` 不会被重写（Phase 0 只重写普通代码里的 `对象.方法()`，
+// 见 docs/language-spec.md 6.2），所以对象间的相互调用写在 main 这类普通 C 代码里。
+#include <stdio.h>
+
+trait Purse {
+    int balance();
+    int spend(int amount);
+    void earn(int amount);
+}
+
+trait Shelf {
+    int price();
+    int stock();
+    int take(int n);
+}
+
+trait Reporter {
+    void report();
+}
+
+struct Trader {
+    char *name;
+    int coins;
+} use Purse, Reporter;
+
+struct Shop {
+    char *name;
+    int price;
+    int units;
+    int coins;
+} use Shelf, Purse, Reporter;
+
+impl Purse for Trader {
+    int balance() {
+        return self->coins;
+    }
+    int spend(int amount) {
+        if (amount > self->coins) {
+            printf("trader %s is short by %d\n", self->name, amount - self->coins);
+            return 0;
+        }
+        self->coins -= amount;
+        return amount;
+    }
+    void earn(int amount) {
+        self->coins += amount;
+    }
+}
+
+impl Reporter for Trader {
+    void report() {
+        printf("trader %s: coins=%d\n", self->name, self->coins);
+    }
+}
+
+impl Shelf for Shop {
+    int price() {
+        return self->price;
+    }
+    int stock() {
+        return self->units;
+    }
+    int take(int n) {
+        if (n > self->units) {
+            n = self->units;
+        }
+        self->units -= n;
+        printf("shop %s sells %d\n", self->name, n);
+        return n;
+    }
+}
+
+impl Purse for Shop {
+    int balance() {
+        return self->coins;
+    }
+    int spend(int amount) {
+        printf("shop %s never spends %d\n", self->name, amount);
+        return 0;
+    }
+    void earn(int amount) {
+        self->coins += amount;
+        printf("shop %s receives %d\n", self->name, amount);
+    }
+}
+
+impl Reporter for Shop {
+    void report() {
+        printf("shop %s: units=%d price=%d coins=%d\n",
+               self->name, self->units, self->price, self->coins);
+    }
+}
+
+int main() {
+    Trader alice = { .name = "alice", .coins = 20 };
+    Trader bob = { .name = "bob", .coins = 3 };
+    Shop fruit = { .name = "fruit", .price = 4, .units = 5, .coins = 0 };
+
+    alice.report();
+    bob.report();
+    fruit.report();
+
+    // 一笔交易：取货 -> 按货架价格扣款 -> 货款进店家钱包
+    int n = fruit.take(2);
+    int paid = alice.spend(fruit.price() * n);
+    fruit.earn(paid);
+
+    // bob 想买 3 件，但钱不够，扣款被拒绝并返回 0
+    bob.spend(fruit.price() * 3);
+
+    // alice 借给 bob 6 枚，bob 再买 1 件：结果从一个对象喂给另一个对象
+    bob.earn(alice.spend(6));
+    n = fruit.take(1);
+    paid = bob.spend(fruit.price() * n);
+    fruit.earn(paid);
+
+    alice.report();
+    bob.report();
+    fruit.report();
+    return 0;
+}
