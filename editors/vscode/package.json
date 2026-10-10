@@ -1,0 +1,66 @@
+{
+  "name": "ct-vscode",
+  "displayName": "CT — C with Traits",
+  "description": "Syntax highlighting, snippets and language configuration for CT (C with Traits), the trait-flavoured C compiled by ctc.",
+  "version": "0.0.1",
+  "publisher": "samxxu",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "ct",
+    "c",
+    "traits",
+    "vtable",
+    "ctc",
+    "ct-lang",
+    "c with traits"
+  ],
+  "galleryBanner": {
+    "color": "#16222e",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/samxxu/ct-lang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samxxu/ct-lang.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/samxxu/ct-lang/issues"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "ct",
+        "aliases": [
+          "CT",
+          "ct",
+          "C with Traits"
+        ],
+        "extensions": [
+          ".ct"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ct",
+        "scopeName": "source.ct",
+        "path": "./syntaxes/ct.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ct",
+        "path": "./snippets/ct.json"
+      }
+    ]
+  }
+}

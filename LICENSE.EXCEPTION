@@ -25,14 +25,15 @@ including under a proprietary license.  The exception covers the generated
 output only; the ctc binary and its sources remain under the GNU GPL.
 
 
-Samples and test fixtures
--------------------------
+Samples, tests and the editor extension
+---------------------------------------
 
-Everything under examples/ and test/ — sample sources, generated expectations
-and fixtures — is licensed under the MIT license (SPDX-License-Identifier:
-MIT), so that you can copy them into your own projects freely.
+Everything under examples/, test/ and editors/ — sample sources, generated
+expectations, fixtures and the VS Code extension — is licensed under the MIT
+license (SPDX-License-Identifier: MIT), so that you can copy them into your own
+projects freely.
 
-  Copyright (c) 2026 Sam X. Xu
+  Copyright (c) 2026 Sam X. Xu <samxxu@gmail.com>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal

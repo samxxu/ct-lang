@@ -1,0 +1,83 @@
+{
+  "name": "CT",
+  "scopeName": "source.ct",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#ct-trait" },
+    { "include": "#ct-impl" },
+    { "include": "#ct-use" },
+    { "include": "#ct-self" },
+    { "include": "source.c" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "include": "#comment-line" },
+        { "include": "#comment-block" }
+      ]
+    },
+    "comment-line": {
+      "match": "//.*$",
+      "name": "comment.line.double-slash.ct"
+    },
+    "comment-block": {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.ct"
+    },
+    "strings": {
+      "patterns": [
+        { "include": "#string-double" },
+        { "include": "#string-single" }
+      ]
+    },
+    "string-double": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.ct",
+      "patterns": [
+        { "match": "\\\\.", "name": "constant.character.escape.ct" }
+      ]
+    },
+    "string-single": {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.ct",
+      "patterns": [
+        { "match": "\\\\.", "name": "constant.character.escape.ct" }
+      ]
+    },
+    "ct-trait": {
+      "match": "^\\s*(trait)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.trait.ct" },
+        "2": { "name": "entity.name.type.trait.ct" }
+      }
+    },
+    "ct-impl": {
+      "match": "^\\s*(impl)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(for)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.impl.ct" },
+        "2": { "name": "entity.name.type.trait.ct" },
+        "3": { "name": "keyword.control.ct" },
+        "4": { "name": "entity.name.type.struct.ct" }
+      }
+    },
+    "ct-use": {
+      "match": "\\b(use)\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*;",
+      "captures": {
+        "1": { "name": "keyword.other.use.ct" },
+        "2": {
+          "patterns": [
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.trait.ct" }
+          ]
+        }
+      }
+    },
+    "ct-self": {
+      "match": "\\bself\\b",
+      "name": "variable.language.self.ct"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "trait declaration": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:Name} {",
+      "\t${2:void ${3:method}();}",
+      "}"
+    ],
+    "description": "Declare a trait (ctc expands it into a <Name>_vtbl struct)"
+  },
+  "struct using traits": {
+    "prefix": "structuse",
+    "body": [
+      "struct ${1:Name} {",
+      "\t$0",
+      "} use ${2:Trait};"
+    ],
+    "description": "Declare a struct plus a use clause (comma-separate several traits)"
+  },
+  "trait implementation": {
+    "prefix": "impl",
+    "body": [
+      "impl ${1:Trait} for ${2:Struct} {",
+      "\t${3:void ${4:method}()} {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Implement a trait for a struct (self is the implicit receiver)"
+  },
+  "implemented method": {
+    "prefix": "method",
+    "body": [
+      "${1:void} ${2:name}(${3}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "A method inside an impl block; the first parameter becomes void *self"
+  },
+  "method call": {
+    "prefix": "call",
+    "body": "${1:obj}.${2:method}(${3})",
+    "description": "Trait method call (ctc turns it into vptr dispatch with &obj)"
+  }
+}
