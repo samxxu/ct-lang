@@ -32,7 +32,7 @@
  * A matching .h file is written next to the .c output.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright (C) 2026 Sam X. Xu
+ * Copyright (C) 2026 Sam X. Xu <samxxu@gmail.com>
  *
  * ctc is free software under the GNU GPL v3 or later (see LICENSE). Generated
  * output is not: the .c/.h files ctc emits carry an exception that frees them
