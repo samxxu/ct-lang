@@ -1,0 +1,68 @@
+ct / ctc output exception
+=========================
+
+ct (the language) and ctc (its compiler) are free software: you can redistribute
+and/or modify ctc under the terms of the GNU General Public License as published
+by the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version.  The full text of that license is in LICENSE.
+
+As a special exception, when this file or any part of the ctc source is copied
+by ctc into a generated output file, you may use that output file without
+restriction.  This special exception was added in version 0.0.1 of ctc and
+follows the precedent of GNU Bison, whose generated parser files carry the
+equivalent clause.
+
+In plain terms, the GNU GPL does NOT apply to:
+
+  * the .ct sources you write and hand to ctc;
+  * the .c and .h files ctc generates from them, including the boilerplate ctc
+    itself inserts (the vtable structs, the `__<trait>_vptr` fields, the
+    `_self` cast line and the vtable variables);
+  * the programs you build from that generated code.
+
+You may license your own .ct sources and the generated output however you like,
+including under a proprietary license.  The exception covers the generated
+output only; the ctc binary and its sources remain under the GNU GPL.
+
+
+Samples and test fixtures
+-------------------------
+
+Everything under examples/ and test/ — sample sources, generated expectations
+and fixtures — is licensed under the MIT license (SPDX-License-Identifier:
+MIT), so that you can copy them into your own projects freely.
+
+  Copyright (c) 2026 Sam X. Xu
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+
+Why this file exists
+--------------------
+
+ctc is a source-to-source compiler: it copies your C through verbatim and also
+inserts boilerplate of its own.  Whether compiler output counts as a derivative
+work of the compiler is debated, and a code generator released under the GPL
+should not leave its users guessing, so the exception above states it
+explicitly.  GNU Bison solves the same problem the same way:
+
+    /* As a special exception, when this file is copied by Bison into a
+       Bison output file, you may use that output file without restriction.
+       This special exception was added by the Free Software Foundation
+       in version 1.24 of Bison. */
