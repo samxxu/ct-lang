@@ -53,6 +53,11 @@
 - 候选：`ct-pkg`（直白）、`ctpm`（类比 npm），或像 `cargo` / `dub` / `mix` 那样的独立品牌词（辨识度高，但新人不易联想到它是 ct 的包管理器）。
 - **registry 与组织名要趁早占位**：`github.com/ct-lang`（2022 年注册）与 `github.com/ctlang`（2019 年注册）两个用户名均已被闲置账号占用（各 1 个仓库、0 关注），要做组织需另选名字。
 
+#### 许可（已定并已落地）
+
+- **编译器本体** GPL-3.0-or-later（`LICENSE`）；**`.ct` 源码与生成物不受 GPL 约束**（`LICENSE.EXCEPTION`，照 GNU Bison 先例，且随产物走）；**`examples/` 与 `test/` 为 MIT**。
+- 例外不是可选项：ctc 会往产物里插入样板（vtable 结构体、vptr 字段、`_self` 强转行），"编译器输出是否构成衍生作品"存在歧义——不写例外，使用者（尤其公司法务）无法判断，等于挡住采用。
+
 ### Phase 0（已完成）
 
 范围：`trait` 定义、`struct … use`、`impl … for`、指定初始化列表、`p.m(...)` 调用重写、
@@ -211,6 +216,15 @@ and update the build/invocation paths in `test/run.sh`.
 - **Claim the registry and organisation names early.** Both `github.com/ct-lang` (registered 2022) and
   `github.com/ctlang` (registered 2019) are held by dormant accounts with one repository and no
   followers, so an organisation needs a different name.
+
+#### License (decided and shipped)
+
+- The **compiler** is GPL-3.0-or-later (`LICENSE`); **`.ct` sources and the generated output are not
+  covered by the GPL** (`LICENSE.EXCEPTION`, following the GNU Bison precedent and travelling with the
+  output); **`examples/` and `test/` are MIT**.
+- The exception is not optional: ctc inserts boilerplate of its own into the output (vtable structs,
+  vptr fields, the `_self` cast line), so whether compiler output counts as a derivative work is
+  ambiguous — leaving it unstated blocks adoption, especially with corporate legal review.
 
 ### Phase 0.1 — fixes and regression tests
 

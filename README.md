@@ -234,6 +234,16 @@ ct/
 - [docs/architecture.md](docs/architecture.md) —— 内部实现
 - [docs/roadmap.md](docs/roadmap.md) —— 后续阶段
 
+### 9. 许可
+
+| 对象 | 许可 |
+| --- | --- |
+| 编译器本体（`ctc.c`、`ctc`） | **GPL-3.0-or-later**，全文见 [LICENSE](LICENSE) |
+| 你的 `.ct` 源码、ctc 生成的 `.c`/`.h`、以及用它们构建的程序 | **不受 GPL 约束**，可任意许可、可闭源分发，见 [LICENSE.EXCEPTION](LICENSE.EXCEPTION) |
+| `examples/` 与 `test/` 下的示例与夹具 | **MIT**（方便直接抄进你自己的项目） |
+
+ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`_self` 强转行），而"编译器输出算不算衍生作品"本有争议，因此这里照 GNU Bison 的先例**显式声明例外**，并让它**随产物走**——每条生成的 `.c`/`.h` 都在 banner 里重复这句话。
+
 ---
 
 ## English
@@ -378,3 +388,17 @@ Implementation limits:
 - [docs/language-spec.md](docs/language-spec.md) — language specification
 - [docs/architecture.md](docs/architecture.md) — implementation internals
 - [docs/roadmap.md](docs/roadmap.md) — phase plan
+
+### 8. License
+
+| What | License |
+| --- | --- |
+| The compiler itself (`ctc.c`, `ctc`) | **GPL-3.0-or-later**, full text in [LICENSE](LICENSE) |
+| Your `.ct` sources, the `.c`/`.h` ctc generates from them, and the programs you build from that code | **not covered by the GPL** — license them however you like, including closed source; see [LICENSE.EXCEPTION](LICENSE.EXCEPTION) |
+| Everything under `examples/` and `test/` | **MIT**, so you can copy the samples straight into your own projects |
+
+ctc inserts boilerplate of its own into the output (vtable structs, `__<trait>_vptr`
+fields, the `_self` cast line), and whether compiler output counts as a derivative
+work is debated. So ctc states the exception explicitly, following the GNU Bison
+precedent, and makes it **travel with the output**: every generated `.c`/`.h`
+repeats that sentence in its banner.

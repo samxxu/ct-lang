@@ -19,6 +19,7 @@
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
 | 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/` 与 `test/` 为 MIT |
 | 当前阶段 | Phase 0：只做结构转换，不做类型检查、不做优化、不做错误恢复 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
@@ -29,6 +30,7 @@
 | `ctc.c` | 源码，全部实现 | ✅ 唯一需要改的实现文件 |
 | `examples/**` | 源码：可运行示例（`<name>.ct` + `<name>.expected.out`） | ✅ 新增语法时同步扩充；生成物不入库 |
 | `test/**` | 测试：用例、golden 基线、runner | ✅ 可改；`*.expected.*` 只能用 `./ctc` 重新生成 |
+| `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
 | `ctc`、生成的 `.c`/`.h`、`.o` | 编译产物 | ❌ 不入库 |
 
@@ -106,6 +108,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - 禁止为了让示例通过而修改 `examples/**/*.ct` 的语义（可以扩充，不可以削弱）。
 - 禁止吞掉错误、禁止静默截断、禁止 `TODO` 空实现留在主路径上。
 - 禁止把项目名 `ct`、当前命令 `ctc` 或后缀 `.ct` 改成 `ct-lang` / `ctlang` / `.ctlang`（`ct-lang` 只是仓库名）。唯一被认可的演进是 roadmap 里已定的「单入口 `ct` + `ctc` 兼容别名」，不得自行发明其它名字。
+- 禁止删除或改写生成物 banner 里的许可声明行，也禁止移除 `ctc.c` 顶部的 SPDX / 版权 / 例外说明——输出例外必须**随产物走**（见 `LICENSE.EXCEPTION`）。
 - 禁止提交二进制文件、`.o`、临时文件。
 
 ### 8. 提交规范
@@ -149,6 +152,7 @@ user before changing code**.
 | Dependencies | None. libc only (`stdio`, `stdlib`, `string`, `ctype`, `stdarg`) |
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
 | Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
+| License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/` and `test/` are MIT |
 | Stage | Phase 0 — structure rewriting only: no type checking, no optimisation, no error recovery |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
@@ -159,6 +163,7 @@ user before changing code**.
 | `ctc.c` | Source, the whole implementation | ✅ the only implementation file to change |
 | `examples/**` | Source: runnable demos (`<name>.ct` + `<name>.expected.out`) | ✅ extend when adding syntax; generated files are not committed |
 | `test/**` | Tests: cases, golden baselines, runner | ✅ editable; `*.expected.*` may only be regenerated |
+| `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
 | `ctc`, generated `.c`/`.h`, `.o` | Build products | ❌ never commit |
 
@@ -243,6 +248,9 @@ Also required:
   `ctlang` / `.ctlang` (`ct-lang` is only the repository name). The one sanctioned evolution is the
   decided "single-entry `ct` with `ctc` as a compatibility alias" recorded in the roadmap — do not
   invent other names.
+- Never delete or reword the license line in the generated banner, and never strip the SPDX /
+  copyright / exception notice at the top of `ctc.c` — the output exception must **travel with the
+  output** (see `LICENSE.EXCEPTION`).
 - No committing binaries, object files, or temporary files.
 
 ### 8. Commits

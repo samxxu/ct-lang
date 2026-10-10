@@ -1,5 +1,6 @@
 // greeter.ct — 最小可运行示例：一个 trait、一个 struct、一次实现、两个调用
 // 展开规则见 docs/language-spec.md；运行方式见 examples/../README.md
+// License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
 #include <stdio.h>
 #include <stdlib.h>
 

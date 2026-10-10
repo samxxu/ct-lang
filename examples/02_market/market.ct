@@ -10,6 +10,7 @@
 //
 // 注意：impl 方法体内部的 `self->m()` 不会被重写（Phase 0 只重写普通代码里的 `对象.方法()`，
 // 见 docs/language-spec.md 6.2），所以对象间的相互调用写在 main 这类普通 C 代码里。
+// License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
 #include <stdio.h>
 
 trait Purse {
