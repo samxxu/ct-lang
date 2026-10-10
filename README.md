@@ -190,6 +190,12 @@ test/
 
 `test/cases/*.expected.*` 是 golden 基线，**只能**用 `./ctc <case>.ct -o <case>.expected.c` 重新生成后人工核对，禁止手写；`examples/**/*.expected.out` 同理（见 [AGENTS.md](AGENTS.md) 第 6 节）。`test/cases/01_trait_basic.ct` 与 `examples/01_greeter/greeter.ct` 内容相同，但前者做生成物逐字节比对、后者做运行结果比对，两者互补。
 
+VS Code 插件另有一份独立的语法冒烟测试，校验的是高亮规则而不是编译器，因此不进 `./test/run.sh`：
+
+```bash
+python3 editors/vscode/test/check-grammar.py   # 13 项断言；退出码 0 = 通过
+```
+
 ### 6. 目录结构
 
 ```
@@ -199,7 +205,10 @@ ct/
 │   ├── 01_greeter/           greeter.ct + greeter.expected.out
 │   └── 02_market/            market.ct  + market.expected.out
 ├── test/                     测试：runner、白盒单测、golden 正例与负例
+├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
 ├── .gitignore                忽略构建产物与 examples 下的生成物
+├── LICENSE                   GPL-3.0 全文（编译器本体）
+├── LICENSE.EXCEPTION         输出例外 + examples/test/editors 的 MIT
 ├── README.md                 本文件
 ├── AGENTS.md                 给 AI 编码代理的项目规约
 └── docs/
@@ -240,9 +249,15 @@ ct/
 | --- | --- |
 | 编译器本体（`ctc.c`、`ctc`） | **GPL-3.0-or-later**，全文见 [LICENSE](LICENSE) |
 | 你的 `.ct` 源码、ctc 生成的 `.c`/`.h`、以及用它们构建的程序 | **不受 GPL 约束**，可任意许可、可闭源分发，见 [LICENSE.EXCEPTION](LICENSE.EXCEPTION) |
-| `examples/` 与 `test/` 下的示例与夹具 | **MIT**（方便直接抄进你自己的项目） |
+| `examples/`、`test/` 与 `editors/vscode/`（VS Code 插件） | **MIT**（方便直接抄进你自己的项目） |
 
 ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`_self` 强转行），而"编译器输出算不算衍生作品"本有争议，因此这里照 GNU Bison 的先例**显式声明例外**，并让它**随产物走**——每条生成的 `.c`/`.h` 都在 banner 里重复这句话。
+
+### 10. 联系
+
+- 作者：Sam X. Xu
+- 邮箱：samxxu@gmail.com
+- 问题、建议与 bug：优先开 [Issue](https://github.com/samxxu/ct-lang/issues)，这样答案能被别人搜到；不适合公开的内容再发邮件。
 
 ---
 
@@ -366,6 +381,13 @@ applies to `examples/**/*.expected.out` (see [AGENTS.md](AGENTS.md) §6).
 former asserts a byte-identical expansion while the latter asserts runtime output — they complement
 each other.
 
+The VS Code extension carries its own smoke test for the highlighting rules. It checks the extension,
+not the compiler, so it is deliberately not part of `./test/run.sh`:
+
+```bash
+python3 editors/vscode/test/check-grammar.py   # 13 checks; exit code 0 means it passed
+```
+
 ### 6. Known limitations
 
 Not supported by design (Phase 0): namespaces, visibility modifiers, generics, inheritance,
@@ -395,10 +417,16 @@ Implementation limits:
 | --- | --- |
 | The compiler itself (`ctc.c`, `ctc`) | **GPL-3.0-or-later**, full text in [LICENSE](LICENSE) |
 | Your `.ct` sources, the `.c`/`.h` ctc generates from them, and the programs you build from that code | **not covered by the GPL** — license them however you like, including closed source; see [LICENSE.EXCEPTION](LICENSE.EXCEPTION) |
-| Everything under `examples/` and `test/` | **MIT**, so you can copy the samples straight into your own projects |
+| Everything under `examples/`, `test/` and `editors/vscode/` (the VS Code extension) | **MIT**, so you can copy the samples straight into your own projects |
 
 ctc inserts boilerplate of its own into the output (vtable structs, `__<trait>_vptr`
 fields, the `_self` cast line), and whether compiler output counts as a derivative
 work is debated. So ctc states the exception explicitly, following the GNU Bison
 precedent, and makes it **travel with the output**: every generated `.c`/`.h`
 repeats that sentence in its banner.
+
+### 9. Contact
+
+- Author: Sam X. Xu
+- Email: samxxu@gmail.com
+- Questions, suggestions and bugs: please open an [issue](https://github.com/samxxu/ct-lang/issues) first, so the answer stays searchable for everyone; email me directly for anything that should not be public.

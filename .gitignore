@@ -15,3 +15,7 @@ examples/*/*.h
 *.swp
 *.swo
 *~
+
+# VS Code extension packaging output (editors/vscode)
+*.vsix
+editors/**/node_modules/

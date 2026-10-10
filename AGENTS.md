@@ -19,7 +19,7 @@
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
 | 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
-| 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/` 与 `test/` 为 MIT |
+| 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
 | 当前阶段 | Phase 0：只做结构转换，不做类型检查、不做优化、不做错误恢复 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
@@ -30,6 +30,7 @@
 | `ctc.c` | 源码，全部实现 | ✅ 唯一需要改的实现文件 |
 | `examples/**` | 源码：可运行示例（`<name>.ct` + `<name>.expected.out`） | ✅ 新增语法时同步扩充；生成物不入库 |
 | `test/**` | 测试：用例、golden 基线、runner | ✅ 可改；`*.expected.*` 只能用 `./ctc` 重新生成 |
+| `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
 | `ctc`、生成的 `.c`/`.h`、`.o` | 编译产物 | ❌ 不入库 |
@@ -39,6 +40,8 @@
 - 生成的 `.c` 必须**自包含**（不 `#include` 生成的 `.h`），保证生成物可单独编译。
 - 生成的头文件只放类型（trait vtable、struct 定义），不放 `static` 函数/变量。
 - 不引入任何第三方库、构建系统、代码生成脚本。
+- `editors/**` 必须保持**纯声明式 JSON**：无构建步骤、无 npm 依赖、无需打包器，改完可直接
+  `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、不调用 `ctc`。
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
 
 ### 3. 代码风格
@@ -97,6 +100,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   `test/errors` 负例诊断（必须非 0 退出，且带 `文件:行:列: error:` 前缀）。`CC=gcc ./test/run.sh` 可换编译器。
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
+- **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
+  `python3 editors/vscode/test/check-grammar.py`（13 项断言，必须全绿）。它校验插件而不是编译器，
+  因此**不进** `./test/run.sh`；反过来它也不能替代手工三件套。
 - **诚实报告**：验证失败就如实说失败并贴原始输出，不允许把「没跑」说成「通过」；
   更不允许靠改 golden 基线或 `.expected.out` 来「修」失败——只有在确认编译器行为变更是有意为之之后，才重新生成它们。
 
@@ -109,6 +115,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - 禁止吞掉错误、禁止静默截断、禁止 `TODO` 空实现留在主路径上。
 - 禁止把项目名 `ct`、当前命令 `ctc` 或后缀 `.ct` 改成 `ct-lang` / `ctlang` / `.ctlang`（`ct-lang` 只是仓库名）。唯一被认可的演进是 roadmap 里已定的「单入口 `ct` + `ctc` 兼容别名」，不得自行发明其它名字。
 - 禁止删除或改写生成物 banner 里的许可声明行，也禁止移除 `ctc.c` 顶部的 SPDX / 版权 / 例外说明——输出例外必须**随产物走**（见 `LICENSE.EXCEPTION`）。
+- 禁止给 `editors/**` 引入构建步骤、npm 依赖或打包器（见第 2 节硬性边界）。
 - 禁止提交二进制文件、`.o`、临时文件。
 
 ### 8. 提交规范
@@ -132,6 +139,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - [ ] `examples/**` 增加或更新示例，生成物重新展开并人工核对，`.expected.out` 同步更新
 - [ ] `test/cases` 增加 golden 用例（基线用 `./ctc <case>.ct -o <case>.expected.c` 重新生成并人工核对，禁止手写），负例补进 `test/errors`
 - [ ] 三件套验证通过，且 `./test/run.sh` 全绿
+- [ ] `editors/vscode/syntaxes/ct.tmLanguage.json` 覆盖了新构造，`python3 editors/vscode/test/check-grammar.py` 全绿
 - [ ] `README.md` / `docs/language-spec.md` 已同步
 
 ---
@@ -152,7 +160,7 @@ user before changing code**.
 | Dependencies | None. libc only (`stdio`, `stdlib`, `string`, `ctype`, `stdarg`) |
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
 | Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
-| License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/` and `test/` are MIT |
+| License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
 | Stage | Phase 0 — structure rewriting only: no type checking, no optimisation, no error recovery |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
@@ -163,6 +171,7 @@ user before changing code**.
 | `ctc.c` | Source, the whole implementation | ✅ the only implementation file to change |
 | `examples/**` | Source: runnable demos (`<name>.ct` + `<name>.expected.out`) | ✅ extend when adding syntax; generated files are not committed |
 | `test/**` | Tests: cases, golden baselines, runner | ✅ editable; `*.expected.*` may only be regenerated |
+| `editors/**` | Editor extensions: `editors/vscode/` (VS Code, declarative JSON) | ✅ editable; see the hard boundaries below |
 | `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
 | `ctc`, generated `.c`/`.h`, `.o` | Build products | ❌ never commit |
@@ -173,6 +182,9 @@ Hard boundaries:
   compiles on its own.
 - The generated header carries types only (trait vtables, struct definitions) — no `static` code.
 - No third-party libraries, build systems, or code-generation scripts.
+- `editors/**` must stay **declarative JSON only**: no build step, no npm dependencies, no bundler —
+  `npx @vscode/vsce package` must work as-is. Extensions cover highlighting and editing comfort
+  only; they do not validate syntax and do not invoke `ctc`.
 - Do not change published naming rules (`<Trait>_vtbl`, `__<trait>_vptr`, `<Struct>_<Trait>_<method>`,
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
 
@@ -232,6 +244,10 @@ Also required:
 - **The manual three-step check stays required** — the suite's internal paths differ from the commands
   you type, so run the three commands above yourself and paste the output.
 - **New or changed syntax needs new cases** — see the checklist in §9.
+- **Editor side**: a syntax change must be mirrored in `editors/vscode/syntaxes/ct.tmLanguage.json`,
+  and `python3 editors/vscode/test/check-grammar.py` (13 assertions) must be green. It checks the
+  extension, not the compiler, so it stays **out** of `./test/run.sh` — and it never replaces the
+  manual three-step check.
 - **Report honestly**: never claim an unrun check passed, and never "fix" a failure by editing a
   golden baseline or an `.expected.out`. Regenerate them only after confirming the behaviour change
   was intended.
@@ -251,6 +267,7 @@ Also required:
 - Never delete or reword the license line in the generated banner, and never strip the SPDX /
   copyright / exception notice at the top of `ctc.c` — the output exception must **travel with the
   output** (see `LICENSE.EXCEPTION`).
+- No build step, npm dependencies, or bundler under `editors/**` (see the hard boundaries in §2).
 - No committing binaries, object files, or temporary files.
 
 ### 8. Commits
@@ -268,4 +285,6 @@ Also required:
 - [ ] `examples/**` extended or updated, regenerated and reviewed, `.expected.out` refreshed
 - [ ] `test/cases` extended with golden cases (regenerate baselines with `./ctc <case>.ct -o <case>.expected.c` and review them — never hand-write them); negative cases go to `test/errors`
 - [ ] The three-step verification passes **and** `./test/run.sh` is green
+- [ ] `editors/vscode/syntaxes/ct.tmLanguage.json` covers the new construct and
+      `python3 editors/vscode/test/check-grammar.py` is green
 - [ ] `README.md` and `docs/language-spec.md` updated
