@@ -43,6 +43,7 @@
 - `editors/**` 必须保持**纯声明式 JSON**：无构建步骤、无 npm 依赖、无需打包器，改完可直接
   `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、不调用 `ctc`。
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
+- `docs/design/` 下是**未实现的设计草案**（如自举的目标目录结构），不是实现依据；不要照着草案创建目录或文件。
 
 ### 3. 代码风格
 
@@ -187,6 +188,8 @@ Hard boundaries:
   only; they do not validate syntax and do not invoke `ctc`.
 - Do not change published naming rules (`<Trait>_vtbl`, `__<trait>_vptr`, `<Struct>_<Trait>_<method>`,
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
+- `docs/design/` holds **unimplemented design drafts** (e.g. the bootstrap target layout) — they are
+  not a mandate to implement anything; never create directories or files from a draft.
 
 ### 3. Code style
 

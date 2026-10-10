@@ -212,9 +212,11 @@ ct/
 ├── README.md                 本文件
 ├── AGENTS.md                 给 AI 编码代理的项目规约
 └── docs/
-    ├── language-spec.md      .ct 语法规范与展开规则
+    ├── vision.md             定位、设计原则与生态策略（为什么）
+    ├── roadmap.md            阶段规划、已定决策与验收标准（接下来做什么）
+    ├── language-spec.md      .ct 语法规范与展开规则（现状）
     ├── architecture.md       编译器内部结构与关键算法
-    └── roadmap.md            阶段规划与验收标准
+    └── design/bootstrap.md   自举设计草案（Phase 3，未实现）
 ```
 
 展开产物（`.c` / `.h`、可执行文件）一律不入库，写到临时目录或按需生成。
@@ -239,9 +241,11 @@ ct/
 ### 8. 相关文档
 
 - [AGENTS.md](AGENTS.md) —— 改动边界、代码风格、验证流程
+- [docs/vision.md](docs/vision.md) —— 定位、设计原则与生态策略
+- [docs/roadmap.md](docs/roadmap.md) —— 后续阶段与已定决策
 - [docs/language-spec.md](docs/language-spec.md) —— 语法规范
 - [docs/architecture.md](docs/architecture.md) —— 内部实现
-- [docs/roadmap.md](docs/roadmap.md) —— 后续阶段
+- [docs/design/bootstrap.md](docs/design/bootstrap.md) —— 自举设计草案（Phase 3，未实现）
 
 ### 9. 许可
 
@@ -341,9 +345,76 @@ never committed.
 | Directory | What it shows |
 | --- | --- |
 | [examples/01_greeter/](examples/01_greeter/greeter.ct) | The minimal case: one trait, one struct, one impl, calls with and without arguments |
-| [examples/02_market/](examples/02_market/market.ct) | Three traits, two structs, three objects: the same trait implemented differently per type, values flowing between objects, and a nested call (`bob.earn(alice.spend(6))`) |
+| [examples/02_market/](examples/02_market/market.ct) | Three traits, two structs, three objects: the same trait implemented differently per type, values flowing between objects, and a nested call (`bob.earn(alice.spend(6))`); compiling `examples/02_market/market.ct` yields 11 lines of output |
 
 `./test/run.sh` builds and runs every example and compares its output with the committed expectation.
+
+`examples/01_greeter/greeter.ct`:
+
+```c
+trait Greeter {
+    void greet();
+    void greet_name(char *name);
+}
+
+struct Person {
+    char *name;
+    int age;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("Hello, I'm %s, age %d\n", self->name, self->age);
+    }
+    void greet_name(char *name) {
+        printf("Hello %s, I'm %s\n", name, self->name);
+    }
+}
+
+int main() {
+    Person p = { .name = "Tom", .age = 36 };
+    p.greet();
+    p.greet_name("Jerry");
+    return 0;
+}
+```
+
+The core of the generated expansion:
+
+```c
+struct Greeter_vtbl {
+    void (*greet)(void *);
+    void (*greet_name)(void *, char *);
+};
+
+struct Person {
+    char *name;
+    int age;
+    struct Greeter_vtbl *__greeter_vptr;
+};
+
+static void Person_Greeter_greet(void *self) {
+    struct Person *_self = (struct Person *)self;
+    printf("Hello, I'm %s, age %d\n", _self->name, _self->age);
+}
+
+static void Person_Greeter_greet_name(void *self, char *name) {
+    struct Person *_self = (struct Person *)self;
+    printf("Hello %s, I'm %s\n", name, _self->name);
+}
+
+static struct Greeter_vtbl Person_Greeter_vtable = {
+    .greet = Person_Greeter_greet,
+    .greet_name = Person_Greeter_greet_name
+};
+
+int main() {
+    struct Person p = { .name = "Tom", .age = 36, .__greeter_vptr = &Person_Greeter_vtable };
+    p.__greeter_vptr->greet(&p);
+    p.__greeter_vptr->greet_name(&p, "Jerry");
+    return 0;
+}
+```
 
 ### 5. Tests
 
@@ -388,7 +459,33 @@ not the compiler, so it is deliberately not part of `./test/run.sh`:
 python3 editors/vscode/test/check-grammar.py   # 13 checks; exit code 0 means it passed
 ```
 
-### 6. Known limitations
+### 6. Directory layout
+
+```
+ct/
+├── ctc.c                     the whole compiler (single file, no third-party dependencies)
+├── examples/                 runnable demos, one directory per example
+│   ├── 01_greeter/           greeter.ct + greeter.expected.out
+│   └── 02_market/            market.ct  + market.expected.out
+├── test/                     tests: runner, white-box unit tests, golden positives and negatives
+├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
+├── .gitignore                ignores build products and the files generated under examples
+├── LICENSE                   GPL-3.0 full text (the compiler itself)
+├── LICENSE.EXCEPTION         the output exception + MIT for examples/test/editors
+├── README.md                 this file
+├── AGENTS.md                 the project contract for AI coding agents
+└── docs/
+    ├── vision.md             positioning, design principles and ecosystem strategy (the why)
+    ├── roadmap.md            phase plan, decided decisions and acceptance criteria (what is next)
+    ├── language-spec.md      .ct grammar and expansion rules (current state)
+    ├── architecture.md       compiler internals and key algorithms
+    └── design/bootstrap.md   bootstrap design draft (Phase 3, not implemented)
+```
+
+Expanded artifacts (`.c` / `.h`, executables) are never committed; write them to a temporary
+directory or generate them on demand.
+
+### 7. Known limitations
 
 Not supported by design (Phase 0): namespaces, visibility modifiers, generics, inheritance,
 multi-file compilation, type checking, error recovery, nested definitions.
@@ -401,17 +498,20 @@ Implementation limits:
 - Pointer declarations (`Person *p = &a;`) are qualified correctly into `struct Person *p = &a;`,
   but pointer variables are not registered, so `p->greet()` is never rewritten — Phase 0 only
   recognises the `p.greet()` form.
-- The variable table has no scoping, and multi-line call statements are not rewritten.
+- The variable table has no scoping, so a same-named variable in a later function resolves to the
+  earlier entry; multi-line call statements are not rewritten.
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
 
-### 7. Documentation
+### 8. Documentation
 
 - [AGENTS.md](AGENTS.md) — change boundaries, code style, verification workflow
+- [docs/vision.md](docs/vision.md) — positioning, design principles, ecosystem strategy
+- [docs/roadmap.md](docs/roadmap.md) — phase plan and decided design decisions
 - [docs/language-spec.md](docs/language-spec.md) — language specification
 - [docs/architecture.md](docs/architecture.md) — implementation internals
-- [docs/roadmap.md](docs/roadmap.md) — phase plan
+- [docs/design/bootstrap.md](docs/design/bootstrap.md) — bootstrap design draft (Phase 3, not implemented)
 
-### 8. License
+### 9. License
 
 | What | License |
 | --- | --- |
@@ -425,7 +525,7 @@ work is debated. So ctc states the exception explicitly, following the GNU Bison
 precedent, and makes it **travel with the output**: every generated `.c`/`.h`
 repeats that sentence in its banner.
 
-### 9. Contact
+### 10. Contact
 
 - Author: Sam X. Xu
 - Email: samxxu@gmail.com

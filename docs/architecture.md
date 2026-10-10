@@ -164,85 +164,140 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 
 ### 1. Design goals
 
-Single file (`gcc ctc.c -o ctc`), readable end to end with no third-party code, structure rewriting
-only (no type checking, no AST, no optimisation), predictable and human-readable C output, and
-fail-loud diagnostics with line/column information.
+Single file — everything lives in `ctc.c` and `gcc ctc.c -o ctc` builds it in one step. Readable end
+to end — no third-party dependencies, no generated code, no build system, kept within roughly a
+thousand lines. Structure rewriting only — recognise and rewrite, with no type checking, no semantic
+analysis and no optimisation. Readable output — plain C with predictable naming and clean
+indentation, meant to be read and debugged by a human. Fail loud — unparseable input exits with a
+line/column error and never silently produces bad code (a few truncations excepted, see §7).
+
+Non-goals: full C parsing (no token stream, no AST), error recovery, multiple files, and a
+cross-platform build system.
 
 ### 2. Data flow
 
-`read_file()` loads the whole source into `g_src`; `write_guard()` emits the header guard; the main
-loop then walks the buffer. Each iteration checks whether the current line starts a top-level
-construct (`trait`, `struct` followed by `{`, `impl`) and dispatches to `parse_trait` / `parse_struct`
-/ `parse_impl`, which emit straight into the output files. Everything else goes through
-`emit_raw_line`, which passes `#` lines through untouched and otherwise runs `transform_line`
+`read_file()` loads the whole source into `g_src` (`g_len`), normalising CRLF to LF; `write_guard()`
+emits the header guard (the guard name goes into `g_guard`); the main loop then walks the buffer.
+Each iteration takes the start of the current line (skipping spaces and tabs) and checks whether it
+opens a top-level construct (`trait`, `struct` followed by `{`, `impl`), dispatching to `parse_trait`
+/ `parse_struct` / `parse_impl`, which emit straight into the output files. Everything else goes
+through `emit_raw_line`, which passes `#` lines through untouched and otherwise runs `transform_line`
 (`try_var_decl` for declarations, then `transform_calls` for method calls). A final
-`#endif /* GUARD */` closes the header.
+`#endif /* GUARD */` closes the header, and both files are closed.
 
 Single-pass streaming is deliberate: output order equals source order, so the generated file reads
-like the original. The price is the absence of forward references, which is why traits must precede
-structs and impls must precede the functions that call them.
+like the original (trait expansions still precede structs, and impl static functions still precede
+`main`). The price is the absence of forward references, which is why traits must precede structs
+and impls must precede the functions that call them.
 
-### 3. Function roster
+### 3. Function sections (kept in the same order in the code)
 
-Utilities (`xmalloc`, `xstrndup`, `die`, `trim`, `to_lower`, `Buf`), source scanning (`word_at`,
-`skip_literal`, `skip_comment`, `skip_ws_comments`, `read_ident`, `match_delim`), symbol tables
-(`find_trait`, `find_struct`, `struct_uses`, `find_var`, `resolve_method`), signature parsing
-(`is_type_keyword`, `param_type_only`, `parse_params`, `split_decl`), emitters (`emit_trait_def`,
-`emit_struct_def`, `replace_self`, `emit_body`), construct parsers (`parse_trait`, `parse_struct`,
-`parse_impl`), line rewriting (`line_literal_end`, `line_match_paren`, `is_designated_list`,
-`transform_calls`, `try_var_decl`, `transform_line`, `emit_raw_line`), and the driver (`usage`,
-`default_output`, `header_path`, `write_guard`, `read_file`, `main`).
+| Section | Functions | Responsibility |
+| --- | --- | --- |
+| Utilities | `xmalloc` `xstrndup` `is_ident_char` | memory and character checks; failures exit immediately |
+| | `die` | the single error exit: converts a byte offset into `line:col`, then `exit(1)` |
+| | `trim` `trim_right_len` `to_lower` | string chores |
+| | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | dynamic string buffer, the main output vehicle of line rewriting |
+| Source scanning | `word_at` | word-boundary matching, replacing bare `strncmp`, so `structx` is not misread |
+| | `skip_literal` `skip_comment` `skip_ws_comments` | skip string/char literals and comments; text inside literals is never rewritten |
+| | `read_ident` | read an identifier (silently truncated when overlong) |
+| | `match_delim` | delimiter matching over `g_src`, automatically skipping literals and comments |
+| Symbol tables | `find_trait` `find_struct` `struct_uses` `find_var` | linear lookups (the scale is small, so no hashing) |
+| | `resolve_method` | find the trait a method belongs to, following the struct's `use` order |
+| Signature parsing | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | split `int add(int a, int b)` into ret / name / params / a parameter-type table |
+| Emitters | `emit_trait_def` `emit_struct_def` | generate vtable types and struct definitions (writing both `.c` and `.h`) |
+| | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments) |
+| | `emit_body` | strip the common indentation and re-layout method bodies on a uniform 4-space base |
+| Construct parsers | `parse_trait` `parse_struct` `parse_impl` | recognition, validation and generation of the three top-level constructs |
+| Line rewriting | `line_literal_end` `line_match_paren` `is_designated_list` | in-line (stack-string) versions of literal skipping, paren matching and initialiser-list detection |
+| | `transform_calls` | the single-line state machine that rewrites method calls |
+| | `try_var_decl` | recognise `Type var = {...}`, rewrite the declaration and register the variable |
+| | `transform_line` `emit_raw_line` | chain the two steps above and write the line out |
+| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `main` | command line, path derivation, file I/O and the main loop |
 
-### 4. Data structures
+### 4. Data structures and symbol tables
 
-`Method` (ret/name/verbatim params/type-only params), `Trait`, `Struct` (name + used traits),
-`Var` (name → struct index) and `ImplMethod` (name, params, and a `g_src` offset/length pair, so
-method bodies are never copied until they are emitted). Three global tables — `g_traits`,
-`g_structs`, `g_vars` — are flat arrays with fixed capacities. The variable table has no scope and no
-type discipline; it is the biggest semantic approximation in the compiler.
+```c
+Method { ret, name, params(verbatim), ptypes[][](types only), nparams }
+Trait  { name, m[MAX_METHOD], nm }
+Struct { name, use_t[MAX_TRAITS][], nu }
+Var    { name, s }              /* s is an index into g_structs */
+ImplMethod { name, params, bstart, blen }   /* the body is stored as offset+length into g_src, never copied */
+```
+
+- Three global tables: `g_traits` / `g_structs` / `g_vars`; the capacities are listed in §7 of
+  `language-spec.md`.
+- The variable table is a flat name → struct-index map — no scope, no block levels, and once
+  registered an entry lives forever. It is the biggest semantic approximation in the compiler today.
+- Impl method bodies are not copied; only their range in `g_src` is recorded. The single copy through
+  `Buf` happens only when the body is actually emitted and `self` has to be rewritten.
 
 ### 5. Key algorithms
 
-- **Delimiter matching** (`match_delim`) counts nesting depth while skipping literals and comments,
-  which is what makes it safe to span arbitrary method bodies.
-- **Signature extraction** (`split_decl`, `parse_params`, `param_type_only`) takes the last identifier
-  before `(` as the method name, splits parameters on top-level commas, treats a lone `void` as no
-  parameters, and derives vtable types by dropping the trailing identifier unless it is a type
-  keyword (`unsigned int` survives, `char *name` becomes `char *`).
-- **Body formatting** (`emit_body`) replaces `self` at token level, then strips the minimum
-  indentation of non-blank lines and re-indents with a 4-space base, preserving relative nesting.
-- **Declaration rewriting** (`try_var_decl`) recognises lines that start with a known struct type
-  (optionally already qualified with `struct`), registers the variable, and appends vptr designators
-  only when the initialiser is empty or fully designated.
-- **Call rewriting** (`transform_calls`) is a single-line state machine: it skips literals and
-  comments, looks identifiers up in the variable table, and rewrites `x.m(args)` into
-  `x.__t_vptr->m(&x, args)`, continuing the scan inside non-empty argument lists so nested calls are
-  handled recursively.
+- **Delimiter matching** (`match_delim`) counts nesting depth from a `{` / `(`, delegating `"` `'` to
+  `skip_literal` and `//` `/*` to `skip_comment`, so brackets inside comments or strings never break
+  pairing — which is what makes it safe to span arbitrary method bodies.
+- **Signature extraction** (`split_decl` + `parse_params` + `param_type_only`): `split_decl` cuts at
+  the first `(`, takes the last identifier on the left as the method name and the rest as the return
+  type, and allows nothing but whitespace after the `(`; `parse_params` splits on top-level commas
+  (tracking `()` and `[]` depth) and treats a lone `void` as no parameters; `param_type_only` derives
+  the vtable type by dropping the trailing identifier unless it is a type keyword
+  (`void`/`unsigned`/`size_t` …) or the text ends with `*` — a heuristic: `unsigned int` survives,
+  `char *name` correctly becomes `char *`.
+- **Body formatting** (`emit_body`) runs `replace_self` first (token level; strings, chars and
+  comments untouched), then scans line by line: leading and trailing blank lines are dropped, the
+  minimum indentation of the remaining non-blank lines becomes the base, and each output line gets a
+  uniform 4-space prefix with the base stripped — relative indentation (e.g. nested `if`s) is
+  preserved.
+- **Declaration rewriting** (`try_var_decl`) requires the whole line to start with a known struct
+  name, or `struct` plus a known struct name (leading spaces allowed). Once the variable name is
+  parsed: if a `*` follows, it is a pointer declaration — only the `struct` qualifier is added, the
+  type name is kept and the variable is **not** registered (`->` is out of scope); otherwise the
+  variable is registered, and `is_designated_list` checks whether the `= { … }` list is empty or all
+  `.field = …` — only then is the vptr designated initialiser inserted before the closing `}`.
+- **Call rewriting** (`transform_calls`) is a single-line state machine that advances character by
+  character and skips literals and comments wholesale; when an identifier hits the variable table
+  and is followed by `.member(` where `member` resolves to a method of some trait, the call is
+  rewritten into `var.__<trait>_vptr->member(&var[, args…])`. With empty arguments it inserts `)` in
+  place and moves the scan past the closing paren; with non-empty arguments only the call head is
+  rewritten and scanning continues inside the argument list, so nested calls like
+  `q.add(1, q.add(2,3))` are handled recursively.
 
-### 6. Header strategy
+### 6. Header generation strategy
 
-Both output files are produced by the same emitters, so their type definitions always agree. The
-generated `.c` deliberately does not include its own `.h`, keeping it self-contained; when multi-file
-compilation arrives, type definitions should move to the header and the `.c` should include it (after
-the banner). Both files start with a provenance comment of the form
-`Generated by ctc v<CTC_VERSION> from <input path>` — the `.c` banner is written by `main` before the
-scan starts, the `.h` one by `write_guard` — so bumping `CTC_VERSION` invalidates every golden under
-`test/cases/**` and they must be regenerated together.
+Both output files are produced by the same emitters (`emit_trait_def` / `emit_struct_def`), so their
+type definitions always agree. The generated `.c` deliberately does not `#include` its own `.h` —
+that keeps it self-contained (and consistent with the expected output), while the `.h` exists purely
+as a standalone type artifact. When multi-file compilation arrives, the right move is to keep type
+definitions only in the `.h` and have the generated `.c` `#include "<out>.h"` (after the banner),
+dropping the duplicate definitions from the `.c`. Both files start with a provenance comment of the
+form `Generated by ctc v<CTC_VERSION> from <input path>` — the `.c` banner is written by `main`
+before the scan starts, the `.h` one by `write_guard` — so bumping `CTC_VERSION` invalidates every
+golden under `test/cases/**` and they must be regenerated together.
 
-### 7. Design debt
+### 7. Design debt and risks
 
-Scope-less, type-less variable table; pointer declarations are qualified but never registered, so
-`p->m()` is not rewritten; the unit tests include `ctc.c` directly and therefore couple to the helpers
-they cover; silent truncation in `read_ident`/`parse_params` and silent ignoring once `MAX_VARS` is
-full; duplicated literal-skipping logic (source-based and line-based); redundant lookahead for
-`struct`; coarse error positions for semantic errors; small parameter limits.
+| Item | Description | Impact |
+| --- | --- | --- |
+| Scope-less, type-less variable table | a global flat table, entries registered in source order | same-name variables interfere with each other; calls that appear before the declaration are not rewritten |
+| Pointer variables are not registered | pointer declarations only gain the `struct` qualifier and never enter the variable table | `p->m()` is not rewritten (`->` support is planned for Phase 1) |
+| Unit tests coupled to the implementation | `test/unit` `#include`s `ctc.c` directly to call `static` functions | renaming or re-signing a covered function requires updating the unit tests in sync (see §9) |
+| Silent truncation | `read_ident` / `parse_params` truncate overlong input; once `MAX_VARS` is full, further registrations are silently ignored | conflicts with the fail-loud goal |
+| Literal skipping exists in two copies | the `g_src` version (`skip_literal`) and the line-buffer version (`line_literal_end`) | the two must be updated together, which is easy to miss |
+| Duplicate lookahead in the main loop | the main loop first probes whether `struct` is followed by `{`, then `parse_struct` parses it again | slight redundancy, acceptable for now |
+| Coarse error positions | semantic errors (e.g. an unimplemented method) point at the start of the construct | imprecise locations in files with many methods |
+| Small parameter limits | `MAX_PARAM` 256, `MAX_PARAMS` 16 | complex signatures get truncated or error out |
 
-### 8. Extension points
+### 8. Extension points (Phase 1 landing spots)
 
-Namespaces (new parser plus qualified lookups and naming), multi-file support (see §6), pointer calls
-(`->` branch in `transform_calls` plus registering pointer variables), block-scoped variable tables,
-positional-initialiser support (C99 permits `{ 1, .v = 0 }`, verified), error recovery with resync
-points, and the automated regression suite described in `roadmap.md`.
+Namespaces (a new `parse_namespace` in the `main` loop, qualified `find_*` lookups, and a prefix added
+to the naming rules), multi-file support (see §6: type definitions sink into the `.h` and the `.c`
+switches to `#include`), pointer calls `p->m()` (a `->` branch in `transform_calls`, plus registering
+pointer variable types in `try_var_decl`), variable scopes (block-depth markers in `g_vars`, truncated
+and rolled back on entering/leaving `{}`), positional-initialiser support (drop the
+`is_designated_list` restriction — C99 permits mixing `{ 1, .v = 0 }`, verified), error recovery
+(after `die`, skip to the next line start or the next `}` and continue, which needs an error
+counter), and the automated regression suite described in `roadmap.md`.
 
 ### 9. How the tests attach to this code
 

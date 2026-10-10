@@ -14,9 +14,10 @@
 | 阶段 | 主题 | 状态 | 出口条件 |
 | --- | --- | --- | --- |
 | Phase 0 | 结构转换（trait / struct / impl / use / 调用） | ✅ 完成 | `examples/` 下示例全流程跑通 |
-| Phase 0.1 | 缺陷修复 + 回归测试 | 🔧 进行中（0.1.1 已完成） | 指针声明缺陷修复，golden 测试全绿 |
-| Phase 1 | namespace、多文件、作用域与指针调用 | ⬜ 待规划 | 见下 |
-| Phase 2 | 待定（类型检查 / 可见性 / 泛型） | 🔍 待用户确认 | — |
+| Phase 0.1 | 缺陷修复 + 回归测试 | 🔧 进行中（0.1.1、0.1.3 已完成） | 指针声明缺陷修复，golden 测试全绿 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、指针调用、作用域 | ⬜ 待规划（语法决策已冻结，见下） | 见下 |
+| Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
+| Phase 3 | 增量编译、跨函数分析、多目标编译、自举（展望） | 🔭 展望 | — |
 
 ### 版本记录
 
@@ -57,6 +58,172 @@
 
 - **编译器本体** GPL-3.0-or-later（`LICENSE`）；**`.ct` 源码与生成物不受 GPL 约束**（`LICENSE.EXCEPTION`，照 GNU Bison 先例，且随产物走）；**`examples/` 与 `test/` 为 MIT**。
 - 例外不是可选项：ctc 会往产物里插入样板（vtable 结构体、vptr 字段、`_self` 强转行），"编译器输出是否构成衍生作品"存在歧义——不写例外，使用者（尤其公司法务）无法判断，等于挡住采用。
+
+#### namespace 与路径访问规则（已定，Phase 1 落地）
+
+CT 采用混合路径访问方式：**前面用 `::` 走命名空间路径，最后一步用 `.` 调用方法或访问字段**。最后一步一定是 `.`。
+
+```c
+// 正确
+HAL::UART::huart1.send(data, len);
+HAL::GPIO::pinA5.set(1);
+
+// 静态函数用 ::
+HAL::UART::get_default_config();
+
+// 错误
+HAL::UART::huart1::send(...);   // 最后一步不能用 ::
+HAL.UART.huart1.send(...);      // 中间不能用 .
+```
+
+| 场景 | 符号 | 示例 |
+| --- | --- | --- |
+| 命名空间路径导航 | `::` | `HAL::UART` |
+| 方法调用 / 字段访问 | `.` | `huart1.send(...)` |
+| 静态函数调用 | `::` | `HAL::UART::init()` |
+| trait 方法引用 | `.` | `obj.method()` |
+
+此规则落地时写入 [language-spec](language-spec.md)，编译器强制检查。
+
+#### import 与模块系统（已定，Phase 1 落地）
+
+`import` 不是 `#include` 的语法糖，而是**编译单元声明**。编译器通过 `import` 建立模块依赖图，自动处理符号引用、编译顺序和链接：
+
+```c
+import HAL.UART;      // 告诉编译器：HAL::UART 的符号在 hal/uart/ 下
+import Driver.Sensor; // 告诉编译器：Driver::Sensor 的符号在 driver/sensor/ 下
+```
+
+编译器内部行为：
+
+1. 扫描所有 `.ct` 文件，建立 module 表（namespace → 源文件路径）
+2. 解析 `import` 关系，构建依赖 DAG
+3. 拓扑排序，按依赖顺序编译
+4. 每个 `.ct` → `.c` + `.h`
+5. 链接所有 `.o`
+
+Phase 0 不做 import（单文件），Phase 1 实现。
+
+#### 文件命名约定与 `pub` 可见性（已定，Phase 1 落地）
+
+文件名决定编译器的生成行为，无需额外关键字或配置文件：
+
+| 文件名 | 生成行为 |
+| --- | --- |
+| `foo.ct` | 只生成 `foo.c`（实现文件，不对外暴露接口），文件内符号默认只在当前编译单元可见 |
+| `foo.h.ct` | 生成 `foo.h` + `foo.c`（接口 + 实现分离） |
+
+编译器从 `pub` 关键字识别需要暴露的符号，自动生成 `.h`（含 `#ifndef` 守卫、struct 定义、函数声明、vtable 类型）和 `.c`（含实现）：
+
+```c
+// uart.h.ct
+namespace HAL.UART {
+    pub trait Controller {
+        void send(uint8_t *data, int len);
+        int recv(uint8_t *buf, int len);
+    }
+
+    pub struct UartDevice {
+        int baud;
+        int fd;
+    }
+
+    pub UartDevice init(int baud);
+    pub void deinit(UartDevice *d);
+}
+```
+
+可见性修饰符：
+
+| 修饰符 | 作用 |
+| --- | --- |
+| `pub` | 对外暴露（进 `.h`） |
+| `static` | 文件级私有（不进 `.h`，不进符号表） |
+| `pub readonly` | 外部可读不可写（生成 `const` 或 getter） |
+
+可见性规则作用于 namespace 内的声明、struct 字段、trait 方法，由编译器强制约束，违反直接报错。封装由编译器强制执行，不存在「忘了在 `.h` 里声明但 `.c` 里实现了」的不一致问题。
+
+#### 内存管理：Drop 与 delete（已定，Phase 1 落地）
+
+编译器内置 `Drop` trait。struct 声明 `use Drop` 后，编译器自动生成释放逻辑：
+
+```c
+struct MyDevice {
+    uint8_t *buf;
+    Filter *filter;
+} use Drop;
+```
+
+自动生成规则：
+
+- 对每个字段，如果其类型也 `use Drop` → 递归调用 `drop()`
+- 基本类型（int / char / float / 裸指针）→ 不处理
+- 如果 struct 本身是堆分配的 → `free(self)`
+- 用户可以用 `impl Drop for MyDevice { void drop() { ... } }` 自定义释放逻辑
+- **未调用不生成代码**：整个项目从未调用过某类型的 `drop()`，则不生成任何 drop 相关函数体，零开销
+
+`delete` 是释放对象的统一入口：
+
+```c
+MyDevice *d = MyDevice::create();
+// ... 使用 ...
+delete d;    // 展开为：if (d) { d->drop(); free(d); }
+```
+
+| 场景 | 展开行为 |
+| --- | --- |
+| 堆对象（指针）+ `use Drop` | `T_drop(ptr); free(ptr);` |
+| 堆对象 + 无 Drop | `free(ptr);` |
+| 栈对象 | 编译错误（或只调 `drop()`，不 `free`） |
+| 空指针 | `if (ptr)` 保护，安全无操作 |
+| 基本类型指针 | 等价于 `free(ptr)` |
+
+数组释放用 `delete[]`：对每个元素调 `drop()`，然后 `free`。
+
+**编译期泄漏警告（Phase 1 简单版）**：函数末尾检查局部变量的分配/释放状态——分配了但没 `delete`、没 `return`、没存全局 → 警告。路径敏感版（分析所有 return 路径）归 Phase 2。警告同时输出人可读列表与 JSON（供 VS Code 插件消费）：
+
+```json
+{
+  "warnings": [{
+    "type": "potential_leak",
+    "file": "src/main.ct",
+    "line": 23,
+    "variable": "sensor",
+    "type_name": "BME280*",
+    "message": "allocated but never deleted"
+  }]
+}
+```
+
+抑制方式：`#[allow(leak)]` 标注有意不释放的分配（如全局存活对象）。
+
+#### map 语法与反向映射表（已定，Phase 1 落地）
+
+`map` 关键字将 trait 方法映射到具体实例的 SDK 调用：
+
+```c
+map trait Controller for instance huart1 {
+    send(data, len) → HAL_UART_Transmit(&huart1, data, len, HAL_MAX_DELAY);
+    recv(buf, len) → HAL_UART_Receive(&huart1, buf, len, HAL_MAX_DELAY);
+}
+```
+
+编译器生成对应的 vtable 条目，使 `huart1` 可以作为 `Controller` trait 的实例使用。
+
+编译器同时维护**反向映射表**（生成代码中的 C 符号 ← CT 中的哪个 trait/方法），用于：错误信息中给出有意义的回溯、VS Code 插件「跳转到定义」、反编译时恢复 CT 语义。
+
+#### JSON 诊断输出与插件薄客户端（已定，Phase 1 落地）
+
+`ctc` 输出 JSON 格式：编译错误/警告（含泄漏警告）、符号表（namespace / trait / struct / 函数位置）、调用关系图。VS Code 插件作为薄客户端消费 JSON，实现内联错误提示、跳转到定义、自动补全、悬停类型信息；插件本身不做编译、不做分析，编译器升级时插件无需改动。
+
+#### 自举策略与单文件边界（已定，Phase 3 落地）
+
+- **渐进自举**：L0（C 写的最简 trait 编译器，即今天的 `ctc.c`）→ L1（CT trait-only 子集写的基础编译器）→ L2（全特性 CT 写的完整编译器）。
+- **Phase 0–2 边界**：`ctc.c` 留在仓库根目录、保持单文件（2026-10-11 用户确认）；不建 `src/`、不拆分。
+- **Phase 3 启动时**：`ctc.c` 移入 `ctrait/` 并冻结（只修 bug），新特性全部在 `src/` 用 CT 实现。
+- **单仓库**：跨层编译与特性耦合决定了不拆仓库；`ctrait/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
+
+目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)（设计草案，未实现）。
 
 ### Phase 0（已完成）
 
@@ -124,6 +291,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 ### Phase 1（待规划）
 
+语言层面的语法决策已冻结，见上方「已定的设计决策」（namespace 路径规则、import、文件命名约定与 `pub`、Drop/delete、map、JSON 诊断）。下表是实现层面的要点与风险：
+
 | 特性 | 要点 | 主要风险 |
 | --- | --- | --- |
 | namespace | 新增 `parse_namespace`；`find_*` 支持限定查找；产物命名加前缀（形如 `<Ns>_<Struct>_<Trait>_<method>`） | 命名规则一旦确定即为契约，需先冻结 |
@@ -134,21 +303,37 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | 诊断增强 | 多错误报告 + 错误恢复（跳到下一个行首/`}`） | 需要错误计数与重同步点，容易产生级联误报 |
 | 语义诊断 | 重复 trait / struct 定义报错；方法签名与 trait 不一致时告警 | 与「不做类型检查」的定位边界需要明确 |
 
-### Phase 2（待用户确认）
+### Phase 2（部分已定，部分待用户确认）
 
-以下事项需要用户先做定位决策，暂不排期：
+已定（设计已冻结）：
+
+- `AutoDrop`：标记变量在作用域结束时自动调用 `drop()`（不 `free`，仅释放持有资源）
+- 路径敏感泄漏分析：分析所有 return 路径，标记「某些路径未释放」
+- 目录 = namespace 强制绑定
+- `macro_map` 语法（可选，让宏映射也能在 CT 源码中声明）
+
+仍需用户先做定位决策，暂不排期：
 
 - 是否引入**类型检查**（若引入，编译器性质将发生改变，需要 AST 而非逐行扫描）
-- 是否引入**可见性修饰符**（`pub` / `readonly` / `setter`）
 - 是否引入**泛型**（需要在 `.c` 侧做单态化展开）
 - 是否要保证**生成物可读性**的硬指标（例如最大嵌套缩进、命名长度上限）
-- 是否把 `ctc` 自身也迁移到其他实现语言（当前为 C 单文件）
+
+（可见性修饰符 `pub` / `pub readonly` / `static` 已定，见「已定的设计决策」，Phase 1 落地。实现语言也已定：Phase 0–2 保持 C 单文件，Phase 3 通过自举迁移到 CT 自身，见「自举策略与单文件边界」。）
+
+### Phase 3（展望）
+
+- 增量编译缓存（只重编改动的 `.ct`）
+- 跨函数泄漏分析
+- 多目标平台同时编译（一套代码生成多平台二进制）
+- 自举：用 CT 写 ctc v1
+
+自举的目标目录结构、分层规则（L0/L1/L2）、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)。
 
 ### 决策待定项
 
 | 问题 | 候选 | 影响 |
 | --- | --- | --- |
-| `.c` 是否 `#include` 自己的 `.h` | A. 保持自包含（现状）／B. 改为包含 | 决定多文件编译的形态与是否破坏既有产物 |
+| `.c` 是否 `#include` 自己的 `.h` | ✅ 已定：多文件场景下 `.h.ct` 生成 `.h` + `.c`，`.c` 包含自己的头（见「文件命名约定与 `pub` 可见性」） | Phase 1 落地时打破 Phase 0 自包含约定 |
 | 位置式初始化的语义 | A. 自动追加 vptr／B. 直接报错 | 决定是否允许 `{ "Tom", 36 }` 写法 |
 | 指针声明的处理 | ✅ 已定：修正生成（`struct Person *p`），指针变量暂不登记 | 已落地于 Phase 0.1.1 |
 | 工具链形态 | ✅ 已定：单入口 `ct`，`ctc` 保留为兼容别名 | 见「已定的设计决策」，**尚未落地** |
@@ -169,8 +354,9 @@ as confirmed by the user.
 | --- | --- | --- | --- |
 | 0 | Structure rewriting (trait / struct / impl / use / calls) | ✅ done | every `examples/` demo runs end to end |
 | 0.1 | Defect fixes + regression tests | 🔧 in progress (0.1.1, 0.1.3 done) | pointer bug fixed, golden tests green |
-| 1 | Namespaces, multi-file, scoping, pointer calls | ⬜ to be planned | see below |
-| 2 | Undecided (type checking / visibility / generics) | 🔍 needs user decision | — |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, pointer calls, scoping | ⬜ to be planned (syntax decisions frozen, see below) | see below |
+| 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
+| 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting (outlook) | 🔭 outlook | — |
 
 ### Versions
 
@@ -226,34 +412,276 @@ and update the build/invocation paths in `test/run.sh`.
   vptr fields, the `_self` cast line), so whether compiler output counts as a derivative work is
   ambiguous — leaving it unstated blocks adoption, especially with corporate legal review.
 
-### Phase 0.1 — fixes and regression tests
+#### Namespace path rules (decided, lands in Phase 1)
 
-1. **Fix the pointer-declaration defect — ✅ done.** `Person *p = &a;` used to emit `struct *p = &a;`,
-   which is invalid C. The `*` branch of `try_var_decl()` now restores the struct name and emits
-   `struct Person *p = &a;`. Pointer variables are deliberately not registered, so `p->m()` is still
-   not rewritten (that needs the `->` support planned for Phase 1).
-2. **Support positional initialisers.** Drop the "fully designated" restriction and append vptr
-   designators unconditionally; C99/C11 permits `{ 1, .v = 0 }` (verified with gcc, no warnings).
-3. **Add regression tests — ✅ done.** `test/run.sh` drives four layers: a warning-free build of
-   `ctc`, white-box unit tests (`test/unit/test_helpers.c` includes `ctc.c` to reach the static
-   helpers — 40 assertions on `trim`, `param_type_only`, `parse_params`, `split_decl`,
-   `is_designated_list`, `word_at`, `match_delim`, …), golden cases (`test/cases/<name>.ct` with
-   `.expected.c` / `.expected.h` / `.expected.out`: exit 0, byte-identical output, the generated C
-   compiles, and runnable cases produce the golden stdout), and negative cases
-   (`test/errors/<name>.ct` with `.expected-err`: non-zero exit, a `file:line:col: error:` prefix, and
-   the expected message text). Coverage implemented: single trait, multiple traits with a wrapped
-   `use` and nested calls, pass-through (preprocessor lines, escaped/non-ASCII strings, line and block
-   comments), signature shapes (`void f(void)`, multi-word types, empty structs, nested braces),
-   declarations (designated init, `struct`-qualified form, pointer declaration), and a method-name
-   collision across traits (first in `use` order wins). Not covered yet: positional initialisers
-   (blocked on 2) and `MAX_*` overflow behaviour (blocked on the capacity decision). A separate
-   examples layer builds and runs every `examples/**` demo and compares its stdout with the committed
-   `.expected.out`, so the demos cannot rot silently. The suite's own effectiveness was verified by
-   injecting three failures into a scratch copy — a corrupted golden, a wrong expected diagnostic, and
-   a bad assertion — all three were reported and the run exited 1. The run currently totals 16 checks
-   (1 build + 1 unit + 6 golden cases + 2 examples + 6 negatives).
+CT uses hybrid path access: **`::` walks the namespace path, and the final step uses `.` to call a
+method or access a field**. The final step is always `.`.
+
+```c
+// Correct
+HAL::UART::huart1.send(data, len);
+HAL::GPIO::pinA5.set(1);
+
+// Static functions use ::
+HAL::UART::get_default_config();
+
+// Wrong
+HAL::UART::huart1::send(...);   // the final step cannot use ::
+HAL.UART.huart1.send(...);      // the middle cannot use .
+```
+
+| Situation | Symbol | Example |
+| --- | --- | --- |
+| Namespace path navigation | `::` | `HAL::UART` |
+| Method call / field access | `.` | `huart1.send(...)` |
+| Static function call | `::` | `HAL::UART::init()` |
+| Trait method reference | `.` | `obj.method()` |
+
+When this lands it is written into [language-spec](language-spec.md) and enforced by the compiler.
+
+#### import and the module system (decided, lands in Phase 1)
+
+`import` is not syntactic sugar for `#include` — it is a **compilation-unit declaration**. The
+compiler builds the module dependency graph from `import`s and handles symbol references, compilation
+order and linking automatically:
+
+```c
+import HAL.UART;      // tells the compiler: HAL::UART symbols live under hal/uart/
+import Driver.Sensor; // tells the compiler: Driver::Sensor symbols live under driver/sensor/
+```
+
+Internal behaviour:
+
+1. scan every `.ct` file and build the module table (namespace → source path)
+2. resolve `import` edges into a dependency DAG
+3. compile in topological order
+4. each `.ct` → `.c` + `.h`
+5. link every `.o`
+
+Phase 0 has no `import` (single file); Phase 1 implements it.
+
+#### File-naming convention and `pub` visibility (decided, lands in Phase 1)
+
+The file name decides what the compiler emits — no extra keywords or config files:
+
+| File name | What is generated |
+| --- | --- |
+| `foo.ct` | only `foo.c` (implementation; nothing exported), symbols are file-local by default |
+| `foo.h.ct` | `foo.h` + `foo.c` (interface / implementation split) |
+
+The compiler recognises the symbols to export via the `pub` keyword and generates the `.h` (with
+`#ifndef` guards, struct definitions, function declarations, vtable types) and the `.c` (with the
+implementations):
+
+```c
+// uart.h.ct
+namespace HAL.UART {
+    pub trait Controller {
+        void send(uint8_t *data, int len);
+        int recv(uint8_t *buf, int len);
+    }
+
+    pub struct UartDevice {
+        int baud;
+        int fd;
+    }
+
+    pub UartDevice init(int baud);
+    pub void deinit(UartDevice *d);
+}
+```
+
+Visibility modifiers:
+
+| Modifier | Effect |
+| --- | --- |
+| `pub` | exported (goes into the `.h`) |
+| `static` | file-private (not in the `.h`, not in the symbol table) |
+| `pub readonly` | readable but not writable from outside (`const` or a getter is generated) |
+
+Visibility applies to declarations inside a namespace, to struct fields, and to trait methods; the
+compiler enforces it and rejects violations. Encapsulation is enforced by the compiler, so the
+"implemented in the `.c` but never declared in the `.h`" inconsistency cannot happen.
+
+#### Memory management: Drop and delete (decided, lands in Phase 1)
+
+The compiler has a built-in `Drop` trait. Declaring `use Drop` on a struct makes the compiler
+generate the release logic:
+
+```c
+struct MyDevice {
+    uint8_t *buf;
+    Filter *filter;
+} use Drop;
+```
+
+Generation rules:
+
+- for each field whose type also has `use Drop` → call `drop()` recursively
+- scalar types (int / char / float / raw pointers) → untouched
+- if the struct itself is heap-allocated → `free(self)`
+- users can customise with `impl Drop for MyDevice { void drop() { ... } }`
+- **no call, no code**: if nothing in the project ever calls a type's `drop()`, no drop-related
+  function body is generated at all — zero overhead
+
+`delete` is the single entry point for releasing an object:
+
+```c
+MyDevice *d = MyDevice::create();
+// ... use ...
+delete d;    // expands to: if (d) { d->drop(); free(d); }
+```
+
+| Situation | Expansion |
+| --- | --- |
+| Heap object (pointer) + `use Drop` | `T_drop(ptr); free(ptr);` |
+| Heap object without Drop | `free(ptr);` |
+| Stack object | compile error (or only `drop()`, no `free`) |
+| NULL pointer | guarded by `if (ptr)`, a safe no-op |
+| Pointer to a scalar | equivalent to `free(ptr)` |
+
+Arrays are released with `delete[]`: `drop()` each element, then `free`.
+
+**Compile-time leak warnings (Phase 1, simple version):** at the end of a function, a local that was
+allocated but never `delete`d, `return`ed, or stored globally produces a warning. The path-sensitive
+version (analysing every return path) is Phase 2. Warnings are emitted both as a human-readable list
+and as JSON for the VS Code extension:
+
+```json
+{
+  "warnings": [{
+    "type": "potential_leak",
+    "file": "src/main.ct",
+    "line": 23,
+    "variable": "sensor",
+    "type_name": "BME280*",
+    "message": "allocated but never deleted"
+  }]
+}
+```
+
+Suppression: annotate intentional leaks (e.g. objects living globally) with `#[allow(leak)]`.
+
+#### The map syntax and the reverse mapping table (decided, lands in Phase 1)
+
+The `map` keyword maps trait methods onto SDK calls of a concrete instance:
+
+```c
+map trait Controller for instance huart1 {
+    send(data, len) → HAL_UART_Transmit(&huart1, data, len, HAL_MAX_DELAY);
+    recv(buf, len) → HAL_UART_Receive(&huart1, buf, len, HAL_MAX_DELAY);
+}
+```
+
+The compiler generates the corresponding vtable entries so `huart1` can be used as an instance of the
+`Controller` trait.
+
+The compiler also maintains a **reverse mapping table** (which C symbol in the output came from which
+CT trait/method), used for: meaningful provenance in error messages, "go to definition" in the VS Code
+extension, and recovering CT semantics when decompiling.
+
+#### JSON diagnostics and the thin-client extension (decided, lands in Phase 1)
+
+`ctc` emits JSON: compile errors/warnings (including leak warnings), the symbol table (positions of
+namespaces / traits / structs / functions), and the call graph. The VS Code extension consumes the
+JSON as a thin client — inline diagnostics, go to definition, completion, hover types — and does no
+compilation or analysis of its own, so compiler upgrades never require extension changes.
+
+#### Bootstrap strategy and the single-file boundary (decided, lands in Phase 3)
+
+- **Progressive self-hosting**: L0 (the minimal trait compiler in C — today's `ctc.c`) → L1 (a base
+  compiler written in the CT trait-only subset) → L2 (the full compiler written in full-featured CT).
+- **Phase 0–2 boundary**: `ctc.c` stays at the repository root as a single file (confirmed by the
+  user on 2026-10-11); no `src/`, no splitting.
+- **When Phase 3 starts**: `ctc.c` moves into `ctrait/` and freezes (bug fixes only); new features
+  are written in CT under `src/`.
+- **Single repository**: cross-layer compilation and feature coupling rule out splitting repos; if
+  `ctrait/` ever needs standalone distribution, `git subtree` / `git filter-repo` splits it without
+  losing history.
+
+The target layout, layering rules (L0/L1/L2), build flow and milestones (M1–M6) live in
+[design/bootstrap.md](design/bootstrap.md) (design draft, not implemented).
+
+### Phase 0 (done)
+
+Scope: `trait` definitions, `struct … use`, `impl … for`, designated initialiser lists,
+`p.m(...)` call rewriting, pass-through of all other C code; also emits the matching `.h`.
+
+Acceptance (passed):
+
+```bash
+gcc -Wall -Wextra -std=c99 ctc.c -o ctc                            # zero warnings
+./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c             # no errors; also emits /tmp/greeter.h
+gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
+# Hello, I'm Tom, age 36
+# Hello Jerry, I'm Tom
+```
+
+(During Phase 0 these commands used `example.ct` at the repository root; the examples later moved
+into `examples/`, and generated files are no longer committed.)
+
+Explicit non-goals (out of Phase 0 scope): type checking, optimisation, error recovery, namespaces,
+generics, multi-file support, nested definitions.
+
+### Phase 0.1 — fixes and regression tests (recommended first)
+
+#### 0.1.1 Fix the pointer-declaration defect — ✅ done
+
+- **Problem**: `Person *p = &a;` used to emit `struct *p = &a;` (the type name was lost), which is
+  invalid C.
+- **Fix**: the `*p == '*'` branch of `try_var_decl()` restores the type name and now emits
+  `struct Person *p = &a;`. Pointer variables are deliberately **not registered** in the variable
+  table, so `p->m()` is still not rewritten (that needs the `->` support planned for Phase 1).
+- **Acceptance**: `Person *p = &a;` emits `struct Person *p = &a;` and compiles; the case is part
+  of the 0.1.3 regression set.
+
+#### 0.1.2 Support positional initialisers
+
+- **Problem**: `Person p = { "Tom", 36 };` gets no appended vptr, so calling a method dereferences
+  a null pointer at run time.
+- **Plan**: drop the "fully designated" restriction and append `.__x_vptr = &…_vtable`
+  unconditionally. C99/C11 permits the mixed form `{ 1, .v = 0 }` (verified with gcc, no warnings).
+- **Acceptance**: both positional and designated initialiser cases run correctly.
+
+#### 0.1.3 Add regression tests — ✅ done
+
+- **Structure** (landed):
+
+  ```
+  test/
+  ├── run.sh                 driver: build → unit → golden → negatives; exit 0 = pass
+  ├── unit/test_helpers.c    white-box unit tests: includes ctc.c to call the static helpers, 40 assertions
+  ├── cases/                 golden positives: <name>.ct + <name>.expected.c / .h / .out
+  └── errors/                negatives: <name>.ct + <name>.expected-err (expected diagnostic substring)
+  ```
+
+- **Assertions**: ① build layer — `ctc` itself compiles warning-free; ② unit layer — behaviour of
+  the pure helpers `trim` / `param_type_only` / `parse_params` / `split_decl` /
+  `is_designated_list` / `word_at` / `match_delim`, …; ③ golden layer — `ctc` exits 0, the output
+  is byte-identical to `.expected.c`/`.expected.h`, the generated C compiles, and cases with a
+  `main` match `.expected.out` on stdout; ④ negative layer — must exit non-zero, and the
+  diagnostics carry the `file:line:col: error:` prefix and contain the expected text.
+- **Coverage (implemented)**: single trait; multiple traits with a wrapped `use` and nested calls;
+  trait-less structs and pass-through (`#define` / strings / CJK literals and escapes / line and
+  block comments are never rewritten); signature shapes (`void f(void)`, multi-word types, empty
+  structs, nested braces); declarations (designated init, `struct`-qualified form, pointer
+  declaration); a method-name collision across traits (first in `use` order wins). The negatives
+  cover undefined trait / undefined struct / undeclared method / unimplemented method / struct not
+  using the trait / unbalanced brackets.
+- **Not covered yet**: positional initialisers (blocked on 0.1.2) and `MAX_*` overflow behaviour
+  (blocked on the capacity decision).
+- **Acceptance**: `./test/run.sh` is green (currently 16 checks: 1 build + 1 unit + 6 golden +
+  2 examples + 6 negatives). An additional examples layer checks every `examples/**` demo end to
+  end (generate → build → run → compare `.expected.out`), so the demos cannot rot silently as the
+  compiler evolves. Its own effectiveness was verified by injecting three failures into a scratch
+  copy — a corrupted golden, a wrong expected diagnostic, and a bad assertion — all three were
+  reported and the run exited 1.
 
 ### Phase 1 — to be planned
+
+The language-level syntax decisions are frozen — see "Decided design decisions" above (namespace path
+rules, import, the file-naming convention with `pub`, Drop/delete, map, JSON diagnostics). The table
+below records implementation-level notes and risks:
 
 | Feature | Notes | Main risk |
 | --- | --- | --- |
@@ -265,17 +693,42 @@ and update the build/invocation paths in `test/run.sh`.
 | Diagnostics | multiple errors, resync-based recovery | cascading false positives |
 | Semantic checks | reject duplicate trait/struct definitions; warn on signature mismatch | must respect the "no type checking" boundary |
 
-### Phase 2 — needs a user decision
+### Phase 2 — partly decided, partly needs a user decision
 
-Type checking (would require an AST and change the compiler's nature), visibility modifiers,
-generics (monomorphisation on the C side), hard readability budgets for the output, and whether `ctc`
-itself should move off single-file C.
+Decided (the design is frozen):
+
+- `AutoDrop`: a marked variable gets an automatic `drop()` at the end of its scope (no `free` — only
+  the held resources are released)
+- Path-sensitive leak analysis: analyse every return path and flag "not released on some paths"
+- Directory = namespace binding made mandatory
+- `macro_map` syntax (optional; lets macro mappings be declared in CT source too)
+
+Still needs a user decision before scheduling:
+
+- type checking (would require an AST and change the compiler's nature)
+- generics (monomorphisation on the C side)
+- hard readability budgets for the generated output (max nesting indent, name-length caps, …)
+
+(Visibility modifiers `pub` / `pub readonly` / `static` are decided — see "Decided design decisions" —
+and land in Phase 1. The implementation language is decided too: single-file C through Phase 0–2,
+then migration to CT itself via self-hosting in Phase 3 — see "Bootstrap strategy and the
+single-file boundary".)
+
+### Phase 3 — outlook
+
+- incremental compilation cache (rebuild only the `.ct` files that changed)
+- cross-function leak analysis
+- multi-target builds (one codebase, binaries for several platforms)
+- self-hosting: write ctc v1 in CT
+
+The bootstrap target layout, layering rules (L0/L1/L2), build flow and milestones (M1–M6) live in
+[design/bootstrap.md](design/bootstrap.md).
 
 ### Open decisions
 
-Whether the generated `.c` should include its own `.h`; whether positional initialisers get automatic
-vptr designators or an error; whether fixed capacity limits stay, become hard errors, or turn into
-dynamic allocation; and what the package manager should be called. Pointer declarations are decided:
-they are generated correctly and pointer variables stay unregistered for now. The toolchain shape is
-decided too: a single-entry `ct` with `ctc` kept as a compatibility alias (see "Decided design
-decisions" above).
+Whether positional initialisers get automatic vptr designators or an error; whether fixed capacity
+limits stay, become hard errors, or turn into dynamic allocation; and what the package manager should
+be called. Pointer declarations are decided: they are generated correctly and pointer variables stay
+unregistered for now. The toolchain shape is decided too: a single-entry `ct` with `ctc` kept as a
+compatibility alias. And the multi-file shape is decided: a `.h.ct` file produces a `.h` + `.c` pair
+whose `.c` includes its own header (see "File-naming convention and `pub` visibility").
