@@ -1,9 +1,11 @@
-# ctc — C with Traits 编译器
+# ct — C with Traits 编译器
 
 > **v0.0.1** · 中文 · [English](#english)
 
-`ctc` 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
+**ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
 它不做类型检查、不做优化，只做结构转换（Phase 0）。
+
+命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），编译器命令叫 **`ctc`**（ct compiler，好比 `tinycc` 仓库发布的命令是 `tcc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
 ```bash
 gcc ctc.c -o ctc
@@ -236,8 +238,12 @@ ct/
 
 ## English
 
-`ctc` is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into plain
-C. It performs no type checking and no optimisation — structure rewriting only (Phase 0).
+**ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into
+plain C. It performs no type checking and no optimisation — structure rewriting only (Phase 0).
+
+Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the compiler
+command is **`ctc`** (the ct compiler — much like the `tinycc` repository that ships a `tcc` binary)
+and the GitHub repository is **`ct-lang`** (`ct` alone is too short to be findable there).
 
 ### 1. Motivation
 

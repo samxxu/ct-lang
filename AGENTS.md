@@ -13,7 +13,8 @@
 
 | 项 | 值 |
 | --- | --- |
-| 是什么 | `.ct`（C + trait 语法）到纯 C 的 source-to-source 编译器 |
+| 是什么 | ct —— CT（*C with Traits*）到纯 C 的 source-to-source 编译器 |
+| 命名 | 项目/语言 `ct`（源文件后缀 `.ct`）；当前命令 `ctc`；GitHub 仓库 `ct-lang`（仅是仓库名）。差异是刻意的（同 `tinycc` 发布 `tcc`），**不要"统一"**。命令的最终形态已定为单入口 `ct`（`ctc` 保留为兼容别名），**尚未落地**，见 roadmap |
 | 实现语言 | C（C99），**单文件** `ctc.c` |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
@@ -104,6 +105,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - 禁止把 `examples/**` 下生成的 `.c` / `.h` 入库或手工编辑（生成物一律不入库）。
 - 禁止为了让示例通过而修改 `examples/**/*.ct` 的语义（可以扩充，不可以削弱）。
 - 禁止吞掉错误、禁止静默截断、禁止 `TODO` 空实现留在主路径上。
+- 禁止把项目名 `ct`、当前命令 `ctc` 或后缀 `.ct` 改成 `ct-lang` / `ctlang` / `.ctlang`（`ct-lang` 只是仓库名）。唯一被认可的演进是 roadmap 里已定的「单入口 `ct` + `ctc` 兼容别名」，不得自行发明其它名字。
 - 禁止提交二进制文件、`.o`、临时文件。
 
 ### 8. 提交规范
@@ -141,7 +143,8 @@ user before changing code**.
 
 | Item | Value |
 | --- | --- |
-| What | A source-to-source compiler from `.ct` (C + trait syntax) to plain C |
+| What | ct — a source-to-source compiler from CT (*C with Traits*) to plain C |
+| Naming | project/language `ct` (files end in `.ct`); current command `ctc`; GitHub repository `ct-lang` (repository name only). The differences are deliberate (cf. the `tinycc` repo shipping `tcc`) — **do not unify them**. The final command shape is decided: a single-entry `ct` with `ctc` kept as a compatibility alias — **not implemented yet**, see the roadmap |
 | Language | C (C99), **single file** `ctc.c` |
 | Dependencies | None. libc only (`stdio`, `stdlib`, `string`, `ctype`, `stdarg`) |
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
@@ -236,6 +239,10 @@ Also required:
   never committed).
 - No weakening of `examples/**/*.ct` to make output pass (extending them is fine).
 - No swallowed errors, silent truncation, or `TODO` stubs on the main path.
+- Never rename the project `ct`, the current `ctc` command or the `.ct` extension to `ct-lang` /
+  `ctlang` / `.ctlang` (`ct-lang` is only the repository name). The one sanctioned evolution is the
+  decided "single-entry `ct` with `ctc` as a compatibility alias" recorded in the roadmap — do not
+  invent other names.
 - No committing binaries, object files, or temporary files.
 
 ### 8. Commits
