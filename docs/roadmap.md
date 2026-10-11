@@ -13,9 +13,10 @@
 
 | 阶段 | 主题 | 状态 | 出口条件 |
 | --- | --- | --- | --- |
-| Phase 0 | 结构转换（trait / struct / impl / use / 调用） | ✅ 完成 | `examples/` 下示例全流程跑通 |
-| Phase 0.1 | 缺陷修复 + 回归测试 | 🔧 进行中（0.1.1、0.1.3 已完成） | 指针声明缺陷修复，golden 测试全绿 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、指针调用、作用域 | ⬜ 待规划（语法决策已冻结，见下） | 见下 |
+| Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
+| Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
+| Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete | ⬜ 待规划（语法决策已冻结，见下） | 见下 |
 | Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
 | Phase 3 | 增量编译、跨函数分析、多目标编译、自举（展望） | 🔭 展望 | — |
 
@@ -162,7 +163,8 @@ struct MyDevice {
 - 用户可以用 `impl Drop for MyDevice { void drop() { ... } }` 自定义释放逻辑
 - **未调用不生成代码**：整个项目从未调用过某类型的 `drop()`，则不生成任何 drop 相关函数体，零开销
 
-`delete` 是释放对象的统一入口：
+`delete` 是释放对象的统一入口。Phase 1 是在**已落地的最小版**（0.1.8：`delete p;` → `if (p) free(p);`，
+只对已登记的 ct-struct 指针生效）之上**扩展**出 `drop()` 调用，**不是重复规划**：
 
 ```c
 MyDevice *d = MyDevice::create();
@@ -225,12 +227,50 @@ map trait Controller for instance huart1 {
 
 目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)（设计草案，未实现）。
 
-### Phase 0（已完成）
+#### 自举前置条件（清单）
 
-范围：`trait` 定义、`struct … use`、`impl … for`、指定初始化列表、`p.m(...)` 调用重写、
-其余 C 代码透传；同时生成配套 `.h`。
+L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐条实测**；除注明外均为当前缺口）：
 
-验收（已通过）：
+| # | 前置条件 | 为什么自举需要 | 归属 | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ❌ |
+| 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | Phase 1（与 Drop 一起定） | ⚠️ 仅手写 vptr |
+| 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ❌ |
+| 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ❌ |
+| 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ❌ |
+| 6 | **方法调用的接收者可以是更一般的表达式** | `make().m()`、`ps[i].m()`（变量下标）、`a.next->m()`（指针字段链）实测均原样透传；遍历子节点要用 | 待定（可拆开单做） | ❌ |
+| 7 | 位置式初始化 / 方法体内互调 | — | 已完成（0.1.1 / 0.1.4） | ✅ |
+
+**AST 的形状**：ct **无继承**，AST 只能用 `trait Node { … }` + 各 `struct impl`，靠**接口值**（Phase 0.2）
+承载——这让自举同时成为 Phase 0.2 的压力测试。注意**声明顺序**：`struct Binary { Node *lhs; }` 要求
+`trait Node` 先声明；两个 struct **以值互相引用**会失败（经接口指针引用则不受影响）。
+
+第 6 项是一类问题（"接收者既不是已登记的标识符、也不是常量下标 / 值字段链"），可单独推进；其余 1–5 项
+与 **Phase 1** 高度重叠——**自举的前置条件基本等于 Phase 1 的产出**。
+
+### Phase 0：用 trait 写「完整 OO」
+
+**出口标准（2026-10-11 用户确认，重新定义）**：Phase 0 是否完成，不按"结构转换跑通"判断，而按
+**能否借助 trait 写出一段完整的面向对象程序**判断。ct 的 OO 语义是 **trait 接口 + 组合，不含继承**。
+
+「完整 OO」在 ct 里 = 下列能力全部成立：
+
+| # | 能力 | 状态 |
+| --- | --- | --- |
+| 1 | **封装**：`struct` 字段 + `impl` 方法；方法体内访问 `self->field` | ✅ |
+| 2 | **接口**：`trait` 声明 + 每个 `struct` 各自 `impl … for` | ✅ |
+| 3 | **派发**：值/指针接收者的 `.m()` / `->m()`，以及方法体内兄弟调用 `self->m()` | ✅（0.1.4 收尾） |
+| 4 | **传递**：对象作为函数/方法的**参数与返回值**（签名里的 struct 类型） | ✅ 见 0.1.5 |
+| 5 | **组合**：struct 字段为另一 struct 类型；字段链式调用 `a.b.m()` | ✅ 见 0.1.6 |
+| 6 | **存储**：数组元素上的方法调用与元素 vptr 初始化 | ✅ 见 0.1.7 |
+| 7 | **创建与释放**：**创建 = 栈上的 struct 声明**（指定 / 位置式 / 无初始化式 / 嵌套 / 数组，均写 vptr）✅；**释放 = `delete q;`** → `if (q) free(q);` ✅；**堆对象无语言级创建入口**，推迟到 Phase 1（与 Drop 一起定；当前需手写 vptr） | ✅ 见 0.1.8 |
+| 8 | **作用域**（正确性前提）：变量/参数按块作用域回滚，不跨函数串味 | ✅ 见 0.1.9 |
+| 9 | **接口多态**：能声明 trait 类型的变量/参数，运行时派发到不同 `struct` | ✅ 见 Phase 0.2 |
+
+第 4–8 项属**实现覆盖缺口**（沿用 [AGENTS.md](../AGENTS.md) §4「不允许静默产出编不过的 C」的口径，按缺陷修）；
+第 9 项属**语言特性**（需要新的类型表示与语法），**必须先设计后实现**，不能当缺陷补。
+
+既有验收（仍适用：零警告构建 + golden + 回归套件）：
 
 ```bash
 gcc -Wall -Wextra -std=c99 ctc.c -o ctc                            # 零警告
@@ -242,7 +282,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 （Phase 0 期间这批命令用的是仓库根目录的 `example.ct`；后续示例收进 `examples/`，生成物不再入库。）
 
-明确的非目标（不在 Phase 0 内）：类型检查、优化、错误恢复、namespace、泛型、多文件、嵌套定义。
+明确的非目标（仍不在 Phase 0 内）：类型检查、优化、错误恢复、namespace、泛型、多文件、嵌套定义、继承。
 
 ### Phase 0.1：缺陷修复与回归测试（建议优先）
 
@@ -250,15 +290,16 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - **问题**：`Person *p = &a;` 曾生成成 `struct *p = &a;`（丢失类型名），产出非法 C。
 - **修复**：`try_var_decl()` 的 `*p == '*'` 分支补回类型名，现生成 `struct Person *p = &a;`。
-  指针变量**不登记**进变量表，因此 `p->m()` 仍然不被重写（待 Phase 1 支持 `->`）。
-- **验收**：`Person *p = &a;` 生成 `struct Person *p = &a;` 且编译通过；该用例应纳入 0.1.3 的回归集。
+  指针变量当时**不登记**进变量表（此为临时状态）；`p->m()` 的重写已在 0.1.4 补齐。
+- **验收**：`Person *p = &a;` 生成 `struct Person *p = &a;` 且编译通过；该用例纳入 0.1.3 的回归集。
 
-#### 0.1.2 支持位置式初始化
+#### 0.1.2 支持位置式初始化 ✅ 已完成
 
 - **问题**：`Person p = { "Tom", 36 };` 不追加 vptr，运行时调用方法解引用空指针。
-- **方案**：去掉「必须全为指定初始化」的限制，直接追加 `.__x_vptr = &…_vtable`。
+- **修复**：去掉「必须全为指定初始化」的限制（移除 `is_designated_list()`），只要 struct 有
+  `use`，无论指定初始化、位置式还是空列表，都在 `}` 前追加 `.__x_vptr = &…_vtable`。
   已验证 C99/C11 允许 `{ 1, .v = 0 }` 这种混用（gcc 无警告）。
-- **验收**：位置式初始化与指定初始化两种写法的用例都能正确运行。
+- **验收**：`test/cases/07_positional_init.ct` 位置式初始化可正确运行。
 
 #### 0.1.3 建立回归测试 ✅ 已完成
 
@@ -273,21 +314,122 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   ```
 
 - **断言**：① 构建层——`ctc` 自身零警告；② 单测层——`trim` / `param_type_only` /
-  `parse_params` / `split_decl` / `is_designated_list` / `word_at` / `match_delim` 等纯函数行为；
+  `parse_params` / `split_decl` / `decl_end_is_bare` / `put_vptr_designators` / `word_at` /
+  `match_delim` 等纯函数行为；
   ③ golden 层——`ctc` 退出 0、生成物与 `.expected.c`/`.expected.h` 逐字节一致、生成物能编译、
   含 `main` 的用例 stdout 与 `.expected.out` 一致；④ 负例层——必须非 0 退出，且诊断带
   `文件:行:列: error:` 前缀并包含期望文案。
 - **覆盖清单（已实现）**：单 trait、多 trait + `use` 换行 + 嵌套调用、无 trait struct 与透传
   （`#define` / 字符串 / 中英文字面量与转义 / 行注释 / 块注释内不重写）、签名形态
   （`void f(void)`、多词类型、空 struct、嵌套花括号）、变量声明（指定初始化、`struct` 限定形式、
-  指针声明）、跨 trait 方法名冲突（取 `use` 顺序第一个）；负例覆盖未定义 trait / 未定义 struct /
+  指针声明）、跨 trait 方法名冲突（取 `use` 顺序第一个）、位置式初始化、方法体内互调、
+  指针接收者、无初始化式声明；负例覆盖未定义 trait / 未定义 struct /
   未声明方法 / 未实现方法 / struct 未 use 该 trait / 括号不配对。
-- **未纳入**：位置式初始化（依赖 0.1.2 先落地）、`MAX_*` 容量上限的越界行为（依赖容量策略决策）。
-- **验收**：`./test/run.sh` 全绿（当前 16 项：1 构建 + 1 单测 + 6 正例 + 2 示例 + 6 负例）。
+- **未纳入**：`MAX_*` 容量上限的越界行为（依赖容量策略决策）。
+- **验收**：`./test/run.sh` 全绿（当前 20 项：1 构建 + 1 单测 + 10 正例 + 2 示例 + 6 负例）。
   额外增加 examples 层，直接校验 `examples/**` 的端到端可运行性（生成 → 构建 → 运行 → 比对
   `.expected.out`），因此示例不会随编译器演进悄悄失效。
   已验证其有效性：在临时副本中注入「改坏 golden / 改错期望诊断 / 断言失败」三处错误，
   三层都能报告失败并以退出码 1 结束。
+
+#### 0.1.4 补齐 vptr 覆盖：指针接收者 / 方法体内互调 / 无初始化声明 ✅ 已完成
+
+- **问题**（同一类：静默产出编不过或空 vptr 的 C，违反 [AGENTS.md](../AGENTS.md) §4）：
+  1. `impl` 方法体内的 `self->other()` 只被改写成 `_self->other()`，产出非法 C；
+  2. 指针变量不登记，`p->m()` 不被重写，产出非法 C；
+  3. 无初始化式声明 `Person p;` 不写 vptr，调用方法解引用未初始化指针。
+- **修复**：
+  1. `Var` 增加 `ptr` 标记；`try_var_decl()` 登记指针变量；`transform_calls()` 增加 `->` 分支
+     （传指针本身，**不补 `&`**），且不对指针变量误用 `.` 规则；
+  2. 方法体内的 `self->m(...)` 在 `replace_self()` 内一并重写为
+     `_self->__<trait>_vptr->m(_self, …)`；检测到此类调用时，在方法函数前补一行 vtable
+     前向声明（C tentative definition）；
+  3. 无初始化式声明改写为 `struct Person p = { .__<trait>_vptr = &…_vtable };`。
+- **用例**：`test/cases/08_self_call.ct` / `09_pointer_receiver.ct` / `10_uninit_decl.ct`
+  （均含 `main`，走运行型断言）。
+- **验收**：四条最小复现都能编译并正确运行；`./test/run.sh` 全绿。
+
+#### 0.1.5 函数/方法签名里的 struct 类型 ✅ 已完成
+
+- **问题**：普通函数的返回类型与参数类型里的裸 struct 名不做 `struct ` 限定，静默产出编不过的 C；
+  参数不登记，参数上的 `.m()` / `->m()` 不重写。实测失败形态：`static Point make(...)`、
+  `Point *pick(...)`（返回类型对、参数错）、`void f(Person p)`、`void f(Person *q)`、
+  `void move(Point *pt, int dx)`、函数原型 `void f(Person *q);`。
+  `Point make(...)`（裸返回类型且行首）之所以"能过"，是被 `try_var_decl()` 误当行首变量声明补了
+  `struct `——属**巧合而非设计**。
+- **修复**：新增 `parse_func_sig()`，在 `emit_raw_line()` 中**先于** `try_var_decl()` 判定该行是否为
+  函数定义/原型（识别 `static` 等前缀词、多词返回类型、指针返回、原型；`if/while/else if` 等语句
+  不会误判）。对返回类型与参数类型中已知 struct 名原位插入 `struct `（保序保格式，不动其它字符），
+  并在**有函数体时**把参数登记进变量表（值 `ptr=0` / 指针 `ptr=1`）。命中函数形态的行不再走
+  `try_var_decl()`，因此顺带消除了"函数名被误登记为变量"的副作用。
+- **限制**：参数列表本身跨多行的签名不识别（按行处理，与"跨行调用不重写"同类）。
+- **用例**：`test/cases/11_value_param.ct` / `12_pointer_param.ct` / `13_signature_types.ct`
+  （含 `static` 返回、指针返回、原型、多词类型）。
+
+#### 0.1.6 组合：struct 字段为另一 struct 类型 ✅ 已完成
+
+- **机制说明（0.1.6–0.1.8 共享）**：[construction.md](construction.md)——构造语义（vptr 由谁、在何时写入），
+  决策 D1–D5 见其第 6 节。
+
+- **问题**：struct 体按设计原样透传，字段类型不做限定（`struct Shop { Person owner; }` → 编译失败）；
+  字段链式调用 `s.owner.greet()` 不重写。
+- **修复**（分三段落地）：**a** 新增 `parse_fields()` 部分解析 struct 体，给已知 struct 类型的字段补
+  `struct `，并把「值是 ct struct」的字段记进 `Struct` 字段表；**b** 声明对象时递归写入嵌套字段的
+  vptr（**用声明后的赋值语句**，避免追加的 `.owner` 指定初始化覆盖用户自己写的 `.owner = {…}`）；
+  **c** `transform_calls()` 改为沿字段链推导静态类型，支持 `s.owner.m(...)` → `s.owner.__<trait>_vptr->m(&s.owner, …)`。
+- **限制**：含嵌套对象的对象**必须在函数内声明**（文件作用域无法安放赋值语句，越界 `die`）。
+- **用例**：`test/cases/15_composition.ct`。
+
+#### 0.1.7 存储：数组元素 ✅ 已完成
+
+- **问题**：`Person ps[2];` 声明被限定但元素 vptr 未初始化；`ps[0].greet()` 不重写（编译失败）。
+- **修复**：`Person ps[<n>];` 展开为声明 + 一个块内循环（`__ct_i`），逐元素写入 vptr（含嵌套字段）；
+  调用侧支持 `ps[<常量>].m()` → `ps[0].__<trait>_vptr->m(&ps[0], …)`。
+- **限制**（D2）：只支持**无初始化式**声明 + 常量下标；其它形态在需要初始化时 `die`。
+- **用例**：`test/cases/16_arrays.ct`。
+
+#### 0.1.8 释放：`delete` ✅ 已完成（堆对象的**创建**推迟到 Phase 1）
+
+- **问题**：`Person *q = malloc(...); q->greet();` 调用被重写但 vptr 从未设置 → 运行期段错误。
+- **本次落地**：`delete q;` → `if (q) free(q);`（`q` 必须是已登记的指针变量；靠词边界 + 形态判定，
+  因此普通 C 里叫 `delete` 的标识符不会被误判）。Drop 版（`d->drop(); free(d);`）仍留 Phase 1。
+- **未落地：堆对象的自动创建**。曾试引入 `new`（D3），复核后认为它不在计划内、且**并未真正堵住**
+  `malloc` 那条洞（`malloc` 出来的对象依旧静默无 vptr、调用即崩），故**已移除**。堆对象的创建方式
+  推迟到 Phase 1，与 Drop/delete 一起定——那时 `drop()` 也需要 vptr，必然要有结论。
+- **现状**：堆对象需**手写** `q->__<trait>_vptr = &…;`（该行原样透传），之后 `delete q;` 可正常释放。
+- **用例**：`test/cases/17_heap.ct`（手写 vptr + `delete`）。
+
+#### 0.1.9 变量作用域 ✅ 已完成
+
+- **问题**：`find_var()` 首命中、`g_vars` 只增不减；多函数同名变量/参数互相串味，产出非法 C。
+- **修复**：`scope_track()` 在主扫描里跟踪花括号（跳过字符串/注释），每个 `{` 压栈当时的 `g_nvars`，
+  遇到 `}` 弹栈回滚；函数体左花括号（含"花括号另起一行"的写法）单独用**参数登记前**的值压栈，
+  保证参数随函数一起出作用域。这同时修掉了既有局部变量的跨函数串味。
+- **备注**：本节原被排在 Phase 1，因 0.1.5 要登记参数而提前。
+- **用例**：`test/cases/14_scope_shadow.ct`（两个函数各自声明同名 `d`、两个函数各自用同名参数 `x`，
+  分属不同 struct；改动前编译失败）。
+
+### Phase 0.2：接口多态（设计先行 → 已实现）
+
+**机制说明**：[polymorphism.md](polymorphism.md)——「接口值 = 胖指针 `{ self, vt }`」方案，
+决策 D1–D7 已冻结（含落地实现注记）。
+
+**目标**：能声明 **trait 类型的变量/参数**（如 `Greeter g`），运行时把不同 `struct` 派发进来，
+即真正的「面向接口编程」。
+
+**已落地（0.2a–0.2d）**：
+
+- 新产物 `struct <Trait>_iface { void *self; struct <Trait>_vtbl *vt; };`（不改既有命名与布局）；
+- 类型展开：裸 trait 名 `Greeter g` / 参数 / 返回值 → `struct Greeter_iface …`；
+- 装箱：`(struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable }`，覆盖**声明、赋值、实参、`return`**；
+  实参装箱依赖**函数签名表**（定义先于使用）；
+- 派发：`g.greet()` → `g.vt->greet(g.self)`；
+- 校验：struct 未 `use` 该 trait、跨 trait 装箱、无法推断类型的表达式 → 一律 `die`，不产出坏 C。
+
+**暂未做**：接口**数组**（声明即 `die`）与接口**字段**的构造期自动装箱（字段类型会被展开、可手动赋值）。
+
+**用例**：`test/cases/18_polymorphism.ct`（同一 `announce(Greeter)` 服务 `Person` 与 `Shop`，
+外加接口变量重赋值与接口返回值）。
 
 ### Phase 1（待规划）
 
@@ -297,9 +439,6 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | --- | --- | --- |
 | namespace | 新增 `parse_namespace`；`find_*` 支持限定查找；产物命名加前缀（形如 `<Ns>_<Struct>_<Trait>_<method>`） | 命名规则一旦确定即为契约，需先冻结 |
 | 多文件编译 | 类型定义下沉到 `.h`，生成的 `.c` 改为 `#include` 自己的头；需要一个「哪些符号对外可见」的规则 | 与 Phase 0 的「`.c` 自包含」直接冲突，属破坏性变更 |
-| 变量作用域 | `g_vars` 增加块深度，进入/离开 `{}` 时回滚 | 需要在透传的原始代码里跟踪花括号层级，不能误吞字符串里的括号 |
-| 指针调用 `p->m()` | `transform_calls` 增加 `->` 分支；不再补 `&`，直接传 `p` | 需要区分「值是结构体」与「值是指针」两类变量 |
-| 方法体内互调 | impl 方法体中 `self->m()` 也重写成 vptr 调用 | 需要把 vtable 变量声明提前（前向引用问题） |
 | 诊断增强 | 多错误报告 + 错误恢复（跳到下一个行首/`}`） | 需要错误计数与重同步点，容易产生级联误报 |
 | 语义诊断 | 重复 trait / struct 定义报错；方法签名与 trait 不一致时告警 | 与「不做类型检查」的定位边界需要明确 |
 
@@ -334,8 +473,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | 问题 | 候选 | 影响 |
 | --- | --- | --- |
 | `.c` 是否 `#include` 自己的 `.h` | ✅ 已定：多文件场景下 `.h.ct` 生成 `.h` + `.c`，`.c` 包含自己的头（见「文件命名约定与 `pub` 可见性」） | Phase 1 落地时打破 Phase 0 自包含约定 |
-| 位置式初始化的语义 | A. 自动追加 vptr／B. 直接报错 | 决定是否允许 `{ "Tom", 36 }` 写法 |
-| 指针声明的处理 | ✅ 已定：修正生成（`struct Person *p`），指针变量暂不登记 | 已落地于 Phase 0.1.1 |
+| 位置式初始化的语义 | ✅ 已定：A. 自动追加 vptr（0.1.2） | 允许 `{ "Tom", 36 }` 写法 |
+| 指针声明的处理 | ✅ 已定：修正生成（`struct Person *p`）并登记为指针，`p->m()` 重写 | 已落地于 Phase 0.1.1 / 0.1.4 |
 | 工具链形态 | ✅ 已定：单入口 `ct`，`ctc` 保留为兼容别名 | 见「已定的设计决策」，**尚未落地** |
 | 包管理器的名字 | A. `ct-pkg`／B. `ctpm`／C. 独立品牌词 | registry 与组织名需趁早占位 |
 | 容量上限策略 | A. 继续固定上限／B. 超限即报错／C. 改动态分配 | 与「失败要响」原则的落地方式 |
@@ -352,9 +491,10 @@ as confirmed by the user.
 
 | Phase | Theme | Status | Exit criteria |
 | --- | --- | --- | --- |
-| 0 | Structure rewriting (trait / struct / impl / use / calls) | ✅ done | every `examples/` demo runs end to end |
-| 0.1 | Defect fixes + regression tests | 🔧 in progress (0.1.1, 0.1.3 done) | pointer bug fixed, golden tests green |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, pointer calls, scoping | ⬜ to be planned (syntax decisions frozen, see below) | see below |
+| 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
+| 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
+| 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete | ⬜ to be planned (syntax decisions frozen, see below) | see below |
 | 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
 | 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting (outlook) | 🔭 outlook | — |
 
@@ -524,7 +664,9 @@ Generation rules:
 - **no call, no code**: if nothing in the project ever calls a type's `drop()`, no drop-related
   function body is generated at all — zero overhead
 
-`delete` is the single entry point for releasing an object:
+`delete` is the single entry point for releasing an object. Phase 1 **extends** the minimal version
+already landed (0.1.8: `delete p;` → `if (p) free(p);`, only for registered ct-struct pointers) by
+adding the `drop()` call — it is **not** a re-plan: the `delete` form and entry point already exist:
 
 ```c
 MyDevice *d = MyDevice::create();
@@ -599,15 +741,61 @@ compilation or analysis of its own, so compiler upgrades never require extension
   `ctrait/` ever needs standalone distribution, `git subtree` / `git filter-repo` splits it without
   losing history.
 
-The target layout, layering rules (L0/L1/L2), build flow and milestones (M1–M6) live in
+The target layout, layering rules, build flow and milestones (M1–M6) live in
 [design/bootstrap.md](design/bootstrap.md) (design draft, not implemented).
 
-### Phase 0 (done)
+#### Bootstrap prerequisites (checklist)
 
-Scope: `trait` definitions, `struct … use`, `impl … for`, designated initialiser lists,
-`p.m(...)` call rewriting, pass-through of all other C code; also emits the matching `.h`.
+For L1 / L2 to write a compiler in CT, the following must exist first (**each one verified by hand on
+2026-10-11**; all are current gaps unless noted):
 
-Acceptance (passed):
+| # | Prerequisite | Why self-hosting needs it | Owner phase | Status |
+| --- | --- | --- | --- | --- |
+| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | Phase 1 | ❌ |
+| 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | Phase 1 (with Drop) | ⚠️ hand-written vptr only |
+| 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ❌ |
+| 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | Phase 1 | ❌ |
+| 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ❌ |
+| 6 | **A method call may have a more general receiver expression** | `make().m()`, `ps[i].m()` (variable subscript) and `a.next->m()` (pointer field chain) are all passed through verbatim (verified); walking child nodes needs this | open (can be done on its own) | ❌ |
+| 7 | Positional initialisers / calls between sibling methods | — | done (0.1.1 / 0.1.4) | ✅ |
+
+**The shape of the AST**: ct has **no inheritance**, so an AST must use `trait Node { … }` plus one
+`struct impl` per node kind and carry them as **interface values** (Phase 0.2) — which makes
+self-hosting a stress test for Phase 0.2. Mind the **declaration order**: `struct Binary { Node *lhs; }`
+requires `trait Node` to be declared first; two structs referencing each other **by value** fail
+(referencing through an interface pointer is unaffected).
+
+Item 6 is one class of problem ("the receiver is neither a registered identifier nor a constant
+subscript / value field chain") and can be advanced on its own; items 1–5 overlap heavily with
+**Phase 1** — **the bootstrap prerequisites are essentially Phase 1's output**.
+
+### Phase 0: writing full OO with traits
+
+**Exit criterion (redefined, confirmed by the user on 2026-10-11)**: whether Phase 0 is done is no
+longer judged by "structure rewriting works" but by **whether a complete object-oriented program can
+be written with traits**. ct's OO semantics are **trait interfaces + composition, without
+inheritance**.
+
+"Full OO" in ct means all of the following hold:
+
+| # | Capability | Status |
+| --- | --- | --- |
+| 1 | **Encapsulation**: `struct` fields + `impl` methods; `self->field` inside a body | ✅ |
+| 2 | **Interfaces**: a `trait` declaration + a separate `impl … for` per `struct` | ✅ |
+| 3 | **Dispatch**: `.m()` / `->m()` for value and pointer receivers, plus sibling calls `self->m()` inside a body | ✅ (finished in 0.1.4) |
+| 4 | **Passing**: objects as **parameters and return values** of functions/methods (struct types in signatures) | ✅ see 0.1.5 |
+| 5 | **Composition**: a struct field whose type is another struct; chained calls `a.b.m()` | ✅ see 0.1.6 |
+| 6 | **Storage**: method calls on array elements and vptr initialisation for elements | ✅ see 0.1.7 |
+| 7 | **Creation & release**: **creation = a stack `struct` declaration** (designated / positional / no initialiser / nested / array, all writing the vptr) ✅; **release = `delete q;`** → `if (q) free(q);` ✅; **heap objects have no language-level creation entry**, deferred to Phase 1 (with Drop; today the vptr must be written by hand) | ✅ see 0.1.8 |
+| 8 | **Scoping** (correctness prerequisite): variables/parameters roll back at block scope, no bleeding across functions | ✅ see 0.1.9 |
+| 9 | **Interface polymorphism**: variables/parameters typed as a trait, dispatched to different `struct`s at run time | ✅ see Phase 0.2 |
+
+Items 4–8 are **implementation coverage gaps** (they fall under [AGENTS.md](../AGENTS.md) §4, "never
+emit C known not to compile", so they are fixed as defects); item 9 is a **language feature** (it needs
+a new type representation and syntax), so it **must be designed before it is implemented** and is not a
+defect to patch.
+
+The existing acceptance still applies (warning-free build + goldens + the regression suite):
 
 ```bash
 gcc -Wall -Wextra -std=c99 ctc.c -o ctc                            # zero warnings
@@ -620,8 +808,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 (During Phase 0 these commands used `example.ct` at the repository root; the examples later moved
 into `examples/`, and generated files are no longer committed.)
 
-Explicit non-goals (out of Phase 0 scope): type checking, optimisation, error recovery, namespaces,
-generics, multi-file support, nested definitions.
+Explicit non-goals (still out of Phase 0 scope): type checking, optimisation, error recovery,
+namespaces, generics, multi-file support, nested definitions, inheritance.
 
 ### Phase 0.1 — fixes and regression tests (recommended first)
 
@@ -630,18 +818,20 @@ generics, multi-file support, nested definitions.
 - **Problem**: `Person *p = &a;` used to emit `struct *p = &a;` (the type name was lost), which is
   invalid C.
 - **Fix**: the `*p == '*'` branch of `try_var_decl()` restores the type name and now emits
-  `struct Person *p = &a;`. Pointer variables are deliberately **not registered** in the variable
-  table, so `p->m()` is still not rewritten (that needs the `->` support planned for Phase 1).
+  `struct Person *p = &a;`. Pointer variables were deliberately **not registered** at the time (a
+  temporary state); rewriting `p->m()` was completed in 0.1.4.
 - **Acceptance**: `Person *p = &a;` emits `struct Person *p = &a;` and compiles; the case is part
   of the 0.1.3 regression set.
 
-#### 0.1.2 Support positional initialisers
+#### 0.1.2 Support positional initialisers — ✅ done
 
 - **Problem**: `Person p = { "Tom", 36 };` gets no appended vptr, so calling a method dereferences
   a null pointer at run time.
-- **Plan**: drop the "fully designated" restriction and append `.__x_vptr = &…_vtable`
-  unconditionally. C99/C11 permits the mixed form `{ 1, .v = 0 }` (verified with gcc, no warnings).
-- **Acceptance**: both positional and designated initialiser cases run correctly.
+- **Fix**: drop the "fully designated" restriction (removing `is_designated_list()`); as long as the
+  struct has a `use` clause, designated, positional and empty lists alike get
+  `.__x_vptr = &…_vtable` appended before `}`. C99/C11 permits the mixed form `{ 1, .v = 0 }`
+  (verified with gcc, no warnings).
+- **Acceptance**: `test/cases/07_positional_init.ct` runs correctly.
 
 #### 0.1.3 Add regression tests — ✅ done
 
@@ -656,8 +846,8 @@ generics, multi-file support, nested definitions.
   ```
 
 - **Assertions**: ① build layer — `ctc` itself compiles warning-free; ② unit layer — behaviour of
-  the pure helpers `trim` / `param_type_only` / `parse_params` / `split_decl` /
-  `is_designated_list` / `word_at` / `match_delim`, …; ③ golden layer — `ctc` exits 0, the output
+  the pure helpers `trim` / `param_type_only` / `parse_params` / `split_decl` / `decl_end_is_bare` /
+  `put_vptr_designators` / `word_at` / `match_delim`, …; ③ golden layer — `ctc` exits 0, the output
   is byte-identical to `.expected.c`/`.expected.h`, the generated C compiles, and cases with a
   `main` match `.expected.out` on stdout; ④ negative layer — must exit non-zero, and the
   diagnostics carry the `file:line:col: error:` prefix and contain the expected text.
@@ -665,17 +855,145 @@ generics, multi-file support, nested definitions.
   trait-less structs and pass-through (`#define` / strings / CJK literals and escapes / line and
   block comments are never rewritten); signature shapes (`void f(void)`, multi-word types, empty
   structs, nested braces); declarations (designated init, `struct`-qualified form, pointer
-  declaration); a method-name collision across traits (first in `use` order wins). The negatives
-  cover undefined trait / undefined struct / undeclared method / unimplemented method / struct not
-  using the trait / unbalanced brackets.
-- **Not covered yet**: positional initialisers (blocked on 0.1.2) and `MAX_*` overflow behaviour
-  (blocked on the capacity decision).
-- **Acceptance**: `./test/run.sh` is green (currently 16 checks: 1 build + 1 unit + 6 golden +
+  declaration); a method-name collision across traits (first in `use` order wins); positional
+  initialisers; calls between methods; pointer receivers; declarations without an initialiser. The
+  negatives cover undefined trait / undefined struct / undeclared method / unimplemented method /
+  struct not using the trait / unbalanced brackets.
+- **Not covered yet**: `MAX_*` overflow behaviour (blocked on the capacity decision).
+- **Acceptance**: `./test/run.sh` is green (currently 20 checks: 1 build + 1 unit + 10 golden +
   2 examples + 6 negatives). An additional examples layer checks every `examples/**` demo end to
   end (generate → build → run → compare `.expected.out`), so the demos cannot rot silently as the
   compiler evolves. Its own effectiveness was verified by injecting three failures into a scratch
   copy — a corrupted golden, a wrong expected diagnostic, and a bad assertion — all three were
   reported and the run exited 1.
+
+#### 0.1.4 Complete the vptr coverage: pointer receivers / calls between methods / declarations without an initialiser — ✅ done
+
+- **Problems** (one class: silently emitting C that does not compile, or carries a null vptr,
+  violating [AGENTS.md](../AGENTS.md) §4):
+  1. `self->other()` inside an `impl` body only became `_self->other()`, which is invalid C;
+  2. pointer variables were not registered, so `p->m()` was not rewritten — invalid C;
+  3. a declaration without an initialiser (`Person p;`) wrote no vptr, so calling a method
+     dereferenced an uninitialised pointer.
+- **Fixes**:
+  1. `Var` gained a `ptr` flag; `try_var_decl()` registers pointer variables; `transform_calls()`
+     gained a `->` branch (passing the pointer itself, **without** `&`), and the `.` rule is never
+     applied to a pointer variable;
+  2. `self->m(...)` inside a body is rewritten in `replace_self()` to
+     `_self->__<trait>_vptr->m(_self, …)`; when such a call exists, a vtable forward declaration
+     (a C tentative definition) is emitted before the method functions;
+  3. a declaration without an initialiser becomes
+     `struct Person p = { .__<trait>_vptr = &…_vtable };`.
+- **Cases**: `test/cases/08_self_call.ct` / `09_pointer_receiver.ct` / `10_uninit_decl.ct`
+  (all with a `main`, so they run).
+- **Acceptance**: all four minimal reproductions compile and run correctly; `./test/run.sh` is green.
+
+#### 0.1.5 Struct types in function/method signatures — ✅ done
+
+- **Problem**: bare struct names in an ordinary function's return type or parameter types are not
+  qualified with `struct `, silently emitting C that does not compile; parameters are not registered,
+  so `.m()` / `->m()` on a parameter is not rewritten. Confirmed failing forms:
+  `static Point make(...)`, `Point *pick(...)` (return type fine, parameters wrong),
+  `void f(Person p)`, `void f(Person *q)`, `void move(Point *pt, int dx)`, and the prototype
+  `void f(Person *q);`. `Point make(...)` (bare return type at line start) only "passes" because
+  `try_var_decl()` mistakes it for a line-initial variable declaration and adds `struct ` — an
+  **accident, not a design**.
+- **Fix**: a new `parse_func_sig()` decides — **before** `try_var_decl()` in `emit_raw_line()` —
+  whether a line is a function definition or prototype (handling `static`-style prefixes, multi-word
+  return types, pointer returns and prototypes, while `if` / `while` / `else if` never match). It
+  inserts `struct ` in place for known struct names in the return type and in the parameter types
+  (formatting elsewhere untouched) and, **when a body follows**, registers the parameters in the
+  variable table (values `ptr=0`, pointers `ptr=1`). Lines recognised as functions no longer go
+  through `try_var_decl()`, which also removes the "function name gets registered as a variable"
+  side effect.
+- **Limitation**: a signature whose parameter list itself spans multiple lines is not recognised
+  (line-by-line processing, like multi-line calls).
+- **Cases**: `test/cases/11_value_param.ct` / `12_pointer_param.ct` / `13_signature_types.ct`
+  (covering `static` returns, pointer returns, prototypes and multi-word types).
+
+#### 0.1.6 Composition: a struct field whose type is another struct — ✅ done
+
+- **Mechanism note (shared by 0.1.6–0.1.8)**: [construction.md](construction.md) — construction semantics
+  (who writes an object's vptr, and when); decisions D1–D5 are in its §6.
+  "construction semantics" draft; decisions D1–D5 are now frozen.
+
+- **Problem**: struct bodies are passed through verbatim by design, so field types are not qualified
+  (`struct Shop { Person owner; }` fails to compile); a chained call `s.owner.greet()` is not rewritten.
+- **Fix** (landed in three parts): **a** a new `parse_fields()` partially parses the struct body,
+  adds `struct ` to fields of known struct types and records them in the struct's field table;
+  **b** declaring an object recursively writes the nested fields' vptrs (**as post-declaration
+  assignments**, so an appended `.owner` designator can never override a `.owner = {…}` the user
+  wrote); **c** `transform_calls()` walks the field chain to infer static types, so
+  `s.owner.m(...)` → `s.owner.__<trait>_vptr->m(&s.owner, …)`.
+- **Limitation**: an object with nested objects **must be declared inside a function** (there is
+  nowhere at file scope to put the statements; the compiler `die`s).
+- **Case**: `test/cases/15_composition.ct`.
+
+#### 0.1.7 Storage: array elements — ✅ done
+
+- **Problem**: `Person ps[2];` has its declaration qualified but no vptr is initialised for the
+  elements, and `ps[0].greet()` is not rewritten (fails to compile).
+- **Fix**: `Person ps[<n>];` expands into the declaration plus a scoped loop (`__ct_i`) writing each
+  element's vptr (nested fields included); the call side supports
+  `ps[<const>].m()` → `ps[0].__<trait>_vptr->m(&ps[0], …)`.
+- **Limitation** (D2): uninitialised declarations plus constant subscripts only; anything else `die`s
+  when initialisation is required.
+- **Case**: `test/cases/16_arrays.ct`.
+
+#### 0.1.8 Release: `delete` — ✅ done (automatic heap **creation** is deferred to Phase 1)
+
+- **Problem**: `Person *q = malloc(...); q->greet();` has the call rewritten but the vptr is never
+  set → a run-time segfault.
+- **Landed**: `delete q;` → `if (q) free(q);` (`q` must be a registered pointer variable; word-boundary
+  plus shape checks mean a plain-C identifier called `delete` is never mistaken for it). The Drop
+  version (`d->drop(); free(d);`) stays in Phase 1.
+- **Not landed: automatic heap creation.** `new` was tried (D3) and then **removed**: it was not in the
+  plan and it never actually closed the `malloc` hole (objects from `malloc` still silently have no
+  vptr and crash on the first call). How heap objects are created is deferred to Phase 1 together with
+  Drop/delete — `drop()` needs a vptr too, so a decision is unavoidable there.
+- **Today**: a heap object needs a hand-written `q->__<trait>_vptr = &…;` (that line is passed through
+  verbatim), after which `delete q;` releases it.
+- **Case**: `test/cases/17_heap.ct` (hand-written vptr + `delete`).
+
+#### 0.1.9 Variable scoping — ✅ done
+
+- **Problem**: `find_var()` returns the first match and `g_vars` only grows, so same-named variables
+  and parameters across functions bleed into each other and emit invalid C.
+- **Fix**: `scope_track()` tracks braces in the main scan (skipping strings and comments), pushing
+  the current `g_nvars` at every `{` and restoring it at the matching `}`; a function body's opening
+  brace (including the "brace on its own line" style) is pushed with the value from **before** its
+  parameters were registered, so parameters leave scope with the function. This also fixes the
+  pre-existing cross-function bleeding of ordinary locals.
+- **Note**: originally scheduled for Phase 1; moved forward because 0.1.5 registers parameters.
+- **Case**: `test/cases/14_scope_shadow.ct` (two functions each declaring a local `d` and each taking
+  a parameter `x`, of different structs; it fails to compile before the fix).
+
+### Phase 0.2: interface polymorphism (designed first → implemented)
+
+**Mechanism note**: [polymorphism.md](polymorphism.md) — the "interface value = fat pointer
+`{ self, vt }`" approach; decisions D1–D7 are frozen (with implementation notes).
+
+**Goal**: declare **variables/parameters typed as a trait** (e.g. `Greeter g`) and dispatch to
+different `struct`s at run time — i.e. real "program to an interface".
+
+**Landed (0.2a–0.2d)**:
+
+- a new artifact `struct <Trait>_iface { void *self; struct <Trait>_vtbl *vt; };` (no change to
+  existing names or layouts);
+- type expansion: a bare trait name in a declaration / parameter / return type becomes
+  `struct Greeter_iface …`;
+- boxing `(struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable }` for **declarations,
+  assignments, arguments and `return`**; argument boxing relies on the **signature table**
+  (definition-before-use);
+- dispatch: `g.greet()` → `g.vt->greet(g.self)`;
+- checks: a struct that does not `use` the trait, boxing across different traits, and expressions
+  whose type cannot be inferred all `die` instead of emitting bad C.
+
+**Not done yet**: interface **arrays** (`die` at the declaration) and automatic boxing of interface
+**fields** at construction (the field type is expanded and can be assigned by hand).
+
+**Case**: `test/cases/18_polymorphism.ct` (one `announce(Greeter)` serving `Person` and `Shop`, plus
+interface re-assignment and an interface return value).
 
 ### Phase 1 — to be planned
 
@@ -687,9 +1005,6 @@ below records implementation-level notes and risks:
 | --- | --- | --- |
 | Namespaces | new parser, qualified lookups, prefixed generated names (`<Ns>_<Struct>_<Trait>_<method>`) | naming becomes a contract; must be frozen first |
 | Multi-file compilation | move type definitions into the header and have the `.c` include it; needs a visibility rule | directly conflicts with today's self-contained `.c` (breaking change) |
-| Variable scoping | block depth tracking with rollback in `g_vars` | must track braces in pass-through code without choking on braces in strings |
-| Pointer calls `p->m()` | `->` branch in `transform_calls`, passing `p` without `&` | requires distinguishing struct values from pointers |
-| Calls between methods | rewrite `self->m()` inside impl bodies too | the vtable variable must be declared earlier (forward reference) |
 | Diagnostics | multiple errors, resync-based recovery | cascading false positives |
 | Semantic checks | reject duplicate trait/struct definitions; warn on signature mismatch | must respect the "no type checking" boundary |
 
@@ -726,9 +1041,10 @@ The bootstrap target layout, layering rules (L0/L1/L2), build flow and milestone
 
 ### Open decisions
 
-Whether positional initialisers get automatic vptr designators or an error; whether fixed capacity
-limits stay, become hard errors, or turn into dynamic allocation; and what the package manager should
-be called. Pointer declarations are decided: they are generated correctly and pointer variables stay
-unregistered for now. The toolchain shape is decided too: a single-entry `ct` with `ctc` kept as a
-compatibility alias. And the multi-file shape is decided: a `.h.ct` file produces a `.h` + `.c` pair
-whose `.c` includes its own header (see "File-naming convention and `pub` visibility").
+Whether fixed capacity limits stay, become hard errors, or turn into dynamic allocation; and what the
+package manager should be called. Positional initialisers are decided: they get automatic vptr
+designators (0.1.2). Pointer declarations are decided too: they are generated correctly and pointer
+variables are registered as pointers so `p->m()` is rewritten (0.1.4). The toolchain shape is decided:
+a single-entry `ct` with `ctc` kept as a compatibility alias. And the multi-file shape is decided: a
+`.h.ct` file produces a `.h` + `.c` pair whose `.c` includes its own header (see "File-naming
+convention and `pub` visibility").

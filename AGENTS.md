@@ -20,7 +20,7 @@
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
 | 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | Phase 0：只做结构转换，不做类型检查、不做优化、不做错误恢复 |
+| 当前阶段 | Phase 0：目标是用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放），不做类型检查、不做优化、不做错误恢复；达成情况见 `docs/roadmap.md` |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
@@ -162,7 +162,7 @@ user before changing code**.
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
 | Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
 | License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
-| Stage | Phase 0 — structure rewriting only: no type checking, no optimisation, no error recovery |
+| Stage | Phase 0 — the goal is to write full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release); no type checking, no optimisation, no error recovery — see `docs/roadmap.md` for progress |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
 ### 2. File ownership

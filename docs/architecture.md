@@ -65,10 +65,18 @@ argv
 | | `resolve_method` | 按 struct 的 `use` 顺序找方法归属的 trait |
 | 签名解析 | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | 把 `int add(int a, int b)` 拆成 ret / name / params / 参数类型表 |
 | 生成器 | `emit_trait_def` `emit_struct_def` | 生成 vtable 类型与 struct 定义（同时写 `.c` 与 `.h`） |
-| | `replace_self` | 方法体内 `self` → `_self`（token 级，跳过字面量与注释） |
+| | `replace_self` | 方法体内 `self` → `_self`（token 级，跳过字面量与注释），并把 `self->m(...)` 重写为 `_self->__<trait>_vptr->m(_self, …)` |
 | | `emit_body` | 去公共缩进 + 统一 4 空格重排方法体 |
+| | `body_calls_sibling` | 探测方法体是否调用了兄弟方法（决定是否需要 vtable 前向声明） |
 | 构造解析 | `parse_trait` `parse_struct` `parse_impl` | 三个顶层构造的识别、校验与生成 |
-| 行重写 | `line_literal_end` `line_match_paren` `is_designated_list` | 行内（栈上字符串）版本的字面量跳过、括号配对、初始化列表判定 |
+| 行重写 | `line_literal_end` `line_match_paren` `decl_end_is_bare` | 行内（栈上字符串）版本的字面量跳过、括号配对、声明尾部判定 |
+| | `parse_func_sig` `analyse_param` | 识别普通函数定义/原型，限定签名里的 struct 类型，并在有函数体时登记参数 |
+| | `parse_fields` `find_field` | 部分解析 struct 体：补 `struct ` 限定，并把嵌套 ct-struct 字段记进字段表 |
+| | `put_own_vptr` `needs_nested_init` `put_nested_assignments` | 生成对象自身 vptr 的指定初始化项；递归生成嵌套字段的 vptr 赋值语句 |
+| | `try_delete` | `delete p;` → `if (p) free(p);`（仅对已登记的指针变量生效） |
+| | `emit_qualified_type` `trait_has_method` `find_func` | 类型展开（`struct ` / `_iface` 后缀）、接口方法判定、函数签名表查询 |
+| | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | 接口多态：装箱（复合字面量）、接口变量声明/赋值、接口返回值 |
+| | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚 |
 | | `transform_calls` | 单行内的方法调用重写状态机 |
 | | `try_var_decl` | 识别 `Type var = {...}` 并改造、登记变量 |
 | | `transform_line` `emit_raw_line` | 串联上述两步并写出 |
@@ -99,16 +107,18 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 - `param_type_only`：去掉参数名得到 vtable 里的类型 —— 从尾部取标识符，若它是类型关键字（`void`/`unsigned`/`size_t` …）或以 `*` 结尾则保留，否则删掉。
   这是启发式：`unsigned int` 不会被误删，`char *name` 会正确变成 `char *`。
 
-**方法体排版（`emit_body`）**
-先 `replace_self` 做 token 级替换（字符串/字符/注释内不动），再按行扫描：跳过首尾空行，取所有非空行的**最小缩进**作为基准，输出时统一加上 4 空格前缀并裁掉基准缩进 —— 相对缩进（如嵌套 `if`）得以保留。
+**方法体排版（`emit_body` + `replace_self`）**
+先 `replace_self` 做 token 级替换（字符串/字符/注释内不动）：`self` → `_self`，且 `self->m(...)` 重写为 `_self->__<trait>_vptr->m(_self, …)`（`m` 需能解析为某 trait 的方法）；再按行扫描：跳过首尾空行，取所有非空行的**最小缩进**作为基准，输出时统一加上 4 空格前缀并裁掉基准缩进 —— 相对缩进（如嵌套 `if`）得以保留。若某方法体存在兄弟方法调用，`parse_impl` 会在方法函数之前先输出一行 vtable 前向声明。
 
 **声明识别与改造（`try_var_decl`）**
 要求整行以「已知 struct 名」或「`struct` + 已知 struct 名」开头（行首允许空格）；解析出变量名后：
-- 若紧跟 `*` → 判定为指针声明，仅补 `struct` 限定符并保留类型名，**不登记**该变量（`->` 形式不在范围内）；
-- 否则登记变量，并检查是否 `= { … }`；用 `is_designated_list` 判断列表是空或全为 `.field = …`，满足才在 `}` 前插入 vptr 指定初始化项。
+- 若紧跟 `*` → 判定为指针声明，补 `struct` 限定符并保留类型名，同时把变量登记为**指针**（供 `p->m()` 重写；已经是 `struct X *p` 时原样返回但仍然登记）；
+- 否则登记变量，并检查是否 `= { … }`：无论指定初始化、位置式还是空列表，都在 `}` 前插入 vptr 指定初始化项（由 `put_vptr_designators` 生成，多 trait 按 `use` 顺序）；若声明**无初始化式**（`Person p;`），则改写为 `= { <vptr> }`。
 
 **调用重写（`transform_calls`）**
-单行状态机，逐字符推进，遇到字面量/注释整体跳过；读到标识符时查变量表，命中并且后面是 `.成员(` 且 `成员` 可解析为某 trait 的方法，则改写为 `var.__<trait>_vptr->成员(&var[, 参数…])`：
+单行状态机，逐字符推进，遇到字面量/注释整体跳过；读到标识符时查变量表，命中后按变量类别改写：
+- 非指针变量 + `.成员(` → `var.__<trait>_vptr->成员(&var[, 参数…])`；
+- 指针变量 + `->成员(` → `var->__<trait>_vptr->成员(var[, 参数…])`（**不补 `&`**）；
 - 参数为空 → 就地补 `)` 并把扫描位置推到配对右括号之后；
 - 参数非空 → 只改写调用头部，扫描继续在参数内部进行（因此嵌套调用 `q.add(1, q.add(2,3))` 能递归处理）。
 
@@ -126,7 +136,8 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | 项 | 说明 | 影响 |
 | --- | --- | --- |
 | 变量表无作用域/无类型 | 全局扁平表，按源码顺序登记 | 同名变量互相干扰；声明前出现的调用不重写 |
-| 指针变量不登记 | 指针声明只补 `struct` 限定符，不入变量表 | `p->m()` 不会被重写（待 Phase 1 支持 `->`） |
+| 全局 ct 对象带嵌套/数组构造 | vptr 写入用的是**语句**，文件作用域安放不了 | 这类对象必须在函数内声明，否则 `die`（已文档化） |
+| 堆对象不写 vptr | `malloc` 出来的对象没有编译期"构造点"，ctc 不介入 | 需手写 `q->__<trait>_vptr = &…;`，否则首次调用崩溃（创建方式推迟到 Phase 1） |
 | 单测与实现耦合 | `test/unit` 直接 `#include ctc.c` 调 `static` 函数 | 改被覆盖函数的签名/命名必须同步改单测（见第 9 节） |
 | 静默截断 | `read_ident` / `parse_params` 超长即截断；`MAX_VARS` 满后静默忽略 | 与「失败要响」目标冲突 |
 | 字面量跳过逻辑有两份 | `g_src` 版（`skip_literal`）与行缓冲版（`line_literal_end`） | 修改时需同步，易漏 |
@@ -140,9 +151,7 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | --- | --- |
 | namespace | `main` 主循环新增 `parse_namespace`；`find_*` 改成带限定的查找；命名规则加前缀 |
 | 多文件编译 | 见第 6 节：类型定义下沉到 `.h`，`.c` 改为 `#include` |
-| 指针调用 `p->m()` | `transform_calls` 增加 `->` 分支；`try_var_decl` 登记指针变量类型 |
 | 变量作用域 | `g_vars` 加块深度标记，进入/离开 `{}` 时截断回滚 |
-| 位置式初始化支持 | 去掉 `is_designated_list` 限制（C99 允许 `{ 1, .v = 0 }` 混用，已验证） |
 | 错误恢复 | 主循环在 `die` 处改为「跳到下一个行首/下一个 `}` 后继续」，需要引入错误计数 |
 | 自动化回归 | 见 `roadmap.md` 的测试策略 |
 
@@ -206,10 +215,18 @@ and impls must precede the functions that call them.
 | | `resolve_method` | find the trait a method belongs to, following the struct's `use` order |
 | Signature parsing | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | split `int add(int a, int b)` into ret / name / params / a parameter-type table |
 | Emitters | `emit_trait_def` `emit_struct_def` | generate vtable types and struct definitions (writing both `.c` and `.h`) |
-| | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments) |
+| | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments), rewriting `self->m(...)` into `_self->__<trait>_vptr->m(_self, …)` |
 | | `emit_body` | strip the common indentation and re-layout method bodies on a uniform 4-space base |
+| | `body_calls_sibling` | detect whether a body calls a sibling method (decides if a vtable forward declaration is needed) |
 | Construct parsers | `parse_trait` `parse_struct` `parse_impl` | recognition, validation and generation of the three top-level constructs |
-| Line rewriting | `line_literal_end` `line_match_paren` `is_designated_list` | in-line (stack-string) versions of literal skipping, paren matching and initialiser-list detection |
+| Line rewriting | `line_literal_end` `line_match_paren` `decl_end_is_bare` | in-line (stack-string) versions of literal skipping, paren matching and declaration-tail detection |
+| | `parse_func_sig` `analyse_param` | recognise ordinary function definitions/prototypes, qualify struct types in the signature and register parameters when a body follows |
+| | `parse_fields` `find_field` | partial struct-body parsing: add `struct ` and record nested ct-struct fields in the field table |
+| | `put_own_vptr` `needs_nested_init` `put_nested_assignments` | emit the object's own vptr designator; recursively emit vptr assignments for nested fields |
+| | `try_delete` | `delete p;` → `if (p) free(p);` (only for registered pointer variables) |
+| | `emit_qualified_type` `trait_has_method` `find_func` | type expansion (`struct ` / the `_iface` suffix), interface-method lookup, signature-table queries |
+| | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | interface polymorphism: boxing (compound literal), interface declarations/assignments, interface returns |
+| | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}` |
 | | `transform_calls` | the single-line state machine that rewrites method calls |
 | | `try_var_decl` | recognise `Type var = {...}`, rewrite the declaration and register the variable |
 | | `transform_line` `emit_raw_line` | chain the two steps above and write the line out |
@@ -244,23 +261,28 @@ ImplMethod { name, params, bstart, blen }   /* the body is stored as offset+leng
   the vtable type by dropping the trailing identifier unless it is a type keyword
   (`void`/`unsigned`/`size_t` …) or the text ends with `*` — a heuristic: `unsigned int` survives,
   `char *name` correctly becomes `char *`.
-- **Body formatting** (`emit_body`) runs `replace_self` first (token level; strings, chars and
-  comments untouched), then scans line by line: leading and trailing blank lines are dropped, the
-  minimum indentation of the remaining non-blank lines becomes the base, and each output line gets a
-  uniform 4-space prefix with the base stripped — relative indentation (e.g. nested `if`s) is
-  preserved.
+- **Body formatting** (`emit_body` + `replace_self`) runs `replace_self` first (token level; strings,
+  chars and comments untouched): `self` → `_self`, and `self->m(...)` → `_self->__<trait>_vptr->m(_self, …)`
+  when `m` resolves to a trait method. Then it scans line by line: leading and trailing blank lines are
+  dropped, the minimum indentation of the remaining non-blank lines becomes the base, and each output
+  line gets a uniform 4-space prefix with the base stripped — relative indentation (e.g. nested `if`s)
+  is preserved. When a body calls a sibling method, `parse_impl` emits a vtable forward declaration
+  before the method functions.
 - **Declaration rewriting** (`try_var_decl`) requires the whole line to start with a known struct
   name, or `struct` plus a known struct name (leading spaces allowed). Once the variable name is
-  parsed: if a `*` follows, it is a pointer declaration — only the `struct` qualifier is added, the
-  type name is kept and the variable is **not** registered (`->` is out of scope); otherwise the
-  variable is registered, and `is_designated_list` checks whether the `= { … }` list is empty or all
-  `.field = …` — only then is the vptr designated initialiser inserted before the closing `}`.
+  parsed: if a `*` follows, it is a pointer declaration — the `struct` qualifier is added, the type
+  name kept and the variable is **registered as a pointer** (so `p->m()` can be rewritten; an already
+  qualified `struct X *p` is returned unchanged but still registered); otherwise the variable is
+  registered and a `= { … }` list — designated, positional or empty — gets the vptr designated
+  initialiser inserted before the closing `}` (built by `put_vptr_designators`, one per trait in `use`
+  order). A declaration with **no** initialiser (`Person p;`) is rewritten into `= { <vptr> }`.
 - **Call rewriting** (`transform_calls`) is a single-line state machine that advances character by
-  character and skips literals and comments wholesale; when an identifier hits the variable table
-  and is followed by `.member(` where `member` resolves to a method of some trait, the call is
-  rewritten into `var.__<trait>_vptr->member(&var[, args…])`. With empty arguments it inserts `)` in
-  place and moves the scan past the closing paren; with non-empty arguments only the call head is
-  rewritten and scanning continues inside the argument list, so nested calls like
+  character and skips literals and comments wholesale; when an identifier hits the variable table it is
+  rewritten according to the variable's kind: a non-pointer variable followed by `.member(` becomes
+  `var.__<trait>_vptr->member(&var[, args…])`, while a pointer variable followed by `->member(`
+  becomes `var->__<trait>_vptr->member(var[, args…])` (**no `&` is added**). With empty arguments it
+  inserts `)` in place and moves the scan past the closing paren; with non-empty arguments only the
+  call head is rewritten and scanning continues inside the argument list, so nested calls like
   `q.add(1, q.add(2,3))` are handled recursively.
 
 ### 6. Header generation strategy
@@ -280,7 +302,8 @@ golden under `test/cases/**` and they must be regenerated together.
 | Item | Description | Impact |
 | --- | --- | --- |
 | Scope-less, type-less variable table | a global flat table, entries registered in source order | same-name variables interfere with each other; calls that appear before the declaration are not rewritten |
-| Pointer variables are not registered | pointer declarations only gain the `struct` qualifier and never enter the variable table | `p->m()` is not rewritten (`->` support is planned for Phase 1) |
+| A global ct object with nested / array construction | vptr writes are **statements**, which file scope cannot hold | such an object must be declared inside a function, or the compiler `die`s (documented) |
+| Heap objects get no vptr | an object from `malloc` has no compile-time construction point, so ctc stays out of it | it needs a hand-written `q->__<trait>_vptr = &…;`, or the first call crashes (creation deferred to Phase 1) |
 | Unit tests coupled to the implementation | `test/unit` `#include`s `ctc.c` directly to call `static` functions | renaming or re-signing a covered function requires updating the unit tests in sync (see §9) |
 | Silent truncation | `read_ident` / `parse_params` truncate overlong input; once `MAX_VARS` is full, further registrations are silently ignored | conflicts with the fail-loud goal |
 | Literal skipping exists in two copies | the `g_src` version (`skip_literal`) and the line-buffer version (`line_literal_end`) | the two must be updated together, which is easy to miss |
@@ -292,12 +315,9 @@ golden under `test/cases/**` and they must be regenerated together.
 
 Namespaces (a new `parse_namespace` in the `main` loop, qualified `find_*` lookups, and a prefix added
 to the naming rules), multi-file support (see §6: type definitions sink into the `.h` and the `.c`
-switches to `#include`), pointer calls `p->m()` (a `->` branch in `transform_calls`, plus registering
-pointer variable types in `try_var_decl`), variable scopes (block-depth markers in `g_vars`, truncated
-and rolled back on entering/leaving `{}`), positional-initialiser support (drop the
-`is_designated_list` restriction — C99 permits mixing `{ 1, .v = 0 }`, verified), error recovery
-(after `die`, skip to the next line start or the next `}` and continue, which needs an error
-counter), and the automated regression suite described in `roadmap.md`.
+switches to `#include`), variable scopes (block-depth markers in `g_vars`, truncated and rolled back on
+entering/leaving `{}`), error recovery (after `die`, skip to the next line start or the next `}` and
+continue, which needs an error counter), and the automated regression suite described in `roadmap.md`.
 
 ### 9. How the tests attach to this code
 

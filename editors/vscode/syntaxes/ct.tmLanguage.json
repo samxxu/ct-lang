@@ -8,6 +8,7 @@
     { "include": "#ct-impl" },
     { "include": "#ct-use" },
     { "include": "#ct-self" },
+    { "include": "#ct-delete" },
     { "include": "source.c" }
   ],
   "repository": {
@@ -78,6 +79,12 @@
     "ct-self": {
       "match": "\\bself\\b",
       "name": "variable.language.self.ct"
+    },
+    "ct-delete": {
+      "match": "\\b(delete)\\b",
+      "captures": {
+        "1": { "name": "keyword.other.delete.ct" }
+      }
     }
   }
 }

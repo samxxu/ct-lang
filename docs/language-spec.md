@@ -27,6 +27,7 @@ item     ::= trait-def | struct-def | impl-def | raw-text
 ### 2. 词法与书写要求
 
 - 关键字（`trait` / `struct` / `impl` / `use` / `for`）必须成**独立单词**出现，由 `word_at()` 做词边界判断；`traitx`、`my_struct` 不会被误判。
+- 行首的 `trait` / `impl` / `struct` 只有在**完整构造头部**紧跟其后时才算构造（`trait IDENT {`、`impl IDENT for`、`struct IDENT {`），否则按原样透传。因此把 `trait` / `impl` 当作普通标识符的合法 C（如 `impl[0] = 1;`、`trait = 2;`）不会被误判。
 - 空白、换行、`//` 行注释、`/* */` 块注释在构造头部可自由插入。
 - trait 体内的方法声明以 `;` 分隔，允许一条声明跨多行；注释在切分前被剥离。
 - struct 体内的字段原样保留、不做解析。
@@ -116,6 +117,10 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
 
 - 生成函数的参数是「`void *self` + impl 中书写的方法参数」，函数体第一行固定为 `_self` 强转。
 - 方法体的缩进按最小公共缩进去除后重新以 4 空格排版。
+- 方法体内对**兄弟方法**的调用也会重写：`self->other()` → `_self->__<trait>_vptr->other(_self)`、
+  `self->other(a)` → `_self->__<trait>_vptr->other(_self, a)`。只要某个方法体存在这种调用，就会在方法
+  函数之前先输出一行前向声明 `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`，以解决 vtable
+  变量的前向引用（C 的 tentative definition，随后再带初始化式定义，合法）。
 - vtable 初始化项按 **trait 中方法的声明顺序**排列，而不是 impl 中的书写顺序。
 
 #### 4.4 变量声明 → 限定 `struct` + 追加 vptr 指定初始化
@@ -132,11 +137,11 @@ struct Person p = { .name = "Tom", .age = 36, .__greeter_vptr = &Person_Greeter_
 
 | 源码形态 | 处理 |
 | --- | --- |
-| `Person p = { … };`（全为指定初始化） | 前缀 `struct `，并在 `}` 前追加 vptr 指定初始化项 |
-| `Person p = {};` / `Person p;` | 前缀 `struct `；空列表会追加 vptr，无初始化式则**不追加**（见 6.2） |
+| `Person p = { … };`（指定初始化） | 前缀 `struct `，并在 `}` 前追加 vptr 指定初始化项 |
+| `Person p = { "Tom", 36 };`（位置式初始化） | 同上：追加的 vptr 项接在位置式元素之后（C99 允许 `{ 1, .v = 0 }` 混用） |
+| `Person p = {};` / `Person p;` | 前缀 `struct `；空列表追加 vptr，无初始化式则补上 `= { <vptr> }` |
 | `struct Person p = { … };` | 同上（已有限定符时不重复添加） |
-| `Person p = { "Tom", 36 };`（位置式初始化） | 前缀 `struct `，其余原样输出，**不追加 vptr** |
-| `Person *p = …;` | 前缀 `struct `，其余原样输出；指针变量**不登记**，`p->m()` 不重写 |
+| `Person *p = …;` | 前缀 `struct `，其余原样输出；指针变量**登记为指针**，故 `p->m()` 会重写为 `p->__t_vptr->m(p, …)` |
 | 其它类型 | 完全不动 |
 
 被识别为「结构体类型变量」的名字会登记进变量表，供后续方法调用重写使用。
@@ -156,7 +161,7 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 触发条件（**全部**满足才重写）：
 
 1. 左边是一个标识符，且它在**本文件此前**已被登记为某 struct 类型的变量；
-2. 紧接着是 `.`，且成员名是该变量类型的某个 trait 的**方法名**；
+2. 紧接着是 `.`（值为结构体）或 `->`（值为指针），且成员名是该变量类型的某个 trait 的**方法名**；
 3. 成员名后紧跟 `(`。
 
 方法归属的判定顺序：按该 struct `use` 子句中的 trait 顺序查找，**取第一个**声明了该名字的 trait。
@@ -165,19 +170,102 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 
 - 形如 `x.m()` 的无参调用 → `x.__t_vptr->m(&x)`（不产生多余逗号）。
 - 形如 `x.m(a)` → `x.__t_vptr->m(&x, a)`。
+- 指针接收者不补 `&`：`p->m()` → `p->__t_vptr->m(p)`，`p->m(a)` → `p->__t_vptr->m(p, a)`。
 - 参数内部的嵌套调用会被继续处理：`q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`。
 - 字符串字面量、字符字面量、注释内的内容**永不重写**。
-- `->` 形式的指针调用不识别。
+- `impl` 方法体内的 `self->m(...)` 也按同一规则重写（见 4.3）。
+
+#### 4.6 普通函数的签名 → 限定 struct 类型
+
+```c
+void show(Person p);
+static Person make(char *n);
+Person *pick(Person *a, Person *b);
+```
+
+```c
+void show(struct Person p);
+static struct Person make(char *n);
+struct Person *pick(struct Person *a, struct Person *b);
+```
+
+规则：
+
+| 源码形态 | 处理 |
+| --- | --- |
+| 返回类型里的已知 struct 名（含 `static` 等前缀词、多词类型、指针返回） | 原地插入 `struct `（其余字符原样保留） |
+| 值参数 `Person p` | 插入 `struct `；**有函数体时**把参数登记进变量表（`ptr=0`），使体内 `p.m()` 可被重写 |
+| 指针参数 `Person *q` | 插入 `struct `；登记为指针（`ptr=1`），使体内 `q->m()` 可被重写 |
+| 函数原型 `void f(Person *q);` | 只限定类型，**不登记**参数（没有函数体） |
+| 参数已写成 `struct X …` | 不重复插入 `struct ` |
+| `if` / `while` / `else if` / `return …` 等语句 | 不会被误判为函数签名 |
+| 参数**列表本身跨多行**的签名 | 不识别，按原样透传 |
+
+#### 4.7 组合、数组与堆对象（构造语义）
+
+vptr 在「构造点」写入：对象**自身**的 vptr 写进初始化式；**嵌套字段 / 数组元素 / 堆对象**改用
+**声明之后的赋值语句**（避免追加的 `.field` 指定初始化覆盖用户自己写的 `.field = {…}`）。
+
+| 源码形态 | 处理 |
+| --- | --- |
+| `struct Shop { Person owner; };` | 字段类型补 `struct `：`struct Person owner;` |
+| `Shop s;` | `struct Shop s = { … };` 之后追加 `s.owner.__greeter_vptr = &Person_Greeter_vtable;` |
+| `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
+| `Person ps[3];` | 声明 + 块内循环 `for (…; __ct_i < 3; …) ps[__ct_i].__greeter_vptr = …;` |
+| `ps[0].greet();` | `ps[0].__greeter_vptr->greet(&ps[0]);` |
+| `delete q;` | `if (q) free(q);`（`q` 必须是已登记的指针变量） |
+
+命名与限制：
+
+- 数组展开的循环变量固定为 `__ct_i`，包在块内。
+- **含嵌套对象或数组的对象必须在函数内声明**——文件作用域无处安放 vptr 赋值语句，会 `die`。
+- 数组只支持 `Type name[<n>];`（无初始化式、常量下标）；需要初始化时的其它形态一律 `die`，不静默产出坏 C。
+- **堆对象不会自动初始化**：`malloc` 出来的对象要**手写** `q->__<trait>_vptr = &…;`（该行原样透传）；
+  堆对象的**创建方式**推迟到 Phase 1，与 Drop/delete 一起定。
+- **ct 不对手写 C 里的类型名做限定**：`sizeof(Person)` 不会被改写，请写成 `sizeof(struct Person)`。
+
+#### 4.8 接口多态（trait 作类型）
+
+每个 trait 额外生成一个**接口值类型**（胖指针，`self` + 该对象的 vtable）：
+
+```c
+struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
+```
+
+| 源码形态 | 处理 |
+| --- | --- |
+| `Greeter g;` | `struct Greeter_iface g = { 0, 0 };` |
+| `Greeter g = p;` | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
+| `Greeter g = q;`（`q` 是 `Person *`） | 同上，`self` 取 `q` 本身（**不加 `&`**） |
+| `g = s;` | 按 `g` 的 trait 装箱后再赋值 |
+| `void announce(Greeter who);` | `void announce(struct Greeter_iface who);` |
+| `announce(p);` | `announce((struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable });` |
+| `Greeter pick(void);` | `struct Greeter_iface pick(void);` |
+| 返回接口的函数里 `return p;` | `return (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
+| `g.greet();` | `g.vt->greet(g.self);` |
+| `g.greet_name("Jerry");` | `g.vt->greet_name(g.self, "Jerry");` |
+
+规则与限制：
+
+- 只有**变量**或 `&变量`（以及「返回同款接口」的函数调用）能装箱；类型无法推断 → `die`。
+- 装箱的目标 trait 由**声明/赋值的左值**或**当前函数返回类型**决定；实参则由**函数签名表**决定，
+  因此遵循「定义先于使用」——调用点看不到签名或看不到具体类型时不会装箱。
+- 被装箱的 struct 必须 `use` 了该 trait；跨 trait 装箱 → `die`。
+- **不做**隐式空检查：空接口值（`{0,0}`）上派发会崩，与 C 一致。
+- 接口**数组**不支持（声明即 `die`）；接口作为 struct **字段**时类型会被展开，但**不参与**构造点递归
+  （需要时手动赋值）。
 
 ### 5. 命名规则（稳定契约）
 
 | 产物 | 规则 | 示例（trait `Greeter`，struct `Person`，方法 `greet`） |
 | --- | --- | --- |
 | vtable 类型 | `<Trait>_vtbl` | `struct Greeter_vtbl` |
+| 接口值类型 | `<Trait>_iface` | `struct Greeter_iface`（胖指针 `{ self, vt }`） |
 | vptr 字段 | `__<trait 全小写>_vptr` | `__greeter_vptr` |
 | 方法实现 | `<Struct>_<Trait>_<method>` | `Person_Greeter_greet` |
 | vtable 变量 | `<Struct>_<Trait>_vtable` | `Person_Greeter_vtable` |
 | 隐式参数 | 固定为 `self`，函数体内强转目标固定为 `_self` | — |
+| 数组循环变量 | 固定为 `__ct_i`，包在自己的块内 | — |
 
 ### 6. 语义约束与已知问题
 
@@ -197,13 +285,14 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 #### 6.2 已知限制
 
-- 无初始化式的声明（`Person p;`）不会写入 vptr，此时调用方法会解引用空指针。
-- 位置式初始化不追加 vptr，因此不要用 `Person p = { "Tom", 36 };`。
-- 指针声明 `Person *p = …;` 会被正确限定为 `struct Person *p = …;`，但指针变量不登记，
-  因此 `p->m()` 形式的方法调用不会被重写（`->` 形式不在 Phase 0 范围内）。
-- 变量表无作用域、无类型（同名变量在后续函数中被沿用），且**登记顺序 = 源码顺序**：在变量声明之前出现的方法调用不会被重写。
-- 跨行的方法调用语句不重写（按行处理）。
-- `impl` 方法体内对其它方法的调用不会被重写（`self->other()` 只会变成 `_self->other()`）。
+- 变量表无类型信息；变量按**花括号块作用域**回滚（`{` 压栈、`}` 恢复），同一作用域内出现同名时取**最先**登记者（`find_var` 首命中）。
+- **登记顺序 = 源码顺序**：在变量声明之前出现的方法调用不会被重写。
+- 跨行的方法调用语句不重写（按行处理）；函数签名的**参数列表**跨多行时同样不识别。
+- **含嵌套对象 / 数组的对象必须在函数内声明**：文件作用域无法安放 vptr 赋值语句，会 `die`。
+- 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
+- **堆对象不自动初始化**：`malloc` 后需手写 `q->__<trait>_vptr = &…;`；堆对象的创建方式推迟到 Phase 1（与 Drop 一起定）。
+- 接口多态：接口**数组**不支持；接口作为 struct **字段**不参与构造点递归；装箱只接受**变量**、`&变量`
+  或「返回同款接口」的函数调用，其它表达式一律 `die`。
 - 顶层构造不支持嵌套。
 
 ### 7. 容量上限
@@ -211,6 +300,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 | 常量 | 值 | 含义 | 超限行为 |
 | --- | --- | --- | --- |
 | `MAX_TRAITS` | 16 | trait 数量 / 单 struct 的 `use` 数量 | 报错退出 |
+| `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 ct struct」的值字段数 | 报错退出 |
+| `MAX_DEPTH` | 8 | 嵌套构造 / 字段链的递归深度上限 | 报错退出 |
 | `MAX_STRUCT` | 32 | struct 数量 | 报错退出 |
 | `MAX_METHOD` | 32 | 单 trait / 单 impl 的方法数 | 报错退出 |
 | `MAX_PARAMS` | 16 | 单方法参数个数 | 报错退出 |
@@ -256,6 +347,10 @@ comment in its header); it is not part of the source content.
 
 - Keywords (`trait`, `struct`, `impl`, `use`, `for`) must appear as whole words (`word_at()` performs
   word-boundary matching), so `traitx` or `my_struct` are not misread.
+- A line-initial `trait` / `impl` / `struct` starts a construct only when the full header follows
+  (`trait IDENT {`, `impl IDENT for`, `struct IDENT {`); otherwise the line is passed through. So
+  legal C that uses `trait` / `impl` as ordinary identifiers (e.g. `impl[0] = 1;`, `trait = 2;`) is
+  not misread.
 - Whitespace, newlines, `//` comments and `/* */` comments may appear freely in construct headers.
 - Method declarations inside a trait are separated by `;` and may span lines; comments are stripped
   before splitting.
@@ -349,6 +444,11 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
   line of its body is always the `_self` cast.
 - The method body's indentation is normalised: the minimal shared indentation is stripped and the body
   is re-emitted with 4-space indentation.
+- Calls to **sibling methods** inside a body are rewritten too: `self->other()` →
+  `_self->__<trait>_vptr->other(_self)` and `self->other(a)` → `_self->__<trait>_vptr->other(_self, a)`.
+  Whenever such a call exists, a forward declaration `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`
+  is emitted before the method functions, to resolve the forward reference to the vtable variable
+  (a C tentative definition, later given its initialiser — both are valid together).
 - vtable initialisers follow the **declaration order of the methods in the trait**, not the order they
   are written in the impl.
 
@@ -366,11 +466,11 @@ Rules:
 
 | Source form | Handling |
 | --- | --- |
-| `Person p = { … };` (fully designated initialisers) | prefix `struct ` and append vptr designators before `}` |
-| `Person p = {};` / `Person p;` | prefix `struct `; an empty list gets the vptr appended, while a declaration without an initialiser gets **nothing appended** (see 6.2) |
+| `Person p = { … };` (designated initialisers) | prefix `struct ` and append vptr designators before `}` |
+| `Person p = { "Tom", 36 };` (positional initialiser) | same: the vptr designators follow the positional elements (C99 allows the mix `{ 1, .v = 0 }`) |
+| `Person p = {};` / `Person p;` | prefix `struct `; an empty list gets the vptr appended, and a declaration without an initialiser gets `= { <vptr> }` added |
 | `struct Person p = { … };` | same as above (the qualifier is not added twice when already present) |
-| `Person p = { "Tom", 36 };` (positional initialiser) | prefix `struct `, everything else emitted verbatim, **no vptr appended** |
-| `Person *p = …;` | prefix `struct `, everything else emitted verbatim; pointer variables are **not registered**, so `p->m()` is not rewritten |
+| `Person *p = …;` | prefix `struct `, everything else emitted verbatim; pointer variables are **registered as pointers**, so `p->m()` is rewritten to `p->__t_vptr->m(p, …)` |
 | other types | left completely untouched |
 
 Names recognised as variables of a struct type are registered in the variable table for later
@@ -392,8 +492,8 @@ Trigger conditions (rewriting happens only when **all** of them hold):
 
 1. the left-hand side is an identifier that has been registered **earlier in this file** as a variable
    of some struct type;
-2. it is immediately followed by `.`, and the member name is a **method name** of one of that struct's
-   traits;
+2. it is immediately followed by `.` (the value is a struct) or `->` (the value is a pointer), and the
+   member name is a **method name** of one of that struct's traits;
 3. the member name is immediately followed by `(`.
 
 Which trait a method belongs to is decided by scanning the traits of the struct's `use` clause in
@@ -403,20 +503,113 @@ Rewriting details:
 
 - a no-argument call `x.m()` → `x.__t_vptr->m(&x)` (no stray comma);
 - a call with arguments `x.m(a)` → `x.__t_vptr->m(&x, a)`;
+- a pointer receiver does not get `&` added: `p->m()` → `p->__t_vptr->m(p)` and
+  `p->m(a)` → `p->__t_vptr->m(p, a)`;
 - nested calls inside arguments are processed recursively:
   `q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`;
 - content inside string literals, character literals and comments is **never rewritten**;
-- pointer calls via `->` are not recognised.
+- `self->m(...)` inside an `impl` body is rewritten by the same rule (see 4.3).
+
+#### 4.6 Ordinary function signatures → struct types qualified
+
+```c
+void show(Person p);
+static Person make(char *n);
+Person *pick(Person *a, Person *b);
+```
+
+```c
+void show(struct Person p);
+static struct Person make(char *n);
+struct Person *pick(struct Person *a, struct Person *b);
+```
+
+Rules:
+
+| Source form | Handling |
+| --- | --- |
+| a known struct name in the return type (including `static`-style prefixes, multi-word types and pointer returns) | insert `struct ` in place (all other characters preserved) |
+| a value parameter `Person p` | insert `struct `; **when the function has a body**, register the parameter (`ptr=0`) so that `p.m()` inside the body is rewritten |
+| a pointer parameter `Person *q` | insert `struct `; register it as a pointer (`ptr=1`) so that `q->m()` inside the body is rewritten |
+| a prototype `void f(Person *q);` | qualify the types only; the parameters are **not** registered (there is no body) |
+| a parameter already written `struct X …` | no second `struct ` is inserted |
+| statements such as `if` / `while` / `else if` / `return …` | never mistaken for a function signature |
+| a signature whose **parameter list itself** spans several lines | not recognised; copied through verbatim |
+
+#### 4.7 Composition, arrays and heap objects (construction semantics)
+
+A vptr is written at a **construction point**: an object's **own** vptr goes into the initialiser, while
+**nested fields / array elements / heap objects** use **post-declaration assignments** (so an appended
+`.field` designator can never override a `.field = {…}` the user wrote).
+
+| Source form | Handling |
+| --- | --- |
+| `struct Shop { Person owner; };` | the field type gains `struct `: `struct Person owner;` |
+| `Shop s;` | after `struct Shop s = { … };`, append `s.owner.__greeter_vptr = &Person_Greeter_vtable;` |
+| `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
+| `Person ps[3];` | the declaration plus a scoped loop `for (…; __ct_i < 3; …) ps[__ct_i].__greeter_vptr = …;` |
+| `ps[0].greet();` | `ps[0].__greeter_vptr->greet(&ps[0]);` |
+| `delete q;` | `if (q) free(q);` (`q` must be a registered pointer variable) |
+
+Naming and limits:
+
+- The loop variable emitted for arrays is always `__ct_i`, wrapped in its own block.
+- **An object with nested objects or an array must be declared inside a function** — there is nowhere
+  at file scope to put the vptr assignment statements, so the compiler `die`s.
+- Arrays only support `Type name[<n>];` (no initialiser, constant subscripts); any other form that needs
+  initialisation `die`s instead of emitting bad C.
+- **Heap objects are not initialised automatically**: an object from `malloc` needs a hand-written
+  `q->__<trait>_vptr = &…;` (that line is passed through verbatim); **how heap objects are created** is
+  deferred to Phase 1, together with Drop/delete.
+- **ct never qualifies type names in hand-written C**: `sizeof(Person)` is not rewritten — write
+  `sizeof(struct Person)` instead.
+
+#### 4.8 Interface polymorphism (a trait used as a type)
+
+Each trait additionally generates an **interface value type** (a fat pointer: the object plus its
+vtable):
+
+```c
+struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
+```
+
+| Source form | Handling |
+| --- | --- |
+| `Greeter g;` | `struct Greeter_iface g = { 0, 0 };` |
+| `Greeter g = p;` | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
+| `Greeter g = q;` (`q` is `Person *`) | as above, with `self` taken from `q` itself (**no `&`**) |
+| `g = s;` | box according to `g`'s trait, then assign |
+| `void announce(Greeter who);` | `void announce(struct Greeter_iface who);` |
+| `announce(p);` | `announce((struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable });` |
+| `Greeter pick(void);` | `struct Greeter_iface pick(void);` |
+| `return p;` inside an interface-returning function | `return (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
+| `g.greet();` | `g.vt->greet(g.self);` |
+| `g.greet_name("Jerry");` | `g.vt->greet_name(g.self, "Jerry");` |
+
+Rules and limits:
+
+- Only a **variable** or `&variable` (or a call that already returns the same interface) can be boxed;
+  when the type cannot be inferred the compiler `die`s.
+- The boxing target trait comes from the **left-hand side** of a declaration/assignment, or from the
+  **current function's return type**; for arguments it comes from the **signature table**, hence the
+  definition-before-use rule applies — where the call site cannot see a signature (or the concrete
+  type) nothing is boxed.
+- The boxed struct must `use` that trait; boxing across different traits `die`s.
+- **No** implicit null check: dispatching on a null interface value (`{0,0}`) crashes, as in C.
+- Interface **arrays** are not supported (`die` at the declaration); an interface **field** has its type
+  expanded but does **not** participate in construction-point recursion (assign it by hand if needed).
 
 ### 5. Naming contract
 
 | Artifact | Rule | Example (trait `Greeter`, struct `Person`, method `greet`) |
 | --- | --- | --- |
 | vtable type | `<Trait>_vtbl` | `struct Greeter_vtbl` |
+| interface value type | `<Trait>_iface` | `struct Greeter_iface` (a fat pointer `{ self, vt }`) |
 | vptr field | `__<lowercase trait>_vptr` | `__greeter_vptr` |
 | method implementation | `<Struct>_<Trait>_<method>` | `Person_Greeter_greet` |
 | vtable variable | `<Struct>_<Trait>_vtable` | `Person_Greeter_vtable` |
 | implicit parameter | always `self`; the cast target inside the body is always `_self` | — |
+| array loop variable | always `__ct_i`, wrapped in its own block | — |
 
 ### 6. Diagnosed constraints and known issues
 
@@ -437,18 +630,21 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 
 #### 6.2 Known limitations
 
-- A declaration without an initialiser (`Person p;`) gets no vptr; calling a method on it dereferences
-  a null pointer.
-- Positional initialisers are not extended with a vptr, so do not write `Person p = { "Tom", 36 };`.
-- Pointer declarations `Person *p = …;` are correctly qualified to `struct Person *p = …;`, but
-  pointer variables are not registered, so `p->m()` calls are not rewritten (the `->` form is outside
-  Phase 0).
-- The variable table has no scope and no type (a same-named variable in a later function is treated as
-  the same variable), and **registration order = source order**: calls appearing before the variable's
-  declaration are not rewritten.
-- Call statements spanning multiple lines are not rewritten (processing is line by line).
-- Calls to other methods inside an `impl` body are not rewritten (`self->other()` only becomes
-  `_self->other()`).
+- The variable table is type-less; variables roll back at **brace block scope** (pushed at `{`,
+  restored at `}`), and within one scope a repeated name resolves to the **earliest** registration
+  (`find_var` returns the first match).
+- **Registration order = source order**: calls appearing before the variable's declaration are not
+  rewritten.
+- Call statements spanning multiple lines are not rewritten (processing is line by line); a function
+  signature whose **parameter list** spans several lines is not recognised either.
+- **An object with nested objects or an array must be declared inside a function**: file scope has
+  nowhere to put the vptr assignment statements, so the compiler `die`s.
+- Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
+- **Heap objects are not initialised automatically**: write `q->__<trait>_vptr = &…;` by hand after
+  `malloc`; how heap objects are created is deferred to Phase 1 (with Drop).
+- Interface polymorphism: interface **arrays** are unsupported; an interface **field** does not
+  participate in construction-point recursion; boxing accepts only a **variable**, `&variable` or a call
+  returning the same interface — any other expression `die`s.
 - Top-level constructs cannot be nested.
 
 ### 7. Capacity limits
@@ -456,6 +652,8 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 | Constant | Value | Meaning | On overflow |
 | --- | --- | --- | --- |
 | `MAX_TRAITS` | 16 | traits / traits per `use` | error, exit |
+| `MAX_FIELDS` | 32 | value fields per struct whose type is a known ct struct | error, exit |
+| `MAX_DEPTH` | 8 | recursion cap for nested construction / field chains | error, exit |
 | `MAX_STRUCT` | 32 | structs | error, exit |
 | `MAX_METHOD` | 32 | methods per trait or impl | error, exit |
 | `MAX_PARAMS` | 16 | parameters per method | error, exit |
