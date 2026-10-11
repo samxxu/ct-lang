@@ -9,11 +9,12 @@
 # Exit code 0 means every check passed.
 #
 # Layers
-#   build    ctc itself must compile under -Wall -Wextra -std=c99 with no warnings
-#   unit     white-box tests of ctc's pure helpers              (test/unit)
-#   cases    golden tests: generate, diff, compile, run        (test/cases)
-#   errors   diagnostics: must fail with the expected message  (test/errors)
-#   examples end-to-end demos: generate, build, run, compare   (examples)
+#   build     ctc itself must compile under -Wall -Wextra -std=c99 with no warnings
+#   unit      white-box tests of ctc's pure helpers              (test/unit)
+#   cases     golden tests: generate, diff, compile, run        (test/cases)
+#   errors    diagnostics: must fail with the expected message  (test/errors)
+#   examples  end-to-end demos: generate, build, run, compare   (examples)
+#   multifile `ct build` multi-file demo: build, compile, run    (test/multifile)
 
 set -u
 
@@ -138,6 +139,29 @@ for ct in examples/*/*.ct; do
     fi
     ok "$label"
 done
+
+# ------------------------------------------------------------------ multifile
+echo
+echo "== multi-file (ct build) =="
+mkdir -p "$TMP/mf"
+if ! "$TMP/ctc" build test/multifile/calc.ct test/multifile/app.ct -o "$TMP/mf" >"$TMP/mf.out" 2>"$TMP/mf.err"; then
+    bad "multifile/build" "ctc build exited non-zero: $(cat "$TMP/mf.err")"
+elif [ ! -f "$TMP/mf/calc.h" ]; then
+    bad "multifile/build" "no calc.h was generated"
+else
+    if ! $CC $CFLAGS "$TMP/mf/calc.c" "$TMP/mf/app.c" -o "$TMP/mf/app" 2>"$TMP/mf.log"; then
+        bad "multifile/cc" "generated C does not build"
+        sed 's/^/    /' "$TMP/mf.log"
+    else
+        "$TMP/mf/app" >"$TMP/mf.stdout" 2>&1
+        if ! diff -u test/multifile/expected.out "$TMP/mf.stdout" >"$TMP/mf.diff"; then
+            bad "multifile/run" "program output differs from expected.out"
+            sed -n '1,40p' "$TMP/mf.diff" | sed 's/^/    /'
+        else
+            ok "multifile/build+run"
+        fi
+    fi
+fi
 
 # ------------------------------------------------------------------ errors
 echo

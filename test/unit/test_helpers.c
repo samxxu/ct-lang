@@ -99,6 +99,7 @@ int main(void)
         Buf b;
         int first = 1;
         snprintf(s.name, sizeof s.name, "Person");
+        snprintf(s.cname, sizeof s.cname, "Person");
         snprintf(s.use_t[0], MAX_NAME, "Greeter");
         snprintf(s.use_t[1], MAX_NAME, "Counter");
         s.nu = 2;
@@ -116,10 +117,12 @@ int main(void)
         Buf b;
         g_nstructs = 2;
         snprintf(g_structs[0].name, MAX_NAME, "Person");
+        snprintf(g_structs[0].cname, MAX_NAME, "Person");
         g_structs[0].nu = 1;
         snprintf(g_structs[0].use_t[0], MAX_NAME, "Greeter");
         g_structs[0].nf = 0;
         snprintf(g_structs[1].name, MAX_NAME, "Shop");
+        snprintf(g_structs[1].cname, MAX_NAME, "Shop");
         g_structs[1].nu = 0;
         snprintf(g_structs[1].fname[0], MAX_NAME, "owner");
         g_structs[1].ftype[0] = 0;
@@ -155,38 +158,42 @@ int main(void)
     /* ---- analyse_param (needs one known struct) ---- */
     g_nstructs = 1;
     snprintf(g_structs[0].name, MAX_NAME, "Person");
+    snprintf(g_structs[0].cname, MAX_NAME, "Person");
     {
-        char nm[MAX_NAME];
-        int ins, ins2, ptr, tr;
-        eq_int("param ptr idx", analyse_param("Person *q", 9, &ins, &ins2, nm, &ptr, &tr), 0);
-        eq_int("param ptr insert", ins, 0);
+        char nm[MAX_NAME], cbase[MAX_NAME];
+        int ia, ib, need_struct, ptr, tr;
+        eq_int("param ptr idx", analyse_param("Person *q", 9, &ia, &ib, cbase, &need_struct, nm, &ptr, &tr), 0);
+        eq_int("param ptr insert", need_struct, 1);
+        eq_int("param ptr ident start", ia, 0);
+        eq_str("param ptr cbase", cbase, "Person");
         eq_str("param ptr name", nm, "q");
         eq_int("param ptr flag", ptr, 1);
 
-        eq_int("param val idx", analyse_param("Person p", 8, &ins, &ins2, nm, &ptr, &tr), 0);
+        eq_int("param val idx", analyse_param("Person p", 8, &ia, &ib, cbase, &need_struct, nm, &ptr, &tr), 0);
         eq_int("param val flag", ptr, 0);
 
-        eq_int("param qualified idx", analyse_param("struct Person *q", 16, &ins, &ins2, nm, &ptr, &tr), 0);
-        eq_int("param qualified no insert", ins, -1);
+        eq_int("param qualified idx", analyse_param("struct Person *q", 16, &ia, &ib, cbase, &need_struct, nm, &ptr, &tr), 0);
+        eq_int("param qualified no insert", need_struct, 0);
 
-        eq_int("param scalar idx", analyse_param("int a", 5, &ins, &ins2, nm, &ptr, &tr), -1);
+        eq_int("param scalar idx", analyse_param("int a", 5, &ia, &ib, cbase, &need_struct, nm, &ptr, &tr), -1);
         eq_str("param scalar name", nm, "a");
-        analyse_param("void", 4, &ins, &ins2, nm, &ptr, &tr);
+        analyse_param("void", 4, &ia, &ib, cbase, &need_struct, nm, &ptr, &tr);
         eq_int("param void unnamed", (long)strlen(nm), 0);
 
         /* a trait name in type position expands to "struct X_iface" */
         g_ntraits = 1;
         snprintf(g_traits[0].name, MAX_NAME, "Greeter");
+        snprintf(g_traits[0].cname, MAX_NAME, "Greeter");
         g_traits[0].nm = 1;
         snprintf(g_traits[0].m[0].name, MAX_NAME, "greet");
-        eq_int("param iface idx", analyse_param("Greeter g", 9, &ins, &ins2, nm, &ptr, &tr), -1);
+        eq_int("param iface idx", analyse_param("Greeter g", 9, &ia, &ib, cbase, &need_struct, nm, &ptr, &tr), -1);
         eq_int("param iface trait", tr, 0);
-        eq_int("param iface insert", ins, 0);
-        eq_int("param iface suffix", ins2, 7);
+        eq_int("param iface insert", need_struct, 1);
+        eq_int("param iface ident end", ib, 7);
         {
             Buf b2;
             buf_init(&b2);
-            emit_qualified_type(&b2, "Greeter g", 9, ins, ins2);
+            emit_qualified_type(&b2, "Greeter g", 9, ia, ib, cbase, need_struct, tr >= 0);
             eq_str("param iface expansion", b2.p, "struct Greeter_iface g");
             free(b2.p);
         }

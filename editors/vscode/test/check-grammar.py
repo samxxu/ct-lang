@@ -29,6 +29,8 @@ CT_CASES = (
     "examples/02_market/market.ct",
     "test/cases/02_multi_trait.ct",
     "test/cases/06_name_collision.ct",
+    "test/cases/19_namespace.ct",
+    "test/multifile/calc.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -172,6 +174,16 @@ def main():
             check("`} use Alpha, Beta;` -> ct-use",
                   any("use Alpha, Beta;" in t for t in
                       [t for n2, t in all_hits if n2 == "ct-use"]))
+        if "19_namespace" in rel:
+            check("`namespace Shop {` -> ct-namespace",
+                  any(h[0] == "ct-namespace" for _, l, hs in rows
+                      if l.strip().startswith("namespace ") for h in hs))
+            check("`Shop::Person` -> ct-path",
+                  any(h[0] == "ct-path" for _, l, hs in rows if "Shop::" in l for h in hs))
+        if "multifile/calc" in rel:
+            check("`pub int add(...)` -> ct-pub",
+                  any(h[0] == "ct-pub" for _, l, hs in rows
+                      if l.strip().startswith("pub ") for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

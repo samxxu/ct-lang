@@ -57,6 +57,7 @@
 #define MAX_SCOPE  256
 #define MAX_DEPTH  8
 #define MAX_FUNCS  64
+#define MAX_BUILD  32
 
 #define CTC_VERSION "0.0.1"
 
@@ -72,13 +73,16 @@ typedef struct {
 
 typedef struct {
     char   name[MAX_NAME];
+    char   cname[MAX_NAME];            /* namespace-mangled C name (ns + name) */
     Method m[MAX_METHOD];
     int    nm;
 } Trait;
 
 typedef struct {
     char name[MAX_NAME];
-    char use_t[MAX_TRAITS][MAX_NAME];
+    char cname[MAX_NAME];              /* namespace-mangled C name (ns + name) */
+    char use_t[MAX_TRAITS][MAX_NAME];  /* used trait short names (vptr field, messages) */
+    int  use_i[MAX_TRAITS];            /* their index into g_traits (for the mangled name) */
     int  nu;
     char fname[MAX_FIELDS][MAX_NAME];  /* value fields whose type is a known struct */
     int  ftype[MAX_FIELDS];            /* ... and their index into g_structs */
@@ -128,6 +132,14 @@ static int g_scope[MAX_SCOPE];        static int g_nscope = 0;
 static size_t g_body_abs = 0;         /* position of a pending function body '{' */
 static int    g_body_pre = 0;         /* g_nvars before that function's parameters */
 static int    g_no_box = 0;           /* while emitting a signature: never box args */
+
+static char g_ns[MAX_NAME];           /* current namespace prefix, e.g. "HAL_UART_" ("" at top level) */
+
+/* multi-file mode (`ct build`): the generated .c includes its own .h, and `pub`
+   symbols are routed into the .h instead of the .c */
+static int g_multi = 0;               /* 1 when compiling in multi-file mode */
+static int g_ctor_pub = 0;            /* 1 when the current trait/struct is 'pub' */
+static int g_line_pub = 0;            /* 1 when the current raw line was 'pub'-prefixed */
 
 static char g_guard[MAX_NAME * 2];     /* include guard of the generated .h */
 
@@ -189,6 +201,13 @@ static void to_lower(const char *in, char *out)
     for (i = 0; in[i] && i < MAX_NAME - 1; i++)
         out[i] = (char)tolower((unsigned char)in[i]);
     out[i] = 0;
+}
+
+/* build the namespace-mangled C name for `name` in namespace `ns` */
+static void set_cname(char *out, size_t cap, const char *ns, const char *name, size_t pos)
+{
+    int k = snprintf(out, cap, "%s%s", ns, name);
+    if (k < 0 || (size_t)k >= cap) die(pos, "namespace-qualified name too long");
 }
 
 /* dynamic string buffer */
@@ -291,19 +310,52 @@ static size_t match_delim(size_t p, char open, char close)
 
 /* ------------------------------------------------ tables / lookups */
 
+/* Namespace-aware lookup: an unqualified name resolves inside the current
+   namespace first, then at top level (the design's "unqualified falls back to
+   the enclosing, then the root namespace"). Comparison is on the mangled C
+   name, so a plain-C namespace never collides with a real name. */
 static Trait *find_trait(const char *name)
 {
+    char q[MAX_NAME * 2];
     int i;
+
+    if (snprintf(q, sizeof q, "%s%s", g_ns, name) < (int)sizeof q) {
+        for (i = 0; i < g_ntraits; i++)
+            if (strcmp(g_traits[i].cname, q) == 0) return &g_traits[i];
+    }
     for (i = 0; i < g_ntraits; i++)
-        if (strcmp(g_traits[i].name, name) == 0) return &g_traits[i];
+        if (strcmp(g_traits[i].cname, name) == 0) return &g_traits[i];
     return NULL;
 }
 
 static Struct *find_struct(const char *name)
 {
+    char q[MAX_NAME * 2];
+    int i;
+
+    if (snprintf(q, sizeof q, "%s%s", g_ns, name) < (int)sizeof q) {
+        for (i = 0; i < g_nstructs; i++)
+            if (strcmp(g_structs[i].cname, q) == 0) return &g_structs[i];
+    }
+    for (i = 0; i < g_nstructs; i++)
+        if (strcmp(g_structs[i].cname, name) == 0) return &g_structs[i];
+    return NULL;
+}
+
+/* lookup by an already-mangled C name (what a qualified `A::B::X` maps to) */
+static Struct *find_struct_c(const char *cname)
+{
     int i;
     for (i = 0; i < g_nstructs; i++)
-        if (strcmp(g_structs[i].name, name) == 0) return &g_structs[i];
+        if (strcmp(g_structs[i].cname, cname) == 0) return &g_structs[i];
+    return NULL;
+}
+
+static Trait *find_trait_c(const char *cname)
+{
+    int i;
+    for (i = 0; i < g_ntraits; i++)
+        if (strcmp(g_traits[i].cname, cname) == 0) return &g_traits[i];
     return NULL;
 }
 
@@ -329,8 +381,7 @@ static const char *resolve_method(const Struct *s, const char *m)
 {
     int i, k;
     for (i = 0; i < s->nu; i++) {
-        Trait *t = find_trait(s->use_t[i]);
-        if (!t) continue;
+        const Trait *t = &g_traits[s->use_i[i]];
         for (k = 0; k < t->nm; k++)
             if (strcmp(t->m[k].name, m) == 0) return t->name;
     }
@@ -512,6 +563,62 @@ static int last_ident(const char *s, size_t n, size_t *a, size_t *b)
     return 1;
 }
 
+/* The last namespace path `A::B::Name` (or a plain `Name`) in s[0..n): 1 and the
+   full span [*a,*b) including the `::` separators. */
+static int last_qual_name(const char *s, size_t n, size_t *a, size_t *b)
+{
+    size_t st, e, z;
+
+    if (!last_ident(s, n, &st, &e)) return 0;
+    for (;;) {
+        z = st;
+        while (z > 0 && isspace((unsigned char)s[z - 1])) z--;
+        if (z >= 2 && s[z - 1] == ':' && s[z - 2] == ':') {
+            size_t w = z - 2, e2, s2;
+            while (w > 0 && isspace((unsigned char)s[w - 1])) w--;
+            e2 = w;
+            s2 = e2;
+            while (s2 > 0 && is_ident_char((unsigned char)s[s2 - 1])) s2--;
+            if (s2 == e2) break;
+            st = s2;
+            continue;
+        }
+        break;
+    }
+    *a = st;
+    *b = e;
+    return 1;
+}
+
+/* mangle a namespace path span (`A::B::Name`) into a C name (`A_B_Name`) */
+static void qual_to_c(const char *s, size_t a, size_t b, char *out, size_t cap)
+{
+    size_t i = a, k = 0;
+    while (i < b) {
+        char c = s[i];
+        if (c == ':') {
+            if (k + 1 < cap) out[k++] = '_';
+            i++;
+            if (i < b && s[i] == ':') i++;
+        } else if (isspace((unsigned char)c)) {
+            i++;
+        } else {
+            if (k + 1 < cap) out[k++] = c;
+            i++;
+        }
+    }
+    out[k] = 0;
+}
+
+/* does the span [a,b) contain a `::`? (i.e. is it a qualified reference) */
+static int span_qualified(const char *s, size_t a, size_t b)
+{
+    size_t i;
+    for (i = a; i < b; i++)
+        if (s[i] == ':') return 1;
+    return 0;
+}
+
 /* is the identifier at `off` in `type` already preceded by "struct"? */
 static int already_qualified(const char *type, size_t off)
 {
@@ -523,57 +630,78 @@ static int already_qualified(const char *type, size_t off)
 
 /* Analyse one declaration piece (a parameter, a struct field or a return type):
    the struct its type names (an index into g_structs, or -1), the trait when the
-   type is an interface value (`*tr`, or -1), where "struct " must be inserted
-   (`*ins`) and where "_iface" must be appended (`*ins2`), the declared name
-   ("" when unnamed) and whether it is a pointer. Arrays are qualified but carry
-   no name. */
-static int analyse_param(const char *s, size_t n, int *ins, int *ins2,
+   type is an interface value (`*tr`, or -1), the identifier span [*ia,*ib) of
+   the base type name and its namespace-mangled spelling (`cbase`), whether the
+   "struct " keyword must be inserted (`*need_struct`), the declared name ("" when
+   unnamed) and whether it is a pointer. Arrays are qualified but carry no name. */
+static int analyse_param(const char *s, size_t n, int *ia, int *ib,
+                         char *cbase, int *need_struct,
                          char *name, int *isptr, int *tr)
 {
     size_t a, b, lim = 0, tn, ea, eb;
-    char tok[MAX_NAME], type[MAX_NAME * 2], base[MAX_NAME];
+    char type[MAX_NAME * 2], base[MAX_NAME];
     int idx = -1;
+    const Struct *S;
+    const Trait *T;
 
-    *ins = -1;
-    *ins2 = -1;
+    *ia = -1;
+    *ib = -1;
+    *need_struct = 0;
     *tr = -1;
+    cbase[0] = 0;
+    base[0] = 0;
     name[0] = 0;
     *isptr = 0;
 
     while (lim < n && s[lim] != '[') lim++;
-    if (!last_ident(s, lim, &a, &b)) return -1;
+    if (!last_qual_name(s, lim, &a, &b)) return -1;
 
     {
-        size_t tl = b - a;
-        if (tl >= sizeof tok) tl = sizeof tok - 1;
-        memcpy(tok, s + a, tl);
-        tok[tl] = 0;
-        if (is_type_keyword(tok) || find_struct(tok) || find_trait(tok)) {
-            snprintf(type, sizeof type, "%.*s", (int)n, s);   /* the type itself */
-        } else {
-            snprintf(name, MAX_NAME, "%s", tok);
+        size_t lsx = b;
+        char last[MAX_NAME];
+        while (lsx > a && is_ident_char((unsigned char)s[lsx - 1])) lsx--;
+        snprintf(last, sizeof last, "%.*s", (int)(b - lsx), s + lsx);
+        if (!span_qualified(s, a, b) &&
+            !is_type_keyword(last) && !find_struct(last) && !find_trait(last)) {
+            snprintf(name, MAX_NAME, "%s", last);
             snprintf(type, sizeof type, "%.*s", (int)a, s);
+        } else {
+            snprintf(type, sizeof type, "%.*s", (int)n, s);   /* the type itself */
         }
     }
     if (lim < n) name[0] = 0;                                 /* array: no object to bind */
 
-    /* the base type name: drop trailing '*'/space, then take the last identifier */
+    /* the base type name: drop trailing '*'/space, then take the last (possibly
+       qualified) name */
     tn = strlen(type);
     while (tn > 0 && (type[tn - 1] == '*' || isspace((unsigned char)type[tn - 1]))) tn--;
-    if (tn == 0 || !last_ident(type, tn, &ea, &eb)) return -1;
+    if (tn == 0 || !last_qual_name(type, tn, &ea, &eb)) return -1;
 
-    {
+    if (span_qualified(type, ea, eb)) {
+        qual_to_c(type, ea, eb, cbase, MAX_NAME);            /* A::B::Name -> A_B_Name */
+        S = find_struct_c(cbase);
+        T = S ? NULL : find_trait_c(cbase);
+    } else {
         size_t bl = eb - ea;
         if (bl >= sizeof base) bl = sizeof base - 1;
         memcpy(base, type + ea, bl);
         base[bl] = 0;
+        S = find_struct(base);
+        T = S ? NULL : find_trait(base);
+        if (S) snprintf(cbase, MAX_NAME, "%s", S->cname);
+        else if (T) snprintf(cbase, MAX_NAME, "%s", T->cname);
     }
-    if (find_struct(base)) {
-        idx = (int)(find_struct(base) - g_structs);
-        if (!already_qualified(type, ea)) *ins = (int)ea;
-    } else if (find_trait(base)) {
-        *tr = (int)(find_trait(base) - g_traits);
-        if (!already_qualified(type, ea)) { *ins = (int)ea; *ins2 = (int)eb; }
+
+    if (S) {
+        idx = (int)(S - g_structs);
+        *ia = (int)ea;
+        *ib = (int)eb;
+        *need_struct = !already_qualified(type, ea);
+    } else if (T) {
+        *tr = (int)(T - g_traits);
+        *ia = (int)ea;
+        *ib = (int)eb;
+        *need_struct = !already_qualified(type, ea);
     } else if (strlen(base) > 6 && strcmp(base + strlen(base) - 6, "_iface") == 0) {
         /* the already-expanded spelling "struct X_iface" */
         char pre[MAX_NAME];
@@ -581,7 +709,8 @@ static int analyse_param(const char *s, size_t n, int *ins, int *ins2,
         if (pl < sizeof pre) {
             memcpy(pre, base, pl);
             pre[pl] = 0;
-            if (find_trait(pre)) *tr = (int)(find_trait(pre) - g_traits);
+            T = find_trait(pre);
+            if (T) *tr = (int)(T - g_traits);
         }
     }
 
@@ -589,19 +718,18 @@ static int analyse_param(const char *s, size_t n, int *ins, int *ins2,
     return idx;
 }
 
-/* emit a declaration piece, inserting "struct " (and "_iface" for a trait) */
-static void emit_qualified_type(Buf *b, const char *piece, size_t len, int ins, int ins2)
+/* emit a declaration piece: replace the base type identifier [ia,ib) with its
+   mangled spelling, inserting "struct " (and "_iface" for a trait) as needed */
+static void emit_qualified_type(Buf *b, const char *piece, size_t len,
+                                int ia, int ib, const char *cbase,
+                                int need_struct, int is_trait)
 {
-    if (ins < 0) { buf_putn(b, piece, len); return; }
-    buf_putn(b, piece, (size_t)ins);
-    buf_puts(b, "struct ");
-    if (ins2 >= 0) {
-        buf_putn(b, piece + ins, (size_t)ins2 - (size_t)ins);
-        buf_puts(b, "_iface");
-        buf_putn(b, piece + ins2, len - (size_t)ins2);
-    } else {
-        buf_putn(b, piece + ins, len - (size_t)ins);
-    }
+    if (ia < 0) { buf_putn(b, piece, len); return; }
+    buf_putn(b, piece, (size_t)ia);
+    if (need_struct) buf_puts(b, "struct ");
+    buf_puts(b, cbase);
+    if (is_trait) buf_puts(b, "_iface");
+    buf_putn(b, piece + ib, len - (size_t)ib);
 }
 
 /* ------------------------------------------------------------ emitters */
@@ -609,7 +737,7 @@ static void emit_qualified_type(Buf *b, const char *piece, size_t len, int ins, 
 static void emit_trait_def(FILE *f, const Trait *T)
 {
     int i, k;
-    fprintf(f, "struct %s_vtbl {\n", T->name);
+    fprintf(f, "struct %s_vtbl {\n", T->cname);
     for (i = 0; i < T->nm; i++) {
         const Method *m = &T->m[i];
         fprintf(f, "    %s (*%s)(void *", m->ret, m->name);
@@ -619,7 +747,7 @@ static void emit_trait_def(FILE *f, const Trait *T)
     fprintf(f, "};\n");
     /* the interface value type: a fat pointer to an object plus its vtable */
     fprintf(f, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n",
-            T->name, T->name);
+            T->cname, T->cname);
 }
 
 static void emit_struct_def(FILE *f, const Struct *S, const char *body)
@@ -627,14 +755,14 @@ static void emit_struct_def(FILE *f, const Struct *S, const char *body)
     int i;
     size_t blen = strlen(body);
 
-    fprintf(f, "struct %s {", S->name);
+    fprintf(f, "struct %s {", S->cname);
     if (blen && body[0] != '\n') fputc('\n', f);
     if (blen) fputs(body, f);
     if (blen == 0 || body[blen - 1] != '\n') fputc('\n', f);
     for (i = 0; i < S->nu; i++) {
         char low[MAX_NAME];
         to_lower(S->use_t[i], low);
-        fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", S->use_t[i], low);
+        fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", g_traits[S->use_i[i]].cname, low);
     }
     fprintf(f, "};\n");
 }
@@ -817,6 +945,7 @@ static size_t parse_trait(size_t p)
     if (g_ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
     T = &g_traits[g_ntraits++];
     snprintf(T->name, sizeof T->name, "%s", name);
+    set_cname(T->cname, sizeof T->cname, g_ns, name, p);
     T->nm = 0;
 
     buf_init(&raw);
@@ -878,8 +1007,9 @@ static size_t parse_trait(size_t p)
     }
     free(clean.p);
 
-    emit_trait_def(g_out, T);
-    emit_trait_def(g_hout, T);
+    if (!g_multi) { emit_trait_def(g_out, T); emit_trait_def(g_hout, T); }
+    else if (g_ctor_pub) emit_trait_def(g_hout, T);
+    else emit_trait_def(g_out, T);
     return close + 1;
 }
 
@@ -896,8 +1026,8 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
 
     while (i < n) {
         size_t j = i, depth = 0;
-        int ins = -1, ins2 = -1, ptr = 0, idx, tr;
-        char fname[MAX_NAME];
+        int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr;
+        char fname[MAX_NAME], cbase[MAX_NAME];
 
         /* one field: up to the next top-level ';' */
         while (j < n) {
@@ -918,8 +1048,8 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
             j++;
         }
 
-        idx = analyse_param(body + i, j - i, &ins, &ins2, fname, &ptr, &tr);
-        emit_qualified_type(&out, body + i, j - i, ins, ins2);
+        idx = analyse_param(body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
+        emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
         if (idx >= 0 && fname[0] && !ptr) {          /* value field of a known struct */
             if (S->nf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
             snprintf(S->fname[S->nf], MAX_NAME, "%s", fname);
@@ -953,6 +1083,7 @@ static size_t parse_struct(size_t p)
     if (g_nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
     S = &g_structs[g_nstructs++];
     snprintf(S->name, sizeof S->name, "%s", name);
+    set_cname(S->cname, sizeof S->cname, g_ns, name, p);
     S->nu = 0;
 
     q = close + 1;
@@ -985,16 +1116,20 @@ static size_t parse_struct(size_t p)
         if (t < g_len && g_src[t] == ';') q = t + 1;
     }
 
-    for (i = 0; i < S->nu; i++)
-        if (!find_trait(S->use_t[i]))
+    for (i = 0; i < S->nu; i++) {
+        Trait *T = find_trait(S->use_t[i]);
+        if (!T)
             die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
+        S->use_i[i] = (int)(T - g_traits);
+    }
 
     {
         char *raw = xstrndup(g_src + bstart, bend - bstart);
         char *qbody = parse_fields(raw, S, p);
         free(raw);
-        emit_struct_def(g_out, S, qbody);
-        emit_struct_def(g_hout, S, qbody);
+        if (!g_multi) { emit_struct_def(g_out, S, qbody); emit_struct_def(g_hout, S, qbody); }
+        else if (g_ctor_pub) emit_struct_def(g_hout, S, qbody);
+        else emit_struct_def(g_out, S, qbody);
         free(qbody);
     }
     return q;
@@ -1094,7 +1229,7 @@ static size_t parse_impl(size_t p)
             if (body_calls_sibling(impl[k].bstart, impl[k].blen, S)) { needs_vtable = 1; break; }
         if (needs_vtable)
             fprintf(g_out, "static struct %s_vtbl %s_%s_vtable;\n\n",
-                    T->name, S->name, T->name);
+                    T->cname, S->cname, T->name);
     }
 
     /* emit one function per trait method, in trait order */
@@ -1107,19 +1242,19 @@ static size_t parse_impl(size_t p)
             die(p, "trait method '%s' is not implemented for struct '%s'",
                 tm->name, S->name);
 
-        fprintf(g_out, "static %s %s_%s_%s(void *self", tm->ret, S->name, T->name, tm->name);
+        fprintf(g_out, "static %s %s_%s_%s(void *self", tm->ret, S->cname, T->name, tm->name);
         if (tm->nparams > 0) fprintf(g_out, ", %s", impl[idx].params);
         fprintf(g_out, ") {\n");
-        fprintf(g_out, "    struct %s *_self = (struct %s *)self;\n", S->name, S->name);
+        fprintf(g_out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
         emit_body(g_out, impl[idx].bstart, impl[idx].blen, S);
         fprintf(g_out, "}\n\n");
     }
 
     fprintf(g_out, "static struct %s_vtbl %s_%s_vtable = {\n",
-            T->name, S->name, T->name);
+            T->cname, S->cname, T->name);
     for (k = 0; k < (size_t)T->nm; k++)
         fprintf(g_out, "    .%s = %s_%s_%s%s\n",
-                T->m[k].name, S->name, T->name, T->m[k].name,
+                T->m[k].name, S->cname, T->name, T->m[k].name,
                 (k + 1 < (size_t)T->nm) ? "," : "");
     fprintf(g_out, "};\n\n");
 
@@ -1170,7 +1305,7 @@ static void put_own_vptr(Buf *b, const Struct *S, int *first)
         buf_puts(b, ".__");
         buf_puts(b, low);
         buf_puts(b, "_vptr = &");
-        buf_puts(b, S->name);
+        buf_puts(b, S->cname);
         buf_putc(b, '_');
         buf_puts(b, S->use_t[h]);
         buf_puts(b, "_vtable");
@@ -1204,7 +1339,7 @@ static void put_nested_assignments(Buf *b, const Struct *S, const char *recv,
         buf_puts(b, ".__");
         buf_puts(b, low);
         buf_puts(b, "_vptr = &");
-        buf_puts(b, S->name);
+        buf_puts(b, S->cname);
         buf_putc(b, '_');
         buf_puts(b, S->use_t[h]);
         buf_puts(b, "_vtable;\n");
@@ -1290,12 +1425,12 @@ static void box_to_iface(Buf *out, const char *e, size_t len, int tr, size_t pos
         die(pos, "struct '%s' does not use trait '%s'", S->name, g_traits[tr].name);
 
     buf_puts(out, "(struct ");
-    buf_puts(out, g_traits[tr].name);
+    buf_puts(out, g_traits[tr].cname);
     buf_puts(out, "_iface){ (void *)");
     if (g_vars[vi].ptr) buf_puts(out, id);
     else { buf_putc(out, '&'); buf_puts(out, id); }
     buf_puts(out, ", &");
-    buf_puts(out, S->name);
+    buf_puts(out, S->cname);
     buf_putc(out, '_');
     buf_puts(out, g_traits[tr].name);
     buf_puts(out, "_vtable }");
@@ -1336,6 +1471,35 @@ static void transform_calls(const char *s, Buf *out)
             if (tl >= sizeof tok) tl = sizeof tok - 1;
             memcpy(tok, s + i, tl);
             tok[tl] = 0;
+
+            /* namespace path `A::B::name`: a call drops the path (functions are
+               not mangled), anything else is mangled to a C name `A_B_name` */
+            if (j + 1 < n && s[j] == ':' && s[j + 1] == ':') {
+                size_t z = j, finalstart = i, chainend = j;
+                int ok = 0;
+                while (z + 1 < n && s[z] == ':' && s[z + 1] == ':') {
+                    size_t w = z + 2;
+                    while (w < n && isspace((unsigned char)s[w])) w++;
+                    if (!(w < n && is_ident_char((unsigned char)s[w]) && !isdigit((unsigned char)s[w]))) break;
+                    finalstart = w;
+                    while (w < n && is_ident_char((unsigned char)s[w])) w++;
+                    chainend = w;
+                    ok = 1;
+                    z = w;
+                    while (z < n && isspace((unsigned char)s[z])) z++;
+                }
+                if (ok) {
+                    if (chainend < n && s[chainend] == '(') {
+                        i = finalstart;
+                    } else {
+                        char mc[MAX_NAME * 2];
+                        qual_to_c(s, i, chainend, mc, sizeof mc);
+                        buf_puts(out, mc);
+                        i = chainend;
+                    }
+                    continue;
+                }
+            }
 
             vi = find_var(tok);
             if (vi >= 0 && g_vars[vi].iface) {
@@ -1487,9 +1651,51 @@ static void transform_calls(const char *s, Buf *out)
     }
 }
 
+/* Read `Ident(::Ident)*` at p (used at the head of a declaration). Fills
+   `cname` with the mangled C name (namespace prefix added when unqualified),
+   `shortname` with the last segment and `*qualified`. Returns a pointer just
+   past the name, or NULL when there is no name. */
+static const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified)
+{
+    char buf[MAX_NAME * 2], seg[MAX_NAME];
+    size_t i;
+
+    *qualified = 0;
+    for (i = 0; is_ident_char((unsigned char)p[i]) && i < MAX_NAME - 1; i++) ;
+    if (i == 0) return NULL;
+    memcpy(seg, p, i);
+    seg[i] = 0;
+    snprintf(buf, sizeof buf, "%s", seg);
+    p += i;
+
+    for (;;) {
+        const char *z = p;
+        while (*z == ' ' || *z == '\t') z++;
+        if (z[0] == ':' && z[1] == ':') {
+            char tmp[MAX_NAME * 2];
+            z += 2;
+            while (*z == ' ' || *z == '\t') z++;
+            for (i = 0; is_ident_char((unsigned char)z[i]) && i < MAX_NAME - 1; i++) ;
+            if (i == 0) return NULL;
+            memcpy(seg, z, i);
+            seg[i] = 0;
+            if (snprintf(tmp, sizeof tmp, "%s_%s", buf, seg) >= (int)sizeof tmp) return NULL;
+            snprintf(buf, sizeof buf, "%s", tmp);
+            *qualified = 1;
+            p = z + i;
+            continue;
+        }
+        break;
+    }
+
+    snprintf(shortname, MAX_NAME, "%s", seg);
+    if (*qualified) snprintf(cname, MAX_NAME, "%s", buf);
+    else snprintf(cname, MAX_NAME, "%s%s", g_ns, buf);
+    return p;
+}
+
 /* "Greeter g;" / "Greeter g = p;" / "Greeter *g;" — an interface-value declaration */
-static char *try_iface_decl(const char *line, const char *tname, int tr, size_t ws,
-                            const char *after)
+static char *try_iface_decl(const char *line, int tr, size_t ws, const char *after)
 {
     char var[MAX_NAME];
     size_t vk = 0;
@@ -1510,7 +1716,7 @@ static char *try_iface_decl(const char *line, const char *tname, int tr, size_t 
     buf_init(&b);
     buf_putn(&b, line, ws);
     buf_puts(&b, "struct ");
-    buf_puts(&b, tname);
+    buf_puts(&b, g_traits[tr].cname);
     buf_puts(&b, ptr ? "_iface *" : "_iface ");
     buf_puts(&b, var);
 
@@ -1536,7 +1742,7 @@ static char *try_iface_decl(const char *line, const char *tname, int tr, size_t 
             buf_puts(&b, e + el);
         }
     } else {
-        die(0, "unsupported declaration of interface type '%s'", tname);
+        die(0, "unsupported declaration of interface type '%s'", g_traits[tr].name);
     }
 
     if (g_nvars < MAX_VARS) {
@@ -1609,11 +1815,11 @@ static char *try_iface_assign(const char *line)
 /* "<Struct> x = {...};" / "struct <Struct> x = {...};" -> add struct + vptr */
 static char *try_var_decl(const char *line)
 {
-    size_t i = 0, ws, k, vk;
-    const char *p;
-    char name[MAX_NAME], var[MAX_NAME];
+    size_t i = 0, ws, vk;
+    const char *p, *after;
+    char name[MAX_NAME], cname[MAX_NAME], var[MAX_NAME];
     Struct *S;
-    int had_struct = 0, done = 0;
+    int qual = 0, done = 0;
     const char *rest;
     Buf b;
 
@@ -1622,22 +1828,19 @@ static char *try_var_decl(const char *line)
     p = line + i;
 
     if (strncmp(p, "struct", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
-        had_struct = 1;
         p += 6;
         while (*p == ' ' || *p == '\t') p++;
     }
 
-    k = 0;
-    while (is_ident_char((unsigned char)p[k]) && k < MAX_NAME - 1) { name[k] = p[k]; k++; }
-    name[k] = 0;
-    if (!k) return NULL;
-    S = find_struct(name);
+    after = read_qual_ref(p, cname, name, &qual);
+    if (!after) return NULL;
+    p = after;
+    S = qual ? find_struct_c(cname) : find_struct(name);
     if (!S) {
-        Trait *TR = find_trait(name);
+        Trait *TR = qual ? find_trait_c(cname) : find_trait(name);
         if (!TR) return NULL;
-        return try_iface_decl(line, name, (int)(TR - g_traits), ws, p + k);
+        return try_iface_decl(line, (int)(TR - g_traits), ws, p);
     }
-    p += k;
     while (*p == ' ' || *p == '\t') p++;
 
     if (*p == '*') {                              /* pointer decl: qualify + register */
@@ -1656,11 +1859,10 @@ static char *try_var_decl(const char *line)
             g_vars[g_nvars].tr = -1;
             g_nvars++;
         }
-        if (had_struct) return NULL;              /* already carries "struct" */
         buf_init(&b);
         buf_putn(&b, line, ws);
         buf_puts(&b, "struct ");
-        buf_puts(&b, name);
+        buf_puts(&b, S->cname);
         buf_putc(&b, ' ');
         buf_puts(&b, p);
         return b.p;
@@ -1690,8 +1892,12 @@ static char *try_var_decl(const char *line)
                     S->name);
 
             buf_init(&b);
-            if (!had_struct) { buf_putn(&b, line, ws); buf_puts(&b, "struct "); }
-            buf_puts(&b, line + ws);
+            buf_putn(&b, line, ws);
+            buf_puts(&b, "struct ");
+            buf_puts(&b, S->cname);
+            buf_putc(&b, ' ');
+            buf_puts(&b, var);
+            buf_puts(&b, q);
 
             if (needs) {
                 char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
@@ -1741,7 +1947,7 @@ static char *try_var_decl(const char *line)
     buf_init(&b);
     buf_putn(&b, line, ws);
     buf_puts(&b, "struct ");
-    buf_puts(&b, name);
+    buf_puts(&b, S->cname);
     buf_putc(&b, ' ');
     buf_puts(&b, var);
 
@@ -1872,7 +2078,8 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
     const char *lp;
     char name[MAX_NAME], tok[MAX_NAME];
     Buf b;
-    int isdef = 0, ret_tr = -1, ret_ins = -1, ret_ins2 = -1;
+    int isdef = 0, ret_tr = -1, ret_ia = -1, ret_ib = -1, ret_ns = 0;
+    char ret_cbase[MAX_NAME];
 
     *has_body = 0;
     *body_abs = 0;
@@ -1932,19 +2139,19 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
     {
         char rname[MAX_NAME];
         int rptr = 0;
-        analyse_param(line, rt, &ret_ins, &ret_ins2, rname, &rptr, &ret_tr);
+        analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase, &ret_ns, rname, &rptr, &ret_tr);
     }
 
     buf_init(&b);
-    emit_qualified_type(&b, line, lpo, ret_ins, ret_ins2);
+    emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, ret_tr >= 0);
     buf_putc(&b, '(');
 
     {
         int npar = 0, ptrait[MAX_PARAMS];
         for (i = lpo + 1, end = rp; i < end; ) {
             size_t j = i;
-            int depth = 0, pins = -1, pins2 = -1, ptr = 0, sidx, ptrtr = -1;
-            char pname[MAX_NAME];
+            int depth = 0, pia = -1, pib = -1, pns = 0, ptr = 0, sidx, ptrtr = -1;
+            char pname[MAX_NAME], pcbase[MAX_NAME];
 
             while (j < end) {
                 char c = line[j];
@@ -1954,8 +2161,8 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
                 else if (c == ',' && depth == 0) break;
                 j++;
             }
-            sidx = analyse_param(line + i, j - i, &pins, &pins2, pname, &ptr, &ptrtr);
-            emit_qualified_type(&b, line + i, j - i, pins, pins2);
+            sidx = analyse_param(line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
+            emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, ptrtr >= 0);
 
             if (isdef && pname[0] && g_nvars < MAX_VARS) {
                 if (sidx >= 0) {                     /* concrete object parameter */
@@ -2050,6 +2257,21 @@ static void emit_raw_line(size_t ls, size_t le)
         free(line);
         return;
     }
+
+    /* a leading `pub` marks an exported declaration (multi-file mode); drop it
+       and remember it so the signature is routed to the .h */
+    g_line_pub = 0;
+    if (t + 3 <= len && strncmp(line + t, "pub", 3) == 0 &&
+        !is_ident_char((unsigned char)line[t + 3])) {
+        size_t z = t + 3;
+        while (z < len && (line[z] == ' ' || line[z] == '\t')) z++;
+        g_line_pub = 1;
+        memmove(line, line + z, len - z + 1);
+        len -= z;
+        ls += z;
+        t = 0;
+    }
+
     sig = parse_func_sig(line, ls, &has_body, &body_abs);
     if (sig) {
         Buf b;
@@ -2058,7 +2280,7 @@ static void emit_raw_line(size_t ls, size_t le)
         g_no_box = 1;                        /* the parameter list is not a call */
         transform_calls(sig, &b);
         g_no_box = 0;
-        fputs(b.p, g_out);
+        fputs(b.p, (g_line_pub && g_multi && !has_body) ? g_hout : g_out);
         free(b.p);
         free(sig);
     } else {
@@ -2075,14 +2297,18 @@ static void emit_raw_line(size_t ls, size_t le)
 static void usage(const char *prog)
 {
     fprintf(stderr,
-            "usage: %s <input.ct> [-o <output.c>]\n\n"
-            "Compiles a C-with-traits (.ct) file into plain C.\n"
-            "Writes <output.c> and a matching header <output.h>.\n"
-            "If -o is omitted the output is <input>.c next to the input.\n\n"
-            "  -o <file>       write the generated C to <file>\n"
+            "usage: %s [compile] <input.ct> [-o <output.c>]\n"
+            "       %s build <input.ct>... [-o <outdir>]\n\n"
+            "Compiles C-with-traits (.ct) files into plain C.\n"
+            "`compile` (default) writes <output.c> and a matching header <output.h>;\n"
+            "if -o is omitted the output is <input>.c next to the input.\n"
+            "`build` compiles every input in multi-file mode (the .c includes its own\n"
+            ".h, `pub` symbols go into the .h) and prints the suggested cc command.\n\n"
+            "  -o <file|dir>   compile: write the generated C to <file>\n"
+            "                  build: write the outputs into <dir>\n"
             "  -v, --version   print the compiler version and exit\n"
             "  -h, --help      print this help and exit\n",
-            prog);
+            prog, prog);
 }
 
 static void default_output(const char *in, char *out, size_t n)
@@ -2123,11 +2349,18 @@ static void write_guard(const char *hpath)
     strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
 
     fprintf(g_hout, "#ifndef %s\n#define %s\n\n", guard, guard);
-    fprintf(g_hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
-                    "   generated .c is self-contained).\n"
-                    "   Generated output is not covered by the GPL and may be "
-                    "used without restriction (LICENSE.EXCEPTION). */\n\n",
-            CTC_VERSION, g_path);
+    if (g_multi)
+        fprintf(g_hout, "/* Generated by ctc v%s from %s (multi-file mode:\n"
+                        "   exported types; the matching .c includes this header).\n"
+                        "   Generated output is not covered by the GPL and may be "
+                        "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                CTC_VERSION, g_path);
+    else
+        fprintf(g_hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
+                        "   generated .c is self-contained).\n"
+                        "   Generated output is not covered by the GPL and may be "
+                        "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                CTC_VERSION, g_path);
     snprintf(g_guard, sizeof g_guard, "%s", guard);
 }
 
@@ -2169,61 +2402,26 @@ static char *read_file(const char *path, size_t *out_len)
     return buf;
 }
 
-int main(int argc, char **argv)
+/* Scan [start,end): expand traits/structs/impls and namespaces, pass the rest
+   through. Namespace braces are consumed here (never emitted) so that the
+   enclosed constructs are mangled with the namespace prefix. */
+static void compile_range(size_t start, size_t end)
 {
-    const char *in = NULL, *outc = NULL;
-    char outbuf[MAX_NAME * 4], hbuf[MAX_NAME * 4];
-    size_t pos = 0;
-    int i;
+    size_t pos = start;
 
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            usage(argv[0]);
-            return 0;
-        }
-        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            printf("ctc v%s\n", CTC_VERSION);
-            return 0;
-        }
-        if (strcmp(argv[i], "-o") == 0) {
-            if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
-            outc = argv[++i];
-            continue;
-        }
-        if (argv[i][0] == '-' && argv[i][1]) {
-            fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
-            usage(argv[0]);
-            return 1;
-        }
-        in = argv[i];
-    }
-
-    if (!in) { usage(argv[0]); return 1; }
-    if (!outc) { default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    header_path(outc, hbuf, sizeof hbuf);
-
-    g_path = in;
-    g_src = read_file(in, &g_len);
-
-    g_out = fopen(outc, "w");
-    if (!g_out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
-    g_hout = fopen(hbuf, "w");
-    if (!g_hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(g_out); return 1; }
-
-    write_guard(hbuf);
-
-    /* provenance banner: the generated C is a build product, not a source file */
-    fprintf(g_out, "/* Generated by ctc v%s from %s -- do not edit; "
-                   "change the .ct and re-run ctc. */\n"
-                   "/* Generated output is not covered by the GPL and may be "
-                   "used without restriction (LICENSE.EXCEPTION). */\n",
-            CTC_VERSION, g_path);
-
-    while (pos < g_len) {
+    while (pos < end) {
         size_t ls = pos, q, le;
 
         q = ls;
-        while (q < g_len && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
+        while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
+
+        /* An optional `pub` marks a trait/struct as exported (multi-file mode);
+           `pub` on a function line is stripped later in emit_raw_line. */
+        g_ctor_pub = 0;
+        if (word_at(q, "pub")) {
+            size_t t = skip_ws_comments(q + 3);
+            if (word_at(t, "trait") || word_at(t, "struct")) { g_ctor_pub = 1; q = t; }
+        }
 
         /* A keyword only starts a construct when its full header follows: plain C
            may legally use 'trait' / 'impl' as identifiers (e.g. 'impl[n] = 0;'). */
@@ -2247,17 +2445,231 @@ int main(int argc, char **argv)
                 if (t < g_len && g_src[t] == '{') { pos = parse_struct(q); continue; }
             }
         }
+        if (word_at(q, "namespace")) {
+            /* namespace A::B::C { ... } -> mangling prefix "A_B_C_". Only a
+               complete header is a construct; anything else passes through, so
+               prose in a comment or plain C that happens to start a line with
+               the word 'namespace' is not mistaken for one. */
+            size_t t = skip_ws_comments(q + 9);
+            char pre[MAX_NAME], seg[MAX_NAME], saved[MAX_NAME], open[MAX_NAME * 2];
+            size_t pl = 0, close = 0;
+            int nseg = 0, ok = 1;
+
+            pre[0] = 0;
+            for (;;) {
+                size_t sl;
+                t = read_ident(t, seg, sizeof seg);
+                if (!seg[0]) {
+                    if (nseg == 0) { ok = 0; break; }        /* not a namespace header */
+                    die(t, "expected a name after '::' in namespace");
+                }
+                sl = strlen(seg);
+                if (nseg && pl + sl + 2 >= sizeof pre) die(t, "namespace path too long");
+                if (nseg) pre[pl++] = '_';
+                memcpy(pre + pl, seg, sl);
+                pl += sl;
+                pre[pl] = 0;
+                nseg++;
+                t = skip_ws_comments(t);
+                if (t + 1 < g_len && g_src[t] == ':' && g_src[t + 1] == ':') {
+                    t = skip_ws_comments(t + 2);
+                    continue;
+                }
+                break;
+            }
+
+            if (ok && t < g_len && g_src[t] == '{') {
+                close = match_delim(t, '{', '}');
+
+                snprintf(saved, sizeof saved, "%s", g_ns);
+                if (snprintf(open, sizeof open, "%s%s_", g_ns, pre) >= (int)sizeof open)
+                    die(t, "namespace path too long");
+                snprintf(g_ns, sizeof g_ns, "%s", open);
+
+                compile_range(t + 1, close);
+
+                snprintf(g_ns, sizeof g_ns, "%s", saved);
+                pos = close + 1;
+                continue;
+            }
+        }
 
         le = ls;
-        while (le < g_len && g_src[le] != '\n') le++;
+        while (le < end && g_src[le] != '\n') le++;
         emit_raw_line(ls, le);
-        if (le < g_len) { fputc('\n', g_out); le++; }
+        if (le < end) { fputc('\n', g_out); le++; }
         pos = le;
     }
+}
+
+/* Compile one input to `outc` and a matching header. When `multi` is set the
+   generated .c includes its own header and `pub` symbols are routed into the
+   header (multi-file mode, `ct build`). Returns 0 on success. */
+static int compile_file(const char *in, const char *outc, int multi)
+{
+    char hbuf[MAX_NAME * 4];
+    const char *base;
+
+    g_multi = multi;
+    g_ns[0] = 0;
+    g_ntraits = g_nstructs = g_nvars = g_nfuncs = g_nscope = 0;
+    g_cur_rettr = -1;
+    g_body_abs = 0;
+    g_body_pre = 0;
+    g_no_box = 0;
+    g_ctor_pub = 0;
+    g_line_pub = 0;
+
+    header_path(outc, hbuf, sizeof hbuf);
+    g_path = in;
+    g_src = read_file(in, &g_len);
+
+    g_out = fopen(outc, "w");
+    if (!g_out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
+    g_hout = fopen(hbuf, "w");
+    if (!g_hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(g_out); return 1; }
+
+    write_guard(hbuf);
+
+    /* provenance banner: the generated C is a build product, not a source file */
+    fprintf(g_out, "/* Generated by ctc v%s from %s -- do not edit; "
+                   "change the .ct and re-run ctc. */\n"
+                   "/* Generated output is not covered by the GPL and may be "
+                   "used without restriction (LICENSE.EXCEPTION). */\n",
+            CTC_VERSION, g_path);
+
+    if (multi) {
+        base = strrchr(hbuf, '/');
+        base = base ? base + 1 : hbuf;
+        fprintf(g_out, "#include \"%s\"\n\n", base);
+    }
+
+    compile_range(0, g_len);
 
     fprintf(g_hout, "\n#endif /* %s */\n", g_guard);
 
     fclose(g_out);
     fclose(g_hout);
     return 0;
+}
+
+/* output path for `in` in build mode: `<outdir>/<base>.c`, or beside the input */
+static int build_output(const char *in, const char *outdir, char *out, size_t cap)
+{
+    size_t l;
+
+    if (!outdir) { default_output(in, out, cap); return 0; }
+    {
+        const char *b = strrchr(in, '/');
+        b = b ? b + 1 : in;
+        if (snprintf(out, cap, "%s/%s", outdir, b) >= (int)cap) return -1;
+    }
+    l = strlen(out);
+    if (l > 3 && strcmp(out + l - 3, ".ct") == 0) out[l - 3] = 0;
+    if (strlen(out) + 3 > cap) return -1;
+    strcat(out, ".c");
+    return 0;
+}
+
+/* `ct build`: compile every input in multi-file mode and print the suggested cc
+   command. ctc never invokes a C compiler itself (it stays dependency-free). */
+static int build_main(int argc, char **argv, const char *prog)
+{
+    const char *in[MAX_BUILD];
+    char outc[MAX_BUILD][MAX_NAME * 4];
+    const char *outdir = NULL;
+    int n = 0, i;
+    Buf cc;
+
+    for (i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) { usage(prog); return 0; }
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("ctc v%s\n", CTC_VERSION);
+            return 0;
+        }
+        if (strcmp(argv[i], "-o") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
+            outdir = argv[++i];
+            continue;
+        }
+        if (argv[i][0] == '-' && argv[i][1]) {
+            fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+            usage(prog);
+            return 1;
+        }
+        if (n >= MAX_BUILD) {
+            fprintf(stderr, "ctc: too many inputs (max %d)\n", MAX_BUILD);
+            return 1;
+        }
+        in[n++] = argv[i];
+    }
+
+    if (!n) { usage(prog); return 1; }
+
+    for (i = 0; i < n; i++) {
+        if (build_output(in[i], outdir, outc[i], sizeof outc[i]) != 0) {
+            fprintf(stderr, "ctc: output path too long for '%s'\n", in[i]);
+            return 1;
+        }
+        if (compile_file(in[i], outc[i], 1) != 0) return 1;
+    }
+
+    buf_init(&cc);
+    buf_puts(&cc, "cc");
+    for (i = 0; i < n; i++) { buf_putc(&cc, ' '); buf_puts(&cc, outc[i]); }
+    buf_puts(&cc, " -o a.out");
+    printf("%s\n", cc.p);
+    free(cc.p);
+    return 0;
+}
+
+/* Compile one .ct file to .c + .h (single-file mode). argv[0..argc-1] are the
+   compile arguments (argv[0] is not the program name); prog is for diagnostics. */
+static int compile_main(int argc, char **argv, const char *prog)
+{
+    const char *in = NULL, *outc = NULL;
+    char outbuf[MAX_NAME * 4];
+    int i;
+
+    for (i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            usage(prog);
+            return 0;
+        }
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("ctc v%s\n", CTC_VERSION);
+            return 0;
+        }
+        if (strcmp(argv[i], "-o") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
+            outc = argv[++i];
+            continue;
+        }
+        if (argv[i][0] == '-' && argv[i][1]) {
+            fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+            usage(prog);
+            return 1;
+        }
+        in = argv[i];
+    }
+
+    if (!in) { usage(prog); return 1; }
+    if (!outc) { default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
+    return compile_file(in, outc, 0);
+}
+
+int main(int argc, char **argv)
+{
+    int first = 1;
+
+    /* Single-entry `ct` with `ctc` kept as a compatibility alias. `compile` is
+       the default subcommand (`ct X` == `ct compile X`); `build` compiles
+       several units in multi-file mode. */
+    if (first < argc && strcmp(argv[first], "build") == 0)
+        return build_main(argc - first - 1, argv + first + 1, argv[0]);
+
+    if (first < argc && strcmp(argv[first], "compile") == 0)
+        first++;
+
+    return compile_main(argc - first, argv + first, argv[0]);
 }

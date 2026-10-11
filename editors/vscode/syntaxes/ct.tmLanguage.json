@@ -4,11 +4,14 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#ct-namespace" },
+    { "include": "#ct-path" },
     { "include": "#ct-trait" },
     { "include": "#ct-impl" },
     { "include": "#ct-use" },
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
+    { "include": "#ct-pub" },
     { "include": "source.c" }
   ],
   "repository": {
@@ -49,11 +52,36 @@
         { "match": "\\\\.", "name": "constant.character.escape.ct" }
       ]
     },
-    "ct-trait": {
-      "match": "^\\s*(trait)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+    "ct-namespace": {
+      "match": "^[ \\t]*(namespace)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
       "captures": {
-        "1": { "name": "storage.type.trait.ct" },
-        "2": { "name": "entity.name.type.trait.ct" }
+        "1": { "name": "storage.type.namespace.ct" },
+        "2": {
+          "patterns": [
+            { "match": "::", "name": "punctuation.separator.namespace.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.namespace.ct" }
+          ]
+        }
+      }
+    },
+    "ct-path": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)((?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)+)",
+      "captures": {
+        "1": { "name": "entity.name.namespace.ct" },
+        "2": {
+          "patterns": [
+            { "match": "::", "name": "punctuation.separator.namespace.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.namespace.ct" }
+          ]
+        }
+      }
+    },
+    "ct-trait": {
+      "match": "^[ \\t]*(?:(pub)[ \\t]+)?(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.modifier.pub.ct" },
+        "2": { "name": "storage.type.trait.ct" },
+        "3": { "name": "entity.name.type.trait.ct" }
       }
     },
     "ct-impl": {
@@ -84,6 +112,12 @@
       "match": "\\b(delete)\\b",
       "captures": {
         "1": { "name": "keyword.other.delete.ct" }
+      }
+    },
+    "ct-pub": {
+      "match": "\\b(pub)\\b",
+      "captures": {
+        "1": { "name": "storage.modifier.pub.ct" }
       }
     }
   }
