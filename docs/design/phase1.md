@@ -10,9 +10,9 @@
 > 第 6 节列出**仍需用户拍板**的决策点（D1–D8）。
 >
 > **落地进度（2026-10-11）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
-> **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）与 **1.3**（`import A::B` 递归解析、
-> 跨单元符号累积、自动 `#include`）已实现，测试全绿（`./test/run.sh` 73/73、`check-grammar.py` 17/17）；
-> 仅 **1.4** 部分完成（堆创建 D1=A + `delete` 放宽已实现；**Drop 未做**）。落地时采用 **D2 = 是**、**D3 = 是**，且 **D-A = 方案 A**
+> **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）、**1.3**（`import A::B` 递归解析、
+> 跨单元符号累积、自动 `#include`）与 **1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）已实现，
+> 测试全绿（`./test/run.sh` 90/90、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，且 **D-A = 方案 A**
 > （`ct build` 不调用 `cc`）。1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
 > 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D1 / D4 / D5 / D6 / D7 / D8 仍待定。
 
@@ -144,12 +144,14 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **风险**：**目录 = namespace 是 Phase 2 才强制**，Phase 1 只按 `import` 路径解析，不校验目录名。
 - **验收**：被 `import` 的单元自动编入，无需手工列出全部文件。
 
-#### 1.4 堆对象创建 + `delete` 放宽 + Drop（"对象住哪儿"）🔨 部分完成
+#### 1.4 堆对象创建 + `delete` 放宽 + Drop（"对象住哪儿"）✅ 已完成（`delete[]` 未做）
 
 > **落地说明**：**已实现**——D1 = A（`T *p = malloc/calloc(...)` 在声明后自动写 vptr，含嵌套值字段）、
-> `delete p;` 对任意指针放宽（`char *` → `if (p) free(p);`）。**未实现**——`Drop`（内置保留名 trait、
-> 默认递归体、用户 `impl` 覆盖、惰性生成）、`delete[]`。相应地，`delete` 现在**只** `free`，不做
-> 值字段的递归 `drop()`。
+> `delete p;` 对任意指针放宽（`char *` → `if (p) free(p);`；`use Drop` 的指针 → `<S>_Drop_drop(p); free(p);`）、
+> **Drop**（内置**保留名** trait，`Drop` 不可被用户定义；`use Drop` 只作标记，无 vtable / vptr；生成
+> `static void <S>_Drop_drop(void *self)`，用户 `impl Drop for T` **完全覆盖**默认体；默认体递归 `drop()`
+> 其 `use Drop` 的值字段；**惰性生成**——只有被 `delete` 触达的类型才生成原型与定义，原型在 body 前、定义在 body 后）。
+> **未实现**——`delete[]`（数组元素逐个 `drop()`）。
 
 - **堆创建入口（决策 D1）**：
   - A. 识别 `T *p = malloc(sizeof(struct T));`（含 `calloc`）→ 自动写 vptr（含嵌套字段）。
@@ -424,13 +426,16 @@ parallel; 1.5–1.8 each depend on their upstream.
   the `import` path and does not check directory names.
 - **Acceptance**: an `import`ed unit is compiled in automatically, with no need to list every file by hand.
 
-#### 1.4 Heap creation + `delete` relaxation + Drop ("where objects live") 🔨 partly done
+#### 1.4 Heap creation + `delete` relaxation + Drop ("where objects live") ✅ done (`delete[]` not done)
 
 > **What landed**: D1 = A (`T *p = malloc/calloc(...)` writes the vptrs — including nested value fields —
-> right after the declaration) and the `delete p;` relaxation to any pointer (`char *` →
-> `if (p) free(p);`). **Not landed**: `Drop` (the reserved built-in trait, its default recursive body,
-> user `impl` override, lazy generation) and `delete[]`. Accordingly `delete` now only `free`s — it does
-> not recursively `drop()` value fields.
+> right after the declaration), the `delete p;` relaxation to any pointer (`char *` → `if (p) free(p);`;
+> a `use Drop` pointer → `<S>_Drop_drop(p); free(p);`), and **Drop** (a **reserved** built-in trait —
+> `Drop` may not be user-defined; `use Drop` is only a marker, no vtable / vptr; it generates
+> `static void <S>_Drop_drop(void *self)`, a user `impl Drop for T` **fully overrides** the default body;
+> the default body recursively `drop()`s its `use Drop` value fields; **lazy** — only types reached by
+> `delete` get a prototype and definition, the prototype before the body and the definition after it).
+> **Not landed**: `delete[]` (dropping each element).
 
 - **Heap creation entry (decision D1)**:
   - A. Recognise `T *p = malloc(sizeof(struct T));` (and `calloc`) → write the vptr automatically

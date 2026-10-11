@@ -268,6 +268,14 @@ ct/
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰，因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
 - **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；用 `import A::B;` 可跨单元按名使用被导入单元的 `pub` 类型；但**跨单元使用带 trait 的对象**（写 vptr / 装箱）尚不可（被导入单元的 vtable 仍是 `static`）。
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
+- **构造头部必须完整**：`trait IDENT {` / `struct IDENT {` / `impl IDENT for` 缺一不可；只写到一半
+  （如 `trait T`、`struct S`、`impl`）**不报错**，该行按普通 C **原样透传**——这是为兼容把
+  `trait` / `impl` 当普通标识符的合法 C（如 `impl[i] = 0;`）。
+- **构造与语句写在同一行时不重写**：重写按行进行，`int main(void){ Person p = { … }; p.greet(); }`
+  里的 `p.greet()` 不会被改写（拆成多行即可）。
+- **容量上限一律报错、不静默截断**：标识符 ≤ 127、函数参数 ≤ 16、参数表文本 ≤ 255、函数签名表 64、
+  变量 512、嵌套作用域 256、struct 字段 32、trait 16、struct 32、方法 32、嵌套深度 8、`ct build`
+  输入 32 / 编译单元 64 / 每单元 import 16。
 
 ### 8. 相关文档
 
@@ -586,6 +594,16 @@ Implementation limits:
   lets a unit use an imported unit's `pub` type names by name; but using an imported unit's
   **trait-carrying objects** (writing a vptr / boxing) is not yet possible (its vtables stay `static`).
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
+- **A construct header must be complete**: `trait IDENT {` / `struct IDENT {` / `impl IDENT for`. A
+  half-written header (`trait T`, `struct S`, `impl`) is **not an error** — the line is **passed through
+  as plain C**, so that legal C using `trait` / `impl` as ordinary identifiers (`impl[i] = 0;`) keeps
+  working.
+- **A construct and a statement on the same line**: rewriting is line-based, so `p.greet()` inside
+  `int main(void){ Person p = { … }; p.greet(); }` is not rewritten (split it across lines).
+- **Capacity limits are hard errors, never silent truncation**: identifier ≤ 127, function parameters
+  ≤ 16, parameter-list text ≤ 255, signature table 64, variables 512, nested scopes 256, struct fields
+  32, traits 16, structs 32, methods 32, nesting depth 8, `ct build` inputs 32 / units 64 / imports
+  per unit 16.
 
 ### 8. Documentation
 

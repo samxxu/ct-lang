@@ -59,7 +59,7 @@ argv
 | | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | 动态字符串缓冲，行重写的主要输出载体 |
 | 源扫描 | `word_at` | 词边界匹配，替代裸 `strncmp`，避免 `structx` 误判 |
 | | `skip_literal` `skip_comment` `skip_ws_comments` | 跳过字符串/字符字面量与注释；保证不误改字面量内文本 |
-| | `read_ident` | 读标识符（超长静默截断） |
+| | `read_ident` `copy_ident` | 读 / 拷贝标识符；超过 `MAX_NAME` 即 `die`，不静默截断 |
 | | `match_delim` | 在 `g_src` 上做括号配对，自动跳过字面量与注释 |
 | 符号表 | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | 线性查找（规模小，不引入哈希）；`find_trait` / `find_struct` 先查当前命名空间再回退顶层，`*_c` 按已修饰的 C 名精确查找 |
 | | `resolve_method` | 按 struct 的 `use` 顺序找方法归属的 trait |
@@ -142,11 +142,10 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | 全局 ct 对象带嵌套/数组构造 | vptr 写入用的是**语句**，文件作用域安放不了 | 这类对象必须在函数内声明，否则 `die`（已文档化） |
 | 堆对象不写 vptr | `malloc` 出来的对象没有编译期"构造点"，ctc 不介入 | 需手写 `q->__<trait>_vptr = &…;`，否则首次调用崩溃（创建方式推迟到 Phase 1） |
 | 单测与实现耦合 | `test/unit` 直接 `#include ctc.c` 调 `static` 函数 | 改被覆盖函数的签名/命名必须同步改单测（见第 9 节） |
-| 静默截断 | `read_ident` / `parse_params` 超长即截断；`MAX_VARS` 满后静默忽略 | 与「失败要响」目标冲突 |
 | 字面量跳过逻辑有两份 | `g_src` 版（`skip_literal`）与行缓冲版（`line_literal_end`） | 修改时需同步，易漏 |
 | 主循环重复前瞻 | 主循环里先探一次 `struct` 是否带 `{`，`parse_struct` 里再解析一次 | 轻微冗余，暂可接受 |
 | 报错定位粒度 | 语义类错误（如未实现的方法）定位到构造起始行 | 多方法文件里定位不够精确 |
-| 参数表上限偏小 | `MAX_PARAM` 256、`MAX_PARAMS` 16 | 复杂签名会被截断或报错 |
+| 参数表上限偏小 | `MAX_PARAM` 256、`MAX_PARAMS` 16 | 复杂签名一律 `die`（不截断） |
 
 ### 8. 扩展点（Phase 1 落点）
 
@@ -212,7 +211,7 @@ and impls must precede the functions that call them.
 | | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | dynamic string buffer, the main output vehicle of line rewriting |
 | Source scanning | `word_at` | word-boundary matching, replacing bare `strncmp`, so `structx` is not misread |
 | | `skip_literal` `skip_comment` `skip_ws_comments` | skip string/char literals and comments; text inside literals is never rewritten |
-| | `read_ident` | read an identifier (silently truncated when overlong) |
+| | `read_ident` `copy_ident` | read / copy an identifier; over `MAX_NAME` is a hard error, never a silent truncation |
 | | `match_delim` | delimiter matching over `g_src`, automatically skipping literals and comments |
 | Symbol tables | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | linear lookups (the scale is small, so no hashing); `find_trait` / `find_struct` try the current namespace then fall back to top level, `*_c` look up an already-mangled C name exactly |
 | | `resolve_method` | find the trait a method belongs to, following the struct's `use` order |
@@ -314,11 +313,10 @@ golden under `test/cases/**` and they must be regenerated together.
 | A global ct object with nested / array construction | vptr writes are **statements**, which file scope cannot hold | such an object must be declared inside a function, or the compiler `die`s (documented) |
 | Heap objects get no vptr | an object from `malloc` has no compile-time construction point, so ctc stays out of it | it needs a hand-written `q->__<trait>_vptr = &…;`, or the first call crashes (creation deferred to Phase 1) |
 | Unit tests coupled to the implementation | `test/unit` `#include`s `ctc.c` directly to call `static` functions | renaming or re-signing a covered function requires updating the unit tests in sync (see §9) |
-| Silent truncation | `read_ident` / `parse_params` truncate overlong input; once `MAX_VARS` is full, further registrations are silently ignored | conflicts with the fail-loud goal |
 | Literal skipping exists in two copies | the `g_src` version (`skip_literal`) and the line-buffer version (`line_literal_end`) | the two must be updated together, which is easy to miss |
 | Duplicate lookahead in the main loop | the main loop first probes whether `struct` is followed by `{`, then `parse_struct` parses it again | slight redundancy, acceptable for now |
 | Coarse error positions | semantic errors (e.g. an unimplemented method) point at the start of the construct | imprecise locations in files with many methods |
-| Small parameter limits | `MAX_PARAM` 256, `MAX_PARAMS` 16 | complex signatures get truncated or error out |
+| Small parameter limits | `MAX_PARAM` 256, `MAX_PARAMS` 16 | complex signatures always `die` (never truncate) |
 
 ### 8. Extension points (Phase 1 landing spots)
 

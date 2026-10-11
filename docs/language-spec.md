@@ -30,10 +30,12 @@ item     ::= trait-def | struct-def | impl-def | namespace-def | raw-text
 - 关键字（`trait` / `struct` / `impl` / `use` / `for` / `namespace` / `pub` / `import`）必须成**独立单词**出现，由 `word_at()` 做词边界判断；`traitx`、`my_struct` 不会被误判。
 - 行首的 `trait` / `impl` / `struct` 只有在**完整构造头部**紧跟其后时才算构造（`trait IDENT {`、`impl IDENT for`、`struct IDENT {`），否则按原样透传。因此把 `trait` / `impl` 当作普通标识符的合法 C（如 `impl[0] = 1;`、`trait = 2;`）不会被误判。
 - 命名空间路径用 `::` 分隔（`namespace A::B { … }`、`A::B::Name`）；路径的**最后一步**若调用方法 / 访问字段则用 `.`。
+- 重写**按行**进行：构造与普通语句写在同一行时，语句不会被重写（`int main(void){ Person p = {…}; p.greet(); }` 中的 `p.greet()` 保持原样）。
+- 所有固定容量上限（标识符长度、参数个数与文本、字段 / 方法 / trait / struct 数、变量数、作用域深度、`ct build` 输入与单元数等）越界一律 `die` 报错，**不静默截断**。
 - 空白、换行、`//` 行注释、`/* */` 块注释在构造头部可自由插入。
 - trait 体内的方法声明以 `;` 分隔，允许一条声明跨多行；注释在切分前被剥离。
 - struct 体内的字段原样保留、不做解析。
-- 标识符为 `[A-Za-z_][A-Za-z0-9_]*`；超出 127 字符会被**静默截断**。
+- 标识符为 `[A-Za-z_][A-Za-z0-9_]*`；超出 127 字符会**报错**（`identifier too long`），不再静默截断。
 
 ### 3. 语法
 
@@ -319,9 +321,9 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 | `MAX_STRUCT` | 32 | struct 数量 | 报错退出 |
 | `MAX_METHOD` | 32 | 单 trait / 单 impl 的方法数 | 报错退出 |
 | `MAX_PARAMS` | 16 | 单方法参数个数 | 报错退出 |
-| `MAX_VARS` | 512 | 被登记的变量数 | 静默忽略（不再重写） |
-| `MAX_NAME` | 128 | 标识符 / 类型名长度 | 静默截断 |
-| `MAX_PARAM` | 256 | 参数字符串长度 | 静默截断 |
+| `MAX_VARS` | 512 | 被登记的变量数 | 报错退出 |
+| `MAX_NAME` | 128 | 标识符 / 类型名长度 | 报错退出 |
+| `MAX_PARAM` | 256 | 参数字符串长度 | 报错退出 |
 
 ### 8. 明确不支持
 
@@ -332,7 +334,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 - 格式：`<file>:<line>:<col>: error: <message>`，输出到 `stderr`。
 - 退出码：`0` 成功；`1` 语法错误、语义错误、I/O 错误。
-- 无警告机制：可疑但仍可生成代码的情况（如静默截断）不会提示。
+- 无警告机制：可疑但仍可生成代码的情况（如构造与语句写在同一行时不被重写）不会提示。
 
 ### 10. 多文件模式、`import` 与 `pub`（Phase 1）
 
@@ -391,12 +393,17 @@ comment in its header); it is not part of the source content.
   not misread.
 - A namespace path is separated by `::` (`namespace A::B { … }`, `A::B::Name`); the **last step** of a
   path uses `.` when it calls a method or accesses a field.
+- Rewriting is **line-based**: when a construct and an ordinary statement share one line, the statement
+  is not rewritten (`p.greet()` inside `int main(void){ Person p = {…}; p.greet(); }` stays as written).
+- Every fixed capacity limit (identifier length, parameter count and text, field / method / trait /
+  struct counts, variable count, scope depth, `ct build` inputs and units, …) is a hard `die` — never a
+  silent truncation.
 - Whitespace, newlines, `//` comments and `/* */` comments may appear freely in construct headers.
 - Method declarations inside a trait are separated by `;` and may span lines; comments are stripped
   before splitting.
 - Struct bodies are preserved verbatim and not parsed.
-- Identifiers are `[A-Za-z_][A-Za-z0-9_]*`; anything longer than 127 characters is **silently
-  truncated**.
+- Identifiers are `[A-Za-z_][A-Za-z0-9_]*`; longer than 127 characters is an **error**
+  (`identifier too long`) — no longer a silent truncation.
 
 ### 3. Grammar
 
@@ -719,9 +726,9 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 | `MAX_STRUCT` | 32 | structs | error, exit |
 | `MAX_METHOD` | 32 | methods per trait or impl | error, exit |
 | `MAX_PARAMS` | 16 | parameters per method | error, exit |
-| `MAX_VARS` | 512 | registered variables | silently ignored |
-| `MAX_NAME` | 128 | identifier / type name length | silently truncated |
-| `MAX_PARAM` | 256 | parameter string length | silently truncated |
+| `MAX_VARS` | 512 | registered variables | error, exit |
+| `MAX_NAME` | 128 | identifier / type name length | error, exit |
+| `MAX_PARAM` | 256 | parameter string length | error, exit |
 
 ### 8. Out of scope
 
@@ -732,8 +739,8 @@ supported — see §3 / §5.)
 ### 9. Diagnostics
 
 `<file>:<line>:<col>: error: <message>` on stderr; exit code `0` on success, `1` on syntax, semantic
-or I/O errors. There is no warning channel — suspicious but usable output (such as silent truncation)
-is never reported.
+or I/O errors. There is no warning channel — suspicious but usable output (such as a construct and a
+statement sharing one line, so the statement is not rewritten) is never reported.
 
 ### 10. Multi-file mode, `import` and `pub` (Phase 1)
 
