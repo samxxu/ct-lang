@@ -73,8 +73,8 @@ argv
 | 行重写 | `line_literal_end` `line_match_paren` `decl_end_is_bare` | 行内（栈上字符串）版本的字面量跳过、括号配对、声明尾部判定 |
 | | `parse_func_sig` `analyse_param` | 识别普通函数定义/原型，限定签名里的 struct 类型，并在有函数体时登记参数 |
 | | `parse_fields` `find_field` | 部分解析 struct 体：补 `struct ` 限定，并把嵌套 ct-struct 字段记进字段表 |
-| | `put_own_vptr` `needs_nested_init` `put_nested_assignments` | 生成对象自身 vptr 的指定初始化项；递归生成嵌套字段的 vptr 赋值语句 |
-| | `try_delete` | `delete p;` → `if (p) free(p);`（仅对已登记的指针变量生效） |
+| | `put_own_vptr` `needs_nested_init` `put_nested_assignments` `put_heap_vpts` | 生成对象自身 vptr 的指定初始化项；递归生成嵌套字段的 vptr 赋值语句；为 `malloc` 得到的堆对象写 vptr（`->`） |
+| | `try_delete` | `delete p;` → `if (p) free(p);`（Phase 1 起对任意指针生效，含 `char *`） |
 | | `emit_qualified_type` `trait_has_method` `find_func` | 类型展开（`struct ` / `_iface` 后缀）、接口方法判定、函数签名表查询 |
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | 接口多态：装箱（复合字面量）、接口变量声明/赋值、接口返回值 |
 | | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚 |
@@ -226,8 +226,8 @@ and impls must precede the functions that call them.
 | Line rewriting | `line_literal_end` `line_match_paren` `decl_end_is_bare` | in-line (stack-string) versions of literal skipping, paren matching and declaration-tail detection |
 | | `parse_func_sig` `analyse_param` | recognise ordinary function definitions/prototypes, qualify struct types in the signature and register parameters when a body follows |
 | | `parse_fields` `find_field` | partial struct-body parsing: add `struct ` and record nested ct-struct fields in the field table |
-| | `put_own_vptr` `needs_nested_init` `put_nested_assignments` | emit the object's own vptr designator; recursively emit vptr assignments for nested fields |
-| | `try_delete` | `delete p;` → `if (p) free(p);` (only for registered pointer variables) |
+| | `put_own_vptr` `needs_nested_init` `put_nested_assignments` `put_heap_vpts` | emit the object's own vptr designator; recursively emit vptr assignments for nested fields; write the vptrs (`->`) of a `malloc`ed heap object |
+| | `try_delete` | `delete p;` → `if (p) free(p);` (since Phase 1 this holds for any pointer, `char *` included) |
 | | `emit_qualified_type` `trait_has_method` `find_func` | type expansion (`struct ` / the `_iface` suffix), interface-method lookup, signature-table queries |
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | interface polymorphism: boxing (compound literal), interface declarations/assignments, interface returns |
 | | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}` |

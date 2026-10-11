@@ -74,7 +74,8 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
 | `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
 | `Person ps[2];` | 声明 + 块内循环逐元素写 vptr，之后 `ps[0].greet()` 可派发 |
-| `delete q;` | `if (q) free(q);` |
+| `delete q;` | `if (q) free(q);`（Phase 1 起对**任意指针**成立，含 `char *`） |
+| `T *p = malloc(sizeof(struct T));` | 声明后自动写 vptr（含嵌套值字段）：`p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
@@ -262,7 +263,7 @@ ct/
 - 变量与参数按花括号块作用域回滚（同一作用域内同名取最先登记者）；跨行的方法调用语句、以及参数列表跨多行的函数签名不识别。
 - **含嵌套对象 / 数组的对象必须在函数内声明**（文件作用域无法安放 vptr 赋值语句，会报错退出）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
-- **堆对象不自动初始化**：`malloc` 出来的对象需**手写** `q->__<trait>_vptr = &…;`；堆对象的创建方式推迟到 Phase 1（与 Drop 一起定）。
+- **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。（`Drop` 自动释放尚未实现，见 roadmap。）
 - 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰，因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
 - **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；用 `import A::B;` 可跨单元按名使用被导入单元的 `pub` 类型；但**跨单元使用带 trait 的对象**（写 vptr / 装箱）尚不可（被导入单元的 vtable 仍是 `static`）。
@@ -351,7 +352,8 @@ Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:lin
 | `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
 | `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
 | `Person ps[2];` | the declaration plus a scoped loop writing each element's vptr, after which `ps[0].greet()` dispatches |
-| `delete q;` | `if (q) free(q);` |
+| `delete q;` | `if (q) free(q);` (since Phase 1 this holds for **any** pointer, `char *` included) |
+| `T *p = malloc(sizeof(struct T));` | the vptrs (including nested value fields) are written right after the declaration: `p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
 | `g.greet();` | `g.vt->greet(g.self);` (dispatches at run time to whatever was boxed) |
@@ -570,8 +572,9 @@ Implementation limits:
 - **An object with nested objects or an array must be declared inside a function** (file scope has
   nowhere to put the vptr assignments; it is a hard error).
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
-- **Heap objects are not initialised automatically**: write `q->__<trait>_vptr = &…;` by hand after
-  `malloc`; how heap objects are created is deferred to Phase 1 (with Drop).
+- **Heap-object vptrs are written automatically**: `T *p = malloc(sizeof(struct T));` (or `calloc`)
+  writes the vptrs (including nested value fields) right after the declaration; no hand-written vptr is
+  needed any more. (`Drop` auto-release is not implemented yet — see the roadmap.)
 - Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
   automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
   a variable, `&variable` or a call returning the same interface.
