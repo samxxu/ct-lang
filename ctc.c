@@ -1363,6 +1363,34 @@ static void put_nested_assignments(Buf *b, const Struct *S, const char *recv,
     }
 }
 
+/* write the vptrs of a heap object obtained from malloc/calloc: the object's own
+   vptrs use '->', its value fields recurse with '.'. */
+static void put_heap_vpts(Buf *b, const Struct *S, const char *ptr, const char *ind)
+{
+    int i, h;
+    for (h = 0; h < S->nu; h++) {
+        char low[MAX_NAME];
+        to_lower(S->use_t[h], low);
+        buf_puts(b, ind);
+        buf_puts(b, ptr);
+        buf_puts(b, "->__");
+        buf_puts(b, low);
+        buf_puts(b, "_vptr = &");
+        buf_puts(b, S->cname);
+        buf_putc(b, '_');
+        buf_puts(b, S->use_t[h]);
+        buf_puts(b, "_vtable;\n");
+    }
+    for (i = 0; i < S->nf; i++) {
+        const Struct *F = &g_structs[S->ftype[i]];
+        char sub[MAX_NAME * (MAX_DEPTH + 3)];
+        if (F->nu == 0 && !needs_nested_init(F, 1)) continue;
+        if ((size_t)snprintf(sub, sizeof sub, "%s->%s", ptr, S->fname[i]) >= sizeof sub)
+            die(0, "nested field path too long in struct '%s'", S->name);
+        put_nested_assignments(b, F, sub, ind, 1, 1);
+    }
+}
+
 /* is the tail of a declaration nothing but ';' (optionally a trailing comment)? */
 static int decl_end_is_bare(const char *s)
 {
@@ -1874,6 +1902,25 @@ static char *try_var_decl(const char *line)
         buf_puts(&b, S->cname);
         buf_putc(&b, ' ');
         buf_puts(&b, p);
+        /* heap creation (Phase 1, D1=A): `T *x = malloc(...)` / calloc gets its
+           vptrs written, so a heap object is usable without a hand-written vptr */
+        {
+            const char *eq = strchr(p, '=');
+            const char *rhs = eq ? eq + 1 : NULL;
+            if (rhs) {
+                while (*rhs == ' ' || *rhs == '\t') rhs++;
+                if (((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
+                     (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6]))) &&
+                    (S->nu > 0 || needs_nested_init(S, 0))) {
+                    char ind[MAX_NAME];
+                    size_t t;
+                    for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
+                    ind[t] = 0;
+                    buf_putc(&b, '\n');
+                    put_heap_vpts(&b, S, pv, ind);
+                }
+            }
+        }
         return b.p;
     }
 
@@ -2039,7 +2086,10 @@ static char *try_delete(const char *line)
     if (!k || !decl_end_is_bare(p + k)) return NULL;
     {
         int vi = find_var(id);
-        if (vi < 0 || !g_vars[vi].ptr) return NULL;
+        /* Phase 1 relaxation: `delete p;` works for any pointer, not only a
+           registered ct-struct pointer (so `delete buf;` on a char * frees it).
+           A registered *non*-pointer is left as-is — that is user error. */
+        if (vi >= 0 && !g_vars[vi].ptr) return NULL;
     }
 
     buf_init(&b);

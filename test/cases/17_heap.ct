@@ -1,4 +1,4 @@
-// 17: heap objects — the vptr must be written by hand after malloc; delete releases
+// 17: heap objects — the vptr is written automatically after malloc; delete releases
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -22,7 +22,6 @@ impl Counter for Tally {
 
 int main(void) {
     Tally *t = malloc(sizeof(struct Tally));
-    t->__counter_vptr = &Tally_Counter_vtable;   /* heap objects are not initialised for you */
     t->n = 0;
     t->bump(5);
     t->bump(7);
