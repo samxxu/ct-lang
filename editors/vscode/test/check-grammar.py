@@ -32,6 +32,7 @@ CT_CASES = (
     "test/cases/19_namespace.ct",
     "test/multifile/calc.ct",
     "test/import/app.ct",
+    "test/cases/22_drop.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -189,6 +190,12 @@ def main():
             check("`import shapes;` -> ct-import",
                   any(h[0] == "ct-import" for _, l, hs in rows
                       if l.strip().startswith("import ") for h in hs))
+        if "22_drop" in rel:
+            check("`impl Drop for Inner` -> ct-impl",
+                  any(h[0] == "ct-impl" for _, l, hs in rows
+                      if l.strip().startswith("impl ") for h in hs))
+            check("`use Drop;` -> ct-use",
+                  any(h[0] == "ct-use" for _, l, hs in rows if "use Drop" in l for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

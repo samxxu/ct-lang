@@ -1,0 +1,2 @@
+struct S { int x; }
+impl Drop for S { void drop() { } }

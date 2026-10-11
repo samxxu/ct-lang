@@ -1,0 +1,25 @@
+// 22: Drop — delete runs the generated or user-written drop, recursively over value fields
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Inner { int v; } use Drop;
+
+struct Outer {
+    Inner in;
+    int w;
+} use Drop;
+
+impl Drop for Inner {
+    void drop() {
+        printf("drop inner\n");
+    }
+}
+
+int main(void) {
+    Outer *o = malloc(sizeof(struct Outer));
+    o->in.v = 1;
+    o->w = 2;
+    printf("%d %d\n", o->in.v, o->w);
+    delete o;
+    return 0;
+}

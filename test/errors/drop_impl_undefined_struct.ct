@@ -1,0 +1,2 @@
+struct S { int x; } use Drop;
+impl Drop for Missing { void drop() { } }

@@ -88,6 +88,10 @@ typedef struct {
     char fname[MAX_FIELDS][MAX_NAME];  /* value fields whose type is a known struct */
     int  ftype[MAX_FIELDS];            /* ... and their index into g_structs */
     int  nf;
+    int  has_drop;                     /* 1 when the use-clause mentions the reserved 'Drop' */
+    int  drop_used;                    /* 1 when a delete of this type was seen (drives lazy emit) */
+    int  has_user_drop;                /* 1 when the user wrote `impl Drop for T` */
+    size_t drop_bstart, drop_blen;     /* the user drop() body, when has_user_drop */
 } Struct;
 
 typedef struct {
@@ -149,6 +153,11 @@ static int  g_nimp_h = 0;
 /* in multi-file mode symbols accumulate across units (so a unit can reference
    an imported unit's types); these are the tables that must NOT be reset. */
 #define MAX_UNITS 64
+
+/* structs declared in the current unit that opt into Drop; their bodies are
+   emitted lazily, only when a delete of that type is seen */
+static int g_own_drop[MAX_STRUCT];
+static int g_nown_drop = 0;
 
 static char g_guard[MAX_NAME * 2];     /* include guard of the generated .h */
 
@@ -293,11 +302,27 @@ static size_t read_ident(size_t p, char *buf, size_t n)
 {
     size_t i = 0;
     while (p < g_len && is_ident_char((unsigned char)g_src[p])) {
-        if (i + 1 < n) buf[i++] = g_src[p];
+        if (i + 1 >= n) die(p, "identifier too long (max %d)", (int)n - 1);
+        buf[i++] = g_src[p];
         p++;
     }
     buf[i] = 0;
     return p;
+}
+
+/* Copy the identifier at `src` (a NUL-terminated string) into `buf` (MAX_NAME
+   bytes) and return its length. A longer identifier is a hard error — dropping
+   the tail would silently misparse (AGENTS §3 forbids silent truncation). */
+static size_t copy_ident(const char *src, char *buf, size_t pos)
+{
+    size_t k = 0;
+    while (is_ident_char((unsigned char)src[k])) {
+        if (k + 1 >= MAX_NAME) die(pos, "identifier too long (max %d)", MAX_NAME - 1);
+        buf[k] = src[k];
+        k++;
+    }
+    buf[k] = 0;
+    return k;
 }
 
 static size_t match_delim(size_t p, char open, char close)
@@ -403,6 +428,14 @@ static int find_var(const char *name)
     for (i = 0; i < g_nvars; i++)
         if (strcmp(g_vars[i].name, name) == 0) return i;
     return -1;
+}
+
+/* Reserve the next variable slot. Overflow is a hard error: AGENTS §3 forbids
+   silent truncation, and a dropped registration would miscompile method calls. */
+static int new_var(void)
+{
+    if (g_nvars >= MAX_VARS) die(0, "too many variables (max %d)", MAX_VARS);
+    return g_nvars++;
 }
 
 /* does trait `t` declare method `m`? */
@@ -944,6 +977,7 @@ static size_t parse_trait(size_t p)
     p = skip_ws_comments(p);
     p = read_ident(p, name, sizeof name);
     if (!name[0]) die(p, "expected trait name");
+    if (strcmp(name, "Drop") == 0) die(p, "'Drop' is a reserved built-in trait and cannot be defined");
     p = skip_ws_comments(p);
     if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after trait '%s'", name);
 
@@ -1094,6 +1128,10 @@ static size_t parse_struct(size_t p)
     snprintf(S->name, sizeof S->name, "%s", name);
     set_cname(S->cname, sizeof S->cname, g_ns, name, p);
     S->nu = 0;
+    S->has_drop = 0;
+    S->drop_used = 0;
+    S->has_user_drop = 0;
+    S->drop_bstart = S->drop_blen = 0;
 
     q = close + 1;
     probe = q;
@@ -1110,9 +1148,13 @@ static size_t parse_struct(size_t p)
             char tn[MAX_NAME];
             u = read_ident(u, tn, sizeof tn);
             if (!tn[0]) die(u, "expected trait name in 'use' clause of '%s'", S->name);
-            if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
-            snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
-            S->nu++;
+            if (strcmp(tn, "Drop") == 0) {
+                S->has_drop = 1;              /* reserved marker: no vtable/vptr, no impl needed */
+            } else {
+                if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
+                snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
+                S->nu++;
+            }
             u = skip_ws_comments(u);
             if (u < g_len && g_src[u] == ',') { u = skip_ws_comments(u + 1); continue; }
             break;
@@ -1131,6 +1173,9 @@ static size_t parse_struct(size_t p)
             die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
         S->use_i[i] = (int)(T - g_traits);
     }
+
+    if (S->has_drop && g_nown_drop < MAX_STRUCT)
+        g_own_drop[g_nown_drop++] = (int)(S - g_structs);
 
     {
         char *raw = xstrndup(g_src + bstart, bend - bstart);
@@ -1166,6 +1211,30 @@ static size_t parse_impl(size_t p)
     if (p >= g_len || g_src[p] != '{') die(p, "expected '{' in impl body");
 
     close = match_delim(p, '{', '}');
+
+    if (strcmp(trait_name, "Drop") == 0) {
+        /* `impl Drop for T { void drop() { … } }` — capture the user body; the
+           drop function itself is emitted lazily (only when a delete is seen). */
+        size_t i2 = skip_ws_comments(p + 1), rp, bp, be;
+        S = find_struct(struct_name);
+        if (!S) die(p, "impl for undefined struct '%s'", struct_name);
+        if (!S->has_drop) die(p, "struct '%s' does not use trait 'Drop'", S->name);
+        while (i2 < close && g_src[i2] != '(') i2++;
+        if (i2 >= close) die(p, "expected 'drop()' in impl of 'Drop' for '%s'", S->name);
+        rp = match_delim(i2, '(', ')');
+        bp = skip_ws_comments(rp + 1);
+        if (bp >= close || g_src[bp] != '{') die(bp, "expected '{' to start the drop() body");
+        be = match_delim(bp, '{', '}');
+        S->has_user_drop = 1;
+        S->drop_bstart = bp + 1;
+        S->drop_blen = be - bp - 1;
+        {
+            size_t q = close + 1, t = q;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < g_len && g_src[t] == ';') q = t + 1;
+            return q;
+        }
+    }
 
     T = find_trait(trait_name);
     if (!T) die(p, "impl for undefined trait '%s'", trait_name);
@@ -1203,7 +1272,7 @@ static size_t parse_impl(size_t p)
         rp = match_delim(lp, '(', ')');
         {
             size_t blen = (rp > lp + 1) ? (rp - lp - 1) : 0;
-            if (blen >= MAX_PARAM) blen = MAX_PARAM - 1;
+            if (blen >= MAX_PARAM) die(lp, "parameter list too long (max %d)", MAX_PARAM - 1);
             memcpy(impl[nimpl].params, g_src + lp + 1, blen);
             impl[nimpl].params[blen] = 0;
             trim(impl[nimpl].params);
@@ -1698,7 +1767,8 @@ static const char *read_qual_ref(const char *p, char *cname, char *shortname, in
     size_t i;
 
     *qualified = 0;
-    for (i = 0; is_ident_char((unsigned char)p[i]) && i < MAX_NAME - 1; i++) ;
+    for (i = 0; is_ident_char((unsigned char)p[i]); i++)
+        if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
     if (i == 0) return NULL;
     memcpy(seg, p, i);
     seg[i] = 0;
@@ -1712,7 +1782,8 @@ static const char *read_qual_ref(const char *p, char *cname, char *shortname, in
             char tmp[MAX_NAME * 2];
             z += 2;
             while (*z == ' ' || *z == '\t') z++;
-            for (i = 0; is_ident_char((unsigned char)z[i]) && i < MAX_NAME - 1; i++) ;
+            for (i = 0; is_ident_char((unsigned char)z[i]); i++)
+                if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
             if (i == 0) return NULL;
             memcpy(seg, z, i);
             seg[i] = 0;
@@ -1743,7 +1814,7 @@ static char *try_iface_decl(const char *line, int tr, size_t ws, const char *aft
 
     while (*p == ' ' || *p == '\t') p++;
     if (*p == '*') { ptr = 1; p++; while (*p == ' ' || *p == '\t') p++; }
-    while (is_ident_char((unsigned char)p[vk]) && vk < MAX_NAME - 1) { var[vk] = p[vk]; vk++; }
+    vk = copy_ident(p, var, 0);
     var[vk] = 0;
     if (!vk) return NULL;
     rest = p + vk;
@@ -1782,14 +1853,14 @@ static char *try_iface_decl(const char *line, int tr, size_t ws, const char *aft
         die(0, "unsupported declaration of interface type '%s'", g_traits[tr].name);
     }
 
-    if (g_nvars < MAX_VARS) {
-        snprintf(g_vars[g_nvars].name, MAX_NAME, "%s", var);
-        g_vars[g_nvars].s = -1;
-        g_vars[g_nvars].ptr = 0;
-        g_vars[g_nvars].arr = 0;
-        g_vars[g_nvars].iface = 1;
-        g_vars[g_nvars].tr = tr;
-        g_nvars++;
+    {
+        int vi = new_var();
+        snprintf(g_vars[vi].name, MAX_NAME, "%s", var);
+        g_vars[vi].s = -1;
+        g_vars[vi].ptr = 0;
+        g_vars[vi].arr = 0;
+        g_vars[vi].iface = 1;
+        g_vars[vi].tr = tr;
     }
     return b.p;
 }
@@ -1828,7 +1899,7 @@ static char *try_iface_assign(const char *line)
     Buf b;
 
     while (*p == ' ' || *p == '\t') p++;
-    while (is_ident_char((unsigned char)p[k]) && k < MAX_NAME - 1) { id[k] = p[k]; k++; }
+    k = copy_ident(p, id, 0);
     id[k] = 0;
     if (!k) return NULL;
     vi = find_var(id);
@@ -1885,16 +1956,16 @@ static char *try_var_decl(const char *line)
         char pv[MAX_NAME];
         int pk = 0;
         while (*q == '*' || *q == ' ' || *q == '\t') q++;
-        while (is_ident_char((unsigned char)q[pk]) && pk < MAX_NAME - 1) { pv[pk] = q[pk]; pk++; }
+        pk = copy_ident(q, pv, 0);
         pv[pk] = 0;
-        if (pk && g_nvars < MAX_VARS) {
-            snprintf(g_vars[g_nvars].name, MAX_NAME, "%s", pv);
-            g_vars[g_nvars].s = (int)(S - g_structs);
-            g_vars[g_nvars].ptr = 1;
-            g_vars[g_nvars].arr = 0;
-            g_vars[g_nvars].iface = 0;
-            g_vars[g_nvars].tr = -1;
-            g_nvars++;
+        if (pk) {
+            int vi = new_var();
+            snprintf(g_vars[vi].name, MAX_NAME, "%s", pv);
+            g_vars[vi].s = (int)(S - g_structs);
+            g_vars[vi].ptr = 1;
+            g_vars[vi].arr = 0;
+            g_vars[vi].iface = 0;
+            g_vars[vi].tr = -1;
         }
         buf_init(&b);
         buf_putn(&b, line, ws);
@@ -1925,7 +1996,7 @@ static char *try_var_decl(const char *line)
     }
 
     vk = 0;
-    while (is_ident_char((unsigned char)p[vk]) && vk < MAX_NAME - 1) { var[vk] = p[vk]; vk++; }
+    vk = copy_ident(p, var, 0);
     var[vk] = 0;
     if (!vk) return NULL;
 
@@ -1990,14 +2061,14 @@ static char *try_var_decl(const char *line)
         }
     }
 
-    if (g_nvars < MAX_VARS) {
-        snprintf(g_vars[g_nvars].name, MAX_NAME, "%s", var);
-        g_vars[g_nvars].s = (int)(S - g_structs);
-        g_vars[g_nvars].ptr = 0;
-        g_vars[g_nvars].arr = 0;
-        g_vars[g_nvars].iface = 0;
-        g_vars[g_nvars].tr = -1;
-        g_nvars++;
+    {
+        int vi = new_var();
+        snprintf(g_vars[vi].name, MAX_NAME, "%s", var);
+        g_vars[vi].s = (int)(S - g_structs);
+        g_vars[vi].ptr = 0;
+        g_vars[vi].arr = 0;
+        g_vars[vi].iface = 0;
+        g_vars[vi].tr = -1;
     }
 
     buf_init(&b);
@@ -2081,7 +2152,7 @@ static char *try_delete(const char *line)
     if (strncmp(p, "delete", 6) != 0 || is_ident_char((unsigned char)p[6])) return NULL;
     p += 6;
     while (*p == ' ' || *p == '\t') p++;
-    while (is_ident_char((unsigned char)p[k]) && k < MAX_NAME - 1) { id[k] = p[k]; k++; }
+    k = copy_ident(p, id, 0);
     id[k] = 0;
     if (!k || !decl_end_is_bare(p + k)) return NULL;
     {
@@ -2094,6 +2165,24 @@ static char *try_delete(const char *line)
 
     buf_init(&b);
     buf_putn(&b, line, ind_len);
+    {
+        int vi = find_var(id);
+        Struct *S = (vi >= 0 && g_vars[vi].ptr && g_vars[vi].s >= 0)
+                    ? &g_structs[g_vars[vi].s] : NULL;
+        if (S && S->has_drop) {              /* Drop type: run drop() then free */
+            S->drop_used = 1;
+            buf_puts(&b, "if (");
+            buf_puts(&b, id);
+            buf_puts(&b, ") { ");
+            buf_puts(&b, S->cname);
+            buf_puts(&b, "_Drop_drop(");
+            buf_puts(&b, id);
+            buf_puts(&b, "); free(");
+            buf_puts(&b, id);
+            buf_puts(&b, "); }");
+            return b.p;
+        }
+    }
     buf_puts(&b, "if (");
     buf_puts(&b, id);
     buf_puts(&b, ") free(");
@@ -2223,40 +2312,33 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
             sidx = analyse_param(line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
             emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, ptrtr >= 0);
 
-            if (isdef && pname[0] && g_nvars < MAX_VARS) {
-                if (sidx >= 0) {                     /* concrete object parameter */
-                    snprintf(g_vars[g_nvars].name, MAX_NAME, "%s", pname);
-                    g_vars[g_nvars].s = sidx;
-                    g_vars[g_nvars].ptr = ptr;
-                    g_vars[g_nvars].arr = 0;
-                    g_vars[g_nvars].iface = 0;
-                    g_vars[g_nvars].tr = -1;
-                    g_nvars++;
-                } else if (ptrtr >= 0) {             /* interface value parameter */
-                    snprintf(g_vars[g_nvars].name, MAX_NAME, "%s", pname);
-                    g_vars[g_nvars].s = -1;
-                    g_vars[g_nvars].ptr = 0;
-                    g_vars[g_nvars].arr = 0;
-                    g_vars[g_nvars].iface = 1;
-                    g_vars[g_nvars].tr = ptrtr;
-                    g_nvars++;
-                }
+            if (isdef && pname[0] && (sidx >= 0 || ptrtr >= 0)) {
+                int vi = new_var();
+                snprintf(g_vars[vi].name, MAX_NAME, "%s", pname);
+                g_vars[vi].s = (sidx >= 0) ? sidx : -1;
+                g_vars[vi].ptr = (sidx >= 0) ? ptr : 0;
+                g_vars[vi].arr = 0;
+                g_vars[vi].iface = (sidx >= 0) ? 0 : 1;
+                g_vars[vi].tr = (sidx >= 0) ? -1 : ptrtr;
             }
             {
                 char pbuf[MAX_NAME * 2];
                 size_t pl = j - i;
-                if (pl >= sizeof pbuf) pl = sizeof pbuf - 1;
+                if (pl >= sizeof pbuf) die(0, "parameter too long (max %d)", (int)sizeof pbuf - 1);
                 memcpy(pbuf, line + i, pl);
                 pbuf[pl] = 0;
                 trim(pbuf);
-                if (pbuf[0] && strcmp(pbuf, "void") != 0 && npar < MAX_PARAMS)
+                if (pbuf[0] && strcmp(pbuf, "void") != 0) {
+                    if (npar >= MAX_PARAMS) die(0, "too many parameters (max %d)", MAX_PARAMS);
                     ptrait[npar++] = ptrtr;
+                }
             }
             if (j < end) { buf_putc(&b, ','); j++; }
             i = j;
         }
         /* record the signature so call sites can box interface arguments */
-        if (g_nfuncs < MAX_FUNCS) {
+        if (g_nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+        {
             FuncSig *FS = &g_funcs[g_nfuncs++];
             int q;
             snprintf(FS->name, MAX_NAME, "%s", name);
@@ -2587,6 +2669,97 @@ static void compile_range(size_t start, size_t end)
     }
 }
 
+/* A deleted Drop type pulls in the drops of its Drop value fields: mark them so
+   their bodies are emitted too (a default body calls them). A user body is taken
+   as-is and marks nothing, so it must not reference generated drop functions. */
+static void mark_drop_closure(void)
+{
+    int changed = 1;
+    while (changed) {
+        int i, h;
+        changed = 0;
+        for (i = 0; i < g_nown_drop; i++) {
+            Struct *S = &g_structs[g_own_drop[i]];
+            if (!S->drop_used || S->has_user_drop) continue;
+            for (h = 0; h < S->nf; h++) {
+                Struct *F = &g_structs[S->ftype[h]];
+                if (F->has_drop && !F->drop_used) { F->drop_used = 1; changed = 1; }
+            }
+        }
+    }
+}
+
+/* Does [bstart, bstart+blen) mention `self` as a word? A user drop body need not
+   use it, and an unused _self/self would warn under -Wall -Wextra. */
+static int body_uses_self(size_t bstart, size_t blen)
+{
+    size_t i = bstart, end = bstart + blen;
+    while (i < end) {
+        if (g_src[i] == '"' || g_src[i] == '\'') { i = skip_literal(i); continue; }
+        if (g_src[i] == '/' && i + 1 < end && (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
+            i = skip_comment(i);
+            continue;
+        }
+        if (is_ident_char((unsigned char)g_src[i]) && !isdigit((unsigned char)g_src[i])) {
+            size_t j = i;
+            while (j < end && is_ident_char((unsigned char)g_src[j])) j++;
+            if (j - i == 4 && memcmp(g_src + i, "self", 4) == 0) return 1;
+            i = j;
+            continue;
+        }
+        i++;
+    }
+    return 0;
+}
+
+/* The drop prototypes go before the body (a delete calls them); the definition
+   goes after it (so the structs are complete). Both are emitted only for types a
+   delete actually reaches, so an unused drop never appears (-Wunused-function). */
+
+static void emit_drop_prototypes(FILE *f)
+{
+    int i, any = 0;
+    mark_drop_closure();
+    for (i = 0; i < g_nown_drop; i++) {
+        Struct *S = &g_structs[g_own_drop[i]];
+        if (!S->drop_used) continue;
+        fprintf(f, "static void %s_Drop_drop(void *self);\n", S->cname);
+        any = 1;
+    }
+    if (any) fputc('\n', f);
+}
+
+static void emit_drop_bodies(FILE *f)
+{
+    int i;
+    for (i = 0; i < g_nown_drop; i++) {
+        Struct *S = &g_structs[g_own_drop[i]];
+        int h, need_self = 0;
+        if (!S->drop_used) continue;
+        if (S->has_user_drop) {
+            need_self = body_uses_self(S->drop_bstart, S->drop_blen);
+        } else {
+            for (h = 0; h < S->nf; h++)
+                if (g_structs[S->ftype[h]].has_drop) { need_self = 1; break; }
+        }
+        fprintf(f, "static void %s_Drop_drop(void *self) {\n", S->cname);
+        if (need_self)
+            fprintf(f, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
+        else
+            fprintf(f, "    (void)self;\n");
+        if (S->has_user_drop) {
+            emit_body(f, S->drop_bstart, S->drop_blen, S);
+        } else {
+            for (h = 0; h < S->nf; h++) {
+                const Struct *F = &g_structs[S->ftype[h]];
+                if (!F->has_drop) continue;
+                fprintf(f, "    %s_Drop_drop(&_self->%s);\n", F->cname, S->fname[h]);
+            }
+        }
+        fprintf(f, "}\n\n");
+    }
+}
+
 /* Compile one input to `outc` and a matching header. When `multi` is set the
    generated .c includes its own header and `pub` symbols are routed into the
    header (multi-file mode, `ct build`). Returns 0 on success. */
@@ -2594,6 +2767,7 @@ static int compile_file(const char *in, const char *outc, int multi)
 {
     char hbuf[MAX_NAME * 4];
     const char *base;
+    FILE *body;
 
     g_multi = multi;
     g_ns[0] = 0;
@@ -2605,6 +2779,7 @@ static int compile_file(const char *in, const char *outc, int multi)
     g_no_box = 0;
     g_ctor_pub = 0;
     g_line_pub = 0;
+    g_nown_drop = 0;
     /* in multi-file mode traits/structs/signatures accumulate across units so a
        unit can reference an imported unit's types */
     if (!multi) { g_ntraits = 0; g_nstructs = 0; g_nfuncs = 0; }
@@ -2637,7 +2812,31 @@ static int compile_file(const char *in, const char *outc, int multi)
         fputc('\n', g_out);
     }
 
-    compile_range(0, g_len);
+    /* Buffer the body so the lazily-generated drop functions can be emitted
+       before it: a drop function must be defined before the delete that calls it. */
+    body = tmpfile();
+    if (!body) {
+        fprintf(stderr, "ctc: cannot create a temporary file\n");
+        fclose(g_out);
+        fclose(g_hout);
+        return 1;
+    }
+    {
+        FILE *real = g_out;
+        g_out = body;
+        compile_range(0, g_len);
+        g_out = real;
+        emit_drop_prototypes(real);
+        rewind(body);
+        for (;;) {
+            char chunk[8192];
+            size_t got = fread(chunk, 1, sizeof chunk, body);
+            if (!got) break;
+            fwrite(chunk, 1, got, g_out);
+        }
+        emit_drop_bodies(real);
+    }
+    fclose(body);
 
     fprintf(g_hout, "\n#endif /* %s */\n", g_guard);
 

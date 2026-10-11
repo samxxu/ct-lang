@@ -1,0 +1,3 @@
+trait T { void f(); }
+struct S { int x; } use T;
+impl T for S

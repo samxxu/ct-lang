@@ -266,6 +266,13 @@ cli_expect o-needs-arg nonzero "-o needs an argument" test/cases/21_empty_init_i
 cli_expect no-input nonzero "usage:"
 cli_expect cannot-open nonzero "cannot open" /nonexistent/nope.ct
 
+# `ct build` driver errors
+printf 'import nothing;\n' >"$TMP/cli_imp.ct"
+cli_expect build-import-missing nonzero "cannot resolve import" build "$TMP/cli_imp.ct" -o "$TMP"
+cli_expect build-o-needs-arg nonzero "-o needs an argument" build test/cases/21_empty_init_iface.ct -o
+cli_expect build-unknown-option nonzero "unknown option" build -Q test/cases/21_empty_init_iface.ct
+cli_expect build-cannot-write nonzero "cannot write" build test/cases/21_empty_init_iface.ct -o /nonexistent-dir
+
 # `compile` is an explicit alias for the default subcommand; its output must be
 # byte-identical to the default-mode golden
 if "$TMP/ctc" compile test/cases/21_empty_init_iface.ct -o "$TMP/cli.c" 2>"$TMP/cli.err"; then
