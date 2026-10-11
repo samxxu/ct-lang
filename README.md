@@ -49,6 +49,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc <input.ct> -o <output.c>` | 输出到指定路径，头文件为同目录同名的 `.h` |
 | `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
 | `ctc build <a.ct> <b.ct>… -o <dir>` | **多文件模式**：每个输入生成 `<dir>/<base>.c` + `.h`；`.c` 会 `#include` 自己的 `.h`；`pub` 符号进 `.h`；最后打印建议的 `cc …` 命令（不自己调用 `cc`） |
+| `--line` / `--no-line` | 强制开 / 关生成的 `#line`（多文件模式默认开、单文件模式默认关），使 C 报错行号映回 `.ct` |
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.0.1` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
@@ -263,10 +264,10 @@ ct/
 - 变量与参数按花括号块作用域回滚（同一作用域内同名取最先登记者）；跨行的方法调用语句、以及参数列表跨多行的函数签名不识别。
 - **含嵌套对象 / 数组的对象必须在函数内声明**（文件作用域无法安放 vptr 赋值语句，会报错退出）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
-- **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。（`Drop` 自动释放尚未实现，见 roadmap。）
+- **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。`use Drop` 的类型在 `delete` 时递归释放其 Drop 值字段（见 §3 的 `Drop`）。
 - 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰，因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
-- **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；用 `import A::B;` 可跨单元按名使用被导入单元的 `pub` 类型；但**跨单元使用带 trait 的对象**（写 vptr / 装箱）尚不可（被导入单元的 vtable 仍是 `static`）。
+- **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；用 `import A::B;` 可跨单元按名使用被导入单元的 `pub` 类型；默认在 `.c` 里发 `#line`（单文件模式默认关，`--line`/`--no-line` 覆盖）；但**跨单元使用带 trait 的对象**（写 vptr / 装箱）尚不可（被导入单元的 vtable 仍是 `static`）。
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
 - **构造头部必须完整**：`trait IDENT {` / `struct IDENT {` / `impl IDENT for` 缺一不可；只写到一半
   （如 `trait T`、`struct S`、`impl`）**不报错**，该行按普通 C **原样透传**——这是为兼容把
@@ -337,6 +338,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc <input.ct> -o <output.c>` | writes the given path plus a sibling `.h` |
 | `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
 | `ctc build <a.ct> <b.ct>… -o <dir>` | **multi-file mode**: each input produces `<dir>/<base>.c` + `.h`; the `.c` includes its own `.h`; `pub` symbols go into the `.h`; then the suggested `cc …` command is printed (ctc never runs `cc`) |
+| `--line` / `--no-line` | force `#line` directives on / off (on by default in multi-file mode, off single-file), so C errors map back to the `.ct` |
 | `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.0.1` |
 | `ctc -h` / `ctc --help` | prints usage |
 
@@ -582,7 +584,7 @@ Implementation limits:
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
 - **Heap-object vptrs are written automatically**: `T *p = malloc(sizeof(struct T));` (or `calloc`)
   writes the vptrs (including nested value fields) right after the declaration; no hand-written vptr is
-  needed any more. (`Drop` auto-release is not implemented yet — see the roadmap.)
+  needed any more. A `use Drop` type releases its Drop value fields recursively on `delete` (see §3).
 - Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
   automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
   a variable, `&variable` or a call returning the same interface.
@@ -591,7 +593,8 @@ Implementation limits:
   C level.
 - **Multi-file mode** (`ctc build`): the generated `.c` includes its own `.h` (no longer self-contained);
   only `pub` trait/struct definitions and `pub` function prototypes cross into the `.h`; `import A::B;`
-  lets a unit use an imported unit's `pub` type names by name; but using an imported unit's
+  lets a unit use an imported unit's `pub` type names by name; `#line` is emitted in the `.c` by default
+  (single-file mode is off; `--line`/`--no-line` override); but using an imported unit's
   **trait-carrying objects** (writing a vptr / boxing) is not yet possible (its vtables stay `static`).
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
 - **A construct header must be complete**: `trait IDENT {` / `struct IDENT {` / `impl IDENT for`. A

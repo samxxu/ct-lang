@@ -350,6 +350,10 @@ import-def  ::= "import" path ";" ;
 - **`.c` 不再自包含**：多文件模式下 `.c` 会 `#include "<自身>.h"`（这是相对 Phase 0 的破坏性变化）。
 - **`pub`**：`pub trait` / `pub struct` 的定义、以及 `pub` 前缀的**函数原型**（`pub int f(...);`）写入 `.h`；其余符号只进 `.c`。`pub` 前缀会被剥离，不进入生成的 C。
 - **不调用 C 编译器**：`ct build` 只产出 `.c`/`.h` 并把建议的 `cc …` 命令打印到 **stdout**，自身不调用 `cc`（保持零依赖）。
+- **`#line` 映射（多文件默认开）**：生成的 `.c` 在**源自源文件**的行前插入 `#line <源行> "<.ct 路径>"`，
+  使 gcc/clang 的报错与调试行号映回 `.ct`；**仅在行号不连续处插入**，生成的样板（vtable、drop 原型 / 定义等）
+  用其**触发点**的源行号。单文件模式**默认关**（产物与 Phase 0 逐字节相同），`.h` 不加 `#line`；
+  `--line` / `--no-line` 可强制开 / 关。
 - **`import A::B;`**：编译单元声明。`ct build` 的根文件里写 `import`，驱动把它解析为
   `<根文件目录>/A/B.ct`（或 `A/B.h.ct`），**递归**收集依赖、按依赖顺序编译（每个单元只编一次），
   并自动在每个单元的 `.c` 里 `#include` 被导入单元的 `.h`。被导入单元的 `pub` 类型名可直接按名使用
@@ -762,6 +766,12 @@ import-def  ::= "import" path ";" ;
   is stripped and never appears in the generated C.
 - **No C compiler is invoked**: `ct build` only emits `.c`/`.h` and prints the suggested `cc …`
   command to **stdout**; it never runs `cc` (staying dependency-free).
+- **`#line` mapping (on by default in multi-file mode)**: the generated `.c` inserts
+  `#line <src line> "<.ct path>"` before each line that originates in the source, so the C compiler's
+  errors and debugger line numbers map back to the `.ct`. A directive is emitted **only where the
+  numbers are discontinuous**; generated boilerplate (vtables, drop prototypes / definitions …) uses
+  its **trigger point**'s source line. Single-file mode is **off by default** (output stays
+  byte-identical to Phase 0) and the `.h` never gets `#line`; `--line` / `--no-line` force either way.
 - **`import A::B;`**: a compilation-unit declaration. In a `ct build` root, the driver resolves it to
   `<root dir>/A/B.ct` (or `A/B.h.ct`), **recursively** collects the dependencies, compiles each unit
   once in dependency order, and automatically `#include`s each imported unit's `.h` from every unit's

@@ -7,14 +7,15 @@
 >
 > 语言层面的**语法决策已在 roadmap「已定的设计决策」中冻结**（`::` 路径规则、`import`、
 > `.h.ct` + `pub`、Drop/delete、`map`、JSON 诊断），本文不重复，只补**实现层面**的设计。
-> 第 6 节列出**仍需用户拍板**的决策点（D1–D8）。
+> 第 6 节列出**实现层面的决策点**（D1–D8；已拍板的行标注「已定」，其余仍待定）。
 >
 > **落地进度（2026-10-11）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
 > **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）、**1.3**（`import A::B` 递归解析、
-> 跨单元符号累积、自动 `#include`）与 **1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）已实现，
-> 测试全绿（`./test/run.sh` 90/90、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，且 **D-A = 方案 A**
-> （`ct build` 不调用 `cc`）。1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
-> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D1 / D4 / D5 / D6 / D7 / D8 仍待定。
+> 跨单元符号累积、自动 `#include`）、**1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）与
+> **1.5**（`#line`，**D4=A**：多文件默认开、单文件默认关，`--line`/`--no-line` 覆盖）已实现，
+> 测试全绿（`./test/run.sh` 92/92、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，
+> **D-A = 方案 A**（`ct build` 不调用 `cc`）。1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
+> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D5 / D6 / D7 / D8 仍待定。
 
 ---
 
@@ -177,14 +178,21 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **验收**：`T *p = <堆创建>; p->m(); delete p;` 正确运行且无泄漏；含 Drop 值字段的 struct
   递归释放正确（用计数或 valgrind 佐证）。
 
-#### 1.5 `#line`
+#### 1.5 `#line` ✅ 已完成（D4 = A）
+
+> **落地说明**：**已实现** —— 多文件模式（`ct build`）默认在 `.c` 里发出 `#line <源行> "<.ct 路径>"`；
+> 透传行按源行号直连，方法体逐行映射（`emit_body` 保持 1:1），生成的样板（trait/struct/impl 的
+> vtable、函数头、drop 原型 / 定义）用其**触发点**（构造起始行 / struct 定义行）的源行号，
+> 各生成块边界 `line_break()` 强制下一行重发，避免映射漂移。单文件模式**默认关**（golden 逐字节不变），
+> 多文件 `.h` 不加 `#line`；`--line` / `--no-line` 覆盖默认。已用 run.sh 的 `#line` 层端到端验证
+> （`.ct` 第 4 行造错 → gcc 报 `err.ct:4:`）。
 
 - **设计**：`.c` 中**源自源文件**的输出行前插 `#line <源行> "<源路径>"`；仅当行号不连续时输出
   （连续段省略，减小体积）；生成的样板行（vtable 定义、vptr 写入循环）用**触发点**的源行号。
-- **开关（决策 D4）**：建议单文件模式**默认关**（保 Phase 0 golden 不变），多文件模式**默认开**，
+- **开关（决策 D4 = A）**：单文件模式**默认关**（保 Phase 0 golden 不变），多文件模式**默认开**，
   `--line` / `--no-line` 覆盖。
 - **风险**：与 golden 的交互；`#line` 会改变 `__LINE__` 的取值（对调试有利，对依赖行号的宏需注意）。
-- **验收**：在 `.ct` 里制造一个 gcc 层面的错误（如调用不存在的 libc 函数），gcc 报出的行号与
+- **验收**：在 `.ct` 里制造一个 gcc 层面的错误（如引用未定义标识符），gcc 报出的行号与
   `.ct` 行号一致。
 
 #### 1.6 文件作用域对象数组 + 文件作用域嵌套对象
@@ -244,7 +252,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 | D1 | 堆对象的创建入口 | **A 识别 `malloc`（零新语法）** / B `T::create()` / C 维持手写 | 决定 1.4 形态与是否新增语法 |
 | D2 | struct **tag** 是否加 namespace 前缀 | **加**（C tag 空间扁平，跨单元必需） / 不加 | 跨单元 struct 重名能否避免 |
 | D3 | 顶层（无 namespace）符号 | **保持 Phase 0 名字（无前缀）** / 也加前缀 | 是否为破坏性变更 |
-| D4 | `#line` 默认开关 | 单文件关、多文件开 / 全开 / 全关 | 既有 golden 是否变动 |
+| D4 | `#line` 默认开关 | **单文件关、多文件开** / 全开 / 全关 | **已定 A**（用户 2026-10-11）：单文件 golden 不变；多文件 golden 一次性重生成 |
 | D5 | 文件作用域对象初始化 | **`__attribute__((constructor))`** / 显式 `<unit>_init()` | 便利 vs 可移植性 |
 | D6 | 单入口 `ct` 落地时机 | **Phase 1 起步** / 与 1.2 一起 / 更晚 | 何时一次性重生成全部 golden |
 | D7 | `import` 的路径根 | **导入文件目录 + `-I`** / 仅 `-I` | 目录约定 |
@@ -465,17 +473,26 @@ parallel; 1.5–1.8 each depend on their upstream.
 - **Acceptance**: `T *p = <heap creation>; p->m(); delete p;` runs correctly with no leak; a struct
   with Drop-carrying value fields releases recursively (evidenced by counts or valgrind).
 
-#### 1.5 `#line`
+#### 1.5 `#line` ✅ done (D4 = A)
+
+> **What landed**: multi-file mode (`ct build`) emits `#line <src line> "<.ct path>"` in the `.c` by
+> default. Pass-through lines map one to one; method bodies map line by line (`emit_body` keeps them
+> 1:1); generated boilerplate (a trait / struct / impl vtable, function headers, drop prototypes and
+> definitions) uses its **trigger point** (the construct's start line, or the struct's definition
+> line), and each generated block ends with `line_break()` so the next line always re-emits — no
+> mapping drift. Single-file mode is **off** (goldens stay byte-identical) and the multi-file `.h`
+> never gets `#line`; `--line` / `--no-line` override. Verified end-to-end by run.sh's `#line` layer
+> (an error at line 4 of a `.ct` makes gcc report `err.ct:4:`).
 
 - **Design**: emit `#line <src line> "<src path>"` before each output line **originating in the
   source**; only when the line number is discontinuous (continuous runs are omitted to shrink the
   output); generated boilerplate lines use the source line of their **trigger point**.
-- **Switch (decision D4)**: recommend **off** by default in single-file mode (keeps Phase 0 goldens
+- **Switch (decision D4 = A)**: **off** by default in single-file mode (keeps Phase 0 goldens
   unchanged) and **on** by default in multi-file mode, overridable with `--line` / `--no-line`.
 - **Risk**: interaction with goldens; `#line` changes what `__LINE__` yields (good for debugging,
   noteworthy for macros that depend on line numbers).
-- **Acceptance**: manufacture a gcc-level error in a `.ct` file (e.g. call a nonexistent libc
-  function); gcc's reported line matches the `.ct` line.
+- **Acceptance**: manufacture a gcc-level error in a `.ct` file (e.g. reference an undefined
+  identifier); gcc's reported line matches the `.ct` line.
 
 #### 1.6 File-scope object arrays + file-scope nested objects
 
@@ -545,7 +562,7 @@ receivers (`make().m()`) designed separately (they need temporary-variable promo
 | D1 | Heap-object creation entry | **A recognise `malloc` (zero new syntax)** / B `T::create()` / C keep hand-written | shapes 1.4 and whether syntax is added |
 | D2 | Prefix struct **tags** with the namespace | **yes** (C's tag space is flat, needed across units) / no | whether cross-unit struct clashes can be avoided |
 | D3 | Top-level (non-namespaced) symbols | **keep Phase 0 names (no prefix)** / prefix them too | whether this is a breaking change |
-| D4 | `#line` default | off single-file, on multi-file / always on / always off | whether existing goldens change |
+| D4 | `#line` default | **off single-file, on multi-file** / always on / always off | **A decided** (user, 2026-10-11): single-file goldens unchanged; multi-file goldens regenerated once |
 | D5 | File-scope object initialisation | **`__attribute__((constructor))`** / explicit `<unit>_init()` | convenience vs portability |
 | D6 | When the single-entry `ct` lands | **at the start of Phase 1** / with 1.2 / later | when every golden is regenerated once |
 | D7 | `import` path root | **importing file's directory + `-I`** / `-I` only | directory convention |

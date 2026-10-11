@@ -16,7 +16,7 @@
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete | 🔨 进行中（1.0 CLI、1.1 namespace、1.2 多文件 + `pub`、1.3 `import`、1.4 堆/Drop 已落地；1.5 `#line` 起待做） | 见下 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line` | 🔨 进行中（1.0 CLI、1.1 namespace、1.2 多文件 + `pub`、1.3 `import`、1.4 堆/Drop、1.5 `#line` 已落地；1.6 起待做） | 见下 |
 | Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
 | Phase 3 | 增量编译、跨函数分析、多目标编译、自举（展望） | 🔭 展望 | — |
 
@@ -237,7 +237,7 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 | 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | Phase 1（与 Drop 一起定） | ✅ `T *p = malloc(...)`（含 `calloc`）已在声明后自动写 vptr（含嵌套值字段，D1=A）；`use Drop` + `delete` 递归释放已实现 |
 | 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ❌ |
 | 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
-| 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ❌ |
+| 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ✅ 多文件模式**默认**在 `.c` 发出 `#line`（D4=A），单文件默认关；gcc/clang 报错映回 `.ct` 行 |
 | 6 | **方法调用的接收者可以是更一般的表达式** | `make().m()`、`ps[i].m()`（变量下标）、`a.next->m()`（指针字段链）实测均原样透传；遍历子节点要用 | 待定（可拆开单做） | ❌ |
 | 7 | 位置式初始化 / 方法体内互调 | — | 已完成（0.1.1 / 0.1.4） | ✅ |
 
@@ -494,7 +494,7 @@ as confirmed by the user.
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete | 🔨 in progress (1.0 CLI, 1.1 namespaces, 1.2 multi-file + `pub`, 1.3 `import` and 1.4 heap/Drop landed; 1.5 `#line` onward pending) | see below |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line` | 🔨 in progress (1.0 CLI, 1.1 namespaces, 1.2 multi-file + `pub`, 1.3 `import`, 1.4 heap/Drop and 1.5 `#line` landed; 1.6 onward pending) | see below |
 | 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
 | 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting (outlook) | 🔭 outlook | — |
 
@@ -755,7 +755,7 @@ For L1 / L2 to write a compiler in CT, the following must exist first (**each on
 | 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | Phase 1 (with Drop) | ✅ `T *p = malloc(...)` (incl. `calloc`) writes the vptrs automatically right after the declaration (nested value fields included, D1=A); `use Drop` + recursive release via `delete` landed |
 | 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ❌ |
 | 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | Phase 1 | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
-| 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ❌ |
+| 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ✅ multi-file mode emits `#line` in the `.c` **by default** (D4=A), off in single-file; gcc/clang errors map back to the `.ct` line |
 | 6 | **A method call may have a more general receiver expression** | `make().m()`, `ps[i].m()` (variable subscript) and `a.next->m()` (pointer field chain) are all passed through verbatim (verified); walking child nodes needs this | open (can be done on its own) | ❌ |
 | 7 | Positional initialisers / calls between sibling methods | — | done (0.1.1 / 0.1.4) | ✅ |
 

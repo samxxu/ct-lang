@@ -61,11 +61,13 @@ argv
 | | `skip_literal` `skip_comment` `skip_ws_comments` | 跳过字符串/字符字面量与注释；保证不误改字面量内文本 |
 | | `read_ident` `copy_ident` | 读 / 拷贝标识符；超过 `MAX_NAME` 即 `die`，不静默截断 |
 | | `match_delim` | 在 `g_src` 上做括号配对，自动跳过字面量与注释 |
+| | `line_of` | 字节偏移 → 1-based 源行号（带缓存，前向遍历保持线性） |
 | 符号表 | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | 线性查找（规模小，不引入哈希）；`find_trait` / `find_struct` 先查当前命名空间再回退顶层，`*_c` 按已修饰的 C 名精确查找 |
 | | `resolve_method` | 按 struct 的 `use` 顺序找方法归属的 trait |
 | 签名解析 | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | 把 `int add(int a, int b)` 拆成 ret / name / params / 参数类型表 |
 | | `last_ident` `last_qual_name` `qual_to_c` `span_qualified` | 取末尾标识符 / 命名空间路径 `A::B::Name`，并把它修饰成 C 名 `A_B_Name` |
 | 生成器 | `emit_trait_def` `emit_struct_def` | 生成 vtable 类型与 struct 定义（同时写 `.c` 与 `.h`） |
+| | `line_at` `line_break` | `#line` 发射（Phase 1.5）：仅在映射不连续时写 `#line <源行> "<.ct>"`（追踪 `.c`，不动 `.h`）；`line_break` 让下一行强制重发（生成块边界） |
 | | `replace_self` | 方法体内 `self` → `_self`（token 级，跳过字面量与注释），并把 `self->m(...)` 重写为 `_self->__<trait>_vptr->m(_self, …)` |
 | | `emit_body` | 去公共缩进 + 统一 4 空格重排方法体 |
 | | `body_calls_sibling` | 探测方法体是否调用了兄弟方法（决定是否需要 vtable 前向声明） |
@@ -213,11 +215,13 @@ and impls must precede the functions that call them.
 | | `skip_literal` `skip_comment` `skip_ws_comments` | skip string/char literals and comments; text inside literals is never rewritten |
 | | `read_ident` `copy_ident` | read / copy an identifier; over `MAX_NAME` is a hard error, never a silent truncation |
 | | `match_delim` | delimiter matching over `g_src`, automatically skipping literals and comments |
+| | `line_of` | byte offset → 1-based source line (cached, so a forward walk stays linear) |
 | Symbol tables | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | linear lookups (the scale is small, so no hashing); `find_trait` / `find_struct` try the current namespace then fall back to top level, `*_c` look up an already-mangled C name exactly |
 | | `resolve_method` | find the trait a method belongs to, following the struct's `use` order |
 | Signature parsing | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | split `int add(int a, int b)` into ret / name / params / a parameter-type table |
 | | `last_ident` `last_qual_name` `qual_to_c` `span_qualified` | take the trailing identifier / namespace path `A::B::Name` and mangle it into a C name `A_B_Name` |
 | Emitters | `emit_trait_def` `emit_struct_def` | generate vtable types and struct definitions (writing both `.c` and `.h`) |
+| | `line_at` `line_break` | `#line` emission (Phase 1.5): write `#line <src line> "<.ct>"` only where the mapping diverges (tracks the `.c`, never the `.h`); `line_break` forces the next line to re-emit (at generated-block boundaries) |
 | | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments), rewriting `self->m(...)` into `_self->__<trait>_vptr->m(_self, …)` |
 | | `emit_body` | strip the common indentation and re-layout method bodies on a uniform 4-space base |
 | | `body_calls_sibling` | detect whether a body calls a sibling method (decides if a vtable forward declaration is needed) |
