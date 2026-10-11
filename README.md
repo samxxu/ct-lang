@@ -45,12 +45,16 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 | 用法 | 说明 |
 | --- | --- |
-| `ctc <input.ct>` | 输出到 `<input>.c`、`<input>.h` |
+| `ctc <input.ct>` | 输出到 `<input>.c`、`<input>.h`（单文件模式） |
 | `ctc <input.ct> -o <output.c>` | 输出到指定路径，头文件为同目录同名的 `.h` |
+| `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
+| `ctc build <a.ct> <b.ct>… -o <dir>` | **多文件模式**：每个输入生成 `<dir>/<base>.c` + `.h`；`.c` 会 `#include` 自己的 `.h`；`pub` 符号进 `.h`；最后打印建议的 `cc …` 命令（不自己调用 `cc`） |
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.0.1` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
 退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。
+
+> 命令的最终形态是单入口 `ct`（`ctc` 保留为兼容别名），尚未落地，见 [docs/roadmap.md](docs/roadmap.md)。
 
 ### 3. 语法与展开规则
 
@@ -74,6 +78,11 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
+| `namespace A::B { struct Person … }` | 其中的 struct / trait / impl 符号加前缀 `A_B_`（`struct A_B_Person`、`A_B_Person_Greeter_greet`、`A_B_Person_Greeter_vtable`），vptr 字段仍是 `__greeter_vptr` |
+| `A::B::Person p;` | `struct A_B_Person p;`（限定引用 `A::B::Name` → `A_B_Name`） |
+| `A::B::fn();` | `fn();`（普通函数名不修饰，只去掉路径） |
+| `pub trait T {…}` / `pub struct S {…}`（多文件模式） | 定义写入 `.h`（其它符号只进 `.c`）；`pub` 被剥离，不进入生成的 C |
+| `pub int f(int);`（多文件模式） | 函数原型写入 `.h` |
 | 其它任意 C 代码 | 原样透传 |
 
 命名规则：
@@ -242,10 +251,10 @@ ct/
 
 **设计内不做（Phase 0 明确排除）**
 
-- namespace、可见性修饰符（`pub` / `readonly` / `setter`）
+- 可见性修饰符（`pub` / `readonly` / `setter`）
 - 泛型、继承、多文件编译
 - 类型检查、错误恢复（遇错即退出）
-- 嵌套定义
+- 嵌套定义（`namespace` 已支持，是唯一可嵌套的构造）
 
 **当前实现限制**
 
@@ -254,6 +263,8 @@ ct/
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象不自动初始化**：`malloc` 出来的对象需**手写** `q->__<trait>_vptr = &…;`；堆对象的创建方式推迟到 Phase 1（与 Drop 一起定）。
 - 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
+- **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰，因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
+- **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；跨单元的**类型**引用仍需 `import`（下一步）。
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
 
 ### 8. 相关文档
@@ -312,8 +323,10 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 | Usage | Result |
 | --- | --- |
-| `ctc <input.ct>` | writes `<input>.c` and `<input>.h` |
+| `ctc <input.ct>` | writes `<input>.c` and `<input>.h` (single-file mode) |
 | `ctc <input.ct> -o <output.c>` | writes the given path plus a sibling `.h` |
+| `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
+| `ctc build <a.ct> <b.ct>… -o <dir>` | **multi-file mode**: each input produces `<dir>/<base>.c` + `.h`; the `.c` includes its own `.h`; `pub` symbols go into the `.h`; then the suggested `cc …` command is printed (ctc never runs `cc`) |
 | `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.0.1` |
 | `ctc -h` / `ctc --help` | prints usage |
 
@@ -341,6 +354,11 @@ Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:lin
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
 | `g.greet();` | `g.vt->greet(g.self);` (dispatches at run time to whatever was boxed) |
+| `namespace A::B { struct Person … }` | struct / trait / impl symbols get the prefix `A_B_` (`struct A_B_Person`, `A_B_Person_Greeter_greet`, `A_B_Person_Greeter_vtable`); the vptr field stays `__greeter_vptr` |
+| `A::B::Person p;` | `struct A_B_Person p;` (a qualified reference `A::B::Name` → `A_B_Name`) |
+| `A::B::fn();` | `fn();` (plain function names are not mangled — only the path is dropped) |
+| `pub trait T {…}` / `pub struct S {…}` (multi-file mode) | the definition goes into the `.h` (everything else stays in the `.c`); the `pub` itself is stripped and never appears in the generated C |
+| `pub int f(int);` (multi-file mode) | the function prototype goes into the `.h` |
 | anything else | copied through verbatim |
 
 Naming rules:
@@ -538,8 +556,9 @@ directory or generate them on demand.
 
 ### 7. Known limitations
 
-Not supported by design (Phase 0): namespaces, visibility modifiers, generics, inheritance,
-multi-file compilation, type checking, error recovery, nested definitions.
+Not supported by design (Phase 0): visibility modifiers, generics, inheritance, multi-file
+compilation, type checking, error recovery, nested definitions (`namespace` is supported — it is the
+only nestable construct).
 
 Implementation limits:
 
@@ -554,6 +573,12 @@ Implementation limits:
 - Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
   automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
   a variable, `&variable` or a call returning the same interface.
+- **A namespace only mangles struct / trait / impl symbols and qualified type references**; plain
+  function names are not mangled, so same-named plain functions in different namespaces collide at the
+  C level.
+- **Multi-file mode** (`ctc build`): the generated `.c` includes its own `.h` (no longer self-contained);
+  only `pub` trait/struct definitions and `pub` function prototypes cross into the `.h`; cross-unit
+  **type** references still need `import` (the next step).
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
 
 ### 8. Documentation

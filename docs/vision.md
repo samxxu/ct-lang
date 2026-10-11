@@ -97,7 +97,7 @@ ct_platform.h（厂商提供，一次编写）→ 宏映射到具体 SDK
 ### 4. AI 编程友好性
 
 - **编译器生成头文件**：AI 只需维护一份 `.h.ct` 的逻辑正确性，编译器自动生成 `.h` + `.c`，不存在「改了实现但忘了更新声明」的不一致问题。
-- **import 替代手动 `#include`**：AI 不需要推断头文件路径、不需要处理 include 顺序和守卫，`import HAL.UART` 由编译器解析。
+- **import 替代手动 `#include`**：AI 不需要推断头文件路径、不需要处理 include 顺序和守卫，`import HAL::UART` 由编译器解析。
 - **不接触宏**：宏收敛在厂商的 `ct_platform.h` 中（见 2.3）。
 - **编译期检查兜底**：见 2.4。
 
@@ -221,7 +221,7 @@ few dozen macro lines to make its chip CT-compatible.
   compiler produces the `.h` + `.c`. There is no "changed the implementation but forgot the
   declaration" inconsistency.
 - **`import` replaces manual `#include`**: AI never infers header paths, include order, or guards —
-  `import HAL.UART` is resolved by the compiler.
+  `import HAL::UART` is resolved by the compiler.
 - **No contact with macros**: macros are confined to the vendor's `ct_platform.h` (see 2.3).
 - **Compile-time checks as the backstop**: see 2.4.
 

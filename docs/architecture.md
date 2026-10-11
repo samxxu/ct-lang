@@ -55,15 +55,16 @@ argv
 | --- | --- | --- |
 | 工具 | `xmalloc` `xstrndup` `is_ident_char` | 内存与字符判断，失败即退出 |
 | | `die` | 唯一报错出口，把字节偏移换算成 `行:列` 后 `exit(1)` |
-| | `trim` `trim_right_len` `to_lower` | 字符串杂务 |
+| | `trim` `trim_right_len` `to_lower` `set_cname` | 字符串杂务；`set_cname` 拼 `命名空间前缀 + 名字`（超长报错） |
 | | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | 动态字符串缓冲，行重写的主要输出载体 |
 | 源扫描 | `word_at` | 词边界匹配，替代裸 `strncmp`，避免 `structx` 误判 |
 | | `skip_literal` `skip_comment` `skip_ws_comments` | 跳过字符串/字符字面量与注释；保证不误改字面量内文本 |
 | | `read_ident` | 读标识符（超长静默截断） |
 | | `match_delim` | 在 `g_src` 上做括号配对，自动跳过字面量与注释 |
-| 符号表 | `find_trait` `find_struct` `struct_uses` `find_var` | 线性查找（规模小，不引入哈希） |
+| 符号表 | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | 线性查找（规模小，不引入哈希）；`find_trait` / `find_struct` 先查当前命名空间再回退顶层，`*_c` 按已修饰的 C 名精确查找 |
 | | `resolve_method` | 按 struct 的 `use` 顺序找方法归属的 trait |
 | 签名解析 | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | 把 `int add(int a, int b)` 拆成 ret / name / params / 参数类型表 |
+| | `last_ident` `last_qual_name` `qual_to_c` `span_qualified` | 取末尾标识符 / 命名空间路径 `A::B::Name`，并把它修饰成 C 名 `A_B_Name` |
 | 生成器 | `emit_trait_def` `emit_struct_def` | 生成 vtable 类型与 struct 定义（同时写 `.c` 与 `.h`） |
 | | `replace_self` | 方法体内 `self` → `_self`（token 级，跳过字面量与注释），并把 `self->m(...)` 重写为 `_self->__<trait>_vptr->m(_self, …)` |
 | | `emit_body` | 去公共缩进 + 统一 4 空格重排方法体 |
@@ -78,22 +79,24 @@ argv
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | 接口多态：装箱（复合字面量）、接口变量声明/赋值、接口返回值 |
 | | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚 |
 | | `transform_calls` | 单行内的方法调用重写状态机 |
-| | `try_var_decl` | 识别 `Type var = {...}` 并改造、登记变量 |
+| | `try_var_decl` `read_qual_ref` | 识别 `Type var = {...}`（含限定名 `A::B::Type`）并改造、登记变量 |
 | | `transform_line` `emit_raw_line` | 串联上述两步并写出 |
-| 驱动 | `usage` `default_output` `header_path` `write_guard` `read_file` `main` | 命令行、路径推导、文件 I/O、主循环 |
+| 驱动 | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `build_main` `compile_main` `main` | 命令行、路径推导、文件 I/O、主循环（`compile_range` 递归处理 `namespace`；`compile_file` 单次编译；`build_main` 多文件驱动；`main` 分派子命令） |
 
 ### 4. 数据结构与符号表
 
 ```c
 Method { ret, name, params(verbatim), ptypes[][](仅类型), nparams }
-Trait  { name, m[MAX_METHOD], nm }
-Struct { name, use_t[MAX_TRAITS][], nu }
+Trait  { name, cname, m[MAX_METHOD], nm }
+Struct { name, cname, use_t[MAX_TRAITS][], use_i[MAX_TRAITS], nu }
 Var    { name, s }              /* s 为 g_structs 下标 */
 ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+长度，不复制 */
 ```
 
 - 三个全局表：`g_traits` / `g_structs` / `g_vars`，容量见 `language-spec.md` 第 7 节。
-- **变量表是「名字 → struct 下标」的扁平表**，没有作用域、没有块层级，一旦登记终生有效。这是当前最大的语义近似。
+- `cname` 是**命名空间修饰后的 C 名**（`namespace A::B` 内的 `Person` → `A_B_Person`；顶层即原名），
+  生成器一律用它；`name` 保留短名用于查找与诊断，`use_i` 记所用 trait 的下标（不依赖当前命名空间）。
+- **变量表是「名字 → struct 下标」的扁平表**，靠 `scope_track` 在 `{}` 处回滚 `g_nvars` 实现块作用域；跨行调用、登记前调用仍不重写。
 - impl 方法体不复制，只记录 `g_src` 中的区间；只有真正要输出、需要改写 `self` 时才经 `Buf` 复制一次。
 
 ### 5. 关键算法
@@ -147,11 +150,11 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 
 ### 8. 扩展点（Phase 1 落点）
 
-| 新特性 | 主要改动位置 |
+| 新特性 | 状态 / 主要改动位置 |
 | --- | --- |
-| namespace | `main` 主循环新增 `parse_namespace`；`find_*` 改成带限定的查找；命名规则加前缀 |
+| namespace | ✅ 已落地（Phase 1.1）：`compile_range` 递归处理 `namespace A::B { … }`；`find_trait` / `find_struct` 先查当前命名空间再回退顶层；`Trait` / `Struct` 增 `cname`（修饰后的 C 名） |
+| 变量作用域 | ✅ 已落地（0.1.9）：`scope_track` 在 `{}` 处压栈、`}` 处回滚 `g_nvars` |
 | 多文件编译 | 见第 6 节：类型定义下沉到 `.h`，`.c` 改为 `#include` |
-| 变量作用域 | `g_vars` 加块深度标记，进入/离开 `{}` 时截断回滚 |
 | 错误恢复 | 主循环在 `die` 处改为「跳到下一个行首/下一个 `}` 后继续」，需要引入错误计数 |
 | 自动化回归 | 见 `roadmap.md` 的测试策略 |
 
@@ -205,15 +208,16 @@ and impls must precede the functions that call them.
 | --- | --- | --- |
 | Utilities | `xmalloc` `xstrndup` `is_ident_char` | memory and character checks; failures exit immediately |
 | | `die` | the single error exit: converts a byte offset into `line:col`, then `exit(1)` |
-| | `trim` `trim_right_len` `to_lower` | string chores |
+| | `trim` `trim_right_len` `to_lower` `set_cname` | string chores; `set_cname` builds `namespace prefix + name` (errors when overlong) |
 | | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | dynamic string buffer, the main output vehicle of line rewriting |
 | Source scanning | `word_at` | word-boundary matching, replacing bare `strncmp`, so `structx` is not misread |
 | | `skip_literal` `skip_comment` `skip_ws_comments` | skip string/char literals and comments; text inside literals is never rewritten |
 | | `read_ident` | read an identifier (silently truncated when overlong) |
 | | `match_delim` | delimiter matching over `g_src`, automatically skipping literals and comments |
-| Symbol tables | `find_trait` `find_struct` `struct_uses` `find_var` | linear lookups (the scale is small, so no hashing) |
+| Symbol tables | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | linear lookups (the scale is small, so no hashing); `find_trait` / `find_struct` try the current namespace then fall back to top level, `*_c` look up an already-mangled C name exactly |
 | | `resolve_method` | find the trait a method belongs to, following the struct's `use` order |
 | Signature parsing | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | split `int add(int a, int b)` into ret / name / params / a parameter-type table |
+| | `last_ident` `last_qual_name` `qual_to_c` `span_qualified` | take the trailing identifier / namespace path `A::B::Name` and mangle it into a C name `A_B_Name` |
 | Emitters | `emit_trait_def` `emit_struct_def` | generate vtable types and struct definitions (writing both `.c` and `.h`) |
 | | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments), rewriting `self->m(...)` into `_self->__<trait>_vptr->m(_self, …)` |
 | | `emit_body` | strip the common indentation and re-layout method bodies on a uniform 4-space base |
@@ -228,24 +232,29 @@ and impls must precede the functions that call them.
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | interface polymorphism: boxing (compound literal), interface declarations/assignments, interface returns |
 | | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}` |
 | | `transform_calls` | the single-line state machine that rewrites method calls |
-| | `try_var_decl` | recognise `Type var = {...}`, rewrite the declaration and register the variable |
+| | `try_var_decl` `read_qual_ref` | recognise `Type var = {...}` (including the qualified `A::B::Type`), rewrite the declaration and register the variable |
 | | `transform_line` `emit_raw_line` | chain the two steps above and write the line out |
-| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `main` | command line, path derivation, file I/O and the main loop |
+| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `build_main` `compile_main` `main` | command line, path derivation, file I/O and the main loop (`compile_range` recurses into `namespace`; `compile_file` compiles one unit; `build_main` is the multi-file driver; `main` dispatches subcommands) |
 
 ### 4. Data structures and symbol tables
 
 ```c
 Method { ret, name, params(verbatim), ptypes[][](types only), nparams }
-Trait  { name, m[MAX_METHOD], nm }
-Struct { name, use_t[MAX_TRAITS][], nu }
+Trait  { name, cname, m[MAX_METHOD], nm }
+Struct { name, cname, use_t[MAX_TRAITS][], use_i[MAX_TRAITS], nu }
 Var    { name, s }              /* s is an index into g_structs */
 ImplMethod { name, params, bstart, blen }   /* the body is stored as offset+length into g_src, never copied */
 ```
 
 - Three global tables: `g_traits` / `g_structs` / `g_vars`; the capacities are listed in §7 of
   `language-spec.md`.
-- The variable table is a flat name → struct-index map — no scope, no block levels, and once
-  registered an entry lives forever. It is the biggest semantic approximation in the compiler today.
+- `cname` is the **namespace-mangled C name** (`Person` in `namespace A::B` → `A_B_Person`; at top
+  level it is just the name) and is what the emitters always use; `name` keeps the short form for
+  lookup and diagnostics, and `use_i` records the index of each used trait (independent of the current
+  namespace).
+- The variable table is a flat name → struct-index map; block scope is provided by `scope_track`
+  rolling `g_nvars` back at `}`, so multi-line calls and calls before registration are still not
+  rewritten.
 - Impl method bodies are not copied; only their range in `g_src` is recorded. The single copy through
   `Buf` happens only when the body is actually emitted and `self` has to be rewritten.
 
@@ -313,11 +322,13 @@ golden under `test/cases/**` and they must be regenerated together.
 
 ### 8. Extension points (Phase 1 landing spots)
 
-Namespaces (a new `parse_namespace` in the `main` loop, qualified `find_*` lookups, and a prefix added
-to the naming rules), multi-file support (see §6: type definitions sink into the `.h` and the `.c`
-switches to `#include`), variable scopes (block-depth markers in `g_vars`, truncated and rolled back on
-entering/leaving `{}`), error recovery (after `die`, skip to the next line start or the next `}` and
-continue, which needs an error counter), and the automated regression suite described in `roadmap.md`.
+Namespaces **✅ landed (Phase 1.1)** — `compile_range` recurses into `namespace A::B { … }`, `find_trait`
+/ `find_struct` try the current namespace then fall back to top level, and `Trait` / `Struct` gained a
+`cname` (the mangled C name). Variable scopes **✅ landed (0.1.9)** — `scope_track` pushes at `{` and
+rolls `g_nvars` back at `}`. Still to come: multi-file support (see §6: type definitions sink into the
+`.h` and the `.c` switches to `#include`), error recovery (after `die`, skip to the next line start or
+the next `}` and continue, which needs an error counter), and the automated regression suite described
+in `roadmap.md`.
 
 ### 9. How the tests attach to this code
 
