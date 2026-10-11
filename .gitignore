@@ -19,3 +19,6 @@ examples/*/*.h
 # VS Code extension packaging output (editors/vscode)
 *.vsix
 editors/**/node_modules/
+
+# Local agent tooling (skills, caches) — not part of the shipped project
+.trae/
