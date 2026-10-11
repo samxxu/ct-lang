@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "calc.h"
 
+#line 1 "test/multifile/calc.ct"
 /* multi-file demo: an exported function declaration plus its definition */
 
 int add(int a, int b) { return a + b; }

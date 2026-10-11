@@ -3,6 +3,7 @@
 #include "app.h"
 #include "shapes.h"
 
+#line 2 "test/import/app.ct"
 
 #include <stdio.h>
 

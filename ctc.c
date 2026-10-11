@@ -92,6 +92,7 @@ typedef struct {
     int  drop_used;                    /* 1 when a delete of this type was seen (drives lazy emit) */
     int  has_user_drop;                /* 1 when the user wrote `impl Drop for T` */
     size_t drop_bstart, drop_blen;     /* the user drop() body, when has_user_drop */
+    size_t def_line;                   /* 1-based source line of the definition (for #line) */
 } Struct;
 
 typedef struct {
@@ -145,6 +146,16 @@ static char g_ns[MAX_NAME];           /* current namespace prefix, e.g. "HAL_UAR
 static int g_multi = 0;               /* 1 when compiling in multi-file mode */
 static int g_ctor_pub = 0;            /* 1 when the current trait/struct is 'pub' */
 static int g_line_pub = 0;            /* 1 when the current raw line was 'pub'-prefixed */
+
+/* Phase 1.5 `#line` (D4 = A): on in multi-file mode so gcc errors in the
+   generated .c map back to the .ct; single-file output stays byte-identical to
+   Phase 0 (where the mapping would diverge anyway). `--line` / `--no-line`
+   override the per-mode default. Only the .c is tracked, never the .h. */
+static int  g_emit_line  = 0;         /* 1 while #line directives are written */
+static int  g_line_force = -1;        /* -1 default (by mode), 0 force off, 1 force on */
+static long g_line_next  = -1;        /* source line the next .c line maps to, or -1 */
+static size_t g_lc_off   = 0;         /* line_of cache: byte offset ... */
+static size_t g_lc_ln    = 1;         /* ... and its 1-based line number */
 
 /* the imported units' header basenames, emitted as #includes by the .c */
 static char g_imp_h[MAX_IMPORTS][MAX_NAME];
@@ -340,6 +351,18 @@ static size_t match_delim(size_t p, char open, char close)
     }
     die(start, "unterminated '%c'", open);
     return p;
+}
+
+/* 1-based line number of byte offset `pos` in g_src. The scan is cached from the
+   previous call so a forward walk over the file stays linear. */
+static size_t line_of(size_t pos)
+{
+    if (pos < g_lc_off) { g_lc_off = 0; g_lc_ln = 1; }
+    while (g_lc_off < pos && g_lc_off < g_len) {
+        if (g_src[g_lc_off] == '\n') g_lc_ln++;
+        g_lc_off++;
+    }
+    return g_lc_ln;
 }
 
 /* ------------------------------------------------ tables / lookups */
@@ -776,9 +799,28 @@ static void emit_qualified_type(Buf *b, const char *piece, size_t len,
 
 /* ------------------------------------------------------------ emitters */
 
-static void emit_trait_def(FILE *f, const Trait *T)
+/* ---------------------------------------------------------- #line emission */
+
+/* Invalidate the running mapping so the next line_at always writes an explicit
+   directive — used after a run of generated boilerplate. */
+static void line_break(void) { g_line_next = -1; }
+
+/* Begin an output line of `f` that originates at `srcline` in the .ct. A `#line`
+   directive is written only when the running mapping would diverge, so a run of
+   consecutive source lines stays directive-free. Only the .c (f == g_out) is
+   tracked; the .h is left untouched. */
+static void line_at(FILE *f, size_t srcline)
+{
+    if (f != g_out || !g_emit_line) return;
+    if ((long)srcline != g_line_next)
+        fprintf(f, "#line %ld \"%s\"\n", (long)srcline, g_path);
+    g_line_next = (long)srcline + 1;
+}
+
+static void emit_trait_def(FILE *f, const Trait *T, size_t srcline)
 {
     int i, k;
+    line_at(f, srcline);
     fprintf(f, "struct %s_vtbl {\n", T->cname);
     for (i = 0; i < T->nm; i++) {
         const Method *m = &T->m[i];
@@ -790,13 +832,15 @@ static void emit_trait_def(FILE *f, const Trait *T)
     /* the interface value type: a fat pointer to an object plus its vtable */
     fprintf(f, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n",
             T->cname, T->cname);
+    line_break();
 }
 
-static void emit_struct_def(FILE *f, const Struct *S, const char *body)
+static void emit_struct_def(FILE *f, const Struct *S, const char *body, size_t srcline)
 {
     int i;
     size_t blen = strlen(body);
 
+    line_at(f, srcline);
     fprintf(f, "struct %s {", S->cname);
     if (blen && body[0] != '\n') fputc('\n', f);
     if (blen) fputs(body, f);
@@ -807,6 +851,7 @@ static void emit_struct_def(FILE *f, const Struct *S, const char *body)
         fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", g_traits[S->use_i[i]].cname, low);
     }
     fprintf(f, "};\n");
+    line_break();
 }
 
 /* does the body call a sibling method, i.e. `self->m(` for a used trait method? */
@@ -914,6 +959,7 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S)
 {
     Buf r;
     size_t i, j, n;
+    size_t bl_first = line_of(bstart);   /* source line of body line 0 */
     int minind = 1 << 30;
     size_t *ls, *le;
     int nlines = 0, first = -1, last = -1, k;
@@ -950,14 +996,17 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S)
     if (first < 0) { free(ls); free(le); free(r.p); return; }
     if (minind == 1 << 30) minind = 0;
 
+    line_break();   /* anchor: the first body line always carries a #line */
     for (k = first; k <= last; k++) {
         size_t t = ls[k];
         while (t < le[k] && (r.p[t] == ' ' || r.p[t] == '\t')) t++;
+        line_at(f, bl_first + (size_t)k);
         if (t >= le[k]) { fputc('\n', f); continue; }
         fputs("    ", f);
         fwrite(r.p + ls[k] + minind, 1, le[k] - ls[k] - minind, f);
         fputc('\n', f);
     }
+    line_break();
 
     free(ls);
     free(le);
@@ -971,6 +1020,7 @@ static size_t parse_trait(size_t p)
     char name[MAX_NAME];
     Trait *T;
     size_t close, bstart, bend, i;
+    size_t tline = line_of(p);                   /* source line of 'trait' */
     Buf raw, clean;
 
     p += 5;                                     /* "trait" */
@@ -1050,9 +1100,9 @@ static size_t parse_trait(size_t p)
     }
     free(clean.p);
 
-    if (!g_multi) { emit_trait_def(g_out, T); emit_trait_def(g_hout, T); }
-    else if (g_ctor_pub) emit_trait_def(g_hout, T);
-    else emit_trait_def(g_out, T);
+    if (!g_multi) { emit_trait_def(g_out, T, tline); emit_trait_def(g_hout, T, tline); }
+    else if (g_ctor_pub) emit_trait_def(g_hout, T, tline);
+    else emit_trait_def(g_out, T, tline);
     return close + 1;
 }
 
@@ -1110,6 +1160,7 @@ static size_t parse_struct(size_t p)
     char name[MAX_NAME];
     Struct *S;
     size_t close, bstart, bend, q, probe;
+    size_t sline = line_of(p);                    /* source line of 'struct' */
     int i;
 
     p += 6;                                     /* "struct" */
@@ -1132,6 +1183,7 @@ static size_t parse_struct(size_t p)
     S->drop_used = 0;
     S->has_user_drop = 0;
     S->drop_bstart = S->drop_blen = 0;
+    S->def_line = sline;
 
     q = close + 1;
     probe = q;
@@ -1181,9 +1233,9 @@ static size_t parse_struct(size_t p)
         char *raw = xstrndup(g_src + bstart, bend - bstart);
         char *qbody = parse_fields(raw, S, p);
         free(raw);
-        if (!g_multi) { emit_struct_def(g_out, S, qbody); emit_struct_def(g_hout, S, qbody); }
-        else if (g_ctor_pub) emit_struct_def(g_hout, S, qbody);
-        else emit_struct_def(g_out, S, qbody);
+        if (!g_multi) { emit_struct_def(g_out, S, qbody, sline); emit_struct_def(g_hout, S, qbody, sline); }
+        else if (g_ctor_pub) emit_struct_def(g_hout, S, qbody, sline);
+        else emit_struct_def(g_out, S, qbody, sline);
         free(qbody);
     }
     return q;
@@ -1195,6 +1247,7 @@ static size_t parse_impl(size_t p)
     Trait *T;
     Struct *S;
     size_t close, i, k;
+    size_t dline = line_of(p);                    /* source line of 'impl' */
     ImplMethod impl[MAX_METHOD];
     int nimpl = 0, found;
 
@@ -1305,9 +1358,12 @@ static size_t parse_impl(size_t p)
         int needs_vtable = 0;
         for (k = 0; k < (size_t)nimpl; k++)
             if (body_calls_sibling(impl[k].bstart, impl[k].blen, S)) { needs_vtable = 1; break; }
-        if (needs_vtable)
+        if (needs_vtable) {
+            line_at(g_out, dline);
             fprintf(g_out, "static struct %s_vtbl %s_%s_vtable;\n\n",
                     T->cname, S->cname, T->name);
+            line_break();
+        }
     }
 
     /* emit one function per trait method, in trait order */
@@ -1320,14 +1376,17 @@ static size_t parse_impl(size_t p)
             die(p, "trait method '%s' is not implemented for struct '%s'",
                 tm->name, S->name);
 
+        line_at(g_out, dline);
         fprintf(g_out, "static %s %s_%s_%s(void *self", tm->ret, S->cname, T->name, tm->name);
         if (tm->nparams > 0) fprintf(g_out, ", %s", impl[idx].params);
         fprintf(g_out, ") {\n");
         fprintf(g_out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
         emit_body(g_out, impl[idx].bstart, impl[idx].blen, S);
         fprintf(g_out, "}\n\n");
+        line_break();
     }
 
+    line_at(g_out, dline);
     fprintf(g_out, "static struct %s_vtbl %s_%s_vtable = {\n",
             T->cname, S->cname, T->name);
     for (k = 0; k < (size_t)T->nm; k++)
@@ -1335,6 +1394,7 @@ static size_t parse_impl(size_t p)
                 T->m[k].name, S->cname, T->name, T->m[k].name,
                 (k + 1 < (size_t)T->nm) ? "," : "");
     fprintf(g_out, "};\n\n");
+    line_break();
 
     {
         size_t q = close + 1;
@@ -2447,6 +2507,8 @@ static void usage(const char *prog)
             ".h, `pub` symbols go into the .h) and prints the suggested cc command.\n\n"
             "  -o <file|dir>   compile: write the generated C to <file>\n"
             "                  build: write the outputs into <dir>\n"
+            "  --line          force `#line` directives in the generated C\n"
+            "  --no-line       suppress `#line` directives\n"
             "  -v, --version   print the compiler version and exit\n"
             "  -h, --help      print this help and exit\n",
             prog, prog);
@@ -2663,6 +2725,7 @@ static void compile_range(size_t start, size_t end)
 
         le = ls;
         while (le < end && g_src[le] != '\n') le++;
+        line_at(g_out, line_of(ls));
         emit_raw_line(ls, le);
         if (le < end) { fputc('\n', g_out); le++; }
         pos = le;
@@ -2723,10 +2786,12 @@ static void emit_drop_prototypes(FILE *f)
     for (i = 0; i < g_nown_drop; i++) {
         Struct *S = &g_structs[g_own_drop[i]];
         if (!S->drop_used) continue;
+        line_at(f, S->def_line);
         fprintf(f, "static void %s_Drop_drop(void *self);\n", S->cname);
         any = 1;
     }
     if (any) fputc('\n', f);
+    line_break();
 }
 
 static void emit_drop_bodies(FILE *f)
@@ -2742,6 +2807,7 @@ static void emit_drop_bodies(FILE *f)
             for (h = 0; h < S->nf; h++)
                 if (g_structs[S->ftype[h]].has_drop) { need_self = 1; break; }
         }
+        line_at(f, S->def_line);
         fprintf(f, "static void %s_Drop_drop(void *self) {\n", S->cname);
         if (need_self)
             fprintf(f, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
@@ -2757,6 +2823,7 @@ static void emit_drop_bodies(FILE *f)
             }
         }
         fprintf(f, "}\n\n");
+        line_break();
     }
 }
 
@@ -2787,6 +2854,14 @@ static int compile_file(const char *in, const char *outc, int multi)
     header_path(outc, hbuf, sizeof hbuf);
     g_path = in;
     g_src = read_file(in, &g_len);
+
+    /* #line is on by default in multi-file mode (D4 = A); --line/--no-line win.
+       Single-file output is left untouched so it stays byte-identical to Phase 0,
+       which keeps every existing golden valid. */
+    g_emit_line = (g_line_force >= 0) ? g_line_force : multi;
+    g_lc_off = 0;
+    g_lc_ln = 1;
+    g_line_next = -1;
 
     g_out = fopen(outc, "w");
     if (!g_out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
@@ -2826,6 +2901,7 @@ static int compile_file(const char *in, const char *outc, int multi)
         g_out = body;
         compile_range(0, g_len);
         g_out = real;
+        line_break();
         emit_drop_prototypes(real);
         rewind(body);
         for (;;) {
@@ -3018,6 +3094,8 @@ static int build_main(int argc, char **argv, const char *prog)
             outdir = argv[++i];
             continue;
         }
+        if (strcmp(argv[i], "--line") == 0) { g_line_force = 1; continue; }
+        if (strcmp(argv[i], "--no-line") == 0) { g_line_force = 0; continue; }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             usage(prog);
@@ -3079,6 +3157,8 @@ static int compile_main(int argc, char **argv, const char *prog)
             outc = argv[++i];
             continue;
         }
+        if (strcmp(argv[i], "--line") == 0) { g_line_force = 1; continue; }
+        if (strcmp(argv[i], "--no-line") == 0) { g_line_force = 0; continue; }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             usage(prog);

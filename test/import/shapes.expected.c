@@ -2,8 +2,10 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "shapes.h"
 
+#line 1 "test/import/shapes.ct"
 /* an imported unit: an exported prototype + definition, and a pub struct */
 
 int add(int a, int b) { return a + b; }
 
+#line 5 "test/import/shapes.ct"
 

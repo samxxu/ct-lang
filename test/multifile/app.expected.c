@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "app.h"
 
+#line 1 "test/multifile/app.ct"
 #include <stdio.h>
 #include "calc.h"
 
