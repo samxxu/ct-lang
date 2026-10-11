@@ -1,0 +1,8 @@
+trait T1 { void f(); }
+trait T2 { void f(); }
+struct S {} use T1;
+impl T1 for S { void f() { } }
+T2 make_wrong(void);
+T1 pick(S *p) {
+    return make_wrong();
+}

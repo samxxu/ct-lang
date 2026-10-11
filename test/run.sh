@@ -16,6 +16,8 @@
 #   examples  end-to-end demos: generate, build, run, compare   (examples)
 #   multifile `ct build` multi-file demo: build, compare goldens, run   (test/multifile)
 #   import    `ct build` with `import`: resolve, compare goldens, run    (test/import)
+#   line      `#line` error mapping in multi-file mode                   (no fixture dir)
+#   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 
 set -u
@@ -209,6 +211,37 @@ else
     fi
 fi
 
+# ------------------------------------------------------------------ #line
+echo
+echo "== #line (multi-file error mapping, D4 = A) =="
+mkdir -p "$TMP/line"
+# line 4 is a deliberate error: with #line the compiler must blame the .ct, not the .c
+cat >"$TMP/line/err.ct" <<'EOF'
+int helper(void) { return 0; }
+
+int main(void) {
+    int x = undefined_symbol;
+    return x;
+}
+EOF
+if ! "$TMP/ctc" build "$TMP/line/err.ct" -o "$TMP/line" >"$TMP/line.out" 2>"$TMP/line.err"; then
+    bad "#line/build" "ctc build exited non-zero: $(cat "$TMP/line.err")"
+else
+    $CC $CFLAGS -c "$TMP/line/err.c" -o "$TMP/line/err.o" 2>"$TMP/line.cc" || true
+    if grep -q 'err\.ct:4:' "$TMP/line.cc"; then
+        ok "#line maps the C error back to the .ct line"
+    else
+        bad "#line" "expected 'err.ct:4:' in the C compiler diagnostic"
+        sed -n '1,10p' "$TMP/line.cc" | sed 's/^/    /'
+    fi
+    "$TMP/ctc" build --no-line "$TMP/line/err.ct" -o "$TMP/line" >/dev/null 2>&1
+    if grep -q '#line' "$TMP/line/err.c"; then
+        bad "#line/--no-line" "directives were not suppressed"
+    else
+        ok "#line --no-line suppresses the directives"
+    fi
+fi
+
 # ------------------------------------------------------------------ errors
 echo
 echo "== error cases =="
@@ -239,6 +272,35 @@ for ct in test/errors/*.ct; do
     if [ "$st" = 1 ]; then ok "$name"; fi
 done
 
+# ------------------------------------------------------------------ limits
+echo
+echo "== known limitations =="
+# Characterisation test for a documented limitation (docs/language-spec.md §6.2):
+# rewriting is line based, so a statement written on the same line as its
+# construct is left alone. This pins the current behaviour so that a fix (or a
+# regression) is visible here rather than silently.
+cat >"$TMP/oneline.ct" <<'EOF'
+#include <stdio.h>
+trait T { void f(); }
+struct S { int x; } use T;
+impl T for S { void f() { printf("f %d\n", self->x); } }
+int main(void){ S s; s.x = 1; s.f(); return 0; }
+EOF
+if ! "$TMP/ctc" "$TMP/oneline.ct" -o "$TMP/oneline.c" 2>"$TMP/oneline.err"; then
+    bad "limits/one-line-accepted" "expected exit 0 (limitation), got non-zero: $(cat "$TMP/oneline.err")"
+else
+    if grep -Fq 'int main(void){ S s; s.x = 1; s.f(); return 0; }' "$TMP/oneline.c"; then
+        ok "limits/one-line body is passed through unrewritten (known limitation)"
+    else
+        bad "limits/one-line" "expected the line verbatim; rewriting may now be implemented"
+    fi
+    if $CC $CFLAGS -c "$TMP/oneline.c" -o "$TMP/oneline.o" 2>/dev/null; then
+        bad "limits/one-line-cc" "expected the un-rewritten output NOT to compile"
+    else
+        ok "limits/one-line output does not compile (consequence of the limitation)"
+    fi
+fi
+
 # ------------------------------------------------------------------ cli
 echo
 echo "== cli =="
@@ -260,7 +322,9 @@ cli_expect() {
 }
 
 cli_expect help zero "usage:" --help
+cli_expect help-short zero "usage:" -h
 cli_expect version zero "ctc v" --version
+cli_expect version-short zero "ctc v" -v
 cli_expect unknown-option nonzero "unknown option" -Z
 cli_expect o-needs-arg nonzero "-o needs an argument" test/cases/21_empty_init_iface.ct -o
 cli_expect no-input nonzero "usage:"
@@ -272,6 +336,23 @@ cli_expect build-import-missing nonzero "cannot resolve import" build "$TMP/cli_
 cli_expect build-o-needs-arg nonzero "-o needs an argument" build test/cases/21_empty_init_iface.ct -o
 cli_expect build-unknown-option nonzero "unknown option" build -Q test/cases/21_empty_init_iface.ct
 cli_expect build-cannot-write nonzero "cannot write" build test/cases/21_empty_init_iface.ct -o /nonexistent-dir
+cli_expect build-no-input nonzero "usage:" build
+cli_expect build-version zero "ctc v" build --version
+
+# #line: off by default in single-file mode, forceable with --line
+"$TMP/ctc" test/cases/21_empty_init_iface.ct -o "$TMP/ln_default.c" 2>/dev/null
+if grep -q '#line' "$TMP/ln_default.c"; then
+    bad "cli/line-single-default" "single-file mode emitted #line by default"
+else
+    ok "cli/line-single-default (off by default)"
+fi
+if "$TMP/ctc" --line test/cases/21_empty_init_iface.ct -o "$TMP/ln_forced.c" 2>/dev/null \
+        && grep -q '#line' "$TMP/ln_forced.c"; then
+    ok "cli/line-single-forced (--line forces directives)"
+else
+    bad "cli/line-single-forced" "--line did not emit #line directives"
+fi
+cli_expect help-line-flag zero "--line" --help
 
 # `compile` is an explicit alias for the default subcommand; its output must be
 # byte-identical to the default-mode golden

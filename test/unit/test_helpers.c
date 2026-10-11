@@ -242,6 +242,136 @@ int main(void)
         eq_int("read_ident copies the whole name", (long)strlen(nb), 50);
     }
 
+    /* ---- trim / trim_right_len edges ---- */
+    snprintf(buf, sizeof buf, "");
+    trim(buf);
+    eq_str("trim empty", buf, "");
+    snprintf(buf, sizeof buf, "   \t\n ");
+    trim(buf);
+    eq_str("trim all whitespace", buf, "");
+    eq_int("trim_right_len none", (long)trim_right_len("abc", 3), 3);
+    eq_int("trim_right_len all", (long)trim_right_len("   ", 3), 0);
+
+    /* ---- to_lower: folds letters, keeps non-letters ---- */
+    to_lower("ABC-1_x", buf);
+    eq_str("to_lower mixed", buf, "abc-1_x");
+
+    /* ---- is_type_keyword: more members and a negative ---- */
+    eq_int("is_type_keyword unsigned", is_type_keyword("unsigned"), 1);
+    eq_int("is_type_keyword const", is_type_keyword("const"), 1);
+    eq_int("is_type_keyword uint8_t", is_type_keyword("uint8_t"), 1);
+    eq_int("is_type_keyword Person", is_type_keyword("Person"), 0);
+
+    /* ---- param_type_only: pointers and qualified types ---- */
+    param_type_only("int*", buf);
+    eq_str("ptype int* (no name)", buf, "int*");
+    param_type_only("struct Person *p", buf);
+    eq_str("ptype struct Person *p", buf, "struct Person *");
+    param_type_only("int", buf);
+    eq_str("ptype bare keyword", buf, "int");
+
+    /* ---- decl_end_is_bare: more shapes ---- */
+    eq_int("bare end '= 0;'", decl_end_is_bare("= 0;"), 0);
+    eq_int("bare end '; // c\\n'", decl_end_is_bare("; // c\n"), 1);
+    eq_int("bare end ';/*c*/'", decl_end_is_bare(";/*c*/"), 1);
+    eq_int("bare end '; x'", decl_end_is_bare("; x"), 0);
+    eq_int("bare end spaces", decl_end_is_bare("   "), 0);
+
+    /* ---- last_ident: name at offset 0 / trailing punctuation ---- */
+    {
+        size_t a, b;
+        eq_int("last_ident at start", last_ident("foo", 3, &a, &b), 1);
+        eq_int("last_ident at start a", (long)a, 0);
+        eq_int("last_ident at start b", (long)b, 3);
+        eq_int("last_ident trailing ')'", last_ident("call(x)", 7, &a, &b), 1);
+        eq_int("last_ident trailing ')' a", (long)a, 5);
+        eq_int("last_ident trailing ')' b", (long)b, 6);
+        eq_int("last_ident only punctuation", last_ident("(*)", 3, &a, &b), 0);
+    }
+
+    /* ---- copy_ident: copies the whole name and reports its length ---- */
+    {
+        char nb[MAX_NAME];
+        eq_int("copy_ident len", (long)copy_ident("abc ", nb, 0), 3);
+        eq_str("copy_ident text", nb, "abc");
+        eq_int("copy_ident empty", (long)copy_ident(" x", nb, 0), 0);
+    }
+
+    /* ---- read_qual_ref: plain, qualified and namespace-prefixed names ---- */
+    {
+        char cname[MAX_NAME], shortname[MAX_NAME];
+        const char *rest;
+        int qual;
+
+        snprintf(g_ns, sizeof g_ns, "");
+        rest = read_qual_ref("Person x", cname, shortname, &qual);
+        eq_str("rqr plain cname", cname, "Person");
+        eq_str("rqr plain short", shortname, "Person");
+        eq_int("rqr plain qual", qual, 0);
+        eq_str("rqr plain rest", rest, " x");
+
+        rest = read_qual_ref("A::B::Person x", cname, shortname, &qual);
+        eq_str("rqr qualified cname", cname, "A_B_Person");
+        eq_str("rqr qualified short", shortname, "Person");
+        eq_int("rqr qualified qual", qual, 1);
+        eq_str("rqr qualified rest", rest, " x");
+
+        snprintf(g_ns, sizeof g_ns, "NS_");
+        read_qual_ref("Person", cname, shortname, &qual);
+        eq_str("rqr namespace prefix", cname, "NS_Person");
+        snprintf(g_ns, sizeof g_ns, "");
+
+        eq_int("rqr no name", read_qual_ref("  x", cname, shortname, &qual) == NULL, 1);
+    }
+
+    /* ---- skip_literal: escapes and the closing quote ---- */
+    g_src = "\"ab\" x";
+    g_len = strlen(g_src);
+    eq_int("skip_literal plain", (long)skip_literal(0), 4);
+    g_src = "\"a\\\"b\"";
+    g_len = strlen(g_src);
+    eq_int("skip_literal escaped quote", (long)skip_literal(0), 6);
+
+    /* ---- line_match_paren / line_literal_end ---- */
+    eq_int("line_match_paren plain", (long)line_match_paren("f(a, b)", 1, 7), 6);
+    eq_int("line_match_paren skips literal", (long)line_match_paren("f(\")\")", 1, 6), 5);
+    eq_int("line_match_paren nested", (long)line_match_paren("f(g(x))", 1, 7), 6);
+    eq_int("line_literal_end", (long)line_literal_end("\"ab\"", 0, 4), 4);
+
+    /* ---- trait_has_method / struct_uses ---- */
+    {
+        Trait t;
+        Struct s;
+        snprintf(t.name, MAX_NAME, "Greeter");
+        snprintf(t.cname, MAX_NAME, "Greeter");
+        t.nm = 2;
+        snprintf(t.m[0].name, MAX_NAME, "greet");
+        snprintf(t.m[1].name, MAX_NAME, "add");
+        eq_int("trait_has_method yes", trait_has_method(&t, "greet"), 1);
+        eq_int("trait_has_method no", trait_has_method(&t, "nope"), 0);
+
+        snprintf(s.name, MAX_NAME, "Person");
+        snprintf(s.cname, MAX_NAME, "Person");
+        s.nu = 1;
+        snprintf(s.use_t[0], MAX_NAME, "Greeter");
+        eq_int("struct_uses yes", struct_uses(&s, "Greeter"), 1);
+        eq_int("struct_uses no", struct_uses(&s, "Counter"), 0);
+    }
+
+    /* ---- new_var / find_var ---- */
+    {
+        int i0, i1;
+        g_nvars = 0;
+        i0 = new_var();
+        snprintf(g_vars[i0].name, MAX_NAME, "alpha");
+        i1 = new_var();
+        snprintf(g_vars[i1].name, MAX_NAME, "beta");
+        eq_int("new_var increments", i1, i0 + 1);
+        eq_int("find_var hit", find_var("beta"), i1);
+        eq_int("find_var miss", find_var("gamma"), -1);
+        g_nvars = 0;
+    }
+
     printf("unit: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -1,0 +1,10 @@
+trait T { void f(); }
+trait U { void g(); }
+struct S {} use T;
+impl T for S { void f() { } }
+int main(void) {
+    S s;
+    T g = s;
+    U h = g;
+    return 0;
+}
