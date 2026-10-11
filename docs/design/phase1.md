@@ -9,12 +9,12 @@
 > `.h.ct` + `pub`、Drop/delete、`map`、JSON 诊断），本文不重复，只补**实现层面**的设计。
 > 第 6 节列出**仍需用户拍板**的决策点（D1–D8）。
 >
-> **落地进度（2026-10-11）**：**1.0**（CLI 子命令 `compile` + `argv[0]` 分派）、**1.1**（namespace，
-> 含限定引用 `A::B::Name`）与 **1.2**（多文件：`ct build` 驱动、`.c` 含自己的 `.h`、`pub` 路由）已实现，
-> 测试全绿（`./test/run.sh` 31/31、`check-grammar.py` 16/16）；1.3（import）与 1.4（堆/Drop）未实现。
-> 落地时采用 **D2 = 是**（struct tag 加命名空间前缀）、**D3 = 是**（顶层不加前缀），且 **D-A = 方案 A**
-> （`ct build` 只产出 `.c`/`.h` 并打印建议的 `cc` 命令，**不**自己调用 `cc`，见第 6 节新条目）。**D6 的
-> banner/改名暂缓**：`ctc`→`ct` 的改名与 banner 变更留到后续一次性完成。D1 / D4 / D5 / D7 / D8 仍待定。
+> **落地进度（2026-10-11）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
+> **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）与 **1.3**（`import A::B` 递归解析、
+> 跨单元符号累积、自动 `#include`）已实现，测试全绿（`./test/run.sh` 32/32、`check-grammar.py` 17/17）；
+> 仅 **1.4**（堆创建 / `delete` 放宽 / Drop）未做。落地时采用 **D2 = 是**、**D3 = 是**，且 **D-A = 方案 A**
+> （`ct build` 不调用 `cc`）。1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
+> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D1 / D4 / D5 / D6 / D7 / D8 仍待定。
 
 ---
 
@@ -133,7 +133,9 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **验收**：`foo.h.ct` + `bar.ct` 两单元，`bar` 用 `foo` 的 `pub` struct 与 trait，`ct build`
   编到可执行并运行正确。
 
-#### 1.3 import
+#### 1.3 import ✅ 已完成（路径解析 + 递归编入 + 跨单元符号；`-I` 与 extern vtable 未做）
+
+> **落地说明**：实现「`import A::B;` → `<导入方目录>/A/B.ct`（或 `A/B.h.ct`）→ 递归收集依赖 → 依赖序编译（每单元一次）→ 各单元 `.c` 自动 `#include` 被导入单元的 `.h` → 符号跨单元累积（被导入单元的 `pub` 类型名可直接用）」。**未**实现：`-I` 搜索根、目录=namespace 校验、跨单元 `extern` vtable（带 trait 的对象跨单元使用）。
 
 - **语法**：`import A::B;`（`::` 分隔模块路径，与 namespace 声明、访问路径规则一致）。
 - **解析**：`A::B` → 路径 `A/B.ct` 或 `A/B.h.ct`（`::` 段映射为目录层级），相对导入文件所在目录搜索，或 `-I <dir>` 指定的根
@@ -398,7 +400,13 @@ parallel; 1.5–1.8 each depend on their upstream.
 - **Acceptance**: `foo.h.ct` + `bar.ct` where `bar` uses `foo`'s `pub` struct and trait;
   `ct build` produces a working executable.
 
-#### 1.3 import
+#### 1.3 import ✅ done (path resolution + recursive inclusion + cross-unit symbols; `-I` and extern vtables not done)
+
+> **What landed**: `import A::B;` → `<importer dir>/A/B.ct` (or `A/B.h.ct`) → recursive dependency
+> collection → dependency-order compilation (each unit once) → each unit's `.c` automatically
+> `#include`s the imported units' `.h` → symbols accumulate across units (an imported unit's `pub`
+> type names are usable by name). **Not** implemented: the `-I` search root, the directory = namespace
+> check, and cross-unit `extern` vtables (using an imported trait-carrying object across units).
 
 - **Syntax**: `import A::B;` (`::` separates the module path, matching the namespace declaration and
   access-path rules).

@@ -16,7 +16,7 @@
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete | 🔨 进行中（1.0 CLI、1.1 namespace、1.2 多文件 + `pub` 已落地；1.3 import、1.4 堆/Drop 待做） | 见下 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete | 🔨 进行中（1.0 CLI、1.1 namespace、1.2 多文件 + `pub`、1.3 `import` 已落地；1.4 堆/Drop 待做） | 见下 |
 | Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
 | Phase 3 | 增量编译、跨函数分析、多目标编译、自举（展望） | 🔭 展望 | — |
 
@@ -233,7 +233,7 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 
 | # | 前置条件 | 为什么自举需要 | 归属 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ⚠️ namespace + 多文件（`ct build`）+ `pub` 已实现；`import` 待做 |
+| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可 |
 | 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | Phase 1（与 Drop 一起定） | ⚠️ 仅手写 vptr |
 | 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ❌ |
 | 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ❌ |
@@ -494,7 +494,7 @@ as confirmed by the user.
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete | 🔨 in progress (1.0 CLI, 1.1 namespaces and 1.2 multi-file + `pub` landed; 1.3 import and 1.4 heap/Drop pending) | see below |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete | 🔨 in progress (1.0 CLI, 1.1 namespaces, 1.2 multi-file + `pub` and 1.3 `import` landed; 1.4 heap/Drop pending) | see below |
 | 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
 | 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting (outlook) | 🔭 outlook | — |
 

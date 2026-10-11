@@ -83,6 +83,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `A::B::fn();` | `fn();`（普通函数名不修饰，只去掉路径） |
 | `pub trait T {…}` / `pub struct S {…}`（多文件模式） | 定义写入 `.h`（其它符号只进 `.c`）；`pub` 被剥离，不进入生成的 C |
 | `pub int f(int);`（多文件模式） | 函数原型写入 `.h` |
+| `import A::B;`（多文件模式，`ct build` 的根文件） | 解析为 `<目录>/A/B.ct`（或 `A/B.h.ct`），递归编入依赖，并在各单元 `.c` 里自动 `#include` 被导入单元的 `.h` |
 | 其它任意 C 代码 | 原样透传 |
 
 命名规则：
@@ -264,7 +265,7 @@ ct/
 - **堆对象不自动初始化**：`malloc` 出来的对象需**手写** `q->__<trait>_vptr = &…;`；堆对象的创建方式推迟到 Phase 1（与 Drop 一起定）。
 - 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰，因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
-- **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；跨单元的**类型**引用仍需 `import`（下一步）。
+- **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；用 `import A::B;` 可跨单元按名使用被导入单元的 `pub` 类型；但**跨单元使用带 trait 的对象**（写 vptr / 装箱）尚不可（被导入单元的 vtable 仍是 `static`）。
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
 
 ### 8. 相关文档
@@ -359,6 +360,7 @@ Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:lin
 | `A::B::fn();` | `fn();` (plain function names are not mangled — only the path is dropped) |
 | `pub trait T {…}` / `pub struct S {…}` (multi-file mode) | the definition goes into the `.h` (everything else stays in the `.c`); the `pub` itself is stripped and never appears in the generated C |
 | `pub int f(int);` (multi-file mode) | the function prototype goes into the `.h` |
+| `import A::B;` (multi-file mode, in a `ct build` root) | resolved to `<dir>/A/B.ct` (or `A/B.h.ct`), dependencies compiled recursively, and each unit's `.c` automatically `#include`s the imported unit's `.h` |
 | anything else | copied through verbatim |
 
 Naming rules:
@@ -577,8 +579,9 @@ Implementation limits:
   function names are not mangled, so same-named plain functions in different namespaces collide at the
   C level.
 - **Multi-file mode** (`ctc build`): the generated `.c` includes its own `.h` (no longer self-contained);
-  only `pub` trait/struct definitions and `pub` function prototypes cross into the `.h`; cross-unit
-  **type** references still need `import` (the next step).
+  only `pub` trait/struct definitions and `pub` function prototypes cross into the `.h`; `import A::B;`
+  lets a unit use an imported unit's `pub` type names by name; but using an imported unit's
+  **trait-carrying objects** (writing a vptr / boxing) is not yet possible (its vtables stay `static`).
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
 
 ### 8. Documentation

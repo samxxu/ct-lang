@@ -27,7 +27,7 @@ item     ::= trait-def | struct-def | impl-def | namespace-def | raw-text
 
 ### 2. 词法与书写要求
 
-- 关键字（`trait` / `struct` / `impl` / `use` / `for` / `namespace` / `pub`）必须成**独立单词**出现，由 `word_at()` 做词边界判断；`traitx`、`my_struct` 不会被误判。
+- 关键字（`trait` / `struct` / `impl` / `use` / `for` / `namespace` / `pub` / `import`）必须成**独立单词**出现，由 `word_at()` 做词边界判断；`traitx`、`my_struct` 不会被误判。
 - 行首的 `trait` / `impl` / `struct` 只有在**完整构造头部**紧跟其后时才算构造（`trait IDENT {`、`impl IDENT for`、`struct IDENT {`），否则按原样透传。因此把 `trait` / `impl` 当作普通标识符的合法 C（如 `impl[0] = 1;`、`trait = 2;`）不会被误判。
 - 命名空间路径用 `::` 分隔（`namespace A::B { … }`、`A::B::Name`）；路径的**最后一步**若调用方法 / 访问字段则用 `.`。
 - 空白、换行、`//` 行注释、`/* */` 块注释在构造头部可自由插入。
@@ -334,20 +334,27 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - 退出码：`0` 成功；`1` 语法错误、语义错误、I/O 错误。
 - 无警告机制：可疑但仍可生成代码的情况（如静默截断）不会提示。
 
-### 10. 多文件模式与 `pub`（Phase 1）
+### 10. 多文件模式、`import` 与 `pub`（Phase 1）
 
 **触发**：只有 `ct build <input.ct>... [-o <outdir>]` 进入多文件模式；`ct compile` / `ctc <file>` 仍是单文件模式。两种模式互不影响——单文件模式的产物与 Phase 0 逐字节相同。
 
 ```ebnf
 trait-def   ::= [ "pub" ] "trait" IDENT "{" { method-decl } "}" ;
 struct-def  ::= [ "pub" ] "struct" IDENT "{" raw-text "}" [ use-clause ] [ ";" ] ;
+import-def  ::= "import" path ";" ;
 ```
 
 - **输出**：每个输入生成 `<base>.c` + `<base>.h`（到 `-o <outdir>`，或输入同目录）。
 - **`.c` 不再自包含**：多文件模式下 `.c` 会 `#include "<自身>.h"`（这是相对 Phase 0 的破坏性变化）。
 - **`pub`**：`pub trait` / `pub struct` 的定义、以及 `pub` 前缀的**函数原型**（`pub int f(...);`）写入 `.h`；其余符号只进 `.c`。`pub` 前缀会被剥离，不进入生成的 C。
 - **不调用 C 编译器**：`ct build` 只产出 `.c`/`.h` 并把建议的 `cc …` 命令打印到 **stdout**，自身不调用 `cc`（保持零依赖）。
-- **限制**：普通**函数定义**不加 `pub`（定义永远进 `.c`）；跨单元的**类型**引用（在另一个单元里按名字用 `pub struct`/`trait`）需要 `import`，属 Phase 1 的下一步；当前跨单元只能复用 `pub` 函数原型与手写 `#include`。
+- **`import A::B;`**：编译单元声明。`ct build` 的根文件里写 `import`，驱动把它解析为
+  `<根文件目录>/A/B.ct`（或 `A/B.h.ct`），**递归**收集依赖、按依赖顺序编译（每个单元只编一次），
+  并自动在每个单元的 `.c` 里 `#include` 被导入单元的 `.h`。被导入单元的 `pub` 类型名可直接按名使用
+  （符号跨单元累积）。
+- **限制**：`import` 只相对**导入方文件所在目录**解析（`-I` 未实现）；跨单元**使用带 trait 的对象**
+  （装箱 / 写 vptr）尚不可——被导入单元的 vtable 是 `static`，需要导出为 `extern`（后续）；普通
+  **函数定义**不加 `pub`（定义永远进 `.c`）。
 
 ---
 
@@ -376,8 +383,8 @@ comment in its header); it is not part of the source content.
 
 ### 2. Lexical notes
 
-- Keywords (`trait`, `struct`, `impl`, `use`, `for`, `namespace`, `pub`) must appear as whole words
-  (`word_at()` performs word-boundary matching), so `traitx` or `my_struct` are not misread.
+- Keywords (`trait`, `struct`, `impl`, `use`, `for`, `namespace`, `pub`, `import`) must appear as whole
+  words (`word_at()` performs word-boundary matching), so `traitx` or `my_struct` are not misread.
 - A line-initial `trait` / `impl` / `struct` starts a construct only when the full header follows
   (`trait IDENT {`, `impl IDENT for`, `struct IDENT {`); otherwise the line is passed through. So
   legal C that uses `trait` / `impl` as ordinary identifiers (e.g. `impl[0] = 1;`, `trait = 2;`) is
@@ -728,7 +735,7 @@ supported — see §3 / §5.)
 or I/O errors. There is no warning channel — suspicious but usable output (such as silent truncation)
 is never reported.
 
-### 10. Multi-file mode and `pub` (Phase 1)
+### 10. Multi-file mode, `import` and `pub` (Phase 1)
 
 **Trigger**: only `ct build <input.ct>... [-o <outdir>]` enters multi-file mode; `ct compile` /
 `ctc <file>` stay in single-file mode. The two modes do not interact — single-file output is
@@ -737,6 +744,7 @@ byte-identical to Phase 0.
 ```ebnf
 trait-def   ::= [ "pub" ] "trait" IDENT "{" { method-decl } "}" ;
 struct-def  ::= [ "pub" ] "struct" IDENT "{" raw-text "}" [ use-clause ] [ ";" ] ;
+import-def  ::= "import" path ";" ;
 ```
 
 - **Output**: each input produces `<base>.c` + `<base>.h` (into `-o <outdir>`, or beside the input).
@@ -747,7 +755,11 @@ struct-def  ::= [ "pub" ] "struct" IDENT "{" raw-text "}" [ use-clause ] [ ";" ]
   is stripped and never appears in the generated C.
 - **No C compiler is invoked**: `ct build` only emits `.c`/`.h` and prints the suggested `cc …`
   command to **stdout**; it never runs `cc` (staying dependency-free).
-- **Limits**: plain **function definitions** are never `pub` (a definition always goes to the `.c`);
-  cross-unit **type** references (using a `pub struct` / `trait` by name in another unit) need
-  `import`, the next Phase 1 step; today cross-unit reuse is limited to `pub` function prototypes plus
-  a hand-written `#include`.
+- **`import A::B;`**: a compilation-unit declaration. In a `ct build` root, the driver resolves it to
+  `<root dir>/A/B.ct` (or `A/B.h.ct`), **recursively** collects the dependencies, compiles each unit
+  once in dependency order, and automatically `#include`s each imported unit's `.h` from every unit's
+  `.c`. An imported unit's `pub` type names can be used by name (symbols accumulate across units).
+- **Limits**: `import` resolves only relative to the **importing file's directory** (`-I` is not
+  implemented); using an imported unit's **trait-carrying objects** (boxing / writing a vptr) is not
+  yet possible — the imported unit's vtable is `static` and must be exported as `extern` (later); a
+  plain **function definition** is never `pub` (a definition always goes to the `.c`).

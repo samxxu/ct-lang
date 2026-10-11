@@ -102,7 +102,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
 - **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
-  `python3 editors/vscode/test/check-grammar.py`（16 项断言，必须全绿）。它校验插件而不是编译器，
+  `python3 editors/vscode/test/check-grammar.py`（17 项断言，必须全绿）。它校验插件而不是编译器，
   因此**不进** `./test/run.sh`；反过来它也不能替代手工三件套。
 - **诚实报告**：验证失败就如实说失败并贴原始输出，不允许把「没跑」说成「通过」；
   更不允许靠改 golden 基线或 `.expected.out` 来「修」失败——只有在确认编译器行为变更是有意为之之后，才重新生成它们。
@@ -248,7 +248,7 @@ Also required:
   you type, so run the three commands above yourself and paste the output.
 - **New or changed syntax needs new cases** — see the checklist in §9.
 - **Editor side**: a syntax change must be mirrored in `editors/vscode/syntaxes/ct.tmLanguage.json`,
-  and `python3 editors/vscode/test/check-grammar.py` (16 assertions) must be green. It checks the
+  and `python3 editors/vscode/test/check-grammar.py` (17 assertions) must be green. It checks the
   extension, not the compiler, so it stays **out** of `./test/run.sh` — and it never replaces the
   manual three-step check.
 - **Report honestly**: never claim an unrun check passed, and never "fix" a failure by editing a

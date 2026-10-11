@@ -81,7 +81,7 @@ argv
 | | `transform_calls` | 单行内的方法调用重写状态机 |
 | | `try_var_decl` `read_qual_ref` | 识别 `Type var = {...}`（含限定名 `A::B::Type`）并改造、登记变量 |
 | | `transform_line` `emit_raw_line` | 串联上述两步并写出 |
-| 驱动 | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `build_main` `compile_main` `main` | 命令行、路径推导、文件 I/O、主循环（`compile_range` 递归处理 `namespace`；`compile_file` 单次编译；`build_main` 多文件驱动；`main` 分派子命令） |
+| 驱动 | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `file_exists` `collect_imports` `resolve_import` `unit_visit` `build_main` `compile_main` `main` | 命令行、路径推导、文件 I/O、主循环（`compile_range` 递归处理 `namespace`；`compile_file` 单次编译；`collect_imports`/`resolve_import`/`unit_visit` 做 `import` 的解析与依赖序；`build_main` 多文件驱动；`main` 分派子命令） |
 
 ### 4. 数据结构与符号表
 
@@ -234,7 +234,7 @@ and impls must precede the functions that call them.
 | | `transform_calls` | the single-line state machine that rewrites method calls |
 | | `try_var_decl` `read_qual_ref` | recognise `Type var = {...}` (including the qualified `A::B::Type`), rewrite the declaration and register the variable |
 | | `transform_line` `emit_raw_line` | chain the two steps above and write the line out |
-| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `build_main` `compile_main` `main` | command line, path derivation, file I/O and the main loop (`compile_range` recurses into `namespace`; `compile_file` compiles one unit; `build_main` is the multi-file driver; `main` dispatches subcommands) |
+| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `file_exists` `collect_imports` `resolve_import` `unit_visit` `build_main` `compile_main` `main` | command line, path derivation, file I/O and the main loop (`compile_range` recurses into `namespace`; `compile_file` compiles one unit; `collect_imports`/`resolve_import`/`unit_visit` resolve `import`s and their dependency order; `build_main` is the multi-file driver; `main` dispatches subcommands) |
 
 ### 4. Data structures and symbol tables
 
