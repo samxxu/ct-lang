@@ -1,0 +1,26 @@
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+    }
+}
+
+struct Shop {
+    Person owner;
+    int units;
+} use Greeter;
+
+impl Greeter for Shop {
+    void greet() {
+    }
+}
+
+/* a struct with a nested object cannot be declared at file scope: there is
+   nowhere to put the vptr assignment statements */
+Shop s;

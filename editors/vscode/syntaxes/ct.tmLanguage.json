@@ -4,6 +4,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#ct-import" },
     { "include": "#ct-namespace" },
     { "include": "#ct-path" },
     { "include": "#ct-trait" },
@@ -51,6 +52,18 @@
       "patterns": [
         { "match": "\\\\.", "name": "constant.character.escape.ct" }
       ]
+    },
+    "ct-import": {
+      "match": "^[ \\t]*(import)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)[ \\t]*;",
+      "captures": {
+        "1": { "name": "keyword.other.import.ct" },
+        "2": {
+          "patterns": [
+            { "match": "::", "name": "punctuation.separator.namespace.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.namespace.ct" }
+          ]
+        }
+      }
     },
     "ct-namespace": {
       "match": "^[ \\t]*(namespace)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",

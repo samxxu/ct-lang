@@ -31,6 +31,7 @@ CT_CASES = (
     "test/cases/06_name_collision.ct",
     "test/cases/19_namespace.ct",
     "test/multifile/calc.ct",
+    "test/import/app.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -184,6 +185,10 @@ def main():
             check("`pub int add(...)` -> ct-pub",
                   any(h[0] == "ct-pub" for _, l, hs in rows
                       if l.strip().startswith("pub ") for h in hs))
+        if "import/app" in rel:
+            check("`import shapes;` -> ct-import",
+                  any(h[0] == "ct-import" for _, l, hs in rows
+                      if l.strip().startswith("import ") for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

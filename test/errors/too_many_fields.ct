@@ -1,0 +1,37 @@
+struct F { int x; }
+
+struct Big {
+    F f0;
+    F f1;
+    F f2;
+    F f3;
+    F f4;
+    F f5;
+    F f6;
+    F f7;
+    F f8;
+    F f9;
+    F f10;
+    F f11;
+    F f12;
+    F f13;
+    F f14;
+    F f15;
+    F f16;
+    F f17;
+    F f18;
+    F f19;
+    F f20;
+    F f21;
+    F f22;
+    F f23;
+    F f24;
+    F f25;
+    F f26;
+    F f27;
+    F f28;
+    F f29;
+    F f30;
+    F f31;
+    F f32;
+};

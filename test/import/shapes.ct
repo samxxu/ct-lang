@@ -1,0 +1,5 @@
+/* an imported unit: an exported prototype + definition, and a pub struct */
+pub int add(int a, int b);
+int add(int a, int b) { return a + b; }
+
+pub struct Point { int x; int y; };

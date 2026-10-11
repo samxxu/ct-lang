@@ -1,0 +1,19 @@
+// 20: nested namespace A::B — every generated symbol is mangled A_B_* and a
+// qualified reference A::B::Name resolves to the mangled C name
+#include <stdio.h>
+
+namespace A::B {
+    trait Greeter { void greet(); }
+    struct Person { char *name; } use Greeter;
+    impl Greeter for Person {
+        void greet() {
+            printf("hi %s\n", self->name);
+        }
+    }
+}
+
+int main(void) {
+    A::B::Person p = { .name = "Tom" };
+    p.greet();
+    return 0;
+}

@@ -1,0 +1,17 @@
+trait T0 { void f(); }
+trait T1 { void f(); }
+trait T2 { void f(); }
+trait T3 { void f(); }
+trait T4 { void f(); }
+trait T5 { void f(); }
+trait T6 { void f(); }
+trait T7 { void f(); }
+trait T8 { void f(); }
+trait T9 { void f(); }
+trait T10 { void f(); }
+trait T11 { void f(); }
+trait T12 { void f(); }
+trait T13 { void f(); }
+trait T14 { void f(); }
+trait T15 { void f(); }
+trait T16 { void f(); }

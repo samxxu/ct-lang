@@ -1,0 +1,19 @@
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+    }
+}
+
+int main(void) {
+    Person p = { .name = "a" };
+    Person *q = &p;
+    Greeter g = &q;
+    return 0;
+}

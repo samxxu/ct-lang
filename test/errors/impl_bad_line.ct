@@ -1,0 +1,10 @@
+trait T {
+    void f();
+}
+
+struct S {
+} use T;
+
+impl T for S {
+    junk;
+}

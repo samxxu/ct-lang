@@ -1,0 +1,7 @@
+trait T {
+    void f();
+}
+
+struct S {
+    int x;
+} use T

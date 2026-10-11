@@ -1,0 +1,1 @@
+error: struct 'Person' does not use trait 'Meower'

@@ -1,0 +1,16 @@
+struct L0 { int x; }
+struct L1 { L0 a; }
+struct L2 { L1 a; }
+struct L3 { L2 a; }
+struct L4 { L3 a; }
+struct L5 { L4 a; }
+struct L6 { L5 a; }
+struct L7 { L6 a; }
+struct L8 { L7 a; }
+struct L9 { L8 a; }
+
+int main(void) {
+    L9 v;
+    (void)v;
+    return 0;
+}

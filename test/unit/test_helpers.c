@@ -229,6 +229,18 @@ int main(void)
     eq_int("read_ident end", (long)read_ident(10, buf, sizeof buf), 13);
     eq_str("read_ident text", buf, "abc");
 
+    /* ---- read_ident caps the buffer at n-1 chars (silent truncation) ---- */
+    {
+        char big[64], nb[8];
+        size_t z;
+        for (z = 0; z < 50; z++) big[z] = 'a';
+        big[50] = 0;
+        g_src = big;
+        g_len = strlen(g_src);
+        eq_int("read_ident consumes the whole name", (long)read_ident(0, nb, sizeof nb), 50);
+        eq_int("read_ident truncates to n-1", (long)strlen(nb), 7);
+    }
+
     printf("unit: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

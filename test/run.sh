@@ -14,7 +14,9 @@
 #   cases     golden tests: generate, diff, compile, run        (test/cases)
 #   errors    diagnostics: must fail with the expected message  (test/errors)
 #   examples  end-to-end demos: generate, build, run, compare   (examples)
-#   multifile `ct build` multi-file demo: build, compile, run    (test/multifile)
+#   multifile `ct build` multi-file demo: build, compare goldens, run   (test/multifile)
+#   import    `ct build` with `import`: resolve, compare goldens, run    (test/import)
+#   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 
 set -u
 
@@ -146,9 +148,18 @@ echo "== multi-file (ct build) =="
 mkdir -p "$TMP/mf"
 if ! "$TMP/ctc" build test/multifile/calc.ct test/multifile/app.ct -o "$TMP/mf" >"$TMP/mf.out" 2>"$TMP/mf.err"; then
     bad "multifile/build" "ctc build exited non-zero: $(cat "$TMP/mf.err")"
-elif [ ! -f "$TMP/mf/calc.h" ]; then
-    bad "multifile/build" "no calc.h was generated"
 else
+    # the generated .c/.h are pinned byte for byte, like the single-file cases
+    for pair in calc.c:calc.expected.c calc.h:calc.expected.h \
+                app.c:app.expected.c app.h:app.expected.h; do
+        gen=${pair%%:*}; exp=${pair##*:}
+        if ! diff -u "test/multifile/$exp" "$TMP/mf/$gen" >"$TMP/mf.$gen.diff"; then
+            bad "multifile/golden" "$gen differs from $exp"
+            sed -n '1,40p' "$TMP/mf.$gen.diff" | sed 's/^/    /'
+        else
+            ok "multifile/golden $gen"
+        fi
+    done
     if ! $CC $CFLAGS "$TMP/mf/calc.c" "$TMP/mf/app.c" -o "$TMP/mf/app" 2>"$TMP/mf.log"; then
         bad "multifile/cc" "generated C does not build"
         sed 's/^/    /' "$TMP/mf.log"
@@ -159,6 +170,41 @@ else
             sed -n '1,40p' "$TMP/mf.diff" | sed 's/^/    /'
         else
             ok "multifile/build+run"
+        fi
+    fi
+fi
+
+# ------------------------------------------------------------------ import
+echo
+echo "== import (ct build with a single root) =="
+mkdir -p "$TMP/imp"
+if ! "$TMP/ctc" build test/import/app.ct -o "$TMP/imp" >"$TMP/imp.out" 2>"$TMP/imp.err"; then
+    bad "import/build" "ctc build exited non-zero: $(cat "$TMP/imp.err")"
+else
+    if [ ! -f "$TMP/imp/shapes.c" ]; then
+        bad "import/build" "the imported unit was not compiled"
+    fi
+    # the generated .c/.h are pinned byte for byte, like the single-file cases
+    for pair in shapes.c:shapes.expected.c shapes.h:shapes.expected.h \
+                app.c:app.expected.c app.h:app.expected.h; do
+        gen=${pair%%:*}; exp=${pair##*:}
+        if ! diff -u "test/import/$exp" "$TMP/imp/$gen" >"$TMP/imp.$gen.diff"; then
+            bad "import/golden" "$gen differs from $exp"
+            sed -n '1,40p' "$TMP/imp.$gen.diff" | sed 's/^/    /'
+        else
+            ok "import/golden $gen"
+        fi
+    done
+    if ! $CC $CFLAGS "$TMP/imp/shapes.c" "$TMP/imp/app.c" -o "$TMP/imp/app" 2>"$TMP/imp.log"; then
+        bad "import/cc" "generated C does not build"
+        sed 's/^/    /' "$TMP/imp.log"
+    else
+        "$TMP/imp/app" >"$TMP/imp.stdout" 2>&1
+        if ! diff -u test/import/expected.out "$TMP/imp.stdout" >"$TMP/imp.diff"; then
+            bad "import/run" "program output differs from expected.out"
+            sed -n '1,40p' "$TMP/imp.diff" | sed 's/^/    /'
+        else
+            ok "import/build+run"
         fi
     fi
 fi
@@ -192,6 +238,46 @@ for ct in test/errors/*.ct; do
     done <"$expected"
     if [ "$st" = 1 ]; then ok "$name"; fi
 done
+
+# ------------------------------------------------------------------ cli
+echo
+echo "== cli =="
+
+# cli_expect <label> <zero|nonzero> <required-output-or-empty> <ctc args...>
+cli_expect() {
+    cli_label=$1; cli_want=$2; cli_substr=$3; shift 3
+    if "$TMP/ctc" "$@" >"$TMP/cli.out" 2>"$TMP/cli.err"; then cli_st=0; else cli_st=$?; fi
+    if [ "$cli_want" = zero ]; then
+        if [ "$cli_st" -ne 0 ]; then bad "cli/$cli_label" "expected exit 0, got $cli_st"; return; fi
+    else
+        if [ "$cli_st" -eq 0 ]; then bad "cli/$cli_label" "expected a non-zero exit"; return; fi
+    fi
+    if [ -n "$cli_substr" ] && ! grep -Fq -- "$cli_substr" "$TMP/cli.out" "$TMP/cli.err"; then
+        bad "cli/$cli_label" "output missing: $cli_substr"
+        return
+    fi
+    ok "cli/$cli_label"
+}
+
+cli_expect help zero "usage:" --help
+cli_expect version zero "ctc v" --version
+cli_expect unknown-option nonzero "unknown option" -Z
+cli_expect o-needs-arg nonzero "-o needs an argument" test/cases/21_empty_init_iface.ct -o
+cli_expect no-input nonzero "usage:"
+cli_expect cannot-open nonzero "cannot open" /nonexistent/nope.ct
+
+# `compile` is an explicit alias for the default subcommand; its output must be
+# byte-identical to the default-mode golden
+if "$TMP/ctc" compile test/cases/21_empty_init_iface.ct -o "$TMP/cli.c" 2>"$TMP/cli.err"; then
+    if diff -u test/cases/21_empty_init_iface.expected.c "$TMP/cli.c" >"$TMP/cli.diff"; then
+        ok "cli/compile-subcommand"
+    else
+        bad "cli/compile-subcommand" "output differs from the default-mode golden"
+        sed -n '1,40p' "$TMP/cli.diff" | sed 's/^/    /'
+    fi
+else
+    bad "cli/compile-subcommand" "ctc compile exited non-zero: $(cat "$TMP/cli.err")"
+fi
 
 # ------------------------------------------------------------------ summary
 echo

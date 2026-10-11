@@ -1,0 +1,1 @@
+error: struct 'Person': only 'Type name[<n>];' arrays are supported

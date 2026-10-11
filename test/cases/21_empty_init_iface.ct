@@ -1,0 +1,28 @@
+// 21: empty initialiser list on an object, and an interface value declared
+// without an initialiser (then boxed by assignment)
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+}
+
+int main(void) {
+    Person p = {};
+    p.name = "Tom";
+    p.greet();
+
+    Greeter g;
+    g = p;
+    g.greet();
+    return 0;
+}
