@@ -8,6 +8,10 @@ struct Greeter_vtbl {
     void (*greet)(void *);
     void (*greet_name)(void *, char *);
 };
+struct Greeter_iface {
+    void *self;
+    struct Greeter_vtbl *vt;
+};
 
 
 struct Person {

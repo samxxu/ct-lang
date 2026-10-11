@@ -6,6 +6,10 @@
 struct Greeter_vtbl {
     void (*greet)(void *);
 };
+struct Greeter_iface {
+    void *self;
+    struct Greeter_vtbl *vt;
+};
 
 
 struct Person {

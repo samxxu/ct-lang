@@ -9,8 +9,16 @@ struct Greeter_vtbl {
     void (*greet)(void *);
     int (*add)(void *, int, int);
 };
+struct Greeter_iface {
+    void *self;
+    struct Greeter_vtbl *vt;
+};
 struct Counter_vtbl {
     int (*count)(void *);
+};
+struct Counter_iface {
+    void *self;
+    struct Counter_vtbl *vt;
 };
 struct Person {
     char *name;

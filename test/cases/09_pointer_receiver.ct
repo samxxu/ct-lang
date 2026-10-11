@@ -1,0 +1,28 @@
+// 09: pointer receivers rewrite p->m() to a vptr call, passing the pointer itself
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+    void greet_name(char *name);
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+    void greet_name(char *name) {
+        printf("hi %s, I'm %s\n", name, self->name);
+    }
+}
+
+int main(void) {
+    Person p = { .name = "Tom" };
+    Person *q = &p;
+    q->greet();
+    q->greet_name("Jerry");
+    return 0;
+}

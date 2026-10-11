@@ -7,6 +7,10 @@ struct Hashable_vtbl {
     unsigned long (*hash)(void *, const char *, unsigned);
     void (*reset)(void *);
 };
+struct Hashable_iface {
+    void *self;
+    struct Hashable_vtbl *vt;
+};
 
 
 struct Dict {

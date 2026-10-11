@@ -38,7 +38,6 @@ int main(void)
 {
     char buf[256];
     Method m;
-    int has;
 
     /* ---- trim / trim_right_len / to_lower ---- */
     snprintf(buf, sizeof buf, "  a b\t ");
@@ -86,14 +85,114 @@ int main(void)
     eq_str("split_decl name ptr", m.name, "dup");
     eq_int("split_decl nparams void", m.nparams, 0);
 
-    /* ---- is_designated_list ---- */
-    eq_int("designated empty", is_designated_list("   ", &has), 1);
-    eq_int("designated empty flag", has, 0);
-    eq_int("designated all", is_designated_list(" .a = 1, .b = 2 ", &has), 1);
-    eq_int("designated all flag", has, 1);
-    eq_int("designated comma inside string", is_designated_list(" .a = \"x,y\", .b = 2 ", &has), 1);
-    eq_int("designated positional", is_designated_list(" 1, 2 ", &has), 0);
-    eq_int("designated mixed", is_designated_list(" .a = 1, 2 ", &has), 0);
+    /* ---- decl_end_is_bare ---- */
+    eq_int("bare end ';'", decl_end_is_bare(";"), 1);
+    eq_int("bare end ';   '", decl_end_is_bare(";   "), 1);
+    eq_int("bare end '; // c'", decl_end_is_bare("; // c"), 1);
+    eq_int("bare end '; /* c */'", decl_end_is_bare("; /* c */  "), 1);
+    eq_int("bare end with init", decl_end_is_bare("= { 1 };"), 0);
+    eq_int("bare end empty", decl_end_is_bare(""), 0);
+
+    /* ---- put_own_vptr: one per used trait, in use order ---- */
+    {
+        Struct s;
+        Buf b;
+        int first = 1;
+        snprintf(s.name, sizeof s.name, "Person");
+        snprintf(s.use_t[0], MAX_NAME, "Greeter");
+        snprintf(s.use_t[1], MAX_NAME, "Counter");
+        s.nu = 2;
+        s.nf = 0;
+        buf_init(&b);
+        put_own_vptr(&b, &s, &first);
+        eq_str("vptr designators", b.p,
+               ".__greeter_vptr = &Person_Greeter_vtable, "
+               ".__counter_vptr = &Person_Counter_vtable");
+        free(b.p);
+    }
+
+    /* ---- nested construction: a struct-typed field gets its own statement ---- */
+    {
+        Buf b;
+        g_nstructs = 2;
+        snprintf(g_structs[0].name, MAX_NAME, "Person");
+        g_structs[0].nu = 1;
+        snprintf(g_structs[0].use_t[0], MAX_NAME, "Greeter");
+        g_structs[0].nf = 0;
+        snprintf(g_structs[1].name, MAX_NAME, "Shop");
+        g_structs[1].nu = 0;
+        snprintf(g_structs[1].fname[0], MAX_NAME, "owner");
+        g_structs[1].ftype[0] = 0;
+        g_structs[1].nf = 1;
+        eq_int("nested needs init", needs_nested_init(&g_structs[1], 0), 1);
+        buf_init(&b);
+        put_nested_assignments(&b, &g_structs[1], "s", "", 1, 0);
+        eq_str("nested assignments", b.p,
+               "s.owner.__greeter_vptr = &Person_Greeter_vtable;\n");
+        free(b.p);
+        g_nstructs = 0;
+    }
+
+    /* ---- is_stmt_keyword ---- */
+    eq_int("stmt keyword if", is_stmt_keyword("if"), 1);
+    eq_int("stmt keyword return", is_stmt_keyword("return"), 1);
+    eq_int("stmt keyword void", is_stmt_keyword("void"), 0);
+
+    /* ---- last_ident ---- */
+    {
+        size_t a, b;
+        eq_int("last_ident found", last_ident("Person *q;", 10, &a, &b), 1);
+        eq_int("last_ident start", (long)a, 8);
+        eq_int("last_ident end", (long)b, 9);
+        eq_int("last_ident none", last_ident("  * ", 4, &a, &b), 0);
+    }
+
+    /* ---- already_qualified ---- */
+    eq_int("qualified struct", already_qualified("struct Person *", 7), 1);
+    eq_int("qualified after prefix", already_qualified("static struct Person", 14), 1);
+    eq_int("not qualified", already_qualified("static Person", 7), 0);
+
+    /* ---- analyse_param (needs one known struct) ---- */
+    g_nstructs = 1;
+    snprintf(g_structs[0].name, MAX_NAME, "Person");
+    {
+        char nm[MAX_NAME];
+        int ins, ins2, ptr, tr;
+        eq_int("param ptr idx", analyse_param("Person *q", 9, &ins, &ins2, nm, &ptr, &tr), 0);
+        eq_int("param ptr insert", ins, 0);
+        eq_str("param ptr name", nm, "q");
+        eq_int("param ptr flag", ptr, 1);
+
+        eq_int("param val idx", analyse_param("Person p", 8, &ins, &ins2, nm, &ptr, &tr), 0);
+        eq_int("param val flag", ptr, 0);
+
+        eq_int("param qualified idx", analyse_param("struct Person *q", 16, &ins, &ins2, nm, &ptr, &tr), 0);
+        eq_int("param qualified no insert", ins, -1);
+
+        eq_int("param scalar idx", analyse_param("int a", 5, &ins, &ins2, nm, &ptr, &tr), -1);
+        eq_str("param scalar name", nm, "a");
+        analyse_param("void", 4, &ins, &ins2, nm, &ptr, &tr);
+        eq_int("param void unnamed", (long)strlen(nm), 0);
+
+        /* a trait name in type position expands to "struct X_iface" */
+        g_ntraits = 1;
+        snprintf(g_traits[0].name, MAX_NAME, "Greeter");
+        g_traits[0].nm = 1;
+        snprintf(g_traits[0].m[0].name, MAX_NAME, "greet");
+        eq_int("param iface idx", analyse_param("Greeter g", 9, &ins, &ins2, nm, &ptr, &tr), -1);
+        eq_int("param iface trait", tr, 0);
+        eq_int("param iface insert", ins, 0);
+        eq_int("param iface suffix", ins2, 7);
+        {
+            Buf b2;
+            buf_init(&b2);
+            emit_qualified_type(&b2, "Greeter g", 9, ins, ins2);
+            eq_str("param iface expansion", b2.p, "struct Greeter_iface g");
+            free(b2.p);
+        }
+        g_ntraits = 0;
+    }
+    g_nstructs = 0;
 
     /* ---- word_at: word boundaries, not bare substring matching ---- */
     g_src = "struct Person {";

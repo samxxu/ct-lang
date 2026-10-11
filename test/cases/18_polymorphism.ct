@@ -1,0 +1,54 @@
+// 18: interface polymorphism — a trait used as a type dispatches to different structs
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+struct Shop {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+}
+
+impl Greeter for Shop {
+    void greet() {
+        printf("shop %s\n", self->name);
+    }
+}
+
+void announce(Greeter who) {
+    who.greet();
+}
+
+Greeter pick(Person *p, Shop *s, int which) {
+    if (which) {
+        return p;
+    }
+    return s;
+}
+
+int main(void) {
+    Person p = { .name = "Tom" };
+    Shop s = { .name = "Mart" };
+
+    announce(p);
+    announce(s);
+
+    Greeter g = p;
+    g.greet();
+    g = s;
+    g.greet();
+
+    Greeter h = pick(&p, &s, 1);
+    h.greet();
+    return 0;
+}

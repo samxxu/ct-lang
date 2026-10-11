@@ -1,0 +1,32 @@
+// 17: heap objects — the vptr must be written by hand after malloc; delete releases
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Counter {
+    void bump(int by);
+    int value();
+}
+
+struct Tally {
+    int n;
+} use Counter;
+
+impl Counter for Tally {
+    void bump(int by) {
+        self->n += by;
+    }
+    int value() {
+        return self->n;
+    }
+}
+
+int main(void) {
+    Tally *t = malloc(sizeof(struct Tally));
+    t->__counter_vptr = &Tally_Counter_vtable;   /* heap objects are not initialised for you */
+    t->n = 0;
+    t->bump(5);
+    t->bump(7);
+    printf("%d\n", t->value());
+    delete t;
+    return 0;
+}

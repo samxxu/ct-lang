@@ -1,0 +1,31 @@
+// 16: arrays of objects — element vptrs are written and element calls dispatch
+#include <stdio.h>
+
+trait Counter {
+    void bump(int by);
+    int value();
+}
+
+struct Tally {
+    int n;
+} use Counter;
+
+impl Counter for Tally {
+    void bump(int by) {
+        self->n += by;
+    }
+    int value() {
+        return self->n;
+    }
+}
+
+int main(void) {
+    Tally ts[3];
+    ts[0].n = 1;
+    ts[1].n = 2;
+    ts[2].n = 3;
+    ts[0].bump(10);
+    ts[2].bump(100);
+    printf("%d %d %d\n", ts[0].value(), ts[1].value(), ts[2].value());
+    return 0;
+}

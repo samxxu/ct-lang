@@ -1,0 +1,32 @@
+// 12: pointer parameters — the type is qualified and t->m() dispatches to the vtable
+#include <stdio.h>
+
+trait Counter {
+    void bump(int by);
+    int value();
+}
+
+struct Tally {
+    int n;
+} use Counter;
+
+impl Counter for Tally {
+    void bump(int by) {
+        self->n += by;
+    }
+    int value() {
+        return self->n;
+    }
+}
+
+void add_twice(Tally *t, int by) {
+    t->bump(by);
+    t->bump(by);
+}
+
+int main(void) {
+    Tally t = { .n = 5 };
+    add_twice(&t, 3);
+    printf("%d\n", t.value());
+    return 0;
+}

@@ -1,0 +1,39 @@
+// 15: composition — nested struct fields are qualified, constructed and callable
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+}
+
+struct Shop {
+    Person owner;
+    int units;
+} use Greeter;
+
+impl Greeter for Shop {
+    void greet() {
+        printf("shop of %s (%d units)\n", self->owner.name, self->units);
+    }
+}
+
+int main(void) {
+    Shop s = { .owner = { .name = "Tom" }, .units = 3 };
+    s.owner.greet();
+    s.greet();
+
+    Shop t;
+    t.owner.name = "Ann";
+    t.units = 1;
+    t.owner.greet();
+    return 0;
+}

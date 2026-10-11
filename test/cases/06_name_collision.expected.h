@@ -8,8 +8,16 @@
 struct Alpha_vtbl {
     void (*info)(void *);
 };
+struct Alpha_iface {
+    void *self;
+    struct Alpha_vtbl *vt;
+};
 struct Beta_vtbl {
     void (*info)(void *);
+};
+struct Beta_iface {
+    void *self;
+    struct Beta_vtbl *vt;
 };
 struct Node {
     char *tag;

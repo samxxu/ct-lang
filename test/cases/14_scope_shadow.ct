@@ -1,0 +1,48 @@
+// 14: same-named locals and parameters in different functions must not bleed
+#include <stdio.h>
+
+trait Barker { void bark(); }
+trait Meower { void meow(); }
+
+struct Dog { char *name; } use Barker;
+struct Cat { char *name; } use Meower;
+
+impl Barker for Dog {
+    void bark() {
+        printf("woof %s\n", self->name);
+    }
+}
+
+impl Meower for Cat {
+    void meow() {
+        printf("meow %s\n", self->name);
+    }
+}
+
+void with_local(void) {
+    Dog d = { .name = "Rex" };
+    d.bark();
+}
+
+void with_local_again(void) {
+    Cat d = { .name = "Tom" };
+    d.meow();
+}
+
+void by_param(Dog *x) {
+    x->bark();
+}
+
+void by_param_again(Cat *x) {
+    x->meow();
+}
+
+int main(void) {
+    with_local();
+    with_local_again();
+    Dog rex = { .name = "Rex" };
+    Cat tom = { .name = "Tom" };
+    by_param(&rex);
+    by_param_again(&tom);
+    return 0;
+}

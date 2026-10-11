@@ -1,0 +1,32 @@
+// 08: a method body may call a sibling method through self (vtable declared up front)
+#include <stdio.h>
+
+trait Counter {
+    void reset();
+    void bump(int by);
+    int value();
+}
+
+struct Tally {
+    int n;
+} use Counter;
+
+impl Counter for Tally {
+    void reset() {
+        self->n = 0;
+    }
+    void bump(int by) {
+        self->n += by;
+    }
+    int value() {
+        self->reset();
+        self->bump(100);
+        return self->n;
+    }
+}
+
+int main(void) {
+    Tally t = { .n = 5 };
+    printf("%d\n", t.value());
+    return 0;
+}

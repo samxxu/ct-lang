@@ -1,0 +1,23 @@
+// 07: positional initialisers also get vptr designators appended (Phase 0.1.2)
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+    int age;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s %d\n", self->name, self->age);
+    }
+}
+
+int main(void) {
+    Person p = { "Tom", 36 };
+    p.greet();
+    return 0;
+}

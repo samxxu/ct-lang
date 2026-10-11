@@ -18,3 +18,13 @@ static const char *k_msg = "self->x and p.greet() stay untouched 中文 \" \\ �
 void show(struct Point *pt) {
     printf("%s %d\n", k_msg, pt->x);
 }
+
+/* plain C may legally use the construct keywords as ordinary identifiers */
+int ident_torture(void) {
+    int impl[2];
+    int trait = 7;
+    impl[0] = trait;
+    trait = impl[0] + 1;
+    impl[1] = trait;
+    return impl[1];
+}

@@ -8,8 +8,8 @@
 // 对象间的交互写在普通 C 代码里（main）：取货 -> 按货架价格扣款 -> 店家入账，
 // 返回值在对象之间流转，并包含嵌套调用 `bob.earn(alice.spend(6))`。
 //
-// 注意：impl 方法体内部的 `self->m()` 不会被重写（Phase 0 只重写普通代码里的 `对象.方法()`，
-// 见 docs/language-spec.md 6.2），所以对象间的相互调用写在 main 这类普通 C 代码里。
+// 注意：impl 方法体内部的 `self->m()` 也会被重写成 vptr 调用（见 docs/language-spec.md 4.3）；
+// 这里把对象间的相互调用写在 main 这类普通 C 代码里，是为了演示跨对象的 `对象.方法()` 重写。
 // License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
 #include <stdio.h>
 

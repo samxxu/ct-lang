@@ -1,0 +1,42 @@
+// 13: struct types across the whole signature — returns, prototypes, multi-word types
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+}
+
+static Person make(char *n);
+
+static Person make(char *n) {
+    Person p = { .name = n };
+    return p;
+}
+
+Person *pick(Person *a, Person *b) {
+    (void)b;
+    return a;
+}
+
+unsigned long count(Person *p, unsigned long base) {
+    (void)p;
+    return base + 1;
+}
+
+int main(void) {
+    Person a = make("A");
+    Person b = make("B");
+    Person *q = pick(&a, &b);
+    q->greet();
+    printf("%lu\n", count(&b, 41));
+    return 0;
+}
