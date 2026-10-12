@@ -468,6 +468,12 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 自举的目标目录结构、分层规则（L0/L1/L2）、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)。
 
+**方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。
+设计已定型但未实现，**排期在 Phase 3 自举之后**（2026-10-13 用户确认）——这是排序选择而非技术依赖，
+展开器是外部脚本、不与自举耦合，靠后安排是为先稳固编译器主语料。落地前须先修订与 [AGENTS.md](../AGENTS.md) §2
+的三处边界冲突（代码生成脚本 / 插件调用编译器 / 包管理分发）。详见
+[design/dialect.md](design/dialect.md)（设计草案，未实现）。
+
 ### 决策待定项
 
 | 问题 | 候选 | 影响 |
@@ -1040,6 +1046,15 @@ single-file boundary".)
 
 The bootstrap target layout, layering rules (L0/L1/L2), build flow and milestones (M1–M6) live in
 [design/bootstrap.md](design/bootstrap.md).
+
+**The dialect system**: domain-specific syntax written inside comments, turned into plain CT by an
+expander script that lives outside the compiler — `ctc` stays unaware of it throughout. The design is
+frozen but unimplemented, and it is **scheduled after Phase 3 (self-hosting)** (confirmed by the user
+on 2026-10-13). That is an ordering choice, not a technical dependency: the expander is an external
+script and does not couple to self-hosting — it is last so the compiler's main body settles first.
+Before it lands, the three boundary conflicts with [AGENTS.md](../AGENTS.md) §2 must be amended
+(code-generation scripts / the extension invoking the compiler / dialect distribution via the package
+manager). See [design/dialect.md](design/dialect.md) (design draft, not implemented).
 
 ### Open decisions
 
