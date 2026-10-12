@@ -281,6 +281,7 @@ ct/
 ### 8. 相关文档
 
 - [AGENTS.md](AGENTS.md) —— 改动边界、代码风格、验证流程
+- [docs/glossary.md](docs/glossary.md) —— 术语表：统一项目名、语言构造与内部符号
 - [docs/vision.md](docs/vision.md) —— 定位、设计原则与生态策略
 - [docs/roadmap.md](docs/roadmap.md) —— 后续阶段与已定决策
 - [docs/language-spec.md](docs/language-spec.md) —— 语法规范
@@ -611,6 +612,7 @@ Implementation limits:
 ### 8. Documentation
 
 - [AGENTS.md](AGENTS.md) — change boundaries, code style, verification workflow
+- [docs/glossary.md](docs/glossary.md) — glossary: canonical project, language and internal-symbol terms
 - [docs/vision.md](docs/vision.md) — positioning, design principles, ecosystem strategy
 - [docs/roadmap.md](docs/roadmap.md) — phase plan and decided design decisions
 - [docs/language-spec.md](docs/language-spec.md) — language specification
