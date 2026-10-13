@@ -293,6 +293,10 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | impl 必须实现 trait 的**每一个**方法 | `error: trait method 'm' is not implemented for struct 'S'` |
 | 大括号/圆括号必须配对 | `error: unterminated '{'` |
 | `namespace` 路径里 `::` 之后必须跟名字 | `error: expected a name after '::' in namespace` |
+| `trait` / `impl` 头部必须完整（名字、`{`、`for`） | `error: expected trait name` / `expected '{' after trait 'X'` / `expected trait name after 'impl'` / `expected 'for' in impl of 'T'` |
+| 嵌套 `namespace` 的前缀总长不得超过 `MAX_NAME` | `error: namespace path too long` |
+| 泄漏警告数量不得超上限 | `error: too many warnings (max 64)` |
+| 单文件 `import` 数量不得超上限 | `ctc: too many imports in '<file>' (max 16)`（驱动层，无行列号） |
 
 **不做**的检查：方法签名是否与 trait 一致（参数类型、个数、返回类型都不比对，原样搬运）；
 trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，不报错）。
@@ -310,7 +314,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰（`A::B::fn()` 去路径成 `fn()`），
   因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
 - 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。
-- 不完整的 `namespace` 头部（缺 `{`）不作为构造，按原样透传（与 `trait` / `struct` 缺 `{` 的做法一致）。
+- 不完整的 `namespace` / `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套（`namespace` 除外，它是唯一可嵌套的构造，见 §5）。
 
 ### 7. 容量上限
@@ -326,6 +330,10 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 | `MAX_VARS` | 512 | 被登记的变量数 | 报错退出 |
 | `MAX_NAME` | 128 | 标识符 / 类型名长度 | 报错退出 |
 | `MAX_PARAM` | 256 | 参数字符串长度 | 报错退出 |
+| `MAX_IMPORTS` | 16 | 单文件 `import` 条数 | 报错退出（驱动层） |
+| `MAX_UNITS` | 64 | 多文件模式的编译单元数 | 报错退出（驱动层） |
+| `MAX_BUILD` | 32 | `ct build` 输入文件数 | 报错退出（驱动层） |
+| `MAX_WARNS` | 64 | 泄漏警告条数 | 报错退出 |
 
 ### 8. 明确不支持
 
@@ -697,6 +705,10 @@ while the vptr field stays `__greeter_vptr`.
 | an impl must implement **every** method of the trait | `error: trait method 'm' is not implemented for struct 'S'` |
 | braces and parentheses must balance | `error: unterminated '{'` |
 | a name must follow `::` in a `namespace` path | `error: expected a name after '::' in namespace` |
+| a `trait` / `impl` header must be complete (name, `{`, `for`) | `error: expected trait name` / `expected '{' after trait 'X'` / `expected trait name after 'impl'` / `expected 'for' in impl of 'T'` |
+| the accumulated `namespace` prefix must fit `MAX_NAME` | `error: namespace path too long` |
+| the number of leak warnings must stay under the cap | `error: too many warnings (max 64)` |
+| imports per file must stay under the cap | `ctc: too many imports in '<file>' (max 16)` (driver layer, no position) |
 
 **Not** checked: whether method signatures agree with the trait (parameter types, arity and return type
 are never compared — everything is copied verbatim); whether a trait/struct name is redefined
@@ -724,8 +736,10 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   in different namespaces collide at the C level.
 - A single-line function body (`int f() { … }` on one line) is not processed, matching Phase 0's
   line-by-line rewriting.
-- An incomplete `namespace` header (no `{`) is not treated as a construct and passes through (same as
-  `trait` / `struct` without `{`).
+- An incomplete `namespace` / `struct` header (no `{`) is not treated as a construct and passes
+  through. `trait` / `impl` are ct-only keywords: a line that starts with one and is followed by an
+  identifier or `{` is an attempted construct, so a malformed header is an error (other follows, like
+  `impl[n] = 0;`, still pass through).
 - Top-level constructs cannot be nested (`namespace` is the exception — the only nestable construct, see §5).
 
 ### 7. Capacity limits
@@ -741,6 +755,10 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 | `MAX_VARS` | 512 | registered variables | error, exit |
 | `MAX_NAME` | 128 | identifier / type name length | error, exit |
 | `MAX_PARAM` | 256 | parameter string length | error, exit |
+| `MAX_IMPORTS` | 16 | imports per file | error, exit (driver) |
+| `MAX_UNITS` | 64 | compilation units in multi-file mode | error, exit (driver) |
+| `MAX_BUILD` | 32 | input files to `ct build` | error, exit (driver) |
+| `MAX_WARNS` | 64 | leak warnings | error, exit |
 
 ### 8. Out of scope
 
