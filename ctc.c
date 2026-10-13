@@ -2861,7 +2861,9 @@ static void compile_range(size_t start, size_t end)
                 close = match_delim(t, '{', '}');
 
                 snprintf(saved, sizeof saved, "%s", g_ns);
-                if (snprintf(open, sizeof open, "%s%s_", g_ns, pre) >= (int)sizeof open)
+                /* g_ns is the binding limit, not open: comparing against open's
+                   size would let the snprintf below silently truncate. */
+                if (snprintf(open, sizeof open, "%s%s_", g_ns, pre) >= (int)sizeof g_ns)
                     die(t, "namespace path too long");
                 snprintf(g_ns, sizeof g_ns, "%s", open);
 
