@@ -262,7 +262,7 @@ ct/
 **当前实现限制**
 
 - 变量与参数按花括号块作用域回滚（同一作用域内同名取最先登记者）；跨行的方法调用语句、以及参数列表跨多行的函数签名不识别。
-- **含嵌套对象 / 数组的对象必须在函数内声明**（文件作用域无法安放 vptr 赋值语句，会报错退出）。
+- **文件作用域的对象 / 数组**：vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入（单文件与多文件模式均生效）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。`use Drop` 的类型在 `delete` 时递归释放其 Drop 值字段（见 §3 的 `Drop`）。
 - 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
@@ -580,8 +580,8 @@ Implementation limits:
 - Variables and parameters roll back at brace block scope (within one scope a repeated name resolves
   to the earliest registration); multi-line call statements, and function signatures whose parameter
   list spans several lines, are not rewritten.
-- **An object with nested objects or an array must be declared inside a function** (file scope has
-  nowhere to put the vptr assignments; it is a hard error).
+- **File-scope objects / arrays**: the vptr is written before `main` by the generated constructor
+  `__ct_init` (`__attribute__((constructor))`, D5=A), in both single- and multi-file mode.
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
 - **Heap-object vptrs are written automatically**: `T *p = malloc(sizeof(struct T));` (or `calloc`)
   writes the vptrs (including nested value fields) right after the declaration; no hand-written vptr is

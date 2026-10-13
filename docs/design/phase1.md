@@ -11,11 +11,12 @@
 >
 > **落地进度（2026-10-11）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
 > **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）、**1.3**（`import A::B` 递归解析、
-> 跨单元符号累积、自动 `#include`）、**1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）与
-> **1.5**（`#line`，**D4=A**：多文件默认开、单文件默认关，`--line`/`--no-line` 覆盖）已实现，
-> 测试全绿（`./test/run.sh` 92/92、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，
-> **D-A = 方案 A**（`ct build` 不调用 `cc`）。1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
-> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D5 / D6 / D7 / D8 仍待定。
+> 跨单元符号累积、自动 `#include`）、**1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）、
+> **1.5**（`#line`，**D4=A**）与 **1.6**（文件作用域对象 / 数组，**D5=A**：生成的构造器 `__ct_init`
+> 用 `__attribute__((constructor))` 在 `main` 前写 vptr）已实现，测试全绿（`./test/run.sh` 113/113、
+> `check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
+> 1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
+> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 / D8 仍待定。
 
 ---
 
@@ -195,13 +196,21 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **验收**：在 `.ct` 里制造一个 gcc 层面的错误（如引用未定义标识符），gcc 报出的行号与
   `.ct` 行号一致。
 
-#### 1.6 文件作用域对象数组 + 文件作用域嵌套对象
+#### 1.6 文件作用域对象数组 + 文件作用域嵌套对象 ✅ 已完成（D5 = A）
+
+> **落地说明**：**已实现**（单文件与多文件模式均生效）—— 文件作用域上一旦出现需要写 vptr 的
+> 对象 / 数组，把 vptr 写入**语句**累积起来，在 `.c` 末尾生成
+> `static void __ct_init(void) __attribute__((constructor));` 与其定义，`main` 前自动执行。
+> 对象/数组本身照常声明在该行（如 `Person ps[2];`、`Outer o;`），构造函数体形如
+> `ps[__ct_i].__greeter_vptr = &Person_Greeter_vtable;` 与 `o.in.__greeter_vptr = &Inner_Greeter_vtable;`。
+> `__ct_init` 为 `static`，每个翻译单元各一份，多文件模式互不冲突。原先的两条
+> 「必须声明在函数内」`die` 已删除；负例 `test/errors/{array,nested}_at_file_scope.*` 相应移除，
+> 正例见 `test/cases/23_file_scope.ct`。
 
 - **问题**：0.1.6 / 0.1.7 要求「含嵌套对象 / 数组的对象必须在函数内声明」，因为文件作用域放不下
   「写 vptr 的语句」。
-- **设计（决策 D5）**：为每个 unit 生成 `static void <unit>_init(void)`（写所有文件作用域对象与
-  数组元素的 vptr），用 `__attribute__((constructor))` 在 `main` 前自动调用；若不用该属性，则退化为
-  要求在 `main` 首行显式调用 `<unit>_init();`。
+- **设计（决策 D5 = A）**：为每个 unit 生成 `static void __ct_init(void)`（写所有文件作用域对象与
+  数组元素的 vptr），用 `__attribute__((constructor))` 在 `main` 前自动调用。
 - **风险**：`__attribute__((constructor))` 非标准 C，但 gcc / clang 均支持，且与本项目
   「以 gcc / clang 为宿主」的定位一致（见 bootstrap 草案）。
 - **验收**：`Person ps[2];` 在文件作用域可声明，元素 vptr 正确，`main` 里 `ps[0].greet()` 正常。
@@ -253,7 +262,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 | D2 | struct **tag** 是否加 namespace 前缀 | **加**（C tag 空间扁平，跨单元必需） / 不加 | 跨单元 struct 重名能否避免 |
 | D3 | 顶层（无 namespace）符号 | **保持 Phase 0 名字（无前缀）** / 也加前缀 | 是否为破坏性变更 |
 | D4 | `#line` 默认开关 | **单文件关、多文件开** / 全开 / 全关 | **已定 A**（用户 2026-10-11）：单文件 golden 不变；多文件 golden 一次性重生成 |
-| D5 | 文件作用域对象初始化 | **`__attribute__((constructor))`** / 显式 `<unit>_init()` | 便利 vs 可移植性 |
+| D5 | 文件作用域对象初始化 | **`__attribute__((constructor))`** / 显式 `<unit>_init()` | **已定 A**（用户 2026-10-13）：生成 `__ct_init` 构造器 |
 | D6 | 单入口 `ct` 落地时机 | **Phase 1 起步** / 与 1.2 一起 / 更晚 | 何时一次性重生成全部 golden |
 | D7 | `import` 的路径根 | **导入文件目录 + `-I`** / 仅 `-I` | 目录约定 |
 | D8 | `map` 是否属 Phase 1 | 是（roadmap 已列） / **推迟到 Phase 1 末尾** | 1.8 排期 |
@@ -494,14 +503,23 @@ parallel; 1.5–1.8 each depend on their upstream.
 - **Acceptance**: manufacture a gcc-level error in a `.ct` file (e.g. reference an undefined
   identifier); gcc's reported line matches the `.ct` line.
 
-#### 1.6 File-scope object arrays + file-scope nested objects
+#### 1.6 File-scope object arrays + file-scope nested objects ✅ done (D5 = A)
+
+> **What landed**: implemented in both single- and multi-file mode. When a file-scope object / array
+> needs vptr writes, the **statements** are collected and emitted at the end of the `.c` as
+> `static void __ct_init(void) __attribute__((constructor));` plus its definition, which runs before
+> `main`. The object / array is declared normally on its line (`Person ps[2];`, `Outer o;`) and the
+> constructor body looks like `ps[__ct_i].__greeter_vptr = &Person_Greeter_vtable;` and
+> `o.in.__greeter_vptr = &Inner_Greeter_vtable;`. `__ct_init` is `static`, so each translation unit
+> has its own and multi-file mode never clashes. The two "must be declared inside a function" `die`
+> sites are gone, the `test/errors/{array,nested}_at_file_scope.*` negatives were removed, and
+> `test/cases/23_file_scope.ct` is the positive case.
 
 - **Problem**: 0.1.6 / 0.1.7 require "an object with nested objects or arrays must be declared inside
   a function", because file scope cannot hold the vptr-writing statements.
-- **Design (decision D5)**: generate `static void <unit>_init(void)` per unit (writing the vptrs of
-  every file-scope object and array element) and call it automatically before `main` with
-  `__attribute__((constructor))`; without that attribute, degrade to requiring an explicit
-  `<unit>_init();` as `main`'s first line.
+- **Design (decision D5 = A)**: generate `static void __ct_init(void)` per unit (writing every
+  file-scope object's and array element's vptr) and call it automatically before `main` with
+  `__attribute__((constructor))`.
 - **Risk**: `__attribute__((constructor))` is not standard C, but gcc / clang both support it and it
   fits this project's "hosted by gcc / clang" positioning (see the bootstrap draft).
 - **Acceptance**: `Person ps[2];` works at file scope, element vptrs are correct, and `ps[0].greet()`
@@ -563,7 +581,7 @@ receivers (`make().m()`) designed separately (they need temporary-variable promo
 | D2 | Prefix struct **tags** with the namespace | **yes** (C's tag space is flat, needed across units) / no | whether cross-unit struct clashes can be avoided |
 | D3 | Top-level (non-namespaced) symbols | **keep Phase 0 names (no prefix)** / prefix them too | whether this is a breaking change |
 | D4 | `#line` default | **off single-file, on multi-file** / always on / always off | **A decided** (user, 2026-10-11): single-file goldens unchanged; multi-file goldens regenerated once |
-| D5 | File-scope object initialisation | **`__attribute__((constructor))`** / explicit `<unit>_init()` | convenience vs portability |
+| D5 | File-scope object initialisation | **`__attribute__((constructor))`** / explicit `<unit>_init()` | **A decided** (user, 2026-10-13): generate the `__ct_init` constructor |
 | D6 | When the single-entry `ct` lands | **at the start of Phase 1** / with 1.2 / later | when every golden is regenerated once |
 | D7 | `import` path root | **importing file's directory + `-I`** / `-I` only | directory convention |
 | D8 | Whether `map` belongs to Phase 1 | yes (roadmap lists it) / **defer to the end of Phase 1** | 1.8 scheduling |

@@ -141,8 +141,6 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | 项 | 说明 | 影响 |
 | --- | --- | --- |
 | 变量表无作用域/无类型 | 全局扁平表，按源码顺序登记 | 同名变量互相干扰；声明前出现的调用不重写 |
-| 全局 ct 对象带嵌套/数组构造 | vptr 写入用的是**语句**，文件作用域安放不了 | 这类对象必须在函数内声明，否则 `die`（已文档化） |
-| 堆对象不写 vptr | `malloc` 出来的对象没有编译期"构造点"，ctc 不介入 | 需手写 `q->__<trait>_vptr = &…;`，否则首次调用崩溃（创建方式推迟到 Phase 1） |
 | 单测与实现耦合 | `test/unit` 直接 `#include ctc.c` 调 `static` 函数 | 改被覆盖函数的签名/命名必须同步改单测（见第 9 节） |
 | 字面量跳过逻辑有两份 | `g_src` 版（`skip_literal`）与行缓冲版（`line_literal_end`） | 修改时需同步，易漏 |
 | 主循环重复前瞻 | 主循环里先探一次 `struct` 是否带 `{`，`parse_struct` 里再解析一次 | 轻微冗余，暂可接受 |
@@ -314,8 +312,6 @@ golden under `test/cases/**` and they must be regenerated together.
 | Item | Description | Impact |
 | --- | --- | --- |
 | Scope-less, type-less variable table | a global flat table, entries registered in source order | same-name variables interfere with each other; calls that appear before the declaration are not rewritten |
-| A global ct object with nested / array construction | vptr writes are **statements**, which file scope cannot hold | such an object must be declared inside a function, or the compiler `die`s (documented) |
-| Heap objects get no vptr | an object from `malloc` has no compile-time construction point, so ctc stays out of it | it needs a hand-written `q->__<trait>_vptr = &…;`, or the first call crashes (creation deferred to Phase 1) |
 | Unit tests coupled to the implementation | `test/unit` `#include`s `ctc.c` directly to call `static` functions | renaming or re-signing a covered function requires updating the unit tests in sync (see §9) |
 | Literal skipping exists in two copies | the `g_src` version (`skip_literal`) and the line-buffer version (`line_literal_end`) | the two must be updated together, which is easy to miss |
 | Duplicate lookahead in the main loop | the main loop first probes whether `struct` is followed by `{`, then `parse_struct` parses it again | slight redundancy, acceptable for now |

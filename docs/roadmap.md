@@ -235,7 +235,7 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 | --- | --- | --- | --- | --- |
 | 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可 |
 | 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | Phase 1（与 Drop 一起定） | ✅ `T *p = malloc(...)`（含 `calloc`）已在声明后自动写 vptr（含嵌套值字段，D1=A）；`use Drop` + `delete` 递归释放已实现 |
-| 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ❌ |
+| 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ✅ Phase 1.6：文件作用域对象 / 数组的 vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入 |
 | 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
 | 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ✅ 多文件模式**默认**在 `.c` 发出 `#line`（D4=A），单文件默认关；gcc/clang 报错映回 `.ct` 行 |
 | 6 | **方法调用的接收者可以是更一般的表达式** | `make().m()`、`ps[i].m()`（变量下标）、`a.next->m()`（指针字段链）实测均原样透传；遍历子节点要用 | 待定（可拆开单做） | ❌ |
@@ -377,7 +377,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   `struct `，并把「值是 ct struct」的字段记进 `Struct` 字段表；**b** 声明对象时递归写入嵌套字段的
   vptr（**用声明后的赋值语句**，避免追加的 `.owner` 指定初始化覆盖用户自己写的 `.owner = {…}`）；
   **c** `transform_calls()` 改为沿字段链推导静态类型，支持 `s.owner.m(...)` → `s.owner.__<trait>_vptr->m(&s.owner, …)`。
-- **限制**：含嵌套对象的对象**必须在函数内声明**（文件作用域无法安放赋值语句，越界 `die`）。
+- **限制**：含嵌套对象的对象**必须在函数内声明**（文件作用域无法安放赋值语句，越界 `die`）。—— **Phase 1.6 已解除**：文件作用域的这类对象由构造器 `__ct_init` 在 `main` 前写 vptr。
 - **用例**：`test/cases/15_composition.ct`。
 
 #### 0.1.7 存储：数组元素 ✅ 已完成
@@ -759,7 +759,7 @@ For L1 / L2 to write a compiler in CT, the following must exist first (**each on
 | --- | --- | --- | --- | --- |
 | 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | Phase 1 | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` landed; referencing a trait-carrying object across units not yet |
 | 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | Phase 1 (with Drop) | ✅ `T *p = malloc(...)` (incl. `calloc`) writes the vptrs automatically right after the declaration (nested value fields included, D1=A); `use Drop` + recursive release via `delete` landed |
-| 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ❌ |
+| 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ✅ Phase 1.6: the vptrs of file-scope objects / arrays are written before `main` by the generated constructor `__ct_init` (`__attribute__((constructor))`, D5=A) |
 | 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | Phase 1 | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
 | 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ✅ multi-file mode emits `#line` in the `.c` **by default** (D4=A), off in single-file; gcc/clang errors map back to the `.ct` line |
 | 6 | **A method call may have a more general receiver expression** | `make().m()`, `ps[i].m()` (variable subscript) and `a.next->m()` (pointer field chain) are all passed through verbatim (verified); walking child nodes needs this | open (can be done on its own) | ❌ |
@@ -932,7 +932,8 @@ namespaces, generics, multi-file support, nested definitions, inheritance.
   wrote); **c** `transform_calls()` walks the field chain to infer static types, so
   `s.owner.m(...)` → `s.owner.__<trait>_vptr->m(&s.owner, …)`.
 - **Limitation**: an object with nested objects **must be declared inside a function** (there is
-  nowhere at file scope to put the statements; the compiler `die`s).
+  nowhere at file scope to put the statements; the compiler `die`s). — **lifted by Phase 1.6**: such
+  file-scope objects get their vptrs written before `main` by the `__ct_init` constructor.
 - **Case**: `test/cases/15_composition.ct`.
 
 #### 0.1.7 Storage: array elements — ✅ done

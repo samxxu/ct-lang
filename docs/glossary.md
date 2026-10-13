@@ -61,6 +61,7 @@
 | vptr 字段 | `__<trait>_vptr` | trait 名小写；字段名在 struct 内，**不加**命名空间前缀 |
 | 方法函数 | `<Struct>_<Trait>_<method>` | |
 | vtable 变量 | `<Struct>_<Trait>_vtable` | |
+| 文件作用域构造器 | `__ct_init` | `static void __ct_init(void) __attribute__((constructor))`：在 `main` 前为文件作用域对象 / 数组写 vptr（D5=A） |
 
 > 以上是**已发布命名规则**，除非用户明确要求，不得更改（AGENTS §2）。
 
@@ -201,6 +202,7 @@
 | vptr field | `__<trait>_vptr` | lowercased trait name; the field is scoped to the struct, so **no** namespace prefix |
 | method function | `<Struct>_<Trait>_<method>` | |
 | vtable variable | `<Struct>_<Trait>_vtable` | |
+| file-scope constructor | `__ct_init` | `static void __ct_init(void) __attribute__((constructor))`: writes file-scope objects' / arrays' vptrs before `main` (D5=A) |
 
 > These are **published naming rules**; do not change them unless the user explicitly asks (AGENTS §2).
 

@@ -225,10 +225,12 @@ vptr 在「构造点」写入：对象**自身**的 vptr 写进初始化式；**
 命名与限制：
 
 - 数组展开的循环变量固定为 `__ct_i`，包在块内。
-- **含嵌套对象或数组的对象必须在函数内声明**——文件作用域无处安放 vptr 赋值语句，会 `die`。
+- **文件作用域的对象 / 数组**：文件作用域放不下 vptr 赋值**语句**，其 vptr 改由编译器生成的构造器
+  `static void __ct_init(void) __attribute__((constructor))` 在 `main` 之前写入（决策 D5 = A）；
+  对象本身照常声明，`main` 里可直接派发。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）；需要初始化时的其它形态一律 `die`，不静默产出坏 C。
-- **堆对象不会自动初始化**：`malloc` 出来的对象要**手写** `q->__<trait>_vptr = &…;`（该行原样透传）；
-  堆对象的**创建方式**推迟到 Phase 1，与 Drop/delete 一起定。
+- **堆对象自动初始化**（Phase 1，D1=A）：`T *p = malloc(sizeof(struct T));`（或 `calloc`）在声明后自动写
+  vptr（含嵌套值字段），不再需要手写。
 - **ct 不对手写 C 里的类型名做限定**：`sizeof(Person)` 不会被改写，请写成 `sizeof(struct Person)`。
 
 #### 4.8 接口多态（trait 作类型）
@@ -300,9 +302,9 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - 变量表无类型信息；变量按**花括号块作用域**回滚（`{` 压栈、`}` 恢复），同一作用域内出现同名时取**最先**登记者（`find_var` 首命中）。
 - **登记顺序 = 源码顺序**：在变量声明之前出现的方法调用不会被重写。
 - 跨行的方法调用语句不重写（按行处理）；函数签名的**参数列表**跨多行时同样不识别。
-- **含嵌套对象 / 数组的对象必须在函数内声明**：文件作用域无法安放 vptr 赋值语句，会 `die`。
+- **文件作用域的对象 / 数组**：vptr 由编译器生成的构造器 `__ct_init`（`__attribute__((constructor))`）在 `main` 前写入（D5=A）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
-- **堆对象不自动初始化**：`malloc` 后需手写 `q->__<trait>_vptr = &…;`；堆对象的创建方式推迟到 Phase 1（与 Drop 一起定）。
+- **堆对象自动初始化**（Phase 1，D1=A）：`T *p = malloc(sizeof(struct T));` / `calloc` 在声明后自动写 vptr（含嵌套字段）。
 - 接口多态：接口**数组**不支持；接口作为 struct **字段**不参与构造点递归；装箱只接受**变量**、`&变量`
   或「返回同款接口」的函数调用，其它表达式一律 `die`。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰（`A::B::fn()` 去路径成 `fn()`），
@@ -608,13 +610,14 @@ A vptr is written at a **construction point**: an object's **own** vptr goes int
 Naming and limits:
 
 - The loop variable emitted for arrays is always `__ct_i`, wrapped in its own block.
-- **An object with nested objects or an array must be declared inside a function** — there is nowhere
-  at file scope to put the vptr assignment statements, so the compiler `die`s.
+- **File-scope objects / arrays**: file scope cannot hold the vptr assignment **statements**, so the
+  vptr is written before `main` by a generated constructor
+  `static void __ct_init(void) __attribute__((constructor))` (decision D5 = A); the object is declared
+  normally and dispatched from `main` as usual.
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts); any other form that needs
   initialisation `die`s instead of emitting bad C.
-- **Heap objects are not initialised automatically**: an object from `malloc` needs a hand-written
-  `q->__<trait>_vptr = &…;` (that line is passed through verbatim); **how heap objects are created** is
-  deferred to Phase 1, together with Drop/delete.
+- **Heap objects are initialised automatically** (Phase 1, D1=A): `T *p = malloc(sizeof(struct T));`
+  (or `calloc`) writes the vptrs (including nested value fields) right after the declaration.
 - **ct never qualifies type names in hand-written C**: `sizeof(Person)` is not rewritten — write
   `sizeof(struct Person)` instead.
 
@@ -703,11 +706,11 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   rewritten.
 - Call statements spanning multiple lines are not rewritten (processing is line by line); a function
   signature whose **parameter list** spans several lines is not recognised either.
-- **An object with nested objects or an array must be declared inside a function**: file scope has
-  nowhere to put the vptr assignment statements, so the compiler `die`s.
+- **File-scope objects / arrays**: the vptr is written before `main` by the generated constructor
+  `__ct_init` (`__attribute__((constructor))`, D5 = A).
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
-- **Heap objects are not initialised automatically**: write `q->__<trait>_vptr = &…;` by hand after
-  `malloc`; how heap objects are created is deferred to Phase 1 (with Drop).
+- **Heap objects are initialised automatically** (Phase 1, D1=A): `T *p = malloc(sizeof(struct T));` /
+  `calloc` writes the vptrs (nested fields included) right after the declaration.
 - Interface polymorphism: interface **arrays** are unsupported; an interface **field** does not
   participate in construction-point recursion; boxing accepts only a **variable**, `&variable` or a call
   returning the same interface — any other expression `die`s.
