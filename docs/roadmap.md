@@ -16,9 +16,9 @@
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line`、泄漏警告 + JSON 诊断 | 🔨 进行中（1.0–1.7 已落地：CLI、namespace、多文件 + `pub`、`import`、堆/Drop、`#line`、文件作用域对象、泄漏警告 + `--diagnostics=json`；1.8 `map` 起待做） | 见下 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line`、泄漏警告 + JSON 诊断 | 🔨 进行中（1.0–1.7 已落地：CLI、namespace、多文件 + `pub`、`import`、堆/Drop、`#line`、文件作用域对象、泄漏警告 + `--diagnostics=json`；余下仅可选的 1.9 一般接收者；`map` + 反向映射表移至 Phase 3（D8，2026-10-14 拍板）） | 见下 |
 | Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
-| Phase 3 | 增量编译、跨函数分析、多目标编译、自举（展望） | 🔭 展望 | — |
+| Phase 3 | 增量编译、跨函数分析、多目标编译、自举、`map` + 反向映射表（自 Phase 1 移出）（展望） | 🔭 展望 | — |
 
 ### 版本记录
 
@@ -199,7 +199,7 @@ delete d;    // 展开为：if (d) { d->drop(); free(d); }
 
 抑制方式：`#[allow(leak)]` 标注有意不释放的分配（如全局存活对象）。
 
-#### map 语法与反向映射表（已定，Phase 1 落地）
+#### map 语法与反向映射表（已定，Phase 3 落地）
 
 `map` 关键字将 trait 方法映射到具体实例的 SDK 调用：
 
@@ -213,6 +213,10 @@ map trait Controller for instance huart1 {
 编译器生成对应的 vtable 条目，使 `huart1` 可以作为 `Controller` trait 的实例使用。
 
 编译器同时维护**反向映射表**（生成代码中的 C 符号 ← CT 中的哪个 trait/方法），用于：错误信息中给出有意义的回溯、VS Code 插件「跳转到定义」、反编译时恢复 CT 语义。
+
+> **排期（D8，用户 2026-10-14 拍板）**：自 Phase 1 移出，排在 Phase 3 自举之后最后实现。理由：
+> `map` 属生态绑定方向而非 Phase 1 的模块化主题，出口标准与自举前置清单均不依赖它；其真实消费者
+> （官方 bindings）尚不存在，过早冻结实例语义会凭想象用例定死设计。落地时与官方 bindings 清单一并定案。
 
 #### JSON 诊断输出与插件薄客户端（已定，Phase 1 落地）
 
@@ -436,7 +440,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 ### Phase 1（待规划）
 
-语言层面的语法决策已冻结，见上方「已定的设计决策」（namespace 路径规则、import、文件命名约定与 `pub`、Drop/delete、map、JSON 诊断）。实现层面的设计（子阶段 1.0–1.8、符号修饰、数据模型改动、待拍板决策 D1–D8）见 [design/phase1.md](design/phase1.md)（设计草案，未实现）。下表是实现层面的要点与风险：
+语言层面的语法决策已冻结，见上方「已定的设计决策」（namespace 路径规则、import、文件命名约定与 `pub`、Drop/delete、map、JSON 诊断）。实现层面的设计（子阶段 1.0–1.7 + 可选 1.9、符号修饰、数据模型改动、决策 D1–D8——仅 D6 / D7 待定，D8 已定：`map` 移至 Phase 3）见 [design/phase1.md](design/phase1.md)（设计草案，未实现）。下表是实现层面的要点与风险：
 
 | 特性 | 要点 | 主要风险 |
 | --- | --- | --- |
@@ -468,6 +472,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - 跨函数泄漏分析
 - 多目标平台同时编译（一套代码生成多平台二进制）
 - 自举：用 CT 写 ctc v1
+- `map` + 反向映射表（自 Phase 1 移出，D8 已定 2026-10-14）：排在自举之后最后实现，落地时与官方 bindings 清单一并定案
 
 自举的目标目录结构、分层规则（L0/L1/L2）、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)。
 
@@ -503,9 +508,9 @@ as confirmed by the user.
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line`, leak warnings + JSON diagnostics | 🔨 in progress (1.0–1.7 landed: CLI, namespaces, multi-file + `pub`, `import`, heap/Drop, `#line`, file-scope objects, leak warnings + `--diagnostics=json`; 1.8 `map` onward pending) | see below |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line`, leak warnings + JSON diagnostics | 🔨 in progress (1.0–1.7 landed: CLI, namespaces, multi-file + `pub`, `import`, heap/Drop, `#line`, file-scope objects, leak warnings + `--diagnostics=json`; only the optional 1.9 general receivers remain; `map` + the reverse mapping table moved to Phase 3 (D8, decided 2026-10-14)) | see below |
 | 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
-| 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting (outlook) | 🔭 outlook | — |
+| 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting, `map` + the reverse mapping table (moved out of Phase 1) (outlook) | 🔭 outlook | — |
 
 ### Versions
 
@@ -713,7 +718,7 @@ and as JSON for the VS Code extension:
 
 Suppression: annotate intentional leaks (e.g. objects living globally) with `#[allow(leak)]`.
 
-#### The map syntax and the reverse mapping table (decided, lands in Phase 1)
+#### The map syntax and the reverse mapping table (decided, lands in Phase 3)
 
 The `map` keyword maps trait methods onto SDK calls of a concrete instance:
 
@@ -730,6 +735,12 @@ The compiler generates the corresponding vtable entries so `huart1` can be used 
 The compiler also maintains a **reverse mapping table** (which C symbol in the output came from which
 CT trait/method), used for: meaningful provenance in error messages, "go to definition" in the VS Code
 extension, and recovering CT semantics when decompiling.
+
+> **Scheduling (D8, decided by the user on 2026-10-14)**: moved out of Phase 1 and scheduled after
+> Phase 3 self-hosting, implemented last. `map` is an ecosystem-binding feature, not part of Phase 1's
+> modularity theme; neither the exit criteria nor the bootstrap checklist depend on it, and its real
+> consumer (the official bindings) does not exist yet — freezing instance semantics early would design
+> against imagined use cases. Settle it together with the bindings list when it lands.
 
 #### JSON diagnostics and the thin-client extension (decided, lands in Phase 1)
 
@@ -1013,8 +1024,9 @@ interface re-assignment and an interface return value).
 
 The language-level syntax decisions are frozen — see "Decided design decisions" above (namespace path
 rules, import, the file-naming convention with `pub`, Drop/delete, map, JSON diagnostics). The
-implementation-level design (sub-phases 1.0–1.8, symbol mangling, data-model changes, decisions
-D1–D8 awaiting sign-off) is in [design/phase1.md](design/phase1.md) (design draft, not implemented).
+implementation-level design (sub-phases 1.0–1.7 + optional 1.9, symbol mangling, data-model changes;
+of decisions D1–D8 only D6 / D7 remain open — D8 is decided: `map` moves to Phase 3) is in
+[design/phase1.md](design/phase1.md) (design draft, not implemented).
 The table below records implementation-level notes and risks:
 
 | Feature | Notes | Main risk |
@@ -1051,6 +1063,8 @@ single-file boundary".)
 - cross-function leak analysis
 - multi-target builds (one codebase, binaries for several platforms)
 - self-hosting: write ctc v1 in CT
+- `map` + the reverse mapping table (moved out of Phase 1; D8 decided 2026-10-14): scheduled after
+  self-hosting, implemented last, settled together with the official bindings list
 
 The bootstrap target layout, layering rules (L0/L1/L2), build flow and milestones (M1–M6) live in
 [design/bootstrap.md](design/bootstrap.md).

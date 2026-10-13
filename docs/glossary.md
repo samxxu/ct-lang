@@ -37,7 +37,7 @@
 | 私有（static） | `static` | 支持的可见性；符号只进 `.c` |
 | 析构特征 Drop | `use Drop`、`impl Drop for S { … }` | **保留名**内置 trait；惰性生成释放函数 |
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
-| 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**） |
+| 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；自 Phase 1 移出，排期 Phase 3，D8） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
 | 虚表指针（vptr） | `__<trait>_vptr` | struct 内字段，指向其 vtable |
@@ -124,7 +124,7 @@
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
 | 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 1 / 2 / 3 | 见 [roadmap](roadmap.md) |
-| 子阶段（sub-phase） | 1.0–1.9 | Phase 1 的落地顺序 |
+| 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 3） | Phase 1 的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D8、D-A | 见 [design/phase1.md](design/phase1.md) §6 |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 | 用 CT 重写编译器 |
@@ -138,8 +138,8 @@
 | --- | --- | --- |
 | 平台映射头 | `ct_platform.h` | 厂商提供；宏只出现在这里 |
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
-| 绑定（bindings） | 每个库一个 `.h.ct` | 随 `map` 阶段推进，**未实现** |
-| 反向映射表（reverse mapping table） | sidecar `.ctmap.json` | 生成的 C 符号 ← CT 定义点 |
+| 绑定（bindings） | 每个库一个 `.h.ct` | 随 Phase 3 的 `map` 推进，**未实现** |
+| 反向映射表（reverse mapping table） | sidecar `.ctmap.json` | 生成的 C 符号 ← CT 定义点；排期 Phase 3（D8） |
 
 ### 8. 许可
 
@@ -180,7 +180,7 @@
 | static | `static` | a supported visibility; the symbol stays in the `.c` |
 | Drop | `use Drop`, `impl Drop for S { … }` | a **reserved** built-in trait; the release function is emitted lazily |
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
-| map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**) |
+| map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; moved out of Phase 1, lands in Phase 3, D8) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
 | vtable | `struct <Trait>_vtbl` | a table of function pointers |
 | vptr | `__<trait>_vptr` | the struct field pointing at its vtable |
@@ -265,7 +265,7 @@
 | Term | Form | Notes |
 | --- | --- | --- |
 | phase | 0 / 0.1 / 0.2 / 1 / 2 / 3 | see [roadmap](roadmap.md) |
-| sub-phase | 1.0–1.9 | the Phase 1 landing order |
+| sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 3) | the Phase 1 landing order |
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D8, D-A | see [design/phase1.md](design/phase1.md) §6 |
 | bootstrap / self-hosting | L0 → L1 → L2 | rewriting the compiler in CT |
@@ -279,8 +279,8 @@
 | --- | --- | --- |
 | platform mapping header | `ct_platform.h` | vendor-provided; macros appear only here |
 | standard peripheral traits | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | covering 80% of platform-difference needs |
-| bindings | one `.h.ct` per library | lands with the `map` stage; **not implemented** |
-| reverse mapping table | a sidecar `.ctmap.json` | generated C symbol ← CT definition site |
+| bindings | one `.h.ct` per library | lands with Phase 3's `map`; **not implemented** |
+| reverse mapping table | a sidecar `.ctmap.json` | generated C symbol ← CT definition site; lands in Phase 3 (D8) |
 
 ### 8. Licensing
 

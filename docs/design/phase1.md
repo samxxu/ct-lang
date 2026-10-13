@@ -16,7 +16,8 @@
 > 用 `__attribute__((constructor))` 在 `main` 前写 vptr）与 **1.7**（泄漏警告 + `--diagnostics=json`，
 > 首版范围见下）已实现，测试全绿（`./test/run.sh` 116/116、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
 > 1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
-> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 / D8 仍待定。
+> 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 仍待定；
+> **D8 已定（用户 2026-10-14）：`map` + 反向映射表移出 Phase 1，排在 Phase 3 自举之后最后实现。**
 
 ---
 
@@ -69,13 +70,14 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
                ├─▶ 1.5 #line
                ├─▶ 1.6 文件作用域对象数组
                └─▶ 1.7 泄漏警告 + JSON 诊断
-                        │
-                        └─▶ 1.8 map + 反向映射表
 
 (可选) 1.9 一般接收者（自举前置 #6：make().m() / ps[i].m() / a.next->m()）
+
+(移出) 1.8 map + 反向映射表 → Phase 3（D8，2026-10-14 拍板）
 ```
 
-1.1–1.3（模块化链）与 1.4（内存链）互不依赖，可并行；1.5–1.8 各依赖其上游。
+1.1–1.3（模块化链）与 1.4（内存链）互不依赖，可并行；1.5–1.7 各依赖其上游。
+1.8（`map` + 反向映射表）已移至 Phase 3，不再属本阶段。
 
 ### 4. 各子阶段设计
 
@@ -231,14 +233,14 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **风险**：warning 依赖「不终止」的诊断能力，需与 `die` 并存而不混淆。
 - **验收**：一个泄漏例子产生且仅产生 1 条 warning，退出码仍为 0；JSON 可被 `jq` 解析。
 
-#### 1.8 `map` + 反向映射表
+#### 1.8 `map` + 反向映射表 → 已移至 Phase 3（D8，2026-10-14 拍板）
 
-- **语法**：roadmap 已冻结（`map trait T for instance x { m(…) → CALL; }`）。
-- **生成**：为实例 `x` 生成 vtable，使 `x` 可作为接口值使用（`Greeter g = x;`）。
-- **反向映射表**：编译期内部表（生成的 C 符号 ← CT 定义点），用于诊断回溯、插件「跳转到定义」、
-  反编译恢复语义；输出为 sidecar `<out>.ctmap.json`，**不进 `.c`**。
-- **风险**：`→` 箭头的词法（非 ASCII）；`for instance` 的解析形态。
-- **验收**：`map` 后的实例能作为接口值传入 `announce(T)` 并派发到映射的 SDK 调用。
+**不再属 Phase 1**（用户 2026-10-14 决定）：`map` 是生态绑定方向而非 Phase 1 的模块化主题，出口标准
+与自举前置清单均不依赖它；其真实消费者（官方 bindings）尚不存在，过早冻结实例语义会凭想象用例定死
+设计。排在 Phase 3 自举之后最后实现，落地时与官方 bindings 清单一并定案。语法仍按 roadmap 冻结
+（`map trait T for instance x { m(…) → CALL; }`；反向映射表输出为 sidecar `<out>.ctmap.json`，
+**不进 `.c`**）；实现层面的设计（生成 vtable 使实例可作接口值、`→` 箭头词法、`for instance` 解析形态）
+排期时再补。
 
 #### （可选）1.9 一般接收者
 
@@ -270,7 +272,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 | D5 | 文件作用域对象初始化 | **`__attribute__((constructor))`** / 显式 `<unit>_init()` | **已定 A**（用户 2026-10-13）：生成 `__ct_init` 构造器 |
 | D6 | 单入口 `ct` 落地时机 | **Phase 1 起步** / 与 1.2 一起 / 更晚 | 何时一次性重生成全部 golden |
 | D7 | `import` 的路径根 | **导入文件目录 + `-I`** / 仅 `-I` | 目录约定 |
-| D8 | `map` 是否属 Phase 1 | 是（roadmap 已列） / **推迟到 Phase 1 末尾** | 1.8 排期 |
+| D8 | `map` 是否属 Phase 1 | **已定：否——移至 Phase 3（自举之后、最后实现）**（用户 2026-10-14）；原候选：是（roadmap 已列） / 推迟到 Phase 1 末尾 | 1.8 排期 |
 | D-A | `ct build` 是否自己调用 `cc` | **A：只产出 `.c`/`.h` 并打印建议的 `cc` 命令** / B：调用 `cc` 出可执行 | **已定 A**（用户 2026-10-11 确认）：保持 `ctc` 零依赖，不违背 AGENTS §2「不引入构建系统」 |
 
 ### 7. 测试策略
@@ -346,14 +348,15 @@ never guessed).
                ├─▶ 1.5 #line
                ├─▶ 1.6 file-scope object arrays
                └─▶ 1.7 leak warnings + JSON diagnostics
-                        │
-                        └─▶ 1.8 map + reverse-mapping table
 
 (optional) 1.9 general receivers (prerequisite #6: make().m() / ps[i].m() / a.next->m())
+
+(moved out) 1.8 map + reverse-mapping table → Phase 3 (D8, decided 2026-10-14)
 ```
 
 The modularity chain (1.1–1.3) and the memory chain (1.4) are independent and can proceed in
-parallel; 1.5–1.8 each depend on their upstream.
+parallel; 1.5–1.7 each depend on their upstream. 1.8 (`map` + the reverse-mapping table) has been
+moved to Phase 3 and is no longer part of this phase.
 
 ### 4. Sub-phase designs
 
@@ -553,17 +556,16 @@ parallel; 1.5–1.8 each depend on their upstream.
 - **Acceptance**: a leaking example produces exactly one warning and still exits 0; the JSON parses
   with `jq`.
 
-#### 1.8 `map` + reverse-mapping table
+#### 1.8 `map` + reverse-mapping table → moved to Phase 3 (D8, decided 2026-10-14)
 
-- **Syntax**: frozen in the roadmap (`map trait T for instance x { m(…) → CALL; }`).
-- **Generation**: build a vtable for the instance `x` so `x` can be used as an interface value
-  (`Greeter g = x;`).
-- **Reverse-mapping table**: a compile-time internal table (generated C symbol ← CT definition site)
-  for diagnostic provenance, the extension's "go to definition", and recovering CT semantics when
-  decompiling; emitted as a sidecar `<out>.ctmap.json`, **not** into the `.c`.
-- **Risk**: the non-ASCII `→` arrow in the lexer; the shape of `for instance`.
-- **Acceptance**: a `map`ped instance can be passed as an interface value to `announce(T)` and
-  dispatches to the mapped SDK call.
+**No longer part of Phase 1** (user decision, 2026-10-14): `map` is an ecosystem-binding feature,
+not Phase 1's modularity theme; neither the exit criteria nor the bootstrap checklist depend on it,
+and its real consumer (the official bindings) does not exist yet — freezing instance semantics early
+would design against imagined use cases. Scheduled after Phase 3 self-hosting, implemented last, and
+settled together with the bindings list. The syntax stays frozen in the roadmap
+(`map trait T for instance x { m(…) → CALL; }`; the reverse-mapping table is a sidecar
+`<out>.ctmap.json`, **not** into the `.c`); the implementation-level design (vtable for the instance,
+the non-ASCII `→` arrow in the lexer, the shape of `for instance`) will be filled in when scheduled.
 
 #### (optional) 1.9 General receivers
 
@@ -597,7 +599,7 @@ receivers (`make().m()`) designed separately (they need temporary-variable promo
 | D5 | File-scope object initialisation | **`__attribute__((constructor))`** / explicit `<unit>_init()` | **A decided** (user, 2026-10-13): generate the `__ct_init` constructor |
 | D6 | When the single-entry `ct` lands | **at the start of Phase 1** / with 1.2 / later | when every golden is regenerated once |
 | D7 | `import` path root | **importing file's directory + `-I`** / `-I` only | directory convention |
-| D8 | Whether `map` belongs to Phase 1 | yes (roadmap lists it) / **defer to the end of Phase 1** | 1.8 scheduling |
+| D8 | Whether `map` belongs to Phase 1 | **Decided: no — moved to Phase 3 (after self-hosting, implemented last)** (user, 2026-10-14); earlier options: yes (roadmap lists it) / defer to the end of Phase 1 | 1.8 scheduling |
 | D-A | Does `ct build` invoke `cc` itself | **A: emit `.c`/`.h` only and print the suggested `cc` command** / B: run `cc` to produce an executable | **A decided** (user, 2026-10-11): keeps `ctc` dependency-free, honouring AGENTS §2 ("no build systems") |
 
 ### 7. Test strategy
