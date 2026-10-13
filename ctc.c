@@ -2800,18 +2800,20 @@ static void compile_range(size_t start, size_t end)
             }
         }
 
-        /* A keyword only starts a construct when its full header follows: plain C
-           may legally use 'trait' / 'impl' as identifiers (e.g. 'impl[n] = 0;'). */
+        /* 'trait' / 'impl' are ct-only keywords: a line that starts with one and
+           is followed by an identifier or '{' is an attempted construct, so a
+           malformed header must die (AGENTS §4). Plain C may still use them as
+           identifiers in expressions (e.g. 'impl[n] = 0;') — those are followed
+           by neither and pass through. */
         if (word_at(q, "trait")) {
             char nm[MAX_NAME];
             size_t t = read_ident(skip_ws_comments(q + 5), nm, sizeof nm);
-            t = skip_ws_comments(t);
-            if (nm[0] && t < g_len && g_src[t] == '{') { pos = parse_trait(q); continue; }
+            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = parse_trait(q); continue; }
         }
         if (word_at(q, "impl")) {
             char nm[MAX_NAME];
             size_t t = read_ident(skip_ws_comments(q + 4), nm, sizeof nm);
-            if (nm[0] && word_at(skip_ws_comments(t), "for")) { pos = parse_impl(q); continue; }
+            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = parse_impl(q); continue; }
         }
         if (word_at(q, "struct")) {
             size_t t = skip_ws_comments(q + 6);
