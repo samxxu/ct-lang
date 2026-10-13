@@ -19,7 +19,6 @@
 #   line      `#line` error mapping in multi-file mode                   (no fixture dir)
 #   warnings  leak warnings + --diagnostics=json, exit stays 0           (no fixture dir)
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
-#   warn      leak warnings and --diagnostics=text|json                  (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 
 set -u
@@ -402,6 +401,41 @@ cli_expect build-unknown-option nonzero "unknown option" build -Q test/cases/21_
 cli_expect build-cannot-write nonzero "cannot write" build test/cases/21_empty_init_iface.ct -o /nonexistent-dir
 cli_expect build-no-input nonzero "usage:" build
 cli_expect build-version zero "ctc v" build --version
+
+# capacity limits of the multi-file driver: every cap must be reported, never
+# applied silently (AGENTS §3)
+cli_expect help-diagnostics zero "--diagnostics" --help
+cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o /nonexistent-dir/x.c
+cli_expect short-read nonzero "short read" "$TMP"
+
+mkdir -p "$TMP/imp17" "$TMP/imp17out"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do
+    printf 'pub struct W%d { int x; };\n' "$i" >"$TMP/imp17/w$i.ct"
+    echo "import w$i;"
+done >"$TMP/imp17/imports.inc"
+cat "$TMP/imp17/imports.inc" >"$TMP/imp17/root.ct"
+echo 'int main(void){ return 0; }' >>"$TMP/imp17/root.ct"
+cli_expect too-many-imports nonzero "too many imports" build "$TMP/imp17/root.ct" -o "$TMP/imp17out"
+
+mkdir -p "$TMP/in33" "$TMP/in33out"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33; do
+    printf 'struct Z%d { int x; };\n' "$i" >"$TMP/in33/z$i.ct"
+done
+cli_expect too-many-inputs nonzero "too many inputs" build "$TMP/in33"/*.ct -o "$TMP/in33out"
+
+# too many units needs an import tree: one file cannot import more than
+# MAX_IMPORTS, so 1 + 16 + 256 units come from two levels of fan-out
+mkdir -p "$TMP/u2" "$TMP/u2out"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+    { for j in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo "import b${i}_${j};"; done
+      echo "pub struct A$i { int x; };"; } >"$TMP/u2/a$i.ct"
+    for j in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+        printf 'pub struct B%d_%d { int x; };\n' "$i" "$j" >"$TMP/u2/b${i}_${j}.ct"
+    done
+    echo "import a$i;"
+done >"$TMP/u2/root.ct"
+echo 'int main(void){ return 0; }' >>"$TMP/u2/root.ct"
+cli_expect too-many-units nonzero "too many units" build "$TMP/u2/root.ct" -o "$TMP/u2out"
 
 # #line: off by default in single-file mode, forceable with --line
 "$TMP/ctc" test/cases/21_empty_init_iface.ct -o "$TMP/ln_default.c" 2>/dev/null
