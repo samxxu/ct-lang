@@ -17,7 +17,9 @@
 #   multifile `ct build` multi-file demo: build, compare goldens, run   (test/multifile)
 #   import    `ct build` with `import`: resolve, compare goldens, run    (test/import)
 #   line      `#line` error mapping in multi-file mode                   (no fixture dir)
+#   warnings  leak warnings + --diagnostics=json, exit stays 0           (no fixture dir)
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
+#   warn      leak warnings and --diagnostics=text|json                  (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 
 set -u
@@ -240,6 +242,68 @@ else
     else
         ok "#line --no-line suppresses the directives"
     fi
+fi
+
+# ------------------------------------------------------------------ warnings
+echo
+echo "== leak warnings (Phase 1.7) =="
+mkdir -p "$TMP/warn"
+cat >"$TMP/warn/leak.ct" <<'EOF'
+#include <stdlib.h>
+
+struct Thing {
+    int n;
+};
+
+struct Box {
+    Thing *owner;
+};
+
+int leaky(void) {
+    Thing *p = malloc(sizeof(struct Thing));
+    return 0;
+}
+
+int clean(void) {
+    Thing *q = malloc(sizeof(struct Thing));
+    delete q;
+    return 0;
+}
+
+int escaped(Box *b) {
+    Thing *e = malloc(sizeof(struct Thing));
+    b->owner = e;
+    return 0;
+}
+
+int main(void) {
+    Box b;
+    return leaky() + clean() + escaped(&b);
+}
+EOF
+if "$TMP/ctc" "$TMP/warn/leak.ct" -o "$TMP/warn/leak.c" >"$TMP/warn.out" 2>"$TMP/warn.err"; then
+    n=$(grep -c 'warning: potential leak' "$TMP/warn.err")
+    if [ "$n" = 1 ] && grep -Fq "'p' (Thing*)" "$TMP/warn.err"; then
+        ok "warnings/exactly one leak (delete and escape stay quiet), exit 0"
+    else
+        bad "warnings/leak" "expected 1 warning naming 'p', got $n"
+        sed 's/^/    /' "$TMP/warn.err"
+    fi
+else
+    bad "warnings/leak" "ctc exited non-zero: $(cat "$TMP/warn.err")"
+fi
+if "$TMP/ctc" --diagnostics=json "$TMP/warn/leak.ct" -o "$TMP/warn/leak.c" 2>/dev/null \
+   | python3 -c "import sys,json; w=json.load(sys.stdin)['warnings']; sys.exit(0 if len(w)==1 and w[0]['variable']=='p' and w[0]['type']=='potential_leak' else 1)"; then
+    ok "warnings/--diagnostics=json parses (1 warning)"
+else
+    bad "warnings/json" "json output did not parse as expected"
+fi
+if "$TMP/ctc" --diagnostics=xml "$TMP/warn/leak.ct" -o "$TMP/warn/leak.c" >/dev/null 2>"$TMP/warn.err"; then
+    bad "warnings/diag-unknown" "expected a non-zero exit for an unknown diagnostics format"
+elif grep -Fq 'unknown diagnostics format' "$TMP/warn.err"; then
+    ok "warnings/unknown diagnostics format rejected"
+else
+    bad "warnings/diag-unknown" "missing the expected message"
 fi
 
 # ------------------------------------------------------------------ errors

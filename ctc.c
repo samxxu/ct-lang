@@ -59,6 +59,7 @@
 #define MAX_FUNCS  64
 #define MAX_BUILD  32
 #define MAX_IMPORTS 16
+#define MAX_WARNS  64
 
 #define CTC_VERSION "0.0.1"
 
@@ -102,6 +103,8 @@ typedef struct {
     int  arr;                          /* 1 when declared as an array (uses '[n]') */
     int  iface;                        /* 1 when this is an interface value */
     int  tr;                           /* index into g_traits when iface */
+    int  owned;                        /* 1 when a heap object (malloc/calloc), not yet released */
+    size_t own_line;                   /* source line of that allocation (for the leak warning) */
 } Var;
 
 /* one recorded function signature, used to box interface arguments */
@@ -248,6 +251,17 @@ typedef struct { char *p; size_t n, cap; } Buf;
    runs before main. `static`, so each translation unit has its own. */
 static Buf g_unit_init;
 static int g_has_unit_init = 0;
+
+/* Phase 1.7 diagnostics: conservative, path-insensitive leak warnings (no
+   suppression in this version). Warnings are collected per invocation and
+   printed once, either human-readable (stderr, default) or as JSON
+   (`--diagnostics=json`). An error still `die`s; warnings never change the
+   exit code. */
+typedef struct { const char *file; size_t line; char var[MAX_NAME]; char tname[MAX_NAME]; } Warn;
+static Warn   g_warns[MAX_WARNS];
+static int    g_nwarns  = 0;
+static int    g_json    = 0;         /* 1 with --diagnostics=json */
+static size_t g_cur_line = 0;        /* source line of the line being rewritten */
 
 static void buf_init(Buf *b)   { b->cap = 256; b->n = 0; b->p = xmalloc(b->cap); b->p[0] = 0; }
 static void buf_putn(Buf *b, const char *s, size_t n)
@@ -461,11 +475,17 @@ static int find_var(const char *name)
 }
 
 /* Reserve the next variable slot. Overflow is a hard error: AGENTS §3 forbids
-   silent truncation, and a dropped registration would miscompile method calls. */
+   silent truncation, and a dropped registration would miscompile method calls.
+   The leak-tracking fields start cleared so a reused slot never inherits stale
+   ownership from an earlier scope. */
 static int new_var(void)
 {
+    int i;
     if (g_nvars >= MAX_VARS) die(0, "too many variables (max %d)", MAX_VARS);
-    return g_nvars++;
+    i = g_nvars++;
+    g_vars[i].owned = 0;
+    g_vars[i].own_line = 0;
+    return i;
 }
 
 /* does trait `t` declare method `m`? */
@@ -2021,12 +2041,12 @@ static char *try_var_decl(const char *line)
     if (*p == '*') {                              /* pointer decl: qualify + register */
         const char *q = p;
         char pv[MAX_NAME];
-        int pk = 0;
+        int pk = 0, vi = -1;
         while (*q == '*' || *q == ' ' || *q == '\t') q++;
         pk = copy_ident(q, pv, 0);
         pv[pk] = 0;
         if (pk) {
-            int vi = new_var();
+            vi = new_var();
             snprintf(g_vars[vi].name, MAX_NAME, "%s", pv);
             g_vars[vi].s = (int)(S - g_structs);
             g_vars[vi].ptr = 1;
@@ -2045,18 +2065,23 @@ static char *try_var_decl(const char *line)
         {
             const char *eq = strchr(p, '=');
             const char *rhs = eq ? eq + 1 : NULL;
+            int isheap = 0;
             if (rhs) {
                 while (*rhs == ' ' || *rhs == '\t') rhs++;
-                if (((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
-                     (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6]))) &&
-                    (S->nu > 0 || needs_nested_init(S, 0))) {
-                    char ind[MAX_NAME];
-                    size_t t;
-                    for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
-                    ind[t] = 0;
-                    buf_putc(&b, '\n');
-                    put_heap_vpts(&b, S, pv, ind);
-                }
+                isheap = (strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
+                         (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6]));
+            }
+            if (isheap && vi >= 0) {  /* Phase 1.7: track the allocation for leak warnings */
+                g_vars[vi].owned = 1;
+                g_vars[vi].own_line = g_cur_line;
+            }
+            if (isheap && (S->nu > 0 || needs_nested_init(S, 0))) {
+                char ind[MAX_NAME];
+                size_t t;
+                for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
+                ind[t] = 0;
+                buf_putc(&b, '\n');
+                put_heap_vpts(&b, S, pv, ind);
             }
         }
         return b.p;
@@ -2241,6 +2266,7 @@ static char *try_delete(const char *line)
            registered ct-struct pointer (so `delete buf;` on a char * frees it).
            A registered *non*-pointer is left as-is — that is user error. */
         if (vi >= 0 && !g_vars[vi].ptr) return NULL;
+        if (vi >= 0) g_vars[vi].owned = 0;   /* Phase 1.7: released → not a leak */
     }
 
     buf_init(&b);
@@ -2434,6 +2460,99 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
     return b.p;
 }
 
+/* -------------------------------------------------- leak warnings (1.7) */
+
+/* does `w` occur in `s` as a whole word (literals and comments skipped)? */
+static int line_has_word(const char *s, const char *w)
+{
+    size_t n = strlen(w), len = strlen(s), i = 0;
+    while (i < len) {
+        char c = s[i];
+        if (c == '"' || c == '\'') { i = line_literal_end(s, i, len); continue; }
+        if (c == '/' && (s[i + 1] == '/' || s[i + 1] == '*')) break;
+        if (is_ident_char((unsigned char)c)) {
+            size_t j = i;
+            while (j < len && is_ident_char((unsigned char)s[j])) j++;
+            if (j - i == n && memcmp(s + i, w, n) == 0) return 1;
+            i = j;
+            continue;
+        }
+        i++;
+    }
+    return 0;
+}
+
+/* offset of a top-level assignment '=' in `line`, or (size_t)-1 when there is
+   none; skips ==, !=, <=, >=, compound op= and text in literals/comments */
+static size_t line_assign_eq(const char *line)
+{
+    size_t len = strlen(line), i = 0;
+    while (i < len) {
+        char c = line[i];
+        if (c == '"' || c == '\'') { i = line_literal_end(line, i, len); continue; }
+        if (c == '/' && (line[i + 1] == '/' || line[i + 1] == '*')) break;
+        if (c == '=') {
+            char next = line[i + 1];
+            char prev = (i > 0) ? line[i - 1] : 0;
+            if (next == '=') { i += 2; continue; }
+            if (prev && strchr("=!<>+-*/%&|^", prev)) { i++; continue; }
+            return i;
+        }
+        i++;
+    }
+    return (size_t)-1;
+}
+
+static void warn_add(int vi)
+{
+    Warn *w;
+    if (g_nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
+    w = &g_warns[g_nwarns++];
+    w->file = g_path;
+    w->line = g_vars[vi].own_line;
+    snprintf(w->var, MAX_NAME, "%s", g_vars[vi].name);
+    snprintf(w->tname, MAX_NAME, "%s", g_structs[g_vars[vi].s].name);
+}
+
+/* a scope [from,to) is closing: still-owned heap objects in it are leaks */
+static void leak_check_scope(int from, int to)
+{
+    int i;
+    for (i = from; i < to; i++)
+        if (g_vars[i].owned) warn_add(i);
+}
+
+/* update ownership for the owned heap objects mentioned on `line`: cleared on a
+   `return`, or when the object is assigned to a non-self lvalue (escape). A
+   `delete p;` clears it in try_delete. Path-insensitive and deliberately
+   conservative: anything else leaves the object owned. */
+static void leak_observe(const char *line)
+{
+    size_t eq = line_assign_eq(line);
+    int is_return = line_has_word(line, "return"), i;
+
+    for (i = 0; i < g_nvars; i++) {
+        size_t nl;
+        if (!g_vars[i].owned) continue;
+        if (!line_has_word(line, g_vars[i].name)) continue;
+        if (eq != (size_t)-1) {
+            size_t s = 0;
+            while (s < eq && (line[s] == ' ' || line[s] == '\t')) s++;
+            nl = strlen(g_vars[i].name);
+            if (strncmp(line + s, g_vars[i].name, nl) == 0) {
+                char after = line[s + nl];
+                /* v = … / v->f = … / v.f = … is not the object escaping */
+                if (after == 0 || after == '.' || after == '-' ||
+                    after == ' ' || after == '\t')
+                    continue;
+            }
+        } else if (!is_return) {
+            continue;   /* not an assignment or return: no escape inferred */
+        }
+        g_vars[i].owned = 0;
+    }
+}
+
 /* roll g_nvars back at every closing brace so parameters and locals stay in
    their own scope; string and comment contents are ignored */
 static void scope_track(size_t ls, size_t le)
@@ -2458,7 +2577,12 @@ static void scope_track(size_t ls, size_t le)
             if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
             g_scope[g_nscope++] = save;
         } else if (c == '}') {
-            if (g_nscope > 0) g_nvars = g_scope[--g_nscope];
+            if (g_nscope > 0) {
+                int base = g_scope[g_nscope - 1];
+                /* a still-owned heap object whose scope ends here is unreachable */
+                leak_check_scope(base, g_nvars);
+                g_nvars = g_scope[--g_nscope];
+            }
         }
         p++;
     }
@@ -2472,6 +2596,7 @@ static void emit_raw_line(size_t ls, size_t le)
     size_t body_abs = 0;
 
     line = xstrndup(g_src + ls, len);
+    g_cur_line = line_of(ls);
     while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
     if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
         fputs(line, g_out);
@@ -2492,6 +2617,8 @@ static void emit_raw_line(size_t ls, size_t le)
         ls += z;
         t = 0;
     }
+
+    leak_observe(line);                              /* Phase 1.7 leak tracking */
 
     sig = parse_func_sig(line, ls, &has_body, &body_abs);
     if (sig) {
@@ -2529,6 +2656,7 @@ static void usage(const char *prog)
             "                  build: write the outputs into <dir>\n"
             "  --line          force `#line` directives in the generated C\n"
             "  --no-line       suppress `#line` directives\n"
+            "  --diagnostics=<fmt>  warning format: text (default) or json\n"
             "  -v, --version   print the compiler version and exit\n"
             "  -h, --help      print this help and exit\n",
             prog, prog);
@@ -3105,6 +3233,56 @@ static int unit_visit(const char *path)
     return idx;
 }
 
+/* ---------------------------------------------------------- diagnostics */
+
+static void json_str(FILE *f, const char *s)
+{
+    for (; *s; s++) {
+        if (*s == '"' || *s == '\\') fputc('\\', f);
+        fputc(*s, f);
+    }
+}
+
+/* Print the collected warnings. With `--diagnostics=json` a JSON document goes
+   to `jsonf`; otherwise one human-readable line per warning goes to `textf`.
+   Warnings never change the exit code. */
+static void emit_warnings(FILE *jsonf, FILE *textf)
+{
+    int i;
+    if (!g_nwarns) return;
+    if (g_json) {
+        fputs("{\"warnings\":[", jsonf);
+        for (i = 0; i < g_nwarns; i++) {
+            Warn *w = &g_warns[i];
+            if (i) fputc(',', jsonf);
+            fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
+            json_str(jsonf, w->file);
+            fprintf(jsonf, "\",\"line\":%ld,\"variable\":\"", (long)w->line);
+            json_str(jsonf, w->var);
+            fputs("\",\"type_name\":\"", jsonf);
+            json_str(jsonf, w->tname);
+            fputs("*\",\"message\":\"allocated but never deleted\"}", jsonf);
+        }
+        fputs("]}\n", jsonf);
+    } else {
+        for (i = 0; i < g_nwarns; i++) {
+            Warn *w = &g_warns[i];
+            fprintf(textf, "%s:%ld: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
+                    w->file, (long)w->line, w->var, w->tname);
+        }
+    }
+}
+
+/* `--diagnostics=<fmt>`: 1 consumed, 0 not ours, -1 bad format */
+static int parse_diag(const char *arg)
+{
+    if (strncmp(arg, "--diagnostics=", 14) != 0) return 0;
+    if (strcmp(arg + 14, "json") == 0) { g_json = 1; return 1; }
+    if (strcmp(arg + 14, "text") == 0) { g_json = 0; return 1; }
+    fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", arg + 14);
+    return -1;
+}
+
 /* `ct build`: resolve imports, compile every unit in dependency order in
    multi-file mode, and print the suggested cc command. ctc never invokes a C
    compiler itself (it stays dependency-free). */
@@ -3128,6 +3306,7 @@ static int build_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "--line") == 0) { g_line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { g_line_force = 0; continue; }
+        { int d = parse_diag(argv[i]); if (d < 0) return 1; if (d > 0) continue; }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             usage(prog);
@@ -3164,6 +3343,7 @@ static int build_main(int argc, char **argv, const char *prog)
     buf_puts(&cc, " -o a.out");
     printf("%s\n", cc.p);
     free(cc.p);
+    emit_warnings(stderr, stderr);   /* build keeps stdout for the cc command */
     return 0;
 }
 
@@ -3191,6 +3371,7 @@ static int compile_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "--line") == 0) { g_line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { g_line_force = 0; continue; }
+        { int d = parse_diag(argv[i]); if (d < 0) return 1; if (d > 0) continue; }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             usage(prog);
@@ -3201,7 +3382,11 @@ static int compile_main(int argc, char **argv, const char *prog)
 
     if (!in) { usage(prog); return 1; }
     if (!outc) { default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    return compile_file(in, outc, 0);
+    {
+        int rc = compile_file(in, outc, 0);
+        if (rc == 0) emit_warnings(stdout, stderr);   /* JSON to stdout, text to stderr */
+        return rc;
+    }
 }
 
 int main(int argc, char **argv)
