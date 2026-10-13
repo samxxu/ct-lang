@@ -1,0 +1,43 @@
+// 23: file-scope objects and arrays — vptrs are written by a constructor (D5=A)
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+struct Inner {
+    int n;
+} use Greeter;
+
+struct Outer {
+    Inner in;
+}
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+}
+
+impl Greeter for Inner {
+    void greet() {
+        printf("inner %d\n", self->n);
+    }
+}
+
+Person ps[2];   // file-scope array of trait-carrying objects
+Outer o;        // file-scope object with a nested trait-carrying field
+
+int main(void) {
+    ps[0].name = "A";
+    ps[1].name = "B";
+    o.in.n = 7;
+    ps[0].greet();
+    ps[1].greet();
+    o.in.greet();
+    return 0;
+}

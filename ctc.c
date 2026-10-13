@@ -242,6 +242,13 @@ static void set_cname(char *out, size_t cap, const char *ns, const char *name, s
 /* dynamic string buffer */
 typedef struct { char *p; size_t n, cap; } Buf;
 
+/* File-scope ct objects/arrays (Phase 1.6): their vptr writes are statements,
+   which C cannot hold at file scope. They are accumulated here and emitted in a
+   per-unit constructor (`__attribute__((constructor))`, decision D5 = A) that
+   runs before main. `static`, so each translation unit has its own. */
+static Buf g_unit_init;
+static int g_has_unit_init = 0;
+
 static void buf_init(Buf *b)   { b->cap = 256; b->n = 0; b->p = xmalloc(b->cap); b->p[0] = 0; }
 static void buf_putn(Buf *b, const char *s, size_t n)
 {
@@ -2069,14 +2076,15 @@ static char *try_var_decl(const char *line)
         while (*q == ' ' || *q == '\t') q++;
         if (*q == '[') {
             const char *d = q + 1, *cl;
+            int atfile;
             needs = (S->nu > 0 || needs_nested_init(S, 0));
             while (*d >= '0' && *d <= '9') d++;
             cl = d;
             if (needs && (cl == q + 1 || *cl != ']' || !decl_end_is_bare(cl + 1)))
                 die(0, "struct '%s': only 'Type name[<n>];' arrays are supported", S->name);
-            if (needs && g_nscope == 0)
-                die(0, "struct '%s': an array of objects must be declared inside a function",
-                    S->name);
+            /* at file scope the per-element vptr writes cannot be statements, so
+               they go into the per-unit constructor instead */
+            atfile = (needs && g_nscope == 0);
 
             buf_init(&b);
             buf_putn(&b, line, ws);
@@ -2087,6 +2095,7 @@ static char *try_var_decl(const char *line)
             buf_puts(&b, q);
 
             if (needs) {
+                Buf *tgt = atfile ? &g_unit_init : &b;
                 char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
                 size_t k2, dl = (size_t)(cl - q - 1);
 
@@ -2099,23 +2108,28 @@ static char *try_var_decl(const char *line)
                     g_vars[g_nvars].tr = -1;
                     g_nvars++;
                 }
-                for (k2 = 0; k2 < ws && k2 < sizeof ind - 1; k2++) ind[k2] = line[k2];
-                ind[k2] = 0;
+                if (atfile) {
+                    g_has_unit_init = 1;
+                    snprintf(ind, sizeof ind, "    ");
+                } else {
+                    buf_putc(&b, '\n');
+                    for (k2 = 0; k2 < ws && k2 < sizeof ind - 1; k2++) ind[k2] = line[k2];
+                    ind[k2] = 0;
+                }
                 if (dl >= sizeof cnt) dl = sizeof cnt - 1;
                 memcpy(cnt, q + 1, dl);
                 cnt[dl] = 0;
                 snprintf(ind2, sizeof ind2, "%s        ", ind);
                 snprintf(recv, sizeof recv, "%s[__ct_i]", var);
 
-                buf_putc(&b, '\n');
-                buf_puts(&b, ind);  buf_puts(&b, "{\n");
-                buf_puts(&b, ind);  buf_puts(&b, "    for (unsigned long __ct_i = 0; __ct_i < ");
-                buf_puts(&b, cnt);
-                buf_puts(&b, "; __ct_i++) {\n");
-                put_nested_assignments(&b, S, recv, ind2, 1, 0);
-                buf_puts(&b, ind);  buf_puts(&b, "    }\n");
-                buf_puts(&b, ind);  buf_puts(&b, "}\n");
-                if (b.n > 0 && b.p[b.n - 1] == '\n') { b.n--; b.p[b.n] = 0; }
+                buf_puts(tgt, ind);  buf_puts(tgt, "{\n");
+                buf_puts(tgt, ind);  buf_puts(tgt, "    for (unsigned long __ct_i = 0; __ct_i < ");
+                buf_puts(tgt, cnt);
+                buf_puts(tgt, "; __ct_i++) {\n");
+                put_nested_assignments(tgt, S, recv, ind2, 1, 0);
+                buf_puts(tgt, ind);  buf_puts(tgt, "    }\n");
+                buf_puts(tgt, ind);  buf_puts(tgt, "}\n");
+                if (!atfile && b.n > 0 && b.p[b.n - 1] == '\n') { b.n--; b.p[b.n] = 0; }
             }
             return b.p;
         }
@@ -2184,16 +2198,22 @@ static char *try_var_decl(const char *line)
     }
 
     if (needs_nested_init(S, 0) || (!done && S->nu > 0)) {
-        /* vptr writes need statements, so they must live inside a function */
+        /* the vptr writes are statements: inside a function they follow the
+           declaration; at file scope they go into the per-unit constructor */
+        int atfile = (g_nscope == 0);
+        Buf *tgt = atfile ? &g_unit_init : &b;
         char ind[MAX_NAME];
         size_t k;
-        if (g_nscope == 0)
-            die(0, "struct '%s' has nested objects: declare it inside a function", S->name);
-        for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
-        ind[k] = 0;
-        buf_putc(&b, '\n');
-        put_nested_assignments(&b, S, var, ind, !done, 0);
-        if (b.n > 0 && b.p[b.n - 1] == '\n') { b.n--; b.p[b.n] = 0; }
+        if (atfile) {
+            g_has_unit_init = 1;
+            snprintf(ind, sizeof ind, "    ");
+        } else {
+            for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
+            ind[k] = 0;
+            buf_putc(&b, '\n');
+        }
+        put_nested_assignments(tgt, S, var, ind, !done, 0);
+        if (!atfile && b.n > 0 && b.p[b.n - 1] == '\n') { b.n--; b.p[b.n] = 0; }
     }
     return b.p;
 }
@@ -2896,6 +2916,8 @@ static int compile_file(const char *in, const char *outc, int multi)
         fclose(g_hout);
         return 1;
     }
+    buf_init(&g_unit_init);
+    g_has_unit_init = 0;
     {
         FILE *real = g_out;
         g_out = body;
@@ -2911,6 +2933,16 @@ static int compile_file(const char *in, const char *outc, int multi)
             fwrite(chunk, 1, got, g_out);
         }
         emit_drop_bodies(real);
+        /* file-scope objects/arrays: their vptr writes were collected while
+           scanning and are emitted here, after the types and vtables they
+           reference, as a constructor that runs before main (D5 = A). */
+        if (g_has_unit_init) {
+            fprintf(g_out,
+                    "static void __ct_init(void) __attribute__((constructor));\n"
+                    "static void __ct_init(void) {\n%s}\n",
+                    g_unit_init.p);
+        }
+        free(g_unit_init.p);
     }
     fclose(body);
 
