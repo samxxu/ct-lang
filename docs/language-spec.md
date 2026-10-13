@@ -334,9 +334,14 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 ### 9. 诊断与退出码
 
-- 格式：`<file>:<line>:<col>: error: <message>`，输出到 `stderr`。
-- 退出码：`0` 成功；`1` 语法错误、语义错误、I/O 错误。
-- 无警告机制：可疑但仍可生成代码的情况（如构造与语句写在同一行时不被重写）不会提示。
+- **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；**遇错即 `exit(1)`**（不做错误恢复）。
+- **警告**（Phase 1.7）：目前只有一类——**泄漏警告**。对局部 ct-struct 堆对象（`T *p = malloc/calloc(...)`），若在其作用域结束前既未 `delete`、未 `return`、也未逃逸（赋给非自身左值），则报
+  `<file>:<line>: warning: potential leak: '<var>' (<Type>*) allocated but never deleted`，输出到 `stderr`。**不影响退出码**（仍为 0）。判定是保守的、路径不敏感的（只覆盖普通函数体；方法体不经行重写，不在内；`char *buf = malloc(...)` 等非 ct 类型不在内）。
+- **JSON 诊断**：`--diagnostics=json` 时，警告改为输出到 **stdout** 的 JSON 文档
+  `{"warnings":[{"type":"potential_leak","file":…,"line":…,"variable":…,"type_name":…,"message":…}]}`；
+  `--diagnostics=text`（默认）为人可读 stderr。`ct build` 的 stdout 留给建议的 `cc` 命令，故其警告始终走 stderr。
+- 退出码：`0` 成功（**含只有警告时**）；`1` 语法 / 语义 / I/O 错误。
+- 暂无抑制语法（`#[allow(leak)]` 未实现）；除泄漏外不产生其它警告（如「构造与语句写在同一行不被重写」不会提示）。
 
 ### 10. 多文件模式、`import` 与 `pub`（Phase 1）
 
@@ -745,9 +750,23 @@ supported — see §3 / §5.)
 
 ### 9. Diagnostics
 
-`<file>:<line>:<col>: error: <message>` on stderr; exit code `0` on success, `1` on syntax, semantic
-or I/O errors. There is no warning channel — suspicious but usable output (such as a construct and a
-statement sharing one line, so the statement is not rewritten) is never reported.
+- **Errors**: `<file>:<line>:<col>: error: <message>` on stderr; an error **exits immediately** with
+  code `1` (no error recovery).
+- **Warnings** (Phase 1.7): there is one class — the **leak warning**. For a local ct-struct heap
+  object (`T *p = malloc/calloc(...)`) that is neither `delete`d, `return`ed, nor escaped (assigned to
+  a non-self lvalue) before its scope ends, ctc reports
+  `<file>:<line>: warning: potential leak: '<var>' (<Type>*) allocated but never deleted` on stderr.
+  It **never changes the exit code** (still 0). The analysis is deliberately conservative and
+  path-insensitive: it covers ordinary function bodies only (method bodies are not line-rewritten, so
+  they are out of scope), and non-ct allocations (`char *buf = malloc(...)`) are not tracked.
+- **JSON diagnostics**: with `--diagnostics=json` the warnings go to **stdout** as a JSON document
+  `{"warnings":[{"type":"potential_leak","file":…,"line":…,"variable":…,"type_name":…,"message":…}]}`;
+  `--diagnostics=text` (the default) prints human-readable lines on stderr. `ct build` keeps stdout for
+  the suggested `cc` command, so its warnings always go to stderr.
+- Exit code: `0` on success (**including when there are only warnings**); `1` on syntax / semantic /
+  I/O errors.
+- No suppression syntax yet (`#[allow(leak)]` is unimplemented); no warnings other than leaks are
+  produced (e.g. a construct and a statement sharing a line is not reported).
 
 ### 10. Multi-file mode, `import` and `pub` (Phase 1)
 

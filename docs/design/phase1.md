@@ -12,9 +12,9 @@
 > **落地进度（2026-10-11）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
 > **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）、**1.3**（`import A::B` 递归解析、
 > 跨单元符号累积、自动 `#include`）、**1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）、
-> **1.5**（`#line`，**D4=A**）与 **1.6**（文件作用域对象 / 数组，**D5=A**：生成的构造器 `__ct_init`
-> 用 `__attribute__((constructor))` 在 `main` 前写 vptr）已实现，测试全绿（`./test/run.sh` 113/113、
-> `check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
+> **1.5**（`#line`，**D4=A**）、**1.6**（文件作用域对象 / 数组，**D5=A**：生成的构造器 `__ct_init`
+> 用 `__attribute__((constructor))` 在 `main` 前写 vptr）与 **1.7**（泄漏警告 + `--diagnostics=json`，
+> 首版范围见下）已实现，测试全绿（`./test/run.sh` 116/116、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
 > 1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
 > 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 / D8 仍待定。
 
@@ -215,15 +215,20 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
   「以 gcc / clang 为宿主」的定位一致（见 bootstrap 草案）。
 - **验收**：`Person ps[2];` 在文件作用域可声明，元素 vptr 正确，`main` 里 `ps[0].greet()` 正常。
 
-#### 1.7 泄漏警告（简单版）+ JSON 诊断
+#### 1.7 泄漏警告（简单版）+ JSON 诊断 ✅ 已完成
+
+> **落地说明（首版范围，用户 2026-10-13 拍板）**：**Q1=A** `--diagnostics=json` 只输出**诊断列表**
+> （符号表 / 调用图另开子项）；**Q2=B** 不实现抑制语法（`#[allow(leak)]` 留待有需求再加）；**Q3=A** 判定保守：
+> 清除时机 = `delete p` / `return p` / `p` 被赋给非自身左值（近似逃逸）。实现要点：`Var` 增 `owned`/`own_line`；
+> 在 1.4 的创建点标记；`leak_observe()`（行级）与 `scope_track()` 的 `}` 回滚处检查；警告收集后一次性输出。
+> 只覆盖普通函数体（方法体不经行重写）、只覆盖 ct-struct 堆对象。退出码始终 0。测试见 run.sh 的 `warnings` 层。
 
 - **泄漏（简单版）**：由 1.4 的创建点标记**局部 owned 堆对象**；`delete` / `return` / 逃离作用域
-  （赋给字段或全局）即清除；函数结束（对应 `}` 的作用域回滚）仍 owned → 警告（**不终止**）。
-  抑制：`#[allow(leak)]`。路径敏感版归 Phase 2。
-- **JSON**：`--diagnostics=json`（或 `-fdiagnostics-json`）输出 error / warning 列表（schema 见
-  roadmap）、符号表、调用图；默认仍为人可读 stderr。
-- **改动**：诊断层引入「错误计数 + 继续」，但 **error 仍终止**（Phase 0 语义不变）；warning 走独立通道。
-- **风险**：warning 依赖「不终止」的诊断能力，需与既有 `die`（立即退出）并存而不混淆。
+  （赋给字段或全局）即清除；作用域（`}`）结束仍 owned → 警告（**不终止**）。抑制语法本版未做。路径敏感版归 Phase 2。
+- **JSON**：`--diagnostics=json` 输出 warning 列表（schema 见 roadmap）；`--diagnostics=text`（默认）为人可读 stderr。
+  首版**不含**符号表 / 调用图。
+- **改动**：warning 走独立通道，与既有 `die`（立即退出）并存；**error 仍终止**（Phase 0 语义不变）。
+- **风险**：warning 依赖「不终止」的诊断能力，需与 `die` 并存而不混淆。
 - **验收**：一个泄漏例子产生且仅产生 1 条 warning，退出码仍为 0；JSON 可被 `jq` 解析。
 
 #### 1.8 `map` + 反向映射表
@@ -525,18 +530,26 @@ parallel; 1.5–1.8 each depend on their upstream.
 - **Acceptance**: `Person ps[2];` works at file scope, element vptrs are correct, and `ps[0].greet()`
   in `main` behaves.
 
-#### 1.7 Leak warnings (simple version) + JSON diagnostics
+#### 1.7 Leak warnings (simple version) + JSON diagnostics ✅ done
+
+> **What landed (first-cut scope, decided by the user on 2026-10-13)**: **Q1=A** `--diagnostics=json`
+> emits the **diagnostic list only** (symbol table / call graph are separate sub-items); **Q2=B** no
+> suppression syntax (`#[allow(leak)]` is left until there is demand); **Q3=A** conservative
+> detection: cleared on `delete p` / `return p` / `p` assigned to a non-self lvalue (approximate
+> escape). Implementation: `Var` gains `owned`/`own_line`; ownership is set at 1.4's creation point;
+> `leak_observe()` (per line) and the `}` rollback in `scope_track()` do the checking; warnings are
+> collected and printed once. Ordinary function bodies only (method bodies are not line-rewritten) and
+> ct-struct heap objects only. The exit code is always 0. Covered by run.sh's `warnings` layer.
 
 - **Leak (simple version)**: mark **local owned heap objects** at 1.4's creation points; `delete` /
   `return` / escaping the scope (assignment to a field or a global) clears the mark; still owned at
-  function end (the matching `}` scope rollback) → a warning (**non-fatal**). Suppression:
-  `#[allow(leak)]`. The path-sensitive version is Phase 2.
-- **JSON**: `--diagnostics=json` (or `-fdiagnostics-json`) emits the error / warning list (schema in
-  the roadmap), the symbol table and the call graph; the default stays human-readable stderr.
-- **Change**: the diagnostic layer gains "error count + continue", **but an error still terminates**
-  (Phase 0 semantics unchanged); warnings travel on a separate channel.
-- **Risk**: warnings need non-fatal diagnostics, which must coexist with the existing `die` (immediate
-  exit) without confusion.
+  scope (the matching `}`) exit → a warning (**non-fatal**). No suppression syntax in this version.
+  The path-sensitive version is Phase 2.
+- **JSON**: `--diagnostics=json` emits the warning list (schema in the roadmap); `--diagnostics=text`
+  (the default) is human-readable stderr. The first cut does **not** include the symbol table / call graph.
+- **Change**: warnings travel on a separate channel alongside the existing `die` (immediate exit);
+  **an error still terminates** (Phase 0 semantics unchanged).
+- **Risk**: warnings need non-fatal diagnostics, which must coexist with `die` without confusion.
 - **Acceptance**: a leaking example produces exactly one warning and still exits 0; the JSON parses
   with `jq`.
 

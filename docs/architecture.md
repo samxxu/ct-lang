@@ -79,7 +79,8 @@ argv
 | | `try_delete` | `delete p;` → `if (p) free(p);`（Phase 1 起对任意指针生效，含 `char *`） |
 | | `emit_qualified_type` `trait_has_method` `find_func` | 类型展开（`struct ` / `_iface` 后缀）、接口方法判定、函数签名表查询 |
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | 接口多态：装箱（复合字面量）、接口变量声明/赋值、接口返回值 |
-| | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚 |
+| | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚；弹栈前检查关闭作用域内仍 owned 的堆对象（泄漏警告） |
+| | `line_has_word` `line_assign_eq` `leak_observe` `warn_add` `leak_check_scope` | Phase 1.7 泄漏跟踪：行级推断 `delete` / `return` / 逃逸并清除 owned，作用域关闭时上报 `potential_leak` |
 | | `transform_calls` | 单行内的方法调用重写状态机 |
 | | `try_var_decl` `read_qual_ref` | 识别 `Type var = {...}`（含限定名 `A::B::Type`）并改造、登记变量 |
 | | `transform_line` `emit_raw_line` | 串联上述两步并写出 |
@@ -231,7 +232,8 @@ and impls must precede the functions that call them.
 | | `try_delete` | `delete p;` → `if (p) free(p);` (since Phase 1 this holds for any pointer, `char *` included) |
 | | `emit_qualified_type` `trait_has_method` `find_func` | type expansion (`struct ` / the `_iface` suffix), interface-method lookup, signature-table queries |
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | interface polymorphism: boxing (compound literal), interface declarations/assignments, interface returns |
-| | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}` |
+| | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}`; before rolling back it checks the closing scope for still-owned heap objects (leak warnings) |
+| | `line_has_word` `line_assign_eq` `leak_observe` `warn_add` `leak_check_scope` | Phase 1.7 leak tracking: per-line `delete` / `return` / escape inference clears ownership; a scope exit reports `potential_leak` |
 | | `transform_calls` | the single-line state machine that rewrites method calls |
 | | `try_var_decl` `read_qual_ref` | recognise `Type var = {...}` (including the qualified `A::B::Type`), rewrite the declaration and register the variable |
 | | `transform_line` `emit_raw_line` | chain the two steps above and write the line out |

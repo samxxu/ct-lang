@@ -90,6 +90,8 @@
 | 驱动（driver） | `compile_file` / `build_main` | 编排，不碰解析/生成逻辑 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A） |
 | 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发 |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7） |
+| owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记 |
 
 ### 4. CLI 与产物
 
@@ -100,7 +102,7 @@
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
-| JSON 诊断 | `--diagnostics=json` | **规划中**（roadmap），未实现 |
+| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7） |
 
 ### 5. 测试
 
@@ -241,7 +243,7 @@
 | output option | `-o <file\|dir>` | |
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
-| JSON diagnostics | `--diagnostics=json` | **planned** (roadmap), not implemented |
+| JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7) |
 
 ### 5. Testing
 

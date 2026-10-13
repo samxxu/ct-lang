@@ -16,7 +16,7 @@
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line` | 🔨 进行中（1.0 CLI、1.1 namespace、1.2 多文件 + `pub`、1.3 `import`、1.4 堆/Drop、1.5 `#line` 已落地；1.6 起待做） | 见下 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line`、泄漏警告 + JSON 诊断 | 🔨 进行中（1.0–1.7 已落地：CLI、namespace、多文件 + `pub`、`import`、堆/Drop、`#line`、文件作用域对象、泄漏警告 + `--diagnostics=json`；1.8 `map` 起待做） | 见下 |
 | Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
 | Phase 3 | 增量编译、跨函数分析、多目标编译、自举（展望） | 🔭 展望 | — |
 
@@ -217,6 +217,9 @@ map trait Controller for instance huart1 {
 #### JSON 诊断输出与插件薄客户端（已定，Phase 1 落地）
 
 `ctc` 输出 JSON 格式：编译错误/警告（含泄漏警告）、符号表（namespace / trait / struct / 函数位置）、调用关系图。VS Code 插件作为薄客户端消费 JSON，实现内联错误提示、跳转到定义、自动补全、悬停类型信息；插件本身不做编译、不做分析，编译器升级时插件无需改动。
+
+> **首版（Phase 1.7，用户 2026-10-13 拍板 Q1=A）**：`--diagnostics=json` **只输出诊断列表**（`{"warnings":[…]}`），
+> 符号表与调用图**尚未实现**，另开子项。`--diagnostics=text`（默认）为人可读 stderr。
 
 #### 自举策略与单文件边界（已定，Phase 3 落地）
 
@@ -500,7 +503,7 @@ as confirmed by the user.
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line` | 🔨 in progress (1.0 CLI, 1.1 namespaces, 1.2 multi-file + `pub`, 1.3 `import`, 1.4 heap/Drop and 1.5 `#line` landed; 1.6 onward pending) | see below |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line`, leak warnings + JSON diagnostics | 🔨 in progress (1.0–1.7 landed: CLI, namespaces, multi-file + `pub`, `import`, heap/Drop, `#line`, file-scope objects, leak warnings + `--diagnostics=json`; 1.8 `map` onward pending) | see below |
 | 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
 | 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting (outlook) | 🔭 outlook | — |
 
@@ -734,6 +737,10 @@ extension, and recovering CT semantics when decompiling.
 namespaces / traits / structs / functions), and the call graph. The VS Code extension consumes the
 JSON as a thin client — inline diagnostics, go to definition, completion, hover types — and does no
 compilation or analysis of its own, so compiler upgrades never require extension changes.
+
+> **First cut (Phase 1.7, Q1=A decided by the user on 2026-10-13)**: `--diagnostics=json` emits the
+> **diagnostic list only** (`{"warnings":[…]}`); the symbol table and call graph are **not implemented
+> yet** and are separate sub-items. `--diagnostics=text` (the default) is human-readable stderr.
 
 #### Bootstrap strategy and the single-file boundary (decided, lands in Phase 3)
 
