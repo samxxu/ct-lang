@@ -3118,7 +3118,7 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
     char *src = read_file(path, &len);
     int n = 0;
 
-    while (pos < len && n < max) {
+    while (pos < len) {
         size_t ls = pos, q = ls, e;
         while (q < len && (src[q] == ' ' || src[q] == '\t')) q++;
         if (q + 6 <= len && memcmp(src + q, "import", 6) == 0 &&
@@ -3146,6 +3146,11 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
                 break;
             }
             if (ok && k && t < len && src[t] == ';') {
+                if (n >= max) {   /* AGENTS §3: overflow dies, never truncates */
+                    fprintf(stderr, "ctc: too many imports in '%s' (max %d)\n", path, max);
+                    free(src);
+                    exit(1);
+                }
                 snprintf(mods[n], MAX_NAME, "%s", mod);
                 n++;
             }
