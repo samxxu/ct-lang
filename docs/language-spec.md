@@ -165,10 +165,12 @@ p.__greeter_vptr->greet(&p);
 p.__greeter_vptr->greet_name(&p, "Jerry");
 ```
 
-触发条件（**全部**满足才重写）：
+触发条件（满足 1 或 1′，且 2–4 全满足才重写）：
 
 1. 左边是一个标识符，且它在**本文件此前**已被登记为某 struct 类型的变量（`T x`、`T *x`、
-   `T x[n]`、`T *x[n]` 均可）；
+   `T x[n]`、`T *x[n]` 均可）；**或**
+1′. 左边是一次调用 `f(...)`，且 `f` 的返回类型是**此前已登记的 struct**（值返回或指针返回均可，
+   如 `f().m()`、`mk()->m()`、`f().a.b.m()`）；
 2. 若该变量是数组或指针，其后可先跟一个下标 `[<表达式>]`（表达式可为任意平衡内容，例如
    `ps[i]`、`ps[i + 1]`、`ps[f()]`）；
 3. 之后是 `.`、`->`，或一串字段跳（每跳 `.field` / `->field`），且**最终**成员名是（跳转后那个
@@ -187,10 +189,19 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 - 指针字段链按**每跳字段是否为指针**决定 `.` 或 `->`，末跳经指针则不补 `&`：
   `a.next->m()` → `a.next->__t_vptr->m(a.next)`；`a.next.m()`（`next` 是值字段）→ `a.next.__t_vptr->m(&a.next)`。
 - 参数内部的嵌套调用会被继续处理：`q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`。
+- **右值接收者**（条件 1′）：接收者先被提升为一个临时变量，求值**恰好一次**，再按上面同一规则派发。
+  临时变量名为 `__ct_tmp<N>`（`N` 在单个文件内递增，从 0 开始）：
+  - 值返回：`f().m(a)` → 前一行 `struct S __ct_tmp0 = f();`，本行 `__ct_tmp0.__t_vptr->m(&__ct_tmp0, a)`；
+  - 指针返回：`mk()->m(a)` → 前一行 `struct S *__ct_tmp0 = mk();`，本行 `__ct_tmp0->__t_vptr->m(__ct_tmp0, a)`。
+  - 提升**只允许**在两种位置：接收者位于**语句行首**（`f().m();`），或位于**赋值 / 声明初始化式的
+    右值行首**（`int r = f().m();`）。这两种位置求值无条件且有序，提升到前一行**不改变语义**。
+  - 接收者出现在其它位置（如 `x = 1 + f().m();`、`g(f().m());`）时无法在不改变求值顺序的前提下重写，
+    **按 `文件:行:列: error:` 报错退出**，而不是产出明知编不过的 C。
+  - 提升出的临时变量声明文本为等宽对齐的源行缩进；它在生成的 `.c` 中占一行，其 `#line` 映射回同一个源行。
 - 字符串字面量、字符字面量、注释内的内容**永不重写**。
 - `impl` 方法体内的 `self->m(...)` 也按同一规则重写（见 4.3）。
-- **接收者表达式会被求值两次**（`ps[i]` 在产物里出现两遍），因此带副作用的下标（如 `ps[i++]`）
-  不保证正确；右值接收者 `make().m()` 同理，尚未支持（见 roadmap 1.9b）。
+- **仅变量下标接收者的表达式会被求值两次**（`ps[i]` 在产物里出现两遍），因此带副作用的下标
+  （如 `ps[i++]`）不保证正确；右值接收者（1′）用临时变量，只求值一次。
 
 #### 4.6 普通函数的签名 → 限定 struct 类型
 
@@ -569,10 +580,12 @@ p.__greeter_vptr->greet(&p);
 p.__greeter_vptr->greet_name(&p, "Jerry");
 ```
 
-Trigger conditions (rewriting happens only when **all** of them hold):
+Trigger conditions (rewriting happens only when 1 or 1′ holds **and** 2–4 all hold):
 
 1. the left-hand side is an identifier that has been registered **earlier in this file** as a variable
-   of some struct type (`T x`, `T *x`, `T x[n]` and `T *x[n]` all qualify);
+   of some struct type (`T x`, `T *x`, `T x[n]` and `T *x[n]` all qualify); **or**
+1′. the left-hand side is a call `f(...)` whose return type is a **previously registered struct**
+   (returned by value or by pointer: `f().m()`, `mk()->m()`, `f().a.b.m()`);
 2. when that variable is an array or a pointer, one subscript `[<expr>]` may follow, with an arbitrary
    balanced expression (`ps[i]`, `ps[i + 1]`, `ps[f()]`);
 3. then comes `.`, `->`, or a run of field hops (each `.field` / `->field`), and the **final** member
@@ -596,11 +609,27 @@ Rewriting details:
   field) → `a.next.__t_vptr->m(&a.next)`;
 - nested calls inside arguments are processed recursively:
   `q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`;
+- **rvalue receivers** (condition 1′): the receiver is first hoisted into a temporary variable so it is
+  evaluated **exactly once**, then dispatched by the same rules above. The temporary is named
+  `__ct_tmp<N>` (`N` increments within a single file, starting at 0):
+  - returned by value: `f().m(a)` → the previous line `struct S __ct_tmp0 = f();`, this line
+    `__ct_tmp0.__t_vptr->m(&__ct_tmp0, a)`;
+  - returned by pointer: `mk()->m(a)` → the previous line `struct S *__ct_tmp0 = mk();`, this line
+    `__ct_tmp0->__t_vptr->m(__ct_tmp0, a)`.
+  - the hoist is allowed **only** in two positions: the receiver starts the **statement**
+    (`f().m();`), or it starts the right-hand side of an **assignment / declaration initialiser**
+    (`int r = f().m();`). In both, evaluation is unconditional and ordered, so hoisting to the previous
+    line does **not** change the semantics.
+  - in any other position (e.g. `x = 1 + f().m();`, `g(f().m());`) it cannot be rewritten without
+    changing evaluation order, so the compiler **reports `file:line:col: error:` and exits** instead of
+    emitting C that is known not to compile.
+  - the hoisted declaration keeps the source line's indentation; it occupies one line in the generated
+    `.c` and its `#line` mapping points back to the same source line.
 - content inside string literals, character literals and comments is **never rewritten**;
 - `self->m(...)` inside an `impl` body is rewritten by the same rule (see 4.3);
-- **the receiver expression is evaluated twice** (`ps[i]` appears twice in the output), so a subscript
-  with a side effect (`ps[i++]`) is not guaranteed correct; an rvalue receiver `make().m()` has the same
-  problem and is not supported yet (see roadmap 1.9b).
+- **only a variable-subscript receiver's expression is evaluated twice** (`ps[i]` appears twice in the
+  output), so a subscript with a side effect (`ps[i++]`) is not guaranteed correct; an rvalue receiver
+  (1′) uses a temporary and is evaluated once.
 
 #### 4.6 Ordinary function signatures → struct types qualified
 

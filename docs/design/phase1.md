@@ -9,12 +9,14 @@
 > `.h.ct` + `pub`、Drop/delete、`map`、JSON 诊断），本文不重复，只补**实现层面**的设计。
 > 第 6 节列出**实现层面的决策点**（D1–D8；已拍板的行标注「已定」，其余仍待定）。
 >
-> **落地进度（2026-10-11）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
+> **落地进度（2026-10-14）**：**1.0**（CLI 子命令 + `argv[0]` 分派）、**1.1**（namespace，含限定引用）、
 > **1.2**（多文件 `ct build`、`.c` 含自己的 `.h`、`pub` 路由）、**1.3**（`import A::B` 递归解析、
 > 跨单元符号累积、自动 `#include`）、**1.4**（堆创建 D1=A + `delete` 放宽 + **Drop**）、
 > **1.5**（`#line`，**D4=A**）、**1.6**（文件作用域对象 / 数组，**D5=A**：生成的构造器 `__ct_init`
-> 用 `__attribute__((constructor))` 在 `main` 前写 vptr）与 **1.7**（泄漏警告 + `--diagnostics=json`，
-> 首版范围见下）已实现，测试全绿（`./test/run.sh` 116/116、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
+> 用 `__attribute__((constructor))` 在 `main` 前写 vptr）、**1.7**（泄漏警告 + `--diagnostics=json`，
+> 首版范围见下）与 **1.9**（一般接收者：**1.9a** 变量下标 / 指针数组 / 指针字段链，**1.9b** 右值
+> 接收者 `f().m()` / `mk()->m()`，**Q1=A / Q2=A / Q3=A**）已实现，测试全绿（`./test/run.sh` 134/134、
+> `check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
 > 1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
 > 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 仍待定；
 > **D8 已定（用户 2026-10-14）：`map` + 反向映射表移出 Phase 1，排在 Phase 3 自举之后最后实现。**
@@ -71,7 +73,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
                ├─▶ 1.6 文件作用域对象数组
                └─▶ 1.7 泄漏警告 + JSON 诊断
 
-(可选) 1.9 一般接收者（自举前置 #6：make().m() / ps[i].m() / a.next->m()）
+1.9 一般接收者 ✅（自举前置 #6：1.9a 变量下标 / 指针数组 / 指针字段链；1.9b 右值接收者 make().m()）
 
 (移出) 1.8 map + 反向映射表 → Phase 3（D8，2026-10-14 拍板）
 ```
@@ -251,8 +253,14 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
   「指针数组元素」（`Person *ptrs[n]; ptrs[i]->m()`）与「指针字段链」（`b.who->m()`，逐跳按字段
   是否为指针决定 `.` / `->`）。指针字段记在**独立字段表**（`pfname` / `pftype` / `npf`），
   因此嵌套构造与 Drop 级联不会把借来的指针当成拥有的嵌套值。
-- **1.9b ⏳ 待定**：rvalue 接收者（`make().m()`）需临时变量提升，且要扩展签名表记录 struct 返回类型。
-- 遗留语义限制（已写入 language-spec）：接收者表达式被求值两次，带副作用的下标不保证正确。
+- **1.9b ✅ 已落地**：rvalue 接收者（`f().m()` / `mk()->m()` / `f().a.b.m()`）。`FuncSig` 新增
+  `retstruct`（返回类型是已知 struct 时的下标）与 `retptr`（该 struct 是否经指针返回）；命中的接收者
+  先提升为 `__ct_tmp<N>` 临时变量（值/指针两种形态），求值**一次**后再按既有规则派发。提升**只允许**
+  两种位置（**Q2=A**）：接收者位于语句行首，或赋值/声明初始化式的 RHS 行首——这两处求值无条件且有序，
+  提升到前一行不改语义；其它位置无法在不改变求值顺序下重写，**直接 `die`**（**Q3=A**），绝不产出
+  明知编不过的 C。`walk_method()` 从原变量接收者路径提炼，两种接收者共用同一跳转逻辑。
+- 遗留语义限制（已写入 language-spec）：**变量下标**接收者的表达式被求值两次，带副作用的下标不保证
+  正确（受支持的位置如 `ps[i].m()`）；rvalue 接收者用临时变量，只求值一次。
 
 ### 5. 数据模型改动（`ctc.c`）
 
@@ -355,7 +363,8 @@ never guessed).
                ├─▶ 1.6 file-scope object arrays
                └─▶ 1.7 leak warnings + JSON diagnostics
 
-(optional) 1.9 general receivers (prerequisite #6: make().m() / ps[i].m() / a.next->m())
+1.9 general receivers ✅ (prerequisite #6: 1.9a variable subscript / pointer array / pointer field
+    chain; 1.9b rvalue receiver make().m())
 
 (moved out) 1.8 map + reverse-mapping table → Phase 3 (D8, decided 2026-10-14)
 ```
@@ -584,10 +593,19 @@ chain) used to be passed through verbatim. It is one class of problem and can be
   (`b.who->m()`, each hop picking `.` or `->` from the field's kind). Pointer fields live in a
   **separate field table** (`pfname` / `pftype` / `npf`), so nested construction and the Drop cascade
   never treat a borrowed pointer as an owned nested value.
-- **1.9b ⏳ open**: rvalue receivers (`make().m()`) need temporary-variable promotion and an extension
-  of the signature table to record struct return types.
-- Remaining semantic limit (now in language-spec): the receiver expression is evaluated twice, so a
-  subscript with a side effect is not guaranteed correct.
+- **1.9b ✅ landed**: rvalue receivers (`f().m()` / `mk()->m()` / `f().a.b.m()`). `FuncSig` gains
+  `retstruct` (the index when the return type is a known struct) and `retptr` (whether that struct
+  comes back through a pointer); a hit receiver is first hoisted into a `__ct_tmp<N>` temporary
+  (value / pointer form), evaluated **once**, then dispatched by the existing rules. The hoist is
+  allowed in **only** two positions (**Q2=A**): the receiver starts the statement, or the right-hand
+  side of an assignment / declaration initialiser — both evaluate unconditionally and in order, so
+  hoisting a line up does not change semantics; any other position cannot be rewritten without
+  reordering evaluation and is a hard **`die`** (**Q3=A**), never emitting C that cannot compile.
+  `walk_method()` was extracted from the original variable-receiver path so both kinds share one hop
+  routine.
+- Remaining semantic limit (now in language-spec): a **variable-subscript** receiver's expression is
+  evaluated twice, so a subscript with a side effect is not guaranteed correct (even in a supported
+  position such as `ps[i].m()`); an rvalue receiver uses a temporary and is evaluated once.
 
 ### 5. Data-model changes (`ctc.c`)
 
