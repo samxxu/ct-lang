@@ -910,33 +910,54 @@ static void emit_struct_def(FILE *f, const Struct *S, const char *body, size_t s
     line_break();
 }
 
-/* does the body call a sibling method, i.e. `self->m(` for a used trait method? */
-static int body_calls_sibling(size_t bstart, size_t blen, const Struct *S)
+/* does any declared trait have a method named `m`? */
+static int is_any_trait_method(const char *m)
+{
+    int i;
+    for (i = 0; i < g_ntraits; i++)
+        if (trait_has_method(&g_traits[i], m)) return 1;
+    return 0;
+}
+
+/* Does the body contain a call that will become a vtable dispatch? Any `.m(` /
+   `->m(` whose `m` names a declared trait method counts. When it does, the
+   impl's vtable variable must be declared before the method bodies, because
+   the bodies now reference it (a tentative definition, defined again below).
+   Another struct's vtable is visible as long as its impl comes earlier, which
+   is the ordinary C definition-before-use rule. */
+static int body_needs_vtable(size_t bstart, size_t blen)
 {
     size_t i = bstart, end = bstart + blen;
+
     while (i < end) {
         char c = g_src[i];
-        if (c == '"' || c == '\'') { size_t j = skip_literal(i); i = (j > end) ? end : j; continue; }
+        if (c == '"' || c == '\'') {
+            size_t j = skip_literal(i);
+            i = (j > end) ? end : j;
+            continue;
+        }
         if (c == '/' && i + 1 < end &&
             (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
-            size_t j = skip_comment(i); i = (j > end) ? end : j; continue;
+            size_t j = skip_comment(i);
+            i = (j > end) ? end : j;
+            continue;
         }
-        if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
-            size_t j = i;
-            while (j < end && is_ident_char((unsigned char)g_src[j])) j++;
-            if (j - i == 4 && memcmp(g_src + i, "self", 4) == 0 &&
-                j + 2 < end && g_src[j] == '-' && g_src[j + 1] == '>') {
-                size_t ms = j + 2, e = ms, ml;
-                char mem[MAX_NAME];
-                while (e < end && is_ident_char((unsigned char)g_src[e])) e++;
-                ml = e - ms;
-                if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
-                    memcpy(mem, g_src + ms, ml);
-                    mem[ml] = 0;
-                    if (resolve_method(S, mem)) return 1;
-                }
+        if (c == '.' || c == '-') {
+            size_t ms = (c == '.') ? i + 1 : i + 2;
+            size_t e, ml;
+            char mem[MAX_NAME];
+            if (c == '-') {
+                if (i + 1 >= end || g_src[i + 1] != '>') { i++; continue; }
             }
-            i = j;
+            e = ms;
+            while (e < end && is_ident_char((unsigned char)g_src[e])) e++;
+            ml = e - ms;
+            if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
+                memcpy(mem, g_src + ms, ml);
+                mem[ml] = 0;
+                if (is_any_trait_method(mem)) return 1;
+            }
+            i = (e > i) ? e : i + 1;
             continue;
         }
         i++;
@@ -944,64 +965,51 @@ static int body_calls_sibling(size_t bstart, size_t blen, const Struct *S)
     return 0;
 }
 
-/* `self` -> `_self`; `self->m(...)` -> `_self->__<trait>_vptr->m(_self, ...)`.
-   Strings and comments are copied verbatim. */
-static void replace_self(size_t bstart, size_t blen, const Struct *S, Buf *out)
+/* Entry points of the shared rewriting pipeline, defined further down but used
+   by emit_body (impl method bodies go through the very same passes). */
+static size_t line_literal_end(const char *s, size_t i, size_t n);
+static const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified);
+static char *transform_line(const char *line);
+static void scope_track(size_t ls, size_t le);
+static void emit_hoisted(void);
+
+/* `self` -> `_self` for one line. Method dispatch (`self->m(...)`,
+   `self->field->m(...)`, local and parameter receivers) is no longer special
+   here: the body runs through transform_calls first, with `self` registered as
+   a pointer to the current struct, so every call dispatches exactly as it
+   would at file scope. This pass only renames the identifier. Strings and
+   comments are copied verbatim. */
+static void replace_self(const char *s, size_t n, Buf *out)
 {
-    size_t i = bstart, end = bstart + blen;
-    while (i < end) {
-        char c = g_src[i];
+    size_t i = 0;
+    while (i < n) {
+        char c = s[i];
         if (c == '"' || c == '\'') {
-            size_t j = skip_literal(i);
-            if (j > end) j = end;
-            buf_putn(out, g_src + i, j - i);
+            size_t j = line_literal_end(s, i, n);
+            buf_putn(out, s + i, j - i);
             i = j;
             continue;
         }
-        if (c == '/' && (i + 1 < end) &&
-            (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
-            size_t j = skip_comment(i);
-            if (j > end) j = end;
-            buf_putn(out, g_src + i, j - i);
+        if (c == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*')) {
+            size_t j;
+            if (s[i + 1] == '/') {
+                j = n;
+            } else {
+                j = i + 2;
+                while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
+                j = (j + 1 < n) ? j + 2 : n;
+            }
+            buf_putn(out, s + i, j - i);
             i = j;
             continue;
         }
         if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
             size_t j = i;
-            while (j < end && is_ident_char((unsigned char)g_src[j])) j++;
-            if (j - i == 4 && memcmp(g_src + i, "self", 4) == 0) {
-                if (j + 2 < end && g_src[j] == '-' && g_src[j + 1] == '>') {
-                    size_t ms = j + 2, e = ms, ml;
-                    char mem[MAX_NAME], low[MAX_NAME];
-                    const char *tr;
-                    while (e < end && is_ident_char((unsigned char)g_src[e])) e++;
-                    ml = e - ms;
-                    if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
-                        size_t z = e + 1;
-                        int empty;
-                        memcpy(mem, g_src + ms, ml);
-                        mem[ml] = 0;
-                        tr = resolve_method(S, mem);
-                        while (z < end && isspace((unsigned char)g_src[z])) z++;
-                        empty = (z < end && g_src[z] == ')');
-                        if (tr) {
-                            to_lower(tr, low);
-                            buf_puts(out, "_self->__");
-                            buf_puts(out, low);
-                            buf_puts(out, "_vptr->");
-                            buf_puts(out, mem);
-                            buf_putc(out, '(');
-                            buf_puts(out, "_self");
-                            if (!empty) buf_puts(out, ", ");
-                            i = e + 1;
-                            continue;
-                        }
-                    }
-                }
+            while (j < n && is_ident_char((unsigned char)s[j])) j++;
+            if (j - i == 4 && memcmp(s + i, "self", 4) == 0)
                 buf_puts(out, "_self");
-            } else {
-                buf_putn(out, g_src + i, j - i);
-            }
+            else
+                buf_putn(out, s + i, j - i);
             i = j;
             continue;
         }
@@ -1010,19 +1018,79 @@ static void replace_self(size_t bstart, size_t blen, const Struct *S, Buf *out)
     }
 }
 
-/* re-indent a method body: drop the shared indentation, use 4 spaces */
-static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S)
+/* Register the impl method's parameters so that calls on them dispatch inside
+   the body, exactly like a top-level function's parameters do. Only parameters
+   declared with a known struct type (by value or by pointer) are registered. */
+static void register_body_params(const char *params)
 {
-    Buf r;
-    size_t i, j, n;
-    size_t bl_first = line_of(bstart);   /* source line of body line 0 */
+    const char *p = params;
+    while (p && *p) {
+        const char *c = strchr(p, ',');
+        const char *end = c ? c : p + strlen(p);
+        char piece[MAX_PARAM];
+        char cname[MAX_NAME], name[MAX_NAME];
+        const char *after, *q;
+        Struct *ST;
+        size_t plen = (size_t)(end - p);
+        int qual = 0;
+
+        if (plen >= sizeof piece) plen = sizeof piece - 1;
+        memcpy(piece, p, plen);
+        piece[plen] = 0;
+        trim(piece);
+
+        q = piece;
+        while (*q == ' ' || *q == '\t') q++;
+        if (strncmp(q, "struct", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
+            q += 6;
+            while (*q == ' ' || *q == '\t') q++;
+        }
+        after = read_qual_ref(q, cname, name, &qual);
+        ST = after ? (qual ? find_struct_c(cname) : find_struct(name)) : NULL;
+        if (ST) {
+            int isptr = 0;
+            q = after;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '*') {
+                isptr = 1;
+                while (*q == '*' || *q == ' ' || *q == '\t') q++;
+            }
+            if (is_ident_char((unsigned char)*q) && !isdigit((unsigned char)*q)) {
+                char pv[MAX_NAME];
+                int pk = copy_ident(q, pv, 0);
+                pv[pk] = 0;
+                if (pk) {
+                    int vi = new_var();
+                    snprintf(g_vars[vi].name, MAX_NAME, "%s", pv);
+                    g_vars[vi].s = (int)(ST - g_structs);
+                    g_vars[vi].ptr = isptr;
+                    g_vars[vi].arr = 0;
+                    g_vars[vi].iface = 0;
+                    g_vars[vi].tr = -1;
+                }
+            }
+        }
+        p = c ? c + 1 : end;
+    }
+}
+
+/* Emit an impl method body. The body runs through the same rewriting pipeline
+   as top-level code: `self` is registered as a pointer to `S` and the method's
+   parameters are registered, so local receivers, parameter receivers, field
+   chains and rvalue receivers all dispatch. Only the identifier naming differs:
+   calls are rewritten first (`self->m()` becomes `self->__<trait>_vptr->m(self)`),
+   then `self` is renamed to `_self`. */
+static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params)
+{
+    size_t i, j, n = blen;
     int minind = 1 << 30;
     size_t *ls, *le;
     int nlines = 0, first = -1, last = -1, k;
-
-    buf_init(&r);
-    replace_self(bstart, blen, S, &r);
-    n = r.n;
+    int saved_nvars = g_nvars, saved_nscope = g_nscope;
+    size_t saved_body_abs = g_body_abs;
+    int saved_body_pre = g_body_pre;
+    size_t saved_cur_line = g_cur_line, saved_line_off = g_line_off;
+    int vi;
 
     ls = xmalloc(sizeof(size_t) * (n + 2));
     le = xmalloc(sizeof(size_t) * (n + 2));
@@ -1030,17 +1098,17 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S)
     i = 0;
     while (i < n) {
         j = i;
-        while (j < n && r.p[j] != '\n') j++;
-        ls[nlines] = i;
-        le[nlines] = j;
+        while (j < n && g_src[bstart + j] != '\n') j++;
+        ls[nlines] = bstart + i;
+        le[nlines] = bstart + j;
         nlines++;
         i = j + 1;
-        if (j == n) break;
+        if (j >= n) break;
     }
 
     for (k = 0; k < nlines; k++) {
         size_t t = ls[k];
-        while (t < le[k] && (r.p[t] == ' ' || r.p[t] == '\t')) t++;
+        while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
         if (t < le[k]) {
             int ind = (int)(t - ls[k]);
             if (ind < minind) minind = ind;
@@ -1049,24 +1117,70 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S)
         }
     }
 
-    if (first < 0) { free(ls); free(le); free(r.p); return; }
+    if (first < 0) { free(ls); free(le); return; }
     if (minind == 1 << 30) minind = 0;
+
+    /* the body sees only its own locals, never the surrounding file scope */
+    g_nvars = 0;
+    g_nscope = 0;
+    g_body_abs = 0;
+    vi = new_var();
+    snprintf(g_vars[vi].name, MAX_NAME, "self");
+    g_vars[vi].s = (int)(S - g_structs);
+    g_vars[vi].ptr = 1;
+    g_vars[vi].arr = 0;
+    g_vars[vi].iface = 0;
+    g_vars[vi].tr = -1;
+    register_body_params(params);
+    if (!g_hoist.cap) buf_init(&g_hoist);
 
     line_break();   /* anchor: the first body line always carries a #line */
     for (k = first; k <= last; k++) {
-        size_t t = ls[k];
-        while (t < le[k] && (r.p[t] == ' ' || r.p[t] == '\t')) t++;
-        line_at(f, bl_first + (size_t)k);
-        if (t >= le[k]) { fputc('\n', f); continue; }
-        fputs("    ", f);
-        fwrite(r.p + ls[k] + minind, 1, le[k] - ls[k] - minind, f);
-        fputc('\n', f);
+        size_t t = ls[k], content;
+        char *line, *out;
+        Buf sb;
+
+        g_cur_line = line_of(ls[k]);
+        g_line_off = ls[k];
+        g_hoist.n = 0;
+        g_hoist.p[0] = 0;
+
+        while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+        if (t >= le[k]) { fputc('\n', f); scope_track(ls[k], le[k]); continue; }
+
+        content = ls[k] + (size_t)minind;
+        line = xstrndup(g_src + content, le[k] - content);
+        out = transform_line(line);
+        if (g_hoist.n == 0) line_at(f, g_cur_line);
+        else emit_hoisted();
+        buf_init(&sb);
+        replace_self(out, strlen(out), &sb);
+        {
+            size_t p2 = 0;
+            while (p2 < sb.n) {
+                size_t q2 = p2;
+                while (q2 < sb.n && sb.p[q2] != '\n') q2++;
+                fputs("    ", f);
+                fwrite(sb.p + p2, 1, q2 - p2, f);
+                fputc('\n', f);
+                p2 = (q2 < sb.n) ? q2 + 1 : q2;
+            }
+        }
+        free(line);
+        free(out);
+        free(sb.p);
+        scope_track(ls[k], le[k]);
     }
     line_break();
 
+    g_nvars = saved_nvars;
+    g_nscope = saved_nscope;
+    g_body_abs = saved_body_abs;
+    g_body_pre = saved_body_pre;
+    g_cur_line = saved_cur_line;
+    g_line_off = saved_line_off;
     free(ls);
     free(le);
-    free(r.p);
 }
 
 /* ------------------------------------------------------- construct parsers */
@@ -1419,7 +1533,7 @@ static size_t parse_impl(size_t p)
     {
         int needs_vtable = 0;
         for (k = 0; k < (size_t)nimpl; k++)
-            if (body_calls_sibling(impl[k].bstart, impl[k].blen, S)) { needs_vtable = 1; break; }
+            if (body_needs_vtable(impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
         if (needs_vtable) {
             line_at(g_out, dline);
             fprintf(g_out, "static struct %s_vtbl %s_%s_vtable;\n\n",
@@ -1443,7 +1557,7 @@ static size_t parse_impl(size_t p)
         if (tm->nparams > 0) fprintf(g_out, ", %s", impl[idx].params);
         fprintf(g_out, ") {\n");
         fprintf(g_out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
-        emit_body(g_out, impl[idx].bstart, impl[idx].blen, S);
+        emit_body(g_out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
         fprintf(g_out, "}\n\n");
         line_break();
     }
@@ -3122,7 +3236,7 @@ static void emit_drop_bodies(FILE *f)
         else
             fprintf(f, "    (void)self;\n");
         if (S->has_user_drop) {
-            emit_body(f, S->drop_bstart, S->drop_blen, S);
+            emit_body(f, S->drop_bstart, S->drop_blen, S, "");
         } else {
             for (h = 0; h < S->nf; h++) {
                 const Struct *F = &g_structs[S->ftype[h]];
