@@ -364,6 +364,71 @@ else
     fi
 fi
 
+# A method body is rewritten by an independent string pass (`replace_self`) that
+# only understands `self` and `self->m(...)`: a local variable receiver and an
+# rvalue receiver inside an impl body are left alone. Pinned here so that a fix
+# (or a regression) shows up rather than silently emitting broken C.
+cat >"$TMP/bodyrecv.ct" <<'EOF'
+#include <stdio.h>
+trait G { void greet(); void run(); }
+struct P { char *name; } use G;
+impl G for P {
+    void greet() { printf("hi %s\n", self->name); }
+    void run() {
+        struct P q = { .name = "Q" };
+        q.greet();
+    }
+}
+int main(void){ struct P p = { .name = "Z" }; p.run(); return 0; }
+EOF
+if ! "$TMP/ctc" "$TMP/bodyrecv.ct" -o "$TMP/bodyrecv.c" 2>"$TMP/bodyrecv.err"; then
+    bad "limits/body-local-receiver" "expected exit 0 (limitation), got non-zero: $(cat "$TMP/bodyrecv.err")"
+else
+    if grep -Fq 'q.greet();' "$TMP/bodyrecv.c"; then
+        ok "limits/a local receiver inside a method body is passed through unrewritten (known limitation)"
+    else
+        bad "limits/body-local-receiver" "expected 'q.greet();' verbatim; rewriting may now be implemented"
+    fi
+    if $CC $CFLAGS -c "$TMP/bodyrecv.c" -o "$TMP/bodyrecv.o" 2>/dev/null; then
+        bad "limits/body-local-receiver-cc" "expected the un-rewritten output NOT to compile"
+    else
+        ok "limits/body-local receiver output does not compile (consequence of the limitation)"
+    fi
+fi
+
+# Same line-based rule, for the two forms the oneline case above does not cover:
+# interface boxing and an rvalue receiver sharing their line with the construct.
+cat >"$TMP/oneline_box.ct" <<'EOF'
+#include <stdio.h>
+trait G { void greet(); }
+struct P { char *name; } use G;
+impl G for P { void greet() { printf("hi %s\n", self->name); } }
+void announce(G g);
+int main(void){ struct P p = { .name = "B" }; announce(p); return 0; }
+EOF
+if "$TMP/ctc" "$TMP/oneline_box.ct" -o "$TMP/oneline_box.c" 2>"$TMP/oneline_box.err" \
+        && grep -Fq 'announce(p)' "$TMP/oneline_box.c" \
+        && ! grep -Fq 'G_iface)' "$TMP/oneline_box.c"; then
+    ok "limits/a one-line interface argument is passed through unboxed (known limitation)"
+else
+    bad "limits/oneline-box" "expected 'announce(p)' verbatim and no boxing"
+fi
+
+cat >"$TMP/oneline_rval.ct" <<'EOF'
+#include <stdio.h>
+trait G { void greet(); }
+struct P { char *name; } use G;
+struct P mk(void) { struct P p = { .name = "A" }; return p; }
+impl G for P { void greet() { printf("hi %s\n", self->name); } }
+int main(void){ mk().greet(); return 0; }
+EOF
+if "$TMP/ctc" "$TMP/oneline_rval.ct" -o "$TMP/oneline_rval.c" 2>"$TMP/oneline_rval.err" \
+        && grep -Fq 'mk().greet();' "$TMP/oneline_rval.c"; then
+    ok "limits/a one-line rvalue receiver is passed through unrewritten (known limitation)"
+else
+    bad "limits/oneline-rval" "expected 'mk().greet();' verbatim; rewriting may now be implemented"
+fi
+
 # ------------------------------------------------------------------ cli
 echo
 echo "== cli =="
@@ -407,6 +472,39 @@ cli_expect build-version zero "ctc v" build --version
 cli_expect help-diagnostics zero "--diagnostics" --help
 cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o /nonexistent-dir/x.c
 cli_expect short-read nonzero "short read" "$TMP"
+
+# the header write is a separate failure site from the .c write above: make the
+# same-named .h path a directory so the header open fails
+mkdir -p "$TMP/hdr/x.h"
+printf 'int main(void){ return 0; }\n' >"$TMP/hdr/x.ct"
+if "$TMP/ctc" "$TMP/hdr/x.ct" -o "$TMP/hdr/x.c" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
+    bad "cli/cannot-write-header" "expected a non-zero exit"
+elif grep -Fq "cannot write" "$TMP/cli.err"; then
+    ok "cli/cannot-write-header"
+else
+    bad "cli/cannot-write-header" "wrong message: $(cat "$TMP/cli.err")"
+fi
+
+# `ct build` output path overflow: an existing directory long enough that
+# outdir + '/' + unit + ".c" exceeds MAX_NAME * 4
+mkdir -p "$TMP/opl"
+LONGDIR="$TMP/opl"
+for _i in 1 2 3 4 5 6 7 8 9 10; do
+    LONGDIR="$LONGDIR/dddddddddddddddddddddddddddddddddddddddddddddddd"
+done
+LONGDIR="$LONGDIR/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+printf 'struct S { int x; };\nint main(void){ return 0; }\n' >"$TMP/opl/g.ct"
+if mkdir -p "$LONGDIR"; then
+    if "$TMP/ctc" build "$TMP/opl/g.ct" -o "$LONGDIR" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
+        bad "cli/output-path-too-long" "expected a non-zero exit"
+    elif grep -Fq "output path too long" "$TMP/cli.err"; then
+        ok "cli/output-path-too-long"
+    else
+        bad "cli/output-path-too-long" "wrong message: $(cat "$TMP/cli.err")"
+    fi
+else
+    bad "cli/output-path-too-long" "could not create a long enough directory"
+fi
 
 mkdir -p "$TMP/imp17" "$TMP/imp17out"
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do
