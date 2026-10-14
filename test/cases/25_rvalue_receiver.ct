@@ -1,0 +1,56 @@
+// 25_rvalue_receiver.ct — rvalue receivers (Phase 1.9b): a struct returned by a
+// call, by value or by pointer, and after a field hop, dispatches normally. The
+// receiver value is hoisted into a temp so it is evaluated exactly once.
+// License: MIT; see LICENSE.EXCEPTION
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Greeter {
+    void greet();
+    int bumps(int n);
+}
+
+struct Person {
+    char *name;
+    int age;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hi %s\n", self->name);
+    }
+    int bumps(int n) {
+        return self->age + n;
+    }
+}
+
+struct Box {
+    Person inner;
+};
+
+Person make_person() {
+    Person p = { .name = "A", .age = 7 };
+    return p;
+}
+
+Person *make_ptr() {
+    Person *p = malloc(sizeof(struct Person));
+    p->name = "B";
+    p->age = 3;
+    return p;
+}
+
+Box make_box() {
+    Box b = { .inner = { .name = "C", .age = 5 } };
+    return b;
+}
+
+int main() {
+    make_person().greet();
+    make_ptr()->greet();
+    int total = make_ptr()->bumps(2);
+    printf("total %d\n", total);
+    int inner = make_box().inner.bumps(1);
+    printf("inner %d\n", inner);
+    return 0;
+}

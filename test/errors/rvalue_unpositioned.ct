@@ -1,0 +1,23 @@
+trait Greeter {
+    int bumps(int n);
+}
+
+struct Person {
+    int age;
+} use Greeter;
+
+impl Greeter for Person {
+    int bumps(int n) {
+        return self->age + n;
+    }
+}
+
+Person make_person() {
+    Person p = { .age = 7 };
+    return p;
+}
+
+int main(void) {
+    int x = 1 + make_person().bumps(2);
+    return x;
+}
