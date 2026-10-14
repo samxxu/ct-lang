@@ -15,8 +15,9 @@
 > **1.5**（`#line`，**D4=A**）、**1.6**（文件作用域对象 / 数组，**D5=A**：生成的构造器 `__ct_init`
 > 用 `__attribute__((constructor))` 在 `main` 前写 vptr）、**1.7**（泄漏警告 + `--diagnostics=json`，
 > 首版范围见下）与 **1.9**（一般接收者：**1.9a** 变量下标 / 指针数组 / 指针字段链，**1.9b** 右值
-> 接收者 `f().m()` / `mk()->m()`，**Q1=A / Q2=A / Q3=A**）已实现，测试全绿（`./test/run.sh` 134/134、
-> `check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**，**D-A = 方案 A**（`ct build` 不调用 `cc`）。
+> 接收者 `f().m()` / `mk()->m()`，**1.9c** 方法体接入同一重写管线，**Q1=A / Q2=A / Q3=A**）已实现，
+> 测试全绿（`./test/run.sh` 140/140、`check-grammar.py` 19/19）。落地时采用 **D2 = 是**、**D3 = 是**、
+> **D-A = 方案 A**（`ct build` 不调用 `cc`）。
 > 1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
 > 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 仍待定；
 > **D8 已定（用户 2026-10-14）：`map` + 反向映射表移出 Phase 1，排在 Phase 3 自举之后最后实现。**
@@ -73,7 +74,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
                ├─▶ 1.6 文件作用域对象数组
                └─▶ 1.7 泄漏警告 + JSON 诊断
 
-1.9 一般接收者 ✅（自举前置 #6：1.9a 变量下标 / 指针数组 / 指针字段链；1.9b 右值接收者 make().m()）
+1.9 一般接收者 ✅（自举前置 #6：1.9a 变量下标 / 指针数组 / 指针字段链；1.9b 右值接收者 make().m()；1.9c impl 方法体接入同一重写管线）
 
 (移出) 1.8 map + 反向映射表 → Phase 3（D8，2026-10-14 拍板）
 ```
@@ -225,7 +226,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 > （符号表 / 调用图另开子项）；**Q2=B** 不实现抑制语法（`#[allow(leak)]` 留待有需求再加）；**Q3=A** 判定保守：
 > 清除时机 = `delete p` / `return p` / `p` 被赋给非自身左值（近似逃逸）。实现要点：`Var` 增 `owned`/`own_line`；
 > 在 1.4 的创建点标记；`leak_observe()`（行级）与 `scope_track()` 的 `}` 回滚处检查；警告收集后一次性输出。
-> 只覆盖普通函数体（方法体不经行重写）、只覆盖 ct-struct 堆对象。退出码始终 0。测试见 run.sh 的 `warnings` 层。
+> 只覆盖普通函数体（`impl` 方法体不在内）、只覆盖 ct-struct 堆对象。退出码始终 0。测试见 run.sh 的 `warnings` 层。
 
 - **泄漏（简单版）**：由 1.4 的创建点标记**局部 owned 堆对象**；`delete` / `return` / 逃离作用域
   （赋给字段或全局）即清除；作用域（`}`）结束仍 owned → 警告（**不终止**）。抑制语法本版未做。路径敏感版归 Phase 2。
@@ -261,6 +262,15 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
   明知编不过的 C。`walk_method()` 从原变量接收者路径提炼，两种接收者共用同一跳转逻辑。
 - 遗留语义限制（已写入 language-spec）：**变量下标**接收者的表达式被求值两次，带副作用的下标不保证
   正确（受支持的位置如 `ps[i].m()`）；rvalue 接收者用临时变量，只求值一次。
+- **1.9c ✅ 已落地（2026-10-14，最小可自举版的关键一步）**：`impl` 方法体接入与顶层完全相同的重写
+  管线。此前方法体走独立的字符串替换 `replace_self()`，只认 `self` 与 `self->m()`，**不登记局部
+  变量**，于是方法体内的 `self->lhs->emit()`（字段链递归）、参数接收者 `o->m()`、局部变量接收者
+  `q.m()` 都原样透传 → 单文件自举时 AST 递归遍历编译不过。现在 `emit_body` 先登记 `self` 与 impl
+  方法参数（新增 `register_body_params()`），逐行调用 `transform_line()`（`try_var_decl` /
+  `transform_calls` 等全部生效），最后只做标识符级的 `self → _self` 重命名；派发检测由
+  `body_calls_sibling()` 放宽为 `body_needs_vtable()`（任一 trait 方法名出现在 `.m(` / `->m(` 即
+  触发 vtable 前向声明）。**1.9c 之后，单文件 + 完全 OO 已具备自举能力**（跨单元引用带 trait 的对象
+  仍是多文件自举的唯一硬阻塞，单文件路径不需要它）。
 
 ### 5. 数据模型改动（`ctc.c`）
 
@@ -364,7 +374,7 @@ never guessed).
                └─▶ 1.7 leak warnings + JSON diagnostics
 
 1.9 general receivers ✅ (prerequisite #6: 1.9a variable subscript / pointer array / pointer field
-    chain; 1.9b rvalue receiver make().m())
+    chain; 1.9b rvalue receiver make().m(); 1.9c impl method bodies share the same pipeline)
 
 (moved out) 1.8 map + reverse-mapping table → Phase 3 (D8, decided 2026-10-14)
 ```
@@ -556,7 +566,7 @@ moved to Phase 3 and is no longer part of this phase.
 > detection: cleared on `delete p` / `return p` / `p` assigned to a non-self lvalue (approximate
 > escape). Implementation: `Var` gains `owned`/`own_line`; ownership is set at 1.4's creation point;
 > `leak_observe()` (per line) and the `}` rollback in `scope_track()` do the checking; warnings are
-> collected and printed once. Ordinary function bodies only (method bodies are not line-rewritten) and
+> collected and printed once. Ordinary function bodies only (`impl` method bodies are out of scope) and
 > ct-struct heap objects only. The exit code is always 0. Covered by run.sh's `warnings` layer.
 
 - **Leak (simple version)**: mark **local owned heap objects** at 1.4's creation points; `delete` /
@@ -606,6 +616,18 @@ chain) used to be passed through verbatim. It is one class of problem and can be
 - Remaining semantic limit (now in language-spec): a **variable-subscript** receiver's expression is
   evaluated twice, so a subscript with a side effect is not guaranteed correct (even in a supported
   position such as `ps[i].m()`); an rvalue receiver uses a temporary and is evaluated once.
+- **1.9c ✅ landed (2026-10-14, the key step toward the minimal self-hostable version)**: `impl` method
+  bodies join the very same pipeline as top-level code. Previously a body went through a standalone
+  string substitution `replace_self()` that understood only `self` and `self->m()` and **did not
+  register local variables**, so `self->lhs->emit()` (a recursive field chain), a parameter receiver
+  `o->m()` and a body-local `q.m()` all passed through verbatim — a single-file self-hosted AST walk
+  would not compile. Now `emit_body` first registers `self` and the impl's parameters (new
+  `register_body_params()`) and feeds every body line to `transform_line()` (so `try_var_decl` /
+  `transform_calls` apply in full), then only renames the identifier `self` to `_self`; dispatch
+  detection was widened from `body_calls_sibling()` to `body_needs_vtable()` (any trait method name
+  appearing as `.m(` / `->m(` triggers the vtable forward declaration). **After 1.9c a single-file,
+  fully-OO program is self-hostable** (cross-unit references to trait-bearing objects remain the only
+  blocker for the multi-file path, which single-file bootstrap does not need).
 
 ### 5. Data-model changes (`ctc.c`)
 

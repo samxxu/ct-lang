@@ -71,6 +71,8 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `p.greet();` | `p.__greeter_vptr->greet(&p);` |
 | `Person *q = &p; q->greet();` | `struct Person *q = &p; q->__greeter_vptr->greet(q);` |
 | 方法体内 `self->other();` | `_self->__greeter_vptr->other(_self);`（并在方法函数前补一行 vtable 前向声明） |
+| 方法体内 `self->who->greet();` | `_self->who->__greeter_vptr->greet(_self->who);`（字段链递归） |
+| 方法体内参数 `o` / 局部变量 `q` 上的 `o->greet();`、`q.greet();` | `o->__greeter_vptr->greet(o);`、`q.__greeter_vptr->greet(&q);`（方法体与顶层代码走同一重写管线） |
 | 函数签名 `void f(Person p)` / `Person *q` | `void f(struct Person p)` / `struct Person *q`（参数登记后，体内 `p.greet()` / `q->greet()` 照常重写） |
 | `static Person mk(char *n)` | `static struct Person mk(char *n)` |
 | `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
@@ -100,7 +102,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 细节约定：
 
-- **`self` 是隐式参数**。方法体内 `self->field` 会被改写为 `_self->field`，兄弟方法调用 `self->other()` 会被改写为 `_self->__<trait>_vptr->other(_self, …)`；生成的函数第一行固定插入 `struct <Struct> *_self = (struct <Struct> *)self;`。
+- **`self` 是隐式参数**。方法体与顶层代码走**同一重写管线**：先登记 `self`（指向当前 struct 的指针）与方法参数，再逐行改写，最后把标识符 `self` 重命名为 `_self`。因此 `self->field` → `_self->field`、兄弟调用 `self->other()` → `_self->__<trait>_vptr->other(_self, …)`，字段链 `self->who->m()`、方法参数 `o->m()`、方法体内局部变量 `q.m()` 也都照常派发；生成的函数第一行固定插入 `struct <Struct> *_self = (struct <Struct> *)self;`。
 - **调用方传值地址**。`p.greet(1)` → `p.__greeter_vptr->greet(&p, 1)`，`&p` 由编译器自动补上；指针接收者 `p->greet(1)` → `p->__greeter_vptr->greet(p, 1)`，不再补 `&`。
 - **多 trait**：`use Greeter, Counter;` 合法，每个 trait 生成一个 vptr 字段；方法名冲突时按 `use` 中的书写顺序取第一个匹配。
 - **初始化列表**：指定初始化、位置式初始化、空列表都会在 `}` 前追加 vptr 项；无初始化式的声明 `Person p;` 会被补成 `struct Person p = { .__<trait>_vptr = &… };`。
@@ -218,7 +220,7 @@ test/
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
 
-当前 18 个正例（单 trait、多 trait + 嵌套调用、透传与字面量保护、签名形态、变量声明、跨 trait 方法名冲突、位置式初始化、方法体内互调、指针接收者、无初始化式声明、值参数、指针参数、函数签名类型、跨函数同名作用域、组合、数组、堆对象、接口多态）、2 个示例与 6 个负例，合计 28 项。
+当前 26 个 golden 正例（`test/cases`）、5 个端到端示例（`examples`）与 63 个负例诊断用例（`test/errors`），另加 unit / multifile / import / `#line` / warnings / limits / cli 等分层断言。
 
 `test/cases/*.expected.*` 是 golden 基线，**只能**用 `./ctc <case>.ct -o <case>.expected.c` 重新生成后人工核对，禁止手写；`examples/**/*.expected.out` 同理（见 [AGENTS.md](AGENTS.md) 第 6 节）。`test/cases/01_trait_basic.ct` 与 `examples/01_greeter/greeter.ct` 内容相同，但前者做生成物逐字节比对、后者做运行结果比对，两者互补。
 
@@ -365,6 +367,8 @@ Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:lin
 | `p.greet();` | `p.__greeter_vptr->greet(&p);` |
 | `Person *q = &p; q->greet();` | `struct Person *q = &p; q->__greeter_vptr->greet(q);` |
 | `self->other();` inside a method body | `_self->__greeter_vptr->other(_self);` (plus a vtable forward declaration before the method functions) |
+| `self->who->greet();` inside a method body | `_self->who->__greeter_vptr->greet(_self->who);` (recursive field chain) |
+| `o->greet();` / `q.greet();` on a method-body parameter `o` or local `q` | `o->__greeter_vptr->greet(o);` / `q.__greeter_vptr->greet(&q);` (bodies share the top-level pipeline) |
 | signature `void f(Person p)` / `Person *q` | `void f(struct Person p)` / `struct Person *q` (with the parameter registered, so `p.greet()` / `q->greet()` inside the body is rewritten) |
 | `static Person mk(char *n)` | `static struct Person mk(char *n)` |
 | `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
@@ -394,9 +398,13 @@ Naming rules:
 
 Additional rules:
 
-- **`self` is an implicit parameter.** Inside a method body `self->field` is rewritten to
-  `_self->field` and a sibling call `self->other()` to `_self->__<trait>_vptr->other(_self, …)`; the
-  generated function always starts with `struct <Struct> *_self = (struct <Struct> *)self;`.
+- **`self` is an implicit parameter.** A method body goes through the **same rewriting pipeline as
+  top-level code**: `self` (a pointer to the current struct) and the method parameters are registered
+  first, then every line is rewritten, and finally the identifier `self` is renamed to `_self`. Hence
+  `self->field` → `_self->field`, a sibling call `self->other()` →
+  `_self->__<trait>_vptr->other(_self, …)`, and a field chain `self->who->m()`, a parameter `o->m()` or
+  a body-local `q.m()` all dispatch; the generated function always starts with
+  `struct <Struct> *_self = (struct <Struct> *)self;`.
 - **Callers pass the address.** `p.greet(1)` becomes `p.__greeter_vptr->greet(&p, 1)`; a pointer
   receiver `p->greet(1)` becomes `p->__greeter_vptr->greet(p, 1)` — no `&` is added.
 - **Multiple traits** are allowed: `use Greeter, Counter;` adds one vptr field per trait. If two traits
@@ -538,12 +546,9 @@ Five layers of assertions:
 | examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
 
-Currently 18 golden positives (single trait, multiple traits with nested calls, pass-through with
-literal/comment protection, signature shapes, declarations, a method-name collision across traits,
-positional initialisers, calls between methods, pointer receivers, a declaration without an
-initialiser, value parameters, pointer parameters, signature struct types, cross-function name
-scoping, composition, arrays, heap objects and interface polymorphism), 2 examples and 6 negatives —
-28 checks in total.
+Currently 26 golden positives (`test/cases`), 5 end-to-end examples (`examples`) and 63 negative
+diagnostic cases (`test/errors`), plus layered assertions for unit / multifile / import / `#line` /
+warnings / limits / cli.
 
 `test/cases/*.expected.*` are golden baselines: regenerate them with
 `./ctc <case>.ct -o <case>.expected.c` and review the result — never hand-write them. The same rule

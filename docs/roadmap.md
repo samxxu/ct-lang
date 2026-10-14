@@ -229,6 +229,11 @@ map trait Controller for instance huart1 {
 
 - **渐进自举**：L0（C 写的最简 trait 编译器，即今天的 `ctc.c`）→ L1（CT trait-only 子集写的基础编译器）→ L2（全特性 CT 写的完整编译器）。
 - **Phase 0–2 边界**：`ctc.c` 留在仓库根目录、保持单文件（2026-10-11 用户确认）；不建 `src/`、不拆分。
+- **最小可自举版（2026-10-14 用户确认）**：优先用**单文件**（不用 namespace / `import` / 多文件）达成自举，
+  以绕开前置条件 #1「跨单元引用带 trait 的对象」（vtable 变量为 `static`、`.h` 只放类型，跨翻译单元
+  既写不了 vptr 也无法派发）。单文件路径的唯一硬阻塞是「`impl` 方法体内无法跨对象派发」，已由
+  **Phase 1.9c** 解决（方法体走与顶层完全相同的重写管线：登记 `self` / 方法参数后逐行 `transform_line`）。
+  结论：**单文件 + 完全 OO 已可自举**；namespace、多文件、诊断等非 OO 特性皆可妥协，排在自举之后。
 - **Phase 3 启动时**：`ctc.c` 移入 `ctrait/` 并冻结（只修 bug），新特性全部在 `src/` 用 CT 实现。
 - **单仓库**：跨层编译与特性耦合决定了不拆仓库；`ctrait/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
 
@@ -240,13 +245,13 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 
 | # | 前置条件 | 为什么自举需要 | 归属 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可 |
+| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可。单文件自举路径**不需要**此项（见上方「最小可自举版」） |
 | 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | Phase 1（与 Drop 一起定） | ✅ `T *p = malloc(...)`（含 `calloc`）已在声明后自动写 vptr（含嵌套值字段，D1=A）；`use Drop` + `delete` 递归释放已实现 |
 | 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ✅ Phase 1.6：文件作用域对象 / 数组的 vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入 |
 | 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
 | 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ✅ 多文件模式**默认**在 `.c` 发出 `#line`（D4=A），单文件默认关；gcc/clang 报错映回 `.ct` 行 |
 | 6 | **方法调用的接收者可以是更一般的表达式** | 变量 / 表达式下标、指针数组元素、指针字段链（`ps[i].m()`、`ptrs[i]->m()`、`b.who->m()`）由 Phase 1.9a 支持；rvalue 接收者 `f().m()` / `mk()->m()`（含字段跳 `f().a.b.m()`）由 Phase 1.9b 支持 | Phase 1.9 | ✅ 1.9a + 1.9b 均落地（Q1=A 值/指针返回、Q2=A 仅语句行首或初始化式 RHS 提升、Q3=A 其它位置 `die`） |
-| 7 | 位置式初始化 / 方法体内互调 | — | 已完成（0.1.1 / 0.1.4） | ✅ |
+| 7 | 位置式初始化 / 方法体内互调 | — | 已完成（0.1.1 / 0.1.4 / 1.9c） | ✅ 方法体自 **Phase 1.9c** 起走与顶层相同的重写管线：方法体内的局部变量接收者、字段链递归与参数接收者均正常派发 |
 
 **AST 的形状**：ct **无继承**，AST 只能用 `trait Node { … }` + 各 `struct impl`，靠**接口值**（Phase 0.2）
 承载——这让自举同时成为 Phase 0.2 的压力测试。注意**声明顺序**：`struct Binary { Node *lhs; }` 要求
@@ -759,6 +764,15 @@ compilation or analysis of its own, so compiler upgrades never require extension
   compiler written in the CT trait-only subset) → L2 (the full compiler written in full-featured CT).
 - **Phase 0–2 boundary**: `ctc.c` stays at the repository root as a single file (confirmed by the
   user on 2026-10-11); no `src/`, no splitting.
+- **Minimal self-hostable version (confirmed by the user on 2026-10-14)**: aim for self-hosting in a
+  **single file** first (no namespaces / `import` / multi-file), side-stepping prerequisite #1
+  "referencing a trait-carrying object across units" (vtable variables are `static` and the `.h`
+  carries types only, so another translation unit can neither write a vptr nor dispatch). The one hard
+  blocker on the single-file path — "an `impl` method body cannot dispatch across objects" — was
+  removed by **Phase 1.9c** (a body now goes through the very same pipeline as top-level code:
+  `self` / method parameters are registered, then every line runs `transform_line`). Conclusion: a
+  **single-file, fully-OO program is self-hostable now**; non-OO features (namespaces, multi-file,
+  diagnostics) may be compromised on and are deferred until after self-hosting.
 - **When Phase 3 starts**: `ctc.c` moves into `ctrait/` and freezes (bug fixes only); new features
   are written in CT under `src/`.
 - **Single repository**: cross-layer compilation and feature coupling rule out splitting repos; if
@@ -775,13 +789,13 @@ For L1 / L2 to write a compiler in CT, the following must exist first (**each on
 
 | # | Prerequisite | Why self-hosting needs it | Owner phase | Status |
 | --- | --- | --- | --- | --- |
-| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | Phase 1 | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` landed; referencing a trait-carrying object across units not yet |
+| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | Phase 1 | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` landed; referencing a trait-carrying object across units not yet. The single-file bootstrap path **does not need** this (see "Minimal self-hostable version" above) |
 | 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | Phase 1 (with Drop) | ✅ `T *p = malloc(...)` (incl. `calloc`) writes the vptrs automatically right after the declaration (nested value fields included, D1=A); `use Drop` + recursive release via `delete` landed |
 | 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ✅ Phase 1.6: the vptrs of file-scope objects / arrays are written before `main` by the generated constructor `__ct_init` (`__attribute__((constructor))`, D5=A) |
 | 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | Phase 1 | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
 | 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ✅ multi-file mode emits `#line` in the `.c` **by default** (D4=A), off in single-file; gcc/clang errors map back to the `.ct` line |
 | 6 | **A method call may have a more general receiver expression** | variable / expression subscripts, pointer-array elements and pointer field chains (`ps[i].m()`, `ptrs[i]->m()`, `b.who->m()`) are supported since Phase 1.9a; rvalue receivers `f().m()` / `mk()->m()` (including the field hop `f().a.b.m()`) since Phase 1.9b | Phase 1.9 | ✅ 1.9a + 1.9b both landed (Q1=A value/pointer returns, Q2=A hoist only at a statement head or an initialiser RHS, Q3=A `die` elsewhere) |
-| 7 | Positional initialisers / calls between sibling methods | — | done (0.1.1 / 0.1.4) | ✅ |
+| 7 | Positional initialisers / calls between sibling methods | — | done (0.1.1 / 0.1.4 / 1.9c) | ✅ since **Phase 1.9c** a method body shares the top-level pipeline: local-variable receivers, recursive field chains and parameter receivers all dispatch |
 
 **The shape of the AST**: ct has **no inheritance**, so an AST must use `trait Node { … }` plus one
 `struct impl` per node kind and carry them as **interface values** (Phase 0.2) — which makes

@@ -124,10 +124,16 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
 
 - 生成函数的参数是「`void *self` + impl 中书写的方法参数」，函数体第一行固定为 `_self` 强转。
 - 方法体的缩进按最小公共缩进去除后重新以 4 空格排版。
-- 方法体内对**兄弟方法**的调用也会重写：`self->other()` → `_self->__<trait>_vptr->other(_self)`、
-  `self->other(a)` → `_self->__<trait>_vptr->other(_self, a)`。只要某个方法体存在这种调用，就会在方法
-  函数之前先输出一行前向声明 `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`，以解决 vtable
-  变量的前向引用（C 的 tentative definition，随后再带初始化式定义，合法）。
+- **方法体走与顶层代码完全相同的重写管线**：先把 `self`（指向当前 struct 的指针）与 impl 中书写的
+  方法参数登记进变量表，再逐行 `transform_line`，最后把标识符 `self` 重命名为 `_self`。因此方法体内
+  的各类接收者都会被派发，与顶层代码无差别：
+  - 兄弟方法：`self->other()` → `_self->__<trait>_vptr->other(_self)`；
+  - 字段链：`self->field->m()` → `_self->field->__<trait>_vptr->m(_self->field)`（可递归，见 §4.5）；
+  - 方法参数：`o->m()` → `o->__<trait>_vptr->m(o)`、`v.m()` → `v.__<trait>_vptr->m(&v)`；
+  - 方法体内局部变量：`P q; q.m();` → `q.__<trait>_vptr->m(&q)`。
+- 只要某个方法体会产生派发，就会在方法函数之前先输出一行前向声明
+  `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`，以解决 vtable 变量的前向引用
+  （C 的 tentative definition，随后再带初始化式定义，合法）。
 - vtable 初始化项按 **trait 中方法的声明顺序**排列，而不是 impl 中的书写顺序。
 
 #### 4.4 变量声明 → 限定 `struct` + 追加 vptr 指定初始化
@@ -199,7 +205,8 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
     **按 `文件:行:列: error:` 报错退出**，而不是产出明知编不过的 C。
   - 提升出的临时变量声明文本为等宽对齐的源行缩进；它在生成的 `.c` 中占一行，其 `#line` 映射回同一个源行。
 - 字符串字面量、字符字面量、注释内的内容**永不重写**。
-- `impl` 方法体内的 `self->m(...)` 也按同一规则重写（见 4.3）。
+- `impl` 方法体与顶层代码共用同一重写管线：方法体内的 `self->m(...)`、字段链 `self->f->m(...)`、
+  参数接收者 `o->m(...)`、局部变量接收者 `q.m(...)` 都按同一规则重写（见 4.3）。
 - **仅变量下标接收者的表达式会被求值两次**（`ps[i]` 在产物里出现两遍），因此带副作用的下标
   （如 `ps[i++]`）不保证正确；右值接收者（1′）用临时变量，只求值一次。
 
@@ -336,8 +343,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
   或「返回同款接口」的函数调用，其它表达式一律 `die`。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰（`A::B::fn()` 去路径成 `fn()`），
   因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
-- 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。
-- **`impl` 方法体内只重写 `self` 与 `self->m()`**（兄弟调用）：方法体经独立的字符串替换处理，**不登记局部变量**，因此方法体内的局部变量接收者（`P q; q.m();`）与右值接收者（`mk().m()`）**不被重写**，会原样出现在生成的 C 中。
+- 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）
 - 不完整的 `namespace` / `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套（`namespace` 除外，它是唯一可嵌套的构造，见 §5）。
 
@@ -368,7 +374,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 - **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；**遇错即 `exit(1)`**（不做错误恢复）。
 - **警告**（Phase 1.7）：目前只有一类——**泄漏警告**。对局部 ct-struct 堆对象（`T *p = malloc/calloc(...)`），若在其作用域结束前既未 `delete`、未 `return`、也未逃逸（赋给非自身左值），则报
-  `<file>:<line>: warning: potential leak: '<var>' (<Type>*) allocated but never deleted`，输出到 `stderr`。**不影响退出码**（仍为 0）。判定是保守的、路径不敏感的（只覆盖普通函数体；方法体不经行重写，不在内；`char *buf = malloc(...)` 等非 ct 类型不在内）。
+  `<file>:<line>: warning: potential leak: '<var>' (<Type>*) allocated but never deleted`，输出到 `stderr`。**不影响退出码**（仍为 0）。判定是保守的、路径不敏感的（只覆盖普通函数体；`impl` 方法体不在内；`char *buf = malloc(...)` 等非 ct 类型不在内）。
 - **JSON 诊断**：`--diagnostics=json` 时，警告改为输出到 **stdout** 的 JSON 文档
   `{"warnings":[{"type":"potential_leak","file":…,"line":…,"variable":…,"type_name":…,"message":…}]}`；
   `--diagnostics=text`（默认）为人可读 stderr。`ct build` 的 stdout 留给建议的 `cc` 命令，故其警告始终走 stderr。
@@ -537,11 +543,18 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
   line of its body is always the `_self` cast.
 - The method body's indentation is normalised: the minimal shared indentation is stripped and the body
   is re-emitted with 4-space indentation.
-- Calls to **sibling methods** inside a body are rewritten too: `self->other()` →
-  `_self->__<trait>_vptr->other(_self)` and `self->other(a)` → `_self->__<trait>_vptr->other(_self, a)`.
-  Whenever such a call exists, a forward declaration `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`
-  is emitted before the method functions, to resolve the forward reference to the vtable variable
-  (a C tentative definition, later given its initialiser — both are valid together).
+- A method body goes through the **very same rewriting pipeline as top-level code**: `self` (a pointer
+  to the current struct) and the impl's method parameters are registered in the variable table first,
+  then every body line is fed to `transform_line`, and finally the identifier `self` is renamed to
+  `_self`. Every receiver form therefore dispatches inside a body, exactly as at top level:
+  - sibling call: `self->other()` → `_self->__<trait>_vptr->other(_self)`;
+  - field chain: `self->field->m()` → `_self->field->__<trait>_vptr->m(_self->field)` (recursive, §4.5);
+  - method parameter: `o->m()` → `o->__<trait>_vptr->m(o)`, `v.m()` → `v.__<trait>_vptr->m(&v)`;
+  - a local variable declared in the body: `P q; q.m();` → `q.__<trait>_vptr->m(&q)`.
+- Whenever a body produces a dispatch, a forward declaration
+  `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;` is emitted before the method functions, to
+  resolve the forward reference to the vtable variable (a C tentative definition, later given its
+  initialiser — both are valid together).
 - vtable initialisers follow the **declaration order of the methods in the trait**, not the order they
   are written in the impl.
 
@@ -627,7 +640,9 @@ Rewriting details:
   - the hoisted declaration keeps the source line's indentation; it occupies one line in the generated
     `.c` and its `#line` mapping points back to the same source line.
 - content inside string literals, character literals and comments is **never rewritten**;
-- `self->m(...)` inside an `impl` body is rewritten by the same rule (see 4.3);
+- an `impl` body shares the top-level pipeline: `self->m(...)`, a field chain `self->f->m(...)`, a
+  parameter receiver `o->m(...)` and a local-variable receiver `q.m(...)` are all rewritten by the
+  same rule (see 4.3);
 - **only a variable-subscript receiver's expression is evaluated twice** (`ps[i]` appears twice in the
   output), so a subscript with a side effect (`ps[i++]`) is not guaranteed correct; an rvalue receiver
   (1′) uses a temporary and is evaluated once.
@@ -792,10 +807,8 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 - A single-line function body (`int f() { … }` on one line) is not processed, matching Phase 0's
   line-by-line rewriting. By the same rule, a statement **sharing its line** with a construct is not
   rewritten either: a one-line interface boxing and a one-line rvalue receiver both pass through.
-- **An `impl` method body rewrites only `self` and `self->m()`** (sibling calls): the body goes
-  through an independent string substitution that **does not register local variables**, so a local
-  variable receiver (`P q; q.m();`) and an rvalue receiver (`mk().m()`) inside a method body are
-  **not rewritten** and appear verbatim in the generated C.
+  (An `impl` construct is the exception: its method body is extracted as a whole by block matching, so
+  it goes through the rewriting pipeline even when it shares the header's line.)
 - An incomplete `namespace` / `struct` header (no `{`) is not treated as a construct and passes
   through. `trait` / `impl` are ct-only keywords: a line that starts with one and is followed by an
   identifier or `{` is an attempted construct, so a malformed header is an error (other follows, like
@@ -835,8 +848,8 @@ supported — see §3 / §5.)
   a non-self lvalue) before its scope ends, ctc reports
   `<file>:<line>: warning: potential leak: '<var>' (<Type>*) allocated but never deleted` on stderr.
   It **never changes the exit code** (still 0). The analysis is deliberately conservative and
-  path-insensitive: it covers ordinary function bodies only (method bodies are not line-rewritten, so
-  they are out of scope), and non-ct allocations (`char *buf = malloc(...)`) are not tracked.
+  path-insensitive: it covers ordinary function bodies only (`impl` method bodies are out of scope),
+  and non-ct allocations (`char *buf = malloc(...)`) are not tracked.
 - **JSON diagnostics**: with `--diagnostics=json` the warnings go to **stdout** as a JSON document
   `{"warnings":[{"type":"potential_leak","file":…,"line":…,"variable":…,"type_name":…,"message":…}]}`;
   `--diagnostics=text` (the default) prints human-readable lines on stderr. `ct build` keeps stdout for
