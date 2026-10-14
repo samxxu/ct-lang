@@ -1,0 +1,60 @@
+// body_dispatch.ct — Phase 1.9c end to end: inside an `impl` method body, a
+// field chain (`self->lhs->m()`), a parameter (`o->m()`) and a local variable
+// (`one.m()`) all dispatch through the trait vtable. This is the recursion
+// pattern the compiler needs to walk its own AST.
+// License: MIT; see LICENSE.EXCEPTION
+#include <stdio.h>
+
+struct Num;
+
+trait Node {
+    void emit();
+    void addto(struct Num *o);
+}
+
+struct Num {
+    int v;
+} use Node;
+
+struct Add {
+    struct Num *lhs;
+    struct Num *rhs;
+} use Node;
+
+impl Node for Num {
+    void emit() {
+        printf("%d", self->v);
+    }
+    void addto(struct Num *o) {
+        o->v += self->v;
+    }
+}
+
+impl Node for Add {
+    void emit() {
+        printf("(");
+        self->lhs->emit();
+        printf(" + ");
+        self->rhs->emit();
+        printf(")");
+    }
+    void addto(struct Num *o) {
+        struct Num one = { .v = 1 };
+        one.addto(o);
+        self->lhs->addto(o);
+        self->rhs->addto(o);
+    }
+}
+
+int main() {
+    struct Num a = { .v = 3 };
+    struct Num b = { .v = 4 };
+    struct Add sum = { .lhs = &a, .rhs = &b };
+    sum.emit();
+    printf("\n");
+
+    struct Num acc = { .v = 0 };
+    sum.addto(&acc);
+    printf("%d\n", acc.v);
+    return 0;
+}
