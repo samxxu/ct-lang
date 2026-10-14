@@ -14,12 +14,13 @@
 #   cases     golden tests: generate, diff, compile, run        (test/cases)
 #   errors    diagnostics: must fail with the expected message  (test/errors)
 #   examples  end-to-end demos: generate, build, run, compare   (examples)
-#   multifile `ct build` multi-file demo: build, compare goldens, run   (test/multifile)
-#   import    `ct build` with `import`: resolve, compare goldens, run    (test/import)
-#   line      `#line` error mapping in multi-file mode                   (no fixture dir)
-#   warnings  leak warnings + --diagnostics=json, exit stays 0           (no fixture dir)
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
+#
+# test/archive/ holds the Phase 2 (CT-side) fixtures -- namespaces, multi-file
+# `ct build`, imports, Drop, `#line` and warning diagnostics -- that Phase 0.3
+# moved out of ctc.c. They are kept, not run here, as the diff baseline for the
+# Phase 2 CT reimplementation.
 
 set -u
 
@@ -144,166 +145,6 @@ for ct in examples/*/*.ct; do
     fi
     ok "$label"
 done
-
-# ------------------------------------------------------------------ multifile
-echo
-echo "== multi-file (ct build) =="
-mkdir -p "$TMP/mf"
-if ! "$TMP/ctc" build test/multifile/calc.ct test/multifile/app.ct -o "$TMP/mf" >"$TMP/mf.out" 2>"$TMP/mf.err"; then
-    bad "multifile/build" "ctc build exited non-zero: $(cat "$TMP/mf.err")"
-else
-    # the generated .c/.h are pinned byte for byte, like the single-file cases
-    for pair in calc.c:calc.expected.c calc.h:calc.expected.h \
-                app.c:app.expected.c app.h:app.expected.h; do
-        gen=${pair%%:*}; exp=${pair##*:}
-        if ! diff -u "test/multifile/$exp" "$TMP/mf/$gen" >"$TMP/mf.$gen.diff"; then
-            bad "multifile/golden" "$gen differs from $exp"
-            sed -n '1,40p' "$TMP/mf.$gen.diff" | sed 's/^/    /'
-        else
-            ok "multifile/golden $gen"
-        fi
-    done
-    if ! $CC $CFLAGS "$TMP/mf/calc.c" "$TMP/mf/app.c" -o "$TMP/mf/app" 2>"$TMP/mf.log"; then
-        bad "multifile/cc" "generated C does not build"
-        sed 's/^/    /' "$TMP/mf.log"
-    else
-        "$TMP/mf/app" >"$TMP/mf.stdout" 2>&1
-        if ! diff -u test/multifile/expected.out "$TMP/mf.stdout" >"$TMP/mf.diff"; then
-            bad "multifile/run" "program output differs from expected.out"
-            sed -n '1,40p' "$TMP/mf.diff" | sed 's/^/    /'
-        else
-            ok "multifile/build+run"
-        fi
-    fi
-fi
-
-# ------------------------------------------------------------------ import
-echo
-echo "== import (ct build with a single root) =="
-mkdir -p "$TMP/imp"
-if ! "$TMP/ctc" build test/import/app.ct -o "$TMP/imp" >"$TMP/imp.out" 2>"$TMP/imp.err"; then
-    bad "import/build" "ctc build exited non-zero: $(cat "$TMP/imp.err")"
-else
-    if [ ! -f "$TMP/imp/shapes.c" ]; then
-        bad "import/build" "the imported unit was not compiled"
-    fi
-    # the generated .c/.h are pinned byte for byte, like the single-file cases
-    for pair in shapes.c:shapes.expected.c shapes.h:shapes.expected.h \
-                app.c:app.expected.c app.h:app.expected.h; do
-        gen=${pair%%:*}; exp=${pair##*:}
-        if ! diff -u "test/import/$exp" "$TMP/imp/$gen" >"$TMP/imp.$gen.diff"; then
-            bad "import/golden" "$gen differs from $exp"
-            sed -n '1,40p' "$TMP/imp.$gen.diff" | sed 's/^/    /'
-        else
-            ok "import/golden $gen"
-        fi
-    done
-    if ! $CC $CFLAGS "$TMP/imp/shapes.c" "$TMP/imp/app.c" -o "$TMP/imp/app" 2>"$TMP/imp.log"; then
-        bad "import/cc" "generated C does not build"
-        sed 's/^/    /' "$TMP/imp.log"
-    else
-        "$TMP/imp/app" >"$TMP/imp.stdout" 2>&1
-        if ! diff -u test/import/expected.out "$TMP/imp.stdout" >"$TMP/imp.diff"; then
-            bad "import/run" "program output differs from expected.out"
-            sed -n '1,40p' "$TMP/imp.diff" | sed 's/^/    /'
-        else
-            ok "import/build+run"
-        fi
-    fi
-fi
-
-# ------------------------------------------------------------------ #line
-echo
-echo "== #line (multi-file error mapping, D4 = A) =="
-mkdir -p "$TMP/line"
-# line 4 is a deliberate error: with #line the compiler must blame the .ct, not the .c
-cat >"$TMP/line/err.ct" <<'EOF'
-int helper(void) { return 0; }
-
-int main(void) {
-    int x = undefined_symbol;
-    return x;
-}
-EOF
-if ! "$TMP/ctc" build "$TMP/line/err.ct" -o "$TMP/line" >"$TMP/line.out" 2>"$TMP/line.err"; then
-    bad "#line/build" "ctc build exited non-zero: $(cat "$TMP/line.err")"
-else
-    $CC $CFLAGS -c "$TMP/line/err.c" -o "$TMP/line/err.o" 2>"$TMP/line.cc" || true
-    if grep -q 'err\.ct:4:' "$TMP/line.cc"; then
-        ok "#line maps the C error back to the .ct line"
-    else
-        bad "#line" "expected 'err.ct:4:' in the C compiler diagnostic"
-        sed -n '1,10p' "$TMP/line.cc" | sed 's/^/    /'
-    fi
-    "$TMP/ctc" build --no-line "$TMP/line/err.ct" -o "$TMP/line" >/dev/null 2>&1
-    if grep -q '#line' "$TMP/line/err.c"; then
-        bad "#line/--no-line" "directives were not suppressed"
-    else
-        ok "#line --no-line suppresses the directives"
-    fi
-fi
-
-# ------------------------------------------------------------------ warnings
-echo
-echo "== leak warnings (Phase 1.7) =="
-mkdir -p "$TMP/warn"
-cat >"$TMP/warn/leak.ct" <<'EOF'
-#include <stdlib.h>
-
-struct Thing {
-    int n;
-};
-
-struct Box {
-    Thing *owner;
-};
-
-int leaky(void) {
-    Thing *p = malloc(sizeof(struct Thing));
-    return 0;
-}
-
-int clean(void) {
-    Thing *q = malloc(sizeof(struct Thing));
-    delete q;
-    return 0;
-}
-
-int escaped(Box *b) {
-    Thing *e = malloc(sizeof(struct Thing));
-    b->owner = e;
-    return 0;
-}
-
-int main(void) {
-    Box b;
-    return leaky() + clean() + escaped(&b);
-}
-EOF
-if "$TMP/ctc" "$TMP/warn/leak.ct" -o "$TMP/warn/leak.c" >"$TMP/warn.out" 2>"$TMP/warn.err"; then
-    n=$(grep -c 'warning: potential leak' "$TMP/warn.err")
-    if [ "$n" = 1 ] && grep -Fq "'p' (Thing*)" "$TMP/warn.err"; then
-        ok "warnings/exactly one leak (delete and escape stay quiet), exit 0"
-    else
-        bad "warnings/leak" "expected 1 warning naming 'p', got $n"
-        sed 's/^/    /' "$TMP/warn.err"
-    fi
-else
-    bad "warnings/leak" "ctc exited non-zero: $(cat "$TMP/warn.err")"
-fi
-if "$TMP/ctc" --diagnostics=json "$TMP/warn/leak.ct" -o "$TMP/warn/leak.c" 2>/dev/null \
-   | python3 -c "import sys,json; w=json.load(sys.stdin)['warnings']; sys.exit(0 if len(w)==1 and w[0]['variable']=='p' and w[0]['type']=='potential_leak' else 1)"; then
-    ok "warnings/--diagnostics=json parses (1 warning)"
-else
-    bad "warnings/json" "json output did not parse as expected"
-fi
-if "$TMP/ctc" --diagnostics=xml "$TMP/warn/leak.ct" -o "$TMP/warn/leak.c" >/dev/null 2>"$TMP/warn.err"; then
-    bad "warnings/diag-unknown" "expected a non-zero exit for an unknown diagnostics format"
-elif grep -Fq 'unknown diagnostics format' "$TMP/warn.err"; then
-    ok "warnings/unknown diagnostics format rejected"
-else
-    bad "warnings/diag-unknown" "missing the expected message"
-fi
 
 # ------------------------------------------------------------------ errors
 echo
@@ -461,18 +302,14 @@ cli_expect o-needs-arg nonzero "-o needs an argument" test/cases/21_empty_init_i
 cli_expect no-input nonzero "usage:"
 cli_expect cannot-open nonzero "cannot open" /nonexistent/nope.ct
 
-# `ct build` driver errors
-printf 'import nothing;\n' >"$TMP/cli_imp.ct"
-cli_expect build-import-missing nonzero "cannot resolve import" build "$TMP/cli_imp.ct" -o "$TMP"
-cli_expect build-o-needs-arg nonzero "-o needs an argument" build test/cases/21_empty_init_iface.ct -o
-cli_expect build-unknown-option nonzero "unknown option" build -Q test/cases/21_empty_init_iface.ct
-cli_expect build-cannot-write nonzero "cannot write" build test/cases/21_empty_init_iface.ct -o /nonexistent-dir
-cli_expect build-no-input nonzero "usage:" build
-cli_expect build-version zero "ctc v" build --version
+# capabilities that moved to the CT layer in Phase 0.3 must fail loudly instead
+# of falling through: the module system (namespace / import / pub / `ct build`)
+# and the diagnostics flags
+cli_expect build-removed nonzero "'build' (multi-file) is not supported" build a.ct -o "$TMP/x"
+cli_expect diagnostics-removed nonzero "unknown option" --diagnostics=json test/cases/01_trait_basic.ct
+cli_expect line-removed nonzero "unknown option" --line test/cases/01_trait_basic.ct
 
-# capacity limits of the multi-file driver: every cap must be reported, never
-# applied silently (AGENTS §3)
-cli_expect help-diagnostics zero "--diagnostics" --help
+# the output write is a failure site: the .c cannot be created
 cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o /nonexistent-dir/x.c
 cli_expect short-read nonzero "short read" "$TMP"
 
@@ -487,71 +324,6 @@ elif grep -Fq "cannot write" "$TMP/cli.err"; then
 else
     bad "cli/cannot-write-header" "wrong message: $(cat "$TMP/cli.err")"
 fi
-
-# `ct build` output path overflow: an existing directory long enough that
-# outdir + '/' + unit + ".c" exceeds MAX_NAME * 4
-mkdir -p "$TMP/opl"
-LONGDIR="$TMP/opl"
-for _i in 1 2 3 4 5 6 7 8 9 10; do
-    LONGDIR="$LONGDIR/dddddddddddddddddddddddddddddddddddddddddddddddd"
-done
-LONGDIR="$LONGDIR/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-printf 'struct S { int x; };\nint main(void){ return 0; }\n' >"$TMP/opl/g.ct"
-if mkdir -p "$LONGDIR"; then
-    if "$TMP/ctc" build "$TMP/opl/g.ct" -o "$LONGDIR" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
-        bad "cli/output-path-too-long" "expected a non-zero exit"
-    elif grep -Fq "output path too long" "$TMP/cli.err"; then
-        ok "cli/output-path-too-long"
-    else
-        bad "cli/output-path-too-long" "wrong message: $(cat "$TMP/cli.err")"
-    fi
-else
-    bad "cli/output-path-too-long" "could not create a long enough directory"
-fi
-
-mkdir -p "$TMP/imp17" "$TMP/imp17out"
-for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do
-    printf 'pub struct W%d { int x; };\n' "$i" >"$TMP/imp17/w$i.ct"
-    echo "import w$i;"
-done >"$TMP/imp17/imports.inc"
-cat "$TMP/imp17/imports.inc" >"$TMP/imp17/root.ct"
-echo 'int main(void){ return 0; }' >>"$TMP/imp17/root.ct"
-cli_expect too-many-imports nonzero "too many imports" build "$TMP/imp17/root.ct" -o "$TMP/imp17out"
-
-mkdir -p "$TMP/in33" "$TMP/in33out"
-for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33; do
-    printf 'struct Z%d { int x; };\n' "$i" >"$TMP/in33/z$i.ct"
-done
-cli_expect too-many-inputs nonzero "too many inputs" build "$TMP/in33"/*.ct -o "$TMP/in33out"
-
-# too many units needs an import tree: one file cannot import more than
-# MAX_IMPORTS, so 1 + 16 + 256 units come from two levels of fan-out
-mkdir -p "$TMP/u2" "$TMP/u2out"
-for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
-    { for j in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo "import b${i}_${j};"; done
-      echo "pub struct A$i { int x; };"; } >"$TMP/u2/a$i.ct"
-    for j in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
-        printf 'pub struct B%d_%d { int x; };\n' "$i" "$j" >"$TMP/u2/b${i}_${j}.ct"
-    done
-    echo "import a$i;"
-done >"$TMP/u2/root.ct"
-echo 'int main(void){ return 0; }' >>"$TMP/u2/root.ct"
-cli_expect too-many-units nonzero "too many units" build "$TMP/u2/root.ct" -o "$TMP/u2out"
-
-# #line: off by default in single-file mode, forceable with --line
-"$TMP/ctc" test/cases/21_empty_init_iface.ct -o "$TMP/ln_default.c" 2>/dev/null
-if grep -q '#line' "$TMP/ln_default.c"; then
-    bad "cli/line-single-default" "single-file mode emitted #line by default"
-else
-    ok "cli/line-single-default (off by default)"
-fi
-if "$TMP/ctc" --line test/cases/21_empty_init_iface.ct -o "$TMP/ln_forced.c" 2>/dev/null \
-        && grep -q '#line' "$TMP/ln_forced.c"; then
-    ok "cli/line-single-forced (--line forces directives)"
-else
-    bad "cli/line-single-forced" "--line did not emit #line directives"
-fi
-cli_expect help-line-flag zero "--line" --help
 
 # `compile` is an explicit alias for the default subcommand; its output must be
 # byte-identical to the default-mode golden

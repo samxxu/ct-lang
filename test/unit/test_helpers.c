@@ -297,33 +297,6 @@ int main(void)
         eq_int("copy_ident empty", (long)copy_ident(" x", nb, 0), 0);
     }
 
-    /* ---- read_qual_ref: plain, qualified and namespace-prefixed names ---- */
-    {
-        char cname[MAX_NAME], shortname[MAX_NAME];
-        const char *rest;
-        int qual;
-
-        snprintf(g_ns, sizeof g_ns, "");
-        rest = read_qual_ref("Person x", cname, shortname, &qual);
-        eq_str("rqr plain cname", cname, "Person");
-        eq_str("rqr plain short", shortname, "Person");
-        eq_int("rqr plain qual", qual, 0);
-        eq_str("rqr plain rest", rest, " x");
-
-        rest = read_qual_ref("A::B::Person x", cname, shortname, &qual);
-        eq_str("rqr qualified cname", cname, "A_B_Person");
-        eq_str("rqr qualified short", shortname, "Person");
-        eq_int("rqr qualified qual", qual, 1);
-        eq_str("rqr qualified rest", rest, " x");
-
-        snprintf(g_ns, sizeof g_ns, "NS_");
-        read_qual_ref("Person", cname, shortname, &qual);
-        eq_str("rqr namespace prefix", cname, "NS_Person");
-        snprintf(g_ns, sizeof g_ns, "");
-
-        eq_int("rqr no name", read_qual_ref("  x", cname, shortname, &qual) == NULL, 1);
-    }
-
     /* ---- skip_literal: escapes and the closing quote ---- */
     g_src = "\"ab\" x";
     g_len = strlen(g_src);
