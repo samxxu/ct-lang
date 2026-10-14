@@ -336,7 +336,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
   或「返回同款接口」的函数调用，其它表达式一律 `die`。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰（`A::B::fn()` 去路径成 `fn()`），
   因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
-- 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。
+- 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。
+- **`impl` 方法体内只重写 `self` 与 `self->m()`**（兄弟调用）：方法体经独立的字符串替换处理，**不登记局部变量**，因此方法体内的局部变量接收者（`P q; q.m();`）与右值接收者（`mk().m()`）**不被重写**，会原样出现在生成的 C 中。
 - 不完整的 `namespace` / `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套（`namespace` 除外，它是唯一可嵌套的构造，见 §5）。
 
@@ -789,7 +790,12 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   function names are not mangled (`A::B::fn()` drops the path to `fn()`), so same-named plain functions
   in different namespaces collide at the C level.
 - A single-line function body (`int f() { … }` on one line) is not processed, matching Phase 0's
-  line-by-line rewriting.
+  line-by-line rewriting. By the same rule, a statement **sharing its line** with a construct is not
+  rewritten either: a one-line interface boxing and a one-line rvalue receiver both pass through.
+- **An `impl` method body rewrites only `self` and `self->m()`** (sibling calls): the body goes
+  through an independent string substitution that **does not register local variables**, so a local
+  variable receiver (`P q; q.m();`) and an rvalue receiver (`mk().m()`) inside a method body are
+  **not rewritten** and appear verbatim in the generated C.
 - An incomplete `namespace` / `struct` header (no `{`) is not treated as a construct and passes
   through. `trait` / `impl` are ct-only keywords: a line that starts with one and is followed by an
   identifier or `{` is an attempted construct, so a malformed header is an error (other follows, like
