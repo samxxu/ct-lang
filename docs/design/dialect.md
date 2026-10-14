@@ -5,8 +5,8 @@
 > **状态：设计定型，暂缓实现。** 本设计目前是**图纸，不是可运行实现**；
 > 今天的编译器是仓库根目录的单文件 [ctc.c](../../ctc.c)，方言展开器尚不存在。
 >
-> **排期：Phase 3 自举之后**（2026-10-13 用户确认）。这是**排序选择，不是技术依赖**——
-> 方言展开器是编译器之外的外部脚本，不需要自举，理论上可与 Phase 3 并行；排在最后是为了先让编译器主语料稳固。
+> **排期：Phase 3（生态与扩展）**（2026-10-13 用户确认；表述随 2026-10-14 相位重排更新）。这是**排序选择，不是技术依赖**——
+> 方言展开器是编译器之外的外部脚本，不需要自举，理论上可与自举并行；排在最后是为了先让编译器主语料稳固。
 >
 > **技术前置**（详见第 0 节）：Phase 1 的 trait / namespace / import / Drop、`ct build` 单入口 CLI，
 > 以及 roadmap 已定的「反向映射表 + JSON 诊断」（JSON 诊断已随 Phase 1.7 落地；反向映射表经 D8 移至 Phase 3，2026-10-14）。
@@ -40,10 +40,10 @@
 - **不在 Phase 1**：包管理（§4.3 的跨项目分发依赖它）。
 - **与自举无关**：展开器是外部可执行文件（bash / Python / awk 均可），不由编译器实现。
 
-#### 0.3 排期：Phase 3 自举之后
+#### 0.3 排期：Phase 3（生态与扩展）
 
-**2026-10-13 用户确认。** 这是**排序选择，不是技术依赖**——方言展开器是编译器之外的外部脚本，
-不需要自举，理论上可与 Phase 3 并行；排在最后是为了先让编译器主语料稳固。
+**2026-10-13 用户确认（表述随 2026-10-14 相位重排更新）。** 这是**排序选择，不是技术依赖**——方言展开器是编译器之外的外部脚本，
+不需要自举，理论上可与自举并行；排在最后是为了先让编译器主语料稳固。
 
 ### 1. 定位与核心原则
 
@@ -440,7 +440,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 ### 14. 实现时机
 
 - 方言系统依赖 trait / namespace / import / Drop，**Phase 1 已落地**；`ct build` 单入口 CLI 亦为 Phase 1 起落地
-- 但方言本身排在**最后**：**排期 = Phase 3 自举之后**（2026-10-13 用户确认）
+- 但方言本身排在**最后**：**排期 = Phase 3（生态与扩展）**（2026-10-13 用户确认）
 - 这是**排序选择，不是技术依赖** —— 展开器是编译器之外的外部脚本，不与自举耦合；
   靠后安排是为了先稳固编译器主语料
 - 落地前须先处理第 0 节列出的三处**规约冲突**与依赖清单
@@ -463,8 +463,8 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 ---
 
 > **文档版本：** v0.1（设计定型）
-> **排期：** Phase 3 自举之后（排序选择，非技术依赖）
-> **下次更新触发：** Phase 3 启动 / 开放问题 1、2 有结论 / 第 0 节的规约冲突被修订
+> **排期：** Phase 3（生态与扩展；排序选择，非技术依赖）
+> **下次更新触发：** 自举启动（Phase 1）/ 开放问题 1、2 有结论 / 第 0 节的规约冲突被修订
 
 ---
 
@@ -496,11 +496,12 @@ Recording them now avoids having to tear up the rules at the very end before any
 - **Independent of self-hosting**: the expander is an external executable (bash / Python / awk are all
   fine) and is not implemented by the compiler.
 
-#### 0.3 Schedule: after Phase 3 (self-hosting)
+#### 0.3 Schedule: Phase 3 (ecosystem and extension)
 
-**Confirmed by the user on 2026-10-13.** This is an **ordering choice, not a technical dependency** —
-the expander is an external script outside the compiler, needs no self-hosting, and could in principle
-run in parallel with Phase 3; it is last so that the compiler's main body settles first.
+**Confirmed by the user on 2026-10-13** (wording updated with the 2026-10-14 phase realignment). This is
+an **ordering choice, not a technical dependency** — the expander is an external script outside the
+compiler, needs no self-hosting, and could in principle run in parallel with self-hosting; it is last so
+that the compiler's main body settles first.
 
 ### 1. Positioning and core principles
 
@@ -948,7 +949,7 @@ It is not that the machine produces less.
 
 - The dialect system depends on trait / namespace / import / Drop, **all landed in Phase 1**; the
   single-entry `ct` CLI also lands from Phase 1 on
-- Yet dialects themselves come **last**: **scheduled after Phase 3 (self-hosting)** (confirmed by the
+- Yet dialects themselves come **last**: **scheduled for Phase 3** (confirmed by the
   user on 2026-10-13)
 - This is an **ordering choice, not a technical dependency** — the expander is an external script
   outside the compiler and does not couple to self-hosting; it is late so that the compiler's main body
@@ -973,6 +974,7 @@ It is not that the machine produces less.
 ---
 
 > **Document version:** v0.1 (design frozen)
-> **Schedule:** after Phase 3 (self-hosting) — an ordering choice, not a technical dependency
-> **Next update triggered by:** Phase 3 starting / open questions 1 and 2 resolved / the rule conflicts
-> in section 0 amended
+> **Schedule:** Phase 3 (ecosystem and extension) — an ordering
+> choice, not a technical dependency
+> **Next update triggered by:** self-hosting starting (Phase 1) / open questions 1 and 2 resolved / the
+> rule conflicts in section 0 amended

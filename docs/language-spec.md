@@ -154,6 +154,7 @@ struct Person p = { .name = "Tom", .age = 36, .__greeter_vptr = &Person_Greeter_
 | `Person p = { "Tom", 36 };`（位置式初始化） | 同上：追加的 vptr 项接在位置式元素之后（C99 允许 `{ 1, .v = 0 }` 混用） |
 | `Person p = {};` / `Person p;` | 前缀 `struct `；空列表追加 vptr，无初始化式则补上 `= { <vptr> }` |
 | `struct Person p = { … };` | 同上（已有限定符时不重复添加） |
+| `static Person p;` / `static Person ps[2];` | 前缀 `static` 原样保留，其余与非 `static` 声明相同（对象补初始化式、数组走 `__ct_init`） |
 | `Person *p = …;` | 前缀 `struct `，其余原样输出；指针变量**登记为指针**，故 `p->m()` 会重写为 `p->__t_vptr->m(p, …)` |
 | 其它类型 | 完全不动 |
 
@@ -284,6 +285,15 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `g.greet();` | `g.vt->greet(g.self);` |
 | `g.greet_name("Jerry");` | `g.vt->greet_name(g.self, "Jerry");` |
 
+**接口作为 struct 字段**（值字段 `T x;` → `struct T_iface x;`；指针字段 `struct T *x;` → `struct T_iface *x;`）：
+
+| 源码形态 | 处理 |
+| --- | --- |
+| 字段 `Node lhs;` / `struct Node *lhs;` | 字段类型展开为 `struct Node_iface lhs;` / `struct Node_iface *lhs;` |
+| `s.lhs.show();` / `self->lhs.show();` | `s.lhs.vt->show(s.lhs.self);`（值字段经 `.`，字段链可递归） |
+| `s.p->lhs->show();` | `s.p->lhs->vt->show(s.p->lhs->self);`（指针字段经 `->`） |
+| `s.lhs = v;`（**值**接口字段） | 按字段声明的 trait 装箱：`s.lhs = (struct Node_iface){ (void *)&v, &Lit_Node_vtable };` |
+
 规则与限制：
 
 - 只有**变量**或 `&变量`（以及「返回同款接口」的函数调用）能装箱；类型无法推断 → `die`。
@@ -291,8 +301,11 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
   因此遵循「定义先于使用」——调用点看不到签名或看不到具体类型时不会装箱。
 - 被装箱的 struct 必须 `use` 了该 trait；跨 trait 装箱 → `die`。
 - **不做**隐式空检查：空接口值（`{0,0}`）上派发会崩，与 C 一致。
-- 接口**数组**不支持（声明即 `die`）；接口作为 struct **字段**时类型会被展开，但**不参与**构造点递归
-  （需要时手动赋值）。
+- 接口**数组**不支持（声明即 `die`）。
+- 接口字段**不参与**构造点递归，`Node lhs;` 声明后为空（`vt == NULL`），需自行赋值。装箱仅覆盖
+  **语句赋值**（`s.lhs = v;`）；**指定初始化式**（`Pair p = { .lhs = v };`）中的接口字段**不装箱**，
+  该类写法仍需手动构造胖指针。**指针**接口字段（`struct T *x`）只支持派发，赋值保持原样
+  （需要已有胖指针的地址，如 `s.x = &someIface;`）。
 
 ### 5. 命名规则（稳定契约）
 
@@ -339,8 +352,10 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - **文件作用域的对象 / 数组**：vptr 由编译器生成的构造器 `__ct_init`（`__attribute__((constructor))`）在 `main` 前写入（D5=A）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象自动初始化**（Phase 1，D1=A）：`T *p = malloc(sizeof(struct T));` / `calloc` 在声明后自动写 vptr（含嵌套字段）。
-- 接口多态：接口**数组**不支持；接口作为 struct **字段**不参与构造点递归；装箱只接受**变量**、`&变量`
-  或「返回同款接口」的函数调用，其它表达式一律 `die`。
+- 接口多态：接口**数组**不支持；接口作为 struct **字段**不参与构造点递归（值字段声明后为空，需自行赋值）；
+  装箱只接受**变量**、`&变量` 或「返回同款接口」的函数调用，其它表达式一律 `die`。接口字段的**派发**已支持
+  （`s.lhs.m()` → `s.lhs.vt->m(s.lhs.self)`，指针字段经 `->`），**值**接口字段的**语句赋值**会自动装箱；
+  但**指定初始化式**里的接口字段不装箱，**指针**接口字段的赋值也不处理（见 §4.8）。
 - **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰（`A::B::fn()` 去路径成 `fn()`），
   因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
 - 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）
@@ -352,7 +367,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 | 常量 | 值 | 含义 | 超限行为 |
 | --- | --- | --- | --- |
 | `MAX_TRAITS` | 16 | trait 数量 / 单 struct 的 `use` 数量 | 报错退出 |
-| `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 ct struct」的值字段数 | 报错退出 |
+| `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 ct 类型」的字段数（值 / 指针 struct 字段、值 / 指针接口字段各表独立计） | 报错退出 |
 | `MAX_DEPTH` | 8 | 嵌套构造 / 字段链的递归深度上限 | 报错退出 |
 | `MAX_STRUCT` | 32 | struct 数量 | 报错退出 |
 | `MAX_METHOD` | 32 | 单 trait / 单 impl 的方法数 | 报错退出 |
@@ -576,6 +591,7 @@ Rules:
 | `Person p = { "Tom", 36 };` (positional initialiser) | same: the vptr designators follow the positional elements (C99 allows the mix `{ 1, .v = 0 }`) |
 | `Person p = {};` / `Person p;` | prefix `struct `; an empty list gets the vptr appended, and a declaration without an initialiser gets `= { <vptr> }` added |
 | `struct Person p = { … };` | same as above (the qualifier is not added twice when already present) |
+| `static Person p;` / `static Person ps[2];` | the `static` prefix is kept verbatim; everything else is as for a non-`static` declaration (objects get the initialiser, arrays go through `__ct_init`) |
 | `Person *p = …;` | prefix `struct `, everything else emitted verbatim; pointer variables are **registered as pointers**, so `p->m()` is rewritten to `p->__t_vptr->m(p, …)` |
 | other types | left completely untouched |
 
@@ -726,6 +742,16 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `g.greet();` | `g.vt->greet(g.self);` |
 | `g.greet_name("Jerry");` | `g.vt->greet_name(g.self, "Jerry");` |
 
+**An interface used as a struct field** (a value field `T x;` → `struct T_iface x;`; a pointer field
+`struct T *x;` → `struct T_iface *x;`):
+
+| Source form | Handling |
+| --- | --- |
+| field `Node lhs;` / `struct Node *lhs;` | the field type is expanded to `struct Node_iface lhs;` / `struct Node_iface *lhs;` |
+| `s.lhs.show();` / `self->lhs.show();` | `s.lhs.vt->show(s.lhs.self);` (a value field hops with `.`, and the chain can recurse) |
+| `s.p->lhs->show();` | `s.p->lhs->vt->show(s.p->lhs->self);` (a pointer field hops with `->`) |
+| `s.lhs = v;` (**value** interface field) | boxed into the field's declared trait: `s.lhs = (struct Node_iface){ (void *)&v, &Lit_Node_vtable };` |
+
 Rules and limits:
 
 - Only a **variable** or `&variable` (or a call that already returns the same interface) can be boxed;
@@ -736,8 +762,13 @@ Rules and limits:
   type) nothing is boxed.
 - The boxed struct must `use` that trait; boxing across different traits `die`s.
 - **No** implicit null check: dispatching on a null interface value (`{0,0}`) crashes, as in C.
-- Interface **arrays** are not supported (`die` at the declaration); an interface **field** has its type
-  expanded but does **not** participate in construction-point recursion (assign it by hand if needed).
+- Interface **arrays** are not supported (`die` at the declaration).
+- Interface fields do **not** participate in construction-point recursion: `Node lhs;` starts empty
+  (`vt == NULL`) and must be assigned. Boxing only covers **statement assignments** (`s.lhs = v;`);
+  an interface field inside a **designated initialiser** (`Pair p = { .lhs = v };`) is **not** boxed
+  and still needs a hand-written fat pointer. A **pointer** interface field (`struct T *x`) supports
+  dispatch only; assignment stays verbatim (it needs the address of an existing fat pointer, e.g.
+  `s.x = &someIface;`).
 
 ### 5. Naming contract
 
@@ -799,8 +830,12 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 - **Heap objects are initialised automatically** (Phase 1, D1=A): `T *p = malloc(sizeof(struct T));` /
   `calloc` writes the vptrs (nested fields included) right after the declaration.
 - Interface polymorphism: interface **arrays** are unsupported; an interface **field** does not
-  participate in construction-point recursion; boxing accepts only a **variable**, `&variable` or a call
-  returning the same interface — any other expression `die`s.
+  participate in construction-point recursion (a value field starts empty and must be assigned);
+  boxing accepts only a **variable**, `&variable` or a call returning the same interface — any other
+  expression `die`s. **Dispatch** through an interface field is supported
+  (`s.lhs.m()` → `s.lhs.vt->m(s.lhs.self)`, a pointer field hops with `->`), and a **statement
+  assignment** into a **value** interface field is boxed; an interface field inside a **designated
+  initialiser** is not boxed, and a **pointer** interface field's assignment is left verbatim (see §4.8).
 - **A namespace only mangles struct / trait / impl symbols and qualified type references**; plain
   function names are not mangled (`A::B::fn()` drops the path to `fn()`), so same-named plain functions
   in different namespaces collide at the C level.
@@ -820,7 +855,7 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 | Constant | Value | Meaning | On overflow |
 | --- | --- | --- | --- |
 | `MAX_TRAITS` | 16 | traits / traits per `use` | error, exit |
-| `MAX_FIELDS` | 32 | value fields per struct whose type is a known ct struct | error, exit |
+| `MAX_FIELDS` | 32 | fields per struct whose type is a known ct type (value / pointer struct fields and value / pointer interface fields are counted in separate tables) | error, exit |
 | `MAX_DEPTH` | 8 | recursion cap for nested construction / field chains | error, exit |
 | `MAX_STRUCT` | 32 | structs | error, exit |
 | `MAX_METHOD` | 32 | methods per trait or impl | error, exit |

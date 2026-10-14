@@ -3,7 +3,7 @@
 > **v0.0.1** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；当前 Phase 0 的目标是把「用 trait 写完整 OO」做完整——已达成的能力与待补项见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）已完成，当前目标是**自举**（Phase 1，用 CT 重写编译器）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），编译器命令叫 **`ctc`**（ct compiler，好比 `tinycc` 仓库发布的命令是 `tcc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -78,7 +78,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
 | `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
 | `Person ps[2];` | 声明 + 块内循环逐元素写 vptr，之后 `ps[0].greet()`、`ps[i].greet()` 可派发；`Person *ptrs[2]` 的元素自身是指针，用 `ptrs[i]->greet()` |
-| `delete q;` | `if (q) free(q);`（Phase 1 起对**任意指针**成立，含 `char *`） |
+| `delete q;` | `if (q) free(q);`（现对**任意指针**成立，含 `char *`） |
 | `T *p = malloc(sizeof(struct T));` | 声明后自动写 vptr（含嵌套值字段）：`p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
@@ -125,6 +125,8 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | [examples/02_market/](examples/02_market/market.ct) | 三个 trait / 两个 struct / 三个对象：同一 trait 在不同类型上有不同实现，对象之间传值与嵌套调用（`bob.earn(alice.spend(6))`），解析 `examples/02_market/market.ct` 得到 11 行输出 |
 | [examples/03_receivers/](examples/03_receivers/receivers.ct) | 一般接收者：下标元素 `ps[i]`、指针数组元素 `slots[0]`、指针字段链 `b.who` 都能正常派发 |
 | [examples/04_rvalue/](examples/04_rvalue/rvalue.ct) | 右值接收者：工厂调用返回的 struct 直接作接收者（`make_person("Ann", 30).greet()`），接收者只求值一次 |
+| [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | 方法体内的派发：字段链递归（`self->lhs->emit()`）、参数与局部变量接收者 |
+| [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | 接口值作 struct 字段：子节点是胖指针，`sum.lhs = one;` 装箱、`self->lhs.show()` 派发，递归组合成表达式树 |
 
 一键跑通全部示例：`./test/run.sh`（examples 层会生成 → 编译 → 运行 → 与 `.expected.out` 比对）。
 
@@ -220,7 +222,7 @@ test/
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
 
-当前 26 个 golden 正例（`test/cases`）、5 个端到端示例（`examples`）与 63 个负例诊断用例（`test/errors`），另加 unit / multifile / import / `#line` / warnings / limits / cli 等分层断言。
+当前 28 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 63 个负例诊断用例（`test/errors`），另加 unit / multifile / import / `#line` / warnings / limits / cli 等分层断言。
 
 `test/cases/*.expected.*` 是 golden 基线，**只能**用 `./ctc <case>.ct -o <case>.expected.c` 重新生成后人工核对，禁止手写；`examples/**/*.expected.out` 同理（见 [AGENTS.md](AGENTS.md) 第 6 节）。`test/cases/01_trait_basic.ct` 与 `examples/01_greeter/greeter.ct` 内容相同，但前者做生成物逐字节比对、后者做运行结果比对，两者互补。
 
@@ -252,7 +254,7 @@ ct/
     ├── roadmap.md            阶段规划、已定决策与验收标准（接下来做什么）
     ├── language-spec.md      .ct 语法规范与展开规则（现状）
     ├── architecture.md       编译器内部结构与关键算法
-    └── design/bootstrap.md   自举设计草案（Phase 3，未实现）
+    └── design/bootstrap.md   自举设计草案（未实现）
 ```
 
 展开产物（`.c` / `.h`、可执行文件）一律不入库，写到临时目录或按需生成。
@@ -294,7 +296,7 @@ ct/
 - [docs/roadmap.md](docs/roadmap.md) —— 后续阶段与已定决策
 - [docs/language-spec.md](docs/language-spec.md) —— 语法规范
 - [docs/architecture.md](docs/architecture.md) —— 内部实现
-- [docs/design/bootstrap.md](docs/design/bootstrap.md) —— 自举设计草案（Phase 3，未实现）
+- [docs/design/bootstrap.md](docs/design/bootstrap.md) —— 自举设计草案（未实现）
 
 ### 9. 许可
 
@@ -317,9 +319,9 @@ ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`
 ## English
 
 **ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into
-plain C. It performs no type checking and no optimisation; the current Phase 0 goal is to make
-"writing full OO with traits" complete — what is done and what is missing is tracked in
-[docs/roadmap.md](docs/roadmap.md).
+plain C. It performs no type checking and no optimisation; Phase 0 ("writing full OO with traits") is
+complete and the current goal is **self-hosting** (Phase 1, rewriting the compiler in CT) — what is
+done and what is planned is tracked in [docs/roadmap.md](docs/roadmap.md).
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the compiler
 command is **`ctc`** (the ct compiler — much like the `tinycc` repository that ships a `tcc` binary)
@@ -374,7 +376,7 @@ Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:lin
 | `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
 | `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
 | `Person ps[2];` | the declaration plus a scoped loop writing each element's vptr, after which `ps[0].greet()` and `ps[i].greet()` dispatch; an element of `Person *ptrs[2]` is itself a pointer, so `ptrs[i]->greet()` |
-| `delete q;` | `if (q) free(q);` (since Phase 1 this holds for **any** pointer, `char *` included) |
+| `delete q;` | `if (q) free(q);` (this now holds for **any** pointer, `char *` included) |
 | `T *p = malloc(sizeof(struct T));` | the vptrs (including nested value fields) are written right after the declaration: `p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
@@ -451,6 +453,8 @@ never committed.
 | [examples/02_market/](examples/02_market/market.ct) | Three traits, two structs, three objects: the same trait implemented differently per type, values flowing between objects, and a nested call (`bob.earn(alice.spend(6))`); compiling `examples/02_market/market.ct` yields 11 lines of output |
 | [examples/03_receivers/](examples/03_receivers/receivers.ct) | General receivers: a subscripted element `ps[i]`, a pointer-array element `slots[0]` and a pointer field chain `b.who` all dispatch normally |
 | [examples/04_rvalue/](examples/04_rvalue/rvalue.ct) | An rvalue receiver: the struct returned by a factory call is used directly (`make_person("Ann", 30).greet()`); the receiver is evaluated exactly once |
+| [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | Dispatch inside a method body: a recursive field chain (`self->lhs->emit()`), parameter and local-variable receivers |
+| [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | An interface value as a struct field: children are fat pointers, `sum.lhs = one;` boxes and `self->lhs.show()` dispatches, composing a recursive expression tree |
 
 `./test/run.sh` builds and runs every example and compares its output with the committed expectation.
 
@@ -546,7 +550,7 @@ Five layers of assertions:
 | examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
 
-Currently 26 golden positives (`test/cases`), 5 end-to-end examples (`examples`) and 63 negative
+Currently 28 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 63 negative
 diagnostic cases (`test/errors`), plus layered assertions for unit / multifile / import / `#line` /
 warnings / limits / cli.
 
@@ -586,7 +590,7 @@ ct/
     ├── roadmap.md            phase plan, decided decisions and acceptance criteria (what is next)
     ├── language-spec.md      .ct grammar and expansion rules (current state)
     ├── architecture.md       compiler internals and key algorithms
-    └── design/bootstrap.md   bootstrap design draft (Phase 3, not implemented)
+    └── design/bootstrap.md   bootstrap design draft (not implemented)
 ```
 
 Expanded artifacts (`.c` / `.h`, executables) are never committed; write them to a temporary
@@ -644,7 +648,7 @@ Implementation limits:
 - [docs/roadmap.md](docs/roadmap.md) — phase plan and decided design decisions
 - [docs/language-spec.md](docs/language-spec.md) — language specification
 - [docs/architecture.md](docs/architecture.md) — implementation internals
-- [docs/design/bootstrap.md](docs/design/bootstrap.md) — bootstrap design draft (Phase 3, not implemented)
+- [docs/design/bootstrap.md](docs/design/bootstrap.md) — bootstrap design draft (not implemented)
 
 ### 9. License
 

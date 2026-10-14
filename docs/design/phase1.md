@@ -2,8 +2,9 @@
 
 > 中文 · [English](#english)
 >
-> **状态：设计草案，当前未实现。** 本文描述 Phase 1 的语义、展开规则、载体与落地顺序，
-> 对应 [roadmap](../roadmap.md) 的 Phase 1。
+> **状态：设计草案；1.0–1.9 已实现（越位实现期）。** 本文描述**越位实现期**（旧称 Phase 1，即 Phase 0
+> 之后一度把命名空间 / 多文件 / import / pub / Drop 直接实现在 C 侧的那一阶段）的语义、展开规则、载体与落地顺序。
+> **注意**：[roadmap](../roadmap.md) 的 **Phase 1 现已重新定义为「自举」**；本文的 `Phase 1.x` 均为**越位实现期的历史子阶段编号**。
 >
 > 语言层面的**语法决策已在 roadmap「已定的设计决策」中冻结**（`::` 路径规则、`import`、
 > `.h.ct` + `pub`、Drop/delete、`map`、JSON 诊断），本文不重复，只补**实现层面**的设计。
@@ -20,7 +21,7 @@
 > **D-A = 方案 A**（`ct build` 不调用 `cc`）。
 > 1.3 的已知缺口：`-I` 未实现（只按导入方目录解析）、跨单元使用带 trait 的
 > 对象（写 vptr / 装箱）尚不可（vtable 仍是 `static`）、`foo.h.ct` 文件名语义未落地。D6 / D7 仍待定；
-> **D8 已定（用户 2026-10-14）：`map` + 反向映射表移出 Phase 1，排在 Phase 3 自举之后最后实现。**
+> **D8 已定（用户 2026-10-14）：`map` + 反向映射表移出 Phase 1，排在 Phase 3 最后实现。**
 
 ---
 
@@ -148,7 +149,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **解析**：`A::B` → 路径 `A/B.ct` 或 `A/B.h.ct`（`::` 段映射为目录层级），相对导入文件所在目录搜索，或 `-I <dir>` 指定的根
   （见 D7）。大小写按原样。
 - **驱动**：扫全部相关 `.ct` → 建模块表 → 解析 `import` 成 DAG → 拓扑序 → 逐单元编译 → 链接 `.o`。
-- **风险**：**目录 = namespace 是 Phase 2 才强制**，Phase 1 只按 `import` 路径解析，不校验目录名。
+- **风险**：**目录 = namespace 强制绑定归 Phase 2（展望）**，本阶段（越位实现期）只按 `import` 路径解析，不校验目录名。
 - **验收**：被 `import` 的单元自动编入，无需手工列出全部文件。
 
 #### 1.4 堆对象创建 + `delete` 放宽 + Drop（"对象住哪儿"）✅ 已完成（`delete[]` 未做）
@@ -219,6 +220,10 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 - **风险**：`__attribute__((constructor))` 非标准 C，但 gcc / clang 均支持，且与本项目
   「以 gcc / clang 为宿主」的定位一致（见 bootstrap 草案）。
 - **验收**：`Person ps[2];` 在文件作用域可声明，元素 vptr 正确，`main` 里 `ps[0].greet()` 正常。
+- **补充（Phase 1，`static` 前缀）**：带 `static` 前缀的同款声明过去原样透传（无 `struct ` 限定、无 vptr），
+  生成物编译失败；现在 `try_var_decl` 记忆并重发 `static `，`static Person g;` / `static Person gs[2];`
+  与非 `static` 声明走同一条路径（对象补初始化式、数组仍走 `__ct_init`）。正例见
+  `test/cases/27_static_file_scope.ct`。
 
 #### 1.7 泄漏警告（简单版）+ JSON 诊断 ✅ 已完成
 
@@ -229,7 +234,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 > 只覆盖普通函数体（`impl` 方法体不在内）、只覆盖 ct-struct 堆对象。退出码始终 0。测试见 run.sh 的 `warnings` 层。
 
 - **泄漏（简单版）**：由 1.4 的创建点标记**局部 owned 堆对象**；`delete` / `return` / 逃离作用域
-  （赋给字段或全局）即清除；作用域（`}`）结束仍 owned → 警告（**不终止**）。抑制语法本版未做。路径敏感版归 Phase 2。
+  （赋给字段或全局）即清除；作用域（`}`）结束仍 owned → 警告（**不终止**）。抑制语法本版未做。路径敏感版归 Phase 2（展望）。
 - **JSON**：`--diagnostics=json` 输出 warning 列表（schema 见 roadmap）；`--diagnostics=text`（默认）为人可读 stderr。
   首版**不含**符号表 / 调用图。
 - **改动**：warning 走独立通道，与既有 `die`（立即退出）并存；**error 仍终止**（Phase 0 语义不变）。
@@ -240,7 +245,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 
 **不再属 Phase 1**（用户 2026-10-14 决定）：`map` 是生态绑定方向而非 Phase 1 的模块化主题，出口标准
 与自举前置清单均不依赖它；其真实消费者（官方 bindings）尚不存在，过早冻结实例语义会凭想象用例定死
-设计。排在 Phase 3 自举之后最后实现，落地时与官方 bindings 清单一并定案。语法仍按 roadmap 冻结
+设计。排在 Phase 3 最后实现，落地时与官方 bindings 清单一并定案。语法仍按 roadmap 冻结
 （`map trait T for instance x { m(…) → CALL; }`；反向映射表输出为 sidecar `<out>.ctmap.json`，
 **不进 `.c`**）；实现层面的设计（生成 vtable 使实例可作接口值、`→` 箭头词法、`for instance` 解析形态）
 排期时再补。
@@ -271,6 +276,14 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
   `body_calls_sibling()` 放宽为 `body_needs_vtable()`（任一 trait 方法名出现在 `.m(` / `->m(` 即
   触发 vtable 前向声明）。**1.9c 之后，单文件 + 完全 OO 已具备自举能力**（跨单元引用带 trait 的对象
   仍是多文件自举的唯一硬阻塞，单文件路径不需要它）。
+- **1.9d ✅ 已落地（2026-10-14，最小可自举版的关键一步）**：**接口字段**作接收者。`struct Pair { … Node lhs; }`
+  里的值字段过去原样透传 → `lhs.show()` 编译不过；现在值字段 `T x` → `struct T_iface x`、指针字段
+  `struct T *x` → `struct T_iface *x`，`s.x.m()` 经字段**自身**的 vt 派发（`s.x.vt->m(s.x.self)`，
+  指针字段用 `->`）。同时补齐值字段的**语句赋值装箱**（`s.x = v;` → `(struct T_iface){ (void *)&v, &S_T_vtable }`）。
+  实现要点：`Struct` 增接口字段表（`ifname`/`iftype`/`nif` + 指针变体），`walk_to_iface_field()` 沿
+  `.`/`->` 跳 struct 字段直到命中接口字段，`try_iface_assign()` 扩展为同时处理接口变量与接口值字段。
+  正例见 `test/cases/28_iface_field.ct` 与 `examples/06_iface_field/`。已知限制：指定初始化器里的接口
+  字段不装箱；指针接口字段只支持派发、赋值保持原样。
 
 ### 5. 数据模型改动（`ctc.c`）
 
@@ -296,7 +309,7 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 | D5 | 文件作用域对象初始化 | **`__attribute__((constructor))`** / 显式 `<unit>_init()` | **已定 A**（用户 2026-10-13）：生成 `__ct_init` 构造器 |
 | D6 | 单入口 `ct` 落地时机 | **Phase 1 起步** / 与 1.2 一起 / 更晚 | 何时一次性重生成全部 golden |
 | D7 | `import` 的路径根 | **导入文件目录 + `-I`** / 仅 `-I` | 目录约定 |
-| D8 | `map` 是否属 Phase 1 | **已定：否——移至 Phase 3（自举之后、最后实现）**（用户 2026-10-14）；原候选：是（roadmap 已列） / 推迟到 Phase 1 末尾 | 1.8 排期 |
+| D8 | `map` 是否属 Phase 1 | **已定：否——移至 Phase 3（最后实现）**（用户 2026-10-14）；原候选：是（roadmap 已列） / 推迟到 Phase 1 末尾 | 1.8 排期 |
 | D-A | `ct build` 是否自己调用 `cc` | **A：只产出 `.c`/`.h` 并打印建议的 `cc` 命令** / B：调用 `cc` 出可执行 | **已定 A**（用户 2026-10-11 确认）：保持 `ctc` 零依赖，不违背 AGENTS §2「不引入构建系统」 |
 
 ### 7. 测试策略
@@ -312,13 +325,19 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 
 - 类型检查、优化；**错误恢复**（1.7 只为 warning 引入「不终止」，error 仍立即终止）。
 - 泛型、继承（永久非目标）。
-- 目录 = namespace 强制绑定（Phase 2）。
-- AutoDrop、路径敏感泄漏分析（Phase 2）。
+- 目录 = namespace 强制绑定（Phase 2 展望）。
+- AutoDrop、路径敏感泄漏分析（Phase 2 展望）。
 - 包管理器本体（`import` 的模块解析属 Phase 1，registry / 安装不在内）。
 
 ---
 
 ## English
+
+> **Status: design draft; 1.0–1.9 implemented (over-reach period).** This document describes the
+> **over-reach period** (the old "Phase 1" — when namespaces / multi-file / import / `pub` / Drop were
+> once implemented directly in C right after Phase 0). **Note**: the roadmap's **Phase 1 has been
+> redefined as "self-hosting"**; the `Phase 1.x` labels here are the over-reach period's historical
+> sub-phase numbers.
 
 ### 1. Goal and exit criteria
 
@@ -472,7 +491,7 @@ moved to Phase 3 and is no longer part of this phase.
   preserved.
 - **Driver**: scan all relevant `.ct` files → build the module table → resolve `import`s into a DAG →
   topological order → compile each unit → link the `.o`s.
-- **Risk**: **directory = namespace only becomes mandatory in Phase 2**; Phase 1 resolves purely from
+- **Risk**: **directory = namespace only becomes mandatory in Phase 2 (outlook)**; this (over-reach) phase resolves purely from
   the `import` path and does not check directory names.
 - **Acceptance**: an `import`ed unit is compiled in automatically, with no need to list every file by hand.
 
@@ -557,6 +576,11 @@ moved to Phase 3 and is no longer part of this phase.
   fits this project's "hosted by gcc / clang" positioning (see the bootstrap draft).
 - **Acceptance**: `Person ps[2];` works at file scope, element vptrs are correct, and `ps[0].greet()`
   in `main` behaves.
+- **Addition (Phase 1, the `static` prefix)**: the same declarations with a leading `static` used to
+  pass through verbatim (no `struct ` qualified, no vptr) and the output would not compile; now
+  `try_var_decl` remembers and re-emits `static `, so `static Person g;` / `static Person gs[2];`
+  share the exact path with non-`static` declarations (objects get the initialiser, arrays still go
+  through `__ct_init`). Positive case: `test/cases/27_static_file_scope.ct`.
 
 #### 1.7 Leak warnings (simple version) + JSON diagnostics ✅ done
 
@@ -572,7 +596,7 @@ moved to Phase 3 and is no longer part of this phase.
 - **Leak (simple version)**: mark **local owned heap objects** at 1.4's creation points; `delete` /
   `return` / escaping the scope (assignment to a field or a global) clears the mark; still owned at
   scope (the matching `}`) exit → a warning (**non-fatal**). No suppression syntax in this version.
-  The path-sensitive version is Phase 2.
+  The path-sensitive version is Phase 2 (outlook).
 - **JSON**: `--diagnostics=json` emits the warning list (schema in the roadmap); `--diagnostics=text`
   (the default) is human-readable stderr. The first cut does **not** include the symbol table / call graph.
 - **Change**: warnings travel on a separate channel alongside the existing `die` (immediate exit);
@@ -584,9 +608,9 @@ moved to Phase 3 and is no longer part of this phase.
 #### 1.8 `map` + reverse-mapping table → moved to Phase 3 (D8, decided 2026-10-14)
 
 **No longer part of Phase 1** (user decision, 2026-10-14): `map` is an ecosystem-binding feature,
-not Phase 1's modularity theme; neither the exit criteria nor the bootstrap checklist depend on it,
+not the self-hosting core's theme; neither the exit criteria nor the bootstrap checklist depend on it,
 and its real consumer (the official bindings) does not exist yet — freezing instance semantics early
-would design against imagined use cases. Scheduled after Phase 3 self-hosting, implemented last, and
+would design against imagined use cases. Scheduled for Phase 3, implemented last, and
 settled together with the bindings list. The syntax stays frozen in the roadmap
 (`map trait T for instance x { m(…) → CALL; }`; the reverse-mapping table is a sidecar
 `<out>.ctmap.json`, **not** into the `.c`); the implementation-level design (vtable for the instance,
@@ -628,6 +652,18 @@ chain) used to be passed through verbatim. It is one class of problem and can be
   appearing as `.m(` / `->m(` triggers the vtable forward declaration). **After 1.9c a single-file,
   fully-OO program is self-hostable** (cross-unit references to trait-bearing objects remain the only
   blocker for the multi-file path, which single-file bootstrap does not need).
+- **1.9d ✅ landed (2026-10-14, the key step toward the minimal self-hostable version)**: an
+  **interface field** as receiver. A value field `Node lhs;` inside `struct Pair { … }` used to pass
+  through verbatim → `lhs.show()` did not compile; now a value field `T x` becomes `struct T_iface x`
+  and a pointer field `struct T *x` becomes `struct T_iface *x`, and `s.x.m()` dispatches through the
+  field's **own** vt (`s.x.vt->m(s.x.self)`, or `->` for a pointer field). Statement assignment of a
+  value field is boxed too (`s.x = v;` → `(struct T_iface){ (void *)&v, &S_T_vtable }`). Implementation:
+  `Struct` gains interface-field tables (`ifname`/`iftype`/`nif` plus a pointer variant),
+  `walk_to_iface_field()` hops `.`/`->` over struct fields until it hits an interface field, and
+  `try_iface_assign()` now handles both interface variables and interface-value fields. Positive cases:
+  `test/cases/28_iface_field.ct` and `examples/06_iface_field/`. Known limits: an interface field in a
+  designated initialiser is not boxed; a pointer interface field supports dispatch only (assignment is
+  left as written).
 
 ### 5. Data-model changes (`ctc.c`)
 
@@ -654,7 +690,7 @@ chain) used to be passed through verbatim. It is one class of problem and can be
 | D5 | File-scope object initialisation | **`__attribute__((constructor))`** / explicit `<unit>_init()` | **A decided** (user, 2026-10-13): generate the `__ct_init` constructor |
 | D6 | When the single-entry `ct` lands | **at the start of Phase 1** / with 1.2 / later | when every golden is regenerated once |
 | D7 | `import` path root | **importing file's directory + `-I`** / `-I` only | directory convention |
-| D8 | Whether `map` belongs to Phase 1 | **Decided: no — moved to Phase 3 (after self-hosting, implemented last)** (user, 2026-10-14); earlier options: yes (roadmap lists it) / defer to the end of Phase 1 | 1.8 scheduling |
+| D8 | Whether `map` belongs to Phase 1 | **Decided: no — moved to Phase 3 (implemented last)** (user, 2026-10-14); earlier options: yes (roadmap lists it) / defer to the end of Phase 1 | 1.8 scheduling |
 | D-A | Does `ct build` invoke `cc` itself | **A: emit `.c`/`.h` only and print the suggested `cc` command** / B: run `cc` to produce an executable | **A decided** (user, 2026-10-11): keeps `ctc` dependency-free, honouring AGENTS §2 ("no build systems") |
 
 ### 7. Test strategy
@@ -672,7 +708,7 @@ chain) used to be passed through verbatim. It is one class of problem and can be
 - Type checking, optimisation; **error recovery** (1.7 introduces "continue" only for warnings;
   errors still terminate immediately).
 - Generics, inheritance (permanent non-goals).
-- Mandatory directory = namespace binding (Phase 2).
-- AutoDrop, path-sensitive leak analysis (Phase 2).
+- Mandatory directory = namespace binding (Phase 2 outlook).
+- AutoDrop, path-sensitive leak analysis (Phase 2 outlook).
 - The package manager itself (Phase 1 covers `import`'s module resolution; the registry / install
   does not).

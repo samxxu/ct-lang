@@ -4,7 +4,7 @@
 >
 > **状态：设计草案，当前未实现。** 本文描述的目录结构与构建流程都还不存在；
 > 今天的编译器是仓库根目录的单文件 [ctc.c](../ctc.c)。
-> 落地触发条件：Phase 1 完成（namespace / import / 多文件）之后、开始用 CT 写编译器之前。
+> 落地触发条件：**Phase 0.3（剥离越位特性）完成、开始自举（Phase 1）**之时——自举一开始，`ctc.c` 即冻结为 L0 + 差分 oracle。
 
 ---
 
@@ -16,14 +16,14 @@
 
 已定边界（2026-10-11 用户确认）：
 
-- **Phase 0–2 期间 `ctc.c` 留在仓库根目录、保持单文件**（见 [AGENTS.md](../AGENTS.md) §2）；本文的目录结构仅在 Phase 3 启动时生效。
-- Phase 3 启动时 `ctc.c` 移入 `ctrait/` 并**冻结**：只修 bug，不加新特性；新特性全部在 `src/` 里用 CT 实现。
+- **Phase 0 期间 `ctc.c` 留在仓库根目录、保持单文件**（见 [AGENTS.md](../AGENTS.md) §2）；本文的目录结构仅在自举（Phase 1）启动时生效。
+- **自举（Phase 1）启动时 `ctc.c` 即冻结为 L0 + 差分 oracle**（只修 bug，不加特性），并随之移入 `ctrait/`；此后新特性一律在 CT 侧实现。它长期保留为种子与 oracle。
 
-### 2. 目标仓库结构（Phase 3 形态）
+### 2. 目标仓库结构（自举形态）
 
 ```
 ct/
-├── ctc.c → ctrait/ctc.c   # L0：C 写的最简 trait 编译器（Phase 3 时从根目录迁入并冻结）
+├── ctc.c → ctrait/ctc.c   # L0：C 写的最简 trait 编译器（自举启动即冻结为种子/oracle，随自举迁入）
 │   └── test/              # 现有 test/ 随之一同迁入，保持独立可跑
 ├── src/                   # L1/L2：CT 写的完整编译器
 │   ├── main.ct            # 编译器入口
@@ -67,6 +67,10 @@ ctrait/ctc src/main.ct src/parser/*.ct src/semantic/*.ct -o ctc-l1
 
 L0 改动（修 bug）后需要重走完整自举流程；日常只改 `src/` 时用已有的 `ctc` 重编即可。
 
+> **注（2026-10-14）**：Step 2 的多文件调用要求 L0 支持多文件，而 Phase 0.3 已把多文件移出 L0 ——
+> 故 **L1 阶段须按单文件编译**（先把 `src/**` 合并成一个 `.ct`，或用宿主 `cc` 的 `-E` 拼接）；
+> 分文件组织从 **L2（Phase 2）** 起才恢复。
+
 ### 5. ctrait 的独立性
 
 `ctrait/` 设计为逻辑上自洽：测试独立运行，不依赖上层任何东西。它只支持 `struct` / `trait` / `impl … for …` / `use` / `self` / 纯 C 透传，不支持 namespace、可见性、多文件、Drop —— **这是设计决策，不是半成品**。
@@ -86,7 +90,7 @@ import (L2)             ← 依赖 namespace
   ↑
 Drop + delete (L2)      ← 依赖 struct
   ↑
-AutoDrop (Phase 2/3)    ← 依赖 Drop + 作用域分析
+AutoDrop (Phase 2)    ← 依赖 Drop + 作用域分析
 ```
 
 新增特性如果依赖未实现的上层特性，先在 `docs/` 里记录设计，等依赖就绪后再实现。
@@ -100,7 +104,11 @@ AutoDrop (Phase 2/3)    ← 依赖 Drop + 作用域分析
 | M3 | L2 | + namespace | 编译后续版本 |
 | M4 | L3 | + import + Drop | 编译后续版本 |
 | M5 | L4 | + JSON 诊断 + 泄漏警告 | 编译自身（自举完成） |
-| M6 | L5 | + AutoDrop + 路径敏感分析 | 完整编译器 |
+| M6 | L5 | 不再新增特性，全功能对齐冻结 oracle | 与 oracle 逐字节一致（自举闭环） |
+
+> **阶段归属（2026-10-14）**：自举期（[roadmap](../roadmap.md) 的 **Phase 1**）只做 **M1→M2（L1）**；
+> **M3–M6 属 Phase 2**（用 CT 恢复被剥离的特性、并新增特性）。L1 只能用 OO 子集且必须是**单文件**——
+> 因为 Phase 0.3 已把 namespace / 多文件 / import 移出 L0。
 
 ### 8. 为什么单仓库
 
@@ -115,8 +123,9 @@ AutoDrop (Phase 2/3)    ← 依赖 Drop + 作用域分析
 
 > **Status: design draft, not implemented.** None of the directories or build flows described here
 > exist; today's compiler is the single-file [ctc.c](../ctc.c) at the repository root.
-> Trigger for landing this: after Phase 1 (namespace / import / multi-file) is complete, before
-> starting to write the compiler in CT.
+> Trigger for landing this: **Phase 0.3 (stripping the over-reach) is done and self-hosting (Phase 1)
+> starts** — the moment it
+> does, `ctc.c` freezes as L0 + the differential oracle.
 
 ### 1. Strategy
 
@@ -125,16 +134,17 @@ language implemented in CT itself, step by step. Everything lives in a single re
 
 Confirmed boundaries (user, 2026-10-11):
 
-- **During Phase 0–2, `ctc.c` stays at the repository root as a single file** (see
-  [AGENTS.md](../AGENTS.md) §2); the layout below only takes effect when Phase 3 starts.
-- When Phase 3 starts, `ctc.c` moves into `ctrait/` and **freezes**: bug fixes only, no new
-  features; all new features are written in CT under `src/`.
+- **During Phase 0, `ctc.c` stays at the repository root as a single file** (see
+  [AGENTS.md](../AGENTS.md) §2); the layout below only takes effect when self-hosting (Phase 1) starts.
+- **`ctc.c` freezes as soon as self-hosting (Phase 1) starts** (L0 + the differential oracle): bug
+  fixes only, no new features; all new features are written in CT from then on. It **moves into
+  `ctrait/`** with the layout and is kept long-term as the seed and oracle.
 
-### 2. Target repository layout (Phase 3 shape)
+### 2. Target repository layout (self-hosting shape)
 
 ```
 ct/
-├── ctc.c → ctrait/ctc.c   # L0: minimal trait compiler in C (moved from root at Phase 3, then frozen)
+├── ctc.c → ctrait/ctc.c   # L0: minimal trait compiler in C (frozen as seed/oracle once self-hosting starts, moved in with it)
 │   └── test/              # today's test/ moves with it and stays independently runnable
 ├── src/                   # L1/L2: the full compiler written in CT
 │   ├── main.ct            # compiler entry point
@@ -202,7 +212,7 @@ import (L2)             ← needs namespaces
   ↑
 Drop + delete (L2)      ← needs structs
   ↑
-AutoDrop (Phase 2/3)    ← needs Drop + scope analysis
+AutoDrop (Phase 2)    ← needs Drop + scope analysis
 ```
 
 If a new feature depends on an unimplemented upper layer, record the design under `docs/` first and
@@ -217,7 +227,12 @@ implement it once its dependencies are ready.
 | M3 | L2 | + namespace | compiling the next stage |
 | M4 | L3 | + import + Drop | compiling the next stage |
 | M5 | L4 | + JSON diagnostics + leak warnings | compiling itself (self-hosted) |
-| M6 | L5 | + AutoDrop + path-sensitive analysis | the complete compiler |
+| M6 | L5 | no new features; full alignment with the frozen oracle | byte-identical with the oracle (self-hosting closed loop) |
+
+> **Phase mapping (2026-10-14)**: the self-hosting phase ([roadmap](../roadmap.md)'s **Phase 1**) only
+> covers **M1→M2 (L1)**; **M3–M6 belong to Phase 2** (restoring the stripped features in CT and adding
+> new ones). L1 must use the OO subset and be a **single file** — Phase 0.3 moved namespaces /
+> multi-file / import out of L0.
 
 ### 8. Why a single repository
 

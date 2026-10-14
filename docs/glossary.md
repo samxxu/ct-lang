@@ -37,7 +37,7 @@
 | 私有（static） | `static` | 支持的可见性；符号只进 `.c` |
 | 析构特征 Drop | `use Drop`、`impl Drop for S { … }` | **保留名**内置 trait；惰性生成释放函数 |
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
-| 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；自 Phase 1 移出，排期 Phase 3，D8） |
+| 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；自越位实现移出，排期 Phase 3，D8） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
 | 虚表指针（vptr） | `__<trait>_vptr` | struct 内字段，指向其 vtable |
@@ -123,8 +123,8 @@
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
-| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 1 / 2 / 3 | 见 [roadmap](roadmap.md) |
-| 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 3） | Phase 1 的落地顺序 |
+| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2（恢复 + 新增特性）/ 3（生态） | 见 [roadmap](roadmap.md) |
+| 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 3） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D8、D-A | 见 [design/phase1.md](design/phase1.md) §6 |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 | 用 CT 重写编译器 |
@@ -180,7 +180,7 @@
 | static | `static` | a supported visibility; the symbol stays in the `.c` |
 | Drop | `use Drop`, `impl Drop for S { … }` | a **reserved** built-in trait; the release function is emitted lazily |
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
-| map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; moved out of Phase 1, lands in Phase 3, D8) |
+| map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; moved off the self-hosting core, lands in Phase 3, D8) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
 | vtable | `struct <Trait>_vtbl` | a table of function pointers |
 | vptr | `__<trait>_vptr` | the struct field pointing at its vtable |
@@ -264,8 +264,8 @@
 
 | Term | Form | Notes |
 | --- | --- | --- |
-| phase | 0 / 0.1 / 0.2 / 1 / 2 / 3 | see [roadmap](roadmap.md) |
-| sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 3) | the Phase 1 landing order |
+| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2 (restore + add features) / 3 (ecosystem) | see [roadmap](roadmap.md) |
+| sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 3) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D8, D-A | see [design/phase1.md](design/phase1.md) §6 |
 | bootstrap / self-hosting | L0 → L1 → L2 | rewriting the compiler in CT |

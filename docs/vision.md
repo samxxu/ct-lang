@@ -92,7 +92,7 @@ ct_platform.h（厂商提供，一次编写）→ 宏映射到具体 SDK
 
 开发者只写 CT 标准接口，不感知平台差异。换平台 = 换 `ct_platform.h`，业务代码零改动；厂商写几十行宏即可让自家芯片兼容 CT 生态。
 
-**新增一个平台适配的方式**（Phase 1 落地多文件后生效）：在 `platform/` 下添加 `ct_platform_<chip>.h`，只写宏映射、不需要改编译器，并附最小示例（`uart.h.ct` + `gpio.h.ct`）。
+**新增一个平台适配的方式**（多文件落地后生效）：在 `platform/` 下添加 `ct_platform_<chip>.h`，只写宏映射、不需要改编译器，并附最小示例（`uart.h.ct` + `gpio.h.ct`）。
 
 ### 4. AI 编程友好性
 
@@ -211,7 +211,7 @@ Developers write only against the CT standard interface and never perceive platf
 Switching platform = switching `ct_platform.h`, with zero changes to business code; a vendor writes a
 few dozen macro lines to make its chip CT-compatible.
 
-**How a new platform gets adapted** (once multi-file lands in Phase 1): add
+**How a new platform gets adapted** (once multi-file lands): add
 `platform/ct_platform_<chip>.h` — macros only, no compiler changes — plus a minimal example
 (`uart.h.ct` + `gpio.h.ct`).
 

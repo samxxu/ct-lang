@@ -13,12 +13,17 @@
 
 | 阶段 | 主题 | 状态 | 出口条件 |
 | --- | --- | --- | --- |
-| Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
-| Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
-| Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line`、泄漏警告 + JSON 诊断 | 🔨 进行中（1.0–1.7 已落地：CLI、namespace、多文件 + `pub`、`import`、堆/Drop、`#line`、文件作用域对象、泄漏警告 + `--diagnostics=json`；1.9 一般接收者已落地：1.9a 变量下标 / 指针数组元素 / 指针字段链、1.9b rvalue 接收者 `f().m()` / `mk()->m()`；`map` + 反向映射表移至 Phase 3（D8，2026-10-14 拍板）） | 见下 |
-| Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
-| Phase 3 | 增量编译、跨函数分析、多目标编译、自举、`map` + 反向映射表（自 Phase 1 移出）（展望） | 🔭 展望 | — |
+| Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 0 之后，已落地） | 出口清单 1–9 全部成立 |
+| Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 0 之后，已落地；golden 测试全绿 |
+| Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口**数组**尚未实现；接口**字段**（值字段装箱 + 派发、指针字段派发）已补齐 |
+| Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | 🔜 下一步 | `ctc.c` 只剩 Phase 0 出口 1–9 的能力；测试与文档同步收缩；归档件可构建出对照 |
+| Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 🔜 待启动 | 只做阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
+| Phase 2 | **用 CT 恢复并新增语言特性**，拆 4 个子阶段：**2.1 模块化**（namespace / 多文件 `ct build` / `pub` / `import`）、**2.2 内存**（Drop / `delete` 放宽）、**2.3 诊断与溯源**（`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断）、**2.4 新增特性**（AutoDrop / 路径敏感泄漏分析 / 目录 = namespace）；2.1–2.3 照归档 oracle 对差，2.4 无 oracle | 🔭 展望 | 2.1–2.3：**byte-identical**；2.4：设计冻结 + 新用例全绿；阶梯 M3–M6 |
+| Phase 3 | 生态与扩展：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标随后 | 🔭 展望 | — |
+
+> **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2** 用 CT 逐项恢复（回归清单见下方 Phase 2 节）。
+>
+> **编号约定**：下文出现的 `Phase 1.0`–`Phase 1.9`、`Phase 1.6/1.7/1.9c` 等，是**越位实现期的历史子阶段编号**，与新的 **Phase 1（自举）**无关。
 
 ### 版本记录
 
@@ -37,7 +42,7 @@
 - **实现方式（待落地时确认）**：按 `argv[0]` 分派（同一二进制，同 busybox 的做法），`ctc` 作为 `ct` 的软链或副本。
 - **当前状态**：**尚未落地** —— 今天的二进制仍叫 `ctc`，`ct` 命令与子命令都不存在。因此 README 等处的命令仍写作 `ctc`，等实现落地那一步统一替换，避免文档指向跑不通的命令。
 
-落地清单（Phase 1 起执行）：
+落地清单（越位实现期起执行）：
 
 1. `ctc.c`：`main` 增加子命令解析（`compile` 为默认），并支持按 `argv[0]` 以 `ctc` 身份直调。
 2. 构建方式改为 `gcc ctc.c -o ct`，并生成 `ctc` 别名（软链）。
@@ -60,7 +65,7 @@
 - **编译器本体** GPL-3.0-or-later（`LICENSE`）；**`.ct` 源码与生成物不受 GPL 约束**（`LICENSE.EXCEPTION`，照 GNU Bison 先例，且随产物走）；**`examples/` 与 `test/` 为 MIT**。
 - 例外不是可选项：ctc 会往产物里插入样板（vtable 结构体、vptr 字段、`_self` 强转行），"编译器输出是否构成衍生作品"存在歧义——不写例外，使用者（尤其公司法务）无法判断，等于挡住采用。
 
-#### namespace 与路径访问规则（已定，Phase 1 落地）
+#### namespace 与路径访问规则（已定，越位实现落地）
 
 CT 采用混合路径访问方式：**前面用 `::` 走命名空间路径，最后一步用 `.` 调用方法或访问字段**。最后一步一定是 `.`。
 
@@ -86,7 +91,7 @@ HAL.UART.huart1.send(...);      // 中间不能用 .
 
 此规则落地时写入 [language-spec](language-spec.md)，编译器强制检查。
 
-#### import 与模块系统（已定，Phase 1 落地）
+#### import 与模块系统（已定，越位实现落地）
 
 `import` 不是 `#include` 的语法糖，而是**编译单元声明**。编译器通过 `import` 建立模块依赖图，自动处理符号引用、编译顺序和链接：
 
@@ -105,7 +110,7 @@ import Driver::Sensor; // 告诉编译器：Driver::Sensor 的符号在 driver/s
 
 Phase 0 不做 import（单文件），Phase 1 实现。
 
-#### 文件命名约定与 `pub` 可见性（已定，Phase 1 落地）
+#### 文件命名约定与 `pub` 可见性（已定，越位实现落地）
 
 文件名决定编译器的生成行为，无需额外关键字或配置文件：
 
@@ -144,7 +149,7 @@ namespace HAL::UART {
 
 可见性规则作用于 namespace 内的声明、struct 字段、trait 方法，由编译器强制约束，违反直接报错。封装由编译器强制执行，不存在「忘了在 `.h` 里声明但 `.c` 里实现了」的不一致问题。
 
-#### 内存管理：Drop 与 delete（已定，Phase 1 落地）
+#### 内存管理：Drop 与 delete（已定，越位实现落地）
 
 编译器内置 `Drop` trait。struct 声明 `use Drop` 后，编译器自动生成释放逻辑：
 
@@ -182,7 +187,7 @@ delete d;    // 展开为：if (d) { d->drop(); free(d); }
 
 数组释放用 `delete[]`：对每个元素调 `drop()`，然后 `free`。
 
-**编译期泄漏警告（Phase 1 简单版）**：函数末尾检查局部变量的分配/释放状态——分配了但没 `delete`、没 `return`、没存全局 → 警告。路径敏感版（分析所有 return 路径）归 Phase 2。警告同时输出人可读列表与 JSON（供 VS Code 插件消费）：
+**编译期泄漏警告（Phase 1 简单版）**：函数末尾检查局部变量的分配/释放状态——分配了但没 `delete`、没 `return`、没存全局 → 警告。路径敏感版（分析所有 return 路径）归 Phase 2（展望）。警告同时输出人可读列表与 JSON（供 VS Code 插件消费）：
 
 ```json
 {
@@ -214,27 +219,29 @@ map trait Controller for instance huart1 {
 
 编译器同时维护**反向映射表**（生成代码中的 C 符号 ← CT 中的哪个 trait/方法），用于：错误信息中给出有意义的回溯、VS Code 插件「跳转到定义」、反编译时恢复 CT 语义。
 
-> **排期（D8，用户 2026-10-14 拍板）**：自 Phase 1 移出，排在 Phase 3 自举之后最后实现。理由：
-> `map` 属生态绑定方向而非 Phase 1 的模块化主题，出口标准与自举前置清单均不依赖它；其真实消费者
+> **排期（D8，用户 2026-10-14 拍板）**：自越位实现中移出，排在 Phase 3 最后实现。理由：
+> `map` 属生态绑定方向而非自举主线的主题，出口标准与自举前置清单均不依赖它；其真实消费者
 > （官方 bindings）尚不存在，过早冻结实例语义会凭想象用例定死设计。落地时与官方 bindings 清单一并定案。
 
-#### JSON 诊断输出与插件薄客户端（已定，Phase 1 落地）
+#### JSON 诊断输出与插件薄客户端（已定，越位实现落地）
 
 `ctc` 输出 JSON 格式：编译错误/警告（含泄漏警告）、符号表（namespace / trait / struct / 函数位置）、调用关系图。VS Code 插件作为薄客户端消费 JSON，实现内联错误提示、跳转到定义、自动补全、悬停类型信息；插件本身不做编译、不做分析，编译器升级时插件无需改动。
 
 > **首版（Phase 1.7，用户 2026-10-13 拍板 Q1=A）**：`--diagnostics=json` **只输出诊断列表**（`{"warnings":[…]}`），
 > 符号表与调用图**尚未实现**，另开子项。`--diagnostics=text`（默认）为人可读 stderr。
 
-#### 自举策略与单文件边界（已定，Phase 3 落地）
+#### 自举策略与单文件边界（已定；`ctc.c` 自举启动即冻结，目录随自举落地）
 
 - **渐进自举**：L0（C 写的最简 trait 编译器，即今天的 `ctc.c`）→ L1（CT trait-only 子集写的基础编译器）→ L2（全特性 CT 写的完整编译器）。
-- **Phase 0–2 边界**：`ctc.c` 留在仓库根目录、保持单文件（2026-10-11 用户确认）；不建 `src/`、不拆分。
+- **Phase 0 边界**：`ctc.c` 留在仓库根目录、保持单文件（2026-10-11 用户确认）；不建 `src/`、不拆分。自举启动后才谈搬迁。
 - **最小可自举版（2026-10-14 用户确认）**：优先用**单文件**（不用 namespace / `import` / 多文件）达成自举，
   以绕开前置条件 #1「跨单元引用带 trait 的对象」（vtable 变量为 `static`、`.h` 只放类型，跨翻译单元
   既写不了 vptr 也无法派发）。单文件路径的唯一硬阻塞是「`impl` 方法体内无法跨对象派发」，已由
   **Phase 1.9c** 解决（方法体走与顶层完全相同的重写管线：登记 `self` / 方法参数后逐行 `transform_line`）。
-  结论：**单文件 + 完全 OO 已可自举**；namespace、多文件、诊断等非 OO 特性皆可妥协，排在自举之后。
-- **Phase 3 启动时**：`ctc.c` 移入 `ctrait/` 并冻结（只修 bug），新特性全部在 `src/` 用 CT 实现。
+  结论：**单文件 + 完全 OO 已可自举**——namespace、多文件、诊断等非 OO 特性**不作为自举前提**，一律改用 CT 实现；C 侧的越位实现**先剥除归档（Phase 0.3）**，再由 Phase 2 用 CT 重做。
+- **冻结与搬迁**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）；移入 `ctrait/` 随自举结构稳定时一并做。新特性一律在 CT 侧实现。
+- **清理口径（2026-10-14 修订为「剥离在前」）**：**先**把越位落在 C 里的 namespace / 多文件 / import / Drop / `#line` / 诊断从 `ctc.c` **移出并归档为 oracle**（Phase 0.3），使 L0 成为**纯 OO 核心**（+底层设施）；**再**自举（Phase 1）；**最后**由 Phase 2 用 CT 逐项重做并向归档对差。两条硬前提：① **移出件不销毁**——归档件既是种子（唯一能生产 L1 的那个行为基准）也是差分 oracle（唯一能产出 byte-identical golden 的对照实现）；② **`ctc.c` 永不整体删除**，作为种子与差分 oracle 长期保留（先例：Rust 长期保留 stage0，Go 1.5 起弃用 stage0，两者皆可）。
+- **阶梯约束（源语言滞后一级）**：第 n 级编译器只能编译「第 n−1 级所支持的语法子集」写成的源码。因此 L1 源码只能用**单文件 + OO 子集**；CT 侧要**使用** namespace / Drop / import 组织编译器源码，必须先有支持它们的 CT 级编译器。**"重写完就删 C"顺序错**，必须逐级爬升。
 - **单仓库**：跨层编译与特性耦合决定了不拆仓库；`ctrait/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
 
 目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)（设计草案，未实现）。
@@ -243,14 +250,14 @@ map trait Controller for instance huart1 {
 
 L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐条实测**；除注明外均为当前缺口）：
 
-| # | 前置条件 | 为什么自举需要 | 归属 | 状态 |
+| # | 前置条件 | 为什么自举需要 | 落地 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | Phase 1 | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可。单文件自举路径**不需要**此项（见上方「最小可自举版」） |
-| 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | Phase 1（与 Drop 一起定） | ✅ `T *p = malloc(...)`（含 `calloc`）已在声明后自动写 vptr（含嵌套值字段，D1=A）；`use Drop` + `delete` 递归释放已实现 |
-| 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ✅ Phase 1.6：文件作用域对象 / 数组的 vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入 |
-| 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
-| 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ✅ 多文件模式**默认**在 `.c` 发出 `#line`（D4=A），单文件默认关；gcc/clang 报错映回 `.ct` 行 |
-| 6 | **方法调用的接收者可以是更一般的表达式** | 变量 / 表达式下标、指针数组元素、指针字段链（`ps[i].m()`、`ptrs[i]->m()`、`b.who->m()`）由 Phase 1.9a 支持；rvalue 接收者 `f().m()` / `mk()->m()`（含字段跳 `f().a.b.m()`）由 Phase 1.9b 支持 | Phase 1.9 | ✅ 1.9a + 1.9b 均落地（Q1=A 值/指针返回、Q2=A 仅语句行首或初始化式 RHS 提升、Q3=A 其它位置 `die`） |
+| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | 越位实现 → 自举期回归 CT | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可。单文件自举路径**不需要**此项（见上方「最小可自举版」） |
+| 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | C 侧（自举前置；与 Drop 一起定） | ✅ `T *p = malloc(...)`（含 `calloc`）已在声明后自动写 vptr（含嵌套值字段，D1=A）；`use Drop` + `delete` 递归释放已实现 |
+| 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | C 侧（自举前置；"对象住哪儿"设计） | ✅ Phase 1.6：文件作用域对象 / 数组的 vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入；`static` 前缀的同款声明也已识别（`static Person g;` / `static Person gs[2];`，Phase 1） |
+| 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | 越位实现 → 自举期回归 CT | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
+| 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | 越位实现 → 自举期回归 CT | ✅ 多文件模式**默认**在 `.c` 发出 `#line`（D4=A），单文件默认关；gcc/clang 报错映回 `.ct` 行 |
+| 6 | **方法调用的接收者可以是更一般的表达式** | 变量 / 表达式下标、指针数组元素、指针字段链（`ps[i].m()`、`ptrs[i]->m()`、`b.who->m()`）由 Phase 1.9a 支持；rvalue 接收者 `f().m()` / `mk()->m()`（含字段跳 `f().a.b.m()`）由 Phase 1.9b 支持 | C 侧（自举前置，1.9） | ✅ 1.9a + 1.9b 均落地（Q1=A 值/指针返回、Q2=A 仅语句行首或初始化式 RHS 提升、Q3=A 其它位置 `die`） |
 | 7 | 位置式初始化 / 方法体内互调 | — | 已完成（0.1.1 / 0.1.4 / 1.9c） | ✅ 方法体自 **Phase 1.9c** 起走与顶层相同的重写管线：方法体内的局部变量接收者、字段链递归与参数接收者均正常派发 |
 
 **AST 的形状**：ct **无继承**，AST 只能用 `trait Node { … }` + 各 `struct impl`，靠**接口值**（Phase 0.2）
@@ -258,7 +265,9 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 `trait Node` 先声明；两个 struct **以值互相引用**会失败（经接口指针引用则不受影响）。
 
 第 6 项是一类问题（"接收者既不是已登记的标识符、也不是常量下标 / 值字段链"），可单独推进；其余 1–5 项
-与 **Phase 1** 高度重叠——**自举的前置条件基本等于 Phase 1 的产出**。
+与**越位实现期**高度重叠——**自举的前置条件基本等于越位实现期的产出**。
+
+> **2026-10-14 修订（配合 Phase 0.3）**：按「纯 OO 单文件」口径，前置 **#1（多文件 + namespace）与 #5（`#line`）退役**（随 Phase 0.3 一并移出，单文件路径本就不需要）；**#2（堆创建）、#3（文件作用域对象/数组）、#4（`delete` 覆盖 `char *`）、#6（一般接收者）、#7（方法体同一管线）保留**并归入 Phase 0 核心（2026-10-14 逐条确认「留」）。退役后自举**不再有硬阻塞**（原 #1 附带的「跨单元带 trait 对象」随之消失）。
 
 ### Phase 0：用 trait 写「完整 OO」
 
@@ -438,65 +447,166 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - 派发：`g.greet()` → `g.vt->greet(g.self)`；
 - 校验：struct 未 `use` 该 trait、跨 trait 装箱、无法推断类型的表达式 → 一律 `die`，不产出坏 C。
 
-**暂未做**：接口**数组**（声明即 `die`）与接口**字段**的构造期自动装箱（字段类型会被展开、可手动赋值）。
+**暂未做**：接口**数组**（声明即 `die`）；接口**字段**的构造期自动装箱（指定初始化器里的接口字段不装箱）。
+接口字段本身已可用（Phase 1 补齐）：值字段 `T x` → `struct T_iface x`、指针字段 `struct T *x` → `struct T_iface *x`；
+`s.x.m()` 经字段自身的 vt 派发，值字段的语句赋值 `s.x = v;` 自动装箱（指针字段赋值保持原样）。
 
 **用例**：`test/cases/18_polymorphism.ct`（同一 `announce(Greeter)` 服务 `Person` 与 `Shop`，
 外加接口变量重赋值与接口返回值）。
 
-### Phase 1（待规划）
+### Phase 0.3：剥离越位特性（回到纯 OO 的 `ctc.c`）
 
-语言层面的语法决策已冻结，见上方「已定的设计决策」（namespace 路径规则、import、文件命名约定与 `pub`、Drop/delete、map、JSON 诊断）。实现层面的设计（子阶段 1.0–1.7 + 可选 1.9、符号修饰、数据模型改动、决策 D1–D8——仅 D6 / D7 待定，D8 已定：`map` 移至 Phase 3）见 [design/phase1.md](design/phase1.md)（设计草案，未实现）。下表是实现层面的要点与风险：
+**主题**：把 Phase 0 之后越位实现在 C 侧的语言特性**从 `ctc.c` 移出**，让主线回到「只做 Phase 0 出口 1–9 的纯 OO」+ 底层设施。移出件**不销毁**：归档为 **oracle**（仍可构建出对照程序），供 Phase 2 用 CT 重做时对差。
 
-| 特性 | 要点 | 主要风险 |
+**剥离清单（2026-10-14 用户确认：只剥这四组）**：
+
+| 能力 | 判断 |
+| --- | --- |
+| namespace（1.1）、多文件 `ct build` + `.h.ct` + `pub`（1.2）、`import`（1.3） | **剥**：非 OO；且多文件正是「跨单元引用带 trait 对象」这一自举唯一硬阻塞的来源 |
+| `Drop`（1.4） | **剥**：非 OO（`delete q;` → `if (q) free(q);` 属出口第 7 项，保留） |
+| `#line`（1.5） | **剥**：只在多文件下有意义，随多文件一并移出（自举前置 #5 随之**退役**） |
+| 泄漏警告 + `--diagnostics=json`（1.7） | **剥**：非 OO |
+
+**保留清单（看着像越位，实则属 Phase 0 出口或自举必需）**：
+
+| 能力 | 判断 |
+| --- | --- |
+| 堆对象创建 `T *p = malloc(...)` 自动写 vptr（1.4） | **留**：出口第 7 项「创建」；且是**自举前置 #2**（AST / 符号表需动态分配，剥掉就要处处手写 vptr，「漏写即运行期崩」） |
+| `delete` 放宽到 `char *`（1.4） | **留**：出口第 7 项「释放」+ **自举前置 #4** |
+| 一般接收者（1.9a：变量下标 / 指针数组 / 指针字段链） | **留**：出口第 5/6 项「组合 / 存储」的覆盖 + **自举前置 #6** |
+| 方法体接入同一重写管线（1.9c） | **留**：出口第 1/3 项（方法体内派发）的必要条件 |
+| 接口**字段**（0.2 补做） | **留**：属 Phase 0.2 接口多态（出口第 9 项） |
+| 右值接收者 `f().m()`（1.9b） | **留（2026-10-14 定）**：与 1.9a 同源，单独剥会造成「下标可以、右值不行」的不一致 |
+| 文件作用域对象 / 数组 + `__ct_init` + `static`（1.6） | **留（2026-10-14 定）**：**自举前置 #3**（全局符号表要它） |
+
+> **对自举就绪度的影响**：剥离项**都不在**自举前置清单里（或随多文件退役），故剥离**不会**削弱就绪度；反而移除了唯一的硬阻塞（跨单元带 trait 对象）与不再需要的 `#line`（前置 #5）。保留下的 #2/#3/#4/#6/#7 恰是「剥离后仍需留在 Phase 0 核心」的那几项——**这也给出了「纯 OO」的可操作判据：自举前置清单 ∩ 非越位特性**。
+
+**连带处理（必须同批完成，否则验证与文档失真）**：
+
+- **归档 oracle**：剥离前给当前 `ctc.c` 打 tag / 存档，并确认它能构建出对照二进制——否则 Phase 2 面对旧 golden 将没有可比对的实现。
+- **测试收缩**：`test/import/`、`test/multifile/` 整目录，`test/cases/19_namespace`、`20_namespace_nested`、`22_drop`，`test/errors/` 中 `namespace_*` / `ns_*` / `drop_*` / `too_many_warnings`，`run.sh` 里的 `#line` 层，以及 `test/unit/test_helpers.c` 里针对被移出函数的断言，**全部移入归档**并退出 `run.sh`（否则套件必红，违反 [AGENTS.md](../AGENTS.md) §6）。（保留项用例——`test/cases/23_file_scope`、`27_static_file_scope`、`24`–`26` 接收者用例——**不动**。）
+- **文档如实标注**：`README.md` 语法表与 `docs/language-spec.md` 相关条目须标「**已移出 L0，Phase 2 用 CT 回归**」，不得继续列为当前可用；`editors/vscode` 语法高亮**维持不动**（语法决策仍冻结，且高亮与编译器无关）。
+
+**出口标准**：① `./test/run.sh` 在**收缩后**的套件上全绿；② `ctc.c` 只余 Phase 0 出口 1–9（+设施），`grep` 不到 namespace / 多文件 / `import` / Drop / `#line` / `--diagnostics` 的处理路径；③ 归档件可独立构建并复现旧 golden。
+
+### Phase 1：自举（第一目标）
+
+**主题（目标单一）**：把 Phase 0 的 **OO 化 C 语言**（剥离后的纯 OO `ctc.c`，即 L0）**用 CT 重写一遍**——与 L0 的目标完全一致，**唯一目的就是自举**。写法：OO 子集、**单文件**（L0 已无 namespace / import / 多文件，L1 无法分文件组织，见下）；出口是与 L0 **逐字节一致**。其余一切排在自举之后。
+
+> **本阶段既不新增语言特性，也不恢复被剥离的特性**：只把 Phase 0 出口 1–9 的能力用 CT 重写一遍。特性恢复与新增一律从 Phase 2 开始。
+
+**入口条件**：Phase 0.3 完成即满足。纯 OO 前提下自举**没有剩余硬阻塞**——就绪报告点名的「跨单元引用带 trait 对象」已随多文件一并移出；报告余下的表达力缺口（接口数组 `die`、构造期装箱、按行重写纪律）仍是 L1 源码必须遵守的纪律，见 [自举就绪总结报告](../reports/selfhost-readiness/selfhost-readiness.html) 与下方「已知约束」。
+
+**L1 出口标准（go/no-go 门）**：L1 能被冻结的 `ctc`（L0）端到端编译并运行，且对同一批语料与 C 版输出**逐字节一致**。
+
+**阶梯（M1→M2 属本阶段；M3–M6 属 Phase 2）**：L1 仅用 OO 子集写就；此后按 [bootstrap.md](design/bootstrap.md) 逐层爬升，每层以 **byte-identical golden** 为出口：
+
+| 层 | 用 CT 实现 / 搬入 CT | 归属 |
 | --- | --- | --- |
-| namespace | 新增 `parse_namespace`；`find_*` 支持限定查找；产物命名加前缀（形如 `<Ns>_<Struct>_<Trait>_<method>`） | 命名规则一旦确定即为契约，需先冻结 |
-| 多文件编译 | 类型定义下沉到 `.h`，生成的 `.c` 改为 `#include` 自己的头；需要一个「哪些符号对外可见」的规则 | 与 Phase 0 的「`.c` 自包含」直接冲突，属破坏性变更 |
-| 诊断增强 | 多错误报告 + 错误恢复（跳到下一个行首/`}`） | 需要错误计数与重同步点，容易产生级联误报 |
-| 语义诊断 | 重复 trait / struct 定义报错；方法签名与 trait 不一致时告警 | 与「不做类型检查」的定位边界需要明确 |
+| L1（M2） | 用 CT（单文件、OO 子集）重写剥离后的纯 OO `ctc.c` | **Phase 1** |
+| L2（M3） | namespace | Phase 2 |
+| L3（M4） | import + Drop | Phase 2 |
+| L4（M5） | JSON 诊断 + 泄漏警告 | Phase 2 |
+| L5（M6） | 自举闭环（全功能对齐归档 oracle） | Phase 2 |
 
-### Phase 2（部分已定，部分待用户确认）
+**阶梯约束（源语言滞后一级）**：第 n 级编译器只能编译「第 n−1 级所支持的语法子集」写成的源码。因此 CT 侧要**使用** namespace / Drop / import 组织编译器源码，必须先有支持它们的 CT 级编译器；**L1 只能是单文件**（Phase 0.3 已把多文件移出 L0），到 L2 起才能分文件组织。
 
-已定（设计已冻结）：
+**顺序原则（2026-10-14 更新为「剥离在前」）**：越位特性**在 Phase 0.3 就先从 `ctc.c` 移出**——先拿到干净的纯 OO L0，自举目标才最小；移出件**归档为 oracle**、不销毁，Phase 2 用 CT 逐项重做时向它差分。
 
-- `AutoDrop`：标记变量在作用域结束时自动调用 `drop()`（不 `free`，仅释放持有资源）
-- 路径敏感泄漏分析：分析所有 return 路径，标记「某些路径未释放」
-- 目录 = namespace 强制绑定
-- `macro_map` 语法（可选，让宏映射也能在 CT 源码中声明）
+**长期目标**：`ctc.c` **长期保留**为纯 OO 的种子与 oracle，不整体删除；Phase 2 起新增的一切能力都由 CT 层承担，`ctc.c` 不再增长。
 
-仍需用户先做定位决策，暂不排期：
+#### 新 `ct` 与 `ctc.c`：`#include` 复用底层设施的设想（2026-10-14 提出；落地方式待定）
 
-- 是否引入**类型检查**（若引入，编译器性质将发生改变，需要 AST 而非逐行扫描）
-- 是否引入**泛型**（需要在 `.c` 侧做单态化展开）
-- 是否要保证**生成物可读性**的硬指标（例如最大嵌套缩进、命名长度上限）
+> **待定**：剥离后 `ctc.c` = 纯 OO + 设施，而 L1 又必须**用 CT 重写 OO**、不得复用 C 的 OO 实现。所以「只 include 设施」还需额外手段（设施与 OO 分段并以宏隔离；或把设施抽成独立小文件——但后者与「单文件」规约冲突），或者 L1 干脆**自带设施、零复用**（最纯的自举）。选定前本节仅作方向记录。
 
-（可见性修饰符 `pub` / `pub readonly` / `static` 已定，见「已定的设计决策」，Phase 1 落地。实现语言也已定：Phase 0–2 保持 C 单文件，Phase 3 通过自举迁移到 CT 自身，见「自举策略与单文件边界」。）
+新 `ct` 用 CT 写、由冻结的 `ctc.c` 编译；它复用 `ctc.c` 的方式是 **`#include ctc.c`**（unity build，同 sqlite amalgamation），**不是**链接。边界：
 
-### Phase 3（展望）
+- **保留在 C（被复用）**：**底层设施**——`Buf` / `xmalloc` / `xstrndup` / `die`（诊断）/ 逐行扫描原语 / 代码生成原语。
+- **用 CT 重写（不复用）**：**OO 核心**（trait / struct / impl / use 转换）与**全部语言特性**。
+- **include 是可收缩复用层**：随 CT 覆盖扩大，被 include 的 C 部分**逐步缩小**，最终只剩最底层设施。
 
-- 增量编译缓存（只重编改动的 `.ct`）
-- 跨函数泄漏分析
-- 多目标平台同时编译（一套代码生成多平台二进制）
-- 自举：用 CT 写 ctc v1
-- `map` + 反向映射表（自 Phase 1 移出，D8 已定 2026-10-14）：排在自举之后最后实现，落地时与官方 bindings 清单一并定案
+> 为什么"只复用设施"而非"连特性一起复用"：被 include 的特性其实现仍是 C，等于没自举；且差分验证会失效（L1 的行为就是 `ctc.c` 的行为，"逐字节一致"成为同义反复）。只复用设施，才能既"避免重复"又保持自举与差分验证有效。
 
-自举的目标目录结构、分层规则（L0/L1/L2）、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)。
+**落地前提（须在"只修 bug"冻结前一次性做完）**：
 
-**方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。
-设计已定型但未实现，**排期在 Phase 3 自举之后**（2026-10-13 用户确认）——这是排序选择而非技术依赖，
-展开器是外部脚本、不与自举耦合，靠后安排是为先稳固编译器主语料。落地前须先修订与 [AGENTS.md](../AGENTS.md) §2
-的三处边界冲突（代码生成脚本 / 插件调用编译器 / 包管理分发）。详见
-[design/dialect.md](design/dialect.md)（设计草案，未实现）。
+- `ctc.c` 的 `main` 需加 `#ifndef CTC_NO_MAIN` 守卫——否则与新 `ct` 的 `main` 落在同一 TU，重定义报错。**这是冻结前唯一一次结构性改造。**
+- CT 代码必须**系统避开 `ctc.c` 的全部 `static` 标识符**（`buf_puts` / `die` / `word_at` / `emit_raw_line` …）；namespace 不修饰普通函数名，同 TU 重名即报错。
+- `ctc.c` 的 `die()` → `exit(1)` 与进程级 `g_*` 需为**可复用 / 可重入**留出口（多文件 `ct build` 需逐单元、可按单元报错）。
+
+**已知约束（开工前必须先接受）**：
+
+- **接口数组声明即 `die`** → AST 子节点列表不能用 `Node kids[N]`，只能靠**接口指针 + 链表**；而指针接口字段的**赋值目前原样透传**（需手工构造胖指针）。
+- **接口字段不参与构造点递归、指定初始化式不装箱** → 装配 AST 时手工装箱代码增多。
+- **按行重写**（构造与语句同行不处理、单行函数体不处理）→ 编译器源码必须遵守「一语句一行」的纪律，否则**静默不重写、产物编不过**。
+- **声明必须先于使用 + 单趟扫描** → trait / struct 需人工拓扑排序；相互递归只能经接口指针。
+- **namespace 只修饰 struct / trait / impl 符号，普通函数名不修饰** → 若按 namespace 切分源码，普通函数会在 C 层重名冲突（这也是先走单文件路径的一个动机）。
+
+**过渡期纪律**：自举启动后**冻结一切新的 C 侧语言特性**；`ctc.c` 只接受 bug 修复。若 L1 暴露出 ct 表达力缺口，须先判定它属「语言特性」（放到 CT 层实现）还是「种子核心能力」（必须在 C 侧补）——后者要作为 **Phase 0 核心的修订定义**显式记录，不得顺手打补丁（这正是 Phase 0 历史偏差的复发点）。
+
+### Phase 2：用 CT 恢复并新增语言特性（拆 4 个子阶段）
+
+自举（Phase 1）完成后才动手。**拆分判据不是「功能多少」，而是出口标准（DoD）是否同一种**：2.1–2.3 是**恢复**（有归档 oracle + 冻结 golden，出口 = **byte-identical**，无需再拍设计）；2.4 是**新增**（无 oracle 可对差，出口 = **设计冻结 + 新用例 + `run.sh` 全绿**）。实现层面的设计见 [design/phase1.md](design/phase1.md)（决策 D1–D8，仅 D6 / D7 待定；D8：`map` 移出，见 Phase 3）。
+
+**次序的三条硬约束（不能乱）**：
+
+1. **2.1 必须最先**——只有 namespace + 多文件落地，CT 编译器源码才能分文件；`import` 也晚于它（依赖路径 / 符号解析）。
+2. **2.2 是 2.4 的前置**——AutoDrop 依赖 Drop，路径敏感分析依赖作用域 + Drop。
+3. **目录 = namespace 绑定依赖 2.1**，只能落在 2.4。
+
+与 [bootstrap.md](design/bootstrap.md) 的阶梯对齐：M3 → 2.1 前半；M4 → 2.1 后半 + 2.2；M5 → 2.3；**M6（全功能对齐）在 2.4 收口**。
+
+#### Phase 2.1 模块化
+
+- **CT 重做**：namespace（`parse_namespace` + 限定查找 + 产物前缀 `<Ns>_<Struct>_<Trait>_<method>`）、多文件 `ct build` / `.h.ct` / `pub`（类型下沉 `.h`、`.c` `#include` 自己的头、可见性规则）、`import`（路径解析 + 递归编入 + 跨单元符号累积）。
+- **出口**：归档用例**逐字节一致**；**编译器源码切成多文件**（后半程的最大红利）。
+- **对差依据**：`test/cases/19_namespace`、`20_namespace_nested`、`test/multifile/`、`test/import/`。
+- **风险**：命名前缀一经发布即契约，须先冻结；多文件破坏「`.c` 自包含」，须与 `pub` 可见性规则一起定案；`-I` 与跨单元 vtable 可见性仍待定。
+
+#### Phase 2.2 内存
+
+- **CT 重做**：`Drop`（内置保留名 trait、惰性生成、递归释值字段）+ `delete` 放宽（任意指针 → `if (p) free(p);`）。
+- **出口**：drop 用例**逐字节一致**。
+- **对差依据**：`test/cases/22_drop`、`test/errors/drop_*`。
+- **风险**：用户 `impl Drop` 与默认体的合并语义需定死。
+
+#### Phase 2.3 诊断与溯源
+
+- **CT 重做**：`#line`（多文件默认开，D4 = A）、泄漏警告 + `--diagnostics=json`（首版范围见 1.7）。
+- **新增（无 oracle，须配新用例）**：多错误报告 + 错误恢复（跳到下一个行首 / `}`）、语义诊断（重复 trait / struct 定义报错、方法签名与 trait 不一致时告警）。
+- **出口**：诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行。
+- **对差依据**：`test/errors/*`、`run.sh` 的 `#line` 层。
+- **风险**：错误计数与重同步点容易产生级联误报；语义诊断要与「不做类型检查」的定位边界划清。
+
+#### Phase 2.4 新增特性
+
+- **AutoDrop**：被标记的变量在作用域结束时自动 `drop()`（不 `free`，只释放其持有的资源）。
+- **路径敏感泄漏分析**：分析所有 `return` 路径，标出「某些路径上未释放」。
+- **目录 = namespace 强制绑定**。
+- **出口**：**设计先行 → 冻结 → 新用例 → `run.sh` 全绿**；明确**不追求** byte-identical（无 oracle 可对）。此处同时收口阶梯 **M6**。
+
+**需用户先定位、暂不排期**：是否引入**类型检查**（若引入，编译器性质改变，需要 AST 而非逐行扫描）；是否引入**泛型**（需在 `.c` 侧单态化展开）；是否要保证**生成物可读性**的硬指标（最大嵌套缩进、命名长度上限）。
+
+### Phase 3：生态与扩展
+
+- **生态绑定**：`map` + 反向映射表（经 D8 移出自举主线；落定时与官方 bindings 清单一并定案）。
+- **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型但未实现，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。落地前须先修订与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突（代码生成脚本 / 插件调用编译器 / 包管理分发）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
+- **构建**：增量编译缓存、跨函数泄漏分析、多目标编译。
+
+自举的目录结构、分层规则（L0/L1/L2）与构建流程见 [design/bootstrap.md](design/bootstrap.md)。
 
 ### 决策待定项
 
 | 问题 | 候选 | 影响 |
 | --- | --- | --- |
-| `.c` 是否 `#include` 自己的 `.h` | ✅ 已定：多文件场景下 `.h.ct` 生成 `.h` + `.c`，`.c` 包含自己的头（见「文件命名约定与 `pub` 可见性」） | Phase 1 落地时打破 Phase 0 自包含约定 |
+| `.c` 是否 `#include` 自己的 `.h` | ✅ 已定：多文件场景下 `.h.ct` 生成 `.h` + `.c`，`.c` 包含自己的头（见「文件命名约定与 `pub` 可见性」） | 越位实现时打破 Phase 0 自包含约定 |
 | 位置式初始化的语义 | ✅ 已定：A. 自动追加 vptr（0.1.2） | 允许 `{ "Tom", 36 }` 写法 |
 | 指针声明的处理 | ✅ 已定：修正生成（`struct Person *p`）并登记为指针，`p->m()` 重写 | 已落地于 Phase 0.1.1 / 0.1.4 |
 | 工具链形态 | ✅ 已定：单入口 `ct`，`ctc` 保留为兼容别名 | 见「已定的设计决策」，**尚未落地** |
 | 包管理器的名字 | A. `ct-pkg`／B. `ctpm`／C. 独立品牌词 | registry 与组织名需趁早占位 |
 | 容量上限策略 | A. 继续固定上限／B. 超限即报错／C. 改动态分配 | 与「失败要响」原则的落地方式 |
+| 过渡期是否冻结一切新特性 | ✅ 已定：自举（Phase 1）启动起冻结一切新的 C 侧语言特性，`ctc.c` 只接受 bug 修复（2026-10-14 相位重排） | 防止 Phase 0 历史偏差复发 |
+| C 实现最终删除还是归档 | ✅ 已定（2026-10-14）：「**剥离在前**」——Phase 0.3 先把越位特性移出 `ctc.c` 并**归档为 oracle**（不销毁），Phase 2 起用 CT 逐项重做并向归档对差；`ctc.c` 剥回纯 OO 核心并**永不整体删除** | 见「Phase 0.3」「自举策略与单文件边界」 |
+| 类型检查 / 泛型 / 生成物可读性硬指标 | 待定，见「Phase 2」 | 若引入类型检查，编译器性质改变，需要 AST |
 
 ---
 
@@ -510,12 +620,23 @@ as confirmed by the user.
 
 | Phase | Theme | Status | Exit criteria |
 | --- | --- | --- | --- |
-| 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
-| 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
-| 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line`, leak warnings + JSON diagnostics | 🔨 in progress (1.0–1.7 landed: CLI, namespaces, multi-file + `pub`, `import`, heap/Drop, `#line`, file-scope objects, leak warnings + `--diagnostics=json`; 1.9 general receivers landed: 1.9a variable subscripts / pointer-array elements / pointer field chains, 1.9b rvalue receivers `f().m()` / `mk()->m()`; `map` + the reverse mapping table moved to Phase 3 (D8, decided 2026-10-14)) | see below |
-| 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
-| 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting, `map` + the reverse mapping table (moved out of Phase 1) (outlook) | 🔭 outlook | — |
+| 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to after Phase 0 per 0.1.8, and has landed) | every exit below holds |
+| 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to after Phase 0 per 0.1.8, landed; golden tests green |
+| 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface **arrays** are not implemented; interface **fields** (value-field boxing + dispatch, pointer-field dispatch) landed |
+| 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | 🔜 next | `ctc.c` keeps only Phase 0 exits 1–9; tests and docs shrink in step; the archive still builds a reference binary |
+| 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | 🔜 to start | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
+| 2 | **Restore and add language features in CT**, split into 4 sub-phases: **2.1 module system** (namespaces / multi-file `ct build` / `pub` / `import`), **2.2 memory** (Drop / loosened `delete`), **2.3 diagnostics & traceability** (`#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks), **2.4 new features** (AutoDrop / path-sensitive leak analysis / directory = namespace); 2.1–2.3 are diffed against the archived oracle, 2.4 has none | 🔭 outlook | 2.1–2.3: **byte-identical**; 2.4: design frozen + new cases green; rungs M3–M6 |
+| 3 | Ecosystem and extension: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target follow | 🔭 outlook | — |
+
+> **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
+> features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap
+> they count as **over-reach**: the syntax decisions stay frozen, but the **implementations are to be
+> redone in CT** — **Phase 0.3** moves them out of `ctc.c` and archives them as the oracle, and
+> **Phase 2** restores them in CT (the list is in the Phase 2 section below).
+>
+> **Numbering convention**: the labels `Phase 1.0`–`Phase 1.9`, `Phase 1.6/1.7/1.9c` below are
+> **historical sub-phase numbers of the over-reach period** and have nothing to do with the new
+> **Phase 1 (self-hosting)**.
 
 ### Versions
 
@@ -539,7 +660,7 @@ changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §
   so commands in the README are still written as `ctc`. They get replaced in one pass when the
   implementation lands, so the docs never point at a command that does not run.
 
-Migration checklist (executed from Phase 1 on): add subcommand parsing to `main` (`compile` as the
+Migration checklist (executed from the over-reach phase on): add subcommand parsing to `main` (`compile` as the
 default, `ctc` dispatching by `argv[0]`); build as `gcc ctc.c -o ct` plus a `ctc` alias; change the
 generated comment from `Generated by ctc …` to `Generated by ct …` (**requires regenerating every
 golden under `test/cases/**`**); update every `ctc` command in `README.md`, `AGENTS.md` and `docs/*`;
@@ -571,7 +692,7 @@ and update the build/invocation paths in `test/run.sh`.
   vptr fields, the `_self` cast line), so whether compiler output counts as a derivative work is
   ambiguous — leaving it unstated blocks adoption, especially with corporate legal review.
 
-#### Namespace path rules (decided, lands in Phase 1)
+#### Namespace path rules (decided, landed in the over-reach phase)
 
 CT uses hybrid path access: **`::` walks the namespace path, and the final step uses `.` to call a
 method or access a field**. The final step is always `.`.
@@ -598,7 +719,7 @@ HAL.UART.huart1.send(...);      // the middle cannot use .
 
 When this lands it is written into [language-spec](language-spec.md) and enforced by the compiler.
 
-#### import and the module system (decided, lands in Phase 1)
+#### import and the module system (decided, landed in the over-reach phase)
 
 `import` is not syntactic sugar for `#include` — it is a **compilation-unit declaration**. The
 compiler builds the module dependency graph from `import`s and handles symbol references, compilation
@@ -619,7 +740,7 @@ Internal behaviour:
 
 Phase 0 has no `import` (single file); Phase 1 implements it.
 
-#### File-naming convention and `pub` visibility (decided, lands in Phase 1)
+#### File-naming convention and `pub` visibility (decided, landed in the over-reach phase)
 
 The file name decides what the compiler emits — no extra keywords or config files:
 
@@ -662,7 +783,7 @@ Visibility applies to declarations inside a namespace, to struct fields, and to 
 compiler enforces it and rejects violations. Encapsulation is enforced by the compiler, so the
 "implemented in the `.c` but never declared in the `.h`" inconsistency cannot happen.
 
-#### Memory management: Drop and delete (decided, lands in Phase 1)
+#### Memory management: Drop and delete (decided, landed in the over-reach phase)
 
 The compiler has a built-in `Drop` trait. Declaring `use Drop` on a struct makes the compiler
 generate the release logic:
@@ -705,7 +826,7 @@ Arrays are released with `delete[]`: `drop()` each element, then `free`.
 
 **Compile-time leak warnings (Phase 1, simple version):** at the end of a function, a local that was
 allocated but never `delete`d, `return`ed, or stored globally produces a warning. The path-sensitive
-version (analysing every return path) is Phase 2. Warnings are emitted both as a human-readable list
+version (analysing every return path) is Phase 2 (outlook). Warnings are emitted both as a human-readable list
 and as JSON for the VS Code extension:
 
 ```json
@@ -741,13 +862,13 @@ The compiler also maintains a **reverse mapping table** (which C symbol in the o
 CT trait/method), used for: meaningful provenance in error messages, "go to definition" in the VS Code
 extension, and recovering CT semantics when decompiling.
 
-> **Scheduling (D8, decided by the user on 2026-10-14)**: moved out of Phase 1 and scheduled after
-> Phase 3 self-hosting, implemented last. `map` is an ecosystem-binding feature, not part of Phase 1's
-> modularity theme; neither the exit criteria nor the bootstrap checklist depend on it, and its real
+> **Scheduling (D8, decided by the user on 2026-10-14)**: moved off the self-hosting mainline and
+> scheduled for Phase 3, implemented last. `map` is an ecosystem-binding feature, not part of the self-hosting mainline;
+> neither the exit criteria nor the bootstrap checklist depend on it, and its real
 > consumer (the official bindings) does not exist yet — freezing instance semantics early would design
 > against imagined use cases. Settle it together with the bindings list when it lands.
 
-#### JSON diagnostics and the thin-client extension (decided, lands in Phase 1)
+#### JSON diagnostics and the thin-client extension (decided, landed in the over-reach phase)
 
 `ctc` emits JSON: compile errors/warnings (including leak warnings), the symbol table (positions of
 namespaces / traits / structs / functions), and the call graph. The VS Code extension consumes the
@@ -758,12 +879,12 @@ compilation or analysis of its own, so compiler upgrades never require extension
 > **diagnostic list only** (`{"warnings":[…]}`); the symbol table and call graph are **not implemented
 > yet** and are separate sub-items. `--diagnostics=text` (the default) is human-readable stderr.
 
-#### Bootstrap strategy and the single-file boundary (decided, lands in Phase 3)
+#### Bootstrap strategy and the single-file boundary (decided; `ctc.c` freezes when self-hosting starts, the layout lands with it)
 
 - **Progressive self-hosting**: L0 (the minimal trait compiler in C — today's `ctc.c`) → L1 (a base
   compiler written in the CT trait-only subset) → L2 (the full compiler written in full-featured CT).
-- **Phase 0–2 boundary**: `ctc.c` stays at the repository root as a single file (confirmed by the
-  user on 2026-10-11); no `src/`, no splitting.
+- **Phase 0 boundary**: `ctc.c` stays at the repository root as a single file (confirmed by the
+  user on 2026-10-11); no `src/`, no splitting. The move is only discussed once self-hosting starts.
 - **Minimal self-hostable version (confirmed by the user on 2026-10-14)**: aim for self-hosting in a
   **single file** first (no namespaces / `import` / multi-file), side-stepping prerequisite #1
   "referencing a trait-carrying object across units" (vtable variables are `static` and the `.h`
@@ -771,10 +892,26 @@ compilation or analysis of its own, so compiler upgrades never require extension
   blocker on the single-file path — "an `impl` method body cannot dispatch across objects" — was
   removed by **Phase 1.9c** (a body now goes through the very same pipeline as top-level code:
   `self` / method parameters are registered, then every line runs `transform_line`). Conclusion: a
-  **single-file, fully-OO program is self-hostable now**; non-OO features (namespaces, multi-file,
-  diagnostics) may be compromised on and are deferred until after self-hosting.
-- **When Phase 3 starts**: `ctc.c` moves into `ctrait/` and freezes (bug fixes only); new features
-  are written in CT under `src/`.
+  **single-file, fully-OO program is self-hostable now** — non-OO features (namespaces, multi-file,
+  diagnostics) are not a prerequisite for self-hosting; they are to be implemented in CT, while the C
+  side over-reach is **stripped and archived first (Phase 0.3)** and redone in CT in Phase 2.
+- **Freezing and moving**: **once Phase 0.3's strip is done (i.e. when self-hosting starts)**,
+  `ctc.c` freezes as **L0 + the differential oracle** (bug fixes only, no new features); moving it into
+  `ctrait/` happens once the self-hosting layout settles. New features are written in CT from then on.
+- **Cleanup scope (revised 2026-10-14 to "strip first")**: **first** move the namespace / multi-file /
+  import / Drop / `#line` / diagnostics implementations that over-reached into C **out of `ctc.c` and
+  into the archive as the oracle** (Phase 0.3), so L0 becomes the **pure-OO core** (+ low-level
+  facilities); **then** self-host (Phase 1); **finally** Phase 2 redoes each in CT, diffed against the
+  archive. Two hard preconditions: ① **the extracted code is never destroyed** — the archive is both
+  the seed (the behavioural baseline that alone can produce L1) and the differential oracle (the only
+  reference that can emit a byte-identical golden); ② **`ctc.c` is never deleted outright** — it is
+  kept long-term as the seed and the differential oracle (precedents: Rust keeps stage0 long-term,
+  Go deprecated stage0 at 1.5 — either is acceptable).
+- **The ladder constraint (the source language lags one level)**: a level-n compiler can only compile
+  source written in "the syntax subset supported by level n−1". So L1 source must stay **single-file +
+  OO subset**; to *use* namespaces / Drop / import when organising the compiler source in CT, a
+  CT-level compiler that supports them must already exist. **"Rewrite, then delete the C" is the wrong
+  order** — the climb has to be level by level.
 - **Single repository**: cross-layer compilation and feature coupling rule out splitting repos; if
   `ctrait/` ever needs standalone distribution, `git subtree` / `git filter-repo` splits it without
   losing history.
@@ -787,14 +924,14 @@ The target layout, layering rules, build flow and milestones (M1–M6) live in
 For L1 / L2 to write a compiler in CT, the following must exist first (**each one verified by hand on
 2026-10-11**; all are current gaps unless noted):
 
-| # | Prerequisite | Why self-hosting needs it | Owner phase | Status |
+| # | Prerequisite | Why self-hosting needs it | Landing | Status |
 | --- | --- | --- | --- | --- |
-| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | Phase 1 | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` landed; referencing a trait-carrying object across units not yet. The single-file bootstrap path **does not need** this (see "Minimal self-hostable version" above) |
-| 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | Phase 1 (with Drop) | ✅ `T *p = malloc(...)` (incl. `calloc`) writes the vptrs automatically right after the declaration (nested value fields included, D1=A); `use Drop` + recursive release via `delete` landed |
-| 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ✅ Phase 1.6: the vptrs of file-scope objects / arrays are written before `main` by the generated constructor `__ct_init` (`__attribute__((constructor))`, D5=A) |
-| 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | Phase 1 | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
-| 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ✅ multi-file mode emits `#line` in the `.c` **by default** (D4=A), off in single-file; gcc/clang errors map back to the `.ct` line |
-| 6 | **A method call may have a more general receiver expression** | variable / expression subscripts, pointer-array elements and pointer field chains (`ps[i].m()`, `ptrs[i]->m()`, `b.who->m()`) are supported since Phase 1.9a; rvalue receivers `f().m()` / `mk()->m()` (including the field hop `f().a.b.m()`) since Phase 1.9b | Phase 1.9 | ✅ 1.9a + 1.9b both landed (Q1=A value/pointer returns, Q2=A hoist only at a statement head or an initialiser RHS, Q3=A `die` elsewhere) |
+| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | over-reach → reclaimed in CT | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` landed; referencing a trait-carrying object across units not yet. The single-file bootstrap path **does not need** this (see "Minimal self-hostable version" above) |
+| 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | C-side, self-hosting prereq (with Drop) | ✅ `T *p = malloc(...)` (incl. `calloc`) writes the vptrs automatically right after the declaration (nested value fields included, D1=A); `use Drop` + recursive release via `delete` landed |
+| 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | C-side, self-hosting prereq ("where objects live") | ✅ Phase 1.6: the vptrs of file-scope objects / arrays are written before `main` by the generated constructor `__ct_init` (`__attribute__((constructor))`, D5=A); the `static`-prefixed form is recognised too (`static Person g;` / `static Person gs[2];`, Phase 1) |
+| 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | over-reach → reclaimed in CT | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
+| 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | over-reach → reclaimed in CT | ✅ multi-file mode emits `#line` in the `.c` **by default** (D4=A), off in single-file; gcc/clang errors map back to the `.ct` line |
+| 6 | **A method call may have a more general receiver expression** | variable / expression subscripts, pointer-array elements and pointer field chains (`ps[i].m()`, `ptrs[i]->m()`, `b.who->m()`) are supported since Phase 1.9a; rvalue receivers `f().m()` / `mk()->m()` (including the field hop `f().a.b.m()`) since Phase 1.9b | C-side, self-hosting prereq (1.9) | ✅ 1.9a + 1.9b both landed (Q1=A value/pointer returns, Q2=A hoist only at a statement head or an initialiser RHS, Q3=A `die` elsewhere) |
 | 7 | Positional initialisers / calls between sibling methods | — | done (0.1.1 / 0.1.4 / 1.9c) | ✅ since **Phase 1.9c** a method body shares the top-level pipeline: local-variable receivers, recursive field chains and parameter receivers all dispatch |
 
 **The shape of the AST**: ct has **no inheritance**, so an AST must use `trait Node { … }` plus one
@@ -805,7 +942,7 @@ requires `trait Node` to be declared first; two structs referencing each other *
 
 Item 6 is one class of problem ("the receiver is neither a registered identifier nor a constant
 subscript / value field chain") and can be advanced on its own; items 1–5 overlap heavily with
-**Phase 1** — **the bootstrap prerequisites are essentially Phase 1's output**.
+**the over-reach phase** — **the bootstrap prerequisites are essentially the over-reach phase's output**.
 
 ### Phase 0: writing full OO with traits
 
@@ -1028,69 +1165,263 @@ different `struct`s at run time — i.e. real "program to an interface".
 - checks: a struct that does not `use` the trait, boxing across different traits, and expressions
   whose type cannot be inferred all `die` instead of emitting bad C.
 
-**Not done yet**: interface **arrays** (`die` at the declaration) and automatic boxing of interface
-**fields** at construction (the field type is expanded and can be assigned by hand).
+**Not done yet**: interface **arrays** (`die` at the declaration); automatic boxing of interface
+**fields** at construction (an interface field in a designated initialiser is not boxed). Interface
+fields themselves are usable now (landed in Phase 1): a value field `T x` → `struct T_iface x`, a
+pointer field `struct T *x` → `struct T_iface *x`; `s.x.m()` dispatches through the field's own vt,
+and statement assignment of a value field `s.x = v;` boxes automatically (a pointer field's assignment
+is left as written).
 
 **Case**: `test/cases/18_polymorphism.ct` (one `announce(Greeter)` serving `Person` and `Shop`, plus
 interface re-assignment and an interface return value).
 
-### Phase 1 — to be planned
+### Phase 0.3 — strip the over-reach (back to a pure-OO `ctc.c`)
 
-The language-level syntax decisions are frozen — see "Decided design decisions" above (namespace path
-rules, import, the file-naming convention with `pub`, Drop/delete, map, JSON diagnostics). The
-implementation-level design (sub-phases 1.0–1.7 + optional 1.9, symbol mangling, data-model changes;
-of decisions D1–D8 only D6 / D7 remain open — D8 is decided: `map` moves to Phase 3) is in
-[design/phase1.md](design/phase1.md) (design draft, not implemented).
-The table below records implementation-level notes and risks:
+**Theme**: move the features that over-reached into C after Phase 0 out of `ctc.c`, so the mainline
+returns to "Phase 0 exits 1–9 only" + the low-level facilities. The extracted code is **archived as the
+oracle** (it still builds a reference binary) so Phase 2 can diff its CT rewrite against it.
 
-| Feature | Notes | Main risk |
+**Strip list (confirmed by the user on 2026-10-14: these four groups only)**:
+
+| Capability | Verdict |
+| --- | --- |
+| namespaces (1.1), multi-file `ct build` + `.h.ct` + `pub` (1.2), `import` (1.3) | **strip**: not OO; multi-file is also the source of the one hard bootstrap blocker (referencing a trait-carrying object across units) |
+| `Drop` (1.4) | **strip**: not OO (Phase 0's `delete q;` → `if (q) free(q);` stays, being exit #7) |
+| `#line` (1.5) | **strip**: only matters in multi-file mode, so it leaves with multi-file (prerequisite #5 **retires**) |
+| leak warnings + `--diagnostics=json` (1.7) | **strip**: not OO |
+
+**Keep list (looks like over-reach, but is really a Phase 0 exit or a bootstrap must)**:
+
+| Capability | Verdict |
+| --- | --- |
+| heap creation `T *p = malloc(...)` writing vptrs (1.4) | **keep**: exit #7 "creation", and **prerequisite #2** (the AST / symbol tables need dynamic allocation; stripping it means hand-writing vptrs everywhere — "forget one and it crashes at run time") |
+| loosened `delete` covering `char *` (1.4) | **keep**: exit #7 "release" + **prerequisite #4** |
+| general receivers (1.9a: variable subscripts / pointer arrays / pointer field chains) | **keep**: covers exits #5/#6 "composition / storage" + **prerequisite #6** |
+| method bodies on the same rewrite pipeline (1.9c) | **keep**: a precondition of exits #1/#3 (dispatch inside method bodies) |
+| interface **fields** (added under 0.2) | **keep**: part of Phase 0.2 interface polymorphism (exit #9) |
+| rvalue receivers `f().m()` (1.9b) | **keep (decided 2026-10-14)**: same origin as 1.9a; stripping it alone leaves the inconsistency "subscripts work, rvalues don't" |
+| file-scope objects / arrays + `__ct_init` + `static` (1.6) | **keep (decided 2026-10-14)**: **prerequisite #3** (the global symbol table wants it) |
+
+> **Impact on bootstrap readiness**: nothing on the strip list is on the bootstrap prerequisite list
+> (or it retires with multi-file), so stripping **does not** weaken readiness — it removes the one hard
+> blocker (cross-unit trait-carrying objects) and the no-longer-needed `#line` (prerequisite #5). The
+> survivors #2/#3/#4/#6/#7 are exactly what must stay in the Phase 0 core — which gives an operable
+> definition of "pure OO": **the bootstrap prerequisite list ∩ everything that is not over-reach**.
+
+**Knock-on work (must land in the same batch, or verification and docs go stale)**:
+
+- **Archive the oracle**: tag/archive today's `ctc.c` *before* stripping and confirm it builds a
+  reference binary — otherwise Phase 2 would have nothing to diff against the old goldens.
+- **Shrink the tests**: `test/import/` and `test/multifile/` wholesale; `test/cases/19_namespace`,
+  `20_namespace_nested`, `22_drop`; `namespace_*` / `ns_*` / `drop_*` / `too_many_warnings` under
+  `test/errors/`; the `#line` layer in `run.sh`; and the assertions on removed functions in
+  `test/unit/test_helpers.c` — all move to the archive and leave `run.sh` (otherwise the suite goes
+  red, violating [AGENTS.md](../AGENTS.md) §6). (Cases for kept items — `test/cases/23_file_scope`,
+  `27_static_file_scope` and the `24`–`26` receiver cases — **stay untouched**.)
+- **Mark the docs honestly**: the syntax tables in `README.md` and `docs/language-spec.md` must say
+  "**moved out of L0, returns in CT during Phase 2**" instead of listing them as available;
+  `editors/vscode` highlighting **stays as is** (the syntax decisions are still frozen, and
+  highlighting is independent of the compiler).
+
+**Exit criteria**: ① `./test/run.sh` is green on the **shrunk** suite; ② `ctc.c` only implements
+Phase 0 exits 1–9 (+ facilities) — no code path for namespaces / multi-file / `import` / Drop /
+`#line` / `--diagnostics`;
+③ the archive builds standalone and reproduces the old goldens.
+
+### Phase 1 — self-hosting (the first goal)
+
+**Theme (a single goal)**: **rewrite Phase 0's OO-in-C** (the stripped, pure-OO `ctc.c` — i.e. L0) **in
+CT** — the goal is exactly L0's goal, and the **only purpose is self-hosting**. How: the OO subset, a
+**single file** (L0 has no namespaces / import / multi-file, so L1 cannot be split across files — see
+below); the exit is **byte-identical** output with L0. Everything else comes after self-hosting.
+
+> **This phase neither adds language features nor restores the stripped ones.** It only rewrites
+> Phase 0 exits 1–9 in CT. Restoring and adding features starts in Phase 2.
+
+**Entry condition**: met once Phase 0.3 is done. On a pure-OO base there is **no remaining hard
+blocker** — the cross-unit trait-carrying object named by the readiness report went out with
+multi-file; the report's remaining expressiveness gaps (interface arrays `die`, boxing at
+construction, the line-rewriting discipline) stay as rules L1's source must follow — see the
+[self-hosting readiness report](../reports/selfhost-readiness/selfhost-readiness.html) and
+"Known constraints" below.
+
+**L1 exit criterion (the go/no-go gate)**: L1 is compiled end to end by the frozen `ctc` (L0) and runs,
+and its output is **byte-identical** to the C version's for the same corpus.
+
+**The ladder (M1→M2 in this phase; M3–M6 in Phase 2)**: L1 is written purely in the OO subset;
+afterwards climb layer by layer per [design/bootstrap.md](design/bootstrap.md), every layer exiting on a
+**byte-identical golden**:
+
+| Layer | Implemented in CT / moved into CT | Phase |
 | --- | --- | --- |
-| Namespaces | new parser, qualified lookups, prefixed generated names (`<Ns>_<Struct>_<Trait>_<method>`) | naming becomes a contract; must be frozen first |
-| Multi-file compilation | move type definitions into the header and have the `.c` include it; needs a visibility rule | directly conflicts with today's self-contained `.c` (breaking change) |
-| Diagnostics | multiple errors, resync-based recovery | cascading false positives |
-| Semantic checks | reject duplicate trait/struct definitions; warn on signature mismatch | must respect the "no type checking" boundary |
+| L1 (M2) | rewrite the stripped pure-OO `ctc.c` in CT (single file, OO subset) | **Phase 1** |
+| L2 (M3) | namespaces | Phase 2 |
+| L3 (M4) | import + Drop | Phase 2 |
+| L4 (M5) | JSON diagnostics + leak warnings | Phase 2 |
+| L5 (M6) | self-hosting closed loop (full alignment with the archived oracle) | Phase 2 |
 
-### Phase 2 — partly decided, partly needs a user decision
+**The ladder constraint (the source language lags one level)**: a level-n compiler can only compile
+source written in "the syntax subset supported by level n−1". So to *use* namespaces / Drop / import
+when organising the compiler source in CT, a CT-level compiler that supports them must already exist; **L1
+is therefore necessarily a single file** (Phase 0.3 moved multi-file out of L0), and only L2 onwards can
+split across files.
 
-Decided (the design is frozen):
+**Ordering principle (updated 2026-10-14 to "strip first")**: unlike the earlier plan, the over-reach
+features leave `ctc.c` **already in Phase 0.3** — a clean pure-OO L0 keeps the self-hosting target
+minimal; the extracted code is **archived as the oracle**, not destroyed, so Phase 2 can diff its CT
+rewrite against it.
 
-- `AutoDrop`: a marked variable gets an automatic `drop()` at the end of its scope (no `free` — only
-  the held resources are released)
-- Path-sensitive leak analysis: analyse every return path and flag "not released on some paths"
-- Directory = namespace binding made mandatory
-- `macro_map` syntax (optional; lets macro mappings be declared in CT source too)
+**The long-term goal**: `ctc.c` is **kept long-term** as the pure-OO seed and oracle and never removed
+wholesale; from Phase 2 on, every new capability lives in the CT layer and `ctc.c` stops growing.
 
-Still needs a user decision before scheduling:
+**The peel-C iron rule (superseded by "strip first", see the ordering principle above)**: the archived
+C implementation must not be **destroyed** until the matching CT version passes differential
+verification; until then it is both the seed (the only thing that can produce L1) and the differential
+oracle (the only thing that can emit a golden). "Strip first" moves the code to the archive instead of
+deleting it, so this rule still holds in spirit.
 
-- type checking (would require an AST and change the compiler's nature)
-- generics (monomorphisation on the C side)
-- hard readability budgets for the generated output (max nesting indent, name-length caps, …)
+**The long-term shape (confirmed by the user on 2026-10-14)**: `ctc.c` stays **peeled back to its core**
+— the Phase 0 trait / struct / impl / use rewriting plus the **low-level facilities** — and is **kept
+long-term** as the seed and differential oracle, never deleted outright.
 
-(Visibility modifiers `pub` / `pub readonly` / `static` are decided — see "Decided design decisions" —
-and land in Phase 1. The implementation language is decided too: single-file C through Phase 0–2,
-then migration to CT itself via self-hosting in Phase 3 — see "Bootstrap strategy and the
-single-file boundary".)
+#### The new `ct` and `ctc.c`: the `#include` facility-reuse idea (raised 2026-10-14; landing still open)
 
-### Phase 3 — outlook
+> **Open**: after the strip, `ctc.c` = pure OO + facilities, yet L1 must **rewrite the OO in CT** and may
+> not reuse the C OO implementation. Reusing "facilities only" therefore needs an extra mechanism
+> (splitting facilities from the OO core behind a macro guard; or extracting the facilities into a small
+> standalone file — which conflicts with the single-file rule), or L1 simply **carries its own
+> facilities with zero reuse** (the purest self-hosting). This section is a direction note until that is
+> decided.
 
-- incremental compilation cache (rebuild only the `.ct` files that changed)
-- cross-function leak analysis
-- multi-target builds (one codebase, binaries for several platforms)
-- self-hosting: write ctc v1 in CT
-- `map` + the reverse mapping table (moved out of Phase 1; D8 decided 2026-10-14): scheduled after
-  self-hosting, implemented last, settled together with the official bindings list
+The new `ct` is written in CT and compiled by the frozen `ctc.c`; it reuses `ctc.c` by **`#include
+ctc.c`** (a unity build, like sqlite's amalgamation), **not** by linking. The boundary:
 
-The bootstrap target layout, layering rules (L0/L1/L2), build flow and milestones (M1–M6) live in
+- **Stays in C (reused)**: the **low-level facilities** — `Buf` / `xmalloc` / `xstrndup` / `die`
+  (diagnostics) / the line-scanning primitives / the code-generation primitives.
+- **Rewritten in CT (not reused)**: the **OO core** (trait / struct / impl / use rewriting) and **all
+  language features**.
+- **The include is a shrinkable reuse layer**: as CT coverage grows, the included C part **shrinks**,
+  ending with the lowest facilities only.
+
+> Why reuse "facilities only" rather than "facilities + features": an included feature is still
+> implemented in C — that is not self-hosting; and it makes differential verification vacuous (L1's
+> behaviour simply *is* `ctc.c`'s behaviour, so "byte-identical" is a tautology). Reusing facilities only
+> keeps both "avoid duplication" and a meaningful self-hosting + differential check.
+
+**Landing preconditions (do them once, before the "bug fixes only" freeze)**:
+
+- `ctc.c`'s `main` needs an `#ifndef CTC_NO_MAIN` guard — otherwise it collides with the new `ct`'s
+  `main` in the same TU. **This is the only structural change before the freeze.**
+- CT code must **systematically avoid every `static` identifier in `ctc.c`** (`buf_puts` / `die` /
+  `word_at` / `emit_raw_line` …); namespaces do not mangle plain function names, so a same-TU clash is a
+  redefinition error.
+- `ctc.c`'s `die()` → `exit(1)` and its process-wide `g_*` need an exit for **reuse / reentrancy**
+  (multi-file `ct build` needs per-unit compilation and per-unit errors).
+
+**Known constraints (must be accepted before starting)**:
+
+- **Declaring an interface array `die`s** → AST child lists cannot use `Node kids[N]`; they must rely on
+  **interface pointers + a linked list**; and assigning to a pointer interface field is **passed
+  through verbatim today** (the fat pointer has to be built by hand).
+- **Interface fields do not take part in constructor-point recursion, and designated initialisers do
+  not box** → more hand-written boxing while assembling the AST.
+- **Line-based rewriting** (a construct sharing a line with a statement is not handled; single-line
+  function bodies are not handled) → the compiler's own source must follow the "one statement per
+  line" discipline, or it is **silently not rewritten and the output will not compile**.
+- **Declaration before use + single-pass scanning** → traits / structs must be topologically sorted by
+  hand; mutual recursion is only possible through interface pointers.
+- **Namespaces mangle only struct / trait / impl symbols, not plain function names** → if the source is
+  organised by namespace, plain functions collide at the C level (which is also a motive for taking
+  the single-file path first).
+
+**Transition discipline**: **every new C-side language feature is frozen the moment self-hosting
+starts**; `ctc.c` accepts bug fixes only. If L1 exposes an expressiveness gap in ct, decide first
+whether it is a "language feature" (which goes to the CT layer) or a "seed core capability" (which must
+be added on the C side) — the latter must be recorded explicitly as an **amendment to the Phase 0 core
+definition**, not patched in passing (this is exactly the relapse point of Phase 0's historical drift).
+
+### Phase 2 — restore and add language features in CT (4 sub-phases)
+
+Only after self-hosting (Phase 1) is done. **The split criterion is not "how much functionality" but
+whether the exit criterion (DoD) is the same kind**: 2.1–2.3 are **restoration** (archived oracle +
+frozen goldens; exit = **byte-identical**, no new design needed); 2.4 is **new work** (no oracle to
+diff against; exit = **design frozen + new cases + `run.sh` green**). The implementation-level design
+is in [design/phase1.md](design/phase1.md) (decisions D1–D8, only D6 / D7 open; D8: `map` moves out,
+see Phase 3).
+
+**Three hard ordering constraints (not negotiable)**:
+
+1. **2.1 must come first** — only once namespaces + multi-file land can the CT compiler source be split
+   across files; `import` also follows it (it depends on path / symbol resolution).
+2. **2.2 precedes 2.4** — AutoDrop depends on Drop, and path-sensitive analysis on scope + Drop.
+3. **Directory = namespace binding depends on 2.1**, so it can only land in 2.4.
+
+Alignment with the [bootstrap.md](design/bootstrap.md) ladder: M3 → the first half of 2.1;
+M4 → the second half of 2.1 + 2.2; M5 → 2.3; **M6 (full alignment) closes in 2.4**.
+
+#### Phase 2.1 — module system
+
+- **Redone in CT**: namespaces (`parse_namespace` + qualified lookups + prefixed generated names
+  `<Ns>_<Struct>_<Trait>_<method>`), multi-file `ct build` / `.h.ct` / `pub` (types sink into `.h`,
+  the `.c` includes its own header, visibility rule), `import` (path resolution + recursive inclusion
+  + accumulating cross-unit symbols).
+- **Exit**: archived cases **byte-identical**; **the compiler source itself becomes multi-file** (the
+  single biggest payoff for the rest of the work).
+- **Diff against**: `test/cases/19_namespace`, `20_namespace_nested`, `test/multifile/`, `test/import/`.
+- **Risk**: the name prefix becomes a published contract as soon as it ships, so freeze it first;
+  multi-file breaks the self-contained `.c`, so decide it together with the `pub` visibility rule;
+  `-I` and cross-unit vtable visibility are still open.
+
+#### Phase 2.2 — memory
+
+- **Redone in CT**: `Drop` (built-in reserved-name trait, lazy generation, recursive value-field
+  release) + loosened `delete` (any pointer → `if (p) free(p);`).
+- **Exit**: drop cases **byte-identical**.
+- **Diff against**: `test/cases/22_drop`, `test/errors/drop_*`.
+- **Risk**: the merge semantics of a user `impl Drop` and the default body must be nailed down.
+
+#### Phase 2.3 — diagnostics and traceability
+
+- **Redone in CT**: `#line` (on by default in multi-file mode, D4 = A), leak warnings +
+  `--diagnostics=json` (first-cut scope in 1.7).
+- **New (no oracle; needs new cases)**: multiple errors + resync-based recovery (jump to the next line
+  start / `}`), semantic checks (reject duplicate trait/struct definitions; warn on signature
+  mismatch).
+- **Exit**: the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line.
+- **Diff against**: `test/errors/*`, the `#line` layer in `run.sh`.
+- **Risk**: error counts plus resync points invite cascading false positives; semantic checks must be
+  kept clear of the "no type checking" boundary.
+
+#### Phase 2.4 — new features
+
+- **AutoDrop**: a marked variable gets an automatic `drop()` at the end of its scope (no `free` — only
+  the held resources are released).
+- **Path-sensitive leak analysis**: analyse every return path and flag "not released on some paths".
+- **Mandatory directory = namespace binding**.
+- **Exit**: **design first → freeze → new cases → `run.sh` green**; **byte-identical is explicitly not
+  required** (there is no oracle to diff against). Rung **M6** closes here.
+
+**Needs a user decision first, not scheduled yet**: whether to introduce **type checking** (if so the
+compiler changes nature and needs an AST rather than line-based scanning); whether to introduce
+**generics** (requires monomorphisation on the `.c` side); whether to guarantee a **hard readability
+budget** for the generated output (max nesting indent, name-length caps, …).
+
+### Phase 3 — ecosystem and extension
+
+- **Ecosystem binding**: `map` + the reverse mapping table (moved off the self-hosting mainline per D8;
+  settled together with the official bindings list when it lands).
+- **The dialect system**: domain-specific syntax written inside comments, turned into plain CT by an
+  expander script that lives outside the compiler — `ctc` stays unaware of it throughout. The design is
+  frozen but unimplemented, and it is **scheduled for this phase** (confirmed by the user on 2026-10-13;
+  wording updated with the 2026-10-14 phase realignment) — an ordering choice, not a technical
+  dependency: the expander is an external script and does not couple to self-hosting. Before it lands,
+  the three boundary conflicts with [AGENTS.md](../AGENTS.md) §2 must be amended (code-generation
+  scripts / the extension invoking the compiler / dialect distribution via the package manager). See
+  [design/dialect.md](design/dialect.md) (design draft, not implemented).
+- **Build**: incremental compilation cache, cross-function leak analysis, multi-target builds.
+
+The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
 [design/bootstrap.md](design/bootstrap.md).
-
-**The dialect system**: domain-specific syntax written inside comments, turned into plain CT by an
-expander script that lives outside the compiler — `ctc` stays unaware of it throughout. The design is
-frozen but unimplemented, and it is **scheduled after Phase 3 (self-hosting)** (confirmed by the user
-on 2026-10-13). That is an ordering choice, not a technical dependency: the expander is an external
-script and does not couple to self-hosting — it is last so the compiler's main body settles first.
-Before it lands, the three boundary conflicts with [AGENTS.md](../AGENTS.md) §2 must be amended
-(code-generation scripts / the extension invoking the compiler / dialect distribution via the package
-manager). See [design/dialect.md](design/dialect.md) (design draft, not implemented).
 
 ### Open decisions
 
@@ -1101,3 +1432,10 @@ variables are registered as pointers so `p->m()` is rewritten (0.1.4). The toolc
 a single-entry `ct` with `ctc` kept as a compatibility alias. And the multi-file shape is decided: a
 `.h.ct` file produces a `.h` + `.c` pair whose `.c` includes its own header (see "File-naming
 convention and `pub` visibility").
+
+After the 2026-10-14 phase realignment two more are decided: **all new C-side language features are
+frozen from self-hosting (Phase 1) on** (`ctc.c` takes bug fixes only), and the **cleanup scope is the
+strict version** — `ctc.c` is peeled back to the pure-OO core, the rest of the features are deleted or
+archived once their CT versions pass differential verification, and `ctc.c` itself is never deleted
+outright (see "Bootstrap strategy and the single-file boundary"). Still open, scheduled for Phase 2:
+type checking, generics, and hard readability budgets for the generated output (see "Phase 2").

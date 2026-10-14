@@ -20,7 +20,7 @@
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
 | 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | Phase 0：目标是用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放），不做类型检查、不做优化、不做错误恢复；达成情况见 `docs/roadmap.md` |
+| 当前阶段 | Phase 0（用 trait 写「完整 OO」）已完成。当前 **Phase 0.3：把越位实现在 C 侧的 namespace / 多文件 / import / Drop / `#line` / 诊断移出 `ctc.c`，回到纯 OO**；随后进入 **Phase 1：用 CT 把 Phase 0 的 OO 化 C 重写一遍**——唯一目的是**自举**，本阶段**不新增语言特性**（新增从 Phase 2 起）。仍不做类型检查、不做优化、不做错误恢复。见 `docs/roadmap.md` |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
@@ -44,6 +44,7 @@
   `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、不调用 `ctc`。
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
 - `docs/design/` 下是**未实现的设计草案**（如自举的目标目录结构），不是实现依据；不要照着草案创建目录或文件。
+- **`ctc.c` 在自举启动后冻结**：Phase 0.3 剥离完成后只接受 bug 修复，**不再新增任何能力**；新能力一律写在 CT 侧（Phase 2 起）。自举要求 `ctc.c` 的 `main` 加 `#ifndef CTC_NO_MAIN` 守卫——这是冻结前**唯一**允许的结构性改造。
 
 ### 3. 代码风格
 
@@ -110,7 +111,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 7. 禁止事项
 
 - 禁止在 `ctc.c` 中引入类型检查、语义分析、优化（Phase 0 范围外）。
-- 禁止新增 namespace、泛型、继承、多文件编译支持，除非用户明确把对应阶段指派给你。
+- 禁止把 namespace / 多文件 / import / Drop / `#line` / 诊断在 **C 侧**新增或加回（Phase 0.3 已把它们移出 `ctc.c`；Phase 2 起改用 **CT** 重做）；禁止新增泛型、继承，除非用户明确把对应阶段指派给你。
 - 禁止把 `examples/**` 下生成的 `.c` / `.h` 入库或手工编辑（生成物一律不入库）。
 - 禁止为了让示例通过而修改 `examples/**/*.ct` 的语义（可以扩充，不可以削弱）。
 - 禁止吞掉错误、禁止静默截断、禁止 `TODO` 空实现留在主路径上。
@@ -162,7 +163,7 @@ user before changing code**.
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
 | Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
 | License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
-| Stage | Phase 0 — the goal is to write full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release); no type checking, no optimisation, no error recovery — see `docs/roadmap.md` for progress |
+| Stage | Phase 0 (writing full OO with traits) is done. Current: **Phase 0.3 — move the C-side over-reach (namespaces / multi-file / import / Drop / `#line` / diagnostics) out of `ctc.c`, back to pure OO**; then **Phase 1 — rewrite that OO-in-C in CT**, whose *only* purpose is **self-hosting** and which adds **no language features** (those start in Phase 2). Still no type checking, no optimisation, no error recovery — see `docs/roadmap.md` |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
 ### 2. File ownership
@@ -190,6 +191,10 @@ Hard boundaries:
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
 - `docs/design/` holds **unimplemented design drafts** (e.g. the bootstrap target layout) — they are
   not a mandate to implement anything; never create directories or files from a draft.
+- **`ctc.c` freezes once self-hosting starts**: after Phase 0.3 strips it, only bug fixes are allowed
+  and **no new capability is added**; new capabilities live in the CT layer (from Phase 2 on).
+  Self-hosting requires an `#ifndef CTC_NO_MAIN` guard on `ctc.c`'s `main` — the **only** structural
+  change permitted before the freeze.
 
 ### 3. Code style
 
@@ -258,7 +263,9 @@ Also required:
 ### 7. Prohibited
 
 - No type checking, semantic analysis, or optimisation in `ctc.c` (outside Phase 0 scope).
-- No namespaces, generics, inheritance, or multi-file support unless assigned.
+- No adding or re-adding namespaces / multi-file / import / Drop / `#line` / diagnostics on the **C
+  side** (Phase 0.3 moved them out of `ctc.c`; from Phase 2 on they are redone in **CT**). No generics
+  or inheritance unless the user assigns that phase explicitly.
 - No committing or hand-editing the `.c` / `.h` generated under `examples/**` (generated files are
   never committed).
 - No weakening of `examples/**/*.ct` to make output pass (extending them is fine).
