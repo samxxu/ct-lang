@@ -89,6 +89,11 @@ typedef struct {
     char fname[MAX_FIELDS][MAX_NAME];  /* value fields whose type is a known struct */
     int  ftype[MAX_FIELDS];            /* ... and their index into g_structs */
     int  nf;
+    /* pointer fields live in their own table: nested construction and the Drop
+       cascade must never treat a borrowed pointer as an owned nested value */
+    char pfname[MAX_FIELDS][MAX_NAME];
+    int  pftype[MAX_FIELDS];
+    int  npf;
     int  has_drop;                     /* 1 when the use-clause mentions the reserved 'Drop' */
     int  drop_used;                    /* 1 when a delete of this type was seen (drives lazy emit) */
     int  has_user_drop;                /* 1 when the user wrote `impl Drop for T` */
@@ -445,12 +450,15 @@ static int struct_uses(const Struct *s, const char *trait)
     return 0;
 }
 
-/* index of a nested struct field, or -1 */
-static int find_field(const Struct *s, const char *name)
+/* struct index of the field named `name`, or -1; *isptr tells whether the field
+   is a pointer, so the following hop must use '->' */
+static int find_field_ex(const Struct *s, const char *name, int *isptr)
 {
     int i;
     for (i = 0; i < s->nf; i++)
-        if (strcmp(s->fname[i], name) == 0) return i;
+        if (strcmp(s->fname[i], name) == 0) { *isptr = 0; return s->ftype[i]; }
+    for (i = 0; i < s->npf; i++)
+        if (strcmp(s->pfname[i], name) == 0) { *isptr = 1; return s->pftype[i]; }
     return -1;
 }
 
@@ -1142,6 +1150,7 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
     size_t n = strlen(body), i = 0;
 
     S->nf = 0;
+    S->npf = 0;
     buf_init(&out);
 
     while (i < n) {
@@ -1170,7 +1179,12 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
 
         idx = analyse_param(body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
         emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
-        if (idx >= 0 && fname[0] && !ptr) {          /* value field of a known struct */
+        if (idx >= 0 && fname[0] && ptr) {           /* pointer field to a known struct */
+            if (S->npf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+            snprintf(S->pfname[S->npf], MAX_NAME, "%s", fname);
+            S->pftype[S->npf] = idx;
+            S->npf++;
+        } else if (idx >= 0 && fname[0]) {           /* value field of a known struct */
             if (S->nf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
             snprintf(S->fname[S->nf], MAX_NAME, "%s", fname);
             S->ftype[S->nf] = idx;
@@ -1770,21 +1784,33 @@ static void transform_calls(const char *s, Buf *out)
                 const char *tr = NULL;
                 size_t pos = j, mp = 0;
                 int cur = g_vars[vi].s, need_amp = 1, hit = 0;
+                int isptr = g_vars[vi].ptr;   /* is the current hop reached via a pointer? */
 
                 for (;;) {
                     size_t ms, k, ml;
-                    int isptr, fi;
+                    int fi;
 
-                    if (pos == j && g_vars[vi].arr) {
-                        /* the receiver is an element: consume "[<n>]" */
-                        if (!(pos < n && s[pos] == '[')) break;
-                        k = pos + 1;
-                        while (k < n && s[k] >= '0' && s[k] <= '9') k++;
-                        if (!(k < n && s[k] == ']')) break;
-                        pos = k + 1;
+                    if (pos == j && (g_vars[vi].arr || g_vars[vi].ptr) &&
+                        pos < n && s[pos] == '[') {
+                        /* the receiver is an element: consume "[<expr>]", whose
+                           expression may be anything (balanced brackets, skipping
+                           literals) — e.g. ps[i], ps[i + 1], ps[f()] */
+                        int d = 0;
+                        k = pos;
+                        while (k < n) {
+                            char e = s[k];
+                            if (e == '"' || e == '\'') { k = line_literal_end(s, k, n); continue; }
+                            if (e == '[') d++;
+                            else if (e == ']') { d--; if (d == 0) { k++; break; } }
+                            k++;
+                        }
+                        if (d != 0) break;
+                        pos = k;
+                        /* an element of `T *ps[n]` is itself a pointer (uses '->'),
+                           while `p[i]` on a plain `T *p` is a value */
+                        isptr = g_vars[vi].arr && g_vars[vi].ptr;
                         continue;
                     }
-                    isptr = (pos == j) ? g_vars[vi].ptr : 0;
 
                     if (isptr) {
                         if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) break;
@@ -1809,9 +1835,9 @@ static void transform_calls(const char *s, Buf *out)
                         break;
                     }
                     tr = NULL;
-                    fi = find_field(&g_structs[cur], mem);
+                    fi = find_field_ex(&g_structs[cur], mem, &isptr);
                     if (fi < 0) break;
-                    cur = g_structs[cur].ftype[fi];
+                    cur = fi;
                     pos = k;
                 }
 
@@ -2050,7 +2076,13 @@ static char *try_var_decl(const char *line)
             snprintf(g_vars[vi].name, MAX_NAME, "%s", pv);
             g_vars[vi].s = (int)(S - g_structs);
             g_vars[vi].ptr = 1;
-            g_vars[vi].arr = 0;
+            {
+                /* `T *ps[<n>]` is an array of pointers — its elements are reached
+                   with '->', unlike `T *p`, where p[i] is a value */
+                const char *aft = q + pk;
+                while (*aft == ' ' || *aft == '\t') aft++;
+                g_vars[vi].arr = (*aft == '[');
+            }
             g_vars[vi].iface = 0;
             g_vars[vi].tr = -1;
         }
