@@ -118,6 +118,8 @@ typedef struct {
     int  nparams;
     int  ptrait[MAX_PARAMS];           /* >=0 when that parameter is an interface value */
     int  rettrait;                     /* >=0 when the return type is an interface value */
+    int  retstruct;                    /* >=0 when the return type is a known struct */
+    int  retptr;                       /* 1 when that struct is returned through a pointer */
 } FuncSig;
 
 typedef struct {
@@ -267,6 +269,13 @@ static Warn   g_warns[MAX_WARNS];
 static int    g_nwarns  = 0;
 static int    g_json    = 0;         /* 1 with --diagnostics=json */
 static size_t g_cur_line = 0;        /* source line of the line being rewritten */
+static size_t g_line_off = 0;        /* g_src offset where that line starts */
+
+/* Phase 1.9b rvalue receivers: `f().m()` needs its receiver evaluated once, in
+   order. The temp declaration is accumulated here and emitted just before the
+   rewritten line (see emit_hoisted); `g_ntmp` keeps the names unique. */
+static Buf    g_hoist;
+static int    g_ntmp = 0;
 
 static void buf_init(Buf *b)   { b->cap = 256; b->n = 0; b->p = xmalloc(b->cap); b->p[0] = 0; }
 static void buf_putn(Buf *b, const char *s, size_t n)
@@ -850,6 +859,18 @@ static void line_at(FILE *f, size_t srcline)
     if ((long)srcline != g_line_next)
         fprintf(f, "#line %ld \"%s\"\n", (long)srcline, g_path);
     g_line_next = (long)srcline + 1;
+}
+
+/* If the line just rewritten hoisted a temp receiver (Phase 1.9b), write that
+   declaration first: it must run before the rewritten line, and both belong to
+   the same source line, so the mapping is re-anchored afterwards. */
+static void emit_hoisted(void)
+{
+    if (g_hoist.n == 0) return;
+    fputs(g_hoist.p, g_out);
+    fputc('\n', g_out);
+    line_break();
+    line_at(g_out, g_cur_line);
 }
 
 static void emit_trait_def(FILE *f, const Trait *T, size_t srcline)
@@ -1643,6 +1664,55 @@ static void box_to_iface(Buf *out, const char *e, size_t len, int tr, size_t pos
     buf_puts(out, "_vtable }");
 }
 
+static size_t line_assign_eq(const char *line);   /* defined with the leak warnings */
+
+/* Follow `.field` / `->field` hops from the object of struct `cur` at offset
+   `pos` (a pointer when `isptr`), stopping at the first method of a used trait.
+   On success returns 1 and fills *out_cur (the receiver's struct), *out_rend
+   (offset of the final '.' / '->', i.e. where the receiver text ends), *mp (the
+   method's '('), *memb, *out_need_amp (pass '&self') and *out_tr (trait name). */
+static int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr,
+                       int *out_cur, int *out_need_amp, const char **out_tr,
+                       size_t *out_rend, size_t *mp, char *memb)
+{
+    char mem[MAX_NAME];
+
+    for (;;) {
+        size_t ms, k, ml;
+        int fi;
+
+        if (isptr) {
+            if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+            k = pos + 2;
+        } else {
+            if (!(pos < n && s[pos] == '.')) return 0;
+            k = pos + 1;
+        }
+        ms = k;
+        while (k < n && is_ident_char((unsigned char)s[k])) k++;
+        ml = k - ms;
+        if (ml == 0) return 0;
+        if (ml >= sizeof mem) ml = sizeof mem - 1;
+        memcpy(mem, s + ms, ml);
+        mem[ml] = 0;
+
+        *out_tr = resolve_method(&g_structs[cur], mem);
+        if (*out_tr && k < n && s[k] == '(') {
+            *out_cur = cur;
+            *out_need_amp = !isptr;
+            *out_rend = pos;
+            *mp = k;
+            snprintf(memb, MAX_NAME, "%s", mem);
+            return 1;
+        }
+        *out_tr = NULL;
+        fi = find_field_ex(&g_structs[cur], mem, &isptr);
+        if (fi < 0) return 0;
+        cur = fi;
+        pos = k;
+    }
+}
+
 static void transform_calls(const char *s, Buf *out)
 {
     size_t i = 0, n = strlen(s);
@@ -1737,6 +1807,82 @@ static void transform_calls(const char *s, Buf *out)
                     }
                 }
             }
+            /* an rvalue receiver: `f().m()` / `f()->m()` / `f().a.b.m()` where
+               f returns a known struct. Its receiver is hoisted into a temp so
+               it is evaluated once and in order; only a statement head or an
+               initialiser (Q2-A) allows that without reordering evaluation, so
+               any other position is a hard error (Q3-A). */
+            if (vi < 0 && !g_no_box && j < n && s[j] == '(') {
+                FuncSig *FS = find_func(tok);
+                if (FS && FS->retstruct >= 0) {
+                    size_t cp = line_match_paren(s, j, n);
+                    if (cp != (size_t)-1) {
+                        char mem[MAX_NAME];
+                        const char *tr = NULL;
+                        int cur = FS->retstruct, need_amp = 0;
+                        size_t rend = 0, mp = 0;
+                        if (walk_method(s, n, cp + 1, cur, FS->retptr, &cur,
+                                        &need_amp, &tr, &rend, &mp, mem)) {
+                            size_t fs = 0, eq, saved_off;
+                            char tmp[MAX_NAME], low[MAX_NAME], *recv;
+                            Buf ini;
+
+                            while (fs < n && (s[fs] == ' ' || s[fs] == '\t')) fs++;
+                            eq = line_assign_eq(s);
+                            if (i != fs) {
+                                int ok = 0;
+                                if (eq != (size_t)-1) {
+                                    size_t rs = eq + 1;
+                                    while (rs < n && (s[rs] == ' ' || s[rs] == '\t')) rs++;
+                                    if (i == rs) ok = 1;
+                                }
+                                if (!ok)
+                                    die(g_line_off + i, "an rvalue receiver must start the statement or an initialiser");
+                            }
+
+                            snprintf(tmp, sizeof tmp, "__ct_tmp%d", g_ntmp++);
+                            /* the initialiser is the receiver text, itself run
+                               through the rewriter so nested calls are handled */
+                            recv = xstrndup(s + i, rend - i);
+                            buf_init(&ini);
+                            saved_off = g_line_off;
+                            g_line_off += i;
+                            transform_calls(recv, &ini);
+                            g_line_off = saved_off;
+                            free(recv);
+
+                            buf_putn(&g_hoist, s, fs);    /* keep the line's indent */
+                            buf_puts(&g_hoist, "struct ");
+                            buf_puts(&g_hoist, g_structs[cur].cname);
+                            buf_puts(&g_hoist, need_amp ? " " : " *");
+                            buf_puts(&g_hoist, tmp);
+                            buf_puts(&g_hoist, " = ");
+                            buf_puts(&g_hoist, ini.p);
+                            buf_putc(&g_hoist, ';');
+                            free(ini.p);
+
+                            to_lower(tr, low);
+                            buf_puts(out, tmp);
+                            buf_puts(out, need_amp ? ".__" : "->__");
+                            buf_puts(out, low);
+                            buf_puts(out, "_vptr->");
+                            buf_puts(out, mem);
+                            buf_putc(out, '(');
+                            if (need_amp) buf_putc(out, '&');
+                            buf_puts(out, tmp);
+                            {
+                                size_t z = mp + 1;
+                                int empty;
+                                while (z < n && isspace((unsigned char)s[z])) z++;
+                                empty = (z < n && s[z] == ')');
+                                if (!empty) buf_puts(out, ", ");
+                            }
+                            i = mp + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
             if (!g_no_box && vi < 0 && j < n && s[j] == '(') {
                 /* a call to a function with interface parameters: box those args */
                 FuncSig *FS = find_func(tok);
@@ -1782,64 +1928,34 @@ static void transform_calls(const char *s, Buf *out)
                 /* walk ".field" hops, then rewrite the final ".m(" / "->m(" */
                 char mem[MAX_NAME], low[MAX_NAME];
                 const char *tr = NULL;
-                size_t pos = j, mp = 0;
-                int cur = g_vars[vi].s, need_amp = 1, hit = 0;
+                size_t pos = j, rend = 0, mp = 0;
+                int cur = g_vars[vi].s, need_amp = 1, hit = 0, unclosed = 0;
                 int isptr = g_vars[vi].ptr;   /* is the current hop reached via a pointer? */
 
-                for (;;) {
-                    size_t ms, k, ml;
-                    int fi;
-
-                    if (pos == j && (g_vars[vi].arr || g_vars[vi].ptr) &&
-                        pos < n && s[pos] == '[') {
-                        /* the receiver is an element: consume "[<expr>]", whose
-                           expression may be anything (balanced brackets, skipping
-                           literals) — e.g. ps[i], ps[i + 1], ps[f()] */
-                        int d = 0;
-                        k = pos;
-                        while (k < n) {
-                            char e = s[k];
-                            if (e == '"' || e == '\'') { k = line_literal_end(s, k, n); continue; }
-                            if (e == '[') d++;
-                            else if (e == ']') { d--; if (d == 0) { k++; break; } }
-                            k++;
-                        }
-                        if (d != 0) break;
+                if ((g_vars[vi].arr || g_vars[vi].ptr) && pos < n && s[pos] == '[') {
+                    /* the receiver is an element: consume "[<expr>]", whose
+                       expression may be anything (balanced brackets, skipping
+                       literals) — e.g. ps[i], ps[i + 1], ps[f()] */
+                    int d = 0;
+                    size_t k = pos;
+                    while (k < n) {
+                        char e = s[k];
+                        if (e == '"' || e == '\'') { k = line_literal_end(s, k, n); continue; }
+                        if (e == '[') d++;
+                        else if (e == ']') { d--; if (d == 0) { k++; break; } }
+                        k++;
+                    }
+                    if (d != 0) unclosed = 1;
+                    else {
                         pos = k;
                         /* an element of `T *ps[n]` is itself a pointer (uses '->'),
                            while `p[i]` on a plain `T *p` is a value */
                         isptr = g_vars[vi].arr && g_vars[vi].ptr;
-                        continue;
                     }
-
-                    if (isptr) {
-                        if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) break;
-                        k = pos + 2;
-                    } else {
-                        if (!(pos < n && s[pos] == '.')) break;
-                        k = pos + 1;
-                    }
-                    ms = k;
-                    while (k < n && is_ident_char((unsigned char)s[k])) k++;
-                    ml = k - ms;
-                    if (ml == 0) break;
-                    if (ml >= sizeof mem) ml = sizeof mem - 1;
-                    memcpy(mem, s + ms, ml);
-                    mem[ml] = 0;
-
-                    tr = resolve_method(&g_structs[cur], mem);
-                    if (tr && k < n && s[k] == '(') {
-                        need_amp = !isptr;
-                        mp = k;
-                        hit = 1;
-                        break;
-                    }
-                    tr = NULL;
-                    fi = find_field_ex(&g_structs[cur], mem, &isptr);
-                    if (fi < 0) break;
-                    cur = fi;
-                    pos = k;
                 }
+                if (!unclosed)
+                    hit = walk_method(s, n, pos, cur, isptr, &cur, &need_amp,
+                                      &tr, &rend, &mp, mem);
 
                 if (hit) {
                     size_t z = mp + 1;
@@ -1848,14 +1964,14 @@ static void transform_calls(const char *s, Buf *out)
                     empty = (z < n && s[z] == ')');
 
                     to_lower(tr, low);
-                    buf_putn(out, s + i, pos - i);            /* receiver */
+                    buf_putn(out, s + i, rend - i);           /* receiver */
                     buf_puts(out, need_amp ? ".__" : "->__");
                     buf_puts(out, low);
                     buf_puts(out, "_vptr->");
                     buf_puts(out, mem);
                     buf_putc(out, '(');
                     if (need_amp) buf_putc(out, '&');
-                    buf_putn(out, s + i, pos - i);            /* receiver again */
+                    buf_putn(out, s + i, rend - i);           /* receiver again */
                     if (!empty) buf_puts(out, ", ");
                     i = mp + 1;
                     continue;
@@ -2365,6 +2481,7 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
     char name[MAX_NAME], tok[MAX_NAME];
     Buf b;
     int isdef = 0, ret_tr = -1, ret_ia = -1, ret_ib = -1, ret_ns = 0;
+    int ret_struct = -1, ret_rptr = 0;
     char ret_cbase[MAX_NAME];
 
     *has_body = 0;
@@ -2424,8 +2541,8 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
     /* the return type: qualify a known struct, or expand a trait to its iface */
     {
         char rname[MAX_NAME];
-        int rptr = 0;
-        analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase, &ret_ns, rname, &rptr, &ret_tr);
+        ret_struct = analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase,
+                                   &ret_ns, rname, &ret_rptr, &ret_tr);
     }
 
     buf_init(&b);
@@ -2482,6 +2599,8 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
             snprintf(FS->name, MAX_NAME, "%s", name);
             FS->nparams = npar;
             FS->rettrait = ret_tr;
+            FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
+            FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
             for (q = 0; q < npar; q++) FS->ptrait[q] = ptrait[q];
         }
         if (isdef) g_cur_rettr = ret_tr;
@@ -2629,6 +2748,9 @@ static void emit_raw_line(size_t ls, size_t le)
 
     line = xstrndup(g_src + ls, len);
     g_cur_line = line_of(ls);
+    if (!g_hoist.cap) buf_init(&g_hoist);            /* Phase 1.9b: per-line hoist */
+    g_hoist.n = 0;
+    g_hoist.p[0] = 0;
     while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
     if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
         fputs(line, g_out);
@@ -2652,6 +2774,7 @@ static void emit_raw_line(size_t ls, size_t le)
 
     leak_observe(line);                              /* Phase 1.7 leak tracking */
 
+    g_line_off = ls;                                /* base offset for diagnostics */
     sig = parse_func_sig(line, ls, &has_body, &body_abs);
     if (sig) {
         Buf b;
@@ -2665,6 +2788,7 @@ static void emit_raw_line(size_t ls, size_t le)
         free(sig);
     } else {
         char *out = transform_line(line);
+        emit_hoisted();                      /* Phase 1.9b: decl before the line */
         fputs(out, g_out);
         free(out);
     }
