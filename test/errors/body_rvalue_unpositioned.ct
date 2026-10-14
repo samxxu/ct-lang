@@ -1,0 +1,26 @@
+// An rvalue receiver in an unpositioned spot must be rejected inside a method
+// body too: the body shares the top-level rewriting pipeline (Phase 1.9c).
+// License: MIT; see LICENSE.EXCEPTION
+trait Greeter {
+    int bumps(int n);
+    int run();
+}
+
+struct Person {
+    int age;
+} use Greeter;
+
+Person make_person() {
+    Person p = { .age = 7 };
+    return p;
+}
+
+impl Greeter for Person {
+    int bumps(int n) {
+        return self->age + n;
+    }
+    int run() {
+        int x = 1 + make_person().bumps(2);
+        return x;
+    }
+}

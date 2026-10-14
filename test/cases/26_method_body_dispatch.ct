@@ -1,0 +1,56 @@
+// 26_method_body_dispatch.ct — Phase 1.9c: impl method bodies go through the same
+// rewriting pipeline as top-level code, so a local-variable receiver, a
+// field-chain receiver and a parameter receiver all dispatch, alongside sibling
+// `self->m()` calls.
+// License: MIT; see LICENSE.EXCEPTION
+#include <stdio.h>
+
+struct Num;
+trait Node {
+    void emit();
+    void addto(struct Num *o);
+}
+
+struct Num {
+    int v;
+} use Node;
+
+struct Add {
+    struct Num *lhs;
+    struct Num *rhs;
+} use Node;
+
+impl Node for Num {
+    void emit() {
+        printf("%d", self->v);
+    }
+    void addto(struct Num *o) {
+        o->v += self->v;
+    }
+}
+
+impl Node for Add {
+    void emit() {
+        self->lhs->emit();
+        printf("+");
+        self->rhs->emit();
+    }
+    void addto(struct Num *o) {
+        struct Num one = { .v = 1 };
+        one.addto(o);
+        self->lhs->addto(o);
+        self->rhs->addto(o);
+    }
+}
+
+int main() {
+    struct Num a = { .v = 7 };
+    struct Num b = { .v = 2 };
+    struct Num acc = { .v = 100 };
+    struct Add sum = { .lhs = &a, .rhs = &b };
+    sum.emit();
+    printf("\n");
+    sum.addto(&acc);
+    printf("%d\n", acc.v);
+    return 0;
+}

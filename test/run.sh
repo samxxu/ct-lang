@@ -364,10 +364,9 @@ else
     fi
 fi
 
-# A method body is rewritten by an independent string pass (`replace_self`) that
-# only understands `self` and `self->m(...)`: a local variable receiver and an
-# rvalue receiver inside an impl body are left alone. Pinned here so that a fix
-# (or a regression) shows up rather than silently emitting broken C.
+# A method body now goes through the very same rewriting pipeline as top-level
+# code (Phase 1.9c): a local variable receiver inside an impl body is dispatched
+# and the emitted method compiles.
 cat >"$TMP/bodyrecv.ct" <<'EOF'
 #include <stdio.h>
 trait G { void greet(); void run(); }
@@ -379,20 +378,24 @@ impl G for P {
         q.greet();
     }
 }
-int main(void){ struct P p = { .name = "Z" }; p.run(); return 0; }
+int main(void) {
+    struct P p = { .name = "Z" };
+    p.run();
+    return 0;
+}
 EOF
 if ! "$TMP/ctc" "$TMP/bodyrecv.ct" -o "$TMP/bodyrecv.c" 2>"$TMP/bodyrecv.err"; then
-    bad "limits/body-local-receiver" "expected exit 0 (limitation), got non-zero: $(cat "$TMP/bodyrecv.err")"
+    bad "limits/body-local-receiver" "expected exit 0, got non-zero: $(cat "$TMP/bodyrecv.err")"
 else
-    if grep -Fq 'q.greet();' "$TMP/bodyrecv.c"; then
-        ok "limits/a local receiver inside a method body is passed through unrewritten (known limitation)"
+    if grep -Fq 'q.__g_vptr->greet(&q);' "$TMP/bodyrecv.c"; then
+        ok "limits/a local receiver inside a method body is dispatched"
     else
-        bad "limits/body-local-receiver" "expected 'q.greet();' verbatim; rewriting may now be implemented"
+        bad "limits/body-local-receiver" "expected the dispatched call 'q.__g_vptr->greet(&q);'"
     fi
     if $CC $CFLAGS -c "$TMP/bodyrecv.c" -o "$TMP/bodyrecv.o" 2>/dev/null; then
-        bad "limits/body-local-receiver-cc" "expected the un-rewritten output NOT to compile"
+        ok "limits/body-local receiver output compiles"
     else
-        ok "limits/body-local receiver output does not compile (consequence of the limitation)"
+        bad "limits/body-local-receiver-cc" "expected the rewritten output to compile"
     fi
 fi
 
