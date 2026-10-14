@@ -94,6 +94,15 @@ typedef struct {
     char pfname[MAX_FIELDS][MAX_NAME];
     int  pftype[MAX_FIELDS];
     int  npf;
+    /* interface fields (a trait used as a field type, `T x;` / `struct T *x;`)
+       live in their own tables: they hold a fat pointer, so a call on them is
+       dispatched through the field's own vt, not the enclosing struct's vptr */
+    char ifname[MAX_FIELDS][MAX_NAME];
+    int  iftype[MAX_FIELDS];           /* ... and their index into g_traits */
+    int  nif;
+    char pifname[MAX_FIELDS][MAX_NAME];
+    int  piftype[MAX_FIELDS];
+    int  npif;
     int  has_drop;                     /* 1 when the use-clause mentions the reserved 'Drop' */
     int  drop_used;                    /* 1 when a delete of this type was seen (drives lazy emit) */
     int  has_user_drop;                /* 1 when the user wrote `impl Drop for T` */
@@ -468,6 +477,18 @@ static int find_field_ex(const Struct *s, const char *name, int *isptr)
         if (strcmp(s->fname[i], name) == 0) { *isptr = 0; return s->ftype[i]; }
     for (i = 0; i < s->npf; i++)
         if (strcmp(s->pfname[i], name) == 0) { *isptr = 1; return s->pftype[i]; }
+    return -1;
+}
+
+/* trait index of the interface field named `name`, or -1; *isptr tells whether
+   the field is a `struct T *` pointer, so the following hop must use '->' */
+static int find_iface_field(const Struct *s, const char *name, int *isptr)
+{
+    int i;
+    for (i = 0; i < s->nif; i++)
+        if (strcmp(s->ifname[i], name) == 0) { *isptr = 0; return s->iftype[i]; }
+    for (i = 0; i < s->npif; i++)
+        if (strcmp(s->pifname[i], name) == 0) { *isptr = 1; return s->piftype[i]; }
     return -1;
 }
 
@@ -1006,7 +1027,11 @@ static void replace_self(const char *s, size_t n, Buf *out)
         if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
             size_t j = i;
             while (j < n && is_ident_char((unsigned char)s[j])) j++;
-            if (j - i == 4 && memcmp(s + i, "self", 4) == 0)
+            /* a member named `self` (e.g. `g.self`, the iface dispatcher's
+               field) is not the implicit receiver and must not be renamed */
+            if (j - i == 4 && memcmp(s + i, "self", 4) == 0 &&
+                !(i > 0 && (s[i - 1] == '.' ||
+                            (s[i - 1] == '>' && i > 1 && s[i - 2] == '-'))))
                 buf_puts(out, "_self");
             else
                 buf_putn(out, s + i, j - i);
@@ -1286,6 +1311,8 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
 
     S->nf = 0;
     S->npf = 0;
+    S->nif = 0;
+    S->npif = 0;
     buf_init(&out);
 
     while (i < n) {
@@ -1319,6 +1346,16 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
             snprintf(S->pfname[S->npf], MAX_NAME, "%s", fname);
             S->pftype[S->npf] = idx;
             S->npf++;
+        } else if (tr >= 0 && fname[0] && ptr) {     /* pointer interface field: `struct T *x` */
+            if (S->npif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+            snprintf(S->pifname[S->npif], MAX_NAME, "%s", fname);
+            S->piftype[S->npif] = tr;
+            S->npif++;
+        } else if (tr >= 0 && fname[0]) {            /* interface-value field: `T x` */
+            if (S->nif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+            snprintf(S->ifname[S->nif], MAX_NAME, "%s", fname);
+            S->iftype[S->nif] = tr;
+            S->nif++;
         } else if (idx >= 0 && fname[0]) {           /* value field of a known struct */
             if (S->nf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
             snprintf(S->fname[S->nf], MAX_NAME, "%s", fname);
@@ -1827,6 +1864,49 @@ static int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr,
     }
 }
 
+/* Follow `.field` / `->field` hops from the object of struct `cur` at offset
+   `pos` (a pointer when `isptr`), stopping at an interface field. On success
+   returns 1 and fills *out_tr (trait index), *out_end (offset just past the
+   field name, i.e. where the receiver text ends) and *out_ifptr (whether the
+   interface field is a `struct T *` pointer, so the hop uses '->'). */
+static int walk_to_iface_field(const char *s, size_t n, size_t pos, int cur,
+                               int isptr, int *out_tr, size_t *out_end,
+                               int *out_ifptr)
+{
+    for (;;) {
+        size_t ms, k, ml;
+        int fi, tr, ifptr = 0;
+        char mem[MAX_NAME];
+
+        if (isptr) {
+            if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+            k = pos + 2;
+        } else {
+            if (!(pos < n && s[pos] == '.')) return 0;
+            k = pos + 1;
+        }
+        ms = k;
+        while (k < n && is_ident_char((unsigned char)s[k])) k++;
+        ml = k - ms;
+        if (ml == 0) return 0;
+        if (ml >= sizeof mem) ml = sizeof mem - 1;
+        memcpy(mem, s + ms, ml);
+        mem[ml] = 0;
+
+        tr = find_iface_field(&g_structs[cur], mem, &ifptr);
+        if (tr >= 0) {
+            *out_tr = tr;
+            *out_end = k;
+            *out_ifptr = ifptr;
+            return 1;
+        }
+        fi = find_field_ex(&g_structs[cur], mem, &isptr);
+        if (fi < 0) return 0;
+        cur = fi;
+        pos = k;
+    }
+}
+
 static void transform_calls(const char *s, Buf *out)
 {
     size_t i = 0, n = strlen(s);
@@ -2090,6 +2170,48 @@ static void transform_calls(const char *s, Buf *out)
                     i = mp + 1;
                     continue;
                 }
+
+                /* an interface field as the receiver: `s.l.m()` ->
+                   `s.l.vt->m(s.l.self)` (or `->` when the field is a pointer) */
+                if (!unclosed && cur >= 0) {
+                    int ftr, ifptr;
+                    size_t fend;
+                    if (walk_to_iface_field(s, n, pos, cur, isptr, &ftr, &fend, &ifptr)) {
+                        size_t ms2, k2, ml2, z;
+                        int empty;
+                        char meth[MAX_NAME];
+                        if (ifptr) {
+                            if (!(fend + 1 < n && s[fend] == '-' && s[fend + 1] == '>')) goto no_iface_hit;
+                            k2 = fend + 2;
+                        } else {
+                            if (!(fend < n && s[fend] == '.')) goto no_iface_hit;
+                            k2 = fend + 1;
+                        }
+                        ms2 = k2;
+                        while (k2 < n && is_ident_char((unsigned char)s[k2])) k2++;
+                        ml2 = k2 - ms2;
+                        if (ml2 == 0) goto no_iface_hit;
+                        if (ml2 >= sizeof meth) ml2 = sizeof meth - 1;
+                        memcpy(meth, s + ms2, ml2);
+                        meth[ml2] = 0;
+                        if (!(k2 < n && s[k2] == '(' &&
+                              trait_has_method(&g_traits[ftr], meth)))
+                            goto no_iface_hit;
+                        z = k2 + 1;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                        empty = (z < n && s[z] == ')');
+                        buf_putn(out, s + i, fend - i);       /* receiver incl. field */
+                        buf_puts(out, ifptr ? "->vt->" : ".vt->");
+                        buf_puts(out, meth);
+                        buf_putc(out, '(');
+                        buf_putn(out, s + i, fend - i);
+                        buf_puts(out, ifptr ? "->self" : ".self");
+                        if (!empty) buf_puts(out, ", ");
+                        i = k2 + 1;
+                        continue;
+                    }
+                }
+            no_iface_hit: ;
             }
             buf_putn(out, s + i, j - i);
             i = j;
@@ -2232,13 +2354,14 @@ static char *try_return(const char *line)
     return b.p;
 }
 
-/* "g = p;" — assigning into an interface value (the target type is the variable) */
+/* "g = p;" — assigning into an interface value (the target type is the variable),
+   or into an interface-value field ("s.l = p;", boxed through the field's trait) */
 static char *try_iface_assign(const char *line)
 {
     const char *p = line, *r;
     char id[MAX_NAME];
-    size_t k = 0, el = 0;
-    int vi;
+    size_t k = 0, el = 0, fend = 0;
+    int vi, ftr = -1, ifptr = 0;
     Buf b;
 
     while (*p == ' ' || *p == '\t') p++;
@@ -2246,8 +2369,24 @@ static char *try_iface_assign(const char *line)
     id[k] = 0;
     if (!k) return NULL;
     vi = find_var(id);
-    if (vi < 0 || !g_vars[vi].iface) return NULL;
-    r = p + k;
+    if (vi < 0) return NULL;
+
+    if (!g_vars[vi].iface) {
+        /* an assignment into an interface-value field: `s.l = v;` becomes a
+           boxed fat pointer. Only value interface fields are boxed this way;
+           a pointer interface field (`struct T *l`) needs an existing address,
+           which box_to_iface cannot synthesise, so it is left verbatim. */
+        if (g_vars[vi].s < 0) return NULL;
+        if (!walk_to_iface_field(line, strlen(line), (size_t)(p + k - line),
+                                 g_vars[vi].s, g_vars[vi].ptr, &ftr, &fend, &ifptr))
+            return NULL;
+        if (ifptr) return NULL;
+        r = line + fend;
+    } else {
+        ftr = g_vars[vi].tr;
+        r = p + k;
+    }
+
     while (*r == ' ' || *r == '\t') r++;
     if (*r != '=' || r[1] == '=') return NULL;
     r++;
@@ -2258,7 +2397,7 @@ static char *try_iface_assign(const char *line)
 
     buf_init(&b);
     buf_putn(&b, line, (size_t)(r - line));
-    box_to_iface(&b, r, el, g_vars[vi].tr, 0);
+    box_to_iface(&b, r, el, ftr, 0);
     buf_puts(&b, r + el);
     return b.p;
 }
@@ -2270,13 +2409,22 @@ static char *try_var_decl(const char *line)
     const char *p, *after;
     char name[MAX_NAME], cname[MAX_NAME], var[MAX_NAME];
     Struct *S;
-    int qual = 0, done = 0;
+    int qual = 0, done = 0, static_kw = 0;
     const char *rest;
     Buf b;
 
     while (line[i] == ' ' || line[i] == '\t') i++;
     ws = i;
     p = line + i;
+
+    /* a leading `static` is re-emitted verbatim: the declaration underneath is
+       still a ct struct object and must get its vptr written like any other */
+    if (strncmp(p, "static", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+        const char *z = p + 6;
+        while (*z == ' ' || *z == '\t') z++;
+        static_kw = 1;
+        p = z;
+    }
 
     if (strncmp(p, "struct", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
         p += 6;
@@ -2318,6 +2466,7 @@ static char *try_var_decl(const char *line)
         }
         buf_init(&b);
         buf_putn(&b, line, ws);
+        if (static_kw) buf_puts(&b, "static ");
         buf_puts(&b, "struct ");
         buf_puts(&b, S->cname);
         buf_putc(&b, ' ');
@@ -2375,6 +2524,7 @@ static char *try_var_decl(const char *line)
 
             buf_init(&b);
             buf_putn(&b, line, ws);
+            if (static_kw) buf_puts(&b, "static ");
             buf_puts(&b, "struct ");
             buf_puts(&b, S->cname);
             buf_putc(&b, ' ');
@@ -2434,6 +2584,7 @@ static char *try_var_decl(const char *line)
 
     buf_init(&b);
     buf_putn(&b, line, ws);
+    if (static_kw) buf_puts(&b, "static ");
     buf_puts(&b, "struct ");
     buf_puts(&b, S->cname);
     buf_putc(&b, ' ');

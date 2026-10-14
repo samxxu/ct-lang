@@ -1,0 +1,52 @@
+// 28: an interface-value / interface-pointer used as a struct field
+#include <stdio.h>
+
+trait Node {
+    void show();
+}
+
+struct Lit {
+    int v;
+} use Node;
+
+struct Pair {
+    int v;
+    Node lhs;        // interface-value field
+    Node rhs;        // interface-value field
+} use Node;
+
+struct Box {
+    Node *inner;     // interface-pointer field
+}
+
+impl Node for Lit {
+    void show() {
+        printf("%d", self->v);
+    }
+}
+
+impl Node for Pair {
+    void show() {
+        printf("(");
+        self->lhs.show();
+        printf("+");
+        self->rhs.show();
+        printf(")");
+    }
+}
+
+int main(void) {
+    Lit a = { .v = 1 };
+    Lit b = { .v = 2 };
+    Pair p = { .v = 0 };
+    p.lhs = a;
+    p.rhs = b;
+    p.show();
+    printf("\n");
+
+    Node t = a;
+    Box box = { .inner = &t };
+    box.inner->show();
+    printf("\n");
+    return 0;
+}

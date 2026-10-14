@@ -1,0 +1,48 @@
+#include <stdio.h>
+
+trait Node {
+    void show();
+}
+
+struct Lit {
+    int v;
+} use Node;
+
+struct Add {
+    Node lhs;        // interface-value fields: children are boxed fat pointers
+    Node rhs;
+} use Node;
+
+impl Node for Lit {
+    void show() {
+        printf("%d", self->v);
+    }
+}
+
+impl Node for Add {
+    void show() {
+        printf("(");
+        self->lhs.show();
+        printf(" + ");
+        self->rhs.show();
+        printf(")");
+    }
+}
+
+int main(void) {
+    Lit one = { .v = 1 };
+    Lit two = { .v = 2 };
+    Lit three = { .v = 3 };
+
+    Add sum;                 // interface fields start empty
+    sum.lhs = one;           // a statement assignment boxes into the fat pointer
+    sum.rhs = two;
+
+    Add outer;
+    outer.lhs = three;
+    outer.rhs = sum;         // a node boxes another node: (3 + (1 + 2))
+
+    outer.show();
+    printf("\n");
+    return 0;
+}
