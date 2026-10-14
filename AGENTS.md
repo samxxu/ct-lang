@@ -20,7 +20,7 @@
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
 | 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | Phase 0（用 trait 写「完整 OO」）已完成。当前 **Phase 0.3：把越位实现在 C 侧的 namespace / 多文件 / import / Drop / `#line` / 诊断移出 `ctc.c`，回到纯 OO**；随后进入 **Phase 1：用 CT 把 Phase 0 的 OO 化 C 重写一遍**——唯一目的是**自举**，本阶段**不新增语言特性**（新增从 Phase 2 起）。仍不做类型检查、不做优化、不做错误恢复。见 `docs/roadmap.md` |
+| 当前阶段 | Phase 0（用 trait 写「完整 OO」）与 **Phase 0.3（剥离越位特性）已完成**——`ctc.c` 现为**纯 OO**（3836 → 2897 行），越位 fixture 归档在 `test/archive/`、旧实现在 tag `overreach-oracle`。当前进入 **Phase 1：自举**——用 CT 把 Phase 0 的 OO 化 C 重写一遍，唯一目的是自举，**不新增语言特性**（新增从 Phase 2 起）。仍不做类型检查、不做优化、不做错误恢复。见 `docs/roadmap.md` |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
@@ -163,7 +163,7 @@ user before changing code**.
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
 | Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
 | License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
-| Stage | Phase 0 (writing full OO with traits) is done. Current: **Phase 0.3 — move the C-side over-reach (namespaces / multi-file / import / Drop / `#line` / diagnostics) out of `ctc.c`, back to pure OO**; then **Phase 1 — rewrite that OO-in-C in CT**, whose *only* purpose is **self-hosting** and which adds **no language features** (those start in Phase 2). Still no type checking, no optimisation, no error recovery — see `docs/roadmap.md` |
+| Stage | Phase 0 (writing full OO with traits) and **Phase 0.3 (stripping the over-reach) are done** — `ctc.c` is now **pure OO** (3836 → 2897 lines), with the over-reach fixtures archived under `test/archive/` and the old implementation kept as the tag `overreach-oracle`. The project has entered **Phase 1: self-hosting** — rewriting Phase 0's OO-in-C in CT, whose *only* purpose is self-hosting and which adds **no language features** (those start in Phase 2). Still no type checking, no optimisation, no error recovery — see `docs/roadmap.md` |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
 ### 2. File ownership

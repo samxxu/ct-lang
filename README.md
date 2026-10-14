@@ -3,7 +3,7 @@
 > **v0.0.1** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）已完成，当前目标是**自举**（Phase 1，用 CT 重写编译器）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）与 Phase 0.3（剥离越位特性）已完成，当前进入 **Phase 1：自举**（用 CT 把 Phase 0 的 OO 化 C 重写一遍）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），编译器命令叫 **`ctc`**（ct compiler，好比 `tinycc` 仓库发布的命令是 `tcc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -45,17 +45,16 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 | 用法 | 说明 |
 | --- | --- |
-| `ctc <input.ct>` | 输出到 `<input>.c`、`<input>.h`（单文件模式） |
+| `ctc <input.ct>` | 输出到 `<input>.c`、`<input>.h` |
 | `ctc <input.ct> -o <output.c>` | 输出到指定路径，头文件为同目录同名的 `.h` |
 | `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
-| `ctc build <a.ct> <b.ct>… -o <dir>` | **多文件模式**：每个输入生成 `<dir>/<base>.c` + `.h`；`.c` 会 `#include` 自己的 `.h`；`pub` 符号进 `.h`；最后打印建议的 `cc …` 命令（不自己调用 `cc`） |
-| `--line` / `--no-line` | 强制开 / 关生成的 `#line`（多文件模式默认开、单文件模式默认关），使 C 报错行号映回 `.ct` |
-| `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON（`ct compile` 走 stdout）或人可读 stderr（默认）；目前仅泄漏警告 |
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.0.1` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
-退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。
+退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。当前**不产生任何警告**。
 
+> **当前只支持单文件**：越位实现过的模块系统与诊断能力（`namespace` / `import` / `pub` / `ct build` 多文件、`Drop`、`#line`、泄漏警告与 `--diagnostics`）已于 Phase 0.3 从编译器移出，现命中即报 `'xxx' is not supported by this compiler`，将在 **Phase 2** 用 CT 重做（见 [docs/roadmap.md](docs/roadmap.md)）。
+>
 > 命令的最终形态是单入口 `ct`（`ctc` 保留为兼容别名），尚未落地，见 [docs/roadmap.md](docs/roadmap.md)。
 
 ### 3. 语法与展开规则
@@ -83,13 +82,9 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
-| `namespace A::B { struct Person … }` | 其中的 struct / trait / impl 符号加前缀 `A_B_`（`struct A_B_Person`、`A_B_Person_Greeter_greet`、`A_B_Person_Greeter_vtable`），vptr 字段仍是 `__greeter_vptr` |
-| `A::B::Person p;` | `struct A_B_Person p;`（限定引用 `A::B::Name` → `A_B_Name`） |
-| `A::B::fn();` | `fn();`（普通函数名不修饰，只去掉路径） |
-| `pub trait T {…}` / `pub struct S {…}`（多文件模式） | 定义写入 `.h`（其它符号只进 `.c`）；`pub` 被剥离，不进入生成的 C |
-| `pub int f(int);`（多文件模式） | 函数原型写入 `.h` |
-| `import A::B;`（多文件模式，`ct build` 的根文件） | 解析为 `<目录>/A/B.ct`（或 `A/B.h.ct`），递归编入依赖，并在各单元 `.c` 里自动 `#include` 被导入单元的 `.h` |
 | 其它任意 C 代码 | 原样透传 |
+
+> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**当前不被接受**（Phase 0.3 已移出，Phase 2 用 CT 重做），写在源码里会直接报错，不会透传。
 
 命名规则：
 
@@ -207,9 +202,10 @@ CC=gcc ./test/run.sh     # 指定 C 编译器（默认 cc）
 ```
 test/
 ├── run.sh                       驱动器：构建 → 单测 → golden 快照 → 负例诊断
-├── unit/test_helpers.c          白盒单测（40 项断言，直接 include ctc.c 以触达 static 函数）
+├── unit/test_helpers.c          白盒单测（直接 include ctc.c 以触达 static 函数）
 ├── cases/                       golden 正例：<name>.ct + <name>.expected.c / .h / .out
-└── errors/                      负例：<name>.ct + <name>.expected-err
+├── errors/                      负例：<name>.ct + <name>.expected-err
+└── archive/                     Phase 0.3 移出的越位特性 fixture（Phase 2 对差基线，不跑）
 ```
 
 五层断言：
@@ -217,12 +213,14 @@ test/
 | 层 | 断言内容 |
 | --- | --- |
 | build | `ctc` 自身在 `-Wall -Wextra -std=c99` 下零警告 |
-| unit | `trim` / `param_type_only` / `parse_params` / `split_decl` / `decl_end_is_bare` / `put_own_vptr` / `put_nested_assignments` / `last_ident` / `already_qualified` / `analyse_param` / `emit_qualified_type` / `word_at` / `match_delim` 等纯函数的 68 项断言 |
+| unit | `trim` / `param_type_only` / `parse_params` / `split_decl` / `decl_end_is_bare` / `put_own_vptr` / `put_nested_assignments` / `last_ident` / `already_qualified` / `analyse_param` / `emit_qualified_type` / `word_at` / `match_delim` 等纯函数的断言 |
 | cases | `ctc` 退出 0 → 生成物与 golden 逐字节一致（`.c` 与 `.h`）→ 生成物编译通过 → 含 `main` 的用例运行 stdout 与 golden 一致 |
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
 
-当前 28 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 63 个负例诊断用例（`test/errors`），另加 unit / multifile / import / `#line` / warnings / limits / cli 等分层断言。
+当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 56 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 110 项。
+
+`test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
 `test/cases/*.expected.*` 是 golden 基线，**只能**用 `./ctc <case>.ct -o <case>.expected.c` 重新生成后人工核对，禁止手写；`examples/**/*.expected.out` 同理（见 [AGENTS.md](AGENTS.md) 第 6 节）。`test/cases/01_trait_basic.ct` 与 `examples/01_greeter/greeter.ct` 内容相同，但前者做生成物逐字节比对、后者做运行结果比对，两者互补。
 
@@ -261,23 +259,20 @@ ct/
 
 ### 7. 已知限制与问题
 
-**设计内不做（Phase 0 明确排除）**
+**设计内不做**
 
-- 可见性修饰符（`pub` / `readonly` / `setter`）
-- 泛型、继承、多文件编译
+- 可见性修饰符（`readonly` / `setter`）
+- 泛型、继承
 - 类型检查、错误恢复（遇错即退出）
-- 嵌套定义（`namespace` 已支持，是唯一可嵌套的构造）
+- 嵌套定义
 
 **当前实现限制**
 
 - 变量与参数按花括号块作用域回滚（同一作用域内同名取最先登记者）；跨行的方法调用语句、以及参数列表跨多行的函数签名不识别。
-- **文件作用域的对象 / 数组**：vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入（单文件与多文件模式均生效）。
+- **文件作用域的对象 / 数组**：vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
-- **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。`use Drop` 的类型在 `delete` 时递归释放其 Drop 值字段（见 §3 的 `Drop`）。
-- **泄漏警告**：局部 ct-struct 堆对象在其作用域结束前既未 `delete`、未 `return`、也未逃逸（赋给非自身左值）时告警——保守、路径不敏感，**不影响退出码**（仍 0）；`--diagnostics=json` 输出 JSON，暂无抑制语法。
+- **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。
 - 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
-- **命名空间只修饰 struct / trait / impl 的符号与限定类型引用**；普通函数名不修饰，因此不同 namespace 下的同名普通函数会在 C 层重名冲突。
-- **多文件模式**（`ctc build`）：生成的 `.c` 会 `#include` 自己的 `.h`（不再自包含）；只有 `pub` 的 trait/struct 定义与 `pub` 函数原型进 `.h`；用 `import A::B;` 可跨单元按名使用被导入单元的 `pub` 类型；默认在 `.c` 里发 `#line`（单文件模式默认关，`--line`/`--no-line` 覆盖）；但**跨单元使用带 trait 的对象**（写 vptr / 装箱）尚不可（被导入单元的 vtable 仍是 `static`）。
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
 - **构造头部必须完整**：`trait IDENT {` / `struct IDENT {` / `impl IDENT for` 缺一不可；只写到一半
   （如 `trait T`、`struct S`、`impl`）**不报错**，该行按普通 C **原样透传**——这是为兼容把
@@ -319,9 +314,10 @@ ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`
 ## English
 
 **ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into
-plain C. It performs no type checking and no optimisation; Phase 0 ("writing full OO with traits") is
-complete and the current goal is **self-hosting** (Phase 1, rewriting the compiler in CT) — what is
-done and what is planned is tracked in [docs/roadmap.md](docs/roadmap.md).
+plain C. It performs no type checking and no optimisation; Phase 0 ("writing full OO with traits") and
+Phase 0.3 (stripping the over-reach) are complete, and the project has entered **Phase 1:
+self-hosting** (rewriting Phase 0's OO-in-C in CT) — see [docs/roadmap.md](docs/roadmap.md) for what is
+done and what is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the compiler
 command is **`ctc`** (the ct compiler — much like the `tinycc` repository that ships a `tcc` binary)
@@ -348,13 +344,17 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc <input.ct>` | writes `<input>.c` and `<input>.h` (single-file mode) |
 | `ctc <input.ct> -o <output.c>` | writes the given path plus a sibling `.h` |
 | `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
-| `ctc build <a.ct> <b.ct>… -o <dir>` | **multi-file mode**: each input produces `<dir>/<base>.c` + `.h`; the `.c` includes its own `.h`; `pub` symbols go into the `.h`; then the suggested `cc …` command is printed (ctc never runs `cc`) |
-| `--line` / `--no-line` | force `#line` directives on / off (on by default in multi-file mode, off single-file), so C errors map back to the `.ct` |
-| `--diagnostics=json` / `--diagnostics=text` | warning format: JSON (`ct compile` → stdout) or human-readable stderr (default); leak warnings only, for now |
 | `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.0.1` |
 | `ctc -h` / `ctc --help` | prints usage |
 
 Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:line:col: error: message`.
+The compiler currently emits **no warnings at all**.
+
+> **Single-file only for now**: the module system and diagnostics that once over-reached into C
+> (`namespace` / `import` / `pub` / `ct build` multi-file, `Drop`, `#line`, leak warnings and
+> `--diagnostics`) were moved out of the compiler in Phase 0.3 — they now fail with
+> `'xxx' is not supported by this compiler` and are to be redone in CT during **Phase 2** (see
+> [docs/roadmap.md](docs/roadmap.md)).
 
 ### 3. Syntax and expansion rules
 
@@ -381,13 +381,11 @@ Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:lin
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
 | `g.greet();` | `g.vt->greet(g.self);` (dispatches at run time to whatever was boxed) |
-| `namespace A::B { struct Person … }` | struct / trait / impl symbols get the prefix `A_B_` (`struct A_B_Person`, `A_B_Person_Greeter_greet`, `A_B_Person_Greeter_vtable`); the vptr field stays `__greeter_vptr` |
-| `A::B::Person p;` | `struct A_B_Person p;` (a qualified reference `A::B::Name` → `A_B_Name`) |
-| `A::B::fn();` | `fn();` (plain function names are not mangled — only the path is dropped) |
-| `pub trait T {…}` / `pub struct S {…}` (multi-file mode) | the definition goes into the `.h` (everything else stays in the `.c`); the `pub` itself is stripped and never appears in the generated C |
-| `pub int f(int);` (multi-file mode) | the function prototype goes into the `.h` |
-| `import A::B;` (multi-file mode, in a `ct build` root) | resolved to `<dir>/A/B.ct` (or `A/B.h.ct`), dependencies compiled recursively, and each unit's `.c` automatically `#include`s the imported unit's `.h` |
 | anything else | copied through verbatim |
+
+> Module-system syntax — `namespace` / `A::B::Name` qualified references / `pub` / `import` — is **not
+> accepted** today (moved out in Phase 0.3, to be redone in CT in Phase 2). Written in a source file it
+> is reported as an error rather than copied through.
 
 Naming rules:
 
@@ -535,9 +533,10 @@ CC=gcc ./test/run.sh     # pick a C compiler (default: cc)
 ```
 test/
 ├── run.sh                       driver: build → unit → golden snapshots → diagnostics
-├── unit/test_helpers.c          white-box unit tests (68 assertions; includes ctc.c to reach statics)
+├── unit/test_helpers.c          white-box unit tests (includes ctc.c to reach statics)
 ├── cases/                       golden positives: <name>.ct + <name>.expected.c / .h / .out
-└── errors/                      negatives: <name>.ct + <name>.expected-err
+├── errors/                      negatives: <name>.ct + <name>.expected-err
+└── archive/                     Phase 0.3 fixtures for the removed over-reach (Phase 2 diff baseline; not run)
 ```
 
 Five layers of assertions:
@@ -545,14 +544,18 @@ Five layers of assertions:
 | Layer | What is asserted |
 | --- | --- |
 | build | `ctc` itself compiles warning-free under `-Wall -Wextra -std=c99` |
-| unit | 68 assertions on pure helpers (`trim`, `param_type_only`, `parse_params`, `split_decl`, `decl_end_is_bare`, `put_own_vptr`, `put_nested_assignments`, `last_ident`, `already_qualified`, `analyse_param`, `emit_qualified_type`, `word_at`, `match_delim`, …) |
+| unit | assertions on pure helpers (`trim`, `param_type_only`, `parse_params`, `split_decl`, `decl_end_is_bare`, `put_own_vptr`, `put_nested_assignments`, `last_ident`, `already_qualified`, `analyse_param`, `emit_qualified_type`, `word_at`, `match_delim`, …) |
 | cases | `ctc` exits 0 → generated `.c` and `.h` are byte-identical to the goldens → the generated C compiles → runnable cases produce the golden stdout |
 | examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
 
-Currently 28 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 63 negative
-diagnostic cases (`test/errors`), plus layered assertions for unit / multifile / import / `#line` /
-warnings / limits / cli.
+Currently 25 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 56 negative
+diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 110 in total.
+
+`test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
+(`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
+`run.sh`; they are the diff baseline for the Phase 2 CT reimplementation. The feature-complete old
+compiler is preserved as the git tag `overreach-oracle`.
 
 `test/cases/*.expected.*` are golden baselines: regenerate them with
 `./ctc <case>.ct -o <case>.expected.c` and review the result — never hand-write them. The same rule
@@ -598,9 +601,8 @@ directory or generate them on demand.
 
 ### 7. Known limitations
 
-Not supported by design (Phase 0): visibility modifiers, generics, inheritance, multi-file
-compilation, type checking, error recovery, nested definitions (`namespace` is supported — it is the
-only nestable construct).
+Not supported by design: visibility modifiers, generics, inheritance, type checking, error recovery,
+nested definitions.
 
 Implementation limits:
 
@@ -608,26 +610,14 @@ Implementation limits:
   to the earliest registration); multi-line call statements, and function signatures whose parameter
   list spans several lines, are not rewritten.
 - **File-scope objects / arrays**: the vptr is written before `main` by the generated constructor
-  `__ct_init` (`__attribute__((constructor))`, D5=A), in both single- and multi-file mode.
+  `__ct_init` (`__attribute__((constructor))`, D5=A).
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
 - **Heap-object vptrs are written automatically**: `T *p = malloc(sizeof(struct T));` (or `calloc`)
   writes the vptrs (including nested value fields) right after the declaration; no hand-written vptr is
-  needed any more. A `use Drop` type releases its Drop value fields recursively on `delete` (see §3).
-- **Leak warnings**: a local ct-struct heap object that is neither `delete`d, `return`ed, nor escaped
-  (assigned to a non-self lvalue) before its scope ends is reported — conservative and
-  path-insensitive, and it **never changes the exit code** (still 0); `--diagnostics=json` emits JSON,
-  and there is no suppression syntax yet.
+  needed any more.
 - Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
   automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
   a variable, `&variable` or a call returning the same interface.
-- **A namespace only mangles struct / trait / impl symbols and qualified type references**; plain
-  function names are not mangled, so same-named plain functions in different namespaces collide at the
-  C level.
-- **Multi-file mode** (`ctc build`): the generated `.c` includes its own `.h` (no longer self-contained);
-  only `pub` trait/struct definitions and `pub` function prototypes cross into the `.h`; `import A::B;`
-  lets a unit use an imported unit's `pub` type names by name; `#line` is emitted in the `.c` by default
-  (single-file mode is off; `--line`/`--no-line` override); but using an imported unit's
-  **trait-carrying objects** (writing a vptr / boxing) is not yet possible (its vtables stay `static`).
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
 - **A construct header must be complete**: `trait IDENT {` / `struct IDENT {` / `impl IDENT for`. A
   half-written header (`trait T`, `struct S`, `impl`) is **not an error** — the line is **passed through

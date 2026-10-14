@@ -16,7 +16,7 @@
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 0 之后，已落地） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 0 之后，已落地；golden 测试全绿 |
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口**数组**尚未实现；接口**字段**（值字段装箱 + 派发、指针字段派发）已补齐 |
-| Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | 🔜 下一步 | `ctc.c` 只剩 Phase 0 出口 1–9 的能力；测试与文档同步收缩；归档件可构建出对照 |
+| Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | ✅ 完成（2026-10-14） | `ctc.c` 3836 → 2897 行、只余 Phase 0 能力；套件 146 → 110 项全绿；归档件在 `test/archive/` + tag `overreach-oracle` |
 | Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 🔜 待启动 | 只做阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
 | Phase 2 | **用 CT 恢复并新增语言特性**，拆 4 个子阶段：**2.1 模块化**（namespace / 多文件 `ct build` / `pub` / `import`）、**2.2 内存**（Drop / `delete` 放宽）、**2.3 诊断与溯源**（`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断）、**2.4 新增特性**（AutoDrop / 路径敏感泄漏分析 / 目录 = namespace）；2.1–2.3 照归档 oracle 对差，2.4 无 oracle | 🔭 展望 | 2.1–2.3：**byte-identical**；2.4：设计冻结 + 新用例全绿；阶梯 M3–M6 |
 | Phase 3 | 生态与扩展：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标随后 | 🔭 展望 | — |
@@ -489,6 +489,14 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 **出口标准**：① `./test/run.sh` 在**收缩后**的套件上全绿；② `ctc.c` 只余 Phase 0 出口 1–9（+设施），`grep` 不到 namespace / 多文件 / `import` / Drop / `#line` / `--diagnostics` 的处理路径；③ 归档件可独立构建并复现旧 golden。
 
+**完成记录（2026-10-14）**：
+
+- `ctc.c` **3836 → 2897** 行（−939），删除 6 组越位实现；保留项的 golden **逐字节未变**（归档全部以 rename 形式记录，内容零改动）。
+- 越位 fixture 移入 **[`test/archive/`](../test/archive/)**（`cases/` `errors/` `import/` `multifile/`，17 个 `.ct`），退出 `run.sh`，留作 Phase 2 的对差基线；完整旧实现见 git tag **`overreach-oracle`**。
+- 套件 **146 → 110** 项全绿（收缩 42 项：multifile / import / `#line` / warnings 四层 + 相关 errors 与 cli 断言；新增 6 项「已移出特性必须报错」的断言）。
+- **补了一道 fail-loud 守卫**：`namespace` / `import` / `pub` 若成构造形态出现，报 `'xxx' is not supported by this compiler`（exit 1），`ct build` 报 `'build' (multi-file) is not supported by this compiler`——否则这些语法会**静默透传**成编不过的 C，违反 [AGENTS.md](../AGENTS.md) §4。对应负例：`test/errors/removed_{namespace,import,pub}.ct`。
+- 文档同步：`README.md`（CLI 表、语法表、测试计数）、`docs/language-spec.md`（§1–§10 逐节标注已移出）。
+
 ### Phase 1：自举（第一目标）
 
 **主题（目标单一）**：把 Phase 0 的 **OO 化 C 语言**（剥离后的纯 OO `ctc.c`，即 L0）**用 CT 重写一遍**——与 L0 的目标完全一致，**唯一目的就是自举**。写法：OO 子集、**单文件**（L0 已无 namespace / import / 多文件，L1 无法分文件组织，见下）；出口是与 L0 **逐字节一致**。其余一切排在自举之后。
@@ -623,7 +631,7 @@ as confirmed by the user.
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to after Phase 0 per 0.1.8, and has landed) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to after Phase 0 per 0.1.8, landed; golden tests green |
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface **arrays** are not implemented; interface **fields** (value-field boxing + dispatch, pointer-field dispatch) landed |
-| 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | 🔜 next | `ctc.c` keeps only Phase 0 exits 1–9; tests and docs shrink in step; the archive still builds a reference binary |
+| 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | ✅ done (2026-10-14) | `ctc.c` 3836 → 2897 lines, Phase 0 capabilities only; the suite went 146 → 110 and is green; the archive lives in `test/archive/` + tag `overreach-oracle` |
 | 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | 🔜 to start | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
 | 2 | **Restore and add language features in CT**, split into 4 sub-phases: **2.1 module system** (namespaces / multi-file `ct build` / `pub` / `import`), **2.2 memory** (Drop / loosened `delete`), **2.3 diagnostics & traceability** (`#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks), **2.4 new features** (AutoDrop / path-sensitive leak analysis / directory = namespace); 2.1–2.3 are diffed against the archived oracle, 2.4 has none | 🔭 outlook | 2.1–2.3: **byte-identical**; 2.4: design frozen + new cases green; rungs M3–M6 |
 | 3 | Ecosystem and extension: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target follow | 🔭 outlook | — |
@@ -1227,6 +1235,23 @@ oracle** (it still builds a reference binary) so Phase 2 can diff its CT rewrite
 Phase 0 exits 1–9 (+ facilities) — no code path for namespaces / multi-file / `import` / Drop /
 `#line` / `--diagnostics`;
 ③ the archive builds standalone and reproduces the old goldens.
+
+**Completion record (2026-10-14)**:
+
+- `ctc.c` **3836 → 2897** lines (−939) with six over-reach groups deleted; the goldens of kept items are
+  **byte-identical** (the archive is recorded purely as renames — no content changed).
+- The over-reach fixtures moved into **[`test/archive/`](../test/archive/)** (`cases/` `errors/`
+  `import/` `multifile/`, 17 `.ct` files) and left `run.sh`; they are the diff baseline for Phase 2. The
+  feature-complete old compiler is kept as the git tag **`overreach-oracle`**.
+- The suite went **146 → 110** and is green (42 assertions retired: the multifile / import / `#line` /
+  warnings layers plus the related errors and cli checks; 6 added for "removed features must fail").
+- **A fail-loud guard was added**: `namespace` / `import` / `pub` appearing as a construct report
+  `'xxx' is not supported by this compiler` (exit 1), and `ct build` reports
+  `'build' (multi-file) is not supported by this compiler` — otherwise these would be silently passed
+  through as C that cannot compile, breaking [AGENTS.md](../AGENTS.md) §4. Negative cases:
+  `test/errors/removed_{namespace,import,pub}.ct`.
+- Docs synced: `README.md` (CLI table, syntax table, test counts) and `docs/language-spec.md`
+  (§1–§10 marked section by section).
 
 ### Phase 1 — self-hosting (the first goal)
 
