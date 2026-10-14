@@ -1,0 +1,39 @@
+// receivers.ct — general receivers end to end (Phase 1.9a): a variable-subscript
+// element, a pointer-array element and a pointer field chain all dispatch.
+// License: MIT; see LICENSE.EXCEPTION
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hello %s\n", self->name);
+    }
+}
+
+struct Box {
+    Person *who;
+};
+
+int main() {
+    Person ps[2];
+    ps[0].name = "Ann";
+    ps[1].name = "Bob";
+    int i = 1;
+    ps[i].greet();
+
+    Person p = { .name = "Cid" };
+    Person *slots[1];
+    slots[0] = &p;
+    slots[0]->greet();
+
+    struct Box b = { .who = &p };
+    b.who->greet();
+    return 0;
+}
