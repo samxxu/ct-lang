@@ -29,10 +29,13 @@ CT_CASES = (
     "examples/02_market/market.ct",
     "test/cases/02_multi_trait.ct",
     "test/cases/06_name_collision.ct",
-    "test/cases/19_namespace.ct",
-    "test/multifile/calc.ct",
-    "test/import/app.ct",
-    "test/cases/22_drop.ct",
+    # namespace / multi-file / Drop fixtures live under test/archive since Phase 0.3
+    # moved those features out of the compiler; the grammar still highlights them
+    # (the syntax decisions are frozen), so they stay in this sample list.
+    "test/archive/cases/19_namespace.ct",
+    "test/archive/multifile/calc.ct",
+    "test/archive/import/app.ct",
+    "test/archive/cases/22_drop.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
