@@ -16,7 +16,7 @@
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 1） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；堆对象创建按 0.1.8 推迟到 Phase 1；golden 测试全绿 |
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | ✅ 完成（设计先行 → 已实现） | 见下方 Phase 0.2 节；接口数组 / 接口字段装箱未实现 |
-| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line`、泄漏警告 + JSON 诊断 | 🔨 进行中（1.0–1.7 已落地：CLI、namespace、多文件 + `pub`、`import`、堆/Drop、`#line`、文件作用域对象、泄漏警告 + `--diagnostics=json`；余下仅可选的 1.9 一般接收者；`map` + 反向映射表移至 Phase 3（D8，2026-10-14 拍板）） | 见下 |
+| Phase 1 | namespace、import、多文件（`.h.ct`）、`pub` 可见性、Drop/delete、`#line`、泄漏警告 + JSON 诊断 | 🔨 进行中（1.0–1.7 已落地：CLI、namespace、多文件 + `pub`、`import`、堆/Drop、`#line`、文件作用域对象、泄漏警告 + `--diagnostics=json`；1.9a 一般接收者（变量下标 / 指针数组元素 / 指针字段链）已落地；余下仅可选的 1.9b rvalue 接收者；`map` + 反向映射表移至 Phase 3（D8，2026-10-14 拍板）） | 见下 |
 | Phase 2 | AutoDrop、路径敏感泄漏分析、目录=namespace 绑定；类型检查 / 泛型待定 | 🔍 部分已定 | — |
 | Phase 3 | 增量编译、跨函数分析、多目标编译、自举、`map` + 反向映射表（自 Phase 1 移出）（展望） | 🔭 展望 | — |
 
@@ -245,7 +245,7 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 | 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | Phase 1（"对象住哪儿"设计） | ✅ Phase 1.6：文件作用域对象 / 数组的 vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入 |
 | 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | Phase 1 | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
 | 5 | **`#line` 指令** | 生成的 C 报错行号要映回 `.ct`，否则自举产物无法调试 | Phase 1 | ✅ 多文件模式**默认**在 `.c` 发出 `#line`（D4=A），单文件默认关；gcc/clang 报错映回 `.ct` 行 |
-| 6 | **方法调用的接收者可以是更一般的表达式** | `make().m()`、`ps[i].m()`（变量下标）、`a.next->m()`（指针字段链）实测均原样透传；遍历子节点要用 | 待定（可拆开单做） | ❌ |
+| 6 | **方法调用的接收者可以是更一般的表达式** | 变量 / 表达式下标、指针数组元素、指针字段链（`ps[i].m()`、`ptrs[i]->m()`、`b.who->m()`）已由 Phase 1.9a 支持；`make().m()`（rvalue 接收者）仍原样透传，待 1.9b | 1.9a 已落地；1.9b（可拆开单做）待定 | 🔨 部分 |
 | 7 | 位置式初始化 / 方法体内互调 | — | 已完成（0.1.1 / 0.1.4） | ✅ |
 
 **AST 的形状**：ct **无继承**，AST 只能用 `trait Node { … }` + 各 `struct impl`，靠**接口值**（Phase 0.2）
@@ -508,7 +508,7 @@ as confirmed by the user.
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to Phase 1 per 0.1.8) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; automatic heap creation deferred to Phase 1 per 0.1.8; golden tests green |
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | ✅ done (design first → implemented) | see the Phase 0.2 section below; interface arrays / boxing of interface fields are not implemented |
-| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line`, leak warnings + JSON diagnostics | 🔨 in progress (1.0–1.7 landed: CLI, namespaces, multi-file + `pub`, `import`, heap/Drop, `#line`, file-scope objects, leak warnings + `--diagnostics=json`; only the optional 1.9 general receivers remain; `map` + the reverse mapping table moved to Phase 3 (D8, decided 2026-10-14)) | see below |
+| 1 | Namespaces, import, multi-file (`.h.ct`), `pub` visibility, Drop/delete, `#line`, leak warnings + JSON diagnostics | 🔨 in progress (1.0–1.7 landed: CLI, namespaces, multi-file + `pub`, `import`, heap/Drop, `#line`, file-scope objects, leak warnings + `--diagnostics=json`; 1.9a general receivers (variable subscripts / pointer-array elements / pointer field chains) landed; only the optional 1.9b rvalue receivers remain; `map` + the reverse mapping table moved to Phase 3 (D8, decided 2026-10-14)) | see below |
 | 2 | AutoDrop, path-sensitive leak analysis, directory = namespace; type checking / generics undecided | 🔍 partly decided | — |
 | 3 | Incremental compilation, cross-function analysis, multi-target builds, self-hosting, `map` + the reverse mapping table (moved out of Phase 1) (outlook) | 🔭 outlook | — |
 
@@ -780,7 +780,7 @@ For L1 / L2 to write a compiler in CT, the following must exist first (**each on
 | 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | Phase 1 (the "where objects live" design) | ✅ Phase 1.6: the vptrs of file-scope objects / arrays are written before `main` by the generated constructor `__ct_init` (`__attribute__((constructor))`, D5=A) |
 | 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | Phase 1 | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
 | 5 | **`#line` directives** | errors in the generated C must map back to `.ct` lines, or the self-hosted product cannot be debugged | Phase 1 | ✅ multi-file mode emits `#line` in the `.c` **by default** (D4=A), off in single-file; gcc/clang errors map back to the `.ct` line |
-| 6 | **A method call may have a more general receiver expression** | `make().m()`, `ps[i].m()` (variable subscript) and `a.next->m()` (pointer field chain) are all passed through verbatim (verified); walking child nodes needs this | open (can be done on its own) | ❌ |
+| 6 | **A method call may have a more general receiver expression** | variable / expression subscripts, pointer-array elements and pointer field chains (`ps[i].m()`, `ptrs[i]->m()`, `b.who->m()`) are supported since Phase 1.9a; `make().m()` (an rvalue receiver) is still passed through verbatim, pending 1.9b | 1.9a landed; 1.9b (can be done on its own) open | 🔨 partly |
 | 7 | Positional initialisers / calls between sibling methods | — | done (0.1.1 / 0.1.4) | ✅ |
 
 **The shape of the AST**: ct has **no inheritance**, so an AST must use `trait Node { … }` plus one

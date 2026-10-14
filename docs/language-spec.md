@@ -167,9 +167,13 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 
 触发条件（**全部**满足才重写）：
 
-1. 左边是一个标识符，且它在**本文件此前**已被登记为某 struct 类型的变量；
-2. 紧接着是 `.`（值为结构体）或 `->`（值为指针），且成员名是该变量类型的某个 trait 的**方法名**；
-3. 成员名后紧跟 `(`。
+1. 左边是一个标识符，且它在**本文件此前**已被登记为某 struct 类型的变量（`T x`、`T *x`、
+   `T x[n]`、`T *x[n]` 均可）；
+2. 若该变量是数组或指针，其后可先跟一个下标 `[<表达式>]`（表达式可为任意平衡内容，例如
+   `ps[i]`、`ps[i + 1]`、`ps[f()]`）；
+3. 之后是 `.`、`->`，或一串字段跳（每跳 `.field` / `->field`），且**最终**成员名是（跳转后那个
+   struct 的）某个 trait 的**方法名**；
+4. 成员名后紧跟 `(`。
 
 方法归属的判定顺序：按该 struct `use` 子句中的 trait 顺序查找，**取第一个**声明了该名字的 trait。
 
@@ -178,9 +182,15 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 - 形如 `x.m()` 的无参调用 → `x.__t_vptr->m(&x)`（不产生多余逗号）。
 - 形如 `x.m(a)` → `x.__t_vptr->m(&x, a)`。
 - 指针接收者不补 `&`：`p->m()` → `p->__t_vptr->m(p)`，`p->m(a)` → `p->__t_vptr->m(p, a)`。
+- 数组元素 / 指针下标：`ps[i].m()` → `ps[i].__t_vptr->m(&ps[i])`；`T *ps[n]` 的元素**自身是指针**，
+  故 `ps[i]->m()` → `ps[i]->__t_vptr->m(ps[i])`；而 `T *p` 上的 `p[i]` 是值，补 `&`。
+- 指针字段链按**每跳字段是否为指针**决定 `.` 或 `->`，末跳经指针则不补 `&`：
+  `a.next->m()` → `a.next->__t_vptr->m(a.next)`；`a.next.m()`（`next` 是值字段）→ `a.next.__t_vptr->m(&a.next)`。
 - 参数内部的嵌套调用会被继续处理：`q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`。
 - 字符串字面量、字符字面量、注释内的内容**永不重写**。
 - `impl` 方法体内的 `self->m(...)` 也按同一规则重写（见 4.3）。
+- **接收者表达式会被求值两次**（`ps[i]` 在产物里出现两遍），因此带副作用的下标（如 `ps[i++]`）
+  不保证正确；右值接收者 `make().m()` 同理，尚未支持（见 roadmap 1.9b）。
 
 #### 4.6 普通函数的签名 → 限定 struct 类型
 
@@ -219,7 +229,9 @@ vptr 在「构造点」写入：对象**自身**的 vptr 写进初始化式；**
 | `Shop s;` | `struct Shop s = { … };` 之后追加 `s.owner.__greeter_vptr = &Person_Greeter_vtable;` |
 | `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
 | `Person ps[3];` | 声明 + 块内循环 `for (…; __ct_i < 3; …) ps[__ct_i].__greeter_vptr = …;` |
-| `ps[0].greet();` | `ps[0].__greeter_vptr->greet(&ps[0]);` |
+| `ps[0].greet();`、`ps[i].greet();` | `ps[0].__greeter_vptr->greet(&ps[0]);`（下标可为任意表达式） |
+| `Person *ptrs[2]; ptrs[0]->greet();` | `ptrs[0]->__greeter_vptr->greet(ptrs[0]);`（元素自身是指针） |
+| `struct Box { Person *who; } … b.who->greet();` | `b.who->__greeter_vptr->greet(b.who);`（指针字段链） |
 | `delete q;` | `if (q) free(q);`（`q` 必须是已登记的指针变量） |
 
 命名与限制：
@@ -560,10 +572,12 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 Trigger conditions (rewriting happens only when **all** of them hold):
 
 1. the left-hand side is an identifier that has been registered **earlier in this file** as a variable
-   of some struct type;
-2. it is immediately followed by `.` (the value is a struct) or `->` (the value is a pointer), and the
-   member name is a **method name** of one of that struct's traits;
-3. the member name is immediately followed by `(`.
+   of some struct type (`T x`, `T *x`, `T x[n]` and `T *x[n]` all qualify);
+2. when that variable is an array or a pointer, one subscript `[<expr>]` may follow, with an arbitrary
+   balanced expression (`ps[i]`, `ps[i + 1]`, `ps[f()]`);
+3. then comes `.`, `->`, or a run of field hops (each `.field` / `->field`), and the **final** member
+   name is a **method name** of some trait of the struct reached by those hops;
+4. the member name is immediately followed by `(`.
 
 Which trait a method belongs to is decided by scanning the traits of the struct's `use` clause in
 order and taking the **first** one that declares that name.
@@ -574,10 +588,19 @@ Rewriting details:
 - a call with arguments `x.m(a)` → `x.__t_vptr->m(&x, a)`;
 - a pointer receiver does not get `&` added: `p->m()` → `p->__t_vptr->m(p)` and
   `p->m(a)` → `p->__t_vptr->m(p, a)`;
+- array elements and pointer subscripts: `ps[i].m()` → `ps[i].__t_vptr->m(&ps[i])`; an element of
+  `T *ps[n]` is **itself a pointer**, so `ps[i]->m()` → `ps[i]->__t_vptr->m(ps[i])`, whereas `p[i]` on
+  a plain `T *p` is a value and gets `&`;
+- a pointer field chain picks `.` or `->` from **each hop's** field kind, and the final hop being via a
+  pointer means no `&`: `a.next->m()` → `a.next->__t_vptr->m(a.next)`, while `a.next.m()` (a value
+  field) → `a.next.__t_vptr->m(&a.next)`;
 - nested calls inside arguments are processed recursively:
   `q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`;
 - content inside string literals, character literals and comments is **never rewritten**;
-- `self->m(...)` inside an `impl` body is rewritten by the same rule (see 4.3).
+- `self->m(...)` inside an `impl` body is rewritten by the same rule (see 4.3);
+- **the receiver expression is evaluated twice** (`ps[i]` appears twice in the output), so a subscript
+  with a side effect (`ps[i++]`) is not guaranteed correct; an rvalue receiver `make().m()` has the same
+  problem and is not supported yet (see roadmap 1.9b).
 
 #### 4.6 Ordinary function signatures → struct types qualified
 
@@ -617,7 +640,9 @@ A vptr is written at a **construction point**: an object's **own** vptr goes int
 | `Shop s;` | after `struct Shop s = { … };`, append `s.owner.__greeter_vptr = &Person_Greeter_vtable;` |
 | `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
 | `Person ps[3];` | the declaration plus a scoped loop `for (…; __ct_i < 3; …) ps[__ct_i].__greeter_vptr = …;` |
-| `ps[0].greet();` | `ps[0].__greeter_vptr->greet(&ps[0]);` |
+| `ps[0].greet();`, `ps[i].greet();` | `ps[0].__greeter_vptr->greet(&ps[0]);` (any subscript expression) |
+| `Person *ptrs[2]; ptrs[0]->greet();` | `ptrs[0]->__greeter_vptr->greet(ptrs[0]);` (the element itself is a pointer) |
+| `struct Box { Person *who; } … b.who->greet();` | `b.who->__greeter_vptr->greet(b.who);` (pointer field chain) |
 | `delete q;` | `if (q) free(q);` (`q` must be a registered pointer variable) |
 
 Naming and limits:

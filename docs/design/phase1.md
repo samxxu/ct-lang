@@ -244,9 +244,15 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 
 #### （可选）1.9 一般接收者
 
-自举前置 #6：`make().m()`、ps[i].m()（**变量**下标）、`a.next->m()`（指针字段链）目前原样透传。
-它是一类独立问题，可单做（不阻塞其它子阶段）。建议拆为：变量下标、指针字段链先行，rvalue
-（`make().m()`）单独设计（需临时变量提升）。
+自举前置 #6：`make().m()`、ps[i].m()（**变量**下标）、`a.next->m()`（指针字段链）曾全部原样透传。
+它是一类独立问题，可单做（不阻塞其它子阶段）。实际拆分与落地：
+
+- **1.9a ✅ 已落地**（Phase 1）：「变量 / 任意表达式下标」（`ps[i].m()`、`ps[i + 1].m()`）、
+  「指针数组元素」（`Person *ptrs[n]; ptrs[i]->m()`）与「指针字段链」（`b.who->m()`，逐跳按字段
+  是否为指针决定 `.` / `->`）。指针字段记在**独立字段表**（`pfname` / `pftype` / `npf`），
+  因此嵌套构造与 Drop 级联不会把借来的指针当成拥有的嵌套值。
+- **1.9b ⏳ 待定**：rvalue 接收者（`make().m()`）需临时变量提升，且要扩展签名表记录 struct 返回类型。
+- 遗留语义限制（已写入 language-spec）：接收者表达式被求值两次，带副作用的下标不保证正确。
 
 ### 5. 数据模型改动（`ctc.c`）
 
@@ -570,9 +576,18 @@ the non-ASCII `→` arrow in the lexer, the shape of `for instance`) will be fil
 #### (optional) 1.9 General receivers
 
 Prerequisite #6: `make().m()`, `ps[i].m()` (**variable** subscript) and `a.next->m()` (pointer field
-chain) are all passed through verbatim today. It is one class of problem and can be done on its own
-(blocking nothing else). Suggested split: variable subscripts and pointer field chains first; rvalue
-receivers (`make().m()`) designed separately (they need temporary-variable promotion).
+chain) used to be passed through verbatim. It is one class of problem and can be done on its own
+(blocking nothing else). The split that actually landed:
+
+- **1.9a ✅ landed** (Phase 1): variable / arbitrary-expression subscripts (`ps[i].m()`,
+  `ps[i + 1].m()`), pointer-array elements (`Person *ptrs[n]; ptrs[i]->m()`) and pointer field chains
+  (`b.who->m()`, each hop picking `.` or `->` from the field's kind). Pointer fields live in a
+  **separate field table** (`pfname` / `pftype` / `npf`), so nested construction and the Drop cascade
+  never treat a borrowed pointer as an owned nested value.
+- **1.9b ⏳ open**: rvalue receivers (`make().m()`) need temporary-variable promotion and an extension
+  of the signature table to record struct return types.
+- Remaining semantic limit (now in language-spec): the receiver expression is evaluated twice, so a
+  subscript with a side effect is not guaranteed correct.
 
 ### 5. Data-model changes (`ctc.c`)
 
