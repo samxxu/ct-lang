@@ -442,88 +442,9 @@ static void param_type_only(const char *piece, char *out)
     snprintf(out, MAX_NAME, "%s", t);
 }
 
-/* raw param list -> verbatim params + type-only list */
-static void parse_params(Method *m, const char *raw)
-{
-    char tmp[MAX_PARAM * 2];
-    char *p;
-    int depth = 0;
-    size_t start = 0, i, n;
-
-    snprintf(tmp, sizeof tmp, "%s", raw);
-    trim(tmp);
-
-    m->nparams = 0;
-    m->params[0] = 0;
-
-    if (!tmp[0] || strcmp(tmp, "void") == 0) return;
-
-    p = tmp;
-    n = strlen(p);
-    for (i = 0; i <= n; i++) {
-        char c = (i < n) ? p[i] : ',';
-        if (i < n) {
-            if (c == '(' || c == '[') depth++;
-            else if (c == ')' || c == ']') depth--;
-        }
-        if (c == ',' && depth == 0) {
-            char piece[MAX_NAME * 2];
-            size_t len = i - start;
-            if (len >= sizeof piece) len = sizeof piece - 1;
-            memcpy(piece, p + start, len);
-            piece[len] = 0;
-            trim(piece);
-            if (piece[0]) {
-                if (m->nparams >= MAX_PARAMS)
-                    die(0, "too many parameters in method '%s'", m->name);
-                if (m->nparams) strncat(m->params, ", ", sizeof m->params - strlen(m->params) - 1);
-                strncat(m->params, piece, sizeof m->params - strlen(m->params) - 1);
-                param_type_only(piece, m->ptypes[m->nparams]);
-                m->nparams++;
-            }
-            start = i + 1;
-        }
-    }
-}
-
-/* "void greet(int a)" -> ret="void", name="greet", params="int a" */
-static void split_decl(const char *decl, size_t pos, Method *m)
-{
-    const char *lp = strchr(decl, '(');
-    const char *rp;
-    char pre[MAX_NAME * 2];
-    int end, st;
-
-    if (!lp) die(pos, "expected '(' in method declaration");
-    snprintf(pre, sizeof pre, "%.*s", (int)(lp - decl), decl);
-    trim(pre);
-
-    end = (int)strlen(pre);
-    st = end;
-    while (st > 0 && is_ident_char((unsigned char)pre[st - 1])) st--;
-    if (st == end) die(pos, "expected method name in declaration");
-    snprintf(m->name, sizeof m->name, "%.*s", end - st, pre + st);
-    pre[st] = 0;
-    trim(pre);
-    if (!pre[0]) die(pos, "expected return type for method '%s'", m->name);
-    snprintf(m->ret, sizeof m->ret, "%s", pre);
-
-    rp = strchr(lp, ')');
-    if (!rp) die(pos, "expected ')' in declaration of '%s'", m->name);
-    {
-        char raw[MAX_PARAM * 2];
-        size_t len = (size_t)(rp - lp - 1);
-        if (len >= sizeof raw) len = sizeof raw - 1;
-        memcpy(raw, lp + 1, len);
-        raw[len] = 0;
-        parse_params(m, raw);
-    }
-    {
-        const char *tail = rp + 1;
-        while (*tail == ' ' || *tail == '\t') tail++;
-        if (*tail) die(pos, "unexpected '%s' after declaration of '%s'", tail, m->name);
-    }
-}
+/* parse_params / split_decl are `Pipe` methods now (see `impl PipeOps for
+   Pipe` below): they turn one method declaration into the `Method` record and
+   never read the symbol tables, so they take no `struct SymTab *sym`. */
 
 /* C keywords that can never be a function's return type or its name */
 static int is_stmt_keyword(const char *s)
@@ -581,8 +502,9 @@ static char *read_file(const char *path, size_t *out_len);
 /* ------------------------------------------------------- construct parsers */
 
 /* The whole output pipeline lives on the `Pipe` object: the output streams are
-   its fields and the code emitters, the construct parsers, the declaration-piece
-   helpers and the pipeline entry points are its methods, so call sites read
+   its fields and the code emitters, the construct parsers, the
+   method-declaration parsers, the declaration-piece helpers and the pipeline
+   entry points are its methods, so call sites read
    `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`. The symbol tables arrive
    as `struct SymTab *sym` because a method body cannot see the file-scope
    `g_sym` object. */
@@ -590,6 +512,9 @@ trait PipeOps {
     size_t parse_trait(struct SymTab *sym, size_t p);
     size_t parse_struct(struct SymTab *sym, size_t p);
     size_t parse_impl(struct SymTab *sym, size_t p);
+    /* method-declaration parsers, called from parse_trait */
+    void parse_params(Method *m, const char *raw);
+    void split_decl(const char *decl, size_t pos, Method *m);
     /* code emitters, called from the parsers above (stream passed explicitly) */
     void emit_trait_def(FILE *f, const Trait *T);
     void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body);
@@ -852,6 +777,89 @@ impl PipeOps for Pipe {
         return out.p;
     }
 
+    /* raw param list -> verbatim params + type-only list */
+    void parse_params(Method *m, const char *raw) {
+        char tmp[MAX_PARAM * 2];
+        char *p;
+        int depth = 0;
+        size_t start = 0, i, n;
+
+        (void)self;  /* a pure parse helper; the receiver is not used */
+        snprintf(tmp, sizeof tmp, "%s", raw);
+        trim(tmp);
+
+        m->nparams = 0;
+        m->params[0] = 0;
+
+        if (!tmp[0] || strcmp(tmp, "void") == 0) return;
+
+        p = tmp;
+        n = strlen(p);
+        for (i = 0; i <= n; i++) {
+            char c = (i < n) ? p[i] : ',';
+            if (i < n) {
+                if (c == '(' || c == '[') depth++;
+                else if (c == ')' || c == ']') depth--;
+            }
+            if (c == ',' && depth == 0) {
+                char piece[MAX_NAME * 2];
+                size_t len = i - start;
+                if (len >= sizeof piece) len = sizeof piece - 1;
+                memcpy(piece, p + start, len);
+                piece[len] = 0;
+                trim(piece);
+                if (piece[0]) {
+                    if (m->nparams >= MAX_PARAMS)
+                        die(0, "too many parameters in method '%s'", m->name);
+                    if (m->nparams) strncat(m->params, ", ", sizeof m->params - strlen(m->params) - 1);
+                    strncat(m->params, piece, sizeof m->params - strlen(m->params) - 1);
+                    param_type_only(piece, m->ptypes[m->nparams]);
+                    m->nparams++;
+                }
+                start = i + 1;
+            }
+        }
+    }
+
+    /* "void greet(int a)" -> ret="void", name="greet", params="int a" */
+    void split_decl(const char *decl, size_t pos, Method *m) {
+        const char *lp = strchr(decl, '(');
+        const char *rp;
+        char pre[MAX_NAME * 2];
+        int end, st;
+
+        (void)self;  /* a pure parse helper; the receiver is not used */
+        if (!lp) die(pos, "expected '(' in method declaration");
+        snprintf(pre, sizeof pre, "%.*s", (int)(lp - decl), decl);
+        trim(pre);
+
+        end = (int)strlen(pre);
+        st = end;
+        while (st > 0 && is_ident_char((unsigned char)pre[st - 1])) st--;
+        if (st == end) die(pos, "expected method name in declaration");
+        snprintf(m->name, sizeof m->name, "%.*s", end - st, pre + st);
+        pre[st] = 0;
+        trim(pre);
+        if (!pre[0]) die(pos, "expected return type for method '%s'", m->name);
+        snprintf(m->ret, sizeof m->ret, "%s", pre);
+
+        rp = strchr(lp, ')');
+        if (!rp) die(pos, "expected ')' in declaration of '%s'", m->name);
+        {
+            char raw[MAX_PARAM * 2];
+            size_t len = (size_t)(rp - lp - 1);
+            if (len >= sizeof raw) len = sizeof raw - 1;
+            memcpy(raw, lp + 1, len);
+            raw[len] = 0;
+            self->parse_params(m, raw);
+        }
+        {
+            const char *tail = rp + 1;
+            while (*tail == ' ' || *tail == '\t') tail++;
+            if (*tail) die(pos, "unexpected '%s' after declaration of '%s'", tail, m->name);
+        }
+    }
+
     size_t parse_trait(struct SymTab *sym, size_t p) {
         char name[MAX_NAME];
         Trait *T;
@@ -924,7 +932,7 @@ impl PipeOps for Pipe {
                 if (seg[0]) {
                     if (T->nm >= MAX_METHOD)
                         die(close, "too many methods in trait '%s'", T->name);
-                    split_decl(seg, close, &T->m[T->nm]);
+                    self->split_decl(seg, close, &T->m[T->nm]);
                     T->nm++;
                 }
                 free(seg);
