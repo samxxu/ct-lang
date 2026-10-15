@@ -45,7 +45,10 @@
   `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、不调用 `ctc`。
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
 - `docs/design/` 下是**未实现的设计草案**（如自举的目标目录结构），不是实现依据；不要照着草案创建目录或文件。
-- **`ctc.c` 在自举启动后冻结**：Phase 0.3 剥离完成后只接受 bug 修复，**不再新增任何能力**；新能力一律写在 CT 侧（Phase 2 起）。自举要求 `ctc.c` 的 `main` 加 `#ifndef CTC_NO_MAIN` 守卫——这是冻结前**唯一**允许的结构性改造。
+- **`ctc.c` 在自举启动后冻结**：Phase 0.3 剥离完成后**只接受 bug 修复**，**不再新增任何能力**（2026-10-15 用户明确重申：bug 修复可以接受，其他一律不行）。自举要求 `ctc.c` 的 `main` 加 `#ifndef CTC_NO_MAIN` 守卫——这是冻结期**唯一**允许的结构性改造。判据如下，**含混时按「不允许」处理**：
+  - **允许**：修正既有行为中的缺陷（错判、错发射、崩溃、越界、状态未还原等）。出口是**既有语料产物不动**——改完 `./test/run.sh` 与 `bash selfhost/check-goldens.sh` 仍须全绿，且**不得重新生成任何 `*.expected.*`**；必须是一个独立的 `fix(...)` 提交，正文写明缺陷、触发条件与验证方式，并登记进下面的清单。
+  - **不允许**：新增或加回任何语言特性 / CLI 选项 / 诊断；放宽或绕开任何 `MAX_*` 上限（含为了让 L1 过 `MAX_FUNCS` / `MAX_METHOD` 而改 `ctc.c`）；改动产物命名规则、banner 或 `CTC_VERSION`；重构、重命名、重排既有符号；新增 `#include` 或改变生成物结构。这些一律只能做在 **CT 侧**（L1 及以后）。
+  - **冻结期改动登记**（至今只有一次）：`1bdb93b fix(codegen): keep file-scope vars in emit_body`（2026-10-15）——`emit_body` 退出时只还原变量表的**条目数**、不还原**内容**，会覆盖外层文件作用域已登记的条目；补进/出各一次内容快照与拷回。产物不变，无 golden 重生成。此后 Phase 1 期间 `ctc.c` **再无任何改动**。
 - **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。见 roadmap Phase 1 开工决策。
 - **L1 必须是 CT OO 风格**：`selfhost/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。见 roadmap Phase 1 开工决策 5。
 
@@ -114,6 +117,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 7. 禁止事项
 
 - 禁止在 `ctc.c` 中引入类型检查、语义分析、优化（Phase 0 范围外）。
+- **禁止把非 bug 修复的改动混进 `ctc.c`**：冻结期只接受「不改变既有语料产物」的缺陷修复（判据与登记清单见第 2 节）；**禁止放宽任何 `MAX_*` 上限**，**禁止为了让 L1 过某个关卡而改 `ctc.c`**，**禁止打着「修 bug」的旗号改既有行为**（若产物确实变了，那就不是 bug 修复，必须走用户确认 + 重新生成 golden 的流程）。
 - 禁止把 namespace / 多文件 / import / Drop / `#line` / 诊断在 **C 侧**新增或加回（Phase 0.3 已把它们移出 `ctc.c`；Phase 2 起改用 **CT** 重做）；禁止新增泛型、继承，除非用户明确把对应阶段指派给你。
 - 禁止把 `examples/**` 下生成的 `.c` / `.h` 入库或手工编辑（生成物一律不入库）。
 - 禁止为了让示例通过而修改 `examples/**/*.ct` 的语义（可以扩充，不可以削弱）。
@@ -195,10 +199,26 @@ Hard boundaries:
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
 - `docs/design/` holds **unimplemented design drafts** (e.g. the bootstrap target layout) — they are
   not a mandate to implement anything; never create directories or files from a draft.
-- **`ctc.c` freezes once self-hosting starts**: after Phase 0.3 strips it, only bug fixes are allowed
-  and **no new capability is added**; new capabilities live in the CT layer (from Phase 2 on).
-  Self-hosting requires an `#ifndef CTC_NO_MAIN` guard on `ctc.c`'s `main` — the **only** structural
-  change permitted before the freeze.
+- **`ctc.c` freezes once self-hosting starts**: after Phase 0.3 strips it, **only bug fixes** are
+  allowed and **no new capability is added** (the user restated this explicitly on 2026-10-15: bug
+  fixes are fine, nothing else). Self-hosting requires an `#ifndef CTC_NO_MAIN` guard on `ctc.c`'s
+  `main` — the **only** structural change permitted while frozen. The test below is the rule; **when
+  in doubt, treat the change as *not* allowed**:
+  - **Allowed**: fixing a defect in existing behaviour (misparse, wrong emission, crash,
+    out-of-bounds, unrestored state). The bar is that **the existing corpus output does not move** —
+    `./test/run.sh` and `bash selfhost/check-goldens.sh` must still be green afterwards, and **no
+    `*.expected.*` may be regenerated**. It must be its own `fix(...)` commit whose body states the
+    defect, what triggers it and how it was verified, and it must be registered in the list below.
+  - **Not allowed**: adding or re-adding any language feature / CLI option / diagnostic; relaxing or
+    working around any `MAX_*` ceiling (including editing `ctc.c` so that L1 fits `MAX_FUNCS` /
+    `MAX_METHOD`); changing the output naming rules, the banner or `CTC_VERSION`; refactoring,
+    renaming or reordering existing symbols; adding `#include`s or changing the output shape. All of
+    that belongs on the **CT side** (L1 and later) only.
+  - **Frozen-period register** (one entry so far): `1bdb93b fix(codegen): keep file-scope vars in
+    emit_body` (2026-10-15) — `emit_body` restored only the var table's **count**, not its
+    **contents**, clobbering entries already registered at file scope; it now snapshots and restores
+    the contents on the way in and out. Output unchanged, no golden regenerated. `ctc.c` has seen
+    **no further change** during Phase 1.
 - **L1 (`selfhost/ctc.ct`) reuses nothing**: it must **not** `#include ctc.c` and carries its own
   facilities. It must be written in the OO subset L0 supports (single file, one statement per line,
   declarations before use, no interface arrays) and its exit is a **byte-identical** match with L0
@@ -275,6 +295,11 @@ Also required:
 ### 7. Prohibited
 
 - No type checking, semantic analysis, or optimisation in `ctc.c` (outside Phase 0 scope).
+- **Never slip a non-bug-fix into `ctc.c`**: while frozen, only defect fixes that do **not move the
+  existing corpus output** are accepted (criteria and register in §2). Never relax a `MAX_*` ceiling,
+  never edit `ctc.c` to make an L1 gate pass, and never change existing behaviour under the label of a
+  "bug fix" — if the output really does move, it is not a bug fix and must go through user sign-off
+  plus golden regeneration instead.
 - No adding or re-adding namespaces / multi-file / import / Drop / `#line` / diagnostics on the **C
   side** (Phase 0.3 moved them out of `ctc.c`; from Phase 2 on they are redone in **CT**). No generics
   or inheritance unless the user assigns that phase explicitly.
