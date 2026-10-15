@@ -5,35 +5,38 @@
  * .ct file and writes plain C plus a matching .h, aiming to be byte-identical
  * with the frozen L0 compiler (ctc.c) on the subset listed below.
  *
- * Covered (M2-a):
+ * Covered (the M2-a slice, plus the later slices that climb the goldens):
  *   - trait NAME { ... }            -> struct NAME_vtbl / struct NAME_iface
  *   - struct NAME { ... } use T;    -> the qualified struct with the __t_vptr field
  *   - impl T for S { ... }          -> static methods + the vtable variable
  *   - method calls on value receivers (x.m(a) -> x.__t_vptr->m(&x, a))
  *   - a struct-typed variable declaration (append the vptr designator)
+ *   - an expression initialiser (`S a = f();`) -- the vptrs become statements
+ *   - heap objects (`S *p = malloc(..)` writes the vptrs) and `delete p;`
  *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
  *
- * Not covered (left to later milestones). L1 reports these as errors instead of
- * emitting C that cannot compile:
+ * Not covered yet (left to later milestones). L1 reports these as errors instead
+ * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
  *   - interface polymorphism (a trait used as a variable / field / arg / return)
  *   - nested struct fields and struct composition construction
- *   - arrays, heap creation (malloc/calloc), delete / Drop
+ *   - arrays; `delete` is supported, Drop is not
  *   - rvalue receivers (f().m()), field chains, #line and diagnostics
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
- * output pipeline lives on `g_pipe` (`struct Pipe` + `use PipeOps`) -- the output
- * streams, the code emitters (`emit_trait_def` / `emit_struct_def` /
- * `put_own_vptr` / `body_needs_vtable`), the construct parsers, the line-rewriting
- * passes and the entry points (`emit_raw_line` / `compile_range` / `write_guard` /
- * `compile_file`) are its methods. Lookups read `g_sym.find_trait(..)` and the
- * pipeline is reached as `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`, both
- * dispatching through their vtable. Only the facilities layer (Buf, allocators,
- * die, the scanning primitives) stays plain C.
+ * output pipeline lives on `g_pipe` (`struct Pipe`, which uses two traits) -- the
+ * output streams, the code emitters (`emit_trait_def` / `emit_struct_def` /
+ * `put_own_vptr` / `body_needs_vtable`), the construct parsers, the pipeline
+ * entry points (`emit_raw_line` / `compile_range` / `write_guard` /
+ * `compile_file`) and the CLI helpers are `PipeOps` methods, while the per-line
+ * rewriting layer lives on `RewriteOps`. Lookups read `g_sym.find_trait(..)` and
+ * the pipeline is reached as `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`,
+ * both dispatching through their vtable. Only the facilities layer (Buf,
+ * allocators, die, the scanning primitives) stays plain C.
  * The source stays inside the subset L0 itself accepts: the plain-C passthrough
  * of CT plus the line-rewriting discipline (one statement per line, no one-line
  * function bodies, declarations before use). L1 carries its own facilities; it
@@ -504,7 +507,8 @@ static size_t line_match_paren(const char *s, size_t k, size_t n);
    entry points are its methods, so call sites read
    `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`. The symbol tables arrive
    as `struct SymTab *sym` because a method body cannot see the file-scope
-   `g_sym` object. */
+   `g_sym` object. The per-line rewriting layer is the `RewriteOps` trait below;
+   both are used by `struct Pipe`, so either half can call the other via `self`. */
 trait PipeOps {
     size_t parse_trait(struct SymTab *sym, size_t p);
     size_t parse_struct(struct SymTab *sym, size_t p);
@@ -523,15 +527,7 @@ trait PipeOps {
     char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos);
     void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
     void register_body_params(struct SymTab *sym, const char *params);
-    void replace_self(const char *s, size_t n, Buf *out);
-    char *transform_line(struct SymTab *sym, const char *line);
-    char *try_var_decl(struct SymTab *sym, const char *line);
-    char *try_delete(struct SymTab *sym, const char *line);
-    void transform_calls(struct SymTab *sym, const char *s, Buf *out);
-    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
-    int decl_end_is_bare(const char *s);
-    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
-    void scope_track(struct SymTab *sym, size_t ls, size_t le);
+    /* the pipeline driver; the rewriting layer itself is the `RewriteOps` trait */
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
     void compile_range(struct SymTab *sym, size_t start, size_t end);
     /* compile_file's own file I/O helpers */
@@ -544,10 +540,26 @@ trait PipeOps {
     void default_output(const char *in, char *out, size_t n);
 }
 
+/* The per-line rewriting layer: one source line in, rewritten line(s) out. It is
+   a trait of its own both because it is a distinct layer (`emit_raw_line` and
+   `emit_body` are the only ways in from the pipeline above) and because the two
+   halves would otherwise run into `MAX_METHOD`. `struct Pipe` uses both. */
+trait RewriteOps {
+    void replace_self(const char *s, size_t n, Buf *out);
+    char *try_delete(struct SymTab *sym, const char *line);
+    char *transform_line(struct SymTab *sym, const char *line);
+    char *try_var_decl(struct SymTab *sym, const char *line);
+    void transform_calls(struct SymTab *sym, const char *s, Buf *out);
+    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
+    int decl_end_is_bare(const char *s);
+    void scope_track(struct SymTab *sym, size_t ls, size_t le);
+    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
+}
+
 struct Pipe {
     FILE *out;
     FILE *hout;
-} use PipeOps;
+} use PipeOps, RewriteOps;
 
 /* Copy a struct body verbatim. M2-a does not support composition or interface
    fields, so any field whose type names a known struct or trait is a hard error
@@ -1529,7 +1541,15 @@ impl PipeOps for Pipe {
             p = c ? c + 1 : end;
         }
     }
+}
 
+/* ------------------------------------------------------- line rewriting */
+
+/* The rewriting layer: everything below turns one source line into the line(s) it
+   becomes, and is reached only through `emit_raw_line` / `emit_body`. It shares
+   the receiver with `PipeOps`, so a method here can still call the pipeline's
+   helpers through `self->` and vice versa. */
+impl RewriteOps for Pipe {
     /* `self` -> `_self` for one line. Strings and comments are copied verbatim, and
        a member literally named `self` (e.g. `g.self`) is not the implicit receiver. */
     void replace_self(const char *s, size_t n, Buf *out) {
