@@ -26,7 +26,9 @@
  *   - arrays of objects (`S xs[n];`): a block follows the declaration writing
  *     every element's vptrs, and `xs[i].m(..)` / `ps[i]->m(..)` dispatch on the
  *     element
- *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
+ *   - file-scope struct objects and arrays: their vptr writes are collected and
+ *     emitted after everything else as `__ct_init`, a constructor that runs
+ *     before main (the objects also host the compiler's own symbol table)
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
@@ -34,7 +36,6 @@
  * Not covered yet (left to later milestones). L1 reports these as errors instead
  * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
- *   - file-scope objects/arrays whose vptrs would need a per-unit constructor
  *   - rvalue receivers (f().m()), #line and diagnostics; `delete` is supported,
  *     Drop is not
  *
@@ -164,6 +165,12 @@ static int    g_cur_rettr = -1;        /* return trait of the function being sca
 
 static char g_guard[MAX_NAME * 2];
 static size_t g_line_off = 0;
+
+/* File-scope objects/arrays cannot write their vptrs in place (there are no
+   statements out there), so the writes are collected here while scanning and
+   emitted after everything else as a constructor that runs before main. */
+static Buf g_unit_init;
+static int g_has_unit_init = 0;
 
 /* ---------------------------------------------------------------- util */
 
@@ -1555,6 +1562,8 @@ impl PipeOps for Pipe {
         sym->ntraits = 0;
         sym->nstructs = 0;
         sym->nfuncs = 0;
+        buf_init(&g_unit_init);
+        g_has_unit_init = 0;
 
         self->header_path(outc, hbuf, sizeof hbuf);
         g_path = in;
@@ -1575,6 +1584,16 @@ impl PipeOps for Pipe {
                 CTC_VERSION, g_path);
 
         self->compile_range(sym, 0, g_len);
+
+        /* file-scope objects/arrays: their vptr writes were collected while
+           scanning and are emitted here, after the types and vtables they
+           reference, as a constructor that runs before main */
+        if (g_has_unit_init)
+            fprintf(self->out,
+                    "static void __ct_init(void) __attribute__((constructor));\n"
+                    "static void __ct_init(void) {\n%s}\n",
+                    g_unit_init.p);
+        free(g_unit_init.p);
 
         fprintf(self->hout, "\n#endif /* %s */\n", g_guard);
 
@@ -2164,7 +2183,7 @@ impl RewriteOps for Pipe {
             if (*q == '[') {
                 const char *d = q + 1, *cl;
                 Buf ib;
-                char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
+                int atfile;
                 size_t k2, dl;
 
                 needs = (S->nu > 0 || needs_nested_init(sym->structs, S, 0));
@@ -2172,6 +2191,9 @@ impl RewriteOps for Pipe {
                 cl = d;
                 if (needs && (cl == q + 1 || *cl != ']' || !self->decl_end_is_bare(cl + 1)))
                     die(0, "struct '%s': only 'Type name[<n>];' arrays are supported", S->name);
+                /* at file scope the per-element writes cannot be statements, so
+                   they go into the per-unit constructor instead */
+                atfile = (needs && g_nscope == 0);
 
                 buf_init(&ib);
                 buf_putn(&ib, line, ws);
@@ -2183,7 +2205,10 @@ impl RewriteOps for Pipe {
                 buf_puts(&ib, q);
 
                 if (needs) {
+                    Buf *tgt = atfile ? &g_unit_init : &ib;
+                    char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
                     int vi = sym->new_var();
+
                     snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
                     sym->vars[vi].s = (int)(S - sym->structs);
                     sym->vars[vi].ptr = 0;
@@ -2191,13 +2216,14 @@ impl RewriteOps for Pipe {
                     sym->vars[vi].iface = 0;
                     sym->vars[vi].tr = -1;
 
-                    /* at file scope there is no statement to hold the per-element
-                       writes (that needs the per-unit constructor) */
-                    if (g_nscope == 0)
-                        die(0, "a file-scope array needing vptr writes is not supported");
-                    buf_putc(&ib, '\n');
-                    for (k2 = 0; k2 < ws && k2 < sizeof ind - 1; k2++) ind[k2] = line[k2];
-                    ind[k2] = 0;
+                    if (atfile) {
+                        g_has_unit_init = 1;
+                        snprintf(ind, sizeof ind, "    ");
+                    } else {
+                        buf_putc(&ib, '\n');
+                        for (k2 = 0; k2 < ws && k2 < sizeof ind - 1; k2++) ind[k2] = line[k2];
+                        ind[k2] = 0;
+                    }
 
                     dl = (size_t)(cl - q - 1);
                     if (dl >= sizeof cnt) dl = sizeof cnt - 1;
@@ -2206,18 +2232,18 @@ impl RewriteOps for Pipe {
                     snprintf(ind2, sizeof ind2, "%s        ", ind);
                     snprintf(recv, sizeof recv, "%s[__ct_i]", var);
 
-                    buf_puts(&ib, ind);
-                    buf_puts(&ib, "{\n");
-                    buf_puts(&ib, ind);
-                    buf_puts(&ib, "    for (unsigned long __ct_i = 0; __ct_i < ");
-                    buf_puts(&ib, cnt);
-                    buf_puts(&ib, "; __ct_i++) {\n");
-                    self->put_nested_assignments(sym, &ib, S, recv, ind2, 1, 0);
-                    buf_puts(&ib, ind);
-                    buf_puts(&ib, "    }\n");
-                    buf_puts(&ib, ind);
-                    buf_puts(&ib, "}\n");
-                    if (ib.n > 0 && ib.p[ib.n - 1] == '\n') {
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "{\n");
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "    for (unsigned long __ct_i = 0; __ct_i < ");
+                    buf_puts(tgt, cnt);
+                    buf_puts(tgt, "; __ct_i++) {\n");
+                    self->put_nested_assignments(sym, tgt, S, recv, ind2, 1, 0);
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "    }\n");
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "}\n");
+                    if (!atfile && ib.n > 0 && ib.p[ib.n - 1] == '\n') {
                         ib.n--;
                         ib.p[ib.n] = 0;
                     }
@@ -2293,21 +2319,24 @@ impl RewriteOps for Pipe {
         }
 
         if (needs_nested_init(sym->structs, S, 0) || (!done && S->nu > 0)) {
-            /* the vptr writes are statements that follow the declaration, indented
-               like it. At file scope there is no statement to put them in (that
-               needs the per-unit constructor), which is not implemented yet -- say
-               so rather than emit C that cannot compile. */
+            /* the vptr writes are statements: inside a function they follow the
+               declaration, indented like it; at file scope there are no statements
+               at all, so they go into the per-unit constructor instead */
+            int atfile = (g_nscope == 0);
+            Buf *tgt = atfile ? &g_unit_init : &b;
             char ind[MAX_NAME];
             size_t k;
 
-            if (g_nscope == 0)
-                die(0, "a file-scope object needing vptr writes is not supported");
-            for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
-            ind[k] = 0;
-
-            buf_putc(&b, '\n');
-            self->put_nested_assignments(sym, &b, S, var, ind, !done, 0);
-            if (b.n > 0 && b.p[b.n - 1] == '\n') {
+            if (atfile) {
+                g_has_unit_init = 1;
+                snprintf(ind, sizeof ind, "    ");
+            } else {
+                for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
+                ind[k] = 0;
+                buf_putc(&b, '\n');
+            }
+            self->put_nested_assignments(sym, tgt, S, var, ind, !done, 0);
+            if (!atfile && b.n > 0 && b.p[b.n - 1] == '\n') {
                 b.n--;
                 b.p[b.n] = 0;
             }
