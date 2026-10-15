@@ -20,6 +20,9 @@
  *     passed through
  *   - interface fields (`T x;` / `struct T *x;`): `s.l.m(..)` dispatches through
  *     the field's own vt and `s.l = obj;` boxes into it
+ *   - composition: struct-typed fields are qualified, their vptrs are written
+ *     after the declaration, and `s.f.m(..)` / `t.f.g(..)` chains dispatch
+ *     through the nested object
  *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
@@ -28,9 +31,8 @@
  * Not covered yet (left to later milestones). L1 reports these as errors instead
  * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
- *   - nested struct fields and struct composition construction
  *   - arrays; `delete` is supported, Drop is not
- *   - rvalue receivers (f().m()), field chains, #line and diagnostics
+ *   - rvalue receivers (f().m()), #line and diagnostics
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
@@ -64,6 +66,7 @@
 #define MAX_TRAITS 16
 #define MAX_STRUCT 32
 #define MAX_FIELDS 32
+#define MAX_DEPTH  8
 #define MAX_VARS   512
 #define MAX_SCOPE  256
 #define MAX_FUNCS  64
@@ -93,6 +96,14 @@ typedef struct {
     char use_t[MAX_TRAITS][MAX_NAME];
     int  use_i[MAX_TRAITS];
     int  nu;
+    /* struct-typed fields, split into value and pointer tables: nested
+       construction must never treat a borrowed pointer as an owned nested value */
+    char fname[MAX_FIELDS][MAX_NAME];
+    int  ftype[MAX_FIELDS];            /* ... and their index into the struct table */
+    int  nf;
+    char pfname[MAX_FIELDS][MAX_NAME];
+    int  pftype[MAX_FIELDS];
+    int  npf;
     /* interface fields (a trait used as a field type, `T x;` / `struct T *x;`)
        live in their own tables: they hold a fat pointer, so a call on them is
        dispatched through the field's own vt, not the enclosing struct's vptr */
@@ -438,6 +449,38 @@ static int struct_uses(const Struct *s, const char *trait)
     return 0;
 }
 
+/* the struct index of the field `name` of `s`, or -1; *isptr reports whether the
+   field is a pointer, so the following hop must use '->'. Plain C: it reads only
+   the receiver Struct. */
+static int find_field_ex(const Struct *s, const char *name, int *isptr)
+{
+    int i;
+    for (i = 0; i < s->nf; i++)
+        if (strcmp(s->fname[i], name) == 0) {
+            *isptr = 0;
+            return s->ftype[i];
+        }
+    for (i = 0; i < s->npf; i++)
+        if (strcmp(s->pfname[i], name) == 0) {
+            *isptr = 1;
+            return s->pftype[i];
+        }
+    return -1;
+}
+
+/* Does `S` (recursively) hold a struct-typed field whose vptr must be written?
+   The table is passed in so this stays a pure plain-C predicate. */
+static int needs_nested_init(const Struct *structs, const Struct *S, int depth)
+{
+    int i;
+    if (depth >= MAX_DEPTH) die(0, "nesting too deep in struct '%s'", S->name);
+    for (i = 0; i < S->nf; i++) {
+        const Struct *F = &structs[S->ftype[i]];
+        if (F->nu > 0 || needs_nested_init(structs, F, depth + 1)) return 1;
+    }
+    return 0;
+}
+
 /* the trait of the interface field `name` of `s` (-1 when there is none);
    *isptr reports whether the field is a `struct T *` pointer. Plain C: it reads
    only the receiver Struct. */
@@ -572,6 +615,8 @@ trait PipeOps {
     void emit_trait_def(FILE *f, const Trait *T);
     void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body);
     void put_own_vptr(Buf *b, const Struct *S, int *first);
+    void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv, const char *ind, int with_self, int depth);
+    void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind);
     int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen);
     /* declaration-piece helpers, shared by parse_fields and parse_func_sig */
     int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr);
@@ -619,10 +664,10 @@ struct Pipe {
     FILE *hout;
 } use PipeOps, RewriteOps;
 
-/* Copy a struct body verbatim. M2-a does not support composition or interface
-   fields, so any field whose type names a known struct or trait is a hard error
-   rather than silent C that cannot compile. Returns a new body string. This is a
-   `Pipe` method now (see `impl PipeOps for Pipe` below). */
+/* Rewrite a struct body: each field's type is qualified and the struct-typed and
+   interface-typed fields are recorded in `S` so nested construction and field
+   chains can find them. Returns a new body string. This is a `Pipe` method now
+   (see `impl PipeOps for Pipe` below). */
 
 impl PipeOps for Pipe {
     void emit_trait_def(FILE *f, const Trait *T) {
@@ -673,6 +718,67 @@ impl PipeOps for Pipe {
             buf_putc(b, '_');
             buf_puts(b, S->use_t[h]);
             buf_puts(b, "_vtable");
+        }
+    }
+
+    /* Emit "recv.__<trait>_vptr = &...;" for `recv` (when `with_self`) and,
+       recursively, for its struct-typed fields. Statements rather than
+       designators, so a nested object the user already initialised is never
+       overridden. */
+    void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv,
+                                const char *ind, int with_self, int depth) {
+        int i, h;
+
+        (void)self;  /* the body walks struct fields; the receiver is not used */
+        for (h = 0; with_self && h < S->nu; h++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[h], low);
+            buf_puts(b, ind);
+            buf_puts(b, recv);
+            buf_puts(b, ".__");
+            buf_puts(b, low);
+            buf_puts(b, "_vptr = &");
+            buf_puts(b, S->cname);
+            buf_putc(b, '_');
+            buf_puts(b, S->use_t[h]);
+            buf_puts(b, "_vtable;\n");
+        }
+        for (i = 0; i < S->nf; i++) {
+            const Struct *F = &sym->structs[S->ftype[i]];
+            char sub[MAX_NAME * (MAX_DEPTH + 3)];
+            if (F->nu == 0 && !needs_nested_init(sym->structs, F, depth + 1)) continue;
+            if ((size_t)snprintf(sub, sizeof sub, "%s.%s", recv, S->fname[i]) >= sizeof sub)
+                die(0, "nested field path too long in struct '%s'", S->name);
+            self->put_nested_assignments(sym, b, F, sub, ind, 1, depth + 1);
+        }
+    }
+
+    /* Write the vptrs of a heap object obtained from malloc/calloc: the object's
+       own vptrs use '->', its struct-typed fields recurse with the nested form. */
+    void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind) {
+        int i, h;
+
+        (void)self;  /* the body walks struct fields; the receiver is not used */
+        for (h = 0; h < S->nu; h++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[h], low);
+            buf_puts(b, ind);
+            buf_puts(b, ptr);
+            buf_puts(b, "->__");
+            buf_puts(b, low);
+            buf_puts(b, "_vptr = &");
+            buf_puts(b, S->cname);
+            buf_putc(b, '_');
+            buf_puts(b, S->use_t[h]);
+            buf_puts(b, "_vtable;\n");
+        }
+        for (i = 0; i < S->nf; i++) {
+            const Struct *F = &sym->structs[S->ftype[i]];
+            char sub[MAX_NAME * (MAX_DEPTH + 3)];
+            if (F->nu == 0 && !needs_nested_init(sym->structs, F, 1)) continue;
+            if ((size_t)snprintf(sub, sizeof sub, "%s->%s", ptr, S->fname[i]) >= sizeof sub)
+                die(0, "nested field path too long in struct '%s'", S->name);
+            self->put_nested_assignments(sym, b, F, sub, ind, 1, 1);
         }
     }
 
@@ -814,6 +920,8 @@ impl PipeOps for Pipe {
         Buf out;
         size_t n = strlen(body), i = 0;
 
+        S->nf = 0;
+        S->npf = 0;
         S->nif = 0;
         S->npif = 0;
         buf_init(&out);
@@ -845,7 +953,10 @@ impl PipeOps for Pipe {
             self->emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
 
             if (idx >= 0 && fname[0] && ptr) {          /* pointer field to a known struct */
-                die(pos, "struct '%s': a field of struct type is not supported (no composition)", S->name);
+                if (S->npf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+                snprintf(S->pfname[S->npf], MAX_NAME, "%s", fname);
+                S->pftype[S->npf] = idx;
+                S->npf++;
             } else if (tr >= 0 && fname[0] && ptr) {    /* pointer interface field: `struct T *x` */
                 if (S->npif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
                 snprintf(S->pifname[S->npif], MAX_NAME, "%s", fname);
@@ -857,7 +968,10 @@ impl PipeOps for Pipe {
                 S->iftype[S->nif] = tr;
                 S->nif++;
             } else if (idx >= 0 && fname[0]) {          /* value field of a known struct */
-                die(pos, "struct '%s': a field of struct type is not supported (no composition)", S->name);
+                if (S->nf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+                snprintf(S->fname[S->nf], MAX_NAME, "%s", fname);
+                S->ftype[S->nf] = idx;
+                S->nf++;
             }
             if (j < n) { buf_putc(&out, ';'); j++; }
             i = j;
@@ -2014,26 +2128,13 @@ impl RewriteOps for Pipe {
                line, so a heap object is usable without a hand-written vptr. The
                indentation is plain spaces and the last line keeps its newline,
                which leaves a blank line before the following statement. */
-            if (isheap && S->nu > 0) {
+            if (isheap && (S->nu > 0 || needs_nested_init(sym->structs, S, 0))) {
                 char ind[MAX_NAME];
                 size_t t;
-                int h;
                 for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
                 ind[t] = 0;
                 buf_putc(&b, '\n');
-                for (h = 0; h < S->nu; h++) {
-                    char low[MAX_NAME];
-                    to_lower(S->use_t[h], low);
-                    buf_puts(&b, ind);
-                    buf_puts(&b, pv);
-                    buf_puts(&b, "->__");
-                    buf_puts(&b, low);
-                    buf_puts(&b, "_vptr = &");
-                    buf_puts(&b, S->cname);
-                    buf_putc(&b, '_');
-                    buf_puts(&b, S->use_t[h]);
-                    buf_puts(&b, "_vtable;\n");
-                }
+                self->put_heap_vpts(sym, &b, S, pv, ind);
             }
             return b.p;
         }
@@ -2115,35 +2216,24 @@ impl RewriteOps for Pipe {
             if (!done) buf_puts(&b, rest);
         }
 
-        if (!done && S->nu > 0) {
-            /* the declaration kept an expression it cannot hold designators in,
-               so each vptr becomes a statement on the following line, indented
-               like the declaration. At file scope there is no statement to put
-               them in (that needs the per-unit constructor), which is not
-               implemented yet -- say so rather than emit C that cannot compile. */
+        if (needs_nested_init(sym->structs, S, 0) || (!done && S->nu > 0)) {
+            /* the vptr writes are statements that follow the declaration, indented
+               like it. At file scope there is no statement to put them in (that
+               needs the per-unit constructor), which is not implemented yet -- say
+               so rather than emit C that cannot compile. */
             char ind[MAX_NAME];
             size_t k;
-            int h;
 
             if (g_nscope == 0)
-                die(0, "a file-scope object initialised by an expression is not supported");
+                die(0, "a file-scope object needing vptr writes is not supported");
             for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
             ind[k] = 0;
 
             buf_putc(&b, '\n');
-            for (h = 0; h < S->nu; h++) {
-                char low[MAX_NAME];
-                to_lower(S->use_t[h], low);
-                buf_puts(&b, ind);
-                buf_puts(&b, var);
-                buf_puts(&b, ".__");
-                buf_puts(&b, low);
-                buf_puts(&b, "_vptr = &");
-                buf_puts(&b, S->cname);
-                buf_putc(&b, '_');
-                buf_puts(&b, S->use_t[h]);
-                buf_puts(&b, "_vtable;");
-                if (h + 1 < S->nu) buf_putc(&b, '\n');
+            self->put_nested_assignments(sym, &b, S, var, ind, !done, 0);
+            if (b.n > 0 && b.p[b.n - 1] == '\n') {
+                b.n--;
+                b.p[b.n] = 0;
             }
         }
 
@@ -2376,76 +2466,91 @@ impl RewriteOps for Pipe {
         }
     }
 
-    /* Follow one `.method(` / `->method(` hop from the receiver of struct `cur`
-       (a pointer when `isptr`) and report the trait method it names, where the
-       receiver text ends (*out_rend) and where the argument list starts (*mp).
-       M2-a supports a single hop; field chains are left to a later milestone. */
+    /* Walk `.field` / `->field` hops from the receiver of struct `cur` (a pointer
+       when `isptr`) until a trait method call is reached, and report the trait it
+       names, where the receiver text ends (*out_rend) and where the argument list
+       starts (*mp). `isptr` flips as the walk crosses pointer fields, so the hook
+       picks `&recv` or `recv`. */
     int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr,
                     int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb) {
         char mem[MAX_NAME];
-        size_t ms, k, ml;
+
         (void)self;  /* the body only consults the symbol table for the method */
+        for (;;) {
+            size_t ms, k, ml;
+            int fi;
 
-        if (isptr) {
-            if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
-            k = pos + 2;
-        } else {
-            if (!(pos < n && s[pos] == '.')) return 0;
-            k = pos + 1;
-        }
-        ms = k;
-        while (k < n && is_ident_char((unsigned char)s[k])) k++;
-        ml = k - ms;
-        if (ml == 0) return 0;
-        if (ml >= sizeof mem) ml = sizeof mem - 1;
-        memcpy(mem, s + ms, ml);
-        mem[ml] = 0;
+            if (isptr) {
+                if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+                k = pos + 2;
+            } else {
+                if (!(pos < n && s[pos] == '.')) return 0;
+                k = pos + 1;
+            }
+            ms = k;
+            while (k < n && is_ident_char((unsigned char)s[k])) k++;
+            ml = k - ms;
+            if (ml == 0) return 0;
+            if (ml >= sizeof mem) ml = sizeof mem - 1;
+            memcpy(mem, s + ms, ml);
+            mem[ml] = 0;
 
-        *out_tr = sym->resolve_method(&sym->structs[cur], mem);
-        if (*out_tr && k < n && s[k] == '(') {
-            *out_need_amp = !isptr;
-            *out_rend = pos;
-            *mp = k;
-            snprintf(memb, MAX_NAME, "%s", mem);
-            return 1;
+            *out_tr = sym->resolve_method(&sym->structs[cur], mem);
+            if (*out_tr && k < n && s[k] == '(') {
+                *out_need_amp = !isptr;
+                *out_rend = pos;
+                *mp = k;
+                snprintf(memb, MAX_NAME, "%s", mem);
+                return 1;
+            }
+            *out_tr = NULL;
+            fi = find_field_ex(&sym->structs[cur], mem, &isptr);
+            if (fi < 0) return 0;
+            cur = fi;
+            pos = k;
         }
-        return 0;
     }
 
-    /* Follow the `.field` / `->field` hop from the object of struct `cur` (a
-       pointer when `isptr`) to an interface-value field. On success returns 1 and
-       fills *out_tr (the field's trait), *out_end (where the receiver text ends,
-       i.e. after the field name) and *out_ifptr (the field is a `struct T *`
-       pointer, so the hop uses '->'). Struct-typed hops in between (composition)
-       are not supported yet, so this stops at the first field. */
+    /* Walk `.field` / `->field` hops from the object of struct `cur` (a pointer
+       when `isptr`), crossing struct-typed fields, until an interface-value field
+       is reached. On success returns 1 and fills *out_tr (the field's trait),
+       *out_end (where the receiver text ends, i.e. after the field name) and
+       *out_ifptr (the field is a `struct T *` pointer, so the hop uses '->'). */
     int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur,
                             int isptr, int *out_tr, size_t *out_end, int *out_ifptr) {
-        size_t ms, k, ml;
-        int tr, ifptr = 0;
-        char mem[MAX_NAME];
-
         (void)self;  /* the body only consults the symbol table for the field */
-        if (isptr) {
-            if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
-            k = pos + 2;
-        } else {
-            if (!(pos < n && s[pos] == '.')) return 0;
-            k = pos + 1;
-        }
-        ms = k;
-        while (k < n && is_ident_char((unsigned char)s[k])) k++;
-        ml = k - ms;
-        if (ml == 0) return 0;
-        if (ml >= sizeof mem) ml = sizeof mem - 1;
-        memcpy(mem, s + ms, ml);
-        mem[ml] = 0;
+        for (;;) {
+            size_t ms, k, ml;
+            int tr, ifptr = 0, fi;
+            char mem[MAX_NAME];
 
-        tr = find_iface_field(&sym->structs[cur], mem, &ifptr);
-        if (tr < 0) return 0;
-        *out_tr = tr;
-        *out_end = k;
-        *out_ifptr = ifptr;
-        return 1;
+            if (isptr) {
+                if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+                k = pos + 2;
+            } else {
+                if (!(pos < n && s[pos] == '.')) return 0;
+                k = pos + 1;
+            }
+            ms = k;
+            while (k < n && is_ident_char((unsigned char)s[k])) k++;
+            ml = k - ms;
+            if (ml == 0) return 0;
+            if (ml >= sizeof mem) ml = sizeof mem - 1;
+            memcpy(mem, s + ms, ml);
+            mem[ml] = 0;
+
+            tr = find_iface_field(&sym->structs[cur], mem, &ifptr);
+            if (tr >= 0) {
+                *out_tr = tr;
+                *out_end = k;
+                *out_ifptr = ifptr;
+                return 1;
+            }
+            fi = find_field_ex(&sym->structs[cur], mem, &isptr);
+            if (fi < 0) return 0;
+            cur = fi;
+            pos = k;
+        }
     }
 
     /* is the tail of a declaration nothing but ';' (optionally a trailing comment)? */
