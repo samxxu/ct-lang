@@ -13,6 +13,8 @@
  *   - a struct-typed variable declaration (append the vptr designator)
  *   - an expression initialiser (`S a = f();`) -- the vptrs become statements
  *   - heap objects (`S *p = malloc(..)` writes the vptrs) and `delete p;`
+ *   - interface values: `T x;` starts as a null fat pointer, `x = obj;` boxes it
+ *     and `x.m(..)` dispatches to `x.vt->m(x.self, ..)`
  *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
@@ -21,7 +23,7 @@
  * Not covered yet (left to later milestones). L1 reports these as errors instead
  * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
- *   - interface polymorphism (a trait used as a variable / field / arg / return)
+ *   - interface types in a signature (a trait as an arg / return) and as a field
  *   - nested struct fields and struct composition construction
  *   - arrays; `delete` is supported, Drop is not
  *   - rvalue receivers (f().m()), field chains, #line and diagnostics
@@ -90,8 +92,10 @@ typedef struct {
 
 typedef struct {
     char name[MAX_NAME];
-    int  s;
+    int  s;                            /* index into the struct table, -1 when iface */
     int  ptr;
+    int  iface;                        /* 1 when this is an interface value */
+    int  tr;                           /* index into the trait table when iface */
 } Var;
 
 /* A recorded function signature; M2-a only needs it to reject rvalue receivers
@@ -327,6 +331,9 @@ trait SymTabOps {
     int new_var();
     FuncSig *find_func(const char *name);
     int is_any_trait_method(const char *m);
+    /* does trait `tr` declare a method named `m`? (interface dispatch needs the
+       trait-specific answer, not `is_any_trait_method`'s) */
+    int trait_has_method(int tr, const char *m);
 }
 
 struct SymTab {
@@ -390,6 +397,13 @@ impl SymTabOps for SymTab {
         for (i = 0; i < self->ntraits; i++)
             for (j = 0; j < self->traits[i].nm; j++)
                 if (strcmp(self->traits[i].m[j].name, m) == 0) return 1;
+        return 0;
+    }
+    /* does trait `tr` declare a method named `m`? */
+    int trait_has_method(int tr, const char *m) {
+        int i;
+        for (i = 0; i < self->traits[tr].nm; i++)
+            if (strcmp(self->traits[tr].m[i].name, m) == 0) return 1;
         return 0;
     }
 }
@@ -546,6 +560,10 @@ trait PipeOps {
    halves would otherwise run into `MAX_METHOD`. `struct Pipe` uses both. */
 trait RewriteOps {
     void replace_self(const char *s, size_t n, Buf *out);
+    /* interface values: boxing, the declaration and the assignment */
+    void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
+    char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
+    char *try_iface_assign(struct SymTab *sym, const char *line);
     char *try_delete(struct SymTab *sym, const char *line);
     char *transform_line(struct SymTab *sym, const char *line);
     char *try_var_decl(struct SymTab *sym, const char *line);
@@ -1445,6 +1463,8 @@ impl PipeOps for Pipe {
         snprintf(sym->vars[vi].name, MAX_NAME, "self");
         sym->vars[vi].s = (int)(S - sym->structs);
         sym->vars[vi].ptr = 1;
+        sym->vars[vi].iface = 0;
+        sym->vars[vi].tr = -1;
         self->register_body_params(sym, params);
 
         for (k = first; k <= last; k++) {
@@ -1535,6 +1555,8 @@ impl PipeOps for Pipe {
                         snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
                         sym->vars[vi].s = (int)(ST - sym->structs);
                         sym->vars[vi].ptr = isptr;
+                        sym->vars[vi].iface = 0;
+                        sym->vars[vi].tr = -1;
                     }
                 }
             }
@@ -1593,6 +1615,173 @@ impl RewriteOps for Pipe {
         }
     }
 
+    /* Append `e` boxed into the interface value of trait `tr`, or verbatim when
+       it already is an interface value of that trait. Dies when the expression's
+       type cannot be inferred (only a variable or `&variable` can be boxed). */
+    void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos) {
+        char id[MAX_NAME];
+        const char *q = e, *r;
+        size_t ql = len, k = 0;
+        int vi, amped = 0;
+        Struct *S;
+
+        (void)self;  /* the symbol tables arrive as `sym`; the receiver is not used */
+        while (ql > 0 && isspace((unsigned char)*q)) { q++; ql--; }
+        while (ql > 0 && isspace((unsigned char)q[ql - 1])) ql--;
+        if (ql == 0) die(pos, "cannot infer the type of the boxed value");
+        if (*q == '&') {
+            amped = 1;
+            q++;
+            ql--;
+        }
+        if (ql == 0 || ql >= MAX_NAME) die(pos, "cannot infer the type of the boxed value");
+
+        while (k < ql && is_ident_char((unsigned char)q[k])) k++;
+        if (k == 0) die(pos, "cannot infer the type of the boxed value");
+        memcpy(id, q, k);
+        id[k] = 0;
+        r = q + k;
+        while (r < q + ql && isspace((unsigned char)*r)) r++;
+
+        /* a call result can only be boxed when its function returns this very
+           interface type, which arrives with the interface-parameter slice */
+        if (*r == '(') die(pos, "cannot infer the type of the boxed value");
+        if (r != q + ql)
+            die(pos, "cannot infer the type of the boxed value");   /* not a plain name */
+
+        vi = sym->find_var(id);
+        if (vi < 0) die(pos, "cannot infer the type of '%s'", id);
+        if (sym->vars[vi].iface) {
+            if (sym->vars[vi].tr != tr)
+                die(pos, "'%s' is an interface value of a different trait", id);
+            if (amped) die(pos, "'%s' is already an interface value", id);
+            buf_putn(out, e, len);                       /* already an interface value */
+            return;
+        }
+        if (amped && sym->vars[vi].ptr)
+            die(pos, "'&%s' is not an object of a struct type", id);
+
+        S = &sym->structs[sym->vars[vi].s];
+        if (!struct_uses(S, sym->traits[tr].name))
+            die(pos, "struct '%s' does not use trait '%s'", S->name, sym->traits[tr].name);
+
+        buf_puts(out, "(struct ");
+        buf_puts(out, sym->traits[tr].cname);
+        buf_puts(out, "_iface){ (void *)");
+        if (sym->vars[vi].ptr) buf_puts(out, id);
+        else { buf_putc(out, '&'); buf_puts(out, id); }
+        buf_puts(out, ", &");
+        buf_puts(out, S->cname);
+        buf_putc(out, '_');
+        buf_puts(out, sym->traits[tr].name);
+        buf_puts(out, "_vtable }");
+    }
+
+    /* "Greeter g;" / "Greeter g = p;" / "Greeter *g;" — an interface-value
+       declaration. A bare one starts as a null fat pointer; an initialised one
+       boxes its expression. */
+    char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after) {
+        char var[MAX_NAME];
+        size_t vk = 0;
+        const char *p = after;
+        const char *rest, *r;
+        Buf b;
+        int ptr = 0;
+
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '*') {
+            ptr = 1;
+            p++;
+            while (*p == ' ' || *p == '\t') p++;
+        }
+        vk = copy_ident(p, var, 0);
+        var[vk] = 0;
+        if (!vk) return NULL;
+        rest = p + vk;
+        r = rest;
+        while (*r == ' ' || *r == '\t') r++;
+
+        buf_init(&b);
+        buf_putn(&b, line, ws);
+        buf_puts(&b, "struct ");
+        buf_puts(&b, sym->traits[tr].cname);
+        buf_puts(&b, ptr ? "_iface *" : "_iface ");
+        buf_puts(&b, var);
+
+        if (ptr) {                                       /* a pointer to an interface value */
+            if (!self->decl_end_is_bare(r)) die(0, "unsupported declaration of interface type");
+            buf_puts(&b, rest);
+            return b.p;
+        }
+
+        if (!*r || (*r == ';' && self->decl_end_is_bare(r))) {
+            buf_puts(&b, " = { 0, 0 }");
+            buf_puts(&b, rest);
+        } else if (*r == '=') {
+            const char *e = r + 1;
+            size_t el = 0;
+            while (*e == ' ' || *e == '\t') e++;
+            if (*e == '{') {
+                buf_puts(&b, rest);                      /* user-provided aggregate initialiser */
+            } else {
+                while (e[el] && e[el] != ';') el++;
+                buf_puts(&b, " = ");
+                self->box_to_iface(sym, &b, e, el, tr, 0);
+                buf_puts(&b, e + el);
+            }
+        } else {
+            die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
+        }
+
+        {
+            int vi = sym->new_var();
+            snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+            sym->vars[vi].s = -1;
+            sym->vars[vi].ptr = 0;
+            sym->vars[vi].iface = 1;
+            sym->vars[vi].tr = tr;
+        }
+        return b.p;
+    }
+
+    /* "g = p;" — assigning into an interface value (the target type is the
+       variable, so its boxing trait is known). An assignment into an
+       interface-value *field* ("s.l = p;") arrives with the interface-field
+       slice: until an interface field can be declared, no line can reach it, so
+       it falls through unchanged — the same as L0 when it finds no field. */
+    char *try_iface_assign(struct SymTab *sym, const char *line) {
+        const char *p = line, *r;
+        char id[MAX_NAME];
+        size_t k = 0, el = 0;
+        int vi, ftr = -1;
+        Buf b;
+
+        while (*p == ' ' || *p == '\t') p++;
+        k = copy_ident(p, id, 0);
+        id[k] = 0;
+        if (!k) return NULL;
+        vi = sym->find_var(id);
+        if (vi < 0) return NULL;
+        if (!sym->vars[vi].iface) return NULL;
+
+        ftr = sym->vars[vi].tr;
+        r = p + k;
+
+        while (*r == ' ' || *r == '\t') r++;
+        if (*r != '=' || r[1] == '=') return NULL;
+        r++;
+        while (*r == ' ' || *r == '\t') r++;
+        if (!*r || *r == '{' || strncmp(r, "(struct ", 8) == 0) return NULL;
+        while (r[el] && r[el] != ';') el++;
+        if (!el) return NULL;
+
+        buf_init(&b);
+        buf_putn(&b, line, (size_t)(r - line));
+        self->box_to_iface(sym, &b, r, el, ftr, 0);
+        buf_puts(&b, r + el);
+        return b.p;
+    }
+
     /* "delete p;" -> "if (p) free(p);" for a registered pointer object. Any
        pointer is accepted, so `delete buf;` on a char * frees it too; a
        registered *non*-pointer is left as-is -- that is user error. */
@@ -1628,12 +1817,15 @@ impl RewriteOps for Pipe {
 
     char *transform_line(struct SymTab *sym, const char *line) {
         char *del = self->try_delete(sym, line);
+        char *asg;
         char *decl;
         const char *base;
         Buf out;
         char *res;
 
         if (del) return del;
+        asg = self->try_iface_assign(sym, line);
+        if (asg) return asg;
 
         decl = self->try_var_decl(sym, line);
         base = decl ? decl : line;
@@ -1678,9 +1870,10 @@ impl RewriteOps for Pipe {
         p += nk;
         S = sym->find_struct(name);
         if (!S) {
-            if (sym->find_trait(name))
-                die(0, "interface values are not supported");
-            return NULL;
+            /* the type names a trait, not a struct: an interface value */
+            Trait *TR = sym->find_trait(name);
+            if (!TR) return NULL;
+            return self->try_iface_decl(sym, line, (int)(TR - sym->traits), ws, p);
         }
         while (*p == ' ' || *p == '\t') p++;
 
@@ -1709,6 +1902,8 @@ impl RewriteOps for Pipe {
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
                 sym->vars[vi].s = (int)(S - sym->structs);
                 sym->vars[vi].ptr = 1;
+                sym->vars[vi].iface = 0;
+                sym->vars[vi].tr = -1;
             }
             buf_init(&b);
             buf_putn(&b, line, ws);
@@ -1761,6 +1956,8 @@ impl RewriteOps for Pipe {
             snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
             sym->vars[vi].s = (int)(S - sym->structs);
             sym->vars[vi].ptr = 0;
+            sym->vars[vi].iface = 0;
+            sym->vars[vi].tr = -1;
         }
 
         buf_init(&b);
@@ -1891,6 +2088,34 @@ impl RewriteOps for Pipe {
                 tok[tl] = 0;
 
                 vi = sym->find_var(tok);
+
+                /* interface dispatch: g.m(args) -> g.vt->m(g.self, args). The
+                   method must belong to the trait the value was boxed as. */
+                if (vi >= 0 && sym->vars[vi].iface && j < n && s[j] == '.') {
+                    size_t k = j + 1, ms = k, ml;
+                    char mem[MAX_NAME];
+                    while (k < n && is_ident_char((unsigned char)s[k])) k++;
+                    ml = k - ms;
+                    if (ml >= sizeof mem) ml = sizeof mem - 1;
+                    memcpy(mem, s + ms, ml);
+                    mem[ml] = 0;
+                    if (ml && k < n && s[k] == '(' &&
+                        sym->trait_has_method(sym->vars[vi].tr, mem)) {
+                        size_t z = k + 1;
+                        int empty;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                        empty = (z < n && s[z] == ')');
+                        buf_puts(out, tok);
+                        buf_puts(out, ".vt->");
+                        buf_puts(out, mem);
+                        buf_putc(out, '(');
+                        buf_puts(out, tok);
+                        buf_puts(out, ".self");
+                        if (!empty) buf_puts(out, ", ");
+                        i = k + 1;
+                        continue;
+                    }
+                }
 
                 /* a call whose result is used as a receiver needs hoisting, which
                    M2-a does not implement: report it instead of passing it through */
@@ -2145,6 +2370,8 @@ impl RewriteOps for Pipe {
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pname);
                 sym->vars[vi].s = sidx;
                 sym->vars[vi].ptr = ptr;
+                sym->vars[vi].iface = 0;
+                sym->vars[vi].tr = -1;
             }
             if (j < end) { buf_putc(&b, ','); j++; }
             i = j;
