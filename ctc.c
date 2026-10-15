@@ -919,6 +919,11 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
     size_t *ls, *le;
     int nlines = 0, first = -1, last = -1, k;
     int saved_nvars = g_nvars, saved_nscope = g_nscope;
+    /* the body reuses the shared var table from index 0, so snapshot the
+       enclosing file-scope entries and put them back on the way out; restoring
+       only the count would leave the outer registrations clobbered */
+    Var *saved_vars = xmalloc(sizeof(Var) * (saved_nvars ? (size_t)saved_nvars : 1));
+    memcpy(saved_vars, g_vars, sizeof(Var) * (size_t)saved_nvars);
     size_t saved_body_abs = g_body_abs;
     int saved_body_pre = g_body_pre;
     size_t saved_line_off = g_line_off;
@@ -1001,6 +1006,8 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
         scope_track(ls[k], le[k]);
     }
 
+    memcpy(g_vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
+    free(saved_vars);
     g_nvars = saved_nvars;
     g_nscope = saved_nscope;
     g_body_abs = saved_body_abs;
