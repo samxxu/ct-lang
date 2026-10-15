@@ -23,6 +23,9 @@
  *   - composition: struct-typed fields are qualified, their vptrs are written
  *     after the declaration, and `s.f.m(..)` / `t.f.g(..)` chains dispatch
  *     through the nested object
+ *   - arrays of objects (`S xs[n];`): a block follows the declaration writing
+ *     every element's vptrs, and `xs[i].m(..)` / `ps[i]->m(..)` dispatch on the
+ *     element
  *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
@@ -31,8 +34,9 @@
  * Not covered yet (left to later milestones). L1 reports these as errors instead
  * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
- *   - arrays; `delete` is supported, Drop is not
- *   - rvalue receivers (f().m()), #line and diagnostics
+ *   - file-scope objects/arrays whose vptrs would need a per-unit constructor
+ *   - rvalue receivers (f().m()), #line and diagnostics; `delete` is supported,
+ *     Drop is not
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
@@ -118,7 +122,8 @@ typedef struct {
 typedef struct {
     char name[MAX_NAME];
     int  s;                            /* index into the struct table, -1 when iface */
-    int  ptr;
+    int  ptr;                          /* 1 when declared as a pointer (uses '->') */
+    int  arr;                          /* 1 when declared as an array (uses '[n]') */
     int  iface;                        /* 1 when this is an interface value */
     int  tr;                           /* index into the trait table when iface */
 } Var;
@@ -1632,6 +1637,7 @@ impl PipeOps for Pipe {
         snprintf(sym->vars[vi].name, MAX_NAME, "self");
         sym->vars[vi].s = (int)(S - sym->structs);
         sym->vars[vi].ptr = 1;
+        sym->vars[vi].arr = 0;
         sym->vars[vi].iface = 0;
         sym->vars[vi].tr = -1;
         self->register_body_params(sym, params);
@@ -1724,6 +1730,7 @@ impl PipeOps for Pipe {
                         snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
                         sym->vars[vi].s = (int)(ST - sym->structs);
                         sym->vars[vi].ptr = isptr;
+                        sym->vars[vi].arr = 0;
                         sym->vars[vi].iface = 0;
                         sym->vars[vi].tr = -1;
                     }
@@ -1914,6 +1921,7 @@ impl RewriteOps for Pipe {
             snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
             sym->vars[vi].s = -1;
             sym->vars[vi].ptr = 0;
+            sym->vars[vi].arr = 0;
             sym->vars[vi].iface = 1;
             sym->vars[vi].tr = tr;
         }
@@ -2092,7 +2100,7 @@ impl RewriteOps for Pipe {
         if (*p == '*') {                              /* pointer declaration */
             const char *q = p;
             char pv[MAX_NAME];
-            int pk = 0, isheap = 0;
+            int pk = 0, isheap = 0, isarr = 0;
             while (*q == '*' || *q == ' ' || *q == '\t') q++;
             pk = copy_ident(q, pv, 0);
             pv[pk] = 0;
@@ -2107,13 +2115,16 @@ impl RewriteOps for Pipe {
                         isheap = 1;
                 }
                 while (*aft == ' ' || *aft == '\t') aft++;
-                if (*aft == '[') die(0, "arrays are not supported");
+                if (*aft == '[') isarr = 1;
             }
             if (pk) {
                 int vi = sym->new_var();
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
                 sym->vars[vi].s = (int)(S - sym->structs);
                 sym->vars[vi].ptr = 1;
+                /* `T *ps[<n>]` is an array of pointers: its elements are reached
+                   with '->', unlike `T *p`, where p[i] is a value */
+                sym->vars[vi].arr = isarr;
                 sym->vars[vi].iface = 0;
                 sym->vars[vi].tr = -1;
             }
@@ -2145,16 +2156,81 @@ impl RewriteOps for Pipe {
 
         rest = p + vk;
 
+        /* array declaration: "Person ps[2];" -- vptrs are written per element */
         {
             const char *q = rest;
+            int needs;
             while (*q == ' ' || *q == '\t') q++;
-            if (*q == '[') die(0, "arrays are not supported");
+            if (*q == '[') {
+                const char *d = q + 1, *cl;
+                Buf ib;
+                char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
+                size_t k2, dl;
+
+                needs = (S->nu > 0 || needs_nested_init(sym->structs, S, 0));
+                while (*d >= '0' && *d <= '9') d++;
+                cl = d;
+                if (needs && (cl == q + 1 || *cl != ']' || !self->decl_end_is_bare(cl + 1)))
+                    die(0, "struct '%s': only 'Type name[<n>];' arrays are supported", S->name);
+
+                buf_init(&ib);
+                buf_putn(&ib, line, ws);
+                if (static_kw) buf_puts(&ib, "static ");
+                buf_puts(&ib, "struct ");
+                buf_puts(&ib, S->cname);
+                buf_putc(&ib, ' ');
+                buf_puts(&ib, var);
+                buf_puts(&ib, q);
+
+                if (needs) {
+                    int vi = sym->new_var();
+                    snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+                    sym->vars[vi].s = (int)(S - sym->structs);
+                    sym->vars[vi].ptr = 0;
+                    sym->vars[vi].arr = 1;
+                    sym->vars[vi].iface = 0;
+                    sym->vars[vi].tr = -1;
+
+                    /* at file scope there is no statement to hold the per-element
+                       writes (that needs the per-unit constructor) */
+                    if (g_nscope == 0)
+                        die(0, "a file-scope array needing vptr writes is not supported");
+                    buf_putc(&ib, '\n');
+                    for (k2 = 0; k2 < ws && k2 < sizeof ind - 1; k2++) ind[k2] = line[k2];
+                    ind[k2] = 0;
+
+                    dl = (size_t)(cl - q - 1);
+                    if (dl >= sizeof cnt) dl = sizeof cnt - 1;
+                    memcpy(cnt, q + 1, dl);
+                    cnt[dl] = 0;
+                    snprintf(ind2, sizeof ind2, "%s        ", ind);
+                    snprintf(recv, sizeof recv, "%s[__ct_i]", var);
+
+                    buf_puts(&ib, ind);
+                    buf_puts(&ib, "{\n");
+                    buf_puts(&ib, ind);
+                    buf_puts(&ib, "    for (unsigned long __ct_i = 0; __ct_i < ");
+                    buf_puts(&ib, cnt);
+                    buf_puts(&ib, "; __ct_i++) {\n");
+                    self->put_nested_assignments(sym, &ib, S, recv, ind2, 1, 0);
+                    buf_puts(&ib, ind);
+                    buf_puts(&ib, "    }\n");
+                    buf_puts(&ib, ind);
+                    buf_puts(&ib, "}\n");
+                    if (ib.n > 0 && ib.p[ib.n - 1] == '\n') {
+                        ib.n--;
+                        ib.p[ib.n] = 0;
+                    }
+                }
+                return ib.p;
+            }
         }
         {
             int vi = sym->new_var();
             snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
             sym->vars[vi].s = (int)(S - sym->structs);
             sym->vars[vi].ptr = 0;
+            sym->vars[vi].arr = 0;
             sym->vars[vi].iface = 0;
             sym->vars[vi].tr = -1;
         }
@@ -2391,11 +2467,42 @@ impl RewriteOps for Pipe {
                     const char *tr = NULL;
                     size_t pos = j, rend = 0, mp = 0;
                     int cur = sym->vars[vi].s;
-                    int need_amp = 1, hit = 0;
+                    int need_amp = 1, hit = 0, unclosed = 0;
                     int isptr = sym->vars[vi].ptr;
 
-                    hit = self->walk_method(sym, s, n, pos, cur, isptr, &need_amp,
-                                            &tr, &rend, &mp, mem);
+                    if ((sym->vars[vi].arr || sym->vars[vi].ptr) && pos < n && s[pos] == '[') {
+                        /* the receiver is an element: consume "[<expr>]", whose
+                           expression may be anything (balanced brackets, skipping
+                           literals) -- e.g. ps[i], ps[i + 1], ps[f()] */
+                        int d = 0;
+                        size_t k = pos;
+                        while (k < n) {
+                            char e = s[k];
+                            if (e == '"' || e == '\'') {
+                                k = line_literal_end(s, k, n);
+                                continue;
+                            }
+                            if (e == '[') d++;
+                            else if (e == ']') {
+                                d--;
+                                if (d == 0) {
+                                    k++;
+                                    break;
+                                }
+                            }
+                            k++;
+                        }
+                        if (d != 0) unclosed = 1;
+                        else {
+                            pos = k;
+                            /* an element of `T *ps[n]` is itself a pointer (uses '->'),
+                               while `p[i]` on a plain `T *p` is a value */
+                            isptr = sym->vars[vi].arr && sym->vars[vi].ptr;
+                        }
+                    }
+                    if (!unclosed)
+                        hit = self->walk_method(sym, s, n, pos, cur, isptr, &need_amp,
+                                                &tr, &rend, &mp, mem);
                     if (hit) {
                         size_t z = mp + 1;
                         int empty;
@@ -2418,7 +2525,7 @@ impl RewriteOps for Pipe {
 
                     /* an interface field as the receiver: `s.l.m()` ->
                        `s.l.vt->m(s.l.self)` (or `->` when the field is a pointer) */
-                    if (cur >= 0) {
+                    if (!unclosed && cur >= 0) {
                         char meth[MAX_NAME];
                         int ftr = -1, ifptr = 0, ok = 0;
                         size_t fend = 0, k2 = 0;
@@ -2700,6 +2807,7 @@ impl RewriteOps for Pipe {
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pname);
                 sym->vars[vi].s = (sidx >= 0) ? sidx : -1;
                 sym->vars[vi].ptr = (sidx >= 0) ? ptr : 0;
+                sym->vars[vi].arr = 0;
                 sym->vars[vi].iface = (sidx >= 0) ? 0 : 1;
                 sym->vars[vi].tr = (sidx >= 0) ? -1 : ptrtr;
             }
