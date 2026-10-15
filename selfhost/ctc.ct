@@ -11,6 +11,7 @@
  *   - impl T for S { ... }          -> static methods + the vtable variable
  *   - method calls on value receivers (x.m(a) -> x.__t_vptr->m(&x, a))
  *   - a struct-typed variable declaration (append the vptr designator)
+ *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
@@ -20,9 +21,13 @@
  *   - namespace / import / pub (the module system)
  *   - interface polymorphism (a trait used as a variable / field / arg / return)
  *   - nested struct fields and struct composition construction
- *   - arrays, file-scope objects, heap creation (malloc/calloc), delete / Drop
+ *   - arrays, heap creation (malloc/calloc), delete / Drop
  *   - rvalue receivers (f().m()), field chains, #line and diagnostics
  *
+ * The data model and pipeline layers are written as CT objects: the four symbol
+ * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`), so lookups read
+ * `g_sym.find_trait(..)` and dispatch through the vtable. Only the facilities
+ * layer (Buf, allocators, die, the scanning primitives) stays plain C.
  * The source stays inside the subset L0 itself accepts: the plain-C passthrough
  * of CT plus the line-rewriting discipline (one statement per line, no one-line
  * function bodies, declarations before use). L1 carries its own facilities; it
@@ -105,10 +110,7 @@ static const char *g_path = "<input>";
 static FILE *g_out  = NULL;
 static FILE *g_hout = NULL;
 
-static Trait   g_traits[MAX_TRAITS];   static int g_ntraits  = 0;
-static Struct  g_structs[MAX_STRUCT];  static int g_nstructs = 0;
-static Var     g_vars[MAX_VARS];       static int g_nvars    = 0;
-static FuncSig g_funcs[MAX_FUNCS];     static int g_nfuncs   = 0;
+/* the four symbol tables live inside `g_sym` (see the symbol-table section) */
 
 static int    g_scope[MAX_SCOPE];      static int g_nscope = 0;
 static size_t g_body_abs = 0;
@@ -306,71 +308,94 @@ static size_t match_delim(size_t p, char open, char close)
     return p;
 }
 
-/* ---------------------------------------------------- tables / lookups */
+/* ---------------------------------------------------- symbol table */
 
-static Trait *find_trait(const char *name)
-{
-    int i;
-
-    for (i = 0; i < g_ntraits; i++)
-        if (strcmp(g_traits[i].cname, name) == 0) return &g_traits[i];
-    return NULL;
+/* The whole symbol table is one CT object. Lookups dispatch through SymTabOps,
+   so call sites read `g_sym.find_trait(..)` instead of a bare global lookup. */
+trait SymTabOps {
+    Trait *find_trait(const char *name);
+    Struct *find_struct(const char *name);
+    const char *resolve_method(const Struct *s, const char *m);
+    int find_var(const char *name);
+    int new_var();
+    FuncSig *find_func(const char *name);
+    int is_any_trait_method(const char *m);
 }
 
-static Struct *find_struct(const char *name)
-{
-    int i;
+struct SymTab {
+    Trait   traits[MAX_TRAITS];
+    int     ntraits;
+    Struct  structs[MAX_STRUCT];
+    int     nstructs;
+    Var     vars[MAX_VARS];
+    int     nvars;
+    FuncSig funcs[MAX_FUNCS];
+    int     nfuncs;
+} use SymTabOps;
 
-    for (i = 0; i < g_nstructs; i++)
-        if (strcmp(g_structs[i].cname, name) == 0) return &g_structs[i];
-    return NULL;
+impl SymTabOps for SymTab {
+    Trait *find_trait(const char *name) {
+        int i;
+        for (i = 0; i < self->ntraits; i++)
+            if (strcmp(self->traits[i].cname, name) == 0) return &self->traits[i];
+        return NULL;
+    }
+    Struct *find_struct(const char *name) {
+        int i;
+        for (i = 0; i < self->nstructs; i++)
+            if (strcmp(self->structs[i].cname, name) == 0) return &self->structs[i];
+        return NULL;
+    }
+    /* which trait of struct `s` declares method `m`? NULL when none does */
+    const char *resolve_method(const Struct *s, const char *m) {
+        int i, k;
+        for (i = 0; i < s->nu; i++) {
+            const Trait *t = &self->traits[s->use_i[i]];
+            for (k = 0; k < t->nm; k++)
+                if (strcmp(t->m[k].name, m) == 0) return t->name;
+        }
+        return NULL;
+    }
+    int find_var(const char *name) {
+        int i;
+        for (i = 0; i < self->nvars; i++)
+            if (strcmp(self->vars[i].name, name) == 0) return i;
+        return -1;
+    }
+    /* Reserve the next variable slot. Overflow is a hard error: a dropped
+       registration would mis-compile method calls (AGENTS §3). */
+    int new_var() {
+        int i;
+        if (self->nvars >= MAX_VARS) die(0, "too many variables (max %d)", MAX_VARS);
+        i = self->nvars++;
+        return i;
+    }
+    /* the last recorded signature of `name`, or NULL */
+    FuncSig *find_func(const char *name) {
+        int i;
+        for (i = self->nfuncs - 1; i >= 0; i--)
+            if (strcmp(self->funcs[i].name, name) == 0) return &self->funcs[i];
+        return NULL;
+    }
+    /* does any declared trait have a method named `m`? */
+    int is_any_trait_method(const char *m) {
+        int i, j;
+        for (i = 0; i < self->ntraits; i++)
+            for (j = 0; j < self->traits[i].nm; j++)
+                if (strcmp(self->traits[i].m[j].name, m) == 0) return 1;
+        return 0;
+    }
 }
 
+static SymTab g_sym = { .ntraits = 0, .nstructs = 0, .nvars = 0, .nfuncs = 0 };
+
+/* `struct_uses` stays plain C: it reads only the receiver Struct, no table. */
 static int struct_uses(const Struct *s, const char *trait)
 {
     int i;
     for (i = 0; i < s->nu; i++)
         if (strcmp(s->use_t[i], trait) == 0) return 1;
     return 0;
-}
-
-/* which trait of struct `s` declares method `m`? NULL when none does */
-static const char *resolve_method(const Struct *s, const char *m)
-{
-    int i, k;
-    for (i = 0; i < s->nu; i++) {
-        const Trait *t = &g_traits[s->use_i[i]];
-        for (k = 0; k < t->nm; k++)
-            if (strcmp(t->m[k].name, m) == 0) return t->name;
-    }
-    return NULL;
-}
-
-static int find_var(const char *name)
-{
-    int i;
-    for (i = 0; i < g_nvars; i++)
-        if (strcmp(g_vars[i].name, name) == 0) return i;
-    return -1;
-}
-
-/* Reserve the next variable slot. Overflow is a hard error: a dropped
-   registration would mis-compile method calls (AGENTS §3). */
-static int new_var(void)
-{
-    int i;
-    if (g_nvars >= MAX_VARS) die(0, "too many variables (max %d)", MAX_VARS);
-    i = g_nvars++;
-    return i;
-}
-
-/* the last recorded signature of `name`, or NULL */
-static FuncSig *find_func(const char *name)
-{
-    int i;
-    for (i = g_nfuncs - 1; i >= 0; i--)
-        if (strcmp(g_funcs[i].name, name) == 0) return &g_funcs[i];
-    return NULL;
 }
 
 /* --------------------------------------------------- signature parsing */
@@ -532,7 +557,7 @@ static int already_qualified(const char *type, size_t off)
 }
 
 /* Analyse one declaration piece: the struct its type names (an index into
-   g_structs, or -1), the trait when the type is an interface value (`*tr`),
+   g_sym.structs, or -1), the trait when the type is an interface value (`*tr`),
    the identifier span [*ia,*ib) of the base type name, its generated spelling
    (`cbase`), whether "struct " must be inserted, the declared name ("" when
    unnamed) and whether it is a pointer. */
@@ -563,7 +588,7 @@ static int analyse_param(const char *s, size_t n, int *ia, int *ib,
         char last[MAX_NAME];
         while (lsx > a && is_ident_char((unsigned char)s[lsx - 1])) lsx--;
         snprintf(last, sizeof last, "%.*s", (int)(b - lsx), s + lsx);
-        if (!is_type_keyword(last) && !find_struct(last) && !find_trait(last)) {
+        if (!is_type_keyword(last) && !g_sym.find_struct(last) && !g_sym.find_trait(last)) {
             snprintf(name, MAX_NAME, "%s", last);
             snprintf(type, sizeof type, "%.*s", (int)a, s);
         } else {
@@ -581,19 +606,19 @@ static int analyse_param(const char *s, size_t n, int *ia, int *ib,
         if (bl >= sizeof base) bl = sizeof base - 1;
         memcpy(base, type + ea, bl);
         base[bl] = 0;
-        S = find_struct(base);
-        T = S ? NULL : find_trait(base);
+        S = g_sym.find_struct(base);
+        T = S ? NULL : g_sym.find_trait(base);
         if (S) snprintf(cbase, MAX_NAME, "%s", S->cname);
         else if (T) snprintf(cbase, MAX_NAME, "%s", T->cname);
     }
 
     if (S) {
-        idx = (int)(S - g_structs);
+        idx = (int)(S - g_sym.structs);
         *ia = (int)ea;
         *ib = (int)eb;
         *need_struct = !already_qualified(type, ea);
     } else if (T) {
-        *tr = (int)(T - g_traits);
+        *tr = (int)(T - g_sym.traits);
         *ia = (int)ea;
         *ib = (int)eb;
         *need_struct = !already_qualified(type, ea);
@@ -603,8 +628,8 @@ static int analyse_param(const char *s, size_t n, int *ia, int *ib,
         if (pl < sizeof pre) {
             memcpy(pre, base, pl);
             pre[pl] = 0;
-            T = find_trait(pre);
-            if (T) *tr = (int)(T - g_traits);
+            T = g_sym.find_trait(pre);
+            if (T) *tr = (int)(T - g_sym.traits);
         }
     }
 
@@ -655,7 +680,7 @@ static void emit_struct_def(FILE *f, const Struct *S, const char *body)
     for (i = 0; i < S->nu; i++) {
         char low[MAX_NAME];
         to_lower(S->use_t[i], low);
-        fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", g_traits[S->use_i[i]].cname, low);
+        fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", g_sym.traits[S->use_i[i]].cname, low);
     }
     fprintf(f, "};\n");
 }
@@ -679,15 +704,7 @@ static void put_own_vptr(Buf *b, const Struct *S, int *first)
     }
 }
 
-/* does any declared trait have a method named `m`? */
-static int is_any_trait_method(const char *m)
-{
-    int i, j;
-    for (i = 0; i < g_ntraits; i++)
-        for (j = 0; j < g_traits[i].nm; j++)
-            if (strcmp(g_traits[i].m[j].name, m) == 0) return 1;
-    return 0;
-}
+/* (is_any_trait_method is a SymTabOps method now; see the symbol-table section) */
 
 /* Does the body contain a call that will become a vtable dispatch? Any `.m(` /
    `->m(` whose `m` names a declared trait method counts; when it does, the
@@ -722,7 +739,7 @@ static int body_needs_vtable(size_t bstart, size_t blen)
             if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
                 memcpy(mem, g_src + ms, ml);
                 mem[ml] = 0;
-                if (is_any_trait_method(mem)) return 1;
+                if (g_sym.is_any_trait_method(mem)) return 1;
             }
             i = (e > i) ? e : i + 1;
             continue;
@@ -809,7 +826,7 @@ static void register_body_params(const char *params)
         nk = copy_ident(q, name, 0);
         name[nk] = 0;
         q += nk;
-        ST = nk ? find_struct(name) : NULL;
+        ST = nk ? g_sym.find_struct(name) : NULL;
         if (ST) {
             int isptr = 0;
             while (*q == ' ' || *q == '\t') q++;
@@ -822,10 +839,10 @@ static void register_body_params(const char *params)
                 int pk = copy_ident(q, pv, 0);
                 pv[pk] = 0;
                 if (pk) {
-                    int vi = new_var();
-                    snprintf(g_vars[vi].name, MAX_NAME, "%s", pv);
-                    g_vars[vi].s = (int)(ST - g_structs);
-                    g_vars[vi].ptr = isptr;
+                    int vi = g_sym.new_var();
+                    snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", pv);
+                    g_sym.vars[vi].s = (int)(ST - g_sym.structs);
+                    g_sym.vars[vi].ptr = isptr;
                 }
             }
         }
@@ -842,7 +859,7 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
     int minind = 1 << 30;
     size_t *ls, *le;
     int nlines = 0, first = -1, last = -1, k;
-    int saved_nvars = g_nvars, saved_nscope = g_nscope;
+    int saved_nvars = g_sym.nvars, saved_nscope = g_nscope;
     size_t saved_body_abs = g_body_abs;
     int saved_body_pre = g_body_pre;
     size_t saved_line_off = g_line_off;
@@ -876,13 +893,13 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
     if (first < 0) { free(ls); free(le); return; }
 
     /* the body sees only its own locals, never the surrounding file scope */
-    g_nvars = 0;
+    g_sym.nvars = 0;
     g_nscope = 0;
     g_body_abs = 0;
-    vi = new_var();
-    snprintf(g_vars[vi].name, MAX_NAME, "self");
-    g_vars[vi].s = (int)(S - g_structs);
-    g_vars[vi].ptr = 1;
+    vi = g_sym.new_var();
+    snprintf(g_sym.vars[vi].name, MAX_NAME, "self");
+    g_sym.vars[vi].s = (int)(S - g_sym.structs);
+    g_sym.vars[vi].ptr = 1;
     register_body_params(params);
 
     for (k = first; k <= last; k++) {
@@ -917,7 +934,7 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
         scope_track(ls[k], le[k]);
     }
 
-    g_nvars = saved_nvars;
+    g_sym.nvars = saved_nvars;
     g_nscope = saved_nscope;
     g_body_abs = saved_body_abs;
     g_body_pre = saved_body_pre;
@@ -946,8 +963,8 @@ static size_t parse_trait(size_t p)
     bstart = p + 1;
     bend = close;
 
-    if (g_ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
-    T = &g_traits[g_ntraits++];
+    if (g_sym.ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
+    T = &g_sym.traits[g_sym.ntraits++];
     snprintf(T->name, sizeof T->name, "%s", name);
     snprintf(T->cname, sizeof T->cname, "%s", name);
     T->nm = 0;
@@ -1079,8 +1096,8 @@ static size_t parse_struct(size_t p)
     bstart = p + 1;
     bend = close;
 
-    if (g_nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
-    S = &g_structs[g_nstructs++];
+    if (g_sym.nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
+    S = &g_sym.structs[g_sym.nstructs++];
     snprintf(S->name, sizeof S->name, "%s", name);
     snprintf(S->cname, sizeof S->cname, "%s", name);
     S->nu = 0;
@@ -1116,10 +1133,10 @@ static size_t parse_struct(size_t p)
     }
 
     for (i = 0; i < S->nu; i++) {
-        Trait *T = find_trait(S->use_t[i]);
+        Trait *T = g_sym.find_trait(S->use_t[i]);
         if (!T)
             die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
-        S->use_i[i] = (int)(T - g_traits);
+        S->use_i[i] = (int)(T - g_sym.traits);
     }
 
     {
@@ -1156,9 +1173,9 @@ static size_t parse_impl(size_t p)
 
     close = match_delim(p, '{', '}');
 
-    T = find_trait(trait_name);
+    T = g_sym.find_trait(trait_name);
     if (!T) die(p, "impl for undefined trait '%s'", trait_name);
-    S = find_struct(struct_name);
+    S = g_sym.find_struct(struct_name);
     if (!S) die(p, "impl for undefined struct '%s'", struct_name);
     if (!struct_uses(S, T->name))
         die(p, "struct '%s' does not use trait '%s'", S->name, T->name);
@@ -1319,7 +1336,7 @@ static int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr,
     memcpy(mem, s + ms, ml);
     mem[ml] = 0;
 
-    *out_tr = resolve_method(&g_structs[cur], mem);
+    *out_tr = g_sym.resolve_method(&g_sym.structs[cur], mem);
     if (*out_tr && k < n && s[k] == '(') {
         *out_need_amp = !isptr;
         *out_rend = pos;
@@ -1366,12 +1383,12 @@ static void transform_calls(const char *s, Buf *out)
             memcpy(tok, s + i, tl);
             tok[tl] = 0;
 
-            vi = find_var(tok);
+            vi = g_sym.find_var(tok);
 
             /* a call whose result is used as a receiver needs hoisting, which
                M2-a does not implement: report it instead of passing it through */
             if (vi < 0 && j < n && s[j] == '(') {
-                FuncSig *FS = find_func(tok);
+                FuncSig *FS = g_sym.find_func(tok);
                 if (FS && FS->retstruct >= 0) {
                     size_t cp = line_match_paren(s, j, n);
                     if (cp != (size_t)-1) {
@@ -1390,7 +1407,7 @@ static void transform_calls(const char *s, Buf *out)
                                 memcpy(mem, s + ms2, ml2);
                                 mem[ml2] = 0;
                                 if (k2 < n && s[k2] == '(' &&
-                                    resolve_method(&g_structs[FS->retstruct], mem))
+                                    g_sym.resolve_method(&g_sym.structs[FS->retstruct], mem))
                                     die(g_line_off + i, "rvalue receivers are not supported");
                             }
                         }
@@ -1403,9 +1420,9 @@ static void transform_calls(const char *s, Buf *out)
                 const char *tr = NULL;
                 size_t pos = j, rend = 0, mp = 0;
                 int need_amp = 1, hit = 0;
-                int isptr = g_vars[vi].ptr;
+                int isptr = g_sym.vars[vi].ptr;
 
-                hit = walk_method(s, n, pos, g_vars[vi].s, isptr, &need_amp,
+                hit = walk_method(s, n, pos, g_sym.vars[vi].s, isptr, &need_amp,
                                   &tr, &rend, &mp, mem);
                 if (hit) {
                     size_t z = mp + 1;
@@ -1463,13 +1480,22 @@ static char *try_var_decl(const char *line)
     const char *p;
     char name[MAX_NAME], var[MAX_NAME];
     Struct *S;
-    int done = 0;
+    int done = 0, static_kw = 0;
     const char *rest;
     Buf b;
 
     while (line[i] == ' ' || line[i] == '\t') i++;
     ws = i;
     p = line + i;
+
+    /* a leading `static` is re-emitted verbatim; the declaration underneath is
+       still a ct struct object and must get its vptr written like any other */
+    if (strncmp(p, "static", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+        const char *z = p + 6;
+        while (*z == ' ' || *z == '\t') z++;
+        static_kw = 1;
+        p = z;
+    }
 
     if (strncmp(p, "struct", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
         p += 6;
@@ -1480,9 +1506,9 @@ static char *try_var_decl(const char *line)
     name[nk] = 0;
     if (!nk) return NULL;
     p += nk;
-    S = find_struct(name);
+    S = g_sym.find_struct(name);
     if (!S) {
-        if (find_trait(name))
+        if (g_sym.find_trait(name))
             die(0, "interface values are not supported");
         return NULL;
     }
@@ -1509,13 +1535,14 @@ static char *try_var_decl(const char *line)
             if (*aft == '[') die(0, "arrays are not supported");
         }
         if (pk) {
-            int vi = new_var();
-            snprintf(g_vars[vi].name, MAX_NAME, "%s", pv);
-            g_vars[vi].s = (int)(S - g_structs);
-            g_vars[vi].ptr = 1;
+            int vi = g_sym.new_var();
+            snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", pv);
+            g_sym.vars[vi].s = (int)(S - g_sym.structs);
+            g_sym.vars[vi].ptr = 1;
         }
         buf_init(&b);
         buf_putn(&b, line, ws);
+        if (static_kw) buf_puts(&b, "static ");
         buf_puts(&b, "struct ");
         buf_puts(&b, S->cname);
         buf_putc(&b, ' ');
@@ -1534,18 +1561,16 @@ static char *try_var_decl(const char *line)
         while (*q == ' ' || *q == '\t') q++;
         if (*q == '[') die(0, "arrays are not supported");
     }
-    if (g_nscope == 0)
-        die(0, "file-scope objects are not supported");
-
     {
-        int vi = new_var();
-        snprintf(g_vars[vi].name, MAX_NAME, "%s", var);
-        g_vars[vi].s = (int)(S - g_structs);
-        g_vars[vi].ptr = 0;
+        int vi = g_sym.new_var();
+        snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", var);
+        g_sym.vars[vi].s = (int)(S - g_sym.structs);
+        g_sym.vars[vi].ptr = 0;
     }
 
     buf_init(&b);
     buf_putn(&b, line, ws);
+    if (static_kw) buf_puts(&b, "static ");
     buf_puts(&b, "struct ");
     buf_puts(&b, S->cname);
     buf_putc(&b, ' ');
@@ -1627,7 +1652,7 @@ static char *transform_line(const char *line)
     return res;
 }
 
-/* roll g_nvars back at every closing brace so locals stay in their own scope;
+/* roll g_sym.nvars back at every closing brace so locals stay in their own scope;
    string and comment contents are ignored */
 static void scope_track(size_t ls, size_t le)
 {
@@ -1646,13 +1671,13 @@ static void scope_track(size_t ls, size_t le)
             continue;
         }
         if (c == '{') {
-            int save = g_nvars;
+            int save = g_sym.nvars;
             if (g_body_abs && p == g_body_abs) { save = g_body_pre; g_body_abs = 0; }
             if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
             g_scope[g_nscope++] = save;
         } else if (c == '}') {
             if (g_nscope > 0)
-                g_nvars = g_scope[--g_nscope];
+                g_sym.nvars = g_scope[--g_nscope];
         }
         p++;
     }
@@ -1752,18 +1777,18 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
         emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, 0);
 
         if (isdef && pname[0] && sidx >= 0) {
-            int vi = new_var();
-            snprintf(g_vars[vi].name, MAX_NAME, "%s", pname);
-            g_vars[vi].s = sidx;
-            g_vars[vi].ptr = ptr;
+            int vi = g_sym.new_var();
+            snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", pname);
+            g_sym.vars[vi].s = sidx;
+            g_sym.vars[vi].ptr = ptr;
         }
         if (j < end) { buf_putc(&b, ','); j++; }
         i = j;
     }
     /* record the signature so call sites can reject rvalue receivers */
-    if (g_nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+    if (g_sym.nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
     {
-        FuncSig *FS = &g_funcs[g_nfuncs++];
+        FuncSig *FS = &g_sym.funcs[g_sym.nfuncs++];
         snprintf(FS->name, MAX_NAME, "%s", name);
         FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
         FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
@@ -1778,7 +1803,7 @@ static void emit_raw_line(size_t ls, size_t le)
 {
     size_t len = le - ls, t = 0;
     char *line, *sig;
-    int pre = g_nvars, has_body = 0;
+    int pre = g_sym.nvars, has_body = 0;
     size_t body_abs = 0;
 
     line = xstrndup(g_src + ls, len);
@@ -1962,13 +1987,13 @@ static int compile_file(const char *in, const char *outc)
 {
     char hbuf[MAX_NAME * 4];
 
-    g_nvars = 0;
+    g_sym.nvars = 0;
     g_nscope = 0;
     g_body_abs = 0;
     g_body_pre = 0;
-    g_ntraits = 0;
-    g_nstructs = 0;
-    g_nfuncs = 0;
+    g_sym.ntraits = 0;
+    g_sym.nstructs = 0;
+    g_sym.nfuncs = 0;
 
     header_path(outc, hbuf, sizeof hbuf);
     g_path = in;
