@@ -49,8 +49,8 @@
   - **允许**：修正既有行为中的缺陷（错判、错发射、崩溃、越界、状态未还原等）。出口是**既有语料产物不动**——改完 `./test/run.sh` 与 `bash selfhost/check-goldens.sh` 仍须全绿，且**不得重新生成任何 `*.expected.*`**；必须是一个独立的 `fix(...)` 提交，正文写明缺陷、触发条件与验证方式，并登记进下面的清单。
   - **不允许**：新增或加回任何语言特性 / CLI 选项 / 诊断；放宽或绕开任何 `MAX_*` 上限（含为了让 L1 过 `MAX_FUNCS` / `MAX_METHOD` 而改 `ctc.c`）；改动产物命名规则、banner 或 `CTC_VERSION`；重构、重命名、重排既有符号；新增 `#include` 或改变生成物结构。这些一律只能做在 **CT 侧**（L1 及以后）。
   - **冻结期改动登记**（至今只有一次）：`1bdb93b fix(codegen): keep file-scope vars in emit_body`（2026-10-15）——`emit_body` 退出时只还原变量表的**条目数**、不还原**内容**，会覆盖外层文件作用域已登记的条目；补进/出各一次内容快照与拷回。产物不变，无 golden 重生成。此后 Phase 1 期间 `ctc.c` **再无任何改动**。
-- **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。见 roadmap Phase 1 开工决策。
-- **L1 必须是 CT OO 风格**：`selfhost/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。见 roadmap Phase 1 开工决策 5。
+- **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。**该出口已达成**：里程碑 M2 完成于 `test/cases/**` 全绿（25/25、0 regression），且 L1 编出的 L1′ 重编同一批语料仍逐字节一致。用 `bash selfhost/check-goldens.sh` 复核，别再靠手工循环。见 roadmap Phase 1 开工决策。
+- **L1 必须是 CT OO 风格**：`selfhost/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。注意管线层由**两个** trait 承载（`PipeOps` 主流程 + `RewriteOps` 行重写层，`struct Pipe` 同时 `use` 二者）——新增方法请放进对应的那一半，别往单侧堆到 `MAX_METHOD`。见 roadmap Phase 1 开工决策 5。
 
 ### 3. 代码风格
 
@@ -222,11 +222,16 @@ Hard boundaries:
 - **L1 (`selfhost/ctc.ct`) reuses nothing**: it must **not** `#include ctc.c` and carries its own
   facilities. It must be written in the OO subset L0 supports (single file, one statement per line,
   declarations before use, no interface arrays) and its exit is a **byte-identical** match with L0
-  (banner included). See the Phase 1 kick-off decisions in the roadmap.
+  (banner included). **That exit is met**: milestone M2 completed with `test/cases/**` fully green
+  (25/25, 0 regressions), and the L1′ that L1 builds reproduces the same corpus byte for byte. Check
+  it with `bash selfhost/check-goldens.sh` instead of hand-rolling loops. See the Phase 1 kick-off
+  decisions in the roadmap.
 - **L1 must be written in CT OO style**: `selfhost/ctc.ct`'s data-model and pipeline layers use
   `struct` + `use` + `impl` and must not fall back to plain-C passthrough; only the facilities layer
-  (`Buf` / allocators / `die` / the scanning primitives) stays plain-C. See Phase 1 kick-off decision 5
-  in the roadmap.
+  (`Buf` / allocators / `die` / the scanning primitives) stays plain-C. Note the pipeline is carried by
+  **two** traits (`PipeOps` for the main flow, `RewriteOps` for the line-rewriting layer; `struct Pipe`
+  uses both) — put a new method in the half it belongs to rather than piling one side up to
+  `MAX_METHOD`. See Phase 1 kick-off decision 5 in the roadmap.
 
 ### 3. Code style
 

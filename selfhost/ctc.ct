@@ -1,11 +1,13 @@
 /*
  * ctc.ct - L1: the ct-to-C compiler written in ct itself (Phase 1, bootstrap).
  *
- * This is the FIRST slice of Phase 1 self-hosting (milestone M2-a). It reads a
- * .ct file and writes plain C plus a matching .h, aiming to be byte-identical
- * with the frozen L0 compiler (ctc.c) on the subset listed below.
+ * This is L1 of Phase 1 self-hosting. It reads a .ct file and writes plain C plus
+ * a matching .h, byte-identical with the frozen L0 compiler (ctc.c) on every
+ * golden under test/cases: milestone M2 is complete at 25/25, and L1 rebuilds
+ * itself (L1') such that L1' also reproduces all 25 -- see
+ * `selfhost/check-goldens.sh` and `selfhost/check-m2a.sh`.
  *
- * Covered (the M2-a slice, plus the later slices that climb the goldens):
+ * Covered:
  *   - trait NAME { ... }            -> struct NAME_vtbl / struct NAME_iface
  *   - struct NAME { ... } use T;    -> the qualified struct with the __t_vptr field
  *   - impl T for S { ... }          -> static methods + the vtable variable
@@ -36,8 +38,8 @@
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
  *
- * Not covered yet (left to later milestones). L1 reports these as errors instead
- * of emitting C that cannot compile:
+ * Not covered (these are Phase 2 items, to be redone on the CT side rather than
+ * in ctc.c). L1 reports them as errors instead of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
  *   - #line and diagnostics; `delete` is supported, Drop is not
  *
@@ -45,8 +47,9 @@
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
  * output pipeline lives on `g_pipe` (`struct Pipe`, which uses two traits) -- the
  * output streams, the code emitters (`emit_trait_def` / `emit_struct_def` /
- * `put_own_vptr` / `body_needs_vtable`), the construct parsers, the pipeline
- * entry points (`emit_raw_line` / `compile_range` / `write_guard` /
+ * `put_own_vptr` / `put_nested_assignments` / `put_heap_vpts` /
+ * `body_needs_vtable`), the construct parsers, the pipeline entry points
+ * (`emit_hoisted` / `emit_raw_line` / `compile_range` / `write_guard` /
  * `compile_file`) and the CLI helpers are `PipeOps` methods, while the per-line
  * rewriting layer lives on `RewriteOps`. Lookups read `g_sym.find_trait(..)` and
  * the pipeline is reached as `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`,
