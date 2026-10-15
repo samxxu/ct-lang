@@ -538,6 +538,9 @@ trait PipeOps {
     char *read_file(const char *path, size_t *out_len);
     int compile_file(struct SymTab *sym, const char *in, const char *outc);
     void write_guard(const char *hpath);
+    /* CLI helpers, called from `main` */
+    void usage(const char *prog);
+    void default_output(const char *in, char *out, size_t n);
 }
 
 struct Pipe {
@@ -1258,6 +1261,31 @@ impl PipeOps for Pipe {
                         "used without restriction (LICENSE.EXCEPTION). */\n\n",
                 CTC_VERSION, g_path);
         snprintf(g_guard, sizeof g_guard, "%s", guard);
+    }
+
+    /* Print the CLI help text to stderr. */
+    void usage(const char *prog) {
+        (void)self;  /* a pure CLI helper; the receiver is not used */
+        fprintf(stderr,
+                "usage: %s <input.ct> [-o <output.c>]\n\n"
+                "L1 (M2-a): compiles a subset of C-with-traits (.ct) into plain C,\n"
+                "writing <output.c> and a matching header <output.h>. If -o is\n"
+                "omitted the output is <input>.c next to the input.\n\n"
+                "  -o <file>       write the generated C to <file>\n"
+                "  -v, --version   print the compiler version and exit\n"
+                "  -h, --help      print this help and exit\n",
+                prog);
+    }
+
+    /* Derive the default C output path from the input ("a.ct" -> "a.c"). */
+    void default_output(const char *in, char *out, size_t n) {
+        size_t l = strlen(in);
+        (void)self;  /* a pure CLI helper; the receiver is not used */
+        if (l > 3 && strcmp(in + l - 3, ".ct") == 0) {
+            snprintf(out, n, "%.*s.c", (int)(l - 3), in);
+        } else {
+            snprintf(out, n, "%s.c", in);
+        }
     }
 
     /* Derive the header path from the C output path ("<outc with .c -> .h>"). */
@@ -2060,29 +2088,6 @@ static size_t line_match_paren(const char *s, size_t k, size_t n)
 
 /* ------------------------------------------------------------------ main */
 
-static void usage(const char *prog)
-{
-    fprintf(stderr,
-            "usage: %s <input.ct> [-o <output.c>]\n\n"
-            "L1 (M2-a): compiles a subset of C-with-traits (.ct) into plain C,\n"
-            "writing <output.c> and a matching header <output.h>. If -o is\n"
-            "omitted the output is <input>.c next to the input.\n\n"
-            "  -o <file>       write the generated C to <file>\n"
-            "  -v, --version   print the compiler version and exit\n"
-            "  -h, --help      print this help and exit\n",
-            prog);
-}
-
-static void default_output(const char *in, char *out, size_t n)
-{
-    size_t l = strlen(in);
-    if (l > 3 && strcmp(in + l - 3, ".ct") == 0) {
-        snprintf(out, n, "%.*s.c", (int)(l - 3), in);
-    } else {
-        snprintf(out, n, "%s.c", in);
-    }
-}
-
 int main(int argc, char **argv)
 {
     const char *in = NULL, *outc = NULL;
@@ -2091,7 +2096,7 @@ int main(int argc, char **argv)
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            usage(argv[0]);
+            g_pipe.usage(argv[0]);
             return 0;
         }
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -2105,13 +2110,13 @@ int main(int argc, char **argv)
         }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
-            usage(argv[0]);
+            g_pipe.usage(argv[0]);
             return 1;
         }
         in = argv[i];
     }
 
-    if (!in) { usage(argv[0]); return 1; }
-    if (!outc) { default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
+    if (!in) { g_pipe.usage(argv[0]); return 1; }
+    if (!outc) { g_pipe.default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
     return g_pipe.compile_file(&g_sym, in, outc);
 }
