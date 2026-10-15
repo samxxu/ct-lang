@@ -526,6 +526,7 @@ trait PipeOps {
     void replace_self(const char *s, size_t n, Buf *out);
     char *transform_line(struct SymTab *sym, const char *line);
     char *try_var_decl(struct SymTab *sym, const char *line);
+    char *try_delete(struct SymTab *sym, const char *line);
     void transform_calls(struct SymTab *sym, const char *s, Buf *out);
     int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
     int decl_end_is_bare(const char *s);
@@ -1572,20 +1573,47 @@ impl PipeOps for Pipe {
         }
     }
 
+    /* "delete p;" -> "if (p) free(p);" for a registered pointer object. Any
+       pointer is accepted, so `delete buf;` on a char * frees it too; a
+       registered *non*-pointer is left as-is -- that is user error. */
+    char *try_delete(struct SymTab *sym, const char *line) {
+        const char *p = line;
+        size_t ind_len;
+        char id[MAX_NAME];
+        size_t k = 0;
+        int vi;
+        Buf b;
+
+        while (*p == ' ' || *p == '\t') p++;
+        ind_len = (size_t)(p - line);
+        if (strncmp(p, "delete", 6) != 0 || is_ident_char((unsigned char)p[6])) return NULL;
+        p += 6;
+        while (*p == ' ' || *p == '\t') p++;
+        k = copy_ident(p, id, 0);
+        id[k] = 0;
+        if (!k || !self->decl_end_is_bare(p + k)) return NULL;
+
+        vi = sym->find_var(id);
+        if (vi >= 0 && !sym->vars[vi].ptr) return NULL;
+
+        buf_init(&b);
+        buf_putn(&b, line, ind_len);
+        buf_puts(&b, "if (");
+        buf_puts(&b, id);
+        buf_puts(&b, ") free(");
+        buf_puts(&b, id);
+        buf_puts(&b, ");");
+        return b.p;
+    }
+
     char *transform_line(struct SymTab *sym, const char *line) {
+        char *del = self->try_delete(sym, line);
         char *decl;
         const char *base;
         Buf out;
         char *res;
-        const char *q = line;
 
-        while (*q == ' ' || *q == '\t') q++;
-        if (strncmp(q, "delete", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
-            const char *d = q + 6;
-            while (*d == ' ' || *d == '\t') d++;
-            if (is_ident_char((unsigned char)*d) && !isdigit((unsigned char)*d))
-                die(0, "delete is not supported");
-        }
+        if (del) return del;
 
         decl = self->try_var_decl(sym, line);
         base = decl ? decl : line;
@@ -1639,7 +1667,7 @@ impl PipeOps for Pipe {
         if (*p == '*') {                              /* pointer declaration */
             const char *q = p;
             char pv[MAX_NAME];
-            int pk = 0;
+            int pk = 0, isheap = 0;
             while (*q == '*' || *q == ' ' || *q == '\t') q++;
             pk = copy_ident(q, pv, 0);
             pv[pk] = 0;
@@ -1651,7 +1679,7 @@ impl PipeOps for Pipe {
                     while (*rhs == ' ' || *rhs == '\t') rhs++;
                     if ((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
                         (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])))
-                        die(0, "heap creation is not supported");
+                        isheap = 1;
                 }
                 while (*aft == ' ' || *aft == '\t') aft++;
                 if (*aft == '[') die(0, "arrays are not supported");
@@ -1669,6 +1697,31 @@ impl PipeOps for Pipe {
             buf_puts(&b, S->cname);
             buf_putc(&b, ' ');
             buf_puts(&b, p);
+            /* `T *x = malloc(..)` / calloc gets its vptrs written on the next
+               line, so a heap object is usable without a hand-written vptr. The
+               indentation is plain spaces and the last line keeps its newline,
+               which leaves a blank line before the following statement. */
+            if (isheap && S->nu > 0) {
+                char ind[MAX_NAME];
+                size_t t;
+                int h;
+                for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
+                ind[t] = 0;
+                buf_putc(&b, '\n');
+                for (h = 0; h < S->nu; h++) {
+                    char low[MAX_NAME];
+                    to_lower(S->use_t[h], low);
+                    buf_puts(&b, ind);
+                    buf_puts(&b, pv);
+                    buf_puts(&b, "->__");
+                    buf_puts(&b, low);
+                    buf_puts(&b, "_vptr = &");
+                    buf_puts(&b, S->cname);
+                    buf_putc(&b, '_');
+                    buf_puts(&b, S->use_t[h]);
+                    buf_puts(&b, "_vtable;\n");
+                }
+            }
             return b.p;
         }
 
