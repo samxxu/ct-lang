@@ -491,13 +491,10 @@ static int already_qualified(const char *type, size_t off)
    `struct SymTab *sym` wherever it reads the symbol tables. `is_any_trait_method`
    stays a `SymTabOps` method (see the symbol-table section). */
 
-/* Scan primitives and pipeline entry points defined after the `Pipe` impl but
-   called from its methods (the line rewriters use `line_literal_end` /
-   `line_match_paren`; `header_path` / `read_file` are called from `compile_file`). */
+/* Scan primitives defined after the `Pipe` impl but called from its methods
+   (the line rewriters use `line_literal_end` / `line_match_paren`). */
 static size_t line_literal_end(const char *s, size_t i, size_t n);
 static size_t line_match_paren(const char *s, size_t k, size_t n);
-static void header_path(const char *outc, char *out, size_t n);
-static char *read_file(const char *path, size_t *out_len);
 
 /* ------------------------------------------------------- construct parsers */
 
@@ -536,6 +533,9 @@ trait PipeOps {
     void scope_track(struct SymTab *sym, size_t ls, size_t le);
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
     void compile_range(struct SymTab *sym, size_t start, size_t end);
+    /* compile_file's own file I/O helpers */
+    void header_path(const char *outc, char *out, size_t n);
+    char *read_file(const char *path, size_t *out_len);
     int compile_file(struct SymTab *sym, const char *in, const char *outc);
     void write_guard(const char *hpath);
 }
@@ -1260,6 +1260,57 @@ impl PipeOps for Pipe {
         snprintf(g_guard, sizeof g_guard, "%s", guard);
     }
 
+    /* Derive the header path from the C output path ("<outc with .c -> .h>"). */
+    void header_path(const char *outc, char *out, size_t n) {
+        size_t l = strlen(outc);
+        (void)self;  /* a pure path helper; the receiver is not used */
+        if (l > 2 && strcmp(outc + l - 2, ".c") == 0) {
+            snprintf(out, n, "%.*s.h", (int)(l - 2), outc);
+        } else {
+            snprintf(out, n, "%s.h", outc);
+        }
+    }
+
+    /* Read one input file whole, normalising CRLF / lone CR. A failing open,
+       read or allocation is fatal. */
+    char *read_file(const char *path, size_t *out_len) {
+        FILE *f = fopen(path, "rb");
+        long sz;
+        char *buf;
+
+        (void)self;  /* a pure I/O helper; the receiver is not used */
+        if (!f) { fprintf(stderr, "ctc: cannot open '%s'\n", path); exit(1); }
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz < 0) { fprintf(stderr, "ctc: cannot read '%s'\n", path); exit(1); }
+
+        buf = xmalloc((size_t)sz + 1);
+        if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+            fprintf(stderr, "ctc: short read on '%s'\n", path);
+            exit(1);
+        }
+        buf[sz] = 0;
+        fclose(f);
+
+        /* normalise CRLF / lone CR */
+        {
+            size_t i = 0, j = 0;
+            while (i < (size_t)sz) {
+                if (buf[i] == '\r') {
+                    if (i + 1 < (size_t)sz && buf[i + 1] == '\n') i++;
+                    buf[j++] = '\n';
+                    i++;
+                } else {
+                    buf[j++] = buf[i++];
+                }
+            }
+            buf[j] = 0;
+            *out_len = j;
+        }
+        return buf;
+    }
+
     /* Compile one input to `outc` and a matching header. Returns 0 on success. */
     int compile_file(struct SymTab *sym, const char *in, const char *outc) {
         char hbuf[MAX_NAME * 4];
@@ -1272,9 +1323,9 @@ impl PipeOps for Pipe {
         sym->nstructs = 0;
         sym->nfuncs = 0;
 
-        header_path(outc, hbuf, sizeof hbuf);
+        self->header_path(outc, hbuf, sizeof hbuf);
         g_path = in;
-        g_src = read_file(in, &g_len);
+        g_src = self->read_file(in, &g_len);
 
         self->out = fopen(outc, "w");
         if (!self->out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
@@ -2030,54 +2081,6 @@ static void default_output(const char *in, char *out, size_t n)
     } else {
         snprintf(out, n, "%s.c", in);
     }
-}
-
-static void header_path(const char *outc, char *out, size_t n)
-{
-    size_t l = strlen(outc);
-    if (l > 2 && strcmp(outc + l - 2, ".c") == 0) {
-        snprintf(out, n, "%.*s.h", (int)(l - 2), outc);
-    } else {
-        snprintf(out, n, "%s.h", outc);
-    }
-}
-
-static char *read_file(const char *path, size_t *out_len)
-{
-    FILE *f = fopen(path, "rb");
-    long sz;
-    char *buf;
-
-    if (!f) { fprintf(stderr, "ctc: cannot open '%s'\n", path); exit(1); }
-    fseek(f, 0, SEEK_END);
-    sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0) { fprintf(stderr, "ctc: cannot read '%s'\n", path); exit(1); }
-
-    buf = xmalloc((size_t)sz + 1);
-    if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
-        fprintf(stderr, "ctc: short read on '%s'\n", path);
-        exit(1);
-    }
-    buf[sz] = 0;
-    fclose(f);
-
-    /* normalise CRLF / lone CR */
-    {
-        size_t i = 0, j = 0;
-        while (i < (size_t)sz) {
-            if (buf[i] == '\r') {
-                if (i + 1 < (size_t)sz && buf[i + 1] == '\n') i++;
-                buf[j++] = '\n';
-                i++;
-            } else {
-                buf[j++] = buf[i++];
-            }
-        }
-        buf[j] = 0;
-        *out_len = j;
-    }
-    return buf;
 }
 
 int main(int argc, char **argv)
