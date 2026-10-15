@@ -15,6 +15,9 @@
  *   - heap objects (`S *p = malloc(..)` writes the vptrs) and `delete p;`
  *   - interface values: `T x;` starts as a null fat pointer, `x = obj;` boxes it
  *     and `x.m(..)` dispatches to `x.vt->m(x.self, ..)`
+ *   - interface types in a signature (`T f(..)`, `void g(T p)`): arguments and
+ *     `return obj;` are boxed, and a call that already yields the interface is
+ *     passed through
  *   - file-scope struct objects (`static S x = {...}`), which host the symbol table
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
@@ -23,7 +26,7 @@
  * Not covered yet (left to later milestones). L1 reports these as errors instead
  * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
- *   - interface types in a signature (a trait as an arg / return) and as a field
+ *   - an interface type as a struct field
  *   - nested struct fields and struct composition construction
  *   - arrays; `delete` is supported, Drop is not
  *   - rvalue receivers (f().m()), field chains, #line and diagnostics
@@ -98,12 +101,16 @@ typedef struct {
     int  tr;                           /* index into the trait table when iface */
 } Var;
 
-/* A recorded function signature; M2-a only needs it to reject rvalue receivers
-   (which would otherwise be passed through as C that cannot compile). */
+/* A recorded function signature: it lets a call site reject an rvalue receiver,
+   box the arguments of a function that takes interface values, and recognise a
+   function whose result already is an interface value. */
 typedef struct {
     char name[MAX_NAME];
     int  retstruct;
     int  retptr;
+    int  rettrait;                     /* >=0 when the return type is an interface */
+    int  nparams;
+    int  ptrait[MAX_PARAMS];           /* >=0 when that parameter is an interface */
 } FuncSig;
 
 typedef struct {
@@ -126,6 +133,7 @@ static const char *g_path = "<input>";
 static int    g_scope[MAX_SCOPE];      static int g_nscope = 0;
 static size_t g_body_abs = 0;
 static int    g_body_pre = 0;
+static int    g_cur_rettr = -1;        /* return trait of the function being scanned */
 
 static char g_guard[MAX_NAME * 2];
 static size_t g_line_off = 0;
@@ -560,10 +568,11 @@ trait PipeOps {
    halves would otherwise run into `MAX_METHOD`. `struct Pipe` uses both. */
 trait RewriteOps {
     void replace_self(const char *s, size_t n, Buf *out);
-    /* interface values: boxing, the declaration and the assignment */
+    /* interface values: boxing, the declaration, the assignment and `return` */
     void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
     char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
     char *try_iface_assign(struct SymTab *sym, const char *line);
+    char *try_return(struct SymTab *sym, const char *line);
     char *try_delete(struct SymTab *sym, const char *line);
     char *transform_line(struct SymTab *sym, const char *line);
     char *try_var_decl(struct SymTab *sym, const char *line);
@@ -1378,6 +1387,7 @@ impl PipeOps for Pipe {
         g_nscope = 0;
         g_body_abs = 0;
         g_body_pre = 0;
+        g_cur_rettr = -1;
         sym->ntraits = 0;
         sym->nstructs = 0;
         sym->nfuncs = 0;
@@ -1643,9 +1653,16 @@ impl RewriteOps for Pipe {
         r = q + k;
         while (r < q + ql && isspace((unsigned char)*r)) r++;
 
-        /* a call result can only be boxed when its function returns this very
-           interface type, which arrives with the interface-parameter slice */
-        if (*r == '(') die(pos, "cannot infer the type of the boxed value");
+        if (*r == '(') {                       /* a call: it must already return this interface */
+            FuncSig *FS = sym->find_func(id);
+            if (FS && FS->rettrait == tr) {
+                buf_putn(out, e, len);
+                return;
+            }
+            if (FS && FS->rettrait >= 0)
+                die(pos, "'%s' returns an interface value of a different trait", id);
+            die(pos, "cannot infer the type of the boxed value");
+        }
         if (r != q + ql)
             die(pos, "cannot infer the type of the boxed value");   /* not a plain name */
 
@@ -1744,6 +1761,30 @@ impl RewriteOps for Pipe {
         return b.p;
     }
 
+    /* "return <object>;" inside a function whose return type is an interface
+       value: the returned object is boxed the same way an assignment is. */
+    char *try_return(struct SymTab *sym, const char *line) {
+        const char *p = line, *e;
+        size_t el = 0;
+        Buf b;
+
+        if (g_cur_rettr < 0) return NULL;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "return", 6) != 0 || is_ident_char((unsigned char)p[6])) return NULL;
+        e = p + 6;
+        while (*e == ' ' || *e == '\t') e++;
+        if (!*e || *e == ';') return NULL;                       /* "return;" */
+        if (*e == '{' || strncmp(e, "(struct ", 8) == 0) return NULL;
+        while (e[el] && e[el] != ';') el++;
+        if (!el) return NULL;
+
+        buf_init(&b);
+        buf_putn(&b, line, (size_t)(e - line));
+        self->box_to_iface(sym, &b, e, el, g_cur_rettr, 0);
+        buf_puts(&b, e + el);
+        return b.p;
+    }
+
     /* "g = p;" — assigning into an interface value (the target type is the
        variable, so its boxing trait is known). An assignment into an
        interface-value *field* ("s.l = p;") arrives with the interface-field
@@ -1817,6 +1858,7 @@ impl RewriteOps for Pipe {
 
     char *transform_line(struct SymTab *sym, const char *line) {
         char *del = self->try_delete(sym, line);
+        char *ret;
         char *asg;
         char *decl;
         const char *base;
@@ -1824,6 +1866,8 @@ impl RewriteOps for Pipe {
         char *res;
 
         if (del) return del;
+        ret = self->try_return(sym, line);
+        if (ret) return ret;
         asg = self->try_iface_assign(sym, line);
         if (asg) return asg;
 
@@ -2147,6 +2191,57 @@ impl RewriteOps for Pipe {
                     }
                 }
 
+                /* a call to a function that takes interface values: box the
+                   arguments whose parameter is one */
+                if (vi < 0 && j < n && s[j] == '(') {
+                    FuncSig *FS = sym->find_func(tok);
+                    size_t cp = (size_t)-1;
+                    int any = 0, q;
+                    if (FS) {
+                        for (q = 0; q < FS->nparams; q++)
+                            if (FS->ptrait[q] >= 0) {
+                                any = 1;
+                                break;
+                            }
+                        if (any) cp = line_match_paren(s, j, n);
+                    }
+                    if (any && cp != (size_t)-1) {
+                        Buf ab;
+                        size_t a = j + 1, pi = 0;
+                        buf_init(&ab);
+                        while (a <= cp) {
+                            size_t bb = a;
+                            int dep = 0, tr;
+                            while (bb < cp) {
+                                char cc = s[bb];
+                                if (cc == '"' || cc == '\'') {
+                                    bb = line_literal_end(s, bb, cp);
+                                    continue;
+                                }
+                                if (cc == '(' || cc == '[' || cc == '{') dep++;
+                                else if (cc == ')' || cc == ']' || cc == '}') dep--;
+                                else if (cc == ',' && dep == 0) break;
+                                bb++;
+                            }
+                            tr = (pi < (size_t)FS->nparams) ? FS->ptrait[pi] : -1;
+                            if (tr >= 0 && bb > a) self->box_to_iface(sym, &ab, s + a, bb - a, tr, 0);
+                            else buf_putn(&ab, s + a, bb - a);
+                            pi++;
+                            if (bb < cp) {
+                                buf_putc(&ab, ',');
+                                a = bb + 1;
+                            } else break;
+                        }
+                        buf_puts(out, tok);
+                        buf_putc(out, '(');
+                        buf_puts(out, ab.p);
+                        buf_putc(out, ')');
+                        free(ab.p);
+                        i = cp + 1;
+                        continue;
+                    }
+                }
+
                 if (vi >= 0) {
                     char mem[MAX_NAME], low[MAX_NAME];
                     const char *tr = NULL;
@@ -2282,6 +2377,7 @@ impl RewriteOps for Pipe {
         Buf b;
         int isdef = 0, ret_tr = -1, ret_ia = -1, ret_ib = -1, ret_ns = 0;
         int ret_struct = -1, ret_rptr = 0;
+        int npar = 0, ptrait[MAX_PARAMS];
         char ret_cbase[MAX_NAME];
         (void)self;  /* the body records signatures in the symbol table, not the receiver */
 
@@ -2342,10 +2438,8 @@ impl RewriteOps for Pipe {
             ret_struct = self->analyse_param(sym, line, rt, &ret_ia, &ret_ib, ret_cbase,
                                              &ret_ns, rname, &ret_rptr, &ret_tr);
         }
-        if (ret_tr >= 0) die(ls, "interface return types are not supported");
-
         buf_init(&b);
-        self->emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, 0);
+        self->emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, ret_tr >= 0);
         buf_putc(&b, '(');
 
         for (i = lpo + 1, end = rp; i < end; ) {
@@ -2362,28 +2456,45 @@ impl RewriteOps for Pipe {
                 j++;
             }
             sidx = self->analyse_param(sym, line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
-            if (ptrtr >= 0) die(ls, "interface parameters are not supported");
-            self->emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, 0);
+            self->emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, ptrtr >= 0);
 
-            if (isdef && pname[0] && sidx >= 0) {
+            if (isdef && pname[0] && (sidx >= 0 || ptrtr >= 0)) {
                 int vi = sym->new_var();
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pname);
-                sym->vars[vi].s = sidx;
-                sym->vars[vi].ptr = ptr;
-                sym->vars[vi].iface = 0;
-                sym->vars[vi].tr = -1;
+                sym->vars[vi].s = (sidx >= 0) ? sidx : -1;
+                sym->vars[vi].ptr = (sidx >= 0) ? ptr : 0;
+                sym->vars[vi].iface = (sidx >= 0) ? 0 : 1;
+                sym->vars[vi].tr = (sidx >= 0) ? -1 : ptrtr;
+            }
+            {
+                char pbuf[MAX_NAME * 2];
+                size_t pl = j - i;
+                if (pl >= sizeof pbuf) die(0, "parameter too long (max %d)", (int)sizeof pbuf - 1);
+                memcpy(pbuf, line + i, pl);
+                pbuf[pl] = 0;
+                trim(pbuf);
+                if (pbuf[0] && strcmp(pbuf, "void") != 0) {
+                    if (npar >= MAX_PARAMS) die(0, "too many parameters (max %d)", MAX_PARAMS);
+                    ptrait[npar++] = ptrtr;
+                }
             }
             if (j < end) { buf_putc(&b, ','); j++; }
             i = j;
         }
-        /* record the signature so call sites can reject rvalue receivers */
+        /* record the signature so call sites can reject rvalue receivers and box
+           interface arguments */
         if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
         {
             FuncSig *FS = &sym->funcs[sym->nfuncs++];
+            int q;
             snprintf(FS->name, MAX_NAME, "%s", name);
+            FS->nparams = npar;
+            FS->rettrait = ret_tr;
             FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
             FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
+            for (q = 0; q < npar; q++) FS->ptrait[q] = ptrait[q];
         }
+        if (isdef) g_cur_rettr = ret_tr;
 
         buf_putc(&b, ')');
         buf_puts(&b, line + rp + 1);

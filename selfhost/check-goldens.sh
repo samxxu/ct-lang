@@ -59,6 +59,7 @@ baseline="
 13_signature_types
 14_scope_shadow
 17_heap
+18_polymorphism
 21_empty_init_iface
 "
 
