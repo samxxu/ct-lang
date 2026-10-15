@@ -56,6 +56,7 @@ baseline="
 10_uninit_decl
 11_value_param
 12_pointer_param
+13_signature_types
 14_scope_shadow
 "
 

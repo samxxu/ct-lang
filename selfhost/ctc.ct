@@ -1731,9 +1731,10 @@ impl PipeOps for Pipe {
                     } else {
                         die(0, "multi-line initialisers are not supported");
                     }
-                } else {
-                    die(0, "unsupported initialiser for struct '%s'", S->name);
                 }
+                /* a non-brace initialiser ("Person a = make(\"A\");") keeps its
+                   expression verbatim; the vptrs are written as statements on the
+                   next line, so it falls through with `done` still 0 */
             } else if (S->nu > 0 && self->decl_end_is_bare(r)) {
                 /* "Person p;" has no initialiser, so give it a designated one */
                 int first = 1;
@@ -1744,6 +1745,38 @@ impl PipeOps for Pipe {
                 done = 1;
             }
             if (!done) buf_puts(&b, rest);
+        }
+
+        if (!done && S->nu > 0) {
+            /* the declaration kept an expression it cannot hold designators in,
+               so each vptr becomes a statement on the following line, indented
+               like the declaration. At file scope there is no statement to put
+               them in (that needs the per-unit constructor), which is not
+               implemented yet -- say so rather than emit C that cannot compile. */
+            char ind[MAX_NAME];
+            size_t k;
+            int h;
+
+            if (g_nscope == 0)
+                die(0, "a file-scope object initialised by an expression is not supported");
+            for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
+            ind[k] = 0;
+
+            buf_putc(&b, '\n');
+            for (h = 0; h < S->nu; h++) {
+                char low[MAX_NAME];
+                to_lower(S->use_t[h], low);
+                buf_puts(&b, ind);
+                buf_puts(&b, var);
+                buf_puts(&b, ".__");
+                buf_puts(&b, low);
+                buf_puts(&b, "_vptr = &");
+                buf_puts(&b, S->cname);
+                buf_putc(&b, '_');
+                buf_puts(&b, S->use_t[h]);
+                buf_puts(&b, "_vtable;");
+                if (h + 1 < S->nu) buf_putc(&b, '\n');
+            }
         }
 
         return b.p;
