@@ -25,12 +25,14 @@
  *   - rvalue receivers (f().m()), field chains, #line and diagnostics
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
- * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the output
- * streams plus the three construct parsers live on `g_pipe` (`struct Pipe` +
- * `use PipeOps`), so lookups read `g_sym.find_trait(..)` and the parsers are
- * reached as `g_pipe.parse_trait(..)`, both dispatching through their vtable.
- * Only the facilities layer (Buf, allocators, die, the scanning primitives)
- * stays plain C.
+ * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
+ * output pipeline lives on `g_pipe` (`struct Pipe` + `use PipeOps`) -- the output
+ * streams are its fields and the construct parsers plus the entry points
+ * (`emit_raw_line` / `compile_range` / `write_guard` / `compile_file`) are its
+ * methods. Lookups read `g_sym.find_trait(..)` and the pipeline is reached as
+ * `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`, both dispatching through
+ * their vtable. Only the facilities layer (Buf, allocators, die, the scanning
+ * primitives) stays plain C.
  * The source stays inside the subset L0 itself accepts: the plain-C passthrough
  * of CT plus the line-rewriting discipline (one statement per line, no one-line
  * function bodies, declarations before use). L1 carries its own facilities; it
@@ -751,10 +753,15 @@ static int body_needs_vtable(size_t bstart, size_t blen)
 }
 
 /* Entry points of the shared rewriting pipeline, defined further down but used
-   by the impl-body passes here (they run the same rewriting as top-level code). */
+   by the impl-body passes here (they run the same rewriting as top-level code).
+   `parse_func_sig` / `header_path` / `read_file` are likewise defined after the
+   `Pipe` impl but called from its methods, so they are declared up here too. */
 static size_t line_literal_end(const char *s, size_t i, size_t n);
 static char *transform_line(const char *line);
 static void scope_track(size_t ls, size_t le);
+static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs);
+static void header_path(const char *outc, char *out, size_t n);
+static char *read_file(const char *path, size_t *out_len);
 
 /* `self` -> `_self` for one line. Strings and comments are copied verbatim, and
    a member literally named `self` (e.g. `g.self`) is not the implicit receiver. */
@@ -953,13 +960,20 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
 
 /* ------------------------------------------------------- construct parsers */
 
-/* The output streams live on the `Pipe` object and the three construct parsers
-   are its methods, so call sites read `g_pipe.parse_trait(..)`. `parse_fields`
-   stays plain C: it reads only the receiver Struct and never touches `self`. */
+/* The whole output pipeline lives on the `Pipe` object: the output streams are
+   its fields and the construct parsers plus the pipeline entry points are its
+   methods, so call sites read `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`.
+   `parse_fields` stays plain C: it reads only the receiver Struct and never
+   touches `self`. The symbol tables arrive as `struct SymTab *sym` because a
+   method body cannot see the file-scope `g_sym` object. */
 trait PipeOps {
     size_t parse_trait(struct SymTab *sym, size_t p);
     size_t parse_struct(struct SymTab *sym, size_t p);
     size_t parse_impl(struct SymTab *sym, size_t p);
+    void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
+    void compile_range(struct SymTab *sym, size_t start, size_t end);
+    int compile_file(struct SymTab *sym, const char *in, const char *outc);
+    void write_guard(const char *hpath);
 }
 
 struct Pipe {
@@ -1302,6 +1316,154 @@ impl PipeOps for Pipe {
             if (t < g_len && g_src[t] == ';') q = t + 1;
             return q;
         }
+    }
+
+    /* Pass one raw source line through the shared rewriting pipeline. */
+    void emit_raw_line(struct SymTab *sym, size_t ls, size_t le) {
+        size_t len = le - ls, t = 0;
+        char *line, *sig;
+        int pre = sym->nvars, has_body = 0;
+        size_t body_abs = 0;
+
+        line = xstrndup(g_src + ls, len);
+        while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
+        if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
+            fputs(line, self->out);
+            free(line);
+            return;
+        }
+
+        g_line_off = ls;
+        sig = parse_func_sig(line, ls, &has_body, &body_abs);
+        if (sig) {
+            if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
+            fputs(sig, self->out);
+            free(sig);
+        } else {
+            char *out = transform_line(line);
+            fputs(out, self->out);
+            free(out);
+        }
+        free(line);
+        scope_track(ls, le);
+    }
+
+    /* Scan [start,end): expand traits/structs/impls, pass the rest through. */
+    void compile_range(struct SymTab *sym, size_t start, size_t end) {
+        size_t pos = start;
+
+        while (pos < end) {
+            size_t ls = pos, q, le;
+
+            q = ls;
+            while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
+
+            /* the module system lives in the CT layer; passing these through would
+               silently emit C that cannot compile, so fail loudly instead. */
+            {
+                static const char *const gone[] = { "namespace", "import", "pub" };
+                int gi;
+                for (gi = 0; gi < 3; gi++) {
+                    char nm[MAX_NAME];
+                    size_t t;
+                    if (!word_at(q, gone[gi])) continue;
+                    t = read_ident(skip_ws_comments(q + strlen(gone[gi])), nm, sizeof nm);
+                    if (nm[0] || (t < g_len && g_src[t] == '{'))
+                        die(q, "'%s' is not supported by this compiler", gone[gi]);
+                }
+            }
+
+            if (word_at(q, "trait")) {
+                char nm[MAX_NAME];
+                size_t t = read_ident(skip_ws_comments(q + 5), nm, sizeof nm);
+                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_trait(sym, q); continue; }
+            }
+            if (word_at(q, "impl")) {
+                char nm[MAX_NAME];
+                size_t t = read_ident(skip_ws_comments(q + 4), nm, sizeof nm);
+                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_impl(sym, q); continue; }
+            }
+            if (word_at(q, "struct")) {
+                size_t t = skip_ws_comments(q + 6);
+                char nm[MAX_NAME];
+                t = read_ident(t, nm, sizeof nm);
+                if (nm[0]) {
+                    t = skip_ws_comments(t);
+                    if (t < g_len && g_src[t] == '{') { pos = self->parse_struct(sym, q); continue; }
+                }
+            }
+
+            le = ls;
+            while (le < end && g_src[le] != '\n') le++;
+            self->emit_raw_line(sym, ls, le);
+            if (le < end) { fputc('\n', self->out); le++; }
+            pos = le;
+        }
+    }
+
+    /* Write the include guard and provenance banner into the header stream. */
+    void write_guard(const char *hpath) {
+        const char *b = strrchr(hpath, '/');
+        char guard[MAX_NAME * 2];
+        size_t i, j = 0;
+        b = b ? b + 1 : hpath;
+
+        for (i = 0; b[i] && b[i] != '.' && j + 1 < sizeof guard; i++)
+            guard[j++] = (isalnum((unsigned char)b[i]) ? (char)toupper((unsigned char)b[i]) : '_');
+        guard[j] = 0;
+        if (!j) snprintf(guard, sizeof guard, "CT_OUTPUT");
+        if (guard[0] >= '0' && guard[0] <= '9') {
+            memmove(guard + 1, guard, j + 1);
+            guard[0] = '_';
+        }
+        strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
+
+        fprintf(self->hout, "#ifndef %s\n#define %s\n\n", guard, guard);
+        fprintf(self->hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
+                        "   generated .c is self-contained).\n"
+                        "   Generated output is not covered by the GPL and may be "
+                        "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                CTC_VERSION, g_path);
+        snprintf(g_guard, sizeof g_guard, "%s", guard);
+    }
+
+    /* Compile one input to `outc` and a matching header. Returns 0 on success. */
+    int compile_file(struct SymTab *sym, const char *in, const char *outc) {
+        char hbuf[MAX_NAME * 4];
+
+        sym->nvars = 0;
+        g_nscope = 0;
+        g_body_abs = 0;
+        g_body_pre = 0;
+        sym->ntraits = 0;
+        sym->nstructs = 0;
+        sym->nfuncs = 0;
+
+        header_path(outc, hbuf, sizeof hbuf);
+        g_path = in;
+        g_src = read_file(in, &g_len);
+
+        self->out = fopen(outc, "w");
+        if (!self->out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
+        self->hout = fopen(hbuf, "w");
+        if (!self->hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(self->out); return 1; }
+
+        self->write_guard(hbuf);
+
+        /* provenance banner: the generated C is a build product, not a source file */
+        fprintf(self->out, "/* Generated by ctc v%s from %s -- do not edit; "
+                       "change the .ct and re-run ctc. */\n"
+                       "/* Generated output is not covered by the GPL and may be "
+                       "used without restriction (LICENSE.EXCEPTION). */\n",
+                CTC_VERSION, g_path);
+
+        self->compile_range(sym, 0, g_len);
+
+        fprintf(self->hout, "\n#endif /* %s */\n", g_guard);
+
+        fclose(self->out);
+        fclose(self->hout);
+        return 0;
     }
 }
 
@@ -1822,36 +1984,6 @@ static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *
     return b.p;
 }
 
-static void emit_raw_line(size_t ls, size_t le)
-{
-    size_t len = le - ls, t = 0;
-    char *line, *sig;
-    int pre = g_sym.nvars, has_body = 0;
-    size_t body_abs = 0;
-
-    line = xstrndup(g_src + ls, len);
-    while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
-    if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
-        fputs(line, g_pipe.out);
-        free(line);
-        return;
-    }
-
-    g_line_off = ls;
-    sig = parse_func_sig(line, ls, &has_body, &body_abs);
-    if (sig) {
-        if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
-        fputs(sig, g_pipe.out);
-        free(sig);
-    } else {
-        char *out = transform_line(line);
-        fputs(out, g_pipe.out);
-        free(out);
-    }
-    free(line);
-    scope_track(ls, le);
-}
-
 /* ------------------------------------------------------------------ main */
 
 static void usage(const char *prog)
@@ -1885,32 +2017,6 @@ static void header_path(const char *outc, char *out, size_t n)
     } else {
         snprintf(out, n, "%s.h", outc);
     }
-}
-
-static void write_guard(const char *hpath)
-{
-    const char *b = strrchr(hpath, '/');
-    char guard[MAX_NAME * 2];
-    size_t i, j = 0;
-    b = b ? b + 1 : hpath;
-
-    for (i = 0; b[i] && b[i] != '.' && j + 1 < sizeof guard; i++)
-        guard[j++] = (isalnum((unsigned char)b[i]) ? (char)toupper((unsigned char)b[i]) : '_');
-    guard[j] = 0;
-    if (!j) snprintf(guard, sizeof guard, "CT_OUTPUT");
-    if (guard[0] >= '0' && guard[0] <= '9') {
-        memmove(guard + 1, guard, j + 1);
-        guard[0] = '_';
-    }
-    strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
-
-    fprintf(g_pipe.hout, "#ifndef %s\n#define %s\n\n", guard, guard);
-    fprintf(g_pipe.hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
-                    "   generated .c is self-contained).\n"
-                    "   Generated output is not covered by the GPL and may be "
-                    "used without restriction (LICENSE.EXCEPTION). */\n\n",
-            CTC_VERSION, g_path);
-    snprintf(g_guard, sizeof g_guard, "%s", guard);
 }
 
 static char *read_file(const char *path, size_t *out_len)
@@ -1951,100 +2057,6 @@ static char *read_file(const char *path, size_t *out_len)
     return buf;
 }
 
-/* Scan [start,end): expand traits/structs/impls, pass the rest through. */
-static void compile_range(size_t start, size_t end)
-{
-    size_t pos = start;
-
-    while (pos < end) {
-        size_t ls = pos, q, le;
-
-        q = ls;
-        while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
-
-        /* the module system lives in the CT layer; passing these through would
-           silently emit C that cannot compile, so fail loudly instead. */
-        {
-            static const char *const gone[] = { "namespace", "import", "pub" };
-            int gi;
-            for (gi = 0; gi < 3; gi++) {
-                char nm[MAX_NAME];
-                size_t t;
-                if (!word_at(q, gone[gi])) continue;
-                t = read_ident(skip_ws_comments(q + strlen(gone[gi])), nm, sizeof nm);
-                if (nm[0] || (t < g_len && g_src[t] == '{'))
-                    die(q, "'%s' is not supported by this compiler", gone[gi]);
-            }
-        }
-
-        if (word_at(q, "trait")) {
-            char nm[MAX_NAME];
-            size_t t = read_ident(skip_ws_comments(q + 5), nm, sizeof nm);
-            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = g_pipe.parse_trait(&g_sym, q); continue; }
-        }
-        if (word_at(q, "impl")) {
-            char nm[MAX_NAME];
-            size_t t = read_ident(skip_ws_comments(q + 4), nm, sizeof nm);
-            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = g_pipe.parse_impl(&g_sym, q); continue; }
-        }
-        if (word_at(q, "struct")) {
-            size_t t = skip_ws_comments(q + 6);
-            char nm[MAX_NAME];
-            t = read_ident(t, nm, sizeof nm);
-            if (nm[0]) {
-                t = skip_ws_comments(t);
-                if (t < g_len && g_src[t] == '{') { pos = g_pipe.parse_struct(&g_sym, q); continue; }
-            }
-        }
-
-        le = ls;
-        while (le < end && g_src[le] != '\n') le++;
-        emit_raw_line(ls, le);
-        if (le < end) { fputc('\n', g_pipe.out); le++; }
-        pos = le;
-    }
-}
-
-/* Compile one input to `outc` and a matching header. Returns 0 on success. */
-static int compile_file(const char *in, const char *outc)
-{
-    char hbuf[MAX_NAME * 4];
-
-    g_sym.nvars = 0;
-    g_nscope = 0;
-    g_body_abs = 0;
-    g_body_pre = 0;
-    g_sym.ntraits = 0;
-    g_sym.nstructs = 0;
-    g_sym.nfuncs = 0;
-
-    header_path(outc, hbuf, sizeof hbuf);
-    g_path = in;
-    g_src = read_file(in, &g_len);
-
-    g_pipe.out = fopen(outc, "w");
-    if (!g_pipe.out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
-    g_pipe.hout = fopen(hbuf, "w");
-    if (!g_pipe.hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(g_pipe.out); return 1; }
-
-    write_guard(hbuf);
-
-    /* provenance banner: the generated C is a build product, not a source file */
-    fprintf(g_pipe.out, "/* Generated by ctc v%s from %s -- do not edit; "
-                   "change the .ct and re-run ctc. */\n"
-                   "/* Generated output is not covered by the GPL and may be "
-                   "used without restriction (LICENSE.EXCEPTION). */\n",
-            CTC_VERSION, g_path);
-
-    compile_range(0, g_len);
-
-    fprintf(g_pipe.hout, "\n#endif /* %s */\n", g_guard);
-
-    fclose(g_pipe.out);
-    fclose(g_pipe.hout);
-    return 0;
-}
-
 int main(int argc, char **argv)
 {
     const char *in = NULL, *outc = NULL;
@@ -2075,5 +2087,5 @@ int main(int argc, char **argv)
 
     if (!in) { usage(argv[0]); return 1; }
     if (!outc) { default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    return compile_file(in, outc);
+    return g_pipe.compile_file(&g_sym, in, outc);
 }
