@@ -514,6 +514,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 3. **源码位置与切片**：L1 源码为单文件 **`selfhost/ctc.ct`**（新增目录，用户已批准）。首个里程碑 **M2-a** 只覆盖 `test/cases/01_trait_basic.ct` 所需子集（trait / struct / impl / use、方法调用重写、`.h` 生成、banner），出口是对 `01_trait_basic.expected.c` / `.expected.h` **逐字节相等**；此后按 golden 用例逐个补齐剩余能力。用 golden 做**增量 oracle**，而不是一次性翻写。
 4. **出口附加一项**：Phase 1 的完成判据除「与 L0 逐字节一致」外，还要**用 L1 编译 `selfhost/ctc.ct` 自身**成功（L1 是纯 OO 子集写的，功能完整后应当直接可行）——这是「真自举」的硬证据。
 5. **L1 必须是 CT OO 风格**（2026-10-15 用户确认）：L1 的**数据模型层**（`Trait` / `Struct` / `Var` / `FuncSig` 等符号表）与**管线层**（逐行扫描、行重写、发射）必须用 CT 的 `struct` + `use` + `impl` 写成 OO 形态，**不得**退回 plain-C 直通；只有**设施层**（`Buf` / 分配器 / `die` / 扫描原语，约 200 行）按决策 1 保持 plain-C 透传。理由：CT 是 C 的严格超集，纯 C 直通的文件也「合法」，但对 OO 机制是**零证明**——那等于没自举（与决策 1 同构）。节奏为**分片推进**：先数据模型层 → 跑 `selfhost/check-m2a.sh` → 再管线层；每片以 byte-identical **不退化**为准绳，而不是以「跑得动」为准。附注（2026-10-15 实测）：L0 的 `MAX_FUNCS`（64）把 L1 里**每个 plain-C 函数签名**计入（定义与原型同等计数），而 `impl` 方法**不计**——该上限压力正是促使 L1 走 CT OO 风格的**健康约束**，不是要绕开的障碍；`ctc.c` 已冻结，**不得**为放宽它而改动。
+6. **增量 oracle 落地为常驻关卡**（2026-10-15 用户确认）：`selfhost/check-goldens.sh` 把「L1 vs 全部 `test/cases/**` golden」做成一条命令，逐例比对 `.c` / `.h` 的字节，输出 `PASS / NEW / PENDING / REGRESSION` 四态与计数。脚本内的 baseline 名单是**棘轮**：只有已在名单里的用例失配才算回归并令关卡非零退出，未实现的族记 `PENDING`（连同 L1 的拒绝原因）不阻塞。起点实测（2026-10-15）：**13 pass / 0 new / 12 pending / 0 regression（共 25 例）**——12 个 pending 全部是 L1 主动 `die` 报「不支持」的留空能力族，不是算错。补齐顺序按**由小到大**：`13` 初始化形式 → `17` heap → 接口值（`21` → `18` → `28`）→ arrays（`16`）→ composition（`15`）→ 回头收互锁的 `23/24/25/26/27`（这些同时要 arrays 与 composition）。每片的出口是「byte-identical 不退化 + 把新通过的用例提升进 baseline 名单」。
 
 **阶梯（M1→M2 属本阶段；M3–M6 属 Phase 2）**：L1 仅用 OO 子集写就；此后按 [bootstrap.md](design/bootstrap.md) 逐层爬升，每层以 **byte-identical golden** 为出口：
 
@@ -1313,6 +1314,18 @@ and its output is **byte-identical** to the C version's for the same corpus.
    counts **every plain-C function signature** in L1 (definitions and prototypes alike) while `impl`
    methods do **not** count — that ceiling is a **healthy constraint** that pushes L1 towards CT OO
    style, not an obstacle to work around; `ctc.c` is frozen, so it must **not** be changed to relax it.
+6. **The incremental oracle becomes a standing gate** (confirmed by the user on 2026-10-15):
+   `selfhost/check-goldens.sh` reduces "L1 vs every `test/cases/**` golden" to one command — it diffs
+   each generated `.c` / `.h` byte for byte and reports `PASS / NEW / PENDING / REGRESSION` with counts.
+   The baseline list inside the script is a **ratchet**: only a case already on the list that stops
+   matching counts as a regression and fails the gate, while an unimplemented family is reported as
+   `PENDING` (with L1's refusal reason) and does not block. Starting point, measured 2026-10-15:
+   **13 pass / 0 new / 12 pending / 0 regression (of 25 cases)** — all 12 pending cases are capability
+   families L1 deliberately left out with an explicit `die`, not wrong output. The climb goes
+   **smallest first**: `13` initialisers → `17` heap → interface values (`21` → `18` → `28`) → arrays
+   (`16`) → composition (`15`) → then the interlocked `23/24/25/26/27` (they need both arrays and
+   composition). Each slice exits on "byte-identical without regressing, and its newly passing case
+   promoted onto the baseline list".
 
 **The ladder (M1→M2 in this phase; M3–M6 in Phase 2)**: L1 is written purely in the OO subset;
 afterwards climb layer by layer per [design/bootstrap.md](design/bootstrap.md), every layer exiting on a
