@@ -25,9 +25,12 @@
  *   - rvalue receivers (f().m()), field chains, #line and diagnostics
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
- * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`), so lookups read
- * `g_sym.find_trait(..)` and dispatch through the vtable. Only the facilities
- * layer (Buf, allocators, die, the scanning primitives) stays plain C.
+ * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the output
+ * streams plus the three construct parsers live on `g_pipe` (`struct Pipe` +
+ * `use PipeOps`), so lookups read `g_sym.find_trait(..)` and the parsers are
+ * reached as `g_pipe.parse_trait(..)`, both dispatching through their vtable.
+ * Only the facilities layer (Buf, allocators, die, the scanning primitives)
+ * stays plain C.
  * The source stays inside the subset L0 itself accepts: the plain-C passthrough
  * of CT plus the line-rewriting discipline (one statement per line, no one-line
  * function bodies, declarations before use). L1 carries its own facilities; it
@@ -107,10 +110,8 @@ static const char *g_src  = NULL;
 static size_t      g_len  = 0;
 static const char *g_path = "<input>";
 
-static FILE *g_out  = NULL;
-static FILE *g_hout = NULL;
-
-/* the four symbol tables live inside `g_sym` (see the symbol-table section) */
+/* the output streams live inside `g_pipe` and the four symbol tables inside
+   `g_sym` (see the construct-parser and symbol-table sections) */
 
 static int    g_scope[MAX_SCOPE];      static int g_nscope = 0;
 static size_t g_body_abs = 0;
@@ -860,6 +861,11 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
     size_t *ls, *le;
     int nlines = 0, first = -1, last = -1, k;
     int saved_nvars = g_sym.nvars, saved_nscope = g_nscope;
+    /* the body reuses the shared var table from index 0, so snapshot the
+       enclosing file-scope entries and put them back on the way out; restoring
+       only the count would leave the outer registrations clobbered */
+    Var *saved_vars = xmalloc(sizeof(Var) * (saved_nvars ? (size_t)saved_nvars : 1));
+    memcpy(saved_vars, g_sym.vars, sizeof(Var) * (size_t)saved_nvars);
     size_t saved_body_abs = g_body_abs;
     int saved_body_pre = g_body_pre;
     size_t saved_line_off = g_line_off;
@@ -934,6 +940,8 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
         scope_track(ls[k], le[k]);
     }
 
+    memcpy(g_sym.vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
+    free(saved_vars);
     g_sym.nvars = saved_nvars;
     g_nscope = saved_nscope;
     g_body_abs = saved_body_abs;
@@ -945,93 +953,19 @@ static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, cons
 
 /* ------------------------------------------------------- construct parsers */
 
-static size_t parse_trait(size_t p)
-{
-    char name[MAX_NAME];
-    Trait *T;
-    size_t close, bstart, bend, i;
-    Buf raw, clean;
-
-    p += 5;                                     /* "trait" */
-    p = skip_ws_comments(p);
-    p = read_ident(p, name, sizeof name);
-    if (!name[0]) die(p, "expected trait name");
-    p = skip_ws_comments(p);
-    if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after trait '%s'", name);
-
-    close = match_delim(p, '{', '}');
-    bstart = p + 1;
-    bend = close;
-
-    if (g_sym.ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
-    T = &g_sym.traits[g_sym.ntraits++];
-    snprintf(T->name, sizeof T->name, "%s", name);
-    snprintf(T->cname, sizeof T->cname, "%s", name);
-    T->nm = 0;
-
-    buf_init(&raw);
-    buf_putn(&raw, g_src + bstart, bend - bstart);
-    buf_init(&clean);
-    {
-        /* strip comments once so ';' inside them does not split declarations */
-        size_t k = 0, ln = raw.n;
-        while (k < ln) {
-            char c = raw.p[k];
-            if (c == '"' || c == '\'') {
-                char q = c;
-                buf_putc(&clean, raw.p[k++]);
-                while (k < ln) {
-                    if (raw.p[k] == '\\' && k + 1 < ln) {
-                        buf_putc(&clean, raw.p[k]);
-                        buf_putc(&clean, raw.p[k + 1]);
-                        k += 2;
-                        continue;
-                    }
-                    buf_putc(&clean, raw.p[k]);
-                    if (raw.p[k] == q) { k++; break; }
-                    k++;
-                }
-                continue;
-            }
-            if (c == '/' && k + 1 < ln && raw.p[k + 1] == '/') {
-                while (k < ln && raw.p[k] != '\n') k++;
-                continue;
-            }
-            if (c == '/' && k + 1 < ln && raw.p[k + 1] == '*') {
-                k += 2;
-                while (k + 1 < ln && !(raw.p[k] == '*' && raw.p[k + 1] == '/')) k++;
-                k = (k + 1 < ln) ? k + 2 : ln;
-                continue;
-            }
-            buf_putc(&clean, raw.p[k++]);
-        }
-    }
-    free(raw.p);
-
-    i = 0;
-    for (;;) {
-        size_t j = i;
-        while (j <= clean.n && !(j < clean.n && clean.p[j] == ';')) j++;
-        {
-            char *seg = xstrndup(clean.p + i, j - i);
-            trim(seg);
-            if (seg[0]) {
-                if (T->nm >= MAX_METHOD)
-                    die(close, "too many methods in trait '%s'", T->name);
-                split_decl(seg, close, &T->m[T->nm]);
-                T->nm++;
-            }
-            free(seg);
-        }
-        if (j >= clean.n) break;
-        i = j + 1;
-    }
-    free(clean.p);
-
-    emit_trait_def(g_out, T);
-    emit_trait_def(g_hout, T);
-    return close + 1;
+/* The output streams live on the `Pipe` object and the three construct parsers
+   are its methods, so call sites read `g_pipe.parse_trait(..)`. `parse_fields`
+   stays plain C: it reads only the receiver Struct and never touches `self`. */
+trait PipeOps {
+    size_t parse_trait(struct SymTab *sym, size_t p);
+    size_t parse_struct(struct SymTab *sym, size_t p);
+    size_t parse_impl(struct SymTab *sym, size_t p);
 }
+
+struct Pipe {
+    FILE *out;
+    FILE *hout;
+} use PipeOps;
 
 /* Copy a struct body verbatim. M2-a does not support composition or interface
    fields, so any field whose type names a known struct or trait is a hard error
@@ -1078,211 +1012,300 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
     return out.p;
 }
 
-static size_t parse_struct(size_t p)
-{
-    char name[MAX_NAME];
-    Struct *S;
-    size_t close, bstart, bend, q, probe;
-    int i;
+impl PipeOps for Pipe {
+    size_t parse_trait(struct SymTab *sym, size_t p) {
+        char name[MAX_NAME];
+        Trait *T;
+        size_t close, bstart, bend, i;
+        Buf raw, clean;
 
-    p += 6;                                     /* "struct" */
-    p = skip_ws_comments(p);
-    p = read_ident(p, name, sizeof name);
-    if (!name[0]) die(p, "expected struct name");
-    p = skip_ws_comments(p);
-    if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after struct '%s'", name);
+        p += 5;                                     /* "trait" */
+        p = skip_ws_comments(p);
+        p = read_ident(p, name, sizeof name);
+        if (!name[0]) die(p, "expected trait name");
+        p = skip_ws_comments(p);
+        if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after trait '%s'", name);
 
-    close = match_delim(p, '{', '}');
-    bstart = p + 1;
-    bend = close;
+        close = match_delim(p, '{', '}');
+        bstart = p + 1;
+        bend = close;
 
-    if (g_sym.nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
-    S = &g_sym.structs[g_sym.nstructs++];
-    snprintf(S->name, sizeof S->name, "%s", name);
-    snprintf(S->cname, sizeof S->cname, "%s", name);
-    S->nu = 0;
+        if (sym->ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
+        T = &sym->traits[sym->ntraits++];
+        snprintf(T->name, sizeof T->name, "%s", name);
+        snprintf(T->cname, sizeof T->cname, "%s", name);
+        T->nm = 0;
 
-    q = close + 1;
-    probe = q;
-    while (probe < g_len && (g_src[probe] == ' ' || g_src[probe] == '\t')) probe++;
-    if (probe < g_len && g_src[probe] == '\n') {
-        size_t t = probe + 1;
-        while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
-        if (word_at(t, "use")) probe = t;
-    }
-
-    if (word_at(probe, "use")) {
-        size_t u = skip_ws_comments(probe + 3);
-        for (;;) {
-            char tn[MAX_NAME];
-            u = read_ident(u, tn, sizeof tn);
-            if (!tn[0]) die(u, "expected trait name in 'use' clause of '%s'", S->name);
-            if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
-            snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
-            S->nu++;
-            u = skip_ws_comments(u);
-            if (u < g_len && g_src[u] == ',') { u = skip_ws_comments(u + 1); continue; }
-            break;
-        }
-        if (u >= g_len || g_src[u] != ';') die(u, "expected ';' after 'use' clause of '%s'", S->name);
-        q = u + 1;
-    } else {
-        size_t t = q;
-        while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
-        if (t < g_len && g_src[t] == ';') q = t + 1;
-    }
-
-    for (i = 0; i < S->nu; i++) {
-        Trait *T = g_sym.find_trait(S->use_t[i]);
-        if (!T)
-            die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
-        S->use_i[i] = (int)(T - g_sym.traits);
-    }
-
-    {
-        char *raw = xstrndup(g_src + bstart, bend - bstart);
-        char *qbody = parse_fields(raw, S, p);
-        free(raw);
-        emit_struct_def(g_out, S, qbody);
-        emit_struct_def(g_hout, S, qbody);
-        free(qbody);
-    }
-    return q;
-}
-
-static size_t parse_impl(size_t p)
-{
-    char trait_name[MAX_NAME], struct_name[MAX_NAME];
-    Trait *T;
-    Struct *S;
-    size_t close, i, k;
-    ImplMethod impl[MAX_METHOD];
-    int nimpl = 0, found;
-
-    p += 4;                                     /* "impl" */
-    p = skip_ws_comments(p);
-    p = read_ident(p, trait_name, sizeof trait_name);
-    if (!trait_name[0]) die(p, "expected trait name after 'impl'");
-    p = skip_ws_comments(p);
-    if (!word_at(p, "for")) die(p, "expected 'for' in impl of '%s'", trait_name);
-    p = skip_ws_comments(p + 3);
-    p = read_ident(p, struct_name, sizeof struct_name);
-    if (!struct_name[0]) die(p, "expected struct name after 'for'");
-    p = skip_ws_comments(p);
-    if (p >= g_len || g_src[p] != '{') die(p, "expected '{' in impl body");
-
-    close = match_delim(p, '{', '}');
-
-    T = g_sym.find_trait(trait_name);
-    if (!T) die(p, "impl for undefined trait '%s'", trait_name);
-    S = g_sym.find_struct(struct_name);
-    if (!S) die(p, "impl for undefined struct '%s'", struct_name);
-    if (!struct_uses(S, T->name))
-        die(p, "struct '%s' does not use trait '%s'", S->name, T->name);
-
-    /* collect the methods written in the impl block */
-    i = p + 1;
-    while (1) {
-        size_t lp, rp, bp, be;
-        char header[MAX_NAME * 2];
-        char pre[MAX_NAME * 2];
-        int end, st;
-
-        i = skip_ws_comments(i);
-        if (i >= close) break;
-
-        lp = i;
-        while (lp < close && g_src[lp] != '(') lp++;
-        if (lp >= close) die(i, "expected method declaration inside impl of '%s' for '%s'",
-                             T->name, S->name);
-
-        snprintf(pre, sizeof pre, "%.*s", (int)(lp - i), g_src + i);
-        trim(pre);
-        end = (int)strlen(pre);
-        st = end;
-        while (st > 0 && is_ident_char((unsigned char)pre[st - 1])) st--;
-        if (st == end) die(i, "expected method name inside impl of '%s' for '%s'",
-                           T->name, S->name);
-        if (nimpl >= MAX_METHOD) die(i, "too many methods in impl of '%s'", T->name);
-        snprintf(header, sizeof header, "%.*s", end - st, pre + st);
-
-        rp = match_delim(lp, '(', ')');
+        buf_init(&raw);
+        buf_putn(&raw, g_src + bstart, bend - bstart);
+        buf_init(&clean);
         {
-            size_t blen = (rp > lp + 1) ? (rp - lp - 1) : 0;
-            if (blen >= MAX_PARAM) die(lp, "parameter list too long (max %d)", MAX_PARAM - 1);
-            memcpy(impl[nimpl].params, g_src + lp + 1, blen);
-            impl[nimpl].params[blen] = 0;
-            trim(impl[nimpl].params);
+            /* strip comments once so ';' inside them does not split declarations */
+            size_t k = 0, ln = raw.n;
+            while (k < ln) {
+                char c = raw.p[k];
+                if (c == '"' || c == '\'') {
+                    char q = c;
+                    buf_putc(&clean, raw.p[k++]);
+                    while (k < ln) {
+                        if (raw.p[k] == '\\' && k + 1 < ln) {
+                            buf_putc(&clean, raw.p[k]);
+                            buf_putc(&clean, raw.p[k + 1]);
+                            k += 2;
+                            continue;
+                        }
+                        buf_putc(&clean, raw.p[k]);
+                        if (raw.p[k] == q) { k++; break; }
+                        k++;
+                    }
+                    continue;
+                }
+                if (c == '/' && k + 1 < ln && raw.p[k + 1] == '/') {
+                    while (k < ln && raw.p[k] != '\n') k++;
+                    continue;
+                }
+                if (c == '/' && k + 1 < ln && raw.p[k + 1] == '*') {
+                    k += 2;
+                    while (k + 1 < ln && !(raw.p[k] == '*' && raw.p[k + 1] == '/')) k++;
+                    k = (k + 1 < ln) ? k + 2 : ln;
+                    continue;
+                }
+                buf_putc(&clean, raw.p[k++]);
+            }
+        }
+        free(raw.p);
+
+        i = 0;
+        for (;;) {
+            size_t j = i;
+            while (j <= clean.n && !(j < clean.n && clean.p[j] == ';')) j++;
+            {
+                char *seg = xstrndup(clean.p + i, j - i);
+                trim(seg);
+                if (seg[0]) {
+                    if (T->nm >= MAX_METHOD)
+                        die(close, "too many methods in trait '%s'", T->name);
+                    split_decl(seg, close, &T->m[T->nm]);
+                    T->nm++;
+                }
+                free(seg);
+            }
+            if (j >= clean.n) break;
+            i = j + 1;
+        }
+        free(clean.p);
+
+        emit_trait_def(self->out, T);
+        emit_trait_def(self->hout, T);
+        return close + 1;
+    }
+
+    size_t parse_struct(struct SymTab *sym, size_t p) {
+        char name[MAX_NAME];
+        Struct *S;
+        size_t close, bstart, bend, q, probe;
+        int i;
+
+        p += 6;                                     /* "struct" */
+        p = skip_ws_comments(p);
+        p = read_ident(p, name, sizeof name);
+        if (!name[0]) die(p, "expected struct name");
+        p = skip_ws_comments(p);
+        if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after struct '%s'", name);
+
+        close = match_delim(p, '{', '}');
+        bstart = p + 1;
+        bend = close;
+
+        if (sym->nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
+        S = &sym->structs[sym->nstructs++];
+        snprintf(S->name, sizeof S->name, "%s", name);
+        snprintf(S->cname, sizeof S->cname, "%s", name);
+        S->nu = 0;
+
+        q = close + 1;
+        probe = q;
+        while (probe < g_len && (g_src[probe] == ' ' || g_src[probe] == '\t')) probe++;
+        if (probe < g_len && g_src[probe] == '\n') {
+            size_t t = probe + 1;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (word_at(t, "use")) probe = t;
         }
 
-        bp = skip_ws_comments(rp + 1);
-        if (bp >= close || g_src[bp] != '{')
-            die(bp, "expected '{' to start body of method '%s'", header);
-        be = match_delim(bp, '{', '}');
+        if (word_at(probe, "use")) {
+            size_t u = skip_ws_comments(probe + 3);
+            for (;;) {
+                char tn[MAX_NAME];
+                u = read_ident(u, tn, sizeof tn);
+                if (!tn[0]) die(u, "expected trait name in 'use' clause of '%s'", S->name);
+                if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
+                snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
+                S->nu++;
+                u = skip_ws_comments(u);
+                if (u < g_len && g_src[u] == ',') { u = skip_ws_comments(u + 1); continue; }
+                break;
+            }
+            if (u >= g_len || g_src[u] != ';') die(u, "expected ';' after 'use' clause of '%s'", S->name);
+            q = u + 1;
+        } else {
+            size_t t = q;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < g_len && g_src[t] == ';') q = t + 1;
+        }
 
-        snprintf(impl[nimpl].name, MAX_NAME, "%s", header);
-        impl[nimpl].bstart = bp + 1;
-        impl[nimpl].blen = be - bp - 1;
-        nimpl++;
+        for (i = 0; i < S->nu; i++) {
+            Trait *T = sym->find_trait(S->use_t[i]);
+            if (!T)
+                die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
+            S->use_i[i] = (int)(T - sym->traits);
+        }
 
-        i = be + 1;
-    }
-
-    /* every impl method must belong to the trait */
-    for (k = 0; k < (size_t)nimpl; k++) {
-        int j;
-        found = 0;
-        for (j = 0; j < T->nm; j++)
-            if (strcmp(T->m[j].name, impl[k].name) == 0) { found = 1; break; }
-        if (!found)
-            die(p, "method '%s' is not declared in trait '%s'", impl[k].name, T->name);
-    }
-
-    /* bodies that call a sibling method need the vtable declared up front */
-    {
-        int needs_vtable = 0;
-        for (k = 0; k < (size_t)nimpl; k++)
-            if (body_needs_vtable(impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
-        if (needs_vtable)
-            fprintf(g_out, "static struct %s_vtbl %s_%s_vtable;\n\n",
-                    T->cname, S->cname, T->name);
-    }
-
-    /* emit one function per trait method, in trait order */
-    for (k = 0; k < (size_t)T->nm; k++) {
-        Method *tm = &T->m[k];
-        int idx = -1;
-        int j;
-        for (j = 0; j < nimpl; j++)
-            if (strcmp(impl[j].name, tm->name) == 0) { idx = j; break; }
-        if (idx < 0)
-            die(p, "trait method '%s' is not implemented for struct '%s'",
-                tm->name, S->name);
-
-        fprintf(g_out, "static %s %s_%s_%s(void *self", tm->ret, S->cname, T->name, tm->name);
-        if (tm->nparams > 0) fprintf(g_out, ", %s", impl[idx].params);
-        fprintf(g_out, ") {\n");
-        fprintf(g_out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
-        emit_body(g_out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
-        fprintf(g_out, "}\n\n");
-    }
-
-    fprintf(g_out, "static struct %s_vtbl %s_%s_vtable = {\n",
-            T->cname, S->cname, T->name);
-    for (k = 0; k < (size_t)T->nm; k++)
-        fprintf(g_out, "    .%s = %s_%s_%s%s\n",
-                T->m[k].name, S->cname, T->name, T->m[k].name,
-                (k + 1 < (size_t)T->nm) ? "," : "");
-    fprintf(g_out, "};\n\n");
-
-    {
-        size_t q = close + 1;
-        size_t t = q;
-        while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
-        if (t < g_len && g_src[t] == ';') q = t + 1;
+        {
+            char *raw = xstrndup(g_src + bstart, bend - bstart);
+            char *qbody = parse_fields(raw, S, p);
+            free(raw);
+            emit_struct_def(self->out, S, qbody);
+            emit_struct_def(self->hout, S, qbody);
+            free(qbody);
+        }
         return q;
     }
+
+    size_t parse_impl(struct SymTab *sym, size_t p) {
+        char trait_name[MAX_NAME], struct_name[MAX_NAME];
+        Trait *T;
+        Struct *S;
+        size_t close, i, k;
+        ImplMethod impl[MAX_METHOD];
+        int nimpl = 0, found;
+
+        p += 4;                                     /* "impl" */
+        p = skip_ws_comments(p);
+        p = read_ident(p, trait_name, sizeof trait_name);
+        if (!trait_name[0]) die(p, "expected trait name after 'impl'");
+        p = skip_ws_comments(p);
+        if (!word_at(p, "for")) die(p, "expected 'for' in impl of '%s'", trait_name);
+        p = skip_ws_comments(p + 3);
+        p = read_ident(p, struct_name, sizeof struct_name);
+        if (!struct_name[0]) die(p, "expected struct name after 'for'");
+        p = skip_ws_comments(p);
+        if (p >= g_len || g_src[p] != '{') die(p, "expected '{' in impl body");
+
+        close = match_delim(p, '{', '}');
+
+        T = sym->find_trait(trait_name);
+        if (!T) die(p, "impl for undefined trait '%s'", trait_name);
+        S = sym->find_struct(struct_name);
+        if (!S) die(p, "impl for undefined struct '%s'", struct_name);
+        if (!struct_uses(S, T->name))
+            die(p, "struct '%s' does not use trait '%s'", S->name, T->name);
+
+        /* collect the methods written in the impl block */
+        i = p + 1;
+        while (1) {
+            size_t lp, rp, bp, be;
+            char header[MAX_NAME * 2];
+            char pre[MAX_NAME * 2];
+            int end, st;
+
+            i = skip_ws_comments(i);
+            if (i >= close) break;
+
+            lp = i;
+            while (lp < close && g_src[lp] != '(') lp++;
+            if (lp >= close) die(i, "expected method declaration inside impl of '%s' for '%s'",
+                                 T->name, S->name);
+
+            snprintf(pre, sizeof pre, "%.*s", (int)(lp - i), g_src + i);
+            trim(pre);
+            end = (int)strlen(pre);
+            st = end;
+            while (st > 0 && is_ident_char((unsigned char)pre[st - 1])) st--;
+            if (st == end) die(i, "expected method name inside impl of '%s' for '%s'",
+                               T->name, S->name);
+            if (nimpl >= MAX_METHOD) die(i, "too many methods in impl of '%s'", T->name);
+            snprintf(header, sizeof header, "%.*s", end - st, pre + st);
+
+            rp = match_delim(lp, '(', ')');
+            {
+                size_t blen = (rp > lp + 1) ? (rp - lp - 1) : 0;
+                if (blen >= MAX_PARAM) die(lp, "parameter list too long (max %d)", MAX_PARAM - 1);
+                memcpy(impl[nimpl].params, g_src + lp + 1, blen);
+                impl[nimpl].params[blen] = 0;
+                trim(impl[nimpl].params);
+            }
+
+            bp = skip_ws_comments(rp + 1);
+            if (bp >= close || g_src[bp] != '{')
+                die(bp, "expected '{' to start body of method '%s'", header);
+            be = match_delim(bp, '{', '}');
+
+            snprintf(impl[nimpl].name, MAX_NAME, "%s", header);
+            impl[nimpl].bstart = bp + 1;
+            impl[nimpl].blen = be - bp - 1;
+            nimpl++;
+
+            i = be + 1;
+        }
+
+        /* every impl method must belong to the trait */
+        for (k = 0; k < (size_t)nimpl; k++) {
+            int j;
+            found = 0;
+            for (j = 0; j < T->nm; j++)
+                if (strcmp(T->m[j].name, impl[k].name) == 0) { found = 1; break; }
+            if (!found)
+                die(p, "method '%s' is not declared in trait '%s'", impl[k].name, T->name);
+        }
+
+        /* bodies that call a sibling method need the vtable declared up front */
+        {
+            int needs_vtable = 0;
+            for (k = 0; k < (size_t)nimpl; k++)
+                if (body_needs_vtable(impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
+            if (needs_vtable)
+                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n\n",
+                        T->cname, S->cname, T->name);
+        }
+
+        /* emit one function per trait method, in trait order */
+        for (k = 0; k < (size_t)T->nm; k++) {
+            Method *tm = &T->m[k];
+            int idx = -1;
+            int j;
+            for (j = 0; j < nimpl; j++)
+                if (strcmp(impl[j].name, tm->name) == 0) { idx = j; break; }
+            if (idx < 0)
+                die(p, "trait method '%s' is not implemented for struct '%s'",
+                    tm->name, S->name);
+
+            fprintf(self->out, "static %s %s_%s_%s(void *self", tm->ret, S->cname, T->name, tm->name);
+            if (tm->nparams > 0) fprintf(self->out, ", %s", impl[idx].params);
+            fprintf(self->out, ") {\n");
+            fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
+            emit_body(self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
+            fprintf(self->out, "}\n\n");
+        }
+
+        fprintf(self->out, "static struct %s_vtbl %s_%s_vtable = {\n",
+                T->cname, S->cname, T->name);
+        for (k = 0; k < (size_t)T->nm; k++)
+            fprintf(self->out, "    .%s = %s_%s_%s%s\n",
+                    T->m[k].name, S->cname, T->name, T->m[k].name,
+                    (k + 1 < (size_t)T->nm) ? "," : "");
+        fprintf(self->out, "};\n\n");
+
+        {
+            size_t q = close + 1;
+            size_t t = q;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < g_len && g_src[t] == ';') q = t + 1;
+            return q;
+        }
+    }
 }
+
+static Pipe g_pipe = { };
 
 /* ------------------------------------------------ raw line rewriting */
 
@@ -1809,7 +1832,7 @@ static void emit_raw_line(size_t ls, size_t le)
     line = xstrndup(g_src + ls, len);
     while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
     if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
-        fputs(line, g_out);
+        fputs(line, g_pipe.out);
         free(line);
         return;
     }
@@ -1818,11 +1841,11 @@ static void emit_raw_line(size_t ls, size_t le)
     sig = parse_func_sig(line, ls, &has_body, &body_abs);
     if (sig) {
         if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
-        fputs(sig, g_out);
+        fputs(sig, g_pipe.out);
         free(sig);
     } else {
         char *out = transform_line(line);
-        fputs(out, g_out);
+        fputs(out, g_pipe.out);
         free(out);
     }
     free(line);
@@ -1881,8 +1904,8 @@ static void write_guard(const char *hpath)
     }
     strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
 
-    fprintf(g_hout, "#ifndef %s\n#define %s\n\n", guard, guard);
-    fprintf(g_hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
+    fprintf(g_pipe.hout, "#ifndef %s\n#define %s\n\n", guard, guard);
+    fprintf(g_pipe.hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
                     "   generated .c is self-contained).\n"
                     "   Generated output is not covered by the GPL and may be "
                     "used without restriction (LICENSE.EXCEPTION). */\n\n",
@@ -1957,12 +1980,12 @@ static void compile_range(size_t start, size_t end)
         if (word_at(q, "trait")) {
             char nm[MAX_NAME];
             size_t t = read_ident(skip_ws_comments(q + 5), nm, sizeof nm);
-            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = parse_trait(q); continue; }
+            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = g_pipe.parse_trait(&g_sym, q); continue; }
         }
         if (word_at(q, "impl")) {
             char nm[MAX_NAME];
             size_t t = read_ident(skip_ws_comments(q + 4), nm, sizeof nm);
-            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = parse_impl(q); continue; }
+            if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = g_pipe.parse_impl(&g_sym, q); continue; }
         }
         if (word_at(q, "struct")) {
             size_t t = skip_ws_comments(q + 6);
@@ -1970,14 +1993,14 @@ static void compile_range(size_t start, size_t end)
             t = read_ident(t, nm, sizeof nm);
             if (nm[0]) {
                 t = skip_ws_comments(t);
-                if (t < g_len && g_src[t] == '{') { pos = parse_struct(q); continue; }
+                if (t < g_len && g_src[t] == '{') { pos = g_pipe.parse_struct(&g_sym, q); continue; }
             }
         }
 
         le = ls;
         while (le < end && g_src[le] != '\n') le++;
         emit_raw_line(ls, le);
-        if (le < end) { fputc('\n', g_out); le++; }
+        if (le < end) { fputc('\n', g_pipe.out); le++; }
         pos = le;
     }
 }
@@ -1999,15 +2022,15 @@ static int compile_file(const char *in, const char *outc)
     g_path = in;
     g_src = read_file(in, &g_len);
 
-    g_out = fopen(outc, "w");
-    if (!g_out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
-    g_hout = fopen(hbuf, "w");
-    if (!g_hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(g_out); return 1; }
+    g_pipe.out = fopen(outc, "w");
+    if (!g_pipe.out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
+    g_pipe.hout = fopen(hbuf, "w");
+    if (!g_pipe.hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(g_pipe.out); return 1; }
 
     write_guard(hbuf);
 
     /* provenance banner: the generated C is a build product, not a source file */
-    fprintf(g_out, "/* Generated by ctc v%s from %s -- do not edit; "
+    fprintf(g_pipe.out, "/* Generated by ctc v%s from %s -- do not edit; "
                    "change the .ct and re-run ctc. */\n"
                    "/* Generated output is not covered by the GPL and may be "
                    "used without restriction (LICENSE.EXCEPTION). */\n",
@@ -2015,10 +2038,10 @@ static int compile_file(const char *in, const char *outc)
 
     compile_range(0, g_len);
 
-    fprintf(g_hout, "\n#endif /* %s */\n", g_guard);
+    fprintf(g_pipe.hout, "\n#endif /* %s */\n", g_guard);
 
-    fclose(g_out);
-    fclose(g_hout);
+    fclose(g_pipe.out);
+    fclose(g_pipe.hout);
     return 0;
 }
 
