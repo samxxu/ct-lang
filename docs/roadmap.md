@@ -29,9 +29,16 @@
 
 | 版本 | 对应阶段 | 内容 |
 | --- | --- | --- |
-| v0.0.1 | Phase 0（当前） | trait / struct / impl / use 的结构转换、方法调用重写、配套 `.h`、五层回归测试 |
+| v0.0.1 | Phase 0 | trait / struct / impl / use 的结构转换、方法调用重写、配套 `.h`、五层回归测试 |
+| v0.1.0 | Phase 1 自举（**里程碑已达成，尚未 bump**） | L1（`selfhost/ctc.ct`）对 `test/cases/**` 全量 25/25 逐字节一致，且 L1 编译自身（L1′）重跑同一批语料仍逐字节一致 |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../AGENTS.md) 第 5 节）。
+
+**版本规则（2026-10-15 用户确认）**：
+
+- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。阶段对应：`0.0.x` = Phase 0；`0.1.x` = Phase 1 自举；`0.2.x` = Phase 2（每恢复一族特性给一个 patch）；`0.5.0` = 单入口 `ct` 落地；`1.0.0` = 语言定稿。
+- **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（当前用 `phase1-m2` 标记 v0.1.0 这个里程碑）。
+- **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重新生成 `test/cases/**` 全部 golden 与 examples 的 `.expected.out`，并**同时**改 `ctc.c` 与 `selfhost/ctc.ct`（L1 自带一份版本号，第 84 行）——两处不一致会让 `selfhost/check-goldens.sh` 立刻全红。冻结期改 `CTC_VERSION` 属「不允许」项，需用户显式授权一次例外。
 
 ### 已定的设计决策
 
@@ -660,10 +667,25 @@ as confirmed by the user.
 
 | Version | Phase | Contents |
 | --- | --- | --- |
-| v0.0.1 | Phase 0 (current) | trait / struct / impl / use rewriting, method-call rewriting, matching `.h`, five-layer regression suite |
+| v0.0.1 | Phase 0 | trait / struct / impl / use rewriting, method-call rewriting, matching `.h`, five-layer regression suite |
+| v0.1.0 | Phase 1 self-hosting (**milestone reached, not bumped yet**) | L1 (`selfhost/ctc.ct`) is byte-identical with L0 on all of `test/cases/**` (25/25), and L1 compiling itself (L1′) reproduces the same corpus byte for byte |
 
 The version lives in `CTC_VERSION` inside `ctc.c` and is written into the generated comments, so
 changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §5).
+
+**Version rules (confirmed by the user on 2026-10-15)**:
+
+- Versions look like **`v0.<phase>.<patch>`** and are bumped **only at phase boundaries**; the `patch`
+  slot is reserved for in-phase fixes that require regenerating goldens. Phase mapping: `0.0.x` =
+  Phase 0; `0.1.x` = Phase 1 self-hosting; `0.2.x` = Phase 2 (one patch per feature family restored);
+  `0.5.0` = the single-entry `ct` landing; `1.0.0` = the language is final.
+- **A tag name must equal `CTC_VERSION`.** Hence "no bump, no `v`-numbered tag"; a milestone that is
+  not bumped gets a non-version tag (today `phase1-m2` marks the v0.1.0 milestone).
+- **Why a bump must be careful**: `CTC_VERSION` goes into the output banner, so one bump means
+  regenerating every golden under `test/cases/**` plus the examples' `.expected.out`, and changing
+  **both** `ctc.c` and `selfhost/ctc.ct` (L1 carries its own copy of the version, line 84) — if the two
+  disagree, `selfhost/check-goldens.sh` goes red immediately. Changing `CTC_VERSION` during the freeze
+  is a "not allowed" item and needs one explicit user-authorised exception.
 
 ### Decided design decisions
 
