@@ -115,13 +115,13 @@
     并能编译自身（L1′）。本报告把它的结构、数据流与关键算法拆开，配流程图，目标是让你以最短路径读懂它。
   </p>
   <div class="chips">
-    <span class="chip"><b>3041</b> 行</span>
+    <span class="chip"><b>3209</b> 行</span>
     <span class="chip"><b>3</b> 层架构</span>
     <span class="chip"><b>3</b> 个 trait</span>
-    <span class="chip"><b>47</b> 个方法</span>
+    <span class="chip"><b>48</b> 个方法</span>
     <span class="chip"><b>11</b> 个 MAX_* 上限</span>
     <span class="chip"><b>1</b> 趟扫描</span>
-    <span class="chip">锚点 <b>selfhost/ctc.ct @ 51e1e25</b> · 2026-10-16</span>
+    <span class="chip">锚点 <b>selfhost/ctc.ct @ 5d5fbfb</b> · 2026-10-16</span>
   </div>
 </header>
 
@@ -201,15 +201,15 @@ flowchart TB
 <tbody>
   <tr><td class="num">1–64</td><td>头注释：已覆盖能力清单 + OO 结构自述</td><td>文档</td><td><b>先读这里</b>。作者把「trait/struct/impl/接口值/组合/数组/堆/rvalue 接收者」逐条列了对应产物</td></tr>
   <tr><td class="num">66–84</td><td>5 个 <code>#include</code> + 11 个 <code>MAX_*</code> + <code>CTC_VERSION</code></td><td>常量</td><td>所有容量上限集中在此，越界一律 <code>die</code></td></tr>
-  <tr><td class="num">86–185</td><td>数据模型 <code>typedef struct</code>（Method/Trait/Struct/Var/FuncSig/ImplMethod/Buf）+ 全局状态</td><td>数据</td><td>看懂 <code>Struct</code> 的四张字段表，后面所有代码都顺</td></tr>
-  <tr><td class="num">188–375</td><td>设施层：<code>xmalloc</code> · <code>xstrndup</code> · <code>die</code> · <code>trim</code> · <code>Buf</code> · 扫描原语</td><td><span class="badge plain">plain C</span></td><td><code>die</code> 是所有报错的唯一出口；<code>word_at</code> 是关键字识别的词边界基石</td></tr>
-  <tr><td class="num">377–462</td><td>符号表层：<code>trait SymTabOps</code> + <code>struct SymTab</code> + <code>impl</code></td><td><span class="badge obj">CT 对象</span></td><td>8 个查询方法，全部是线性查找；<code>new_var</code> 预留槽位</td></tr>
-  <tr><td class="num">464–619</td><td>只读谓词（<code>struct_uses</code> / <code>find_field_ex</code> / <code>find_iface_field</code> / <code>needs_nested_init</code> …）+ 3 个前置声明</td><td><span class="badge plain">plain C</span></td><td>刻意保持 plain C：只读入参、不碰全局表，故不占 <code>MAX_FUNCS</code> 额度的「方法」位</td></tr>
-  <tr><td class="num">621–695</td><td><code>trait PipeOps</code> + <code>trait RewriteOps</code> 声明 + <code>struct Pipe</code></td><td>接口</td><td><b>读完了两个管线 trait 的 API 面</b>：39 个方法签名（25 + 14）</td></tr>
-  <tr><td class="num">697–1791</td><td><code>impl PipeOps for Pipe</code>：发射器 → 声明解析 → 构造解析器 → 管线 → CLI</td><td><span class="badge obj">CT 对象</span></td><td>编译的「骨架」都在这里</td></tr>
-  <tr><td class="num">1793–2957</td><td><code>impl RewriteOps for Pipe</code>：逐行重写层</td><td><span class="badge obj">CT 对象</span></td><td>语法糖（<code>.m()</code>、装箱、<code>delete</code>、vptr）全在这里展开</td></tr>
-  <tr><td class="num">2959–3006</td><td><code>static Pipe g_pipe</code> + <code>line_literal_end</code> / <code>line_match_paren</code> / <code>line_assign_eq</code></td><td><span class="badge plain">plain C</span></td><td>行级小工具：字面量结束、括号配对、找「普通 <code>=</code>」</td></tr>
-  <tr><td class="num">3008–3041</td><td><code>main</code></td><td>入口</td><td>32 行，只是参数解析 + 一次 <code>compile_file</code></td></tr>
+  <tr><td class="num">86–189</td><td>数据模型 <code>typedef struct</code>（Method/Trait/Struct/Var/FuncSig/ImplMethod/Buf）+ 全局状态</td><td>数据</td><td>看懂 <code>Struct</code> 的四张字段表，后面所有代码都顺</td></tr>
+  <tr><td class="num">190–378</td><td>设施层：<code>xmalloc</code> · <code>xstrndup</code> · <code>die</code> · <code>trim</code> · <code>Buf</code> · 扫描原语</td><td><span class="badge plain">plain C</span></td><td><code>die</code> 是所有报错的唯一出口；<code>word_at</code> 是关键字识别的词边界基石</td></tr>
+  <tr><td class="num">379–543</td><td>符号表层：<code>trait SymTabOps</code> + <code>struct SymTab</code> + <code>impl</code></td><td><span class="badge obj">CT 对象</span></td><td>8 个查询方法，全部是线性查找（前缀优先、再回退根）；<code>new_var</code> 预留槽位</td></tr>
+  <tr><td class="num">545–639</td><td>声明片段辅助（<code>analyse_param</code> / <code>read_qual_ref</code> / <code>emit_qualified_type</code>）+ 只读谓词 + 3 个前置声明</td><td><span class="badge plain">plain C</span></td><td>只读谓词刻意保持 plain C：只读入参、不碰全局表，故不占 <code>MAX_FUNCS</code> 额度的「方法」位</td></tr>
+  <tr><td class="num">640–721</td><td><code>trait PipeOps</code> + <code>trait RewriteOps</code> 声明 + <code>struct Pipe</code></td><td>接口</td><td><b>读完了两个管线 trait 的 API 面</b>：40 个方法签名（26 + 14）</td></tr>
+  <tr><td class="num">722–1916</td><td><code>impl PipeOps for Pipe</code>：发射器 → 声明解析 → 构造解析器 → 管线 → CLI</td><td><span class="badge obj">CT 对象</span></td><td>编译的「骨架」都在这里</td></tr>
+  <tr><td class="num">1923–3126</td><td><code>impl RewriteOps for Pipe</code>：逐行重写层</td><td><span class="badge obj">CT 对象</span></td><td>语法糖（<code>.m()</code>、装箱、<code>delete</code>、vptr、<code>::</code>）全在这里展开</td></tr>
+  <tr><td class="num">3127–3175</td><td><code>static Pipe g_pipe</code> + <code>line_literal_end</code> / <code>line_match_paren</code> / <code>line_assign_eq</code></td><td><span class="badge plain">plain C</span></td><td>行级小工具：字面量结束、括号配对、找「普通 <code>=</code>」</td></tr>
+  <tr><td class="num">3176–3209</td><td><code>main</code></td><td>入口</td><td>32 行，只是参数解析 + 一次 <code>compile_file</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -222,21 +222,23 @@ flowchart TB
 <figure class="diagram">
 <pre class="mermaid">
 flowchart TD
-    M["main() 3010<br/>解析 -o / -h / -v，缺输入则 usage"] --> CF["g_pipe.compile_file(sym, in, outc)  1580"]
+    M["main() 3178<br/>解析 -o / -h / -v，缺输入则 usage"] --> CF["g_pipe.compile_file(sym, in, outc)  1704"]
     CF --> RST["重置状态：nvars/nscope/四张表计数归零<br/>buf_init(g_unit_init)"]
     RST --> RD["read_file：整读 + CRLF 归一化 → g_src / g_len"]
     RD --> WG["write_guard(hpath) → .h 的 #ifndef/#define + banner，guard 存进 g_guard"]
     WG --> BN["向 .c 写 provenance banner（含 CTC_VERSION 与输入路径）"]
-    BN --> CR["compile_range(sym, 0, g_len)  1425 —— 唯一一趟扫描"]
+    BN --> CR["compile_range(sym, 0, g_len)  1495 —— 唯一一趟扫描"]
     CR --> J{"行首关键字？"}
-    J -->|trait| PT["parse_trait 1090<br/>→ .h: struct T_vtbl + struct T_iface"]
-    J -->|struct| PS["parse_struct 1177 → parse_fields<br/>→ .h: 限定类型后的 struct + __t_vptr 字段"]
-    J -->|impl| PI["parse_impl 1248<br/>→ .c: static 方法 + vtable 变量"]
-    J -->|namespace / import / pub| DIE["die: '%s' is not supported by this compiler"]
-    J -->|其它行| ERL["emit_raw_line 1390<br/>parse_func_sig 或 transform_line → 写 .c"]
+    J -->|trait| PT["parse_trait 1156<br/>→ .h: struct T_vtbl + struct T_iface"]
+    J -->|struct| PS["parse_struct 1245 → parse_fields<br/>→ .h: 限定类型后的 struct + __t_vptr 字段"]
+    J -->|impl| PI["parse_impl 1318<br/>→ .c: static 方法 + vtable 变量"]
+    J -->|namespace 前缀| NS["递归处理块体（前缀入 g_ns）<br/>→ 声明加前缀、块内名字前缀优先"]
+    J -->|import / pub| DIE["die: '%s' is not supported by this compiler"]
+    J -->|其它行| ERL["emit_raw_line 1460<br/>parse_func_sig 或 transform_line → 写 .c"]
     PT --> Q
     PS --> Q
     PI --> Q
+    NS --> Q
     ERL --> Q{"扫描结束"}
     Q -->|g_has_unit_init| UI["写 __ct_init（__attribute__((constructor))）<br/>内容取自 g_unit_init"]
     Q --> EF["向 .h 写 #endif · 关闭两个流 · return 0"]
@@ -267,16 +269,16 @@ flowchart TD
 <figure class="diagram">
 <pre class="mermaid">
 flowchart TD
-    IN["一行源文本（去掉行首缩进后）"] --> D1{"try_delete  2054"}
+    IN["一行源文本（去掉行首缩进后）"] --> D1{"try_delete  2178"}
     D1 -->|"delete p;"| O1["if (p) free(p);"]
-    D1 -->|未命中| D2{"try_return  1982"}
+    D1 -->|未命中| D2{"try_return  2106"}
     D2 -->|"return obj; 且当前函数返回接口"| O2["return 装箱(obj);"]
-    D2 -->|未命中| D3{"try_iface_assign  2007"}
+    D2 -->|未命中| D3{"try_iface_assign  2131"}
     D3 -->|"g = obj; 或 s.l = obj;"| O3["装箱进接口值 / 接口字段"]
-    D3 -->|未命中| D4{"try_var_decl  2109"}
+    D3 -->|未命中| D4{"try_var_decl  2233"}
     D4 -->|"S x; / S *p = malloc(); / S a[n]; / T v;"| O4["限定类型 + 补写 vptr"]
     D4 -->|未命中| O5["base = 原行"]
-    O4 --> TC["transform_calls  2378<br/>改写行内所有 recv.method(args)"]
+    O4 --> TC["transform_calls  2500<br/>改写行内所有 recv.method(args)"]
     O5 --> TC
     O1 --> OUT["返回改写后的行"]
     O2 --> OUT
@@ -291,11 +293,11 @@ flowchart TD
 <table>
 <thead><tr><th>识别器</th><th class="num">行</th><th>识别</th><th>产物</th></tr></thead>
 <tbody>
-  <tr><td><code>try_delete</code></td><td class="num">2054</td><td><code>delete id;</code>（单个标识符 + 裸 <code>;</code>）</td><td><code>if (id) free(id);</code>；若该名字已登记且<b>不是</b>指针，返回 NULL 交给用户</td></tr>
-  <tr><td><code>try_return</code></td><td class="num">1982</td><td><code>return expr;</code> 且 <code>g_cur_rettr &ge; 0</code></td><td><code>return 装箱(expr);</code>；已是接口形式则不动</td></tr>
-  <tr><td><code>try_iface_assign</code></td><td class="num">2007</td><td><code>g = expr;</code>（<code>g</code> 是接口值）或 <code>s.l = expr;</code>（字段链末端是接口字段）</td><td>右侧装箱；接口<b>指针</b>字段放弃（返回 NULL）</td></tr>
-  <tr><td><code>try_var_decl</code></td><td class="num">2109</td><td><code>Struct x</code> / <code>struct Struct x</code> / <code>Struct *p = malloc(..)</code> / <code>Struct a[n]</code> / <code>Trait v</code></td><td>类型限定为 <code>struct X</code>；登记变量；补 <code>.__shape_vptr = …</code>；数组/堆对象补逐元素/嵌套 vptr；<code>Trait v</code> 转交 <code>try_iface_decl</code></td></tr>
-  <tr><td><code>transform_calls</code></td><td class="num">2378</td><td>行内任意 <code>recv.method(args)</code></td><td>改写为 vtable 分发（见下一节）</td></tr>
+  <tr><td><code>try_delete</code></td><td class="num">2178</td><td><code>delete id;</code>（单个标识符 + 裸 <code>;</code>）</td><td><code>if (id) free(id);</code>；若该名字已登记且<b>不是</b>指针，返回 NULL 交给用户</td></tr>
+  <tr><td><code>try_return</code></td><td class="num">2106</td><td><code>return expr;</code> 且 <code>g_cur_rettr &ge; 0</code></td><td><code>return 装箱(expr);</code>；已是接口形式则不动</td></tr>
+  <tr><td><code>try_iface_assign</code></td><td class="num">2131</td><td><code>g = expr;</code>（<code>g</code> 是接口值）或 <code>s.l = expr;</code>（字段链末端是接口字段）</td><td>右侧装箱；接口<b>指针</b>字段放弃（返回 NULL）</td></tr>
+  <tr><td><code>try_var_decl</code></td><td class="num">2233</td><td><code>Struct x</code> / <code>struct Struct x</code> / <code>Struct *p = malloc(..)</code> / <code>Struct a[n]</code> / <code>Trait v</code> / <code>Ns::Struct x</code>（限定名走 <code>read_qual_ref</code>）</td><td>类型限定为 <code>struct X</code>；登记变量；补 <code>.__shape_vptr = …</code>；数组/堆对象补逐元素/嵌套 vptr；<code>Trait v</code> 转交 <code>try_iface_decl</code></td></tr>
+  <tr><td><code>transform_calls</code></td><td class="num">2500</td><td>行内任意 <code>recv.method(args)</code>，以及 <code>A::B::name</code> 限定引用</td><td>改写为 vtable 分发；限定引用折叠成 <code>A_B_name</code>（链尾跟 <code>(</code> 时丢路径）</td></tr>
 </tbody>
 </table>
 </div>
@@ -338,10 +340,10 @@ flowchart LR
 <table>
 <thead><tr><th>分支</th><th class="num">行</th><th>条件</th><th>动作</th></tr></thead>
 <tbody>
-  <tr><td><b>A</b> 接口值接收者</td><td class="num">2417</td><td><code>vi &ge; 0 &amp;&amp; vars[vi].iface &amp;&amp; s[j]=='.'</code>，且成员是该方法 trait 的方法</td><td>输出 <code>tok.vt-&gt;mem(tok.self, args)</code></td></tr>
-  <tr><td><b>B</b> rvalue 接收者</td><td class="num">2448</td><td><code>vi &lt; 0 &amp;&amp; s[j]=='('</code>，<code>find_func(tok).retstruct &ge; 0</code>，且随后确有方法调用</td><td>建 <code>__ct_tmp&lt;N&gt;</code> 声明写入 <code>g_hoist</code>；<b>位置校验</b>：必须在语句头或第一个 <code>=</code> 之后的初始化式首位，否则 <code>die</code>；接收者文本递归再过一遍 <code>transform_calls</code>（处理嵌套调用）</td></tr>
-  <tr><td><b>C</b> 接口实参</td><td class="num">2522</td><td>函数参数表里有 <code>ptrait &ge; 0</code></td><td>按顶层逗号切分实参，对应参数逐个 <code>box_to_iface</code>，其余原样</td></tr>
-  <tr><td><b>D</b> 变量接收者</td><td class="num">2571</td><td><code>vi &ge; 0</code></td><td>先消费可能的 <code>[...]</code>（数组元素，<code>isptr = arr &amp;&amp; ptr</code>），再 <code>walk_method</code> 沿字段链找方法 → 输出 <code>recv.__t_vptr-&gt;m(&amp;recv, args)</code>；未命中则试 <code>walk_to_iface_field</code>（接口字段分发）</td></tr>
+  <tr><td><b>A</b> 接口值接收者</td><td class="num">2585</td><td><code>vi &ge; 0 &amp;&amp; vars[vi].iface &amp;&amp; s[j]=='.'</code>，且成员是该方法 trait 的方法</td><td>输出 <code>tok.vt-&gt;mem(tok.self, args)</code></td></tr>
+  <tr><td><b>B</b> rvalue 接收者</td><td class="num">2616</td><td><code>vi &lt; 0 &amp;&amp; s[j]=='('</code>，<code>find_func(tok).retstruct &ge; 0</code>，且随后确有方法调用</td><td>建 <code>__ct_tmp&lt;N&gt;</code> 声明写入 <code>g_hoist</code>；<b>位置校验</b>：必须在语句头或第一个 <code>=</code> 之后的初始化式首位，否则 <code>die</code>；接收者文本递归再过一遍 <code>transform_calls</code>（处理嵌套调用）</td></tr>
+  <tr><td><b>C</b> 接口实参</td><td class="num">2690</td><td>函数参数表里有 <code>ptrait &ge; 0</code></td><td>按顶层逗号切分实参，对应参数逐个 <code>box_to_iface</code>，其余原样</td></tr>
+  <tr><td><b>D</b> 变量接收者</td><td class="num">2739</td><td><code>vi &ge; 0</code></td><td>先消费可能的 <code>[...]</code>（数组元素，<code>isptr = arr &amp;&amp; ptr</code>），再 <code>walk_method</code> 沿字段链找方法 → 输出 <code>recv.__t_vptr-&gt;m(&amp;recv, args)</code>；未命中则试 <code>walk_to_iface_field</code>（接口字段分发）</td></tr>
 </tbody>
 </table>
 </div>
@@ -352,7 +354,7 @@ flowchart LR
 </div>
 
 <h3>两个 walker</h3>
-<p><code>walk_method</code>（2688）与 <code>walk_to_iface_field</code>（2735）是同构的：从一个 struct 接收者出发，循环按 <code>isptr</code> 要求 <code>.</code> 或 <code>-&gt;</code>，读成员名；命中目标（方法 / 接口字段）就回填出参并返回 1，否则用 <code>find_field_ex</code> 往下一层走——<b>跨过指针字段时翻转 <code>isptr</code></b>，这决定了最终是取 <code>&amp;recv</code> 还是 <code>recv</code>、用 <code>.__</code> 还是 <code>-&gt;__</code>。</p>
+<p><code>walk_method</code>（2856）与 <code>walk_to_iface_field</code>（2903）是同构的：从一个 struct 接收者出发，循环按 <code>isptr</code> 要求 <code>.</code> 或 <code>-&gt;</code>，读成员名；命中目标（方法 / 接口字段）就回填出参并返回 1，否则用 <code>find_field_ex</code> 往下一层走——<b>跨过指针字段时翻转 <code>isptr</code></b>，这决定了最终是取 <code>&amp;recv</code> 还是 <code>recv</code>、用 <code>.__</code> 还是 <code>-&gt;__</code>。</p>
 <p>出参含义：<code>out_tr</code> 命中方法所属 trait；<code>out_cur</code> 最终接收者 struct 下标（rvalue 提升要写回）；<code>out_need_amp</code> = <code>!isptr</code>；<code>out_rend</code> 接收者文本结束位置；<code>mp</code> 实参左括号位置；<code>memb</code> 方法名。</p>
 
 <!-- ============================================================ -->
@@ -390,14 +392,15 @@ flowchart LR
 <thead><tr><th>全局</th><th class="num">行</th><th>作用</th></tr></thead>
 <tbody>
   <tr><td><code>g_src</code> / <code>g_len</code> / <code>g_path</code></td><td class="num">159</td><td>源文本、长度、输入路径（诊断前缀用）</td></tr>
-  <tr><td><code>g_scope[]</code> / <code>g_nscope</code></td><td class="num">166</td><td>花括号深度栈，存每个 <code>{</code> 处的变量数快照，用于回收局部变量</td></tr>
-  <tr><td><code>g_body_abs</code> / <code>g_body_pre</code></td><td class="num">167</td><td>函数体起点的绝对偏移 + 入口作用域快照</td></tr>
-  <tr><td><code>g_cur_rettr</code></td><td class="num">169</td><td>当前函数的返回 trait（<code>-1</code> 非接口）；<code>try_return</code> 靠它决定是否装箱</td></tr>
-  <tr><td><code>g_guard[]</code></td><td class="num">171</td><td>.h 的 include guard 宏名，收尾写 <code>#endif</code> 要用</td></tr>
-  <tr><td><code>g_line_off</code></td><td class="num">172</td><td>当前行的源内偏移，供行级重写算出正确位置</td></tr>
-  <tr><td><code>g_unit_init</code> / <code>g_has_unit_init</code></td><td class="num">177</td><td>文件作用域对象的 vptr 写入语句，末尾合成 <code>__ct_init</code></td></tr>
-  <tr><td><code>g_hoist</code> / <code>g_ntmp</code></td><td class="num">183</td><td>rvalue 接收者临时量的声明缓冲 + 命名计数器</td></tr>
-  <tr><td><code>g_sym</code> / <code>g_pipe</code></td><td class="num">464 / 2959</td><td>两个对象实例：符号表与管线（方法经 <code>g_sym.find_*()</code> / <code>g_pipe.*()</code> 分发）</td></tr>
+  <tr><td><code>g_ns</code></td><td class="num">165</td><td>当前命名空间前缀（<code>A_B_</code>；顶层为 <code>""</code>）——声明加前缀、块内查找前缀优先</td></tr>
+  <tr><td><code>g_scope[]</code> / <code>g_nscope</code></td><td class="num">170</td><td>花括号深度栈，存每个 <code>{</code> 处的变量数快照，用于回收局部变量</td></tr>
+  <tr><td><code>g_body_abs</code> / <code>g_body_pre</code></td><td class="num">171</td><td>函数体起点的绝对偏移 + 入口作用域快照</td></tr>
+  <tr><td><code>g_cur_rettr</code></td><td class="num">173</td><td>当前函数的返回 trait（<code>-1</code> 非接口）；<code>try_return</code> 靠它决定是否装箱</td></tr>
+  <tr><td><code>g_guard[]</code></td><td class="num">175</td><td>.h 的 include guard 宏名，收尾写 <code>#endif</code> 要用</td></tr>
+  <tr><td><code>g_line_off</code></td><td class="num">176</td><td>当前行的源内偏移，供行级重写算出正确位置</td></tr>
+  <tr><td><code>g_unit_init</code> / <code>g_has_unit_init</code></td><td class="num">181</td><td>文件作用域对象的 vptr 写入语句，末尾合成 <code>__ct_init</code></td></tr>
+  <tr><td><code>g_hoist</code> / <code>g_ntmp</code></td><td class="num">187</td><td>rvalue 接收者临时量的声明缓冲 + 命名计数器</td></tr>
+  <tr><td><code>g_sym</code> / <code>g_pipe</code></td><td class="num">483 / 3127</td><td>两个对象实例：符号表与管线（方法经 <code>g_sym.find_*()</code> / <code>g_pipe.*()</code> 分发）</td></tr>
 </tbody>
 </table>
 </div>
@@ -433,8 +436,8 @@ flowchart TD
 
 <h3>方法体里的两条行级特例</h3>
 <ul>
-  <li><code>replace_self</code>（1802）：把 <code>self</code> 改写为 <code>_self</code>——只在 <code>self</code> 是完整单词、且前一字符不是 <code>.</code> 或 <code>-&gt;</code> 时替换。所以 <code>g.self</code>、字符串里的 <code>"self"</code>、注释里的 self 都不动。</li>
-  <li><code>scope_track</code>（2794）：扫本行的 <code>{</code>/<code>}</code> 压弹 <code>g_scope[]</code> 并回滚 <code>sym-&gt;nvars</code>，让局部变量只在自己的作用域可见；函数体入口那个 <code>{</code> 用 <code>g_body_pre</code> 快照对齐。</li>
+  <li><code>replace_self</code>（1926）：把 <code>self</code> 改写为 <code>_self</code>——只在 <code>self</code> 是完整单词、且前一字符不是 <code>.</code> 或 <code>-&gt;</code> 时替换。所以 <code>g.self</code>、字符串里的 <code>"self"</code>、注释里的 self 都不动。</li>
+  <li><code>scope_track</code>（2962）：扫本行的 <code>{</code>/<code>}</code> 压弹 <code>g_scope[]</code> 并回滚 <code>sym-&gt;nvars</code>，让局部变量只在自己的作用域可见；函数体入口那个 <code>{</code> 用 <code>g_body_pre</code> 快照对齐。</li>
 </ul>
 
 <!-- ============================================================ -->
@@ -527,25 +530,25 @@ flowchart TD
 
 <p>全文<b>只有</b> <code>die(pos, fmt, ...)</code> 一个报错口（设施层，208 行）：由偏移换算出 <code>文件:行:列: error: 描述</code>，随即 <code>exit(1)</code>。<b>不做错误恢复</b>——第一个错误就终止。唯一例外是 <code>read_file</code> 的 I/O 失败走 <code>fprintf + exit(1)</code>。</p>
 
-<p class="sub">下表是<b>代表行，非穷举</b>：全文共 <b>64</b> 处 <code>die(</code>（含 1 处函数定义，即 63 个调用点），分布为设施层/谓词区 5 · <code>PipeOps</code> 38 · <code>RewriteOps</code> 20。</p>
+<p class="sub">下表是<b>代表行，非穷举</b>：全文共 <b>71</b> 处 <code>die(</code>（含 1 处函数定义，即 70 个调用点），分布为设施层 4 · <code>PipeOps</code> 45 · <code>RewriteOps</code> 20（余 2 处在 trait 声明区）。</p>
 
 <div class="tbl-wrap">
 <table>
 <thead><tr><th>类别</th><th>典型触发</th><th>代表行</th></tr></thead>
 <tbody>
-  <tr><td><b>容量超限</b></td><td>超出任一 <code>MAX_*</code>：trait/struct/方法/字段/参数/变量/函数数；嵌套路径过长</td><td class="num">1107 · 1161 · 1194 · 1215 · 1300 · 1306 · 2223 · 2813 · 2931 · 2940</td></tr>
-  <tr><td><b>语法缺漏</b></td><td>缺名字、缺 <code>{</code>/<code>}</code>/<code>(</code>/<code>)</code>/<code>;</code>、缺 <code>for</code>、缺返回类型、声明后有残留字符</td><td class="num">1099 · 1101 · 1186 · 1188 · 1222 · 1259–1266 · 1290 · 1298 · 1314</td></tr>
-  <tr><td><b>语义引用</b></td><td><code>use</code> 未定义 trait、impl 未定义 trait/struct、struct 没 use 该 trait、方法未声明 / 未实现</td><td class="num">1233 · 1271 · 1273 · 1275 · 1332 · 1353</td></tr>
-  <tr><td><b>接口装箱</b></td><td>待装箱表达式为空/不可推断/是别的 trait；变量未登记；对接口值再取 <code>&amp;</code>；struct 未 use 该 trait</td><td class="num">1856–1898</td></tr>
-  <tr><td><b>位置限制</b></td><td>rvalue 接收者既不在语句头也不在初始化式首位</td><td class="num">2473</td></tr>
-  <tr><td><b>明确不支持</b></td><td>行首出现 <code>namespace</code> / <code>import</code> / <code>pub</code></td><td class="num">1445</td></tr>
+  <tr><td><b>容量超限</b></td><td>超出任一 <code>MAX_*</code>：trait/struct/方法/字段/参数/变量/函数数；嵌套路径或命名空间路径过长</td><td class="num">1173 · 1229 · 1262 · 1285 · 1370 · 1376 · 1561 · 1582 · 2345 · 2981 · 3094 · 3099 · 3108</td></tr>
+  <tr><td><b>语法缺漏</b></td><td>缺名字、缺 <code>{</code>/<code>}</code>/<code>(</code>/<code>)</code>/<code>;</code>、缺 <code>for</code>、缺返回类型、声明后有残留字符、<code>::</code> 后缺名字</td><td class="num">1125 · 1132 · 1136 · 1140 · 1152 · 1165 · 1167 · 1254 · 1256 · 1292 · 1329–1336 · 1360 · 1368 · 1384 · 1558</td></tr>
+  <tr><td><b>语义引用</b></td><td><code>use</code> 未定义 trait、impl 未定义 trait/struct、struct 没 use 该 trait、方法未声明 / 未实现</td><td class="num">1303 · 1341 · 1343 · 1345 · 1402 · 1423</td></tr>
+  <tr><td><b>接口装箱</b></td><td>待装箱表达式为空/不可推断/是别的 trait；变量未登记；对接口值再取 <code>&amp;</code>；struct 未 use 该 trait</td><td class="num">1980–2022</td></tr>
+  <tr><td><b>位置限制</b></td><td>rvalue 接收者既不在语句头也不在初始化式首位</td><td class="num">2641</td></tr>
+  <tr><td><b>明确不支持</b></td><td>行首出现 <code>import</code> / <code>pub</code>（<code>namespace</code> 已于 Phase 2 切片 2b 落地）</td><td class="num">1516</td></tr>
 </tbody>
 </table>
 </div>
 
 <div class="callout warn">
   <span class="lbl">这些「不支持」是刻意的</span>
-  <code>namespace</code>/<code>import</code>/<code>pub</code>（模块系统）、<code>#line</code>、诊断、Drop 都属 Phase 2–5 —— 要么用 CT 侧重做，要么已被归档为 oracle。<code>ctc.c</code> 冻结期不得在 C 侧加回。L1 对它们<b>报错而不是硬编</b>。
+  <code>import</code> / <code>pub</code>（模块系统的其余部分）、<code>#line</code>、诊断、Drop 都属 Phase 2–5 —— 要么用 CT 侧重做，要么已被归档为 oracle。<code>ctc.c</code> 冻结期不得在 C 侧加回。本编译器对它们<b>报错而不是硬编</b>。（<code>namespace</code> 已于 Phase 2 切片 2b 落地，见 roadmap。）
 </div>
 
 <h3>其他已知边界</h3>
@@ -563,18 +566,18 @@ flowchart TD
 
 <ol>
   <li><b>&nbsp;1–64 行</b> — 头注释。作者自己的能力清单与 OO 结构说明，读完就有地图。</li>
-  <li><b>72–153 行</b> — 常量与数据模型。看懂 <code>Struct</code> 的四张字段表和 <code>Var</code> 六个字段。</li>
-  <li><b>631–690 行</b> — 两个管线 trait 的声明 + <code>struct Pipe</code>。39 个方法签名（另加符号表层 <code>SymTabOps</code> 的 8 个，全文共 47 个）。</li>
-  <li><b>3010–3041 行</b> — <code>main</code>。32 行，看它怎么落到一次 <code>compile_file</code>。</li>
-  <li><b>1580–1629 行</b> — <code>compile_file</code>。重置 → 读文件 → 开流 → guard/banner → 扫描 → 构造器 → 收尾。</li>
-  <li><b>1425–1475 行</b> — <code>compile_range</code>。单趟扫描与四种分派（含「不支持」的报错）。</li>
-  <li><b>1390–1422 行</b> — <code>emit_raw_line</code>。每行如何进 <code>parse_func_sig</code> 或 <code>transform_line</code>。</li>
-  <li><b>2084–2106 行</b> — <code>transform_line</code>。四识别器的优先级链。</li>
-  <li><b>2378–2680 行</b> — <code>transform_calls</code>。最长的核心扫描器，配合 A/B/C/D 四分支读。</li>
-  <li><b>2688–2770 行</b> — 两个 walker。接收者沿字段链行走的规则。</li>
+  <li><b>72–189 行</b> — 常量与数据模型。看懂 <code>Struct</code> 的四张字段表和 <code>Var</code> 六个字段。</li>
+  <li><b>640–721 行</b> — 两个管线 trait 的声明 + <code>struct Pipe</code>。40 个方法签名（另加符号表层 <code>SymTabOps</code> 的 8 个，全文共 48 个）。</li>
+  <li><b>3176–3209 行</b> — <code>main</code>。32 行，看它怎么落到一次 <code>compile_file</code>。</li>
+  <li><b>1704–1757 行</b> — <code>compile_file</code>。重置 → 读文件 → 开流 → guard/banner → 扫描 → 构造器 → 收尾。</li>
+  <li><b>1495–1600 行</b> — <code>compile_range</code>。单趟扫描与五种分派（trait / struct / impl / namespace / 普通行，含「不支持」的报错）。</li>
+  <li><b>1460–1493 行</b> — <code>emit_raw_line</code>。每行如何进 <code>parse_func_sig</code> 或 <code>transform_line</code>。</li>
+  <li><b>2208–2231 行</b> — <code>transform_line</code>。四识别器的优先级链。</li>
+  <li><b>2500–2854 行</b> — <code>transform_calls</code>。最长的核心扫描器，配合 A/B/C/D 四分支与 <code>::</code> 链重写读。</li>
+  <li><b>2856–2960 行</b> — 两个 walker。接收者沿字段链行走的规则。</li>
 </ol>
 
-<p>之后再按需展开：<code>parse_trait</code>(1090) / <code>parse_struct</code>(1177) / <code>parse_impl</code>(1248)、<code>try_var_decl</code>(2109)、<code>box_to_iface</code>(1846)、<code>parse_func_sig</code>(2826)。</p>
+<p>之后再按需展开：<code>parse_trait</code>(1156) / <code>parse_struct</code>(1245) / <code>parse_impl</code>(1318)、<code>read_qual_ref</code>(883)、<code>try_var_decl</code>(2233)、<code>box_to_iface</code>(1970)、<code>parse_func_sig</code>(2994)。</p>
 
 <div class="callout ok">
   <span class="lbl">配合跑一遍</span>
@@ -637,7 +640,7 @@ flowchart LR
 <ul>
   <li><code>test/cases/**</code> 全量 <b>25/25 逐字节一致</b>，0 regression。</li>
   <li><b>L1 能编译自身</b> → L1′，零警告构建，重跑语料仍 25/25 一致。</li>
-  <li>本次分析基于 3041 行源码的静态通读；<code>ctc.c</code> 在 Phase 1 期间<b>未改动</b>（冻结期仅 <code>1bdb93b</code> 一次 bug 修复）。</li>
+  <li>本次分析基于 <b>3209</b> 行源码（<code>selfhost/ctc.ct @ 5d5fbfb</code>）的静态通读；<code>ctc.c</code> 在 Phase 1 期间<b>未改动</b>（冻结期仅 <code>1bdb93b</code> 一次 bug 修复）。</li>
 </ul>
 
 <!-- ============================================================ -->
@@ -646,21 +649,21 @@ flowchart LR
 <p>本报告只分析 <code>selfhost/ctc.ct</code>。以下内容<b>不在</b>范围内，列出来避免误以为已覆盖：</p>
 <ul>
   <li><b>L0 的实现</b>（<code>ctc.c</code>，冻结的 C 版）：只在 §12 谈它与 L1 的关系，不分析其内部结构。</li>
-  <li><b>自举之后的能力</b>：<code>namespace</code> / <code>import</code> / <code>pub</code> / <code>#line</code> / 诊断 / Drop / AutoDrop —— 报告中只标到「L1 会 <code>die</code>」这一层，不涉及它们将来怎么用 CT 实现。</li>
-  <li><b>未支持构造的判定细节</b>：§09 只给类别与代表行，未逐条展开 63 个 <code>die</code> 调用点的条件。</li>
+  <li><b>尚待用 CT 重做的能力</b>：<code>import</code> / <code>pub</code>（多文件）、<code>#line</code> / 诊断 / Drop / AutoDrop —— 报告中只标到「本编译器会 <code>die</code>」这一层，不涉及它们将来怎么用 CT 实现。（<code>namespace</code> 已于 Phase 2 切片 2b 落地。）</li>
+  <li><b>未支持构造的判定细节</b>：§09 只给类别与代表行，未逐条展开 70 个 <code>die</code> 调用点的条件。</li>
   <li><b>产物语义</b>：报告讲「生成什么」，不讲生成物跑起来是什么行为——后者由 <code>test/cases/**</code> 的 <code>.expected.out</code> 与 <code>examples/**</code> 保证。</li>
   <li><b>性能与复杂度</b>：全文是偏移量线性扫描 + 符号表线性查找，本报告未做复杂度分析。</li>
 </ul>
-<p class="sub">时效性：所有行号是 <code>selfhost/ctc.ct @ 51e1e25</code> 的快照（与首次分析时的 <code>7c0cb46</code> 相比只动了头部注释，行号未变）。此后任何改动 <code>ctc.ct</code> 的提交都可能让部分行号失效，复核时以源码为准。</p>
+<p class="sub">时效性：所有行号是 <code>selfhost/ctc.ct @ 5d5fbfb</code>（3209 行）的快照，已随 Phase 2 切片 2b（namespace 支持）重新核对过。此后任何改动 <code>ctc.ct</code> 的提交都可能让部分行号失效，复核时以源码为准（<code>grep -n</code> 符号名即可）。</p>
 
 <hr class="soft">
 <p class="sub">
-  报告范围：<code>selfhost/ctc.ct</code>（3041 行，含头注释与 <code>main</code>）的全部结构、数据流与错误路径。
+  报告范围：<code>selfhost/ctc.ct</code>（3209 行，含头注释与 <code>main</code>）的全部结构、数据流与错误路径。
   生成方式：静态分析 + 分层并行通读；所有行号可直接在源码中定位。图表由 mermaid 在本地渲染（<code>_shared/js/mermaid.min.js</code>），无外部依赖。
 </p>
 
 <footer>
-  ctc.ct 代码分析报告 · L1 自举编译器 · v0.0.1 · 分析锚点 <code>selfhost/ctc.ct @ 51e1e25</code>（3041 行）· 与 <code>selfhost/check-goldens.sh</code> 的出口一致
+  ctc.ct 代码分析报告 · L1 自举编译器 · v0.0.1 · 分析锚点 <code>selfhost/ctc.ct @ 5d5fbfb</code>（3209 行）· 与 <code>selfhost/check-goldens.sh</code> / <code>check-archive.sh</code> 的出口一致
 </footer>
 
 </article>
