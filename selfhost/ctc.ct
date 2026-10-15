@@ -159,6 +159,10 @@ typedef struct { char *p; size_t n, cap; } Buf;
 static const char *g_src  = NULL;
 static size_t      g_len  = 0;
 static const char *g_path = "<input>";
+/* The namespace prefix in force while a `namespace A::B { ... }` body is
+   processed ("" at top level). A name declared inside gets it prefixed into its
+   C name; lookups try the prefixed form first and fall back to the root. */
+static char g_ns[MAX_NAME];
 
 /* the output streams live inside `g_pipe` and the four symbol tables inside
    `g_sym` (see the construct-parser and symbol-table sections) */
@@ -403,12 +407,27 @@ struct SymTab {
 impl SymTabOps for SymTab {
     Trait *find_trait(const char *name) {
         int i;
+        char q[MAX_NAME * 2];
+        /* an unqualified name inside a namespace resolves there first, then at
+           the root; comparison is on the mangled C name, so "" (top level)
+           collapses the two passes into one */
+        if (g_ns[0]) {
+            snprintf(q, sizeof q, "%s%s", g_ns, name);
+            for (i = 0; i < self->ntraits; i++)
+                if (strcmp(self->traits[i].cname, q) == 0) return &self->traits[i];
+        }
         for (i = 0; i < self->ntraits; i++)
             if (strcmp(self->traits[i].cname, name) == 0) return &self->traits[i];
         return NULL;
     }
     Struct *find_struct(const char *name) {
         int i;
+        char q[MAX_NAME * 2];
+        if (g_ns[0]) {
+            snprintf(q, sizeof q, "%s%s", g_ns, name);
+            for (i = 0; i < self->nstructs; i++)
+                if (strcmp(self->structs[i].cname, q) == 0) return &self->structs[i];
+        }
         for (i = 0; i < self->nstructs; i++)
             if (strcmp(self->structs[i].cname, name) == 0) return &self->structs[i];
         return NULL;
@@ -645,6 +664,12 @@ trait PipeOps {
     /* declaration-piece helpers, shared by parse_fields and parse_func_sig */
     int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr);
     void emit_qualified_type(Buf *b, const char *piece, size_t len, int ia, int ib, const char *cbase, int need_struct, int is_trait);
+    /* Read `Ident(::Ident)*` at p -- the head of a declaration. `cname` gets the
+       mangled C name (a qualified path `A::B::Name` becomes `A_B_Name`; an
+       unqualified one gets the enclosing namespace prefix), `shortname` its last
+       segment. Returns the position just past the name, or NULL when there is
+       none. */
+    const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified);
     char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos);
     void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
     void register_body_params(struct SymTab *sym, const char *params);
@@ -855,6 +880,47 @@ impl PipeOps for Pipe {
        (`*tr`), the identifier span [*ia,*ib) of the base type name, its
        generated spelling (`cbase`), whether "struct " must be inserted, the
        declared name ("" when unnamed) and whether it is a pointer. */
+    const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified) {
+        char buf[MAX_NAME * 2], seg[MAX_NAME];
+        size_t i;
+
+        (void)self;  /* a pure string helper; the receiver is not used */
+        *qualified = 0;
+        for (i = 0; is_ident_char((unsigned char)p[i]); i++)
+            if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
+        if (i == 0) return NULL;
+        memcpy(seg, p, i);
+        seg[i] = 0;
+        snprintf(buf, sizeof buf, "%s", seg);
+        p += i;
+
+        for (;;) {
+            const char *z = p;
+            while (*z == ' ' || *z == '\t') z++;
+            if (z[0] == ':' && z[1] == ':') {
+                char tmp[MAX_NAME * 2];
+                z += 2;
+                while (*z == ' ' || *z == '\t') z++;
+                for (i = 0; is_ident_char((unsigned char)z[i]); i++)
+                    if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
+                if (i == 0) return NULL;
+                memcpy(seg, z, i);
+                seg[i] = 0;
+                if (snprintf(tmp, sizeof tmp, "%s_%s", buf, seg) >= (int)sizeof tmp) return NULL;
+                snprintf(buf, sizeof buf, "%s", tmp);
+                *qualified = 1;
+                p = z + i;
+                continue;
+            }
+            break;
+        }
+
+        snprintf(shortname, MAX_NAME, "%s", seg);
+        if (*qualified) snprintf(cname, MAX_NAME, "%s", buf);
+        else snprintf(cname, MAX_NAME, "%s%s", g_ns, buf);
+        return p;
+    }
+
     int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr) {
         size_t a, b, lim = 0, tn, ea, eb;
         char type[MAX_NAME * 2], base[MAX_NAME];
@@ -1107,7 +1173,9 @@ impl PipeOps for Pipe {
         if (sym->ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
         T = &sym->traits[sym->ntraits++];
         snprintf(T->name, sizeof T->name, "%s", name);
-        snprintf(T->cname, sizeof T->cname, "%s", name);
+        if (strlen(g_ns) + strlen(name) >= sizeof T->cname)
+            die(p, "namespace-qualified name too long");
+        snprintf(T->cname, sizeof T->cname, "%s%s", g_ns, name);
         T->nm = 0;
 
         buf_init(&raw);
@@ -1194,7 +1262,9 @@ impl PipeOps for Pipe {
         if (sym->nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
         S = &sym->structs[sym->nstructs++];
         snprintf(S->name, sizeof S->name, "%s", name);
-        snprintf(S->cname, sizeof S->cname, "%s", name);
+        if (strlen(g_ns) + strlen(name) >= sizeof S->cname)
+            die(p, "namespace-qualified name too long");
+        snprintf(S->cname, sizeof S->cname, "%s%s", g_ns, name);
         S->nu = 0;
 
         q = close + 1;
@@ -1431,12 +1501,13 @@ impl PipeOps for Pipe {
             q = ls;
             while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
 
-            /* the module system lives in the CT layer; passing these through would
-               silently emit C that cannot compile, so fail loudly instead. */
+            /* `import` / `pub` are still to be redone in the CT layer, so passing
+               them through would silently emit C that cannot compile: fail
+               loudly instead. (`namespace` is handled just below.) */
             {
-                static const char *const gone[] = { "namespace", "import", "pub" };
+                static const char *const gone[] = { "import", "pub" };
                 int gi;
-                for (gi = 0; gi < 3; gi++) {
+                for (gi = 0; gi < 2; gi++) {
                     char nm[MAX_NAME];
                     size_t t;
                     if (!word_at(q, gone[gi])) continue;
@@ -1463,6 +1534,59 @@ impl PipeOps for Pipe {
                 if (nm[0]) {
                     t = skip_ws_comments(t);
                     if (t < g_len && g_src[t] == '{') { pos = self->parse_struct(sym, q); continue; }
+                }
+            }
+
+            if (word_at(q, "namespace")) {
+                /* namespace A::B::C { ... } mangles every enclosed declaration
+                   with the prefix "A_B_C_" and resolves unqualified names there
+                   first. The braces themselves are consumed, never emitted. Only
+                   a complete header is a construct; anything else falls through
+                   as a plain line. */
+                size_t t = skip_ws_comments(q + 9);
+                char pre[MAX_NAME], seg[MAX_NAME], saved[MAX_NAME], open[MAX_NAME * 2];
+                size_t pl = 0, close = 0;
+                int nseg = 0, ok = 1;
+
+                pre[0] = 0;
+                for (;;) {
+                    size_t sl;
+
+                    t = read_ident(t, seg, sizeof seg);
+                    if (!seg[0]) {
+                        if (nseg == 0) { ok = 0; break; }
+                        die(t, "expected a name after '::' in namespace");
+                    }
+                    sl = strlen(seg);
+                    if (nseg && pl + sl + 2 >= sizeof pre) die(t, "namespace path too long");
+                    if (nseg) pre[pl++] = '_';
+                    memcpy(pre + pl, seg, sl);
+                    pl += sl;
+                    pre[pl] = 0;
+                    nseg++;
+                    t = skip_ws_comments(t);
+                    if (t + 1 < g_len && g_src[t] == ':' && g_src[t + 1] == ':') {
+                        t = skip_ws_comments(t + 2);
+                        continue;
+                    }
+                    break;
+                }
+
+                if (ok && t < g_len && g_src[t] == '{') {
+                    close = match_delim(t, '{', '}');
+
+                    snprintf(saved, sizeof saved, "%s", g_ns);
+                    /* compare against g_ns's own capacity: truncating the prefix
+                       would silently mangle every name inside */
+                    if (snprintf(open, sizeof open, "%s%s_", g_ns, pre) >= (int)sizeof g_ns)
+                        die(t, "namespace path too long");
+                    snprintf(g_ns, sizeof g_ns, "%s", open);
+
+                    self->compile_range(sym, t + 1, close);
+
+                    snprintf(g_ns, sizeof g_ns, "%s", saved);
+                    pos = close + 1;
+                    continue;
                 }
             }
 
@@ -2107,11 +2231,11 @@ impl RewriteOps for Pipe {
 
     /* "<Struct> x = {...};" / "struct <Struct> x = {...};" -> add struct + vptr */
     char *try_var_decl(struct SymTab *sym, const char *line) {
-        size_t i = 0, ws, vk, nk;
+        size_t i = 0, ws, vk;
         const char *p;
-        char name[MAX_NAME], var[MAX_NAME];
+        char cname[MAX_NAME * 2], name[MAX_NAME], var[MAX_NAME];
         Struct *S;
-        int done = 0, static_kw = 0;
+        int done = 0, static_kw = 0, qual = 0;
         const char *rest;
         Buf b;
 
@@ -2133,14 +2257,12 @@ impl RewriteOps for Pipe {
             while (*p == ' ' || *p == '\t') p++;
         }
 
-        nk = copy_ident(p, name, 0);
-        name[nk] = 0;
-        if (!nk) return NULL;
-        p += nk;
-        S = sym->find_struct(name);
+        p = self->read_qual_ref(p, cname, name, &qual);
+        if (!p) return NULL;
+        S = sym->find_struct(qual ? cname : name);
         if (!S) {
             /* the type names a trait, not a struct: an interface value */
-            Trait *TR = sym->find_trait(name);
+            Trait *TR = sym->find_trait(qual ? cname : name);
             if (!TR) return NULL;
             return self->try_iface_decl(sym, line, (int)(TR - sym->traits), ws, p);
         }
@@ -2409,6 +2531,52 @@ impl RewriteOps for Pipe {
                 if (tl >= sizeof tok) tl = sizeof tok - 1;
                 memcpy(tok, s + i, tl);
                 tok[tl] = 0;
+
+                /* namespace path `A::B::name`: a call drops the path (functions
+                   are not mangled), anything else becomes the C name
+                   `A_B_name`. Like the block-comment scan, this runs on every
+                   line -- including a comment's continuation line. */
+                if (j + 1 < n && s[j] == ':' && s[j + 1] == ':') {
+                    size_t z = j, finalstart = i, chainend = j;
+                    int ok = 0;
+                    while (z + 1 < n && s[z] == ':' && s[z + 1] == ':') {
+                        size_t w = z + 2;
+                        while (w < n && isspace((unsigned char)s[w])) w++;
+                        if (!(w < n && is_ident_char((unsigned char)s[w]) &&
+                              !isdigit((unsigned char)s[w]))) break;
+                        finalstart = w;
+                        while (w < n && is_ident_char((unsigned char)s[w])) w++;
+                        chainend = w;
+                        ok = 1;
+                        z = w;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                    }
+                    if (ok) {
+                        if (chainend < n && s[chainend] == '(') {
+                            i = finalstart;
+                        } else {
+                            char mc[MAX_NAME * 2];
+                            size_t w2 = i, k2 = 0;
+                            while (w2 < chainend) {
+                                char cc = s[w2];
+                                if (cc == ':') {
+                                    if (k2 + 1 < sizeof mc) mc[k2++] = '_';
+                                    w2++;
+                                    if (w2 < chainend && s[w2] == ':') w2++;
+                                } else if (isspace((unsigned char)cc)) {
+                                    w2++;
+                                } else {
+                                    if (k2 + 1 < sizeof mc) mc[k2++] = cc;
+                                    w2++;
+                                }
+                            }
+                            mc[k2] = 0;
+                            buf_puts(out, mc);
+                            i = chainend;
+                        }
+                        continue;
+                    }
+                }
 
                 vi = sym->find_var(tok);
 
