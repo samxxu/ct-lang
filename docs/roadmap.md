@@ -230,7 +230,7 @@ map trait Controller for instance huart1 {
 > **首版（Phase 1.7，用户 2026-10-13 拍板 Q1=A）**：`--diagnostics=json` **只输出诊断列表**（`{"warnings":[…]}`），
 > 符号表与调用图**尚未实现**，另开子项。`--diagnostics=text`（默认）为人可读 stderr。
 
-#### 自举策略与单文件边界（已定；`ctc.c` 自举启动即冻结，目录随自举落地）
+#### 自举策略与单文件边界（已定；`ctc.c` 自举启动即冻结，目录随布局定型落地）
 
 - **渐进自举**：L0（C 写的最简 trait 编译器，即今天的 `ctc.c`）→ L1（CT trait-only 子集写的基础编译器）→ L2（全特性 CT 写的完整编译器）。
 - **Phase 0 边界**：`ctc.c` 留在仓库根目录、保持单文件（2026-10-11 用户确认）；不建 `src/`、不拆分。自举启动后才谈搬迁。
@@ -239,7 +239,7 @@ map trait Controller for instance huart1 {
   既写不了 vptr 也无法派发）。单文件路径的唯一硬阻塞是「`impl` 方法体内无法跨对象派发」，已由
   **Phase 1.9c** 解决（方法体走与顶层完全相同的重写管线：登记 `self` / 方法参数后逐行 `transform_line`）。
   结论：**单文件 + 完全 OO 已可自举**——namespace、多文件、诊断等非 OO 特性**不作为自举前提**，一律改用 CT 实现；C 侧的越位实现**先剥除归档（Phase 0.3）**，再由 Phase 2 用 CT 重做。
-- **冻结与搬迁**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）；移入 `ctrait/` 随自举结构稳定时一并做。新特性一律在 CT 侧实现。
+- **冻结与搬迁**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）；移入 `ctrait/` 随自举结构稳定时一并做——**2026-10-15 用户确认：CT 侧布局定型前不搬**，`ctc.c` 继续留在仓库根目录。理由：这次搬迁并非单文件 `git mv`——草案里 `ctrait/` = 「`ctc.c` + 它自己的 `test/`」，隐含「把今天的 `test/` 拆成 L0 单测 vs 集成测试」这一设计任务；而 L1/L2 的 `src/` 分文件又依赖 L2 恢复多文件。故搬迁与 `src/` + `test/` 布局定型合并为**一次**独立 `chore` 提交，不做半次搬迁（见 [design/bootstrap.md](design/bootstrap.md)）。新特性一律在 CT 侧实现。
 - **清理口径（2026-10-14 修订为「剥离在前」）**：**先**把越位落在 C 里的 namespace / 多文件 / import / Drop / `#line` / 诊断从 `ctc.c` **移出并归档为 oracle**（Phase 0.3），使 L0 成为**纯 OO 核心**（+底层设施）；**再**自举（Phase 1）；**最后**由 Phase 2 用 CT 逐项重做并向归档对差。两条硬前提：① **移出件不销毁**——归档件既是种子（唯一能生产 L1 的那个行为基准）也是差分 oracle（唯一能产出 byte-identical golden 的对照实现）；② **`ctc.c` 永不整体删除**，作为种子与差分 oracle 长期保留（先例：Rust 长期保留 stage0，Go 1.5 起弃用 stage0，两者皆可）。
 - **阶梯约束（源语言滞后一级）**：第 n 级编译器只能编译「第 n−1 级所支持的语法子集」写成的源码。因此 L1 源码只能用**单文件 + OO 子集**；CT 侧要**使用** namespace / Drop / import 组织编译器源码，必须先有支持它们的 CT 级编译器。**"重写完就删 C"顺序错**，必须逐级爬升。
 - **单仓库**：跨层编译与特性耦合决定了不拆仓库；`ctrait/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
@@ -897,7 +897,7 @@ compilation or analysis of its own, so compiler upgrades never require extension
 > **diagnostic list only** (`{"warnings":[…]}`); the symbol table and call graph are **not implemented
 > yet** and are separate sub-items. `--diagnostics=text` (the default) is human-readable stderr.
 
-#### Bootstrap strategy and the single-file boundary (decided; `ctc.c` freezes when self-hosting starts, the layout lands with it)
+#### Bootstrap strategy and the single-file boundary (decided; `ctc.c` freezes when self-hosting starts, the layout lands once it settles)
 
 - **Progressive self-hosting**: L0 (the minimal trait compiler in C — today's `ctc.c`) → L1 (a base
   compiler written in the CT trait-only subset) → L2 (the full compiler written in full-featured CT).
@@ -915,7 +915,13 @@ compilation or analysis of its own, so compiler upgrades never require extension
   side over-reach is **stripped and archived first (Phase 0.3)** and redone in CT in Phase 2.
 - **Freezing and moving**: **once Phase 0.3's strip is done (i.e. when self-hosting starts)**,
   `ctc.c` freezes as **L0 + the differential oracle** (bug fixes only, no new features); moving it into
-  `ctrait/` happens once the self-hosting layout settles. New features are written in CT from then on.
+  `ctrait/` happens once the self-hosting layout settles — **confirmed by the user on 2026-10-15: do
+  not move before the CT-side layout settles**, so `ctc.c` stays at the repository root for now. The
+  reason is that this is not a single-file `git mv`: in the draft `ctrait/` = "`ctc.c` + its own
+  `test/`", which implies the design task of splitting today's `test/` into L0 unit tests vs
+  integration tests; and the L1/L2 `src/` split depends on L2 restoring multi-file. So the move is
+  merged with the `src/` + `test/` layout work into **one** `chore` commit rather than done half-way
+  (see [design/bootstrap.md](design/bootstrap.md)). New features are written in CT from then on.
 - **Cleanup scope (revised 2026-10-14 to "strip first")**: **first** move the namespace / multi-file /
   import / Drop / `#line` / diagnostics implementations that over-reached into C **out of `ctc.c` and
   into the archive as the oracle** (Phase 0.3), so L0 becomes the **pure-OO core** (+ low-level

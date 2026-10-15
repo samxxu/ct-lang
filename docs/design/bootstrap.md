@@ -4,7 +4,7 @@
 >
 > **状态：设计草案，当前未实现。** 本文描述的目录结构与构建流程都还不存在；
 > 今天的编译器是仓库根目录的单文件 [ctc.c](../ctc.c)。
-> 落地触发条件：**Phase 0.3（剥离越位特性）完成、开始自举（Phase 1）**之时——自举一开始，`ctc.c` 即冻结为 L0 + 差分 oracle。
+> **冻结**已随 **Phase 1（自举）启动**发生（`ctc.c` 即 L0 + 差分 oracle）；但**本文的目录结构**的落地触发条件不同——是 **CT 侧布局定型**（`src/` 分文件 + `test/` 拆分就绪），届时 `ctc.c` 与其测试**一次性**搬入 `ctrait/`。在此之前 `ctc.c` 留在仓库根目录（2026-10-15 用户确认）。
 
 ---
 
@@ -16,8 +16,8 @@
 
 已定边界（2026-10-11 用户确认）：
 
-- **Phase 0 期间 `ctc.c` 留在仓库根目录、保持单文件**（见 [AGENTS.md](../AGENTS.md) §2）；本文的目录结构仅在自举（Phase 1）启动时生效。
-- **自举（Phase 1）启动时 `ctc.c` 即冻结为 L0 + 差分 oracle**（只修 bug，不加特性），并随之移入 `ctrait/`；此后新特性一律在 CT 侧实现。它长期保留为种子与 oracle。
+- **`ctc.c` 留在仓库根目录、保持单文件**（见 [AGENTS.md](../AGENTS.md) §2）；本文的目录结构**不在**自举启动时生效，而在 **CT 侧布局定型**（Phase 2 起 `src/` 分文件与 `test/` 拆分就绪）时生效（2026-10-15 用户确认）。
+- **自举（Phase 1）启动时 `ctc.c` 即冻结为 L0 + 差分 oracle**（只修 bug，不加特性）；其搬迁与 CT 侧布局定型一并做——`ctc.c` 与其测试一次性移入 `ctrait/`。此后新特性一律在 CT 侧实现。它长期保留为种子与 oracle。
 
 ### 2. 目标仓库结构（自举形态）
 
@@ -123,22 +123,27 @@ AutoDrop (Phase 2)    ← 依赖 Drop + 作用域分析
 
 > **Status: design draft, not implemented.** None of the directories or build flows described here
 > exist; today's compiler is the single-file [ctc.c](../ctc.c) at the repository root.
-> Trigger for landing this: **Phase 0.3 (stripping the over-reach) is done and self-hosting (Phase 1)
-> starts** — the moment it
-> does, `ctc.c` freezes as L0 + the differential oracle.
+> **Freezing** already happened with the **start of self-hosting (Phase 1)** — `ctc.c` is L0 + the
+> differential oracle. But the **layout in this document** has a different trigger: **the CT-side
+> layout settling** (`src/` split across files + the `test/` split). Then `ctc.c` and its tests move
+> into `ctrait/` in one go; until then `ctc.c` stays at the repository root (confirmed by the user on
+> 2026-10-15).
 
 ### 1. Strategy
 
 Progressive self-hosting: a minimal trait compiler in C first (L0 — today's `ctc.c`), then the full
 language implemented in CT itself, step by step. Everything lives in a single repository.
 
-Confirmed boundaries (user, 2026-10-11):
+Confirmed boundaries (user, 2026-10-11; the landing trigger refined on 2026-10-15):
 
-- **During Phase 0, `ctc.c` stays at the repository root as a single file** (see
-  [AGENTS.md](../AGENTS.md) §2); the layout below only takes effect when self-hosting (Phase 1) starts.
+- **`ctc.c` stays at the repository root as a single file** (see [AGENTS.md](../AGENTS.md) §2); the
+  layout below does **not** take effect when self-hosting starts but **once the CT-side layout settles**
+  (`src/` split across files + the `test/` split, from Phase 2 on) — confirmed by the user on
+  2026-10-15.
 - **`ctc.c` freezes as soon as self-hosting (Phase 1) starts** (L0 + the differential oracle): bug
-  fixes only, no new features; all new features are written in CT from then on. It **moves into
-  `ctrait/`** with the layout and is kept long-term as the seed and oracle.
+  fixes only, no new features; all new features are written in CT from then on. Its move is done
+  together with the CT-side layout work — `ctc.c` and its tests move into `ctrait/` in one go — and it
+  is kept long-term as the seed and oracle.
 
 ### 2. Target repository layout (self-hosting shape)
 
