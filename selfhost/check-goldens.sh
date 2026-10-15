@@ -9,9 +9,11 @@
 #   4) L1 compiles every test/cases/*.ct into <tmp>/<case>.c -- the golden
 #      basename, so the .h include guard matches -- and both outputs are compared
 #      byte for byte with the committed .expected.c / .expected.h
+#   5) [self-hosting] L1 compiles itself into L1', L1' is built warning-free and
+#      runs over the same corpus; every output must still be byte-identical
 #
-# The goldens are the oracle: L1 climbs them one feature family at a time. The
-# baseline below lists the cases L1 must already match, and it is a ratchet:
+# The goldens are the oracle: L1 climbed them one feature family at a time. The
+# baseline below lists the cases L1 matches, and it is a ratchet:
 #
 #   PASS        in the baseline, byte-identical
 #   NEW         byte-identical but not in the baseline -> promote it below
@@ -25,8 +27,9 @@
 # Usage:  bash selfhost/check-goldens.sh       (or ./selfhost/check-goldens.sh after chmod +x)
 #         CC=clang bash selfhost/check-goldens.sh
 #
-# Exits non-zero only when a baseline case regressed. PENDING cases are the
-# remaining climb and do NOT fail the run.
+# Exits non-zero when a baseline case regressed or when the self-hosted rebuild
+# disagrees with the goldens (step 5). PENDING cases are the remaining climb and
+# do NOT fail the run.
 
 set -u
 
@@ -39,6 +42,9 @@ work="${work%/}"
 
 l1_c="$work/ctc-l1.c"
 l1_bin="$work/ctc-l1"
+self_c="$work/l1-self.c"
+self_bin="$work/l1-self"
+self_log="$work/l1-self.log"
 outdir="$work/ctc-goldens"
 
 # Cases L1 already matches byte for byte. Keep this list in lockstep with the
@@ -172,16 +178,61 @@ for f in test/cases/*.ct; do
     fi
 done
 
+# ------------------------------------------------- 5) L1' vs every golden
+# The stronger claim: L1 compiles itself into L1', and L1' reproduces the same
+# corpus. A failure here means L1 mis-compiles something L1 is written in, i.e. a
+# real defect the goldens alone would not catch -- so it fails the gate.
+banner "5) L1' (L1 compiling itself) vs the goldens"
+nselfpass=0
+nselffail=0
+
+if ! run "L1 compiles itself" "$l1_bin" selfhost/ctc.ct -o "$self_c"; then
+    printf 'FAIL: L1 could not compile itself\n'
+    fail=1
+elif ! run "build L1'" "$CC" -Wall -Wextra -std=c99 "$self_c" -o "$self_bin" 2>"$self_log" ||
+     [ -s "$self_log" ]; then
+    printf 'FAIL: the self-compiled L1 did not build warning-free:\n'
+    sed 's/^/    /' "$self_log"
+    fail=1
+else
+    for f in test/cases/*.ct; do
+        b="$(basename "$f" .ct)"
+        exp_c="test/cases/$b.expected.c"
+        exp_h="test/cases/$b.expected.h"
+        got_c="$outdir/$b.c"
+        got_h="$outdir/$b.h"
+
+        rm -f "$got_c" "$got_h"
+        err="$("$self_bin" "$f" -o "$got_c" 2>&1 >/dev/null)"
+        rc=$?
+        if [ "$rc" -eq 0 ] && [ -f "$got_c" ] && [ -f "$got_h" ] &&
+           cmp -s "$got_c" "$exp_c" && cmp -s "$got_h" "$exp_h"; then
+            nselfpass=$((nselfpass + 1))
+        else
+            printf "L1' MISMATCH  %s  (%s)\n" "$b" \
+                "$(printf '%s' "$err" | head -n 1)"
+            nselffail=$((nselffail + 1))
+        fi
+    done
+    if [ "$nselffail" -ne 0 ]; then
+        printf "L1' reproduces only %d of %d goldens\n" \
+            "$nselfpass" "$((nselfpass + nselffail))"
+        fail=1
+    fi
+fi
+
 # --------------------------------------------------------------- verdict
 banner "VERDICT"
 printf 'L1 golden coverage: %d pass, %d new, %d pending, %d regression (of %d cases)\n' \
     "$npass" "$nnew" "$npending" "$nregress" \
     "$((npass + nnew + npending + nregress))"
+printf "L1' (self-hosted rebuild): %d passed, %d failed\n" "$nselfpass" "$nselffail"
 
 if [ "$fail" -eq 0 ]; then
-    printf 'check-goldens: OK (no baseline case regressed)\n'
+    printf 'check-goldens: OK (no regression, and the self-hosted rebuild agrees)\n'
 else
-    printf 'check-goldens: FAIL (%d baseline case(s) regressed)\n' "$nregress"
+    printf 'check-goldens: FAIL (%d baseline regression(s), %d self-hosted mismatch(es))\n' \
+        "$nregress" "$nselffail"
 fi
 
 exit "$fail"
