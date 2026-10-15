@@ -27,9 +27,9 @@
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
  * output pipeline lives on `g_pipe` (`struct Pipe` + `use PipeOps`) -- the output
- * streams are its fields and the construct parsers plus the entry points
- * (`emit_raw_line` / `compile_range` / `write_guard` / `compile_file`) are its
- * methods. Lookups read `g_sym.find_trait(..)` and the pipeline is reached as
+ * streams plus the construct parsers, the line-rewriting passes and the entry
+ * points (`emit_raw_line` / `compile_range` / `write_guard` / `compile_file`) are
+ * its methods. Lookups read `g_sym.find_trait(..)` and the pipeline is reached as
  * `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`, both dispatching through
  * their vtable. Only the facilities layer (Buf, allocators, die, the scanning
  * primitives) stays plain C.
@@ -752,211 +752,13 @@ static int body_needs_vtable(size_t bstart, size_t blen)
     return 0;
 }
 
-/* Entry points of the shared rewriting pipeline, defined further down but used
-   by the impl-body passes here (they run the same rewriting as top-level code).
-   `parse_func_sig` / `header_path` / `read_file` are likewise defined after the
-   `Pipe` impl but called from its methods, so they are declared up here too. */
+/* Scan primitives and pipeline entry points defined after the `Pipe` impl but
+   called from its methods (the line rewriters use `line_literal_end` /
+   `line_match_paren`; `header_path` / `read_file` are called from `compile_file`). */
 static size_t line_literal_end(const char *s, size_t i, size_t n);
-static char *transform_line(const char *line);
-static void scope_track(size_t ls, size_t le);
-static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs);
+static size_t line_match_paren(const char *s, size_t k, size_t n);
 static void header_path(const char *outc, char *out, size_t n);
 static char *read_file(const char *path, size_t *out_len);
-
-/* `self` -> `_self` for one line. Strings and comments are copied verbatim, and
-   a member literally named `self` (e.g. `g.self`) is not the implicit receiver. */
-static void replace_self(const char *s, size_t n, Buf *out)
-{
-    size_t i = 0;
-    while (i < n) {
-        char c = s[i];
-        if (c == '"' || c == '\'') {
-            size_t j = line_literal_end(s, i, n);
-            buf_putn(out, s + i, j - i);
-            i = j;
-            continue;
-        }
-        if (c == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*')) {
-            size_t j;
-            if (s[i + 1] == '/') {
-                j = n;
-            } else {
-                j = i + 2;
-                while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
-                j = (j + 1 < n) ? j + 2 : n;
-            }
-            buf_putn(out, s + i, j - i);
-            i = j;
-            continue;
-        }
-        if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
-            size_t j = i;
-            while (j < n && is_ident_char((unsigned char)s[j])) j++;
-            if (j - i == 4 && memcmp(s + i, "self", 4) == 0 &&
-                !(i > 0 && (s[i - 1] == '.' ||
-                            (s[i - 1] == '>' && i > 1 && s[i - 2] == '-'))))
-                buf_puts(out, "_self");
-            else
-                buf_putn(out, s + i, j - i);
-            i = j;
-            continue;
-        }
-        buf_putc(out, c);
-        i++;
-    }
-}
-
-/* Register the impl method's parameters that are declared with a known struct
-   type, so calls on them dispatch inside the body like top-level parameters do. */
-static void register_body_params(const char *params)
-{
-    const char *p = params;
-    while (p && *p) {
-        const char *c = strchr(p, ',');
-        const char *end = c ? c : p + strlen(p);
-        char piece[MAX_PARAM];
-        char name[MAX_NAME];
-        const char *q;
-        Struct *ST;
-        size_t plen = (size_t)(end - p), nk;
-
-        if (plen >= sizeof piece) plen = sizeof piece - 1;
-        memcpy(piece, p, plen);
-        piece[plen] = 0;
-        trim(piece);
-
-        q = piece;
-        while (*q == ' ' || *q == '\t') q++;
-        if (strncmp(q, "struct", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
-            q += 6;
-            while (*q == ' ' || *q == '\t') q++;
-        }
-        nk = copy_ident(q, name, 0);
-        name[nk] = 0;
-        q += nk;
-        ST = nk ? g_sym.find_struct(name) : NULL;
-        if (ST) {
-            int isptr = 0;
-            while (*q == ' ' || *q == '\t') q++;
-            if (*q == '*') {
-                isptr = 1;
-                while (*q == '*' || *q == ' ' || *q == '\t') q++;
-            }
-            if (is_ident_char((unsigned char)*q) && !isdigit((unsigned char)*q)) {
-                char pv[MAX_NAME];
-                int pk = copy_ident(q, pv, 0);
-                pv[pk] = 0;
-                if (pk) {
-                    int vi = g_sym.new_var();
-                    snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", pv);
-                    g_sym.vars[vi].s = (int)(ST - g_sym.structs);
-                    g_sym.vars[vi].ptr = isptr;
-                }
-            }
-        }
-        p = c ? c + 1 : end;
-    }
-}
-
-/* Emit an impl method body. `self` is registered as a pointer to `S` and the
-   method's parameters are registered, then every line runs through the same
-   pipeline as top-level code; only the identifier `self` is renamed to `_self`. */
-static void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params)
-{
-    size_t i, j, n = blen;
-    int minind = 1 << 30;
-    size_t *ls, *le;
-    int nlines = 0, first = -1, last = -1, k;
-    int saved_nvars = g_sym.nvars, saved_nscope = g_nscope;
-    /* the body reuses the shared var table from index 0, so snapshot the
-       enclosing file-scope entries and put them back on the way out; restoring
-       only the count would leave the outer registrations clobbered */
-    Var *saved_vars = xmalloc(sizeof(Var) * (saved_nvars ? (size_t)saved_nvars : 1));
-    memcpy(saved_vars, g_sym.vars, sizeof(Var) * (size_t)saved_nvars);
-    size_t saved_body_abs = g_body_abs;
-    int saved_body_pre = g_body_pre;
-    size_t saved_line_off = g_line_off;
-    int vi;
-
-    ls = xmalloc(sizeof(size_t) * (n + 2));
-    le = xmalloc(sizeof(size_t) * (n + 2));
-
-    i = 0;
-    while (i < n) {
-        j = i;
-        while (j < n && g_src[bstart + j] != '\n') j++;
-        ls[nlines] = bstart + i;
-        le[nlines] = bstart + j;
-        nlines++;
-        i = j + 1;
-        if (j >= n) break;
-    }
-
-    for (k = 0; k < nlines; k++) {
-        size_t t = ls[k];
-        while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
-        if (t < le[k]) {
-            int ind = (int)(t - ls[k]);
-            if (ind < minind) minind = ind;
-            if (first < 0) first = k;
-            last = k;
-        }
-    }
-
-    if (first < 0) { free(ls); free(le); return; }
-
-    /* the body sees only its own locals, never the surrounding file scope */
-    g_sym.nvars = 0;
-    g_nscope = 0;
-    g_body_abs = 0;
-    vi = g_sym.new_var();
-    snprintf(g_sym.vars[vi].name, MAX_NAME, "self");
-    g_sym.vars[vi].s = (int)(S - g_sym.structs);
-    g_sym.vars[vi].ptr = 1;
-    register_body_params(params);
-
-    for (k = first; k <= last; k++) {
-        size_t t = ls[k], content;
-        char *line, *out;
-        Buf sb;
-
-        g_line_off = ls[k];
-
-        while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
-        if (t >= le[k]) { fputc('\n', f); scope_track(ls[k], le[k]); continue; }
-
-        content = ls[k] + (size_t)minind;
-        line = xstrndup(g_src + content, le[k] - content);
-        out = transform_line(line);
-        buf_init(&sb);
-        replace_self(out, strlen(out), &sb);
-        {
-            size_t p2 = 0;
-            while (p2 < sb.n) {
-                size_t q2 = p2;
-                while (q2 < sb.n && sb.p[q2] != '\n') q2++;
-                fputs("    ", f);
-                fwrite(sb.p + p2, 1, q2 - p2, f);
-                fputc('\n', f);
-                p2 = (q2 < sb.n) ? q2 + 1 : q2;
-            }
-        }
-        free(line);
-        free(out);
-        free(sb.p);
-        scope_track(ls[k], le[k]);
-    }
-
-    memcpy(g_sym.vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
-    free(saved_vars);
-    g_sym.nvars = saved_nvars;
-    g_nscope = saved_nscope;
-    g_body_abs = saved_body_abs;
-    g_body_pre = saved_body_pre;
-    g_line_off = saved_line_off;
-    free(ls);
-    free(le);
-}
 
 /* ------------------------------------------------------- construct parsers */
 
@@ -970,6 +772,16 @@ trait PipeOps {
     size_t parse_trait(struct SymTab *sym, size_t p);
     size_t parse_struct(struct SymTab *sym, size_t p);
     size_t parse_impl(struct SymTab *sym, size_t p);
+    void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
+    void register_body_params(struct SymTab *sym, const char *params);
+    void replace_self(const char *s, size_t n, Buf *out);
+    char *transform_line(struct SymTab *sym, const char *line);
+    char *try_var_decl(struct SymTab *sym, const char *line);
+    void transform_calls(struct SymTab *sym, const char *s, Buf *out);
+    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
+    int decl_end_is_bare(const char *s);
+    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
+    void scope_track(struct SymTab *sym, size_t ls, size_t le);
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
     void compile_range(struct SymTab *sym, size_t start, size_t end);
     int compile_file(struct SymTab *sym, const char *in, const char *outc);
@@ -1297,7 +1109,7 @@ impl PipeOps for Pipe {
             if (tm->nparams > 0) fprintf(self->out, ", %s", impl[idx].params);
             fprintf(self->out, ") {\n");
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
-            emit_body(self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
+            self->emit_body(sym, self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
             fprintf(self->out, "}\n\n");
         }
 
@@ -1334,18 +1146,18 @@ impl PipeOps for Pipe {
         }
 
         g_line_off = ls;
-        sig = parse_func_sig(line, ls, &has_body, &body_abs);
+        sig = self->parse_func_sig(sym, line, ls, &has_body, &body_abs);
         if (sig) {
             if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
             fputs(sig, self->out);
             free(sig);
         } else {
-            char *out = transform_line(line);
+            char *out = self->transform_line(sym, line);
             fputs(out, self->out);
             free(out);
         }
         free(line);
-        scope_track(ls, le);
+        self->scope_track(sym, ls, le);
     }
 
     /* Scan [start,end): expand traits/structs/impls, pass the rest through. */
@@ -1465,6 +1277,685 @@ impl PipeOps for Pipe {
         fclose(self->hout);
         return 0;
     }
+
+    /* Emit an impl method body. `self` is registered as a pointer to `S` and the
+       method's parameters are registered, then every line runs through the same
+       pipeline as top-level code; only the identifier `self` is renamed to `_self`. */
+    void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params) {
+        size_t i, j, n = blen;
+        int minind = 1 << 30;
+        size_t *ls, *le;
+        int nlines = 0, first = -1, last = -1, k;
+        int saved_nvars = sym->nvars, saved_nscope = g_nscope;
+        /* the body reuses the shared var table from index 0, so snapshot the
+           enclosing file-scope entries and put them back on the way out; restoring
+           only the count would leave the outer registrations clobbered */
+        Var *saved_vars = xmalloc(sizeof(Var) * (saved_nvars ? (size_t)saved_nvars : 1));
+        memcpy(saved_vars, sym->vars, sizeof(Var) * (size_t)saved_nvars);
+        size_t saved_body_abs = g_body_abs;
+        int saved_body_pre = g_body_pre;
+        size_t saved_line_off = g_line_off;
+        int vi;
+
+        ls = xmalloc(sizeof(size_t) * (n + 2));
+        le = xmalloc(sizeof(size_t) * (n + 2));
+
+        i = 0;
+        while (i < n) {
+            j = i;
+            while (j < n && g_src[bstart + j] != '\n') j++;
+            ls[nlines] = bstart + i;
+            le[nlines] = bstart + j;
+            nlines++;
+            i = j + 1;
+            if (j >= n) break;
+        }
+
+        for (k = 0; k < nlines; k++) {
+            size_t t = ls[k];
+            while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < le[k]) {
+                int ind = (int)(t - ls[k]);
+                if (ind < minind) minind = ind;
+                if (first < 0) first = k;
+                last = k;
+            }
+        }
+
+        if (first < 0) { free(ls); free(le); return; }
+
+        /* the body sees only its own locals, never the surrounding file scope */
+        sym->nvars = 0;
+        g_nscope = 0;
+        g_body_abs = 0;
+        vi = sym->new_var();
+        snprintf(sym->vars[vi].name, MAX_NAME, "self");
+        sym->vars[vi].s = (int)(S - sym->structs);
+        sym->vars[vi].ptr = 1;
+        self->register_body_params(sym, params);
+
+        for (k = first; k <= last; k++) {
+            size_t t = ls[k], content;
+            char *line, *out;
+            Buf sb;
+
+            g_line_off = ls[k];
+
+            while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t >= le[k]) { fputc('\n', f); self->scope_track(sym, ls[k], le[k]); continue; }
+
+            content = ls[k] + (size_t)minind;
+            line = xstrndup(g_src + content, le[k] - content);
+            out = self->transform_line(sym, line);
+            buf_init(&sb);
+            self->replace_self(out, strlen(out), &sb);
+            {
+                size_t p2 = 0;
+                while (p2 < sb.n) {
+                    size_t q2 = p2;
+                    while (q2 < sb.n && sb.p[q2] != '\n') q2++;
+                    fputs("    ", f);
+                    fwrite(sb.p + p2, 1, q2 - p2, f);
+                    fputc('\n', f);
+                    p2 = (q2 < sb.n) ? q2 + 1 : q2;
+                }
+            }
+            free(line);
+            free(out);
+            free(sb.p);
+            self->scope_track(sym, ls[k], le[k]);
+        }
+
+        memcpy(sym->vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
+        free(saved_vars);
+        sym->nvars = saved_nvars;
+        g_nscope = saved_nscope;
+        g_body_abs = saved_body_abs;
+        g_body_pre = saved_body_pre;
+        g_line_off = saved_line_off;
+        free(ls);
+        free(le);
+    }
+
+    /* Register the impl method's parameters that are declared with a known struct
+       type, so calls on them dispatch inside the body like top-level parameters do. */
+    void register_body_params(struct SymTab *sym, const char *params) {
+        const char *p = params;
+        (void)self;  /* the body only reads the symbol table, not the receiver */
+        while (p && *p) {
+            const char *c = strchr(p, ',');
+            const char *end = c ? c : p + strlen(p);
+            char piece[MAX_PARAM];
+            char name[MAX_NAME];
+            const char *q;
+            Struct *ST;
+            size_t plen = (size_t)(end - p), nk;
+
+            if (plen >= sizeof piece) plen = sizeof piece - 1;
+            memcpy(piece, p, plen);
+            piece[plen] = 0;
+            trim(piece);
+
+            q = piece;
+            while (*q == ' ' || *q == '\t') q++;
+            if (strncmp(q, "struct", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
+                q += 6;
+                while (*q == ' ' || *q == '\t') q++;
+            }
+            nk = copy_ident(q, name, 0);
+            name[nk] = 0;
+            q += nk;
+            ST = nk ? sym->find_struct(name) : NULL;
+            if (ST) {
+                int isptr = 0;
+                while (*q == ' ' || *q == '\t') q++;
+                if (*q == '*') {
+                    isptr = 1;
+                    while (*q == '*' || *q == ' ' || *q == '\t') q++;
+                }
+                if (is_ident_char((unsigned char)*q) && !isdigit((unsigned char)*q)) {
+                    char pv[MAX_NAME];
+                    int pk = copy_ident(q, pv, 0);
+                    pv[pk] = 0;
+                    if (pk) {
+                        int vi = sym->new_var();
+                        snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
+                        sym->vars[vi].s = (int)(ST - sym->structs);
+                        sym->vars[vi].ptr = isptr;
+                    }
+                }
+            }
+            p = c ? c + 1 : end;
+        }
+    }
+
+    /* `self` -> `_self` for one line. Strings and comments are copied verbatim, and
+       a member literally named `self` (e.g. `g.self`) is not the implicit receiver. */
+    void replace_self(const char *s, size_t n, Buf *out) {
+        size_t i = 0;
+        (void)self;  /* a pure string rewrite; the receiver is not used */
+        while (i < n) {
+            char c = s[i];
+            if (c == '"' || c == '\'') {
+                size_t j = line_literal_end(s, i, n);
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (c == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*')) {
+                size_t j;
+                if (s[i + 1] == '/') {
+                    j = n;
+                } else {
+                    j = i + 2;
+                    while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
+                    j = (j + 1 < n) ? j + 2 : n;
+                }
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
+                size_t j = i;
+                while (j < n && is_ident_char((unsigned char)s[j])) j++;
+                if (j - i == 4 && memcmp(s + i, "self", 4) == 0 &&
+                    !(i > 0 && (s[i - 1] == '.' ||
+                                (s[i - 1] == '>' && i > 1 && s[i - 2] == '-'))))
+                    buf_puts(out, "_self");
+                else
+                    buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            buf_putc(out, c);
+            i++;
+        }
+    }
+
+    char *transform_line(struct SymTab *sym, const char *line) {
+        char *decl;
+        const char *base;
+        Buf out;
+        char *res;
+        const char *q = line;
+
+        while (*q == ' ' || *q == '\t') q++;
+        if (strncmp(q, "delete", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
+            const char *d = q + 6;
+            while (*d == ' ' || *d == '\t') d++;
+            if (is_ident_char((unsigned char)*d) && !isdigit((unsigned char)*d))
+                die(0, "delete is not supported");
+        }
+
+        decl = self->try_var_decl(sym, line);
+        base = decl ? decl : line;
+        buf_init(&out);
+        self->transform_calls(sym, base, &out);
+        free(decl);
+        res = out.p;
+        return res;
+    }
+
+    /* "<Struct> x = {...};" / "struct <Struct> x = {...};" -> add struct + vptr */
+    char *try_var_decl(struct SymTab *sym, const char *line) {
+        size_t i = 0, ws, vk, nk;
+        const char *p;
+        char name[MAX_NAME], var[MAX_NAME];
+        Struct *S;
+        int done = 0, static_kw = 0;
+        const char *rest;
+        Buf b;
+
+        while (line[i] == ' ' || line[i] == '\t') i++;
+        ws = i;
+        p = line + i;
+
+        /* a leading `static` is re-emitted verbatim; the declaration underneath is
+           still a ct struct object and must get its vptr written like any other */
+        if (strncmp(p, "static", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+            const char *z = p + 6;
+            while (*z == ' ' || *z == '\t') z++;
+            static_kw = 1;
+            p = z;
+        }
+
+        if (strncmp(p, "struct", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+            p += 6;
+            while (*p == ' ' || *p == '\t') p++;
+        }
+
+        nk = copy_ident(p, name, 0);
+        name[nk] = 0;
+        if (!nk) return NULL;
+        p += nk;
+        S = sym->find_struct(name);
+        if (!S) {
+            if (sym->find_trait(name))
+                die(0, "interface values are not supported");
+            return NULL;
+        }
+        while (*p == ' ' || *p == '\t') p++;
+
+        if (*p == '*') {                              /* pointer declaration */
+            const char *q = p;
+            char pv[MAX_NAME];
+            int pk = 0;
+            while (*q == '*' || *q == ' ' || *q == '\t') q++;
+            pk = copy_ident(q, pv, 0);
+            pv[pk] = 0;
+            {
+                const char *eq = strchr(p, '=');
+                const char *aft = q + pk;
+                if (eq) {
+                    const char *rhs = eq + 1;
+                    while (*rhs == ' ' || *rhs == '\t') rhs++;
+                    if ((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
+                        (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])))
+                        die(0, "heap creation is not supported");
+                }
+                while (*aft == ' ' || *aft == '\t') aft++;
+                if (*aft == '[') die(0, "arrays are not supported");
+            }
+            if (pk) {
+                int vi = sym->new_var();
+                snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
+                sym->vars[vi].s = (int)(S - sym->structs);
+                sym->vars[vi].ptr = 1;
+            }
+            buf_init(&b);
+            buf_putn(&b, line, ws);
+            if (static_kw) buf_puts(&b, "static ");
+            buf_puts(&b, "struct ");
+            buf_puts(&b, S->cname);
+            buf_putc(&b, ' ');
+            buf_puts(&b, p);
+            return b.p;
+        }
+
+        vk = copy_ident(p, var, 0);
+        var[vk] = 0;
+        if (!vk) return NULL;
+
+        rest = p + vk;
+
+        {
+            const char *q = rest;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '[') die(0, "arrays are not supported");
+        }
+        {
+            int vi = sym->new_var();
+            snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+            sym->vars[vi].s = (int)(S - sym->structs);
+            sym->vars[vi].ptr = 0;
+        }
+
+        buf_init(&b);
+        buf_putn(&b, line, ws);
+        if (static_kw) buf_puts(&b, "static ");
+        buf_puts(&b, "struct ");
+        buf_puts(&b, S->cname);
+        buf_putc(&b, ' ');
+        buf_puts(&b, var);
+
+        {
+            const char *r = rest;
+            while (*r == ' ' || *r == '\t') r++;
+            if (*r == '=' && S->nu > 0) {
+                const char *e = r + 1;
+                while (*e == ' ' || *e == '\t') e++;
+                if (*e == '{') {
+                    int depth = 0;
+                    const char *close = NULL;
+                    size_t ln = strlen(e);
+                    size_t z;
+                    for (z = 0; z < ln; z++) {
+                        char cc = e[z];
+                        if (cc == '"' || cc == '\'') { z = line_literal_end(e, z, ln) - 1; continue; }
+                        if (cc == '{') depth++;
+                        else if (cc == '}') { depth--; if (!depth) { close = e + z; break; } }
+                    }
+                    if (close) {
+                        char *inner = xstrndup(e + 1, (size_t)(close - e - 1));
+                        size_t it = trim_right_len(inner, strlen(inner));
+                        int first = 1;
+                        buf_putn(&b, rest, (size_t)(e - rest) + 1);        /* " = {" */
+                        buf_putn(&b, inner, it);
+                        if (it) buf_puts(&b, ", ");
+                        else buf_putc(&b, ' ');
+                        put_own_vptr(&b, S, &first);
+                        buf_putc(&b, ' ');
+                        buf_puts(&b, close);
+                        free(inner);
+                        done = 1;
+                    } else {
+                        die(0, "multi-line initialisers are not supported");
+                    }
+                } else {
+                    die(0, "unsupported initialiser for struct '%s'", S->name);
+                }
+            } else if (S->nu > 0 && self->decl_end_is_bare(r)) {
+                /* "Person p;" has no initialiser, so give it a designated one */
+                int first = 1;
+                buf_puts(&b, " = { ");
+                put_own_vptr(&b, S, &first);
+                buf_puts(&b, " }");
+                buf_puts(&b, rest);
+                done = 1;
+            }
+            if (!done) buf_puts(&b, rest);
+        }
+
+        return b.p;
+    }
+
+    void transform_calls(struct SymTab *sym, const char *s, Buf *out) {
+        size_t i = 0, n = strlen(s);
+        while (i < n) {
+            char c = s[i];
+
+            if (c == '"' || c == '\'') {
+                size_t j = line_literal_end(s, i, n);
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (c == '/' && i + 1 < n && s[i + 1] == '/') {
+                buf_putn(out, s + i, n - i);
+                break;
+            }
+            if (c == '/' && i + 1 < n && s[i + 1] == '*') {
+                size_t j = i + 2;
+                while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
+                j = (j + 1 < n) ? j + 2 : n;
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
+                size_t j = i;
+                char tok[MAX_NAME];
+                size_t tl;
+                int vi;
+
+                while (j < n && is_ident_char((unsigned char)s[j])) j++;
+                tl = j - i;
+                if (tl >= sizeof tok) tl = sizeof tok - 1;
+                memcpy(tok, s + i, tl);
+                tok[tl] = 0;
+
+                vi = sym->find_var(tok);
+
+                /* a call whose result is used as a receiver needs hoisting, which
+                   M2-a does not implement: report it instead of passing it through */
+                if (vi < 0 && j < n && s[j] == '(') {
+                    FuncSig *FS = sym->find_func(tok);
+                    if (FS && FS->retstruct >= 0) {
+                        size_t cp = line_match_paren(s, j, n);
+                        if (cp != (size_t)-1) {
+                            size_t p2 = cp + 1;
+                            char mem[MAX_NAME];
+                            size_t ms2, k2, ml2;
+                            if (p2 + 1 < n && s[p2] == '-' && s[p2 + 1] == '>') p2 += 2;
+                            else if (p2 < n && s[p2] == '.') p2 += 1;
+                            else p2 = 0;
+                            if (p2) {
+                                ms2 = p2;
+                                k2 = p2;
+                                while (k2 < n && is_ident_char((unsigned char)s[k2])) k2++;
+                                ml2 = k2 - ms2;
+                                if (ml2 > 0 && ml2 < MAX_NAME) {
+                                    memcpy(mem, s + ms2, ml2);
+                                    mem[ml2] = 0;
+                                    if (k2 < n && s[k2] == '(' &&
+                                        sym->resolve_method(&sym->structs[FS->retstruct], mem))
+                                        die(g_line_off + i, "rvalue receivers are not supported");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (vi >= 0) {
+                    char mem[MAX_NAME], low[MAX_NAME];
+                    const char *tr = NULL;
+                    size_t pos = j, rend = 0, mp = 0;
+                    int need_amp = 1, hit = 0;
+                    int isptr = sym->vars[vi].ptr;
+
+                    hit = self->walk_method(sym, s, n, pos, sym->vars[vi].s, isptr, &need_amp,
+                                            &tr, &rend, &mp, mem);
+                    if (hit) {
+                        size_t z = mp + 1;
+                        int empty;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                        empty = (z < n && s[z] == ')');
+
+                        to_lower(tr, low);
+                        buf_putn(out, s + i, rend - i);           /* receiver */
+                        buf_puts(out, need_amp ? ".__" : "->__");
+                        buf_puts(out, low);
+                        buf_puts(out, "_vptr->");
+                        buf_puts(out, mem);
+                        buf_putc(out, '(');
+                        if (need_amp) buf_putc(out, '&');
+                        buf_putn(out, s + i, rend - i);           /* receiver again */
+                        if (!empty) buf_puts(out, ", ");
+                        i = mp + 1;
+                        continue;
+                    }
+                }
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            buf_putc(out, c);
+            i++;
+        }
+    }
+
+    /* Follow one `.method(` / `->method(` hop from the receiver of struct `cur`
+       (a pointer when `isptr`) and report the trait method it names, where the
+       receiver text ends (*out_rend) and where the argument list starts (*mp).
+       M2-a supports a single hop; field chains are left to a later milestone. */
+    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr,
+                    int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb) {
+        char mem[MAX_NAME];
+        size_t ms, k, ml;
+        (void)self;  /* the body only consults the symbol table for the method */
+
+        if (isptr) {
+            if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+            k = pos + 2;
+        } else {
+            if (!(pos < n && s[pos] == '.')) return 0;
+            k = pos + 1;
+        }
+        ms = k;
+        while (k < n && is_ident_char((unsigned char)s[k])) k++;
+        ml = k - ms;
+        if (ml == 0) return 0;
+        if (ml >= sizeof mem) ml = sizeof mem - 1;
+        memcpy(mem, s + ms, ml);
+        mem[ml] = 0;
+
+        *out_tr = sym->resolve_method(&sym->structs[cur], mem);
+        if (*out_tr && k < n && s[k] == '(') {
+            *out_need_amp = !isptr;
+            *out_rend = pos;
+            *mp = k;
+            snprintf(memb, MAX_NAME, "%s", mem);
+            return 1;
+        }
+        return 0;
+    }
+
+    /* is the tail of a declaration nothing but ';' (optionally a trailing comment)? */
+    int decl_end_is_bare(const char *s) {
+        (void)self;  /* a pure string test; the receiver is not used */
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s != ';') return 0;
+        s++;
+        for (;;) {
+            while (*s == ' ' || *s == '\t') s++;
+            if (!*s) return 1;
+            if (s[0] == '/' && s[1] == '/') return 1;
+            if (s[0] == '/' && s[1] == '*') {
+                const char *e = strstr(s + 2, "*/");
+                if (!e) return 1;
+                s = e + 2;
+                continue;
+            }
+            return 0;
+        }
+    }
+
+    /* roll sym->nvars back at every closing brace so locals stay in their own scope;
+       string and comment contents are ignored */
+    void scope_track(struct SymTab *sym, size_t ls, size_t le) {
+        size_t p = ls;
+        (void)self;  /* the body tracks the symbol table, not the receiver */
+        while (p < le) {
+            char c = g_src[p];
+            if (c == '"' || c == '\'') {
+                size_t j = skip_literal(p);
+                p = (j > le) ? le : j;
+                continue;
+            }
+            if (c == '/' && p + 1 < le &&
+                (g_src[p + 1] == '/' || g_src[p + 1] == '*')) {
+                size_t j = skip_comment(p);
+                p = (j > le) ? le : j;
+                continue;
+            }
+            if (c == '{') {
+                int save = sym->nvars;
+                if (g_body_abs && p == g_body_abs) { save = g_body_pre; g_body_abs = 0; }
+                if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
+                g_scope[g_nscope++] = save;
+            } else if (c == '}') {
+                if (g_nscope > 0)
+                    sym->nvars = g_scope[--g_nscope];
+            }
+            p++;
+        }
+    }
+
+    /* Ordinary function definition or prototype: qualify the struct types in its
+       return type and parameters, record the signature, and register the parameters
+       when a body follows. Returns a new line, or NULL when `line` is not one. */
+    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs) {
+        size_t n = strlen(line), lpo, he, ns, rt, rp, i, end;
+        const char *lp;
+        char name[MAX_NAME], tok[MAX_NAME];
+        Buf b;
+        int isdef = 0, ret_tr = -1, ret_ia = -1, ret_ib = -1, ret_ns = 0;
+        int ret_struct = -1, ret_rptr = 0;
+        char ret_cbase[MAX_NAME];
+        (void)self;  /* the body records signatures in the symbol table, not the receiver */
+
+        *has_body = 0;
+        *body_abs = 0;
+
+        lp = strchr(line, '(');
+        if (!lp) return NULL;
+        lpo = (size_t)(lp - line);
+        {
+            const char *sc = strchr(line, ';');
+            if (sc && (size_t)(sc - line) < lpo) return NULL;      /* ';' before '(' */
+        }
+
+        he = trim_right_len(line, lpo);
+        ns = he;
+        while (ns > 0 && is_ident_char((unsigned char)line[ns - 1])) ns--;
+        if (ns == he) return NULL;                                 /* no function name */
+        rt = trim_right_len(line, ns);
+        if (rt == 0) return NULL;                                  /* no return type */
+
+        {
+            size_t k, u;
+            for (k = 0; k < rt; k++) {
+                char c = line[k];
+                if (!(is_ident_char((unsigned char)c) || c == '*' || c == ' ' || c == '\t'))
+                    return NULL;
+            }
+            snprintf(name, sizeof name, "%.*s", (int)(he - ns), line + ns);
+            if (is_stmt_keyword(name)) return NULL;
+            for (k = 0; k < rt; ) {
+                u = k;
+                while (u < rt && !is_ident_char((unsigned char)line[u])) u++;
+                k = u;
+                while (k < rt && is_ident_char((unsigned char)line[k])) k++;
+                if (k > u) {
+                    size_t tl = k - u;
+                    if (tl >= sizeof tok) tl = sizeof tok - 1;
+                    memcpy(tok, line + u, tl);
+                    tok[tl] = 0;
+                    if (is_stmt_keyword(tok)) return NULL;
+                }
+            }
+        }
+
+        rp = line_match_paren(line, lpo, n);
+        if (rp == (size_t)-1) return NULL;                         /* ')' on another line */
+
+        {
+            size_t k = skip_ws_comments(ls + rp + 1);
+            if (k < g_len && g_src[k] == '{') { isdef = 1; *has_body = 1; *body_abs = k; }
+            else if (k < g_len && g_src[k] == ';') { isdef = 0; }
+            else return NULL;
+        }
+
+        {
+            char rname[MAX_NAME];
+            ret_struct = analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase,
+                                       &ret_ns, rname, &ret_rptr, &ret_tr);
+        }
+        if (ret_tr >= 0) die(ls, "interface return types are not supported");
+
+        buf_init(&b);
+        emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, 0);
+        buf_putc(&b, '(');
+
+        for (i = lpo + 1, end = rp; i < end; ) {
+            size_t j = i;
+            int depth = 0, pia = -1, pib = -1, pns = 0, ptr = 0, sidx, ptrtr = -1;
+            char pname[MAX_NAME], pcbase[MAX_NAME];
+
+            while (j < end) {
+                char c = line[j];
+                if (c == '"' || c == '\'') { j = line_literal_end(line, j, end); continue; }
+                if (c == '(' || c == '[' || c == '{') depth++;
+                else if (c == ')' || c == ']' || c == '}') depth--;
+                else if (c == ',' && depth == 0) break;
+                j++;
+            }
+            sidx = analyse_param(line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
+            if (ptrtr >= 0) die(ls, "interface parameters are not supported");
+            emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, 0);
+
+            if (isdef && pname[0] && sidx >= 0) {
+                int vi = sym->new_var();
+                snprintf(sym->vars[vi].name, MAX_NAME, "%s", pname);
+                sym->vars[vi].s = sidx;
+                sym->vars[vi].ptr = ptr;
+            }
+            if (j < end) { buf_putc(&b, ','); j++; }
+            i = j;
+        }
+        /* record the signature so call sites can reject rvalue receivers */
+        if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+        {
+            FuncSig *FS = &sym->funcs[sym->nfuncs++];
+            snprintf(FS->name, MAX_NAME, "%s", name);
+            FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
+            FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
+        }
+
+        buf_putc(&b, ')');
+        buf_puts(&b, line + rp + 1);
+        return b.p;
+    }
 }
 
 static Pipe g_pipe = { };
@@ -1493,495 +1984,6 @@ static size_t line_match_paren(const char *s, size_t k, size_t n)
         k++;
     }
     return (size_t)-1;
-}
-
-/* Follow one `.method(` / `->method(` hop from the receiver of struct `cur`
-   (a pointer when `isptr`) and report the trait method it names, where the
-   receiver text ends (*out_rend) and where the argument list starts (*mp).
-   M2-a supports a single hop; field chains are left to a later milestone. */
-static int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr,
-                       int *out_need_amp, const char **out_tr,
-                       size_t *out_rend, size_t *mp, char *memb)
-{
-    char mem[MAX_NAME];
-    size_t ms, k, ml;
-
-    if (isptr) {
-        if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
-        k = pos + 2;
-    } else {
-        if (!(pos < n && s[pos] == '.')) return 0;
-        k = pos + 1;
-    }
-    ms = k;
-    while (k < n && is_ident_char((unsigned char)s[k])) k++;
-    ml = k - ms;
-    if (ml == 0) return 0;
-    if (ml >= sizeof mem) ml = sizeof mem - 1;
-    memcpy(mem, s + ms, ml);
-    mem[ml] = 0;
-
-    *out_tr = g_sym.resolve_method(&g_sym.structs[cur], mem);
-    if (*out_tr && k < n && s[k] == '(') {
-        *out_need_amp = !isptr;
-        *out_rend = pos;
-        *mp = k;
-        snprintf(memb, MAX_NAME, "%s", mem);
-        return 1;
-    }
-    return 0;
-}
-
-static void transform_calls(const char *s, Buf *out)
-{
-    size_t i = 0, n = strlen(s);
-    while (i < n) {
-        char c = s[i];
-
-        if (c == '"' || c == '\'') {
-            size_t j = line_literal_end(s, i, n);
-            buf_putn(out, s + i, j - i);
-            i = j;
-            continue;
-        }
-        if (c == '/' && i + 1 < n && s[i + 1] == '/') {
-            buf_putn(out, s + i, n - i);
-            break;
-        }
-        if (c == '/' && i + 1 < n && s[i + 1] == '*') {
-            size_t j = i + 2;
-            while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
-            j = (j + 1 < n) ? j + 2 : n;
-            buf_putn(out, s + i, j - i);
-            i = j;
-            continue;
-        }
-        if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
-            size_t j = i;
-            char tok[MAX_NAME];
-            size_t tl;
-            int vi;
-
-            while (j < n && is_ident_char((unsigned char)s[j])) j++;
-            tl = j - i;
-            if (tl >= sizeof tok) tl = sizeof tok - 1;
-            memcpy(tok, s + i, tl);
-            tok[tl] = 0;
-
-            vi = g_sym.find_var(tok);
-
-            /* a call whose result is used as a receiver needs hoisting, which
-               M2-a does not implement: report it instead of passing it through */
-            if (vi < 0 && j < n && s[j] == '(') {
-                FuncSig *FS = g_sym.find_func(tok);
-                if (FS && FS->retstruct >= 0) {
-                    size_t cp = line_match_paren(s, j, n);
-                    if (cp != (size_t)-1) {
-                        size_t p2 = cp + 1;
-                        char mem[MAX_NAME];
-                        size_t ms2, k2, ml2;
-                        if (p2 + 1 < n && s[p2] == '-' && s[p2 + 1] == '>') p2 += 2;
-                        else if (p2 < n && s[p2] == '.') p2 += 1;
-                        else p2 = 0;
-                        if (p2) {
-                            ms2 = p2;
-                            k2 = p2;
-                            while (k2 < n && is_ident_char((unsigned char)s[k2])) k2++;
-                            ml2 = k2 - ms2;
-                            if (ml2 > 0 && ml2 < MAX_NAME) {
-                                memcpy(mem, s + ms2, ml2);
-                                mem[ml2] = 0;
-                                if (k2 < n && s[k2] == '(' &&
-                                    g_sym.resolve_method(&g_sym.structs[FS->retstruct], mem))
-                                    die(g_line_off + i, "rvalue receivers are not supported");
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (vi >= 0) {
-                char mem[MAX_NAME], low[MAX_NAME];
-                const char *tr = NULL;
-                size_t pos = j, rend = 0, mp = 0;
-                int need_amp = 1, hit = 0;
-                int isptr = g_sym.vars[vi].ptr;
-
-                hit = walk_method(s, n, pos, g_sym.vars[vi].s, isptr, &need_amp,
-                                  &tr, &rend, &mp, mem);
-                if (hit) {
-                    size_t z = mp + 1;
-                    int empty;
-                    while (z < n && isspace((unsigned char)s[z])) z++;
-                    empty = (z < n && s[z] == ')');
-
-                    to_lower(tr, low);
-                    buf_putn(out, s + i, rend - i);           /* receiver */
-                    buf_puts(out, need_amp ? ".__" : "->__");
-                    buf_puts(out, low);
-                    buf_puts(out, "_vptr->");
-                    buf_puts(out, mem);
-                    buf_putc(out, '(');
-                    if (need_amp) buf_putc(out, '&');
-                    buf_putn(out, s + i, rend - i);           /* receiver again */
-                    if (!empty) buf_puts(out, ", ");
-                    i = mp + 1;
-                    continue;
-                }
-            }
-            buf_putn(out, s + i, j - i);
-            i = j;
-            continue;
-        }
-        buf_putc(out, c);
-        i++;
-    }
-}
-
-/* is the tail of a declaration nothing but ';' (optionally a trailing comment)? */
-static int decl_end_is_bare(const char *s)
-{
-    while (*s == ' ' || *s == '\t') s++;
-    if (*s != ';') return 0;
-    s++;
-    for (;;) {
-        while (*s == ' ' || *s == '\t') s++;
-        if (!*s) return 1;
-        if (s[0] == '/' && s[1] == '/') return 1;
-        if (s[0] == '/' && s[1] == '*') {
-            const char *e = strstr(s + 2, "*/");
-            if (!e) return 1;
-            s = e + 2;
-            continue;
-        }
-        return 0;
-    }
-}
-
-/* "<Struct> x = {...};" / "struct <Struct> x = {...};" -> add struct + vptr */
-static char *try_var_decl(const char *line)
-{
-    size_t i = 0, ws, vk, nk;
-    const char *p;
-    char name[MAX_NAME], var[MAX_NAME];
-    Struct *S;
-    int done = 0, static_kw = 0;
-    const char *rest;
-    Buf b;
-
-    while (line[i] == ' ' || line[i] == '\t') i++;
-    ws = i;
-    p = line + i;
-
-    /* a leading `static` is re-emitted verbatim; the declaration underneath is
-       still a ct struct object and must get its vptr written like any other */
-    if (strncmp(p, "static", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
-        const char *z = p + 6;
-        while (*z == ' ' || *z == '\t') z++;
-        static_kw = 1;
-        p = z;
-    }
-
-    if (strncmp(p, "struct", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
-        p += 6;
-        while (*p == ' ' || *p == '\t') p++;
-    }
-
-    nk = copy_ident(p, name, 0);
-    name[nk] = 0;
-    if (!nk) return NULL;
-    p += nk;
-    S = g_sym.find_struct(name);
-    if (!S) {
-        if (g_sym.find_trait(name))
-            die(0, "interface values are not supported");
-        return NULL;
-    }
-    while (*p == ' ' || *p == '\t') p++;
-
-    if (*p == '*') {                              /* pointer declaration */
-        const char *q = p;
-        char pv[MAX_NAME];
-        int pk = 0;
-        while (*q == '*' || *q == ' ' || *q == '\t') q++;
-        pk = copy_ident(q, pv, 0);
-        pv[pk] = 0;
-        {
-            const char *eq = strchr(p, '=');
-            const char *aft = q + pk;
-            if (eq) {
-                const char *rhs = eq + 1;
-                while (*rhs == ' ' || *rhs == '\t') rhs++;
-                if ((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
-                    (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])))
-                    die(0, "heap creation is not supported");
-            }
-            while (*aft == ' ' || *aft == '\t') aft++;
-            if (*aft == '[') die(0, "arrays are not supported");
-        }
-        if (pk) {
-            int vi = g_sym.new_var();
-            snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", pv);
-            g_sym.vars[vi].s = (int)(S - g_sym.structs);
-            g_sym.vars[vi].ptr = 1;
-        }
-        buf_init(&b);
-        buf_putn(&b, line, ws);
-        if (static_kw) buf_puts(&b, "static ");
-        buf_puts(&b, "struct ");
-        buf_puts(&b, S->cname);
-        buf_putc(&b, ' ');
-        buf_puts(&b, p);
-        return b.p;
-    }
-
-    vk = copy_ident(p, var, 0);
-    var[vk] = 0;
-    if (!vk) return NULL;
-
-    rest = p + vk;
-
-    {
-        const char *q = rest;
-        while (*q == ' ' || *q == '\t') q++;
-        if (*q == '[') die(0, "arrays are not supported");
-    }
-    {
-        int vi = g_sym.new_var();
-        snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", var);
-        g_sym.vars[vi].s = (int)(S - g_sym.structs);
-        g_sym.vars[vi].ptr = 0;
-    }
-
-    buf_init(&b);
-    buf_putn(&b, line, ws);
-    if (static_kw) buf_puts(&b, "static ");
-    buf_puts(&b, "struct ");
-    buf_puts(&b, S->cname);
-    buf_putc(&b, ' ');
-    buf_puts(&b, var);
-
-    {
-        const char *r = rest;
-        while (*r == ' ' || *r == '\t') r++;
-        if (*r == '=' && S->nu > 0) {
-            const char *e = r + 1;
-            while (*e == ' ' || *e == '\t') e++;
-            if (*e == '{') {
-                int depth = 0;
-                const char *close = NULL;
-                size_t ln = strlen(e);
-                size_t z;
-                for (z = 0; z < ln; z++) {
-                    char cc = e[z];
-                    if (cc == '"' || cc == '\'') { z = line_literal_end(e, z, ln) - 1; continue; }
-                    if (cc == '{') depth++;
-                    else if (cc == '}') { depth--; if (!depth) { close = e + z; break; } }
-                }
-                if (close) {
-                    char *inner = xstrndup(e + 1, (size_t)(close - e - 1));
-                    size_t it = trim_right_len(inner, strlen(inner));
-                    int first = 1;
-                    buf_putn(&b, rest, (size_t)(e - rest) + 1);        /* " = {" */
-                    buf_putn(&b, inner, it);
-                    if (it) buf_puts(&b, ", ");
-                    else buf_putc(&b, ' ');
-                    put_own_vptr(&b, S, &first);
-                    buf_putc(&b, ' ');
-                    buf_puts(&b, close);
-                    free(inner);
-                    done = 1;
-                } else {
-                    die(0, "multi-line initialisers are not supported");
-                }
-            } else {
-                die(0, "unsupported initialiser for struct '%s'", S->name);
-            }
-        } else if (S->nu > 0 && decl_end_is_bare(r)) {
-            /* "Person p;" has no initialiser, so give it a designated one */
-            int first = 1;
-            buf_puts(&b, " = { ");
-            put_own_vptr(&b, S, &first);
-            buf_puts(&b, " }");
-            buf_puts(&b, rest);
-            done = 1;
-        }
-        if (!done) buf_puts(&b, rest);
-    }
-
-    return b.p;
-}
-
-static char *transform_line(const char *line)
-{
-    char *decl;
-    const char *base;
-    Buf out;
-    char *res;
-    const char *q = line;
-
-    while (*q == ' ' || *q == '\t') q++;
-    if (strncmp(q, "delete", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
-        const char *d = q + 6;
-        while (*d == ' ' || *d == '\t') d++;
-        if (is_ident_char((unsigned char)*d) && !isdigit((unsigned char)*d))
-            die(0, "delete is not supported");
-    }
-
-    decl = try_var_decl(line);
-    base = decl ? decl : line;
-    buf_init(&out);
-    transform_calls(base, &out);
-    free(decl);
-    res = out.p;
-    return res;
-}
-
-/* roll g_sym.nvars back at every closing brace so locals stay in their own scope;
-   string and comment contents are ignored */
-static void scope_track(size_t ls, size_t le)
-{
-    size_t p = ls;
-    while (p < le) {
-        char c = g_src[p];
-        if (c == '"' || c == '\'') {
-            size_t j = skip_literal(p);
-            p = (j > le) ? le : j;
-            continue;
-        }
-        if (c == '/' && p + 1 < le &&
-            (g_src[p + 1] == '/' || g_src[p + 1] == '*')) {
-            size_t j = skip_comment(p);
-            p = (j > le) ? le : j;
-            continue;
-        }
-        if (c == '{') {
-            int save = g_sym.nvars;
-            if (g_body_abs && p == g_body_abs) { save = g_body_pre; g_body_abs = 0; }
-            if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
-            g_scope[g_nscope++] = save;
-        } else if (c == '}') {
-            if (g_nscope > 0)
-                g_sym.nvars = g_scope[--g_nscope];
-        }
-        p++;
-    }
-}
-
-/* Ordinary function definition or prototype: qualify the struct types in its
-   return type and parameters, record the signature, and register the parameters
-   when a body follows. Returns a new line, or NULL when `line` is not one. */
-static char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs)
-{
-    size_t n = strlen(line), lpo, he, ns, rt, rp, i, end;
-    const char *lp;
-    char name[MAX_NAME], tok[MAX_NAME];
-    Buf b;
-    int isdef = 0, ret_tr = -1, ret_ia = -1, ret_ib = -1, ret_ns = 0;
-    int ret_struct = -1, ret_rptr = 0;
-    char ret_cbase[MAX_NAME];
-
-    *has_body = 0;
-    *body_abs = 0;
-
-    lp = strchr(line, '(');
-    if (!lp) return NULL;
-    lpo = (size_t)(lp - line);
-    {
-        const char *sc = strchr(line, ';');
-        if (sc && (size_t)(sc - line) < lpo) return NULL;      /* ';' before '(' */
-    }
-
-    he = trim_right_len(line, lpo);
-    ns = he;
-    while (ns > 0 && is_ident_char((unsigned char)line[ns - 1])) ns--;
-    if (ns == he) return NULL;                                 /* no function name */
-    rt = trim_right_len(line, ns);
-    if (rt == 0) return NULL;                                  /* no return type */
-
-    {
-        size_t k, u;
-        for (k = 0; k < rt; k++) {
-            char c = line[k];
-            if (!(is_ident_char((unsigned char)c) || c == '*' || c == ' ' || c == '\t'))
-                return NULL;
-        }
-        snprintf(name, sizeof name, "%.*s", (int)(he - ns), line + ns);
-        if (is_stmt_keyword(name)) return NULL;
-        for (k = 0; k < rt; ) {
-            u = k;
-            while (u < rt && !is_ident_char((unsigned char)line[u])) u++;
-            k = u;
-            while (k < rt && is_ident_char((unsigned char)line[k])) k++;
-            if (k > u) {
-                size_t tl = k - u;
-                if (tl >= sizeof tok) tl = sizeof tok - 1;
-                memcpy(tok, line + u, tl);
-                tok[tl] = 0;
-                if (is_stmt_keyword(tok)) return NULL;
-            }
-        }
-    }
-
-    rp = line_match_paren(line, lpo, n);
-    if (rp == (size_t)-1) return NULL;                         /* ')' on another line */
-
-    {
-        size_t k = skip_ws_comments(ls + rp + 1);
-        if (k < g_len && g_src[k] == '{') { isdef = 1; *has_body = 1; *body_abs = k; }
-        else if (k < g_len && g_src[k] == ';') { isdef = 0; }
-        else return NULL;
-    }
-
-    {
-        char rname[MAX_NAME];
-        ret_struct = analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase,
-                                   &ret_ns, rname, &ret_rptr, &ret_tr);
-    }
-    if (ret_tr >= 0) die(ls, "interface return types are not supported");
-
-    buf_init(&b);
-    emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, 0);
-    buf_putc(&b, '(');
-
-    for (i = lpo + 1, end = rp; i < end; ) {
-        size_t j = i;
-        int depth = 0, pia = -1, pib = -1, pns = 0, ptr = 0, sidx, ptrtr = -1;
-        char pname[MAX_NAME], pcbase[MAX_NAME];
-
-        while (j < end) {
-            char c = line[j];
-            if (c == '"' || c == '\'') { j = line_literal_end(line, j, end); continue; }
-            if (c == '(' || c == '[' || c == '{') depth++;
-            else if (c == ')' || c == ']' || c == '}') depth--;
-            else if (c == ',' && depth == 0) break;
-            j++;
-        }
-        sidx = analyse_param(line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
-        if (ptrtr >= 0) die(ls, "interface parameters are not supported");
-        emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, 0);
-
-        if (isdef && pname[0] && sidx >= 0) {
-            int vi = g_sym.new_var();
-            snprintf(g_sym.vars[vi].name, MAX_NAME, "%s", pname);
-            g_sym.vars[vi].s = sidx;
-            g_sym.vars[vi].ptr = ptr;
-        }
-        if (j < end) { buf_putc(&b, ','); j++; }
-        i = j;
-    }
-    /* record the signature so call sites can reject rvalue receivers */
-    if (g_sym.nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
-    {
-        FuncSig *FS = &g_sym.funcs[g_sym.nfuncs++];
-        snprintf(FS->name, MAX_NAME, "%s", name);
-        FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
-        FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
-    }
-
-    buf_putc(&b, ')');
-    buf_puts(&b, line + rp + 1);
-    return b.p;
 }
 
 /* ------------------------------------------------------------------ main */
