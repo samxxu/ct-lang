@@ -65,6 +65,7 @@ baseline="
 21_empty_init_iface
 23_file_scope
 24_receiver_forms
+25_rvalue_receiver
 26_method_body_dispatch
 27_static_file_scope
 28_iface_field

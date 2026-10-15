@@ -29,6 +29,9 @@
  *   - file-scope struct objects and arrays: their vptr writes are collected and
  *     emitted after everything else as `__ct_init`, a constructor that runs
  *     before main (the objects also host the compiler's own symbol table)
+ *   - rvalue receivers (`f().m()`, `f()->m()`, `f().a.b.m()`): the receiver is
+ *     hoisted into a `__ct_tmp<N>` so it is evaluated once, and the call
+ *     dispatches on that temp
  *   - ordinary function signatures (qualify known struct types, register params)
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
@@ -36,8 +39,7 @@
  * Not covered yet (left to later milestones). L1 reports these as errors instead
  * of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
- *   - rvalue receivers (f().m()), #line and diagnostics; `delete` is supported,
- *     Drop is not
+ *   - #line and diagnostics; `delete` is supported, Drop is not
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
@@ -171,6 +173,12 @@ static size_t g_line_off = 0;
    emitted after everything else as a constructor that runs before main. */
 static Buf g_unit_init;
 static int g_has_unit_init = 0;
+
+/* An rvalue receiver (`f().m()`) is hoisted into a temp so it is evaluated once
+   and in order; the declaration goes on the line before the rewritten one (see
+   `emit_hoisted`), and `g_ntmp` keeps the temp names unique. */
+static Buf g_hoist;
+static int g_ntmp = 0;
 
 /* ---------------------------------------------------------------- util */
 
@@ -605,6 +613,7 @@ static int already_qualified(const char *type, size_t off)
    (the line rewriters use `line_literal_end` / `line_match_paren`). */
 static size_t line_literal_end(const char *s, size_t i, size_t n);
 static size_t line_match_paren(const char *s, size_t k, size_t n);
+static size_t line_assign_eq(const char *line);
 
 /* ------------------------------------------------------- construct parsers */
 
@@ -637,6 +646,7 @@ trait PipeOps {
     void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
     void register_body_params(struct SymTab *sym, const char *params);
     /* the pipeline driver; the rewriting layer itself is the `RewriteOps` trait */
+    void emit_hoisted();
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
     void compile_range(struct SymTab *sym, size_t start, size_t end);
     /* compile_file's own file I/O helpers */
@@ -664,7 +674,7 @@ trait RewriteOps {
     char *transform_line(struct SymTab *sym, const char *line);
     char *try_var_decl(struct SymTab *sym, const char *line);
     void transform_calls(struct SymTab *sym, const char *s, Buf *out);
-    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
+    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
     int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_tr, size_t *out_end, int *out_ifptr);
     int decl_end_is_bare(const char *s);
     void scope_track(struct SymTab *sym, size_t ls, size_t le);
@@ -1365,12 +1375,24 @@ impl PipeOps for Pipe {
         }
     }
 
+    /* If the line just rewritten hoisted a temp receiver, write that declaration
+       first: it must run before the rewritten line. */
+    void emit_hoisted(void) {
+        if (g_hoist.n == 0) return;
+        fputs(g_hoist.p, self->out);
+        fputc('\n', self->out);
+    }
+
     /* Pass one raw source line through the shared rewriting pipeline. */
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le) {
         size_t len = le - ls, t = 0;
         char *line, *sig;
         int pre = sym->nvars, has_body = 0;
         size_t body_abs = 0;
+
+        if (!g_hoist.cap) buf_init(&g_hoist);
+        g_hoist.n = 0;
+        g_hoist.p[0] = 0;
 
         line = xstrndup(g_src + ls, len);
         while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
@@ -1388,6 +1410,7 @@ impl PipeOps for Pipe {
             free(sig);
         } else {
             char *out = self->transform_line(sym, line);
+            self->emit_hoisted();
             fputs(out, self->out);
             free(out);
         }
@@ -1667,6 +1690,9 @@ impl PipeOps for Pipe {
             Buf sb;
 
             g_line_off = ls[k];
+            if (!g_hoist.cap) buf_init(&g_hoist);
+            g_hoist.n = 0;
+            g_hoist.p[0] = 0;
 
             while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
             if (t >= le[k]) { fputc('\n', f); self->scope_track(sym, ls[k], le[k]); continue; }
@@ -1674,6 +1700,7 @@ impl PipeOps for Pipe {
             content = ls[k] + (size_t)minind;
             line = xstrndup(g_src + content, le[k] - content);
             out = self->transform_line(sym, line);
+            self->emit_hoisted();
             buf_init(&sb);
             self->replace_self(out, strlen(out), &sb);
             {
@@ -2410,31 +2437,78 @@ impl RewriteOps for Pipe {
                     }
                 }
 
-                /* a call whose result is used as a receiver needs hoisting, which
-                   M2-a does not implement: report it instead of passing it through */
+                /* an rvalue receiver: `f().m()` / `f()->m()` / `f().a.b.m()` where
+                   f returns a known struct. Its receiver is hoisted into a temp so
+                   it is evaluated once and in order; only a statement head or an
+                   initialiser allows that without reordering evaluation, so any
+                   other position is a hard error. */
                 if (vi < 0 && j < n && s[j] == '(') {
                     FuncSig *FS = sym->find_func(tok);
                     if (FS && FS->retstruct >= 0) {
                         size_t cp = line_match_paren(s, j, n);
                         if (cp != (size_t)-1) {
-                            size_t p2 = cp + 1;
                             char mem[MAX_NAME];
-                            size_t ms2, k2, ml2;
-                            if (p2 + 1 < n && s[p2] == '-' && s[p2 + 1] == '>') p2 += 2;
-                            else if (p2 < n && s[p2] == '.') p2 += 1;
-                            else p2 = 0;
-                            if (p2) {
-                                ms2 = p2;
-                                k2 = p2;
-                                while (k2 < n && is_ident_char((unsigned char)s[k2])) k2++;
-                                ml2 = k2 - ms2;
-                                if (ml2 > 0 && ml2 < MAX_NAME) {
-                                    memcpy(mem, s + ms2, ml2);
-                                    mem[ml2] = 0;
-                                    if (k2 < n && s[k2] == '(' &&
-                                        sym->resolve_method(&sym->structs[FS->retstruct], mem))
-                                        die(g_line_off + i, "rvalue receivers are not supported");
+                            const char *tr = NULL;
+                            int cur = FS->retstruct, need_amp = 0;
+                            size_t rend = 0, mp = 0;
+                            if (self->walk_method(sym, s, n, cp + 1, cur, FS->retptr, &cur, &need_amp,
+                                                  &tr, &rend, &mp, mem)) {
+                                size_t fs = 0, eq, saved_off;
+                                char tmp[MAX_NAME], low[MAX_NAME], *recv;
+                                Buf ini;
+
+                                while (fs < n && (s[fs] == ' ' || s[fs] == '\t')) fs++;
+                                eq = line_assign_eq(s);
+                                if (i != fs) {
+                                    int ok = 0;
+                                    if (eq != (size_t)-1) {
+                                        size_t rs = eq + 1;
+                                        while (rs < n && (s[rs] == ' ' || s[rs] == '\t')) rs++;
+                                        if (i == rs) ok = 1;
+                                    }
+                                    if (!ok)
+                                        die(g_line_off + i, "an rvalue receiver must start the statement or an initialiser");
                                 }
+
+                                snprintf(tmp, sizeof tmp, "__ct_tmp%d", g_ntmp++);
+                                /* the initialiser is the receiver text, itself run
+                                   through the rewriter so nested calls are handled */
+                                recv = xstrndup(s + i, rend - i);
+                                buf_init(&ini);
+                                saved_off = g_line_off;
+                                g_line_off += i;
+                                self->transform_calls(sym, recv, &ini);
+                                g_line_off = saved_off;
+                                free(recv);
+
+                                buf_putn(&g_hoist, s, fs);    /* keep the line's indent */
+                                buf_puts(&g_hoist, "struct ");
+                                buf_puts(&g_hoist, sym->structs[cur].cname);
+                                buf_puts(&g_hoist, need_amp ? " " : " *");
+                                buf_puts(&g_hoist, tmp);
+                                buf_puts(&g_hoist, " = ");
+                                buf_puts(&g_hoist, ini.p);
+                                buf_putc(&g_hoist, ';');
+                                free(ini.p);
+
+                                to_lower(tr, low);
+                                buf_puts(out, tmp);
+                                buf_puts(out, need_amp ? ".__" : "->__");
+                                buf_puts(out, low);
+                                buf_puts(out, "_vptr->");
+                                buf_puts(out, mem);
+                                buf_putc(out, '(');
+                                if (need_amp) buf_putc(out, '&');
+                                buf_puts(out, tmp);
+                                {
+                                    size_t z = mp + 1;
+                                    int empty;
+                                    while (z < n && isspace((unsigned char)s[z])) z++;
+                                    empty = (z < n && s[z] == ')');
+                                    if (!empty) buf_puts(out, ", ");
+                                }
+                                i = mp + 1;
+                                continue;
                             }
                         }
                     }
@@ -2530,7 +2604,7 @@ impl RewriteOps for Pipe {
                         }
                     }
                     if (!unclosed)
-                        hit = self->walk_method(sym, s, n, pos, cur, isptr, &need_amp,
+                        hit = self->walk_method(sym, s, n, pos, cur, isptr, &cur, &need_amp,
                                                 &tr, &rend, &mp, mem);
                     if (hit) {
                         size_t z = mp + 1;
@@ -2604,11 +2678,13 @@ impl RewriteOps for Pipe {
 
     /* Walk `.field` / `->field` hops from the receiver of struct `cur` (a pointer
        when `isptr`) until a trait method call is reached, and report the trait it
-       names, where the receiver text ends (*out_rend) and where the argument list
-       starts (*mp). `isptr` flips as the walk crosses pointer fields, so the hook
-       picks `&recv` or `recv`. */
+       names, the struct the *final* receiver is (*out_cur -- the writeback the
+       rvalue-receiver hoist needs), where the receiver text ends (*out_rend) and
+       where the argument list starts (*mp). `isptr` flips as the walk crosses
+       pointer fields, so the hook picks `&recv` or `recv`. */
     int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr,
-                    int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb) {
+                    int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend,
+                    size_t *mp, char *memb) {
         char mem[MAX_NAME];
 
         (void)self;  /* the body only consults the symbol table for the method */
@@ -2633,6 +2709,7 @@ impl RewriteOps for Pipe {
 
             *out_tr = sym->resolve_method(&sym->structs[cur], mem);
             if (*out_tr && k < n && s[k] == '(') {
+                *out_cur = cur;
                 *out_need_amp = !isptr;
                 *out_rend = pos;
                 *mp = k;
@@ -2900,6 +2977,27 @@ static size_t line_match_paren(const char *s, size_t k, size_t n)
         if (c == '(') depth++;
         else if (c == ')') { depth--; if (!depth) return k; }
         k++;
+    }
+    return (size_t)-1;
+}
+
+/* Offset of the first plain '=' (the assignment or initialiser), or -1. A '=='
+   or a compound operator like '+=' is not one. */
+static size_t line_assign_eq(const char *line)
+{
+    size_t len = strlen(line), i = 0;
+    while (i < len) {
+        char c = line[i];
+        if (c == '"' || c == '\'') { i = line_literal_end(line, i, len); continue; }
+        if (c == '/' && (line[i + 1] == '/' || line[i + 1] == '*')) break;
+        if (c == '=') {
+            char next = line[i + 1];
+            char prev = (i > 0) ? line[i - 1] : 0;
+            if (next == '=') { i += 2; continue; }
+            if (prev && strchr("=!<>+-*/%&|^", prev)) { i++; continue; }
+            return i;
+        }
+        i++;
     }
     return (size_t)-1;
 }
