@@ -22,3 +22,4 @@ editors/**/node_modules/
 
 # Local agent tooling (skills, caches) — not part of the shipped project
 .trae/
+.trae-html-share-packages/
