@@ -27,12 +27,13 @@
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
  * output pipeline lives on `g_pipe` (`struct Pipe` + `use PipeOps`) -- the output
- * streams plus the construct parsers, the line-rewriting passes and the entry
- * points (`emit_raw_line` / `compile_range` / `write_guard` / `compile_file`) are
- * its methods. Lookups read `g_sym.find_trait(..)` and the pipeline is reached as
- * `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`, both dispatching through
- * their vtable. Only the facilities layer (Buf, allocators, die, the scanning
- * primitives) stays plain C.
+ * streams, the code emitters (`emit_trait_def` / `emit_struct_def` /
+ * `put_own_vptr` / `body_needs_vtable`), the construct parsers, the line-rewriting
+ * passes and the entry points (`emit_raw_line` / `compile_range` / `write_guard` /
+ * `compile_file`) are its methods. Lookups read `g_sym.find_trait(..)` and the
+ * pipeline is reached as `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`, both
+ * dispatching through their vtable. Only the facilities layer (Buf, allocators,
+ * die, the scanning primitives) stays plain C.
  * The source stays inside the subset L0 itself accepts: the plain-C passthrough
  * of CT plus the line-rewriting discipline (one statement per line, no one-line
  * function bodies, declarations before use). L1 carries its own facilities; it
@@ -654,103 +655,12 @@ static void emit_qualified_type(Buf *b, const char *piece, size_t len,
     buf_putn(b, piece + ib, len - (size_t)ib);
 }
 
-/* ------------------------------------------------------------ emitters */
-
-static void emit_trait_def(FILE *f, const Trait *T)
-{
-    int i, k;
-    fprintf(f, "struct %s_vtbl {\n", T->cname);
-    for (i = 0; i < T->nm; i++) {
-        const Method *m = &T->m[i];
-        fprintf(f, "    %s (*%s)(void *", m->ret, m->name);
-        for (k = 0; k < m->nparams; k++) fprintf(f, ", %s", m->ptypes[k]);
-        fprintf(f, ");\n");
-    }
-    fprintf(f, "};\n");
-    fprintf(f, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n",
-            T->cname, T->cname);
-}
-
-static void emit_struct_def(FILE *f, const Struct *S, const char *body)
-{
-    int i;
-    size_t blen = strlen(body);
-
-    fprintf(f, "struct %s {", S->cname);
-    if (blen && body[0] != '\n') fputc('\n', f);
-    if (blen) fputs(body, f);
-    if (blen == 0 || body[blen - 1] != '\n') fputc('\n', f);
-    for (i = 0; i < S->nu; i++) {
-        char low[MAX_NAME];
-        to_lower(S->use_t[i], low);
-        fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", g_sym.traits[S->use_i[i]].cname, low);
-    }
-    fprintf(f, "};\n");
-}
-
-/* append one ".__<trait>_vptr = &<Struct>_<Trait>_vtable" per used trait */
-static void put_own_vptr(Buf *b, const Struct *S, int *first)
-{
-    int h;
-    for (h = 0; h < S->nu; h++) {
-        char low[MAX_NAME];
-        to_lower(S->use_t[h], low);
-        if (!*first) buf_puts(b, ", ");
-        *first = 0;
-        buf_puts(b, ".__");
-        buf_puts(b, low);
-        buf_puts(b, "_vptr = &");
-        buf_puts(b, S->cname);
-        buf_putc(b, '_');
-        buf_puts(b, S->use_t[h]);
-        buf_puts(b, "_vtable");
-    }
-}
-
-/* (is_any_trait_method is a SymTabOps method now; see the symbol-table section) */
-
-/* Does the body contain a call that will become a vtable dispatch? Any `.m(` /
-   `->m(` whose `m` names a declared trait method counts; when it does, the
-   impl's vtable variable must be declared before the method bodies. */
-static int body_needs_vtable(size_t bstart, size_t blen)
-{
-    size_t i = bstart, end = bstart + blen;
-
-    while (i < end) {
-        char c = g_src[i];
-        if (c == '"' || c == '\'') {
-            size_t j = skip_literal(i);
-            i = (j > end) ? end : j;
-            continue;
-        }
-        if (c == '/' && i + 1 < end &&
-            (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
-            size_t j = skip_comment(i);
-            i = (j > end) ? end : j;
-            continue;
-        }
-        if (c == '.' || c == '-') {
-            size_t ms = (c == '.') ? i + 1 : i + 2;
-            size_t e, ml;
-            char mem[MAX_NAME];
-            if (c == '-') {
-                if (i + 1 >= end || g_src[i + 1] != '>') { i++; continue; }
-            }
-            e = ms;
-            while (e < end && is_ident_char((unsigned char)g_src[e])) e++;
-            ml = e - ms;
-            if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
-                memcpy(mem, g_src + ms, ml);
-                mem[ml] = 0;
-                if (g_sym.is_any_trait_method(mem)) return 1;
-            }
-            i = (e > i) ? e : i + 1;
-            continue;
-        }
-        i++;
-    }
-    return 0;
-}
+/* The four code emitters (emit_trait_def / emit_struct_def / put_own_vptr /
+   body_needs_vtable) are `Pipe` methods now -- see `impl PipeOps for Pipe`
+   below. Each keeps its stream parameter (FILE* / Buf*) because it is used for
+   both the .c output (`self->out`) and the .h output (`self->hout`), and takes
+   `struct SymTab *sym` wherever it reads the symbol tables. `is_any_trait_method`
+   stays a `SymTabOps` method (see the symbol-table section). */
 
 /* Scan primitives and pipeline entry points defined after the `Pipe` impl but
    called from its methods (the line rewriters use `line_literal_end` /
@@ -772,6 +682,11 @@ trait PipeOps {
     size_t parse_trait(struct SymTab *sym, size_t p);
     size_t parse_struct(struct SymTab *sym, size_t p);
     size_t parse_impl(struct SymTab *sym, size_t p);
+    /* code emitters, called from the parsers above (stream passed explicitly) */
+    void emit_trait_def(FILE *f, const Trait *T);
+    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body);
+    void put_own_vptr(Buf *b, const Struct *S, int *first);
+    int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen);
     void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
     void register_body_params(struct SymTab *sym, const char *params);
     void replace_self(const char *s, size_t n, Buf *out);
@@ -839,6 +754,100 @@ static char *parse_fields(const char *body, Struct *S, size_t pos)
 }
 
 impl PipeOps for Pipe {
+    void emit_trait_def(FILE *f, const Trait *T) {
+        int i, k;
+        (void)self;  /* the stream is passed in; the receiver is not used */
+        fprintf(f, "struct %s_vtbl {\n", T->cname);
+        for (i = 0; i < T->nm; i++) {
+            const Method *m = &T->m[i];
+            fprintf(f, "    %s (*%s)(void *", m->ret, m->name);
+            for (k = 0; k < m->nparams; k++) fprintf(f, ", %s", m->ptypes[k]);
+            fprintf(f, ");\n");
+        }
+        fprintf(f, "};\n");
+        fprintf(f, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n",
+                T->cname, T->cname);
+    }
+
+    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body) {
+        int i;
+        size_t blen = strlen(body);
+
+        (void)self;  /* the body only reads the symbol table, not the receiver */
+        fprintf(f, "struct %s {", S->cname);
+        if (blen && body[0] != '\n') fputc('\n', f);
+        if (blen) fputs(body, f);
+        if (blen == 0 || body[blen - 1] != '\n') fputc('\n', f);
+        for (i = 0; i < S->nu; i++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[i], low);
+            fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", sym->traits[S->use_i[i]].cname, low);
+        }
+        fprintf(f, "};\n");
+    }
+
+    /* append one ".__<trait>_vptr = &<Struct>_<Trait>_vtable" per used trait */
+    void put_own_vptr(Buf *b, const Struct *S, int *first) {
+        int h;
+        (void)self;  /* the buffer is passed in; the receiver is not used */
+        for (h = 0; h < S->nu; h++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[h], low);
+            if (!*first) buf_puts(b, ", ");
+            *first = 0;
+            buf_puts(b, ".__");
+            buf_puts(b, low);
+            buf_puts(b, "_vptr = &");
+            buf_puts(b, S->cname);
+            buf_putc(b, '_');
+            buf_puts(b, S->use_t[h]);
+            buf_puts(b, "_vtable");
+        }
+    }
+
+    /* Does a body contain a call that will become a vtable dispatch? Any `.m(` /
+       `->m(` whose `m` names a declared trait method counts; when it does, the
+       impl's vtable variable must be declared before the method bodies. */
+    int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen) {
+        size_t i = bstart, end = bstart + blen;
+
+        (void)self;  /* the body only consults the symbol table for the method */
+        while (i < end) {
+            char c = g_src[i];
+            if (c == '"' || c == '\'') {
+                size_t j = skip_literal(i);
+                i = (j > end) ? end : j;
+                continue;
+            }
+            if (c == '/' && i + 1 < end &&
+                (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
+                size_t j = skip_comment(i);
+                i = (j > end) ? end : j;
+                continue;
+            }
+            if (c == '.' || c == '-') {
+                size_t ms = (c == '.') ? i + 1 : i + 2;
+                size_t e, ml;
+                char mem[MAX_NAME];
+                if (c == '-') {
+                    if (i + 1 >= end || g_src[i + 1] != '>') { i++; continue; }
+                }
+                e = ms;
+                while (e < end && is_ident_char((unsigned char)g_src[e])) e++;
+                ml = e - ms;
+                if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
+                    memcpy(mem, g_src + ms, ml);
+                    mem[ml] = 0;
+                    if (sym->is_any_trait_method(mem)) return 1;
+                }
+                i = (e > i) ? e : i + 1;
+                continue;
+            }
+            i++;
+        }
+        return 0;
+    }
+
     size_t parse_trait(struct SymTab *sym, size_t p) {
         char name[MAX_NAME];
         Trait *T;
@@ -921,8 +930,8 @@ impl PipeOps for Pipe {
         }
         free(clean.p);
 
-        emit_trait_def(self->out, T);
-        emit_trait_def(self->hout, T);
+        self->emit_trait_def(self->out, T);
+        self->emit_trait_def(self->hout, T);
         return close + 1;
     }
 
@@ -990,8 +999,8 @@ impl PipeOps for Pipe {
             char *raw = xstrndup(g_src + bstart, bend - bstart);
             char *qbody = parse_fields(raw, S, p);
             free(raw);
-            emit_struct_def(self->out, S, qbody);
-            emit_struct_def(self->hout, S, qbody);
+            self->emit_struct_def(sym, self->out, S, qbody);
+            self->emit_struct_def(sym, self->hout, S, qbody);
             free(qbody);
         }
         return q;
@@ -1088,7 +1097,7 @@ impl PipeOps for Pipe {
         {
             int needs_vtable = 0;
             for (k = 0; k < (size_t)nimpl; k++)
-                if (body_needs_vtable(impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
+                if (self->body_needs_vtable(sym, impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
             if (needs_vtable)
                 fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n\n",
                         T->cname, S->cname, T->name);
@@ -1623,7 +1632,7 @@ impl PipeOps for Pipe {
                         buf_putn(&b, inner, it);
                         if (it) buf_puts(&b, ", ");
                         else buf_putc(&b, ' ');
-                        put_own_vptr(&b, S, &first);
+                        self->put_own_vptr(&b, S, &first);
                         buf_putc(&b, ' ');
                         buf_puts(&b, close);
                         free(inner);
@@ -1638,7 +1647,7 @@ impl PipeOps for Pipe {
                 /* "Person p;" has no initialiser, so give it a designated one */
                 int first = 1;
                 buf_puts(&b, " = { ");
-                put_own_vptr(&b, S, &first);
+                self->put_own_vptr(&b, S, &first);
                 buf_puts(&b, " }");
                 buf_puts(&b, rest);
                 done = 1;
