@@ -560,100 +560,8 @@ static int already_qualified(const char *type, size_t off)
            (q == 6 || !is_ident_char((unsigned char)type[q - 7]));
 }
 
-/* Analyse one declaration piece: the struct its type names (an index into
-   g_sym.structs, or -1), the trait when the type is an interface value (`*tr`),
-   the identifier span [*ia,*ib) of the base type name, its generated spelling
-   (`cbase`), whether "struct " must be inserted, the declared name ("" when
-   unnamed) and whether it is a pointer. */
-static int analyse_param(const char *s, size_t n, int *ia, int *ib,
-                         char *cbase, int *need_struct,
-                         char *name, int *isptr, int *tr)
-{
-    size_t a, b, lim = 0, tn, ea, eb;
-    char type[MAX_NAME * 2], base[MAX_NAME];
-    int idx = -1;
-    const Struct *S;
-    const Trait *T;
-
-    *ia = -1;
-    *ib = -1;
-    *need_struct = 0;
-    *tr = -1;
-    cbase[0] = 0;
-    base[0] = 0;
-    name[0] = 0;
-    *isptr = 0;
-
-    while (lim < n && s[lim] != '[') lim++;
-    if (!last_ident(s, lim, &a, &b)) return -1;
-
-    {
-        size_t lsx = b;
-        char last[MAX_NAME];
-        while (lsx > a && is_ident_char((unsigned char)s[lsx - 1])) lsx--;
-        snprintf(last, sizeof last, "%.*s", (int)(b - lsx), s + lsx);
-        if (!is_type_keyword(last) && !g_sym.find_struct(last) && !g_sym.find_trait(last)) {
-            snprintf(name, MAX_NAME, "%s", last);
-            snprintf(type, sizeof type, "%.*s", (int)a, s);
-        } else {
-            snprintf(type, sizeof type, "%.*s", (int)n, s);   /* the type itself */
-        }
-    }
-    if (lim < n) name[0] = 0;                                 /* array: no object to bind */
-
-    tn = strlen(type);
-    while (tn > 0 && (type[tn - 1] == '*' || isspace((unsigned char)type[tn - 1]))) tn--;
-    if (tn == 0 || !last_ident(type, tn, &ea, &eb)) return -1;
-
-    {
-        size_t bl = eb - ea;
-        if (bl >= sizeof base) bl = sizeof base - 1;
-        memcpy(base, type + ea, bl);
-        base[bl] = 0;
-        S = g_sym.find_struct(base);
-        T = S ? NULL : g_sym.find_trait(base);
-        if (S) snprintf(cbase, MAX_NAME, "%s", S->cname);
-        else if (T) snprintf(cbase, MAX_NAME, "%s", T->cname);
-    }
-
-    if (S) {
-        idx = (int)(S - g_sym.structs);
-        *ia = (int)ea;
-        *ib = (int)eb;
-        *need_struct = !already_qualified(type, ea);
-    } else if (T) {
-        *tr = (int)(T - g_sym.traits);
-        *ia = (int)ea;
-        *ib = (int)eb;
-        *need_struct = !already_qualified(type, ea);
-    } else if (strlen(base) > 6 && strcmp(base + strlen(base) - 6, "_iface") == 0) {
-        char pre[MAX_NAME];
-        size_t pl = strlen(base) - 6;
-        if (pl < sizeof pre) {
-            memcpy(pre, base, pl);
-            pre[pl] = 0;
-            T = g_sym.find_trait(pre);
-            if (T) *tr = (int)(T - g_sym.traits);
-        }
-    }
-
-    *isptr = (strchr(type, '*') != NULL);
-    return idx;
-}
-
-/* emit a declaration piece: replace the base type identifier [ia,ib) with its
-   generated spelling, inserting "struct " as needed */
-static void emit_qualified_type(Buf *b, const char *piece, size_t len,
-                                int ia, int ib, const char *cbase,
-                                int need_struct, int is_trait)
-{
-    if (ia < 0) { buf_putn(b, piece, len); return; }
-    buf_putn(b, piece, (size_t)ia);
-    if (need_struct) buf_puts(b, "struct ");
-    buf_puts(b, cbase);
-    if (is_trait) buf_puts(b, "_iface");
-    buf_putn(b, piece + ib, len - (size_t)ib);
-}
+/* analyse_param / emit_qualified_type are `Pipe` methods now (see `impl
+   PipeOps for Pipe` below); analyse_param reads the symbol tables through `sym`. */
 
 /* The four code emitters (emit_trait_def / emit_struct_def / put_own_vptr /
    body_needs_vtable) are `Pipe` methods now -- see `impl PipeOps for Pipe`
@@ -673,11 +581,11 @@ static char *read_file(const char *path, size_t *out_len);
 /* ------------------------------------------------------- construct parsers */
 
 /* The whole output pipeline lives on the `Pipe` object: the output streams are
-   its fields and the construct parsers plus the pipeline entry points are its
-   methods, so call sites read `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`.
-   `parse_fields` stays plain C: it reads only the receiver Struct and never
-   touches `self`. The symbol tables arrive as `struct SymTab *sym` because a
-   method body cannot see the file-scope `g_sym` object. */
+   its fields and the code emitters, the construct parsers, the declaration-piece
+   helpers and the pipeline entry points are its methods, so call sites read
+   `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`. The symbol tables arrive
+   as `struct SymTab *sym` because a method body cannot see the file-scope
+   `g_sym` object. */
 trait PipeOps {
     size_t parse_trait(struct SymTab *sym, size_t p);
     size_t parse_struct(struct SymTab *sym, size_t p);
@@ -687,6 +595,10 @@ trait PipeOps {
     void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body);
     void put_own_vptr(Buf *b, const Struct *S, int *first);
     int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen);
+    /* declaration-piece helpers, shared by parse_fields and parse_func_sig */
+    int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr);
+    void emit_qualified_type(Buf *b, const char *piece, size_t len, int ia, int ib, const char *cbase, int need_struct, int is_trait);
+    char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos);
     void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
     void register_body_params(struct SymTab *sym, const char *params);
     void replace_self(const char *s, size_t n, Buf *out);
@@ -710,48 +622,8 @@ struct Pipe {
 
 /* Copy a struct body verbatim. M2-a does not support composition or interface
    fields, so any field whose type names a known struct or trait is a hard error
-   rather than silent C that cannot compile. Returns a new body string. */
-static char *parse_fields(const char *body, Struct *S, size_t pos)
-{
-    Buf out;
-    size_t n = strlen(body), i = 0;
-
-    buf_init(&out);
-
-    while (i < n) {
-        size_t j = i, depth = 0;
-        int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr;
-        char fname[MAX_NAME], cbase[MAX_NAME];
-
-        while (j < n) {
-            char c = body[j];
-            if (c == '"' || c == '\'') {
-                char q = c;
-                j++;
-                while (j < n) {
-                    if (body[j] == '\\' && j + 1 < n) { j += 2; continue; }
-                    if (body[j] == q) { j++; break; }
-                    j++;
-                }
-                continue;
-            }
-            if (c == '{' || c == '(' || c == '[') depth++;
-            else if (c == '}' || c == ')' || c == ']') depth--;
-            else if (c == ';' && depth == 0) break;
-            j++;
-        }
-
-        idx = analyse_param(body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
-        if (idx >= 0)
-            die(pos, "struct '%s': a field of struct type is not supported (no composition)", S->name);
-        if (tr >= 0)
-            die(pos, "struct '%s': an interface-typed field is not supported", S->name);
-        emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, 0);
-        if (j < n) { buf_putc(&out, ';'); j++; }
-        i = j;
-    }
-    return out.p;
-}
+   rather than silent C that cannot compile. Returns a new body string. This is a
+   `Pipe` method now (see `impl PipeOps for Pipe` below). */
 
 impl PipeOps for Pipe {
     void emit_trait_def(FILE *f, const Trait *T) {
@@ -846,6 +718,138 @@ impl PipeOps for Pipe {
             i++;
         }
         return 0;
+    }
+
+    /* Analyse one declaration piece: the struct its type names (an index into
+       sym->structs, or -1), the trait when the type is an interface value
+       (`*tr`), the identifier span [*ia,*ib) of the base type name, its
+       generated spelling (`cbase`), whether "struct " must be inserted, the
+       declared name ("" when unnamed) and whether it is a pointer. */
+    int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr) {
+        size_t a, b, lim = 0, tn, ea, eb;
+        char type[MAX_NAME * 2], base[MAX_NAME];
+        int idx = -1;
+        const Struct *S;
+        const Trait *T;
+
+        (void)self;  /* the body only consults the symbol table for the type */
+        *ia = -1;
+        *ib = -1;
+        *need_struct = 0;
+        *tr = -1;
+        cbase[0] = 0;
+        base[0] = 0;
+        name[0] = 0;
+        *isptr = 0;
+
+        while (lim < n && s[lim] != '[') lim++;
+        if (!last_ident(s, lim, &a, &b)) return -1;
+
+        {
+            size_t lsx = b;
+            char last[MAX_NAME];
+            while (lsx > a && is_ident_char((unsigned char)s[lsx - 1])) lsx--;
+            snprintf(last, sizeof last, "%.*s", (int)(b - lsx), s + lsx);
+            if (!is_type_keyword(last) && !sym->find_struct(last) && !sym->find_trait(last)) {
+                snprintf(name, MAX_NAME, "%s", last);
+                snprintf(type, sizeof type, "%.*s", (int)a, s);
+            } else {
+                snprintf(type, sizeof type, "%.*s", (int)n, s);   /* the type itself */
+            }
+        }
+        if (lim < n) name[0] = 0;                                 /* array: no object to bind */
+
+        tn = strlen(type);
+        while (tn > 0 && (type[tn - 1] == '*' || isspace((unsigned char)type[tn - 1]))) tn--;
+        if (tn == 0 || !last_ident(type, tn, &ea, &eb)) return -1;
+
+        {
+            size_t bl = eb - ea;
+            if (bl >= sizeof base) bl = sizeof base - 1;
+            memcpy(base, type + ea, bl);
+            base[bl] = 0;
+            S = sym->find_struct(base);
+            T = S ? NULL : sym->find_trait(base);
+            if (S) snprintf(cbase, MAX_NAME, "%s", S->cname);
+            else if (T) snprintf(cbase, MAX_NAME, "%s", T->cname);
+        }
+
+        if (S) {
+            idx = (int)(S - sym->structs);
+            *ia = (int)ea;
+            *ib = (int)eb;
+            *need_struct = !already_qualified(type, ea);
+        } else if (T) {
+            *tr = (int)(T - sym->traits);
+            *ia = (int)ea;
+            *ib = (int)eb;
+            *need_struct = !already_qualified(type, ea);
+        } else if (strlen(base) > 6 && strcmp(base + strlen(base) - 6, "_iface") == 0) {
+            char pre[MAX_NAME];
+            size_t pl = strlen(base) - 6;
+            if (pl < sizeof pre) {
+                memcpy(pre, base, pl);
+                pre[pl] = 0;
+                T = sym->find_trait(pre);
+                if (T) *tr = (int)(T - sym->traits);
+            }
+        }
+
+        *isptr = (strchr(type, '*') != NULL);
+        return idx;
+    }
+
+    /* emit a declaration piece: replace the base type identifier [ia,ib) with its
+       generated spelling, inserting "struct " as needed */
+    void emit_qualified_type(Buf *b, const char *piece, size_t len, int ia, int ib, const char *cbase, int need_struct, int is_trait) {
+        (void)self;  /* a pure emit helper; the receiver is not used */
+        if (ia < 0) { buf_putn(b, piece, len); return; }
+        buf_putn(b, piece, (size_t)ia);
+        if (need_struct) buf_puts(b, "struct ");
+        buf_puts(b, cbase);
+        if (is_trait) buf_puts(b, "_iface");
+        buf_putn(b, piece + ib, len - (size_t)ib);
+    }
+
+    char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos) {
+        Buf out;
+        size_t n = strlen(body), i = 0;
+
+        buf_init(&out);
+
+        while (i < n) {
+            size_t j = i, depth = 0;
+            int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr;
+            char fname[MAX_NAME], cbase[MAX_NAME];
+
+            while (j < n) {
+                char c = body[j];
+                if (c == '"' || c == '\'') {
+                    char q = c;
+                    j++;
+                    while (j < n) {
+                        if (body[j] == '\\' && j + 1 < n) { j += 2; continue; }
+                        if (body[j] == q) { j++; break; }
+                        j++;
+                    }
+                    continue;
+                }
+                if (c == '{' || c == '(' || c == '[') depth++;
+                else if (c == '}' || c == ')' || c == ']') depth--;
+                else if (c == ';' && depth == 0) break;
+                j++;
+            }
+
+            idx = self->analyse_param(sym, body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
+            if (idx >= 0)
+                die(pos, "struct '%s': a field of struct type is not supported (no composition)", S->name);
+            if (tr >= 0)
+                die(pos, "struct '%s': an interface-typed field is not supported", S->name);
+            self->emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, 0);
+            if (j < n) { buf_putc(&out, ';'); j++; }
+            i = j;
+        }
+        return out.p;
     }
 
     size_t parse_trait(struct SymTab *sym, size_t p) {
@@ -997,7 +1001,7 @@ impl PipeOps for Pipe {
 
         {
             char *raw = xstrndup(g_src + bstart, bend - bstart);
-            char *qbody = parse_fields(raw, S, p);
+            char *qbody = self->parse_fields(sym, raw, S, p);
             free(raw);
             self->emit_struct_def(sym, self->out, S, qbody);
             self->emit_struct_def(sym, self->hout, S, qbody);
@@ -1917,13 +1921,13 @@ impl PipeOps for Pipe {
 
         {
             char rname[MAX_NAME];
-            ret_struct = analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase,
-                                       &ret_ns, rname, &ret_rptr, &ret_tr);
+            ret_struct = self->analyse_param(sym, line, rt, &ret_ia, &ret_ib, ret_cbase,
+                                             &ret_ns, rname, &ret_rptr, &ret_tr);
         }
         if (ret_tr >= 0) die(ls, "interface return types are not supported");
 
         buf_init(&b);
-        emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, 0);
+        self->emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, 0);
         buf_putc(&b, '(');
 
         for (i = lpo + 1, end = rp; i < end; ) {
@@ -1939,9 +1943,9 @@ impl PipeOps for Pipe {
                 else if (c == ',' && depth == 0) break;
                 j++;
             }
-            sidx = analyse_param(line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
+            sidx = self->analyse_param(sym, line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
             if (ptrtr >= 0) die(ls, "interface parameters are not supported");
-            emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, 0);
+            self->emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, 0);
 
             if (isdef && pname[0] && sidx >= 0) {
                 int vi = sym->new_var();
