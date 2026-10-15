@@ -61,6 +61,7 @@ baseline="
 17_heap
 18_polymorphism
 21_empty_init_iface
+28_iface_field
 "
 
 in_baseline() {
