@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ctc.ct 代码分析报告 — L1 自举编译器 · v0.0.1</title>
+
+<style>
+  @font-face { font-family: 'Instrument Sans'; src: url('./_shared/fonts/InstrumentSans-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Instrument Sans'; src: url('./_shared/fonts/InstrumentSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Instrument Sans'; src: url('./_shared/fonts/InstrumentSans-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('./_shared/fonts/JetBrainsMono-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('./_shared/fonts/JetBrainsMono-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+</style>
+
+<style>
+  :root {
+    --bg: #f8f9fb; --bg2: #eef1f6; --panel: #ffffff;
+    --ink: #16202e; --muted: #5c6878; --rule: #d9e0e9;
+    --accent: #2f4fbf; --accent2: #b45309; --ok: #1f7a4d; --warn: #b42318;
+    --font: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --max: 1020px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: var(--font); color: var(--ink); background: var(--bg);
+    line-height: 1.72; padding: 0 1.25rem 5rem; -webkit-font-smoothing: antialiased;
+  }
+  article.page { max-width: var(--max); margin: 0 auto; }
+
+  header.masthead { border-bottom: 2px solid var(--ink); padding: 3rem 0 1.5rem; margin-bottom: 1.75rem; }
+  header.masthead .eyebrow { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent2); font-weight: 700; }
+  header.masthead h1 { font-size: 2.15rem; line-height: 1.2; margin: 0.6rem 0 0.5rem; letter-spacing: -0.02em; }
+  header.masthead p.dek { color: var(--muted); font-size: 1.02rem; max-width: 64ch; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 1.1rem; }
+  .chip { font-family: var(--font-mono); font-size: 0.72rem; background: var(--bg2); border: 1px solid var(--rule); border-radius: 999px; padding: 0.22rem 0.7rem; color: var(--muted); }
+  .chip b { color: var(--ink); }
+
+  h2 { font-size: 1.42rem; margin: 2.9rem 0 0.35rem; letter-spacing: -0.01em; scroll-margin-top: 1rem; }
+  h2 .num { font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); font-weight: 700; margin-right: 0.5rem; }
+  h3 { font-size: 1.08rem; margin: 1.7rem 0 0.4rem; }
+  h4 { font-size: 0.95rem; margin: 1.2rem 0 0.3rem; color: var(--muted); }
+  p { margin: 0.55rem 0; }
+  ul, ol { margin: 0.5rem 0 0.5rem 1.35rem; }
+  li { margin: 0.28rem 0; }
+  strong { font-weight: 700; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(47,79,191,0.3); }
+  a:hover { border-bottom-color: var(--accent); }
+  .sub { color: var(--muted); font-size: 0.92rem; }
+
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  code { background: var(--bg2); border: 1px solid var(--rule); border-radius: 4px; padding: 0.06em 0.34em; }
+  pre { font-family: var(--font-mono); font-size: 0.79rem; line-height: 1.62; background: #10151f; color: #dbe3f0; border-radius: 10px; padding: 1rem 1.1rem; overflow-x: auto; margin: 0.7rem 0; }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .c { color: #7f8ea8; }
+  pre .k { color: #8fd0ff; }
+  pre .s { color: #ffd28a; }
+  pre .hi { color: #7ee2a8; }
+
+  table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.87rem; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); border-bottom: 1.5px solid var(--ink); }
+  td.num, th.num { font-family: var(--font-mono); white-space: nowrap; color: var(--accent); font-size: 0.8rem; }
+  tbody tr:hover { background: var(--bg2); }
+  .tbl-wrap { overflow-x: auto; }
+
+  .toc { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 1.1rem 1.3rem; margin: 1.5rem 0; }
+  .toc h3 { margin: 0 0 0.5rem; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .toc ol { columns: 2; column-gap: 2rem; margin-left: 1.2rem; font-size: 0.9rem; }
+
+  .callout { border-radius: 10px; padding: 0.85rem 1.05rem; margin: 0.9rem 0; border-left: 4px solid var(--accent); background: #eef2fc; font-size: 0.92rem; }
+  .callout.warn { border-left-color: var(--warn); background: #fdf0ee; }
+  .callout.ok { border-left-color: var(--ok); background: #eaf6f0; }
+  .callout .lbl { display: block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-bottom: 0.2rem; }
+  .callout .lbl { color: var(--accent); }
+  .callout.warn .lbl { color: var(--warn); }
+  .callout.ok .lbl { color: var(--ok); }
+
+  .diagram { text-align: center; margin: 1.1rem 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 1rem 0.6rem; }
+  .diagram pre.mermaid { display: block; width: 100%; background: none; color: inherit; padding: 0; margin: 0.3rem auto; font-family: var(--font); font-size: 1rem; overflow-x: auto; }
+  .diagram pre.mermaid svg { max-width: 100%; height: auto; }
+  figcaption { font-size: 0.83rem; color: var(--muted); padding: 0 0.9rem 0.3rem; text-align: left; }
+  figcaption b { color: var(--ink); }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7rem; margin: 1.1rem 0; }
+  .kpi { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 0.8rem 0.85rem; }
+  .kpi .v { font-family: var(--font-mono); font-weight: 700; font-size: 1.35rem; color: var(--accent); letter-spacing: -0.02em; }
+  .kpi .l { font-size: 0.76rem; color: var(--muted); line-height: 1.35; margin-top: 0.1rem; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; align-items: start; }
+  @media (max-width: 760px) { .grid2, .kpis { grid-template-columns: 1fr; } .toc ol { columns: 1; } }
+
+  .badge { display: inline-block; font-family: var(--font-mono); font-size: 0.68rem; padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid; }
+  .badge.plain { color: #6b3fbf; border-color: #d3c6f0; background: #f4f0fd; }
+  .badge.obj { color: var(--accent); border-color: #c6d2f0; background: #eef2fc; }
+  .badge.no { color: var(--warn); border-color: #f0c6c0; background: #fdf0ee; }
+  .badge.yes { color: var(--ok); border-color: #bfe3d0; background: #eaf6f0; }
+
+  footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.84rem; }
+  hr.soft { border: none; border-top: 1px solid var(--rule); margin: 2rem 0; }
+</style>
+</head>
+<body>
+<article class="page">
+
+<header class="masthead">
+  <div class="eyebrow">Code Analysis · Phase 1 Self-hosting</div>
+  <h1>ctc.ct 代码分析报告</h1>
+  <p class="dek">
+    <code>selfhost/ctc.ct</code> 是用 <b>CT（C with Traits）</b> 写的编译器：读一份 <code>.ct</code>，
+    吐出可独立编译的 <code>.c</code> 与只含类型的 <code>.h</code>。它是 Phase 1 自举的产物（L1），
+    与冻结的 C 版（L0 = <code>ctc.c</code>）在 <code>test/cases/**</code> 上 <b>逐字节一致</b>，
+    并能编译自身（L1′）。本报告把它的结构、数据流与关键算法拆开，配流程图，目标是让你以最短路径读懂它。
+  </p>
+  <div class="chips">
+    <span class="chip"><b>3041</b> 行</span>
+    <span class="chip"><b>3</b> 层架构</span>
+    <span class="chip"><b>3</b> 个 trait</span>
+    <span class="chip"><b>47</b> 个方法</span>
+    <span class="chip"><b>11</b> 个 MAX_* 上限</span>
+    <span class="chip"><b>1</b> 趟扫描</span>
+    <span class="chip">静态分析 · 2026-10-15</span>
+  </div>
+</header>
+
+<div class="toc">
+  <h3>目录</h3>
+  <ol>
+    <li><a href="#s0">一分钟速读</a></li>
+    <li><a href="#s1">三层架构与文件地图</a></li>
+    <li><a href="#s2">主流程：从 argv 到 .c/.h</a></li>
+    <li><a href="#s3">逐行重写管线（核心）</a></li>
+    <li><a href="#s4">接收者形态与 transform_calls</a></li>
+    <li><a href="#s5">数据结构与符号表</a></li>
+    <li><a href="#s6">impl 的展开：方法与 vtable</a></li>
+    <li><a href="#s7">实例：一份 .ct 到 .c</a></li>
+    <li><a href="#s8">错误路径地图（die）</a></li>
+    <li><a href="#s9">最短阅读路线</a></li>
+    <li><a href="#s10">约束、上限与不支持项</a></li>
+    <li><a href="#s11">L0 / L1 / L1′ 与自举闭环</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s0"><span class="num">01</span>一分钟速读</h2>
+
+<p>它做的事只有一件：<b>把 CT 语法糖展开成纯 C</b>。没有任何类型检查、优化或错误恢复——能静态判定的错误就 <code>die()</code> 退出，其余原样透传。</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="v">读整文件</div><div class="l">一次性读入 <code>g_src</code>/<code>g_len</code>，CRLF 归一化</div></div>
+  <div class="kpi"><div class="v">单趟扫描</div><div class="l"><code>compile_range</code> 只跑一遍；边扫边写两个流</div></div>
+  <div class="kpi"><div class="v">按行分派</div><div class="l"><code>trait</code>/<code>struct</code>/<code>impl</code> 走构造解析器，其余走逐行重写</div></div>
+  <div class="kpi"><div class="v">收尾补构造器</div><div class="l">文件作用域对象的 vptr 攒进 <code>g_unit_init</code>，末尾发 <code>__ct_init</code></div></div>
+</div>
+
+<div class="callout ok">
+  <span class="lbl">先记住这三条，通读会快很多</span>
+  <b>① 一切都是偏移量扫描。</b> 全文件用 <code>size_t p</code> 在 <code>g_src</code> 上走，没有 token/AST。<br>
+  <b>② 两个 trait 是同一对象的两半。</b> <code>struct Pipe</code> 同时 <code>use PipeOps, RewriteOps</code>，两半可经 <code>self-&gt;</code> 互相调用；拆成两个只为绕开 <code>MAX_METHOD</code>。<br>
+  <b>③ 方法体看不到文件作用域对象。</b> 所以符号表一律以 <code>struct SymTab *sym</code> 参数显式传下去（这正是 <code>emit_body</code> 那个快照/还原 bug 的由来）。
+</div>
+
+<div class="callout warn">
+  <span class="lbl">物化约束</span>
+  编译器源码本身必须遵守 CT 的「一行一语句、声明先于使用、单文件」纪律——否则<strong>重写器认不出来</strong>，产物编译不过。这条约束贯穿全文。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s1"><span class="num">02</span>三层架构与文件地图</h2>
+
+<p><code>ctc.ct</code> 只有三个抽象层。理解分层，就理解了这个文件为什么这么切。</p>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart TB
+    subgraph L3["管线层 · struct Pipe（一个对象，两个 trait）"]
+        direction LR
+        P1["PipeOps · 25 方法<br/>构造解析 · 代码发射 · 管线入口 · CLI"]
+        P2["RewriteOps · 14 方法<br/>逐行重写层"]
+    end
+    subgraph L2["符号表层 · CT 对象"]
+        SY["struct SymTab use SymTabOps<br/>traits / structs / vars / funcs 四张定长表"]
+    end
+    subgraph L1F["设施层 · plain C（不对象化，只透传）"]
+        FA["Buf · xmalloc/xstrndup · die<br/>word_at · skip_literal/comment · match_delim · read_ident"]
+    end
+    L3 --> L2
+    L2 --> L1F
+    L3 --> L1F
+</pre>
+<figcaption><b>三层各司其职：</b>设施层不参与 OO（避免自举变成同义反复），符号表层是纯数据 + 查询，管线层承担全部「读源码 → 产 C」的判断与发射。</figcaption>
+</figure>
+
+<h3>文件地图（行号即坐标）</h3>
+<div class="tbl-wrap">
+<table>
+<thead><tr><th class="num">行</th><th>区块</th><th>性质</th><th>读它的理由</th></tr></thead>
+<tbody>
+  <tr><td class="num">1–64</td><td>头注释：已覆盖能力清单 + OO 结构自述</td><td>文档</td><td><b>先读这里</b>。作者把「trait/struct/impl/接口值/组合/数组/堆/rvalue 接收者」逐条列了对应产物</td></tr>
+  <tr><td class="num">66–84</td><td>5 个 <code>#include</code> + 11 个 <code>MAX_*</code> + <code>CTC_VERSION</code></td><td>常量</td><td>所有容量上限集中在此，越界一律 <code>die</code></td></tr>
+  <tr><td class="num">86–185</td><td>数据模型 <code>typedef struct</code>（Method/Trait/Struct/Var/FuncSig/ImplMethod/Buf）+ 全局状态</td><td>数据</td><td>看懂 <code>Struct</code> 的四张字段表，后面所有代码都顺</td></tr>
+  <tr><td class="num">188–375</td><td>设施层：<code>xmalloc</code> · <code>xstrndup</code> · <code>die</code> · <code>trim</code> · <code>Buf</code> · 扫描原语</td><td><span class="badge plain">plain C</span></td><td><code>die</code> 是所有报错的唯一出口；<code>word_at</code> 是关键字识别的词边界基石</td></tr>
+  <tr><td class="num">377–462</td><td>符号表层：<code>trait SymTabOps</code> + <code>struct SymTab</code> + <code>impl</code></td><td><span class="badge obj">CT 对象</span></td><td>8 个查询方法，全部是线性查找；<code>new_var</code> 预留槽位</td></tr>
+  <tr><td class="num">464–619</td><td>只读谓词（<code>struct_uses</code> / <code>find_field_ex</code> / <code>find_iface_field</code> / <code>needs_nested_init</code> …）+ 3 个前置声明</td><td><span class="badge plain">plain C</span></td><td>刻意保持 plain C：只读入参、不碰全局表，故不占 <code>MAX_FUNCS</code> 额度的「方法」位</td></tr>
+  <tr><td class="num">621–695</td><td><code>trait PipeOps</code> + <code>trait RewriteOps</code> 声明 + <code>struct Pipe</code></td><td>接口</td><td><b>读完了两个管线 trait 的 API 面</b>：39 个方法签名（25 + 14）</td></tr>
+  <tr><td class="num">697–1791</td><td><code>impl PipeOps for Pipe</code>：发射器 → 声明解析 → 构造解析器 → 管线 → CLI</td><td><span class="badge obj">CT 对象</span></td><td>编译的「骨架」都在这里</td></tr>
+  <tr><td class="num">1793–2957</td><td><code>impl RewriteOps for Pipe</code>：逐行重写层</td><td><span class="badge obj">CT 对象</span></td><td>语法糖（<code>.m()</code>、装箱、<code>delete</code>、vptr）全在这里展开</td></tr>
+  <tr><td class="num">2959–3006</td><td><code>static Pipe g_pipe</code> + <code>line_literal_end</code> / <code>line_match_paren</code> / <code>line_assign_eq</code></td><td><span class="badge plain">plain C</span></td><td>行级小工具：字面量结束、括号配对、找「普通 <code>=</code>」</td></tr>
+  <tr><td class="num">3008–3041</td><td><code>main</code></td><td>入口</td><td>32 行，只是参数解析 + 一次 <code>compile_file</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s2"><span class="num">03</span>主流程：从 argv 到 .c/.h</h2>
+
+<p>顶层是<b>单趟</b>的：<code>compile_file</code> 只调用一次 <code>compile_range</code>，扫描过程中直接往两个流写；文件作用域对象的 vptr 写入不是靠第二趟，而是攒进 <code>g_unit_init</code>，末尾一次性发成 <code>__ct_init</code> 构造函数。</p>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart TD
+    M["main() 3010<br/>解析 -o / -h / -v，缺输入则 usage"] --> CF["g_pipe.compile_file(sym, in, outc)  1580"]
+    CF --> RST["重置状态：nvars/nscope/四张表计数归零<br/>buf_init(g_unit_init)"]
+    RST --> RD["read_file：整读 + CRLF 归一化 → g_src / g_len"]
+    RD --> WG["write_guard(hpath) → .h 的 #ifndef/#define + banner，guard 存进 g_guard"]
+    WG --> BN["向 .c 写 provenance banner（含 CTC_VERSION 与输入路径）"]
+    BN --> CR["compile_range(sym, 0, g_len)  1425 —— 唯一一趟扫描"]
+    CR --> J{"行首关键字？"}
+    J -->|trait| PT["parse_trait 1090<br/>→ .h: struct T_vtbl + struct T_iface"]
+    J -->|struct| PS["parse_struct 1177 → parse_fields<br/>→ .h: 限定类型后的 struct + __t_vptr 字段"]
+    J -->|impl| PI["parse_impl 1248<br/>→ .c: static 方法 + vtable 变量"]
+    J -->|namespace / import / pub| DIE["die: '%s' is not supported by this compiler"]
+    J -->|其它行| ERL["emit_raw_line 1390<br/>parse_func_sig 或 transform_line → 写 .c"]
+    PT --> Q
+    PS --> Q
+    PI --> Q
+    ERL --> Q{"扫描结束"}
+    Q -->|g_has_unit_init| UI["写 __ct_init（__attribute__((constructor))）<br/>内容取自 g_unit_init"]
+    Q --> EF["向 .h 写 #endif · 关闭两个流 · return 0"]
+    UI --> EF
+</pre>
+<figcaption><b>分派规则很脆但很省：</b>只有 <code>trait</code>/<code>struct</code>/<code>impl</code> 关键字后面真的跟着标识符或 <code>{</code>，才走构造解析器；否则这行降级成普通行交给重写管线（所以 <code>struct</code> 当变量名用也不会被误吃）。</figcaption>
+</figure>
+
+<h3>两个输出流的分工</h3>
+<table>
+<thead><tr><th>流</th><th>字段</th><th>谁往里写</th><th>内容</th></tr></thead>
+<tbody>
+  <tr><td><code>.c</code></td><td><code>Pipe.out</code></td><td><code>compile_file</code> · 构造解析器 · <code>emit_body</code> · <code>emit_raw_line</code> · <code>emit_hoisted</code></td><td>banner、vtable 前置声明、重写后的每一行、方法函数体、vtable 变量、<code>__ct_init</code></td></tr>
+  <tr><td><code>.h</code></td><td><code>Pipe.hout</code></td><td><code>write_guard</code> · <code>emit_trait_def</code> · <code>emit_struct_def</code> · <code>compile_file</code> 收尾</td><td>include guard、banner、<code>_vtbl</code>/<code>_iface</code>、struct 定义、<code>#endif</code>。<b>只有类型，没有 static 代码</b></td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <span class="lbl">为什么生成物自包含</span>
+  生成的 <code>.c</code> <b>不</b> <code>#include</code> 生成的 <code>.h</code>——类型定义（vtbl/iface/struct）在两个文件里各来一份。这是硬性边界，保证 <code>.c</code> 能单独编译。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s3"><span class="num">04</span>逐行重写管线（核心）</h2>
+
+<p>普通行进入 <code>emit_raw_line</code> 后：先试 <code>parse_func_sig</code>（是不是函数签名/定义），否则交给 <code>transform_line</code>。<code>transform_line</code> 按<b>固定优先级</b>依次尝试四个识别器，任一命中即返回；全部不命中时才走通用兜底 <code>transform_calls</code>。</p>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart TD
+    IN["一行源文本（去掉行首缩进后）"] --> D1{"try_delete  2054"}
+    D1 -->|"delete p;"| O1["if (p) free(p);"]
+    D1 -->|未命中| D2{"try_return  1982"}
+    D2 -->|"return obj; 且当前函数返回接口"| O2["return 装箱(obj);"]
+    D2 -->|未命中| D3{"try_iface_assign  2007"}
+    D3 -->|"g = obj; 或 s.l = obj;"| O3["装箱进接口值 / 接口字段"]
+    D3 -->|未命中| D4{"try_var_decl  2109"}
+    D4 -->|"S x; / S *p = malloc(); / S a[n]; / T v;"| O4["限定类型 + 补写 vptr"]
+    D4 -->|未命中| O5["base = 原行"]
+    O4 --> TC["transform_calls  2378<br/>改写行内所有 recv.method(args)"]
+    O5 --> TC
+    O1 --> OUT["返回改写后的行"]
+    O2 --> OUT
+    O3 --> OUT
+    TC --> OUT
+</pre>
+<figcaption><b>注意顺序的后果：</b><code>delete</code> 优先级最高；接口 <code>return</code> 只在「当前函数返回接口」时才可能命中（靠全局 <code>g_cur_rettr</code>）；<b>声明行被 <code>try_var_decl</code> 改写后仍会再跑一遍 <code>transform_calls</code></b>。</figcaption>
+</figure>
+
+<h3>各识别器「吃什么、吐什么」</h3>
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>识别器</th><th class="num">行</th><th>识别</th><th>产物</th></tr></thead>
+<tbody>
+  <tr><td><code>try_delete</code></td><td class="num">2054</td><td><code>delete id;</code>（单个标识符 + 裸 <code>;</code>）</td><td><code>if (id) free(id);</code>；若该名字已登记且<b>不是</b>指针，返回 NULL 交给用户</td></tr>
+  <tr><td><code>try_return</code></td><td class="num">1982</td><td><code>return expr;</code> 且 <code>g_cur_rettr &ge; 0</code></td><td><code>return 装箱(expr);</code>；已是接口形式则不动</td></tr>
+  <tr><td><code>try_iface_assign</code></td><td class="num">2007</td><td><code>g = expr;</code>（<code>g</code> 是接口值）或 <code>s.l = expr;</code>（字段链末端是接口字段）</td><td>右侧装箱；接口<b>指针</b>字段放弃（返回 NULL）</td></tr>
+  <tr><td><code>try_var_decl</code></td><td class="num">2109</td><td><code>Struct x</code> / <code>struct Struct x</code> / <code>Struct *p = malloc(..)</code> / <code>Struct a[n]</code> / <code>Trait v</code></td><td>类型限定为 <code>struct X</code>；登记变量；补 <code>.__shape_vptr = …</code>；数组/堆对象补逐元素/嵌套 vptr；<code>Trait v</code> 转交 <code>try_iface_decl</code></td></tr>
+  <tr><td><code>transform_calls</code></td><td class="num">2378</td><td>行内任意 <code>recv.method(args)</code></td><td>改写为 vtable 分发（见下一节）</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4><code>try_var_decl</code> 的三条分支</h4>
+<ul>
+  <li><b>指针形态</b>（<code>Struct *p</code>）：检测 RHS 是否 <code>malloc</code>/<code>calloc</code> → 判 <code>isheap</code>；是堆对象且该 struct（含嵌套）需要 vptr 时，换行补 <code>put_heap_vpts</code>（用 <code>-&gt;</code> 写 vptr）。</li>
+  <li><b>数组形态</b>（<code>Struct a[n];</code>）：需要 vptr 时强制成带长度的裸声明形式（否则 <code>die</code>）；<b>按作用域分流</b>——文件作用域把逐元素 vptr 攒进 <code>g_unit_init</code>，函数内则追加到本行之后。</li>
+  <li><b>值对象形态</b>（<code>Struct x</code>）：<code>= { … }</code> 时在 <code>}</code> 前用 <code>put_own_vptr</code> 插入 vptr 指示符（多行初始化式 <code>die</code>）；裸声明补 <code>= { …vptr }</code>；还需嵌套初始化时同样按作用域分流。</li>
+</ul>
+
+<div class="callout">
+  <span class="lbl">作用域分流的判据</span>
+  就是 <code>g_nscope == 0</code>——0 表示文件作用域。文件作用域没有任何语句能安放赋值，所以只能攒进 <code>g_unit_init</code> 交给 <code>__ct_init</code>。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s4"><span class="num">05</span>接收者形态与 transform_calls</h2>
+
+<p><code>transform_calls</code> 是全文最长的扫描器（约 300 行）。它逐字符走一行，遇标识符就取 token 并查 <code>find_var</code>，然后按 <b>A → B → C → D</b> 四分支尝试改写；字面量与注释逐字拷贝，保证「字符串/注释内不重写」。</p>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+    R["recv.method(args)"] --> Q{"recv 的形态（查 find_var / find_func）"}
+    Q -->|"变量，是接口值"| A["g.m(a) → g.vt->m(g.self, a)"]
+    Q -->|"变量，struct 对象"| D1["x.m(a) → x.__t_vptr->m(&x, a)"]
+    Q -->|"变量，指针对象"| D2["p->m(a) → p->__t_vptr->m(p, a)"]
+    Q -->|"数组元素"| D3["xs[i].m() 取地址；ps[i]->m() 不取地址"]
+    Q -->|"对象里的字段链"| D4["b.inner.m() → 沿字段走到方法再分发"]
+    Q -->|"接口字段"| D5["s.l.m() → s.l.vt->m(s.l.self, a)"]
+    Q -->|"rvalue（函数调用结果）"| B["提升为 __ct_tmpN 前置声明，再在其上分发"]
+    Q -->|"函数实参需要装箱"| C["T f(x) 的接口参数：逐参 box_to_iface"]
+</pre>
+<figcaption><b>判据是「能不能查到一个接收者变量」：</b>查到 → 走 A/D（变量路径）；查不到但后面是 <code>(</code> 且该函数返回 struct → 走 B（rvalue 提升）；查不到但函数签名里有接口参数 → 走 C（实参装箱）。</figcaption>
+</figure>
+
+<h3>四个分支的要点</h3>
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>分支</th><th class="num">行</th><th>条件</th><th>动作</th></tr></thead>
+<tbody>
+  <tr><td><b>A</b> 接口值接收者</td><td class="num">2417</td><td><code>vi &ge; 0 &amp;&amp; vars[vi].iface &amp;&amp; s[j]=='.'</code>，且成员是该方法 trait 的方法</td><td>输出 <code>tok.vt-&gt;mem(tok.self, args)</code></td></tr>
+  <tr><td><b>B</b> rvalue 接收者</td><td class="num">2448</td><td><code>vi &lt; 0 &amp;&amp; s[j]=='('</code>，<code>find_func(tok).retstruct &ge; 0</code>，且随后确有方法调用</td><td>建 <code>__ct_tmp&lt;N&gt;</code> 声明写入 <code>g_hoist</code>；<b>位置校验</b>：必须在语句头或第一个 <code>=</code> 之后的初始化式首位，否则 <code>die</code>；接收者文本递归再过一遍 <code>transform_calls</code>（处理嵌套调用）</td></tr>
+  <tr><td><b>C</b> 接口实参</td><td class="num">2522</td><td>函数参数表里有 <code>ptrait &ge; 0</code></td><td>按顶层逗号切分实参，对应参数逐个 <code>box_to_iface</code>，其余原样</td></tr>
+  <tr><td><b>D</b> 变量接收者</td><td class="num">2571</td><td><code>vi &ge; 0</code></td><td>先消费可能的 <code>[...]</code>（数组元素，<code>isptr = arr &amp;&amp; ptr</code>），再 <code>walk_method</code> 沿字段链找方法 → 输出 <code>recv.__t_vptr-&gt;m(&amp;recv, args)</code>；未命中则试 <code>walk_to_iface_field</code>（接口字段分发）</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout">
+  <span class="lbl">hoist 机制（rvalue 提升）</span>
+  <code>g_hoist</code> 是一个「下一行之前要先输出的声明」缓冲。<code>emit_raw_line</code> / <code>emit_body</code> 在写被重写行<b>之前</b>调用 <code>emit_hoisted()</code> 把它 flush 出去，于是接收者<b>只求值一次</b>、且次序正确。临时量命名 <code>__ct_tmp&lt;N&gt;</code>，<code>N</code> 来自全局单调计数 <code>g_ntmp</code>（全文件唯一）。
+</div>
+
+<h3>两个 walker</h3>
+<p><code>walk_method</code>（2688）与 <code>walk_to_iface_field</code>（2735）是同构的：从一个 struct 接收者出发，循环按 <code>isptr</code> 要求 <code>.</code> 或 <code>-&gt;</code>，读成员名；命中目标（方法 / 接口字段）就回填出参并返回 1，否则用 <code>find_field_ex</code> 往下一层走——<b>跨过指针字段时翻转 <code>isptr</code></b>，这决定了最终是取 <code>&amp;recv</code> 还是 <code>recv</code>、用 <code>.__</code> 还是 <code>-&gt;__</code>。</p>
+<p>出参含义：<code>out_tr</code> 命中方法所属 trait；<code>out_cur</code> 最终接收者 struct 下标（rvalue 提升要写回）；<code>out_need_amp</code> = <code>!isptr</code>；<code>out_rend</code> 接收者文本结束位置；<code>mp</code> 实参左括号位置；<code>memb</code> 方法名。</p>
+
+<!-- ============================================================ -->
+<h2 id="s5"><span class="num">06</span>数据结构与符号表</h2>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+    SY["struct SymTab（g_sym）"] --> TR["Trait[MAX_TRAITS]"]
+    SY --> ST["Struct[MAX_STRUCT]"]
+    SY --> VA["Var[MAX_VARS]"]
+    SY --> FU["FuncSig[MAX_FUNCS]"]
+    TR --> M["Method[]<br/>ret · name · params · ptypes[] · nparams"]
+    ST --> U["use_t[] + use_i[]<br/>用到的 trait 及其索引"]
+    ST --> F1["fname / ftype<br/>值类型字段"]
+    ST --> F2["pfname / pftype<br/>指针字段"]
+    ST --> F3["ifname / iftype<br/>接口值字段"]
+    ST --> F4["pifname / piftype<br/>接口指针字段"]
+    VA --> VF["name · s · ptr · arr · iface · tr"]
+    FU --> FF["name · retstruct · retptr · rettrait<br/>nparams · ptrait[]"]
+</pre>
+<figcaption><b><code>Struct</code> 的四张字段表是全文件的信息枢纽：</b>组合 / 嵌套 vptr / 字段链分发 / 接口字段装箱全靠它们。</figcaption>
+</figure>
+
+<h3>关键字段语义</h3>
+<ul>
+  <li><code>Var</code>：<code>s</code> = struct 表索引（接口值时为 <code>-1</code>）；<code>ptr</code> 指针；<code>arr</code> 数组；<code>iface</code> 是否接口值；<code>tr</code> 接口对应的 trait 索引。<b>这六个字段决定了 <code>transform_calls</code> 里选哪个分支。</b></li>
+  <li><code>FuncSig</code>：<code>retstruct</code>/<code>retptr</code> 让 rvalue 接收者知道临时量该声明成值还是指针；<code>rettrait</code> 让 <code>box_to_iface</code> 认出「返回接口的函数」；<code>ptrait[]</code> 决定哪些实参要装箱。</li>
+  <li><code>SymTabOps</code> 的 8 个方法全部是<b>线性查找</b>（名字 + 计数），<code>find_func</code> 是<b>从后往前</b>找最近同名（允许重声明）。</li>
+</ul>
+
+<h3>全局状态速查</h3>
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>全局</th><th class="num">行</th><th>作用</th></tr></thead>
+<tbody>
+  <tr><td><code>g_src</code> / <code>g_len</code> / <code>g_path</code></td><td class="num">159</td><td>源文本、长度、输入路径（诊断前缀用）</td></tr>
+  <tr><td><code>g_scope[]</code> / <code>g_nscope</code></td><td class="num">166</td><td>花括号深度栈，存每个 <code>{</code> 处的变量数快照，用于回收局部变量</td></tr>
+  <tr><td><code>g_body_abs</code> / <code>g_body_pre</code></td><td class="num">167</td><td>函数体起点的绝对偏移 + 入口作用域快照</td></tr>
+  <tr><td><code>g_cur_rettr</code></td><td class="num">169</td><td>当前函数的返回 trait（<code>-1</code> 非接口）；<code>try_return</code> 靠它决定是否装箱</td></tr>
+  <tr><td><code>g_guard[]</code></td><td class="num">171</td><td>.h 的 include guard 宏名，收尾写 <code>#endif</code> 要用</td></tr>
+  <tr><td><code>g_line_off</code></td><td class="num">172</td><td>当前行的源内偏移，供行级重写算出正确位置</td></tr>
+  <tr><td><code>g_unit_init</code> / <code>g_has_unit_init</code></td><td class="num">177</td><td>文件作用域对象的 vptr 写入语句，末尾合成 <code>__ct_init</code></td></tr>
+  <tr><td><code>g_hoist</code> / <code>g_ntmp</code></td><td class="num">183</td><td>rvalue 接收者临时量的声明缓冲 + 命名计数器</td></tr>
+  <tr><td><code>g_sym</code> / <code>g_pipe</code></td><td class="num">464 / 2959</td><td>两个对象实例：符号表与管线（方法经 <code>g_sym.find_*()</code> / <code>g_pipe.*()</code> 分发）</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout warn">
+  <span class="lbl">plain-C 值全局在方法体里可见</span>
+  上面这些标量/数组全局（如 <code>g_src</code>、<code>g_nscope</code>、<code>g_hoist</code>）可以被 <code>impl</code> 方法直接读写，<b>但 <code>g_sym</code> 这类对象不行</b>——这就是为什么符号表必须以参数形式传下游。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s6"><span class="num">07</span>impl 的展开：方法与 vtable</h2>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart TD
+    PI["impl T for S { ... }   parse_impl 1248"] --> CHK{"四类校验"}
+    CHK -->|"T 未定义"| DIE["die"]
+    CHK -->|"S 未定义"| DIE
+    CHK -->|"S 未 use T"| DIE
+    CHK -->|"某方法不在 T 中声明"| DIE
+    CHK -->|"T 的方法没被实现"| DIE
+    PI --> FWD["任一方法体含方法调用？<br/>→ 先前置声明 vtable 变量"]
+    PI --> FN["每个方法 → static ret S_T_m(void *self, ...)<br/>首行 struct S *_self = (struct S *)self;<br/>方法体交 emit_body（与顶层同一重写管线）"]
+    PI --> VT["static struct T_vtbl S_T_vtable = { .m = S_T_m, ... };"]
+</pre>
+<figcaption><b>方法体不是特例：</b><code>emit_body</code> 把方法体按行切成 <code>ls[]/le[]</code>，算最小缩进，再逐行走 <code>transform_line</code> → <code>emit_hoisted</code> → <code>replace_self</code>。方法体的局部变量登记与顶层完全一致。</figcaption>
+</figure>
+
+<div class="callout">
+  <span class="lbl">为什么 emit_body 要快照/还原</span>
+  进入方法体前 <code>sym-&gt;nvars = 0</code> 并重新登记 <code>self</code> 与参数；退出时必须把 <code>sym-&gt;vars</code> 的<b>内容</b>（而不只是条目数）还原回文件作用域的状态。冻结期唯一那次 <code>ctc.c</code> 修复（<code>1bdb93b</code>）修的就是这里只还原计数、不还原内容导致覆盖外层条目的缺陷；L1 同步保持同一行为。
+</div>
+
+<h3>方法体里的两条行级特例</h3>
+<ul>
+  <li><code>replace_self</code>（1802）：把 <code>self</code> 改写为 <code>_self</code>——只在 <code>self</code> 是完整单词、且前一字符不是 <code>.</code> 或 <code>-&gt;</code> 时替换。所以 <code>g.self</code>、字符串里的 <code>"self"</code>、注释里的 self 都不动。</li>
+  <li><code>scope_track</code>（2794）：扫本行的 <code>{</code>/<code>}</code> 压弹 <code>g_scope[]</code> 并回滚 <code>sym-&gt;nvars</code>，让局部变量只在自己的作用域可见；函数体入口那个 <code>{</code> 用 <code>g_body_pre</code> 快照对齐。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s7"><span class="num">08</span>实例：一份 .ct 到 .c</h2>
+
+<p>以本仓库可跑的样例为准（<code>bash selfhost/ct-tour.sh</code> 里的内建程序），左边是你写的 CT，右边是它展开出的 C。三处映射是理解全篇的钥匙。</p>
+
+<div class="grid2">
+<div>
+<h4>输入：<code>tour_sample.ct</code></h4>
+<pre><code><span class="k">trait</span> Shape {
+    <span class="k">int</span> area();
+    <span class="k">int</span> scaled(<span class="k">int</span> k);
+    <span class="k">void</span> describe(<span class="k">char</span> *tag);
+}
+
+<span class="k">struct</span> Rect {
+    <span class="k">int</span> w;
+    <span class="k">int</span> h;
+} <span class="k">use</span> Shape;
+
+<span class="k">impl</span> Shape <span class="k">for</span> Rect {
+    <span class="k">int</span> area() {
+        <span class="k">return</span> <span class="hi">self</span>-&gt;w * <span class="hi">self</span>-&gt;h;
+    }
+    ...
+}</code></pre>
+</div>
+<div>
+<h4>产物：<code>tour_sample.c</code>（片段）</h4>
+<pre><code><span class="c">/* Generated by ctc v0.0.1 from … */</span>
+<span class="k">struct</span> Shape_vtbl {
+    <span class="k">int</span> (*area)(<span class="k">void</span> *);
+    <span class="k">int</span> (*scaled)(<span class="k">void</span> *, <span class="k">int</span>);
+    <span class="k">void</span> (*describe)(<span class="k">void</span> *, <span class="k">char</span> *);
+};
+<span class="k">struct</span> Shape_iface {
+    <span class="k">void</span> *self;
+    <span class="k">struct</span> Shape_vtbl *vt;
+};
+
+<span class="k">struct</span> Rect {
+    <span class="k">int</span> w;
+    <span class="k">int</span> h;
+    <span class="hi">struct Shape_vtbl *__shape_vptr;</span>
+};
+
+<span class="k">static</span> <span class="k">int</span> <span class="hi">Rect_Shape_area</span>(<span class="k">void</span> *self) {
+    <span class="k">struct</span> Rect *_self = (<span class="k">struct</span> Rect *)self;
+    <span class="k">return</span> _self-&gt;w * _self-&gt;h;
+}</code></pre>
+</div>
+</div>
+
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>CT 里写的</th><th>生成物</th><th>谁负责</th></tr></thead>
+<tbody>
+  <tr><td><code>trait Shape { … }</code></td><td><code>struct Shape_vtbl</code>（函数指针表）+ <code>struct Shape_iface</code>（胖指针）</td><td><code>parse_trait</code> → <code>emit_trait_def</code></td></tr>
+  <tr><td><code>struct Rect { … } use Shape</code></td><td><code>struct Rect</code> + 隐藏字段 <code>struct Shape_vtbl *__shape_vptr;</code></td><td><code>parse_struct</code> → <code>parse_fields</code> + <code>emit_struct_def</code></td></tr>
+  <tr><td><code>impl Shape for Rect</code> 的 <code>area()</code></td><td><code>static int Rect_Shape_area(void *self)</code>，首行强转出 <code>_self</code></td><td><code>parse_impl</code> → <code>emit_body</code></td></tr>
+  <tr><td>（无需手写）vtable 变量</td><td><code>static struct Shape_vtbl Rect_Shape_vtable = { .area = Rect_Shape_area, … };</code></td><td><code>parse_impl</code> 收尾</td></tr>
+  <tr><td><code>Rect r = { .w = 3, .h = 4 };</code></td><td>自动补 <code>.__shape_vptr = &amp;Rect_Shape_vtable</code></td><td><code>try_var_decl</code> → <code>put_own_vptr</code></td></tr>
+  <tr><td><code>r.describe("rect")</code></td><td><code>r.__shape_vptr-&gt;describe(&amp;r, "rect")</code></td><td><code>transform_calls</code> 分支 D</td></tr>
+  <tr><td>文件作用域的对象 / 数组</td><td>vptr 写入攒起来，末尾发 <code>__ct_init</code> 构造函数</td><td><code>try_var_decl</code> → <code>g_unit_init</code> → <code>compile_file</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s8"><span class="num">09</span>错误路径地图（die）</h2>
+
+<p>全文<b>只有</b> <code>die(pos, fmt, ...)</code> 一个报错口（设施层，208 行）：由偏移换算出 <code>文件:行:列: error: 描述</code>，随即 <code>exit(1)</code>。<b>不做错误恢复</b>——第一个错误就终止。唯一例外是 <code>read_file</code> 的 I/O 失败走 <code>fprintf + exit(1)</code>。</p>
+
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>类别</th><th>典型触发</th><th>代表行</th></tr></thead>
+<tbody>
+  <tr><td><b>容量超限</b></td><td>超出任一 <code>MAX_*</code>：trait/struct/方法/字段/参数/变量/函数数；嵌套路径过长</td><td class="num">1107 · 1161 · 1194 · 1215 · 1300 · 1306 · 2223 · 2813 · 2931 · 2940</td></tr>
+  <tr><td><b>语法缺漏</b></td><td>缺名字、缺 <code>{</code>/<code>}</code>/<code>(</code>/<code>)</code>/<code>;</code>、缺 <code>for</code>、缺返回类型、声明后有残留字符</td><td class="num">1099 · 1101 · 1186 · 1188 · 1222 · 1259–1266 · 1290 · 1298 · 1314</td></tr>
+  <tr><td><b>语义引用</b></td><td><code>use</code> 未定义 trait、impl 未定义 trait/struct、struct 没 use 该 trait、方法未声明 / 未实现</td><td class="num">1233 · 1271 · 1273 · 1275 · 1332 · 1353</td></tr>
+  <tr><td><b>接口装箱</b></td><td>待装箱表达式为空/不可推断/是别的 trait；变量未登记；对接口值再取 <code>&amp;</code>；struct 未 use 该 trait</td><td class="num">1856–1898</td></tr>
+  <tr><td><b>位置限制</b></td><td>rvalue 接收者既不在语句头也不在初始化式首位</td><td class="num">2473</td></tr>
+  <tr><td><b>明确不支持</b></td><td>行首出现 <code>namespace</code> / <code>import</code> / <code>pub</code></td><td class="num">1445</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout warn">
+  <span class="lbl">这些「不支持」是刻意的</span>
+  <code>namespace</code>/<code>import</code>/<code>pub</code>（模块系统）、<code>#line</code>、诊断、Drop 都属 Phase 2 —— 要么用 CT 侧重做，要么已被归档为 oracle。<code>ctc.c</code> 冻结期不得在 C 侧加回。L1 对它们<b>报错而不是硬编</b>。
+</div>
+
+<h3>其他已知边界</h3>
+<ul>
+  <li><b>接口数组声明即 <code>die</code></b>：AST 子节点只能用「接口指针 + 链表」。</li>
+  <li><b>多行初始化式</b>（<code>= {</code> 找不到配对 <code>}</code>）<code>die</code>；<b>数组只支持 <code>Type name[n];</code></b> 形态。</li>
+  <li><b>接口指针字段</b>：装箱/接收者分发会被放弃（返回 NULL，留给用户或报错）。</li>
+  <li><b>rvalue 接收者</b>只允许出现在语句头或初始化式首位。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s9"><span class="num">10</span>最短阅读路线</h2>
+
+<p>如果只想用一小时建立骨架认知，按这个顺序读<b>约 300 行</b>就够：</p>
+
+<ol>
+  <li><b>&nbsp;1–64 行</b> — 头注释。作者自己的能力清单与 OO 结构说明，读完就有地图。</li>
+  <li><b>72–153 行</b> — 常量与数据模型。看懂 <code>Struct</code> 的四张字段表和 <code>Var</code> 六个字段。</li>
+  <li><b>631–690 行</b> — 两个管线 trait 的声明 + <code>struct Pipe</code>。39 个方法签名（另加符号表层 <code>SymTabOps</code> 的 8 个，全文共 47 个）。</li>
+  <li><b>3010–3041 行</b> — <code>main</code>。32 行，看它怎么落到一次 <code>compile_file</code>。</li>
+  <li><b>1580–1629 行</b> — <code>compile_file</code>。重置 → 读文件 → 开流 → guard/banner → 扫描 → 构造器 → 收尾。</li>
+  <li><b>1425–1475 行</b> — <code>compile_range</code>。单趟扫描与四种分派（含「不支持」的报错）。</li>
+  <li><b>1390–1422 行</b> — <code>emit_raw_line</code>。每行如何进 <code>parse_func_sig</code> 或 <code>transform_line</code>。</li>
+  <li><b>2084–2106 行</b> — <code>transform_line</code>。四识别器的优先级链。</li>
+  <li><b>2378–2680 行</b> — <code>transform_calls</code>。最长的核心扫描器，配合 A/B/C/D 四分支读。</li>
+  <li><b>2688–2770 行</b> — 两个 walker。接收者沿字段链行走的规则。</li>
+</ol>
+
+<p>之后再按需展开：<code>parse_trait</code>(1090) / <code>parse_struct</code>(1177) / <code>parse_impl</code>(1248)、<code>try_var_decl</code>(2109)、<code>box_to_iface</code>(1846)、<code>parse_func_sig</code>(2826)。</p>
+
+<div class="callout ok">
+  <span class="lbl">配合跑一遍</span>
+  <code>bash selfhost/ct-tour.sh</code> 会现场演示 L0→L1→L1′ 与「逐字节一致」；<code>bash selfhost/check-goldens.sh</code> 是常驻关卡（L1 vs golden、L1′ vs golden）。边读边跑，理解最快。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s10"><span class="num">11</span>约束、上限与不支持项</h2>
+
+<h3>11 个容量上限（越界即 die，绝不静默截断）</h3>
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>常量</th><th class="num">值</th><th>管什么</th></tr></thead>
+<tbody>
+  <tr><td><code>MAX_NAME</code></td><td class="num">128</td><td>标识符 / 名字缓冲长度</td></tr>
+  <tr><td><code>MAX_PARAM</code></td><td class="num">256</td><td>整个参数串文本长度</td></tr>
+  <tr><td><code>MAX_PARAMS</code></td><td class="num">16</td><td>单个方法/函数的参数个数</td></tr>
+  <tr><td><code>MAX_METHOD</code></td><td class="num">32</td><td>每个 trait 的方法数、每个 impl 的方法数</td></tr>
+  <tr><td><code>MAX_TRAITS</code></td><td class="num">16</td><td>trait 总数；也是每个 struct 能 use 的 trait 数</td></tr>
+  <tr><td><code>MAX_STRUCT</code></td><td class="num">32</td><td>struct 总数</td></tr>
+  <tr><td><code>MAX_FIELDS</code></td><td class="num">32</td><td>每个 struct 的字段数（四张字段表各自的上限）</td></tr>
+  <tr><td><code>MAX_DEPTH</code></td><td class="num">8</td><td>嵌套初始化递归深度</td></tr>
+  <tr><td><code>MAX_VARS</code></td><td class="num">512</td><td>变量登记总数</td></tr>
+  <tr><td><code>MAX_SCOPE</code></td><td class="num">256</td><td>花括号嵌套深度</td></tr>
+  <tr><td><code>MAX_FUNCS</code></td><td class="num">64</td><td><b>plain-C 顶层函数签名数</b>（定义与原型同等计数）；<b><code>impl</code> 方法不计入</b></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout">
+  <span class="lbl">MAX_FUNCS 是「健康约束」</span>
+  它逼着 L1 把逻辑搬进 <code>impl</code> 方法而不是散落的自由函数——这正是「L1 必须写 OO」的机械保障。<b>不得为绕过它而改冻结的 <code>ctc.c</code>。</b>
+</div>
+
+<h3>L1 源码自身的硬约束</h3>
+<ul>
+  <li><b>单文件</b>：L0 已无 namespace / 多文件，所以 L1 无法分文件组织。</li>
+  <li><b>一行一语句</b>、<b>函数体不用单行写法</b>：否则按行重写器认不出来，产物静默不变、编不过。</li>
+  <li><b>声明先于使用</b>、单趟扫描：trait/struct 需人工拓扑排序；相互递归只能经接口指针。</li>
+  <li><b>零复用</b>：不得 <code>#include ctc.c</code>，设施自带（否则自举与差分验证都变成同义反复）。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s11"><span class="num">12</span>L0 / L1 / L1′ 与自举闭环</h2>
+
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+    C["ctc.c —— L0（冻结的 C 实现，只修 bug）"] -->|host gcc| B0["ctc（L0 可执行）"]
+    B0 -->|编译| L1C["selfhost/ctc.ct → ctc-l1.c"]
+    L1C -->|gcc| B1["L1 可执行（用 CT 写的编译器）"]
+    B1 -->|编译自身| BP["L1′ 可执行"]
+    B0 -.->|"逐字节一致 25/25"| B1
+    B1 -.->|"逐字节一致 25/25"| BP
+</pre>
+<figcaption><b>这就是 Phase 1 的全部成果：</b>同一个编译器，两种语言来源；L1 编出的 L1′ 重编同一批语料仍逐字节一致——「真自举」的硬证据。</figcaption>
+</figure>
+
+<h3>三条实测事实（本报告的依据）</h3>
+<ul>
+  <li><code>test/cases/**</code> 全量 <b>25/25 逐字节一致</b>，0 regression。</li>
+  <li><b>L1 能编译自身</b> → L1′，零警告构建，重跑语料仍 25/25 一致。</li>
+  <li>本次分析基于 3041 行源码的静态通读；<code>ctc.c</code> 在 Phase 1 期间<b>未改动</b>（冻结期仅 <code>1bdb93b</code> 一次 bug 修复）。</li>
+</ul>
+
+<hr class="soft">
+<p class="sub">
+  报告范围：<code>selfhost/ctc.ct</code>（3041 行，含头注释与 <code>main</code>）的全部结构、数据流与错误路径。
+  生成方式：静态分析 + 分层并行通读；所有行号可直接在源码中定位。图表由 mermaid 在本地渲染（<code>_shared/js/mermaid.min.js</code>），无外部依赖。
+</p>
+
+<footer>
+  ctc.ct 代码分析报告 · L1 自举编译器 · v0.0.1 · 与 <code>selfhost/check-goldens.sh</code> 的出口一致
+</footer>
+
+</article>
+
+<script src="./_shared/js/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose',
+    flowchart: { curve: 'basis', htmlLabels: true, useMaxWidth: true } });
+</script>
+</body>
+</html>
