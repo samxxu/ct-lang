@@ -31,6 +31,7 @@
 | `examples/**` | 源码：可运行示例（`<name>.ct` + `<name>.expected.out`） | ✅ 新增语法时同步扩充；生成物不入库 |
 | `test/**` | 测试：用例、golden 基线、runner | ✅ 可改；`*.expected.*` 只能用 `./ctc` 重新生成 |
 | `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
+| `selfhost/**` | 源码：L1 —— 用 CT 写的自举编译器（单文件 `selfhost/ctc.ct`） | ✅ Phase 1 起新增；只放 CT 源码与测试脚本，生成物不入库 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
 | `ctc`、生成的 `.c`/`.h`、`.o` | 编译产物 | ❌ 不入库 |
@@ -45,6 +46,8 @@
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
 - `docs/design/` 下是**未实现的设计草案**（如自举的目标目录结构），不是实现依据；不要照着草案创建目录或文件。
 - **`ctc.c` 在自举启动后冻结**：Phase 0.3 剥离完成后只接受 bug 修复，**不再新增任何能力**；新能力一律写在 CT 侧（Phase 2 起）。自举要求 `ctc.c` 的 `main` 加 `#ifndef CTC_NO_MAIN` 守卫——这是冻结前**唯一**允许的结构性改造。
+- **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。见 roadmap Phase 1 开工决策。
+- **L1 必须是 CT OO 风格**：`selfhost/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。见 roadmap Phase 1 开工决策 5。
 
 ### 3. 代码风格
 
@@ -127,7 +130,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ```
 
 - `type`：`feat` | `fix` | `docs` | `refactor` | `test` | `chore`
-- `scope`：`parser` | `codegen` | `rewrite` | `cli` | `docs` | `example`
+- `scope`：`parser` | `codegen` | `rewrite` | `cli` | `selfhost` | `docs` | `example`
 - 正文用中文说明「为什么这么改」以及验证方式；一次提交只做一件事。
 
 ### 9. 新增语法特性检查清单
@@ -174,6 +177,7 @@ user before changing code**.
 | `examples/**` | Source: runnable demos (`<name>.ct` + `<name>.expected.out`) | ✅ extend when adding syntax; generated files are not committed |
 | `test/**` | Tests: cases, golden baselines, runner | ✅ editable; `*.expected.*` may only be regenerated |
 | `editors/**` | Editor extensions: `editors/vscode/` (VS Code, declarative JSON) | ✅ editable; see the hard boundaries below |
+| `selfhost/**` | Source: L1 — the self-hosted compiler written in CT (single file `selfhost/ctc.ct`) | ✅ new from Phase 1 on; CT source and test scripts only, never generated files |
 | `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
 | `ctc`, generated `.c`/`.h`, `.o` | Build products | ❌ never commit |
@@ -195,6 +199,14 @@ Hard boundaries:
   and **no new capability is added**; new capabilities live in the CT layer (from Phase 2 on).
   Self-hosting requires an `#ifndef CTC_NO_MAIN` guard on `ctc.c`'s `main` — the **only** structural
   change permitted before the freeze.
+- **L1 (`selfhost/ctc.ct`) reuses nothing**: it must **not** `#include ctc.c` and carries its own
+  facilities. It must be written in the OO subset L0 supports (single file, one statement per line,
+  declarations before use, no interface arrays) and its exit is a **byte-identical** match with L0
+  (banner included). See the Phase 1 kick-off decisions in the roadmap.
+- **L1 must be written in CT OO style**: `selfhost/ctc.ct`'s data-model and pipeline layers use
+  `struct` + `use` + `impl` and must not fall back to plain-C passthrough; only the facilities layer
+  (`Buf` / allocators / `die` / the scanning primitives) stays plain-C. See Phase 1 kick-off decision 5
+  in the roadmap.
 
 ### 3. Code style
 
@@ -283,7 +295,7 @@ Also required:
 ### 8. Commits
 
 `<type>(<scope>): <subject>` with an English imperative subject ≤ 50 chars; `type` ∈
-`feat|fix|docs|refactor|test|chore`; `scope` ∈ `parser|codegen|rewrite|cli|docs|example`. Explain the
+`feat|fix|docs|refactor|test|chore`; `scope` ∈ `parser|codegen|rewrite|cli|selfhost|docs|example`. Explain the
 *why* and the verification steps in the body (Chinese is fine). One concern per commit.
 
 ### 9. Checklist for new syntax features
