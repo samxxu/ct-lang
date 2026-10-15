@@ -5,11 +5,11 @@
 > **状态：设计定型，暂缓实现。** 本设计目前是**图纸，不是可运行实现**；
 > 今天的编译器是仓库根目录的单文件 [ctc.c](../../ctc.c)，方言展开器尚不存在。
 >
-> **排期：Phase 3（生态与扩展）**（2026-10-13 用户确认；表述随 2026-10-14 相位重排更新）。这是**排序选择，不是技术依赖**——
+> **排期：Phase 6（生态与扩展）**（2026-10-13 用户确认；表述随 2026-10-14 相位重排更新）。这是**排序选择，不是技术依赖**——
 > 方言展开器是编译器之外的外部脚本，不需要自举，理论上可与自举并行；排在最后是为了先让编译器主语料稳固。
 >
 > **技术前置**（详见第 0 节）：Phase 1 的 trait / namespace / import / Drop、`ct build` 单入口 CLI，
-> 以及 roadmap 已定的「反向映射表 + JSON 诊断」（JSON 诊断已随 Phase 1.7 落地；反向映射表经 D8 移至 Phase 3，2026-10-14）。
+> 以及 roadmap 已定的「反向映射表 + JSON 诊断」（JSON 诊断已随 Phase 1.7 落地；反向映射表经 D8 移至 Phase 6，2026-10-14）。
 >
 > **落地前必须修订的规约条目见第 0 节**（与 [AGENTS.md](../../AGENTS.md) 现行硬性边界存在三处冲突）。
 
@@ -35,12 +35,12 @@
 
 - **已在路线图上**：trait / namespace / import / Drop、`ct build` 单入口 CLI（Phase 1 已落地），
   以及**反向映射表 + JSON 诊断**（见 [roadmap](../roadmap.md) 的「已定的设计决策」；JSON 诊断已随
-  Phase 1.7 落地，反向映射表经 D8 移至 Phase 3）。
+  Phase 1.7 落地，反向映射表经 D8 移至 Phase 6）。
   后者正是本文 §7.2 sourcemap 与 §8 引用预检的底座，**应复用而非另起一套**。
 - **不在 Phase 1**：包管理（§4.3 的跨项目分发依赖它）。
 - **与自举无关**：展开器是外部可执行文件（bash / Python / awk 均可），不由编译器实现。
 
-#### 0.3 排期：Phase 3（生态与扩展）
+#### 0.3 排期：Phase 6（生态与扩展）
 
 **2026-10-13 用户确认（表述随 2026-10-14 相位重排更新）。** 这是**排序选择，不是技术依赖**——方言展开器是编译器之外的外部脚本，
 不需要自举，理论上可与自举并行；排在最后是为了先让编译器主语料稳固。
@@ -294,7 +294,7 @@ if (pid == 0) {
 - 展开器输出 sourcemap（生成行 → 方言注释行），`ct build` 翻译回原文件行
 - 简单版：生成代码带 `//@src-line: N` 尾注
 
-> 底座已定，无需另起：roadmap 已定的**反向映射表 + JSON 诊断**（JSON 诊断已随 Phase 1.7 落地；反向映射表排期 Phase 3，D8 2026-10-14）就是
+> 底座已定，无需另起：roadmap 已定的**反向映射表 + JSON 诊断**（JSON 诊断已随 Phase 1.7 落地；反向映射表排期 Phase 6，D8 2026-10-14）就是
 > 「生成符号 ← 哪个 CT 声明」的映射载体，sourcemap 在此之上加一层「生成行 → 方言注释行」即可。
 > 仍未定的只是本层的**输出格式**（见 §15 第 6 项）。
 
@@ -440,7 +440,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 ### 14. 实现时机
 
 - 方言系统依赖 trait / namespace / import / Drop，**Phase 1 已落地**；`ct build` 单入口 CLI 亦为 Phase 1 起落地
-- 但方言本身排在**最后**：**排期 = Phase 3（生态与扩展）**（2026-10-13 用户确认）
+- 但方言本身排在**最后**：**排期 = Phase 6（生态与扩展）**（2026-10-13 用户确认）
 - 这是**排序选择，不是技术依赖** —— 展开器是编译器之外的外部脚本，不与自举耦合；
   靠后安排是为了先稳固编译器主语料
 - 落地前须先处理第 0 节列出的三处**规约冲突**与依赖清单
@@ -463,7 +463,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 ---
 
 > **文档版本：** v0.1（设计定型）
-> **排期：** Phase 3（生态与扩展；排序选择，非技术依赖）
+> **排期：** Phase 6（生态与扩展；排序选择，非技术依赖）
 > **下次更新触发：** 自举启动（Phase 1）/ 开放问题 1、2 有结论 / 第 0 节的规约冲突被修订
 
 ---
@@ -490,13 +490,13 @@ Recording them now avoids having to tear up the rules at the very end before any
 - **Already on the roadmap**: trait / namespace / import / Drop and the single-entry `ct` CLI (landed
   in Phase 1), plus the **reverse mapping table + JSON diagnostics** (see "Decided design decisions"
   in the [roadmap](../roadmap.md); JSON diagnostics landed with Phase 1.7, the reverse mapping table
-  moved to Phase 3 per D8, 2026-10-14). The latter is exactly the substrate for the sourcemap in §7.2 and the
+  moved to Phase 6 per D8, 2026-10-14). The latter is exactly the substrate for the sourcemap in §7.2 and the
   reference pre-check in §8, so it **should be reused, not rebuilt**.
 - **Not in Phase 1**: the package manager (which §4.3's cross-project distribution depends on).
 - **Independent of self-hosting**: the expander is an external executable (bash / Python / awk are all
   fine) and is not implemented by the compiler.
 
-#### 0.3 Schedule: Phase 3 (ecosystem and extension)
+#### 0.3 Schedule: Phase 6 (ecosystem and extension)
 
 **Confirmed by the user on 2026-10-13** (wording updated with the 2026-10-14 phase realignment). This is
 an **ordering choice, not a technical dependency** — the expander is an external script outside the
@@ -781,7 +781,7 @@ When the generated region fails, ctc reports a generated line number that nobody
 
 > The substrate is already decided, so nothing needs inventing: the roadmap's **reverse mapping table
 > + JSON diagnostics** (JSON diagnostics landed with Phase 1.7; the reverse mapping table lands in
-> Phase 3 per D8, 2026-10-14) is precisely the "generated symbol ← which CT declaration"
+> Phase 6 per D8, 2026-10-14) is precisely the "generated symbol ← which CT declaration"
 > mapping, and a sourcemap only adds one more layer on top of it — "generated line → dialect comment
 > line". What remains undecided is merely this layer's **output format** (see §15 item 6).
 
@@ -949,7 +949,7 @@ It is not that the machine produces less.
 
 - The dialect system depends on trait / namespace / import / Drop, **all landed in Phase 1**; the
   single-entry `ct` CLI also lands from Phase 1 on
-- Yet dialects themselves come **last**: **scheduled for Phase 3** (confirmed by the
+- Yet dialects themselves come **last**: **scheduled for Phase 6** (confirmed by the
   user on 2026-10-13)
 - This is an **ordering choice, not a technical dependency** — the expander is an external script
   outside the compiler and does not couple to self-hosting; it is late so that the compiler's main body
@@ -974,7 +974,7 @@ It is not that the machine produces less.
 ---
 
 > **Document version:** v0.1 (design frozen)
-> **Schedule:** Phase 3 (ecosystem and extension) — an ordering
+> **Schedule:** Phase 6 (ecosystem and extension) — an ordering
 > choice, not a technical dependency
 > **Next update triggered by:** self-hosting starting (Phase 1) / open questions 1 and 2 resolved / the
 > rule conflicts in section 0 amended

@@ -17,10 +17,10 @@
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 #
-# test/archive/ holds the Phase 2 (CT-side) fixtures -- namespaces, multi-file
+# test/archive/ holds the Phases 2–5 (CT-side) fixtures -- namespaces, multi-file
 # `ct build`, imports, Drop, `#line` and warning diagnostics -- that Phase 0.3
 # moved out of ctc.c. They are kept, not run here, as the diff baseline for the
-# Phase 2 CT reimplementation.
+# Phases 2–5 CT reimplementation.
 
 set -u
 

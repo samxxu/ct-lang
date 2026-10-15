@@ -53,7 +53,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。当前**不产生任何警告**。
 
-> **当前只支持单文件**：越位实现过的模块系统与诊断能力（`namespace` / `import` / `pub` / `ct build` 多文件、`Drop`、`#line`、泄漏警告与 `--diagnostics`）已于 Phase 0.3 从编译器移出，现命中即报 `'xxx' is not supported by this compiler`，将在 **Phase 2** 用 CT 重做（见 [docs/roadmap.md](docs/roadmap.md)）。
+> **当前只支持单文件**：越位实现过的模块系统与诊断能力（`namespace` / `import` / `pub` / `ct build` 多文件、`Drop`、`#line`、泄漏警告与 `--diagnostics`）已于 Phase 0.3 从编译器移出，现命中即报 `'xxx' is not supported by this compiler`，将在 **Phase 2–5** 用 CT 重做（见 [docs/roadmap.md](docs/roadmap.md)）。
 >
 > 命令的最终形态是单入口 `ct`（`ctc` 保留为兼容别名），尚未落地，见 [docs/roadmap.md](docs/roadmap.md)。
 
@@ -205,7 +205,7 @@ test/
 ├── unit/test_helpers.c          白盒单测（直接 include ctc.c 以触达 static 函数）
 ├── cases/                       golden 正例：<name>.ct + <name>.expected.c / .h / .out
 ├── errors/                      负例：<name>.ct + <name>.expected-err
-└── archive/                     Phase 0.3 移出的越位特性 fixture（Phase 2 对差基线，不跑）
+└── archive/                     Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
 ```
 
 五层断言：
@@ -220,7 +220,7 @@ test/
 
 当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 56 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 110 项。
 
-`test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
+`test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
 `test/cases/*.expected.*` 是 golden 基线，**只能**用 `./ctc <case>.ct -o <case>.expected.c` 重新生成后人工核对，禁止手写；`examples/**/*.expected.out` 同理（见 [AGENTS.md](AGENTS.md) 第 6 节）。`test/cases/01_trait_basic.ct` 与 `examples/01_greeter/greeter.ct` 内容相同，但前者做生成物逐字节比对、后者做运行结果比对，两者互补。
 
@@ -353,7 +353,7 @@ The compiler currently emits **no warnings at all**.
 > **Single-file only for now**: the module system and diagnostics that once over-reached into C
 > (`namespace` / `import` / `pub` / `ct build` multi-file, `Drop`, `#line`, leak warnings and
 > `--diagnostics`) were moved out of the compiler in Phase 0.3 — they now fail with
-> `'xxx' is not supported by this compiler` and are to be redone in CT during **Phase 2** (see
+> `'xxx' is not supported by this compiler` and are to be redone in CT during **Phases 2–5** (see
 > [docs/roadmap.md](docs/roadmap.md)).
 
 ### 3. Syntax and expansion rules
@@ -536,7 +536,7 @@ test/
 ├── unit/test_helpers.c          white-box unit tests (includes ctc.c to reach statics)
 ├── cases/                       golden positives: <name>.ct + <name>.expected.c / .h / .out
 ├── errors/                      negatives: <name>.ct + <name>.expected-err
-└── archive/                     Phase 0.3 fixtures for the removed over-reach (Phase 2 diff baseline; not run)
+└── archive/                     Phase 0.3 fixtures for the removed over-reach (Phases 2–5 diff baseline; not run)
 ```
 
 Five layers of assertions:
@@ -554,7 +554,7 @@ diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cl
 
 `test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
 (`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
-`run.sh`; they are the diff baseline for the Phase 2 CT reimplementation. The feature-complete old
+`run.sh`; they are the diff baseline for the Phases 2–5 CT reimplementation. The feature-complete old
 compiler is preserved as the git tag `overreach-oracle`.
 
 `test/cases/*.expected.*` are golden baselines: regenerate them with

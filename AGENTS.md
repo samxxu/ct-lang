@@ -118,7 +118,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - 禁止在 `ctc.c` 中引入类型检查、语义分析、优化（Phase 0 范围外）。
 - **禁止把非 bug 修复的改动混进 `ctc.c`**：冻结期只接受「不改变既有语料产物」的缺陷修复（判据与登记清单见第 2 节）；**禁止放宽任何 `MAX_*` 上限**，**禁止为了让 L1 过某个关卡而改 `ctc.c`**，**禁止打着「修 bug」的旗号改既有行为**（若产物确实变了，那就不是 bug 修复，必须走用户确认 + 重新生成 golden 的流程）。
-- 禁止把 namespace / 多文件 / import / Drop / `#line` / 诊断在 **C 侧**新增或加回（Phase 0.3 已把它们移出 `ctc.c`；Phase 2 起改用 **CT** 重做）；禁止新增泛型、继承，除非用户明确把对应阶段指派给你。
+- 禁止把 namespace / 多文件 / import / Drop / `#line` / 诊断在 **C 侧**新增或加回（Phase 0.3 已把它们移出 `ctc.c`；Phase 2–5 改用 **CT** 重做）；禁止新增泛型、继承，除非用户明确把对应阶段指派给你。
 - 禁止把 `examples/**` 下生成的 `.c` / `.h` 入库或手工编辑（生成物一律不入库）。
 - 禁止为了让示例通过而修改 `examples/**/*.ct` 的语义（可以扩充，不可以削弱）。
 - 禁止吞掉错误、禁止静默截断、禁止 `TODO` 空实现留在主路径上。
@@ -306,7 +306,7 @@ Also required:
   "bug fix" — if the output really does move, it is not a bug fix and must go through user sign-off
   plus golden regeneration instead.
 - No adding or re-adding namespaces / multi-file / import / Drop / `#line` / diagnostics on the **C
-  side** (Phase 0.3 moved them out of `ctc.c`; from Phase 2 on they are redone in **CT**). No generics
+  side** (Phase 0.3 moved them out of `ctc.c`; they are redone in **CT** in Phases 2–5). No generics
   or inheritance unless the user assigns that phase explicitly.
 - No committing or hand-editing the `.c` / `.h` generated under `examples/**` (generated files are
   never committed).

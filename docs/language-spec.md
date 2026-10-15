@@ -6,7 +6,7 @@
 > 多文件模式 / `Drop` / `#line` / 泄漏警告与 `--diagnostics` 属**越位实现**，已于 2026-10-14
 > （Phase 0.3）**从编译器移出**：当前命中即报 `'namespace' is not supported by this compiler`
 > （`pub` / `import` / `ct build` 同类；`--line` / `--no-line` / `--diagnostics` 报 `unknown option`）。
-> 这些能力将在 **Phase 2** 用 CT 重做；归档 fixture 见 `test/archive/`，旧实现见 git tag
+> 这些能力将在 **Phase 2–5** 用 CT 重做；归档 fixture 见 `test/archive/`，旧实现见 git tag
 > `overreach-oracle`。
 
 本文描述 `ctc` 接受的输入语法、展开规则、命名规则与诊断行为（Phase 0 全部）。凡本文未写明的行为，均属未定义，不应依赖。
@@ -384,8 +384,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 多文件模式（`ct build`）、`namespace`、`import`、`pub` 与 `#line` 映射均属**越位实现**，已随 Phase 0.3
 **从编译器移出**，`ctc` 当前**不接受**它们（命中即报 `'xxx' is not supported by this compiler`）。
-这些能力将在 **Phase 2** 用 CT 重做；归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见
-git tag `overreach-oracle`。实现层设计见 `design/phase1.md`。
+这些能力将在 **Phase 2–5** 用 CT 重做；归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见
+git tag `overreach-oracle`。实现层设计见 `design/restore.md`。
 
 ---
 
@@ -397,7 +397,7 @@ git tag `overreach-oracle`。实现层设计见 `design/phase1.md`。
 > 2026-10-14 (Phase 0.3): hitting them today reports
 > `'namespace' is not supported by this compiler` (same for `pub` / `import` / `ct build`, while
 > `--line` / `--no-line` / `--diagnostics` report `unknown option`). These capabilities will be redone
-> in **CT** in **Phase 2**; archived fixtures live in `test/archive/` and the old implementation is at
+> in **CT** in **Phases 2–5**; archived fixtures live in `test/archive/` and the old implementation is at
 > git tag `overreach-oracle`.
 
 This document specifies what `ctc` accepts and emits — all of Phase 0. Anything not described here is
@@ -834,5 +834,5 @@ error recovery, nested definitions.
 Multi-file mode (`ct build`), `namespace`, `import`, `pub` and `#line` mapping are all **over-reach
 implementations** that were **removed from the compiler** in Phase 0.3; `ctc` **rejects** them today
 (reporting `'xxx' is not supported by this compiler`). These capabilities will be redone in **CT** in
-**Phase 2**; archived test fixtures live in `test/archive/` and the feature-complete old compiler is at
-git tag `overreach-oracle`. Implementation-level design is in `design/phase1.md`.
+**Phases 2–5**; archived test fixtures live in `test/archive/` and the feature-complete old compiler is at
+git tag `overreach-oracle`. Implementation-level design is in `design/restore.md`.

@@ -38,7 +38,7 @@
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
  *
- * Not covered (these are Phase 2 items, to be redone on the CT side rather than
+ * Not covered (these are Phases 2–5 items, to be redone on the CT side rather than
  * in ctc.c). L1 reports them as errors instead of emitting C that cannot compile:
  *   - namespace / import / pub (the module system)
  *   - #line and diagnostics; `delete` is supported, Drop is not

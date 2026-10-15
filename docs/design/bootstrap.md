@@ -90,7 +90,7 @@ import (L2)             ← 依赖 namespace
   ↑
 Drop + delete (L2)      ← 依赖 struct
   ↑
-AutoDrop (Phase 2)    ← 依赖 Drop + 作用域分析
+AutoDrop (Phase 5)    ← 依赖 Drop + 作用域分析
 ```
 
 新增特性如果依赖未实现的上层特性，先在 `docs/` 里记录设计，等依赖就绪后再实现。
@@ -107,7 +107,7 @@ AutoDrop (Phase 2)    ← 依赖 Drop + 作用域分析
 | M6 | L5 | 不再新增特性，全功能对齐冻结 oracle | 与 oracle 逐字节一致（自举闭环） |
 
 > **阶段归属（2026-10-14）**：自举期（[roadmap](../roadmap.md) 的 **Phase 1**）只做 **M1→M2（L1）**；
-> **M3–M6 属 Phase 2**（用 CT 恢复被剥离的特性、并新增特性）。L1 只能用 OO 子集且必须是**单文件**——
+> **M3–M6 属 Phase 2–5**（用 CT 恢复被剥离的特性、并新增特性）。L1 只能用 OO 子集且必须是**单文件**——
 > 因为 Phase 0.3 已把 namespace / 多文件 / import 移出 L0。
 
 ### 8. 为什么单仓库
@@ -217,7 +217,7 @@ import (L2)             ← needs namespaces
   ↑
 Drop + delete (L2)      ← needs structs
   ↑
-AutoDrop (Phase 2)    ← needs Drop + scope analysis
+AutoDrop (Phase 5)    ← needs Drop + scope analysis
 ```
 
 If a new feature depends on an unimplemented upper layer, record the design under `docs/` first and
@@ -235,7 +235,7 @@ implement it once its dependencies are ready.
 | M6 | L5 | no new features; full alignment with the frozen oracle | byte-identical with the oracle (self-hosting closed loop) |
 
 > **Phase mapping (2026-10-14)**: the self-hosting phase ([roadmap](../roadmap.md)'s **Phase 1**) only
-> covers **M1→M2 (L1)**; **M3–M6 belong to Phase 2** (restoring the stripped features in CT and adding
+> covers **M1→M2 (L1)**; **M3–M6 belong to Phases 2–5** (restoring the stripped features in CT and adding
 > new ones). L1 must use the OO subset and be a **single file** — Phase 0.3 moved namespaces /
 > multi-file / import out of L0.
 
