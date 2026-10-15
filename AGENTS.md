@@ -144,7 +144,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - [ ] 词法识别不会与既有构造冲突（用 `word_at()` 做词边界判断，而不是 `strncmp`）
 - [ ] 解析器能对不完整/错误输入给出带位置的报错
 - [ ] 生成物的命名规则已写入 `docs/language-spec.md`
-- [ ] 未破坏「字符串 / 字符 / 注释内不重写」的既有保证
+- [ ] 未破坏「字符串 / 字符 / **单行**注释内不重写」的既有保证（跨行块注释的**续行**不在此列：它会被当普通代码行处理，是 [language-spec](docs/language-spec.md) §6.2 记录的已知限制）
 - [ ] `examples/**` 增加或更新示例，生成物重新展开并人工核对，`.expected.out` 同步更新
 - [ ] `test/cases` 增加 golden 用例（基线用 `./ctc <case>.ct -o <case>.expected.c` 重新生成并人工核对，禁止手写），负例补进 `test/errors`
 - [ ] 三件套验证通过，且 `./test/run.sh` 全绿
@@ -333,7 +333,9 @@ Also required:
 - [ ] Lexing uses `word_at()` word-boundary checks, not bare `strncmp`
 - [ ] Incomplete/invalid input produces a positional error
 - [ ] New naming rules documented in `docs/language-spec.md`
-- [ ] The "never rewrite inside strings/chars/comments" guarantee still holds
+- [ ] The "never rewrite inside strings / chars / **single-line** comments" guarantee still holds (the
+      **continuation line** of a multi-line block comment is not covered: it is treated as ordinary
+      code, a known limitation recorded in [language-spec](docs/language-spec.md) §6.2)
 - [ ] `examples/**` extended or updated, regenerated and reviewed, `.expected.out` refreshed
 - [ ] `test/cases` extended with golden cases (regenerate baselines with `./ctc <case>.ct -o <case>.expected.c` and review them — never hand-write them); negative cases go to `test/errors`
 - [ ] The three-step verification passes **and** `./test/run.sh` is green

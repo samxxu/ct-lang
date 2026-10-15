@@ -345,6 +345,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - 变量表无类型信息；变量按**花括号块作用域**回滚（`{` 压栈、`}` 恢复），同一作用域内出现同名时取**最先**登记者（`find_var` 首命中）。
 - **登记顺序 = 源码顺序**：在变量声明之前出现的方法调用不会被重写。
 - 跨行的方法调用语句不重写（按行处理）；函数签名的**参数列表**跨多行时同样不识别。
+- **跨行的块注释 `/* … */` 只保护第一行**：续行会被当作普通代码行处理，其中的 `self`、方法调用等照常改写（单行 `/* … */`、`//` 与字符串 / 字符字面量不受影响）。这是按行处理管线的固有限制，Phase 2–5 用 CT 重做特性时随实现一并保留（见 [roadmap](roadmap.md) 的「自举之后的恢复与新增」）。
 - **文件作用域的对象 / 数组**：vptr 由编译器生成的构造器 `__ct_init`（`__attribute__((constructor))`）在 `main` 前写入（D5=A）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象自动初始化**（Phase 1，D1=A）：`T *p = malloc(sizeof(struct T));` / `calloc` 在声明后自动写 vptr（含嵌套字段）。
@@ -780,6 +781,11 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   rewritten.
 - Call statements spanning multiple lines are not rewritten (processing is line by line); a function
   signature whose **parameter list** spans several lines is not recognised either.
+- **A block comment `/* … */` is only protected on its first line**: continuation lines are treated as
+  ordinary source lines, so `self`, method calls and the rest inside them ARE rewritten (single-line
+  `/* … */`, `//` and string / character literals are unaffected). This is an inherent limit of
+  line-based processing and Phases 2–5 keep it as they redo the features in CT (see "Restoring and
+  adding features after self-hosting" in the [roadmap](roadmap.md)).
 - **File-scope objects / arrays**: the vptr is written before `main` by the generated constructor
   `__ct_init` (`__attribute__((constructor))`, D5 = A).
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).

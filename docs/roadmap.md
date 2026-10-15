@@ -595,6 +595,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 自举（Phase 1）完成后才动手。出口判据按**类别**分两类（不再按子阶段分）：Phase 2–4 是**恢复**（有归档 oracle + 冻结 golden，出口 = **byte-identical**，无需再拍设计）；Phase 5 是**新增**（无 oracle 可对差，出口 = **设计冻结 + 新用例 + `run.sh` 全绿**）。实现层面的设计见 [design/restore.md](design/restore.md)（决策 D1–D8，仅 D6 / D7 待定；D8：`map` 移出，见 Phase 6）。
 
+**实现方针——保真优先（2026-10-16 用户确认）**：用 CT 重做这些特性时，以**与归档 oracle 逐字节一致**为准，**包括复刻其既有行为与限制**（例如跨行块注释的 `/* … */` **续行**会被当作普通代码行处理，见 [language-spec](language-spec.md) §6.2）。因此**不修改 `test/archive/**` 的输入、也不重新生成任何归档 golden**——fixture 与 golden 都是冻结的 oracle；既有缺陷照实写进 §6.2，而不是靠改语料把它绕开。对差关卡是 [selfhost/check-archive.sh](../selfhost/check-archive.sh)。
+
 **次序的三条硬约束（不能乱）**：
 
 1. **Phase 2 必须最先**——只有 namespace + 多文件落地，CT 编译器源码才能分文件；`import` 也晚于它（依赖路径 / 符号解析）。
@@ -1532,6 +1534,14 @@ Phases 2–4 are **restoration** (archived oracle + frozen goldens; exit = **byt
 design needed); Phase 5 is **new work** (no oracle to diff against; exit = **design frozen + new cases
 + `run.sh` green**). The implementation-level design is in [design/restore.md](design/restore.md)
 (decisions D1–D8, only D6 / D7 open; D8: `map` moves out, see Phase 6).
+
+**Implementation policy — fidelity first (confirmed by the user on 2026-10-16)**: redoing these features
+in CT aims at **byte-identical output with the archived oracle**, **including replicating its existing
+behaviour and limitations** (for instance the **continuation line** of a multi-line `/* … */` block
+comment is treated as ordinary code — see [language-spec](language-spec.md) §6.2). So **neither the
+inputs under `test/archive/**` nor the archived goldens are ever edited or regenerated**: fixture and
+golden are the frozen oracle; an existing defect is written down in §6.2 instead of being dodged by
+changing the corpus. The diff gate is [selfhost/check-archive.sh](../selfhost/check-archive.sh).
 
 **Three hard ordering constraints (not negotiable)**:
 
