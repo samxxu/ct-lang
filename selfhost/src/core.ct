@@ -64,6 +64,7 @@ typedef struct {
     char use_t[MAX_TRAITS][MAX_NAME];
     int  use_i[MAX_TRAITS];
     int  nu;
+    size_t def_line;                   /* 1-based source line of the definition (for #line) */
     /* struct-typed fields, split into value and pointer tables: nested
        construction must never treat a borrowed pointer as an owned nested value */
     char fname[MAX_FIELDS][MAX_NAME];
@@ -81,6 +82,16 @@ typedef struct {
     char pifname[MAX_FIELDS][MAX_NAME];
     int  piftype[MAX_FIELDS];
     int  npif;
+    /* Drop, the reserved built-in trait: `has_drop` comes from the use-clause,
+       `has_user_drop` from a user-written `impl Drop for T` (its body span is
+       captured in the two size_t), and `drop_used` marks the types a `delete`
+       actually reaches -- only those bodies are emitted, so an unused drop never
+       appears and -Wunused-function stays quiet. */
+    int  has_drop;
+    int  has_user_drop;
+    int  drop_used;
+    size_t drop_bstart;
+    size_t drop_blen;
 } Struct;
 
 typedef struct {
@@ -163,6 +174,12 @@ static int g_has_unit_init = 0;
    `emit_hoisted`), and `g_ntmp` keeps the temp names unique. */
 static Buf g_hoist;
 static int g_ntmp = 0;
+
+/* The structs whose use-clause mentions the reserved `Drop`: one entry per
+   struct, in declaration order. Their drop bodies are emitted only when a
+   `delete` reaches them (`drop_used`). */
+static int g_own_drop[MAX_STRUCT];
+static int g_nown_drop = 0;
 
 /* ---------------------------------------------------------------- util */
 
@@ -368,6 +385,11 @@ trait SymTabOps {
     /* does trait `tr` declare a method named `m`? (interface dispatch needs the
        trait-specific answer, not `is_any_trait_method`'s) */
     int trait_has_method(int tr, const char *m);
+    /* Drop: propagate `drop_used` from a deleted type to the Drop value fields a
+       generated body will call. It is a method rather than a plain function
+       because plain-C top-level signatures are capped (MAX_FUNCS) and the budget
+       is already tight. */
+    void mark_drop_closure();
 }
 
 struct SymTab {
@@ -382,6 +404,28 @@ struct SymTab {
 } use SymTabOps;
 
 impl SymTabOps for SymTab {
+    /* A deleted Drop type pulls in the drops of its Drop value fields: mark them
+       so their bodies are emitted too (a default body calls them). A user-written
+       body is taken as-is and marks nothing, so it must not call a generated one. */
+    void mark_drop_closure() {
+        int changed = 1;
+        while (changed) {
+            int i, h;
+            changed = 0;
+            for (i = 0; i < g_nown_drop; i++) {
+                Struct *S = &self->structs[g_own_drop[i]];
+                if (!S->drop_used || S->has_user_drop) continue;
+                for (h = 0; h < S->nf; h++) {
+                    Struct *F = &self->structs[S->ftype[h]];
+                    if (F->has_drop && !F->drop_used) {
+                        F->drop_used = 1;
+                        changed = 1;
+                    }
+                }
+            }
+        }
+    }
+
     Trait *find_trait(const char *name) {
         int i;
         char q[MAX_NAME * 2];
@@ -654,6 +698,12 @@ trait PipeOps {
     void register_body_params(struct SymTab *sym, const char *params);
     /* the pipeline driver; the rewriting layer itself is the `RewriteOps` trait */
     void emit_hoisted();
+    /* The lazily-generated drop functions: the prototypes go before the buffered
+       body (a delete farther down calls them) and the definitions after it, when
+       the structs they walk are complete. Only the types a delete reaches get a
+       body, so an unused drop never appears (-Wunused-function stays quiet). */
+    void emit_drop_prototypes(struct SymTab *sym, FILE *f);
+    void emit_drop_bodies(struct SymTab *sym, FILE *f);
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
     void compile_range(struct SymTab *sym, size_t start, size_t end);
     /* Source-line tracking. The directive is written only when the running
@@ -694,6 +744,10 @@ trait RewriteOps {
     int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
     int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_tr, size_t *out_end, int *out_ifptr);
     int decl_end_is_bare(const char *s);
+    /* the same kind of source-shape predicate as decl_end_is_bare: does a captured
+       user body mention `self`? A drop body need not use it, and an unused self
+       would warn under -Wall -Wextra. */
+    int body_uses_self(size_t bstart, size_t blen);
     void scope_track(struct SymTab *sym, size_t ls, size_t le);
     char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
 }
@@ -1155,6 +1209,7 @@ impl PipeOps for Pipe {
         p = skip_ws_comments(p);
         p = read_ident(p, name, sizeof name);
         if (!name[0]) die(p, "expected trait name");
+        if (strcmp(name, "Drop") == 0) die(p, "'Drop' is a reserved built-in trait and cannot be defined");
         p = skip_ws_comments(p);
         if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after trait '%s'", name);
 
@@ -1267,6 +1322,14 @@ impl PipeOps for Pipe {
             die(p, "namespace-qualified name too long");
         snprintf(S->cname, sizeof S->cname, "%s%s", g_ns, name);
         S->nu = 0;
+        /* slots are reused across compiles (the table is reset by count, not by
+           clearing), so every Drop flag must start clean */
+        S->has_drop = 0;
+        S->drop_used = 0;
+        S->has_user_drop = 0;
+        S->drop_bstart = 0;
+        S->drop_blen = 0;
+        S->def_line = sline;
 
         q = close + 1;
         probe = q;
@@ -1283,9 +1346,15 @@ impl PipeOps for Pipe {
                 char tn[MAX_NAME];
                 u = read_ident(u, tn, sizeof tn);
                 if (!tn[0]) die(u, "expected trait name in 'use' clause of '%s'", S->name);
-                if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
-                snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
-                S->nu++;
+                if (strcmp(tn, "Drop") == 0) {
+                    /* the reserved built-in trait: it has no vtable and no vptr, so
+                       it never enters the use list -- only the marker */
+                    S->has_drop = 1;
+                } else {
+                    if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
+                    snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
+                    S->nu++;
+                }
                 u = skip_ws_comments(u);
                 if (u < g_len && g_src[u] == ',') { u = skip_ws_comments(u + 1); continue; }
                 break;
@@ -1303,6 +1372,11 @@ impl PipeOps for Pipe {
             if (!T)
                 die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
             S->use_i[i] = (int)(T - sym->traits);
+        }
+
+        if (S->has_drop && g_nown_drop < MAX_STRUCT) {
+            g_own_drop[g_nown_drop] = (int)(S - sym->structs);
+            g_nown_drop++;
         }
 
         {
@@ -1344,6 +1418,31 @@ impl PipeOps for Pipe {
         if (p >= g_len || g_src[p] != '{') die(p, "expected '{' in impl body");
 
         close = match_delim(p, '{', '}');
+
+        if (strcmp(trait_name, "Drop") == 0) {
+            /* `impl Drop for T { void drop() { ... } }` -- capture the user body;
+               the drop function itself is emitted lazily, only when a delete is
+               seen, so an unused impl costs nothing. */
+            size_t i2 = skip_ws_comments(p + 1), rp, bp, be;
+            S = sym->find_struct(struct_name);
+            if (!S) die(p, "impl for undefined struct '%s'", struct_name);
+            if (!S->has_drop) die(p, "struct '%s' does not use trait 'Drop'", S->name);
+            while (i2 < close && g_src[i2] != '(') i2++;
+            if (i2 >= close) die(p, "expected 'drop()' in impl of 'Drop' for '%s'", S->name);
+            rp = match_delim(i2, '(', ')');
+            bp = skip_ws_comments(rp + 1);
+            if (bp >= close || g_src[bp] != '{') die(bp, "expected '{' to start the drop() body");
+            be = match_delim(bp, '{', '}');
+            S->has_user_drop = 1;
+            S->drop_bstart = bp + 1;
+            S->drop_blen = be - bp - 1;
+            {
+                size_t q2 = close + 1, t2 = q2;
+                while (t2 < g_len && (g_src[t2] == ' ' || g_src[t2] == '\t')) t2++;
+                if (t2 < g_len && g_src[t2] == ';') q2 = t2 + 1;
+                return q2;
+            }
+        }
 
         T = sym->find_trait(trait_name);
         if (!T) die(p, "impl for undefined trait '%s'", trait_name);
@@ -1808,11 +1907,61 @@ impl PipeOps for Pipe {
         return buf;
     }
 
+    /* The drop prototypes go before the body (a delete calls them) and the
+       definitions after it (so the structs are complete). Both are emitted only
+       for the types a delete actually reaches. */
+    void emit_drop_prototypes(struct SymTab *sym, FILE *f) {
+        int i, any = 0;
+        sym->mark_drop_closure();
+        for (i = 0; i < g_nown_drop; i++) {
+            Struct *S = &sym->structs[g_own_drop[i]];
+            if (!S->drop_used) continue;
+            self->line_at(f, S->def_line);
+            fprintf(f, "static void %s_Drop_drop(void *self);\n", S->cname);
+            any = 1;
+        }
+        if (any) fputc('\n', f);
+        self->line_break();
+    }
+
+    void emit_drop_bodies(struct SymTab *sym, FILE *f) {
+        int i;
+        for (i = 0; i < g_nown_drop; i++) {
+            Struct *S = &sym->structs[g_own_drop[i]];
+            int h, need_self = 0;
+            if (!S->drop_used) continue;
+            if (S->has_user_drop) {
+                need_self = self->body_uses_self(S->drop_bstart, S->drop_blen);
+            } else {
+                for (h = 0; h < S->nf; h++)
+                    if (sym->structs[S->ftype[h]].has_drop) { need_self = 1; break; }
+            }
+            self->line_at(f, S->def_line);
+            fprintf(f, "static void %s_Drop_drop(void *self) {\n", S->cname);
+            if (need_self)
+                fprintf(f, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
+            else
+                fprintf(f, "    (void)self;\n");
+            if (S->has_user_drop) {
+                self->emit_body(sym, f, S->drop_bstart, S->drop_blen, S, "");
+            } else {
+                for (h = 0; h < S->nf; h++) {
+                    const Struct *F = &sym->structs[S->ftype[h]];
+                    if (!F->has_drop) continue;
+                    fprintf(f, "    %s_Drop_drop(&_self->%s);\n", F->cname, S->fname[h]);
+                }
+            }
+            fprintf(f, "}\n\n");
+            self->line_break();
+        }
+    }
+
     /* Compile one input to `outc` and a matching header. `multi` selects
        multi-file mode (see the trait declaration). Returns 0 on success. */
     int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi) {
         char hbuf[MAX_NAME * 4];
         const char *base;
+        FILE *body;
 
         g_multi = multi;
         g_ns[0] = 0;
@@ -1823,6 +1972,7 @@ impl PipeOps for Pipe {
         g_cur_rettr = -1;
         g_ctor_pub = 0;
         g_line_pub = 0;
+        g_nown_drop = 0;
         /* multi-file mode accumulates the traits/structs/signatures across units
            so a unit can name what the units built before it exported; a
            single-file compile of the same file starts from an empty table, which
@@ -1868,17 +2018,43 @@ impl PipeOps for Pipe {
             fputc('\n', self->out);
         }
 
-        self->compile_range(sym, 0, g_len);
+        /* Buffer the body so the lazily-generated drop functions can be emitted
+           before it: a drop function must be defined before the delete that calls
+           it, and whether a type needs one is only known once the body is scanned. */
+        body = tmpfile();
+        if (!body) {
+            fprintf(stderr, "ctc: cannot create a temporary file\n");
+            fclose(self->out);
+            fclose(self->hout);
+            return 1;
+        }
+        {
+            FILE *real = self->out;
+            self->out = body;
+            self->compile_range(sym, 0, g_len);
+            self->out = real;
+            self->line_break();
+            self->emit_drop_prototypes(sym, real);
+            rewind(body);
+            for (;;) {
+                char chunk[8192];
+                size_t got = fread(chunk, 1, sizeof chunk, body);
+                if (!got) break;
+                fwrite(chunk, 1, got, real);
+            }
+            self->emit_drop_bodies(sym, real);
 
-        /* file-scope objects/arrays: their vptr writes were collected while
-           scanning and are emitted here, after the types and vtables they
-           reference, as a constructor that runs before main */
-        if (g_has_unit_init)
-            fprintf(self->out,
-                    "static void __ct_init(void) __attribute__((constructor));\n"
-                    "static void __ct_init(void) {\n%s}\n",
-                    g_unit_init.p);
-        free(g_unit_init.p);
+            /* file-scope objects/arrays: their vptr writes were collected while
+               scanning and are emitted here, after the types and vtables they
+               reference, as a constructor that runs before main */
+            if (g_has_unit_init)
+                fprintf(real,
+                        "static void __ct_init(void) __attribute__((constructor));\n"
+                        "static void __ct_init(void) {\n%s}\n",
+                        g_unit_init.p);
+            free(g_unit_init.p);
+        }
+        fclose(body);
 
         fprintf(self->hout, "\n#endif /* %s */\n", g_guard);
 
@@ -2338,6 +2514,23 @@ impl RewriteOps for Pipe {
 
         buf_init(&b);
         buf_putn(&b, line, ind_len);
+        {
+            Struct *S = (vi >= 0 && sym->vars[vi].ptr && sym->vars[vi].s >= 0)
+                        ? &sym->structs[sym->vars[vi].s] : NULL;
+            if (S && S->has_drop) {          /* a Drop type: run drop() then free */
+                S->drop_used = 1;
+                buf_puts(&b, "if (");
+                buf_puts(&b, id);
+                buf_puts(&b, ") { ");
+                buf_puts(&b, S->cname);
+                buf_puts(&b, "_Drop_drop(");
+                buf_puts(&b, id);
+                buf_puts(&b, "); free(");
+                buf_puts(&b, id);
+                buf_puts(&b, "); }");
+                return b.p;
+            }
+        }
         buf_puts(&b, "if (");
         buf_puts(&b, id);
         buf_puts(&b, ") free(");
@@ -3096,6 +3289,29 @@ impl RewriteOps for Pipe {
             }
             return 0;
         }
+    }
+
+    /* Does [bstart, bstart+blen) mention `self` as a word? A user drop body need
+       not use it, and an unused self would warn under -Wall -Wextra. */
+    int body_uses_self(size_t bstart, size_t blen) {
+        size_t i = bstart, end = bstart + blen;
+        (void)self;  /* a pure source test; the receiver is not used */
+        while (i < end) {
+            if (g_src[i] == '"' || g_src[i] == '\'') { i = skip_literal(i); continue; }
+            if (g_src[i] == '/' && i + 1 < end && (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
+                i = skip_comment(i);
+                continue;
+            }
+            if (is_ident_char((unsigned char)g_src[i]) && !isdigit((unsigned char)g_src[i])) {
+                size_t j = i;
+                while (j < end && is_ident_char((unsigned char)g_src[j])) j++;
+                if (j - i == 4 && memcmp(g_src + i, "self", 4) == 0) return 1;
+                i = j;
+                continue;
+            }
+            i++;
+        }
+        return 0;
     }
 
     /* roll sym->nvars back at every closing brace so locals stay in their own scope;
