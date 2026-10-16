@@ -9,7 +9,7 @@
 > （`pub` / `import` / `ct build` 同类；`--line` / `--no-line` / `--diagnostics` 报 `unknown option`）。
 > **它们正在 CT 侧重做**（不在本文范围内）：`namespace` / 多文件 / `import` / `pub` 已由
 > Phase 2 在 `selfhost/src/**` 恢复，`Drop` 由 Phase 3 恢复；`#line`（含 `--line` / `--no-line`
-> 覆盖开关）与泄漏警告 / `--diagnostics` 已由 Phase 4 切片 1 / 2 收尾。因此**本文对 L0 依旧准确**，但不要把「移出」读成「不可用」——要写这些语法，
+> 覆盖开关）与泄漏警告 / `--diagnostics` 已由 Phase 4 切片 1 / 2 收尾，多错误报告 + 重同步由切片 3 新增（无 oracle）。因此**本文对 L0 依旧准确**，但不要把「移出」读成「不可用」——要写这些语法，
 > 用当前编译器（L2，由 `selfhost/src/**` 编出）。归档 fixture 见 `test/archive/`，旧实现见
 > git tag `overreach-oracle`。
 
@@ -393,7 +393,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 **从 L0 移出**，`ctc` 当前**不接受**它们（命中即报 `'xxx' is not supported by this compiler`）。
 **恢复进度**：`namespace` / 多文件 / `import` / `pub` 已由 Phase 2、`Drop` 已由 Phase 3 在
 `selfhost/src/**` 恢复（本文不描述其语法）；`#line`（含 `--line` / `--no-line` 开关）与泄漏警告 /
-`--diagnostics` 已由 Phase 4 切片 1 / 2 收尾。归档的
+`--diagnostics` 已由 Phase 4 切片 1 / 2 收尾，多错误报告 + 重同步由切片 3 新增（无 oracle）。归档的
 测试 fixture 见 `test/archive/`，特性完整的旧实现见
 git tag `overreach-oracle`。实现层设计见 `design/restore.md`。
 
@@ -410,7 +410,8 @@ git tag `overreach-oracle`。实现层设计见 `design/restore.md`。
 > **They are being redone in CT** (outside this document's scope): `namespace` / multi-file /
 > `import` / `pub` were restored by Phase 2 and `Drop` by Phase 3, all under `selfhost/src/**`;
 > `#line` (with the `--line` / `--no-line` overrides) and leak warnings / `--diagnostics` were closed
-> out by Phase 4 slices 1 and 2. So this document stays accurate for
+> out by Phase 4 slices 1 and 2, and multi-error reporting + resync were added by slice 3 (no
+> oracle). So this document stays accurate for
 > L0, but do not read "removed" as "unavailable" — to write these constructs, use the current
 > compiler (L2, built from `selfhost/src/**`). Archived fixtures live in `test/archive/` and the old
 > implementation is at git tag `overreach-oracle`.
@@ -860,6 +861,7 @@ implementations** that were **removed from L0** in Phase 0.3; `ctc` **rejects** 
 multi-file / `import` / `pub` were restored by Phase 2 and `Drop` by Phase 3, all under
 `selfhost/src/**` (this document does not cover their syntax); `#line` (with the `--line` /
 `--no-line` overrides) and leak warnings / `--diagnostics` were closed out by Phase 4 slices 1
-and 2. Archived test fixtures live in `test/archive/` and the
+and 2, and multi-error reporting + resync were added by slice 3 (no oracle). Archived test
+fixtures live in `test/archive/` and the
 feature-complete old compiler is at
 git tag `overreach-oracle`. Implementation-level design is in `design/restore.md`.

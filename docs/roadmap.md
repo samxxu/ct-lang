@@ -594,11 +594,34 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 **已知约束（开工前必须先接受）**：
 
-- **接口数组声明即 `die`** → AST 子节点列表不能用 `Node kids[N]`，只能靠**接口指针 + 链表**；而指针接口字段的**赋值目前原样透传**（需手工构造胖指针）。
-- **接口字段不参与构造点递归、指定初始化式不装箱** → 装配 AST 时手工装箱代码增多。
+- **接口数组声明即 `die`** → AST 子节点列表不能用 `Node kids[N]`，只能靠**接口指针 + 链表**；而指针接口字段的**赋值目前原样透传**（需手工构造胖指针）。**订正（2026-10-17）**：该「接口指针 + 链表」退路**本身不可靠**——指针接口字段赋值会**段错误**，且「接口指针局部声明」也 `die`；实测与订正见下方「三处表达力缺口与 AST 主线」。
+- **接口字段不参与构造点递归、指定初始化式不装箱** → 装配 AST 时手工装箱代码增多（注：接口值字段的**赋值**其实已装箱，只有**构造点**没走 box 路径——见下方实测）。
 - **按行重写**（构造与语句同行不处理、单行函数体不处理）→ 编译器源码必须遵守「一语句一行」的纪律，否则**静默不重写、产物编不过**。
 - **声明必须先于使用 + 单趟扫描** → trait / struct 需人工拓扑排序；相互递归只能经接口指针。
 - **namespace 只修饰 struct / trait / impl 符号，普通函数名不修饰** → 若按 namespace 切分源码，普通函数会在 C 层重名冲突（这也是先走单文件路径的一个动机）。
+
+**三处表达力缺口与 AST 主线（2026-10-17 用户决定）**
+
+自举就绪报告点名的三处缺口已由 [test/acceptance/run.sh](../test/acceptance/run.sh) **实测枚举**。L0 无错误恢复（一个错误即终止），故逐构造隔离成微探针——否则编译一次只会看见第一条 `die`：
+
+| 微探针 | 缺口 | 实测现象 |
+| --- | --- | --- |
+| `p01` / `p02` | 接口**数组**声明（`Node kids[2]`、`Node *kids[2]`） | `die`：`unsupported declaration of interface type` |
+| `p03` / `p04` | 数组元素**赋值 / 派发**（`kids[0] = a; kids[0].eval()`） | 受上一条门禁，当前不可达 |
+| `p05` | 接口**值字段**在**构造点**装箱（`Pair p = { .l = a, .r = b }`） | ctc 产出**编不过的 C**（`void *` 收 `struct Leaf`） |
+| `p06` | 接口值字段**赋值**（`p.l = a;`） | ✅ **已支持**（走既有 box 路径） |
+| `p07` / `p08` | 接口**指针字段**（构造 / 赋值，`p.l = &a`） | ctc 静默透传 → 编译过（抑制 warning）→ **运行段错误 exit 139** |
+| `p09`–`p11` | 对照组：接口局部来自值 / 指针、函数返回接口 | ✅ **已支持**（证明 box 子系统存在，harness 能诚实抵达 PASS） |
+
+**订正**：「用**接口指针 + 链表**绕过数组缺口」这条退路**本身是坏的**——指针接口字段赋值静默透传并段错误，且**接口指针局部声明**（`T *g = 0;`，[test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct)）同样 `die`。故 AST 子节点既不能数组、也不能指针链表，只能手工构造胖指针。三处缺口对外全部可见（`die` 或坏 C / 崩溃），**不存在隐藏的静默降级**。**三例连归档 oracle 都不支持**（oracle 对同三例同样 `die` / 产出坏 C / 段错误），故它们是**新增**而非「恢复」。
+
+**用户决定（2026-10-17，三项均取推荐项）**：
+
+1. **落点 = CT 侧（`selfhost/src/**`），`ctc.c` 保持冻结**——既然 trio 无归档 oracle 可对差（不属 Phase 2–4「恢复」类），就不该在 C 侧加；且 `ctc.c` 的 `MAX_FUNCS` 余量仅 1，C 侧无处可加。鸡生蛋问题有解：**先让 L1/L2 在纯子集里把缺口当作「它提供的一项特性」实现**（其源码不用该特性），再由它编出用该特性的新编译器——L0 全程不动。
+2. **顺序 = 先落验收关卡、再逐条补**（消费者驱动：完整缺口清单从编译报错中长出，而非靠读码推断）。
+3. **定位 = AST 版编译器作**新主线**，旧 `selfhost/ctc.ct`（L1）打 tag 归档**；出口口径由 **byte-identical** 换成 **行为等价**（同输入、同运行输出，不要求产物逐字节相同）。
+
+**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，基线 `BASELINE` 现只含 `p06 p09 p10 p11`；退出码仅 `REGRESSION` 非零）。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。补齐后三条 PENDING 主项转 PASS、`ast_spike.ct`（[test/acceptance/ast_spike.ct](../test/acceptance/ast_spike.ct)）转 PASS，且 `test/errors/{iface_array,iface_pointer_init}.ct` 两条负例须**退役**（它们钉的是缺口存在，特性落地后不再 `die`）。
 
 **过渡期纪律**：自举启动后**冻结一切新的 C 侧语言特性**；`ctc.c` 只接受 bug 修复。若 L1 暴露出 ct 表达力缺口，须先判定它属「语言特性」（放到 CT 层实现）还是「种子核心能力」（必须在 C 侧补）——后者要作为 **Phase 0 核心的修订定义**显式记录，不得顺手打补丁（这正是 Phase 0 历史偏差的复发点）。
 
@@ -644,9 +667,11 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **出口**：诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行。
 - **对差依据**：`test/archive/errors/*`、`run.sh` 的 `#line` 层。
 - **风险**：错误计数与重同步点容易产生级联误报；语义诊断要与「不做类型检查」的定位边界划清。
-- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。**尚未做**：多错误重同步（3）、语义诊断（4）。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
-- **进展（2026-10-16，切片 2：泄漏警告 + `--diagnostics`）**：oracle 的保守、路径不敏感泄漏警告已在 `selfhost/src/**` 恢复——`Var` 增 `owned` / `own_line`，指针声明处的 `malloc` / `calloc` 记为持有（`new_var` 复用槽位时清这两个字段），`delete` 与 `return` / 逃逸赋值清标记，作用域闭合时 `leak_check_scope` 收集仍持有的对象，`emit_warnings` 按 `--diagnostics=json` 发 JSON（compile 走 stdout、build 走 stderr，后者把 stdout 留给 cc 命令）、按 text 发 stderr。归档负例 `too_many_warnings` 由 PENDING 转 PASS（超 `MAX_WARNS` 仍 `die`）。**5 个新方法全部进 `SymTabOps`（9 → 14）**，warning 输出复用既有 pub 包装器（单文件 `ct_compile_file`、build `ct_cc_finish`），**顶层函数零新增**——`MAX_FUNCS` 余量仍是 1。新增 3 个 designed fixture：`leak`（compile text）、`leak_json`（compile json → stdout）、`leak_build`（build json → stderr），`check-archive.sh` 第 7 组新增 `expected.stdout` / `expected.stderr` 逐字节断言。**尚未做**：多错误重同步（3）、语义诊断（4）。
+- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。**尚未做**：语义诊断（4）。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
+- **进展（2026-10-16，切片 2：泄漏警告 + `--diagnostics`）**：oracle 的保守、路径不敏感泄漏警告已在 `selfhost/src/**` 恢复——`Var` 增 `owned` / `own_line`，指针声明处的 `malloc` / `calloc` 记为持有（`new_var` 复用槽位时清这两个字段），`delete` 与 `return` / 逃逸赋值清标记，作用域闭合时 `leak_check_scope` 收集仍持有的对象，`emit_warnings` 按 `--diagnostics=json` 发 JSON（compile 走 stdout、build 走 stderr，后者把 stdout 留给 cc 命令）、按 text 发 stderr。归档负例 `too_many_warnings` 由 PENDING 转 PASS（超 `MAX_WARNS` 仍 `die`）。**5 个新方法全部进 `SymTabOps`（9 → 14）**，warning 输出复用既有 pub 包装器（单文件 `ct_compile_file`、build `ct_cc_finish`），**顶层函数零新增**——`MAX_FUNCS` 余量仍是 1。新增 3 个 designed fixture：`leak`（compile text）、`leak_json`（compile json → stdout）、`leak_build`（build json → stderr），`check-archive.sh` 第 7 组新增 `expected.stdout` / `expected.stderr` 逐字节断言。**尚未做**：语义诊断（4）。
 - **验证（2026-10-16，切片 2）**：三套 golden 全部由 tag `overreach-oracle` 编出的 oracle 生成，L2 与之在 `.c` / `.h` / stderr / stdout 四侧逐字节一致（含 `--diagnostics=bad` 的 `unknown diagnostics format` 报错）；`check-archive.sh` 0 退化（单单元 3 pass、诊断 **10 pass / 0 pending**、多单元 4 pass、designed **10 pass**）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过，L2 单文件产物与 L0 逐字节一致。
+- **进展（2026-10-16，切片 3：多错误报告 + 重同步）**：`die` 不再一律退出——`compile_range` 的逐行循环每轮用 `setjmp` 设一个守卫，`die` 报告后 `longjmp` 回守卫（无守卫时仍是原来的「一处错误即停」，OOM 亦然）。守卫处快照、处理分支里还原 `sym->nvars` / `g_nscope` / `g_body_abs`（长跳转会把 `emit_body` 的还原跳过），嵌套 namespace 的递归靠保存/拷回 `jmp_buf` 保住外层守卫。重同步点由 `RewriteOps::recover_pos` 给出：自错误处向后，取「下一个 `}` 之后」与「下一行行首」的先到者（跳过字符串与注释），并保证严格前进。错误上限 `MAX_ERRORS=20`，超过即打印 `ctc: too many errors, stopping` 后退出 1。失败的编译按本次调用的错误增量**删除**已写的 `.c`/`.h`，并在 stderr 末尾补 `ctc: N error(s) generated`。**尚未做**：语义诊断（切片 4）。
+- **验证（2026-10-16，切片 3）**：3 处错误的样例三处全报 + 摘要 + 退出 1 + 无产物；`MAX_ERRORS` 边界（第 21 处后停止）、namespace 嵌套内错误、函数体内错误均符合预期，且后一处错误的位置不受前一处长跳转影响（与 L0 的既有位置一致）。`check-archive.sh` 0 退化（designed **12 pass**，新增 `multi_err` / `multi_err_build`）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过。
 
 ### Phase 5：新增特性（原 2.4）
 
@@ -1718,7 +1743,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   it on single-file), and `check-archive.sh` group 7 grew a `compile.args` branch (single-file cases
   run their args verbatim from a staging copy so the banner path matches the golden), taking
   `baseline_designed` to 7. **The single-file default stays off**, so L2's single-file output remains
-  byte-identical with L0. **Still to do**: multi-error resync (3), semantic checks (4). New code goes
+  byte-identical with L0. **Still to do**: semantic checks (4). New code goes
   into `impl` blocks (`MAX_FUNCS` has one slot left).
 - **Progress (2026-10-16, slice 2: leak warnings + `--diagnostics`)**: the oracle's conservative,
   path-insensitive leak warnings are restored in `selfhost/src/**` — `Var` gains `owned` /
@@ -1733,7 +1758,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   **no top-level function is added** — `MAX_FUNCS` still has its one slot. Three designed fixtures
   were added (`leak`: compile text; `leak_json`: compile json → stdout; `leak_build`: build json →
   stderr), and `check-archive.sh` group 7 gained `expected.stdout` / `expected.stderr` byte-exact
-  assertions. **Still to do**: multi-error resync (3), semantic checks (4).
+  assertions. **Still to do**: semantic checks (4).
 - **Verification (2026-10-16, slice 2)**: all three goldens were generated by the oracle built from
   tag `overreach-oracle`, and L2 matches it byte for byte across `.c` / `.h` / stderr / stdout
   (including the `unknown diagnostics format` error for `--diagnostics=bad`); `check-archive.sh`
@@ -1741,6 +1766,24 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   designed **10 pass**); `check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + fixpoint 2/2;
   `check-m2a.sh` / `ct-tour.sh` exit 0; `./test/run.sh` 115/115; the manual three-step passes and
   L2's single-file output matches L0 byte for byte.
+- **Progress (2026-10-16, slice 3: multi-error reporting + resync)**: `die` no longer always
+  exits — `compile_range`'s per-line loop installs a `setjmp` guard each round, and `die` reports
+  and `longjmp`s back to it (without a guard the old one-error-stops behaviour — and OOM — still
+  holds). The guard snapshots `sym->nvars` / `g_nscope` / `g_body_abs`, restored in the handler
+  because a long jump skips `emit_body`'s own restore, and a recursive namespace body keeps its
+  caller's guard by saving and copying back the `jmp_buf`. `RewriteOps::recover_pos` picks the
+  resync point: past the next `}` or the start of the next line, whichever comes first (literals
+  and comments skipped), always strictly forward. `MAX_ERRORS=20` caps it (`ctc: too many errors,
+  stopping`, exit 1). A failing compile deletes the `.c`/`.h` it had written (judged by this call's
+  error delta) and closes with `ctc: N error(s) generated`; the exit code is 1. **Still to do**:
+  semantic checks (slice 4).
+- **Verification (2026-10-16, slice 3)**: a three-error sample reports all three plus the summary,
+  exits 1 and leaves no artifact; the `MAX_ERRORS` boundary (stops after the 21st), an error inside
+  a nested `namespace`, and one inside a function body all behave as designed, and a later error's
+  position is unaffected by an earlier long jump (matching L0's existing positions).
+  `check-archive.sh` 0 regressions (designed **12 pass**, adding `multi_err` / `multi_err_build`);
+  `check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + fixpoint 2/2; `check-m2a.sh` / `ct-tour.sh`
+  exit 0; `./test/run.sh` 115/115; the manual three-step passes.
 
 ### Phase 5 — new features (was 2.4)
 
