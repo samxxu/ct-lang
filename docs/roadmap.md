@@ -18,7 +18,7 @@
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | 建设 | ✅ 完成（设计先行 → 已实现） | 接口**数组**尚未实现；接口**字段**（值字段装箱 + 派发、指针字段派发）已补齐 |
 | Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | 建设 | ✅ 完成（2026-10-14） | `ctc.c` 3836 → 2897 行、只余 Phase 0 能力；套件 146 → 110 项全绿；归档件在 `test/archive/` + tag `overreach-oracle` |
 | Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 建设 | ✅ 完成（2026-10-15：M2 达成 25/25，且 L1′ 自举闭环通过） | 阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
-| Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | 🔄 进行中（namespace + 多文件 `build` / `pub` / `import` 已达成，2026-10-16） | 归档用例 **byte-identical**；编译器源码切成多文件 |
+| Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | ✅ 完成（2026-10-16；非版本 tag `phase2-multifile-split`） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | 🔭 展望 | drop 用例 **byte-identical** |
 | Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | 🔭 展望 | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔭 展望 | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
@@ -48,7 +48,7 @@
 | --- | --- | --- |
 | v0.0.1 | Phase 0 | trait / struct / impl / use 的结构转换、方法调用重写、配套 `.h`、五层回归测试 |
 | v0.1.0 | Phase 1 自举（**里程碑已达成，尚未 bump**） | L1（`selfhost/ctc.ct`）对 `test/cases/**` 全量 25/25 逐字节一致，且 L1 编译自身（L1′）重跑同一批语料仍逐字节一致 |
-| v0.2.0 | Phase 2 模块化 | 展望：namespace / 多文件 `ct build` / `pub` / `import` |
+| v0.2.0 | Phase 2 模块化（**里程碑已达成，尚未 bump**） | namespace / 多文件 `ct build` / `pub` / `import` / `.h.ct` / `-I`；归档用例逐字节一致，编译器源码拆成 `selfhost/src/**`（L1 建出 L2，对 `test/cases/**` 25/25 一致） |
 | v0.3.0 | Phase 3 内存 | 展望：Drop / `delete` 放宽 |
 | v0.4.0 | Phase 4 诊断与溯源 | 展望：`#line` / 泄漏警告 / `--diagnostics` |
 | v0.5.0 | Phase 5 新增特性 | 展望：AutoDrop / 路径敏感分析 / 目录 = namespace |
@@ -60,7 +60,8 @@
 **版本规则（2026-10-15 用户确认）**：
 
 - 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0（已完成，当前 v0.0.1）、`0.1.x` = Phase 1 自举（已完成，尚未 bump）、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源、`0.5.x` = Phase 5 新增特性、`0.6.x` = Phase 6 生态与扩展、`0.7.x` = Phase 7 工具链形态；`1.0.0` = 语言定稿。
-- **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（当前用 `phase1-m2` 标记 v0.1.0 这个里程碑）。
+- **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（`phase1-m2` 标记 v0.1.0、`phase2-multifile-split` 标记 v0.2.0）。
+- **口径 A（2026-10-16 用户确认）**：Phase 1 / Phase 2 的版本号**都不在阶段边界 bump**，与「单入口 `ct`」一并落地；`v0.1.0` / `v0.2.0` 的 bump 会在那一刻一次性完成（含两处 `CTC_VERSION` 同步与全量 golden 重生成）。
 - **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重新生成 `test/cases/**` 全部 golden 与 examples 的 `.expected.out`，并**同时**改 `ctc.c` 与 `selfhost/ctc.ct`（L1 自带一份版本号，第 84 行）——两处不一致会让 `selfhost/check-goldens.sh` 立刻全红。冻结期改 `CTC_VERSION` 属「不允许」项，需用户显式授权一次例外。
 
 ### 已定的设计决策
@@ -613,17 +614,19 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### Phase 2：模块化（原 2.1）
 
 - **CT 重做**：namespace（`parse_namespace` + 限定查找 + 产物前缀 `<Ns>_<Struct>_<Trait>_<method>`）、多文件 `ct build` / `.h.ct` / `pub`（类型下沉 `.h`、`.c` `#include` 自己的头、可见性规则）、`import`（路径解析 + 递归编入 + 跨单元符号累积）。
-- **出口**：归档用例**逐字节一致**；**编译器源码切成多文件**（后半程的最大红利）。
-- **对差依据**：`test/cases/19_namespace`、`20_namespace_nested`、`test/multifile/`、`test/import/`。
-- **风险**：命名前缀一经发布即契约，须先冻结；多文件破坏「`.c` 自包含」，须与 `pub` 可见性规则一起定案；`-I` 已定（**本地优先**：先查导入方所在目录，再按命令行顺序逐个查 `-I` 根）；跨单元 vtable 可见性仍待定。
+- **出口**：归档用例**逐字节一致**；**编译器源码切成多文件**（后半程的最大红利，✅ 2026-10-16 达成 → `selfhost/src/**` 由 L1 建出 L2，见下条进展）。
+- **对差依据**：`test/archive/cases/19_namespace`、`test/archive/cases/20_namespace_nested`、`test/archive/multifile/`、`test/archive/import/`。
+- **风险**：命名前缀一经发布即契约，须先冻结；多文件破坏「`.c` 自包含」，须与 `pub` 可见性规则一起定案；`-I` 已定（**本地优先**：先查导入方所在目录，再按命令行顺序逐个查 `-I` 根）；跨单元 vtable 可见性**已定**（2026-10-16 拆分实测：vtable 发射为 `static`，**符号不可跨单元**，跨单元派发只走对象内已存的 vptr；头单元也无法携带 `MAX_*` / `size_t` / `FILE`——`pub` 前缀进不了 `.h`）。
 - **进展（2026-10-16）**：**namespace 已达成**——`selfhost/check-archive.sh` 报 `19_namespace` 与 `20_namespace_nested` 逐字节一致（嵌套命名空间顺带达成），另有 4 条 namespace 负例（`namespace_bad_path` / `namespace_path_too_long` / `ns_path_nested` / `ns_qualified_name`，含逐字相同的诊断）通过并提升进关卡基线；Phase 1 出口不退化（`check-goldens.sh` 25/25、L1′ 一致）。实现要点：`g_ns` 扁平前缀、`read_qual_ref` 解析限定声明头、`transform_calls` 的 `::` 链重写、`compile_range` 的 namespace 分支（递归 + 压/还前缀）。**待做**：多文件 `.h.ct` / `pub` / `ct build` / `import`——`test/archive/{multifile,import}/` 的四个单元仍 PENDING。
 - **进展（2026-10-16，切片 2d/2e + `.h.ct`/`-I`）**：**多文件 `ct build`、`pub`、`import` 与 `.h.ct` / `-I` 均达成**——`test/archive/{multifile,import}/` 四单元逐字节一致（`.c` 与 `.h` 两侧）并提升进 `baseline_multi`；本轮再补 **`.h.ct` 附加式命名**（基名剥 `.h.ct` → `foo.c` + `foo.h`，`import foo;` 回退命中 `foo.h.ct`）与 **`-I <dir>` 搜索根**（可重复；解析顺序 = 导入方目录优先，再按命令行顺序）。CLI 增 `build` 子命令（`compile` 兼作显式别名，build 模式 `-o` 为输出**目录**）；驱动 `collect_imports` / `resolve_import` / `unit_visit` / `build_output` / `build_main` 解析每个 `import a::b;`、按依赖后序逐单元以多文件模式编译并打印建议的 `cc` 命令。`pub` 函数行剥掉 `pub` 但原型进 `.h`（`.c` 留空行），`pub trait` / `pub struct` 只把类型放进 `.h`，`import` 行被消费，`#line` 映射（`line_of` / `line_at` / `line_break`）落在多文件 `.c` 里。**新语义的用例**放 `test/modules/**`，由 `check-archive.sh` **第 7 组 designed** 覆盖（无归档 oracle，自比对 golden + 端到端运行）：`hdr`（`.h.ct` 命名 + 回退）、`inc`（`-I` 使能用）、`inc_missing`（不给 `-I` 则必须报 `cannot resolve import`）、`precedence`（同名时导入方目录优先于 `-I` 根，钉住「本地优先」）。**待做**：`--line` / `--no-line` 覆盖开关（归 Phase 4）。
+- **进展（2026-10-16，源码拆分 → L2）**：**后半程红利落地**——CT 编译器源码已从单文件种子 `selfhost/ctc.ct` 拆成多单元源码树 `selfhost/src/**`（`core.ct` + `driver.ct`），由 **L1 自身的 `build`**（多文件 + `import`）编译，产出 **L2**；出口判据 = **L2 对 `test/cases/**` 与 L1 逐字节一致（25/25）**，已达成（`check-goldens.sh` 第 6 步）。拆分触发的能力与**硬约束**（T0 探针实测）：① `pub` 前缀**进不了 `.h`**——`ctc.ct` 对 `#` 开头的行直接 verbatim 写进 `.c` 并提前 return，绕过 `pub` 路由，故**头单元无法携带 `MAX_*` / `size_t` / `FILE`**；数据、宏与单例只能留在 `core.ct`（落进 `core.c`），`driver.ct` 自带同值 `MAX_*` 副本。② `impl` / vtable 原生发射为 `static`，**符号无法跨单元引用**——跨单元派发只能经由对象内已存的 vptr（即"用访问器返回 `struct Pipe *` / `struct SymTab *` 后再 `->method()`"）。③ `MAX_FUNCS` 只对**非 static 顶层签名**累积（`pub` 原型 + 非 static 定义计一次）；本拆分只导出 10 个 `pub` 标量包装器（`ct_read_file` / `ct_is_ident_char` / `ct_usage` / `ct_default_output` / `ct_begin_imports` / `ct_add_import` / `ct_compile_file` / `ct_cc_reset` / `ct_cc_add` / `ct_cc_finish`），余量充足。**同源、不互相生成**：`selfhost/src/**` 与手写种子 `selfhost/ctc.ct`（L1）都是手写源码，种子保留。**新关卡**：`check-goldens.sh` 第 6 步（**硬判据**：L1 `build selfhost/src/driver.ct` → L2 → 语料逐字节）、`check-archive.sh` 3b、`check-m2a.sh` 第 7 步、`ct-tour.sh` 第 6 步。**新设计用例** `test/modules/split`（`pub trait` + `pub struct` 在头单元、`impl`（含 static vtable）在另一单元、第三单元经访问器返回的指针派发）钉住该跨单元契约，登记进 `check-archive.sh` 第 7 组 `baseline_designed`。**待做**：Phase 2 的 `--line` 与 Phase 3+ 的恢复项；`--line` / `--no-line` 覆盖开关仍归 Phase 4。
+- **收口（2026-10-16 用户确认，口径 A）**：**Phase 2 到此结束**——**不 bump 版本号**（`CTC_VERSION` 保持 `v0.0.1`，冻结期不改），只打**非版本 tag `phase2-multifile-split`**；`v0.1.0` / `v0.2.0` 的 bump 与「单入口 `ct`」一并落地，届时一次性重生成全部 golden。两个出口均已达成，故本阶段无遗留功能项；`--line` / `--no-line` 归 Phase 4。
 
 ### Phase 3：内存（原 2.2）
 
 - **CT 重做**：`Drop`（内置保留名 trait、惰性生成、递归释值字段）+ `delete` 放宽（任意指针 → `if (p) free(p);`）。
 - **出口**：drop 用例**逐字节一致**。
-- **对差依据**：`test/cases/22_drop`、`test/errors/drop_*`。
+- **对差依据**：`test/archive/cases/22_drop`、`test/archive/errors/drop_*`。
 - **风险**：用户 `impl Drop` 与默认体的合并语义需定死。
 
 ### Phase 4：诊断与溯源（原 2.3）
@@ -631,7 +634,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **CT 重做**：`#line`（多文件默认开，D4 = A）、泄漏警告 + `--diagnostics=json`（首版范围见 1.7）。
 - **新增（无 oracle，须配新用例）**：多错误报告 + 错误恢复（跳到下一个行首 / `}`）、语义诊断（重复 trait / struct 定义报错、方法签名与 trait 不一致时告警）。
 - **出口**：诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行。
-- **对差依据**：`test/errors/*`、`run.sh` 的 `#line` 层。
+- **对差依据**：`test/archive/errors/*`、`run.sh` 的 `#line` 层。
 - **风险**：错误计数与重同步点容易产生级联误报；语义诊断要与「不做类型检查」的定位边界划清。
 
 ### Phase 5：新增特性（原 2.4）
