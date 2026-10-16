@@ -49,8 +49,9 @@
 #        compile-mode line, repo-relative) plus its own *.expected.c/*.expected.h
 #        to byte-diff and, for positive cases, an expected.out to link-and-run
 #        against. Optional expected.stderr / expected.stdout byte-diff what the
-#        *compiler* printed (expected.out is the linked program's output). A
-#        fixture with an expected.err is a negative case (the command must fail
+#        *compiler* printed (expected.out is the linked program's output), and an
+#        expected.noartifacts marker asserts a failing run left no .c/.h behind.
+#        A fixture with an expected.err is a negative case (the command must fail
 #        with that message).
 #
 # Usage:  bash selfhost/check-archive.sh        (or ./selfhost/check-archive.sh once +x)
@@ -101,8 +102,9 @@ test/archive/multifile/calc
 "
 # designed cases: no archive oracle backs these, they pin the new semantics of
 # `foo.h.ct` file names, `-I` import roots, the `--line` / `--no-line` overrides
-# of the per-mode `#line` default and the `--diagnostics` leak warnings,
-# byte-diffed against their own goldens plus an end-to-end run (see group 7).
+# of the per-mode `#line` default, the `--diagnostics` leak warnings and the
+# multi-error recovery, byte-diffed against their own goldens plus an end-to-end
+# run (see group 7).
 # `split` additionally pins the cross-unit OO contract the selfhost split relies
 # on: a `pub trait`/`pub struct` in a header unit, its `impl` (with a `static`
 # vtable) in another unit, and a third unit dispatching through an
@@ -118,6 +120,8 @@ line
 leak
 leak_json
 leak_build
+multi_err
+multi_err_build
 "
 
 in_list() {
@@ -484,6 +488,11 @@ for fdir in test/modules/*/; do
        ! cmp -s "$work/mod-$name.stdout" "$fdir/expected.stdout"; then
         matched=0
         detail="(compiler stdout differs from expected.stdout)"
+    fi
+    if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.noartifacts" ] &&
+       ls "$runc"/*.c "$runc"/*.h >/dev/null 2>&1; then
+        matched=0
+        detail="(an artifact survived a failing compile)"
     fi
 
     if in_list "$name" "$baseline_designed"; then

@@ -1,0 +1,1 @@
+# the failing build must not leave a .c/.h behind

@@ -1,0 +1,1 @@
+# the failing compile must not leave a .c/.h behind

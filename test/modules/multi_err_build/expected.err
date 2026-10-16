@@ -1,0 +1,1 @@
+# negative case: build reports the errors, then stops at the failing unit

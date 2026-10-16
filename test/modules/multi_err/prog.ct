@@ -1,0 +1,11 @@
+trait T { void f(); }
+struct A { int x; }
+impl T for Missing {
+    void f() { }
+}
+struct B { int y; } use NoSuch;
+struct C { int z; }
+impl T for AlsoMissing {
+    void f() { }
+}
+int main(void) { return 0; }

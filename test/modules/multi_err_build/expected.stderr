@@ -1,0 +1,4 @@
+test/modules/multi_err_build/prog.ct:3:20: error: impl for undefined struct 'Missing'
+test/modules/multi_err_build/prog.ct:6:10: error: struct 'B' uses undefined trait 'NoSuch'
+test/modules/multi_err_build/prog.ct:8:24: error: impl for undefined struct 'AlsoMissing'
+ctc: 3 error(s) generated
