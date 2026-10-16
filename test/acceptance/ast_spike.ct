@@ -1,0 +1,77 @@
+/*
+ * ast_spike -- the acceptance target for one question:
+ *
+ *   can CT express an AST -- a recursive, heterogeneous tree of node kinds,
+ *   held through interface (fat-pointer) values and collections, walked
+ *   polymorphically?
+ *
+ * That is exactly the shape a real compiler front-end needs, and it is the
+ * shape L0 cannot write today. The constructs below are the ones under test:
+ *
+ *   - `struct Add { Node l, r; }`      interface *value* fields
+ *   - `struct Ref { Node *t; }`        interface *pointer* fields
+ *   - `struct Block { Node items[4]; }` interface *arrays*
+ *   - `Add sum = { .l = a, .r = b };`  boxing into fields at construction
+ *
+ * This file is the goal, not a fixture: it fails until the capabilities land.
+ * `test/acceptance/run.sh` probes every construct in isolation, because L0 has
+ * no error recovery (docs/language-spec.md: the first error terminates), so a
+ * single compile of this file would hide all but the first gap.
+ */
+#include <stdio.h>
+
+trait Node {
+    int eval();
+    int arity();
+}
+
+struct Num {
+    int v;
+} use Node;
+
+struct Add {
+    Node l;
+    Node r;
+} use Node;
+
+struct Ref {
+    Node *t;
+} use Node;
+
+struct Block {
+    Node items[4];
+    int n;
+} use Node;
+
+impl Node for Num {
+    int eval() { return self->v; }
+    int arity() { return 0; }
+}
+
+impl Node for Add {
+    int eval() { return self->l.eval() + self->r.eval(); }
+    int arity() { return 2; }
+}
+
+impl Node for Ref {
+    int eval() { return self->t->eval(); }
+    int arity() { return 1; }
+}
+
+impl Node for Block {
+    int eval() {
+        int i = 0;
+        int acc = 0;
+        for (i = 0; i < self->n; i++) acc = acc + self->items[i].eval();
+        return acc;
+    }
+    int arity() { return self->n; }
+}
+
+int main(void) {
+    struct Num a = { .v = 2 };
+    struct Num b = { .v = 3 };
+    struct Add sum = { .l = a, .r = b };
+    printf("%d\n", sum.eval());
+    return 0;
+}
