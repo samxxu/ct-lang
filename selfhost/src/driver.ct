@@ -208,6 +208,7 @@ static int build_main(int argc, char **argv, const char *prog)
     const char *outdir = NULL;
     int n = 0, i, o;
     int line_force = -1;               /* -1 mode default, 0 --no-line, 1 --line */
+    int diag = 0;                      /* 0 text warnings, 1 `--diagnostics=json` */
 
     for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) { ct_usage(prog); return 0; }
@@ -232,6 +233,13 @@ static int build_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { line_force = 0; continue; }
+        if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
+            const char *v = argv[i] + 14;
+            if (strcmp(v, "json") == 0) { diag = 1; continue; }
+            if (strcmp(v, "text") == 0) { diag = 0; continue; }
+            fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
+            return 1;
+        }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             ct_usage(prog);
@@ -259,7 +267,7 @@ static int build_main(int argc, char **argv, const char *prog)
         ct_begin_imports();
         for (k = 0; k < g_unit_nimp[u]; k++)
             ct_add_import(g_unit_imp[u][k]);
-        if (ct_compile_file(g_unit_path[u], g_unit_out[u], 1, line_force) != 0) return 1;
+        if (ct_compile_file(g_unit_path[u], g_unit_out[u], 1, line_force, diag) != 0) return 1;
     }
 
     ct_cc_reset();
@@ -276,6 +284,7 @@ static int compile_main(int argc, char **argv, const char *prog)
     char outbuf[MAX_NAME * 4];
     int i;
     int line_force = -1;               /* -1 mode default, 0 --no-line, 1 --line */
+    int diag = 0;                      /* 0 text warnings, 1 `--diagnostics=json` */
 
     for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -303,6 +312,13 @@ static int compile_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { line_force = 0; continue; }
+        if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
+            const char *v = argv[i] + 14;
+            if (strcmp(v, "json") == 0) { diag = 1; continue; }
+            if (strcmp(v, "text") == 0) { diag = 0; continue; }
+            fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
+            return 1;
+        }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             ct_usage(prog);
@@ -313,7 +329,7 @@ static int compile_main(int argc, char **argv, const char *prog)
 
     if (!in) { ct_usage(prog); return 1; }
     if (!outc) { ct_default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    return ct_compile_file(in, outc, 0, line_force);
+    return ct_compile_file(in, outc, 0, line_force, diag);
 }
 
 int main(int argc, char **argv)

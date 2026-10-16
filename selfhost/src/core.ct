@@ -38,6 +38,7 @@
 #define MAX_BUILD  32                     /* inputs on a single command line */
 #define MAX_IMPORTS 16                    /* `import` lines per unit */
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
+#define MAX_WARNS  64                     /* collected leak warnings per run */
 
 #define CTC_VERSION "0.0.1"
 
@@ -101,6 +102,8 @@ typedef struct {
     int  arr;                          /* 1 when declared as an array (uses '[n]') */
     int  iface;                        /* 1 when this is an interface value */
     int  tr;                           /* index into the trait table when iface */
+    int  owned;                        /* 1 when a heap object (malloc/calloc), not yet released */
+    size_t own_line;                   /* source line of that allocation (for the leak warning) */
 } Var;
 
 /* A recorded function signature: it lets a call site reject an rvalue receiver,
@@ -181,6 +184,20 @@ static int g_ntmp = 0;
    `delete` reaches them (`drop_used`). */
 static int g_own_drop[MAX_STRUCT];
 static int g_nown_drop = 0;
+
+/* Conservative, path-insensitive leak warnings (no suppression in this version).
+   Warnings are collected per invocation and printed once, either human-readable
+   (stderr, default) or as JSON (`--diagnostics=json`). An error still `die`s;
+   warnings never change the exit code. */
+typedef struct {
+    const char *file;
+    size_t line;
+    char var[MAX_NAME];
+    char tname[MAX_NAME];
+} Warn;
+static Warn g_warns[MAX_WARNS];
+static int  g_nwarns = 0;
+static int  g_json    = 0;             /* 1 with `--diagnostics=json` */
 
 /* ---------------------------------------------------------------- util */
 
@@ -373,6 +390,13 @@ static size_t match_delim(size_t p, char open, char close)
 
 /* ---------------------------------------------------- symbol table */
 
+/* Scan primitives the symbol table's leak tracker calls as well as the line
+   rewriters: they are defined further down (with the line-rewriting layer), so
+   their prototypes come first. */
+static size_t line_literal_end(const char *s, size_t i, size_t n);
+static size_t line_match_paren(const char *s, size_t k, size_t n);
+static size_t line_assign_eq(const char *line);
+
 /* The whole symbol table is one CT object. Lookups dispatch through SymTabOps,
    so call sites read `g_sym.find_trait(..)` instead of a bare global lookup. */
 trait SymTabOps {
@@ -381,6 +405,19 @@ trait SymTabOps {
     const char *resolve_method(const Struct *s, const char *m);
     int find_var(const char *name);
     int new_var();
+    /* Leak tracking: `warn_add` collects one warning, `leak_check_scope` reports
+       the still-owned heap objects of a scope that is closing, and `leak_observe`
+       clears ownership when an object is released or escapes. They are methods
+       rather than plain functions because plain-C top-level signatures are capped
+       (MAX_FUNCS) and the budget is nearly exhausted. */
+    void warn_add(int vi);
+    void leak_check_scope(int from, int to);
+    void leak_observe(const char *line);
+    /* Print the collected warnings, JSON to `jsonf` and text to `textf`. */
+    void emit_warnings(FILE *jsonf, FILE *textf);
+    void json_str(FILE *f, const char *s);
+    /* does `w` occur in `s` as a whole word (literals and comments skipped)? */
+    int line_has_word(const char *s, const char *w);
     FuncSig *find_func(const char *name);
     int is_any_trait_method(const char *m);
     /* does trait `tr` declare a method named `m`? (interface dispatch needs the
@@ -471,12 +508,118 @@ impl SymTabOps for SymTab {
         return -1;
     }
     /* Reserve the next variable slot. Overflow is a hard error: a dropped
-       registration would mis-compile method calls (AGENTS §3). */
+       registration would mis-compile method calls (AGENTS §3). The leak-tracking
+       fields start cleared so a reused slot never inherits stale ownership from
+       an earlier scope. */
     int new_var() {
         int i;
         if (self->nvars >= MAX_VARS) die(0, "too many variables (max %d)", MAX_VARS);
         i = self->nvars++;
+        self->vars[i].owned = 0;
+        self->vars[i].own_line = 0;
         return i;
+    }
+    /* Record one leak warning. Overflow is a hard error: a report that silently
+       dropped entries would understate the leaks it was asked to find. */
+    void warn_add(int vi) {
+        Warn *w;
+        if (g_nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
+        w = &g_warns[g_nwarns++];
+        w->file = g_path;
+        w->line = self->vars[vi].own_line;
+        snprintf(w->var, MAX_NAME, "%s", self->vars[vi].name);
+        snprintf(w->tname, MAX_NAME, "%s", self->structs[self->vars[vi].s].name);
+    }
+    /* a scope [from,to) is closing: still-owned heap objects in it are leaks */
+    void leak_check_scope(int from, int to) {
+        int i;
+        for (i = from; i < to; i++)
+            if (self->vars[i].owned) self->warn_add(i);
+    }
+    /* Update ownership for the owned heap objects mentioned on `line`: cleared on
+       a `return`, or when the object is assigned to a non-self lvalue (escape).
+       A `delete p;` clears it in try_delete. Path-insensitive and deliberately
+       conservative: anything else leaves the object owned. */
+    void leak_observe(const char *line) {
+        size_t eq = line_assign_eq(line);
+        int is_return = self->line_has_word(line, "return"), i;
+
+        for (i = 0; i < self->nvars; i++) {
+            size_t nl;
+            if (!self->vars[i].owned) continue;
+            if (!self->line_has_word(line, self->vars[i].name)) continue;
+            if (eq != (size_t)-1) {
+                size_t s = 0;
+                while (s < eq && (line[s] == ' ' || line[s] == '\t')) s++;
+                nl = strlen(self->vars[i].name);
+                if (strncmp(line + s, self->vars[i].name, nl) == 0) {
+                    char after = line[s + nl];
+                    /* v = ... / v->f = ... / v.f = ... is not the object escaping */
+                    if (after == 0 || after == '.' || after == '-' ||
+                        after == ' ' || after == '\t')
+                        continue;
+                }
+            } else if (!is_return) {
+                continue;   /* not an assignment or return: no escape inferred */
+            }
+            self->vars[i].owned = 0;
+        }
+    }
+    /* JSON string escaping: the two characters that must not appear raw. */
+    void json_str(FILE *f, const char *s) {
+        (void)self;  /* a pure writer; the receiver is not used */
+        for (; *s; s++) {
+            if (*s == '"' || *s == '\\') fputc('\\', f);
+            fputc(*s, f);
+        }
+    }
+    /* Print the collected warnings. With `--diagnostics=json` a JSON document goes
+       to `jsonf`; otherwise one human-readable line per warning goes to `textf`.
+       Warnings never change the exit code. */
+    void emit_warnings(FILE *jsonf, FILE *textf) {
+        int i;
+        (void)self;  /* the warning table is global, not per-receiver */
+        if (!g_nwarns) return;
+        if (g_json) {
+            fputs("{\"warnings\":[", jsonf);
+            for (i = 0; i < g_nwarns; i++) {
+                Warn *w = &g_warns[i];
+                if (i) fputc(',', jsonf);
+                fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
+                self->json_str(jsonf, w->file);
+                fprintf(jsonf, "\",\"line\":%ld,\"variable\":\"", (long)w->line);
+                self->json_str(jsonf, w->var);
+                fputs("\",\"type_name\":\"", jsonf);
+                self->json_str(jsonf, w->tname);
+                fputs("*\",\"message\":\"allocated but never deleted\"}", jsonf);
+            }
+            fputs("]}\n", jsonf);
+        } else {
+            for (i = 0; i < g_nwarns; i++) {
+                Warn *w = &g_warns[i];
+                fprintf(textf, "%s:%ld: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
+                        w->file, (long)w->line, w->var, w->tname);
+            }
+        }
+    }
+    /* does `w` occur in `s` as a whole word (literals and comments skipped)? */
+    int line_has_word(const char *s, const char *w) {
+        size_t n = strlen(w), len = strlen(s), i = 0;
+        (void)self;  /* a pure string probe; the receiver is not used */
+        while (i < len) {
+            char c = s[i];
+            if (c == '"' || c == '\'') { i = line_literal_end(s, i, len); continue; }
+            if (c == '/' && (s[i + 1] == '/' || s[i + 1] == '*')) break;
+            if (is_ident_char((unsigned char)c)) {
+                size_t j = i;
+                while (j < len && is_ident_char((unsigned char)s[j])) j++;
+                if (j - i == n && memcmp(s + i, w, n) == 0) return 1;
+                i = j;
+                continue;
+            }
+            i++;
+        }
+        return 0;
     }
     /* the last recorded signature of `name`, or NULL */
     FuncSig *find_func(const char *name) {
@@ -652,12 +795,6 @@ static int already_qualified(const char *type, size_t off)
    both the .c output (`self->out`) and the .h output (`self->hout`), and takes
    `struct SymTab *sym` wherever it reads the symbol tables. `is_any_trait_method`
    stays a `SymTabOps` method (see the symbol-table section). */
-
-/* Scan primitives defined after the `Pipe` impl but called from its methods
-   (the line rewriters use `line_literal_end` / `line_match_paren`). */
-static size_t line_literal_end(const char *s, size_t i, size_t n);
-static size_t line_match_paren(const char *s, size_t k, size_t n);
-static size_t line_assign_eq(const char *line);
 
 /* ------------------------------------------------------- construct parsers */
 
@@ -1640,6 +1777,7 @@ impl PipeOps for Pipe {
             t = 0;
         }
 
+        sym->leak_observe(line);                         /* leak tracking */
         g_line_off = ls;
         sig = self->parse_func_sig(sym, line, ls, &has_body, &body_abs);
         if (sig) {
@@ -1840,6 +1978,7 @@ impl PipeOps for Pipe {
                 "                  the importing file's own directory\n"
                 "  --line          force `#line` directives in the generated C\n"
                 "  --no-line       suppress `#line` directives\n"
+                "  --diagnostics=<fmt>  warning format: text (default) or json\n"
                 "  -v, --version   print the compiler version and exit\n"
                 "  -h, --help      print this help and exit\n",
                 prog, prog);
@@ -2515,6 +2654,7 @@ impl RewriteOps for Pipe {
 
         vi = sym->find_var(id);
         if (vi >= 0 && !sym->vars[vi].ptr) return NULL;
+        if (vi >= 0) sym->vars[vi].owned = 0;   /* released: no longer a leak */
 
         buf_init(&b);
         buf_putn(&b, line, ind_len);
@@ -2636,6 +2776,10 @@ impl RewriteOps for Pipe {
                 sym->vars[vi].arr = isarr;
                 sym->vars[vi].iface = 0;
                 sym->vars[vi].tr = -1;
+                if (isheap) {                  /* track the allocation for leak warnings */
+                    sym->vars[vi].owned = 1;
+                    sym->vars[vi].own_line = (size_t)g_cur_line;
+                }
             }
             buf_init(&b);
             buf_putn(&b, line, ws);
@@ -3342,8 +3486,12 @@ impl RewriteOps for Pipe {
                 if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
                 g_scope[g_nscope++] = save;
             } else if (c == '}') {
-                if (g_nscope > 0)
+                if (g_nscope > 0) {
+                    int base = g_scope[g_nscope - 1];
+                    /* a still-owned heap object whose scope ends here is unreachable */
+                    sym->leak_check_scope(base, sym->nvars);
                     sym->nvars = g_scope[--g_nscope];
+                }
             }
             p++;
         }
@@ -3570,11 +3718,18 @@ void ct_add_import(const char *h)
     g_nimp_h++;
 }
 
-pub int ct_compile_file(const char *in, const char *outc, int multi, int line_force);
-int ct_compile_file(const char *in, const char *outc, int multi, int line_force)
+pub int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json);
+int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json)
 {
+    int rc;
     g_line_force = line_force;
-    return g_pipe.compile_file(&g_sym, in, outc, multi);
+    g_json = json;
+    rc = g_pipe.compile_file(&g_sym, in, outc, multi);
+    /* Warnings are printed once per run. Single-file mode prints them here (JSON
+       to stdout, text to stderr); `build` defers to ct_cc_finish so a whole run's
+       warnings land after the cc command instead of once per unit. */
+    if (rc == 0 && !multi) g_sym.emit_warnings(stdout, stderr);
+    return rc;
 }
 
 pub void ct_usage(const char *prog);
@@ -3618,4 +3773,6 @@ void ct_cc_finish(void)
 {
     buf_puts(&g_cc, " -o a.out");
     printf("%s\n", g_cc.p);
+    /* build keeps stdout for the cc command, so every warning goes to stderr */
+    g_sym.emit_warnings(stderr, stderr);
 }
