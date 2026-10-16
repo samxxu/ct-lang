@@ -9,6 +9,9 @@
 #   4) L1 compiles test/cases/01_trait_basic.ct
 #   5) diff the generated .c and .h against the golden (byte for byte)
 #   6) [beyond M2-a] L1 compiles itself; reported but never changes the verdict
+#   7) [beyond M2-a] L1 builds the split tree selfhost/src/** into L2, warning-free;
+#      reported but never changes the verdict (the corpus gate for L2 is
+#      check-goldens.sh step 6)
 #
 # Usage:  bash selfhost/check-m2a.sh        (or ./selfhost/check-m2a.sh after chmod +x)
 #         CC=clang bash selfhost/check-m2a.sh
@@ -38,6 +41,7 @@ exp_h="test/cases/01_trait_basic.expected.h"
 
 fail=0
 selfhost_fail=0
+split_fail=0
 
 banner() {
     printf '\n=============================================================\n%s\n=============================================================\n' "$1"
@@ -132,6 +136,31 @@ else
     selfhost_fail=1
 fi
 
+# ------------------------ 7) [beyond M2-a] L2 from the split tree
+# selfhost/src/** is the same compiler partitioned across units and built by L1.
+# Like step 6 this is a later-milestone precondition: it is reported but never
+# changes the M2-a verdict (the corpus gate for L2 is check-goldens.sh step 6).
+banner "7) [beyond M2-a] L2 built from the split tree (selfhost/src/**)"
+l2src="$work/l2src"
+l2_bin="$work/ctc-l2"
+l2_log="$work/ctc-l2.log"
+rm -rf "$l2src"
+mkdir -p "$l2src"
+
+if run "L1 builds the split tree" "$l1_bin" build selfhost/src/driver.ct -o "$l2src"; then
+    if run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$l2_log" &&
+       [ ! -s "$l2_log" ]; then
+        printf 'OK: L2 built warning-free from the split tree\n'
+    else
+        printf 'NOTE (beyond M2-a): L2 did not build warning-free; does not affect M2-a\n'
+        sed 's/^/    /' "$l2_log"
+        split_fail=1
+    fi
+else
+    printf 'NOTE (beyond M2-a): L1 could not build selfhost/src/**; does not affect M2-a\n'
+    split_fail=1
+fi
+
 # --------------------------------------------------------------- verdict
 banner "VERDICT"
 if [ "$fail" -eq 0 ]; then
@@ -141,6 +170,9 @@ else
 fi
 if [ "$selfhost_fail" -ne 0 ]; then
     printf 'self-compile: not yet (beyond M2-a; expected until later milestones)\n'
+fi
+if [ "$split_fail" -ne 0 ]; then
+    printf 'split tree (L2): not yet (beyond M2-a; expected until later milestones)\n'
 fi
 
 exit "$fail"

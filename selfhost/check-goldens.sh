@@ -11,6 +11,10 @@
 #      byte for byte with the committed .expected.c / .expected.h
 #   5) [self-hosting] L1 compiles itself into L1', L1' is built warning-free and
 #      runs over the same corpus; every output must still be byte-identical
+#   6) [Phase 2 split] L1 builds the multi-unit tree selfhost/src/** into L2; L2 is
+#      built warning-free and must reproduce the same corpus byte for byte. This is
+#      the split's exit criterion: the compiler partitioned across units still is
+#      the compiler, and it now shares one source with the OO-in-CT rewrite.
 #
 # The goldens are the oracle: L1 climbed them one feature family at a time. The
 # baseline below lists the cases L1 matches, and it is a ratchet:
@@ -27,9 +31,9 @@
 # Usage:  bash selfhost/check-goldens.sh       (or ./selfhost/check-goldens.sh after chmod +x)
 #         CC=clang bash selfhost/check-goldens.sh
 #
-# Exits non-zero when a baseline case regressed or when the self-hosted rebuild
-# disagrees with the goldens (step 5). PENDING cases are the remaining climb and
-# do NOT fail the run.
+# Exits non-zero when a baseline case regressed, when the self-hosted rebuild
+# disagrees with the goldens (step 5), or when L2 disagrees with them (step 6).
+# PENDING cases are the remaining climb and do NOT fail the run.
 
 set -u
 
@@ -221,18 +225,68 @@ else
     fi
 fi
 
+# --------------------------------------------- 6) L2 vs every golden (the split)
+# selfhost/src/** is the same compiler re-partitioned across units. L1 builds it in
+# multi-unit mode into L2, and L2 must reproduce the whole corpus byte for byte --
+# the exit criterion for the Phase 2 split. A mismatch fails the gate.
+banner "6) L2 (L1 builds selfhost/src/**) vs the goldens"
+n2pass=0
+n2fail=0
+l2src="$work/ctc-l2src"
+l2_bin="$work/ctc-l2"
+l2_log="$work/ctc-l2.log"
+
+rm -rf "$l2src"
+mkdir -p "$l2src"
+
+if ! run "L1 builds the split tree" "$l1_bin" build selfhost/src/driver.ct -o "$l2src"; then
+    printf 'FAIL: L1 could not build selfhost/src/**\n'
+    fail=1
+elif ! run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$l2_log" ||
+     [ -s "$l2_log" ]; then
+    printf 'FAIL: L2 did not build warning-free:\n'
+    sed 's/^/    /' "$l2_log"
+    fail=1
+else
+    for f in test/cases/*.ct; do
+        b="$(basename "$f" .ct)"
+        exp_c="test/cases/$b.expected.c"
+        exp_h="test/cases/$b.expected.h"
+        got_c="$outdir/$b.c"
+        got_h="$outdir/$b.h"
+
+        rm -f "$got_c" "$got_h"
+        err="$("$l2_bin" "$f" -o "$got_c" 2>&1 >/dev/null)"
+        rc=$?
+        if [ "$rc" -eq 0 ] && [ -f "$got_c" ] && [ -f "$got_h" ] &&
+           cmp -s "$got_c" "$exp_c" && cmp -s "$got_h" "$exp_h"; then
+            n2pass=$((n2pass + 1))
+        else
+            printf "L2 MISMATCH  %s  (%s)\n" "$b" \
+                "$(printf '%s' "$err" | head -n 1)"
+            n2fail=$((n2fail + 1))
+        fi
+    done
+    if [ "$n2fail" -ne 0 ]; then
+        printf "L2 reproduces only %d of %d goldens\n" \
+            "$n2pass" "$((n2pass + n2fail))"
+        fail=1
+    fi
+fi
+
 # --------------------------------------------------------------- verdict
 banner "VERDICT"
 printf 'L1 golden coverage: %d pass, %d new, %d pending, %d regression (of %d cases)\n' \
     "$npass" "$nnew" "$npending" "$nregress" \
     "$((npass + nnew + npending + nregress))"
 printf "L1' (self-hosted rebuild): %d passed, %d failed\n" "$nselfpass" "$nselffail"
+printf 'L2 (split tree, built by L1): %d passed, %d failed\n' "$n2pass" "$n2fail"
 
 if [ "$fail" -eq 0 ]; then
     printf 'check-goldens: OK (no regression, and the self-hosted rebuild agrees)\n'
 else
-    printf 'check-goldens: FAIL (%d baseline regression(s), %d self-hosted mismatch(es))\n' \
-        "$nregress" "$nselffail"
+    printf 'check-goldens: FAIL (%d baseline regression(s), %d self-hosted mismatch(es), %d L2 mismatch(es))\n' \
+        "$nregress" "$nselffail" "$n2fail"
 fi
 
 exit "$fail"

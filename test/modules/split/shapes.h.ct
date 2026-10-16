@@ -1,0 +1,10 @@
+/* a header unit exporting a trait and a struct. The `foo.h.ct` basename publishes
+   `shapes.h` next to `shapes.c`, so the trait, its vtable type and the struct's
+   field layout (including the vptr field) are visible to every importing unit. */
+pub trait Speak {
+    void hi();
+}
+
+pub struct Dog {
+    int n;
+} use Speak;

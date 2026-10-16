@@ -1,0 +1,22 @@
+import shapes;
+
+#include <stdio.h>
+
+/* The impl and the vtable it builds are `static` and live here, in impl_dog.c: no
+   other unit can name them. Only the object pointer crosses the unit boundary. */
+impl Speak for Dog {
+    void hi() {
+        printf("woof %d\n", self->n);
+    }
+}
+
+static Dog g_dog = { .n = 7 };
+
+/* The accessor hands back the singleton; callers in other units reach `hi()` by
+   dispatching through the vptr stored in the object, never through the vtable
+   symbol, which is why a separate unit can still call it. */
+pub struct Dog *dog_get(void);
+struct Dog *dog_get(void)
+{
+    return &g_dog;
+}

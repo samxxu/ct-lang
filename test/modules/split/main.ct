@@ -1,0 +1,10 @@
+/* this unit sees only the type (from shapes.h) and the accessor (from impl_dog.h);
+   it dispatches through the pointer, so the impl's static vtable stays invisible */
+import shapes;
+import impl_dog;
+
+int main(void)
+{
+    dog_get()->hi();
+    return 0;
+}

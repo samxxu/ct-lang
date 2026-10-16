@@ -9,7 +9,9 @@
 #   3) builds L1      -- the same compiler rewritten in CT (selfhost/ctc.ct), compiled by L0
 #   4) L1 compiles the same sample -> the output must be byte-identical with L0's
 #   5) true self-hosting: L1 compiles itself into L1', and L1' compiles the sample too
-#   6) prints where to go next
+#   6) the split compiler: L1 builds the multi-unit tree selfhost/src/** into L2,
+#      and L2 compiles the sample identically as well
+#   7) prints where to go next
 #
 # Usage:
 #   bash selfhost/ct-tour.sh                 # tour with the built-in sample
@@ -208,11 +210,46 @@ else
     fail=1
 fi
 
-# ------------------------------------------------------------------- 6) next
-banner "6) where to go next"
+# --------------------------------- 6) the split compiler: L1 builds selfhost/src/**
+banner "6) the split compiler: L1 builds selfhost/src/** into L2"
+say "selfhost/src/** is the same compiler partitioned across units, written in the"
+say "multi-file CT that L1 implements. L1 builds it with a single 'build' command:"
+l2src="$work/l2src"
+l2_bin="$work/ctc-l2"
+rm -rf "$l2src"
+mkdir -p "$l2src"
+
+if run "L1 building the split tree" "$l1" build selfhost/src/driver.ct -o "$l2src"; then
+    say "The units it wrote:"
+    printf '\n'
+    ls -1 "$l2src" | sed 's/^/    /'
+    printf '\n+ %s -Wall -Wextra -std=c99 %s/*.c -o %s\n' "$CC" "$l2src" "$l2_bin"
+    if "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$work/l2.log" &&
+       [ ! -s "$work/l2.log" ]; then
+        note "ok (warning-free)"
+        say "Sanity check: L2 compiles the same sample, and must match L0 identically."
+        printf '\n+ %s %s -o %s\n' "$l2_bin" "$sample_abs" "$out_c"
+        if "$l2_bin" "$sample_abs" -o "$out_c" && cmp -s "$out_c" "$l0_c"; then
+            note "L2 compiles your program identically as well."
+        else
+            printf 'FAIL: L2%s output differs\n' "'"
+            fail=1
+        fi
+    else
+        printf 'FAIL: L2 did not build warning-free\n'
+        sed 's/^/    /' "$work/l2.log"
+        fail=1
+    fi
+else
+    printf 'FAIL: L1 could not build selfhost/src/**\n'
+fi
+
+# ------------------------------------------------------------------- 7) next
+banner "7) where to go next"
 say "  your own file      bash selfhost/ct-tour.sh path/to/your.ct"
 say "  full test suite    ./test/run.sh                    (build, unit, goldens, examples, errors)"
 say "  bootstrap gates    bash selfhost/check-goldens.sh   (L1 vs goldens, plus L1' vs goldens)"
+say "  split compiler     selfhost/src/**                  (the compiler, one unit per file)"
 say "  syntax reference   docs/language-spec.md"
 say "  runnable examples  examples/01_greeter ... 06_iface_field  (<name>.ct + <name>.expected.out)"
 say "  editor comfort     editors/vscode                   (highlighting only, no build step)"

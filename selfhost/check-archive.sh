@@ -25,6 +25,10 @@
 #   * the *.expected.h include guard is derived from the output basename, so the
 #     output is named after the case.
 #
+# Step 3b additionally rebuilds L2 from the split tree selfhost/src/** (the Phase 2
+# multi-unit rewrite) and fails the run if it does not build warning-free; the
+# corpus-level byte comparison for L2 lives in check-goldens.sh step 6.
+#
 # Groups:
 #   4  single-unit goldens   test/archive/cases/*.ct   full byte diff of .c and .h
 #   5  diagnostics           test/archive/errors/*.ct  non-zero exit + message
@@ -82,12 +86,16 @@ test/archive/multifile/calc
 "
 # designed cases: no archive oracle backs these, they pin the new semantics of
 # `foo.h.ct` file names and `-I` import roots, byte-diffed against their own
-# goldens plus an end-to-end run (see group 7)
+# goldens plus an end-to-end run (see group 7). `split` additionally pins the
+# cross-unit OO contract the selfhost split relies on: a `pub trait`/`pub struct`
+# in a header unit, its `impl` (with a `static` vtable) in another unit, and a
+# third unit dispatching through an accessor-returned pointer.
 baseline_designed="
 hdr
 inc
 inc_missing
 precedence
+split
 "
 
 in_list() {
@@ -135,6 +143,31 @@ if ! run "build the self-hosted compiler" "$CC" -Wall -Wextra -std=c99 "$l1_c" -
 fi
 
 fail=0
+l2_ok=0
+
+# ------------------------------------------------- 3b) L2 from the split tree
+# selfhost/src/** is the same compiler partitioned across units; L1 builds it into
+# L2. The partition must not change behaviour, so a build failure here is a
+# regression -- the corpus byte comparison for L2 is check-goldens.sh step 6.
+banner "3b) L2 built from the split tree (selfhost/src/**)"
+l2src="$work/l2src"
+l2_bin="$work/ctc-l2"
+l2_log="$work/ctc-l2.log"
+rm -rf "$l2src"
+mkdir -p "$l2src"
+
+if ! run "L1 builds the split tree" "$l1" build selfhost/src/driver.ct -o "$l2src"; then
+    printf 'FAIL: L1 could not build selfhost/src/**\n'
+    fail=1
+elif ! run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$l2_log" ||
+     [ -s "$l2_log" ]; then
+    printf 'FAIL: L2 did not build warning-free:\n'
+    sed 's/^/    /' "$l2_log"
+    fail=1
+else
+    printf 'OK: L2 built warning-free from the split tree\n'
+    l2_ok=1
+fi
 
 # ------------------------------------------- 4) single-unit goldens
 banner "4) single-unit goldens (test/archive/cases/*.ct)"
@@ -429,6 +462,11 @@ printf 'multi-unit goldens:  %d pass, %d new, %d pending, %d regression\n' \
     "$kpass" "$knew" "$kpending" "$kregress"
 printf 'designed cases:      %d pass, %d new, %d pending, %d regression\n' \
     "$zpass" "$znew" "$zpending" "$zregress"
+if [ "$l2_ok" -eq 1 ]; then
+    printf 'L2 (split tree):     built warning-free\n'
+else
+    printf 'L2 (split tree):     FAILED to build\n'
+fi
 
 if [ "$fail" -eq 0 ]; then
     printf 'check-archive: OK (no regression)\n'
