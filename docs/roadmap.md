@@ -595,7 +595,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 **已知约束（开工前必须先接受）**：
 
 - **接口数组声明即 `die`** → AST 子节点列表不能用 `Node kids[N]`，只能靠**接口指针 + 链表**；而指针接口字段的**赋值目前原样透传**（需手工构造胖指针）。**订正（2026-10-17）**：该「接口指针 + 链表」退路**本身不可靠**——指针接口字段赋值会**段错误**，且「接口指针局部声明」也 `die`；实测与订正见下方「三处表达力缺口与 AST 主线」。
-- **接口字段不参与构造点递归、指定初始化式不装箱** → 装配 AST 时手工装箱代码增多（注：接口值字段的**赋值**其实已装箱，只有**构造点**没走 box 路径——见下方实测）。
+- **接口字段不参与构造点递归、指定初始化式不装箱** → 装配 AST 时手工装箱代码增多（注：接口值字段的**赋值**其实已装箱，只有**构造点**没走 box 路径——见下方实测）。**订正（2026-10-17）**：构造点已由 ② 隐式装箱，接口数组已由 ① 补齐，见下方「三处表达力缺口与 AST 主线」。
 - **按行重写**（构造与语句同行不处理、单行函数体不处理）→ 编译器源码必须遵守「一语句一行」的纪律，否则**静默不重写、产物编不过**。
 - **声明必须先于使用 + 单趟扫描** → trait / struct 需人工拓扑排序；相互递归只能经接口指针。
 - **namespace 只修饰 struct / trait / impl 符号，普通函数名不修饰** → 若按 namespace 切分源码，普通函数会在 C 层重名冲突（这也是先走单文件路径的一个动机）。
@@ -606,13 +606,14 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 | 微探针 | 缺口 | 实测现象 |
 | --- | --- | --- |
-| `p01` / `p02` | 接口**数组**声明（`Node kids[2]`、`Node *kids[2]`） | `die`：`unsupported declaration of interface type` |
-| `p03` / `p04` | 数组元素**赋值 / 派发**（`kids[0] = a; kids[0].eval()`） | 受上一条门禁，当前不可达 |
-| `p05` | 接口**值字段**在**构造点**装箱（`Pair p = { .l = a, .r = b }`） | ctc 产出**编不过的 C**（`void *` 收 `struct Leaf`）（待 ②） |
+| `p01` / `p02` | 接口**数组**声明（`Node kids[2]`、`Node *kids[2]`） | 起先 `die`：`unsupported declaration of interface type`；**① 已修**（见下） |
+| `p03` / `p04` | 数组元素**赋值 / 派发**（`kids[0] = a; kids[0].eval()`） | 起先被上一条门禁挡住，不可达；**① 已修**（见下） |
+| `p05` | 接口**值字段**在**构造点**装箱（`Pair p = { .l = a, .r = b }`） | 起先 ctc 产出**编不过的 C**（`void *` 收 `struct Leaf`）；**② 已修**（见下） |
 | `p06` | 接口值字段**赋值**（`p.l = a;`） | ✅ **已支持**（走既有 box 路径） |
-| `p07` | 接口**指针字段**在**构造点**（`p.l = &a`） | ctc 静默透传 → 编译过 → **运行段错误 exit 139**（待 ②） |
+| `p07` | 接口**指针字段**在**构造点**（`p.l = &a`） | 起先 ctc 静默透传 → 编译过 → **运行段错误 exit 139**；**② 已修**（见下） |
 | `p08` | 接口**指针字段**赋值（`p.l = &a;`） | 起先静默透传 → 段错误；**③ 已修**（L2 隐式装箱，见下） |
 | `p09`–`p11` | 对照组：接口局部来自值 / 指针、函数返回接口 | ✅ **已支持**（证明 box 子系统存在，harness 能诚实抵达 PASS） |
+| `ast_spike` | **整个目标程序**（trait 含两方法、值/指针字段、接口数组字段与 `Block` 的 `self->items[i].eval()`） | 起先首错即 `die`；**① + ② 落地后转 PASS**（编、跑、输出 `5`） |
 
 **订正**：「用**接口指针 + 链表**绕过数组缺口」这条退路**本身是坏的**——指针接口字段赋值静默透传并段错误，且**接口指针局部声明**（`T *g = 0;`，[test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct)）同样 `die`。故 AST 子节点既不能数组、也不能指针链表，只能手工构造胖指针。三处缺口对外全部可见（`die` 或坏 C / 崩溃），**不存在隐藏的静默降级**。**三例连归档 oracle 都不支持**（oracle 对同三例同样 `die` / 产出坏 C / 段错误），故它们是**新增**而非「恢复」。
 
@@ -622,13 +623,19 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 2. **顺序 = 先落验收关卡、再逐条补**（消费者驱动：完整缺口清单从编译报错中长出，而非靠读码推断）。
 3. **定位 = AST 版编译器作**新主线**，旧 `selfhost/ctc.ct`（L1）打 tag 归档**；出口口径由 **byte-identical** 换成 **行为等价**（同输入、同运行输出，不要求产物逐字节相同）。
 
-**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，基线 `BASELINE` 现含 `p06 p08 p09 p10 p11`；退出码仅 `REGRESSION` 非零）。**默认探针目标改为 L2**（L0→L1→L2 链）——`ctc.c` 冻结、能力只落 CT 侧，故只有显式 `CT=<l0>` 才探 L0，其 PENDING 属预期而非失败。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。
+**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，退出码仅 `REGRESSION` 非零）。基线 `BASELINE` 现含**全部 12 项**（`p01`–`p11` + `ast_spike`），即当前**12 pass / 0 pending / 0 regression**。**默认探针目标为 L2**（L0→L1→L2 链）——`ctc.c` 冻结、能力只落 CT 侧，故只有显式 `CT=<l0>` 才探 L0，其 PENDING 属预期而非失败。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。
 
 **落地记录**：
 
-- **③ 指针接口字段（2026-10-17，落 `selfhost/src/core.ct`，语义决策：隐式装箱）**：新增 `RewriteOps::box_to_iface_ptr`——具体对象隐式装箱为 `&(struct <T>_iface){ (void*)&x, &<S>_<T>_vtable }`（匿名声明的生命期 = 所在块），已是接口值则取址 / 复用，函数返回接口走复合字面量，无法推断则 `die`（绝不产出坏 C）。`try_iface_assign` 对指针接口字段不再透传。`p08` 转 PASS，全套关卡零退化。下一步：**② 构造点装箱**（`p05` / `p07`）→ **① 接口数组**（`p01`–`p04` + `ast_spike`）。
+- **③ 指针接口字段（2026-10-17，落 `selfhost/src/core.ct`，语义决策：隐式装箱）**：新增 `RewriteOps::box_to_iface_ptr`——具体对象隐式装箱为 `&(struct <T>_iface){ (void*)&x, &<S>_<T>_vtable }`（匿名声明的生命期 = 所在块），已是接口值则取址 / 复用，函数返回接口走复合字面量，无法推断则 `die`（绝不产出坏 C）。`try_iface_assign` 对指针接口字段不再透传。`p08` 转 PASS，全套关卡零退化。
 
-补齐后三条 PENDING 主项转 PASS、`ast_spike.ct`（[test/acceptance/ast_spike.ct](../test/acceptance/ast_spike.ct)）转 PASS，且 `test/errors/{iface_array,iface_pointer_init}.ct` 两条负例须**退役**（它们钉的是缺口存在，特性落地后不再 `die`）。
+- **② 构造点隐式装箱（2026-10-17，落 `selfhost/src/core.ct`，语义决策同上：隐式装箱）**：新增 `RewriteOps::box_agg_fields`——聚合初始化式 `{ .l = a, .r = b }` 不再原样透传，而是按项拆分，命中的接口字段走与赋值完全相同的装箱路径（值字段 `box_to_iface`、指针字段 `box_to_iface_ptr`），非接口项、位置式与嵌套花括号原样保留。接线点在 `try_var_decl` 的花括号分支。`p05` / `p07` 转 PASS，全套关卡零退化。
+
+- **① 接口数组（2026-10-17，落 `selfhost/src/core.ct`）**：共用一条「下标延伸到哪」的判定 `RewriteOps::skip_bracket`，四处接线——(a) `try_iface_decl` 新增数组分支：`T xs[n]` → `struct T_iface xs[n] = { { 0, 0 } }`、`T *xs[n]` → `struct T_iface *xs[n] = { 0 }`（胖指针两字宽，故值数组的初始化式要嵌套一层花括号），变量表记 `iface + arr [+ ptr]`；(b) `try_iface_assign` 支持元素赋值 `xs[i] = v;`（值数组装箱、指针数组 `box_to_iface_ptr`），顺带让 struct 数组元素 `ps[i].l = v;` 也走通；(c) `transform_calls` 的接口派发改为「先吃下标再取方法」，`xs[i].m()` → `xs[i].vt->m(xs[i].self)`，`T *xs[n]` 的元素自身是指针故走 `->`；(d) 结构体接口字段新增数组标记（`ifarr` / `pifarr` 两张标记表 + `find_iface_field` 出参），`walk_to_iface_field` 在命中数组字段后吃掉 `[<expr>]`，于是 `self->items[i].eval()` → `_self->items[i].vt->eval(_self->items[i].self)`。`p01`–`p04` 与 `ast_spike` 全部转 PASS，**目标程序首次编、跑、输出 `5`**。
+
+- 至此**三条 PENDING 主项全部闭合**：`test/acceptance/run.sh` 现 **12 pass / 0 pending / 0 regression**，`ast_spike.ct`（[test/acceptance/ast_spike.ct](../test/acceptance/ast_spike.ct)）既是目标程序、也是常驻回归项。**为何不进 golden**：`examples/**` 与 `test/cases/**` 的基线都由 **L0/L1** 驱动，承载不了 L0 不支持的语法（`ctc.c` 冻结、不得为其放宽），故这三项能力只有 `test/acceptance/run.sh`（探 L2）能钉住；编辑器侧无需改动——`T xs[n]` 用的仍是既有括号与标识符，没有新关键字。
+
+> **关于两条负例（订正）**：[test/errors/iface_array.ct](../test/errors/iface_array.ct) 与 [test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct) **不必退役、也不该退役**。`test/errors/**` 由 `./test/run.sh` 用 **L0（`ctc.c`）** 驱动，而 L0 已冻结、**永远**会对这两例报 `die`；它们钉的是 L0 的行为，因此继续有效。新能力只存在于 CT 侧（L2），由 `test/acceptance/run.sh` 的 `BASELINE` 钉住——两条负例与那批探针各自钉住**不同的编译器**，并不矛盾。（`iface_pointer_init.ct` 钉的「接口值指针**局部变量** `T *g = 0;`」也不在本次范围：① 覆盖的是**数组**，不是指向接口值的裸指针。）
 
 **过渡期纪律**：自举启动后**冻结一切新的 C 侧语言特性**；`ctc.c` 只接受 bug 修复。若 L1 暴露出 ct 表达力缺口，须先判定它属「语言特性」（放到 CT 层实现）还是「种子核心能力」（必须在 C 侧补）——后者要作为 **Phase 0 核心的修订定义**显式记录，不得顺手打补丁（这正是 Phase 0 历史偏差的复发点）。
 

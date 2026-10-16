@@ -307,11 +307,16 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
   因此遵循「定义先于使用」——调用点看不到签名或看不到具体类型时不会装箱。
 - 被装箱的 struct 必须 `use` 了该 trait；跨 trait 装箱 → `die`。
 - **不做**隐式空检查：空接口值（`{0,0}`）上派发会崩，与 C 一致。
-- 接口**数组**不支持（声明即 `die`）。
-- 接口字段**不参与**构造点递归，`Node lhs;` 声明后为空（`vt == NULL`），需自行赋值。装箱仅覆盖
-  **语句赋值**（`s.lhs = v;`）；**指定初始化式**（`Pair p = { .lhs = v };`）中的接口字段**不装箱**，
-  该类写法仍需手动构造胖指针。**指针**接口字段（`struct T *x`）只支持派发，赋值保持原样
-  （需要已有胖指针的地址，如 `s.x = &someIface;`）。
+- **L0 限制（本文所述）**：接口**数组**不支持，声明即 `die`；接口字段**不参与**构造点递归，`Node lhs;`
+  声明后为空（`vt == NULL`），需自行赋值；装箱仅覆盖**语句赋值**（`s.lhs = v;`），**指定初始化式**
+  （`Pair p = { .lhs = v };`）中的接口字段**不装箱**；**指针**接口字段（`struct T *x`）只支持派发，
+  赋值保持原样（需要已有胖指针的地址，如 `s.x = &someIface;`）。
+- **CT 侧（L2）已扩展**：`selfhost/src/**` 把上一条的限制全部放开，且沿用同一套隐式装箱规则——
+  接口数组 `T xs[n]` / `T *xs[n]`（含元素赋值 `xs[i] = v;` 与元素派发 `xs[i].m()`，指针数组的元素自身是
+  指针故走 `->`）、接口**数组字段**（`Node items[4]` 与 `self->items[i].eval()`）、以及**构造点**装箱
+  （`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）。接口值**裸指针局部变量**
+  （`T *g;`）**仍不支持**。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），
+  由 `test/acceptance/run.sh` 钉住。
 
 ### 5. 命名规则（稳定契约）
 
@@ -747,13 +752,21 @@ Rules and limits:
   type) nothing is boxed.
 - The boxed struct must `use` that trait; boxing across different traits `die`s.
 - **No** implicit null check: dispatching on a null interface value (`{0,0}`) crashes, as in C.
-- Interface **arrays** are not supported (`die` at the declaration).
-- Interface fields do **not** participate in construction-point recursion: `Node lhs;` starts empty
-  (`vt == NULL`) and must be assigned. Boxing only covers **statement assignments** (`s.lhs = v;`);
-  an interface field inside a **designated initialiser** (`Pair p = { .lhs = v };`) is **not** boxed
-  and still needs a hand-written fat pointer. A **pointer** interface field (`struct T *x`) supports
-  dispatch only; assignment stays verbatim (it needs the address of an existing fat pointer, e.g.
-  `s.x = &someIface;`).
+- **L0 limits (what this document describes)**: interface **arrays** are not supported (`die` at the
+  declaration); interface fields do **not** participate in construction-point recursion (`Node lhs;`
+  starts empty, `vt == NULL`, and must be assigned); boxing only covers **statement assignments**
+  (`s.lhs = v;`), so an interface field inside a **designated initialiser**
+  (`Pair p = { .lhs = v };`) is **not** boxed; and a **pointer** interface field (`struct T *x`)
+  supports dispatch only, its assignment staying verbatim (it needs the address of an existing fat
+  pointer, e.g. `s.x = &someIface;`).
+- **Extended on the CT side (L2)**: `selfhost/src/**` lifts every limit above while keeping the same
+  implicit-boxing rules — interface arrays `T xs[n]` / `T *xs[n]` (including element assignment
+  `xs[i] = v;` and element dispatch `xs[i].m()`, whose element is itself a pointer for a pointer
+  array, hence `->`), interface **array fields** (`Node items[4]`, `self->items[i].eval()`), and
+  **construction-point** boxing (`Pair p = { .l = v, .ptr = &v };` — value and pointer fields take
+  their own boxing path). A bare **pointer local** to an interface value (`T *g;`) is **still
+  unsupported**. Rationale as in the status note at the top: this document stays accurate for L0, and
+  the new capability belongs to the current compiler (L2) alone, pinned by `test/acceptance/run.sh`.
 
 ### 5. Naming contract
 

@@ -295,7 +295,7 @@ ct/
 - **文件作用域的对象 / 数组**：vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。
-- 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。
+- 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。（以上是 **L0（`ctc.c`）** 的边界；**当前编译器 L2**（`selfhost/src/**`）已放开这三条——接口数组、接口数组字段与构造点装箱，见 [language-spec](docs/language-spec.md) §4.8 与 [roadmap](docs/roadmap.md)。）
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
 - **构造头部必须完整**：`trait IDENT {` / `struct IDENT {` / `impl IDENT for` 缺一不可；只写到一半
   （如 `trait T`、`struct S`、`impl`）**不报错**，该行按普通 C **原样透传**——这是为兼容把
@@ -668,7 +668,10 @@ Implementation limits:
   needed any more.
 - Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
   automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
-  a variable, `&variable` or a call returning the same interface.
+  a variable, `&variable` or a call returning the same interface. (Those are **L0 (`ctc.c`)** bounds;
+  the **current compiler, L2** (`selfhost/src/**`), has lifted all three — interface arrays, interface
+  array fields and construction-point boxing — see [language-spec](docs/language-spec.md) §4.8 and the
+  [roadmap](docs/roadmap.md).)
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
 - **A construct header must be complete**: `trait IDENT {` / `struct IDENT {` / `impl IDENT for`. A
   half-written header (`trait T`, `struct S`, `impl`) is **not an error** — the line is **passed through
