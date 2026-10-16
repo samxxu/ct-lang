@@ -96,14 +96,15 @@
 
 ### B2 疑似漏洞 / 需定行为 —— 请模块组判断
 
-- [ ] `default_output()` 的非 `.ct` 后缀分支（`ctc.c` L2652–2659）：输入 `foo` 会得到 `foo.c`。
+- [x] `default_output()` 的非 `.ct` 后缀分支（`ctc.c` L2652–2659）：输入 `foo` 会得到 `foo.c`。
   当前 `cli` 层无断言。补一条 CLI 断言即可钉死，或明确不保证。
-  - **状态：待用户定夺**（两条路线都成立：补断言会把 `run.sh` 总数 114 → 115 并需同步 README 计数；
-    或改为在文档里明确「不保证」）。
-  - 已实测该分支的实际行为：`cp test/cases/21_empty_init_iface.ct /tmp/noext && ./ctc /tmp/noext`
-    → `rc=0`，产出 `/tmp/noext.c` 与 `/tmp/noext.h`（guard `NOEXT_H`）。即「补断言」这条路线
-    **技术上成立**，草案断言（插在 `cli/cannot-write-header` 之后）也验证可通过；但**尚未落盘**，
-    待用户拍板后再加（届时 README 的 114 需同步改为 115）。
+  - **模块组处理（2026-10-16 用户选 A：钉死）**：已在 `test/run.sh` 的 `cli` 层补断言
+    `cli/default-output-non-ct`（紧随 `cli/cannot-write-header` 之后）：把某个 `.ct` 拷成无后缀名，
+    跑默认子命令，断言退出 0 且产出 `<input>.c` 与 `<input>.h` 均非空。
+  - 实测依据：`cp test/cases/21_empty_init_iface.ct <TMP>/noext && ctc <TMP>/noext` → `rc=0`，
+    产出 `<TMP>/noext.c` 与 `<TMP>/noext.h`（guard `NOEXT_H`）；产物落在**输入文件所在目录**，
+    与断言的路径推断一致。
+  - 连带：`run.sh` 总数 **114 → 115**，README 中英两处计数已同步。
 - [x] `put_nested_assignments()` 的递归**自身没有深度上限**（`ctc.c` L1441–1465）：
   对 `nu>0`（本身 `use` 了 trait）的嵌套链，L1461 的短路使 `needs_nested_init` 的 `MAX_DEPTH` 检查
   被绕过，递归深度只受 `MAX_STRUCT`(32) 间接约束。
@@ -126,7 +127,7 @@
 
 ## 模块组回执（2026-10-16）
 
-**范围**：只改文档 + README 计数同步；**未改动 `ctc.c`**（冻结期），未改动任何测试或脚本。
+**范围**：文档修正 + README 计数同步 + 一条 CLI 断言（B2.1，用户选 A）；**未改动 `ctc.c`**（冻结期）。
 
 | 项 | 处理 | 落点 |
 | --- | --- | --- |
@@ -135,10 +136,10 @@
 | A3 | examples 树补全 01–06；新增「自举 gate（`selfhost/`）」小节（L1 / L2 / 四个脚本 + 用法，描述取自各脚本头注释）；`check-grammar.py` 13 → 19；容量清单去 `ct build` 三项、改为与 `ctc.c` 的 11 个 `#define MAX_*` 一一对应（中英对称） | `README.md` |
 | A4 | §7 表补 `MAX_SCOPE` 256、`MAX_FUNCS` 64（中英对称），全表 11 行 = `ctc.c` 的 `#define MAX_*` 全集 | `docs/language-spec.md` |
 | A5 | 泄漏警告改为「尚属展望——已随 Phase 0.3 移出 L0，计划 Phase 4 用 CT 重做」 | `docs/vision.md` |
-| A6 | 负例 56 → 60、总数 110 → 114（中英各一处） | `README.md` |
+| A6 | 负例 56 → 60、总数 110 → 114（中英各一处）。**B2.1 落地后再 +1 → 115** | `README.md` |
 | B1 | 采纳「接受、不补 fixture」；因冻结期不落 `ctc.c` 注释，改记入 §7「设计债与风险」表 | `docs/architecture.md` §7 |
 | B2.2 | 采纳「接受现状 + 记录」，同样记入 §7，并写明「前向声明落地时必须补显式深度守卫」 | `docs/architecture.md` §7 |
-| B2.1 | **未决**——两条路线都成立，需用户定夺（见上） | — |
+| B2.1 | **用户选 A：钉死**——`test/run.sh` 的 `cli` 层新增 `cli/default-output-non-ct`，断言「无 `.ct` 后缀的输入 → 产出 `<input>.c` + `<input>.h`」；总数 114 → 115，README 中英同步 | `test/run.sh` + `README.md` |
 
 **额外修正（审计未列，同属文档一致性）**：`README.md` 顶部「当前进入 Phase 1：自举」已过期，
 改为「Phase 0 及子阶段 0.1/0.2/0.3、Phase 1（自举，2026-10-15）、Phase 2（模块化，2026-10-16）
@@ -147,9 +148,10 @@
 **验证**：
 - 4 个新 fixture 逐个复跑：`./ctc test/errors/<name>.ct` 均 `exit=1`，且 stderr 含
   `too many struct fields in 'Big'`（3 个）/ `nested field path too long in struct`。
-- `ls test/errors/*.ct | wc -l` = **60**，与 README 的 60 / 114 一致。
+- `ls test/errors/*.ct | wc -l` = **60**，与 README 的 60 / 115 一致。
 - `ctc.c` 上 `grep -c '\b<name>\b'` 对全部 18 个审计点名符号 = 0（复核成立）；
   `architecture.md` 改写后对全部 23 个失效符号 = 0 命中。
 - 说明：`./test/run.sh` **未能**在本环境完整执行——其 `cli/cannot-write` 用例故意写
-  `/nonexistent-dir/x.c`，被沙箱拦截（`hit restricted`）。故 114 这一数字取自「原 110（已实跑）
-  + 本次 4 个新负例（已逐个复跑通过）」，而非一次整跑的输出。
+  `/nonexistent-dir/x.c`，被沙箱拦截（`hit restricted`）。故总数取自「原 110（已实跑）
+  + 本次 4 个新负例 + 1 条新 CLI 断言（均逐个复跑通过）= 115」，而非一次整跑的输出。
+  请在本机跑一次 `./test/run.sh` 复核应为 `115 passed, 0 failed`。

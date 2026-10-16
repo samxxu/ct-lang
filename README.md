@@ -218,7 +218,7 @@ test/
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
 
-当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 60 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 114 项。
+当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 60 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 115 项。
 
 `test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
@@ -574,7 +574,7 @@ Five layers of assertions:
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
 
 Currently 25 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 60 negative
-diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 114 in total.
+diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 115 in total.
 
 `test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
 (`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by

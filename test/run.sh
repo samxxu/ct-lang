@@ -325,6 +325,17 @@ else
     bad "cli/cannot-write-header" "wrong message: $(cat "$TMP/cli.err")"
 fi
 
+# default_output()'s other branch: a `.ct` suffix is stripped, but an input
+# without one keeps its whole name, so the output lands as <input>.c with the
+# header beside it. Pinned because the audit found the branch untested.
+cp test/cases/21_empty_init_iface.ct "$TMP/noext"
+if "$TMP/ctc" "$TMP/noext" >"$TMP/cli.out" 2>"$TMP/cli.err" &&
+    [ -s "$TMP/noext.c" ] && [ -s "$TMP/noext.h" ]; then
+    ok "cli/default-output-non-ct"
+else
+    bad "cli/default-output-non-ct" "expected <input>.c + <input>.h for a non-.ct input: $(cat "$TMP/cli.err")"
+fi
+
 # `compile` is an explicit alias for the default subcommand; its output must be
 # byte-identical to the default-mode golden
 if "$TMP/ctc" compile test/cases/21_empty_init_iface.ct -o "$TMP/cli.c" 2>"$TMP/cli.err"; then
