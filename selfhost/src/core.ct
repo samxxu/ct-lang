@@ -902,6 +902,7 @@ trait RewriteOps {
     /* interface values: boxing, the declaration, the assignment and `return` */
     void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
     void box_to_iface_ptr(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
+    void box_agg_fields(struct SymTab *sym, Buf *out, const Struct *S, const char *inner, size_t it);
     char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
     char *try_iface_assign(struct SymTab *sym, const char *line);
     char *try_return(struct SymTab *sym, const char *line);
@@ -2642,6 +2643,63 @@ impl RewriteOps for Pipe {
         self->box_to_iface(sym, out, e, len, tr, pos);
     }
 
+    /* The body of an aggregate initialiser (the text between the braces) is
+       rewritten item by item: a designated initialiser of an interface field
+       boxes its value exactly as the matching assignment would, so
+       `struct Add s = { .l = a, .r = b };` builds the same fat pointers
+       `s.l = a; s.r = b;` do. Non-interface fields, positional items and nested
+       braces pass through untouched. */
+    void box_agg_fields(struct SymTab *sym, Buf *out, const Struct *S, const char *inner, size_t it) {
+        size_t i = 0;
+        while (i < it) {
+            size_t j = i, depth = 0, vstart, pn, ms;
+            int isptr = 0, ftr = -1;
+            char mem[MAX_NAME];
+            size_t ml;
+
+            /* this item runs up to the next comma that is not inside brackets */
+            while (j < it) {
+                char c = inner[j];
+                if (c == '"' || c == '\'') { j = line_literal_end(inner, j, it); continue; }
+                if (c == '(' || c == '[' || c == '{') depth++;
+                else if (c == ')' || c == ']' || c == '}') { if (depth) depth--; }
+                else if (c == ',' && depth == 0) break;
+                j++;
+            }
+
+            vstart = i;
+            while (vstart < j && (inner[vstart] == ' ' || inner[vstart] == '\t')) vstart++;
+            if (vstart < j && inner[vstart] == '.') {
+                ms = vstart + 1;
+                pn = ms;
+                while (pn < j && is_ident_char((unsigned char)inner[pn])) pn++;
+                ml = pn - ms;
+                if (ml > 0 && ml < sizeof mem) {
+                    size_t q = pn;
+                    memcpy(mem, inner + ms, ml);
+                    mem[ml] = 0;
+                    while (q < j && isspace((unsigned char)inner[q])) q++;
+                    if (q < j && inner[q] == '=') {
+                        ftr = find_iface_field(S, mem, &isptr);
+                        if (ftr >= 0) vstart = q + 1;
+                    }
+                }
+            }
+
+            if (ftr < 0) {
+                buf_putn(out, inner + i, j - i);
+            } else {
+                size_t vs = vstart;
+                while (vs < j && isspace((unsigned char)inner[vs])) vs++;
+                buf_putn(out, inner + i, (vs > i) ? vs - i : 0);   /* ".name = " */
+                if (isptr) self->box_to_iface_ptr(sym, out, inner + vs, j - vs, ftr, 0);
+                else self->box_to_iface(sym, out, inner + vs, j - vs, ftr, 0);
+            }
+            if (j < it) buf_putc(out, ',');
+            i = j + 1;
+        }
+    }
+
     /* "Greeter g;" / "Greeter g = p;" / "Greeter *g;" — an interface-value
        declaration. A bare one starts as a null fat pointer; an initialised one
        boxes its expression. */
@@ -3074,7 +3132,7 @@ impl RewriteOps for Pipe {
                         size_t it = trim_right_len(inner, strlen(inner));
                         int first = 1;
                         buf_putn(&b, rest, (size_t)(e - rest) + 1);        /* " = {" */
-                        buf_putn(&b, inner, it);
+                        self->box_agg_fields(sym, &b, S, inner, it);
                         if (it) buf_puts(&b, ", ");
                         else buf_putc(&b, ' ');
                         self->put_own_vptr(&b, S, &first);
