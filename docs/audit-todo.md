@@ -151,7 +151,8 @@
 - `ls test/errors/*.ct | wc -l` = **60**，与 README 的 60 / 115 一致。
 - `ctc.c` 上 `grep -c '\b<name>\b'` 对全部 18 个审计点名符号 = 0（复核成立）；
   `architecture.md` 改写后对全部 23 个失效符号 = 0 命中。
-- 说明：`./test/run.sh` **未能**在本环境完整执行——其 `cli/cannot-write` 用例故意写
-  `/nonexistent-dir/x.c`，被沙箱拦截（`hit restricted`）。故总数取自「原 110（已实跑）
-  + 本次 4 个新负例 + 1 条新 CLI 断言（均逐个复跑通过）= 115」，而非一次整跑的输出。
-  请在本机跑一次 `./test/run.sh` 复核应为 `115 passed, 0 failed`。
+- **套件整跑（沙箱内变通）**：`./test/run.sh` 无法在沙箱内原样执行——其 `cli/compile-cannot-write`
+  用例故意写 `/nonexistent-dir/x.c`，被拦截（`hit restricted`）。改为以管道喂入同一脚本、仅摘除该
+  用例后整跑：**`== summary: 114 passed, 0 failed ==`（退出 0）**，且新增的
+  `ok cli/default-output-non-ct` 在列。114 = 真实总数 115 − 摘除的 1 例，故本机原样跑应为
+  `115 passed, 0 failed`。
