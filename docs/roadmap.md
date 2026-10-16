@@ -20,7 +20,7 @@
 | Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 建设 | ✅ 完成（2026-10-15：M2 达成 25/25，且 L1′ 自举闭环通过） | 阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
 | Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | ✅ 完成（2026-10-16；非版本 tag `phase2-multifile-split`） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
-| Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | 🔭 展望 | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
+| Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | 🚧 进行中（2026-10-16 起；切片 1：`--line` / `--no-line` 已落地） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔭 展望 | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔭 展望 | — |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名（设计已冻结，只差落地） | 落地 | 🔭 展望 | `ct compile` 可用且 `ctc …` 调用不失效 |
@@ -644,6 +644,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **出口**：诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行。
 - **对差依据**：`test/archive/errors/*`、`run.sh` 的 `#line` 层。
 - **风险**：错误计数与重同步点容易产生级联误报；语义诊断要与「不做类型检查」的定位边界划清。
+- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。**尚未做**：泄漏警告 + `--diagnostics`（切片 2）、多错误重同步（3）、语义诊断（4）。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
+- **验证（2026-10-16）**：`check-archive.sh` 0 退化（单单元 3 pass、诊断 9 pass / 1 pending、多单元 4 pass、designed **7 pass**）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过，且 L2 单文件 greeter 输出与 L0 逐字节一致。
 
 ### Phase 5：新增特性（原 2.4）
 
@@ -702,7 +704,7 @@ as confirmed by the user.
 | 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | build | ✅ done (2026-10-15: M2 at 25/25, and the L1′ self-hosting loop passes) | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
 | 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | ✅ done (2026-10-16; non-version tag `phase2-multifile-split`) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
-| 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | 🔭 outlook | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
+| 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | 🚧 in progress (from 2026-10-16; slice 1: `--line` / `--no-line` landed) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔭 outlook | design frozen + new cases green; rung **M6** closes here |
 | 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔭 outlook | — |
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias (design frozen, only the landing is left) | landing | 🔭 outlook | `ct compile` works and existing `ctc …` invocations keep working |
@@ -1706,6 +1708,21 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
 - **Diff against**: `test/archive/errors/*`, the `#line` layer in `run.sh`.
 - **Risk**: error counts plus resync points invite cascading false positives; semantic checks must be
   kept clear of the "no type checking" boundary.
+- **Progress (2026-10-16, slice 1: `#line` switch close-out)**: `--line` / `--no-line` landed in
+  `selfhost/src/**` — `core.ct` gains a `g_line_force` global (`-1` by mode / `0` force off / `1`
+  force on) and `g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`; `ct_compile_file` takes
+  a fourth `line_force` argument, parsed and threaded through both `compile_main` and `build_main`,
+  and the usage text gains the two lines. Two designed fixtures were added (`test/modules/noline/`:
+  `build --no-line` suppresses the multi-file default; `test/modules/line/`: `compile --line` forces
+  it on single-file), and `check-archive.sh` group 7 grew a `compile.args` branch (single-file cases
+  run their args verbatim from a staging copy so the banner path matches the golden), taking
+  `baseline_designed` to 7. **The single-file default stays off**, so L2's single-file output remains
+  byte-identical with L0. **Still to do**: leak warnings + `--diagnostics` (slice 2), multi-error
+  resync (3), semantic checks (4). New code goes into `impl` blocks (`MAX_FUNCS` has one slot left).
+- **Verification (2026-10-16)**: `check-archive.sh` 0 regressions (single-unit 3 pass, diagnostics
+  9 pass / 1 pending, multi-unit 4 pass, designed **7 pass**); `check-goldens.sh` 25/25 + L1′ 25/25 +
+  L2 25/25 + fixpoint 2/2; `check-m2a.sh` / `ct-tour.sh` exit 0; `./test/run.sh` 115/115; the manual
+  three-step passes and L2's single-file greeter output matches L0 byte for byte.
 
 ### Phase 5 — new features (was 2.4)
 
