@@ -18,6 +18,7 @@
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 #include <ctype.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +40,7 @@
 #define MAX_IMPORTS 16                    /* `import` lines per unit */
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
 #define MAX_WARNS  64                     /* collected leak warnings per run */
+#define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
 
 #define CTC_VERSION "0.0.1"
 
@@ -199,6 +201,20 @@ static Warn g_warns[MAX_WARNS];
 static int  g_nwarns = 0;
 static int  g_json    = 0;             /* 1 with `--diagnostics=json` */
 
+/* Multi-error recovery: `die` reports and, while a guard is installed, longjmps
+   back to it instead of exiting. `compile_range`'s loop installs the guard and
+   resynchronises to the next line start or `}` (see `recover_pos`), so one bad
+   construct no longer hides the rest of the file. Stops for good past
+   MAX_ERRORS (cascading reports stop being useful). */
+static jmp_buf g_err_jmp;              /* the guard the loop set */
+static int     g_guarded = 0;          /* 1 while that guard is live */
+static int     g_nerrors = 0;          /* errors reported so far, whole run */
+static size_t  g_err_pos = 0;          /* source offset of the last report */
+static size_t  g_guard_pos = 0;        /* loop position the live guard started at */
+static size_t  g_guard_end = 0;        /* its range end */
+static int     g_safe_nvars = 0;       /* invariants a longjmp may skip past */
+static int     g_safe_nscope = 0;
+
 /* ---------------------------------------------------------------- util */
 
 static void *xmalloc(size_t n)
@@ -235,6 +251,19 @@ static void die(size_t pos, const char *fmt, ...)
     vfprintf(stderr, fmt, ap);
     va_end(ap);
     fputc('\n', stderr);
+
+    /* With a recovery guard installed the error is reported and control returns
+       to the loop, which resynchronises; otherwise this is still the fatal one
+       error that stops the compiler. */
+    g_nerrors++;
+    if (g_guarded) {
+        g_err_pos = pos;
+        if (g_nerrors > MAX_ERRORS) {
+            fprintf(stderr, "ctc: too many errors, stopping\n");
+            exit(1);
+        }
+        longjmp(g_err_jmp, 1);
+    }
     exit(1);
 }
 
@@ -887,6 +916,10 @@ trait RewriteOps {
        would warn under -Wall -Wextra. */
     int body_uses_self(size_t bstart, size_t blen);
     void scope_track(struct SymTab *sym, size_t ls, size_t le);
+    /* Resynchronisation point after a reported error: past the next `}` or the
+       start of the next line, whichever comes first (literals and comments are
+       skipped, so a brace inside a string does not count). */
+    size_t recover_pos(size_t from, size_t end);
     char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
 }
 
@@ -1800,9 +1833,35 @@ impl PipeOps for Pipe {
     /* Scan [start,end): expand traits/structs/impls, pass the rest through. */
     void compile_range(struct SymTab *sym, size_t start, size_t end) {
         size_t pos = start;
+        jmp_buf outer_jmp;
+        int outer_guarded = g_guarded;
+
+        /* A namespace body compiles through a recursive call, so this range's
+           guard would clobber its caller's; save and restore it around the loop. */
+        memset(outer_jmp, 0, sizeof outer_jmp);
+        if (outer_guarded) memcpy(outer_jmp, g_err_jmp, sizeof g_err_jmp);
 
         while (pos < end) {
             size_t ls = pos, q, le;
+
+            /* One guard per construct: `die` reports and jumps back here, the loop
+               resynchronises past the next `}` or line start, and the invariants a
+               jump may skip past are put back before it does. */
+            g_guard_pos = pos;
+            g_guard_end = end;
+            g_safe_nvars = sym->nvars;
+            g_safe_nscope = g_nscope;
+            if (setjmp(g_err_jmp) != 0) {
+                g_guarded = 1;
+                sym->nvars = g_safe_nvars;
+                g_nscope = g_safe_nscope;
+                g_body_abs = 0;
+                pos = self->recover_pos(g_err_pos > g_guard_pos ? g_err_pos : g_guard_pos,
+                                        g_guard_end);
+                if (pos <= g_guard_pos) pos = g_guard_pos + 1;
+                continue;
+            }
+            g_guarded = 1;
 
             q = ls;
             while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
@@ -1925,6 +1984,9 @@ impl PipeOps for Pipe {
             if (le < end) { fputc('\n', self->out); le++; }
             pos = le;
         }
+
+        g_guarded = outer_guarded;
+        if (outer_guarded) memcpy(g_err_jmp, outer_jmp, sizeof g_err_jmp);
     }
 
     /* Write the include guard and provenance banner into the header stream. */
@@ -2104,6 +2166,7 @@ impl PipeOps for Pipe {
         char hbuf[MAX_NAME * 4];
         const char *base;
         FILE *body;
+        int err_base = g_nerrors;   /* errors already reported by earlier units */
 
         g_multi = multi;
         g_ns[0] = 0;
@@ -2176,6 +2239,17 @@ impl PipeOps for Pipe {
             self->out = body;
             self->compile_range(sym, 0, g_len);
             self->out = real;
+            /* Errors were reported along the way: the body is not a usable
+               product, so the half-written .c/.h are dropped instead of left
+               behind (a later successful unit is unaffected). */
+            if (g_nerrors > err_base) {
+                fclose(body);
+                fclose(self->out);
+                fclose(self->hout);
+                remove(outc);
+                remove(hbuf);
+                return 1;
+            }
             self->line_break();
             self->emit_drop_prototypes(sym, real);
             rewind(body);
@@ -2381,6 +2455,26 @@ impl PipeOps for Pipe {
    the receiver with `PipeOps`, so a method here can still call the pipeline's
    helpers through `self->` and vice versa. */
 impl RewriteOps for Pipe {
+    /* After a reported error, jump to a place the scanner can restart from: the
+       first of the next `}` (consumed) and the next line start. Literals and
+       comments are stepped over so a `}` inside a string is not mistaken for the
+       end of the construct. */
+    size_t recover_pos(size_t from, size_t end) {
+        size_t p = from;
+        (void)self;  /* a pure scan; the receiver is not used */
+        while (p < end) {
+            char c = g_src[p];
+            if (c == '"' || c == '\'') { p = skip_literal(p); continue; }
+            if (c == '/' && p + 1 < end &&
+                (g_src[p + 1] == '/' || g_src[p + 1] == '*')) {
+                p = skip_comment(p);
+                continue;
+            }
+            if (c == '}' || c == '\n') return p + 1;
+            p++;
+        }
+        return end;
+    }
     /* `self` -> `_self` for one line. Strings and comments are copied verbatim, and
        a member literally named `self` (e.g. `g.self`) is not the implicit receiver. */
     void replace_self(const char *s, size_t n, Buf *out) {
@@ -3722,9 +3816,16 @@ pub int ct_compile_file(const char *in, const char *outc, int multi, int line_fo
 int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json)
 {
     int rc;
+    int err_base = g_nerrors;
     g_line_force = line_force;
     g_json = json;
     rc = g_pipe.compile_file(&g_sym, in, outc, multi);
+    if (g_nerrors > err_base) {
+        /* close the multi-error report with a count; the failure itself travels
+           back through the exit code */
+        fprintf(stderr, "ctc: %d error(s) generated\n", g_nerrors - err_base);
+        return 1;
+    }
     /* Warnings are printed once per run. Single-file mode prints them here (JSON
        to stdout, text to stderr); `build` defers to ct_cc_finish so a whole run's
        warnings land after the cc command instead of once per unit. */
