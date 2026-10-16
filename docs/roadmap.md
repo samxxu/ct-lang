@@ -49,7 +49,7 @@
 | v0.0.1 | Phase 0 | trait / struct / impl / use 的结构转换、方法调用重写、配套 `.h`、五层回归测试 |
 | v0.1.0 | Phase 1 自举（**里程碑已达成，尚未 bump**） | L1（`selfhost/ctc.ct`）对 `test/cases/**` 全量 25/25 逐字节一致，且 L1 编译自身（L1′）重跑同一批语料仍逐字节一致 |
 | v0.2.0 | Phase 2 模块化（**里程碑已达成，尚未 bump**） | namespace / 多文件 `ct build` / `pub` / `import` / `.h.ct` / `-I`；归档用例逐字节一致，编译器源码拆成 `selfhost/src/**`（L1 建出 L2，对 `test/cases/**` 25/25 一致） |
-| v0.3.0 | Phase 3 内存 | 展望：Drop / `delete` 放宽 |
+| v0.3.0 | Phase 3 内存（**里程碑已达成，尚未 bump**） | Drop / `delete` 放宽，已在 `selfhost/src/**` 恢复（L1 冻结）；`22_drop` 逐字节一致 |
 | v0.4.0 | Phase 4 诊断与溯源 | 展望：`#line` / 泄漏警告 / `--diagnostics` |
 | v0.5.0 | Phase 5 新增特性 | 展望：AutoDrop / 路径敏感分析 / 目录 = namespace |
 | v0.6.0 | Phase 6 生态与扩展 | 展望：`map` / 方言系统 / 增量编译 |
@@ -700,8 +700,8 @@ as confirmed by the user.
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | build | ✅ done (design first → implemented) | interface **arrays** are not implemented; interface **fields** landed |
 | 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | build | ✅ done (2026-10-14) | `ctc.c` 3836 → 2897 lines; the suite went 146 → 110 and is green; the archive lives in `test/archive/` + tag `overreach-oracle` |
 | 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | build | ✅ done (2026-10-15: M2 at 25/25, and the L1′ self-hosting loop passes) | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
-| 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | 🔄 in progress (namespaces + multi-file `build` / `pub` / `import` done, 2026-10-16) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
-| 3 | **Memory**: Drop / loosened `delete` | restore | 🔭 outlook | drop cases **byte-identical** |
+| 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | ✅ done (2026-10-16; non-version tag `phase2-multifile-split`) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
+| 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
 | 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | 🔭 outlook | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔭 outlook | design frozen + new cases green; rung **M6** closes here |
 | 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔭 outlook | — |
@@ -744,8 +744,8 @@ as confirmed by the user.
 | --- | --- | --- |
 | v0.0.1 | Phase 0 | trait / struct / impl / use rewriting, method-call rewriting, matching `.h`, five-layer regression suite |
 | v0.1.0 | Phase 1 self-hosting (**milestone reached, not bumped yet**) | L1 (`selfhost/ctc.ct`) is byte-identical with L0 on all of `test/cases/**` (25/25), and L1 compiling itself (L1′) reproduces the same corpus byte for byte |
-| v0.2.0 | Phase 2 module system | outlook: namespaces / multi-file `ct build` / `pub` / `import` |
-| v0.3.0 | Phase 3 memory | outlook: Drop / loosened `delete` |
+| v0.2.0 | Phase 2 module system (**milestone reached, not bumped yet**) | namespaces / multi-file `ct build` / `pub` / `import` / `.h.ct` / `-I`; the archived cases are byte-identical and the compiler source is split into `selfhost/src/**` (L1 builds L2, byte-identical on `test/cases/**` 25/25) |
+| v0.3.0 | Phase 3 memory (**milestone reached, not bumped yet**) | Drop / loosened `delete`, restored under `selfhost/src/**` (L1 frozen); `22_drop` byte-identical |
 | v0.4.0 | Phase 4 diagnostics & traceability | outlook: `#line` / leak warnings / `--diagnostics` |
 | v0.5.0 | Phase 5 new features | outlook: AutoDrop / path-sensitive analysis / directory = namespace |
 | v0.6.0 | Phase 6 ecosystem and extension | outlook: `map` / dialect system / incremental compilation |
@@ -1471,6 +1471,14 @@ when organising the compiler source in CT, a CT-level compiler that supports the
 is therefore necessarily a single file** (Phase 0.3 moved multi-file out of L0), and only L2 onwards can
 split across files.
 
+> **A name with two meanings (noted 2026-10-16)**: "L2" is used in two senses — ① in the **capability
+> ladder**, L2 = "the compiler that supports namespaces" (M3, the sense used in the tables above);
+> ② in **this repository's artefacts**, L2 = "the binary L1 builds out of `selfhost/src/**` with
+> `build`" (the Phase 2 split's product, and the object the ratchet tests from Phase 3 on). The two
+> **do not carry the same capability today**: the artefact L2 already has Drop (Phase 3), whereas the
+> ladder's L2/L3 are an abstract description of capability levels. To avoid confusion, "L2" below and
+> in the gate scripts always means ②.
+
 **Ordering principle (updated 2026-10-14 to "strip first")**: unlike the earlier plan, the over-reach
 features leave `ctc.c` **already in Phase 0.3** — a clean pure-OO L0 keeps the self-hosting target
 minimal; the extracted code is **archived as the oracle**, not destroyed, so Phases 2–5 can diff their CT
@@ -1579,7 +1587,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   + accumulating cross-unit symbols).
 - **Exit**: archived cases **byte-identical**; **the compiler source itself becomes multi-file** (the
   single biggest payoff for the rest of the work).
-- **Diff against**: `test/cases/19_namespace`, `20_namespace_nested`, `test/multifile/`, `test/import/`.
+- **Diff against**: `test/archive/cases/19_namespace`, `test/archive/cases/20_namespace_nested`, `test/archive/multifile/`, `test/archive/import/`.
 - **Risk**: the name prefix becomes a published contract as soon as it ships, so freeze it first;
   multi-file breaks the self-contained `.c`, so decide it together with the `pub` visibility rule;
   `-I` is decided (**local-first**: the importing file's own directory, then each `-I` root in
@@ -1591,7 +1599,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   Phase 1 exit does not regress (`check-goldens.sh` 25/25, L1′ agreeing). The implementation: a flat
   `g_ns` prefix, `read_qual_ref` for a qualified declaration head, the `::` chain rewrite in
   `transform_calls`, and a `namespace` branch in `compile_range` (recurse + save/restore the prefix).
-- **Progress (2026-10-16, slice 2d/2e)**: **multi-file `ct build`, `pub` and `import` are done** — the
+- **Progress (2026-10-16, slice 2d/2e + `.h.ct` / `-I`)**: **multi-file `ct build`, `pub` and `import` are done** — the
   four archived units under `test/archive/{multifile,import}/` (`app` / `calc`, `app` / `shapes`) are
   **NEW** (byte-identical `.c` and `.h` on both sides) and promoted onto `baseline_multi`, so the
   gate now reads 4 pass + 4 pass + 6 pass, 0 regression and exits 0. The CLI grew a `build`
@@ -1606,7 +1614,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   which carries the directives — matches byte for byte. Cross-unit symbols accumulate (`ntraits` /
   `nstructs` / `nfuncs` reset only in single-file mode). The generated program was also built and run
   end to end (`1 2 5`). **Still to do**: the `--line` / `--no-line` overrides (Phase 4).
-- **Progress (2026-10-16, `.h.ct` / `-I`)**: **`foo.h.ct` file names and `-I` search roots are done**.
+  **Also (2026-10-16, `.h.ct` / `-I`)**: **`foo.h.ct` file names and `-I` search roots are done**.
   A `*.h.ct` basename strips the whole `.h.ct` for the output (`foo.h.ct` -> `foo.c` + `foo.h`) and an
   `import foo;` falls back to `foo.h.ct`, so the pair is published under the name a consumer would
   import; a plain `*.ct` keeps producing the `.c`/`.h` pair it always has (its "publishes no header"
@@ -1618,14 +1626,74 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   name + the import fallback), `inc` (the `-I` root makes the import resolvable), `inc_missing`
   (without the `-I` root the build must fail with `cannot resolve import`), and `precedence` (a
   same-named file in the importing dir beats the `-I` root, pinning "local-first").
+- **Progress (2026-10-16, source split → L2)**: **the split landed** — the CT compiler source moved
+  from the single-file seed `selfhost/ctc.ct` to the multi-unit tree `selfhost/src/**`
+  (`core.ct` + `driver.ct`), built by **L1's own `build`** (multi-file + `import`) into **L2**; the exit
+  criterion is **L2 byte-identical with L1 on `test/cases/**` (25/25)** and it holds
+  (`check-goldens.sh` step 6). Hard constraints the split surfaced (measured with a T0 probe):
+  ① a `pub` prefix **cannot reach the `.h`** — `ctc.ct` writes any `#`-starting line verbatim into the
+  `.c` and returns early, bypassing the `pub` routing, so a header unit **cannot carry `MAX_*` /
+  `size_t` / `FILE`**; data, macros and the singleton must stay inside `core.ct` (landing in `core.c`)
+  and `driver.ct` keeps its own equal-valued `MAX_*` copies. ② an `impl` / vtable is emitted `static`,
+  so its **symbol cannot be referenced across units** — cross-unit dispatch goes only through a vptr
+  already stored in the object (a `->method()` after an accessor returns `struct Pipe *` /
+  `struct SymTab *`). ③ `MAX_FUNCS` counts **top-level plain-C signatures**; this split exported only
+  10 `pub` scalar wrappers (`ct_read_file` / `ct_is_ident_char` / `ct_usage` / `ct_default_output` /
+  `ct_begin_imports` / `ct_add_import` / `ct_compile_file` / `ct_cc_reset` / `ct_cc_add` /
+  `ct_cc_finish`). **Correction (2026-10-16, measured in Phase 3)**: that ceiling **also counts `static`
+  top-level signatures**, so the headroom was in fact tiny — Phase 3's new helpers already had to become
+  `impl` methods (see the Phase 3 progress). **Same source, neither generated from the other**:
+  `selfhost/src/**` and the hand-written seed `selfhost/ctc.ct` (L1) are both hand-written; the seed is
+  kept. (**From Phase 3 it becomes "L1 frozen, new capability lands in `src/**` only"** — double-writing
+  is unsustainable, see the Phase 3 kick-off decision.) **New gates**: `check-goldens.sh` step 6 (the
+  hard criterion: L1 `build selfhost/src/driver.ct` → L2 → corpus byte-identical), `check-archive.sh` 3b,
+  `check-m2a.sh` step 7, `ct-tour.sh` step 6. **New designed case** `test/modules/split` (`pub trait` +
+  `pub struct` in the header unit, the `impl` (with its static vtable) in another unit, a third unit
+  dispatching through the pointer an accessor returns) pins that cross-unit contract and is registered
+  in `check-archive.sh` group 7 `baseline_designed`. **Still to do**: Phase 2's `--line` and the Phase 3+
+  restoration items; the `--line` / `--no-line` overrides still belong to Phase 4.
+- **Close-out (2026-10-16, user-confirmed, option A)**: **Phase 2 ends here** — **no version bump**
+  (`CTC_VERSION` stays `v0.0.1`, not touched while frozen), only the **non-version tag
+  `phase2-multifile-split`**; the `v0.1.0` / `v0.2.0` bumps land together with the single-entry `ct`,
+  regenerating every golden at once. Both exit criteria hold, so the phase leaves no functional item;
+  `--line` / `--no-line` belong to Phase 4.
 
 ### Phase 3 — memory (was 2.2)
 
 - **Redone in CT**: `Drop` (built-in reserved-name trait, lazy generation, recursive value-field
   release) + loosened `delete` (any pointer → `if (p) free(p);`).
-- **Exit**: drop cases **byte-identical**.
-- **Diff against**: `test/cases/22_drop`, `test/errors/drop_*`.
+- **Exit**: drop cases **byte-identical**. ✅ met (2026-10-16).
+- **Diff against**: `test/archive/cases/22_drop`, `test/archive/errors/drop_*`.
 - **Risk**: the merge semantics of a user `impl Drop` and the default body must be nailed down.
+- **Kick-off decision (2026-10-16, user-confirmed, option B: L1 frozen)**: this phase **does not touch
+  `selfhost/ctc.ct` (L1)** — L1 becomes a **frozen seed** (its capability stops at Phase 2) and new
+  capability lands only in `selfhost/src/**`. The reason is that double-writing is unsustainable: read
+  Phase 2's "L1 and `src/**` share one source" literally and every Phase 3–7 feature has to be written
+  twice. This mirrors the level above — once `ctc.c` froze, development moved to L1; now that L1 has
+  frozen, development moves to `src/**`. **The cost is a change of gate meaning**: `check-archive.sh`'s
+  ratchet switches from L1 to **L2** (what L1 `build`s `src/**` into), and `check-goldens.sh` gains a
+  **step 7 fixpoint** (L2 compiles `src/**` too and its output must be byte-identical with L1's).
+- **Progress (2026-10-16, Drop landed)**: **`Drop` and the `delete` split are both implemented in
+  `selfhost/src/core.ct`**, `22_drop`'s `.c` / `.h` / run output are all **byte-identical** with the
+  archived oracle, and the five drop negatives (`drop_reserved` / `drop_impl_undefined_struct` /
+  `drop_impl_not_used` / `drop_impl_no_method` / `drop_impl_no_body`) all pass — `check-archive.sh`'s
+  `baseline_cases` grew to 3 and `baseline_errors` to 9. Implementation: `Struct` gains `has_drop` /
+  `has_user_drop` / `drop_used` / `drop_bstart` / `drop_blen` / `def_line`; `use Drop` only sets the
+  marker (**no vtable entry, no vptr**); `trait Drop` reports the reserved name; `parse_impl`
+  special-cases `impl Drop for T` and captures the user body; `delete p` on a Drop type emits
+  `if (p) { T_Drop_drop(p); free(p); }`; emission happens in two places — **prototypes before the main
+  body, definitions after it** (`compile_file` therefore writes the body into a `tmpfile()` first and
+  copies it back, isomorphic to the oracle) — and only for types `delete` actually reaches
+  (`mark_drop_closure` takes the transitive closure) so `-Wunused-function` stays quiet. **Measured
+  lesson on the signature ceiling**: `MAX_FUNCS` (64) **counts every top-level plain-C signature
+  (`static` included)** and `src/**` has almost no headroom left — the two new helpers therefore became
+  `impl` methods (`SymTabOps::mark_drop_closure`, `RewriteOps::body_uses_self`), a hard constraint
+  rather than a style preference; `PipeOps` now stands at 31/32.
+- **Verification (2026-10-16)**: `check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + **fixpoint 2/2 units
+  identical**; `check-archive.sh` 0 regressions (single-unit 3 pass, diagnostics 9 pass / 1 pending,
+  multi-unit 4 pass, designed 5 pass); `check-m2a.sh` and `ct-tour.sh` exit 0; `./test/run.sh` green at
+  115 (114/0 actually run inside the sandbox, with `cli/compile-cannot-write` excised); `ctc.c` and
+  `selfhost/ctc.ct` unchanged relative to `audit-1`.
 
 ### Phase 4 — diagnostics and traceability (was 2.3)
 
@@ -1635,7 +1703,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   start / `}`), semantic checks (reject duplicate trait/struct definitions; warn on signature
   mismatch).
 - **Exit**: the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line.
-- **Diff against**: `test/errors/*`, the `#line` layer in `run.sh`.
+- **Diff against**: `test/archive/errors/*`, the `#line` layer in `run.sh`.
 - **Risk**: error counts plus resync points invite cascading false positives; semantic checks must be
   kept clear of the "no type checking" boundary.
 
