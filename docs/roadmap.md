@@ -18,7 +18,7 @@
 | Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | 建设 | ✅ 完成（设计先行 → 已实现） | 接口**数组**尚未实现；接口**字段**（值字段装箱 + 派发、指针字段派发）已补齐 |
 | Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | 建设 | ✅ 完成（2026-10-14） | `ctc.c` 3836 → 2897 行、只余 Phase 0 能力；套件 146 → 110 项全绿；归档件在 `test/archive/` + tag `overreach-oracle` |
 | Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 建设 | ✅ 完成（2026-10-15：M2 达成 25/25，且 L1′ 自举闭环通过） | 阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
-| Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | 🔄 进行中（namespace 已达成，2026-10-16） | 归档用例 **byte-identical**；编译器源码切成多文件 |
+| Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | 🔄 进行中（namespace + 多文件 `build` / `pub` / `import` 已达成，2026-10-16） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | 🔭 展望 | drop 用例 **byte-identical** |
 | Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | 🔭 展望 | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔭 展望 | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
@@ -683,7 +683,7 @@ as confirmed by the user.
 | 0.2 | Interface polymorphism: traits as types, dispatching at run time | build | ✅ done (design first → implemented) | interface **arrays** are not implemented; interface **fields** landed |
 | 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | build | ✅ done (2026-10-14) | `ctc.c` 3836 → 2897 lines; the suite went 146 → 110 and is green; the archive lives in `test/archive/` + tag `overreach-oracle` |
 | 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | build | ✅ done (2026-10-15: M2 at 25/25, and the L1′ self-hosting loop passes) | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
-| 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | 🔄 in progress (namespaces done, 2026-10-16) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
+| 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | 🔄 in progress (namespaces + multi-file `build` / `pub` / `import` done, 2026-10-16) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
 | 3 | **Memory**: Drop / loosened `delete` | restore | 🔭 outlook | drop cases **byte-identical** |
 | 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | 🔭 outlook | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔭 outlook | design frozen + new cases green; rung **M6** closes here |
@@ -1573,8 +1573,22 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   Phase 1 exit does not regress (`check-goldens.sh` 25/25, L1′ agreeing). The implementation: a flat
   `g_ns` prefix, `read_qual_ref` for a qualified declaration head, the `::` chain rewrite in
   `transform_calls`, and a `namespace` branch in `compile_range` (recurse + save/restore the prefix).
-  **Still to do**: multi-file `.h.ct` / `pub` / `ct build` / `import` — the four units under
-  `test/archive/{multifile,import}/` remain PENDING.
+- **Progress (2026-10-16, slice 2d/2e)**: **multi-file `ct build`, `pub` and `import` are done** — the
+  four archived units under `test/archive/{multifile,import}/` (`app` / `calc`, `app` / `shapes`) are
+  **NEW** (byte-identical `.c` and `.h` on both sides) and promoted onto `baseline_multi`, so the
+  gate now reads 4 pass + 4 pass + 6 pass, 0 regression and exits 0. The CLI grew a `build`
+  subcommand (with `compile` accepted as an explicit alias; `-o` means an output **directory** in
+  build mode) plus a plain-C driver in `selfhost/ctc.ct` (`collect_imports` / `resolve_import` /
+  `unit_visit` / `build_output` / `build_main`): it resolves each `import a::b;` against the importer's
+  directory, compiles the units in dependency (post-)order in multi-file mode, and prints the
+  suggested `cc` command. In the pipeline, `pub` is stripped from a function line but its prototype is
+  routed into the `.h` (leaving a blank line in the `.c`), a `pub trait` / `pub struct` puts only the
+  type into the `.h`, an `import` line is consumed, and `#line` mapping (`line_of` / `line_at` /
+  `line_break`, three new `PipeOps` methods) lands in the multi-file `.c` so the archived output —
+  which carries the directives — matches byte for byte. Cross-unit symbols accumulate (`ntraits` /
+  `nstructs` / `nfuncs` reset only in single-file mode). The generated program was also built and run
+  end to end (`1 2 5`). **Still to do**: `.h.ct` file-name semantics, `-I` search roots and the
+  `--line` / `--no-line` overrides (Phase 4).
 
 ### Phase 3 — memory (was 2.2)
 
