@@ -81,9 +81,11 @@ typedef struct {
        dispatched through the field's own vt, not the enclosing struct's vptr */
     char ifname[MAX_FIELDS][MAX_NAME];
     int  iftype[MAX_FIELDS];           /* ... and their index into the trait table */
+    int  ifarr[MAX_FIELDS];            /* 1 for `T x[n]`, an array of interface values */
     int  nif;
     char pifname[MAX_FIELDS][MAX_NAME];
     int  piftype[MAX_FIELDS];
+    int  pifarr[MAX_FIELDS];           /* 1 for `T *x[n]`, an array of interface pointers */
     int  npif;
     /* Drop, the reserved built-in trait: `has_drop` comes from the use-clause,
        `has_user_drop` from a user-written `impl Drop for T` (its body span is
@@ -718,19 +720,22 @@ static int needs_nested_init(const Struct *structs, const Struct *S, int depth)
 }
 
 /* the trait of the interface field `name` of `s` (-1 when there is none);
-   *isptr reports whether the field is a `struct T *` pointer. Plain C: it reads
-   only the receiver Struct. */
-static int find_iface_field(const Struct *s, const char *name, int *isptr)
+   *isptr reports whether the field is a `struct T *` pointer and *isarr whether
+   it is an array of them (`T x[n]` / `T *x[n]`). Plain C: it reads only the
+   receiver Struct. */
+static int find_iface_field(const Struct *s, const char *name, int *isptr, int *isarr)
 {
     int i;
     for (i = 0; i < s->nif; i++)
         if (strcmp(s->ifname[i], name) == 0) {
             *isptr = 0;
+            *isarr = s->ifarr[i];
             return s->iftype[i];
         }
     for (i = 0; i < s->npif; i++)
         if (strcmp(s->pifname[i], name) == 0) {
             *isptr = 1;
+            *isarr = s->pifarr[i];
             return s->piftype[i];
         }
     return -1;
@@ -903,6 +908,7 @@ trait RewriteOps {
     void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
     void box_to_iface_ptr(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
     void box_agg_fields(struct SymTab *sym, Buf *out, const Struct *S, const char *inner, size_t it);
+    size_t skip_bracket(const char *s, size_t n, size_t pos);
     char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
     char *try_iface_assign(struct SymTab *sym, const char *line);
     char *try_return(struct SymTab *sym, const char *line);
@@ -1237,7 +1243,7 @@ impl PipeOps for Pipe {
 
         while (i < n) {
             size_t j = i, depth = 0;
-            int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr;
+            int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr, arr = 0;
             char fname[MAX_NAME], cbase[MAX_NAME];
 
             while (j < n) {
@@ -1261,6 +1267,26 @@ impl PipeOps for Pipe {
             idx = self->analyse_param(sym, body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
             self->emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
 
+            /* an interface array field (`T x[n]` / `T *x[n]`) carries no object
+               name out of analyse_param -- the name sits before the '[' */
+            {
+                const char *lb = memchr(body + i, '[', j - i);
+                if (lb) {
+                    size_t e2 = (size_t)(lb - (body + i));
+                    size_t s2;
+                    arr = 1;
+                    while (e2 > 0 && isspace((unsigned char)body[i + e2 - 1])) e2--;
+                    s2 = e2;
+                    while (s2 > 0 && is_ident_char((unsigned char)body[i + s2 - 1])) s2--;
+                    if (tr >= 0 && !fname[0] && e2 > s2) {
+                        size_t ml = e2 - s2;
+                        if (ml >= MAX_NAME) ml = MAX_NAME - 1;
+                        memcpy(fname, body + i + s2, ml);
+                        fname[ml] = 0;
+                    }
+                }
+            }
+
             if (idx >= 0 && fname[0] && ptr) {          /* pointer field to a known struct */
                 if (S->npf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
                 snprintf(S->pfname[S->npf], MAX_NAME, "%s", fname);
@@ -1270,11 +1296,13 @@ impl PipeOps for Pipe {
                 if (S->npif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
                 snprintf(S->pifname[S->npif], MAX_NAME, "%s", fname);
                 S->piftype[S->npif] = tr;
+                S->pifarr[S->npif] = arr;
                 S->npif++;
             } else if (tr >= 0 && fname[0]) {           /* interface-value field: `T x` */
                 if (S->nif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
                 snprintf(S->ifname[S->nif], MAX_NAME, "%s", fname);
                 S->iftype[S->nif] = tr;
+                S->ifarr[S->nif] = arr;
                 S->nif++;
             } else if (idx >= 0 && fname[0]) {          /* value field of a known struct */
                 if (S->nf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
@@ -2653,7 +2681,7 @@ impl RewriteOps for Pipe {
         size_t i = 0;
         while (i < it) {
             size_t j = i, depth = 0, vstart, pn, ms;
-            int isptr = 0, ftr = -1;
+            int isptr = 0, isarr = 0, ftr = -1;
             char mem[MAX_NAME];
             size_t ml;
 
@@ -2680,8 +2708,10 @@ impl RewriteOps for Pipe {
                     mem[ml] = 0;
                     while (q < j && isspace((unsigned char)inner[q])) q++;
                     if (q < j && inner[q] == '=') {
-                        ftr = find_iface_field(S, mem, &isptr);
-                        if (ftr >= 0) vstart = q + 1;
+                        ftr = find_iface_field(S, mem, &isptr, &isarr);
+                        /* an interface *array* field has no single value to box */
+                        if (ftr >= 0 && !isarr) vstart = q + 1;
+                        else ftr = -1;
                     }
                 }
             }
@@ -2730,6 +2760,34 @@ impl RewriteOps for Pipe {
         buf_puts(&b, sym->traits[tr].cname);
         buf_puts(&b, ptr ? "_iface *" : "_iface ");
         buf_puts(&b, var);
+
+        if (*r == '[') {                                 /* an interface array */
+            const char *d = r, *cl = NULL;
+            int dep = 0;
+            while (*d) {
+                if (*d == '[') dep++;
+                else if (*d == ']') { dep--; if (!dep) { cl = d; break; } }
+                d++;
+            }
+            if (!cl) die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
+            buf_putn(&b, r, (size_t)(cl - r) + 1);       /* "[<n>]" */
+            if (self->decl_end_is_bare(cl + 1)) {
+                /* a fat pointer is two words, so the braces have to be nested */
+                buf_puts(&b, ptr ? " = { 0 }" : " = { { 0, 0 } }");
+            }
+            buf_puts(&b, cl + 1);
+
+            {
+                int vi = sym->new_var();
+                snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+                sym->vars[vi].s = -1;
+                sym->vars[vi].ptr = ptr;
+                sym->vars[vi].arr = 1;
+                sym->vars[vi].iface = 1;
+                sym->vars[vi].tr = tr;
+            }
+            return b.p;
+        }
 
         if (ptr) {                                       /* a pointer to an interface value */
             if (!self->decl_end_is_bare(r)) die(0, "unsupported declaration of interface type");
@@ -2813,11 +2871,28 @@ impl RewriteOps for Pipe {
             /* an assignment into an interface-value field. A pointer interface
                field (`struct T *l`) stores the address of a boxed fat pointer;
                a value field stores the fat pointer itself. */
+            size_t fpos = (size_t)(p + k - line);
+            int aptr = sym->vars[vi].ptr;
             if (sym->vars[vi].s < 0) return NULL;
-            if (!self->walk_to_iface_field(sym, line, strlen(line), (size_t)(p + k - line),
-                                           sym->vars[vi].s, sym->vars[vi].ptr, &ftr, &fend, &ifptr))
+            if (sym->vars[vi].arr) {          /* an element of an array of structs */
+                size_t nl = strlen(line);
+                size_t e2;
+                if (fpos >= nl || line[fpos] != '[') return NULL;
+                e2 = self->skip_bracket(line, nl, fpos);
+                if (e2 == (size_t)-1) return NULL;
+                fpos = e2;
+            }
+            if (!self->walk_to_iface_field(sym, line, strlen(line), fpos,
+                                           sym->vars[vi].s, aptr, &ftr, &fend, &ifptr))
                 return NULL;
             r = line + fend;
+        } else if (sym->vars[vi].arr && *(p + k) == '[') {
+            /* an element of an interface array: `xs[i] = v;` */
+            size_t e2 = self->skip_bracket(line, strlen(line), (size_t)(p + k - line));
+            if (e2 == (size_t)-1) return NULL;
+            ftr = sym->vars[vi].tr;
+            ifptr = sym->vars[vi].ptr;
+            r = line + e2;
         } else {
             ftr = sym->vars[vi].tr;
             r = p + k;
@@ -3270,30 +3345,56 @@ impl RewriteOps for Pipe {
                 vi = sym->find_var(tok);
 
                 /* interface dispatch: g.m(args) -> g.vt->m(g.self, args). The
-                   method must belong to the trait the value was boxed as. */
-                if (vi >= 0 && sym->vars[vi].iface && j < n && s[j] == '.') {
-                    size_t k = j + 1, ms = k, ml;
-                    char mem[MAX_NAME];
-                    while (k < n && is_ident_char((unsigned char)s[k])) k++;
-                    ml = k - ms;
-                    if (ml >= sizeof mem) ml = sizeof mem - 1;
-                    memcpy(mem, s + ms, ml);
-                    mem[ml] = 0;
-                    if (ml && k < n && s[k] == '(' &&
-                        sym->trait_has_method(sym->vars[vi].tr, mem)) {
-                        size_t z = k + 1;
-                        int empty;
-                        while (z < n && isspace((unsigned char)s[z])) z++;
-                        empty = (z < n && s[z] == ')');
-                        buf_puts(out, tok);
-                        buf_puts(out, ".vt->");
-                        buf_puts(out, mem);
-                        buf_putc(out, '(');
-                        buf_puts(out, tok);
-                        buf_puts(out, ".self");
-                        if (!empty) buf_puts(out, ", ");
-                        i = k + 1;
-                        continue;
+                   method must belong to the trait the value was boxed as. An
+                   element of an interface array dispatches through its own vt:
+                   xs[i].m() -> xs[i].vt->m(xs[i].self). */
+                if (vi >= 0 && sym->vars[vi].iface) {
+                    size_t rend = j, k = j, rlen;
+                    int elptr = 0;
+                    if (sym->vars[vi].arr && j < n && s[j] == '[') {
+                        size_t e2 = self->skip_bracket(s, n, j);
+                        if (e2 == (size_t)-1) k = n;    /* unclosed: leave the line alone */
+                        else {
+                            rend = e2;                  /* the receiver is `xs[i]` */
+                            elptr = sym->vars[vi].ptr;  /* an element of `T *xs[n]` is a pointer */
+                            k = e2;
+                        }
+                    }
+                    if (k < n) {
+                        if (elptr) {
+                            if (k + 1 < n && s[k] == '-' && s[k + 1] == '>') k += 2;
+                            else k = n;
+                        } else if (s[k] == '.') {
+                            k += 1;
+                        } else {
+                            k = n;
+                        }
+                    }
+                    if (k < n) {
+                        size_t ms = k, ml;
+                        char mem[MAX_NAME];
+                        while (k < n && is_ident_char((unsigned char)s[k])) k++;
+                        ml = k - ms;
+                        if (ml >= sizeof mem) ml = sizeof mem - 1;
+                        memcpy(mem, s + ms, ml);
+                        mem[ml] = 0;
+                        if (ml && k < n && s[k] == '(' &&
+                            sym->trait_has_method(sym->vars[vi].tr, mem)) {
+                            size_t z = k + 1;
+                            int empty;
+                            while (z < n && isspace((unsigned char)s[z])) z++;
+                            empty = (z < n && s[z] == ')');
+                            rlen = rend - i;
+                            buf_putn(out, s + i, rlen);
+                            buf_puts(out, elptr ? "->vt->" : ".vt->");
+                            buf_puts(out, mem);
+                            buf_putc(out, '(');
+                            buf_putn(out, s + i, rlen);
+                            buf_puts(out, elptr ? "->self" : ".self");
+                            if (!empty) buf_puts(out, ", ");
+                            i = k + 1;
+                            continue;
+                        }
                     }
                 }
 
@@ -3584,17 +3685,36 @@ impl RewriteOps for Pipe {
         }
     }
 
+    /* Given `pos` at the '[' of an array subscript, return the index just past
+       its matching ']' (literals skipped), or (size_t)-1 when it is unclosed.
+       The receiver walks below all need the same "how far does this subscript
+       run" answer, so it lives here rather than in each of them. */
+    size_t skip_bracket(const char *s, size_t n, size_t pos) {
+        int d = 0;
+        size_t k = pos;
+        (void)self;  /* a pure source-shape predicate; the receiver is not used */
+        while (k < n) {
+            char e = s[k];
+            if (e == '"' || e == '\'') { k = line_literal_end(s, k, n); continue; }
+            if (e == '[') d++;
+            else if (e == ']') { d--; if (d == 0) return k + 1; }
+            k++;
+        }
+        return (size_t)-1;
+    }
+
     /* Walk `.field` / `->field` hops from the object of struct `cur` (a pointer
        when `isptr`), crossing struct-typed fields, until an interface-value field
        is reached. On success returns 1 and fills *out_tr (the field's trait),
-       *out_end (where the receiver text ends, i.e. after the field name) and
-       *out_ifptr (the field is a `struct T *` pointer, so the hop uses '->'). */
+       *out_end (where the receiver text ends, i.e. after the field name -- and
+       after the `[<expr>]` when the field is an interface array) and *out_ifptr
+       (the field is a `struct T *` pointer, so the hop uses '->'). */
     int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur,
                             int isptr, int *out_tr, size_t *out_end, int *out_ifptr) {
         (void)self;  /* the body only consults the symbol table for the field */
         for (;;) {
             size_t ms, k, ml;
-            int tr, ifptr = 0, fi;
+            int tr, ifptr = 0, ifarr = 0, fi;
             char mem[MAX_NAME];
 
             if (isptr) {
@@ -3612,8 +3732,15 @@ impl RewriteOps for Pipe {
             memcpy(mem, s + ms, ml);
             mem[ml] = 0;
 
-            tr = find_iface_field(&sym->structs[cur], mem, &ifptr);
+            tr = find_iface_field(&sym->structs[cur], mem, &ifptr, &ifarr);
             if (tr >= 0) {
+                if (ifarr) {
+                    /* an element of the array: consume "[<expr>]" so the receiver
+                       text (and the dispatch) covers `x.f[i]`, not just `x.f` */
+                    size_t k2 = self->skip_bracket(s, n, k);
+                    if (k2 == (size_t)-1) return 0;
+                    k = k2;
+                }
                 *out_tr = tr;
                 *out_end = k;
                 *out_ifptr = ifptr;
