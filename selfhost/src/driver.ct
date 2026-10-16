@@ -1,0 +1,327 @@
+/*
+ * driver.ct - L1 driver unit: the CLI, the unit tables and `main`.
+ *
+ * The other half of the multi-unit split (see `core.ct` for the pipeline). This
+ * unit owns everything that never touches the scanning state: the argument parser,
+ * the `build` unit table, the import resolver, and `main`. It reaches the pipeline
+ * only through the `pub` wrappers declared in `core.h`, so no symbol of `core.ct`
+ * is referenced here by name and no type crosses the unit boundary.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+import core;
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* This unit carries its own copy of the shared capacities (a generated header
+   cannot carry a macro): the values must stay in lockstep with `core.ct`. */
+#define MAX_NAME   128
+#define MAX_UNITS  64                     /* units in one `ctc build` run */
+#define MAX_BUILD  32                     /* inputs on a single command line */
+#define MAX_IMPORTS 16                    /* `import` lines per unit */
+#define MAX_INCDIRS 16                    /* `-I` search roots per command */
+
+#define CTC_VERSION "0.0.1"
+
+/* Extra `import` search roots from `-I <dir>` (checked after the importing
+   file's own directory, in command-line order). */
+static char g_incdir[MAX_INCDIRS][MAX_NAME * 4];
+static int  g_nincdirs = 0;
+
+/* ------------------------------------------------- `build` driver (plain C) */
+
+/* Output path for `in` in build mode: `<outdir>/<base>.c`, or beside the input. */
+static int build_output(const char *in, const char *outdir, char *out, size_t cap)
+{
+    char base[MAX_NAME];
+    const char *b = strrchr(in, '/');
+    size_t l;
+
+    b = b ? b + 1 : in;
+    snprintf(base, sizeof base, "%s", b);
+    l = strlen(base);
+    /* `foo.h.ct` names a header unit: strip the whole `.h.ct` so the pair comes
+       out as `foo.c` + `foo.h`; a plain `foo.ct` keeps its old `.c` name. */
+    if (l > 5 && strcmp(base + l - 5, ".h.ct") == 0) base[l - 5] = 0;
+    else if (l > 3 && strcmp(base + l - 3, ".ct") == 0) base[l - 3] = 0;
+
+    if (outdir)
+        return snprintf(out, cap, "%s/%s.c", outdir, base) >= (int)cap ? -1 : 0;
+    return snprintf(out, cap, "%.*s%s.c", (int)(b - in), in, base) >= (int)cap ? -1 : 0;
+}
+
+/* Does the file exist? (used to probe import candidates.) */
+static int file_exists(const char *p)
+{
+    FILE *f = fopen(p, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* Collect every `import a::b;` module in `path`, each as "a/b". Returns the count. */
+static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
+{
+    size_t pos = 0;
+    unsigned long len = 0;
+    char *src = ct_read_file(path, &len);
+    int n = 0;
+
+    while (pos < len) {
+        size_t ls = pos, q = ls, e;
+        while (q < len && (src[q] == ' ' || src[q] == '\t')) q++;
+        if (q + 6 <= len && memcmp(src + q, "import", 6) == 0 &&
+            (q + 6 == len || !ct_is_ident_char((unsigned char)src[q + 6]))) {
+            size_t t = q + 6, k = 0;
+            char mod[MAX_NAME];
+            int ok = 1;
+            while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+            mod[0] = 0;
+            for (;;) {
+                size_t s = t;
+                while (t < len && ct_is_ident_char((unsigned char)src[t])) t++;
+                if (t == s) { ok = 0; break; }
+                if (k && k + 1 < sizeof mod) mod[k++] = '/';
+                if (k + (t - s) + 1 >= sizeof mod) { ok = 0; break; }
+                memcpy(mod + k, src + s, t - s);
+                k += t - s;
+                mod[k] = 0;
+                while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                if (t + 1 < len && src[t] == ':' && src[t + 1] == ':') {
+                    t += 2;
+                    while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                    continue;
+                }
+                break;
+            }
+            if (ok && k && t < len && src[t] == ';') {
+                if (n >= max) {   /* overflow dies, never truncates */
+                    fprintf(stderr, "ctc: too many imports in '%s' (max %d)\n", path, max);
+                    free(src);
+                    exit(1);
+                }
+                snprintf(mods[n], MAX_NAME, "%s", mod);
+                n++;
+            }
+        }
+        e = ls;
+        while (e < len && src[e] != '\n') e++;
+        pos = (e < len) ? e + 1 : len;
+    }
+    free(src);
+    return n;
+}
+
+/* Resolve `mod` ("a/b") against the importing file's directory, then every `-I`
+   root in command-line order -> `<root>/a/b.ct` or `<root>/a/b.h.ct`. Returns 0
+   on success. `k == -1` is the "own directory" sentinel. */
+static int resolve_import(const char *importer, const char *mod, char *out, size_t cap)
+{
+    char dir[MAX_NAME * 2];
+    const char *slash = strrchr(importer, '/');
+    const char *root;
+    int k;
+
+    if (slash) {
+        size_t n = (size_t)(slash - importer);
+        if (n >= sizeof dir) n = sizeof dir - 1;
+        memcpy(dir, importer, n);
+        dir[n] = 0;
+    } else {
+        snprintf(dir, sizeof dir, ".");
+    }
+
+    for (k = -1; k < g_nincdirs; k++) {
+        root = (k < 0) ? dir : g_incdir[k];
+        if (snprintf(out, cap, "%s/%s.ct", root, mod) >= (int)cap) return -1;
+        if (file_exists(out)) return 0;
+        if (snprintf(out, cap, "%s/%s.h.ct", root, mod) >= (int)cap) return -1;
+        if (file_exists(out)) return 0;
+    }
+    return -1;
+}
+
+/* ------------------------------------------------------------------ units */
+
+static char g_unit_path[MAX_UNITS][MAX_NAME * 4];
+static char g_unit_out[MAX_UNITS][MAX_NAME * 4];
+static char g_unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
+static int  g_unit_nimp[MAX_UNITS];
+static int  g_unit_n = 0;
+static int  g_order[MAX_UNITS];
+static int  g_order_n = 0;
+
+static int unit_find(const char *path)
+{
+    int i;
+    for (i = 0; i < g_unit_n; i++)
+        if (strcmp(g_unit_path[i], path) == 0) return i;
+    return -1;
+}
+
+/* Add `path` and its imports (post-order: dependencies land in g_order first). */
+static int unit_visit(const char *path)
+{
+    int idx = unit_find(path), k;
+    char mods[MAX_IMPORTS][MAX_NAME];
+    int n;
+
+    if (idx >= 0) return idx;                      /* already scheduled */
+
+    if (g_unit_n >= MAX_UNITS) {
+        fprintf(stderr, "ctc: too many units (max %d)\n", MAX_UNITS);
+        return -1;
+    }
+    idx = g_unit_n++;
+    snprintf(g_unit_path[idx], sizeof g_unit_path[0], "%s", path);
+    g_unit_nimp[idx] = 0;
+
+    n = collect_imports(path, mods, MAX_IMPORTS);
+    for (k = 0; k < n; k++) {
+        char dep[MAX_NAME * 4];
+        const char *seg;
+        char hname[MAX_NAME];
+        if (resolve_import(path, mods[k], dep, sizeof dep) != 0) {
+            fprintf(stderr, "ctc: cannot resolve import '%s' from '%s'\n", mods[k], path);
+            return -1;
+        }
+        if (unit_visit(dep) < 0) return -1;
+        seg = strrchr(mods[k], '/');
+        seg = seg ? seg + 1 : mods[k];
+        snprintf(hname, sizeof hname, "%s.h", seg);
+        if (g_unit_nimp[idx] < MAX_IMPORTS)
+            snprintf(g_unit_imp[idx][g_unit_nimp[idx]++], MAX_NAME, "%s", hname);
+    }
+
+    g_order[g_order_n++] = idx;
+    return idx;
+}
+
+/* `build`: resolve imports, compile every unit in dependency order in
+   multi-file mode, then print the suggested cc command. The compiler never
+   invokes a C compiler itself (it stays dependency-free). */
+static int build_main(int argc, char **argv, const char *prog)
+{
+    const char *in[MAX_BUILD];
+    const char *outdir = NULL;
+    int n = 0, i, o;
+
+    for (i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) { ct_usage(prog); return 0; }
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("ctc v%s\n", CTC_VERSION);
+            return 0;
+        }
+        if (strcmp(argv[i], "-o") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
+            outdir = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "-I") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -I needs an argument\n"); return 1; }
+            if (g_nincdirs >= MAX_INCDIRS) {
+                fprintf(stderr, "ctc: too many -I roots (max %d)\n", MAX_INCDIRS);
+                return 1;
+            }
+            snprintf(g_incdir[g_nincdirs], sizeof g_incdir[0], "%s", argv[++i]);
+            g_nincdirs++;
+            continue;
+        }
+        if (argv[i][0] == '-' && argv[i][1]) {
+            fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+            ct_usage(prog);
+            return 1;
+        }
+        if (n >= MAX_BUILD) {
+            fprintf(stderr, "ctc: too many inputs (max %d)\n", MAX_BUILD);
+            return 1;
+        }
+        in[n++] = argv[i];
+    }
+
+    if (!n) { ct_usage(prog); return 1; }
+
+    for (i = 0; i < n; i++)
+        if (unit_visit(in[i]) < 0) return 1;
+
+    for (o = 0; o < g_order_n; o++) {
+        int u = g_order[o];
+        int k;
+        if (build_output(g_unit_path[u], outdir, g_unit_out[u], sizeof g_unit_out[0]) != 0) {
+            fprintf(stderr, "ctc: output path too long for '%s'\n", g_unit_path[u]);
+            return 1;
+        }
+        ct_begin_imports();
+        for (k = 0; k < g_unit_nimp[u]; k++)
+            ct_add_import(g_unit_imp[u][k]);
+        if (ct_compile_file(g_unit_path[u], g_unit_out[u], 1) != 0) return 1;
+    }
+
+    ct_cc_reset();
+    for (o = 0; o < g_order_n; o++) ct_cc_add(g_unit_out[g_order[o]]);
+    ct_cc_finish();
+    return 0;
+}
+
+/* Compile one .ct file to .c + .h (single-file mode). argv[0..argc-1] are the
+   compile arguments (argv[0] is not the program name); prog is for diagnostics. */
+static int compile_main(int argc, char **argv, const char *prog)
+{
+    const char *in = NULL, *outc = NULL;
+    char outbuf[MAX_NAME * 4];
+    int i;
+
+    for (i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            ct_usage(prog);
+            return 0;
+        }
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("ctc v%s\n", CTC_VERSION);
+            return 0;
+        }
+        if (strcmp(argv[i], "-o") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
+            outc = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "-I") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -I needs an argument\n"); return 1; }
+            if (g_nincdirs >= MAX_INCDIRS) {
+                fprintf(stderr, "ctc: too many -I roots (max %d)\n", MAX_INCDIRS);
+                return 1;
+            }
+            snprintf(g_incdir[g_nincdirs], sizeof g_incdir[0], "%s", argv[++i]);
+            g_nincdirs++;
+            continue;
+        }
+        if (argv[i][0] == '-' && argv[i][1]) {
+            fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+            ct_usage(prog);
+            return 1;
+        }
+        in = argv[i];
+    }
+
+    if (!in) { ct_usage(prog); return 1; }
+    if (!outc) { ct_default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
+    return ct_compile_file(in, outc, 0);
+}
+
+int main(int argc, char **argv)
+{
+    int first = 1;
+
+    /* Single-entry `ct` with `ctc` kept as a compatibility alias. `compile` is
+       the default subcommand (`ct X` == `ct compile X`); `build` compiles
+       several units in multi-file mode. */
+    if (first < argc && strcmp(argv[first], "build") == 0)
+        return build_main(argc - first - 1, argv + first + 1, argv[0]);
+
+    if (first < argc && strcmp(argv[first], "compile") == 0)
+        first++;
+
+    return compile_main(argc - first, argv + first, argv[0]);
+}

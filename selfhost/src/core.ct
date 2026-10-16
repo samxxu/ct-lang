@@ -1,0 +1,3400 @@
+/*
+ * core.ct - L1 core unit: the facilities, the data model and the whole pipeline.
+ *
+ * Part of the multi-unit split of the self-hosted compiler (Phase 2). `driver.ct`
+ * is the other unit: it owns the CLI, the unit tables and `main`, and reaches this
+ * unit only through the `pub` wrappers at the end of this file. The split dogfoods
+ * `ctc build`; it must not move the generated corpus (L2 == L1 byte for byte).
+ *
+ * Why this unit is large: the facilities (`die`, `word_at`, `buf_*`, ...) read the
+ * file-scope soup of scanning statics (`g_src`, `g_len`, `g_path`, ...) and are used
+ * by the whole pipeline, so they cannot be moved to a second unit -- L1 has no `pub`
+ * globals. Nor can the data model be exported through a header: a preprocessor line
+ * is emitted verbatim into the .c (never the .h), so a generated header cannot carry
+ * the `MAX_*` macros its fixed-size fields need, and the pipeline's own types name
+ * `FILE *` / `size_t`, which a header has no way to include. Everything sharing that
+ * state therefore stays here, and only primitives-only wrappers cross the boundary.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <ctype.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_NAME   128
+#define MAX_PARAM  256
+#define MAX_PARAMS 16
+#define MAX_METHOD 32
+#define MAX_TRAITS 16
+#define MAX_STRUCT 32
+#define MAX_FIELDS 32
+#define MAX_DEPTH  8
+#define MAX_VARS   512
+#define MAX_SCOPE  256
+#define MAX_FUNCS  64
+#define MAX_UNITS  64                     /* units in one `ctc build` run */
+#define MAX_BUILD  32                     /* inputs on a single command line */
+#define MAX_IMPORTS 16                    /* `import` lines per unit */
+#define MAX_INCDIRS 16                    /* `-I` search roots per command */
+
+#define CTC_VERSION "0.0.1"
+
+/* ---------------------------------------------------------------- data */
+
+typedef struct {
+    char ret[MAX_NAME];
+    char name[MAX_NAME];
+    char params[MAX_PARAM];
+    char ptypes[MAX_PARAMS][MAX_NAME];
+    int  nparams;
+} Method;
+
+typedef struct {
+    char   name[MAX_NAME];
+    char   cname[MAX_NAME];
+    Method m[MAX_METHOD];
+    int    nm;
+} Trait;
+
+typedef struct {
+    char name[MAX_NAME];
+    char cname[MAX_NAME];
+    char use_t[MAX_TRAITS][MAX_NAME];
+    int  use_i[MAX_TRAITS];
+    int  nu;
+    /* struct-typed fields, split into value and pointer tables: nested
+       construction must never treat a borrowed pointer as an owned nested value */
+    char fname[MAX_FIELDS][MAX_NAME];
+    int  ftype[MAX_FIELDS];            /* ... and their index into the struct table */
+    int  nf;
+    char pfname[MAX_FIELDS][MAX_NAME];
+    int  pftype[MAX_FIELDS];
+    int  npf;
+    /* interface fields (a trait used as a field type, `T x;` / `struct T *x;`)
+       live in their own tables: they hold a fat pointer, so a call on them is
+       dispatched through the field's own vt, not the enclosing struct's vptr */
+    char ifname[MAX_FIELDS][MAX_NAME];
+    int  iftype[MAX_FIELDS];           /* ... and their index into the trait table */
+    int  nif;
+    char pifname[MAX_FIELDS][MAX_NAME];
+    int  piftype[MAX_FIELDS];
+    int  npif;
+} Struct;
+
+typedef struct {
+    char name[MAX_NAME];
+    int  s;                            /* index into the struct table, -1 when iface */
+    int  ptr;                          /* 1 when declared as a pointer (uses '->') */
+    int  arr;                          /* 1 when declared as an array (uses '[n]') */
+    int  iface;                        /* 1 when this is an interface value */
+    int  tr;                           /* index into the trait table when iface */
+} Var;
+
+/* A recorded function signature: it lets a call site reject an rvalue receiver,
+   box the arguments of a function that takes interface values, and recognise a
+   function whose result already is an interface value. */
+typedef struct {
+    char name[MAX_NAME];
+    int  retstruct;
+    int  retptr;
+    int  rettrait;                     /* >=0 when the return type is an interface */
+    int  nparams;
+    int  ptrait[MAX_PARAMS];           /* >=0 when that parameter is an interface */
+} FuncSig;
+
+typedef struct {
+    char   name[MAX_NAME];
+    char   params[MAX_PARAM];
+    size_t bstart, blen;
+} ImplMethod;
+
+typedef struct { char *p; size_t n, cap; } Buf;
+
+/* -------------------------------------------------------------- globals */
+
+static const char *g_src  = NULL;
+static size_t      g_len  = 0;
+static const char *g_path = "<input>";
+/* The namespace prefix in force while a `namespace A::B { ... }` body is
+   processed ("" at top level). A name declared inside gets it prefixed into its
+   C name; lookups try the prefixed form first and fall back to the root. */
+static char g_ns[MAX_NAME];
+
+/* the output streams live inside `g_pipe` and the four symbol tables inside
+   `g_sym` (see the construct-parser and symbol-table sections) */
+
+static int    g_scope[MAX_SCOPE];      static int g_nscope = 0;
+static size_t g_body_abs = 0;
+static int    g_body_pre = 0;
+static int    g_cur_rettr = -1;        /* return trait of the function being scanned */
+
+static char g_guard[MAX_NAME * 2];
+static size_t g_line_off = 0;
+
+/* Multi-file mode (`ctc build`): the unit's .c includes its own .h and every
+   `pub` declaration is routed into that .h instead of the .c. Both flags are 0
+   for a single-file compile, which is why the corpus output does not move. */
+static int g_multi    = 0;
+static int g_ctor_pub = 0;             /* 1 while the current trait/struct is `pub` */
+static int g_line_pub = 0;             /* 1 while the current raw line is `pub`-led */
+
+/* `#line` directives: on in multi-file mode so a C compiler's diagnostics point
+   back at the .ct. The mapping runs forward, so a stretch of consecutive source
+   lines needs a single directive at its head. */
+static int  g_emit_line = 0;
+static int  g_cur_line  = 1;
+static long g_line_next = -1;
+
+/* The `#include`s a unit's .c opens with: its own header, then one per import
+   (filled in by the build driver before the unit is compiled). */
+static char g_imp_h[MAX_IMPORTS][MAX_NAME];
+static int  g_nimp_h = 0;
+
+/* File-scope objects/arrays cannot write their vptrs in place (there are no
+   statements out there), so the writes are collected here while scanning and
+   emitted after everything else as a constructor that runs before main. */
+static Buf g_unit_init;
+static int g_has_unit_init = 0;
+
+/* An rvalue receiver (`f().m()`) is hoisted into a temp so it is evaluated once
+   and in order; the declaration goes on the line before the rewritten one (see
+   `emit_hoisted`), and `g_ntmp` keeps the temp names unique. */
+static Buf g_hoist;
+static int g_ntmp = 0;
+
+/* ---------------------------------------------------------------- util */
+
+static void *xmalloc(size_t n)
+{
+    void *p = malloc(n ? n : 1);
+    if (!p) { fprintf(stderr, "ctc: out of memory\n"); exit(1); }
+    return p;
+}
+
+static char *xstrndup(const char *s, size_t n)
+{
+    char *p = xmalloc(n + 1);
+    memcpy(p, s, n);
+    p[n] = 0;
+    return p;
+}
+
+static int is_ident_char(int c)
+{
+    return isalnum((unsigned char)c) || c == '_';
+}
+
+static void die(size_t pos, const char *fmt, ...)
+{
+    va_list ap;
+    int line = 1, col = 1;
+    size_t i;
+
+    for (i = 0; i < pos && i < g_len; i++) {
+        if (g_src[i] == '\n') { line++; col = 1; } else col++;
+    }
+    fprintf(stderr, "%s:%d:%d: error: ", g_path, line, col);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    exit(1);
+}
+
+/* leading/trailing whitespace trim, in place */
+static void trim(char *s)
+{
+    size_t n, i = 0;
+    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') i++;
+    if (i) memmove(s, s + i, strlen(s + i) + 1);
+    n = strlen(s);
+    while (n && isspace((unsigned char)s[n - 1])) s[--n] = 0;
+}
+
+static size_t trim_right_len(const char *s, size_t n)
+{
+    while (n && isspace((unsigned char)s[n - 1])) n--;
+    return n;
+}
+
+static void to_lower(const char *in, char *out)
+{
+    size_t i;
+    for (i = 0; in[i] && i < MAX_NAME - 1; i++)
+        out[i] = (char)tolower((unsigned char)in[i]);
+    out[i] = 0;
+}
+
+static void buf_init(Buf *b)
+{
+    b->cap = 256;
+    b->n = 0;
+    b->p = xmalloc(b->cap);
+    b->p[0] = 0;
+}
+
+static void buf_putn(Buf *b, const char *s, size_t n)
+{
+    if (b->n + n + 1 > b->cap) {
+        while (b->cap < b->n + n + 1) b->cap *= 2;
+        b->p = realloc(b->p, b->cap);
+        if (!b->p) { fprintf(stderr, "ctc: out of memory\n"); exit(1); }
+    }
+    memcpy(b->p + b->n, s, n);
+    b->n += n;
+    b->p[b->n] = 0;
+}
+
+static void buf_puts(Buf *b, const char *s)
+{
+    buf_putn(b, s, strlen(s));
+}
+
+static void buf_putc(Buf *b, char c)
+{
+    buf_putn(b, &c, 1);
+}
+
+/* --------------------------------------------------- source-level helpers */
+
+static int word_at(size_t p, const char *w)
+{
+    size_t l = strlen(w);
+    if (p + l > g_len) return 0;
+    if (memcmp(g_src + p, w, l) != 0) return 0;
+    if (p > 0 && is_ident_char((unsigned char)g_src[p - 1])) return 0;
+    if (p + l < g_len && is_ident_char((unsigned char)g_src[p + l])) return 0;
+    return 1;
+}
+
+static size_t skip_literal(size_t p)
+{
+    char q = g_src[p++];
+    while (p < g_len) {
+        if (g_src[p] == '\\' && p + 1 < g_len) { p += 2; continue; }
+        if (g_src[p] == q) return p + 1;
+        p++;
+    }
+    return p;
+}
+
+static size_t skip_comment(size_t p)
+{
+    if (p + 1 < g_len && g_src[p] == '/' && g_src[p + 1] == '/') {
+        p += 2;
+        while (p < g_len && g_src[p] != '\n') p++;
+        return p;
+    }
+    if (p + 1 < g_len && g_src[p] == '/' && g_src[p + 1] == '*') {
+        p += 2;
+        while (p + 1 < g_len && !(g_src[p] == '*' && g_src[p + 1] == '/')) p++;
+        return (p + 1 < g_len) ? p + 2 : g_len;
+    }
+    return p;
+}
+
+/* skip whitespace and comments (newlines included) */
+static size_t skip_ws_comments(size_t p)
+{
+    for (;;) {
+        while (p < g_len && isspace((unsigned char)g_src[p])) p++;
+        if (p + 1 < g_len && g_src[p] == '/' &&
+            (g_src[p + 1] == '/' || g_src[p + 1] == '*')) {
+            p = skip_comment(p);
+            continue;
+        }
+        return p;
+    }
+}
+
+static size_t read_ident(size_t p, char *buf, size_t n)
+{
+    size_t i = 0;
+    while (p < g_len && is_ident_char((unsigned char)g_src[p])) {
+        if (i + 1 >= n) die(p, "identifier too long (max %d)", (int)n - 1);
+        buf[i++] = g_src[p];
+        p++;
+    }
+    buf[i] = 0;
+    return p;
+}
+
+/* Copy the identifier at `src` into `buf` (MAX_NAME bytes) and return its
+   length. A longer identifier is a hard error: dropping the tail would silently
+   misparse (AGENTS §3 forbids silent truncation). */
+static size_t copy_ident(const char *src, char *buf, size_t pos)
+{
+    size_t k = 0;
+    while (is_ident_char((unsigned char)src[k])) {
+        if (k + 1 >= MAX_NAME) die(pos, "identifier too long (max %d)", MAX_NAME - 1);
+        buf[k] = src[k];
+        k++;
+    }
+    buf[k] = 0;
+    return k;
+}
+
+static size_t match_delim(size_t p, char open, char close)
+{
+    int depth = 0;
+    size_t start = p;
+    while (p < g_len) {
+        char c = g_src[p];
+        if (c == '"' || c == '\'') { p = skip_literal(p); continue; }
+        if (c == '/' && p + 1 < g_len &&
+            (g_src[p + 1] == '/' || g_src[p + 1] == '*')) { p = skip_comment(p); continue; }
+        if (c == open) depth++;
+        else if (c == close) { depth--; if (depth == 0) return p; }
+        p++;
+    }
+    die(start, "unterminated '%c'", open);
+    return p;
+}
+
+/* ---------------------------------------------------- symbol table */
+
+/* The whole symbol table is one CT object. Lookups dispatch through SymTabOps,
+   so call sites read `g_sym.find_trait(..)` instead of a bare global lookup. */
+trait SymTabOps {
+    Trait *find_trait(const char *name);
+    Struct *find_struct(const char *name);
+    const char *resolve_method(const Struct *s, const char *m);
+    int find_var(const char *name);
+    int new_var();
+    FuncSig *find_func(const char *name);
+    int is_any_trait_method(const char *m);
+    /* does trait `tr` declare a method named `m`? (interface dispatch needs the
+       trait-specific answer, not `is_any_trait_method`'s) */
+    int trait_has_method(int tr, const char *m);
+}
+
+struct SymTab {
+    Trait   traits[MAX_TRAITS];
+    int     ntraits;
+    Struct  structs[MAX_STRUCT];
+    int     nstructs;
+    Var     vars[MAX_VARS];
+    int     nvars;
+    FuncSig funcs[MAX_FUNCS];
+    int     nfuncs;
+} use SymTabOps;
+
+impl SymTabOps for SymTab {
+    Trait *find_trait(const char *name) {
+        int i;
+        char q[MAX_NAME * 2];
+        /* an unqualified name inside a namespace resolves there first, then at
+           the root; comparison is on the mangled C name, so "" (top level)
+           collapses the two passes into one */
+        if (g_ns[0]) {
+            snprintf(q, sizeof q, "%s%s", g_ns, name);
+            for (i = 0; i < self->ntraits; i++)
+                if (strcmp(self->traits[i].cname, q) == 0) return &self->traits[i];
+        }
+        for (i = 0; i < self->ntraits; i++)
+            if (strcmp(self->traits[i].cname, name) == 0) return &self->traits[i];
+        return NULL;
+    }
+    Struct *find_struct(const char *name) {
+        int i;
+        char q[MAX_NAME * 2];
+        if (g_ns[0]) {
+            snprintf(q, sizeof q, "%s%s", g_ns, name);
+            for (i = 0; i < self->nstructs; i++)
+                if (strcmp(self->structs[i].cname, q) == 0) return &self->structs[i];
+        }
+        for (i = 0; i < self->nstructs; i++)
+            if (strcmp(self->structs[i].cname, name) == 0) return &self->structs[i];
+        return NULL;
+    }
+    /* which trait of struct `s` declares method `m`? NULL when none does */
+    const char *resolve_method(const Struct *s, const char *m) {
+        int i, k;
+        for (i = 0; i < s->nu; i++) {
+            const Trait *t = &self->traits[s->use_i[i]];
+            for (k = 0; k < t->nm; k++)
+                if (strcmp(t->m[k].name, m) == 0) return t->name;
+        }
+        return NULL;
+    }
+    int find_var(const char *name) {
+        int i;
+        for (i = 0; i < self->nvars; i++)
+            if (strcmp(self->vars[i].name, name) == 0) return i;
+        return -1;
+    }
+    /* Reserve the next variable slot. Overflow is a hard error: a dropped
+       registration would mis-compile method calls (AGENTS §3). */
+    int new_var() {
+        int i;
+        if (self->nvars >= MAX_VARS) die(0, "too many variables (max %d)", MAX_VARS);
+        i = self->nvars++;
+        return i;
+    }
+    /* the last recorded signature of `name`, or NULL */
+    FuncSig *find_func(const char *name) {
+        int i;
+        for (i = self->nfuncs - 1; i >= 0; i--)
+            if (strcmp(self->funcs[i].name, name) == 0) return &self->funcs[i];
+        return NULL;
+    }
+    /* does any declared trait have a method named `m`? */
+    int is_any_trait_method(const char *m) {
+        int i, j;
+        for (i = 0; i < self->ntraits; i++)
+            for (j = 0; j < self->traits[i].nm; j++)
+                if (strcmp(self->traits[i].m[j].name, m) == 0) return 1;
+        return 0;
+    }
+    /* does trait `tr` declare a method named `m`? */
+    int trait_has_method(int tr, const char *m) {
+        int i;
+        for (i = 0; i < self->traits[tr].nm; i++)
+            if (strcmp(self->traits[tr].m[i].name, m) == 0) return 1;
+        return 0;
+    }
+}
+
+static SymTab g_sym = { .ntraits = 0, .nstructs = 0, .nvars = 0, .nfuncs = 0 };
+
+/* `struct_uses` stays plain C: it reads only the receiver Struct, no table. */
+static int struct_uses(const Struct *s, const char *trait)
+{
+    int i;
+    for (i = 0; i < s->nu; i++)
+        if (strcmp(s->use_t[i], trait) == 0) return 1;
+    return 0;
+}
+
+/* the struct index of the field `name` of `s`, or -1; *isptr reports whether the
+   field is a pointer, so the following hop must use '->'. Plain C: it reads only
+   the receiver Struct. */
+static int find_field_ex(const Struct *s, const char *name, int *isptr)
+{
+    int i;
+    for (i = 0; i < s->nf; i++)
+        if (strcmp(s->fname[i], name) == 0) {
+            *isptr = 0;
+            return s->ftype[i];
+        }
+    for (i = 0; i < s->npf; i++)
+        if (strcmp(s->pfname[i], name) == 0) {
+            *isptr = 1;
+            return s->pftype[i];
+        }
+    return -1;
+}
+
+/* Does `S` (recursively) hold a struct-typed field whose vptr must be written?
+   The table is passed in so this stays a pure plain-C predicate. */
+static int needs_nested_init(const Struct *structs, const Struct *S, int depth)
+{
+    int i;
+    if (depth >= MAX_DEPTH) die(0, "nesting too deep in struct '%s'", S->name);
+    for (i = 0; i < S->nf; i++) {
+        const Struct *F = &structs[S->ftype[i]];
+        if (F->nu > 0 || needs_nested_init(structs, F, depth + 1)) return 1;
+    }
+    return 0;
+}
+
+/* the trait of the interface field `name` of `s` (-1 when there is none);
+   *isptr reports whether the field is a `struct T *` pointer. Plain C: it reads
+   only the receiver Struct. */
+static int find_iface_field(const Struct *s, const char *name, int *isptr)
+{
+    int i;
+    for (i = 0; i < s->nif; i++)
+        if (strcmp(s->ifname[i], name) == 0) {
+            *isptr = 0;
+            return s->iftype[i];
+        }
+    for (i = 0; i < s->npif; i++)
+        if (strcmp(s->pifname[i], name) == 0) {
+            *isptr = 1;
+            return s->piftype[i];
+        }
+    return -1;
+}
+
+/* --------------------------------------------------- signature parsing */
+
+static int is_type_keyword(const char *s)
+{
+    static const char *kw[] = {
+        "void", "char", "short", "int", "long", "float", "double",
+        "signed", "unsigned", "_Bool", "bool", "const", "volatile",
+        "struct", "union", "enum", "size_t", "ssize_t", "FILE", "wchar_t",
+        "int8_t", "int16_t", "int32_t", "int64_t",
+        "uint8_t", "uint16_t", "uint32_t", "uint64_t", "ptrdiff_t", NULL
+    };
+    int i;
+    for (i = 0; kw[i]; i++)
+        if (strcmp(kw[i], s) == 0) return 1;
+    return 0;
+}
+
+/* "char *name" -> "char *" ; "int" -> "int" (already a type) */
+static void param_type_only(const char *piece, char *out)
+{
+    char t[MAX_NAME * 2];
+    int end, st;
+    char id[MAX_NAME];
+
+    snprintf(t, sizeof t, "%s", piece);
+    trim(t);
+
+    end = (int)strlen(t);
+    st = end;
+    while (st > 0 && is_ident_char((unsigned char)t[st - 1])) st--;
+    if (st == end) { snprintf(out, MAX_NAME, "%s", t); return; }
+
+    snprintf(id, sizeof id, "%.*s", end - st, t + st);
+    if (is_type_keyword(id)) { snprintf(out, MAX_NAME, "%s", t); return; }
+
+    t[st] = 0;
+    trim(t);
+    snprintf(out, MAX_NAME, "%s", t);
+}
+
+/* parse_params / split_decl are `Pipe` methods now (see `impl PipeOps for
+   Pipe` below): they turn one method declaration into the `Method` record and
+   never read the symbol tables, so they take no `struct SymTab *sym`. */
+
+/* C keywords that can never be a function's return type or its name */
+static int is_stmt_keyword(const char *s)
+{
+    static const char *kw[] = {
+        "if", "else", "while", "for", "switch", "case", "default", "do",
+        "return", "goto", "break", "continue", "sizeof", NULL
+    };
+    int i;
+    for (i = 0; kw[i]; i++)
+        if (strcmp(kw[i], s) == 0) return 1;
+    return 0;
+}
+
+/* the last identifier token in s[0..n): 1 and [*a,*b) when there is one */
+static int last_ident(const char *s, size_t n, size_t *a, size_t *b)
+{
+    size_t e = n, st;
+    while (e > 0 && !is_ident_char((unsigned char)s[e - 1])) e--;
+    if (e == 0) return 0;
+    st = e;
+    while (st > 0 && is_ident_char((unsigned char)s[st - 1])) st--;
+    *a = st;
+    *b = e;
+    return 1;
+}
+
+/* is the identifier at `off` in `type` already preceded by "struct"? */
+static int already_qualified(const char *type, size_t off)
+{
+    size_t q = off;
+    while (q > 0 && isspace((unsigned char)type[q - 1])) q--;
+    return q >= 6 && memcmp(type + q - 6, "struct", 6) == 0 &&
+           (q == 6 || !is_ident_char((unsigned char)type[q - 7]));
+}
+
+/* analyse_param / emit_qualified_type are `Pipe` methods now (see `impl
+   PipeOps for Pipe` below); analyse_param reads the symbol tables through `sym`. */
+
+/* The four code emitters (emit_trait_def / emit_struct_def / put_own_vptr /
+   body_needs_vtable) are `Pipe` methods now -- see `impl PipeOps for Pipe`
+   below. Each keeps its stream parameter (FILE* / Buf*) because it is used for
+   both the .c output (`self->out`) and the .h output (`self->hout`), and takes
+   `struct SymTab *sym` wherever it reads the symbol tables. `is_any_trait_method`
+   stays a `SymTabOps` method (see the symbol-table section). */
+
+/* Scan primitives defined after the `Pipe` impl but called from its methods
+   (the line rewriters use `line_literal_end` / `line_match_paren`). */
+static size_t line_literal_end(const char *s, size_t i, size_t n);
+static size_t line_match_paren(const char *s, size_t k, size_t n);
+static size_t line_assign_eq(const char *line);
+
+/* ------------------------------------------------------- construct parsers */
+
+/* The whole output pipeline lives on the `Pipe` object: the output streams are
+   its fields and the code emitters, the construct parsers, the
+   method-declaration parsers, the declaration-piece helpers and the pipeline
+   entry points are its methods, so call sites read
+   `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`. The symbol tables arrive
+   as `struct SymTab *sym` because a method body cannot see the file-scope
+   `g_sym` object. The per-line rewriting layer is the `RewriteOps` trait below;
+   both are used by `struct Pipe`, so either half can call the other via `self`. */
+trait PipeOps {
+    size_t parse_trait(struct SymTab *sym, size_t p);
+    size_t parse_struct(struct SymTab *sym, size_t p);
+    size_t parse_impl(struct SymTab *sym, size_t p);
+    /* method-declaration parsers, called from parse_trait */
+    void parse_params(Method *m, const char *raw);
+    void split_decl(const char *decl, size_t pos, Method *m);
+    /* code emitters, called from the parsers above (stream passed explicitly).
+       `srcline` is the source line the construct starts on: it anchors a `#line`
+       directive when multi-file mode is on. */
+    void emit_trait_def(FILE *f, const Trait *T, size_t srcline);
+    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body, size_t srcline);
+    void put_own_vptr(Buf *b, const Struct *S, int *first);
+    void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv, const char *ind, int with_self, int depth);
+    void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind);
+    int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen);
+    /* declaration-piece helpers, shared by parse_fields and parse_func_sig */
+    int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr);
+    void emit_qualified_type(Buf *b, const char *piece, size_t len, int ia, int ib, const char *cbase, int need_struct, int is_trait);
+    /* Read `Ident(::Ident)*` at p -- the head of a declaration. `cname` gets the
+       mangled C name (a qualified path `A::B::Name` becomes `A_B_Name`; an
+       unqualified one gets the enclosing namespace prefix), `shortname` its last
+       segment. Returns the position just past the name, or NULL when there is
+       none. */
+    const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified);
+    char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos);
+    void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
+    void register_body_params(struct SymTab *sym, const char *params);
+    /* the pipeline driver; the rewriting layer itself is the `RewriteOps` trait */
+    void emit_hoisted();
+    void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
+    void compile_range(struct SymTab *sym, size_t start, size_t end);
+    /* Source-line tracking. The directive is written only when the running
+       mapping would diverge, and only into the .c: the .h is included verbatim
+       by the .c, so `#line` out there would be wrong. */
+    int  line_of(size_t pos);
+    void line_break();
+    void line_at(FILE *f, size_t srcline);
+    /* compile_file's own file I/O helpers */
+    void header_path(const char *outc, char *out, size_t n);
+    char *read_file(const char *path, size_t *out_len);
+    /* `multi` selects multi-file mode: the .c then includes its own .h, opens
+       with the imports the driver registered in `g_imp_h`, and emits `#line`.
+       The symbol tables accumulate across units in that mode (a unit sees the
+       units built before it) and are reset per file otherwise. */
+    int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi);
+    void write_guard(const char *hpath);
+    /* CLI helpers, called from `main` */
+    void usage(const char *prog);
+    void default_output(const char *in, char *out, size_t n);
+}
+
+/* The per-line rewriting layer: one source line in, rewritten line(s) out. It is
+   a trait of its own both because it is a distinct layer (`emit_raw_line` and
+   `emit_body` are the only ways in from the pipeline above) and because the two
+   halves would otherwise run into `MAX_METHOD`. `struct Pipe` uses both. */
+trait RewriteOps {
+    void replace_self(const char *s, size_t n, Buf *out);
+    /* interface values: boxing, the declaration, the assignment and `return` */
+    void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
+    char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
+    char *try_iface_assign(struct SymTab *sym, const char *line);
+    char *try_return(struct SymTab *sym, const char *line);
+    char *try_delete(struct SymTab *sym, const char *line);
+    char *transform_line(struct SymTab *sym, const char *line);
+    char *try_var_decl(struct SymTab *sym, const char *line);
+    void transform_calls(struct SymTab *sym, const char *s, Buf *out);
+    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
+    int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_tr, size_t *out_end, int *out_ifptr);
+    int decl_end_is_bare(const char *s);
+    void scope_track(struct SymTab *sym, size_t ls, size_t le);
+    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
+}
+
+struct Pipe {
+    FILE *out;
+    FILE *hout;
+} use PipeOps, RewriteOps;
+
+/* Rewrite a struct body: each field's type is qualified and the struct-typed and
+   interface-typed fields are recorded in `S` so nested construction and field
+   chains can find them. Returns a new body string. This is a `Pipe` method now
+   (see `impl PipeOps for Pipe` below). */
+
+impl PipeOps for Pipe {
+    void emit_trait_def(FILE *f, const Trait *T, size_t srcline) {
+        int i, k;
+        self->line_at(f, srcline);
+        fprintf(f, "struct %s_vtbl {\n", T->cname);
+        for (i = 0; i < T->nm; i++) {
+            const Method *m = &T->m[i];
+            fprintf(f, "    %s (*%s)(void *", m->ret, m->name);
+            for (k = 0; k < m->nparams; k++) fprintf(f, ", %s", m->ptypes[k]);
+            fprintf(f, ");\n");
+        }
+        fprintf(f, "};\n");
+        fprintf(f, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n",
+                T->cname, T->cname);
+        self->line_break();
+    }
+
+    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body, size_t srcline) {
+        int i;
+        size_t blen = strlen(body);
+
+        self->line_at(f, srcline);
+        fprintf(f, "struct %s {", S->cname);
+        if (blen && body[0] != '\n') fputc('\n', f);
+        if (blen) fputs(body, f);
+        if (blen == 0 || body[blen - 1] != '\n') fputc('\n', f);
+        for (i = 0; i < S->nu; i++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[i], low);
+            fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", sym->traits[S->use_i[i]].cname, low);
+        }
+        fprintf(f, "};\n");
+        self->line_break();
+    }
+
+    /* append one ".__<trait>_vptr = &<Struct>_<Trait>_vtable" per used trait */
+    void put_own_vptr(Buf *b, const Struct *S, int *first) {
+        int h;
+        (void)self;  /* the buffer is passed in; the receiver is not used */
+        for (h = 0; h < S->nu; h++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[h], low);
+            if (!*first) buf_puts(b, ", ");
+            *first = 0;
+            buf_puts(b, ".__");
+            buf_puts(b, low);
+            buf_puts(b, "_vptr = &");
+            buf_puts(b, S->cname);
+            buf_putc(b, '_');
+            buf_puts(b, S->use_t[h]);
+            buf_puts(b, "_vtable");
+        }
+    }
+
+    /* Emit "recv.__<trait>_vptr = &...;" for `recv` (when `with_self`) and,
+       recursively, for its struct-typed fields. Statements rather than
+       designators, so a nested object the user already initialised is never
+       overridden. */
+    void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv,
+                                const char *ind, int with_self, int depth) {
+        int i, h;
+
+        (void)self;  /* the body walks struct fields; the receiver is not used */
+        for (h = 0; with_self && h < S->nu; h++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[h], low);
+            buf_puts(b, ind);
+            buf_puts(b, recv);
+            buf_puts(b, ".__");
+            buf_puts(b, low);
+            buf_puts(b, "_vptr = &");
+            buf_puts(b, S->cname);
+            buf_putc(b, '_');
+            buf_puts(b, S->use_t[h]);
+            buf_puts(b, "_vtable;\n");
+        }
+        for (i = 0; i < S->nf; i++) {
+            const Struct *F = &sym->structs[S->ftype[i]];
+            char sub[MAX_NAME * (MAX_DEPTH + 3)];
+            if (F->nu == 0 && !needs_nested_init(sym->structs, F, depth + 1)) continue;
+            if ((size_t)snprintf(sub, sizeof sub, "%s.%s", recv, S->fname[i]) >= sizeof sub)
+                die(0, "nested field path too long in struct '%s'", S->name);
+            self->put_nested_assignments(sym, b, F, sub, ind, 1, depth + 1);
+        }
+    }
+
+    /* Write the vptrs of a heap object obtained from malloc/calloc: the object's
+       own vptrs use '->', its struct-typed fields recurse with the nested form. */
+    void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind) {
+        int i, h;
+
+        (void)self;  /* the body walks struct fields; the receiver is not used */
+        for (h = 0; h < S->nu; h++) {
+            char low[MAX_NAME];
+            to_lower(S->use_t[h], low);
+            buf_puts(b, ind);
+            buf_puts(b, ptr);
+            buf_puts(b, "->__");
+            buf_puts(b, low);
+            buf_puts(b, "_vptr = &");
+            buf_puts(b, S->cname);
+            buf_putc(b, '_');
+            buf_puts(b, S->use_t[h]);
+            buf_puts(b, "_vtable;\n");
+        }
+        for (i = 0; i < S->nf; i++) {
+            const Struct *F = &sym->structs[S->ftype[i]];
+            char sub[MAX_NAME * (MAX_DEPTH + 3)];
+            if (F->nu == 0 && !needs_nested_init(sym->structs, F, 1)) continue;
+            if ((size_t)snprintf(sub, sizeof sub, "%s->%s", ptr, S->fname[i]) >= sizeof sub)
+                die(0, "nested field path too long in struct '%s'", S->name);
+            self->put_nested_assignments(sym, b, F, sub, ind, 1, 1);
+        }
+    }
+
+    /* Does a body contain a call that will become a vtable dispatch? Any `.m(` /
+       `->m(` whose `m` names a declared trait method counts; when it does, the
+       impl's vtable variable must be declared before the method bodies. */
+    int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen) {
+        size_t i = bstart, end = bstart + blen;
+
+        (void)self;  /* the body only consults the symbol table for the method */
+        while (i < end) {
+            char c = g_src[i];
+            if (c == '"' || c == '\'') {
+                size_t j = skip_literal(i);
+                i = (j > end) ? end : j;
+                continue;
+            }
+            if (c == '/' && i + 1 < end &&
+                (g_src[i + 1] == '/' || g_src[i + 1] == '*')) {
+                size_t j = skip_comment(i);
+                i = (j > end) ? end : j;
+                continue;
+            }
+            if (c == '.' || c == '-') {
+                size_t ms = (c == '.') ? i + 1 : i + 2;
+                size_t e, ml;
+                char mem[MAX_NAME];
+                if (c == '-') {
+                    if (i + 1 >= end || g_src[i + 1] != '>') { i++; continue; }
+                }
+                e = ms;
+                while (e < end && is_ident_char((unsigned char)g_src[e])) e++;
+                ml = e - ms;
+                if (ml > 0 && ml < MAX_NAME && e < end && g_src[e] == '(') {
+                    memcpy(mem, g_src + ms, ml);
+                    mem[ml] = 0;
+                    if (sym->is_any_trait_method(mem)) return 1;
+                }
+                i = (e > i) ? e : i + 1;
+                continue;
+            }
+            i++;
+        }
+        return 0;
+    }
+
+    /* Analyse one declaration piece: the struct its type names (an index into
+       sym->structs, or -1), the trait when the type is an interface value
+       (`*tr`), the identifier span [*ia,*ib) of the base type name, its
+       generated spelling (`cbase`), whether "struct " must be inserted, the
+       declared name ("" when unnamed) and whether it is a pointer. */
+    const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified) {
+        char buf[MAX_NAME * 2], seg[MAX_NAME];
+        size_t i;
+
+        (void)self;  /* a pure string helper; the receiver is not used */
+        *qualified = 0;
+        for (i = 0; is_ident_char((unsigned char)p[i]); i++)
+            if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
+        if (i == 0) return NULL;
+        memcpy(seg, p, i);
+        seg[i] = 0;
+        snprintf(buf, sizeof buf, "%s", seg);
+        p += i;
+
+        for (;;) {
+            const char *z = p;
+            while (*z == ' ' || *z == '\t') z++;
+            if (z[0] == ':' && z[1] == ':') {
+                char tmp[MAX_NAME * 2];
+                z += 2;
+                while (*z == ' ' || *z == '\t') z++;
+                for (i = 0; is_ident_char((unsigned char)z[i]); i++)
+                    if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
+                if (i == 0) return NULL;
+                memcpy(seg, z, i);
+                seg[i] = 0;
+                if (snprintf(tmp, sizeof tmp, "%s_%s", buf, seg) >= (int)sizeof tmp) return NULL;
+                snprintf(buf, sizeof buf, "%s", tmp);
+                *qualified = 1;
+                p = z + i;
+                continue;
+            }
+            break;
+        }
+
+        snprintf(shortname, MAX_NAME, "%s", seg);
+        if (*qualified) snprintf(cname, MAX_NAME, "%s", buf);
+        else snprintf(cname, MAX_NAME, "%s%s", g_ns, buf);
+        return p;
+    }
+
+    int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr) {
+        size_t a, b, lim = 0, tn, ea, eb;
+        char type[MAX_NAME * 2], base[MAX_NAME];
+        int idx = -1;
+        const Struct *S;
+        const Trait *T;
+
+        (void)self;  /* the body only consults the symbol table for the type */
+        *ia = -1;
+        *ib = -1;
+        *need_struct = 0;
+        *tr = -1;
+        cbase[0] = 0;
+        base[0] = 0;
+        name[0] = 0;
+        *isptr = 0;
+
+        while (lim < n && s[lim] != '[') lim++;
+        if (!last_ident(s, lim, &a, &b)) return -1;
+
+        {
+            size_t lsx = b;
+            char last[MAX_NAME];
+            while (lsx > a && is_ident_char((unsigned char)s[lsx - 1])) lsx--;
+            snprintf(last, sizeof last, "%.*s", (int)(b - lsx), s + lsx);
+            if (!is_type_keyword(last) && !sym->find_struct(last) && !sym->find_trait(last)) {
+                snprintf(name, MAX_NAME, "%s", last);
+                snprintf(type, sizeof type, "%.*s", (int)a, s);
+            } else {
+                snprintf(type, sizeof type, "%.*s", (int)n, s);   /* the type itself */
+            }
+        }
+        if (lim < n) name[0] = 0;                                 /* array: no object to bind */
+
+        tn = strlen(type);
+        while (tn > 0 && (type[tn - 1] == '*' || isspace((unsigned char)type[tn - 1]))) tn--;
+        if (tn == 0 || !last_ident(type, tn, &ea, &eb)) return -1;
+
+        {
+            size_t bl = eb - ea;
+            if (bl >= sizeof base) bl = sizeof base - 1;
+            memcpy(base, type + ea, bl);
+            base[bl] = 0;
+            S = sym->find_struct(base);
+            T = S ? NULL : sym->find_trait(base);
+            if (S) snprintf(cbase, MAX_NAME, "%s", S->cname);
+            else if (T) snprintf(cbase, MAX_NAME, "%s", T->cname);
+        }
+
+        if (S) {
+            idx = (int)(S - sym->structs);
+            *ia = (int)ea;
+            *ib = (int)eb;
+            *need_struct = !already_qualified(type, ea);
+        } else if (T) {
+            *tr = (int)(T - sym->traits);
+            *ia = (int)ea;
+            *ib = (int)eb;
+            *need_struct = !already_qualified(type, ea);
+        } else if (strlen(base) > 6 && strcmp(base + strlen(base) - 6, "_iface") == 0) {
+            char pre[MAX_NAME];
+            size_t pl = strlen(base) - 6;
+            if (pl < sizeof pre) {
+                memcpy(pre, base, pl);
+                pre[pl] = 0;
+                T = sym->find_trait(pre);
+                if (T) *tr = (int)(T - sym->traits);
+            }
+        }
+
+        *isptr = (strchr(type, '*') != NULL);
+        return idx;
+    }
+
+    /* emit a declaration piece: replace the base type identifier [ia,ib) with its
+       generated spelling, inserting "struct " as needed */
+    void emit_qualified_type(Buf *b, const char *piece, size_t len, int ia, int ib, const char *cbase, int need_struct, int is_trait) {
+        (void)self;  /* a pure emit helper; the receiver is not used */
+        if (ia < 0) { buf_putn(b, piece, len); return; }
+        buf_putn(b, piece, (size_t)ia);
+        if (need_struct) buf_puts(b, "struct ");
+        buf_puts(b, cbase);
+        if (is_trait) buf_puts(b, "_iface");
+        buf_putn(b, piece + ib, len - (size_t)ib);
+    }
+
+    char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos) {
+        Buf out;
+        size_t n = strlen(body), i = 0;
+
+        S->nf = 0;
+        S->npf = 0;
+        S->nif = 0;
+        S->npif = 0;
+        buf_init(&out);
+
+        while (i < n) {
+            size_t j = i, depth = 0;
+            int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr;
+            char fname[MAX_NAME], cbase[MAX_NAME];
+
+            while (j < n) {
+                char c = body[j];
+                if (c == '"' || c == '\'') {
+                    char q = c;
+                    j++;
+                    while (j < n) {
+                        if (body[j] == '\\' && j + 1 < n) { j += 2; continue; }
+                        if (body[j] == q) { j++; break; }
+                        j++;
+                    }
+                    continue;
+                }
+                if (c == '{' || c == '(' || c == '[') depth++;
+                else if (c == '}' || c == ')' || c == ']') depth--;
+                else if (c == ';' && depth == 0) break;
+                j++;
+            }
+
+            idx = self->analyse_param(sym, body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
+            self->emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
+
+            if (idx >= 0 && fname[0] && ptr) {          /* pointer field to a known struct */
+                if (S->npf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+                snprintf(S->pfname[S->npf], MAX_NAME, "%s", fname);
+                S->pftype[S->npf] = idx;
+                S->npf++;
+            } else if (tr >= 0 && fname[0] && ptr) {    /* pointer interface field: `struct T *x` */
+                if (S->npif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+                snprintf(S->pifname[S->npif], MAX_NAME, "%s", fname);
+                S->piftype[S->npif] = tr;
+                S->npif++;
+            } else if (tr >= 0 && fname[0]) {           /* interface-value field: `T x` */
+                if (S->nif >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+                snprintf(S->ifname[S->nif], MAX_NAME, "%s", fname);
+                S->iftype[S->nif] = tr;
+                S->nif++;
+            } else if (idx >= 0 && fname[0]) {          /* value field of a known struct */
+                if (S->nf >= MAX_FIELDS) die(pos, "too many struct fields in '%s'", S->name);
+                snprintf(S->fname[S->nf], MAX_NAME, "%s", fname);
+                S->ftype[S->nf] = idx;
+                S->nf++;
+            }
+            if (j < n) { buf_putc(&out, ';'); j++; }
+            i = j;
+        }
+        return out.p;
+    }
+
+    /* raw param list -> verbatim params + type-only list */
+    void parse_params(Method *m, const char *raw) {
+        char tmp[MAX_PARAM * 2];
+        char *p;
+        int depth = 0;
+        size_t start = 0, i, n;
+
+        (void)self;  /* a pure parse helper; the receiver is not used */
+        snprintf(tmp, sizeof tmp, "%s", raw);
+        trim(tmp);
+
+        m->nparams = 0;
+        m->params[0] = 0;
+
+        if (!tmp[0] || strcmp(tmp, "void") == 0) return;
+
+        p = tmp;
+        n = strlen(p);
+        for (i = 0; i <= n; i++) {
+            char c = (i < n) ? p[i] : ',';
+            if (i < n) {
+                if (c == '(' || c == '[') depth++;
+                else if (c == ')' || c == ']') depth--;
+            }
+            if (c == ',' && depth == 0) {
+                char piece[MAX_NAME * 2];
+                size_t len = i - start;
+                if (len >= sizeof piece) len = sizeof piece - 1;
+                memcpy(piece, p + start, len);
+                piece[len] = 0;
+                trim(piece);
+                if (piece[0]) {
+                    if (m->nparams >= MAX_PARAMS)
+                        die(0, "too many parameters in method '%s'", m->name);
+                    if (m->nparams) strncat(m->params, ", ", sizeof m->params - strlen(m->params) - 1);
+                    strncat(m->params, piece, sizeof m->params - strlen(m->params) - 1);
+                    param_type_only(piece, m->ptypes[m->nparams]);
+                    m->nparams++;
+                }
+                start = i + 1;
+            }
+        }
+    }
+
+    /* "void greet(int a)" -> ret="void", name="greet", params="int a" */
+    void split_decl(const char *decl, size_t pos, Method *m) {
+        const char *lp = strchr(decl, '(');
+        const char *rp;
+        char pre[MAX_NAME * 2];
+        int end, st;
+
+        (void)self;  /* a pure parse helper; the receiver is not used */
+        if (!lp) die(pos, "expected '(' in method declaration");
+        snprintf(pre, sizeof pre, "%.*s", (int)(lp - decl), decl);
+        trim(pre);
+
+        end = (int)strlen(pre);
+        st = end;
+        while (st > 0 && is_ident_char((unsigned char)pre[st - 1])) st--;
+        if (st == end) die(pos, "expected method name in declaration");
+        snprintf(m->name, sizeof m->name, "%.*s", end - st, pre + st);
+        pre[st] = 0;
+        trim(pre);
+        if (!pre[0]) die(pos, "expected return type for method '%s'", m->name);
+        snprintf(m->ret, sizeof m->ret, "%s", pre);
+
+        rp = strchr(lp, ')');
+        if (!rp) die(pos, "expected ')' in declaration of '%s'", m->name);
+        {
+            char raw[MAX_PARAM * 2];
+            size_t len = (size_t)(rp - lp - 1);
+            if (len >= sizeof raw) len = sizeof raw - 1;
+            memcpy(raw, lp + 1, len);
+            raw[len] = 0;
+            self->parse_params(m, raw);
+        }
+        {
+            const char *tail = rp + 1;
+            while (*tail == ' ' || *tail == '\t') tail++;
+            if (*tail) die(pos, "unexpected '%s' after declaration of '%s'", tail, m->name);
+        }
+    }
+
+    size_t parse_trait(struct SymTab *sym, size_t p) {
+        char name[MAX_NAME];
+        Trait *T;
+        size_t close, bstart, bend, i;
+        size_t tline = self->line_of(p);            /* source line of 'trait' */
+        Buf raw, clean;
+
+        p += 5;                                     /* "trait" */
+        p = skip_ws_comments(p);
+        p = read_ident(p, name, sizeof name);
+        if (!name[0]) die(p, "expected trait name");
+        p = skip_ws_comments(p);
+        if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after trait '%s'", name);
+
+        close = match_delim(p, '{', '}');
+        bstart = p + 1;
+        bend = close;
+
+        if (sym->ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
+        T = &sym->traits[sym->ntraits++];
+        snprintf(T->name, sizeof T->name, "%s", name);
+        if (strlen(g_ns) + strlen(name) >= sizeof T->cname)
+            die(p, "namespace-qualified name too long");
+        snprintf(T->cname, sizeof T->cname, "%s%s", g_ns, name);
+        T->nm = 0;
+
+        buf_init(&raw);
+        buf_putn(&raw, g_src + bstart, bend - bstart);
+        buf_init(&clean);
+        {
+            /* strip comments once so ';' inside them does not split declarations */
+            size_t k = 0, ln = raw.n;
+            while (k < ln) {
+                char c = raw.p[k];
+                if (c == '"' || c == '\'') {
+                    char q = c;
+                    buf_putc(&clean, raw.p[k++]);
+                    while (k < ln) {
+                        if (raw.p[k] == '\\' && k + 1 < ln) {
+                            buf_putc(&clean, raw.p[k]);
+                            buf_putc(&clean, raw.p[k + 1]);
+                            k += 2;
+                            continue;
+                        }
+                        buf_putc(&clean, raw.p[k]);
+                        if (raw.p[k] == q) { k++; break; }
+                        k++;
+                    }
+                    continue;
+                }
+                if (c == '/' && k + 1 < ln && raw.p[k + 1] == '/') {
+                    while (k < ln && raw.p[k] != '\n') k++;
+                    continue;
+                }
+                if (c == '/' && k + 1 < ln && raw.p[k + 1] == '*') {
+                    k += 2;
+                    while (k + 1 < ln && !(raw.p[k] == '*' && raw.p[k + 1] == '/')) k++;
+                    k = (k + 1 < ln) ? k + 2 : ln;
+                    continue;
+                }
+                buf_putc(&clean, raw.p[k++]);
+            }
+        }
+        free(raw.p);
+
+        i = 0;
+        for (;;) {
+            size_t j = i;
+            while (j <= clean.n && !(j < clean.n && clean.p[j] == ';')) j++;
+            {
+                char *seg = xstrndup(clean.p + i, j - i);
+                trim(seg);
+                if (seg[0]) {
+                    if (T->nm >= MAX_METHOD)
+                        die(close, "too many methods in trait '%s'", T->name);
+                    self->split_decl(seg, close, &T->m[T->nm]);
+                    T->nm++;
+                }
+                free(seg);
+            }
+            if (j >= clean.n) break;
+            i = j + 1;
+        }
+        free(clean.p);
+
+        /* an exported declaration goes into the .h alone; otherwise it goes to the
+           .c (and, in single-file mode, to the .h as well: the .h is types-only) */
+        if (!g_multi) {
+            self->emit_trait_def(self->out, T, tline);
+            self->emit_trait_def(self->hout, T, tline);
+        } else if (g_ctor_pub) {
+            self->emit_trait_def(self->hout, T, tline);
+        } else {
+            self->emit_trait_def(self->out, T, tline);
+        }
+        return close + 1;
+    }
+
+    size_t parse_struct(struct SymTab *sym, size_t p) {
+        char name[MAX_NAME];
+        Struct *S;
+        size_t close, bstart, bend, q, probe;
+        size_t sline = self->line_of(p);            /* source line of 'struct' */
+        int i;
+
+        p += 6;                                     /* "struct" */
+        p = skip_ws_comments(p);
+        p = read_ident(p, name, sizeof name);
+        if (!name[0]) die(p, "expected struct name");
+        p = skip_ws_comments(p);
+        if (p >= g_len || g_src[p] != '{') die(p, "expected '{' after struct '%s'", name);
+
+        close = match_delim(p, '{', '}');
+        bstart = p + 1;
+        bend = close;
+
+        if (sym->nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
+        S = &sym->structs[sym->nstructs++];
+        snprintf(S->name, sizeof S->name, "%s", name);
+        if (strlen(g_ns) + strlen(name) >= sizeof S->cname)
+            die(p, "namespace-qualified name too long");
+        snprintf(S->cname, sizeof S->cname, "%s%s", g_ns, name);
+        S->nu = 0;
+
+        q = close + 1;
+        probe = q;
+        while (probe < g_len && (g_src[probe] == ' ' || g_src[probe] == '\t')) probe++;
+        if (probe < g_len && g_src[probe] == '\n') {
+            size_t t = probe + 1;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (word_at(t, "use")) probe = t;
+        }
+
+        if (word_at(probe, "use")) {
+            size_t u = skip_ws_comments(probe + 3);
+            for (;;) {
+                char tn[MAX_NAME];
+                u = read_ident(u, tn, sizeof tn);
+                if (!tn[0]) die(u, "expected trait name in 'use' clause of '%s'", S->name);
+                if (S->nu >= MAX_TRAITS) die(u, "too many traits used by '%s'", S->name);
+                snprintf(S->use_t[S->nu], MAX_NAME, "%s", tn);
+                S->nu++;
+                u = skip_ws_comments(u);
+                if (u < g_len && g_src[u] == ',') { u = skip_ws_comments(u + 1); continue; }
+                break;
+            }
+            if (u >= g_len || g_src[u] != ';') die(u, "expected ';' after 'use' clause of '%s'", S->name);
+            q = u + 1;
+        } else {
+            size_t t = q;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < g_len && g_src[t] == ';') q = t + 1;
+        }
+
+        for (i = 0; i < S->nu; i++) {
+            Trait *T = sym->find_trait(S->use_t[i]);
+            if (!T)
+                die(p, "struct '%s' uses undefined trait '%s'", S->name, S->use_t[i]);
+            S->use_i[i] = (int)(T - sym->traits);
+        }
+
+        {
+            char *raw = xstrndup(g_src + bstart, bend - bstart);
+            char *qbody = self->parse_fields(sym, raw, S, p);
+            free(raw);
+            if (!g_multi) {
+                self->emit_struct_def(sym, self->out, S, qbody, sline);
+                self->emit_struct_def(sym, self->hout, S, qbody, sline);
+            } else if (g_ctor_pub) {
+                self->emit_struct_def(sym, self->hout, S, qbody, sline);
+            } else {
+                self->emit_struct_def(sym, self->out, S, qbody, sline);
+            }
+            free(qbody);
+        }
+        return q;
+    }
+
+    size_t parse_impl(struct SymTab *sym, size_t p) {
+        char trait_name[MAX_NAME], struct_name[MAX_NAME];
+        Trait *T;
+        Struct *S;
+        size_t close, i, k;
+        size_t dline = self->line_of(p);            /* source line of 'impl' */
+        ImplMethod impl[MAX_METHOD];
+        int nimpl = 0, found;
+
+        p += 4;                                     /* "impl" */
+        p = skip_ws_comments(p);
+        p = read_ident(p, trait_name, sizeof trait_name);
+        if (!trait_name[0]) die(p, "expected trait name after 'impl'");
+        p = skip_ws_comments(p);
+        if (!word_at(p, "for")) die(p, "expected 'for' in impl of '%s'", trait_name);
+        p = skip_ws_comments(p + 3);
+        p = read_ident(p, struct_name, sizeof struct_name);
+        if (!struct_name[0]) die(p, "expected struct name after 'for'");
+        p = skip_ws_comments(p);
+        if (p >= g_len || g_src[p] != '{') die(p, "expected '{' in impl body");
+
+        close = match_delim(p, '{', '}');
+
+        T = sym->find_trait(trait_name);
+        if (!T) die(p, "impl for undefined trait '%s'", trait_name);
+        S = sym->find_struct(struct_name);
+        if (!S) die(p, "impl for undefined struct '%s'", struct_name);
+        if (!struct_uses(S, T->name))
+            die(p, "struct '%s' does not use trait '%s'", S->name, T->name);
+
+        /* collect the methods written in the impl block */
+        i = p + 1;
+        while (1) {
+            size_t lp, rp, bp, be;
+            char header[MAX_NAME * 2];
+            char pre[MAX_NAME * 2];
+            int end, st;
+
+            i = skip_ws_comments(i);
+            if (i >= close) break;
+
+            lp = i;
+            while (lp < close && g_src[lp] != '(') lp++;
+            if (lp >= close) die(i, "expected method declaration inside impl of '%s' for '%s'",
+                                 T->name, S->name);
+
+            snprintf(pre, sizeof pre, "%.*s", (int)(lp - i), g_src + i);
+            trim(pre);
+            end = (int)strlen(pre);
+            st = end;
+            while (st > 0 && is_ident_char((unsigned char)pre[st - 1])) st--;
+            if (st == end) die(i, "expected method name inside impl of '%s' for '%s'",
+                               T->name, S->name);
+            if (nimpl >= MAX_METHOD) die(i, "too many methods in impl of '%s'", T->name);
+            snprintf(header, sizeof header, "%.*s", end - st, pre + st);
+
+            rp = match_delim(lp, '(', ')');
+            {
+                size_t blen = (rp > lp + 1) ? (rp - lp - 1) : 0;
+                if (blen >= MAX_PARAM) die(lp, "parameter list too long (max %d)", MAX_PARAM - 1);
+                memcpy(impl[nimpl].params, g_src + lp + 1, blen);
+                impl[nimpl].params[blen] = 0;
+                trim(impl[nimpl].params);
+            }
+
+            bp = skip_ws_comments(rp + 1);
+            if (bp >= close || g_src[bp] != '{')
+                die(bp, "expected '{' to start body of method '%s'", header);
+            be = match_delim(bp, '{', '}');
+
+            snprintf(impl[nimpl].name, MAX_NAME, "%s", header);
+            impl[nimpl].bstart = bp + 1;
+            impl[nimpl].blen = be - bp - 1;
+            nimpl++;
+
+            i = be + 1;
+        }
+
+        /* every impl method must belong to the trait */
+        for (k = 0; k < (size_t)nimpl; k++) {
+            int j;
+            found = 0;
+            for (j = 0; j < T->nm; j++)
+                if (strcmp(T->m[j].name, impl[k].name) == 0) { found = 1; break; }
+            if (!found)
+                die(p, "method '%s' is not declared in trait '%s'", impl[k].name, T->name);
+        }
+
+        /* bodies that call a sibling method need the vtable declared up front */
+        {
+            int needs_vtable = 0;
+            for (k = 0; k < (size_t)nimpl; k++)
+                if (self->body_needs_vtable(sym, impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
+            if (needs_vtable) {
+                self->line_at(self->out, dline);
+                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n\n",
+                        T->cname, S->cname, T->name);
+                self->line_break();
+            }
+        }
+
+        /* emit one function per trait method, in trait order */
+        for (k = 0; k < (size_t)T->nm; k++) {
+            Method *tm = &T->m[k];
+            int idx = -1;
+            int j;
+            for (j = 0; j < nimpl; j++)
+                if (strcmp(impl[j].name, tm->name) == 0) { idx = j; break; }
+            if (idx < 0)
+                die(p, "trait method '%s' is not implemented for struct '%s'",
+                    tm->name, S->name);
+
+            self->line_at(self->out, dline);
+            fprintf(self->out, "static %s %s_%s_%s(void *self", tm->ret, S->cname, T->name, tm->name);
+            if (tm->nparams > 0) fprintf(self->out, ", %s", impl[idx].params);
+            fprintf(self->out, ") {\n");
+            fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
+            self->emit_body(sym, self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
+            fprintf(self->out, "}\n\n");
+            self->line_break();
+        }
+
+        self->line_at(self->out, dline);
+        fprintf(self->out, "static struct %s_vtbl %s_%s_vtable = {\n",
+                T->cname, S->cname, T->name);
+        for (k = 0; k < (size_t)T->nm; k++)
+            fprintf(self->out, "    .%s = %s_%s_%s%s\n",
+                    T->m[k].name, S->cname, T->name, T->m[k].name,
+                    (k + 1 < (size_t)T->nm) ? "," : "");
+        fprintf(self->out, "};\n\n");
+        self->line_break();
+
+        {
+            size_t q = close + 1;
+            size_t t = q;
+            while (t < g_len && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < g_len && g_src[t] == ';') q = t + 1;
+            return q;
+        }
+    }
+
+    /* The 1-based source line a byte offset falls on; `die` derives its
+       line:column the same way. */
+    int line_of(size_t pos) {
+        int line = 1;
+        size_t i;
+        (void)self;    /* the source buffer is file-scope, not part of the receiver */
+        for (i = 0; i < pos && i < g_len; i++) {
+            if (g_src[i] == '\n') line++;
+        }
+        return line;
+    }
+
+    /* Invalidate the running mapping so the next `line_at` writes an explicit
+       directive -- used after a run of generated boilerplate. */
+    void line_break(void) {
+        (void)self;    /* the mapping is file-scope state */
+        g_line_next = -1;
+    }
+
+    /* Begin an output line of `f` that originates at `srcline`. A `#line`
+       directive is written only when the running mapping would diverge, so a run
+       of consecutive source lines stays directive-free. Only the .c is tracked:
+       the .h is included verbatim by the .c, so a directive out there would point
+       at the wrong file. */
+    void line_at(FILE *f, size_t srcline) {
+        if (f != self->out || !g_emit_line) return;
+        if ((long)srcline != g_line_next)
+            fprintf(f, "#line %ld \"%s\"\n", (long)srcline, g_path);
+        g_line_next = (long)srcline + 1;
+    }
+
+    /* If the line just rewritten hoisted a temp receiver, write that declaration
+       first: it must run before the rewritten line, and both belong to the same
+       source line, so the mapping is re-anchored afterwards. */
+    void emit_hoisted(void) {
+        if (g_hoist.n == 0) return;
+        fputs(g_hoist.p, self->out);
+        fputc('\n', self->out);
+        self->line_break();
+        self->line_at(self->out, (size_t)g_cur_line);
+    }
+
+    /* Pass one raw source line through the shared rewriting pipeline. */
+    void emit_raw_line(struct SymTab *sym, size_t ls, size_t le) {
+        size_t len = le - ls, t = 0;
+        char *line, *sig;
+        int pre = sym->nvars, has_body = 0;
+        size_t body_abs = 0;
+
+        if (!g_hoist.cap) buf_init(&g_hoist);
+        g_hoist.n = 0;
+        g_hoist.p[0] = 0;
+
+        line = xstrndup(g_src + ls, len);
+        g_cur_line = self->line_of(ls);
+        while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
+        if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
+            fputs(line, self->out);
+            free(line);
+            return;
+        }
+
+        /* A leading `pub` marks an exported declaration (multi-file mode): drop it
+           from the emitted line and remember it, so a bodiless signature can be
+           routed into the .h instead (see just below). */
+        g_line_pub = 0;
+        if (t + 3 <= len && strncmp(line + t, "pub", 3) == 0 &&
+            !is_ident_char((unsigned char)line[t + 3])) {
+            size_t z = t + 3;
+            while (z < len && (line[z] == ' ' || line[z] == '\t')) z++;
+            g_line_pub = 1;
+            memmove(line, line + z, len - z + 1);
+            len -= z;
+            ls += z;
+            t = 0;
+        }
+
+        g_line_off = ls;
+        sig = self->parse_func_sig(sym, line, ls, &has_body, &body_abs);
+        if (sig) {
+            /* an exported prototype belongs in the .h and nowhere else; the
+               newline compile_range writes still lands in the .c, so the .c keeps
+               a blank line where the declaration used to be */
+            if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
+            fputs(sig, (g_line_pub && g_multi && !has_body) ? self->hout : self->out);
+            free(sig);
+        } else {
+            char *out = self->transform_line(sym, line);
+            self->emit_hoisted();
+            fputs(out, self->out);
+            free(out);
+        }
+        free(line);
+        self->scope_track(sym, ls, le);
+    }
+
+    /* Scan [start,end): expand traits/structs/impls, pass the rest through. */
+    void compile_range(struct SymTab *sym, size_t start, size_t end) {
+        size_t pos = start;
+
+        while (pos < end) {
+            size_t ls = pos, q, le;
+
+            q = ls;
+            while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
+
+            /* An optional `pub` marks a trait/struct as exported (multi-file
+               mode); `pub` on a function line is stripped later, in
+               `emit_raw_line`. */
+            g_ctor_pub = 0;
+            if (word_at(q, "pub")) {
+                size_t t = skip_ws_comments(q + 3);
+                if (word_at(t, "trait") || word_at(t, "struct")) { g_ctor_pub = 1; q = t; }
+            }
+
+            /* `import A::B;` is a compilation-unit declaration: the build driver
+               resolves it and turns it into an `#include` line, so the line itself
+               is consumed here and never emitted. Anything less than a complete
+               header falls through as a plain line, which keeps a line that merely
+               starts with the word from being mistaken for one. */
+            if (word_at(q, "import")) {
+                size_t t = skip_ws_comments(q + 6);
+                int ok = 1;
+                size_t nseg = 0;
+                for (;;) {
+                    char seg[MAX_NAME];
+                    t = read_ident(t, seg, sizeof seg);
+                    if (!seg[0]) { ok = 0; break; }
+                    nseg++;
+                    t = skip_ws_comments(t);
+                    if (t + 1 < g_len && g_src[t] == ':' && g_src[t + 1] == ':') {
+                        t = skip_ws_comments(t + 2);
+                        continue;
+                    }
+                    break;
+                }
+                if (ok && nseg && t < g_len && g_src[t] == ';') {
+                    size_t e = t;
+                    while (e < end && g_src[e] != '\n') e++;
+                    pos = (e < end) ? e + 1 : end;
+                    continue;
+                }
+            }
+
+            if (word_at(q, "trait")) {
+                char nm[MAX_NAME];
+                size_t t = read_ident(skip_ws_comments(q + 5), nm, sizeof nm);
+                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_trait(sym, q); continue; }
+            }
+            if (word_at(q, "impl")) {
+                char nm[MAX_NAME];
+                size_t t = read_ident(skip_ws_comments(q + 4), nm, sizeof nm);
+                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_impl(sym, q); continue; }
+            }
+            if (word_at(q, "struct")) {
+                size_t t = skip_ws_comments(q + 6);
+                char nm[MAX_NAME];
+                t = read_ident(t, nm, sizeof nm);
+                if (nm[0]) {
+                    t = skip_ws_comments(t);
+                    if (t < g_len && g_src[t] == '{') { pos = self->parse_struct(sym, q); continue; }
+                }
+            }
+
+            if (word_at(q, "namespace")) {
+                /* namespace A::B::C { ... } mangles every enclosed declaration
+                   with the prefix "A_B_C_" and resolves unqualified names there
+                   first. The braces themselves are consumed, never emitted. Only
+                   a complete header is a construct; anything else falls through
+                   as a plain line. */
+                size_t t = skip_ws_comments(q + 9);
+                char pre[MAX_NAME], seg[MAX_NAME], saved[MAX_NAME], open[MAX_NAME * 2];
+                size_t pl = 0, close = 0;
+                int nseg = 0, ok = 1;
+
+                pre[0] = 0;
+                for (;;) {
+                    size_t sl;
+
+                    t = read_ident(t, seg, sizeof seg);
+                    if (!seg[0]) {
+                        if (nseg == 0) { ok = 0; break; }
+                        die(t, "expected a name after '::' in namespace");
+                    }
+                    sl = strlen(seg);
+                    if (nseg && pl + sl + 2 >= sizeof pre) die(t, "namespace path too long");
+                    if (nseg) pre[pl++] = '_';
+                    memcpy(pre + pl, seg, sl);
+                    pl += sl;
+                    pre[pl] = 0;
+                    nseg++;
+                    t = skip_ws_comments(t);
+                    if (t + 1 < g_len && g_src[t] == ':' && g_src[t + 1] == ':') {
+                        t = skip_ws_comments(t + 2);
+                        continue;
+                    }
+                    break;
+                }
+
+                if (ok && t < g_len && g_src[t] == '{') {
+                    close = match_delim(t, '{', '}');
+
+                    snprintf(saved, sizeof saved, "%s", g_ns);
+                    /* compare against g_ns's own capacity: truncating the prefix
+                       would silently mangle every name inside */
+                    if (snprintf(open, sizeof open, "%s%s_", g_ns, pre) >= (int)sizeof g_ns)
+                        die(t, "namespace path too long");
+                    snprintf(g_ns, sizeof g_ns, "%s", open);
+
+                    self->compile_range(sym, t + 1, close);
+
+                    snprintf(g_ns, sizeof g_ns, "%s", saved);
+                    pos = close + 1;
+                    continue;
+                }
+            }
+
+            le = ls;
+            while (le < end && g_src[le] != '\n') le++;
+            self->line_at(self->out, self->line_of(ls));
+            self->emit_raw_line(sym, ls, le);
+            if (le < end) { fputc('\n', self->out); le++; }
+            pos = le;
+        }
+    }
+
+    /* Write the include guard and provenance banner into the header stream. */
+    void write_guard(const char *hpath) {
+        const char *b = strrchr(hpath, '/');
+        char guard[MAX_NAME * 2];
+        size_t i, j = 0;
+        b = b ? b + 1 : hpath;
+
+        for (i = 0; b[i] && b[i] != '.' && j + 1 < sizeof guard; i++)
+            guard[j++] = (isalnum((unsigned char)b[i]) ? (char)toupper((unsigned char)b[i]) : '_');
+        guard[j] = 0;
+        if (!j) snprintf(guard, sizeof guard, "CT_OUTPUT");
+        if (guard[0] >= '0' && guard[0] <= '9') {
+            memmove(guard + 1, guard, j + 1);
+            guard[0] = '_';
+        }
+        strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
+
+        fprintf(self->hout, "#ifndef %s\n#define %s\n\n", guard, guard);
+        if (g_multi)
+            fprintf(self->hout, "/* Generated by ctc v%s from %s (multi-file mode:\n"
+                            "   exported types; the matching .c includes this header).\n"
+                            "   Generated output is not covered by the GPL and may be "
+                            "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                    CTC_VERSION, g_path);
+        else
+            fprintf(self->hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
+                            "   generated .c is self-contained).\n"
+                            "   Generated output is not covered by the GPL and may be "
+                            "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                    CTC_VERSION, g_path);
+        snprintf(g_guard, sizeof g_guard, "%s", guard);
+    }
+
+    /* Print the CLI help text to stderr. */
+    void usage(const char *prog) {
+        (void)self;  /* a pure CLI helper; the receiver is not used */
+        fprintf(stderr,
+                "usage: %s [compile] <input.ct> [-o <output.c>] [-I <dir>]\n"
+                "       %s build <input.ct>... [-o <outdir>] [-I <dir>]...\n\n"
+                "L1: compiles C-with-traits (.ct) into plain C, writing <output.c> and\n"
+                "a matching header <output.h>; if -o is omitted the output is <input>.c\n"
+                "next to the input. `build` compiles every input in multi-file mode (the\n"
+                ".c includes its own .h, `pub` symbols go into the .h, an `import` adds\n"
+                "an include line, and `#line` is emitted) and prints the suggested cc\n"
+                "command.\n\n"
+                "  -o <file|dir>   compile: write the generated C to <file>\n"
+                "                  build: write the outputs into <dir>\n"
+                "  -I <dir>        extra `import` search root, repeatable; checked after\n"
+                "                  the importing file's own directory\n"
+                "  -v, --version   print the compiler version and exit\n"
+                "  -h, --help      print this help and exit\n",
+                prog, prog);
+    }
+
+    /* Derive the default C output path from the input ("a.ct" -> "a.c",
+       "a.h.ct" -> "a.c" -- the `.h.ct` basename names a header unit). */
+    void default_output(const char *in, char *out, size_t n) {
+        size_t l = strlen(in);
+        (void)self;  /* a pure CLI helper; the receiver is not used */
+        if (l > 5 && strcmp(in + l - 5, ".h.ct") == 0) {
+            snprintf(out, n, "%.*s.c", (int)(l - 5), in);
+        } else if (l > 3 && strcmp(in + l - 3, ".ct") == 0) {
+            snprintf(out, n, "%.*s.c", (int)(l - 3), in);
+        } else {
+            snprintf(out, n, "%s.c", in);
+        }
+    }
+
+    /* Derive the header path from the C output path ("<outc with .c -> .h>"). */
+    void header_path(const char *outc, char *out, size_t n) {
+        size_t l = strlen(outc);
+        (void)self;  /* a pure path helper; the receiver is not used */
+        if (l > 2 && strcmp(outc + l - 2, ".c") == 0) {
+            snprintf(out, n, "%.*s.h", (int)(l - 2), outc);
+        } else {
+            snprintf(out, n, "%s.h", outc);
+        }
+    }
+
+    /* Read one input file whole, normalising CRLF / lone CR. A failing open,
+       read or allocation is fatal. */
+    char *read_file(const char *path, size_t *out_len) {
+        FILE *f = fopen(path, "rb");
+        long sz;
+        char *buf;
+
+        (void)self;  /* a pure I/O helper; the receiver is not used */
+        if (!f) { fprintf(stderr, "ctc: cannot open '%s'\n", path); exit(1); }
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz < 0) { fprintf(stderr, "ctc: cannot read '%s'\n", path); exit(1); }
+
+        buf = xmalloc((size_t)sz + 1);
+        if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+            fprintf(stderr, "ctc: short read on '%s'\n", path);
+            exit(1);
+        }
+        buf[sz] = 0;
+        fclose(f);
+
+        /* normalise CRLF / lone CR */
+        {
+            size_t i = 0, j = 0;
+            while (i < (size_t)sz) {
+                if (buf[i] == '\r') {
+                    if (i + 1 < (size_t)sz && buf[i + 1] == '\n') i++;
+                    buf[j++] = '\n';
+                    i++;
+                } else {
+                    buf[j++] = buf[i++];
+                }
+            }
+            buf[j] = 0;
+            *out_len = j;
+        }
+        return buf;
+    }
+
+    /* Compile one input to `outc` and a matching header. `multi` selects
+       multi-file mode (see the trait declaration). Returns 0 on success. */
+    int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi) {
+        char hbuf[MAX_NAME * 4];
+        const char *base;
+
+        g_multi = multi;
+        g_ns[0] = 0;
+        sym->nvars = 0;
+        g_nscope = 0;
+        g_body_abs = 0;
+        g_body_pre = 0;
+        g_cur_rettr = -1;
+        g_ctor_pub = 0;
+        g_line_pub = 0;
+        /* multi-file mode accumulates the traits/structs/signatures across units
+           so a unit can name what the units built before it exported; a
+           single-file compile of the same file starts from an empty table, which
+           is what keeps its output identical to the single-file compiler's */
+        if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; }
+        buf_init(&g_unit_init);
+        g_has_unit_init = 0;
+
+        self->header_path(outc, hbuf, sizeof hbuf);
+        g_path = in;
+        g_src = self->read_file(in, &g_len);
+
+        /* `#line` is on in multi-file mode only: single-file output is left
+           untouched so it stays byte-identical to L0's */
+        g_emit_line = multi;
+        g_cur_line = 1;
+        g_line_next = -1;
+
+        self->out = fopen(outc, "w");
+        if (!self->out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
+        self->hout = fopen(hbuf, "w");
+        if (!self->hout) { fprintf(stderr, "ctc: cannot write '%s'\n", hbuf); fclose(self->out); return 1; }
+
+        self->write_guard(hbuf);
+
+        /* provenance banner: the generated C is a build product, not a source file */
+        fprintf(self->out, "/* Generated by ctc v%s from %s -- do not edit; "
+                       "change the .ct and re-run ctc. */\n"
+                       "/* Generated output is not covered by the GPL and may be "
+                       "used without restriction (LICENSE.EXCEPTION). */\n",
+                CTC_VERSION, g_path);
+
+        /* Every generated .c opens by including the header it was built with, so
+           its types are in scope; the imports the driver resolved follow, and the
+           blank line keeps the banner off the first source line. */
+        if (multi) {
+            int i;
+            base = strrchr(hbuf, '/');
+            base = base ? base + 1 : hbuf;
+            fprintf(self->out, "#include \"%s\"\n", base);
+            for (i = 0; i < g_nimp_h; i++)
+                fprintf(self->out, "#include \"%s\"\n", g_imp_h[i]);
+            fputc('\n', self->out);
+        }
+
+        self->compile_range(sym, 0, g_len);
+
+        /* file-scope objects/arrays: their vptr writes were collected while
+           scanning and are emitted here, after the types and vtables they
+           reference, as a constructor that runs before main */
+        if (g_has_unit_init)
+            fprintf(self->out,
+                    "static void __ct_init(void) __attribute__((constructor));\n"
+                    "static void __ct_init(void) {\n%s}\n",
+                    g_unit_init.p);
+        free(g_unit_init.p);
+
+        fprintf(self->hout, "\n#endif /* %s */\n", g_guard);
+
+        fclose(self->out);
+        fclose(self->hout);
+        return 0;
+    }
+
+    /* Emit an impl method body. `self` is registered as a pointer to `S` and the
+       method's parameters are registered, then every line runs through the same
+       pipeline as top-level code; only the identifier `self` is renamed to `_self`. */
+    void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params) {
+        size_t i, j, n = blen;
+        int minind = 1 << 30;
+        size_t *ls, *le;
+        int nlines = 0, first = -1, last = -1, k;
+        int saved_nvars = sym->nvars, saved_nscope = g_nscope;
+        /* the body reuses the shared var table from index 0, so snapshot the
+           enclosing file-scope entries and put them back on the way out; restoring
+           only the count would leave the outer registrations clobbered */
+        Var *saved_vars = xmalloc(sizeof(Var) * (saved_nvars ? (size_t)saved_nvars : 1));
+        memcpy(saved_vars, sym->vars, sizeof(Var) * (size_t)saved_nvars);
+        size_t saved_body_abs = g_body_abs;
+        int saved_body_pre = g_body_pre;
+        size_t saved_line_off = g_line_off;
+        int saved_cur_line = g_cur_line;
+        int vi;
+
+        ls = xmalloc(sizeof(size_t) * (n + 2));
+        le = xmalloc(sizeof(size_t) * (n + 2));
+
+        i = 0;
+        while (i < n) {
+            j = i;
+            while (j < n && g_src[bstart + j] != '\n') j++;
+            ls[nlines] = bstart + i;
+            le[nlines] = bstart + j;
+            nlines++;
+            i = j + 1;
+            if (j >= n) break;
+        }
+
+        for (k = 0; k < nlines; k++) {
+            size_t t = ls[k];
+            while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t < le[k]) {
+                int ind = (int)(t - ls[k]);
+                if (ind < minind) minind = ind;
+                if (first < 0) first = k;
+                last = k;
+            }
+        }
+
+        if (first < 0) { free(ls); free(le); return; }
+
+        /* the body sees only its own locals, never the surrounding file scope */
+        sym->nvars = 0;
+        g_nscope = 0;
+        g_body_abs = 0;
+        vi = sym->new_var();
+        snprintf(sym->vars[vi].name, MAX_NAME, "self");
+        sym->vars[vi].s = (int)(S - sym->structs);
+        sym->vars[vi].ptr = 1;
+        sym->vars[vi].arr = 0;
+        sym->vars[vi].iface = 0;
+        sym->vars[vi].tr = -1;
+        self->register_body_params(sym, params);
+
+        self->line_break();   /* anchor: the first body line always carries a #line */
+        for (k = first; k <= last; k++) {
+            size_t t = ls[k], content;
+            char *line, *out;
+            Buf sb;
+
+            g_cur_line = self->line_of(ls[k]);
+            g_line_off = ls[k];
+            if (!g_hoist.cap) buf_init(&g_hoist);
+            g_hoist.n = 0;
+            g_hoist.p[0] = 0;
+
+            while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
+            if (t >= le[k]) { fputc('\n', f); self->scope_track(sym, ls[k], le[k]); continue; }
+
+            content = ls[k] + (size_t)minind;
+            line = xstrndup(g_src + content, le[k] - content);
+            out = self->transform_line(sym, line);
+            if (g_hoist.n == 0) self->line_at(f, (size_t)g_cur_line);
+            else self->emit_hoisted();
+            buf_init(&sb);
+            self->replace_self(out, strlen(out), &sb);
+            {
+                size_t p2 = 0;
+                while (p2 < sb.n) {
+                    size_t q2 = p2;
+                    while (q2 < sb.n && sb.p[q2] != '\n') q2++;
+                    fputs("    ", f);
+                    fwrite(sb.p + p2, 1, q2 - p2, f);
+                    fputc('\n', f);
+                    p2 = (q2 < sb.n) ? q2 + 1 : q2;
+                }
+            }
+            free(line);
+            free(out);
+            free(sb.p);
+            self->scope_track(sym, ls[k], le[k]);
+        }
+        self->line_break();
+
+        memcpy(sym->vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
+        free(saved_vars);
+        sym->nvars = saved_nvars;
+        g_nscope = saved_nscope;
+        g_body_abs = saved_body_abs;
+        g_body_pre = saved_body_pre;
+        g_line_off = saved_line_off;
+        g_cur_line = saved_cur_line;
+        free(ls);
+        free(le);
+    }
+
+    /* Register the impl method's parameters that are declared with a known struct
+       type, so calls on them dispatch inside the body like top-level parameters do. */
+    void register_body_params(struct SymTab *sym, const char *params) {
+        const char *p = params;
+        (void)self;  /* the body only reads the symbol table, not the receiver */
+        while (p && *p) {
+            const char *c = strchr(p, ',');
+            const char *end = c ? c : p + strlen(p);
+            char piece[MAX_PARAM];
+            char name[MAX_NAME];
+            const char *q;
+            Struct *ST;
+            size_t plen = (size_t)(end - p), nk;
+
+            if (plen >= sizeof piece) plen = sizeof piece - 1;
+            memcpy(piece, p, plen);
+            piece[plen] = 0;
+            trim(piece);
+
+            q = piece;
+            while (*q == ' ' || *q == '\t') q++;
+            if (strncmp(q, "struct", 6) == 0 && !is_ident_char((unsigned char)q[6])) {
+                q += 6;
+                while (*q == ' ' || *q == '\t') q++;
+            }
+            nk = copy_ident(q, name, 0);
+            name[nk] = 0;
+            q += nk;
+            ST = nk ? sym->find_struct(name) : NULL;
+            if (ST) {
+                int isptr = 0;
+                while (*q == ' ' || *q == '\t') q++;
+                if (*q == '*') {
+                    isptr = 1;
+                    while (*q == '*' || *q == ' ' || *q == '\t') q++;
+                }
+                if (is_ident_char((unsigned char)*q) && !isdigit((unsigned char)*q)) {
+                    char pv[MAX_NAME];
+                    int pk = copy_ident(q, pv, 0);
+                    pv[pk] = 0;
+                    if (pk) {
+                        int vi = sym->new_var();
+                        snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
+                        sym->vars[vi].s = (int)(ST - sym->structs);
+                        sym->vars[vi].ptr = isptr;
+                        sym->vars[vi].arr = 0;
+                        sym->vars[vi].iface = 0;
+                        sym->vars[vi].tr = -1;
+                    }
+                }
+            }
+            p = c ? c + 1 : end;
+        }
+    }
+}
+
+/* ------------------------------------------------------- line rewriting */
+
+/* The rewriting layer: everything below turns one source line into the line(s) it
+   becomes, and is reached only through `emit_raw_line` / `emit_body`. It shares
+   the receiver with `PipeOps`, so a method here can still call the pipeline's
+   helpers through `self->` and vice versa. */
+impl RewriteOps for Pipe {
+    /* `self` -> `_self` for one line. Strings and comments are copied verbatim, and
+       a member literally named `self` (e.g. `g.self`) is not the implicit receiver. */
+    void replace_self(const char *s, size_t n, Buf *out) {
+        size_t i = 0;
+        (void)self;  /* a pure string rewrite; the receiver is not used */
+        while (i < n) {
+            char c = s[i];
+            if (c == '"' || c == '\'') {
+                size_t j = line_literal_end(s, i, n);
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (c == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*')) {
+                size_t j;
+                if (s[i + 1] == '/') {
+                    j = n;
+                } else {
+                    j = i + 2;
+                    while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
+                    j = (j + 1 < n) ? j + 2 : n;
+                }
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
+                size_t j = i;
+                while (j < n && is_ident_char((unsigned char)s[j])) j++;
+                if (j - i == 4 && memcmp(s + i, "self", 4) == 0 &&
+                    !(i > 0 && (s[i - 1] == '.' ||
+                                (s[i - 1] == '>' && i > 1 && s[i - 2] == '-'))))
+                    buf_puts(out, "_self");
+                else
+                    buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            buf_putc(out, c);
+            i++;
+        }
+    }
+
+    /* Append `e` boxed into the interface value of trait `tr`, or verbatim when
+       it already is an interface value of that trait. Dies when the expression's
+       type cannot be inferred (only a variable or `&variable` can be boxed). */
+    void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos) {
+        char id[MAX_NAME];
+        const char *q = e, *r;
+        size_t ql = len, k = 0;
+        int vi, amped = 0;
+        Struct *S;
+
+        (void)self;  /* the symbol tables arrive as `sym`; the receiver is not used */
+        while (ql > 0 && isspace((unsigned char)*q)) { q++; ql--; }
+        while (ql > 0 && isspace((unsigned char)q[ql - 1])) ql--;
+        if (ql == 0) die(pos, "cannot infer the type of the boxed value");
+        if (*q == '&') {
+            amped = 1;
+            q++;
+            ql--;
+        }
+        if (ql == 0 || ql >= MAX_NAME) die(pos, "cannot infer the type of the boxed value");
+
+        while (k < ql && is_ident_char((unsigned char)q[k])) k++;
+        if (k == 0) die(pos, "cannot infer the type of the boxed value");
+        memcpy(id, q, k);
+        id[k] = 0;
+        r = q + k;
+        while (r < q + ql && isspace((unsigned char)*r)) r++;
+
+        if (*r == '(') {                       /* a call: it must already return this interface */
+            FuncSig *FS = sym->find_func(id);
+            if (FS && FS->rettrait == tr) {
+                buf_putn(out, e, len);
+                return;
+            }
+            if (FS && FS->rettrait >= 0)
+                die(pos, "'%s' returns an interface value of a different trait", id);
+            die(pos, "cannot infer the type of the boxed value");
+        }
+        if (r != q + ql)
+            die(pos, "cannot infer the type of the boxed value");   /* not a plain name */
+
+        vi = sym->find_var(id);
+        if (vi < 0) die(pos, "cannot infer the type of '%s'", id);
+        if (sym->vars[vi].iface) {
+            if (sym->vars[vi].tr != tr)
+                die(pos, "'%s' is an interface value of a different trait", id);
+            if (amped) die(pos, "'%s' is already an interface value", id);
+            buf_putn(out, e, len);                       /* already an interface value */
+            return;
+        }
+        if (amped && sym->vars[vi].ptr)
+            die(pos, "'&%s' is not an object of a struct type", id);
+
+        S = &sym->structs[sym->vars[vi].s];
+        if (!struct_uses(S, sym->traits[tr].name))
+            die(pos, "struct '%s' does not use trait '%s'", S->name, sym->traits[tr].name);
+
+        buf_puts(out, "(struct ");
+        buf_puts(out, sym->traits[tr].cname);
+        buf_puts(out, "_iface){ (void *)");
+        if (sym->vars[vi].ptr) buf_puts(out, id);
+        else { buf_putc(out, '&'); buf_puts(out, id); }
+        buf_puts(out, ", &");
+        buf_puts(out, S->cname);
+        buf_putc(out, '_');
+        buf_puts(out, sym->traits[tr].name);
+        buf_puts(out, "_vtable }");
+    }
+
+    /* "Greeter g;" / "Greeter g = p;" / "Greeter *g;" — an interface-value
+       declaration. A bare one starts as a null fat pointer; an initialised one
+       boxes its expression. */
+    char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after) {
+        char var[MAX_NAME];
+        size_t vk = 0;
+        const char *p = after;
+        const char *rest, *r;
+        Buf b;
+        int ptr = 0;
+
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '*') {
+            ptr = 1;
+            p++;
+            while (*p == ' ' || *p == '\t') p++;
+        }
+        vk = copy_ident(p, var, 0);
+        var[vk] = 0;
+        if (!vk) return NULL;
+        rest = p + vk;
+        r = rest;
+        while (*r == ' ' || *r == '\t') r++;
+
+        buf_init(&b);
+        buf_putn(&b, line, ws);
+        buf_puts(&b, "struct ");
+        buf_puts(&b, sym->traits[tr].cname);
+        buf_puts(&b, ptr ? "_iface *" : "_iface ");
+        buf_puts(&b, var);
+
+        if (ptr) {                                       /* a pointer to an interface value */
+            if (!self->decl_end_is_bare(r)) die(0, "unsupported declaration of interface type");
+            buf_puts(&b, rest);
+            return b.p;
+        }
+
+        if (!*r || (*r == ';' && self->decl_end_is_bare(r))) {
+            buf_puts(&b, " = { 0, 0 }");
+            buf_puts(&b, rest);
+        } else if (*r == '=') {
+            const char *e = r + 1;
+            size_t el = 0;
+            while (*e == ' ' || *e == '\t') e++;
+            if (*e == '{') {
+                buf_puts(&b, rest);                      /* user-provided aggregate initialiser */
+            } else {
+                while (e[el] && e[el] != ';') el++;
+                buf_puts(&b, " = ");
+                self->box_to_iface(sym, &b, e, el, tr, 0);
+                buf_puts(&b, e + el);
+            }
+        } else {
+            die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
+        }
+
+        {
+            int vi = sym->new_var();
+            snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+            sym->vars[vi].s = -1;
+            sym->vars[vi].ptr = 0;
+            sym->vars[vi].arr = 0;
+            sym->vars[vi].iface = 1;
+            sym->vars[vi].tr = tr;
+        }
+        return b.p;
+    }
+
+    /* "return <object>;" inside a function whose return type is an interface
+       value: the returned object is boxed the same way an assignment is. */
+    char *try_return(struct SymTab *sym, const char *line) {
+        const char *p = line, *e;
+        size_t el = 0;
+        Buf b;
+
+        if (g_cur_rettr < 0) return NULL;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "return", 6) != 0 || is_ident_char((unsigned char)p[6])) return NULL;
+        e = p + 6;
+        while (*e == ' ' || *e == '\t') e++;
+        if (!*e || *e == ';') return NULL;                       /* "return;" */
+        if (*e == '{' || strncmp(e, "(struct ", 8) == 0) return NULL;
+        while (e[el] && e[el] != ';') el++;
+        if (!el) return NULL;
+
+        buf_init(&b);
+        buf_putn(&b, line, (size_t)(e - line));
+        self->box_to_iface(sym, &b, e, el, g_cur_rettr, 0);
+        buf_puts(&b, e + el);
+        return b.p;
+    }
+
+    /* "g = p;" — assigning into an interface value (the target type is the
+       variable), or into an interface-value field ("s.l = p;", boxed through the
+       field's trait). */
+    char *try_iface_assign(struct SymTab *sym, const char *line) {
+        const char *p = line, *r;
+        char id[MAX_NAME];
+        size_t k = 0, el = 0, fend = 0;
+        int vi, ftr = -1, ifptr = 0;
+        Buf b;
+
+        while (*p == ' ' || *p == '\t') p++;
+        k = copy_ident(p, id, 0);
+        id[k] = 0;
+        if (!k) return NULL;
+        vi = sym->find_var(id);
+        if (vi < 0) return NULL;
+
+        if (!sym->vars[vi].iface) {
+            /* an assignment into an interface-value field. A pointer interface
+               field (`struct T *l`) needs an existing address, which
+               box_to_iface cannot synthesise, so it is left verbatim. */
+            if (sym->vars[vi].s < 0) return NULL;
+            if (!self->walk_to_iface_field(sym, line, strlen(line), (size_t)(p + k - line),
+                                           sym->vars[vi].s, sym->vars[vi].ptr, &ftr, &fend, &ifptr))
+                return NULL;
+            if (ifptr) return NULL;
+            r = line + fend;
+        } else {
+            ftr = sym->vars[vi].tr;
+            r = p + k;
+        }
+
+        while (*r == ' ' || *r == '\t') r++;
+        if (*r != '=' || r[1] == '=') return NULL;
+        r++;
+        while (*r == ' ' || *r == '\t') r++;
+        if (!*r || *r == '{' || strncmp(r, "(struct ", 8) == 0) return NULL;
+        while (r[el] && r[el] != ';') el++;
+        if (!el) return NULL;
+
+        buf_init(&b);
+        buf_putn(&b, line, (size_t)(r - line));
+        self->box_to_iface(sym, &b, r, el, ftr, 0);
+        buf_puts(&b, r + el);
+        return b.p;
+    }
+
+    /* "delete p;" -> "if (p) free(p);" for a registered pointer object. Any
+       pointer is accepted, so `delete buf;` on a char * frees it too; a
+       registered *non*-pointer is left as-is -- that is user error. */
+    char *try_delete(struct SymTab *sym, const char *line) {
+        const char *p = line;
+        size_t ind_len;
+        char id[MAX_NAME];
+        size_t k = 0;
+        int vi;
+        Buf b;
+
+        while (*p == ' ' || *p == '\t') p++;
+        ind_len = (size_t)(p - line);
+        if (strncmp(p, "delete", 6) != 0 || is_ident_char((unsigned char)p[6])) return NULL;
+        p += 6;
+        while (*p == ' ' || *p == '\t') p++;
+        k = copy_ident(p, id, 0);
+        id[k] = 0;
+        if (!k || !self->decl_end_is_bare(p + k)) return NULL;
+
+        vi = sym->find_var(id);
+        if (vi >= 0 && !sym->vars[vi].ptr) return NULL;
+
+        buf_init(&b);
+        buf_putn(&b, line, ind_len);
+        buf_puts(&b, "if (");
+        buf_puts(&b, id);
+        buf_puts(&b, ") free(");
+        buf_puts(&b, id);
+        buf_puts(&b, ");");
+        return b.p;
+    }
+
+    char *transform_line(struct SymTab *sym, const char *line) {
+        char *del = self->try_delete(sym, line);
+        char *ret;
+        char *asg;
+        char *decl;
+        const char *base;
+        Buf out;
+        char *res;
+
+        if (del) return del;
+        ret = self->try_return(sym, line);
+        if (ret) return ret;
+        asg = self->try_iface_assign(sym, line);
+        if (asg) return asg;
+
+        decl = self->try_var_decl(sym, line);
+        base = decl ? decl : line;
+        buf_init(&out);
+        self->transform_calls(sym, base, &out);
+        free(decl);
+        res = out.p;
+        return res;
+    }
+
+    /* "<Struct> x = {...};" / "struct <Struct> x = {...};" -> add struct + vptr */
+    char *try_var_decl(struct SymTab *sym, const char *line) {
+        size_t i = 0, ws, vk;
+        const char *p;
+        char cname[MAX_NAME * 2], name[MAX_NAME], var[MAX_NAME];
+        Struct *S;
+        int done = 0, static_kw = 0, qual = 0;
+        const char *rest;
+        Buf b;
+
+        while (line[i] == ' ' || line[i] == '\t') i++;
+        ws = i;
+        p = line + i;
+
+        /* a leading `static` is re-emitted verbatim; the declaration underneath is
+           still a ct struct object and must get its vptr written like any other */
+        if (strncmp(p, "static", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+            const char *z = p + 6;
+            while (*z == ' ' || *z == '\t') z++;
+            static_kw = 1;
+            p = z;
+        }
+
+        if (strncmp(p, "struct", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+            p += 6;
+            while (*p == ' ' || *p == '\t') p++;
+        }
+
+        p = self->read_qual_ref(p, cname, name, &qual);
+        if (!p) return NULL;
+        S = sym->find_struct(qual ? cname : name);
+        if (!S) {
+            /* the type names a trait, not a struct: an interface value */
+            Trait *TR = sym->find_trait(qual ? cname : name);
+            if (!TR) return NULL;
+            return self->try_iface_decl(sym, line, (int)(TR - sym->traits), ws, p);
+        }
+        while (*p == ' ' || *p == '\t') p++;
+
+        if (*p == '*') {                              /* pointer declaration */
+            const char *q = p;
+            char pv[MAX_NAME];
+            int pk = 0, isheap = 0, isarr = 0;
+            while (*q == '*' || *q == ' ' || *q == '\t') q++;
+            pk = copy_ident(q, pv, 0);
+            pv[pk] = 0;
+            {
+                const char *eq = strchr(p, '=');
+                const char *aft = q + pk;
+                if (eq) {
+                    const char *rhs = eq + 1;
+                    while (*rhs == ' ' || *rhs == '\t') rhs++;
+                    if ((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
+                        (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])))
+                        isheap = 1;
+                }
+                while (*aft == ' ' || *aft == '\t') aft++;
+                if (*aft == '[') isarr = 1;
+            }
+            if (pk) {
+                int vi = sym->new_var();
+                snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
+                sym->vars[vi].s = (int)(S - sym->structs);
+                sym->vars[vi].ptr = 1;
+                /* `T *ps[<n>]` is an array of pointers: its elements are reached
+                   with '->', unlike `T *p`, where p[i] is a value */
+                sym->vars[vi].arr = isarr;
+                sym->vars[vi].iface = 0;
+                sym->vars[vi].tr = -1;
+            }
+            buf_init(&b);
+            buf_putn(&b, line, ws);
+            if (static_kw) buf_puts(&b, "static ");
+            buf_puts(&b, "struct ");
+            buf_puts(&b, S->cname);
+            buf_putc(&b, ' ');
+            buf_puts(&b, p);
+            /* `T *x = malloc(..)` / calloc gets its vptrs written on the next
+               line, so a heap object is usable without a hand-written vptr. The
+               indentation is plain spaces and the last line keeps its newline,
+               which leaves a blank line before the following statement. */
+            if (isheap && (S->nu > 0 || needs_nested_init(sym->structs, S, 0))) {
+                char ind[MAX_NAME];
+                size_t t;
+                for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
+                ind[t] = 0;
+                buf_putc(&b, '\n');
+                self->put_heap_vpts(sym, &b, S, pv, ind);
+            }
+            return b.p;
+        }
+
+        vk = copy_ident(p, var, 0);
+        var[vk] = 0;
+        if (!vk) return NULL;
+
+        rest = p + vk;
+
+        /* array declaration: "Person ps[2];" -- vptrs are written per element */
+        {
+            const char *q = rest;
+            int needs;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '[') {
+                const char *d = q + 1, *cl;
+                Buf ib;
+                int atfile;
+                size_t k2, dl;
+
+                needs = (S->nu > 0 || needs_nested_init(sym->structs, S, 0));
+                while (*d >= '0' && *d <= '9') d++;
+                cl = d;
+                if (needs && (cl == q + 1 || *cl != ']' || !self->decl_end_is_bare(cl + 1)))
+                    die(0, "struct '%s': only 'Type name[<n>];' arrays are supported", S->name);
+                /* at file scope the per-element writes cannot be statements, so
+                   they go into the per-unit constructor instead */
+                atfile = (needs && g_nscope == 0);
+
+                buf_init(&ib);
+                buf_putn(&ib, line, ws);
+                if (static_kw) buf_puts(&ib, "static ");
+                buf_puts(&ib, "struct ");
+                buf_puts(&ib, S->cname);
+                buf_putc(&ib, ' ');
+                buf_puts(&ib, var);
+                buf_puts(&ib, q);
+
+                if (needs) {
+                    Buf *tgt = atfile ? &g_unit_init : &ib;
+                    char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
+                    int vi = sym->new_var();
+
+                    snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+                    sym->vars[vi].s = (int)(S - sym->structs);
+                    sym->vars[vi].ptr = 0;
+                    sym->vars[vi].arr = 1;
+                    sym->vars[vi].iface = 0;
+                    sym->vars[vi].tr = -1;
+
+                    if (atfile) {
+                        g_has_unit_init = 1;
+                        snprintf(ind, sizeof ind, "    ");
+                    } else {
+                        buf_putc(&ib, '\n');
+                        for (k2 = 0; k2 < ws && k2 < sizeof ind - 1; k2++) ind[k2] = line[k2];
+                        ind[k2] = 0;
+                    }
+
+                    dl = (size_t)(cl - q - 1);
+                    if (dl >= sizeof cnt) dl = sizeof cnt - 1;
+                    memcpy(cnt, q + 1, dl);
+                    cnt[dl] = 0;
+                    snprintf(ind2, sizeof ind2, "%s        ", ind);
+                    snprintf(recv, sizeof recv, "%s[__ct_i]", var);
+
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "{\n");
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "    for (unsigned long __ct_i = 0; __ct_i < ");
+                    buf_puts(tgt, cnt);
+                    buf_puts(tgt, "; __ct_i++) {\n");
+                    self->put_nested_assignments(sym, tgt, S, recv, ind2, 1, 0);
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "    }\n");
+                    buf_puts(tgt, ind);
+                    buf_puts(tgt, "}\n");
+                    if (!atfile && ib.n > 0 && ib.p[ib.n - 1] == '\n') {
+                        ib.n--;
+                        ib.p[ib.n] = 0;
+                    }
+                }
+                return ib.p;
+            }
+        }
+        {
+            int vi = sym->new_var();
+            snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+            sym->vars[vi].s = (int)(S - sym->structs);
+            sym->vars[vi].ptr = 0;
+            sym->vars[vi].arr = 0;
+            sym->vars[vi].iface = 0;
+            sym->vars[vi].tr = -1;
+        }
+
+        buf_init(&b);
+        buf_putn(&b, line, ws);
+        if (static_kw) buf_puts(&b, "static ");
+        buf_puts(&b, "struct ");
+        buf_puts(&b, S->cname);
+        buf_putc(&b, ' ');
+        buf_puts(&b, var);
+
+        {
+            const char *r = rest;
+            while (*r == ' ' || *r == '\t') r++;
+            if (*r == '=' && S->nu > 0) {
+                const char *e = r + 1;
+                while (*e == ' ' || *e == '\t') e++;
+                if (*e == '{') {
+                    int depth = 0;
+                    const char *close = NULL;
+                    size_t ln = strlen(e);
+                    size_t z;
+                    for (z = 0; z < ln; z++) {
+                        char cc = e[z];
+                        if (cc == '"' || cc == '\'') { z = line_literal_end(e, z, ln) - 1; continue; }
+                        if (cc == '{') depth++;
+                        else if (cc == '}') { depth--; if (!depth) { close = e + z; break; } }
+                    }
+                    if (close) {
+                        char *inner = xstrndup(e + 1, (size_t)(close - e - 1));
+                        size_t it = trim_right_len(inner, strlen(inner));
+                        int first = 1;
+                        buf_putn(&b, rest, (size_t)(e - rest) + 1);        /* " = {" */
+                        buf_putn(&b, inner, it);
+                        if (it) buf_puts(&b, ", ");
+                        else buf_putc(&b, ' ');
+                        self->put_own_vptr(&b, S, &first);
+                        buf_putc(&b, ' ');
+                        buf_puts(&b, close);
+                        free(inner);
+                        done = 1;
+                    } else {
+                        die(0, "multi-line initialisers are not supported");
+                    }
+                }
+                /* a non-brace initialiser ("Person a = make(\"A\");") keeps its
+                   expression verbatim; the vptrs are written as statements on the
+                   next line, so it falls through with `done` still 0 */
+            } else if (S->nu > 0 && self->decl_end_is_bare(r)) {
+                /* "Person p;" has no initialiser, so give it a designated one */
+                int first = 1;
+                buf_puts(&b, " = { ");
+                self->put_own_vptr(&b, S, &first);
+                buf_puts(&b, " }");
+                buf_puts(&b, rest);
+                done = 1;
+            }
+            if (!done) buf_puts(&b, rest);
+        }
+
+        if (needs_nested_init(sym->structs, S, 0) || (!done && S->nu > 0)) {
+            /* the vptr writes are statements: inside a function they follow the
+               declaration, indented like it; at file scope there are no statements
+               at all, so they go into the per-unit constructor instead */
+            int atfile = (g_nscope == 0);
+            Buf *tgt = atfile ? &g_unit_init : &b;
+            char ind[MAX_NAME];
+            size_t k;
+
+            if (atfile) {
+                g_has_unit_init = 1;
+                snprintf(ind, sizeof ind, "    ");
+            } else {
+                for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
+                ind[k] = 0;
+                buf_putc(&b, '\n');
+            }
+            self->put_nested_assignments(sym, tgt, S, var, ind, !done, 0);
+            if (!atfile && b.n > 0 && b.p[b.n - 1] == '\n') {
+                b.n--;
+                b.p[b.n] = 0;
+            }
+        }
+
+        return b.p;
+    }
+
+    void transform_calls(struct SymTab *sym, const char *s, Buf *out) {
+        size_t i = 0, n = strlen(s);
+        while (i < n) {
+            char c = s[i];
+
+            if (c == '"' || c == '\'') {
+                size_t j = line_literal_end(s, i, n);
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (c == '/' && i + 1 < n && s[i + 1] == '/') {
+                buf_putn(out, s + i, n - i);
+                break;
+            }
+            if (c == '/' && i + 1 < n && s[i + 1] == '*') {
+                size_t j = i + 2;
+                while (j + 1 < n && !(s[j] == '*' && s[j + 1] == '/')) j++;
+                j = (j + 1 < n) ? j + 2 : n;
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            if (is_ident_char((unsigned char)c) && !isdigit((unsigned char)c)) {
+                size_t j = i;
+                char tok[MAX_NAME];
+                size_t tl;
+                int vi;
+
+                while (j < n && is_ident_char((unsigned char)s[j])) j++;
+                tl = j - i;
+                if (tl >= sizeof tok) tl = sizeof tok - 1;
+                memcpy(tok, s + i, tl);
+                tok[tl] = 0;
+
+                /* namespace path `A::B::name`: a call drops the path (functions
+                   are not mangled), anything else becomes the C name
+                   `A_B_name`. Like the block-comment scan, this runs on every
+                   line -- including a comment's continuation line. */
+                if (j + 1 < n && s[j] == ':' && s[j + 1] == ':') {
+                    size_t z = j, finalstart = i, chainend = j;
+                    int ok = 0;
+                    while (z + 1 < n && s[z] == ':' && s[z + 1] == ':') {
+                        size_t w = z + 2;
+                        while (w < n && isspace((unsigned char)s[w])) w++;
+                        if (!(w < n && is_ident_char((unsigned char)s[w]) &&
+                              !isdigit((unsigned char)s[w]))) break;
+                        finalstart = w;
+                        while (w < n && is_ident_char((unsigned char)s[w])) w++;
+                        chainend = w;
+                        ok = 1;
+                        z = w;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                    }
+                    if (ok) {
+                        if (chainend < n && s[chainend] == '(') {
+                            i = finalstart;
+                        } else {
+                            char mc[MAX_NAME * 2];
+                            size_t w2 = i, k2 = 0;
+                            while (w2 < chainend) {
+                                char cc = s[w2];
+                                if (cc == ':') {
+                                    if (k2 + 1 < sizeof mc) mc[k2++] = '_';
+                                    w2++;
+                                    if (w2 < chainend && s[w2] == ':') w2++;
+                                } else if (isspace((unsigned char)cc)) {
+                                    w2++;
+                                } else {
+                                    if (k2 + 1 < sizeof mc) mc[k2++] = cc;
+                                    w2++;
+                                }
+                            }
+                            mc[k2] = 0;
+                            buf_puts(out, mc);
+                            i = chainend;
+                        }
+                        continue;
+                    }
+                }
+
+                vi = sym->find_var(tok);
+
+                /* interface dispatch: g.m(args) -> g.vt->m(g.self, args). The
+                   method must belong to the trait the value was boxed as. */
+                if (vi >= 0 && sym->vars[vi].iface && j < n && s[j] == '.') {
+                    size_t k = j + 1, ms = k, ml;
+                    char mem[MAX_NAME];
+                    while (k < n && is_ident_char((unsigned char)s[k])) k++;
+                    ml = k - ms;
+                    if (ml >= sizeof mem) ml = sizeof mem - 1;
+                    memcpy(mem, s + ms, ml);
+                    mem[ml] = 0;
+                    if (ml && k < n && s[k] == '(' &&
+                        sym->trait_has_method(sym->vars[vi].tr, mem)) {
+                        size_t z = k + 1;
+                        int empty;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                        empty = (z < n && s[z] == ')');
+                        buf_puts(out, tok);
+                        buf_puts(out, ".vt->");
+                        buf_puts(out, mem);
+                        buf_putc(out, '(');
+                        buf_puts(out, tok);
+                        buf_puts(out, ".self");
+                        if (!empty) buf_puts(out, ", ");
+                        i = k + 1;
+                        continue;
+                    }
+                }
+
+                /* an rvalue receiver: `f().m()` / `f()->m()` / `f().a.b.m()` where
+                   f returns a known struct. Its receiver is hoisted into a temp so
+                   it is evaluated once and in order; only a statement head or an
+                   initialiser allows that without reordering evaluation, so any
+                   other position is a hard error. */
+                if (vi < 0 && j < n && s[j] == '(') {
+                    FuncSig *FS = sym->find_func(tok);
+                    if (FS && FS->retstruct >= 0) {
+                        size_t cp = line_match_paren(s, j, n);
+                        if (cp != (size_t)-1) {
+                            char mem[MAX_NAME];
+                            const char *tr = NULL;
+                            int cur = FS->retstruct, need_amp = 0;
+                            size_t rend = 0, mp = 0;
+                            if (self->walk_method(sym, s, n, cp + 1, cur, FS->retptr, &cur, &need_amp,
+                                                  &tr, &rend, &mp, mem)) {
+                                size_t fs = 0, eq, saved_off;
+                                char tmp[MAX_NAME], low[MAX_NAME], *recv;
+                                Buf ini;
+
+                                while (fs < n && (s[fs] == ' ' || s[fs] == '\t')) fs++;
+                                eq = line_assign_eq(s);
+                                if (i != fs) {
+                                    int ok = 0;
+                                    if (eq != (size_t)-1) {
+                                        size_t rs = eq + 1;
+                                        while (rs < n && (s[rs] == ' ' || s[rs] == '\t')) rs++;
+                                        if (i == rs) ok = 1;
+                                    }
+                                    if (!ok)
+                                        die(g_line_off + i, "an rvalue receiver must start the statement or an initialiser");
+                                }
+
+                                snprintf(tmp, sizeof tmp, "__ct_tmp%d", g_ntmp++);
+                                /* the initialiser is the receiver text, itself run
+                                   through the rewriter so nested calls are handled */
+                                recv = xstrndup(s + i, rend - i);
+                                buf_init(&ini);
+                                saved_off = g_line_off;
+                                g_line_off += i;
+                                self->transform_calls(sym, recv, &ini);
+                                g_line_off = saved_off;
+                                free(recv);
+
+                                buf_putn(&g_hoist, s, fs);    /* keep the line's indent */
+                                buf_puts(&g_hoist, "struct ");
+                                buf_puts(&g_hoist, sym->structs[cur].cname);
+                                buf_puts(&g_hoist, need_amp ? " " : " *");
+                                buf_puts(&g_hoist, tmp);
+                                buf_puts(&g_hoist, " = ");
+                                buf_puts(&g_hoist, ini.p);
+                                buf_putc(&g_hoist, ';');
+                                free(ini.p);
+
+                                to_lower(tr, low);
+                                buf_puts(out, tmp);
+                                buf_puts(out, need_amp ? ".__" : "->__");
+                                buf_puts(out, low);
+                                buf_puts(out, "_vptr->");
+                                buf_puts(out, mem);
+                                buf_putc(out, '(');
+                                if (need_amp) buf_putc(out, '&');
+                                buf_puts(out, tmp);
+                                {
+                                    size_t z = mp + 1;
+                                    int empty;
+                                    while (z < n && isspace((unsigned char)s[z])) z++;
+                                    empty = (z < n && s[z] == ')');
+                                    if (!empty) buf_puts(out, ", ");
+                                }
+                                i = mp + 1;
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                /* a call to a function that takes interface values: box the
+                   arguments whose parameter is one */
+                if (vi < 0 && j < n && s[j] == '(') {
+                    FuncSig *FS = sym->find_func(tok);
+                    size_t cp = (size_t)-1;
+                    int any = 0, q;
+                    if (FS) {
+                        for (q = 0; q < FS->nparams; q++)
+                            if (FS->ptrait[q] >= 0) {
+                                any = 1;
+                                break;
+                            }
+                        if (any) cp = line_match_paren(s, j, n);
+                    }
+                    if (any && cp != (size_t)-1) {
+                        Buf ab;
+                        size_t a = j + 1, pi = 0;
+                        buf_init(&ab);
+                        while (a <= cp) {
+                            size_t bb = a;
+                            int dep = 0, tr;
+                            while (bb < cp) {
+                                char cc = s[bb];
+                                if (cc == '"' || cc == '\'') {
+                                    bb = line_literal_end(s, bb, cp);
+                                    continue;
+                                }
+                                if (cc == '(' || cc == '[' || cc == '{') dep++;
+                                else if (cc == ')' || cc == ']' || cc == '}') dep--;
+                                else if (cc == ',' && dep == 0) break;
+                                bb++;
+                            }
+                            tr = (pi < (size_t)FS->nparams) ? FS->ptrait[pi] : -1;
+                            if (tr >= 0 && bb > a) self->box_to_iface(sym, &ab, s + a, bb - a, tr, 0);
+                            else buf_putn(&ab, s + a, bb - a);
+                            pi++;
+                            if (bb < cp) {
+                                buf_putc(&ab, ',');
+                                a = bb + 1;
+                            } else break;
+                        }
+                        buf_puts(out, tok);
+                        buf_putc(out, '(');
+                        buf_puts(out, ab.p);
+                        buf_putc(out, ')');
+                        free(ab.p);
+                        i = cp + 1;
+                        continue;
+                    }
+                }
+
+                if (vi >= 0) {
+                    char mem[MAX_NAME], low[MAX_NAME];
+                    const char *tr = NULL;
+                    size_t pos = j, rend = 0, mp = 0;
+                    int cur = sym->vars[vi].s;
+                    int need_amp = 1, hit = 0, unclosed = 0;
+                    int isptr = sym->vars[vi].ptr;
+
+                    if ((sym->vars[vi].arr || sym->vars[vi].ptr) && pos < n && s[pos] == '[') {
+                        /* the receiver is an element: consume "[<expr>]", whose
+                           expression may be anything (balanced brackets, skipping
+                           literals) -- e.g. ps[i], ps[i + 1], ps[f()] */
+                        int d = 0;
+                        size_t k = pos;
+                        while (k < n) {
+                            char e = s[k];
+                            if (e == '"' || e == '\'') {
+                                k = line_literal_end(s, k, n);
+                                continue;
+                            }
+                            if (e == '[') d++;
+                            else if (e == ']') {
+                                d--;
+                                if (d == 0) {
+                                    k++;
+                                    break;
+                                }
+                            }
+                            k++;
+                        }
+                        if (d != 0) unclosed = 1;
+                        else {
+                            pos = k;
+                            /* an element of `T *ps[n]` is itself a pointer (uses '->'),
+                               while `p[i]` on a plain `T *p` is a value */
+                            isptr = sym->vars[vi].arr && sym->vars[vi].ptr;
+                        }
+                    }
+                    if (!unclosed)
+                        hit = self->walk_method(sym, s, n, pos, cur, isptr, &cur, &need_amp,
+                                                &tr, &rend, &mp, mem);
+                    if (hit) {
+                        size_t z = mp + 1;
+                        int empty;
+                        while (z < n && isspace((unsigned char)s[z])) z++;
+                        empty = (z < n && s[z] == ')');
+
+                        to_lower(tr, low);
+                        buf_putn(out, s + i, rend - i);           /* receiver */
+                        buf_puts(out, need_amp ? ".__" : "->__");
+                        buf_puts(out, low);
+                        buf_puts(out, "_vptr->");
+                        buf_puts(out, mem);
+                        buf_putc(out, '(');
+                        if (need_amp) buf_putc(out, '&');
+                        buf_putn(out, s + i, rend - i);           /* receiver again */
+                        if (!empty) buf_puts(out, ", ");
+                        i = mp + 1;
+                        continue;
+                    }
+
+                    /* an interface field as the receiver: `s.l.m()` ->
+                       `s.l.vt->m(s.l.self)` (or `->` when the field is a pointer) */
+                    if (!unclosed && cur >= 0) {
+                        char meth[MAX_NAME];
+                        int ftr = -1, ifptr = 0, ok = 0;
+                        size_t fend = 0, k2 = 0;
+                        if (self->walk_to_iface_field(sym, s, n, pos, cur, isptr, &ftr, &fend, &ifptr)) {
+                            if (ifptr) {
+                                if (fend + 1 < n && s[fend] == '-' && s[fend + 1] == '>') k2 = fend + 2;
+                            } else {
+                                if (fend < n && s[fend] == '.') k2 = fend + 1;
+                            }
+                            if (k2) {
+                                size_t ms2 = k2, ml2;
+                                while (k2 < n && is_ident_char((unsigned char)s[k2])) k2++;
+                                ml2 = k2 - ms2;
+                                if (ml2 > 0 && ml2 < MAX_NAME) {
+                                    memcpy(meth, s + ms2, ml2);
+                                    meth[ml2] = 0;
+                                    if (k2 < n && s[k2] == '(' && sym->trait_has_method(ftr, meth))
+                                        ok = 1;
+                                }
+                            }
+                        }
+                        if (ok) {
+                            size_t z = k2 + 1;
+                            int empty;
+                            while (z < n && isspace((unsigned char)s[z])) z++;
+                            empty = (z < n && s[z] == ')');
+                            buf_putn(out, s + i, fend - i);       /* receiver incl. field */
+                            buf_puts(out, ifptr ? "->vt->" : ".vt->");
+                            buf_puts(out, meth);
+                            buf_putc(out, '(');
+                            buf_putn(out, s + i, fend - i);
+                            buf_puts(out, ifptr ? "->self" : ".self");
+                            if (!empty) buf_puts(out, ", ");
+                            i = k2 + 1;
+                            continue;
+                        }
+                    }
+                }
+                buf_putn(out, s + i, j - i);
+                i = j;
+                continue;
+            }
+            buf_putc(out, c);
+            i++;
+        }
+    }
+
+    /* Walk `.field` / `->field` hops from the receiver of struct `cur` (a pointer
+       when `isptr`) until a trait method call is reached, and report the trait it
+       names, the struct the *final* receiver is (*out_cur -- the writeback the
+       rvalue-receiver hoist needs), where the receiver text ends (*out_rend) and
+       where the argument list starts (*mp). `isptr` flips as the walk crosses
+       pointer fields, so the hook picks `&recv` or `recv`. */
+    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr,
+                    int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend,
+                    size_t *mp, char *memb) {
+        char mem[MAX_NAME];
+
+        (void)self;  /* the body only consults the symbol table for the method */
+        for (;;) {
+            size_t ms, k, ml;
+            int fi;
+
+            if (isptr) {
+                if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+                k = pos + 2;
+            } else {
+                if (!(pos < n && s[pos] == '.')) return 0;
+                k = pos + 1;
+            }
+            ms = k;
+            while (k < n && is_ident_char((unsigned char)s[k])) k++;
+            ml = k - ms;
+            if (ml == 0) return 0;
+            if (ml >= sizeof mem) ml = sizeof mem - 1;
+            memcpy(mem, s + ms, ml);
+            mem[ml] = 0;
+
+            *out_tr = sym->resolve_method(&sym->structs[cur], mem);
+            if (*out_tr && k < n && s[k] == '(') {
+                *out_cur = cur;
+                *out_need_amp = !isptr;
+                *out_rend = pos;
+                *mp = k;
+                snprintf(memb, MAX_NAME, "%s", mem);
+                return 1;
+            }
+            *out_tr = NULL;
+            fi = find_field_ex(&sym->structs[cur], mem, &isptr);
+            if (fi < 0) return 0;
+            cur = fi;
+            pos = k;
+        }
+    }
+
+    /* Walk `.field` / `->field` hops from the object of struct `cur` (a pointer
+       when `isptr`), crossing struct-typed fields, until an interface-value field
+       is reached. On success returns 1 and fills *out_tr (the field's trait),
+       *out_end (where the receiver text ends, i.e. after the field name) and
+       *out_ifptr (the field is a `struct T *` pointer, so the hop uses '->'). */
+    int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur,
+                            int isptr, int *out_tr, size_t *out_end, int *out_ifptr) {
+        (void)self;  /* the body only consults the symbol table for the field */
+        for (;;) {
+            size_t ms, k, ml;
+            int tr, ifptr = 0, fi;
+            char mem[MAX_NAME];
+
+            if (isptr) {
+                if (!(pos + 1 < n && s[pos] == '-' && s[pos + 1] == '>')) return 0;
+                k = pos + 2;
+            } else {
+                if (!(pos < n && s[pos] == '.')) return 0;
+                k = pos + 1;
+            }
+            ms = k;
+            while (k < n && is_ident_char((unsigned char)s[k])) k++;
+            ml = k - ms;
+            if (ml == 0) return 0;
+            if (ml >= sizeof mem) ml = sizeof mem - 1;
+            memcpy(mem, s + ms, ml);
+            mem[ml] = 0;
+
+            tr = find_iface_field(&sym->structs[cur], mem, &ifptr);
+            if (tr >= 0) {
+                *out_tr = tr;
+                *out_end = k;
+                *out_ifptr = ifptr;
+                return 1;
+            }
+            fi = find_field_ex(&sym->structs[cur], mem, &isptr);
+            if (fi < 0) return 0;
+            cur = fi;
+            pos = k;
+        }
+    }
+
+    /* is the tail of a declaration nothing but ';' (optionally a trailing comment)? */
+    int decl_end_is_bare(const char *s) {
+        (void)self;  /* a pure string test; the receiver is not used */
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s != ';') return 0;
+        s++;
+        for (;;) {
+            while (*s == ' ' || *s == '\t') s++;
+            if (!*s) return 1;
+            if (s[0] == '/' && s[1] == '/') return 1;
+            if (s[0] == '/' && s[1] == '*') {
+                const char *e = strstr(s + 2, "*/");
+                if (!e) return 1;
+                s = e + 2;
+                continue;
+            }
+            return 0;
+        }
+    }
+
+    /* roll sym->nvars back at every closing brace so locals stay in their own scope;
+       string and comment contents are ignored */
+    void scope_track(struct SymTab *sym, size_t ls, size_t le) {
+        size_t p = ls;
+        (void)self;  /* the body tracks the symbol table, not the receiver */
+        while (p < le) {
+            char c = g_src[p];
+            if (c == '"' || c == '\'') {
+                size_t j = skip_literal(p);
+                p = (j > le) ? le : j;
+                continue;
+            }
+            if (c == '/' && p + 1 < le &&
+                (g_src[p + 1] == '/' || g_src[p + 1] == '*')) {
+                size_t j = skip_comment(p);
+                p = (j > le) ? le : j;
+                continue;
+            }
+            if (c == '{') {
+                int save = sym->nvars;
+                if (g_body_abs && p == g_body_abs) { save = g_body_pre; g_body_abs = 0; }
+                if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
+                g_scope[g_nscope++] = save;
+            } else if (c == '}') {
+                if (g_nscope > 0)
+                    sym->nvars = g_scope[--g_nscope];
+            }
+            p++;
+        }
+    }
+
+    /* Ordinary function definition or prototype: qualify the struct types in its
+       return type and parameters, record the signature, and register the parameters
+       when a body follows. Returns a new line, or NULL when `line` is not one. */
+    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs) {
+        size_t n = strlen(line), lpo, he, ns, rt, rp, i, end;
+        const char *lp;
+        char name[MAX_NAME], tok[MAX_NAME];
+        Buf b;
+        int isdef = 0, ret_tr = -1, ret_ia = -1, ret_ib = -1, ret_ns = 0;
+        int ret_struct = -1, ret_rptr = 0;
+        int npar = 0, ptrait[MAX_PARAMS];
+        char ret_cbase[MAX_NAME];
+        (void)self;  /* the body records signatures in the symbol table, not the receiver */
+
+        *has_body = 0;
+        *body_abs = 0;
+
+        lp = strchr(line, '(');
+        if (!lp) return NULL;
+        lpo = (size_t)(lp - line);
+        {
+            const char *sc = strchr(line, ';');
+            if (sc && (size_t)(sc - line) < lpo) return NULL;      /* ';' before '(' */
+        }
+
+        he = trim_right_len(line, lpo);
+        ns = he;
+        while (ns > 0 && is_ident_char((unsigned char)line[ns - 1])) ns--;
+        if (ns == he) return NULL;                                 /* no function name */
+        rt = trim_right_len(line, ns);
+        if (rt == 0) return NULL;                                  /* no return type */
+
+        {
+            size_t k, u;
+            for (k = 0; k < rt; k++) {
+                char c = line[k];
+                if (!(is_ident_char((unsigned char)c) || c == '*' || c == ' ' || c == '\t'))
+                    return NULL;
+            }
+            snprintf(name, sizeof name, "%.*s", (int)(he - ns), line + ns);
+            if (is_stmt_keyword(name)) return NULL;
+            for (k = 0; k < rt; ) {
+                u = k;
+                while (u < rt && !is_ident_char((unsigned char)line[u])) u++;
+                k = u;
+                while (k < rt && is_ident_char((unsigned char)line[k])) k++;
+                if (k > u) {
+                    size_t tl = k - u;
+                    if (tl >= sizeof tok) tl = sizeof tok - 1;
+                    memcpy(tok, line + u, tl);
+                    tok[tl] = 0;
+                    if (is_stmt_keyword(tok)) return NULL;
+                }
+            }
+        }
+
+        rp = line_match_paren(line, lpo, n);
+        if (rp == (size_t)-1) return NULL;                         /* ')' on another line */
+
+        {
+            size_t k = skip_ws_comments(ls + rp + 1);
+            if (k < g_len && g_src[k] == '{') { isdef = 1; *has_body = 1; *body_abs = k; }
+            else if (k < g_len && g_src[k] == ';') { isdef = 0; }
+            else return NULL;
+        }
+
+        {
+            char rname[MAX_NAME];
+            ret_struct = self->analyse_param(sym, line, rt, &ret_ia, &ret_ib, ret_cbase,
+                                             &ret_ns, rname, &ret_rptr, &ret_tr);
+        }
+        buf_init(&b);
+        self->emit_qualified_type(&b, line, lpo, ret_ia, ret_ib, ret_cbase, ret_ns, ret_tr >= 0);
+        buf_putc(&b, '(');
+
+        for (i = lpo + 1, end = rp; i < end; ) {
+            size_t j = i;
+            int depth = 0, pia = -1, pib = -1, pns = 0, ptr = 0, sidx, ptrtr = -1;
+            char pname[MAX_NAME], pcbase[MAX_NAME];
+
+            while (j < end) {
+                char c = line[j];
+                if (c == '"' || c == '\'') { j = line_literal_end(line, j, end); continue; }
+                if (c == '(' || c == '[' || c == '{') depth++;
+                else if (c == ')' || c == ']' || c == '}') depth--;
+                else if (c == ',' && depth == 0) break;
+                j++;
+            }
+            sidx = self->analyse_param(sym, line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
+            self->emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, ptrtr >= 0);
+
+            if (isdef && pname[0] && (sidx >= 0 || ptrtr >= 0)) {
+                int vi = sym->new_var();
+                snprintf(sym->vars[vi].name, MAX_NAME, "%s", pname);
+                sym->vars[vi].s = (sidx >= 0) ? sidx : -1;
+                sym->vars[vi].ptr = (sidx >= 0) ? ptr : 0;
+                sym->vars[vi].arr = 0;
+                sym->vars[vi].iface = (sidx >= 0) ? 0 : 1;
+                sym->vars[vi].tr = (sidx >= 0) ? -1 : ptrtr;
+            }
+            {
+                char pbuf[MAX_NAME * 2];
+                size_t pl = j - i;
+                if (pl >= sizeof pbuf) die(0, "parameter too long (max %d)", (int)sizeof pbuf - 1);
+                memcpy(pbuf, line + i, pl);
+                pbuf[pl] = 0;
+                trim(pbuf);
+                if (pbuf[0] && strcmp(pbuf, "void") != 0) {
+                    if (npar >= MAX_PARAMS) die(0, "too many parameters (max %d)", MAX_PARAMS);
+                    ptrait[npar++] = ptrtr;
+                }
+            }
+            if (j < end) { buf_putc(&b, ','); j++; }
+            i = j;
+        }
+        /* record the signature so call sites can reject rvalue receivers and box
+           interface arguments */
+        if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+        {
+            FuncSig *FS = &sym->funcs[sym->nfuncs++];
+            int q;
+            snprintf(FS->name, MAX_NAME, "%s", name);
+            FS->nparams = npar;
+            FS->rettrait = ret_tr;
+            FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
+            FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
+            for (q = 0; q < npar; q++) FS->ptrait[q] = ptrait[q];
+        }
+        if (isdef) g_cur_rettr = ret_tr;
+
+        buf_putc(&b, ')');
+        buf_puts(&b, line + rp + 1);
+        return b.p;
+    }
+}
+
+static Pipe g_pipe = { };
+
+/* ------------------------------------------------ raw line rewriting */
+
+static size_t line_literal_end(const char *s, size_t i, size_t n)
+{
+    char q = s[i++];
+    while (i < n) {
+        if (s[i] == '\\' && i + 1 < n) { i += 2; continue; }
+        if (s[i] == q) return i + 1;
+        i++;
+    }
+    return n;
+}
+
+static size_t line_match_paren(const char *s, size_t k, size_t n)
+{
+    int depth = 0;
+    while (k < n) {
+        char c = s[k];
+        if (c == '"' || c == '\'') { k = line_literal_end(s, k, n); continue; }
+        if (c == '(') depth++;
+        else if (c == ')') { depth--; if (!depth) return k; }
+        k++;
+    }
+    return (size_t)-1;
+}
+
+/* Offset of the first plain '=' (the assignment or initialiser), or -1. A '=='
+   or a compound operator like '+=' is not one. */
+static size_t line_assign_eq(const char *line)
+{
+    size_t len = strlen(line), i = 0;
+    while (i < len) {
+        char c = line[i];
+        if (c == '"' || c == '\'') { i = line_literal_end(line, i, len); continue; }
+        if (c == '/' && (line[i + 1] == '/' || line[i + 1] == '*')) break;
+        if (c == '=') {
+            char next = line[i + 1];
+            char prev = (i > 0) ? line[i - 1] : 0;
+            if (next == '=') { i += 2; continue; }
+            if (prev && strchr("=!<>+-*/%&|^", prev)) { i++; continue; }
+            return i;
+        }
+        i++;
+    }
+    return (size_t)-1;
+}
+
+/* ------------------------------------------------- core export surface */
+
+/* `driver.ct` is a separate unit and can reach nothing file-scope here, so the CLI
+   side talks to the pipeline through these wrappers. Primitive-only signatures are
+   not a style choice: the generated header cannot name a macro, an include or a
+   typed global, so `struct Pipe` / `struct SymTab` / `Buf` cannot cross at all. */
+
+pub int ct_is_ident_char(int c);
+int ct_is_ident_char(int c)
+{
+    return is_ident_char(c);
+}
+
+pub char *ct_read_file(const char *path, unsigned long *len);
+char *ct_read_file(const char *path, unsigned long *len)
+{
+    size_t n = 0;
+    char *s = g_pipe.read_file(path, &n);
+    *len = (unsigned long)n;
+    return s;
+}
+
+/* the `#include`s a build-mode unit's .c opens with, filled before compiling it */
+pub void ct_begin_imports(void);
+void ct_begin_imports(void)
+{
+    g_nimp_h = 0;
+}
+
+pub void ct_add_import(const char *h);
+void ct_add_import(const char *h)
+{
+    snprintf(g_imp_h[g_nimp_h], MAX_NAME, "%s", h);
+    g_nimp_h++;
+}
+
+pub int ct_compile_file(const char *in, const char *outc, int multi);
+int ct_compile_file(const char *in, const char *outc, int multi)
+{
+    return g_pipe.compile_file(&g_sym, in, outc, multi);
+}
+
+pub void ct_usage(const char *prog);
+void ct_usage(const char *prog)
+{
+    g_pipe.usage(prog);
+}
+
+pub void ct_default_output(const char *in, char *out, unsigned long n);
+void ct_default_output(const char *in, char *out, unsigned long n)
+{
+    g_pipe.default_output(in, out, (size_t)n);
+}
+
+/* The suggested cc command `build` prints: spliced here so `driver.ct` never needs
+   `Buf` (which cannot cross units) for it. */
+static Buf g_cc;
+static int g_cc_ready = 0;
+
+pub void ct_cc_reset(void);
+void ct_cc_reset(void)
+{
+    if (!g_cc_ready) {
+        buf_init(&g_cc);
+        g_cc_ready = 1;
+    }
+    g_cc.n = 0;
+    g_cc.p[0] = 0;
+    buf_puts(&g_cc, "cc");
+}
+
+pub void ct_cc_add(const char *path);
+void ct_cc_add(const char *path)
+{
+    buf_putc(&g_cc, ' ');
+    buf_puts(&g_cc, path);
+}
+
+pub void ct_cc_finish(void);
+void ct_cc_finish(void)
+{
+    buf_puts(&g_cc, " -o a.out");
+    printf("%s\n", g_cc.p);
+}
