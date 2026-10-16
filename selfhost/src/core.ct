@@ -901,6 +901,7 @@ trait RewriteOps {
     void replace_self(const char *s, size_t n, Buf *out);
     /* interface values: boxing, the declaration, the assignment and `return` */
     void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
+    void box_to_iface_ptr(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
     char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
     char *try_iface_assign(struct SymTab *sym, const char *line);
     char *try_return(struct SymTab *sym, const char *line);
@@ -2587,6 +2588,60 @@ impl RewriteOps for Pipe {
         buf_puts(out, "_vtable }");
     }
 
+    /* Append `e` boxed as a *pointer* to the interface value of trait `tr` -- a
+       `struct <T>_iface *` for a pointer interface field (`struct T *x`). A
+       concrete object is boxed into an anonymous fat pointer whose address is
+       stored, so its lifetime is the enclosing block; an expression that already
+       is an interface value has its address taken (or reused, for `&v`). */
+    void box_to_iface_ptr(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos) {
+        char id[MAX_NAME];
+        const char *q = e, *r;
+        size_t ql = len, k = 0;
+        int vi, amped = 0;
+
+        (void)self;  /* the symbol tables arrive as `sym`; the receiver is not used */
+        while (ql > 0 && isspace((unsigned char)*q)) { q++; ql--; }
+        while (ql > 0 && isspace((unsigned char)q[ql - 1])) ql--;
+        if (ql == 0) die(pos, "cannot infer the type of the boxed value");
+        if (*q == '&') { amped = 1; q++; ql--; }
+        if (ql == 0 || ql >= MAX_NAME) die(pos, "cannot infer the type of the boxed value");
+        while (k < ql && is_ident_char((unsigned char)q[k])) k++;
+        if (k == 0) die(pos, "cannot infer the type of the boxed value");
+        memcpy(id, q, k);
+        id[k] = 0;
+        r = q + k;
+        while (r < q + ql && isspace((unsigned char)*r)) r++;
+
+        if (*r == '(') {
+            /* a call returning this interface value: box its result into an
+               anonymous location whose address can be stored */
+            FuncSig *FS = sym->find_func(id);
+            if (!(FS && FS->rettrait == tr))
+                die(pos, "cannot infer the type of the boxed value");
+            buf_puts(out, "&(struct ");
+            buf_puts(out, sym->traits[tr].cname);
+            buf_puts(out, "_iface){ ");
+            buf_putn(out, e, len);
+            buf_puts(out, " }");
+            return;
+        }
+        if (r != q + ql)
+            die(pos, "cannot infer the type of the boxed value");
+
+        vi = sym->find_var(id);
+        if (vi < 0) die(pos, "cannot infer the type of '%s'", id);
+        if (sym->vars[vi].iface) {
+            if (sym->vars[vi].tr != tr)
+                die(pos, "'%s' is an interface value of a different trait", id);
+            if (!amped) buf_putc(out, '&');
+            buf_putn(out, e, len);
+            return;
+        }
+        /* a concrete object: store the address of the boxed copy */
+        buf_putc(out, '&');
+        self->box_to_iface(sym, out, e, len, tr, pos);
+    }
+
     /* "Greeter g;" / "Greeter g = p;" / "Greeter *g;" — an interface-value
        declaration. A bare one starts as a null fat pointer; an initialised one
        boxes its expression. */
@@ -2698,13 +2753,12 @@ impl RewriteOps for Pipe {
 
         if (!sym->vars[vi].iface) {
             /* an assignment into an interface-value field. A pointer interface
-               field (`struct T *l`) needs an existing address, which
-               box_to_iface cannot synthesise, so it is left verbatim. */
+               field (`struct T *l`) stores the address of a boxed fat pointer;
+               a value field stores the fat pointer itself. */
             if (sym->vars[vi].s < 0) return NULL;
             if (!self->walk_to_iface_field(sym, line, strlen(line), (size_t)(p + k - line),
                                            sym->vars[vi].s, sym->vars[vi].ptr, &ftr, &fend, &ifptr))
                 return NULL;
-            if (ifptr) return NULL;
             r = line + fend;
         } else {
             ftr = sym->vars[vi].tr;
@@ -2721,7 +2775,8 @@ impl RewriteOps for Pipe {
 
         buf_init(&b);
         buf_putn(&b, line, (size_t)(r - line));
-        self->box_to_iface(sym, &b, r, el, ftr, 0);
+        if (ifptr) self->box_to_iface_ptr(sym, &b, r, el, ftr, 0);
+        else self->box_to_iface(sym, &b, r, el, ftr, 0);
         buf_puts(&b, r + el);
         return b.p;
     }
