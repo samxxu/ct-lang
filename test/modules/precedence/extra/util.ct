@@ -1,0 +1,3 @@
+/* a decoy of the same name under the -I root: local-first means this one loses */
+pub int which(void);
+int which(void) { return 2; }

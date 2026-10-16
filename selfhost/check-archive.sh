@@ -87,6 +87,7 @@ baseline_designed="
 hdr
 inc
 inc_missing
+precedence
 "
 
 in_list() {

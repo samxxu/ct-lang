@@ -1,0 +1,3 @@
+/* the importing file's own directory wins over an -I root with the same name */
+pub int which(void);
+int which(void) { return 1; }
