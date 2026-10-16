@@ -35,13 +35,23 @@
  *     hoisted into a `__ct_tmp<N>` so it is evaluated once, and the call
  *     dispatches on that temp
  *   - ordinary function signatures (qualify known struct types, register params)
+ *   - `namespace` blocks: a dotted path becomes the prefix "M_N_" on every name
+ *     declared inside, lookups try the prefix first and fall back to the root, a
+ *     dotted reference folds to the prefixed name, and the braces themselves are
+ *     never emitted
+ *   - the module system: `ctc build <unit.ct>... -o <dir>` compiles every unit in
+ *     multi-file mode -- the .c includes its own .h, `pub` declarations are routed
+ *     into it, an `import` of a sibling file adds the matching include, and `#line`
+ *     is on by default so a C compiler's diagnostics point back at the .ct
  *   - the generated .h (include guard, types only) and the provenance banner
- *   - the minimal CLI: `ctc <in.ct> -o <out.c>` (writes <out.c> and <out.h>)
+ *   - the CLI: `ctc [compile] <in.ct> -o <out.c>` (writes <out.c> and <out.h>),
+ *     and `ctc build <in.ct>... -o <dir>` (one .c/.h pair per unit, then the
+ *     suggested cc command on stdout)
  *
- * Not covered (these are Phases 2–5 items, to be redone on the CT side rather than
+ * Not covered (these are Phases 3–5 items, to be redone on the CT side rather than
  * in ctc.c). L1 reports them as errors instead of emitting C that cannot compile:
- *   - namespace / import / pub (the module system)
- *   - #line and diagnostics; `delete` is supported, Drop is not
+ *   - diagnostics (leak warnings, `--diagnostics`); `delete` is supported, Drop is not
+ *   - `--line` / `--no-line`: multi-file mode always emits `#line`
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
@@ -53,8 +63,10 @@
  * `compile_file`) and the CLI helpers are `PipeOps` methods, while the per-line
  * rewriting layer lives on `RewriteOps`. Lookups read `g_sym.find_trait(..)` and
  * the pipeline is reached as `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`,
- * both dispatching through their vtable. Only the facilities layer (Buf,
- * allocators, die, the scanning primitives) stays plain C.
+ * both dispatching through their vtable. The facilities layer (Buf, allocators,
+ * die, the scanning primitives) and the driver/CLI tier (`main` and the `ctc
+ * build` driver, which only sequences `g_pipe.compile_file(..)` over the units)
+ * stay plain C.
  * The source stays inside the subset L0 itself accepts: the plain-C passthrough
  * of CT plus the line-rewriting discipline (one statement per line, no one-line
  * function bodies, declarations before use). L1 carries its own facilities; it
@@ -80,6 +92,9 @@
 #define MAX_VARS   512
 #define MAX_SCOPE  256
 #define MAX_FUNCS  64
+#define MAX_UNITS  64                     /* units in one `ctc build` run */
+#define MAX_BUILD  32                     /* inputs on a single command line */
+#define MAX_IMPORTS 16                    /* `import` lines per unit */
 
 #define CTC_VERSION "0.0.1"
 
@@ -174,6 +189,25 @@ static int    g_cur_rettr = -1;        /* return trait of the function being sca
 
 static char g_guard[MAX_NAME * 2];
 static size_t g_line_off = 0;
+
+/* Multi-file mode (`ctc build`): the unit's .c includes its own .h and every
+   `pub` declaration is routed into that .h instead of the .c. Both flags are 0
+   for a single-file compile, which is why the corpus output does not move. */
+static int g_multi    = 0;
+static int g_ctor_pub = 0;             /* 1 while the current trait/struct is `pub` */
+static int g_line_pub = 0;             /* 1 while the current raw line is `pub`-led */
+
+/* `#line` directives: on in multi-file mode so a C compiler's diagnostics point
+   back at the .ct. The mapping runs forward, so a stretch of consecutive source
+   lines needs a single directive at its head. */
+static int  g_emit_line = 0;
+static int  g_cur_line  = 1;
+static long g_line_next = -1;
+
+/* The `#include`s a unit's .c opens with: its own header, then one per import
+   (filled in by the build driver before the unit is compiled). */
+static char g_imp_h[MAX_IMPORTS][MAX_NAME];
+static int  g_nimp_h = 0;
 
 /* File-scope objects/arrays cannot write their vptrs in place (there are no
    statements out there), so the writes are collected here while scanning and
@@ -654,9 +688,11 @@ trait PipeOps {
     /* method-declaration parsers, called from parse_trait */
     void parse_params(Method *m, const char *raw);
     void split_decl(const char *decl, size_t pos, Method *m);
-    /* code emitters, called from the parsers above (stream passed explicitly) */
-    void emit_trait_def(FILE *f, const Trait *T);
-    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body);
+    /* code emitters, called from the parsers above (stream passed explicitly).
+       `srcline` is the source line the construct starts on: it anchors a `#line`
+       directive when multi-file mode is on. */
+    void emit_trait_def(FILE *f, const Trait *T, size_t srcline);
+    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body, size_t srcline);
     void put_own_vptr(Buf *b, const Struct *S, int *first);
     void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv, const char *ind, int with_self, int depth);
     void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind);
@@ -677,10 +713,20 @@ trait PipeOps {
     void emit_hoisted();
     void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
     void compile_range(struct SymTab *sym, size_t start, size_t end);
+    /* Source-line tracking. The directive is written only when the running
+       mapping would diverge, and only into the .c: the .h is included verbatim
+       by the .c, so `#line` out there would be wrong. */
+    int  line_of(size_t pos);
+    void line_break();
+    void line_at(FILE *f, size_t srcline);
     /* compile_file's own file I/O helpers */
     void header_path(const char *outc, char *out, size_t n);
     char *read_file(const char *path, size_t *out_len);
-    int compile_file(struct SymTab *sym, const char *in, const char *outc);
+    /* `multi` selects multi-file mode: the .c then includes its own .h, opens
+       with the imports the driver registered in `g_imp_h`, and emits `#line`.
+       The symbol tables accumulate across units in that mode (a unit sees the
+       units built before it) and are reset per file otherwise. */
+    int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi);
     void write_guard(const char *hpath);
     /* CLI helpers, called from `main` */
     void usage(const char *prog);
@@ -720,9 +766,9 @@ struct Pipe {
    (see `impl PipeOps for Pipe` below). */
 
 impl PipeOps for Pipe {
-    void emit_trait_def(FILE *f, const Trait *T) {
+    void emit_trait_def(FILE *f, const Trait *T, size_t srcline) {
         int i, k;
-        (void)self;  /* the stream is passed in; the receiver is not used */
+        self->line_at(f, srcline);
         fprintf(f, "struct %s_vtbl {\n", T->cname);
         for (i = 0; i < T->nm; i++) {
             const Method *m = &T->m[i];
@@ -733,13 +779,14 @@ impl PipeOps for Pipe {
         fprintf(f, "};\n");
         fprintf(f, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n",
                 T->cname, T->cname);
+        self->line_break();
     }
 
-    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body) {
+    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body, size_t srcline) {
         int i;
         size_t blen = strlen(body);
 
-        (void)self;  /* the body only reads the symbol table, not the receiver */
+        self->line_at(f, srcline);
         fprintf(f, "struct %s {", S->cname);
         if (blen && body[0] != '\n') fputc('\n', f);
         if (blen) fputs(body, f);
@@ -750,6 +797,7 @@ impl PipeOps for Pipe {
             fprintf(f, "    struct %s_vtbl *__%s_vptr;\n", sym->traits[S->use_i[i]].cname, low);
         }
         fprintf(f, "};\n");
+        self->line_break();
     }
 
     /* append one ".__<trait>_vptr = &<Struct>_<Trait>_vtable" per used trait */
@@ -1157,6 +1205,7 @@ impl PipeOps for Pipe {
         char name[MAX_NAME];
         Trait *T;
         size_t close, bstart, bend, i;
+        size_t tline = self->line_of(p);            /* source line of 'trait' */
         Buf raw, clean;
 
         p += 5;                                     /* "trait" */
@@ -1237,8 +1286,16 @@ impl PipeOps for Pipe {
         }
         free(clean.p);
 
-        self->emit_trait_def(self->out, T);
-        self->emit_trait_def(self->hout, T);
+        /* an exported declaration goes into the .h alone; otherwise it goes to the
+           .c (and, in single-file mode, to the .h as well: the .h is types-only) */
+        if (!g_multi) {
+            self->emit_trait_def(self->out, T, tline);
+            self->emit_trait_def(self->hout, T, tline);
+        } else if (g_ctor_pub) {
+            self->emit_trait_def(self->hout, T, tline);
+        } else {
+            self->emit_trait_def(self->out, T, tline);
+        }
         return close + 1;
     }
 
@@ -1246,6 +1303,7 @@ impl PipeOps for Pipe {
         char name[MAX_NAME];
         Struct *S;
         size_t close, bstart, bend, q, probe;
+        size_t sline = self->line_of(p);            /* source line of 'struct' */
         int i;
 
         p += 6;                                     /* "struct" */
@@ -1308,8 +1366,14 @@ impl PipeOps for Pipe {
             char *raw = xstrndup(g_src + bstart, bend - bstart);
             char *qbody = self->parse_fields(sym, raw, S, p);
             free(raw);
-            self->emit_struct_def(sym, self->out, S, qbody);
-            self->emit_struct_def(sym, self->hout, S, qbody);
+            if (!g_multi) {
+                self->emit_struct_def(sym, self->out, S, qbody, sline);
+                self->emit_struct_def(sym, self->hout, S, qbody, sline);
+            } else if (g_ctor_pub) {
+                self->emit_struct_def(sym, self->hout, S, qbody, sline);
+            } else {
+                self->emit_struct_def(sym, self->out, S, qbody, sline);
+            }
             free(qbody);
         }
         return q;
@@ -1320,6 +1384,7 @@ impl PipeOps for Pipe {
         Trait *T;
         Struct *S;
         size_t close, i, k;
+        size_t dline = self->line_of(p);            /* source line of 'impl' */
         ImplMethod impl[MAX_METHOD];
         int nimpl = 0, found;
 
@@ -1407,9 +1472,12 @@ impl PipeOps for Pipe {
             int needs_vtable = 0;
             for (k = 0; k < (size_t)nimpl; k++)
                 if (self->body_needs_vtable(sym, impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
-            if (needs_vtable)
+            if (needs_vtable) {
+                self->line_at(self->out, dline);
                 fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n\n",
                         T->cname, S->cname, T->name);
+                self->line_break();
+            }
         }
 
         /* emit one function per trait method, in trait order */
@@ -1423,14 +1491,17 @@ impl PipeOps for Pipe {
                 die(p, "trait method '%s' is not implemented for struct '%s'",
                     tm->name, S->name);
 
+            self->line_at(self->out, dline);
             fprintf(self->out, "static %s %s_%s_%s(void *self", tm->ret, S->cname, T->name, tm->name);
             if (tm->nparams > 0) fprintf(self->out, ", %s", impl[idx].params);
             fprintf(self->out, ") {\n");
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
             self->emit_body(sym, self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
             fprintf(self->out, "}\n\n");
+            self->line_break();
         }
 
+        self->line_at(self->out, dline);
         fprintf(self->out, "static struct %s_vtbl %s_%s_vtable = {\n",
                 T->cname, S->cname, T->name);
         for (k = 0; k < (size_t)T->nm; k++)
@@ -1438,6 +1509,7 @@ impl PipeOps for Pipe {
                     T->m[k].name, S->cname, T->name, T->m[k].name,
                     (k + 1 < (size_t)T->nm) ? "," : "");
         fprintf(self->out, "};\n\n");
+        self->line_break();
 
         {
             size_t q = close + 1;
@@ -1448,12 +1520,46 @@ impl PipeOps for Pipe {
         }
     }
 
+    /* The 1-based source line a byte offset falls on; `die` derives its
+       line:column the same way. */
+    int line_of(size_t pos) {
+        int line = 1;
+        size_t i;
+        (void)self;    /* the source buffer is file-scope, not part of the receiver */
+        for (i = 0; i < pos && i < g_len; i++) {
+            if (g_src[i] == '\n') line++;
+        }
+        return line;
+    }
+
+    /* Invalidate the running mapping so the next `line_at` writes an explicit
+       directive -- used after a run of generated boilerplate. */
+    void line_break(void) {
+        (void)self;    /* the mapping is file-scope state */
+        g_line_next = -1;
+    }
+
+    /* Begin an output line of `f` that originates at `srcline`. A `#line`
+       directive is written only when the running mapping would diverge, so a run
+       of consecutive source lines stays directive-free. Only the .c is tracked:
+       the .h is included verbatim by the .c, so a directive out there would point
+       at the wrong file. */
+    void line_at(FILE *f, size_t srcline) {
+        if (f != self->out || !g_emit_line) return;
+        if ((long)srcline != g_line_next)
+            fprintf(f, "#line %ld \"%s\"\n", (long)srcline, g_path);
+        g_line_next = (long)srcline + 1;
+    }
+
     /* If the line just rewritten hoisted a temp receiver, write that declaration
-       first: it must run before the rewritten line. */
+       first: it must run before the rewritten line, and both belong to the same
+       source line, so the mapping is re-anchored afterwards. */
     void emit_hoisted(void) {
         if (g_hoist.n == 0) return;
         fputs(g_hoist.p, self->out);
         fputc('\n', self->out);
+        self->line_break();
+        self->line_at(self->out, (size_t)g_cur_line);
     }
 
     /* Pass one raw source line through the shared rewriting pipeline. */
@@ -1468,6 +1574,7 @@ impl PipeOps for Pipe {
         g_hoist.p[0] = 0;
 
         line = xstrndup(g_src + ls, len);
+        g_cur_line = self->line_of(ls);
         while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
         if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
             fputs(line, self->out);
@@ -1475,11 +1582,29 @@ impl PipeOps for Pipe {
             return;
         }
 
+        /* A leading `pub` marks an exported declaration (multi-file mode): drop it
+           from the emitted line and remember it, so a bodiless signature can be
+           routed into the .h instead (see just below). */
+        g_line_pub = 0;
+        if (t + 3 <= len && strncmp(line + t, "pub", 3) == 0 &&
+            !is_ident_char((unsigned char)line[t + 3])) {
+            size_t z = t + 3;
+            while (z < len && (line[z] == ' ' || line[z] == '\t')) z++;
+            g_line_pub = 1;
+            memmove(line, line + z, len - z + 1);
+            len -= z;
+            ls += z;
+            t = 0;
+        }
+
         g_line_off = ls;
         sig = self->parse_func_sig(sym, line, ls, &has_body, &body_abs);
         if (sig) {
+            /* an exported prototype belongs in the .h and nowhere else; the
+               newline compile_range writes still lands in the .c, so the .c keeps
+               a blank line where the declaration used to be */
             if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
-            fputs(sig, self->out);
+            fputs(sig, (g_line_pub && g_multi && !has_body) ? self->hout : self->out);
             free(sig);
         } else {
             char *out = self->transform_line(sym, line);
@@ -1501,19 +1626,41 @@ impl PipeOps for Pipe {
             q = ls;
             while (q < end && (g_src[q] == ' ' || g_src[q] == '\t')) q++;
 
-            /* `import` / `pub` are still to be redone in the CT layer, so passing
-               them through would silently emit C that cannot compile: fail
-               loudly instead. (`namespace` is handled just below.) */
-            {
-                static const char *const gone[] = { "import", "pub" };
-                int gi;
-                for (gi = 0; gi < 2; gi++) {
-                    char nm[MAX_NAME];
-                    size_t t;
-                    if (!word_at(q, gone[gi])) continue;
-                    t = read_ident(skip_ws_comments(q + strlen(gone[gi])), nm, sizeof nm);
-                    if (nm[0] || (t < g_len && g_src[t] == '{'))
-                        die(q, "'%s' is not supported by this compiler", gone[gi]);
+            /* An optional `pub` marks a trait/struct as exported (multi-file
+               mode); `pub` on a function line is stripped later, in
+               `emit_raw_line`. */
+            g_ctor_pub = 0;
+            if (word_at(q, "pub")) {
+                size_t t = skip_ws_comments(q + 3);
+                if (word_at(t, "trait") || word_at(t, "struct")) { g_ctor_pub = 1; q = t; }
+            }
+
+            /* `import A::B;` is a compilation-unit declaration: the build driver
+               resolves it and turns it into an `#include` line, so the line itself
+               is consumed here and never emitted. Anything less than a complete
+               header falls through as a plain line, which keeps a line that merely
+               starts with the word from being mistaken for one. */
+            if (word_at(q, "import")) {
+                size_t t = skip_ws_comments(q + 6);
+                int ok = 1;
+                size_t nseg = 0;
+                for (;;) {
+                    char seg[MAX_NAME];
+                    t = read_ident(t, seg, sizeof seg);
+                    if (!seg[0]) { ok = 0; break; }
+                    nseg++;
+                    t = skip_ws_comments(t);
+                    if (t + 1 < g_len && g_src[t] == ':' && g_src[t + 1] == ':') {
+                        t = skip_ws_comments(t + 2);
+                        continue;
+                    }
+                    break;
+                }
+                if (ok && nseg && t < g_len && g_src[t] == ';') {
+                    size_t e = t;
+                    while (e < end && g_src[e] != '\n') e++;
+                    pos = (e < end) ? e + 1 : end;
+                    continue;
                 }
             }
 
@@ -1592,6 +1739,7 @@ impl PipeOps for Pipe {
 
             le = ls;
             while (le < end && g_src[le] != '\n') le++;
+            self->line_at(self->out, self->line_of(ls));
             self->emit_raw_line(sym, ls, le);
             if (le < end) { fputc('\n', self->out); le++; }
             pos = le;
@@ -1616,11 +1764,18 @@ impl PipeOps for Pipe {
         strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
 
         fprintf(self->hout, "#ifndef %s\n#define %s\n\n", guard, guard);
-        fprintf(self->hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
-                        "   generated .c is self-contained).\n"
-                        "   Generated output is not covered by the GPL and may be "
-                        "used without restriction (LICENSE.EXCEPTION). */\n\n",
-                CTC_VERSION, g_path);
+        if (g_multi)
+            fprintf(self->hout, "/* Generated by ctc v%s from %s (multi-file mode:\n"
+                            "   exported types; the matching .c includes this header).\n"
+                            "   Generated output is not covered by the GPL and may be "
+                            "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                    CTC_VERSION, g_path);
+        else
+            fprintf(self->hout, "/* Generated by ctc v%s from %s (Phase 0: types only, the\n"
+                            "   generated .c is self-contained).\n"
+                            "   Generated output is not covered by the GPL and may be "
+                            "used without restriction (LICENSE.EXCEPTION). */\n\n",
+                    CTC_VERSION, g_path);
         snprintf(g_guard, sizeof g_guard, "%s", guard);
     }
 
@@ -1628,14 +1783,19 @@ impl PipeOps for Pipe {
     void usage(const char *prog) {
         (void)self;  /* a pure CLI helper; the receiver is not used */
         fprintf(stderr,
-                "usage: %s <input.ct> [-o <output.c>]\n\n"
-                "L1 (M2-a): compiles a subset of C-with-traits (.ct) into plain C,\n"
-                "writing <output.c> and a matching header <output.h>. If -o is\n"
-                "omitted the output is <input>.c next to the input.\n\n"
-                "  -o <file>       write the generated C to <file>\n"
+                "usage: %s [compile] <input.ct> [-o <output.c>]\n"
+                "       %s build <input.ct>... [-o <outdir>]\n\n"
+                "L1: compiles C-with-traits (.ct) into plain C, writing <output.c> and\n"
+                "a matching header <output.h>; if -o is omitted the output is <input>.c\n"
+                "next to the input. `build` compiles every input in multi-file mode (the\n"
+                ".c includes its own .h, `pub` symbols go into the .h, an `import` adds\n"
+                "an include line, and `#line` is emitted) and prints the suggested cc\n"
+                "command.\n\n"
+                "  -o <file|dir>   compile: write the generated C to <file>\n"
+                "                  build: write the outputs into <dir>\n"
                 "  -v, --version   print the compiler version and exit\n"
                 "  -h, --help      print this help and exit\n",
-                prog);
+                prog, prog);
     }
 
     /* Derive the default C output path from the input ("a.ct" -> "a.c"). */
@@ -1700,24 +1860,38 @@ impl PipeOps for Pipe {
         return buf;
     }
 
-    /* Compile one input to `outc` and a matching header. Returns 0 on success. */
-    int compile_file(struct SymTab *sym, const char *in, const char *outc) {
+    /* Compile one input to `outc` and a matching header. `multi` selects
+       multi-file mode (see the trait declaration). Returns 0 on success. */
+    int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi) {
         char hbuf[MAX_NAME * 4];
+        const char *base;
 
+        g_multi = multi;
+        g_ns[0] = 0;
         sym->nvars = 0;
         g_nscope = 0;
         g_body_abs = 0;
         g_body_pre = 0;
         g_cur_rettr = -1;
-        sym->ntraits = 0;
-        sym->nstructs = 0;
-        sym->nfuncs = 0;
+        g_ctor_pub = 0;
+        g_line_pub = 0;
+        /* multi-file mode accumulates the traits/structs/signatures across units
+           so a unit can name what the units built before it exported; a
+           single-file compile of the same file starts from an empty table, which
+           is what keeps its output identical to the single-file compiler's */
+        if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; }
         buf_init(&g_unit_init);
         g_has_unit_init = 0;
 
         self->header_path(outc, hbuf, sizeof hbuf);
         g_path = in;
         g_src = self->read_file(in, &g_len);
+
+        /* `#line` is on in multi-file mode only: single-file output is left
+           untouched so it stays byte-identical to L0's */
+        g_emit_line = multi;
+        g_cur_line = 1;
+        g_line_next = -1;
 
         self->out = fopen(outc, "w");
         if (!self->out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
@@ -1732,6 +1906,19 @@ impl PipeOps for Pipe {
                        "/* Generated output is not covered by the GPL and may be "
                        "used without restriction (LICENSE.EXCEPTION). */\n",
                 CTC_VERSION, g_path);
+
+        /* Every generated .c opens by including the header it was built with, so
+           its types are in scope; the imports the driver resolved follow, and the
+           blank line keeps the banner off the first source line. */
+        if (multi) {
+            int i;
+            base = strrchr(hbuf, '/');
+            base = base ? base + 1 : hbuf;
+            fprintf(self->out, "#include \"%s\"\n", base);
+            for (i = 0; i < g_nimp_h; i++)
+                fprintf(self->out, "#include \"%s\"\n", g_imp_h[i]);
+            fputc('\n', self->out);
+        }
 
         self->compile_range(sym, 0, g_len);
 
@@ -1769,6 +1956,7 @@ impl PipeOps for Pipe {
         size_t saved_body_abs = g_body_abs;
         int saved_body_pre = g_body_pre;
         size_t saved_line_off = g_line_off;
+        int saved_cur_line = g_cur_line;
         int vi;
 
         ls = xmalloc(sizeof(size_t) * (n + 2));
@@ -1811,11 +1999,13 @@ impl PipeOps for Pipe {
         sym->vars[vi].tr = -1;
         self->register_body_params(sym, params);
 
+        self->line_break();   /* anchor: the first body line always carries a #line */
         for (k = first; k <= last; k++) {
             size_t t = ls[k], content;
             char *line, *out;
             Buf sb;
 
+            g_cur_line = self->line_of(ls[k]);
             g_line_off = ls[k];
             if (!g_hoist.cap) buf_init(&g_hoist);
             g_hoist.n = 0;
@@ -1827,7 +2017,8 @@ impl PipeOps for Pipe {
             content = ls[k] + (size_t)minind;
             line = xstrndup(g_src + content, le[k] - content);
             out = self->transform_line(sym, line);
-            self->emit_hoisted();
+            if (g_hoist.n == 0) self->line_at(f, (size_t)g_cur_line);
+            else self->emit_hoisted();
             buf_init(&sb);
             self->replace_self(out, strlen(out), &sb);
             {
@@ -1846,6 +2037,7 @@ impl PipeOps for Pipe {
             free(sb.p);
             self->scope_track(sym, ls[k], le[k]);
         }
+        self->line_break();
 
         memcpy(sym->vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
         free(saved_vars);
@@ -1854,6 +2046,7 @@ impl PipeOps for Pipe {
         g_body_abs = saved_body_abs;
         g_body_pre = saved_body_pre;
         g_line_off = saved_line_off;
+        g_cur_line = saved_cur_line;
         free(ls);
         free(le);
     }
@@ -3173,17 +3366,236 @@ static size_t line_assign_eq(const char *line)
     return (size_t)-1;
 }
 
-/* ------------------------------------------------------------------ main */
+/* ------------------------------------------------- `build` driver (plain C) */
 
-int main(int argc, char **argv)
+/* Output path for `in` in build mode: `<outdir>/<base>.c`, or beside the input. */
+static int build_output(const char *in, const char *outdir, char *out, size_t cap)
+{
+    char base[MAX_NAME];
+    const char *b = strrchr(in, '/');
+    size_t l;
+
+    b = b ? b + 1 : in;
+    snprintf(base, sizeof base, "%s", b);
+    l = strlen(base);
+    if (l > 3 && strcmp(base + l - 3, ".ct") == 0) base[l - 3] = 0;
+
+    if (outdir)
+        return snprintf(out, cap, "%s/%s.c", outdir, base) >= (int)cap ? -1 : 0;
+    return snprintf(out, cap, "%.*s%s.c", (int)(b - in), in, base) >= (int)cap ? -1 : 0;
+}
+
+/* Does the file exist? (used to probe import candidates.) */
+static int file_exists(const char *p)
+{
+    FILE *f = fopen(p, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* Collect every `import a::b;` module in `path`, each as "a/b". Returns the count. */
+static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
+{
+    size_t len = 0, pos = 0;
+    char *src = g_pipe.read_file(path, &len);
+    int n = 0;
+
+    while (pos < len) {
+        size_t ls = pos, q = ls, e;
+        while (q < len && (src[q] == ' ' || src[q] == '\t')) q++;
+        if (q + 6 <= len && memcmp(src + q, "import", 6) == 0 &&
+            (q + 6 == len || !is_ident_char((unsigned char)src[q + 6]))) {
+            size_t t = q + 6, k = 0;
+            char mod[MAX_NAME];
+            int ok = 1;
+            while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+            mod[0] = 0;
+            for (;;) {
+                size_t s = t;
+                while (t < len && is_ident_char((unsigned char)src[t])) t++;
+                if (t == s) { ok = 0; break; }
+                if (k && k + 1 < sizeof mod) mod[k++] = '/';
+                if (k + (t - s) + 1 >= sizeof mod) { ok = 0; break; }
+                memcpy(mod + k, src + s, t - s);
+                k += t - s;
+                mod[k] = 0;
+                while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                if (t + 1 < len && src[t] == ':' && src[t + 1] == ':') {
+                    t += 2;
+                    while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                    continue;
+                }
+                break;
+            }
+            if (ok && k && t < len && src[t] == ';') {
+                if (n >= max) {   /* overflow dies, never truncates */
+                    fprintf(stderr, "ctc: too many imports in '%s' (max %d)\n", path, max);
+                    free(src);
+                    exit(1);
+                }
+                snprintf(mods[n], MAX_NAME, "%s", mod);
+                n++;
+            }
+        }
+        e = ls;
+        while (e < len && src[e] != '\n') e++;
+        pos = (e < len) ? e + 1 : len;
+    }
+    free(src);
+    return n;
+}
+
+/* Resolve `mod` ("a/b") against the importing file's directory -> `<dir>/a/b.ct`
+   or `<dir>/a/b.h.ct`. Returns 0 on success. */
+static int resolve_import(const char *importer, const char *mod, char *out, size_t cap)
+{
+    char dir[MAX_NAME * 2];
+    const char *slash = strrchr(importer, '/');
+
+    if (slash) {
+        size_t n = (size_t)(slash - importer);
+        if (n >= sizeof dir) n = sizeof dir - 1;
+        memcpy(dir, importer, n);
+        dir[n] = 0;
+    } else {
+        snprintf(dir, sizeof dir, ".");
+    }
+
+    if (snprintf(out, cap, "%s/%s.ct", dir, mod) >= (int)cap) return -1;
+    if (file_exists(out)) return 0;
+    if (snprintf(out, cap, "%s/%s.h.ct", dir, mod) >= (int)cap) return -1;
+    if (file_exists(out)) return 0;
+    return -1;
+}
+
+/* ------------------------------------------------------------------ units */
+
+static char g_unit_path[MAX_UNITS][MAX_NAME * 4];
+static char g_unit_out[MAX_UNITS][MAX_NAME * 4];
+static char g_unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
+static int  g_unit_nimp[MAX_UNITS];
+static int  g_unit_n = 0;
+static int  g_order[MAX_UNITS];
+static int  g_order_n = 0;
+
+static int unit_find(const char *path)
+{
+    int i;
+    for (i = 0; i < g_unit_n; i++)
+        if (strcmp(g_unit_path[i], path) == 0) return i;
+    return -1;
+}
+
+/* Add `path` and its imports (post-order: dependencies land in g_order first). */
+static int unit_visit(const char *path)
+{
+    int idx = unit_find(path), k;
+    char mods[MAX_IMPORTS][MAX_NAME];
+    int n;
+
+    if (idx >= 0) return idx;                      /* already scheduled */
+
+    if (g_unit_n >= MAX_UNITS) {
+        fprintf(stderr, "ctc: too many units (max %d)\n", MAX_UNITS);
+        return -1;
+    }
+    idx = g_unit_n++;
+    snprintf(g_unit_path[idx], sizeof g_unit_path[0], "%s", path);
+    g_unit_nimp[idx] = 0;
+
+    n = collect_imports(path, mods, MAX_IMPORTS);
+    for (k = 0; k < n; k++) {
+        char dep[MAX_NAME * 4];
+        const char *seg;
+        char hname[MAX_NAME];
+        if (resolve_import(path, mods[k], dep, sizeof dep) != 0) {
+            fprintf(stderr, "ctc: cannot resolve import '%s' from '%s'\n", mods[k], path);
+            return -1;
+        }
+        if (unit_visit(dep) < 0) return -1;
+        seg = strrchr(mods[k], '/');
+        seg = seg ? seg + 1 : mods[k];
+        snprintf(hname, sizeof hname, "%s.h", seg);
+        if (g_unit_nimp[idx] < MAX_IMPORTS)
+            snprintf(g_unit_imp[idx][g_unit_nimp[idx]++], MAX_NAME, "%s", hname);
+    }
+
+    g_order[g_order_n++] = idx;
+    return idx;
+}
+
+/* `build`: resolve imports, compile every unit in dependency order in
+   multi-file mode, then print the suggested cc command. The compiler never
+   invokes a C compiler itself (it stays dependency-free). */
+static int build_main(int argc, char **argv, const char *prog)
+{
+    const char *in[MAX_BUILD];
+    const char *outdir = NULL;
+    int n = 0, i, o;
+    Buf cc;
+
+    for (i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) { g_pipe.usage(prog); return 0; }
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("ctc v%s\n", CTC_VERSION);
+            return 0;
+        }
+        if (strcmp(argv[i], "-o") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
+            outdir = argv[++i];
+            continue;
+        }
+        if (argv[i][0] == '-' && argv[i][1]) {
+            fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+            g_pipe.usage(prog);
+            return 1;
+        }
+        if (n >= MAX_BUILD) {
+            fprintf(stderr, "ctc: too many inputs (max %d)\n", MAX_BUILD);
+            return 1;
+        }
+        in[n++] = argv[i];
+    }
+
+    if (!n) { g_pipe.usage(prog); return 1; }
+
+    for (i = 0; i < n; i++)
+        if (unit_visit(in[i]) < 0) return 1;
+
+    for (o = 0; o < g_order_n; o++) {
+        int u = g_order[o];
+        int k;
+        if (build_output(g_unit_path[u], outdir, g_unit_out[u], sizeof g_unit_out[0]) != 0) {
+            fprintf(stderr, "ctc: output path too long for '%s'\n", g_unit_path[u]);
+            return 1;
+        }
+        g_nimp_h = g_unit_nimp[u];
+        for (k = 0; k < g_nimp_h; k++)
+            snprintf(g_imp_h[k], MAX_NAME, "%s", g_unit_imp[u][k]);
+        if (g_pipe.compile_file(&g_sym, g_unit_path[u], g_unit_out[u], 1) != 0) return 1;
+    }
+
+    buf_init(&cc);
+    buf_puts(&cc, "cc");
+    for (o = 0; o < g_order_n; o++) { buf_putc(&cc, ' '); buf_puts(&cc, g_unit_out[g_order[o]]); }
+    buf_puts(&cc, " -o a.out");
+    printf("%s\n", cc.p);
+    free(cc.p);
+    return 0;
+}
+
+/* Compile one .ct file to .c + .h (single-file mode). argv[0..argc-1] are the
+   compile arguments (argv[0] is not the program name); prog is for diagnostics. */
+static int compile_main(int argc, char **argv, const char *prog)
 {
     const char *in = NULL, *outc = NULL;
     char outbuf[MAX_NAME * 4];
     int i;
 
-    for (i = 1; i < argc; i++) {
+    for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            g_pipe.usage(argv[0]);
+            g_pipe.usage(prog);
             return 0;
         }
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -3197,13 +3609,29 @@ int main(int argc, char **argv)
         }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
-            g_pipe.usage(argv[0]);
+            g_pipe.usage(prog);
             return 1;
         }
         in = argv[i];
     }
 
-    if (!in) { g_pipe.usage(argv[0]); return 1; }
+    if (!in) { g_pipe.usage(prog); return 1; }
     if (!outc) { g_pipe.default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    return g_pipe.compile_file(&g_sym, in, outc);
+    return g_pipe.compile_file(&g_sym, in, outc, 0);
+}
+
+int main(int argc, char **argv)
+{
+    int first = 1;
+
+    /* Single-entry `ct` with `ctc` kept as a compatibility alias. `compile` is
+       the default subcommand (`ct X` == `ct compile X`); `build` compiles
+       several units in multi-file mode. */
+    if (first < argc && strcmp(argv[first], "build") == 0)
+        return build_main(argc - first - 1, argv + first + 1, argv[0]);
+
+    if (first < argc && strcmp(argv[first], "compile") == 0)
+        first++;
+
+    return compile_main(argc - first, argv + first, argv[0]);
 }

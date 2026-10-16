@@ -67,7 +67,12 @@ namespace_path_too_long
 ns_path_nested
 ns_qualified_name
 "
-baseline_multi=""
+baseline_multi="
+test/archive/import/app
+test/archive/import/shapes
+test/archive/multifile/app
+test/archive/multifile/calc
+"
 
 in_list() {
     case " $(echo $2) " in
