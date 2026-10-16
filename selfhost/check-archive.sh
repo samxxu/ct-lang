@@ -41,13 +41,14 @@
 #        <dir>` invocation over the whole directory (multi-file mode: the .c
 #        includes its own .h). One build per directory; each unit is staged at the
 #        path its golden records, exactly as in group 4.
-#   7  designed cases        test/modules/*/build.args
+#   7  designed cases        test/modules/*/{build,compile}.args
 #        no archive oracle backs these: they pin semantics added after the
-#        over-reach strip (`foo.h.ct` file names, `-I` import roots). Each fixture
-#        dir holds a build.args (the arguments after `build`, repo-relative) plus
-#        its own *.expected.c/*.expected.h to byte-diff and, for positive cases, an
-#        expected.out to link-and-run against. A fixture with an expected.err is a
-#        negative case (the build must fail with that message).
+#        over-reach strip (`foo.h.ct` file names, `-I` import roots, `--line` /
+#        `--no-line`). Each fixture dir holds a build.args or compile.args (the
+#        arguments after `build`, or the whole compile-mode line, repo-relative)
+#        plus its own *.expected.c/*.expected.h to byte-diff and, for positive
+#        cases, an expected.out to link-and-run against. A fixture with an
+#        expected.err is a negative case (the command must fail with that message).
 #
 # Usage:  bash selfhost/check-archive.sh        (or ./selfhost/check-archive.sh once +x)
 #         CC=clang bash selfhost/check-archive.sh
@@ -95,7 +96,8 @@ test/archive/multifile/app
 test/archive/multifile/calc
 "
 # designed cases: no archive oracle backs these, they pin the new semantics of
-# `foo.h.ct` file names and `-I` import roots, byte-diffed against their own
+# `foo.h.ct` file names, `-I` import roots and the `--line` / `--no-line`
+# overrides of the per-mode `#line` default, byte-diffed against their own
 # goldens plus an end-to-end run (see group 7). `split` additionally pins the
 # cross-unit OO contract the selfhost split relies on: a `pub trait`/`pub struct`
 # in a header unit, its `impl` (with a `static` vtable) in another unit, and a
@@ -106,6 +108,8 @@ inc
 inc_missing
 precedence
 split
+noline
+line
 "
 
 in_list() {
@@ -378,14 +382,17 @@ for dir in test/archive/import test/archive/multifile; do
 done
 
 # ------------------------------------------------- 7) designed module cases
-banner "7) designed module cases (test/modules/*/build.args)"
+banner "7) designed module cases (test/modules/*/{build,compile}.args)"
 zpass=0; znew=0; zpending=0; zregress=0
 
-for argfile in test/modules/*/build.args; do
-    [ -f "$argfile" ] || continue
-    fdir="${argfile%/build.args}"
+for fdir in test/modules/*/; do
+    [ -d "$fdir" ] || continue
+    fdir="${fdir%/}"
     name="${fdir#test/modules/}"
-    args="$(cat "$argfile")"
+    if [ -f "$fdir/compile.args" ]; then mode=compile
+    elif [ -f "$fdir/build.args" ]; then mode=build
+    else continue; fi
+    args="$(cat "$fdir/$mode.args")"
     outdir="$work/mod-$name"
     log="$work/mod-$name.log"
     rm -rf "$outdir"
@@ -395,11 +402,25 @@ for argfile in test/modules/*/build.args; do
     matched=0
     detail=""
 
-    if [ -f "$errfile" ]; then
-        # a negative case: the build must fail, and every non-comment line of
-        # expected.err must appear on stderr (the same convention as group 5)
+    # build mode compiles into $outdir and its args carry no `-o` (the runner
+    # appends it); compile mode runs its args verbatim from a staging copy so the
+    # recorded banner path matches, and its args name both the input and `-o`.
+    if [ "$mode" = compile ]; then
+        stage="$outdir/src"
+        mkdir -p "$stage"
+        cp "$fdir"/*.ct "$stage"/ 2>/dev/null
+        ( cd "$stage" && "$l2" $args ) >/dev/null 2>"$log"
+        rc=$?
+        runc="$stage"
+    else
         "$l2" build $args -o "$outdir" >/dev/null 2>"$log"
         rc=$?
+        runc="$outdir"
+    fi
+
+    if [ -f "$errfile" ]; then
+        # a negative case: the command must fail, and every non-comment line of
+        # expected.err must appear on stderr (the same convention as group 5)
         detail="(got: $(first_line "$(cat "$log")"))"
         if [ "$rc" -ne 0 ]; then
             matched=1
@@ -410,8 +431,6 @@ for argfile in test/modules/*/build.args; do
         fi
     else
         # a positive case: byte-diff every unit pair, then link and run
-        "$l2" build $args -o "$outdir" >/dev/null 2>"$log"
-        rc=$?
         detail="(exit $rc: $(first_line "$(cat "$log")"))"
         matched=1
         if [ "$rc" -ne 0 ]; then
@@ -420,8 +439,8 @@ for argfile in test/modules/*/build.args; do
             for exp_c in "$fdir"/*.expected.c; do
                 [ -f "$exp_c" ] || continue
                 b="$(basename "$exp_c" .expected.c)"
-                if ! cmp -s "$outdir/$b.c" "$exp_c" ||
-                   ! cmp -s "$outdir/$b.h" "$fdir/$b.expected.h"; then
+                if ! cmp -s "$runc/$b.c" "$exp_c" ||
+                   ! cmp -s "$runc/$b.h" "$fdir/$b.expected.h"; then
                     matched=0
                     detail="($b.c or $b.h differs from its golden)"
                     break
@@ -431,7 +450,7 @@ for argfile in test/modules/*/build.args; do
         outfile="$fdir/expected.out"
         if [ "$matched" -eq 1 ] && [ -f "$outfile" ]; then
             exe="$work/mod-$name.bin"
-            if "$CC" "$outdir"/*.c -o "$exe" >/dev/null 2>&1; then
+            if "$CC" "$runc"/*.c -o "$exe" >/dev/null 2>&1; then
                 if ! "$exe" >"$work/mod-$name.out" 2>&1 ||
                    ! cmp -s "$work/mod-$name.out" "$outfile"; then
                     matched=0
