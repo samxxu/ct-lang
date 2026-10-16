@@ -69,9 +69,12 @@ if [ -z "$CT" ]; then
     CT="$TMP/ctc-l2"
 fi
 
-# Probes that must pass today: the boxing surface the live compiler (L2) already
-# reaches. Type/pointer interface-field assignment, plus the boxing control group.
-BASELINE="p06_iface_value_field_assign p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return"
+# Probes that must pass today: the interface-collection surface (arrays, their
+# element assignment and dispatch) and the boxing surface the live compiler (L2)
+# reaches -- interface fields at the construction point and by assignment, plus
+# the interface local/return control group. `ast_spike` is the whole target
+# program: it must compile, run and print 5.
+BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return ast_spike"
 
 n_pass=0
 n_pending=0
