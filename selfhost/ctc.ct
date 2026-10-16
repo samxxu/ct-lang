@@ -43,6 +43,11 @@
  *     multi-file mode -- the .c includes its own .h, `pub` declarations are routed
  *     into it, an `import` of a sibling file adds the matching include, and `#line`
  *     is on by default so a C compiler's diagnostics point back at the .ct
+ *   - a `*.h.ct` basename names a header unit: the trailing `.h.ct` is stripped for
+ *     the output (foo.h.ct -> foo.c + foo.h), so the pair is publishable under the
+ *     name a consumer would `import`; a plain `*.ct` is unchanged
+ *   - `import` search roots: `-I <dir>` (repeatable) adds a root that is searched
+ *     after the importing file's own directory, in command-line order
  *   - the generated .h (include guard, types only) and the provenance banner
  *   - the CLI: `ctc [compile] <in.ct> -o <out.c>` (writes <out.c> and <out.h>),
  *     and `ctc build <in.ct>... -o <dir>` (one .c/.h pair per unit, then the
@@ -52,6 +57,9 @@
  * in ctc.c). L1 reports them as errors instead of emitting C that cannot compile:
  *   - diagnostics (leak warnings, `--diagnostics`); `delete` is supported, Drop is not
  *   - `--line` / `--no-line`: multi-file mode always emits `#line`
+ *   - the other half of the file-name convention: `foo.ct` must keep producing the
+ *     .c/.h pair it always has (the frozen archive goldens compare the .h too), so
+ *     the "a plain .ct publishes no header" rule waits for Phase 5
  *
  * The data model and pipeline layers are written as CT objects: the four symbol
  * tables live inside `g_sym` (`struct SymTab` + `use SymTabOps`) and the whole
@@ -95,6 +103,7 @@
 #define MAX_UNITS  64                     /* units in one `ctc build` run */
 #define MAX_BUILD  32                     /* inputs on a single command line */
 #define MAX_IMPORTS 16                    /* `import` lines per unit */
+#define MAX_INCDIRS 16                    /* `-I` search roots per command */
 
 #define CTC_VERSION "0.0.1"
 
@@ -208,6 +217,11 @@ static long g_line_next = -1;
    (filled in by the build driver before the unit is compiled). */
 static char g_imp_h[MAX_IMPORTS][MAX_NAME];
 static int  g_nimp_h = 0;
+
+/* Extra `import` search roots from `-I <dir>` (checked after the importing
+   file's own directory, in command-line order). */
+static char g_incdir[MAX_INCDIRS][MAX_NAME * 4];
+static int  g_nincdirs = 0;
 
 /* File-scope objects/arrays cannot write their vptrs in place (there are no
    statements out there), so the writes are collected here while scanning and
@@ -1783,8 +1797,8 @@ impl PipeOps for Pipe {
     void usage(const char *prog) {
         (void)self;  /* a pure CLI helper; the receiver is not used */
         fprintf(stderr,
-                "usage: %s [compile] <input.ct> [-o <output.c>]\n"
-                "       %s build <input.ct>... [-o <outdir>]\n\n"
+                "usage: %s [compile] <input.ct> [-o <output.c>] [-I <dir>]\n"
+                "       %s build <input.ct>... [-o <outdir>] [-I <dir>]...\n\n"
                 "L1: compiles C-with-traits (.ct) into plain C, writing <output.c> and\n"
                 "a matching header <output.h>; if -o is omitted the output is <input>.c\n"
                 "next to the input. `build` compiles every input in multi-file mode (the\n"
@@ -1793,16 +1807,21 @@ impl PipeOps for Pipe {
                 "command.\n\n"
                 "  -o <file|dir>   compile: write the generated C to <file>\n"
                 "                  build: write the outputs into <dir>\n"
+                "  -I <dir>        extra `import` search root, repeatable; checked after\n"
+                "                  the importing file's own directory\n"
                 "  -v, --version   print the compiler version and exit\n"
                 "  -h, --help      print this help and exit\n",
                 prog, prog);
     }
 
-    /* Derive the default C output path from the input ("a.ct" -> "a.c"). */
+    /* Derive the default C output path from the input ("a.ct" -> "a.c",
+       "a.h.ct" -> "a.c" -- the `.h.ct` basename names a header unit). */
     void default_output(const char *in, char *out, size_t n) {
         size_t l = strlen(in);
         (void)self;  /* a pure CLI helper; the receiver is not used */
-        if (l > 3 && strcmp(in + l - 3, ".ct") == 0) {
+        if (l > 5 && strcmp(in + l - 5, ".h.ct") == 0) {
+            snprintf(out, n, "%.*s.c", (int)(l - 5), in);
+        } else if (l > 3 && strcmp(in + l - 3, ".ct") == 0) {
             snprintf(out, n, "%.*s.c", (int)(l - 3), in);
         } else {
             snprintf(out, n, "%s.c", in);
@@ -3378,7 +3397,10 @@ static int build_output(const char *in, const char *outdir, char *out, size_t ca
     b = b ? b + 1 : in;
     snprintf(base, sizeof base, "%s", b);
     l = strlen(base);
-    if (l > 3 && strcmp(base + l - 3, ".ct") == 0) base[l - 3] = 0;
+    /* `foo.h.ct` names a header unit: strip the whole `.h.ct` so the pair comes
+       out as `foo.c` + `foo.h`; a plain `foo.ct` keeps its old `.c` name. */
+    if (l > 5 && strcmp(base + l - 5, ".h.ct") == 0) base[l - 5] = 0;
+    else if (l > 3 && strcmp(base + l - 3, ".ct") == 0) base[l - 3] = 0;
 
     if (outdir)
         return snprintf(out, cap, "%s/%s.c", outdir, base) >= (int)cap ? -1 : 0;
@@ -3446,12 +3468,15 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
     return n;
 }
 
-/* Resolve `mod` ("a/b") against the importing file's directory -> `<dir>/a/b.ct`
-   or `<dir>/a/b.h.ct`. Returns 0 on success. */
+/* Resolve `mod` ("a/b") against the importing file's directory, then every `-I`
+   root in command-line order -> `<root>/a/b.ct` or `<root>/a/b.h.ct`. Returns 0
+   on success. `k == -1` is the "own directory" sentinel. */
 static int resolve_import(const char *importer, const char *mod, char *out, size_t cap)
 {
     char dir[MAX_NAME * 2];
     const char *slash = strrchr(importer, '/');
+    const char *root;
+    int k;
 
     if (slash) {
         size_t n = (size_t)(slash - importer);
@@ -3462,10 +3487,13 @@ static int resolve_import(const char *importer, const char *mod, char *out, size
         snprintf(dir, sizeof dir, ".");
     }
 
-    if (snprintf(out, cap, "%s/%s.ct", dir, mod) >= (int)cap) return -1;
-    if (file_exists(out)) return 0;
-    if (snprintf(out, cap, "%s/%s.h.ct", dir, mod) >= (int)cap) return -1;
-    if (file_exists(out)) return 0;
+    for (k = -1; k < g_nincdirs; k++) {
+        root = (k < 0) ? dir : g_incdir[k];
+        if (snprintf(out, cap, "%s/%s.ct", root, mod) >= (int)cap) return -1;
+        if (file_exists(out)) return 0;
+        if (snprintf(out, cap, "%s/%s.h.ct", root, mod) >= (int)cap) return -1;
+        if (file_exists(out)) return 0;
+    }
     return -1;
 }
 
@@ -3546,6 +3574,16 @@ static int build_main(int argc, char **argv, const char *prog)
             outdir = argv[++i];
             continue;
         }
+        if (strcmp(argv[i], "-I") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -I needs an argument\n"); return 1; }
+            if (g_nincdirs >= MAX_INCDIRS) {
+                fprintf(stderr, "ctc: too many -I roots (max %d)\n", MAX_INCDIRS);
+                return 1;
+            }
+            snprintf(g_incdir[g_nincdirs], sizeof g_incdir[0], "%s", argv[++i]);
+            g_nincdirs++;
+            continue;
+        }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             g_pipe.usage(prog);
@@ -3605,6 +3643,16 @@ static int compile_main(int argc, char **argv, const char *prog)
         if (strcmp(argv[i], "-o") == 0) {
             if (i + 1 >= argc) { fprintf(stderr, "ctc: -o needs an argument\n"); return 1; }
             outc = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "-I") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: -I needs an argument\n"); return 1; }
+            if (g_nincdirs >= MAX_INCDIRS) {
+                fprintf(stderr, "ctc: too many -I roots (max %d)\n", MAX_INCDIRS);
+                return 1;
+            }
+            snprintf(g_incdir[g_nincdirs], sizeof g_incdir[0], "%s", argv[++i]);
+            g_nincdirs++;
             continue;
         }
         if (argv[i][0] == '-' && argv[i][1]) {

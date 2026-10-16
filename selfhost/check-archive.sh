@@ -33,6 +33,13 @@
 #        <dir>` invocation over the whole directory (multi-file mode: the .c
 #        includes its own .h). One build per directory; each unit is staged at the
 #        path its golden records, exactly as in group 4.
+#   7  designed cases        test/modules/*/build.args
+#        no archive oracle backs these: they pin semantics added after the
+#        over-reach strip (`foo.h.ct` file names, `-I` import roots). Each fixture
+#        dir holds a build.args (the arguments after `build`, repo-relative) plus
+#        its own *.expected.c/*.expected.h to byte-diff and, for positive cases, an
+#        expected.out to link-and-run against. A fixture with an expected.err is a
+#        negative case (the build must fail with that message).
 #
 # Usage:  bash selfhost/check-archive.sh        (or ./selfhost/check-archive.sh once +x)
 #         CC=clang bash selfhost/check-archive.sh
@@ -72,6 +79,14 @@ test/archive/import/app
 test/archive/import/shapes
 test/archive/multifile/app
 test/archive/multifile/calc
+"
+# designed cases: no archive oracle backs these, they pin the new semantics of
+# `foo.h.ct` file names and `-I` import roots, byte-diffed against their own
+# goldens plus an end-to-end run (see group 7)
+baseline_designed="
+hdr
+inc
+inc_missing
 "
 
 in_list() {
@@ -316,6 +331,93 @@ for dir in test/archive/import test/archive/multifile; do
     done
 done
 
+# ------------------------------------------------- 7) designed module cases
+banner "7) designed module cases (test/modules/*/build.args)"
+zpass=0; znew=0; zpending=0; zregress=0
+
+for argfile in test/modules/*/build.args; do
+    [ -f "$argfile" ] || continue
+    fdir="${argfile%/build.args}"
+    name="${fdir#test/modules/}"
+    args="$(cat "$argfile")"
+    outdir="$work/mod-$name"
+    log="$work/mod-$name.log"
+    rm -rf "$outdir"
+    mkdir -p "$outdir"
+
+    errfile="$fdir/expected.err"
+    matched=0
+    detail=""
+
+    if [ -f "$errfile" ]; then
+        # a negative case: the build must fail, and every non-comment line of
+        # expected.err must appear on stderr (the same convention as group 5)
+        "$l1" build $args -o "$outdir" >/dev/null 2>"$log"
+        rc=$?
+        detail="(got: $(first_line "$(cat "$log")"))"
+        if [ "$rc" -ne 0 ]; then
+            matched=1
+            while IFS= read -r want; do
+                case "$want" in '' | '#'*) continue ;; esac
+                if ! grep -Fq -- "$want" "$log"; then matched=0; break; fi
+            done <"$errfile"
+        fi
+    else
+        # a positive case: byte-diff every unit pair, then link and run
+        "$l1" build $args -o "$outdir" >/dev/null 2>"$log"
+        rc=$?
+        detail="(exit $rc: $(first_line "$(cat "$log")"))"
+        matched=1
+        if [ "$rc" -ne 0 ]; then
+            matched=0
+        else
+            for exp_c in "$fdir"/*.expected.c; do
+                [ -f "$exp_c" ] || continue
+                b="$(basename "$exp_c" .expected.c)"
+                if ! cmp -s "$outdir/$b.c" "$exp_c" ||
+                   ! cmp -s "$outdir/$b.h" "$fdir/$b.expected.h"; then
+                    matched=0
+                    detail="($b.c or $b.h differs from its golden)"
+                    break
+                fi
+            done
+        fi
+        outfile="$fdir/expected.out"
+        if [ "$matched" -eq 1 ] && [ -f "$outfile" ]; then
+            exe="$work/mod-$name.bin"
+            if "$CC" "$outdir"/*.c -o "$exe" >/dev/null 2>&1; then
+                if ! "$exe" >"$work/mod-$name.out" 2>&1 ||
+                   ! cmp -s "$work/mod-$name.out" "$outfile"; then
+                    matched=0
+                    detail="(the linked program's output differs from expected.out)"
+                fi
+            else
+                matched=0
+                detail="(the generated C did not link)"
+            fi
+        fi
+    fi
+
+    if in_list "$name" "$baseline_designed"; then
+        if [ "$matched" -eq 1 ]; then
+            printf 'PASS        %s\n' "$name"
+            zpass=$((zpass + 1))
+        else
+            printf 'REGRESSION  %s  %s\n' "$name" "$detail"
+            zregress=$((zregress + 1))
+            fail=1
+        fi
+    else
+        if [ "$matched" -eq 1 ]; then
+            printf 'NEW         %s  (promote it in the baseline)\n' "$name"
+            znew=$((znew + 1))
+        else
+            printf 'PENDING     %s  %s\n' "$name" "$detail"
+            zpending=$((zpending + 1))
+        fi
+    fi
+done
+
 # --------------------------------------------------------------- verdict
 banner "VERDICT"
 printf 'single-unit goldens: %d pass, %d new, %d pending, %d regression\n' \
@@ -324,11 +426,13 @@ printf 'diagnostics:         %d pass, %d new, %d pending, %d regression\n' \
     "$epass" "$enew" "$epending" "$eregress"
 printf 'multi-unit goldens:  %d pass, %d new, %d pending, %d regression\n' \
     "$kpass" "$knew" "$kpending" "$kregress"
+printf 'designed cases:      %d pass, %d new, %d pending, %d regression\n' \
+    "$zpass" "$znew" "$zpending" "$zregress"
 
 if [ "$fail" -eq 0 ]; then
     printf 'check-archive: OK (no regression)\n'
 else
-    printf 'check-archive: FAIL (%d regression(s))\n' "$((nregress + eregress + kregress))"
+    printf 'check-archive: FAIL (%d regression(s))\n' "$((nregress + eregress + kregress + zregress))"
 fi
 
 exit "$fail"

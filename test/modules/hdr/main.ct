@@ -1,0 +1,9 @@
+import shapes;
+
+#include <stdio.h>
+
+int main(void) {
+    Point p = { .x = 1, .y = 2 };
+    printf("%d %d %d\n", p.x, p.y, add(2, 3));
+    return 0;
+}
