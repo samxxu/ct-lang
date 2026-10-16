@@ -149,6 +149,11 @@ Phase 0 不做 import（单文件），Phase 1 实现。
 | `foo.ct` | 只生成 `foo.c`（实现文件，不对外暴露接口），文件内符号默认只在当前编译单元可见 |
 | `foo.h.ct` | 生成 `foo.h` + `foo.c`（接口 + 实现分离） |
 
+> **落地说明（2026-10-16）**：**附加式落地**——`foo.h.ct` 这一半已实现：基名去掉 `.h.ct` 后产出 `foo.c` + `foo.h`，
+> `import foo;` 也会回退命中 `foo.h.ct`（并因此产出 `foo.h`）。`foo.ct` 「只产出 `foo.c`、不对外暴露」的那一半
+> **未落地**：冻结归档对 `foo.ct` 的 `.h` 也做逐字节比对（`check-archive.sh` 组 6），砍掉 `.h` 会立刻判 REGRESSION，
+> 故推迟到 **Phase 5**。用户 2026-10-16 拍板：本轮只做附加式，不改 `*.ct` 既有产物。
+
 编译器从 `pub` 关键字识别需要暴露的符号，自动生成 `.h`（含 `#ifndef` 守卫、struct 定义、函数声明、vtable 类型）和 `.c`（含实现）：
 
 ```c
@@ -282,7 +287,7 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 
 | # | 前置条件 | 为什么自举需要 | 落地 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | 越位实现 → 自举期回归 CT | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` 已实现；跨单元引用带 trait 的对象尚不可。单文件自举路径**不需要**此项（见上方「最小可自举版」） |
+| 1 | **多文件编译 + namespace**（`.h.ct` / `import` / `pub`） | 否则全部代码挤在单文件，没有模块边界 | 越位实现 → 自举期回归 CT | ⚠️ namespace + 多文件（`ct build`）+ `pub` + `import` + `.h.ct` 命名 + `-I` 搜索根已实现；跨单元引用带 trait 的对象尚不可。单文件自举路径**不需要**此项（见上方「最小可自举版」） |
 | 2 | **堆对象的语言级创建** | AST / 符号表需动态分配；当前只能手写 `q->__<trait>_vptr = &…;`（可用，但漏写即运行期崩） | C 侧（自举前置；与 Drop 一起定） | ✅ `T *p = malloc(...)`（含 `calloc`）已在声明后自动写 vptr（含嵌套值字段，D1=A）；`use Drop` + `delete` 递归释放已实现 |
 | 3 | **文件作用域的对象数组** | 全局符号表；实测 `Person ps[2];` 在文件作用域直接 `die` | C 侧（自举前置；"对象住哪儿"设计） | ✅ Phase 1.6：文件作用域对象 / 数组的 vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入；`static` 前缀的同款声明也已识别（`static Person g;` / `static Person gs[2];`，Phase 1） |
 | 4 | **`delete` 覆盖 `char *`** | 字符串 / 缓冲区；实测 `delete buf;`（`char *buf`）原样透传 → 编译错，只能改用 `free()` | 越位实现 → 自举期回归 CT | ✅ `delete p;` 已对任意指针生效（`char *` → `if (p) free(p);`） |
@@ -610,8 +615,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **CT 重做**：namespace（`parse_namespace` + 限定查找 + 产物前缀 `<Ns>_<Struct>_<Trait>_<method>`）、多文件 `ct build` / `.h.ct` / `pub`（类型下沉 `.h`、`.c` `#include` 自己的头、可见性规则）、`import`（路径解析 + 递归编入 + 跨单元符号累积）。
 - **出口**：归档用例**逐字节一致**；**编译器源码切成多文件**（后半程的最大红利）。
 - **对差依据**：`test/cases/19_namespace`、`20_namespace_nested`、`test/multifile/`、`test/import/`。
-- **风险**：命名前缀一经发布即契约，须先冻结；多文件破坏「`.c` 自包含」，须与 `pub` 可见性规则一起定案；`-I` 与跨单元 vtable 可见性仍待定。
+- **风险**：命名前缀一经发布即契约，须先冻结；多文件破坏「`.c` 自包含」，须与 `pub` 可见性规则一起定案；`-I` 已定（**本地优先**：先查导入方所在目录，再按命令行顺序逐个查 `-I` 根）；跨单元 vtable 可见性仍待定。
 - **进展（2026-10-16）**：**namespace 已达成**——`selfhost/check-archive.sh` 报 `19_namespace` 与 `20_namespace_nested` 逐字节一致（嵌套命名空间顺带达成），另有 4 条 namespace 负例（`namespace_bad_path` / `namespace_path_too_long` / `ns_path_nested` / `ns_qualified_name`，含逐字相同的诊断）通过并提升进关卡基线；Phase 1 出口不退化（`check-goldens.sh` 25/25、L1′ 一致）。实现要点：`g_ns` 扁平前缀、`read_qual_ref` 解析限定声明头、`transform_calls` 的 `::` 链重写、`compile_range` 的 namespace 分支（递归 + 压/还前缀）。**待做**：多文件 `.h.ct` / `pub` / `ct build` / `import`——`test/archive/{multifile,import}/` 的四个单元仍 PENDING。
+- **进展（2026-10-16，切片 2d/2e + `.h.ct`/`-I`）**：**多文件 `ct build`、`pub`、`import` 与 `.h.ct` / `-I` 均达成**——`test/archive/{multifile,import}/` 四单元逐字节一致（`.c` 与 `.h` 两侧）并提升进 `baseline_multi`；本轮再补 **`.h.ct` 附加式命名**（基名剥 `.h.ct` → `foo.c` + `foo.h`，`import foo;` 回退命中 `foo.h.ct`）与 **`-I <dir>` 搜索根**（可重复；解析顺序 = 导入方目录优先，再按命令行顺序）。CLI 增 `build` 子命令（`compile` 兼作显式别名，build 模式 `-o` 为输出**目录**）；驱动 `collect_imports` / `resolve_import` / `unit_visit` / `build_output` / `build_main` 解析每个 `import a::b;`、按依赖后序逐单元以多文件模式编译并打印建议的 `cc` 命令。`pub` 函数行剥掉 `pub` 但原型进 `.h`（`.c` 留空行），`pub trait` / `pub struct` 只把类型放进 `.h`，`import` 行被消费，`#line` 映射（`line_of` / `line_at` / `line_break`）落在多文件 `.c` 里。**新语义的用例**放 `test/modules/**`，由 `check-archive.sh` **第 7 组 designed** 覆盖（无归档 oracle，自比对 golden + 端到端运行）：`hdr`（`.h.ct` 命名 + 回退）、`inc`（`-I` 使能用）、`inc_missing`（不给 `-I` 则必须报 `cannot resolve import`）。**待做**：`--line` / `--no-line` 覆盖开关（归 Phase 4）。
 
 ### Phase 3：内存（原 2.2）
 
@@ -1038,7 +1044,7 @@ For L1 / L2 to write a compiler in CT, the following must exist first (**each on
 
 | # | Prerequisite | Why self-hosting needs it | Landing | Status |
 | --- | --- | --- | --- | --- |
-| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | over-reach → reclaimed in CT | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` landed; referencing a trait-carrying object across units not yet. The single-file bootstrap path **does not need** this (see "Minimal self-hostable version" above) |
+| 1 | **Multi-file compilation + namespaces** (`.h.ct` / `import` / `pub`) | otherwise all code lands in one file with no module boundary | over-reach → reclaimed in CT | ⚠️ namespaces + multi-file (`ct build`) + `pub` + `import` + `.h.ct` file names + `-I` search roots landed; referencing a trait-carrying object across units not yet. The single-file bootstrap path **does not need** this (see "Minimal self-hostable version" above) |
 | 2 | **Language-level heap creation** | the AST and symbol tables must allocate dynamically; today you can only hand-write `q->__<trait>_vptr = &…;` (workable, but forgetting it crashes at run time) | C-side, self-hosting prereq (with Drop) | ✅ `T *p = malloc(...)` (incl. `calloc`) writes the vptrs automatically right after the declaration (nested value fields included, D1=A); `use Drop` + recursive release via `delete` landed |
 | 3 | **Object arrays at file scope** | global symbol tables; `Person ps[2];` at file scope `die`s (verified) | C-side, self-hosting prereq ("where objects live") | ✅ Phase 1.6: the vptrs of file-scope objects / arrays are written before `main` by the generated constructor `__ct_init` (`__attribute__((constructor))`, D5=A); the `static`-prefixed form is recognised too (`static Person g;` / `static Person gs[2];`, Phase 1) |
 | 4 | **`delete` covering `char *`** | strings / buffers; `delete buf;` on a `char *buf` is passed through verbatim → compile error, so `free()` must be used instead | over-reach → reclaimed in CT | ✅ `delete p;` now works for any pointer (`char *` → `if (p) free(p);`) |
@@ -1565,7 +1571,8 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
 - **Diff against**: `test/cases/19_namespace`, `20_namespace_nested`, `test/multifile/`, `test/import/`.
 - **Risk**: the name prefix becomes a published contract as soon as it ships, so freeze it first;
   multi-file breaks the self-contained `.c`, so decide it together with the `pub` visibility rule;
-  `-I` and cross-unit vtable visibility are still open.
+  `-I` is decided (**local-first**: the importing file's own directory, then each `-I` root in
+  command-line order); cross-unit vtable visibility is still open.
 - **Progress (2026-10-16)**: **namespaces are done** — `selfhost/check-archive.sh` reports
   `19_namespace` and `20_namespace_nested` byte-identical (nested namespaces came along for free),
   plus four namespace negatives (`namespace_bad_path` / `namespace_path_too_long` / `ns_path_nested` /
@@ -1587,8 +1594,18 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   `line_break`, three new `PipeOps` methods) lands in the multi-file `.c` so the archived output —
   which carries the directives — matches byte for byte. Cross-unit symbols accumulate (`ntraits` /
   `nstructs` / `nfuncs` reset only in single-file mode). The generated program was also built and run
-  end to end (`1 2 5`). **Still to do**: `.h.ct` file-name semantics, `-I` search roots and the
-  `--line` / `--no-line` overrides (Phase 4).
+  end to end (`1 2 5`). **Still to do**: the `--line` / `--no-line` overrides (Phase 4).
+- **Progress (2026-10-16, `.h.ct` / `-I`)**: **`foo.h.ct` file names and `-I` search roots are done**.
+  A `*.h.ct` basename strips the whole `.h.ct` for the output (`foo.h.ct` -> `foo.c` + `foo.h`) and an
+  `import foo;` falls back to `foo.h.ct`, so the pair is published under the name a consumer would
+  import; a plain `*.ct` keeps producing the `.c`/`.h` pair it always has (its "publishes no header"
+  half is deferred to Phase 5 — the frozen archive compares `foo.ct`'s `.h` too). `-I <dir>` is
+  repeatable and is searched after the importing file's own directory, in command-line order
+  (local-first, the decision D7 recommends). The new semantics are pinned in `test/modules/**` by
+  `check-archive.sh` **group 7 (designed)**, which has no archive oracle: each fixture byte-diffs its
+  own goldens and, for a positive case, links and runs against an `expected.out` — `hdr` (the `.h.ct`
+  name + the import fallback), `inc` (the `-I` root makes the import resolvable), `inc_missing`
+  (without the `-I` root the build must fail with `cannot resolve import`).
 
 ### Phase 3 — memory (was 2.2)
 
