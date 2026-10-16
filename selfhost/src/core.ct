@@ -154,7 +154,8 @@ static int g_line_pub = 0;             /* 1 while the current raw line is `pub`-
 /* `#line` directives: on in multi-file mode so a C compiler's diagnostics point
    back at the .ct. The mapping runs forward, so a stretch of consecutive source
    lines needs a single directive at its head. */
-static int  g_emit_line = 0;
+static int  g_emit_line  = 0;
+static int  g_line_force = -1;         /* -1 default (by mode), 0 force off, 1 force on */
 static int  g_cur_line  = 1;
 static long g_line_next = -1;
 
@@ -1837,6 +1838,8 @@ impl PipeOps for Pipe {
                 "                  build: write the outputs into <dir>\n"
                 "  -I <dir>        extra `import` search root, repeatable; checked after\n"
                 "                  the importing file's own directory\n"
+                "  --line          force `#line` directives in the generated C\n"
+                "  --no-line       suppress `#line` directives\n"
                 "  -v, --version   print the compiler version and exit\n"
                 "  -h, --help      print this help and exit\n",
                 prog, prog);
@@ -1986,8 +1989,9 @@ impl PipeOps for Pipe {
         g_src = self->read_file(in, &g_len);
 
         /* `#line` is on in multi-file mode only: single-file output is left
-           untouched so it stays byte-identical to L0's */
-        g_emit_line = multi;
+           untouched so it stays byte-identical to L0's. `--line` / `--no-line`
+           override the per-mode default. */
+        g_emit_line = (g_line_force >= 0) ? g_line_force : multi;
         g_cur_line = 1;
         g_line_next = -1;
 
@@ -3566,9 +3570,10 @@ void ct_add_import(const char *h)
     g_nimp_h++;
 }
 
-pub int ct_compile_file(const char *in, const char *outc, int multi);
-int ct_compile_file(const char *in, const char *outc, int multi)
+pub int ct_compile_file(const char *in, const char *outc, int multi, int line_force);
+int ct_compile_file(const char *in, const char *outc, int multi, int line_force)
 {
+    g_line_force = line_force;
     return g_pipe.compile_file(&g_sym, in, outc, multi);
 }
 
