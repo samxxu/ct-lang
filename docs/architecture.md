@@ -55,36 +55,35 @@ argv
 | --- | --- | --- |
 | 工具 | `xmalloc` `xstrndup` `is_ident_char` | 内存与字符判断，失败即退出 |
 | | `die` | 唯一报错出口，把字节偏移换算成 `行:列` 后 `exit(1)` |
-| | `trim` `trim_right_len` `to_lower` `set_cname` | 字符串杂务；`set_cname` 拼 `命名空间前缀 + 名字`（超长报错） |
+| | `trim` `trim_right_len` `to_lower` | 字符串杂务：裁剪空白、大小写归一 |
 | | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | 动态字符串缓冲，行重写的主要输出载体 |
 | 源扫描 | `word_at` | 词边界匹配，替代裸 `strncmp`，避免 `structx` 误判 |
 | | `skip_literal` `skip_comment` `skip_ws_comments` | 跳过字符串/字符字面量与注释；保证不误改字面量内文本 |
 | | `read_ident` `copy_ident` | 读 / 拷贝标识符；超过 `MAX_NAME` 即 `die`，不静默截断 |
 | | `match_delim` | 在 `g_src` 上做括号配对，自动跳过字面量与注释 |
-| | `line_of` | 字节偏移 → 1-based 源行号（带缓存，前向遍历保持线性） |
-| 符号表 | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | 线性查找（规模小，不引入哈希）；`find_trait` / `find_struct` 先查当前命名空间再回退顶层，`*_c` 按已修饰的 C 名精确查找 |
-| | `resolve_method` | 按 struct 的 `use` 顺序找方法归属的 trait |
-| 签名解析 | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | 把 `int add(int a, int b)` 拆成 ret / name / params / 参数类型表 |
-| | `last_ident` `last_qual_name` `qual_to_c` `span_qualified` | 取末尾标识符 / 命名空间路径 `A::B::Name`，并把它修饰成 C 名 `A_B_Name` |
-| 生成器 | `emit_trait_def` `emit_struct_def` | 生成 vtable 类型与 struct 定义（同时写 `.c` 与 `.h`） |
-| | `line_at` `line_break` | `#line` 发射（Phase 1.5）：仅在映射不连续时写 `#line <源行> "<.ct>"`（追踪 `.c`，不动 `.h`）；`line_break` 让下一行强制重发（生成块边界） |
-| | `replace_self` | 方法体内 `self` → `_self`（token 级，跳过字面量与注释），并把 `self->m(...)` 重写为 `_self->__<trait>_vptr->m(_self, …)` |
-| | `emit_body` | 去公共缩进 + 统一 4 空格重排方法体 |
-| | `body_calls_sibling` | 探测方法体是否调用了兄弟方法（决定是否需要 vtable 前向声明） |
+| 符号表 | `find_trait` `find_struct` `struct_uses` `find_var` `new_var` | 线性查找（规模小，不引入哈希）；按 C 名精确匹配（`cname` 即原名），`new_var` 预留下一个变量槽、溢出即 `die` |
+| | `find_field_ex` `find_iface_field` `resolve_method` `trait_has_method` `find_func` | 查找 struct / 接口字段并报告是否为指针；按 `use` 顺序找方法归属的 trait；判定 trait 是否声明某方法；查函数签名表 |
+| 签名解析 | `is_type_keyword` `is_stmt_keyword` `param_type_only` `parse_params` `split_decl` | 把 `int add(int a, int b)` 拆成 ret / name / params / 参数类型表 |
+| | `last_ident` `already_qualified` `analyse_param` | 取文本末尾的标识符；判断类型名是否已被 `struct` 限定；分析单个声明片段（参数 / 字段 / 返回类型） |
+| 生成器 | `emit_trait_def` `emit_struct_def` | 生成 vtable / 接口类型与 struct 定义（同时写 `.c` 与 `.h`） |
+| | `emit_hoisted` | 若上一行重写提升了临时接收者，先写出该声明（必须在重写行之前生效） |
+| | `replace_self` | 方法体内 `self` → `_self`（token 级，跳过字面量与注释）；调用派发交给 `transform_calls` 处理 |
+| | `emit_body` `register_body_params` | 去公共缩进 + 统一 4 空格重排方法体；把方法参数登记为变量 |
+| | `body_needs_vtable` `is_any_trait_method` | 探测方法体是否含将变成 vtable 分发的调用（`is_any_trait_method` 供其查询已声明的 trait 方法），决定是否需要 vtable 前向声明 |
 | 构造解析 | `parse_trait` `parse_struct` `parse_impl` | 三个顶层构造的识别、校验与生成 |
 | 行重写 | `line_literal_end` `line_match_paren` `decl_end_is_bare` | 行内（栈上字符串）版本的字面量跳过、括号配对、声明尾部判定 |
-| | `parse_func_sig` `analyse_param` | 识别普通函数定义/原型，限定签名里的 struct 类型，并在有函数体时登记参数 |
-| | `parse_fields` `find_field` | 部分解析 struct 体：补 `struct ` 限定，并把嵌套 ct-struct 字段记进字段表 |
+| | `parse_func_sig` | 识别普通函数定义/原型，限定签名里的 struct 类型，并在有函数体时登记参数 |
+| | `parse_fields` | 部分解析 struct 体：补 `struct` 限定，并把字段记进字段表 |
 | | `put_own_vptr` `needs_nested_init` `put_nested_assignments` `put_heap_vpts` | 生成对象自身 vptr 的指定初始化项；递归生成嵌套字段的 vptr 赋值语句；为 `malloc` 得到的堆对象写 vptr（`->`） |
 | | `try_delete` | `delete p;` → `if (p) free(p);`（Phase 1 起对任意指针生效，含 `char *`） |
 | | `emit_qualified_type` `trait_has_method` `find_func` | 类型展开（`struct ` / `_iface` 后缀）、接口方法判定、函数签名表查询 |
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | 接口多态：装箱（复合字面量）、接口变量声明/赋值、接口返回值 |
-| | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚；弹栈前检查关闭作用域内仍 owned 的堆对象（泄漏警告） |
-| | `line_has_word` `line_assign_eq` `leak_observe` `warn_add` `leak_check_scope` | Phase 1.7 泄漏跟踪：行级推断 `delete` / `return` / 逃逸并清除 owned，作用域关闭时上报 `potential_leak` |
-| | `transform_calls` | 单行内的方法调用重写状态机 |
-| | `try_var_decl` `read_qual_ref` | 识别 `Type var = {...}`（含限定名 `A::B::Type`）并改造、登记变量 |
+| | `scope_track` | 花括号块作用域：每个 `{` 压栈 `g_nvars`，`}` 弹栈回滚（方法参数经 `g_body_pre` 单独还原） |
+| | `line_assign_eq` | 定位行内顶层的赋值 `=`（跳过 `==` / `!=` / 复合赋值与字面量、注释），供接口赋值等判定 |
+| | `walk_method` `walk_to_iface_field` `transform_calls` | 单行内的方法调用重写状态机（`walk_method` / `walk_to_iface_field` 分别处理方法链与接口字段链） |
+| | `try_var_decl` | 识别已知 struct / trait 的 `Type var …` 声明（含 `static`、指针、`malloc` 堆对象）并改造、登记变量 |
 | | `transform_line` `emit_raw_line` | 串联上述两步并写出 |
-| 驱动 | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `file_exists` `collect_imports` `resolve_import` `unit_visit` `build_main` `compile_main` `main` | 命令行、路径推导、文件 I/O、主循环（`compile_range` 递归处理 `namespace`；`compile_file` 单次编译；`collect_imports`/`resolve_import`/`unit_visit` 做 `import` 的解析与依赖序；`build_main` 多文件驱动；`main` 分派子命令） |
+| 驱动 | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `compile_main` `main` | 命令行、路径推导、文件 I/O 与单文件驱动（`compile_range` 单趟扫描，命中 `namespace` / `import` / `pub` 即 `die`；`compile_file` 编译一个文件；`main` 识别 `compile` 子命令、`build` 直接报错） |
 
 ### 4. 数据结构与符号表
 
@@ -97,8 +96,8 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 ```
 
 - 三个全局表：`g_traits` / `g_structs` / `g_vars`，容量见 `language-spec.md` 第 7 节。
-- `cname` 是**命名空间修饰后的 C 名**（`namespace A::B` 内的 `Person` → `A_B_Person`；顶层即原名），
-  生成器一律用它；`name` 保留短名用于查找与诊断，`use_i` 记所用 trait 的下标（不依赖当前命名空间）。
+- `cname` 是**生成器使用的 C 名** —— 命名空间修饰已随 Phase 0.3 移出，故当前它只是 `name` 的原样拷贝；
+  生成器一律用它，`name` 保留短名用于查找与诊断，`use_i` 记所用 trait 的下标。
 - **变量表是「名字 → struct 下标」的扁平表**，靠 `scope_track` 在 `{}` 处回滚 `g_nvars` 实现块作用域；跨行调用、登记前调用仍不重写。
 - impl 方法体不复制，只记录 `g_src` 中的区间；只有真正要输出、需要改写 `self` 时才经 `Buf` 复制一次。
 
@@ -119,7 +118,7 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 **声明识别与改造（`try_var_decl`）**
 要求整行以「已知 struct 名」或「`struct` + 已知 struct 名」开头（行首允许空格）；解析出变量名后：
 - 若紧跟 `*` → 判定为指针声明，补 `struct` 限定符并保留类型名，同时把变量登记为**指针**（供 `p->m()` 重写；已经是 `struct X *p` 时原样返回但仍然登记）；
-- 否则登记变量，并检查是否 `= { … }`：无论指定初始化、位置式还是空列表，都在 `}` 前插入 vptr 指定初始化项（由 `put_vptr_designators` 生成，多 trait 按 `use` 顺序）；若声明**无初始化式**（`Person p;`），则改写为 `= { <vptr> }`。
+- 否则登记变量，并检查是否 `= { … }`：无论指定初始化、位置式还是空列表，都在 `}` 前插入 vptr 指定初始化项（由 `put_own_vptr` 生成，多 trait 按 `use` 顺序）；若声明**无初始化式**（`Person p;`），则改写为 `= { <vptr> }`。
 
 **调用重写（`transform_calls`）**
 单行状态机，逐字符推进，遇到字面量/注释整体跳过；读到标识符时查变量表，命中后按变量类别改写：
@@ -147,14 +146,16 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | 主循环重复前瞻 | 主循环里先探一次 `struct` 是否带 `{`，`parse_struct` 里再解析一次 | 轻微冗余，暂可接受 |
 | 报错定位粒度 | 语义类错误（如未实现的方法）定位到构造起始行 | 多方法文件里定位不够精确 |
 | 参数表上限偏小 | `MAX_PARAM` 256、`MAX_PARAMS` 16 | 复杂签名一律 `die`（不截断） |
+| 嵌套初始化递归无显式深度守卫 | `put_nested_assignments`（L1441）对 `nu > 0` 的嵌套链在 L1461 短路，绕过 `needs_nested_init` 的 `MAX_DEPTH` 检查；递归深度只受 `MAX_STRUCT`(32) 间接约束 | 当前**不是**可复现崩溃——值互相引用在 CT 中无法表达，链必为无环有限；若将来支持前向声明，这里会变成无限递归，需补显式深度守卫（2026-10-16 审计结论，接受现状） |
+| 部分防御性 `die` 点不可达 | `expected struct name`（L1187）/ `expected '{' after struct`（L1189）——派发处已要求「名字 + `{`」才进 `parse_struct`；`put_heap_vpts` 版的 `nested field path too long`（L1491）只查一跳，长度必小于缓冲；`cannot create a temporary file`（L2837）仅 `tmpfile` 失败时触发；`out of memory`（L158/L237）OOM 分支 | 审计已逐个探针确认不可达；按**防御性检查**接受，不补 fixture |
 
 ### 8. 扩展点（Phase 1 落点）
 
 | 新特性 | 状态 / 主要改动位置 |
 | --- | --- |
-| namespace | ✅ 已落地（Phase 1.1）：`compile_range` 递归处理 `namespace A::B { … }`；`find_trait` / `find_struct` 先查当前命名空间再回退顶层；`Trait` / `Struct` 增 `cname`（修饰后的 C 名） |
+| namespace | ⛔ 已随 Phase 0.3 移出 L0（命中即 `die`：`'namespace' is not supported by this compiler`）；Phase 2–5 用 CT（L1 / `selfhost/src/**`）重做 |
 | 变量作用域 | ✅ 已落地（0.1.9）：`scope_track` 在 `{}` 处压栈、`}` 处回滚 `g_nvars` |
-| 多文件编译 | 见第 6 节：类型定义下沉到 `.h`，`.c` 改为 `#include` |
+| 多文件编译 | ⛔ 已随 Phase 0.3 移出 L0；Phase 2 起由 CT 层的多单元构建承载（L1 的 `build` + `import`，`selfhost/src/**`） |
 | 错误恢复 | 主循环在 `die` 处改为「跳到下一个行首/下一个 `}` 后继续」，需要引入错误计数 |
 | 自动化回归 | 见 `roadmap.md` 的测试策略 |
 
@@ -208,36 +209,35 @@ and impls must precede the functions that call them.
 | --- | --- | --- |
 | Utilities | `xmalloc` `xstrndup` `is_ident_char` | memory and character checks; failures exit immediately |
 | | `die` | the single error exit: converts a byte offset into `line:col`, then `exit(1)` |
-| | `trim` `trim_right_len` `to_lower` `set_cname` | string chores; `set_cname` builds `namespace prefix + name` (errors when overlong) |
+| | `trim` `trim_right_len` `to_lower` | string chores: trimming whitespace and case folding |
 | | `Buf` / `buf_init` / `buf_putn` / `buf_puts` / `buf_putc` | dynamic string buffer, the main output vehicle of line rewriting |
 | Source scanning | `word_at` | word-boundary matching, replacing bare `strncmp`, so `structx` is not misread |
 | | `skip_literal` `skip_comment` `skip_ws_comments` | skip string/char literals and comments; text inside literals is never rewritten |
 | | `read_ident` `copy_ident` | read / copy an identifier; over `MAX_NAME` is a hard error, never a silent truncation |
 | | `match_delim` | delimiter matching over `g_src`, automatically skipping literals and comments |
-| | `line_of` | byte offset → 1-based source line (cached, so a forward walk stays linear) |
-| Symbol tables | `find_trait` `find_struct` `find_struct_c` `find_trait_c` `struct_uses` `find_var` | linear lookups (the scale is small, so no hashing); `find_trait` / `find_struct` try the current namespace then fall back to top level, `*_c` look up an already-mangled C name exactly |
-| | `resolve_method` | find the trait a method belongs to, following the struct's `use` order |
-| Signature parsing | `is_type_keyword` `param_type_only` `parse_params` `split_decl` | split `int add(int a, int b)` into ret / name / params / a parameter-type table |
-| | `last_ident` `last_qual_name` `qual_to_c` `span_qualified` | take the trailing identifier / namespace path `A::B::Name` and mangle it into a C name `A_B_Name` |
-| Emitters | `emit_trait_def` `emit_struct_def` | generate vtable types and struct definitions (writing both `.c` and `.h`) |
-| | `line_at` `line_break` | `#line` emission (Phase 1.5): write `#line <src line> "<.ct>"` only where the mapping diverges (tracks the `.c`, never the `.h`); `line_break` forces the next line to re-emit (at generated-block boundaries) |
-| | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments), rewriting `self->m(...)` into `_self->__<trait>_vptr->m(_self, …)` |
-| | `emit_body` | strip the common indentation and re-layout method bodies on a uniform 4-space base |
-| | `body_calls_sibling` | detect whether a body calls a sibling method (decides if a vtable forward declaration is needed) |
+| Symbol tables | `find_trait` `find_struct` `struct_uses` `find_var` `new_var` | linear lookups (the scale is small, so no hashing); matching is by C name (`cname` is just the name), and `new_var` reserves the next variable slot, dying on overflow |
+| | `find_field_ex` `find_iface_field` `resolve_method` `trait_has_method` `find_func` | look up struct / interface fields and report whether the field is a pointer; find the trait a method belongs to (struct `use` order); test whether a trait declares a method; query the signature table |
+| Signature parsing | `is_type_keyword` `is_stmt_keyword` `param_type_only` `parse_params` `split_decl` | split `int add(int a, int b)` into ret / name / params / a parameter-type table |
+| | `last_ident` `already_qualified` `analyse_param` | take the trailing identifier of a text span; test whether a type name already carries the `struct` qualifier; analyse one declaration piece (parameter / field / return type) |
+| Emitters | `emit_trait_def` `emit_struct_def` | generate vtable / interface types and struct definitions (writing both `.c` and `.h`) |
+| | `emit_hoisted` | if the previous rewritten line hoisted a temp receiver, write that declaration first (it must run before the rewritten line) |
+| | `replace_self` | `self` → `_self` inside method bodies (token level, skipping literals and comments); dispatch is left to `transform_calls` |
+| | `emit_body` `register_body_params` | strip the common indentation and re-layout method bodies on a uniform 4-space base; register the method parameters as variables |
+| | `body_needs_vtable` `is_any_trait_method` | detect whether a body contains a call that becomes a vtable dispatch (`is_any_trait_method` answers its query); decides if a vtable forward declaration is needed |
 | Construct parsers | `parse_trait` `parse_struct` `parse_impl` | recognition, validation and generation of the three top-level constructs |
 | Line rewriting | `line_literal_end` `line_match_paren` `decl_end_is_bare` | in-line (stack-string) versions of literal skipping, paren matching and declaration-tail detection |
-| | `parse_func_sig` `analyse_param` | recognise ordinary function definitions/prototypes, qualify struct types in the signature and register parameters when a body follows |
-| | `parse_fields` `find_field` | partial struct-body parsing: add `struct ` and record nested ct-struct fields in the field table |
+| | `parse_func_sig` | recognise ordinary function definitions/prototypes, qualify struct types in the signature and register parameters when a body follows |
+| | `parse_fields` | partial struct-body parsing: add `struct` and record fields in the field table |
 | | `put_own_vptr` `needs_nested_init` `put_nested_assignments` `put_heap_vpts` | emit the object's own vptr designator; recursively emit vptr assignments for nested fields; write the vptrs (`->`) of a `malloc`ed heap object |
 | | `try_delete` | `delete p;` → `if (p) free(p);` (since Phase 1 this holds for any pointer, `char *` included) |
 | | `emit_qualified_type` `trait_has_method` `find_func` | type expansion (`struct ` / the `_iface` suffix), interface-method lookup, signature-table queries |
 | | `box_to_iface` `try_iface_decl` `try_iface_assign` `try_return` | interface polymorphism: boxing (compound literal), interface declarations/assignments, interface returns |
-| | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}`; before rolling back it checks the closing scope for still-owned heap objects (leak warnings) |
-| | `line_has_word` `line_assign_eq` `leak_observe` `warn_add` `leak_check_scope` | Phase 1.7 leak tracking: per-line `delete` / `return` / escape inference clears ownership; a scope exit reports `potential_leak` |
-| | `transform_calls` | the single-line state machine that rewrites method calls |
-| | `try_var_decl` `read_qual_ref` | recognise `Type var = {...}` (including the qualified `A::B::Type`), rewrite the declaration and register the variable |
+| | `scope_track` | brace block scope: push `g_nvars` at every `{`, roll back at `}` (method parameters are restored separately via `g_body_pre`) |
+| | `line_assign_eq` | locate a top-level assignment `=` in a line (skipping `==` / `!=` / compound assignments and text in literals/comments), used for interface-assignment decisions |
+| | `walk_method` `walk_to_iface_field` `transform_calls` | the single-line state machine that rewrites method calls (`walk_method` / `walk_to_iface_field` handle method chains and interface-field chains respectively) |
+| | `try_var_decl` | recognise a declaration of a known struct / trait (`Type var …`, including `static`, pointers and `malloc`ed heap objects), rewrite it and register the variable |
 | | `transform_line` `emit_raw_line` | chain the two steps above and write the line out |
-| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `build_output` `file_exists` `collect_imports` `resolve_import` `unit_visit` `build_main` `compile_main` `main` | command line, path derivation, file I/O and the main loop (`compile_range` recurses into `namespace`; `compile_file` compiles one unit; `collect_imports`/`resolve_import`/`unit_visit` resolve `import`s and their dependency order; `build_main` is the multi-file driver; `main` dispatches subcommands) |
+| Driver | `usage` `default_output` `header_path` `write_guard` `read_file` `compile_range` `compile_file` `compile_main` `main` | command line, path derivation, file I/O and the single-file driver (`compile_range` is the one-pass scan and dies on `namespace` / `import` / `pub`; `compile_file` compiles one file; `main` recognises the `compile` subcommand and rejects `build`) |
 
 ### 4. Data structures and symbol tables
 
@@ -251,10 +251,9 @@ ImplMethod { name, params, bstart, blen }   /* the body is stored as offset+leng
 
 - Three global tables: `g_traits` / `g_structs` / `g_vars`; the capacities are listed in §7 of
   `language-spec.md`.
-- `cname` is the **namespace-mangled C name** (`Person` in `namespace A::B` → `A_B_Person`; at top
-  level it is just the name) and is what the emitters always use; `name` keeps the short form for
-  lookup and diagnostics, and `use_i` records the index of each used trait (independent of the current
-  namespace).
+- `cname` is the **C name the emitters use** — namespace mangling was removed with Phase 0.3, so today
+  it is just a copy of `name`; `name` keeps the short form for lookup and diagnostics, and `use_i`
+  records the index of each used trait.
 - The variable table is a flat name → struct-index map; block scope is provided by `scope_track`
   rolling `g_nvars` back at `}`, so multi-line calls and calls before registration are still not
   rewritten.
@@ -286,7 +285,7 @@ ImplMethod { name, params, bstart, blen }   /* the body is stored as offset+leng
   name kept and the variable is **registered as a pointer** (so `p->m()` can be rewritten; an already
   qualified `struct X *p` is returned unchanged but still registered); otherwise the variable is
   registered and a `= { … }` list — designated, positional or empty — gets the vptr designated
-  initialiser inserted before the closing `}` (built by `put_vptr_designators`, one per trait in `use`
+  initialiser inserted before the closing `}` (built by `put_own_vptr`, one per trait in `use`
   order). A declaration with **no** initialiser (`Person p;`) is rewritten into `= { <vptr> }`.
 - **Call rewriting** (`transform_calls`) is a single-line state machine that advances character by
   character and skips literals and comments wholesale; when an identifier hits the variable table it is
@@ -319,16 +318,18 @@ golden under `test/cases/**` and they must be regenerated together.
 | Duplicate lookahead in the main loop | the main loop first probes whether `struct` is followed by `{`, then `parse_struct` parses it again | slight redundancy, acceptable for now |
 | Coarse error positions | semantic errors (e.g. an unimplemented method) point at the start of the construct | imprecise locations in files with many methods |
 | Small parameter limits | `MAX_PARAM` 256, `MAX_PARAMS` 16 | complex signatures always `die` (never truncate) |
+| Nested-init recursion has no explicit depth guard | `put_nested_assignments` (L1441) short-circuits at L1461 for nested chains with `nu > 0`, bypassing `needs_nested_init`'s `MAX_DEPTH` check; the recursion depth is only indirectly bounded by `MAX_STRUCT` (32) | **not** a reproducible crash today — values cannot reference each other in CT, so any chain is finite and acyclic; if forward declarations are ever supported this becomes infinite recursion and needs an explicit depth guard (2026-10-16 audit finding; accepted as-is) |
+| Some defensive `die` points are unreachable | `expected struct name` (L1187) / `expected '{' after struct` (L1189) — the dispatch site already requires "name + `{`" before entering `parse_struct`; the `put_heap_vpts` copy of `nested field path too long` (L1491) checks only one hop, so the length is always below the buffer; `cannot create a temporary file` (L2837) fires only when `tmpfile` fails; `out of memory` (L158/L237) is the OOM branch | the audit probed each site and confirmed it is unreachable; accepted as **defensive checks**, no fixtures added |
 
 ### 8. Extension points (Phase 1 landing spots)
 
-Namespaces **✅ landed (Phase 1.1)** — `compile_range` recurses into `namespace A::B { … }`, `find_trait`
-/ `find_struct` try the current namespace then fall back to top level, and `Trait` / `Struct` gained a
-`cname` (the mangled C name). Variable scopes **✅ landed (0.1.9)** — `scope_track` pushes at `{` and
-rolls `g_nvars` back at `}`. Still to come: multi-file support (see §6: type definitions sink into the
-`.h` and the `.c` switches to `#include`), error recovery (after `die`, skip to the next line start or
-the next `}` and continue, which needs an error counter), and the automated regression suite described
-in `roadmap.md`.
+Namespaces **⛔ removed from L0 in Phase 0.3** (hitting `namespace` now `die`s with
+`'namespace' is not supported by this compiler`); from Phase 2–5 they are redone in CT (L1 /
+`selfhost/src/**`) instead. Multi-file compilation was removed the same way and, since Phase 2, is
+carried by the CT layer's multi-unit build (L1's `build` + `import`). Variable scopes
+**✅ landed (0.1.9)** — `scope_track` pushes at `{` and rolls `g_nvars` back at `}`. Still to come:
+error recovery (after `die`, skip to the next line start or the next `}` and continue, which needs an
+error counter), and the automated regression suite described in `roadmap.md`.
 
 ### 9. How the tests attach to this code
 

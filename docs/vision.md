@@ -50,7 +50,7 @@ HAL_UART_Transmit(&huart1, data, len, HAL_MAX_DELAY);
 
 #### 2.4 编译期兜底
 
-类型错误、未释放变量、namespace 引用错误由编译器直接报错，而不是留到运行时。泄漏警告列表帮助开发者（和 AI）快速定位遗漏。
+类型错误、未释放变量、namespace 引用错误由编译器直接报错，而不是留到运行时。泄漏警告列表**尚属展望**——它已随 Phase 0.3 移出 L0，计划在 Phase 4 用 CT 重做——用于帮助开发者（和 AI）快速定位遗漏。
 
 ### 3. 嵌入式切入策略
 
@@ -163,7 +163,8 @@ for humans and AI alike.
 #### 2.4 The compiler is the safety net
 
 Type errors, unreleased variables and bad namespace references are reported at compile time instead
-of surfacing at run time. Leak warnings help developers (and AI) find omissions quickly.
+of surfacing at run time. Leak warnings are **still an outlook** — they moved out of L0 in Phase 0.3
+and are scheduled for a CT rework in Phase 4 — and help developers (and AI) find omissions quickly.
 
 ### 3. Embedded-first strategy
 

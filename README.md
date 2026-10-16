@@ -3,7 +3,7 @@
 > **v0.0.1** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）与 Phase 0.3（剥离越位特性）已完成，当前进入 **Phase 1：自举**（用 CT 把 Phase 0 的 OO 化 C 重写一遍）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**与 **Phase 2（模块化，2026-10-16）**均已完成，当前进入 **Phase 3：内存**（`Drop` / `delete` 放宽）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），编译器命令叫 **`ctc`**（ct compiler，好比 `tinycc` 仓库发布的命令是 `tcc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -218,7 +218,7 @@ test/
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
 
-当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 56 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 110 项。
+当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 60 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 114 项。
 
 `test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
@@ -227,7 +227,28 @@ test/
 VS Code 插件另有一份独立的语法冒烟测试，校验的是高亮规则而不是编译器，因此不进 `./test/run.sh`：
 
 ```bash
-python3 editors/vscode/test/check-grammar.py   # 13 项断言；退出码 0 = 通过
+python3 editors/vscode/test/check-grammar.py   # 19 项断言；退出码 0 = 通过
+```
+
+#### 自举 gate（`selfhost/`）
+
+`selfhost/` 承载 Phase 1–2 的自举链：`ctc.c`（L0）编译出 **L1**，L1 再编译出 **L2**。它与 `./test/run.sh` **相互独立**；[AGENTS.md](AGENTS.md) 把这四个脚本列为必跑。
+
+- `selfhost/ctc.ct` —— **L1**：用 CT（OO 子集、单文件）重写全部能力的编译器，由 `ctc.c`（L0）编译得到；
+- `selfhost/src/**` —— 同一编译器拆成多单元（`core.ct` + `driver.ct`），由 **L1 自身的 `build`** 编译成 **L2**。
+
+| 脚本 | 作用 |
+| --- | --- |
+| `selfhost/check-goldens.sh` | L1 的增量 golden oracle：构建 L0 → L0 编译 L1 → 构建 L1 → 逐字节比对 `test/cases/**` 的 `.expected.c`/`.expected.h`；再做自举闭环（L1 编译自身为 L1′，L1′ 重跑同一语料仍逐字节一致）；最后 L1 用 `build` 把 `selfhost/src/**` 拆出的 L2 对同一语料仍逐字节一致（Phase 2 拆分出口） |
+| `selfhost/check-m2a.sh` | M2-a 验收 gate：复现「构建 L0 → L0 编译 L1 → 构建 L1 → L1 编译 `test/cases/01_trait_basic.ct` → 与 golden 逐字节 diff」；自举闭环与 L2 构建仅作报告，不影响判定 |
+| `selfhost/check-archive.sh` | Phase 2+ 的对差 oracle：把 `test/archive/**` 中 Phase 0.3 移出的越位特性 fixture 当 ratchet，逐字节比对 CT 侧恢复出的特性（namespace / 多文件 / `import` / `Drop` / 诊断）；第 3b 步另建 L2 并要求零警告 |
+| `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
+
+```bash
+bash selfhost/check-goldens.sh     # L1 / L1′ / L2 对 test/cases/** 逐字节一致
+bash selfhost/check-m2a.sh         # M2-a 单用例验收
+bash selfhost/check-archive.sh     # 归档越位用例逐字节对差
+bash selfhost/ct-tour.sh           # 演示整条自举链
 ```
 
 ### 6. 目录结构
@@ -236,10 +257,12 @@ python3 editors/vscode/test/check-grammar.py   # 13 项断言；退出码 0 = �
 ct/
 ├── ctc.c                     编译器全部实现（单文件，无第三方依赖）
 ├── examples/                 可运行示例，每个例子一个目录
-│   ├── 01_greeter/           greeter.ct   + greeter.expected.out
-│   ├── 02_market/            market.ct    + market.expected.out
-│   ├── 03_receivers/         receivers.ct + receivers.expected.out
-│   └── 04_rvalue/            rvalue.ct    + rvalue.expected.out
+│   ├── 01_greeter/           greeter.ct       + greeter.expected.out
+│   ├── 02_market/            market.ct        + market.expected.out
+│   ├── 03_receivers/         receivers.ct     + receivers.expected.out
+│   ├── 04_rvalue/            rvalue.ct        + rvalue.expected.out
+│   ├── 05_body_dispatch/     body_dispatch.ct + body_dispatch.expected.out
+│   └── 06_iface_field/       iface_field.ct   + iface_field.expected.out
 ├── test/                     测试：runner、白盒单测、golden 正例与负例
 ├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
 ├── .gitignore                忽略构建产物与 examples 下的生成物
@@ -279,9 +302,10 @@ ct/
   `trait` / `impl` 当普通标识符的合法 C（如 `impl[i] = 0;`）。
 - **构造与语句写在同一行时不重写**：重写按行进行，`int main(void){ Person p = { … }; p.greet(); }`
   里的 `p.greet()` 不会被改写（拆成多行即可）。
-- **容量上限一律报错、不静默截断**：标识符 ≤ 127、函数参数 ≤ 16、参数表文本 ≤ 255、函数签名表 64、
-  变量 512、嵌套作用域 256、struct 字段 32、trait 16、struct 32、方法 32、嵌套深度 8、`ct build`
-  输入 32 / 编译单元 64 / 每单元 import 16。
+- **容量上限一律报错、不静默截断**（对应 `ctc.c` 顶部的 `MAX_*` 常量，一一对应）：`MAX_NAME` 128（标识符 ≤ 127）、
+  `MAX_PARAM` 256（参数表文本）、`MAX_PARAMS` 16（函数参数）、`MAX_METHOD` 32（方法）、`MAX_TRAITS` 16（trait）、
+  `MAX_STRUCT` 32（struct）、`MAX_FIELDS` 32（struct 字段）、`MAX_VARS` 512（变量）、`MAX_SCOPE` 256（嵌套作用域）、
+  `MAX_DEPTH` 8（嵌套深度）、`MAX_FUNCS` 64（函数签名表）。
 
 ### 8. 相关文档
 
@@ -314,10 +338,10 @@ ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`
 ## English
 
 **ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into
-plain C. It performs no type checking and no optimisation; Phase 0 ("writing full OO with traits") and
-Phase 0.3 (stripping the over-reach) are complete, and the project has entered **Phase 1:
-self-hosting** (rewriting Phase 0's OO-in-C in CT) — see [docs/roadmap.md](docs/roadmap.md) for what is
-done and what is next.
+plain C. It performs no type checking and no optimisation; Phase 0 (writing full OO with traits) and
+its sub-phases 0.1 / 0.2 / 0.3 (stripping the over-reach), **Phase 1 (self-hosting, 2026-10-15)** and
+**Phase 2 (modularity, 2026-10-16)** are all complete; the project has entered **Phase 3: memory**
+(`Drop` / `delete` relaxed) — see [docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the compiler
 command is **`ctc`** (the ct compiler — much like the `tinycc` repository that ships a `tcc` binary)
@@ -549,8 +573,8 @@ Five layers of assertions:
 | examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
 
-Currently 25 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 56 negative
-diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 110 in total.
+Currently 25 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 60 negative
+diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 114 in total.
 
 `test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
 (`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
@@ -568,7 +592,32 @@ The VS Code extension carries its own smoke test for the highlighting rules. It 
 not the compiler, so it is deliberately not part of `./test/run.sh`:
 
 ```bash
-python3 editors/vscode/test/check-grammar.py   # 13 checks; exit code 0 means it passed
+python3 editors/vscode/test/check-grammar.py   # 19 checks; exit code 0 means it passed
+```
+
+#### Self-hosting gates (`selfhost/`)
+
+`selfhost/` carries the Phase 1–2 bootstrap chain: `ctc.c` (L0) compiles **L1**, which in turn builds
+**L2**. It is **separate** from `./test/run.sh`; [AGENTS.md](AGENTS.md) lists these four scripts as
+required runs.
+
+- `selfhost/ctc.ct` — **L1**: the whole compiler rewritten in CT (OO subset, single file), compiled by
+  `ctc.c` (L0);
+- `selfhost/src/**` — the same compiler split into units (`core.ct` + `driver.ct`), built **by L1's own
+  `build`** into **L2**.
+
+| Script | What it does |
+| --- | --- |
+| `selfhost/check-goldens.sh` | the incremental golden oracle for L1: build L0 → L0 compiles L1 → build L1 → byte-compare `test/cases/**` against `.expected.c`/`.expected.h`; then close the self-hosting loop (L1 compiles itself into L1′, which reproduces the same corpus byte for byte); finally L1's `build` splits `selfhost/src/**` into L2, which must match the same corpus byte for byte (the Phase 2 split exit) |
+| `selfhost/check-m2a.sh` | the M2-a acceptance gate: reproduces "build L0 → L0 compiles L1 → build L1 → L1 compiles `test/cases/01_trait_basic.ct` → byte diff against the golden"; the self-hosting loop and the L2 build are reported only and never change the verdict |
+| `selfhost/check-archive.sh` | the Phase 2+ diff oracle: treats the over-reach fixtures Phase 0.3 moved into `test/archive/**` as a ratchet, diffing byte for byte the features the CT side has restored (namespace / multi-file / `import` / `Drop` / diagnostics); step 3b rebuilds L2 and requires it to be warning-free |
+| `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
+
+```bash
+bash selfhost/check-goldens.sh     # L1 / L1′ / L2 byte-identical on test/cases/**
+bash selfhost/check-m2a.sh         # M2-a single-case acceptance
+bash selfhost/check-archive.sh     # byte-for-byte diff of the archived over-reach cases
+bash selfhost/ct-tour.sh           # walk the whole bootstrap chain
 ```
 
 ### 6. Directory layout
@@ -577,10 +626,12 @@ python3 editors/vscode/test/check-grammar.py   # 13 checks; exit code 0 means it
 ct/
 ├── ctc.c                     the whole compiler (single file, no third-party dependencies)
 ├── examples/                 runnable demos, one directory per example
-│   ├── 01_greeter/           greeter.ct   + greeter.expected.out
-│   ├── 02_market/            market.ct    + market.expected.out
-│   ├── 03_receivers/         receivers.ct + receivers.expected.out
-│   └── 04_rvalue/            rvalue.ct    + rvalue.expected.out
+│   ├── 01_greeter/           greeter.ct       + greeter.expected.out
+│   ├── 02_market/            market.ct        + market.expected.out
+│   ├── 03_receivers/         receivers.ct     + receivers.expected.out
+│   ├── 04_rvalue/            rvalue.ct        + rvalue.expected.out
+│   ├── 05_body_dispatch/     body_dispatch.ct + body_dispatch.expected.out
+│   └── 06_iface_field/       iface_field.ct   + iface_field.expected.out
 ├── test/                     tests: runner, white-box unit tests, golden positives and negatives
 ├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
 ├── .gitignore                ignores build products and the files generated under examples
@@ -625,10 +676,11 @@ Implementation limits:
   working.
 - **A construct and a statement on the same line**: rewriting is line-based, so `p.greet()` inside
   `int main(void){ Person p = { … }; p.greet(); }` is not rewritten (split it across lines).
-- **Capacity limits are hard errors, never silent truncation**: identifier ≤ 127, function parameters
-  ≤ 16, parameter-list text ≤ 255, signature table 64, variables 512, nested scopes 256, struct fields
-  32, traits 16, structs 32, methods 32, nesting depth 8, `ct build` inputs 32 / units 64 / imports
-  per unit 16.
+- **Capacity limits are hard errors, never silent truncation** (the `MAX_*` constants at the top of
+  `ctc.c`, one to one): `MAX_NAME` 128 (identifier ≤ 127), `MAX_PARAM` 256 (parameter-list text),
+  `MAX_PARAMS` 16 (function parameters), `MAX_METHOD` 32 (methods), `MAX_TRAITS` 16 (traits),
+  `MAX_STRUCT` 32 (structs), `MAX_FIELDS` 32 (struct fields), `MAX_VARS` 512 (variables),
+  `MAX_SCOPE` 256 (nested scopes), `MAX_DEPTH` 8 (nesting depth), `MAX_FUNCS` 64 (signature table).
 
 ### 8. Documentation
 

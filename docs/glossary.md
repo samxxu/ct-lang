@@ -30,9 +30,9 @@
 | 实现块（impl） | `impl T for S { … }` | 把 trait 的方法绑定到具体 struct |
 | use 子句（use-clause） | `} use T, U;` | struct 声明它实现哪些 trait |
 | self | `self`、`self->m()` | 方法体内指代自身；生成时展开为 `_self` |
-| 命名空间（namespace） | `namespace A::B { … }` | 唯一可嵌套构造；符号加 `A_B_` 前缀 |
+| 命名空间（namespace） | `namespace A::B { … }` | 唯一可嵌套构造；符号加 `A_B_` 前缀。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 命名空间路径 | `A::B`、`A::B::Name` | `::` 分隔各段；访问成员/方法用末尾 `.` |
-| 导入（import） | `import A::B;` | 编译单元依赖声明（`ct build`） |
+| 导入（import） | `import A::B;` | 编译单元依赖声明（`ct build`）。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 导出（pub） | `pub trait` / `pub struct` / `pub int f(…);` | 多文件模式下符号进 `.h`；前缀本身被剥离 |
 | 私有（static） | `static` | 支持的可见性；符号只进 `.c` |
 | 析构特征 Drop | `use Drop`、`impl Drop for S { … }` | **保留名**内置 trait；惰性生成释放函数 |
@@ -71,7 +71,7 @@
 | --- | --- | --- |
 | 源到源编译器（source-to-source compiler） | `ctc.c` | 输入 `.ct`，输出纯 C |
 | 单文件模式 | `ct compile` / `ctc <file>` | `.c` 自包含；Phase 0 行为 |
-| 多文件模式 | `ct build <a.ct> … -o <dir>` | `.c` `#include` 自己的 `.h` |
+| 多文件模式 | `ct build <a.ct> … -o <dir>` | `.c` `#include` 自己的 `.h`。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 透传（pass-through） | 非构造行原样输出 | |
 | 行重写（line rewriting） | `transform_line` 等 | 按行进行；构造与语句同行不重写 |
 | 诊断退出 `die()` | `die(pos, fmt, …)` | 唯一错误出口：`file:line:col: error:` 后 `exit(1)` |
@@ -80,25 +80,25 @@
 | 内存分配 | `xmalloc` / `xstrndup` | 失败即 `exit(1)` |
 | 容量上限（capacity limit） | `MAX_*` 常量（文件头部） | 越界一律 `die`，**不静默截断** |
 | 函数分区（partition） | 工具→源扫描→符号表→签名解析→生成器→构造解析→行重写→`main` | 新增函数放入对应分区 |
-| 惰性生成（lazy generation） | drop 函数体 | 仅在被 `delete` 触达时生成，零开销 |
-| 传递闭包（drop closure） | `mark_drop_closure()` | 被删除类型递归拉入其 Drop 值字段 |
+| 惰性生成（lazy generation） | drop 函数体 | 仅在被 `delete` 触达时生成，零开销。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
+| 传递闭包（drop closure） | `mark_drop_closure()` | 被删除类型递归拉入其 Drop 值字段。**同上，已移出 L0** |
 | 生成物 banner | 生成物首部 | 溯源注释 + **输出例外**声明，不得删除 |
 | 自包含（self-contained） | 单文件 `.c` | 不 `#include` 生成的 `.h` |
 | 头文件守卫（include guard） | `.h` 的 `#ifndef` … `#endif` | |
-| 编译单元（unit） | 一个 `.ct` → 一对 `.c`/`.h` | `ct build` 中每单元只编一次 |
-| 依赖顺序（dependency order） | 拓扑序 | import 的 DAG 拓扑排序 |
-| 驱动（driver） | `compile_file` / `build_main` | 编排，不碰解析/生成逻辑 |
-| `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A） |
-| 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发 |
-| 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7） |
-| owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记 |
+| 编译单元（unit） | 一个 `.ct` → 一对 `.c`/`.h` | `ct build` 中每单元只编一次。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
+| 依赖顺序（dependency order） | 拓扑序 | import 的 DAG 拓扑排序。**同上，已移出 L0** |
+| 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
+| `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
+| 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发。**同上，已移出 L0** |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7）。**已随 Phase 0.3 移出 L0，计划 Phase 4 用 CT 重做** |
+| owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记。**随泄漏警告一并移出 L0** |
 
 ### 4. CLI 与产物
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
 | 子命令 compile | `ct compile <in.ct> [-o out.c]` | 默认子命令（等价 `ctc <in.ct>`） |
-| 子命令 build | `ct build <in.ct>… [-o <dir>]` | 多文件驱动；只出 `.c`/`.h`，打印建议 `cc` 命令 |
+| 子命令 build | `ct build <in.ct>… [-o <dir>]` | 多文件驱动；只出 `.c`/`.h`，打印建议 `cc` 命令。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
@@ -109,7 +109,7 @@
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
 | 测试套件（runner） | `./test/run.sh` | 退出码 0 = 全绿；`CC=gcc` 换编译器 |
-| 层（layer） | build / unit / cases / errors / examples / multifile / import / line / limits / cli | |
+| 层（layer） | build / unit / cases / errors / examples / limits / cli | `multifile` / `import` / `line` 三层已随 Phase 0.3 移除 |
 | golden 基线（golden baseline） | `*.expected.c` / `.expected.h` / `.expected.out` | **只能重新生成**，禁止手写 |
 | 用例（fixture） | `test/cases/*.ct`、`test/errors/*.ct` | |
 | 正例（positive case） | `test/cases/` | 生成→逐字节比对→编译→运行 |
@@ -117,7 +117,7 @@
 | 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | `#include "../../ctc.c"` 以触达 `static` 函数 |
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
-| 端到端（end-to-end） | examples / multifile / import 各层 | 生成→构建→运行→比对 |
+| 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
 
 ### 6. 阶段与路线
 
@@ -173,9 +173,9 @@
 | impl | `impl T for S { … }` | binds a trait's methods to a concrete struct |
 | use-clause | `} use T, U;` | the traits a struct implements |
 | self | `self`, `self->m()` | the receiver inside a method body; expanded to `_self` |
-| namespace | `namespace A::B { … }` | the only nestable construct; symbols get the `A_B_` prefix |
+| namespace | `namespace A::B { … }` | the only nestable construct; symbols get the `A_B_` prefix. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | namespace path | `A::B`, `A::B::Name` | `::` separates segments; the trailing `.` accesses a member / method |
-| import | `import A::B;` | a compilation-unit dependency (in `ct build`) |
+| import | `import A::B;` | a compilation-unit dependency (in `ct build`). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | pub | `pub trait` / `pub struct` / `pub int f(…);` | in multi-file mode the symbol crosses into the `.h`; the prefix itself is stripped |
 | static | `static` | a supported visibility; the symbol stays in the `.c` |
 | Drop | `use Drop`, `impl Drop for S { … }` | a **reserved** built-in trait; the release function is emitted lazily |
@@ -214,7 +214,7 @@
 | --- | --- | --- |
 | source-to-source compiler | `ctc.c` | input `.ct`, output plain C |
 | single-file mode | `ct compile` / `ctc <file>` | `.c` is self-contained; Phase 0 behaviour |
-| multi-file mode | `ct build <a.ct> … -o <dir>` | the `.c` `#include`s its own `.h` |
+| multi-file mode | `ct build <a.ct> … -o <dir>` | the `.c` `#include`s its own `.h`. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | pass-through | any non-construct line | copied verbatim |
 | line rewriting | `transform_line` etc. | processed line by line; a construct and a statement sharing a line are not rewritten |
 | `die()` | `die(pos, fmt, …)` | the only error exit: `file:line:col: error:` then `exit(1)` |
@@ -223,23 +223,25 @@
 | allocation | `xmalloc` / `xstrndup` | fail fast with `exit(1)` |
 | capacity limit | `MAX_*` constants (top of the file) | overflow is a hard `die` — **never a silent truncation** |
 | partition | utilities → source scanning → symbol tables → signature parsing → emitters → construct parsers → line rewriting → `main` | new functions go into their partition |
-| lazy generation | drop bodies | only types reached by `delete` get a body — zero overhead |
-| drop closure | `mark_drop_closure()` | a deleted type pulls in its Drop value fields recursively |
+| lazy generation | drop bodies | only types reached by `delete` get a body — zero overhead. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
+| drop closure | `mark_drop_closure()` | a deleted type pulls in its Drop value fields recursively. **Same; moved out of L0** |
 | output banner | top of every generated file | provenance comment + the **output exception**, never deleted |
 | self-contained | the single-file `.c` | does not `#include` the generated `.h` |
 | include guard | `#ifndef` … `#endif` in the `.h` | |
-| unit | one `.ct` → a `.c`/`.h` pair | compiled once in `ct build` |
-| dependency order | topological order | the import DAG sorted |
-| driver | `compile_file` / `build_main` | orchestration; touches no parsing / generation logic |
-| `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A) |
-| line emission | `line_of` / `line_at` / `line_break` | offset→line cache / emit / force a re-emit at a block boundary |
+| unit | one `.ct` → a `.c`/`.h` pair | compiled once in `ct build`. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
+| dependency order | topological order | the import DAG sorted. **Same; moved out of L0** |
+| driver | `compile_range` / `compile_file` / `compile_main` | orchestration; touches no parsing / generation logic — L0 is single-file only now |
+| `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
+| line emission | `line_of` / `line_at` / `line_break` | offset→line cache / emit / force a re-emit at a block boundary. **Same; moved out of L0** |
+| leak warning | `potential_leak` · `leak_observe` | conservative, path-insensitive: an owned heap object still not `delete`d / `return`ed / escaped when its scope ends (Phase 1.7). **Moved out of L0 in Phase 0.3; scheduled for a CT rework in Phase 4** |
+| owned (heap-holding) | `Var.owned` / `own_line` | marked at the creation site by `T *p = malloc/calloc(...)`. **Moved out of L0 together with the leak warnings** |
 
 ### 4. CLI and output
 
 | Term | Form | Notes |
 | --- | --- | --- |
 | the `compile` subcommand | `ct compile <in.ct> [-o out.c]` | the default subcommand (same as `ctc <in.ct>`) |
-| the `build` subcommand | `ct build <in.ct>… [-o <dir>]` | the multi-file driver; emits `.c`/`.h` and prints the suggested `cc` command |
+| the `build` subcommand | `ct build <in.ct>… [-o <dir>]` | the multi-file driver; emits `.c`/`.h` and prints the suggested `cc` command. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | output option | `-o <file\|dir>` | |
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
@@ -250,7 +252,7 @@
 | Term | Form | Notes |
 | --- | --- | --- |
 | test suite (runner) | `./test/run.sh` | exit 0 = all green; `CC=gcc` selects a compiler |
-| layer | build / unit / cases / errors / examples / multifile / import / line / limits / cli | |
+| layer | build / unit / cases / errors / examples / limits / cli | the `multifile` / `import` / `line` layers were removed with Phase 0.3 |
 | golden baseline | `*.expected.c` / `.expected.h` / `.expected.out` | **regenerate only**, never hand-write |
 | fixture | `test/cases/*.ct`, `test/errors/*.ct` | |
 | positive case | `test/cases/` | generate → byte diff → compile → run |
@@ -258,7 +260,7 @@
 | white-box unit test | `test/unit/test_helpers.c` | `#include "../../ctc.c"` to reach `static` functions |
 | regeneration | `./ctc <case>.ct -o <case>.expected.c` | after an intended behaviour change, regenerate **and review the diff** |
 | grammar smoke test | `python3 editors/vscode/test/check-grammar.py` | checks the editor grammar, **stays out of** run.sh |
-| end-to-end | the examples / multifile / import layers | generate → build → run → compare |
+| end-to-end | the examples layer | generate → build → run → compare |
 
 ### 6. Stages and roadmap
 

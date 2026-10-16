@@ -364,10 +364,12 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 | `MAX_TRAITS` | 16 | trait 数量 / 单 struct 的 `use` 数量 | 报错退出 |
 | `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 ct 类型」的字段数（值 / 指针 struct 字段、值 / 指针接口字段各表独立计） | 报错退出 |
 | `MAX_DEPTH` | 8 | 嵌套构造 / 字段链的递归深度上限 | 报错退出 |
+| `MAX_SCOPE` | 256 | 嵌套作用域（花括号块）深度上限 | 报错退出 |
 | `MAX_STRUCT` | 32 | struct 数量 | 报错退出 |
 | `MAX_METHOD` | 32 | 单 trait / 单 impl 的方法数 | 报错退出 |
 | `MAX_PARAMS` | 16 | 单方法参数个数 | 报错退出 |
 | `MAX_VARS` | 512 | 被登记的变量数 | 报错退出 |
+| `MAX_FUNCS` | 64 | 函数签名表条目数 | 报错退出 |
 | `MAX_NAME` | 128 | 标识符 / 类型名长度 | 报错退出 |
 | `MAX_PARAM` | 256 | 参数字符串长度 | 报错退出 |
 
@@ -816,10 +818,12 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 | `MAX_TRAITS` | 16 | traits / traits per `use` | error, exit |
 | `MAX_FIELDS` | 32 | fields per struct whose type is a known ct type (value / pointer struct fields and value / pointer interface fields are counted in separate tables) | error, exit |
 | `MAX_DEPTH` | 8 | recursion cap for nested construction / field chains | error, exit |
+| `MAX_SCOPE` | 256 | nested brace-scope depth | error, exit |
 | `MAX_STRUCT` | 32 | structs | error, exit |
 | `MAX_METHOD` | 32 | methods per trait or impl | error, exit |
 | `MAX_PARAMS` | 16 | parameters per method | error, exit |
 | `MAX_VARS` | 512 | registered variables | error, exit |
+| `MAX_FUNCS` | 64 | function-signature table entries | error, exit |
 | `MAX_NAME` | 128 | identifier / type name length | error, exit |
 | `MAX_PARAM` | 256 | parameter string length | error, exit |
 
