@@ -31,7 +31,7 @@
 | `examples/**` | 源码：可运行示例（`<name>.ct` + `<name>.expected.out`） | ✅ 新增语法时同步扩充；生成物不入库 |
 | `test/**` | 测试：用例、golden 基线、runner | ✅ 可改；`*.expected.*` 只能用 `./ctc` 重新生成 |
 | `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
-| `selfhost/**` | 源码：自举编译器 —— 手写单文件种子 `selfhost/ctc.ct`（L1）＋ 拆分后的多单元源码树 `selfhost/src/**`（`core.ct` + `driver.ct`，由 L1 编译出 L2） | ✅ Phase 1 起新增；只放 CT 源码与测试脚本，生成物不入库 |
+| `selfhost/**` | 源码：自举编译器 —— 冻结种子 `selfhost/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/src/**`（`core.ct` + `driver.ct`，由 L1 编译出 L2；Phase 3 起新能力只落这里） | ✅ Phase 1 起新增；只放 CT 源码与测试脚本，生成物不入库 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
 | `ctc`、生成的 `.c`/`.h`、`.o` | 编译产物 | ❌ 不入库 |
@@ -49,7 +49,10 @@
   - **允许**：修正既有行为中的缺陷（错判、错发射、崩溃、越界、状态未还原等）。出口是**既有语料产物不动**——改完 `./test/run.sh` 与 `bash selfhost/check-goldens.sh` 仍须全绿，且**不得重新生成任何 `*.expected.*`**；必须是一个独立的 `fix(...)` 提交，正文写明缺陷、触发条件与验证方式，并登记进下面的清单。
   - **不允许**：新增或加回任何语言特性 / CLI 选项 / 诊断；放宽或绕开任何 `MAX_*` 上限（含为了让 L1 过 `MAX_FUNCS` / `MAX_METHOD` 而改 `ctc.c`）；改动产物命名规则、banner 或 `CTC_VERSION`；重构、重命名、重排既有符号；新增 `#include` 或改变生成物结构。这些一律只能做在 **CT 侧**（L1 及以后）。
   - **冻结期改动登记**（至今只有一次）：`1bdb93b fix(codegen): keep file-scope vars in emit_body`（2026-10-15）——`emit_body` 退出时只还原变量表的**条目数**、不还原**内容**，会覆盖外层文件作用域已登记的条目；补进/出各一次内容快照与拷回。产物不变，无 golden 重生成。此后 Phase 1 期间 `ctc.c` **再无任何改动**。
-- **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。**该出口已达成**：里程碑 M2 完成于 `test/cases/**` 全绿（25/25、0 regression），且 L1 编出的 L1′ 重编同一批语料仍逐字节一致。用 `bash selfhost/check-goldens.sh` 复核，别再靠手工循环。见 roadmap Phase 1 开工决策。**Phase 2 拆分出口**：L1 用自身 `build`（多文件 + `import`）编译多单元源码树 `selfhost/src/**`（`core.ct` + `driver.ct`）产出 **L2**，L2 须对 `test/cases/**` 与 L1&#8203; 逐字节一致（25/25）——这是拆分的出口判据；跨单元只走 `pub` 标量包装器（`ct_read_file` 等 10 个），数据/宏/单例全部留在 `core.ct` 内（落进 `core.c`），**不得**为此新增语言特性。关卡：`check-goldens.sh` 第 6 步、`check-archive.sh` 3b、`check-m2a.sh` 第 7 步、`ct-tour.sh` 第 6 步。见 roadmap Phase 2。
+- **`selfhost/ctc.ct`（L1）自 Phase 3 起冻结**：L1 已成为**冻结种子**——它停在 Phase 2 的能力上，**不再新增任何能力**（加注释也算，登记方式与 `ctc.c` 相同）。理由与上一级同构：`ctc.c` 冻结后开发搬到 L1，L1 冻结后开发搬到 **`selfhost/src/**`**（`core.ct` + `driver.ct`，L2 的源）。**Phase 3 起一切新能力只落 `src/**`**。
+  - **关卡语义随之改变**：`check-archive.sh` 的 ratchet 跑的是 **L2**（L1 `build` `src/**` 得到），不再是 L1；`check-goldens.sh` 第 7 步是**不动点**——L2 也编 `src/**`，产出须与 L1 的**逐字节一致**（两个编译器必须在「编译器自己用的那套语法」上一致）。
+  - **签名上限是真约束**：`MAX_FUNCS`（64）**计入所有顶层 plain-C 签名，`static` 也算**，`src/**` 的余量已接近 0；新增辅助函数**必须**放进 `impl` 块（impl 方法不计），并注意 `MAX_METHOD`（32）——`PipeOps` 已用到 31。见 roadmap Phase 3。
+- **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。**该出口已达成**：里程碑 M2 完成于 `test/cases/**` 全绿（25/25、0 regression），且 L1 编出的 L1′ 重编同一批语料仍逐字节一致。用 `bash selfhost/check-goldens.sh` 复核，别再靠手工循环。见 roadmap Phase 1 开工决策。**Phase 2 拆分出口**：L1 用自身 `build`（多文件 + `import`）编译多单元源码树 `selfhost/src/**`（`core.ct` + `driver.ct`）产出 **L2**，L2 须对 `test/cases/**` 与 L1&#8203; 逐字节一致（25/25）——这是拆分的出口判据；跨单元只走 `pub` 标量包装器（`ct_read_file` 等 10 个），数据/宏/单例全部留在 `core.ct` 内（落进 `core.c`），**不得**为此新增语言特性。关卡：`check-goldens.sh` 第 6/7 步、`check-archive.sh` 3b、`check-m2a.sh` 第 7 步、`ct-tour.sh` 第 6 步。见 roadmap Phase 2。
 - **L1 必须是 CT OO 风格**：`selfhost/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。注意管线层由**两个** trait 承载（`PipeOps` 主流程 + `RewriteOps` 行重写层，`struct Pipe` 同时 `use` 二者）——新增方法请放进对应的那一半，别往单侧堆到 `MAX_METHOD`。见 roadmap Phase 1 开工决策 5。
 
 ### 3. 代码风格
@@ -181,7 +184,7 @@ user before changing code**.
 | `examples/**` | Source: runnable demos (`<name>.ct` + `<name>.expected.out`) | ✅ extend when adding syntax; generated files are not committed |
 | `test/**` | Tests: cases, golden baselines, runner | ✅ editable; `*.expected.*` may only be regenerated |
 | `editors/**` | Editor extensions: `editors/vscode/` (VS Code, declarative JSON) | ✅ editable; see the hard boundaries below |
-| `selfhost/**` | Source: the self-hosted compiler — the hand-written single-file seed `selfhost/ctc.ct` (L1) plus the split multi-unit tree `selfhost/src/**` (`core.ct` + `driver.ct`, which L1 builds into L2) | ✅ new from Phase 1 on; CT source and test scripts only, never generated files |
+| `selfhost/**` | Source: the self-hosted compiler — the frozen seed `selfhost/ctc.ct` (L1, its capability stops at Phase 2) plus the **development line** `selfhost/src/**` (`core.ct` + `driver.ct`, which L1 builds into L2; from Phase 3 on every new capability lands here) | ✅ new from Phase 1 on; CT source and test scripts only, never generated files |
 | `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
 | `ctc`, generated `.c`/`.h`, `.o` | Build products | ❌ never commit |
@@ -230,8 +233,22 @@ Hard boundaries:
   **L2**, and L2 must match L1 byte-for-byte on `test/cases/**` (25/25) — the split's exit criterion.
   Cross-unit access goes only through the 10 scalar `pub` wrappers (`ct_read_file` &c.); data, macros
   and the singleton stay inside `core.ct` (land in `core.c`), and **no language feature may be added**
-  to help the split. Gates: `check-goldens.sh` step 6, `check-archive.sh` 3b, `check-m2a.sh` step 7,
+  to help the split. Gates: `check-goldens.sh` steps 6/7, `check-archive.sh` 3b, `check-m2a.sh` step 7,
   `ct-tour.sh` step 6. See Phase 2 in the roadmap.
+- **`selfhost/ctc.ct` (L1) is frozen from Phase 3 on**: L1 has become a **frozen seed** — its
+  capability stops where Phase 2 left it and it gains **no new capability** (comments included,
+  registered the same way as `ctc.c`). The reason mirrors the level above: once `ctc.c` froze,
+  development moved to L1; now that L1 has frozen, development moves to **`selfhost/src/**`**
+  (`core.ct` + `driver.ct`, the source of L2). **From Phase 3 on every new capability lands in
+  `src/**` only.**
+  - **The gates change meaning with it**: `check-archive.sh`'s ratchet now runs **L2** (which L1
+    builds from `src/**`), not L1; `check-goldens.sh` step 7 is a **fixpoint** — L2 compiles
+    `src/**` too and its output must be **byte-identical** with L1's, because the two compilers must
+    agree on the very subset the compiler is written in.
+  - **The signature ceiling is a real constraint**: `MAX_FUNCS` (64) **counts every top-level
+    plain-C signature, `static` included**, and `src/**` has almost no headroom left. New helpers
+    **must** go into an `impl` block (impl methods do not count), minding `MAX_METHOD` (32) —
+    `PipeOps` already uses 31. See Phase 3 in the roadmap.
 - **L1 must be written in CT OO style**: `selfhost/ctc.ct`'s data-model and pipeline layers use
   `struct` + `use` + `impl` and must not fall back to plain-C passthrough; only the facilities layer
   (`Buf` / allocators / `die` / the scanning primitives) stays plain-C. Note the pipeline is carried by
