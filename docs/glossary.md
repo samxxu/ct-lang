@@ -90,8 +90,8 @@
 | 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
 | 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发。**同上，已移出 L0** |
-| 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7）。**已随 Phase 0.3 移出 L0，计划 Phase 4 用 CT 重做** |
-| owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记。**随泄漏警告一并移出 L0** |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7）。**已随 Phase 0.3 移出 L0；已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
+| owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记。**随泄漏警告一并移出 L0，已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
 
 ### 4. CLI 与产物
 
@@ -102,7 +102,7 @@
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
-| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7） |
+| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
 
 ### 5. 测试
 
@@ -233,8 +233,8 @@
 | driver | `compile_range` / `compile_file` / `compile_main` | orchestration; touches no parsing / generation logic — L0 is single-file only now |
 | `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | line emission | `line_of` / `line_at` / `line_break` | offset→line cache / emit / force a re-emit at a block boundary. **Same; moved out of L0** |
-| leak warning | `potential_leak` · `leak_observe` | conservative, path-insensitive: an owned heap object still not `delete`d / `return`ed / escaped when its scope ends (Phase 1.7). **Moved out of L0 in Phase 0.3; scheduled for a CT rework in Phase 4** |
-| owned (heap-holding) | `Var.owned` / `own_line` | marked at the creation site by `T *p = malloc/calloc(...)`. **Moved out of L0 together with the leak warnings** |
+| leak warning | `potential_leak` · `leak_observe` | conservative, path-insensitive: an owned heap object still not `delete`d / `return`ed / escaped when its scope ends (Phase 1.7). **Moved out of L0 in Phase 0.3; restored by Phase 4 slice 2 under `selfhost/src/**`** |
+| owned (heap-holding) | `Var.owned` / `own_line` | marked at the creation site by `T *p = malloc/calloc(...)`. **Moved out of L0 together with the leak warnings; restored by Phase 4 slice 2 under `selfhost/src/**`** |
 
 ### 4. CLI and output
 
@@ -245,7 +245,7 @@
 | output option | `-o <file\|dir>` | |
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
-| JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7) |
+| JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7). **Restored by Phase 4 slice 2 under `selfhost/src/**`** |
 
 ### 5. Testing
 

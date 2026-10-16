@@ -644,8 +644,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **出口**：诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行。
 - **对差依据**：`test/archive/errors/*`、`run.sh` 的 `#line` 层。
 - **风险**：错误计数与重同步点容易产生级联误报；语义诊断要与「不做类型检查」的定位边界划清。
-- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。**尚未做**：泄漏警告 + `--diagnostics`（切片 2）、多错误重同步（3）、语义诊断（4）。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
-- **验证（2026-10-16）**：`check-archive.sh` 0 退化（单单元 3 pass、诊断 9 pass / 1 pending、多单元 4 pass、designed **7 pass**）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过，且 L2 单文件 greeter 输出与 L0 逐字节一致。
+- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。**尚未做**：多错误重同步（3）、语义诊断（4）。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
+- **进展（2026-10-16，切片 2：泄漏警告 + `--diagnostics`）**：oracle 的保守、路径不敏感泄漏警告已在 `selfhost/src/**` 恢复——`Var` 增 `owned` / `own_line`，指针声明处的 `malloc` / `calloc` 记为持有（`new_var` 复用槽位时清这两个字段），`delete` 与 `return` / 逃逸赋值清标记，作用域闭合时 `leak_check_scope` 收集仍持有的对象，`emit_warnings` 按 `--diagnostics=json` 发 JSON（compile 走 stdout、build 走 stderr，后者把 stdout 留给 cc 命令）、按 text 发 stderr。归档负例 `too_many_warnings` 由 PENDING 转 PASS（超 `MAX_WARNS` 仍 `die`）。**5 个新方法全部进 `SymTabOps`（9 → 14）**，warning 输出复用既有 pub 包装器（单文件 `ct_compile_file`、build `ct_cc_finish`），**顶层函数零新增**——`MAX_FUNCS` 余量仍是 1。新增 3 个 designed fixture：`leak`（compile text）、`leak_json`（compile json → stdout）、`leak_build`（build json → stderr），`check-archive.sh` 第 7 组新增 `expected.stdout` / `expected.stderr` 逐字节断言。**尚未做**：多错误重同步（3）、语义诊断（4）。
+- **验证（2026-10-16，切片 2）**：三套 golden 全部由 tag `overreach-oracle` 编出的 oracle 生成，L2 与之在 `.c` / `.h` / stderr / stdout 四侧逐字节一致（含 `--diagnostics=bad` 的 `unknown diagnostics format` 报错）；`check-archive.sh` 0 退化（单单元 3 pass、诊断 **10 pass / 0 pending**、多单元 4 pass、designed **10 pass**）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过，L2 单文件产物与 L0 逐字节一致。
 
 ### Phase 5：新增特性（原 2.4）
 
@@ -1717,12 +1718,29 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   it on single-file), and `check-archive.sh` group 7 grew a `compile.args` branch (single-file cases
   run their args verbatim from a staging copy so the banner path matches the golden), taking
   `baseline_designed` to 7. **The single-file default stays off**, so L2's single-file output remains
-  byte-identical with L0. **Still to do**: leak warnings + `--diagnostics` (slice 2), multi-error
-  resync (3), semantic checks (4). New code goes into `impl` blocks (`MAX_FUNCS` has one slot left).
-- **Verification (2026-10-16)**: `check-archive.sh` 0 regressions (single-unit 3 pass, diagnostics
-  9 pass / 1 pending, multi-unit 4 pass, designed **7 pass**); `check-goldens.sh` 25/25 + L1′ 25/25 +
-  L2 25/25 + fixpoint 2/2; `check-m2a.sh` / `ct-tour.sh` exit 0; `./test/run.sh` 115/115; the manual
-  three-step passes and L2's single-file greeter output matches L0 byte for byte.
+  byte-identical with L0. **Still to do**: multi-error resync (3), semantic checks (4). New code goes
+  into `impl` blocks (`MAX_FUNCS` has one slot left).
+- **Progress (2026-10-16, slice 2: leak warnings + `--diagnostics`)**: the oracle's conservative,
+  path-insensitive leak warnings are restored in `selfhost/src/**` — `Var` gains `owned` /
+  `own_line`, a pointer declaration initialised from `malloc` / `calloc` is marked as owned
+  (`new_var` clears both fields so a reused slot never inherits stale ownership), `delete` and a
+  `return` / escaping assignment clear the mark, a closing scope collects the objects still owned
+  via `leak_check_scope`, and `emit_warnings` prints JSON under `--diagnostics=json` (stdout in
+  compile mode, stderr in build mode, which keeps stdout for the cc command) or text to stderr.
+  The archived negative case `too_many_warnings` flips from PENDING to PASS (overflow past
+  `MAX_WARNS` still `die`s). **All five new methods go into `SymTabOps` (9 → 14)** and warning
+  output reuses existing pub wrappers (single-file `ct_compile_file`, build `ct_cc_finish`), so
+  **no top-level function is added** — `MAX_FUNCS` still has its one slot. Three designed fixtures
+  were added (`leak`: compile text; `leak_json`: compile json → stdout; `leak_build`: build json →
+  stderr), and `check-archive.sh` group 7 gained `expected.stdout` / `expected.stderr` byte-exact
+  assertions. **Still to do**: multi-error resync (3), semantic checks (4).
+- **Verification (2026-10-16, slice 2)**: all three goldens were generated by the oracle built from
+  tag `overreach-oracle`, and L2 matches it byte for byte across `.c` / `.h` / stderr / stdout
+  (including the `unknown diagnostics format` error for `--diagnostics=bad`); `check-archive.sh`
+  0 regressions (single-unit 3 pass, diagnostics **10 pass / 0 pending**, multi-unit 4 pass,
+  designed **10 pass**); `check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + fixpoint 2/2;
+  `check-m2a.sh` / `ct-tour.sh` exit 0; `./test/run.sh` 115/115; the manual three-step passes and
+  L2's single-file output matches L0 byte for byte.
 
 ### Phase 5 — new features (was 2.4)
 

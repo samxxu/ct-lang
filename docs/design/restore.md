@@ -194,6 +194,10 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 > 各生成块边界 `line_break()` 强制下一行重发，避免映射漂移。单文件模式**默认关**（golden 逐字节不变），
 > 多文件 `.h` 不加 `#line`；`--line` / `--no-line` 覆盖默认。已用 run.sh 的 `#line` 层端到端验证
 > （`.ct` 第 4 行造错 → gcc 报 `err.ct:4:`）。
+>
+> **CT 侧**：Phase 4 切片 1 已在 `selfhost/src/**` 用 CT 恢复 `#line` 与 `--line` / `--no-line`；
+> 上文提到的 run.sh `#line` 层已随 Phase 0.3 移出，改由 `check-archive.sh`（designed fixture
+> `line` / `noline`）承担对差。
 
 - **设计**：`.c` 中**源自源文件**的输出行前插 `#line <源行> "<源路径>"`；仅当行号不连续时输出
   （连续段省略，减小体积）；生成的样板行（vtable 定义、vptr 写入循环）用**触发点**的源行号。
@@ -233,6 +237,11 @@ Phase 1 新增**多文件模式**，与 Phase 0 的**单文件模式**并存：
 > 清除时机 = `delete p` / `return p` / `p` 被赋给非自身左值（近似逃逸）。实现要点：`Var` 增 `owned`/`own_line`；
 > 在 1.4 的创建点标记；`leak_observe()`（行级）与 `scope_track()` 的 `}` 回滚处检查；警告收集后一次性输出。
 > 只覆盖普通函数体（`impl` 方法体不在内）、只覆盖 ct-struct 堆对象。退出码始终 0。测试见 run.sh 的 `warnings` 层。
+>
+> **CT 侧**：Phase 4 切片 2 已在 `selfhost/src/**` 用 CT 恢复泄漏警告与 `--diagnostics`（`Var` 增
+> `owned` / `own_line`，`new_var` 清槽位，创建点标记，`leak_observe` + `scope_track` 的 `}` 回滚检查，
+> 收集后一次性输出）；上文提到的 run.sh `warnings` 层已随 Phase 0.3 移出，改由 `check-archive.sh`
+> 承担对差（designed fixture `leak` / `leak_json` / `leak_build`，加归档负例 `too_many_warnings`）。
 
 - **泄漏（简单版）**：由 1.4 的创建点标记**局部 owned 堆对象**；`delete` / `return` / 逃离作用域
   （赋给字段或全局）即清除；作用域（`}`）结束仍 owned → 警告（**不终止**）。抑制语法本版未做。路径敏感版归 Phase 5（展望）。
@@ -545,6 +554,10 @@ moved to Phase 6 and is no longer part of this phase.
 > mapping drift. Single-file mode is **off** (goldens stay byte-identical) and the multi-file `.h`
 > never gets `#line`; `--line` / `--no-line` override. Verified end-to-end by run.sh's `#line` layer
 > (an error at line 4 of a `.ct` makes gcc report `err.ct:4:`).
+>
+> **CT side**: Phase 4 slice 1 restored `#line` and `--line` / `--no-line` in CT under
+> `selfhost/src/**`; the run.sh `#line` layer mentioned above left with Phase 0.3, and its diff is now
+> carried by `check-archive.sh` (designed fixtures `line` / `noline`).
 
 - **Design**: emit `#line <src line> "<src path>"` before each output line **originating in the
   source**; only when the line number is discontinuous (continuous runs are omitted to shrink the
@@ -593,6 +606,13 @@ moved to Phase 6 and is no longer part of this phase.
 > `leak_observe()` (per line) and the `}` rollback in `scope_track()` do the checking; warnings are
 > collected and printed once. Ordinary function bodies only (`impl` method bodies are out of scope) and
 > ct-struct heap objects only. The exit code is always 0. Covered by run.sh's `warnings` layer.
+>
+> **CT side**: Phase 4 slice 2 restored leak warnings and `--diagnostics` in CT under
+> `selfhost/src/**` (`Var` gains `owned` / `own_line`, `new_var` clears a reused slot, the creation
+> point marks ownership, `leak_observe` plus the `}` rollback in `scope_track` check it, and the
+> warnings print once at the end); the run.sh `warnings` layer mentioned above left with Phase 0.3,
+> and its diff is now carried by `check-archive.sh` (designed fixtures `leak` / `leak_json` /
+> `leak_build`, plus the archived negative case `too_many_warnings`).
 
 - **Leak (simple version)**: mark **local owned heap objects** at 1.4's creation points; `delete` /
   `return` / escaping the scope (assignment to a field or a global) clears the mark; still owned at
