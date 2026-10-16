@@ -44,11 +44,14 @@
 #   7  designed cases        test/modules/*/{build,compile}.args
 #        no archive oracle backs these: they pin semantics added after the
 #        over-reach strip (`foo.h.ct` file names, `-I` import roots, `--line` /
-#        `--no-line`). Each fixture dir holds a build.args or compile.args (the
-#        arguments after `build`, or the whole compile-mode line, repo-relative)
-#        plus its own *.expected.c/*.expected.h to byte-diff and, for positive
-#        cases, an expected.out to link-and-run against. A fixture with an
-#        expected.err is a negative case (the command must fail with that message).
+#        `--no-line`, `--diagnostics` leak warnings). Each fixture dir holds a
+#        build.args or compile.args (the arguments after `build`, or the whole
+#        compile-mode line, repo-relative) plus its own *.expected.c/*.expected.h
+#        to byte-diff and, for positive cases, an expected.out to link-and-run
+#        against. Optional expected.stderr / expected.stdout byte-diff what the
+#        *compiler* printed (expected.out is the linked program's output). A
+#        fixture with an expected.err is a negative case (the command must fail
+#        with that message).
 #
 # Usage:  bash selfhost/check-archive.sh        (or ./selfhost/check-archive.sh once +x)
 #         CC=clang bash selfhost/check-archive.sh
@@ -88,6 +91,7 @@ drop_impl_undefined_struct
 drop_impl_not_used
 drop_impl_no_method
 drop_impl_no_body
+too_many_warnings
 "
 baseline_multi="
 test/archive/import/app
@@ -96,12 +100,13 @@ test/archive/multifile/app
 test/archive/multifile/calc
 "
 # designed cases: no archive oracle backs these, they pin the new semantics of
-# `foo.h.ct` file names, `-I` import roots and the `--line` / `--no-line`
-# overrides of the per-mode `#line` default, byte-diffed against their own
-# goldens plus an end-to-end run (see group 7). `split` additionally pins the
-# cross-unit OO contract the selfhost split relies on: a `pub trait`/`pub struct`
-# in a header unit, its `impl` (with a `static` vtable) in another unit, and a
-# third unit dispatching through an accessor-returned pointer.
+# `foo.h.ct` file names, `-I` import roots, the `--line` / `--no-line` overrides
+# of the per-mode `#line` default and the `--diagnostics` leak warnings,
+# byte-diffed against their own goldens plus an end-to-end run (see group 7).
+# `split` additionally pins the cross-unit OO contract the selfhost split relies
+# on: a `pub trait`/`pub struct` in a header unit, its `impl` (with a `static`
+# vtable) in another unit, and a third unit dispatching through an
+# accessor-returned pointer.
 baseline_designed="
 hdr
 inc
@@ -110,6 +115,9 @@ precedence
 split
 noline
 line
+leak
+leak_json
+leak_build
 "
 
 in_list() {
@@ -405,15 +413,17 @@ for fdir in test/modules/*/; do
     # build mode compiles into $outdir and its args carry no `-o` (the runner
     # appends it); compile mode runs its args verbatim from a staging copy so the
     # recorded banner path matches, and its args name both the input and `-o`.
+    # The compiler's own stdout/stderr are kept for the optional expected.stdout
+    # / expected.stderr assertions below (expected.out is the *program's* output).
     if [ "$mode" = compile ]; then
         stage="$outdir/src"
         mkdir -p "$stage"
         cp "$fdir"/*.ct "$stage"/ 2>/dev/null
-        ( cd "$stage" && "$l2" $args ) >/dev/null 2>"$log"
+        ( cd "$stage" && "$l2" $args ) >"$work/mod-$name.stdout" 2>"$log"
         rc=$?
         runc="$stage"
     else
-        "$l2" build $args -o "$outdir" >/dev/null 2>"$log"
+        "$l2" build $args -o "$outdir" >"$work/mod-$name.stdout" 2>"$log"
         rc=$?
         runc="$outdir"
     fi
@@ -461,6 +471,19 @@ for fdir in test/modules/*/; do
                 detail="(the generated C did not link)"
             fi
         fi
+    fi
+
+    # Compiler-output assertions: byte-exact against what the compiler printed.
+    # (expected.out above is what the linked *program* prints.)
+    if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.stderr" ] &&
+       ! cmp -s "$log" "$fdir/expected.stderr"; then
+        matched=0
+        detail="(compiler stderr differs from expected.stderr)"
+    fi
+    if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.stdout" ] &&
+       ! cmp -s "$work/mod-$name.stdout" "$fdir/expected.stdout"; then
+        matched=0
+        detail="(compiler stdout differs from expected.stdout)"
     fi
 
     if in_list "$name" "$baseline_designed"; then

@@ -1,0 +1,1 @@
+prog.ct:6: warning: potential leak: 'p' (S*) allocated but never deleted

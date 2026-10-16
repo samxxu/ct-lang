@@ -1,0 +1,8 @@
+#include <stdlib.h>
+
+struct S { int n; };
+
+int main(void) {
+    S *p = malloc(sizeof(struct S));
+    return 0;
+}

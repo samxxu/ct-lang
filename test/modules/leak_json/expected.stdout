@@ -1,0 +1,1 @@
+{"warnings":[{"type":"potential_leak","file":"prog.ct","line":6,"variable":"p","type_name":"S*","message":"allocated but never deleted"}]}
