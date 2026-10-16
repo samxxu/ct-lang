@@ -635,7 +635,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - 至此**三条 PENDING 主项全部闭合**：`test/acceptance/run.sh` 现 **12 pass / 0 pending / 0 regression**，`ast_spike.ct`（[test/acceptance/ast_spike.ct](../test/acceptance/ast_spike.ct)）既是目标程序、也是常驻回归项。**为何不进 golden**：`examples/**` 与 `test/cases/**` 的基线都由 **L0/L1** 驱动，承载不了 L0 不支持的语法（`ctc.c` 冻结、不得为其放宽），故这三项能力只有 `test/acceptance/run.sh`（探 L2）能钉住；编辑器侧无需改动——`T xs[n]` 用的仍是既有括号与标识符，没有新关键字。
 
-> **关于两条负例（订正）**：[test/errors/iface_array.ct](../test/errors/iface_array.ct) 与 [test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct) **不必退役、也不该退役**。`test/errors/**` 由 `./test/run.sh` 用 **L0（`ctc.c`）** 驱动，而 L0 已冻结、**永远**会对这两例报 `die`；它们钉的是 L0 的行为，因此继续有效。新能力只存在于 CT 侧（L2），由 `test/acceptance/run.sh` 的 `BASELINE` 钉住——两条负例与那批探针各自钉住**不同的编译器**，并不矛盾。（`iface_pointer_init.ct` 钉的「接口值指针**局部变量** `T *g = 0;`」也不在本次范围：① 覆盖的是**数组**，不是指向接口值的裸指针。）
+> **关于两条负例（订正）**：[test/errors/iface_array.ct](../test/errors/iface_array.ct) 与 [test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct) **不必退役、也不该退役**。`test/errors/**` 由 `./test/run.sh` 用 **L0（`ctc.c`）** 驱动，而 L0 已冻结、**永远**会对这两例报 `die`；它们钉的是 L0 的行为，因此继续有效。新能力只存在于 CT 侧（L2），由 `test/acceptance/run.sh` 的 `BASELINE` 钉住——两条负例与那批探针各自钉住**不同的编译器**，并不矛盾。（`iface_pointer_init.ct` 钉的是**带初始化式**的接口值裸指针 `T *g = 0;`；无初始化式的 `T *g;` 本来就支持，产出 `struct T_iface *g;`（2026-10-17 实测），因此该负例与本轮 ① **互不重叠**——① 覆盖的是**数组**。）
 
 **过渡期纪律**：自举启动后**冻结一切新的 C 侧语言特性**；`ctc.c` 只接受 bug 修复。若 L1 暴露出 ct 表达力缺口，须先判定它属「语言特性」（放到 CT 层实现）还是「种子核心能力」（必须在 C 侧补）——后者要作为 **Phase 0 核心的修订定义**显式记录，不得顺手打补丁（这正是 Phase 0 历史偏差的复发点）。
 

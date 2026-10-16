@@ -314,9 +314,9 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - **CT 侧（L2）已扩展**：`selfhost/src/**` 把上一条的限制全部放开，且沿用同一套隐式装箱规则——
   接口数组 `T xs[n]` / `T *xs[n]`（含元素赋值 `xs[i] = v;` 与元素派发 `xs[i].m()`，指针数组的元素自身是
   指针故走 `->`）、接口**数组字段**（`Node items[4]` 与 `self->items[i].eval()`）、以及**构造点**装箱
-  （`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）。接口值**裸指针局部变量**
-  （`T *g;`）**仍不支持**。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），
-  由 `test/acceptance/run.sh` 钉住。
+  （`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）。带初始化式的接口值裸指针
+  （`T *g = 0;`）**仍不支持**——无初始化式的 `T *g;` 本就可用（产出 `struct T_iface *g;`）。理由同顶部
+  状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），由 `test/acceptance/run.sh` 钉住。
 
 ### 5. 命名规则（稳定契约）
 
@@ -764,9 +764,11 @@ Rules and limits:
   `xs[i] = v;` and element dispatch `xs[i].m()`, whose element is itself a pointer for a pointer
   array, hence `->`), interface **array fields** (`Node items[4]`, `self->items[i].eval()`), and
   **construction-point** boxing (`Pair p = { .l = v, .ptr = &v };` — value and pointer fields take
-  their own boxing path). A bare **pointer local** to an interface value (`T *g;`) is **still
-  unsupported**. Rationale as in the status note at the top: this document stays accurate for L0, and
-  the new capability belongs to the current compiler (L2) alone, pinned by `test/acceptance/run.sh`.
+  their own boxing path). An **initialised** bare pointer to an interface value (`T *g = 0;`) is
+  **still unsupported**; the uninitialised `T *g;` has always worked (it emits
+  `struct T_iface *g;`). Rationale as in the status note at the top: this document stays accurate for
+  L0, and the new capability belongs to the current compiler (L2) alone, pinned by
+  `test/acceptance/run.sh`.
 
 ### 5. Naming contract
 
