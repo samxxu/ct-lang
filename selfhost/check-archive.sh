@@ -25,9 +25,13 @@
 #   * the *.expected.h include guard is derived from the output basename, so the
 #     output is named after the case.
 #
-# Step 3b additionally rebuilds L2 from the split tree selfhost/src/** (the Phase 2
-# multi-unit rewrite) and fails the run if it does not build warning-free; the
-# corpus-level byte comparison for L2 lives in check-goldens.sh step 6.
+# The compiler under test is L2, not L1. Steps 1-3 build L1 (= selfhost/ctc.ct
+# compiled by L0); from Phase 3 on, L1 is a frozen seed and every new capability
+# is implemented in the multi-unit tree selfhost/src/**, which L1 builds into L2.
+# Step 3b does exactly that and then hands L2 to groups 4-7, so promoting a case
+# here means "the current compiler source restores this feature". L1's own corpus
+# is still checked byte for byte by check-goldens.sh steps 4-5, and its agreement
+# with L2 on the split tree by step 7 there.
 #
 # Groups:
 #   4  single-unit goldens   test/archive/cases/*.ct   full byte diff of .c and .h
@@ -71,12 +75,18 @@ l1="$work/ctc-l1"
 baseline_cases="
 19_namespace
 20_namespace_nested
+22_drop
 "
 baseline_errors="
+ns_path_nested
 namespace_bad_path
 namespace_path_too_long
-ns_path_nested
 ns_qualified_name
+drop_reserved
+drop_impl_undefined_struct
+drop_impl_not_used
+drop_impl_no_method
+drop_impl_no_body
 "
 baseline_multi="
 test/archive/import/app
@@ -145,13 +155,15 @@ fi
 fail=0
 l2_ok=0
 
-# ------------------------------------------------- 3b) L2 from the split tree
-# selfhost/src/** is the same compiler partitioned across units; L1 builds it into
-# L2. The partition must not change behaviour, so a build failure here is a
-# regression -- the corpus byte comparison for L2 is check-goldens.sh step 6.
-banner "3b) L2 built from the split tree (selfhost/src/**)"
+# ------------------------------------------------- 3b) build L2 (the compiler under test)
+# Steps 1-3 build L1 = selfhost/ctc.ct compiled by L0. Since Phase 3 L1 is a
+# *frozen seed*: new capabilities are implemented in the multi-unit tree
+# selfhost/src/**, which L1 builds into L2. The ratchet below therefore runs L2,
+# not L1 -- that is what "the compiler restores this feature" now means. L1's own
+# corpus (test/cases) is still checked by check-goldens.sh steps 4-5.
+banner "3b) L2 built by L1 from the split tree (selfhost/src/**)"
 l2src="$work/l2src"
-l2_bin="$work/ctc-l2"
+l2="$work/ctc-l2"
 l2_log="$work/ctc-l2.log"
 rm -rf "$l2src"
 mkdir -p "$l2src"
@@ -159,13 +171,13 @@ mkdir -p "$l2src"
 if ! run "L1 builds the split tree" "$l1" build selfhost/src/driver.ct -o "$l2src"; then
     printf 'FAIL: L1 could not build selfhost/src/**\n'
     fail=1
-elif ! run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$l2_log" ||
+elif ! run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2" 2>"$l2_log" ||
      [ -s "$l2_log" ]; then
     printf 'FAIL: L2 did not build warning-free:\n'
     sed 's/^/    /' "$l2_log"
     fail=1
 else
-    printf 'OK: L2 built warning-free from the split tree\n'
+    printf 'OK: L2 built warning-free from the split tree -- the ratchet runs L2\n'
     l2_ok=1
 fi
 
@@ -198,7 +210,7 @@ for exp_c in test/archive/cases/*.expected.c; do
     outh="$stage/_out/$base.h"
     rm -f "$outc" "$outh"
 
-    err="$(cd "$stage" && "$l1" "$rel" -o "$outc" 2>&1 >/dev/null)"
+    err="$(cd "$stage" && "$l2" "$rel" -o "$outc" 2>&1 >/dev/null)"
     rc=$?
 
     matched=0
@@ -248,7 +260,7 @@ for ct in test/archive/errors/*.ct; do
     expected="test/archive/errors/$base.expected-err"
     log="$work/$base.err"
 
-    "$l1" "$ct" -o "$work/$base.out.c" 2>"$log"
+    "$l2" "$ct" -o "$work/$base.out.c" 2>"$log"
     rc=$?
 
     matched=0
@@ -317,7 +329,7 @@ for dir in test/archive/import test/archive/multifile; do
     done
     [ -n "$rels" ] || continue
 
-    err="$(cd "$stage" && "$l1" build $rels -o "$outdir" 2>&1 >/dev/null)"
+    err="$(cd "$stage" && "$l2" build $rels -o "$outdir" 2>&1 >/dev/null)"
     rc=$?
 
     for b in $units; do
@@ -386,7 +398,7 @@ for argfile in test/modules/*/build.args; do
     if [ -f "$errfile" ]; then
         # a negative case: the build must fail, and every non-comment line of
         # expected.err must appear on stderr (the same convention as group 5)
-        "$l1" build $args -o "$outdir" >/dev/null 2>"$log"
+        "$l2" build $args -o "$outdir" >/dev/null 2>"$log"
         rc=$?
         detail="(got: $(first_line "$(cat "$log")"))"
         if [ "$rc" -ne 0 ]; then
@@ -398,7 +410,7 @@ for argfile in test/modules/*/build.args; do
         fi
     else
         # a positive case: byte-diff every unit pair, then link and run
-        "$l1" build $args -o "$outdir" >/dev/null 2>"$log"
+        "$l2" build $args -o "$outdir" >/dev/null 2>"$log"
         rc=$?
         detail="(exit $rc: $(first_line "$(cat "$log")"))"
         matched=1

@@ -15,6 +15,9 @@
 #      built warning-free and must reproduce the same corpus byte for byte. This is
 #      the split's exit criterion: the compiler partitioned across units still is
 #      the compiler, and it now shares one source with the OO-in-CT rewrite.
+#   7) [Phase 3 fixpoint] L2 compiles selfhost/src/** too, and its output must be
+#      byte-identical with L1's -- the two compilers must agree on the construct
+#      the compiler itself is written in.
 #
 # The goldens are the oracle: L1 climbed them one feature family at a time. The
 # baseline below lists the cases L1 matches, and it is a ratchet:
@@ -274,6 +277,39 @@ else
     fi
 fi
 
+# ------------------------------- 7) L1 and L2 agree on the split tree (fixpoint)
+# The strongest cheap check that L2 really is "L1's source, grown": L2 compiles
+# selfhost/src/** too, and every emitted .c/.h must be byte-identical with L1's
+# (step 6 kept them in $l2src). A difference means the two compilers disagree on
+# a construct the compiler is written in, i.e. a real defect the corpus cannot see.
+banner "7) L1 and L2 agree on compiling selfhost/src/** (fixpoint)"
+nfixok=0
+nfixfail=0
+l2self="$work/ctc-l2-self"
+
+rm -rf "$l2self"
+mkdir -p "$l2self"
+
+if [ "$fail" -ne 0 ] && [ ! -x "$l2_bin" ]; then
+    printf 'SKIP: L2 was not built (see step 6)\n'
+    fail=1
+elif ! run "L2 builds the split tree" "$l2_bin" build selfhost/src/driver.ct -o "$l2self"; then
+    printf 'FAIL: L2 could not build selfhost/src/**\n'
+    fail=1
+else
+    for u in core driver; do
+        if cmp -s "$l2src/$u.c" "$l2self/$u.c" && cmp -s "$l2src/$u.h" "$l2self/$u.h"; then
+            nfixok=$((nfixok + 1))
+        else
+            printf 'FIXPOINT MISMATCH  %s  (L1 and L2 emit different C)\n' "$u"
+            nfixfail=$((nfixfail + 1))
+        fi
+    done
+    if [ "$nfixfail" -ne 0 ]; then
+        fail=1
+    fi
+fi
+
 # --------------------------------------------------------------- verdict
 banner "VERDICT"
 printf 'L1 golden coverage: %d pass, %d new, %d pending, %d regression (of %d cases)\n' \
@@ -281,12 +317,13 @@ printf 'L1 golden coverage: %d pass, %d new, %d pending, %d regression (of %d ca
     "$((npass + nnew + npending + nregress))"
 printf "L1' (self-hosted rebuild): %d passed, %d failed\n" "$nselfpass" "$nselffail"
 printf 'L2 (split tree, built by L1): %d passed, %d failed\n' "$n2pass" "$n2fail"
+printf 'L1 vs L2 on the split tree: %d unit(s) identical, %d differing\n' "$nfixok" "$nfixfail"
 
 if [ "$fail" -eq 0 ]; then
     printf 'check-goldens: OK (no regression, and the self-hosted rebuild agrees)\n'
 else
-    printf 'check-goldens: FAIL (%d baseline regression(s), %d self-hosted mismatch(es), %d L2 mismatch(es))\n' \
-        "$nregress" "$nselffail" "$n2fail"
+    printf 'check-goldens: FAIL (%d baseline regression(s), %d self-hosted mismatch(es), %d L2 mismatch(es), %d fixpoint mismatch(es))\n' \
+        "$nregress" "$nselffail" "$n2fail" "$nfixfail"
 fi
 
 exit "$fail"
