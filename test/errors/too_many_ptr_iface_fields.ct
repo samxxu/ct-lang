@@ -1,0 +1,39 @@
+// this one overflows the *pointer interface field* table (npif): `struct T *x`
+// where T is a trait.
+trait T { void tick(); }
+
+struct Big {
+    struct T *p0;
+    struct T *p1;
+    struct T *p2;
+    struct T *p3;
+    struct T *p4;
+    struct T *p5;
+    struct T *p6;
+    struct T *p7;
+    struct T *p8;
+    struct T *p9;
+    struct T *p10;
+    struct T *p11;
+    struct T *p12;
+    struct T *p13;
+    struct T *p14;
+    struct T *p15;
+    struct T *p16;
+    struct T *p17;
+    struct T *p18;
+    struct T *p19;
+    struct T *p20;
+    struct T *p21;
+    struct T *p22;
+    struct T *p23;
+    struct T *p24;
+    struct T *p25;
+    struct T *p26;
+    struct T *p27;
+    struct T *p28;
+    struct T *p29;
+    struct T *p30;
+    struct T *p31;
+    struct T *p32;
+};

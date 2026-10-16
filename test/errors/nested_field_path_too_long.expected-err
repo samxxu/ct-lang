@@ -1,0 +1,3 @@
+# the struct name in this message depends on the lengths of the names in the
+# chain, so — like nesting_too_deep.expected-err — only the stable part is pinned
+error: nested field path too long in struct

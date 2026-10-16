@@ -1,0 +1,39 @@
+// four tables share `MAX_FIELDS` and one message, but each has its own overflow
+// check; this one overflows the *pointer struct field* table (npf).
+struct F { int x; }
+
+struct Big {
+    struct F *p0;
+    struct F *p1;
+    struct F *p2;
+    struct F *p3;
+    struct F *p4;
+    struct F *p5;
+    struct F *p6;
+    struct F *p7;
+    struct F *p8;
+    struct F *p9;
+    struct F *p10;
+    struct F *p11;
+    struct F *p12;
+    struct F *p13;
+    struct F *p14;
+    struct F *p15;
+    struct F *p16;
+    struct F *p17;
+    struct F *p18;
+    struct F *p19;
+    struct F *p20;
+    struct F *p21;
+    struct F *p22;
+    struct F *p23;
+    struct F *p24;
+    struct F *p25;
+    struct F *p26;
+    struct F *p27;
+    struct F *p28;
+    struct F *p29;
+    struct F *p30;
+    struct F *p31;
+    struct F *p32;
+};
