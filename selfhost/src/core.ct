@@ -151,7 +151,6 @@ static size_t g_body_abs = 0;
 static int    g_body_pre = 0;
 static int    g_cur_rettr = -1;        /* return trait of the function being scanned */
 
-static char g_guard[MAX_NAME * 2];
 static size_t g_line_off = 0;
 
 /* Multi-file mode (`ctc build`): the unit's .c includes its own .h and every
@@ -169,22 +168,9 @@ static int  g_line_force = -1;         /* -1 default (by mode), 0 force off, 1 f
 static int  g_cur_line  = 1;
 static long g_line_next = -1;
 
-/* The `#include`s a unit's .c opens with: its own header, then one per import
-   (filled in by the build driver before the unit is compiled). */
-static char g_imp_h[MAX_IMPORTS][MAX_NAME];
-static int  g_nimp_h = 0;
-
-/* File-scope objects/arrays cannot write their vptrs in place (there are no
-   statements out there), so the writes are collected here while scanning and
-   emitted after everything else as a constructor that runs before main. */
-static Buf g_unit_init;
-static int g_has_unit_init = 0;
-
 /* An rvalue receiver (`f().m()`) is hoisted into a temp so it is evaluated once
    and in order; the declaration goes on the line before the rewritten one (see
-   `emit_hoisted`), and `g_ntmp` keeps the temp names unique. */
-static Buf g_hoist;
-static int g_ntmp = 0;
+   `emit_hoisted`), and `self->ntmp` keeps the temp names unique. */
 
 /* Conservative, path-insensitive leak warnings (no suppression in this version).
    Warnings are collected per invocation and printed once, either human-readable
@@ -947,7 +933,7 @@ trait PipeOps {
     void header_path(const char *outc, char *out, size_t n);
     char *read_file(const char *path, size_t *out_len);
     /* `multi` selects multi-file mode: the .c then includes its own .h, opens
-       with the imports the driver registered in `g_imp_h`, and emits `#line`.
+       with the imports the driver registered in `self->imp_h`, and emits `#line`.
        The symbol tables accumulate across units in that mode (a unit sees the
        units built before it) and are reset per file otherwise. */
     int compile_file(const char *in, const char *outc, int multi);
@@ -998,6 +984,18 @@ struct Pipe {
        here is what makes the pipeline an object with state. A method still names
        it `sym` through a local alias, so the bodies read as before. */
     struct SymTab *sym;
+    /* Output state that belongs to one compile: the per-line hoist buffer and its
+       temp counter, the file-scope constructor accumulator, the `#include`s the
+       driver pre-loads, the header include guard, and the suggested cc command. */
+    Buf  hoist;
+    int  ntmp;
+    Buf  unit_init;
+    int  has_unit_init;
+    char imp_h[MAX_IMPORTS][MAX_NAME];
+    int  nimp_h;
+    char guard[MAX_NAME * 2];
+    Buf  cc;
+    int  cc_ready;
 } use PipeOps, RewriteOps;
 
 /* Rewrite a struct body: each field's type is qualified and the struct-typed and
@@ -1929,8 +1927,8 @@ impl PipeOps for Pipe {
        first: it must run before the rewritten line, and both belong to the same
        source line, so the mapping is re-anchored afterwards. */
     void emit_hoisted(void) {
-        if (g_hoist.n == 0) return;
-        fputs(g_hoist.p, self->out);
+        if (self->hoist.n == 0) return;
+        fputs(self->hoist.p, self->out);
         fputc('\n', self->out);
         self->line_break();
         self->line_at(self->out, (size_t)g_cur_line);
@@ -1944,9 +1942,9 @@ impl PipeOps for Pipe {
         int pre = sym->nvars, has_body = 0;
         size_t body_abs = 0;
 
-        if (!g_hoist.cap) buf_init(&g_hoist);
-        g_hoist.n = 0;
-        g_hoist.p[0] = 0;
+        if (!self->hoist.cap) buf_init(&self->hoist);
+        self->hoist.n = 0;
+        self->hoist.p[0] = 0;
 
         line = xstrndup(g_src + ls, len);
         g_cur_line = self->line_of(ls);
@@ -2182,7 +2180,7 @@ impl PipeOps for Pipe {
                             "   Generated output is not covered by the GPL and may be "
                             "used without restriction (LICENSE.EXCEPTION). */\n\n",
                     CTC_VERSION, g_path);
-        snprintf(g_guard, sizeof g_guard, "%s", guard);
+        snprintf(self->guard, sizeof self->guard, "%s", guard);
     }
 
     /* Print the CLI help text to stderr. */
@@ -2349,8 +2347,8 @@ impl PipeOps for Pipe {
            single-file compile of the same file starts from an empty table, which
            is what keeps its output identical to the single-file compiler's */
         if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; }
-        buf_init(&g_unit_init);
-        g_has_unit_init = 0;
+        buf_init(&self->unit_init);
+        self->has_unit_init = 0;
 
         self->header_path(outc, hbuf, sizeof hbuf);
         g_path = in;
@@ -2385,8 +2383,8 @@ impl PipeOps for Pipe {
             base = strrchr(hbuf, '/');
             base = base ? base + 1 : hbuf;
             fprintf(self->out, "#include \"%s\"\n", base);
-            for (i = 0; i < g_nimp_h; i++)
-                fprintf(self->out, "#include \"%s\"\n", g_imp_h[i]);
+            for (i = 0; i < self->nimp_h; i++)
+                fprintf(self->out, "#include \"%s\"\n", self->imp_h[i]);
             fputc('\n', self->out);
         }
 
@@ -2430,16 +2428,16 @@ impl PipeOps for Pipe {
             /* file-scope objects/arrays: their vptr writes were collected while
                scanning and are emitted here, after the types and vtables they
                reference, as a constructor that runs before main */
-            if (g_has_unit_init)
+            if (self->has_unit_init)
                 fprintf(real,
                         "static void __ct_init(void) __attribute__((constructor));\n"
                         "static void __ct_init(void) {\n%s}\n",
-                        g_unit_init.p);
-            free(g_unit_init.p);
+                        self->unit_init.p);
+            free(self->unit_init.p);
         }
         fclose(body);
 
-        fprintf(self->hout, "\n#endif /* %s */\n", g_guard);
+        fprintf(self->hout, "\n#endif /* %s */\n", self->guard);
 
         fclose(self->out);
         fclose(self->hout);
@@ -2515,9 +2513,9 @@ impl PipeOps for Pipe {
 
             g_cur_line = self->line_of(ls[k]);
             g_line_off = ls[k];
-            if (!g_hoist.cap) buf_init(&g_hoist);
-            g_hoist.n = 0;
-            g_hoist.p[0] = 0;
+            if (!self->hoist.cap) buf_init(&self->hoist);
+            self->hoist.n = 0;
+            self->hoist.p[0] = 0;
 
             while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
             if (t >= le[k]) { fputc('\n', f); self->scope_track(ls[k], le[k]); continue; }
@@ -2525,7 +2523,7 @@ impl PipeOps for Pipe {
             content = ls[k] + (size_t)minind;
             line = xstrndup(g_src + content, le[k] - content);
             out = self->transform_line(line);
-            if (g_hoist.n == 0) self->line_at(f, (size_t)g_cur_line);
+            if (self->hoist.n == 0) self->line_at(f, (size_t)g_cur_line);
             else self->emit_hoisted();
             buf_init(&sb);
             self->replace_self(out, strlen(out), &sb);
@@ -3292,7 +3290,7 @@ impl RewriteOps for Pipe {
                 buf_puts(&ib, q);
 
                 if (needs) {
-                    Buf *tgt = atfile ? &g_unit_init : &ib;
+                    Buf *tgt = atfile ? &self->unit_init : &ib;
                     char ind[MAX_NAME], ind2[MAX_NAME], cnt[64], recv[MAX_NAME + 16];
                     int vi = sym->new_var();
 
@@ -3304,7 +3302,7 @@ impl RewriteOps for Pipe {
                     sym->vars[vi].tr = -1;
 
                     if (atfile) {
-                        g_has_unit_init = 1;
+                        self->has_unit_init = 1;
                         snprintf(ind, sizeof ind, "    ");
                     } else {
                         buf_putc(&ib, '\n');
@@ -3410,12 +3408,12 @@ impl RewriteOps for Pipe {
                declaration, indented like it; at file scope there are no statements
                at all, so they go into the per-unit constructor instead */
             int atfile = (g_nscope == 0);
-            Buf *tgt = atfile ? &g_unit_init : &b;
+            Buf *tgt = atfile ? &self->unit_init : &b;
             char ind[MAX_NAME];
             size_t k;
 
             if (atfile) {
-                g_has_unit_init = 1;
+                self->has_unit_init = 1;
                 snprintf(ind, sizeof ind, "    ");
             } else {
                 for (k = 0; k < ws && k < sizeof ind - 1; k++) ind[k] = line[k];
@@ -3609,7 +3607,7 @@ impl RewriteOps for Pipe {
                                         die(g_line_off + i, "an rvalue receiver must start the statement or an initialiser");
                                 }
 
-                                snprintf(tmp, sizeof tmp, "__ct_tmp%d", g_ntmp++);
+                                snprintf(tmp, sizeof tmp, "__ct_tmp%d", self->ntmp++);
                                 /* the initialiser is the receiver text, itself run
                                    through the rewriter so nested calls are handled */
                                 recv = xstrndup(s + i, rend - i);
@@ -3620,14 +3618,14 @@ impl RewriteOps for Pipe {
                                 g_line_off = saved_off;
                                 free(recv);
 
-                                buf_putn(&g_hoist, s, fs);    /* keep the line's indent */
-                                buf_puts(&g_hoist, "struct ");
-                                buf_puts(&g_hoist, sym->structs[cur].cname);
-                                buf_puts(&g_hoist, need_amp ? " " : " *");
-                                buf_puts(&g_hoist, tmp);
-                                buf_puts(&g_hoist, " = ");
-                                buf_puts(&g_hoist, ini.p);
-                                buf_putc(&g_hoist, ';');
+                                buf_putn(&self->hoist, s, fs);    /* keep the line's indent */
+                                buf_puts(&self->hoist, "struct ");
+                                buf_puts(&self->hoist, sym->structs[cur].cname);
+                                buf_puts(&self->hoist, need_amp ? " " : " *");
+                                buf_puts(&self->hoist, tmp);
+                                buf_puts(&self->hoist, " = ");
+                                buf_puts(&self->hoist, ini.p);
+                                buf_putc(&self->hoist, ';');
                                 free(ini.p);
 
                                 to_lower(tr, low);
@@ -4172,6 +4170,9 @@ impl RewriteOps for Pipe {
     }
 }
 
+/* The single pipeline instance. The methods name their own state through
+   `self->...`; the top-level `pub` wrappers below (which have no `self`) reach it
+   through `g_pipe`. */
 static Pipe g_pipe = { };
 
 /* ------------------------------------------------ raw line rewriting */
@@ -4247,14 +4248,14 @@ char *ct_read_file(const char *path, unsigned long *len)
 pub void ct_begin_imports(void);
 void ct_begin_imports(void)
 {
-    g_nimp_h = 0;
+    g_pipe.nimp_h = 0;
 }
 
 pub void ct_add_import(const char *h);
 void ct_add_import(const char *h)
 {
-    snprintf(g_imp_h[g_nimp_h], MAX_NAME, "%s", h);
-    g_nimp_h++;
+    snprintf(g_pipe.imp_h[g_pipe.nimp_h], MAX_NAME, "%s", h);
+    g_pipe.nimp_h++;
 }
 
 pub int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json);
@@ -4292,34 +4293,32 @@ void ct_default_output(const char *in, char *out, unsigned long n)
 }
 
 /* The suggested cc command `build` prints: spliced here so `driver.ct` never needs
-   `Buf` (which cannot cross units) for it. */
-static Buf g_cc;
-static int g_cc_ready = 0;
+   `Buf` (which cannot cross units) for it. It lives on `g_pipe` (see `struct Pipe`). */
 
 pub void ct_cc_reset(void);
 void ct_cc_reset(void)
 {
-    if (!g_cc_ready) {
-        buf_init(&g_cc);
-        g_cc_ready = 1;
+    if (!g_pipe.cc_ready) {
+        buf_init(&g_pipe.cc);
+        g_pipe.cc_ready = 1;
     }
-    g_cc.n = 0;
-    g_cc.p[0] = 0;
-    buf_puts(&g_cc, "cc");
+    g_pipe.cc.n = 0;
+    g_pipe.cc.p[0] = 0;
+    buf_puts(&g_pipe.cc, "cc");
 }
 
 pub void ct_cc_add(const char *path);
 void ct_cc_add(const char *path)
 {
-    buf_putc(&g_cc, ' ');
-    buf_puts(&g_cc, path);
+    buf_putc(&g_pipe.cc, ' ');
+    buf_puts(&g_pipe.cc, path);
 }
 
 pub void ct_cc_finish(void);
 void ct_cc_finish(void)
 {
-    buf_puts(&g_cc, " -o a.out");
-    printf("%s\n", g_cc.p);
+    buf_puts(&g_pipe.cc, " -o a.out");
+    printf("%s\n", g_pipe.cc.p);
     /* build keeps stdout for the cc command, so every warning goes to stderr */
     g_sym.emit_warnings(stderr, stderr);
 }
