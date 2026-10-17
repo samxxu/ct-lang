@@ -2790,8 +2790,30 @@ impl RewriteOps for Pipe {
         }
 
         if (ptr) {                                       /* a pointer to an interface value */
-            if (!self->decl_end_is_bare(r)) die(0, "unsupported declaration of interface type");
-            buf_puts(&b, rest);
+            if (!*r || (*r == ';' && self->decl_end_is_bare(r))) {
+                buf_puts(&b, rest);
+            } else if (*r == '=') {
+                const char *e = r + 1;
+                size_t el = 0;
+                while (*e == ' ' || *e == '\t') e++;
+                if (*e == '{' || strncmp(e, "(struct ", 8) == 0)
+                    die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
+                while (e[el] && e[el] != ';') el++;
+                buf_puts(&b, " = ");
+                self->box_to_iface_ptr(sym, &b, e, el, tr, 0);
+                buf_puts(&b, e + el);
+            } else {
+                die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
+            }
+            {
+                int vi = sym->new_var();
+                snprintf(sym->vars[vi].name, MAX_NAME, "%s", var);
+                sym->vars[vi].s = -1;
+                sym->vars[vi].ptr = 1;
+                sym->vars[vi].arr = 0;
+                sym->vars[vi].iface = 1;
+                sym->vars[vi].tr = tr;
+            }
             return b.p;
         }
 
@@ -2886,15 +2908,20 @@ impl RewriteOps for Pipe {
                                            sym->vars[vi].s, aptr, &ftr, &fend, &ifptr))
                 return NULL;
             r = line + fend;
-        } else if (sym->vars[vi].arr && *(p + k) == '[') {
-            /* an element of an interface array: `xs[i] = v;` */
+        } else if ((sym->vars[vi].arr || sym->vars[vi].ptr) && *(p + k) == '[') {
+            /* an element of an interface array or of an indexable interface
+               pointer: `xs[i] = v;` (the element of `T *xs[n]` is itself a
+               pointer, so a pointer array boxes with box_to_iface_ptr) */
             size_t e2 = self->skip_bracket(line, strlen(line), (size_t)(p + k - line));
             if (e2 == (size_t)-1) return NULL;
             ftr = sym->vars[vi].tr;
-            ifptr = sym->vars[vi].ptr;
+            ifptr = sym->vars[vi].arr && sym->vars[vi].ptr;
             r = line + e2;
         } else {
             ftr = sym->vars[vi].tr;
+            /* a bare interface pointer holds the *address* of a fat pointer, so
+               `q = &v;` / `q = v;` boxes through the pointer path */
+            ifptr = sym->vars[vi].ptr;
             r = p + k;
         }
 
@@ -3345,20 +3372,25 @@ impl RewriteOps for Pipe {
                 vi = sym->find_var(tok);
 
                 /* interface dispatch: g.m(args) -> g.vt->m(g.self, args). The
-                   method must belong to the trait the value was boxed as. An
-                   element of an interface array dispatches through its own vt:
-                   xs[i].m() -> xs[i].vt->m(xs[i].self). */
+                   method must belong to the trait the value was boxed as. A
+                   subscripted receiver takes the element's own vt and the hop
+                   follows the element kind (a value unless the element is itself
+                   a pointer, i.e. `T *xs[n]`):
+                     xs[i].m() -> xs[i].vt->m(xs[i].self)
+                     q->m()    -> q->vt->m(q->self) */
                 if (vi >= 0 && sym->vars[vi].iface) {
                     size_t rend = j, k = j, rlen;
                     int elptr = 0;
-                    if (sym->vars[vi].arr && j < n && s[j] == '[') {
+                    if ((sym->vars[vi].arr || sym->vars[vi].ptr) && j < n && s[j] == '[') {
                         size_t e2 = self->skip_bracket(s, n, j);
                         if (e2 == (size_t)-1) k = n;    /* unclosed: leave the line alone */
                         else {
                             rend = e2;                  /* the receiver is `xs[i]` */
-                            elptr = sym->vars[vi].ptr;  /* an element of `T *xs[n]` is a pointer */
+                            elptr = sym->vars[vi].arr && sym->vars[vi].ptr;
                             k = e2;
                         }
+                    } else if (sym->vars[vi].ptr) {
+                        elptr = 1;                      /* no subscript: the receiver is the pointer */
                     }
                     if (k < n) {
                         if (elptr) {
@@ -3734,12 +3766,14 @@ impl RewriteOps for Pipe {
 
             tr = find_iface_field(&sym->structs[cur], mem, &ifptr, &ifarr);
             if (tr >= 0) {
-                if (ifarr) {
-                    /* an element of the array: consume "[<expr>]" so the receiver
-                       text (and the dispatch) covers `x.f[i]`, not just `x.f` */
+                if (ifarr || (ifptr && k < n && s[k] == '[')) {
+                    /* subscripted: consume "[<expr>]" so the receiver text (and the
+                       dispatch) covers `x.f[i]`, not just `x.f`. The element is a
+                       value unless the field is an array of pointers (`T *f[n]`). */
                     size_t k2 = self->skip_bracket(s, n, k);
                     if (k2 == (size_t)-1) return 0;
                     k = k2;
+                    ifptr = (ifarr && ifptr) ? 1 : 0;
                 }
                 *out_tr = tr;
                 *out_end = k;
@@ -3908,7 +3942,7 @@ impl RewriteOps for Pipe {
 
         for (i = lpo + 1, end = rp; i < end; ) {
             size_t j = i;
-            int depth = 0, pia = -1, pib = -1, pns = 0, ptr = 0, sidx, ptrtr = -1;
+            int depth = 0, pia = -1, pib = -1, pns = 0, ptr = 0, sidx, ptrtr = -1, parr = 0;
             char pname[MAX_NAME], pcbase[MAX_NAME];
 
             while (j < end) {
@@ -3922,12 +3956,32 @@ impl RewriteOps for Pipe {
             sidx = self->analyse_param(sym, line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
             self->emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, ptrtr >= 0);
 
+            /* an interface *array* parameter (`Expr xs[]`) carries no name out of
+               analyse_param -- the name sits before the '[' -- and it makes the
+               parameter indexable in the body */
+            if (ptrtr >= 0 && !pname[0]) {
+                const char *lb = memchr(line + i, '[', j - i);
+                if (lb) {
+                    size_t e2 = (size_t)(lb - (line + i)), s2;
+                    while (e2 > 0 && isspace((unsigned char)line[i + e2 - 1])) e2--;
+                    s2 = e2;
+                    while (s2 > 0 && is_ident_char((unsigned char)line[i + s2 - 1])) s2--;
+                    if (e2 > s2) {
+                        size_t ml = e2 - s2;
+                        if (ml >= MAX_NAME) ml = MAX_NAME - 1;
+                        memcpy(pname, line + i + s2, ml);
+                        pname[ml] = 0;
+                        parr = 1;
+                    }
+                }
+            }
+
             if (isdef && pname[0] && (sidx >= 0 || ptrtr >= 0)) {
                 int vi = sym->new_var();
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pname);
                 sym->vars[vi].s = (sidx >= 0) ? sidx : -1;
-                sym->vars[vi].ptr = (sidx >= 0) ? ptr : 0;
-                sym->vars[vi].arr = 0;
+                sym->vars[vi].ptr = ptr;
+                sym->vars[vi].arr = parr;
                 sym->vars[vi].iface = (sidx >= 0) ? 0 : 1;
                 sym->vars[vi].tr = (sidx >= 0) ? -1 : ptrtr;
             }
