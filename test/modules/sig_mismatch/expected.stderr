@@ -1,0 +1,1 @@
+prog.ct:4: warning: signature mismatch: 'f' in impl of 'T' for 'S': return type 'void' does not match the trait's 'int'

@@ -1,0 +1,1 @@
+{"warnings":[{"type":"signature_mismatch","file":"prog.ct","line":4,"method":"f","trait":"T","struct":"S","message":"return type 'void' does not match the trait's 'int'"}]}

@@ -1,0 +1,2 @@
+prog.ct:2:10: error: duplicate struct 'S'
+ctc: 1 error(s) generated

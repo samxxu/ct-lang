@@ -1,0 +1,2 @@
+prog.ct:2:9: error: duplicate trait 'T'
+ctc: 1 error(s) generated

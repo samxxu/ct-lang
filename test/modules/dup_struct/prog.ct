@@ -1,0 +1,3 @@
+struct S { int x; }
+struct S { int y; }
+int main(void) { return 0; }

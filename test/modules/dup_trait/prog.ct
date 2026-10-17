@@ -1,0 +1,3 @@
+trait T { void f(); }
+trait T { void g(); }
+int main(void) { return 0; }

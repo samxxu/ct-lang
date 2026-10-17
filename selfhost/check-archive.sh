@@ -122,6 +122,10 @@ leak_json
 leak_build
 multi_err
 multi_err_build
+dup_trait
+dup_struct
+sig_mismatch
+sig_mismatch_json
 "
 
 in_list() {
