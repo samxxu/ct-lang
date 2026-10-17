@@ -21,7 +21,7 @@
 | Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | ✅ 完成（2026-10-16；非版本 tag `phase2-multifile-split`） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
 | Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | ✅ 完成（2026-10-16；4 个切片全部落地；2026-10-17 bump 到 v0.4.0） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
-| Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔨 进行中（设计已冻结 2026-10-17；D9–D14 均取推荐项） | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
+| Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | ✅ 完成（2026-10-17；5 个切片全部落地；bump 到 v0.5.0，**M6 收口**） | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔭 展望 | — |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名（设计已冻结，只差落地） | 落地 | 🔭 展望 | `ct compile` 可用且 `ctc …` 调用不失效 |
 
@@ -50,8 +50,8 @@
 | v0.1.0 | Phase 1 自举（里程碑已达成；版本号并入 v0.4.0） | L1（`selfhost/ctc.ct`）对 `test/cases/**` 全量 25/25 逐字节一致，且 L1 编译自身（L1′）重跑同一批语料仍逐字节一致 |
 | v0.2.0 | Phase 2 模块化（里程碑已达成；版本号并入 v0.4.0） | namespace / 多文件 `ct build` / `pub` / `import` / `.h.ct` / `-I`；归档用例逐字节一致，编译器源码拆成 `selfhost/src/**`（L1 建出 L2，对 `test/cases/**` 25/25 一致） |
 | v0.3.0 | Phase 3 内存（里程碑已达成；版本号并入 v0.4.0） | Drop / `delete` 放宽，已在 `selfhost/src/**` 恢复（L1 冻结）；`22_drop` 逐字节一致 |
-| v0.4.0 | Phase 4 诊断与溯源（**当前版本**，2026-10-17 bump） | `#line` + `--line` / `--no-line`、泄漏警告 + `--diagnostics`、多错误恢复、语义诊断（重复定义报错 / 签名不一致告警）；全量 golden 按新版本重生成 |
-| v0.5.0 | Phase 5 新增特性 | 展望：AutoDrop / 路径敏感分析 / 目录 = namespace |
+| v0.4.0 | Phase 4 诊断与溯源（2026-10-17 bump，现已由 v0.5.0 接替） | `#line` + `--line` / `--no-line`、泄漏警告 + `--diagnostics`、多错误恢复、语义诊断（重复定义报错 / 签名不一致告警）；全量 golden 按新版本重生成 |
+| v0.5.0 | Phase 5 新增特性（**当前版本**，2026-10-17 bump） | AutoDrop（`own`）、条件 return 的路径敏感泄漏告警、目录 = namespace 校验（`--ns-root`）；全量 golden 按新版本重生成，**M6 收口** |
 | v0.6.0 | Phase 6 生态与扩展 | 展望：`map` / 方言系统 / 增量编译 |
 | v0.7.0 | Phase 7 工具链形态 | 展望：单入口 `ct` + `ctc` 兼容别名 |
 
@@ -59,10 +59,10 @@
 
 **版本规则（2026-10-15 用户确认）**：
 
-- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = **Phase 4 诊断与溯源（当前 v0.4.0）**、`0.5.x` = Phase 5 新增特性、`0.6.x` = Phase 6 生态与扩展、`0.7.x` = Phase 7 工具链形态；`1.0.0` = 语言定稿。
+- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源（v0.4.0）、`0.5.x` = **Phase 5 新增特性（当前 v0.5.0）**、`0.6.x` = Phase 6 生态与扩展、`0.7.x` = Phase 7 工具链形态；`1.0.0` = 语言定稿。
 - **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（`phase1-m2` 标记 v0.1.0、`phase2-multifile-split` 标记 v0.2.0）。
-- **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。
-- **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重生成 `test/cases/**` 与 `test/modules/**` 的 golden（本次 82 个文件），并**同时**改 `ctc.c`、`selfhost/ctc.ct`（L1）与 `selfhost/src/{core,driver}.ct`——任一处不一致会让 `check-goldens.sh` 立刻全红。**归档 oracle 不能重生成**，故 `check-archive.sh` 用 `same_modulo_version` 在比较时归一化 banner 的版本 token（其余字节仍逐字节）。冻结期改 `CTC_VERSION` 属「不允许」项，本次经用户显式授权。
+- **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。Phase 5 完成时按同一规范 bump 到 **v0.5.0**（2026-10-17，同样经用户授权），全量 golden 重生成。
+- **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重生成 `test/cases/**` 与 `test/modules/**` 的 golden（v0.5.0 为 94 个文件），并**同时**改 `ctc.c`、`selfhost/ctc.ct`（L1）与 `selfhost/src/{core,driver}.ct`——任一处不一致会让 `check-goldens.sh` 立刻全红。**归档 oracle 不能重生成**，故 `check-archive.sh` 用 `same_modulo_version` 在比较时归一化 banner 的版本 token（其余字节仍逐字节）。冻结期改 `CTC_VERSION` 属「不允许」项，每次均经用户显式授权。
 
 ### 已定的设计决策
 
@@ -722,6 +722,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **前置约束（2026-10-17 审查记录）**：`MAX_FUNCS`（64，**计入所有顶层 plain-C 签名，`static` 也算**）余量只剩 1；Phase 5 的新逻辑**必须**写进 `impl` 块（impl 方法不计数），并注意 `MAX_METHOD`（32）——把方法放进 `PipeOps` / `RewriteOps` 对应的一半。**不得**为扩容改 `ctc.c` 的 `MAX_*`（冻结期明令禁止）。
 - **出口**：**设计先行 → 冻结 → 新用例 → `run.sh` 全绿**；明确**不追求** byte-identical（无 oracle 可对）。此处同时收口阶梯 **M6**。
 - **设计（2026-10-17，已冻结）**：实现层面的设计、发射形状、v1 限制、测试切片与 **D9–D14** 决策表见 [design/phase5.md](design/phase5.md)。D9–D14 **均取推荐项**：AutoDrop 用 `own` 前缀；释放动作 = `drop` + `free` + 置空；行内 `}` / `return` 报错；路径敏感只做「条件 return」判定；目录 = namespace 取**校验式**；推进顺序 AutoDrop → 路径分析 → 目录绑定。**AST 主线不提前**，仍按原计划推进。
+- **收口（2026-10-17，切片 5.5）**：版本按阶段规范同步 bump 到 **v0.5.0**（`ctc.c` / `selfhost/ctc.ct` / `core.ct` / `driver.ct` 四处一致；`test/cases/**` 与 `test/modules/**` 共 **94** 个 golden 按新版本重生成，归档 oracle 由 `same_modulo_version` 归一化），README / AGENTS / roadmap 的版本与阶段行同步。**阶梯 M6 收口，Phase 5 完成**；下一步 Phase 6。
 - **进展（2026-10-17，切片 5.4：目录 = namespace）**：`build` 新增 **`--ns-root <dir>`**（缺省 = 第一个输入所在目录）；driver 逐单元算出「相对 root 的目录分量」（`src/hal/uart.ct` → `hal`）并作为 `ns_expect` 传给 `ct_compile_file`，core 在解析**最外层** `namespace` 时与声明比对，不一致即 `namespace 'X' does not match directory 'a::b'`。无声明、root 之外、路径含 `.`/`..` 的单元不校验（D13 = A：校验式，不隐式加前缀、不改变既有产物）。新增 designed fixture **2 个**：`ns_dir`（匹配的 `hal` + 无声明子目录单元，构建并运行输出 `5 6`）与 `ns_dir_mismatch`（不匹配报错、无产物）。**验证**：designed **24 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` 117/117、`check-m2a` / `ct-tour` OK、acceptance 19 pass / 1 pending、grammar 20/20、手工三件套通过。
 - **进展（2026-10-17，切片 5.3：路径敏感泄漏分析）**：`SymTabOps::leak_check_return` 落地——行首且位于函数帧顶层的 `return` 视为**无条件**（只有**对象本身**作为返回表达式时才转移所有权，其余仍 owned，由闭合 `}` 报确定泄漏）；位于块内或行中的 `return` 视为**条件**，对每个仍 owned、非 autodrop 且未被返回的变量记一条 **kind = 2** 警告（每个对象只报一次，`path_warned` 去重，作用域闭合不再重复报）。文本：`warning: potential leak: '<var>' (<Type>*) may leak on a return path (line <n>)`；JSON：`"type":"potential_leak"` + `"message":"may leak on a return path"` + `"path_line":<n>`。旧的 `leak_observe` 不再在 `return` 行清标记（否则条件返回会掩盖泄漏），只保留赋值逃逸判定。新增 designed fixture **2 个**：`leak_path`（文本，含「无条件 `return r;` 转移所有权不告警」对照）与 `leak_path_json`（JSON 形状）。**验证**：designed **22 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` 117/117、`check-m2a` / `ct-tour` OK、acceptance 19 pass / 1 pending、grammar 20/20、手工三件套通过。
 - **进展（2026-10-17，切片 5.1/5.2：AutoDrop）**：`own` 已在 `selfhost/src/**` 落地。`Var` 增 `autodrop`；`SymTabOps::autodrop_observe` 在重新赋值 / 逃逸 / 返回（只认 `return` 之后的表达式）时取消标记；`RewriteOps::emit_drops` + `autodrop_before` 经 **hoist** 在行首 `}` / `return` 前注入 `if (p) { T_Drop_drop(p); free(p); p = 0; }`（声明逆序、置空防重放），impl 方法体顶层在 `emit_body` 尾部补发（`Pipe` 增 `in_body` 区分文件作用域）。硬诊断：文件作用域、数组、非指针、无 `malloc`/`calloc` 初始化、无 `Drop` 类型、行内 `}` / `return` —— 全部编译期报错，**绝不静默跳过**。新增 4 个 designed fixture：`autodrop`（Drop 体打印，证明嵌套块、独立块与 impl 体尾部三处释放真的执行）与 `autodrop_nodrop` / `autodrop_layout` / `autodrop_scope`（三条硬诊断）。**验证**：designed **20 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` **117/117**、`check-all` 六门全绿、acceptance 19 pass / 1 pending、grammar **20/20**、手工三件套通过。
@@ -777,7 +778,7 @@ as confirmed by the user.
 | 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | ✅ done (2026-10-16; non-version tag `phase2-multifile-split`) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
 | 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | ✅ done (2026-10-16; all four slices landed; bumped to v0.4.0 on 2026-10-17) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
-| 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔨 in progress (design frozen 2026-10-17; D9–D14 accepted as recommended) | design frozen + new cases green; rung **M6** closes here |
+| 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | ✅ done (2026-10-17; all five slices landed; bumped to v0.5.0, **M6 closes**) | design frozen + new cases green; rung **M6** closes here |
 | 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔭 outlook | — |
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias (design frozen, only the landing is left) | landing | 🔭 outlook | `ct compile` works and existing `ctc …` invocations keep working |
 
@@ -820,8 +821,8 @@ as confirmed by the user.
 | v0.1.0 | Phase 1 self-hosting (milestone reached; version folded into v0.4.0) | L1 (`selfhost/ctc.ct`) is byte-identical with L0 on all of `test/cases/**` (25/25), and L1 compiling itself (L1′) reproduces the same corpus byte for byte |
 | v0.2.0 | Phase 2 module system (milestone reached; version folded into v0.4.0) | namespaces / multi-file `ct build` / `pub` / `import` / `.h.ct` / `-I`; the archived cases are byte-identical and the compiler source is split into `selfhost/src/**` (L1 builds L2, byte-identical on `test/cases/**` 25/25) |
 | v0.3.0 | Phase 3 memory (milestone reached; version folded into v0.4.0) | Drop / loosened `delete`, restored under `selfhost/src/**` (L1 frozen); `22_drop` byte-identical |
-| v0.4.0 | Phase 4 diagnostics & traceability (**current version**, bumped 2026-10-17) | `#line` + `--line` / `--no-line`, leak warnings + `--diagnostics`, multi-error recovery, semantic checks (duplicate definitions are errors, signature mismatches warn); every golden regenerated for the new version |
-| v0.5.0 | Phase 5 new features | outlook: AutoDrop / path-sensitive analysis / directory = namespace |
+| v0.4.0 | Phase 4 diagnostics & traceability (bumped 2026-10-17; superseded by v0.5.0) | `#line` + `--line` / `--no-line`, leak warnings + `--diagnostics`, multi-error recovery, semantic checks (duplicate definitions are errors, signature mismatches warn); every golden regenerated for the new version |
+| v0.5.0 | Phase 5 new features (**current version**, bumped 2026-10-17) | AutoDrop (`own`), path-sensitive leak warnings on conditional returns, directory = namespace validation (`--ns-root`); every golden regenerated, **M6 closes** |
 | v0.6.0 | Phase 6 ecosystem and extension | outlook: `map` / dialect system / incremental compilation |
 | v0.7.0 | Phase 7 toolchain shape | outlook: single-entry `ct` + the `ctc` alias |
 
@@ -833,8 +834,8 @@ changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §
 - Versions look like **`v0.<phase>.<patch>`** and are bumped **only at phase boundaries**; the `patch`
   slot is reserved for in-phase fixes that require regenerating goldens. The mapping is **one-to-one**:
   `0.<n>.x` = Phase *n* — `0.0.x` = Phase 0, `0.1.x` = Phase 1 self-hosting, `0.2.x` = Phase 2 module
-  system, `0.3.x` = Phase 3 memory, `0.4.x` = **Phase 4 diagnostics (current v0.4.0)**, `0.5.x` = Phase 5
-  new features, `0.6.x` = Phase 6 ecosystem, `0.7.x` = Phase 7 toolchain;
+  system, `0.3.x` = Phase 3 memory, `0.4.x` = Phase 4 diagnostics (v0.4.0), `0.5.x` = **Phase 5
+  new features (current v0.5.0)**, `0.6.x` = Phase 6 ecosystem, `0.7.x` = Phase 7 toolchain;
   `1.0.0` = the language is final.
 - **A tag name must equal `CTC_VERSION`.** Hence "no bump, no `v`-numbered tag"; a milestone that is
   not bumped gets a non-version tag (today `phase1-m2` marks the v0.1.0 milestone).

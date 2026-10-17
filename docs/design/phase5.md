@@ -188,7 +188,7 @@ root 的确定：
 | 5.4 | 目录 = namespace 校验 | `test/modules/ns_dir/`：匹配通过、不匹配报错、import 目录匹配 |
 | 5.5 | 文档 + `v0.5.0` + M6 收口 | language-spec / roadmap / AGENTS 版本行 |
 
-**进度（2026-10-17）**：5.1–5.4 已落地（designed fixture 共 8 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`、`ns_dir`、`ns_dir_mismatch`）；5.5 待做。
+**进度（2026-10-17）**：5.1–5.5 **全部落地**（designed fixture 共 8 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`、`ns_dir`、`ns_dir_mismatch`）；版本已 bump 到 **v0.5.0**，**M6 收口**。
 
 每个切片后跑：`./test/run.sh`、`bash selfhost/check-all.sh`、手工三件套。
 
