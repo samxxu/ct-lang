@@ -70,11 +70,13 @@ if [ -z "$CT" ]; then
 fi
 
 # Probes that must pass today: the interface-collection surface (arrays, their
-# element assignment and dispatch) and the boxing surface the live compiler (L2)
-# reaches -- interface fields at the construction point and by assignment, plus
-# the interface local/return control group. `ast_spike` is the whole target
-# program: it must compile, run and print 5.
-BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return ast_spike"
+# element assignment and dispatch), the interface-pointer surface (bare locals and
+# parameters, indexed or not), the boxing surface the live compiler (L2) reaches --
+# interface fields at the construction point and by assignment, plus the interface
+# local/return control group -- and the AST-shaped group (heap nodes, child array
+# fields, array parameters). `ast_spike` is the whole target program: it must
+# compile, run and print 5.
+BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return p12_heap_boxed_node p13_child_array_field p14_param_array_brackets p15_param_array_ptr p16_ptr_iface_local p17_ptr_iface_local_init ast_spike"
 
 n_pass=0
 n_pending=0
@@ -284,6 +286,144 @@ int main(void) {
     return 0;
 }
 EOF
+
+echo "== AST-compiler shapes (what a compiler written in CT needs) =="
+
+# A second world per probe keeps the shapes independent of PRELUDE's single-method
+# Node trait. These are the constructs a real front-end leans on: nodes on the
+# heap, children held in an interface array field or passed as an array
+# parameter, and interface *pointers* (bare, indexable, initialised).
+
+run_probe p12_heap_boxed_node '7' <<'EOF'
+#include <stdlib.h>
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+int main(void) {
+    Num *p = malloc(sizeof(struct Num));
+    p->v = 7;
+    Expr e = p;
+    printf("%d\n", e.eval());
+    return 0;
+}
+EOF
+
+run_probe p13_child_array_field '3' <<'EOF'
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+struct Sum { Expr kids[3]; int n; } use Expr;
+impl Expr for Sum {
+    int eval() {
+        int i = 0;
+        int acc = 0;
+        for (i = 0; i < self->n; i++) acc = acc + self->kids[i].eval();
+        return acc;
+    }
+}
+int main(void) {
+    Num a = { .v = 1 };
+    Num b = { .v = 2 };
+    Sum s;
+    s.kids[0] = a;
+    s.kids[1] = b;
+    s.n = 2;
+    printf("%d\n", s.eval());
+    return 0;
+}
+EOF
+
+run_probe p14_param_array_brackets '3' <<'EOF'
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+int total(Expr xs[], int n) {
+    int i = 0;
+    int acc = 0;
+    for (i = 0; i < n; i++) acc = acc + xs[i].eval();
+    return acc;
+}
+int main(void) {
+    Num a = { .v = 1 };
+    Num b = { .v = 2 };
+    Expr kids[2];
+    kids[0] = a;
+    kids[1] = b;
+    printf("%d\n", total(kids, 2));
+    return 0;
+}
+EOF
+
+run_probe p15_param_array_ptr '3' <<'EOF'
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+int total(Expr *xs, int n) {
+    int i = 0;
+    int acc = 0;
+    for (i = 0; i < n; i++) acc = acc + xs[i].eval();
+    return acc;
+}
+int main(void) {
+    Num a = { .v = 1 };
+    Num b = { .v = 2 };
+    Expr kids[2];
+    kids[0] = a;
+    kids[1] = b;
+    printf("%d\n", total(kids, 2));
+    return 0;
+}
+EOF
+
+run_probe p16_ptr_iface_local '7' <<'EOF'
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+int main(void) {
+    Expr e;
+    Num a = { .v = 7 };
+    e = a;
+    Expr *q;
+    q = &e;
+    printf("%d\n", q->eval());
+    return 0;
+}
+EOF
+
+run_probe p17_ptr_iface_local_init '7' <<'EOF'
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+int main(void) {
+    Num a = { .v = 7 };
+    Expr n = a;
+    Expr *q = &n;
+    printf("%d\n", q->eval());
+    return 0;
+}
+EOF
+
+run_probe p18_struct_array_field '3' <<'EOF'
+trait Expr { int eval(); }
+struct Num { int v; } use Expr;
+impl Expr for Num { int eval() { return self->v; } }
+struct Duo { Num ab[2]; int n; } use Expr;
+impl Expr for Duo {
+    int eval() { return self->ab[0].eval() + self->ab[1].eval(); }
+}
+int main(void) {
+    Duo d;
+    d.ab[0].v = 1;
+    d.ab[1].v = 2;
+    d.n = 2;
+    printf("%d\n", d.eval());
+    return 0;
+}
+EOF
+# p18 stays PENDING on purpose: a *struct-typed* array field (as opposed to the
+# interface arrays above) needs per-element vptr writes inside the enclosing
+# object's construction, which the AST mainline does not need -- node children are
+# interface values (p13). Deferred by decision; see docs/roadmap.md.
 
 echo "== the whole target program =="
 if ! "$CT" test/acceptance/ast_spike.ct -o "$TMP/spike.c" 2>"$TMP/spike.err"; then
