@@ -1,0 +1,1 @@
+{"warnings":[{"type":"potential_leak","file":"prog.ct","line":7,"variable":"p","type_name":"S*","message":"may leak on a return path","path_line":10}]}

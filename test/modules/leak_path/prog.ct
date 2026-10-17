@@ -1,0 +1,27 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+struct S { int n; };
+
+int pick(int c) {
+    S *p = malloc(sizeof(struct S));
+    p->n = 1;
+    if (c) {
+        return p->n;
+    }
+    delete p;
+    return 0;
+}
+
+S *mk(void) {
+    S *r = malloc(sizeof(struct S));
+    r->n = 2;
+    return r;
+}
+
+int main(void) {
+    S *m = mk();
+    printf("%d\n", pick(0) + m->n);
+    delete m;
+    return 0;
+}

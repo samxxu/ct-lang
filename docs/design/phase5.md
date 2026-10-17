@@ -124,13 +124,13 @@ if (p) { Person_Drop_drop(p); free(p); p = 0; }
 
 | return 形态 | owned 标记 | 诊断 |
 | --- | --- | --- |
-| 无条件 | 清空（与现状一致） | 不报 |
-| 条件 | **保留** | 对每个仍 owned 的非 autodrop 变量记一条 `kind = 2` 警告 |
+| 无条件 | 仅当**对象本身**是返回表达式时清空；其余仍 owned，交给闭合 `}` 报确定泄漏 | 不报 |
+| 条件 | 保留 | 对每个**未被返回**的 owned 非 autodrop 变量记一条 `kind = 2` 警告 |
 
 `kind = 2` 复用人可读与 JSON 两条通道：文本为
-`<file>:<line>: warning: '<var>' may leak on a return path (line <n>)`，JSON 为
-`"type": "potential_leak"` 且带 `"path_line": <n>`。作用域闭合时的原有警告**跳过**已发过
-`kind = 2` 的变量，避免同一对象报两次。
+`<file>:<line>: warning: potential leak: '<var>' (<Type>*) may leak on a return path (line <n>)`，
+JSON 为 `"type": "potential_leak"`、`"message": "may leak on a return path"` 且带
+`"path_line": <n>`。作用域闭合时的原有警告**跳过**已发过 `kind = 2` 的变量，避免同一对象报两次。
 
 #### 4.3 边界
 
@@ -182,6 +182,8 @@ root 的确定：
 | 5.3 | 路径敏感 return 判定 | `test/modules/leak_path/`：条件 return 告警 + 无条件 return 不告警 |
 | 5.4 | 目录 = namespace 校验 | `test/modules/ns_dir/`：匹配通过、不匹配报错、import 目录匹配 |
 | 5.5 | 文档 + `v0.5.0` + M6 收口 | language-spec / roadmap / AGENTS 版本行 |
+
+**进度（2026-10-17）**：5.1–5.3 已落地（designed fixture 共 6 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`）；5.4–5.5 待做。
 
 每个切片后跑：`./test/run.sh`、`bash selfhost/check-all.sh`、手工三件套。
 
@@ -236,12 +238,16 @@ The current checker is path-insensitive: any `return` marks every owned object m
 as released, so a conditional return hides real leaks. v1 only distinguishes **conditional** from
 **unconditional** returns, without an AST:
 
-- a return is *conditional* when it is not the first non-blank token of its line, or when
-  `nscope > 0` (inside a block);
-- an unconditional return clears ownership as today;
+- a return is *conditional* when it is not the first non-blank token of its line, or when it sits
+  deeper than the function frame (`depth > frame`, where an ordinary body's frame is depth 1 and an
+  `impl` body's is depth 0);
+- an unconditional return transfers ownership only when the object **itself** is the returned
+  expression; anything else it leaves behind stays owned and the closing `}` reports a definite leak;
 - a conditional return keeps ownership and records a `kind = 2` warning per still-owned, non-autodrop
-  variable: text `'<var>' may leak on a return path (line <n>)`, JSON `"type": "potential_leak"` with
-  `"path_line"`. The scope-close warning skips variables already reported this way.
+  variable that is **not** returned: text
+  `warning: potential leak: '<var>' (<Type>*) may leak on a return path (line <n>)`, JSON
+  `"type": "potential_leak"` with `"message": "may leak on a return path"` and `"path_line"`. The
+  scope-close warning skips variables already reported this way.
 
 No branch merging, no loop induction, no "all paths" analysis — the question answered is exactly
 "does *some* path leak". Full data flow needs an AST and is deferred to Phase 6.

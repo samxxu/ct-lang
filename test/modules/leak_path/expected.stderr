@@ -1,0 +1,1 @@
+prog.ct:7: warning: potential leak: 'p' (S*) may leak on a return path (line 10)

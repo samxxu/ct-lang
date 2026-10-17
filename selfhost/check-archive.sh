@@ -107,6 +107,9 @@ test/archive/multifile/calc
 # run (see group 7). `autodrop*` pins Phase 5 AutoDrop: the positive case proves
 # the releases run at every scope exit (the Drop body prints), the negatives pin
 # the three hard diagnostics (no Drop type, mid-line brace, file scope).
+# `leak_path*` pins the path-sensitive warning: a conditional return leaves the
+# object behind (text and JSON, the latter carrying `path_line`), while an
+# unconditional `return p;` transfers ownership and stays silent.
 # `split` additionally pins the cross-unit OO contract the selfhost split relies
 # on: a `pub trait`/`pub struct` in a header unit, its `impl` (with a `static`
 # vtable) in another unit, and a third unit dispatching through an
@@ -132,6 +135,8 @@ autodrop
 autodrop_nodrop
 autodrop_layout
 autodrop_scope
+leak_path
+leak_path_json
 "
 
 in_list() {

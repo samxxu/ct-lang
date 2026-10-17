@@ -109,6 +109,7 @@ typedef struct {
     int  owned;                        /* 1 when a heap object (malloc/calloc), not yet released */
     size_t own_line;                   /* source line of that allocation (for the leak warning) */
     int  autodrop;                     /* 1 when declared `own`: release at scope exit */
+    int  path_warned;                  /* 1 once reported as possibly leaking on a return path */
 } Var;
 
 /* A recorded function signature: it lets a call site reject an rvalue receiver,
@@ -156,13 +157,16 @@ static char g_ns[MAX_NAME];
    and in order; the declaration goes on the line before the rewritten one (see
    `emit_hoisted`), and `self->ntmp` keeps the temp names unique. */
 
-/* Conservative, path-insensitive leak warnings (no suppression in this version).
-   The collected table and the format flag live on `struct SymTab` (the
-   `SymTabOps` methods own them); an error still `die`s. */
+/* Conservative leak warnings: a still-owned object at scope end is a definite
+   leak (kind 0), and one left behind by a conditional return is reported once as
+   a possible leak (kind 2). The collected table and the format flag live on
+   `struct SymTab` (the `SymTabOps` methods own them); an error still `die`s. */
 typedef struct {
     const char *file;
     size_t line;
-    int  kind;                         /* 0 potential_leak, 1 signature_mismatch */
+    int  kind;                         /* 0 potential_leak, 1 signature_mismatch,
+                                          2 potential_leak on a return path */
+    size_t path_line;                  /* kind 2: the conditional return's line */
     char var[MAX_NAME];                /* leak: variable; mismatch: method */
     char tname[MAX_NAME];              /* leak: struct type; mismatch: trait */
     char sname[MAX_NAME];              /* mismatch: struct */
@@ -413,6 +417,11 @@ trait SymTabOps {
     int type_same(const char *a, const char *b);
     void leak_check_scope(int from, int to);
     void leak_observe(const char *line);
+    /* Path-sensitive return check: an unconditional return transfers the
+       returned object's ownership; a conditional one may leave still-owned
+       objects behind, which is reported once per object. */
+    void leak_check_return(const char *line, int depth, int frame, size_t ret_line);
+    void warn_add_path(int vi, size_t ret_line);
     /* AutoDrop: clear `autodrop` when the marked object is reassigned, escapes
        through an assignment, or is returned (ownership moved). Conservative by
        design: a missed auto-drop leaks, a wrong one corrupts memory. */
@@ -534,6 +543,7 @@ impl SymTabOps for SymTab {
         self->vars[i].owned = 0;
         self->vars[i].own_line = 0;
         self->vars[i].autodrop = 0;
+        self->vars[i].path_warned = 0;
         return i;
     }
     /* Record one leak warning. Overflow is a hard error: a report that silently
@@ -544,7 +554,22 @@ impl SymTabOps for SymTab {
         w = &self->warns[self->nwarns++];
         w->file = g_path;
         w->line = self->vars[vi].own_line;
+        w->path_line = 0;
         w->kind = 0;
+        snprintf(w->var, MAX_NAME, "%s", self->vars[vi].name);
+        snprintf(w->tname, MAX_NAME, "%s", self->structs[self->vars[vi].s].name);
+    }
+    /* Record one "may leak on a return path" warning (kind 2). The allocation
+       line is the object's, `ret_line` the conditional return that leaves it
+       behind. */
+    void warn_add_path(int vi, size_t ret_line) {
+        Warn *w;
+        if (self->nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
+        w = &self->warns[self->nwarns++];
+        w->file = g_path;
+        w->line = self->vars[vi].own_line;
+        w->path_line = ret_line;
+        w->kind = 2;
         snprintf(w->var, MAX_NAME, "%s", self->vars[vi].name);
         snprintf(w->tname, MAX_NAME, "%s", self->structs[self->vars[vi].s].name);
     }
@@ -558,6 +583,7 @@ impl SymTabOps for SymTab {
         w = &self->warns[self->nwarns++];
         w->file = g_path;
         w->line = line;
+        w->path_line = 0;
         w->kind = 1;
         snprintf(w->var, MAX_NAME, "%s", method);
         snprintf(w->tname, MAX_NAME, "%s", trait_name);
@@ -579,25 +605,30 @@ impl SymTabOps for SymTab {
     }
     /* a scope [from,to) is closing: still-owned heap objects in it are leaks.
        `own` variables are excluded: the generated code releases them right
-       before this scope's `}`. */
+       before this scope's `}`. Objects already reported as possibly leaking on
+       a return path are not reported again as a definite leak. */
     void leak_check_scope(int from, int to) {
         int i;
         for (i = from; i < to; i++)
-            if (self->vars[i].owned && !self->vars[i].autodrop) self->warn_add(i);
+            if (self->vars[i].owned && !self->vars[i].autodrop &&
+                !self->vars[i].path_warned)
+                self->warn_add(i);
     }
-    /* Update ownership for the owned heap objects mentioned on `line`: cleared on
-       a `return`, or when the object is assigned to a non-self lvalue (escape).
-       A `delete p;` clears it in try_delete. Path-insensitive and deliberately
-       conservative: anything else leaves the object owned. */
+    /* Update ownership for the owned heap objects mentioned on an assignment
+       line: cleared when the object is assigned to a non-self lvalue (escape).
+       A `delete p;` clears it in try_delete, and `return` is handled by
+       leak_check_return. Path-insensitive and conservative: anything else
+       leaves the object owned. */
     void leak_observe(const char *line) {
         size_t eq = line_assign_eq(line);
-        int is_return = self->line_has_word(line, "return"), i;
+        int i;
 
+        if (eq == (size_t)-1) return;
         for (i = 0; i < self->nvars; i++) {
             size_t nl;
             if (!self->vars[i].owned) continue;
             if (!self->line_has_word(line, self->vars[i].name)) continue;
-            if (eq != (size_t)-1) {
+            {
                 size_t s = 0;
                 while (s < eq && (line[s] == ' ' || line[s] == '\t')) s++;
                 nl = strlen(self->vars[i].name);
@@ -608,10 +639,72 @@ impl SymTabOps for SymTab {
                         after == ' ' || after == '\t')
                         continue;
                 }
-            } else if (!is_return) {
-                continue;   /* not an assignment or return: no escape inferred */
             }
             self->vars[i].owned = 0;
+        }
+    }
+    /* Path-sensitive return check. A return at the frame's own level is
+       unconditional: the returned object's ownership moves out, everything else
+       stays owned and the closing brace reports the real leak. A return nested in
+       a block (or written mid-line) may be skipped at run time, so every object
+       it leaves behind is reported once as "may leak on a return path"; the
+       object itself is only transferred when it is the returned expression, not
+       when a field is read (`return p->n;`). */
+    void leak_check_return(const char *line, int depth, int frame, size_t ret_line) {
+        size_t len = strlen(line), ret = (size_t)-1, i, s;
+        int line_initial, conditional, vi;
+
+        for (i = 0; i < len; ) {
+            char c = line[i];
+            if (c == '"' || c == '\'') { i = line_literal_end(line, i, len); continue; }
+            if (c == '/' && (line[i + 1] == '/' || line[i + 1] == '*')) break;
+            if (is_ident_char((unsigned char)c)) {
+                size_t j = i;
+                while (j < len && is_ident_char((unsigned char)line[j])) j++;
+                if (j - i == 6 && memcmp(line + i, "return", 6) == 0) { ret = i; break; }
+                i = j;
+                continue;
+            }
+            i++;
+        }
+        if (ret == (size_t)-1) return;
+        for (i = 0; i < ret; i++)
+            if (line[i] != ' ' && line[i] != '\t') break;
+        line_initial = (i == ret);
+        conditional = !line_initial || depth > frame;
+
+        for (vi = 0; vi < self->nvars; vi++) {
+            Var *v = &self->vars[vi];
+            size_t nl, pos = (size_t)-1;
+
+            if (!v->owned || v->autodrop) continue;
+            nl = strlen(v->name);
+            for (s = ret + 6; s < len; ) {
+                char c = line[s];
+                if (c == '"' || c == '\'') { s = line_literal_end(line, s, len); continue; }
+                if (c == '/' && (line[s + 1] == '/' || line[s + 1] == '*')) break;
+                if (c == ';') break;
+                if (is_ident_char((unsigned char)c)) {
+                    size_t j = s;
+                    while (j < len && is_ident_char((unsigned char)line[j])) j++;
+                    if (j - s == nl && memcmp(line + s, v->name, nl) == 0 &&
+                        line[j] != '.' && line[j] != '-') {   /* a field read is not a transfer */
+                        pos = s;
+                        break;
+                    }
+                    s = j;
+                    continue;
+                }
+                s++;
+            }
+            if (!conditional) {
+                if (pos != (size_t)-1) v->owned = 0;   /* returned: ownership moves */
+                continue;
+            }
+            if (pos == (size_t)-1 && !v->path_warned) {
+                v->path_warned = 1;
+                self->warn_add_path(vi, ret_line);
+            }
         }
     }
     /* AutoDrop: ownership is lost as soon as the marked variable is reassigned,
@@ -708,6 +801,15 @@ impl SymTabOps for SymTab {
                     fputs("\",\"message\":\"", jsonf);
                     self->json_str(jsonf, w->msg);
                     fputs("\"}", jsonf);
+                } else if (w->kind == 2) {
+                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
+                    self->json_str(jsonf, w->file);
+                    fprintf(jsonf, "\",\"line\":%ld,\"variable\":\"", (long)w->line);
+                    self->json_str(jsonf, w->var);
+                    fputs("\",\"type_name\":\"", jsonf);
+                    self->json_str(jsonf, w->tname);
+                    fprintf(jsonf, "*\",\"message\":\"may leak on a return path\","
+                                    "\"path_line\":%ld}", (long)w->path_line);
                 } else {
                     fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
                     self->json_str(jsonf, w->file);
@@ -725,6 +827,9 @@ impl SymTabOps for SymTab {
                 if (w->kind == 1)
                     fprintf(textf, "%s:%ld: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
                             w->file, (long)w->line, w->var, w->tname, w->sname, w->msg);
+                else if (w->kind == 2)
+                    fprintf(textf, "%s:%ld: warning: potential leak: '%s' (%s*) may leak on a return path (line %ld)\n",
+                            w->file, (long)w->line, w->var, w->tname, (long)w->path_line);
                 else
                     fprintf(textf, "%s:%ld: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
                             w->file, (long)w->line, w->var, w->tname);
@@ -3245,6 +3350,8 @@ impl RewriteOps for Pipe {
         /* AutoDrop bookkeeping runs first: the flag must be cleared (reassign,
            escape, return) before the closing-brace/return injection reads it. */
         self->sym->autodrop_observe(line);
+        self->sym->leak_check_return(line, self->nscope, self->in_body ? 0 : 1,
+                                     (size_t)self->cur_line);
         self->autodrop_before(line);
 
         /* `own` is a contextual keyword: only a line-initial `own <name>` is a
