@@ -1,11 +1,11 @@
-# Phase 8 设计草案：包管理与分发（`ct-pkg`）
+# Phase 8 设计（已冻结）：包管理与分发（`ct-pkg`）
 
 > 中文 · [English](#english)
 >
-> **状态：设计草案，未实现。** 本文不描述任何已落地的行为；当前编译器仍是 v0.7.0，
-> `ct get` / `ct install` 不存在。事实基线来自 2026-10-18 对 `v0.7.0`（commit `6988480`）的实测，
-> 数据见 §2。决策编号从 **D21** 起（D1–D8 见 [restore.md](restore.md)，D9–D14 见
-> [phase5.md](phase5.md)，D15–D20 见 [phase6.md](phase6.md)）。
+> **状态：设计已冻结（2026-10-18），未实现。** D21–D27 全部定案；冻结的是设计契约而非代码，
+> 实现按 §11 的切片推进。当前编译器仍是 v0.7.0，`ct get` / `ct install` 不存在。事实基线来自
+> 2026-10-18 对 `v0.7.0`（commit `6988480`）的实测，数据见 §2。决策编号从 **D21** 起（D1–D8 见
+> [restore.md](restore.md)，D9–D14 见 [phase5.md](phase5.md)，D15–D20 见 [phase6.md](phase6.md)）。
 
 ---
 
@@ -40,7 +40,7 @@
 | **`MAX_FUNCS` 余量** | **2 个**顶层 plain-C 签名（加 3 个即 `too many functions (max 64)`） | 包管理逻辑**必须**进 `impl`；新顶层函数几乎不可用 |
 | 方法余量 | `PipeOps` 31/32、`RewriteOps` 21/32、`CacheOps` 5/32 | 新能力应开新 trait（`PkgOps`），不要挤 `PipeOps` |
 
-### 3. 包的形态（D21）
+### 3. 包的形态（D21，已定：极简 `ct.pkg`）
 
 **一个包 = 一个目录**，目录名即包名；包内是若干 `.ct` 单元与一个清单文件。
 
@@ -54,7 +54,8 @@ mathx/                      # 包名 mathx
 
 - **导出边界 = `pub`**：`mathx.h.ct` 里的 `pub trait` / `pub struct` / `pub` 函数原型会进 `mathx.h`；
   其余单元不导出。这与 Phase 2 的既有多文件契约完全一致，**不新增语法**。
-- **清单格式**：极简 `key = value`（单行、无嵌套、可重复的 `dep` 行）。不引入 TOML/YAML 解析器：
+- **清单格式（D21 已定，2026-10-18）**：极简 `key = value`（单行、无嵌套、可重复的 `dep` 行），
+  文件名固定为 `ct.pkg`。不引入 TOML/YAML 解析器：
 
 ```ini
 name    = mathx
@@ -97,16 +98,17 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 - 本地源在**没有 `git`** 的环境下依然可用；只有 git 源会因此失败。
 - 风险提示：本地源可指向任意目录，文档需明确「只指向可信目录」。
 
-### 5. 依赖解析与锁文件（D23）
+### 5. 依赖解析与锁文件（D23，已定：MVS + SemVer 子集）
 
 - **版本语义**：SemVer 子集（`MAJOR.MINOR.PATCH` + 可选 `-pre`）；范围只支持 `^x.y.z`、`~x.y.z`、精确值。
 - **解析策略**：**最小版本选择（MVS，Go 式）**——每个依赖取满足所有约束的最低版本。它不需要回溯搜索，
   结果确定，和「不做复杂求解」的非目标一致。
 - **锁文件 `ct.lock`**：每个依赖一行，记录 `name`、解析到的 `commit`、内容摘要、以及它自己的依赖边。
-  摘要复用 `CacheOps::digest` 的折叠方式（FNV-1a），使锁文件与 `.ctcache` 键可互相验证。
+  摘要复用 `CacheOps::digest` 的折叠方式（FNV-1a，D27 已定），使锁文件与 `.ctcache` 键可互相验证。
+  **FNV-1a 只做变更检测，不承担安全校验**；SHA-256 留到需要签名/供应链安全时再引入。
 - **可重复构建**：`ct build` 只读 `vendor/` 与 `ct.lock`；缺锁或摘要不符即失败（不静默重解析）。
 
-### 6. 命令面（D24）
+### 6. 命令面（D24，已定：先 `get` + `install`）
 
 最小集（本轮只做前两个）：
 
@@ -120,7 +122,10 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 
 `ct install` **不**调用 `cc`，与现有 `ct build` 的「只出 C，打印建议命令」保持一致。
 
-### 7. 实现落点与容量预算（D25）
+**D24 已定（2026-10-18）**：`get` 写清单与锁；`install` 只按锁还原/校验，不修改清单（Go 式分工，
+而非 npm 式）。
+
+### 7. 实现落点与容量预算（D25，已定：新 `PkgOps` trait）
 
 - **新 trait `PkgOps`**，放在 `driver.ct`（CLI/驱动层），impl 方法承载清单解析、依赖解析、git 调用、锁文件读写。
   `MAX_METHOD` 32 对该 trait 是全新额度。
@@ -145,21 +150,31 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 | --- | --- |
 | 系统 `git` 依赖 | **已定策略**：无 `git` 时 git 源硬报错并提示安装；本地目录源照常可用（见 §4） |
 | `MAX_UNITS` / `MAX_IMPORTS` | 依赖多的大包会触顶；`vendor/` 的单元可能超过 64，需要分批或提高上限（提高上限属语言层变更） |
-| 锁文件摘要 | FNV-1a 不是抗碰撞哈希，只用于缓存键；锁文件是否需要 SHA-256 需单独决定 |
+| 锁文件摘要 | **已定**：复用 FNV-1a，仅做变更检测；SHA-256 留作后续安全需求 |
 | registry 占位 | `github.com/ct-pkg` 当前可用（2026-10-17 检索），应尽早注册组织名 |
 | 许可与供应链 | `pub` 边界是 trait，但包可能携带任意 C 代码；是否要求清单声明 license、是否做摘要校验需定 |
 
-### 10. 待定决策
+### 10. 决策清单（全部已定）
 
-| 编号 | 问题 | 候选 |
+| 编号 | 问题 | 结论 |
 | --- | --- | --- |
-| D21 | 清单格式 | **极简 `ct.pkg`（推荐）** / `.ct` 扩展 / 复用 map JSON |
+| D21 | 清单格式 | ✅ **已定（2026-10-18）：极简 `ct.pkg`** |
 | D22 | registry 形态 | ✅ **已定（2026-10-18）：git 即 registry + 本地目录源** |
-| D23 | 版本解析 | **MVS + SemVer 子集（推荐）** / 最大满足 / 精确锁定 |
-| D24 | 命令面 | **先 `get` + `install`（推荐）** / 一次做全 |
-| D25 | 实现落点 | **新 `PkgOps` trait（推荐）** / 挤进 `PipeOps`（不可行，已 31/32） |
+| D23 | 版本解析 | ✅ **已定（2026-10-18）：MVS + SemVer 子集** |
+| D24 | 命令面 | ✅ **已定（2026-10-18）：先 `get` + `install`** |
+| D25 | 实现落点 | ✅ **已定（2026-10-18）：新 `PkgOps` trait** |
 | D26 | 无 `git` 时的行为 | ✅ **已定（2026-10-18）：git 源硬报错并提示；本地目录源照常可用** |
-| D27 | 锁文件摘要算法 | 复用 FNV-1a / 引入 SHA-256 |
+| D27 | 锁文件摘要 | ✅ **已定（2026-10-18）：复用 FNV-1a（仅变更检测）** |
+
+### 11. 实现切片（冻结后的推进顺序）
+
+| 切片 | 内容 | 出口 |
+| --- | --- | --- |
+| 8.1 | 清单解析 + `ct.pkg` / `ct.lock` 往返 + **本地目录源**同步进 `vendor/` | 无 `git` 也能 `ct get ../local-util`；单测覆盖解析与 MVS |
+| 8.2 | git 源获取（系统 `git`，commit 锁定） | git 源可 `get`；无 `git` 时硬报错并提示 |
+| 8.3 | `ct install` 校验与建议命令 | 锁/目录摘要不符即失败；`ct build` 可用 `vendor/` 编译 |
+
+每片出口都要求既有六道硬关卡全绿；8.1 不引入任何网络/子进程代码。
 
 ---
 
@@ -168,9 +183,9 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 ### 1. Scope
 
 `ct-pkg` is the brand and distribution name of ct's package manager and registry (named on 2026-10-17).
-This draft answers four questions: what a package is, where packages come from, how dependencies are
-resolved, and what the commands look like. **Non-goals**: a build system (`cc` stays external), a
-central account system, binary distribution, and backtracking version solving.
+This frozen design answers four questions: what a package is, where packages come from, how
+dependencies are resolved, and what the commands look like. **Non-goals**: a build system (`cc` stays
+external), a central account system, binary distribution, and backtracking version solving.
 
 ### 2. Fact baseline (measured 2026-10-18, v0.7.0 / `6988480`)
 
@@ -187,13 +202,14 @@ central account system, binary distribution, and backtracking version solving.
 - **`MAX_FUNCS` head-room is 2** plain-C top-level signatures (3 fails). New logic must live in `impl`
   methods; `PipeOps` is at 31/32 methods, `RewriteOps` 21/32, `CacheOps` 5/32.
 
-### 3. Package shape (D21)
+### 3. Package shape (D21, decided: minimal `ct.pkg`)
 
 A package is a directory named after the package, containing a manifest and `.ct` units; the exported
-surface is the `pub` declarations of its header unit (`<name>.h.ct` → `<name>.h`). The manifest is a
-minimal line-oriented `key = value` file (`name`, `version`, `license`, repeatable `dep`), avoiding a
-TOML/YAML parser. Directory depth maps onto `--ns-root`, so no hand-written `namespace` is needed.
-Rejected alternative: a `.ct` manifest, which would force a language extension for version/URL fields.
+surface is the `pub` declarations of its header unit (`<name>.h.ct` → `<name>.h`). The manifest
+(**D21 decided, 2026-10-18**) is a minimal line-oriented `key = value` file named `ct.pkg` (`name`,
+`version`, `license`, repeatable `dep`), avoiding a TOML/YAML parser. Directory depth maps onto
+`--ns-root`, so no hand-written `namespace` is needed. Rejected alternative: a `.ct` manifest, which
+would force a language extension for version/URL fields.
 
 ### 4. Registry and fetching (D22, decided: git as registry + local directory sources)
 
@@ -227,20 +243,24 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 - Risk note: a local source can point anywhere, so the docs must say "point it at trusted
   directories only".
 
-### 5. Resolution and lock file (D23)
+### 5. Resolution and lock file (D23, decided: MVS + SemVer subset)
 
 SemVer subset with `^`, `~` and exact ranges; **minimal version selection** (Go-style), which is
 deterministic and needs no backtracking. `ct.lock` records each dependency's resolved commit, content
-digest and dependency edges, reusing the FNV-1a fold from `CacheOps::digest`. `ct build` reads only
-`vendor/` and `ct.lock` and fails on a missing lock or digest mismatch.
+digest and dependency edges, reusing the FNV-1a fold from `CacheOps::digest` (**D27 decided**).
+**FNV-1a is change detection only, not a security digest**; SHA-256 is deferred until a
+signing/supply-chain requirement appears. `ct build` reads only `vendor/` and `ct.lock` and fails on a
+missing lock or digest mismatch.
 
-### 6. Command surface (D24)
+### 6. Command surface (D24, decided: `get` + `install` first)
 
 Ship `ct get <pkg>[@<range>]` (resolve, fetch into `vendor/`, update `ct.pkg` and `ct.lock`) and
 `ct install` (verify the lock and vendor tree, then print the suggested `ct build` command). No `cc`
-invocation, matching today's `ct build`. `remove`, `update` and `publish` are deferred.
+invocation, matching today's `ct build`. **D24 decided (2026-10-18)**: `get` writes the manifest and
+lock; `install` only restores/verifies against the lock and never edits the manifest (Go-style, not
+npm-style). `remove`, `update` and `publish` are deferred.
 
-### 7. Implementation budget (D25)
+### 7. Implementation budget (D25, decided: new `PkgOps` trait)
 
 Add a **new `PkgOps` trait** in `driver.ct`: its 32-method budget is fresh, whereas `PipeOps` is full.
 **No new top-level plain-C functions** — only 2 signatures of head-room remain and they are reserved
@@ -259,18 +279,28 @@ with `git` masked. The six existing hard gates must stay green; the L0 layer is 
 
 The system `git` may be missing — **decided policy**: git sources fail hard with an installation
 hint, while local directory sources keep working (see §4). `MAX_UNITS` / `MAX_IMPORTS` will be
-hit by large dependency trees; FNV-1a is not collision-resistant (a lock file may want SHA-256); the
-registry name should be claimed early; and supply-chain questions (license declarations, digest
-verification) are still open.
+hit by large dependency trees; lock digests reuse FNV-1a for change detection only (SHA-256 is
+deferred); the registry name should be claimed early; and supply-chain questions (license
+declarations, digest verification) are still open.
 
-### 10. Open decisions
+### 10. Decision register (all decided)
 
-| ID | Question | Options |
+| ID | Question | Outcome |
 | --- | --- | --- |
-| D21 | Manifest format | **minimal `ct.pkg` (recommended)** / `.ct` extension / reuse map JSON |
+| D21 | Manifest format | ✅ **decided (2026-10-18): minimal `ct.pkg`** |
 | D22 | Registry shape | ✅ **decided (2026-10-18): git as registry + local directory sources** |
-| D23 | Version resolution | **MVS + SemVer subset (recommended)** / maximal satisfying / exact pinning |
-| D24 | Command surface | **`get` + `install` first (recommended)** / all at once |
-| D25 | Implementation home | **new `PkgOps` trait (recommended)** / squeeze into `PipeOps` (not viable, 31/32) |
+| D23 | Version resolution | ✅ **decided (2026-10-18): MVS + SemVer subset** |
+| D24 | Command surface | ✅ **decided (2026-10-18): `get` + `install` first** |
+| D25 | Implementation home | ✅ **decided (2026-10-18): new `PkgOps` trait** |
 | D26 | Behaviour without `git` | ✅ **decided (2026-10-18): git sources fail hard with a hint; local sources keep working** |
-| D27 | Lock digest | reuse FNV-1a / introduce SHA-256 |
+| D27 | Lock digest | ✅ **decided (2026-10-18): reuse FNV-1a (change detection only)** |
+
+### 11. Implementation slices (the order after the freeze)
+
+| Slice | Content | Exit |
+| --- | --- | --- |
+| 8.1 | Manifest parsing + `ct.pkg` / `ct.lock` round-trips + **local directory sources** synced into `vendor/` | `ct get ../local-util` works without `git`; unit tests cover parsing and MVS |
+| 8.2 | git-sourced packages (system `git`, commit pinning) | git sources work; without `git` the command fails hard with a hint |
+| 8.3 | `ct install` verification and the suggested command | a lock/digest mismatch fails; `ct build` compiles against `vendor/` |
+
+Every slice keeps the six existing hard gates green; 8.1 introduces no network or subprocess code.
