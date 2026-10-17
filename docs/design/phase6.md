@@ -136,11 +136,28 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 
 ### 7. 6.6 方言系统（D20）
 
-- 展开器是**仓库外**的独立脚本（bash / Python / awk），编译器零感知；因此 AGENTS §2 的
-  「不引入代码生成脚本」指的是**仓库内构建管线**，方言展开器不在此列——实现时在 AGENTS 补一条
-  明确豁免。
+- 展开器是**仓库外**的独立脚本（bash / Python / awk，作者自选语言），编译器零感知；因此 AGENTS §2 的
+  「不引入代码生成脚本」指的是**仓库内**的编译器构建管线，方言展开器不在此列——**豁免已在 AGENTS §2
+  落地**（中英双语，2026-10-17，切片 6.6）。
 - 插件仍**不调用编译器**；`--watch` / 自动 expand 推迟，插件只消费 6.1 的映射 JSON。
 - 包管理分发方言不在本阶段。
+
+**落地记录（2026-10-17，切片 6.6）**：
+
+- **AGENTS §2 豁免**：方言展开器在**仓库外**、`ctc` **零感知**（永不调用展开器、永不内置方言）；
+  仓库内**只允许**在 `examples/**`（演示）与 `test/**`（测试）下携带方言源与插件，约定目录
+  `ct-dialects/`、文件名 `<名字>.sh`（`/` 换 `-`），且**不得**成为编译器构建步骤。AGENTS §6 的
+  「七层覆盖」随之改为「八层」（新增 `dialect` 层）。
+- **可运行演示**：`examples/07_dialect/`——`registry.ct` 把寄存器表写成 `//@` 注释，插件
+  `ct-dialects/register-map.sh`（POSIX sh + awk，零依赖）展开出 trait / struct / impl 与偏移宏；
+  `test/run.sh` 新增 `dialect` 层：展开 → `ctc` → `cc` → 运行 → 与 `.expected.out` 比对，并额外
+  **断言未展开的源无法直接编译**——这正是「编译器零感知」的证明。examples 层按 `ct-dialects/`
+  目录存在与否跳过该目录。
+- **布局**：插件不放在仓库根（那会暗示编译器自身用方言），而是放在演示项目自己的 `ct-dialects/`
+  下，与 [dialect.md](dialect.md) §4.3 的项目级布局一致；包管理分发方言仍不在本阶段，未预留任何
+  下载目录名。
+- **验证**：`./test/run.sh` 118/118、`bash selfhost/check-all.sh` 全绿、手工三件套通过；**编译器与
+  CT 线零改动**（本切片不动 L0 / L1 / L2）。
 
 ### 8. 测试与验收
 
@@ -278,6 +295,40 @@ the landing notes). Scalar fields are not listed in v1.
   build's suggested command embeds an absolute output directory, so it cannot be byte-diffed) and
   `std_bad` (a compile-mode negative). Group 7 of `check-archive.sh` gained that optional
   `expected.stdout.contains` file (one literal per line, all must occur).
+
+### 6.5 `map` (D19)
+
+Design frozen only (see the scope-and-order bullet); **not implemented** until an official bindings
+list appears.
+
+### 6.6 dialect system (D20)
+
+The expander is a standalone script **outside the repository** (bash / Python / awk — the author picks
+the language) and `ctc` stays unaware; the §2 ban on code-generation scripts covers the **in-repo**
+compiler build pipeline, so the dialect expander is exempt — **the exemption has landed in AGENTS §2**
+(both languages, 2026-10-17, slice 6.6). The plugin still **never invokes the compiler**; `--watch` /
+auto-expand is deferred and a plugin only consumes 6.1's map JSON. Package-manager distribution stays
+out of this phase.
+
+**Landing notes (2026-10-17, slice 6.6)**:
+
+- **The AGENTS §2 exemption**: the expander lives **outside the repository** and `ctc` is **unaware**
+  (it never runs an expander and never ships a dialect). Inside the repo, dialect sources and plugins
+  are allowed **only** under `examples/**` (demos) and `test/**` (tests), in the conventional
+  `ct-dialects/` directory, the file being `<name>.sh` (`/` → `-`), and must **not** become a compiler
+  build step. AGENTS §6's "seven layers" therefore becomes "eight" (a new `dialect` layer).
+- **A runnable demo**: `examples/07_dialect/` — `registry.ct` writes a register table into `//@`
+  comments and the plugin `ct-dialects/register-map.sh` (POSIX sh + awk, no dependencies) expands it
+  into the trait / structs / impls and offset macros. `test/run.sh` gained a `dialect` layer: expand →
+  `ctc` → `cc` → run → compare with `.expected.out`, plus an assertion that the **unexpanded** source
+  does not compile — which is exactly the "compiler stays unaware" proof. The examples layer skips that
+  directory by the presence of `ct-dialects/`.
+- **Layout**: the plugin sits neither at the repo root (that would suggest the compiler itself uses
+  dialects) nor loose beside the source, but in the demo project's own `ct-dialects/`, matching the
+  project-level layout of [dialect.md](dialect.md) §4.3. Package-manager distribution is still out of
+  this phase and no download directory name is reserved.
+- **Verification**: `./test/run.sh` 118/118, `bash selfhost/check-all.sh` green, and the manual
+  three-step check; **the compiler and the CT line are untouched** (this slice changes no L0/L1/L2).
 
 ### Constraints and gates
 

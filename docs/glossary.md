@@ -39,6 +39,8 @@
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
 | 自动释放（AutoDrop） | `own T *p = malloc(…);` | 作用域出口 / 行首 `return` 前自动 `drop()` + `free()` + 置空（Phase 5；仅 CT 线，L0 不识别） |
 | 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；自越位实现移出，排期 Phase 6，D8） |
+| 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](design/dialect.md)） |
+| 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
 | 虚表指针（vptr） | `__<trait>_vptr` | struct 内字段，指向其 vtable |
@@ -187,6 +189,8 @@
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
 | AutoDrop | `own T *p = malloc(…);` | releases at scope exit / before a line-initial `return`: `drop()` + `free()` + null (Phase 5; CT line only, L0 does not know it) |
 | map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; moved off the self-hosting core, lands in Phase 6, D8) |
+| dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](design/dialect.md)) |
+| dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
 | vtable | `struct <Trait>_vtbl` | a table of function pointers |
 | vptr | `__<trait>_vptr` | the struct field pointing at its vtable |

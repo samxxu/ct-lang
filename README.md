@@ -116,7 +116,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 ### 4. 示例
 
-`examples/` 下每个例子一个目录，只放源文件 `<name>.ct` 与期望输出 `<name>.expected.out`（展开出的 `.c`/`.h` 按需生成，不入库）：
+`examples/` 下每个例子一个目录，只放源文件 `<name>.ct` 与期望输出 `<name>.expected.out`（展开出的 `.c`/`.h` 按需生成，不入库）。唯一的例外是方言示例 `07_dialect/`：它的 `.ct` 里是**写在注释里的 DSL**（`ctc` 看不到），须先由同目录 `ct-dialects/` 下的插件展开成纯 CT——豁免范围与约束见 [AGENTS.md](AGENTS.md) §2、设计见 [design/dialect.md](docs/design/dialect.md)：
 
 | 目录 | 展示的内容 |
 | --- | --- |
@@ -126,8 +126,9 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | [examples/04_rvalue/](examples/04_rvalue/rvalue.ct) | 右值接收者：工厂调用返回的 struct 直接作接收者（`make_person("Ann", 30).greet()`），接收者只求值一次 |
 | [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | 方法体内的派发：字段链递归（`self->lhs->emit()`）、参数与局部变量接收者 |
 | [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | 接口值作 struct 字段：子节点是胖指针，`sum.lhs = one;` 装箱、`self->lhs.show()` 派发，递归组合成表达式树 |
+| [examples/07_dialect/](examples/07_dialect/registry.ct) | 方言（dialect）：寄存器表写在 `//@` 注释里，`ct-dialects/register-map.sh`（sh + awk，作者语言自选）把它展开成 trait / struct / impl；`ctc` 全程零感知，未展开的源无法直接编译 |
 
-一键跑通全部示例：`./test/run.sh`（examples 层会生成 → 编译 → 运行 → 与 `.expected.out` 比对）。
+一键跑通全部示例：`./test/run.sh`（examples 层会生成 → 编译 → 运行 → 与 `.expected.out` 比对；方言示例由 `dialect` 层先展开，再走同一套流程）。
 
 `examples/01_greeter/greeter.ct`：
 
@@ -205,14 +206,14 @@ CC=gcc ./test/run.sh     # 指定 C 编译器（默认 cc）
 
 ```
 test/
-├── run.sh                       驱动器：构建 → 单测 → golden → examples → 负例 → limits → cli
+├── run.sh                       驱动器：构建 → 单测 → golden → examples → dialect → 负例 → limits → cli
 ├── unit/test_helpers.c          白盒单测（直接 include ctc.c 以触达 static 函数）
 ├── cases/                       golden 正例：<name>.ct + <name>.expected.c / .h / .out
 ├── errors/                      负例：<name>.ct + <name>.expected-err
 └── archive/                     Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
 ```
 
-七层断言：
+八层断言：
 
 | 层 | 断言内容 |
 | --- | --- |
@@ -221,10 +222,11 @@ test/
 | cases | `ctc` 退出 0 → 生成物与 golden 逐字节一致（`.c` 与 `.h`）→ 生成物编译通过 → 含 `main` 的用例运行 stdout 与 golden 一致 |
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
+| dialect | 方言示例：`ct-dialects/` 下的插件把 `.ct` 展开成纯 CT → 走同一套生成 / 构建 / 运行 → 与 `.expected.out` 比对；并断言**未展开**的源无法直接编译（编译器零感知） |
 | limits | `known limitations` 特征化断言：把已知限制钉成行为契约，改动时立刻暴露 |
 | cli | CLI 参数与驱动分支（默认子命令 / `build` / 输出路径 / 读写失败路径） |
 
-当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 60 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 117 项。
+当前 25 个 golden 正例（`test/cases`）、7 个端到端示例（`examples`，含 1 个方言示例）与 60 个负例诊断用例（`test/errors`），另加 unit / dialect / limits / cli 等分层断言，合计 118 项。
 
 `test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
@@ -270,7 +272,8 @@ ct/
 │   ├── 03_receivers/         receivers.ct     + receivers.expected.out
 │   ├── 04_rvalue/            rvalue.ct        + rvalue.expected.out
 │   ├── 05_body_dispatch/     body_dispatch.ct + body_dispatch.expected.out
-│   └── 06_iface_field/       iface_field.ct   + iface_field.expected.out
+│   ├── 06_iface_field/       iface_field.ct   + iface_field.expected.out
+│   └── 07_dialect/           registry.ct + ct-dialects/register-map.sh（方言插件，见 AGENTS §2）
 ├── test/                     测试：runner、白盒单测、golden 正例与负例
 ├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
 ├── .gitignore                忽略构建产物与 examples 下的生成物
@@ -483,7 +486,10 @@ The full grammar lives in [docs/language-spec.md](docs/language-spec.md).
 
 Each example lives in its own directory under `examples/` and holds only its source (`<name>.ct`)
 plus its expected output (`<name>.expected.out`); the expanded `.c`/`.h` are generated on demand and
-never committed.
+never committed. The one exception is the dialect demo `07_dialect/`: its `.ct` carries **DSL written
+into comments** (`ctc` cannot see it) and has to be expanded into plain CT by the plugin under its
+`ct-dialects/` directory first — for the exemption's scope and limits see [AGENTS.md](AGENTS.md) §2, for
+the design [design/dialect.md](docs/design/dialect.md):
 
 | Directory | What it shows |
 | --- | --- |
@@ -493,8 +499,10 @@ never committed.
 | [examples/04_rvalue/](examples/04_rvalue/rvalue.ct) | An rvalue receiver: the struct returned by a factory call is used directly (`make_person("Ann", 30).greet()`); the receiver is evaluated exactly once |
 | [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | Dispatch inside a method body: a recursive field chain (`self->lhs->emit()`), parameter and local-variable receivers |
 | [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | An interface value as a struct field: children are fat pointers, `sum.lhs = one;` boxes and `self->lhs.show()` dispatches, composing a recursive expression tree |
+| [examples/07_dialect/](examples/07_dialect/registry.ct) | A dialect: a register table written into `//@` comments, expanded into the trait / structs / impls by `ct-dialects/register-map.sh` (sh + awk; the author picks the language); `ctc` stays unaware and the unexpanded source does not compile |
 
-`./test/run.sh` builds and runs every example and compares its output with the committed expectation.
+`./test/run.sh` builds and runs every example and compares its output with the committed expectation
+(the dialect demo is expanded by the `dialect` layer first and then follows the same path).
 
 `examples/01_greeter/greeter.ct`:
 
@@ -572,14 +580,14 @@ CC=gcc ./test/run.sh     # pick a C compiler (default: cc)
 
 ```
 test/
-├── run.sh                       driver: build → unit → golden → examples → errors → limits → cli
+├── run.sh                       driver: build → unit → golden → examples → dialect → errors → limits → cli
 ├── unit/test_helpers.c          white-box unit tests (includes ctc.c to reach statics)
 ├── cases/                       golden positives: <name>.ct + <name>.expected.c / .h / .out
 ├── errors/                      negatives: <name>.ct + <name>.expected-err
 └── archive/                     Phase 0.3 fixtures for the removed over-reach (Phases 2–5 diff baseline; not run)
 ```
 
-Seven layers of assertions:
+Eight layers of assertions:
 
 | Layer | What is asserted |
 | --- | --- |
@@ -588,11 +596,13 @@ Seven layers of assertions:
 | cases | `ctc` exits 0 → generated `.c` and `.h` are byte-identical to the goldens → the generated C compiles → runnable cases produce the golden stdout |
 | examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
+| dialect | the dialect demo: the plugin under `ct-dialects/` expands the `.ct` into plain CT → the same generate / build / run path → compared with `.expected.out`; it also asserts that the **unexpanded** source does not compile (the compiler stays unaware) |
 | limits | characterisation assertions for the `known limitations`, so a behaviour change is visible immediately |
 | cli | argument parsing and driver branches (default subcommand / `build` / output paths / read-write failures) |
 
-Currently 25 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 60 negative
-diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 117 in total.
+Currently 25 golden positives (`test/cases`), 7 end-to-end examples (`examples`, one of them a dialect
+demo) and 60 negative diagnostic cases (`test/errors`), plus layered assertions for unit / dialect /
+limits / cli — 118 in total.
 
 `test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
 (`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
@@ -651,7 +661,8 @@ ct/
 │   ├── 03_receivers/         receivers.ct     + receivers.expected.out
 │   ├── 04_rvalue/            rvalue.ct        + rvalue.expected.out
 │   ├── 05_body_dispatch/     body_dispatch.ct + body_dispatch.expected.out
-│   └── 06_iface_field/       iface_field.ct   + iface_field.expected.out
+│   ├── 06_iface_field/       iface_field.ct   + iface_field.expected.out
+│   └── 07_dialect/           registry.ct + ct-dialects/register-map.sh (dialect plugin, see AGENTS §2)
 ├── test/                     tests: runner, white-box unit tests, golden positives and negatives
 ├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
 ├── .gitignore                ignores build products and the files generated under examples

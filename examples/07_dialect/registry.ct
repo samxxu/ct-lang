@@ -1,0 +1,40 @@
+// registry.ct — dialect demo: a register map written into comments
+//
+// Every line inside the block below is a comment, so `ctc` on its own cannot
+// see what those lines describe: the trait, the register structs and their impls
+// do not exist until an expander generates them. `ctc` stays dialect-unaware —
+// it only ever receives plain CT.
+//
+// The plugin that owns this dialect lives in the conventional `ct-dialects/`
+// directory, named after the dialect (`register/map` -> `register-map.sh`), and
+// may be written in any language. Expand and compile with:
+//
+//     sh ct-dialects/register-map.sh registry.ct > registry.gen.ct
+//     ../../ctc registry.gen.ct -o registry.gen.c
+//
+// Only the dialect comment block is committed (the "lazy" mode of
+// docs/design/dialect.md §3); the generated region is materialised at build
+// time and never checked in. `test/run.sh`'s `dialect` layer drives this demo.
+//
+// License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
+//@ct-dialect: register/map
+//@ register CTRL   0x00 rw
+//@ register STATUS 0x04 ro
+
+#include <stdio.h>
+
+int main(void)
+{
+    CTRL ctrl = { .off = REG_CTRL_OFF };
+    STATUS status = { .off = REG_STATUS_OFF };
+
+    ctrl.write(0x81);
+    printf("ctrl   @%d = %d\n", ctrl.off, ctrl.read());
+
+    /* STATUS is read-only: its generated write() refuses and counts the attempt */
+    status.write(0xFF);
+    printf("status @%d = %d (%d write(s) refused)\n",
+           status.off, status.read(), status.denied);
+
+    return 0;
+}

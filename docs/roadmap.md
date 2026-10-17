@@ -733,10 +733,10 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### Phase 6：生态与扩展（原 Phase 3）
 
 - **生态绑定**：`map` + 反向映射表（经 D8 移出自举主线；落定时与官方 bindings 清单一并定案）。
-- **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型但未实现，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。落地前须先修订与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突（代码生成脚本 / 插件调用编译器 / 包管理分发）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
+- **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突**已在 Phase 6.6 修订**（展开器留在仓库外、`ctc` 零感知；仓库内只允许在 `examples/**` / `test/**` 下携带演示 / 测试用方言插件；包管理分发方言仍不在本阶段）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
 - **构建**：增量编译缓存、跨函数泄漏分析、多目标编译。
 - **设计（2026-10-17，已冻结）**：切片顺序、6.1 的 `--emit-map` JSON 形状、缓存键、多目标口径、`map` / 方言的边界处理与 **D15–D20** 决策表见 [design/phase6.md](design/phase6.md)。顺序：反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map`（等 bindings）→ 方言（仓库外展开器）。
-- **切片进展**：**6.1 反向映射表已落地**（`--emit-map <file|->`，`test/modules/map/` 钉住 JSON 形状；trait / struct / function / impl 方法与 `Drop` 生成符号全部可反查；`build` 模式只写文件，且由最后一个单元落盘）。**6.2 调用图与跨函数所有权已落地**（`calls` 段记录直接调用边；`ret_owned` 事实让 `T *q = f();` 继承分配并参与泄漏分析，`test/modules/leak_call/` 钉正/负例）。**6.3 增量编译缓存已落地**（`build` 按单元在 `<outdir>/.ctcache/<unit>.key` 记键，键一致且 `.c/.h` 在盘即跳过重生成；改动传播按 `order` 前缀 + 依赖闭包，`ct-tour.sh` 第 7 步钉「二次构建命中 / 触源失效」）。**6.4 多目标编译已落地**（`--std=c99`（默认）/ `--std=gnu99`，暂无可差异发射点，故只落 CLI 与 `cc` 建议命令里的 `-std=`；`test/modules/std_default|std_gnu|std_bad/` 钉正/负例）。6.5–6.6 待做。
+- **切片进展**：**6.1 反向映射表已落地**（`--emit-map <file|->`，`test/modules/map/` 钉住 JSON 形状；trait / struct / function / impl 方法与 `Drop` 生成符号全部可反查；`build` 模式只写文件，且由最后一个单元落盘）。**6.2 调用图与跨函数所有权已落地**（`calls` 段记录直接调用边；`ret_owned` 事实让 `T *q = f();` 继承分配并参与泄漏分析，`test/modules/leak_call/` 钉正/负例）。**6.3 增量编译缓存已落地**（`build` 按单元在 `<outdir>/.ctcache/<unit>.key` 记键，键一致且 `.c/.h` 在盘即跳过重生成；改动传播按 `order` 前缀 + 依赖闭包，`ct-tour.sh` 第 7 步钉「二次构建命中 / 触源失效」）。**6.4 多目标编译已落地**（`--std=c99`（默认）/ `--std=gnu99`，暂无可差异发射点，故只落 CLI 与 `cc` 建议命令里的 `-std=`；`test/modules/std_default|std_gnu|std_bad/` 钉正/负例）。**6.5 `map` 仅做设计冻结**（`map trait T for instance x` 的实例语义不落实现，等官方 bindings 清单；D19）。**6.6 方言系统已落地**（展开器在仓库外、`ctc` 零感知；AGENTS §2 豁免与 §6「八层覆盖」已同步；演示 `examples/07_dialect/` + `test/run.sh` 的 `dialect` 层：展开 → `ctc` → `cc` → 运行 → 比对，并断言未展开的源不可直接编译；**编译器与 CT 线零改动**）。
 
 ### Phase 7：工具链形态（单入口 `ct`）
 
@@ -1904,13 +1904,13 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   settled together with the official bindings list when it lands).
 - **The dialect system**: domain-specific syntax written inside comments, turned into plain CT by an
   expander script that lives outside the compiler — `ctc` stays unaware of it throughout. The design is
-  frozen but unimplemented, and it is **scheduled for this phase** (confirmed by the user on 2026-10-13;
-  wording updated with the 2026-10-14 phase realignment and the 2026-10-16 renumbering to Phase 6) — an
-  ordering choice, not a technical
-  dependency: the expander is an external script and does not couple to self-hosting. Before it lands,
-  the three boundary conflicts with [AGENTS.md](../AGENTS.md) §2 must be amended (code-generation
-  scripts / the extension invoking the compiler / dialect distribution via the package manager). See
-  [design/dialect.md](design/dialect.md) (design draft, not implemented).
+  frozen and **scheduled for this phase** (confirmed by the user on 2026-10-13; wording updated with the
+  2026-10-14 phase realignment and the 2026-10-16 renumbering to Phase 6) — an ordering choice, not a
+  technical dependency: the expander is an external script and does not couple to self-hosting. The
+  three boundary conflicts with [AGENTS.md](../AGENTS.md) §2 **were amended in Phase 6.6** (the expander
+  stays outside the repository and `ctc` never sees it; inside the repository dialects may ride along
+  only as demos / tests under `examples/**` and `test/**`; dialect distribution via the package manager
+  is still out of scope). See [design/dialect.md](design/dialect.md) (design draft, not implemented).
 - **Build**: incremental compilation cache, cross-function leak analysis, multi-target builds.
 - **Design (2026-10-17, frozen)**: the slice order, the `--emit-map` JSON shape, the cache key, the
   multi-target scope, the `map` / dialect boundaries and the **D15–D20** decisions live in
@@ -1927,7 +1927,13 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   dependency closure; step 7 of `ct-tour.sh` pins the "second build hits / touched source
   invalidates"). **6.4, multi-target, has landed** (`--std=c99` (default) / `--std=gnu99`; no emission
   point differs yet, so it lands the CLI and the `-std=` in the suggested cc command, with
-  `test/modules/std_default|std_gnu|std_bad/` pinning the positive and negative cases). 6.5–6.6 remain.
+  `test/modules/std_default|std_gnu|std_bad/` pinning the positive and negative cases). **6.5 `map` is
+  design-frozen only** (the instance semantics of `map trait T for instance x` are not implemented,
+  waiting for an official bindings list; D19). **6.6, the dialect system, has landed** (the expander
+  lives outside the repository and `ctc` never sees it; the AGENTS §2 exemption and the §6 "eight
+  layers" are synced; the demo `examples/07_dialect/` plus the `dialect` layer in `test/run.sh` — expand
+  → `ctc` → `cc` → run → compare, with an assertion that the unexpanded source does not compile on its
+  own; **the compiler and the CT line are unchanged**).
 
 ### Phase 7 — toolchain shape (single-entry `ct`)
 

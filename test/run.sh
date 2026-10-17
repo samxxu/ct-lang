@@ -14,6 +14,7 @@
 #   cases     golden tests: generate, diff, compile, run        (test/cases)
 #   errors    diagnostics: must fail with the expected message  (test/errors)
 #   examples  end-to-end demos: generate, build, run, compare   (examples)
+#   dialect   a dialect demo: expand via ct-dialects/, build, run (examples)
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 #
@@ -124,6 +125,10 @@ echo
 echo "== examples =="
 for ct in examples/*/*.ct; do
     dir=$(dirname "$ct")
+    # A dialect demo cannot be compiled as-is: the DSL lives in comments and the
+    # CT it describes does not exist until a plugin generates it, so this loop
+    # skips it -- the dialect layer further down drives it instead.
+    if [ -d "$dir/ct-dialects" ]; then continue; fi
     name=$(basename "$ct" .ct)
     label="$dir/$name.ct"
     exp_out="$dir/$name.expected.out"
@@ -144,6 +149,59 @@ for ct in examples/*/*.ct; do
         continue
     fi
     ok "$label"
+done
+
+# ------------------------------------------------------------------ dialect
+echo
+echo "== dialect demo =="
+# A dialect is a plugin script that turns DSL written into comments into plain
+# CT. Plugins live in a project's `ct-dialects/` directory and `ctc` never sees
+# them: the compiler only ever reads plain CT, which is the whole point. The
+# driver that routes `//@ct-dialect: <name>` to `<name>.sh` (`/` -> `-`) belongs
+# to the build (future `ct build`); here the demo is expanded by its own plugin
+# and then compiled and run like any other example.
+# See AGENTS.md §2 (the Phase 6.6 exemption) and docs/design/dialect.md.
+for ct in examples/*/*.ct; do
+    dir=$(dirname "$ct")
+    if [ ! -d "$dir/ct-dialects" ]; then continue; fi
+
+    name=$(basename "$ct" .ct)
+    label="$dir/$name.ct"
+    exp_out="$dir/$name.expected.out"
+    dialect=$(sed -n 's|^//@ct-dialect:[[:space:]]*||p' "$ct" | sed -n 1p)
+    plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
+
+    if [ -z "$dialect" ] || [ ! -f "$plugin" ]; then
+        bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+        continue
+    fi
+    if ! sh "$plugin" "$ct" >"$TMP/dial-$name.ct" 2>"$TMP/dial-$name.err"; then
+        bad "$label" "the expander failed: $(cat "$TMP/dial-$name.err")"
+        continue
+    fi
+    if ! "$TMP/ctc" "$TMP/dial-$name.ct" -o "$TMP/dial-$name.c" 2>"$TMP/dial-$name.ctc.err"; then
+        bad "$label" "ctc rejected the expanded CT: $(cat "$TMP/dial-$name.ctc.err")"
+        continue
+    fi
+    if ! $CC $CFLAGS "$TMP/dial-$name.c" -o "$TMP/dial-$name.bin" 2>"$TMP/dial-$name.cc.log"; then
+        bad "$label" "the expanded program does not build"
+        sed 's/^/    /' "$TMP/dial-$name.cc.log"
+        continue
+    fi
+    "$TMP/dial-$name.bin" >"$TMP/dial-$name.stdout" 2>&1
+    if ! diff -u "$exp_out" "$TMP/dial-$name.stdout" >"$TMP/dial-$name.diff"; then
+        bad "$label" "program output differs from $exp_out"
+        sed -n '1,40p' "$TMP/dial-$name.diff" | sed 's/^/    /'
+        continue
+    fi
+    # The compiler is dialect-unaware: with no expansion the described symbols do
+    # not exist, so the source cannot be turned into a working program directly.
+    if "$TMP/ctc" "$ct" -o "$TMP/dial-$name.raw.c" 2>/dev/null \
+            && $CC $CFLAGS "$TMP/dial-$name.raw.c" -o "$TMP/dial-$name.raw" 2>/dev/null; then
+        bad "$label" "the unexpanded source must not build on its own"
+        continue
+    fi
+    ok "$label (dialect '$dialect' expanded by ct-dialects/$(basename "$plugin"))"
 done
 
 # ------------------------------------------------------------------ errors

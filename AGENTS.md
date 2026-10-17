@@ -40,9 +40,17 @@
 
 - 生成的 `.c` 必须**自包含**（不 `#include` 生成的 `.h`），保证生成物可单独编译。
 - 生成的头文件只放类型（trait vtable、struct 定义），不放 `static` 函数/变量。
-- 不引入任何第三方库、构建系统、代码生成脚本。
+- 不引入任何第三方库、构建系统、代码生成脚本。**例外（Phase 6.6 方言）**：方言展开器是**仓库外**的
+  独立脚本（bash / Python / awk 均可，作者自选语言），`ctc` 对它**零感知**——编译器只见纯 CT，且
+  **永不**调用展开器、**永不**内置任何方言；本禁令只约束**仓库内的编译器构建管线**。仓库内**只允许**
+  在 `examples/**`（演示）与 `test/**`（测试）下携带方言源与方言插件，且必须满足：插件放在约定目录
+  `ct-dialects/`、按 `//@ct-dialect: <名字>` 路由、文件名 `<名字>.sh`（`/` 换 `-`）；**不得**成为编译器的
+  构建步骤——`gcc ctc.c`、`./test/run.sh` 的编译相关层与 CT 线全部关卡都不得依赖它，方言演示只由
+  `test/run.sh` 的 `dialect` 层驱动。方言所需的符号信息由编译器已产出的 map JSON（`--emit-map`）
+  提供，不在仓库内另造一套。
 - `editors/**` 必须保持**纯声明式 JSON**：无构建步骤、无 npm 依赖、无需打包器，改完可直接
-  `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、不调用 `ctc`。
+  `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、**不调用 `ctc`**（方言亦不例外：
+  插件不代跑展开器，`--watch` / 后台自动展开推迟；消费映射信息只能读编译器已产出的 map JSON）。
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
 - `docs/design/` 下是**未实现的设计草案**（如自举的目标目录结构），不是实现依据；不要照着草案创建目录或文件。
 - **`ctc.c` 在自举启动后冻结**：Phase 0.3 剥离完成后**只接受 bug 修复**，**不再新增任何能力**（2026-10-15 用户明确重申：bug 修复可以接受，其他一律不行）。自举要求 `ctc.c` 的 `main` 加 `#ifndef CTC_NO_MAIN` 守卫——这是冻结期**唯一**允许的结构性改造。判据如下，**含混时按「不允许」处理**：
@@ -105,9 +113,11 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 补充要求：
 
-- **自动化测试**：`./test/run.sh` 必须全绿（退出码 0）。**七层覆盖**：ctc 自身零警告构建、
+- **自动化测试**：`./test/run.sh` 必须全绿（退出码 0）。**八层覆盖**：ctc 自身零警告构建、
   `test/unit` 白盒单测、`test/cases` golden 快照（生成 → 比对 → 编译 → 运行）、
   `examples/**` 端到端（生成 → 构建 → 运行 → 与 `.expected.out` 比对）、
+  `dialect` 方言演示（`ct-dialects/` 插件展开 → 同一套生成 / 构建 / 运行 → 与 `.expected.out` 比对，
+  并断言未展开的源不可直接编译）、
   `test/errors` 负例诊断（必须非 0 退出，且带 `文件:行:列: error:` 前缀）、
   `known limitations` 特征化断言、`cli` 参数与驱动分支。`CC=gcc ./test/run.sh` 可换编译器。
 - **CT 线关卡同样必跑**（`run.sh` 只驱动 L0）：一条命令 `bash selfhost/check-all.sh` 依次跑
@@ -200,10 +210,22 @@ Hard boundaries:
 - The generated `.c` must stay self-contained (it must not `#include` the generated `.h`) so that it
   compiles on its own.
 - The generated header carries types only (trait vtables, struct definitions) — no `static` code.
-- No third-party libraries, build systems, or code-generation scripts.
+- No third-party libraries, build systems, or code-generation scripts. **Exception (Phase 6.6 dialects)**:
+  a dialect expander is a standalone script **outside the repository** (bash / Python / awk — the author
+  picks the language); `ctc` stays **unaware** of it — the compiler only ever sees plain CT, **never**
+  invokes an expander and **never** ships a dialect. The ban covers the **in-repo compiler build
+  pipeline** only. Inside the repo, dialect sources and plugins are allowed **only** under `examples/**`
+  (demos) and `test/**` (tests), and must satisfy: a plugin lives in the conventional `ct-dialects/`
+  directory and is routed by `//@ct-dialect: <name>`, its file being `<name>.sh` (`/` → `-`); it must
+  **not** become a compiler build step — `gcc ctc.c`, the compilation-related layers of `./test/run.sh`
+  and every CT-line gate must not depend on it, and the dialect demo is driven by the `dialect` layer of
+  `test/run.sh` alone. The symbols a dialect needs come from the map JSON the compiler already emits
+  (`--emit-map`); nothing parallel is built in the repo.
 - `editors/**` must stay **declarative JSON only**: no build step, no npm dependencies, no bundler —
-  `npx @vscode/vsce package` must work as-is. Extensions cover highlighting and editing comfort
-  only; they do not validate syntax and do not invoke `ctc`.
+  `npx @vscode/vsce package` must work as-is. Extensions cover highlighting and editing comfort only;
+  they do not validate syntax and do not invoke `ctc` (dialects included: the extension runs no
+  expander; `--watch` / background auto-expand is deferred; mapping information may only be read from
+  the map JSON the compiler already emitted).
 - Do not change published naming rules (`<Trait>_vtbl`, `__<trait>_vptr`, `<Struct>_<Trait>_<method>`,
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
 - `docs/design/` holds **unimplemented design drafts** (e.g. the bootstrap target layout) — they are
@@ -310,10 +332,12 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter   # prints two 
 
 Also required:
 
-- **Automated tests**: `./test/run.sh` must be green (exit 0). **Seven layers**: a warning-free build
+- **Automated tests**: `./test/run.sh` must be green (exit 0). **Eight layers**: a warning-free build
   of `ctc`, white-box unit tests in `test/unit`, golden snapshots in `test/cases`
   (generate → diff → compile → run), end-to-end examples in `examples/**`
-  (generate → build → run → compare with `.expected.out`), negative diagnostics in `test/errors`
+  (generate → build → run → compare with `.expected.out`), the `dialect` demo (expanded by its
+  `ct-dialects/` plugin, then the same generate / build / run path compared with `.expected.out`, plus
+  an assertion that the unexpanded source does not compile), negative diagnostics in `test/errors`
   (must exit non-zero with a `file:line:col: error:` prefix), characterisation assertions under
   `known limitations`, and the `cli` argument/driver branches. `CC=gcc ./test/run.sh` selects a compiler.
 - **The CT-line gates are required too** (`run.sh` only drives L0): one command,
