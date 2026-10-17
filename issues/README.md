@@ -3,7 +3,7 @@
 本目录汇总 [reports/repo-review](../reports/repo-review/repo-review.md) 的审查发现，**每条 issue 一个 markdown 文件，按模块分目录存放**。
 
 - 源码锚点：commit `8aac450`（2026-10-17）——文中行号是该 commit 的快照。
-- 状态：**9 条已修复、1 条部分修复、2 条开放**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
+- 状态：**11 条已修复、1 条开放**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -51,21 +51,21 @@
 
 ## 修复进展（2026-10-17）
 
-9 条已修复、1 条部分修复、2 条开放：
+11 条已修复、1 条开放：
 
 | 提交 | 覆盖 |
 | --- | --- |
-| `5bde821` docs: correct stage and CT-line gates | DOC-1、DOC-2、DOC-3（以及 CI-1 的文档面） |
+| `5bde821` docs: correct stage and CT-line gates | DOC-1、DOC-2、DOC-3 |
 | `b6b3dc4` docs: fix reachability and stale to-dos | DOC-4、DOC-5、TEST-3、SH-1 |
 | `1a1ae91` test(cli): cover two driver failure sites | TEST-1、TEST-2 |
+| `8765c83` chore(ci): add the aggregate gate entry point | CI-1、CI-2（`selfhost/check-all.sh`） |
 
 仍开放：
 
 | ID | 原因 |
 | --- | --- |
-| CI-2 | 需要一条聚合门禁入口（纯 bash 脚本，依次跑 `run.sh` + 四个 CT 脚本 + `check-grammar.py`，acceptance 单独报告不阻断）。涉及入口命名/位置的长期约定，待用户拍板；GitHub Actions 未加（仓库无 `.github`，是否上 CI 属运维决定） |
 | SH-2 | Info 级架构观察（`SymTab *sym` 参数化 + 文件作用域 static）。改动会波及产物与全部 golden，应作为独立重构议题立项 |
 
-验证：`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。
+验证：`bash selfhost/check-all.sh` 六道硬关卡全绿（acceptance 18 pass / 1 pending，预期）；`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。
 
 > 审查期间未修改任何文件；本目录与报告最初为只读产物，后续修复见上「修复进展」。

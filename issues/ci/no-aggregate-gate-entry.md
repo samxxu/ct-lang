@@ -5,7 +5,7 @@
 | 模块 | ci |
 | 严重度 | **High** |
 | 锚点 | commit `8aac450`（2026-10-17） |
-| 状态 | 开放 |
+| 状态 | 已修复（commit `8765c83`，新增 `selfhost/check-all.sh`） |
 
 ## 现象
 
