@@ -18,7 +18,7 @@
 | 实现语言 | C（C99），**单文件** `ctc.c` |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
-| 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.4.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
 | 当前阶段 | Phase 0（含子阶段 0.1–0.3）与 **Phase 1（自举）、Phase 2（模块化）、Phase 3（内存）、Phase 4（诊断与溯源）均已完成**——`ctc.c` 冻结为**纯 OO 的 L0**（3836 → **2930** 行），越位 fixture 归档在 `test/archive/`、旧实现在 tag `overreach-oracle`；CT 线已拆成 `selfhost/src/**`（L1 自 Phase 3 起冻结，开发主线是 L1 编出的 L2）。当前进入 **Phase 5：新增特性**（AutoDrop / 路径敏感泄漏分析 / 目录 = namespace），**设计先行**。仍不做类型检查、不做优化。见 `docs/roadmap.md` |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
@@ -177,7 +177,7 @@ user before changing code**.
 | Language | C (C99), **single file** `ctc.c` |
 | Dependencies | None. libc only (`stdio`, `stdlib`, `string`, `ctype`, `stdarg`) |
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
-| Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
+| Version | v0.4.0 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
 | License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
 | Stage | Phase 0 (including sub-phases 0.1–0.3) and **Phases 1 (self-hosting), 2 (modularity), 3 (memory) and 4 (diagnostics and traceability) are done** — `ctc.c` is frozen as the **pure-OO L0** (3836 → **2930** lines), with the over-reach fixtures archived under `test/archive/` and the old implementation kept as the tag `overreach-oracle`; the CT line lives in `selfhost/src/**` (L1 has been frozen since Phase 3, and the development line is L2, which L1 builds). The project has entered **Phase 5: new features** (AutoDrop / path-sensitive leak analysis / directory = namespace), **design first**. Still no type checking, no optimisation — see `docs/roadmap.md` |
 | Size target | Keep it one readable file; do not split `ctc.c` |
