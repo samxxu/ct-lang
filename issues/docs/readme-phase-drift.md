@@ -38,3 +38,6 @@ README 是仓库门面，阶段声明是对外契约的第一句话。写成 Pha
 ## 验证
 
 改后与 [roadmap.md](../../docs/roadmap.md) 总览表逐行对齐；`v0.0.1` 保持不动（刻意未 bump）。
+
+> 后续变化（2026-10-17）：Phase 4 / Phase 5 完成时已按「版本 ↔ phase」规范把 `CTC_VERSION` 依次 bump 到
+> **v0.4.0 / v0.5.0**（全量 golden 重生成）。本条其余内容仍是锚点 `8aac450` 的只读快照。

@@ -61,6 +61,6 @@
 | `8765c83` chore(ci): add the aggregate gate entry point | CI-1、CI-2（`selfhost/check-all.sh`） |
 | `54c3713` … `fe6c29f`（6 个 refactor 提交） | SH-2：`sym` 进 `Pipe`；Drop 表/`Warn` 表进 `SymTab`；输出缓冲与扫描状态进 `Pipe`；driver 全局进 `struct Build`。static 52 → 11（剩余为扫描上下文、`die` 恢复协议与三个单例） |
 
-验证：`bash selfhost/check-all.sh` 六道硬关卡全绿（acceptance 18 pass / 1 pending，预期）；`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。
+验证：`bash selfhost/check-all.sh` 六道硬关卡全绿（acceptance 18 pass / 1 pending，预期）；`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。后续 Phase 5 新增 `ast_parse_spike`，acceptance 现为 **19 pass / 1 pending**；`check-grammar.py` 现为 **20 项断言**。
 
 > 审查期间未修改任何文件；本目录与报告最初为只读产物，后续修复见上「修复进展」。

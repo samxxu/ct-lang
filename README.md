@@ -202,14 +202,14 @@ CC=gcc ./test/run.sh     # 指定 C 编译器（默认 cc）
 
 ```
 test/
-├── run.sh                       驱动器：构建 → 单测 → golden 快照 → 负例诊断
+├── run.sh                       驱动器：构建 → 单测 → golden → examples → 负例 → limits → cli
 ├── unit/test_helpers.c          白盒单测（直接 include ctc.c 以触达 static 函数）
 ├── cases/                       golden 正例：<name>.ct + <name>.expected.c / .h / .out
 ├── errors/                      负例：<name>.ct + <name>.expected-err
 └── archive/                     Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
 ```
 
-五层断言：
+七层断言：
 
 | 层 | 断言内容 |
 | --- | --- |
@@ -218,8 +218,10 @@ test/
 | cases | `ctc` 退出 0 → 生成物与 golden 逐字节一致（`.c` 与 `.h`）→ 生成物编译通过 → 含 `main` 的用例运行 stdout 与 golden 一致 |
 | examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
 | errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
+| limits | `known limitations` 特征化断言：把已知限制钉成行为契约，改动时立刻暴露 |
+| cli | CLI 参数与驱动分支（默认子命令 / `build` / 输出路径 / 读写失败路径） |
 
-当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 60 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 115 项。
+当前 25 个 golden 正例（`test/cases`）、6 个端到端示例（`examples`）与 60 个负例诊断用例（`test/errors`），另加 unit / limits / cli 等分层断言，合计 117 项。
 
 `test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
@@ -228,7 +230,7 @@ test/
 VS Code 插件另有一份独立的语法冒烟测试，校验的是高亮规则而不是编译器，因此不进 `./test/run.sh`：
 
 ```bash
-python3 editors/vscode/test/check-grammar.py   # 19 项断言；退出码 0 = 通过
+python3 editors/vscode/test/check-grammar.py   # 20 项断言；退出码 0 = 通过
 ```
 
 #### 自举 gate（`selfhost/`）
@@ -564,14 +566,14 @@ CC=gcc ./test/run.sh     # pick a C compiler (default: cc)
 
 ```
 test/
-├── run.sh                       driver: build → unit → golden snapshots → diagnostics
+├── run.sh                       driver: build → unit → golden → examples → errors → limits → cli
 ├── unit/test_helpers.c          white-box unit tests (includes ctc.c to reach statics)
 ├── cases/                       golden positives: <name>.ct + <name>.expected.c / .h / .out
 ├── errors/                      negatives: <name>.ct + <name>.expected-err
 └── archive/                     Phase 0.3 fixtures for the removed over-reach (Phases 2–5 diff baseline; not run)
 ```
 
-Five layers of assertions:
+Seven layers of assertions:
 
 | Layer | What is asserted |
 | --- | --- |
@@ -580,9 +582,11 @@ Five layers of assertions:
 | cases | `ctc` exits 0 → generated `.c` and `.h` are byte-identical to the goldens → the generated C compiles → runnable cases produce the golden stdout |
 | examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
 | errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
+| limits | characterisation assertions for the `known limitations`, so a behaviour change is visible immediately |
+| cli | argument parsing and driver branches (default subcommand / `build` / output paths / read-write failures) |
 
 Currently 25 golden positives (`test/cases`), 6 end-to-end examples (`examples`) and 60 negative
-diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 115 in total.
+diagnostic cases (`test/errors`), plus layered assertions for unit / limits / cli — 117 in total.
 
 `test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
 (`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
@@ -600,7 +604,7 @@ The VS Code extension carries its own smoke test for the highlighting rules. It 
 not the compiler, so it is deliberately not part of `./test/run.sh`:
 
 ```bash
-python3 editors/vscode/test/check-grammar.py   # 19 checks; exit code 0 means it passed
+python3 editors/vscode/test/check-grammar.py   # 20 checks; exit code 0 means it passed
 ```
 
 #### Self-hosting gates (`selfhost/`)

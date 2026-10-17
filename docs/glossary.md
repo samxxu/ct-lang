@@ -37,6 +37,7 @@
 | 私有（static） | `static` | 支持的可见性；符号只进 `.c` |
 | 析构特征 Drop | `use Drop`、`impl Drop for S { … }` | **保留名**内置 trait；惰性生成释放函数 |
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
+| 自动释放（AutoDrop） | `own T *p = malloc(…);` | 作用域出口 / 行首 `return` 前自动 `drop()` + `free()` + 置空（Phase 5；仅 CT 线，L0 不识别） |
 | 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；自越位实现移出，排期 Phase 6，D8） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
@@ -90,8 +91,8 @@
 | 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
 | 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发。**同上，已移出 L0** |
-| 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7）。**已随 Phase 0.3 移出 L0；已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
-| owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记。**随泄漏警告一并移出 L0，已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）。**已由 Phase 4/5 在 `selfhost/src/**` 实现** |
+| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/src/**` 实现** |
 | 错误恢复（error recovery） | `setjmp` 守卫 + `recover_pos` | `die` 报告后长跳到 `compile_range` 的守卫，并重同步到下一个 `}` 之后或下一行行首；上限 `MAX_ERRORS=20`，失败的编译删除产物并在末尾补 `ctc: N error(s) generated`。Phase 4 切片 3 **新增**（无 oracle） |
 | 语义诊断（semantic check） | `duplicate trait/struct` · `signature_mismatch` | 重复定义按 cname 报错（namespace 隔离）；impl 的返回类型 / 参数个数与 trait 不符时告警（**不比参数类型**）。Phase 4 切片 4 **新增**（无 oracle） |
 
@@ -182,6 +183,7 @@
 | static | `static` | a supported visibility; the symbol stays in the `.c` |
 | Drop | `use Drop`, `impl Drop for S { … }` | a **reserved** built-in trait; the release function is emitted lazily |
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
+| AutoDrop | `own T *p = malloc(…);` | releases at scope exit / before a line-initial `return`: `drop()` + `free()` + null (Phase 5; CT line only, L0 does not know it) |
 | map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; moved off the self-hosting core, lands in Phase 6, D8) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
 | vtable | `struct <Trait>_vtbl` | a table of function pointers |
@@ -235,8 +237,8 @@
 | driver | `compile_range` / `compile_file` / `compile_main` | orchestration; touches no parsing / generation logic — L0 is single-file only now |
 | `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | line emission | `line_of` / `line_at` / `line_break` | offset→line cache / emit / force a re-emit at a block boundary. **Same; moved out of L0** |
-| leak warning | `potential_leak` · `leak_observe` | conservative, path-insensitive: an owned heap object still not `delete`d / `return`ed / escaped when its scope ends (Phase 1.7). **Moved out of L0 in Phase 0.3; restored by Phase 4 slice 2 under `selfhost/src/**`** |
-| owned (heap-holding) | `Var.owned` / `own_line` | marked at the creation site by `T *p = malloc/calloc(...)`. **Moved out of L0 together with the leak warnings; restored by Phase 4 slice 2 under `selfhost/src/**`** |
+| leak warning | `potential_leak` · `leak_check_scope` · `leak_check_return` | conservative: still owned at scope end is a definite leak (kind 0); a conditional `return` leaving a non-returned object behind reports once as `may leak on a return path` (kind 2, JSON carries `path_line`). **Implemented by Phases 4/5 under `selfhost/src/**`** |
+| owned (heap-holding) | `Var.owned` / `own_line` / `autodrop` | marked at the creation site by `T *p = malloc/calloc(...)`; `own` additionally sets `autodrop` (Phase 5). **Implemented under `selfhost/src/**`** |
 | error recovery | `setjmp` guard + `recover_pos` | `die` reports and longjmps back to `compile_range`'s guard, resyncing past the next `}` or the start of the next line; capped by `MAX_ERRORS=20`, and a failing compile drops its artifacts and closes with `ctc: N error(s) generated`. Added by Phase 4 slice 3 (**new**, no oracle) |
 | semantic check | `duplicate trait/struct` · `signature_mismatch` | duplicate definitions are errors judged on the cname (namespaces stay isolated); a differing return type / parameter count between impl and trait is a warning (**parameter types are not compared**). Added by Phase 4 slice 4 (**new**, no oracle) |
 

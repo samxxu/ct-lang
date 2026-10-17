@@ -69,5 +69,5 @@ core.ct:4142  static Pipe g_pipe = { };
 扫描原语同层。
 
 **验证**：每一片都独立跑过 `bash selfhost/check-all.sh`（六道硬关卡全绿），且
-**产物逐字节不变**（L1 golden 25/25、L1↔L2 不动点 2/2、archive 0 回归、designed 16）；
+**产物逐字节不变**（L1 golden 25/25、L1↔L2 不动点 2/2、archive 0 回归、designed 16；后续 Phase 5 把 designed 扩到 24，仍 0 回归）；
 L0→L1→L2 每片零警告。

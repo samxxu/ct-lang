@@ -184,11 +184,11 @@ root 的确定：
 | --- | --- | --- |
 | 5.1 | `own` 声明 + 作用域闭合注入 + `return` 注入 | `test/modules/autodrop/`：正常闭合、提前 return、嵌套作用域逆序 |
 | 5.2 | 负例与限制 | `autodrop` 无 Drop 类型、`}` 不在行首、`own` 后重新赋值 |
-| 5.3 | 路径敏感 return 判定 | `test/modules/leak_path/`：条件 return 告警 + 无条件 return 不告警 |
+| 5.3 | 路径敏感 return 判定 | `test/modules/leak_path/`：条件 return 告警 + 无条件 return 不告警；`leak_method/`：impl 方法体内泄漏与逃逸赋值 |
 | 5.4 | 目录 = namespace 校验 | `test/modules/ns_dir/`：匹配通过、不匹配报错、import 目录匹配 |
 | 5.5 | 文档 + `v0.5.0` + M6 收口 | language-spec / roadmap / AGENTS 版本行 |
 
-**进度（2026-10-17）**：5.1–5.5 **全部落地**（designed fixture 共 8 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`、`ns_dir`、`ns_dir_mismatch`）；版本已 bump 到 **v0.5.0**，**M6 收口**。
+**进度（2026-10-17）**：5.1–5.5 **全部落地**（designed fixture 共 9 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`、`leak_method`、`ns_dir`、`ns_dir_mismatch`）；版本已 bump 到 **v0.5.0**，**M6 收口**。复查补上了泄漏分析在 impl 方法体内的覆盖（隐式结尾按作用域出口检查 + 逃逸赋值）。
 
 每个切片后跑：`./test/run.sh`、`bash selfhost/check-all.sh`、手工三件套。
 
