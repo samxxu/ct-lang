@@ -14,13 +14,13 @@
 | 项 | 值 |
 | --- | --- |
 | 是什么 | ct —— CT（*C with Traits*）到纯 C 的 source-to-source 编译器 |
-| 命名 | 项目/语言 `ct`（源文件后缀 `.ct`）；当前命令 `ctc`；GitHub 仓库 `ct-lang`（仅是仓库名）。差异是刻意的（同 `tinycc` 发布 `tcc`），**不要"统一"**。命令的最终形态已定为单入口 `ct`（`ctc` 保留为兼容别名），**尚未落地**，见 roadmap |
+| 命名 | 项目/语言 `ct`（源文件后缀 `.ct`）；当前命令 `ctc`；GitHub 仓库 `ct-lang`（仅是仓库名）。差异是刻意的（同 `tinycc` 发布 `tcc`），**不要"统一"**。命令的最终形态是单入口 `ct`（`ctc` 保留为兼容别名）：**Phase 7.1 已落地**——L2 二进制名为 `ct` 时以 `ct` 身份运行，L0 种子仍只叫 `ctc`；生成物 banner 仍写 `ctc`（L0/L1 冻结，改名推迟），见 roadmap |
 | 实现语言 | C（C99），**单文件** `ctc.c` |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
-| 当前版本 | v0.5.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.6.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | Phase 0（含子阶段 0.1–0.3）与 **Phase 1（自举）、Phase 2（模块化）、Phase 3（内存）、Phase 4（诊断与溯源）、Phase 5（新增特性）均已完成**——`ctc.c` 冻结为**纯 OO 的 L0**（3836 → **2930** 行），越位 fixture 归档在 `test/archive/`、旧实现在 tag `overreach-oracle`；CT 线已拆成 `selfhost/src/**`（L1 自 Phase 3 起冻结，开发主线是 L1 编出的 L2）。Phase 5 已落地 AutoDrop（`own`）/ 路径敏感泄漏分析 / 目录 = namespace，阶梯 **M6** 收口，版本 bump 至 **v0.5.0**。仍不做类型检查、不做优化。见 `docs/roadmap.md` |
+| 当前阶段 | Phase 0（含子阶段 0.1–0.3）与 **Phase 1（自举）、Phase 2（模块化）、Phase 3（内存）、Phase 4（诊断与溯源）、Phase 5（新增特性）均已完成**——`ctc.c` 冻结为**纯 OO 的 L0**（3836 → **2930** 行），越位 fixture 归档在 `test/archive/`、旧实现在 tag `overreach-oracle`；CT 线已拆成 `selfhost/src/**`（L1 自 Phase 3 起冻结，开发主线是 L1 编出的 L2）。Phase 5 已落地 AutoDrop（`own`）/ 路径敏感泄漏分析 / 目录 = namespace，阶梯 **M6** 收口，版本 bump 至 **v0.5.0**；**Phase 6（生态与扩展）的 6.1–6.4 与 6.6 已落地，6.5 `map` 仅设计冻结**，Phase 6 收口 bump 至 **v0.6.0**；**Phase 7（工具链形态）进行中，7.1 已落地**（L2 以 `ct` 身份运行，`ctc` 仍为别名）。仍不做类型检查、不做优化。见 `docs/roadmap.md` |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
@@ -183,13 +183,13 @@ user before changing code**.
 | Item | Value |
 | --- | --- |
 | What | ct — a source-to-source compiler from CT (*C with Traits*) to plain C |
-| Naming | project/language `ct` (files end in `.ct`); current command `ctc`; GitHub repository `ct-lang` (repository name only). The differences are deliberate (cf. the `tinycc` repo shipping `tcc`) — **do not unify them**. The final command shape is decided: a single-entry `ct` with `ctc` kept as a compatibility alias — **not implemented yet**, see the roadmap |
+| Naming | project/language `ct` (files end in `.ct`); current command `ctc`; GitHub repository `ct-lang` (repository name only). The differences are deliberate (cf. the `tinycc` repo shipping `tcc`) — **do not unify them**. The final command shape is the single-entry `ct` with `ctc` kept as a compatibility alias: **Phase 7.1 has landed** — an L2 binary named `ct` runs under the `ct` identity, while the L0 seed is still `ctc`; the generated banner keeps saying `ctc` (L0/L1 are frozen, so renaming is deferred) — see the roadmap |
 | Language | C (C99), **single file** `ctc.c` |
 | Dependencies | None. libc only (`stdio`, `stdlib`, `string`, `ctype`, `stdarg`) |
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
-| Version | v0.5.0 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
+| Version | v0.6.0 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
 | License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
-| Stage | Phase 0 (including sub-phases 0.1–0.3) and **Phases 1 (self-hosting), 2 (modularity), 3 (memory), 4 (diagnostics and traceability) and 5 (new features) are done** — `ctc.c` is frozen as the **pure-OO L0** (3836 → **2930** lines), with the over-reach fixtures archived under `test/archive/` and the old implementation kept as the tag `overreach-oracle`; the CT line lives in `selfhost/src/**` (L1 has been frozen since Phase 3, and the development line is L2, which L1 builds). Phase 5 landed AutoDrop (`own`), path-sensitive leak analysis and directory = namespace; rung **M6** closes here and the version is bumped to **v0.5.0**. Still no type checking, no optimisation — see `docs/roadmap.md` |
+| Stage | Phase 0 (including sub-phases 0.1–0.3) and **Phases 1 (self-hosting), 2 (modularity), 3 (memory), 4 (diagnostics and traceability) and 5 (new features) are done** — `ctc.c` is frozen as the **pure-OO L0** (3836 → **2930** lines), with the over-reach fixtures archived under `test/archive/` and the old implementation kept as the tag `overreach-oracle`; the CT line lives in `selfhost/src/**` (L1 has been frozen since Phase 3, and the development line is L2, which L1 builds). Phase 5 landed AutoDrop (`own`), path-sensitive leak analysis and directory = namespace; rung **M6** closes here and the version is bumped to **v0.5.0**. **Phase 6 (ecosystem and extension) has landed slices 6.1–6.4 and 6.6; 6.5 (`map`) is design-frozen only**, and Phase 6 closes with the version bumped to **v0.6.0**. **Phase 7 (toolchain shape) is in progress; 7.1 has landed** (L2 runs under the `ct` identity, with `ctc` still an alias). Still no type checking, no optimisation — see `docs/roadmap.md` |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
 ### 2. File ownership

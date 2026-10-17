@@ -4,6 +4,8 @@
 >
 > **状态：设计已冻结（2026-10-17）。** D15–D20 均按推荐项拍板。Phase 6 是**扩展类**，
 > 无归档 oracle：出口 = **设计冻结 + 新用例 + `./test/run.sh` 与 `bash selfhost/check-all.sh` 全绿**。
+> **收口（2026-10-17）**：6.1–6.4 与 6.6 已落地，6.5 `map` 仅设计冻结；版本 bump 至 **v0.6.0**，
+> 全量 golden 已按新版本重生成。
 >
 > 现有约束：`MAX_FUNCS` 余量 **1**；`Pipe` 字段 **31/32**；`PipeOps` **31/32**。
 > Phase 6 的新逻辑必须走 `impl` 方法；新状态优先放进 `SymTab` 或新的轻量对象，**不要**继续加 `Pipe` 字段。
@@ -35,7 +37,7 @@ JSON 形状（v1）：
 
 ```json
 {
-  "compiler": "ctc v0.5.0",
+  "compiler": "ctc v0.6.0",
   "file": "prog.ct",
   "traits":  [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,
                "methods":[{"name":"greet","ret":"void","params":0}]}],
@@ -110,7 +112,7 @@ JSON 形状（v1）：
 - 依赖键只折叠定宽 **digest**（FNV-1a），键长不随 `import` 链深指数膨胀；`stat` 失败或键溢出一律
   返回「无键」→ 必须重编译，绝不静默截断。写键失败静默（只损失一次重建，绝不破坏构建）。
 - 新增 `#include <sys/stat.h>`（POSIX `stat` / `mkdir`，非第三方依赖）；L1 只需透传，不动点不受影响。
-- 断言位置：`ct-tour.sh` 第 7 步（`cachesrc` 副本树两次 `build`，回写旧 `mtime` 后验「未被重写」，
+- 断言位置：`ct-tour.sh` 第 8 步（`cachesrc` 副本树两次 `build`，回写旧 `mtime` 后验「未被重写」，
   再 `touch -t` 触源验失效）——`test/modules/` 的 designed 用例只跑一次 `build`，表达不了「二次命中」。
 
 ### 5. 6.4 多目标编译（D18）
@@ -158,6 +160,9 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
   下载目录名。
 - **验证**：`./test/run.sh` 118/118、`bash selfhost/check-all.sh` 全绿、手工三件套通过；**编译器与
   CT 线零改动**（本切片不动 L0 / L1 / L2）。
+- **收口（2026-10-17）**：版本按阶段规范 bump 到 **v0.6.0**（`ctc.c` / `selfhost/ctc.ct` /
+  `selfhost/src/{core,driver}.ct` 四处一致），`test/cases/**` 50 个与 `test/modules/**` 51 个
+  golden（含 `map/expected.stdout`）按新版本重生成；归档 oracle 由 `same_modulo_version` 归一化。
 
 ### 8. 测试与验收
 
@@ -202,7 +207,7 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 
 ```json
 {
-  "compiler": "ctc v0.5.0",
+  "compiler": "ctc v0.6.0",
   "file": "prog.ct",
   "traits":  [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,
                "methods":[{"name":"greet","ret":"void","params":0}]}],
@@ -276,7 +281,7 @@ the landing notes). Scalar fields are not listed in v1.
   truncated. A failed key write stays silent (it costs one rebuild, never breaks the build).
 - Adds `#include <sys/stat.h>` (POSIX `stat` / `mkdir`, not a third-party dependency); L1 only has to
   pass it through, so the fixpoint is unaffected.
-- Asserted in step 7 of `ct-tour.sh` (the `cachesrc` copy tree is built twice; after back-dating the
+- Asserted in step 8 of `ct-tour.sh` (the `cachesrc` copy tree is built twice; after back-dating the
   artefacts the second build must not rewrite them, and a `touch -t` of a source must invalidate) — the
   designed fixtures under `test/modules/` run `build` only once and cannot express "the second build
   hits".
@@ -329,6 +334,10 @@ out of this phase.
   this phase and no download directory name is reserved.
 - **Verification**: `./test/run.sh` 118/118, `bash selfhost/check-all.sh` green, and the manual
   three-step check; **the compiler and the CT line are untouched** (this slice changes no L0/L1/L2).
+- **Close-out (2026-10-17)**: the version is bumped to **v0.6.0** per the phase-boundary rule (all
+  four sites agree: `ctc.c`, `selfhost/ctc.ct`, `selfhost/src/{core,driver}.ct`), and the 50 goldens
+  under `test/cases/**` plus the 51 under `test/modules/**` (including `map/expected.stdout`) are
+  regenerated for the new version; the archived oracle is normalised by `same_modulo_version`.
 
 ### Constraints and gates
 

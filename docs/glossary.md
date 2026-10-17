@@ -38,7 +38,7 @@
 | 析构特征 Drop | `use Drop`、`impl Drop for S { … }` | **保留名**内置 trait；惰性生成释放函数 |
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
 | 自动释放（AutoDrop） | `own T *p = malloc(…);` | 作用域出口 / 行首 `return` 前自动 `drop()` + `free()` + 置空（Phase 5；仅 CT 线，L0 不识别） |
-| 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；自越位实现移出，排期 Phase 6，D8） |
+| 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到 SDK 调用（**未实现**；Phase 6.5 仅冻结设计，待官方 bindings 清单，D19） |
 | 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](design/dialect.md)） |
 | 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
@@ -102,6 +102,7 @@
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
+| 单入口 `ct`（single entry） | `ct` / `ct compile` / `ct build` | Phase 7.1：L2 二进制名为 `ct` 时以 `ct` 身份运行（`-v` 打印 `ct v…`）；`ctc` 仍是兼容别名，L0 种子仍叫 `ctc`；生成物 banner 仍写 `ctc`（L0/L1 冻结） |
 | 子命令 compile | `ct compile <in.ct> [-o out.c]` | 默认子命令（等价 `ctc <in.ct>`） |
 | 子命令 build | `ct build <in.ct>… [-o <dir>]` | 多文件驱动；只出 `.c`/`.h`，打印建议 `cc` 命令。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 输出选项 | `-o <file\|dir>` | |
@@ -116,7 +117,7 @@
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
 | 测试套件（runner） | `./test/run.sh` | 退出码 0 = 全绿；`CC=gcc` 换编译器 |
-| 层（layer） | build / unit / cases / errors / examples / limits / cli | `multifile` / `import` / `line` 三层已随 Phase 0.3 移除 |
+| 层（layer） | build / unit / cases / errors / examples / dialect / limits / cli | `multifile` / `import` / `line` 三层已随 Phase 0.3 移除；`dialect` 为 Phase 6.6 新增 |
 | golden 基线（golden baseline） | `*.expected.c` / `.expected.h` / `.expected.out` | **只能重新生成**，禁止手写 |
 | 用例（fixture） | `test/cases/*.ct`、`test/errors/*.ct` | |
 | 正例（positive case） | `test/cases/` | 生成→逐字节比对→编译→运行 |
@@ -133,7 +134,7 @@
 | 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`） |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
-| 设计决策 | D1–D8、D-A | 见 [design/restore.md](design/restore.md) §6 |
+| 设计决策 | D1–D20、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md) |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 | 用 CT 重写编译器 |
 | 吃自己的狗粮（dogfooding） | — | 用 CT 写 CT 工具链 |
 | 非目标（non-goal） | — | 明确不做的事 |
@@ -146,7 +147,7 @@
 | 平台映射头 | `ct_platform.h` | 厂商提供；宏只出现在这里 |
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
 | 绑定（bindings） | 每个库一个 `.h.ct` | 随 Phase 6 的 `map` 推进，**未实现** |
-| 反向映射表（reverse mapping table） | sidecar `.ctmap.json` | 生成的 C 符号 ← CT 定义点；排期 Phase 6（D8） |
+| 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
 
 ### 8. 许可
 
@@ -188,7 +189,7 @@
 | Drop | `use Drop`, `impl Drop for S { … }` | a **reserved** built-in trait; the release function is emitted lazily |
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
 | AutoDrop | `own T *p = malloc(…);` | releases at scope exit / before a line-initial `return`: `drop()` + `free()` + null (Phase 5; CT line only, L0 does not know it) |
-| map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; moved off the self-hosting core, lands in Phase 6, D8) |
+| map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto an SDK call (**not implemented**; Phase 6.5 froze the design only, waiting for an official bindings list, D19) |
 | dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](design/dialect.md)) |
 | dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
@@ -252,6 +253,7 @@
 
 | Term | Form | Notes |
 | --- | --- | --- |
+| single entry `ct` | `ct` / `ct compile` / `ct build` | Phase 7.1: an L2 binary named `ct` runs under the `ct` identity (`-v` prints `ct v…`); `ctc` is still the compatibility alias and the L0 seed is still `ctc`; the generated banner still says `ctc` (L0/L1 frozen) |
 | the `compile` subcommand | `ct compile <in.ct> [-o out.c]` | the default subcommand (same as `ctc <in.ct>`) |
 | the `build` subcommand | `ct build <in.ct>… [-o <dir>]` | the multi-file driver; emits `.c`/`.h` and prints the suggested `cc` command. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | output option | `-o <file\|dir>` | |
@@ -266,7 +268,7 @@
 | Term | Form | Notes |
 | --- | --- | --- |
 | test suite (runner) | `./test/run.sh` | exit 0 = all green; `CC=gcc` selects a compiler |
-| layer | build / unit / cases / errors / examples / limits / cli | the `multifile` / `import` / `line` layers were removed with Phase 0.3 |
+| layer | build / unit / cases / errors / examples / dialect / limits / cli | the `multifile` / `import` / `line` layers were removed with Phase 0.3; `dialect` arrived in Phase 6.6 |
 | golden baseline | `*.expected.c` / `.expected.h` / `.expected.out` | **regenerate only**, never hand-write |
 | fixture | `test/cases/*.ct`, `test/errors/*.ct` | |
 | positive case | `test/cases/` | generate → byte diff → compile → run |
@@ -283,7 +285,7 @@
 | phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`) |
 | sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 6) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
-| design decisions | D1–D8, D-A | see [design/restore.md](design/restore.md) §6 |
+| design decisions | D1–D20, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md) |
 | bootstrap / self-hosting | L0 → L1 → L2 | rewriting the compiler in CT |
 | dogfooding | — | using CT to build CT's own toolchain |
 | non-goal | — | something explicitly out of scope |
@@ -296,7 +298,7 @@
 | platform mapping header | `ct_platform.h` | vendor-provided; macros appear only here |
 | standard peripheral traits | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | covering 80% of platform-difference needs |
 | bindings | one `.h.ct` per library | lands with Phase 6's `map`; **not implemented** |
-| reverse mapping table | a sidecar `.ctmap.json` | generated C symbol ← CT definition site; lands in Phase 6 (D8) |
+| reverse mapping table | the JSON written by `--emit-map <file\|->` | generated C symbol ← CT definition site; landed in Phase 6.1 (D16) |
 
 ### 8. Licensing
 

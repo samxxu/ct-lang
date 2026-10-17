@@ -22,8 +22,8 @@
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
 | Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | ✅ 完成（2026-10-16；4 个切片全部落地；2026-10-17 bump 到 v0.4.0） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | ✅ 完成（2026-10-17；5 个切片全部落地；bump 到 v0.5.0，**M6 收口**） | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
-| Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔨 进行中（设计已冻结 2026-10-17；6.1–6.4 已落地） | 设计冻结 + 新用例全绿 |
-| Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名（设计已冻结，只差落地） | 落地 | 🔭 展望 | `ct compile` 可用且 `ctc …` 调用不失效 |
+| Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | ✅ 完成（2026-10-17；6.1–6.4 + 6.6 落地，6.5 仅设计冻结；bump 到 v0.6.0） | 设计冻结 + 新用例全绿 |
+| Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | 🔨 进行中（7.1 已落地：L2 以 `ct` 身份运行；banner 改名因 L0/L1 冻结推迟） | `ct compile` 可用且 `ctc …` 调用不失效 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -51,18 +51,18 @@
 | v0.2.0 | Phase 2 模块化（里程碑已达成；版本号并入 v0.4.0） | namespace / 多文件 `ct build` / `pub` / `import` / `.h.ct` / `-I`；归档用例逐字节一致，编译器源码拆成 `selfhost/src/**`（L1 建出 L2，对 `test/cases/**` 25/25 一致） |
 | v0.3.0 | Phase 3 内存（里程碑已达成；版本号并入 v0.4.0） | Drop / `delete` 放宽，已在 `selfhost/src/**` 恢复（L1 冻结）；`22_drop` 逐字节一致 |
 | v0.4.0 | Phase 4 诊断与溯源（2026-10-17 bump，现已由 v0.5.0 接替） | `#line` + `--line` / `--no-line`、泄漏警告 + `--diagnostics`、多错误恢复、语义诊断（重复定义报错 / 签名不一致告警）；全量 golden 按新版本重生成 |
-| v0.5.0 | Phase 5 新增特性（**当前版本**，2026-10-17 bump） | AutoDrop（`own`）、条件 return 的路径敏感泄漏告警、目录 = namespace 校验（`--ns-root`）；全量 golden 按新版本重生成，**M6 收口** |
-| v0.6.0 | Phase 6 生态与扩展 | 展望：`map` / 方言系统 / 增量编译 |
+| v0.5.0 | Phase 5 新增特性（2026-10-17 bump，现已由 v0.6.0 接替） | AutoDrop（`own`）、条件 return 的路径敏感泄漏告警、目录 = namespace 校验（`--ns-root`）；全量 golden 按新版本重生成，**M6 收口** |
+| v0.6.0 | Phase 6 生态与扩展（**当前版本**，2026-10-17 bump） | 反向映射表 `--emit-map` / 调用图 + 跨函数所有权 / 增量编译缓存 / `--std` 多目标 / 方言系统（仓库外展开器）；`map` 仅设计冻结；全量 golden 按新版本重生成，**Phase 6 收口** |
 | v0.7.0 | Phase 7 工具链形态 | 展望：单入口 `ct` + `ctc` 兼容别名 |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../AGENTS.md) 第 5 节）。
 
 **版本规则（2026-10-15 用户确认）**：
 
-- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源（v0.4.0）、`0.5.x` = **Phase 5 新增特性（当前 v0.5.0）**、`0.6.x` = Phase 6 生态与扩展、`0.7.x` = Phase 7 工具链形态；`1.0.0` = 语言定稿。
+- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源（v0.4.0）、`0.5.x` = Phase 5 新增特性（v0.5.0）、`0.6.x` = **Phase 6 生态与扩展（当前 v0.6.0）**、`0.7.x` = Phase 7 工具链形态；`1.0.0` = 语言定稿。
 - **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（`phase1-m2` 标记 v0.1.0、`phase2-multifile-split` 标记 v0.2.0）。
-- **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。Phase 5 完成时按同一规范 bump 到 **v0.5.0**（2026-10-17，同样经用户授权），全量 golden 重生成。
-- **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重生成 `test/cases/**` 与 `test/modules/**` 的 golden（v0.5.0 为 94 个文件），并**同时**改 `ctc.c`、`selfhost/ctc.ct`（L1）与 `selfhost/src/{core,driver}.ct`——任一处不一致会让 `check-goldens.sh` 立刻全红。**归档 oracle 不能重生成**，故 `check-archive.sh` 用 `same_modulo_version` 在比较时归一化 banner 的版本 token（其余字节仍逐字节）。冻结期改 `CTC_VERSION` 属「不允许」项，每次均经用户显式授权。
+- **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。Phase 5 完成时按同一规范 bump 到 **v0.5.0**（2026-10-17，同样经用户授权），Phase 6 完成时 bump 到 **v0.6.0**（2026-10-17，同样经用户授权），全量 golden 均重生成。
+- **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重生成 `test/cases/**` 与 `test/modules/**` 的 golden（v0.6.0 为 101 个文件），并**同时**改 `ctc.c`、`selfhost/ctc.ct`（L1）与 `selfhost/src/{core,driver}.ct`——任一处不一致会让 `check-goldens.sh` 立刻全红。**归档 oracle 不能重生成**，故 `check-archive.sh` 用 `same_modulo_version` 在比较时归一化 banner 的版本 token（其余字节仍逐字节）。冻结期改 `CTC_VERSION` 属「不允许」项，每次均经用户显式授权。
 
 ### 已定的设计决策
 
@@ -546,7 +546,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 **开工决策（2026-10-14 用户确认）**：
 
 1. **零复用**：L1 **不** `#include ctc.c`，自带全部设施（`Buf` / 分配器 / `die` / 逐行扫描原语，约 200 行，以普通 C 透传写就）。理由：剥离后的 `ctc.c` = 纯 OO + 设施，include 进来会连 C 的 OO 核心一并复用，等于没自举，且「逐字节一致」退化为同义反复。早先「`#include` 只复用设施」的设想**作废**（它与「L1 必须用 CT 重写 OO」自相矛盾）。
-2. **banner 逐字节相同**：L1 原样发出 `Generated by ctc v<版本> from <输入路径>`（含许可行）。版本号与命令名的变更是独立事件：2026-10-17 已按阶段边界依次 bump 到 v0.4.0 / v0.5.0 并重生成 golden；命令名的变更仍等单入口 `ct` 落地。
+2. **banner 逐字节相同**：L1 原样发出 `Generated by ctc v<版本> from <输入路径>`（含许可行）。版本号与命令名的变更是独立事件：2026-10-17 已按阶段边界依次 bump 到 v0.4.0 / v0.5.0 / v0.6.0 并重生成 golden；命令名的变更仍等单入口 `ct` 落地。
 3. **源码位置与切片**：L1 源码为单文件 **`selfhost/ctc.ct`**（新增目录，用户已批准）。首个里程碑 **M2-a** 只覆盖 `test/cases/01_trait_basic.ct` 所需子集（trait / struct / impl / use、方法调用重写、`.h` 生成、banner），出口是对 `01_trait_basic.expected.c` / `.expected.h` **逐字节相等**；此后按 golden 用例逐个补齐剩余能力。用 golden 做**增量 oracle**，而不是一次性翻写。
 4. **出口附加一项**：Phase 1 的完成判据除「与 L0 逐字节一致」外，还要**用 L1 编译 `selfhost/ctc.ct` 自身**成功（L1 是纯 OO 子集写的，功能完整后应当直接可行）——这是「真自举」的硬证据。
 5. **L1 必须是 CT OO 风格**（2026-10-15 用户确认）：L1 的**数据模型层**（`Trait` / `Struct` / `Var` / `FuncSig` 等符号表）与**管线层**（逐行扫描、行重写、发射）必须用 CT 的 `struct` + `use` + `impl` 写成 OO 形态，**不得**退回 plain-C 直通；只有**设施层**（`Buf` / 分配器 / `die` / 扫描原语，约 200 行）按决策 1 保持 plain-C 透传。理由：CT 是 C 的严格超集，纯 C 直通的文件也「合法」，但对 OO 机制是**零证明**——那等于没自举（与决策 1 同构）。节奏为**分片推进**：先数据模型层 → 跑 `selfhost/check-m2a.sh` → 再管线层；每片以 byte-identical **不退化**为准绳，而不是以「跑得动」为准。附注（2026-10-15 实测）：L0 的 `MAX_FUNCS`（64）把 L1 里**每个 plain-C 函数签名**计入（定义与原型同等计数），而 `impl` 方法**不计**——该上限压力正是促使 L1 走 CT OO 风格的**健康约束**，不是要绕开的障碍；`ctc.c` 已冻结，**不得**为放宽它而改动。落地附注（2026-10-15）：管线层最终由**两个** trait 承载——`PipeOps`（主流程：构造解析、发射器、入口、CLI）与 `RewriteOps`（逐行重写层），`struct Pipe` 同时 `use` 二者；新增方法按归属放进对应的一半，避免单侧逼近 `MAX_METHOD`（32）。
@@ -736,7 +736,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突**已在 Phase 6.6 修订**（展开器留在仓库外、`ctc` 零感知；仓库内只允许在 `examples/**` / `test/**` 下携带演示 / 测试用方言插件；包管理分发方言仍不在本阶段）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
 - **构建**：增量编译缓存、跨函数泄漏分析、多目标编译。
 - **设计（2026-10-17，已冻结）**：切片顺序、6.1 的 `--emit-map` JSON 形状、缓存键、多目标口径、`map` / 方言的边界处理与 **D15–D20** 决策表见 [design/phase6.md](design/phase6.md)。顺序：反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map`（等 bindings）→ 方言（仓库外展开器）。
-- **切片进展**：**6.1 反向映射表已落地**（`--emit-map <file|->`，`test/modules/map/` 钉住 JSON 形状；trait / struct / function / impl 方法与 `Drop` 生成符号全部可反查；`build` 模式只写文件，且由最后一个单元落盘）。**6.2 调用图与跨函数所有权已落地**（`calls` 段记录直接调用边；`ret_owned` 事实让 `T *q = f();` 继承分配并参与泄漏分析，`test/modules/leak_call/` 钉正/负例）。**6.3 增量编译缓存已落地**（`build` 按单元在 `<outdir>/.ctcache/<unit>.key` 记键，键一致且 `.c/.h` 在盘即跳过重生成；改动传播按 `order` 前缀 + 依赖闭包，`ct-tour.sh` 第 7 步钉「二次构建命中 / 触源失效」）。**6.4 多目标编译已落地**（`--std=c99`（默认）/ `--std=gnu99`，暂无可差异发射点，故只落 CLI 与 `cc` 建议命令里的 `-std=`；`test/modules/std_default|std_gnu|std_bad/` 钉正/负例）。**6.5 `map` 仅做设计冻结**（`map trait T for instance x` 的实例语义不落实现，等官方 bindings 清单；D19）。**6.6 方言系统已落地**（展开器在仓库外、`ctc` 零感知；AGENTS §2 豁免与 §6「八层覆盖」已同步；演示 `examples/07_dialect/` + `test/run.sh` 的 `dialect` 层：展开 → `ctc` → `cc` → 运行 → 比对，并断言未展开的源不可直接编译；**编译器与 CT 线零改动**）。
+- **切片进展**：**6.1 反向映射表已落地**（`--emit-map <file|->`，`test/modules/map/` 钉住 JSON 形状；trait / struct / function / impl 方法与 `Drop` 生成符号全部可反查；`build` 模式只写文件，且由最后一个单元落盘）。**6.2 调用图与跨函数所有权已落地**（`calls` 段记录直接调用边；`ret_owned` 事实让 `T *q = f();` 继承分配并参与泄漏分析，`test/modules/leak_call/` 钉正/负例）。**6.3 增量编译缓存已落地**（`build` 按单元在 `<outdir>/.ctcache/<unit>.key` 记键，键一致且 `.c/.h` 在盘即跳过重生成；改动传播按 `order` 前缀 + 依赖闭包，`ct-tour.sh` 第 8 步钉「二次构建命中 / 触源失效」）。**6.4 多目标编译已落地**（`--std=c99`（默认）/ `--std=gnu99`，暂无可差异发射点，故只落 CLI 与 `cc` 建议命令里的 `-std=`；`test/modules/std_default|std_gnu|std_bad/` 钉正/负例）。**6.5 `map` 仅做设计冻结**（`map trait T for instance x` 的实例语义不落实现，等官方 bindings 清单；D19）。**6.6 方言系统已落地**（展开器在仓库外、`ctc` 零感知；AGENTS §2 豁免与 §6「八层覆盖」已同步；演示 `examples/07_dialect/` + `test/run.sh` 的 `dialect` 层：展开 → `ctc` → `cc` → 运行 → 比对，并断言未展开的源不可直接编译；**编译器与 CT 线零改动**）。**Phase 6 收口，版本 bump 至 v0.6.0**。
 
 ### Phase 7：工具链形态（单入口 `ct`）
 
@@ -744,6 +744,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **出口**：`ct compile` 可用，且既有 `ctc …` 调用不失效；README 与脚本中的命令统一换成 `ct`。
 - **依赖**：`ct build` 属 Phase 2（多文件），故本阶段排在其后；`ct get` / `ct install` 依赖包管理器（名字待定，见「决策待定项」）。
 - **风险**：命令改名会波及 README、脚本与全部既有文档里的 `ctc` 用法，必须一次性替换并复核。
+- **进展（2026-10-17，切片 7.1）**：L2 的 `main` 按 `argv[0]` 识别身份——basename 为 `ct` 时以 `ct` 身份运行（`-v` / usage 打印 `ct`），其余名字（`ctc` 别名、关卡里的 `ctc-l2`）保持 `ctc` 身份，既有断言不动。`ct compile` 与默认子命令 `ct <file>` 都与 L0 输出逐字节一致；`selfhost/ct-tour.sh` 新增第 7 步钉住这些行为。
+  - **banner 不改名**：旧清单第 3 条（`Generated by ctc` → `Generated by ct`）与冻结期约束冲突——L0（`ctc.c`）与 L1 已冻结且 golden 逐字节比对，改 banner 必须同时解冻两层，故**推迟**；`ct` 只改变入口身份，不改变溯源 token。
+  - **安装形态**：不引入构建系统或部署脚本；文档说明把 L2 二进制命名为 `ct`、用 `ln -s ct ctc` 提供别名即可。
 
 自举的目录结构、分层规则（L0/L1/L2）与构建流程见 [design/bootstrap.md](design/bootstrap.md)。
 
@@ -782,8 +785,8 @@ as confirmed by the user.
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
 | 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | ✅ done (2026-10-16; all four slices landed; bumped to v0.4.0 on 2026-10-17) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | ✅ done (2026-10-17; all five slices landed; bumped to v0.5.0, **M6 closes**) | design frozen + new cases green; rung **M6** closes here |
-| 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔨 in progress (design frozen 2026-10-17; 6.1–6.4 landed) | design frozen + new cases green |
-| 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias (design frozen, only the landing is left) | landing | 🔭 outlook | `ct compile` works and existing `ctc …` invocations keep working |
+| 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | ✅ done (2026-10-17; 6.1–6.4 + 6.6 landed, 6.5 design-frozen only; bumped to v0.6.0) | design frozen + new cases green |
+| 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias | landing | 🔨 in progress (7.1 landed: L2 runs under the `ct` identity; the banner rename is deferred because L0/L1 are frozen) | `ct compile` works and existing `ctc …` invocations keep working |
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
 > features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap
@@ -825,8 +828,8 @@ as confirmed by the user.
 | v0.2.0 | Phase 2 module system (milestone reached; version folded into v0.4.0) | namespaces / multi-file `ct build` / `pub` / `import` / `.h.ct` / `-I`; the archived cases are byte-identical and the compiler source is split into `selfhost/src/**` (L1 builds L2, byte-identical on `test/cases/**` 25/25) |
 | v0.3.0 | Phase 3 memory (milestone reached; version folded into v0.4.0) | Drop / loosened `delete`, restored under `selfhost/src/**` (L1 frozen); `22_drop` byte-identical |
 | v0.4.0 | Phase 4 diagnostics & traceability (bumped 2026-10-17; superseded by v0.5.0) | `#line` + `--line` / `--no-line`, leak warnings + `--diagnostics`, multi-error recovery, semantic checks (duplicate definitions are errors, signature mismatches warn); every golden regenerated for the new version |
-| v0.5.0 | Phase 5 new features (**current version**, bumped 2026-10-17) | AutoDrop (`own`), path-sensitive leak warnings on conditional returns, directory = namespace validation (`--ns-root`); every golden regenerated, **M6 closes** |
-| v0.6.0 | Phase 6 ecosystem and extension | outlook: `map` / dialect system / incremental compilation |
+| v0.5.0 | Phase 5 new features (bumped 2026-10-17; superseded by v0.6.0) | AutoDrop (`own`), path-sensitive leak warnings on conditional returns, directory = namespace validation (`--ns-root`); every golden regenerated, **M6 closes** |
+| v0.6.0 | Phase 6 ecosystem and extension (**current version**, bumped 2026-10-17) | reverse mapping table `--emit-map` / call graph + cross-function ownership / incremental build cache / `--std` multi-target / dialect system (expander outside the repo); `map` is design-frozen only; every golden regenerated, **Phase 6 closes** |
 | v0.7.0 | Phase 7 toolchain shape | outlook: single-entry `ct` + the `ctc` alias |
 
 The version lives in `CTC_VERSION` inside `ctc.c` and is written into the generated comments, so
@@ -837,23 +840,23 @@ changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §
 - Versions look like **`v0.<phase>.<patch>`** and are bumped **only at phase boundaries**; the `patch`
   slot is reserved for in-phase fixes that require regenerating goldens. The mapping is **one-to-one**:
   `0.<n>.x` = Phase *n* — `0.0.x` = Phase 0, `0.1.x` = Phase 1 self-hosting, `0.2.x` = Phase 2 module
-  system, `0.3.x` = Phase 3 memory, `0.4.x` = Phase 4 diagnostics (v0.4.0), `0.5.x` = **Phase 5
-  new features (current v0.5.0)**, `0.6.x` = Phase 6 ecosystem, `0.7.x` = Phase 7 toolchain;
+  system, `0.3.x` = Phase 3 memory, `0.4.x` = Phase 4 diagnostics (v0.4.0), `0.5.x` = Phase 5
+  new features (v0.5.0), `0.6.x` = **Phase 6 ecosystem (current v0.6.0)**, `0.7.x` = Phase 7 toolchain;
   `1.0.0` = the language is final.
 - **A tag name must equal `CTC_VERSION`.** Hence "no bump, no `v`-numbered tag"; a milestone that is
   not bumped gets a non-version tag (today `phase1-m2` marks the v0.1.0 milestone).
 - **Superseded (2026-10-17)**: the earlier "bump together with the single-entry `ct`" decision
-  (option A) is replaced — the version is now bumped at the phase boundary to **v0.4.0**, all goldens
-  are regenerated, and the v0.1.0–v0.3.0 milestones are not tagged separately (their non-version tags
-  stay).
+  (option A) is replaced — the version is now bumped at each phase boundary (v0.4.0 → v0.5.0 →
+  v0.6.0), all goldens are regenerated each time, and the v0.1.0–v0.3.0 milestones are not tagged
+  separately (their non-version tags stay).
 - **Why a bump must be careful**: `CTC_VERSION` goes into the output banner, so one bump means
-  regenerating the goldens under `test/cases/**` and `test/modules/**` (82 files this time), and
+  regenerating the goldens under `test/cases/**` and `test/modules/**` (101 files for v0.6.0), and
   changing **all** of `ctc.c`, `selfhost/ctc.ct` (L1) and `selfhost/src/{core,driver}.ct` — if any of
   them disagrees, `check-goldens.sh` goes red immediately. **The archived oracle cannot be
   regenerated**, so `check-archive.sh` normalises the banner's version token with
   `same_modulo_version` (every other byte is still compared strictly). Changing `CTC_VERSION` during
   the freeze is a "not allowed" item and needs one explicit user-authorised exception (granted for
-  this bump).
+  each bump).
 
 ### Decided design decisions
 
@@ -1488,7 +1491,7 @@ and its output is **byte-identical** to the C version's for the same corpus.
    the facilities only" idea is **dropped** (it contradicts "L1 must rewrite the OO in CT").
 2. **Banner stays byte-identical**: L1 emits `Generated by ctc v<version> from <input path>` (license
    line included) verbatim. A version/command-name change is a separate event: the version was bumped
-   at the phase boundaries to v0.4.0 and then v0.5.0 on 2026-10-17 (goldens regenerated); the command
+   at the phase boundaries to v0.4.0, then v0.5.0, then v0.6.0 on 2026-10-17 (goldens regenerated); the command
    name still waits for the single-entry `ct`.
 3. **Source location and slicing**: L1 lives in the single file **`selfhost/ctc.ct`** (new directory,
    approved by the user). The first milestone **M2-a** covers only the subset needed by
@@ -1924,7 +1927,7 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   part in leak analysis, pinned by `test/modules/leak_call/`). **6.3, the incremental build cache, has
   landed** (`build` stamps each unit's key under `<outdir>/.ctcache/<unit>.key`; a matching key with the
   `.c/.h` still on disk skips regeneration, and the recompile set is the `order` prefix plus the
-  dependency closure; step 7 of `ct-tour.sh` pins the "second build hits / touched source
+  dependency closure; step 8 of `ct-tour.sh` pins the "second build hits / touched source
   invalidates"). **6.4, multi-target, has landed** (`--std=c99` (default) / `--std=gnu99`; no emission
   point differs yet, so it lands the CLI and the `-std=` in the suggested cc command, with
   `test/modules/std_default|std_gnu|std_bad/` pinning the positive and negative cases). **6.5 `map` is
@@ -1933,7 +1936,8 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   lives outside the repository and `ctc` never sees it; the AGENTS §2 exemption and the §6 "eight
   layers" are synced; the demo `examples/07_dialect/` plus the `dialect` layer in `test/run.sh` — expand
   → `ctc` → `cc` → run → compare, with an assertion that the unexpanded source does not compile on its
-  own; **the compiler and the CT line are unchanged**).
+  own; **the compiler and the CT line are unchanged**). **Phase 6 closes with the version bumped to
+  v0.6.0.**
 
 ### Phase 7 — toolchain shape (single-entry `ct`)
 
@@ -1945,6 +1949,17 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   `ct` throughout.
 - **Depends on**: `ct build` belongs to Phase 2 (multi-file), so this phase follows it; `ct get` /
   `ct install` depend on the package manager (name still open, see "Open decisions").
+- **Progress (2026-10-17, slice 7.1)**: L2's `main` derives its identity from `argv[0]` — a basename
+  of `ct` runs under the `ct` identity (`-v` / usage print `ct`), while every other name (the `ctc`
+  alias and the `ctc-l2` binary the gates build) keeps the `ctc` identity, so no pinned assertion
+  moves. `ct compile` and the default `ct <file>` both match L0 byte for byte; step 7 of
+  `selfhost/ct-tour.sh` pins this.
+  - **The banner is not renamed**: the old checklist item (`Generated by ctc` → `Generated by ct`)
+    conflicts with the freeze — L0 (`ctc.c`) and L1 are frozen and goldens are compared byte for
+    byte, so renaming it would require unfreezing both layers. It is **deferred**; `ct` changes the
+    entry identity only, not the provenance token.
+  - **Install shape**: no build system or deploy script; the docs say to name the L2 binary `ct` and
+    provide the alias with `ln -s ct ctc`.
 - **Risk**: renaming the command touches every `ctc` usage in README, scripts and the rest of the
   documentation — it has to be replaced in one go and re-checked.
 
