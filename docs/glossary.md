@@ -106,6 +106,7 @@
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
 | JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
+| 增量缓存（incremental cache） | `<outdir>/.ctcache/<unit>.key` | Phase 6.3：每个单元一枚键（路径 + `mtime.size` + 版本 + `--line`/`--diagnostics` + 依赖 digest），键一致且 `.c/.h` 在盘即跳过重生成。**缓存命中不重放 `#line` 与告警**；`--emit-map` 下不命中。重编译集 = `order` 前缀 ∪ 依赖闭包 |
 
 ### 5. 测试
 
@@ -252,6 +253,7 @@
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
 | JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7). **Restored by Phase 4 slice 2 under `selfhost/src/**`** |
+| incremental cache | `<outdir>/.ctcache/<unit>.key` | Phase 6.3: one key per unit (path + `mtime.size` + version + `--line`/`--diagnostics` + dependency digests); a matching key with the `.c/.h` still on disk skips regeneration. **A hit replays neither `#line` nor warnings**; `--emit-map` never hits. The recompile set is the `order` prefix plus the dependency closure |
 
 ### 5. Testing
 

@@ -95,6 +95,24 @@ JSON 形状（v1）：
 - 缓存位置：`<outdir>/.ctcache/<unit>.key`；`build` 专用，单文件 `compile` 不缓存。
 - 失效：源文件、`-I` 依赖、`--line/--no-line`、`--diagnostics` 任一变化即未命中。
 
+**落地记录（2026-10-17，切片 6.3）**：
+
+- 键 ≈ `ctc <版本> L<line> D<diag> N<ns_root> P<路径> S<mtime.size> I<导入名 digest> K<依赖 fold>`。
+  `-I` 根**不直接入键**——它只能改变某条 `import` 解析到哪个文件，而解析结果已体现在该依赖自身的键里。
+- 新增 `trait CacheOps` + `impl CacheOps for Build`（5 个方法，`struct Build` 加 `use CacheOps`）：
+  `MAX_FUNCS` 只剩 1 个顶层签名余量，故缓存逻辑**不落**普通函数，落 impl 方法（precedent：`PipeOps` /
+  `RewriteOps`）。`digest` 等不引用接收者的方法保留 `(void)self;`（否则 L2 会有 `-Wunused-variable`）。
+- **命中不重放**：键一致即视为产物仍有效，`#line` 与告警不重放；`--emit-map` 时**一律不命中**（map
+  覆盖整轮运行，跳过的单元会缺席），但键仍计算并落盘，保证依赖 digest 不为陈旧值。
+- **安全规则（对 §4 的强制细化）**：`build` 的符号表**跨单元累积**，被跳过的单元其符号不进表，故
+  重编译集 = `order` 的**前缀**（自首个未命中单元起向前全部重编，供其后单元查符号）**∪** 变更传播
+  闭包（依赖键折叠进下游键，依赖变则下游全变）。因此全树未变才整轮跳过，否则至少前缀重编。
+- 依赖键只折叠定宽 **digest**（FNV-1a），键长不随 `import` 链深指数膨胀；`stat` 失败或键溢出一律
+  返回「无键」→ 必须重编译，绝不静默截断。写键失败静默（只损失一次重建，绝不破坏构建）。
+- 新增 `#include <sys/stat.h>`（POSIX `stat` / `mkdir`，非第三方依赖）；L1 只需透传，不动点不受影响。
+- 断言位置：`ct-tour.sh` 第 7 步（`cachesrc` 副本树两次 `build`，回写旧 `mtime` 后验「未被重写」，
+  再 `touch -t` 触源验失效）——`test/modules/` 的 designed 用例只跑一次 `build`，表达不了「二次命中」。
+
 ### 5. 6.4 多目标编译（D18）
 
 v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差异限定在少数需要 GNU 扩展的发射点
@@ -205,6 +223,36 @@ the landing notes). Scalar fields are not listed in v1.
 - Conservative: facts are recorded per function (no whole-program data flow or alias analysis); an `f`
   that forwards an object obtained from `g()` also becomes `ret_owned` — the fact travels, but no
   cross-function solver runs.
+
+### 6.3 incremental build cache (D17)
+
+**Landing notes (2026-10-17, slice 6.3)**:
+
+- Key ≈ `ctc <version> L<line> D<diag> N<ns_root> P<path> S<mtime.size> I<import names digest> K<dep
+  fold>`. The `-I` roots are **not** in the key: they can only change which file an `import` resolves
+  to, and that resolved path is already inside the dependency's own key.
+- New `trait CacheOps` + `impl CacheOps for Build` (five methods; `struct Build` gains `use CacheOps`):
+  `MAX_FUNCS` has one top-level signature slot left, so the cache logic lives in `impl` methods, not
+  plain functions (precedent: `PipeOps` / `RewriteOps`). Methods that ignore the receiver keep
+  `(void)self;` — otherwise L2 would warn `-Wunused-variable`.
+- **A hit replays nothing**: a matching key just means the artefacts are still valid, so `#line` and
+  warnings are not replayed. Under `--emit-map` nothing is ever reused (the map spans the whole run and
+  a skipped unit would be missing), but the key is still computed and stored so a dependency's digest
+  never goes stale.
+- **Safety rule (a hard refinement of §4)**: `build`'s symbol table **accumulates across units**, and a
+  skipped unit's symbols never enter it — so the recompile set is a **prefix** of `order` (from the
+  first miss backwards everything is recompiled, so later units can look up their symbols) **plus** the
+  change-propagation closure (a dependency's key is folded into its dependants' keys, so a changed
+  dependency invalidates everything downstream). Hence only a fully-unchanged tree skips the whole run.
+- Dependency keys fold a fixed-width **digest** (FNV-1a), so a key does not grow exponentially with the
+  import chain; a `stat` failure or an over-long key returns "no key" → must recompile, never silently
+  truncated. A failed key write stays silent (it costs one rebuild, never breaks the build).
+- Adds `#include <sys/stat.h>` (POSIX `stat` / `mkdir`, not a third-party dependency); L1 only has to
+  pass it through, so the fixpoint is unaffected.
+- Asserted in step 7 of `ct-tour.sh` (the `cachesrc` copy tree is built twice; after back-dating the
+  artefacts the second build must not rewrite them, and a `touch -t` of a source must invalidate) — the
+  designed fixtures under `test/modules/` run `build` only once and cannot express "the second build
+  hits".
 
 ### Constraints and gates
 

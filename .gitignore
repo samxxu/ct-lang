@@ -10,6 +10,10 @@ a.out
 examples/*/*.c
 examples/*/*.h
 
+# Incremental-build cache (Phase 6.3): `build -o <dir>` drops a .ctcache/ beside
+# the unit outputs; it is a rebuild accelerator, never an artifact to commit.
+.ctcache/
+
 # Editor and OS junk
 .DS_Store
 *.swp

@@ -11,7 +11,9 @@
 #   5) true self-hosting: L1 compiles itself into L1', and L1' compiles the sample too
 #   6) the split compiler: L1 builds the multi-unit tree selfhost/src/** into L2,
 #      and L2 compiles the sample identically as well
-#   7) prints where to go next
+#   7) the incremental cache (Phase 6.3): a second `build` of unchanged sources
+#      reuses the artifacts, and a touched source invalidates them
+#   8) prints where to go next
 #
 # Usage:
 #   bash selfhost/ct-tour.sh                 # tour with the built-in sample
@@ -244,8 +246,56 @@ else
     printf 'FAIL: L1 could not build selfhost/src/**\n'
 fi
 
-# ------------------------------------------------------------------- 7) next
-banner "7) where to go next"
+# ------------------------------------------- 7) the incremental cache (Phase 6.3)
+banner "7) the incremental cache: a second build reuses unchanged units"
+say "Phase 6.3: 'build' stamps every unit with a key -- its path, mtime, size, the"
+say "run's options and its dependencies' keys -- under <outdir>/.ctcache/. When the"
+say "key still matches and the .c/.h are on disk, the unit is not regenerated."
+cachesrc="$work/cachesrc"
+cacheout="$work/cacheout"
+rm -rf "$cachesrc" "$cacheout"
+mkdir -p "$cachesrc" "$cacheout"
+cp selfhost/src/*.ct "$cachesrc/"
+
+# mtime <file> : seconds since the epoch, portable across GNU and BSD stat
+mtime() {
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"
+}
+
+printf '\n+ %s build %s -o %s   (cold cache)\n' "$l2_bin" "$cachesrc/driver.ct" "$cacheout"
+"$l2_bin" build "$cachesrc/driver.ct" -o "$cacheout" >/dev/null || fail=1
+if [ -f "$cacheout/core.c" ] && [ -f "$cacheout/core.h" ]; then
+    # Back-date the artifacts: if a second build rewrites them, their mtime moves.
+    touch -t 200001010000 "$cacheout/core.c" "$cacheout/driver.c"
+    before="$(mtime "$cacheout/core.c")"
+    printf '\n+ %s build %s -o %s   (warm cache, sources untouched)\n' \
+        "$l2_bin" "$cachesrc/driver.ct" "$cacheout"
+    "$l2_bin" build "$cachesrc/driver.ct" -o "$cacheout" >/dev/null || fail=1
+    if [ "$(mtime "$cacheout/core.c")" = "$before" ]; then
+        note "reused: the artifacts were not regenerated (their mtime is unchanged)"
+    else
+        printf 'FAIL: an unchanged unit was recompiled\n'
+        fail=1
+    fi
+
+    printf '\n+ touch -t 201001010000 %s/core.ct   (a source changes)\n' "$cachesrc"
+    touch -t 201001010000 "$cachesrc/core.ct"
+    printf '\n+ %s build %s -o %s   (the key no longer matches)\n' \
+        "$l2_bin" "$cachesrc/driver.ct" "$cacheout"
+    "$l2_bin" build "$cachesrc/driver.ct" -o "$cacheout" >/dev/null || fail=1
+    if [ "$(mtime "$cacheout/core.c")" != "$before" ]; then
+        note "invalidated: the touched unit and its dependant were rebuilt"
+    else
+        printf 'FAIL: a changed source was not rebuilt\n'
+        fail=1
+    fi
+else
+    printf 'FAIL: the cold build produced no core.c/core.h\n'
+    fail=1
+fi
+
+# ------------------------------------------------------------------- 8) next
+banner "8) where to go next"
 say "  your own file      bash selfhost/ct-tour.sh path/to/your.ct"
 say "  full test suite    ./test/run.sh                    (build, unit, goldens, examples, errors)"
 say "  bootstrap gates    bash selfhost/check-goldens.sh   (L1 vs goldens, plus L1' vs goldens)"

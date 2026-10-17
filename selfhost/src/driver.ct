@@ -14,6 +14,9 @@ import core;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* `stat` stamps a unit's mtime/size and `mkdir` creates the cache directory
+   (Phase 6.3); both are POSIX, not a third-party dependency. */
+#include <sys/stat.h>
 
 /* This unit carries its own copy of the shared capacities (a generated header
    cannot carry a macro): the values must stay in lockstep with `core.ct`. */
@@ -22,8 +25,24 @@ import core;
 #define MAX_BUILD  32                     /* inputs on a single command line */
 #define MAX_IMPORTS 16                    /* `import` lines per unit */
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
+#define MAX_KEY   768                     /* one unit's cache key, stored as text */
 
 #define CTC_VERSION "0.5.0"
+
+/* The incremental-build cache (Phase 6.3). These are methods rather than plain
+   functions because plain-C top-level signatures are capped (MAX_FUNCS) and this
+   tree has no head-room left; the receiver carries the unit table, so nothing
+   else has to be global. The key covers the compiler version, the run's options
+   and, per unit, its path, its `mtime`/`size` stamp, its imports and its
+   dependencies' key digests -- the digest keeps a key bounded however deep the
+   import chain is. */
+trait CacheOps {
+    unsigned long digest(const char *s);
+    int  key_of(int u, int line_force, int diag, char *out, size_t cap);
+    int  keyfile_of(const char *outc, char *dir, size_t dcap, char *key, size_t kcap);
+    int  hit(const char *outc, const char *key);
+    void store(const char *outc, const char *key);
+}
 
 /* The `build` driver's state: the `-I` search roots (checked after the importing
    file's own directory, in command-line order) and the unit table it fills while
@@ -45,10 +64,129 @@ struct Build {
     char unit_out[MAX_UNITS][MAX_NAME * 4];
     char unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
     int  unit_nimp[MAX_UNITS];
+    /* The resolved dependencies (unit indices, already scheduled) and each unit's
+       key digest: a unit folds its dependencies' digests into its own key, so a
+       change anywhere in the chain invalidates everything downstream. */
+    int  unit_dep[MAX_UNITS][MAX_IMPORTS];
+    int  unit_ndep[MAX_UNITS];
+    unsigned long unit_digest[MAX_UNITS];
     int  unit_n;
     int  order[MAX_UNITS];
     int  order_n;
-};
+} use CacheOps;
+
+impl CacheOps for Build {
+    /* FNV-1a: the map that folds a variable-length string into a fixed-width
+       number for the key. Not a content hash of the sources -- it only keeps the
+       key bounded when keys are folded into other keys. */
+    unsigned long digest(const char *s) {
+        unsigned long h = 2166136261UL;
+        size_t i = 0;
+        (void)self;   /* a pure fold; the receiver is not used */
+        while (s[i]) {
+            h = h ^ (unsigned long)(unsigned char)s[i];
+            h = h * 16777619UL;
+            i++;
+        }
+        return h;
+    }
+
+    /* The key of unit `u`: what the emitted .c/.h are a function of. `-1` means
+       "no key", which the caller takes as "cannot be reused" (a missing stamp or
+       an over-long key must never be papered over). The `-I` roots are not listed
+       because they can only change which file an import resolves to, and the
+       resolved path is already part of that dependency's own key. */
+    int key_of(int u, int line_force, int diag, char *out, size_t cap) {
+        char stamp[64], ih[MAX_IMPORTS * MAX_NAME];
+        unsigned long dep = 0;
+        struct stat st;
+        size_t n = 0, k;
+        int w;
+
+        if (stat(self->unit_path[u], &st) != 0) return -1;
+        snprintf(stamp, sizeof stamp, "%lu.%lu",
+                 (unsigned long)st.st_mtime, (unsigned long)st.st_size);
+
+        ih[0] = 0;
+        for (k = 0; k < (size_t)self->unit_nimp[u]; k++) {
+            w = snprintf(ih + n, sizeof ih - n, "%s;", self->unit_imp[u][k]);
+            if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+            n += (size_t)w;
+        }
+        for (k = 0; k < (size_t)self->unit_ndep[u]; k++)
+            dep = dep * 1099511628211UL + self->unit_digest[self->unit_dep[u][k]];
+
+        w = snprintf(out, cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
+                     CTC_VERSION, line_force, diag, self->ns_root,
+                     self->unit_path[u], stamp, self->digest(ih), dep);
+        if (w < 0 || (size_t)w >= cap) return -1;
+        /* publish the digest: dependants fold it into their own keys */
+        self->unit_digest[u] = self->digest(out);
+        return 0;
+    }
+
+    /* `<dir of outc>/.ctcache/<base>.key`: the cache sits beside the unit's own
+       outputs, so `-o <dir>` keeps it out of the source tree. */
+    int keyfile_of(const char *outc, char *dir, size_t dcap, char *key, size_t kcap) {
+        const char *slash = strrchr(outc, '/');
+        const char *base = slash ? slash + 1 : outc;
+        int w;
+
+        (void)self;  /* the paths are derived from the argument; the receiver is not used */
+        if (slash) w = snprintf(dir, dcap, "%.*s/.ctcache", (int)(slash - outc), outc);
+        else       w = snprintf(dir, dcap, ".ctcache");
+        if (w < 0 || (size_t)w >= dcap) return -1;
+        w = snprintf(key, kcap, "%s/%s.key", dir, base);
+        if (w < 0 || (size_t)w >= kcap) return -1;
+        return 0;
+    }
+
+    /* A hit needs the key file to match byte for byte and both artefacts on disk:
+       a key that matches but whose .c/.h were deleted or never finished must not
+       be reused. */
+    int hit(const char *outc, const char *key) {
+        char dir[MAX_NAME * 4], kf[MAX_NAME * 4], hp[MAX_NAME * 4];
+        char buf[MAX_KEY];
+        FILE *f;
+        size_t n, kl, hl;
+
+        if (self->keyfile_of(outc, dir, sizeof dir, kf, sizeof kf) != 0) return 0;
+        f = fopen(kf, "r");
+        if (!f) return 0;
+        n = fread(buf, 1, sizeof buf, f);
+        fclose(f);
+        kl = strlen(key);
+        if (n != kl || memcmp(buf, key, kl) != 0) return 0;
+
+        /* the header is the .c's sibling: `foo.c` -> `foo.h` */
+        snprintf(hp, sizeof hp, "%s", outc);
+        hl = strlen(hp);
+        if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
+        hp[hl - 1] = 'h';
+        f = fopen(hp, "rb");
+        if (!f) return 0;
+        fclose(f);
+        f = fopen(outc, "rb");
+        if (!f) return 0;
+        fclose(f);
+        return 1;
+    }
+
+    /* Best effort by design: a cache that cannot be written costs a rebuild, never
+       a broken build, so an unwritable directory stays silent. */
+    void store(const char *outc, const char *key) {
+        char dir[MAX_NAME * 4], kf[MAX_NAME * 4];
+        FILE *f;
+
+        if (self->keyfile_of(outc, dir, sizeof dir, kf, sizeof kf) != 0) return;
+        mkdir(dir, 0755);            /* EEXIST on a warm cache is the normal case */
+        f = fopen(kf, "w");
+        if (!f) return;
+        fprintf(f, "%s", key);       /* no newline: `hit` compares the file byte for byte */
+        fclose(f);
+    }
+}
+
 static struct Build g_build;
 
 /* ------------------------------------------------- `build` driver (plain C) */
@@ -190,17 +328,24 @@ static int unit_visit(const char *path)
     idx = g_build.unit_n++;
     snprintf(g_build.unit_path[idx], sizeof g_build.unit_path[0], "%s", path);
     g_build.unit_nimp[idx] = 0;
+    g_build.unit_ndep[idx] = 0;
 
     n = collect_imports(path, mods, MAX_IMPORTS);
     for (k = 0; k < n; k++) {
         char dep[MAX_NAME * 4];
         const char *seg;
         char hname[MAX_NAME];
+        int di;
         if (resolve_import(path, mods[k], dep, sizeof dep) != 0) {
             fprintf(stderr, "ctc: cannot resolve import '%s' from '%s'\n", mods[k], path);
             return -1;
         }
-        if (unit_visit(dep) < 0) return -1;
+        /* keep the dependency's unit index: the incremental cache needs it to
+           fold a dependency's key into this unit's own key */
+        di = unit_visit(dep);
+        if (di < 0) return -1;
+        if (g_build.unit_ndep[idx] < MAX_IMPORTS)
+            g_build.unit_dep[idx][g_build.unit_ndep[idx]++] = di;
         seg = strrchr(mods[k], '/');
         seg = seg ? seg + 1 : mods[k];
         snprintf(hname, sizeof hname, "%s.h", seg);
@@ -220,6 +365,8 @@ static int build_main(int argc, char **argv, const char *prog)
     const char *in[MAX_BUILD];
     const char *outdir = NULL;
     int n = 0, i, o;
+    int dirty[MAX_UNITS];              /* 1 = must be compiled this run */
+    int first = -1;                    /* first unit that is not reused */
     int line_force = -1;               /* -1 mode default, 0 --no-line, 1 --line */
     int diag = 0;                      /* 0 text warnings, 1 `--diagnostics=json` */
 
@@ -314,14 +461,39 @@ static int build_main(int argc, char **argv, const char *prog)
     for (i = 0; i < n; i++)
         if (unit_visit(in[i]) < 0) return 1;
 
+    /* Incremental cache (Phase 6.3): decide, unit by unit, whether the .c/.h on
+       disk can be reused. `build` fills one symbol table for the whole run, so a
+       unit that is compiled needs the units before it in that table as well:
+       the recompiled set is a prefix of `order`. A unit's key folds its
+       dependencies' digests, so a change anywhere in a chain invalidates
+       everything below it, and a unit whose dependency is being recompiled is
+       recompiled too. `--emit-map` never reuses: the map spans the whole run, so
+       a skipped unit would be missing from it. */
+    for (o = 0; o < g_build.order_n; o++) {
+        int u = g_build.order[o];
+        int k;
+        char key[MAX_KEY];
+        dirty[u] = 1;                       /* default: recompile */
+        if (build_output(g_build.unit_path[u], outdir, g_build.unit_out[u],
+                         sizeof g_build.unit_out[0]) != 0) {
+            fprintf(stderr, "ctc: output path too long for '%s'\n", g_build.unit_path[u]);
+            return 1;
+        }
+        if (g_build.key_of(u, line_force, diag, key, sizeof key) == 0 &&
+            !g_build.has_map && g_build.hit(g_build.unit_out[u], key))
+            dirty[u] = 0;
+        for (k = 0; k < g_build.unit_ndep[u]; k++)
+            if (dirty[g_build.unit_dep[u][k]]) dirty[u] = 1;
+        if (dirty[u] && first < 0) first = o;
+    }
+
     for (o = 0; o < g_build.order_n; o++) {
         int u = g_build.order[o];
         int k;
         char ns_expect[MAX_NAME * 4];
-        if (build_output(g_build.unit_path[u], outdir, g_build.unit_out[u], sizeof g_build.unit_out[0]) != 0) {
-            fprintf(stderr, "ctc: output path too long for '%s'\n", g_build.unit_path[u]);
-            return 1;
-        }
+        char key[MAX_KEY];
+        /* the cache is warm for this unit and every unit before it */
+        if (first < 0 || (o > first && !dirty[u])) continue;
         /* Derive the unit's directory namespace from the root. A unit outside
            the root, or one with a non-normalised (`./`, `../`) component, gets
            no expectation and is not checked. */
@@ -371,6 +543,11 @@ static int build_main(int argc, char **argv, const char *prog)
                             (g_build.has_map && o + 1 == g_build.order_n) ? g_build.map_path : NULL,
                             in[0]) != 0)
             return 1;
+        /* the key is stamped only after a successful compile: a unit that failed
+           must never be reused, and a stale key file must never be mistaken for
+           the current symbol table */
+        if (g_build.key_of(u, line_force, diag, key, sizeof key) == 0)
+            g_build.store(g_build.unit_out[u], key);
     }
 
     ct_cc_reset();

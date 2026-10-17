@@ -49,6 +49,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc <input.ct> -o <output.c>` | 输出到指定路径，头文件为同目录同名的 `.h` |
 | `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
 | `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，仅 compile 可用，`build` 须写文件 |
+| `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`/`.h` 并打印建议 `cc` 命令；在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.5.0` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
@@ -377,6 +378,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc <input.ct> -o <output.c>` | writes the given path plus a sibling `.h` |
 | `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
 | `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, compile mode only — `build` must write a file |
+| `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits `.c`/`.h` and the suggested `cc` command is printed; a key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
 | `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.5.0` |
 | `ctc -h` / `ctc --help` | prints usage |
 
