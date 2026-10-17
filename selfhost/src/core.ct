@@ -885,24 +885,25 @@ static int already_qualified(const char *type, size_t off)
 /* The four code emitters (emit_trait_def / emit_struct_def / put_own_vptr /
    body_needs_vtable) are `Pipe` methods now -- see `impl PipeOps for Pipe`
    below. Each keeps its stream parameter (FILE* / Buf*) because it is used for
-   both the .c output (`self->out`) and the .h output (`self->hout`), and takes
-   `struct SymTab *sym` wherever it reads the symbol tables. `is_any_trait_method`
-   stays a `SymTabOps` method (see the symbol-table section). */
+   both the .c output (`self->out`) and the .h output (`self->hout`), and reads
+   the symbol tables through `self->sym`. `is_any_trait_method` stays a
+   `SymTabOps` method (see the symbol-table section). */
 
 /* ------------------------------------------------------- construct parsers */
 
-/* The whole output pipeline lives on the `Pipe` object: the output streams are
-   its fields and the code emitters, the construct parsers, the
-   method-declaration parsers, the declaration-piece helpers and the pipeline
-   entry points are its methods, so call sites read
-   `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`. The symbol tables arrive
-   as `struct SymTab *sym` because a method body cannot see the file-scope
-   `g_sym` object. The per-line rewriting layer is the `RewriteOps` trait below;
-   both are used by `struct Pipe`, so either half can call the other via `self`. */
+/* The whole output pipeline lives on the `Pipe` object: the output streams and
+   the symbol table are its fields, and the code emitters, the construct
+   parsers, the method-declaration parsers, the declaration-piece helpers and the
+   pipeline entry points are its methods, so call sites read
+   `g_pipe.parse_trait(..)` / `g_pipe.compile_file(..)`. `self->sym` is the table
+   the compiler is working on (a method aliases it as `sym` locally to keep the
+   bodies readable). The per-line rewriting layer is the `RewriteOps` trait
+   below; both are used by `struct Pipe`, so either half can call the other via
+   `self`. */
 trait PipeOps {
-    size_t parse_trait(struct SymTab *sym, size_t p);
-    size_t parse_struct(struct SymTab *sym, size_t p);
-    size_t parse_impl(struct SymTab *sym, size_t p);
+    size_t parse_trait(size_t p);
+    size_t parse_struct(size_t p);
+    size_t parse_impl(size_t p);
     /* method-declaration parsers, called from parse_trait */
     void parse_params(Method *m, const char *raw);
     void split_decl(const char *decl, size_t pos, Method *m);
@@ -910,13 +911,13 @@ trait PipeOps {
        `srcline` is the source line the construct starts on: it anchors a `#line`
        directive when multi-file mode is on. */
     void emit_trait_def(FILE *f, const Trait *T, size_t srcline);
-    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body, size_t srcline);
+    void emit_struct_def(FILE *f, const Struct *S, const char *body, size_t srcline);
     void put_own_vptr(Buf *b, const Struct *S, int *first);
-    void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv, const char *ind, int with_self, int depth);
-    void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind);
-    int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen);
+    void put_nested_assignments(Buf *b, const Struct *S, const char *recv, const char *ind, int with_self, int depth);
+    void put_heap_vpts(Buf *b, const Struct *S, const char *ptr, const char *ind);
+    int body_needs_vtable(size_t bstart, size_t blen);
     /* declaration-piece helpers, shared by parse_fields and parse_func_sig */
-    int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr);
+    int analyse_param(const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr);
     void emit_qualified_type(Buf *b, const char *piece, size_t len, int ia, int ib, const char *cbase, int need_struct, int is_trait);
     /* Read `Ident(::Ident)*` at p -- the head of a declaration. `cname` gets the
        mangled C name (a qualified path `A::B::Name` becomes `A_B_Name`; an
@@ -924,19 +925,19 @@ trait PipeOps {
        segment. Returns the position just past the name, or NULL when there is
        none. */
     const char *read_qual_ref(const char *p, char *cname, char *shortname, int *qualified);
-    char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos);
-    void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
-    void register_body_params(struct SymTab *sym, const char *params);
+    char *parse_fields(const char *body, Struct *S, size_t pos);
+    void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params);
+    void register_body_params(const char *params);
     /* the pipeline driver; the rewriting layer itself is the `RewriteOps` trait */
     void emit_hoisted();
     /* The lazily-generated drop functions: the prototypes go before the buffered
        body (a delete farther down calls them) and the definitions after it, when
        the structs they walk are complete. Only the types a delete reaches get a
        body, so an unused drop never appears (-Wunused-function stays quiet). */
-    void emit_drop_prototypes(struct SymTab *sym, FILE *f);
-    void emit_drop_bodies(struct SymTab *sym, FILE *f);
-    void emit_raw_line(struct SymTab *sym, size_t ls, size_t le);
-    void compile_range(struct SymTab *sym, size_t start, size_t end);
+    void emit_drop_prototypes(FILE *f);
+    void emit_drop_bodies(FILE *f);
+    void emit_raw_line(size_t ls, size_t le);
+    void compile_range(size_t start, size_t end);
     /* Source-line tracking. The directive is written only when the running
        mapping would diverge, and only into the .c: the .h is included verbatim
        by the .c, so `#line` out there would be wrong. */
@@ -950,7 +951,7 @@ trait PipeOps {
        with the imports the driver registered in `g_imp_h`, and emits `#line`.
        The symbol tables accumulate across units in that mode (a unit sees the
        units built before it) and are reset per file otherwise. */
-    int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi);
+    int compile_file(const char *in, const char *outc, int multi);
     void write_guard(const char *hpath);
     /* CLI helpers, called from `main` */
     void usage(const char *prog);
@@ -964,35 +965,40 @@ trait PipeOps {
 trait RewriteOps {
     void replace_self(const char *s, size_t n, Buf *out);
     /* interface values: boxing, the declaration, the assignment and `return` */
-    void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
-    void box_to_iface_ptr(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos);
-    void box_agg_fields(struct SymTab *sym, Buf *out, const Struct *S, const char *inner, size_t it);
+    void box_to_iface(Buf *out, const char *e, size_t len, int tr, size_t pos);
+    void box_to_iface_ptr(Buf *out, const char *e, size_t len, int tr, size_t pos);
+    void box_agg_fields(Buf *out, const Struct *S, const char *inner, size_t it);
     size_t skip_bracket(const char *s, size_t n, size_t pos);
-    char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after);
-    char *try_iface_assign(struct SymTab *sym, const char *line);
-    char *try_return(struct SymTab *sym, const char *line);
-    char *try_delete(struct SymTab *sym, const char *line);
-    char *transform_line(struct SymTab *sym, const char *line);
-    char *try_var_decl(struct SymTab *sym, const char *line);
-    void transform_calls(struct SymTab *sym, const char *s, Buf *out);
-    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
-    int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr, int *out_tr, size_t *out_end, int *out_ifptr);
+    char *try_iface_decl(const char *line, int tr, size_t ws, const char *after);
+    char *try_iface_assign(const char *line);
+    char *try_return(const char *line);
+    char *try_delete(const char *line);
+    char *transform_line(const char *line);
+    char *try_var_decl(const char *line);
+    void transform_calls(const char *s, Buf *out);
+    int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr, int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
+    int walk_to_iface_field(const char *s, size_t n, size_t pos, int cur, int isptr, int *out_tr, size_t *out_end, int *out_ifptr);
     int decl_end_is_bare(const char *s);
     /* the same kind of source-shape predicate as decl_end_is_bare: does a captured
        user body mention `self`? A drop body need not use it, and an unused self
        would warn under -Wall -Wextra. */
     int body_uses_self(size_t bstart, size_t blen);
-    void scope_track(struct SymTab *sym, size_t ls, size_t le);
+    void scope_track(size_t ls, size_t le);
     /* Resynchronisation point after a reported error: past the next `}` or the
        start of the next line, whichever comes first (literals and comments are
        skipped, so a brace inside a string does not count). */
     size_t recover_pos(size_t from, size_t end);
-    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs);
+    char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs);
 }
 
 struct Pipe {
     FILE *out;
     FILE *hout;
+    /* The symbol table this pipeline compiles against. Threading it through every
+       method by hand (63 parameters) was manual dependency injection; owning it
+       here is what makes the pipeline an object with state. A method still names
+       it `sym` through a local alias, so the bodies read as before. */
+    struct SymTab *sym;
 } use PipeOps, RewriteOps;
 
 /* Rewrite a struct body: each field's type is qualified and the struct-typed and
@@ -1017,7 +1023,8 @@ impl PipeOps for Pipe {
         self->line_break();
     }
 
-    void emit_struct_def(struct SymTab *sym, FILE *f, const Struct *S, const char *body, size_t srcline) {
+    void emit_struct_def(FILE *f, const Struct *S, const char *body, size_t srcline) {
+        struct SymTab *sym = self->sym;
         int i;
         size_t blen = strlen(body);
 
@@ -1058,8 +1065,9 @@ impl PipeOps for Pipe {
        recursively, for its struct-typed fields. Statements rather than
        designators, so a nested object the user already initialised is never
        overridden. */
-    void put_nested_assignments(struct SymTab *sym, Buf *b, const Struct *S, const char *recv,
+    void put_nested_assignments(Buf *b, const Struct *S, const char *recv,
                                 const char *ind, int with_self, int depth) {
+        struct SymTab *sym = self->sym;
         int i, h;
 
         (void)self;  /* the body walks struct fields; the receiver is not used */
@@ -1082,13 +1090,14 @@ impl PipeOps for Pipe {
             if (F->nu == 0 && !needs_nested_init(sym->structs, F, depth + 1)) continue;
             if ((size_t)snprintf(sub, sizeof sub, "%s.%s", recv, S->fname[i]) >= sizeof sub)
                 die(0, "nested field path too long in struct '%s'", S->name);
-            self->put_nested_assignments(sym, b, F, sub, ind, 1, depth + 1);
+            self->put_nested_assignments(b, F, sub, ind, 1, depth + 1);
         }
     }
 
     /* Write the vptrs of a heap object obtained from malloc/calloc: the object's
        own vptrs use '->', its struct-typed fields recurse with the nested form. */
-    void put_heap_vpts(struct SymTab *sym, Buf *b, const Struct *S, const char *ptr, const char *ind) {
+    void put_heap_vpts(Buf *b, const Struct *S, const char *ptr, const char *ind) {
+        struct SymTab *sym = self->sym;
         int i, h;
 
         (void)self;  /* the body walks struct fields; the receiver is not used */
@@ -1111,14 +1120,15 @@ impl PipeOps for Pipe {
             if (F->nu == 0 && !needs_nested_init(sym->structs, F, 1)) continue;
             if ((size_t)snprintf(sub, sizeof sub, "%s->%s", ptr, S->fname[i]) >= sizeof sub)
                 die(0, "nested field path too long in struct '%s'", S->name);
-            self->put_nested_assignments(sym, b, F, sub, ind, 1, 1);
+            self->put_nested_assignments(b, F, sub, ind, 1, 1);
         }
     }
 
     /* Does a body contain a call that will become a vtable dispatch? Any `.m(` /
        `->m(` whose `m` names a declared trait method counts; when it does, the
        impl's vtable variable must be declared before the method bodies. */
-    int body_needs_vtable(struct SymTab *sym, size_t bstart, size_t blen) {
+    int body_needs_vtable(size_t bstart, size_t blen) {
+        struct SymTab *sym = self->sym;
         size_t i = bstart, end = bstart + blen;
 
         (void)self;  /* the body only consults the symbol table for the method */
@@ -1204,7 +1214,8 @@ impl PipeOps for Pipe {
         return p;
     }
 
-    int analyse_param(struct SymTab *sym, const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr) {
+    int analyse_param(const char *s, size_t n, int *ia, int *ib, char *cbase, int *need_struct, char *name, int *isptr, int *tr) {
+        struct SymTab *sym = self->sym;
         size_t a, b, lim = 0, tn, ea, eb;
         char type[MAX_NAME * 2], base[MAX_NAME];
         int idx = -1;
@@ -1290,7 +1301,7 @@ impl PipeOps for Pipe {
         buf_putn(b, piece + ib, len - (size_t)ib);
     }
 
-    char *parse_fields(struct SymTab *sym, const char *body, Struct *S, size_t pos) {
+    char *parse_fields(const char *body, Struct *S, size_t pos) {
         Buf out;
         size_t n = strlen(body), i = 0;
 
@@ -1323,7 +1334,7 @@ impl PipeOps for Pipe {
                 j++;
             }
 
-            idx = self->analyse_param(sym, body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
+            idx = self->analyse_param(body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
             self->emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
 
             /* an interface array field (`T x[n]` / `T *x[n]`) carries no object
@@ -1458,7 +1469,8 @@ impl PipeOps for Pipe {
         }
     }
 
-    size_t parse_trait(struct SymTab *sym, size_t p) {
+    size_t parse_trait(size_t p) {
+        struct SymTab *sym = self->sym;
         char name[MAX_NAME];
         Trait *T;
         size_t close, bstart, bend, i;
@@ -1568,7 +1580,8 @@ impl PipeOps for Pipe {
         return close + 1;
     }
 
-    size_t parse_struct(struct SymTab *sym, size_t p) {
+    size_t parse_struct(size_t p) {
+        struct SymTab *sym = self->sym;
         char name[MAX_NAME];
         Struct *S;
         size_t close, bstart, bend, q, probe;
@@ -1662,22 +1675,23 @@ impl PipeOps for Pipe {
 
         {
             char *raw = xstrndup(g_src + bstart, bend - bstart);
-            char *qbody = self->parse_fields(sym, raw, S, p);
+            char *qbody = self->parse_fields(raw, S, p);
             free(raw);
             if (!g_multi) {
-                self->emit_struct_def(sym, self->out, S, qbody, sline);
-                self->emit_struct_def(sym, self->hout, S, qbody, sline);
+                self->emit_struct_def(self->out, S, qbody, sline);
+                self->emit_struct_def(self->hout, S, qbody, sline);
             } else if (g_ctor_pub) {
-                self->emit_struct_def(sym, self->hout, S, qbody, sline);
+                self->emit_struct_def(self->hout, S, qbody, sline);
             } else {
-                self->emit_struct_def(sym, self->out, S, qbody, sline);
+                self->emit_struct_def(self->out, S, qbody, sline);
             }
             free(qbody);
         }
         return q;
     }
 
-    size_t parse_impl(struct SymTab *sym, size_t p) {
+    size_t parse_impl(size_t p) {
+        struct SymTab *sym = self->sym;
         char trait_name[MAX_NAME], struct_name[MAX_NAME];
         Trait *T;
         Struct *S;
@@ -1832,7 +1846,7 @@ impl PipeOps for Pipe {
         {
             int needs_vtable = 0;
             for (k = 0; k < (size_t)nimpl; k++)
-                if (self->body_needs_vtable(sym, impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
+                if (self->body_needs_vtable(impl[k].bstart, impl[k].blen)) { needs_vtable = 1; break; }
             if (needs_vtable) {
                 self->line_at(self->out, dline);
                 fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n\n",
@@ -1857,7 +1871,7 @@ impl PipeOps for Pipe {
             if (tm->nparams > 0) fprintf(self->out, ", %s", impl[idx].params);
             fprintf(self->out, ") {\n");
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
-            self->emit_body(sym, self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
+            self->emit_body(self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
             fprintf(self->out, "}\n\n");
             self->line_break();
         }
@@ -1924,7 +1938,8 @@ impl PipeOps for Pipe {
     }
 
     /* Pass one raw source line through the shared rewriting pipeline. */
-    void emit_raw_line(struct SymTab *sym, size_t ls, size_t le) {
+    void emit_raw_line(size_t ls, size_t le) {
+        struct SymTab *sym = self->sym;
         size_t len = le - ls, t = 0;
         char *line, *sig;
         int pre = sym->nvars, has_body = 0;
@@ -1960,7 +1975,7 @@ impl PipeOps for Pipe {
 
         sym->leak_observe(line);                         /* leak tracking */
         g_line_off = ls;
-        sig = self->parse_func_sig(sym, line, ls, &has_body, &body_abs);
+        sig = self->parse_func_sig(line, ls, &has_body, &body_abs);
         if (sig) {
             /* an exported prototype belongs in the .h and nowhere else; the
                newline compile_range writes still lands in the .c, so the .c keeps
@@ -1969,17 +1984,18 @@ impl PipeOps for Pipe {
             fputs(sig, (g_line_pub && g_multi && !has_body) ? self->hout : self->out);
             free(sig);
         } else {
-            char *out = self->transform_line(sym, line);
+            char *out = self->transform_line(line);
             self->emit_hoisted();
             fputs(out, self->out);
             free(out);
         }
         free(line);
-        self->scope_track(sym, ls, le);
+        self->scope_track(ls, le);
     }
 
     /* Scan [start,end): expand traits/structs/impls, pass the rest through. */
-    void compile_range(struct SymTab *sym, size_t start, size_t end) {
+    void compile_range(size_t start, size_t end) {
+        struct SymTab *sym = self->sym;
         size_t pos = start;
         jmp_buf outer_jmp;
         int outer_guarded = g_guarded;
@@ -2055,12 +2071,12 @@ impl PipeOps for Pipe {
             if (word_at(q, "trait")) {
                 char nm[MAX_NAME];
                 size_t t = read_ident(skip_ws_comments(q + 5), nm, sizeof nm);
-                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_trait(sym, q); continue; }
+                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_trait(q); continue; }
             }
             if (word_at(q, "impl")) {
                 char nm[MAX_NAME];
                 size_t t = read_ident(skip_ws_comments(q + 4), nm, sizeof nm);
-                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_impl(sym, q); continue; }
+                if (nm[0] || (t < g_len && g_src[t] == '{')) { pos = self->parse_impl(q); continue; }
             }
             if (word_at(q, "struct")) {
                 size_t t = skip_ws_comments(q + 6);
@@ -2068,7 +2084,7 @@ impl PipeOps for Pipe {
                 t = read_ident(t, nm, sizeof nm);
                 if (nm[0]) {
                     t = skip_ws_comments(t);
-                    if (t < g_len && g_src[t] == '{') { pos = self->parse_struct(sym, q); continue; }
+                    if (t < g_len && g_src[t] == '{') { pos = self->parse_struct(q); continue; }
                 }
             }
 
@@ -2117,7 +2133,7 @@ impl PipeOps for Pipe {
                         die(t, "namespace path too long");
                     snprintf(g_ns, sizeof g_ns, "%s", open);
 
-                    self->compile_range(sym, t + 1, close);
+                    self->compile_range(t + 1, close);
 
                     snprintf(g_ns, sizeof g_ns, "%s", saved);
                     pos = close + 1;
@@ -2128,7 +2144,7 @@ impl PipeOps for Pipe {
             le = ls;
             while (le < end && g_src[le] != '\n') le++;
             self->line_at(self->out, self->line_of(ls));
-            self->emit_raw_line(sym, ls, le);
+            self->emit_raw_line(ls, le);
             if (le < end) { fputc('\n', self->out); le++; }
             pos = le;
         }
@@ -2262,7 +2278,8 @@ impl PipeOps for Pipe {
     /* The drop prototypes go before the body (a delete calls them) and the
        definitions after it (so the structs are complete). Both are emitted only
        for the types a delete actually reaches. */
-    void emit_drop_prototypes(struct SymTab *sym, FILE *f) {
+    void emit_drop_prototypes(FILE *f) {
+        struct SymTab *sym = self->sym;
         int i, any = 0;
         sym->mark_drop_closure();
         for (i = 0; i < g_nown_drop; i++) {
@@ -2276,7 +2293,8 @@ impl PipeOps for Pipe {
         self->line_break();
     }
 
-    void emit_drop_bodies(struct SymTab *sym, FILE *f) {
+    void emit_drop_bodies(FILE *f) {
+        struct SymTab *sym = self->sym;
         int i;
         for (i = 0; i < g_nown_drop; i++) {
             Struct *S = &sym->structs[g_own_drop[i]];
@@ -2295,7 +2313,7 @@ impl PipeOps for Pipe {
             else
                 fprintf(f, "    (void)self;\n");
             if (S->has_user_drop) {
-                self->emit_body(sym, f, S->drop_bstart, S->drop_blen, S, "");
+                self->emit_body(f, S->drop_bstart, S->drop_blen, S, "");
             } else {
                 for (h = 0; h < S->nf; h++) {
                     const Struct *F = &sym->structs[S->ftype[h]];
@@ -2310,7 +2328,8 @@ impl PipeOps for Pipe {
 
     /* Compile one input to `outc` and a matching header. `multi` selects
        multi-file mode (see the trait declaration). Returns 0 on success. */
-    int compile_file(struct SymTab *sym, const char *in, const char *outc, int multi) {
+    int compile_file(const char *in, const char *outc, int multi) {
+        struct SymTab *sym = self->sym;
         char hbuf[MAX_NAME * 4];
         const char *base;
         FILE *body;
@@ -2385,7 +2404,7 @@ impl PipeOps for Pipe {
         {
             FILE *real = self->out;
             self->out = body;
-            self->compile_range(sym, 0, g_len);
+            self->compile_range(0, g_len);
             self->out = real;
             /* Errors were reported along the way: the body is not a usable
                product, so the half-written .c/.h are dropped instead of left
@@ -2399,7 +2418,7 @@ impl PipeOps for Pipe {
                 return 1;
             }
             self->line_break();
-            self->emit_drop_prototypes(sym, real);
+            self->emit_drop_prototypes(real);
             rewind(body);
             for (;;) {
                 char chunk[8192];
@@ -2407,7 +2426,7 @@ impl PipeOps for Pipe {
                 if (!got) break;
                 fwrite(chunk, 1, got, real);
             }
-            self->emit_drop_bodies(sym, real);
+            self->emit_drop_bodies(real);
 
             /* file-scope objects/arrays: their vptr writes were collected while
                scanning and are emitted here, after the types and vtables they
@@ -2431,7 +2450,8 @@ impl PipeOps for Pipe {
     /* Emit an impl method body. `self` is registered as a pointer to `S` and the
        method's parameters are registered, then every line runs through the same
        pipeline as top-level code; only the identifier `self` is renamed to `_self`. */
-    void emit_body(struct SymTab *sym, FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params) {
+    void emit_body(FILE *f, size_t bstart, size_t blen, const Struct *S, const char *params) {
+        struct SymTab *sym = self->sym;
         size_t i, j, n = blen;
         int minind = 1 << 30;
         size_t *ls, *le;
@@ -2486,7 +2506,7 @@ impl PipeOps for Pipe {
         sym->vars[vi].arr = 0;
         sym->vars[vi].iface = 0;
         sym->vars[vi].tr = -1;
-        self->register_body_params(sym, params);
+        self->register_body_params(params);
 
         self->line_break();   /* anchor: the first body line always carries a #line */
         for (k = first; k <= last; k++) {
@@ -2501,11 +2521,11 @@ impl PipeOps for Pipe {
             g_hoist.p[0] = 0;
 
             while (t < le[k] && (g_src[t] == ' ' || g_src[t] == '\t')) t++;
-            if (t >= le[k]) { fputc('\n', f); self->scope_track(sym, ls[k], le[k]); continue; }
+            if (t >= le[k]) { fputc('\n', f); self->scope_track(ls[k], le[k]); continue; }
 
             content = ls[k] + (size_t)minind;
             line = xstrndup(g_src + content, le[k] - content);
-            out = self->transform_line(sym, line);
+            out = self->transform_line(line);
             if (g_hoist.n == 0) self->line_at(f, (size_t)g_cur_line);
             else self->emit_hoisted();
             buf_init(&sb);
@@ -2524,7 +2544,7 @@ impl PipeOps for Pipe {
             free(line);
             free(out);
             free(sb.p);
-            self->scope_track(sym, ls[k], le[k]);
+            self->scope_track(ls[k], le[k]);
         }
         self->line_break();
 
@@ -2542,7 +2562,8 @@ impl PipeOps for Pipe {
 
     /* Register the impl method's parameters that are declared with a known struct
        type, so calls on them dispatch inside the body like top-level parameters do. */
-    void register_body_params(struct SymTab *sym, const char *params) {
+    void register_body_params(const char *params) {
+        struct SymTab *sym = self->sym;
         const char *p = params;
         (void)self;  /* the body only reads the symbol table, not the receiver */
         while (p && *p) {
@@ -2669,7 +2690,8 @@ impl RewriteOps for Pipe {
     /* Append `e` boxed into the interface value of trait `tr`, or verbatim when
        it already is an interface value of that trait. Dies when the expression's
        type cannot be inferred (only a variable or `&variable` can be boxed). */
-    void box_to_iface(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos) {
+    void box_to_iface(Buf *out, const char *e, size_t len, int tr, size_t pos) {
+        struct SymTab *sym = self->sym;
         char id[MAX_NAME];
         const char *q = e, *r;
         size_t ql = len, k = 0;
@@ -2740,7 +2762,8 @@ impl RewriteOps for Pipe {
        concrete object is boxed into an anonymous fat pointer whose address is
        stored, so its lifetime is the enclosing block; an expression that already
        is an interface value has its address taken (or reused, for `&v`). */
-    void box_to_iface_ptr(struct SymTab *sym, Buf *out, const char *e, size_t len, int tr, size_t pos) {
+    void box_to_iface_ptr(Buf *out, const char *e, size_t len, int tr, size_t pos) {
+        struct SymTab *sym = self->sym;
         char id[MAX_NAME];
         const char *q = e, *r;
         size_t ql = len, k = 0;
@@ -2786,7 +2809,7 @@ impl RewriteOps for Pipe {
         }
         /* a concrete object: store the address of the boxed copy */
         buf_putc(out, '&');
-        self->box_to_iface(sym, out, e, len, tr, pos);
+        self->box_to_iface(out, e, len, tr, pos);
     }
 
     /* The body of an aggregate initialiser (the text between the braces) is
@@ -2795,7 +2818,7 @@ impl RewriteOps for Pipe {
        `struct Add s = { .l = a, .r = b };` builds the same fat pointers
        `s.l = a; s.r = b;` do. Non-interface fields, positional items and nested
        braces pass through untouched. */
-    void box_agg_fields(struct SymTab *sym, Buf *out, const Struct *S, const char *inner, size_t it) {
+    void box_agg_fields(Buf *out, const Struct *S, const char *inner, size_t it) {
         size_t i = 0;
         while (i < it) {
             size_t j = i, depth = 0, vstart, pn, ms;
@@ -2840,8 +2863,8 @@ impl RewriteOps for Pipe {
                 size_t vs = vstart;
                 while (vs < j && isspace((unsigned char)inner[vs])) vs++;
                 buf_putn(out, inner + i, (vs > i) ? vs - i : 0);   /* ".name = " */
-                if (isptr) self->box_to_iface_ptr(sym, out, inner + vs, j - vs, ftr, 0);
-                else self->box_to_iface(sym, out, inner + vs, j - vs, ftr, 0);
+                if (isptr) self->box_to_iface_ptr(out, inner + vs, j - vs, ftr, 0);
+                else self->box_to_iface(out, inner + vs, j - vs, ftr, 0);
             }
             if (j < it) buf_putc(out, ',');
             i = j + 1;
@@ -2851,7 +2874,8 @@ impl RewriteOps for Pipe {
     /* "Greeter g;" / "Greeter g = p;" / "Greeter *g;" — an interface-value
        declaration. A bare one starts as a null fat pointer; an initialised one
        boxes its expression. */
-    char *try_iface_decl(struct SymTab *sym, const char *line, int tr, size_t ws, const char *after) {
+    char *try_iface_decl(const char *line, int tr, size_t ws, const char *after) {
+        struct SymTab *sym = self->sym;
         char var[MAX_NAME];
         size_t vk = 0;
         const char *p = after;
@@ -2918,7 +2942,7 @@ impl RewriteOps for Pipe {
                     die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
                 while (e[el] && e[el] != ';') el++;
                 buf_puts(&b, " = ");
-                self->box_to_iface_ptr(sym, &b, e, el, tr, 0);
+                self->box_to_iface_ptr(&b, e, el, tr, 0);
                 buf_puts(&b, e + el);
             } else {
                 die(0, "unsupported declaration of interface type '%s'", sym->traits[tr].name);
@@ -2947,7 +2971,7 @@ impl RewriteOps for Pipe {
             } else {
                 while (e[el] && e[el] != ';') el++;
                 buf_puts(&b, " = ");
-                self->box_to_iface(sym, &b, e, el, tr, 0);
+                self->box_to_iface(&b, e, el, tr, 0);
                 buf_puts(&b, e + el);
             }
         } else {
@@ -2968,7 +2992,7 @@ impl RewriteOps for Pipe {
 
     /* "return <object>;" inside a function whose return type is an interface
        value: the returned object is boxed the same way an assignment is. */
-    char *try_return(struct SymTab *sym, const char *line) {
+    char *try_return(const char *line) {
         const char *p = line, *e;
         size_t el = 0;
         Buf b;
@@ -2985,7 +3009,7 @@ impl RewriteOps for Pipe {
 
         buf_init(&b);
         buf_putn(&b, line, (size_t)(e - line));
-        self->box_to_iface(sym, &b, e, el, g_cur_rettr, 0);
+        self->box_to_iface(&b, e, el, g_cur_rettr, 0);
         buf_puts(&b, e + el);
         return b.p;
     }
@@ -2993,7 +3017,8 @@ impl RewriteOps for Pipe {
     /* "g = p;" — assigning into an interface value (the target type is the
        variable), or into an interface-value field ("s.l = p;", boxed through the
        field's trait). */
-    char *try_iface_assign(struct SymTab *sym, const char *line) {
+    char *try_iface_assign(const char *line) {
+        struct SymTab *sym = self->sym;
         const char *p = line, *r;
         char id[MAX_NAME];
         size_t k = 0, el = 0, fend = 0;
@@ -3022,7 +3047,7 @@ impl RewriteOps for Pipe {
                 if (e2 == (size_t)-1) return NULL;
                 fpos = e2;
             }
-            if (!self->walk_to_iface_field(sym, line, strlen(line), fpos,
+            if (!self->walk_to_iface_field(line, strlen(line), fpos,
                                            sym->vars[vi].s, aptr, &ftr, &fend, &ifptr))
                 return NULL;
             r = line + fend;
@@ -3053,8 +3078,8 @@ impl RewriteOps for Pipe {
 
         buf_init(&b);
         buf_putn(&b, line, (size_t)(r - line));
-        if (ifptr) self->box_to_iface_ptr(sym, &b, r, el, ftr, 0);
-        else self->box_to_iface(sym, &b, r, el, ftr, 0);
+        if (ifptr) self->box_to_iface_ptr(&b, r, el, ftr, 0);
+        else self->box_to_iface(&b, r, el, ftr, 0);
         buf_puts(&b, r + el);
         return b.p;
     }
@@ -3062,7 +3087,8 @@ impl RewriteOps for Pipe {
     /* "delete p;" -> "if (p) free(p);" for a registered pointer object. Any
        pointer is accepted, so `delete buf;` on a char * frees it too; a
        registered *non*-pointer is left as-is -- that is user error. */
-    char *try_delete(struct SymTab *sym, const char *line) {
+    char *try_delete(const char *line) {
+        struct SymTab *sym = self->sym;
         const char *p = line;
         size_t ind_len;
         char id[MAX_NAME];
@@ -3110,8 +3136,8 @@ impl RewriteOps for Pipe {
         return b.p;
     }
 
-    char *transform_line(struct SymTab *sym, const char *line) {
-        char *del = self->try_delete(sym, line);
+    char *transform_line(const char *line) {
+        char *del = self->try_delete(line);
         char *ret;
         char *asg;
         char *decl;
@@ -3120,22 +3146,23 @@ impl RewriteOps for Pipe {
         char *res;
 
         if (del) return del;
-        ret = self->try_return(sym, line);
+        ret = self->try_return(line);
         if (ret) return ret;
-        asg = self->try_iface_assign(sym, line);
+        asg = self->try_iface_assign(line);
         if (asg) return asg;
 
-        decl = self->try_var_decl(sym, line);
+        decl = self->try_var_decl(line);
         base = decl ? decl : line;
         buf_init(&out);
-        self->transform_calls(sym, base, &out);
+        self->transform_calls(base, &out);
         free(decl);
         res = out.p;
         return res;
     }
 
     /* "<Struct> x = {...};" / "struct <Struct> x = {...};" -> add struct + vptr */
-    char *try_var_decl(struct SymTab *sym, const char *line) {
+    char *try_var_decl(const char *line) {
+        struct SymTab *sym = self->sym;
         size_t i = 0, ws, vk;
         const char *p;
         char cname[MAX_NAME * 2], name[MAX_NAME], var[MAX_NAME];
@@ -3169,7 +3196,7 @@ impl RewriteOps for Pipe {
             /* the type names a trait, not a struct: an interface value */
             Trait *TR = sym->find_trait(qual ? cname : name);
             if (!TR) return NULL;
-            return self->try_iface_decl(sym, line, (int)(TR - sym->traits), ws, p);
+            return self->try_iface_decl(line, (int)(TR - sym->traits), ws, p);
         }
         while (*p == ' ' || *p == '\t') p++;
 
@@ -3225,7 +3252,7 @@ impl RewriteOps for Pipe {
                 for (t = 0; t < ws && t + 1 < sizeof ind; t++) ind[t] = ' ';
                 ind[t] = 0;
                 buf_putc(&b, '\n');
-                self->put_heap_vpts(sym, &b, S, pv, ind);
+                self->put_heap_vpts(&b, S, pv, ind);
             }
             return b.p;
         }
@@ -3299,7 +3326,7 @@ impl RewriteOps for Pipe {
                     buf_puts(tgt, "    for (unsigned long __ct_i = 0; __ct_i < ");
                     buf_puts(tgt, cnt);
                     buf_puts(tgt, "; __ct_i++) {\n");
-                    self->put_nested_assignments(sym, tgt, S, recv, ind2, 1, 0);
+                    self->put_nested_assignments(tgt, S, recv, ind2, 1, 0);
                     buf_puts(tgt, ind);
                     buf_puts(tgt, "    }\n");
                     buf_puts(tgt, ind);
@@ -3352,7 +3379,7 @@ impl RewriteOps for Pipe {
                         size_t it = trim_right_len(inner, strlen(inner));
                         int first = 1;
                         buf_putn(&b, rest, (size_t)(e - rest) + 1);        /* " = {" */
-                        self->box_agg_fields(sym, &b, S, inner, it);
+                        self->box_agg_fields(&b, S, inner, it);
                         if (it) buf_puts(&b, ", ");
                         else buf_putc(&b, ' ');
                         self->put_own_vptr(&b, S, &first);
@@ -3396,7 +3423,7 @@ impl RewriteOps for Pipe {
                 ind[k] = 0;
                 buf_putc(&b, '\n');
             }
-            self->put_nested_assignments(sym, tgt, S, var, ind, !done, 0);
+            self->put_nested_assignments(tgt, S, var, ind, !done, 0);
             if (!atfile && b.n > 0 && b.p[b.n - 1] == '\n') {
                 b.n--;
                 b.p[b.n] = 0;
@@ -3406,7 +3433,8 @@ impl RewriteOps for Pipe {
         return b.p;
     }
 
-    void transform_calls(struct SymTab *sym, const char *s, Buf *out) {
+    void transform_calls(const char *s, Buf *out) {
+        struct SymTab *sym = self->sym;
         size_t i = 0, n = strlen(s);
         while (i < n) {
             char c = s[i];
@@ -3562,8 +3590,9 @@ impl RewriteOps for Pipe {
                             const char *tr = NULL;
                             int cur = FS->retstruct, need_amp = 0;
                             size_t rend = 0, mp = 0;
-                            if (self->walk_method(sym, s, n, cp + 1, cur, FS->retptr, &cur, &need_amp,
+                            if (self->walk_method(s, n, cp + 1, cur, FS->retptr, &cur, &need_amp,
                                                   &tr, &rend, &mp, mem)) {
+        struct SymTab *sym = self->sym;
                                 size_t fs = 0, eq, saved_off;
                                 char tmp[MAX_NAME], low[MAX_NAME], *recv;
                                 Buf ini;
@@ -3588,7 +3617,7 @@ impl RewriteOps for Pipe {
                                 buf_init(&ini);
                                 saved_off = g_line_off;
                                 g_line_off += i;
-                                self->transform_calls(sym, recv, &ini);
+                                self->transform_calls(recv, &ini);
                                 g_line_off = saved_off;
                                 free(recv);
 
@@ -3658,7 +3687,7 @@ impl RewriteOps for Pipe {
                                 bb++;
                             }
                             tr = (pi < (size_t)FS->nparams) ? FS->ptrait[pi] : -1;
-                            if (tr >= 0 && bb > a) self->box_to_iface(sym, &ab, s + a, bb - a, tr, 0);
+                            if (tr >= 0 && bb > a) self->box_to_iface(&ab, s + a, bb - a, tr, 0);
                             else buf_putn(&ab, s + a, bb - a);
                             pi++;
                             if (bb < cp) {
@@ -3715,7 +3744,7 @@ impl RewriteOps for Pipe {
                         }
                     }
                     if (!unclosed)
-                        hit = self->walk_method(sym, s, n, pos, cur, isptr, &cur, &need_amp,
+                        hit = self->walk_method(s, n, pos, cur, isptr, &cur, &need_amp,
                                                 &tr, &rend, &mp, mem);
                     if (hit) {
                         size_t z = mp + 1;
@@ -3743,7 +3772,8 @@ impl RewriteOps for Pipe {
                         char meth[MAX_NAME];
                         int ftr = -1, ifptr = 0, ok = 0;
                         size_t fend = 0, k2 = 0;
-                        if (self->walk_to_iface_field(sym, s, n, pos, cur, isptr, &ftr, &fend, &ifptr)) {
+                        if (self->walk_to_iface_field(s, n, pos, cur, isptr, &ftr, &fend, &ifptr)) {
+        struct SymTab *sym = self->sym;
                             if (ifptr) {
                                 if (fend + 1 < n && s[fend] == '-' && s[fend + 1] == '>') k2 = fend + 2;
                             } else {
@@ -3793,9 +3823,10 @@ impl RewriteOps for Pipe {
        rvalue-receiver hoist needs), where the receiver text ends (*out_rend) and
        where the argument list starts (*mp). `isptr` flips as the walk crosses
        pointer fields, so the hook picks `&recv` or `recv`. */
-    int walk_method(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur, int isptr,
+    int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr,
                     int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend,
                     size_t *mp, char *memb) {
+        struct SymTab *sym = self->sym;
         char mem[MAX_NAME];
 
         (void)self;  /* the body only consults the symbol table for the method */
@@ -3859,8 +3890,9 @@ impl RewriteOps for Pipe {
        *out_end (where the receiver text ends, i.e. after the field name -- and
        after the `[<expr>]` when the field is an interface array) and *out_ifptr
        (the field is a `struct T *` pointer, so the hop uses '->'). */
-    int walk_to_iface_field(struct SymTab *sym, const char *s, size_t n, size_t pos, int cur,
+    int walk_to_iface_field(const char *s, size_t n, size_t pos, int cur,
                             int isptr, int *out_tr, size_t *out_end, int *out_ifptr) {
+        struct SymTab *sym = self->sym;
         (void)self;  /* the body only consults the symbol table for the field */
         for (;;) {
             size_t ms, k, ml;
@@ -3950,7 +3982,8 @@ impl RewriteOps for Pipe {
 
     /* roll sym->nvars back at every closing brace so locals stay in their own scope;
        string and comment contents are ignored */
-    void scope_track(struct SymTab *sym, size_t ls, size_t le) {
+    void scope_track(size_t ls, size_t le) {
+        struct SymTab *sym = self->sym;
         size_t p = ls;
         (void)self;  /* the body tracks the symbol table, not the receiver */
         while (p < le) {
@@ -3986,7 +4019,8 @@ impl RewriteOps for Pipe {
     /* Ordinary function definition or prototype: qualify the struct types in its
        return type and parameters, record the signature, and register the parameters
        when a body follows. Returns a new line, or NULL when `line` is not one. */
-    char *parse_func_sig(struct SymTab *sym, const char *line, size_t ls, int *has_body, size_t *body_abs) {
+    char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs) {
+        struct SymTab *sym = self->sym;
         size_t n = strlen(line), lpo, he, ns, rt, rp, i, end;
         const char *lp;
         char name[MAX_NAME], tok[MAX_NAME];
@@ -4051,7 +4085,7 @@ impl RewriteOps for Pipe {
 
         {
             char rname[MAX_NAME];
-            ret_struct = self->analyse_param(sym, line, rt, &ret_ia, &ret_ib, ret_cbase,
+            ret_struct = self->analyse_param(line, rt, &ret_ia, &ret_ib, ret_cbase,
                                              &ret_ns, rname, &ret_rptr, &ret_tr);
         }
         buf_init(&b);
@@ -4071,7 +4105,7 @@ impl RewriteOps for Pipe {
                 else if (c == ',' && depth == 0) break;
                 j++;
             }
-            sidx = self->analyse_param(sym, line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
+            sidx = self->analyse_param(line + i, j - i, &pia, &pib, pcbase, &pns, pname, &ptr, &ptrtr);
             self->emit_qualified_type(&b, line + i, j - i, pia, pib, pcbase, pns, ptrtr >= 0);
 
             /* an interface *array* parameter (`Expr xs[]`) carries no name out of
@@ -4231,7 +4265,8 @@ int ct_compile_file(const char *in, const char *outc, int multi, int line_force,
     int err_base = g_nerrors;
     g_line_force = line_force;
     g_json = json;
-    rc = g_pipe.compile_file(&g_sym, in, outc, multi);
+    g_pipe.sym = &g_sym;
+    rc = g_pipe.compile_file(in, outc, multi);
     if (g_nerrors > err_base) {
         /* close the multi-error report with a count; the failure itself travels
            back through the exit code */
