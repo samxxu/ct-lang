@@ -3,7 +3,7 @@
 本目录汇总 [reports/repo-review](../reports/repo-review/repo-review.md) 的审查发现，**每条 issue 一个 markdown 文件，按模块分目录存放**。
 
 - 源码锚点：commit `8aac450`（2026-10-17）——文中行号是该 commit 的快照。
-- 状态：**11 条已修复、1 条部分修复**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
+- 状态：**12 条已全部修复**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -51,7 +51,7 @@
 
 ## 修复进展（2026-10-17）
 
-11 条已修复、1 条部分修复：
+12 条已全部修复：
 
 | 提交 | 覆盖 |
 | --- | --- |
@@ -59,13 +59,7 @@
 | `b6b3dc4` docs: fix reachability and stale to-dos | DOC-4、DOC-5、TEST-3、SH-1 |
 | `1a1ae91` test(cli): cover two driver failure sites | TEST-1、TEST-2 |
 | `8765c83` chore(ci): add the aggregate gate entry point | CI-1、CI-2（`selfhost/check-all.sh`） |
-| `54c3713` refactor(selfhost): give the symtab to Pipe | SH-2（第一步：`sym` 收进 `Pipe`） |
-
-部分修复（保留的设计取舍）：
-
-| ID | 说明 |
-| --- | --- |
-| SH-2 | `struct SymTab *sym` 已从 32 个方法收进 `Pipe`；剩下的文件作用域 static（扫描状态 / 诊断表 / 缓冲）被顶层自由函数直接读取，移进对象需要给设施层全部加参数，成本高于收益。若 Phase 5 引入 AST，上下文对象应随之整体设计 |
+| `54c3713` … `fe6c29f`（6 个 refactor 提交） | SH-2：`sym` 进 `Pipe`；Drop 表/`Warn` 表进 `SymTab`；输出缓冲与扫描状态进 `Pipe`；driver 全局进 `struct Build`。static 52 → 11（剩余为扫描上下文、`die` 恢复协议与三个单例） |
 
 验证：`bash selfhost/check-all.sh` 六道硬关卡全绿（acceptance 18 pass / 1 pending，预期）；`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。
 
