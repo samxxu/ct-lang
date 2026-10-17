@@ -156,9 +156,8 @@ static char g_ns[MAX_NAME];
    `emit_hoisted`), and `self->ntmp` keeps the temp names unique. */
 
 /* Conservative, path-insensitive leak warnings (no suppression in this version).
-   Warnings are collected per invocation and printed once, either human-readable
-   (stderr, default) or as JSON (`--diagnostics=json`). An error still `die`s;
-   warnings never change the exit code. */
+   The collected table and the format flag live on `struct SymTab` (the
+   `SymTabOps` methods own them); an error still `die`s. */
 typedef struct {
     const char *file;
     size_t line;
@@ -168,23 +167,18 @@ typedef struct {
     char sname[MAX_NAME];              /* mismatch: struct */
     char msg[MAX_PARAM];               /* mismatch: what differs */
 } Warn;
-static Warn g_warns[MAX_WARNS];
-static int  g_nwarns = 0;
-static int  g_json    = 0;             /* 1 with `--diagnostics=json` */
 
 /* Multi-error recovery: `die` reports and, while a guard is installed, longjmps
    back to it instead of exiting. `compile_range`'s loop installs the guard and
    resynchronises to the next line start or `}` (see `recover_pos`), so one bad
    construct no longer hides the rest of the file. Stops for good past
-   MAX_ERRORS (cascading reports stop being useful). */
+   MAX_ERRORS (cascading reports stop being useful). These four stay file-scope
+   because `die` — a free helper with no receiver — reads and writes them; the
+   loop's own bookkeeping lives on `struct Pipe`. */
 static jmp_buf g_err_jmp;              /* the guard the loop set */
 static int     g_guarded = 0;          /* 1 while that guard is live */
 static int     g_nerrors = 0;          /* errors reported so far, whole run */
 static size_t  g_err_pos = 0;          /* source offset of the last report */
-static size_t  g_guard_pos = 0;        /* loop position the live guard started at */
-static size_t  g_guard_end = 0;        /* its range end */
-static int     g_safe_nvars = 0;       /* invariants a longjmp may skip past */
-static int     g_safe_nscope = 0;
 
 /* ---------------------------------------------------------------- util */
 
@@ -449,6 +443,13 @@ struct SymTab {
        (`drop_used`). Part of the symbol table, not a loose global. */
     int     own_drop[MAX_STRUCT];
     int     nown_drop;
+    /* Collected warnings (leak / signature mismatch) and the `--diagnostics`
+       format. They live here because `warn_add`, `warn_add_sig` and
+       `emit_warnings` are `SymTabOps` methods. Warnings never change the exit
+       code. */
+    Warn    warns[MAX_WARNS];
+    int     nwarns;
+    int     json;
 } use SymTabOps;
 
 impl SymTabOps for SymTab {
@@ -533,8 +534,8 @@ impl SymTabOps for SymTab {
        dropped entries would understate the leaks it was asked to find. */
     void warn_add(int vi) {
         Warn *w;
-        if (g_nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
-        w = &g_warns[g_nwarns++];
+        if (self->nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
+        w = &self->warns[self->nwarns++];
         w->file = g_path;
         w->line = self->vars[vi].own_line;
         w->kind = 0;
@@ -547,8 +548,8 @@ impl SymTabOps for SymTab {
                       const char *stype, const char *msg) {
         Warn *w;
         (void)self;  /* the warning table is global, not per-receiver */
-        if (g_nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
-        w = &g_warns[g_nwarns++];
+        if (self->nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
+        w = &self->warns[self->nwarns++];
         w->file = g_path;
         w->line = line;
         w->kind = 1;
@@ -619,11 +620,11 @@ impl SymTabOps for SymTab {
     void emit_warnings(FILE *jsonf, FILE *textf) {
         int i;
         (void)self;  /* the warning table is global, not per-receiver */
-        if (!g_nwarns) return;
-        if (g_json) {
+        if (!self->nwarns) return;
+        if (self->json) {
             fputs("{\"warnings\":[", jsonf);
-            for (i = 0; i < g_nwarns; i++) {
-                Warn *w = &g_warns[i];
+            for (i = 0; i < self->nwarns; i++) {
+                Warn *w = &self->warns[i];
                 if (i) fputc(',', jsonf);
                 if (w->kind == 1) {
                     fputs("{\"type\":\"signature_mismatch\",\"file\":\"", jsonf);
@@ -649,8 +650,8 @@ impl SymTabOps for SymTab {
             }
             fputs("]}\n", jsonf);
         } else {
-            for (i = 0; i < g_nwarns; i++) {
-                Warn *w = &g_warns[i];
+            for (i = 0; i < self->nwarns; i++) {
+                Warn *w = &self->warns[i];
                 if (w->kind == 1)
                     fprintf(textf, "%s:%ld: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
                             w->file, (long)w->line, w->var, w->tname, w->sname, w->msg);
@@ -983,6 +984,13 @@ struct Pipe {
     int    line_force;
     int    cur_line;
     long   line_next;
+    /* Multi-error recovery bookkeeping that only `compile_range` reads. The
+       guard itself (`g_err_jmp` / `g_guarded` / `g_nerrors` / `g_err_pos`) stays
+       file-scope: `die` is a free helper and must reach it. */
+    size_t guard_pos;
+    size_t guard_end;
+    int    safe_nvars;
+    int    safe_nscope;
     /* Output state that belongs to one compile: the per-line hoist buffer and its
        temp counter, the file-scope constructor accumulator, the `#include`s the
        driver pre-loads, the header include guard, and the suggested cc command. */
@@ -2007,18 +2015,18 @@ impl PipeOps for Pipe {
             /* One guard per construct: `die` reports and jumps back here, the loop
                resynchronises past the next `}` or line start, and the invariants a
                jump may skip past are put back before it does. */
-            g_guard_pos = pos;
-            g_guard_end = end;
-            g_safe_nvars = sym->nvars;
-            g_safe_nscope = self->nscope;
+            self->guard_pos = pos;
+            self->guard_end = end;
+            self->safe_nvars = sym->nvars;
+            self->safe_nscope = self->nscope;
             if (setjmp(g_err_jmp) != 0) {
                 g_guarded = 1;
-                sym->nvars = g_safe_nvars;
-                self->nscope = g_safe_nscope;
+                sym->nvars = self->safe_nvars;
+                self->nscope = self->safe_nscope;
                 self->body_abs = 0;
-                pos = self->recover_pos(g_err_pos > g_guard_pos ? g_err_pos : g_guard_pos,
-                                        g_guard_end);
-                if (pos <= g_guard_pos) pos = g_guard_pos + 1;
+                pos = self->recover_pos(g_err_pos > self->guard_pos ? g_err_pos : self->guard_pos,
+                                        self->guard_end);
+                if (pos <= self->guard_pos) pos = self->guard_pos + 1;
                 continue;
             }
             g_guarded = 1;
@@ -4263,7 +4271,7 @@ int ct_compile_file(const char *in, const char *outc, int multi, int line_force,
     int rc;
     int err_base = g_nerrors;
     g_pipe.line_force = line_force;
-    g_json = json;
+    g_sym.json = json;
     g_pipe.sym = &g_sym;
     rc = g_pipe.compile_file(in, outc, multi);
     if (g_nerrors > err_base) {
