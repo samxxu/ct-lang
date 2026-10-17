@@ -1,9 +1,11 @@
 # 审查发现的问题（issues）
 
-本目录汇总 [reports/repo-review](../reports/repo-review/repo-review.md) 的审查发现，**每条 issue 一个 markdown 文件，按模块分目录存放**。
+本目录汇总两轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）与
+[reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）。
+**每条 issue 一个 markdown 文件，按模块分目录存放**。
 
-- 源码锚点：commit `8aac450`（2026-10-17）——文中行号是该 commit 的快照。
-- 状态：**12 条已全部修复**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）——各文件行号以其自身锚点为准。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）。逐条状态见各文件的状态行。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -17,6 +19,10 @@
 | DOC-3 | Medium | AGENTS §6 称「五层覆盖」不实（实为 7 层），且未列 CT 线关卡 | [agents-dod-layer-count.md](docs/agents-dod-layer-count.md) |
 | DOC-4 | Medium | architecture.md 断言多个 `die` 点「不可达」，其中 2 处实测可达 | [architecture-unreachable-claim.md](docs/architecture-unreachable-claim.md) |
 | DOC-5 | Low | roadmap.md 残留「待做 / PENDING」条目，已被后续进展取代 | [roadmap-stale-todo.md](docs/roadmap-stale-todo.md) |
+| DOC-6 | Medium | 冻结期改动登记只记 2 次，实际 `ctc.c` 有 5 次（含 4 次 bump） | [freeze-register-incomplete.md](docs/freeze-register-incomplete.md) |
+| DOC-7 | Medium | README / AGENTS 仍写「当前命令 `ctc`」，与 Phase 7 矛盾 | [naming-command-stale.md](docs/naming-command-stale.md) |
+| DOC-8 | Medium | README CLI 表缺 `-I` / `--line` / `--ns-root` / `--diagnostics` | [readme-cli-flags-missing.md](docs/readme-cli-flags-missing.md) |
+| DOC-9 | Medium | language-spec 范围与时态过期（仍称 L2 语法「正在重做」） | [language-spec-scope-stale.md](docs/language-spec-scope-stale.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -25,6 +31,9 @@
 | TEST-1 | Medium | `ctc.c:2837`（cannot create a temporary file）可达但无负例 | [ctc-2837-tmpfile-not-covered.md](testing/ctc-2837-tmpfile-not-covered.md) |
 | TEST-2 | Medium | `ctc.c:2708`（cannot read）可达但无负例 | [ctc-2708-cannot-read-not-covered.md](testing/ctc-2708-cannot-read-not-covered.md) |
 | TEST-3 | Low | `ctc.c:1491`（nested field path too long）探针未复现，文档却称不可达 | [ctc-1491-nested-path-not-reproduced.md](testing/ctc-1491-nested-path-not-reproduced.md) |
+| TEST-4 | Low | Phase 7 的 `ct` 身份只测了一半（`ct build` / `-h` / `ctc compile` 未测） | [phase7-ct-identity-coverage.md](testing/phase7-ct-identity-coverage.md) |
+| TEST-5 | Medium | L2 驱动的错误分支仍无负例（10+ 个站点） | [l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) |
+| TEST-6 | Medium | `--emit-map <file>` 成功路径没有用例 | [emit-map-file-path-untested.md](testing/emit-map-file-path-untested.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -39,15 +48,16 @@
 | --- | --- | --- | --- |
 | SH-1 | Medium | `MAX_FUNCS` 余量极小，是 CT 线最紧的扩展瓶颈 | [max-funcs-headroom.md](selfhost/max-funcs-headroom.md) |
 | SH-2 | Info | L2 状态无归属：`SymTab *sym` 参数化 63 次 + 52 处文件作用域 static | [unowned-state-sym-param.md](selfhost/unowned-state-sym-param.md) |
+| SH-3 | Low | 以 `ct` 运行时驱动错误仍打印 `ctc:` 前缀（37 处硬编码） | [ct-error-prefix.md](selfhost/ct-error-prefix.md) |
 
 ## 汇总
 
-- High: 4（DOC-1、DOC-2、CI-1、CI-2）
-- Medium: 5（DOC-3、DOC-4、TEST-1、TEST-2、SH-1）
-- Low: 2（DOC-5、TEST-3）
-- Info: 1（SH-2）
+- High: 4（DOC-1、DOC-2、CI-1、CI-2）——均已修复
+- Medium: 11（DOC-3、DOC-4、TEST-1、TEST-2、SH-1 已修复；DOC-6–9 已修复；TEST-5、TEST-6 部分覆盖，剩余项见各自文件）
+- Low: 4（DOC-5、TEST-3 已修复；TEST-4 已修复；SH-3 已决策保持 `ctc:`）
+- Info: 1（SH-2，已修复）
 
-合计 12 条。
+合计 20 条：已处理 20（其中 TEST-5 / TEST-6 为部分覆盖，未覆盖项已在文件内列明）。
 
 ## 修复进展（2026-10-17）
 
@@ -74,3 +84,27 @@
 - glossary 的 `layer` 清单漏 `dialect`；`map` / 反向映射表仍按「排期 Phase 6（D8）」描述 → 已按 6.1 / 6.5 / 6.6 的实际状态订正，设计决策范围补到 D1–D20。
 
 以上均为文档订正，未触碰 `ctc.c` / `selfhost/**` / `test/**`。
+
+## Phase 7 复审（2026-10-17，锚点 `ec97f99`）
+
+完整报告见 [reports/phase7-review](../reports/phase7-review/phase7-review.md)。所有硬关卡实测绿色：
+
+- `./test/run.sh` → `118 passed, 0 failed`（八层：1/1/25/6/1/60/6/18）
+- `bash selfhost/check-all.sh` → `OK (6 hard gates green)`，`SCRIPT_EXIT=0`
+- `check-goldens` 25/25 + L1′ 25 + L2 25 + 不动点 2；`check-archive` 3/10/4/32；
+  `check-m2a` PASS；`ct-tour` OK；grammar 20/20；acceptance 19 pass / 1 pending（p18 已知）
+
+本轮新增 8 条，**已于 2026-10-18 全部处理**：
+
+| ID | 严重度 | 摘要 | 处理 |
+| --- | --- | --- | --- |
+| [DOC-6](docs/freeze-register-incomplete.md) | Medium | 冻结登记只写 2 次，实际 `ctc.c` 有 5 次改动（4 次 bump 未登记） | ✅ AGENTS §2 增加「版本 bump 另行登记」段，指向 roadmap 与 tag |
+| [DOC-7](docs/naming-command-stale.md) | Medium | README L8 / AGENTS L17、L146 仍写「当前命令 `ctc`」 | ✅ 统一为「入口命令 `ct`，`ctc` 为兼容别名」 |
+| [DOC-8](docs/readme-cli-flags-missing.md) | Medium | README CLI 表缺 `-I` / `--line` / `--ns-root` / `--diagnostics` | ✅ 中英表各补 4 行 |
+| [DOC-9](docs/language-spec-scope-stale.md) | Medium | spec 仍称 L2 语法「正在重做」 | ✅ 改契约：spec 覆盖 L0/L2 共有语法，L2 独有给链接；AGENTS §5 分层 |
+| [TEST-4](testing/phase7-ct-identity-coverage.md) | Low | `ct build` / `ct -h` / `ctc compile` 无断言 | ✅ ct-tour 第 7 步补 5 类断言 |
+| [TEST-5](testing/l2-driver-errors-untested.md) | Medium | L2 驱动 10+ 个错误分支无负例 | 🟡 补 6 条（`-o`/`-I`/diagnostics/std/cannot open/short read）；build 缺参与上限类留待 |
+| [TEST-6](testing/emit-map-file-path-untested.md) | Medium | `--emit-map <file>` 成功路径无用例 | 🟡 补 compile 写盘 `map_file` + `expected.map` 断言；build 落盘留待 |
+| [SH-3](selfhost/ct-error-prefix.md) | Low | 以 `ct` 运行时错误仍打印 `ctc:` | ✅ 决策保持 `ctc:`，README + roadmap 记录 |
+
+验证（2026-10-18）：`check-archive` 39 pass / 0 regression（新增 7 个 designed 用例）；`ct-tour` OK（含新增身份断言）；手工三件套通过。
