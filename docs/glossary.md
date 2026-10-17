@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | ct（CT = *C with Traits*） | `ct`，源文件后缀 `.ct` | 语言/项目名 |
 | ctc | `ctc` | 今天的编译器命令 |
-| ct（最终单入口） | `ct` | 已定形态：单入口 `ct`，`ctc` 保留为兼容别名；**尚未落地** |
+| ct（最终单入口） | `ct` | 已定形态：单入口 `ct`，`ctc` 保留为兼容别名；**7.1–7.2 已落地**（L2 二进制名为 `ct` 即可用 `ct …`；安装形态 `ct` + `ln -s ct ctc`，不改 banner） |
 | ct-lang | 仓库名 `ct-lang` | **仅是 GitHub 仓库名**，不是语言/命令/后缀 |
 
 > 禁止把 `ct` / `ctc` / `.ct` 写成 `ct-lang` / `ctlang` / `.ctlang`（AGENTS §7）。
@@ -102,7 +102,7 @@
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
-| 单入口 `ct`（single entry） | `ct` / `ct compile` / `ct build` | Phase 7.1：L2 二进制名为 `ct` 时以 `ct` 身份运行（`-v` 打印 `ct v…`）；`ctc` 仍是兼容别名，L0 种子仍叫 `ctc`；生成物 banner 仍写 `ctc`（L0/L1 冻结） |
+| 单入口 `ct`（single entry） | `ct` / `ct compile` / `ct build` | Phase 7.1–7.2：L2 二进制名为 `ct` 时以 `ct` 身份运行（`-v` 打印 `ct v…`）；安装形态 = 命名为 `ct` + `ln -s ct ctc`；`ctc` 仍是兼容别名，L0 种子仍叫 `ctc`；生成物 banner 仍写 `ctc`（L0/L1 冻结） |
 | 子命令 compile | `ct compile <in.ct> [-o out.c]` | 默认子命令（等价 `ctc <in.ct>`） |
 | 子命令 build | `ct build <in.ct>… [-o <dir>]` | 多文件驱动；只出 `.c`/`.h`，打印建议 `cc` 命令。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 输出选项 | `-o <file\|dir>` | |
@@ -167,7 +167,7 @@
 | --- | --- | --- |
 | ct (CT = *C with Traits*) | `ct`, source suffix `.ct` | the language / project |
 | ctc | `ctc` | today's compiler command |
-| ct (final single entry) | `ct` | decided shape: single-entry `ct`, `ctc` kept as a compatibility alias; **not implemented yet** |
+| ct (final single entry) | `ct` | decided shape: single-entry `ct`, `ctc` kept as a compatibility alias; **7.1–7.2 landed** (an L2 binary named `ct` answers to `ct …`; install shape `ct` + `ln -s ct ctc`, banner unchanged) |
 | ct-lang | repository name `ct-lang` | **only the GitHub repository name**, not the language / command / suffix |
 
 > Never write `ct` / `ctc` / `.ct` as `ct-lang` / `ctlang` / `.ctlang` (AGENTS §7).
@@ -253,7 +253,7 @@
 
 | Term | Form | Notes |
 | --- | --- | --- |
-| single entry `ct` | `ct` / `ct compile` / `ct build` | Phase 7.1: an L2 binary named `ct` runs under the `ct` identity (`-v` prints `ct v…`); `ctc` is still the compatibility alias and the L0 seed is still `ctc`; the generated banner still says `ctc` (L0/L1 frozen) |
+| single entry `ct` | `ct` / `ct compile` / `ct build` | Phase 7.1–7.2: an L2 binary named `ct` runs under the `ct` identity (`-v` prints `ct v…`); install shape = name it `ct` + `ln -s ct ctc`; `ctc` is still the compatibility alias and the L0 seed is still `ctc`; the generated banner still says `ctc` (L0/L1 frozen) |
 | the `compile` subcommand | `ct compile <in.ct> [-o out.c]` | the default subcommand (same as `ctc <in.ct>`) |
 | the `build` subcommand | `ct build <in.ct>… [-o <dir>]` | the multi-file driver; emits `.c`/`.h` and prints the suggested `cc` command. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | output option | `-o <file\|dir>` | |

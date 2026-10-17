@@ -60,6 +60,23 @@ gcc /tmp/greeter.c -o /tmp/greeter
 >
 > 命令的最终形态是单入口 `ct`（`ctc` 保留为兼容别名）。**Phase 7.1 已落地**：把 L2 产出的二进制命名为 `ct` 即可用 `ct …`（`ct compile` / `ct build`，默认子命令仍是 `compile`），`ctc` 仍是别名（可 `ln -s ct ctc`）。L0 种子（`ctc.c`）仍只叫 `ctc`；生成物 banner 继续写 `ctc`——L0/L1 已冻结且要求逐字节一致，改 banner 需同时解冻两层，故推迟。见 [docs/roadmap.md](docs/roadmap.md)。
 
+#### 单入口 `ct` 的构建与安装（Phase 7.2）
+
+`ct` 由 CT 线（L2）提供，**不引入构建系统或安装脚本**：把自举链编到 L2，把二进制命名为 `ct`，再用软链补上 `ctc` 别名即可（L0 种子本身也叫 `ctc`，故别名要装到**独立目录**，不要和种子同名同处）。
+
+```sh
+gcc -Wall -Wextra -std=c99 ctc.c -o ctc                      # L0 种子（唯一的 C 构建，名字是 ctc）
+./ctc selfhost/ctc.ct -o /tmp/ctc-l1.c                       # L0 编出 L1 的 C
+gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # 得到 L1
+mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/src/driver.ct -o /tmp/ct-l2   # L1 编出 L2 源
+OUT="$HOME/.local/bin"                                       # 任选一个在 PATH 上的目录
+mkdir -p "$OUT"
+gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o "$OUT/ct"       # 单入口 ct
+ln -s ct "$OUT/ctc"                                          # ctc 兼容别名（副本亦可）
+```
+
+此后 `ct compile <in.ct>` / `ct <in.ct>` 与旧写法 `ctc <in.ct>` 等价，`ct build … -o <dir>` 走多文件模式；`ct -v` 打印 `ct v0.6.0`，`ctc -v` 仍打印 `ctc v0.6.0`。L0 种子（`ctc.c`）本身仍只叫 `ctc`。完整自举链见 [docs/design/bootstrap.md](docs/design/bootstrap.md) 与 `bash selfhost/ct-tour.sh`。
+
 ### 3. 语法与展开规则
 
 | 输入（`.ct`） | 输出（`.c`） |
@@ -404,6 +421,23 @@ L0 (`ctc.c`) emits **no warnings at all**; the CT line (L2) emits leak and signa
 > with `compile` still the default subcommand); `ctc` remains an alias (`ln -s ct ctc`). The L0 seed
 > (`ctc.c`) is still called `ctc`, and the generated banner keeps saying `ctc` — L0/L1 are frozen and
 > must stay byte-identical, so renaming it would require unfreezing both layers and is deferred.
+
+#### Building and installing the single-entry `ct` (Phase 7.2)
+
+`ct` comes from the CT line (L2); there is **no build system and no install script**. Compile the bootstrap chain up to L2, name the binary `ct`, and provide the `ctc` alias with a symlink (the L0 seed is itself named `ctc`, so install the alias into a **separate directory**, not next to the seed).
+
+```sh
+gcc -Wall -Wextra -std=c99 ctc.c -o ctc                      # the L0 seed (the only C build; named ctc)
+./ctc selfhost/ctc.ct -o /tmp/ctc-l1.c                       # L0 compiles L1 to C
+gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # build L1
+mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/src/driver.ct -o /tmp/ct-l2   # L1 builds L2
+OUT="$HOME/.local/bin"                                       # any directory on your PATH
+mkdir -p "$OUT"
+gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o "$OUT/ct"       # the single entry
+ln -s ct "$OUT/ctc"                                          # the ctc compatibility alias (a copy works too)
+```
+
+From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, and `ct build … -o <dir>` is multi-file mode; `ct -v` prints `ct v0.6.0` while `ctc -v` still prints `ctc v0.6.0`. The L0 seed (`ctc.c`) itself stays named `ctc`. See [docs/design/bootstrap.md](docs/design/bootstrap.md) and `bash selfhost/ct-tour.sh` for the whole chain.
 
 ### 3. Syntax and expansion rules
 
