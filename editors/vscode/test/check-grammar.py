@@ -36,6 +36,9 @@ CT_CASES = (
     "test/archive/multifile/calc.ct",
     "test/archive/import/app.ct",
     "test/archive/cases/22_drop.ct",
+    # Phase 5 AutoDrop (`own`) lives on the CT line only, so its fixture is under
+    # test/modules rather than test/cases.
+    "test/modules/autodrop/prog.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -199,6 +202,10 @@ def main():
                       if l.strip().startswith("impl ") for h in hs))
             check("`use Drop;` -> ct-use",
                   any(h[0] == "ct-use" for _, l, hs in rows if "use Drop" in l for h in hs))
+        if "modules/autodrop" in rel:
+            check("`own Box *b` -> ct-own",
+                  any(h[0] == "ct-own" for _, l, hs in rows
+                      if l.strip().startswith("own ") for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

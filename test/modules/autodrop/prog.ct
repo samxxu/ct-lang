@@ -1,0 +1,44 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop() { printf("drop %d\n", self->n); }
+}
+
+trait Runner {
+    void run();
+}
+
+struct Impl {
+    int k;
+} use Runner;
+
+impl Runner for Impl {
+    void run() {
+        own Box *b = malloc(sizeof(struct Box));
+        b->n = self->k;
+        printf("impl %d\n", b->n);
+    }
+}
+
+int main(void) {
+    if (1) {
+        own Box *b = malloc(sizeof(struct Box));
+        b->n = 1;
+        printf("nested %d\n", b->n);
+    }
+    {
+        own Box *b = malloc(sizeof(struct Box));
+        b->n = 2;
+        int r = b->n;
+        printf("scoped %d\n", r);
+    }
+    Impl x;
+    x.k = 3;
+    x.run();
+    return 0;
+}

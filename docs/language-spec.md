@@ -9,7 +9,8 @@
 > （`pub` / `import` / `ct build` 同类；`--line` / `--no-line` / `--diagnostics` 报 `unknown option`）。
 > **它们正在 CT 侧重做**（不在本文范围内）：`namespace` / 多文件 / `import` / `pub` 已由
 > Phase 2 在 `selfhost/src/**` 恢复，`Drop` 由 Phase 3 恢复；`#line`（含 `--line` / `--no-line`
-> 覆盖开关）与泄漏警告 / `--diagnostics` 已由 Phase 4 切片 1 / 2 收尾，多错误报告 + 重同步由切片 3 新增（无 oracle），语义诊断由切片 4 新增。因此**本文对 L0 依旧准确**，但不要把「移出」读成「不可用」——要写这些语法，
+> 覆盖开关）与泄漏警告 / `--diagnostics` 已由 Phase 4 切片 1 / 2 收尾，多错误报告 + 重同步由切片 3 新增（无 oracle），语义诊断由切片 4 新增；**Phase 5 的 AutoDrop（`own`）是新增特性**（见 §4.9）。
+> 因此**本文对 L0 依旧准确**，但不要把「移出」读成「不可用」——要写这些语法，
 > 用当前编译器（L2，由 `selfhost/src/**` 编出）。归档 fixture 见 `test/archive/`，旧实现见
 > git tag `overreach-oracle`。
 
@@ -323,6 +324,33 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 
   另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）、以及 **struct 类型的数组字段**（`struct Duo { Num ab[2]; }`，见 [roadmap](roadmap.md) 的 `p18` 探针，按决定延后）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），由 `test/acceptance/run.sh` 钉住。
 
+#### 4.9 AutoDrop（Phase 5 新增，仅 CT 线）
+
+`own` 是一个**上下文关键字**，只出现在声明行的行首：它把变量标记为「持有对象生命周期」，
+编译器在作用域出口自动释放。它是 Phase 5 新增项，**L0（`ctc.c`）不认识它**（会原样透传），
+由当前编译器（L2，`selfhost/src/**`）实现。
+
+| 源码形态 | 处理 |
+| --- | --- |
+| `own Person *p = malloc(sizeof(struct Person));` | 去掉 `own` 后照常声明；登记 autodrop |
+| 声明作用域的闭合 `}`（行首） | 在该行之前插入 `if (p) { Person_Drop_drop(p); free(p); p = 0; }` |
+| 函数帧顶层的 `return`（行首） | 同上，插入全部 autodrop 变量的释放（声明逆序） |
+| `delete p;` | 既有的 `free`/`drop` 照旧；同时取消 autodrop（不重复释放） |
+| `p = …;`（重新赋值） | 取消 autodrop（所有权已转移，不再兜底） |
+| `p` 以**独立值**形式出现在赋值右值（`q = p;`）或 `return` 的返回表达式中 | 取消 autodrop（逃逸）；读取字段 / 元素（`x = p->n;`、`x = p[0];`）**不**算逃逸 |
+
+约束与限制：
+
+- 只支持 `own T *p = malloc|calloc(...);`：必须是**结构体指针**、必须由 `malloc` / `calloc` 初始化、
+  且该 struct 必须 `use Drop`；否则编译期报错。
+- `own` 只允许出现在**函数体内**（文件作用域报错）；不支持数组形态（`own T *ps[n]`）。
+- 同一作用域的多个 `own` 变量按**声明逆序**释放。
+- 闭合 `}` 与 `return` 必须位于**行首**；行内形式（`b->n = 1; }`、`if (p) return 0;`）编译期报错，
+  不静默跳过——逐行注入无法把释放语句安全地放进条件分支。
+- `goto` 跳出声明作用域不会触发释放。
+- 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
+  优于错放（重复释放 / 释放借用对象）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/src/**` 恢复（本文不描述它）。
@@ -421,7 +449,8 @@ git tag `overreach-oracle`。实现层设计见 `design/restore.md`。
 > `import` / `pub` were restored by Phase 2 and `Drop` by Phase 3, all under `selfhost/src/**`;
 > `#line` (with the `--line` / `--no-line` overrides) and leak warnings / `--diagnostics` were closed
 > out by Phase 4 slices 1 and 2, and multi-error reporting + resync were added by slice 3 (no
-> oracle) and semantic checks by slice 4. So this document stays accurate for
+> oracle) and semantic checks by slice 4; **Phase 5's AutoDrop (`own`) is a new feature** (§4.9).
+> So this document stays accurate for
 > L0, but do not read "removed" as "unavailable" — to write these constructs, use the current
 > compiler (L2, built from `selfhost/src/**`). Archived fixtures live in `test/archive/` and the old
 > implementation is at git tag `overreach-oracle`.
@@ -785,6 +814,36 @@ Rules and limits:
   (`struct Duo { Num ab[2]; }` — see probe `p18` in the [roadmap](roadmap.md), deferred by decision).
   Rationale as in the status note at the top: this document stays accurate for L0, and the new
   capability belongs to the current compiler (L2) alone, pinned by `test/acceptance/run.sh`.
+
+#### 4.9 AutoDrop (new in Phase 5, CT line only)
+
+`own` is a **contextual keyword** recognised only at the start of a declaration line. It marks the
+variable as owning its object's lifetime, so the compiler releases it at scope exit. This is a Phase 5
+addition: **L0 (`ctc.c`) does not know it** (it passes the line through), and the current compiler
+(L2, `selfhost/src/**`) implements it.
+
+| Shape | Expansion |
+| --- | --- |
+| `own Person *p = malloc(sizeof(struct Person));` | emit the declaration without `own`; register it as auto-dropped |
+| the declaring scope's closing `}` (line-initial) | insert `if (p) { Person_Drop_drop(p); free(p); p = 0; }` before it |
+| a `return` at the function frame's own level (line-initial) | the same, for every auto-dropped variable in reverse declaration order |
+| `delete p;` | the usual `free`/`drop`; auto-drop is cancelled (no double release) |
+| `p = …;` (reassignment) | auto-drop is cancelled (ownership moved) |
+| `p` as a standalone value on the right-hand side of an assignment (`q = p;`) or in the returned expression | auto-drop is cancelled (escape); reading a field or an element (`x = p->n;`, `x = p[0];`) is **not** an escape |
+
+Constraints and limits:
+
+- Only `own T *p = malloc|calloc(...);` is accepted: a **struct pointer**, initialised by
+  `malloc` / `calloc`, whose struct `use Drop`; anything else is a compile-time error.
+- `own` is allowed **inside a function body only** (file scope is an error), and arrays are rejected.
+- Multiple auto-dropped variables in one scope are released in **reverse declaration order**.
+- The closing `}` and the `return` must start their line; inline forms (`b->n = 1; }`,
+  `if (p) return 0;`) are a compile-time error rather than a silent skip — a line-oriented injector
+  cannot place the release inside a conditional.
+- `goto` out of the declaring scope does not release.
+- Escape detection is **conservative**: a standalone mention on the right-hand side of an assignment
+  or on a `return` line cancels auto-drop, because a missed release (a leak) beats a wrong one
+  (double free / freeing a borrow).
 
 ### 5. Naming contract
 

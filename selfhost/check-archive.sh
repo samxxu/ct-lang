@@ -104,7 +104,9 @@ test/archive/multifile/calc
 # `foo.h.ct` file names, `-I` import roots, the `--line` / `--no-line` overrides
 # of the per-mode `#line` default, the `--diagnostics` leak warnings and the
 # multi-error recovery, byte-diffed against their own goldens plus an end-to-end
-# run (see group 7).
+# run (see group 7). `autodrop*` pins Phase 5 AutoDrop: the positive case proves
+# the releases run at every scope exit (the Drop body prints), the negatives pin
+# the three hard diagnostics (no Drop type, mid-line brace, file scope).
 # `split` additionally pins the cross-unit OO contract the selfhost split relies
 # on: a `pub trait`/`pub struct` in a header unit, its `impl` (with a `static`
 # vtable) in another unit, and a third unit dispatching through an
@@ -126,6 +128,10 @@ dup_trait
 dup_struct
 sig_mismatch
 sig_mismatch_json
+autodrop
+autodrop_nodrop
+autodrop_layout
+autodrop_scope
 "
 
 in_list() {

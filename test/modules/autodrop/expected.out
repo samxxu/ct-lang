@@ -1,0 +1,6 @@
+nested 1
+drop 1
+scoped 2
+drop 2
+impl 3
+drop 3

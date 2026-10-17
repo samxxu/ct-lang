@@ -1,0 +1,11 @@
+#include <stdlib.h>
+
+struct Plain {
+    int n;
+};
+
+int main(void) {
+    own Plain *p = malloc(sizeof(struct Plain));
+    p->n = 1;
+    return 0;
+}

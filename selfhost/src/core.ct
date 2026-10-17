@@ -108,6 +108,7 @@ typedef struct {
     int  tr;                           /* index into the trait table when iface */
     int  owned;                        /* 1 when a heap object (malloc/calloc), not yet released */
     size_t own_line;                   /* source line of that allocation (for the leak warning) */
+    int  autodrop;                     /* 1 when declared `own`: release at scope exit */
 } Var;
 
 /* A recorded function signature: it lets a call site reject an rvalue receiver,
@@ -412,6 +413,10 @@ trait SymTabOps {
     int type_same(const char *a, const char *b);
     void leak_check_scope(int from, int to);
     void leak_observe(const char *line);
+    /* AutoDrop: clear `autodrop` when the marked object is reassigned, escapes
+       through an assignment, or is returned (ownership moved). Conservative by
+       design: a missed auto-drop leaks, a wrong one corrupts memory. */
+    void autodrop_observe(const char *line);
     /* Print the collected warnings, JSON to `jsonf` and text to `textf`. */
     void emit_warnings(FILE *jsonf, FILE *textf);
     void json_str(FILE *f, const char *s);
@@ -528,6 +533,7 @@ impl SymTabOps for SymTab {
         i = self->nvars++;
         self->vars[i].owned = 0;
         self->vars[i].own_line = 0;
+        self->vars[i].autodrop = 0;
         return i;
     }
     /* Record one leak warning. Overflow is a hard error: a report that silently
@@ -571,11 +577,13 @@ impl SymTabOps for SymTab {
             b++;
         }
     }
-    /* a scope [from,to) is closing: still-owned heap objects in it are leaks */
+    /* a scope [from,to) is closing: still-owned heap objects in it are leaks.
+       `own` variables are excluded: the generated code releases them right
+       before this scope's `}`. */
     void leak_check_scope(int from, int to) {
         int i;
         for (i = from; i < to; i++)
-            if (self->vars[i].owned) self->warn_add(i);
+            if (self->vars[i].owned && !self->vars[i].autodrop) self->warn_add(i);
     }
     /* Update ownership for the owned heap objects mentioned on `line`: cleared on
        a `return`, or when the object is assigned to a non-self lvalue (escape).
@@ -604,6 +612,68 @@ impl SymTabOps for SymTab {
                 continue;   /* not an assignment or return: no escape inferred */
             }
             self->vars[i].owned = 0;
+        }
+    }
+    /* AutoDrop: ownership is lost as soon as the marked variable is reassigned,
+       appears elsewhere in an assignment (escape), or is returned. Clearing the
+       flag stops the scope-exit injection; releasing an object the program no
+       longer owns would free memory twice or free a borrowed one. */
+    void autodrop_observe(const char *line) {
+        size_t eq = line_assign_eq(line);
+        int is_return = self->line_has_word(line, "return"), i;
+        size_t ret_pos = (size_t)-1;
+
+        if (is_return) {
+            size_t r;
+            for (r = 0; line[r]; r++)
+                if ((r == 0 || !is_ident_char((unsigned char)line[r - 1])) &&
+                    strncmp(line + r, "return", 6) == 0 &&
+                    !is_ident_char((unsigned char)line[r + 6])) { ret_pos = r; break; }
+        }
+
+        for (i = 0; i < self->nvars; i++) {
+            size_t nl, s, pos = (size_t)-1;
+
+            if (!self->vars[i].autodrop) continue;
+            if (!self->line_has_word(line, self->vars[i].name)) continue;
+            nl = strlen(self->vars[i].name);
+            for (s = 0; line[s]; s++)
+                if ((s == 0 || !is_ident_char((unsigned char)line[s - 1])) &&
+                    strncmp(line + s, self->vars[i].name, nl) == 0 &&
+                    !is_ident_char((unsigned char)line[s + nl])) { pos = s; break; }
+            if (eq == (size_t)-1) {
+                /* only the returned expression transfers ownership; a mention in
+                   an `if (...)` condition does not */
+                if (is_return && ret_pos != (size_t)-1) {
+                    for (s = ret_pos + 6; line[s]; s++)
+                        if (!is_ident_char((unsigned char)line[s - 1]) &&
+                            strncmp(line + s, self->vars[i].name, nl) == 0 &&
+                            !is_ident_char((unsigned char)line[s + nl])) {
+                            self->vars[i].autodrop = 0;
+                            break;
+                        }
+                }
+                continue;
+            }
+            if (pos == (size_t)-1) continue;
+            if (pos >= eq) {                 /* on the right-hand side */
+                char after = line[pos + nl];
+                /* reading a field or an element (`x = p->n;`, `x = p[0];`) does
+                   not move ownership; only `x = p;` does */
+                if (after != '.' && after != '-' && after != '[')
+                    self->vars[i].autodrop = 0;
+                continue;
+            }
+            /* a use in the lvalue is a field/element write or a dereference --
+               ownership does not move. Only `p = ...` itself reassigns the
+               variable and drops ownership. */
+            {
+                size_t a = 0, e = eq;
+                while (a < e && (line[a] == ' ' || line[a] == '\t')) a++;
+                while (e > a && (line[e - 1] == ' ' || line[e - 1] == '\t')) e--;
+                if (e - a == nl && strncmp(line + a, self->vars[i].name, nl) == 0)
+                    self->vars[i].autodrop = 0;
+            }
         }
     }
     /* JSON string escaping: the two characters that must not appear raw. */
@@ -953,6 +1023,11 @@ trait RewriteOps {
        would warn under -Wall -Wextra. */
     int body_uses_self(size_t bstart, size_t blen);
     void scope_track(size_t ls, size_t le);
+    /* AutoDrop injection: `autodrop_before` queues the releases for a line that
+       closes the innermost scope or returns, into the per-line hoist buffer;
+       `emit_drops` writes the releases of [from,to) in reverse order. */
+    void autodrop_before(const char *line);
+    void emit_drops(Buf *b, const char *ind, size_t indlen, int from, int to);
     /* Resynchronisation point after a reported error: past the next `}` or the
        start of the next line, whichever comes first (literals and comments are
        skipped, so a brace inside a string does not count). */
@@ -975,6 +1050,10 @@ struct Pipe {
     int    nscope;
     size_t body_abs;
     int    body_pre;
+    /* 1 while `emit_body` walks an impl method: its top-level locals have no
+       enclosing `}` in the emitted range, which AutoDrop has to distinguish from
+       file scope (where `own` is rejected). */
+    int    in_body;
     int    cur_rettr;
     size_t line_off;
     int    multi;
@@ -2470,6 +2549,7 @@ impl PipeOps for Pipe {
         int saved_body_pre = self->body_pre;
         size_t saved_line_off = self->line_off;
         int saved_cur_line = self->cur_line;
+        int saved_in_body = self->in_body;
         int vi;
 
         ls = xmalloc(sizeof(size_t) * (n + 2));
@@ -2513,6 +2593,7 @@ impl PipeOps for Pipe {
         self->register_body_params(params);
 
         self->line_break();   /* anchor: the first body line always carries a #line */
+        self->in_body = 1;
         for (k = first; k <= last; k++) {
             size_t t = ls[k], content;
             char *line, *out;
@@ -2550,10 +2631,21 @@ impl PipeOps for Pipe {
             free(sb.p);
             self->scope_track(ls[k], le[k]);
         }
+        /* the method body's own scope has no `}` inside the emitted range: release
+           its top-level `own` variables right before the caller writes the brace */
+        if (!self->hoist.cap) buf_init(&self->hoist);
+        self->hoist.n = 0;
+        self->hoist.p[0] = 0;
+        self->emit_drops(&self->hoist, "    ", 4, 0, sym->nvars);
+        if (self->hoist.n > 0) {
+            fputs(self->hoist.p, f);
+            fputc('\n', f);
+        }
         self->line_break();
 
         memcpy(sym->vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
         free(saved_vars);
+        self->in_body = saved_in_body;
         sym->nvars = saved_nvars;
         self->nscope = saved_nscope;
         self->body_abs = saved_body_abs;
@@ -3111,7 +3203,10 @@ impl RewriteOps for Pipe {
 
         vi = sym->find_var(id);
         if (vi >= 0 && !sym->vars[vi].ptr) return NULL;
-        if (vi >= 0) sym->vars[vi].owned = 0;   /* released: no longer a leak */
+        if (vi >= 0) {
+            sym->vars[vi].owned = 0;      /* released: no longer a leak */
+            sym->vars[vi].autodrop = 0;   /* and no scope-exit release either */
+        }
 
         buf_init(&b);
         buf_putn(&b, line, ind_len);
@@ -3141,14 +3236,30 @@ impl RewriteOps for Pipe {
     }
 
     char *transform_line(const char *line) {
-        char *del = self->try_delete(line);
-        char *ret;
-        char *asg;
-        char *decl;
+        char *del, *ret, *asg, *decl;
         const char *base;
         Buf out;
         char *res;
+        int own_decl = 0;
 
+        /* AutoDrop bookkeeping runs first: the flag must be cleared (reassign,
+           escape, return) before the closing-brace/return injection reads it. */
+        self->sym->autodrop_observe(line);
+        self->autodrop_before(line);
+
+        /* `own` is a contextual keyword: only a line-initial `own <name>` is a
+           declaration. `own = 5;` stays an ordinary assignment. */
+        {
+            const char *q = line;
+            while (*q == ' ' || *q == '\t') q++;
+            if (strncmp(q, "own", 3) == 0 && !is_ident_char((unsigned char)q[3])) {
+                q += 3;
+                while (*q == ' ' || *q == '\t') q++;
+                own_decl = is_ident_char((unsigned char)*q) ? 1 : 0;
+            }
+        }
+
+        del = self->try_delete(line);
         if (del) return del;
         ret = self->try_return(line);
         if (ret) return ret;
@@ -3156,6 +3267,8 @@ impl RewriteOps for Pipe {
         if (asg) return asg;
 
         decl = self->try_var_decl(line);
+        if (own_decl && !decl)
+            die(self->line_off, "'own' must declare a struct pointer with Drop");
         base = decl ? decl : line;
         buf_init(&out);
         self->transform_calls(base, &out);
@@ -3171,13 +3284,22 @@ impl RewriteOps for Pipe {
         const char *p;
         char cname[MAX_NAME * 2], name[MAX_NAME], var[MAX_NAME];
         Struct *S;
-        int done = 0, static_kw = 0, qual = 0;
+        int done = 0, static_kw = 0, qual = 0, own_kw = 0;
         const char *rest;
         Buf b;
 
         while (line[i] == ' ' || line[i] == '\t') i++;
         ws = i;
         p = line + i;
+
+        /* `own` marks the declaration for AutoDrop; it is not valid C, so the
+           rewritten line drops it. It must precede `static` in v1. */
+        if (strncmp(p, "own", 3) == 0 && !is_ident_char((unsigned char)p[3])) {
+            const char *z = p + 3;
+            while (*z == ' ' || *z == '\t') z++;
+            own_kw = 1;
+            p = z;
+        }
 
         /* a leading `static` is re-emitted verbatim; the declaration underneath is
            still a ct struct object and must get its vptr written like any other */
@@ -3200,6 +3322,7 @@ impl RewriteOps for Pipe {
             /* the type names a trait, not a struct: an interface value */
             Trait *TR = sym->find_trait(qual ? cname : name);
             if (!TR) return NULL;
+            if (own_kw) die(self->line_off, "'own' requires a struct pointer that uses Drop");
             return self->try_iface_decl(line, (int)(TR - sym->traits), ws, p);
         }
         while (*p == ' ' || *p == '\t') p++;
@@ -3224,6 +3347,14 @@ impl RewriteOps for Pipe {
                 while (*aft == ' ' || *aft == '\t') aft++;
                 if (*aft == '[') isarr = 1;
             }
+            if (own_kw) {
+                if (!self->in_body && self->nscope == 0)
+                    die(self->line_off, "'own' is only allowed inside a function body");
+                if (isarr) die(self->line_off, "'own' does not support arrays");
+                if (!isheap) die(self->line_off, "'own' requires a malloc or calloc initialiser");
+                if (!S->has_drop)
+                    die(self->line_off, "struct '%s' does not use trait 'Drop'", S->name);
+            }
             if (pk) {
                 int vi = sym->new_var();
                 snprintf(sym->vars[vi].name, MAX_NAME, "%s", pv);
@@ -3238,6 +3369,7 @@ impl RewriteOps for Pipe {
                     sym->vars[vi].owned = 1;
                     sym->vars[vi].own_line = (size_t)self->cur_line;
                 }
+                if (own_kw) sym->vars[vi].autodrop = 1;
             }
             buf_init(&b);
             buf_putn(&b, line, ws);
@@ -3260,6 +3392,8 @@ impl RewriteOps for Pipe {
             }
             return b.p;
         }
+
+        if (own_kw) die(self->line_off, "'own' requires a pointer declaration");
 
         vk = copy_ident(p, var, 0);
         var[vk] = 0;
@@ -3982,6 +4116,109 @@ impl RewriteOps for Pipe {
             i++;
         }
         return 0;
+    }
+
+    /* Append the release statement of every `own` variable in [from,to), in
+       reverse declaration order (the last object declared is released first).
+       Each statement nulls the pointer, so a second injection on another path is
+       a guarded no-op instead of a double free. */
+    void emit_drops(Buf *b, const char *ind, size_t indlen, int from, int to) {
+        struct SymTab *sym = self->sym;
+        int i, any = 0;
+
+        for (i = to - 1; i >= from; i--) {
+            Var *v = &sym->vars[i];
+            Struct *S;
+            if (!v->autodrop) continue;
+            S = &sym->structs[v->s];
+            S->drop_used = 1;              /* emit this type's Drop function */
+            if (any) buf_putc(b, '\n');
+            buf_putn(b, ind, indlen);
+            buf_puts(b, "if (");
+            buf_puts(b, v->name);
+            buf_puts(b, ") { ");
+            buf_puts(b, S->cname);
+            buf_puts(b, "_Drop_drop(");
+            buf_puts(b, v->name);
+            buf_puts(b, "); free(");
+            buf_puts(b, v->name);
+            buf_puts(b, "); ");
+            buf_puts(b, v->name);
+            buf_puts(b, " = 0; }");
+            any = 1;
+        }
+    }
+
+    /* Queue the `own` releases that belong before this line, into the per-line
+       hoist buffer (emitted ahead of the line, with `#line` re-anchored). A
+       line-initial `}` ends the innermost scope, a line-initial `return` ends the
+       whole frame. Any other brace/return would have to be split out of a
+       conditional expression, which this line-oriented injector cannot place
+       safely -- that is reported instead of guessed. */
+    void autodrop_before(const char *line) {
+        struct SymTab *sym = self->sym;
+        const char *p = line;
+        size_t ind, q;
+        int has_own = 0, i;
+
+        for (i = 0; i < sym->nvars; i++)
+            if (sym->vars[i].autodrop) { has_own = 1; break; }
+        if (!has_own) return;
+
+        while (*p == ' ' || *p == '\t') p++;
+        ind = (size_t)(p - line);
+
+        if (*p == '}') {
+            if (self->nscope > 0)
+                self->emit_drops(&self->hoist, line, ind,
+                                 self->scope[self->nscope - 1], sym->nvars);
+            return;
+        }
+        if (strncmp(p, "return", 6) == 0 && !is_ident_char((unsigned char)p[6])) {
+            self->emit_drops(&self->hoist, line, ind, 0, sym->nvars);
+            /* a return at the frame's own level ends every scope: clearing the
+               flags keeps the later brace from emitting unreachable duplicates.
+               A return nested in a block is conditional, so those objects must
+               stay owned for the path that falls through. */
+            if (self->nscope == (self->in_body ? 0 : 1))
+                for (i = 0; i < sym->nvars; i++) sym->vars[i].autodrop = 0;
+            return;
+        }
+
+        /* A brace that closes a scope opened on an earlier line, or a conditional
+           return, cannot be prefixed with the release. */
+        {
+            int depth = 0;
+            for (q = 0; line[q]; q++) {
+                if (line[q] == '"' || line[q] == '\'') {
+                    char quote = line[q++];
+                    while (line[q] && line[q] != quote) {
+                        if (line[q] == '\\' && line[q + 1]) q++;
+                        q++;
+                    }
+                    if (line[q]) q++;
+                    continue;
+                }
+                if (line[q] == '/' && line[q + 1] == '/') break;
+                if (line[q] == '/' && line[q + 1] == '*') {
+                    q += 2;
+                    while (line[q] && !(line[q] == '*' && line[q + 1] == '/')) q++;
+                    if (line[q]) q++;
+                    continue;
+                }
+                if (line[q] == '{') { depth++; continue; }
+                if (line[q] == '}') {
+                    /* a `}` with a `{` earlier on the same line closes an inner
+                       same-line block: no `own` variable can live there */
+                    if (depth > 0) { depth--; continue; }
+                    die(self->line_off, "auto-drop requires the closing '}' at the start of a line");
+                }
+                if (line[q] == 'r' && strncmp(line + q, "return", 6) == 0 &&
+                    !is_ident_char((unsigned char)line[q + 6]) &&
+                    (q == 0 || !is_ident_char((unsigned char)line[q - 1])))
+                    die(self->line_off, "auto-drop requires 'return' at the start of a line");
+            }
+        }
     }
 
     /* roll sym->nvars back at every closing brace so locals stay in their own scope;

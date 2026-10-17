@@ -21,7 +21,7 @@
 | Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | ✅ 完成（2026-10-16；非版本 tag `phase2-multifile-split`） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
 | Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | ✅ 完成（2026-10-16；4 个切片全部落地；2026-10-17 bump 到 v0.4.0） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
-| Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔭 展望 | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
+| Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔨 进行中（设计已冻结 2026-10-17；D9–D14 均取推荐项） | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔭 展望 | — |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名（设计已冻结，只差落地） | 落地 | 🔭 展望 | `ct compile` 可用且 `ctc …` 调用不失效 |
 
@@ -635,7 +635,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - **④ 接口指针与数组形参（2026-10-17，落 `selfhost/src/core.ct`）**：把「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」四态收成一条规则——**非下标接收者按 `ptr` 选 `.`/`->`，下标接收者按「元素自身是不是指针」（`arr && ptr`）选**。四处接线：(a) `try_iface_decl` 的指针分支允许初始化式（`T *q = &n;`，走 `box_to_iface_ptr`）**并登记变量**——此前裸 `T *g;` 不登记，故 `g->m()` 根本无法派发；(b) `try_iface_assign` 对可下标的接口变量支持元素赋值，对裸指针走 `box_to_iface_ptr`；(c) `parse_func_sig` 的形参登记改为**保留 `isptr`** 并识别数组形态 `T xs[]`（此前指针接口形参被强制成「值」，数组形参连名字都在 `analyse_param` 里被丢掉），于是 `xs[i].eval()` 在函数体内可派发；(d) `walk_to_iface_field` 允许对指针接口字段取下标（`s.f[0].m()`）。同时新增 AST 形状探针 **p12–p17**（堆节点装箱、子节点数组字段、数组形参两种拼写、接口指针局部与带初始化式的接口指针），**6/6 转 PASS**。
 
-- **进度**：验收关卡 **18 pass / 1 pending / 0 regression**（`BASELINE` 含 p01–p17 + `ast_spike`）。唯一 PENDING 是 **`p18`**：`struct Duo { Num ab[2]; }` 这类 **struct 类型的数组字段**——其元素 vptr 需在宿主对象的构造期逐元素写入（`put_nested_assignments` / `needs_nested_init` 目前不覆盖数组字段）。AST 主线的子节点是**接口值**（由 p13 覆盖），故 **p18 按决定延后**；探针保留，用于钉住这一族缺口不被忘记。**为何这些都不进 golden**：`examples/**` 与 `test/cases/**` 的基线都由 **L0/L1** 驱动，承载不了 L0 不支持的语法（`ctc.c` 冻结、不得为其放宽），所以只有 `test/acceptance/run.sh`（探 L2）能钉住它们；编辑器侧亦无需改动——接口数组/指针对拼写用的仍是既有括号、`*` 与标识符，没有新关键字。
+- **进度**：验收关卡 **19 pass / 1 pending / 0 regression**（`BASELINE` 含 p01–p17 + `ast_spike` + `ast_parse_spike`）。唯一 PENDING 是 **`p18`**：`struct Duo { Num ab[2]; }` 这类 **struct 类型的数组字段**——其元素 vptr 需在宿主对象的构造期逐元素写入（`put_nested_assignments` / `needs_nested_init` 目前不覆盖数组字段）。AST 主线的子节点是**接口值**（由 p13 覆盖），故 **p18 按决定延后**；探针保留，用于钉住这一族缺口不被忘记。**为何这些都不进 golden**：`examples/**` 与 `test/cases/**` 的基线都由 **L0/L1** 驱动，承载不了 L0 不支持的语法（`ctc.c` 冻结、不得为其放宽），所以只有 `test/acceptance/run.sh`（探 L2）能钉住它们；编辑器侧亦无需改动——接口数组/指针对拼写用的仍是既有括号、`*` 与标识符，没有新关键字。
+
+- **可行性骨架（2026-10-17）**：新增验收探针 **`ast_parse_spike`**（[test/acceptance/ast_parse_spike.ct](../test/acceptance/ast_parse_spike.ct)）——最小端到端前端：手写词法器 + 递归下降解析 `1+2`，在堆上构造 `Num` / `Add` 节点（子节点是 `Expr` 接口值字段），经接口派发求值并打印 `3`。由 **L2** 编译、gcc 零警告、运行通过；`test/acceptance/run.sh` 基线升至 **19 pass / 1 pending / 0 regression**（`p18` 仍按决定延后）。结论：**AST 主线的第一代可以完全落在现有 CT 子集内**，不需要再补语言特性；下一步是把骨架扩成能编译最小语言子集的编译器。
 
 - **归档点**：切到 AST 主线前的最后一个 byte-identical 状态已打 tag **`pre-ast-mainline`**（2026-10-17，含 `src/**` 仍在 frozen L1 表容量之内的全部语料）。此后出口口径为**行为等价**。
 
@@ -719,6 +721,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **目录 = namespace 强制绑定**。
 - **前置约束（2026-10-17 审查记录）**：`MAX_FUNCS`（64，**计入所有顶层 plain-C 签名，`static` 也算**）余量只剩 1；Phase 5 的新逻辑**必须**写进 `impl` 块（impl 方法不计数），并注意 `MAX_METHOD`（32）——把方法放进 `PipeOps` / `RewriteOps` 对应的一半。**不得**为扩容改 `ctc.c` 的 `MAX_*`（冻结期明令禁止）。
 - **出口**：**设计先行 → 冻结 → 新用例 → `run.sh` 全绿**；明确**不追求** byte-identical（无 oracle 可对）。此处同时收口阶梯 **M6**。
+- **设计（2026-10-17，已冻结）**：实现层面的设计、发射形状、v1 限制、测试切片与 **D9–D14** 决策表见 [design/phase5.md](design/phase5.md)。D9–D14 **均取推荐项**：AutoDrop 用 `own` 前缀；释放动作 = `drop` + `free` + 置空；行内 `}` / `return` 报错；路径敏感只做「条件 return」判定；目录 = namespace 取**校验式**；推进顺序 AutoDrop → 路径分析 → 目录绑定。**AST 主线不提前**，仍按原计划推进。
+- **进展（2026-10-17，切片 5.1/5.2：AutoDrop）**：`own` 已在 `selfhost/src/**` 落地。`Var` 增 `autodrop`；`SymTabOps::autodrop_observe` 在重新赋值 / 逃逸 / 返回（只认 `return` 之后的表达式）时取消标记；`RewriteOps::emit_drops` + `autodrop_before` 经 **hoist** 在行首 `}` / `return` 前注入 `if (p) { T_Drop_drop(p); free(p); p = 0; }`（声明逆序、置空防重放），impl 方法体顶层在 `emit_body` 尾部补发（`Pipe` 增 `in_body` 区分文件作用域）。硬诊断：文件作用域、数组、非指针、无 `malloc`/`calloc` 初始化、无 `Drop` 类型、行内 `}` / `return` —— 全部编译期报错，**绝不静默跳过**。新增 4 个 designed fixture：`autodrop`（Drop 体打印，证明嵌套块、独立块与 impl 体尾部三处释放真的执行）与 `autodrop_nodrop` / `autodrop_layout` / `autodrop_scope`（三条硬诊断）。**验证**：designed **20 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` **117/117**、`check-all` 六门全绿、acceptance 19 pass / 1 pending、grammar **20/20**、手工三件套通过。
 
 **需用户先定位、暂不排期**：是否引入**类型检查**（若引入，编译器性质改变，需要 AST 而非逐行扫描）；是否引入**泛型**（需在 `.c` 侧单态化展开）；是否要保证**生成物可读性**的硬指标（最大嵌套缩进、命名长度上限）。
 
@@ -771,7 +775,7 @@ as confirmed by the user.
 | 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | ✅ done (2026-10-16; non-version tag `phase2-multifile-split`) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
 | 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | ✅ done (2026-10-16; all four slices landed; bumped to v0.4.0 on 2026-10-17) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
-| 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔭 outlook | design frozen + new cases green; rung **M6** closes here |
+| 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔨 in progress (design frozen 2026-10-17; D9–D14 accepted as recommended) | design frozen + new cases green; rung **M6** closes here |
 | 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔭 outlook | — |
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias (design frozen, only the landing is left) | landing | 🔭 outlook | `ct compile` works and existing `ctc …` invocations keep working |
 

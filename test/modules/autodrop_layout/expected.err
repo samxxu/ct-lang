@@ -1,0 +1,2 @@
+prog.ct:10:1: error: auto-drop requires the closing '}' at the start of a line
+ctc: 1 error(s) generated

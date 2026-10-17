@@ -1,0 +1,2 @@
+prog.ct:8:1: error: struct 'Plain' does not use trait 'Drop'
+ctc: 1 error(s) generated

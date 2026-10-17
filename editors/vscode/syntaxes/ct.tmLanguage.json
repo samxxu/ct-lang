@@ -12,6 +12,7 @@
     { "include": "#ct-use" },
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
+    { "include": "#ct-own" },
     { "include": "#ct-pub" },
     { "include": "source.c" }
   ],
@@ -125,6 +126,12 @@
       "match": "\\b(delete)\\b",
       "captures": {
         "1": { "name": "keyword.other.delete.ct" }
+      }
+    },
+    "ct-own": {
+      "match": "^[ \\t]*(own)\\b",
+      "captures": {
+        "1": { "name": "storage.modifier.own.ct" }
       }
     },
     "ct-pub": {

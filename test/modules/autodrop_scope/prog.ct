@@ -1,0 +1,11 @@
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+own Box *global = malloc(sizeof(struct Box));
+
+int main(void) {
+    return 0;
+}

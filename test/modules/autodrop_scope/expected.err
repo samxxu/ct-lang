@@ -1,0 +1,2 @@
+prog.ct:7:1: error: 'own' is only allowed inside a function body
+ctc: 1 error(s) generated
