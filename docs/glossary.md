@@ -148,6 +148,7 @@
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
 | 绑定（bindings） | 每个库一个 `.h.ct` | 随 Phase 6 的 `map` 推进，**未实现** |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
+| 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口仍是 `ct get` / `ct install` 子命令，**未实现** |
 
 ### 8. 许可
 
@@ -299,6 +300,7 @@
 | standard peripheral traits | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | covering 80% of platform-difference needs |
 | bindings | one `.h.ct` per library | lands with Phase 6's `map`; **not implemented** |
 | reverse mapping table | the JSON written by `--emit-map <file\|->` | generated C symbol ← CT definition site; landed in Phase 6.1 (D16) |
+| package manager | `ct-pkg` | named on 2026-10-17; the everyday entry points stay the `ct get` / `ct install` subcommands; **not implemented** |
 
 ### 8. Licensing
 

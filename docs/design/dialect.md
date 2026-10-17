@@ -488,7 +488,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 | -------- | ------------------------------------------- | ----------------------------- |
 | Code-generation scripts and a build pipeline | §2 hard boundary: no third-party libraries, build systems or code-generation scripts | dialect expanders + the `ct build` expansion pipeline |
 | The extension must not invoke the compiler | §2: `editors/**` covers highlighting and editing comfort only and does not call `ctc` | §9 the extension running expand in the background, or `--watch` |
-| Dialect distribution via the package manager | the package manager is unimplemented and unnamed (see [roadmap](../roadmap.md)) | §4.3 a global dialect directory, `ct get dialect-html` |
+| Dialect distribution via the package manager | the package manager is unimplemented (named `ct-pkg`, see [roadmap](../roadmap.md)) | §4.3 a global dialect directory, `ct get dialect-html` |
 
 None of these disappears by being scheduled last — each one has to be amended the moment it lands.
 Recording them now avoids having to tear up the rules at the very end before any work can start.
