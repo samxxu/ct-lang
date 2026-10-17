@@ -186,12 +186,6 @@ static int g_has_unit_init = 0;
 static Buf g_hoist;
 static int g_ntmp = 0;
 
-/* The structs whose use-clause mentions the reserved `Drop`: one entry per
-   struct, in declaration order. Their drop bodies are emitted only when a
-   `delete` reaches them (`drop_used`). */
-static int g_own_drop[MAX_STRUCT];
-static int g_nown_drop = 0;
-
 /* Conservative, path-insensitive leak warnings (no suppression in this version).
    Warnings are collected per invocation and printed once, either human-readable
    (stderr, default) or as JSON (`--diagnostics=json`). An error still `die`s;
@@ -481,6 +475,11 @@ struct SymTab {
     int     nvars;
     FuncSig funcs[MAX_FUNCS];
     int     nfuncs;
+    /* The structs whose use-clause mentions the reserved `Drop`, in declaration
+       order. Their drop bodies are emitted only when a `delete` reaches them
+       (`drop_used`). Part of the symbol table, not a loose global. */
+    int     own_drop[MAX_STRUCT];
+    int     nown_drop;
 } use SymTabOps;
 
 impl SymTabOps for SymTab {
@@ -492,8 +491,8 @@ impl SymTabOps for SymTab {
         while (changed) {
             int i, h;
             changed = 0;
-            for (i = 0; i < g_nown_drop; i++) {
-                Struct *S = &self->structs[g_own_drop[i]];
+            for (i = 0; i < self->nown_drop; i++) {
+                Struct *S = &self->structs[self->own_drop[i]];
                 if (!S->drop_used || S->has_user_drop) continue;
                 for (h = 0; h < S->nf; h++) {
                     Struct *F = &self->structs[S->ftype[h]];
@@ -1668,9 +1667,9 @@ impl PipeOps for Pipe {
             S->use_i[i] = (int)(T - sym->traits);
         }
 
-        if (S->has_drop && g_nown_drop < MAX_STRUCT) {
-            g_own_drop[g_nown_drop] = (int)(S - sym->structs);
-            g_nown_drop++;
+        if (S->has_drop && sym->nown_drop < MAX_STRUCT) {
+            sym->own_drop[sym->nown_drop] = (int)(S - sym->structs);
+            sym->nown_drop++;
         }
 
         {
@@ -2282,8 +2281,8 @@ impl PipeOps for Pipe {
         struct SymTab *sym = self->sym;
         int i, any = 0;
         sym->mark_drop_closure();
-        for (i = 0; i < g_nown_drop; i++) {
-            Struct *S = &sym->structs[g_own_drop[i]];
+        for (i = 0; i < sym->nown_drop; i++) {
+            Struct *S = &sym->structs[sym->own_drop[i]];
             if (!S->drop_used) continue;
             self->line_at(f, S->def_line);
             fprintf(f, "static void %s_Drop_drop(void *self);\n", S->cname);
@@ -2296,8 +2295,8 @@ impl PipeOps for Pipe {
     void emit_drop_bodies(FILE *f) {
         struct SymTab *sym = self->sym;
         int i;
-        for (i = 0; i < g_nown_drop; i++) {
-            Struct *S = &sym->structs[g_own_drop[i]];
+        for (i = 0; i < sym->nown_drop; i++) {
+            Struct *S = &sym->structs[sym->own_drop[i]];
             int h, need_self = 0;
             if (!S->drop_used) continue;
             if (S->has_user_drop) {
@@ -2344,7 +2343,7 @@ impl PipeOps for Pipe {
         g_cur_rettr = -1;
         g_ctor_pub = 0;
         g_line_pub = 0;
-        g_nown_drop = 0;
+        sym->nown_drop = 0;
         /* multi-file mode accumulates the traits/structs/signatures across units
            so a unit can name what the units built before it exported; a
            single-file compile of the same file starts from an empty table, which
