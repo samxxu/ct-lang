@@ -37,7 +37,7 @@ JSON 形状（v1）：
 
 ```json
 {
-  "compiler": "ctc v0.6.0",
+  "compiler": "ct v0.6.0",
   "file": "prog.ct",
   "traits":  [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,
                "methods":[{"name":"greet","ret":"void","params":0}]}],
@@ -207,7 +207,7 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 
 ```json
 {
-  "compiler": "ctc v0.6.0",
+  "compiler": "ct v0.6.0",
   "file": "prog.ct",
   "traits":  [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,
                "methods":[{"name":"greet","ret":"void","params":0}]}],
