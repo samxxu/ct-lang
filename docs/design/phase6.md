@@ -48,6 +48,8 @@ JSON 形状（v1）：
 }
 ```
 
+> 6.2 起在 `impls` 之后追加 `"calls"` 段（见 §3），其余形状不变。
+
 数据来源与改动点：
 
 - `Trait` 增 `def_line` / `file`；`parse_trait` 记录。
@@ -73,12 +75,18 @@ JSON 形状（v1）：
 ### 3. 6.2 调用图与跨函数泄漏分析
 
 - 调用图：`"calls": [{"caller":"main","callee":"add","file":"prog.ct","line":15}]`。
-  `caller` = 当前所在函数 / 方法名（顶层代码记 `<file>`）。实现上 `SymTab` 增调用边表 +
-  `cur_func`，`Pipe` 增 `func_scope`（用掉最后 1 个字段余量；若后续还要加字段，改为新的
-  `struct Map` 对象）。
-- 跨函数泄漏：函数 `f` 分配的对象若作为返回值交给调用方，视为所有权转移；否则在 `f` 的出口仍是泄漏。
-  保守规则：**只跨一层**（调用方不把被调函数的返回视为已释放），调用图只用于「被调函数是否可能返回
-  其分配的对象」的提示，不做全程序数据流。
+  `caller` = 当前所在函数 / 方法名（顶层代码记 `<file>`）。
+- **落地实现**：`SymTab` 增 `CallEdge` 表（`MAX_CALLS`）与 `cur_func`；**未新增 `Pipe` 字段**——
+  函数体边界用既有的 `nscope`（普通函数）与 `in_body`（impl 方法）判定，`Pipe` 余量保持 31/32。
+  边只记**直接调用** `name(...)` 且 `name` 已有签名（C 要求先声明后使用，这也自动滤掉关键字与
+  libc 调用）；`.m()` / `->m()` 是动态派发，没有单一被调者，不记。impl 方法作为调用方时用生成符号
+  （与 `impls[].symbol` 一致）；同一行同一对 caller/callee 去重。
+- 跨函数泄漏：函数 `f` 在**自身层级**无条件 `return p;` 且 `p` 是它拥有的堆对象时，记一条事实
+  `ret_owned[f] = 1`；调用方在**声明初始化** `T *q = f();` 且 `f` 返回同一 struct 指针时，把 `q`
+  视为 owned，未释放则在作用域出口报泄漏。条件 return 不产生事实；`q = f();`（赋值而非声明）、
+  别名、参数与容器都不跟踪。
+- 保守口径：事实按函数本地记录（不做全程序数据流 / 别名分析）；`f` 若把从 `g()` 得到的对象继续
+  `return` 出去，`f` 也会被记为可能转移——传递的是事实，不是跨函数求解。
 
 ### 4. 6.3 增量编译缓存（D17）
 
@@ -179,6 +187,24 @@ the landing notes). Scalar fields are not listed in v1.
   names the unit that defined it.
 - Fixture: `test/modules/map/` (compile, `--emit-map -`), `expected.stdout` pinning the JSON and
   `expected.out` pinning the program output.
+
+### 6.2 call graph and cross-function leaks
+
+- `"calls": [{"caller":"main","callee":"add","file":"prog.ct","line":15}]` follows `impls`; `caller`
+  is the enclosing function, the generated method symbol inside an impl body, or `<file>` at top level.
+- Implementation: `SymTab` gains a `CallEdge` table (`MAX_CALLS`) and `cur_func`; **no `Pipe` field was
+  added** — the body boundary is derived from the existing `nscope` (plain functions) and `in_body`
+  (impl bodies), so `Pipe` stays at 31/32. Only direct `name(...)` calls whose name already has a
+  signature are edges (C requires a declaration before use, which also filters keywords and libc);
+  `.m()` / `->m()` is dynamic dispatch with no single callee. Edges are deduplicated per line and pair.
+- Cross-function ownership: when `f` unconditionally `return p;` at its own level and `p` is a heap
+  object it owns, `ret_owned[f]` is recorded; a caller whose **declaration initialiser** is
+  `T *q = f();` and whose callee returns the same struct pointer treats `q` as owned, so a missing
+  release is reported at the scope exit. Conditional returns produce no fact; `q = f();` (assignment,
+  not a declaration), aliases, parameters and containers are not tracked.
+- Conservative: facts are recorded per function (no whole-program data flow or alias analysis); an `f`
+  that forwards an object obtained from `g()` also becomes `ret_owned` — the fact travels, but no
+  cross-function solver runs.
 
 ### Constraints and gates
 

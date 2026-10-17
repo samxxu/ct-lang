@@ -1,0 +1,1 @@
+prog.ct:32: warning: potential leak: 'q' (Box*) allocated but never deleted

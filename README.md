@@ -48,7 +48,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc <input.ct>` | 输出到 `<input>.c`、`<input>.h` |
 | `ctc <input.ct> -o <output.c>` | 输出到指定路径，头文件为同目录同名的 `.h` |
 | `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
-| `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号）；`-` 表示 stdout，仅 compile 可用，`build` 须写文件 |
+| `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，仅 compile 可用，`build` 须写文件 |
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.5.0` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
@@ -376,7 +376,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc <input.ct>` | writes `<input>.c` and `<input>.h` (single-file mode) |
 | `ctc <input.ct> -o <output.c>` | writes the given path plus a sibling `.h` |
 | `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
-| `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols); `-` means stdout, compile mode only — `build` must write a file |
+| `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, compile mode only — `build` must write a file |
 | `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.5.0` |
 | `ctc -h` / `ctc --help` | prints usage |
 

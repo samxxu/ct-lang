@@ -42,6 +42,7 @@
 #define MAX_WARNS  64                     /* collected leak warnings per run */
 #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
 #define MAX_MAP_IMPLS 256                 /* impl methods listed in `--emit-map` */
+#define MAX_CALLS  512                    /* direct call edges listed in `--emit-map` */
 
 #define CTC_VERSION "0.5.0"
 
@@ -129,7 +130,17 @@ typedef struct {
     char ret[MAX_NAME];                /* the return type as written (map) */
     size_t line;                       /* 1-based source line (map) */
     const char *file;                  /* unit that declared it (map) */
+    int  ret_owned;                    /* 1 when it may return an allocation it owns */
 } FuncSig;
+
+/* One direct call edge: the reverse map's call graph. Dynamic dispatch through a
+   vtable has no single callee, so only plain function calls are recorded. */
+typedef struct {
+    char caller[MAX_NAME * 2];         /* function name, method symbol or "<file>" */
+    char callee[MAX_NAME];
+    size_t line;
+    const char *file;
+} CallEdge;
 
 /* One impl method: the reverse-mapping row printed by `--emit-map`. */
 typedef struct {
@@ -465,6 +476,10 @@ trait SymTabOps {
     void record_impl(int si, int ti, const char *method, const char *ret,
                      int nparams, size_t line);
     void write_map(FILE *f);
+    /* Call graph (`--emit-map`, Phase 6.2): record the direct calls on a line,
+       and mark the current function as returning ownership of an allocation. */
+    void record_calls(const char *line, size_t line_no);
+    void mark_ret_owned();
 }
 
 struct SymTab {
@@ -492,6 +507,12 @@ struct SymTab {
        copied at parse time so the map survives the statement that built them. */
     ImplEntry impls[MAX_MAP_IMPLS];
     int       nimpls;
+    /* Direct call edges and the caller currently being compiled. The caller is
+       "" at top level (the map prints `<file>`) and the generated symbol inside
+       an impl body. */
+    CallEdge  calls[MAX_CALLS];
+    int       ncalls;
+    char      cur_func[MAX_NAME * 2];
     /* First input of the run: the reverse map's top-level "file". `build` may
        compile several units into one symbol table, so per-entry `file` fields
        carry the unit and only the root is a single value here. */
@@ -627,7 +648,80 @@ impl SymTabOps for SymTab {
             self->json_str(f, e->file ? e->file : "");
             fprintf(f, "\",\"line\":%ld}", (long)e->line);
         }
+        fputs("],\n", f);
+        fputs("  \"calls\": [", f);
+        for (i = 0; i < self->ncalls; i++) {
+            CallEdge *c = &self->calls[i];
+            if (i) fputc(',', f);
+            fputs("{\"caller\":\"", f);
+            self->json_str(f, c->caller);
+            fputs("\",\"callee\":\"", f);
+            self->json_str(f, c->callee);
+            fputs("\",\"file\":\"", f);
+            self->json_str(f, c->file ? c->file : "");
+            fprintf(f, "\",\"line\":%ld}", (long)c->line);
+        }
         fputs("]\n}\n", f);
+    }
+    /* Record the direct calls on one source line. A call is `name(` that is not
+       reached through `.` / `->` and whose name already has a signature: C
+       requires a declaration before use, so the rule the rewriter relies on also
+       bounds the callee set (and filters keywords and stdlib calls). Dynamic
+       dispatch has no single callee and is not an edge. Top-level calls are
+       attributed to "<file>". */
+    void record_calls(const char *line, size_t line_no) {
+        size_t len = strlen(line), i = 0;
+        const char *caller = self->cur_func[0] ? self->cur_func : "<file>";
+        while (i < len) {
+            char c = line[i];
+            if (c == '"' || c == '\'') { i = line_literal_end(line, i, len); continue; }
+            if (c == '/' && (line[i + 1] == '/' || line[i + 1] == '*')) break;
+            if (!is_ident_char((unsigned char)c)) { i++; continue; }
+            {
+                size_t j = i, k, b;
+                char name[MAX_NAME];
+                while (j < len && is_ident_char((unsigned char)line[j])) j++;
+                if (j - i >= sizeof name) { i = j; continue; }
+                memcpy(name, line + i, j - i);
+                name[j - i] = 0;
+                k = j;
+                while (k < len && (line[k] == ' ' || line[k] == '\t')) k++;
+                if (k < len && line[k] == '(') {
+                    b = i;
+                    while (b > 0 && (line[b - 1] == ' ' || line[b - 1] == '\t')) b--;
+                    if (b > 0 && line[b - 1] != '.' &&
+                        !(b > 1 && line[b - 1] == '>' && line[b - 2] == '-') &&
+                        self->find_func(name)) {
+                        int dup = 0, d;
+                        for (d = 0; d < self->ncalls; d++)
+                            if (self->calls[d].line == line_no && self->calls[d].file == g_path &&
+                                strcmp(self->calls[d].caller, caller) == 0 &&
+                                strcmp(self->calls[d].callee, name) == 0) { dup = 1; break; }
+                        if (!dup) {
+                            CallEdge *e;
+                            if (self->ncalls >= MAX_CALLS)
+                                die(0, "too many calls for the map (max %d)", MAX_CALLS);
+                            e = &self->calls[self->ncalls];
+                            self->ncalls++;
+                            snprintf(e->caller, MAX_NAME * 2, "%s", caller);
+                            snprintf(e->callee, MAX_NAME, "%s", name);
+                            e->line = line_no;
+                            e->file = g_path;
+                        }
+                    }
+                }
+                i = j;
+            }
+        }
+    }
+    /* The current function returns an object it owned: its caller inherits that
+       ownership (one level; the call graph is the hint). A method symbol is not
+       in the function table, so impl bodies simply record nothing. */
+    void mark_ret_owned() {
+        FuncSig *FS;
+        if (!self->cur_func[0]) return;
+        FS = self->find_func(self->cur_func);
+        if (FS) FS->ret_owned = 1;
     }
 
     Trait *find_trait(const char *name) {
@@ -839,7 +933,10 @@ impl SymTabOps for SymTab {
                 s++;
             }
             if (!conditional) {
-                if (pos != (size_t)-1) v->owned = 0;   /* returned: ownership moves */
+                if (pos != (size_t)-1) {
+                    v->owned = 0;   /* returned: ownership moves */
+                    self->mark_ret_owned();
+                }
                 continue;
             }
             if (pos == (size_t)-1 && !v->path_warned) {
@@ -1278,7 +1375,8 @@ trait RewriteOps {
        start of the next line, whichever comes first (literals and comments are
        skipped, so a brace inside a string does not count). */
     size_t recover_pos(size_t from, size_t end);
-    char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs);
+    char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs,
+                         char *fname, size_t fcap);
 }
 
 struct Pipe {
@@ -2212,7 +2310,12 @@ impl PipeOps for Pipe {
             if (tm->nparams > 0) fprintf(self->out, ", %s", impl[idx].params);
             fprintf(self->out, ") {\n");
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", S->cname, S->cname);
+            /* the call graph names the method by its generated symbol, which is
+               also its `impls[].symbol` in the map */
+            snprintf(sym->cur_func, sizeof sym->cur_func, "%s_%s_%s",
+                     S->cname, T->name, impl[idx].name);
             self->emit_body(self->out, impl[idx].bstart, impl[idx].blen, S, impl[idx].params);
+            sym->cur_func[0] = 0;
             fprintf(self->out, "}\n\n");
             self->line_break();
         }
@@ -2283,6 +2386,7 @@ impl PipeOps for Pipe {
         struct SymTab *sym = self->sym;
         size_t len = le - ls, t = 0;
         char *line, *sig;
+        char fname[MAX_NAME];
         int pre = sym->nvars, has_body = 0;
         size_t body_abs = 0;
 
@@ -2316,12 +2420,18 @@ impl PipeOps for Pipe {
 
         sym->leak_observe(line);                         /* leak tracking */
         self->line_off = ls;
-        sig = self->parse_func_sig(line, ls, &has_body, &body_abs);
+        sig = self->parse_func_sig(line, ls, &has_body, &body_abs, fname, sizeof fname);
         if (sig) {
             /* an exported prototype belongs in the .h and nowhere else; the
                newline compile_range writes still lands in the .c, so the .c keeps
                a blank line where the declaration used to be */
-            if (has_body) { self->body_abs = body_abs; self->body_pre = pre; }
+            if (has_body) {
+                self->body_abs = body_abs;
+                self->body_pre = pre;
+                /* the call graph attributes the body's lines to this function;
+                   scope_track clears it when the body's `}` closes */
+                snprintf(sym->cur_func, sizeof sym->cur_func, "%s", fname);
+            }
             fputs(sig, (self->line_pub && self->multi && !has_body) ? self->hout : self->out);
             free(sig);
         } else {
@@ -2674,7 +2784,9 @@ impl PipeOps for Pipe {
             else
                 fprintf(f, "    (void)self;\n");
             if (S->has_user_drop) {
+                snprintf(sym->cur_func, sizeof sym->cur_func, "%s_Drop_drop", S->cname);
                 self->emit_body(f, S->drop_bstart, S->drop_blen, S, "");
+                sym->cur_func[0] = 0;
             } else {
                 for (h = 0; h < S->nf; h++) {
                     const Struct *F = &sym->structs[S->ftype[h]];
@@ -2710,7 +2822,10 @@ impl PipeOps for Pipe {
            so a unit can name what the units built before it exported; a
            single-file compile of the same file starts from an empty table, which
            is what keeps its output identical to the single-file compiler's */
-        if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; sym->nimpls = 0; }
+        if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; sym->nimpls = 0; sym->ncalls = 0; }
+        /* the caller starts empty for every unit: attribution must not leak from
+           the previous unit in `build` mode */
+        sym->cur_func[0] = 0;
         buf_init(&self->unit_init);
         self->has_unit_init = 0;
 
@@ -3529,6 +3644,7 @@ impl RewriteOps for Pipe {
         self->sym->autodrop_observe(line);
         self->sym->leak_check_return(line, self->nscope, self->in_body ? 0 : 1,
                                      (size_t)self->cur_line);
+        self->sym->record_calls(line, (size_t)self->cur_line);
         self->autodrop_before(line);
 
         /* `own` is a contextual keyword: only a line-initial `own <name>` is a
@@ -3614,7 +3730,7 @@ impl RewriteOps for Pipe {
         if (*p == '*') {                              /* pointer declaration */
             const char *q = p;
             char pv[MAX_NAME];
-            int pk = 0, isheap = 0, isarr = 0;
+            int pk = 0, isheap = 0, isarr = 0, call_owned = 0;
             while (*q == '*' || *q == ' ' || *q == '\t') q++;
             pk = copy_ident(q, pv, 0);
             pv[pk] = 0;
@@ -3627,6 +3743,29 @@ impl RewriteOps for Pipe {
                     if ((strncmp(rhs, "malloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])) ||
                         (strncmp(rhs, "calloc", 6) == 0 && !is_ident_char((unsigned char)rhs[6])))
                         isheap = 1;
+                    else {
+                        /* Cross-function ownership: a direct call to a known
+                           function that returns the same struct pointer and may
+                           hand back its own allocation transfers that allocation
+                           to this variable, so a missing release is a leak. The
+                           fact is one level deep and comes from the call graph
+                           hint (`ret_owned`); a borrowed return stays untracked. */
+                        char fn[MAX_NAME];
+                        int fl = 0;
+                        FuncSig *FS;
+                        while (rhs[fl] && is_ident_char((unsigned char)rhs[fl]) &&
+                               fl + 1 < (int)sizeof fn) {
+                            fn[fl] = rhs[fl];
+                            fl++;
+                        }
+                        fn[fl] = 0;
+                        if (fl && rhs[fl] == '(') {
+                            FS = sym->find_func(fn);
+                            if (FS && FS->ret_owned && FS->retptr &&
+                                FS->retstruct == (int)(S - sym->structs))
+                                call_owned = 1;
+                        }
+                    }
                 }
                 while (*aft == ' ' || *aft == '\t') aft++;
                 if (*aft == '[') isarr = 1;
@@ -3649,7 +3788,7 @@ impl RewriteOps for Pipe {
                 sym->vars[vi].arr = isarr;
                 sym->vars[vi].iface = 0;
                 sym->vars[vi].tr = -1;
-                if (isheap) {                  /* track the allocation for leak warnings */
+                if (isheap || call_owned) {   /* track the allocation for leak warnings */
                     sym->vars[vi].owned = 1;
                     sym->vars[vi].own_line = (size_t)self->cur_line;
                 }
@@ -4535,6 +4674,10 @@ impl RewriteOps for Pipe {
                     /* a still-owned heap object whose scope ends here is unreachable */
                     sym->leak_check_scope(base, sym->nvars);
                     sym->nvars = self->scope[--self->nscope];
+                    /* the outermost scope is a function body: its caller is done
+                       (impl bodies track their own scope from zero, so they are
+                       excluded -- the emitter clears cur_func itself) */
+                    if (self->nscope == 0 && !self->in_body) sym->cur_func[0] = 0;
                 }
             }
             p++;
@@ -4544,7 +4687,8 @@ impl RewriteOps for Pipe {
     /* Ordinary function definition or prototype: qualify the struct types in its
        return type and parameters, record the signature, and register the parameters
        when a body follows. Returns a new line, or NULL when `line` is not one. */
-    char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs) {
+    char *parse_func_sig(const char *line, size_t ls, int *has_body, size_t *body_abs,
+                         char *fname, size_t fcap) {
         struct SymTab *sym = self->sym;
         size_t n = strlen(line), lpo, he, ns, rt, rp, i, end;
         const char *lp;
@@ -4558,6 +4702,7 @@ impl RewriteOps for Pipe {
 
         *has_body = 0;
         *body_abs = 0;
+        if (fcap) fname[0] = 0;
 
         lp = strchr(line, '(');
         if (!lp) return NULL;
@@ -4688,6 +4833,7 @@ impl RewriteOps for Pipe {
             if (fi < 0) {
                 if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
                 fi = sym->nfuncs++;
+                sym->funcs[fi].ret_owned = 0;   /* fresh row: no ownership fact yet */
             }
             FS = &sym->funcs[fi];
             snprintf(FS->name, MAX_NAME, "%s", name);
@@ -4700,6 +4846,7 @@ impl RewriteOps for Pipe {
             if (strncmp(FS->ret, "static ", 7) == 0) memmove(FS->ret, FS->ret + 7, strlen(FS->ret + 7) + 1);
             FS->line = (size_t)self->cur_line;
             FS->file = g_path;
+            if (fcap) snprintf(fname, fcap, "%s", name);
         }
         if (isdef) self->cur_rettr = ret_tr;
 

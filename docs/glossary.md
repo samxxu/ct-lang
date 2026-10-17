@@ -91,8 +91,8 @@
 | 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
 | 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发。**同上，已移出 L0** |
-| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）。**已由 Phase 4/5 在 `selfhost/src/**` 实现** |
-| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/src/**` 实现** |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）；Phase 6.2 起 `T *q = f();` 若 `f` 可能返回它自己的分配（`ret_owned`），`q` 也计为 owned。**已由 Phase 4/5/6 在 `selfhost/src/**` 实现** |
+| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；Phase 6.2 起 `T *q = f()`（`f` 的 `ret_owned` 为真且返回同一 struct 指针）也标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/src/**` 实现** |
 | 错误恢复（error recovery） | `setjmp` 守卫 + `recover_pos` | `die` 报告后长跳到 `compile_range` 的守卫，并重同步到下一个 `}` 之后或下一行行首；上限 `MAX_ERRORS=20`，失败的编译删除产物并在末尾补 `ctc: N error(s) generated`。Phase 4 切片 3 **新增**（无 oracle） |
 | 语义诊断（semantic check） | `duplicate trait/struct` · `signature_mismatch` | 重复定义按 cname 报错（namespace 隔离）；impl 的返回类型 / 参数个数与 trait 不符时告警（**不比参数类型**）。Phase 4 切片 4 **新增**（无 oracle） |
 
@@ -237,8 +237,8 @@
 | driver | `compile_range` / `compile_file` / `compile_main` | orchestration; touches no parsing / generation logic — L0 is single-file only now |
 | `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | line emission | `line_of` / `line_at` / `line_break` | offset→line cache / emit / force a re-emit at a block boundary. **Same; moved out of L0** |
-| leak warning | `potential_leak` · `leak_check_scope` · `leak_check_return` | conservative: still owned at scope end is a definite leak (kind 0); a conditional `return` leaving a non-returned object behind reports once as `may leak on a return path` (kind 2, JSON carries `path_line`). **Implemented by Phases 4/5 under `selfhost/src/**`** |
-| owned (heap-holding) | `Var.owned` / `own_line` / `autodrop` | marked at the creation site by `T *p = malloc/calloc(...)`; `own` additionally sets `autodrop` (Phase 5). **Implemented under `selfhost/src/**`** |
+| leak warning | `potential_leak` · `leak_check_scope` · `leak_check_return` | conservative: still owned at scope end is a definite leak (kind 0); a conditional `return` leaving a non-returned object behind reports once as `may leak on a return path` (kind 2, JSON carries `path_line`); since Phase 6.2 a `T *q = f();` whose callee may return its own allocation (`ret_owned`) counts `q` as owned too. **Implemented by Phases 4/5/6 under `selfhost/src/**`** |
+| owned (heap-holding) | `Var.owned` / `own_line` / `autodrop` | marked at the creation site by `T *p = malloc/calloc(...)`; from Phase 6.2 also by `T *q = f()` when `f`'s `ret_owned` is set and it returns the same struct pointer; `own` additionally sets `autodrop` (Phase 5). **Implemented under `selfhost/src/**`** |
 | error recovery | `setjmp` guard + `recover_pos` | `die` reports and longjmps back to `compile_range`'s guard, resyncing past the next `}` or the start of the next line; capped by `MAX_ERRORS=20`, and a failing compile drops its artifacts and closes with `ctc: N error(s) generated`. Added by Phase 4 slice 3 (**new**, no oracle) |
 | semantic check | `duplicate trait/struct` · `signature_mismatch` | duplicate definitions are errors judged on the cname (namespaces stay isolated); a differing return type / parameter count between impl and trait is a warning (**parameter types are not compared**). Added by Phase 4 slice 4 (**new**, no oracle) |
 

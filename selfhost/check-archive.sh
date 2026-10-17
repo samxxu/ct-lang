@@ -115,11 +115,15 @@ test/archive/multifile/calc
 # `ns_dir*` pins Phase 5 directory = namespace: a matching declaration and a unit
 # with no declaration build, while a mismatch is a hard diagnostic.
 # `map` pins Phase 6 reverse mapping (`--emit-map -`): the JSON names every trait,
-# struct, function and impl method, including the `Drop` marker and its symbol.
+# struct, function, impl method and direct call edge (caller attribution uses the
+# generated method symbol; the built-in `Drop` is listed too).
 # `map_noarg` pins the compile-mode missing-argument branch, and
 # `map_stdout_build` pins the build-mode `-` rejection. (The build parser's
 # missing-argument branch cannot be expressed: the runner appends `-o <dir>`,
 # which would be taken as the option's value.)
+# `leak_call` pins Phase 6 cross-function ownership: `Box *q = make();` inherits
+# the allocation that `make` returns and leaks (one warning), while a callee that
+# releases its result and one that only borrows stay silent.
 # `split` additionally pins the cross-unit OO contract the selfhost split relies
 # on: a `pub trait`/`pub struct` in a header unit, its `impl` (with a `static`
 # vtable) in another unit, and a third unit dispatching through an
@@ -153,6 +157,7 @@ ns_dir_mismatch
 map
 map_noarg
 map_stdout_build
+leak_call
 "
 
 in_list() {

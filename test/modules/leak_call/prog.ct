@@ -1,0 +1,35 @@
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop() { (void)self; }
+}
+
+Box *make(void) {
+    Box *p = malloc(sizeof(struct Box));
+    p->n = 1;
+    return p;
+}
+
+Box *borrow(Box *b) {
+    return b;
+}
+
+void consume(void) {
+    Box *r = make();
+    delete r;
+}
+
+void use_borrow(Box *seed) {
+    Box *t = borrow(seed);
+    t->n = 2;
+}
+
+int main(void) {
+    Box *q = make();
+    q->n = 2;
+    return 0;
+}
