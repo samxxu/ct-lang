@@ -313,6 +313,26 @@ cli_expect line-removed nonzero "unknown option" --line test/cases/01_trait_basi
 cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o /nonexistent-dir/x.c
 cli_expect short-read nonzero "short read" "$TMP"
 
+# two more reachable driver failure sites (2026-10-17 audit): a non-seekable
+# input — a pipe — makes read_file's fseek/ftell fail (`cannot read`), and an
+# unusable $TMPDIR makes tmpfile() fail (`cannot create a temporary file`).
+# Both messages are pinned verbatim against the real binary.
+if printf 'int x;\n' | "$TMP/ctc" /dev/stdin -o "$TMP/stdin.c" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
+    bad "cli/cannot-read" "expected a non-zero exit"
+elif grep -Fq "cannot read" "$TMP/cli.err"; then
+    ok "cli/cannot-read"
+else
+    bad "cli/cannot-read" "wrong message: $(cat "$TMP/cli.err")"
+fi
+
+if TMPDIR=/nonexistent/zzz "$TMP/ctc" test/cases/21_empty_init_iface.ct -o "$TMP/tmpdir.c" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
+    bad "cli/tmpfile-cannot-create" "expected a non-zero exit"
+elif grep -Fq "cannot create a temporary file" "$TMP/cli.err"; then
+    ok "cli/tmpfile-cannot-create"
+else
+    bad "cli/tmpfile-cannot-create" "wrong message: $(cat "$TMP/cli.err")"
+fi
+
 # the header write is a separate failure site from the .c write above: make the
 # same-named .h path a directory so the header open fails
 mkdir -p "$TMP/hdr/x.h"
