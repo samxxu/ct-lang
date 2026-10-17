@@ -1,0 +1,1 @@
+prog.ct:10: warning: potential leak: 'p' (Cell*) allocated but never deleted

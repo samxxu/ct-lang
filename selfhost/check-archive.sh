@@ -110,6 +110,8 @@ test/archive/multifile/calc
 # `leak_path*` pins the path-sensitive warning: a conditional return leaves the
 # object behind (text and JSON, the latter carrying `path_line`), while an
 # unconditional `return p;` transfers ownership and stays silent.
+# `leak_method` pins leak tracking inside impl bodies: the body's implicit end is
+# a scope exit, and an assignment that moves the pointer is not a leak.
 # `ns_dir*` pins Phase 5 directory = namespace: a matching declaration and a unit
 # with no declaration build, while a mismatch is a hard diagnostic.
 # `split` additionally pins the cross-unit OO contract the selfhost split relies
@@ -139,6 +141,7 @@ autodrop_layout
 autodrop_scope
 leak_path
 leak_path_json
+leak_method
 ns_dir
 ns_dir_mismatch
 "

@@ -2736,6 +2736,7 @@ impl PipeOps for Pipe {
 
             content = ls[k] + (size_t)minind;
             line = xstrndup(g_src + content, le[k] - content);
+            sym->leak_observe(line);
             out = self->transform_line(line);
             if (self->hoist.n == 0) self->line_at(f, (size_t)self->cur_line);
             else self->emit_hoisted();
@@ -2757,6 +2758,9 @@ impl PipeOps for Pipe {
             free(sb.p);
             self->scope_track(ls[k], le[k]);
         }
+        /* the implicit end of a method body is a scope exit too: still-owned heap
+           objects that no inner `}` reported are leaks (own variables excluded) */
+        sym->leak_check_scope(0, sym->nvars);
         /* the method body's own scope has no `}` inside the emitted range: release
            its top-level `own` variables right before the caller writes the brace */
         if (!self->hoist.cap) buf_init(&self->hoist);

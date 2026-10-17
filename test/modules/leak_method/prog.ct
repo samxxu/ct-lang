@@ -1,0 +1,28 @@
+#include <stdlib.h>
+
+trait Worker { void work(); void clean(); }
+
+struct Cell { int n; };
+struct Job { int n; } use Worker;
+
+impl Worker for Job {
+    void work() {
+        Cell *p = malloc(sizeof(struct Cell));
+        p->n = self->n;
+    }
+    void clean() {
+        {
+            Cell *q = malloc(sizeof(struct Cell));
+            Cell *r = q;
+            q->n = self->n;
+            delete r;
+        }
+    }
+}
+
+int main(void) {
+    Job j;
+    j.work();
+    j.clean();
+    return 0;
+}
