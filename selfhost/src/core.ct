@@ -42,7 +42,7 @@
 #define MAX_WARNS  64                     /* collected leak warnings per run */
 #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
 
-#define CTC_VERSION "0.0.1"
+#define CTC_VERSION "0.4.0"
 
 /* ---------------------------------------------------------------- data */
 
