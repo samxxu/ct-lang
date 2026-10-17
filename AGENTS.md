@@ -48,6 +48,10 @@
   构建步骤——`gcc ctc.c`、`./test/run.sh` 的编译相关层与 CT 线全部关卡都不得依赖它，方言演示只由
   `test/run.sh` 的 `dialect` 层驱动。方言所需的符号信息由编译器已产出的 map JSON（`--emit-map`）
   提供，不在仓库内另造一套。
+- **例外（Phase 8 包管理）**：`ct get` / `ct install` 可调用**系统 `git`** 获取 git 源包，并可把**本地目录源**同步进
+  `vendor/`。这是包管理子命令的受控例外——编译器核（`ct compile` / `ct build`）仍**零网络、零子进程**，
+  且不得内置 HTTP 客户端。无 `git` 时 git 源硬报错并提示，本地源照常可用。见
+  [design/phase8.md](docs/design/phase8.md)（D22 / D26）。
 - `editors/**` 必须保持**纯声明式 JSON**：无构建步骤、无 npm 依赖、无需打包器，改完可直接
   `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、**不调用 `ctc`**（方言亦不例外：
   插件不代跑展开器，`--watch` / 后台自动展开推迟；消费映射信息只能读编译器已产出的 map JSON）。
@@ -224,6 +228,12 @@ Hard boundaries:
   and every CT-line gate must not depend on it, and the dialect demo is driven by the `dialect` layer of
   `test/run.sh` alone. The symbols a dialect needs come from the map JSON the compiler already emits
   (`--emit-map`); nothing parallel is built in the repo.
+- **Exception (Phase 8 package management)**: `ct get` / `ct install` may invoke the **system `git`** to
+  fetch git-sourced packages and may sync **local directory sources** into `vendor/`. This is a
+  controlled exception for the package subcommands only — the compiler core (`ct compile` /
+  `ct build`) stays **network-free and process-free**, and no HTTP client may be built in. Without
+  `git`, git sources fail hard with a hint while local sources keep working. See
+  [design/phase8.md](docs/design/phase8.md) (D22 / D26).
 - `editors/**` must stay **declarative JSON only**: no build step, no npm dependencies, no bundler —
   `npx @vscode/vsce package` must work as-is. Extensions cover highlighting and editing comfort only;
   they do not validate syntax and do not invoke `ctc` (dialects included: the extension runs no
