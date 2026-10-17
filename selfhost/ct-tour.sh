@@ -11,9 +11,11 @@
 #   5) true self-hosting: L1 compiles itself into L1', and L1' compiles the sample too
 #   6) the split compiler: L1 builds the multi-unit tree selfhost/src/** into L2,
 #      and L2 compiles the sample identically as well
-#   7) the incremental cache (Phase 6.3): a second `build` of unchanged sources
+#   7) the single entry (Phase 7.1): the same L2 binary answers to `ct`, with
+#      `ctc` kept as a compatibility alias
+#   8) the incremental cache (Phase 6.3): a second `build` of unchanged sources
 #      reuses the artifacts, and a touched source invalidates them
-#   8) prints where to go next
+#   9) prints where to go next
 #
 # Usage:
 #   bash selfhost/ct-tour.sh                 # tour with the built-in sample
@@ -246,8 +248,46 @@ else
     printf 'FAIL: L1 could not build selfhost/src/**\n'
 fi
 
-# ------------------------------------------- 7) the incremental cache (Phase 6.3)
-banner "7) the incremental cache: a second build reuses unchanged units"
+# ------------------------------------- 7) the single entry `ct` (Phase 7.1)
+banner "7) the single entry: the same L2 binary answers to 'ct'"
+say "Phase 7: 'ct' is the command and 'ctc' stays as a compatibility alias."
+say "The identity comes from argv[0], so no second build is needed:"
+ct_bin="$work/ct"
+alias_bin="$work/ctc"
+cp "$l2_bin" "$ct_bin"
+cp "$l2_bin" "$alias_bin"
+
+printf '\n+ %s -v\n' "$ct_bin"
+ct_ver="$("$ct_bin" -v)"
+printf '\n+ %s -v\n' "$alias_bin"
+ctc_ver="$("$alias_bin" -v)"
+case "$ct_ver" in
+    ct\ v*) note "ok: $ct_ver" ;;
+    *) printf 'FAIL: expected a "ct v..." version line, got "%s"\n' "$ct_ver"; fail=1 ;;
+esac
+case "$ctc_ver" in
+    ctc\ v*) note "ok: $ctc_ver" ;;
+    *) printf 'FAIL: expected a "ctc v..." version line, got "%s"\n' "$ctc_ver"; fail=1 ;;
+esac
+
+say "It compiles through both the explicit and the default subcommand:"
+printf '\n+ %s compile %s -o %s\n' "$ct_bin" "$sample_abs" "$out_c"
+if "$ct_bin" compile "$sample_abs" -o "$out_c" && cmp -s "$out_c" "$l0_c"; then
+    note "ok: 'ct compile' writes the same C as L0."
+else
+    printf 'FAIL: ct compile differs\n'
+    fail=1
+fi
+printf '\n+ %s %s -o %s\n' "$ct_bin" "$sample_abs" "$out_c"
+if "$ct_bin" "$sample_abs" -o "$out_c" && cmp -s "$out_c" "$l0_c"; then
+    note "ok: the default subcommand ('ct <file>') behaves the same."
+else
+    printf 'FAIL: ct <file> differs\n'
+    fail=1
+fi
+
+# ------------------------------------------- 8) the incremental cache (Phase 6.3)
+banner "8) the incremental cache: a second build reuses unchanged units"
 say "Phase 6.3: 'build' stamps every unit with a key -- its path, mtime, size, the"
 say "run's options and its dependencies' keys -- under <outdir>/.ctcache/. When the"
 say "key still matches and the .c/.h are on disk, the unit is not regenerated."
@@ -294,8 +334,8 @@ else
     fail=1
 fi
 
-# ------------------------------------------------------------------- 8) next
-banner "8) where to go next"
+# ------------------------------------------------------------------- 9) next
+banner "9) where to go next"
 say "  your own file      bash selfhost/ct-tour.sh path/to/your.ct"
 say "  full test suite    ./test/run.sh                    (build, unit, goldens, examples, errors)"
 say "  bootstrap gates    bash selfhost/check-goldens.sh   (L1 vs goldens, plus L1' vs goldens)"

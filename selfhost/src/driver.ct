@@ -27,7 +27,7 @@ import core;
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
 #define MAX_KEY   768                     /* one unit's cache key, stored as text */
 
-#define CTC_VERSION "0.5.0"
+#define CTC_VERSION "0.6.0"
 
 /* The incremental-build cache (Phase 6.3). These are methods rather than plain
    functions because plain-C top-level signatures are capped (MAX_FUNCS) and this
@@ -188,6 +188,12 @@ impl CacheOps for Build {
 }
 
 static struct Build g_build;
+
+/* The name printed by `-v` and the usage line. `ct` is the Phase 7 single entry;
+   any other argv[0] -- the `ctc` compatibility alias and the ctc-l2 binary the
+   gates build included -- keeps the historical `ctc` identity, so no pinned
+   diagnostic or version line moves. */
+static const char *g_ct_prog = "ctc";
 
 /* ------------------------------------------------- `build` driver (plain C) */
 
@@ -377,7 +383,7 @@ static int build_main(int argc, char **argv, const char *prog)
     for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) { ct_usage(prog); return 0; }
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            printf("ctc v%s\n", CTC_VERSION);
+            printf("%s v%s\n", g_ct_prog, CTC_VERSION);
             return 0;
         }
         if (strcmp(argv[i], "-o") == 0) {
@@ -584,7 +590,7 @@ static int compile_main(int argc, char **argv, const char *prog)
             return 0;
         }
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            printf("ctc v%s\n", CTC_VERSION);
+            printf("%s v%s\n", g_ct_prog, CTC_VERSION);
             return 0;
         }
         if (strcmp(argv[i], "-o") == 0) {
@@ -648,15 +654,19 @@ static int compile_main(int argc, char **argv, const char *prog)
 int main(int argc, char **argv)
 {
     int first = 1;
+    const char *base = strrchr(argv[0], '/');
+
+    base = base ? base + 1 : argv[0];
+    if (strcmp(base, "ct") == 0) g_ct_prog = "ct";
 
     /* Single-entry `ct` with `ctc` kept as a compatibility alias. `compile` is
        the default subcommand (`ct X` == `ct compile X`); `build` compiles
        several units in multi-file mode. */
     if (first < argc && strcmp(argv[first], "build") == 0)
-        return build_main(argc - first - 1, argv + first + 1, argv[0]);
+        return build_main(argc - first - 1, argv + first + 1, g_ct_prog);
 
     if (first < argc && strcmp(argv[first], "compile") == 0)
         first++;
 
-    return compile_main(argc - first, argv + first, argv[0]);
+    return compile_main(argc - first, argv + first, g_ct_prog);
 }
