@@ -20,7 +20,7 @@
 | Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 建设 | ✅ 完成（2026-10-15：M2 达成 25/25，且 L1′ 自举闭环通过） | 阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
 | Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | ✅ 完成（2026-10-16；非版本 tag `phase2-multifile-split`） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
-| Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | 🚧 进行中（2026-10-16 起；切片 1：`--line` / `--no-line` 已落地） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
+| Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | ✅ 完成（2026-10-16；4 个切片全部落地，版本仍 v0.0.1） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | 🔭 展望 | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔭 展望 | — |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名（设计已冻结，只差落地） | 落地 | 🔭 展望 | `ct compile` 可用且 `ctc …` 调用不失效 |
@@ -700,11 +700,13 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **出口**：诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行。
 - **对差依据**：`test/archive/errors/*`、`run.sh` 的 `#line` 层。
 - **风险**：错误计数与重同步点容易产生级联误报；语义诊断要与「不做类型检查」的定位边界划清。
-- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。**尚未做**：语义诊断（4）。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
-- **进展（2026-10-16，切片 2：泄漏警告 + `--diagnostics`）**：oracle 的保守、路径不敏感泄漏警告已在 `selfhost/src/**` 恢复——`Var` 增 `owned` / `own_line`，指针声明处的 `malloc` / `calloc` 记为持有（`new_var` 复用槽位时清这两个字段），`delete` 与 `return` / 逃逸赋值清标记，作用域闭合时 `leak_check_scope` 收集仍持有的对象，`emit_warnings` 按 `--diagnostics=json` 发 JSON（compile 走 stdout、build 走 stderr，后者把 stdout 留给 cc 命令）、按 text 发 stderr。归档负例 `too_many_warnings` 由 PENDING 转 PASS（超 `MAX_WARNS` 仍 `die`）。**5 个新方法全部进 `SymTabOps`（9 → 14）**，warning 输出复用既有 pub 包装器（单文件 `ct_compile_file`、build `ct_cc_finish`），**顶层函数零新增**——`MAX_FUNCS` 余量仍是 1。新增 3 个 designed fixture：`leak`（compile text）、`leak_json`（compile json → stdout）、`leak_build`（build json → stderr），`check-archive.sh` 第 7 组新增 `expected.stdout` / `expected.stderr` 逐字节断言。**尚未做**：语义诊断（4）。
+- **进展（2026-10-16，切片 1：`#line` 开关收尾）**：`--line` / `--no-line` 已在 `selfhost/src/**` 落地——`core.ct` 新增全局 `g_line_force`（`-1` 随模式 / `0` 强制关 / `1` 强制开），`g_emit_line = (g_line_force >= 0) ? g_line_force : multi;`；`ct_compile_file` 增第 4 个参数 `line_force`，`compile_main` 与 `build_main` 两条 CLI 路径均解析并透传，usage 文本补上两行。新增两个 designed fixture（`test/modules/noline/`：`build --no-line` 抑制多文件默认开；`test/modules/line/`：`compile --line` 单文件强制开），`check-archive.sh` 第 7 组由此扩展出 `compile.args` 分支（单文件用例在暂存副本里原样跑参数，banner 路径才与 golden 对齐），`baseline_designed` 增至 7 例。**单文件默认仍为关**，故 L2 单文件产物与 L0 逐字节一致。新代码一律进 `impl`（`MAX_FUNCS` 余量仅 1）。
+- **进展（2026-10-16，切片 2：泄漏警告 + `--diagnostics`）**：oracle 的保守、路径不敏感泄漏警告已在 `selfhost/src/**` 恢复——`Var` 增 `owned` / `own_line`，指针声明处的 `malloc` / `calloc` 记为持有（`new_var` 复用槽位时清这两个字段），`delete` 与 `return` / 逃逸赋值清标记，作用域闭合时 `leak_check_scope` 收集仍持有的对象，`emit_warnings` 按 `--diagnostics=json` 发 JSON（compile 走 stdout、build 走 stderr，后者把 stdout 留给 cc 命令）、按 text 发 stderr。归档负例 `too_many_warnings` 由 PENDING 转 PASS（超 `MAX_WARNS` 仍 `die`）。**5 个新方法全部进 `SymTabOps`（9 → 14）**，warning 输出复用既有 pub 包装器（单文件 `ct_compile_file`、build `ct_cc_finish`），**顶层函数零新增**——`MAX_FUNCS` 余量仍是 1。新增 3 个 designed fixture：`leak`（compile text）、`leak_json`（compile json → stdout）、`leak_build`（build json → stderr），`check-archive.sh` 第 7 组新增 `expected.stdout` / `expected.stderr` 逐字节断言。
 - **验证（2026-10-16，切片 2）**：三套 golden 全部由 tag `overreach-oracle` 编出的 oracle 生成，L2 与之在 `.c` / `.h` / stderr / stdout 四侧逐字节一致（含 `--diagnostics=bad` 的 `unknown diagnostics format` 报错）；`check-archive.sh` 0 退化（单单元 3 pass、诊断 **10 pass / 0 pending**、多单元 4 pass、designed **10 pass**）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过，L2 单文件产物与 L0 逐字节一致。
-- **进展（2026-10-16，切片 3：多错误报告 + 重同步）**：`die` 不再一律退出——`compile_range` 的逐行循环每轮用 `setjmp` 设一个守卫，`die` 报告后 `longjmp` 回守卫（无守卫时仍是原来的「一处错误即停」，OOM 亦然）。守卫处快照、处理分支里还原 `sym->nvars` / `g_nscope` / `g_body_abs`（长跳转会把 `emit_body` 的还原跳过），嵌套 namespace 的递归靠保存/拷回 `jmp_buf` 保住外层守卫。重同步点由 `RewriteOps::recover_pos` 给出：自错误处向后，取「下一个 `}` 之后」与「下一行行首」的先到者（跳过字符串与注释），并保证严格前进。错误上限 `MAX_ERRORS=20`，超过即打印 `ctc: too many errors, stopping` 后退出 1。失败的编译按本次调用的错误增量**删除**已写的 `.c`/`.h`，并在 stderr 末尾补 `ctc: N error(s) generated`。**尚未做**：语义诊断（切片 4）。
+- **进展（2026-10-16，切片 3：多错误报告 + 重同步）**：`die` 不再一律退出——`compile_range` 的逐行循环每轮用 `setjmp` 设一个守卫，`die` 报告后 `longjmp` 回守卫（无守卫时仍是原来的「一处错误即停」，OOM 亦然）。守卫处快照、处理分支里还原 `sym->nvars` / `g_nscope` / `g_body_abs`（长跳转会把 `emit_body` 的还原跳过），嵌套 namespace 的递归靠保存/拷回 `jmp_buf` 保住外层守卫。重同步点由 `RewriteOps::recover_pos` 给出：自错误处向后，取「下一个 `}` 之后」与「下一行行首」的先到者（跳过字符串与注释），并保证严格前进。错误上限 `MAX_ERRORS=20`，超过即打印 `ctc: too many errors, stopping` 后退出 1。失败的编译按本次调用的错误增量**删除**已写的 `.c`/`.h`，并在 stderr 末尾补 `ctc: N error(s) generated`。
 - **验证（2026-10-16，切片 3）**：3 处错误的样例三处全报 + 摘要 + 退出 1 + 无产物；`MAX_ERRORS` 边界（第 21 处后停止）、namespace 嵌套内错误、函数体内错误均符合预期，且后一处错误的位置不受前一处长跳转影响（与 L0 的既有位置一致）。`check-archive.sh` 0 退化（designed **12 pass**，新增 `multi_err` / `multi_err_build`）；`check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过。
+- **进展（2026-10-16，切片 4：语义诊断）**：两类新增诊断落地。**重复定义**在 `parse_trait` / `parse_struct` 追加前按 **cname** 查重（namespace 隔离：`A::S` 与 `B::S` 合法），命中即 `duplicate trait 'X'` / `duplicate struct 'X'` 报错，并参与切片 3 的多错误恢复。**方法签名不一致**在 `parse_impl` 收集方法时记下 impl 实际写的返回类型与参数个数（`ImplMethod` 增 `ret` / `nparams` / `line`），再与 trait 的 `Method` 比对：参数个数不同、或返回类型（忽略空白）不同即 `signature mismatch` **告警**（不改变退出码；impl 省略返回类型时视为沿用 trait，与发射行为一致）。告警沿用泄漏警告的同一条通道（`Warn` 增 `kind` / `sname` / `msg`），`--diagnostics=json` 新增 `signature_mismatch` 条目，**leak 条目的字段与形状保持不变**。**Phase 4 四个切片全部完成**，版本仍停 v0.0.1（冻结期不改 `CTC_VERSION`）。
+- **验证（2026-10-16，切片 4）**：重复 trait / struct 各报 1 错 + 摘要 + 退出 1 + 无产物；同名 struct 分处两个 namespace 不误报且产物可运行；返回类型与参数个数不一致各产生 1 条 warning、退出 0、产物存在；json 与 `--diagnostics=json` 下的 leak 输出均不变。**selfhost 自编译零告警**。`check-archive.sh` 0 退化（designed **16 pass**，新增 `dup_trait` / `dup_struct` / `sig_mismatch` / `sig_mismatch_json`）；`check-goldens.sh` 25/25 ×3 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过。
 
 ### Phase 5：新增特性（原 2.4）
 
@@ -763,7 +765,7 @@ as confirmed by the user.
 | 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | build | ✅ done (2026-10-15: M2 at 25/25, and the L1′ self-hosting loop passes) | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
 | 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | ✅ done (2026-10-16; non-version tag `phase2-multifile-split`) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
-| 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | 🚧 in progress (from 2026-10-16; slice 1: `--line` / `--no-line` landed) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
+| 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | ✅ done (2026-10-16; all four slices landed, version still v0.0.1) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | 🔭 outlook | design frozen + new cases green; rung **M6** closes here |
 | 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔭 outlook | — |
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias (design frozen, only the landing is left) | landing | 🔭 outlook | `ct compile` works and existing `ctc …` invocations keep working |
@@ -1776,7 +1778,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   it on single-file), and `check-archive.sh` group 7 grew a `compile.args` branch (single-file cases
   run their args verbatim from a staging copy so the banner path matches the golden), taking
   `baseline_designed` to 7. **The single-file default stays off**, so L2's single-file output remains
-  byte-identical with L0. **Still to do**: semantic checks (4). New code goes
+  byte-identical with L0.  New code goes
   into `impl` blocks (`MAX_FUNCS` has one slot left).
 - **Progress (2026-10-16, slice 2: leak warnings + `--diagnostics`)**: the oracle's conservative,
   path-insensitive leak warnings are restored in `selfhost/src/**` — `Var` gains `owned` /
@@ -1791,7 +1793,7 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   **no top-level function is added** — `MAX_FUNCS` still has its one slot. Three designed fixtures
   were added (`leak`: compile text; `leak_json`: compile json → stdout; `leak_build`: build json →
   stderr), and `check-archive.sh` group 7 gained `expected.stdout` / `expected.stderr` byte-exact
-  assertions. **Still to do**: semantic checks (4).
+  assertions. 
 - **Verification (2026-10-16, slice 2)**: all three goldens were generated by the oracle built from
   tag `overreach-oracle`, and L2 matches it byte for byte across `.c` / `.h` / stderr / stdout
   (including the `unknown diagnostics format` error for `--diagnostics=bad`); `check-archive.sh`
@@ -1817,6 +1819,26 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   `check-archive.sh` 0 regressions (designed **12 pass**, adding `multi_err` / `multi_err_build`);
   `check-goldens.sh` 25/25 + L1′ 25/25 + L2 25/25 + fixpoint 2/2; `check-m2a.sh` / `ct-tour.sh`
   exit 0; `./test/run.sh` 115/115; the manual three-step passes.
+- **Progress (2026-10-16, slice 4: semantic checks)**: two new diagnostics. **Duplicate
+  definitions** are rejected before `parse_trait` / `parse_struct` append, compared on the
+  **cname** (so `A::S` and `B::S` stay legal), reporting `duplicate trait 'X'` /
+  `duplicate struct 'X'` — they take part in slice 3's recovery. **Signature mismatches** are
+  collected in `parse_impl`: it now records what the impl actually wrote (`ImplMethod` gains
+  `ret` / `nparams` / `line`) and compares it with the trait's `Method` — a different parameter
+  count or a different return type (whitespace ignored) raises a `signature mismatch`
+  **warning** (the exit code is unchanged; an omitted return type means "use the trait's",
+  matching what is emitted). Warnings reuse the leak channel (`Warn` gains `kind` / `sname` /
+  `msg`) and `--diagnostics=json` gains a `signature_mismatch` entry while **leak entries keep
+  their exact shape**. **All four Phase 4 slices are done**; the version stays v0.0.1
+  (`CTC_VERSION` is frozen).
+- **Verification (2026-10-16, slice 4)**: a duplicate trait / struct each reports one error plus
+  the summary, exits 1 and leaves no artifact; the same struct name in two namespaces is not
+  flagged and still builds and runs; a differing return type and a differing parameter count
+  each yield one warning with exit 0 and working artifacts; JSON is unchanged for leak entries.
+  **The self-hosted compiler builds itself with zero warnings.** `check-archive.sh` 0
+  regressions (designed **16 pass**, adding `dup_trait` / `dup_struct` / `sig_mismatch` /
+  `sig_mismatch_json`); `check-goldens.sh` 25/25 ×3 + fixpoint 2/2; `check-m2a.sh` /
+  `ct-tour.sh` exit 0; `./test/run.sh` 115/115; the manual three-step passes.
 
 ### Phase 5 — new features (was 2.4)
 

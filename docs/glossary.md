@@ -93,6 +93,7 @@
 | 泄漏警告（leak warning） | `potential_leak` · `leak_observe` | 保守、路径不敏感：owned 堆对象在作用域结束仍未 `delete` / `return` / 逃逸（Phase 1.7）。**已随 Phase 0.3 移出 L0；已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
 | owned（堆对象持有） | `Var.owned` / `own_line` | 由 `T *p = malloc/calloc(...)` 在创建点标记。**随泄漏警告一并移出 L0，已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
 | 错误恢复（error recovery） | `setjmp` 守卫 + `recover_pos` | `die` 报告后长跳到 `compile_range` 的守卫，并重同步到下一个 `}` 之后或下一行行首；上限 `MAX_ERRORS=20`，失败的编译删除产物并在末尾补 `ctc: N error(s) generated`。Phase 4 切片 3 **新增**（无 oracle） |
+| 语义诊断（semantic check） | `duplicate trait/struct` · `signature_mismatch` | 重复定义按 cname 报错（namespace 隔离）；impl 的返回类型 / 参数个数与 trait 不符时告警（**不比参数类型**）。Phase 4 切片 4 **新增**（无 oracle） |
 
 ### 4. CLI 与产物
 
@@ -237,6 +238,7 @@
 | leak warning | `potential_leak` · `leak_observe` | conservative, path-insensitive: an owned heap object still not `delete`d / `return`ed / escaped when its scope ends (Phase 1.7). **Moved out of L0 in Phase 0.3; restored by Phase 4 slice 2 under `selfhost/src/**`** |
 | owned (heap-holding) | `Var.owned` / `own_line` | marked at the creation site by `T *p = malloc/calloc(...)`. **Moved out of L0 together with the leak warnings; restored by Phase 4 slice 2 under `selfhost/src/**`** |
 | error recovery | `setjmp` guard + `recover_pos` | `die` reports and longjmps back to `compile_range`'s guard, resyncing past the next `}` or the start of the next line; capped by `MAX_ERRORS=20`, and a failing compile drops its artifacts and closes with `ctc: N error(s) generated`. Added by Phase 4 slice 3 (**new**, no oracle) |
+| semantic check | `duplicate trait/struct` · `signature_mismatch` | duplicate definitions are errors judged on the cname (namespaces stay isolated); a differing return type / parameter count between impl and trait is a warning (**parameter types are not compared**). Added by Phase 4 slice 4 (**new**, no oracle) |
 
 ### 4. CLI and output
 
