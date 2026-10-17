@@ -123,7 +123,11 @@ test/archive/multifile/calc
 # `map_noarg` pins the compile-mode missing-argument branch, and
 # `map_stdout_build` pins the build-mode `-` rejection. (The build parser's
 # missing-argument branch cannot be expressed: the runner appends `-o <dir>`,
-# which would be taken as the option's value.)
+# which would be taken as the option's value.) `map_file` pins the compile-mode
+# `--emit-map <file>` write path, comparing the emitted JSON with expected.map.
+# The `cli_*` cases pin the L2 driver's argument and I/O failure branches:
+# missing `-o` / `-I` values, an unknown `--diagnostics` or `--std` value, an
+# unopenable input, and a directory read (`short read`).
 # `leak_call` pins Phase 6 cross-function ownership: `Box *q = make();` inherits
 # the allocation that `make` returns and leaks (one warning), while a callee that
 # releases its result and one that only borrows stay silent.
@@ -163,11 +167,18 @@ ns_dir
 ns_dir_mismatch
 map
 map_noarg
+map_file
 map_stdout_build
 leak_call
 std_default
 std_gnu
 std_bad
+cli_o_needs_arg
+cli_i_needs_arg
+cli_diag_bogus
+cli_std_bogus
+cli_cannot_open
+cli_short_read
 "
 
 in_list() {
@@ -557,6 +568,15 @@ for fdir in test/modules/*/; do
                 break
             fi
         done <"$fdir/expected.stdout.contains"
+    fi
+    # `--emit-map <file>` writes a JSON beside the other outputs (compile mode
+    # keeps it in the staging copy); expected.map pins those bytes.
+    if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.map" ]; then
+        mapgot="$(ls "$runc"/*.map 2>/dev/null | head -n 1)"
+        if [ -z "$mapgot" ] || ! cmp -s "$mapgot" "$fdir/expected.map"; then
+            matched=0
+            detail="(the emitted map JSON differs from expected.map)"
+        fi
     fi
     if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.noartifacts" ] &&
        ls "$runc"/*.c "$runc"/*.h >/dev/null 2>&1; then

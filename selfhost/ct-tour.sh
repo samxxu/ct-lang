@@ -286,6 +286,61 @@ else
     fail=1
 fi
 
+say "The usage line follows the same identity:"
+printf '\n+ %s -h\n' "$ct_bin"
+ct_help="$("$ct_bin" -h 2>&1)"
+case "$ct_help" in
+    usage:\ ct\ *) note "ok: it starts with 'usage: ct'." ;;
+    *) printf 'FAIL: expected a "usage: ct ..." line, got "%s"\n' \
+           "$(printf '%s' "$ct_help" | head -n 1)"; fail=1 ;;
+esac
+printf '\n+ %s -h\n' "$alias_bin"
+ctc_help="$("$alias_bin" -h 2>&1)"
+case "$ctc_help" in
+    usage:\ ctc\ *) note "ok: the alias still starts with 'usage: ctc'." ;;
+    *) printf 'FAIL: expected a "usage: ctc ..." line, got "%s"\n' \
+           "$(printf '%s' "$ctc_help" | head -n 1)"; fail=1 ;;
+esac
+
+say "'ct build' drives the same multi-file mode under the ct identity:"
+ctbuild="$work/ct-id-build"
+rm -rf "$ctbuild"
+mkdir -p "$ctbuild"
+printf '\n+ %s build selfhost/src/driver.ct -o %s\n' "$ct_bin" "$ctbuild"
+if "$ct_bin" build selfhost/src/driver.ct -o "$ctbuild" >"$work/ct-build.out" 2>&1 &&
+   [ -f "$ctbuild/core.c" ] && [ -f "$ctbuild/driver.c" ]; then
+    note "ok: it produced the multi-unit tree."
+    same=1
+    for u in core driver; do
+        cmp -s "$ctbuild/$u.c" "$l2src/$u.c" || same=0
+        cmp -s "$ctbuild/$u.h" "$l2src/$u.h" || same=0
+    done
+    if [ "$same" -eq 1 ]; then
+        note "ok: the tree matches the L1-built one byte for byte."
+    else
+        printf 'FAIL: ct build differs from the L1-built tree\n'
+        fail=1
+    fi
+else
+    printf 'FAIL: ct build did not produce core.c / driver.c\n'
+    sed 's/^/    /' "$work/ct-build.out"
+    fail=1
+fi
+
+say "'ctc compile' and 'ct compile' agree on the same input:"
+ct_out="$work/ct-id-ct.c"
+ctc_out="$work/ct-id-ctc.c"
+printf '\n+ %s compile %s -o %s\n' "$ct_bin" "$sample_abs" "$ct_out"
+printf '\n+ %s compile %s -o %s\n' "$alias_bin" "$sample_abs" "$ctc_out"
+if "$ct_bin" compile "$sample_abs" -o "$ct_out" &&
+   "$alias_bin" compile "$sample_abs" -o "$ctc_out" &&
+   cmp -s "$ct_out" "$ctc_out"; then
+    note "ok: both identities emit the same C."
+else
+    printf 'FAIL: ct compile and ctc compile disagree\n'
+    fail=1
+fi
+
 # ------------------------------------------- 8) the incremental cache (Phase 6.3)
 banner "8) the incremental cache: a second build reuses unchanged units"
 say "Phase 6.3: 'build' stamps every unit with a key -- its path, mtime, size, the"

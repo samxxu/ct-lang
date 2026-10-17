@@ -1,0 +1,1 @@
+--emit-map prog.map prog.ct -o prog.c
