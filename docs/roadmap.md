@@ -633,9 +633,28 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - **① 接口数组（2026-10-17，落 `selfhost/src/core.ct`）**：共用一条「下标延伸到哪」的判定 `RewriteOps::skip_bracket`，四处接线——(a) `try_iface_decl` 新增数组分支：`T xs[n]` → `struct T_iface xs[n] = { { 0, 0 } }`、`T *xs[n]` → `struct T_iface *xs[n] = { 0 }`（胖指针两字宽，故值数组的初始化式要嵌套一层花括号），变量表记 `iface + arr [+ ptr]`；(b) `try_iface_assign` 支持元素赋值 `xs[i] = v;`（值数组装箱、指针数组 `box_to_iface_ptr`），顺带让 struct 数组元素 `ps[i].l = v;` 也走通；(c) `transform_calls` 的接口派发改为「先吃下标再取方法」，`xs[i].m()` → `xs[i].vt->m(xs[i].self)`，`T *xs[n]` 的元素自身是指针故走 `->`；(d) 结构体接口字段新增数组标记（`ifarr` / `pifarr` 两张标记表 + `find_iface_field` 出参），`walk_to_iface_field` 在命中数组字段后吃掉 `[<expr>]`，于是 `self->items[i].eval()` → `_self->items[i].vt->eval(_self->items[i].self)`。`p01`–`p04` 与 `ast_spike` 全部转 PASS，**目标程序首次编、跑、输出 `5`**。
 
-- 至此**三条 PENDING 主项全部闭合**：`test/acceptance/run.sh` 现 **12 pass / 0 pending / 0 regression**，`ast_spike.ct`（[test/acceptance/ast_spike.ct](../test/acceptance/ast_spike.ct)）既是目标程序、也是常驻回归项。**为何不进 golden**：`examples/**` 与 `test/cases/**` 的基线都由 **L0/L1** 驱动，承载不了 L0 不支持的语法（`ctc.c` 冻结、不得为其放宽），故这三项能力只有 `test/acceptance/run.sh`（探 L2）能钉住；编辑器侧无需改动——`T xs[n]` 用的仍是既有括号与标识符，没有新关键字。
+- **④ 接口指针与数组形参（2026-10-17，落 `selfhost/src/core.ct`）**：把「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」四态收成一条规则——**非下标接收者按 `ptr` 选 `.`/`->`，下标接收者按「元素自身是不是指针」（`arr && ptr`）选**。四处接线：(a) `try_iface_decl` 的指针分支允许初始化式（`T *q = &n;`，走 `box_to_iface_ptr`）**并登记变量**——此前裸 `T *g;` 不登记，故 `g->m()` 根本无法派发；(b) `try_iface_assign` 对可下标的接口变量支持元素赋值，对裸指针走 `box_to_iface_ptr`；(c) `parse_func_sig` 的形参登记改为**保留 `isptr`** 并识别数组形态 `T xs[]`（此前指针接口形参被强制成「值」，数组形参连名字都在 `analyse_param` 里被丢掉），于是 `xs[i].eval()` 在函数体内可派发；(d) `walk_to_iface_field` 允许对指针接口字段取下标（`s.f[0].m()`）。同时新增 AST 形状探针 **p12–p17**（堆节点装箱、子节点数组字段、数组形参两种拼写、接口指针局部与带初始化式的接口指针），**6/6 转 PASS**。
 
-> **关于两条负例（订正）**：[test/errors/iface_array.ct](../test/errors/iface_array.ct) 与 [test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct) **不必退役、也不该退役**。`test/errors/**` 由 `./test/run.sh` 用 **L0（`ctc.c`）** 驱动，而 L0 已冻结、**永远**会对这两例报 `die`；它们钉的是 L0 的行为，因此继续有效。新能力只存在于 CT 侧（L2），由 `test/acceptance/run.sh` 的 `BASELINE` 钉住——两条负例与那批探针各自钉住**不同的编译器**，并不矛盾。（`iface_pointer_init.ct` 钉的是**带初始化式**的接口值裸指针 `T *g = 0;`；无初始化式的 `T *g;` 本来就支持，产出 `struct T_iface *g;`（2026-10-17 实测），因此该负例与本轮 ① **互不重叠**——① 覆盖的是**数组**。）
+- **进度**：验收关卡 **18 pass / 1 pending / 0 regression**（`BASELINE` 含 p01–p17 + `ast_spike`）。唯一 PENDING 是 **`p18`**：`struct Duo { Num ab[2]; }` 这类 **struct 类型的数组字段**——其元素 vptr 需在宿主对象的构造期逐元素写入（`put_nested_assignments` / `needs_nested_init` 目前不覆盖数组字段）。AST 主线的子节点是**接口值**（由 p13 覆盖），故 **p18 按决定延后**；探针保留，用于钉住这一族缺口不被忘记。**为何这些都不进 golden**：`examples/**` 与 `test/cases/**` 的基线都由 **L0/L1** 驱动，承载不了 L0 不支持的语法（`ctc.c` 冻结、不得为其放宽），所以只有 `test/acceptance/run.sh`（探 L2）能钉住它们；编辑器侧亦无需改动——接口数组/指针对拼写用的仍是既有括号、`*` 与标识符，没有新关键字。
+
+- **归档点**：切到 AST 主线前的最后一个 byte-identical 状态已打 tag **`pre-ast-mainline`**（2026-10-17，含 `src/**` 仍在 frozen L1 表容量之内的全部语料）。此后出口口径为**行为等价**。
+
+**容量预算（2026-10-17 实测；写 AST 编译器的前置约束）**
+
+符号表是**每次运行一份、跨单元共享**（`driver.ct` 的 `build` 逐单元调用同一进程的 `ct_compile_file`），所以**拆多单元不能扩额**，只能改善源码组织与编译顺序。四类额度：
+
+| 额度 | 上限 | 现状 | 说明 |
+| --- | --- | --- | --- |
+| plain-C 顶层签名（含 `static`） | `MAX_FUNCS` 64 | core.ct 33 + driver ≈15 + 10 个 `pub` 包装器 ≈ **58** | 最紧的一项；**impl 方法不计**，所以把新逻辑写进 impl 块是唯一可持续的解法 |
+| CT `struct`（可 `use` trait） | `MAX_STRUCT` 32 | **2**（`SymTab`、`Pipe`） | **plain-C `typedef struct` 不计**——数据模型全走 typedef；AST 里「只装数据、不需派发」的类型应继续走 typedef |
+| CT `trait` | `MAX_TRAITS` 16 | **3**（`SymTabOps`、`PipeOps`、`RewriteOps`） | 每个 trait = 一套 vtable + 一个 iface 类型 |
+| 每 trait 方法 | `MAX_METHOD` 32 | `PipeOps` **31** | 已到边缘；新方法必须放对应的一半（这正是 `PipeOps` / `RewriteOps` 拆分的原因） |
+
+其它：`MAX_FIELDS` 32（每 struct 四张字段表各 32）、`MAX_VARS` 512、`MAX_SCOPE` 256、`MAX_DEPTH` 8（AST 类型递归走指针/接口，不消耗它）。
+
+**越界时的唯一出路是自举阶梯**（不是改 L0）：`src/**` 里的 `MAX_*` 只是源码文本里的数字，可以调大，但「能否编译这份源码」取决于**编译者自己的表大小**——所以增长**一代滞后**：让 frozen L1（32/16/64）编得过的那一代先落地，新一代带着更大的表，下一代源码才能变大。**推论：第一版 AST 编译器必须落在 32 struct / 16 trait / 64 plain-C 之内**；一旦 `src/**` 的声明数超过 frozen L1 的表容量，`check-goldens.sh` 第 7 步（L1 vs L2 定点）即失效——这正是 `pre-ast-mainline` 记录的切换点。
+
+> **关于两条负例（订正）**：[test/errors/iface_array.ct](../test/errors/iface_array.ct) 与 [test/errors/iface_pointer_init.ct](../test/errors/iface_pointer_init.ct) **不必退役、也不该退役**。`test/errors/**` 由 `./test/run.sh` 用 **L0（`ctc.c`）** 驱动，而 L0 已冻结、**永远**会对这两例报 `die`；它们钉的是 L0 的行为，因此继续有效。新能力只存在于 CT 侧（L2），由 `test/acceptance/run.sh` 的 `BASELINE` 钉住——两条负例与那批探针各自钉住**不同的编译器**，并不矛盾。（`iface_pointer_init.ct` 钉的是 `T *g = 0;`：L0 报 `unsupported declaration of interface type`。L2 已在 ④ 里放开指针声明的**初始化式**（`T *q = &n;`），但 `0` 不是可推断的对象，L2 仍会 `die`（`cannot infer the type of '0'`）——故该负例继续有效，只是两侧的错误口径不同。）
 
 **过渡期纪律**：自举启动后**冻结一切新的 C 侧语言特性**；`ctc.c` 只接受 bug 修复。若 L1 暴露出 ct 表达力缺口，须先判定它属「语言特性」（放到 CT 层实现）还是「种子核心能力」（必须在 C 侧补）——后者要作为 **Phase 0 核心的修订定义**显式记录，不得顺手打补丁（这正是 Phase 0 历史偏差的复发点）。
 

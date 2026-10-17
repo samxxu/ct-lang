@@ -311,12 +311,17 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
   声明后为空（`vt == NULL`），需自行赋值；装箱仅覆盖**语句赋值**（`s.lhs = v;`），**指定初始化式**
   （`Pair p = { .lhs = v };`）中的接口字段**不装箱**；**指针**接口字段（`struct T *x`）只支持派发，
   赋值保持原样（需要已有胖指针的地址，如 `s.x = &someIface;`）。
-- **CT 侧（L2）已扩展**：`selfhost/src/**` 把上一条的限制全部放开，且沿用同一套隐式装箱规则——
-  接口数组 `T xs[n]` / `T *xs[n]`（含元素赋值 `xs[i] = v;` 与元素派发 `xs[i].m()`，指针数组的元素自身是
-  指针故走 `->`）、接口**数组字段**（`Node items[4]` 与 `self->items[i].eval()`）、以及**构造点**装箱
-  （`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）。带初始化式的接口值裸指针
-  （`T *g = 0;`）**仍不支持**——无初始化式的 `T *g;` 本就可用（产出 `struct T_iface *g;`）。理由同顶部
-  状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），由 `test/acceptance/run.sh` 钉住。
+- **CT 侧（L2）已扩展**：`selfhost/src/**` 放开上一条的全部限制，并给出统一的「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」模型；装箱规则在**赋值、构造点、`return`、实参**四处完全一致：
+
+| 形态 | 含义 | 派发 | 下标元素的种类 |
+| --- | --- | --- | --- |
+| `T x` | 接口值（胖指针） | `x.m()` → `x.vt->m(x.self)` | — |
+| `T *x` | 指向接口值的指针 | `x->m()` → `x->vt->m(x->self)` | `x[i]` 是**值**（`x[i].m()`） |
+| `T xs[n]` | 接口值数组 | `xs[i].m()` → `xs[i].vt->m(xs[i].self)` | 值 |
+| `T *xs[n]` | 接口指针数组 | `xs[i]->m()` | 指针 |
+| 形参 `T xs[]` / `T *xs` | 同上，函数体内可下标 | 同左 | 值 |
+
+  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）、以及 **struct 类型的数组字段**（`struct Duo { Num ab[2]; }`，见 [roadmap](roadmap.md) 的 `p18` 探针，按决定延后）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），由 `test/acceptance/run.sh` 钉住。
 
 ### 5. 命名规则（稳定契约）
 
@@ -759,16 +764,27 @@ Rules and limits:
   (`Pair p = { .lhs = v };`) is **not** boxed; and a **pointer** interface field (`struct T *x`)
   supports dispatch only, its assignment staying verbatim (it needs the address of an existing fat
   pointer, e.g. `s.x = &someIface;`).
-- **Extended on the CT side (L2)**: `selfhost/src/**` lifts every limit above while keeping the same
-  implicit-boxing rules — interface arrays `T xs[n]` / `T *xs[n]` (including element assignment
-  `xs[i] = v;` and element dispatch `xs[i].m()`, whose element is itself a pointer for a pointer
-  array, hence `->`), interface **array fields** (`Node items[4]`, `self->items[i].eval()`), and
-  **construction-point** boxing (`Pair p = { .l = v, .ptr = &v };` — value and pointer fields take
-  their own boxing path). An **initialised** bare pointer to an interface value (`T *g = 0;`) is
-  **still unsupported**; the uninitialised `T *g;` has always worked (it emits
-  `struct T_iface *g;`). Rationale as in the status note at the top: this document stays accurate for
-  L0, and the new capability belongs to the current compiler (L2) alone, pinned by
-  `test/acceptance/run.sh`.
+- **Extended on the CT side (L2)**: `selfhost/src/**` lifts every limit above and gives one uniform
+  model for "interface value / pointer to an interface value / array of interface values / array of
+  interface pointers"; boxing behaves identically in all four places (assignment, construction point,
+  `return`, argument):
+
+| Shape | Meaning | Dispatch | Kind of a subscripted element |
+| --- | --- | --- | --- |
+| `T x` | an interface value (fat pointer) | `x.m()` → `x.vt->m(x.self)` | — |
+| `T *x` | a pointer to an interface value | `x->m()` → `x->vt->m(x->self)` | `x[i]` is a **value** (`x[i].m()`) |
+| `T xs[n]` | an array of interface values | `xs[i].m()` → `xs[i].vt->m(xs[i].self)` | value |
+| `T *xs[n]` | an array of interface pointers | `xs[i]->m()` | pointer |
+| parameter `T xs[]` / `T *xs` | as above, indexable in the body | as above | value |
+
+  Also: interface **array fields** (`Node items[4]`, `self->items[i].eval()`), subscripting a pointer
+  interface field (`s.f[0].m()`), **construction-point** boxing (`Pair p = { .l = v, .ptr = &v };` —
+  value and pointer fields take their own path) and **heap-object** boxing
+  (`Num *p = malloc(sizeof(struct Num)); Expr e = p;`). **Still unsupported**: an interface pointer
+  with an aggregate initialiser (`T *g = { ... };`) and **struct-typed array fields**
+  (`struct Duo { Num ab[2]; }` — see probe `p18` in the [roadmap](roadmap.md), deferred by decision).
+  Rationale as in the status note at the top: this document stays accurate for L0, and the new
+  capability belongs to the current compiler (L2) alone, pinned by `test/acceptance/run.sh`.
 
 ### 5. Naming contract
 
