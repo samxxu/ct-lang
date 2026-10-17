@@ -1,0 +1,6 @@
+#include <stdio.h>
+
+int main(void) {
+    printf("gnu\n");
+    return 0;
+}

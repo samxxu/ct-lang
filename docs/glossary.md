@@ -104,6 +104,7 @@
 | 子命令 build | `ct build <in.ct>… [-o <dir>]` | 多文件驱动；只出 `.c`/`.h`，打印建议 `cc` 命令。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
+| C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
 | JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
 | 增量缓存（incremental cache） | `<outdir>/.ctcache/<unit>.key` | Phase 6.3：每个单元一枚键（路径 + `mtime.size` + 版本 + `--line`/`--diagnostics` + 依赖 digest），键一致且 `.c/.h` 在盘即跳过重生成。**缓存命中不重放 `#line` 与告警**；`--emit-map` 下不命中。重编译集 = `order` 前缀 ∪ 依赖闭包 |
@@ -251,6 +252,7 @@
 | the `build` subcommand | `ct build <in.ct>… [-o <dir>]` | the multi-file driver; emits `.c`/`.h` and prints the suggested `cc` command. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | output option | `-o <file\|dir>` | |
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
+| C standard target | `--std=c99` (default) / `--std=gnu99` | Phase 6.4: no emission point differs yet, so `build` only writes it into the suggested `cc` command; any other value is a hard error |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
 | JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7). **Restored by Phase 4 slice 2 under `selfhost/src/**`** |
 | incremental cache | `<outdir>/.ctcache/<unit>.key` | Phase 6.3: one key per unit (path + `mtime.size` + version + `--line`/`--diagnostics` + dependency digests); a matching key with the `.c/.h` still on disk skips regeneration. **A hit replays neither `#line` nor warnings**; `--emit-map` never hits. The recompile set is the `order` prefix plus the dependency closure |

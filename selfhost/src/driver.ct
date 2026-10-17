@@ -369,6 +369,10 @@ static int build_main(int argc, char **argv, const char *prog)
     int first = -1;                    /* first unit that is not reused */
     int line_force = -1;               /* -1 mode default, 0 --no-line, 1 --line */
     int diag = 0;                      /* 0 text warnings, 1 `--diagnostics=json` */
+    /* The target C standard (Phase 6.4). Nothing in the emitted C needs a GNU
+       extension yet, so the value only shapes the suggested cc command; it is
+       still part of the CLI so a build script can state what it targets. */
+    const char *std_flag = "-std=c99";
 
     for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) { ct_usage(prog); return 0; }
@@ -423,6 +427,13 @@ static int build_main(int argc, char **argv, const char *prog)
             if (strcmp(v, "json") == 0) { diag = 1; continue; }
             if (strcmp(v, "text") == 0) { diag = 0; continue; }
             fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
+            return 1;
+        }
+        if (strncmp(argv[i], "--std=", 6) == 0) {
+            const char *v = argv[i] + 6;
+            if (strcmp(v, "c99") == 0) { std_flag = "-std=c99"; continue; }
+            if (strcmp(v, "gnu99") == 0) { std_flag = "-std=gnu99"; continue; }
+            fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
             return 1;
         }
         if (argv[i][0] == '-' && argv[i][1]) {
@@ -551,6 +562,7 @@ static int build_main(int argc, char **argv, const char *prog)
     }
 
     ct_cc_reset();
+    ct_cc_add(std_flag);          /* the suggested command states the target standard */
     for (o = 0; o < g_build.order_n; o++) ct_cc_add(g_build.unit_out[g_build.order[o]]);
     ct_cc_finish();
     return 0;
@@ -608,6 +620,16 @@ static int compile_main(int argc, char **argv, const char *prog)
             if (strcmp(v, "text") == 0) { diag = 0; continue; }
             fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
             return 1;
+        }
+        if (strncmp(argv[i], "--std=", 6) == 0) {
+            const char *v = argv[i] + 6;
+            /* compile mode suggests no cc command, and no emitted construct is
+               GNU-specific yet: validate the target, accept it, change nothing */
+            if (strcmp(v, "c99") != 0 && strcmp(v, "gnu99") != 0) {
+                fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
+                return 1;
+            }
+            continue;
         }
         if (argv[i][0] == '-' && argv[i][1]) {
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);

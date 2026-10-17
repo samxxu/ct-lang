@@ -51,6 +51,9 @@
 #        against. Optional expected.stderr / expected.stdout byte-diff what the
 #        *compiler* printed (expected.out is the linked program's output), and an
 #        expected.noartifacts marker asserts a failing run left no .c/.h behind.
+#        A build case's cc command embeds an absolute output directory, so its
+#        stdout cannot be byte-diffed; `expected.stdout.contains` (one literal per
+#        line, all must occur) pins the shape instead.
 #        A fixture with an expected.err is a negative case (the command must fail
 #        with that message).
 #
@@ -124,6 +127,10 @@ test/archive/multifile/calc
 # `leak_call` pins Phase 6 cross-function ownership: `Box *q = make();` inherits
 # the allocation that `make` returns and leaks (one warning), while a callee that
 # releases its result and one that only borrows stay silent.
+# `std_default` / `std_gnu` pin Phase 6.4 multi-target: the suggested cc command
+# carries `-std=c99` by default and `-std=gnu99` on request (a build's stdout
+# embeds an absolute outdir, so `expected.stdout.contains` pins the literal
+# instead of a byte diff); `std_bad` pins the unknown-standard diagnostic.
 # `split` additionally pins the cross-unit OO contract the selfhost split relies
 # on: a `pub trait`/`pub struct` in a header unit, its `impl` (with a `static`
 # vtable) in another unit, and a third unit dispatching through an
@@ -158,6 +165,9 @@ map
 map_noarg
 map_stdout_build
 leak_call
+std_default
+std_gnu
+std_bad
 "
 
 in_list() {
@@ -534,6 +544,16 @@ for fdir in test/modules/*/; do
        ! cmp -s "$work/mod-$name.stdout" "$fdir/expected.stdout"; then
         matched=0
         detail="(compiler stdout differs from expected.stdout)"
+    fi
+    if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.stdout.contains" ]; then
+        while IFS= read -r want; do
+            case "$want" in '' | '#'*) continue ;; esac
+            if ! grep -Fq -- "$want" "$work/mod-$name.stdout"; then
+                matched=0
+                detail="(compiler stdout lacks '$want')"
+                break
+            fi
+        done <"$fdir/expected.stdout.contains"
     fi
     if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.noartifacts" ] &&
        ls "$runc"/*.c "$runc"/*.h >/dev/null 2>&1; then

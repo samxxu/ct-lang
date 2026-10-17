@@ -2673,6 +2673,8 @@ impl PipeOps for Pipe {
                 "                  under it (default: the first input's directory)\n"
                 "  --line          force `#line` directives in the generated C\n"
                 "  --no-line       suppress `#line` directives\n"
+                "  --std=<std>     target C standard: c99 (default) or gnu99; build\n"
+                "                  echoes it in the suggested cc command\n"
                 "  --diagnostics=<fmt>  warning format: text (default) or json\n"
                 "  --emit-map <file>    write the reverse-mapping table as JSON; `-`\n"
                 "                  means stdout (compile only -- `build` writes a file)\n"

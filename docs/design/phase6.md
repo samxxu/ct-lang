@@ -119,6 +119,16 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 （目前代码里没有；若无可差异点，本切片只落 CLI 与 `cc` 建议命令里的 `-std=`）。
 跨平台（Windows / MSVC）、多架构、交叉编译**推迟**到后续阶段。
 
+**落地记录（2026-10-17，切片 6.4）**：
+
+- 接受 `--std=c99`（默认）与 `--std=gnu99`；其他值一律硬报错 `unknown C standard '<v>'`（退出 1）。
+- **产物零差异**：暂无可差异发射点，故 `compile` 只校验并接受该开关（不打印 cc 命令，无可见影响）；
+  `build` 把 `-std=<std>` 放在建议命令的最前面（`cc -std=gnu99 core.c driver.c -o a.out`）。
+  默认也显式写出 `-std=c99`，让建议命令自带完整信息、可被断言。
+- fixture：`std_default` / `std_gnu`（build，`expected.stdout.contains` 钉字面量——建议命令含绝对
+  输出目录，无法逐字节比对）、`std_bad`（compile 负例）。为此 `check-archive.sh` 第 7 组新增可选的
+  `expected.stdout.contains`（每行一个字面量，全部须出现）。
+
 ### 6. 6.5 `map`（D19）
 
 本阶段只做设计冻结（`map trait T for instance x { m() → CALL; }` → vtable 条目 + 反向映射条目）。
@@ -253,6 +263,21 @@ the landing notes). Scalar fields are not listed in v1.
   artefacts the second build must not rewrite them, and a `touch -t` of a source must invalidate) — the
   designed fixtures under `test/modules/` run `build` only once and cannot express "the second build
   hits".
+
+### 6.4 multi-target (D18)
+
+**Landing notes (2026-10-17, slice 6.4)**:
+
+- `--std=c99` (default) and `--std=gnu99` are accepted; any other value is a hard
+  `unknown C standard '<v>'` (exit 1).
+- **Output is unchanged**: no emission point needs a GNU extension yet, so `compile` only validates and
+  accepts the switch (it prints no cc command, hence no visible effect), while `build` puts
+  `-std=<std>` at the front of the suggested command (`cc -std=gnu99 core.c driver.c -o a.out`). The
+  default is spelled out too, so the suggestion is complete and assertable.
+- Fixtures: `std_default` / `std_gnu` (build, pinning the literal with `expected.stdout.contains` — a
+  build's suggested command embeds an absolute output directory, so it cannot be byte-diffed) and
+  `std_bad` (a compile-mode negative). Group 7 of `check-archive.sh` gained that optional
+  `expected.stdout.contains` file (one literal per line, all must occur).
 
 ### Constraints and gates
 
