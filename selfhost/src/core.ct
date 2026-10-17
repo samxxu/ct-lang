@@ -135,6 +135,11 @@ typedef struct { char *p; size_t n, cap; } Buf;
 
 /* -------------------------------------------------------------- globals */
 
+/* The scan context the free helpers read directly: `die` formats from it,
+   `skip_literal` / `word_at` / `read_ident` scan it, and `find_trait` /
+   `find_struct` prefix with `g_ns`. They stay file-scope because those helpers
+   have no receiver — this is the facility layer, alongside `Buf` and `die`. The
+   rest of the per-compile state lives on `g_pipe` / `g_sym`. */
 static const char *g_src  = NULL;
 static size_t      g_len  = 0;
 static const char *g_path = "<input>";
@@ -143,30 +148,8 @@ static const char *g_path = "<input>";
    C name; lookups try the prefixed form first and fall back to the root. */
 static char g_ns[MAX_NAME];
 
-/* the output streams live inside `g_pipe` and the four symbol tables inside
-   `g_sym` (see the construct-parser and symbol-table sections) */
-
-static int    g_scope[MAX_SCOPE];      static int g_nscope = 0;
-static size_t g_body_abs = 0;
-static int    g_body_pre = 0;
-static int    g_cur_rettr = -1;        /* return trait of the function being scanned */
-
-static size_t g_line_off = 0;
-
-/* Multi-file mode (`ctc build`): the unit's .c includes its own .h and every
-   `pub` declaration is routed into that .h instead of the .c. Both flags are 0
-   for a single-file compile, which is why the corpus output does not move. */
-static int g_multi    = 0;
-static int g_ctor_pub = 0;             /* 1 while the current trait/struct is `pub` */
-static int g_line_pub = 0;             /* 1 while the current raw line is `pub`-led */
-
-/* `#line` directives: on in multi-file mode so a C compiler's diagnostics point
-   back at the .ct. The mapping runs forward, so a stretch of consecutive source
-   lines needs a single directive at its head. */
-static int  g_emit_line  = 0;
-static int  g_line_force = -1;         /* -1 default (by mode), 0 force off, 1 force on */
-static int  g_cur_line  = 1;
-static long g_line_next = -1;
+/* the output streams and scan state live inside `g_pipe`, and the four symbol
+   tables inside `g_sym` (see `struct Pipe` / `struct SymTab`) */
 
 /* An rvalue receiver (`f().m()`) is hoisted into a temp so it is evaluated once
    and in order; the declaration goes on the line before the rewritten one (see
@@ -984,6 +967,22 @@ struct Pipe {
        here is what makes the pipeline an object with state. A method still names
        it `sym` through a local alias, so the bodies read as before. */
     struct SymTab *sym;
+    /* Scan state for the file being compiled: brace/parameter scope tracking and
+       the body / `pub` / `#line` bookkeeping. Only `Pipe` methods touch it, so it
+       belongs here rather than in a global. */
+    int    scope[MAX_SCOPE];
+    int    nscope;
+    size_t body_abs;
+    int    body_pre;
+    int    cur_rettr;
+    size_t line_off;
+    int    multi;
+    int    ctor_pub;
+    int    line_pub;
+    int    emit_line;
+    int    line_force;
+    int    cur_line;
+    long   line_next;
     /* Output state that belongs to one compile: the per-line hoist buffer and its
        temp counter, the file-scope constructor accumulator, the `#include`s the
        driver pre-loads, the header include guard, and the suggested cc command. */
@@ -1566,10 +1565,10 @@ impl PipeOps for Pipe {
 
         /* an exported declaration goes into the .h alone; otherwise it goes to the
            .c (and, in single-file mode, to the .h as well: the .h is types-only) */
-        if (!g_multi) {
+        if (!self->multi) {
             self->emit_trait_def(self->out, T, tline);
             self->emit_trait_def(self->hout, T, tline);
-        } else if (g_ctor_pub) {
+        } else if (self->ctor_pub) {
             self->emit_trait_def(self->hout, T, tline);
         } else {
             self->emit_trait_def(self->out, T, tline);
@@ -1674,10 +1673,10 @@ impl PipeOps for Pipe {
             char *raw = xstrndup(g_src + bstart, bend - bstart);
             char *qbody = self->parse_fields(raw, S, p);
             free(raw);
-            if (!g_multi) {
+            if (!self->multi) {
                 self->emit_struct_def(self->out, S, qbody, sline);
                 self->emit_struct_def(self->hout, S, qbody, sline);
-            } else if (g_ctor_pub) {
+            } else if (self->ctor_pub) {
                 self->emit_struct_def(self->hout, S, qbody, sline);
             } else {
                 self->emit_struct_def(self->out, S, qbody, sline);
@@ -1908,7 +1907,7 @@ impl PipeOps for Pipe {
        directive -- used after a run of generated boilerplate. */
     void line_break(void) {
         (void)self;    /* the mapping is file-scope state */
-        g_line_next = -1;
+        self->line_next = -1;
     }
 
     /* Begin an output line of `f` that originates at `srcline`. A `#line`
@@ -1917,10 +1916,10 @@ impl PipeOps for Pipe {
        the .h is included verbatim by the .c, so a directive out there would point
        at the wrong file. */
     void line_at(FILE *f, size_t srcline) {
-        if (f != self->out || !g_emit_line) return;
-        if ((long)srcline != g_line_next)
+        if (f != self->out || !self->emit_line) return;
+        if ((long)srcline != self->line_next)
             fprintf(f, "#line %ld \"%s\"\n", (long)srcline, g_path);
-        g_line_next = (long)srcline + 1;
+        self->line_next = (long)srcline + 1;
     }
 
     /* If the line just rewritten hoisted a temp receiver, write that declaration
@@ -1931,7 +1930,7 @@ impl PipeOps for Pipe {
         fputs(self->hoist.p, self->out);
         fputc('\n', self->out);
         self->line_break();
-        self->line_at(self->out, (size_t)g_cur_line);
+        self->line_at(self->out, (size_t)self->cur_line);
     }
 
     /* Pass one raw source line through the shared rewriting pipeline. */
@@ -1947,7 +1946,7 @@ impl PipeOps for Pipe {
         self->hoist.p[0] = 0;
 
         line = xstrndup(g_src + ls, len);
-        g_cur_line = self->line_of(ls);
+        self->cur_line = self->line_of(ls);
         while (t < len && (line[t] == ' ' || line[t] == '\t')) t++;
         if (t < len && line[t] == '#') {                 /* preprocessor: verbatim */
             fputs(line, self->out);
@@ -1958,12 +1957,12 @@ impl PipeOps for Pipe {
         /* A leading `pub` marks an exported declaration (multi-file mode): drop it
            from the emitted line and remember it, so a bodiless signature can be
            routed into the .h instead (see just below). */
-        g_line_pub = 0;
+        self->line_pub = 0;
         if (t + 3 <= len && strncmp(line + t, "pub", 3) == 0 &&
             !is_ident_char((unsigned char)line[t + 3])) {
             size_t z = t + 3;
             while (z < len && (line[z] == ' ' || line[z] == '\t')) z++;
-            g_line_pub = 1;
+            self->line_pub = 1;
             memmove(line, line + z, len - z + 1);
             len -= z;
             ls += z;
@@ -1971,14 +1970,14 @@ impl PipeOps for Pipe {
         }
 
         sym->leak_observe(line);                         /* leak tracking */
-        g_line_off = ls;
+        self->line_off = ls;
         sig = self->parse_func_sig(line, ls, &has_body, &body_abs);
         if (sig) {
             /* an exported prototype belongs in the .h and nowhere else; the
                newline compile_range writes still lands in the .c, so the .c keeps
                a blank line where the declaration used to be */
-            if (has_body) { g_body_abs = body_abs; g_body_pre = pre; }
-            fputs(sig, (g_line_pub && g_multi && !has_body) ? self->hout : self->out);
+            if (has_body) { self->body_abs = body_abs; self->body_pre = pre; }
+            fputs(sig, (self->line_pub && self->multi && !has_body) ? self->hout : self->out);
             free(sig);
         } else {
             char *out = self->transform_line(line);
@@ -2011,12 +2010,12 @@ impl PipeOps for Pipe {
             g_guard_pos = pos;
             g_guard_end = end;
             g_safe_nvars = sym->nvars;
-            g_safe_nscope = g_nscope;
+            g_safe_nscope = self->nscope;
             if (setjmp(g_err_jmp) != 0) {
                 g_guarded = 1;
                 sym->nvars = g_safe_nvars;
-                g_nscope = g_safe_nscope;
-                g_body_abs = 0;
+                self->nscope = g_safe_nscope;
+                self->body_abs = 0;
                 pos = self->recover_pos(g_err_pos > g_guard_pos ? g_err_pos : g_guard_pos,
                                         g_guard_end);
                 if (pos <= g_guard_pos) pos = g_guard_pos + 1;
@@ -2030,10 +2029,10 @@ impl PipeOps for Pipe {
             /* An optional `pub` marks a trait/struct as exported (multi-file
                mode); `pub` on a function line is stripped later, in
                `emit_raw_line`. */
-            g_ctor_pub = 0;
+            self->ctor_pub = 0;
             if (word_at(q, "pub")) {
                 size_t t = skip_ws_comments(q + 3);
-                if (word_at(t, "trait") || word_at(t, "struct")) { g_ctor_pub = 1; q = t; }
+                if (word_at(t, "trait") || word_at(t, "struct")) { self->ctor_pub = 1; q = t; }
             }
 
             /* `import A::B;` is a compilation-unit declaration: the build driver
@@ -2168,7 +2167,7 @@ impl PipeOps for Pipe {
         strncat(guard, "_H", sizeof guard - strlen(guard) - 1);
 
         fprintf(self->hout, "#ifndef %s\n#define %s\n\n", guard, guard);
-        if (g_multi)
+        if (self->multi)
             fprintf(self->hout, "/* Generated by ctc v%s from %s (multi-file mode:\n"
                             "   exported types; the matching .c includes this header).\n"
                             "   Generated output is not covered by the GPL and may be "
@@ -2332,15 +2331,15 @@ impl PipeOps for Pipe {
         FILE *body;
         int err_base = g_nerrors;   /* errors already reported by earlier units */
 
-        g_multi = multi;
+        self->multi = multi;
         g_ns[0] = 0;
         sym->nvars = 0;
-        g_nscope = 0;
-        g_body_abs = 0;
-        g_body_pre = 0;
-        g_cur_rettr = -1;
-        g_ctor_pub = 0;
-        g_line_pub = 0;
+        self->nscope = 0;
+        self->body_abs = 0;
+        self->body_pre = 0;
+        self->cur_rettr = -1;
+        self->ctor_pub = 0;
+        self->line_pub = 0;
         sym->nown_drop = 0;
         /* multi-file mode accumulates the traits/structs/signatures across units
            so a unit can name what the units built before it exported; a
@@ -2357,9 +2356,9 @@ impl PipeOps for Pipe {
         /* `#line` is on in multi-file mode only: single-file output is left
            untouched so it stays byte-identical to L0's. `--line` / `--no-line`
            override the per-mode default. */
-        g_emit_line = (g_line_force >= 0) ? g_line_force : multi;
-        g_cur_line = 1;
-        g_line_next = -1;
+        self->emit_line = (self->line_force >= 0) ? self->line_force : multi;
+        self->cur_line = 1;
+        self->line_next = -1;
 
         self->out = fopen(outc, "w");
         if (!self->out) { fprintf(stderr, "ctc: cannot write '%s'\n", outc); return 1; }
@@ -2453,16 +2452,16 @@ impl PipeOps for Pipe {
         int minind = 1 << 30;
         size_t *ls, *le;
         int nlines = 0, first = -1, last = -1, k;
-        int saved_nvars = sym->nvars, saved_nscope = g_nscope;
+        int saved_nvars = sym->nvars, saved_nscope = self->nscope;
         /* the body reuses the shared var table from index 0, so snapshot the
            enclosing file-scope entries and put them back on the way out; restoring
            only the count would leave the outer registrations clobbered */
         Var *saved_vars = xmalloc(sizeof(Var) * (saved_nvars ? (size_t)saved_nvars : 1));
         memcpy(saved_vars, sym->vars, sizeof(Var) * (size_t)saved_nvars);
-        size_t saved_body_abs = g_body_abs;
-        int saved_body_pre = g_body_pre;
-        size_t saved_line_off = g_line_off;
-        int saved_cur_line = g_cur_line;
+        size_t saved_body_abs = self->body_abs;
+        int saved_body_pre = self->body_pre;
+        size_t saved_line_off = self->line_off;
+        int saved_cur_line = self->cur_line;
         int vi;
 
         ls = xmalloc(sizeof(size_t) * (n + 2));
@@ -2494,8 +2493,8 @@ impl PipeOps for Pipe {
 
         /* the body sees only its own locals, never the surrounding file scope */
         sym->nvars = 0;
-        g_nscope = 0;
-        g_body_abs = 0;
+        self->nscope = 0;
+        self->body_abs = 0;
         vi = sym->new_var();
         snprintf(sym->vars[vi].name, MAX_NAME, "self");
         sym->vars[vi].s = (int)(S - sym->structs);
@@ -2511,8 +2510,8 @@ impl PipeOps for Pipe {
             char *line, *out;
             Buf sb;
 
-            g_cur_line = self->line_of(ls[k]);
-            g_line_off = ls[k];
+            self->cur_line = self->line_of(ls[k]);
+            self->line_off = ls[k];
             if (!self->hoist.cap) buf_init(&self->hoist);
             self->hoist.n = 0;
             self->hoist.p[0] = 0;
@@ -2523,7 +2522,7 @@ impl PipeOps for Pipe {
             content = ls[k] + (size_t)minind;
             line = xstrndup(g_src + content, le[k] - content);
             out = self->transform_line(line);
-            if (self->hoist.n == 0) self->line_at(f, (size_t)g_cur_line);
+            if (self->hoist.n == 0) self->line_at(f, (size_t)self->cur_line);
             else self->emit_hoisted();
             buf_init(&sb);
             self->replace_self(out, strlen(out), &sb);
@@ -2548,11 +2547,11 @@ impl PipeOps for Pipe {
         memcpy(sym->vars, saved_vars, sizeof(Var) * (size_t)saved_nvars);
         free(saved_vars);
         sym->nvars = saved_nvars;
-        g_nscope = saved_nscope;
-        g_body_abs = saved_body_abs;
-        g_body_pre = saved_body_pre;
-        g_line_off = saved_line_off;
-        g_cur_line = saved_cur_line;
+        self->nscope = saved_nscope;
+        self->body_abs = saved_body_abs;
+        self->body_pre = saved_body_pre;
+        self->line_off = saved_line_off;
+        self->cur_line = saved_cur_line;
         free(ls);
         free(le);
     }
@@ -2994,7 +2993,7 @@ impl RewriteOps for Pipe {
         size_t el = 0;
         Buf b;
 
-        if (g_cur_rettr < 0) return NULL;
+        if (self->cur_rettr < 0) return NULL;
         while (*p == ' ' || *p == '\t') p++;
         if (strncmp(p, "return", 6) != 0 || is_ident_char((unsigned char)p[6])) return NULL;
         e = p + 6;
@@ -3006,7 +3005,7 @@ impl RewriteOps for Pipe {
 
         buf_init(&b);
         buf_putn(&b, line, (size_t)(e - line));
-        self->box_to_iface(&b, e, el, g_cur_rettr, 0);
+        self->box_to_iface(&b, e, el, self->cur_rettr, 0);
         buf_puts(&b, e + el);
         return b.p;
     }
@@ -3229,7 +3228,7 @@ impl RewriteOps for Pipe {
                 sym->vars[vi].tr = -1;
                 if (isheap) {                  /* track the allocation for leak warnings */
                     sym->vars[vi].owned = 1;
-                    sym->vars[vi].own_line = (size_t)g_cur_line;
+                    sym->vars[vi].own_line = (size_t)self->cur_line;
                 }
             }
             buf_init(&b);
@@ -3278,7 +3277,7 @@ impl RewriteOps for Pipe {
                     die(0, "struct '%s': only 'Type name[<n>];' arrays are supported", S->name);
                 /* at file scope the per-element writes cannot be statements, so
                    they go into the per-unit constructor instead */
-                atfile = (needs && g_nscope == 0);
+                atfile = (needs && self->nscope == 0);
 
                 buf_init(&ib);
                 buf_putn(&ib, line, ws);
@@ -3407,7 +3406,7 @@ impl RewriteOps for Pipe {
             /* the vptr writes are statements: inside a function they follow the
                declaration, indented like it; at file scope there are no statements
                at all, so they go into the per-unit constructor instead */
-            int atfile = (g_nscope == 0);
+            int atfile = (self->nscope == 0);
             Buf *tgt = atfile ? &self->unit_init : &b;
             char ind[MAX_NAME];
             size_t k;
@@ -3604,7 +3603,7 @@ impl RewriteOps for Pipe {
                                         if (i == rs) ok = 1;
                                     }
                                     if (!ok)
-                                        die(g_line_off + i, "an rvalue receiver must start the statement or an initialiser");
+                                        die(self->line_off + i, "an rvalue receiver must start the statement or an initialiser");
                                 }
 
                                 snprintf(tmp, sizeof tmp, "__ct_tmp%d", self->ntmp++);
@@ -3612,10 +3611,10 @@ impl RewriteOps for Pipe {
                                    through the rewriter so nested calls are handled */
                                 recv = xstrndup(s + i, rend - i);
                                 buf_init(&ini);
-                                saved_off = g_line_off;
-                                g_line_off += i;
+                                saved_off = self->line_off;
+                                self->line_off += i;
                                 self->transform_calls(recv, &ini);
-                                g_line_off = saved_off;
+                                self->line_off = saved_off;
                                 free(recv);
 
                                 buf_putn(&self->hoist, s, fs);    /* keep the line's indent */
@@ -3998,15 +3997,15 @@ impl RewriteOps for Pipe {
             }
             if (c == '{') {
                 int save = sym->nvars;
-                if (g_body_abs && p == g_body_abs) { save = g_body_pre; g_body_abs = 0; }
-                if (g_nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
-                g_scope[g_nscope++] = save;
+                if (self->body_abs && p == self->body_abs) { save = self->body_pre; self->body_abs = 0; }
+                if (self->nscope >= MAX_SCOPE) die(p, "too many nested scopes (max %d)", MAX_SCOPE);
+                self->scope[self->nscope++] = save;
             } else if (c == '}') {
-                if (g_nscope > 0) {
-                    int base = g_scope[g_nscope - 1];
+                if (self->nscope > 0) {
+                    int base = self->scope[self->nscope - 1];
                     /* a still-owned heap object whose scope ends here is unreachable */
                     sym->leak_check_scope(base, sym->nvars);
-                    sym->nvars = g_scope[--g_nscope];
+                    sym->nvars = self->scope[--self->nscope];
                 }
             }
             p++;
@@ -4162,7 +4161,7 @@ impl RewriteOps for Pipe {
             FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
             for (q = 0; q < npar; q++) FS->ptrait[q] = ptrait[q];
         }
-        if (isdef) g_cur_rettr = ret_tr;
+        if (isdef) self->cur_rettr = ret_tr;
 
         buf_putc(&b, ')');
         buf_puts(&b, line + rp + 1);
@@ -4263,7 +4262,7 @@ int ct_compile_file(const char *in, const char *outc, int multi, int line_force,
 {
     int rc;
     int err_base = g_nerrors;
-    g_line_force = line_force;
+    g_pipe.line_force = line_force;
     g_json = json;
     g_pipe.sym = &g_sym;
     rc = g_pipe.compile_file(in, outc, multi);
