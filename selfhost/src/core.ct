@@ -41,6 +41,7 @@
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
 #define MAX_WARNS  64                     /* collected leak warnings per run */
 #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
+#define MAX_MAP_IMPLS 256                 /* impl methods listed in `--emit-map` */
 
 #define CTC_VERSION "0.5.0"
 
@@ -59,6 +60,8 @@ typedef struct {
     char   cname[MAX_NAME];
     Method m[MAX_METHOD];
     int    nm;
+    size_t def_line;                   /* 1-based line of the `trait` line (map) */
+    const char *file;                  /* unit that defined it (map) */
 } Trait;
 
 typedef struct {
@@ -68,6 +71,7 @@ typedef struct {
     int  use_i[MAX_TRAITS];
     int  nu;
     size_t def_line;                   /* 1-based source line of the definition (for #line) */
+    const char *file;                  /* unit that defined it (map) */
     /* struct-typed fields, split into value and pointer tables: nested
        construction must never treat a borrowed pointer as an owned nested value */
     char fname[MAX_FIELDS][MAX_NAME];
@@ -122,7 +126,22 @@ typedef struct {
     int  rettrait;                     /* >=0 when the return type is an interface */
     int  nparams;
     int  ptrait[MAX_PARAMS];           /* >=0 when that parameter is an interface */
+    char ret[MAX_NAME];                /* the return type as written (map) */
+    size_t line;                       /* 1-based source line (map) */
+    const char *file;                  /* unit that declared it (map) */
 } FuncSig;
+
+/* One impl method: the reverse-mapping row printed by `--emit-map`. */
+typedef struct {
+    int  si;                           /* struct index */
+    int  ti;                           /* trait index, -1 for the built-in Drop */
+    char method[MAX_NAME];
+    char symbol[MAX_NAME * 2];         /* generated C function name */
+    char ret[MAX_NAME];                /* return type as written ("" when omitted) */
+    int  nparams;
+    size_t line;
+    const char *file;
+} ImplEntry;
 
 typedef struct {
     char   name[MAX_NAME];
@@ -441,6 +460,11 @@ trait SymTabOps {
        because plain-C top-level signatures are capped (MAX_FUNCS) and the budget
        is already tight. */
     void mark_drop_closure();
+    /* Reverse mapping (`--emit-map`): record one impl method and write the
+       symbol table as JSON. */
+    void record_impl(int si, int ti, const char *method, const char *ret,
+                     int nparams, size_t line);
+    void write_map(FILE *f);
 }
 
 struct SymTab {
@@ -464,6 +488,14 @@ struct SymTab {
     Warn    warns[MAX_WARNS];
     int     nwarns;
     int     json;
+    /* Reverse-mapping rows (`--emit-map`): one entry per impl method. Values are
+       copied at parse time so the map survives the statement that built them. */
+    ImplEntry impls[MAX_MAP_IMPLS];
+    int       nimpls;
+    /* First input of the run: the reverse map's top-level "file". `build` may
+       compile several units into one symbol table, so per-entry `file` fields
+       carry the unit and only the root is a single value here. */
+    const char *root_file;
 } use SymTabOps;
 
 impl SymTabOps for SymTab {
@@ -487,6 +519,115 @@ impl SymTabOps for SymTab {
                 }
             }
         }
+    }
+
+    /* Record one impl method for the reverse map. Values are copied because the
+       parser's temporaries do not outlive the statement that built them. */
+    void record_impl(int si, int ti, const char *method, const char *ret,
+                     int nparams, size_t line) {
+        ImplEntry *e;
+        if (self->nimpls >= MAX_MAP_IMPLS)
+            die(0, "too many impl methods for the reverse map (max %d)", MAX_MAP_IMPLS);
+        e = &self->impls[self->nimpls];
+        self->nimpls++;
+        e->si = si;
+        e->ti = ti;
+        snprintf(e->method, MAX_NAME, "%s", method);
+        /* the emitted symbol uses the struct's mangled name and the trait's
+           written name (see the impl emitter), not the mangled trait name */
+        snprintf(e->symbol, MAX_NAME * 2, "%s_%s_%s", self->structs[si].cname,
+                 (ti >= 0) ? self->traits[ti].name : "Drop", method);
+        snprintf(e->ret, MAX_NAME, "%s", ret ? ret : "");
+        e->nparams = nparams;
+        e->line = line;
+        e->file = g_path;
+    }
+    /* Write the reverse-mapping table. One section per line so a diff of two maps
+       stays readable; the shape is frozen in docs/design/phase6.md. */
+    void write_map(FILE *f) {
+        int i, j;
+        fprintf(f, "{\n");
+        fprintf(f, "  \"compiler\": \"ctc v%s\",\n", CTC_VERSION);
+        fputs("  \"file\": \"", f);
+        self->json_str(f, self->root_file ? self->root_file : "");
+        fputs("\",\n", f);
+        fputs("  \"traits\": [", f);
+        for (i = 0; i < self->ntraits; i++) {
+            Trait *T = &self->traits[i];
+            if (i) fputc(',', f);
+            fputs("{\"name\":\"", f);
+            self->json_str(f, T->name);
+            fputs("\",\"cname\":\"", f);
+            self->json_str(f, T->cname);
+            fputs("\",\"file\":\"", f);
+            self->json_str(f, T->file ? T->file : "");
+            fprintf(f, "\",\"line\":%ld,\"methods\":[", (long)T->def_line);
+            for (j = 0; j < T->nm; j++) {
+                if (j) fputc(',', f);
+                fputs("{\"name\":\"", f);
+                self->json_str(f, T->m[j].name);
+                fputs("\",\"ret\":\"", f);
+                self->json_str(f, T->m[j].ret);
+                fprintf(f, "\",\"params\":%d}", T->m[j].nparams);
+            }
+            fputs("]}", f);
+        }
+        fputs("],\n", f);
+        fputs("  \"structs\": [", f);
+        for (i = 0; i < self->nstructs; i++) {
+            Struct *S = &self->structs[i];
+            int nuse = S->nu + (S->has_drop ? 1 : 0);
+            if (i) fputc(',', f);
+            fputs("{\"name\":\"", f);
+            self->json_str(f, S->name);
+            fputs("\",\"cname\":\"", f);
+            self->json_str(f, S->cname);
+            fputs("\",\"file\":\"", f);
+            self->json_str(f, S->file ? S->file : "");
+            fprintf(f, "\",\"line\":%ld,\"uses\":[", (long)S->def_line);
+            for (j = 0; j < nuse; j++) {
+                if (j) fputc(',', f);
+                fputc('"', f);
+                /* Drop is a marker, not a vtable entry, so it is absent from the
+                   use list; the source did write it, so the map still shows it */
+                self->json_str(f, (j < S->nu) ? S->use_t[j] : "Drop");
+                fputc('"', f);
+            }
+            fputs("]}", f);
+        }
+        fputs("],\n", f);
+        fputs("  \"functions\": [", f);
+        for (i = 0; i < self->nfuncs; i++) {
+            FuncSig *FS = &self->funcs[i];
+            if (i) fputc(',', f);
+            fputs("{\"name\":\"", f);
+            self->json_str(f, FS->name);
+            fputs("\",\"file\":\"", f);
+            self->json_str(f, FS->file ? FS->file : "");
+            fprintf(f, "\",\"line\":%ld,\"ret\":\"", (long)FS->line);
+            self->json_str(f, FS->ret);
+            fprintf(f, "\",\"params\":%d}", FS->nparams);
+        }
+        fputs("],\n", f);
+        fputs("  \"impls\": [", f);
+        for (i = 0; i < self->nimpls; i++) {
+            ImplEntry *e = &self->impls[i];
+            if (i) fputc(',', f);
+            fputs("{\"struct\":\"", f);
+            self->json_str(f, self->structs[e->si].name);
+            fputs("\",\"trait\":\"", f);
+            self->json_str(f, (e->ti >= 0) ? self->traits[e->ti].name : "Drop");
+            fputs("\",\"method\":\"", f);
+            self->json_str(f, e->method);
+            fputs("\",\"symbol\":\"", f);
+            self->json_str(f, e->symbol);
+            fputs("\",\"ret\":\"", f);
+            self->json_str(f, e->ret);
+            fprintf(f, "\",\"params\":%d,\"file\":\"", e->nparams);
+            self->json_str(f, e->file ? e->file : "");
+            fprintf(f, "\",\"line\":%ld}", (long)e->line);
+        }
+        fputs("]\n}\n", f);
     }
 
     Trait *find_trait(const char *name) {
@@ -1698,6 +1839,8 @@ impl PipeOps for Pipe {
         snprintf(T->name, sizeof T->name, "%s", name);
         snprintf(T->cname, sizeof T->cname, "%s%s", g_ns, name);
         T->nm = 0;
+        T->def_line = tline;
+        T->file = g_path;
 
         buf_init(&raw);
         buf_putn(&raw, g_src + bstart, bend - bstart);
@@ -1815,6 +1958,7 @@ impl PipeOps for Pipe {
         S->drop_bstart = 0;
         S->drop_blen = 0;
         S->def_line = sline;
+        S->file = g_path;
 
         q = close + 1;
         probe = q;
@@ -1922,6 +2066,7 @@ impl PipeOps for Pipe {
             S->has_user_drop = 1;
             S->drop_bstart = bp + 1;
             S->drop_blen = be - bp - 1;
+            sym->record_impl((int)(S - sym->structs), -1, "drop", "void", 0, dline);
             {
                 size_t q2 = close + 1, t2 = q2;
                 while (t2 < g_len && (g_src[t2] == ' ' || g_src[t2] == '\t')) t2++;
@@ -2008,6 +2153,11 @@ impl PipeOps for Pipe {
             if (!found)
                 die(p, "method '%s' is not declared in trait '%s'", impl[k].name, T->name);
         }
+
+        /* reverse-mapping rows: only well-formed impls reach here */
+        for (k = 0; k < (size_t)nimpl; k++)
+            sym->record_impl((int)(S - sym->structs), (int)(T - sym->traits),
+                             impl[k].name, impl[k].ret, impl[k].nparams, impl[k].line);
 
         /* Signature consistency (a warning, not an error). The emitted function
            always takes the trait's return type, so a differing one would be
@@ -2414,6 +2564,8 @@ impl PipeOps for Pipe {
                 "  --line          force `#line` directives in the generated C\n"
                 "  --no-line       suppress `#line` directives\n"
                 "  --diagnostics=<fmt>  warning format: text (default) or json\n"
+                "  --emit-map <file>    write the reverse-mapping table as JSON; `-`\n"
+                "                  means stdout (compile only -- `build` writes a file)\n"
                 "  -v, --version   print the compiler version and exit\n"
                 "  -h, --help      print this help and exit\n",
                 prog, prog);
@@ -2558,7 +2710,7 @@ impl PipeOps for Pipe {
            so a unit can name what the units built before it exported; a
            single-file compile of the same file starts from an empty table, which
            is what keeps its output identical to the single-file compiler's */
-        if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; }
+        if (!multi) { sym->ntraits = 0; sym->nstructs = 0; sym->nfuncs = 0; sym->nimpls = 0; }
         buf_init(&self->unit_init);
         self->has_unit_init = 0;
 
@@ -4526,17 +4678,28 @@ impl RewriteOps for Pipe {
             i = j;
         }
         /* record the signature so call sites can reject rvalue receivers and box
-           interface arguments */
-        if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+           interface arguments; a redeclaration updates the existing row (the map
+           lists one entry per function, and `find_func` already takes the last) */
         {
-            FuncSig *FS = &sym->funcs[sym->nfuncs++];
-            int q;
+            FuncSig *FS = NULL;
+            int q, fi = -1;
+            for (q = 0; q < sym->nfuncs; q++)
+                if (strcmp(sym->funcs[q].name, name) == 0) { fi = q; break; }
+            if (fi < 0) {
+                if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+                fi = sym->nfuncs++;
+            }
+            FS = &sym->funcs[fi];
             snprintf(FS->name, MAX_NAME, "%s", name);
             FS->nparams = npar;
             FS->rettrait = ret_tr;
             FS->retstruct = (ret_tr >= 0) ? -1 : ret_struct;
             FS->retptr = (ret_tr >= 0) ? 0 : ret_rptr;
             for (q = 0; q < npar; q++) FS->ptrait[q] = ptrait[q];
+            snprintf(FS->ret, MAX_NAME, "%.*s", (int)rt, line);
+            if (strncmp(FS->ret, "static ", 7) == 0) memmove(FS->ret, FS->ret + 7, strlen(FS->ret + 7) + 1);
+            FS->line = (size_t)self->cur_line;
+            FS->file = g_path;
         }
         if (isdef) self->cur_rettr = ret_tr;
 
@@ -4634,9 +4797,9 @@ void ct_add_import(const char *h)
     g_pipe.nimp_h++;
 }
 
-pub int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json, const char *ns_expect);
+pub int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json, const char *ns_expect, const char *map_path, const char *root);
 int ct_compile_file(const char *in, const char *outc, int multi, int line_force, int json,
-                    const char *ns_expect)
+                    const char *ns_expect, const char *map_path, const char *root)
 {
     int rc;
     int err_base = g_nerrors;
@@ -4644,6 +4807,9 @@ int ct_compile_file(const char *in, const char *outc, int multi, int line_force,
     g_sym.json = json;
     g_pipe.sym = &g_sym;
     g_pipe.ns_expect = ns_expect ? ns_expect : "";
+    /* The map's top-level "file" names the run, not the unit: `build` compiles
+       dependencies first, so its first unit is not the command-line root. */
+    if (!g_sym.root_file) g_sym.root_file = (root && root[0]) ? root : in;
     rc = g_pipe.compile_file(in, outc, multi);
     if (g_nerrors > err_base) {
         /* close the multi-error report with a count; the failure itself travels
@@ -4655,6 +4821,21 @@ int ct_compile_file(const char *in, const char *outc, int multi, int line_force,
        to stdout, text to stderr); `build` defers to ct_cc_finish so a whole run's
        warnings land after the cc command instead of once per unit. */
     if (rc == 0 && !multi) g_sym.emit_warnings(stdout, stderr);
+    /* The reverse map is a success-only artefact: a failed run leaves no map, so
+       a stale file can never be mistaken for the current symbol table. `build`
+       hands this path to the last unit only, once the whole table is populated. */
+    if (rc == 0 && map_path && map_path[0]) {
+        FILE *mf = (strcmp(map_path, "-") == 0) ? stdout : fopen(map_path, "w");
+        if (!mf) {
+            fprintf(stderr, "ctc: cannot write '%s'\n", map_path);
+            return 1;
+        }
+        g_sym.write_map(mf);
+        if (mf != stdout && fclose(mf) != 0) {
+            fprintf(stderr, "ctc: cannot write '%s'\n", map_path);
+            return 1;
+        }
+    }
     return rc;
 }
 

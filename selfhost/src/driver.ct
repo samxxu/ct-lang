@@ -37,6 +37,10 @@ struct Build {
        Defaults to the first input's directory; empty until resolved. */
     char ns_root[MAX_NAME * 4];
     int  has_ns_root;
+    /* `--emit-map <file>`: the reverse-mapping table. `build` writes a file only
+       (stdout carries the suggested cc command). */
+    char map_path[MAX_NAME * 4];
+    int  has_map;
     char unit_path[MAX_UNITS][MAX_NAME * 4];
     char unit_out[MAX_UNITS][MAX_NAME * 4];
     char unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
@@ -252,6 +256,21 @@ static int build_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { line_force = 0; continue; }
+        if (strcmp(argv[i], "--emit-map") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: --emit-map needs an argument\n"); return 1; }
+            if (snprintf(g_build.map_path, sizeof g_build.map_path, "%s", argv[++i])
+                >= (int)sizeof g_build.map_path) {
+                fprintf(stderr, "ctc: map path too long\n");
+                return 1;
+            }
+            /* stdout carries the suggested cc command in build mode */
+            if (strcmp(g_build.map_path, "-") == 0) {
+                fprintf(stderr, "ctc: --emit-map - is not supported with build; write a file\n");
+                return 1;
+            }
+            g_build.has_map = 1;
+            continue;
+        }
         if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
             const char *v = argv[i] + 14;
             if (strcmp(v, "json") == 0) { diag = 1; continue; }
@@ -345,8 +364,12 @@ static int build_main(int argc, char **argv, const char *prog)
         ct_begin_imports();
         for (k = 0; k < g_build.unit_nimp[u]; k++)
             ct_add_import(g_build.unit_imp[u][k]);
+        /* The map covers the whole run, so only the last unit writes it: by then
+           every unit's symbols are in the table. */
         if (ct_compile_file(g_build.unit_path[u], g_build.unit_out[u], 1, line_force, diag,
-                            ns_expect) != 0)
+                            ns_expect,
+                            (g_build.has_map && o + 1 == g_build.order_n) ? g_build.map_path : NULL,
+                            in[0]) != 0)
             return 1;
     }
 
@@ -392,6 +415,16 @@ static int compile_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { line_force = 0; continue; }
+        if (strcmp(argv[i], "--emit-map") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: --emit-map needs an argument\n"); return 1; }
+            if (snprintf(g_build.map_path, sizeof g_build.map_path, "%s", argv[++i])
+                >= (int)sizeof g_build.map_path) {
+                fprintf(stderr, "ctc: map path too long\n");
+                return 1;
+            }
+            g_build.has_map = 1;
+            continue;
+        }
         if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
             const char *v = argv[i] + 14;
             if (strcmp(v, "json") == 0) { diag = 1; continue; }
@@ -409,7 +442,8 @@ static int compile_main(int argc, char **argv, const char *prog)
 
     if (!in) { ct_usage(prog); return 1; }
     if (!outc) { ct_default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    return ct_compile_file(in, outc, 0, line_force, diag, "");
+    return ct_compile_file(in, outc, 0, line_force, diag, "",
+                           g_build.has_map ? g_build.map_path : NULL, NULL);
 }
 
 int main(int argc, char **argv)

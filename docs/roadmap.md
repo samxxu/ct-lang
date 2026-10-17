@@ -22,7 +22,7 @@
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
 | Phase 4 | **诊断与溯源**：`#line` / 泄漏警告 / `--diagnostics` + 多错误恢复 / 语义诊断 | 恢复 + 新增 | ✅ 完成（2026-10-16；4 个切片全部落地；2026-10-17 bump 到 v0.4.0） | 诊断层全绿；`#line` 能把 gcc 报错映回 `.ct` 行 |
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | ✅ 完成（2026-10-17；5 个切片全部落地；bump 到 v0.5.0，**M6 收口**） | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
-| Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔭 展望 | — |
+| Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | 🔨 进行中（设计已冻结 2026-10-17；6.1 反向映射表已落地） | 设计冻结 + 新用例全绿 |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名（设计已冻结，只差落地） | 落地 | 🔭 展望 | `ct compile` 可用且 `ctc …` 调用不失效 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
@@ -735,6 +735,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **生态绑定**：`map` + 反向映射表（经 D8 移出自举主线；落定时与官方 bindings 清单一并定案）。
 - **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型但未实现，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。落地前须先修订与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突（代码生成脚本 / 插件调用编译器 / 包管理分发）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
 - **构建**：增量编译缓存、跨函数泄漏分析、多目标编译。
+- **设计（2026-10-17，已冻结）**：切片顺序、6.1 的 `--emit-map` JSON 形状、缓存键、多目标口径、`map` / 方言的边界处理与 **D15–D20** 决策表见 [design/phase6.md](design/phase6.md)。顺序：反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map`（等 bindings）→ 方言（仓库外展开器）。
+- **切片进展**：**6.1 反向映射表已落地**（`--emit-map <file|->`，`test/modules/map/` 钉住 JSON 形状；trait / struct / function / impl 方法与 `Drop` 生成符号全部可反查；`build` 模式只写文件，且由最后一个单元落盘）。6.2–6.6 待做。
 
 ### Phase 7：工具链形态（单入口 `ct`）
 
@@ -780,7 +782,7 @@ as confirmed by the user.
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |
 | 4 | **Diagnostics & traceability**: `#line` / leak warnings / `--diagnostics` + multi-error recovery / semantic checks | restore + new | ✅ done (2026-10-16; all four slices landed; bumped to v0.4.0 on 2026-10-17) | the diagnostics layers are green; `#line` maps a gcc error back to the `.ct` line |
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | ✅ done (2026-10-17; all five slices landed; bumped to v0.5.0, **M6 closes**) | design frozen + new cases green; rung **M6** closes here |
-| 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔭 outlook | — |
+| 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | 🔨 in progress (design frozen 2026-10-17; slice 6.1 landed) | design frozen + new cases green |
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias (design frozen, only the landing is left) | landing | 🔭 outlook | `ct compile` works and existing `ctc …` invocations keep working |
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
@@ -1910,6 +1912,14 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   scripts / the extension invoking the compiler / dialect distribution via the package manager). See
   [design/dialect.md](design/dialect.md) (design draft, not implemented).
 - **Build**: incremental compilation cache, cross-function leak analysis, multi-target builds.
+- **Design (2026-10-17, frozen)**: the slice order, the `--emit-map` JSON shape, the cache key, the
+  multi-target scope, the `map` / dialect boundaries and the **D15–D20** decisions live in
+  [design/phase6.md](design/phase6.md). Order: reverse map → call graph / cross-function analysis →
+  incremental cache → multi-target → `map` (waiting for bindings) → dialect (expander outside the repo).
+- **Slice progress**: **6.1, the reverse mapping table, has landed** (`--emit-map <file|->`, with
+  `test/modules/map/` pinning the JSON shape; traits, structs, functions and impl methods — including
+  the generated `Drop` symbol — are all reverse-lookupable; `build` writes a file only, flushed by the
+  last unit). 6.2–6.6 remain.
 
 ### Phase 7 — toolchain shape (single-entry `ct`)
 

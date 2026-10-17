@@ -1,0 +1,8 @@
+{
+  "compiler": "ctc v0.5.0",
+  "file": "prog.ct",
+  "traits": [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,"methods":[{"name":"greet","ret":"void","params":0}]}],
+  "structs": [{"name":"Person","cname":"Person","file":"prog.ct","line":7,"uses":["Greeter","Drop"]}],
+  "functions": [{"name":"add","file":"prog.ct","line":21,"ret":"int","params":2},{"name":"main","file":"prog.ct","line":25,"ret":"int","params":0}],
+  "impls": [{"struct":"Person","trait":"Greeter","method":"greet","symbol":"Person_Greeter_greet","ret":"void","params":0,"file":"prog.ct","line":12},{"struct":"Person","trait":"Drop","method":"drop","symbol":"Person_Drop_drop","ret":"void","params":0,"file":"prog.ct","line":17}]
+}

@@ -1,0 +1,187 @@
+# Phase 6 设计（已冻结）：生态与扩展
+
+> 中文 · [English](#english)
+>
+> **状态：设计已冻结（2026-10-17）。** D15–D20 均按推荐项拍板。Phase 6 是**扩展类**，
+> 无归档 oracle：出口 = **设计冻结 + 新用例 + `./test/run.sh` 与 `bash selfhost/check-all.sh` 全绿**。
+>
+> 现有约束：`MAX_FUNCS` 余量 **1**；`Pipe` 字段 **31/32**；`PipeOps` **31/32**。
+> Phase 6 的新逻辑必须走 `impl` 方法；新状态优先放进 `SymTab` 或新的轻量对象，**不要**继续加 `Pipe` 字段。
+
+---
+
+## 中文
+
+### 1. 范围与推进顺序（D15）
+
+| 切片 | 内容 | 依赖 |
+| --- | --- | --- |
+| 6.1 | **反向映射表**：`--emit-map <file|->` 输出符号表 JSON（trait / struct / function / impl 方法 → 生成的 C 符号） | 无 |
+| 6.2 | **调用图 + 跨函数泄漏分析**：在 6.1 的映射上记录调用边，并沿调用边传播「返回值是否转移所有权」 | 6.1 |
+| 6.3 | **增量编译缓存**：按单元缓存 `.c/.h`，命中即跳过重新生成 | 无（driver 层） |
+| 6.4 | **多目标编译**：先限定为 C 标准 / cc 兼容性（`--std=c99|gnu99` 一类的产物差异），跨平台与多架构推迟 | 6.3 可并行 |
+| 6.5 | **`map` + 官方 bindings**：本阶段只冻结设计；bindings 清单出现后再实现（D8：最后） | 6.1 |
+| 6.6 | **方言系统**：展开器保持在仓库外；实现时修订 AGENTS §2 的三条边界 | 6.1（sourcemap） |
+
+理由：反向映射表是插件跳转、方言 sourcemap、`map` 三处的共同底座；跨函数分析是 Phase 5 的自然延伸；
+增量与多目标属构建层，可独立推进；`map` 与方言依赖外部消费者与规约修订，放最后。
+
+### 2. 6.1 反向映射表（D16）
+
+CLI：`--emit-map <file>`；`-` 表示写 stdout（compile 模式推荐；build 模式下 stdout 已被 cc 命令占用，
+请写文件）。只在编译**成功**后写出；失败不产出。
+
+JSON 形状（v1）：
+
+```json
+{
+  "compiler": "ctc v0.5.0",
+  "file": "prog.ct",
+  "traits":  [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,
+               "methods":[{"name":"greet","ret":"void","params":0}]}],
+  "structs": [{"name":"Person","cname":"Person","file":"prog.ct","line":5,
+               "uses":["Greeter"]}],
+  "functions":[{"name":"add","file":"prog.ct","line":11,"ret":"int","params":2}],
+  "impls":   [{"struct":"Person","trait":"Greeter","method":"greet",
+               "symbol":"Person_Greeter_greet","ret":"void","params":0,
+               "file":"prog.ct","line":7}]
+}
+```
+
+数据来源与改动点：
+
+- `Trait` 增 `def_line` / `file`；`parse_trait` 记录。
+- `Struct` 已有 `def_line`，增 `file`。
+- `FuncSig` 增 `line` / `file` / `ret`（返回类型拼写）；`parse_func_sig` 记录，并按名字**就地更新**
+  重复签名（与 `find_func` 的「最后一个生效」一致）。
+- `SymTab` 增一个 plain-C `ImplEntry` 表（`struct/trait/method/symbol/ret/params/line/file`）；
+  `parse_impl` 在收集完方法后登记。`impl Drop` 也登记为 `trait: "Drop"`。
+- `SymTabOps::write_map(FILE *)`（impl 方法）负责写文件；导出面走 `ct_compile_file` 新增的
+  `map_path` 参数（现场记录见下方「落地记录」）。
+- 已知 v1 限制：不列**标量字段**（符号表只记录 struct/接口字段）；不列 `namespace` 的独立节点，
+  但 `cname` 已含前缀；`line` 是定义行。
+
+**落地记录（2026-10-17，切片 6.1）**：
+
+- 写入口改为 `ct_compile_file(..., const char *map_path, const char *root)`，**不新增** `pub ct_write_map`——`MAX_FUNCS`
+  只剩 1 个签名余量，本阶段约束要求新逻辑不消耗它。map 只在编译成功后写出；`build` 只把路径交给
+  **最后一个单元**（此时整张符号表已填满），且 `-` 在 `build` 下被挡下（stdout 留给 cc 命令）。
+- `structs[].uses` 在源码写了 `Drop` 时一并列出（符号表把 `Drop` 存成标记而非 use 条目，map 按源码还原）。
+- 顶层 `"file"` 取本次运行**命令行上的第一个输入**（`build` 依赖先行编译，首个单元不是根，故由 driver 显式传入）；每个条目的 `file` 指向定义它的单元。
+- fixture：`test/modules/map/`（compile，`--emit-map -`），`expected.stdout` 钉 JSON、`expected.out` 钉程序输出。
+
+### 3. 6.2 调用图与跨函数泄漏分析
+
+- 调用图：`"calls": [{"caller":"main","callee":"add","file":"prog.ct","line":15}]`。
+  `caller` = 当前所在函数 / 方法名（顶层代码记 `<file>`）。实现上 `SymTab` 增调用边表 +
+  `cur_func`，`Pipe` 增 `func_scope`（用掉最后 1 个字段余量；若后续还要加字段，改为新的
+  `struct Map` 对象）。
+- 跨函数泄漏：函数 `f` 分配的对象若作为返回值交给调用方，视为所有权转移；否则在 `f` 的出口仍是泄漏。
+  保守规则：**只跨一层**（调用方不把被调函数的返回视为已释放），调用图只用于「被调函数是否可能返回
+  其分配的对象」的提示，不做全程序数据流。
+
+### 4. 6.3 增量编译缓存（D17）
+
+- 键：`(输入路径, mtime, size, 编译器版本, 关键选项)`；v1 不做内容哈希（成本/收益不划算）。
+- 命中：`.c/.h` 已存在且键一致 → 跳过生成，保留旧产物（`#line` 与告警不重放；文档写明）。
+- 缓存位置：`<outdir>/.ctcache/<unit>.key`；`build` 专用，单文件 `compile` 不缓存。
+- 失效：源文件、`-I` 依赖、`--line/--no-line`、`--diagnostics` 任一变化即未命中。
+
+### 5. 6.4 多目标编译（D18）
+
+v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差异限定在少数需要 GNU 扩展的发射点
+（目前代码里没有；若无可差异点，本切片只落 CLI 与 `cc` 建议命令里的 `-std=`）。
+跨平台（Windows / MSVC）、多架构、交叉编译**推迟**到后续阶段。
+
+### 6. 6.5 `map`（D19）
+
+本阶段只做设计冻结（`map trait T for instance x { m() → CALL; }` → vtable 条目 + 反向映射条目）。
+**不实现**，直到官方 bindings 清单出现；避免用想象用例把实例语义定死。
+
+### 7. 6.6 方言系统（D20）
+
+- 展开器是**仓库外**的独立脚本（bash / Python / awk），编译器零感知；因此 AGENTS §2 的
+  「不引入代码生成脚本」指的是**仓库内构建管线**，方言展开器不在此列——实现时在 AGENTS 补一条
+  明确豁免。
+- 插件仍**不调用编译器**；`--watch` / 自动 expand 推迟，插件只消费 6.1 的映射 JSON。
+- 包管理分发方言不在本阶段。
+
+### 8. 测试与验收
+
+- 6.1：新 designed fixture `map/`（compile，`--emit-map -`，`expected.stdout` 钉 JSON，
+  `expected.out` 钉程序输出）。
+- 6.2：`calls` 形状 + 跨函数泄漏的正/负例（`test/modules/leak_call/`）。
+- 6.3：`build` 两次运行，第二次命中缓存（产物时间戳不变 / 缓存计数日志）。
+- 6.4：CLI 与建议命令的断言（无产物差异时只钉参数）。
+- 每片后跑：`./test/run.sh`、`bash selfhost/check-all.sh`、手工三件套。
+
+### 9. 决策点（2026-10-17 已拍板）
+
+| 编号 | 问题 | 决定 |
+| --- | --- | --- |
+| **D15** | 推进顺序 | ✅ 反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map` → 方言 |
+| **D16** | 映射表形态 | ✅ `--emit-map <file|->` 输出独立 JSON，不塞进 `--diagnostics` |
+| **D17** | 增量缓存键 | ✅ `路径 + mtime + size + 版本 + 关键选项`，v1 不做内容哈希 |
+| **D18** | 多目标含义 | ✅ 先只做 C 标准 / cc 兼容性；跨平台推迟 |
+| **D19** | `map` 何时实现 | ✅ 本阶段只冻结设计，等官方 bindings 清单 |
+| **D20** | 方言规约冲突 | ✅ 展开器留在仓库外；实现时修订 AGENTS §2（明确豁免 + 插件不调编译器） |
+
+---
+
+## English
+
+### Scope and order (D15)
+
+1. **Reverse mapping table** — `--emit-map <file|->` emits a symbol-table JSON (traits, structs,
+   functions, and impl methods → their generated C symbols). It is the common base for editor
+   navigation, the dialect sourcemap and `map`.
+2. **Call graph + cross-function leak analysis** — record call edges on top of 6.1 and use them to
+   propagate "does the callee return its allocation?" conservatively (one level only).
+3. **Incremental compilation cache** — key `(path, mtime, size, version, relevant options)`; a hit
+   reuses the existing `.c/.h` (no content hashing in v1; `build` mode only).
+4. **Multi-target** — v1 defines only the C dialect target (`--std=c99` / `--std=gnu99`); cross-platform
+   and cross-architecture are deferred.
+5. **`map`** — design frozen only; implement after an official bindings list exists (D8 says last).
+6. **Dialect system** — the expander stays **outside** the repository; implementing it requires an
+   explicit AGENTS §2 exemption and keeps the editor from calling the compiler.
+
+### 6.1 JSON shape (D16)
+
+```json
+{
+  "compiler": "ctc v0.5.0",
+  "file": "prog.ct",
+  "traits":  [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,
+               "methods":[{"name":"greet","ret":"void","params":0}]}],
+  "structs": [{"name":"Person","cname":"Person","file":"prog.ct","line":5,"uses":["Greeter"]}],
+  "functions":[{"name":"add","file":"prog.ct","line":11,"ret":"int","params":2}],
+  "impls":   [{"struct":"Person","trait":"Greeter","method":"greet",
+               "symbol":"Person_Greeter_greet","ret":"void","params":0,
+               "file":"prog.ct","line":7}]
+}
+```
+
+Data-model changes: `Trait` gains `def_line` / `file`; `Struct` gains `file`; `FuncSig` gains
+`line` / `file` / `ret`; `SymTab` gains a plain-C `ImplEntry` table filled by `parse_impl`;
+`SymTabOps::write_map` writes the file, reached through `ct_compile_file`'s `map_path` argument (see
+the landing notes). Scalar fields are not listed in v1.
+
+**Landing notes (2026-10-17, slice 6.1)**:
+
+- The writer is `ct_compile_file(..., const char *map_path, const char *root)`; no `pub ct_write_map`
+  was added, since `MAX_FUNCS` has one signature slot left and this phase must not spend it. The map
+  is written only after a successful compile, and `build` hands the path to the **last** unit (the
+  table is complete by then); `-` is rejected under `build` (stdout carries the cc command).
+- `structs[].uses` lists `Drop` when the source wrote it (the symbol table keeps it as a marker, not a
+  use entry; the map restores what the source said).
+- The top-level `"file"` is the **first input on the command line** (`build` compiles dependencies
+  first, so its first unit is not the root — the driver passes it explicitly); each entry's `file`
+  names the unit that defined it.
+- Fixture: `test/modules/map/` (compile, `--emit-map -`), `expected.stdout` pinning the JSON and
+  `expected.out` pinning the program output.
+
+### Constraints and gates
+
+The new logic must live in `impl` methods (`MAX_FUNCS` has one slot left), and `Pipe` is at 31/32
+fields (`PipeOps` at 31/32 methods). Each slice runs `./test/run.sh`, `bash selfhost/check-all.sh`
+and the manual three-step check; new behaviour gets a designed fixture under `test/modules/`.
