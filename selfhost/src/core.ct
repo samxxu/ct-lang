@@ -125,6 +125,9 @@ typedef struct {
 typedef struct {
     char   name[MAX_NAME];
     char   params[MAX_PARAM];
+    char   ret[MAX_NAME];              /* the return type as written, "" when omitted */
+    int    nparams;
+    size_t line;                       /* source line of the declaration */
     size_t bstart, blen;
 } ImplMethod;
 
@@ -196,8 +199,11 @@ static int g_nown_drop = 0;
 typedef struct {
     const char *file;
     size_t line;
-    char var[MAX_NAME];
-    char tname[MAX_NAME];
+    int  kind;                         /* 0 potential_leak, 1 signature_mismatch */
+    char var[MAX_NAME];                /* leak: variable; mismatch: method */
+    char tname[MAX_NAME];              /* leak: struct type; mismatch: trait */
+    char sname[MAX_NAME];              /* mismatch: struct */
+    char msg[MAX_PARAM];               /* mismatch: what differs */
 } Warn;
 static Warn g_warns[MAX_WARNS];
 static int  g_nwarns = 0;
@@ -442,6 +448,11 @@ trait SymTabOps {
        rather than plain functions because plain-C top-level signatures are capped
        (MAX_FUNCS) and the budget is nearly exhausted. */
     void warn_add(int vi);
+    /* A signature mismatch is a warning, not an error: `msg` says what differs. */
+    void warn_add_sig(size_t line, const char *method, const char *trait_name,
+                      const char *stype, const char *msg);
+    /* Do two type spellings mean the same once whitespace is ignored? */
+    int type_same(const char *a, const char *b);
     void leak_check_scope(int from, int to);
     void leak_observe(const char *line);
     /* Print the collected warnings, JSON to `jsonf` and text to `textf`. */
@@ -558,8 +569,38 @@ impl SymTabOps for SymTab {
         w = &g_warns[g_nwarns++];
         w->file = g_path;
         w->line = self->vars[vi].own_line;
+        w->kind = 0;
         snprintf(w->var, MAX_NAME, "%s", self->vars[vi].name);
         snprintf(w->tname, MAX_NAME, "%s", self->structs[self->vars[vi].s].name);
+    }
+    /* Record one signature-mismatch warning. Non-fatal, like a leak warning, and
+       capped by the same table so a runaway report cannot grow without bound. */
+    void warn_add_sig(size_t line, const char *method, const char *trait_name,
+                      const char *stype, const char *msg) {
+        Warn *w;
+        (void)self;  /* the warning table is global, not per-receiver */
+        if (g_nwarns >= MAX_WARNS) die(0, "too many warnings (max %d)", MAX_WARNS);
+        w = &g_warns[g_nwarns++];
+        w->file = g_path;
+        w->line = line;
+        w->kind = 1;
+        snprintf(w->var, MAX_NAME, "%s", method);
+        snprintf(w->tname, MAX_NAME, "%s", trait_name);
+        snprintf(w->sname, MAX_NAME, "%s", stype);
+        snprintf(w->msg, MAX_PARAM, "%s", msg);
+    }
+    /* Compare two type spellings ignoring whitespace, so `int *` and `int*` agree
+       (the trait and the impl may space the star differently). */
+    int type_same(const char *a, const char *b) {
+        (void)self;  /* a pure string comparison; the receiver is not used */
+        for (;;) {
+            while (*a == ' ' || *a == '\t') a++;
+            while (*b == ' ' || *b == '\t') b++;
+            if (*a != *b) return 0;
+            if (!*a) return 1;
+            a++;
+            b++;
+        }
     }
     /* a scope [from,to) is closing: still-owned heap objects in it are leaks */
     void leak_check_scope(int from, int to) {
@@ -616,20 +657,38 @@ impl SymTabOps for SymTab {
             for (i = 0; i < g_nwarns; i++) {
                 Warn *w = &g_warns[i];
                 if (i) fputc(',', jsonf);
-                fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
-                self->json_str(jsonf, w->file);
-                fprintf(jsonf, "\",\"line\":%ld,\"variable\":\"", (long)w->line);
-                self->json_str(jsonf, w->var);
-                fputs("\",\"type_name\":\"", jsonf);
-                self->json_str(jsonf, w->tname);
-                fputs("*\",\"message\":\"allocated but never deleted\"}", jsonf);
+                if (w->kind == 1) {
+                    fputs("{\"type\":\"signature_mismatch\",\"file\":\"", jsonf);
+                    self->json_str(jsonf, w->file);
+                    fprintf(jsonf, "\",\"line\":%ld,\"method\":\"", (long)w->line);
+                    self->json_str(jsonf, w->var);
+                    fputs("\",\"trait\":\"", jsonf);
+                    self->json_str(jsonf, w->tname);
+                    fputs("\",\"struct\":\"", jsonf);
+                    self->json_str(jsonf, w->sname);
+                    fputs("\",\"message\":\"", jsonf);
+                    self->json_str(jsonf, w->msg);
+                    fputs("\"}", jsonf);
+                } else {
+                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
+                    self->json_str(jsonf, w->file);
+                    fprintf(jsonf, "\",\"line\":%ld,\"variable\":\"", (long)w->line);
+                    self->json_str(jsonf, w->var);
+                    fputs("\",\"type_name\":\"", jsonf);
+                    self->json_str(jsonf, w->tname);
+                    fputs("*\",\"message\":\"allocated but never deleted\"}", jsonf);
+                }
             }
             fputs("]}\n", jsonf);
         } else {
             for (i = 0; i < g_nwarns; i++) {
                 Warn *w = &g_warns[i];
-                fprintf(textf, "%s:%ld: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
-                        w->file, (long)w->line, w->var, w->tname);
+                if (w->kind == 1)
+                    fprintf(textf, "%s:%ld: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
+                            w->file, (long)w->line, w->var, w->tname, w->sname, w->msg);
+                else
+                    fprintf(textf, "%s:%ld: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
+                            w->file, (long)w->line, w->var, w->tname);
             }
         }
     }
@@ -1418,11 +1477,22 @@ impl PipeOps for Pipe {
         bstart = p + 1;
         bend = close;
 
+        if (strlen(g_ns) + strlen(name) >= sizeof T->cname)
+            die(p, "namespace-qualified name too long");
+        /* A duplicate is a hard error: the table keeps the first definition and
+           every later lookup would silently pick whichever came last. Compared on
+           the mangled C name, so the same short name in two namespaces is fine. */
+        {
+            char cn[MAX_NAME];
+            int i2;
+            snprintf(cn, sizeof cn, "%s%s", g_ns, name);
+            for (i2 = 0; i2 < sym->ntraits; i2++)
+                if (strcmp(sym->traits[i2].cname, cn) == 0)
+                    die(p, "duplicate trait '%s'", name);
+        }
         if (sym->ntraits >= MAX_TRAITS) die(p, "too many traits (max %d)", MAX_TRAITS);
         T = &sym->traits[sym->ntraits++];
         snprintf(T->name, sizeof T->name, "%s", name);
-        if (strlen(g_ns) + strlen(name) >= sizeof T->cname)
-            die(p, "namespace-qualified name too long");
         snprintf(T->cname, sizeof T->cname, "%s%s", g_ns, name);
         T->nm = 0;
 
@@ -1516,11 +1586,21 @@ impl PipeOps for Pipe {
         bstart = p + 1;
         bend = close;
 
+        if (strlen(g_ns) + strlen(name) >= sizeof S->cname)
+            die(p, "namespace-qualified name too long");
+        /* see parse_trait: duplicate definitions are errors, judged on the mangled
+           name so namespaces stay isolated */
+        {
+            char cn[MAX_NAME];
+            int i2;
+            snprintf(cn, sizeof cn, "%s%s", g_ns, name);
+            for (i2 = 0; i2 < sym->nstructs; i2++)
+                if (strcmp(sym->structs[i2].cname, cn) == 0)
+                    die(p, "duplicate struct '%s'", name);
+        }
         if (sym->nstructs >= MAX_STRUCT) die(p, "too many structs (max %d)", MAX_STRUCT);
         S = &sym->structs[sym->nstructs++];
         snprintf(S->name, sizeof S->name, "%s", name);
-        if (strlen(g_ns) + strlen(name) >= sizeof S->cname)
-            die(p, "namespace-qualified name too long");
         snprintf(S->cname, sizeof S->cname, "%s%s", g_ns, name);
         S->nu = 0;
         /* slots are reused across compiles (the table is reset by count, not by
@@ -1693,6 +1773,20 @@ impl PipeOps for Pipe {
             be = match_delim(bp, '{', '}');
 
             snprintf(impl[nimpl].name, MAX_NAME, "%s", header);
+            /* keep what the impl actually wrote: the signature check compares the
+               return type and the parameter count against the trait */
+            impl[nimpl].ret[0] = 0;
+            if (st > 0) {
+                snprintf(impl[nimpl].ret, MAX_NAME, "%.*s", st, pre);
+                trim(impl[nimpl].ret);
+            }
+            {
+                Method tmp;            /* parse_params only needs the count here */
+                snprintf(tmp.name, MAX_NAME, "%s", header);
+                self->parse_params(&tmp, impl[nimpl].params);
+                impl[nimpl].nparams = tmp.nparams;
+            }
+            impl[nimpl].line = self->line_of(i);
             impl[nimpl].bstart = bp + 1;
             impl[nimpl].blen = be - bp - 1;
             nimpl++;
@@ -1708,6 +1802,30 @@ impl PipeOps for Pipe {
                 if (strcmp(T->m[j].name, impl[k].name) == 0) { found = 1; break; }
             if (!found)
                 die(p, "method '%s' is not declared in trait '%s'", impl[k].name, T->name);
+        }
+
+        /* Signature consistency (a warning, not an error). The emitted function
+           always takes the trait's return type, so a differing one would be
+           silently dropped, and a differing parameter count would mis-call it. An
+           omitted return type means "use the trait's", exactly as before. */
+        for (k = 0; k < (size_t)nimpl; k++) {
+            int j;
+            const Method *tm;
+            for (j = 0; j < T->nm; j++)
+                if (strcmp(T->m[j].name, impl[k].name) == 0) break;
+            if (j >= T->nm) continue;          /* already diagnosed above */
+            tm = &T->m[j];
+            if (impl[k].ret[0] && !sym->type_same(impl[k].ret, tm->ret)) {
+                char msg[MAX_PARAM];
+                snprintf(msg, sizeof msg, "return type '%s' does not match the trait's '%s'",
+                         impl[k].ret, tm->ret);
+                sym->warn_add_sig(impl[k].line, impl[k].name, T->name, S->name, msg);
+            } else if (impl[k].nparams != tm->nparams) {
+                char msg[MAX_PARAM];
+                snprintf(msg, sizeof msg, "takes %d parameter(s), the trait declares %d",
+                         impl[k].nparams, tm->nparams);
+                sym->warn_add_sig(impl[k].line, impl[k].name, T->name, S->name, msg);
+            }
         }
 
         /* bodies that call a sibling method need the vtable declared up front */
