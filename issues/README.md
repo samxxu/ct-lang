@@ -3,7 +3,7 @@
 本目录汇总 [reports/repo-review](../reports/repo-review/repo-review.md) 的审查发现，**每条 issue 一个 markdown 文件，按模块分目录存放**。
 
 - 源码锚点：commit `8aac450`（2026-10-17）——文中行号是该 commit 的快照。
-- 状态：**11 条已修复、1 条开放**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
+- 状态：**11 条已修复、1 条部分修复**（2026-10-17；逐条状态与修复提交见各文件的状态行，汇总见下方「修复进展」）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -51,7 +51,7 @@
 
 ## 修复进展（2026-10-17）
 
-11 条已修复、1 条开放：
+11 条已修复、1 条部分修复：
 
 | 提交 | 覆盖 |
 | --- | --- |
@@ -59,12 +59,13 @@
 | `b6b3dc4` docs: fix reachability and stale to-dos | DOC-4、DOC-5、TEST-3、SH-1 |
 | `1a1ae91` test(cli): cover two driver failure sites | TEST-1、TEST-2 |
 | `8765c83` chore(ci): add the aggregate gate entry point | CI-1、CI-2（`selfhost/check-all.sh`） |
+| `54c3713` refactor(selfhost): give the symtab to Pipe | SH-2（第一步：`sym` 收进 `Pipe`） |
 
-仍开放：
+部分修复（保留的设计取舍）：
 
-| ID | 原因 |
+| ID | 说明 |
 | --- | --- |
-| SH-2 | Info 级架构观察（`SymTab *sym` 参数化 + 文件作用域 static）。改动会波及产物与全部 golden，应作为独立重构议题立项 |
+| SH-2 | `struct SymTab *sym` 已从 32 个方法收进 `Pipe`；剩下的文件作用域 static（扫描状态 / 诊断表 / 缓冲）被顶层自由函数直接读取，移进对象需要给设施层全部加参数，成本高于收益。若 Phase 5 引入 AST，上下文对象应随之整体设计 |
 
 验证：`bash selfhost/check-all.sh` 六道硬关卡全绿（acceptance 18 pass / 1 pending，预期）；`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。
 

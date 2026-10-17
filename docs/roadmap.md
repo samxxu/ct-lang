@@ -708,6 +708,10 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **进展（2026-10-16，切片 4：语义诊断）**：两类新增诊断落地。**重复定义**在 `parse_trait` / `parse_struct` 追加前按 **cname** 查重（namespace 隔离：`A::S` 与 `B::S` 合法），命中即 `duplicate trait 'X'` / `duplicate struct 'X'` 报错，并参与切片 3 的多错误恢复。**方法签名不一致**在 `parse_impl` 收集方法时记下 impl 实际写的返回类型与参数个数（`ImplMethod` 增 `ret` / `nparams` / `line`），再与 trait 的 `Method` 比对：参数个数不同、或返回类型（忽略空白）不同即 `signature mismatch` **告警**（不改变退出码；impl 省略返回类型时视为沿用 trait，与发射行为一致）。告警沿用泄漏警告的同一条通道（`Warn` 增 `kind` / `sname` / `msg`），`--diagnostics=json` 新增 `signature_mismatch` 条目，**leak 条目的字段与形状保持不变**。**Phase 4 四个切片全部完成**；版本于 2026-10-17 bump 到 **v0.4.0**（冻结期一次性例外，用户授权，全量 golden 已按新版本重生成）。
 - **验证（2026-10-16，切片 4）**：重复 trait / struct 各报 1 错 + 摘要 + 退出 1 + 无产物；同名 struct 分处两个 namespace 不误报且产物可运行；返回类型与参数个数不一致各产生 1 条 warning、退出 0、产物存在；json 与 `--diagnostics=json` 下的 leak 输出均不变。**selfhost 自编译零告警**。`check-archive.sh` 0 退化（designed **16 pass**，新增 `dup_trait` / `dup_struct` / `sig_mismatch` / `sig_mismatch_json`）；`check-goldens.sh` 25/25 ×3 + 不动点 2/2；`check-m2a.sh` / `ct-tour.sh` 退出 0；`./test/run.sh` 115/115；手工三件套通过。
 
+### 重构记录（2026-10-17）：`sym` 收进 `Pipe`
+
+SH-2 第一步（**纯重构，产物逐字节不变**）：`struct SymTab *sym` 从 **32 个方法**（PipeOps / RewriteOps 的 trait 声明 + impl 定义）的参数表移除，改由 `struct Pipe` 持有（`self->sym`），`ct_compile_file` 在调用前设置 `g_pipe.sym = &g_sym`；28 个方法在方法体首行用局部别名 `struct SymTab *sym = self->sym;` 保持方法体零改动，另 4 个（`parse_fields` / `box_agg_fields` / `try_return` / `transform_line`）本就不读符号表、不声明别名。剩余的扫描状态 / 诊断表 / 缓冲仍是设施层全局——它们被 `skip_literal` / `word_at` / `buf_*` 等自由函数直接读取，移进对象需要给设施层全部加参数，成本高于收益；若 Phase 5 引入 AST，上下文对象应随之整体设计。验证：`bash selfhost/check-all.sh` 六道硬关卡全绿。
+
 ### Phase 5：新增特性（原 2.4）
 
 - **AutoDrop**：被标记的变量在作用域结束时自动 `drop()`（不 `free`，只释放其持有的资源）。
@@ -1848,6 +1852,19 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   regressions (designed **16 pass**, adding `dup_trait` / `dup_struct` / `sig_mismatch` /
   `sig_mismatch_json`); `check-goldens.sh` 25/25 ×3 + fixpoint 2/2; `check-m2a.sh` /
   `ct-tour.sh` exit 0; `./test/run.sh` 115/115; the manual three-step passes.
+
+### Refactor record (2026-10-17): the symtab moves into `Pipe`
+
+SH-2 step one (**pure refactor; output stays byte-identical**): `struct SymTab *sym` leaves the
+parameter list of **32 methods** (the PipeOps / RewriteOps trait declarations and impl definitions)
+and becomes a `Pipe` field (`self->sym`); `ct_compile_file` sets `g_pipe.sym = &g_sym` before
+calling. 28 methods alias it locally (`struct SymTab *sym = self->sym;`) so their bodies are
+untouched, while 4 (`parse_fields` / `box_agg_fields` / `try_return` / `transform_line`) never read
+the tables and take no alias. The remaining scan state / diagnostics table / buffers stay
+facility-level globals: the free helpers (`skip_literal` / `word_at` / `buf_*`, …) read them
+directly, so moving them into the object would mean threading a parameter through the whole
+facility layer — cost above benefit. If Phase 5 introduces an AST, the context object should be
+designed with it. Verified by `bash selfhost/check-all.sh` (all six hard gates green).
 
 ### Phase 5 — new features (was 2.4)
 

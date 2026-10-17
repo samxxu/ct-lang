@@ -6,7 +6,7 @@
 | 严重度 | **Info**（设计观察，非本轮要修项） |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 文件 | `selfhost/src/core.ct`、`selfhost/src/driver.ct` |
-| 状态 | 开放（观察） |
+| 状态 | 部分修复（commit `54c3713`：`sym` 已收进 `Pipe`；剩余 static 为设施层全局，见下方「进展」） |
 
 ## 现象
 
@@ -42,3 +42,24 @@ core.ct:4142  static Pipe g_pipe = { };
 ## 验证
 
 （若将来推进）每个切片后跑三件套 + `check-goldens.sh` + `check-archive.sh` + `run.sh`，且 `check-goldens.sh` 第 7 步 L1 vs L2 逐字节一致。
+
+## 进展（2026-10-17，第一步已落地）
+
+commit `54c3713`（`refactor(selfhost): give the symtab to Pipe`）把 `struct SymTab *sym`
+从 **32 个方法**（PipeOps / RewriteOps 的 trait 声明 + impl 定义）的参数表里移除，改由
+`struct Pipe` 持有（`self->sym`）；`ct_compile_file` 在调用 `compile_file` 前设置
+`g_pipe.sym = &g_sym`。28 个方法在方法体首行用局部别名
+`struct SymTab *sym = self->sym;` 保持方法体零改动；另 4 个（`parse_fields` /
+`box_agg_fields` / `try_return` / `transform_line`）本就不读符号表，不声明别名。
+
+**验证**：纯重构、产物逐字节不变——`check-all` 六道硬关卡全绿（run.sh 117、L1
+golden 25/25 + L1′ + L2 + 不动点、archive 0 回归、designed 16、M2-a PASS、ct-tour OK、
+grammar 19），L2 自编译零警告。
+
+**剩余部分（保留为设计取舍，不再单独推进）**：文件作用域 static（扫描状态 `g_src` /
+`g_len` / `g_path` / `g_ns` / `g_cur_line`、诊断表 `g_warns` / `g_nerrors`、缓冲
+`g_hoist` / `g_unit_init` 等）仍然无归属。原因是它们被**大量顶层自由函数**
+（`skip_literal` / `skip_comment` / `word_at` / `read_ident` / `buf_*`）直接读取；
+移进对象需要给这些设施函数全部加参数，成本高于收益——它们属于「设施层全局」，与
+`Buf` / `die` / 扫描原语同层。若 Phase 5 引入 AST，上下文对象应随之整体设计，而不是
+先把这些全局逐个搬进 `Pipe`。
