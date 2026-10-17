@@ -3,7 +3,7 @@
 > **v0.0.1** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**与 **Phase 2（模块化，2026-10-16）**均已完成，当前进入 **Phase 3：内存**（`Drop` / `delete` 放宽）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**与 **Phase 4（诊断与溯源，2026-10-16）**均已完成，当前进入 **Phase 5：新增特性**（AutoDrop / 路径敏感泄漏分析 / 目录 = namespace）——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），编译器命令叫 **`ctc`**（ct compiler，好比 `tinycc` 仓库发布的命令是 `tcc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -339,9 +339,11 @@ ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`
 
 **ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into
 plain C. It performs no type checking and no optimisation; Phase 0 (writing full OO with traits) and
-its sub-phases 0.1 / 0.2 / 0.3 (stripping the over-reach), **Phase 1 (self-hosting, 2026-10-15)** and
-**Phase 2 (modularity, 2026-10-16)** are all complete; the project has entered **Phase 3: memory**
-(`Drop` / `delete` relaxed) — see [docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
+its sub-phases 0.1 / 0.2 / 0.3 (stripping the over-reach), **Phase 1 (self-hosting, 2026-10-15)**,
+**Phase 2 (modularity, 2026-10-16)**, **Phase 3 (memory, 2026-10-16)** and **Phase 4 (diagnostics and
+traceability, 2026-10-16)** are all complete; the project has entered **Phase 5: new features**
+(AutoDrop / path-sensitive leak analysis / directory = namespace) — see
+[docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the compiler
 command is **`ctc`** (the ct compiler — much like the `tinycc` repository that ships a `tcc` binary)

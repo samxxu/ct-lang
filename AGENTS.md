@@ -20,7 +20,7 @@
 | 构建 | `gcc ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告） |
 | 当前版本 | v0.0.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | Phase 0（用 trait 写「完整 OO」）与 **Phase 0.3（剥离越位特性）已完成**——`ctc.c` 现为**纯 OO**（3836 → 2897 行），越位 fixture 归档在 `test/archive/`、旧实现在 tag `overreach-oracle`。当前进入 **Phase 1：自举**——用 CT 把 Phase 0 的 OO 化 C 重写一遍，唯一目的是自举，**不新增语言特性**（新增从 Phase 2 起）。仍不做类型检查、不做优化、不做错误恢复。见 `docs/roadmap.md` |
+| 当前阶段 | Phase 0（含子阶段 0.1–0.3）与 **Phase 1（自举）、Phase 2（模块化）、Phase 3（内存）、Phase 4（诊断与溯源）均已完成**——`ctc.c` 冻结为**纯 OO 的 L0**（3836 → **2930** 行），越位 fixture 归档在 `test/archive/`、旧实现在 tag `overreach-oracle`；CT 线已拆成 `selfhost/src/**`（L1 自 Phase 3 起冻结，开发主线是 L1 编出的 L2）。当前进入 **Phase 5：新增特性**（AutoDrop / 路径敏感泄漏分析 / 目录 = namespace），**设计先行**。仍不做类型检查、不做优化。见 `docs/roadmap.md` |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
@@ -105,10 +105,15 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 补充要求：
 
-- **自动化测试**：`./test/run.sh` 必须全绿（退出码 0）。五层覆盖：ctc 自身零警告构建、
+- **自动化测试**：`./test/run.sh` 必须全绿（退出码 0）。**七层覆盖**：ctc 自身零警告构建、
   `test/unit` 白盒单测、`test/cases` golden 快照（生成 → 比对 → 编译 → 运行）、
   `examples/**` 端到端（生成 → 构建 → 运行 → 与 `.expected.out` 比对）、
-  `test/errors` 负例诊断（必须非 0 退出，且带 `文件:行:列: error:` 前缀）。`CC=gcc ./test/run.sh` 可换编译器。
+  `test/errors` 负例诊断（必须非 0 退出，且带 `文件:行:列: error:` 前缀）、
+  `known limitations` 特征化断言、`cli` 参数与驱动分支。`CC=gcc ./test/run.sh` 可换编译器。
+- **CT 线关卡同样必跑**（`run.sh` 只驱动 L0）：`bash selfhost/check-goldens.sh`（L1 对 golden +
+  L1′ 自举闭环 + L1/L2 不动点）、`bash selfhost/check-archive.sh`（L2 对归档 oracle 的棘轮）、
+  `bash selfhost/check-m2a.sh`、`bash selfhost/ct-tour.sh`；`bash test/acceptance/run.sh` 单独报告
+  （其 PENDING 属预期，不阻断）。改动 `selfhost/**` 后必须全部跑一遍。
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
 - **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
@@ -173,7 +178,7 @@ user before changing code**.
 | Build | `gcc ctc.c -o ctc`, must be warning-free under `-Wall -Wextra -std=c99` |
 | Version | v0.0.1 (`CTC_VERSION` at the top of `ctc.c`; it is embedded in generated comments) |
 | License | compiler: GPL-3.0-or-later (`LICENSE`); `.ct` sources and generated output are **not covered by the GPL** (`LICENSE.EXCEPTION`); `examples/`, `test/` and `editors/` are MIT |
-| Stage | Phase 0 (writing full OO with traits) and **Phase 0.3 (stripping the over-reach) are done** — `ctc.c` is now **pure OO** (3836 → 2897 lines), with the over-reach fixtures archived under `test/archive/` and the old implementation kept as the tag `overreach-oracle`. The project has entered **Phase 1: self-hosting** — rewriting Phase 0's OO-in-C in CT, whose *only* purpose is self-hosting and which adds **no language features** (those start in Phase 2). Still no type checking, no optimisation, no error recovery — see `docs/roadmap.md` |
+| Stage | Phase 0 (including sub-phases 0.1–0.3) and **Phases 1 (self-hosting), 2 (modularity), 3 (memory) and 4 (diagnostics and traceability) are done** — `ctc.c` is frozen as the **pure-OO L0** (3836 → **2930** lines), with the over-reach fixtures archived under `test/archive/` and the old implementation kept as the tag `overreach-oracle`; the CT line lives in `selfhost/src/**` (L1 has been frozen since Phase 3, and the development line is L2, which L1 builds). The project has entered **Phase 5: new features** (AutoDrop / path-sensitive leak analysis / directory = namespace), **design first**. Still no type checking, no optimisation — see `docs/roadmap.md` |
 | Size target | Keep it one readable file; do not split `ctc.c` |
 
 ### 2. File ownership
@@ -304,11 +309,18 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter   # prints two 
 
 Also required:
 
-- **Automated tests**: `./test/run.sh` must be green (exit 0). Five layers: a warning-free build of
-  `ctc`, white-box unit tests in `test/unit`, golden snapshots in `test/cases`
+- **Automated tests**: `./test/run.sh` must be green (exit 0). **Seven layers**: a warning-free build
+  of `ctc`, white-box unit tests in `test/unit`, golden snapshots in `test/cases`
   (generate → diff → compile → run), end-to-end examples in `examples/**`
-  (generate → build → run → compare with `.expected.out`), and negative diagnostics in `test/errors`
-  (must exit non-zero with a `file:line:col: error:` prefix). `CC=gcc ./test/run.sh` selects a compiler.
+  (generate → build → run → compare with `.expected.out`), negative diagnostics in `test/errors`
+  (must exit non-zero with a `file:line:col: error:` prefix), characterisation assertions under
+  `known limitations`, and the `cli` argument/driver branches. `CC=gcc ./test/run.sh` selects a compiler.
+- **The CT-line gates are required too** (`run.sh` only drives L0): `bash selfhost/check-goldens.sh`
+  (L1 against the goldens, the L1′ bootstrap loop, and the L1/L2 fixpoint),
+  `bash selfhost/check-archive.sh` (the L2 ratchet against the archived oracle),
+  `bash selfhost/check-m2a.sh` and `bash selfhost/ct-tour.sh`; `bash test/acceptance/run.sh` reports
+  separately (its PENDING entries are expected and do not block). Run all of them after touching
+  `selfhost/**`.
 - **The manual three-step check stays required** — the suite's internal paths differ from the commands
   you type, so run the three commands above yourself and paste the output.
 - **New or changed syntax needs new cases** — see the checklist in §9.
