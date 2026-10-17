@@ -64,3 +64,13 @@
 验证：`bash selfhost/check-all.sh` 六道硬关卡全绿（acceptance 18 pass / 1 pending，预期）；`./test/run.sh` **117 passed, 0 failed**（原 115，新增 `cli/cannot-read` 与 `cli/tmpfile-cannot-create`）。后续 Phase 5 新增 `ast_parse_spike`，acceptance 现为 **19 pass / 1 pending**；`check-grammar.py` 现为 **20 项断言**。
 
 > 审查期间未修改任何文件；本目录与报告最初为只读产物，后续修复见上「修复进展」。
+
+## 复核（2026-10-17，Phase 6.6 之后）
+
+12 条修复均仍成立（`ctc.c` 2930 行、`cli/cannot-read` 与 `cli/tmpfile-cannot-create` 在册、`check-all.sh` 为聚合入口、`architecture.md` 的可达性表述已改、roadmap 无残留待做）。但 Phase 6 的 6.1–6.4 / 6.6 落地后，**DOC-1 / DOC-2 的「当前阶段」表述再次滞后**，并出现两处新的清单漂移：
+
+- README 顶部与 AGENTS §1 仍把阶段停在 Phase 5 → 已补「Phase 6 的 6.1–6.4 与 6.6 已落地，6.5 仅设计冻结」。
+- roadmap 总览表（中英）仍写「6.1–6.4 已落地」→ 已改为「6.1–6.4 + 6.6 已落地」。
+- glossary 的 `layer` 清单漏 `dialect`；`map` / 反向映射表仍按「排期 Phase 6（D8）」描述 → 已按 6.1 / 6.5 / 6.6 的实际状态订正，设计决策范围补到 D1–D20。
+
+以上均为文档订正，未触碰 `ctc.c` / `selfhost/**` / `test/**`。
