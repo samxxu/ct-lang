@@ -1,0 +1,3 @@
+/* a unit with no namespace declaration is not checked (D13 option A) */
+pub int twice(int x);
+int twice(int x) { return x * 2; }

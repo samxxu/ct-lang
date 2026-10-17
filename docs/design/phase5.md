@@ -158,6 +158,11 @@ root 的确定：
 
 只在 `build` 模式生效；单文件 `compile` 不做目录校验（那里没有 root 概念）。
 
+落地细节（5.4，2026-10-17）：校验只看**单元最外层**的 `namespace` 声明（嵌套 namespace 不受限）；
+无声明、在 root 之外、或路径含 `.` / `..` 分量的单元一律**不校验**。`--ns-root` 缺省取第一个输入
+所在目录；driver 逐单元算出期望值后作为 `ct_compile_file` 的 `ns_expect` 参数传入，core 在解析
+最外层 namespace 时比对。
+
 ### 6. 决策点（2026-10-17 已拍板，均取推荐项）
 
 | 编号 | 问题 | 决定 | 备选 |
@@ -183,7 +188,7 @@ root 的确定：
 | 5.4 | 目录 = namespace 校验 | `test/modules/ns_dir/`：匹配通过、不匹配报错、import 目录匹配 |
 | 5.5 | 文档 + `v0.5.0` + M6 收口 | language-spec / roadmap / AGENTS 版本行 |
 
-**进度（2026-10-17）**：5.1–5.3 已落地（designed fixture 共 6 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`）；5.4–5.5 待做。
+**进度（2026-10-17）**：5.1–5.4 已落地（designed fixture 共 8 个：`autodrop`、`autodrop_nodrop`、`autodrop_layout`、`autodrop_scope`、`leak_path`、`leak_path_json`、`ns_dir`、`ns_dir_mismatch`）；5.5 待做。
 
 每个切片后跑：`./test/run.sh`、`bash selfhost/check-all.sh`、手工三件套。
 

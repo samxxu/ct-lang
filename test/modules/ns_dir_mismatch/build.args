@@ -1,0 +1,1 @@
+--ns-root test/modules/ns_dir_mismatch test/modules/ns_dir_mismatch/a/uart.ct

@@ -1,0 +1,5 @@
+/* the directory under --ns-root names the namespace: src/hal/ -> `hal` */
+namespace hal {
+pub int ping(int x);
+int ping(int x) { return x + 1; }
+}

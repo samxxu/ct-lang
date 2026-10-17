@@ -33,6 +33,10 @@ import core;
 struct Build {
     char incdir[MAX_INCDIRS][MAX_NAME * 4];
     int  nincdirs;
+    /* `--ns-root` (Phase 5): the tree root whose directories name namespaces.
+       Defaults to the first input's directory; empty until resolved. */
+    char ns_root[MAX_NAME * 4];
+    int  has_ns_root;
     char unit_path[MAX_UNITS][MAX_NAME * 4];
     char unit_out[MAX_UNITS][MAX_NAME * 4];
     char unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
@@ -236,6 +240,16 @@ static int build_main(int argc, char **argv, const char *prog)
             g_build.nincdirs++;
             continue;
         }
+        if (strcmp(argv[i], "--ns-root") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ctc: --ns-root needs an argument\n"); return 1; }
+            if (snprintf(g_build.ns_root, sizeof g_build.ns_root, "%s", argv[++i])
+                >= (int)sizeof g_build.ns_root) {
+                fprintf(stderr, "ctc: namespace root too long\n");
+                return 1;
+            }
+            g_build.has_ns_root = 1;
+            continue;
+        }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
         if (strcmp(argv[i], "--no-line") == 0) { line_force = 0; continue; }
         if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
@@ -259,20 +273,81 @@ static int build_main(int argc, char **argv, const char *prog)
 
     if (!n) { ct_usage(prog); return 1; }
 
+    /* Directory = namespace needs a root: the explicit `--ns-root`, or the
+       directory holding the first input (so `build src/main.ct` maps
+       `src/hal/uart.ct` to `hal`). */
+    if (!g_build.has_ns_root) {
+        const char *s = strrchr(in[0], '/');
+        if (s) {
+            size_t l = (size_t)(s - in[0]);
+            if (l >= sizeof g_build.ns_root) {
+                fprintf(stderr, "ctc: namespace root too long\n");
+                return 1;
+            }
+            memcpy(g_build.ns_root, in[0], l);
+            g_build.ns_root[l] = 0;
+        } else {
+            snprintf(g_build.ns_root, sizeof g_build.ns_root, ".");
+        }
+        g_build.has_ns_root = 1;
+    }
+
     for (i = 0; i < n; i++)
         if (unit_visit(in[i]) < 0) return 1;
 
     for (o = 0; o < g_build.order_n; o++) {
         int u = g_build.order[o];
         int k;
+        char ns_expect[MAX_NAME * 4];
         if (build_output(g_build.unit_path[u], outdir, g_build.unit_out[u], sizeof g_build.unit_out[0]) != 0) {
             fprintf(stderr, "ctc: output path too long for '%s'\n", g_build.unit_path[u]);
             return 1;
         }
+        /* Derive the unit's directory namespace from the root. A unit outside
+           the root, or one with a non-normalised (`./`, `../`) component, gets
+           no expectation and is not checked. */
+        ns_expect[0] = 0;
+        {
+            const char *up = g_build.unit_path[u];
+            const char *root = g_build.ns_root;
+            size_t rl, k = 0, j;
+            int ok = 1;
+
+            while (up[0] == '.' && up[1] == '/') up += 2;
+            while (root[0] == '.' && root[1] == '/') root += 2;
+            rl = strlen(root);
+            if (!(rl == 0 || strcmp(root, ".") == 0)) {
+                if (strncmp(up, root, rl) != 0 || up[rl] != '/') ok = 0;
+                else up += rl + 1;
+            }
+            if (ok) {
+                const char *slash = strrchr(up, '/');
+                size_t dl = slash ? (size_t)(slash - up) : 0;
+                j = 0;
+                while (j < dl) {
+                    size_t e = j;
+                    while (e < dl && up[e] != '/') e++;
+                    if (e == j || (e - j == 1 && up[j] == '.') ||
+                        (e - j == 2 && up[j] == '.' && up[j + 1] == '.')) {
+                        ok = 0;
+                        break;
+                    }
+                    if (k) { ns_expect[k++] = ':'; ns_expect[k++] = ':'; }
+                    if (k + (e - j) + 1 >= sizeof ns_expect) { ok = 0; break; }
+                    memcpy(ns_expect + k, up + j, e - j);
+                    k += e - j;
+                    j = e + 1;
+                }
+                if (!ok) k = 0;
+                ns_expect[k] = 0;
+            }
+        }
         ct_begin_imports();
         for (k = 0; k < g_build.unit_nimp[u]; k++)
             ct_add_import(g_build.unit_imp[u][k]);
-        if (ct_compile_file(g_build.unit_path[u], g_build.unit_out[u], 1, line_force, diag) != 0) return 1;
+        if (ct_compile_file(g_build.unit_path[u], g_build.unit_out[u], 1, line_force, diag,
+                            ns_expect) != 0)
+            return 1;
     }
 
     ct_cc_reset();
@@ -334,7 +409,7 @@ static int compile_main(int argc, char **argv, const char *prog)
 
     if (!in) { ct_usage(prog); return 1; }
     if (!outc) { ct_default_output(in, outbuf, sizeof outbuf); outc = outbuf; }
-    return ct_compile_file(in, outc, 0, line_force, diag);
+    return ct_compile_file(in, outc, 0, line_force, diag, "");
 }
 
 int main(int argc, char **argv)

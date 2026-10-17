@@ -1,0 +1,9 @@
+import hal::uart;
+import plain::extra;
+
+#include <stdio.h>
+
+int main(void) {
+    printf("%d %d\n", ping(4), twice(3));
+    return 0;
+}
