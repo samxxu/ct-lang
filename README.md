@@ -5,7 +5,7 @@
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
 它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**与 **Phase 7（工具链形态，2026-10-17）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名），`ct get` / `ct install` 待包管理器 `ct-pkg` 实现——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
-命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），编译器命令叫 **`ctc`**（ct compiler，好比 `tinycc` 仓库发布的命令是 `tcc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
+命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
 ```bash
 gcc ctc.c -o ctc
@@ -51,10 +51,14 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，仅 compile 可用，`build` 须写文件 |
 | `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`/`.h` 并打印建议 `cc` 命令；在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
 | `ctc … --std=c99\|gnu99` | 目标 C 标准（默认 `c99`）；暂无产物差异，`build` 将其写入建议的 `cc` 命令，其他值硬报错（Phase 6.4） |
+| `ctc … -I <dir>` | 追加一个导入搜索根（可重复，最多 16 个；Phase 2，`compile` 与 `build` 均可用） |
+| `ctc … --line` / `--no-line` | 覆盖 `#line` 的默认开关（`build` 默认开、`compile` 默认关；Phase 4） |
+| `ctc build … --ns-root <dir>` | 目录 = namespace 校验的树根（仅 `build`；Phase 5） |
+| `ctc … --diagnostics=json\|text` | 告警格式：`text` 为人可读 stderr（默认），`json` 写 stdout（含泄漏与签名告警；Phase 4） |
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.7.0`；二进制名为 `ct` 时打印 `ct v0.7.0` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
-退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。L0（`ctc.c`）**不产生任何警告**；CT 线（L2）会输出泄漏与签名不一致告警（`--diagnostics` 可切 JSON）。
+退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。L0（`ctc.c`）**不产生任何警告**；CT 线（L2）会输出泄漏与签名不一致告警（`--diagnostics` 可切 JSON）。**驱动层错误前缀固定为 `ctc:`**（即使二进制以 `ct` 身份运行），以保持日志与既有断言稳定——这与 `-v` / usage 随身份变化是两件事。
 
 > **L0 当前只支持单文件**：越位实现过的模块系统与诊断能力（`namespace` / `import` / `pub` / `ct build` 多文件、`Drop`、`#line`、泄漏警告与 `--diagnostics`）已于 Phase 0.3 从 `ctc.c` 移出，L0 命中仍报 `'xxx' is not supported by this compiler`；这些能力已由 **Phase 2–5** 在 CT 线（`selfhost/src/**`，即 L2）全部重做完成（见 [docs/roadmap.md](docs/roadmap.md)）。
 >
@@ -377,9 +381,10 @@ multi-target) and 6.6 (the dialect system) have landed, while 6.5 (`map`) is des
 shape, the banner rename), with `ct get` / `ct install` waiting on the `ct-pkg` package manager — see
 [docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
 
-Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the compiler
-command is **`ctc`** (the ct compiler — much like the `tinycc` repository that ships a `tcc` binary)
-and the GitHub repository is **`ct-lang`** (`ct` alone is too short to be findable there).
+Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the entry command
+is **`ct`** (since Phase 7; `ctc` is kept as a **compatibility alias**, and the binary built from the
+L0 seed `ctc.c` is still called `ctc`), and the GitHub repository is **`ct-lang`** (`ct` alone is too
+short to be findable there).
 
 ### 1. Motivation
 
@@ -405,12 +410,18 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, compile mode only — `build` must write a file |
 | `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits `.c`/`.h` and the suggested `cc` command is printed; a key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
 | `ctc … --std=c99\|gnu99` | target C standard (default `c99`); nothing in the output differs yet, so `build` writes it into the suggested `cc` command, and any other value is a hard error (Phase 6.4) |
+| `ctc … -I <dir>` | adds an import search root (repeatable, up to 16; Phase 2 — works in both `compile` and `build`) |
+| `ctc … --line` / `--no-line` | overrides the `#line` default (on for `build`, off for `compile`; Phase 4) |
+| `ctc build … --ns-root <dir>` | the tree root for directory = namespace validation (`build` only; Phase 5) |
+| `ctc … --diagnostics=json\|text` | warning format: `text` is human-readable stderr (default), `json` goes to stdout (leak and signature warnings; Phase 4) |
 | `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.7.0`; a binary named `ct` prints `ct v0.7.0` |
 | `ctc -h` / `ctc --help` | prints usage |
 
 Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:line:col: error: message`.
 L0 (`ctc.c`) emits **no warnings at all**; the CT line (L2) emits leak and signature-mismatch warnings
-(`--diagnostics` switches to JSON).
+(`--diagnostics` switches to JSON). **Driver-level errors keep the `ctc:` prefix** even when the binary
+runs as `ct`, so logs and pinned assertions stay stable — that is separate from `-v` / usage following
+the identity.
 
 > **L0 is single-file only**: the module system and diagnostics that once over-reached into C
 > (`namespace` / `import` / `pub` / `ct build` multi-file, `Drop`, `#line`, leak warnings and

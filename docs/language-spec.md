@@ -2,19 +2,18 @@
 
 > 中文 · [English](#english)
 
-> **状态**：本文描述 `ctc`（即 L0，`ctc.c`）**当前接受与产出**的语法。`namespace` / `import` / `pub` /
-> `ct build` 多文件模式 / `Drop` / `#line` / 泄漏警告与 `--diagnostics` 属**越位实现**，已于
-> 2026-10-14（Phase 0.3）**从 L0 移出**：命中即报
-> `'namespace' is not supported by this compiler`
-> （`pub` / `import` / `ct build` 同类；`--line` / `--no-line` / `--diagnostics` 报 `unknown option`）。
-> **它们正在 CT 侧重做**（不在本文范围内）：`namespace` / 多文件 / `import` / `pub` 已由
-> Phase 2 在 `selfhost/src/**` 恢复，`Drop` 由 Phase 3 恢复；`#line`（含 `--line` / `--no-line`
-> 覆盖开关）与泄漏警告 / `--diagnostics` 已由 Phase 4 切片 1 / 2 收尾，多错误报告 + 重同步由切片 3 新增（无 oracle），语义诊断由切片 4 新增；**Phase 5 的 AutoDrop（`own`）是新增特性**（见 §4.9）。
-> 因此**本文对 L0 依旧准确**，但不要把「移出」读成「不可用」——要写这些语法，
-> 用当前编译器（L2，由 `selfhost/src/**` 编出）。归档 fixture 见 `test/archive/`，旧实现见
-> git tag `overreach-oracle`。
+> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）与当前编译器 L2（`selfhost/src/**`）**共同**
+> 接受与产出的部分。L2 是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
+> `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
+> [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
+> [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 L2 独有，但在 §4.9 一并描述。
+>
+> 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
+> `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
+> `--line` / `--no-line` / `--diagnostics` 报 `unknown option`）。归档 fixture 见 `test/archive/`，
+> 特性完整的旧实现见 git tag `overreach-oracle`。
 
-本文描述 `ctc` 接受的输入语法、展开规则、命名规则与诊断行为（Phase 0 全部）。凡本文未写明的行为，均属未定义，不应依赖。
+本文描述核心语法的输入规则、展开规则、命名规则与诊断行为。凡本文未写明的行为，均属未定义，不应依赖。
 
 ---
 
@@ -425,38 +424,32 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - **当前不产生任何警告**，只有错误。
 - 退出码：`0` 成功；`1` 语法 / 语义 / I/O 错误。
 
-### 10. 模块系统（已移出 L0；Phase 2 起在 CT 侧恢复）
+### 10. L2 独有：模块系统与诊断（本文不描述其语法）
 
-多文件模式（`ct build`）、`namespace`、`import`、`pub` 与 `#line` 映射均属**越位实现**，已随 Phase 0.3
-**从 L0 移出**，`ctc` 当前**不接受**它们（命中即报 `'xxx' is not supported by this compiler`）。
-**恢复进度**：`namespace` / 多文件 / `import` / `pub` 已由 Phase 2、`Drop` 已由 Phase 3 在
-`selfhost/src/**` 恢复（本文不描述其语法）；`#line`（含 `--line` / `--no-line` 开关）与泄漏警告 /
-`--diagnostics` 已由 Phase 4 切片 1 / 2 收尾，多错误报告 + 重同步由切片 3 新增（无 oracle），语义诊断由切片 4 新增。归档的
-测试 fixture 见 `test/archive/`，特性完整的旧实现见
-git tag `overreach-oracle`。实现层设计见 `design/restore.md`。
+多文件模式（`ct build`）、`namespace`、`import`、`pub`、`Drop`、`#line`（含 `--line` / `--no-line`）、
+泄漏警告与 `--diagnostics`，以及语义诊断（重复定义 / 签名不一致）**均由 L2 支持**，L0 不接受。
+这些语法的定义与实现记录见 [roadmap](roadmap.md) 的 Phase 2–5 与 [design/restore.md](design/restore.md)；
+归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见 git tag `overreach-oracle`。
 
 ---
 
 ## English
 
-> **Status**: this document specifies what `ctc` (L0, `ctc.c`) **currently accepts and emits**.
-> `namespace` / `import` / `pub` / `ct build` multi-file mode / `Drop` / `#line` / leak warnings and
-> `--diagnostics` are **over-reach implementations** that were **removed from L0** on 2026-10-14
-> (Phase 0.3): hitting them today reports
-> `'namespace' is not supported by this compiler` (same for `pub` / `import` / `ct build`, while
-> `--line` / `--no-line` / `--diagnostics` report `unknown option`).
-> **They are being redone in CT** (outside this document's scope): `namespace` / multi-file /
-> `import` / `pub` were restored by Phase 2 and `Drop` by Phase 3, all under `selfhost/src/**`;
-> `#line` (with the `--line` / `--no-line` overrides) and leak warnings / `--diagnostics` were closed
-> out by Phase 4 slices 1 and 2, and multi-error reporting + resync were added by slice 3 (no
-> oracle) and semantic checks by slice 4; **Phase 5's AutoDrop (`own`) is a new feature** (§4.9).
-> So this document stays accurate for
-> L0, but do not read "removed" as "unavailable" — to write these constructs, use the current
-> compiler (L2, built from `selfhost/src/**`). Archived fixtures live in `test/archive/` and the old
-> implementation is at git tag `overreach-oracle`.
+> **Status**: this document specifies the **core ct grammar** — the subset that both L0 (`ctc.c`) and
+> the current compiler L2 (`selfhost/src/**`) **accept and emit**. L2 is a superset: it also supports
+> `namespace` / `import` / `pub` / multi-file `ct build` / `Drop` / `#line` / leak warnings and
+> `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
+> landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
+> and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also L2-only but is described in §4.9.
+>
+> This is a **capability gap between the two layers**, not work in progress: L0 still reports
+> `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
+> `ct build`; `--line` / `--no-line` / `--diagnostics` report `unknown option`). Archived fixtures
+> live in `test/archive/`, and the old, feature-complete implementation is at git tag
+> `overreach-oracle`.
 
-This document specifies what `ctc` accepts and emits — all of Phase 0. Anything not described here is
-undefined behaviour and must not be relied upon.
+This document specifies the input rules, expansion rules, naming rules and diagnostics of the core
+grammar. Anything not described here is undefined behaviour and must not be relied upon.
 
 ### 1. Source model
 
@@ -943,15 +936,11 @@ error recovery, nested definitions.
 - **No warnings are produced at all**; errors are the only diagnostics.
 - Exit code: `0` on success; `1` on syntax / semantic / I/O errors.
 
-### 10. Module system (removed from L0; restored in CT from Phase 2 on)
+### 10. L2 only: module system and diagnostics (syntax not described here)
 
-Multi-file mode (`ct build`), `namespace`, `import`, `pub` and `#line` mapping are all **over-reach
-implementations** that were **removed from L0** in Phase 0.3; `ctc` **rejects** them today
-(reporting `'xxx' is not supported by this compiler`). **Restoration status**: `namespace` /
-multi-file / `import` / `pub` were restored by Phase 2 and `Drop` by Phase 3, all under
-`selfhost/src/**` (this document does not cover their syntax); `#line` (with the `--line` /
-`--no-line` overrides) and leak warnings / `--diagnostics` were closed out by Phase 4 slices 1
-and 2, and multi-error reporting + resync were added by slice 3 (no oracle) and semantic checks
-by slice 4. Archived test fixtures live in `test/archive/` and the
-feature-complete old compiler is at
-git tag `overreach-oracle`. Implementation-level design is in `design/restore.md`.
+Multi-file mode (`ct build`), `namespace`, `import`, `pub`, `Drop`, `#line` (with the `--line` /
+`--no-line` overrides), leak warnings and `--diagnostics`, plus semantic checks (duplicate
+definitions / signature mismatches) are **all supported by L2** and rejected by L0. Their grammar
+and implementation record live in [roadmap](roadmap.md) (Phases 2–5) and
+[design/restore.md](design/restore.md); archived test fixtures are in `test/archive/`, and the
+feature-complete old compiler is at git tag `overreach-oracle`.
