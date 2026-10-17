@@ -110,10 +110,11 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   `examples/**` 端到端（生成 → 构建 → 运行 → 与 `.expected.out` 比对）、
   `test/errors` 负例诊断（必须非 0 退出，且带 `文件:行:列: error:` 前缀）、
   `known limitations` 特征化断言、`cli` 参数与驱动分支。`CC=gcc ./test/run.sh` 可换编译器。
-- **CT 线关卡同样必跑**（`run.sh` 只驱动 L0）：`bash selfhost/check-goldens.sh`（L1 对 golden +
-  L1′ 自举闭环 + L1/L2 不动点）、`bash selfhost/check-archive.sh`（L2 对归档 oracle 的棘轮）、
-  `bash selfhost/check-m2a.sh`、`bash selfhost/ct-tour.sh`；`bash test/acceptance/run.sh` 单独报告
-  （其 PENDING 属预期，不阻断）。改动 `selfhost/**` 后必须全部跑一遍。
+- **CT 线关卡同样必跑**（`run.sh` 只驱动 L0）：一条命令 `bash selfhost/check-all.sh` 依次跑
+  `./test/run.sh`、`selfhost/check-goldens.sh`（L1 对 golden + L1′ 自举闭环 + L1/L2 不动点）、
+  `selfhost/check-archive.sh`（L2 对归档 oracle 的棘轮）、`selfhost/check-m2a.sh`、
+  `selfhost/ct-tour.sh` 与 `editors/vscode/test/check-grammar.py`（任一失败即整体非零）；
+  `bash test/acceptance/run.sh` 单独报告（其 PENDING 属预期，不阻断）。改动 `selfhost/**` 后必须跑一遍。
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
 - **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
@@ -315,12 +316,13 @@ Also required:
   (generate → build → run → compare with `.expected.out`), negative diagnostics in `test/errors`
   (must exit non-zero with a `file:line:col: error:` prefix), characterisation assertions under
   `known limitations`, and the `cli` argument/driver branches. `CC=gcc ./test/run.sh` selects a compiler.
-- **The CT-line gates are required too** (`run.sh` only drives L0): `bash selfhost/check-goldens.sh`
-  (L1 against the goldens, the L1′ bootstrap loop, and the L1/L2 fixpoint),
-  `bash selfhost/check-archive.sh` (the L2 ratchet against the archived oracle),
-  `bash selfhost/check-m2a.sh` and `bash selfhost/ct-tour.sh`; `bash test/acceptance/run.sh` reports
-  separately (its PENDING entries are expected and do not block). Run all of them after touching
-  `selfhost/**`.
+- **The CT-line gates are required too** (`run.sh` only drives L0): one command,
+  `bash selfhost/check-all.sh`, runs `./test/run.sh`, `selfhost/check-goldens.sh` (L1 against the
+  goldens, the L1′ bootstrap loop, and the L1/L2 fixpoint), `selfhost/check-archive.sh` (the L2
+  ratchet against the archived oracle), `selfhost/check-m2a.sh`, `selfhost/ct-tour.sh` and
+  `editors/vscode/test/check-grammar.py` (any failure makes the whole run non-zero);
+  `bash test/acceptance/run.sh` reports separately (its PENDING entries are expected and do not
+  block). Run it after touching `selfhost/**`.
 - **The manual three-step check stays required** — the suite's internal paths differ from the commands
   you type, so run the three commands above yourself and paste the output.
 - **New or changed syntax needs new cases** — see the checklist in §9.

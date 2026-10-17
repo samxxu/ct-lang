@@ -232,7 +232,7 @@ python3 editors/vscode/test/check-grammar.py   # 19 项断言；退出码 0 = �
 
 #### 自举 gate（`selfhost/`）
 
-`selfhost/` 承载 Phase 1–2 的自举链：`ctc.c`（L0）编译出 **L1**，L1 再编译出 **L2**。它与 `./test/run.sh` **相互独立**；[AGENTS.md](AGENTS.md) 把这四个脚本列为必跑。
+`selfhost/` 承载 Phase 1–2 的自举链：`ctc.c`（L0）编译出 **L1**，L1 再编译出 **L2**。它与 `./test/run.sh` **相互独立**；[AGENTS.md](AGENTS.md) 要求改动 `selfhost/**` 后把这些脚本全部跑一遍，`check-all.sh` 是它们的聚合入口。
 
 - `selfhost/ctc.ct` —— **L1**：用 CT（OO 子集、单文件）重写全部能力的编译器，由 `ctc.c`（L0）编译得到；
 - `selfhost/src/**` —— 同一编译器拆成多单元（`core.ct` + `driver.ct`），由 **L1 自身的 `build`** 编译成 **L2**。
@@ -243,8 +243,10 @@ python3 editors/vscode/test/check-grammar.py   # 19 项断言；退出码 0 = �
 | `selfhost/check-m2a.sh` | M2-a 验收 gate：复现「构建 L0 → L0 编译 L1 → 构建 L1 → L1 编译 `test/cases/01_trait_basic.ct` → 与 golden 逐字节 diff」；自举闭环与 L2 构建仅作报告，不影响判定 |
 | `selfhost/check-archive.sh` | Phase 2+ 的对差 oracle：把 `test/archive/**` 中 Phase 0.3 移出的越位特性 fixture 当 ratchet，逐字节比对 CT 侧恢复出的特性（namespace / 多文件 / `import` / `Drop` / 诊断）；第 3b 步另建 L2 并要求零警告 |
 | `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
+| `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面四个 CT 脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
 
 ```bash
+bash selfhost/check-all.sh         # 一条命令跑完全部硬门禁
 bash selfhost/check-goldens.sh     # L1 / L1′ / L2 对 test/cases/** 逐字节一致
 bash selfhost/check-m2a.sh         # M2-a 单用例验收
 bash selfhost/check-archive.sh     # 归档越位用例逐字节对差
@@ -600,8 +602,8 @@ python3 editors/vscode/test/check-grammar.py   # 19 checks; exit code 0 means it
 #### Self-hosting gates (`selfhost/`)
 
 `selfhost/` carries the Phase 1–2 bootstrap chain: `ctc.c` (L0) compiles **L1**, which in turn builds
-**L2**. It is **separate** from `./test/run.sh`; [AGENTS.md](AGENTS.md) lists these four scripts as
-required runs.
+**L2**. It is **separate** from `./test/run.sh`; [AGENTS.md](AGENTS.md) requires all of these scripts
+after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 
 - `selfhost/ctc.ct` — **L1**: the whole compiler rewritten in CT (OO subset, single file), compiled by
   `ctc.c` (L0);
@@ -614,8 +616,10 @@ required runs.
 | `selfhost/check-m2a.sh` | the M2-a acceptance gate: reproduces "build L0 → L0 compiles L1 → build L1 → L1 compiles `test/cases/01_trait_basic.ct` → byte diff against the golden"; the self-hosting loop and the L2 build are reported only and never change the verdict |
 | `selfhost/check-archive.sh` | the Phase 2+ diff oracle: treats the over-reach fixtures Phase 0.3 moved into `test/archive/**` as a ratchet, diffing byte for byte the features the CT side has restored (namespace / multi-file / `import` / `Drop` / diagnostics); step 3b rebuilds L2 and requires it to be warning-free |
 | `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
+| `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the four CT scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
 
 ```bash
+bash selfhost/check-all.sh         # every hard gate in one command
 bash selfhost/check-goldens.sh     # L1 / L1′ / L2 byte-identical on test/cases/**
 bash selfhost/check-m2a.sh         # M2-a single-case acceptance
 bash selfhost/check-archive.sh     # byte-for-byte diff of the archived over-reach cases
