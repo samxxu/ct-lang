@@ -25,10 +25,23 @@ import core;
 
 #define CTC_VERSION "0.4.0"
 
-/* Extra `import` search roots from `-I <dir>` (checked after the importing
-   file's own directory, in command-line order). */
-static char g_incdir[MAX_INCDIRS][MAX_NAME * 4];
-static int  g_nincdirs = 0;
+/* The `build` driver's state: the `-I` search roots (checked after the importing
+   file's own directory, in command-line order) and the unit table it fills while
+   resolving imports. One struct instead of nine loose globals. `struct Build` and
+   `g_build` live in this unit because `struct Pipe` / `struct SymTab` do not cross
+   the unit boundary. */
+struct Build {
+    char incdir[MAX_INCDIRS][MAX_NAME * 4];
+    int  nincdirs;
+    char unit_path[MAX_UNITS][MAX_NAME * 4];
+    char unit_out[MAX_UNITS][MAX_NAME * 4];
+    char unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
+    int  unit_nimp[MAX_UNITS];
+    int  unit_n;
+    int  order[MAX_UNITS];
+    int  order_n;
+};
+static struct Build g_build;
 
 /* ------------------------------------------------- `build` driver (plain C) */
 
@@ -133,8 +146,8 @@ static int resolve_import(const char *importer, const char *mod, char *out, size
         snprintf(dir, sizeof dir, ".");
     }
 
-    for (k = -1; k < g_nincdirs; k++) {
-        root = (k < 0) ? dir : g_incdir[k];
+    for (k = -1; k < g_build.nincdirs; k++) {
+        root = (k < 0) ? dir : g_build.incdir[k];
         if (snprintf(out, cap, "%s/%s.ct", root, mod) >= (int)cap) return -1;
         if (file_exists(out)) return 0;
         if (snprintf(out, cap, "%s/%s.h.ct", root, mod) >= (int)cap) return -1;
@@ -145,23 +158,15 @@ static int resolve_import(const char *importer, const char *mod, char *out, size
 
 /* ------------------------------------------------------------------ units */
 
-static char g_unit_path[MAX_UNITS][MAX_NAME * 4];
-static char g_unit_out[MAX_UNITS][MAX_NAME * 4];
-static char g_unit_imp[MAX_UNITS][MAX_IMPORTS][MAX_NAME];
-static int  g_unit_nimp[MAX_UNITS];
-static int  g_unit_n = 0;
-static int  g_order[MAX_UNITS];
-static int  g_order_n = 0;
-
 static int unit_find(const char *path)
 {
     int i;
-    for (i = 0; i < g_unit_n; i++)
-        if (strcmp(g_unit_path[i], path) == 0) return i;
+    for (i = 0; i < g_build.unit_n; i++)
+        if (strcmp(g_build.unit_path[i], path) == 0) return i;
     return -1;
 }
 
-/* Add `path` and its imports (post-order: dependencies land in g_order first). */
+/* Add `path` and its imports (post-order: dependencies land in g_build.order first). */
 static int unit_visit(const char *path)
 {
     int idx = unit_find(path), k;
@@ -170,13 +175,13 @@ static int unit_visit(const char *path)
 
     if (idx >= 0) return idx;                      /* already scheduled */
 
-    if (g_unit_n >= MAX_UNITS) {
+    if (g_build.unit_n >= MAX_UNITS) {
         fprintf(stderr, "ctc: too many units (max %d)\n", MAX_UNITS);
         return -1;
     }
-    idx = g_unit_n++;
-    snprintf(g_unit_path[idx], sizeof g_unit_path[0], "%s", path);
-    g_unit_nimp[idx] = 0;
+    idx = g_build.unit_n++;
+    snprintf(g_build.unit_path[idx], sizeof g_build.unit_path[0], "%s", path);
+    g_build.unit_nimp[idx] = 0;
 
     n = collect_imports(path, mods, MAX_IMPORTS);
     for (k = 0; k < n; k++) {
@@ -191,11 +196,11 @@ static int unit_visit(const char *path)
         seg = strrchr(mods[k], '/');
         seg = seg ? seg + 1 : mods[k];
         snprintf(hname, sizeof hname, "%s.h", seg);
-        if (g_unit_nimp[idx] < MAX_IMPORTS)
-            snprintf(g_unit_imp[idx][g_unit_nimp[idx]++], MAX_NAME, "%s", hname);
+        if (g_build.unit_nimp[idx] < MAX_IMPORTS)
+            snprintf(g_build.unit_imp[idx][g_build.unit_nimp[idx]++], MAX_NAME, "%s", hname);
     }
 
-    g_order[g_order_n++] = idx;
+    g_build.order[g_build.order_n++] = idx;
     return idx;
 }
 
@@ -223,12 +228,12 @@ static int build_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "-I") == 0) {
             if (i + 1 >= argc) { fprintf(stderr, "ctc: -I needs an argument\n"); return 1; }
-            if (g_nincdirs >= MAX_INCDIRS) {
+            if (g_build.nincdirs >= MAX_INCDIRS) {
                 fprintf(stderr, "ctc: too many -I roots (max %d)\n", MAX_INCDIRS);
                 return 1;
             }
-            snprintf(g_incdir[g_nincdirs], sizeof g_incdir[0], "%s", argv[++i]);
-            g_nincdirs++;
+            snprintf(g_build.incdir[g_build.nincdirs], sizeof g_build.incdir[0], "%s", argv[++i]);
+            g_build.nincdirs++;
             continue;
         }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
@@ -257,21 +262,21 @@ static int build_main(int argc, char **argv, const char *prog)
     for (i = 0; i < n; i++)
         if (unit_visit(in[i]) < 0) return 1;
 
-    for (o = 0; o < g_order_n; o++) {
-        int u = g_order[o];
+    for (o = 0; o < g_build.order_n; o++) {
+        int u = g_build.order[o];
         int k;
-        if (build_output(g_unit_path[u], outdir, g_unit_out[u], sizeof g_unit_out[0]) != 0) {
-            fprintf(stderr, "ctc: output path too long for '%s'\n", g_unit_path[u]);
+        if (build_output(g_build.unit_path[u], outdir, g_build.unit_out[u], sizeof g_build.unit_out[0]) != 0) {
+            fprintf(stderr, "ctc: output path too long for '%s'\n", g_build.unit_path[u]);
             return 1;
         }
         ct_begin_imports();
-        for (k = 0; k < g_unit_nimp[u]; k++)
-            ct_add_import(g_unit_imp[u][k]);
-        if (ct_compile_file(g_unit_path[u], g_unit_out[u], 1, line_force, diag) != 0) return 1;
+        for (k = 0; k < g_build.unit_nimp[u]; k++)
+            ct_add_import(g_build.unit_imp[u][k]);
+        if (ct_compile_file(g_build.unit_path[u], g_build.unit_out[u], 1, line_force, diag) != 0) return 1;
     }
 
     ct_cc_reset();
-    for (o = 0; o < g_order_n; o++) ct_cc_add(g_unit_out[g_order[o]]);
+    for (o = 0; o < g_build.order_n; o++) ct_cc_add(g_build.unit_out[g_build.order[o]]);
     ct_cc_finish();
     return 0;
 }
@@ -302,12 +307,12 @@ static int compile_main(int argc, char **argv, const char *prog)
         }
         if (strcmp(argv[i], "-I") == 0) {
             if (i + 1 >= argc) { fprintf(stderr, "ctc: -I needs an argument\n"); return 1; }
-            if (g_nincdirs >= MAX_INCDIRS) {
+            if (g_build.nincdirs >= MAX_INCDIRS) {
                 fprintf(stderr, "ctc: too many -I roots (max %d)\n", MAX_INCDIRS);
                 return 1;
             }
-            snprintf(g_incdir[g_nincdirs], sizeof g_incdir[0], "%s", argv[++i]);
-            g_nincdirs++;
+            snprintf(g_build.incdir[g_build.nincdirs], sizeof g_build.incdir[0], "%s", argv[++i]);
+            g_build.nincdirs++;
             continue;
         }
         if (strcmp(argv[i], "--line") == 0) { line_force = 1; continue; }
