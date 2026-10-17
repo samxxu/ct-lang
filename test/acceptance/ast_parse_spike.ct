@@ -1,0 +1,112 @@
+/*
+ * ast_parse_spike -- Phase 5 feasibility probe for the AST mainline.
+ *
+ * `ast_spike` already shows that CT can *express* a tree. This probe answers the
+ * next question: can a parser written in CT build that tree on the heap and walk
+ * it polymorphically? `1+2` is the smallest input that exercises the full loop:
+ *
+ *   lexer -> recursive-descent parser -> heap nodes -> interface dispatch -> 3
+ *
+ * If this compiles with L1/L2 and prints 3, the AST mainline has a working
+ * foundation; if it does not, the first failing construct is the next capability
+ * to build.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Expr {
+    int eval();
+}
+
+struct Num {
+    int v;
+} use Expr;
+
+struct Add {
+    Expr l;
+    Expr r;
+} use Expr;
+
+impl Expr for Num {
+    int eval() { return self->v; }
+}
+
+impl Expr for Add {
+    int eval() { return self->l.eval() + self->r.eval(); }
+}
+
+/* Token kinds: 0 = end of input, 1 = number, 2 = '+'. */
+int g_tok;
+int g_val;
+const char *g_p;
+
+void next_tok()
+{
+    while (*g_p == ' ' || *g_p == '\t') g_p++;
+    if (*g_p >= '0' && *g_p <= '9') {
+        int v = 0;
+        while (*g_p >= '0' && *g_p <= '9') {
+            v = v * 10 + (*g_p - '0');
+            g_p++;
+        }
+        g_tok = 1;
+        g_val = v;
+        return;
+    }
+    if (*g_p == '+') {
+        g_tok = 2;
+        g_p++;
+        return;
+    }
+    g_tok = 0;
+}
+
+Expr make_num(int v)
+{
+    Num *n = malloc(sizeof(struct Num));
+    n->v = v;
+    return n;
+}
+
+Expr make_add(Expr l, Expr r)
+{
+    Add *a = malloc(sizeof(struct Add));
+    a->l = l;
+    a->r = r;
+    return a;
+}
+
+Expr parse_expr()
+{
+    Expr left;
+    next_tok();
+    if (g_tok != 1) {
+        fprintf(stderr, "parse error: expected a number\n");
+        exit(1);
+    }
+    left = make_num(g_val);
+    next_tok();
+    while (g_tok == 2) {
+        next_tok();
+        if (g_tok != 1) {
+            fprintf(stderr, "parse error: expected a number after '+'\n");
+            exit(1);
+        }
+        left = make_add(left, make_num(g_val));
+        next_tok();
+    }
+    if (g_tok != 0) {
+        fprintf(stderr, "parse error: trailing input\n");
+        exit(1);
+    }
+    return left;
+}
+
+int main(void)
+{
+    Expr e;
+    g_p = "1+2";
+    e = parse_expr();
+    printf("%d\n", e.eval());
+    return 0;
+}

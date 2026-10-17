@@ -75,8 +75,9 @@ fi
 # interface fields at the construction point and by assignment, plus the interface
 # local/return control group -- and the AST-shaped group (heap nodes, child array
 # fields, array parameters). `ast_spike` is the whole target program: it must
-# compile, run and print 5.
-BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return p12_heap_boxed_node p13_child_array_field p14_param_array_brackets p15_param_array_ptr p16_ptr_iface_local p17_ptr_iface_local_init ast_spike"
+# compile, run and print 5. `ast_parse_spike` is the Phase 5 feasibility skeleton:
+# a lexer + recursive-descent parser that builds heap nodes and prints 3.
+BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return p12_heap_boxed_node p13_child_array_field p14_param_array_brackets p15_param_array_ptr p16_ptr_iface_local p17_ptr_iface_local_init ast_spike ast_parse_spike"
 
 n_pass=0
 n_pending=0
@@ -438,6 +439,24 @@ else
         report ast_spike FAIL "run: got '$(cat "$TMP/spike.out")', want '5'"
     else
         report ast_spike PASS ""
+    fi
+fi
+
+echo "== the parser skeleton (Phase 5 AST feasibility) =="
+# ast_parse_spike is the smallest end-to-end front-end: lex `1+2`, build heap
+# nodes, dispatch through interface fields, print 3.
+if ! "$CT" test/acceptance/ast_parse_spike.ct -o "$TMP/parse.c" 2>"$TMP/parse.err"; then
+    report ast_parse_spike FAIL "ctc: $(first_error "$TMP/parse.err")"
+elif ! $CC $CFLAGS "$TMP/parse.c" -o "$TMP/parse.bin" 2>"$TMP/parse.cc.err"; then
+    report ast_parse_spike FAIL "cc:  $(first_error "$TMP/parse.cc.err")"
+else
+    rc=$(run_bin parse)
+    if [ "$rc" -ne 0 ]; then
+        report ast_parse_spike FAIL "run: exited $rc (built but does not run)"
+    elif [ "$(cat "$TMP/parse.out")" != "3" ]; then
+        report ast_parse_spike FAIL "run: got '$(cat "$TMP/parse.out")', want '3'"
+    else
+        report ast_parse_spike PASS ""
     fi
 fi
 
