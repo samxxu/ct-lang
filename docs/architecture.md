@@ -147,7 +147,7 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | 报错定位粒度 | 语义类错误（如未实现的方法）定位到构造起始行 | 多方法文件里定位不够精确 |
 | 参数表上限偏小 | `MAX_PARAM` 256、`MAX_PARAMS` 16 | 复杂签名一律 `die`（不截断） |
 | 嵌套初始化递归无显式深度守卫 | `put_nested_assignments`（L1441）对 `nu > 0` 的嵌套链在 L1461 短路，绕过 `needs_nested_init` 的 `MAX_DEPTH` 检查；递归深度只受 `MAX_STRUCT`(32) 间接约束 | 当前**不是**可复现崩溃——值互相引用在 CT 中无法表达，链必为无环有限；若将来支持前向声明，这里会变成无限递归，需补显式深度守卫（2026-10-16 审计结论，接受现状） |
-| 部分防御性 `die` 点不可达 | `expected struct name`（L1187）/ `expected '{' after struct`（L1189）——派发处已要求「名字 + `{`」才进 `parse_struct`；`put_heap_vpts` 版的 `nested field path too long`（L1491）只查一跳，长度必小于缓冲；`cannot create a temporary file`（L2837）仅 `tmpfile` 失败时触发；`out of memory`（L158/L237）OOM 分支 | 审计已逐个探针确认不可达；按**防御性检查**接受，不补 fixture |
+| 诊断点的可达性分四类 | **真防御**：`expected struct name`（L1187）/ `expected '{' after struct`（L1189）——派发处已要求「名字 + `{`」才进 `parse_struct`。**可达·已覆盖**：`cannot open`（L2704）与 `short read`（L2712），由 `cli/cannot-open` / `cli/short-read` 钉住。**可达·已补**：`cannot create a temporary file`（L2837，`tmpfile()` 失败，macOS 遵循 `$TMPDIR`）与 `cannot read`（L2708，FIFO 等不可 seek 的输入），由 `cli/tmpfile-cannot-create` / `cli/cannot-read` 钉住。**未复现**：`put_heap_vpts` 版的 `nested field path too long`（L1491）——深链探针未命中，但「未复现」不等于「不可达」，保留为待复核项。**不可测**：`out of memory`（L158/L237） | 2026-10-17 审计逐个探针复核，结论见左列 |
 
 ### 8. 扩展点（Phase 1 落点）
 
@@ -156,7 +156,7 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 | namespace | ⛔ 已随 Phase 0.3 移出 L0（命中即 `die`：`'namespace' is not supported by this compiler`）；Phase 2–5 用 CT（L1 / `selfhost/src/**`）重做 |
 | 变量作用域 | ✅ 已落地（0.1.9）：`scope_track` 在 `{}` 处压栈、`}` 处回滚 `g_nvars` |
 | 多文件编译 | ⛔ 已随 Phase 0.3 移出 L0；Phase 2 起由 CT 层的多单元构建承载（L1 的 `build` + `import`，`selfhost/src/**`） |
-| 错误恢复 | 主循环在 `die` 处改为「跳到下一个行首/下一个 `}` 后继续」，需要引入错误计数 |
+| 错误恢复 | ✅ Phase 4 已在 CT 侧落地（`setjmp` 守卫 + `recover_pos`，`MAX_ERRORS=20`），见 `roadmap.md` Phase 4；L0 仍是「一处错误即停」 |
 | 自动化回归 | 见 `roadmap.md` 的测试策略 |
 
 ### 9. 测试如何挂到这份代码上
