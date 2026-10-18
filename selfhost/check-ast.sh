@@ -20,6 +20,10 @@
 # 9.5b adds the metadata section: `--emit-map` (stdout and file), `#line` in
 # build mode (default on) and `--line` / `--no-line` in both modes.
 #
+# 9.6 adds the self-hosting section: the AST compiler compiles its own source,
+# the result builds warning-free, and the rebuilt compiler reproduces the same
+# output byte for byte (a fixpoint).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -282,6 +286,22 @@ elif grep -q "^ct-ast: " "$work/bad.err"; then
     ok "missing_semi (rejected with a diagnostic)"
 else
     bad "missing_semi" "no diagnostic on stderr"
+fi
+
+echo
+echo "== self-hosting (9.6) =="
+# The AST compiler compiles its own source; the result must build warning-free,
+# and the rebuilt compiler must reproduce the same output byte for byte (a
+# fixpoint: the compiler agrees with itself on its own subset).
+if "$work/ct-ast" selfhost/ast/main.ct -o "$work/self1.c" \
+        >"$work/self1.out" 2>"$work/self1.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/self1.c" -o "$work/ct-ast2" 2>"$work/selfcc.log" \
+   && "$work/ct-ast2" selfhost/ast/main.ct -o "$work/self2.c" \
+        >"$work/self2.out" 2>"$work/self2.err" \
+   && cmp -s "$work/self1.c" "$work/self2.c"; then
+    ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"
+else
+    bad "self-compile" "$(cat "$work/self1.err" "$work/selfcc.log" "$work/self2.err" 2>/dev/null | head -5)"
 fi
 
 echo
