@@ -1,10 +1,10 @@
-# Phase 9 设计（草案）：AST 版编译器（新主线）
+# Phase 9 设计（已冻结）：AST 版编译器（新主线）
 
 > 中文 · [English](#english)
 >
-> **状态：设计草案（2026-10-18），未实现。** 主题与五项决策（D28–D33）已由用户定案；
-> 其余决策标为**待定**，实现前必须逐条拍板并按本文件更新状态。**不要**照本文件创建
-> `selfhost/ast/**` 或任何实现文件——`docs/design/` 是草案，不是实现依据（AGENTS §2）。
+> **状态：设计已冻结（2026-10-18），未实现。** D28–D37 全部定案；冻结的是设计契约而非代码，
+> 实现按 §7 的切片推进。**不要**照本文件创建 `selfhost/ast/**` 或任何实现文件——冻结的是设计，
+> 不是开工许可（AGENTS §2）。
 > 决策编号从 **D28** 起（D21–D27 见 [phase8.md](phase8.md)）。
 
 ---
@@ -46,7 +46,7 @@
 | 归档点 | tag `pre-ast-mainline`（2026-10-17） | 旧管线的 byte-identical 出口到此为止 |
 | 自举阶梯 | 新编译器的表容量由**上一代**编译器决定，增长一代滞后 | 第一代 AST 编译器必须落在 32 struct / 16 trait / 64 签名内 |
 
-### 3. 已定决策（D28–D33，2026-10-18 用户确认）
+### 3. 已定决策（D28–D37，2026-10-18 用户确认）
 
 | 编号 | 问题 | 结论 |
 | --- | --- | --- |
@@ -56,15 +56,14 @@
 | D31 | Phase 9 最终出口 | ✅ **自编 + 行为等价**：AST 编译器能编自己，且对 `test/cases` + `examples` + `modules` 的编译成功性与程序输出与旧管线等价 |
 | D32 | AST 节点表示 | ✅ **`typedef struct` 数据节点 + `kind` 判别字段**（`typedef struct` 不计 `MAX_STRUCT`），遍历/发射由少量 trait（如 `NodeOps`）承载，内部按 `kind` 分派；分派逻辑集中在一处，新增节点只改那一处 |
 | D33 | 符号表与作用域 | ✅ **分类扁平表**：类型（struct / trait / typedef）、函数、变量各一张；只有变量表压/弹作用域（进入记录长度、退出回滚）。与 C 的名字空间语义一致，不自造跨类冲突规则；查找线性，容量内成本可忽略；越界即 `die`，不静默截断 |
+| D34 | 行为等价判据 | ✅ **退出码一致 + 成功产物可被 `cc -Wall -Wextra -std=c99` 零警告编译 + 程序输出与 `*.expected.out` 一致**；诊断文本与告警不比对 |
+| D35 | AST 线门禁 | ✅ **新增 `selfhost/check-ast.sh`**，9.1 起纳入 `check-all.sh` 作为硬关卡；四态 `PASS / NEW / PENDING / REGRESSION`，仅 `REGRESSION` 非零 |
+| D36 | 旧管线归档时点 | ✅ **9.6 自编成功后继续跑到 9.7 全量行为等价，再打 tag 归档** `selfhost/src/**`（冻结但保留），归档前始终可回退 |
+| D37 | 容量增长 | ✅ **一代滞后**：每代只提高新编译器自己的 `MAX_*`，且新源码必须仍由上一代编得过 |
 
-### 4. 待定决策（实现前必须拍板）
+### 4. 决策清单收口
 
-| 编号 | 问题 | 推荐方案 | 代价 / 说明 |
-| --- | --- | --- | --- |
-| D34 | 行为等价的验收口径 | **退出码一致 + 成功产物可编译 + 程序输出一致；诊断文本与告警不要求逐字一致** | 若要求告警一致，等于要求复刻行重写的启发式，违背「新主线」初衷 |
-| D35 | 新门禁形态 | **新增 `selfhost/check-ast.sh`**，9.1 起纳入 `check-all.sh`；七道旧关卡保持不变 | 双轨期多一道门禁；旧关卡继续钉住旧管线 |
-| D36 | 旧管线归档时点 | **9.7 行为等价全绿后打 tag 归档**，`selfhost/src/**` 冻结但保留 | 归档后 `check-goldens` / `check-archive` 的语义需要重写为「对 AST 编译器」 |
-| D37 | 容量增长 | **一代滞后**：9.x 每代只提高新编译器自己的 `MAX_*`，且仍须由上一代编得过 | 提高过快会让「上一代编下一代」断链 |
+D28–D37 全部定案，**无待定项**。本节保留编号占位；后续若出现新决策，从 **D38** 起编号。
 
 ### 5. 「行为等价」的精确含义
 
@@ -165,7 +164,7 @@ behavioural equivalence"); Phase 9 gives that decision a phase, a design and a s
 - The bootstrap ladder grows one generation behind: the first AST compiler must fit the frozen
   L1's tables (32 structs / 16 traits / 64 signatures).
 
-### 3. Decided (D28–D33, user-confirmed 2026-10-18)
+### 3. Decided (D28–D37, user-confirmed 2026-10-18)
 
 | ID | Question | Decision |
 | --- | --- | --- |
@@ -175,15 +174,15 @@ behavioural equivalence"); Phase 9 gives that decision a phase, a design and a s
 | D31 | Phase exit | ✅ **Self-compilation + behavioural equivalence** on `test/cases`, `examples` and `modules` |
 | D32 | AST representation | ✅ **`typedef struct` data nodes + a `kind` tag** (`typedef struct` does not count against `MAX_STRUCT`), with a few traits (`NodeOps`) carrying the walker/emitter and one central `kind` dispatch; a new node kind touches one switch |
 | D33 | Symbol tables / scopes | ✅ **Separate flat tables** for types (struct / trait / typedef), functions and variables; only the variable table pushes/pops scopes (record the length, roll back on exit). This matches C's namespaces, needs no cross-category collision rule, and lookup is linear within a bounded table; overflow `die`s |
+| D34 | Equivalence test | ✅ **Same exit status + the generated C compiles warning-free with `cc -Wall -Wextra -std=c99` + the program output matches `*.expected.out`**; diagnostics and warnings are not compared |
+| D35 | AST gate | ✅ **A new `selfhost/check-ast.sh`**, added to `check-all.sh` as a hard gate from 9.1 on; four states `PASS / NEW / PENDING / REGRESSION`, only `REGRESSION` is non-zero |
+| D36 | Archiving the old pipeline | ✅ **After 9.6 self-compiles, run on to full equivalence at 9.7, then tag and archive** `selfhost/src/**` (frozen but present); the old line stays available for rollback until then |
+| D37 | Capacity growth | ✅ **One generation behind**: each generation may raise only the new compiler's own `MAX_*`, and the new sources must still be compilable by the previous generation |
 
-### 4. Open decisions (must be settled before implementation)
+### 4. Decisions closed
 
-| ID | Question | Recommendation |
-| --- | --- | --- |
-| D34 | Equivalence definition | **Same exit status + generated C compiles + identical program output**; diagnostics and warnings need not match |
-| D35 | New gate | **`selfhost/check-ast.sh`**, added to `check-all.sh` from 9.1 on; the seven existing gates stay |
-| D36 | Archiving the old pipeline | **Tag and archive after 9.7**; `selfhost/src/**` stays frozen but present |
-| D37 | Capacity growth | **One generation behind**: each 9.x generation may raise only the new compiler's own `MAX_*`, and must still be compilable by the previous generation |
+D28–D37 are all settled; **nothing is open**. The section is kept as a placeholder — any new decision
+starts at **D38**.
 
 ### 5. What "behavioural equivalence" means
 
