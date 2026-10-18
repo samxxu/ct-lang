@@ -20,6 +20,9 @@ import core;
 /* Phase 8.1 vendors a local package by walking its directory; `opendir` is the
    POSIX way to do that without a subprocess. */
 #include <dirent.h>
+/* Phase 8.2 fetches git sources by shelling out to the system `git`. `system`
+   lives in stdlib.h (ISO C), so no feature macro is needed; the call is confined
+   to the package subcommand and never runs while compiling. */
 
 /* This unit carries its own copy of the shared capacities (a generated header
    cannot carry a macro): the values must stay in lockstep with `core.ct`. */
@@ -654,15 +657,21 @@ static int compile_main(int argc, char **argv, const char *prog)
                            g_build.has_map ? g_build.map_path : NULL, NULL);
 }
 
-/* ---------------------------------------- package manager (Phase 8.1, local) */
+/* ------------------------------------ package manager (Phase 8.1 + 8.2) */
 
-/* 8.1 covers the local half of ct-pkg: read a package's `ct.pkg`, check a version
-   range, resolve its local `dep` lines recursively and vendor the tree into
-   `./vendor/<name>`, recording what was taken in `./ct.lock`. No git and no
-   subprocess are involved yet -- 8.2 adds those behind the same entry. */
+/* ct-pkg reads a package's `ct.pkg`, checks a version range, resolves its `dep`
+   lines recursively and vendors the tree into `./vendor/<name>`, recording what
+   was taken in `./ct.lock`. 8.1 covers a local directory source (copy, no git);
+   8.2 adds a git source, the only place in the compiler that runs a subprocess:
+   the system `git` is invoked from `ct get` alone, never from `ct compile` or
+   `ct build`. A spec is local when it begins with `.`, `/` or `file://`; anything
+   else is a git source -- a full `scheme://` URL used verbatim, a `host/path`
+   given `https://`, or a bare name resolved against `CT_REGISTRY`
+   (default `https://github.com/ct-pkg`). */
 #define MAX_PKG_DEPS   16
 #define MAX_PKG_PATH   (MAX_NAME * 4)
 #define MAX_PKG_DEPTH  8
+#define MAX_PKG_CMD    2048      /* a shell command line, with two quoted paths */
 
 trait PkgOps {
     int  read_manifest(const char *dir, char *name, size_t ncap, char *ver, size_t vcap,
@@ -673,9 +682,23 @@ trait PkgOps {
     int  copy_file(const char *src, const char *dst);
     int  copy_tree(const char *src, const char *dst);
     int  split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap);
+    int  ensure_dir(const char *path);
     int  get_one(const char *dir, const char *range, int depth);
     int  get(const char *spec, const char *root);
     int  run(int argc, char **argv, const char *prog);
+    /* Phase 8.2: git sources. `get_spec` is the dispatcher (git vs local) every
+       dependency edge goes through; the rest are the git machinery, kept in one
+       trait so the single subprocess call site stays auditable. */
+    int  is_git_ref(const char *spec);
+    int  git_url(const char *spec, char *url, size_t cap);
+    int  git_name(const char *spec, char *name, size_t cap);
+    int  git_avail(void);
+    int  sh_quote(const char *s, char *out, size_t cap);
+    int  git_run(const char *cmd, const char *outfile);
+    int  read_line_of(const char *path, char *buf, size_t cap);
+    int  git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap);
+    int  get_git(const char *spec, const char *range, int depth);
+    int  get_spec(const char *spec, const char *base, int depth);
 }
 
 struct Pkg {
@@ -836,6 +859,17 @@ impl PkgOps for Pkg {
         return rc;
     }
 
+    /* Create `path` if it is missing; an existing directory is success (an
+       EEXIST from a warm cache or a pre-created `vendor/` is the normal case). */
+    int ensure_dir(const char *path) {
+        struct stat st;
+        (void)self;
+
+        if (mkdir(path, 0755) == 0) return 0;
+        if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return 0;
+        return -1;
+    }
+
     /* `path[@range]`: the last `@` separates the two, so a path may contain one. */
     int split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap) {
         const char *at = NULL, *q;
@@ -856,6 +890,324 @@ impl PkgOps for Pkg {
         path[n] = 0;
         snprintf(range, rcap, "%s", at + 1);
         return 0;
+    }
+
+    /* A spec is a git source unless it names a filesystem location: a relative or
+       absolute path, or a `file://` URL (copied, not cloned -- see design §4). */
+    int is_git_ref(const char *spec) {
+        (void)self;
+        if (spec[0] == '.' || spec[0] == '/') return 0;
+        if (strncmp(spec, "file://", 7) == 0) return 0;
+        return 1;
+    }
+
+    /* Turn a git spec into a clone URL: a `scheme://` URL is taken verbatim, a
+       bare `host/path` gets `https://`, and a package name alone is resolved
+       against the registry (default `https://github.com/ct-pkg`). */
+    int git_url(const char *spec, char *url, size_t cap) {
+        const char *reg;
+        int w;
+        (void)self;
+
+        if (strstr(spec, "://")) {
+            if (strlen(spec) >= cap) return -1;
+            snprintf(url, cap, "%s", spec);
+            return 0;
+        }
+        if (strchr(spec, '/')) {
+            w = snprintf(url, cap, "https://%s", spec);
+            if (w < 0 || (size_t)w >= cap) return -1;
+            return 0;
+        }
+        reg = getenv("CT_REGISTRY");
+        if (!reg || !reg[0]) reg = "https://github.com/ct-pkg";
+        w = snprintf(url, cap, "%s/%s", reg, spec);
+        if (w < 0 || (size_t)w >= cap) return -1;
+        return 0;
+    }
+
+    /* The vendor directory is named after the last path segment of the spec. */
+    int git_name(const char *spec, char *name, size_t cap) {
+        const char *b, *e;
+        size_t l;
+        (void)self;
+
+        e = spec + strlen(spec);
+        while (e > spec && e[-1] == '/') e--;
+        b = e;
+        while (b > spec && b[-1] != '/') b--;
+        l = (size_t)(e - b);
+        if (l == 0 || l >= cap) return -1;
+        memcpy(name, b, l);
+        name[l] = 0;
+        return 0;
+    }
+
+    int git_avail(void) {
+        (void)self;
+        return system("git --version >/dev/null 2>&1") == 0;
+    }
+
+    /* Single-quote `s` for the shell, escaping embedded quotes as `'\''`. Every
+       path and URL that reaches `git_run` goes through here, so a spec can never
+       break out of its argument. */
+    int sh_quote(const char *s, char *out, size_t cap) {
+        size_t n = 0, i;
+        (void)self;
+
+        if (cap < 4) return -1;
+        out[n++] = '\'';
+        for (i = 0; s[i]; i++) {
+            if (s[i] == '\'') {
+                if (n + 5 >= cap) return -1;
+                out[n++] = '\''; out[n++] = '\\'; out[n++] = '\''; out[n++] = '\'';
+            } else {
+                if (n + 2 >= cap) return -1;
+                out[n++] = s[i];
+            }
+        }
+        out[n++] = '\'';
+        out[n] = 0;
+        return 0;
+    }
+
+    /* The one subprocess call site. A command's exit status is the result; when
+       `outfile` is given, stdout is captured there for `read_line_of`. `system`
+       requires a shell, so every path splice is pre-quoted by the caller. */
+    int git_run(const char *cmd, const char *outfile) {
+        char full[MAX_PKG_CMD], qo[MAX_PKG_CMD];
+        int w;
+        (void)self;
+
+        if (outfile) {
+            if (self->sh_quote(outfile, qo, sizeof qo) != 0) return -1;
+            w = snprintf(full, sizeof full, "%s > %s 2>/dev/null", cmd, qo);
+        } else {
+            w = snprintf(full, sizeof full, "%s 2>/dev/null", cmd);
+        }
+        if (w < 0 || (size_t)w >= sizeof full) return -1;
+        return system(full);
+    }
+
+    /* First line of a captured-output file, without the trailing newline. */
+    int read_line_of(const char *path, char *buf, size_t cap) {
+        FILE *f;
+        size_t n = 0;
+        int c;
+        (void)self;
+
+        f = fopen(path, "r");
+        if (!f) return -1;
+        while ((c = fgetc(f)) != EOF && c != '\n' && c != '\r') {
+            if (n + 1 >= cap) { fclose(f); return -1; }
+            buf[n++] = (char)c;
+        }
+        fclose(f);
+        buf[n] = 0;
+        return 0;
+    }
+
+    /* Pick the version to lock: among the repository's tags, treated as SemVer
+       (a leading `v` is optional), take the **lowest** one satisfying `range`
+       (minimal version selection). `0` means a tag was chosen and written to
+       `tag`; `-2` means there are no tags and the range accepts any version, so
+       the caller falls back to the default branch; `-1` means no tag fits. */
+    int git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap) {
+        char q1[MAX_PKG_CMD], cmd[MAX_PKG_CMD], out[MAX_PKG_CMD], root[MAX_PKG_CMD];
+        const char *home;
+        unsigned long len = 0;
+        char *src, *p, *end;
+        int have = 0, v[3], best[3], w;
+
+        home = getenv("HOME");
+        if (!home || !home[0]) return -1;
+        if (snprintf(root, sizeof root, "%s/.cache/ct-pkg", home) >= (int)sizeof root) return -1;
+        if (snprintf(out, sizeof out, "%s/.ct-pkg.tags", root) >= (int)sizeof out) return -1;
+        tag[0] = 0;
+        if (self->sh_quote(cache, q1, sizeof q1) != 0) return -1;
+        w = snprintf(cmd, sizeof cmd, "git -C %s tag -l", q1);
+        if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+        if (self->git_run(cmd, out) != 0) return -1;
+
+        src = ct_read_file(out, &len);
+        if (!src) return -1;
+        p = src;
+        end = src + len;
+        while (p < end) {
+            char *ls = p, *le = p, *vp;
+            char tmp[MAX_NAME];
+            size_t vl, tl;
+            while (le < end && *le != '\n') le++;
+            p = (le < end) ? le + 1 : end;
+            while (le > ls && (le[-1] == '\r' || le[-1] == ' ' || le[-1] == '\t')) le--;
+            while (ls < le && (*ls == ' ' || *ls == '\t')) ls++;
+            if (ls == le) continue;
+            vp = ls;
+            vl = (size_t)(le - ls);
+            if (vl && *vp == 'v') { vp++; vl--; }
+            if (vl == 0 || vl >= sizeof tmp) continue;
+            memcpy(tmp, vp, vl);
+            tmp[vl] = 0;
+            if (self->version_parse(tmp, v) != 0) continue;
+            if (!self->range_match(range, tmp)) continue;
+            tl = (size_t)(le - ls);
+            if (tl == 0 || tl >= tcap) continue;
+            if (!have || self->version_cmp(v, best) < 0) {
+                memcpy(tag, ls, tl);
+                tag[tl] = 0;
+                best[0] = v[0]; best[1] = v[1]; best[2] = v[2];
+                have = 1;
+            }
+        }
+        free(src);
+        if (have) return 0;
+        if (!range || !range[0] || strcmp(range, "*") == 0) return -2;
+        return -1;
+    }
+
+    /* Fetch a git package into the cache, check out the version the range picks,
+       pin the resulting commit, then resolve and vendor it like a local source. */
+    int get_git(const char *spec, const char *range, int depth) {
+        char url[MAX_PKG_CMD], name[MAX_NAME], hdir[MAX_PKG_CMD], root[MAX_PKG_CMD];
+        char cache[MAX_PKG_CMD], gitdir[MAX_PKG_CMD], out[MAX_PKG_CMD];
+        char q1[MAX_PKG_CMD], q2[MAX_PKG_CMD], cmd[MAX_PKG_CMD];
+        char mname[MAX_NAME], mver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        char tag[MAX_NAME], commit[64], dst[MAX_PKG_PATH];
+        const char *home;
+        struct stat st;
+        int ndeps = 0, i, w, rc, fresh;
+
+        if (depth > MAX_PKG_DEPTH) {
+            fprintf(stderr, "ctc: dependency chain is too deep at '%s'\n", spec);
+            return -1;
+        }
+        if (!self->git_avail()) {
+            fprintf(stderr, "ctc: git is required for '%s' but was not found; "
+                            "install git or use a local directory source\n", spec);
+            return -1;
+        }
+        if (self->git_url(spec, url, sizeof url) != 0) {
+            fprintf(stderr, "ctc: cannot resolve a git url for '%s'\n", spec);
+            return -1;
+        }
+        if (self->git_name(spec, name, sizeof name) != 0) {
+            fprintf(stderr, "ctc: cannot derive a package name from '%s'\n", spec);
+            return -1;
+        }
+        home = getenv("HOME");
+        if (!home || !home[0]) {
+            fprintf(stderr, "ctc: cannot locate the package cache (HOME is unset)\n");
+            return -1;
+        }
+        if (snprintf(hdir, sizeof hdir, "%s/.cache", home) >= (int)sizeof hdir) return -1;
+        if (snprintf(root, sizeof root, "%s/.cache/ct-pkg", home) >= (int)sizeof root) return -1;
+        if (snprintf(cache, sizeof cache, "%s/%s", root, name) >= (int)sizeof cache) return -1;
+        if (snprintf(gitdir, sizeof gitdir, "%s/.git", cache) >= (int)sizeof gitdir) return -1;
+        if (snprintf(out, sizeof out, "%s/.ct-pkg.out", root) >= (int)sizeof out) return -1;
+        if (self->ensure_dir(hdir) != 0 || self->ensure_dir(root) != 0) {
+            fprintf(stderr, "ctc: cannot create the package cache '%s'\n", root);
+            return -1;
+        }
+
+        fresh = (stat(gitdir, &st) != 0 || !S_ISDIR(st.st_mode));
+        if (self->sh_quote(url, q1, sizeof q1) != 0) return -1;
+        if (self->sh_quote(cache, q2, sizeof q2) != 0) return -1;
+        if (fresh) {
+            w = snprintf(cmd, sizeof cmd, "git clone --quiet %s %s", q1, q2);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, NULL) != 0) {
+                fprintf(stderr, "ctc: git clone of '%s' failed\n", url);
+                return -1;
+            }
+        } else {
+            w = snprintf(cmd, sizeof cmd, "git -C %s fetch --quiet --tags --force", q2);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, NULL) != 0) {
+                fprintf(stderr, "ctc: git fetch of '%s' failed\n", url);
+                return -1;
+            }
+        }
+
+        rc = self->git_pick_tag(cache, range, tag, sizeof tag);
+        if (rc == 0) {
+            if (self->sh_quote(tag, q1, sizeof q1) != 0) return -1;
+            w = snprintf(cmd, sizeof cmd, "git -C %s checkout --quiet --detach %s", q2, q1);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, NULL) != 0) {
+                fprintf(stderr, "ctc: git checkout of '%s' failed\n", tag);
+                return -1;
+            }
+        } else if (rc == -2) {
+            /* no tags: the default branch tip is the only version on offer */
+            if (!fresh) {
+                w = snprintf(cmd, sizeof cmd, "git -C %s reset --hard --quiet origin/HEAD", q2);
+                if (w >= 0 && (size_t)w < sizeof cmd) self->git_run(cmd, NULL);
+            }
+        } else {
+            fprintf(stderr, "ctc: no tag of '%s' satisfies '%s'\n", name, range);
+            return -1;
+        }
+
+        w = snprintf(cmd, sizeof cmd, "git -C %s rev-parse --verify HEAD", q2);
+        if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+        if (self->git_run(cmd, out) != 0) {
+            fprintf(stderr, "ctc: git cannot resolve a commit for '%s'\n", name);
+            return -1;
+        }
+        if (self->read_line_of(out, commit, sizeof commit) != 0 || commit[0] == 0) {
+            fprintf(stderr, "ctc: git returned no commit for '%s'\n", name);
+            return -1;
+        }
+
+        if (self->read_manifest(cache, mname, sizeof mname, mver, sizeof mver, deps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", cache);
+            return -1;
+        }
+        if (!self->range_match(range, mver)) {
+            fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", mname, mver, range);
+            return -1;
+        }
+        for (i = 0; i < self->nseen; i++)
+            if (strcmp(self->seen[i], mname) == 0) return 0;
+        if (self->nseen >= MAX_PKG_DEPS) {
+            fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
+            return -1;
+        }
+        snprintf(self->seen[self->nseen], MAX_NAME, "%s", mname);
+        self->nseen++;
+
+        for (i = 0; i < ndeps; i++)
+            if (self->get_spec(deps[i], cache, depth + 1) != 0) return -1;
+
+        if (snprintf(dst, sizeof dst, "./vendor/%s", mname) >= (int)sizeof dst) return -1;
+        if (self->copy_tree(cache, dst) != 0) {
+            fprintf(stderr, "ctc: cannot vendor '%s' from '%s'\n", mname, cache);
+            return -1;
+        }
+        w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
+                     "%s %s git %s\n", mname, mver, commit);
+        if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
+        self->locklen += w;
+        self->nlocks++;
+        return 0;
+    }
+
+    /* The single entry every dependency edge takes: split off the range, then
+       route to `get_git` or, for a filesystem location, to `get_one`. */
+    int get_spec(const char *spec, const char *base, int depth) {
+        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
+        (void)self;
+
+        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        if (self->is_git_ref(path)) return self->get_git(path, range, depth);
+        if (strncmp(path, "file://", 7) == 0) {
+            if (snprintf(full, sizeof full, "%s", path + 7) >= (int)sizeof full) return -1;
+        } else if (path[0] == '/') {
+            if (snprintf(full, sizeof full, "%s", path) >= (int)sizeof full) return -1;
+        } else if (snprintf(full, sizeof full, "%s/%s", base, path) >= (int)sizeof full) {
+            return -1;
+        }
+        return self->get_one(full, range, depth);
     }
 
     int get_one(const char *dir, const char *range, int depth) {
@@ -886,13 +1238,12 @@ impl PkgOps for Pkg {
         self->nseen++;
 
         /* dependencies first: the lock file is written in resolution order, so a
-           reader can vendor them back without re-running the resolver */
-        for (i = 0; i < ndeps; i++) {
-            char dpath[MAX_PKG_PATH], drange[32], sub[MAX_PKG_PATH];
-            if (self->split_spec(deps[i], dpath, sizeof dpath, drange, sizeof drange) != 0) return -1;
-            if (snprintf(sub, sizeof sub, "%s/%s", dir, dpath) >= (int)sizeof sub) return -1;
-            if (self->get_one(sub, drange, depth + 1) != 0) return -1;
-        }
+           reader can vendor them back without re-running the resolver. Each edge
+           is dispatched by `get_spec`, so a local package may depend on a git one
+           (and vice versa) -- relative paths resolve against `dir`, the package
+           root just read. */
+        for (i = 0; i < ndeps; i++)
+            if (self->get_spec(deps[i], dir, depth + 1) != 0) return -1;
 
         if (snprintf(dst, sizeof dst, "./vendor/%s", name) >= (int)sizeof dst) return -1;
         if (self->copy_tree(dir, dst) != 0) {
@@ -900,7 +1251,7 @@ impl PkgOps for Pkg {
             return -1;
         }
         w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
-                     "%s %s %s\n", name, ver, dir);
+                     "%s %s dir %s\n", name, ver, dir);
         if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
         self->locklen += w;
         self->nlocks++;
@@ -908,24 +1259,17 @@ impl PkgOps for Pkg {
     }
 
     int get(const char *spec, const char *root) {
-        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
         FILE *f;
 
         self->locklen = 0;
         self->nseen = 0;
         self->nlocks = 0;
-        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return 1;
         /* `copy_tree` creates the package directory itself, not its parent. */
-        if (mkdir("./vendor", 0755) != 0) {
-            struct stat ds;
-            if (stat("./vendor", &ds) != 0 || !S_ISDIR(ds.st_mode)) {
-                fprintf(stderr, "ctc: cannot create 'vendor/'\n");
-                return 1;
-            }
+        if (self->ensure_dir("./vendor") != 0) {
+            fprintf(stderr, "ctc: cannot create 'vendor/'\n");
+            return 1;
         }
-        if (path[0] == '/') snprintf(full, sizeof full, "%s", path);
-        else snprintf(full, sizeof full, "%s/%s", root, path);
-        if (self->get_one(full, range, 0) != 0) return 1;
+        if (self->get_spec(spec, root, 0) != 0) return 1;
 
         f = fopen("./ct.lock", "w");
         if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
@@ -941,7 +1285,9 @@ impl PkgOps for Pkg {
 
         for (i = 0; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: %s get <local-dir>[@<range>]\n", prog);
+                printf("usage: %s get <spec>[@<range>]\n", prog);
+                printf("  spec: a local directory (. or / or file://) or a git package\n"
+                       "        (name resolved against CT_REGISTRY, else an https URL)\n");
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -955,7 +1301,7 @@ impl PkgOps for Pkg {
             spec = argv[i];
         }
         if (!spec) {
-            fprintf(stderr, "usage: %s get <local-dir>[@<range>]\n", prog);
+            fprintf(stderr, "usage: %s get <spec>[@<range>]\n", prog);
             return 1;
         }
         return self->get(spec, ".");
@@ -980,7 +1326,7 @@ int main(int argc, char **argv)
     if (first < argc && strcmp(argv[first], "build") == 0)
         return build_main(argc - first - 1, argv + first + 1, g_ct_prog);
 
-    /* Phase 8.1: `ct get <local-dir>[@<range>]` vendors a local package. */
+    /* Phase 8.1/8.2: `ct get <spec>[@<range>]` vendors a local or git package. */
     if (first < argc && strcmp(argv[first], "get") == 0)
         return g_pkg.run(argc - first - 1, argv + first + 1, g_ct_prog);
 

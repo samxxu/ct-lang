@@ -24,7 +24,7 @@
 | Phase 5 | **新增特性**：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace | 新增 | ✅ 完成（2026-10-17；5 个切片全部落地；bump 到 v0.5.0，**M6 收口**） | 设计冻结 + 新用例全绿；阶梯 **M6** 在此收口 |
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | ✅ 完成（2026-10-17；6.1–6.4 + 6.6 落地，6.5 仅设计冻结；bump 到 v0.6.0） | 设计冻结 + 新用例全绿 |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | ✅ 完成（2026-10-17；7.1–7.3 落地，bump 到 v0.7.0；`ct get` / `ct install` 待 `ct-pkg`） | `ct compile` 可用、`ctc …` 不失效、banner 写 `ct` |
-| Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | 🔨 进行中（8.1 已落地：`ct get` 本地源 + `ct.pkg`/`ct.lock`；8.2/8.3 待做；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
+| Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | 🔨 进行中（8.1 + 8.2 已落地：`ct get` 支持本地源与 git 源，commit 锁定；8.3 待做；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -86,7 +86,8 @@
 - 真正的**前置是「多文件编译」**（Phase 1 已列）：类型定义下沉到 `.h`，生成的 `.c` 改为 `#include` 自己的头。这会打破 Phase 0 的「`.c` 自包含」约定，属破坏性变更。
 - 包的**接口边界天然是 trait**：一个包 = 一组 `.ct` + 对外暴露的 `.h`（trait 声明）。这条决定了包管理器与 registry 能长成什么样。
 - **设计冻结（2026-10-18）**：D21–D27 全部定案（清单 `ct.pkg` / git registry + 本地源 / MVS / `get` + `install` / 新 `PkgOps` trait / FNV-1a）。实现按 8.1（清单 + 本地源）→ 8.2（git 源）→ 8.3（`install` 校验）推进，见 [design/phase8.md](design/phase8.md) §11。
-- **8.1 已落地（2026-10-18）**：`ct get <local-dir>[@<range>]` 解析 `ct.pkg`、递归处理本地 `dep`、复制到 `vendor/<name>/`、按拓扑序写 `ct.lock`。新增 `PkgOps` trait（`driver.ct`），零网络零子进程；`test/pkg/run.sh` 9 项断言，已接入 `check-all.sh` 第 7 关。
+- **8.1 已落地（2026-10-18）**：`ct get <local-dir>[@<range>]` 解析 `ct.pkg`、递归处理本地 `dep`、复制到 `vendor/<name>/`、按拓扑序写 `ct.lock`。新增 `PkgOps` trait（`driver.ct`），零网络零子进程；`test/pkg/run.sh` 已接入 `check-all.sh` 第 7 关。
+- **8.2 已落地（2026-10-18）**：`ct get` 增加 **git 源**——spec 以 `.` / `/` / `file://` 开头为本地目录（复制），其余为 git 源（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`，默认 `https://github.com/ct-pkg`）。`git` 是**唯一**子进程调用点，且只由 `ct get` 触发；`git clone/fetch` 进 `~/.cache/ct-pkg/<name>/`，按 **MVS** 取满足范围的最低 tag（可带/不带 `v`；无 tag 且范围为空时回退默认分支 HEAD），`ct.lock` 记为 `name ver git <commit>`。无 `git` 时 git 源硬报错并提示安装，本地源照常可用（D26）。`test/pkg/run.sh` 扩到 14 项断言（含本地 git 仓库作 registry 的离线用例）。
 
 #### 包管理器的命名（已定：`ct-pkg`）
 
@@ -795,7 +796,7 @@ as confirmed by the user.
 | 5 | **New features**: AutoDrop / path-sensitive leak analysis / directory = namespace | new | ✅ done (2026-10-17; all five slices landed; bumped to v0.5.0, **M6 closes**) | design frozen + new cases green; rung **M6** closes here |
 | 6 | **Ecosystem and extension**: `map` + the reverse mapping table (D8), the dialect system; incremental compilation, cross-function analysis, multi-target | extension | ✅ done (2026-10-17; 6.1–6.4 + 6.6 landed, 6.5 design-frozen only; bumped to v0.6.0) | design frozen + new cases green |
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias | landing | ✅ done (2026-10-17; 7.1–7.3 landed, bumped to v0.7.0; `ct get` / `ct install` wait on `ct-pkg`) | `ct compile` works, `ctc …` keeps working, the banner says `ct` |
-| 8 | **Package management and distribution**: `ct-pkg` (git registry + local directory sources), `ct get` / `ct install` | new | 🔨 in progress (8.1 landed: `ct get` with local sources + `ct.pkg`/`ct.lock`; 8.2/8.3 pending; D21–D27 frozen) | `ct get` / `ct install` work, and the compile path stays network-free |
+| 8 | **Package management and distribution**: `ct-pkg` (git registry + local directory sources), `ct get` / `ct install` | new | 🔨 in progress (8.1 + 8.2 landed: `ct get` handles local and git sources, pinning commits; 8.3 pending; D21–D27 frozen) | `ct get` / `ct install` work, and the compile path stays network-free |
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
 > features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap
@@ -911,8 +912,17 @@ Migration checklist (executed from the over-reach phase on; updated 2026-10-17):
   [design/phase8.md](design/phase8.md) §11.
 - **8.1 landed (2026-10-18)**: `ct get <local-dir>[@<range>]` parses `ct.pkg`, resolves local `dep`
   lines recursively, copies packages into `vendor/<name>/` and writes `ct.lock` in dependency order.
-  A new `PkgOps` trait lives in `driver.ct`; no network and no subprocess. `test/pkg/run.sh` covers
-  it with 9 assertions and is gate 7 of `check-all.sh`.
+  A new `PkgOps` trait lives in `driver.ct`; no network and no subprocess. `test/pkg/run.sh` is gate 7
+  of `check-all.sh`.
+- **8.2 landed (2026-10-18)**: `ct get` gained **git sources** — a spec starting with `.` / `/` /
+  `file://` is a local directory (copied); anything else is a git source (a `scheme://` URL taken
+  verbatim, a `host/path` given `https://`, a bare name resolved against `CT_REGISTRY`, default
+  `https://github.com/ct-pkg`). `git` is the **only** subprocess call site and runs only from
+  `ct get`; `git clone/fetch` fills `~/.cache/ct-pkg/<name>/`, **MVS** picks the lowest tag satisfying
+  the range (the leading `v` optional; with no tag and an empty range it falls back to the default
+  branch tip), and `ct.lock` records `name ver git <commit>`. Without `git`, a git source fails hard
+  with an install hint while local sources keep working (D26). `test/pkg/run.sh` grew to 14 assertions,
+  including an offline local-git-repo registry.
 
 #### Naming the package manager (decided: `ct-pkg`)
 
