@@ -107,7 +107,7 @@ selfhost/ast/
 | 9.4b | 接口值与接口数组：trait 当类型、装箱、运行期派发 | ✅ **已落地（2026-10-18）**：trait 名作类型时发射 `struct <T>_iface`；声明 / 赋值 / 实参 / `return` 处按静态类型装箱为 `(struct T_iface){ (void *)&x, &S_T_vtable }`（指针则不带 `&`）；`g.m()` → `g.vt->m(g.self)`，接口数组元素同样支持。`18_polymorphism`、`21_empty_init_iface` 已行为等价（含空 `{}` 初始化式），新增 `test/ast/10_iface_array` |
 | 9.5a | 模块层：`import` / `pub` / `build` / `namespace` / `--ns-root` | ✅ **已落地（2026-10-18）**：`build <inputs…> -o <dir> [-I <dir>] [--ns-root <dir>]` 逐单元产出 `.c` + `.h`；导入闭包深度优先解析，`a::b` → `<root>/a/b.ct` 或 `a/b.h.ct`（导入方目录优先）；`pub` 只导出 trait / struct / typedef / 原型；`namespace A::B` 的类型名压成 `A_B_`，`--ns-root` 按 D13-A 校验目录。`test/modules` 的 split / ns_dir / inc / hdr 行为等价，两条负例非零退出 |
 | 9.5b | 元数据：`#line` 与 `--emit-map` | ✅ **已落地（2026-10-18）**：词法与节点带行号，`#line 1 "<输入>"` 在 compile 模式由 `--line` 开启、在 build 模式默认开启（`--no-line` 关闭）；`--emit-map <file|->` 输出与旧管线同形的 JSON（compiler / file / traits / structs / functions / impls / calls），行号与调用图取自解析期记录。新增 `test/ast/11_map`；`check-ast.sh` 30 项全绿 |
-| 9.6 | 自编：用 AST 编译器编 `selfhost/ast/**` 自身，产出下一代 | 不动点：AST 编译器编出的自己再编同一批语料，行为仍等价 |
+| 9.6 | 自编：用 AST 编译器编 `selfhost/ast/**` 自身，产出下一代 | ✅ **已落地（2026-10-18）**：`ct-ast` 编自己的 `main.ct` → 产物零警告编出 `ct-ast2` → `ct-ast2` 再编同一源码，与首轮产物**逐字节一致**（不动点）。`check-ast.sh` 新增 self-hosting 一节，31 项全绿 |
 | 9.7 | 全量行为等价 + 切主线 | `test/cases` + `examples` + `modules` 全绿；旧管线打 tag 归档；版本收口 v0.9.0 |
 
 每片出口都要求：`bash selfhost/check-all.sh` 七道旧关卡**零回退**，且 `check-ast.sh` 全绿。
