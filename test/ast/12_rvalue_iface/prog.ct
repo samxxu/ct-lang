@@ -1,0 +1,78 @@
+#include <stdio.h>
+
+trait Node {
+    void show();
+    int bump(int by);
+}
+
+struct Lit {
+    int v;
+} use Node;
+
+struct Pair {
+    Node lhs;
+    Node rhs;
+} use Node;
+
+struct Box {
+    Node *inner;
+}
+
+impl Node for Lit {
+    void show() {
+        printf("%d", self->v);
+    }
+    int bump(int by) {
+        return self->v + by;
+    }
+}
+
+impl Node for Pair {
+    void show() {
+        printf("(");
+        self->lhs.show();
+        printf("+");
+        self->rhs.show();
+        printf(")");
+    }
+    int bump(int by) {
+        return self->lhs.bump(by);
+    }
+}
+
+static struct Lit g_one;
+
+struct Lit make_lit(int v) {
+    struct Lit l;
+    l.v = v;
+    return l;
+}
+
+struct Lit *make_ptr(void) {
+    g_one.v = 7;
+    return &g_one;
+}
+
+int main(void)
+{
+    Lit a;
+    Lit b;
+    Pair p;
+    a.v = 1;
+    b.v = 2;
+    p.lhs = a;
+    p.rhs = b;
+    p.show();
+    printf("\n");
+
+    make_lit(4).show();
+    printf("\n");
+    int total = make_ptr()->bump(2);
+    printf("%d\n", total);
+
+    Node t = a;
+    Box box = { .inner = &t };
+    box.inner->show();
+    printf("\n");
+    return 0;
+}
