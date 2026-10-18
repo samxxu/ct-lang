@@ -3,7 +3,7 @@
 > **v0.8.0** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**；**Phase 9（AST 版编译器，新主线）已立项为设计草案（2026-10-18），实现未开始**——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -384,8 +384,9 @@ multi-target) and 6.6 (the dialect system) have landed, while 6.5 (`map`) is des
 shape, the banner rename). **Phase 8 (package management and distribution, `ct-pkg`, 2026-10-18)** is
 complete: slices 8.1–8.3 have landed (`ct get` handles local directory sources and git sources, pinning
 commits and content digests; `ct install` verifies offline and prints the suggested build command), and
-the phase closed with the bump to **v0.8.0** — see [docs/roadmap.md](docs/roadmap.md) for what is done
-and what is next.
+the phase closed with the bump to **v0.8.0**. **Phase 9 (the AST-based compiler, the new mainline)** is a
+design draft as of 2026-10-18 and is not implemented — see [docs/roadmap.md](docs/roadmap.md) for what is
+done and what is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the entry command
 is **`ct`** (since Phase 7; `ctc` is kept as a **compatibility alias**, and the binary built from the
