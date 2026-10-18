@@ -26,7 +26,7 @@
 
 #define CTC_VERSION "0.8.0"
 
-#define MAX_NODES  4096
+#define MAX_NODES  32768
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_FUNCS  64
@@ -35,7 +35,7 @@
 #define MAX_SCOPE  256
 #define MAX_TYPES  64
 #define MAX_TRAITS 16
-#define MAX_METHODS 16
+#define MAX_METHODS 32
 #define MAX_STRUCTS 32
 #define MAX_UNITS  64
 #define MAX_IMPORTS 16
@@ -77,6 +77,12 @@
 #define N_TRAIT   32
 #define N_IMPL    33
 #define N_BOX     34
+#define N_CAST    35
+#define N_SIZEOF  36
+#define N_TERN    37
+#define N_BREAK   38
+#define N_CONT    39
+#define N_DECLS   40
 
 /* token kinds */
 #define T_EOF    0
@@ -98,6 +104,8 @@
 #define B_EQ  9
 #define B_NE  10
 #define B_MOD 11
+#define B_AND 12
+#define B_OR  13
 
 /* unary / postfix operators */
 #define U_NEG 1
@@ -120,6 +128,7 @@ typedef struct Node {
     long num;           /* numeric literal or array length */
     char text[MAX_TEXT];/* type, string literal or preprocessor line */
     char text2[MAX_TEXT];/* declared / member / function name */
+    char text3[MAX_TEXT];/* array length written as a name (a macro constant) */
 } Node;
 
 typedef struct Fn {
@@ -196,6 +205,12 @@ static const char *g_path;
 static char g_errmsg[MAX_TEXT];
 static int  g_nparams;
 
+/* String literals live in a pool, not in Node.text: adjacent literals join into
+   one C string and easily exceed MAX_TEXT. Node.num holds the pool offset. */
+#define MAX_STRPOOL (256 * 1024)
+static char g_strpool[MAX_STRPOOL];
+static int  g_nstrpool;
+
 static Fn  g_funcs[MAX_FUNCS];
 static int g_nfunc;
 static Var g_vars[MAX_VARS];
@@ -267,6 +282,8 @@ trait ParseOps {
     int  is_type_word(const char *w);
     int  type_append(char *out, size_t cap, size_t *n, const char *tok);
     int  parse_type(char *out, size_t cap);
+    int  parse_array_dims(int n);
+    int  next_is_type_name(void);
     int  parse_program(void);
     int  parse_func(int is_static, int is_pub);
     int  parse_params(void);
@@ -369,7 +386,10 @@ impl AstOps for Ast {
     int fail(const char *msg)
     {
         (void)self;
-        if (!g_errmsg[0]) snprintf(g_errmsg, sizeof g_errmsg, "%s", msg);
+        /* the line and the offending token are the two things a self-hosting
+           run needs to locate a gap; diagnostics are not compared (D34) */
+        if (!g_errmsg[0])
+            snprintf(g_errmsg, sizeof g_errmsg, "line %d: %s (at '%s')", g_tokline, msg, g_toktext);
         return -1;
     }
 
@@ -426,19 +446,34 @@ impl AstOps for Ast {
         }
         if (c >= '0' && c <= '9') {
             g_toknum = 0;
-            while (g_src[g_pos] >= '0' && g_src[g_pos] <= '9') {
-                g_toknum = g_toknum * 10 + (g_src[g_pos] - '0');
-                g_pos++;
+            if (c == '0' && (g_src[g_pos + 1] == 'x' || g_src[g_pos + 1] == 'X')) {
+                g_pos += 2;
+                for (;;) {
+                    char h = g_src[g_pos];
+                    int dv;
+                    if (h >= '0' && h <= '9') dv = h - '0';
+                    else if (h >= 'a' && h <= 'f') dv = h - 'a' + 10;
+                    else if (h >= 'A' && h <= 'F') dv = h - 'A' + 10;
+                    else break;
+                    g_toknum = g_toknum * 16 + dv;
+                    g_pos++;
+                }
+            } else {
+                while (g_src[g_pos] >= '0' && g_src[g_pos] <= '9') {
+                    g_toknum = g_toknum * 10 + (g_src[g_pos] - '0');
+                    g_pos++;
+                }
             }
             g_tok = T_NUM;
             return;
         }
-        if (c == '"') {
+        if (c == '"' || c == '\'') {
+            char q = (char)c;
             n = 0;
-            g_toktext[n] = '"';
+            g_toktext[n] = q;
             n++;
             g_pos++;
-            while (g_src[g_pos] && g_src[g_pos] != '"') {
+            while (g_src[g_pos] && g_src[g_pos] != q) {
                 if (g_src[g_pos] == '\\' && g_src[g_pos + 1]) {
                     if (n + 1 < MAX_TEXT) { g_toktext[n] = g_src[g_pos]; n++; }
                     g_pos++;
@@ -446,8 +481,8 @@ impl AstOps for Ast {
                 if (n + 1 < MAX_TEXT) { g_toktext[n] = g_src[g_pos]; n++; }
                 g_pos++;
             }
-            if (g_src[g_pos] == '"') {
-                if (n + 1 < MAX_TEXT) { g_toktext[n] = '"'; n++; }
+            if (g_src[g_pos] == q) {
+                if (n + 1 < MAX_TEXT) { g_toktext[n] = q; n++; }
                 g_pos++;
             }
             g_toktext[n] = 0;
@@ -481,6 +516,25 @@ impl AstOps for Ast {
         if ((c == '+' || c == '-') && g_src[g_pos + 1] == c) {
             g_toktext[0] = (char)c;
             g_toktext[1] = (char)c;
+            g_toktext[2] = 0;
+            g_tok = T_PUNCT;
+            g_pos += 2;
+            return;
+        }
+        /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
+        if ((c == '&' || c == '|') && g_src[g_pos + 1] == c) {
+            g_toktext[0] = (char)c;
+            g_toktext[1] = (char)c;
+            g_toktext[2] = 0;
+            g_tok = T_PUNCT;
+            g_pos += 2;
+            return;
+        }
+        /* compound assignment: `+=` `-=` `*=` `/=` `%=` */
+        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
+            && g_src[g_pos + 1] == '=') {
+            g_toktext[0] = (char)c;
+            g_toktext[1] = '=';
             g_toktext[2] = 0;
             g_tok = T_PUNCT;
             g_pos += 2;
@@ -936,7 +990,8 @@ impl ParseOps for Ast {
             || strcmp(w, "short") == 0 || strcmp(w, "float") == 0
             || strcmp(w, "double") == 0 || strcmp(w, "const") == 0
             || strcmp(w, "struct") == 0 || strcmp(w, "enum") == 0
-            || strcmp(w, "union") == 0;
+            || strcmp(w, "union") == 0 || strcmp(w, "size_t") == 0
+            || strcmp(w, "FILE") == 0;
     }
 
     int type_append(char *out, size_t cap, size_t *n, const char *tok)
@@ -1014,6 +1069,63 @@ impl ParseOps for Ast {
         return 0;
     }
 
+    /* Zero or more `[<len>]` groups after a declared name. The whole suffix is
+       kept verbatim in `text3`, so a macro constant (`char buf[MAX_TEXT]`) and a
+       second dimension (`[MAX_PARAMS][MAX_TEXT]`) both survive; a numeric length
+       keeps `num` for the callers that still read it. */
+    int parse_array_dims(int n)
+    {
+        (void)self;
+        while (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
+            char dim[MAX_TEXT];
+            char cur[MAX_TEXT];
+            self->lex_next();
+            if (g_tok == T_NUM) {
+                snprintf(dim, sizeof dim, "[%ld]", g_toknum);
+            } else if (g_tok == T_ID) {
+                snprintf(dim, sizeof dim, "[%s]", g_toktext);
+            } else {
+                return self->fail("expected an array length");
+            }
+            self->lex_next();
+            if (self->expect("]") != 0) return -1;
+            snprintf(cur, sizeof cur, "%s%s", g_nodes[n].text3, dim);
+            snprintf(g_nodes[n].text3, MAX_TEXT, "%s", cur);
+            g_nodes[n].num = 0;      /* text3 is the authoritative spelling */
+        }
+        return 0;
+    }
+
+    /* One-token lookahead: with the current token at `(`, does the token after it
+       start a type? It tells a cast (`(char)c`) from a parenthesised expression
+       (`(a + b)`) without consuming anything, so postfix binding stays intact. */
+    int next_is_type_name(void)
+    {
+        int save_tok, save_line, save_bol, save_srcline, res;
+        long save_num;
+        size_t save_pos;
+        char save_text[MAX_TEXT];
+        (void)self;
+        save_tok = g_tok;
+        save_num = g_toknum;
+        save_line = g_tokline;
+        save_pos = g_pos;
+        save_srcline = g_line;
+        save_bol = g_bol;
+        snprintf(save_text, sizeof save_text, "%s", g_toktext);
+        self->lex_next();
+        res = (g_tok == T_ID && (self->is_type_word(g_toktext)
+                                 || self->find_type(g_toktext) >= 0));
+        g_tok = save_tok;
+        g_toknum = save_num;
+        g_tokline = save_line;
+        g_pos = save_pos;
+        g_line = save_srcline;
+        g_bol = save_bol;
+        snprintf(g_toktext, MAX_TEXT, "%s", save_text);
+        return res;
+    }
+
     int parse_program(void)
     {
         int prog, n;
@@ -1073,13 +1185,7 @@ impl ParseOps for Ast {
             g_nodes[g].line = func_line;
             /* a file-scope name is visible to every function body */
             if (self->declare_var(name, ret) != 0) return -1;
-            if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
-                self->lex_next();
-                if (g_tok != T_NUM) return self->fail("expected an array length");
-                g_nodes[g].num = g_toknum;
-                self->lex_next();
-                if (self->expect("]") != 0) return -1;
-            }
+            if (self->parse_array_dims(g) != 0) return -1;
             if (self->accept("=")) {
                 if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
                     char raw[MAX_TEXT];
@@ -1203,13 +1309,7 @@ impl ParseOps for Ast {
         if (m < 0) return -1;
         snprintf(g_nodes[m].text, MAX_TEXT, "%s", typebuf);
         snprintf(g_nodes[m].text2, MAX_TEXT, "%s", name);
-        if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
-            self->lex_next();
-            if (g_tok != T_NUM) return self->fail("expected an array length");
-            g_nodes[m].num = g_toknum;
-            self->lex_next();
-            if (self->expect("]") != 0) return -1;
-        }
+        if (self->parse_array_dims(m) != 0) return -1;
         if (self->expect(";") != 0) return -1;
         return m;
     }
@@ -1273,12 +1373,27 @@ impl ParseOps for Ast {
             self->lex_next();
             if (self->expect(";") != 0) return -1;
             if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            /* keep the tag in `text`: `typedef struct Tag {...} Alias;` must emit
+               the tag, or a `struct Tag` reference elsewhere is incomplete */
+            snprintf(g_nodes[t].text, MAX_TEXT, "%s", g_nodes[t].text2);
             snprintf(g_nodes[t].text2, MAX_TEXT, "%s", qname);
             g_nodes[t].aux = 1;
             g_nodes[t].d = is_pub;
             g_nodes[t].line = td_line;
             if (self->add_type(qname, 2) != 0) return -1;
             if (self->add_struct(qname) < 0) return -1;
+            /* the tag and the alias are two table entries: give the alias the
+               `use` list the body attached to the tag, or its vptr fields vanish */
+            {
+                int tagi = -1, ai, ui;
+                if (g_nodes[t].text[0]) tagi = self->find_struct(g_nodes[t].text);
+                ai = self->find_struct(qname);
+                if (tagi >= 0 && ai >= 0 && tagi != ai) {
+                    g_structs[ai].nuse = g_structs[tagi].nuse;
+                    for (ui = 0; ui < g_structs[tagi].nuse; ui++)
+                        snprintf(g_structs[ai].use[ui], MAX_TEXT, "%s", g_structs[tagi].use[ui]);
+                }
+            }
             return t;
         }
         if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
@@ -1578,6 +1693,20 @@ impl ParseOps for Ast {
             if (self->expect(";") != 0) return -1;
             return s;
         }
+        if (g_tok == T_ID && strcmp(g_toktext, "break") == 0) {
+            s = self->new_node(N_BREAK);
+            if (s < 0) return -1;
+            self->lex_next();
+            if (self->expect(";") != 0) return -1;
+            return s;
+        }
+        if (g_tok == T_ID && strcmp(g_toktext, "continue") == 0) {
+            s = self->new_node(N_CONT);
+            if (s < 0) return -1;
+            self->lex_next();
+            if (self->expect(";") != 0) return -1;
+            return s;
+        }
         if (g_tok == T_ID && strcmp(g_toktext, "if") == 0) {
             s = self->new_node(N_IF);
             if (s < 0) return -1;
@@ -1709,53 +1838,90 @@ impl ParseOps for Ast {
         return b;
     }
 
-    /* `<type> name [\[N\]] [= expr]` without the trailing semicolon. */
+    /* `<type> name[dims] [= expr] (, name[dims] [= expr])*` without the trailing
+       semicolon. Several declarators share the type and come back as an N_DECLS
+       wrapper, so every consumer still sees one statement node. */
     int parse_decl_node(void)
     {
-        int n, e;
+        int n, e, head, tail, base_stars, first_decl;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
 
         if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-        if (g_tok != T_ID) return self->fail("expected a variable name");
-        snprintf(name, sizeof name, "%s", g_toktext);
-        self->lex_next();
-        n = self->new_node(N_DECL);
-        if (n < 0) return -1;
-        snprintf(g_nodes[n].text, MAX_TEXT, "%s", typebuf);
-        snprintf(g_nodes[n].text2, MAX_TEXT, "%s", name);
-        if (self->declare_var(name, typebuf) != 0) return -1;
-        if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
-            self->lex_next();
-            if (g_tok != T_NUM) return self->fail("expected an array length");
-            g_nodes[n].num = g_toknum;
-            self->lex_next();
-            if (self->expect("]") != 0) return -1;
-        }
-        if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
-            self->lex_next();
-            if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
-                char raw[MAX_TEXT];
-                e = self->new_node(N_RAW);
-                if (e < 0) return -1;
-                if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
-                snprintf(g_nodes[e].text, MAX_TEXT, "%s", raw);
-            } else {
-                e = self->parse_expr();
-                if (e < 0) return -1;
+        head = -1;
+        tail = -1;
+        base_stars = 0;
+        first_decl = 1;
+        for (;;) {
+            int stars = 0, si;
+            size_t tl;
+            char t2[MAX_TEXT];
+
+            while (g_tok == T_PUNCT && strcmp(g_toktext, "*") == 0) {
+                stars++;
+                self->lex_next();
             }
-            g_nodes[n].a = e;
-        }
-        if (g_nodes[n].a >= 0) {
-            char tr[MAX_TEXT];
-            if (self->is_iface_type(typebuf, tr, sizeof tr)) {
-                e = self->maybe_box(g_nodes[n].a, tr);
-                if (e < 0) return -1;
+            /* `parse_type` folds the first declarator's stars into the type; each
+               later declarator brings its own, so the star suffix is rebuilt per
+               declarator (`const char *p, *q;` and `int *a, **b;` both work) */
+            tl = strlen(typebuf);
+            while (tl > 0 && (typebuf[tl - 1] == '*' || typebuf[tl - 1] == ' ')) {
+                if (first_decl && typebuf[tl - 1] == '*') base_stars++;
+                tl--;
+            }
+            typebuf[tl] = 0;
+            if (first_decl) {
+                stars = base_stars;
+                first_decl = 0;
+            }
+            for (si = 0; si < stars; si++) {
+                snprintf(t2, sizeof t2, "%s *", typebuf);
+                snprintf(typebuf, sizeof typebuf, "%s", t2);
+            }
+            if (g_tok != T_ID) return self->fail("expected a variable name");
+            snprintf(name, sizeof name, "%s", g_toktext);
+            self->lex_next();
+            n = self->new_node(N_DECL);
+            if (n < 0) return -1;
+            snprintf(g_nodes[n].text, MAX_TEXT, "%s", typebuf);
+            snprintf(g_nodes[n].text2, MAX_TEXT, "%s", name);
+            if (self->declare_var(name, typebuf) != 0) return -1;
+            if (self->parse_array_dims(n) != 0) return -1;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
+                self->lex_next();
+                if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
+                    char raw[MAX_TEXT];
+                    e = self->new_node(N_RAW);
+                    if (e < 0) return -1;
+                    if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
+                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", raw);
+                } else {
+                    e = self->parse_expr();
+                    if (e < 0) return -1;
+                }
                 g_nodes[n].a = e;
             }
+            if (g_nodes[n].a >= 0) {
+                char tr[MAX_TEXT];
+                if (self->is_iface_type(typebuf, tr, sizeof tr)) {
+                    e = self->maybe_box(g_nodes[n].a, tr);
+                    if (e < 0) return -1;
+                    g_nodes[n].a = e;
+                }
+            }
+            if (head < 0) head = n;
+            else g_nodes[tail].next = n;
+            tail = n;
+            if (!self->accept(",")) break;
         }
-        return n;
+        if (g_nodes[head].next >= 0) {
+            int w = self->new_node(N_DECLS);
+            if (w < 0) return -1;
+            g_nodes[w].a = head;
+            return w;
+        }
+        return head;
     }
 
     int parse_expr_stmt_node(void)
@@ -1765,6 +1931,29 @@ impl ParseOps for Ast {
 
         e = self->parse_expr();
         if (e < 0) return -1;
+        if (g_tok == T_PUNCT && (strcmp(g_toktext, "+=") == 0 || strcmp(g_toktext, "-=") == 0
+                                 || strcmp(g_toktext, "*=") == 0 || strcmp(g_toktext, "/=") == 0
+                                 || strcmp(g_toktext, "%=") == 0)) {
+            int op = 0, k2;
+            char oc = g_toktext[0];
+            k2 = g_nodes[e].kind;
+            if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
+                return self->fail("assignment target is not assignable");
+            if (oc == '+') op = 1;
+            else if (oc == '-') op = 2;
+            else if (oc == '*') op = 3;
+            else if (oc == '/') op = 4;
+            else op = 5;
+            self->lex_next();
+            rhs = self->parse_expr();
+            if (rhs < 0) return -1;
+            n = self->new_node(N_ASSIGN);
+            if (n < 0) return -1;
+            g_nodes[n].a = e;
+            g_nodes[n].b = rhs;
+            g_nodes[n].aux = op;
+            return n;
+        }
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
             int k;
             char tt[MAX_TEXT];
@@ -1797,8 +1986,62 @@ impl ParseOps for Ast {
 
     int parse_expr(void)
     {
+        int left, right, inner, n, c;
         (void)self;
-        return self->parse_cmp();
+
+        /* `&&` binds tighter than `||`; both are looser than parse_cmp's operators.
+           The loops live here so the trait's method budget stays put. */
+        left = self->parse_cmp();
+        if (left < 0) return -1;
+        while (g_tok == T_PUNCT && strcmp(g_toktext, "&&") == 0) {
+            self->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            n = self->new_node(N_BIN);
+            if (n < 0) return -1;
+            g_nodes[n].a = left;
+            g_nodes[n].b = right;
+            g_nodes[n].aux = B_AND;
+            left = n;
+        }
+        while (g_tok == T_PUNCT && strcmp(g_toktext, "||") == 0) {
+            self->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            while (g_tok == T_PUNCT && strcmp(g_toktext, "&&") == 0) {
+                self->lex_next();
+                inner = self->parse_cmp();
+                if (inner < 0) return -1;
+                n = self->new_node(N_BIN);
+                if (n < 0) return -1;
+                g_nodes[n].a = right;
+                g_nodes[n].b = inner;
+                g_nodes[n].aux = B_AND;
+                right = n;
+            }
+            n = self->new_node(N_BIN);
+            if (n < 0) return -1;
+            g_nodes[n].a = left;
+            g_nodes[n].b = right;
+            g_nodes[n].aux = B_OR;
+            left = n;
+        }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "?") == 0) {
+            int a, b;
+            self->lex_next();
+            a = self->parse_expr();
+            if (a < 0) return -1;
+            if (self->expect(":") != 0) return -1;
+            b = self->parse_expr();
+            if (b < 0) return -1;
+            c = self->new_node(N_TERN);
+            if (c < 0) return -1;
+            g_nodes[c].a = left;
+            g_nodes[c].b = a;
+            g_nodes[c].c = b;
+            return c;
+        }
+        return left;
     }
 
     int parse_cmp(void)
@@ -1882,6 +2125,41 @@ impl ParseOps for Ast {
         int n, e, op;
         (void)self;
 
+        if (g_tok == T_ID && strcmp(g_toktext, "sizeof") == 0) {
+            char tbuf[MAX_TEXT];
+            self->lex_next();
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0
+                && self->next_is_type_name()) {
+                self->lex_next();
+                if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+                if (self->expect(")") != 0) return -1;
+                n = self->new_node(N_SIZEOF);
+                if (n < 0) return -1;
+                snprintf(g_nodes[n].text, MAX_TEXT, "%s", tbuf);
+                g_nodes[n].aux = 1;
+                return n;
+            }
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->new_node(N_SIZEOF);
+            if (n < 0) return -1;
+            g_nodes[n].a = e;
+            return n;
+        }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0
+            && self->next_is_type_name()) {
+            char tbuf[MAX_TEXT];
+            self->lex_next();
+            if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+            if (self->expect(")") != 0) return -1;
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->new_node(N_CAST);
+            if (n < 0) return -1;
+            snprintf(g_nodes[n].text, MAX_TEXT, "%s", tbuf);
+            g_nodes[n].a = e;
+            return n;
+        }
         op = 0;
         if (g_tok == T_PUNCT && strcmp(g_toktext, "-") == 0) op = U_NEG;
         else if (g_tok == T_PUNCT && strcmp(g_toktext, "!") == 0) op = U_NOT;
@@ -2013,10 +2291,24 @@ impl ParseOps for Ast {
             return n;
         }
         if (g_tok == T_STR) {
+            int off = g_nstrpool;
             n = self->new_node(N_STR);
             if (n < 0) return -1;
-            snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
-            self->lex_next();
+            /* adjacent literals concatenate; they are copied into the pool so the
+               joined string is not limited by MAX_TEXT */
+            while (g_tok == T_STR) {
+                int m = 0;
+                while (g_toktext[m] && g_nstrpool + 2 < MAX_STRPOOL) {
+                    g_strpool[g_nstrpool] = g_toktext[m];
+                    g_nstrpool++;
+                    m++;
+                }
+                if (g_toktext[m]) return self->fail("string pool is full");
+                self->lex_next();
+            }
+            g_strpool[g_nstrpool] = 0;
+            g_nstrpool++;      /* keep this literal's terminator for good */
+            g_nodes[n].num = off;
             return n;
         }
         if (g_tok == T_ID) {
@@ -2058,6 +2350,25 @@ impl ParseOps for Ast {
                 g_nodes[n].kind = N_CALL;
                 g_nodes[n].a = (args == 0) ? -1 : args;
             } else if (self->find_var(g_nodes[n].text2) < 0) {
+                /* CT has no preprocessor: an ALL_CAPS name is a macro constant
+                   (MAX_NODES, NULL, ...) and is emitted verbatim. Anything else
+                   still has to be declared. */
+                int ci, all_caps;
+                const char *nm = g_nodes[n].text2;
+                all_caps = (nm[0] != 0);
+                for (ci = 0; nm[ci]; ci++) {
+                    char cc = nm[ci];
+                    if (!((cc >= 'A' && cc <= 'Z') || (cc >= '0' && cc <= '9') || cc == '_')) {
+                        all_caps = 0;
+                        break;
+                    }
+                }
+                if (all_caps || strcmp(nm, "stderr") == 0
+                    || strcmp(nm, "stdout") == 0 || strcmp(nm, "stdin") == 0) {
+                    g_nodes[n].kind = N_RAW;
+                    snprintf(g_nodes[n].text, MAX_TEXT, "%s", nm);
+                    return n;
+                }
                 return self->fail("use of an undeclared variable");
             }
             return n;
@@ -2163,6 +2474,14 @@ impl ParseOps for Ast {
         }
         if (g_nodes[n].kind == N_BOX) {
             if (snprintf(out, cap, "struct %s_iface", g_nodes[n].text) >= (int)cap) return -1;
+            return 0;
+        }
+        if (g_nodes[n].kind == N_CAST) {
+            if (snprintf(out, cap, "%s", g_nodes[n].text) >= (int)cap) return -1;
+            return 0;
+        }
+        if (g_nodes[n].kind == N_SIZEOF) {
+            if (snprintf(out, cap, "%s", "int") >= (int)cap) return -1;
             return 0;
         }
         return -1;
@@ -3009,8 +3328,13 @@ impl EmitOps for Ast {
         if (g_nodes[n].kind == N_STRUCT) {
             int si, u;
             if (g_nodes[n].aux) {
-                /* `typedef struct { ... } Name;` -- no tag after `struct` */
-                fputs("typedef struct {\n", g_out);
+                /* `typedef struct Tag { ... } Name;` keeps the tag so a
+                   `struct Tag` reference (or self-reference) stays valid */
+                if (g_nodes[n].text[0]) {
+                    fprintf(g_out, "typedef struct %s {\n", g_nodes[n].text);
+                } else {
+                    fputs("typedef struct {\n", g_out);
+                }
             } else {
                 fprintf(g_out, "struct %s {\n", g_nodes[n].text2);
             }
@@ -3048,7 +3372,7 @@ impl EmitOps for Ast {
             self->emit_indent(ind);
             if (g_nodes[n].aux) fputs("static ", g_out);
             fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
-            if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
+            if (g_nodes[n].text3[0]) fputs(g_nodes[n].text3, g_out);
             if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
                 if (self->emit_raw_init(g_nodes[n].a, g_nodes[n].text) != 0) return -1;
             } else if (g_nodes[n].a >= 0) {
@@ -3108,6 +3432,26 @@ impl EmitOps for Ast {
             fputs(";\n", g_out);
             return 0;
         }
+        if (g_nodes[n].kind == N_BREAK) {
+            self->emit_indent(ind);
+            fputs("break;\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_CONT) {
+            self->emit_indent(ind);
+            fputs("continue;\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_DECLS) {
+            int c = g_nodes[n].a;
+            while (c >= 0) {
+                self->emit_indent(ind);
+                if (self->emit_inline(c) != 0) return -1;
+                fputs(";\n", g_out);
+                c = g_nodes[c].next;
+            }
+            return 0;
+        }
         if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_ASSIGN
             || g_nodes[n].kind == N_EXPR || g_nodes[n].kind == N_POST) {
             self->emit_indent(ind);
@@ -3157,9 +3501,33 @@ impl EmitOps for Ast {
     {
         (void)self;
 
+        if (g_nodes[n].kind == N_DECLS) {
+            /* a `for` initialiser: one shared type, then bare declarators */
+            int c = g_nodes[n].a, first = 1;
+            while (c >= 0) {
+                if (first) {
+                    if (self->emit_inline(c) != 0) return -1;
+                } else {
+                    fputs(", ", g_out);
+                    fputs(g_nodes[c].text2, g_out);
+                    if (g_nodes[c].text3[0]) fputs(g_nodes[c].text3, g_out);
+                    if (g_nodes[c].a >= 0) {
+                        if (g_nodes[g_nodes[c].a].kind == N_RAW) {
+                            if (self->emit_raw_init(g_nodes[c].a, g_nodes[c].text) != 0) return -1;
+                        } else {
+                            fputs(" = ", g_out);
+                            if (self->emit_expr(g_nodes[c].a) != 0) return -1;
+                        }
+                    }
+                }
+                first = 0;
+                c = g_nodes[c].next;
+            }
+            return 0;
+        }
         if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_FIELD) {
             fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
-            if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
+            if (g_nodes[n].text3[0]) fputs(g_nodes[n].text3, g_out);
             if (g_nodes[n].kind == N_DECL) {
                 if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
                     if (self->emit_raw_init(g_nodes[n].a, g_nodes[n].text) != 0) return -1;
@@ -3175,8 +3543,14 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_ASSIGN) {
+            const char *aop = " = ";
+            if (g_nodes[n].aux == 1) aop = " += ";
+            else if (g_nodes[n].aux == 2) aop = " -= ";
+            else if (g_nodes[n].aux == 3) aop = " *= ";
+            else if (g_nodes[n].aux == 4) aop = " /= ";
+            else if (g_nodes[n].aux == 5) aop = " %= ";
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fputs(" = ", g_out);
+            fputs(aop, g_out);
             return self->emit_expr(g_nodes[n].b);
         }
         if (g_nodes[n].kind == N_EXPR) return self->emit_expr(g_nodes[n].a);
@@ -3200,6 +3574,8 @@ impl EmitOps for Ast {
             else if (g_nodes[n].aux == B_GE) op = ">=";
             else if (g_nodes[n].aux == B_EQ) op = "==";
             else if (g_nodes[n].aux == B_NE) op = "!=";
+            else if (g_nodes[n].aux == B_AND) op = "&&";
+            else if (g_nodes[n].aux == B_OR) op = "||";
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fprintf(g_out, " %s ", op);
             return self->emit_expr(g_nodes[n].b);
@@ -3218,7 +3594,7 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_STR) {
-            fputs(g_nodes[n].text, g_out);
+            fputs(g_strpool + g_nodes[n].num, g_out);
             return 0;
         }
         if (g_nodes[n].kind == N_RAW) {
@@ -3259,6 +3635,32 @@ impl EmitOps for Ast {
             fputs(")", g_out);
             return 0;
         }
+        if (g_nodes[n].kind == N_CAST) {
+            fprintf(g_out, "(%s)(", g_nodes[n].text);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_SIZEOF) {
+            if (g_nodes[n].aux) {
+                fprintf(g_out, "sizeof(%s)", g_nodes[n].text);
+                return 0;
+            }
+            fputs("sizeof(", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_TERN) {
+            fputs("(", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(" ? ", g_out);
+            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            fputs(" : ", g_out);
+            if (self->emit_expr(g_nodes[n].c) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
         if (g_nodes[n].kind == N_BIN) {
             op = "+";
             if (g_nodes[n].aux == B_SUB) op = "-";
@@ -3271,6 +3673,8 @@ impl EmitOps for Ast {
             else if (g_nodes[n].aux == B_GE) op = ">=";
             else if (g_nodes[n].aux == B_EQ) op = "==";
             else if (g_nodes[n].aux == B_NE) op = "!=";
+            else if (g_nodes[n].aux == B_AND) op = "&&";
+            else if (g_nodes[n].aux == B_OR) op = "||";
             fputs("(", g_out);
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fprintf(g_out, " %s ", op);
