@@ -1,0 +1,22 @@
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+static const char *k_msg = "point";
+
+void show(struct Point *pt)
+{
+    printf("%s %d %d\n", k_msg, pt->x, pt->y);
+}
+
+int main(void)
+{
+    struct Point p;
+    p.x = 3;
+    p.y = 4;
+    show(&p);
+    return 0;
+}

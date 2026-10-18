@@ -1,21 +1,21 @@
 /*
  * main.ct - Phase 9: the AST compiler.
  *
- * 9.1 proved the pipe end to end (lexer -> recursive descent -> AST -> C).
- * 9.2 adds the statement/control-flow layer and real signatures:
+ * 9.1 proved the pipe (lexer -> parser -> AST -> C). 9.2 added statements,
+ * control flow and signatures. 9.3 adds the declaration layer:
  *
- *   - `int` / `void` functions with parameters, prototypes and forward calls
- *   - local declarations, assignment, `if` / `else`, `while`, `for`
- *   - `return expr;` and `return;`
- *   - comparisons (< > <= >= == !=), `%`, unary `-` / `!`, postfix `++` / `--`
+ *   - type specifiers (`int` / `void` / `char` / `unsigned long` / `const ...`)
+ *   - `struct` definitions, `typedef` (including anonymous structs)
+ *   - pointers (`*`, `&`), member access (`.` / `->`), arrays and indexing
+ *   - `static` functions and globals
  *
- * Node shape follows D32 (`typedef struct` pool + `kind`, one central dispatch).
- * Symbol tables follow D33: a function table plus a variable table with a scope
- * stack (only variables are scoped). The tables carry names, not types -- 9.2
- * does no type checking; the declared type is `int` and `void` for returns.
+ * Node shape follows D32 (`typedef struct` pool + `kind`, one dispatch per
+ * concern). Symbol tables follow D33: functions, variables and types are
+ * separate flat tables; only variables are scoped.
  *
  * Output contract: banner, `<base>.h` guard and a self-contained `.c`; byte
- * equality with the old pipeline is not required (D34).
+ * equality with the old pipeline is not required (D34). 9.3 still defers brace
+ * initializers, casts, `sizeof` and trait/impl (9.4).
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
@@ -25,33 +25,44 @@
 
 #define CTC_VERSION "0.8.0"
 
-#define MAX_NODES 4096
-#define MAX_TEXT  160
-#define MAX_PATH  1024
-#define MAX_FUNCS 64
-#define MAX_VARS  512
-#define MAX_SCOPE 256
+#define MAX_NODES  4096
+#define MAX_TEXT   160
+#define MAX_PATH   1024
+#define MAX_FUNCS  64
+#define MAX_PARAMS 8
+#define MAX_VARS   512
+#define MAX_SCOPE  256
+#define MAX_TYPES  64
 
-/* node kinds (D32: one tag, one central dispatch) */
-#define N_PROG   1
-#define N_PP     2
-#define N_FUNC   3
-#define N_BLOCK  4
-#define N_RET    5
-#define N_EXPR   6
-#define N_CALL   7
-#define N_NUM    8
-#define N_STR    9
-#define N_VAR    10
-#define N_BIN    11
-#define N_DECL   12
-#define N_ASSIGN 13
-#define N_IF     14
-#define N_WHILE  15
-#define N_FOR    16
-#define N_UNARY  17
-#define N_POST   18
-#define N_PARAM  19
+/* node kinds (D32: one tag, one dispatch) */
+#define N_PROG    1
+#define N_PP      2
+#define N_FUNC    3
+#define N_BLOCK   4
+#define N_RET     5
+#define N_EXPR    6
+#define N_CALL    7
+#define N_NUM     8
+#define N_STR     9
+#define N_VAR     10
+#define N_BIN     11
+#define N_DECL    12
+#define N_ASSIGN  13
+#define N_IF      14
+#define N_WHILE   15
+#define N_FOR     16
+#define N_UNARY   17
+#define N_POST    18
+#define N_PARAM   19
+#define N_STRUCT  20
+#define N_TYPEDEF 21
+#define N_GLOBAL  22
+#define N_FIELD   23
+#define N_MEMBER  24
+#define N_ARROW   25
+#define N_INDEX   26
+#define N_ADDR    27
+#define N_DEREF   28
 
 /* token kinds */
 #define T_EOF    0
@@ -80,29 +91,28 @@
 #define P_INC 1
 #define P_DEC 2
 
-/* return types */
-#define R_VOID 0
-#define R_INT  1
-
 /* `parse_func` returns this when the declaration was a prototype (no node). */
 #define NO_NODE (-2)
 
 typedef struct Node {
     int  kind;
-    int  a;             /* first child / left operand / condition */
+    int  a;             /* first child / left operand / condition / target */
     int  b;             /* second child / right operand / body */
     int  c;             /* third child (else branch / for step) */
     int  d;             /* fourth child (for body) */
     int  next;          /* next sibling in a list */
-    int  aux;           /* operator kind, return type */
-    long num;           /* numeric literal */
-    char text[MAX_TEXT];/* identifier, string literal or preprocessor line */
+    int  aux;           /* operator kind or `static` flag */
+    long num;           /* numeric literal or array length */
+    char text[MAX_TEXT];/* type, string literal or preprocessor line */
+    char text2[MAX_TEXT];/* declared / member / function name */
 } Node;
 
 typedef struct Fn {
     char name[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char ptype[MAX_PARAMS][MAX_TEXT];
     int  nparams;
-    int  ret;
+    int  is_static;
 } Fn;
 
 typedef struct Var {
@@ -113,14 +123,14 @@ static Node g_nodes[MAX_NODES];
 static int  g_nnode;
 static const char *g_src;
 static int  g_pos;
-static int  g_bol;          /* at the beginning of a line (for `#` lines) */
+static int  g_bol;
 static int  g_tok;
 static char g_toktext[MAX_TEXT];
 static long g_toknum;
 static FILE *g_out;
 static const char *g_path;
 static char g_errmsg[MAX_TEXT];
-static int  g_nparams;      /* parameters of the function being parsed */
+static int  g_nparams;
 
 static Fn  g_funcs[MAX_FUNCS];
 static int g_nfunc;
@@ -128,6 +138,8 @@ static Var g_vars[MAX_VARS];
 static int g_nvar;
 static int g_scope[MAX_SCOPE];
 static int g_nscope;
+static char g_types[MAX_TYPES][MAX_TEXT];
+static int g_ntype;
 
 trait AstOps {
     int  new_node(int kind);
@@ -135,15 +147,32 @@ trait AstOps {
     void lex_next(void);
     int  accept(const char *p);
     int  expect(const char *p);
+    int  read_file(const char *path);
+    int  default_output(const char *in, char *out, size_t cap);
+    int  run(int argc, char **argv);
+}
+
+trait SymOps {
     int  push_scope(void);
     int  pop_scope(void);
     int  declare_var(const char *name);
     int  find_var(const char *name);
     int  find_func(const char *name);
-    int  add_func(const char *name, int nparams, int ret);
+    int  add_func(const char *name, const char *ret, int is_static, int first_param);
+    int  find_type(const char *name);
+    int  add_type(const char *name);
+}
+
+trait ParseOps {
+    int  is_type_word(const char *w);
+    int  type_append(char *out, size_t cap, size_t *n, const char *tok);
+    int  parse_type(char *out, size_t cap);
     int  parse_program(void);
-    int  parse_func(void);
+    int  parse_func(int is_static);
     int  parse_params(void);
+    int  parse_struct_def(void);
+    int  parse_typedef(void);
+    int  parse_field_def(void);
     int  parse_block(void);
     int  parse_stmt(void);
     int  parse_branch(void);
@@ -157,9 +186,6 @@ trait AstOps {
     int  parse_postfix(void);
     int  parse_primary(void);
     int  parse_args(void);
-    int  read_file(const char *path);
-    int  default_output(const char *in, char *out, size_t cap);
-    int  run(int argc, char **argv);
 }
 
 trait EmitOps {
@@ -169,14 +195,15 @@ trait EmitOps {
     int  emit_expr(int n);
     int  emit_cond(int n);
     int  emit_indent(int n);
+    int  emit_type_decl(int n, int ind, int with_semi);
     int  write_header(const char *outc);
 }
 
-/* 9.1/9.2 need no per-run state beyond the globals above; the struct exists so
-   the methods live in impl blocks (plain-C signatures are capped by MAX_FUNCS). */
+/* The state lives in file-scope globals (9.x is a single-unit compiler); the
+   struct exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
 struct Ast {
     int nerr;
-} use AstOps, EmitOps;
+} use AstOps, SymOps, ParseOps, EmitOps;
 
 impl AstOps for Ast {
     int new_node(int kind)
@@ -195,6 +222,7 @@ impl AstOps for Ast {
         g_nodes[n].aux = 0;
         g_nodes[n].num = 0;
         g_nodes[n].text[0] = 0;
+        g_nodes[n].text2[0] = 0;
         return n;
     }
 
@@ -205,8 +233,6 @@ impl AstOps for Ast {
         return -1;
     }
 
-    /* One token at a time. Preprocessor lines are kept verbatim: they are
-       emitted before the program, never interpreted. */
     void lex_next(void)
     {
         int c, n;
@@ -219,6 +245,12 @@ impl AstOps for Ast {
             if (c == ' ' || c == '\t' || c == '\r') { g_pos++; continue; }
             if (c == '/' && g_src[g_pos + 1] == '/') {
                 while (g_src[g_pos] && g_src[g_pos] != '\n') g_pos++;
+                continue;
+            }
+            if (c == '/' && g_src[g_pos + 1] == '*') {
+                g_pos += 2;
+                while (g_src[g_pos] && !(g_src[g_pos] == '*' && g_src[g_pos + 1] == '/')) g_pos++;
+                if (g_src[g_pos]) g_pos += 2;
                 continue;
             }
             break;
@@ -278,14 +310,20 @@ impl AstOps for Ast {
             g_tok = T_STR;
             return;
         }
-        /* two-character punctuation must be tried before the one-char default */
+        if (c == '-' && g_src[g_pos + 1] == '>') {
+            g_toktext[0] = '-';
+            g_toktext[1] = '>';
+            g_toktext[2] = 0;
+            g_tok = T_PUNCT;
+            g_pos += 2;
+            return;
+        }
         if ((c == '=' || c == '!' || c == '<' || c == '>') && g_src[g_pos + 1] == '=') {
             g_toktext[0] = (char)c;
             g_toktext[1] = '=';
             g_toktext[2] = 0;
             g_tok = T_PUNCT;
-            g_pos++;
-            g_pos++;
+            g_pos += 2;
             return;
         }
         if ((c == '+' || c == '-') && g_src[g_pos + 1] == c) {
@@ -293,8 +331,7 @@ impl AstOps for Ast {
             g_toktext[1] = (char)c;
             g_toktext[2] = 0;
             g_tok = T_PUNCT;
-            g_pos++;
-            g_pos++;
+            g_pos += 2;
             return;
         }
         g_toktext[0] = (char)c;
@@ -320,8 +357,145 @@ impl AstOps for Ast {
         return self->fail("unexpected token");
     }
 
-    /* ---- D33: flat tables plus a scope stack (only variables are scoped) ---- */
+    int read_file(const char *path)
+    {
+        FILE *f;
+        long sz;
+        char *buf;
 
+        (void)self;
+        f = fopen(path, "rb");
+        if (!f) return self->fail("cannot open the input file");
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz < 0) {
+            fclose(f);
+            return self->fail("cannot read the input file");
+        }
+        buf = (char *)malloc((size_t)sz + 1);
+        if (!buf) {
+            fclose(f);
+            return self->fail("out of memory");
+        }
+        if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+            free(buf);
+            fclose(f);
+            return self->fail("short read");
+        }
+        fclose(f);
+        buf[sz] = 0;
+        g_src = buf;
+        return 0;
+    }
+
+    int default_output(const char *in, char *out, size_t cap)
+    {
+        size_t n;
+        (void)self;
+
+        n = strlen(in);
+        if (n >= 3 && strcmp(in + n - 3, ".ct") == 0) {
+            if (snprintf(out, cap, "%.*s.c", (int)(n - 3), in) >= (int)cap) return -1;
+            return 0;
+        }
+        if (snprintf(out, cap, "%s.c", in) >= (int)cap) return -1;
+        return 0;
+    }
+
+    int run(int argc, char **argv)
+    {
+        const char *in;
+        const char *out;
+        char outbuf[MAX_PATH];
+        int i, prog;
+        FILE *f;
+
+        in = NULL;
+        out = NULL;
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: ct-ast <input.ct> [-o <output.c>]\n");
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("ct-ast v%s\n", CTC_VERSION);
+                return 0;
+            }
+            if (strcmp(argv[i], "-o") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: -o needs an argument\n");
+                    return 1;
+                }
+                i++;
+                out = argv[i];
+                continue;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            in = argv[i];
+        }
+        if (!in) {
+            fprintf(stderr, "usage: ct-ast <input.ct> [-o <output.c>]\n");
+            return 1;
+        }
+        if (!out) {
+            if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
+                fprintf(stderr, "ct-ast: output path too long\n");
+                return 1;
+            }
+            out = outbuf;
+        }
+
+        g_path = in;
+        g_pos = 0;
+        g_bol = 1;
+        g_nnode = 0;
+        g_nfunc = 0;
+        g_nvar = 0;
+        g_nscope = 0;
+        g_ntype = 0;
+        g_nparams = 0;
+        g_errmsg[0] = 0;
+        if (self->read_file(in) != 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        prog = self->parse_program();
+        if (prog < 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        f = fopen(out, "w");
+        if (!f) {
+            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            return 1;
+        }
+        g_out = f;
+        fprintf(g_out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
+                CTC_VERSION, g_path);
+        fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
+              g_out);
+        if (self->emit_program(prog) != 0) {
+            fclose(f);
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        if (fclose(f) != 0) {
+            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            return 1;
+        }
+        if (self->write_header(out) != 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        return 0;
+    }
+}
+
+impl SymOps for Ast {
     int push_scope(void)
     {
         (void)self;
@@ -368,22 +542,120 @@ impl AstOps for Ast {
     }
 
     /* A prototype followed by its definition updates the same entry. */
-    int add_func(const char *name, int nparams, int ret)
+    int add_func(const char *name, const char *ret, int is_static, int first_param)
+    {
+        int i, k, p;
+        (void)self;
+
+        i = self->find_func(name);
+        if (i < 0) {
+            if (g_nfunc >= MAX_FUNCS) return self->fail("too many functions");
+            i = g_nfunc;
+            g_nfunc++;
+            snprintf(g_funcs[i].name, MAX_TEXT, "%s", name);
+        }
+        snprintf(g_funcs[i].ret, MAX_TEXT, "%s", ret);
+        g_funcs[i].is_static = is_static;
+        g_funcs[i].nparams = 0;
+        p = first_param;
+        k = 0;
+        while (p > 0 && k < MAX_PARAMS) {
+            snprintf(g_funcs[i].ptype[k], MAX_TEXT, "%s", g_nodes[p].text);
+            k++;
+            p = g_nodes[p].next;
+        }
+        if (k >= MAX_PARAMS && p > 0) return self->fail("too many parameters");
+        g_funcs[i].nparams = k;
+        return i;
+    }
+
+    int find_type(const char *name)
     {
         int i;
         (void)self;
-        i = self->find_func(name);
-        if (i >= 0) {
-            g_funcs[i].nparams = nparams;
-            g_funcs[i].ret = ret;
-            return i;
+        for (i = 0; i < g_ntype; i++)
+            if (strcmp(g_types[i], name) == 0) return i;
+        return -1;
+    }
+
+    int add_type(const char *name)
+    {
+        (void)self;
+        if (self->find_type(name) >= 0) return 0;
+        if (g_ntype >= MAX_TYPES) return self->fail("too many types");
+        snprintf(g_types[g_ntype], MAX_TEXT, "%s", name);
+        g_ntype++;
+        return 0;
+    }
+}
+
+impl ParseOps for Ast {
+    int is_type_word(const char *w)
+    {
+        (void)self;
+        return strcmp(w, "int") == 0 || strcmp(w, "void") == 0
+            || strcmp(w, "char") == 0 || strcmp(w, "unsigned") == 0
+            || strcmp(w, "signed") == 0 || strcmp(w, "long") == 0
+            || strcmp(w, "short") == 0 || strcmp(w, "float") == 0
+            || strcmp(w, "double") == 0 || strcmp(w, "const") == 0
+            || strcmp(w, "struct") == 0 || strcmp(w, "enum") == 0
+            || strcmp(w, "union") == 0;
+    }
+
+    int type_append(char *out, size_t cap, size_t *n, const char *tok)
+    {
+        int w;
+        (void)self;
+        if (*n > 0) {
+            if (*n + 1 >= cap) return self->fail("type is too long");
+            out[*n] = ' ';
+            (*n)++;
         }
-        if (g_nfunc >= MAX_FUNCS) return self->fail("too many functions");
-        snprintf(g_funcs[g_nfunc].name, MAX_TEXT, "%s", name);
-        g_funcs[g_nfunc].nparams = nparams;
-        g_funcs[g_nfunc].ret = ret;
-        g_nfunc++;
-        return g_nfunc - 1;
+        w = snprintf(out + *n, cap - *n, "%s", tok);
+        if (w < 0 || (size_t)w >= cap - *n) return self->fail("type is too long");
+        *n += (size_t)w;
+        return 0;
+    }
+
+    /* Consume a type specifier. `struct X` keeps the tag; a known typedef name
+       is part of the type; `*` accumulates (9.3 supports a single pointer). */
+    int parse_type(char *out, size_t cap)
+    {
+        size_t n;
+        (void)self;
+
+        n = 0;
+        out[0] = 0;
+        for (;;) {
+            if (g_tok == T_ID && self->is_type_word(g_toktext)) {
+                if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
+                if (strcmp(g_toktext, "struct") == 0) {
+                    self->lex_next();
+                    if (g_tok != T_ID) return self->fail("expected a struct name");
+                    if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
+                    if (self->add_type(g_toktext) != 0) return -1;
+                }
+                self->lex_next();
+                continue;
+            }
+            if (g_tok == T_ID && self->find_type(g_toktext) >= 0) {
+                if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
+                self->lex_next();
+                continue;
+            }
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "*") == 0) {
+                if (self->type_append(out, cap, &n, "*") != 0) return -1;
+                self->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (n == 0) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "expected a type (tok %d '%s')", g_tok, g_toktext);
+            return self->fail(msg);
+        }
+        return 0;
     }
 
     int parse_program(void)
@@ -405,10 +677,17 @@ impl AstOps for Ast {
             self->lex_next();
         }
         while (g_tok != T_EOF) {
-            if (g_tok != T_ID || (strcmp(g_toktext, "int") != 0
-                                  && strcmp(g_toktext, "void") != 0))
-                return self->fail("expected a function definition");
-            n = self->parse_func();
+            if (g_tok == T_ID && strcmp(g_toktext, "typedef") == 0) {
+                n = self->parse_typedef();
+            } else if (g_tok == T_ID && strcmp(g_toktext, "struct") == 0) {
+                n = self->parse_struct_def();
+                if (n >= 0 && self->expect(";") != 0) n = -1;
+            } else if (g_tok == T_ID && strcmp(g_toktext, "static") == 0) {
+                self->lex_next();
+                n = self->parse_func(1);
+            } else {
+                n = self->parse_func(0);
+            }
             if (n == -1) return -1;
             if (n == NO_NODE) continue;
             if (tail < 0) g_nodes[prog].a = n;
@@ -418,19 +697,42 @@ impl AstOps for Ast {
         return prog;
     }
 
-    /* `int|void name(params) ;` or `int|void name(params) { ... }`. */
-    int parse_func(void)
+    /* A function (prototype or definition) or a global variable. */
+    int parse_func(int is_static)
     {
-        int ret, f, b, params;
+        int f, b, params;
+        char ret[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
 
-        ret = (strcmp(g_toktext, "int") == 0) ? R_INT : R_VOID;
-        self->lex_next();
-        if (g_tok != T_ID) return self->fail("expected a function name");
+        if (self->parse_type(ret, sizeof ret) != 0) return -1;
+        if (g_tok != T_ID) return self->fail("expected a name");
         snprintf(name, sizeof name, "%s", g_toktext);
         self->lex_next();
-        if (self->expect("(") != 0) return -1;
+        if (g_tok != T_PUNCT || strcmp(g_toktext, "(") != 0) {
+            int g, e;
+            g = self->new_node(N_GLOBAL);
+            if (g < 0) return -1;
+            snprintf(g_nodes[g].text, MAX_TEXT, "%s", ret);
+            snprintf(g_nodes[g].text2, MAX_TEXT, "%s", name);
+            g_nodes[g].aux = is_static;
+            /* a file-scope name is visible to every function body */
+            if (self->declare_var(name) != 0) return -1;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
+                self->lex_next();
+                if (g_tok != T_NUM) return self->fail("expected an array length");
+                g_nodes[g].num = g_toknum;
+                self->lex_next();
+                if (self->expect("]") != 0) return -1;
+            }
+            if (self->accept("=")) {
+                e = self->parse_expr();
+                if (e < 0) return -1;
+                g_nodes[g].a = e;
+            }
+            if (self->expect(";") != 0) return -1;
+            return g;
+        }
         if (self->push_scope() != 0) return -1;
         params = self->parse_params();
         if (params < 0) {
@@ -439,7 +741,7 @@ impl AstOps for Ast {
         }
         if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
             self->lex_next();
-            if (self->add_func(name, g_nparams, ret) < 0) {
+            if (self->add_func(name, ret, is_static, params) < 0) {
                 self->pop_scope();
                 return -1;
             }
@@ -451,7 +753,7 @@ impl AstOps for Ast {
             self->pop_scope();
             return -1;
         }
-        if (self->add_func(name, g_nparams, ret) < 0) {
+        if (self->add_func(name, ret, is_static, params) < 0) {
             self->pop_scope();
             return -1;
         }
@@ -460,43 +762,44 @@ impl AstOps for Ast {
             self->pop_scope();
             return -1;
         }
-        snprintf(g_nodes[f].text, MAX_TEXT, "%s", name);
-        g_nodes[f].aux = ret;
+        snprintf(g_nodes[f].text, MAX_TEXT, "%s", ret);
+        snprintf(g_nodes[f].text2, MAX_TEXT, "%s", name);
+        g_nodes[f].aux = is_static;
         g_nodes[f].a = params;
         g_nodes[f].b = b;
         self->pop_scope();
         return f;
     }
 
-    /* `(void)` or `(int a, int b)`; the count lands in `g_nparams`. */
     int parse_params(void)
     {
         int first, tail, p;
+        char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
 
         g_nparams = 0;
         first = 0;
         tail = 0;
-        if (g_tok == T_ID && strcmp(g_toktext, "void") == 0) {
-            self->lex_next();
-            if (self->expect(")") != 0) return -1;
-            return 0;
-        }
+        if (self->expect("(") != 0) return -1;
         if (g_tok == T_PUNCT && strcmp(g_toktext, ")") == 0) {
             self->lex_next();
             return 0;
         }
         for (;;) {
-            if (g_tok != T_ID || strcmp(g_toktext, "int") != 0)
-                return self->fail("9.2 parameters must be 'int'");
-            self->lex_next();
+            if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ")") == 0 &&
+                strcmp(typebuf, "void") == 0) {
+                self->lex_next();
+                return 0;
+            }
             if (g_tok != T_ID) return self->fail("expected a parameter name");
             snprintf(name, sizeof name, "%s", g_toktext);
             self->lex_next();
             p = self->new_node(N_PARAM);
             if (p < 0) return -1;
-            snprintf(g_nodes[p].text, MAX_TEXT, "%s", name);
+            snprintf(g_nodes[p].text, MAX_TEXT, "%s", typebuf);
+            snprintf(g_nodes[p].text2, MAX_TEXT, "%s", name);
             if (self->declare_var(name) != 0) return -1;
             if (tail == 0) first = p;
             else g_nodes[tail].next = p;
@@ -510,6 +813,96 @@ impl AstOps for Ast {
         }
         if (self->expect(")") != 0) return -1;
         return first;
+    }
+
+    int parse_field_def(void)
+    {
+        int m;
+        char typebuf[MAX_TEXT];
+        char name[MAX_TEXT];
+        (void)self;
+
+        if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+        if (g_tok != T_ID) return self->fail("expected a field name");
+        snprintf(name, sizeof name, "%s", g_toktext);
+        self->lex_next();
+        m = self->new_node(N_FIELD);
+        if (m < 0) return -1;
+        snprintf(g_nodes[m].text, MAX_TEXT, "%s", typebuf);
+        snprintf(g_nodes[m].text2, MAX_TEXT, "%s", name);
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
+            self->lex_next();
+            if (g_tok != T_NUM) return self->fail("expected an array length");
+            g_nodes[m].num = g_toknum;
+            self->lex_next();
+            if (self->expect("]") != 0) return -1;
+        }
+        if (self->expect(";") != 0) return -1;
+        return m;
+    }
+
+    /* `struct Name { ... }` (the trailing `;` is the caller's business). */
+    int parse_struct_def(void)
+    {
+        int s, tail, m;
+        char name[MAX_TEXT];
+        (void)self;
+
+        self->lex_next();
+        name[0] = 0;
+        if (g_tok == T_ID) {
+            snprintf(name, sizeof name, "%s", g_toktext);
+            if (self->add_type(name) != 0) return -1;
+            self->lex_next();
+        }
+        if (self->expect("{") != 0) return -1;
+        s = self->new_node(N_STRUCT);
+        if (s < 0) return -1;
+        snprintf(g_nodes[s].text2, MAX_TEXT, "%s", name);
+        tail = -1;
+        while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
+            m = self->parse_field_def();
+            if (m < 0) return -1;
+            if (tail < 0) g_nodes[s].a = m;
+            else g_nodes[tail].next = m;
+            tail = m;
+        }
+        if (self->expect("}") != 0) return -1;
+        return s;
+    }
+
+    /* `typedef struct { ... } Name;` or `typedef <type> Name;`. */
+    int parse_typedef(void)
+    {
+        int t;
+        char typebuf[MAX_TEXT];
+        char name[MAX_TEXT];
+        (void)self;
+
+        self->lex_next();
+        if (g_tok == T_ID && strcmp(g_toktext, "struct") == 0) {
+            t = self->parse_struct_def();
+            if (t < 0) return -1;
+            if (g_tok != T_ID) return self->fail("expected a typedef name");
+            snprintf(name, sizeof name, "%s", g_toktext);
+            self->lex_next();
+            if (self->expect(";") != 0) return -1;
+            snprintf(g_nodes[t].text2, MAX_TEXT, "%s", name);
+            g_nodes[t].aux = 1;
+            if (self->add_type(name) != 0) return -1;
+            return t;
+        }
+        if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+        if (g_tok != T_ID) return self->fail("expected a typedef name");
+        snprintf(name, sizeof name, "%s", g_toktext);
+        self->lex_next();
+        if (self->expect(";") != 0) return -1;
+        t = self->new_node(N_TYPEDEF);
+        if (t < 0) return -1;
+        snprintf(g_nodes[t].text, MAX_TEXT, "%s", typebuf);
+        snprintf(g_nodes[t].text2, MAX_TEXT, "%s", name);
+        if (self->add_type(name) != 0) return -1;
+        return t;
     }
 
     int parse_block(void)
@@ -605,7 +998,8 @@ impl AstOps for Ast {
             if (self->push_scope() != 0) return -1;
             if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
                 g_nodes[s].a = -1;
-            } else if (g_tok == T_ID && strcmp(g_toktext, "int") == 0) {
+            } else if (g_tok == T_ID && (self->is_type_word(g_toktext)
+                       || self->find_type(g_toktext) >= 0)) {
                 e = self->parse_decl_node();
                 if (e < 0) {
                     self->pop_scope();
@@ -661,7 +1055,8 @@ impl AstOps for Ast {
             self->pop_scope();
             return s;
         }
-        if (g_tok == T_ID && strcmp(g_toktext, "int") == 0) {
+        if (g_tok == T_ID && (self->is_type_word(g_toktext)
+                              || self->find_type(g_toktext) >= 0)) {
             s = self->parse_decl_node();
             if (s < 0) return -1;
             if (self->expect(";") != 0) return -1;
@@ -673,7 +1068,6 @@ impl AstOps for Ast {
         return s;
     }
 
-    /* A branch is always a block node, so emission never needs implicit braces. */
     int parse_branch(void)
     {
         int b, s;
@@ -693,22 +1087,30 @@ impl AstOps for Ast {
         return b;
     }
 
-    /* `int name [= expr]` without the trailing semicolon. */
+    /* `<type> name [\[N\]] [= expr]` without the trailing semicolon. */
     int parse_decl_node(void)
     {
         int n, e;
+        char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
 
-        self->lex_next();
+        if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
         if (g_tok != T_ID) return self->fail("expected a variable name");
         snprintf(name, sizeof name, "%s", g_toktext);
         self->lex_next();
         n = self->new_node(N_DECL);
         if (n < 0) return -1;
-        snprintf(g_nodes[n].text, MAX_TEXT, "%s", name);
-        g_nodes[n].aux = R_INT;
+        snprintf(g_nodes[n].text, MAX_TEXT, "%s", typebuf);
+        snprintf(g_nodes[n].text2, MAX_TEXT, "%s", name);
         if (self->declare_var(name) != 0) return -1;
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
+            self->lex_next();
+            if (g_tok != T_NUM) return self->fail("expected an array length");
+            g_nodes[n].num = g_toknum;
+            self->lex_next();
+            if (self->expect("]") != 0) return -1;
+        }
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
             self->lex_next();
             e = self->parse_expr();
@@ -718,7 +1120,6 @@ impl AstOps for Ast {
         return n;
     }
 
-    /* An expression statement, or `name = expr` when `=` follows a plain name. */
     int parse_expr_stmt_node(void)
     {
         int e, rhs, n;
@@ -727,13 +1128,18 @@ impl AstOps for Ast {
         e = self->parse_expr();
         if (e < 0) return -1;
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
-            if (g_nodes[e].kind != N_VAR) return self->fail("assignment target must be a variable");
+            int k;
+            k = g_nodes[e].kind;
+            if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
+                return self->fail("assignment target is not assignable");
             self->lex_next();
             rhs = self->parse_expr();
             if (rhs < 0) return -1;
-            g_nodes[e].kind = N_ASSIGN;
-            g_nodes[e].a = rhs;
-            return e;
+            n = self->new_node(N_ASSIGN);
+            if (n < 0) return -1;
+            g_nodes[n].a = e;
+            g_nodes[n].b = rhs;
+            return n;
         }
         if (g_nodes[e].kind == N_POST) return e;
         n = self->new_node(N_EXPR);
@@ -842,21 +1248,82 @@ impl AstOps for Ast {
             g_nodes[n].aux = op;
             return n;
         }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "&") == 0) {
+            self->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->new_node(N_ADDR);
+            if (n < 0) return -1;
+            g_nodes[n].a = e;
+            return n;
+        }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "*") == 0) {
+            self->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->new_node(N_DEREF);
+            if (n < 0) return -1;
+            g_nodes[n].a = e;
+            return n;
+        }
         return self->parse_postfix();
     }
 
     int parse_postfix(void)
     {
-        int n;
+        int n, m, idx;
         (void)self;
 
         n = self->parse_primary();
         if (n < 0) return -1;
+        for (;;) {
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
+                self->lex_next();
+                idx = self->parse_expr();
+                if (idx < 0) return -1;
+                if (self->expect("]") != 0) return -1;
+                m = self->new_node(N_INDEX);
+                if (m < 0) return -1;
+                g_nodes[m].a = n;
+                g_nodes[m].b = idx;
+                n = m;
+                continue;
+            }
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ".") == 0) {
+                self->lex_next();
+                if (g_tok != T_ID) return self->fail("expected a field name");
+                m = self->new_node(N_MEMBER);
+                if (m < 0) return -1;
+                g_nodes[m].a = n;
+                snprintf(g_nodes[m].text2, MAX_TEXT, "%s", g_toktext);
+                self->lex_next();
+                n = m;
+                continue;
+            }
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "->") == 0) {
+                self->lex_next();
+                if (g_tok != T_ID) return self->fail("expected a field name");
+                m = self->new_node(N_ARROW);
+                if (m < 0) return -1;
+                g_nodes[m].a = n;
+                snprintf(g_nodes[m].text2, MAX_TEXT, "%s", g_toktext);
+                self->lex_next();
+                n = m;
+                continue;
+            }
+            break;
+        }
         if (g_tok == T_PUNCT && (strcmp(g_toktext, "++") == 0 || strcmp(g_toktext, "--") == 0)) {
-            if (g_nodes[n].kind != N_VAR) return self->fail("'++' / '--' need a variable");
-            g_nodes[n].kind = N_POST;
-            g_nodes[n].aux = (g_toktext[0] == '+') ? P_INC : P_DEC;
+            int k;
+            k = g_nodes[n].kind;
+            if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
+                return self->fail("'++' / '--' need an assignable target");
+            m = self->new_node(N_POST);
+            if (m < 0) return -1;
+            g_nodes[m].a = n;
+            g_nodes[m].aux = (g_toktext[0] == '+') ? P_INC : P_DEC;
             self->lex_next();
+            return m;
         }
         return n;
     }
@@ -883,16 +1350,14 @@ impl AstOps for Ast {
         if (g_tok == T_ID) {
             n = self->new_node(N_VAR);
             if (n < 0) return -1;
-            snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
+            snprintf(g_nodes[n].text2, MAX_TEXT, "%s", g_toktext);
             self->lex_next();
             if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0) {
                 args = self->parse_args();
                 if (args < 0) return -1;
                 g_nodes[n].kind = N_CALL;
                 g_nodes[n].a = (args == 0) ? -1 : args;
-            } else if (self->find_var(g_nodes[n].text) < 0) {
-                /* the scope stack is unwound after each function, so this check
-                   has to happen while parsing, not in the emitter */
+            } else if (self->find_var(g_nodes[n].text2) < 0) {
                 return self->fail("use of an undeclared variable");
             }
             return n;
@@ -907,7 +1372,6 @@ impl AstOps for Ast {
         return self->fail("expected an expression");
     }
 
-    /* `(` args `)`: 0 means an empty list (node 0 is the program). */
     int parse_args(void)
     {
         int first, tail, e;
@@ -935,143 +1399,6 @@ impl AstOps for Ast {
         if (self->expect(")") != 0) return -1;
         return first;
     }
-
-    int read_file(const char *path)
-    {
-        FILE *f;
-        long sz;
-        char *buf;
-
-        (void)self;
-        f = fopen(path, "rb");
-        if (!f) return self->fail("cannot open the input file");
-        fseek(f, 0, SEEK_END);
-        sz = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        if (sz < 0) {
-            fclose(f);
-            return self->fail("cannot read the input file");
-        }
-        buf = (char *)malloc((size_t)sz + 1);
-        if (!buf) {
-            fclose(f);
-            return self->fail("out of memory");
-        }
-        if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
-            free(buf);
-            fclose(f);
-            return self->fail("short read");
-        }
-        fclose(f);
-        buf[sz] = 0;
-        g_src = buf;
-        return 0;
-    }
-
-    /* `foo.ct` -> `foo.c`; anything else gets `.c` appended. */
-    int default_output(const char *in, char *out, size_t cap)
-    {
-        size_t n;
-        (void)self;
-
-        n = strlen(in);
-        if (n >= 3 && strcmp(in + n - 3, ".ct") == 0) {
-            if (snprintf(out, cap, "%.*s.c", (int)(n - 3), in) >= (int)cap) return -1;
-            return 0;
-        }
-        if (snprintf(out, cap, "%s.c", in) >= (int)cap) return -1;
-        return 0;
-    }
-
-    int run(int argc, char **argv)
-    {
-        const char *in;
-        const char *out;
-        char outbuf[MAX_PATH];
-        int i, prog;
-        FILE *f;
-
-        in = NULL;
-        out = NULL;
-        for (i = 1; i < argc; i++) {
-            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: ct-ast <input.ct> [-o <output.c>]\n");
-                return 0;
-            }
-            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                printf("ct-ast v%s\n", CTC_VERSION);
-                return 0;
-            }
-            if (strcmp(argv[i], "-o") == 0) {
-                if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: -o needs an argument\n");
-                    return 1;
-                }
-                i++;
-                out = argv[i];
-                continue;
-            }
-            if (argv[i][0] == '-' && argv[i][1]) {
-                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
-                return 1;
-            }
-            in = argv[i];
-        }
-        if (!in) {
-            fprintf(stderr, "usage: ct-ast <input.ct> [-o <output.c>]\n");
-            return 1;
-        }
-        if (!out) {
-            if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
-                fprintf(stderr, "ct-ast: output path too long\n");
-                return 1;
-            }
-            out = outbuf;
-        }
-
-        g_path = in;
-        g_pos = 0;
-        g_bol = 1;
-        g_nnode = 0;
-        g_nfunc = 0;
-        g_nvar = 0;
-        g_nscope = 0;
-        g_nparams = 0;
-        g_errmsg[0] = 0;
-        if (self->read_file(in) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        prog = self->parse_program();
-        if (prog < 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        f = fopen(out, "w");
-        if (!f) {
-            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
-            return 1;
-        }
-        g_out = f;
-        fprintf(g_out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
-                CTC_VERSION, g_path);
-        fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
-              g_out);
-        if (self->emit_program(prog) != 0) {
-            fclose(f);
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        if (fclose(f) != 0) {
-            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
-            return 1;
-        }
-        if (self->write_header(out) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        return 0;
-    }
 }
 
 impl EmitOps for Ast {
@@ -1083,8 +1410,8 @@ impl EmitOps for Ast {
         return 0;
     }
 
-    /* Preprocessor lines first, then one prototype per function (so a call may
-       precede its definition), then the definitions in source order. */
+    /* PP lines, then types/globals in source order, then prototypes, then the
+       definitions. Prototypes come after the type declarations they may use. */
     int emit_program(int prog)
     {
         int n, i;
@@ -1093,17 +1420,23 @@ impl EmitOps for Ast {
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
 
+        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+            if (g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
+                || g_nodes[n].kind == N_GLOBAL) {
+                if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+            }
+        }
+
         for (i = 0; i < g_nfunc; i++) {
-            if (g_funcs[i].ret == R_VOID) fputs("void ", g_out);
-            else fputs("int ", g_out);
-            fprintf(g_out, "%s(", g_funcs[i].name);
+            int k;
+            if (g_funcs[i].is_static) fputs("static ", g_out);
+            fprintf(g_out, "%s %s(", g_funcs[i].ret, g_funcs[i].name);
             if (g_funcs[i].nparams == 0) {
                 fputs("void", g_out);
             } else {
-                int k;
                 for (k = 0; k < g_funcs[i].nparams; k++) {
                     if (k > 0) fputs(", ", g_out);
-                    fputs("int", g_out);
+                    fputs(g_funcs[i].ptype[k], g_out);
                 }
             }
             fputs(");\n", g_out);
@@ -1112,11 +1445,52 @@ impl EmitOps for Ast {
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
             if (g_nodes[n].kind == N_FUNC) {
                 if (self->emit_node(n, 0) != 0) return -1;
-            } else if (g_nodes[n].kind != N_PP) {
-                return self->fail("unknown top-level node");
             }
         }
         return 0;
+    }
+
+    /* Top-level declarations: struct / typedef / global (with a semicolon as
+       appropriate). */
+    int emit_type_decl(int n, int ind, int with_semi)
+    {
+        int m;
+        (void)self;
+
+        if (g_nodes[n].kind == N_STRUCT) {
+            if (g_nodes[n].aux) {
+                /* `typedef struct { ... } Name;` -- no tag after `struct` */
+                fputs("typedef struct {\n", g_out);
+            } else {
+                fprintf(g_out, "struct %s {\n", g_nodes[n].text2);
+            }
+            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+                self->emit_indent(ind + 1);
+                if (self->emit_inline(m) != 0) return -1;
+                fputs(";\n", g_out);
+            }
+            self->emit_indent(ind);
+            if (g_nodes[n].aux) fprintf(g_out, "} %s;\n", g_nodes[n].text2);
+            else fputs("};\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_TYPEDEF) {
+            fprintf(g_out, "typedef %s %s;\n", g_nodes[n].text, g_nodes[n].text2);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_GLOBAL) {
+            self->emit_indent(ind);
+            if (g_nodes[n].aux) fputs("static ", g_out);
+            fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
+            if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
+            if (g_nodes[n].a >= 0) {
+                fputs(" = ", g_out);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            }
+            if (with_semi) fputs(";\n", g_out);
+            return 0;
+        }
+        return self->fail("unknown declaration node");
     }
 
     int emit_node(int n, int ind)
@@ -1125,9 +1499,8 @@ impl EmitOps for Ast {
         (void)self;
 
         if (g_nodes[n].kind == N_FUNC) {
-            if (g_nodes[n].aux == R_VOID) fputs("void ", g_out);
-            else fputs("int ", g_out);
-            fprintf(g_out, "%s(", g_nodes[n].text);
+            if (g_nodes[n].aux) fputs("static ", g_out);
+            fprintf(g_out, "%s %s(", g_nodes[n].text, g_nodes[n].text2);
             c = g_nodes[n].a;
             if (c == 0) {
                 fputs("void) ", g_out);
@@ -1136,7 +1509,7 @@ impl EmitOps for Ast {
                 first = 1;
                 while (c > 0) {
                     if (!first) fputs(", ", g_out);
-                    fprintf(g_out, "int %s", g_nodes[c].text);
+                    fprintf(g_out, "%s %s", g_nodes[c].text, g_nodes[c].text2);
                     first = 0;
                     c = g_nodes[c].next;
                 }
@@ -1208,36 +1581,33 @@ impl EmitOps for Ast {
         }
     }
 
-    /* A statement-shaped node without indentation or the trailing semicolon:
-       used by `for (init; cond; step)` as well as by ordinary statements. */
     int emit_inline(int n)
     {
         (void)self;
 
-        if (g_nodes[n].kind == N_DECL) {
-            fprintf(g_out, "int %s", g_nodes[n].text);
-            if (g_nodes[n].a >= 0) {
+        if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_FIELD) {
+            fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
+            if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
+            if (g_nodes[n].kind == N_DECL && g_nodes[n].a >= 0) {
                 fputs(" = ", g_out);
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             }
             return 0;
         }
         if (g_nodes[n].kind == N_ASSIGN) {
-            fputs(g_nodes[n].text, g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fputs(" = ", g_out);
-            return self->emit_expr(g_nodes[n].a);
+            return self->emit_expr(g_nodes[n].b);
         }
         if (g_nodes[n].kind == N_EXPR) return self->emit_expr(g_nodes[n].a);
         if (g_nodes[n].kind == N_POST) {
-            fprintf(g_out, "%s%s", g_nodes[n].text,
-                    g_nodes[n].aux == P_INC ? "++" : "--");
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(g_nodes[n].aux == P_INC ? "++" : "--", g_out);
             return 0;
         }
         return self->fail("cannot inline this node");
     }
 
-    /* A condition must not gain a second pair of parentheses: clang warns about
-       `if ((a == b))` under -Wall, and D34 requires a warning-free build. */
     int emit_cond(int n)
     {
         const char *op;
@@ -1272,7 +1642,36 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_VAR) {
-            fputs(g_nodes[n].text, g_out);
+            fputs(g_nodes[n].text2, g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_MEMBER) {
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fprintf(g_out, ".%s", g_nodes[n].text2);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_ARROW) {
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fprintf(g_out, "->%s", g_nodes[n].text2);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_INDEX) {
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs("[", g_out);
+            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            fputs("]", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_ADDR) {
+            fputs("(&", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_DEREF) {
+            fputs("(*", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(")", g_out);
             return 0;
         }
         if (g_nodes[n].kind == N_BIN) {
@@ -1301,7 +1700,7 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_CALL) {
-            fprintf(g_out, "%s(", g_nodes[n].text);
+            fprintf(g_out, "%s(", g_nodes[n].text2);
             c = g_nodes[n].a;
             while (c >= 0) {
                 if (self->emit_expr(c) != 0) return -1;
@@ -1314,8 +1713,6 @@ impl EmitOps for Ast {
         return self->fail("unknown expression node");
     }
 
-    /* The header carries the same banner and guard as the old pipeline; 9.2 has
-       no exported types yet, so there is nothing between the guard and `#endif`. */
     int write_header(const char *outc)
     {
         char path[MAX_PATH];

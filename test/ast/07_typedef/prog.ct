@@ -1,0 +1,16 @@
+#include <stdio.h>
+
+typedef struct {
+    int x;
+} Box;
+
+typedef int myint;
+
+int main(void)
+{
+    Box b;
+    myint n = 9;
+    b.x = 4;
+    printf("%d %d\n", b.x, n);
+    return 0;
+}

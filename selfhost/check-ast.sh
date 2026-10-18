@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# check-ast.sh - Phase 9.1/9.2: the AST compiler's behavioural gate.
+# check-ast.sh - Phase 9.1–9.3: the AST compiler's behavioural gate.
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
 # (selfhost/ast/main.ct, D30: a separate tree in parallel with the old
@@ -100,6 +100,16 @@ for d in test/ast/*/; do
     fi
     ok "$name"
 done
+
+echo
+echo "== corpus unit (no main: compile only) =="
+if "$work/ct-ast" test/cases/03_passthrough.ct -o "$work/p03.c" \
+        >"$work/p03.out" 2>"$work/p03.err" \
+   && "$CC" -Wall -Wextra -std=c99 -c "$work/p03.c" -o "$work/p03.o" 2>"$work/p03.cc"; then
+    ok "03_passthrough (struct/pointer/array shapes)"
+else
+    bad "03_passthrough" "$(cat "$work/p03.err" "$work/p03.cc")"
+fi
 
 echo
 echo "== negative case =="

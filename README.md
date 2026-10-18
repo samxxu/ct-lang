@@ -3,7 +3,7 @@
 > **v0.8.0** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**；**Phase 9（AST 版编译器，新主线）设计已冻结（2026-10-18，D28–D37 全部定案），9.1–9.2 已落地**——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**；**Phase 9（AST 版编译器，新主线）设计已冻结（2026-10-18，D28–D37 全部定案），9.1–9.3 已落地**——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -275,7 +275,7 @@ python3 editors/vscode/test/check-grammar.py   # 20 项断言；退出码 0 = �
 | `selfhost/check-archive.sh` | Phase 2+ 的对差 oracle：把 `test/archive/**` 中 Phase 0.3 移出的越位特性 fixture 当 ratchet，逐字节比对 CT 侧恢复出的特性（namespace / 多文件 / `import` / `Drop` / 诊断）；第 3b 步另建 L2 并要求零警告 |
 | `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
 | `test/pkg/run.sh` | Phase 8.1/8.2/8.3 包管理器：构建 L0→L1→L2，验证 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock`（本地包与 git 包；git 用例用本地 git 仓库作 registry，含无 `git` 硬报错），以及 `ct install` 的摘要校验、清单覆盖、建议命令，并证明 `ct build` 可用 `vendor/` 编译 |
-| `selfhost/check-ast.sh` | Phase 9.1/9.2 AST 编译器：构建 L0→L1→L2→`ct-ast`，对 `test/ast/*/prog.ct` 做「编译 → cc 零警告 → 运行 → 与 `prog.expected.out` 比对」；`test/ast/errors/` 的负例必须非零退出 |
+| `selfhost/check-ast.sh` | Phase 9.1–9.3 AST 编译器：构建 L0→L1→L2→`ct-ast`，对 `test/ast/*/prog.ct` 做「编译 → cc 零警告 → 运行 → 与 `prog.expected.out` 比对」；`test/ast/errors/` 的负例必须非零退出 |
 | `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面六个 CT / 包管理 / AST 脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
 
 ```bash
@@ -386,7 +386,7 @@ shape, the banner rename). **Phase 8 (package management and distribution, `ct-p
 complete: slices 8.1–8.3 have landed (`ct get` handles local directory sources and git sources, pinning
 commits and content digests; `ct install` verifies offline and prints the suggested build command), and
 the phase closed with the bump to **v0.8.0**. **Phase 9 (the AST-based compiler, the new mainline) is
-design-frozen as of 2026-10-18 (D28–D37 all decided) and slices 9.1–9.2 have landed** — see
+design-frozen as of 2026-10-18 (D28–D37 all decided) and slices 9.1–9.3 have landed** — see
 [docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the entry command
@@ -706,7 +706,7 @@ after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 | `selfhost/check-archive.sh` | the Phase 2+ diff oracle: treats the over-reach fixtures Phase 0.3 moved into `test/archive/**` as a ratchet, diffing byte for byte the features the CT side has restored (namespace / multi-file / `import` / `Drop` / diagnostics); step 3b rebuilds L2 and requires it to be warning-free |
 | `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
 | `test/pkg/run.sh` | Phase 8.1/8.2/8.3 package manager: builds L0→L1→L2 and exercises `ct get` — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock`, for both local and git packages (the git cases use a local git repo as the registry and assert the no-`git` hard failure) — plus `ct install`'s digest verification, manifest coverage and suggested command, proving `ct build` compiles against `vendor/` |
-| `selfhost/check-ast.sh` | Phase 9.1/9.2 AST compiler: builds L0→L1→L2→`ct-ast` and runs every `test/ast/*/prog.ct` through "compile → warning-free cc → run → compare with `prog.expected.out`"; the `test/ast/errors/` negative must exit non-zero |
+| `selfhost/check-ast.sh` | Phase 9.1–9.3 AST compiler: builds L0→L1→L2→`ct-ast` and runs every `test/ast/*/prog.ct` through "compile → warning-free cc → run → compare with `prog.expected.out`"; the `test/ast/errors/` negative must exit non-zero |
 | `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the six CT / package / AST scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
 
 ```bash

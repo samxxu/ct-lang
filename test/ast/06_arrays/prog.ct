@@ -1,0 +1,16 @@
+#include <stdio.h>
+
+int main(void)
+{
+    int a[3];
+    int i;
+    a[0] = 5;
+    a[1] = 6;
+    a[2] = 7;
+    i = 0;
+    while (i < 3) {
+        printf("%d\n", a[i]);
+        i++;
+    }
+    return 0;
+}
