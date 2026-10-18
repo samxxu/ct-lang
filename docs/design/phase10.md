@@ -2,8 +2,8 @@
 
 > 中文 · [English](#english)
 >
-> 状态：**设计草案（2026-10-19，待用户确认）**。Phase 9 已把 `selfhost/ast/main.ct`（下称
-> **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
+> 状态：**10.1 已落地（2026-10-19）**；10.2–10.7 待推进。D38–D45 已按建议值确认。
+> Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
 > Phase 10 的目标是补齐 ct-ast 相对 L2 的能力缺口，并把安装入口切过去；旧线保留为回归 oracle。
 
 ---
@@ -32,10 +32,11 @@
 | --- | --- | --- | --- |
 | compile：`-o` / 默认输出名 / `#line` / `--emit-map` | ✅ | ✅ | — |
 | build：多文件 / `import` / `pub` / `namespace` / `--ns-root` / `-I` | ✅ | ✅ | — |
-| 身份：二进制名为 `ct` 时 `-v`/usage 打印 `ct` | ✅ | ❌ 固定打印 `ct-ast` | 10.1 |
-| `--diagnostics=text\|json`（接受、校验、切换格式） | ✅ | ❌ 未知选项 | 10.1 |
-| `--std=c99\|gnu99` | ✅ | ❌ 未知选项 | 10.1 |
-| compile 模式接受 `-I` | ✅（静默接受） | ❌ 未知选项 | 10.1 |
+| 身份：二进制名为 `ct` 时 `-v`/usage 打印 `ct` | ✅ | ✅（`argv[0]` basename：`ct` / `ctc` / 开发名 `ct-ast`） | — |
+| `--diagnostics=text\|json`（接受、校验、切换格式） | ✅ | ✅ 接受与校验（告警本体在 10.3） | 10.3 |
+| `--std=c99\|gnu99` | ✅ | ✅（build 的建议 `cc` 命令带上目标标准） | — |
+| compile 模式接受 `-I` | ✅（静默接受） | ✅ | — |
+| build 打印建议 `cc` 命令 | ✅ | ✅（10.1 补齐，含 `-std`） | — |
 | 语义诊断：重复 trait / struct 报错 | ✅ | ❌ | 10.2 |
 | 语义诊断：impl 签名不一致告警（text/json） | ✅ | ❌ | 10.2 |
 | 多错误恢复（`MAX_ERRORS=20` + 产物清理 + `N error(s) generated`） | ✅ | ❌ 首错即停 | 10.4 |
@@ -50,7 +51,7 @@
 
 | 切片 | 内容 | 出口 |
 | --- | --- | --- |
-| 10.1 | CLI 与身份对齐：`--diagnostics`、`--std`、compile `-I`、`argv[0]` 身份、usage 文本 | `check-ast.sh` 增加 CLI 用例，文本与 L2 一致（按身份） |
+| 10.1 | CLI 与身份对齐：`--diagnostics`、`--std`、compile `-I`、`argv[0]` 身份、usage 文本 | ✅ **已落地（2026-10-19）**：`g_prog` 按 `argv[0]` 取 `ct` / `ctc` / `ct-ast`；两模式接受并校验 `--diagnostics=text\|json`（`g_diag_json` 留给 10.3）与 `--std=c99\|gnu99`；compile 模式接受 `-I`；build 补发建议 `cc -std=… <unit>.c… -o a.out`。`check-ast.sh` 新增 8 项 CLI/身份断言（64 → **72**） |
 | 10.2 | 语义诊断：重复定义报错、签名不一致告警（text/json） | `test/modules/dup_*`、`sig_mismatch*` 在 ct-ast 下逐字节比对通过 |
 | 10.3 | 内存：Drop / AutoDrop / 泄漏分析 | `test/modules/autodrop*`、`leak*` 在 ct-ast 下逐字节比对通过 |
 | 10.4 | 多错误恢复 | 多错误语料在 ct-ast 下输出与 L2 一致（`N error(s) generated` + 产物清理） |
@@ -112,10 +113,11 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | --- | --- | --- | --- |
 | compile: `-o`, default name, `#line`, `--emit-map` | ✅ | ✅ | — |
 | build: multi-file, `import`, `pub`, `namespace`, `--ns-root`, `-I` | ✅ | ✅ | — |
-| identity: a binary named `ct` prints `ct` in `-v`/usage | ✅ | ❌ always `ct-ast` | 10.1 |
-| `--diagnostics=text\|json` (accept, validate, switch format) | ✅ | ❌ unknown option | 10.1 |
-| `--std=c99\|gnu99` | ✅ | ❌ unknown option | 10.1 |
-| compile mode accepts `-I` | ✅ (ignored) | ❌ unknown option | 10.1 |
+| identity: a binary named `ct` prints `ct` in `-v`/usage | ✅ | ✅ (`argv[0]` basename: `ct` / `ctc` / the dev name `ct-ast`) | — |
+| `--diagnostics=text\|json` (accept, validate, switch format) | ✅ | ✅ accepted and validated (the warnings themselves land in 10.3) | 10.3 |
+| `--std=c99\|gnu99` | ✅ | ✅ (the suggested `cc` command carries the target standard) | — |
+| compile mode accepts `-I` | ✅ (ignored) | ✅ | — |
+| build prints the suggested `cc` command | ✅ | ✅ (added in 10.1, `-std` included) | — |
 | semantic check: duplicate trait / struct is an error | ✅ | ❌ | 10.2 |
 | semantic check: impl signature mismatch warning (text/json) | ✅ | ❌ | 10.2 |
 | multi-error recovery (`MAX_ERRORS=20`, artifact cleanup, `N error(s) generated`) | ✅ | ❌ first error stops | 10.4 |
@@ -130,7 +132,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 
 | Slice | Content | Exit |
 | --- | --- | --- |
-| 10.1 | CLI and identity: `--diagnostics`, `--std`, compile `-I`, `argv[0]` identity, usage text | new `check-ast.sh` CLI cases, text identical to L2 per identity |
+| 10.1 | CLI and identity: `--diagnostics`, `--std`, compile `-I`, `argv[0]` identity, usage text | ✅ **landed (2026-10-19)**: `g_prog` comes from `argv[0]` (`ct` / `ctc` / `ct-ast`); both modes accept and validate `--diagnostics=text\|json` (`g_diag_json` is reserved for 10.3) and `--std=c99\|gnu99`; compile mode accepts `-I`; build prints `cc -std=… <unit>.c… -o a.out`. `check-ast.sh` gained 8 CLI/identity assertions (64 → **72**) |
 | 10.2 | semantic diagnostics: duplicate definitions error, signature-mismatch warning (text/json) | `test/modules/dup_*` and `sig_mismatch*` pass byte for byte under ct-ast |
 | 10.3 | memory: Drop / AutoDrop / leak analysis | `test/modules/autodrop*` and `leak*` pass byte for byte under ct-ast |
 | 10.4 | multi-error recovery | multi-error fixtures produce the same output as L2 (cleanup + `N error(s) generated`) |
