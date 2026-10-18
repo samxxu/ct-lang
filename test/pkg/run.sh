@@ -11,6 +11,8 @@
 # Phase 8.3 adds `ct install`, which checks the vendored tree against the lock's
 # content digests and the manifest's dependencies, then prints a `ct build`
 # command; a tampered tree, a missing package or an uncovered dependency fails.
+# The error branches of both subcommands are covered too: no or empty `ct.lock`,
+# a missing or incomplete `ct.pkg`, a malformed `dep` and bad `ct get` arguments.
 #
 # Usage:  bash test/pkg/run.sh
 #         CC=gcc bash test/pkg/run.sh
@@ -149,6 +151,18 @@ fi
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
 
 echo
+echo "== ct install rejects a malformed dep =="
+printf 'name = demo\nversion = 0.1.0\ndep = @^0.1.0\n' >"$work/proj/ct.pkg"
+if ( cd "$work/proj" && "$work/l2" install >"$work/id.out" 2>"$work/id.err" ); then
+    bad "install bad dep" "expected a non-zero exit"
+elif grep -Fq "bad dependency" "$work/id.err"; then
+    ok "rejects a dep with no path"
+else
+    bad "install bad dep" "wrong diagnostic: $(cat "$work/id.err")"
+fi
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
+
+echo
 echo "== ct build compiles against vendor/ =="
 mkdir -p "$work/proj/out"
 if ( cd "$work/proj" && "$work/l2" build -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
@@ -181,6 +195,65 @@ elif grep -Eq "cannot (open|read)" "$work/e.err"; then
     ok "reports a missing manifest"
 else
     bad "no-manifest" "wrong diagnostic: $(cat "$work/e.err")"
+fi
+
+echo
+echo "== ct install: missing or empty ct.lock =="
+mkdir -p "$work/nolock"
+printf 'name = demo\nversion = 0.1.0\n' >"$work/nolock/ct.pkg"
+if ( cd "$work/nolock" && "$work/l2" install >"$work/nl.out" 2>"$work/nl.err" ); then
+    bad "install no-lock" "expected a non-zero exit"
+elif grep -Fq "no './ct.lock'" "$work/nl.err"; then
+    ok "asks for ct.lock when it is missing"
+else
+    bad "install no-lock" "wrong diagnostic: $(cat "$work/nl.err")"
+fi
+: >"$work/nolock/ct.lock"
+if ( cd "$work/nolock" && "$work/l2" install >"$work/el.out" 2>"$work/el.err" ); then
+    bad "install empty-lock" "expected a non-zero exit"
+elif grep -Fq "ct.lock is empty" "$work/el.err"; then
+    ok "rejects an empty ct.lock"
+else
+    bad "install empty-lock" "wrong diagnostic: $(cat "$work/el.err")"
+fi
+
+echo
+echo "== ct install without ct.pkg =="
+mkdir -p "$work/nomanifest"
+if ( cd "$work/nomanifest" && "$work/l2" install >"$work/nm.out" 2>"$work/nm.err" ); then
+    bad "install no-manifest" "expected a non-zero exit"
+elif grep -Fq "cannot open './ct.pkg'" "$work/nm.err"; then
+    ok "reports a missing manifest"
+else
+    bad "install no-manifest" "wrong diagnostic: $(cat "$work/nm.err")"
+fi
+
+echo
+echo "== ct install with an incomplete manifest =="
+printf 'name = demo\n' >"$work/nomanifest/ct.pkg"
+if ( cd "$work/nomanifest" && "$work/l2" install >"$work/ni.out" 2>"$work/ni.err" ); then
+    bad "install incomplete-manifest" "expected a non-zero exit"
+elif grep -Fq "cannot read './ct.pkg'" "$work/ni.err"; then
+    ok "rejects a manifest without a version"
+else
+    bad "install incomplete-manifest" "wrong diagnostic: $(cat "$work/ni.err")"
+fi
+
+echo
+echo "== ct get: argument errors =="
+if ( cd "$work/proj" && "$work/l2" get --bogus >"$work/ga.out" 2>"$work/ga.err" ); then
+    bad "get unknown-option" "expected a non-zero exit"
+elif grep -Fq "unknown option '--bogus'" "$work/ga.err"; then
+    ok "rejects an unknown option"
+else
+    bad "get unknown-option" "wrong diagnostic: $(cat "$work/ga.err")"
+fi
+if ( cd "$work/proj" && "$work/l2" get >"$work/gn.out" 2>"$work/gn.err" ); then
+    bad "get no-spec" "expected a non-zero exit"
+elif grep -Fq "usage:" "$work/gn.err"; then
+    ok "prints usage without a spec"
+else
+    bad "get no-spec" "wrong diagnostic: $(cat "$work/gn.err")"
 fi
 
 echo

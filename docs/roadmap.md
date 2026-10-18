@@ -87,8 +87,8 @@
 - 包的**接口边界天然是 trait**：一个包 = 一组 `.ct` + 对外暴露的 `.h`（trait 声明）。这条决定了包管理器与 registry 能长成什么样。
 - **设计冻结（2026-10-18）**：D21–D27 全部定案（清单 `ct.pkg` / git registry + 本地源 / MVS / `get` + `install` / 新 `PkgOps` trait / FNV-1a）。实现按 8.1（清单 + 本地源）→ 8.2（git 源）→ 8.3（`install` 校验）推进，见 [design/phase8.md](design/phase8.md) §11。
 - **8.1 已落地（2026-10-18）**：`ct get <local-dir>[@<range>]` 解析 `ct.pkg`、递归处理本地 `dep`、复制到 `vendor/<name>/`、按拓扑序写 `ct.lock`。新增 `PkgOps` trait（`driver.ct`），零网络零子进程；`test/pkg/run.sh` 已接入 `check-all.sh` 第 7 关。
-- **8.2 已落地（2026-10-18）**：`ct get` 增加 **git 源**——spec 以 `.` / `/` / `file://` 开头为本地目录（复制），其余为 git 源（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`，默认 `https://github.com/ct-pkg`）。`git` 是**唯一**子进程调用点，且只由 `ct get` 触发；`git clone/fetch` 进 `~/.cache/ct-pkg/<name>/`，按 **MVS** 取满足范围的最低 tag（可带/不带 `v`；无 tag 且范围为空时回退默认分支 HEAD），`ct.lock` 记为 `name ver git <commit> <digest>`。无 `git` 时 git 源硬报错并提示安装，本地源照常可用（D26）。`test/pkg/run.sh` 扩到 20 项断言（含本地 git 仓库作 registry 的离线用例）。
-- **8.3 已落地（2026-10-18）**：`ct.lock` 统一为五列 `name ver kind ref <digest>`（`digest` 为**逐文件加法折叠**的 FNV-1a，顺序无关、只做变更检测，与 `.ctcache` 键同源；见 D27）。`ct install` **离线**校验每个锁定包的 `vendor/<name>` 存在且摘要相符，并要求工程 `ct.pkg` 的每条 `dep` 都被锁覆盖且在范围内；全部通过即打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`，与 `ct build` 的「只出 C」一致，D24）。摘要不符 / 缺包 / 未覆盖依赖均硬报错。`test/pkg/run.sh` 另证 `ct build` 可用 `vendor/` 编译（导入 vendored 包并运行）。`ct install` 零网络零子进程。
+- **8.2 已落地（2026-10-18）**：`ct get` 增加 **git 源**——spec 以 `.` / `/` / `file://` 开头为本地目录（复制），其余为 git 源（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`，默认 `https://github.com/ct-pkg`）。`git` 是**唯一**子进程调用点，且只由 `ct get` 触发；`git clone/fetch` 进 `~/.cache/ct-pkg/<name>/`，按 **MVS** 取满足范围的最低 tag（可带/不带 `v`；无 tag 且范围为空时回退默认分支 HEAD），`ct.lock` 记为 `name ver git <commit> <digest>`。无 `git` 时 git 源硬报错并提示安装，本地源照常可用（D26）。`test/pkg/run.sh` 扩到 14 项断言（含本地 git 仓库作 registry 的离线用例）。
+- **8.3 已落地（2026-10-18）**：`ct.lock` 统一为五列 `name ver kind ref <digest>`（`digest` 为**逐文件加法折叠**的 FNV-1a，顺序无关、只做变更检测，与 `.ctcache` 键同源；见 D27）。`ct install` **离线**校验每个锁定包的 `vendor/<name>` 存在且摘要相符，并要求工程 `ct.pkg` 的每条 `dep` 都被锁覆盖且在范围内；全部通过即打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`，与 `ct build` 的「只出 C」一致，D24）。摘要不符 / 缺包 / 未覆盖依赖 / 清单不完整 / 空锁均硬报错。`test/pkg/run.sh` 扩到 27 项断言（含 install/get 的错误分支负例），另证 `ct build` 可用 `vendor/` 编译（导入 vendored 包并运行）。`ct install` 零网络零子进程。
 
 #### 包管理器的命名（已定：`ct-pkg`）
 
@@ -922,15 +922,16 @@ Migration checklist (executed from the over-reach phase on; updated 2026-10-17):
   `ct get`; `git clone/fetch` fills `~/.cache/ct-pkg/<name>/`, **MVS** picks the lowest tag satisfying
   the range (the leading `v` optional; with no tag and an empty range it falls back to the default
   branch tip), and `ct.lock` records `name ver git <commit> <digest>`. Without `git`, a git source fails hard
-  with an install hint while local sources keep working (D26). `test/pkg/run.sh` grew to 20 assertions,
+  with an install hint while local sources keep working (D26). `test/pkg/run.sh` grew to 14 assertions,
   including an offline local-git-repo registry.
 - **8.3 landed (2026-10-18)**: `ct.lock` is a uniform five columns `name ver kind ref <digest>`, where the
   digest is an **additive per-file FNV-1a fold** (order-independent, change detection only, the same fold
   as the `.ctcache` key — D27). `ct install` checks **offline** that every locked `vendor/<name>` exists
   with a matching digest and that every manifest `dep` is covered by the lock at a satisfying version,
   then prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`, matching
-  `ct build`'s "C only" stance — D24). A mismatch, a missing package or an uncovered dependency fails hard,
-  and `test/pkg/run.sh` additionally proves `ct build` compiles against `vendor/`. `ct install` is
+  `ct build`'s "C only" stance — D24). A mismatch, a missing package, an uncovered dependency, an
+  incomplete manifest or an empty lock fails hard; `test/pkg/run.sh` grew to 27 assertions (including those
+  error branches) and additionally proves `ct build` compiles against `vendor/`. `ct install` is
   network-free and process-free.
 
 #### Naming the package manager (decided: `ct-pkg`)
