@@ -104,8 +104,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 - **版本语义**：SemVer 子集（`MAJOR.MINOR.PATCH` + 可选 `-pre`）；范围只支持 `^x.y.z`、`~x.y.z`、精确值。
 - **解析策略**：**最小版本选择（MVS，Go 式）**——每个依赖取满足所有约束的最低版本。它不需要回溯搜索，
   结果确定，和「不做复杂求解」的非目标一致。
-- **锁文件 `ct.lock`**：每个依赖一行，记录 `name`、解析到的 `commit`、内容摘要、以及它自己的依赖边。
-  摘要复用 `CacheOps::digest` 的折叠方式（FNV-1a，D27 已定），使锁文件与 `.ctcache` 键可互相验证。
+- **锁文件 `ct.lock`**：每个依赖一行、**五列** `name ver kind ref digest`——`kind` 为 `dir`（`ref` 是规范化后的源目录路径）或 `git`（`ref` 是 commit id），末列是整棵包树的 FNV-1a 折叠摘要（D27），复用 `CacheOps::digest` 的折叠方式，使锁文件与 `.ctcache` 键可互相验证。**锁文件不记录依赖边**：解析顺序已保证依赖先于依赖者写入；`ct install` 用工程清单的 `dep` 行核对覆盖。
   **FNV-1a 只做变更检测，不承担安全校验**；SHA-256 留到需要签名/供应链安全时再引入。
 - **可重复构建**：`ct build` 只读 `vendor/` 与 `ct.lock`；缺锁或摘要不符即失败（不静默重解析）。
 
@@ -247,8 +246,12 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 ### 5. Resolution and lock file (D23, decided: MVS + SemVer subset)
 
 SemVer subset with `^`, `~` and exact ranges; **minimal version selection** (Go-style), which is
-deterministic and needs no backtracking. `ct.lock` records each dependency's resolved commit, content
-digest and dependency edges, reusing the FNV-1a fold from `CacheOps::digest` (**D27 decided**).
+deterministic and needs no backtracking. `ct.lock` holds **one five-column line per dependency**,
+`name ver kind ref digest`: `kind` is `dir` (`ref` = the normalised source directory) or `git`
+(`ref` = the commit id), and the last column is the FNV-1a fold of the whole package tree, reusing the
+`CacheOps::digest` fold (**D27 decided**). **The lock records no dependency edges**: resolution order
+already writes dependencies before their dependents, and `ct install` checks coverage against the
+project manifest's `dep` lines.
 **FNV-1a is change detection only, not a security digest**; SHA-256 is deferred until a
 signing/supply-chain requirement appears. `ct build` reads only `vendor/` and `ct.lock` and fails on a
 missing lock or digest mismatch.

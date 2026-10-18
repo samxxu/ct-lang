@@ -110,3 +110,20 @@
 验证（2026-10-18）：`check-archive` 39 pass / 0 regression（新增 7 个 designed 用例）；`ct-tour` OK（含新增身份断言）；手工三件套通过。
 
 验证（2026-10-18，TEST-5/TEST-6 收尾）：`check-archive` designed **43 pass / 0 regression**（新增 `map_file_build` / `map_unwritable` / `too_many_inputs` / `too_many_inc`）；`bash selfhost/check-all.sh` 七道硬关卡全绿。
+
+## Phase 8/9 复审（2026-10-19，锚点 `8010875`）
+
+只读复审后按发现修复。本轮均为「实现或文档与已冻结设计不一致」的缺陷修复（`selfhost/src/**` 只修 bug，不加能力）：
+
+| 项 | 处理 |
+| --- | --- |
+| `ct get` 未回写工程 `ct.pkg`，违背 D24「`get` 写清单与锁」 | ✅ `get` 成功后按**包名**去重地补 `dep = <spec>`；目录无 `ct.pkg` 时不报错（仍 vendor + 写锁） |
+| `ct get` 与 `ct install` 包名口径不一致（一个用清单 `name`、一个用 spec 尾段） | ✅ 抽出 `dep_name`：本地源读其清单 `name`，git 源用 spec 尾段；`get_git` 拒绝与源名不符的清单，两条路径从此同口径 |
+| `ct install` 缺帮助与未知选项处理 | ✅ `-h/--help`、`-v/--version`、未知选项、多余操作数均显式处理 |
+| 顶层 usage 漏写 `install`，`get` 说明只写本地源 | ✅ 两条子命令均列入，`get` 说明补 git 源 |
+| AST 测试缺错误分支负例，且未钉自包含契约 | ✅ `test/ast/errors/` 增至 4 例（逐例断言 `ct-ast: line N:`），新增 compile 模式「`.c` 不 include 自己的 `.h`」断言；`check-ast.sh` **64 项全绿** |
+| glossary 滞后（banner / Phase / D1–D20 / 包管理器「未实现」） | ✅ 同步到 v0.9.0，补 Phase 8/9 词汇、D21–D37、`get` / `install` |
+| `check-all.sh` 头注释的层数、断言数与阶段号滞后 | ✅ 八层、20 项、Phase 9.1–9.7 |
+| `pre-ast-mainline` 实际指向 Phase 4/5 边界，而非文档所述 Phase 9 归档点 | ⏳ **待用户确认后重指**（建议 `db667df`：v0.8.0 收口，即 Phase 9 开始前的最后一个提交） |
+
+验证：`./test/run.sh` 118/118；`test/pkg/run.sh` **35/35**；`check-ast.sh` 64/64；`bash selfhost/check-all.sh` **8 关全绿**；手工三件套零警告通过。

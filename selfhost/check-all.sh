@@ -8,14 +8,15 @@
 # wrapper is that entry point.
 #
 # Hard gates (any failure fails the run):
-#   1. ./test/run.sh                             L0 suite (seven layers)
+#   1. ./test/run.sh                             L0 suite (eight layers)
 #   2. selfhost/check-goldens.sh                 L1 vs goldens, L1' loop, L1/L2 fixpoint
 #   3. selfhost/check-archive.sh                 L2 against the archived oracle (ratchet)
 #   4. selfhost/check-m2a.sh                     L1 output byte-identical with L0
 #   5. selfhost/ct-tour.sh                       end-to-end tour
-#   6. editors/vscode/test/check-grammar.py      editor grammar (19 assertions)
+#   6. editors/vscode/test/check-grammar.py      editor grammar (20 assertions)
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
-#   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.5b)
+#   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7: probes,
+#                                                corpus equivalence, fixpoint, negatives)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning

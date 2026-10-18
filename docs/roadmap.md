@@ -747,6 +747,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | CT `struct`（可 `use` trait） | `MAX_STRUCT` 32 | **2**（`SymTab`、`Pipe`） | **plain-C `typedef struct` 不计**——数据模型全走 typedef；AST 里「只装数据、不需派发」的类型应继续走 typedef |
 | CT `trait` | `MAX_TRAITS` 16 | **3**（`SymTabOps`、`PipeOps`、`RewriteOps`） | 每个 trait = 一套 vtable + 一个 iface 类型 |
 | 每 trait 方法 | `MAX_METHOD` 32 | `PipeOps` **31** | 已到边缘；新方法必须放对应的一半（这正是 `PipeOps` / `RewriteOps` 拆分的原因） |
+| AST 编译器的每 trait 方法 | `MAX_METHOD` 32 | `ParseOps` **32/32**（9.7 收口时） | **已满**：`selfhost/ast/main.ct` 的解析层不能再加方法；新逻辑需另开 trait，或放进 `ModuleOps`（12）与 `EmitOps`（29）。其余：`AstOps` 8、`SymOps` 17 |
 
 其它：`MAX_FIELDS` 32（每 struct 四张字段表各 32；**`Pipe` 已用 31/32**，Phase 5 新增 `in_body` / `ns_expect` 后只剩 1 个字段余量）、`MAX_VARS` 512、`MAX_SCOPE` 256、`MAX_DEPTH` 8（AST 类型递归走指针/接口，不消耗它）。
 
