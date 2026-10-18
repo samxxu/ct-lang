@@ -2657,7 +2657,8 @@ impl PipeOps for Pipe {
         (void)self;  /* a pure CLI helper; the receiver is not used */
         fprintf(stderr,
                 "usage: %s [compile] <input.ct> [-o <output.c>] [-I <dir>]\n"
-                "       %s build <input.ct>... [-o <outdir>] [-I <dir>]... [--ns-root <dir>]\n\n"
+                "       %s build <input.ct>... [-o <outdir>] [-I <dir>]... [--ns-root <dir>]\n"
+                "       %s get <local-dir>[@<range>]   (vendor a local package)\n\n"
                 "L1: compiles C-with-traits (.ct) into plain C, writing <output.c> and\n"
                 "a matching header <output.h>; if -o is omitted the output is <input>.c\n"
                 "next to the input. `build` compiles every input in multi-file mode (the\n"
@@ -2680,7 +2681,7 @@ impl PipeOps for Pipe {
                 "                  means stdout (compile only -- `build` writes a file)\n"
                 "  -v, --version   print the compiler version and exit\n"
                 "  -h, --help      print this help and exit\n",
-                prog, prog);
+                prog, prog, prog);
     }
 
     /* Derive the default C output path from the input ("a.ct" -> "a.c",

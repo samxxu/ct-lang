@@ -53,6 +53,7 @@ run_gate "3) CT: check-archive" bash selfhost/check-archive.sh
 run_gate "4) CT: check-m2a" bash selfhost/check-m2a.sh
 run_gate "5) CT: ct-tour" bash selfhost/ct-tour.sh
 run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
+run_gate "7) package manager (Phase 8.1)" bash test/pkg/run.sh
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then

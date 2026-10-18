@@ -17,6 +17,9 @@ import core;
 /* `stat` stamps a unit's mtime/size and `mkdir` creates the cache directory
    (Phase 6.3); both are POSIX, not a third-party dependency. */
 #include <sys/stat.h>
+/* Phase 8.1 vendors a local package by walking its directory; `opendir` is the
+   POSIX way to do that without a subprocess. */
+#include <dirent.h>
 
 /* This unit carries its own copy of the shared capacities (a generated header
    cannot carry a macro): the values must stay in lockstep with `core.ct`. */
@@ -651,6 +654,318 @@ static int compile_main(int argc, char **argv, const char *prog)
                            g_build.has_map ? g_build.map_path : NULL, NULL);
 }
 
+/* ---------------------------------------- package manager (Phase 8.1, local) */
+
+/* 8.1 covers the local half of ct-pkg: read a package's `ct.pkg`, check a version
+   range, resolve its local `dep` lines recursively and vendor the tree into
+   `./vendor/<name>`, recording what was taken in `./ct.lock`. No git and no
+   subprocess are involved yet -- 8.2 adds those behind the same entry. */
+#define MAX_PKG_DEPS   16
+#define MAX_PKG_PATH   (MAX_NAME * 4)
+#define MAX_PKG_DEPTH  8
+
+trait PkgOps {
+    int  read_manifest(const char *dir, char *name, size_t ncap, char *ver, size_t vcap,
+                       char deps[][MAX_PKG_PATH], int *ndeps);
+    int  version_parse(const char *s, int v[3]);
+    int  version_cmp(const int a[3], const int b[3]);
+    int  range_match(const char *range, const char *ver);
+    int  copy_file(const char *src, const char *dst);
+    int  copy_tree(const char *src, const char *dst);
+    int  split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap);
+    int  get_one(const char *dir, const char *range, int depth);
+    int  get(const char *spec, const char *root);
+    int  run(int argc, char **argv, const char *prog);
+}
+
+struct Pkg {
+    char lock[MAX_PKG_PATH * 8];
+    int  locklen;
+    int  nlocks;
+    /* packages already vendored in this run: a diamond dependency must not be
+       copied twice, and a cycle must terminate */
+    char seen[MAX_PKG_DEPS][MAX_NAME];
+    int  nseen;
+} use PkgOps;
+
+impl PkgOps for Pkg {
+    /* Parse `<dir>/ct.pkg`. The format is deliberately line-oriented: `#` starts
+       a comment, `key = value`, and `dep` may repeat. A missing name or version
+       is an error -- a package without either cannot be resolved. */
+    int read_manifest(const char *dir, char *name, size_t ncap, char *ver, size_t vcap,
+                      char deps[][MAX_PKG_PATH], int *ndeps) {
+        char path[MAX_PKG_PATH];
+        unsigned long len = 0;
+        char *src, *p, *end;
+        (void)self;
+
+        snprintf(path, sizeof path, "%s/ct.pkg", dir);
+        src = ct_read_file(path, &len);
+        if (!src) return -1;
+        name[0] = 0;
+        ver[0] = 0;
+        *ndeps = 0;
+        p = src;
+        end = src + len;
+        while (p < end) {
+            char *ls = p, *le = p, *eq, *k, *v, *ve;
+            size_t kl, vl;
+            while (le < end && *le != '\n') le++;
+            p = (le < end) ? le + 1 : end;
+            while (ls < le && (*ls == ' ' || *ls == '\t')) ls++;
+            if (ls == le || *ls == '#') continue;
+            eq = ls;
+            while (eq < le && *eq != '=') eq++;
+            if (eq == le) continue;
+            k = eq;
+            while (k > ls && (k[-1] == ' ' || k[-1] == '\t')) k--;
+            v = eq + 1;
+            while (v < le && (*v == ' ' || *v == '\t')) v++;
+            ve = le;
+            while (ve > v && (ve[-1] == ' ' || ve[-1] == '\t' || ve[-1] == '\r')) ve--;
+            kl = (size_t)(k - ls);
+            vl = (size_t)(ve - v);
+            if (kl == 4 && memcmp(ls, "name", 4) == 0) {
+                if (vl >= ncap) { free(src); return -1; }
+                memcpy(name, v, vl);
+                name[vl] = 0;
+            } else if (kl == 7 && memcmp(ls, "version", 7) == 0) {
+                if (vl >= vcap) { free(src); return -1; }
+                memcpy(ver, v, vl);
+                ver[vl] = 0;
+            } else if (kl == 3 && memcmp(ls, "dep", 3) == 0) {
+                if (*ndeps >= MAX_PKG_DEPS || vl + 1 >= MAX_PKG_PATH) { free(src); return -1; }
+                memcpy(deps[*ndeps], v, vl);
+                deps[*ndeps][vl] = 0;
+                (*ndeps)++;
+            }
+        }
+        free(src);
+        return (name[0] && ver[0]) ? 0 : -1;
+    }
+
+    int version_parse(const char *s, int v[3]) {
+        int n;
+        (void)self;
+        v[0] = 0; v[1] = 0; v[2] = 0;
+        n = sscanf(s, "%d.%d.%d", &v[0], &v[1], &v[2]);
+        return (n >= 1) ? 0 : -1;
+    }
+
+    int version_cmp(const int a[3], const int b[3]) {
+        int i;
+        (void)self;
+        for (i = 0; i < 3; i++) {
+            if (a[i] < b[i]) return -1;
+            if (a[i] > b[i]) return 1;
+        }
+        return 0;
+    }
+
+    /* `^x.y.z` = same major and >= x.y.z; `~x.y.z` = same major.minor and >= x.y.z;
+       anything else is an exact match. An empty range or `*` accepts any version. */
+    int range_match(const char *range, const char *ver) {
+        int v[3], lo[3], op = 0;
+        const char *r = range;
+        (void)self;
+
+        if (!range || !range[0] || strcmp(range, "*") == 0) return 1;
+        if (r[0] == '^') { op = 1; r++; }
+        else if (r[0] == '~') { op = 2; r++; }
+        if (self->version_parse(r, lo) != 0) return 0;
+        if (self->version_parse(ver, v) != 0) return 0;
+        if (op == 1) {
+            if (v[0] != lo[0]) return 0;
+            return self->version_cmp(v, lo) >= 0;
+        }
+        if (op == 2) {
+            if (v[0] != lo[0] || v[1] != lo[1]) return 0;
+            return self->version_cmp(v, lo) >= 0;
+        }
+        return self->version_cmp(v, lo) == 0;
+    }
+
+    int copy_file(const char *src, const char *dst) {
+        FILE *in, *out;
+        char buf[4096];
+        size_t n;
+        (void)self;
+
+        in = fopen(src, "rb");
+        if (!in) return -1;
+        out = fopen(dst, "wb");
+        if (!out) { fclose(in); return -1; }
+        while ((n = fread(buf, 1, sizeof buf, in)) > 0) {
+            if (fwrite(buf, 1, n, out) != n) { fclose(in); fclose(out); return -1; }
+        }
+        fclose(in);
+        if (fclose(out) != 0) return -1;
+        return 0;
+    }
+
+    /* Copy a package directory. Build caches and VCS metadata are not package
+       content, so they are skipped rather than vendored. */
+    int copy_tree(const char *src, const char *dst) {
+        DIR *d;
+        struct dirent *e;
+        struct stat st;
+        char s[MAX_PKG_PATH], t[MAX_PKG_PATH];
+        int rc = 0;
+        (void)self;
+
+        if (mkdir(dst, 0755) != 0) {
+            struct stat ds;
+            if (stat(dst, &ds) != 0 || !S_ISDIR(ds.st_mode)) return -1;
+        }
+        d = opendir(src);
+        if (!d) return -1;
+        while ((e = readdir(d)) != NULL) {
+            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+            if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
+            if (strcmp(e->d_name, ".ctcache") == 0) continue;
+            snprintf(s, sizeof s, "%s/%s", src, e->d_name);
+            snprintf(t, sizeof t, "%s/%s", dst, e->d_name);
+            if (stat(s, &st) != 0) { rc = -1; break; }
+            if (S_ISDIR(st.st_mode)) {
+                if (self->copy_tree(s, t) != 0) { rc = -1; break; }
+            } else if (S_ISREG(st.st_mode)) {
+                if (self->copy_file(s, t) != 0) { rc = -1; break; }
+            }
+        }
+        closedir(d);
+        return rc;
+    }
+
+    /* `path[@range]`: the last `@` separates the two, so a path may contain one. */
+    int split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap) {
+        const char *at = NULL, *q;
+        size_t n;
+        (void)self;
+
+        for (q = spec; *q; q++)
+            if (*q == '@') at = q;
+        if (!at) {
+            if (strlen(spec) >= pcap) return -1;
+            snprintf(path, pcap, "%s", spec);
+            range[0] = 0;
+            return 0;
+        }
+        n = (size_t)(at - spec);
+        if (n >= pcap || strlen(at + 1) >= rcap) return -1;
+        memcpy(path, spec, n);
+        path[n] = 0;
+        snprintf(range, rcap, "%s", at + 1);
+        return 0;
+    }
+
+    int get_one(const char *dir, const char *range, int depth) {
+        char name[MAX_NAME], ver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        char dst[MAX_PKG_PATH];
+        int ndeps = 0, i, w;
+        (void)self;
+
+        if (depth > MAX_PKG_DEPTH) {
+            fprintf(stderr, "ctc: dependency chain is too deep at '%s'\n", dir);
+            return -1;
+        }
+        if (self->read_manifest(dir, name, sizeof name, ver, sizeof ver, deps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", dir);
+            return -1;
+        }
+        if (!self->range_match(range, ver)) {
+            fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", name, ver, range);
+            return -1;
+        }
+        for (i = 0; i < self->nseen; i++)
+            if (strcmp(self->seen[i], name) == 0) return 0;
+        if (self->nseen >= MAX_PKG_DEPS) {
+            fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
+            return -1;
+        }
+        snprintf(self->seen[self->nseen], MAX_NAME, "%s", name);
+        self->nseen++;
+
+        /* dependencies first: the lock file is written in resolution order, so a
+           reader can vendor them back without re-running the resolver */
+        for (i = 0; i < ndeps; i++) {
+            char dpath[MAX_PKG_PATH], drange[32], sub[MAX_PKG_PATH];
+            if (self->split_spec(deps[i], dpath, sizeof dpath, drange, sizeof drange) != 0) return -1;
+            if (snprintf(sub, sizeof sub, "%s/%s", dir, dpath) >= (int)sizeof sub) return -1;
+            if (self->get_one(sub, drange, depth + 1) != 0) return -1;
+        }
+
+        if (snprintf(dst, sizeof dst, "./vendor/%s", name) >= (int)sizeof dst) return -1;
+        if (self->copy_tree(dir, dst) != 0) {
+            fprintf(stderr, "ctc: cannot vendor '%s' from '%s'\n", name, dir);
+            return -1;
+        }
+        w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
+                     "%s %s %s\n", name, ver, dir);
+        if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
+        self->locklen += w;
+        self->nlocks++;
+        return 0;
+    }
+
+    int get(const char *spec, const char *root) {
+        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
+        FILE *f;
+
+        self->locklen = 0;
+        self->nseen = 0;
+        self->nlocks = 0;
+        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return 1;
+        /* `copy_tree` creates the package directory itself, not its parent. */
+        if (mkdir("./vendor", 0755) != 0) {
+            struct stat ds;
+            if (stat("./vendor", &ds) != 0 || !S_ISDIR(ds.st_mode)) {
+                fprintf(stderr, "ctc: cannot create 'vendor/'\n");
+                return 1;
+            }
+        }
+        if (path[0] == '/') snprintf(full, sizeof full, "%s", path);
+        else snprintf(full, sizeof full, "%s/%s", root, path);
+        if (self->get_one(full, range, 0) != 0) return 1;
+
+        f = fopen("./ct.lock", "w");
+        if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        fputs(self->lock, f);
+        if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        printf("vendored %d package(s)\n", self->nlocks);
+        return 0;
+    }
+
+    int run(int argc, char **argv, const char *prog) {
+        const char *spec = NULL;
+        int i;
+
+        for (i = 0; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: %s get <local-dir>[@<range>]\n", prog);
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("%s v%s\n", g_ct_prog, CTC_VERSION);
+                return 0;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            spec = argv[i];
+        }
+        if (!spec) {
+            fprintf(stderr, "usage: %s get <local-dir>[@<range>]\n", prog);
+            return 1;
+        }
+        return self->get(spec, ".");
+    }
+}
+
+/* The instance lives after the impl: its vptr initialiser needs the vtable
+   forward declaration the emitter places with the impl. */
+static struct Pkg g_pkg;
+
 int main(int argc, char **argv)
 {
     int first = 1;
@@ -664,6 +979,10 @@ int main(int argc, char **argv)
        several units in multi-file mode. */
     if (first < argc && strcmp(argv[first], "build") == 0)
         return build_main(argc - first - 1, argv + first + 1, g_ct_prog);
+
+    /* Phase 8.1: `ct get <local-dir>[@<range>]` vendors a local package. */
+    if (first < argc && strcmp(argv[first], "get") == 0)
+        return g_pkg.run(argc - first - 1, argv + first + 1, g_ct_prog);
 
     if (first < argc && strcmp(argv[first], "compile") == 0)
         first++;

@@ -52,6 +52,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`/`.h` 并打印建议 `cc` 命令；在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
 | `ctc … --std=c99\|gnu99` | 目标 C 标准（默认 `c99`）；暂无产物差异，`build` 将其写入建议的 `cc` 命令，其他值硬报错（Phase 6.4） |
 | `ctc … -I <dir>` | 追加一个导入搜索根（可重复，最多 16 个；Phase 2，`compile` 与 `build` 均可用） |
+| `ctc get <local-dir>[@<range>]` | Phase 8.1：解析本地包的 `ct.pkg`、递归解析本地 `dep`、复制到 `vendor/<name>/` 并写 `ct.lock`（不经网络、不调子进程） |
 | `ctc … --line` / `--no-line` | 覆盖 `#line` 的默认开关（`build` 默认开、`compile` 默认关；Phase 4） |
 | `ctc build … --ns-root <dir>` | 目录 = namespace 校验的树根（仅 `build`；Phase 5） |
 | `ctc … --diagnostics=json\|text` | 告警格式：`text` 为人可读 stderr（默认），`json` 写 stdout（含泄漏与签名告警；Phase 4） |
@@ -272,7 +273,8 @@ python3 editors/vscode/test/check-grammar.py   # 20 项断言；退出码 0 = �
 | `selfhost/check-m2a.sh` | M2-a 验收 gate：复现「构建 L0 → L0 编译 L1 → 构建 L1 → L1 编译 `test/cases/01_trait_basic.ct` → 与 golden 逐字节 diff」；自举闭环与 L2 构建仅作报告，不影响判定 |
 | `selfhost/check-archive.sh` | Phase 2+ 的对差 oracle：把 `test/archive/**` 中 Phase 0.3 移出的越位特性 fixture 当 ratchet，逐字节比对 CT 侧恢复出的特性（namespace / 多文件 / `import` / `Drop` / 诊断）；第 3b 步另建 L2 并要求零警告 |
 | `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
-| `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面四个 CT 脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
+| `test/pkg/run.sh` | Phase 8.1 包管理器：构建 L0→L1→L2，用本地包验证 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock` |
+| `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面五个 CT/包管理脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
 
 ```bash
 bash selfhost/check-all.sh         # 一条命令跑完全部硬门禁
@@ -411,6 +413,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits `.c`/`.h` and the suggested `cc` command is printed; a key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
 | `ctc … --std=c99\|gnu99` | target C standard (default `c99`); nothing in the output differs yet, so `build` writes it into the suggested `cc` command, and any other value is a hard error (Phase 6.4) |
 | `ctc … -I <dir>` | adds an import search root (repeatable, up to 16; Phase 2 — works in both `compile` and `build`) |
+| `ctc get <local-dir>[@<range>]` | Phase 8.1: parse a local package's `ct.pkg`, resolve its local `dep` lines, copy it into `vendor/<name>/` and write `ct.lock` (no network, no subprocess) |
 | `ctc … --line` / `--no-line` | overrides the `#line` default (on for `build`, off for `compile`; Phase 4) |
 | `ctc build … --ns-root <dir>` | the tree root for directory = namespace validation (`build` only; Phase 5) |
 | `ctc … --diagnostics=json\|text` | warning format: `text` is human-readable stderr (default), `json` goes to stdout (leak and signature warnings; Phase 4) |
@@ -695,7 +698,8 @@ after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 | `selfhost/check-m2a.sh` | the M2-a acceptance gate: reproduces "build L0 → L0 compiles L1 → build L1 → L1 compiles `test/cases/01_trait_basic.ct` → byte diff against the golden"; the self-hosting loop and the L2 build are reported only and never change the verdict |
 | `selfhost/check-archive.sh` | the Phase 2+ diff oracle: treats the over-reach fixtures Phase 0.3 moved into `test/archive/**` as a ratchet, diffing byte for byte the features the CT side has restored (namespace / multi-file / `import` / `Drop` / diagnostics); step 3b rebuilds L2 and requires it to be warning-free |
 | `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
-| `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the four CT scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
+| `test/pkg/run.sh` | Phase 8.1 package manager: builds L0→L1→L2 and exercises `ct get` on local packages — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock` |
+| `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the five CT / package scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
 
 ```bash
 bash selfhost/check-all.sh         # every hard gate in one command

@@ -142,7 +142,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 - **集成**：用本地 git 仓库（`file://` 或工作区目录）充当 registry，避免测试依赖网络；
   放入 `test/modules/pkg_*`，由 `check-archive.sh` 的 designed cases 驱动。
 - **离线断言**：`ct build` 在断网/无 `git` 的环境下必须照常工作（用环境变量屏蔽 `git` 后跑一遍）。
-- **回归**：现有六道硬关卡保持全绿；`test/run.sh` 的 L0 层不受影响（包管理只在 L2）。
+- **回归**：现有七道硬关卡保持全绿；`test/run.sh` 的 L0 层不受影响（包管理只在 L2）。
 
 ### 9. 风险与未决
 
@@ -170,11 +170,11 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 
 | 切片 | 内容 | 出口 |
 | --- | --- | --- |
-| 8.1 | 清单解析 + `ct.pkg` / `ct.lock` 往返 + **本地目录源**同步进 `vendor/` | 无 `git` 也能 `ct get ../local-util`；单测覆盖解析与 MVS |
+| 8.1 | 清单解析 + `ct.pkg` / `ct.lock` 往返 + **本地目录源**同步进 `vendor/` | ✅ **已落地（2026-10-18）**：无 `git` 也能 `ct get ../local-util`；`test/pkg/run.sh` 9 项断言全绿 |
 | 8.2 | git 源获取（系统 `git`，commit 锁定） | git 源可 `get`；无 `git` 时硬报错并提示 |
 | 8.3 | `ct install` 校验与建议命令 | 锁/目录摘要不符即失败；`ct build` 可用 `vendor/` 编译 |
 
-每片出口都要求既有六道硬关卡全绿；8.1 不引入任何网络/子进程代码。
+每片出口都要求既有七道硬关卡全绿；8.1 不引入任何网络/子进程代码。
 
 ---
 
@@ -273,7 +273,7 @@ is one impl method, so it can be audited and stubbed in tests.
 Unit tests cover manifest parsing, range comparison, MVS and lock round-trips. Integration tests use a
 local `file://` git repository as the registry, so no test needs the network, and live under
 `test/modules/pkg_*` driven by `check-archive.sh`. An offline assertion proves `ct build` still works
-with `git` masked. The six existing hard gates must stay green; the L0 layer is unaffected.
+with `git` masked. The seven existing hard gates must stay green; the L0 layer is unaffected.
 
 ### 9. Risks
 
@@ -299,8 +299,8 @@ declarations, digest verification) are still open.
 
 | Slice | Content | Exit |
 | --- | --- | --- |
-| 8.1 | Manifest parsing + `ct.pkg` / `ct.lock` round-trips + **local directory sources** synced into `vendor/` | `ct get ../local-util` works without `git`; unit tests cover parsing and MVS |
+| 8.1 | Manifest parsing + `ct.pkg` / `ct.lock` round-trips + **local directory sources** synced into `vendor/` | ✅ **landed (2026-10-18)**: `ct get ../local-util` works without `git`; `test/pkg/run.sh` passes 9 assertions |
 | 8.2 | git-sourced packages (system `git`, commit pinning) | git sources work; without `git` the command fails hard with a hint |
 | 8.3 | `ct install` verification and the suggested command | a lock/digest mismatch fails; `ct build` compiles against `vendor/` |
 
-Every slice keeps the six existing hard gates green; 8.1 introduces no network or subprocess code.
+Every slice keeps the seven existing hard gates green; 8.1 introduces no network or subprocess code.
