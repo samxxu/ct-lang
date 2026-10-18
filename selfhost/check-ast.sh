@@ -340,6 +340,68 @@ else
 fi
 
 echo
+echo "== CLI and identity (10.1) =="
+# D44: `-v`/usage derive the program name from argv[0]; the `ct-ast` name stays
+# for the development binary, while `ct` and `ctc` are the shipped names.
+ln -sf "$work/ct-ast" "$work/ct"
+ln -sf "$work/ct-ast" "$work/ctc"
+devv="$("$work/ct-ast" -v 2>/dev/null)"
+ctv="$("$work/ct" -v 2>/dev/null)"
+ctcv="$("$work/ctc" -v 2>/dev/null)"
+case "$devv" in
+    "ct-ast v"*) ok "identity: the development binary prints 'ct-ast'" ;;
+    *) bad "identity dev" "got '$devv'" ;;
+esac
+case "$ctv" in
+    "ct v"*) ok "identity: a binary named 'ct' prints 'ct'" ;;
+    *) bad "identity ct" "got '$ctv'" ;;
+esac
+case "$ctcv" in
+    "ctc v"*) ok "identity: a binary named 'ctc' prints 'ctc'" ;;
+    *) bad "identity ctc" "got '$ctcv'" ;;
+esac
+
+if "$work/ct-ast" --diagnostics=text test/ast/02_expr/prog.ct -o "$work/cli-diag.c" \
+        >"$work/cli-diag.out" 2>"$work/cli-diag.err"; then
+    ok "compile accepts --diagnostics=text"
+else
+    bad "--diagnostics=text" "$(cat "$work/cli-diag.err")"
+fi
+if "$work/ct-ast" --diagnostics=bogus test/ast/02_expr/prog.ct -o "$work/cli-diag2.c" \
+        >"$work/cli-diag2.out" 2>"$work/cli-diag2.err"; then
+    bad "--diagnostics=bogus" "expected a non-zero exit"
+elif grep -q "unknown diagnostics format" "$work/cli-diag2.err"; then
+    ok "--diagnostics=bogus is rejected"
+else
+    bad "--diagnostics=bogus" "wrong diagnostic: $(cat "$work/cli-diag2.err")"
+fi
+
+if "$work/ct-ast" -I /tmp test/ast/02_expr/prog.ct -o "$work/cli-i.c" \
+        >"$work/cli-i.out" 2>"$work/cli-i.err"; then
+    ok "compile accepts -I (no imports to resolve)"
+else
+    bad "compile -I" "$(cat "$work/cli-i.err")"
+fi
+
+rm -rf "$work/cli-b"
+mkdir -p "$work/cli-b"
+if "$work/ct-ast" build --std=gnu99 test/ast/11_map/prog.ct -o "$work/cli-b" \
+        >"$work/cli-b.out" 2>"$work/cli-b.err" \
+   && grep -q '^cc -std=gnu99 .* -o a.out$' "$work/cli-b.out"; then
+    ok "build suggests the target C standard"
+else
+    bad "build --std=gnu99" "$(cat "$work/cli-b.err") $(cat "$work/cli-b.out")"
+fi
+if "$work/ct-ast" --std=c11 test/ast/02_expr/prog.ct -o "$work/cli-std.c" \
+        >"$work/cli-std.out" 2>"$work/cli-std.err"; then
+    bad "--std=c11" "expected a non-zero exit"
+elif grep -q "unknown C standard" "$work/cli-std.err"; then
+    ok "--std=c11 is rejected"
+else
+    bad "--std=c11" "wrong diagnostic: $(cat "$work/cli-std.err")"
+fi
+
+echo
 echo "== self-hosting (9.6) =="
 # The AST compiler compiles its own source; the result must build warning-free,
 # and the rebuilt compiler must reproduce the same output byte for byte (a
