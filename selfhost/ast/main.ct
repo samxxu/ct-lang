@@ -2,20 +2,21 @@
  * main.ct - Phase 9: the AST compiler.
  *
  * 9.1 proved the pipe (lexer -> parser -> AST -> C). 9.2 added statements,
- * control flow and signatures. 9.3 adds the declaration layer:
+ * control flow and signatures. 9.3 added the declaration layer, 9.4 traits and
+ * interface values, and 9.5a the module layer:
  *
- *   - type specifiers (`int` / `void` / `char` / `unsigned long` / `const ...`)
- *   - `struct` definitions, `typedef` (including anonymous structs)
- *   - pointers (`*`, `&`), member access (`.` / `->`), arrays and indexing
- *   - `static` functions and globals
+ *   - `build` mode: one `.c` + `.h` per unit, imports resolved recursively
+ *   - `import a::b;` (the importing file's directory first, then `-I` roots)
+ *   - `pub` routing: exported traits/structs/typedefs/prototypes land in `.h`
+ *   - `namespace A::B { ... }` plus `--ns-root` directory validation
  *
  * Node shape follows D32 (`typedef struct` pool + `kind`, one dispatch per
  * concern). Symbol tables follow D33: functions, variables and types are
  * separate flat tables; only variables are scoped.
  *
  * Output contract: banner, `<base>.h` guard and a self-contained `.c`; byte
- * equality with the old pipeline is not required (D34). 9.3 still defers brace
- * initializers, casts, `sizeof` and trait/impl (9.4).
+ * equality with the old pipeline is not required (D34). 9.5b still adds `#line`
+ * and `--emit-map`.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
@@ -36,6 +37,9 @@
 #define MAX_TRAITS 16
 #define MAX_METHODS 16
 #define MAX_STRUCTS 32
+#define MAX_UNITS  64
+#define MAX_IMPORTS 16
+#define MAX_INCDIRS 16
 
 /* node kinds (D32: one tag, one dispatch) */
 #define N_PROG    1
@@ -122,6 +126,7 @@ typedef struct Fn {
     char ptype[MAX_PARAMS][MAX_TEXT];
     int  nparams;
     int  is_static;
+    int  is_pub;
 } Fn;
 
 typedef struct Var {
@@ -140,6 +145,7 @@ typedef struct Trait {
     char name[MAX_TEXT];
     MethodSig m[MAX_METHODS];
     int  nm;
+    int  is_pub;
 } Trait;
 
 typedef struct StructDef {
@@ -147,6 +153,22 @@ typedef struct StructDef {
     char use[MAX_TRAITS][MAX_TEXT];
     int  nuse;
 } StructDef;
+
+/* One translation unit of a `build`: its source, output base, declared
+   namespace and the exported names of the units it imports. */
+typedef struct Unit {
+    char path[MAX_PATH];
+    char base[MAX_TEXT];
+    char ns[MAX_TEXT];
+    char dep[MAX_IMPORTS][MAX_TEXT];
+    int  ndep;
+    int  prog;
+    int  is_hdr;
+    int  fn_start;
+    int  fn_end;
+    int  tr_start;
+    int  tr_end;
+} Unit;
 
 static Node g_nodes[MAX_NODES];
 static int  g_nnode;
@@ -177,6 +199,18 @@ static int g_nstructs;
 static int g_self_mode;               /* inside an impl body: `self` -> `_self` */
 static char g_ret_type[MAX_TEXT];     /* return type of the function being parsed */
 
+static Unit g_units[MAX_UNITS];
+static int  g_nunits;
+static int  g_build_mode;
+static char g_ns[MAX_TEXT];           /* current namespace prefix, e.g. "hal_" */
+static char g_ns_decl[MAX_TEXT];      /* namespace path declared by the current unit */
+static char g_outdir[MAX_PATH];
+static const char *g_incdirs[MAX_INCDIRS];
+static int  g_ninc;
+static const char *g_nsroot;
+static char g_rels[MAX_IMPORTS][MAX_TEXT];  /* import paths seen by the scanner */
+static int  g_nrels;
+
 trait AstOps {
     int  new_node(int kind);
     int  fail(const char *msg);
@@ -195,7 +229,7 @@ trait SymOps {
     int  find_var(const char *name);
     int  var_type(const char *name, char *out, size_t cap);
     int  find_func(const char *name);
-    int  add_func(const char *name, const char *ret, int is_static, int first_param);
+    int  add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param);
     int  find_type(const char *name);
     int  add_type(const char *name, int kind);
     int  find_struct(const char *name);
@@ -203,6 +237,8 @@ trait SymOps {
     int  find_trait(const char *name);
     int  add_trait(const char *name);
     int  method_trait(const char *stype, const char *method, char *tout, size_t tcap);
+    int  ns_decl_name(const char *name, char *out, size_t cap);
+    int  resolve_type(const char *name, char *out, size_t cap);
 }
 
 trait ParseOps {
@@ -210,10 +246,10 @@ trait ParseOps {
     int  type_append(char *out, size_t cap, size_t *n, const char *tok);
     int  parse_type(char *out, size_t cap);
     int  parse_program(void);
-    int  parse_func(int is_static);
+    int  parse_func(int is_static, int is_pub);
     int  parse_params(void);
     int  parse_struct_def(void);
-    int  parse_typedef(void);
+    int  parse_typedef(int is_pub);
     int  parse_field_def(void);
     int  parse_block(void);
     int  parse_stmt(void);
@@ -228,7 +264,7 @@ trait ParseOps {
     int  parse_postfix(void);
     int  parse_primary(void);
     int  parse_args(void);
-    int  parse_trait(void);
+    int  parse_trait(int is_pub);
     int  parse_impl(void);
     int  parse_use_list(int sindex);
     int  parse_init_raw(char *out, size_t cap);
@@ -238,8 +274,32 @@ trait ParseOps {
     int  maybe_box(int n, const char *trait);
 }
 
+/* Build-mode driving: path handling, import resolution, unit loading and the
+   namespace/directory check. Kept out of ParseOps because that trait is one
+   method below MAX_METHOD. */
+trait ModuleOps {
+    int  base_name(const char *path, char *out, size_t cap, int *is_hdr);
+    int  path_dir(const char *path, char *out, size_t cap);
+    int  append_node(int prog, int n);
+    int  skip_import(void);
+    int  scan_imports(const char *from);
+    int  resolve_import(const char *from, const char *rel, char *out, size_t cap, int *is_hdr);
+    int  load_unit(const char *path);
+    int  check_ns_dir(int u);
+    int  parse_top_decl(int is_pub);
+    int  parse_namespace(int prog);
+    int  struct_def_ahead(void);
+    int  build_main(int argc, char **argv);
+}
+
 trait EmitOps {
     int  emit_program(int prog);
+    int  emit_unit(int u);
+    int  write_unit_header(int u);
+    int  emit_trait_range(int start, int end, int mode);
+    int  emit_proto(int i);
+    int  emit_vtable_fwd(int prog);
+    int  header_guard(const char *base, char *out, size_t cap);
     int  emit_node(int n, int ind);
     int  emit_inline(int n);
     int  emit_expr(int n);
@@ -254,11 +314,11 @@ trait EmitOps {
     int  write_header(const char *outc);
 }
 
-/* The state lives in file-scope globals (9.x is a single-unit compiler); the
-   struct exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
+/* The state lives in file-scope globals (9.x is a small compiler); the struct
+   exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
 struct Ast {
     int nerr;
-} use AstOps, SymOps, ParseOps, EmitOps;
+} use AstOps, SymOps, ParseOps, ModuleOps, EmitOps;
 
 impl AstOps for Ast {
     int new_node(int kind)
@@ -373,6 +433,14 @@ impl AstOps for Ast {
             g_pos += 2;
             return;
         }
+        if (c == ':' && g_src[g_pos + 1] == ':') {
+            g_toktext[0] = ':';
+            g_toktext[1] = ':';
+            g_toktext[2] = 0;
+            g_tok = T_PUNCT;
+            g_pos += 2;
+            return;
+        }
         if ((c == '=' || c == '!' || c == '<' || c == '>') && g_src[g_pos + 1] == '=') {
             g_toktext[0] = (char)c;
             g_toktext[1] = '=';
@@ -468,9 +536,13 @@ impl AstOps for Ast {
 
         in = NULL;
         out = NULL;
+        if (argc > 1 && strcmp(argv[1], "build") == 0)
+            return self->build_main(argc - 1, argv + 1);
+        g_build_mode = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: ct-ast <input.ct> [-o <output.c>]\n");
+                printf("usage: ct-ast <input.ct> [-o <output.c>]\n"
+                       "       ct-ast build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n");
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -610,8 +682,9 @@ impl SymOps for Ast {
         return -1;
     }
 
-    /* A prototype followed by its definition updates the same entry. */
-    int add_func(const char *name, const char *ret, int is_static, int first_param)
+    /* A prototype followed by its definition updates the same entry. `pub` on
+       either declaration exports the prototype to the unit header. */
+    int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
         int i, k, p;
         (void)self;
@@ -622,7 +695,9 @@ impl SymOps for Ast {
             i = g_nfunc;
             g_nfunc++;
             snprintf(g_funcs[i].name, MAX_TEXT, "%s", name);
+            g_funcs[i].is_pub = 0;
         }
+        if (is_pub) g_funcs[i].is_pub = 1;
         snprintf(g_funcs[i].ret, MAX_TEXT, "%s", ret);
         g_funcs[i].is_static = is_static;
         g_funcs[i].nparams = 0;
@@ -743,6 +818,37 @@ impl SymOps for Ast {
         }
         return -1;
     }
+
+    /* A declaration inside `namespace A::B` is stored under its C name,
+       `A_B_<name>`; the top level adds no prefix. */
+    int ns_decl_name(const char *name, char *out, size_t cap)
+    {
+        (void)self;
+        if (snprintf(out, cap, "%s%s", g_ns, name) >= (int)cap)
+            return self->fail("name is too long");
+        return 0;
+    }
+
+    /* Unqualified lookup: the current namespace first, then the top level. */
+    int resolve_type(const char *name, char *out, size_t cap)
+    {
+        char qname[MAX_TEXT];
+        (void)self;
+
+        if (g_ns[0]) {
+            if (snprintf(qname, sizeof qname, "%s%s", g_ns, name) >= (int)sizeof qname)
+                return self->fail("name is too long");
+            if (self->find_type(qname) >= 0 || self->find_trait(qname) >= 0
+                || self->find_struct(qname) >= 0) {
+                if (snprintf(out, cap, "%s", qname) >= (int)cap)
+                    return self->fail("name is too long");
+                return 0;
+            }
+        }
+        if (snprintf(out, cap, "%s", name) >= (int)cap)
+            return self->fail("name is too long");
+        return 0;
+    }
 }
 
 impl ParseOps for Ast {
@@ -786,30 +892,35 @@ impl ParseOps for Ast {
             if (g_tok == T_ID && self->is_type_word(g_toktext)) {
                 if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
                 if (strcmp(g_toktext, "struct") == 0) {
+                    char sname[MAX_TEXT];
                     self->lex_next();
                     if (g_tok != T_ID) return self->fail("expected a struct name");
-                    if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
-                    if (self->add_type(g_toktext, 1) != 0) return -1;
+                    if (self->resolve_type(g_toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->type_append(out, cap, &n, sname) != 0) return -1;
+                    if (self->add_type(sname, 1) != 0) return -1;
                 }
                 self->lex_next();
                 continue;
             }
-            if (g_tok == T_ID && self->find_type(g_toktext) >= 0) {
+            if (g_tok == T_ID) {
                 int ti;
+                char rname[MAX_TEXT];
                 char iface[MAX_TEXT];
-                ti = self->find_type(g_toktext);
+                if (self->resolve_type(g_toktext, rname, sizeof rname) != 0) return -1;
+                ti = self->find_type(rname);
+                if (ti < 0) break;
                 /* a bare struct tag needs `struct`; a trait becomes its iface */
                 if (g_type_kind[ti] == 1) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                 } else if (g_type_kind[ti] == 3) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
-                    if (snprintf(iface, sizeof iface, "%s_iface", g_toktext) >= (int)sizeof iface)
+                    if (snprintf(iface, sizeof iface, "%s_iface", rname) >= (int)sizeof iface)
                         return self->fail("type name is too long");
                     if (self->type_append(out, cap, &n, iface) != 0) return -1;
                     self->lex_next();
                     continue;
                 }
-                if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
+                if (self->type_append(out, cap, &n, rname) != 0) return -1;
                 self->lex_next();
                 continue;
             }
@@ -830,49 +941,41 @@ impl ParseOps for Ast {
 
     int parse_program(void)
     {
-        int prog, tail, n;
+        int prog, n;
         (void)self;
 
         prog = self->new_node(N_PROG);
         if (prog < 0) return -1;
-        tail = -1;
         self->lex_next();
-        while (g_tok == T_PP) {
-            n = self->new_node(N_PP);
-            if (n < 0) return -1;
-            snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
-            if (tail < 0) g_nodes[prog].a = n;
-            else g_nodes[tail].next = n;
-            tail = n;
-            self->lex_next();
-        }
         while (g_tok != T_EOF) {
-            if (g_tok == T_ID && strcmp(g_toktext, "typedef") == 0) {
-                n = self->parse_typedef();
-            } else if (g_tok == T_ID && strcmp(g_toktext, "trait") == 0) {
-                n = self->parse_trait();
-            } else if (g_tok == T_ID && strcmp(g_toktext, "impl") == 0) {
-                n = self->parse_impl();
-            } else if (g_tok == T_ID && strcmp(g_toktext, "struct") == 0) {
-                n = self->parse_struct_def();
-                if (n >= 0 && self->expect(";") != 0) n = -1;
-            } else if (g_tok == T_ID && strcmp(g_toktext, "static") == 0) {
+            if (g_tok == T_PP) {
+                n = self->new_node(N_PP);
+                if (n < 0) return -1;
+                snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
+                if (self->append_node(prog, n) != 0) return -1;
                 self->lex_next();
-                n = self->parse_func(1);
-            } else {
-                n = self->parse_func(0);
+                continue;
             }
-            if (n == -1) return -1;
+            if (g_tok == T_ID && strcmp(g_toktext, "import") == 0) {
+                if (!g_build_mode)
+                    return self->fail("'import' is not supported in compile mode");
+                if (self->skip_import() != 0) return -1;
+                continue;
+            }
+            if (g_tok == T_ID && strcmp(g_toktext, "namespace") == 0) {
+                if (self->parse_namespace(prog) != 0) return -1;
+                continue;
+            }
+            n = self->parse_top_decl(0);
             if (n == NO_NODE) continue;
-            if (tail < 0) g_nodes[prog].a = n;
-            else g_nodes[tail].next = n;
-            tail = n;
+            if (n < 0) return -1;
+            if (self->append_node(prog, n) != 0) return -1;
         }
         return prog;
     }
 
     /* A function (prototype or definition) or a global variable. */
-    int parse_func(int is_static)
+    int parse_func(int is_static, int is_pub)
     {
         int f, b, params;
         char ret[MAX_TEXT];
@@ -890,6 +993,7 @@ impl ParseOps for Ast {
             snprintf(g_nodes[g].text, MAX_TEXT, "%s", ret);
             snprintf(g_nodes[g].text2, MAX_TEXT, "%s", name);
             g_nodes[g].aux = is_static;
+            g_nodes[g].d = is_pub;
             /* a file-scope name is visible to every function body */
             if (self->declare_var(name, ret) != 0) return -1;
             if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
@@ -923,7 +1027,7 @@ impl ParseOps for Ast {
         }
         if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
             self->lex_next();
-            if (self->add_func(name, ret, is_static, params) < 0) {
+            if (self->add_func(name, ret, is_static, is_pub, params) < 0) {
                 self->pop_scope();
                 return -1;
             }
@@ -937,7 +1041,7 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
-        if (self->add_func(name, ret, is_static, params) < 0) {
+        if (self->add_func(name, ret, is_static, is_pub, params) < 0) {
             self->pop_scope();
             return -1;
         }
@@ -949,6 +1053,7 @@ impl ParseOps for Ast {
         snprintf(g_nodes[f].text, MAX_TEXT, "%s", ret);
         snprintf(g_nodes[f].text2, MAX_TEXT, "%s", name);
         g_nodes[f].aux = is_static;
+        g_nodes[f].d = is_pub;
         g_nodes[f].a = params;
         g_nodes[f].b = b;
         self->pop_scope();
@@ -1030,20 +1135,23 @@ impl ParseOps for Ast {
     {
         int s, tail, m;
         char name[MAX_TEXT];
+        char qname[MAX_TEXT];
         (void)self;
 
         self->lex_next();
         name[0] = 0;
+        qname[0] = 0;
         if (g_tok == T_ID) {
             snprintf(name, sizeof name, "%s", g_toktext);
-            if (self->add_type(name, 1) != 0) return -1;
-            if (self->add_struct(name) < 0) return -1;
+            if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            if (self->add_type(qname, 1) != 0) return -1;
+            if (self->add_struct(qname) < 0) return -1;
             self->lex_next();
         }
         if (self->expect("{") != 0) return -1;
         s = self->new_node(N_STRUCT);
         if (s < 0) return -1;
-        snprintf(g_nodes[s].text2, MAX_TEXT, "%s", name);
+        snprintf(g_nodes[s].text2, MAX_TEXT, "%s", qname);
         tail = -1;
         while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
             m = self->parse_field_def();
@@ -1055,17 +1163,18 @@ impl ParseOps for Ast {
         if (self->expect("}") != 0) return -1;
         if (g_tok == T_ID && strcmp(g_toktext, "use") == 0) {
             self->lex_next();
-            if (name[0] && self->parse_use_list(self->find_struct(name)) != 0) return -1;
+            if (qname[0] && self->parse_use_list(self->find_struct(qname)) != 0) return -1;
         }
         return s;
     }
 
     /* `typedef struct { ... } Name;` or `typedef <type> Name;`. */
-    int parse_typedef(void)
+    int parse_typedef(int is_pub)
     {
         int t;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
+        char qname[MAX_TEXT];
         (void)self;
 
         self->lex_next();
@@ -1076,10 +1185,12 @@ impl ParseOps for Ast {
             snprintf(name, sizeof name, "%s", g_toktext);
             self->lex_next();
             if (self->expect(";") != 0) return -1;
-            snprintf(g_nodes[t].text2, MAX_TEXT, "%s", name);
+            if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            snprintf(g_nodes[t].text2, MAX_TEXT, "%s", qname);
             g_nodes[t].aux = 1;
-            if (self->add_type(name, 2) != 0) return -1;
-            if (self->add_struct(name) < 0) return -1;
+            g_nodes[t].d = is_pub;
+            if (self->add_type(qname, 2) != 0) return -1;
+            if (self->add_struct(qname) < 0) return -1;
             return t;
         }
         if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
@@ -1087,23 +1198,27 @@ impl ParseOps for Ast {
         snprintf(name, sizeof name, "%s", g_toktext);
         self->lex_next();
         if (self->expect(";") != 0) return -1;
+        if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
         t = self->new_node(N_TYPEDEF);
         if (t < 0) return -1;
         snprintf(g_nodes[t].text, MAX_TEXT, "%s", typebuf);
-        snprintf(g_nodes[t].text2, MAX_TEXT, "%s", name);
-        if (self->add_type(name, 2) != 0) return -1;
+        snprintf(g_nodes[t].text2, MAX_TEXT, "%s", qname);
+        g_nodes[t].d = is_pub;
+        if (self->add_type(qname, 2) != 0) return -1;
         return t;
     }
 
     /* `use A, B` after a struct body; the trailing `;` stays with the caller. */
     int parse_use_list(int sindex)
     {
+        char tname[MAX_TEXT];
         (void)self;
         if (sindex < 0) return self->fail("unknown struct in 'use'");
         for (;;) {
             if (g_tok != T_ID) return self->fail("expected a trait name");
+            if (self->resolve_type(g_toktext, tname, sizeof tname) != 0) return -1;
             if (g_structs[sindex].nuse >= MAX_TRAITS) return self->fail("too many used traits");
-            snprintf(g_structs[sindex].use[g_structs[sindex].nuse], MAX_TEXT, "%s", g_toktext);
+            snprintf(g_structs[sindex].use[g_structs[sindex].nuse], MAX_TEXT, "%s", tname);
             g_structs[sindex].nuse++;
             self->lex_next();
             if (g_tok == T_PUNCT && strcmp(g_toktext, ",") == 0) {
@@ -1116,10 +1231,11 @@ impl ParseOps for Ast {
     }
 
     /* `trait Name { ret m(params); ... }` -- no node, the table is enough. */
-    int parse_trait(void)
+    int parse_trait(int is_pub)
     {
         int ti, mi, np;
         char name[MAX_TEXT];
+        char qname[MAX_TEXT];
         char ret[MAX_TEXT];
         char ptype[MAX_TEXT];
         (void)self;
@@ -1127,9 +1243,11 @@ impl ParseOps for Ast {
         self->lex_next();
         if (g_tok != T_ID) return self->fail("expected a trait name");
         snprintf(name, sizeof name, "%s", g_toktext);
-        ti = self->add_trait(name);
+        if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+        ti = self->add_trait(qname);
         if (ti < 0) return -1;
-        if (self->add_type(name, 3) != 0) return -1;   /* trait = iface type */
+        g_traits[ti].is_pub = is_pub;
+        if (self->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
         self->lex_next();
         if (self->expect("{") != 0) return -1;
         while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
@@ -1179,6 +1297,8 @@ impl ParseOps for Ast {
         int ti, si, node, mnode, params, body, tail;
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
+        char rtrait[MAX_TEXT];
+        char rstruct[MAX_TEXT];
         char ret[MAX_TEXT];
         char mname[MAX_TEXT];
         char stype[MAX_TEXT];
@@ -1188,7 +1308,8 @@ impl ParseOps for Ast {
         self->lex_next();
         if (g_tok != T_ID) return self->fail("expected a trait name");
         snprintf(tname, sizeof tname, "%s", g_toktext);
-        ti = self->find_trait(tname);
+        if (self->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+        ti = self->find_trait(rtrait);
         if (ti < 0) return self->fail("impl of an unknown trait");
         self->lex_next();
         if (g_tok != T_ID || strcmp(g_toktext, "for") != 0)
@@ -1196,19 +1317,20 @@ impl ParseOps for Ast {
         self->lex_next();
         if (g_tok != T_ID) return self->fail("expected a struct name");
         snprintf(sname, sizeof sname, "%s", g_toktext);
-        si = self->find_struct(sname);
-        if (si < 0) si = self->add_struct(sname);
+        if (self->resolve_type(sname, rstruct, sizeof rstruct) != 0) return -1;
+        si = self->find_struct(rstruct);
+        if (si < 0) si = self->add_struct(rstruct);
         if (si < 0) return -1;
-        type_index = self->find_type(sname);
+        type_index = self->find_type(rstruct);
         if (type_index >= 0 && g_type_kind[type_index] == 1)
-            snprintf(stype, sizeof stype, "struct %s", sname);
+            snprintf(stype, sizeof stype, "struct %s", rstruct);
         else
-            snprintf(stype, sizeof stype, "%s", sname);
+            snprintf(stype, sizeof stype, "%s", rstruct);
         self->lex_next();
         if (self->expect("{") != 0) return -1;
         node = self->new_node(N_IMPL);
         if (node < 0) return -1;
-        snprintf(g_nodes[node].text2, MAX_TEXT, "%s", tname);
+        snprintf(g_nodes[node].text2, MAX_TEXT, "%s", rtrait);
         g_nodes[node].aux = si;
         snprintf(g_nodes[node].text, MAX_TEXT, "%s", stype);
         tail = -1;
@@ -1983,6 +2105,526 @@ impl ParseOps for Ast {
     }
 }
 
+impl ModuleOps for Ast {
+    /* `foo.ct` -> `foo`; `foo.h.ct` -> `foo` and `is_hdr = 1`. */
+    int base_name(const char *path, char *out, size_t cap, int *is_hdr)
+    {
+        const char *slash, *name;
+        size_t n;
+        (void)self;
+
+        slash = strrchr(path, '/');
+        name = slash ? slash + 1 : path;
+        n = strlen(name);
+        *is_hdr = 0;
+        if (n > 5 && strcmp(name + n - 5, ".h.ct") == 0) {
+            *is_hdr = 1;
+            n -= 5;
+        } else if (n > 3 && strcmp(name + n - 3, ".ct") == 0) {
+            n -= 3;
+        }
+        if (n + 1 > cap) return self->fail("output name is too long");
+        snprintf(out, cap, "%.*s", (int)n, name);
+        return 0;
+    }
+
+    int path_dir(const char *path, char *out, size_t cap)
+    {
+        const char *slash;
+        size_t n;
+        (void)self;
+
+        slash = strrchr(path, '/');
+        if (!slash) {
+            if (cap < 2) return self->fail("path is too long");
+            snprintf(out, cap, "%s", ".");
+            return 0;
+        }
+        n = (size_t)(slash - path);
+        if (n == 0) n = 1;   /* "/x" -> "/" */
+        if (n + 1 > cap) return self->fail("path is too long");
+        snprintf(out, cap, "%.*s", (int)n, path);
+        return 0;
+    }
+
+    int append_node(int prog, int n)
+    {
+        int t;
+        (void)self;
+
+        g_nodes[n].next = -1;
+        if (g_nodes[prog].a < 0) {
+            g_nodes[prog].a = n;
+            return 0;
+        }
+        t = g_nodes[prog].a;
+        while (g_nodes[t].next >= 0) t = g_nodes[t].next;
+        g_nodes[t].next = n;
+        return 0;
+    }
+
+    /* Consume `import a::b;` and remember the path; `load_unit` resolves it. */
+    int skip_import(void)
+    {
+        char rel[MAX_TEXT];
+        size_t n;
+        (void)self;
+
+        n = 0;
+        rel[0] = 0;
+        self->lex_next();
+        for (;;) {
+            if (g_tok != T_ID) return self->fail("expected an import path");
+            if (n > 0) {
+                if (n + 1 >= sizeof rel) return self->fail("import path is too long");
+                rel[n] = '/';
+                n++;
+            }
+            if (n + strlen(g_toktext) >= sizeof rel) return self->fail("import path is too long");
+            snprintf(rel + n, sizeof rel - n, "%s", g_toktext);
+            n += strlen(g_toktext);
+            self->lex_next();
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "::") == 0) {
+                self->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (self->expect(";") != 0) return -1;
+        if (g_nrels >= MAX_IMPORTS) return self->fail("too many imports");
+        snprintf(g_rels[g_nrels], MAX_TEXT, "%s", rel);
+        g_nrels++;
+        return 0;
+    }
+
+    /* Imports are the leading declarations of a unit, so one pass finds them
+       before anything is parsed. */
+    int scan_imports(const char *from)
+    {
+        (void)self;
+        g_nrels = 0;
+        g_path = from;
+        g_pos = 0;
+        g_bol = 1;
+        g_tok = 0;
+        self->lex_next();
+        for (;;) {
+            if (g_tok == T_PP) {
+                self->lex_next();
+                continue;
+            }
+            if (g_tok == T_ID && strcmp(g_toktext, "import") == 0) {
+                if (self->skip_import() != 0) return -1;
+                continue;
+            }
+            break;
+        }
+        return 0;
+    }
+
+    /* `a::b` -> `<root>/a/b.ct`, then `a/b.h.ct`, for the importing file's own
+       directory and then every `-I` root. */
+    int resolve_import(const char *from, const char *rel, char *out, size_t cap, int *is_hdr)
+    {
+        char dir[MAX_PATH];
+        char cand[MAX_PATH];
+        const char *root;
+        FILE *f;
+        int r;
+        (void)self;
+
+        if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
+        for (r = -1; r < g_ninc; r++) {
+            root = (r < 0) ? dir : g_incdirs[r];
+            if (snprintf(cand, sizeof cand, "%s/%s.ct", root, rel) >= (int)sizeof cand)
+                return self->fail("import path is too long");
+            f = fopen(cand, "rb");
+            if (f) {
+                fclose(f);
+                *is_hdr = 0;
+                if (snprintf(out, cap, "%s", cand) >= (int)cap) return self->fail("import path is too long");
+                return 0;
+            }
+            if (snprintf(cand, sizeof cand, "%s/%s.h.ct", root, rel) >= (int)sizeof cand)
+                return self->fail("import path is too long");
+            f = fopen(cand, "rb");
+            if (f) {
+                fclose(f);
+                *is_hdr = 1;
+                if (snprintf(out, cap, "%s", cand) >= (int)cap) return self->fail("import path is too long");
+                return 0;
+            }
+        }
+        snprintf(cand, sizeof cand, "cannot resolve import '%s'", rel);
+        return self->fail(cand);
+    }
+
+    /* Parse the import closure depth first, so a unit's declarations are in the
+       shared tables before its importers are parsed. Returns the unit index. */
+    int load_unit(const char *path)
+    {
+        char rels[MAX_IMPORTS][MAX_TEXT];
+        char dep[MAX_PATH];
+        char *mysrc;
+        int u, i, d, nrels, is_hdr;
+        (void)self;
+
+        for (u = 0; u < g_nunits; u++)
+            if (strcmp(g_units[u].path, path) == 0) return u;
+        if (g_nunits >= MAX_UNITS) {
+            self->fail("too many units");
+            return -1;
+        }
+        u = g_nunits;
+        g_nunits++;
+        if (snprintf(g_units[u].path, MAX_PATH, "%s", path) >= MAX_PATH) {
+            self->fail("path is too long");
+            return -1;
+        }
+        g_units[u].ndep = 0;
+        g_units[u].prog = -1;
+        g_units[u].ns[0] = 0;
+        if (self->base_name(path, g_units[u].base, MAX_TEXT, &is_hdr) != 0) return -1;
+        g_units[u].is_hdr = is_hdr;
+
+        if (self->read_file(path) != 0) return -1;
+        mysrc = (char *)g_src;
+        if (self->scan_imports(path) != 0) return -1;
+        nrels = g_nrels;
+        for (i = 0; i < nrels; i++) snprintf(rels[i], MAX_TEXT, "%s", g_rels[i]);
+        for (i = 0; i < nrels; i++) {
+            if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr) != 0) return -1;
+            d = self->load_unit(dep);
+            if (d < 0) return -1;
+            if (g_units[u].ndep >= MAX_IMPORTS) {
+                self->fail("too many imports");
+                return -1;
+            }
+            snprintf(g_units[u].dep[g_units[u].ndep], MAX_TEXT, "%s", g_units[d].base);
+            g_units[u].ndep++;
+        }
+
+        g_src = mysrc;
+        g_pos = 0;
+        g_bol = 1;
+        g_tok = 0;
+        g_nvar = 0;
+        g_nscope = 0;
+        g_ns[0] = 0;
+        g_ns_decl[0] = 0;
+        g_self_mode = 0;
+        g_ret_type[0] = 0;
+        g_nparams = 0;
+        g_path = path;
+        g_units[u].fn_start = g_nfunc;
+        g_units[u].tr_start = g_ntraits;
+        g_units[u].prog = self->parse_program();
+        if (g_units[u].prog < 0) return -1;
+        g_units[u].fn_end = g_nfunc;
+        g_units[u].tr_end = g_ntraits;
+        snprintf(g_units[u].ns, MAX_TEXT, "%s", g_ns_decl);
+        return u;
+    }
+
+    /* A unit that declares a namespace must sit in the matching directory under
+       `--ns-root` (D13 option A: validation, not derivation). */
+    int check_ns_dir(int u)
+    {
+        char rest[MAX_PATH];
+        char dir[MAX_TEXT];
+        char want[MAX_TEXT];
+        const char *p;
+        size_t rn, k, m;
+
+        (void)self;
+        if (!g_units[u].ns[0]) return 0;
+        if (!g_nsroot || !g_nsroot[0]) return 0;
+        rn = strlen(g_nsroot);
+        if (strncmp(g_units[u].path, g_nsroot, rn) != 0) return 0;
+        p = g_units[u].path + rn;
+        if (*p == '/') p++;
+        snprintf(rest, sizeof rest, "%s", p);
+        if (strncmp(rest, "./", 2) == 0 || strncmp(rest, "../", 3) == 0
+            || strstr(rest, "/./") != NULL || strstr(rest, "/../") != NULL) return 0;
+
+        k = strlen(rest);
+        while (k > 0 && rest[k - 1] != '/') k--;
+        if (k > 0) k--;                    /* drop the slash before the basename */
+        if (k >= sizeof dir) return self->fail("path is too long");
+        snprintf(dir, sizeof dir, "%.*s", (int)k, rest);
+
+        m = 0;
+        for (k = 0; g_units[u].ns[k]; k++) {
+            if (m + 1 >= sizeof want) return self->fail("namespace is too long");
+            if (g_units[u].ns[k] == ':' && g_units[u].ns[k + 1] == ':') {
+                want[m] = '/';
+                m++;
+                k++;
+            } else {
+                want[m] = g_units[u].ns[k];
+                m++;
+            }
+        }
+        want[m] = 0;
+        if (strcmp(dir, want) != 0) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "namespace '%s' does not match the directory '%s'",
+                     g_units[u].ns, dir);
+            return self->fail(msg);
+        }
+        return 0;
+    }
+
+    /* `struct` starts either a definition (`struct S {`) or the return type of a
+       function/global (`struct S *f();`). Peek with a lexer snapshot. */
+    int struct_def_ahead(void)
+    {
+        int pos, bol, tok, is_def;
+        long num;
+        char text[MAX_TEXT];
+        (void)self;
+
+        pos = g_pos;
+        bol = g_bol;
+        tok = g_tok;
+        num = g_toknum;
+        snprintf(text, sizeof text, "%s", g_toktext);
+        self->lex_next();
+        is_def = 0;
+        if (g_tok == T_ID) self->lex_next();
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) is_def = 1;
+        g_pos = pos;
+        g_bol = bol;
+        g_tok = tok;
+        g_toknum = num;
+        snprintf(g_toktext, MAX_TEXT, "%s", text);
+        return is_def;
+    }
+
+    /* One top-level declaration; `pub` may lead it. */
+    int parse_top_decl(int is_pub)
+    {
+        int n;
+        (void)self;
+
+        if (g_tok == T_ID && strcmp(g_toktext, "pub") == 0) {
+            if (is_pub) return self->fail("duplicate 'pub'");
+            self->lex_next();
+            return self->parse_top_decl(1);
+        }
+        if (g_tok == T_ID && strcmp(g_toktext, "typedef") == 0) {
+            n = self->parse_typedef(is_pub);
+        } else if (g_tok == T_ID && strcmp(g_toktext, "trait") == 0) {
+            n = self->parse_trait(is_pub);
+        } else if (g_tok == T_ID && strcmp(g_toktext, "impl") == 0) {
+            n = self->parse_impl();
+        } else if (g_tok == T_ID && strcmp(g_toktext, "struct") == 0
+                   && self->struct_def_ahead()) {
+            n = self->parse_struct_def();
+            if (n >= 0 && self->expect(";") != 0) n = -1;
+        } else if (g_tok == T_ID && strcmp(g_toktext, "static") == 0) {
+            self->lex_next();
+            n = self->parse_func(1, is_pub);
+        } else {
+            n = self->parse_func(0, is_pub);
+        }
+        if (n == NO_NODE) return NO_NODE;
+        if (n < 0) return -1;
+        g_nodes[n].d = is_pub ? 1 : 0;
+        return n;
+    }
+
+    /* `namespace A::B { ... }`: C has one global namespace, so declarations are
+       stored under the `A_B_` prefix. Functions keep their names (the published
+       rule), and the block itself emits nothing. */
+    int parse_namespace(int prog)
+    {
+        char path[MAX_TEXT];
+        char prefix[MAX_TEXT];
+        char save[MAX_TEXT];
+        size_t np, npre;
+        int n;
+        (void)self;
+
+        self->lex_next();
+        np = 0;
+        npre = 0;
+        path[0] = 0;
+        prefix[0] = 0;
+        for (;;) {
+            if (g_tok != T_ID) return self->fail("expected a namespace name");
+            if (np > 0) {
+                if (np + 2 >= sizeof path) return self->fail("namespace is too long");
+                path[np] = ':';
+                path[np + 1] = ':';
+                np += 2;
+                path[np] = 0;
+            }
+            if (np + strlen(g_toktext) >= sizeof path) return self->fail("namespace is too long");
+            snprintf(path + np, sizeof path - np, "%s", g_toktext);
+            np += strlen(g_toktext);
+            if (npre + strlen(g_toktext) + 1 >= sizeof prefix)
+                return self->fail("namespace is too long");
+            snprintf(prefix + npre, sizeof prefix - npre, "%s_", g_toktext);
+            npre += strlen(g_toktext) + 1;
+            self->lex_next();
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "::") == 0) {
+                self->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (!g_ns[0]) snprintf(g_ns_decl, MAX_TEXT, "%s", path);
+        if (self->expect("{") != 0) return -1;
+        snprintf(save, sizeof save, "%s", g_ns);
+        if (snprintf(g_ns, sizeof g_ns, "%s%s", save, prefix) >= (int)sizeof g_ns)
+            return self->fail("namespace is too long");
+        while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
+            if (g_tok == T_PP) {
+                n = self->new_node(N_PP);
+                if (n < 0) return -1;
+                snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
+                if (self->append_node(prog, n) != 0) return -1;
+                self->lex_next();
+                continue;
+            }
+            n = self->parse_top_decl(0);
+            if (n == NO_NODE) continue;
+            if (n < 0) return -1;
+            if (self->append_node(prog, n) != 0) return -1;
+        }
+        if (self->expect("}") != 0) return -1;
+        snprintf(g_ns, sizeof g_ns, "%s", save);
+        return 0;
+    }
+
+    int build_main(int argc, char **argv)
+    {
+        const char *inputs[MAX_UNITS];
+        int ninput, i, u;
+        const char *outdir;
+        char root[MAX_PATH];
+        (void)self;
+
+        ninput = 0;
+        outdir = NULL;
+        g_ninc = 0;
+        g_nsroot = NULL;
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: ct-ast build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n");
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("ct-ast v%s\n", CTC_VERSION);
+                return 0;
+            }
+            if (strcmp(argv[i], "-o") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: -o needs an argument\n");
+                    return 1;
+                }
+                i++;
+                outdir = argv[i];
+                continue;
+            }
+            if (strcmp(argv[i], "-I") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: -I needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (g_ninc >= MAX_INCDIRS) {
+                    fprintf(stderr, "ct-ast: too many -I roots\n");
+                    return 1;
+                }
+                g_incdirs[g_ninc] = argv[i];
+                g_ninc++;
+                continue;
+            }
+            if (strcmp(argv[i], "--ns-root") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: --ns-root needs an argument\n");
+                    return 1;
+                }
+                i++;
+                g_nsroot = argv[i];
+                continue;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            if (ninput >= MAX_UNITS) {
+                fprintf(stderr, "ct-ast: too many inputs\n");
+                return 1;
+            }
+            inputs[ninput] = argv[i];
+            ninput++;
+        }
+        if (ninput == 0) {
+            fprintf(stderr, "usage: ct-ast build <input.ct>... -o <dir>\n");
+            return 1;
+        }
+        if (!outdir) {
+            fprintf(stderr, "ct-ast: build needs -o <dir>\n");
+            return 1;
+        }
+        if (snprintf(g_outdir, sizeof g_outdir, "%s", outdir) >= (int)sizeof g_outdir) {
+            fprintf(stderr, "ct-ast: output directory is too long\n");
+            return 1;
+        }
+        if (!g_nsroot) {
+            if (self->path_dir(inputs[0], root, sizeof root) != 0) {
+                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                return 1;
+            }
+            g_nsroot = root;
+        }
+
+        g_nunits = 0;
+        g_nnode = 0;
+        g_nfunc = 0;
+        g_nvar = 0;
+        g_nscope = 0;
+        g_ntype = 0;
+        g_ntraits = 0;
+        g_nstructs = 0;
+        g_nrels = 0;
+        g_nparams = 0;
+        g_self_mode = 0;
+        g_ret_type[0] = 0;
+        g_ns[0] = 0;
+        g_ns_decl[0] = 0;
+        g_errmsg[0] = 0;
+        g_build_mode = 1;
+
+        for (i = 0; i < ninput; i++) {
+            if (self->load_unit(inputs[i]) < 0) {
+                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                return 1;
+            }
+        }
+        for (u = 0; u < g_nunits; u++) {
+            if (self->check_ns_dir(u) != 0) {
+                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                return 1;
+            }
+        }
+        for (u = 0; u < g_nunits; u++) {
+            if (self->emit_unit(u) != 0) {
+                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                return 1;
+            }
+            if (self->write_unit_header(u) != 0) {
+                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                return 1;
+            }
+        }
+        return 0;
+    }
+}
+
 impl EmitOps for Ast {
     int emit_indent(int n)
     {
@@ -2003,6 +2645,7 @@ impl EmitOps for Ast {
             if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
 
         if (self->emit_trait_decls() != 0) return -1;
+        if (self->emit_vtable_fwd(prog) != 0) return -1;
 
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
             if (g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
@@ -2013,20 +2656,8 @@ impl EmitOps for Ast {
 
         if (self->emit_impls(prog) != 0) return -1;
 
-        for (i = 0; i < g_nfunc; i++) {
-            int k;
-            if (g_funcs[i].is_static) fputs("static ", g_out);
-            fprintf(g_out, "%s %s(", g_funcs[i].ret, g_funcs[i].name);
-            if (g_funcs[i].nparams == 0) {
-                fputs("void", g_out);
-            } else {
-                for (k = 0; k < g_funcs[i].nparams; k++) {
-                    if (k > 0) fputs(", ", g_out);
-                    fputs(g_funcs[i].ptype[k], g_out);
-                }
-            }
-            fputs(");\n", g_out);
-        }
+        for (i = 0; i < g_nfunc; i++)
+            if (self->emit_proto(i) != 0) return -1;
 
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
             if (g_nodes[n].kind == N_FUNC) {
@@ -2036,13 +2667,60 @@ impl EmitOps for Ast {
         return 0;
     }
 
+    /* One prototype line for `g_funcs[i]`. */
+    int emit_proto(int i)
+    {
+        int k;
+        (void)self;
+
+        if (g_funcs[i].is_static) fputs("static ", g_out);
+        fprintf(g_out, "%s %s(", g_funcs[i].ret, g_funcs[i].name);
+        if (g_funcs[i].nparams == 0) {
+            fputs("void", g_out);
+        } else {
+            for (k = 0; k < g_funcs[i].nparams; k++) {
+                if (k > 0) fputs(", ", g_out);
+                fputs(g_funcs[i].ptype[k], g_out);
+            }
+        }
+        fputs(");\n", g_out);
+        return 0;
+    }
+
+    /* Tentative definitions so a global declared above an impl can already
+       point at its vtable; C99 6.9.2 lets the definition below complete them. */
+    int emit_vtable_fwd(int prog)
+    {
+        int n, si;
+        const char *tname;
+        (void)self;
+
+        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+            if (g_nodes[n].kind != N_IMPL) continue;
+            si = g_nodes[n].aux;
+            tname = g_nodes[n].text2;
+            fprintf(g_out, "static struct %s_vtbl %s_%s_vtable;\n",
+                    tname, g_structs[si].name, tname);
+        }
+        return 0;
+    }
+
     /* One vtable type and one interface type per trait. */
     int emit_trait_decls(void)
+    {
+        (void)self;
+        return self->emit_trait_range(0, g_ntraits, 0);
+    }
+
+    /* `mode`: 0 = every trait, 1 = exported only, 2 = private only. */
+    int emit_trait_range(int start, int end, int mode)
     {
         int t, m, k;
         (void)self;
 
-        for (t = 0; t < g_ntraits; t++) {
+        for (t = start; t < end; t++) {
+            if (mode == 1 && !g_traits[t].is_pub) continue;
+            if (mode == 2 && g_traits[t].is_pub) continue;
             fprintf(g_out, "struct %s_vtbl {\n", g_traits[t].name);
             for (m = 0; m < g_traits[t].nm; m++) {
                 fprintf(g_out, "    %s (*%s)(void *", g_traits[t].m[m].ret,
@@ -2488,8 +3166,8 @@ impl EmitOps for Ast {
             int i, c2, rk;
             if (g_nodes[n].a < 0) return self->fail("method call without a receiver");
             rk = g_nodes[g_nodes[n].a].kind;
-            if (rk != N_VAR && rk != N_INDEX)
-                return self->fail("method receiver must be a variable or an element");
+            if (rk != N_VAR && rk != N_INDEX && rk != N_CALL)
+                return self->fail("method receiver must be a variable, an element or a call");
             if (!g_nodes[n].text[0])
                 return self->fail("cannot resolve the method trait (unknown receiver type)");
             snprintf(tname, sizeof tname, "%s", g_nodes[n].text);
@@ -2536,6 +3214,130 @@ impl EmitOps for Ast {
         return self->fail("unknown expression node");
     }
 
+    /* `foo` -> `FOO_H`; a leading digit gets an underscore so the guard is a
+       valid identifier. */
+    int header_guard(const char *base, char *out, size_t cap)
+    {
+        size_t n, i, m;
+        (void)self;
+
+        n = strlen(base);
+        m = 0;
+        if (n > 0 && base[0] >= '0' && base[0] <= '9') {
+            out[m] = '_';
+            m++;
+        }
+        for (i = 0; i < n; i++) {
+            char c = base[i];
+            if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+            else if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) c = '_';
+            if (m + 1 >= cap) return self->fail("output name too long");
+            out[m] = c;
+            m++;
+        }
+        if (m + 3 >= cap) return self->fail("output name too long");
+        out[m] = '_';
+        out[m + 1] = 'H';
+        out[m + 2] = 0;
+        return 0;
+    }
+
+    /* Build mode: one `.c` per unit. It includes its own header (so the `pub`
+       declarations are visible exactly once) and the headers of its imports. */
+    int emit_unit(int u)
+    {
+        char path[MAX_PATH];
+        int n, i;
+        FILE *f;
+        (void)self;
+
+        if (snprintf(path, sizeof path, "%s/%s.c", g_outdir, g_units[u].base) >= (int)sizeof path)
+            return self->fail("output path is too long");
+        f = fopen(path, "w");
+        if (!f) return self->fail("cannot write the output file");
+        g_out = f;
+        g_path = g_units[u].path;
+        fprintf(g_out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
+                CTC_VERSION, g_path);
+        fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
+              g_out);
+        fprintf(g_out, "#include \"%s.h\"\n", g_units[u].base);
+        for (i = 0; i < g_units[u].ndep; i++)
+            fprintf(g_out, "#include \"%s.h\"\n", g_units[u].dep[i]);
+        fputs("\n", g_out);
+
+        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next)
+            if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
+
+        if (self->emit_trait_range(g_units[u].tr_start, g_units[u].tr_end, 2) != 0) return -1;
+        if (self->emit_vtable_fwd(g_units[u].prog) != 0) return -1;
+
+        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next) {
+            if ((g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
+                 || g_nodes[n].kind == N_GLOBAL) && g_nodes[n].d != 1) {
+                if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+            }
+        }
+
+        if (self->emit_impls(g_units[u].prog) != 0) return -1;
+
+        for (i = g_units[u].fn_start; i < g_units[u].fn_end; i++)
+            if (self->emit_proto(i) != 0) return -1;
+
+        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next)
+            if (g_nodes[n].kind == N_FUNC && self->emit_node(n, 0) != 0) return -1;
+
+        if (fclose(f) != 0) return self->fail("cannot write the output file");
+        return 0;
+    }
+
+    /* Build mode: the unit's exported surface (D34 keeps the naming contract,
+       not byte equality with the old pipeline). */
+    int write_unit_header(int u)
+    {
+        char path[MAX_PATH];
+        char guard[MAX_PATH];
+        int n, i;
+        FILE *f;
+        (void)self;
+
+        if (snprintf(path, sizeof path, "%s/%s.h", g_outdir, g_units[u].base) >= (int)sizeof path)
+            return self->fail("output path is too long");
+        if (self->header_guard(g_units[u].base, guard, sizeof guard) != 0) return -1;
+        f = fopen(path, "w");
+        if (!f) return self->fail("cannot write the header");
+        g_out = f;
+        g_path = g_units[u].path;
+        fprintf(g_out, "#ifndef %s\n", guard);
+        fprintf(g_out, "#define %s\n\n", guard);
+        fprintf(g_out, "/* Generated by ct v%s from %s (multi-file mode: exported types; the matching .c\n"
+                       "   includes this header).\n"
+                       "   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n",
+                CTC_VERSION, g_path);
+        for (i = 0; i < g_units[u].ndep; i++)
+            fprintf(g_out, "#include \"%s.h\"\n", g_units[u].dep[i]);
+        if (g_units[u].ndep > 0) fputs("\n", g_out);
+
+        if (self->emit_trait_range(g_units[u].tr_start, g_units[u].tr_end, 1) != 0) return -1;
+
+        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next) {
+            if ((g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF)
+                && g_nodes[n].d == 1) {
+                if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+            }
+        }
+
+        for (i = g_units[u].fn_start; i < g_units[u].fn_end; i++) {
+            if (!g_funcs[i].is_pub || g_funcs[i].is_static) continue;
+            if (self->emit_proto(i) != 0) return -1;
+        }
+
+        fputs("\n#endif\n", g_out);
+        if (fclose(f) != 0) return self->fail("cannot write the header");
+        return 0;
+    }
+
+    /* Compile mode: a placeholder header (types only; the .c is self-contained). */
     int write_header(const char *outc)
     {
         char path[MAX_PATH];
@@ -2543,7 +3345,7 @@ impl EmitOps for Ast {
         char guard[MAX_PATH];
         const char *name;
         FILE *f;
-        size_t n, i, m;
+        size_t n;
 
         (void)self;
         if (snprintf(path, sizeof path, "%s", outc) >= (int)sizeof path)
@@ -2559,24 +3361,7 @@ impl EmitOps for Ast {
         n = strlen(base);
         if (n < 3) return self->fail("output name too short");
         base[n - 2] = 0;
-        n = strlen(base);
-        m = 0;
-        if (n > 0 && base[0] >= '0' && base[0] <= '9') {
-            guard[m] = '_';
-            m++;
-        }
-        for (i = 0; i < n; i++) {
-            char c = base[i];
-            if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-            else if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) c = '_';
-            if (m + 1 >= sizeof guard) return self->fail("output name too long");
-            guard[m] = c;
-            m++;
-        }
-        if (m + 3 >= sizeof guard) return self->fail("output name too long");
-        guard[m] = '_';
-        guard[m + 1] = 'H';
-        guard[m + 2] = 0;
+        if (self->header_guard(base, guard, sizeof guard) != 0) return -1;
 
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the header");

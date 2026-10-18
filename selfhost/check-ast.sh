@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# check-ast.sh - Phase 9.1–9.4b: the AST compiler's behavioural gate.
+# check-ast.sh - Phase 9.1–9.5a: the AST compiler's behavioural gate.
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
 # (selfhost/ast/main.ct, D30: a separate tree in parallel with the old
@@ -12,6 +12,10 @@
 # D34 defines equivalence as exit status + a warning-free build + identical
 # program output; diagnostics and warnings are not compared. The negative
 # fixture under test/ast/errors/ must exit non-zero.
+#
+# 9.5a adds a module section: `ct-ast build` on test/modules fixtures (imports,
+# `pub` routing, namespace + `--ns-root`, `-I` roots), compared on behaviour
+# too, plus the two negative module cases.
 #
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
@@ -130,6 +134,80 @@ for c in 18_polymorphism 21_empty_init_iface; do
         bad "$c" "$(cat "$work/$c.err" "$work/$c.cc" "$work/$c.stdout")"
     fi
 done
+
+echo
+echo "== module cases (build -> cc -> run -> compare) =="
+mod="$work/mod"
+rm -rf "$mod-split"
+mkdir -p "$mod-split"
+if "$work/ct-ast" build test/modules/split/main.ct -o "$mod-split" \
+        >"$work/msplit.out" 2>"$work/msplit.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-split"/*.c -o "$work/msplit.bin" 2>"$work/msplit.cc" \
+   && "$work/msplit.bin" >"$work/msplit.stdout" 2>&1 \
+   && cmp -s "$work/msplit.stdout" test/modules/split/expected.out; then
+    ok "split (import + pub routing + cross-unit dispatch)"
+else
+    bad "split" "$(cat "$work/msplit.err" "$work/msplit.cc" "$work/msplit.stdout")"
+fi
+
+rm -rf "$mod-ns"
+mkdir -p "$mod-ns"
+if "$work/ct-ast" build --ns-root test/modules/ns_dir/src \
+        test/modules/ns_dir/src/main.ct test/modules/ns_dir/src/plain/extra.ct \
+        -o "$mod-ns" >"$work/mns.out" 2>"$work/mns.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-ns"/*.c -o "$work/mns.bin" 2>"$work/mns.cc" \
+   && "$work/mns.bin" >"$work/mns.stdout" 2>&1 \
+   && cmp -s "$work/mns.stdout" test/modules/ns_dir/expected.out; then
+    ok "ns_dir (namespace + --ns-root + import a::b)"
+else
+    bad "ns_dir" "$(cat "$work/mns.err" "$work/mns.cc" "$work/mns.stdout")"
+fi
+
+rm -rf "$mod-inc"
+mkdir -p "$mod-inc"
+if "$work/ct-ast" build test/modules/inc/main.ct -I test/modules/inc/extra \
+        -o "$mod-inc" >"$work/minc.out" 2>"$work/minc.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-inc"/*.c -o "$work/minc.bin" 2>"$work/minc.cc" \
+   && "$work/minc.bin" >"$work/minc.stdout" 2>&1 \
+   && cmp -s "$work/minc.stdout" test/modules/inc/expected.out; then
+    ok "inc (-I import root)"
+else
+    bad "inc" "$(cat "$work/minc.err" "$work/minc.cc" "$work/minc.stdout")"
+fi
+
+rm -rf "$mod-hdr"
+mkdir -p "$mod-hdr"
+if "$work/ct-ast" build test/modules/hdr/main.ct -o "$mod-hdr" \
+        >"$work/mhdr.out" 2>"$work/mhdr.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-hdr"/*.c -o "$work/mhdr.bin" 2>"$work/mhdr.cc" \
+   && "$work/mhdr.bin" >"$work/mhdr.stdout" 2>&1 \
+   && cmp -s "$work/mhdr.stdout" test/modules/hdr/expected.out; then
+    ok "hdr (foo.h.ct header unit)"
+else
+    bad "hdr" "$(cat "$work/mhdr.err" "$work/mhdr.cc" "$work/mhdr.stdout")"
+fi
+
+echo
+echo "== negative cases =="
+rm -rf "$work/mod-bad"
+mkdir -p "$work/mod-bad"
+if "$work/ct-ast" build --ns-root test/modules/ns_dir_mismatch \
+        test/modules/ns_dir_mismatch/a/uart.ct -o "$work/mod-bad" \
+        >"$work/mnbad.out" 2>"$work/mnbad.err"; then
+    bad "ns_dir_mismatch" "expected a non-zero exit"
+elif grep -q "^ct-ast: " "$work/mnbad.err"; then
+    ok "ns_dir_mismatch (namespace/directory check)"
+else
+    bad "ns_dir_mismatch" "no diagnostic on stderr"
+fi
+if "$work/ct-ast" build test/modules/inc_missing/main.ct -o "$work/mod-bad" \
+        >"$work/mincm.out" 2>"$work/mincm.err"; then
+    bad "inc_missing" "expected a non-zero exit"
+elif grep -q "^ct-ast: " "$work/mincm.err"; then
+    ok "inc_missing (unresolved import)"
+else
+    bad "inc_missing" "no diagnostic on stderr"
+fi
 
 echo
 echo "== negative case =="

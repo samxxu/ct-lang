@@ -25,7 +25,7 @@
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | ✅ 完成（2026-10-17；6.1–6.4 + 6.6 落地，6.5 仅设计冻结；bump 到 v0.6.0） | 设计冻结 + 新用例全绿 |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | ✅ 完成（2026-10-17；7.1–7.3 落地，bump 到 v0.7.0；`ct get` / `ct install` 后由 Phase 8 落地） | `ct compile` 可用、`ctc …` 不失效、banner 写 `ct` |
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
-| Phase 9 | **AST 版编译器**（新主线） | 新增 | 🔨 进行中（2026-10-18；9.1–9.4b 已落地：端到端 + 语句 + 类型 + trait/impl + 接口值；9.5+ 待做；D28–D37 已冻结） | 自编 + 行为等价 |
+| Phase 9 | **AST 版编译器**（新主线） | 新增 | 🔨 进行中（2026-10-18；9.1–9.5a 已落地：端到端 + 语句 + 类型 + trait/impl + 接口值 + 模块层；9.5b+ 待做；D28–D37 已冻结） | 自编 + 行为等价 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -150,6 +150,17 @@ D34 的判据（退出码 + 零警告可编 + 输出一致）在脚本里逐条�
 `18_polymorphism` 与 `21_empty_init_iface` 已按完整行为纳入 `check-ast.sh`，新增
 `test/ast/10_iface_array`（16 项断言全绿）。**9.5 起继续按切片推进**，且**不得**把单文件形态当成
 最终布局（D30 的目标仍是 `selfhost/ast/**` 多单元）。
+
+**9.5a 已落地（2026-10-18）**：模块层——`ct-ast build <inputs...> -o <dir> [-I <dir>] [--ns-root <dir>]`
+按单元产出 `.c` + `.h`，导入闭包按深度优先解析后逐单元发射；`import a::b;` 映射
+`<root>/a/b.ct` 或 `a/b.h.ct`（导入方目录优先，其次 `-I` 顺序）；`pub` 只把 trait / struct /
+typedef / 函数原型放进 `.h`，其余声明留在 `.c`；`namespace A::B { … }` 把类型名压成 `A_B_`
+（函数名不变，符合已发布规则），`--ns-root` 按 D13-A 校验「声明 namespace = 目录路径」，不匹配即报错。
+新增 `ModuleOps`（路径 / import / 单元加载 / namespace 校验 / 顶层分派），`ParseOps` 保持 30 个方法；
+发射端新增 vtable 预声明（tentative definition），使「全局对象在 impl 之前引用 vtable」也能编译。
+`check-ast.sh` 新增模块层：`test/modules` 的 **split / ns_dir / inc / hdr** 走 `build` 后链接运行并比对
+`expected.out`，`ns_dir_mismatch` 与 `inc_missing` 必须非零退出（22 项断言全绿）。**9.5b**（`#line` 与
+`--emit-map`）留作下一片。
 
 #### 许可（已定并已落地）
 
