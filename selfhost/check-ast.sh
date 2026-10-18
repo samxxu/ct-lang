@@ -402,6 +402,50 @@ else
 fi
 
 echo
+echo "== semantic diagnostics (10.2) =="
+# The module fixtures are staged like check-archive does: the compiler runs on
+# `prog.ct` in a scratch directory, so the recorded path matches the goldens.
+sem="$work/sem"
+for c in dup_struct dup_trait; do
+    rm -rf "$sem-$c"
+    mkdir -p "$sem-$c"
+    cp "test/modules/$c/prog.ct" "$sem-$c/"
+    if ( cd "$sem-$c" && "$work/ct-ast" prog.ct -o prog.c ) >"$sem-$c.out" 2>"$sem-$c.err"; then
+        bad "$c" "expected a non-zero exit"
+    elif ! cmp -s "$sem-$c.err" "test/modules/$c/expected.stderr"; then
+        bad "$c" "stderr differs from expected.stderr: $(cat "$sem-$c.err")"
+    elif [ -f "$sem-$c/prog.c" ] || [ -f "$sem-$c/prog.h" ]; then
+        bad "$c" "artifacts survived a failed compile"
+    else
+        ok "$c (L2-identical diagnostic, no artifacts)"
+    fi
+done
+
+rm -rf "$sem-sig"
+mkdir -p "$sem-sig"
+cp test/modules/sig_mismatch/prog.ct "$sem-sig/"
+if ( cd "$sem-sig" && "$work/ct-ast" prog.ct -o prog.c ) >"$sem-sig.out" 2>"$sem-sig.err" \
+   && cmp -s "$sem-sig.err" test/modules/sig_mismatch/expected.stderr \
+   && "$CC" "$sem-sig/prog.c" -o "$sem-sig.bin" 2>"$sem-sig.cc" \
+   && "$sem-sig.bin" >"$sem-sig.stdout" 2>&1 \
+   && cmp -s "$sem-sig.stdout" test/modules/sig_mismatch/expected.out; then
+    ok "sig_mismatch (warning matches L2, the program runs)"
+else
+    bad "sig_mismatch" "$(cat "$sem-sig.err" "$sem-sig.stdout" 2>/dev/null)"
+fi
+
+rm -rf "$sem-json"
+mkdir -p "$sem-json"
+cp test/modules/sig_mismatch_json/prog.ct "$sem-json/"
+if ( cd "$sem-json" && "$work/ct-ast" --diagnostics=json prog.ct -o prog.c ) \
+        >"$sem-json.out" 2>"$sem-json.err" \
+   && cmp -s "$sem-json.out" test/modules/sig_mismatch_json/expected.stdout; then
+    ok "sig_mismatch_json (JSON document matches L2)"
+else
+    bad "sig_mismatch_json" "stdout differs: $(cat "$sem-json.out")"
+fi
+
+echo
 echo "== self-hosting (9.6) =="
 # The AST compiler compiles its own source; the result must build warning-free,
 # and the rebuilt compiler must reproduce the same output byte for byte (a
