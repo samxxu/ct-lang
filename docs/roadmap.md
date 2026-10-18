@@ -25,7 +25,7 @@
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | ✅ 完成（2026-10-17；6.1–6.4 + 6.6 落地，6.5 仅设计冻结；bump 到 v0.6.0） | 设计冻结 + 新用例全绿 |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | ✅ 完成（2026-10-17；7.1–7.3 落地，bump 到 v0.7.0；`ct get` / `ct install` 后由 Phase 8 落地） | `ct compile` 可用、`ctc …` 不失效、banner 写 `ct` |
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
-| Phase 9 | **AST 版编译器**（新主线） | 新增 | 🔨 进行中（2026-10-18；9.1–9.5a 已落地：端到端 + 语句 + 类型 + trait/impl + 接口值 + 模块层；9.5b+ 待做；D28–D37 已冻结） | 自编 + 行为等价 |
+| Phase 9 | **AST 版编译器**（新主线） | 新增 | 🔨 进行中（2026-10-18；9.1–9.5b 已落地：端到端 + 语句 + 类型 + trait/impl + 接口值 + 模块层 + 元数据；9.6+ 待做；D28–D37 已冻结） | 自编 + 行为等价 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -161,6 +161,14 @@ typedef / 函数原型放进 `.h`，其余声明留在 `.c`；`namespace A::B { 
 `check-ast.sh` 新增模块层：`test/modules` 的 **split / ns_dir / inc / hdr** 走 `build` 后链接运行并比对
 `expected.out`，`ns_dir_mismatch` 与 `inc_missing` 必须非零退出（22 项断言全绿）。**9.5b**（`#line` 与
 `--emit-map`）留作下一片。
+
+**9.5b 已落地（2026-10-18）**：元数据层——词法器与节点携带源码行号（`Node.line`、`Trait` / `Fn` 的
+`line`），解析期同时记录函数调用图；`#line 1 "<输入>"` 在 compile 模式由 `--line` 开启、在 build
+模式默认开启，`--no-line` 关闭；`--emit-map <file|->` 输出与旧管线同形的 JSON
+（compiler / file / traits / structs / functions / impls / calls）。新增 `test/ast/11_map`
+（trait + struct + impl + 两处函数 + 一次调用），`check-ast.sh` 增加元数据层（map stdout、compile
+默认无 `#line`、`--line`、build 默认 `#line`、`--no-line`、缺参数与不可写路径两条负例），共
+**30 项断言全绿**。下一片是 **9.6 自编**。
 
 #### 许可（已定并已落地）
 

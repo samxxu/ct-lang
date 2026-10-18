@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# check-ast.sh - Phase 9.1–9.5a: the AST compiler's behavioural gate.
+# check-ast.sh - Phase 9.1–9.5b: the AST compiler's behavioural gate.
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
 # (selfhost/ast/main.ct, D30: a separate tree in parallel with the old
@@ -16,6 +16,9 @@
 # 9.5a adds a module section: `ct-ast build` on test/modules fixtures (imports,
 # `pub` routing, namespace + `--ns-root`, `-I` roots), compared on behaviour
 # too, plus the two negative module cases.
+#
+# 9.5b adds the metadata section: `--emit-map` (stdout and file), `#line` in
+# build mode (default on) and `--line` / `--no-line` in both modes.
 #
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
@@ -185,6 +188,67 @@ if "$work/ct-ast" build test/modules/hdr/main.ct -o "$mod-hdr" \
     ok "hdr (foo.h.ct header unit)"
 else
     bad "hdr" "$(cat "$work/mhdr.err" "$work/mhdr.cc" "$work/mhdr.stdout")"
+fi
+
+echo
+echo "== metadata (map + #line) =="
+if "$work/ct-ast" --emit-map - test/ast/11_map/prog.ct -o "$work/m11.c" \
+        >"$work/m11.map" 2>"$work/m11.err" \
+   && grep -q '"name":"Greeter"' "$work/m11.map" \
+   && grep -q '"callee":"add"' "$work/m11.map" \
+   && grep -q '"line":11' "$work/m11.map" \
+   && grep -q '"symbol":"Person_Greeter_greet"' "$work/m11.map"; then
+    ok "--emit-map - (traits/structs/functions/impls/calls)"
+else
+    bad "map stdout" "$(cat "$work/m11.err")"
+fi
+if grep -q '^#line ' "$work/m11.c"; then
+    bad "compile default" "an unexpected #line directive"
+else
+    ok "compile default (no #line)"
+fi
+if "$work/ct-ast" --line test/ast/11_map/prog.ct -o "$work/m11l.c" >/dev/null 2>&1 \
+   && grep -q '^#line 1 "test/ast/11_map/prog.ct"' "$work/m11l.c"; then
+    ok "--line (directive emitted)"
+else
+    bad "--line" "no directive in the generated C"
+fi
+
+rm -rf "$work/m11b"
+mkdir -p "$work/m11b"
+if "$work/ct-ast" build --emit-map "$work/m11b/prog.map" test/ast/11_map/prog.ct \
+        -o "$work/m11b" >"$work/m11b.out" 2>"$work/m11b.err" \
+   && grep -q '^#line 1 "test/ast/11_map/prog.ct"' "$work/m11b/prog.c" \
+   && grep -q '"compiler": "ct v' "$work/m11b/prog.map"; then
+    ok "build default (#line on, map to a file)"
+else
+    bad "build metadata" "$(cat "$work/m11b.err")"
+fi
+
+rm -rf "$work/m11n"
+mkdir -p "$work/m11n"
+if "$work/ct-ast" build --no-line test/ast/11_map/prog.ct -o "$work/m11n" \
+        >"$work/m11n.out" 2>"$work/m11n.err" \
+   && ! grep -q '^#line ' "$work/m11n/prog.c"; then
+    ok "build --no-line (directive suppressed)"
+else
+    bad "build --no-line" "a directive survived"
+fi
+
+if "$work/ct-ast" --emit-map >"$work/mapa.out" 2>"$work/mapa.err"; then
+    bad "--emit-map without an argument" "expected a non-zero exit"
+elif grep -q "needs an argument" "$work/mapa.err"; then
+    ok "--emit-map without an argument"
+else
+    bad "--emit-map without an argument" "no diagnostic on stderr"
+fi
+if "$work/ct-ast" --emit-map /no/such/dir/x.map test/ast/11_map/prog.ct \
+        -o "$work/m11u.c" >"$work/mapu.out" 2>"$work/mapu.err"; then
+    bad "--emit-map to an unwritable path" "expected a non-zero exit"
+elif grep -q "cannot write the map" "$work/mapu.err"; then
+    ok "--emit-map to an unwritable path"
+else
+    bad "--emit-map to an unwritable path" "no diagnostic on stderr"
 fi
 
 echo

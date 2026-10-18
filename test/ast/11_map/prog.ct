@@ -1,0 +1,27 @@
+#include <stdio.h>
+
+trait Greeter {
+    void greet();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    void greet() {
+        printf("hello %s\n", self->name);
+    }
+}
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int main(void) {
+    Person p;
+    p.name = "ann";
+    p.greet();
+    printf("%d\n", add(2, 3));
+    return 0;
+}
