@@ -24,6 +24,12 @@
 # the result builds warning-free, and the rebuilt compiler reproduces the same
 # output byte for byte (a fixpoint).
 #
+# 9.7 adds the corpus-equivalence section: every `test/cases/*.ct` and
+# `examples/*/*.ct` is compiled by ct-ast, built and run, then compared with its
+# `expected.out` (D34: exit status + build + output, not the generated text).
+# A case without `expected.out` is judged compile-only; a dialect demo is first
+# expanded by its `ct-dialects/` plugin, since the compiler never sees the DSL.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -113,33 +119,61 @@ for d in test/ast/*/; do
 done
 
 echo
-echo "== corpus cases =="
-if "$work/ct-ast" test/cases/03_passthrough.ct -o "$work/p03.c" \
-        >"$work/p03.out" 2>"$work/p03.err" \
-   && "$CC" -Wall -Wextra -std=c99 -c "$work/p03.c" -o "$work/p03.o" 2>"$work/p03.cc"; then
-    ok "03_passthrough (struct/pointer/array shapes, compile only)"
-else
-    bad "03_passthrough" "$(cat "$work/p03.err" "$work/p03.cc")"
-fi
-if "$work/ct-ast" test/cases/01_trait_basic.ct -o "$work/p01.c" \
-        >"$work/p01.out" 2>"$work/p01.err" \
-   && "$CC" -Wall -Wextra -std=c99 "$work/p01.c" -o "$work/p01.bin" 2>"$work/p01.cc" \
-   && "$work/p01.bin" >"$work/p01.stdout" 2>&1 \
-   && cmp -s "$work/p01.stdout" test/cases/01_trait_basic.expected.out; then
-    ok "01_trait_basic (trait/impl dispatch, full behaviour)"
-else
-    bad "01_trait_basic" "$(cat "$work/p01.err" "$work/p01.cc" "$work/p01.stdout")"
-fi
-for c in 18_polymorphism 21_empty_init_iface; do
-    if "$work/ct-ast" "test/cases/$c.ct" -o "$work/$c.c" \
-            >"$work/$c.out" 2>"$work/$c.err" \
-       && "$CC" -Wall -Wextra -std=c99 "$work/$c.c" -o "$work/$c.bin" 2>"$work/$c.cc" \
-       && "$work/$c.bin" >"$work/$c.stdout" 2>&1 \
-       && cmp -s "$work/$c.stdout" "test/cases/$c.expected.out"; then
-        ok "$c (interface values, full behaviour)"
-    else
-        bad "$c" "$(cat "$work/$c.err" "$work/$c.cc" "$work/$c.stdout")"
+echo "== corpus equivalence (9.7: test/cases + examples) =="
+# D34: exit status + a warning-free build + identical program output. Golden
+# `.c` / `.h` files are not compared; a case without `expected.out` is judged
+# compile-only (`03_passthrough` / `04_signatures` have no `main`). A dialect
+# demo is expanded by its plugin first: ct-ast, like ct, never sees the DSL.
+ci=0
+for ct in test/cases/*.ct examples/*/*.ct; do
+    dir=$(dirname "$ct")
+    name=$(basename "$ct" .ct)
+    ci=$((ci + 1))
+    label="$ct"
+    src="$ct"
+    exp_out="$dir/$name.expected.out"
+
+    if [ -d "$dir/ct-dialects" ]; then
+        dialect=$(sed -n 's|^//@ct-dialect:[[:space:]]*||p' "$ct" | sed -n 1p)
+        plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
+        if [ -z "$dialect" ] || [ ! -f "$plugin" ]; then
+            bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+            continue
+        fi
+        if ! sh "$plugin" "$ct" >"$work/corp-$ci.ct" 2>"$work/corp-$ci.err"; then
+            bad "$label" "the expander failed: $(cat "$work/corp-$ci.err")"
+            continue
+        fi
+        src="$work/corp-$ci.ct"
     fi
+    if ! "$work/ct-ast" "$src" -o "$work/corp-$ci.c" \
+            >"$work/corp-$ci.out" 2>"$work/corp-$ci.err"; then
+        bad "$label" "ct-ast failed: $(cat "$work/corp-$ci.err")"
+        continue
+    fi
+    if ! "$CC" -Wall -Wextra -std=c99 -c "$work/corp-$ci.c" -o "$work/corp-$ci.o" \
+            2>"$work/corp-$ci.cc"; then
+        bad "$label" "the generated C does not compile: $(cat "$work/corp-$ci.cc")"
+        continue
+    fi
+    if [ ! -f "$exp_out" ]; then
+        ok "$label (compile only)"
+        continue
+    fi
+    if ! "$CC" -Wall -Wextra -std=c99 "$work/corp-$ci.c" -o "$work/corp-$ci.bin" \
+            2>"$work/corp-$ci.cc2"; then
+        bad "$label" "the generated C does not link: $(cat "$work/corp-$ci.cc2")"
+        continue
+    fi
+    if ! "$work/corp-$ci.bin" >"$work/corp-$ci.stdout" 2>&1; then
+        bad "$label" "the program exited non-zero"
+        continue
+    fi
+    if ! cmp -s "$work/corp-$ci.stdout" "$exp_out"; then
+        bad "$label" "program output differs from $exp_out"
+        continue
+    fi
+    ok "$label"
 done
 
 echo
