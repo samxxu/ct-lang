@@ -1,0 +1,23 @@
+#include <stdio.h>
+
+trait Show {
+    void show();
+}
+
+struct Point {
+    int x;
+} use Show;
+
+impl Ghost for Point {
+    void show() {
+        printf("%d\n", self->x);
+    }
+}
+
+int main(void)
+{
+    Point p;
+    p.x = 1;
+    p.show();
+    return 0;
+}

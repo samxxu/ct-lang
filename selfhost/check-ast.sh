@@ -312,14 +312,31 @@ else
 fi
 
 echo
-echo "== negative case =="
-if "$work/ct-ast" test/ast/errors/missing_semi.ct -o "$work/bad.c" \
-        >"$work/bad.out" 2>"$work/bad.err"; then
-    bad "missing_semi" "expected a non-zero exit"
-elif grep -q "^ct-ast: " "$work/bad.err"; then
-    ok "missing_semi (rejected with a diagnostic)"
+echo "== negative cases (test/ast/errors/*.ct) =="
+for f in test/ast/errors/*.ct; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f" .ct)"
+    if "$work/ct-ast" "$f" -o "$work/bad-$b.c" \
+            >"$work/bad-$b.out" 2>"$work/bad-$b.err"; then
+        bad "$b" "expected a non-zero exit"
+    elif grep -Eq '^ct-ast: line [0-9]+: ' "$work/bad-$b.err"; then
+        ok "$b (rejected with a line diagnostic)"
+    else
+        bad "$b" "no line diagnostic on stderr: $(cat "$work/bad-$b.err")"
+    fi
+done
+
+echo
+echo "== output contract =="
+# Compile mode keeps the `.c` self-contained: it must not include the `.h` it
+# writes next to itself (the header is a standalone type artifact).
+if "$work/ct-ast" test/ast/02_expr/prog.ct -o "$work/contract.c" \
+        >"$work/contract.out" 2>"$work/contract.err" \
+   && [ -f "$work/contract.h" ] \
+   && ! grep -q '^#include "contract.h"' "$work/contract.c"; then
+    ok "compile mode: the .c does not include its own header"
 else
-    bad "missing_semi" "no diagnostic on stderr"
+    bad "output contract" "the .c includes its header, or the .h is missing: $(cat "$work/contract.err")"
 fi
 
 echo
