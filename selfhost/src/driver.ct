@@ -687,6 +687,10 @@ trait PkgOps {
     int  ensure_dir(const char *path);
     int  get_one(const char *dir, const char *range, int depth);
     int  get(const char *spec, const char *root);
+    /* D24: `get` writes the manifest as well as the lock, and `install`
+       resolves a dependency's name the same way `get` does. */
+    int  remember_dep(const char *spec);
+    int  dep_name(const char *spec, char *name, size_t cap);
     int  run(int argc, char **argv, const char *prog);
     /* Phase 8.2: git sources. `get_spec` is the dispatcher (git vs local) every
        dependency edge goes through; the rest are the git machinery, kept in one
@@ -1252,6 +1256,14 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", cache);
             return -1;
         }
+        /* D21: the manifest names the package, and `ct get` vendors under that
+           name. A fetched manifest that disagrees would make `ct install`'s
+           name check unwinnable, so reject it here instead. */
+        if (strcmp(mname, name) != 0) {
+            fprintf(stderr, "ctc: '%s/ct.pkg' names '%s', but the source is '%s'\n",
+                    cache, mname, name);
+            return -1;
+        }
         if (!self->range_match(range, mver)) {
             fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", mname, mver, range);
             return -1;
@@ -1355,6 +1367,117 @@ impl PkgOps for Pkg {
         return 0;
     }
 
+    /* D24: `get` updates the project manifest too. The spec is recorded as a
+       `dep = ...` line unless that exact line is already there, so re-running
+       `get` is idempotent; a directory without `ct.pkg` still gets its vendor
+       tree and lock (there is no manifest to update). */
+    int remember_dep(const char *spec) {
+        char buf[MAX_PKG_PATH * 8];
+        char newname[MAX_NAME], cur[MAX_PKG_PATH];
+        char *p, *end;
+        long len;
+        size_t n, sl;
+        int found = 0, have_name;
+        FILE *f;
+        (void)self;
+
+        f = fopen("./ct.pkg", "r");
+        if (!f) return 0;
+        if (fseek(f, 0, SEEK_END) != 0 || (len = ftell(f)) < 0
+            || fseek(f, 0, SEEK_SET) != 0 || (size_t)len >= sizeof buf) {
+            fclose(f);
+            fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+            return -1;
+        }
+        n = (len > 0) ? fread(buf, 1, (size_t)len, f) : 0;
+        if (n != (size_t)len) {
+            fclose(f);
+            fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+            return -1;
+        }
+        fclose(f);
+        buf[n] = 0;
+        sl = strlen(spec);
+        have_name = (self->dep_name(spec, newname, sizeof newname) == 0);
+        p = buf;
+        end = buf + n;
+        while (p < end) {
+            char *ls = p, *le = p, *v, *ve;
+            size_t vl, cl;
+            while (le < end && *le != '\n') le++;
+            p = (le < end) ? le + 1 : end;
+            while (ls < le && (*ls == ' ' || *ls == '\t')) ls++;
+            if ((size_t)(le - ls) < 4 || memcmp(ls, "dep", 3) != 0) continue;
+            v = ls + 3;
+            while (v < le && (*v == ' ' || *v == '\t')) v++;
+            if (v >= le || *v != '=') continue;
+            v++;
+            while (v < le && (*v == ' ' || *v == '\t')) v++;
+            ve = le;
+            while (ve > v && (ve[-1] == ' ' || ve[-1] == '\t' || ve[-1] == '\r')) ve--;
+            vl = (size_t)(ve - v);
+            if (sl == vl && memcmp(v, spec, vl) == 0) {
+                found = 1;
+                break;
+            }
+            /* the same package may be spelled with or without a range */
+            if (have_name) {
+                char cn[MAX_NAME];
+                cl = vl < sizeof cur - 1 ? vl : sizeof cur - 1;
+                memcpy(cur, v, cl);
+                cur[cl] = 0;
+                if (self->dep_name(cur, cn, sizeof cn) == 0 && strcmp(cn, newname) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            f = fopen("./ct.pkg", "a");
+            if (!f) {
+                fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
+                return -1;
+            }
+            if (n > 0 && buf[n - 1] != '\n') fputc('\n', f);
+            fprintf(f, "dep = %s\n", spec);
+            if (fclose(f) != 0) {
+                fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    /* The name a dependency spec resolves to, using `get`'s rule: a local
+       package is named by its own manifest, a git package by its spec tail
+       (`get_git` rejects a fetched manifest that disagrees, so the two always
+       agree). Falls back to the tail when the local source is gone. */
+    int dep_name(const char *spec, char *name, size_t cap) {
+        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
+        char mp[MAX_PKG_PATH], sname[MAX_NAME], sver[32];
+        char deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        int ndeps;
+        FILE *f;
+
+        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        if (self->is_git_ref(path)) return self->git_name(path, name, cap);
+        if (strncmp(path, "file://", 7) == 0) {
+            if (snprintf(full, sizeof full, "%s", path + 7) >= (int)sizeof full) return -1;
+        } else if (path[0] == '/') {
+            if (snprintf(full, sizeof full, "%s", path) >= (int)sizeof full) return -1;
+        } else if (snprintf(full, sizeof full, "./%s", path) >= (int)sizeof full) {
+            return -1;
+        }
+        if (snprintf(mp, sizeof mp, "%s/ct.pkg", full) >= (int)sizeof mp) return -1;
+        f = fopen(mp, "r");
+        if (!f) return self->git_name(path, name, cap);
+        fclose(f);
+        if (self->read_manifest(full, sname, sizeof sname, sver, sizeof sver, deps, &ndeps) != 0)
+            return self->git_name(path, name, cap);
+        if (snprintf(name, cap, "%s", sname) >= (int)cap) return -1;
+        return 0;
+    }
+
     int get(const char *spec, const char *root) {
         FILE *f;
 
@@ -1372,6 +1495,7 @@ impl PkgOps for Pkg {
         if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
         fputs(self->lock, f);
         if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        if (self->remember_dep(spec) != 0) return 1;
         printf("vendored %d package(s)\n", self->nlocks);
         return 0;
     }
@@ -1444,11 +1568,13 @@ impl PkgOps for Pkg {
 
         /* Every dependency the manifest declares must be in the lock, at a
            version inside its range -- otherwise the vendored tree is not what
-           the project asked for. The package name is the spec's last segment
-           (D21: a package's directory names it). */
+           the project asked for. The name comes from `dep_name`, the same rule
+           `get` uses (a local package's manifest, a git package's spec tail),
+           so a directory whose manifest disagrees can never be locked under one
+           name and looked up under another. */
         for (i = 0; i < ndeps; i++) {
             if (self->split_spec(pdeps[i], dpath, sizeof dpath, drange, sizeof drange) != 0
-                || self->git_name(dpath, dname, sizeof dname) != 0) {
+                || self->dep_name(pdeps[i], dname, sizeof dname) != 0) {
                 fprintf(stderr, "ctc: bad dependency '%s'\n", pdeps[i]);
                 rc = 1;
                 continue;
@@ -1535,9 +1661,29 @@ int main(int argc, char **argv)
         return g_pkg.run(argc - first - 1, argv + first + 1, g_ct_prog);
 
     /* Phase 8.3: `ct install` verifies the vendored tree against `ct.lock` and
-       prints the `ct build` command that compiles with it. */
-    if (first < argc && strcmp(argv[first], "install") == 0)
+       prints the `ct build` command that compiles with it. It takes no operands,
+       so anything but help/version is rejected rather than silently ignored. */
+    if (first < argc && strcmp(argv[first], "install") == 0) {
+        int ai;
+        for (ai = first + 1; ai < argc; ai++) {
+            if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
+                printf("usage: %s install\n", g_ct_prog);
+                printf("  verify vendor/ against ct.lock and print the suggested build command\n");
+                return 0;
+            }
+            if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
+                printf("%s v%s\n", g_ct_prog, CTC_VERSION);
+                return 0;
+            }
+            if (argv[ai][0] == '-') {
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[ai]);
+                return 1;
+            }
+            fprintf(stderr, "ctc: unexpected argument '%s'\n", argv[ai]);
+            return 1;
+        }
         return g_pkg.install(g_ct_prog);
+    }
 
     if (first < argc && strcmp(argv[first], "compile") == 0)
         first++;
