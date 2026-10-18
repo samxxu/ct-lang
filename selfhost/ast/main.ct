@@ -226,6 +226,14 @@ static int  g_nstrpool;
 static Field g_pend_fields[MAX_FIELDS];
 static int   g_npend;
 
+/* An rvalue receiver (`f().m()`) is hoisted into a temp so the call is
+   evaluated once; the declarations are flushed before the statement. */
+#define MAX_HOISTS 4
+static int g_hoist_calls[MAX_HOISTS];
+static int g_nhoist;
+static int g_ntmp;
+static int g_raw_call;                /* emit this call, not its temp name */
+
 static Fn  g_funcs[MAX_FUNCS];
 static int g_nfunc;
 static Var g_vars[MAX_VARS];
@@ -350,6 +358,7 @@ trait EmitOps {
     int  emit_program(int prog);
     int  emit_unit(int u);
     int  write_unit_header(int u);
+    int  emit_struct_fwd(void);
     int  emit_trait_range(int start, int end, int mode);
     int  emit_proto(int i);
     int  emit_vtable_fwd(int prog);
@@ -359,6 +368,9 @@ trait EmitOps {
     int  emit_node(int n, int ind);
     int  emit_inline(int n);
     int  emit_expr(int n);
+    int  hoist_rvalue(int n);
+    int  hoist_scan(int n);
+    int  emit_hoists(int ind);
     int  emit_cond(int n);
     int  emit_indent(int n);
     int  emit_type_decl(int n, int ind, int with_semi);
@@ -2034,7 +2046,8 @@ impl ParseOps for Ast {
             rhs = self->parse_expr();
             if (rhs < 0) return -1;
             if ((k == N_VAR && self->var_type(g_nodes[e].text2, tt, sizeof tt) == 0)
-                || (k == N_INDEX && self->expr_type(e, tt, sizeof tt) == 0)) {
+                || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
+                    && self->expr_type(e, tt, sizeof tt) == 0)) {
                 if (self->is_iface_type(tt, tr, sizeof tr)) {
                     rhs = self->maybe_box(rhs, tr);
                     if (rhs < 0) return -1;
@@ -2306,7 +2319,19 @@ impl ParseOps for Ast {
                     /* resolve the trait now: locals are out of scope by the time
                        the emitter runs */
                     if (self->expr_type(n, rtype, sizeof rtype) == 0) {
-                        if (self->is_iface_type(rtype, trname, sizeof trname)) {
+                        char ibase[MAX_TEXT];
+                        size_t il;
+                        int piface = 0;
+                        /* a pointer to an interface value dispatches through
+                           `->vt` instead of `.vt` */
+                        snprintf(ibase, sizeof ibase, "%s", rtype);
+                        il = strlen(ibase);
+                        while (il > 0 && (ibase[il - 1] == ' ' || ibase[il - 1] == '*')) {
+                            if (ibase[il - 1] == '*') piface = 1;
+                            il--;
+                            ibase[il] = 0;
+                        }
+                        if (self->is_iface_type(ibase, trname, sizeof trname)) {
                             int t = self->find_trait(trname);
                             int mi, ok = 0;
                             if (t >= 0) {
@@ -2314,7 +2339,7 @@ impl ParseOps for Ast {
                                     if (strcmp(g_traits[t].m[mi].name, fname) == 0) ok = 1;
                             }
                             if (ok) {
-                                g_nodes[m].aux = 3;
+                                g_nodes[m].aux = piface ? 4 : 3;
                                 snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
                             }
                         } else if (self->method_trait(rtype, fname, trname, sizeof trname) == 0) {
@@ -3176,6 +3201,79 @@ impl EmitOps for Ast {
         return 0;
     }
 
+    /* Fresh state for one statement's hoist scan. The statement's `next` is the
+       following statement (not part of this expression), so it is cut off
+       while the children are walked. */
+    int hoist_rvalue(int n)
+    {
+        int saved;
+        (void)self;
+        g_nhoist = 0;
+        saved = g_nodes[n].next;
+        g_nodes[n].next = -1;
+        if (self->hoist_scan(n) != 0) {
+            g_nodes[n].next = saved;
+            return -1;
+        }
+        g_nodes[n].next = saved;
+        return 0;
+    }
+
+    /* A chain like `f().a.b` as a method receiver has to be materialised: C
+       will not take the address of the call result. Root calls are recorded
+       and named `__ct_tmpN`. */
+    int hoist_scan(int n)
+    {
+        int root;
+        (void)self;
+
+        if (n < 0) return 0;
+        if (g_nodes[n].kind == N_MCALL) {
+            root = g_nodes[n].a;
+            while (root >= 0 && (g_nodes[root].kind == N_MEMBER
+                                 || g_nodes[root].kind == N_ARROW))
+                root = g_nodes[root].a;
+            if (root >= 0 && g_nodes[root].kind == N_CALL
+                && !g_nodes[root].text3[0]
+                && self->find_func(g_nodes[root].text2) >= 0) {
+                if (g_nhoist >= MAX_HOISTS)
+                    return self->fail("too many hoisted receivers in one statement");
+                snprintf(g_nodes[root].text3, MAX_TEXT, "__ct_tmp%d", g_ntmp);
+                g_ntmp++;
+                g_hoist_calls[g_nhoist] = root;
+                g_nhoist++;
+            }
+        }
+        if (g_nodes[n].a >= 0 && self->hoist_scan(g_nodes[n].a) != 0) return -1;
+        if (g_nodes[n].b >= 0 && self->hoist_scan(g_nodes[n].b) != 0) return -1;
+        if (g_nodes[n].c >= 0 && self->hoist_scan(g_nodes[n].c) != 0) return -1;
+        if (g_nodes[n].d >= 0 && self->hoist_scan(g_nodes[n].d) != 0) return -1;
+        if (g_nodes[n].next >= 0 && self->hoist_scan(g_nodes[n].next) != 0) return -1;
+        return 0;
+    }
+
+    int emit_hoists(int ind)
+    {
+        int i, f;
+        (void)self;
+
+        for (i = 0; i < g_nhoist; i++) {
+            f = self->find_func(g_nodes[g_hoist_calls[i]].text2);
+            if (f < 0) return self->fail("cannot infer the type of a hoisted receiver");
+            self->emit_indent(ind);
+            fprintf(g_out, "%s %s = ", g_funcs[f].ret, g_nodes[g_hoist_calls[i]].text3);
+            g_raw_call = g_hoist_calls[i];
+            if (self->emit_expr(g_hoist_calls[i]) != 0) {
+                g_raw_call = -1;
+                return -1;
+            }
+            g_raw_call = -1;
+            fputs(";\n", g_out);
+        }
+        g_nhoist = 0;
+        return 0;
+    }
+
     /* PP lines, then types/globals in source order, then prototypes, then the
        definitions. Prototypes come after the type declarations they may use. */
     int emit_program(int prog)
@@ -3186,6 +3284,7 @@ impl EmitOps for Ast {
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
 
+        if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_decls() != 0) return -1;
         if (self->emit_vtable_fwd(prog) != 0) return -1;
 
@@ -3253,6 +3352,22 @@ impl EmitOps for Ast {
     {
         (void)self;
         return self->emit_trait_range(0, g_ntraits, 0);
+    }
+
+    /* A vtable field may name a struct by pointer (`void (*m)(void *, struct S *)`)
+       before that struct is defined, and a tag first seen inside a parameter
+       list would get prototype scope. Declare every tag up front. */
+    int emit_struct_fwd(void)
+    {
+        int i, ti;
+        (void)self;
+
+        for (i = 0; i < g_nstructs; i++) {
+            ti = self->find_type(g_structs[i].name);
+            if (ti < 0 || g_type_kind[ti] != 1) continue;
+            fprintf(g_out, "struct %s;\n", g_structs[i].name);
+        }
+        return 0;
     }
 
     /* `mode`: 0 = every trait, 1 = exported only, 2 = private only. */
@@ -3661,6 +3776,8 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_RET) {
+            if (self->hoist_rvalue(n) != 0) return -1;
+            if (self->emit_hoists(ind) != 0) return -1;
             self->emit_indent(ind);
             if (g_nodes[n].a < 0) {
                 fputs("return;\n", g_out);
@@ -3747,6 +3864,8 @@ impl EmitOps for Ast {
         }
         if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_ASSIGN
             || g_nodes[n].kind == N_EXPR || g_nodes[n].kind == N_POST) {
+            if (self->hoist_rvalue(n) != 0) return -1;
+            if (self->emit_hoists(ind) != 0) return -1;
             self->emit_indent(ind);
             if (self->emit_inline(n) != 0) return -1;
             fputs(";\n", g_out);
@@ -4019,7 +4138,12 @@ impl EmitOps for Ast {
                 low[i] = c;
             }
             low[i] = 0;
-            if (g_nodes[n].aux == 3) {
+            if (g_nodes[n].aux == 4) {
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fprintf(g_out, "->vt->%s(", g_nodes[n].text2);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fputs("->self", g_out);
+            } else if (g_nodes[n].aux == 3) {
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
                 fprintf(g_out, ".vt->%s(", g_nodes[n].text2);
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
@@ -4043,6 +4167,10 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_CALL) {
+            if (g_nodes[n].text3[0] && n != g_raw_call) {
+                fputs(g_nodes[n].text3, g_out);
+                return 0;
+            }
             fprintf(g_out, "%s(", g_nodes[n].text2);
             c = g_nodes[n].a;
             while (c >= 0) {
@@ -4112,6 +4240,7 @@ impl EmitOps for Ast {
         for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
 
+        if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_range(g_units[u].tr_start, g_units[u].tr_end, 2) != 0) return -1;
         if (self->emit_vtable_fwd(g_units[u].prog) != 0) return -1;
 
@@ -4161,6 +4290,7 @@ impl EmitOps for Ast {
             fprintf(g_out, "#include \"%s.h\"\n", g_units[u].dep[i]);
         if (g_units[u].ndep > 0) fputs("\n", g_out);
 
+        if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_range(g_units[u].tr_start, g_units[u].tr_end, 1) != 0) return -1;
 
         for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next) {
