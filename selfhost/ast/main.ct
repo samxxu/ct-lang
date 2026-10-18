@@ -1,0 +1,743 @@
+/*
+ * main.ct - Phase 9.1: the AST compiler's minimal end-to-end path.
+ *
+ * The new mainline (Phase 9 design, D28-D37) parses CT into a real AST and
+ * emits C from it, instead of rewriting source lines. Slice 9.1 is deliberately
+ * tiny: `int f(void) { ... }` with `return`, `printf` calls, string/number
+ * literals and `+ - * /`. That is enough to prove the whole pipe:
+ *
+ *   lexer -> recursive-descent parser -> AST -> C emitter
+ *
+ * Node shape follows D32 (a `typedef struct` node pool + a `kind` tag, with the
+ * dispatch kept in `emit_expr` / `emit_node`). Symbol tables (D33) are not
+ * needed yet: 9.1 has no variables or user functions to resolve.
+ *
+ * The output contract is unchanged: the banner, the `<base>.h` guard and a
+ * self-contained `.c` are emitted exactly like the old pipeline does, but the
+ * bytes are not required to match (D34: behavioural equivalence from 9.7 on).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define CTC_VERSION "0.8.0"
+
+#define MAX_NODES 4096
+#define MAX_TEXT  160
+#define MAX_PATH  1024
+
+/* node kinds (D32: one tag, one central dispatch) */
+#define N_PROG   1
+#define N_PP     2
+#define N_FUNC   3
+#define N_BLOCK  4
+#define N_RET    5
+#define N_EXPR   6
+#define N_CALL   7
+#define N_NUM    8
+#define N_STR    9
+#define N_VAR    10
+#define N_BIN    11
+
+/* token kinds */
+#define T_EOF    0
+#define T_ID     1
+#define T_NUM    2
+#define T_STR    3
+#define T_PUNCT  4
+#define T_PP     5
+
+/* binary operators, stored in `aux` */
+#define B_ADD 1
+#define B_SUB 2
+#define B_MUL 3
+#define B_DIV 4
+
+typedef struct Node {
+    int  kind;
+    int  a;             /* first child (or left operand) */
+    int  b;             /* second child (or right operand) */
+    int  next;          /* next sibling in a list */
+    int  aux;           /* operator kind */
+    long num;           /* numeric literal */
+    char text[MAX_TEXT];/* identifier, string literal or preprocessor line */
+} Node;
+
+static Node g_nodes[MAX_NODES];
+static int  g_nnode;
+static const char *g_src;
+static int  g_pos;
+static int  g_bol;          /* at the beginning of a line (for `#` lines) */
+static int  g_tok;
+static char g_toktext[MAX_TEXT];
+static long g_toknum;
+static FILE *g_out;
+static const char *g_path;
+static char g_errmsg[MAX_TEXT];
+
+trait AstOps {
+    int  new_node(int kind);
+    int  fail(const char *msg);
+    void lex_next(void);
+    int  accept(const char *p);
+    int  expect(const char *p);
+    int  parse_program(void);
+    int  parse_func(void);
+    int  parse_block(void);
+    int  parse_stmt(void);
+    int  parse_expr(void);
+    int  parse_add(void);
+    int  parse_mul(void);
+    int  parse_primary(void);
+    int  parse_args(void);
+    int  emit_program(int prog);
+    int  emit_node(int n, int ind);
+    int  emit_expr(int n);
+    int  emit_indent(int n);
+    int  read_file(const char *path);
+    int  default_output(const char *in, char *out, size_t cap);
+    int  write_header(const char *outc);
+    int  run(int argc, char **argv);
+}
+
+/* 9.1 needs no per-run state beyond the globals above; the struct exists so the
+   methods live in an impl block (plain-C signatures are capped by MAX_FUNCS). */
+struct Ast {
+    int nerr;
+} use AstOps;
+
+impl AstOps for Ast {
+    int new_node(int kind)
+    {
+        int n;
+        (void)self;
+        if (g_nnode >= MAX_NODES) return self->fail("too many AST nodes");
+        n = g_nnode;
+        g_nnode++;
+        g_nodes[n].kind = kind;
+        g_nodes[n].a = -1;
+        g_nodes[n].b = -1;
+        g_nodes[n].next = -1;
+        g_nodes[n].aux = 0;
+        g_nodes[n].num = 0;
+        g_nodes[n].text[0] = 0;
+        return n;
+    }
+
+    int fail(const char *msg)
+    {
+        (void)self;
+        if (!g_errmsg[0]) snprintf(g_errmsg, sizeof g_errmsg, "%s", msg);
+        return -1;
+    }
+
+    /* One token at a time. Preprocessor lines are kept verbatim: 9.1 does not
+       interpret them, it only has to keep `#include <stdio.h>` in front of the
+       emitted functions. */
+    void lex_next(void)
+    {
+        int c, n;
+        (void)self;
+
+        for (;;) {
+            c = (unsigned char)g_src[g_pos];
+            if (c == 0) { g_tok = T_EOF; g_toktext[0] = 0; return; }
+            if (c == '\n') { g_bol = 1; g_pos++; continue; }
+            if (c == ' ' || c == '\t' || c == '\r') { g_pos++; continue; }
+            if (c == '/' && g_src[g_pos + 1] == '/') {
+                while (g_src[g_pos] && g_src[g_pos] != '\n') g_pos++;
+                continue;
+            }
+            break;
+        }
+        if (g_bol && c == '#') {
+            n = 0;
+            while (g_src[g_pos] && g_src[g_pos] != '\n') {
+                if (n + 1 < MAX_TEXT) { g_toktext[n] = g_src[g_pos]; n++; }
+                g_pos++;
+            }
+            g_toktext[n] = 0;
+            g_tok = T_PP;
+            g_bol = 0;
+            return;
+        }
+        g_bol = 0;
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+            n = 0;
+            while (g_src[g_pos] && ((g_src[g_pos] >= 'a' && g_src[g_pos] <= 'z')
+                   || (g_src[g_pos] >= 'A' && g_src[g_pos] <= 'Z')
+                   || (g_src[g_pos] >= '0' && g_src[g_pos] <= '9')
+                   || g_src[g_pos] == '_')) {
+                if (n + 1 < MAX_TEXT) { g_toktext[n] = g_src[g_pos]; n++; }
+                g_pos++;
+            }
+            g_toktext[n] = 0;
+            g_tok = T_ID;
+            return;
+        }
+        if (c >= '0' && c <= '9') {
+            g_toknum = 0;
+            while (g_src[g_pos] >= '0' && g_src[g_pos] <= '9') {
+                g_toknum = g_toknum * 10 + (g_src[g_pos] - '0');
+                g_pos++;
+            }
+            g_tok = T_NUM;
+            return;
+        }
+        if (c == '"') {
+            n = 0;
+            g_toktext[n] = '"';
+            n++;
+            g_pos++;
+            while (g_src[g_pos] && g_src[g_pos] != '"') {
+                if (g_src[g_pos] == '\\' && g_src[g_pos + 1]) {
+                    if (n + 1 < MAX_TEXT) { g_toktext[n] = g_src[g_pos]; n++; }
+                    g_pos++;
+                }
+                if (n + 1 < MAX_TEXT) { g_toktext[n] = g_src[g_pos]; n++; }
+                g_pos++;
+            }
+            if (g_src[g_pos] == '"') {
+                if (n + 1 < MAX_TEXT) { g_toktext[n] = '"'; n++; }
+                g_pos++;
+            }
+            g_toktext[n] = 0;
+            g_tok = T_STR;
+            return;
+        }
+        g_toktext[0] = (char)c;
+        g_toktext[1] = 0;
+        g_tok = T_PUNCT;
+        g_pos++;
+    }
+
+    int accept(const char *p)
+    {
+        (void)self;
+        if (g_tok == T_PUNCT && strcmp(g_toktext, p) == 0) {
+            self->lex_next();
+            return 1;
+        }
+        return 0;
+    }
+
+    int expect(const char *p)
+    {
+        (void)self;
+        if (self->accept(p)) return 0;
+        return self->fail("unexpected token");
+    }
+
+    int parse_program(void)
+    {
+        int prog, tail, n;
+        (void)self;
+
+        prog = self->new_node(N_PROG);
+        if (prog < 0) return -1;
+        tail = -1;
+        self->lex_next();
+        while (g_tok == T_PP) {
+            n = self->new_node(N_PP);
+            if (n < 0) return -1;
+            snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
+            if (tail < 0) g_nodes[prog].a = n;
+            else g_nodes[tail].next = n;
+            tail = n;
+            self->lex_next();
+        }
+        while (g_tok != T_EOF) {
+            n = self->parse_func();
+            if (n < 0) return -1;
+            if (tail < 0) g_nodes[prog].a = n;
+            else g_nodes[tail].next = n;
+            tail = n;
+        }
+        return prog;
+    }
+
+    int parse_func(void)
+    {
+        int f, b;
+        (void)self;
+
+        if (g_tok != T_ID || strcmp(g_toktext, "int") != 0)
+            return self->fail("expected a function definition");
+        f = self->new_node(N_FUNC);
+        if (f < 0) return -1;
+        self->lex_next();
+        if (g_tok != T_ID) return self->fail("expected a function name");
+        snprintf(g_nodes[f].text, MAX_TEXT, "%s", g_toktext);
+        self->lex_next();
+        if (self->expect("(") != 0) return -1;
+        if (g_tok == T_ID && strcmp(g_toktext, "void") == 0) self->lex_next();
+        else return self->fail("9.1 only supports 'void' parameters");
+        if (self->expect(")") != 0) return -1;
+        b = self->parse_block();
+        if (b < 0) return -1;
+        g_nodes[f].a = b;
+        return f;
+    }
+
+    int parse_block(void)
+    {
+        int blk, tail, s;
+        (void)self;
+
+        if (self->expect("{") != 0) return -1;
+        blk = self->new_node(N_BLOCK);
+        if (blk < 0) return -1;
+        tail = -1;
+        while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
+            s = self->parse_stmt();
+            if (s < 0) return -1;
+            if (tail < 0) g_nodes[blk].a = s;
+            else g_nodes[tail].next = s;
+            tail = s;
+        }
+        if (self->expect("}") != 0) return -1;
+        return blk;
+    }
+
+    int parse_stmt(void)
+    {
+        int s, e;
+        (void)self;
+
+        if (g_tok == T_ID && strcmp(g_toktext, "return") == 0) {
+            s = self->new_node(N_RET);
+            if (s < 0) return -1;
+            self->lex_next();
+            e = self->parse_expr();
+            if (e < 0) return -1;
+            g_nodes[s].a = e;
+            if (self->expect(";") != 0) return -1;
+            return s;
+        }
+        s = self->new_node(N_EXPR);
+        if (s < 0) return -1;
+        e = self->parse_expr();
+        if (e < 0) return -1;
+        g_nodes[s].a = e;
+        if (self->expect(";") != 0) return -1;
+        return s;
+    }
+
+    int parse_expr(void)
+    {
+        (void)self;
+        return self->parse_add();
+    }
+
+    int parse_add(void)
+    {
+        int left, right, n;
+        int op;
+        (void)self;
+
+        left = self->parse_mul();
+        if (left < 0) return -1;
+        while (g_tok == T_PUNCT && (strcmp(g_toktext, "+") == 0 || strcmp(g_toktext, "-") == 0)) {
+            op = (g_toktext[0] == '+') ? B_ADD : B_SUB;
+            self->lex_next();
+            right = self->parse_mul();
+            if (right < 0) return -1;
+            n = self->new_node(N_BIN);
+            if (n < 0) return -1;
+            g_nodes[n].a = left;
+            g_nodes[n].b = right;
+            g_nodes[n].aux = op;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_mul(void)
+    {
+        int left, right, n;
+        int op;
+        (void)self;
+
+        left = self->parse_primary();
+        if (left < 0) return -1;
+        while (g_tok == T_PUNCT && (strcmp(g_toktext, "*") == 0 || strcmp(g_toktext, "/") == 0)) {
+            op = (g_toktext[0] == '*') ? B_MUL : B_DIV;
+            self->lex_next();
+            right = self->parse_primary();
+            if (right < 0) return -1;
+            n = self->new_node(N_BIN);
+            if (n < 0) return -1;
+            g_nodes[n].a = left;
+            g_nodes[n].b = right;
+            g_nodes[n].aux = op;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_primary(void)
+    {
+        int n, args;
+        (void)self;
+
+        if (g_tok == T_NUM) {
+            n = self->new_node(N_NUM);
+            if (n < 0) return -1;
+            g_nodes[n].num = g_toknum;
+            self->lex_next();
+            return n;
+        }
+        if (g_tok == T_STR) {
+            n = self->new_node(N_STR);
+            if (n < 0) return -1;
+            snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
+            self->lex_next();
+            return n;
+        }
+        if (g_tok == T_ID) {
+            n = self->new_node(N_VAR);
+            if (n < 0) return -1;
+            snprintf(g_nodes[n].text, MAX_TEXT, "%s", g_toktext);
+            self->lex_next();
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0) {
+                args = self->parse_args();
+                if (args < 0) return -1;
+                g_nodes[n].kind = N_CALL;
+                g_nodes[n].a = (args == 0) ? -1 : args;
+            }
+            return n;
+        }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0) {
+            self->lex_next();
+            n = self->parse_expr();
+            if (n < 0) return -1;
+            if (self->expect(")") != 0) return -1;
+            return n;
+        }
+        return self->fail("expected an expression");
+    }
+
+    /* `(` args `)`: 0 means an empty list (node 0 is the program, so callers
+       distinguish it from an index explicitly). */
+    int parse_args(void)
+    {
+        int first, tail, e;
+        (void)self;
+
+        if (self->expect("(") != 0) return -1;
+        if (g_tok == T_PUNCT && strcmp(g_toktext, ")") == 0) {
+            self->lex_next();
+            return 0;
+        }
+        first = -1;
+        tail = -1;
+        for (;;) {
+            e = self->parse_expr();
+            if (e < 0) return -1;
+            if (tail < 0) first = e;
+            else g_nodes[tail].next = e;
+            tail = e;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ",") == 0) {
+                self->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (self->expect(")") != 0) return -1;
+        return first;
+    }
+
+    int emit_indent(int n)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < n * 4; i++) fputc(' ', g_out);
+        return 0;
+    }
+
+    int emit_program(int prog)
+    {
+        int n;
+        (void)self;
+
+        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+            if (g_nodes[n].kind == N_PP) {
+                fprintf(g_out, "%s\n", g_nodes[n].text);
+            } else if (g_nodes[n].kind == N_FUNC) {
+                if (self->emit_node(n, 0) != 0) return -1;
+            } else {
+                return self->fail("unknown top-level node");
+            }
+        }
+        return 0;
+    }
+
+    int emit_node(int n, int ind)
+    {
+        int c;
+        (void)self;
+
+        if (g_nodes[n].kind == N_FUNC) {
+            fprintf(g_out, "int %s(void) {\n", g_nodes[n].text);
+            for (c = g_nodes[g_nodes[n].a].a; c >= 0; c = g_nodes[c].next)
+                if (self->emit_node(c, ind + 1) != 0) return -1;
+            fputs("}\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_RET) {
+            self->emit_indent(ind);
+            fputs("return ", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(";\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_EXPR) {
+            self->emit_indent(ind);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(";\n", g_out);
+            return 0;
+        }
+        return self->fail("unknown statement node");
+    }
+
+    int emit_expr(int n)
+    {
+        int c;
+        const char *op;
+        (void)self;
+
+        if (g_nodes[n].kind == N_NUM) {
+            fprintf(g_out, "%ld", g_nodes[n].num);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_STR || g_nodes[n].kind == N_VAR) {
+            fputs(g_nodes[n].text, g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_BIN) {
+            op = "+";
+            if (g_nodes[n].aux == B_SUB) op = "-";
+            else if (g_nodes[n].aux == B_MUL) op = "*";
+            else if (g_nodes[n].aux == B_DIV) op = "/";
+            fputs("(", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fprintf(g_out, " %s ", op);
+            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_CALL) {
+            fprintf(g_out, "%s(", g_nodes[n].text);
+            c = g_nodes[n].a;
+            while (c >= 0) {
+                if (self->emit_expr(c) != 0) return -1;
+                c = g_nodes[c].next;
+                if (c >= 0) fputs(", ", g_out);
+            }
+            fputs(")", g_out);
+            return 0;
+        }
+        return self->fail("unknown expression node");
+    }
+
+    int read_file(const char *path)
+    {
+        FILE *f;
+        long sz;
+        char *buf;
+
+        (void)self;
+        f = fopen(path, "rb");
+        if (!f) return self->fail("cannot open the input file");
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz < 0) {
+            fclose(f);
+            return self->fail("cannot read the input file");
+        }
+        buf = (char *)malloc((size_t)sz + 1);
+        if (!buf) {
+            fclose(f);
+            return self->fail("out of memory");
+        }
+        if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+            free(buf);
+            fclose(f);
+            return self->fail("short read");
+        }
+        fclose(f);
+        buf[sz] = 0;
+        g_src = buf;
+        return 0;
+    }
+
+    /* `foo.ct` -> `foo.c`; anything else gets `.c` appended. */
+    int default_output(const char *in, char *out, size_t cap)
+    {
+        size_t n;
+        (void)self;
+
+        n = strlen(in);
+        if (n >= 3 && strcmp(in + n - 3, ".ct") == 0) {
+            if (snprintf(out, cap, "%.*s.c", (int)(n - 3), in) >= (int)cap) return -1;
+            return 0;
+        }
+        if (snprintf(out, cap, "%s.c", in) >= (int)cap) return -1;
+        return 0;
+    }
+
+    /* The header carries the same banner and guard as the old pipeline; 9.1 has
+       no exported types yet, so there is nothing between the guard and `#endif`. */
+    int write_header(const char *outc)
+    {
+        char path[MAX_PATH];
+        char base[MAX_PATH];
+        char guard[MAX_PATH];
+        const char *name;
+        FILE *f;
+        size_t n, i, m;
+
+        (void)self;
+        if (snprintf(path, sizeof path, "%s", outc) >= (int)sizeof path)
+            return self->fail("output path too long");
+        n = strlen(path);
+        if (n < 3 || path[n - 1] != 'c' || path[n - 2] != '.')
+            return self->fail("output must end in .c");
+        path[n - 1] = 'h';
+        name = strrchr(path, '/');
+        name = name ? name + 1 : path;
+        if (snprintf(base, sizeof base, "%s", name) >= (int)sizeof base)
+            return self->fail("output path too long");
+        n = strlen(base);
+        if (n < 3) return self->fail("output name too short");
+        base[n - 2] = 0;
+        n = strlen(base);
+        m = 0;
+        if (n > 0 && base[0] >= '0' && base[0] <= '9') {
+            guard[m] = '_';
+            m++;
+        }
+        for (i = 0; i < n; i++) {
+            char c = base[i];
+            if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+            else if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) c = '_';
+            if (m + 1 >= sizeof guard) return self->fail("output name too long");
+            guard[m] = c;
+            m++;
+        }
+        if (m + 3 >= sizeof guard) return self->fail("output name too long");
+        guard[m] = '_';
+        guard[m + 1] = 'H';
+        guard[m + 2] = 0;
+
+        f = fopen(path, "w");
+        if (!f) return self->fail("cannot write the header");
+        fprintf(f, "#ifndef %s\n", guard);
+        fprintf(f, "#define %s\n\n", guard);
+        fprintf(f, "/* Generated by ct v%s from %s (Phase 0: types only, the\n"
+                   "   generated .c is self-contained).\n"
+                   "   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n",
+                CTC_VERSION, g_path);
+        fputs("#endif\n", f);
+        if (fclose(f) != 0) return self->fail("cannot write the header");
+        return 0;
+    }
+
+    int run(int argc, char **argv)
+    {
+        const char *in;
+        const char *out;
+        char outbuf[MAX_PATH];
+        int i, prog;
+        FILE *f;
+
+        in = NULL;
+        out = NULL;
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: ct-ast <input.ct> [-o <output.c>]\n");
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("ct-ast v%s\n", CTC_VERSION);
+                return 0;
+            }
+            if (strcmp(argv[i], "-o") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: -o needs an argument\n");
+                    return 1;
+                }
+                i++;
+                out = argv[i];
+                continue;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            in = argv[i];
+        }
+        if (!in) {
+            fprintf(stderr, "usage: ct-ast <input.ct> [-o <output.c>]\n");
+            return 1;
+        }
+        if (!out) {
+            if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
+                fprintf(stderr, "ct-ast: output path too long\n");
+                return 1;
+            }
+            out = outbuf;
+        }
+
+        g_path = in;
+        g_pos = 0;
+        g_bol = 1;
+        g_nnode = 0;
+        g_errmsg[0] = 0;
+        if (self->read_file(in) != 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        prog = self->parse_program();
+        if (prog < 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        f = fopen(out, "w");
+        if (!f) {
+            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            return 1;
+        }
+        g_out = f;
+        fprintf(g_out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
+                CTC_VERSION, g_path);
+        fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
+              g_out);
+        if (self->emit_program(prog) != 0) {
+            fclose(f);
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        if (fclose(f) != 0) {
+            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            return 1;
+        }
+        if (self->write_header(out) != 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        return 0;
+    }
+}
+
+/* The instance lives after the impl: its vptr initialiser needs the vtable
+   forward declaration the emitter places with the impl. */
+static struct Ast g_ast;
+
+int main(int argc, char **argv)
+{
+    return g_ast.run(argc, argv);
+}
