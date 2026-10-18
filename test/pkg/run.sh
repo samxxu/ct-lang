@@ -99,6 +99,13 @@ if [ -f "$work/proj/ct.lock" ]; then
 else
     bad "ct.lock" "was not written"
 fi
+# D24: `get` writes the manifest too, and a re-run must not duplicate the line
+# that already named this package (the fixture spells it with a range).
+if [ "$(grep -c '^dep = ' "$work/proj/ct.pkg")" = "1" ]; then
+    ok "get leaves an existing dep line alone"
+else
+    bad "ct.pkg" "unexpected dep lines: $(cat "$work/proj/ct.pkg")"
+fi
 
 echo
 echo "== ct install: verifies the lock and prints a build command =="
@@ -285,6 +292,13 @@ else
     else
         bad "ct get <git>" "vendor/gutil is incomplete"
     fi
+    # D24: the manifest records what `get` brought in, so `install` can be run
+    # later without re-typing the spec.
+    if grep -Fq 'dep = gutil@^0.1.0' "$work/proj/ct.pkg"; then
+        ok "get records the git package in ct.pkg"
+    else
+        bad "ct.pkg <git>" "missing the gutil dep: $(cat "$work/proj/ct.pkg")"
+    fi
     if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} [0-9a-f]+$" "$work/proj/ct.lock"; then
         ok "MVS picks the lowest satisfying tag and pins its commit"
     else
@@ -321,6 +335,69 @@ else
     else
         bad "no-git" "wrong diagnostic: $(cat "$work/ng.err")"
     fi
+
+    echo
+    echo "== a fetched manifest whose name differs from the source =="
+    mkdir -p "$reg/mismatch"
+    ( cd "$reg/mismatch" \
+        && git init -q \
+        && printf 'name = other\nversion = 0.1.0\n' >ct.pkg \
+        && printf 'int other_value(void) { return 1; }\n' >other.c \
+        && git add -A && git commit -qm one && git tag 0.1.0 )
+    if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
+            "$work/l2" get "mismatch@*" >"$work/mis.out" 2>"$work/mis.err" ); then
+        bad "name mismatch" "expected a non-zero exit"
+    elif grep -Fq "names 'other'" "$work/mis.err"; then
+        ok "rejects a manifest name that disagrees with the source"
+    else
+        bad "name mismatch" "wrong diagnostic: $(cat "$work/mis.err")"
+    fi
+fi
+
+echo
+echo "== ct install: help and argument errors =="
+if ( cd "$work/proj" && "$work/l2" install --help >"$work/ih.out" 2>"$work/ih.err" ) \
+   && grep -Fq "usage: " "$work/ih.out"; then
+    ok "install --help prints usage"
+else
+    bad "install --help" "no usage on stdout: $(cat "$work/ih.out" "$work/ih.err")"
+fi
+if ( cd "$work/proj" && "$work/l2" install --bogus >"$work/iu.out" 2>"$work/iu.err" ); then
+    bad "install unknown-option" "expected a non-zero exit"
+elif grep -Fq "unknown option '--bogus'" "$work/iu.err"; then
+    ok "install rejects an unknown option"
+else
+    bad "install unknown-option" "wrong diagnostic: $(cat "$work/iu.err")"
+fi
+if ( cd "$work/proj" && "$work/l2" install stray >"$work/ix.out" 2>"$work/ix.err" ); then
+    bad "install extra-arg" "expected a non-zero exit"
+elif grep -Fq "unexpected argument 'stray'" "$work/ix.err"; then
+    ok "install rejects a stray argument"
+else
+    bad "install extra-arg" "wrong diagnostic: $(cat "$work/ix.err")"
+fi
+
+echo
+echo "== a local package whose directory differs from its manifest name =="
+# `get` vendors under the manifest name; `install` must resolve the same name
+# from the dep spec instead of trusting the directory segment.
+mkdir -p "$work/pkgs/dirname"
+printf 'name = realname\nversion = 0.1.0\n' >"$work/pkgs/dirname/ct.pkg"
+printf 'int realname_value(void) { return 1; }\n' >"$work/pkgs/dirname/a.c"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/dirname@^0.1.0\n' >"$work/proj/ct.pkg"
+if ( cd "$work/proj" && "$work/l2" get ../pkgs/dirname >"$work/rn.out" 2>"$work/rn.err" ); then
+    if [ -d "$work/proj/vendor/realname" ]; then
+        ok "get vendors under the manifest name"
+    else
+        bad "get dirname" "vendor/realname is missing"
+    fi
+    if ( cd "$work/proj" && "$work/l2" install >"$work/rni.out" 2>"$work/rni.err" ); then
+        ok "install resolves the same manifest name"
+    else
+        bad "install dirname" "non-zero exit: $(cat "$work/rni.err")"
+    fi
+else
+    bad "get dirname" "non-zero exit: $(cat "$work/rn.err")"
 fi
 
 echo
