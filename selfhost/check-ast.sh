@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# check-ast.sh - Phase 9.1–9.3: the AST compiler's behavioural gate.
+# check-ast.sh - Phase 9.1–9.4a: the AST compiler's behavioural gate.
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
 # (selfhost/ast/main.ct, D30: a separate tree in parallel with the old
@@ -102,13 +102,22 @@ for d in test/ast/*/; do
 done
 
 echo
-echo "== corpus unit (no main: compile only) =="
+echo "== corpus cases =="
 if "$work/ct-ast" test/cases/03_passthrough.ct -o "$work/p03.c" \
         >"$work/p03.out" 2>"$work/p03.err" \
    && "$CC" -Wall -Wextra -std=c99 -c "$work/p03.c" -o "$work/p03.o" 2>"$work/p03.cc"; then
-    ok "03_passthrough (struct/pointer/array shapes)"
+    ok "03_passthrough (struct/pointer/array shapes, compile only)"
 else
     bad "03_passthrough" "$(cat "$work/p03.err" "$work/p03.cc")"
+fi
+if "$work/ct-ast" test/cases/01_trait_basic.ct -o "$work/p01.c" \
+        >"$work/p01.out" 2>"$work/p01.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/p01.c" -o "$work/p01.bin" 2>"$work/p01.cc" \
+   && "$work/p01.bin" >"$work/p01.stdout" 2>&1 \
+   && cmp -s "$work/p01.stdout" test/cases/01_trait_basic.expected.out; then
+    ok "01_trait_basic (trait/impl dispatch, full behaviour)"
+else
+    bad "01_trait_basic" "$(cat "$work/p01.err" "$work/p01.cc" "$work/p01.stdout")"
 fi
 
 echo

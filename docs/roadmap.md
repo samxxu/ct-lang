@@ -25,7 +25,7 @@
 | Phase 6 | **生态与扩展**：`map` + 反向映射表（D8）、方言系统；增量编译、跨函数分析、多目标 | 扩展 | ✅ 完成（2026-10-17；6.1–6.4 + 6.6 落地，6.5 仅设计冻结；bump 到 v0.6.0） | 设计冻结 + 新用例全绿 |
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | ✅ 完成（2026-10-17；7.1–7.3 落地，bump 到 v0.7.0；`ct get` / `ct install` 后由 Phase 8 落地） | `ct compile` 可用、`ctc …` 不失效、banner 写 `ct` |
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
-| Phase 9 | **AST 版编译器**（新主线） | 新增 | 🔨 进行中（2026-10-18；9.1–9.3 已落地：最小端到端 + 语句/控制流 + 类型/struct/指针/数组 + `check-ast.sh` 第 8 关；D28–D37 已冻结） | 自编 + 行为等价 |
+| Phase 9 | **AST 版编译器**（新主线） | 新增 | 🔨 进行中（2026-10-18；9.1–9.4a 已落地：端到端 + 语句 + 类型 + trait/impl 派发；接口值与 9.5+ 待做；D28–D37 已冻结） | 自编 + 行为等价 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -133,8 +133,20 @@ D34 的判据（退出码 + 零警告可编 + 输出一致）在脚本里逐条�
 新增 `test/ast/05_struct`（`struct` + 指针参数 + `static` 全局字符串）、`06_arrays`、
 `07_typedef`（匿名 struct + `typedef int`）、`08_static`；`check-ast.sh` 另把 **`03_passthrough`**
 作为「无 main 语料单元」直接编译并 `cc -c` 通过（11 项断言全绿）。仍显式推迟：花括号初始化式、
-强制转换、`sizeof`（`04_signatures` 需要它们与 trait，留到 9.4）。**9.4 起继续按切片推进**，
-且**不得**把单文件形态当成最终布局（D30 的目标仍是 `selfhost/ast/**` 多单元）。
+强制转换、`sizeof`（`04_signatures` 需要它们与 trait，留到 9.4）。
+
+**9.4a 已落地（2026-10-18）**：trait/impl 派发到位——`trait` 生成 `<T>_vtbl` / `<T>_iface`，
+`struct ... use T` 追加 `__<trait>_vptr` 字段，`impl T for S` 生成 `static <S>_<T>_<m>` 方法与
+`static struct <T>_vtbl <S>_<T>_vtable`；方法调用按接收者形态重写为
+`recv.__x_vptr->m(&recv, …)`（值）或 `recv->__x_vptr->m(recv, …)`（指针），`self->other()` 走同一路径；
+声明处自动写 vptr，花括号初始化式（`{ .name = "Tom", … }`）在收尾 `}` 前追加 vptr 项。
+接收者形态与 trait 解析在**解析期**完成（局部变量在发射期已出作用域）。新增 `test/ast/09_methods`
+（值/指针/`self` 兄弟调用）；`check-ast.sh` 现把 **`01_trait_basic`** 按完整行为（编、跑、输出比对）
+纳入语料断言，共 **13 项全绿**。
+
+**9.4b（待做）**：接口值与接口数组——`Greeter g = p;`、`g.greet()`、接口数组；需要 iface 装箱与
+运行期派发，是 9.4 剩余的一半。**9.4b 起继续按切片推进**，且**不得**把单文件形态当成最终布局
+（D30 的目标仍是 `selfhost/ast/**` 多单元）。
 
 #### 许可（已定并已落地）
 

@@ -15,7 +15,7 @@
 #   5. selfhost/ct-tour.sh                       end-to-end tour
 #   6. editors/vscode/test/check-grammar.py      editor grammar (19 assertions)
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
-#   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.3)
+#   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.4a)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning
@@ -56,7 +56,7 @@ run_gate "4) CT: check-m2a" bash selfhost/check-m2a.sh
 run_gate "5) CT: ct-tour" bash selfhost/ct-tour.sh
 run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
-run_gate "8) AST compiler (Phase 9.1–9.3)" bash selfhost/check-ast.sh
+run_gate "8) AST compiler (Phase 9.1–9.4a)" bash selfhost/check-ast.sh
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then

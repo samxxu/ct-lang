@@ -33,6 +33,9 @@
 #define MAX_VARS   512
 #define MAX_SCOPE  256
 #define MAX_TYPES  64
+#define MAX_TRAITS 16
+#define MAX_METHODS 16
+#define MAX_STRUCTS 32
 
 /* node kinds (D32: one tag, one dispatch) */
 #define N_PROG    1
@@ -63,6 +66,11 @@
 #define N_INDEX   26
 #define N_ADDR    27
 #define N_DEREF   28
+#define N_METHOD  29
+#define N_MCALL   30
+#define N_RAW     31
+#define N_TRAIT   32
+#define N_IMPL    33
 
 /* token kinds */
 #define T_EOF    0
@@ -117,7 +125,27 @@ typedef struct Fn {
 
 typedef struct Var {
     char name[MAX_TEXT];
+    char type[MAX_TEXT];
 } Var;
+
+typedef struct MethodSig {
+    char name[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char ptype[MAX_PARAMS][MAX_TEXT];
+    int  nparams;
+} MethodSig;
+
+typedef struct Trait {
+    char name[MAX_TEXT];
+    MethodSig m[MAX_METHODS];
+    int  nm;
+} Trait;
+
+typedef struct StructDef {
+    char name[MAX_TEXT];
+    char use[MAX_TRAITS][MAX_TEXT];
+    int  nuse;
+} StructDef;
 
 static Node g_nodes[MAX_NODES];
 static int  g_nnode;
@@ -139,7 +167,13 @@ static int g_nvar;
 static int g_scope[MAX_SCOPE];
 static int g_nscope;
 static char g_types[MAX_TYPES][MAX_TEXT];
+static int  g_type_kind[MAX_TYPES];   /* 1 = struct tag, 2 = typedef */
 static int g_ntype;
+static Trait g_traits[MAX_TRAITS];
+static int g_ntraits;
+static StructDef g_structs[MAX_STRUCTS];
+static int g_nstructs;
+static int g_self_mode;               /* inside an impl body: `self` -> `_self` */
 
 trait AstOps {
     int  new_node(int kind);
@@ -155,12 +189,18 @@ trait AstOps {
 trait SymOps {
     int  push_scope(void);
     int  pop_scope(void);
-    int  declare_var(const char *name);
+    int  declare_var(const char *name, const char *type);
     int  find_var(const char *name);
+    int  var_type(const char *name, char *out, size_t cap);
     int  find_func(const char *name);
     int  add_func(const char *name, const char *ret, int is_static, int first_param);
     int  find_type(const char *name);
-    int  add_type(const char *name);
+    int  add_type(const char *name, int kind);
+    int  find_struct(const char *name);
+    int  add_struct(const char *name);
+    int  find_trait(const char *name);
+    int  add_trait(const char *name);
+    int  method_trait(const char *stype, const char *method, char *tout, size_t tcap);
 }
 
 trait ParseOps {
@@ -186,6 +226,10 @@ trait ParseOps {
     int  parse_postfix(void);
     int  parse_primary(void);
     int  parse_args(void);
+    int  parse_trait(void);
+    int  parse_impl(void);
+    int  parse_use_list(int sindex);
+    int  parse_init_raw(char *out, size_t cap);
 }
 
 trait EmitOps {
@@ -196,6 +240,10 @@ trait EmitOps {
     int  emit_cond(int n);
     int  emit_indent(int n);
     int  emit_type_decl(int n, int ind, int with_semi);
+    int  emit_trait_decls(void);
+    int  emit_impls(int prog);
+    int  type_has_vptr(const char *type);
+    int  emit_vptr_items(const char *type);
     int  write_header(const char *outc);
 }
 
@@ -457,6 +505,9 @@ impl AstOps for Ast {
         g_nvar = 0;
         g_nscope = 0;
         g_ntype = 0;
+        g_ntraits = 0;
+        g_nstructs = 0;
+        g_self_mode = 0;
         g_nparams = 0;
         g_errmsg[0] = 0;
         if (self->read_file(in) != 0) {
@@ -514,11 +565,12 @@ impl SymOps for Ast {
         return 0;
     }
 
-    int declare_var(const char *name)
+    int declare_var(const char *name, const char *type)
     {
         (void)self;
         if (g_nvar >= MAX_VARS) return self->fail("too many variables");
         snprintf(g_vars[g_nvar].name, MAX_TEXT, "%s", name);
+        snprintf(g_vars[g_nvar].type, MAX_TEXT, "%s", type);
         g_nvar++;
         return 0;
     }
@@ -530,6 +582,16 @@ impl SymOps for Ast {
         for (i = g_nvar - 1; i >= 0; i--)
             if (strcmp(g_vars[i].name, name) == 0) return i;
         return -1;
+    }
+
+    int var_type(const char *name, char *out, size_t cap)
+    {
+        int i;
+        (void)self;
+        i = self->find_var(name);
+        if (i < 0) return -1;
+        if (snprintf(out, cap, "%s", g_vars[i].type) >= (int)cap) return -1;
+        return 0;
     }
 
     int find_func(const char *name)
@@ -578,14 +640,101 @@ impl SymOps for Ast {
         return -1;
     }
 
-    int add_type(const char *name)
+    int add_type(const char *name, int kind)
     {
+        int i;
         (void)self;
-        if (self->find_type(name) >= 0) return 0;
+        i = self->find_type(name);
+        if (i >= 0) {
+            /* a struct tag discovered while parsing a type keeps its kind */
+            if (g_type_kind[i] == 0) g_type_kind[i] = kind;
+            return 0;
+        }
         if (g_ntype >= MAX_TYPES) return self->fail("too many types");
         snprintf(g_types[g_ntype], MAX_TEXT, "%s", name);
+        g_type_kind[g_ntype] = kind;
         g_ntype++;
         return 0;
+    }
+
+    int find_struct(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < g_nstructs; i++)
+            if (strcmp(g_structs[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int add_struct(const char *name)
+    {
+        int i;
+        (void)self;
+        if (!name[0]) return -1;
+        i = self->find_struct(name);
+        if (i >= 0) return i;
+        if (g_nstructs >= MAX_STRUCTS) return self->fail("too many structs");
+        snprintf(g_structs[g_nstructs].name, MAX_TEXT, "%s", name);
+        g_structs[g_nstructs].nuse = 0;
+        g_nstructs++;
+        return g_nstructs - 1;
+    }
+
+    int find_trait(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < g_ntraits; i++)
+            if (strcmp(g_traits[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int add_trait(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_trait(name);
+        if (i >= 0) return i;
+        if (g_ntraits >= MAX_TRAITS) return self->fail("too many traits");
+        snprintf(g_traits[g_ntraits].name, MAX_TEXT, "%s", name);
+        g_traits[g_ntraits].nm = 0;
+        g_ntraits++;
+        return g_ntraits - 1;
+    }
+
+    /* Which trait of `stype` declares `method`: the vtable field name and the
+       dispatch target both need it. `stype` may carry a `struct ` prefix or a
+       trailing `*` (a pointer receiver). */
+    int method_trait(const char *stype, const char *method, char *tout, size_t tcap)
+    {
+        char buf[MAX_TEXT];
+        char *base;
+        size_t n;
+        int s, ti, mi;
+        (void)self;
+
+        if (snprintf(buf, sizeof buf, "%s", stype) >= (int)sizeof buf) return -1;
+        base = buf;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        n = strlen(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
+            base[n - 1] = 0;
+            n--;
+        }
+        s = self->find_struct(base);
+        if (s < 0) return -1;
+        for (ti = 0; ti < g_structs[s].nuse; ti++) {
+            int t = self->find_trait(g_structs[s].use[ti]);
+            if (t < 0) continue;
+            for (mi = 0; mi < g_traits[t].nm; mi++) {
+                if (strcmp(g_traits[t].m[mi].name, method) == 0) {
+                    if (snprintf(tout, tcap, "%s", g_traits[t].name) >= (int)tcap) return -1;
+                    return 0;
+                }
+            }
+        }
+        return -1;
     }
 }
 
@@ -633,12 +782,19 @@ impl ParseOps for Ast {
                     self->lex_next();
                     if (g_tok != T_ID) return self->fail("expected a struct name");
                     if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
-                    if (self->add_type(g_toktext) != 0) return -1;
+                    if (self->add_type(g_toktext, 1) != 0) return -1;
                 }
                 self->lex_next();
                 continue;
             }
             if (g_tok == T_ID && self->find_type(g_toktext) >= 0) {
+                int ti;
+                ti = self->find_type(g_toktext);
+                /* a bare struct tag needs the `struct` keyword in C; a typedef
+                   name is used as-is */
+                if (g_type_kind[ti] == 1) {
+                    if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                }
                 if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
                 self->lex_next();
                 continue;
@@ -679,6 +835,10 @@ impl ParseOps for Ast {
         while (g_tok != T_EOF) {
             if (g_tok == T_ID && strcmp(g_toktext, "typedef") == 0) {
                 n = self->parse_typedef();
+            } else if (g_tok == T_ID && strcmp(g_toktext, "trait") == 0) {
+                n = self->parse_trait();
+            } else if (g_tok == T_ID && strcmp(g_toktext, "impl") == 0) {
+                n = self->parse_impl();
             } else if (g_tok == T_ID && strcmp(g_toktext, "struct") == 0) {
                 n = self->parse_struct_def();
                 if (n >= 0 && self->expect(";") != 0) n = -1;
@@ -717,7 +877,7 @@ impl ParseOps for Ast {
             snprintf(g_nodes[g].text2, MAX_TEXT, "%s", name);
             g_nodes[g].aux = is_static;
             /* a file-scope name is visible to every function body */
-            if (self->declare_var(name) != 0) return -1;
+            if (self->declare_var(name, ret) != 0) return -1;
             if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
                 self->lex_next();
                 if (g_tok != T_NUM) return self->fail("expected an array length");
@@ -726,8 +886,16 @@ impl ParseOps for Ast {
                 if (self->expect("]") != 0) return -1;
             }
             if (self->accept("=")) {
-                e = self->parse_expr();
-                if (e < 0) return -1;
+                if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
+                    char raw[MAX_TEXT];
+                    e = self->new_node(N_RAW);
+                    if (e < 0) return -1;
+                    if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
+                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", raw);
+                } else {
+                    e = self->parse_expr();
+                    if (e < 0) return -1;
+                }
                 g_nodes[g].a = e;
             }
             if (self->expect(";") != 0) return -1;
@@ -800,7 +968,7 @@ impl ParseOps for Ast {
             if (p < 0) return -1;
             snprintf(g_nodes[p].text, MAX_TEXT, "%s", typebuf);
             snprintf(g_nodes[p].text2, MAX_TEXT, "%s", name);
-            if (self->declare_var(name) != 0) return -1;
+            if (self->declare_var(name, typebuf) != 0) return -1;
             if (tail == 0) first = p;
             else g_nodes[tail].next = p;
             tail = p;
@@ -852,7 +1020,8 @@ impl ParseOps for Ast {
         name[0] = 0;
         if (g_tok == T_ID) {
             snprintf(name, sizeof name, "%s", g_toktext);
-            if (self->add_type(name) != 0) return -1;
+            if (self->add_type(name, 1) != 0) return -1;
+            if (self->add_struct(name) < 0) return -1;
             self->lex_next();
         }
         if (self->expect("{") != 0) return -1;
@@ -868,6 +1037,10 @@ impl ParseOps for Ast {
             tail = m;
         }
         if (self->expect("}") != 0) return -1;
+        if (g_tok == T_ID && strcmp(g_toktext, "use") == 0) {
+            self->lex_next();
+            if (name[0] && self->parse_use_list(self->find_struct(name)) != 0) return -1;
+        }
         return s;
     }
 
@@ -889,7 +1062,8 @@ impl ParseOps for Ast {
             if (self->expect(";") != 0) return -1;
             snprintf(g_nodes[t].text2, MAX_TEXT, "%s", name);
             g_nodes[t].aux = 1;
-            if (self->add_type(name) != 0) return -1;
+            if (self->add_type(name, 2) != 0) return -1;
+            if (self->add_struct(name) < 0) return -1;
             return t;
         }
         if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
@@ -901,8 +1075,212 @@ impl ParseOps for Ast {
         if (t < 0) return -1;
         snprintf(g_nodes[t].text, MAX_TEXT, "%s", typebuf);
         snprintf(g_nodes[t].text2, MAX_TEXT, "%s", name);
-        if (self->add_type(name) != 0) return -1;
+        if (self->add_type(name, 2) != 0) return -1;
         return t;
+    }
+
+    /* `use A, B` after a struct body; the trailing `;` stays with the caller. */
+    int parse_use_list(int sindex)
+    {
+        (void)self;
+        if (sindex < 0) return self->fail("unknown struct in 'use'");
+        for (;;) {
+            if (g_tok != T_ID) return self->fail("expected a trait name");
+            if (g_structs[sindex].nuse >= MAX_TRAITS) return self->fail("too many used traits");
+            snprintf(g_structs[sindex].use[g_structs[sindex].nuse], MAX_TEXT, "%s", g_toktext);
+            g_structs[sindex].nuse++;
+            self->lex_next();
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ",") == 0) {
+                self->lex_next();
+                continue;
+            }
+            break;
+        }
+        return 0;
+    }
+
+    /* `trait Name { ret m(params); ... }` -- no node, the table is enough. */
+    int parse_trait(void)
+    {
+        int ti, mi, np;
+        char name[MAX_TEXT];
+        char ret[MAX_TEXT];
+        char ptype[MAX_TEXT];
+        (void)self;
+
+        self->lex_next();
+        if (g_tok != T_ID) return self->fail("expected a trait name");
+        snprintf(name, sizeof name, "%s", g_toktext);
+        ti = self->add_trait(name);
+        if (ti < 0) return -1;
+        self->lex_next();
+        if (self->expect("{") != 0) return -1;
+        while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
+            if (self->parse_type(ret, sizeof ret) != 0) return -1;
+            if (g_tok != T_ID) return self->fail("expected a method name");
+            if (g_traits[ti].nm >= MAX_METHODS) return self->fail("too many trait methods");
+            mi = g_traits[ti].nm;
+            snprintf(g_traits[ti].m[mi].name, MAX_TEXT, "%s", g_toktext);
+            snprintf(g_traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
+            g_traits[ti].m[mi].nparams = 0;
+            self->lex_next();
+            if (self->expect("(") != 0) return -1;
+            if (g_tok == T_ID && strcmp(g_toktext, "void") == 0) {
+                self->lex_next();
+                if (self->expect(")") != 0) return -1;
+                if (self->expect(";") != 0) return -1;
+                g_traits[ti].nm++;
+                continue;
+            }
+            np = 0;
+            if (!(g_tok == T_PUNCT && strcmp(g_toktext, ")") == 0)) {
+                for (;;) {
+                    if (self->parse_type(ptype, sizeof ptype) != 0) return -1;
+                    if (g_tok == T_ID) self->lex_next();
+                    if (np >= MAX_PARAMS) return self->fail("too many method parameters");
+                    snprintf(g_traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
+                    np++;
+                    if (g_tok == T_PUNCT && strcmp(g_toktext, ",") == 0) {
+                        self->lex_next();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            if (self->expect(")") != 0) return -1;
+            if (self->expect(";") != 0) return -1;
+            g_traits[ti].m[mi].nparams = np;
+            g_traits[ti].nm++;
+        }
+        if (self->expect("}") != 0) return -1;
+        return NO_NODE;
+    }
+
+    /* `impl T for S { methods }` -- one N_IMPL node carrying N_METHOD children. */
+    int parse_impl(void)
+    {
+        int ti, si, node, mnode, params, body, tail;
+        char tname[MAX_TEXT];
+        char sname[MAX_TEXT];
+        char ret[MAX_TEXT];
+        char mname[MAX_TEXT];
+        char stype[MAX_TEXT];
+        int type_index;
+        (void)self;
+
+        self->lex_next();
+        if (g_tok != T_ID) return self->fail("expected a trait name");
+        snprintf(tname, sizeof tname, "%s", g_toktext);
+        ti = self->find_trait(tname);
+        if (ti < 0) return self->fail("impl of an unknown trait");
+        self->lex_next();
+        if (g_tok != T_ID || strcmp(g_toktext, "for") != 0)
+            return self->fail("expected 'for' after the trait name");
+        self->lex_next();
+        if (g_tok != T_ID) return self->fail("expected a struct name");
+        snprintf(sname, sizeof sname, "%s", g_toktext);
+        si = self->find_struct(sname);
+        if (si < 0) si = self->add_struct(sname);
+        if (si < 0) return -1;
+        type_index = self->find_type(sname);
+        if (type_index >= 0 && g_type_kind[type_index] == 1)
+            snprintf(stype, sizeof stype, "struct %s", sname);
+        else
+            snprintf(stype, sizeof stype, "%s", sname);
+        self->lex_next();
+        if (self->expect("{") != 0) return -1;
+        node = self->new_node(N_IMPL);
+        if (node < 0) return -1;
+        snprintf(g_nodes[node].text2, MAX_TEXT, "%s", tname);
+        g_nodes[node].aux = si;
+        snprintf(g_nodes[node].text, MAX_TEXT, "%s", stype);
+        tail = -1;
+        while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
+            if (self->parse_type(ret, sizeof ret) != 0) return -1;
+            if (g_tok != T_ID) return self->fail("expected a method name");
+            snprintf(mname, sizeof mname, "%s", g_toktext);
+            self->lex_next();
+            if (self->push_scope() != 0) return -1;
+            if (self->declare_var("self", stype) != 0) {
+                self->pop_scope();
+                return -1;
+            }
+            params = self->parse_params();
+            if (params < 0) {
+                self->pop_scope();
+                return -1;
+            }
+            body = self->parse_block();
+            if (body < 0) {
+                self->pop_scope();
+                return -1;
+            }
+            self->pop_scope();
+            mnode = self->new_node(N_METHOD);
+            if (mnode < 0) return -1;
+            snprintf(g_nodes[mnode].text, MAX_TEXT, "%s", ret);
+            snprintf(g_nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            g_nodes[mnode].a = params;
+            g_nodes[mnode].b = body;
+            g_nodes[mnode].num = ti;
+            g_nodes[mnode].aux = si;
+            if (tail < 0) g_nodes[node].a = mnode;
+            else g_nodes[tail].next = mnode;
+            tail = mnode;
+        }
+        if (self->expect("}") != 0) return -1;
+        return node;
+    }
+
+    /* Capture a `{ ... }` initializer verbatim; the caller appends vptr items. */
+    int parse_init_raw(char *out, size_t cap)
+    {
+        int depth, n, c;
+        (void)self;
+
+        n = 0;
+        if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+        out[n] = '{';
+        n++;
+        depth = 1;
+        while (g_src[g_pos] && depth > 0) {
+            c = (unsigned char)g_src[g_pos];
+            if (c == '"') {
+                if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                out[n] = '"';
+                n++;
+                g_pos++;
+                while (g_src[g_pos] && g_src[g_pos] != '"') {
+                    if (g_src[g_pos] == '\\' && g_src[g_pos + 1]) {
+                        if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                        out[n] = g_src[g_pos];
+                        n++;
+                        g_pos++;
+                    }
+                    if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                    out[n] = g_src[g_pos];
+                    n++;
+                    g_pos++;
+                }
+                if (g_src[g_pos] == '"') {
+                    if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                    out[n] = '"';
+                    n++;
+                    g_pos++;
+                }
+                continue;
+            }
+            if (c == '{') depth++;
+            else if (c == '}') depth--;
+            if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+            out[n] = (char)c;
+            n++;
+            g_pos++;
+        }
+        if (depth != 0) return self->fail("unterminated initializer");
+        out[n] = 0;
+        self->lex_next();
+        return 0;
     }
 
     int parse_block(void)
@@ -1103,7 +1481,7 @@ impl ParseOps for Ast {
         if (n < 0) return -1;
         snprintf(g_nodes[n].text, MAX_TEXT, "%s", typebuf);
         snprintf(g_nodes[n].text2, MAX_TEXT, "%s", name);
-        if (self->declare_var(name) != 0) return -1;
+        if (self->declare_var(name, typebuf) != 0) return -1;
         if (g_tok == T_PUNCT && strcmp(g_toktext, "[") == 0) {
             self->lex_next();
             if (g_tok != T_NUM) return self->fail("expected an array length");
@@ -1113,8 +1491,16 @@ impl ParseOps for Ast {
         }
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
             self->lex_next();
-            e = self->parse_expr();
-            if (e < 0) return -1;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
+                char raw[MAX_TEXT];
+                e = self->new_node(N_RAW);
+                if (e < 0) return -1;
+                if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
+                snprintf(g_nodes[e].text, MAX_TEXT, "%s", raw);
+            } else {
+                e = self->parse_expr();
+                if (e < 0) return -1;
+            }
             g_nodes[n].a = e;
         }
         return n;
@@ -1271,7 +1657,10 @@ impl ParseOps for Ast {
 
     int parse_postfix(void)
     {
-        int n, m, idx;
+        int n, m, idx, args;
+        char fname[MAX_TEXT];
+        char rtype[MAX_TEXT];
+        char trname[MAX_TEXT];
         (void)self;
 
         n = self->parse_primary();
@@ -1289,25 +1678,36 @@ impl ParseOps for Ast {
                 n = m;
                 continue;
             }
-            if (g_tok == T_PUNCT && strcmp(g_toktext, ".") == 0) {
+            if (g_tok == T_PUNCT && (strcmp(g_toktext, ".") == 0
+                                     || strcmp(g_toktext, "->") == 0)) {
+                int arrow;
+                arrow = (g_toktext[0] == '-') ? 1 : 0;
                 self->lex_next();
-                if (g_tok != T_ID) return self->fail("expected a field name");
-                m = self->new_node(N_MEMBER);
-                if (m < 0) return -1;
-                g_nodes[m].a = n;
-                snprintf(g_nodes[m].text2, MAX_TEXT, "%s", g_toktext);
+                if (g_tok != T_ID) return self->fail("expected a field or method name");
+                snprintf(fname, sizeof fname, "%s", g_toktext);
                 self->lex_next();
-                n = m;
-                continue;
-            }
-            if (g_tok == T_PUNCT && strcmp(g_toktext, "->") == 0) {
-                self->lex_next();
-                if (g_tok != T_ID) return self->fail("expected a field name");
-                m = self->new_node(N_ARROW);
-                if (m < 0) return -1;
-                g_nodes[m].a = n;
-                snprintf(g_nodes[m].text2, MAX_TEXT, "%s", g_toktext);
-                self->lex_next();
+                if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0) {
+                    args = self->parse_args();
+                    if (args < 0) return -1;
+                    m = self->new_node(N_MCALL);
+                    if (m < 0) return -1;
+                    g_nodes[m].a = n;
+                    g_nodes[m].b = (args == 0) ? -1 : args;
+                    g_nodes[m].aux = arrow ? 2 : 1;
+                    snprintf(g_nodes[m].text2, MAX_TEXT, "%s", fname);
+                    /* resolve the trait now: locals are out of scope by the time
+                       the emitter runs */
+                    if (g_nodes[n].kind == N_VAR
+                        && self->var_type(g_nodes[n].text2, rtype, sizeof rtype) == 0
+                        && self->method_trait(rtype, fname, trname, sizeof trname) == 0) {
+                        snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
+                    }
+                } else {
+                    m = self->new_node(arrow ? N_ARROW : N_MEMBER);
+                    if (m < 0) return -1;
+                    g_nodes[m].a = n;
+                    snprintf(g_nodes[m].text2, MAX_TEXT, "%s", fname);
+                }
                 n = m;
                 continue;
             }
@@ -1420,12 +1820,16 @@ impl EmitOps for Ast {
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
 
+        if (self->emit_trait_decls() != 0) return -1;
+
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
             if (g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
                 || g_nodes[n].kind == N_GLOBAL) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }
+
+        if (self->emit_impls(prog) != 0) return -1;
 
         for (i = 0; i < g_nfunc; i++) {
             int k;
@@ -1450,6 +1854,121 @@ impl EmitOps for Ast {
         return 0;
     }
 
+    /* One vtable type and one interface type per trait. */
+    int emit_trait_decls(void)
+    {
+        int t, m, k;
+        (void)self;
+
+        for (t = 0; t < g_ntraits; t++) {
+            fprintf(g_out, "struct %s_vtbl {\n", g_traits[t].name);
+            for (m = 0; m < g_traits[t].nm; m++) {
+                fprintf(g_out, "    %s (*%s)(void *", g_traits[t].m[m].ret,
+                        g_traits[t].m[m].name);
+                for (k = 0; k < g_traits[t].m[m].nparams; k++)
+                    fprintf(g_out, ", %s", g_traits[t].m[m].ptype[k]);
+                fputs(");\n", g_out);
+            }
+            fputs("};\n", g_out);
+            fprintf(g_out, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n\n",
+                    g_traits[t].name, g_traits[t].name);
+        }
+        return 0;
+    }
+
+    int type_has_vptr(const char *type)
+    {
+        const char *base;
+        int si;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        si = self->find_struct(base);
+        return (si >= 0 && g_structs[si].nuse > 0) ? 1 : 0;
+    }
+
+    int emit_vptr_items(const char *type)
+    {
+        const char *base;
+        int si, u, i;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        si = self->find_struct(base);
+        if (si < 0) return 0;
+        for (u = 0; u < g_structs[si].nuse; u++) {
+            char low[MAX_TEXT];
+            for (i = 0; g_structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                char c = g_structs[si].use[u][i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+                low[i] = c;
+            }
+            low[i] = 0;
+            if (u > 0) fputs(", ", g_out);
+            fprintf(g_out, ".__%s_vptr = &%s_%s_vtable", low, base, g_structs[si].use[u]);
+        }
+        return 0;
+    }
+
+    /* Impl methods and their vtables, emitted before the ordinary functions so
+       `main` can already dispatch through them. */
+    int emit_impls(int prog)
+    {
+        int n, m, k, u;
+        (void)self;
+
+        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+            int si, ti;
+            const char *tname;
+            const char *sname;
+            if (g_nodes[n].kind != N_IMPL) continue;
+            si = g_nodes[n].aux;
+            tname = g_nodes[n].text2;
+            ti = -1;
+            for (k = 0; k < g_ntraits; k++)
+                if (strcmp(g_traits[k].name, tname) == 0) ti = k;
+            if (ti < 0) return self->fail("impl of an unknown trait");
+            sname = g_nodes[n].text;
+            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+                fprintf(g_out, "static %s %s_%s_%s(void *self", g_nodes[m].text,
+                        g_structs[si].name, tname, g_nodes[m].text2);
+                k = g_nodes[m].a;
+                while (k > 0) {
+                    fprintf(g_out, ", %s %s", g_nodes[k].text, g_nodes[k].text2);
+                    k = g_nodes[k].next;
+                }
+                fputs(") {\n", g_out);
+                fprintf(g_out, "    %s *_self = (%s *)self;\n", sname, sname);
+                g_self_mode = 1;
+                k = g_nodes[g_nodes[m].b].a;
+                while (k >= 0) {
+                    if (self->emit_node(k, 1) != 0) {
+                        g_self_mode = 0;
+                        return -1;
+                    }
+                    k = g_nodes[k].next;
+                }
+                g_self_mode = 0;
+                fputs("}\n\n", g_out);
+            }
+            fprintf(g_out, "static struct %s_vtbl %s_%s_vtable = {\n",
+                    tname, g_structs[si].name, tname);
+            u = 0;
+            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+                if (u > 0) fputs(",\n", g_out);
+                fprintf(g_out, "    .%s = %s_%s_%s", g_nodes[m].text2,
+                        g_structs[si].name, tname, g_nodes[m].text2);
+                u++;
+            }
+            fputs("\n};\n\n", g_out);
+        }
+        return 0;
+    }
+
     /* Top-level declarations: struct / typedef / global (with a semicolon as
        appropriate). */
     int emit_type_decl(int n, int ind, int with_semi)
@@ -1458,6 +1977,7 @@ impl EmitOps for Ast {
         (void)self;
 
         if (g_nodes[n].kind == N_STRUCT) {
+            int si, u;
             if (g_nodes[n].aux) {
                 /* `typedef struct { ... } Name;` -- no tag after `struct` */
                 fputs("typedef struct {\n", g_out);
@@ -1468,6 +1988,22 @@ impl EmitOps for Ast {
                 self->emit_indent(ind + 1);
                 if (self->emit_inline(m) != 0) return -1;
                 fputs(";\n", g_out);
+            }
+            si = self->find_struct(g_nodes[n].text2);
+            if (si >= 0) {
+                for (u = 0; u < g_structs[si].nuse; u++) {
+                    char low[MAX_TEXT];
+                    int i;
+                    for (i = 0; g_structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                        char c = g_structs[si].use[u][i];
+                        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+                        low[i] = c;
+                    }
+                    low[i] = 0;
+                    self->emit_indent(ind + 1);
+                    fprintf(g_out, "struct %s_vtbl *__%s_vptr;\n",
+                            g_structs[si].use[u], low);
+                }
             }
             self->emit_indent(ind);
             if (g_nodes[n].aux) fprintf(g_out, "} %s;\n", g_nodes[n].text2);
@@ -1483,9 +2019,24 @@ impl EmitOps for Ast {
             if (g_nodes[n].aux) fputs("static ", g_out);
             fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
             if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
-            if (g_nodes[n].a >= 0) {
+            if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
+                const char *raw = g_nodes[g_nodes[n].a].text;
+                int len = (int)strlen(raw);
+                fputs(" = ", g_out);
+                if (len > 0 && raw[len - 1] == '}') fwrite(raw, 1, (size_t)(len - 1), g_out);
+                else fputs(raw, g_out);
+                if (self->type_has_vptr(g_nodes[n].text)) {
+                    fputs(", ", g_out);
+                    if (self->emit_vptr_items(g_nodes[n].text) != 0) return -1;
+                }
+                fputs("}", g_out);
+            } else if (g_nodes[n].a >= 0) {
                 fputs(" = ", g_out);
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            } else if (self->type_has_vptr(g_nodes[n].text)) {
+                fputs(" = { ", g_out);
+                if (self->emit_vptr_items(g_nodes[n].text) != 0) return -1;
+                fputs(" }", g_out);
             }
             if (with_semi) fputs(";\n", g_out);
             return 0;
@@ -1588,9 +2139,26 @@ impl EmitOps for Ast {
         if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_FIELD) {
             fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
             if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
-            if (g_nodes[n].kind == N_DECL && g_nodes[n].a >= 0) {
-                fputs(" = ", g_out);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (g_nodes[n].kind == N_DECL) {
+                if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
+                    const char *raw = g_nodes[g_nodes[n].a].text;
+                    int len = (int)strlen(raw);
+                    fputs(" = ", g_out);
+                    if (len > 0 && raw[len - 1] == '}') fwrite(raw, 1, (size_t)(len - 1), g_out);
+                    else fputs(raw, g_out);
+                    if (self->type_has_vptr(g_nodes[n].text)) {
+                        fputs(", ", g_out);
+                        if (self->emit_vptr_items(g_nodes[n].text) != 0) return -1;
+                    }
+                    fputs("}", g_out);
+                } else if (g_nodes[n].a >= 0) {
+                    fputs(" = ", g_out);
+                    if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                } else if (self->type_has_vptr(g_nodes[n].text)) {
+                    fputs(" = { ", g_out);
+                    if (self->emit_vptr_items(g_nodes[n].text) != 0) return -1;
+                    fputs(" }", g_out);
+                }
             }
             return 0;
         }
@@ -1641,8 +2209,13 @@ impl EmitOps for Ast {
             fputs(g_nodes[n].text, g_out);
             return 0;
         }
+        if (g_nodes[n].kind == N_RAW) {
+            fputs(g_nodes[n].text, g_out);
+            return 0;
+        }
         if (g_nodes[n].kind == N_VAR) {
-            fputs(g_nodes[n].text2, g_out);
+            if (g_self_mode && strcmp(g_nodes[n].text2, "self") == 0) fputs("_self", g_out);
+            else fputs(g_nodes[n].text2, g_out);
             return 0;
         }
         if (g_nodes[n].kind == N_MEMBER) {
@@ -1696,6 +2269,38 @@ impl EmitOps for Ast {
         if (g_nodes[n].kind == N_UNARY) {
             fputs(g_nodes[n].aux == U_NEG ? "(-" : "(!", g_out);
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_MCALL) {
+            char tname[MAX_TEXT];
+            char low[MAX_TEXT];
+            int i, c2;
+            if (g_nodes[n].a < 0 || g_nodes[g_nodes[n].a].kind != N_VAR)
+                return self->fail("method receiver must be a plain variable");
+            if (!g_nodes[n].text[0])
+                return self->fail("cannot resolve the method trait (unknown receiver type)");
+            snprintf(tname, sizeof tname, "%s", g_nodes[n].text);
+            for (i = 0; tname[i] && i + 1 < MAX_TEXT; i++) {
+                char c = tname[i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+                low[i] = c;
+            }
+            low[i] = 0;
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (g_nodes[n].aux == 2) {
+                fprintf(g_out, "->__%s_vptr->%s(", low, g_nodes[n].text2);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            } else {
+                fprintf(g_out, ".__%s_vptr->%s(&", low, g_nodes[n].text2);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            }
+            c2 = g_nodes[n].b;
+            while (c2 >= 0) {
+                fputs(", ", g_out);
+                if (self->emit_expr(c2) != 0) return -1;
+                c2 = g_nodes[c2].next;
+            }
             fputs(")", g_out);
             return 0;
         }

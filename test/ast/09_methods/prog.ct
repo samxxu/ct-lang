@@ -1,0 +1,30 @@
+#include <stdio.h>
+
+trait Calc {
+    int base();
+    int twice();
+}
+
+struct Num {
+    int v;
+} use Calc;
+
+impl Calc for Num {
+    int base() {
+        return self->v;
+    }
+    int twice() {
+        return self->base() + self->base();
+    }
+}
+
+int main(void)
+{
+    struct Num n;
+    struct Num *q;
+    n.v = 21;
+    printf("%d %d\n", n.base(), n.twice());
+    q = &n;
+    printf("%d\n", q->base());
+    return 0;
+}
