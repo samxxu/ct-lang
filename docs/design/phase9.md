@@ -101,7 +101,7 @@ selfhost/ast/
 | 切片 | 内容 | 出口 |
 | --- | --- | --- |
 | 9.1 | 最小端到端：词法 + 表达式/`return` 解析 + 发射 C；`int main` + `printf` 调用 | ✅ **已落地（2026-10-18）**：`selfhost/ast/main.ct`（单文件：词法 + 递归下降 + 按 `kind` 发射 + banner/头文件）；`test/ast/01_hello`、`02_expr` 两个行为用例与 `errors/missing_semi` 负例；`selfhost/check-ast.sh` 已接入 `check-all.sh` 第 8 关 |
-| 9.2 | 语句与控制流：局部声明、赋值、`if` / `while` / `for`、函数调用（含前置声明） | `test/cases` 的 `03_passthrough` / `04_signatures` 类用例行为等价 |
+| 9.2 | 语句与控制流：局部声明、赋值、`if` / `while` / `for`、函数调用（含前置声明） | ✅ **已落地（2026-10-18）**：新增局部声明 / 赋值 / `if`-`else` / `while` / `for`、函数原型与参数、`void` 返回、比较与 `%`、一元 `-`/`!`、后缀 `++`/`--`；D33 的函数表 + 变量表（作用域栈）就位；`test/ast/03_control`、`04_void` 两个行为用例全绿（`03` 的完整语料等价留到 9.3/9.4） |
 | 9.3 | 声明与类型：`struct` / `typedef`、指针、数组、函数签名（含 `static`） | 无 trait 的用例全部行为等价 |
 | 9.4 | 特性子集：`trait` / `struct use` / `impl` 与派发；接口值与接口数组 | `01_trait_basic` 等 trait 用例行为等价 |
 | 9.5 | 模块与元数据：`import` / `pub` / `build` / `namespace` / `#line` / `--emit-map` | `test/modules/**` 行为等价；`ct build` 可切换 |
@@ -217,7 +217,7 @@ temporarily named `ct-ast` (like `ctc-l2`); the user-facing entry stays `ct` aft
 | Slice | Content | Exit |
 | --- | --- | --- |
 | 9.1 | Minimal end-to-end: lexer, expression/`return` parsing, C emission; `int main` + `printf` | ✅ **landed (2026-10-18)**: `selfhost/ast/main.ct` (one unit: lexer + recursive descent + `kind`-dispatched emission + banner/header); `test/ast/01_hello` and `02_expr` behavioural cases plus the `errors/missing_semi` negative; `selfhost/check-ast.sh` is gate 8 of `check-all.sh` |
-| 9.2 | Statements and control flow: locals, assignment, `if` / `while` / `for`, calls | Behavioural equivalence for `03_passthrough` / `04_signatures`-style cases |
+| 9.2 | Statements and control flow: locals, assignment, `if` / `while` / `for`, calls | ✅ **landed (2026-10-18)**: locals/assignment, `if`-`else`, `while`, `for`, prototypes and parameters, `void` returns, comparisons and `%`, unary `-`/`!`, postfix `++`/`--`; D33's function table plus a scoped variable table are in place; `test/ast/03_control` and `04_void` are green (full corpus equivalence for `03_passthrough` waits for 9.3/9.4) |
 | 9.3 | Declarations and types: `struct` / `typedef`, pointers, arrays, signatures | Every trait-free case is equivalent |
 | 9.4 | Features: `trait` / `struct use` / `impl` and dispatch; interface values and arrays | Trait cases such as `01_trait_basic` are equivalent |
 | 9.5 | Modules and metadata: `import` / `pub` / `build` / `namespace` / `#line` / `--emit-map` | `test/modules/**` is equivalent; `ct build` can switch over |

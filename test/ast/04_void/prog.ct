@@ -1,0 +1,15 @@
+#include <stdio.h>
+
+void show(int n);
+
+void show(int n)
+{
+    printf("%d\n", n);
+    return;
+}
+
+int main(void)
+{
+    show(7);
+    return 0;
+}

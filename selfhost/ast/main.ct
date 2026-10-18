@@ -1,20 +1,21 @@
 /*
- * main.ct - Phase 9.1: the AST compiler's minimal end-to-end path.
+ * main.ct - Phase 9: the AST compiler.
  *
- * The new mainline (Phase 9 design, D28-D37) parses CT into a real AST and
- * emits C from it, instead of rewriting source lines. Slice 9.1 is deliberately
- * tiny: `int f(void) { ... }` with `return`, `printf` calls, string/number
- * literals and `+ - * /`. That is enough to prove the whole pipe:
+ * 9.1 proved the pipe end to end (lexer -> recursive descent -> AST -> C).
+ * 9.2 adds the statement/control-flow layer and real signatures:
  *
- *   lexer -> recursive-descent parser -> AST -> C emitter
+ *   - `int` / `void` functions with parameters, prototypes and forward calls
+ *   - local declarations, assignment, `if` / `else`, `while`, `for`
+ *   - `return expr;` and `return;`
+ *   - comparisons (< > <= >= == !=), `%`, unary `-` / `!`, postfix `++` / `--`
  *
- * Node shape follows D32 (a `typedef struct` node pool + a `kind` tag, with the
- * dispatch kept in `emit_expr` / `emit_node`). Symbol tables (D33) are not
- * needed yet: 9.1 has no variables or user functions to resolve.
+ * Node shape follows D32 (`typedef struct` pool + `kind`, one central dispatch).
+ * Symbol tables follow D33: a function table plus a variable table with a scope
+ * stack (only variables are scoped). The tables carry names, not types -- 9.2
+ * does no type checking; the declared type is `int` and `void` for returns.
  *
- * The output contract is unchanged: the banner, the `<base>.h` guard and a
- * self-contained `.c` are emitted exactly like the old pipeline does, but the
- * bytes are not required to match (D34: behavioural equivalence from 9.7 on).
+ * Output contract: banner, `<base>.h` guard and a self-contained `.c`; byte
+ * equality with the old pipeline is not required (D34).
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
@@ -27,6 +28,9 @@
 #define MAX_NODES 4096
 #define MAX_TEXT  160
 #define MAX_PATH  1024
+#define MAX_FUNCS 64
+#define MAX_VARS  512
+#define MAX_SCOPE 256
 
 /* node kinds (D32: one tag, one central dispatch) */
 #define N_PROG   1
@@ -40,6 +44,14 @@
 #define N_STR    9
 #define N_VAR    10
 #define N_BIN    11
+#define N_DECL   12
+#define N_ASSIGN 13
+#define N_IF     14
+#define N_WHILE  15
+#define N_FOR    16
+#define N_UNARY  17
+#define N_POST   18
+#define N_PARAM  19
 
 /* token kinds */
 #define T_EOF    0
@@ -49,21 +61,53 @@
 #define T_PUNCT  4
 #define T_PP     5
 
-/* binary operators, stored in `aux` */
+/* binary operators (stored in `aux`) */
 #define B_ADD 1
 #define B_SUB 2
 #define B_MUL 3
 #define B_DIV 4
+#define B_LT  5
+#define B_GT  6
+#define B_LE  7
+#define B_GE  8
+#define B_EQ  9
+#define B_NE  10
+#define B_MOD 11
+
+/* unary / postfix operators */
+#define U_NEG 1
+#define U_NOT 2
+#define P_INC 1
+#define P_DEC 2
+
+/* return types */
+#define R_VOID 0
+#define R_INT  1
+
+/* `parse_func` returns this when the declaration was a prototype (no node). */
+#define NO_NODE (-2)
 
 typedef struct Node {
     int  kind;
-    int  a;             /* first child (or left operand) */
-    int  b;             /* second child (or right operand) */
+    int  a;             /* first child / left operand / condition */
+    int  b;             /* second child / right operand / body */
+    int  c;             /* third child (else branch / for step) */
+    int  d;             /* fourth child (for body) */
     int  next;          /* next sibling in a list */
-    int  aux;           /* operator kind */
+    int  aux;           /* operator kind, return type */
     long num;           /* numeric literal */
     char text[MAX_TEXT];/* identifier, string literal or preprocessor line */
 } Node;
+
+typedef struct Fn {
+    char name[MAX_TEXT];
+    int  nparams;
+    int  ret;
+} Fn;
+
+typedef struct Var {
+    char name[MAX_TEXT];
+} Var;
 
 static Node g_nodes[MAX_NODES];
 static int  g_nnode;
@@ -76,6 +120,14 @@ static long g_toknum;
 static FILE *g_out;
 static const char *g_path;
 static char g_errmsg[MAX_TEXT];
+static int  g_nparams;      /* parameters of the function being parsed */
+
+static Fn  g_funcs[MAX_FUNCS];
+static int g_nfunc;
+static Var g_vars[MAX_VARS];
+static int g_nvar;
+static int g_scope[MAX_SCOPE];
+static int g_nscope;
 
 trait AstOps {
     int  new_node(int kind);
@@ -83,30 +135,48 @@ trait AstOps {
     void lex_next(void);
     int  accept(const char *p);
     int  expect(const char *p);
+    int  push_scope(void);
+    int  pop_scope(void);
+    int  declare_var(const char *name);
+    int  find_var(const char *name);
+    int  find_func(const char *name);
+    int  add_func(const char *name, int nparams, int ret);
     int  parse_program(void);
     int  parse_func(void);
+    int  parse_params(void);
     int  parse_block(void);
     int  parse_stmt(void);
+    int  parse_branch(void);
+    int  parse_decl_node(void);
+    int  parse_expr_stmt_node(void);
     int  parse_expr(void);
+    int  parse_cmp(void);
     int  parse_add(void);
     int  parse_mul(void);
+    int  parse_unary(void);
+    int  parse_postfix(void);
     int  parse_primary(void);
     int  parse_args(void);
-    int  emit_program(int prog);
-    int  emit_node(int n, int ind);
-    int  emit_expr(int n);
-    int  emit_indent(int n);
     int  read_file(const char *path);
     int  default_output(const char *in, char *out, size_t cap);
-    int  write_header(const char *outc);
     int  run(int argc, char **argv);
 }
 
-/* 9.1 needs no per-run state beyond the globals above; the struct exists so the
-   methods live in an impl block (plain-C signatures are capped by MAX_FUNCS). */
+trait EmitOps {
+    int  emit_program(int prog);
+    int  emit_node(int n, int ind);
+    int  emit_inline(int n);
+    int  emit_expr(int n);
+    int  emit_cond(int n);
+    int  emit_indent(int n);
+    int  write_header(const char *outc);
+}
+
+/* 9.1/9.2 need no per-run state beyond the globals above; the struct exists so
+   the methods live in impl blocks (plain-C signatures are capped by MAX_FUNCS). */
 struct Ast {
     int nerr;
-} use AstOps;
+} use AstOps, EmitOps;
 
 impl AstOps for Ast {
     int new_node(int kind)
@@ -119,6 +189,8 @@ impl AstOps for Ast {
         g_nodes[n].kind = kind;
         g_nodes[n].a = -1;
         g_nodes[n].b = -1;
+        g_nodes[n].c = -1;
+        g_nodes[n].d = -1;
         g_nodes[n].next = -1;
         g_nodes[n].aux = 0;
         g_nodes[n].num = 0;
@@ -133,9 +205,8 @@ impl AstOps for Ast {
         return -1;
     }
 
-    /* One token at a time. Preprocessor lines are kept verbatim: 9.1 does not
-       interpret them, it only has to keep `#include <stdio.h>` in front of the
-       emitted functions. */
+    /* One token at a time. Preprocessor lines are kept verbatim: they are
+       emitted before the program, never interpreted. */
     void lex_next(void)
     {
         int c, n;
@@ -207,6 +278,25 @@ impl AstOps for Ast {
             g_tok = T_STR;
             return;
         }
+        /* two-character punctuation must be tried before the one-char default */
+        if ((c == '=' || c == '!' || c == '<' || c == '>') && g_src[g_pos + 1] == '=') {
+            g_toktext[0] = (char)c;
+            g_toktext[1] = '=';
+            g_toktext[2] = 0;
+            g_tok = T_PUNCT;
+            g_pos++;
+            g_pos++;
+            return;
+        }
+        if ((c == '+' || c == '-') && g_src[g_pos + 1] == c) {
+            g_toktext[0] = (char)c;
+            g_toktext[1] = (char)c;
+            g_toktext[2] = 0;
+            g_tok = T_PUNCT;
+            g_pos++;
+            g_pos++;
+            return;
+        }
         g_toktext[0] = (char)c;
         g_toktext[1] = 0;
         g_tok = T_PUNCT;
@@ -230,6 +320,72 @@ impl AstOps for Ast {
         return self->fail("unexpected token");
     }
 
+    /* ---- D33: flat tables plus a scope stack (only variables are scoped) ---- */
+
+    int push_scope(void)
+    {
+        (void)self;
+        if (g_nscope >= MAX_SCOPE) return self->fail("too many nested scopes");
+        g_scope[g_nscope] = g_nvar;
+        g_nscope++;
+        return 0;
+    }
+
+    int pop_scope(void)
+    {
+        (void)self;
+        if (g_nscope <= 0) return self->fail("scope stack underflow");
+        g_nscope--;
+        g_nvar = g_scope[g_nscope];
+        return 0;
+    }
+
+    int declare_var(const char *name)
+    {
+        (void)self;
+        if (g_nvar >= MAX_VARS) return self->fail("too many variables");
+        snprintf(g_vars[g_nvar].name, MAX_TEXT, "%s", name);
+        g_nvar++;
+        return 0;
+    }
+
+    int find_var(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = g_nvar - 1; i >= 0; i--)
+            if (strcmp(g_vars[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int find_func(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < g_nfunc; i++)
+            if (strcmp(g_funcs[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    /* A prototype followed by its definition updates the same entry. */
+    int add_func(const char *name, int nparams, int ret)
+    {
+        int i;
+        (void)self;
+        i = self->find_func(name);
+        if (i >= 0) {
+            g_funcs[i].nparams = nparams;
+            g_funcs[i].ret = ret;
+            return i;
+        }
+        if (g_nfunc >= MAX_FUNCS) return self->fail("too many functions");
+        snprintf(g_funcs[g_nfunc].name, MAX_TEXT, "%s", name);
+        g_funcs[g_nfunc].nparams = nparams;
+        g_funcs[g_nfunc].ret = ret;
+        g_nfunc++;
+        return g_nfunc - 1;
+    }
+
     int parse_program(void)
     {
         int prog, tail, n;
@@ -249,8 +405,12 @@ impl AstOps for Ast {
             self->lex_next();
         }
         while (g_tok != T_EOF) {
+            if (g_tok != T_ID || (strcmp(g_toktext, "int") != 0
+                                  && strcmp(g_toktext, "void") != 0))
+                return self->fail("expected a function definition");
             n = self->parse_func();
-            if (n < 0) return -1;
+            if (n == -1) return -1;
+            if (n == NO_NODE) continue;
             if (tail < 0) g_nodes[prog].a = n;
             else g_nodes[tail].next = n;
             tail = n;
@@ -258,27 +418,98 @@ impl AstOps for Ast {
         return prog;
     }
 
+    /* `int|void name(params) ;` or `int|void name(params) { ... }`. */
     int parse_func(void)
     {
-        int f, b;
+        int ret, f, b, params;
+        char name[MAX_TEXT];
         (void)self;
 
-        if (g_tok != T_ID || strcmp(g_toktext, "int") != 0)
-            return self->fail("expected a function definition");
-        f = self->new_node(N_FUNC);
-        if (f < 0) return -1;
+        ret = (strcmp(g_toktext, "int") == 0) ? R_INT : R_VOID;
         self->lex_next();
         if (g_tok != T_ID) return self->fail("expected a function name");
-        snprintf(g_nodes[f].text, MAX_TEXT, "%s", g_toktext);
+        snprintf(name, sizeof name, "%s", g_toktext);
         self->lex_next();
         if (self->expect("(") != 0) return -1;
-        if (g_tok == T_ID && strcmp(g_toktext, "void") == 0) self->lex_next();
-        else return self->fail("9.1 only supports 'void' parameters");
-        if (self->expect(")") != 0) return -1;
+        if (self->push_scope() != 0) return -1;
+        params = self->parse_params();
+        if (params < 0) {
+            self->pop_scope();
+            return -1;
+        }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
+            self->lex_next();
+            if (self->add_func(name, g_nparams, ret) < 0) {
+                self->pop_scope();
+                return -1;
+            }
+            self->pop_scope();
+            return NO_NODE;
+        }
         b = self->parse_block();
-        if (b < 0) return -1;
-        g_nodes[f].a = b;
+        if (b < 0) {
+            self->pop_scope();
+            return -1;
+        }
+        if (self->add_func(name, g_nparams, ret) < 0) {
+            self->pop_scope();
+            return -1;
+        }
+        f = self->new_node(N_FUNC);
+        if (f < 0) {
+            self->pop_scope();
+            return -1;
+        }
+        snprintf(g_nodes[f].text, MAX_TEXT, "%s", name);
+        g_nodes[f].aux = ret;
+        g_nodes[f].a = params;
+        g_nodes[f].b = b;
+        self->pop_scope();
         return f;
+    }
+
+    /* `(void)` or `(int a, int b)`; the count lands in `g_nparams`. */
+    int parse_params(void)
+    {
+        int first, tail, p;
+        char name[MAX_TEXT];
+        (void)self;
+
+        g_nparams = 0;
+        first = 0;
+        tail = 0;
+        if (g_tok == T_ID && strcmp(g_toktext, "void") == 0) {
+            self->lex_next();
+            if (self->expect(")") != 0) return -1;
+            return 0;
+        }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, ")") == 0) {
+            self->lex_next();
+            return 0;
+        }
+        for (;;) {
+            if (g_tok != T_ID || strcmp(g_toktext, "int") != 0)
+                return self->fail("9.2 parameters must be 'int'");
+            self->lex_next();
+            if (g_tok != T_ID) return self->fail("expected a parameter name");
+            snprintf(name, sizeof name, "%s", g_toktext);
+            self->lex_next();
+            p = self->new_node(N_PARAM);
+            if (p < 0) return -1;
+            snprintf(g_nodes[p].text, MAX_TEXT, "%s", name);
+            if (self->declare_var(name) != 0) return -1;
+            if (tail == 0) first = p;
+            else g_nodes[tail].next = p;
+            tail = p;
+            g_nparams++;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ",") == 0) {
+                self->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (self->expect(")") != 0) return -1;
+        return first;
     }
 
     int parse_block(void)
@@ -287,54 +518,268 @@ impl AstOps for Ast {
         (void)self;
 
         if (self->expect("{") != 0) return -1;
+        if (self->push_scope() != 0) return -1;
         blk = self->new_node(N_BLOCK);
-        if (blk < 0) return -1;
+        if (blk < 0) {
+            self->pop_scope();
+            return -1;
+        }
         tail = -1;
         while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
             s = self->parse_stmt();
-            if (s < 0) return -1;
+            if (s < 0) {
+                self->pop_scope();
+                return -1;
+            }
             if (tail < 0) g_nodes[blk].a = s;
             else g_nodes[tail].next = s;
             tail = s;
         }
-        if (self->expect("}") != 0) return -1;
+        if (self->expect("}") != 0) {
+            self->pop_scope();
+            return -1;
+        }
+        self->pop_scope();
         return blk;
     }
 
     int parse_stmt(void)
     {
-        int s, e;
+        int s, e, c;
         (void)self;
 
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) return self->parse_block();
         if (g_tok == T_ID && strcmp(g_toktext, "return") == 0) {
             s = self->new_node(N_RET);
             if (s < 0) return -1;
             self->lex_next();
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
+                self->lex_next();
+                return s;
+            }
             e = self->parse_expr();
             if (e < 0) return -1;
             g_nodes[s].a = e;
             if (self->expect(";") != 0) return -1;
             return s;
         }
-        s = self->new_node(N_EXPR);
+        if (g_tok == T_ID && strcmp(g_toktext, "if") == 0) {
+            s = self->new_node(N_IF);
+            if (s < 0) return -1;
+            self->lex_next();
+            if (self->expect("(") != 0) return -1;
+            c = self->parse_expr();
+            if (c < 0) return -1;
+            if (self->expect(")") != 0) return -1;
+            g_nodes[s].a = c;
+            e = self->parse_branch();
+            if (e < 0) return -1;
+            g_nodes[s].b = e;
+            if (g_tok == T_ID && strcmp(g_toktext, "else") == 0) {
+                self->lex_next();
+                e = self->parse_branch();
+                if (e < 0) return -1;
+                g_nodes[s].c = e;
+            }
+            return s;
+        }
+        if (g_tok == T_ID && strcmp(g_toktext, "while") == 0) {
+            s = self->new_node(N_WHILE);
+            if (s < 0) return -1;
+            self->lex_next();
+            if (self->expect("(") != 0) return -1;
+            c = self->parse_expr();
+            if (c < 0) return -1;
+            if (self->expect(")") != 0) return -1;
+            g_nodes[s].a = c;
+            e = self->parse_branch();
+            if (e < 0) return -1;
+            g_nodes[s].b = e;
+            return s;
+        }
+        if (g_tok == T_ID && strcmp(g_toktext, "for") == 0) {
+            s = self->new_node(N_FOR);
+            if (s < 0) return -1;
+            self->lex_next();
+            if (self->expect("(") != 0) return -1;
+            if (self->push_scope() != 0) return -1;
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
+                g_nodes[s].a = -1;
+            } else if (g_tok == T_ID && strcmp(g_toktext, "int") == 0) {
+                e = self->parse_decl_node();
+                if (e < 0) {
+                    self->pop_scope();
+                    return -1;
+                }
+                g_nodes[s].a = e;
+            } else {
+                e = self->parse_expr_stmt_node();
+                if (e < 0) {
+                    self->pop_scope();
+                    return -1;
+                }
+                g_nodes[s].a = e;
+            }
+            if (self->expect(";") != 0) {
+                self->pop_scope();
+                return -1;
+            }
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
+                g_nodes[s].b = -1;
+            } else {
+                c = self->parse_expr();
+                if (c < 0) {
+                    self->pop_scope();
+                    return -1;
+                }
+                g_nodes[s].b = c;
+            }
+            if (self->expect(";") != 0) {
+                self->pop_scope();
+                return -1;
+            }
+            if (g_tok == T_PUNCT && strcmp(g_toktext, ")") == 0) {
+                g_nodes[s].c = -1;
+            } else {
+                e = self->parse_expr_stmt_node();
+                if (e < 0) {
+                    self->pop_scope();
+                    return -1;
+                }
+                g_nodes[s].c = e;
+            }
+            if (self->expect(")") != 0) {
+                self->pop_scope();
+                return -1;
+            }
+            e = self->parse_branch();
+            if (e < 0) {
+                self->pop_scope();
+                return -1;
+            }
+            g_nodes[s].d = e;
+            self->pop_scope();
+            return s;
+        }
+        if (g_tok == T_ID && strcmp(g_toktext, "int") == 0) {
+            s = self->parse_decl_node();
+            if (s < 0) return -1;
+            if (self->expect(";") != 0) return -1;
+            return s;
+        }
+        s = self->parse_expr_stmt_node();
         if (s < 0) return -1;
-        e = self->parse_expr();
-        if (e < 0) return -1;
-        g_nodes[s].a = e;
         if (self->expect(";") != 0) return -1;
         return s;
+    }
+
+    /* A branch is always a block node, so emission never needs implicit braces. */
+    int parse_branch(void)
+    {
+        int b, s;
+        (void)self;
+
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) return self->parse_block();
+        if (self->push_scope() != 0) return -1;
+        s = self->parse_stmt();
+        if (s < 0) {
+            self->pop_scope();
+            return -1;
+        }
+        self->pop_scope();
+        b = self->new_node(N_BLOCK);
+        if (b < 0) return -1;
+        g_nodes[b].a = s;
+        return b;
+    }
+
+    /* `int name [= expr]` without the trailing semicolon. */
+    int parse_decl_node(void)
+    {
+        int n, e;
+        char name[MAX_TEXT];
+        (void)self;
+
+        self->lex_next();
+        if (g_tok != T_ID) return self->fail("expected a variable name");
+        snprintf(name, sizeof name, "%s", g_toktext);
+        self->lex_next();
+        n = self->new_node(N_DECL);
+        if (n < 0) return -1;
+        snprintf(g_nodes[n].text, MAX_TEXT, "%s", name);
+        g_nodes[n].aux = R_INT;
+        if (self->declare_var(name) != 0) return -1;
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
+            self->lex_next();
+            e = self->parse_expr();
+            if (e < 0) return -1;
+            g_nodes[n].a = e;
+        }
+        return n;
+    }
+
+    /* An expression statement, or `name = expr` when `=` follows a plain name. */
+    int parse_expr_stmt_node(void)
+    {
+        int e, rhs, n;
+        (void)self;
+
+        e = self->parse_expr();
+        if (e < 0) return -1;
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
+            if (g_nodes[e].kind != N_VAR) return self->fail("assignment target must be a variable");
+            self->lex_next();
+            rhs = self->parse_expr();
+            if (rhs < 0) return -1;
+            g_nodes[e].kind = N_ASSIGN;
+            g_nodes[e].a = rhs;
+            return e;
+        }
+        if (g_nodes[e].kind == N_POST) return e;
+        n = self->new_node(N_EXPR);
+        if (n < 0) return -1;
+        g_nodes[n].a = e;
+        return n;
     }
 
     int parse_expr(void)
     {
         (void)self;
-        return self->parse_add();
+        return self->parse_cmp();
+    }
+
+    int parse_cmp(void)
+    {
+        int left, right, n, op;
+        (void)self;
+
+        left = self->parse_add();
+        if (left < 0) return -1;
+        while (g_tok == T_PUNCT) {
+            op = 0;
+            if (strcmp(g_toktext, "<") == 0) op = B_LT;
+            else if (strcmp(g_toktext, ">") == 0) op = B_GT;
+            else if (strcmp(g_toktext, "<=") == 0) op = B_LE;
+            else if (strcmp(g_toktext, ">=") == 0) op = B_GE;
+            else if (strcmp(g_toktext, "==") == 0) op = B_EQ;
+            else if (strcmp(g_toktext, "!=") == 0) op = B_NE;
+            if (op == 0) break;
+            self->lex_next();
+            right = self->parse_add();
+            if (right < 0) return -1;
+            n = self->new_node(N_BIN);
+            if (n < 0) return -1;
+            g_nodes[n].a = left;
+            g_nodes[n].b = right;
+            g_nodes[n].aux = op;
+            left = n;
+        }
+        return left;
     }
 
     int parse_add(void)
     {
-        int left, right, n;
-        int op;
+        int left, right, n, op;
         (void)self;
 
         left = self->parse_mul();
@@ -356,16 +801,18 @@ impl AstOps for Ast {
 
     int parse_mul(void)
     {
-        int left, right, n;
-        int op;
+        int left, right, n, op;
         (void)self;
 
-        left = self->parse_primary();
+        left = self->parse_unary();
         if (left < 0) return -1;
-        while (g_tok == T_PUNCT && (strcmp(g_toktext, "*") == 0 || strcmp(g_toktext, "/") == 0)) {
-            op = (g_toktext[0] == '*') ? B_MUL : B_DIV;
+        while (g_tok == T_PUNCT && (strcmp(g_toktext, "*") == 0
+               || strcmp(g_toktext, "/") == 0 || strcmp(g_toktext, "%") == 0)) {
+            op = B_MUL;
+            if (g_toktext[0] == '/') op = B_DIV;
+            else if (g_toktext[0] == '%') op = B_MOD;
             self->lex_next();
-            right = self->parse_primary();
+            right = self->parse_unary();
             if (right < 0) return -1;
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
@@ -375,6 +822,43 @@ impl AstOps for Ast {
             left = n;
         }
         return left;
+    }
+
+    int parse_unary(void)
+    {
+        int n, e, op;
+        (void)self;
+
+        op = 0;
+        if (g_tok == T_PUNCT && strcmp(g_toktext, "-") == 0) op = U_NEG;
+        else if (g_tok == T_PUNCT && strcmp(g_toktext, "!") == 0) op = U_NOT;
+        if (op != 0) {
+            self->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->new_node(N_UNARY);
+            if (n < 0) return -1;
+            g_nodes[n].a = e;
+            g_nodes[n].aux = op;
+            return n;
+        }
+        return self->parse_postfix();
+    }
+
+    int parse_postfix(void)
+    {
+        int n;
+        (void)self;
+
+        n = self->parse_primary();
+        if (n < 0) return -1;
+        if (g_tok == T_PUNCT && (strcmp(g_toktext, "++") == 0 || strcmp(g_toktext, "--") == 0)) {
+            if (g_nodes[n].kind != N_VAR) return self->fail("'++' / '--' need a variable");
+            g_nodes[n].kind = N_POST;
+            g_nodes[n].aux = (g_toktext[0] == '+') ? P_INC : P_DEC;
+            self->lex_next();
+        }
+        return n;
     }
 
     int parse_primary(void)
@@ -406,6 +890,10 @@ impl AstOps for Ast {
                 if (args < 0) return -1;
                 g_nodes[n].kind = N_CALL;
                 g_nodes[n].a = (args == 0) ? -1 : args;
+            } else if (self->find_var(g_nodes[n].text) < 0) {
+                /* the scope stack is unwound after each function, so this check
+                   has to happen while parsing, not in the emitter */
+                return self->fail("use of an undeclared variable");
             }
             return n;
         }
@@ -419,8 +907,7 @@ impl AstOps for Ast {
         return self->fail("expected an expression");
     }
 
-    /* `(` args `)`: 0 means an empty list (node 0 is the program, so callers
-       distinguish it from an index explicitly). */
+    /* `(` args `)`: 0 means an empty list (node 0 is the program). */
     int parse_args(void)
     {
         int first, tail, e;
@@ -447,99 +934,6 @@ impl AstOps for Ast {
         }
         if (self->expect(")") != 0) return -1;
         return first;
-    }
-
-    int emit_indent(int n)
-    {
-        int i;
-        (void)self;
-        for (i = 0; i < n * 4; i++) fputc(' ', g_out);
-        return 0;
-    }
-
-    int emit_program(int prog)
-    {
-        int n;
-        (void)self;
-
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
-            if (g_nodes[n].kind == N_PP) {
-                fprintf(g_out, "%s\n", g_nodes[n].text);
-            } else if (g_nodes[n].kind == N_FUNC) {
-                if (self->emit_node(n, 0) != 0) return -1;
-            } else {
-                return self->fail("unknown top-level node");
-            }
-        }
-        return 0;
-    }
-
-    int emit_node(int n, int ind)
-    {
-        int c;
-        (void)self;
-
-        if (g_nodes[n].kind == N_FUNC) {
-            fprintf(g_out, "int %s(void) {\n", g_nodes[n].text);
-            for (c = g_nodes[g_nodes[n].a].a; c >= 0; c = g_nodes[c].next)
-                if (self->emit_node(c, ind + 1) != 0) return -1;
-            fputs("}\n", g_out);
-            return 0;
-        }
-        if (g_nodes[n].kind == N_RET) {
-            self->emit_indent(ind);
-            fputs("return ", g_out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fputs(";\n", g_out);
-            return 0;
-        }
-        if (g_nodes[n].kind == N_EXPR) {
-            self->emit_indent(ind);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fputs(";\n", g_out);
-            return 0;
-        }
-        return self->fail("unknown statement node");
-    }
-
-    int emit_expr(int n)
-    {
-        int c;
-        const char *op;
-        (void)self;
-
-        if (g_nodes[n].kind == N_NUM) {
-            fprintf(g_out, "%ld", g_nodes[n].num);
-            return 0;
-        }
-        if (g_nodes[n].kind == N_STR || g_nodes[n].kind == N_VAR) {
-            fputs(g_nodes[n].text, g_out);
-            return 0;
-        }
-        if (g_nodes[n].kind == N_BIN) {
-            op = "+";
-            if (g_nodes[n].aux == B_SUB) op = "-";
-            else if (g_nodes[n].aux == B_MUL) op = "*";
-            else if (g_nodes[n].aux == B_DIV) op = "/";
-            fputs("(", g_out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fprintf(g_out, " %s ", op);
-            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
-            fputs(")", g_out);
-            return 0;
-        }
-        if (g_nodes[n].kind == N_CALL) {
-            fprintf(g_out, "%s(", g_nodes[n].text);
-            c = g_nodes[n].a;
-            while (c >= 0) {
-                if (self->emit_expr(c) != 0) return -1;
-                c = g_nodes[c].next;
-                if (c >= 0) fputs(", ", g_out);
-            }
-            fputs(")", g_out);
-            return 0;
-        }
-        return self->fail("unknown expression node");
     }
 
     int read_file(const char *path)
@@ -589,7 +983,338 @@ impl AstOps for Ast {
         return 0;
     }
 
-    /* The header carries the same banner and guard as the old pipeline; 9.1 has
+    int run(int argc, char **argv)
+    {
+        const char *in;
+        const char *out;
+        char outbuf[MAX_PATH];
+        int i, prog;
+        FILE *f;
+
+        in = NULL;
+        out = NULL;
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: ct-ast <input.ct> [-o <output.c>]\n");
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("ct-ast v%s\n", CTC_VERSION);
+                return 0;
+            }
+            if (strcmp(argv[i], "-o") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: -o needs an argument\n");
+                    return 1;
+                }
+                i++;
+                out = argv[i];
+                continue;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            in = argv[i];
+        }
+        if (!in) {
+            fprintf(stderr, "usage: ct-ast <input.ct> [-o <output.c>]\n");
+            return 1;
+        }
+        if (!out) {
+            if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
+                fprintf(stderr, "ct-ast: output path too long\n");
+                return 1;
+            }
+            out = outbuf;
+        }
+
+        g_path = in;
+        g_pos = 0;
+        g_bol = 1;
+        g_nnode = 0;
+        g_nfunc = 0;
+        g_nvar = 0;
+        g_nscope = 0;
+        g_nparams = 0;
+        g_errmsg[0] = 0;
+        if (self->read_file(in) != 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        prog = self->parse_program();
+        if (prog < 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        f = fopen(out, "w");
+        if (!f) {
+            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            return 1;
+        }
+        g_out = f;
+        fprintf(g_out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
+                CTC_VERSION, g_path);
+        fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
+              g_out);
+        if (self->emit_program(prog) != 0) {
+            fclose(f);
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        if (fclose(f) != 0) {
+            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            return 1;
+        }
+        if (self->write_header(out) != 0) {
+            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            return 1;
+        }
+        return 0;
+    }
+}
+
+impl EmitOps for Ast {
+    int emit_indent(int n)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < n * 4; i++) fputc(' ', g_out);
+        return 0;
+    }
+
+    /* Preprocessor lines first, then one prototype per function (so a call may
+       precede its definition), then the definitions in source order. */
+    int emit_program(int prog)
+    {
+        int n, i;
+        (void)self;
+
+        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
+            if (g_nodes[n].kind == N_PP) fprintf(g_out, "%s\n", g_nodes[n].text);
+
+        for (i = 0; i < g_nfunc; i++) {
+            if (g_funcs[i].ret == R_VOID) fputs("void ", g_out);
+            else fputs("int ", g_out);
+            fprintf(g_out, "%s(", g_funcs[i].name);
+            if (g_funcs[i].nparams == 0) {
+                fputs("void", g_out);
+            } else {
+                int k;
+                for (k = 0; k < g_funcs[i].nparams; k++) {
+                    if (k > 0) fputs(", ", g_out);
+                    fputs("int", g_out);
+                }
+            }
+            fputs(");\n", g_out);
+        }
+
+        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+            if (g_nodes[n].kind == N_FUNC) {
+                if (self->emit_node(n, 0) != 0) return -1;
+            } else if (g_nodes[n].kind != N_PP) {
+                return self->fail("unknown top-level node");
+            }
+        }
+        return 0;
+    }
+
+    int emit_node(int n, int ind)
+    {
+        int c;
+        (void)self;
+
+        if (g_nodes[n].kind == N_FUNC) {
+            if (g_nodes[n].aux == R_VOID) fputs("void ", g_out);
+            else fputs("int ", g_out);
+            fprintf(g_out, "%s(", g_nodes[n].text);
+            c = g_nodes[n].a;
+            if (c == 0) {
+                fputs("void) ", g_out);
+            } else {
+                int first;
+                first = 1;
+                while (c > 0) {
+                    if (!first) fputs(", ", g_out);
+                    fprintf(g_out, "int %s", g_nodes[c].text);
+                    first = 0;
+                    c = g_nodes[c].next;
+                }
+                fputs(") ", g_out);
+            }
+            return self->emit_node(g_nodes[n].b, ind);
+        }
+        if (g_nodes[n].kind == N_BLOCK) {
+            fputs("{\n", g_out);
+            for (c = g_nodes[n].a; c >= 0; c = g_nodes[c].next)
+                if (self->emit_node(c, ind + 1) != 0) return -1;
+            self->emit_indent(ind);
+            fputs("}\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_RET) {
+            self->emit_indent(ind);
+            if (g_nodes[n].a < 0) {
+                fputs("return;\n", g_out);
+                return 0;
+            }
+            fputs("return ", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(";\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_ASSIGN
+            || g_nodes[n].kind == N_EXPR || g_nodes[n].kind == N_POST) {
+            self->emit_indent(ind);
+            if (self->emit_inline(n) != 0) return -1;
+            fputs(";\n", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_IF) {
+            self->emit_indent(ind);
+            fputs("if (", g_out);
+            if (self->emit_cond(g_nodes[n].a) != 0) return -1;
+            fputs(") ", g_out);
+            if (self->emit_node(g_nodes[n].b, ind) != 0) return -1;
+            if (g_nodes[n].c >= 0) {
+                self->emit_indent(ind);
+                fputs("else ", g_out);
+                if (self->emit_node(g_nodes[n].c, ind) != 0) return -1;
+            }
+            return 0;
+        }
+        if (g_nodes[n].kind == N_WHILE) {
+            self->emit_indent(ind);
+            fputs("while (", g_out);
+            if (self->emit_cond(g_nodes[n].a) != 0) return -1;
+            fputs(") ", g_out);
+            return self->emit_node(g_nodes[n].b, ind);
+        }
+        if (g_nodes[n].kind == N_FOR) {
+            self->emit_indent(ind);
+            fputs("for (", g_out);
+            if (g_nodes[n].a >= 0 && self->emit_inline(g_nodes[n].a) != 0) return -1;
+            fputs("; ", g_out);
+            if (g_nodes[n].b >= 0 && self->emit_cond(g_nodes[n].b) != 0) return -1;
+            fputs("; ", g_out);
+            if (g_nodes[n].c >= 0 && self->emit_inline(g_nodes[n].c) != 0) return -1;
+            fputs(") ", g_out);
+            return self->emit_node(g_nodes[n].d, ind);
+        }
+        {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "unknown statement node (kind %d)", g_nodes[n].kind);
+            return self->fail(msg);
+        }
+    }
+
+    /* A statement-shaped node without indentation or the trailing semicolon:
+       used by `for (init; cond; step)` as well as by ordinary statements. */
+    int emit_inline(int n)
+    {
+        (void)self;
+
+        if (g_nodes[n].kind == N_DECL) {
+            fprintf(g_out, "int %s", g_nodes[n].text);
+            if (g_nodes[n].a >= 0) {
+                fputs(" = ", g_out);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            }
+            return 0;
+        }
+        if (g_nodes[n].kind == N_ASSIGN) {
+            fputs(g_nodes[n].text, g_out);
+            fputs(" = ", g_out);
+            return self->emit_expr(g_nodes[n].a);
+        }
+        if (g_nodes[n].kind == N_EXPR) return self->emit_expr(g_nodes[n].a);
+        if (g_nodes[n].kind == N_POST) {
+            fprintf(g_out, "%s%s", g_nodes[n].text,
+                    g_nodes[n].aux == P_INC ? "++" : "--");
+            return 0;
+        }
+        return self->fail("cannot inline this node");
+    }
+
+    /* A condition must not gain a second pair of parentheses: clang warns about
+       `if ((a == b))` under -Wall, and D34 requires a warning-free build. */
+    int emit_cond(int n)
+    {
+        const char *op;
+        (void)self;
+
+        if (g_nodes[n].kind == N_BIN && g_nodes[n].aux >= B_LT && g_nodes[n].aux <= B_NE) {
+            op = "<";
+            if (g_nodes[n].aux == B_GT) op = ">";
+            else if (g_nodes[n].aux == B_LE) op = "<=";
+            else if (g_nodes[n].aux == B_GE) op = ">=";
+            else if (g_nodes[n].aux == B_EQ) op = "==";
+            else if (g_nodes[n].aux == B_NE) op = "!=";
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fprintf(g_out, " %s ", op);
+            return self->emit_expr(g_nodes[n].b);
+        }
+        return self->emit_expr(n);
+    }
+
+    int emit_expr(int n)
+    {
+        int c;
+        const char *op;
+        (void)self;
+
+        if (g_nodes[n].kind == N_NUM) {
+            fprintf(g_out, "%ld", g_nodes[n].num);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_STR) {
+            fputs(g_nodes[n].text, g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_VAR) {
+            fputs(g_nodes[n].text, g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_BIN) {
+            op = "+";
+            if (g_nodes[n].aux == B_SUB) op = "-";
+            else if (g_nodes[n].aux == B_MUL) op = "*";
+            else if (g_nodes[n].aux == B_DIV) op = "/";
+            else if (g_nodes[n].aux == B_MOD) op = "%";
+            else if (g_nodes[n].aux == B_LT) op = "<";
+            else if (g_nodes[n].aux == B_GT) op = ">";
+            else if (g_nodes[n].aux == B_LE) op = "<=";
+            else if (g_nodes[n].aux == B_GE) op = ">=";
+            else if (g_nodes[n].aux == B_EQ) op = "==";
+            else if (g_nodes[n].aux == B_NE) op = "!=";
+            fputs("(", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fprintf(g_out, " %s ", op);
+            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_UNARY) {
+            fputs(g_nodes[n].aux == U_NEG ? "(-" : "(!", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_CALL) {
+            fprintf(g_out, "%s(", g_nodes[n].text);
+            c = g_nodes[n].a;
+            while (c >= 0) {
+                if (self->emit_expr(c) != 0) return -1;
+                c = g_nodes[c].next;
+                if (c >= 0) fputs(", ", g_out);
+            }
+            fputs(")", g_out);
+            return 0;
+        }
+        return self->fail("unknown expression node");
+    }
+
+    /* The header carries the same banner and guard as the old pipeline; 9.2 has
        no exported types yet, so there is nothing between the guard and `#endif`. */
     int write_header(const char *outc)
     {
@@ -645,96 +1370,10 @@ impl AstOps for Ast {
         if (fclose(f) != 0) return self->fail("cannot write the header");
         return 0;
     }
-
-    int run(int argc, char **argv)
-    {
-        const char *in;
-        const char *out;
-        char outbuf[MAX_PATH];
-        int i, prog;
-        FILE *f;
-
-        in = NULL;
-        out = NULL;
-        for (i = 1; i < argc; i++) {
-            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: ct-ast <input.ct> [-o <output.c>]\n");
-                return 0;
-            }
-            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                printf("ct-ast v%s\n", CTC_VERSION);
-                return 0;
-            }
-            if (strcmp(argv[i], "-o") == 0) {
-                if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: -o needs an argument\n");
-                    return 1;
-                }
-                i++;
-                out = argv[i];
-                continue;
-            }
-            if (argv[i][0] == '-' && argv[i][1]) {
-                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
-                return 1;
-            }
-            in = argv[i];
-        }
-        if (!in) {
-            fprintf(stderr, "usage: ct-ast <input.ct> [-o <output.c>]\n");
-            return 1;
-        }
-        if (!out) {
-            if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
-                fprintf(stderr, "ct-ast: output path too long\n");
-                return 1;
-            }
-            out = outbuf;
-        }
-
-        g_path = in;
-        g_pos = 0;
-        g_bol = 1;
-        g_nnode = 0;
-        g_errmsg[0] = 0;
-        if (self->read_file(in) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        prog = self->parse_program();
-        if (prog < 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        f = fopen(out, "w");
-        if (!f) {
-            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
-            return 1;
-        }
-        g_out = f;
-        fprintf(g_out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
-                CTC_VERSION, g_path);
-        fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
-              g_out);
-        if (self->emit_program(prog) != 0) {
-            fclose(f);
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        if (fclose(f) != 0) {
-            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
-            return 1;
-        }
-        if (self->write_header(out) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
-            return 1;
-        }
-        return 0;
-    }
 }
 
-/* The instance lives after the impl: its vptr initialiser needs the vtable
-   forward declaration the emitter places with the impl. */
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
 static struct Ast g_ast;
 
 int main(int argc, char **argv)
