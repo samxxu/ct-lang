@@ -83,6 +83,7 @@
 #define N_BREAK   38
 #define N_CONT    39
 #define N_DECLS   40
+#define N_DELETE  41
 
 /* token kinds */
 #define T_EOF    0
@@ -1333,6 +1334,12 @@ impl ParseOps for Ast {
             if (self->add_struct(qname) < 0) return -1;
             self->lex_next();
         }
+        if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
+            /* `struct X;` -- a forward declaration: the tag is registered above,
+               so `struct X *p` parses; the body may follow later */
+            self->lex_next();
+            return NO_NODE;
+        }
         if (self->expect("{") != 0) return -1;
         s = self->new_node(N_STRUCT);
         if (s < 0) return -1;
@@ -1689,6 +1696,16 @@ impl ParseOps for Ast {
                     if (e < 0) return -1;
                 }
             }
+            g_nodes[s].a = e;
+            if (self->expect(";") != 0) return -1;
+            return s;
+        }
+        if (g_tok == T_ID && strcmp(g_toktext, "delete") == 0) {
+            s = self->new_node(N_DELETE);
+            if (s < 0) return -1;
+            self->lex_next();
+            e = self->parse_expr();
+            if (e < 0) return -1;
             g_nodes[s].a = e;
             if (self->expect(";") != 0) return -1;
             return s;
@@ -2814,7 +2831,9 @@ impl ModuleOps for Ast {
         self->lex_next();
         is_def = 0;
         if (g_tok == T_ID) self->lex_next();
-        if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) is_def = 1;
+        /* a body (`{`) or a forward declaration (`;`) both start a CT struct */
+        if (g_tok == T_PUNCT && (strcmp(g_toktext, "{") == 0 || strcmp(g_toktext, ";") == 0))
+            is_def = 1;
         g_pos = pos;
         g_bol = bol;
         g_tok = tok;
@@ -2843,7 +2862,8 @@ impl ModuleOps for Ast {
         } else if (g_tok == T_ID && strcmp(g_toktext, "struct") == 0
                    && self->struct_def_ahead()) {
             n = self->parse_struct_def();
-            if (n >= 0 && self->expect(";") != 0) n = -1;
+            /* CT writes `struct X { ... }` bare (the old pipeline accepts both) */
+            if (n >= 0) self->accept(";");
         } else if (g_tok == T_ID && strcmp(g_toktext, "static") == 0) {
             self->lex_next();
             n = self->parse_func(1, is_pub);
@@ -3432,6 +3452,15 @@ impl EmitOps for Ast {
             fputs(";\n", g_out);
             return 0;
         }
+        if (g_nodes[n].kind == N_DELETE) {
+            self->emit_indent(ind);
+            fputs("if (", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(") free(", g_out);
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(");\n", g_out);
+            return 0;
+        }
         if (g_nodes[n].kind == N_BREAK) {
             self->emit_indent(ind);
             fputs("break;\n", g_out);
@@ -3649,6 +3678,11 @@ impl EmitOps for Ast {
             fputs("sizeof(", g_out);
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fputs(")", g_out);
+            return 0;
+        }
+        if (g_nodes[n].kind == N_POST) {
+            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            fputs(g_nodes[n].aux == P_INC ? "++" : "--", g_out);
             return 0;
         }
         if (g_nodes[n].kind == N_TERN) {
