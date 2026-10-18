@@ -26,7 +26,7 @@
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | ✅ 完成（2026-10-17；7.1–7.3 落地，bump 到 v0.7.0；`ct get` / `ct install` 后由 Phase 8 落地） | `ct compile` 可用、`ctc …` 不失效、banner 写 `ct` |
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
 | Phase 9 | **AST 版编译器**（新主线） | 新增 | ✅ 9.1–9.7 已落地（2026-10-18）：自编 + 不动点 + **全量行为等价**（`check-ast.sh` 60 项）；旧管线 `selfhost/src/**` 按 D36 冻结归档（tag `pre-ast-mainline`）；**v0.9.0 版本收口待授权** | 自编 + 行为等价 |
-| Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | 🔨 进行中（2026-10-19；[design/phase10.md](design/phase10.md)，D38–D45 已按建议值确认；**10.1 CLI/身份已落地**，10.2–10.7 待做） | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
+| Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | 🔨 进行中（2026-10-19；[design/phase10.md](design/phase10.md)，D38–D45 已按建议值确认；**10.1 CLI/身份、10.2 语义诊断已落地**，10.3–10.7 待做） | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -891,7 +891,7 @@ as confirmed by the user.
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias | landing | ✅ done (2026-10-17; 7.1–7.3 landed, bumped to v0.7.0; `ct get` / `ct install` landed later in Phase 8) | `ct compile` works, `ctc …` keeps working, the banner says `ct` |
 | 8 | **Package management and distribution**: `ct-pkg` (git registry + local directory sources), `ct get` / `ct install` | new | ✅ done (2026-10-18; 8.1–8.3 all landed; bumped to v0.8.0; D21–D27 frozen) | `ct get` / `ct install` work, and the compile path stays network-free |
 | 9 | **AST-based compiler** (the new mainline) | new | ✅ 9.1–9.7 landed (2026-10-18): self-compilation + fixpoint + **whole-corpus behavioural equivalence** (`check-ast.sh`, 60 assertions); the old pipeline `selfhost/src/**` is frozen and archived per D36 (tag `pre-ast-mainline`); **the v0.9.0 version close awaits authorisation** | self-compilation + behavioural equivalence |
-| 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | 🔨 in progress (2026-10-19; [design/phase10.md](design/phase10.md), D38–D45 confirmed as proposed; **10.1 CLI/identity landed**, 10.2–10.7 to go) | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
+| 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | 🔨 in progress (2026-10-19; [design/phase10.md](design/phase10.md), D38–D45 confirmed as proposed; **10.1 CLI/identity and 10.2 semantic diagnostics landed**, 10.3–10.7 to go) | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
 > features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap

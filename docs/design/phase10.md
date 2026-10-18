@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> 状态：**10.1 已落地（2026-10-19）**；10.2–10.7 待推进。D38–D45 已按建议值确认。
+> 状态：**10.1–10.2 已落地（2026-10-19）**；10.3–10.7 待推进。D38–D45 已按建议值确认。
 > Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
 > Phase 10 的目标是补齐 ct-ast 相对 L2 的能力缺口，并把安装入口切过去；旧线保留为回归 oracle。
 
@@ -37,8 +37,8 @@
 | `--std=c99\|gnu99` | ✅ | ✅（build 的建议 `cc` 命令带上目标标准） | — |
 | compile 模式接受 `-I` | ✅（静默接受） | ✅ | — |
 | build 打印建议 `cc` 命令 | ✅ | ✅（10.1 补齐，含 `-std`） | — |
-| 语义诊断：重复 trait / struct 报错 | ✅ | ❌ | 10.2 |
-| 语义诊断：impl 签名不一致告警（text/json） | ✅ | ❌ | 10.2 |
+| 语义诊断：重复 trait / struct 报错 | ✅ | ✅（`file:line:col: error:` + `ctc: N error(s) generated`，位置指向 `{`） | — |
+| 语义诊断：impl 签名不一致告警（text/json） | ✅ | ✅（措辞与 JSON 与 L2 逐字节一致；发射时取 trait 的返回类型） | — |
 | 多错误恢复（`MAX_ERRORS=20` + 产物清理 + `N error(s) generated`） | ✅ | ❌ 首错即停 | 10.4 |
 | Drop trait（`use Drop` / 递归释放） | ✅ | ❌ | 10.3 |
 | AutoDrop（`own`） | ✅ | ❌ | 10.3 |
@@ -52,7 +52,7 @@
 | 切片 | 内容 | 出口 |
 | --- | --- | --- |
 | 10.1 | CLI 与身份对齐：`--diagnostics`、`--std`、compile `-I`、`argv[0]` 身份、usage 文本 | ✅ **已落地（2026-10-19）**：`g_prog` 按 `argv[0]` 取 `ct` / `ctc` / `ct-ast`；两模式接受并校验 `--diagnostics=text\|json`（`g_diag_json` 留给 10.3）与 `--std=c99\|gnu99`；compile 模式接受 `-I`；build 补发建议 `cc -std=… <unit>.c… -o a.out`。`check-ast.sh` 新增 8 项 CLI/身份断言（64 → **72**） |
-| 10.2 | 语义诊断：重复定义报错、签名不一致告警（text/json） | `test/modules/dup_*`、`sig_mismatch*` 在 ct-ast 下逐字节比对通过 |
+| 10.2 | 语义诊断：重复定义报错、签名不一致告警（text/json） | ✅ **已落地（2026-10-19）**：新增 `DiagOps`（`sem_error` / `record_sig_warn` / `emit_warnings`）；重复 trait/struct 报 `file:line:col: error:` 并以 `ctc: N error(s) generated` 收尾、失败不留产物（前置声明合法）；impl 签名不一致按 L2 措辞告警（text stderr / `{"warnings":[…]} ` stdout），发射函数取 **trait 的返回类型**使产物仍可编译。`check-ast.sh` 逐字节比对 `dup_struct` / `dup_trait` / `sig_mismatch` / `sig_mismatch_json`（72 → **76**） |
 | 10.3 | 内存：Drop / AutoDrop / 泄漏分析 | `test/modules/autodrop*`、`leak*` 在 ct-ast 下逐字节比对通过 |
 | 10.4 | 多错误恢复 | 多错误语料在 ct-ast 下输出与 L2 一致（`N error(s) generated` + 产物清理） |
 | 10.5 | 增量缓存 | `ct-tour` 的缓存三步在 ct-ast 下通过；键格式与 L2 相同 |
@@ -118,8 +118,8 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | `--std=c99\|gnu99` | ✅ | ✅ (the suggested `cc` command carries the target standard) | — |
 | compile mode accepts `-I` | ✅ (ignored) | ✅ | — |
 | build prints the suggested `cc` command | ✅ | ✅ (added in 10.1, `-std` included) | — |
-| semantic check: duplicate trait / struct is an error | ✅ | ❌ | 10.2 |
-| semantic check: impl signature mismatch warning (text/json) | ✅ | ❌ | 10.2 |
+| semantic check: duplicate trait / struct is an error | ✅ | ✅ (`file:line:col: error:` + `ctc: N error(s) generated`, positioned at the `{`) | — |
+| semantic check: impl signature mismatch warning (text/json) | ✅ | ✅ (wording and JSON byte-identical to L2; the emitted function takes the trait's return type) | — |
 | multi-error recovery (`MAX_ERRORS=20`, artifact cleanup, `N error(s) generated`) | ✅ | ❌ first error stops | 10.4 |
 | Drop trait (`use Drop`, recursive release) | ✅ | ❌ | 10.3 |
 | AutoDrop (`own`) | ✅ | ❌ | 10.3 |
@@ -133,7 +133,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | Slice | Content | Exit |
 | --- | --- | --- |
 | 10.1 | CLI and identity: `--diagnostics`, `--std`, compile `-I`, `argv[0]` identity, usage text | ✅ **landed (2026-10-19)**: `g_prog` comes from `argv[0]` (`ct` / `ctc` / `ct-ast`); both modes accept and validate `--diagnostics=text\|json` (`g_diag_json` is reserved for 10.3) and `--std=c99\|gnu99`; compile mode accepts `-I`; build prints `cc -std=… <unit>.c… -o a.out`. `check-ast.sh` gained 8 CLI/identity assertions (64 → **72**) |
-| 10.2 | semantic diagnostics: duplicate definitions error, signature-mismatch warning (text/json) | `test/modules/dup_*` and `sig_mismatch*` pass byte for byte under ct-ast |
+| 10.2 | semantic diagnostics: duplicate definitions error, signature-mismatch warning (text/json) | ✅ **landed (2026-10-19)**: new `DiagOps` (`sem_error` / `record_sig_warn` / `emit_warnings`); a duplicate trait/struct reports `file:line:col: error:` and closes with `ctc: N error(s) generated`, leaving no artifacts (forward declarations stay legal); a signature mismatch warns in L2's wording (text stderr / `{"warnings":[…]}` stdout) and the emitted function takes the **trait's** return type so the output still compiles. `check-ast.sh` compares `dup_struct` / `dup_trait` / `sig_mismatch` / `sig_mismatch_json` byte for byte (72 → **76**) |
 | 10.3 | memory: Drop / AutoDrop / leak analysis | `test/modules/autodrop*` and `leak*` pass byte for byte under ct-ast |
 | 10.4 | multi-error recovery | multi-error fixtures produce the same output as L2 (cleanup + `N error(s) generated`) |
 | 10.5 | incremental cache | the three cache steps of `ct-tour` pass under ct-ast; key format identical to L2 |
