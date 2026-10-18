@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# check-ast.sh - Phase 9.1–9.4a: the AST compiler's behavioural gate.
+# check-ast.sh - Phase 9.1–9.4b: the AST compiler's behavioural gate.
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
 # (selfhost/ast/main.ct, D30: a separate tree in parallel with the old
@@ -119,6 +119,17 @@ if "$work/ct-ast" test/cases/01_trait_basic.ct -o "$work/p01.c" \
 else
     bad "01_trait_basic" "$(cat "$work/p01.err" "$work/p01.cc" "$work/p01.stdout")"
 fi
+for c in 18_polymorphism 21_empty_init_iface; do
+    if "$work/ct-ast" "test/cases/$c.ct" -o "$work/$c.c" \
+            >"$work/$c.out" 2>"$work/$c.err" \
+       && "$CC" -Wall -Wextra -std=c99 "$work/$c.c" -o "$work/$c.bin" 2>"$work/$c.cc" \
+       && "$work/$c.bin" >"$work/$c.stdout" 2>&1 \
+       && cmp -s "$work/$c.stdout" "test/cases/$c.expected.out"; then
+        ok "$c (interface values, full behaviour)"
+    else
+        bad "$c" "$(cat "$work/$c.err" "$work/$c.cc" "$work/$c.stdout")"
+    fi
+done
 
 echo
 echo "== negative case =="

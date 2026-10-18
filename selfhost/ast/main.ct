@@ -71,6 +71,7 @@
 #define N_RAW     31
 #define N_TRAIT   32
 #define N_IMPL    33
+#define N_BOX     34
 
 /* token kinds */
 #define T_EOF    0
@@ -174,6 +175,7 @@ static int g_ntraits;
 static StructDef g_structs[MAX_STRUCTS];
 static int g_nstructs;
 static int g_self_mode;               /* inside an impl body: `self` -> `_self` */
+static char g_ret_type[MAX_TEXT];     /* return type of the function being parsed */
 
 trait AstOps {
     int  new_node(int kind);
@@ -230,6 +232,10 @@ trait ParseOps {
     int  parse_impl(void);
     int  parse_use_list(int sindex);
     int  parse_init_raw(char *out, size_t cap);
+    int  is_iface_type(const char *type, char *tout, size_t tcap);
+    int  concrete_struct(const char *type, char *sout, size_t scap, int *is_ptr);
+    int  expr_type(int n, char *out, size_t cap);
+    int  maybe_box(int n, const char *trait);
 }
 
 trait EmitOps {
@@ -244,6 +250,7 @@ trait EmitOps {
     int  emit_impls(int prog);
     int  type_has_vptr(const char *type);
     int  emit_vptr_items(const char *type);
+    int  emit_raw_init(int raw, const char *type);
     int  write_header(const char *outc);
 }
 
@@ -789,11 +796,18 @@ impl ParseOps for Ast {
             }
             if (g_tok == T_ID && self->find_type(g_toktext) >= 0) {
                 int ti;
+                char iface[MAX_TEXT];
                 ti = self->find_type(g_toktext);
-                /* a bare struct tag needs the `struct` keyword in C; a typedef
-                   name is used as-is */
+                /* a bare struct tag needs `struct`; a trait becomes its iface */
                 if (g_type_kind[ti] == 1) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                } else if (g_type_kind[ti] == 3) {
+                    if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                    if (snprintf(iface, sizeof iface, "%s_iface", g_toktext) >= (int)sizeof iface)
+                        return self->fail("type name is too long");
+                    if (self->type_append(out, cap, &n, iface) != 0) return -1;
+                    self->lex_next();
+                    continue;
                 }
                 if (self->type_append(out, cap, &n, g_toktext) != 0) return -1;
                 self->lex_next();
@@ -916,7 +930,9 @@ impl ParseOps for Ast {
             self->pop_scope();
             return NO_NODE;
         }
+        snprintf(g_ret_type, sizeof g_ret_type, "%s", ret);
         b = self->parse_block();
+        g_ret_type[0] = 0;
         if (b < 0) {
             self->pop_scope();
             return -1;
@@ -1113,6 +1129,7 @@ impl ParseOps for Ast {
         snprintf(name, sizeof name, "%s", g_toktext);
         ti = self->add_trait(name);
         if (ti < 0) return -1;
+        if (self->add_type(name, 3) != 0) return -1;   /* trait = iface type */
         self->lex_next();
         if (self->expect("{") != 0) return -1;
         while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
@@ -1210,7 +1227,9 @@ impl ParseOps for Ast {
                 self->pop_scope();
                 return -1;
             }
+            snprintf(g_ret_type, sizeof g_ret_type, "%s", ret);
             body = self->parse_block();
+            g_ret_type[0] = 0;
             if (body < 0) {
                 self->pop_scope();
                 return -1;
@@ -1330,6 +1349,13 @@ impl ParseOps for Ast {
             }
             e = self->parse_expr();
             if (e < 0) return -1;
+            {
+                char tr[MAX_TEXT];
+                if (self->is_iface_type(g_ret_type, tr, sizeof tr)) {
+                    e = self->maybe_box(e, tr);
+                    if (e < 0) return -1;
+                }
+            }
             g_nodes[s].a = e;
             if (self->expect(";") != 0) return -1;
             return s;
@@ -1503,6 +1529,14 @@ impl ParseOps for Ast {
             }
             g_nodes[n].a = e;
         }
+        if (g_nodes[n].a >= 0) {
+            char tr[MAX_TEXT];
+            if (self->is_iface_type(typebuf, tr, sizeof tr)) {
+                e = self->maybe_box(g_nodes[n].a, tr);
+                if (e < 0) return -1;
+                g_nodes[n].a = e;
+            }
+        }
         return n;
     }
 
@@ -1515,12 +1549,21 @@ impl ParseOps for Ast {
         if (e < 0) return -1;
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
             int k;
+            char tt[MAX_TEXT];
+            char tr[MAX_TEXT];
             k = g_nodes[e].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->fail("assignment target is not assignable");
             self->lex_next();
             rhs = self->parse_expr();
             if (rhs < 0) return -1;
+            if ((k == N_VAR && self->var_type(g_nodes[e].text2, tt, sizeof tt) == 0)
+                || (k == N_INDEX && self->expr_type(e, tt, sizeof tt) == 0)) {
+                if (self->is_iface_type(tt, tr, sizeof tr)) {
+                    rhs = self->maybe_box(rhs, tr);
+                    if (rhs < 0) return -1;
+                }
+            }
             n = self->new_node(N_ASSIGN);
             if (n < 0) return -1;
             g_nodes[n].a = e;
@@ -1697,10 +1740,21 @@ impl ParseOps for Ast {
                     snprintf(g_nodes[m].text2, MAX_TEXT, "%s", fname);
                     /* resolve the trait now: locals are out of scope by the time
                        the emitter runs */
-                    if (g_nodes[n].kind == N_VAR
-                        && self->var_type(g_nodes[n].text2, rtype, sizeof rtype) == 0
-                        && self->method_trait(rtype, fname, trname, sizeof trname) == 0) {
-                        snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
+                    if (self->expr_type(n, rtype, sizeof rtype) == 0) {
+                        if (self->is_iface_type(rtype, trname, sizeof trname)) {
+                            int t = self->find_trait(trname);
+                            int mi, ok = 0;
+                            if (t >= 0) {
+                                for (mi = 0; mi < g_traits[t].nm; mi++)
+                                    if (strcmp(g_traits[t].m[mi].name, fname) == 0) ok = 1;
+                            }
+                            if (ok) {
+                                g_nodes[m].aux = 3;
+                                snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
+                            }
+                        } else if (self->method_trait(rtype, fname, trname, sizeof trname) == 0) {
+                            snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
+                        }
                     }
                 } else {
                     m = self->new_node(arrow ? N_ARROW : N_MEMBER);
@@ -1753,8 +1807,34 @@ impl ParseOps for Ast {
             snprintf(g_nodes[n].text2, MAX_TEXT, "%s", g_toktext);
             self->lex_next();
             if (g_tok == T_PUNCT && strcmp(g_toktext, "(") == 0) {
+                int fi;
                 args = self->parse_args();
                 if (args < 0) return -1;
+                fi = self->find_func(g_nodes[n].text2);
+                if (fi >= 0 && args > 0) {
+                    int cur, prev, k, first_arg;
+                    cur = args;
+                    prev = -1;
+                    k = 0;
+                    first_arg = args;
+                    while (cur > 0 && k < g_funcs[fi].nparams) {
+                        char tr[MAX_TEXT];
+                        if (self->is_iface_type(g_funcs[fi].ptype[k], tr, sizeof tr)) {
+                            int boxed = self->maybe_box(cur, tr);
+                            if (boxed < 0) return -1;
+                            if (boxed != cur) {
+                                if (prev < 0) first_arg = boxed;
+                                else g_nodes[prev].next = boxed;
+                                g_nodes[boxed].next = g_nodes[cur].next;
+                                cur = boxed;
+                            }
+                        }
+                        prev = cur;
+                        cur = g_nodes[cur].next;
+                        k++;
+                    }
+                    args = first_arg;
+                }
                 g_nodes[n].kind = N_CALL;
                 g_nodes[n].a = (args == 0) ? -1 : args;
             } else if (self->find_var(g_nodes[n].text2) < 0) {
@@ -1798,6 +1878,108 @@ impl ParseOps for Ast {
         }
         if (self->expect(")") != 0) return -1;
         return first;
+    }
+
+    /* `struct T_iface` -> T. */
+    int is_iface_type(const char *type, char *tout, size_t tcap)
+    {
+        const char *base;
+        size_t n;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) != 0) return 0;
+        base += 7;
+        n = strlen(base);
+        if (n <= 6 || strcmp(base + n - 6, "_iface") != 0) return 0;
+        if (n - 6 >= tcap) return 0;
+        snprintf(tout, tcap, "%.*s", (int)(n - 6), base);
+        return 1;
+    }
+
+    /* `struct S` / `S` / `struct S *` -> S (and whether it was a pointer). */
+    int concrete_struct(const char *type, char *sout, size_t scap, int *is_ptr)
+    {
+        char buf[MAX_TEXT];
+        char *base;
+        size_t n;
+        (void)self;
+
+        if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
+        base = buf;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        n = strlen(base);
+        *is_ptr = 0;
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
+            if (base[n - 1] == '*') *is_ptr = 1;
+            base[n - 1] = 0;
+            n--;
+        }
+        if (self->find_struct(base) < 0) return 0;
+        if (snprintf(sout, scap, "%s", base) >= (int)scap) return 0;
+        return 1;
+    }
+
+    /* A best-effort static type for the expressions boxing needs. */
+    int expr_type(int n, char *out, size_t cap)
+    {
+        int i;
+        (void)self;
+
+        if (g_nodes[n].kind == N_VAR) return self->var_type(g_nodes[n].text2, out, cap);
+        if (g_nodes[n].kind == N_INDEX) return self->expr_type(g_nodes[n].a, out, cap);
+        if (g_nodes[n].kind == N_ADDR) {
+            if (self->expr_type(g_nodes[n].a, out, cap) != 0) return -1;
+            if (strlen(out) + 2 >= cap) return -1;
+            strcat(out, " *");
+            return 0;
+        }
+        if (g_nodes[n].kind == N_CALL) {
+            i = self->find_func(g_nodes[n].text2);
+            if (i < 0) return -1;
+            if (snprintf(out, cap, "%s", g_funcs[i].ret) >= (int)cap) return -1;
+            return 0;
+        }
+        if (g_nodes[n].kind == N_BOX) {
+            if (snprintf(out, cap, "struct %s_iface", g_nodes[n].text) >= (int)cap) return -1;
+            return 0;
+        }
+        return -1;
+    }
+
+    /* Wrap `n` in a fat pointer when `trait` is expected; an expression that is
+       already the right interface passes through unchanged. */
+    int maybe_box(int n, const char *trait)
+    {
+        char t[MAX_TEXT];
+        char tname[MAX_TEXT];
+        char sname[MAX_TEXT];
+        int is_ptr, si, u, box, found;
+        (void)self;
+
+        if (g_nodes[n].kind == N_BOX) return n;
+        if (self->expr_type(n, t, sizeof t) != 0)
+            return self->fail("cannot infer the type to box");
+        if (self->is_iface_type(t, tname, sizeof tname)) {
+            if (strcmp(tname, trait) == 0) return n;
+            return self->fail("interface type mismatch");
+        }
+        if (!self->concrete_struct(t, sname, sizeof sname, &is_ptr))
+            return self->fail("cannot box this expression");
+        si = self->find_struct(sname);
+        if (si < 0) return self->fail("cannot box an unknown struct");
+        found = 0;
+        for (u = 0; u < g_structs[si].nuse; u++)
+            if (strcmp(g_structs[si].use[u], trait) == 0) found = 1;
+        if (!found) return self->fail("the struct does not use this trait");
+        box = self->new_node(N_BOX);
+        if (box < 0) return -1;
+        g_nodes[box].a = n;
+        g_nodes[box].aux = is_ptr;
+        snprintf(g_nodes[box].text, MAX_TEXT, "%s", trait);
+        snprintf(g_nodes[box].text2, MAX_TEXT, "%s", sname);
+        return box;
     }
 }
 
@@ -1914,6 +2096,41 @@ impl EmitOps for Ast {
         return 0;
     }
 
+    /* A captured `{ ... }` initializer; vptr items are appended before the final
+       brace. An empty list gets `{ items }` without a dangling comma. */
+    int emit_raw_init(int raw, const char *type)
+    {
+        const char *t;
+        int len, i, only_space;
+        (void)self;
+
+        t = g_nodes[raw].text;
+        len = (int)strlen(t);
+        fputs(" = ", g_out);
+        if (len < 2 || t[len - 1] != '}') {
+            fputs(t, g_out);
+            return 0;
+        }
+        only_space = 1;
+        for (i = 1; i < len - 1; i++)
+            if (t[i] != ' ' && t[i] != '\t' && t[i] != '\n' && t[i] != '\r') only_space = 0;
+        if (only_space) {
+            fputs("{ ", g_out);
+            if (self->type_has_vptr(type)) {
+                if (self->emit_vptr_items(type) != 0) return -1;
+            }
+            fputs(" }", g_out);
+            return 0;
+        }
+        fwrite(t, 1, (size_t)(len - 1), g_out);
+        if (self->type_has_vptr(type)) {
+            fputs(", ", g_out);
+            if (self->emit_vptr_items(type) != 0) return -1;
+        }
+        fputs("}", g_out);
+        return 0;
+    }
+
     /* Impl methods and their vtables, emitted before the ordinary functions so
        `main` can already dispatch through them. */
     int emit_impls(int prog)
@@ -2020,16 +2237,7 @@ impl EmitOps for Ast {
             fprintf(g_out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
             if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
             if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
-                const char *raw = g_nodes[g_nodes[n].a].text;
-                int len = (int)strlen(raw);
-                fputs(" = ", g_out);
-                if (len > 0 && raw[len - 1] == '}') fwrite(raw, 1, (size_t)(len - 1), g_out);
-                else fputs(raw, g_out);
-                if (self->type_has_vptr(g_nodes[n].text)) {
-                    fputs(", ", g_out);
-                    if (self->emit_vptr_items(g_nodes[n].text) != 0) return -1;
-                }
-                fputs("}", g_out);
+                if (self->emit_raw_init(g_nodes[n].a, g_nodes[n].text) != 0) return -1;
             } else if (g_nodes[n].a >= 0) {
                 fputs(" = ", g_out);
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
@@ -2141,16 +2349,7 @@ impl EmitOps for Ast {
             if (g_nodes[n].num > 0) fprintf(g_out, "[%ld]", g_nodes[n].num);
             if (g_nodes[n].kind == N_DECL) {
                 if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
-                    const char *raw = g_nodes[g_nodes[n].a].text;
-                    int len = (int)strlen(raw);
-                    fputs(" = ", g_out);
-                    if (len > 0 && raw[len - 1] == '}') fwrite(raw, 1, (size_t)(len - 1), g_out);
-                    else fputs(raw, g_out);
-                    if (self->type_has_vptr(g_nodes[n].text)) {
-                        fputs(", ", g_out);
-                        if (self->emit_vptr_items(g_nodes[n].text) != 0) return -1;
-                    }
-                    fputs("}", g_out);
+                    if (self->emit_raw_init(g_nodes[n].a, g_nodes[n].text) != 0) return -1;
                 } else if (g_nodes[n].a >= 0) {
                     fputs(" = ", g_out);
                     if (self->emit_expr(g_nodes[n].a) != 0) return -1;
@@ -2272,12 +2471,25 @@ impl EmitOps for Ast {
             fputs(")", g_out);
             return 0;
         }
+        if (g_nodes[n].kind == N_BOX) {
+            fprintf(g_out, "(struct %s_iface){ (void *)", g_nodes[n].text);
+            if (g_nodes[n].aux) {
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            } else {
+                fputs("&", g_out);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            }
+            fprintf(g_out, ", &%s_%s_vtable }", g_nodes[n].text2, g_nodes[n].text);
+            return 0;
+        }
         if (g_nodes[n].kind == N_MCALL) {
             char tname[MAX_TEXT];
             char low[MAX_TEXT];
-            int i, c2;
-            if (g_nodes[n].a < 0 || g_nodes[g_nodes[n].a].kind != N_VAR)
-                return self->fail("method receiver must be a plain variable");
+            int i, c2, rk;
+            if (g_nodes[n].a < 0) return self->fail("method call without a receiver");
+            rk = g_nodes[g_nodes[n].a].kind;
+            if (rk != N_VAR && rk != N_INDEX)
+                return self->fail("method receiver must be a variable or an element");
             if (!g_nodes[n].text[0])
                 return self->fail("cannot resolve the method trait (unknown receiver type)");
             snprintf(tname, sizeof tname, "%s", g_nodes[n].text);
@@ -2287,11 +2499,17 @@ impl EmitOps for Ast {
                 low[i] = c;
             }
             low[i] = 0;
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            if (g_nodes[n].aux == 2) {
+            if (g_nodes[n].aux == 3) {
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fprintf(g_out, ".vt->%s(", g_nodes[n].text2);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fputs(".self", g_out);
+            } else if (g_nodes[n].aux == 2) {
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
                 fprintf(g_out, "->__%s_vptr->%s(", low, g_nodes[n].text2);
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             } else {
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
                 fprintf(g_out, ".__%s_vptr->%s(&", low, g_nodes[n].text2);
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             }
