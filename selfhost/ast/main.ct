@@ -270,6 +270,13 @@ static int  g_line_mode;              /* emit `#line`: 0 off, 1 on */
 static char g_map_path[MAX_PATH];
 static int  g_have_map;
 
+/* The name `-v` and usage print (D44): `ct` when installed under that name,
+   `ctc` for the compatibility alias, `ct-ast` for the development binary.
+   Diagnostics keep their `ct-ast:` prefix so existing assertions stay put. */
+static const char *g_prog = "ct-ast";
+static int  g_diag_json;              /* --diagnostics=json (warnings land in 10.3) */
+static const char *g_std_flag = "-std=c99";   /* --std=c99 | --std=gnu99 */
+
 trait AstOps {
     int  new_node(int kind);
     int  fail(const char *msg);
@@ -657,14 +664,51 @@ impl AstOps for Ast {
         g_have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: ct-ast <input.ct> [-o <output.c>] [--line|--no-line] [--emit-map <file|->]\n"
-                       "       ct-ast build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
-                       "                     [--line|--no-line] [--emit-map <file|->]\n");
+                printf("usage: %s <input.ct> [-o <output.c>] [-I <dir>] [--line|--no-line]\n"
+                       "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99]\n"
+                       "       %s build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
+                       "                 [--line|--no-line] [--emit-map <file|->]\n"
+                       "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
+                       g_prog, g_prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                printf("ct-ast v%s\n", CTC_VERSION);
+                printf("%s v%s\n", g_prog, CTC_VERSION);
                 return 0;
+            }
+            if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
+                const char *v = argv[i] + 14;
+                if (strcmp(v, "json") == 0) {
+                    g_diag_json = 1;
+                    continue;
+                }
+                if (strcmp(v, "text") == 0) {
+                    g_diag_json = 0;
+                    continue;
+                }
+                fprintf(stderr, "ct-ast: unknown diagnostics format '%s'\n", v);
+                return 1;
+            }
+            if (strncmp(argv[i], "--std=", 6) == 0) {
+                const char *v = argv[i] + 6;
+                if (strcmp(v, "c99") == 0) {
+                    g_std_flag = "-std=c99";
+                    continue;
+                }
+                if (strcmp(v, "gnu99") == 0) {
+                    g_std_flag = "-std=gnu99";
+                    continue;
+                }
+                fprintf(stderr, "ct-ast: unknown C standard '%s'\n", v);
+                return 1;
+            }
+            if (strcmp(argv[i], "-I") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ct-ast: -I needs an argument\n");
+                    return 1;
+                }
+                i++;   /* accepted for CLI parity; compile mode resolves no imports */
+                continue;
             }
             if (strcmp(argv[i], "--line") == 0) {
                 g_line_mode = 1;
@@ -703,7 +747,7 @@ impl AstOps for Ast {
             in = argv[i];
         }
         if (!in) {
-            fprintf(stderr, "usage: ct-ast <input.ct> [-o <output.c>]\n");
+            fprintf(stderr, "usage: %s <input.ct> [-o <output.c>]\n", g_prog);
             return 1;
         }
         if (!out) {
@@ -3049,13 +3093,41 @@ impl ModuleOps for Ast {
         g_have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: ct-ast build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
-                       "                     [--line|--no-line] [--emit-map <file|->]\n");
+                printf("usage: %s build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
+                       "                 [--line|--no-line] [--emit-map <file|->]\n"
+                       "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
+                       g_prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                printf("ct-ast v%s\n", CTC_VERSION);
+                printf("%s v%s\n", g_prog, CTC_VERSION);
                 return 0;
+            }
+            if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
+                const char *v = argv[i] + 14;
+                if (strcmp(v, "json") == 0) {
+                    g_diag_json = 1;
+                    continue;
+                }
+                if (strcmp(v, "text") == 0) {
+                    g_diag_json = 0;
+                    continue;
+                }
+                fprintf(stderr, "ct-ast: unknown diagnostics format '%s'\n", v);
+                return 1;
+            }
+            if (strncmp(argv[i], "--std=", 6) == 0) {
+                const char *v = argv[i] + 6;
+                if (strcmp(v, "c99") == 0) {
+                    g_std_flag = "-std=c99";
+                    continue;
+                }
+                if (strcmp(v, "gnu99") == 0) {
+                    g_std_flag = "-std=gnu99";
+                    continue;
+                }
+                fprintf(stderr, "ct-ast: unknown C standard '%s'\n", v);
+                return 1;
             }
             if (strcmp(argv[i], "--line") == 0) {
                 g_line_mode = 1;
@@ -3122,7 +3194,7 @@ impl ModuleOps for Ast {
             ninput++;
         }
         if (ninput == 0) {
-            fprintf(stderr, "usage: ct-ast build <input.ct>... -o <dir>\n");
+            fprintf(stderr, "usage: %s build <input.ct>... -o <dir>\n", g_prog);
             return 1;
         }
         if (!outdir) {
@@ -3188,6 +3260,12 @@ impl ModuleOps for Ast {
             fprintf(stderr, "ct-ast: %s\n", g_errmsg);
             return 1;
         }
+        /* The command the user runs next, in the same shape L2 prints; the
+           target C standard (Phase 6.4) is the only option it carries. */
+        printf("cc %s", g_std_flag);
+        for (u = 0; u < g_nunits; u++)
+            printf(" %s/%s.c", g_outdir, g_units[u].base);
+        printf(" -o a.out\n");
         return 0;
     }
 }
@@ -4532,5 +4610,10 @@ static struct Ast g_ast;
 
 int main(int argc, char **argv)
 {
+    const char *base = strrchr(argv[0], '/');
+
+    base = base ? base + 1 : argv[0];
+    if (strcmp(base, "ct") == 0) g_prog = "ct";
+    else if (strcmp(base, "ctc") == 0) g_prog = "ctc";
     return g_ast.run(argc, argv);
 }
