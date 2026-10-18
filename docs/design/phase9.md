@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：设计草案（2026-10-18），未实现。** 主题与三项形状决策（D28–D31）已由用户定案；
+> **状态：设计草案（2026-10-18），未实现。** 主题与五项决策（D28–D33）已由用户定案；
 > 其余决策标为**待定**，实现前必须逐条拍板并按本文件更新状态。**不要**照本文件创建
 > `selfhost/ast/**` 或任何实现文件——`docs/design/` 是草案，不是实现依据（AGENTS §2）。
 > 决策编号从 **D28** 起（D21–D27 见 [phase8.md](phase8.md)）。
@@ -46,7 +46,7 @@
 | 归档点 | tag `pre-ast-mainline`（2026-10-17） | 旧管线的 byte-identical 出口到此为止 |
 | 自举阶梯 | 新编译器的表容量由**上一代**编译器决定，增长一代滞后 | 第一代 AST 编译器必须落在 32 struct / 16 trait / 64 签名内 |
 
-### 3. 已定决策（D28–D31，2026-10-18 用户确认）
+### 3. 已定决策（D28–D33，2026-10-18 用户确认）
 
 | 编号 | 问题 | 结论 |
 | --- | --- | --- |
@@ -54,13 +54,13 @@
 | D29 | 9.1 首个里程碑出口 | ✅ **最小端到端子集**：`int` 函数 + 表达式 + `return` + `printf` 调用，能编并跑通一个 hello 级程序；先把「词法 → AST → 发射 C」管道打通 |
 | D30 | 代码落点 | ✅ **新目录 `selfhost/ast/**`，与旧管线并行**：由 L2 构建，旧 `selfhost/src/**` 原地冻结但保留；行为等价后再切主线，可回退 |
 | D31 | Phase 9 最终出口 | ✅ **自编 + 行为等价**：AST 编译器能编自己，且对 `test/cases` + `examples` + `modules` 的编译成功性与程序输出与旧管线等价 |
+| D32 | AST 节点表示 | ✅ **`typedef struct` 数据节点 + `kind` 判别字段**（`typedef struct` 不计 `MAX_STRUCT`），遍历/发射由少量 trait（如 `NodeOps`）承载，内部按 `kind` 分派；分派逻辑集中在一处，新增节点只改那一处 |
+| D33 | 符号表与作用域 | ✅ **分类扁平表**：类型（struct / trait / typedef）、函数、变量各一张；只有变量表压/弹作用域（进入记录长度、退出回滚）。与 C 的名字空间语义一致，不自造跨类冲突规则；查找线性，容量内成本可忽略；越界即 `die`，不静默截断 |
 
 ### 4. 待定决策（实现前必须拍板）
 
 | 编号 | 问题 | 推荐方案 | 代价 / 说明 |
 | --- | --- | --- | --- |
-| D32 | AST 节点表示 | **数据节点走 `typedef struct`（不计 `MAX_STRUCT`）+ 判别字段，派发用少量 trait（如 `NodeOps`）承载 walker/emitter** | 全用 `struct` + `use` 会撞 `MAX_STRUCT 32`；全用判别字段则失去多态，需要 switch 式 walker |
-| D33 | 符号表与作用域 | **沿用扁平表 + 作用域栈，容量独立于旧管线** | 容量受上一代表限制；需要明确越界即 `die`，不静默截断 |
 | D34 | 行为等价的验收口径 | **退出码一致 + 成功产物可编译 + 程序输出一致；诊断文本与告警不要求逐字一致** | 若要求告警一致，等于要求复刻行重写的启发式，违背「新主线」初衷 |
 | D35 | 新门禁形态 | **新增 `selfhost/check-ast.sh`**，9.1 起纳入 `check-all.sh`；七道旧关卡保持不变 | 双轨期多一道门禁；旧关卡继续钉住旧管线 |
 | D36 | 旧管线归档时点 | **9.7 行为等价全绿后打 tag 归档**，`selfhost/src/**` 冻结但保留 | 归档后 `check-goldens` / `check-archive` 的语义需要重写为「对 AST 编译器」 |
@@ -91,6 +91,9 @@ selfhost/ast/
 
 - 单元数远低于 `MAX_UNITS 64`；跨单元只导出 `pub` 类型与标量包装器（旧管线已踩过的坑：
   `pub` 前缀进不了 `.h`，宏必须各自复制）。
+- **节点形状（D32）**：`ast.h.ct` 只放 `typedef struct` 节点、`kind` 枚举常量与 `NodeOps` trait；
+  `parse.ct` 负责构造节点，`emit.ct` 按 `kind` 分派发射。新增节点 = 加一个 `kind` + 在分派处加一支。
+- **符号表（D33）**：类型 / 函数 / 变量三张扁平表，只有变量表压/弹作用域；越界即 `die`。
 - 构建方式复用现成的 `ct build`：`l2 build selfhost/ast/main.ct -o <dir>`。
 - 产物名称：关卡内部暂称 `ct-ast`（与 `ctc-l2` 同为内部名）；用户入口在切换后仍是 `ct`。
 
@@ -123,7 +126,7 @@ selfhost/ast/
 
 | 风险 | 说明 |
 | --- | --- |
-| 容量天花板 | `MAX_STRUCT 32` / `MAX_TRAITS 16` / `MAX_FUNCS 64`；D32 选错表示法会让 9.3 就触顶 |
+| 容量天花板 | D32 已用 `typedef struct` 规避 `MAX_STRUCT`；剩余压力在 `MAX_TRAITS 16`、`MAX_FUNCS 64` 与 `MAX_FIELDS 32` |
 | 双轨维护 | 并行期两套编译器同时演进；旧管线应**只修 bug 不加特性** |
 | 等价口径漂移 | 告警与诊断文本不比对，容易掩盖真实差异；需要在 9.7 前逐例人工复核 |
 | AST 内存 | 节点用堆分配 + `own`/Drop；泄漏会拖垮长输入，需要泄漏关卡 |
@@ -162,7 +165,7 @@ behavioural equivalence"); Phase 9 gives that decision a phase, a design and a s
 - The bootstrap ladder grows one generation behind: the first AST compiler must fit the frozen
   L1's tables (32 structs / 16 traits / 64 signatures).
 
-### 3. Decided (D28–D31, user-confirmed 2026-10-18)
+### 3. Decided (D28–D33, user-confirmed 2026-10-18)
 
 | ID | Question | Decision |
 | --- | --- | --- |
@@ -170,13 +173,13 @@ behavioural equivalence"); Phase 9 gives that decision a phase, a design and a s
 | D29 | 9.1 exit | ✅ **A minimal end-to-end subset**: `int` functions, expressions, `return` and `printf`, enough to compile and run a hello-level program |
 | D30 | Code location | ✅ **A new `selfhost/ast/**` tree built by L2, in parallel with the old pipeline**, which stays frozen and in place until behavioural equivalence, so the switch is reversible |
 | D31 | Phase exit | ✅ **Self-compilation + behavioural equivalence** on `test/cases`, `examples` and `modules` |
+| D32 | AST representation | ✅ **`typedef struct` data nodes + a `kind` tag** (`typedef struct` does not count against `MAX_STRUCT`), with a few traits (`NodeOps`) carrying the walker/emitter and one central `kind` dispatch; a new node kind touches one switch |
+| D33 | Symbol tables / scopes | ✅ **Separate flat tables** for types (struct / trait / typedef), functions and variables; only the variable table pushes/pops scopes (record the length, roll back on exit). This matches C's namespaces, needs no cross-category collision rule, and lookup is linear within a bounded table; overflow `die`s |
 
 ### 4. Open decisions (must be settled before implementation)
 
 | ID | Question | Recommendation |
 | --- | --- | --- |
-| D32 | AST node representation | **`typedef struct` data nodes + a kind tag**, with a few traits (e.g. `NodeOps`) carrying the walker/emitter — using `struct` + `use` for every node would hit `MAX_STRUCT 32` |
-| D33 | Symbol table / scopes | **A flat table plus a scope stack, independent of the old pipeline**; overflow must `die` |
 | D34 | Equivalence definition | **Same exit status + generated C compiles + identical program output**; diagnostics and warnings need not match |
 | D35 | New gate | **`selfhost/check-ast.sh`**, added to `check-all.sh` from 9.1 on; the seven existing gates stay |
 | D36 | Archiving the old pipeline | **Tag and archive after 9.7**; `selfhost/src/**` stays frozen but present |
@@ -204,6 +207,12 @@ selfhost/ast/
 Build with the existing `ct build`: `l2 build selfhost/ast/main.ct -o <dir>`. The gate artifact is
 temporarily named `ct-ast` (like `ctc-l2`); the user-facing entry stays `ct` after the switch.
 
+- **Node shape (D32)**: `ast.h.ct` carries only `typedef struct` nodes, the `kind` constants and the
+  `NodeOps` trait; `parse.ct` builds nodes and `emit.ct` dispatches on `kind`. A new node = one `kind`
+  plus one branch in that dispatch.
+- **Symbol tables (D33)**: three flat tables (types / functions / variables); only the variable table
+  pushes and pops scopes, and overflow `die`s.
+
 ### 7. Slices (9.1 → 9.7)
 
 | Slice | Content | Exit |
@@ -220,6 +229,7 @@ Every slice keeps the seven existing gates regression-free and `check-ast.sh` gr
 
 ### 8. Risks
 
-Capacity ceilings (`MAX_STRUCT` / `MAX_TRAITS` / `MAX_FUNCS`) are the main risk — D32 decides whether
-9.3 already hits them; dual maintenance during the parallel period; equivalence drift around warnings;
-AST memory management (`own`/Drop); and the one-generation-lag constraint on capacity growth.
+Capacity is the main risk: D32 already sidesteps `MAX_STRUCT` with `typedef struct`, leaving
+`MAX_TRAITS 16`, `MAX_FUNCS 64` and `MAX_FIELDS 32` as the pressure points. Also: dual maintenance
+during the parallel period; equivalence drift around warnings; AST memory management (`own`/Drop); and
+the one-generation-lag constraint on capacity growth.
