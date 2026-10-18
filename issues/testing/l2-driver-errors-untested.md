@@ -6,7 +6,7 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 位置 | [selfhost/src/driver.ct](../../selfhost/src/driver.ct)、[selfhost/src/core.ct](../../selfhost/src/core.ct) |
-| 状态 | 🟡 部分修复（2026-10-18；6 条已补，见下） |
+| 状态 | ✅ 已修复（2026-10-18 两轮；仅 build 缺参与 `--ns-root` 缺参受 runner 限制未覆盖） |
 
 ## 现象
 
@@ -56,3 +56,18 @@ L2 是当前唯一仍在开发的编译器；其驱动层回归网比 L0 薄。�
 新增 6 条 designed 负例（`expected.err` 均由真实 L2 输出生成）：`cli_o_needs_arg`（`-o`）、`cli_i_needs_arg`（`-I`）、`cli_diag_bogus`（`--diagnostics=bogus`）、`cli_std_bogus`（`--std=c11`）、`cli_cannot_open`（不存在的输入）、`cli_short_read`（目录作输入）。已提升进 `check-archive.sh` 的 `baseline_designed`，计数 32 → 39。
 
 未覆盖（受 runner 限制，留作后续）：build 模式的缺参分支（runner 总追加 `-o <dir>`，会被当作选项值）、`too many units/inputs`、`--ns-root` 缺参、map 文件不可写（沙箱下不稳定）。
+
+## 处理（2026-10-18，第二轮）
+
+又补 3 条（`expected.err` 均由真实 L2 输出生成；连同 TEST-6 的 `map_file_build`，`baseline_designed` 总数 39 → 43）：
+
+- `too_many_inputs`：33 个输入触发 `too many inputs (max 32)`（`MAX_BUILD` 上限）；
+- `too_many_inc`：17 个 `-I` 触发 `too many -I roots (max 16)`（`MAX_INCDIRS` 上限）；
+- `map_unwritable`：`--emit-map nope/prog.map` 触发 `cannot write`（compile 模式，路径必然不可写）。
+
+仍未覆盖（runner 的结构性限制，非漏测）：
+
+- build 模式的缺参分支：runner 无条件追加 `-o <dir>`，`-I` / `--ns-root` / `--emit-map` 后面总会跟一个值；
+- `too many units`：需要 65 个真实解析出的单元，成本远高于其价值；`too many inputs` 已钉住同类上限逻辑。
+
+验证：`bash selfhost/check-archive.sh` → `designed cases: 43 pass, 0 new, 0 pending, 0 regression`；`bash selfhost/check-all.sh` 七道硬关卡全绿。

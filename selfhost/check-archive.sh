@@ -128,6 +128,10 @@ test/archive/multifile/calc
 # The `cli_*` cases pin the L2 driver's argument and I/O failure branches:
 # missing `-o` / `-I` values, an unknown `--diagnostics` or `--std` value, an
 # unopenable input, and a directory read (`short read`).
+# `map_file_build` pins the build-mode `--emit-map <file>` write path (the runner
+# relocates the map beside the outputs before the byte diff); `map_unwritable`
+# pins the `cannot write` failure, `too_many_inputs` the `MAX_BUILD` ceiling and
+# `too_many_inc` the `MAX_INCDIRS` ceiling.
 # `leak_call` pins Phase 6 cross-function ownership: `Box *q = make();` inherits
 # the allocation that `make` returns and leaks (one warning), while a callee that
 # releases its result and one that only borrows stay silent.
@@ -179,6 +183,10 @@ cli_diag_bogus
 cli_std_bogus
 cli_cannot_open
 cli_short_read
+map_file_build
+map_unwritable
+too_many_inputs
+too_many_inc
 "
 
 in_list() {
@@ -500,6 +508,14 @@ for fdir in test/modules/*/; do
         "$l2" build $args -o "$outdir" >"$work/mod-$name.stdout" 2>"$log"
         rc=$?
         runc="$outdir"
+        # build mode resolves `--emit-map <file>` against the runner's cwd (the
+        # repo root), so move the map beside the outputs before comparing: the
+        # case declares a bare name and no test run ever writes into the tree.
+        prev=""
+        for a in $args; do
+            if [ "$prev" = "--emit-map" ] && [ -f "$a" ]; then mv -f "$a" "$outdir/"; fi
+            prev="$a"
+        done
     fi
 
     if [ -f "$errfile" ]; then

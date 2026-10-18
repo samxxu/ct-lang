@@ -6,7 +6,7 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 位置 | `test/modules/map*`、[driver.ct](../../selfhost/src/driver.ct#L411-L425) |
-| 状态 | 🟡 部分修复（2026-10-18；compile 写盘已覆盖，build 落盘见下） |
+| 状态 | ✅ 已修复（2026-10-18；compile 与 build 两条写盘路径均有用例，`cannot write` 也已钉住） |
 
 ## 现象
 
@@ -45,3 +45,15 @@ build 模式的 map 落盘（含「由最后一个单元落盘」的语义）是
 新增 `test/modules/map_file`（compile 模式 `--emit-map prog.map`），`check-archive.sh` 增加 `expected.map` 断言（比对编译输出目录中的 `*.map`）。`designed cases: 39 pass / 0 regression`。
 
 未覆盖：build 模式的 map 落盘（其 `map_path` 相对 CWD，runner 需要把工作目录切到 outdir 才能断言，留作后续）。
+
+## 处理（2026-10-18，第二轮）
+
+`map_file_build` 补齐了 build 模式的写盘断言：
+
+- `build.args`：`--emit-map out.map test/modules/map_file_build/prog.ct`；
+- runner 侧新增一段：build 模式的 map 相对仓库根解析，跑完把 `out.map` **归位**到输出目录再比对，测试不会往仓库里写文件；
+- `expected.map` 由真实 L2 输出生成，断言「由最后一个单元落盘」的完整 JSON。
+
+另补 `map_unwritable`（compile 模式，`--emit-map nope/prog.map`）钉住 `cannot write 'nope/prog.map'`。
+
+验证：`bash selfhost/check-archive.sh` → `designed cases: 43 pass, 0 new, 0 pending, 0 regression`；`bash selfhost/check-all.sh` 七道硬关卡全绿。

@@ -1,0 +1,1 @@
+--emit-map out.map test/modules/map_file_build/prog.ct

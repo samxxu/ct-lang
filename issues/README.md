@@ -103,8 +103,10 @@
 | [DOC-8](docs/readme-cli-flags-missing.md) | Medium | README CLI 表缺 `-I` / `--line` / `--ns-root` / `--diagnostics` | ✅ 中英表各补 4 行 |
 | [DOC-9](docs/language-spec-scope-stale.md) | Medium | spec 仍称 L2 语法「正在重做」 | ✅ 改契约：spec 覆盖 L0/L2 共有语法，L2 独有给链接；AGENTS §5 分层 |
 | [TEST-4](testing/phase7-ct-identity-coverage.md) | Low | `ct build` / `ct -h` / `ctc compile` 无断言 | ✅ ct-tour 第 7 步补 5 类断言 |
-| [TEST-5](testing/l2-driver-errors-untested.md) | Medium | L2 驱动 10+ 个错误分支无负例 | 🟡 补 6 条（`-o`/`-I`/diagnostics/std/cannot open/short read）；build 缺参与上限类留待 |
-| [TEST-6](testing/emit-map-file-path-untested.md) | Medium | `--emit-map <file>` 成功路径无用例 | 🟡 补 compile 写盘 `map_file` + `expected.map` 断言；build 落盘留待 |
+| [TEST-5](testing/l2-driver-errors-untested.md) | Medium | L2 驱动 10+ 个错误分支无负例 | ✅ 两轮共补 9 条（`-o`/`-I`/diagnostics/std/cannot open/short read，加 `too many inputs` / `too many -I roots` / map `cannot write`）；仅 build 模式缺参与 `--ns-root` 缺参受 runner 限制未覆盖（已在文件中说明） |
+| [TEST-6](testing/emit-map-file-path-untested.md) | Medium | `--emit-map <file>` 成功路径无用例 | ✅ compile 写盘 `map_file` + build 写盘 `map_file_build`（runner 归位后比对 `expected.map`），另补 `map_unwritable` 钉住 `cannot write` |
 | [SH-3](selfhost/ct-error-prefix.md) | Low | 以 `ct` 运行时错误仍打印 `ctc:` | ✅ 决策保持 `ctc:`，README + roadmap 记录 |
 
 验证（2026-10-18）：`check-archive` 39 pass / 0 regression（新增 7 个 designed 用例）；`ct-tour` OK（含新增身份断言）；手工三件套通过。
+
+验证（2026-10-18，TEST-5/TEST-6 收尾）：`check-archive` designed **43 pass / 0 regression**（新增 `map_file_build` / `map_unwritable` / `too_many_inputs` / `too_many_inc`）；`bash selfhost/check-all.sh` 七道硬关卡全绿。
