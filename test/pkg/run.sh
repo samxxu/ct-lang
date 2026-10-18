@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# test/pkg/run.sh - Phase 8.1 + 8.2: the local and git halves of ct-pkg.
+# test/pkg/run.sh - Phase 8.1 + 8.2 + 8.3: the local, git and install halves of ct-pkg.
 #
 # Builds the whole bootstrap chain (L0 -> L1 -> L2) and exercises `ct get` on a
 # throwaway project: manifest parsing, a version range, a recursive local `dep`,
@@ -8,6 +8,9 @@
 # Phase 8.2 adds a git source: a local git repository stands in for the registry
 # (so the test needs no network), and the `git` absent case must fail hard. The
 # cache and the registry are redirected through HOME / CT_REGISTRY.
+# Phase 8.3 adds `ct install`, which checks the vendored tree against the lock's
+# content digests and the manifest's dependencies, then prints a `ct build`
+# command; a tampered tree, a missing package or an uncovered dependency fails.
 #
 # Usage:  bash test/pkg/run.sh
 #         CC=gcc bash test/pkg/run.sh
@@ -55,9 +58,10 @@ ok "the chain builds (L0 -> L1 -> L2)"
 echo
 echo "== a project and two local packages =="
 mkdir -p "$work/proj" "$work/pkgs/util" "$work/pkgs/extra"
-printf 'name = demo\nversion = 0.1.0\n' >"$work/proj/ct.pkg"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
+printf 'import util;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$work/proj/main.ct"
 printf 'name = util\nversion = 0.2.0\nlicense = MIT\ndep = ../extra@^0.1.0\n' >"$work/pkgs/util/ct.pkg"
-printf 'int util_value(void) { return 42; }\n' >"$work/pkgs/util/util.c"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/pkgs/util/util.ct"
 printf 'name = extra\nversion = 0.1.0\n' >"$work/pkgs/extra/ct.pkg"
 printf 'int extra_value(void) { return 7; }\n' >"$work/pkgs/extra/extra.c"
 ok "fixtures created"
@@ -69,7 +73,7 @@ if ( cd "$work/proj" && "$work/l2" get ../pkgs/util >"$work/get.out" 2>"$work/ge
 else
     bad "ct get" "non-zero exit: $(cat "$work/get.err")"
 fi
-if [ -f "$work/proj/vendor/util/ct.pkg" ] && [ -f "$work/proj/vendor/util/util.c" ]; then
+if [ -f "$work/proj/vendor/util/ct.pkg" ] && [ -f "$work/proj/vendor/util/util.ct" ]; then
     ok "vendors the requested package"
 else
     bad "ct get" "vendor/util is incomplete"
@@ -92,6 +96,70 @@ if [ -f "$work/proj/ct.lock" ]; then
     esac
 else
     bad "ct.lock" "was not written"
+fi
+
+echo
+echo "== ct install: verifies the lock and prints a build command =="
+if ( cd "$work/proj" && "$work/l2" install >"$work/i.out" 2>"$work/i.err" ); then
+    ok "ct install exits 0"
+else
+    bad "ct install" "non-zero exit: $(cat "$work/i.err")"
+fi
+if grep -Fq -- "-I vendor/util" "$work/i.out" && grep -Fq -- "-I vendor/extra" "$work/i.out" \
+   && grep -Fq "build" "$work/i.out"; then
+    ok "suggests -I roots for every vendored package"
+else
+    bad "ct install" "no suggested build command: $(cat "$work/i.out")"
+fi
+
+echo
+echo "== ct install rejects a tampered vendor tree =="
+printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.ct"
+if ( cd "$work/proj" && "$work/l2" install >"$work/it.out" 2>"$work/it.err" ); then
+    bad "install tamper" "expected a non-zero exit"
+elif grep -Fq "does not match ct.lock" "$work/it.err"; then
+    ok "rejects a digest mismatch"
+else
+    bad "install tamper" "wrong diagnostic: $(cat "$work/it.err")"
+fi
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.ct"
+
+echo
+echo "== ct install rejects a missing vendored package =="
+mv "$work/proj/vendor/extra" "$work/proj/vendor/extra.bak"
+if ( cd "$work/proj" && "$work/l2" install >"$work/im.out" 2>"$work/im.err" ); then
+    bad "install missing" "expected a non-zero exit"
+elif grep -Fq "not vendored" "$work/im.err"; then
+    ok "rejects a missing vendored package"
+else
+    bad "install missing" "wrong diagnostic: $(cat "$work/im.err")"
+fi
+mv "$work/proj/vendor/extra.bak" "$work/proj/vendor/extra"
+
+echo
+echo "== ct install rejects an uncovered manifest dependency =="
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\ndep = ghost@^1.0.0\n' >"$work/proj/ct.pkg"
+if ( cd "$work/proj" && "$work/l2" install >"$work/ic.out" 2>"$work/ic.err" ); then
+    bad "install coverage" "expected a non-zero exit"
+elif grep -Fq "is not satisfied by ct.lock" "$work/ic.err"; then
+    ok "rejects a dependency missing from the lock"
+else
+    bad "install coverage" "wrong diagnostic: $(cat "$work/ic.err")"
+fi
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
+
+echo
+echo "== ct build compiles against vendor/ =="
+mkdir -p "$work/proj/out"
+if ( cd "$work/proj" && "$work/l2" build -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
+    if "$CC" "$work/proj/out"/*.c -o "$work/app" 2>"$work/bc.err" \
+       && [ "$("$work/app")" = "42" ]; then
+        ok "imports a vendored package and runs"
+    else
+        bad "build vendor" "compile/run failed: $(cat "$work/bc.err")"
+    fi
+else
+    bad "build vendor" "ct build failed: $(cat "$work/b.err")"
 fi
 
 echo
@@ -144,10 +212,10 @@ else
     else
         bad "ct get <git>" "vendor/gutil is incomplete"
     fi
-    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40}$" "$work/proj/ct.lock"; then
+    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} [0-9a-f]+$" "$work/proj/ct.lock"; then
         ok "MVS picks the lowest satisfying tag and pins its commit"
     else
-        bad "ct.lock <git>" "expected 'gutil 0.1.0 git <commit>', got: $(grep gutil "$work/proj/ct.lock")"
+        bad "ct.lock <git>" "expected 'gutil 0.1.0 git <commit> <digest>', got: $(grep gutil "$work/proj/ct.lock")"
     fi
 
     echo
@@ -160,10 +228,10 @@ else
         && git add -A && git commit -qm one )
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
             "$work/l2" get "notags@*" >"$work/h.out" 2>"$work/h.err" ); then
-        if grep -Eq "^notags 0\.0\.1 git [0-9a-f]{40}$" "$work/proj/ct.lock"; then
+        if grep -Eq "^notags 0\.0\.1 git [0-9a-f]{40} [0-9a-f]+$" "$work/proj/ct.lock"; then
             ok "locks the default branch tip when there is no tag"
         else
-            bad "ct.lock <HEAD>" "expected 'notags 0.0.1 git <commit>', got: $(grep notags "$work/proj/ct.lock")"
+            bad "ct.lock <HEAD>" "expected 'notags 0.0.1 git <commit> <digest>', got: $(grep notags "$work/proj/ct.lock")"
         fi
     else
         bad "ct get <HEAD>" "non-zero exit: $(cat "$work/h.err")"

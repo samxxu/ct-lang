@@ -657,7 +657,7 @@ static int compile_main(int argc, char **argv, const char *prog)
                            g_build.has_map ? g_build.map_path : NULL, NULL);
 }
 
-/* ------------------------------------ package manager (Phase 8.1 + 8.2) */
+/* ------------------------------------ package manager (Phase 8.1 + 8.2 + 8.3) */
 
 /* ct-pkg reads a package's `ct.pkg`, checks a version range, resolves its `dep`
    lines recursively and vendors the tree into `./vendor/<name>`, recording what
@@ -667,7 +667,9 @@ static int compile_main(int argc, char **argv, const char *prog)
    `ct build`. A spec is local when it begins with `.`, `/` or `file://`; anything
    else is a git source -- a full `scheme://` URL used verbatim, a `host/path`
    given `https://`, or a bare name resolved against `CT_REGISTRY`
-   (default `https://github.com/ct-pkg`). */
+   (default `https://github.com/ct-pkg`). 8.3 adds a content digest per lock line
+   and `ct install`, which re-checks the vendored tree against the lock (offline,
+   no subprocess) and prints the `ct build` command that uses `vendor/`. */
 #define MAX_PKG_DEPS   16
 #define MAX_PKG_PATH   (MAX_NAME * 4)
 #define MAX_PKG_DEPTH  8
@@ -699,6 +701,15 @@ trait PkgOps {
     int  git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap);
     int  get_git(const char *spec, const char *range, int depth);
     int  get_spec(const char *spec, const char *base, int depth);
+    /* Phase 8.3: the content digest a lock line carries and `ct install` checks.
+       `digest` mirrors `CacheOps::digest` (FNV-1a), so a lock line and a
+       `.ctcache` key fold the same way; `dir_digest` folds a whole package tree
+       additively, so readdir order can never change the result. */
+    unsigned long digest(const char *s);
+    unsigned long file_digest(const char *path);
+    unsigned long dir_sum(const char *dir, const char *rel);
+    int  dir_digest(const char *dir, char *out, size_t cap);
+    int  install(const char *prog);
 }
 
 struct Pkg {
@@ -857,6 +868,84 @@ impl PkgOps for Pkg {
         }
         closedir(d);
         return rc;
+    }
+
+    /* FNV-1a, mirroring `CacheOps::digest`: the same fold the `.ctcache` key
+       uses, so a lock digest and a cache key are comparable. Change detection
+       only -- it is not a cryptographic hash (design D27). */
+    unsigned long digest(const char *s) {
+        unsigned long h = 2166136261UL;
+        size_t i = 0;
+        (void)self;
+        while (s[i]) {
+            h = h ^ (unsigned long)(unsigned char)s[i];
+            h = h * 16777619UL;
+            i++;
+        }
+        return h;
+    }
+
+    /* FNV-1a over a file's raw bytes. A file that cannot be read contributes 0;
+       `dir_digest` re-checks that its directory exists, so a vanished package is
+       reported rather than quietly hashed. */
+    unsigned long file_digest(const char *path) {
+        unsigned long h = 2166136261UL;
+        FILE *f;
+        int c;
+        (void)self;
+        f = fopen(path, "rb");
+        if (!f) return 0;
+        while ((c = fgetc(f)) != EOF) {
+            h = h ^ (unsigned long)(unsigned char)c;
+            h = h * 16777619UL;
+        }
+        fclose(f);
+        return h;
+    }
+
+    /* Additively fold every regular file under `dir` (relative names carried in
+       `rel`), skipping the same build/VCS directories `copy_tree` skips so a
+       source tree and its vendored copy hash equal. Addition is commutative, so
+       readdir order cannot change the digest. */
+    unsigned long dir_sum(const char *dir, const char *rel) {
+        DIR *d;
+        struct dirent *e;
+        struct stat st;
+        char full[MAX_PKG_PATH], r[MAX_PKG_PATH];
+        unsigned long total = 0;
+        int w;
+
+        (void)self;
+        d = opendir(dir);
+        if (!d) return 0;
+        while ((e = readdir(d)) != NULL) {
+            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+            if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
+            if (strcmp(e->d_name, ".ctcache") == 0) continue;
+            if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >= (int)sizeof full) continue;
+            if (rel[0]) w = snprintf(r, sizeof r, "%s/%s", rel, e->d_name);
+            else        w = snprintf(r, sizeof r, "%s", e->d_name);
+            if (w < 0 || (size_t)w >= sizeof r) continue;
+            if (stat(full, &st) != 0) continue;
+            if (S_ISDIR(st.st_mode)) total += self->dir_sum(full, r);
+            else if (S_ISREG(st.st_mode)) total += self->file_digest(full) ^ self->digest(r);
+        }
+        closedir(d);
+        return total;
+    }
+
+    /* Hex digest of a package directory; `-1` if it is not a readable directory,
+       which the caller turns into a hard failure rather than a silent zero. */
+    int dir_digest(const char *dir, char *out, size_t cap) {
+        struct stat st;
+        unsigned long h;
+        int w;
+        (void)self;
+        if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) return -1;
+        h = self->dir_sum(dir, "");
+        w = snprintf(out, cap, "%016lx", h);
+        if (w < 0 || (size_t)w >= cap) return -1;
+        return 0;
     }
 
     /* Create `path` if it is missing; an existing directory is success (an
@@ -1072,7 +1161,7 @@ impl PkgOps for Pkg {
         char cache[MAX_PKG_CMD], gitdir[MAX_PKG_CMD], out[MAX_PKG_CMD];
         char q1[MAX_PKG_CMD], q2[MAX_PKG_CMD], cmd[MAX_PKG_CMD];
         char mname[MAX_NAME], mver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
-        char tag[MAX_NAME], commit[64], dst[MAX_PKG_PATH];
+        char tag[MAX_NAME], commit[64], dig[32], dst[MAX_PKG_PATH];
         const char *home;
         struct stat st;
         int ndeps = 0, i, w, rc, fresh;
@@ -1184,8 +1273,12 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot vendor '%s' from '%s'\n", mname, cache);
             return -1;
         }
+        if (self->dir_digest(cache, dig, sizeof dig) != 0) {
+            fprintf(stderr, "ctc: cannot hash '%s'\n", cache);
+            return -1;
+        }
         w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
-                     "%s %s git %s\n", mname, mver, commit);
+                     "%s %s git %s %s\n", mname, mver, commit, dig);
         if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
         self->locklen += w;
         self->nlocks++;
@@ -1212,7 +1305,7 @@ impl PkgOps for Pkg {
 
     int get_one(const char *dir, const char *range, int depth) {
         char name[MAX_NAME], ver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
-        char dst[MAX_PKG_PATH];
+        char dig[32], dst[MAX_PKG_PATH];
         int ndeps = 0, i, w;
         (void)self;
 
@@ -1250,8 +1343,12 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot vendor '%s' from '%s'\n", name, dir);
             return -1;
         }
+        if (self->dir_digest(dir, dig, sizeof dig) != 0) {
+            fprintf(stderr, "ctc: cannot hash '%s'\n", dir);
+            return -1;
+        }
         w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
-                     "%s %s dir %s\n", name, ver, dir);
+                     "%s %s dir %s %s\n", name, ver, dir, dig);
         if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
         self->locklen += w;
         self->nlocks++;
@@ -1276,6 +1373,113 @@ impl PkgOps for Pkg {
         fputs(self->lock, f);
         if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
         printf("vendored %d package(s)\n", self->nlocks);
+        return 0;
+    }
+
+    /* `ct install` (Phase 8.3): verify the lock against the vendored tree and the
+       project manifest, then print the `ct build` command that compiles with it.
+       It never fetches, never calls `cc` and never edits the manifest -- `get`
+       owns those (design D24). A missing package, a moved content digest or a
+       manifest dependency the lock does not cover is a hard failure. */
+    int install(const char *prog) {
+        FILE *f;
+        DIR *d;
+        struct dirent *e;
+        struct stat st;
+        char line[MAX_PKG_PATH * 2];
+        char pname[MAX_NAME], pver[32], pdeps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        char lname[MAX_PKG_DEPS][MAX_NAME], lver[MAX_PKG_DEPS][32];
+        char vdir[MAX_PKG_PATH], vdig[32];
+        char dpath[MAX_PKG_PATH], drange[32], dname[MAX_NAME];
+        int ndeps = 0, nlock = 0, i, j, rc = 0, units = 0, seen;
+        size_t nl;
+
+        if (self->read_manifest(".", pname, sizeof pname, pver, sizeof pver, pdeps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+            return 1;
+        }
+        f = fopen("./ct.lock", "r");
+        if (!f) {
+            fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog);
+            return 1;
+        }
+        while (fgets(line, sizeof line, f) != NULL) {
+            char *tok[12];
+            int ntok = 0;
+            char *p = line;
+            size_t ll = strlen(line);
+            while (ll && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) line[--ll] = 0;
+            while (*p) {
+                while (*p == ' ' || *p == '\t') p++;
+                if (!*p) break;
+                if (ntok < (int)(sizeof tok / sizeof tok[0])) tok[ntok++] = p;
+                while (*p && *p != ' ' && *p != '\t') p++;
+                if (*p) { *p = 0; p++; }
+            }
+            if (ntok < 4) continue;
+            if (nlock >= MAX_PKG_DEPS) {
+                fprintf(stderr, "ctc: ct.lock lists more than %d packages\n", MAX_PKG_DEPS);
+                fclose(f);
+                return 1;
+            }
+            snprintf(lname[nlock], MAX_NAME, "%s", tok[0]);
+            snprintf(lver[nlock], 32, "%s", tok[1]);
+            /* the content digest is the last token; the ref in between may hold
+               spaces, so only the first three columns are positional */
+            if (snprintf(vdir, sizeof vdir, "./vendor/%s", tok[0]) >= (int)sizeof vdir) {
+                fprintf(stderr, "ctc: package path too long for '%s'\n", tok[0]);
+                rc = 1;
+            } else if (self->dir_digest(vdir, vdig, sizeof vdig) != 0) {
+                fprintf(stderr, "ctc: '%s' is locked but not vendored at '%s'\n", tok[0], vdir);
+                rc = 1;
+            } else if (strcmp(vdig, tok[ntok - 1]) != 0) {
+                fprintf(stderr, "ctc: '%s' does not match ct.lock (vendor %s, lock %s)\n",
+                        tok[0], vdig, tok[ntok - 1]);
+                rc = 1;
+            }
+            nlock++;
+        }
+        if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
+        if (nlock == 0) { fprintf(stderr, "ctc: ct.lock is empty\n"); return 1; }
+
+        /* Every dependency the manifest declares must be in the lock, at a
+           version inside its range -- otherwise the vendored tree is not what
+           the project asked for. The package name is the spec's last segment
+           (D21: a package's directory names it). */
+        for (i = 0; i < ndeps; i++) {
+            if (self->split_spec(pdeps[i], dpath, sizeof dpath, drange, sizeof drange) != 0
+                || self->git_name(dpath, dname, sizeof dname) != 0) {
+                fprintf(stderr, "ctc: bad dependency '%s'\n", pdeps[i]);
+                rc = 1;
+                continue;
+            }
+            seen = 0;
+            for (j = 0; j < nlock; j++)
+                if (strcmp(lname[j], dname) == 0 && self->range_match(drange, lver[j])) seen = 1;
+            if (!seen) {
+                fprintf(stderr, "ctc: dependency '%s' is not satisfied by ct.lock\n", pdeps[i]);
+                rc = 1;
+            }
+        }
+        if (rc != 0) return 1;
+
+        /* the command the user runs next: vendored packages become `-I` roots,
+           the project's own top-level `.ct` files are the units */
+        printf("%s build", prog);
+        for (i = 0; i < nlock; i++) printf(" -I vendor/%s", lname[i]);
+        d = opendir(".");
+        if (d) {
+            while ((e = readdir(d)) != NULL) {
+                nl = strlen(e->d_name);
+                if (nl <= 3 || strcmp(e->d_name + nl - 3, ".ct") != 0) continue;
+                if (stat(e->d_name, &st) != 0 || !S_ISREG(st.st_mode)) continue;
+                printf(" %s", e->d_name);
+                units++;
+            }
+            closedir(d);
+        }
+        if (units == 0) printf(" <unit>.ct");
+        printf(" -o build\n");
         return 0;
     }
 
@@ -1329,6 +1533,11 @@ int main(int argc, char **argv)
     /* Phase 8.1/8.2: `ct get <spec>[@<range>]` vendors a local or git package. */
     if (first < argc && strcmp(argv[first], "get") == 0)
         return g_pkg.run(argc - first - 1, argv + first + 1, g_ct_prog);
+
+    /* Phase 8.3: `ct install` verifies the vendored tree against `ct.lock` and
+       prints the `ct build` command that compiles with it. */
+    if (first < argc && strcmp(argv[first], "install") == 0)
+        return g_pkg.install(g_ct_prog);
 
     if (first < argc && strcmp(argv[first], "compile") == 0)
         first++;

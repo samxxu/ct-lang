@@ -3,7 +3,7 @@
 > **v0.7.0** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**与 **Phase 7（工具链形态，2026-10-17）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；**Phase 8（包管理与分发，`ct-pkg`）进行中**——8.1 + 8.2 已落地（`ct get` 支持本地目录源与 git 源、commit 锁定），8.3 `ct install` 待实现——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**与 **Phase 7（工具链形态，2026-10-17）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；**Phase 8（包管理与分发，`ct-pkg`）进行中**——8.1–8.3 已落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），待收口 bump 到 v0.8.0——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -52,7 +52,8 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`/`.h` 并打印建议 `cc` 命令；在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
 | `ctc … --std=c99\|gnu99` | 目标 C 标准（默认 `c99`）；暂无产物差异，`build` 将其写入建议的 `cc` 命令，其他值硬报错（Phase 6.4） |
 | `ctc … -I <dir>` | 追加一个导入搜索根（可重复，最多 16 个；Phase 2，`compile` 与 `build` 均可用） |
-| `ctc get <spec>[@<range>]` | Phase 8.1/8.2：`spec` 以 `.` / `/` / `file://` 开头为本地包（复制），否则为 git 包（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`）；解析 `ct.pkg`、递归 `dep`、复制到 `vendor/<name>/`、写 `ct.lock`（`name ver dir\|git <ref>`）。git 源调用系统 `git`——**唯一**子进程调用点，仅 `ct get` 触发，`ct compile` / `ct build` 零网络零子进程 |
+| `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3：`spec` 以 `.` / `/` / `file://` 开头为本地包（复制），否则为 git 包（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`）；解析 `ct.pkg`、递归 `dep`、复制到 `vendor/<name>/`、写 `ct.lock`（五列 `name ver dir\|git <ref> <digest>`，摘要为逐文件加法折叠的 FNV-1a）。git 源调用系统 `git`——**唯一**子进程调用点，仅 `ct get` 触发，`ct compile` / `ct build` / `ct install` 零网络零子进程 |
+| `ctc install` | Phase 8.3：离线校验 `ct.lock` 与 `vendor/`（逐包摘要相符、清单 `dep` 均被锁覆盖且在范围内），全部通过则打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`）；摘要不符 / 缺包 / 未覆盖依赖硬报错 |
 | `ctc … --line` / `--no-line` | 覆盖 `#line` 的默认开关（`build` 默认开、`compile` 默认关；Phase 4） |
 | `ctc build … --ns-root <dir>` | 目录 = namespace 校验的树根（仅 `build`；Phase 5） |
 | `ctc … --diagnostics=json\|text` | 告警格式：`text` 为人可读 stderr（默认），`json` 写 stdout（含泄漏与签名告警；Phase 4） |
@@ -273,7 +274,7 @@ python3 editors/vscode/test/check-grammar.py   # 20 项断言；退出码 0 = �
 | `selfhost/check-m2a.sh` | M2-a 验收 gate：复现「构建 L0 → L0 编译 L1 → 构建 L1 → L1 编译 `test/cases/01_trait_basic.ct` → 与 golden 逐字节 diff」；自举闭环与 L2 构建仅作报告，不影响判定 |
 | `selfhost/check-archive.sh` | Phase 2+ 的对差 oracle：把 `test/archive/**` 中 Phase 0.3 移出的越位特性 fixture 当 ratchet，逐字节比对 CT 侧恢复出的特性（namespace / 多文件 / `import` / `Drop` / 诊断）；第 3b 步另建 L2 并要求零警告 |
 | `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
-| `test/pkg/run.sh` | Phase 8.1/8.2 包管理器：构建 L0→L1→L2，验证 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock`（本地包与 git 包；git 用例用本地 git 仓库作 registry，含无 `git` 硬报错） |
+| `test/pkg/run.sh` | Phase 8.1/8.2/8.3 包管理器：构建 L0→L1→L2，验证 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock`（本地包与 git 包；git 用例用本地 git 仓库作 registry，含无 `git` 硬报错），以及 `ct install` 的摘要校验、清单覆盖、建议命令，并证明 `ct build` 可用 `vendor/` 编译 |
 | `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面五个 CT/包管理脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
 
 ```bash
@@ -381,9 +382,10 @@ complete. Phase 6's slices 6.1–6.4 (reverse mapping table / call graph / incre
 multi-target) and 6.6 (the dialect system) have landed, while 6.5 (`map`) is design-frozen only.
 **Phase 7 (toolchain shape, 2026-10-17)** is complete: 7.1–7.3 landed (the `ct` identity, the install
 shape, the banner rename). **Phase 8 (package management and distribution, `ct-pkg`) is in progress**:
-slices 8.1 + 8.2 have landed (`ct get` handles local directory sources and git sources, pinning
-commits) and 8.3 (`ct install`) is still to come — see [docs/roadmap.md](docs/roadmap.md) for what is
-done and what is next.
+slices 8.1–8.3 have landed (`ct get` handles local directory sources and git sources, pinning commits
+and content digests; `ct install` verifies offline and prints the suggested build command), with the
+closure bump to v0.8.0 still to come — see [docs/roadmap.md](docs/roadmap.md) for what is done and what
+is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the entry command
 is **`ct`** (since Phase 7; `ctc` is kept as a **compatibility alias**, and the binary built from the
@@ -415,7 +417,8 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits `.c`/`.h` and the suggested `cc` command is printed; a key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
 | `ctc … --std=c99\|gnu99` | target C standard (default `c99`); nothing in the output differs yet, so `build` writes it into the suggested `cc` command, and any other value is a hard error (Phase 6.4) |
 | `ctc … -I <dir>` | adds an import search root (repeatable, up to 16; Phase 2 — works in both `compile` and `build`) |
-| `ctc get <spec>[@<range>]` | Phase 8.1/8.2: a `spec` starting with `.` / `/` / `file://` is a local package (copied), anything else is a git package (a `scheme://` URL verbatim, a `host/path` given `https://`, a bare name via `CT_REGISTRY`); it parses `ct.pkg`, resolves `dep` recursively, copies into `vendor/<name>/` and writes `ct.lock` (`name ver dir\|git <ref>`). git sources call the system `git` — the **only** subprocess call site, reached by `ct get` alone; `ct compile` / `ct build` stay network-free and process-free |
+| `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3: a `spec` starting with `.` / `/` / `file://` is a local package (copied), anything else is a git package (a `scheme://` URL verbatim, a `host/path` given `https://`, a bare name via `CT_REGISTRY`); it parses `ct.pkg`, resolves `dep` recursively, copies into `vendor/<name>/` and writes `ct.lock` (five columns `name ver dir\|git <ref> <digest>`, the digest being an additive per-file FNV-1a fold). git sources call the system `git` — the **only** subprocess call site, reached by `ct get` alone; `ct compile` / `ct build` / `ct install` stay network-free and process-free |
+| `ctc install` | Phase 8.3: verifies `ct.lock` against `vendor/` offline (each locked package present with a matching digest, every manifest `dep` covered by the lock at a satisfying version) and, on success, prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`); a mismatch, a missing package or an uncovered dependency fails hard |
 | `ctc … --line` / `--no-line` | overrides the `#line` default (on for `build`, off for `compile`; Phase 4) |
 | `ctc build … --ns-root <dir>` | the tree root for directory = namespace validation (`build` only; Phase 5) |
 | `ctc … --diagnostics=json\|text` | warning format: `text` is human-readable stderr (default), `json` goes to stdout (leak and signature warnings; Phase 4) |
@@ -700,7 +703,7 @@ after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 | `selfhost/check-m2a.sh` | the M2-a acceptance gate: reproduces "build L0 → L0 compiles L1 → build L1 → L1 compiles `test/cases/01_trait_basic.ct` → byte diff against the golden"; the self-hosting loop and the L2 build are reported only and never change the verdict |
 | `selfhost/check-archive.sh` | the Phase 2+ diff oracle: treats the over-reach fixtures Phase 0.3 moved into `test/archive/**` as a ratchet, diffing byte for byte the features the CT side has restored (namespace / multi-file / `import` / `Drop` / diagnostics); step 3b rebuilds L2 and requires it to be warning-free |
 | `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
-| `test/pkg/run.sh` | Phase 8.1/8.2 package manager: builds L0→L1→L2 and exercises `ct get` — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock`, for both local and git packages (the git cases use a local git repo as the registry and assert the no-`git` hard failure) |
+| `test/pkg/run.sh` | Phase 8.1/8.2/8.3 package manager: builds L0→L1→L2 and exercises `ct get` — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock`, for both local and git packages (the git cases use a local git repo as the registry and assert the no-`git` hard failure) — plus `ct install`'s digest verification, manifest coverage and suggested command, proving `ct build` compiles against `vendor/` |
 | `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the five CT / package scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
 
 ```bash
