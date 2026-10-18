@@ -141,7 +141,7 @@
 | AST 版编译器（ct-ast） | `selfhost/ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；单文件、纯 CT，自编并达到全量行为等价 |
 | 行为等价（behavioural equivalence） | D34 | 等价口径 = 退出码 + 产物零警告可编 + **程序输出一致**（不比对生成的 C 文本） |
 | 自编不动点（fixpoint） | `ct-ast` → `ct-ast2` | 编译器的产物再编同一源码，输出**逐字节一致** |
-| 归档点（archive tag） | `pre-ast-mainline` | 切到 AST 主线前的最后一个 byte-identical 状态；`selfhost/src/**` 自此冻结（只修 bug） |
+| 归档点（archive tag） | `pre-ast-mainline` | 2026-10-17 的 frozen 边界（`src/**` 仍在 frozen L1 表容量之内）；Phase 9 的起点由 `v0.8.0`（`db667df`）标出 |
 | 吃自己的狗粮（dogfooding） | — | 用 CT 写 CT 工具链 |
 | 非目标（non-goal） | — | 明确不做的事 |
 | 设计债（design debt） | architecture §7 | 已知取舍 |
@@ -303,7 +303,7 @@
 | AST compiler (ct-ast) | `selfhost/ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; one plain-CT file that self-compiles and is behaviourally equivalent |
 | behavioural equivalence | D34 | the equivalence rule = exit status + warning-free build + **identical program output** (the generated C text is not compared) |
 | self-compilation fixpoint | `ct-ast` → `ct-ast2` | the emitted compiler recompiles the same source and produces **byte-identical** output |
-| archive tag | `pre-ast-mainline` | the last byte-identical state before the AST mainline; `selfhost/src/**` is frozen from then on (bug fixes only) |
+| archive tag | `pre-ast-mainline` | the frozen boundary of 2026-10-17 (when `src/**` still fit the frozen L1 tables); Phase 9 starts at the `v0.8.0` close (`db667df`) |
 | dogfooding | — | using CT to build CT's own toolchain |
 | non-goal | — | something explicitly out of scope |
 | design debt | architecture §7 | a known trade-off |

@@ -124,6 +124,6 @@
 | AST 测试缺错误分支负例，且未钉自包含契约 | ✅ `test/ast/errors/` 增至 4 例（逐例断言 `ct-ast: line N:`），新增 compile 模式「`.c` 不 include 自己的 `.h`」断言；`check-ast.sh` **64 项全绿** |
 | glossary 滞后（banner / Phase / D1–D20 / 包管理器「未实现」） | ✅ 同步到 v0.9.0，补 Phase 8/9 词汇、D21–D37、`get` / `install` |
 | `check-all.sh` 头注释的层数、断言数与阶段号滞后 | ✅ 八层、20 项、Phase 9.1–9.7 |
-| `pre-ast-mainline` 实际指向 Phase 4/5 边界，而非文档所述 Phase 9 归档点 | ⏳ **待用户确认后重指**（建议 `db667df`：v0.8.0 收口，即 Phase 9 开始前的最后一个提交） |
+| `pre-ast-mainline` 实际指向 Phase 4/5 边界，而非文档所述 Phase 9 归档点 | ✅ **已决策保留 tag、改文档措辞**：`pre-ast-mainline` 明确为 2026-10-17 的 frozen 边界；Phase 9 的起点由 `v0.8.0`（`db667df`）标出 |
 
 验证：`./test/run.sh` 118/118；`test/pkg/run.sh` **35/35**；`check-ast.sh` 64/64；`bash selfhost/check-all.sh` **8 关全绿**；手工三件套零警告通过。

@@ -67,7 +67,7 @@
 - **`selfhost/ctc.ct`（L1）自 Phase 3 起冻结**：L1 已成为**冻结种子**——它停在 Phase 2 的能力上，**不再新增任何能力**（加注释也算，登记方式与 `ctc.c` 相同）。理由与上一级同构：`ctc.c` 冻结后开发搬到 L1，L1 冻结后开发搬到 **`selfhost/src/**`**（`core.ct` + `driver.ct`，L2 的源）。**Phase 3 起一切新能力只落 `src/**`**。（Phase 9.7 起主线再搬到 `selfhost/ast/**`，见下条。）
   - **关卡语义随之改变**：`check-archive.sh` 的 ratchet 跑的是 **L2**（L1 `build` `src/**` 得到），不再是 L1；`check-goldens.sh` 第 7 步是**不动点**——L2 也编 `src/**`，产出须与 L1 的**逐字节一致**（两个编译器必须在「编译器自己用的那套语法」上一致）。
   - **签名上限是真约束**：`MAX_FUNCS`（64）**计入所有顶层 plain-C 签名，`static` 也算**，`src/**` 的余量已接近 0；新增辅助函数**必须**放进 `impl` 块（impl 方法不计），并注意 `MAX_METHOD`（32）——`PipeOps` 已用到 31。见 roadmap Phase 3。
-- **`selfhost/src/**` 自 Phase 9.7 起冻结归档**（D36）：Phase 9 的 AST 版编译器 `selfhost/ast/main.ct` 成为**唯一开发主线**（`ct-ast` 自编 + 全量行为等价），`src/**` 只**修 bug、不加能力**，归档点 tag 为 `pre-ast-mainline`。旧关卡（`check-goldens.sh` / `check-archive.sh` / `check-m2a.sh` / `ct-tour.sh` / `test/pkg/run.sh`）继续把 `src/**` 当**回归 oracle** 跑，双轨期语义不变；新能力与 9.x 之后的切片只落 `selfhost/ast/**`，并受 `check-ast.sh` 的「自编不动点 + 全量语料等价」约束。
+- **`selfhost/src/**` 自 Phase 9.7 起冻结归档**（D36）：Phase 9 的 AST 版编译器 `selfhost/ast/main.ct` 成为**唯一开发主线**（`ct-ast` 自编 + 全量行为等价），`src/**` 只**修 bug、不加能力**，归档参照 tag 为 `pre-ast-mainline`（2026-10-17 的 frozen 边界；Phase 9 起点对应 `v0.8.0`）。旧关卡（`check-goldens.sh` / `check-archive.sh` / `check-m2a.sh` / `ct-tour.sh` / `test/pkg/run.sh`）继续把 `src/**` 当**回归 oracle** 跑，双轨期语义不变；新能力与 9.x 之后的切片只落 `selfhost/ast/**`，并受 `check-ast.sh` 的「自编不动点 + 全量语料等价」约束。
 - **L1（`selfhost/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。**该出口已达成**：里程碑 M2 完成于 `test/cases/**` 全绿（25/25、0 regression），且 L1 编出的 L1′ 重编同一批语料仍逐字节一致。用 `bash selfhost/check-goldens.sh` 复核，别再靠手工循环。见 roadmap Phase 1 开工决策。**Phase 2 拆分出口**：L1 用自身 `build`（多文件 + `import`）编译多单元源码树 `selfhost/src/**`（`core.ct` + `driver.ct`）产出 **L2**，L2 须对 `test/cases/**` 与 L1&#8203; 逐字节一致（25/25）——这是拆分的出口判据；跨单元只走 `pub` 标量包装器（`ct_read_file` 等 10 个），数据/宏/单例全部留在 `core.ct` 内（落进 `core.c`），**不得**为此新增语言特性。关卡：`check-goldens.sh` 第 6/7 步、`check-archive.sh` 3b、`check-m2a.sh` 第 7 步、`ct-tour.sh` 第 6 步。见 roadmap Phase 2。
 - **L1 必须是 CT OO 风格**：`selfhost/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。注意管线层由**两个** trait 承载（`PipeOps` 主流程 + `RewriteOps` 行重写层，`struct Pipe` 同时 `use` 二者）——新增方法请放进对应的那一半，别往单侧堆到 `MAX_METHOD`。见 roadmap Phase 1 开工决策 5。
 
@@ -309,7 +309,8 @@ Hard boundaries:
 - **`selfhost/src/**` is frozen and archived from Phase 9.7 on** (D36): the Phase 9 AST compiler
   `selfhost/ast/main.ct` is the **only development mainline** (ct-ast self-compiles and is
   behaviourally equivalent over the whole corpus); `src/**` takes **bug fixes only, no new
-  capability**, with `pre-ast-mainline` as the archive tag. The old gates (`check-goldens.sh` /
+  capability**, with `pre-ast-mainline` as the archive reference tag (the 2026-10-17 frozen boundary;
+  Phase 9 starts at the `v0.8.0` close). The old gates (`check-goldens.sh` /
   `check-archive.sh` / `check-m2a.sh` / `ct-tour.sh` / `test/pkg/run.sh`) keep running `src/**` as a
   **regression oracle**, unchanged in the dual-track period; new capabilities and every slice after
   9.x land in `selfhost/ast/**` only, bound by `check-ast.sh` (the self-compile fixpoint plus the

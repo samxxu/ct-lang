@@ -735,7 +735,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - **可行性骨架（2026-10-17）**：新增验收探针 **`ast_parse_spike`**（[test/acceptance/ast_parse_spike.ct](../test/acceptance/ast_parse_spike.ct)）——最小端到端前端：手写词法器 + 递归下降解析 `1+2`，在堆上构造 `Num` / `Add` 节点（子节点是 `Expr` 接口值字段），经接口派发求值并打印 `3`。由 **L2** 编译、gcc 零警告、运行通过；`test/acceptance/run.sh` 基线升至 **19 pass / 1 pending / 0 regression**（`p18` 仍按决定延后）。结论：**AST 主线的第一代可以完全落在现有 CT 子集内**，不需要再补语言特性；下一步是把骨架扩成能编译最小语言子集的编译器。
 
-- **归档点**：切到 AST 主线前的最后一个 byte-identical 状态已打 tag **`pre-ast-mainline`**（2026-10-17，含 `src/**` 仍在 frozen L1 表容量之内的全部语料）。此后出口口径为**行为等价**。
+- **归档点**：tag **`pre-ast-mainline`** 打在 **2026-10-17 的 frozen 边界**（`src/**` 仍在 frozen L1 表容量之内），它**不是** Phase 9 的起点——Phase 9 开始前的最后一个提交是 v0.8.0 收口（`db667df`，tag `v0.8.0`）。此后出口口径为**行为等价**。
 
 **容量预算（2026-10-17 实测；写 AST 编译器的前置约束）**
 

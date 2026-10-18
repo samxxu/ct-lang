@@ -43,7 +43,7 @@
 | 每 struct 字段 | `MAX_FIELDS 32`，`Pipe` 已 31/32 | 数据节点尽量走 `typedef struct`（不计入 `MAX_STRUCT`） |
 | 单元 | `MAX_UNITS 64`、`MAX_IMPORTS 16` | 新树可按职责拆单元；`driver.ct` 的 `build` 可直接编它 |
 | 验收探针 | `p01`–`p17` + `ast_spike` + `ast_parse_spike`，19 pass / 1 pending / 0 regression | 已证明「树 + 接口派发 + 递归下降」在现有子集内可行 |
-| 归档点 | tag `pre-ast-mainline`（2026-10-17） | 旧管线的 byte-identical 出口到此为止 |
+| 归档点 | tag `pre-ast-mainline`（2026-10-17 的 frozen 边界；Phase 9 起点由 `v0.8.0` 标出） | 旧管线的 byte-identical 出口到此为止 |
 | 自举阶梯 | 新编译器的表容量由**上一代**编译器决定，增长一代滞后 | 第一代 AST 编译器必须落在 32 struct / 16 trait / 64 签名内 |
 
 ### 3. 已定决策（D28–D37，2026-10-18 用户确认）
@@ -137,7 +137,7 @@ selfhost/ast/
 ### 10. 与既有阶段的关系
 
 - **不修改** Phase 0–8 的任何行为与语料；`ctc.c` / L1 `/ selfhost/src/**` 在双轨期冻结。
-- `pre-ast-mainline` 是 byte-identical 口径的终点；此后新能力只落 `selfhost/ast/**`。
+- `pre-ast-mainline` 标记 byte-identical 时代的 frozen 边界；Phase 9 的起点是 v0.8.0 收口。此后新能力只落 `selfhost/ast/**`。
 - 版本：Phase 9 ↔ `v0.9.x`，收口时 bump 到 **v0.9.0**（同样属冻结期例外，需用户显式授权）。
 
 ---
@@ -162,7 +162,8 @@ behavioural equivalence"); Phase 9 gives that decision a phase, a design and a s
   `MAX_FUNCS` — the new tree must exploit both.
 - Acceptance probes `p01`–`p17` + `ast_spike` + `ast_parse_spike` pass (19 / 1 pending / 0 regression),
   proving that trees, interface dispatch and recursive descent fit the current CT subset.
-- Tag `pre-ast-mainline` marks the last byte-identical state.
+- Tag `pre-ast-mainline` marks the frozen boundary of the byte-identical era; Phase 9 starts at the
+  v0.8.0 close.
 - The bootstrap ladder grows one generation behind: the first AST compiler must fit the frozen
   L1's tables (32 structs / 16 traits / 64 signatures).
 
