@@ -31,22 +31,26 @@
 
 #define CTC_VERSION "0.12.0"
 
-#define MAX_NODES  32768
+/* Capacity: the caps below were sized for the Phase 0 corpus; the compiler now
+   needs more than 32768 nodes to parse its own source, and the old user-facing
+   numbers (16 traits, 32 structs, 64 functions) stopped real programs. They stay
+   fixed-size -- overflow is still a hard error -- but the numbers no longer bind. */
+#define MAX_NODES  65536
 #define MAX_TEXT   160
 #define MAX_PATH   1024
-#define MAX_FUNCS  64
-#define MAX_PARAMS 8
-#define MAX_VARS   512
+#define MAX_FUNCS  256
+#define MAX_PARAMS 16
+#define MAX_VARS   4096
 #define MAX_SCOPE  256
-#define MAX_TYPES  64
-#define MAX_TRAITS 16
-#define MAX_METHODS 32
-#define MAX_STRUCTS 32
-#define MAX_FIELDS 32
+#define MAX_TYPES  256
+#define MAX_TRAITS 64
+#define MAX_METHODS 64
+#define MAX_STRUCTS 128
+#define MAX_FIELDS 64
 #define MAX_UNITS  64
 #define MAX_IMPORTS 16
 #define MAX_INCDIRS 16
-#define MAX_CALLS  256
+#define MAX_CALLS  1024
 #define MAX_MAPS   64
 #define MAX_ERRORS 20                   /* recovery cap: past this the compiler stops */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
@@ -154,6 +158,10 @@ typedef struct Fn {
     char name[MAX_TEXT];
     char ret[MAX_TEXT];
     char ptype[MAX_PARAMS][MAX_TEXT];
+    /* array dims are kept apart from the type: the prototype must spell them
+       (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
+       call side still compares bare types for boxing */
+    char pdim[MAX_PARAMS][MAX_TEXT];
     int  nparams;
     int  is_static;
     int  is_pub;
@@ -164,6 +172,9 @@ typedef struct Fn {
 typedef struct Var {
     char name[MAX_TEXT];
     char type[MAX_TEXT];
+    /* an array's declared type carries no star of its own, but `T *a[N]` and
+       `T *p` spell the same type; indexing tells them apart only through this */
+    int  is_array;
     /* leak tracking (10.3), mirroring L2's conservative rules */
     int  st;            /* struct index when the type is `struct T *`, else -1 */
     int  owned;         /* 1 when a heap object (malloc/calloc/owned callee) */
@@ -190,6 +201,9 @@ typedef struct Trait {
 typedef struct Field {
     char name[MAX_TEXT];
     char type[MAX_TEXT];
+    /* array dims (`[2]`, `[N]`): a designated initialiser cannot reach an
+       element, so such a field's vptrs are written by a loop instead */
+    char dims[MAX_TEXT];
 } Field;
 
 typedef struct StructDef {
@@ -430,15 +444,24 @@ trait ParseOps {
     int  parse_impl(void);
     int  parse_use_list(int sindex);
     int  parse_init_raw(char *out, size_t cap);
+}
+
+/* Static type queries and boxing. Split out of ParseOps: none of this is
+   parsing, and ParseOps already sits at MAX_METHOD. */
+trait TypeOps {
     int  is_iface_type(const char *type, char *tout, size_t tcap);
+    int  iface_ref_type(const char *type, char *tout, size_t tcap, int *is_ptr);
     int  concrete_struct(const char *type, char *sout, size_t scap, int *is_ptr);
     int  expr_type(int n, char *out, size_t cap);
-    int  maybe_box(int n, const char *trait);
+    int  maybe_box(int n, const char *trait, int addr);
+    int  type_has_array_init(const char *type);
+    int  init_item_text(const char *stype, const char *item, char *out, size_t cap);
+    int  rewrite_init_text(const char *stype, const char *raw, char *out, size_t cap);
 }
 
 /* Build-mode driving: path handling, import resolution, unit loading and the
-   namespace/directory check. Kept out of ParseOps because that trait is one
-   method below MAX_METHOD. */
+   namespace/directory check. Kept apart from ParseOps to leave the parser room
+   to grow under MAX_METHOD. */
 trait ModuleOps {
     int  base_name(const char *path, char *out, size_t cap, int *is_hdr);
     int  path_dir(const char *path, char *out, size_t cap);
@@ -483,6 +506,7 @@ trait EmitOps {
     int  type_needs_init(const char *type);
     int  emit_vptr_items(const char *prefix, const char *type);
     int  emit_field_vptrs(int si, int started);
+    int  emit_array_field_vptrs(int si, const char *recv, int ind);
     int  emit_vptr_stmts(const char *recv, const char *type, int ind);
     int  emit_unit_init(int prog);
     int  emit_raw_init(int raw, const char *type);
@@ -577,8 +601,8 @@ trait PkgOps {
    exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
 struct Ast {
     int nerr;
-} use AstOps, SymOps, ParseOps, ModuleOps, EmitOps, DiagOps, MemoryOps, CacheOps,
-    PkgOps;
+} use AstOps, SymOps, ParseOps, TypeOps, ModuleOps, EmitOps, DiagOps, MemoryOps,
+    CacheOps, PkgOps;
 
 impl AstOps for Ast {
     int new_node(int kind)
@@ -1046,6 +1070,7 @@ impl SymOps for Ast {
         i = g_nvar;
         snprintf(g_vars[i].name, MAX_TEXT, "%s", name);
         snprintf(g_vars[i].type, MAX_TEXT, "%s", type);
+        g_vars[i].is_array = 0;
         g_vars[i].st = -1;
         g_vars[i].owned = 0;
         g_vars[i].own_line = 0;
@@ -1107,6 +1132,7 @@ impl SymOps for Ast {
         k = 0;
         while (p > 0 && k < MAX_PARAMS) {
             snprintf(g_funcs[i].ptype[k], MAX_TEXT, "%s", g_nodes[p].text);
+            snprintf(g_funcs[i].pdim[k], MAX_TEXT, "%s", g_nodes[p].text3);
             k++;
             p = g_nodes[p].next;
         }
@@ -1492,10 +1518,12 @@ impl ParseOps for Ast {
             if (self->accept("=")) {
                 if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
                     char raw[MAX_TEXT];
+                    char fixed[MAX_TEXT];
                     e = self->new_node(N_RAW);
                     if (e < 0) return -1;
                     if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
-                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", raw);
+                    if (self->rewrite_init_text(ret, raw, fixed, sizeof fixed) != 0) return -1;
+                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {
                     e = self->parse_expr();
                     if (e < 0) return -1;
@@ -1593,6 +1621,10 @@ impl ParseOps for Ast {
             snprintf(g_nodes[p].text2, MAX_TEXT, "%s", name);
             if (self->parse_array_dims(p) != 0) return -1;
             if (self->declare_var(name, typebuf) != 0) return -1;
+            if (g_nodes[p].text3[0]) {
+                int vi = self->find_var(name);
+                if (vi >= 0) g_vars[vi].is_array = 1;
+            }
             if (tail == 0) first = p;
             else g_nodes[tail].next = p;
             tail = p;
@@ -1687,11 +1719,14 @@ impl ParseOps for Ast {
                              "%s", g_nodes[m].text2);
                     snprintf(g_structs[si2].fields[g_structs[si2].nfields].type, MAX_TEXT,
                              "%s", g_nodes[m].text);
+                    snprintf(g_structs[si2].fields[g_structs[si2].nfields].dims, MAX_TEXT,
+                             "%s", g_nodes[m].text3);
                     g_structs[si2].nfields++;
                 }
             } else if (g_npend < MAX_FIELDS) {
                 snprintf(g_pend_fields[g_npend].name, MAX_TEXT, "%s", g_nodes[m].text2);
                 snprintf(g_pend_fields[g_npend].type, MAX_TEXT, "%s", g_nodes[m].text);
+                snprintf(g_pend_fields[g_npend].dims, MAX_TEXT, "%s", g_nodes[m].text3);
                 g_npend++;
             }
             if (tail < 0) g_nodes[s].a = m;
@@ -1782,6 +1817,8 @@ impl ParseOps for Ast {
                                  g_pend_fields[ui].name);
                         snprintf(g_structs[ai].fields[ui].type, MAX_TEXT, "%s",
                                  g_pend_fields[ui].type);
+                        snprintf(g_structs[ai].fields[ui].dims, MAX_TEXT, "%s",
+                                 g_pend_fields[ui].dims);
                     }
                 }
             }
@@ -2219,8 +2256,9 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             {
                 char tr[MAX_TEXT];
-                if (self->is_iface_type(g_ret_type, tr, sizeof tr)) {
-                    e = self->maybe_box(e, tr);
+                int ip = 0;
+                if (self->iface_ref_type(g_ret_type, tr, sizeof tr, &ip)) {
+                    e = self->maybe_box(e, tr, ip);
                     if (e < 0) return -1;
                 }
             }
@@ -2470,14 +2508,20 @@ impl ParseOps for Ast {
             snprintf(g_nodes[n].text2, MAX_TEXT, "%s", name);
             if (self->declare_var(name, typebuf) != 0) return -1;
             if (self->parse_array_dims(n) != 0) return -1;
+            if (g_nodes[n].text3[0]) {
+                int vi = self->find_var(name);
+                if (vi >= 0) g_vars[vi].is_array = 1;
+            }
             if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
                 self->lex_next();
                 if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
                     char raw[MAX_TEXT];
+                    char fixed[MAX_TEXT];
                     e = self->new_node(N_RAW);
                     if (e < 0) return -1;
                     if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
-                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", raw);
+                    if (self->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
+                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {
                     e = self->parse_expr();
                     if (e < 0) return -1;
@@ -2486,8 +2530,9 @@ impl ParseOps for Ast {
             }
             if (g_nodes[n].a >= 0) {
                 char tr[MAX_TEXT];
-                if (self->is_iface_type(typebuf, tr, sizeof tr)) {
-                    e = self->maybe_box(g_nodes[n].a, tr);
+                int ip = 0;
+                if (self->iface_ref_type(typebuf, tr, sizeof tr, &ip)) {
+                    e = self->maybe_box(g_nodes[n].a, tr, ip);
                     if (e < 0) return -1;
                     g_nodes[n].a = e;
                 }
@@ -2551,8 +2596,9 @@ impl ParseOps for Ast {
             if ((k == N_VAR && self->var_type(g_nodes[e].text2, tt, sizeof tt) == 0)
                 || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
                     && self->expr_type(e, tt, sizeof tt) == 0)) {
-                if (self->is_iface_type(tt, tr, sizeof tr)) {
-                    rhs = self->maybe_box(rhs, tr);
+                int ip = 0;
+                if (self->iface_ref_type(tt, tr, sizeof tr, &ip)) {
+                    rhs = self->maybe_box(rhs, tr, ip);
                     if (rhs < 0) return -1;
                 }
             }
@@ -2942,8 +2988,9 @@ impl ParseOps for Ast {
                     first_arg = args;
                     while (cur > 0 && k < g_funcs[fi].nparams) {
                         char tr[MAX_TEXT];
-                        if (self->is_iface_type(g_funcs[fi].ptype[k], tr, sizeof tr)) {
-                            int boxed = self->maybe_box(cur, tr);
+                        int ip = 0;
+                        if (self->iface_ref_type(g_funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
+                            int boxed = self->maybe_box(cur, tr, ip);
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
                                 if (prev < 0) first_arg = boxed;
@@ -3021,7 +3068,9 @@ impl ParseOps for Ast {
         if (self->expect(")") != 0) return -1;
         return first;
     }
+}
 
+impl TypeOps for Ast {
     /* `struct T_iface` -> T. */
     int is_iface_type(const char *type, char *tout, size_t tcap)
     {
@@ -3037,6 +3086,24 @@ impl ParseOps for Ast {
         if (n - 6 >= tcap) return 0;
         snprintf(tout, tcap, "%.*s", (int)(n - 6), base);
         return 1;
+    }
+
+    /* `struct X_iface` -> (X, 0); `struct X_iface *` -> (X, 1). */
+    int iface_ref_type(const char *type, char *tout, size_t tcap, int *is_ptr)
+    {
+        char buf[MAX_TEXT];
+        size_t n;
+        (void)self;
+
+        *is_ptr = 0;
+        if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
+        n = strlen(buf);
+        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {
+            if (buf[n - 1] == '*') *is_ptr = 1;
+            buf[n - 1] = 0;
+            n--;
+        }
+        return self->is_iface_type(buf, tout, tcap);
     }
 
     /* `struct S` / `S` / `struct S *` -> S (and whether it was a pointer). */
@@ -3070,7 +3137,25 @@ impl ParseOps for Ast {
         (void)self;
 
         if (g_nodes[n].kind == N_VAR) return self->var_type(g_nodes[n].text2, out, cap);
-        if (g_nodes[n].kind == N_INDEX) return self->expr_type(g_nodes[n].a, out, cap);
+        if (g_nodes[n].kind == N_INDEX) {
+            /* a[i] is the pointee: a pointer's star drops, while an array's
+               declared type has none to drop -- unless it is an array *of*
+               pointers, which `is_array` keeps intact */
+            size_t ln;
+            if (self->expr_type(g_nodes[n].a, out, cap) != 0) return -1;
+            if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_VAR) {
+                int vi = self->find_var(g_nodes[g_nodes[n].a].text2);
+                if (vi >= 0 && g_vars[vi].is_array) return 0;
+            }
+            ln = strlen(out);
+            while (ln > 0 && out[ln - 1] == ' ') ln--;
+            if (ln > 0 && out[ln - 1] == '*') {
+                ln--;
+                while (ln > 0 && out[ln - 1] == ' ') ln--;
+                out[ln] = 0;
+            }
+            return 0;
+        }
         if (g_nodes[n].kind == N_ADDR) {
             if (self->expr_type(g_nodes[n].a, out, cap) != 0) return -1;
             if (strlen(out) + 2 >= cap) return -1;
@@ -3100,7 +3185,8 @@ impl ParseOps for Ast {
             return -1;
         }
         if (g_nodes[n].kind == N_BOX) {
-            if (snprintf(out, cap, "struct %s_iface", g_nodes[n].text) >= (int)cap) return -1;
+            if (snprintf(out, cap, "struct %s_iface%s", g_nodes[n].text,
+                         g_nodes[n].aux >= 2 ? " *" : "") >= (int)cap) return -1;
             return 0;
         }
         if (g_nodes[n].kind == N_CAST) {
@@ -3118,16 +3204,23 @@ impl ParseOps for Ast {
        already the right interface passes through unchanged. A declared global
        instance bound by `map` (11.2) boxes with its instance-level vtable even
        when its struct never `use`d the trait. */
-    int maybe_box(int n, const char *trait)
+    int maybe_box(int n, const char *trait, int addr)
     {
         char t[MAX_TEXT];
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
         char iname[MAX_TEXT];
-        int is_ptr, si, u, box, found, i, mptr;
+        int is_ptr, si, u, box, found, i, mptr, ip;
         (void)self;
 
-        if (g_nodes[n].kind == N_BOX) return n;
+        if (g_nodes[n].kind == N_BOX) {
+            /* already an interface value; a pointer target takes its address */
+            if (!addr) return n;
+            box = self->new_node(N_ADDR);
+            if (box < 0) return -1;
+            g_nodes[box].a = n;
+            return box;
+        }
         /* N_BOX text2 names the vtable's owner: the struct for a struct-level
            box, the instance for a `map` box, so the same `<owner>_<trait>_vtable`
            emit rule covers both. */
@@ -3145,7 +3238,7 @@ impl ParseOps for Ast {
                     box = self->new_node(N_BOX);
                     if (box < 0) return -1;
                     g_nodes[box].a = n;
-                    g_nodes[box].aux = mptr;
+                    g_nodes[box].aux = mptr + (addr ? 2 : 0);
                     snprintf(g_nodes[box].text, MAX_TEXT, "%s", trait);
                     snprintf(g_nodes[box].text2, MAX_TEXT, "%s", iname);
                     return box;
@@ -3153,8 +3246,16 @@ impl ParseOps for Ast {
         }
         if (self->expr_type(n, t, sizeof t) != 0)
             return self->fail("cannot infer the type to box");
-        if (self->is_iface_type(t, tname, sizeof tname)) {
-            if (strcmp(tname, trait) == 0) return n;
+        ip = 0;
+        if (self->iface_ref_type(t, tname, sizeof tname, &ip)) {
+            if (strcmp(tname, trait) == 0) {
+                if (ip == addr) return n;
+                /* an array of interface values decays to a pointer */
+                if (!ip && addr && g_nodes[n].kind == N_VAR) {
+                    int vi = self->find_var(g_nodes[n].text2);
+                    if (vi >= 0 && g_vars[vi].is_array) return n;
+                }
+            }
             return self->fail("interface type mismatch");
         }
         if (!self->concrete_struct(t, sname, sizeof sname, &is_ptr))
@@ -3168,10 +3269,189 @@ impl ParseOps for Ast {
         box = self->new_node(N_BOX);
         if (box < 0) return -1;
         g_nodes[box].a = n;
-        g_nodes[box].aux = is_ptr;
+        g_nodes[box].aux = is_ptr + (addr ? 2 : 0);
         snprintf(g_nodes[box].text, MAX_TEXT, "%s", trait);
         snprintf(g_nodes[box].text2, MAX_TEXT, "%s", sname);
         return box;
+    }
+
+    /* Does `type` carry a struct-typed array field whose elements need vptrs?
+       Such a field cannot be initialised by designator, so the declaration site
+       has to emit a loop after it. */
+    int type_has_array_init(const char *type)
+    {
+        const char *base;
+        int si, fi;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        si = self->find_struct(base);
+        for (fi = 0; si >= 0 && fi < g_structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            if (!g_structs[si].fields[fi].dims[0]) continue;
+            snprintf(ft, sizeof ft, "%s", g_structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;
+            if (self->type_needs_init(ft)) return 1;
+        }
+        return 0;
+    }
+
+    /* Rewrite one initialiser item when it fills an interface field from a
+       concrete struct (`.l = a`, `.l = &a`). Both forms need boxing: a value
+       field takes the fat pointer, a pointer field its address. Anything else
+       (including a value that is already an interface) is copied verbatim, so
+       existing initialisers stay byte for byte as they were. */
+    int init_item_text(const char *stype, const char *item, char *out, size_t cap)
+    {
+        const char *p, *rhs, *base;
+        char fname[MAX_TEXT];
+        char ftype[MAX_TEXT];
+        char sname[MAX_TEXT];
+        char tname[MAX_TEXT];
+        char vname[MAX_TEXT];
+        char vtype[MAX_TEXT];
+        int si, fi, is_ptr, srcptr, vptr, u, found, ok;
+        size_t k;
+
+        fname[0] = 0;
+        ftype[0] = 0;
+        sname[0] = 0;
+        tname[0] = 0;
+        vname[0] = 0;
+        vtype[0] = 0;
+        rhs = item;
+        base = stype;
+
+        /* shape: `.field = <operand>` */
+        p = item;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        ok = (*p == '.');
+        if (ok) p++;
+        k = 0;
+        while (ok && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                      || (*p >= '0' && *p <= '9') || *p == '_')) {
+            if (k + 1 >= sizeof fname) ok = 0;
+            else { fname[k] = *p; k++; p++; }
+        }
+        fname[k] = 0;
+        if (!k) ok = 0;
+        while (ok && (*p == ' ' || *p == '\t')) p++;
+        if (ok && *p != '=') ok = 0;
+        if (ok) { p++; rhs = p; }
+
+        /* the field must be an interface (value or pointer) of a known struct */
+        if (ok && strncmp(base, "struct ", 7) == 0) base += 7;
+        while (ok && *base == ' ') base++;
+        si = ok ? self->find_struct(base) : -1;
+        if (si < 0) ok = 0;
+        fi = -1;
+        for (u = 0; ok && u < g_structs[si].nfields; u++)
+            if (strcmp(g_structs[si].fields[u].name, fname) == 0) fi = u;
+        if (ok && (fi < 0 || g_structs[si].fields[fi].dims[0])) ok = 0;
+        is_ptr = 0;
+        if (ok) {
+            snprintf(ftype, sizeof ftype, "%s", g_structs[si].fields[fi].type);
+            if (!self->iface_ref_type(ftype, tname, sizeof tname, &is_ptr)) ok = 0;
+        }
+
+        /* the operand must be a bare variable, optionally addressed */
+        srcptr = 0;
+        if (ok) {
+            p = rhs;
+            while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+            if (*p == '&') {
+                srcptr = 1;
+                p++;
+                while (*p == ' ' || *p == '\t') p++;
+            }
+            k = 0;
+            while (ok && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                          || (*p >= '0' && *p <= '9') || *p == '_')) {
+                if (k + 1 >= sizeof vname) ok = 0;
+                else { vname[k] = *p; k++; p++; }
+            }
+            vname[k] = 0;
+            if (!k) ok = 0;
+            while (ok && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++;
+            if (ok && *p) ok = 0;
+        }
+
+        /* ... of a struct that implements the trait, with matching indirection */
+        vptr = 0;
+        if (ok && self->var_type(vname, vtype, sizeof vtype) != 0) ok = 0;
+        if (ok && !self->concrete_struct(vtype, sname, sizeof sname, &vptr)) ok = 0;
+        if (ok && srcptr && vptr) ok = 0;     /* `&p` on a struct pointer is not a box source */
+        found = 0;
+        si = ok ? self->find_struct(sname) : -1;
+        for (u = 0; ok && si >= 0 && u < g_structs[si].nuse; u++)
+            if (strcmp(g_structs[si].use[u], tname) == 0) found = 1;
+        if (ok && !found) ok = 0;
+
+        if (!ok) {
+            if (snprintf(out, cap, "%s", item) >= (int)cap) return -1;
+            return 0;
+        }
+        /* the self pointer is the operand itself when it already is a pointer */
+        if (snprintf(out, cap, ".%s = %s(struct %s_iface){ (void *)%s%s, &%s_%s_vtable }",
+                     fname, is_ptr ? "&" : "", tname,
+                     (srcptr || !vptr) ? "&" : "", vname, sname, tname) >= (int)cap) return -1;
+        return 0;
+    }
+
+    /* Rewrite a captured `{ ... }` list item by item. Runs at parse time: the
+       operand types come from the local variable table, which is gone by the
+       time the emitter walks the AST. */
+    int rewrite_init_text(const char *stype, const char *raw, char *out, size_t cap)
+    {
+        int len, i, depth, in_str, start, seg;
+        char item[MAX_TEXT];
+        char fixed[MAX_TEXT];
+
+        len = (int)strlen(raw);
+        if (len < 2 || raw[len - 1] != '}') {
+            if (snprintf(out, cap, "%s", raw) >= (int)cap) return -1;
+            return 0;
+        }
+        if (cap < 3) return -1;
+        out[0] = '{';
+        out[1] = 0;
+        start = 1;
+        depth = 0;
+        in_str = 0;
+        for (i = 1; i < len - 1; i++) {
+            char c = raw[i];
+            if (in_str) {
+                if (c == '\\' && raw[i + 1]) i++;
+                else if (c == '"') in_str = 0;
+                continue;
+            }
+            if (c == '"') { in_str = 1; continue; }
+            if (c == '{' || c == '[' || c == '(') depth++;
+            else if (c == '}' || c == ']' || c == ')') depth--;
+            else if (c == ',' && depth == 0) {
+                seg = i - start;
+                if (seg >= (int)sizeof item) return self->fail("initializer is too long");
+                memcpy(item, raw + start, (size_t)seg);
+                item[seg] = 0;
+                if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) return -1;
+                if (strlen(out) + strlen(fixed) + 2 >= cap) return -1;
+                strcat(out, fixed);
+                strcat(out, ",");
+                start = i + 1;
+            }
+        }
+        seg = len - 1 - start;
+        if (seg < 0) seg = 0;
+        if (seg >= (int)sizeof item) return self->fail("initializer is too long");
+        memcpy(item, raw + start, (size_t)seg);
+        item[seg] = 0;
+        if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) return -1;
+        if (strlen(out) + strlen(fixed) + 2 >= cap) return -1;
+        strcat(out, fixed);
+        strcat(out, "}");
+        return 0;
     }
 }
 
@@ -4255,6 +4535,7 @@ impl EmitOps for Ast {
             for (k = 0; k < g_funcs[i].nparams; k++) {
                 if (k > 0) fputs(", ", g_out);
                 fputs(g_funcs[i].ptype[k], g_out);
+                fputs(g_funcs[i].pdim[k], g_out);
             }
         }
         fputs(");\n", g_out);
@@ -4441,11 +4722,12 @@ impl EmitOps for Ast {
             char sub[MAX_TEXT];
             snprintf(ft, sizeof ft, "%s", g_structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
+            if (g_structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
             if (!self->type_needs_init(ft)) continue;
             snprintf(sub, sizeof sub, "%s.%s", recv, g_structs[si].fields[fi].name);
             if (self->emit_vptr_stmts(sub, ft, ind) != 0) return -1;
         }
-        return 0;
+        return self->emit_array_field_vptrs(si, recv, ind);
     }
 
     /* File-scope arrays cannot carry per-element writes in an initialiser, so
@@ -4458,8 +4740,9 @@ impl EmitOps for Ast {
 
         any = 0;
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
-            if (g_nodes[n].kind == N_GLOBAL && g_nodes[n].text3[0]
-                && self->type_needs_init(g_nodes[n].text)) any = 1;
+            if (g_nodes[n].kind == N_GLOBAL && self->type_needs_init(g_nodes[n].text)
+                && (g_nodes[n].text3[0]
+                    || self->type_has_array_init(g_nodes[n].text))) any = 1;
         if (!any) return 0;
         fputs("static void __ct_init(void) __attribute__((constructor));\n", g_out);
         fputs("static void __ct_init(void) {\n", g_out);
@@ -4468,8 +4751,15 @@ impl EmitOps for Ast {
             char cnt[MAX_TEXT];
             char recv[MAX_TEXT];
             int i, k;
-            if (g_nodes[n].kind != N_GLOBAL || !g_nodes[n].text3[0]) continue;
+            if (g_nodes[n].kind != N_GLOBAL) continue;
             if (!self->type_needs_init(g_nodes[n].text)) continue;
+            if (!g_nodes[n].text3[0]) {
+                /* a scalar object whose struct has array fields */
+                if (self->type_has_array_init(g_nodes[n].text)
+                    && self->emit_vptr_stmts(g_nodes[n].text2, g_nodes[n].text, 2) != 0)
+                    return -1;
+                continue;
+            }
             /* the count is the first bracket group of the suffix */
             k = 0;
             for (i = 1; g_nodes[n].text3[i] && g_nodes[n].text3[i] != ']' && k + 1 < MAX_TEXT; i++) {
@@ -4540,11 +4830,61 @@ impl EmitOps for Ast {
             char prefix[MAX_TEXT];
             snprintf(ft, sizeof ft, "%s", g_structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
+            if (g_structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
             if (!self->type_needs_init(ft)) continue;
             snprintf(prefix, sizeof prefix, ".%s", g_structs[si].fields[fi].name);
             if (started) fputs(", ", g_out);
             if (self->emit_vptr_items(prefix, ft) != 0) return -1;
             started = 1;
+        }
+        return 0;
+    }
+
+    /* vptr writes for struct-typed array fields. A designated initialiser cannot
+       reach an array element (`.f.__x_vptr` is not valid C), so the caller emits
+       these as statements after the declaration. One loop per dimension. */
+    int emit_array_field_vptrs(int si, const char *recv, int ind)
+    {
+        int fi;
+        (void)self;
+        for (fi = 0; fi < g_structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            char sub[MAX_TEXT];
+            const char *d;
+            int depth, started;
+            if (!g_structs[si].fields[fi].dims[0]) continue;
+            snprintf(ft, sizeof ft, "%s", g_structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;
+            if (!self->type_needs_init(ft)) continue;
+            snprintf(sub, sizeof sub, "%s.%s", recv, g_structs[si].fields[fi].name);
+            d = g_structs[si].fields[fi].dims;
+            depth = 0;
+            started = 0;
+            while (*d == '[') {
+                const char *close = strchr(d, ']');
+                char bound[MAX_TEXT];
+                size_t bl;
+                if (!close) break;
+                bl = (size_t)(close - d - 1);
+                if (bl >= sizeof bound) bl = sizeof bound - 1;
+                memcpy(bound, d + 1, bl);
+                bound[bl] = 0;
+                if (!bound[0]) break;   /* `[]`: not a definition */
+                self->emit_indent(ind + depth);
+                fprintf(g_out, "for (unsigned long __ct_j%d = 0; __ct_j%d < %s; __ct_j%d++) {\n",
+                        depth, depth, bound, depth);
+                snprintf(sub, sizeof sub, "%s[__ct_j%d]", sub, depth);
+                depth++;
+                d = close + 1;
+                started = 1;
+            }
+            if (!started) continue;
+            if (self->emit_vptr_stmts(sub, ft, ind + depth) != 0) return -1;
+            while (depth > 0) {
+                depth--;
+                self->emit_indent(ind + depth);
+                fputs("}\n", g_out);
+            }
         }
         return 0;
     }
@@ -4889,6 +5229,21 @@ impl EmitOps for Ast {
                 fputs("}\n", g_out);
                 return 0;
             }
+            if (!g_nodes[n].text3[0] && self->type_needs_init(tp)
+                && (g_nodes[n].a < 0
+                    || g_nodes[g_nodes[n].a].kind == N_RAW)
+                && self->type_has_array_init(tp)) {
+                /* a struct-typed array field cannot be reached by a designator,
+                   so its elements get their vptrs on the lines after */
+                const char *base = tp;
+                int si;
+                if (strncmp(base, "struct ", 7) == 0) base += 7;
+                si = self->find_struct(base);
+                self->emit_indent(ind);
+                if (self->emit_inline(n) != 0) return -1;
+                fputs(";\n", g_out);
+                return self->emit_array_field_vptrs(si, g_nodes[n].text2, ind);
+            }
             if (heap_ptr) {
                 char recv[MAX_TEXT];
                 self->emit_indent(ind);
@@ -5148,8 +5503,12 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_BOX) {
+            /* aux: bit 0 = the source operand is a pointer, bit 1 = take the
+               address of the literal (a pointer-to-interface target) */
+            int a = g_nodes[n].aux;
+            if (a >= 2) fputs("&", g_out);
             fprintf(g_out, "(struct %s_iface){ (void *)", g_nodes[n].text);
-            if (g_nodes[n].aux) {
+            if (a == 1 || a == 3) {
                 if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             } else {
                 fputs("&", g_out);
