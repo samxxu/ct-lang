@@ -27,6 +27,7 @@
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
 | Phase 9 | **AST 版编译器**（新主线） | 新增 | ✅ 9.1–9.7 已落地（2026-10-18）：自编 + 不动点 + **全量行为等价**（`check-ast.sh`，Phase 9 收口时 60 项，Phase 10 现为 105 项）；旧管线 `selfhost/src/**` 按 D36 冻结归档（tag `pre-ast-mainline`）；**已 bump 到 v0.9.0 收口** | 自编 + 行为等价 |
 | Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | ✅ 10.1–10.7 全部落地（2026-10-19；[design/phase10.md](design/phase10.md)，D38–D45 已按建议值确认）：CLI/身份、语义诊断、内存、多错误恢复、增量缓存、包管理迁移、切主线；安装入口由 ct-ast 提供（切换前 tag `pre-ct-ast-switch`），**已 bump 到 v0.10.0 收口** | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
+| Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | 🚧 11.1 已落地（2026-10-19）：解析 + 实例级包装/vtable 发射 + `--emit-map` 的 `maps` 字段 + 负例（D19 解除，见 [design/phase6.md](design/phase6.md) §6.5）；**派发接线（11.2）与本阶段 bump（v0.11.0）待做** | 设计冻结 + 新用例全绿；收口时按规范 bump v0.11.0 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -65,7 +66,7 @@
 
 **版本规则（2026-10-15 用户确认）**：
 
-- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源（v0.4.0）、`0.5.x` = Phase 5 新增特性（v0.5.0）、`0.6.x` = Phase 6 生态与扩展（v0.6.0）、`0.7.x` = Phase 7 工具链形态（v0.7.0）、`0.8.x` = Phase 8 包管理与分发（v0.8.0）、`0.9.x` = Phase 9 AST 版编译器（v0.9.0）、`0.10.x` = Phase 10 主线切换（v0.10.0）；`1.0.0` = 语言定稿。
+- 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源（v0.4.0）、`0.5.x` = Phase 5 新增特性（v0.5.0）、`0.6.x` = Phase 6 生态与扩展（v0.6.0）、`0.7.x` = Phase 7 工具链形态（v0.7.0）、`0.8.x` = Phase 8 包管理与分发（v0.8.0）、`0.9.x` = Phase 9 AST 版编译器（v0.9.0）、`0.10.x` = Phase 10 主线切换（v0.10.0）、`0.11.x` = Phase 11 `map` 构造；`1.0.0` = 语言定稿。
 - **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（`phase1-m2` 标记 v0.1.0、`phase2-multifile-split` 标记 v0.2.0）。
 - **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。Phase 5 完成时按同一规范 bump 到 **v0.5.0**（2026-10-17，同样经用户授权），Phase 6 完成时 bump 到 **v0.6.0**（2026-10-17，同样经用户授权），Phase 7 完成时 bump 到 **v0.7.0**（2026-10-17，同样经用户授权），Phase 8 完成时 bump 到 **v0.8.0**（2026-10-18，同样经用户授权），Phase 9 完成时 bump 到 **v0.9.0**（2026-10-18，同样经用户授权），Phase 10 完成时 bump 到 **v0.10.0**（2026-10-19，同样经用户授权），全量 golden 均重生成。
 - **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重生成 `test/cases/**` 与 `test/modules/**` 的 golden（v0.8.0 这一次是 107 个文件），并**同时**改 `ctc.c`、`selfhost/ctc.ct`（L1）与 `selfhost/src/{core,driver}.ct`——任一处不一致会让 `check-goldens.sh` 立刻全红。**归档 oracle 不能重生成**，故 `check-archive.sh` 用 `same_modulo_version` 在比较时归一化 banner 的版本 token（其余字节仍逐字节）。冻结期改 `CTC_VERSION` 属「不允许」项，每次均经用户显式授权。
@@ -356,6 +357,8 @@ map trait Controller for instance huart1 {
 > **排期（D8，用户 2026-10-14 拍板）**：自越位实现中移出，排在 Phase 6 最后实现。理由：
 > `map` 属生态绑定方向而非自举主线的主题，出口标准与自举前置清单均不依赖它；其真实消费者
 > （官方 bindings）尚不存在，过早冻结实例语义会凭想象用例定死设计。落地时与官方 bindings 清单一并定案。
+> **更新（2026-10-19）**：D8 的「移出」口径已由 **Phase 11** 解除——`map` 重新立为阶段，11.1 已在
+> **ct-ast** 主线落地（解析 + 发射 + `maps` JSON），11.2 再做派发接线；实例语义见 [language-spec](language-spec.md) §4.10。
 
 #### JSON 诊断输出与插件薄客户端（已定，越位实现落地）
 
@@ -831,7 +834,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 ### Phase 6：生态与扩展（原 Phase 3）
 
-- **生态绑定**：`map` + 反向映射表（经 D8 移出自举主线；落定时与官方 bindings 清单一并定案）。
+- **生态绑定**：`map` + 反向映射表（经 D8 移出自举主线；落定时与官方 bindings 清单一并定案；**2026-10-19 由 Phase 11 解冻并落地 11.1**）。
 - **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突**已在 Phase 6.6 修订**（展开器留在仓库外、`ctc` 零感知；仓库内只允许在 `examples/**` / `test/**` 下携带演示 / 测试用方言插件；包管理分发方言仍不在本阶段）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
 - **构建**：增量编译缓存、跨函数泄漏分析、多目标编译。
 - **设计（2026-10-17，已冻结）**：切片顺序、6.1 的 `--emit-map` JSON 形状、缓存键、多目标口径、`map` / 方言的边界处理与 **D15–D20** 决策表见 [design/phase6.md](design/phase6.md)。顺序：反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map`（等 bindings）→ 方言（仓库外展开器）。
@@ -850,6 +853,14 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **诊断前缀保持 `ctc:`**：驱动层 37 处 `ctc:` 前缀不随 `argv[0]` 变化（`-v` / usage 变、诊断前缀不变）。理由：`core.ct` 要用到身份就得新增 `pub` 包装器，而 `MAX_FUNCS` 余量已近乎为零；保持不变也避免移动既有日志与断言。README 已写明该约定。
 
 自举的目录结构、分层规则（L0/L1/L2）与构建流程见 [design/bootstrap.md](design/bootstrap.md)。
+
+### Phase 11：`map` 构造（新增；D19 解除）
+
+- **背景**：`map` 原在 Phase 6.5 **仅设计冻结**（D19：等官方 bindings 清单再实现）。2026-10-19 用户确认把 `map` 立为 **Phase 11**，入口语法 `map trait T for instance x { m() → CALL; }`——把 trait 方法绑定到某个**已声明的全局实例**上的具体调用；先落 **ct-ast** 主线（L0 / L1 / L2 一律不动）。语义与产物命名见 [language-spec](language-spec.md) §4.10。
+- **切片**：
+  - **11.1（已落地，2026-10-19）**：解析 `map` 构造（`instance` 必须是已声明的全局变量、trait 已定义、绑定方法与参数个数须匹配、`CALL` 只接受受限子集）＋ 发射实例级包装函数 `<inst>_<Trait>_<method>`（首参 `void *self`，体内 `(void)self;`）与 `<inst>_<Trait>_vtable`（指定初始化）＋ `--emit-map` JSON 新增 `maps` 字段。正向 fixture `test/ast/13_map_instance/`，5 条负例进 `test/ast/errors/`，`check-ast.sh` 新增 map 小节（wrapper/vtable、maps JSON、`MAX_MAPS` 上限）。**产物是静态、自包含的，尚未接入隐式装箱／动态派发**。
+  - **11.2（待做）**：把映射实例接入派发（运行时效果）。
+- **出口**：设计冻结 + 新用例全绿；收口时按规范 bump 到 **v0.11.0**（五处 `CTC_VERSION` 同步 + 全量 golden 重生成；属冻结期例外，需用户显式授权）。**11.1 本切片不 bump。**
 
 ### 决策待定项
 
@@ -892,6 +903,7 @@ as confirmed by the user.
 | 8 | **Package management and distribution**: `ct-pkg` (git registry + local directory sources), `ct get` / `ct install` | new | ✅ done (2026-10-18; 8.1–8.3 all landed; bumped to v0.8.0; D21–D27 frozen) | `ct get` / `ct install` work, and the compile path stays network-free |
 | 9 | **AST-based compiler** (the new mainline) | new | ✅ 9.1–9.7 landed (2026-10-18): self-compilation + fixpoint + **whole-corpus behavioural equivalence** (`check-ast.sh`, 60 assertions at close, 105 today); the old pipeline `selfhost/src/**` is frozen and archived per D36 (tag `pre-ast-mainline`); **bumped to v0.9.0 and closed** | self-compilation + behavioural equivalence |
 | 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | ✅ 10.1–10.7 all landed (2026-10-19; [design/phase10.md](design/phase10.md), D38–D45 confirmed as proposed): CLI/identity, semantic diagnostics, memory, multi-error recovery, the incremental cache, the package-manager migration and the switch itself; the installed entry comes from ct-ast (tag `pre-ct-ast-switch` marks the state before it), **bumped to v0.10.0 and closed** | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
+| 11 | **The `map` construct**: `map trait T for instance x { m() → CALL; }` (binds a trait's method to a declared global instance) | new | 🚧 11.1 landed (2026-10-19): parsing + instance-level wrapper/vtable emission + the `maps` field of `--emit-map` + negative cases (D19 lifted, see [design/phase6.md](design/phase6.md) §6.5); **dispatch wiring (11.2) and the phase bump (v0.11.0) remain** | design frozen + new cases green; bumped to v0.11.0 at close |
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
 > features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap
@@ -951,7 +963,7 @@ changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §
   system, `0.3.x` = Phase 3 memory, `0.4.x` = Phase 4 diagnostics (v0.4.0), `0.5.x` = Phase 5
   new features (v0.5.0), `0.6.x` = Phase 6 ecosystem (v0.6.0), `0.7.x` = Phase 7 toolchain (v0.7.0),
   `0.8.x` = Phase 8 package management (v0.8.0), `0.9.x` = Phase 9 AST-based compiler (v0.9.0),
-  `0.10.x` = Phase 10 mainline switch (v0.10.0); `1.0.0` = the language is final.
+  `0.10.x` = Phase 10 mainline switch (v0.10.0), `0.11.x` = Phase 11 `map` construct; `1.0.0` = the language is final.
 - **A tag name must equal `CTC_VERSION`.** Hence "no bump, no `v`-numbered tag"; a milestone that is
   not bumped gets a non-version tag (today `phase1-m2` marks the v0.1.0 milestone).
 - **Superseded (2026-10-17)**: the earlier "bump together with the single-entry `ct`" decision
@@ -1806,7 +1818,7 @@ Only after self-hosting (Phase 1) is done. Exit criteria are grouped by **Class*
 Phases 2–4 are **restoration** (archived oracle + frozen goldens; exit = **byte-identical**, no new
 design needed); Phase 5 is **new work** (no oracle to diff against; exit = **design frozen + new cases
 + `run.sh` green**). The implementation-level design is in [design/restore.md](design/restore.md)
-(decisions D1–D8, only D6 open; D7 is decided as "local first"; D8: `map` moves out, see Phase 6).
+(decisions D1–D8, only D6 open; D7 is decided as "local first"; D8: `map` moves out, see Phase 6 — **lifted on 2026-10-19: Phase 11 lands 11.1 on the ct-ast mainline**).
 
 **Implementation policy — fidelity first (confirmed by the user on 2026-10-16)**: redoing these features
 in CT aims at **byte-identical output with the archived oracle**, **including replicating its existing
@@ -2091,7 +2103,8 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   point differs yet, so it lands the CLI and the `-std=` in the suggested cc command, with
   `test/modules/std_default|std_gnu|std_bad/` pinning the positive and negative cases). **6.5 `map` is
   design-frozen only** (the instance semantics of `map trait T for instance x` are not implemented,
-  waiting for an official bindings list; D19). **6.6, the dialect system, has landed** (the expander
+  waiting for an official bindings list; D19 — **lifted in Phase 11, whose 11.1 slice landed on
+  2026-10-19**). **6.6, the dialect system, has landed** (the expander
   lives outside the repository and `ctc` never sees it; the AGENTS §2 exemption and the §6 "eight
   layers" are synced; the demo `examples/07_dialect/` plus the `dialect` layer in `test/run.sh` — expand
   → `ctc` → `cc` → run → compare, with an assertion that the unexpanded source does not compile on its
@@ -2138,6 +2151,27 @@ budget** for the generated output (max nesting indent, name-length caps, …).
 
 The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
 [design/bootstrap.md](design/bootstrap.md).
+
+### Phase 11 — the `map` construct (new; D19 lifted)
+
+- **Background**: `map` was *design-frozen only* in Phase 6.5 (D19: implement once an official bindings
+  list exists). On 2026-10-19 the user promoted it to **Phase 11**, with the entry syntax
+  `map trait T for instance x { m() → CALL; }` — binding a trait's method to a concrete call on a
+  **declared global instance** — landing first on the **ct-ast** mainline (L0 / L1 / L2 stay
+  untouched). The semantics and artifact naming are in [language-spec](language-spec.md) §4.10.
+- **Slices**:
+  - **11.1 (landed, 2026-10-19)**: parse the `map` construct (`instance` must be a declared global,
+    the trait must be defined, the bound method and its arity must match, and the CALL accepts only a
+    restricted subset) + emit the instance-level wrapper `<inst>_<Trait>_<method>` (leading
+    `void *self`, body `(void)self;`) and the vtable `<inst>_<Trait>_vtable` (designated-init) + add the
+    `maps` field to the `--emit-map` JSON. Positive fixture `test/ast/13_map_instance/`, five negative
+    cases under `test/ast/errors/`, and a new map section in `check-ast.sh` (wrapper/vtable, the maps
+    JSON, the `MAX_MAPS` cap). **The artifacts are static and self-contained; dispatch is not wired in
+    yet.**
+  - **11.2 (to do)**: wire a mapped instance into dispatch (a run-time effect).
+- **Exit**: design frozen + new cases green; bumped to **v0.11.0** at close (five `CTC_VERSION` sites
+  in lockstep + every golden regenerated; a freeze-period exception requiring explicit user sign-off).
+  **Slice 11.1 does not bump.**
 
 ### Open decisions
 

@@ -9,6 +9,7 @@
     { "include": "#ct-path" },
     { "include": "#ct-trait" },
     { "include": "#ct-impl" },
+    { "include": "#ct-map" },
     { "include": "#ct-use" },
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
@@ -105,6 +106,17 @@
         "2": { "name": "entity.name.type.trait.ct" },
         "3": { "name": "keyword.control.ct" },
         "4": { "name": "entity.name.type.struct.ct" }
+      }
+    },
+    "ct-map": {
+      "match": "^[ \\t]*(map)[ \\t]+(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]+(for)[ \\t]+(instance)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.map.ct" },
+        "2": { "name": "storage.type.trait.ct" },
+        "3": { "name": "entity.name.type.trait.ct" },
+        "4": { "name": "keyword.control.ct" },
+        "5": { "name": "keyword.other.instance.ct" },
+        "6": { "name": "entity.name.type.struct.ct" }
       }
     },
     "ct-use": {

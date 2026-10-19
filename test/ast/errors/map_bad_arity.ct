@@ -1,0 +1,13 @@
+// map: the binding's parameter count differs from the trait's
+trait T {
+    void m(int a);
+}
+
+struct S {
+};
+
+struct S s;
+
+map trait T for instance s {
+    m() -> g();
+}

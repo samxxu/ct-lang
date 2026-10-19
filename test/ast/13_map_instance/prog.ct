@@ -1,0 +1,26 @@
+// 13: `map` — a trait method bound to a declared global instance (Phase 11.1)
+#include <stdio.h>
+
+trait Controller {
+    int send(char *buf, int len);
+}
+
+struct Uart {
+    int fd;
+};
+
+struct Uart uart1;
+
+int mock_uart_send(struct Uart *u, char *buf, int len) {
+    (void)buf;
+    return len + u->fd;
+}
+
+map trait Controller for instance uart1 {
+    send(buf, len) -> mock_uart_send(&uart1, buf, len);
+}
+
+int main(void) {
+    printf("map ok\n");
+    return 0;
+}

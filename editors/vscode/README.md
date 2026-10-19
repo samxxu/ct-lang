@@ -81,7 +81,7 @@ To get an F5 workflow, add a launch configuration at the repository root as
 ## Checks
 
 ```bash
-python3 test/check-grammar.py    # 20 assertions; exit code 0 means it passed
+python3 test/check-grammar.py    # 21 assertions; exit code 0 means it passed
 ```
 
 The script replays the grammar's patterns with Python's `re` over the demos in

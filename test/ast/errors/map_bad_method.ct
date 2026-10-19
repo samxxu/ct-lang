@@ -1,0 +1,13 @@
+// map: the bound method is not part of the trait
+trait T {
+    void m();
+}
+
+struct S {
+};
+
+struct S s;
+
+map trait T for instance s {
+    nope() -> g();
+}

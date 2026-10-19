@@ -1,0 +1,13 @@
+// map: an argument is neither a bound parameter nor a literal
+trait T {
+    void m(int a);
+}
+
+struct S {
+};
+
+struct S s;
+
+map trait T for instance s {
+    m(a) -> g(free_name);
+}

@@ -39,6 +39,8 @@ CT_CASES = (
     # Phase 5 AutoDrop (`own`) lives on the CT line only, so its fixture is under
     # test/modules rather than test/cases.
     "test/modules/autodrop/prog.ct",
+    # Phase 11.1 `map`: a CT-line-only construct (ct-ast).
+    "test/ast/13_map_instance/prog.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -206,6 +208,10 @@ def main():
             check("`own Box *b` -> ct-own",
                   any(h[0] == "ct-own" for _, l, hs in rows
                       if l.strip().startswith("own ") for h in hs))
+        if "13_map_instance" in rel:
+            check("`map trait T for instance x {` -> ct-map",
+                  any(h[0] == "ct-map" for _, l, hs in rows
+                      if l.strip().startswith("map ") for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

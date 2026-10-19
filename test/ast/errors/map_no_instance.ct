@@ -1,0 +1,8 @@
+// map: the instance is not a declared variable
+trait T {
+    void m();
+}
+
+map trait T for instance ghost {
+    m() -> g();
+}

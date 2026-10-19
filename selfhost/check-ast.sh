@@ -40,6 +40,9 @@
 # 10.5 adds the cache section: cold/warm builds, dependency invalidation and a
 # missing artefact, with the keys byte-compared against L2's.
 #
+# 11.1 adds the map construct section: a `map` binding's wrapper + vtable, the
+# `maps` field of the map JSON, and the MAX_MAPS cap.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -297,6 +300,49 @@ elif grep -q "cannot write the map" "$work/mapu.err"; then
     ok "--emit-map to an unwritable path"
 else
     bad "--emit-map to an unwritable path" "no diagnostic on stderr"
+fi
+
+echo
+echo "== map construct (11.1) =="
+# A `map` binding emits an instance-level wrapper plus a vtable (static, not wired
+# into dispatch until 11.2) and is described by the `maps` field of the map JSON.
+if "$work/ct-ast" test/ast/13_map_instance/prog.ct -o "$work/mmap.c" \
+        >"$work/mmap.out" 2>"$work/mmap.err" \
+   && grep -q 'static int uart1_Controller_send(void \*self' "$work/mmap.c" \
+   && grep -q 'static struct Controller_vtbl uart1_Controller_vtable = {' "$work/mmap.c"; then
+    ok "map (wrapper + vtable emitted)"
+else
+    bad "map emit" "$(cat "$work/mmap.err")"
+fi
+if "$work/ct-ast" --emit-map - test/ast/13_map_instance/prog.ct -o "$work/mmapm.c" \
+        >"$work/mmap.map" 2>"$work/mmapm.err" \
+   && grep -Eq '"maps": *\[' "$work/mmap.map" \
+   && grep -q '"instance":"uart1"' "$work/mmap.map" \
+   && grep -q '"symbol":"uart1_Controller_send"' "$work/mmap.map"; then
+    ok "map (maps field in the map JSON)"
+else
+    bad "map JSON" "$(cat "$work/mmapm.err")"
+fi
+# The 65th map overflows MAX_MAPS (64).
+mi=0
+{
+    printf 'trait Controller {\n    int send(char *buf, int len);\n}\n'
+    printf 'struct Uart {\n    int fd;\n};\n'
+    printf 'struct Uart uart1;\n'
+    printf 'int mock_send(struct Uart *u, char *b, int n) {\n    (void)b;\n    return n + u->fd;\n}\n'
+    while [ "$mi" -lt 65 ]; do
+        printf 'map trait Controller for instance uart1 {\n    send(buf, len) -> mock_send(&uart1, buf, len);\n}\n'
+        mi=$((mi + 1))
+    done
+    printf 'int main(void) { return 0; }\n'
+} > "$work/map-many.ct"
+if "$work/ct-ast" "$work/map-many.ct" -o "$work/map-many.c" \
+        >"$work/map-many.out" 2>"$work/map-many.err"; then
+    bad "map cap" "expected a non-zero exit"
+elif grep -q "too many maps" "$work/map-many.err"; then
+    ok "map (MAX_MAPS cap)"
+else
+    bad "map cap" "no diagnostic on stderr"
 fi
 
 echo

@@ -1,0 +1,9 @@
+// map: the trait is not declared
+struct S {
+};
+
+struct S s;
+
+map trait Nope for instance s {
+    m() -> g();
+}

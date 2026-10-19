@@ -8,6 +8,7 @@
 > `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
 > [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
 > [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
+> Phase 11.1 新增的 `map`（把 trait 方法绑定到已声明的全局实例）**仅 ct-ast** 支持，L0 与 L2 都不接受，见 §4.10。
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -351,6 +352,39 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
   优于错放（重复释放 / 释放借用对象）。
 
+#### 4.10 `map`（Phase 11.1 新增，仅 ct-ast）
+
+`map` 把一个 trait 的方法绑定到某个**已声明的全局实例**上的具体调用，为实例发射一个「实例级包装函数」
+与一张 vtable；本切片只**发射**产物，尚未接入派发（接线留待 Phase 11.2）。它是 Phase 11.1 新增项，
+**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ast/main.ct`）支持。
+
+```c
+trait Controller {
+    int send(char *buf, int len);
+}
+struct Uart { int fd; };
+struct Uart uart1;                                    /* 必须是已声明的全局变量 */
+
+map trait Controller for instance uart1 {
+    send(buf, len) -> mock_uart_send(&uart1, buf, len);
+}
+```
+
+| 产物 | 规则 | 示例（实例 `uart1`，trait `Controller`，方法 `send`） |
+| --- | --- | --- |
+| 包装函数 | `<实例>_<Trait>_<方法>`，首参 `void *self`（体内 `(void)self;`） | `static int uart1_Controller_send(void *self, char *buf, int len)` |
+| vtable 变量 | `<实例>_<Trait>_vtable`，指定初始化 `.方法 = 包装函数` | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
+
+约束与限制：
+
+- `map trait T for instance x { … }` 中，`x` 必须是**已声明的全局变量**（文件作用域），否则编译期报错。
+- `T` 必须是已定义的 trait；无 vtbl 的 trait 不可映射。
+- 绑定方法名必须是 `T` 的既有方法，`( … )` 里的参数个数须与 trait 声明一致。
+- `->` 右侧（CALL）只接受受限子集——单层调用 `f(args)`，每个实参只能是：左括号内出现过的**形参名**、
+  `&<实例>`（须等于本 map 的实例名）、或数字 / `"…"` / `'…'` 字面量；其余实参编译期报错。
+- 多个 map 可作用于同一实例；`MAX_MAPS`（64）是 map 构造总数上限，超限报错。
+- `--emit-map` 的 JSON 新增 `maps` 字段，逐条列出 trait / instance / file / line 与 `bindings`（method → 生成符号）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/src/**` 恢复（本文不描述它）。
@@ -443,6 +477,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
 > landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
 > and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also CT-line-only but is described in §4.9.
+> The `map` construct added in Phase 11.1 (binding a trait method to a declared global instance) is
+> supported by **ct-ast only** — neither L0 nor L2 accepts it; see §4.10.
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -839,6 +875,44 @@ Constraints and limits:
 - Escape detection is **conservative**: a standalone mention on the right-hand side of an assignment
   or on a `return` line cancels auto-drop, because a missed release (a leak) beats a wrong one
   (double free / freeing a borrow).
+
+#### 4.10 `map` (new in Phase 11.1, ct-ast only)
+
+`map` binds a trait's method to a concrete call on a **declared global instance**, emitting an
+instance-level wrapper plus a vtable; this slice only **emits** the artifacts and is not yet wired
+into dispatch (that is Phase 11.2). It is a Phase 11.1 addition: **neither L0 nor L2 knows it** —
+only **ct-ast** (`selfhost/ast/main.ct`) supports it.
+
+```c
+trait Controller {
+    int send(char *buf, int len);
+}
+struct Uart { int fd; };
+struct Uart uart1;                                    /* must be a declared global */
+
+map trait Controller for instance uart1 {
+    send(buf, len) -> mock_uart_send(&uart1, buf, len);
+}
+```
+
+| Artifact | Rule | Example (instance `uart1`, trait `Controller`, method `send`) |
+| --- | --- | --- |
+| wrapper | `<inst>_<Trait>_<method>` with a leading `void *self` (body `(void)self;`) | `static int uart1_Controller_send(void *self, char *buf, int len)` |
+| vtable | `<inst>_<Trait>_vtable`, designated-init `.method = wrapper` | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
+
+Constraints and limits:
+
+- In `map trait T for instance x { … }`, `x` must be a **declared global variable** (file scope), else
+  a compile-time error.
+- `T` must be a defined trait; a trait without a vtbl cannot be mapped.
+- The bound method must be an existing method of `T`, and its `( … )` parameter count must match the
+  trait declaration.
+- The right-hand side of `->` (the CALL) accepts a restricted subset only — one `f(args)` call whose
+  every argument is a **parameter name** from the `( … )`, `&<instance>` (equal to this map's
+  instance), or a numeric / `"…"` / `'…'` literal; anything else is a compile-time error.
+- Several maps may target the same instance; `MAX_MAPS` (64) caps the total number of map blocks.
+- The `--emit-map` JSON gains a `maps` field listing trait / instance / file / line and `bindings`
+  (method → generated symbol) per map.
 
 ### 5. Naming contract
 

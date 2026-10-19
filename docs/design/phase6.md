@@ -136,6 +136,12 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 本阶段只做设计冻结（`map trait T for instance x { m() → CALL; }` → vtable 条目 + 反向映射条目）。
 **不实现**，直到官方 bindings 清单出现；避免用想象用例把实例语义定死。
 
+> **更新（2026-10-19，D19 解除）**：`map` 已从「设计冻结」解冻，立为 **Phase 11** 并在 **ct-ast** 主线落地
+> 切片 **11.1**——解析 `map trait T for instance x { … }`、发射实例级包装函数 `<inst>_<Trait>_<method>` 与
+> `<inst>_<Trait>_vtable`、`--emit-map` JSON 新增 `maps` 字段（**尚未接入派发**，见 11.2）。
+> 实际语义与产物命名以 [language-spec](../language-spec.md) §4.10 与 [roadmap](../roadmap.md) 的 Phase 11 为准；
+> 本节保留当时的设计冻结记录。
+
 ### 7. 6.6 方言系统（D20）
 
 - 展开器是**仓库外**的独立脚本（bash / Python / awk，作者自选语言），编译器零感知；因此 AGENTS §2 的
@@ -181,7 +187,7 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 | **D16** | 映射表形态 | ✅ `--emit-map <file|->` 输出独立 JSON，不塞进 `--diagnostics` |
 | **D17** | 增量缓存键 | ✅ `路径 + mtime + size + 版本 + 关键选项`，v1 不做内容哈希 |
 | **D18** | 多目标含义 | ✅ 先只做 C 标准 / cc 兼容性；跨平台推迟 |
-| **D19** | `map` 何时实现 | ✅ 本阶段只冻结设计，等官方 bindings 清单 |
+| **D19** | `map` 何时实现 | ✅ 本阶段只冻结设计，等官方 bindings 清单（**2026-10-19 解除：Phase 11 落地 11.1**） |
 | **D20** | 方言规约冲突 | ✅ 展开器留在仓库外；实现时修订 AGENTS §2（明确豁免 + 插件不调编译器） |
 
 ---
@@ -199,7 +205,8 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
    reuses the existing `.c/.h` (no content hashing in v1; `build` mode only).
 4. **Multi-target** — v1 defines only the C dialect target (`--std=c99` / `--std=gnu99`); cross-platform
    and cross-architecture are deferred.
-5. **`map`** — design frozen only; implement after an official bindings list exists (D8 says last).
+5. **`map`** — design frozen only; implement after an official bindings list exists (D8 says last)
+   — **lifted on 2026-10-19: Phase 11, whose 11.1 slice has landed on the ct-ast mainline**.
 6. **Dialect system** — the expander stays **outside** the repository; implementing it requires an
    explicit AGENTS §2 exemption and keeps the editor from calling the compiler.
 
@@ -305,6 +312,13 @@ the landing notes). Scalar fields are not listed in v1.
 
 Design frozen only (see the scope-and-order bullet); **not implemented** until an official bindings
 list appears.
+
+> **Update (2026-10-19, D19 lifted)**: `map` is no longer design-frozen — it became **Phase 11** and
+> slice **11.1** landed on the **ct-ast** mainline: parse `map trait T for instance x { … }`, emit the
+> instance-level wrapper `<inst>_<Trait>_<method>` and `<inst>_<Trait>_vtable`, and add the `maps`
+> field to the `--emit-map` JSON (**dispatch is not wired in yet — see 11.2**). The actual semantics
+> and artifact naming live in [language-spec](../language-spec.md) §4.10 and Phase 11 of the
+> [roadmap](../roadmap.md); this section keeps the original design-freeze record.
 
 ### 6.6 dialect system (D20)
 
