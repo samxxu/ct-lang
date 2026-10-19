@@ -1,0 +1,30 @@
+// 15: `map` CALL arguments — `&<another global>` and a member path on the instance
+#include <stdio.h>
+
+trait Reader {
+    int read(void);
+}
+
+struct Box {
+    int base;
+};
+
+struct Box box_a;
+struct Box box_b;
+
+static int pick(struct Box *b, int off) {
+    return b->base + off;
+}
+
+map trait Reader for instance box_a {
+    read() -> pick(&box_b, box_a.base);
+}
+
+int main(void) {
+    Reader r;
+    box_a.base = 2;
+    box_b.base = 10;
+    r = box_a;
+    printf("%d\n", r.read());
+    return 0;
+}

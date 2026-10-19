@@ -1,0 +1,14 @@
+// map: a trait method is left unbound (its vtable slot would be null)
+trait T {
+    void m();
+    void n();
+}
+
+struct S {
+};
+
+struct S s;
+
+map trait T for instance s {
+    m() -> g();
+}

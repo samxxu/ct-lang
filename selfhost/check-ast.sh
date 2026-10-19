@@ -46,6 +46,11 @@
 # 11.2 wires a mapped global instance into dispatch: `test/ast/14_map_dispatch`
 # uses it as a trait instance, and boxing it names the instance-level vtable.
 #
+# 11.3 hardens `map`: every trait method must be bound exactly once (an unbound
+# slot is a null pointer, a duplicate binding redefines the wrapper), and a CALL
+# argument may now be a bare visible name or a member path rooted at the
+# instance (test/ast/15_map_args).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -356,6 +361,25 @@ elif grep -q "too many maps" "$work/map-many.err"; then
     ok "map (MAX_MAPS cap)"
 else
     bad "map cap" "no diagnostic on stderr"
+fi
+# 11.3: a map must bind every trait method; an unbound slot would be a null
+# function pointer (calling it crashes at run time).
+if "$work/ct-ast" test/ast/errors/map_partial.ct -o "$work/mmap3.c" \
+        >"$work/mmap3.out" 2>"$work/mmap3.err"; then
+    bad "map completeness" "expected a non-zero exit"
+elif grep -q "is not bound by the map" "$work/mmap3.err"; then
+    ok "map (every trait method must be bound)"
+else
+    bad "map completeness" "$(cat "$work/mmap3.err")"
+fi
+# 11.3: a CALL argument may be `&<another global>` or a member path on the
+# instance. `15_map_args` also runs the boxed instance end to end.
+if "$work/ct-ast" test/ast/15_map_args/prog.ct -o "$work/mmap4.c" \
+        >"$work/mmap4.out" 2>"$work/mmap4.err" \
+   && grep -q 'return pick(&box_b, box_a.base);' "$work/mmap4.c"; then
+    ok "map (CALL args: &other-global and instance member path)"
+else
+    bad "map args" "$(cat "$work/mmap4.err")"
 fi
 
 echo

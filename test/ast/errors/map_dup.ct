@@ -1,0 +1,14 @@
+// map: the same method is bound twice (the wrapper would be redefined)
+trait T {
+    void m();
+}
+
+struct S {
+};
+
+struct S s;
+
+map trait T for instance s {
+    m() -> g();
+    m() -> g();
+}
