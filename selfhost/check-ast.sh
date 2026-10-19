@@ -30,6 +30,10 @@
 # A case without `expected.out` is judged compile-only; a dialect demo is first
 # expanded by its `ct-dialects/` plugin, since the compiler never sees the DSL.
 #
+# 10.3 adds the memory section: AutoDrop (`own`) fixtures and the conservative
+# leak warnings in text and JSON (compile and build mode), all byte-diffed
+# against L2's diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -443,6 +447,85 @@ if ( cd "$sem-json" && "$work/ct-ast" --diagnostics=json prog.ct -o prog.c ) \
     ok "sig_mismatch_json (JSON document matches L2)"
 else
     bad "sig_mismatch_json" "stdout differs: $(cat "$sem-json.out")"
+fi
+
+echo
+echo "== memory: auto-drop and leak warnings (10.3) =="
+# AutoDrop releases every `own` object at its scope exit, in reverse order; the
+# three negative fixtures pin the layout / Drop / scope diagnostics. Every
+# warning is byte-diffed against L2's, since D39 keeps diagnostics identical.
+mem="$work/mem"
+for c in autodrop autodrop_layout autodrop_nodrop autodrop_scope; do
+    rm -rf "$mem-$c"
+    mkdir -p "$mem-$c"
+    cp "test/modules/$c/prog.ct" "$mem-$c/"
+    args=$(cat "test/modules/$c/compile.args")
+    if ( cd "$mem-$c" && "$work/ct-ast" $args ) \
+            >"$mem-$c.out" 2>"$mem-$c.err"; then
+        if [ -f "test/modules/$c/expected.err" ]; then
+            bad "$c" "expected a non-zero exit"
+        elif "$CC" -Wall -Wextra -std=c99 "$mem-$c/prog.c" -o "$mem-$c.bin" \
+                2>"$mem-$c.cc" \
+             && "$mem-$c.bin" >"$mem-$c.stdout" 2>&1 \
+             && cmp -s "$mem-$c.stdout" "test/modules/$c/expected.out"; then
+            ok "$c (auto-drop releases at scope exit)"
+        else
+            bad "$c" "$(cat "$mem-$c.cc" "$mem-$c.stdout" 2>/dev/null | head -5)"
+        fi
+    elif [ -f "test/modules/$c/expected.err" ] \
+         && cmp -s "$mem-$c.err" "test/modules/$c/expected.err"; then
+        ok "$c (L2-identical diagnostic)"
+    else
+        bad "$c" "unexpected result: $(cat "$mem-$c.err")"
+    fi
+done
+
+for c in leak leak_path leak_call leak_method; do
+    rm -rf "$mem-$c"
+    mkdir -p "$mem-$c"
+    cp "test/modules/$c/prog.ct" "$mem-$c/"
+    args=$(cat "test/modules/$c/compile.args")
+    if ( cd "$mem-$c" && "$work/ct-ast" $args ) \
+            >"$mem-$c.out" 2>"$mem-$c.err" \
+       && cmp -s "$mem-$c.err" "test/modules/$c/expected.stderr" \
+       && "$CC" -Wall -Wextra -std=c99 "$mem-$c/prog.c" -o "$mem-$c.bin" \
+            2>"$mem-$c.cc" \
+       && "$mem-$c.bin" >"$mem-$c.stdout" 2>&1 \
+       && cmp -s "$mem-$c.stdout" "test/modules/$c/expected.out"; then
+        ok "$c (leak warning matches L2, the program runs)"
+    else
+        bad "$c" "$(cat "$mem-$c.err" "$mem-$c.cc" 2>/dev/null | head -5)"
+    fi
+done
+
+for c in leak_json leak_path_json; do
+    rm -rf "$mem-$c"
+    mkdir -p "$mem-$c"
+    cp "test/modules/$c/prog.ct" "$mem-$c/"
+    args=$(cat "test/modules/$c/compile.args")
+    if ( cd "$mem-$c" && "$work/ct-ast" $args ) \
+            >"$mem-$c.out" 2>"$mem-$c.err" \
+       && cmp -s "$mem-$c.out" "test/modules/$c/expected.stdout"; then
+        ok "$c (JSON leak document matches L2)"
+    else
+        bad "$c" "stdout differs: $(cat "$mem-$c.out")"
+    fi
+done
+
+# build mode: the JSON document goes to stderr (stdout carries the cc hint) and
+# the recorded path is the one given on the command line.
+rm -rf "$mem-leak_build"
+mkdir -p "$mem-leak_build"
+if "$work/ct-ast" build --diagnostics=json test/modules/leak_build/prog.ct \
+        -o "$mem-leak_build" >"$mem-leak_build.out" 2>"$mem-leak_build.err" \
+   && cmp -s "$mem-leak_build.err" test/modules/leak_build/expected.stderr \
+   && "$CC" -Wall -Wextra -std=c99 "$mem-leak_build/prog.c" \
+        -o "$mem-leak_build.bin" 2>"$mem-leak_build.cc" \
+   && "$mem-leak_build.bin" >"$mem-leak_build.stdout" 2>&1 \
+   && cmp -s "$mem-leak_build.stdout" test/modules/leak_build/expected.out; then
+    ok "leak_build (build-mode JSON on stderr, the program runs)"
+else
+    bad "leak_build" "$(cat "$mem-leak_build.err" "$mem-leak_build.cc" 2>/dev/null | head -5)"
 fi
 
 echo
