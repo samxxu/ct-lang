@@ -142,7 +142,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 - **集成**：用本地 git 仓库（`file://` 或工作区目录）充当 registry，避免测试依赖网络；
   放入 `test/modules/pkg_*`，由 `check-archive.sh` 的 designed cases 驱动。
 - **离线断言**：`ct build` 在断网/无 `git` 的环境下必须照常工作（用环境变量屏蔽 `git` 后跑一遍）。
-- **回归**：现有七道硬关卡保持全绿；`test/run.sh` 的 L0 层不受影响（包管理只在 L2）。
+- **回归**：现有硬关卡保持全绿（Phase 8 时为七道；Phase 9 起 `check-ast.sh` 接入为第 8 关）；`test/run.sh` 的 L0 层不受影响（包管理只在 L2）。
 
 ### 9. 风险与未决
 
@@ -174,7 +174,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 | 8.2 | git 源获取（系统 `git`，commit 锁定） | ✅ **已落地（2026-10-18）**：git 源可 `get`（本地 git 仓库作 registry 的离线用例），MVS 取最低满足 tag、无 tag 回退 HEAD、`ct.lock` 记 `name ver git <commit> <digest>`；无 `git` 时硬报错并提示，本地源照常可用；`test/pkg/run.sh` 扩到 14 项断言 |
 | 8.3 | `ct install` 校验与建议命令 | ✅ **已落地（2026-10-18）**：锁文件统一五列 `name ver kind ref <digest>`（逐文件加法折叠的 FNV-1a，只做变更检测）；`ct install` 离线校验每个锁定包的 `vendor/<name>` 存在且摘要相符、清单 `dep` 均被锁覆盖且版本在范围内，成功即打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`）；摘要不符 / 缺包 / 未覆盖依赖 / 清单不完整 / 空锁均硬报错，`test/pkg/run.sh` 扩到 27 项断言（含上述错误分支负例），另证 `ct build` 可用 `vendor/` 编译 |
 
-每片出口都要求既有七道硬关卡全绿；8.1 不引入任何网络/子进程代码，8.2 引入唯一子进程调用点（`ct get` 里的系统 `git`），`ct install` 仍零网络零子进程，编译路径（`ct compile` / `ct build`）全程零网络零子进程。
+每片出口都要求既有硬关卡全绿（Phase 8 时为七道；Phase 9 起 `check-ast.sh` 接入为第 8 关）；8.1 不引入任何网络/子进程代码，8.2 引入唯一子进程调用点（`ct get` 里的系统 `git`），`ct install` 仍零网络零子进程，编译路径（`ct compile` / `ct build`）全程零网络零子进程。
 
 ---
 
@@ -277,7 +277,8 @@ is one impl method, so it can be audited and stubbed in tests.
 Unit tests cover manifest parsing, range comparison, MVS and lock round-trips. Integration tests use a
 local `file://` git repository as the registry, so no test needs the network, and live under
 `test/modules/pkg_*` driven by `check-archive.sh`. An offline assertion proves `ct build` still works
-with `git` masked. The seven existing hard gates must stay green; the L0 layer is unaffected.
+with `git` masked. The existing hard gates must stay green (seven at Phase 8; `check-ast.sh` became the
+8th when Phase 9 wired it into `check-all.sh`); the L0 layer is unaffected.
 
 ### 9. Risks
 
@@ -307,7 +308,8 @@ declarations, digest verification) are still open.
 | 8.2 | git-sourced packages (system `git`, commit pinning) | ✅ **landed (2026-10-18)**: git sources fetch (offline cases use a local git repo as the registry); MVS picks the lowest satisfying tag with an HEAD fallback when there are none; `ct.lock` records `name ver git <commit> <digest>`; without `git` the command fails hard with a hint while local sources keep working; `test/pkg/run.sh` grew to 14 assertions |
 | 8.3 | `ct install` verification and the suggested command | ✅ **landed (2026-10-18)**: the lock is a uniform five columns `name ver kind ref <digest>` (an additive per-file FNV-1a fold, change detection only); `ct install` checks offline that each locked `vendor/<name>` exists with a matching digest and that every manifest `dep` is covered by the lock at a satisfying version, then prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`); a mismatch, a missing package, an uncovered dependency, an incomplete manifest or an empty lock fails hard, `test/pkg/run.sh` grew to 27 assertions (including those error branches), and it additionally proves `ct build` compiles against `vendor/` |
 
-Every slice keeps the seven existing hard gates green; 8.1 introduces no network or subprocess code, and
+Every slice keeps the existing hard gates green (seven at Phase 8; `check-ast.sh` became the 8th when
+Phase 9 wired it into `check-all.sh`); 8.1 introduces no network or subprocess code, and
 8.2 adds the single subprocess call site (the system `git` inside `ct get`) while the compile path
 (`ct compile` / `ct build`) stays network-free and process-free; `ct install` is likewise network-free
 and process-free.
