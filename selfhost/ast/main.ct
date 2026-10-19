@@ -141,11 +141,18 @@ typedef struct Fn {
     int  is_static;
     int  is_pub;
     int  line;
+    int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */
 } Fn;
 
 typedef struct Var {
     char name[MAX_TEXT];
     char type[MAX_TEXT];
+    /* leak tracking (10.3), mirroring L2's conservative rules */
+    int  st;            /* struct index when the type is `struct T *`, else -1 */
+    int  owned;         /* 1 when a heap object (malloc/calloc/owned callee) */
+    int  own_line;      /* source line of that allocation */
+    int  autodrop;      /* 1 when declared `own`: release at scope exit */
+    int  path_warned;   /* 1 once reported as possibly leaking on a return path */
 } Var;
 
 typedef struct MethodSig {
@@ -177,6 +184,7 @@ typedef struct StructDef {
     Field fields[MAX_FIELDS];
     int  nfields;
     int  defined;               /* a body was parsed; a forward declaration is not */
+    int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
 } StructDef;
 
 /* One translation unit of a `build`: its source, output base, declared
@@ -283,20 +291,38 @@ static const char *g_std_flag = "-std=c99";   /* --std=c99 | --std=gnu99 */
 static int  g_tokstart;
 static int  g_lstart;
 
-/* Collected signature-mismatch warnings (10.2). One document at the end, in the
-   same shape L2 emits (`{"warnings":[...]}` or one line each on stderr). */
+/* Collected warnings (10.2 signature mismatch, 10.3 leak). One document at the
+   end, in the same shape and order L2 emits (`{"warnings":[...]}` or one line
+   each on stderr). */
 #define MAX_WARNINGS 32
 typedef struct Warn {
+    int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path */
     int  line;
+    int  path_line;     /* kind 2: the conditional return that leaves it behind */
     char file[MAX_PATH];
-    char method[MAX_TEXT];
-    char trait[MAX_TEXT];
+    char var[MAX_TEXT]; /* leak: variable; mismatch: method */
+    char tname[MAX_TEXT]; /* leak: struct type; mismatch: trait */
     char stype[MAX_TEXT];
     char msg[MAX_TEXT];
 } Warn;
 static Warn g_warns[MAX_WARNINGS];
 static int  g_nwarns;
 static int  g_nsem;                   /* semantic errors reported in L2's format */
+
+/* AutoDrop (Phase 5, landed here in 10.3): every scope records where its `own`
+   declarations start, so the block can append the deletes in reverse order. */
+static int  g_own_decl[MAX_VARS];
+static int  g_nowner;
+static int  g_own_base[MAX_SCOPE];
+
+/* Leak analysis state (10.3): active only while a function or method body is
+   being parsed, so file-scope declarations are never tracked. `g_leak_frame`
+   is the body's own scope number -- a return in a deeper block is conditional.
+   `g_ret_owned` is the current function's ownership hint for its caller. */
+static int  g_leak_active;
+static int  g_leak_frame;
+static int  g_leak_impl;              /* 1 while parsing an impl method body */
+static int  g_ret_owned;
 
 trait AstOps {
     int  new_node(int kind);
@@ -420,14 +446,31 @@ trait DiagOps {
     int  sem_error(int line, int col, const char *msg);
     int  record_sig_warn(int line, const char *method, const char *trait,
                          const char *stype, const char *msg);
-    int  emit_warnings(void);
+    int  emit_warnings(FILE *jsonf, FILE *textf);
+}
+
+/* Memory semantics (Phase 10.3): `own` registration plus the leak analysis.
+   The rules are deliberately the conservative ones L2 uses (D40), so the
+   warnings match its output byte for byte. */
+trait MemoryOps {
+    int  mark_owned(int n, int line);
+    int  expr_alloc(int e);
+    int  expr_mentions(int e, const char *name);
+    int  expr_returns(int e, const char *name);
+    int  ret_same_struct(const char *ret, int si);
+    int  leak_decl(int n);
+    int  leak_scope(int from, int to);
+    int  leak_assign(int n);
+    int  leak_return(int ret, int conditional, int line);
+    int  leak_delete(int e);
+    int  warn_leak(int vi, int path_line);
 }
 
 /* The state lives in file-scope globals (9.x is a small compiler); the struct
    exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
 struct Ast {
     int nerr;
-} use AstOps, SymOps, ParseOps, ModuleOps, EmitOps, DiagOps;
+} use AstOps, SymOps, ParseOps, ModuleOps, EmitOps, DiagOps, MemoryOps;
 
 impl AstOps for Ast {
     int new_node(int kind)
@@ -802,6 +845,11 @@ impl AstOps for Ast {
         g_nfunc = 0;
         g_nvar = 0;
         g_nscope = 0;
+        g_nowner = 0;
+        g_leak_active = 0;
+        g_leak_frame = -1;
+        g_leak_impl = 0;
+        g_ret_owned = 0;
         g_ntype = 0;
         g_ntraits = 0;
         g_nstructs = 0;
@@ -851,7 +899,7 @@ impl AstOps for Ast {
             fprintf(stderr, "ct-ast: %s\n", g_errmsg);
             return 1;
         }
-        if (self->emit_warnings() != 0) return 1;
+        if (self->emit_warnings(stdout, stderr) != 0) return 1;
         return 0;
     }
 }
@@ -862,6 +910,7 @@ impl SymOps for Ast {
         (void)self;
         if (g_nscope >= MAX_SCOPE) return self->fail("too many nested scopes");
         g_scope[g_nscope] = g_nvar;
+        g_own_base[g_nscope] = g_nowner;
         g_nscope++;
         return 0;
     }
@@ -872,15 +921,23 @@ impl SymOps for Ast {
         if (g_nscope <= 0) return self->fail("scope stack underflow");
         g_nscope--;
         g_nvar = g_scope[g_nscope];
+        g_nowner = g_own_base[g_nscope];
         return 0;
     }
 
     int declare_var(const char *name, const char *type)
     {
+        int i;
         (void)self;
         if (g_nvar >= MAX_VARS) return self->fail("too many variables");
-        snprintf(g_vars[g_nvar].name, MAX_TEXT, "%s", name);
-        snprintf(g_vars[g_nvar].type, MAX_TEXT, "%s", type);
+        i = g_nvar;
+        snprintf(g_vars[i].name, MAX_TEXT, "%s", name);
+        snprintf(g_vars[i].type, MAX_TEXT, "%s", type);
+        g_vars[i].st = -1;
+        g_vars[i].owned = 0;
+        g_vars[i].own_line = 0;
+        g_vars[i].autodrop = 0;
+        g_vars[i].path_warned = 0;
         g_nvar++;
         return 0;
     }
@@ -927,6 +984,7 @@ impl SymOps for Ast {
             g_nfunc++;
             snprintf(g_funcs[i].name, MAX_TEXT, "%s", name);
             g_funcs[i].is_pub = 0;
+            g_funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
         }
         if (is_pub) g_funcs[i].is_pub = 1;
         snprintf(g_funcs[i].ret, MAX_TEXT, "%s", ret);
@@ -989,6 +1047,7 @@ impl SymOps for Ast {
         if (g_nstructs >= MAX_STRUCTS) return self->fail("too many structs");
         snprintf(g_structs[g_nstructs].name, MAX_TEXT, "%s", name);
         g_structs[g_nstructs].nuse = 0;
+        g_structs[g_nstructs].uses_drop = 0;
         g_nstructs++;
         return g_nstructs - 1;
     }
@@ -1336,7 +1395,15 @@ impl ParseOps for Ast {
         }
         snprintf(g_ret_type, sizeof g_ret_type, "%s", ret);
         snprintf(g_cur_func, sizeof g_cur_func, "%s", name);
+        /* the body is the leak analysis window; its own scope is the frame a
+           deeper return counts as conditional against */
+        g_leak_active = 1;
+        g_leak_frame = g_nscope + 1;
+        g_leak_impl = 0;
+        g_ret_owned = 0;
         b = self->parse_block();
+        g_leak_active = 0;
+        g_leak_frame = -1;
         g_cur_func[0] = 0;
         g_ret_type[0] = 0;
         if (b < 0) {
@@ -1348,6 +1415,7 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
+        g_funcs[fi].ret_owned = g_ret_owned;
         g_funcs[fi].line = func_line;
         f = self->new_node(N_FUNC);
         if (f < 0) {
@@ -1543,6 +1611,7 @@ impl ParseOps for Ast {
                 ai = self->find_struct(qname);
                 if (tagi >= 0 && ai >= 0 && tagi != ai) {
                     g_structs[ai].nuse = g_structs[tagi].nuse;
+                    g_structs[ai].uses_drop = g_structs[tagi].uses_drop;
                     for (ui = 0; ui < g_structs[tagi].nuse; ui++)
                         snprintf(g_structs[ai].use[ui], MAX_TEXT, "%s", g_structs[tagi].use[ui]);
                     g_structs[ai].nfields = g_structs[tagi].nfields;
@@ -1590,6 +1659,17 @@ impl ParseOps for Ast {
         for (;;) {
             if (g_tok != T_ID) return self->fail("expected a trait name");
             if (self->resolve_type(g_toktext, tname, sizeof tname) != 0) return -1;
+            /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
+               never joins the `use` list -- only the flag matters */
+            if (strcmp(tname, "Drop") == 0) {
+                g_structs[sindex].uses_drop = 1;
+                self->lex_next();
+                if (g_tok == T_PUNCT && strcmp(g_toktext, ",") == 0) {
+                    self->lex_next();
+                    continue;
+                }
+                break;
+            }
             if (g_structs[sindex].nuse >= MAX_TRAITS) return self->fail("too many used traits");
             snprintf(g_structs[sindex].use[g_structs[sindex].nuse], MAX_TEXT, "%s", tname);
             g_structs[sindex].nuse++;
@@ -1695,7 +1775,10 @@ impl ParseOps for Ast {
         snprintf(tname, sizeof tname, "%s", g_toktext);
         if (self->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->find_trait(rtrait);
-        if (ti < 0) return self->fail("impl of an unknown trait");
+        /* `Drop` is built in: no `trait Drop` declaration exists, but
+           `impl Drop for S` is legal and emits `S_Drop_drop` */
+        if (ti < 0 && strcmp(rtrait, "Drop") != 0)
+            return self->fail("impl of an unknown trait");
         self->lex_next();
         if (g_tok != T_ID || strcmp(g_toktext, "for") != 0)
             return self->fail("expected 'for' after the trait name");
@@ -1741,9 +1824,11 @@ impl ParseOps for Ast {
                (D39), so the module fixtures can be compared byte for byte. */
             nimpl = 0;
             for (k2 = params; k2 > 0; k2 = g_nodes[k2].next) nimpl++;
-            for (tm_i = 0; tm_i < g_traits[ti].nm; tm_i++)
-                if (strcmp(g_traits[ti].m[tm_i].name, mname) == 0) break;
-            if (tm_i < g_traits[ti].nm) {
+            tm_i = 0;
+            if (ti >= 0)
+                for (tm_i = 0; tm_i < g_traits[ti].nm; tm_i++)
+                    if (strcmp(g_traits[ti].m[tm_i].name, mname) == 0) break;
+            if (ti >= 0 && tm_i < g_traits[ti].nm) {
                 char wmsg[MAX_TEXT];
                 if (ret[0] && strcmp(ret, g_traits[ti].m[tm_i].ret) != 0) {
                     snprintf(wmsg, sizeof wmsg, "return type '%s' does not match the trait's '%s'",
@@ -1764,7 +1849,15 @@ impl ParseOps for Ast {
             snprintf(g_ret_type, sizeof g_ret_type, "%s", ret);
             snprintf(g_cur_func, sizeof g_cur_func, "%s_%s_%s",
                      g_structs[si].name, rtrait, mname);
+            /* the method body tracks leaks too; a method symbol is not in the
+               function table, so nothing feeds `ret_owned` back to callers */
+            g_leak_active = 1;
+            g_leak_frame = g_nscope + 1;
+            g_leak_impl = 1;
             body = self->parse_block();
+            g_leak_active = 0;
+            g_leak_frame = -1;
+            g_leak_impl = 0;
             g_cur_func[0] = 0;
             g_ret_type[0] = 0;
             if (body < 0) {
@@ -1779,7 +1872,7 @@ impl ParseOps for Ast {
             /* The emitted function takes the trait's return type (L2 does the
                same), so a mismatching impl still yields C that compiles; the
                map keeps the impl's written type in `text`. */
-            if (tm_i < g_traits[ti].nm)
+            if (ti >= 0 && tm_i < g_traits[ti].nm)
                 snprintf(g_nodes[mnode].text3, MAX_TEXT, "%s", g_traits[ti].m[tm_i].ret);
             g_nodes[mnode].a = params;
             g_nodes[mnode].b = body;
@@ -1846,11 +1939,12 @@ impl ParseOps for Ast {
 
     int parse_block(void)
     {
-        int blk, tail, s;
+        int blk, tail, s, base;
         (void)self;
 
         if (self->expect("{") != 0) return -1;
         if (self->push_scope() != 0) return -1;
+        base = g_own_base[g_nscope - 1];
         blk = self->new_node(N_BLOCK);
         if (blk < 0) {
             self->pop_scope();
@@ -1867,7 +1961,58 @@ impl ParseOps for Ast {
             else g_nodes[tail].next = s;
             tail = s;
         }
+        /* AutoDrop: append `delete v;` for this scope's `own` declarations, in
+           reverse order, just before the closing brace (L2's line rewrite does
+           the same). A brace that shares its line with code cannot host the
+           deletes, so that layout is rejected. */
+        if (g_nowner > base) {
+            int p, at_start, d;
+            at_start = 1;
+            for (p = g_lstart; p < g_tokstart; p++)
+                if (g_src[p] != ' ' && g_src[p] != '\t' && g_src[p] != '\r') at_start = 0;
+            if (!at_start) {
+                self->pop_scope();
+                return self->sem_error(g_tokline, 1,
+                    "auto-drop requires the closing '}' at the start of a line");
+            }
+            for (d = g_nowner - 1; d >= base; d--) {
+                int del, v, vi;
+                const char *tp;
+                size_t bl;
+                /* a reassigned / returned / moved `own` variable is no longer
+                   ours to release (L2 clears the same flag before its rewrite) */
+                vi = self->find_var(g_nodes[g_own_decl[d]].text2);
+                if (vi >= 0 && !g_vars[vi].autodrop) continue;
+                del = self->new_node(N_DELETE);
+                v = self->new_node(N_VAR);
+                if (del < 0 || v < 0) {
+                    self->pop_scope();
+                    return -1;
+                }
+                g_nodes[del].line = g_nodes[g_own_decl[d]].line;
+                snprintf(g_nodes[v].text2, MAX_TEXT, "%s", g_nodes[g_own_decl[d]].text2);
+                g_nodes[del].a = v;
+                tp = g_nodes[g_own_decl[d]].text;
+                if (strncmp(tp, "struct ", 7) == 0) tp += 7;
+                snprintf(g_nodes[del].text, MAX_TEXT, "%s", tp);
+                bl = strlen(g_nodes[del].text);
+                while (bl > 0 && (g_nodes[del].text[bl - 1] == '*'
+                                  || g_nodes[del].text[bl - 1] == ' ')) {
+                    bl = bl - 1;
+                    g_nodes[del].text[bl] = 0;
+                }
+                if (tail < 0) g_nodes[blk].a = del;
+                else g_nodes[tail].next = del;
+                tail = del;
+            }
+        }
         if (self->expect("}") != 0) {
+            self->pop_scope();
+            return -1;
+        }
+        /* a scope that closes with a still-owned heap object leaks it (L2
+           reports it at the same point, keeping the warning order) */
+        if (g_leak_active && self->leak_scope(g_scope[g_nscope - 1], g_nvar) != 0) {
             self->pop_scope();
             return -1;
         }
@@ -1882,11 +2027,18 @@ impl ParseOps for Ast {
 
         if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) return self->parse_block();
         if (g_tok == T_ID && strcmp(g_toktext, "return") == 0) {
+            int rline = g_tokline, at_start = 1, rp;
+            for (rp = g_lstart; rp < g_tokstart; rp++)
+                if (g_src[rp] != ' ' && g_src[rp] != '\t' && g_src[rp] != '\r') at_start = 0;
             s = self->new_node(N_RET);
             if (s < 0) return -1;
             self->lex_next();
             if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
                 self->lex_next();
+                /* a bare `return;` leaves every owned object behind */
+                if (g_leak_active
+                    && self->leak_return(-1, !at_start || g_nscope > g_leak_frame, rline) != 0)
+                    return -1;
                 return s;
             }
             e = self->parse_expr();
@@ -1899,6 +2051,11 @@ impl ParseOps for Ast {
                 }
             }
             g_nodes[s].a = e;
+            /* a return nested in a block (or written mid-line) may be skipped
+               at run time, so it only warns about what it leaves behind */
+            if (g_leak_active
+                && self->leak_return(e, !at_start || g_nscope > g_leak_frame, rline) != 0)
+                return -1;
             if (self->expect(";") != 0) return -1;
             return s;
         }
@@ -1909,6 +2066,29 @@ impl ParseOps for Ast {
             e = self->parse_expr();
             if (e < 0) return -1;
             g_nodes[s].a = e;
+            /* the object is released: it can neither leak nor auto-drop */
+            if (g_leak_active && self->leak_delete(e) != 0) return -1;
+            /* resolve the pointee's struct now (the variable may leave scope
+               before the delete is emitted) and remember it only when it uses
+               Drop; otherwise the emitter stays on the plain `free` path */
+            {
+                char dt[MAX_TEXT];
+                if (self->expr_type(e, dt, sizeof dt) == 0) {
+                    const char *dp = dt;
+                    size_t dl;
+                    int si;
+                    if (strncmp(dp, "struct ", 7) == 0) dp += 7;
+                    snprintf(g_nodes[s].text, MAX_TEXT, "%s", dp);
+                    dl = strlen(g_nodes[s].text);
+                    while (dl > 0 && (g_nodes[s].text[dl - 1] == '*'
+                                      || g_nodes[s].text[dl - 1] == ' ')) {
+                        dl = dl - 1;
+                        g_nodes[s].text[dl] = 0;
+                    }
+                    si = self->find_struct(g_nodes[s].text);
+                    if (si < 0 || !g_structs[si].uses_drop) g_nodes[s].text[0] = 0;
+                }
+            }
             if (self->expect(";") != 0) return -1;
             return s;
         }
@@ -2025,6 +2205,15 @@ impl ParseOps for Ast {
             self->pop_scope();
             return s;
         }
+        if (g_tok == T_ID && strcmp(g_toktext, "own") == 0) {
+            int own_line = g_tokline;
+            self->lex_next();
+            s = self->parse_decl_node();
+            if (s < 0) return -1;
+            if (self->expect(";") != 0) return -1;
+            if (self->mark_owned(s, own_line) != 0) return -1;
+            return s;
+        }
         if (g_tok == T_ID && (self->is_type_word(g_toktext)
                               || self->find_type(g_toktext) >= 0)) {
             s = self->parse_decl_node();
@@ -2129,6 +2318,7 @@ impl ParseOps for Ast {
                     g_nodes[n].a = e;
                 }
             }
+            if (g_leak_active && self->leak_decl(n) != 0) return -1;
             if (head < 0) head = n;
             else g_nodes[tail].next = n;
             tail = n;
@@ -2171,6 +2361,7 @@ impl ParseOps for Ast {
             g_nodes[n].a = e;
             g_nodes[n].b = rhs;
             g_nodes[n].aux = op;
+            if (g_leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
@@ -2195,6 +2386,7 @@ impl ParseOps for Ast {
             if (n < 0) return -1;
             g_nodes[n].a = e;
             g_nodes[n].b = rhs;
+            if (g_leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
         if (g_nodes[e].kind == N_POST) return e;
@@ -2977,6 +3169,11 @@ impl ModuleOps for Ast {
         g_tok = 0;
         g_nvar = 0;
         g_nscope = 0;
+        g_nowner = 0;
+        g_leak_active = 0;
+        g_leak_frame = -1;
+        g_leak_impl = 0;
+        g_ret_owned = 0;
         g_ns[0] = 0;
         g_ns_decl[0] = 0;
         g_self_mode = 0;
@@ -3084,6 +3281,9 @@ impl ModuleOps for Ast {
             self->lex_next();
             return self->parse_top_decl(1);
         }
+        if (g_tok == T_ID && strcmp(g_toktext, "own") == 0)
+            return self->sem_error(g_tokline, 1,
+                "'own' is only allowed inside a function body");
         if (g_tok == T_ID && strcmp(g_toktext, "typedef") == 0) {
             n = self->parse_typedef(is_pub);
         } else if (g_tok == T_ID && strcmp(g_toktext, "trait") == 0) {
@@ -3312,6 +3512,11 @@ impl ModuleOps for Ast {
         g_nfunc = 0;
         g_nvar = 0;
         g_nscope = 0;
+        g_nowner = 0;
+        g_leak_active = 0;
+        g_leak_frame = -1;
+        g_leak_impl = 0;
+        g_ret_owned = 0;
         g_ntype = 0;
         g_ntraits = 0;
         g_nstructs = 0;
@@ -3365,7 +3570,7 @@ impl ModuleOps for Ast {
         for (u = 0; u < g_nunits; u++)
             printf(" %s/%s.c", g_outdir, g_units[u].base);
         printf(" -o a.out\n");
-        if (self->emit_warnings() != 0) return 1;
+        if (self->emit_warnings(stderr, stderr) != 0) return 1;
         return 0;
     }
 }
@@ -3519,9 +3724,15 @@ impl EmitOps for Ast {
             if (g_nodes[n].kind != N_IMPL) continue;
             si = g_nodes[n].aux;
             tname = g_nodes[n].text2;
+            if (strcmp(tname, "Drop") == 0) continue;   /* no vptr, no vtable */
             fprintf(g_out, "static struct %s_vtbl %s_%s_vtable;\n",
                     tname, g_structs[si].name, tname);
         }
+        /* a `delete` in a function body runs before the drop definition below */
+        for (si = 0; si < g_nstructs; si++)
+            if (g_structs[si].uses_drop)
+                fprintf(g_out, "static void %s_Drop_drop(void *self);\n", g_structs[si].name);
+        if (g_nstructs) fputs("\n", g_out);
         return 0;
     }
 
@@ -3806,7 +4017,8 @@ impl EmitOps for Ast {
             ti = -1;
             for (k = 0; k < g_ntraits; k++)
                 if (strcmp(g_traits[k].name, tname) == 0) ti = k;
-            if (ti < 0) return self->fail("impl of an unknown trait");
+            if (ti < 0 && strcmp(tname, "Drop") != 0)
+                return self->fail("impl of an unknown trait");
             sname = g_nodes[n].text;
             for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
                 fprintf(g_out, "static %s %s_%s_%s(void *self",
@@ -3831,16 +4043,55 @@ impl EmitOps for Ast {
                 g_self_mode = 0;
                 fputs("}\n\n", g_out);
             }
-            fprintf(g_out, "static struct %s_vtbl %s_%s_vtable = {\n",
-                    tname, g_structs[si].name, tname);
-            u = 0;
-            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
-                if (u > 0) fputs(",\n", g_out);
-                fprintf(g_out, "    .%s = %s_%s_%s", g_nodes[m].text2,
-                        g_structs[si].name, tname, g_nodes[m].text2);
-                u++;
+            if (strcmp(tname, "Drop") != 0) {
+                fprintf(g_out, "static struct %s_vtbl %s_%s_vtable = {\n",
+                        tname, g_structs[si].name, tname);
+                u = 0;
+                for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+                    if (u > 0) fputs(",\n", g_out);
+                    fprintf(g_out, "    .%s = %s_%s_%s", g_nodes[m].text2,
+                            g_structs[si].name, tname, g_nodes[m].text2);
+                    u++;
+                }
+                fputs("\n};\n\n", g_out);
             }
-            fputs("\n};\n\n", g_out);
+        }
+        /* A struct that `use Drop` but writes no impl gets a drop that recurses
+           into its Drop-using value fields, the same shape L2 generates. */
+        {
+        int si;
+        for (si = 0; si < g_nstructs; si++) {
+            int has = 0, fi, used = 0;
+            if (!g_structs[si].uses_drop) continue;
+            for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
+                if (g_nodes[n].kind == N_IMPL && g_nodes[n].aux == si
+                    && strcmp(g_nodes[n].text2, "Drop") == 0) has = 1;
+            if (has) continue;
+            fprintf(g_out, "static void %s_Drop_drop(void *self) {\n", g_structs[si].name);
+            fprintf(g_out, "    struct %s *_self = (struct %s *)self;\n",
+                    g_structs[si].name, g_structs[si].name);
+            for (fi = 0; fi < g_structs[si].nfields; fi++) {
+                char base[MAX_TEXT];
+                const char *ft = g_structs[si].fields[fi].type;
+                size_t bl;
+                int ci;
+                if (strncmp(ft, "struct ", 7) == 0) ft += 7;
+                snprintf(base, sizeof base, "%s", ft);
+                bl = strlen(base);
+                while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
+                    bl = bl - 1;
+                    base[bl] = 0;
+                }
+                ci = self->find_struct(base);
+                if (ci >= 0 && g_structs[ci].uses_drop) {
+                    fprintf(g_out, "    %s_Drop_drop(&_self->%s);\n",
+                            g_structs[ci].name, g_structs[si].fields[fi].name);
+                    used = 1;
+                }
+            }
+            if (!used) fputs("    (void)_self;\n", g_out);
+            fputs("}\n\n", g_out);
+        }
         }
         return 0;
     }
@@ -3968,7 +4219,21 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_DELETE) {
+            int si;
+            si = -1;
+            if (g_nodes[n].text[0]) si = self->find_struct(g_nodes[n].text);
             self->emit_indent(ind);
+            if (si >= 0 && g_structs[si].uses_drop) {
+                /* a Drop struct runs its drop before the memory goes away */
+                fputs("if (", g_out);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fprintf(g_out, ") { %s_Drop_drop(", g_structs[si].name);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fputs("); free(", g_out);
+                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                fputs("); }\n", g_out);
+                return 0;
+            }
             fputs("if (", g_out);
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fputs(") free(", g_out);
@@ -4723,47 +4988,367 @@ impl DiagOps for Ast {
         (void)self;
         if (g_nwarns >= MAX_WARNINGS) return self->fail("too many warnings");
         w = &g_warns[g_nwarns];
+        w->kind = 1;
         w->line = line;
+        w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", g_path);
-        snprintf(w->method, sizeof w->method, "%s", method);
-        snprintf(w->trait, sizeof w->trait, "%s", trait);
+        snprintf(w->var, sizeof w->var, "%s", method);
+        snprintf(w->tname, sizeof w->tname, "%s", trait);
         snprintf(w->stype, sizeof w->stype, "%s", stype);
         snprintf(w->msg, sizeof w->msg, "%s", msg);
         g_nwarns++;
         return 0;
     }
 
-    /* One JSON document on stdout or one stderr line per warning -- the same
-       shape and wording L2 uses (D39). Warnings never change the exit code. */
-    int emit_warnings(void)
+    /* One JSON document or one line per warning -- the same shape and wording
+       L2 uses (D39). Compile mode sends JSON to stdout, build mode to stderr
+       (stdout already carries the suggested cc command). */
+    int emit_warnings(FILE *jsonf, FILE *textf)
     {
         int i;
         (void)self;
         if (g_nwarns == 0) return 0;
         if (g_diag_json) {
-            fputs("{\"warnings\":[", stdout);
+            fputs("{\"warnings\":[", jsonf);
             for (i = 0; i < g_nwarns; i++) {
                 Warn *w = &g_warns[i];
-                if (i) fputc(',', stdout);
-                fputs("{\"type\":\"signature_mismatch\",\"file\":\"", stdout);
-                self->emit_json_str(stdout, w->file);
-                fprintf(stdout, "\",\"line\":%d,\"method\":\"", w->line);
-                self->emit_json_str(stdout, w->method);
-                fputs("\",\"trait\":\"", stdout);
-                self->emit_json_str(stdout, w->trait);
-                fputs("\",\"struct\":\"", stdout);
-                self->emit_json_str(stdout, w->stype);
-                fputs("\",\"message\":\"", stdout);
-                self->emit_json_str(stdout, w->msg);
-                fputs("\"}", stdout);
+                if (i) fputc(',', jsonf);
+                if (w->kind == 1) {
+                    fputs("{\"type\":\"signature_mismatch\",\"file\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->file);
+                    fprintf(jsonf, "\",\"line\":%d,\"method\":\"", w->line);
+                    self->emit_json_str(jsonf, w->var);
+                    fputs("\",\"trait\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->tname);
+                    fputs("\",\"struct\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->stype);
+                    fputs("\",\"message\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->msg);
+                    fputs("\"}", jsonf);
+                } else if (w->kind == 2) {
+                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->file);
+                    fprintf(jsonf, "\",\"line\":%d,\"variable\":\"", w->line);
+                    self->emit_json_str(jsonf, w->var);
+                    fputs("\",\"type_name\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->tname);
+                    fprintf(jsonf, "*\",\"message\":\"may leak on a return path\","
+                                    "\"path_line\":%d}", w->path_line);
+                } else {
+                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->file);
+                    fprintf(jsonf, "\",\"line\":%d,\"variable\":\"", w->line);
+                    self->emit_json_str(jsonf, w->var);
+                    fputs("\",\"type_name\":\"", jsonf);
+                    self->emit_json_str(jsonf, w->tname);
+                    fputs("*\",\"message\":\"allocated but never deleted\"}", jsonf);
+                }
             }
-            fputs("]}\n", stdout);
+            fputs("]}\n", jsonf);
         } else {
-            for (i = 0; i < g_nwarns; i++)
-                fprintf(stderr, "%s:%d: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
-                        g_warns[i].file, g_warns[i].line, g_warns[i].method,
-                        g_warns[i].trait, g_warns[i].stype, g_warns[i].msg);
+            for (i = 0; i < g_nwarns; i++) {
+                Warn *w = &g_warns[i];
+                if (w->kind == 1)
+                    fprintf(textf, "%s:%d: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
+                            w->file, w->line, w->var, w->tname, w->stype, w->msg);
+                else if (w->kind == 2)
+                    fprintf(textf, "%s:%d: warning: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
+                            w->file, w->line, w->var, w->tname, w->path_line);
+                else
+                    fprintf(textf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
+                            w->file, w->line, w->var, w->tname);
+            }
         }
+        return 0;
+    }
+}
+
+impl MemoryOps for Ast {
+    /* `own T *x = malloc(...)`: the declaration is validated and remembered so
+       the enclosing block can append its release (L2's AutoDrop). */
+    int mark_owned(int n, int line)
+    {
+        int d;
+        (void)self;
+        d = n;
+        if (g_nodes[n].kind == N_DECLS) d = g_nodes[n].a;
+        while (d >= 0) {
+            char base[MAX_TEXT];
+            char msg[MAX_TEXT];
+            const char *tp = g_nodes[d].text;
+            size_t bl;
+            int si, vi;
+            if (g_nodes[d].text3[0] != 0)
+                return self->sem_error(line, 1, "'own' does not support arrays");
+            if (!self->expr_alloc(g_nodes[d].a))
+                return self->sem_error(line, 1,
+                                       "'own' requires a malloc or calloc initialiser");
+            if (strncmp(tp, "struct ", 7) == 0) tp += 7;
+            snprintf(base, sizeof base, "%s", tp);
+            bl = strlen(base);
+            while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
+                bl = bl - 1;
+                base[bl] = 0;
+            }
+            si = self->find_struct(base);
+            if (si < 0 || !g_structs[si].uses_drop) {
+                snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Drop'", base);
+                return self->sem_error(line, 1, msg);
+            }
+            vi = self->find_var(g_nodes[d].text2);
+            if (vi >= 0) g_vars[vi].autodrop = 1;
+            if (g_nowner >= MAX_VARS) return self->fail("too many owned variables");
+            g_own_decl[g_nowner] = d;
+            g_nowner++;
+            d = g_nodes[d].next;
+        }
+        return 0;
+    }
+
+    /* Is this expression a direct `malloc` / `calloc` call? Only that spelling
+       counts, exactly as in L2 (a cast in front already hides the allocation). */
+    int expr_alloc(int e)
+    {
+        (void)self;
+        if (e < 0) return 0;
+        if (g_nodes[e].kind != N_CALL) return 0;
+        if (strcmp(g_nodes[e].text2, "malloc") == 0) return 1;
+        if (strcmp(g_nodes[e].text2, "calloc") == 0) return 1;
+        return 0;
+    }
+
+    /* Does any name in the expression spell `name`? Field names count too: L2
+       scans words on the line, not values. */
+    int expr_mentions(int e, const char *name)
+    {
+        int p;
+        (void)self;
+        if (e < 0) return 0;
+        if (g_nodes[e].kind == N_VAR) return strcmp(g_nodes[e].text2, name) == 0;
+        if (g_nodes[e].kind == N_MEMBER || g_nodes[e].kind == N_ARROW) {
+            if (strcmp(g_nodes[e].text2, name) == 0) return 1;
+            return self->expr_mentions(g_nodes[e].a, name);
+        }
+        if (g_nodes[e].kind == N_CALL) {
+            if (strcmp(g_nodes[e].text2, name) == 0) return 1;
+            for (p = g_nodes[e].a; p >= 0; p = g_nodes[p].next)
+                if (self->expr_mentions(p, name)) return 1;
+            return 0;
+        }
+        if (self->expr_mentions(g_nodes[e].a, name)) return 1;
+        if (self->expr_mentions(g_nodes[e].b, name)) return 1;
+        if (self->expr_mentions(g_nodes[e].c, name)) return 1;
+        if (self->expr_mentions(g_nodes[e].d, name)) return 1;
+        return 0;
+    }
+
+    /* Does the expression hand `name` back by value? A field or member read
+       (`p->n`, `p.n`) is not a transfer; `p` and `p[0]` are, matching the
+       character test L2 applies after the name. */
+    int expr_returns(int e, const char *name)
+    {
+        int p;
+        (void)self;
+        if (e < 0) return 0;
+        if (g_nodes[e].kind == N_VAR) return strcmp(g_nodes[e].text2, name) == 0;
+        if (g_nodes[e].kind == N_MEMBER || g_nodes[e].kind == N_ARROW) return 0;
+        if (g_nodes[e].kind == N_INDEX) return self->expr_returns(g_nodes[e].a, name);
+        if (g_nodes[e].kind == N_CALL) {
+            for (p = g_nodes[e].a; p >= 0; p = g_nodes[p].next)
+                if (self->expr_returns(p, name)) return 1;
+            return 0;
+        }
+        if (self->expr_returns(g_nodes[e].a, name)) return 1;
+        if (self->expr_returns(g_nodes[e].b, name)) return 1;
+        if (self->expr_returns(g_nodes[e].c, name)) return 1;
+        if (self->expr_returns(g_nodes[e].d, name)) return 1;
+        return 0;
+    }
+
+    /* Is `ret` a pointer to struct `si`? L2 compares the recorded return type
+       with the variable's struct before trusting its `ret_owned` hint. */
+    int ret_same_struct(const char *ret, int si)
+    {
+        char rt[MAX_TEXT];
+        size_t bl;
+        (void)self;
+        bl = strlen(ret);
+        if (bl == 0 || ret[bl - 1] != '*') return 0;
+        snprintf(rt, sizeof rt, "%s", ret);
+        bl = strlen(rt);
+        while (bl > 0 && (rt[bl - 1] == '*' || rt[bl - 1] == ' ')) {
+            bl = bl - 1;
+            rt[bl] = 0;
+        }
+        if (strncmp(rt, "struct ", 7) == 0)
+            return strcmp(rt + 7, g_structs[si].name) == 0;
+        return strcmp(rt, g_structs[si].name) == 0;
+    }
+
+    /* A declaration: `struct T *p = malloc(...)` (or a call to a function that
+       returns an owned pointer of the same struct) starts tracking `p`. Any
+       other owned variable named in the initialiser escapes here, because L2
+       runs its assignment scan on the declaration line as well. */
+    int leak_decl(int n)
+    {
+        int e, vi, i, si, heap, call_owned;
+        (void)self;
+
+        e = g_nodes[n].a;
+        if (e < 0) return 0;
+        heap = self->expr_alloc(e);
+        call_owned = 0;
+        si = -1;
+        {
+            char base[MAX_TEXT];
+            char sname[MAX_TEXT];
+            const char *tp = g_nodes[n].text;
+            size_t bl = strlen(tp);
+            if (bl > 0 && tp[bl - 1] == '*' && g_nodes[n].text3[0] == 0) {
+                snprintf(base, sizeof base, "%s", tp);
+                bl = strlen(base);
+                while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
+                    bl = bl - 1;
+                    base[bl] = 0;
+                }
+                if (strncmp(base, "struct ", 7) == 0)
+                    snprintf(sname, sizeof sname, "%s", base + 7);
+                else
+                    snprintf(sname, sizeof sname, "%s", base);
+                si = self->find_struct(sname);
+                if (!heap && si >= 0 && g_nodes[e].kind == N_CALL) {
+                    int fi = self->find_func(g_nodes[e].text2);
+                    if (fi >= 0 && g_funcs[fi].ret_owned)
+                        call_owned = self->ret_same_struct(g_funcs[fi].ret, si);
+                }
+            }
+        }
+        vi = self->find_var(g_nodes[n].text2);
+        if (vi >= 0 && si >= 0) {
+            g_vars[vi].st = si;
+            if (heap || call_owned) {
+                g_vars[vi].owned = 1;
+                g_vars[vi].own_line = g_nodes[n].line;
+            }
+        }
+        for (i = 0; i < g_nvar; i++) {
+            if (i == vi) continue;
+            if (!g_vars[i].owned && !g_vars[i].autodrop) continue;
+            if (!self->expr_mentions(e, g_vars[i].name)) continue;
+            g_vars[i].owned = 0;
+            if (self->expr_returns(e, g_vars[i].name)) g_vars[i].autodrop = 0;
+        }
+        return 0;
+    }
+
+    /* A scope is closing: a still-owned object in it is unreachable. */
+    int leak_scope(int from, int to)
+    {
+        int i;
+        (void)self;
+        for (i = from; i < to; i++)
+            if (g_vars[i].owned && !g_vars[i].autodrop && !g_vars[i].path_warned)
+                if (self->warn_leak(i, 0) != 0) return -1;
+        return 0;
+    }
+
+    /* An assignment: the target keeps ownership (`p = x` only stops AutoDrop),
+       anything else owned and named on the line escapes. */
+    int leak_assign(int n)
+    {
+        int lhs, rhs, bv, i;
+        (void)self;
+        lhs = g_nodes[n].a;
+        rhs = g_nodes[n].b;
+        bv = -1;
+        if (lhs >= 0) {
+            if (g_nodes[lhs].kind == N_VAR)
+                bv = self->find_var(g_nodes[lhs].text2);
+            else if (g_nodes[lhs].kind == N_MEMBER || g_nodes[lhs].kind == N_ARROW) {
+                int b = g_nodes[lhs].a;
+                if (b >= 0 && g_nodes[b].kind == N_VAR)
+                    bv = self->find_var(g_nodes[b].text2);
+            }
+        }
+        for (i = 0; i < g_nvar; i++) {
+            if (i == bv) {
+                if (g_vars[i].autodrop && lhs >= 0 && g_nodes[lhs].kind == N_VAR)
+                    g_vars[i].autodrop = 0;
+                continue;
+            }
+            if (!g_vars[i].owned && !g_vars[i].autodrop) continue;
+            if (!self->expr_mentions(lhs, g_vars[i].name)
+                && !self->expr_mentions(rhs, g_vars[i].name)) continue;
+            g_vars[i].owned = 0;
+            if (self->expr_returns(rhs, g_vars[i].name)) g_vars[i].autodrop = 0;
+        }
+        return 0;
+    }
+
+    /* A return: at the body's own level it moves the returned object's
+       ownership out and tells the caller (one level, via `ret_owned`); nested in
+       a block it may be skipped, so everything it leaves behind is reported once
+       as a possible leak. */
+    int leak_return(int ret, int conditional, int line)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < g_nvar; i++) {
+            int pos = 0;
+            if (g_vars[i].autodrop) {
+                if (ret >= 0 && self->expr_mentions(ret, g_vars[i].name))
+                    g_vars[i].autodrop = 0;
+                continue;
+            }
+            if (!g_vars[i].owned) continue;
+            if (ret >= 0 && self->expr_returns(ret, g_vars[i].name)) pos = 1;
+            if (!conditional) {
+                if (pos) {
+                    g_vars[i].owned = 0;
+                    if (!g_leak_impl) g_ret_owned = 1;
+                }
+                continue;
+            }
+            if (!pos && !g_vars[i].path_warned) {
+                g_vars[i].path_warned = 1;
+                if (self->warn_leak(i, line) != 0) return -1;
+            }
+        }
+        return 0;
+    }
+
+    int leak_delete(int e)
+    {
+        int vi;
+        (void)self;
+        if (e < 0 || g_nodes[e].kind != N_VAR) return 0;
+        vi = self->find_var(g_nodes[e].text2);
+        if (vi < 0) return 0;
+        g_vars[vi].owned = 0;
+        g_vars[vi].autodrop = 0;
+        return 0;
+    }
+
+    /* Record one leak warning. `path_line` 0 means a definite leak; otherwise it
+       is the conditional return that leaves the object behind. */
+    int warn_leak(int vi, int path_line)
+    {
+        Warn *w;
+        (void)self;
+        if (g_nwarns >= MAX_WARNINGS) return self->fail("too many warnings");
+        w = &g_warns[g_nwarns];
+        w->kind = (path_line > 0) ? 2 : 0;
+        w->line = g_vars[vi].own_line;
+        w->path_line = path_line;
+        snprintf(w->file, sizeof w->file, "%s", g_path);
+        snprintf(w->var, sizeof w->var, "%s", g_vars[vi].name);
+        if (g_vars[vi].st >= 0)
+            snprintf(w->tname, sizeof w->tname, "%s", g_structs[g_vars[vi].st].name);
+        else
+            w->tname[0] = 0;
+        w->stype[0] = 0;
+        w->msg[0] = 0;
+        g_nwarns++;
         return 0;
     }
 }
