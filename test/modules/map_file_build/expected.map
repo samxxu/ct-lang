@@ -1,5 +1,5 @@
 {
-  "compiler": "ct v0.9.0",
+  "compiler": "ct v0.10.0",
   "file": "test/modules/map_file_build/prog.ct",
   "traits": [{"name":"Greeter","cname":"Greeter","file":"test/modules/map_file_build/prog.ct","line":3,"methods":[{"name":"greet","ret":"void","params":0}]}],
   "structs": [{"name":"Person","cname":"Person","file":"test/modules/map_file_build/prog.ct","line":7,"uses":["Greeter","Drop"]}],

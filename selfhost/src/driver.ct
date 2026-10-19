@@ -33,7 +33,7 @@ import core;
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
 #define MAX_KEY   768                     /* one unit's cache key, stored as text */
 
-#define CTC_VERSION "0.9.0"
+#define CTC_VERSION "0.10.0"
 
 /* The incremental-build cache (Phase 6.3). These are methods rather than plain
    functions because plain-C top-level signatures are capped (MAX_FUNCS) and this
