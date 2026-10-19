@@ -3114,16 +3114,42 @@ impl ParseOps for Ast {
     }
 
     /* Wrap `n` in a fat pointer when `trait` is expected; an expression that is
-       already the right interface passes through unchanged. */
+       already the right interface passes through unchanged. A declared global
+       instance bound by `map` (11.2) boxes with its instance-level vtable even
+       when its struct never `use`d the trait. */
     int maybe_box(int n, const char *trait)
     {
         char t[MAX_TEXT];
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
-        int is_ptr, si, u, box, found;
+        char iname[MAX_TEXT];
+        int is_ptr, si, u, box, found, i, mptr;
         (void)self;
 
         if (g_nodes[n].kind == N_BOX) return n;
+        /* N_BOX text2 names the vtable's owner: the struct for a struct-level
+           box, the instance for a `map` box, so the same `<owner>_<trait>_vtable`
+           emit rule covers both. */
+        mptr = 0;
+        iname[0] = 0;
+        if (g_nodes[n].kind == N_VAR) {
+            snprintf(iname, sizeof iname, "%s", g_nodes[n].text2);
+        } else if (g_nodes[n].kind == N_ADDR && g_nodes[g_nodes[n].a].kind == N_VAR) {
+            snprintf(iname, sizeof iname, "%s", g_nodes[g_nodes[n].a].text2);
+            mptr = 1;
+        }
+        if (iname[0]) {
+            for (i = 0; i < g_nmaps; i++)
+                if (strcmp(g_maps[i].inst, iname) == 0 && strcmp(g_maps[i].trait, trait) == 0) {
+                    box = self->new_node(N_BOX);
+                    if (box < 0) return -1;
+                    g_nodes[box].a = n;
+                    g_nodes[box].aux = mptr;
+                    snprintf(g_nodes[box].text, MAX_TEXT, "%s", trait);
+                    snprintf(g_nodes[box].text2, MAX_TEXT, "%s", iname);
+                    return box;
+                }
+        }
         if (self->expr_type(n, t, sizeof t) != 0)
             return self->fail("cannot infer the type to box");
         if (self->is_iface_type(t, tname, sizeof tname)) {

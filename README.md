@@ -3,7 +3,7 @@
 > **v0.10.0** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**；**Phase 9（AST 版编译器，新主线）设计已冻结（2026-10-18，D28–D37 全部定案），9.1–9.7 已落地**（自编 + 不动点 + 全量行为等价，旧管线 `selfhost/src/**` 按 D36 冻结归档），收口 bump 到 **v0.9.0**；**Phase 10（主线切换）已完成，10.1–10.7 全部落地**（ct-ast 承接诊断 / 内存 / 多错误恢复 / 增量缓存 / 包管理，10.7 起安装入口由 `selfhost/ast/main.ct` 提供，L2 降为回归 oracle），收口 bump 到 **v0.10.0**——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
+它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**；**Phase 9（AST 版编译器，新主线）设计已冻结（2026-10-18，D28–D37 全部定案），9.1–9.7 已落地**（自编 + 不动点 + 全量行为等价，旧管线 `selfhost/src/**` 按 D36 冻结归档），收口 bump 到 **v0.9.0**；**Phase 10（主线切换）已完成，10.1–10.7 全部落地**（ct-ast 承接诊断 / 内存 / 多错误恢复 / 增量缓存 / 包管理，10.7 起安装入口由 `selfhost/ast/main.ct` 提供，L2 降为回归 oracle），收口 bump 到 **v0.10.0**；**Phase 11（`map` 构造，D19 解除）的 11.1–11.2 已落地（2026-10-19，仅 ct-ast）**——11.2 已把映射实例接入派发（装箱用实例级 vtable，未 `use` 该 trait 的 struct 亦可作为其实例运行），收口 bump **v0.11.0** 待做——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
 
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
@@ -107,14 +107,14 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 | `Person ps[2];` | 声明 + 块内循环逐元素写 vptr，之后 `ps[0].greet()`、`ps[i].greet()` 可派发；`Person *ptrs[2]` 的元素自身是指针，用 `ptrs[i]->greet()` |
 | `delete q;` | `if (q) free(q);`（现对**任意指针**成立，含 `char *`） |
 | `own T *p = malloc(sizeof(struct T));` | 去掉 `own`；作用域闭合 `}` / 行首 `return` 之前自动插入 `if (p) { T_Drop_drop(p); free(p); p = 0; }`（**Phase 5，仅 CT 线**） |
-| `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | 发射实例级包装函数 + vtable：`static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` 与 `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };`（**Phase 11.1，仅 ct-ast**；尚未接入派发） |
+| `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | 发射实例级包装函数 + vtable：`static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` 与 `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };`（**Phase 11，仅 ct-ast**；11.2 已接入派发——`Controller c = uart1;` 装箱用 `&uart1_Controller_vtable`） |
 | `T *p = malloc(sizeof(struct T));` | 声明后自动写 vptr（含嵌套值字段）：`p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
 | 其它任意 C 代码 | 原样透传 |
 
-> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。`map`（Phase 11.1）**只属 ct-ast**，L0 与 L2 都不认识。
+> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。`map`（Phase 11）**只属 ct-ast**，L0 与 L2 都不认识。
 
 命名规则：
 
@@ -392,7 +392,7 @@ commits and content digests; `ct install` verifies offline and prints the sugges
 the phase closed with the bump to **v0.8.0**. **Phase 9 (the AST-based compiler, the new mainline) is
 design-frozen as of 2026-10-18 (D28–D37 all decided) and slices 9.1–9.7 have landed** (self-compilation
 + fixpoint + whole-corpus behavioural equivalence; the old pipeline `selfhost/src/**` is frozen and
-archived per D36), closing with the bump to **v0.9.0**; **Phase 10 (mainline switch) is complete, slices 10.1–10.7 all landed** (ct-ast takes over diagnostics / memory / multi-error recovery / the incremental cache / package management, and from 10.7 the installed entry comes from `selfhost/ast/main.ct` with L2 demoted to the regression oracle), closing with the bump to **v0.10.0** — see
+archived per D36), closing with the bump to **v0.9.0**; **Phase 10 (mainline switch) is complete, slices 10.1–10.7 all landed** (ct-ast takes over diagnostics / memory / multi-error recovery / the incremental cache / package management, and from 10.7 the installed entry comes from `selfhost/ast/main.ct` with L2 demoted to the regression oracle), closing with the bump to **v0.10.0**; **Phase 11 (the `map` construct, D19 lifted) has landed slices 11.1–11.2 (2026-10-19, ct-ast only)** — 11.2 wires the mapped instance into dispatch (boxing uses the instance-level vtable, so a struct that never `use`d the trait still runs as its instance), with the v0.11.0 close still to do — see
 [docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
 
 Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the entry command
@@ -494,7 +494,7 @@ From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, an
 | `Person ps[2];` | the declaration plus a scoped loop writing each element's vptr, after which `ps[0].greet()` and `ps[i].greet()` dispatch; an element of `Person *ptrs[2]` is itself a pointer, so `ptrs[i]->greet()` |
 | `delete q;` | `if (q) free(q);` (this now holds for **any** pointer, `char *` included) |
 | `own T *p = malloc(sizeof(struct T));` | `own` is dropped; before the scope's closing `}` / a line-initial `return` the compiler inserts `if (p) { T_Drop_drop(p); free(p); p = 0; }` (**Phase 5, CT line only**) |
-| `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | emits an instance-level wrapper plus a vtable: `static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` and `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` (**Phase 11.1, ct-ast only**; not wired into dispatch yet) |
+| `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | emits an instance-level wrapper plus a vtable: `static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` and `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` (**Phase 11, ct-ast only**; 11.2 wires it into dispatch — `Controller c = uart1;` boxes with `&uart1_Controller_vtable`) |
 | `T *p = malloc(sizeof(struct T));` | the vptrs (including nested value fields) are written right after the declaration: `p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
@@ -504,7 +504,7 @@ From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, an
 > Module-system syntax — `namespace` / `A::B::Name` qualified references / `pub` / `import` — is **not
 > accepted by L0** (moved out in Phase 0.3; redone on the CT line in Phases 2–5, see below). Written in
 > a source file it is reported as an error rather than copied through. `own` (AutoDrop) is likewise
-> **CT-line only** (L2 / ct-ast); L0 copies it through unchanged. `map` (Phase 11.1) is **ct-ast
+> **CT-line only** (L2 / ct-ast); L0 copies it through unchanged. `map` (Phase 11) is **ct-ast
 > only** — neither L0 nor L2 knows it.
 
 Naming rules:

@@ -27,7 +27,7 @@
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
 | Phase 9 | **AST 版编译器**（新主线） | 新增 | ✅ 9.1–9.7 已落地（2026-10-18）：自编 + 不动点 + **全量行为等价**（`check-ast.sh`，Phase 9 收口时 60 项，Phase 10 现为 105 项）；旧管线 `selfhost/src/**` 按 D36 冻结归档（tag `pre-ast-mainline`）；**已 bump 到 v0.9.0 收口** | 自编 + 行为等价 |
 | Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | ✅ 10.1–10.7 全部落地（2026-10-19；[design/phase10.md](design/phase10.md)，D38–D45 已按建议值确认）：CLI/身份、语义诊断、内存、多错误恢复、增量缓存、包管理迁移、切主线；安装入口由 ct-ast 提供（切换前 tag `pre-ct-ast-switch`），**已 bump 到 v0.10.0 收口** | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
-| Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | 🚧 11.1 已落地（2026-10-19）：解析 + 实例级包装/vtable 发射 + `--emit-map` 的 `maps` 字段 + 负例（D19 解除，见 [design/phase6.md](design/phase6.md) §6.5）；**派发接线（11.2）与本阶段 bump（v0.11.0）待做** | 设计冻结 + 新用例全绿；收口时按规范 bump v0.11.0 |
+| Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | 🚧 11.1–11.2 已落地（2026-10-19）：解析 + 实例级包装/vtable + `--emit-map` 的 `maps` 字段 + 负例；**11.2 接入派发**（实例装箱用实例级 vtable，未 `use` 该 trait 亦可作为其实例运行，见 [design/phase6.md](design/phase6.md) §6.5）；**本阶段 bump（v0.11.0）待做** | 设计冻结 + 新用例全绿；收口时按规范 bump v0.11.0 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -858,8 +858,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - **背景**：`map` 原在 Phase 6.5 **仅设计冻结**（D19：等官方 bindings 清单再实现）。2026-10-19 用户确认把 `map` 立为 **Phase 11**，入口语法 `map trait T for instance x { m() → CALL; }`——把 trait 方法绑定到某个**已声明的全局实例**上的具体调用；先落 **ct-ast** 主线（L0 / L1 / L2 一律不动）。语义与产物命名见 [language-spec](language-spec.md) §4.10。
 - **切片**：
-  - **11.1（已落地，2026-10-19）**：解析 `map` 构造（`instance` 必须是已声明的全局变量、trait 已定义、绑定方法与参数个数须匹配、`CALL` 只接受受限子集）＋ 发射实例级包装函数 `<inst>_<Trait>_<method>`（首参 `void *self`，体内 `(void)self;`）与 `<inst>_<Trait>_vtable`（指定初始化）＋ `--emit-map` JSON 新增 `maps` 字段。正向 fixture `test/ast/13_map_instance/`，5 条负例进 `test/ast/errors/`，`check-ast.sh` 新增 map 小节（wrapper/vtable、maps JSON、`MAX_MAPS` 上限）。**产物是静态、自包含的，尚未接入隐式装箱／动态派发**。
-  - **11.2（待做）**：把映射实例接入派发（运行时效果）。
+  - **11.1（已落地，2026-10-19）**：解析 `map` 构造（`instance` 必须是已声明的全局变量、trait 已定义、绑定方法与参数个数须匹配、`CALL` 只接受受限子集）＋ 发射实例级包装函数 `<inst>_<Trait>_<method>`（首参 `void *self`，体内 `(void)self;`）与 `<inst>_<Trait>_vtable`（指定初始化）＋ `--emit-map` JSON 新增 `maps` 字段。正向 fixture `test/ast/13_map_instance/`，5 条负例进 `test/ast/errors/`，`check-ast.sh` 新增 map 小节（wrapper/vtable、maps JSON、`MAX_MAPS` 上限）。
+  - **11.2（已落地，2026-10-19）**：把映射实例接入派发（运行时效果）——在 `maybe_box` 里识别「被 `map` 绑定的全局实例」，装箱时使用**实例级** vtable（`Controller c = uart1;` → `(struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable }`），即便其 struct 未 `use` 该 trait；此后经 `c.vt->send(c.self, …)` 派发到包装函数。正向 fixture `test/ast/14_map_dispatch/`（端到端运行输出 `7`），`check-ast.sh` 增加派发断言。本切片**不新增语法**，故未加负例。
 - **出口**：设计冻结 + 新用例全绿；收口时按规范 bump 到 **v0.11.0**（五处 `CTC_VERSION` 同步 + 全量 golden 重生成；属冻结期例外，需用户显式授权）。**11.1 本切片不 bump。**
 
 ### 决策待定项

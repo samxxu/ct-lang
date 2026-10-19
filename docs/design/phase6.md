@@ -138,7 +138,8 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
 
 > **更新（2026-10-19，D19 解除）**：`map` 已从「设计冻结」解冻，立为 **Phase 11** 并在 **ct-ast** 主线落地
 > 切片 **11.1**——解析 `map trait T for instance x { … }`、发射实例级包装函数 `<inst>_<Trait>_<method>` 与
-> `<inst>_<Trait>_vtable`、`--emit-map` JSON 新增 `maps` 字段（**尚未接入派发**，见 11.2）。
+> `<inst>_<Trait>_vtable`、`--emit-map` JSON 新增 `maps` 字段；切片 **11.2** 已把映射实例**接入派发**
+> （装箱用实例级 vtable，未 `use` 该 trait 的 struct 亦可作为其实例运行）。
 > 实际语义与产物命名以 [language-spec](../language-spec.md) §4.10 与 [roadmap](../roadmap.md) 的 Phase 11 为准；
 > 本节保留当时的设计冻结记录。
 
@@ -316,9 +317,10 @@ list appears.
 > **Update (2026-10-19, D19 lifted)**: `map` is no longer design-frozen — it became **Phase 11** and
 > slice **11.1** landed on the **ct-ast** mainline: parse `map trait T for instance x { … }`, emit the
 > instance-level wrapper `<inst>_<Trait>_<method>` and `<inst>_<Trait>_vtable`, and add the `maps`
-> field to the `--emit-map` JSON (**dispatch is not wired in yet — see 11.2**). The actual semantics
-> and artifact naming live in [language-spec](../language-spec.md) §4.10 and Phase 11 of the
-> [roadmap](../roadmap.md); this section keeps the original design-freeze record.
+> field to the `--emit-map` JSON; slice **11.2** has now **wired the mapped instance into dispatch**
+> (boxing uses the instance-level vtable, so a struct that never `use`d the trait still runs as its
+> instance). The actual semantics and artifact naming live in [language-spec](../language-spec.md) §4.10
+> and Phase 11 of the [roadmap](../roadmap.md); this section keeps the original design-freeze record.
 
 ### 6.6 dialect system (D20)
 

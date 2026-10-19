@@ -43,6 +43,9 @@
 # 11.1 adds the map construct section: a `map` binding's wrapper + vtable, the
 # `maps` field of the map JSON, and the MAX_MAPS cap.
 #
+# 11.2 wires a mapped global instance into dispatch: `test/ast/14_map_dispatch`
+# uses it as a trait instance, and boxing it names the instance-level vtable.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -303,9 +306,9 @@ else
 fi
 
 echo
-echo "== map construct (11.1) =="
-# A `map` binding emits an instance-level wrapper plus a vtable (static, not wired
-# into dispatch until 11.2) and is described by the `maps` field of the map JSON.
+echo "== map construct (11.1-11.2) =="
+# A `map` binding emits an instance-level wrapper plus a vtable, described by the
+# `maps` field of the map JSON; 11.2 boxes the bound instance with that vtable.
 if "$work/ct-ast" test/ast/13_map_instance/prog.ct -o "$work/mmap.c" \
         >"$work/mmap.out" 2>"$work/mmap.err" \
    && grep -q 'static int uart1_Controller_send(void \*self' "$work/mmap.c" \
@@ -313,6 +316,16 @@ if "$work/ct-ast" test/ast/13_map_instance/prog.ct -o "$work/mmap.c" \
     ok "map (wrapper + vtable emitted)"
 else
     bad "map emit" "$(cat "$work/mmap.err")"
+fi
+# `Controller c; c = uart1;` boxes the instance with `&uart1_Controller_vtable`,
+# not the struct-level `&Uart_Controller_vtable` (which does not exist).
+if "$work/ct-ast" test/ast/14_map_dispatch/prog.ct -o "$work/mmap2.c" \
+        >"$work/mmap2.out" 2>"$work/mmap2.err" \
+   && grep -q '(void \*)&uart1, &uart1_Controller_vtable }' "$work/mmap2.c" \
+   && ! grep -q 'Uart_Controller_vtable' "$work/mmap2.c"; then
+    ok "map (dispatch: the instance-level vtable boxes the instance)"
+else
+    bad "map dispatch" "$(cat "$work/mmap2.err")"
 fi
 if "$work/ct-ast" --emit-map - test/ast/13_map_instance/prog.ct -o "$work/mmapm.c" \
         >"$work/mmap.map" 2>"$work/mmapm.err" \

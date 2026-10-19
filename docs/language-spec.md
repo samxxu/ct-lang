@@ -352,11 +352,12 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
   优于错放（重复释放 / 释放借用对象）。
 
-#### 4.10 `map`（Phase 11.1 新增，仅 ct-ast）
+#### 4.10 `map`（Phase 11 新增，仅 ct-ast）
 
 `map` 把一个 trait 的方法绑定到某个**已声明的全局实例**上的具体调用，为实例发射一个「实例级包装函数」
-与一张 vtable；本切片只**发射**产物，尚未接入派发（接线留待 Phase 11.2）。它是 Phase 11.1 新增项，
-**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ast/main.ct`）支持。
+与一张 vtable；**Phase 11.2 已把该实例接入派发**——它被当作 trait 接口值使用时（赋给 `T` 类型的
+变量、传给 `T` 接口参数、从接口返回、或作为函数实参），装箱会使用这张**实例级** vtable，从而作为该
+trait 的实例运行。它是 Phase 11 新增项，**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ast/main.ct`）支持。
 
 ```c
 trait Controller {
@@ -383,6 +384,10 @@ map trait Controller for instance uart1 {
 - `->` 右侧（CALL）只接受受限子集——单层调用 `f(args)`，每个实参只能是：左括号内出现过的**形参名**、
   `&<实例>`（须等于本 map 的实例名）、或数字 / `"…"` / `'…'` 字面量；其余实参编译期报错。
 - 多个 map 可作用于同一实例；`MAX_MAPS`（64）是 map 构造总数上限，超限报错。
+- **派发（11.2）**：把映射实例装箱为 trait 接口值时，用**实例级** vtable——
+  `Controller c = uart1;` → `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };`
+  （注意不是 struct 级的 `&Uart_Controller_vtable`）。因此**即便 `Uart` 未 `use Controller`**，
+  `uart1` 也能作为 `Controller` 实例使用；此后 `c.send(...)` 经 `c.vt->send(c.self, ...)` 派发到包装函数。
 - `--emit-map` 的 JSON 新增 `maps` 字段，逐条列出 trait / instance / file / line 与 `bindings`（method → 生成符号）。
 
 ### 5. 命名规则（稳定契约）
@@ -876,12 +881,14 @@ Constraints and limits:
   or on a `return` line cancels auto-drop, because a missed release (a leak) beats a wrong one
   (double free / freeing a borrow).
 
-#### 4.10 `map` (new in Phase 11.1, ct-ast only)
+#### 4.10 `map` (new in Phase 11, ct-ast only)
 
 `map` binds a trait's method to a concrete call on a **declared global instance**, emitting an
-instance-level wrapper plus a vtable; this slice only **emits** the artifacts and is not yet wired
-into dispatch (that is Phase 11.2). It is a Phase 11.1 addition: **neither L0 nor L2 knows it** —
-only **ct-ast** (`selfhost/ast/main.ct`) supports it.
+instance-level wrapper plus a vtable; **Phase 11.2 has wired the instance into dispatch** — when it is
+used as a trait interface value (assigned to a `T`-typed variable, passed to a `T` interface parameter,
+returned from an interface, or used as a call argument), boxing uses that **instance-level** vtable, so
+it runs as an instance of the trait. It is a Phase 11 addition: **neither L0 nor L2 knows it** — only
+**ct-ast** (`selfhost/ast/main.ct`) supports it.
 
 ```c
 trait Controller {
@@ -911,6 +918,11 @@ Constraints and limits:
   every argument is a **parameter name** from the `( … )`, `&<instance>` (equal to this map's
   instance), or a numeric / `"…"` / `'…'` literal; anything else is a compile-time error.
 - Several maps may target the same instance; `MAX_MAPS` (64) caps the total number of map blocks.
+- **Dispatch (11.2)**: boxing a mapped instance as a trait interface value uses the **instance-level**
+  vtable — `Controller c = uart1;` becomes
+  `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };` (not the struct-level
+  `&Uart_Controller_vtable`). So **even when `Uart` never `use`d `Controller`**, `uart1` works as a
+  `Controller` instance; afterwards `c.send(...)` dispatches via `c.vt->send(c.self, ...)` to the wrapper.
 - The `--emit-map` JSON gains a `maps` field listing trait / instance / file / line and `bindings`
   (method → generated symbol) per map.
 

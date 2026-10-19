@@ -1,0 +1,29 @@
+// 14: a `map`-bound instance used as a trait instance (Phase 11.2)
+#include <stdio.h>
+
+trait Controller {
+    int send(char *buf, int len);
+}
+
+struct Uart {
+    int fd;
+};
+
+struct Uart uart1;
+
+static int mock_uart_send(struct Uart *u, char *buf, int len) {
+    (void)buf;
+    return len + u->fd;
+}
+
+map trait Controller for instance uart1 {
+    send(buf, len) -> mock_uart_send(&uart1, buf, len);
+}
+
+int main(void) {
+    Controller c;
+    uart1.fd = 3;
+    c = uart1;
+    printf("%d\n", c.send("x", 4));
+    return 0;
+}
