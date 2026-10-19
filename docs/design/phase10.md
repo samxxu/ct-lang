@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> 状态：**10.1–10.3 已落地（2026-10-19）**；10.4–10.7 待推进。D38–D45 已按建议值确认。
+> 状态：**10.1–10.4 已落地（2026-10-19）**；10.5–10.7 待推进。D38–D45 已按建议值确认。
 > Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
 > Phase 10 的目标是补齐 ct-ast 相对 L2 的能力缺口，并把安装入口切过去；旧线保留为回归 oracle。
 
@@ -39,7 +39,7 @@
 | build 打印建议 `cc` 命令 | ✅ | ✅（10.1 补齐，含 `-std`） | — |
 | 语义诊断：重复 trait / struct 报错 | ✅ | ✅（`file:line:col: error:` + `ctc: N error(s) generated`，位置指向 `{`） | — |
 | 语义诊断：impl 签名不一致告警（text/json） | ✅ | ✅（措辞与 JSON 与 L2 逐字节一致；发射时取 trait 的返回类型） | — |
-| 多错误恢复（`MAX_ERRORS=20` + 产物清理 + `N error(s) generated`） | ✅ | ❌ 首错即停 | 10.4 |
+| 多错误恢复（`MAX_ERRORS=20` + 产物清理 + `N error(s) generated`） | ✅ | ✅（逐行重同步；超上限输出 `ctc: too many errors, stopping`） | — |
 | Drop trait（`use Drop` / 递归释放） | ✅ | ✅ | — |
 | AutoDrop（`own`） | ✅ | ✅ | — |
 | 泄漏分析（作用域 / 条件 return / `ret_owned`） | ✅ | ✅（保守规则与 L2 一致） | — |
@@ -54,7 +54,7 @@
 | 10.1 | CLI 与身份对齐：`--diagnostics`、`--std`、compile `-I`、`argv[0]` 身份、usage 文本 | ✅ **已落地（2026-10-19）**：`g_prog` 按 `argv[0]` 取 `ct` / `ctc` / `ct-ast`；两模式接受并校验 `--diagnostics=text\|json`（`g_diag_json` 留给 10.3）与 `--std=c99\|gnu99`；compile 模式接受 `-I`；build 补发建议 `cc -std=… <unit>.c… -o a.out`。`check-ast.sh` 新增 8 项 CLI/身份断言（64 → **72**） |
 | 10.2 | 语义诊断：重复定义报错、签名不一致告警（text/json） | ✅ **已落地（2026-10-19）**：新增 `DiagOps`（`sem_error` / `record_sig_warn` / `emit_warnings`）；重复 trait/struct 报 `file:line:col: error:` 并以 `ctc: N error(s) generated` 收尾、失败不留产物（前置声明合法）；impl 签名不一致按 L2 措辞告警（text stderr / `{"warnings":[…]} ` stdout），发射函数取 **trait 的返回类型**使产物仍可编译。`check-ast.sh` 逐字节比对 `dup_struct` / `dup_trait` / `sig_mismatch` / `sig_mismatch_json`（72 → **76**） |
 | 10.3 | 内存：Drop / AutoDrop / 泄漏分析 | ✅ **已落地（2026-10-19）**：`Drop` 内置 trait（`use Drop` / `impl Drop` / 递归释放 / `delete` 调用）与 AutoDrop（`own`，作用域末逆序释放，布局/Drop/作用域三种负例按 L2 措辞报错）落地；泄漏分析按 D40 复刻 L2 的保守规则（声明即跟踪 `malloc`/`calloc`/`ret_owned` 调用、赋值逃逸、`delete` 释放、条件 return 的路径告警、作用域末确定泄漏），text / JSON 均逐字节一致。新增 trait `MemoryOps`（11 个方法，未触碰 `ParseOps`）。`check-ast.sh` 新增 10.3 段：autodrop 4 例 + leak 7 例（76 → **87**） |
-| 10.4 | 多错误恢复 | 多错误语料在 ct-ast 下输出与 L2 一致（`N error(s) generated` + 产物清理） |
+| 10.4 | 多错误恢复 | ✅ **已落地（2026-10-19）**：`parse_program` 在报错后重同步（到下一条行首或 `}` 之后，同 L2 的 `recover_pos`），继续解析后续声明；`impl` 指向未定义 struct 时按 L2 在 `{` 处报 `impl for undefined struct 'X'` 并跳过整个 body；`use` 引用未定义 trait 时在 struct 的 `{` 处报错；超过 `MAX_ERRORS=20` 输出 `ctc: too many errors, stopping` 并以 1 退出。报错单元一律返回失败，产物不落盘。`check-ast.sh` 新增 `multi_err` / `multi_err_build` / `max_errors` 三项（逐字节比对 L2，87 → **90**） |
 | 10.5 | 增量缓存 | `ct-tour` 的缓存三步在 ct-ast 下通过；键格式与 L2 相同 |
 | 10.6 | 包管理迁移 | `test/pkg/run.sh` 改为驱动新入口；`get`/`install` 仍不触碰编译核 |
 | 10.7 | 切主线 | 安装形态改由 ct-ast 构建；`check-all.sh` 的默认编译器切到新线，L2 降级为回归 oracle；bump v0.10.0 |
@@ -120,7 +120,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | build prints the suggested `cc` command | ✅ | ✅ (added in 10.1, `-std` included) | — |
 | semantic check: duplicate trait / struct is an error | ✅ | ✅ (`file:line:col: error:` + `ctc: N error(s) generated`, positioned at the `{`) | — |
 | semantic check: impl signature mismatch warning (text/json) | ✅ | ✅ (wording and JSON byte-identical to L2; the emitted function takes the trait's return type) | — |
-| multi-error recovery (`MAX_ERRORS=20`, artifact cleanup, `N error(s) generated`) | ✅ | ❌ first error stops | 10.4 |
+| multi-error recovery (`MAX_ERRORS=20`, artifact cleanup, `N error(s) generated`) | ✅ | ✅ (line-start resynchronisation; past the cap `ctc: too many errors, stopping`) | — |
 | Drop trait (`use Drop`, recursive release) | ✅ | ✅ | — |
 | AutoDrop (`own`) | ✅ | ✅ | — |
 | leak analysis (scope / conditional return / `ret_owned`) | ✅ | ✅ (the same conservative rules as L2) | — |
@@ -135,7 +135,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | 10.1 | CLI and identity: `--diagnostics`, `--std`, compile `-I`, `argv[0]` identity, usage text | ✅ **landed (2026-10-19)**: `g_prog` comes from `argv[0]` (`ct` / `ctc` / `ct-ast`); both modes accept and validate `--diagnostics=text\|json` (`g_diag_json` is reserved for 10.3) and `--std=c99\|gnu99`; compile mode accepts `-I`; build prints `cc -std=… <unit>.c… -o a.out`. `check-ast.sh` gained 8 CLI/identity assertions (64 → **72**) |
 | 10.2 | semantic diagnostics: duplicate definitions error, signature-mismatch warning (text/json) | ✅ **landed (2026-10-19)**: new `DiagOps` (`sem_error` / `record_sig_warn` / `emit_warnings`); a duplicate trait/struct reports `file:line:col: error:` and closes with `ctc: N error(s) generated`, leaving no artifacts (forward declarations stay legal); a signature mismatch warns in L2's wording (text stderr / `{"warnings":[…]}` stdout) and the emitted function takes the **trait's** return type so the output still compiles. `check-ast.sh` compares `dup_struct` / `dup_trait` / `sig_mismatch` / `sig_mismatch_json` byte for byte (72 → **76**) |
 | 10.3 | memory: Drop / AutoDrop / leak analysis | ✅ **landed (2026-10-19)**: the built-in `Drop` trait (`use Drop`, `impl Drop`, recursive release, `delete` calling it) and AutoDrop (`own` — reverse-order release at scope exit, with the layout / Drop / scope negatives reporting L2's wording); the leak analysis replicates L2's conservative rules per D40 (tracking `malloc` / `calloc` / `ret_owned` calls at the declaration, escape on assignment, release on `delete`, one path warning per conditional return, definite leak at scope exit) with text and JSON byte-identical. The new `MemoryOps` trait (11 methods) leaves `ParseOps` untouched. `check-ast.sh` gained the 10.3 section: 4 autodrop + 7 leak assertions (76 → **87**) |
-| 10.4 | multi-error recovery | multi-error fixtures produce the same output as L2 (cleanup + `N error(s) generated`) |
+| 10.4 | multi-error recovery | ✅ **landed (2026-10-19)**: `parse_program` resynchronises after a reported error (past the next `}` or to the start of the next line, L2's `recover_pos`) and keeps parsing; an `impl` of an undefined struct reports `impl for undefined struct 'X'` at its `{` and skips the body; a `use` of an undefined trait reports at the struct's `{`; past `MAX_ERRORS=20` both print `ctc: too many errors, stopping` and exit 1. A unit with errors always fails, so no artifacts are written. `check-ast.sh` gained `multi_err` / `multi_err_build` / `max_errors` (byte-diffed against L2, 87 → **90**) |
 | 10.5 | incremental cache | the three cache steps of `ct-tour` pass under ct-ast; key format identical to L2 |
 | 10.6 | package manager migration | `test/pkg/run.sh` drives the new entry; `get`/`install` still stay out of the compile core |
 | 10.7 | mainline switch | the install shape builds from ct-ast; `check-all.sh` defaults to the new line with L2 as the regression oracle; bump v0.10.0 |
