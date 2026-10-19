@@ -3,10 +3,10 @@
 本目录汇总三轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）与
 [reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）。
-**每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现以本文件末节承载，未另立文件。
+**每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
 - 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）——各文件行号以其自身锚点为准。
-- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见末节，复核于 v0.10.0 `885d01b`）。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；复核中另订正 7 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -136,4 +136,19 @@
 | §6 | Medium | `pre-ast-mainline` tag 定位偏早（落在 Phase 4/5 边界） | ✅ 已决策：`297e39c` 保留 tag，把文档口径改为「2026-10-17 的 frozen 边界」，Phase 9 起点由 `v0.8.0` 标出 |
 
 > 唯一保留的长期约束是 SH-4：`ParseOps` 已顶格，这不是缺陷而是容量事实，修复方式是「下次先拆 trait」。
+
+## 复核中顺手订正（2026-10-19）
+
+除报告列出的项外，本轮对 HEAD 的文档做了一遍交叉核对，订正了下列「文档说未实现 / 指向旧主线，实际已落地」的陈述漂移：
+
+| 文档 | 原表述 | 订正 |
+| --- | --- | --- |
+| [design/phase9.md](../docs/design/phase9.md) 头部 | 「设计已冻结，未实现；不要照此创建 `selfhost/ast/**`」 | 改为 9.1–9.7 已全部落地（v0.9.0 收口），Phase 10 起该实现是安装入口主线 |
+| [construction.md](../docs/construction.md) 状态行 / §1 表 / §2 推论 2 / §3.5 / §6（中英） | 堆对象创建「推迟到 Phase 1」，需手写 vptr | 堆对象已落地（[restore](../docs/design/restore.md) D1=A：`T *p = malloc\|calloc(...)` 声明后自动补 vptr），D5 记为「源文件自带 `<stdlib.h>`」 |
+| [polymorphism.md](../docs/polymorphism.md) 头部 | 「尚未实现：接口数组、接口字段的装箱」 | 已于 2026-10-17 补齐，由 `test/cases/28_iface_field.ct` 与 acceptance 的 p01–p08 钉住 |
+| [design/bootstrap.md](../docs/design/bootstrap.md) 状态行（中英） | 「目录结构与构建流程都还不存在」 | 自举链已在 `selfhost/**` 运行；仅目标 `ctrait/` 布局未落地 |
+| [roadmap.md](../docs/roadmap.md) Phase 7 三处（中英） | `ct get` / `ct install`「待做 / remain unimplemented」 | 标注 Phase 8 已落地（`ct-pkg`） |
+| [architecture.md](../docs/architecture.md) 英文表 | 仍称 2837 / 2708 / 1491「已逐个探针确认不可达」 | 与中文表同步为四态分桶：2837 / 2708 已由 `cli/tmpfile-cannot-create` / `cli/cannot-read` 钉住，1491 仅记为「未复现」 |
+| [language-spec.md](../docs/language-spec.md) 状态行 / §4.8 注 / §4.9（中英） | 称 L2 是「当前编译器」 | 改为「CT 线（L2；v0.10.0 起安装入口由行为等价的 ct-ast 提供）」 |
+
 
