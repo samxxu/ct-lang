@@ -1,11 +1,12 @@
 # 审查发现的问题（issues）
 
-本目录汇总两轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）与
-[reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）。
-**每条 issue 一个 markdown 文件，按模块分目录存放**。
+本目录汇总三轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
+[reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）与
+[reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）。
+**每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现以本文件末节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）——各文件行号以其自身锚点为准。
-- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）。逐条状态见各文件的状态行。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）——各文件行号以其自身锚点为准。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见末节，复核于 v0.10.0 `885d01b`）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -58,6 +59,7 @@
 - Info: 1（SH-2，已修复）
 
 合计 20 条：已处理 20（其中 TEST-5 / TEST-6 为部分覆盖，未覆盖项已在文件内列明）。
+另有 Phase 9 复审的 14 项发现，未单独立文件，逐项状态见文末「Phase 9 复审」一节。
 
 ## 修复进展（2026-10-17）
 
@@ -110,3 +112,28 @@
 验证（2026-10-18）：`check-archive` 39 pass / 0 regression（新增 7 个 designed 用例）；`ct-tour` OK（含新增身份断言）；手工三件套通过。
 
 验证（2026-10-18，TEST-5/TEST-6 收尾）：`check-archive` designed **43 pass / 0 regression**（新增 `map_file_build` / `map_unwritable` / `too_many_inputs` / `too_many_inc`）；`bash selfhost/check-all.sh` 七道硬关卡全绿。
+
+## Phase 9 复审（2026-10-19，锚点 `8010875`）
+
+完整报告见 [reports/phase9-review](../reports/phase9-review/phase9-review.md)。评审基线为八关全绿；本轮在
+**v0.10.0（`885d01b`）** 上复核，仍为八关全绿（`test/run.sh` 118、`check-ast.sh` 105、`test/pkg` 35、
+`check-grammar.py` 20）。报告列出的 14 项发现**全部关闭**：
+
+| ID | 严重度 | 摘要 | 状态与证据 |
+| --- | --- | --- | --- |
+| SH-4 | Low（前向风险） | `ParseOps` = 32 = `MAX_METHOD`，解析层已无余量 | ✅ 已记录：roadmap「容量预算」表写明 32/32，并注明 10.2 / 10.3 / 10.5 / 10.6 的新能力全部落在新 trait（`DiagOps` / `MemoryOps` / `CacheOps` / `PkgOps`），未触碰 `ParseOps`。**后续为解析层加方法必须先拆 trait** |
+| §3.2-1 | Medium | AST 驱动的 CLI / 错误分支无用例 | ✅ 已修：10.1 先覆盖身份（`ct-ast` / `ct` / `ctc`）、`--diagnostics`、`-I`、`--std`；本轮补齐剩余 10 个驱动分支——`-h`、无输入、`-o` / `-I` / `--ns-root` 缺参、未知选项、cannot open / write、compile 模式 `import`、build 缺 `-o`（`check-ast.sh` 95 → **105**） |
+| §3.2-2 | Medium | 自包含契约未被钉死 | ✅ 已修：`check-ast.sh` 增「output contract」节，断言 compile 模式 `.c` **不含**自身 `#include` |
+| §3.2-3 | Low | `test/ast/errors/` 仅 1 例 | ✅ 已修：现为 4 例（`missing_semi` / `assign_target` / `undeclared_var` / `unknown_trait`） |
+| F1 | Medium | `ct get` 不回写 `ct.pkg` | ✅ 已修：`fccfac7` |
+| F3 | Low | `get` / `install` 包名口径不一致 | ✅ 已修：`fccfac7`（抽出 `dep_name`） |
+| F4/F5 | Low | `ct install` 无参数处理、usage 未列 `install` | ✅ 已修：`fccfac7` + `48e2d8b`（`test/pkg` 27 → 35） |
+| D-a | Medium | glossary 滞后且缺 Phase 9 词条 | ✅ 已修：`db47f7c`；本轮又补 Phase 10 与 D38–D45 |
+| D-b | Medium | roadmap 仍写「待授权 / 未 bump」 | ✅ 已修：Phase 9 行改为「已 bump 到 v0.9.0 收口」，Phase 10 行同步收口到 v0.10.0 |
+| D-c | Low | `check-all.sh` 头注释层数 / 断言数 / 阶段号过期 | ✅ 已修：`db47f7c`（八层 / 20 assertions / 9.1–9.7）；本轮补掉漏网的 gate 横幅（原「9.1–9.5b」） |
+| D-d | Low | `check-ast.sh` 头注释停在 9.5b | ✅ 已修：现写 `Phase 9.1-9.7, Phase 10.x` |
+| D-e | Low | README 表格把 `check-ast` 标为 9.1–9.5b | ✅ 已修：现写「Phase 9.1–9.7 + Phase 10.x」 |
+| §6 | Medium | `pre-ast-mainline` tag 定位偏早（落在 Phase 4/5 边界） | ✅ 已决策：`297e39c` 保留 tag，把文档口径改为「2026-10-17 的 frozen 边界」，Phase 9 起点由 `v0.8.0` 标出 |
+
+> 唯一保留的长期约束是 SH-4：`ParseOps` 已顶格，这不是缺陷而是容量事实，修复方式是「下次先拆 trait」。
+

@@ -57,7 +57,7 @@ run_gate "4) CT: check-m2a" bash selfhost/check-m2a.sh
 run_gate "5) CT: ct-tour" bash selfhost/ct-tour.sh
 run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
-run_gate "8) AST compiler (Phase 9.1–9.5b)" bash selfhost/check-ast.sh
+run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x)" bash selfhost/check-ast.sh
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then
