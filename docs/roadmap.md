@@ -15,8 +15,8 @@
 | --- | --- | --- | --- | --- |
 | Phase 0 | 用 trait 写「完整 OO」（封装 / 接口 / 派发 / 传递 / 组合 / 创建与释放 / 接口多态） | 建设 | ✅ 完成（出口 1–9 成立；堆对象的**创建**按 0.1.8 推迟到 Phase 0 之后，已落地） | 出口清单 1–9 全部成立 |
 | Phase 0.1 | 缺陷修复 + 回归测试 | 建设 | ✅ 完成（0.1.1–0.1.9） | 组合 / 数组 / 作用域 / 接口多态全部补齐；golden 测试全绿 |
-| Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | 建设 | ✅ 完成（设计先行 → 已实现） | 接口**数组**尚未实现；接口**字段**（值字段装箱 + 派发、指针字段派发）已补齐 |
-| Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | 建设 | ✅ 完成（2026-10-14） | `ctc.c` 3836 → 2897 行、只余 Phase 0 能力；套件 146 → 110 项全绿；归档件在 `test/archive/` + tag `overreach-oracle` |
+| Phase 0.2 | 接口多态：把 trait 当类型、运行时派发 | 建设 | ✅ 完成（设计先行 → 已实现） | 接口**字段**（值字段装箱 + 派发、指针字段派发）已补齐；接口**数组**在 L0 仍不支持，CT 线已由 Phase 5 补齐（acceptance p01–p04） |
+| Phase 0.3 | **剥离越位特性**：把 namespace / 多文件 / import / Drop / 诊断等在 C 侧越位实现的能力移出 `ctc.c`，使其回到**纯 OO + 底层设施**；移出件**归档为 oracle**（不销毁） | 建设 | ✅ 完成（2026-10-14） | `ctc.c` 3836 → 2897 行（含后续 fix 与 banner/bump，现为 2930 行）、只余 Phase 0 能力；套件 146 → 110 项全绿；归档件在 `test/archive/` + tag `overreach-oracle` |
 | Phase 1 | **自举（第一目标）**：以剥离后的**纯 OO `ctc.c`** 为 L0，用 CT（OO 子集、单文件）重写其**全部能力**，出口是与 L0 **逐字节一致** | 建设 | ✅ 完成（2026-10-15：M2 达成 25/25，且 L1′ 自举闭环通过） | 阶梯 M1→M2（L1）；每层以 **byte-identical golden** 为出口 |
 | Phase 2 | **模块化**：namespace / 多文件 `ct build` / `pub` / `import` | 恢复 | ✅ 完成（2026-10-16；非版本 tag `phase2-multifile-split`） | 归档用例 **byte-identical**；编译器源码切成多文件 |
 | Phase 3 | **内存**：Drop / `delete` 放宽 | 恢复 | ✅ 完成（2026-10-16；在 `selfhost/src/**` 实现，L1 冻结） | drop 用例 **byte-identical** |
@@ -721,7 +721,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 2. **顺序 = 先落验收关卡、再逐条补**（消费者驱动：完整缺口清单从编译报错中长出，而非靠读码推断）。
 3. **定位 = AST 版编译器作**新主线**，旧 `selfhost/ctc.ct`（L1）打 tag 归档**；出口口径由 **byte-identical** 换成 **行为等价**（同输入、同运行输出，不要求产物逐字节相同）。
 
-**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，退出码仅 `REGRESSION` 非零）。基线 `BASELINE` 现含**全部 12 项**（`p01`–`p11` + `ast_spike`），即当前**12 pass / 0 pending / 0 regression**。**默认探针目标为 L2**（L0→L1→L2 链）——`ctc.c` 冻结、能力只落 CT 侧，故只有显式 `CT=<l0>` 才探 L0，其 PENDING 属预期而非失败。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。
+**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，退出码仅 `REGRESSION` 非零）。基线 `BASELINE` 现含**全部 19 项**（`p01`–`p17` + `ast_spike` + `ast_parse_spike`），即当前**19 pass / 0 pending / 0 regression**；第 20 个探针 `p18_struct_array_field` 按决定刻意留在 PENDING。**默认探针目标为 L2**（L0→L1→L2 链）——`ctc.c` 冻结、能力只落 CT 侧，故只有显式 `CT=<l0>` 才探 L0，其 PENDING 属预期而非失败。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。
 
 **落地记录**：
 
@@ -880,8 +880,8 @@ as confirmed by the user.
 | --- | --- | --- | --- | --- |
 | 0 | Writing full OO with traits (encapsulation / interfaces / dispatch / passing / composition / creation & release / interface polymorphism) | build | ✅ done (exits 1–9 hold; **automatic heap creation** is deferred to after Phase 0 per 0.1.8, and has landed) | every exit below holds |
 | 0.1 | Defect fixes + regression tests | build | ✅ done (0.1.1–0.1.9) | composition / arrays / scoping / interface polymorphism all covered; golden tests green |
-| 0.2 | Interface polymorphism: traits as types, dispatching at run time | build | ✅ done (design first → implemented) | interface **arrays** are not implemented; interface **fields** landed |
-| 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | build | ✅ done (2026-10-14) | `ctc.c` 3836 → 2897 lines; the suite went 146 → 110 and is green; the archive lives in `test/archive/` + tag `overreach-oracle` |
+| 0.2 | Interface polymorphism: traits as types, dispatching at run time | build | ✅ done (design first → implemented) | interface **fields** (value-field boxing + dispatch, pointer-field dispatch) landed; interface **arrays** stay unsupported in L0 and were landed on the CT line in Phase 5 (acceptance p01–p04) |
+| 0.3 | **Strip the over-reach**: move the C-side over-reaching features (namespaces / multi-file / import / Drop / diagnostics) out of `ctc.c` so it returns to **pure OO + low-level facilities**; the extracted code is **archived as the oracle** (never destroyed) | build | ✅ done (2026-10-14) | `ctc.c` 3836 → 2897 lines (2930 today, after the later fix and banner/bump); the suite went 146 → 110 and is green; the archive lives in `test/archive/` + tag `overreach-oracle` |
 | 1 | **Self-hosting (the first goal)**: with the stripped, pure-OO `ctc.c` as L0, rewrite **all of its capabilities** in CT (OO subset, single file), exiting on **byte-identical** output with L0 | build | ✅ done (2026-10-15: M2 at 25/25, and the L1′ self-hosting loop passes) | only rungs M1→M2 (L1); every layer exits on a **byte-identical golden** |
 | 2 | **Module system**: namespaces / multi-file `ct build` / `pub` / `import` | restore | ✅ done (2026-10-16; non-version tag `phase2-multifile-split`) | archived cases **byte-identical**; the compiler source itself becomes multi-file |
 | 3 | **Memory**: Drop / loosened `delete` | restore | ✅ done (2026-10-16; implemented under `selfhost/src/**`, L1 frozen) | drop cases **byte-identical** |

@@ -60,7 +60,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.10.0`；二进制名为 `ct` 时打印 `ct v0.10.0` |
 | `ctc -h` / `ctc --help` | 打印用法 |
 
-退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。L0（`ctc.c`）**不产生任何警告**；CT 线（L2）会输出泄漏与签名不一致告警（`--diagnostics` 可切 JSON）。**驱动层错误前缀固定为 `ctc:`**（即使二进制以 `ct` 身份运行），以保持日志与既有断言稳定——这与 `-v` / usage 随身份变化是两件事。
+退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。L0（`ctc.c`）**不产生任何警告**；CT 线（L2 / ct-ast）会输出泄漏与签名不一致告警（`--diagnostics` 可切 JSON）。**驱动层错误前缀固定为 `ctc:`**（即使二进制以 `ct` 身份运行），以保持日志与既有断言稳定——这与 `-v` / usage 随身份变化是两件事。
 
 > **L0 当前只支持单文件**：越位实现过的模块系统与诊断能力（`namespace` / `import` / `pub` / `ct build` 多文件、`Drop`、`#line`、泄漏警告与 `--diagnostics`）已于 Phase 0.3 从 `ctc.c` 移出，L0 命中仍报 `'xxx' is not supported by this compiler`；这些能力已由 **Phase 2–5** 在 CT 线（`selfhost/src/**`，即 L2）全部重做完成（见 [docs/roadmap.md](docs/roadmap.md)）。
 >
@@ -113,7 +113,7 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
 | 其它任意 C 代码 | 原样透传 |
 
-> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**当前不被接受**（Phase 0.3 已移出，Phase 2 用 CT 重做），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2），L0 会原样透传。
+> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。
 
 命名规则：
 
@@ -265,10 +265,11 @@ python3 editors/vscode/test/check-grammar.py   # 20 项断言；退出码 0 = �
 
 #### 自举 gate（`selfhost/`）
 
-`selfhost/` 承载 Phase 1–2 的自举链：`ctc.c`（L0）编译出 **L1**，L1 再编译出 **L2**。它与 `./test/run.sh` **相互独立**；[AGENTS.md](AGENTS.md) 要求改动 `selfhost/**` 后把这些脚本全部跑一遍，`check-all.sh` 是它们的聚合入口。
+`selfhost/` 承载自举链：`ctc.c`（L0）编译出 **L1**，L1 编译出 **L2**，L2 再编译出 **ct-ast**（Phase 9 的 AST 主线，Phase 10.7 起提供安装入口）。它与 `./test/run.sh` **相互独立**；[AGENTS.md](AGENTS.md) 要求改动 `selfhost/**` 后把这些脚本全部跑一遍，`check-all.sh` 是它们的聚合入口。
 
 - `selfhost/ctc.ct` —— **L1**：用 CT（OO 子集、单文件）重写全部能力的编译器，由 `ctc.c`（L0）编译得到；
-- `selfhost/src/**` —— 同一编译器拆成多单元（`core.ct` + `driver.ct`），由 **L1 自身的 `build`** 编译成 **L2**。
+- `selfhost/src/**` —— 同一编译器拆成多单元（`core.ct` + `driver.ct`），由 **L1 自身的 `build`** 编译成 **L2**（Phase 10.7 起只作回归 oracle）；
+- `selfhost/ast/main.ct` —— **ct-ast**：Phase 9 的 AST 版编译器，由 L2 用 `build` 编译而成，是安装入口。
 
 | 脚本 | 作用 |
 | --- | --- |
@@ -333,7 +334,7 @@ ct/
 - **文件作用域的对象 / 数组**：vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。
-- 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。（以上是 **L0（`ctc.c`）** 的边界；**当前编译器 L2**（`selfhost/src/**`）已放开这三条——接口数组、接口数组字段与构造点装箱，见 [language-spec](docs/language-spec.md) §4.8 与 [roadmap](docs/roadmap.md)。）
+- 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。（以上是 **L0（`ctc.c`）** 的边界；**CT 线**（L2 / ct-ast）已放开这三条——接口数组、接口数组字段与构造点装箱，见 [language-spec](docs/language-spec.md) §4.8 与 [roadmap](docs/roadmap.md)。）
 - 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
 - **构造头部必须完整**：`trait IDENT {` / `struct IDENT {` / `impl IDENT for` 缺一不可；只写到一半
   （如 `trait T`、`struct S`、`impl`）**不报错**，该行按普通 C **原样透传**——这是为兼容把
@@ -432,7 +433,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ctc -h` / `ctc --help` | prints usage |
 
 Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:line:col: error: message`.
-L0 (`ctc.c`) emits **no warnings at all**; the CT line (L2) emits leak and signature-mismatch warnings
+L0 (`ctc.c`) emits **no warnings at all**; the CT line (L2 / ct-ast) emits leak and signature-mismatch warnings
 (`--diagnostics` switches to JSON). **Driver-level errors keep the `ctc:` prefix** even when the binary
 runs as `ct`, so logs and pinned assertions stay stable — that is separate from `-v` / usage following
 the identity.
@@ -499,9 +500,9 @@ From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, an
 | anything else | copied through verbatim |
 
 > Module-system syntax — `namespace` / `A::B::Name` qualified references / `pub` / `import` — is **not
-> accepted** today (moved out in Phase 0.3, to be redone in CT in Phase 2). Written in a source file it
-> is reported as an error rather than copied through. `own` (AutoDrop) is likewise **CT-line only**
-> (L2); L0 copies it through unchanged.
+> accepted by L0** (moved out in Phase 0.3; redone on the CT line in Phases 2–5, see below). Written in
+> a source file it is reported as an error rather than copied through. `own` (AutoDrop) is likewise
+> **CT-line only** (L2 / ct-ast); L0 copies it through unchanged.
 
 Naming rules:
 
@@ -698,14 +699,16 @@ python3 editors/vscode/test/check-grammar.py   # 20 checks; exit code 0 means it
 
 #### Self-hosting gates (`selfhost/`)
 
-`selfhost/` carries the Phase 1–2 bootstrap chain: `ctc.c` (L0) compiles **L1**, which in turn builds
-**L2**. It is **separate** from `./test/run.sh`; [AGENTS.md](AGENTS.md) requires all of these scripts
+`selfhost/` carries the bootstrap chain: `ctc.c` (L0) compiles **L1**, which in turn builds **L2**,
+which builds **ct-ast** (the Phase 9 AST mainline and, since Phase 10.7, the installed entry). It is
+**separate** from `./test/run.sh`; [AGENTS.md](AGENTS.md) requires all of these scripts
 after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 
 - `selfhost/ctc.ct` — **L1**: the whole compiler rewritten in CT (OO subset, single file), compiled by
   `ctc.c` (L0);
 - `selfhost/src/**` — the same compiler split into units (`core.ct` + `driver.ct`), built **by L1's own
-  `build`** into **L2**.
+  `build`** into **L2** (the regression oracle since Phase 10.7);
+- `selfhost/ast/main.ct` — **ct-ast**: the Phase 9 AST compiler, built by L2, and the installed entry.
 
 | Script | What it does |
 | --- | --- |
@@ -775,7 +778,7 @@ Implementation limits:
 - Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
   automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
   a variable, `&variable` or a call returning the same interface. (Those are **L0 (`ctc.c`)** bounds;
-  the **current compiler, L2** (`selfhost/src/**`), has lifted all three — interface arrays, interface
+  the **CT line** (L2 / ct-ast) has lifted all three — interface arrays, interface
   array fields and construction-point boxing — see [language-spec](docs/language-spec.md) §4.8 and the
   [roadmap](docs/roadmap.md).)
 - Definitions must precede use: an `impl` must appear before any function that calls its methods.
