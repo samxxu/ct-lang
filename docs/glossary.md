@@ -133,10 +133,10 @@
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
-| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`，当前 v0.11.1） |
+| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`，当前 v0.12.0） |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
-| 设计决策 | D1–D45、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md) |
+| 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md)，D46–D52 见 [design/phase12.md](design/phase12.md) |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 → ct-ast | 用 CT 重写编译器 |
 | AST 版编译器（ct-ast） | `selfhost/ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；单文件、纯 CT，自编并达到全量行为等价 |
 | 行为等价（behavioural equivalence） | D34 | 等价口径 = 退出码 + 产物零警告可编 + **程序输出一致**（不比对生成的 C 文本） |
@@ -295,10 +295,10 @@
 
 | Term | Form | Notes |
 | --- | --- | --- |
-| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`, currently v0.11.1) |
+| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) / 12 (bindings + dialect deepening) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`, currently v0.12.0) |
 | sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 6) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
-| design decisions | D1–D45, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md) |
+| design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md), D46–D52 in [design/phase12.md](design/phase12.md) |
 | bootstrap / self-hosting | L0 → L1 → L2 → ct-ast | rewriting the compiler in CT |
 | AST compiler (ct-ast) | `selfhost/ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; one plain-CT file that self-compiles and is behaviourally equivalent |
 | behavioural equivalence | D34 | the equivalence rule = exit status + warning-free build + **identical program output** (the generated C text is not compared) |

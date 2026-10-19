@@ -16,7 +16,7 @@
 | --- | --- |
 | 目标 | 让 **ct-ast** 提供完整的 `ct` 命令行：`compile` / `build` / `get` / `install` 与全部既有选项，行为与 L2 等价 |
 | 出口 | 以 ct-ast 构建的 `ct` 跑完整套关卡（`test/run.sh`、`test/modules`、`test/pkg`、`ct-tour`、`acceptance`）全绿；`check-ast.sh` 覆盖全部语料 |
-| 版本 | `v0.10.0`（Phase 10 ↔ `v0.10.x`），收口时 bump（冻结期例外，需用户授权） |
+| 版本 | `v0.10.0`（Phase 10 ↔ `v0.10.x`），已 bump（2026-10-19，冻结期例外，经用户授权） |
 | 回退 | 旧线 `selfhost/src/**` 冻结保留，tag `v0.9.0` 即为可回退点；切换前打 tag `pre-ct-ast-switch`（2026-10-19） |
 
 ### 2. 非目标

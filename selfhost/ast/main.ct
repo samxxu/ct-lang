@@ -29,7 +29,7 @@
 /* the package manager (Phase 8, ported in 10.6) walks a package directory */
 #include <dirent.h>
 
-#define CTC_VERSION "0.11.1"
+#define CTC_VERSION "0.12.0"
 
 #define MAX_NODES  32768
 #define MAX_TEXT   160

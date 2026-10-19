@@ -28,7 +28,7 @@
 | Phase 9 | **AST 版编译器**（新主线） | 新增 | ✅ 9.1–9.7 已落地（2026-10-18）：自编 + 不动点 + **全量行为等价**（`check-ast.sh`，Phase 9 收口时 60 项，Phase 10 现为 105 项）；旧管线 `selfhost/src/**` 按 D36 冻结归档（tag `pre-ast-mainline`）；**已 bump 到 v0.9.0 收口** | 自编 + 行为等价 |
 | Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | ✅ 10.1–10.7 全部落地（2026-10-19；[design/phase10.md](design/phase10.md)，D38–D45 已按建议值确认）：CLI/身份、语义诊断、内存、多错误恢复、增量缓存、包管理迁移、切主线；安装入口由 ct-ast 提供（切换前 tag `pre-ct-ast-switch`），**已 bump 到 v0.10.0 收口** | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
 | Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | ✅ 完成（2026-10-19；11.1–11.3 全部落地：解析 + 实例级包装/vtable + `--emit-map` 的 `maps` 字段 + 负例，11.2 接入派发，11.3 加固绑定完整性与唯一性并放宽 CALL 子集，收口 bump 到 v0.11.0、11.3 后 patch bump 到 v0.11.1；D19 解除，见 [design/phase6.md](design/phase6.md) §6.5） | 设计冻结 + 新用例全绿；收口 bump v0.11.0、patch bump v0.11.1 |
-| Phase 12 | **生态扩展**：官方 / 示范 bindings（首个为仓库内假 HAL）＋ 方言深化（多方言并存 + 作者指南） | 扩展 | ⏳ 设计已冻结（2026-10-19，[design/phase12.md](design/phase12.md)，D46–D49 已确认、D50–D52 取建议值）：**尚未开工**，12.1–12.4 待推进 | 设计冻结 + 新用例全绿；收口 bump v0.12.0（需用户授权） |
+| Phase 12 | **生态扩展**：官方 / 示范 bindings（首个为仓库内假 HAL）＋ 方言深化（多方言并存 + 作者指南） | 扩展 | ✅ 完成（2026-10-19；12.1–12.4 全部落地：首个官方 binding `bindings/mock-hal/`、binding 规约 `bindings/README.md`、多方言并存演示 + 作者指南；收口 bump 到 v0.12.0；[design/phase12.md](design/phase12.md)，D46–D52） | 设计冻结 + 新用例全绿；收口 bump v0.12.0 |
 
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
@@ -63,7 +63,8 @@
 | v0.9.0 | Phase 9 AST 版编译器（2026-10-18 bump，现已由 v0.10.0 接替） | `selfhost/ast/main.ct` 新主线：自编 + 不动点 + 全量行为等价（`check-ast.sh` 收口时 60 项，Phase 10 已扩到 105 项）；旧管线 `selfhost/src/**` 按 D36 冻结归档（tag `pre-ast-mainline`）；`CTC_VERSION` 同步改动 `ctc.c` / L1 / `src/{core,driver}.ct` / `ast/main.ct` 五处，`test/cases/**` 与 `test/modules/**` 共 103 个 golden 重生成（仅版本 token 变化），**Phase 9 收口** |
 | v0.10.0 | Phase 10 主线切换（2026-10-19 bump，现已由 v0.11.0 接替） | 10.1–10.7 全部落地：CLI/身份、语义诊断、内存（Drop / AutoDrop / 泄漏）、多错误恢复、增量缓存、包管理迁移，最后把安装入口改由 **ct-ast** 提供（L2 降为回归 oracle，切换前 tag `pre-ct-ast-switch`）；`CTC_VERSION` 五处同步，`test/cases/**` 50 + `test/modules/**` 58 共 108 个 golden 重生成（仅版本 token 变化），**Phase 10 收口** |
 | v0.11.0 | Phase 11 `map` 构造（2026-10-19 bump，现已由 v0.11.1 接替） | 11.1–11.2 全部落地：`map trait T for instance x { m() → CALL; }` 的解析、实例级包装函数 `<inst>_<Trait>_<method>` 与 vtable `<inst>_<Trait>_vtable`、`--emit-map` 的 `maps` 字段，以及**派发接线**（实例装箱用实例级 vtable，未 `use` 该 trait 的 struct 亦可作为其实例运行）；`CTC_VERSION` 五处同步，`test/cases/**` 50 + `test/modules/**` 53 共 103 个 golden 重生成（仅版本 token 变化），**Phase 11 收口** |
-| v0.11.1 | Phase 11 加固（**当前版本**，2026-10-19 patch bump） | **11.3** 落地：绑定**完整性**（覆盖 trait 每个方法，漏绑会让 vtable 留空指针槽即崩溃）与**唯一性**（重复绑定会发射两份同名包装函数即 C 重定义）校验 + CALL 实参子集放宽为「数字 / 字符串字面量、可见名字（绑定形参、本 map 的实例、此前已声明的变量）、以实例为根的成员路径 `x.f` / `x->f`（可带 `&`）」；正向 fixture `test/ast/15_map_args/`，负例 `map_partial` / `map_dup` / `map_bad_path`；`CTC_VERSION` 五处同步，全量 golden 重生成（仅版本 token 变化），**Phase 11 内 patch** |
+| v0.11.1 | Phase 11 加固（2026-10-19 patch bump，现已由 v0.12.0 接替） | **11.3** 落地：绑定**完整性**（覆盖 trait 每个方法，漏绑会让 vtable 留空指针槽即崩溃）与**唯一性**（重复绑定会发射两份同名包装函数即 C 重定义）校验 + CALL 实参子集放宽为「数字 / 字符串字面量、可见名字（绑定形参、本 map 的实例、此前已声明的变量）、以实例为根的成员路径 `x.f` / `x->f`（可带 `&`）」；正向 fixture `test/ast/15_map_args/`，负例 `map_partial` / `map_dup` / `map_bad_path`；`CTC_VERSION` 五处同步，全量 golden 重生成（仅版本 token 变化），**Phase 11 内 patch** |
+| v0.12.0 | Phase 12 生态扩展（2026-10-19 bump，**当前版本**） | 12.1–12.4 全部落地：仓库内新增顶层 `bindings/**` 与**首个官方 binding** `bindings/mock-hal/`（`#include` 直通 + 镜像 `trait`/`struct` + 声明全局实例 + `map`，**零新增语言特性**）；binding 规约 `bindings/README.md`（12.2）；单文件**多方言并存**路由 + 作者指南（12.3，含 `fsm-state` 方言插件与「路由只处理首个方言标记」缺口的修复）；并顺带修复 ct-ast 主线在 build 多文件模式下 `map` 未发射包装函数 / vtable 的缺陷；`CTC_VERSION` 五处同步，`test/cases/**` 与 `test/modules/**` **共 103 个 golden 重生成**（仅版本 token 变化），**Phase 12 收口** |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../AGENTS.md) 第 5 节）。
 
@@ -71,7 +72,7 @@
 
 - 版本号形如 **`v0.<phase>.<patch>`**，**只在阶段边界 bump**；`patch` 位留给阶段内需要重生成 golden 的修复。与阶段**一一对应**：`0.<n>.x` = Phase *n* — `0.0.x` = Phase 0、`0.1.x` = Phase 1 自举、`0.2.x` = Phase 2 模块化、`0.3.x` = Phase 3 内存、`0.4.x` = Phase 4 诊断与溯源（v0.4.0）、`0.5.x` = Phase 5 新增特性（v0.5.0）、`0.6.x` = Phase 6 生态与扩展（v0.6.0）、`0.7.x` = Phase 7 工具链形态（v0.7.0）、`0.8.x` = Phase 8 包管理与分发（v0.8.0）、`0.9.x` = Phase 9 AST 版编译器（v0.9.0）、`0.10.x` = Phase 10 主线切换（v0.10.0）、`0.11.x` = Phase 11 `map` 构造、`0.12.x` = Phase 12 生态扩展（bindings / 方言深化）；`1.0.0` = 语言定稿。
 - **tag 名必须与 `CTC_VERSION` 一致**：因此「不 bump 就不打 `v` 号 tag」，未 bump 的里程碑用非版本 tag（`phase1-m2` 标记 v0.1.0、`phase2-multifile-split` 标记 v0.2.0）。
-- **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。Phase 5 完成时按同一规范 bump 到 **v0.5.0**（2026-10-17，同样经用户授权），Phase 6 完成时 bump 到 **v0.6.0**（2026-10-17，同样经用户授权），Phase 7 完成时 bump 到 **v0.7.0**（2026-10-17，同样经用户授权），Phase 8 完成时 bump 到 **v0.8.0**（2026-10-18，同样经用户授权），Phase 9 完成时 bump 到 **v0.9.0**（2026-10-18，同样经用户授权），Phase 10 完成时 bump 到 **v0.10.0**（2026-10-19，同样经用户授权），Phase 11 完成时 bump 到 **v0.11.0**（2026-10-19，同样经用户授权），其后的 **11.3 加固**按「阶段内需重生成 golden 的修复」用 patch 位 bump 到 **v0.11.1**，全量 golden 均重生成。Phase 12 收口时按同一规范 bump 到 **v0.12.0**（同样需用户授权）。
+- **口径 A（2026-10-16 用户确认，2026-10-17 已被取代）**：原定 Phase 1 / Phase 2 的版本号不在阶段边界 bump、与「单入口 `ct`」一并落地。**2026-10-17 用户改判**：按「版本 ↔ phase」规范在 Phase 4 完成时一次性 bump 到 **v0.4.0**（冻结期一次性例外），并重生成全量 golden；`v0.1.0`–`v0.3.0` 的里程碑不再单独补 tag（其阶段 tag 保留为非版本名）。Phase 5 完成时按同一规范 bump 到 **v0.5.0**（2026-10-17，同样经用户授权），Phase 6 完成时 bump 到 **v0.6.0**（2026-10-17，同样经用户授权），Phase 7 完成时 bump 到 **v0.7.0**（2026-10-17，同样经用户授权），Phase 8 完成时 bump 到 **v0.8.0**（2026-10-18，同样经用户授权），Phase 9 完成时 bump 到 **v0.9.0**（2026-10-18，同样经用户授权），Phase 10 完成时 bump 到 **v0.10.0**（2026-10-19，同样经用户授权），Phase 11 完成时 bump 到 **v0.11.0**（2026-10-19，同样经用户授权），其后的 **11.3 加固**按「阶段内需重生成 golden 的修复」用 patch 位 bump 到 **v0.11.1**；**Phase 12 完成时**按同一规范 bump 到 **v0.12.0**（2026-10-19，同样经用户授权）。全量 golden 均重生成。
 - **bump 为什么必须谨慎**：`CTC_VERSION` 会进产物 banner，一次 bump 就要重生成 `test/cases/**` 与 `test/modules/**` 的 golden（v0.8.0 这一次是 107 个文件），并**同时**改 `ctc.c`、`selfhost/ctc.ct`（L1）与 `selfhost/src/{core,driver}.ct`——任一处不一致会让 `check-goldens.sh` 立刻全红。**归档 oracle 不能重生成**，故 `check-archive.sh` 用 `same_modulo_version` 在比较时归一化 banner 的版本 token（其余字节仍逐字节）。冻结期改 `CTC_VERSION` 属「不允许」项，每次均经用户显式授权。
 
 ### 已定的设计决策
@@ -869,13 +870,13 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### Phase 12：生态扩展（新增：官方 bindings + 方言深化）
 
 - **背景（2026-10-19 用户确认）**：Phase 11 落地 `map` 后，CT 已具备「把 trait 方法绑定到已声明的全局实例」的底座；本阶段把它用于**消费既有 C 库**——以**声明式 binding**（直通 `#include` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`）**零新增语言特性**地对接 C 库，同时**深化方言系统**（多方言并存 + 作者指南）。设计冻结见 [design/phase12.md](design/phase12.md)（D46–D52）。
-- **切片**（待推进）：
-  - **12.1 binding 形态 + 首个 binding**：新建顶层 `bindings/**`，首个为**仓库内假 HAL**（`bindings/mock-hal/`，自带假 HAL 头与实现，零外部依赖）。**进展（2026-10-19，部分落地）**：`bindings/mock-hal/` 已建（`mock_hal.h` 不透明句柄 + `mock_hal_impl.c` + binding `uart.ct` + 消费方 `demo.ct` + `demo.expected.out`），`check-ast.sh` 新增 bindings 小节（端到端 build → `cc` → 运行 → 比对）。前置缺陷已修：**`map` 的包装函数与 vtable 在 `build`（多文件）模式下从未发射**，导致引用未定义 vtable；现按「声明该 map 的单元」发射（`emit_maps(u)`，compile 模式传 `-1` 保持原行为）。
+- **切片**（全部落地）：
+  - **12.1 binding 形态 + 首个 binding**：新建顶层 `bindings/**`，首个为**仓库内假 HAL**（`bindings/mock-hal/`，自带假 HAL 头与实现，零外部依赖）。**已落地（2026-10-19）**：`bindings/mock-hal/` 已建（`mock_hal.h` 不透明句柄 + `mock_hal_impl.c` + binding `uart.ct` + 消费方 `demo.ct` + `demo.expected.out`），`check-ast.sh` 新增 bindings 小节（端到端 build → `cc` → 运行 → 比对）。前置缺陷已修：**`map` 的包装函数与 vtable 在 `build`（多文件）模式下从未发射**，导致引用未定义 vtable；现按「声明该 map 的单元」发射（`emit_maps(u)`，compile 模式传 `-1` 保持原行为）。
   - **12.2 binding 规约文档**：`bindings/README.md` 记配方 / 命名 / self-contained 与跨单元限制。**已落地（2026-10-19）**：中英双语，含五步配方、目录与命名（binding 单元名不得与库头同名）、不透明句柄 + 镜像布局的 ABI 契约、跨单元限制、构建与测试命令、新增 binding 检查清单。
   - **12.3 方言深化**：同一 `.ct` 内多 dialect 块路由演示 + [dialect.md](design/dialect.md) 的作者指南。**已落地（2026-10-19）**：`examples/07_dialect/registry.ct` 同时含 `register/map` 与新增的 `fsm/state` 两个块，新增插件 `ct-dialects/fsm-state.sh`；确立「插件只处理自己的标记、其余逐字节透传」的归属规则，`test/run.sh` 的 `dialect` 层与 `check-ast.sh` 的语料段改为按文件内首次出现顺序**依次**路由全部方言（原实现只取第一个标记）；[dialect.md](design/dialect.md) §4.5 新增作者指南（中英）。
-  - **12.4 加固与收口**：`check-all.sh` 全绿后 bump v0.12.0（需授权）。
+  - **12.4 加固与收口**：`check-all.sh` 全绿。**已落地（2026-10-19）**：`CTC_VERSION` 五处同步 bump 到 **v0.12.0**（经用户授权），全量 golden 重生成（仅版本 token 变化），`check-all.sh` 八道硬关卡全绿。
 - **规约前置**：`bindings/**` 需先修订 [AGENTS.md](../AGENTS.md) §2（文件所有权表 + 硬性边界）——binding 只声明外部库符号，**不 vendored、不下载**、**不成为编译器构建步骤**；L0 / L1 / L2 一律不动，新代码只落 ct-ast。
-- **出口**：设计冻结 + 新用例全绿；收口 bump **v0.12.0**（冻结期例外，需用户授权）。
+- **出口**：✅ 达成（2026-10-19）——设计冻结 + 新用例全绿；**收口 bump v0.12.0**（冻结期例外，已获用户授权）。
 
 ### 决策待定项
 
@@ -919,7 +920,7 @@ as confirmed by the user.
 | 9 | **AST-based compiler** (the new mainline) | new | ✅ 9.1–9.7 landed (2026-10-18): self-compilation + fixpoint + **whole-corpus behavioural equivalence** (`check-ast.sh`, 60 assertions at close, 105 today); the old pipeline `selfhost/src/**` is frozen and archived per D36 (tag `pre-ast-mainline`); **bumped to v0.9.0 and closed** | self-compilation + behavioural equivalence |
 | 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | ✅ 10.1–10.7 all landed (2026-10-19; [design/phase10.md](design/phase10.md), D38–D45 confirmed as proposed): CLI/identity, semantic diagnostics, memory, multi-error recovery, the incremental cache, the package-manager migration and the switch itself; the installed entry comes from ct-ast (tag `pre-ct-ast-switch` marks the state before it), **bumped to v0.10.0 and closed** | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
 | 11 | **The `map` construct**: `map trait T for instance x { m() → CALL; }` (binds a trait's method to a declared global instance) | new | ✅ 11.1–11.3 landed (2026-10-19): parsing + instance-level wrapper/vtable emission + the `maps` field of `--emit-map` + negative cases, 11.2 wires dispatch, 11.3 hardens binding completeness/uniqueness and relaxes the CALL subset (D19 lifted, see [design/phase6.md](design/phase6.md) §6.5); **closed at v0.11.0, then patch-bumped to v0.11.1** | design frozen + new cases green; bumped to v0.11.0, patch-bumped to v0.11.1 |
-| 12 | **Ecosystem extension**: official / sample bindings (first: an in-repo fake HAL) + dialect deepening (multi-dialect coexistence + an authoring guide) | extension | ⏳ design frozen (2026-10-19, [design/phase12.md](design/phase12.md), D46–D49 confirmed, D50–D52 as proposed): **not started**, slices 12.1–12.4 pending | design frozen + new cases green; closing bump to v0.12.0 (authorisation needed) |
+| 12 | **Ecosystem extension**: official / sample bindings (first: an in-repo fake HAL) + dialect deepening (multi-dialect coexistence + an authoring guide) | extension | ✅ 12.1–12.4 all landed (2026-10-19, [design/phase12.md](design/phase12.md), D46–D52 confirmed): the first official binding `bindings/mock-hal/` (pass-through `#include` + mirrored `trait`/`struct` + a declared global instance + `map`, **zero new language features**), the binding guidelines `bindings/README.md`, and the multi-dialect coexistence demo + authoring guide; **bumped to v0.12.0 and closed** | design frozen + new cases green; closing bump to v0.12.0 |
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
 > features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap
@@ -968,7 +969,8 @@ as confirmed by the user.
 | v0.9.0 | Phase 9 AST-based compiler (bumped 2026-10-18; superseded by v0.10.0) | the `selfhost/ast/main.ct` mainline: self-compilation + fixpoint + whole-corpus behavioural equivalence (`check-ast.sh`, 60 assertions at close, 105 after Phase 10); the old pipeline `selfhost/src/**` is frozen and archived per D36 (tag `pre-ast-mainline`); `CTC_VERSION` moved in lockstep across `ctc.c` / L1 / `src/{core,driver}.ct` / `ast/main.ct` and 103 goldens under `test/cases/**` and `test/modules/**` were regenerated (version token only), **Phase 9 closes** |
 | v0.10.0 | Phase 10 mainline switch (bumped 2026-10-19; superseded by v0.11.0) | all of 10.1–10.7 landed: CLI/identity, semantic diagnostics, memory (Drop / AutoDrop / leaks), multi-error recovery, incremental cache, package-manager migration, and finally the installed entry shipped from **ct-ast** (L2 demoted to the regression oracle; `pre-ct-ast-switch` marks the pre-switch commit); `CTC_VERSION` moved in lockstep and 108 goldens (50 under `test/cases/**`, 58 under `test/modules/**`) were regenerated with only the version token moving, **Phase 10 closes** |
 | v0.11.0 | Phase 11 `map` construct (bumped 2026-10-19; superseded by v0.11.1) | 11.1–11.2 landed: parsing `map trait T for instance x { m() → CALL; }`, the instance-level wrapper `<inst>_<Trait>_<method>` and the vtable `<inst>_<Trait>_vtable`, the `maps` field of `--emit-map`, and the dispatch wiring (boxing uses the instance-level vtable, so a struct that never `use`d the trait still runs as its instance); `CTC_VERSION` moved in lockstep and 103 goldens were regenerated (version token only), **Phase 11 closes** |
-| v0.11.1 | Phase 11 hardening (**current version**, patch-bumped 2026-10-19) | **11.3** landed: binding **completeness** (every trait method bound; a missing one leaves a null vtable slot and crashes at the call) and **uniqueness** (a duplicate would emit two same-named wrappers, i.e. a C redefinition) checks, plus a relaxed CALL argument subset (numeric / string literals, visible names, instance-rooted member paths `x.f` / `x->f` with an optional `&`); positive fixture `test/ast/15_map_args/`, negative cases `map_partial` / `map_dup` / `map_bad_path`; `CTC_VERSION` moved in lockstep and every golden was regenerated (version token only), **an in-phase patch** |
+| v0.11.1 | Phase 11 hardening (patch-bumped 2026-10-19; superseded by v0.12.0) | **11.3** landed: binding **completeness** (every trait method bound; a missing one leaves a null vtable slot and crashes at the call) and **uniqueness** (a duplicate would emit two same-named wrappers, i.e. a C redefinition) checks, plus a relaxed CALL argument subset (numeric / string literals, visible names, instance-rooted member paths `x.f` / `x->f` with an optional `&`); positive fixture `test/ast/15_map_args/`, negative cases `map_partial` / `map_dup` / `map_bad_path`; `CTC_VERSION` moved in lockstep and every golden was regenerated (version token only), **an in-phase patch** |
+| v0.12.0 | Phase 12 ecosystem extension (bumped 2026-10-19; **current version**) | 12.1–12.4 all landed: a new top-level `bindings/**` and the **first official binding** `bindings/mock-hal/` (pass-through `#include` + mirrored `trait`/`struct` + a declared global instance + `map`, **zero new language features**); the binding guidelines `bindings/README.md` (12.2); the single-file **multi-dialect coexistence** routing + authoring guide (12.3, with the `fsm-state` dialect plugin and a fix for the "only the first dialect marker is routed" gap); plus a fix for the ct-ast mainline never emitting `map` wrappers / vtables in multi-file `build` mode; `CTC_VERSION` moved in lockstep and **103 goldens** under `test/cases/**` and `test/modules/**` were regenerated (version token only), **Phase 12 closes** |
 
 The version lives in `CTC_VERSION` inside `ctc.c` and is written into the generated comments, so
 changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §5).
@@ -2208,9 +2210,9 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   `trait` / `struct` + a declared global instance + `map`) connect to C libraries with **zero new
   language features** — and **deepens the dialect system** (multi-dialect coexistence + an authoring
   guide). The design is frozen in [design/phase12.md](design/phase12.md) (D46–D52).
-- **Slices** (pending): **12.1** the binding shape plus the first binding (a new top-level
+- **Slices** (all landed): **12.1** the binding shape plus the first binding (a new top-level
   `bindings/**`, the first for an **in-repo fake HAL** under `bindings/mock-hal/` with its own header
-  and implementation and zero external dependencies) — *partly landed (2026-10-19)*: the directory,
+  and implementation and zero external dependencies) — *landed (2026-10-19)*: the directory,
   the binding (`uart.ct`), a consumer (`demo.ct`) and `demo.expected.out` exist, and the bindings
   section of `check-ast.sh` runs it end to end; a blocking defect was fixed on the way (`map`
   wrappers and vtables were never emitted in `build` mode — they are now emitted into the unit that
@@ -2223,14 +2225,15 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   through byte for byte" rule is established, both `test/run.sh`'s `dialect` layer and
   `check-ast.sh`'s corpus section now route **every** dialect in first-appearance order (they used
   to take only the first marker), and [dialect.md](design/dialect.md) §4.5 gained the authoring
-  guide; **12.4** hardening and closing (`check-all.sh` green, then a bump to v0.12.0 with
-  authorisation).
+  guide; **12.4** hardening and closing — *landed (2026-10-19)*: `check-all.sh` is green,
+  `CTC_VERSION` was bumped to **v0.12.0** in lockstep with authorisation and every golden was
+  regenerated (version token only).
 - **Spec prerequisite**: `bindings/**` requires amending [AGENTS.md](../AGENTS.md) §2 (the ownership
   table and hard boundaries) first — a binding only **declares** external symbols, **vendors nothing,
   downloads nothing** and **never becomes a compiler build step**; L0 / L1 / L2 stay untouched and new
   code lands in ct-ast only.
-- **Exit**: design frozen + new cases green; closing bump **v0.12.0** (a freeze-period exception
-  needing explicit user authorisation).
+- **Exit**: ✅ met (2026-10-19) — design frozen + new cases green; **closed with the bump to
+  v0.12.0** (a freeze-period exception, explicitly authorised by the user).
 
 ### Open decisions
 

@@ -1,5 +1,5 @@
 {
-  "compiler": "ct v0.11.1",
+  "compiler": "ct v0.12.0",
   "file": "prog.ct",
   "traits": [{"name":"Greeter","cname":"Greeter","file":"prog.ct","line":3,"methods":[{"name":"greet","ret":"void","params":0}]}],
   "structs": [{"name":"Person","cname":"Person","file":"prog.ct","line":7,"uses":["Greeter","Drop"]}],
