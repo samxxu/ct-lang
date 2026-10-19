@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> 状态：**10.1–10.5 已落地（2026-10-19）**；10.6–10.7 待推进。D38–D45 已按建议值确认。
+> 状态：**10.1–10.6 已落地（2026-10-19）**；10.7 待推进。D38–D45 已按建议值确认。
 > Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
 > Phase 10 的目标是补齐 ct-ast 相对 L2 的能力缺口，并把安装入口切过去；旧线保留为回归 oracle。
 
@@ -44,7 +44,7 @@
 | AutoDrop（`own`） | ✅ | ✅ | — |
 | 泄漏分析（作用域 / 条件 return / `ret_owned`） | ✅ | ✅（保守规则与 L2 一致） | — |
 | 增量缓存 `.ctcache/<unit>.key` | ✅ | ✅（键与 L2 逐字节一致） | — |
-| 包管理 `get` / `install` | ✅ | ❌ | 10.6 |
+| 包管理 `get` / `install` | ✅ | ✅（`PkgOps` 落在驱动层，编译核仍零网络） | — |
 | 语料覆盖：`test/modules` 的 autodrop / leak / line / map 用例 | ✅ | 全部覆盖（line / map 见元数据层） | — |
 
 ### 4. 切片与出口
@@ -56,7 +56,7 @@
 | 10.3 | 内存：Drop / AutoDrop / 泄漏分析 | ✅ **已落地（2026-10-19）**：`Drop` 内置 trait（`use Drop` / `impl Drop` / 递归释放 / `delete` 调用）与 AutoDrop（`own`，作用域末逆序释放，布局/Drop/作用域三种负例按 L2 措辞报错）落地；泄漏分析按 D40 复刻 L2 的保守规则（声明即跟踪 `malloc`/`calloc`/`ret_owned` 调用、赋值逃逸、`delete` 释放、条件 return 的路径告警、作用域末确定泄漏），text / JSON 均逐字节一致。新增 trait `MemoryOps`（11 个方法，未触碰 `ParseOps`）。`check-ast.sh` 新增 10.3 段：autodrop 4 例 + leak 7 例（76 → **87**） |
 | 10.4 | 多错误恢复 | ✅ **已落地（2026-10-19）**：`parse_program` 在报错后重同步（到下一条行首或 `}` 之后，同 L2 的 `recover_pos`），继续解析后续声明；`impl` 指向未定义 struct 时按 L2 在 `{` 处报 `impl for undefined struct 'X'` 并跳过整个 body；`use` 引用未定义 trait 时在 struct 的 `{` 处报错；超过 `MAX_ERRORS=20` 输出 `ctc: too many errors, stopping` 并以 1 退出。报错单元一律返回失败，产物不落盘。`check-ast.sh` 新增 `multi_err` / `multi_err_build` / `max_errors` 三项（逐字节比对 L2，87 → **90**） |
 | 10.5 | 增量缓存 | ✅ **已落地（2026-10-19）**：`build` 为每个单元写 `<outdir>/.ctcache/<base>.c.key`，键覆盖编译器版本、`--line` 强制度、诊断格式、`--ns-root`、单元路径、`mtime.size`、import 摘要与依赖 digest，拼写与 L2 **逐字节一致**（D41）。依赖按后序 DFS 保证 digest 先算；依赖变脏则下游变脏；`--emit-map` 不复用；键只在成功发射后落盘，`-c/-h` 缺失或键不符时重编。`check-ast.sh` 新增 10.5 段：冷编盖章、键对 L2、暖编复用、依赖失效、产物缺失重建（90 → **95**） |
-| 10.6 | 包管理迁移 | `test/pkg/run.sh` 改为驱动新入口；`get`/`install` 仍不触碰编译核 |
+| 10.6 | 包管理迁移 | ✅ **已落地（2026-10-19）**：`get` / `install` 按 D42 整体搬进 ct-ast 的驱动层（新 trait `PkgOps`，28 个方法），清单解析 / SemVer 子集与 MVS / 本地目录源 / git 源（`CT_REGISTRY`、`~/.cache/ct-pkg`、tag 选择与默认分支回退、commit + 内容摘要锁定）/ 五列 `ct.lock` / `ct.pkg` 回写去重 / `install` 离线校验与建议命令全部按 L2 措辞实现；编译核仍零网络零子进程。`test/pkg/run.sh` 的链路扩到 L0→L1→L2→ct-ast，并被 `get`/`install`/`build` 用例直接驱动（35 项全绿） |
 | 10.7 | 切主线 | 安装形态改由 ct-ast 构建；`check-all.sh` 的默认编译器切到新线，L2 降级为回归 oracle；bump v0.10.0 |
 
 每片要求：`check-all.sh` 零回退；`check-ast.sh` 全绿；新增/修改语料必须由真实二进制输出生成期望值。
@@ -125,7 +125,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | AutoDrop (`own`) | ✅ | ✅ | — |
 | leak analysis (scope / conditional return / `ret_owned`) | ✅ | ✅ (the same conservative rules as L2) | — |
 | incremental cache `.ctcache/<unit>.key` | ✅ | ✅ (keys byte-identical to L2) | — |
-| package manager `get` / `install` | ✅ | ❌ | 10.6 |
+| package manager `get` / `install` | ✅ | ✅ (`PkgOps` in the driver; the compile core stays network-free) | — |
 | corpus coverage of `test/modules` autodrop / leak / line / map cases | ✅ | all covered (line / map live in the metadata layer) | — |
 
 ### 4. Slices and exit criteria
@@ -137,7 +137,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | 10.3 | memory: Drop / AutoDrop / leak analysis | ✅ **landed (2026-10-19)**: the built-in `Drop` trait (`use Drop`, `impl Drop`, recursive release, `delete` calling it) and AutoDrop (`own` — reverse-order release at scope exit, with the layout / Drop / scope negatives reporting L2's wording); the leak analysis replicates L2's conservative rules per D40 (tracking `malloc` / `calloc` / `ret_owned` calls at the declaration, escape on assignment, release on `delete`, one path warning per conditional return, definite leak at scope exit) with text and JSON byte-identical. The new `MemoryOps` trait (11 methods) leaves `ParseOps` untouched. `check-ast.sh` gained the 10.3 section: 4 autodrop + 7 leak assertions (76 → **87**) |
 | 10.4 | multi-error recovery | ✅ **landed (2026-10-19)**: `parse_program` resynchronises after a reported error (past the next `}` or to the start of the next line, L2's `recover_pos`) and keeps parsing; an `impl` of an undefined struct reports `impl for undefined struct 'X'` at its `{` and skips the body; a `use` of an undefined trait reports at the struct's `{`; past `MAX_ERRORS=20` both print `ctc: too many errors, stopping` and exit 1. A unit with errors always fails, so no artifacts are written. `check-ast.sh` gained `multi_err` / `multi_err_build` / `max_errors` (byte-diffed against L2, 87 → **90**) |
 | 10.5 | incremental cache | ✅ **landed (2026-10-19)**: `build` stamps `<outdir>/.ctcache/<base>.c.key` per unit; the key covers the compiler version, the `--line` force, the diagnostics format, `--ns-root`, the unit path, its `mtime.size`, an import digest and the folded dependency digests, spelled exactly as L2 writes them (D41). A postorder DFS computes digests before they are folded; a dirty dependency makes its importers dirty; `--emit-map` never reuses; the key is stored only after a successful emit, and a missing `.c`/`.h` or a stale key rebuilds. `check-ast.sh` gained the 10.5 section: cold stamps, key parity with L2, warm reuse, dependency invalidation and a missing artefact (90 → **95**) |
-| 10.6 | package manager migration | `test/pkg/run.sh` drives the new entry; `get`/`install` still stay out of the compile core |
+| 10.6 | package manager migration | ✅ **landed (2026-10-19)**: `get` / `install` move into ct-ast's driver per D42 (new `PkgOps`, 28 methods): manifest parsing, the SemVer subset + MVS, local directory sources, git sources (`CT_REGISTRY`, `~/.cache/ct-pkg`, tag pick with the default-branch fallback, commit + content-digest pinning), the five-column `ct.lock`, the de-duplicating `ct.pkg` write-back, and `install`'s offline verification and suggested command, all with L2's wording; the compile core stays network-free and process-free. `test/pkg/run.sh` builds L0→L1→L2→ct-ast and drives the new entry for get/install/build (35 assertions green) |
 | 10.7 | mainline switch | the install shape builds from ct-ast; `check-all.sh` defaults to the new line with L2 as the regression oracle; bump v0.10.0 |
 
 Every slice keeps `check-all.sh` regression-free and `check-ast.sh` green; any new or changed
