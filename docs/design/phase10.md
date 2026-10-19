@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> 状态：**10.1–10.6 已落地（2026-10-19）**；10.7 待推进。D38–D45 已按建议值确认。
+> 状态：**10.1–10.7 全部落地（2026-10-19），Phase 10 收口并 bump 到 v0.10.0**。D38–D45 已按建议值确认。
 > Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
 > Phase 10 的目标是补齐 ct-ast 相对 L2 的能力缺口，并把安装入口切过去；旧线保留为回归 oracle。
 
@@ -17,7 +17,7 @@
 | 目标 | 让 **ct-ast** 提供完整的 `ct` 命令行：`compile` / `build` / `get` / `install` 与全部既有选项，行为与 L2 等价 |
 | 出口 | 以 ct-ast 构建的 `ct` 跑完整套关卡（`test/run.sh`、`test/modules`、`test/pkg`、`ct-tour`、`acceptance`）全绿；`check-ast.sh` 覆盖全部语料 |
 | 版本 | `v0.10.0`（Phase 10 ↔ `v0.10.x`），收口时 bump（冻结期例外，需用户授权） |
-| 回退 | 旧线 `selfhost/src/**` 冻结保留，tag `v0.9.0` 即为可回退点；切换本身再打一个非版本 tag |
+| 回退 | 旧线 `selfhost/src/**` 冻结保留，tag `v0.9.0` 即为可回退点；切换前打 tag `pre-ct-ast-switch`（2026-10-19） |
 
 ### 2. 非目标
 
@@ -57,7 +57,7 @@
 | 10.4 | 多错误恢复 | ✅ **已落地（2026-10-19）**：`parse_program` 在报错后重同步（到下一条行首或 `}` 之后，同 L2 的 `recover_pos`），继续解析后续声明；`impl` 指向未定义 struct 时按 L2 在 `{` 处报 `impl for undefined struct 'X'` 并跳过整个 body；`use` 引用未定义 trait 时在 struct 的 `{` 处报错；超过 `MAX_ERRORS=20` 输出 `ctc: too many errors, stopping` 并以 1 退出。报错单元一律返回失败，产物不落盘。`check-ast.sh` 新增 `multi_err` / `multi_err_build` / `max_errors` 三项（逐字节比对 L2，87 → **90**） |
 | 10.5 | 增量缓存 | ✅ **已落地（2026-10-19）**：`build` 为每个单元写 `<outdir>/.ctcache/<base>.c.key`，键覆盖编译器版本、`--line` 强制度、诊断格式、`--ns-root`、单元路径、`mtime.size`、import 摘要与依赖 digest，拼写与 L2 **逐字节一致**（D41）。依赖按后序 DFS 保证 digest 先算；依赖变脏则下游变脏；`--emit-map` 不复用；键只在成功发射后落盘，`-c/-h` 缺失或键不符时重编。`check-ast.sh` 新增 10.5 段：冷编盖章、键对 L2、暖编复用、依赖失效、产物缺失重建（90 → **95**） |
 | 10.6 | 包管理迁移 | ✅ **已落地（2026-10-19）**：`get` / `install` 按 D42 整体搬进 ct-ast 的驱动层（新 trait `PkgOps`，28 个方法），清单解析 / SemVer 子集与 MVS / 本地目录源 / git 源（`CT_REGISTRY`、`~/.cache/ct-pkg`、tag 选择与默认分支回退、commit + 内容摘要锁定）/ 五列 `ct.lock` / `ct.pkg` 回写去重 / `install` 离线校验与建议命令全部按 L2 措辞实现；编译核仍零网络零子进程。`test/pkg/run.sh` 的链路扩到 L0→L1→L2→ct-ast，并被 `get`/`install`/`build` 用例直接驱动（35 项全绿） |
-| 10.7 | 切主线 | 安装形态改由 ct-ast 构建；`check-all.sh` 的默认编译器切到新线，L2 降级为回归 oracle；bump v0.10.0 |
+| 10.7 | 切主线 | ✅ **已落地（2026-10-19）**：安装形态改由 **ct-ast** 构建（链到 L2 后由 L2 编出 `selfhost/ast/main.ct`，二进制命名为 `ct` + `ln -s ct ctc`），L2 降级为回归 oracle；`ct-tour.sh` 的第 7 步改为展示 ct-ast 的身份与多文件构建、第 8 步缓存改用 ct-ast，README 的安装段落同步；切换前打 tag `pre-ct-ast-switch`。五处 `CTC_VERSION` 同步 bump 到 **v0.10.0**，108 个 golden（`test/cases/**` 50 + `test/modules/**` 58，含 map JSON 与 stdout）按真实二进制重生成，仅版本 token 变化；`check-all.sh` 8 关全绿，**Phase 10 收口** |
 
 每片要求：`check-all.sh` 零回退；`check-ast.sh` 全绿；新增/修改语料必须由真实二进制输出生成期望值。
 
@@ -99,7 +99,7 @@ switches the shipped entry to ct-ast, keeping the old line as a regression oracl
 | Goal | ct-ast offers the full `ct` CLI: `compile` / `build` / `get` / `install` and every existing option, behaving like L2 |
 | Exit | a `ct` built from ct-ast passes the whole suite (`test/run.sh`, `test/modules`, `test/pkg`, `ct-tour`, `acceptance`); `check-ast.sh` covers the entire corpus |
 | Version | `v0.10.0` (Phase 10 ↔ `v0.10.x`), bumped when 10.7 closes (a freeze-period exception needing user authorisation) |
-| Rollback | `selfhost/src/**` stays frozen; `v0.9.0` is the rollback point, and the switch itself gets a non-version tag |
+| Rollback | `selfhost/src/**` stays frozen; `v0.9.0` is the rollback point, and `pre-ct-ast-switch` marks the commit before the switch (2026-10-19) |
 
 ### 2. Non-goals
 
@@ -138,7 +138,7 @@ requirement between ct-ast and L2 (D34 is behavioural equivalence).
 | 10.4 | multi-error recovery | ✅ **landed (2026-10-19)**: `parse_program` resynchronises after a reported error (past the next `}` or to the start of the next line, L2's `recover_pos`) and keeps parsing; an `impl` of an undefined struct reports `impl for undefined struct 'X'` at its `{` and skips the body; a `use` of an undefined trait reports at the struct's `{`; past `MAX_ERRORS=20` both print `ctc: too many errors, stopping` and exit 1. A unit with errors always fails, so no artifacts are written. `check-ast.sh` gained `multi_err` / `multi_err_build` / `max_errors` (byte-diffed against L2, 87 → **90**) |
 | 10.5 | incremental cache | ✅ **landed (2026-10-19)**: `build` stamps `<outdir>/.ctcache/<base>.c.key` per unit; the key covers the compiler version, the `--line` force, the diagnostics format, `--ns-root`, the unit path, its `mtime.size`, an import digest and the folded dependency digests, spelled exactly as L2 writes them (D41). A postorder DFS computes digests before they are folded; a dirty dependency makes its importers dirty; `--emit-map` never reuses; the key is stored only after a successful emit, and a missing `.c`/`.h` or a stale key rebuilds. `check-ast.sh` gained the 10.5 section: cold stamps, key parity with L2, warm reuse, dependency invalidation and a missing artefact (90 → **95**) |
 | 10.6 | package manager migration | ✅ **landed (2026-10-19)**: `get` / `install` move into ct-ast's driver per D42 (new `PkgOps`, 28 methods): manifest parsing, the SemVer subset + MVS, local directory sources, git sources (`CT_REGISTRY`, `~/.cache/ct-pkg`, tag pick with the default-branch fallback, commit + content-digest pinning), the five-column `ct.lock`, the de-duplicating `ct.pkg` write-back, and `install`'s offline verification and suggested command, all with L2's wording; the compile core stays network-free and process-free. `test/pkg/run.sh` builds L0→L1→L2→ct-ast and drives the new entry for get/install/build (35 assertions green) |
-| 10.7 | mainline switch | the install shape builds from ct-ast; `check-all.sh` defaults to the new line with L2 as the regression oracle; bump v0.10.0 |
+| 10.7 | mainline switch | ✅ **landed (2026-10-19)**: the install shape builds **ct-ast** (L2 compiles `selfhost/ast/main.ct`; the binary is named `ct` plus `ln -s ct ctc`) and L2 drops to the regression-oracle role; `ct-tour.sh` step 7 demonstrates ct-ast's identity and multi-file build, step 8 runs the cache on ct-ast, and the README install section follows; the commit before the switch is tagged `pre-ct-ast-switch`. All five `CTC_VERSION`s move to **v0.10.0** and 108 goldens (`test/cases/**` 50 + `test/modules/**` 58, map JSON and stdout included) are regenerated by the real binaries with only the version token moving; `check-all.sh` is green on all 8 gates and **Phase 10 closes** |
 
 Every slice keeps `check-all.sh` regression-free and `check-ast.sh` green; any new or changed
 fixture expectation must be produced by the real binary, never hand-written.
