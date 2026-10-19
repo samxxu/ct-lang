@@ -300,7 +300,8 @@ static int  g_have_map;
 
 /* The name `-v` and usage print (D44): `ct` when installed under that name,
    `ctc` for the compatibility alias, `ct-ast` for the development binary.
-   Diagnostics keep their `ct-ast:` prefix so existing assertions stay put. */
+   Driver diagnostics keep the published `ctc:` prefix (SH-3 / phase10 non-goal),
+   so logs and assertions do not move when the entry name changes. */
 static const char *g_prog = "ct-ast";
 static int  g_diag_json;              /* --diagnostics=json (warnings land in 10.3) */
 static const char *g_std_flag = "-std=c99";   /* --std=c99 | --std=gnu99 */
@@ -821,8 +822,10 @@ impl AstOps for Ast {
                        "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
-                       "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
-                       g_prog, g_prog);
+                       "                 [--diagnostics=text|json] [--std=c99|gnu99]\n"
+                       "       %s get <spec>[@<range>]\n"
+                       "       %s install\n",
+                       g_prog, g_prog, g_prog, g_prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -839,7 +842,7 @@ impl AstOps for Ast {
                     g_diag_json = 0;
                     continue;
                 }
-                fprintf(stderr, "ct-ast: unknown diagnostics format '%s'\n", v);
+                fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
                 return 1;
             }
             if (strncmp(argv[i], "--std=", 6) == 0) {
@@ -852,12 +855,12 @@ impl AstOps for Ast {
                     g_std_flag = "-std=gnu99";
                     continue;
                 }
-                fprintf(stderr, "ct-ast: unknown C standard '%s'\n", v);
+                fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
                 return 1;
             }
             if (strcmp(argv[i], "-I") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: -I needs an argument\n");
+                    fprintf(stderr, "ctc: -I needs an argument\n");
                     return 1;
                 }
                 i++;   /* accepted for CLI parity; compile mode resolves no imports */
@@ -875,12 +878,12 @@ impl AstOps for Ast {
             }
             if (strcmp(argv[i], "--emit-map") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: --emit-map needs an argument\n");
+                    fprintf(stderr, "ctc: --emit-map needs an argument\n");
                     return 1;
                 }
                 i++;
                 if (snprintf(g_map_path, sizeof g_map_path, "%s", argv[i]) >= (int)sizeof g_map_path) {
-                    fprintf(stderr, "ct-ast: map path is too long\n");
+                    fprintf(stderr, "ctc: map path is too long\n");
                     return 1;
                 }
                 g_have_map = 1;
@@ -888,7 +891,7 @@ impl AstOps for Ast {
             }
             if (strcmp(argv[i], "-o") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: -o needs an argument\n");
+                    fprintf(stderr, "ctc: -o needs an argument\n");
                     return 1;
                 }
                 i++;
@@ -896,7 +899,7 @@ impl AstOps for Ast {
                 continue;
             }
             if (argv[i][0] == '-' && argv[i][1]) {
-                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
                 return 1;
             }
             in = argv[i];
@@ -907,7 +910,7 @@ impl AstOps for Ast {
         }
         if (!out) {
             if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
-                fprintf(stderr, "ct-ast: output path too long\n");
+                fprintf(stderr, "ctc: output path too long\n");
                 return 1;
             }
             out = outbuf;
@@ -940,7 +943,7 @@ impl AstOps for Ast {
         g_cur_func[0] = 0;
         g_errmsg[0] = 0;
         if (self->read_file(in) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            fprintf(stderr, "ctc: %s\n", g_errmsg);
             return 1;
         }
         prog = self->parse_program();
@@ -949,12 +952,12 @@ impl AstOps for Ast {
                 fprintf(stderr, "ctc: %d error(s) generated\n", g_nsem);
                 return 1;
             }
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            fprintf(stderr, "ctc: %s\n", g_errmsg);
             return 1;
         }
         f = fopen(out, "w");
         if (!f) {
-            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            fprintf(stderr, "ctc: cannot write '%s'\n", out);
             return 1;
         }
         g_out = f;
@@ -965,19 +968,19 @@ impl AstOps for Ast {
         if (g_line_mode) fprintf(g_out, "#line 1 \"%s\"\n", g_path);
         if (self->emit_program(prog) != 0) {
             fclose(f);
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            fprintf(stderr, "ctc: %s\n", g_errmsg);
             return 1;
         }
         if (fclose(f) != 0) {
-            fprintf(stderr, "ct-ast: cannot write '%s'\n", out);
+            fprintf(stderr, "ctc: cannot write '%s'\n", out);
             return 1;
         }
         if (self->write_header(out) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            fprintf(stderr, "ctc: %s\n", g_errmsg);
             return 1;
         }
         if (g_have_map && self->write_map(g_map_path, prog, -1) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            fprintf(stderr, "ctc: %s\n", g_errmsg);
             return 1;
         }
         if (self->emit_warnings(stdout, stderr) != 0) return 1;
@@ -3568,7 +3571,7 @@ impl ModuleOps for Ast {
                     g_diag_json = 0;
                     continue;
                 }
-                fprintf(stderr, "ct-ast: unknown diagnostics format '%s'\n", v);
+                fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
                 return 1;
             }
             if (strncmp(argv[i], "--std=", 6) == 0) {
@@ -3581,7 +3584,7 @@ impl ModuleOps for Ast {
                     g_std_flag = "-std=gnu99";
                     continue;
                 }
-                fprintf(stderr, "ct-ast: unknown C standard '%s'\n", v);
+                fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
                 return 1;
             }
             if (strcmp(argv[i], "--line") == 0) {
@@ -3596,12 +3599,12 @@ impl ModuleOps for Ast {
             }
             if (strcmp(argv[i], "--emit-map") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: --emit-map needs an argument\n");
+                    fprintf(stderr, "ctc: --emit-map needs an argument\n");
                     return 1;
                 }
                 i++;
                 if (snprintf(g_map_path, sizeof g_map_path, "%s", argv[i]) >= (int)sizeof g_map_path) {
-                    fprintf(stderr, "ct-ast: map path is too long\n");
+                    fprintf(stderr, "ctc: map path is too long\n");
                     return 1;
                 }
                 g_have_map = 1;
@@ -3609,7 +3612,7 @@ impl ModuleOps for Ast {
             }
             if (strcmp(argv[i], "-o") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: -o needs an argument\n");
+                    fprintf(stderr, "ctc: -o needs an argument\n");
                     return 1;
                 }
                 i++;
@@ -3618,12 +3621,12 @@ impl ModuleOps for Ast {
             }
             if (strcmp(argv[i], "-I") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: -I needs an argument\n");
+                    fprintf(stderr, "ctc: -I needs an argument\n");
                     return 1;
                 }
                 i++;
                 if (g_ninc >= MAX_INCDIRS) {
-                    fprintf(stderr, "ct-ast: too many -I roots\n");
+                    fprintf(stderr, "ctc: too many -I roots\n");
                     return 1;
                 }
                 g_incdirs[g_ninc] = argv[i];
@@ -3632,7 +3635,7 @@ impl ModuleOps for Ast {
             }
             if (strcmp(argv[i], "--ns-root") == 0) {
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "ct-ast: --ns-root needs an argument\n");
+                    fprintf(stderr, "ctc: --ns-root needs an argument\n");
                     return 1;
                 }
                 i++;
@@ -3640,11 +3643,11 @@ impl ModuleOps for Ast {
                 continue;
             }
             if (argv[i][0] == '-' && argv[i][1]) {
-                fprintf(stderr, "ct-ast: unknown option '%s'\n", argv[i]);
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
                 return 1;
             }
             if (ninput >= MAX_UNITS) {
-                fprintf(stderr, "ct-ast: too many inputs\n");
+                fprintf(stderr, "ctc: too many inputs\n");
                 return 1;
             }
             inputs[ninput] = argv[i];
@@ -3655,16 +3658,16 @@ impl ModuleOps for Ast {
             return 1;
         }
         if (!outdir) {
-            fprintf(stderr, "ct-ast: build needs -o <dir>\n");
+            fprintf(stderr, "ctc: build needs -o <dir>\n");
             return 1;
         }
         if (snprintf(g_outdir, sizeof g_outdir, "%s", outdir) >= (int)sizeof g_outdir) {
-            fprintf(stderr, "ct-ast: output directory is too long\n");
+            fprintf(stderr, "ctc: output directory is too long\n");
             return 1;
         }
         if (!g_nsroot) {
             if (self->path_dir(inputs[0], root, sizeof root) != 0) {
-                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                fprintf(stderr, "ctc: %s\n", g_errmsg);
                 return 1;
             }
             g_nsroot = root;
@@ -3703,13 +3706,13 @@ impl ModuleOps for Ast {
         for (i = 0; i < ninput; i++) {
             if (self->load_unit(inputs[i]) < 0) {
                 if (g_nsem) fprintf(stderr, "ctc: %d error(s) generated\n", g_nsem);
-                else fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                else fprintf(stderr, "ctc: %s\n", g_errmsg);
                 return 1;
             }
         }
         for (u = 0; u < g_nunits; u++) {
             if (self->check_ns_dir(u) != 0) {
-                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                fprintf(stderr, "ctc: %s\n", g_errmsg);
                 return 1;
             }
         }
@@ -3722,7 +3725,7 @@ impl ModuleOps for Ast {
         cn = 0;
         for (u = 0; u < g_nunits; u++)
             if (self->cache_order(u, cstate, corder, &cn) != 0) {
-                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                fprintf(stderr, "ctc: %s\n", g_errmsg);
                 return 1;
             }
         for (o = 0; o < cn; o++) {
@@ -3733,7 +3736,7 @@ impl ModuleOps for Ast {
             dirty[u] = 1;
             if (snprintf(outc, sizeof outc, "%s/%s.c", g_outdir, g_units[u].base)
                     >= (int)sizeof outc) {
-                fprintf(stderr, "ct-ast: output path is too long\n");
+                fprintf(stderr, "ctc: output path is too long\n");
                 return 1;
             }
             if (!g_have_map && self->cache_key(u, key, sizeof key) == 0
@@ -3748,11 +3751,11 @@ impl ModuleOps for Ast {
             u = corder[o];
             if (!dirty[u]) continue;
             if (self->emit_unit(u) != 0) {
-                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                fprintf(stderr, "ctc: %s\n", g_errmsg);
                 return 1;
             }
             if (self->write_unit_header(u) != 0) {
-                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                fprintf(stderr, "ctc: %s\n", g_errmsg);
                 return 1;
             }
             /* stamped only after a successful emit: a failed unit must never be
@@ -3763,7 +3766,7 @@ impl ModuleOps for Ast {
                 self->cache_store(outc, key);
         }
         if (g_have_map && self->write_map(g_map_path, g_units[0].prog, 0) != 0) {
-            fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+            fprintf(stderr, "ctc: %s\n", g_errmsg);
             return 1;
         }
         /* The command the user runs next, in the same shape L2 prints; the
