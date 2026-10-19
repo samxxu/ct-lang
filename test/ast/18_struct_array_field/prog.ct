@@ -1,0 +1,21 @@
+#include <stdio.h>
+
+trait Expr { int eval(); }
+
+struct Num { int v; } use Expr;
+struct Duo { Num ab[2]; int n; } use Expr;
+
+impl Expr for Num { int eval() { return self->v; } }
+
+impl Expr for Duo {
+    int eval() { return self->ab[0].eval() + self->ab[1].eval(); }
+}
+
+int main(void) {
+    Duo d;
+    d.ab[0].v = 1;
+    d.ab[1].v = 2;
+    d.n = 2;
+    printf("%d\n", d.eval());
+    return 0;
+}

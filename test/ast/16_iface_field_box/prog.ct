@@ -1,0 +1,22 @@
+#include <stdio.h>
+
+trait Node { int eval(); }
+
+struct Num { int v; } use Node;
+struct Add { Node l; Node r; } use Node;
+struct Ref { Node *t; } use Node;
+
+impl Node for Num { int eval() { return self->v; } }
+impl Node for Add { int eval() { return self->l.eval() + self->r.eval(); } }
+impl Node for Ref { int eval() { return self->t->eval(); } }
+
+int main(void) {
+    Num a = { .v = 2 };
+    Num b = { .v = 3 };
+    Add sum = { .l = a, .r = b };
+    Ref ref = { .t = &sum };
+    Ref assigned;
+    assigned.t = &sum;
+    printf("%d %d %d\n", sum.eval(), ref.eval(), assigned.eval());
+    return 0;
+}
