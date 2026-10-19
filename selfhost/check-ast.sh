@@ -37,6 +37,9 @@
 # 10.4 adds the recovery section: multi_error fixtures (compile and build) plus
 # the MAX_ERRORS cap, byte-diffed against L2 and artifact-free.
 #
+# 10.5 adds the cache section: cold/warm builds, dependency invalidation and a
+# missing artefact, with the keys byte-compared against L2's.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -585,6 +588,55 @@ elif ! grep -q '^ctc: too many errors, stopping$' "$rec-cap/ast.err"; then
     bad "max_errors" "the cap line is missing"
 else
     ok "max_errors (same cap and report as L2)"
+fi
+
+echo
+echo "== incremental cache (10.5) =="
+# The key is a pure function of the source stamp, the run's options and the
+# dependency digests, so a warm build must leave the artefacts alone while a
+# dependency change or a deleted artefact must rebuild. The key spelling is
+# byte-compared with L2's (D41).
+cac="$work/cache"
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
+rm -rf "$cac"
+mkdir -p "$cac/src" "$cac/ast" "$cac/l2"
+cp test/modules/split/*.ct "$cac/src/"
+if "$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>"$cac/ast.err" \
+   && [ -f "$cac/ast/.ctcache/main.c.key" ]; then
+    ok "cache: a cold build stamps every unit"
+else
+    bad "cache" "cold build failed: $(cat "$cac/ast.err")"
+fi
+if "$work/l2" build "$cac/src/main.ct" -o "$cac/l2" >/dev/null 2>&1 \
+   && cmp -s "$cac/ast/.ctcache/main.c.key" "$cac/l2/.ctcache/main.c.key" \
+   && cmp -s "$cac/ast/.ctcache/shapes.c.key" "$cac/l2/.ctcache/shapes.c.key" \
+   && cmp -s "$cac/ast/.ctcache/impl_dog.c.key" "$cac/l2/.ctcache/impl_dog.c.key"; then
+    ok "cache: keys match L2 byte for byte"
+else
+    bad "cache keys" "the key spelling differs from L2"
+fi
+touch -t 200001010000 "$cac/ast/main.c" "$cac/ast/shapes.c" "$cac/ast/impl_dog.c"
+cached=$(mtime "$cac/ast/main.c")
+"$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
+if [ "$(mtime "$cac/ast/main.c")" = "$cached" ]; then
+    ok "cache: a warm build reuses unchanged units"
+else
+    bad "cache warm" "main.c was regenerated although nothing changed"
+fi
+touch -t 201001010000 "$cac/src/shapes.h.ct"
+"$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
+if [ "$(mtime "$cac/ast/main.c")" != "$cached" ] \
+   && [ "$(mtime "$cac/ast/impl_dog.c")" != "$cached" ]; then
+    ok "cache: a dependency change invalidates downstream units"
+else
+    bad "cache dep" "main.c/impl_dog.c were not rebuilt after shapes changed"
+fi
+rm -f "$cac/ast/shapes.c"
+"$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
+if [ -f "$cac/ast/shapes.c" ]; then
+    ok "cache: a missing artefact is regenerated"
+else
+    bad "cache artifact" "shapes.c was not restored"
 fi
 
 echo
