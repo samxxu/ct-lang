@@ -30,7 +30,7 @@
 |--------|---------------------|-------------|
 | 引入代码生成脚本与构建管线 | §2 硬性边界：不引入任何第三方库、构建系统、代码生成脚本 | 方言展开器 + `ct build` 展开管线 |
 | 插件不得调用编译器 | §2：`editors/**` 只做高亮与编辑体验，不调用 `ctc` | §9 插件后台自动 expand 或 `--watch` |
-| 包管理分发方言 | 包管理未落地、命名未定（见 [roadmap](../roadmap.md)） | §4.3 全局方言目录、`ct get dialect-html` |
+| 包管理分发方言 | 包管理（`ct-pkg`）已在 Phase 8 落地（`ct get` / `ct install`）；方言的全局分发仍属远期 | §4.3 全局方言目录、`ct get dialect-html` |
 
 这三条不会因为「排在后面」就消失，落地那一刻必然要改规约。现在记下来，是为了避免最后阶段先撕规约再开工。
 
@@ -466,7 +466,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 | 4 | 接口文档独立成页 | 待写 |
 | 5 | 官方预制方言清单最终确认 | 建议 3-4 个 |
 | 6 | sourcemap 格式 | 底座（反向映射表）已定，**本层输出格式待定** |
-| 7 | 包管理分发方言 | 远期（依赖未落地的包管理） |
+| 7 | 包管理分发方言 | 远期（包管理已在 Phase 8 落地；方言的全局分发目录尚未落地） |
 | 8 | 与已定 `map` 语法的职责边界（§11.5） | 开放，落地前须划清 |
 | 9 | 修订 AGENTS.md §2 硬性边界（§0.1） | 落地前必须处理 |
 
@@ -490,7 +490,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 | -------- | ------------------------------------------- | ----------------------------- |
 | Code-generation scripts and a build pipeline | §2 hard boundary: no third-party libraries, build systems or code-generation scripts | dialect expanders + the `ct build` expansion pipeline |
 | The extension must not invoke the compiler | §2: `editors/**` covers highlighting and editing comfort only and does not call `ctc` | §9 the extension running expand in the background, or `--watch` |
-| Dialect distribution via the package manager | the package manager is unimplemented (named `ct-pkg`, see [roadmap](../roadmap.md)) | §4.3 a global dialect directory, `ct get dialect-html` |
+| Dialect distribution via the package manager | the package manager (`ct-pkg`) landed in Phase 8 (`ct get` / `ct install`); dialect distribution through it is still long term | §4.3 a global dialect directory, `ct get dialect-html` |
 
 None of these disappears by being scheduled last — each one has to be amended the moment it lands.
 Recording them now avoids having to tear up the rules at the very end before any work can start.
@@ -982,7 +982,7 @@ It is not that the machine produces less.
 | 4 | An independent page for the interface document | to be written |
 | 5 | Final list of official prebuilt dialects | 3–4 recommended |
 | 6 | Sourcemap format | substrate (reverse mapping table) decided, **this layer's output format undecided** |
-| 7 | Dialect distribution via the package manager | long term (depends on the unimplemented package manager) |
+| 7 | Dialect distribution via the package manager | long term (the package manager landed in Phase 8; a global dialect directory has not) |
 | 8 | Boundary with the decided `map` syntax (§11.5) | open; to be drawn before landing |
 | 9 | Amend the AGENTS.md §2 hard boundary (§0.1) | must be handled before landing |
 

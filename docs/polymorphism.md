@@ -231,7 +231,9 @@ D6 = 确认 `<Trait>_iface`；D7 = 接口字段为普通字段。
 > **Kind: mechanism note (describes current behaviour).** This document explains the semantics and
 > syntax needed to use a trait as a type and dispatch to different `struct`s at run time —
 > [roadmap](roadmap.md) Phase 0.2. These capabilities are **implemented** (decisions D1–D7 are in §7).
-> **Not implemented yet**: interface arrays and automatic boxing of interface fields at construction.
+> Interface arrays and interface fields (boxing at construction and dispatch, for value and pointer
+> fields) **landed on 2026-10-17**, pinned by `test/cases/28_iface_field.ct` and probes p01–p08 in
+> `test/acceptance/run.sh`.
 >
 > Prerequisite: Phase 0 exits 1–8 hold (0.1.1–0.1.9) — concrete, compile-time-known objects are
 > already fully usable.
