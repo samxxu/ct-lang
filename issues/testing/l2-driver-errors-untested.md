@@ -6,7 +6,7 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 位置 | [selfhost/src/driver.ct](../../selfhost/src/driver.ct)、[selfhost/src/core.ct](../../selfhost/src/core.ct) |
-| 状态 | ✅ 已修复（2026-10-18 两轮；仅 build 缺参与 `--ns-root` 缺参受 runner 限制未覆盖） |
+| 状态 | ✅ 已修复（2026-10-18 两轮；仅 build 缺参、`--ns-root` 缺参与 `too many units` 受 runner / 成本限制未覆盖） |
 
 ## 现象
 
@@ -34,7 +34,7 @@ L0 侧同类分支已有 `cli/cannot-open`、`cli/cannot-read`、`cli/tmpfile-ca
 
 ## 影响
 
-L2 是当前唯一仍在开发的编译器；其驱动层回归网比 L0 薄。此前在 L0 上真实发生过的 I/O 失败缺陷（`cannot read` / `tmpfile`）说明这类分支并非纯理论。
+（在锚点当时）L2 是唯一仍在开发的编译器；其驱动层回归网比 L0 薄。此前在 L0 上真实发生过的 I/O 失败缺陷（`cannot read` / `tmpfile`）说明这类分支并非纯理论。
 
 ## 修复建议
 
