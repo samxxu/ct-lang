@@ -411,6 +411,85 @@ else
     bad "--std=c11" "wrong diagnostic: $(cat "$work/cli-std.err")"
 fi
 
+# The remaining driver branches (Phase 9 review §3.2-1): help, missing
+# option arguments, unknown options, an unreadable input, an unwritable
+# output, `import` in compile mode and a build without `-o`.
+if "$work/ct-ast" -h >"$work/cli-h.out" 2>"$work/cli-h.err" \
+   && grep -q '^usage: ' "$work/cli-h.out"; then
+    ok "-h prints usage and exits zero"
+else
+    bad "-h" "$(cat "$work/cli-h.out") $(cat "$work/cli-h.err")"
+fi
+if "$work/ct-ast" >"$work/cli-none.out" 2>"$work/cli-none.err"; then
+    bad "compile with no input" "expected a non-zero exit"
+elif grep -q '^usage: ' "$work/cli-none.err"; then
+    ok "compile with no input prints usage"
+else
+    bad "compile with no input" "wrong diagnostic: $(cat "$work/cli-none.err")"
+fi
+if "$work/ct-ast" -o >"$work/cli-o.out" 2>"$work/cli-o.err"; then
+    bad "-o needs an argument" "expected a non-zero exit"
+elif grep -q -- "-o needs an argument" "$work/cli-o.err"; then
+    ok "-o without an argument is rejected"
+else
+    bad "-o needs an argument" "wrong diagnostic: $(cat "$work/cli-o.err")"
+fi
+if "$work/ct-ast" -I >"$work/cli-iarg.out" 2>"$work/cli-iarg.err"; then
+    bad "-I needs an argument" "expected a non-zero exit"
+elif grep -q -- "-I needs an argument" "$work/cli-iarg.err"; then
+    ok "-I without an argument is rejected"
+else
+    bad "-I needs an argument" "wrong diagnostic: $(cat "$work/cli-iarg.err")"
+fi
+if "$work/ct-ast" build test/ast/02_expr/prog.ct --ns-root \
+        >"$work/cli-ns.out" 2>"$work/cli-ns.err"; then
+    bad "--ns-root needs an argument" "expected a non-zero exit"
+elif grep -q -- "--ns-root needs an argument" "$work/cli-ns.err"; then
+    ok "build: --ns-root without an argument is rejected"
+else
+    bad "--ns-root needs an argument" "wrong diagnostic: $(cat "$work/cli-ns.err")"
+fi
+if "$work/ct-ast" --bogus test/ast/02_expr/prog.ct -o "$work/cli-u.c" \
+        >"$work/cli-u.out" 2>"$work/cli-u.err"; then
+    bad "unknown option" "expected a non-zero exit"
+elif grep -q "unknown option '--bogus'" "$work/cli-u.err"; then
+    ok "an unknown option is rejected"
+else
+    bad "unknown option" "wrong diagnostic: $(cat "$work/cli-u.err")"
+fi
+if "$work/ct-ast" "$work/no-such.ct" -o "$work/cli-co.c" \
+        >"$work/cli-co.out" 2>"$work/cli-co.err"; then
+    bad "cannot open input" "expected a non-zero exit"
+elif grep -q "cannot open the input file" "$work/cli-co.err"; then
+    ok "an unreadable input is reported"
+else
+    bad "cannot open input" "wrong diagnostic: $(cat "$work/cli-co.err")"
+fi
+if "$work/ct-ast" test/ast/02_expr/prog.ct -o "$work" \
+        >"$work/cli-cw.out" 2>"$work/cli-cw.err"; then
+    bad "cannot write output" "expected a non-zero exit"
+elif grep -q "cannot write" "$work/cli-cw.err"; then
+    ok "an unwritable output is reported"
+else
+    bad "cannot write output" "wrong diagnostic: $(cat "$work/cli-cw.err")"
+fi
+if "$work/ct-ast" test/modules/inc/main.ct -o "$work/cli-im.c" \
+        >"$work/cli-im.out" 2>"$work/cli-im.err"; then
+    bad "import in compile mode" "expected a non-zero exit"
+elif grep -q "not supported in compile mode" "$work/cli-im.err"; then
+    ok "compile mode rejects 'import'"
+else
+    bad "import in compile mode" "wrong diagnostic: $(cat "$work/cli-im.err")"
+fi
+if "$work/ct-ast" build test/modules/split/main.ct \
+        >"$work/cli-bo.out" 2>"$work/cli-bo.err"; then
+    bad "build without -o" "expected a non-zero exit"
+elif grep -q "build needs -o" "$work/cli-bo.err"; then
+    ok "build without -o is rejected"
+else
+    bad "build without -o" "wrong diagnostic: $(cat "$work/cli-bo.err")"
+fi
+
 echo
 echo "== semantic diagnostics (10.2) =="
 # The module fixtures are staged like check-archive does: the compiler runs on
