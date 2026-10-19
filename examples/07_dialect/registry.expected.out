@@ -1,2 +1,4 @@
 ctrl   @0 = 129
 status @4 = 0 (1 write(s) refused)
+fsm after go: 1
+fsm after stop: 0

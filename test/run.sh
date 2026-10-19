@@ -156,10 +156,9 @@ echo
 echo "== dialect demo =="
 # A dialect is a plugin script that turns DSL written into comments into plain
 # CT. Plugins live in a project's `ct-dialects/` directory and `ctc` never sees
-# them: the compiler only ever reads plain CT, which is the whole point. The
-# driver that routes `//@ct-dialect: <name>` to `<name>.sh` (`/` -> `-`) belongs
-# to the build (future `ct build`); here the demo is expanded by its own plugin
-# and then compiled and run like any other example.
+# them: the compiler only ever reads plain CT, which is the whole point. A file
+# may mix several dialects; each plugin owns its own `//@ct-dialect:` block and
+# passes the others through, so the demo applies them in first-appearance order.
 # See AGENTS.md §2 (the Phase 6.6 exemption) and docs/design/dialect.md.
 for ct in examples/*/*.ct; do
     dir=$(dirname "$ct")
@@ -168,17 +167,37 @@ for ct in examples/*/*.ct; do
     name=$(basename "$ct" .ct)
     label="$dir/$name.ct"
     exp_out="$dir/$name.expected.out"
-    dialect=$(sed -n 's|^//@ct-dialect:[[:space:]]*||p' "$ct" | sed -n 1p)
-    plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
 
-    if [ -z "$dialect" ] || [ ! -f "$plugin" ]; then
-        bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+    # Route every distinct dialect in first-appearance order. A plugin owns its
+    # own `//@ct-dialect:` block and passes every foreign block through
+    # untouched, so applying the plugins in sequence expands a file that mixes
+    # several dialects.
+    dialects=$(sed -n 's|^//@ct-dialect:[[:space:]]*||p' "$ct" | tr -d ' ' | awk '!seen[$0]++')
+    if [ -z "$dialects" ]; then
+        bad "$label" "no '//@ct-dialect:' marker"
         continue
     fi
-    if ! sh "$plugin" "$ct" >"$TMP/dial-$name.ct" 2>"$TMP/dial-$name.err"; then
-        bad "$label" "the expander failed: $(cat "$TMP/dial-$name.err")"
-        continue
-    fi
+
+    cp "$ct" "$TMP/dial-$name.ct"
+    expanded=""
+    broken=0
+    for dialect in $dialects; do
+        plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
+        if [ ! -f "$plugin" ]; then
+            bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+            broken=1
+            break
+        fi
+        if ! sh "$plugin" "$TMP/dial-$name.ct" >"$TMP/dial-$name.step.ct" 2>"$TMP/dial-$name.err"; then
+            bad "$label" "the expander for '$dialect' failed: $(cat "$TMP/dial-$name.err")"
+            broken=1
+            break
+        fi
+        mv "$TMP/dial-$name.step.ct" "$TMP/dial-$name.ct"
+        expanded="$expanded $dialect"
+    done
+    if [ "$broken" -ne 0 ]; then continue; fi
+
     if ! "$TMP/ctc" "$TMP/dial-$name.ct" -o "$TMP/dial-$name.c" 2>"$TMP/dial-$name.ctc.err"; then
         bad "$label" "ctc rejected the expanded CT: $(cat "$TMP/dial-$name.ctc.err")"
         continue
@@ -201,7 +220,7 @@ for ct in examples/*/*.ct; do
         bad "$label" "the unexpanded source must not build on its own"
         continue
     fi
-    ok "$label (dialect '$dialect' expanded by ct-dialects/$(basename "$plugin"))"
+    ok "$label (dialects '${expanded# }' expanded by ct-dialects/)"
 done
 
 # ------------------------------------------------------------------ errors

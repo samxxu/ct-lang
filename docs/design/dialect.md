@@ -151,6 +151,46 @@ ct-dialects/
 
 默认按文件内出现顺序依次处理。存在依赖时在脚本头部 `depends` 声明。
 
+#### 4.5 作者指南（Phase 12.3 已落地的口径）
+
+可运行的范例是 `examples/07_dialect/`：同一个 `registry.ct` 里混用 `register/map` 与 `fsm/state`
+两个方言，分别由 `ct-dialects/register-map.sh` 与 `ct-dialects/fsm-state.sh` 展开。
+
+**调用方式（已实现）**
+
+```
+sh ct-dialects/<方言名，/换成->.sh <input.ct> > <expanded.ct>
+```
+
+插件从**参数**读入文件、把展开后的纯 CT 写到 **stdout**；不读 stdin、不写文件、不调用编译器。
+（§5.1 里的 stdin/stdout 契约尚未启用——当前驱动与演示一律走「参数 + stdout」。）
+
+**归属规则（多方言并存的唯一硬约定）**
+
+- 插件**只处理自己的** `//@ct-dialect: <自己的名字>` 块；
+- 其余一切（包括别的方言块、普通代码、注释）必须**原样透传**，一个字节都不改；
+- 于是驱动可以按「文件内首次出现的顺序」把各插件**依次**套在同一个文件上：
+  前一个插件展开自己的块，后一个插件再展开它的块，互不干扰。
+
+`test/run.sh` 的 `dialect` 层与 `selfhost/check-ast.sh` 的语料段都按这条规则路由，不再只取
+第一个方言标记。
+
+**生成区与源注释**
+
+- `//@ ...` 的 DSL 行是**唯一事实来源**，必须保留；
+- 展开结果插在块下方，包在 `//@gen-begin … //@gen-end` 之间（由插件打印，供人阅读时跳过）；
+- 展开产物不入库（lazy 模式，见 §3）。
+
+**作者检查清单**
+
+- [ ] 文件名 = 方言名把 `/` 换成 `-`，放在项目的 `ct-dialects/` 下
+- [ ] 参数不足时打印 `usage:` 到 stderr 并以非零退出
+- [ ] 只认自己的 `//@ct-dialect:` 标记；别的块逐字节透传
+- [ ] 生成区有 `//@gen-begin` / `//@gen-end`，且不覆盖 `//@` 源行
+- [ ] 插件零依赖（POSIX sh + awk 足够；也可用 Python 等）
+- [ ] 不调用 `ctc`、不修改输入文件、不联网
+- [ ] 一条命令可复现：`sh ct-dialects/<名字>.sh <in.ct> > <out.ct>`
+
 ### 5. 脚本接口契约
 
 #### 5.1 语言不限
@@ -623,6 +663,49 @@ Official and user dialects follow the same rule.
 
 By default, blocks are processed in file order. When there is a dependency, declare it with `depends`
 in the script header.
+
+#### 4.5 Authoring guide (the shape Phase 12.3 landed)
+
+The runnable example is `examples/07_dialect/`: one `registry.ct` mixes `register/map` and
+`fsm/state`, expanded by `ct-dialects/register-map.sh` and `ct-dialects/fsm-state.sh`.
+
+**Invocation (implemented)**
+
+```
+sh ct-dialects/<dialect name, / becomes ->.sh <input.ct> > <expanded.ct>
+```
+
+A plugin reads the file from its **argument** and writes expanded plain CT to **stdout**; it does not
+read stdin, write files or invoke the compiler. (The stdin/stdout contract in §5.1 is not in use yet —
+today's drivers and demo always take the argument + stdout shape.)
+
+**The ownership rule (the one hard convention for coexisting dialects)**
+
+- a plugin handles **only its own** `//@ct-dialect: <its name>` block;
+- everything else — other dialects' blocks, ordinary code, comments — must be **passed through byte
+  for byte**;
+- the driver can therefore apply the plugins **in sequence** in first-appearance order: each expands
+  its own block and leaves the others untouched.
+
+The `dialect` layer of `test/run.sh` and the corpus section of `selfhost/check-ast.sh` route exactly
+this way instead of taking only the first marker.
+
+**Generated regions and source comments**
+
+- the `//@ ...` DSL lines are the **single source of truth** and stay;
+- the expansion is spliced below the block inside `//@gen-begin … //@gen-end` (printed by the plugin,
+  so a human reader can skip it);
+- generated files are never committed (lazy mode, see §3).
+
+**Author checklist**
+
+- [ ] file name = the dialect name with `/` replaced by `-`, under the project's `ct-dialects/`
+- [ ] on bad arguments, print `usage:` to stderr and exit non-zero
+- [ ] recognise only your own `//@ct-dialect:` marker; pass foreign blocks through byte for byte
+- [ ] wrap output in `//@gen-begin` / `//@gen-end` and never overwrite the `//@` source lines
+- [ ] stay dependency-free (POSIX sh + awk is enough; Python &c. are fine too)
+- [ ] never invoke `ctc`, never modify the input file, never touch the network
+- [ ] reproducible with one command: `sh ct-dialects/<name>.sh <in.ct> > <out.ct>`
 
 ### 5. The script interface contract
 

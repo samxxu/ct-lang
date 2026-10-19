@@ -173,7 +173,9 @@ echo "== corpus equivalence (9.7: test/cases + examples) =="
 # D34: exit status + a warning-free build + identical program output. Golden
 # `.c` / `.h` files are not compared; a case without `expected.out` is judged
 # compile-only (`03_passthrough` / `04_signatures` have no `main`). A dialect
-# demo is expanded by its plugin first: ct-ast, like ct, never sees the DSL.
+# demo is expanded by its plugins first: ct-ast, like ct, never sees the DSL.
+# A file may mix several dialects, so every distinct marker is routed in
+# first-appearance order (each plugin passes foreign blocks through).
 ci=0
 for ct in test/cases/*.ct examples/*/*.ct; do
     dir=$(dirname "$ct")
@@ -184,17 +186,25 @@ for ct in test/cases/*.ct examples/*/*.ct; do
     exp_out="$dir/$name.expected.out"
 
     if [ -d "$dir/ct-dialects" ]; then
-        dialect=$(sed -n 's|^//@ct-dialect:[[:space:]]*||p' "$ct" | sed -n 1p)
-        plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
-        if [ -z "$dialect" ] || [ ! -f "$plugin" ]; then
-            bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
-            continue
-        fi
-        if ! sh "$plugin" "$ct" >"$work/corp-$ci.ct" 2>"$work/corp-$ci.err"; then
-            bad "$label" "the expander failed: $(cat "$work/corp-$ci.err")"
-            continue
-        fi
+        dialects=$(sed -n 's|^//@ct-dialect:[[:space:]]*||p' "$ct" | tr -d ' ' | awk '!seen[$0]++')
+        cp "$ct" "$work/corp-$ci.ct"
         src="$work/corp-$ci.ct"
+        broken=0
+        for dialect in $dialects; do
+            plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
+            if [ -z "$dialect" ] || [ ! -f "$plugin" ]; then
+                bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+                broken=1
+                break
+            fi
+            if ! sh "$plugin" "$src" >"$work/corp-$ci.step.ct" 2>"$work/corp-$ci.err"; then
+                bad "$label" "the expander for '$dialect' failed: $(cat "$work/corp-$ci.err")"
+                broken=1
+                break
+            fi
+            mv "$work/corp-$ci.step.ct" "$src"
+        done
+        if [ "$broken" -ne 0 ]; then continue; fi
     fi
     if ! "$work/ct-ast" "$src" -o "$work/corp-$ci.c" \
             >"$work/corp-$ci.out" 2>"$work/corp-$ci.err"; then

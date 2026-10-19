@@ -871,8 +871,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **背景（2026-10-19 用户确认）**：Phase 11 落地 `map` 后，CT 已具备「把 trait 方法绑定到已声明的全局实例」的底座；本阶段把它用于**消费既有 C 库**——以**声明式 binding**（直通 `#include` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`）**零新增语言特性**地对接 C 库，同时**深化方言系统**（多方言并存 + 作者指南）。设计冻结见 [design/phase12.md](design/phase12.md)（D46–D52）。
 - **切片**（待推进）：
   - **12.1 binding 形态 + 首个 binding**：新建顶层 `bindings/**`，首个为**仓库内假 HAL**（`bindings/mock-hal/`，自带假 HAL 头与实现，零外部依赖）。**进展（2026-10-19，部分落地）**：`bindings/mock-hal/` 已建（`mock_hal.h` 不透明句柄 + `mock_hal_impl.c` + binding `uart.ct` + 消费方 `demo.ct` + `demo.expected.out`），`check-ast.sh` 新增 bindings 小节（端到端 build → `cc` → 运行 → 比对）。前置缺陷已修：**`map` 的包装函数与 vtable 在 `build`（多文件）模式下从未发射**，导致引用未定义 vtable；现按「声明该 map 的单元」发射（`emit_maps(u)`，compile 模式传 `-1` 保持原行为）。
-  - **12.2 binding 规约文档**：`bindings/README.md` 记配方 / 命名 / self-contained 与跨单元限制。
-  - **12.3 方言深化**：同一 `.ct` 内多 dialect 块路由演示 + [dialect.md](design/dialect.md) 的作者指南。
+  - **12.2 binding 规约文档**：`bindings/README.md` 记配方 / 命名 / self-contained 与跨单元限制。**已落地（2026-10-19）**：中英双语，含五步配方、目录与命名（binding 单元名不得与库头同名）、不透明句柄 + 镜像布局的 ABI 契约、跨单元限制、构建与测试命令、新增 binding 检查清单。
+  - **12.3 方言深化**：同一 `.ct` 内多 dialect 块路由演示 + [dialect.md](design/dialect.md) 的作者指南。**已落地（2026-10-19）**：`examples/07_dialect/registry.ct` 同时含 `register/map` 与新增的 `fsm/state` 两个块，新增插件 `ct-dialects/fsm-state.sh`；确立「插件只处理自己的标记、其余逐字节透传」的归属规则，`test/run.sh` 的 `dialect` 层与 `check-ast.sh` 的语料段改为按文件内首次出现顺序**依次**路由全部方言（原实现只取第一个标记）；[dialect.md](design/dialect.md) §4.5 新增作者指南（中英）。
   - **12.4 加固与收口**：`check-all.sh` 全绿后 bump v0.12.0（需授权）。
 - **规约前置**：`bindings/**` 需先修订 [AGENTS.md](../AGENTS.md) §2（文件所有权表 + 硬性边界）——binding 只声明外部库符号，**不 vendored、不下载**、**不成为编译器构建步骤**；L0 / L1 / L2 一律不动，新代码只落 ct-ast。
 - **出口**：设计冻结 + 新用例全绿；收口 bump **v0.12.0**（冻结期例外，需用户授权）。
@@ -2210,11 +2210,21 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   guide). The design is frozen in [design/phase12.md](design/phase12.md) (D46–D52).
 - **Slices** (pending): **12.1** the binding shape plus the first binding (a new top-level
   `bindings/**`, the first for an **in-repo fake HAL** under `bindings/mock-hal/` with its own header
-  and implementation and zero external dependencies); **12.2** binding guidelines
-  (`bindings/README.md` covering the recipe, naming, and the self-contained / cross-unit limits);
-  **12.3** dialect deepening (multi-block routing within a single `.ct` plus an authoring guide in
-  [dialect.md](design/dialect.md)); **12.4** hardening and closing (`check-all.sh` green, then a bump
-  to v0.12.0 with authorisation).
+  and implementation and zero external dependencies) — *partly landed (2026-10-19)*: the directory,
+  the binding (`uart.ct`), a consumer (`demo.ct`) and `demo.expected.out` exist, and the bindings
+  section of `check-ast.sh` runs it end to end; a blocking defect was fixed on the way (`map`
+  wrappers and vtables were never emitted in `build` mode — they are now emitted into the unit that
+  declares the map, `emit_maps(u)`, with `-1` keeping compile mode as before); **12.2** binding
+  guidelines — *landed (2026-10-19)*: bilingual `bindings/README.md` with the five-step recipe,
+  layout and naming (the binding unit must not share the library header's name), the opaque-handle
+  ABI contract, the cross-unit limit, build/test commands and a checklist; **12.3** dialect
+  deepening — *landed (2026-10-19)*: `examples/07_dialect/registry.ct` mixes `register/map` with a
+  new `fsm/state` block and plugin, the "a plugin owns only its own marker, everything else passes
+  through byte for byte" rule is established, both `test/run.sh`'s `dialect` layer and
+  `check-ast.sh`'s corpus section now route **every** dialect in first-appearance order (they used
+  to take only the first marker), and [dialect.md](design/dialect.md) §4.5 gained the authoring
+  guide; **12.4** hardening and closing (`check-all.sh` green, then a bump to v0.12.0 with
+  authorisation).
 - **Spec prerequisite**: `bindings/**` requires amending [AGENTS.md](../AGENTS.md) §2 (the ownership
   table and hard boundaries) first — a binding only **declares** external symbols, **vendors nothing,
   downloads nothing** and **never becomes a compiler build step**; L0 / L1 / L2 stay untouched and new

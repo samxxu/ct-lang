@@ -5,12 +5,14 @@
 // do not exist until an expander generates them. `ctc` stays dialect-unaware —
 // it only ever receives plain CT.
 //
-// The plugin that owns this dialect lives in the conventional `ct-dialects/`
-// directory, named after the dialect (`register/map` -> `register-map.sh`), and
-// may be written in any language. Expand and compile with:
+// The plugins that own these dialects live in the conventional `ct-dialects/`
+// directory, named after each dialect (`register/map` -> `register-map.sh`,
+// `fsm/state` -> `fsm-state.sh`), and may be written in any language. Expand
+// and compile with:
 //
 //     sh ct-dialects/register-map.sh registry.ct > registry.gen.ct
-//     ../../ctc registry.gen.ct -o registry.gen.c
+//     sh ct-dialects/fsm-state.sh registry.gen.ct > registry.gen2.ct
+//     ../../ctc registry.gen2.ct -o registry.gen.c
 //
 // Only the dialect comment block is committed (the "lazy" mode of
 // docs/design/dialect.md §3); the generated region is materialised at build
@@ -20,6 +22,12 @@
 //@ct-dialect: register/map
 //@ register CTRL   0x00 rw
 //@ register STATUS 0x04 ro
+
+// A second dialect in the same file: each plugin owns its own block and passes
+// the other one through untouched, so the drivers apply them in sequence.
+//@ct-dialect: fsm/state
+//@ state IDLE go RUN
+//@ state RUN stop IDLE
 
 #include <stdio.h>
 
@@ -35,6 +43,13 @@ int main(void)
     status.write(0xFF);
     printf("status @%d = %d (%d write(s) refused)\n",
            status.off, status.read(), status.denied);
+
+    /* The second dialect generated constants and a transition function */
+    int state = FSM_IDLE;
+    state = fsm_step(state, FSM_EV_GO);
+    printf("fsm after go: %d\n", state);
+    state = fsm_step(state, FSM_EV_STOP);
+    printf("fsm after stop: %d\n", state);
 
     return 0;
 }

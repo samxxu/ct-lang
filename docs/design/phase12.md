@@ -3,6 +3,8 @@
 > 中文 · [English](#english)
 >
 > **状态：设计已冻结（2026-10-19）。** D46–D49 经用户决策板**确认**；D50–D52 取建议值。
+> **进展（2026-10-19）：12.1 / 12.2 / 12.3 已落地**——`bindings/mock-hal/` 首个 binding、中英双语
+> `bindings/README.md`、多方言并存演示 + 作者指南；12.4（加固与收口，含 v0.12.0 bump）待推进。
 > Phase 12 是**扩展类**，无归档 oracle：出口 = **设计冻结 + 新用例 + `./test/run.sh` 与 `bash selfhost/check-all.sh` 全绿**。
 > 本文件是**设计冻结草案**，不是实现依据——**不得**据此创建 `bindings/**` 或任何目录（AGENTS §2）。
 >
