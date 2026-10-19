@@ -23,6 +23,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* the incremental cache stamps each unit with `stat` and creates `.ctcache`
+   with `mkdir` (Phase 6.3, ported in 10.5) */
+#include <sys/stat.h>
 
 #define CTC_VERSION "0.9.0"
 
@@ -43,6 +46,8 @@
 #define MAX_INCDIRS 16
 #define MAX_CALLS  256
 #define MAX_ERRORS 20                   /* recovery cap: past this the compiler stops */
+#define MAX_KEY    768                  /* one unit's incremental-cache key */
+#define MAX_IH     2560                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
 
 /* node kinds (D32: one tag, one dispatch) */
 #define N_PROG    1
@@ -109,6 +114,7 @@
 #define B_MOD 11
 #define B_AND 12
 #define B_OR  13
+#define B_XOR 14
 
 /* unary / postfix operators */
 #define U_NEG 1
@@ -195,6 +201,7 @@ typedef struct Unit {
     char base[MAX_TEXT];
     char ns[MAX_TEXT];
     char dep[MAX_IMPORTS][MAX_TEXT];
+    int  depu[MAX_IMPORTS];     /* the dependency's unit index (cache folding) */
     int  ndep;
     int  prog;
     int  is_hdr;
@@ -204,6 +211,7 @@ typedef struct Unit {
     int  tr_end;
     int  call_start;
     int  call_end;
+    unsigned long digest;       /* this unit's key digest (10.5) */
 } Unit;
 
 /* One `callee(...)` in a function body, for the map's call graph. */
@@ -277,6 +285,7 @@ static Call g_calls[MAX_CALLS];
 static int  g_ncalls;
 static char g_cur_func[MAX_TEXT];     /* caller recorded for the map */
 static int  g_line_mode;              /* emit `#line`: 0 off, 1 on */
+static int  g_line_force = -1;        /* -1 mode default, 0 --no-line, 1 --line */
 static char g_map_path[MAX_PATH];
 static int  g_have_map;
 
@@ -469,11 +478,24 @@ trait MemoryOps {
     int  warn_leak(int vi, int path_line);
 }
 
+/* Incremental build cache (Phase 6.3, ported in 10.5). The key is a function of
+   the compiler version, the run's options and the unit's path, stamp, imports
+   and dependency digests -- the same spelling L2 writes (D41). */
+trait CacheOps {
+    unsigned long cache_digest(const char *s);
+    int  cache_order(int u, int *state, int *order, int *n);
+    int  cache_key(int u, char *out, size_t cap);
+    int  cache_paths(const char *outc, char *dir, size_t dcap,
+                     char *kf, size_t kcap);
+    int  cache_hit(const char *outc, const char *key);
+    void cache_store(const char *outc, const char *key);
+}
+
 /* The state lives in file-scope globals (9.x is a small compiler); the struct
    exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
 struct Ast {
     int nerr;
-} use AstOps, SymOps, ParseOps, ModuleOps, EmitOps, DiagOps, MemoryOps;
+} use AstOps, SymOps, ParseOps, ModuleOps, EmitOps, DiagOps, MemoryOps, CacheOps;
 
 impl AstOps for Ast {
     int new_node(int kind)
@@ -738,6 +760,7 @@ impl AstOps for Ast {
             return self->build_main(argc - 1, argv + 1);
         g_build_mode = 0;
         g_line_mode = 0;
+        g_line_force = -1;
         g_have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -789,10 +812,12 @@ impl AstOps for Ast {
             }
             if (strcmp(argv[i], "--line") == 0) {
                 g_line_mode = 1;
+                g_line_force = 1;
                 continue;
             }
             if (strcmp(argv[i], "--no-line") == 0) {
                 g_line_mode = 0;
+                g_line_force = 0;
                 continue;
             }
             if (strcmp(argv[i], "--emit-map") == 0) {
@@ -2450,6 +2475,19 @@ impl ParseOps for Ast {
            The loops live here so the trait's method budget stays put. */
         left = self->parse_cmp();
         if (left < 0) return -1;
+        /* `^` sits between the comparisons and `&&`; the cache's FNV fold is the
+           first source to need it */
+        while (g_tok == T_PUNCT && strcmp(g_toktext, "^") == 0) {
+            self->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            n = self->new_node(N_BIN);
+            if (n < 0) return -1;
+            g_nodes[n].a = left;
+            g_nodes[n].b = right;
+            g_nodes[n].aux = B_XOR;
+            left = n;
+        }
         while (g_tok == T_PUNCT && strcmp(g_toktext, "&&") == 0) {
             self->lex_next();
             right = self->parse_cmp();
@@ -3185,6 +3223,7 @@ impl ModuleOps for Ast {
         }
         g_units[u].ndep = 0;
         g_units[u].prog = -1;
+        g_units[u].digest = 0;
         g_units[u].ns[0] = 0;
         if (self->base_name(path, g_units[u].base, MAX_TEXT, &is_hdr) != 0) return -1;
         g_units[u].is_hdr = is_hdr;
@@ -3203,6 +3242,7 @@ impl ModuleOps for Ast {
                 return -1;
             }
             snprintf(g_units[u].dep[g_units[u].ndep], MAX_TEXT, "%s", g_units[d].base);
+            g_units[u].depu[g_units[u].ndep] = d;
             g_units[u].ndep++;
         }
 
@@ -3419,7 +3459,10 @@ impl ModuleOps for Ast {
     int build_main(int argc, char **argv)
     {
         const char *inputs[MAX_UNITS];
-        int ninput, i, u;
+        int ninput, i, u, o, cn;
+        int dirty[MAX_UNITS];
+        int cstate[MAX_UNITS];
+        int corder[MAX_UNITS];
         const char *outdir;
         char root[MAX_PATH];
         (void)self;
@@ -3429,6 +3472,7 @@ impl ModuleOps for Ast {
         g_ninc = 0;
         g_nsroot = NULL;
         g_line_mode = 1;
+        g_line_force = -1;
         g_have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -3470,10 +3514,12 @@ impl ModuleOps for Ast {
             }
             if (strcmp(argv[i], "--line") == 0) {
                 g_line_mode = 1;
+                g_line_force = 1;
                 continue;
             }
             if (strcmp(argv[i], "--no-line") == 0) {
                 g_line_mode = 0;
+                g_line_force = 0;
                 continue;
             }
             if (strcmp(argv[i], "--emit-map") == 0) {
@@ -3595,7 +3641,40 @@ impl ModuleOps for Ast {
                 return 1;
             }
         }
-        for (u = 0; u < g_nunits; u++) {
+        /* Incremental cache (Phase 6.3, ported in 10.5): a unit whose key still
+           matches and whose .c/.h are on disk is not regenerated. The walk is a
+           dependency-first postorder, so a unit's key can fold its dependencies'
+           digests; a unit whose dependency is dirty is dirty too. `--emit-map`
+           never reuses, because the map spans the whole run. */
+        for (u = 0; u < g_nunits; u++) cstate[u] = 0;
+        cn = 0;
+        for (u = 0; u < g_nunits; u++)
+            if (self->cache_order(u, cstate, corder, &cn) != 0) {
+                fprintf(stderr, "ct-ast: %s\n", g_errmsg);
+                return 1;
+            }
+        for (o = 0; o < cn; o++) {
+            char outc[MAX_PATH];
+            char key[MAX_KEY];
+            int k;
+            u = corder[o];
+            dirty[u] = 1;
+            if (snprintf(outc, sizeof outc, "%s/%s.c", g_outdir, g_units[u].base)
+                    >= (int)sizeof outc) {
+                fprintf(stderr, "ct-ast: output path is too long\n");
+                return 1;
+            }
+            if (!g_have_map && self->cache_key(u, key, sizeof key) == 0
+                && self->cache_hit(outc, key))
+                dirty[u] = 0;
+            for (k = 0; k < g_units[u].ndep; k++)
+                if (dirty[g_units[u].depu[k]]) dirty[u] = 1;
+        }
+        for (o = 0; o < cn; o++) {
+            char outc[MAX_PATH];
+            char key[MAX_KEY];
+            u = corder[o];
+            if (!dirty[u]) continue;
             if (self->emit_unit(u) != 0) {
                 fprintf(stderr, "ct-ast: %s\n", g_errmsg);
                 return 1;
@@ -3604,6 +3683,12 @@ impl ModuleOps for Ast {
                 fprintf(stderr, "ct-ast: %s\n", g_errmsg);
                 return 1;
             }
+            /* stamped only after a successful emit: a failed unit must never be
+               reused, and a stale key must never vouch for new sources */
+            if (snprintf(outc, sizeof outc, "%s/%s.c", g_outdir, g_units[u].base)
+                    < (int)sizeof outc
+                && self->cache_key(u, key, sizeof key) == 0)
+                self->cache_store(outc, key);
         }
         if (g_have_map && self->write_map(g_map_path, g_units[0].prog, 0) != 0) {
             fprintf(stderr, "ct-ast: %s\n", g_errmsg);
@@ -4481,6 +4566,7 @@ impl EmitOps for Ast {
             else if (g_nodes[n].aux == B_NE) op = "!=";
             else if (g_nodes[n].aux == B_AND) op = "&&";
             else if (g_nodes[n].aux == B_OR) op = "||";
+            else if (g_nodes[n].aux == B_XOR) op = "^";
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fprintf(g_out, " %s ", op);
             return self->emit_expr(g_nodes[n].b);
@@ -4585,6 +4671,7 @@ impl EmitOps for Ast {
             else if (g_nodes[n].aux == B_NE) op = "!=";
             else if (g_nodes[n].aux == B_AND) op = "&&";
             else if (g_nodes[n].aux == B_OR) op = "||";
+            else if (g_nodes[n].aux == B_XOR) op = "^";
             fputs("(", g_out);
             if (self->emit_expr(g_nodes[n].a) != 0) return -1;
             fprintf(g_out, " %s ", op);
@@ -5441,6 +5528,144 @@ impl MemoryOps for Ast {
         w->msg[0] = 0;
         g_nwarns++;
         return 0;
+    }
+}
+
+impl CacheOps for Ast {
+    /* FNV-1a: folds a variable-length string into the fixed-width number a key
+       carries, so dependency chains stay bounded (L2's `digest`, D41). */
+    unsigned long cache_digest(const char *s)
+    {
+        unsigned long h;
+        size_t i;
+        (void)self;
+        h = (unsigned long)2166136261;
+        i = 0;
+        while (s[i]) {
+            h = h ^ (unsigned long)(unsigned char)s[i];
+            h = h * (unsigned long)16777619;
+            i++;
+        }
+        return h;
+    }
+
+    /* Dependency-first order for the cache. `load_unit` assigns an importer its
+       index before recursing, so unit indices are neither a topological order
+       nor its reverse; this postorder DFS is (same shape as L2's `order[]`). */
+    int cache_order(int u, int *state, int *order, int *n)
+    {
+        int k;
+        (void)self;
+        if (state[u] != 0) return 0;
+        state[u] = 1;
+        for (k = 0; k < g_units[u].ndep; k++)
+            if (self->cache_order(g_units[u].depu[k], state, order, n) != 0)
+                return -1;
+        state[u] = 2;
+        order[*n] = u;
+        (*n)++;
+        return 0;
+    }
+
+    /* The key of unit `u`: what its .c/.h are a function of. `-1` means "no key"
+       and is treated as "cannot be reused" (a missing stamp must never be
+       papered over). The spelling matches L2 byte for byte. */
+    int cache_key(int u, char *out, size_t cap)
+    {
+        char stamp[64];
+        char ih[MAX_IH];
+        unsigned long dep;
+        struct stat st;
+        size_t n, k;
+        int w;
+        (void)self;
+
+        if (stat(g_units[u].path, &st) != 0) return -1;
+        snprintf(stamp, sizeof stamp, "%lu.%lu",
+                 (unsigned long)st.st_mtime, (unsigned long)st.st_size);
+        n = 0;
+        ih[0] = 0;
+        for (k = 0; k < (size_t)g_units[u].ndep; k++) {
+            w = snprintf(ih + n, sizeof ih - n, "%s.h;", g_units[u].dep[k]);
+            if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+            n += (size_t)w;
+        }
+        dep = 0;
+        for (k = 0; k < (size_t)g_units[u].ndep; k++)
+            dep = dep * (unsigned long)1099511628211 + g_units[g_units[u].depu[k]].digest;
+        w = snprintf(out, cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
+                     CTC_VERSION, g_line_force, g_diag_json, g_nsroot,
+                     g_units[u].path, stamp, self->cache_digest(ih), dep);
+        if (w < 0 || (size_t)w >= cap) return -1;
+        g_units[u].digest = self->cache_digest(out);
+        return 0;
+    }
+
+    /* `<dir of outc>/.ctcache/<base>.key`: the cache sits beside the unit's own
+       outputs, so `-o <dir>` keeps it out of the source tree. */
+    int cache_paths(const char *outc, char *dir, size_t dcap,
+                    char *kf, size_t kcap)
+    {
+        const char *slash;
+        const char *base;
+        int w;
+        (void)self;
+        slash = strrchr(outc, '/');
+        base = slash ? slash + 1 : outc;
+        if (slash) w = snprintf(dir, dcap, "%.*s/.ctcache", (int)(slash - outc), outc);
+        else w = snprintf(dir, dcap, ".ctcache");
+        if (w < 0 || (size_t)w >= dcap) return -1;
+        w = snprintf(kf, kcap, "%s/%s.key", dir, base);
+        if (w < 0 || (size_t)w >= kcap) return -1;
+        return 0;
+    }
+
+    /* A hit needs the key file to match byte for byte and both artefacts on
+       disk: a key whose .c/.h were deleted must not be reused. */
+    int cache_hit(const char *outc, const char *key)
+    {
+        char dir[MAX_PATH];
+        char kf[MAX_PATH];
+        char hp[MAX_PATH];
+        char buf[MAX_KEY];
+        FILE *f;
+        size_t n, kl, hl;
+        (void)self;
+
+        if (self->cache_paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return 0;
+        f = fopen(kf, "r");
+        if (!f) return 0;
+        n = fread(buf, 1, sizeof buf, f);
+        fclose(f);
+        kl = strlen(key);
+        if (n != kl || memcmp(buf, key, kl) != 0) return 0;
+        if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
+        hl = strlen(hp);
+        if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
+        hp[hl - 1] = 'h';
+        f = fopen(hp, "rb");
+        if (!f) return 0;
+        fclose(f);
+        f = fopen(outc, "rb");
+        if (!f) return 0;
+        fclose(f);
+        return 1;
+    }
+
+    /* Best effort by design: a cache that cannot be written costs a rebuild,
+       never a broken build, so an unwritable directory stays silent. */
+    void cache_store(const char *outc, const char *key)
+    {
+        char dir[MAX_PATH];
+        char kf[MAX_PATH];
+        FILE *f;
+        (void)self;
+        if (self->cache_paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return;
+        mkdir(dir, 0755);            /* EEXIST on a warm cache is the normal case */
+        f = fopen(kf, "w");
+        if (!f) return;
+        fprintf(f, "%s", key);       /* no newline: `hit` compares byte for byte */
+        fclose(f);
     }
 }
 
