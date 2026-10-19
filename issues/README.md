@@ -6,7 +6,7 @@
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
 - 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）——各文件行号以其自身锚点为准。
-- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；复核中另订正 18 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；复核中另订正 20 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 
 ## 模块索引
@@ -161,5 +161,7 @@
 | [editors/vscode](../editors/vscode) README / package.json / snippets | 仍称编译器为 `ctc`；语法自检写「13 assertions」 | 统一为「`ct`（`ctc` 为兼容别名）」；断言数改为实测 **20**（CHANGELOG 标注「发布时 13、现 20」） |
 | [issues/testing/l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) 状态行 | 未覆盖清单漏了 `too many units` | 状态行补齐「build 缺参 / `--ns-root` 缺参 / `too many units`」 |
 | [glossary.md](../docs/glossary.md) 自举链与单入口条目（中英） | 自举链写「L0 → L1 → L2」；单入口写「L2 二进制名为 ct」 | 补为「L0 → L1 → L2 → ct-ast」，并注明 10.7 起 `ct` 二进制由 ct-ast 构建 |
+| [selfhost/ast/main.ct](../selfhost/ast/main.ct#L821-L827) 顶层 usage | 只列 compile / build，未列 `get` / `install`（F5 在 L2 修过，但 10.7 切主线后未同步到 ct-ast） | 补上 `get <spec>[@<range>]` 与 `install` 两行；`check-ast.sh` 的 `-h` 断言同时钉住三条子命令 |
+| [selfhost/ast/main.ct](../selfhost/ast/main.ct) 驱动诊断前缀 | CLI / I/O 错误仍打印 `ct-ast:`，违反 README 与 phase10 非目标「驱动错误前缀固定 `ctc:`」（SH-3） | 35 处诊断消息统一改回 `ctc:`；`check-ast.sh` 的负例断言同步，自编不动点与 105 项全绿 |
 
 

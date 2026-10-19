@@ -428,7 +428,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 ### 10. L2 独有：模块系统与诊断（本文不描述其语法）
 
 多文件模式（`ct build`）、`namespace`、`import`、`pub`、`Drop`、`#line`（含 `--line` / `--no-line`）、
-泄漏警告与 `--diagnostics`，以及语义诊断（重复定义 / 签名不一致）**均由 L2 支持**，L0 不接受。
+泄漏警告与 `--diagnostics`，以及语义诊断（重复定义 / 签名不一致）**均由 CT 线（L2 / ct-ast）支持**，L0 不接受。
 这些语法的定义与实现记录见 [roadmap](roadmap.md) 的 Phase 2–5 与 [design/restore.md](design/restore.md)；
 归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见 git tag `overreach-oracle`。
 
@@ -942,7 +942,7 @@ error recovery, nested definitions.
 
 Multi-file mode (`ct build`), `namespace`, `import`, `pub`, `Drop`, `#line` (with the `--line` /
 `--no-line` overrides), leak warnings and `--diagnostics`, plus semantic checks (duplicate
-definitions / signature mismatches) are **all supported by L2** and rejected by L0. Their grammar
+definitions / signature mismatches) are **all supported by the CT line (L2 / ct-ast)** and rejected by L0. Their grammar
 and implementation record live in [roadmap](roadmap.md) (Phases 2–5) and
 [design/restore.md](design/restore.md); archived test fixtures are in `test/archive/`, and the
 feature-complete old compiler is at git tag `overreach-oracle`.
