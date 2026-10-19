@@ -870,7 +870,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 - **背景（2026-10-19 用户确认）**：Phase 11 落地 `map` 后，CT 已具备「把 trait 方法绑定到已声明的全局实例」的底座；本阶段把它用于**消费既有 C 库**——以**声明式 binding**（直通 `#include` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`）**零新增语言特性**地对接 C 库，同时**深化方言系统**（多方言并存 + 作者指南）。设计冻结见 [design/phase12.md](design/phase12.md)（D46–D52）。
 - **切片**（待推进）：
-  - **12.1 binding 形态 + 首个 binding**：新建顶层 `bindings/**`，首个为**仓库内假 HAL**（`bindings/mock-hal/`，自带假 HAL 头与实现，零外部依赖）。
+  - **12.1 binding 形态 + 首个 binding**：新建顶层 `bindings/**`，首个为**仓库内假 HAL**（`bindings/mock-hal/`，自带假 HAL 头与实现，零外部依赖）。**进展（2026-10-19，部分落地）**：`bindings/mock-hal/` 已建（`mock_hal.h` 不透明句柄 + `mock_hal_impl.c` + binding `uart.ct` + 消费方 `demo.ct` + `demo.expected.out`），`check-ast.sh` 新增 bindings 小节（端到端 build → `cc` → 运行 → 比对）。前置缺陷已修：**`map` 的包装函数与 vtable 在 `build`（多文件）模式下从未发射**，导致引用未定义 vtable；现按「声明该 map 的单元」发射（`emit_maps(u)`，compile 模式传 `-1` 保持原行为）。
   - **12.2 binding 规约文档**：`bindings/README.md` 记配方 / 命名 / self-contained 与跨单元限制。
   - **12.3 方言深化**：同一 `.ct` 内多 dialect 块路由演示 + [dialect.md](design/dialect.md) 的作者指南。
   - **12.4 加固与收口**：`check-all.sh` 全绿后 bump v0.12.0（需授权）。

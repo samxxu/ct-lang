@@ -1,0 +1,10 @@
+// 12.1: a consumer of the fake HAL binding - imports the binding unit and
+// drives it through the binding's entry points.
+import uart;
+#include <stdio.h>
+
+int main(void) {
+    mock_hal_init(3);
+    printf("%d\n", mock_hal_send("x", 4));
+    return 0;
+}

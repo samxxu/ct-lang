@@ -51,6 +51,11 @@
 # argument may now be a bare visible name or a member path rooted at the
 # instance (test/ast/15_map_args).
 #
+# 12.1 adds the bindings section: `bindings/mock-hal/` is a declarative binding
+# to a fake HAL (pass-through include + mirrored trait / struct + a declared
+# global instance + `map`), built end to end and compared with expected output.
+# It also pins the fix that emits map wrappers in build mode.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -138,6 +143,30 @@ for d in test/ast/*/; do
     fi
     ok "$name"
 done
+
+echo
+echo "== bindings (Phase 12: the fake HAL demo) =="
+# A binding is plain CT - a pass-through include, a mirrored trait / struct, a
+# declared global instance and a `map` - so no language feature is involved.
+# Build mode must emit the wrappers and the vtable into the unit that declares
+# the map (12.1 fixed a gap where they were only emitted in compile mode).
+bd=bindings/mock-hal
+rm -rf "$work/bind"
+mkdir -p "$work/bind"
+if ! "$work/ct-ast" build "$bd/demo.ct" -o "$work/bind" >"$work/bind.out" 2>"$work/bind.err"; then
+    bad "bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
+elif ! grep -q "uart1_Controller_vtable" "$work/bind/uart.c"; then
+    bad "bindings/mock-hal" "the map vtable was not emitted into the declaring unit"
+elif ! "$CC" -Wall -Wextra -std=c99 -I "$bd" "$work/bind"/*.c "$bd/mock_hal_impl.c" \
+        -o "$work/bind.bin" 2>"$work/bind.cc"; then
+    bad "bindings/mock-hal" "generated C did not build warning-free: $(cat "$work/bind.cc")"
+elif ! "$work/bind.bin" >"$work/bind.stdout" 2>&1; then
+    bad "bindings/mock-hal" "the program exited non-zero"
+elif ! cmp -s "$work/bind.stdout" "$bd/demo.expected.out"; then
+    bad "bindings/mock-hal" "program output differs: $(cat "$work/bind.stdout")"
+else
+    ok "bindings/mock-hal"
+fi
 
 echo
 echo "== corpus equivalence (9.7: test/cases + examples) =="

@@ -388,7 +388,8 @@ map trait Controller for instance uart1 {
   `x.f` / `x->f`（可带前置 `&`）；其余实参编译期报错。
 - 多个 map 可作用于同一实例；`MAX_MAPS`（64）是 map 构造总数上限，超限报错。
 - **跨单元**：映射实例只在**定义它的单元内**装箱——把一个实例箱成接口值与 `impl` 的 vtable 一样是单元私有的
-  （跨单元时该实例的全局变量本身也不可见，故其它单元应在定义单元先装箱、再传出接口值）。
+  （跨单元时该实例的全局变量本身也不可见，故其它单元应在定义单元先装箱、再传出接口值）。`build` 模式下，
+  包装函数与 vtable 发射在**声明该 map 的单元**的 `.c` 里（`static`），不会重复出现在其它单元。
 - **派发（11.2）**：把映射实例装箱为 trait 接口值时，用**实例级** vtable——
   `Controller c = uart1;` → `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };`
   （注意不是 struct 级的 `&Uart_Controller_vtable`）。因此**即便 `Uart` 未 `use Controller`**，

@@ -1,0 +1,35 @@
+// 12.1: declarative binding to the fake HAL (Phase 12).
+//
+// A binding is plain CT: pass-through C to see the library's declarations,
+// a mirrored trait / struct, one declared global instance, and a `map` that
+// binds the trait's methods to real calls on that instance. No new language
+// feature is involved - only `map` (Phase 11) and top-level pass-through C.
+//
+// v1 limitation: boxing a mapped instance is unit-private, so the instance is
+// boxed here and this unit exposes plain entry points to other units.
+#include "mock_hal.h"
+
+trait Controller {
+    int send(char *buf, int len);
+}
+
+// Must match mock_hal_impl.c's layout: the header only forward-declares it.
+struct mock_uart {
+    int fd;
+};
+
+struct mock_uart uart1;
+
+map trait Controller for instance uart1 {
+    send(buf, len) -> mock_uart_send(&uart1, buf, len);
+}
+
+pub void mock_hal_init(int fd) {
+    uart1.fd = fd;
+}
+
+pub int mock_hal_send(char *buf, int len) {
+    Controller c;
+    c = uart1;
+    return c.send(buf, len);
+}

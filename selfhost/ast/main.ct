@@ -251,6 +251,7 @@ typedef struct Map {
     MapBind b[MAX_METHODS];
     int  nb;
     int  line;
+    int  unit;                              /* the unit that declared this map */
 } Map;
 
 static Node g_nodes[MAX_NODES];
@@ -477,7 +478,7 @@ trait EmitOps {
     int  emit_type_decl(int n, int ind, int with_semi);
     int  emit_trait_decls(void);
     int  emit_impls(int prog);
-    int  emit_maps(void);
+    int  emit_maps(int u);
     int  type_has_vptr(const char *type);
     int  type_needs_init(const char *type);
     int  emit_vptr_items(const char *prefix, const char *type);
@@ -3634,6 +3635,7 @@ impl ModuleOps for Ast {
         snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", inst, rtrait);
         m->nb = 0;
         m->line = line;
+        m->unit = g_nunits - 1;
 
         while (g_tok != T_EOF && !(g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0)) {
             if (m->nb >= MAX_METHODS) return self->fail("too many map bindings");
@@ -4228,7 +4230,7 @@ impl EmitOps for Ast {
         for (i = 0; i < g_nfunc; i++)
             if (self->emit_proto(i) != 0) return -1;
 
-        if (self->emit_maps() != 0) return -1;
+        if (self->emit_maps(-1) != 0) return -1;
 
         for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
             if (g_nodes[n].kind == N_FUNC) {
@@ -4645,13 +4647,16 @@ impl EmitOps for Ast {
     }
 
     /* The instance-level wrappers and vtable of every `map` (Phase 11.1). Emitted
-       after the prototypes so a bound call may name any top-level function. */
-    int emit_maps(void)
+       after the prototypes so a bound call may name any top-level function.
+       `u` is the unit being emitted in build mode (only its own maps belong in
+       its `.c`); `-1` emits every map, which is what compile mode wants. */
+    int emit_maps(int u)
     {
         int i, j, k;
         (void)self;
 
         for (i = 0; i < g_nmaps; i++) {
+            if (u >= 0 && g_maps[i].unit != u) continue;
             for (j = 0; j < g_maps[i].nb; j++) {
                 MapBind *b;
                 MethodSig *sig;
@@ -5288,6 +5293,8 @@ impl EmitOps for Ast {
 
         for (i = g_units[u].fn_start; i < g_units[u].fn_end; i++)
             if (self->emit_proto(i) != 0) return -1;
+
+        if (self->emit_maps(u) != 0) return -1;
 
         for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_FUNC && self->emit_node(n, 0) != 0) return -1;
