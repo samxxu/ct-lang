@@ -133,7 +133,7 @@
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
-| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`，当前 v0.10.0） |
+| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`，当前 v0.11.0） |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D45、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md) |
@@ -295,7 +295,7 @@
 
 | Term | Form | Notes |
 | --- | --- | --- |
-| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`, currently v0.10.0) |
+| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`, currently v0.11.0) |
 | sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 6) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D45, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md) |
