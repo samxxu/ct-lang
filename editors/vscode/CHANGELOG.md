@@ -14,7 +14,8 @@ Initial release.
 - Language configuration: line/block comments, brackets, auto-closing and
   surrounding pairs, brace indentation, block-comment continuation on Enter.
 - Snippets: `trait`, `structuse`, `impl`, `method`, `call`.
-- `test/check-grammar.py`: a dependency-free smoke test (13 assertions) that
-  replays the grammar's patterns over the demos and checks both directions — the
-  CT rules fire on `trait` / `use` / `impl` / `self`, and stay silent inside
-  comments, strings and look-alike identifiers (`use_it`, `selfish`).
+- `test/check-grammar.py`: a dependency-free smoke test (13 assertions at
+  release; 20 today) that replays the grammar's patterns over the demos and
+  checks both directions — the CT rules fire on `trait` / `use` / `impl` /
+  `self`, and stay silent inside comments, strings and look-alike identifiers
+  (`use_it`, `selfish`).

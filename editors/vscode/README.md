@@ -1,7 +1,8 @@
 # CT — C with Traits for VS Code
 
 Syntax highlighting, snippets and language configuration for **CT**, the
-trait-flavoured C compiled by [`ctc`](https://github.com/samxxu/ct-lang).
+trait-flavoured C compiled by [`ct`](https://github.com/samxxu/ct-lang) (`ctc`
+remains a compatibility alias).
 
 ```c
 trait Greeter {
@@ -42,7 +43,8 @@ pairs, brace-based indentation, block-comment continuation on Enter, and the
 snippets `trait`, `structuse`, `impl`, `method`, `call`.
 
 The extension is **declarative JSON — no build step, no dependencies**. The
-`.ct` sources are not compiled by this extension; use `ctc` for that.
+`.ct` sources are not compiled by this extension; use `ct` (or the `ctc` alias)
+for that.
 
 ## Install
 
@@ -79,7 +81,7 @@ To get an F5 workflow, add a launch configuration at the repository root as
 ## Checks
 
 ```bash
-python3 test/check-grammar.py    # 13 assertions; exit code 0 means it passed
+python3 test/check-grammar.py    # 20 assertions; exit code 0 means it passed
 ```
 
 The script replays the grammar's patterns with Python's `re` over the demos in

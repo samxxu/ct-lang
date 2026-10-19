@@ -6,7 +6,7 @@
       "\t${2:void ${3:method}();}",
       "}"
     ],
-    "description": "Declare a trait (ctc expands it into a <Name>_vtbl struct)"
+    "description": "Declare a trait (ct expands it into a <Name>_vtbl struct)"
   },
   "struct using traits": {
     "prefix": "structuse",
@@ -40,6 +40,6 @@
   "method call": {
     "prefix": "call",
     "body": "${1:obj}.${2:method}(${3})",
-    "description": "Trait method call (ctc turns it into vptr dispatch with &obj)"
+    "description": "Trait method call (ct turns it into vptr dispatch with &obj)"
   }
 }

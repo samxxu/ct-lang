@@ -2,8 +2,10 @@
 
 > 中文 · [English](#english)
 >
-> **状态：设计定型，暂缓实现。** 本设计目前是**图纸，不是可运行实现**；
-> 今天的编译器是仓库根目录的单文件 [ctc.c](../../ctc.c)，方言展开器尚不存在。
+> **状态：设计草案存档；方言能力已在 Phase 6.6 以「仓库外展开器」形态落地。** 本文描述的是
+> 早期「图纸」，其实现形态后来由 [phase6.md](phase6.md) §7（D20）取代：编译器对 DSL **零感知**，
+> 展开器只允许出现在 `examples/` 与 `test/` 的 `ct-dialects/` 下，演示见 `examples/07_dialect/`。
+> 今天的编译器是 `selfhost/ast/main.ct`（ct-ast，v0.10.0 起提供安装入口）。
 >
 > **排期：Phase 6（生态与扩展）**（2026-10-13 用户确认；表述随 2026-10-14 相位重排更新）。这是**排序选择，不是技术依赖**——
 > 方言展开器是编译器之外的外部脚本，不需要自举，理论上可与自举并行；排在最后是为了先让编译器主语料稳固。
@@ -452,7 +454,7 @@ HTML 标签背后是更普适的模式：**"一堆同构的东西，每个只差
 - 这是**排序选择，不是技术依赖** —— 展开器是编译器之外的外部脚本，不与自举耦合；
   靠后安排是为了先稳固编译器主语料
 - 落地前须先处理第 0 节列出的三处**规约冲突**与依赖清单
-- 本文档已存档为 `docs/design/dialect.md`（设计草案，未实现）
+- 本文档已存档为 `docs/design/dialect.md`；**最终实现形态**见 [phase6.md](phase6.md) §7（D20，仓库外展开器，Phase 6.6 已落地）
 
 ### 15. 待办与开放问题
 
@@ -967,7 +969,8 @@ It is not that the machine produces less.
   outside the compiler and does not couple to self-hosting; it is late so that the compiler's main body
   settles first
 - Before landing, the three **rule conflicts** and the dependency list in section 0 must be dealt with
-- This document is archived as `docs/design/dialect.md` (design draft, not implemented)
+- This document is archived as `docs/design/dialect.md`; the **landed shape** is in
+  [phase6.md](phase6.md) §7 (D20 — the expander stays outside the repo, landed in Phase 6.6)
 
 ### 15. TODOs and open questions
 
