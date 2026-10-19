@@ -42,6 +42,7 @@
 #define MAX_IMPORTS 16
 #define MAX_INCDIRS 16
 #define MAX_CALLS  256
+#define MAX_ERRORS 20                   /* recovery cap: past this the compiler stops */
 
 /* node kinds (D32: one tag, one dispatch) */
 #define N_PROG    1
@@ -447,6 +448,8 @@ trait DiagOps {
     int  record_sig_warn(int line, const char *method, const char *trait,
                          const char *stype, const char *msg);
     int  emit_warnings(FILE *jsonf, FILE *textf);
+    int  skip_body(void);
+    int  skip_after_error(void);
 }
 
 /* Memory semantics (Phase 10.3): `own` registration plus the leak analysis.
@@ -1302,11 +1305,12 @@ impl ParseOps for Ast {
 
     int parse_program(void)
     {
-        int prog, n;
+        int prog, n, base;
         (void)self;
 
         prog = self->new_node(N_PROG);
         if (prog < 0) return -1;
+        base = g_nsem;
         self->lex_next();
         while (g_tok != T_EOF) {
             if (g_tok == T_PP) {
@@ -1329,9 +1333,18 @@ impl ParseOps for Ast {
             }
             n = self->parse_top_decl(0);
             if (n == NO_NODE) continue;
-            if (n < 0) return -1;
+            if (n < 0) {
+                /* A reported error is recoverable: resynchronise and keep going
+                   so one bad construct does not hide the rest of the file. A
+                   parse failure without a diagnostic is still fatal. */
+                if (g_nsem == base) return -1;
+                if (self->skip_after_error() != 0) return -1;
+                continue;
+            }
             if (self->append_node(prog, n) != 0) return -1;
         }
+        /* errors leave the unit (and its artifacts) behind */
+        if (g_nsem > base) return -1;
         return prog;
     }
 
@@ -1500,12 +1513,14 @@ impl ParseOps for Ast {
     /* `struct Name { ... }` (the trailing `;` is the caller's business). */
     int parse_struct_def(void)
     {
-        int s, tail, m, struct_line;
+        int s, tail, m, struct_line, brace_line, brace_col;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         (void)self;
 
         struct_line = g_tokline;
+        brace_line = 0;
+        brace_col = 1;
         self->lex_next();
         name[0] = 0;
         qname[0] = 0;
@@ -1532,6 +1547,9 @@ impl ParseOps for Ast {
                 return self->sem_error(g_tokline, g_tokstart - g_lstart + 1, msg);
             }
         }
+        /* the body's `{` is where L2 reports an unresolved `use` trait */
+        brace_line = g_tokline;
+        brace_col = g_tokstart - g_lstart + 1;
         if (self->expect("{") != 0) return -1;
         s = self->new_node(N_STRUCT);
         if (s < 0) return -1;
@@ -1567,6 +1585,24 @@ impl ParseOps for Ast {
         if (g_tok == T_ID && strcmp(g_toktext, "use") == 0) {
             self->lex_next();
             if (qname[0] && self->parse_use_list(self->find_struct(qname)) != 0) return -1;
+            /* every trait named in `use` must already be defined (the built-in
+               Drop never joins the list); L2 reports the first miss at the
+               struct's '{', so the remembered position is what is used here */
+            if (qname[0]) {
+                int si3, ui3;
+                si3 = self->find_struct(qname);
+                if (si3 >= 0) {
+                    for (ui3 = 0; ui3 < g_structs[si3].nuse; ui3++) {
+                        if (self->find_trait(g_structs[si3].use[ui3]) < 0) {
+                            char msg[MAX_TEXT];
+                            snprintf(msg, sizeof msg,
+                                     "struct '%s' uses undefined trait '%s'",
+                                     name, g_structs[si3].use[ui3]);
+                            return self->sem_error(brace_line, brace_col, msg);
+                        }
+                    }
+                }
+            }
         }
         if (qname[0]) {
             int di = self->find_struct(qname);
@@ -1786,15 +1822,24 @@ impl ParseOps for Ast {
         if (g_tok != T_ID) return self->fail("expected a struct name");
         snprintf(sname, sizeof sname, "%s", g_toktext);
         if (self->resolve_type(sname, rstruct, sizeof rstruct) != 0) return -1;
+        /* the struct must exist (a forward declaration is enough); an undefined
+           one is reported at the body's `{`, like L2, and the body is skipped so
+           the declarations after it are still parsed (Phase 10.4 recovery) */
         si = self->find_struct(rstruct);
-        if (si < 0) si = self->add_struct(rstruct);
-        if (si < 0) return -1;
+        self->lex_next();
+        if (si < 0) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "impl for undefined struct '%s'", sname);
+            if (self->sem_error(g_tokline, g_tokstart - g_lstart + 1, msg) != 0)
+                return -1;
+            if (self->skip_body() != 0) return -1;
+            return NO_NODE;
+        }
         type_index = self->find_type(rstruct);
         if (type_index >= 0 && g_type_kind[type_index] == 1)
             snprintf(stype, sizeof stype, "struct %s", rstruct);
         else
             snprintf(stype, sizeof stype, "%s", rstruct);
-        self->lex_next();
         if (self->expect("{") != 0) return -1;
         node = self->new_node(N_IMPL);
         if (node < 0) return -1;
@@ -4971,14 +5016,60 @@ impl EmitOps for Ast {
 }
 
 impl DiagOps for Ast {
-    /* A semantic error in L2's shape (`file:line:col: error: ...`); the caller
-       stops parsing, and `run`/`build_main` close with L2's summary line. */
+    /* A semantic error in L2's shape (`file:line:col: error: ...`). Reporting is
+       followed by resynchronisation in `parse_program`, so the rest of the file
+       is still checked; `run`/`build_main` close with L2's summary line. */
     int sem_error(int line, int col, const char *msg)
     {
         (void)self;
         fprintf(stderr, "%s:%d:%d: error: %s\n", g_path, line, col, msg);
         g_nsem++;
+        /* past the cap the reports are cascades of the first few, not news */
+        if (g_nsem > MAX_ERRORS) {
+            fprintf(stderr, "ctc: too many errors, stopping\n");
+            exit(1);
+        }
         return -1;
+    }
+
+    /* Skip a balanced `{ ... }` group (the lexer sits on its `{`) so a rejected
+       construct does not swallow the declarations that follow it. */
+    int skip_body(void)
+    {
+        int depth;
+        (void)self;
+        if (g_tok != T_PUNCT || strcmp(g_toktext, "{") != 0)
+            return self->fail("expected '{'");
+        depth = 0;
+        while (g_tok != T_EOF) {
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "{") == 0) {
+                depth++;
+            } else if (g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0) {
+                depth--;
+                if (depth == 0) {
+                    self->lex_next();
+                    return 0;
+                }
+            }
+            self->lex_next();
+        }
+        return self->fail("unterminated body");
+    }
+
+    /* Resynchronisation after a reported error: stop past the next `}` or at the
+       start of the next line, whichever comes first (L2's recover_pos). */
+    int skip_after_error(void)
+    {
+        (void)self;
+        while (g_tok != T_EOF) {
+            if (g_tok == T_PUNCT && strcmp(g_toktext, "}") == 0) {
+                self->lex_next();
+                return 0;
+            }
+            self->lex_next();
+            if (g_bol) return 0;
+        }
+        return 0;
     }
 
     int record_sig_warn(int line, const char *method, const char *trait,
