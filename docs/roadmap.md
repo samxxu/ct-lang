@@ -878,6 +878,12 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **规约前置**：`bindings/**` 需先修订 [AGENTS.md](../AGENTS.md) §2（文件所有权表 + 硬性边界）——binding 只声明外部库符号，**不 vendored、不下载**、**不成为编译器构建步骤**；L0 / L1 / L2 一律不动，新代码只落 ct-ast。
 - **出口**：✅ 达成（2026-10-19）——设计冻结 + 新用例全绿；**收口 bump v0.12.0**（冻结期例外，已获用户授权）。
 
+### Phase 12 后续修复（v0.12.0 之后，仅 ct-ast）
+
+- **能力补齐**：把 `test/acceptance/run.sh` 的默认编译器从 L2 改回**安装入口 ct-ast**（10.7 起本应如此）后，暴露了 6 项 L2 能过而 ct-ast 不能过的构造，已全部修复：接口**值/指针字段**在构造式里装箱；接口指针变量/参数（`Expr *xs`）按元素派发；**结构体类型数组字段**逐元素写 vptr；函数**原型**保留数组参数维度。`ast_spike`（本项目自己的目标程序）随之通过。
+- **容量**：`ParseOps` 拆出 `TypeOps`（类型查询与装箱）腾出方法位；用户可见上限整体抬高（`MAX_NODES` 65536、`MAX_FUNCS` 256、`MAX_TRAITS` 64 等，见 [language-spec](language-spec.md) §7）。策略仍是「固定上限 + 越界硬报错」，未改动态分配；ct-ast 自编现在需要超过 32768 个节点，抬高 `MAX_NODES` 是自举的前提。
+- **验收**：`p18_struct_array_field` 晋升 `test/acceptance/run.sh` 基线；`test/ast/{16_iface_field_box,17_param_array,18_struct_array_field}` 纳入 `check-ast.sh` 硬关卡。
+
 ### 决策待定项
 
 | 问题 | 候选 | 影响 |
@@ -2234,6 +2240,23 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   code lands in ct-ast only.
 - **Exit**: ✅ met (2026-10-19) — design frozen + new cases green; **closed with the bump to
   v0.12.0** (a freeze-period exception, explicitly authorised by the user).
+
+### Post-Phase-12 fixes (after v0.12.0, ct-ast only)
+
+- **Capability gaps**: pointing `test/acceptance/run.sh` back at the installed entry **ct-ast**
+  (which it should have used since 10.7) exposed six constructs L2 accepted and ct-ast did not.
+  All are fixed: interface **value / pointer fields** are boxed at construction; an interface-pointer
+  variable / parameter (`Expr *xs`) dispatches per element; a **struct-typed array field** gets its
+  vptrs written per element; a function **prototype** keeps its parameter's array dimension.
+  `ast_spike` (the project's own target program) passes again.
+- **Capacity**: a new `TypeOps` trait takes the type queries and boxing out of `ParseOps` (which sat
+  at `MAX_METHOD`), and the user-facing caps are raised (`MAX_NODES` 65536, `MAX_FUNCS` 256,
+  `MAX_TRAITS` 64 and so on — see [language-spec](language-spec.md) §7). The policy is still "fixed
+  cap + hard error", not dynamic allocation; ct-ast now needs more than 32768 nodes to parse its own
+  source, so a higher `MAX_NODES` is a precondition for self-hosting.
+- **Gates**: `p18_struct_array_field` is promoted into the `test/acceptance/run.sh` baseline, and
+  `test/ast/{16_iface_field_box,17_param_array,18_struct_array_field}` join the hard gate that is
+  `check-ast.sh`.
 
 ### Open decisions
 

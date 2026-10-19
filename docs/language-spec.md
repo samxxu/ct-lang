@@ -440,11 +440,21 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
   装箱只接受**变量**、`&变量` 或「返回同款接口」的函数调用，其它表达式一律 `die`。接口字段的**派发**已支持
   （`s.lhs.m()` → `s.lhs.vt->m(s.lhs.self)`，指针字段经 `->`），**值**接口字段的**语句赋值**会自动装箱；
   但**指定初始化式**里的接口字段不装箱，**指针**接口字段的赋值也不处理（见 §4.8）。
+- **ct-ast 已放宽上述接口限制**（v0.12.0 之后的修复，L0 / L2 不变）：构造式里由具体 struct 变量或
+  `&变量` 填充的接口**值**字段与接口**指针**字段都会自动装箱（后者取复合字面量的地址）；接口指针形式的
+  变量 / 参数（`Expr *xs`）按元素派发（`xs[i].m()`，元素是值而非指针）；结构体类型的**数组字段**逐元素
+  写 vptr（`Num ab[2]` 的元素可直接派发）；函数原型的数组参数保留维度（`int f(Expr a[])`）。其它更复杂的
+  初始化表达式（如算术式、函数调用结果直接灌进接口字段）仍按原样透传。
 - 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）
 - 不完整的 `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套。
 
 ### 7. 容量上限
+
+> 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 65536、
+> `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、`MAX_FIELDS` 64、`MAX_FUNCS` 256、
+> `MAX_PARAMS` 16、`MAX_VARS` 4096、`MAX_TYPES` 256、`MAX_CALLS` 1024；其余（`MAX_TEXT` / `MAX_PATH` /
+> `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` / `MAX_MAPS`）不变。策略仍是「固定上限 + 越界硬报错」，未改成动态分配。
 
 | 常量 | 值 | 含义 | 超限行为 |
 | --- | --- | --- | --- |
@@ -991,6 +1001,14 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   (`s.lhs.m()` → `s.lhs.vt->m(s.lhs.self)`, a pointer field hops with `->`), and a **statement
   assignment** into a **value** interface field is boxed; an interface field inside a **designated
   initialiser** is not boxed, and a **pointer** interface field's assignment is left verbatim (see §4.8).
+- **ct-ast relaxes the interface limits above** (fixed after v0.12.0; L0 / L2 are unchanged): an
+  interface **value** field and an interface **pointer** field both box a concrete struct given as a
+  bare variable or `&variable` in a construction (the pointer form takes the address of the compound
+  literal); an interface-pointer variable / parameter (`Expr *xs`) dispatches per element
+  (`xs[i].m()`, the element being a value, not a pointer); a **struct-typed array field** gets its
+  vptrs written per element (`Num ab[2]` dispatches directly); and a function prototype keeps the
+  array dimension of a parameter (`int f(Expr a[])`). Richer initialiser expressions (an arithmetic
+  expression or a call result poured straight into an interface field) still pass through verbatim.
 - A single-line function body (`int f() { … }` on one line) is not processed, matching Phase 0's
   line-by-line rewriting. By the same rule, a statement **sharing its line** with a construct is not
   rewritten either: a one-line interface boxing and a one-line rvalue receiver both pass through.
@@ -1003,6 +1021,12 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 - Top-level constructs cannot be nested.
 
 ### 7. Capacity limits
+
+> The table below lists the **L0** (frozen seed) caps. **ct-ast** (the installed entry) raises the
+> user-facing ones: `MAX_NODES` 65536, `MAX_TRAITS` 64, `MAX_STRUCTS` 128, `MAX_METHODS` 64,
+> `MAX_FIELDS` 64, `MAX_FUNCS` 256, `MAX_PARAMS` 16, `MAX_VARS` 4096, `MAX_TYPES` 256,
+> `MAX_CALLS` 1024; the rest (`MAX_TEXT` / `MAX_PATH` / `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` /
+> `MAX_MAPS`) are unchanged. The policy is still "fixed cap + hard error", not dynamic allocation.
 
 | Constant | Value | Meaning | On overflow |
 | --- | --- | --- | --- |

@@ -36,10 +36,10 @@ cd "$ROOT" || exit 1
 
 CT=${CT:-}
 if [ -z "$CT" ]; then
-    # The live compiler is L2: ctc.c (L0) is frozen, so every new capability lands
-    # on the CT side (selfhost/src/**), which L1 builds into L2, and L0 builds L1
-    # from. Probing L0 instead is still possible via `CT=<l0 binary>`, but its
-    # PENDING verdicts are then expected, not failures.
+    # The live compiler is ct-ast (the installed entry since 10.7). Probing L2
+    # instead is still possible via `CT=<l2 binary>` and used to be the default
+    # until Phase 12; L0 (`CT=<l0 binary>`) is also honoured, but its PENDING
+    # verdicts are then expected, not failures.
     if ! $CC $CFLAGS ctc.c -o "$TMP/ctc-l0" 2>"$TMP/build.log"; then
         echo "building ctc.c (L0) failed:"
         sed 's/^/    /' "$TMP/build.log"
@@ -66,18 +66,30 @@ if [ -z "$CT" ]; then
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi
-    CT="$TMP/ctc-l2"
+    mkdir -p "$TMP/astsrc"
+    if ! "$TMP/ctc-l2" build selfhost/ast/main.ct -o "$TMP/astsrc" 2>"$TMP/build.log"; then
+        echo "L2 could not build ct-ast (selfhost/ast/main.ct):"
+        sed 's/^/    /' "$TMP/build.log"
+        exit 1
+    fi
+    if ! $CC $CFLAGS "$TMP/astsrc"/*.c -o "$TMP/ct-ast" 2>"$TMP/build.log"; then
+        echo "building ct-ast failed:"
+        sed 's/^/    /' "$TMP/build.log"
+        exit 1
+    fi
+    CT="$TMP/ct-ast"
 fi
 
 # Probes that must pass today: the interface-collection surface (arrays, their
 # element assignment and dispatch), the interface-pointer surface (bare locals and
-# parameters, indexed or not), the boxing surface the live compiler (L2) reaches --
+# parameters, indexed or not), the boxing surface the live compiler (ct-ast)
+# reaches --
 # interface fields at the construction point and by assignment, plus the interface
 # local/return control group -- and the AST-shaped group (heap nodes, child array
 # fields, array parameters). `ast_spike` is the whole target program: it must
 # compile, run and print 5. `ast_parse_spike` is the Phase 5 feasibility skeleton:
 # a lexer + recursive-descent parser that builds heap nodes and prints 3.
-BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return p12_heap_boxed_node p13_child_array_field p14_param_array_brackets p15_param_array_ptr p16_ptr_iface_local p17_ptr_iface_local_init ast_spike ast_parse_spike"
+BASELINE="p01_iface_array_value p02_iface_array_ptr p03_iface_array_elem_assign p04_iface_array_elem_dispatch p05_iface_value_field_construct p06_iface_value_field_assign p07_ptr_iface_field_construct p08_ptr_iface_field_assign p09_iface_local_from_value p10_iface_local_from_ptr p11_iface_return p12_heap_boxed_node p13_child_array_field p14_param_array_brackets p15_param_array_ptr p16_ptr_iface_local p17_ptr_iface_local_init p18_struct_array_field ast_spike ast_parse_spike"
 
 n_pass=0
 n_pending=0
