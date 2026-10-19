@@ -4,7 +4,8 @@
 >
 > **性质：机制说明（描述现状）。** 本文说明「对象的 vptr 由谁、在何时写入」这一套语义，
 > 对应 [roadmap](roadmap.md) 的 0.1.6 / 0.1.7 / 0.1.8（组合 / 数组 / 释放）。
-> 这些语义**已实现**；第 6 节保留决策记录与**尚未落地**的部分（堆对象的创建，推迟到 Phase 1）。
+> 这些语义**已实现**：栈变量、嵌套字段、数组元素与堆对象四种构造形态都写 vptr
+> （堆对象见 3.5 与 [restore](design/restore.md) 的 D1=A）。第 6 节保留决策记录。
 
 ---
 
@@ -16,12 +17,14 @@
 往初始化式里追加 `.__<trait>_vptr = &…_vtable`。也就是说，**"写 vptr" 这件事被绑死在
 "局部栈变量的声明"上**。一旦对象不是以这种形态出现，vptr 就没人写：
 
-| 形态 | 现状 | 后果 |
+| 形态 | 草案时的现状（2026-10-11） | 当时的后果 |
 | --- | --- | --- |
 | 栈变量声明（`Person p = {...}` / `Person p;`） | ✅ 写 | 可用 |
 | **嵌套字段**（`struct Shop { Person owner; }`） | ❌ 字段类型甚至不做 `struct` 限定，`owner` 的 vptr 从不写 | 编不过 / 崩溃 |
 | **数组元素**（`Person ps[2];`） | ❌ 元素 vptr 从不写，`ps[0].greet()` 不重写 | 崩溃 / 编不过 |
 | **堆对象**（`Person *q = malloc(...)`） | ❌ 只登记了指针，pointee 的 vptr 从不写 | 运行期段错误（实测 exit 139） |
+
+> 上表是草案时的快照；四行现均已实现，由 `test/cases/{07,15,16,17,28}_*` 覆盖。
 
 根因是**缺少"构造点"这个概念**：编译器没有"在哪个时刻，一个对象被创建出来、应当被初始化"的模型，
 于是只能靠"声明行改写"这一个巧合覆盖一部分场景。
@@ -29,7 +32,8 @@
 ### 2. 核心语义（本文主张的定义）
 
 > **构造点**：一个对象被创建的时刻。只有两处——
-> (a) **栈上**：带（或可补）初始化式的变量声明；(b) **堆上**：`new <Struct>`。
+> (a) **栈上**：带（或可补）初始化式的变量声明；(b) **堆上**：结构体指针的 `malloc` / `calloc` 声明
+> （草案写的是 `new <Struct>`，实现改用零新语法的 D1=A）。
 >
 > **构造规则**：在构造点，编译器必须写入该对象**自身以及其内部所有"可派发子对象"**的 vptr。
 > 「可派发子对象」= 类型是已知 ct struct、并且该 struct 至少 `use` 了一个 trait 的字段 / 数组元素。
@@ -37,8 +41,8 @@
 推论：
 
 1. **递归**：`Shop s` 的构造，包含 `s.owner`（Person）的构造。
-2. **只在构造点写**：`malloc` 出来的裸内存不是构造点，因此**不**自动获得 vptr——这正是 0.1.8 要用
-   `new` 补齐的原因。
+2. **只在构造点写**：没有声明的裸 `malloc` 不是构造点；`T *p = malloc|calloc(...)` 声明是，
+   vptr 在声明后补写。
 3. **纯 C 结构体无影响**：字段类型不是 ct struct（或该 struct 没有 `use` trait）→ 不写入、不改写。
 
 ### 3. 各形态的展开草案
@@ -113,8 +117,8 @@ struct Person ps[2];
 
 #### 3.5 堆对象：`new` / `delete`（0.1.8）
 
-> **⚠ 本节已部分撤回**：`delete` 落地；**`new` 已移除**，堆对象的创建方式推迟到 Phase 1（见第 6 节的
-> 决定与实现注记）。以下保留原始草案，供 Phase 1 决策时参考。
+> **本节已演化**：`delete` 落地；**`new` 未引入**，堆对象改由 `T *p = malloc|calloc(...)` 声明识别
+> （[restore](design/restore.md) D1=A，见第 6 节的实现注记）。下面保留原始 `new` 草案作为决策记录。
 
 ```c
 Person *q = new Person;
@@ -171,11 +175,11 @@ if (q) free(q);
 **已决定（2026-10-11，用户确认）**：D1 = 纳入字段链调用（排在 0.1.6a/b 之后）；
 D2 = 只支持无初始化式声明 + 常量下标；**D3 = 不引入 `new`**（复核后**撤回**：不在计划内，且并未真正堵住
 `malloc` 那条洞）；**D4 = 推迟**（Phase 0 只落地 `delete q;` → `if (q) free(q);`，Drop 版留 Phase 1）；
-**D5 = 悬空/取消**（堆对象不再由编译器创建，因此"谁负责 `<stdlib.h>`"当前不适用）。
+**D5 = A**（堆 vptr 落地后仍要求源文件自己 `#include <stdlib.h>`，编译器不插入 include）。
 
-> **堆对象的创建**：本稿 3.5 描述的 `new` / `delete` 只保留 `delete`；**堆对象的创建方式推迟到 Phase 1**，
-> 与 Drop/delete 一起定（Phase 1 的 `delete` 展开含 `d->drop()`，而 `drop()` 也需要 vptr，那时必然要有结论）。
-> 当前堆对象需**手写** `q->__<trait>_vptr = &…;`。
+> **堆对象的创建（已落地，[restore](design/restore.md) D1=A）**：`new` 未引入；`T *p = malloc|calloc(...)`（结构体指针）
+> 被视为堆构造点，声明后自动补写 vptr（含嵌套字段），`delete` 展开为 `if (q) free(q);`。
+> 空白 `malloc` / 未登记形态仍是裸内存，不受影响。见 [language-spec](language-spec.md) §4.7。
 
 **落地实现注记**：0.1.6–0.1.8 的**构造语义**已按本文实现；有两处与草案不同，以实现为准：
 
@@ -222,8 +226,9 @@ D2 = 只支持无初始化式声明 + 常量下标；**D3 = 不引入 `new`**（
 
 > **Kind: mechanism note (describes current behaviour).** This document explains *who writes an
 > object's vptr and when*, covering [roadmap](roadmap.md) items 0.1.6 / 0.1.7 / 0.1.8. These semantics
-> are **implemented**; §6 keeps the decision record and the parts **not yet landed** (heap-object
-> creation, deferred to Phase 1).
+> are **implemented**: stack variables, nested fields, array elements and heap objects all get a
+> vptr (heap objects as described in 3.5 and [restore](design/restore.md) D1=A). §6 keeps the
+> decision record.
 
 ### 1. Why this needs its own semantics
 
@@ -232,12 +237,15 @@ Today the vptr is written in exactly one place: `try_var_decl()` appends
 words, **"writing the vptr" is welded to "declaring a local stack variable"**. Whenever an object
 appears in any other shape, nobody writes its vptr:
 
-| Shape | Today | Consequence |
+| Shape | State at draft time (2026-10-11) | Consequence then |
 | --- | --- | --- |
 | stack declaration (`Person p = {...}` / `Person p;`) | ✅ written | works |
 | **nested field** (`struct Shop { Person owner; }`) | ❌ the field type is not even `struct`-qualified and `owner`'s vptr is never written | fails to compile / crashes |
 | **array element** (`Person ps[2];`) | ❌ no per-element vptr, `ps[0].greet()` not rewritten | crashes / fails to compile |
 | **heap object** (`Person *q = malloc(...)`) | ❌ only the pointer is registered, the pointee's vptr is never written | run-time segfault (measured exit 139) |
+
+> The table is the draft-time snapshot; all four rows are implemented today and covered by
+> `test/cases/{07,15,16,17,28}_*`.
 
 The root cause is the missing notion of a **construction point**: there is no model of "when an object
 comes into being and must be initialised", so only one accidental shape is covered.
@@ -245,15 +253,17 @@ comes into being and must be initialised", so only one accidental shape is cover
 ### 2. Core semantics (this draft's definition)
 
 > **Construction point**: the moment an object is created. There are exactly two — (a) **on the stack**:
-> a variable declaration with (or able to gain) an initialiser; (b) **on the heap**: `new <Struct>`.
+> a variable declaration with (or able to gain) an initialiser; (b) **on the heap**: a struct-pointer
+> declaration initialised by `malloc` / `calloc` (the draft said `new <Struct>`; the implementation
+> chose the zero-new-syntax D1=A).
 >
 > **Construction rule**: at a construction point the compiler writes the vptr of the object **and of
 > every dispatchable sub-object inside it**. A "dispatchable sub-object" is a field / array element
 > whose type is a known ct struct that `use`s at least one trait.
 
 Corollaries: (1) **recursive** — constructing `Shop s` includes constructing `s.owner`;
-(2) **only at construction points** — raw memory from `malloc` is not one, which is why 0.1.8 needs
-`new`; (3) plain C structs are untouched.
+(2) **only at construction points** — a bare `malloc` without a declaration is not one, while a
+`T *p = malloc|calloc(...)` declaration is; (3) plain C structs are untouched.
 
 ### 3. Draft expansions
 
@@ -271,9 +281,9 @@ Corollaries: (1) **recursive** — constructing `Shop s` includes constructing `
 - **3.4 Array elements (0.1.7):** `Person ps[2];` gains a scoped loop writing each element's vptr;
   `ps[0].greet()` → `ps[0].__greeter_vptr->greet(&ps[0]);`. Proposed scope: uninitialised array
   declarations plus constant subscripts only.
-- **3.5 Heap objects — `new` / `delete` (0.1.8):** *(partly withdrawn: `delete` landed, `new` was
-  removed and heap creation is deferred to Phase 1 — see §6; the draft text below is kept for the
-  Phase 1 decision.)* `Person *q = new Person;` expands to an allocation
+- **3.5 Heap objects — `new` / `delete` (0.1.8):** *(evolved: `delete` landed, `new` was never
+  introduced, and heap objects are recognised from `T *p = malloc|calloc(...)` declarations instead
+  — [restore](design/restore.md) D1=A, see §6. The draft text below is kept as the decision record.)* `Person *q = new Person;` expands to an allocation
   plus a vptr assignment (recursively), and `delete q;` to a minimal `if (q) free(q);`. `new` / `delete`
   are not C keywords, so `word_at()` word boundaries plus shape checks are required. `malloc` / `free`
   need `<stdlib.h>`, which the source file should include itself (see D5).
@@ -306,13 +316,13 @@ against user identifiers; and `<stdlib.h>` handling must be decided.
 D2 = uninitialised declarations plus constant subscripts only; **D3 = do not introduce `new`**
 (withdrawn after review: it was not in the plan and never actually closed the `malloc` hole);
 **D4 = deferred** (Phase 0 lands only `delete q;` → `if (q) free(q);`; the Drop version stays in
-Phase 1); **D5 = moot** (the compiler no longer creates heap objects, so "who provides `<stdlib.h>`"
-does not currently apply).
+Phase 1); **D5 = A** (with heap vptrs landed the source file must still include `<stdlib.h>`
+itself; the compiler never inserts includes).
 
-> **Heap-object creation**: of the `new` / `delete` pair in draft 3.5, only `delete` is kept;
-> **how heap objects are created is deferred to Phase 1**, together with Drop/delete (Phase 1's
-> `delete` expands to `d->drop()` plus `free`, and `drop()` needs a vptr too, so a decision is
-> unavoidable there). Today a heap object needs a hand-written `q->__<trait>_vptr = &…;`.
+> **Heap-object creation (landed, [restore](design/restore.md) D1=A)**: of the `new` / `delete` pair
+> in draft 3.5 only `delete` is kept; `new` was never introduced. A struct-pointer declaration
+> initialised by `malloc` / `calloc` is treated as a heap construction point and gets its vptrs
+> written after the declaration. A bare `malloc` without such a declaration stays raw memory.
 
 **Implementation notes**: the construction semantics of 0.1.6–0.1.8 have been implemented per this
 document, with two deviations (the code wins):
@@ -324,8 +334,8 @@ document, with two deviations (the code wins):
 2. **Arrays use assignments too** (as draft 3.4 already did); only an object's **own** vptr still goes
    through a designated initialiser. One limitation follows: **an object with nested objects or an
    array must be declared inside a function** (there is nowhere to put those statements at file
-   scope); the compiler `die`s rather than emitting bad C. Of the **heap** work (draft 3.5) only
-   `delete` is kept; creation is deferred to Phase 1.
+   scope); the compiler `die`s rather than emitting bad C. Heap objects follow D1=A (vptrs written
+   after a `malloc` / `calloc` declaration).
 
 ### 7. Acceptance and testing
 

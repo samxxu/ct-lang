@@ -3,7 +3,7 @@
 > 中文 · [English](#english)
 >
 > 状态：**10.1–10.7 全部落地（2026-10-19），Phase 10 收口并 bump 到 v0.10.0**。D38–D45 已按建议值确认。
-> Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**。
+> Phase 9 已把 `selfhost/ast/main.ct`（下称 **ct-ast**）做成开发主线，但当时**用户实际运行的 `ct` 仍由旧管线 L2（`selfhost/src/**`）提供**；10.7 起已切换到 ct-ast。
 > Phase 10 的目标是补齐 ct-ast 相对 L2 的能力缺口，并把安装入口切过去；旧线保留为回归 oracle。
 
 ---
@@ -90,9 +90,10 @@
 
 ### 1. Goal and exit
 
-Phase 9 made `selfhost/ast/main.ct` (**ct-ast**) the development mainline, but the installed `ct`
-still comes from the old pipeline L2 (`selfhost/src/**`). Phase 10 closes the capability gap and
-switches the shipped entry to ct-ast, keeping the old line as a regression oracle.
+Phase 9 made `selfhost/ast/main.ct` (**ct-ast**) the development mainline, but at that point the
+installed `ct` still came from the old pipeline L2 (`selfhost/src/**`); 10.7 switched it to ct-ast.
+Phase 10 closes the capability gap and switches the shipped entry to ct-ast, keeping the old line as
+a regression oracle.
 
 | Item | Content |
 | --- | --- |

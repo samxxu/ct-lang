@@ -2,9 +2,9 @@
 
 > 中文 · [English](#english)
 >
-> **状态：设计已冻结（2026-10-18），未实现。** D28–D37 全部定案；冻结的是设计契约而非代码，
-> 实现按 §7 的切片推进。**不要**照本文件创建 `selfhost/ast/**` 或任何实现文件——冻结的是设计，
-> 不是开工许可（AGENTS §2）。
+> **状态：设计已冻结（2026-10-18）；9.1–9.7 已全部落地（同日收口 v0.9.0），Phase 10 起该实现是安装入口的主线。**
+> D28–D37 全部定案；冻结的是设计契约，实现按 §7 的切片推进并已逐片交付。
+> 主线切换、L2 的回归 oracle 角色与回退 tag 见 [phase10.md](phase10.md)。
 > 决策编号从 **D28** 起（D21–D27 见 [phase8.md](phase8.md)）。
 
 ---
@@ -146,7 +146,7 @@ selfhost/ast/
 
 ### 1. Scope
 
-The current compiler (L2, `selfhost/src/**`) is a **line-rewriting** design. Phase 9 builds a real
+At the time (L2, `selfhost/src/**`) the compiler was a **line-rewriting** design. Phase 9 builds a real
 **AST-based compiler** instead. This was already decided on 2026-10-17 ("the AST compiler becomes the
 new mainline; the old L1 is archived by tag; the exit criterion changes from byte-identical to
 behavioural equivalence"); Phase 9 gives that decision a phase, a design and a slice plan.

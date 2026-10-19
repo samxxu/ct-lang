@@ -2,11 +2,12 @@
 
 > 中文 · [English](#english)
 
-> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）与当前编译器 L2（`selfhost/src/**`）**共同**
-> 接受与产出的部分。L2 是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
+> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）与 CT 线（L2，`selfhost/src/**`；
+> v0.10.0 起安装入口由行为等价的 ct-ast，`selfhost/ast/main.ct`，提供）**共同**
+> 接受与产出的部分。CT 线是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
 > `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
 > [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
-> [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 L2 独有，但在 §4.9 一并描述。
+> [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -321,13 +322,13 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `T *xs[n]` | 接口指针数组 | `xs[i]->m()` | 指针 |
 | 形参 `T xs[]` / `T *xs` | 同上，函数体内可下标 | 同左 | 值 |
 
-  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）、以及 **struct 类型的数组字段**（`struct Duo { Num ab[2]; }`，见 [roadmap](roadmap.md) 的 `p18` 探针，按决定延后）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属当前编译器（L2），由 `test/acceptance/run.sh` 钉住。
+  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）、以及 **struct 类型的数组字段**（`struct Duo { Num ab[2]; }`，见 [roadmap](roadmap.md) 的 `p18` 探针，按决定延后）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 CT 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
 
 #### 4.9 AutoDrop（Phase 5 新增，仅 CT 线）
 
 `own` 是一个**上下文关键字**，只出现在声明行的行首：它把变量标记为「持有对象生命周期」，
 编译器在作用域出口自动释放。它是 Phase 5 新增项，**L0（`ctc.c`）不认识它**（会原样透传），
-由当前编译器（L2，`selfhost/src/**`）实现。
+由 CT 线（L2，`selfhost/src/**`；ct-ast 行为等价）实现。
 
 | 源码形态 | 处理 |
 | --- | --- |
@@ -436,11 +437,12 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 ## English
 
 > **Status**: this document specifies the **core ct grammar** — the subset that both L0 (`ctc.c`) and
-> the current compiler L2 (`selfhost/src/**`) **accept and emit**. L2 is a superset: it also supports
+> the CT line (L2, `selfhost/src/**`; since v0.10.0 the installed entry is the behaviourally
+> equivalent ct-ast, `selfhost/ast/main.ct`) **accept and emit**. The CT line is a superset: it also supports
 > `namespace` / `import` / `pub` / multi-file `ct build` / `Drop` / `#line` / leak warnings and
 > `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
 > landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
-> and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also L2-only but is described in §4.9.
+> and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also CT-line-only but is described in §4.9.
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -806,14 +808,14 @@ Rules and limits:
   with an aggregate initialiser (`T *g = { ... };`) and **struct-typed array fields**
   (`struct Duo { Num ab[2]; }` — see probe `p18` in the [roadmap](roadmap.md), deferred by decision).
   Rationale as in the status note at the top: this document stays accurate for L0, and the new
-  capability belongs to the current compiler (L2) alone, pinned by `test/acceptance/run.sh`.
+  capability belongs to the CT line (L2 / ct-ast) alone, pinned by `test/acceptance/run.sh`.
 
 #### 4.9 AutoDrop (new in Phase 5, CT line only)
 
 `own` is a **contextual keyword** recognised only at the start of a declaration line. It marks the
 variable as owning its object's lifetime, so the compiler releases it at scope exit. This is a Phase 5
-addition: **L0 (`ctc.c`) does not know it** (it passes the line through), and the current compiler
-(L2, `selfhost/src/**`) implements it.
+addition: **L0 (`ctc.c`) does not know it** (it passes the line through), and the CT line
+(L2, `selfhost/src/**`; ct-ast is behaviourally equivalent) implements it.
 
 | Shape | Expansion |
 | --- | --- |

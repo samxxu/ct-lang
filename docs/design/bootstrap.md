@@ -2,9 +2,11 @@
 
 > 中文 · [English](#english)
 >
-> **状态：设计草案，当前未实现。** 本文描述的目录结构与构建流程都还不存在；
-> 今天的编译器是仓库根目录的单文件 [ctc.c](../ctc.c)。
-> **冻结**已随 **Phase 1（自举）启动**发生（`ctc.c` 即 L0 + 差分 oracle）；但**本文的目录结构**的落地触发条件不同——是 **CT 侧布局定型**（`src/` 分文件 + `test/` 拆分就绪），届时 `ctc.c` 与其测试**一次性**搬入 `ctrait/`。在此之前 `ctc.c` 留在仓库根目录（2026-10-15 用户确认）。
+> **状态：设计草案；本文的目标目录（`ctrait/`）仍未落地。** 自举链本身已经存在——
+> 冻结种子 `selfhost/ctc.ct`（L1）、拆分树 `selfhost/src/**`（L2，回归 oracle）与主线
+> `selfhost/ast/main.ct`（ct-ast，v0.10.0 起提供安装入口）；L0 仍是仓库根目录的单文件
+> [ctc.c](../ctc.c)。
+> **冻结**已随 **Phase 1（自举）启动**发生（`ctc.c` 即 L0 + 差分 oracle）；但**本文的目录结构**的落地触发条件不同——是 **CT 侧布局定型**，届时 `ctc.c` 与其测试**一次性**搬入 `ctrait/`。在此之前 `ctc.c` 留在仓库根目录（2026-10-15 用户确认）。
 
 ---
 
@@ -121,8 +123,10 @@ AutoDrop (Phase 5)    ← 依赖 Drop + 作用域分析
 
 ## English
 
-> **Status: design draft, not implemented.** None of the directories or build flows described here
-> exist; today's compiler is the single-file [ctc.c](../ctc.c) at the repository root.
+> **Status: design draft; the target layout (`ctrait/`) is not implemented.** The bootstrap chain
+> itself exists — the frozen seed `selfhost/ctc.ct` (L1), the split tree `selfhost/src/**` (L2, the
+> regression oracle) and the mainline `selfhost/ast/main.ct` (ct-ast, the installed entry since
+> v0.10.0); L0 is still the single-file [ctc.c](../ctc.c) at the repository root.
 > **Freezing** already happened with the **start of self-hosting (Phase 1)** — `ctc.c` is L0 + the
 > differential oracle. But the **layout in this document** has a different trigger: **the CT-side
 > layout settling** (`src/` split across files + the `test/` split). Then `ctc.c` and its tests move
