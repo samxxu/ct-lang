@@ -11,10 +11,10 @@
 #   5) true self-hosting: L1 compiles itself into L1', and L1' compiles the sample too
 #   6) the split compiler: L1 builds the multi-unit tree selfhost/src/** into L2,
 #      and L2 compiles the sample identically as well
-#   7) the single entry (Phase 7.1): the same L2 binary answers to `ct`, with
-#      `ctc` kept as a compatibility alias
+#   7) the shipped entry (Phase 10.7): L2 builds ct-ast from selfhost/ast/main.ct,
+#      and that binary answers to `ct`, with `ctc` kept as a compatibility alias
 #   8) the incremental cache (Phase 6.3): a second `build` of unchanged sources
-#      reuses the artifacts, and a touched source invalidates them
+#      reuses the artifacts, and a changed dependency invalidates them
 #   9) prints where to go next
 #
 # Usage:
@@ -248,14 +248,33 @@ else
     printf 'FAIL: L1 could not build selfhost/src/**\n'
 fi
 
-# ------------------------------------- 7) the single entry `ct` (Phase 7.1)
-banner "7) the single entry: the same L2 binary answers to 'ct'"
-say "Phase 7: 'ct' is the command and 'ctc' stays as a compatibility alias."
-say "The identity comes from argv[0], so no second build is needed:"
+# ------------------------------------- 7) the shipped entry `ct` (Phase 10.7)
+banner "7) the shipped entry: ct-ast answers to 'ct'"
+say "Phase 10.7: the installed compiler is built from selfhost/ast/main.ct (ct-ast);"
+say "L2 stays as the regression oracle. The identity comes from argv[0]:"
+ast_src="$work/astsrc"
+ast_bin="$work/ct-ast-bin"
 ct_bin="$work/ct"
 alias_bin="$work/ctc"
-cp "$l2_bin" "$ct_bin"
-cp "$l2_bin" "$alias_bin"
+rm -rf "$ast_src"
+mkdir -p "$ast_src"
+
+if run "L2 building the AST compiler" "$l2_bin" build selfhost/ast/main.ct -o "$ast_src"; then
+    printf '\n+ %s -Wall -Wextra -std=c99 %s/*.c -o %s\n' "$CC" "$ast_src" "$ast_bin"
+    if "$CC" -Wall -Wextra -std=c99 "$ast_src"/*.c -o "$ast_bin" 2>"$work/ast.log" &&
+       [ ! -s "$work/ast.log" ]; then
+        note "ok (warning-free)"
+    else
+        printf 'FAIL: ct-ast did not build warning-free\n'
+        sed 's/^/    /' "$work/ast.log"
+        fail=1
+    fi
+else
+    printf 'FAIL: L2 could not build selfhost/ast/main.ct\n'
+    fail=1
+fi
+cp "$ast_bin" "$ct_bin"
+cp "$ast_bin" "$alias_bin"
 
 printf '\n+ %s -v\n' "$ct_bin"
 ct_ver="$("$ct_bin" -v)"
@@ -272,17 +291,23 @@ esac
 
 say "It compiles through both the explicit and the default subcommand:"
 printf '\n+ %s compile %s -o %s\n' "$ct_bin" "$sample_abs" "$out_c"
-if "$ct_bin" compile "$sample_abs" -o "$out_c" && cmp -s "$out_c" "$l0_c"; then
-    note "ok: 'ct compile' writes the same C as L0."
+if "$ct_bin" compile "$sample_abs" -o "$out_c" &&
+   "$CC" -Wall -Wextra -std=c99 "$out_c" -o "$work/ct-sample.bin" 2>"$work/ct-sample.cc" &&
+   "$work/ct-sample.bin" >"$work/ct-sample.out" 2>&1; then
+    note "ok: 'ct compile' writes C that builds and runs."
 else
-    printf 'FAIL: ct compile differs\n'
+    printf 'FAIL: ct compile output did not build or run\n'
+    sed 's/^/    /' "$work/ct-sample.cc"
     fail=1
 fi
 printf '\n+ %s %s -o %s\n' "$ct_bin" "$sample_abs" "$out_c"
-if "$ct_bin" "$sample_abs" -o "$out_c" && cmp -s "$out_c" "$l0_c"; then
+if "$ct_bin" "$sample_abs" -o "$out_c" &&
+   "$CC" -Wall -Wextra -std=c99 "$out_c" -o "$work/ct-sample.bin" 2>"$work/ct-sample.cc" &&
+   "$work/ct-sample.bin" >"$work/ct-sample.out" 2>&1; then
     note "ok: the default subcommand ('ct <file>') behaves the same."
 else
-    printf 'FAIL: ct <file> differs\n'
+    printf 'FAIL: ct <file> output did not build or run\n'
+    sed 's/^/    /' "$work/ct-sample.cc"
     fail=1
 fi
 
@@ -302,27 +327,18 @@ case "$ctc_help" in
            "$(printf '%s' "$ctc_help" | head -n 1)"; fail=1 ;;
 esac
 
-say "'ct build' drives the same multi-file mode under the ct identity:"
+say "'ct build' drives the multi-file mode under the ct identity:"
 ctbuild="$work/ct-id-build"
 rm -rf "$ctbuild"
 mkdir -p "$ctbuild"
-printf '\n+ %s build selfhost/src/driver.ct -o %s\n' "$ct_bin" "$ctbuild"
-if "$ct_bin" build selfhost/src/driver.ct -o "$ctbuild" >"$work/ct-build.out" 2>&1 &&
-   [ -f "$ctbuild/core.c" ] && [ -f "$ctbuild/driver.c" ]; then
-    note "ok: it produced the multi-unit tree."
-    same=1
-    for u in core driver; do
-        cmp -s "$ctbuild/$u.c" "$l2src/$u.c" || same=0
-        cmp -s "$ctbuild/$u.h" "$l2src/$u.h" || same=0
-    done
-    if [ "$same" -eq 1 ]; then
-        note "ok: the tree matches the L1-built one byte for byte."
-    else
-        printf 'FAIL: ct build differs from the L1-built tree\n'
-        fail=1
-    fi
+printf '\n+ %s build test/modules/split/main.ct -o %s\n' "$ct_bin" "$ctbuild"
+if "$ct_bin" build test/modules/split/main.ct -o "$ctbuild" >"$work/ct-build.out" 2>&1 &&
+   "$CC" "$ctbuild"/*.c -o "$work/ct-id.bin" 2>"$work/ct-id.cc" &&
+   "$work/ct-id.bin" >"$work/ct-id.out" 2>&1 &&
+   cmp -s "$work/ct-id.out" test/modules/split/expected.out; then
+    note "ok: it built the multi-unit fixture and the program runs."
 else
-    printf 'FAIL: ct build did not produce core.c / driver.c\n'
+    printf 'FAIL: ct build did not produce a working multi-unit program\n'
     sed 's/^/    /' "$work/ct-build.out"
     fail=1
 fi
@@ -350,42 +366,42 @@ cachesrc="$work/cachesrc"
 cacheout="$work/cacheout"
 rm -rf "$cachesrc" "$cacheout"
 mkdir -p "$cachesrc" "$cacheout"
-cp selfhost/src/*.ct "$cachesrc/"
+cp test/modules/split/*.ct "$cachesrc/"
 
 # mtime <file> : seconds since the epoch, portable across GNU and BSD stat
 mtime() {
     stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"
 }
 
-printf '\n+ %s build %s -o %s   (cold cache)\n' "$l2_bin" "$cachesrc/driver.ct" "$cacheout"
-"$l2_bin" build "$cachesrc/driver.ct" -o "$cacheout" >/dev/null || fail=1
-if [ -f "$cacheout/core.c" ] && [ -f "$cacheout/core.h" ]; then
+printf '\n+ %s build %s -o %s   (cold cache)\n' "$ct_bin" "$cachesrc/main.ct" "$cacheout"
+"$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
+if [ -f "$cacheout/main.c" ] && [ -f "$cacheout/main.h" ]; then
     # Back-date the artifacts: if a second build rewrites them, their mtime moves.
-    touch -t 200001010000 "$cacheout/core.c" "$cacheout/driver.c"
-    before="$(mtime "$cacheout/core.c")"
+    touch -t 200001010000 "$cacheout/main.c" "$cacheout/shapes.c" "$cacheout/impl_dog.c"
+    before="$(mtime "$cacheout/main.c")"
     printf '\n+ %s build %s -o %s   (warm cache, sources untouched)\n' \
-        "$l2_bin" "$cachesrc/driver.ct" "$cacheout"
-    "$l2_bin" build "$cachesrc/driver.ct" -o "$cacheout" >/dev/null || fail=1
-    if [ "$(mtime "$cacheout/core.c")" = "$before" ]; then
+        "$ct_bin" "$cachesrc/main.ct" "$cacheout"
+    "$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
+    if [ "$(mtime "$cacheout/main.c")" = "$before" ]; then
         note "reused: the artifacts were not regenerated (their mtime is unchanged)"
     else
         printf 'FAIL: an unchanged unit was recompiled\n'
         fail=1
     fi
 
-    printf '\n+ touch -t 201001010000 %s/core.ct   (a source changes)\n' "$cachesrc"
-    touch -t 201001010000 "$cachesrc/core.ct"
+    printf '\n+ touch -t 201001010000 %s/shapes.h.ct   (a dependency changes)\n' "$cachesrc"
+    touch -t 201001010000 "$cachesrc/shapes.h.ct"
     printf '\n+ %s build %s -o %s   (the key no longer matches)\n' \
-        "$l2_bin" "$cachesrc/driver.ct" "$cacheout"
-    "$l2_bin" build "$cachesrc/driver.ct" -o "$cacheout" >/dev/null || fail=1
-    if [ "$(mtime "$cacheout/core.c")" != "$before" ]; then
-        note "invalidated: the touched unit and its dependant were rebuilt"
+        "$ct_bin" "$cachesrc/main.ct" "$cacheout"
+    "$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
+    if [ "$(mtime "$cacheout/main.c")" != "$before" ]; then
+        note "invalidated: the touched unit and its dependants were rebuilt"
     else
         printf 'FAIL: a changed source was not rebuilt\n'
         fail=1
     fi
 else
-    printf 'FAIL: the cold build produced no core.c/core.h\n'
+    printf 'FAIL: the cold build produced no main.c/main.h\n'
     fail=1
 fi
 
@@ -394,7 +410,8 @@ banner "9) where to go next"
 say "  your own file      bash selfhost/ct-tour.sh path/to/your.ct"
 say "  full test suite    ./test/run.sh                    (build, unit, goldens, examples, errors)"
 say "  bootstrap gates    bash selfhost/check-goldens.sh   (L1 vs goldens, plus L1' vs goldens)"
-say "  split compiler     selfhost/src/**                  (the compiler, one unit per file)"
+say "  shipped compiler   selfhost/ast/main.ct             (ct-ast: the ct entry since Phase 10.7)"
+say "  split compiler     selfhost/src/**                  (L2, the frozen regression oracle)"
 say "  syntax reference   docs/language-spec.md"
 say "  runnable examples  examples/01_greeter ... 06_iface_field  (<name>.ct + <name>.expected.out)"
 say "  editor comfort     editors/vscode                   (highlighting only, no build step)"
