@@ -307,7 +307,7 @@ if "$work/ct-ast" build --ns-root test/modules/ns_dir_mismatch \
         test/modules/ns_dir_mismatch/a/uart.ct -o "$work/mod-bad" \
         >"$work/mnbad.out" 2>"$work/mnbad.err"; then
     bad "ns_dir_mismatch" "expected a non-zero exit"
-elif grep -q "^ct-ast: " "$work/mnbad.err"; then
+elif grep -q "^ctc: " "$work/mnbad.err"; then
     ok "ns_dir_mismatch (namespace/directory check)"
 else
     bad "ns_dir_mismatch" "no diagnostic on stderr"
@@ -315,7 +315,7 @@ fi
 if "$work/ct-ast" build test/modules/inc_missing/main.ct -o "$work/mod-bad" \
         >"$work/mincm.out" 2>"$work/mincm.err"; then
     bad "inc_missing" "expected a non-zero exit"
-elif grep -q "^ct-ast: " "$work/mincm.err"; then
+elif grep -q "^ctc: " "$work/mincm.err"; then
     ok "inc_missing (unresolved import)"
 else
     bad "inc_missing" "no diagnostic on stderr"
@@ -329,7 +329,7 @@ for f in test/ast/errors/*.ct; do
     if "$work/ct-ast" "$f" -o "$work/bad-$b.c" \
             >"$work/bad-$b.out" 2>"$work/bad-$b.err"; then
         bad "$b" "expected a non-zero exit"
-    elif grep -Eq '^ct-ast: line [0-9]+: ' "$work/bad-$b.err"; then
+    elif grep -Eq '^ctc: line [0-9]+: ' "$work/bad-$b.err"; then
         ok "$b (rejected with a line diagnostic)"
     else
         bad "$b" "no line diagnostic on stderr: $(cat "$work/bad-$b.err")"
@@ -415,8 +415,10 @@ fi
 # option arguments, unknown options, an unreadable input, an unwritable
 # output, `import` in compile mode and a build without `-o`.
 if "$work/ct-ast" -h >"$work/cli-h.out" 2>"$work/cli-h.err" \
-   && grep -q '^usage: ' "$work/cli-h.out"; then
-    ok "-h prints usage and exits zero"
+   && grep -q '^usage: ' "$work/cli-h.out" \
+   && grep -q ' get <' "$work/cli-h.out" \
+   && grep -q ' install$' "$work/cli-h.out"; then
+    ok "-h lists usage and the get/install subcommands"
 else
     bad "-h" "$(cat "$work/cli-h.out") $(cat "$work/cli-h.err")"
 fi
