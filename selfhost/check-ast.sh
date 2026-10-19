@@ -34,6 +34,9 @@
 # leak warnings in text and JSON (compile and build mode), all byte-diffed
 # against L2's diagnostics.
 #
+# 10.4 adds the recovery section: multi_error fixtures (compile and build) plus
+# the MAX_ERRORS cap, byte-diffed against L2 and artifact-free.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -526,6 +529,62 @@ if "$work/ct-ast" build --diagnostics=json test/modules/leak_build/prog.ct \
     ok "leak_build (build-mode JSON on stderr, the program runs)"
 else
     bad "leak_build" "$(cat "$mem-leak_build.err" "$mem-leak_build.cc" 2>/dev/null | head -5)"
+fi
+
+echo
+echo "== multi-error recovery (10.4) =="
+# A bad construct must not hide the rest of the file: every error is reported and
+# the run closes with the summary. Both fixtures are byte-diffed against L2 and
+# must leave no .c/.h behind.
+rec="$work/rec"
+rm -rf "$rec-multi_err"
+mkdir -p "$rec-multi_err"
+cp test/modules/multi_err/prog.ct "$rec-multi_err/"
+if ( cd "$rec-multi_err" && "$work/ct-ast" prog.ct -o prog.c ) \
+        >"$rec-multi_err.out" 2>"$rec-multi_err.err"; then
+    bad "multi_err" "expected a non-zero exit"
+elif ! cmp -s "$rec-multi_err.err" test/modules/multi_err/expected.stderr; then
+    bad "multi_err" "stderr differs: $(cat "$rec-multi_err.err")"
+elif [ -f "$rec-multi_err/prog.c" ] || [ -f "$rec-multi_err/prog.h" ]; then
+    bad "multi_err" "artifacts survived a failed compile"
+else
+    ok "multi_err (three errors, L2-identical, no artifacts)"
+fi
+
+rm -rf "$rec-multi_err_build"
+mkdir -p "$rec-multi_err_build"
+if "$work/ct-ast" build test/modules/multi_err_build/prog.ct -o "$rec-multi_err_build" \
+        >"$rec-multi_err_build.out" 2>"$rec-multi_err_build.err"; then
+    bad "multi_err_build" "expected a non-zero exit"
+elif ! cmp -s "$rec-multi_err_build.err" test/modules/multi_err_build/expected.stderr; then
+    bad "multi_err_build" "stderr differs: $(cat "$rec-multi_err_build.err")"
+elif [ -n "$(ls -A "$rec-multi_err_build" 2>/dev/null)" ]; then
+    bad "multi_err_build" "artifacts survived a failed build"
+else
+    ok "multi_err_build (build reports every error, no artifacts)"
+fi
+
+# Past MAX_ERRORS both compilers stop with the same line instead of a summary.
+rm -rf "$rec-cap"
+mkdir -p "$rec-cap"
+i=1
+{
+    echo 'trait T { void f(); }'
+    while [ "$i" -le 25 ]; do
+        echo "impl T for M$i { void f() { } }"
+        i=$((i + 1))
+    done
+} >"$rec-cap/cap.ct"
+if ( cd "$rec-cap" && "$work/l2" cap.ct -o l2.c ) >/dev/null 2>"$rec-cap/l2.err"; then
+    bad "max_errors" "L2 was expected to fail"
+elif ( cd "$rec-cap" && "$work/ct-ast" cap.ct -o ast.c ) >/dev/null 2>"$rec-cap/ast.err"; then
+    bad "max_errors" "expected a non-zero exit"
+elif ! cmp -s "$rec-cap/l2.err" "$rec-cap/ast.err"; then
+    bad "max_errors" "the report differs from L2"
+elif ! grep -q '^ctc: too many errors, stopping$' "$rec-cap/ast.err"; then
+    bad "max_errors" "the cap line is missing"
+else
+    ok "max_errors (same cap and report as L2)"
 fi
 
 echo
