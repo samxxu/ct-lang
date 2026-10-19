@@ -6,7 +6,7 @@
 | 严重度 | **Info**（设计观察，非本轮要修项） |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 文件 | `selfhost/src/core.ct`、`selfhost/src/driver.ct` |
-| 状态 | 已修复（`54c3713` + `fefbec6` / `5b9faad` / `71fed69` / `65d0696` / `fe6c29f`；static 52 → 11，剩余为设施层/单例，见下方「进展」） |
+| 状态 | 已修复（`54c3713` + `fefbec6` / `5b9faad` / `71fed69` / `65d0696` / `fe6c29f`；static 52 → 11，后续 Phase 7/8 各加一个单例、现为 13，剩余均属设施层/单例，见下方「进展」） |
 
 ## 现象
 
@@ -56,14 +56,16 @@ core.ct:4142  static Pipe g_pipe = { };
 | D | `65d0696` | `Warn` 表 + `json` → `struct SymTab`；恢复簿记（`guard_pos` / `guard_end` / `safe_nvars` / `safe_nscope`）→ `struct Pipe` |
 | E | `fe6c29f` | driver 的 `-I` 根 + unit 表（9 个）→ `struct Build` |
 
-**剩余 11 个，全部是刻意的设施层 / 单例**：
+**剩余 11 个，全部是刻意的设施层 / 单例**（Phase 7 / 8 又各加一个单例——`g_ct_prog` 身份与
+`g_pkg` 包管理状态，故 2026-10-19 复核时实测为 **13 个**，仍属同一类）：
 
 - `g_src` / `g_len` / `g_path` / `g_ns` —— 扫描上下文：`die`、`skip_literal`、`word_at`、
   `read_ident` 以及 `find_trait` / `find_struct` 都**没有接收者**；而且 `g_pipe` 的定义必须在
   `impl` 之后（vtable 依赖），无法前置供自由函数使用。
 - `g_err_jmp` / `g_guarded` / `g_nerrors` / `g_err_pos` —— `die`（自由函数）与
   `compile_range` 之间的恢复协议，同上理由。
-- `g_sym` / `g_pipe` / `g_build` —— 三个单例实例本身。
+- `g_sym` / `g_pipe` / `g_build` / `g_pkg` —— 四个单例实例本身（`g_pkg` 由 Phase 8 引入）。
+- `g_ct_prog` —— Phase 7 的入口身份（`ct` / `ctc`），由 `main` 的 `argv[0]` 写入，是驱动层的自举设施。
 
 即：**所有业务状态都有归属**；剩下的是 OO 的必要边界（设施层 + 单例），与 `Buf` / `die` /
 扫描原语同层。
