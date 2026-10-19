@@ -2,9 +2,10 @@
 #
 # test/pkg/run.sh - Phase 8.1 + 8.2 + 8.3: the local, git and install halves of ct-pkg.
 #
-# Builds the whole bootstrap chain (L0 -> L1 -> L2) and exercises `ct get` on a
-# throwaway project: manifest parsing, a version range, a recursive local `dep`,
-# vendoring into `vendor/<name>` and the resolution order recorded in `ct.lock`.
+# Builds the whole bootstrap chain (L0 -> L1 -> L2 -> ct-ast, the compiler that
+# now ships `get`/`install`) and exercises `ct get` on a throwaway project:
+# manifest parsing, a version range, a recursive local `dep`, vendoring into
+# `vendor/<name>` and the resolution order recorded in `ct.lock`.
 # Phase 8.2 adds a git source: a local git repository stands in for the registry
 # (so the test needs no network), and the `git` absent case must fail hard. The
 # cache and the registry are redirected through HOME / CT_REGISTRY.
@@ -55,7 +56,16 @@ fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
     echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
 fi
-ok "the chain builds (L0 -> L1 -> L2)"
+# Phase 10.6: the package subcommands now ship with the AST compiler (ct-ast),
+# which L2 builds from selfhost/ast/main.ct. This gate drives that entry.
+mkdir -p "$work/astsrc"
+if ! "$work/l2" build selfhost/ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
+    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
+fi
+if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
+    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
+fi
+ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 
 echo
 echo "== a project and two local packages =="
@@ -70,7 +80,7 @@ ok "fixtures created"
 
 echo
 echo "== ct get: recursive local dependency =="
-if ( cd "$work/proj" && "$work/l2" get ../pkgs/util >"$work/get.out" 2>"$work/get.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/util >"$work/get.out" 2>"$work/get.err" ); then
     ok "exits 0"
 else
     bad "ct get" "non-zero exit: $(cat "$work/get.err")"
@@ -109,7 +119,7 @@ fi
 
 echo
 echo "== ct install: verifies the lock and prints a build command =="
-if ( cd "$work/proj" && "$work/l2" install >"$work/i.out" 2>"$work/i.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/i.out" 2>"$work/i.err" ); then
     ok "ct install exits 0"
 else
     bad "ct install" "non-zero exit: $(cat "$work/i.err")"
@@ -124,7 +134,7 @@ fi
 echo
 echo "== ct install rejects a tampered vendor tree =="
 printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.ct"
-if ( cd "$work/proj" && "$work/l2" install >"$work/it.out" 2>"$work/it.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/it.out" 2>"$work/it.err" ); then
     bad "install tamper" "expected a non-zero exit"
 elif grep -Fq "does not match ct.lock" "$work/it.err"; then
     ok "rejects a digest mismatch"
@@ -136,7 +146,7 @@ printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/pro
 echo
 echo "== ct install rejects a missing vendored package =="
 mv "$work/proj/vendor/extra" "$work/proj/vendor/extra.bak"
-if ( cd "$work/proj" && "$work/l2" install >"$work/im.out" 2>"$work/im.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/im.out" 2>"$work/im.err" ); then
     bad "install missing" "expected a non-zero exit"
 elif grep -Fq "not vendored" "$work/im.err"; then
     ok "rejects a missing vendored package"
@@ -148,7 +158,7 @@ mv "$work/proj/vendor/extra.bak" "$work/proj/vendor/extra"
 echo
 echo "== ct install rejects an uncovered manifest dependency =="
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\ndep = ghost@^1.0.0\n' >"$work/proj/ct.pkg"
-if ( cd "$work/proj" && "$work/l2" install >"$work/ic.out" 2>"$work/ic.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/ic.out" 2>"$work/ic.err" ); then
     bad "install coverage" "expected a non-zero exit"
 elif grep -Fq "is not satisfied by ct.lock" "$work/ic.err"; then
     ok "rejects a dependency missing from the lock"
@@ -160,7 +170,7 @@ printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/
 echo
 echo "== ct install rejects a malformed dep =="
 printf 'name = demo\nversion = 0.1.0\ndep = @^0.1.0\n' >"$work/proj/ct.pkg"
-if ( cd "$work/proj" && "$work/l2" install >"$work/id.out" 2>"$work/id.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/id.out" 2>"$work/id.err" ); then
     bad "install bad dep" "expected a non-zero exit"
 elif grep -Fq "bad dependency" "$work/id.err"; then
     ok "rejects a dep with no path"
@@ -172,7 +182,7 @@ printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/
 echo
 echo "== ct build compiles against vendor/ =="
 mkdir -p "$work/proj/out"
-if ( cd "$work/proj" && "$work/l2" build -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" build -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
     if "$CC" "$work/proj/out"/*.c -o "$work/app" 2>"$work/bc.err" \
        && [ "$("$work/app")" = "42" ]; then
         ok "imports a vendored package and runs"
@@ -185,7 +195,7 @@ fi
 
 echo
 echo "== a range that cannot match =="
-if ( cd "$work/proj" && "$work/l2" get ../pkgs/util@^1.0.0 >"$work/mm.out" 2>"$work/mm.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/util@^1.0.0 >"$work/mm.out" 2>"$work/mm.err" ); then
     bad "mismatch" "expected a non-zero exit"
 elif grep -Fq "does not satisfy" "$work/mm.err"; then
     ok "rejects a version outside the range"
@@ -196,7 +206,7 @@ fi
 echo
 echo "== a directory without ct.pkg =="
 mkdir -p "$work/pkgs/empty"
-if ( cd "$work/proj" && "$work/l2" get ../pkgs/empty >"$work/e.out" 2>"$work/e.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/empty >"$work/e.out" 2>"$work/e.err" ); then
     bad "no-manifest" "expected a non-zero exit"
 elif grep -Eq "cannot (open|read)" "$work/e.err"; then
     ok "reports a missing manifest"
@@ -208,7 +218,7 @@ echo
 echo "== ct install: missing or empty ct.lock =="
 mkdir -p "$work/nolock"
 printf 'name = demo\nversion = 0.1.0\n' >"$work/nolock/ct.pkg"
-if ( cd "$work/nolock" && "$work/l2" install >"$work/nl.out" 2>"$work/nl.err" ); then
+if ( cd "$work/nolock" && "$work/ct-ast" install >"$work/nl.out" 2>"$work/nl.err" ); then
     bad "install no-lock" "expected a non-zero exit"
 elif grep -Fq "no './ct.lock'" "$work/nl.err"; then
     ok "asks for ct.lock when it is missing"
@@ -216,7 +226,7 @@ else
     bad "install no-lock" "wrong diagnostic: $(cat "$work/nl.err")"
 fi
 : >"$work/nolock/ct.lock"
-if ( cd "$work/nolock" && "$work/l2" install >"$work/el.out" 2>"$work/el.err" ); then
+if ( cd "$work/nolock" && "$work/ct-ast" install >"$work/el.out" 2>"$work/el.err" ); then
     bad "install empty-lock" "expected a non-zero exit"
 elif grep -Fq "ct.lock is empty" "$work/el.err"; then
     ok "rejects an empty ct.lock"
@@ -227,7 +237,7 @@ fi
 echo
 echo "== ct install without ct.pkg =="
 mkdir -p "$work/nomanifest"
-if ( cd "$work/nomanifest" && "$work/l2" install >"$work/nm.out" 2>"$work/nm.err" ); then
+if ( cd "$work/nomanifest" && "$work/ct-ast" install >"$work/nm.out" 2>"$work/nm.err" ); then
     bad "install no-manifest" "expected a non-zero exit"
 elif grep -Fq "cannot open './ct.pkg'" "$work/nm.err"; then
     ok "reports a missing manifest"
@@ -238,7 +248,7 @@ fi
 echo
 echo "== ct install with an incomplete manifest =="
 printf 'name = demo\n' >"$work/nomanifest/ct.pkg"
-if ( cd "$work/nomanifest" && "$work/l2" install >"$work/ni.out" 2>"$work/ni.err" ); then
+if ( cd "$work/nomanifest" && "$work/ct-ast" install >"$work/ni.out" 2>"$work/ni.err" ); then
     bad "install incomplete-manifest" "expected a non-zero exit"
 elif grep -Fq "cannot read './ct.pkg'" "$work/ni.err"; then
     ok "rejects a manifest without a version"
@@ -248,14 +258,14 @@ fi
 
 echo
 echo "== ct get: argument errors =="
-if ( cd "$work/proj" && "$work/l2" get --bogus >"$work/ga.out" 2>"$work/ga.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" get --bogus >"$work/ga.out" 2>"$work/ga.err" ); then
     bad "get unknown-option" "expected a non-zero exit"
 elif grep -Fq "unknown option '--bogus'" "$work/ga.err"; then
     ok "rejects an unknown option"
 else
     bad "get unknown-option" "wrong diagnostic: $(cat "$work/ga.err")"
 fi
-if ( cd "$work/proj" && "$work/l2" get >"$work/gn.out" 2>"$work/gn.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" get >"$work/gn.out" 2>"$work/gn.err" ); then
     bad "get no-spec" "expected a non-zero exit"
 elif grep -Fq "usage:" "$work/gn.err"; then
     ok "prints usage without a spec"
@@ -282,7 +292,7 @@ else
         && git add -A && git commit -qm two && git tag v0.2.0 )
     mkdir -p "$work/home"
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/l2" get "gutil@^0.1.0" >"$work/g.out" 2>"$work/g.err" ); then
+            "$work/ct-ast" get "gutil@^0.1.0" >"$work/g.out" 2>"$work/g.err" ); then
         ok "ct get <git> exits 0"
     else
         bad "ct get <git>" "non-zero exit: $(cat "$work/g.err")"
@@ -314,7 +324,7 @@ else
         && printf 'int notags_value(void) { return 9; }\n' >notags.c \
         && git add -A && git commit -qm one )
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/l2" get "notags@*" >"$work/h.out" 2>"$work/h.err" ); then
+            "$work/ct-ast" get "notags@*" >"$work/h.out" 2>"$work/h.err" ); then
         if grep -Eq "^notags 0\.0\.1 git [0-9a-f]{40} [0-9a-f]+$" "$work/proj/ct.lock"; then
             ok "locks the default branch tip when there is no tag"
         else
@@ -328,7 +338,7 @@ else
     echo "== without git on PATH, a git source fails hard =="
     mkdir -p "$work/nobin"
     if ( cd "$work/proj" && PATH="$work/nobin" HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/l2" get "gutil@^0.1.0" >"$work/ng.out" 2>"$work/ng.err" ); then
+            "$work/ct-ast" get "gutil@^0.1.0" >"$work/ng.out" 2>"$work/ng.err" ); then
         bad "no-git" "expected a non-zero exit"
     elif grep -Fq "install git" "$work/ng.err"; then
         ok "fails hard with an install hint"
@@ -345,7 +355,7 @@ else
         && printf 'int other_value(void) { return 1; }\n' >other.c \
         && git add -A && git commit -qm one && git tag 0.1.0 )
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/l2" get "mismatch@*" >"$work/mis.out" 2>"$work/mis.err" ); then
+            "$work/ct-ast" get "mismatch@*" >"$work/mis.out" 2>"$work/mis.err" ); then
         bad "name mismatch" "expected a non-zero exit"
     elif grep -Fq "names 'other'" "$work/mis.err"; then
         ok "rejects a manifest name that disagrees with the source"
@@ -356,20 +366,20 @@ fi
 
 echo
 echo "== ct install: help and argument errors =="
-if ( cd "$work/proj" && "$work/l2" install --help >"$work/ih.out" 2>"$work/ih.err" ) \
+if ( cd "$work/proj" && "$work/ct-ast" install --help >"$work/ih.out" 2>"$work/ih.err" ) \
    && grep -Fq "usage: " "$work/ih.out"; then
     ok "install --help prints usage"
 else
     bad "install --help" "no usage on stdout: $(cat "$work/ih.out" "$work/ih.err")"
 fi
-if ( cd "$work/proj" && "$work/l2" install --bogus >"$work/iu.out" 2>"$work/iu.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install --bogus >"$work/iu.out" 2>"$work/iu.err" ); then
     bad "install unknown-option" "expected a non-zero exit"
 elif grep -Fq "unknown option '--bogus'" "$work/iu.err"; then
     ok "install rejects an unknown option"
 else
     bad "install unknown-option" "wrong diagnostic: $(cat "$work/iu.err")"
 fi
-if ( cd "$work/proj" && "$work/l2" install stray >"$work/ix.out" 2>"$work/ix.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" install stray >"$work/ix.out" 2>"$work/ix.err" ); then
     bad "install extra-arg" "expected a non-zero exit"
 elif grep -Fq "unexpected argument 'stray'" "$work/ix.err"; then
     ok "install rejects a stray argument"
@@ -385,13 +395,13 @@ mkdir -p "$work/pkgs/dirname"
 printf 'name = realname\nversion = 0.1.0\n' >"$work/pkgs/dirname/ct.pkg"
 printf 'int realname_value(void) { return 1; }\n' >"$work/pkgs/dirname/a.c"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/dirname@^0.1.0\n' >"$work/proj/ct.pkg"
-if ( cd "$work/proj" && "$work/l2" get ../pkgs/dirname >"$work/rn.out" 2>"$work/rn.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/dirname >"$work/rn.out" 2>"$work/rn.err" ); then
     if [ -d "$work/proj/vendor/realname" ]; then
         ok "get vendors under the manifest name"
     else
         bad "get dirname" "vendor/realname is missing"
     fi
-    if ( cd "$work/proj" && "$work/l2" install >"$work/rni.out" 2>"$work/rni.err" ); then
+    if ( cd "$work/proj" && "$work/ct-ast" install >"$work/rni.out" 2>"$work/rni.err" ); then
         ok "install resolves the same manifest name"
     else
         bad "install dirname" "non-zero exit: $(cat "$work/rni.err")"
