@@ -1,0 +1,737 @@
+/*
+ * expr.h.ct - the expression and type grammar, one sub-object of the parser.
+ *
+ * The precedence chain (`parse_expr` down to `parse_primary`), the argument
+ * list and the call-graph record sit here with the type specifier reader the
+ * chain leans on: `sizeof` and casts need `parse_type`, so the two share an
+ * object rather than calling back into the parser. The parser keeps statements
+ * and declarations and invites the chain in through `expr_get`; this object
+ * only points at the cursor, the shared primitives, the symbol tables, the node
+ * pool and the call table the driver reads back.
+ *
+ * Macros do not cross a unit boundary, so the caps, node kinds, token kinds and
+ * operator codes used here are restated; they must stay equal to main.ct.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+
+import runtime::arena::arena;
+import frontend::lex::lexer;
+import frontend::sym::sym;
+import frontend::module::map;
+import frontend::parse::support;
+
+#define B_ADD 1
+#define B_AND 12
+#define B_DIV 4
+#define B_EQ 9
+#define B_GE 8
+#define B_GT 6
+#define B_LE 7
+#define B_LT 5
+#define B_MOD 11
+#define B_MUL 3
+#define B_NE 10
+#define B_OR 13
+#define B_SUB 2
+#define B_XOR 14
+#define MAX_CALLS 1024
+#define MAX_TEXT 160
+#define N_ADDR 27
+#define N_ARROW 25
+#define N_BIN 11
+#define N_CALL 7
+#define N_CAST 35
+#define N_DEREF 28
+#define N_INDEX 26
+#define N_MCALL 30
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_POST 18
+#define N_RAW 31
+#define N_SIZEOF 36
+#define N_STR 9
+#define N_TERN 37
+#define N_UNARY 17
+#define N_VAR 10
+#define P_DEC 2
+#define P_INC 1
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define U_NEG 1
+#define U_NOT 2
+
+namespace frontend::parse {
+/* `cur_func` and the call table stay the parser's (the driver reads them back),
+   so this object points at them; `calls` points into storage that unit owns. */
+pub trait ExprOps {
+    int  is_type_word(const char *w);
+    int  type_append(char *out, int cap, int *n, const char *tok);
+    int  parse_type(char *out, int cap);
+    int  parse_array_dims(int n);
+    int  next_is_type_name(void);
+    int  parse_expr(void);
+    int  parse_cmp(void);
+    int  parse_add(void);
+    int  parse_mul(void);
+    int  parse_unary(void);
+    int  parse_postfix(void);
+    int  parse_primary(void);
+    int  parse_args(void);
+    int  record_call(const char *callee, int line);
+}
+
+pub struct Expr {
+    struct runtime_arena_Arena *arena;
+    struct frontend_lex_Lexer *lex;
+    struct frontend_sym_Symbols *sym;
+    struct frontend_parse_ParseSupport *sup;
+    char *cur_func;                      /* the parser's current function name */
+    struct frontend_module_Call *calls;  /* storage owned by parse.h.ct */
+    int *ncalls;
+} use ExprOps;
+
+impl ExprOps for Expr {
+    int is_type_word(const char *w)
+    {
+        (void)self;
+        return strcmp(w, "int") == 0 || strcmp(w, "void") == 0
+            || strcmp(w, "char") == 0 || strcmp(w, "unsigned") == 0
+            || strcmp(w, "signed") == 0 || strcmp(w, "long") == 0
+            || strcmp(w, "short") == 0 || strcmp(w, "float") == 0
+            || strcmp(w, "double") == 0 || strcmp(w, "const") == 0
+            || strcmp(w, "struct") == 0 || strcmp(w, "enum") == 0
+            || strcmp(w, "union") == 0 || strcmp(w, "size_t") == 0
+            || strcmp(w, "FILE") == 0 || strcmp(w, "DIR") == 0;
+    }
+
+    int type_append(char *out, int cap, int *n, const char *tok)
+    {
+        int w;
+        (void)self;
+        if (*n > 0) {
+            if (*n + 1 >= cap) return self->sup->fail("type is too long");
+            out[*n] = ' ';
+            (*n)++;
+        }
+        w = snprintf(out + *n, (size_t)(cap - *n), "%s", tok);
+        if (w < 0 || w >= cap - *n) return self->sup->fail("type is too long");
+        *n += w;
+        return 0;
+    }
+
+    /* Consume a type specifier. `struct X` keeps the tag; a known typedef name
+       is part of the type; `*` accumulates (9.3 supports a single pointer). */
+    int parse_type(char *out, int cap)
+    {
+        int n;
+        (void)self;
+
+        n = 0;
+        out[0] = 0;
+        for (;;) {
+            if (self->lex->tok == T_ID && self->is_type_word(self->lex->toktext)) {
+                if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
+                if (strcmp(self->lex->toktext, "struct") == 0) {
+                    char sname[MAX_TEXT];
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID) return self->sup->fail("expected a struct name");
+                    if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->type_append(out, cap, &n, sname) != 0) return -1;
+                    if (self->sup->add_type(sname, 1) != 0) return -1;
+                }
+                self->sup->lex_next();
+                continue;
+            }
+            if (self->lex->tok == T_ID) {
+                int ti;
+                char rname[MAX_TEXT];
+                char iface[MAX_TEXT];
+                if (self->sup->resolve_type(self->lex->toktext, rname, sizeof rname) != 0) return -1;
+                ti = self->sym->find_type(rname);
+                if (ti < 0) break;
+                /* a bare struct tag needs `struct`; a trait becomes its iface */
+                if (self->sym->type_kind[ti] == 1) {
+                    if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                } else if (self->sym->type_kind[ti] == 3) {
+                    if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                    if (snprintf(iface, sizeof iface, "%s_iface", rname) >= (int)sizeof iface)
+                        return self->sup->fail("type name is too long");
+                    if (self->type_append(out, cap, &n, iface) != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
+                if (self->type_append(out, cap, &n, rname) != 0) return -1;
+                self->sup->lex_next();
+                continue;
+            }
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
+                if (self->type_append(out, cap, &n, "*") != 0) return -1;
+                self->sup->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (n == 0) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "expected a type (tok %d '%s')", self->lex->tok, self->lex->toktext);
+            return self->sup->fail(msg);
+        }
+        return 0;
+    }
+
+    /* Zero or more `[<len>]` groups after a declared name. The whole suffix is
+       kept verbatim in `text3`, so a macro constant (`char buf[MAX_TEXT]`) and a
+       second dimension (`[MAX_PARAMS][MAX_TEXT]`) both survive; a numeric length
+       keeps `num` for the callers that still read it. */
+    int parse_array_dims(int n)
+    {
+        (void)self;
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+            char dim[MAX_TEXT];
+            char cur[MAX_TEXT];
+            int unsized;
+            unsized = 0;
+            self->sup->lex_next();
+            if (self->lex->tok == T_NUM) {
+                snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
+            } else if (self->lex->tok == T_ID) {
+                snprintf(dim, sizeof dim, "[%s]", self->lex->toktext);
+            } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0) {
+                /* `T a[][N]`: an unsized parameter dimension (10.6) */
+                snprintf(dim, sizeof dim, "[]");
+                unsized = 1;
+            } else {
+                return self->sup->fail("expected an array length");
+            }
+            if (!unsized) self->sup->lex_next();
+            if (self->sup->expect("]") != 0) return -1;
+            snprintf(cur, sizeof cur, "%s%s", self->arena->nodes[n].text3, dim);
+            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", cur);
+            self->arena->nodes[n].num = 0;      /* text3 is the authoritative spelling */
+        }
+        return 0;
+    }
+
+    /* One-token lookahead: with the current token at `(`, does the token after it
+       start a type? It tells a cast (`(char)c`) from a parenthesised expression
+       (`(a + b)`) without consuming anything, so postfix binding stays intact. */
+    int next_is_type_name(void)
+    {
+        int save_tok, save_line, save_bol, save_srcline, res;
+        long save_num;
+        size_t save_pos;
+        char save_text[MAX_TEXT];
+        (void)self;
+        save_tok = self->lex->tok;
+        save_num = self->lex->toknum;
+        save_line = self->lex->tokline;
+        save_pos = self->lex->pos;
+        save_srcline = self->lex->line;
+        save_bol = self->lex->bol;
+        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        res = (self->lex->tok == T_ID && (self->is_type_word(self->lex->toktext)
+                                 || self->sym->find_type(self->lex->toktext) >= 0));
+        self->lex->tok = save_tok;
+        self->lex->toknum = save_num;
+        self->lex->tokline = save_line;
+        self->lex->pos = save_pos;
+        self->lex->line = save_srcline;
+        self->lex->bol = save_bol;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        return res;
+    }
+
+    int parse_expr(void)
+    {
+        int left, right, inner, n, c;
+        (void)self;
+
+        /* `&&` binds tighter than `||`; both are looser than parse_cmp's operators.
+           The loops live here so the trait's method budget stays put. */
+        left = self->parse_cmp();
+        if (left < 0) return -1;
+        /* `^` sits between the comparisons and `&&`; the cache's FNV fold is the
+           first source to need it */
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "^") == 0) {
+            self->sup->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_XOR;
+            left = n;
+        }
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
+            self->sup->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_AND;
+            left = n;
+        }
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "||") == 0) {
+            self->sup->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
+                self->sup->lex_next();
+                inner = self->parse_cmp();
+                if (inner < 0) return -1;
+                n = self->sup->new_node(N_BIN);
+                if (n < 0) return -1;
+                self->arena->nodes[n].a = right;
+                self->arena->nodes[n].b = inner;
+                self->arena->nodes[n].aux = B_AND;
+                right = n;
+            }
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_OR;
+            left = n;
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "?") == 0) {
+            int a, b;
+            self->sup->lex_next();
+            a = self->parse_expr();
+            if (a < 0) return -1;
+            if (self->sup->expect(":") != 0) return -1;
+            b = self->parse_expr();
+            if (b < 0) return -1;
+            c = self->sup->new_node(N_TERN);
+            if (c < 0) return -1;
+            self->arena->nodes[c].a = left;
+            self->arena->nodes[c].b = a;
+            self->arena->nodes[c].c = b;
+            return c;
+        }
+        return left;
+    }
+
+    int parse_cmp(void)
+    {
+        int left, right, n, op;
+        (void)self;
+
+        left = self->parse_add();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT) {
+            op = 0;
+            if (strcmp(self->lex->toktext, "<") == 0) op = B_LT;
+            else if (strcmp(self->lex->toktext, ">") == 0) op = B_GT;
+            else if (strcmp(self->lex->toktext, "<=") == 0) op = B_LE;
+            else if (strcmp(self->lex->toktext, ">=") == 0) op = B_GE;
+            else if (strcmp(self->lex->toktext, "==") == 0) op = B_EQ;
+            else if (strcmp(self->lex->toktext, "!=") == 0) op = B_NE;
+            if (op == 0) break;
+            self->sup->lex_next();
+            right = self->parse_add();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_add(void)
+    {
+        int left, right, n, op;
+        (void)self;
+
+        left = self->parse_mul();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+") == 0 || strcmp(self->lex->toktext, "-") == 0)) {
+            op = (self->lex->toktext[0] == '+') ? B_ADD : B_SUB;
+            self->sup->lex_next();
+            right = self->parse_mul();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_mul(void)
+    {
+        int left, right, n, op;
+        (void)self;
+
+        left = self->parse_unary();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "*") == 0
+               || strcmp(self->lex->toktext, "/") == 0 || strcmp(self->lex->toktext, "%") == 0)) {
+            op = B_MUL;
+            if (self->lex->toktext[0] == '/') op = B_DIV;
+            else if (self->lex->toktext[0] == '%') op = B_MOD;
+            self->sup->lex_next();
+            right = self->parse_unary();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_unary(void)
+    {
+        int n, e, op;
+        (void)self;
+
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "sizeof") == 0) {
+            char tbuf[MAX_TEXT];
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
+                && self->next_is_type_name()) {
+                self->sup->lex_next();
+                if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+                if (self->sup->expect(")") != 0) return -1;
+                n = self->sup->new_node(N_SIZEOF);
+                if (n < 0) return -1;
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[n].aux = 1;
+                return n;
+            }
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->sup->new_node(N_SIZEOF);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = e;
+            return n;
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
+            && self->next_is_type_name()) {
+            char tbuf[MAX_TEXT];
+            self->sup->lex_next();
+            if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+            if (self->sup->expect(")") != 0) return -1;
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->sup->new_node(N_CAST);
+            if (n < 0) return -1;
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+            self->arena->nodes[n].a = e;
+            return n;
+        }
+        op = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) op = U_NEG;
+        else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "!") == 0) op = U_NOT;
+        if (op != 0) {
+            self->sup->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->sup->new_node(N_UNARY);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = e;
+            self->arena->nodes[n].aux = op;
+            return n;
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&") == 0) {
+            self->sup->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->sup->new_node(N_ADDR);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = e;
+            return n;
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
+            self->sup->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->sup->new_node(N_DEREF);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = e;
+            return n;
+        }
+        return self->parse_postfix();
+    }
+
+    int parse_postfix(void)
+    {
+        int n, m, idx, args;
+        char fname[MAX_TEXT];
+        char rtype[MAX_TEXT];
+        char trname[MAX_TEXT];
+        (void)self;
+
+        n = self->parse_primary();
+        if (n < 0) return -1;
+        for (;;) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+                self->sup->lex_next();
+                idx = self->parse_expr();
+                if (idx < 0) return -1;
+                if (self->sup->expect("]") != 0) return -1;
+                m = self->sup->new_node(N_INDEX);
+                if (m < 0) return -1;
+                self->arena->nodes[m].a = n;
+                self->arena->nodes[m].b = idx;
+                n = m;
+                continue;
+            }
+            if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, ".") == 0
+                                     || strcmp(self->lex->toktext, "->") == 0)) {
+                int arrow;
+                arrow = (self->lex->toktext[0] == '-') ? 1 : 0;
+                self->sup->lex_next();
+                if (self->lex->tok != T_ID) return self->sup->fail("expected a field or method name");
+                snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                    args = self->parse_args();
+                    if (args < 0) return -1;
+                    m = self->sup->new_node(N_MCALL);
+                    if (m < 0) return -1;
+                    self->arena->nodes[m].a = n;
+                    self->arena->nodes[m].b = (args == 0) ? -1 : args;
+                    self->arena->nodes[m].aux = arrow ? 2 : 1;
+                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                    /* resolve the trait now: locals are out of scope by the time
+                       the emitter runs */
+                    if (self->sup->expr_type(n, rtype, sizeof rtype) == 0) {
+                        char ibase[MAX_TEXT];
+                        size_t il;
+                        int piface = 0;
+                        /* a pointer to an interface value dispatches through
+                           `->vt` instead of `.vt` */
+                        snprintf(ibase, sizeof ibase, "%s", rtype);
+                        il = strlen(ibase);
+                        while (il > 0 && (ibase[il - 1] == ' ' || ibase[il - 1] == '*')) {
+                            if (ibase[il - 1] == '*') piface = 1;
+                            il--;
+                            ibase[il] = 0;
+                        }
+                        if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
+                            int t = self->sym->find_trait(trname);
+                            int mi, ok = 0;
+                            if (t >= 0) {
+                                for (mi = 0; mi < self->sym->traits[t].nm; mi++)
+                                    if (strcmp(self->sym->traits[t].m[mi].name, fname) == 0) ok = 1;
+                            }
+                            if (ok) {
+                                self->arena->nodes[m].aux = piface ? 4 : 3;
+                                snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
+                            }
+                        } else if (self->sup->method_trait(rtype, fname, trname, sizeof trname) == 0) {
+                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
+                        }
+                    }
+                } else {
+                    m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
+                    if (m < 0) return -1;
+                    self->arena->nodes[m].a = n;
+                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                }
+                n = m;
+                continue;
+            }
+            break;
+        }
+        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "++") == 0 || strcmp(self->lex->toktext, "--") == 0)) {
+            int k;
+            k = self->arena->nodes[n].kind;
+            if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
+                return self->sup->fail("'++' / '--' need an assignable target");
+            m = self->sup->new_node(N_POST);
+            if (m < 0) return -1;
+            self->arena->nodes[m].a = n;
+            self->arena->nodes[m].aux = (self->lex->toktext[0] == '+') ? P_INC : P_DEC;
+            self->sup->lex_next();
+            return m;
+        }
+        return n;
+    }
+
+    int parse_primary(void)
+    {
+        int n, args, id_line;
+        (void)self;
+
+        if (self->lex->tok == T_NUM) {
+            n = self->sup->new_node(N_NUM);
+            if (n < 0) return -1;
+            self->arena->nodes[n].num = self->lex->toknum;
+            self->sup->lex_next();
+            return n;
+        }
+        if (self->lex->tok == T_STR) {
+            int off = self->arena->str_begin();
+            n = self->sup->new_node(N_STR);
+            if (n < 0) return -1;
+            /* adjacent literals concatenate; they are copied into the pool so the
+               joined string is not limited by MAX_TEXT */
+            while (self->lex->tok == T_STR) {
+                int m = 0;
+                while (self->lex->toktext[m]) {
+                    if (self->arena->str_put((unsigned char)self->lex->toktext[m]) != 0)
+                        return self->sup->fail("string pool is full");
+                    m++;
+                }
+                self->sup->lex_next();
+            }
+            self->arena->str_end();
+            self->arena->nodes[n].num = off;
+            return n;
+        }
+        if (self->lex->tok == T_ID) {
+            id_line = self->lex->tokline;
+            n = self->sup->new_node(N_VAR);
+            if (n < 0) return -1;
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                int fi;
+                args = self->parse_args();
+                if (args < 0) return -1;
+                fi = self->sym->find_func(self->arena->nodes[n].text2);
+                if (fi >= 0 && self->record_call(self->arena->nodes[n].text2, id_line) != 0) return -1;
+                if (fi >= 0 && args > 0) {
+                    int cur, prev, k, first_arg;
+                    cur = args;
+                    prev = -1;
+                    k = 0;
+                    first_arg = args;
+                    while (cur > 0 && k < self->sym->funcs[fi].nparams) {
+                        char tr[MAX_TEXT];
+                        int ip = 0;
+                        if (self->sup->iface_ref_type(self->sym->funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
+                            int boxed = self->sup->maybe_box(cur, tr, ip);
+                            if (boxed < 0) return -1;
+                            if (boxed != cur) {
+                                if (prev < 0) first_arg = boxed;
+                                else self->arena->nodes[prev].next = boxed;
+                                self->arena->nodes[boxed].next = self->arena->nodes[cur].next;
+                                cur = boxed;
+                            }
+                        }
+                        prev = cur;
+                        cur = self->arena->nodes[cur].next;
+                        k++;
+                    }
+                    args = first_arg;
+                }
+                self->arena->nodes[n].kind = N_CALL;
+                self->arena->nodes[n].a = (args == 0) ? -1 : args;
+            } else if (self->sym->find_var(self->arena->nodes[n].text2) < 0) {
+                /* CT has no preprocessor: an ALL_CAPS name is a macro constant
+                   (MAX_NODES, NULL, ...) and is emitted verbatim. Anything else
+                   still has to be declared. */
+                int ci, all_caps;
+                const char *nm = self->arena->nodes[n].text2;
+                all_caps = (nm[0] != 0);
+                for (ci = 0; nm[ci]; ci++) {
+                    char cc = nm[ci];
+                    if (!((cc >= 'A' && cc <= 'Z') || (cc >= '0' && cc <= '9') || cc == '_')) {
+                        all_caps = 0;
+                        break;
+                    }
+                }
+                if (all_caps || strcmp(nm, "stderr") == 0
+                    || strcmp(nm, "stdout") == 0 || strcmp(nm, "stdin") == 0) {
+                    self->arena->nodes[n].kind = N_RAW;
+                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", nm);
+                    return n;
+                }
+                return self->sup->fail("use of an undeclared variable");
+            }
+            return n;
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+            self->sup->lex_next();
+            n = self->parse_expr();
+            if (n < 0) return -1;
+            if (self->sup->expect(")") != 0) return -1;
+            return n;
+        }
+        return self->sup->fail("expected an expression");
+    }
+
+    int parse_args(void)
+    {
+        int first, tail, e;
+        (void)self;
+
+        if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+            self->sup->lex_next();
+            return 0;
+        }
+        first = -1;
+        tail = -1;
+        for (;;) {
+            e = self->parse_expr();
+            if (e < 0) return -1;
+            if (tail < 0) first = e;
+            else self->arena->nodes[tail].next = e;
+            tail = e;
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                self->sup->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (self->sup->expect(")") != 0) return -1;
+        return first;
+    }
+
+    int record_call(const char *callee, int line)
+    {
+        (void)self;
+        if (!self->cur_func[0]) return 0;
+        if (*self->ncalls >= MAX_CALLS) return self->sup->fail("too many calls");
+        snprintf(self->calls[*self->ncalls].caller, MAX_TEXT, "%s", self->cur_func);
+        snprintf(self->calls[*self->ncalls].callee, MAX_TEXT, "%s", callee);
+        self->calls[*self->ncalls].line = line;
+        (*self->ncalls)++;
+        return 0;
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Expr g_expr;
+
+/* Only primitives cross the unit boundary (a generated header carries no
+   #include, so the collaborators arrive as `void *` and are cast here). */
+pub void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls);
+void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls)
+{
+    g_expr.arena = (struct runtime_arena_Arena *)arena;
+    g_expr.lex = (struct frontend_lex_Lexer *)lex;
+    g_expr.sym = (struct frontend_sym_Symbols *)sym;
+    g_expr.sup = (struct frontend_parse_ParseSupport *)sup;
+    g_expr.cur_func = (char *)cur_func;
+    g_expr.calls = (struct frontend_module_Call *)calls;
+    g_expr.ncalls = (int *)ncalls;
+}
+
+pub struct frontend_parse_Expr *expr_get(void);
+struct frontend_parse_Expr *expr_get(void)
+{
+    return &g_expr;
+}
+}
