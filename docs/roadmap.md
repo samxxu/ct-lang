@@ -883,7 +883,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **能力补齐**：把 `test/acceptance/run.sh` 的默认编译器从 L2 改回**安装入口 ct-ast**（10.7 起本应如此）后，暴露了 6 项 L2 能过而 ct-ast 不能过的构造，已全部修复：接口**值/指针字段**在构造式里装箱；接口指针变量/参数（`Expr *xs`）按元素派发；**结构体类型数组字段**逐元素写 vptr；函数**原型**保留数组参数维度。`ast_spike`（本项目自己的目标程序）随之通过。
 - **容量**：`ParseOps` 拆出 `TypeOps`（类型查询与装箱）腾出方法位；用户可见上限整体抬高（`MAX_NODES` 65536、`MAX_FUNCS` 256、`MAX_TRAITS` 64 等，见 [language-spec](language-spec.md) §7）。策略仍是「固定上限 + 越界硬报错」，未改动态分配；ct-ast 自编现在需要超过 32768 个节点，抬高 `MAX_NODES` 是自举的前提。
 - **验收**：`p18_struct_array_field` 晋升 `test/acceptance/run.sh` 基线；`test/ast/{16_iface_field_box,17_param_array,18_struct_array_field}` 纳入 `check-ast.sh` 硬关卡。
-- **模块语法（2026-10-20，用户确认）**：namespace 增加**文件级**写法 `namespace A::B;`——前缀生效到单元结束、没有闭合花括号，模块层逐单元重置（块式仍保留）。`import` 增加**按名引入**：`import a::b::C [as D];` 中 `a::b` 是单元路径、`C` 是该单元导出的名字、`D`（默认 `C`）是本文件的写法；发射时展开为既有的 `<ns>_C`，不新增命名规则。路径末段以大写开头即视为名字（文件一律小写），前缀部分才是单元路径。别名只作用于源码、不进产物；同名绑定到不同全名直接报错。L2 与 ct-ast 同步实现（**只加语法能力，L2 自身源码仍用旧写法**），新增正例 `test/modules/alias/`（分号式 namespace + `import app::model::Point;`），`check-ast.sh` 127 项全绿。
+- **模块语法（2026-10-20，用户确认）**：namespace 增加**文件级**写法 `namespace A::B;`——前缀生效到单元结束、没有闭合花括号，模块层逐单元重置（块式仍保留）。`import` 增加**按名引入**：`import a::b::C [as D];` 中 `a::b` 是单元路径、`C` 是该单元导出的名字、`D`（默认 `C`）是本文件的写法；发射时展开为既有的 `<ns>_C`，不新增命名规则。路径末段以大写开头即视为名字（文件一律小写），前缀部分才是单元路径。别名只作用于源码、不进产物；同名绑定到不同全名直接报错。L2 与 ct-ast 同步实现（**只加语法能力，L2 自身源码仍用旧写法**），新增正例 `test/modules/alias/`（分号式 namespace + `import app::model::Point;`），`check-ast.sh` 127 项全绿。随后 ct-ast 全树迁移到这两条语法（17 个文件改分号式、跨单元引用改短名并补 `import`）；迁移暴露出两处必需配套：L2 行重写器新增 `expand_aliases`（cast / `sizeof` 里的短名必须展开成落库 C 名），`MAX_IMPORTS` 16→32（逐类型 import 最多 22 条）并修掉 `unit.h.ct` 中与常量不同步的 `dep[16]`/`depu[16]`（超过 16 个依赖会越界，自编时在 `cache_order` 段错误）。
 
 ### 决策待定项
 
@@ -2269,7 +2269,13 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   the unit path. Aliases live in the source only and never reach the output; binding one alias to two
   different full names is an error. L2 and ct-ast implement it together (**capability only — L2's own
   sources keep the old spelling**), with a new positive fixture `test/modules/alias/` (file-scoped
-  namespace + `import app::model::Point;`); `check-ast.sh` is 127 green.
+  namespace + `import app::model::Point;`); `check-ast.sh` is 127 green. ct-ast then migrated wholesale
+  to both forms (17 files went file-scoped; cross-unit references became short names with an
+  `import`). The migration needed two companions: L2's line rewriter gained `expand_aliases` (a short
+  name in a cast or `sizeof` must reach C as the mangled name), and `MAX_IMPORTS` went 16→32 (by-name
+  imports put up to 22 lines in one file) — which in turn exposed `unit.h.ct`'s `dep[16]`/`depu[16]`
+  drifting from the constant: more than 16 dependencies wrote past the array and crashed
+  `cache_order` during self-compilation.
 
 ### Open decisions
 
