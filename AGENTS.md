@@ -72,8 +72,9 @@
   - **版本 bump 另行登记**：`CTC_VERSION` 的推进（v0.4.0 / v0.5.0 / v0.6.0 / v0.7.0 / v0.8.0 / v0.9.0 / v0.10.0 / v0.11.0 / v0.11.1，以及 Phase 12 收口时的 v0.12.x）同样属用户显式授权的冻结期例外，但**不逐条列入上表**——逐次记录见 [roadmap](docs/roadmap.md) 的「版本记录」与对应 `v*` tag 注释。每次 bump 都同时改动 `ctc.c`、L1（`selfhost/l1/ctc.ct`）、`selfhost/l2/{core,driver}.ct` 与 `selfhost/ct-ast/main.ct`，并重生成全部 golden；上表只逐条登记**与版本推进无关**的个别改动。
 - **`selfhost/l1/ctc.ct`（L1）自 Phase 3 起冻结**：L1 已成为**冻结种子**——它停在 Phase 2 的能力上，**不再新增任何能力**（加注释也算，登记方式与 `ctc.c` 相同）。理由与上一级同构：`ctc.c` 冻结后开发搬到 L1，L1 冻结后开发搬到 **`selfhost/l2/**`**（`core.ct` + `driver.ct`，L2 的源）。**Phase 3 起一切新能力只落 `l2/**`**。（Phase 9.7 起主线再搬到 `selfhost/ct-ast/**`，见下条。）
   - **关卡语义随之改变**：`check-archive.sh` 的 ratchet 跑的是 **L2**（L1 `build` `l2/**` 得到），不再是 L1；`check-goldens.sh` 第 7 步是**不动点**——L2 也编 `l2/**`，产出须与 L1 的**逐字节一致**（两个编译器必须在「编译器自己用的那套语法」上一致）。
-  - **签名上限是真约束**：`MAX_FUNCS`（64）**计入所有顶层 plain-C 签名，`static` 也算**，`l2/**` 的余量已接近 0；新增辅助函数**必须**放进 `impl` 块（impl 方法不计），并注意 `MAX_METHOD`（32）——`PipeOps` 已用到 31。见 roadmap Phase 3。
+  - **签名上限是真约束**：`MAX_FUNCS` **计入所有顶层 plain-C 签名，`static` 也算**；`l2/**` 自身仍受 L1 的 64 约束、余量已接近 0，新增辅助函数**必须**放进 `impl` 块（impl 方法不计），并注意 `MAX_METHOD`（L1 为 32，`PipeOps` 已用到 31）。见 roadmap Phase 3。
 - **`selfhost/l2/**` 自 Phase 9.7 起冻结归档**（D36）：Phase 9 的 AST 版编译器 `selfhost/ct-ast/main.ct` 成为**唯一开发主线**（`ct-ast` 自编 + 全量行为等价），`l2/**` 只**修 bug、不加能力**，归档参照 tag 为 `pre-ast-mainline`（2026-10-17 的 frozen 边界；Phase 9 起点对应 `v0.8.0`）。旧关卡（`check-goldens.sh` / `check-archive.sh` / `check-m2a.sh` / `ct-tour.sh` / `test/pkg/run.sh`）继续把 `l2/**` 当**回归 oracle** 跑，双轨期语义不变；新能力与 9.x 之后的切片只落 `selfhost/ct-ast/**`，并受 `check-ast.sh` 的「自编不动点 + 全量语料等价」约束。
+  - **2026-10-20 用户显式授权的一次性解冻例外（引导容量）**：`selfhost/l2/core.ct` 的四个引导上限成套抬高——`MAX_TRAITS` 16→64、`MAX_STRUCT` 32→64、`MAX_METHOD` 32→64、`MAX_FUNCS` 64→128。理由：`build` 模式跨单元共享同一张符号表，L2 编 `ct-ast` 时这四个额度成了 OO 切片的实际天花板（当时 trait 15/16、struct 27/32、`EmitOps` 32/32）。这些都是**内部常量、不进产物**，故 `test/cases/**` golden、L1/L2 不动点与归档棘轮均逐字节不变，**无 golden 重生成**；代价是静态符号表的 BSS 增加约十几 MB。L0 / L1 **未改**：它们编的是 `l2/**`（trait 3、struct 2、顶层签名 ≈58），额度足够。此例外**不改变** `l2/**` 的「只修 bug、不加能力」边界。
 - **L1（`selfhost/l1/ctc.ct`）零复用**：**不得** `#include ctc.c`，设施自带；L1 必须只用 L0 支持的 OO 子集书写（单文件、一语句一行、声明先于使用、不用接口数组），出口是与 L0 **逐字节一致**（banner 也相同）。**该出口已达成**：里程碑 M2 完成于 `test/cases/**` 全绿（25/25、0 regression），且 L1 编出的 L1′ 重编同一批语料仍逐字节一致。用 `bash selfhost/check-goldens.sh` 复核，别再靠手工循环。见 roadmap Phase 1 开工决策。**Phase 2 拆分出口**：L1 用自身 `build`（多文件 + `import`）编译多单元源码树 `selfhost/l2/**`（`core.ct` + `driver.ct`）产出 **L2**，L2 须对 `test/cases/**` 与 L1&#8203; 逐字节一致（25/25）——这是拆分的出口判据；跨单元只走 `pub` 标量包装器（`ct_read_file` 等 10 个），数据/宏/单例全部留在 `core.ct` 内（落进 `core.c`），**不得**为此新增语言特性。关卡：`check-goldens.sh` 第 6/7 步、`check-archive.sh` 3b、`check-m2a.sh` 第 7 步、`ct-tour.sh` 第 6 步。见 roadmap Phase 2。
 - **L1 必须是 CT OO 风格**：`selfhost/l1/ctc.ct` 的数据模型层与管线层须用 `struct` + `use` + `impl` 书写，**不得**退回 plain-C 直通；仅设施层（`Buf` / 分配器 / `die` / 扫描原语）保持 plain-C 透传。注意管线层由**两个** trait 承载（`PipeOps` 主流程 + `RewriteOps` 行重写层，`struct Pipe` 同时 `use` 二者）——新增方法请放进对应的那一半，别往单侧堆到 `MAX_METHOD`。见 roadmap Phase 1 开工决策 5。
 
@@ -319,10 +320,10 @@ Hard boundaries:
     builds from `l2/**`), not L1; `check-goldens.sh` step 7 is a **fixpoint** — L2 compiles
     `l2/**` too and its output must be **byte-identical** with L1's, because the two compilers must
     agree on the very subset the compiler is written in.
-  - **The signature ceiling is a real constraint**: `MAX_FUNCS` (64) **counts every top-level
-    plain-C signature, `static` included**, and `l2/**` has almost no headroom left. New helpers
-    **must** go into an `impl` block (impl methods do not count), minding `MAX_METHOD` (32) —
-    `PipeOps` already uses 31. See Phase 3 in the roadmap.
+  - **The signature ceiling is a real constraint**: `MAX_FUNCS` **counts every top-level
+    plain-C signature, `static` included**; `l2/**` itself is still bound by L1's 64 and has almost
+    no headroom left. New helpers **must** go into an `impl` block (impl methods do not count),
+    minding `MAX_METHOD` (32 in L1 — `PipeOps` already uses 31). See Phase 3 in the roadmap.
 - **`selfhost/l2/**` is frozen and archived from Phase 9.7 on** (D36): the Phase 9 AST compiler
   `selfhost/ct-ast/main.ct` is the **only development mainline** (ct-ast self-compiles and is
   behaviourally equivalent over the whole corpus); `l2/**` takes **bug fixes only, no new
@@ -332,6 +333,16 @@ Hard boundaries:
   **regression oracle**, unchanged in the dual-track period; new capabilities and every slice after
   9.x land in `selfhost/ct-ast/**` only, bound by `check-ast.sh` (the self-compile fixpoint plus the
   whole-corpus equivalence section).
+  - **One-off unfreeze on 2026-10-20, explicitly authorised by the user (bootstrap capacity)**:
+    four bootstrap caps in `selfhost/l2/core.ct` were raised together — `MAX_TRAITS` 16→64,
+    `MAX_STRUCT` 32→64, `MAX_METHOD` 32→64 and `MAX_FUNCS` 64→128. Reason: `build` mode shares one
+    symbol table across units, so when L2 compiles `ct-ast` these four are the real ceiling for the
+    OO split (at the time: traits 15/16, structs 27/32, `EmitOps` 32/32). They are **internal
+    constants that never reach the output**, so the `test/cases/**` goldens, the L1/L2 fixpoint and
+    the archive ratchet stay byte-identical and **no golden was regenerated**; the cost is roughly a
+    dozen megabytes of extra BSS in the static tables. L0 / L1 were **not** touched: they compile
+    `l2/**` (3 traits, 2 structs, ≈58 top-level signatures), which fits. The exception does **not**
+    relax the "bug fixes only, no new capability" rule for `l2/**`.
 - **L1 must be written in CT OO style**: `selfhost/l1/ctc.ct`'s data-model and pipeline layers use
   `struct` + `use` + `impl` and must not fall back to plain-C passthrough; only the facilities layer
   (`Buf` / allocators / `die` / the scanning primitives) stays plain-C. Note the pipeline is carried by

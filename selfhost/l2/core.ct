@@ -27,14 +27,20 @@
 #define MAX_NAME   128
 #define MAX_PARAM  256
 #define MAX_PARAMS 16
-#define MAX_METHOD 32
-#define MAX_TRAITS 16
-#define MAX_STRUCT 32
+/* The bootstrap caps. They were set in Phase 0 for the corpus of the day and
+   have since become the ceiling L2 imposes on ct-ast itself (build mode shares
+   one symbol table across units), not a user-facing limit -- ct-ast carries its
+   own, larger caps. `MAX_TRAITS` is also the `use` budget of one struct. Raised
+   so the OO split of the AST line can keep going; the tables are static, so the
+   price is about a dozen megabytes of BSS, none of which reaches the output. */
+#define MAX_METHOD 64
+#define MAX_TRAITS 64
+#define MAX_STRUCT 64
 #define MAX_FIELDS 32
 #define MAX_DEPTH  8
 #define MAX_VARS   512
 #define MAX_SCOPE  256
-#define MAX_FUNCS  64
+#define MAX_FUNCS  128
 #define MAX_UNITS  64                     /* units in one `ctc build` run */
 #define MAX_BUILD  32                     /* inputs on a single command line */
 #define MAX_IMPORTS 16                    /* `import` lines per unit */
