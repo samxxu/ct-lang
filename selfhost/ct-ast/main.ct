@@ -20,25 +20,17 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-import backend::emit::emit;
-import backend::mem::mem;
-import backend::mem::mem::Memory;
-import frontend::lex::lexer;
-import frontend::lex::lexer::Lexer;
-import frontend::module::map;
-import frontend::module::module;
-import frontend::module::module::Module;
-import frontend::module::unit;
-import frontend::parse::parse;
-import frontend::parse::parse::Parser;
-import frontend::sym::sym;
-import frontend::sym::sym::Symbols;
-import frontend::type::type;
-import frontend::type::type::TypeCheck;
-import runtime::arena::arena;
-import runtime::arena::arena::Arena;
-import tool::cache::cache;
-import tool::cache::cache::Cache;
+import backend::emit::Emit;
+import backend::mem::Memory;
+import frontend::lex::Lexer;
+import frontend::module::Map;
+import frontend::module::Module;
+import frontend::module::Unit;
+import frontend::parse::Parser;
+import frontend::sym::Symbols;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import tool::cache::Cache;
 import tool::diag::diag;
 import tool::driver::driver;
 import tool::pkg::pkg;

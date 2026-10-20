@@ -17,16 +17,12 @@
 #include <stdio.h>
 #include <string.h>
 
-import frontend::lex::lexer;
-import frontend::lex::lexer::Lexer;
-import frontend::module::map;
-import frontend::module::map::Call;
-import frontend::parse::support;
-import frontend::parse::support::ParseSupport;
-import frontend::sym::sym;
-import frontend::sym::sym::Symbols;
-import runtime::arena::arena;
-import runtime::arena::arena::Arena;
+import frontend::lex::Lexer;
+import frontend::module::Map::Call as Call;
+import frontend::module::Map;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
 
 #define B_ADD 1
 #define B_AND 12

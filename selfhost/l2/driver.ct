@@ -250,7 +250,7 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
             size_t t = q + 6, k = 0;
             char mod[MAX_NAME];
             char segs[16][MAX_NAME];
-            int ns = 0, symbolic = 0, ok = 1, j;
+            int ns = 0, has_as = 0, ok = 1, j;
             while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
             for (;;) {
                 size_t s = t;
@@ -278,18 +278,19 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
                 }
                 kw[kl] = 0;
                 if (kl && strcmp(kw, "as") == 0) {
-                    symbolic = 1;
+                    has_as = 1;
                     while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
                     while (t < len && ct_is_ident_char((unsigned char)src[t])) t++;
                     while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
                 } else {
                     t = after;
-                    symbolic = (segs[ns - 1][0] >= 'A' && segs[ns - 1][0] <= 'Z');
                 }
             }
             mod[0] = 0;
             if (ok && ns) {
-                int upto = symbolic ? ns - 1 : ns;
+                /* `import u::c::C as D;` depends on `u/c`; every other form names
+                   the whole path as the unit (`import u::c::C;` included) */
+                int upto = has_as ? ns - 1 : ns;
                 for (j = 0; j < upto; j++) {
                     size_t sl = strlen(segs[j]);
                     if (k && k + 1 < sizeof mod) mod[k++] = '/';

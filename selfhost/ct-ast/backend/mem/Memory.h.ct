@@ -12,10 +12,8 @@
 #include <stdio.h>
 #include <string.h>
 
-import frontend::sym::sym;
-import frontend::sym::sym::Symbols;
-import runtime::arena::arena;
-import runtime::arena::arena::Arena;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
 import tool::diag::diag;
 
 #define MAX_TEXT  160

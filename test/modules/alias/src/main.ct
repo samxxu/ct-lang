@@ -1,8 +1,7 @@
-/* `import app::model::Point;` brings the exported name in under `Point` (the
-   default alias); `import app::model;` brings the unit in for its `pub`
-   functions. Both resolve to the mangled `app_*` names when emitted. */
+/* a unit import names a file; a by-name import pulls one exported name in under
+   the alias on the right */
 import app::model;
-import app::model::Point;
+import app::model::Point as Point;
 
 #include <stdio.h>
 

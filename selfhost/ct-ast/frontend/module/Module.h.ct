@@ -18,23 +18,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-import backend::emit::emit;
-import backend::mem::mem;
-import backend::mem::mem::Memory;
-import frontend::lex::lexer;
-import frontend::lex::lexer::Lexer;
-import frontend::module::unit;
-import frontend::module::unit::Unit;
-import frontend::parse::parse;
-import frontend::parse::parse::Parser;
-import frontend::sym::sym;
-import frontend::sym::sym::Symbols;
-import frontend::type::type;
-import frontend::type::type::TypeCheck;
-import runtime::arena::arena;
-import runtime::arena::arena::Arena;
-import tool::cache::cache;
-import tool::cache::cache::Cache;
+import backend::emit::Emit;
+import backend::mem::Memory;
+import frontend::lex::Lexer;
+import frontend::module::Unit;
+import frontend::parse::Parser;
+import frontend::sym::Symbols;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import tool::cache::Cache;
 import tool::diag::diag;
 
 #define MAX_TEXT   160
@@ -191,10 +183,13 @@ impl ModuleOps for Module {
     }
 
     /* Imports are the leading declarations of a unit, so one pass finds them
-       before anything is parsed. */
+       before anything is parsed. The dependencies are not loaded yet, so this
+       pass only records the paths (`scan_only` keeps `skip_import` from trying
+       to resolve aliases against a symbol table that does not have them). */
     int scan_imports(const char *from)
     {
         self->p->nrels = 0;
+        self->p->scan_only = 1;
         self->path = from;
         self->mem->path = self->path;
         ct_emit_set_path(self->path);
@@ -208,11 +203,12 @@ impl ModuleOps for Module {
                 continue;
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
-                if (ct_parse_skip_import() != 0) return -1;
+                if (ct_parse_skip_import() != 0) { self->p->scan_only = 0; return -1; }
                 continue;
             }
             break;
         }
+        self->p->scan_only = 0;
         return 0;
     }
 
@@ -325,6 +321,7 @@ impl ModuleOps for Module {
            parsing skips the same `import` lines again -- start that pass from
            zero so a unit is never charged for its dependencies' imports. */
         self->p->nrels = 0;
+        self->p->scan_only = 0;
         self->path = path;
         self->mem->path = self->path;
         ct_emit_set_path(self->path);
@@ -595,6 +592,7 @@ impl ModuleOps for Module {
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
         self->p->nrels = 0;
+        self->p->scan_only = 0;
         self->p->nparams = 0;
         self->sym->self_mode = 0;
         self->sym->ret_type[0] = 0;

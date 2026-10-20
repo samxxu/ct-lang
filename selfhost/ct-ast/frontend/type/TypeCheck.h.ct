@@ -12,14 +12,10 @@
 #include <stdio.h>
 #include <string.h>
 
-import frontend::lex::lexer;
-import frontend::lex::lexer::Lexer;
-import frontend::module::map;
-import frontend::module::map::Map;
-import frontend::sym::sym;
-import frontend::sym::sym::Symbols;
-import runtime::arena::arena;
-import runtime::arena::arena::Arena;
+import frontend::lex::Lexer;
+import frontend::module::Map;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
 
 #define MAX_TEXT 160
 /* only the node kinds this unit reads; the numbers must stay equal to main.ct */

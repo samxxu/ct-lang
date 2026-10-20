@@ -2568,9 +2568,9 @@ impl PipeOps for Pipe {
                resolves it and turns it into an `#include` line, so the line itself
                is consumed here and never emitted. `import A::B::C as D;` names one
                exported type instead; it still depends on A::B but binds D to the
-               mangled name A_B_C for this unit only. A trailing segment that
-               starts upper-case is a name, not a directory (files are lower-case
-               by convention). Anything less than a complete header falls through
+               mangled name A_B_C for this unit only. A unit import whose file
+               name is upper-case (`import a::b::C;`) also binds that main type
+               as a short name. Anything less than a complete header falls through
                as a plain line, which keeps a line that merely starts with the
                word from being mistaken for one. */
             if (word_at(q, "import")) {
@@ -2580,7 +2580,7 @@ impl PipeOps for Pipe {
                 char seg[MAX_IMPORTS][MAX_NAME];
                 char alias[MAX_NAME];
                 char full[MAX_NAME * 2];
-                int symbolic = 0;
+                int has_as = 0;
 
                 seg[0][0] = 0;
                 for (;;) {
@@ -2600,11 +2600,10 @@ impl PipeOps for Pipe {
                     size_t t2, t3;
 
                     snprintf(alias, sizeof alias, "%s", seg[nseg - 1]);
-                    symbolic = (seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z');
                     t2 = skip_ws_comments(t);
                     t3 = read_ident(t2, kw, sizeof kw);
                     if (kw[0] && strcmp(kw, "as") == 0) {
-                        symbolic = 1;
+                        has_as = 1;
                         t3 = skip_ws_comments(t3);
                         t3 = read_ident(t3, alias, sizeof alias);
                         if (!alias[0]) ok = 0;
@@ -2614,15 +2613,15 @@ impl PipeOps for Pipe {
                     }
                 }
                 if (ok && nseg && t < g_len && g_src[t] == ';') {
-                    if (symbolic) {
+                    /* A by-name import always binds; a unit import binds only when
+                       its file name is upper-case (file name = main type). */
+                    if (has_as || (seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z')) {
                         size_t w = 0;
                         int i2, dup = 0;
+                        int ns_end = has_as ? (int)nseg - 2 : (int)nseg - 1;
 
-                        for (i2 = 0; i2 < (int)nseg; i2++) {
+                        for (i2 = 0; i2 < ns_end; i2++) {
                             int w2;
-                            /* the segment before the name is the unit's file
-                               name, not part of the namespace */
-                            if (i2 == (int)nseg - 2) continue;
                             if (w > 0) {
                                 if (w + 1 >= sizeof full) { ok = 0; break; }
                                 full[w] = '_';
@@ -2631,6 +2630,14 @@ impl PipeOps for Pipe {
                             w2 = snprintf(full + w, sizeof full - w, "%s", seg[i2]);
                             if (w2 < 0 || w2 >= (int)(sizeof full - w)) { ok = 0; break; }
                             w += (size_t)w2;
+                        }
+                        if (ok && w > 0) {
+                            if (w + 1 >= sizeof full) ok = 0;
+                            else { full[w] = '_'; w++; }
+                        }
+                        if (ok) {
+                            int w2 = snprintf(full + w, sizeof full - w, "%s", seg[nseg - 1]);
+                            if (w2 < 0 || w2 >= (int)(sizeof full - w)) ok = 0;
                         }
                         if (!ok) die(t, "import path too long");
                         for (i2 = 0; i2 < sym->nalias; i2++) {

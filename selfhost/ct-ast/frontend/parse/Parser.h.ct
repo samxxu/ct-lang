@@ -16,24 +16,17 @@
 #include <stdio.h>
 #include <string.h>
 
-import backend::mem::mem;
-import backend::mem::mem::Memory;
-import frontend::lex::lexer;
-import frontend::lex::lexer::Lexer;
-import frontend::module::map;
-import frontend::module::map::Call;
-import frontend::module::map::Map;
-import frontend::parse::expr;
-import frontend::parse::expr::Expr;
-import frontend::parse::mapbuild;
-import frontend::parse::support;
-import frontend::parse::support::ParseSupport;
-import frontend::sym::sym;
-import frontend::sym::sym::Field;
-import frontend::sym::sym::Symbols;
-import frontend::type::type::TypeCheck;
-import runtime::arena::arena;
-import runtime::arena::arena::Arena;
+import backend::mem::Memory;
+import frontend::lex::Lexer;
+import frontend::module::Map::Call as Call;
+import frontend::module::Map;
+import frontend::parse::Expr;
+import frontend::parse::MapBuild;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols::Field as Field;
+import frontend::sym::Symbols;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
 import tool::diag::diag;
 
 #define MAX_FIELDS 64
@@ -141,6 +134,9 @@ pub struct Parser {
     int  npend;
     struct ParseSupport *sup;
     struct Expr *ex;     /* the expression and type grammar */
+    /* The pre-pass only collects the import list: the dependencies are not
+       parsed yet, so nothing can be resolved into an alias. */
+    int  scan_only;
 } use ParseOps, ParseDeclOps;
 
 impl ParseDeclOps for Parser {
@@ -186,11 +182,11 @@ impl ParseDeclOps for Parser {
         return 0;
     }
 
-    /* `import a::b;` pulls in a unit: its `pub` functions become callable.
-       `import a::b::C as D;` pulls in one exported name instead -- the unit is
-       `a::b`, `C` is what it exports and `D` (default `C`) is how this file
-       spells it. A trailing segment that starts upper-case is a name, not a
-       directory: files are lower-case by convention. */
+    /* `import a::b::C;` pulls in the unit `a::b::C`. When the last segment is
+       upper-case the file name is the unit's main exported type, so that name is
+       also usable short here. `import a::b::C::D as E;` pulls in one exported
+       name instead: `a::b::C` is the unit, `D` is what it exports and `E` is how
+       this file spells it. */
     int skip_import(void)
     {
         char seg[16][MAX_TEXT];
@@ -198,11 +194,12 @@ impl ParseDeclOps for Parser {
         char full[MAX_TEXT];
         char alias[MAX_TEXT];
         size_t n;
-        int nseg, i, w, symbolic;
+        int nseg, i, w, has_as, ns_end;
         (void)self;
 
         nseg = 0;
         rel[0] = 0;
+        has_as = 0;
         self->sup->lex_next();                       /* consume `import` */
         for (;;) {
             if (self->lex->tok != T_ID) return self->sup->fail("expected an import path");
@@ -217,18 +214,17 @@ impl ParseDeclOps for Parser {
             break;
         }
         snprintf(alias, sizeof alias, "%s", seg[nseg - 1]);
-        symbolic = (seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z');
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "as") == 0) {
-            symbolic = 1;
+            has_as = 1;
             self->sup->lex_next();
             if (self->lex->tok != T_ID) return self->sup->fail("expected an alias after 'as'");
             snprintf(alias, sizeof alias, "%s", self->lex->toktext);
             self->sup->lex_next();
         }
         if (self->sup->expect(";") != 0) return -1;
-        if (symbolic && nseg < 2) return self->sup->fail("an imported name needs a unit");
+        if (has_as && nseg < 2) return self->sup->fail("an imported name needs a unit");
         n = 0;
-        for (i = 0; i < (symbolic ? nseg - 1 : nseg); i++) {
+        for (i = 0; i < (has_as ? nseg - 1 : nseg); i++) {
             if (n > 0) {
                 if (n + 1 >= sizeof rel) return self->sup->fail("import path is too long");
                 rel[n] = '/';
@@ -243,13 +239,17 @@ impl ParseDeclOps for Parser {
             snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
             self->nrels++;
         }
-        if (!symbolic) return 0;
-        /* The mangled C name: the namespace segments plus the name. The unit's
-           file name (the segment before the name) is not part of the namespace. */
+        /* A by-name import binds `seg[last]`; a unit import binds the type named
+           by its upper-case file name. A lower-case unit import binds nothing. */
+        if (self->scan_only) return 0;
+        if (!has_as && !(seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z'))
+            return 0;
+        ns_end = has_as ? nseg - 2 : nseg - 1;
+        /* the mangled C name: the namespace segments plus the name (the unit's
+           file name is not part of the namespace) */
         w = 0;
-        for (i = 0; i < nseg; i++) {
+        for (i = 0; i < ns_end; i++) {
             int k;
-            if (i == nseg - 2) continue;
             if (w > 0) {
                 if (w + 1 >= (int)sizeof full) return self->sup->fail("import path is too long");
                 full[w] = '_';
@@ -258,6 +258,21 @@ impl ParseDeclOps for Parser {
             k = snprintf(full + w, (size_t)((int)sizeof full - w), "%s", seg[i]);
             if (k < 0 || k >= (int)sizeof full - w) return self->sup->fail("import path is too long");
             w += k;
+        }
+        if (w > 0) {
+            if (w + 1 >= (int)sizeof full) return self->sup->fail("import path is too long");
+            full[w] = '_';
+            w++;
+        }
+        {
+            int k = snprintf(full + w, (size_t)((int)sizeof full - w), "%s", seg[nseg - 1]);
+            if (k < 0 || k >= (int)sizeof full - w) return self->sup->fail("import path is too long");
+            w += k;
+        }
+        if (self->sym->find_type(full) < 0 && self->sym->find_trait(full) < 0
+            && self->sym->find_struct(full) < 0) {
+            if (has_as) return self->sup->fail("the imported unit does not export that name");
+            return 0;                            /* a unit with no such type: no alias */
         }
         if (self->sym->add_alias(alias, full) != 0)
             return self->sup->fail(self->sym->last_error());
