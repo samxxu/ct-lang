@@ -32,7 +32,7 @@ ct/
 │   ├── l0/ctc.c           # L0：C 写的最简编译器（种子/差分 oracle，冻结；二进制落仓库根 ./ctc）
 │   ├── l1/ctc.ct          # L1：CT OO 子集、单文件写的完整编译器（冻结，能力停在 Phase 2）
 │   ├── l2/{core,driver}.ct   # L2：多单元拆分（import / pub）；Phase 10.7 起为回归 oracle
-│   ├── ct-ast/{main,pkg}.ct   # ct-ast：Phase 9 主线（main = driver + 核心，pkg = 包管理器）；Phase 10.7 起提供安装入口
+│   ├── ct-ast/{main,pkg,diag}.ct   # ct-ast：Phase 9 主线（main = driver + 核心，pkg = 包管理器，diag = 告警存储）；Phase 10.7 起提供安装入口
 │   └── check-*.sh / ct-tour.sh   门禁脚本（聚合入口 check-all.sh）
 ├── test/                  # 测试（L0 单测 + 分层集成；见 test/README.md）
 ├── bindings/              # C 库的声明式 binding（Phase 12）
@@ -154,7 +154,7 @@ ct/
 │   ├── l0/ctc.c           # L0: the minimal compiler in C (seed/differential oracle, frozen; binary at the repo root ./ctc)
 │   ├── l1/ctc.ct          # L1: the full compiler in the CT OO subset, single file (frozen; capability stops at Phase 2)
 │   ├── l2/{core,driver}.ct   # L2: split across units (import / pub); the regression oracle since Phase 10.7
-│   ├── ct-ast/{main,pkg}.ct   # ct-ast: the Phase 9 mainline (main = driver + core, pkg = package manager); the installed entry since Phase 10.7
+│   ├── ct-ast/{main,pkg,diag}.ct   # ct-ast: the Phase 9 mainline (main = driver + core, pkg = package manager, diag = warning store); the installed entry since Phase 10.7
 │   └── check-*.sh / ct-tour.sh   gate scripts (check-all.sh aggregates)
 ├── test/                  # tests (L0 unit tests + layered integration; see test/README.md)
 ├── bindings/              # declarative bindings to C libraries (Phase 12)

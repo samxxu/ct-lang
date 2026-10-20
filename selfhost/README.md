@@ -15,7 +15,7 @@
 | `l0/ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
 | `l1/ctc.ct` | L1 | 冻结种子：用 CT OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
 | `l2/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
-| `ct-ast/{main,pkg}.ct` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译：`main.ct` 是 driver + 编译核心，`pkg.ct` 是包管理器（状态私有，只导出两个 `pub` 包装器）；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
+| `ct-ast/{main,pkg,diag}.ct` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译：`main.ct` 是 driver + 编译核心，`pkg.ct` 是包管理器，`diag.ct` 是告警存储与错误计数（各自状态私有，只导出 `pub` 包装器）；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
 
 ## 脚本（门禁）
 
@@ -48,7 +48,7 @@ falsify that comment and lengthen every user-facing command.
 | `l0/ctc.c` | L0 | the minimal compiler in C (the frozen seed / differential oracle since Phase 1; bug fixes only), built by the host C compiler; the binary lands at the **repository root** |
 | `l1/ctc.ct` | L1 | The frozen seed: all capabilities hand-written in the CT OO subset as a single file, compiled by L0 (`l0/ctc.c`); capability stops at Phase 2 and **never grows** (comments included) |
 | `l2/{core,driver}.ct` | L2 | The same compiler re-partitioned across units (`import` / `pub`), built by L1's own `build`; since Phase 10.7 it is the **regression oracle** only |
-| `ct-ast/{main,pkg}.ct` | ct-ast | The Phase 9 AST compiler, built by L2 with `build`: `main.ct` is the driver + compile core, `pkg.ct` is the package manager (private state, only two `pub` wrappers exported); **the installed entry (`ct` / `ctc`) since Phase 10.7** |
+| `ct-ast/{main,pkg,diag}.ct` | ct-ast | The Phase 9 AST compiler, built by L2 with `build`: `main.ct` is the driver + compile core, `pkg.ct` the package manager, `diag.ct` the warning store and error counter (each keeps its state private and exports `pub` wrappers only); **the installed entry (`ct` / `ctc`) since Phase 10.7** |
 
 ### Scripts (the gates)
 

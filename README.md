@@ -310,7 +310,7 @@ ct/
 │   ├── l0/ctc.c              L0 C 种子（单文件，无第三方依赖）
 │   ├── l1/ctc.ct             L1 种子（冻结；能力停在 Phase 2）
 │   ├── l2/                   L2：多单元源码树（core.ct + driver.ct；Phase 10.7 起为回归 oracle）
-│   ├── ct-ast/               ct-ast：Phase 9 主线（main.ct = driver + 核心，pkg.ct = 包管理器），Phase 10.7 起提供安装入口
+│   ├── ct-ast/               ct-ast：Phase 9 主线（main.ct = driver + 核心，pkg.ct = 包管理器，diag.ct = 告警存储），Phase 10.7 起提供安装入口
 │   └── check-*.sh / ct-tour.sh   门禁脚本（aggregate 入口 check-all.sh；用法见 README §5）
 ├── bindings/                 C 库的声明式 binding（Phase 12）：直通 #include + 镜像 trait/struct + map
 │   └── mock-hal/             首个官方 binding（自带假 HAL 的 C 头/实现，仅作演示与测试）
@@ -765,7 +765,7 @@ ct/
 │   ├── l0/ctc.c              the L0 C seed (single file, no third-party dependencies)
 │   ├── l1/ctc.ct             L1 seed (frozen; capability stops at Phase 2)
 │   ├── l2/                   L2: the multi-unit tree (core.ct + driver.ct; regression oracle since 10.7)
-│   ├── ct-ast/               ct-ast: the Phase 9 mainline (main.ct = driver + core, pkg.ct = package manager), the installed entry since 10.7
+│   ├── ct-ast/               ct-ast: the Phase 9 mainline (main.ct = driver + core, pkg.ct = package manager, diag.ct = warning store), the installed entry since 10.7
 │   └── check-*.sh / ct-tour.sh   gate scripts (check-all.sh aggregates; usage in README §5)
 ├── bindings/                 declarative bindings to C libraries (Phase 12): #include + mirrored traits/structs + map
 │   └── mock-hal/             the first official binding (ships a fake HAL header/impl, for demos and tests only)

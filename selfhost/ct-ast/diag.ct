@@ -1,0 +1,254 @@
+/*
+ * diag.ct - the warning store and the semantic-error counter, one unit of its own.
+ *
+ * Warnings are recorded from two places (a signature mismatch while parsing an
+ * impl, a potential leak while analysing memory) and printed once at the end;
+ * the error counter also drives the "too many errors" stop and the driver's
+ * summary line. Keeping the store here means both producers reach it through
+ * primitive wrappers -- a generated header cannot carry the MAX_* macros or the
+ * FILE * a richer interface would need.
+ *
+ * Macros do not cross units, so the caps this unit needs are restated; they must
+ * stay equal to the ones in main.ct.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_TEXT     160
+#define MAX_PATH     1024
+#define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
+#define MAX_WARNINGS 32
+
+/* One collected warning (10.2 signature mismatch, 10.3 leak). */
+typedef struct Warn {
+    int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path */
+    int  line;
+    int  path_line;     /* kind 2: the conditional return that leaves it behind */
+    char file[MAX_PATH];
+    char var[MAX_TEXT]; /* leak: variable; mismatch: method */
+    char tname[MAX_TEXT]; /* leak: struct type; mismatch: trait */
+    char stype[MAX_TEXT];
+    char msg[MAX_TEXT];
+} Warn;
+
+trait DiagStore {
+    int  sem_error(int line, int col, const char *msg, const char *path);
+    int  record_sig_warn(int line, const char *method, const char *trait,
+                         const char *stype, const char *msg, const char *path);
+    int  record_leak(int kind, int line, int path_line, const char *file,
+                     const char *var, const char *tname);
+    int  emit(int json, int to_stderr);
+    void put_json(FILE *f, const char *s);
+    int  nsem(void);
+    void reset(void);
+}
+
+struct Diag {
+    Warn warns[MAX_WARNINGS];
+    int  nwarns;
+    int  nsem;
+} use DiagStore;
+
+impl DiagStore for Diag {
+    /* A semantic error in L2's shape (`file:line:col: error: ...`). Reporting is
+       followed by resynchronisation in `parse_program`, so the rest of the file
+       is still checked; `run`/`build_main` close with L2's summary line. */
+    int sem_error(int line, int col, const char *msg, const char *path)
+    {
+        (void)self;
+        fprintf(stderr, "%s:%d:%d: error: %s\n", path, line, col, msg);
+        self->nsem++;
+        /* past the cap the reports are cascades of the first few, not news */
+        if (self->nsem > MAX_ERRORS) {
+            fprintf(stderr, "ctc: too many errors, stopping\n");
+            exit(1);
+        }
+        return -1;
+    }
+
+    int record_sig_warn(int line, const char *method, const char *trait,
+                        const char *stype, const char *msg, const char *path)
+    {
+        Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 1;
+        w->line = line;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        snprintf(w->var, sizeof w->var, "%s", method);
+        snprintf(w->tname, sizeof w->tname, "%s", trait);
+        snprintf(w->stype, sizeof w->stype, "%s", stype);
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* `path_line` 0 means a definite leak; otherwise it is the conditional
+       return that leaves the object behind. */
+    int record_leak(int kind, int line, int path_line, const char *file,
+                    const char *var, const char *tname)
+    {
+        Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = kind;
+        w->line = line;
+        w->path_line = path_line;
+        snprintf(w->file, sizeof w->file, "%s", file);
+        snprintf(w->var, sizeof w->var, "%s", var);
+        snprintf(w->tname, sizeof w->tname, "%s", tname);
+        w->stype[0] = 0;
+        w->msg[0] = 0;
+        self->nwarns++;
+        return 0;
+    }
+
+    /* The emitter's `emit_json_str` is an EmitOps method, so this unit keeps a
+       local copy; the escaping must match it byte for byte (the JSON documents
+       are compared against L2's). */
+    void put_json(FILE *f, const char *s)
+    {
+        (void)self;
+        for (; *s; s++) {
+            if (*s == '"' || *s == '\\') {
+                fputc('\\', f);
+                fputc(*s, f);
+            } else if (*s == '\n') {
+                fputs("\\n", f);
+            } else if (*s == '\t') {
+                fputs("\\t", f);
+            } else if ((unsigned char)*s < 0x20) {
+                fputc('?', f);
+            } else {
+                fputc(*s, f);
+            }
+        }
+    }
+
+    /* One JSON document or one line per warning -- the same shape and wording
+       L2 uses (D39). Compile mode sends JSON to stdout, build mode to stderr
+       (stdout already carries the suggested cc command). */
+    int emit(int json, int to_stderr)
+    {
+        int i;
+        FILE *jf;
+        FILE *tf;
+        (void)self;
+        jf = to_stderr ? stderr : stdout;
+        tf = stderr;
+        if (self->nwarns == 0) return 0;
+        if (json) {
+            fputs("{\"warnings\":[", jf);
+            for (i = 0; i < self->nwarns; i++) {
+                Warn *w = &self->warns[i];
+                if (i) fputc(',', jf);
+                if (w->kind == 1) {
+                    fputs("{\"type\":\"signature_mismatch\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"method\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"trait\":\"", jf);
+                    self->put_json(jf, w->tname);
+                    fputs("\",\"struct\":\"", jf);
+                    self->put_json(jf, w->stype);
+                    fputs("\",\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
+                } else if (w->kind == 2) {
+                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"type_name\":\"", jf);
+                    self->put_json(jf, w->tname);
+                    fprintf(jf, "*\",\"message\":\"may leak on a return path\","
+                                 "\"path_line\":%d}", w->path_line);
+                } else {
+                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"type_name\":\"", jf);
+                    self->put_json(jf, w->tname);
+                    fputs("*\",\"message\":\"allocated but never deleted\"}", jf);
+                }
+            }
+            fputs("]}\n", jf);
+        } else {
+            for (i = 0; i < self->nwarns; i++) {
+                Warn *w = &self->warns[i];
+                if (w->kind == 1)
+                    fprintf(tf, "%s:%d: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
+                            w->file, w->line, w->var, w->tname, w->stype, w->msg);
+                else if (w->kind == 2)
+                    fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
+                            w->file, w->line, w->var, w->tname, w->path_line);
+                else
+                    fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
+                            w->file, w->line, w->var, w->tname);
+            }
+        }
+        return 0;
+    }
+
+    int nsem(void)
+    {
+        (void)self;
+        return self->nsem;
+    }
+
+    void reset(void)
+    {
+        (void)self;
+        self->nwarns = 0;
+        self->nsem = 0;
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Diag g_diag;
+
+/* Only primitives cross the unit boundary; the path is passed per call because
+   the driver may reset it (`build` re-points it at each unit). */
+pub int ct_sem_error(int line, int col, const char *msg, const char *path);
+int ct_sem_error(int line, int col, const char *msg, const char *path)
+{
+    return g_diag.sem_error(line, col, msg, path);
+}
+
+pub int ct_sig_warn(int line, const char *method, const char *trait, const char *stype, const char *msg, const char *path);
+int ct_sig_warn(int line, const char *method, const char *trait,
+                const char *stype, const char *msg, const char *path)
+{
+    return g_diag.record_sig_warn(line, method, trait, stype, msg, path);
+}
+
+pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);
+int ct_leak_warn(int kind, int line, int path_line, const char *file,
+                 const char *var, const char *tname)
+{
+    return g_diag.record_leak(kind, line, path_line, file, var, tname);
+}
+
+pub int ct_diag_emit(int json, int to_stderr);
+int ct_diag_emit(int json, int to_stderr)
+{
+    return g_diag.emit(json, to_stderr);
+}
+
+pub int ct_diag_nsem(void);
+int ct_diag_nsem(void)
+{
+    return g_diag.nsem();
+}
+
+pub void ct_diag_reset(void);
+void ct_diag_reset(void)
+{
+    g_diag.reset();
+}

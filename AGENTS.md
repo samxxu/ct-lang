@@ -31,7 +31,7 @@
 | `examples/**` | 源码：可运行示例（`<name>.ct` + `<name>.expected.out`） | ✅ 新增语法时同步扩充；生成物不入库 |
 | `test/**` | 测试：用例、golden 基线、runner | ✅ 可改；`*.expected.*` 只能用 `./ctc` 重新生成 |
 | `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
-| `selfhost/**` | 源码：自举编译器 —— **L0 C 种子** `selfhost/l0/ctc.c` ＋ 冻结种子 `selfhost/l1/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/ct-ast/**`（`main.ct` = driver + 编译核心，`pkg.ct` = 包管理器；Phase 9 的 AST 版编译器，ct-ast）＋ **冻结归档** `selfhost/l2/**`（`core.ct` + `driver.ct`，Phase 3–8 的旧管线 L2；只修 bug，不再加能力） | ✅ Phase 1 起新增；放编译器源码（含 L0 C 种子）与门禁脚本，生成物不入库 |
+| `selfhost/**` | 源码：自举编译器 —— **L0 C 种子** `selfhost/l0/ctc.c` ＋ 冻结种子 `selfhost/l1/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/ct-ast/**`（`main.ct` = driver + 编译核心，`pkg.ct` = 包管理器，`diag.ct` = 告警存储；Phase 9 的 AST 版编译器，ct-ast）＋ **冻结归档** `selfhost/l2/**`（`core.ct` + `driver.ct`，Phase 3–8 的旧管线 L2；只修 bug，不再加能力） | ✅ Phase 1 起新增；放编译器源码（含 L0 C 种子）与门禁脚本，生成物不入库 |
 | `bindings/**` | 源码：C 库的**声明式 binding**（Phase 12 起）—— 直通 `#include "<lib>.h"` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`；仓库内假 HAL 自带其头与实现 | ✅ Phase 12 起新增；只放 binding 源与（假 HAL 的）最小 C 头 / 实现，**不 vendored、不下载**、不成为编译器构建步骤；生成物不入库 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
@@ -216,7 +216,7 @@ user before changing code**.
 | `examples/**` | Source: runnable demos (`<name>.ct` + `<name>.expected.out`) | ✅ extend when adding syntax; generated files are not committed |
 | `test/**` | Tests: cases, golden baselines, runner | ✅ editable; `*.expected.*` may only be regenerated |
 | `editors/**` | Editor extensions: `editors/vscode/` (VS Code, declarative JSON) | ✅ editable; see the hard boundaries below |
-| `selfhost/**` | Source: the self-hosted compiler — the **L0 C seed** `selfhost/l0/ctc.c` plus the frozen seed `selfhost/l1/ctc.ct` (L1, its capability stops at Phase 2), the **development mainline** `selfhost/ct-ast/**` (`main.ct` = driver + compile core, `pkg.ct` = package manager; the Phase 9 AST compiler, ct-ast) and the **frozen archive** `selfhost/l2/**` (`core.ct` + `driver.ct`, the Phase 3–8 old pipeline L2; bug fixes only, no new capability) | ✅ new from Phase 1 on; compiler source (including the L0 C seed) and gate scripts, never generated files |
+| `selfhost/**` | Source: the self-hosted compiler — the **L0 C seed** `selfhost/l0/ctc.c` plus the frozen seed `selfhost/l1/ctc.ct` (L1, its capability stops at Phase 2), the **development mainline** `selfhost/ct-ast/**` (`main.ct` = driver + compile core, `pkg.ct` = package manager, `diag.ct` = warning store; the Phase 9 AST compiler, ct-ast) and the **frozen archive** `selfhost/l2/**` (`core.ct` + `driver.ct`, the Phase 3–8 old pipeline L2; bug fixes only, no new capability) | ✅ new from Phase 1 on; compiler source (including the L0 C seed) and gate scripts, never generated files |
 | `bindings/**` | Source: declarative bindings to C libraries (from Phase 12) — pass-through `#include "<lib>.h"` + mirrored `trait` / `struct` + a declared global instance + `map`; an in-repo fake HAL ships its own header and implementation | ✅ new from Phase 12 on; binding sources plus (for the fake HAL) a minimal C header / implementation only, which **vendor nothing and download nothing** and never become a compiler build step; generated files are never committed |
 | `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
