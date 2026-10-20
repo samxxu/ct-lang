@@ -22,6 +22,7 @@
  */
 import pkg;
 import diag;
+import runtime::arena::arena;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,11 +33,11 @@ import diag;
 
 #define CTC_VERSION "0.12.0"
 
-/* Capacity: the caps below were sized for the Phase 0 corpus; the compiler now
-   needs more than 32768 nodes to parse its own source, and the old user-facing
+/* Capacity: the caps below were sized for the Phase 0 corpus; the old user-facing
    numbers (16 traits, 32 structs, 64 functions) stopped real programs. They stay
-   fixed-size -- overflow is still a hard error -- but the numbers no longer bind. */
-#define MAX_NODES  65536
+   fixed-size -- overflow is still a hard error -- but the numbers no longer bind.
+   The node pool and the string-literal pool moved to `runtime::arena`, so their
+   caps (65536 nodes, 256 KiB of literals) live on that class now. */
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_FUNCS  256
@@ -140,20 +141,8 @@ import diag;
 /* `parse_func` returns this when the declaration was a prototype (no node). */
 #define NO_NODE (-2)
 
-typedef struct Node {
-    int  kind;
-    int  a;             /* first child / left operand / condition / target */
-    int  b;             /* second child / right operand / body */
-    int  c;             /* third child (else branch / for step) */
-    int  d;             /* fourth child (for body) / `pub` flag */
-    int  next;          /* next sibling in a list */
-    int  aux;           /* operator kind or `static` flag */
-    int  line;          /* source line, for `#line` and the map */
-    long num;           /* numeric literal or array length */
-    char text[MAX_TEXT];/* type, string literal or preprocessor line */
-    char text2[MAX_TEXT];/* declared / member / function name */
-    char text3[MAX_TEXT];/* array length written as a name (a macro constant) */
-} Node;
+/* `Node` and the two pools now live in `runtime::arena`; this unit holds a
+   pointer to the arena singleton and works through it. */
 
 typedef struct Fn {
     char name[MAX_TEXT];
@@ -268,15 +257,6 @@ typedef struct Map {
     int  line;
     int  unit;                              /* the unit that declared this map */
 } Map;
-
-static Node g_nodes[MAX_NODES];
-static int  g_nnode;
-
-/* String literals live in a pool, not in Node.text: adjacent literals join into
-   one C string and easily exceed MAX_TEXT. Node.num holds the pool offset. */
-#define MAX_STRPOOL (256 * 1024)
-static char g_strpool[MAX_STRPOOL];
-static int  g_nstrpool;
 
 /* An rvalue receiver (`f().m()`) is hoisted into a temp so the call is
    evaluated once; the declarations are flushed before the statement. */
@@ -473,6 +453,9 @@ struct Ast {
     FILE *out;
     const char *path;
     char errmsg[MAX_TEXT];
+    /* The node pool and the literal pool live in runtime::arena; the driver
+       points this at that singleton before it dispatches to `run`. */
+    struct runtime_arena_Arena *arena;
     /* Lexer: the source, the cursor and the current token. `tokstart` and
        `lstart` give a column as tokstart - lstart + 1. */
     const char *src;
@@ -558,24 +541,13 @@ struct Ast {
     CacheOps;
 
 impl AstOps for Ast {
+    /* The pool owns the storage and the reset of a fresh node; the line number
+       comes from the lexer and the overflow diagnostic from this object, so both
+       stay here. */
     int new_node(int kind)
     {
-        int n;
-        (void)self;
-        if (g_nnode >= MAX_NODES) return self->fail("too many AST nodes");
-        n = g_nnode;
-        g_nnode++;
-        g_nodes[n].kind = kind;
-        g_nodes[n].a = -1;
-        g_nodes[n].b = -1;
-        g_nodes[n].c = -1;
-        g_nodes[n].d = -1;
-        g_nodes[n].next = -1;
-        g_nodes[n].aux = 0;
-        g_nodes[n].line = self->tokline;
-        g_nodes[n].num = 0;
-        g_nodes[n].text[0] = 0;
-        g_nodes[n].text2[0] = 0;
+        int n = self->arena->alloc(kind, self->tokline);
+        if (n < 0) return self->fail("too many AST nodes");
         return n;
     }
 
@@ -939,7 +911,7 @@ impl AstOps for Ast {
         self->lstart = 0;
         self->tokstart = 0;
         ct_diag_reset();
-        g_nnode = 0;
+        self->arena->reset();
         self->nfunc = 0;
         self->nvar = 0;
         self->nscope = 0;
@@ -1092,10 +1064,10 @@ impl SymOps for Ast {
         p = first_param;
         k = 0;
         while (p > 0 && k < MAX_PARAMS) {
-            snprintf(self->funcs[i].ptype[k], MAX_TEXT, "%s", g_nodes[p].text);
-            snprintf(self->funcs[i].pdim[k], MAX_TEXT, "%s", g_nodes[p].text3);
+            snprintf(self->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
+            snprintf(self->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
             k++;
-            p = g_nodes[p].next;
+            p = self->arena->nodes[p].next;
         }
         if (k >= MAX_PARAMS && p > 0) return self->fail("too many parameters");
         self->funcs[i].nparams = k;
@@ -1369,9 +1341,9 @@ impl ParseOps for Ast {
             }
             if (!unsized) self->lex_next();
             if (self->expect("]") != 0) return -1;
-            snprintf(cur, sizeof cur, "%s%s", g_nodes[n].text3, dim);
-            snprintf(g_nodes[n].text3, MAX_TEXT, "%s", cur);
-            g_nodes[n].num = 0;      /* text3 is the authoritative spelling */
+            snprintf(cur, sizeof cur, "%s%s", self->arena->nodes[n].text3, dim);
+            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", cur);
+            self->arena->nodes[n].num = 0;      /* text3 is the authoritative spelling */
         }
         return 0;
     }
@@ -1419,7 +1391,7 @@ impl ParseOps for Ast {
             if (self->tok == T_PP) {
                 n = self->new_node(N_PP);
                 if (n < 0) return -1;
-                snprintf(g_nodes[n].text, MAX_TEXT, "%s", self->toktext);
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->toktext);
                 if (self->append_node(prog, n) != 0) return -1;
                 self->lex_next();
                 continue;
@@ -1468,11 +1440,11 @@ impl ParseOps for Ast {
             int g, e;
             g = self->new_node(N_GLOBAL);
             if (g < 0) return -1;
-            snprintf(g_nodes[g].text, MAX_TEXT, "%s", ret);
-            snprintf(g_nodes[g].text2, MAX_TEXT, "%s", name);
-            g_nodes[g].aux = is_static;
-            g_nodes[g].d = is_pub;
-            g_nodes[g].line = func_line;
+            snprintf(self->arena->nodes[g].text, MAX_TEXT, "%s", ret);
+            snprintf(self->arena->nodes[g].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[g].aux = is_static;
+            self->arena->nodes[g].d = is_pub;
+            self->arena->nodes[g].line = func_line;
             /* a file-scope name is visible to every function body */
             if (self->declare_var(name, ret) != 0) return -1;
             if (self->parse_array_dims(g) != 0) return -1;
@@ -1484,12 +1456,12 @@ impl ParseOps for Ast {
                     if (e < 0) return -1;
                     if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->rewrite_init_text(ret, raw, fixed, sizeof fixed) != 0) return -1;
-                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", fixed);
+                    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {
                     e = self->parse_expr();
                     if (e < 0) return -1;
                 }
-                g_nodes[g].a = e;
+                self->arena->nodes[g].a = e;
             }
             if (self->expect(";") != 0) return -1;
             return g;
@@ -1540,13 +1512,13 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
-        snprintf(g_nodes[f].text, MAX_TEXT, "%s", ret);
-        snprintf(g_nodes[f].text2, MAX_TEXT, "%s", name);
-        g_nodes[f].aux = is_static;
-        g_nodes[f].d = is_pub;
-        g_nodes[f].line = func_line;
-        g_nodes[f].a = params;
-        g_nodes[f].b = b;
+        snprintf(self->arena->nodes[f].text, MAX_TEXT, "%s", ret);
+        snprintf(self->arena->nodes[f].text2, MAX_TEXT, "%s", name);
+        self->arena->nodes[f].aux = is_static;
+        self->arena->nodes[f].d = is_pub;
+        self->arena->nodes[f].line = func_line;
+        self->arena->nodes[f].a = params;
+        self->arena->nodes[f].b = b;
         self->pop_scope();
         return f;
     }
@@ -1578,16 +1550,16 @@ impl ParseOps for Ast {
             self->lex_next();
             p = self->new_node(N_PARAM);
             if (p < 0) return -1;
-            snprintf(g_nodes[p].text, MAX_TEXT, "%s", typebuf);
-            snprintf(g_nodes[p].text2, MAX_TEXT, "%s", name);
+            snprintf(self->arena->nodes[p].text, MAX_TEXT, "%s", typebuf);
+            snprintf(self->arena->nodes[p].text2, MAX_TEXT, "%s", name);
             if (self->parse_array_dims(p) != 0) return -1;
             if (self->declare_var(name, typebuf) != 0) return -1;
-            if (g_nodes[p].text3[0]) {
+            if (self->arena->nodes[p].text3[0]) {
                 int vi = self->find_var(name);
                 if (vi >= 0) self->vars[vi].is_array = 1;
             }
             if (tail == 0) first = p;
-            else g_nodes[tail].next = p;
+            else self->arena->nodes[tail].next = p;
             tail = p;
             self->nparams++;
             if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
@@ -1613,8 +1585,8 @@ impl ParseOps for Ast {
         self->lex_next();
         m = self->new_node(N_FIELD);
         if (m < 0) return -1;
-        snprintf(g_nodes[m].text, MAX_TEXT, "%s", typebuf);
-        snprintf(g_nodes[m].text2, MAX_TEXT, "%s", name);
+        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", typebuf);
+        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", name);
         if (self->parse_array_dims(m) != 0) return -1;
         if (self->expect(";") != 0) return -1;
         return m;
@@ -1663,8 +1635,8 @@ impl ParseOps for Ast {
         if (self->expect("{") != 0) return -1;
         s = self->new_node(N_STRUCT);
         if (s < 0) return -1;
-        g_nodes[s].line = struct_line;
-        snprintf(g_nodes[s].text2, MAX_TEXT, "%s", qname);
+        self->arena->nodes[s].line = struct_line;
+        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
         tail = -1;
         self->npend = 0;
         while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
@@ -1677,21 +1649,21 @@ impl ParseOps for Ast {
                 int si2 = self->find_struct(qname);
                 if (si2 >= 0 && self->structs[si2].nfields < MAX_FIELDS) {
                     snprintf(self->structs[si2].fields[self->structs[si2].nfields].name, MAX_TEXT,
-                             "%s", g_nodes[m].text2);
+                             "%s", self->arena->nodes[m].text2);
                     snprintf(self->structs[si2].fields[self->structs[si2].nfields].type, MAX_TEXT,
-                             "%s", g_nodes[m].text);
+                             "%s", self->arena->nodes[m].text);
                     snprintf(self->structs[si2].fields[self->structs[si2].nfields].dims, MAX_TEXT,
-                             "%s", g_nodes[m].text3);
+                             "%s", self->arena->nodes[m].text3);
                     self->structs[si2].nfields++;
                 }
             } else if (self->npend < MAX_FIELDS) {
-                snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", g_nodes[m].text2);
-                snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", g_nodes[m].text);
-                snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", g_nodes[m].text3);
+                snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", self->arena->nodes[m].text2);
+                snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
+                snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
                 self->npend++;
             }
-            if (tail < 0) g_nodes[s].a = m;
-            else g_nodes[tail].next = m;
+            if (tail < 0) self->arena->nodes[s].a = m;
+            else self->arena->nodes[tail].next = m;
             tail = m;
         }
         if (self->expect("}") != 0) return -1;
@@ -1745,18 +1717,18 @@ impl ParseOps for Ast {
             if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
             /* keep the tag in `text`: `typedef struct Tag {...} Alias;` must emit
                the tag, or a `struct Tag` reference elsewhere is incomplete */
-            snprintf(g_nodes[t].text, MAX_TEXT, "%s", g_nodes[t].text2);
-            snprintf(g_nodes[t].text2, MAX_TEXT, "%s", qname);
-            g_nodes[t].aux = 1;
-            g_nodes[t].d = is_pub;
-            g_nodes[t].line = td_line;
+            snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", self->arena->nodes[t].text2);
+            snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
+            self->arena->nodes[t].aux = 1;
+            self->arena->nodes[t].d = is_pub;
+            self->arena->nodes[t].line = td_line;
             if (self->add_type(qname, 2) != 0) return -1;
             if (self->add_struct(qname) < 0) return -1;
             /* the tag and the alias are two table entries: give the alias the
                `use` list the body attached to the tag, or its vptr fields vanish */
             {
                 int tagi = -1, ai, ui;
-                if (g_nodes[t].text[0]) tagi = self->find_struct(g_nodes[t].text);
+                if (self->arena->nodes[t].text[0]) tagi = self->find_struct(self->arena->nodes[t].text);
                 ai = self->find_struct(qname);
                 if (tagi >= 0 && ai >= 0 && tagi != ai) {
                     self->structs[ai].nuse = self->structs[tagi].nuse;
@@ -1770,7 +1742,7 @@ impl ParseOps for Ast {
                         snprintf(self->structs[ai].fields[ui].type, MAX_TEXT, "%s",
                                  self->structs[tagi].fields[ui].type);
                     }
-                } else if (ai >= 0 && !g_nodes[t].text[0]) {
+                } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
                     self->structs[ai].nfields = self->npend;
                     for (ui = 0; ui < self->npend; ui++) {
@@ -1793,10 +1765,10 @@ impl ParseOps for Ast {
         if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
         t = self->new_node(N_TYPEDEF);
         if (t < 0) return -1;
-        snprintf(g_nodes[t].text, MAX_TEXT, "%s", typebuf);
-        snprintf(g_nodes[t].text2, MAX_TEXT, "%s", qname);
-        g_nodes[t].d = is_pub;
-        g_nodes[t].line = td_line;
+        snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", typebuf);
+        snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
+        self->arena->nodes[t].d = is_pub;
+        self->arena->nodes[t].line = td_line;
         if (self->add_type(qname, 2) != 0) return -1;
         return t;
     }
@@ -1894,9 +1866,9 @@ impl ParseOps for Ast {
                         sp = self->new_node(N_PARAM);
                         if (sp < 0) return -1;
                         if (self->parse_array_dims(sp) != 0) return -1;
-                        if (g_nodes[sp].text3[0])
+                        if (self->arena->nodes[sp].text3[0])
                             snprintf(ptype + strlen(ptype),
-                                     sizeof ptype - strlen(ptype), "%s", g_nodes[sp].text3);
+                                     sizeof ptype - strlen(ptype), "%s", self->arena->nodes[sp].text3);
                     }
                     if (np >= MAX_PARAMS) return self->fail("too many method parameters");
                     snprintf(self->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
@@ -1970,10 +1942,10 @@ impl ParseOps for Ast {
         if (self->expect("{") != 0) return -1;
         node = self->new_node(N_IMPL);
         if (node < 0) return -1;
-        g_nodes[node].line = impl_line;
-        snprintf(g_nodes[node].text2, MAX_TEXT, "%s", rtrait);
-        g_nodes[node].aux = si;
-        snprintf(g_nodes[node].text, MAX_TEXT, "%s", stype);
+        self->arena->nodes[node].line = impl_line;
+        snprintf(self->arena->nodes[node].text2, MAX_TEXT, "%s", rtrait);
+        self->arena->nodes[node].aux = si;
+        snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", stype);
         tail = -1;
         while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
             mline = self->tokline;
@@ -1995,7 +1967,7 @@ impl ParseOps for Ast {
                The wording and the line (the method's, not the impl's) match L2
                (D39), so the module fixtures can be compared byte for byte. */
             nimpl = 0;
-            for (k2 = params; k2 > 0; k2 = g_nodes[k2].next) nimpl++;
+            for (k2 = params; k2 > 0; k2 = self->arena->nodes[k2].next) nimpl++;
             tm_i = 0;
             if (ti >= 0)
                 for (tm_i = 0; tm_i < self->traits[ti].nm; tm_i++)
@@ -2039,19 +2011,19 @@ impl ParseOps for Ast {
             self->pop_scope();
             mnode = self->new_node(N_METHOD);
             if (mnode < 0) return -1;
-            snprintf(g_nodes[mnode].text, MAX_TEXT, "%s", ret);
-            snprintf(g_nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
+            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, "%s", mname);
             /* The emitted function takes the trait's return type (L2 does the
                same), so a mismatching impl still yields C that compiles; the
                map keeps the impl's written type in `text`. */
             if (ti >= 0 && tm_i < self->traits[ti].nm)
-                snprintf(g_nodes[mnode].text3, MAX_TEXT, "%s", self->traits[ti].m[tm_i].ret);
-            g_nodes[mnode].a = params;
-            g_nodes[mnode].b = body;
-            g_nodes[mnode].num = ti;
-            g_nodes[mnode].aux = si;
-            if (tail < 0) g_nodes[node].a = mnode;
-            else g_nodes[tail].next = mnode;
+                snprintf(self->arena->nodes[mnode].text3, MAX_TEXT, "%s", self->traits[ti].m[tm_i].ret);
+            self->arena->nodes[mnode].a = params;
+            self->arena->nodes[mnode].b = body;
+            self->arena->nodes[mnode].num = ti;
+            self->arena->nodes[mnode].aux = si;
+            if (tail < 0) self->arena->nodes[node].a = mnode;
+            else self->arena->nodes[tail].next = mnode;
             tail = mnode;
         }
         if (self->expect("}") != 0) return -1;
@@ -2129,8 +2101,8 @@ impl ParseOps for Ast {
                 self->pop_scope();
                 return -1;
             }
-            if (tail < 0) g_nodes[blk].a = s;
-            else g_nodes[tail].next = s;
+            if (tail < 0) self->arena->nodes[blk].a = s;
+            else self->arena->nodes[tail].next = s;
             tail = s;
         }
         /* AutoDrop: append `delete v;` for this scope's `own` declarations, in
@@ -2153,7 +2125,7 @@ impl ParseOps for Ast {
                 size_t bl;
                 /* a reassigned / returned / moved `own` variable is no longer
                    ours to release (L2 clears the same flag before its rewrite) */
-                vi = self->find_var(g_nodes[self->own_decl[d]].text2);
+                vi = self->find_var(self->arena->nodes[self->own_decl[d]].text2);
                 if (vi >= 0 && !self->vars[vi].autodrop) continue;
                 del = self->new_node(N_DELETE);
                 v = self->new_node(N_VAR);
@@ -2161,20 +2133,20 @@ impl ParseOps for Ast {
                     self->pop_scope();
                     return -1;
                 }
-                g_nodes[del].line = g_nodes[self->own_decl[d]].line;
-                snprintf(g_nodes[v].text2, MAX_TEXT, "%s", g_nodes[self->own_decl[d]].text2);
-                g_nodes[del].a = v;
-                tp = g_nodes[self->own_decl[d]].text;
+                self->arena->nodes[del].line = self->arena->nodes[self->own_decl[d]].line;
+                snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->own_decl[d]].text2);
+                self->arena->nodes[del].a = v;
+                tp = self->arena->nodes[self->own_decl[d]].text;
                 if (strncmp(tp, "struct ", 7) == 0) tp += 7;
-                snprintf(g_nodes[del].text, MAX_TEXT, "%s", tp);
-                bl = strlen(g_nodes[del].text);
-                while (bl > 0 && (g_nodes[del].text[bl - 1] == '*'
-                                  || g_nodes[del].text[bl - 1] == ' ')) {
+                snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
+                bl = strlen(self->arena->nodes[del].text);
+                while (bl > 0 && (self->arena->nodes[del].text[bl - 1] == '*'
+                                  || self->arena->nodes[del].text[bl - 1] == ' ')) {
                     bl = bl - 1;
-                    g_nodes[del].text[bl] = 0;
+                    self->arena->nodes[del].text[bl] = 0;
                 }
-                if (tail < 0) g_nodes[blk].a = del;
-                else g_nodes[tail].next = del;
+                if (tail < 0) self->arena->nodes[blk].a = del;
+                else self->arena->nodes[tail].next = del;
                 tail = del;
             }
         }
@@ -2223,7 +2195,7 @@ impl ParseOps for Ast {
                     if (e < 0) return -1;
                 }
             }
-            g_nodes[s].a = e;
+            self->arena->nodes[s].a = e;
             /* a return nested in a block (or written mid-line) may be skipped
                at run time, so it only warns about what it leaves behind */
             if (self->leak_active
@@ -2238,7 +2210,7 @@ impl ParseOps for Ast {
             self->lex_next();
             e = self->parse_expr();
             if (e < 0) return -1;
-            g_nodes[s].a = e;
+            self->arena->nodes[s].a = e;
             /* the object is released: it can neither leak nor auto-drop */
             if (self->leak_active && self->leak_delete(e) != 0) return -1;
             /* resolve the pointee's struct now (the variable may leave scope
@@ -2251,15 +2223,15 @@ impl ParseOps for Ast {
                     size_t dl;
                     int si;
                     if (strncmp(dp, "struct ", 7) == 0) dp += 7;
-                    snprintf(g_nodes[s].text, MAX_TEXT, "%s", dp);
-                    dl = strlen(g_nodes[s].text);
-                    while (dl > 0 && (g_nodes[s].text[dl - 1] == '*'
-                                      || g_nodes[s].text[dl - 1] == ' ')) {
+                    snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", dp);
+                    dl = strlen(self->arena->nodes[s].text);
+                    while (dl > 0 && (self->arena->nodes[s].text[dl - 1] == '*'
+                                      || self->arena->nodes[s].text[dl - 1] == ' ')) {
                         dl = dl - 1;
-                        g_nodes[s].text[dl] = 0;
+                        self->arena->nodes[s].text[dl] = 0;
                     }
-                    si = self->find_struct(g_nodes[s].text);
-                    if (si < 0 || !self->structs[si].uses_drop) g_nodes[s].text[0] = 0;
+                    si = self->find_struct(self->arena->nodes[s].text);
+                    if (si < 0 || !self->structs[si].uses_drop) self->arena->nodes[s].text[0] = 0;
                 }
             }
             if (self->expect(";") != 0) return -1;
@@ -2287,15 +2259,15 @@ impl ParseOps for Ast {
             c = self->parse_expr();
             if (c < 0) return -1;
             if (self->expect(")") != 0) return -1;
-            g_nodes[s].a = c;
+            self->arena->nodes[s].a = c;
             e = self->parse_branch();
             if (e < 0) return -1;
-            g_nodes[s].b = e;
+            self->arena->nodes[s].b = e;
             if (self->tok == T_ID && strcmp(self->toktext, "else") == 0) {
                 self->lex_next();
                 e = self->parse_branch();
                 if (e < 0) return -1;
-                g_nodes[s].c = e;
+                self->arena->nodes[s].c = e;
             }
             return s;
         }
@@ -2307,10 +2279,10 @@ impl ParseOps for Ast {
             c = self->parse_expr();
             if (c < 0) return -1;
             if (self->expect(")") != 0) return -1;
-            g_nodes[s].a = c;
+            self->arena->nodes[s].a = c;
             e = self->parse_branch();
             if (e < 0) return -1;
-            g_nodes[s].b = e;
+            self->arena->nodes[s].b = e;
             return s;
         }
         if (self->tok == T_ID && strcmp(self->toktext, "for") == 0) {
@@ -2320,7 +2292,7 @@ impl ParseOps for Ast {
             if (self->expect("(") != 0) return -1;
             if (self->push_scope() != 0) return -1;
             if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
-                g_nodes[s].a = -1;
+                self->arena->nodes[s].a = -1;
             } else if (self->tok == T_ID && (self->is_type_word(self->toktext)
                        || self->find_type(self->toktext) >= 0)) {
                 e = self->parse_decl_node();
@@ -2328,42 +2300,42 @@ impl ParseOps for Ast {
                     self->pop_scope();
                     return -1;
                 }
-                g_nodes[s].a = e;
+                self->arena->nodes[s].a = e;
             } else {
                 e = self->parse_expr_stmt_node();
                 if (e < 0) {
                     self->pop_scope();
                     return -1;
                 }
-                g_nodes[s].a = e;
+                self->arena->nodes[s].a = e;
             }
             if (self->expect(";") != 0) {
                 self->pop_scope();
                 return -1;
             }
             if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
-                g_nodes[s].b = -1;
+                self->arena->nodes[s].b = -1;
             } else {
                 c = self->parse_expr();
                 if (c < 0) {
                     self->pop_scope();
                     return -1;
                 }
-                g_nodes[s].b = c;
+                self->arena->nodes[s].b = c;
             }
             if (self->expect(";") != 0) {
                 self->pop_scope();
                 return -1;
             }
             if (self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0) {
-                g_nodes[s].c = -1;
+                self->arena->nodes[s].c = -1;
             } else {
                 e = self->parse_expr_stmt_node();
                 if (e < 0) {
                     self->pop_scope();
                     return -1;
                 }
-                g_nodes[s].c = e;
+                self->arena->nodes[s].c = e;
             }
             if (self->expect(")") != 0) {
                 self->pop_scope();
@@ -2374,7 +2346,7 @@ impl ParseOps for Ast {
                 self->pop_scope();
                 return -1;
             }
-            g_nodes[s].d = e;
+            self->arena->nodes[s].d = e;
             self->pop_scope();
             return s;
         }
@@ -2415,7 +2387,7 @@ impl ParseOps for Ast {
         self->pop_scope();
         b = self->new_node(N_BLOCK);
         if (b < 0) return -1;
-        g_nodes[b].a = s;
+        self->arena->nodes[b].a = s;
         return b;
     }
 
@@ -2465,11 +2437,11 @@ impl ParseOps for Ast {
             self->lex_next();
             n = self->new_node(N_DECL);
             if (n < 0) return -1;
-            snprintf(g_nodes[n].text, MAX_TEXT, "%s", typebuf);
-            snprintf(g_nodes[n].text2, MAX_TEXT, "%s", name);
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
             if (self->declare_var(name, typebuf) != 0) return -1;
             if (self->parse_array_dims(n) != 0) return -1;
-            if (g_nodes[n].text3[0]) {
+            if (self->arena->nodes[n].text3[0]) {
                 int vi = self->find_var(name);
                 if (vi >= 0) self->vars[vi].is_array = 1;
             }
@@ -2482,32 +2454,32 @@ impl ParseOps for Ast {
                     if (e < 0) return -1;
                     if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
-                    snprintf(g_nodes[e].text, MAX_TEXT, "%s", fixed);
+                    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {
                     e = self->parse_expr();
                     if (e < 0) return -1;
                 }
-                g_nodes[n].a = e;
+                self->arena->nodes[n].a = e;
             }
-            if (g_nodes[n].a >= 0) {
+            if (self->arena->nodes[n].a >= 0) {
                 char tr[MAX_TEXT];
                 int ip = 0;
                 if (self->iface_ref_type(typebuf, tr, sizeof tr, &ip)) {
-                    e = self->maybe_box(g_nodes[n].a, tr, ip);
+                    e = self->maybe_box(self->arena->nodes[n].a, tr, ip);
                     if (e < 0) return -1;
-                    g_nodes[n].a = e;
+                    self->arena->nodes[n].a = e;
                 }
             }
             if (self->leak_active && self->leak_decl(n) != 0) return -1;
             if (head < 0) head = n;
-            else g_nodes[tail].next = n;
+            else self->arena->nodes[tail].next = n;
             tail = n;
             if (!self->accept(",")) break;
         }
-        if (g_nodes[head].next >= 0) {
+        if (self->arena->nodes[head].next >= 0) {
             int w = self->new_node(N_DECLS);
             if (w < 0) return -1;
-            g_nodes[w].a = head;
+            self->arena->nodes[w].a = head;
             return w;
         }
         return head;
@@ -2525,7 +2497,7 @@ impl ParseOps for Ast {
                                  || strcmp(self->toktext, "%=") == 0)) {
             int op = 0, k2;
             char oc = self->toktext[0];
-            k2 = g_nodes[e].kind;
+            k2 = self->arena->nodes[e].kind;
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
                 return self->fail("assignment target is not assignable");
             if (oc == '+') op = 1;
@@ -2538,9 +2510,9 @@ impl ParseOps for Ast {
             if (rhs < 0) return -1;
             n = self->new_node(N_ASSIGN);
             if (n < 0) return -1;
-            g_nodes[n].a = e;
-            g_nodes[n].b = rhs;
-            g_nodes[n].aux = op;
+            self->arena->nodes[n].a = e;
+            self->arena->nodes[n].b = rhs;
+            self->arena->nodes[n].aux = op;
             if (self->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
@@ -2548,13 +2520,13 @@ impl ParseOps for Ast {
             int k;
             char tt[MAX_TEXT];
             char tr[MAX_TEXT];
-            k = g_nodes[e].kind;
+            k = self->arena->nodes[e].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->fail("assignment target is not assignable");
             self->lex_next();
             rhs = self->parse_expr();
             if (rhs < 0) return -1;
-            if ((k == N_VAR && self->var_type(g_nodes[e].text2, tt, sizeof tt) == 0)
+            if ((k == N_VAR && self->var_type(self->arena->nodes[e].text2, tt, sizeof tt) == 0)
                 || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
                     && self->expr_type(e, tt, sizeof tt) == 0)) {
                 int ip = 0;
@@ -2565,15 +2537,15 @@ impl ParseOps for Ast {
             }
             n = self->new_node(N_ASSIGN);
             if (n < 0) return -1;
-            g_nodes[n].a = e;
-            g_nodes[n].b = rhs;
+            self->arena->nodes[n].a = e;
+            self->arena->nodes[n].b = rhs;
             if (self->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
-        if (g_nodes[e].kind == N_POST) return e;
+        if (self->arena->nodes[e].kind == N_POST) return e;
         n = self->new_node(N_EXPR);
         if (n < 0) return -1;
-        g_nodes[n].a = e;
+        self->arena->nodes[n].a = e;
         return n;
     }
 
@@ -2594,9 +2566,9 @@ impl ParseOps for Ast {
             if (right < 0) return -1;
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
-            g_nodes[n].a = left;
-            g_nodes[n].b = right;
-            g_nodes[n].aux = B_XOR;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_XOR;
             left = n;
         }
         while (self->tok == T_PUNCT && strcmp(self->toktext, "&&") == 0) {
@@ -2605,9 +2577,9 @@ impl ParseOps for Ast {
             if (right < 0) return -1;
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
-            g_nodes[n].a = left;
-            g_nodes[n].b = right;
-            g_nodes[n].aux = B_AND;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_AND;
             left = n;
         }
         while (self->tok == T_PUNCT && strcmp(self->toktext, "||") == 0) {
@@ -2620,16 +2592,16 @@ impl ParseOps for Ast {
                 if (inner < 0) return -1;
                 n = self->new_node(N_BIN);
                 if (n < 0) return -1;
-                g_nodes[n].a = right;
-                g_nodes[n].b = inner;
-                g_nodes[n].aux = B_AND;
+                self->arena->nodes[n].a = right;
+                self->arena->nodes[n].b = inner;
+                self->arena->nodes[n].aux = B_AND;
                 right = n;
             }
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
-            g_nodes[n].a = left;
-            g_nodes[n].b = right;
-            g_nodes[n].aux = B_OR;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_OR;
             left = n;
         }
         if (self->tok == T_PUNCT && strcmp(self->toktext, "?") == 0) {
@@ -2642,9 +2614,9 @@ impl ParseOps for Ast {
             if (b < 0) return -1;
             c = self->new_node(N_TERN);
             if (c < 0) return -1;
-            g_nodes[c].a = left;
-            g_nodes[c].b = a;
-            g_nodes[c].c = b;
+            self->arena->nodes[c].a = left;
+            self->arena->nodes[c].b = a;
+            self->arena->nodes[c].c = b;
             return c;
         }
         return left;
@@ -2671,9 +2643,9 @@ impl ParseOps for Ast {
             if (right < 0) return -1;
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
-            g_nodes[n].a = left;
-            g_nodes[n].b = right;
-            g_nodes[n].aux = op;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
             left = n;
         }
         return left;
@@ -2693,9 +2665,9 @@ impl ParseOps for Ast {
             if (right < 0) return -1;
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
-            g_nodes[n].a = left;
-            g_nodes[n].b = right;
-            g_nodes[n].aux = op;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
             left = n;
         }
         return left;
@@ -2718,9 +2690,9 @@ impl ParseOps for Ast {
             if (right < 0) return -1;
             n = self->new_node(N_BIN);
             if (n < 0) return -1;
-            g_nodes[n].a = left;
-            g_nodes[n].b = right;
-            g_nodes[n].aux = op;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
             left = n;
         }
         return left;
@@ -2741,15 +2713,15 @@ impl ParseOps for Ast {
                 if (self->expect(")") != 0) return -1;
                 n = self->new_node(N_SIZEOF);
                 if (n < 0) return -1;
-                snprintf(g_nodes[n].text, MAX_TEXT, "%s", tbuf);
-                g_nodes[n].aux = 1;
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[n].aux = 1;
                 return n;
             }
             e = self->parse_unary();
             if (e < 0) return -1;
             n = self->new_node(N_SIZEOF);
             if (n < 0) return -1;
-            g_nodes[n].a = e;
+            self->arena->nodes[n].a = e;
             return n;
         }
         if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0
@@ -2762,8 +2734,8 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             n = self->new_node(N_CAST);
             if (n < 0) return -1;
-            snprintf(g_nodes[n].text, MAX_TEXT, "%s", tbuf);
-            g_nodes[n].a = e;
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+            self->arena->nodes[n].a = e;
             return n;
         }
         op = 0;
@@ -2775,8 +2747,8 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             n = self->new_node(N_UNARY);
             if (n < 0) return -1;
-            g_nodes[n].a = e;
-            g_nodes[n].aux = op;
+            self->arena->nodes[n].a = e;
+            self->arena->nodes[n].aux = op;
             return n;
         }
         if (self->tok == T_PUNCT && strcmp(self->toktext, "&") == 0) {
@@ -2785,7 +2757,7 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             n = self->new_node(N_ADDR);
             if (n < 0) return -1;
-            g_nodes[n].a = e;
+            self->arena->nodes[n].a = e;
             return n;
         }
         if (self->tok == T_PUNCT && strcmp(self->toktext, "*") == 0) {
@@ -2794,7 +2766,7 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             n = self->new_node(N_DEREF);
             if (n < 0) return -1;
-            g_nodes[n].a = e;
+            self->arena->nodes[n].a = e;
             return n;
         }
         return self->parse_postfix();
@@ -2818,8 +2790,8 @@ impl ParseOps for Ast {
                 if (self->expect("]") != 0) return -1;
                 m = self->new_node(N_INDEX);
                 if (m < 0) return -1;
-                g_nodes[m].a = n;
-                g_nodes[m].b = idx;
+                self->arena->nodes[m].a = n;
+                self->arena->nodes[m].b = idx;
                 n = m;
                 continue;
             }
@@ -2836,10 +2808,10 @@ impl ParseOps for Ast {
                     if (args < 0) return -1;
                     m = self->new_node(N_MCALL);
                     if (m < 0) return -1;
-                    g_nodes[m].a = n;
-                    g_nodes[m].b = (args == 0) ? -1 : args;
-                    g_nodes[m].aux = arrow ? 2 : 1;
-                    snprintf(g_nodes[m].text2, MAX_TEXT, "%s", fname);
+                    self->arena->nodes[m].a = n;
+                    self->arena->nodes[m].b = (args == 0) ? -1 : args;
+                    self->arena->nodes[m].aux = arrow ? 2 : 1;
+                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
                     /* resolve the trait now: locals are out of scope by the time
                        the emitter runs */
                     if (self->expr_type(n, rtype, sizeof rtype) == 0) {
@@ -2863,18 +2835,18 @@ impl ParseOps for Ast {
                                     if (strcmp(self->traits[t].m[mi].name, fname) == 0) ok = 1;
                             }
                             if (ok) {
-                                g_nodes[m].aux = piface ? 4 : 3;
-                                snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
+                                self->arena->nodes[m].aux = piface ? 4 : 3;
+                                snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
                             }
                         } else if (self->method_trait(rtype, fname, trname, sizeof trname) == 0) {
-                            snprintf(g_nodes[m].text, MAX_TEXT, "%s", trname);
+                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
                         }
                     }
                 } else {
                     m = self->new_node(arrow ? N_ARROW : N_MEMBER);
                     if (m < 0) return -1;
-                    g_nodes[m].a = n;
-                    snprintf(g_nodes[m].text2, MAX_TEXT, "%s", fname);
+                    self->arena->nodes[m].a = n;
+                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
                 }
                 n = m;
                 continue;
@@ -2883,13 +2855,13 @@ impl ParseOps for Ast {
         }
         if (self->tok == T_PUNCT && (strcmp(self->toktext, "++") == 0 || strcmp(self->toktext, "--") == 0)) {
             int k;
-            k = g_nodes[n].kind;
+            k = self->arena->nodes[n].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->fail("'++' / '--' need an assignable target");
             m = self->new_node(N_POST);
             if (m < 0) return -1;
-            g_nodes[m].a = n;
-            g_nodes[m].aux = (self->toktext[0] == '+') ? P_INC : P_DEC;
+            self->arena->nodes[m].a = n;
+            self->arena->nodes[m].aux = (self->toktext[0] == '+') ? P_INC : P_DEC;
             self->lex_next();
             return m;
         }
@@ -2904,43 +2876,41 @@ impl ParseOps for Ast {
         if (self->tok == T_NUM) {
             n = self->new_node(N_NUM);
             if (n < 0) return -1;
-            g_nodes[n].num = self->toknum;
+            self->arena->nodes[n].num = self->toknum;
             self->lex_next();
             return n;
         }
         if (self->tok == T_STR) {
-            int off = g_nstrpool;
+            int off = self->arena->str_begin();
             n = self->new_node(N_STR);
             if (n < 0) return -1;
             /* adjacent literals concatenate; they are copied into the pool so the
                joined string is not limited by MAX_TEXT */
             while (self->tok == T_STR) {
                 int m = 0;
-                while (self->toktext[m] && g_nstrpool + 2 < MAX_STRPOOL) {
-                    g_strpool[g_nstrpool] = self->toktext[m];
-                    g_nstrpool++;
+                while (self->toktext[m]) {
+                    if (self->arena->str_put((unsigned char)self->toktext[m]) != 0)
+                        return self->fail("string pool is full");
                     m++;
                 }
-                if (self->toktext[m]) return self->fail("string pool is full");
                 self->lex_next();
             }
-            g_strpool[g_nstrpool] = 0;
-            g_nstrpool++;      /* keep this literal's terminator for good */
-            g_nodes[n].num = off;
+            self->arena->str_end();
+            self->arena->nodes[n].num = off;
             return n;
         }
         if (self->tok == T_ID) {
             id_line = self->tokline;
             n = self->new_node(N_VAR);
             if (n < 0) return -1;
-            snprintf(g_nodes[n].text2, MAX_TEXT, "%s", self->toktext);
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->toktext);
             self->lex_next();
             if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0) {
                 int fi;
                 args = self->parse_args();
                 if (args < 0) return -1;
-                fi = self->find_func(g_nodes[n].text2);
-                if (fi >= 0 && self->record_call(g_nodes[n].text2, id_line) != 0) return -1;
+                fi = self->find_func(self->arena->nodes[n].text2);
+                if (fi >= 0 && self->record_call(self->arena->nodes[n].text2, id_line) != 0) return -1;
                 if (fi >= 0 && args > 0) {
                     int cur, prev, k, first_arg;
                     cur = args;
@@ -2955,25 +2925,25 @@ impl ParseOps for Ast {
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
                                 if (prev < 0) first_arg = boxed;
-                                else g_nodes[prev].next = boxed;
-                                g_nodes[boxed].next = g_nodes[cur].next;
+                                else self->arena->nodes[prev].next = boxed;
+                                self->arena->nodes[boxed].next = self->arena->nodes[cur].next;
                                 cur = boxed;
                             }
                         }
                         prev = cur;
-                        cur = g_nodes[cur].next;
+                        cur = self->arena->nodes[cur].next;
                         k++;
                     }
                     args = first_arg;
                 }
-                g_nodes[n].kind = N_CALL;
-                g_nodes[n].a = (args == 0) ? -1 : args;
-            } else if (self->find_var(g_nodes[n].text2) < 0) {
+                self->arena->nodes[n].kind = N_CALL;
+                self->arena->nodes[n].a = (args == 0) ? -1 : args;
+            } else if (self->find_var(self->arena->nodes[n].text2) < 0) {
                 /* CT has no preprocessor: an ALL_CAPS name is a macro constant
                    (MAX_NODES, NULL, ...) and is emitted verbatim. Anything else
                    still has to be declared. */
                 int ci, all_caps;
-                const char *nm = g_nodes[n].text2;
+                const char *nm = self->arena->nodes[n].text2;
                 all_caps = (nm[0] != 0);
                 for (ci = 0; nm[ci]; ci++) {
                     char cc = nm[ci];
@@ -2984,8 +2954,8 @@ impl ParseOps for Ast {
                 }
                 if (all_caps || strcmp(nm, "stderr") == 0
                     || strcmp(nm, "stdout") == 0 || strcmp(nm, "stdin") == 0) {
-                    g_nodes[n].kind = N_RAW;
-                    snprintf(g_nodes[n].text, MAX_TEXT, "%s", nm);
+                    self->arena->nodes[n].kind = N_RAW;
+                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", nm);
                     return n;
                 }
                 return self->fail("use of an undeclared variable");
@@ -3018,7 +2988,7 @@ impl ParseOps for Ast {
             e = self->parse_expr();
             if (e < 0) return -1;
             if (tail < 0) first = e;
-            else g_nodes[tail].next = e;
+            else self->arena->nodes[tail].next = e;
             tail = e;
             if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
                 self->lex_next();
@@ -3097,15 +3067,15 @@ impl TypeOps for Ast {
         int i;
         (void)self;
 
-        if (g_nodes[n].kind == N_VAR) return self->var_type(g_nodes[n].text2, out, cap);
-        if (g_nodes[n].kind == N_INDEX) {
+        if (self->arena->nodes[n].kind == N_VAR) return self->var_type(self->arena->nodes[n].text2, out, cap);
+        if (self->arena->nodes[n].kind == N_INDEX) {
             /* a[i] is the pointee: a pointer's star drops, while an array's
                declared type has none to drop -- unless it is an array *of*
                pointers, which `is_array` keeps intact */
             size_t ln;
-            if (self->expr_type(g_nodes[n].a, out, cap) != 0) return -1;
-            if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_VAR) {
-                int vi = self->find_var(g_nodes[g_nodes[n].a].text2);
+            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
+            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
+                int vi = self->find_var(self->arena->nodes[self->arena->nodes[n].a].text2);
                 if (vi >= 0 && self->vars[vi].is_array) return 0;
             }
             ln = strlen(out);
@@ -3117,44 +3087,44 @@ impl TypeOps for Ast {
             }
             return 0;
         }
-        if (g_nodes[n].kind == N_ADDR) {
-            if (self->expr_type(g_nodes[n].a, out, cap) != 0) return -1;
+        if (self->arena->nodes[n].kind == N_ADDR) {
+            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
             if (strlen(out) + 2 >= cap) return -1;
             strcat(out, " *");
             return 0;
         }
-        if (g_nodes[n].kind == N_CALL) {
-            i = self->find_func(g_nodes[n].text2);
+        if (self->arena->nodes[n].kind == N_CALL) {
+            i = self->find_func(self->arena->nodes[n].text2);
             if (i < 0) return -1;
             if (snprintf(out, cap, "%s", self->funcs[i].ret) >= (int)cap) return -1;
             return 0;
         }
-        if (g_nodes[n].kind == N_MEMBER || g_nodes[n].kind == N_ARROW) {
+        if (self->arena->nodes[n].kind == N_MEMBER || self->arena->nodes[n].kind == N_ARROW) {
             char rt[MAX_TEXT];
             char sname[MAX_TEXT];
             int is_ptr, si, fi;
-            if (self->expr_type(g_nodes[n].a, rt, sizeof rt) != 0) return -1;
-            is_ptr = (g_nodes[n].kind == N_ARROW);
+            if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
+            is_ptr = (self->arena->nodes[n].kind == N_ARROW);
             if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
             si = self->find_struct(sname);
             if (si < 0) return -1;
             for (fi = 0; fi < self->structs[si].nfields; fi++)
-                if (strcmp(self->structs[si].fields[fi].name, g_nodes[n].text2) == 0) {
+                if (strcmp(self->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
                     if (snprintf(out, cap, "%s", self->structs[si].fields[fi].type) >= (int)cap) return -1;
                     return 0;
                 }
             return -1;
         }
-        if (g_nodes[n].kind == N_BOX) {
-            if (snprintf(out, cap, "struct %s_iface%s", g_nodes[n].text,
-                         g_nodes[n].aux >= 2 ? " *" : "") >= (int)cap) return -1;
+        if (self->arena->nodes[n].kind == N_BOX) {
+            if (snprintf(out, cap, "struct %s_iface%s", self->arena->nodes[n].text,
+                         self->arena->nodes[n].aux >= 2 ? " *" : "") >= (int)cap) return -1;
             return 0;
         }
-        if (g_nodes[n].kind == N_CAST) {
-            if (snprintf(out, cap, "%s", g_nodes[n].text) >= (int)cap) return -1;
+        if (self->arena->nodes[n].kind == N_CAST) {
+            if (snprintf(out, cap, "%s", self->arena->nodes[n].text) >= (int)cap) return -1;
             return 0;
         }
-        if (g_nodes[n].kind == N_SIZEOF) {
+        if (self->arena->nodes[n].kind == N_SIZEOF) {
             if (snprintf(out, cap, "%s", "int") >= (int)cap) return -1;
             return 0;
         }
@@ -3174,12 +3144,12 @@ impl TypeOps for Ast {
         int is_ptr, si, u, box, found, i, mptr, ip;
         (void)self;
 
-        if (g_nodes[n].kind == N_BOX) {
+        if (self->arena->nodes[n].kind == N_BOX) {
             /* already an interface value; a pointer target takes its address */
             if (!addr) return n;
             box = self->new_node(N_ADDR);
             if (box < 0) return -1;
-            g_nodes[box].a = n;
+            self->arena->nodes[box].a = n;
             return box;
         }
         /* N_BOX text2 names the vtable's owner: the struct for a struct-level
@@ -3187,10 +3157,10 @@ impl TypeOps for Ast {
            emit rule covers both. */
         mptr = 0;
         iname[0] = 0;
-        if (g_nodes[n].kind == N_VAR) {
-            snprintf(iname, sizeof iname, "%s", g_nodes[n].text2);
-        } else if (g_nodes[n].kind == N_ADDR && g_nodes[g_nodes[n].a].kind == N_VAR) {
-            snprintf(iname, sizeof iname, "%s", g_nodes[g_nodes[n].a].text2);
+        if (self->arena->nodes[n].kind == N_VAR) {
+            snprintf(iname, sizeof iname, "%s", self->arena->nodes[n].text2);
+        } else if (self->arena->nodes[n].kind == N_ADDR && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
+            snprintf(iname, sizeof iname, "%s", self->arena->nodes[self->arena->nodes[n].a].text2);
             mptr = 1;
         }
         if (iname[0]) {
@@ -3198,10 +3168,10 @@ impl TypeOps for Ast {
                 if (strcmp(self->maps[i].inst, iname) == 0 && strcmp(self->maps[i].trait, trait) == 0) {
                     box = self->new_node(N_BOX);
                     if (box < 0) return -1;
-                    g_nodes[box].a = n;
-                    g_nodes[box].aux = mptr + (addr ? 2 : 0);
-                    snprintf(g_nodes[box].text, MAX_TEXT, "%s", trait);
-                    snprintf(g_nodes[box].text2, MAX_TEXT, "%s", iname);
+                    self->arena->nodes[box].a = n;
+                    self->arena->nodes[box].aux = mptr + (addr ? 2 : 0);
+                    snprintf(self->arena->nodes[box].text, MAX_TEXT, "%s", trait);
+                    snprintf(self->arena->nodes[box].text2, MAX_TEXT, "%s", iname);
                     return box;
                 }
         }
@@ -3212,8 +3182,8 @@ impl TypeOps for Ast {
             if (strcmp(tname, trait) == 0) {
                 if (ip == addr) return n;
                 /* an array of interface values decays to a pointer */
-                if (!ip && addr && g_nodes[n].kind == N_VAR) {
-                    int vi = self->find_var(g_nodes[n].text2);
+                if (!ip && addr && self->arena->nodes[n].kind == N_VAR) {
+                    int vi = self->find_var(self->arena->nodes[n].text2);
                     if (vi >= 0 && self->vars[vi].is_array) return n;
                 }
             }
@@ -3229,10 +3199,10 @@ impl TypeOps for Ast {
         if (!found) return self->fail("the struct does not use this trait");
         box = self->new_node(N_BOX);
         if (box < 0) return -1;
-        g_nodes[box].a = n;
-        g_nodes[box].aux = is_ptr + (addr ? 2 : 0);
-        snprintf(g_nodes[box].text, MAX_TEXT, "%s", trait);
-        snprintf(g_nodes[box].text2, MAX_TEXT, "%s", sname);
+        self->arena->nodes[box].a = n;
+        self->arena->nodes[box].aux = is_ptr + (addr ? 2 : 0);
+        snprintf(self->arena->nodes[box].text, MAX_TEXT, "%s", trait);
+        snprintf(self->arena->nodes[box].text2, MAX_TEXT, "%s", sname);
         return box;
     }
 
@@ -3463,14 +3433,14 @@ impl ModuleOps for Ast {
         int t;
         (void)self;
 
-        g_nodes[n].next = -1;
-        if (g_nodes[prog].a < 0) {
-            g_nodes[prog].a = n;
+        self->arena->nodes[n].next = -1;
+        if (self->arena->nodes[prog].a < 0) {
+            self->arena->nodes[prog].a = n;
             return 0;
         }
-        t = g_nodes[prog].a;
-        while (g_nodes[t].next >= 0) t = g_nodes[t].next;
-        g_nodes[t].next = n;
+        t = self->arena->nodes[prog].a;
+        while (self->arena->nodes[t].next >= 0) t = self->arena->nodes[t].next;
+        self->arena->nodes[t].next = n;
         return 0;
     }
 
@@ -3761,7 +3731,7 @@ impl ModuleOps for Ast {
         }
         if (n == NO_NODE) return NO_NODE;
         if (n < 0) return -1;
-        g_nodes[n].d = is_pub ? 1 : 0;
+        self->arena->nodes[n].d = is_pub ? 1 : 0;
         return n;
     }
 
@@ -3814,7 +3784,7 @@ impl ModuleOps for Ast {
             if (self->tok == T_PP) {
                 n = self->new_node(N_PP);
                 if (n < 0) return -1;
-                snprintf(g_nodes[n].text, MAX_TEXT, "%s", self->toktext);
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->toktext);
                 if (self->append_node(prog, n) != 0) return -1;
                 self->lex_next();
                 continue;
@@ -4257,7 +4227,7 @@ impl ModuleOps for Ast {
         }
 
         self->nunits = 0;
-        g_nnode = 0;
+        self->arena->reset();
         self->nfunc = 0;
         self->nvar = 0;
         self->nscope = 0;
@@ -4379,13 +4349,13 @@ impl EmitOps for Ast {
         int saved;
         (void)self;
         self->nhoist = 0;
-        saved = g_nodes[n].next;
-        g_nodes[n].next = -1;
+        saved = self->arena->nodes[n].next;
+        self->arena->nodes[n].next = -1;
         if (self->hoist_scan(n) != 0) {
-            g_nodes[n].next = saved;
+            self->arena->nodes[n].next = saved;
             return -1;
         }
-        g_nodes[n].next = saved;
+        self->arena->nodes[n].next = saved;
         return 0;
     }
 
@@ -4398,27 +4368,27 @@ impl EmitOps for Ast {
         (void)self;
 
         if (n < 0) return 0;
-        if (g_nodes[n].kind == N_MCALL) {
-            root = g_nodes[n].a;
-            while (root >= 0 && (g_nodes[root].kind == N_MEMBER
-                                 || g_nodes[root].kind == N_ARROW))
-                root = g_nodes[root].a;
-            if (root >= 0 && g_nodes[root].kind == N_CALL
-                && !g_nodes[root].text3[0]
-                && self->find_func(g_nodes[root].text2) >= 0) {
+        if (self->arena->nodes[n].kind == N_MCALL) {
+            root = self->arena->nodes[n].a;
+            while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
+                                 || self->arena->nodes[root].kind == N_ARROW))
+                root = self->arena->nodes[root].a;
+            if (root >= 0 && self->arena->nodes[root].kind == N_CALL
+                && !self->arena->nodes[root].text3[0]
+                && self->find_func(self->arena->nodes[root].text2) >= 0) {
                 if (self->nhoist >= MAX_HOISTS)
                     return self->fail("too many hoisted receivers in one statement");
-                snprintf(g_nodes[root].text3, MAX_TEXT, "__ct_tmp%d", self->ntmp);
+                snprintf(self->arena->nodes[root].text3, MAX_TEXT, "__ct_tmp%d", self->ntmp);
                 self->ntmp++;
                 self->hoist_calls[self->nhoist] = root;
                 self->nhoist++;
             }
         }
-        if (g_nodes[n].a >= 0 && self->hoist_scan(g_nodes[n].a) != 0) return -1;
-        if (g_nodes[n].b >= 0 && self->hoist_scan(g_nodes[n].b) != 0) return -1;
-        if (g_nodes[n].c >= 0 && self->hoist_scan(g_nodes[n].c) != 0) return -1;
-        if (g_nodes[n].d >= 0 && self->hoist_scan(g_nodes[n].d) != 0) return -1;
-        if (g_nodes[n].next >= 0 && self->hoist_scan(g_nodes[n].next) != 0) return -1;
+        if (self->arena->nodes[n].a >= 0 && self->hoist_scan(self->arena->nodes[n].a) != 0) return -1;
+        if (self->arena->nodes[n].b >= 0 && self->hoist_scan(self->arena->nodes[n].b) != 0) return -1;
+        if (self->arena->nodes[n].c >= 0 && self->hoist_scan(self->arena->nodes[n].c) != 0) return -1;
+        if (self->arena->nodes[n].d >= 0 && self->hoist_scan(self->arena->nodes[n].d) != 0) return -1;
+        if (self->arena->nodes[n].next >= 0 && self->hoist_scan(self->arena->nodes[n].next) != 0) return -1;
         return 0;
     }
 
@@ -4428,10 +4398,10 @@ impl EmitOps for Ast {
         (void)self;
 
         for (i = 0; i < self->nhoist; i++) {
-            f = self->find_func(g_nodes[self->hoist_calls[i]].text2);
+            f = self->find_func(self->arena->nodes[self->hoist_calls[i]].text2);
             if (f < 0) return self->fail("cannot infer the type of a hoisted receiver");
             self->emit_indent(ind);
-            fprintf(self->out, "%s %s = ", self->funcs[f].ret, g_nodes[self->hoist_calls[i]].text3);
+            fprintf(self->out, "%s %s = ", self->funcs[f].ret, self->arena->nodes[self->hoist_calls[i]].text3);
             self->raw_call = self->hoist_calls[i];
             if (self->emit_expr(self->hoist_calls[i]) != 0) {
                 self->raw_call = -1;
@@ -4451,16 +4421,16 @@ impl EmitOps for Ast {
         int n, i;
         (void)self;
 
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
-            if (g_nodes[n].kind == N_PP) fprintf(self->out, "%s\n", g_nodes[n].text);
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
 
         if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_decls() != 0) return -1;
         if (self->emit_vtable_fwd(prog) != 0) return -1;
 
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
-            if (g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
-                || g_nodes[n].kind == N_GLOBAL) {
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
+                || self->arena->nodes[n].kind == N_GLOBAL) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }
@@ -4472,8 +4442,8 @@ impl EmitOps for Ast {
 
         if (self->emit_maps(-1) != 0) return -1;
 
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
-            if (g_nodes[n].kind == N_FUNC) {
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind == N_FUNC) {
                 if (self->emit_node(n, 0) != 0) return -1;
             }
         }
@@ -4510,10 +4480,10 @@ impl EmitOps for Ast {
         const char *tname;
         (void)self;
 
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
-            if (g_nodes[n].kind != N_IMPL) continue;
-            si = g_nodes[n].aux;
-            tname = g_nodes[n].text2;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            si = self->arena->nodes[n].aux;
+            tname = self->arena->nodes[n].text2;
             if (strcmp(tname, "Drop") == 0) continue;   /* no vptr, no vtable */
             fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n",
                     tname, self->structs[si].name, tname);
@@ -4699,37 +4669,37 @@ impl EmitOps for Ast {
         (void)self;
 
         any = 0;
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
-            if (g_nodes[n].kind == N_GLOBAL && self->type_needs_init(g_nodes[n].text)
-                && (g_nodes[n].text3[0]
-                    || self->type_has_array_init(g_nodes[n].text))) any = 1;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_GLOBAL && self->type_needs_init(self->arena->nodes[n].text)
+                && (self->arena->nodes[n].text3[0]
+                    || self->type_has_array_init(self->arena->nodes[n].text))) any = 1;
         if (!any) return 0;
         fputs("static void __ct_init(void) __attribute__((constructor));\n", self->out);
         fputs("static void __ct_init(void) {\n", self->out);
         fputs("    unsigned long __ct_i;\n", self->out);
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             char cnt[MAX_TEXT];
             char recv[MAX_TEXT];
             int i, k;
-            if (g_nodes[n].kind != N_GLOBAL) continue;
-            if (!self->type_needs_init(g_nodes[n].text)) continue;
-            if (!g_nodes[n].text3[0]) {
+            if (self->arena->nodes[n].kind != N_GLOBAL) continue;
+            if (!self->type_needs_init(self->arena->nodes[n].text)) continue;
+            if (!self->arena->nodes[n].text3[0]) {
                 /* a scalar object whose struct has array fields */
-                if (self->type_has_array_init(g_nodes[n].text)
-                    && self->emit_vptr_stmts(g_nodes[n].text2, g_nodes[n].text, 2) != 0)
+                if (self->type_has_array_init(self->arena->nodes[n].text)
+                    && self->emit_vptr_stmts(self->arena->nodes[n].text2, self->arena->nodes[n].text, 2) != 0)
                     return -1;
                 continue;
             }
             /* the count is the first bracket group of the suffix */
             k = 0;
-            for (i = 1; g_nodes[n].text3[i] && g_nodes[n].text3[i] != ']' && k + 1 < MAX_TEXT; i++) {
-                cnt[k] = g_nodes[n].text3[i];
+            for (i = 1; self->arena->nodes[n].text3[i] && self->arena->nodes[n].text3[i] != ']' && k + 1 < MAX_TEXT; i++) {
+                cnt[k] = self->arena->nodes[n].text3[i];
                 k++;
             }
             cnt[k] = 0;
-            snprintf(recv, sizeof recv, "%s[__ct_i]", g_nodes[n].text2);
+            snprintf(recv, sizeof recv, "%s[__ct_i]", self->arena->nodes[n].text2);
             fprintf(self->out, "    for (__ct_i = 0; __ct_i < %s; __ct_i++) {\n", cnt);
-            if (self->emit_vptr_stmts(recv, g_nodes[n].text, 2) != 0) return -1;
+            if (self->emit_vptr_stmts(recv, self->arena->nodes[n].text, 2) != 0) return -1;
             fputs("    }\n", self->out);
         }
         fputs("}\n\n", self->out);
@@ -4745,7 +4715,7 @@ impl EmitOps for Ast {
         int len, i, only_space, si;
         (void)self;
 
-        t = g_nodes[raw].text;
+        t = self->arena->nodes[raw].text;
         len = (int)strlen(t);
         base = type;
         if (strncmp(base, "struct ", 7) == 0) base += 7;
@@ -4856,39 +4826,39 @@ impl EmitOps for Ast {
         int n, m, k, u;
         (void)self;
 
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             int si, ti;
             const char *tname;
             const char *sname;
-            if (g_nodes[n].kind != N_IMPL) continue;
-            si = g_nodes[n].aux;
-            tname = g_nodes[n].text2;
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            si = self->arena->nodes[n].aux;
+            tname = self->arena->nodes[n].text2;
             ti = -1;
             for (k = 0; k < self->ntraits; k++)
                 if (strcmp(self->traits[k].name, tname) == 0) ti = k;
             if (ti < 0 && strcmp(tname, "Drop") != 0)
                 return self->fail("impl of an unknown trait");
-            sname = g_nodes[n].text;
-            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+            sname = self->arena->nodes[n].text;
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 fprintf(self->out, "static %s %s_%s_%s(void *self",
-                        g_nodes[m].text3[0] ? g_nodes[m].text3 : g_nodes[m].text,
-                        self->structs[si].name, tname, g_nodes[m].text2);
-                k = g_nodes[m].a;
+                        self->arena->nodes[m].text3[0] ? self->arena->nodes[m].text3 : self->arena->nodes[m].text,
+                        self->structs[si].name, tname, self->arena->nodes[m].text2);
+                k = self->arena->nodes[m].a;
                 while (k > 0) {
-                    fprintf(self->out, ", %s %s", g_nodes[k].text, g_nodes[k].text2);
-                    if (g_nodes[k].text3[0]) fputs(g_nodes[k].text3, self->out);
-                    k = g_nodes[k].next;
+                    fprintf(self->out, ", %s %s", self->arena->nodes[k].text, self->arena->nodes[k].text2);
+                    if (self->arena->nodes[k].text3[0]) fputs(self->arena->nodes[k].text3, self->out);
+                    k = self->arena->nodes[k].next;
                 }
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 self->self_mode = 1;
-                k = g_nodes[g_nodes[m].b].a;
+                k = self->arena->nodes[self->arena->nodes[m].b].a;
                 while (k >= 0) {
                     if (self->emit_node(k, 1) != 0) {
                         self->self_mode = 0;
                         return -1;
                     }
-                    k = g_nodes[k].next;
+                    k = self->arena->nodes[k].next;
                 }
                 self->self_mode = 0;
                 fputs("}\n\n", self->out);
@@ -4897,10 +4867,10 @@ impl EmitOps for Ast {
                 fprintf(self->out, "static struct %s_vtbl %s_%s_vtable = {\n",
                         tname, self->structs[si].name, tname);
                 u = 0;
-                for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+                for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                     if (u > 0) fputs(",\n", self->out);
-                    fprintf(self->out, "    .%s = %s_%s_%s", g_nodes[m].text2,
-                            self->structs[si].name, tname, g_nodes[m].text2);
+                    fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
+                            self->structs[si].name, tname, self->arena->nodes[m].text2);
                     u++;
                 }
                 fputs("\n};\n\n", self->out);
@@ -4913,9 +4883,9 @@ impl EmitOps for Ast {
         for (si = 0; si < self->nstructs; si++) {
             int has = 0, fi, used = 0;
             if (!self->structs[si].uses_drop) continue;
-            for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next)
-                if (g_nodes[n].kind == N_IMPL && g_nodes[n].aux == si
-                    && strcmp(g_nodes[n].text2, "Drop") == 0) has = 1;
+            for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+                if (self->arena->nodes[n].kind == N_IMPL && self->arena->nodes[n].aux == si
+                    && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
             if (has) continue;
             fprintf(self->out, "static void %s_Drop_drop(void *self) {\n", self->structs[si].name);
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n",
@@ -4994,25 +4964,25 @@ impl EmitOps for Ast {
         int m;
         (void)self;
 
-        if (g_nodes[n].kind == N_STRUCT) {
+        if (self->arena->nodes[n].kind == N_STRUCT) {
             int si, u;
-            if (g_nodes[n].aux) {
+            if (self->arena->nodes[n].aux) {
                 /* `typedef struct Tag { ... } Name;` keeps the tag so a
                    `struct Tag` reference (or self-reference) stays valid */
-                if (g_nodes[n].text[0]) {
-                    fprintf(self->out, "typedef struct %s {\n", g_nodes[n].text);
+                if (self->arena->nodes[n].text[0]) {
+                    fprintf(self->out, "typedef struct %s {\n", self->arena->nodes[n].text);
                 } else {
                     fputs("typedef struct {\n", self->out);
                 }
             } else {
-                fprintf(self->out, "struct %s {\n", g_nodes[n].text2);
+                fprintf(self->out, "struct %s {\n", self->arena->nodes[n].text2);
             }
-            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 self->emit_indent(ind + 1);
                 if (self->emit_inline(m) != 0) return -1;
                 fputs(";\n", self->out);
             }
-            si = self->find_struct(g_nodes[n].text2);
+            si = self->find_struct(self->arena->nodes[n].text2);
             if (si >= 0) {
                 for (u = 0; u < self->structs[si].nuse; u++) {
                     char low[MAX_TEXT];
@@ -5029,33 +4999,33 @@ impl EmitOps for Ast {
                 }
             }
             self->emit_indent(ind);
-            if (g_nodes[n].aux) fprintf(self->out, "} %s;\n", g_nodes[n].text2);
+            if (self->arena->nodes[n].aux) fprintf(self->out, "} %s;\n", self->arena->nodes[n].text2);
             else fputs("};\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_TYPEDEF) {
-            fprintf(self->out, "typedef %s %s;\n", g_nodes[n].text, g_nodes[n].text2);
+        if (self->arena->nodes[n].kind == N_TYPEDEF) {
+            fprintf(self->out, "typedef %s %s;\n", self->arena->nodes[n].text, self->arena->nodes[n].text2);
             return 0;
         }
-        if (g_nodes[n].kind == N_GLOBAL) {
+        if (self->arena->nodes[n].kind == N_GLOBAL) {
             self->emit_indent(ind);
-            if (g_nodes[n].aux) fputs("static ", self->out);
-            fprintf(self->out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
-            if (g_nodes[n].text3[0]) fputs(g_nodes[n].text3, self->out);
-            if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
-                if (self->emit_raw_init(g_nodes[n].a, g_nodes[n].text) != 0) return -1;
-            } else if (g_nodes[n].a >= 0) {
+            if (self->arena->nodes[n].aux) fputs("static ", self->out);
+            fprintf(self->out, "%s %s", self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
+            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
+                if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text) != 0) return -1;
+            } else if (self->arena->nodes[n].a >= 0) {
                 fputs(" = ", self->out);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            } else if (self->type_needs_init(g_nodes[n].text) && !g_nodes[n].text3[0]) {
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            } else if (self->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
                 /* an array gets per-element writes (local) or a constructor
                    (file scope); a designator on the array itself is invalid */
                 fputs(" = { ", self->out);
-                if (self->emit_vptr_items("", g_nodes[n].text) != 0) return -1;
+                if (self->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;
                 if (self->emit_field_vptrs(self->find_struct(
-                        strncmp(g_nodes[n].text, "struct ", 7) == 0
-                            ? g_nodes[n].text + 7 : g_nodes[n].text),
-                        self->type_has_vptr(g_nodes[n].text)) != 0) return -1;
+                        strncmp(self->arena->nodes[n].text, "struct ", 7) == 0
+                            ? self->arena->nodes[n].text + 7 : self->arena->nodes[n].text),
+                        self->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
                 fputs(" }", self->out);
             }
             if (with_semi) fputs(";\n", self->out);
@@ -5069,10 +5039,10 @@ impl EmitOps for Ast {
         int c;
         (void)self;
 
-        if (g_nodes[n].kind == N_FUNC) {
-            if (g_nodes[n].aux) fputs("static ", self->out);
-            fprintf(self->out, "%s %s(", g_nodes[n].text, g_nodes[n].text2);
-            c = g_nodes[n].a;
+        if (self->arena->nodes[n].kind == N_FUNC) {
+            if (self->arena->nodes[n].aux) fputs("static ", self->out);
+            fprintf(self->out, "%s %s(", self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            c = self->arena->nodes[n].a;
             if (c == 0) {
                 fputs("void) ", self->out);
             } else {
@@ -5080,92 +5050,92 @@ impl EmitOps for Ast {
                 first = 1;
                 while (c > 0) {
                     if (!first) fputs(", ", self->out);
-                    fprintf(self->out, "%s %s", g_nodes[c].text, g_nodes[c].text2);
-                    if (g_nodes[c].text3[0]) fputs(g_nodes[c].text3, self->out);
+                    fprintf(self->out, "%s %s", self->arena->nodes[c].text, self->arena->nodes[c].text2);
+                    if (self->arena->nodes[c].text3[0]) fputs(self->arena->nodes[c].text3, self->out);
                     first = 0;
-                    c = g_nodes[c].next;
+                    c = self->arena->nodes[c].next;
                 }
                 fputs(") ", self->out);
             }
-            return self->emit_node(g_nodes[n].b, ind);
+            return self->emit_node(self->arena->nodes[n].b, ind);
         }
-        if (g_nodes[n].kind == N_BLOCK) {
+        if (self->arena->nodes[n].kind == N_BLOCK) {
             fputs("{\n", self->out);
-            for (c = g_nodes[n].a; c >= 0; c = g_nodes[c].next)
+            for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
                 if (self->emit_node(c, ind + 1) != 0) return -1;
             self->emit_indent(ind);
             fputs("}\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_RET) {
+        if (self->arena->nodes[n].kind == N_RET) {
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
             self->emit_indent(ind);
-            if (g_nodes[n].a < 0) {
+            if (self->arena->nodes[n].a < 0) {
                 fputs("return;\n", self->out);
                 return 0;
             }
             fputs("return ", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(";\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_DELETE) {
+        if (self->arena->nodes[n].kind == N_DELETE) {
             int si;
             si = -1;
-            if (g_nodes[n].text[0]) si = self->find_struct(g_nodes[n].text);
+            if (self->arena->nodes[n].text[0]) si = self->find_struct(self->arena->nodes[n].text);
             self->emit_indent(ind);
             if (si >= 0 && self->structs[si].uses_drop) {
                 /* a Drop struct runs its drop before the memory goes away */
                 fputs("if (", self->out);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fprintf(self->out, ") { %s_Drop_drop(", self->structs[si].name);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs("); free(", self->out);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs("); }\n", self->out);
                 return 0;
             }
             fputs("if (", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(") free(", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(");\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_BREAK) {
+        if (self->arena->nodes[n].kind == N_BREAK) {
             self->emit_indent(ind);
             fputs("break;\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_CONT) {
+        if (self->arena->nodes[n].kind == N_CONT) {
             self->emit_indent(ind);
             fputs("continue;\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_DECLS) {
-            int c = g_nodes[n].a;
+        if (self->arena->nodes[n].kind == N_DECLS) {
+            int c = self->arena->nodes[n].a;
             while (c >= 0) {
                 self->emit_indent(ind);
                 if (self->emit_inline(c) != 0) return -1;
                 fputs(";\n", self->out);
-                c = g_nodes[c].next;
+                c = self->arena->nodes[c].next;
             }
             return 0;
         }
-        if (g_nodes[n].kind == N_DECL) {
-            const char *tp = g_nodes[n].text;
+        if (self->arena->nodes[n].kind == N_DECL) {
+            const char *tp = self->arena->nodes[n].text;
             size_t tl = strlen(tp);
             int heap_ptr = 0;
 
             /* `T *p = malloc(..)` writes its vptrs on the next line */
-            if (tl > 0 && tp[tl - 1] == '*' && g_nodes[n].a >= 0
-                && g_nodes[g_nodes[n].a].kind == N_CALL
-                && (strcmp(g_nodes[g_nodes[n].a].text2, "malloc") == 0
-                    || strcmp(g_nodes[g_nodes[n].a].text2, "calloc") == 0))
+            if (tl > 0 && tp[tl - 1] == '*' && self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_CALL
+                && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "malloc") == 0
+                    || strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "calloc") == 0))
                 heap_ptr = 1;
 
-            if (g_nodes[n].text3[0] && g_nodes[n].a < 0 && self->type_needs_init(tp)) {
+            if (self->arena->nodes[n].text3[0] && self->arena->nodes[n].a < 0 && self->type_needs_init(tp)) {
                 /* a local array of trait-carrying values: one loop writes every
                    element's vptr (`Type name[n];` has no initialiser to extend) */
                 char cnt[MAX_TEXT];
@@ -5175,13 +5145,13 @@ impl EmitOps for Ast {
                 self->emit_indent(ind);
                 if (self->emit_inline(n) != 0) return -1;
                 fputs(";\n", self->out);
-                for (ci = 1; g_nodes[n].text3[ci] && g_nodes[n].text3[ci] != ']'
+                for (ci = 1; self->arena->nodes[n].text3[ci] && self->arena->nodes[n].text3[ci] != ']'
                            && k + 1 < MAX_TEXT; ci++) {
-                    cnt[k] = g_nodes[n].text3[ci];
+                    cnt[k] = self->arena->nodes[n].text3[ci];
                     k++;
                 }
                 cnt[k] = 0;
-                snprintf(recv, sizeof recv, "%s[__ct_i]", g_nodes[n].text2);
+                snprintf(recv, sizeof recv, "%s[__ct_i]", self->arena->nodes[n].text2);
                 self->emit_indent(ind);
                 fprintf(self->out, "for (unsigned long __ct_i = 0; __ct_i < %s; __ct_i++) {\n", cnt);
                 if (self->emit_vptr_stmts(recv, tp, ind + 1) != 0) return -1;
@@ -5189,9 +5159,9 @@ impl EmitOps for Ast {
                 fputs("}\n", self->out);
                 return 0;
             }
-            if (!g_nodes[n].text3[0] && self->type_needs_init(tp)
-                && (g_nodes[n].a < 0
-                    || g_nodes[g_nodes[n].a].kind == N_RAW)
+            if (!self->arena->nodes[n].text3[0] && self->type_needs_init(tp)
+                && (self->arena->nodes[n].a < 0
+                    || self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW)
                 && self->type_has_array_init(tp)) {
                 /* a struct-typed array field cannot be reached by a designator,
                    so its elements get their vptrs on the lines after */
@@ -5202,19 +5172,19 @@ impl EmitOps for Ast {
                 self->emit_indent(ind);
                 if (self->emit_inline(n) != 0) return -1;
                 fputs(";\n", self->out);
-                return self->emit_array_field_vptrs(si, g_nodes[n].text2, ind);
+                return self->emit_array_field_vptrs(si, self->arena->nodes[n].text2, ind);
             }
             if (heap_ptr) {
                 char recv[MAX_TEXT];
                 self->emit_indent(ind);
                 if (self->emit_inline(n) != 0) return -1;
                 fputs(";\n", self->out);
-                snprintf(recv, sizeof recv, "(*%s)", g_nodes[n].text2);
+                snprintf(recv, sizeof recv, "(*%s)", self->arena->nodes[n].text2);
                 return self->emit_vptr_stmts(recv, tp, ind);
             }
         }
-        if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_ASSIGN
-            || g_nodes[n].kind == N_EXPR || g_nodes[n].kind == N_POST) {
+        if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_ASSIGN
+            || self->arena->nodes[n].kind == N_EXPR || self->arena->nodes[n].kind == N_POST) {
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
             self->emit_indent(ind);
@@ -5222,40 +5192,40 @@ impl EmitOps for Ast {
             fputs(";\n", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_IF) {
+        if (self->arena->nodes[n].kind == N_IF) {
             self->emit_indent(ind);
             fputs("if (", self->out);
-            if (self->emit_cond(g_nodes[n].a) != 0) return -1;
+            if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
             fputs(") ", self->out);
-            if (self->emit_node(g_nodes[n].b, ind) != 0) return -1;
-            if (g_nodes[n].c >= 0) {
+            if (self->emit_node(self->arena->nodes[n].b, ind) != 0) return -1;
+            if (self->arena->nodes[n].c >= 0) {
                 self->emit_indent(ind);
                 fputs("else ", self->out);
-                if (self->emit_node(g_nodes[n].c, ind) != 0) return -1;
+                if (self->emit_node(self->arena->nodes[n].c, ind) != 0) return -1;
             }
             return 0;
         }
-        if (g_nodes[n].kind == N_WHILE) {
+        if (self->arena->nodes[n].kind == N_WHILE) {
             self->emit_indent(ind);
             fputs("while (", self->out);
-            if (self->emit_cond(g_nodes[n].a) != 0) return -1;
+            if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
             fputs(") ", self->out);
-            return self->emit_node(g_nodes[n].b, ind);
+            return self->emit_node(self->arena->nodes[n].b, ind);
         }
-        if (g_nodes[n].kind == N_FOR) {
+        if (self->arena->nodes[n].kind == N_FOR) {
             self->emit_indent(ind);
             fputs("for (", self->out);
-            if (g_nodes[n].a >= 0 && self->emit_inline(g_nodes[n].a) != 0) return -1;
+            if (self->arena->nodes[n].a >= 0 && self->emit_inline(self->arena->nodes[n].a) != 0) return -1;
             fputs("; ", self->out);
-            if (g_nodes[n].b >= 0 && self->emit_cond(g_nodes[n].b) != 0) return -1;
+            if (self->arena->nodes[n].b >= 0 && self->emit_cond(self->arena->nodes[n].b) != 0) return -1;
             fputs("; ", self->out);
-            if (g_nodes[n].c >= 0 && self->emit_inline(g_nodes[n].c) != 0) return -1;
+            if (self->arena->nodes[n].c >= 0 && self->emit_inline(self->arena->nodes[n].c) != 0) return -1;
             fputs(") ", self->out);
-            return self->emit_node(g_nodes[n].d, ind);
+            return self->emit_node(self->arena->nodes[n].d, ind);
         }
         {
             char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "unknown statement node (kind %d)", g_nodes[n].kind);
+            snprintf(msg, sizeof msg, "unknown statement node (kind %d)", self->arena->nodes[n].kind);
             return self->fail(msg);
         }
     }
@@ -5264,66 +5234,66 @@ impl EmitOps for Ast {
     {
         (void)self;
 
-        if (g_nodes[n].kind == N_DECLS) {
+        if (self->arena->nodes[n].kind == N_DECLS) {
             /* a `for` initialiser: one shared type, then bare declarators */
-            int c = g_nodes[n].a, first = 1;
+            int c = self->arena->nodes[n].a, first = 1;
             while (c >= 0) {
                 if (first) {
                     if (self->emit_inline(c) != 0) return -1;
                 } else {
                     fputs(", ", self->out);
-                    fputs(g_nodes[c].text2, self->out);
-                    if (g_nodes[c].text3[0]) fputs(g_nodes[c].text3, self->out);
-                    if (g_nodes[c].a >= 0) {
-                        if (g_nodes[g_nodes[c].a].kind == N_RAW) {
-                            if (self->emit_raw_init(g_nodes[c].a, g_nodes[c].text) != 0) return -1;
+                    fputs(self->arena->nodes[c].text2, self->out);
+                    if (self->arena->nodes[c].text3[0]) fputs(self->arena->nodes[c].text3, self->out);
+                    if (self->arena->nodes[c].a >= 0) {
+                        if (self->arena->nodes[self->arena->nodes[c].a].kind == N_RAW) {
+                            if (self->emit_raw_init(self->arena->nodes[c].a, self->arena->nodes[c].text) != 0) return -1;
                         } else {
                             fputs(" = ", self->out);
-                            if (self->emit_expr(g_nodes[c].a) != 0) return -1;
+                            if (self->emit_expr(self->arena->nodes[c].a) != 0) return -1;
                         }
                     }
                 }
                 first = 0;
-                c = g_nodes[c].next;
+                c = self->arena->nodes[c].next;
             }
             return 0;
         }
-        if (g_nodes[n].kind == N_DECL || g_nodes[n].kind == N_FIELD) {
-            fprintf(self->out, "%s %s", g_nodes[n].text, g_nodes[n].text2);
-            if (g_nodes[n].text3[0]) fputs(g_nodes[n].text3, self->out);
-            if (g_nodes[n].kind == N_DECL) {
-                if (g_nodes[n].a >= 0 && g_nodes[g_nodes[n].a].kind == N_RAW) {
-                    if (self->emit_raw_init(g_nodes[n].a, g_nodes[n].text) != 0) return -1;
-                } else if (g_nodes[n].a >= 0) {
+        if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_FIELD) {
+            fprintf(self->out, "%s %s", self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
+            if (self->arena->nodes[n].kind == N_DECL) {
+                if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
+                    if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text) != 0) return -1;
+                } else if (self->arena->nodes[n].a >= 0) {
                     fputs(" = ", self->out);
-                    if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-                } else if (self->type_needs_init(g_nodes[n].text) && !g_nodes[n].text3[0]) {
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                } else if (self->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
                     fputs(" = { ", self->out);
-                    if (self->emit_vptr_items("", g_nodes[n].text) != 0) return -1;
+                    if (self->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;
                     if (self->emit_field_vptrs(self->find_struct(
-                            strncmp(g_nodes[n].text, "struct ", 7) == 0
-                                ? g_nodes[n].text + 7 : g_nodes[n].text),
-                            self->type_has_vptr(g_nodes[n].text)) != 0) return -1;
+                            strncmp(self->arena->nodes[n].text, "struct ", 7) == 0
+                                ? self->arena->nodes[n].text + 7 : self->arena->nodes[n].text),
+                            self->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
                     fputs(" }", self->out);
                 }
             }
             return 0;
         }
-        if (g_nodes[n].kind == N_ASSIGN) {
+        if (self->arena->nodes[n].kind == N_ASSIGN) {
             const char *aop = " = ";
-            if (g_nodes[n].aux == 1) aop = " += ";
-            else if (g_nodes[n].aux == 2) aop = " -= ";
-            else if (g_nodes[n].aux == 3) aop = " *= ";
-            else if (g_nodes[n].aux == 4) aop = " /= ";
-            else if (g_nodes[n].aux == 5) aop = " %= ";
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->arena->nodes[n].aux == 1) aop = " += ";
+            else if (self->arena->nodes[n].aux == 2) aop = " -= ";
+            else if (self->arena->nodes[n].aux == 3) aop = " *= ";
+            else if (self->arena->nodes[n].aux == 4) aop = " /= ";
+            else if (self->arena->nodes[n].aux == 5) aop = " %= ";
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(aop, self->out);
-            return self->emit_expr(g_nodes[n].b);
+            return self->emit_expr(self->arena->nodes[n].b);
         }
-        if (g_nodes[n].kind == N_EXPR) return self->emit_expr(g_nodes[n].a);
-        if (g_nodes[n].kind == N_POST) {
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fputs(g_nodes[n].aux == P_INC ? "++" : "--", self->out);
+        if (self->arena->nodes[n].kind == N_EXPR) return self->emit_expr(self->arena->nodes[n].a);
+        if (self->arena->nodes[n].kind == N_POST) {
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
             return 0;
         }
         return self->fail("cannot inline this node");
@@ -5334,19 +5304,19 @@ impl EmitOps for Ast {
         const char *op;
         (void)self;
 
-        if (g_nodes[n].kind == N_BIN && g_nodes[n].aux >= B_LT && g_nodes[n].aux <= B_NE) {
+        if (self->arena->nodes[n].kind == N_BIN && self->arena->nodes[n].aux >= B_LT && self->arena->nodes[n].aux <= B_NE) {
             op = "<";
-            if (g_nodes[n].aux == B_GT) op = ">";
-            else if (g_nodes[n].aux == B_LE) op = "<=";
-            else if (g_nodes[n].aux == B_GE) op = ">=";
-            else if (g_nodes[n].aux == B_EQ) op = "==";
-            else if (g_nodes[n].aux == B_NE) op = "!=";
-            else if (g_nodes[n].aux == B_AND) op = "&&";
-            else if (g_nodes[n].aux == B_OR) op = "||";
-            else if (g_nodes[n].aux == B_XOR) op = "^";
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->arena->nodes[n].aux == B_GT) op = ">";
+            else if (self->arena->nodes[n].aux == B_LE) op = "<=";
+            else if (self->arena->nodes[n].aux == B_GE) op = ">=";
+            else if (self->arena->nodes[n].aux == B_EQ) op = "==";
+            else if (self->arena->nodes[n].aux == B_NE) op = "!=";
+            else if (self->arena->nodes[n].aux == B_AND) op = "&&";
+            else if (self->arena->nodes[n].aux == B_OR) op = "||";
+            else if (self->arena->nodes[n].aux == B_XOR) op = "^";
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fprintf(self->out, " %s ", op);
-            return self->emit_expr(g_nodes[n].b);
+            return self->emit_expr(self->arena->nodes[n].b);
         }
         return self->emit_expr(n);
     }
@@ -5357,182 +5327,182 @@ impl EmitOps for Ast {
         const char *op;
         (void)self;
 
-        if (g_nodes[n].kind == N_NUM) {
-            fprintf(self->out, "%ld", g_nodes[n].num);
+        if (self->arena->nodes[n].kind == N_NUM) {
+            fprintf(self->out, "%ld", self->arena->nodes[n].num);
             return 0;
         }
-        if (g_nodes[n].kind == N_STR) {
-            fputs(g_strpool + g_nodes[n].num, self->out);
+        if (self->arena->nodes[n].kind == N_STR) {
+            fputs(self->arena->str_at(self->arena->nodes[n].num), self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_RAW) {
-            fputs(g_nodes[n].text, self->out);
+        if (self->arena->nodes[n].kind == N_RAW) {
+            fputs(self->arena->nodes[n].text, self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_VAR) {
-            if (self->self_mode && strcmp(g_nodes[n].text2, "self") == 0) fputs("_self", self->out);
-            else fputs(g_nodes[n].text2, self->out);
+        if (self->arena->nodes[n].kind == N_VAR) {
+            if (self->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) fputs("_self", self->out);
+            else fputs(self->arena->nodes[n].text2, self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_MEMBER) {
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fprintf(self->out, ".%s", g_nodes[n].text2);
+        if (self->arena->nodes[n].kind == N_MEMBER) {
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fprintf(self->out, ".%s", self->arena->nodes[n].text2);
             return 0;
         }
-        if (g_nodes[n].kind == N_ARROW) {
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fprintf(self->out, "->%s", g_nodes[n].text2);
+        if (self->arena->nodes[n].kind == N_ARROW) {
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fprintf(self->out, "->%s", self->arena->nodes[n].text2);
             return 0;
         }
-        if (g_nodes[n].kind == N_INDEX) {
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+        if (self->arena->nodes[n].kind == N_INDEX) {
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs("[", self->out);
-            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
             fputs("]", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_ADDR) {
+        if (self->arena->nodes[n].kind == N_ADDR) {
             fputs("(&", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_DEREF) {
+        if (self->arena->nodes[n].kind == N_DEREF) {
             fputs("(*", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_CAST) {
-            fprintf(self->out, "(%s)(", g_nodes[n].text);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+        if (self->arena->nodes[n].kind == N_CAST) {
+            fprintf(self->out, "(%s)(", self->arena->nodes[n].text);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_SIZEOF) {
-            if (g_nodes[n].aux) {
-                fprintf(self->out, "sizeof(%s)", g_nodes[n].text);
+        if (self->arena->nodes[n].kind == N_SIZEOF) {
+            if (self->arena->nodes[n].aux) {
+                fprintf(self->out, "sizeof(%s)", self->arena->nodes[n].text);
                 return 0;
             }
             fputs("sizeof(", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_POST) {
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-            fputs(g_nodes[n].aux == P_INC ? "++" : "--", self->out);
+        if (self->arena->nodes[n].kind == N_POST) {
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_TERN) {
+        if (self->arena->nodes[n].kind == N_TERN) {
             fputs("(", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(" ? ", self->out);
-            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
             fputs(" : ", self->out);
-            if (self->emit_expr(g_nodes[n].c) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].c) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_BIN) {
+        if (self->arena->nodes[n].kind == N_BIN) {
             op = "+";
-            if (g_nodes[n].aux == B_SUB) op = "-";
-            else if (g_nodes[n].aux == B_MUL) op = "*";
-            else if (g_nodes[n].aux == B_DIV) op = "/";
-            else if (g_nodes[n].aux == B_MOD) op = "%";
-            else if (g_nodes[n].aux == B_LT) op = "<";
-            else if (g_nodes[n].aux == B_GT) op = ">";
-            else if (g_nodes[n].aux == B_LE) op = "<=";
-            else if (g_nodes[n].aux == B_GE) op = ">=";
-            else if (g_nodes[n].aux == B_EQ) op = "==";
-            else if (g_nodes[n].aux == B_NE) op = "!=";
-            else if (g_nodes[n].aux == B_AND) op = "&&";
-            else if (g_nodes[n].aux == B_OR) op = "||";
-            else if (g_nodes[n].aux == B_XOR) op = "^";
+            if (self->arena->nodes[n].aux == B_SUB) op = "-";
+            else if (self->arena->nodes[n].aux == B_MUL) op = "*";
+            else if (self->arena->nodes[n].aux == B_DIV) op = "/";
+            else if (self->arena->nodes[n].aux == B_MOD) op = "%";
+            else if (self->arena->nodes[n].aux == B_LT) op = "<";
+            else if (self->arena->nodes[n].aux == B_GT) op = ">";
+            else if (self->arena->nodes[n].aux == B_LE) op = "<=";
+            else if (self->arena->nodes[n].aux == B_GE) op = ">=";
+            else if (self->arena->nodes[n].aux == B_EQ) op = "==";
+            else if (self->arena->nodes[n].aux == B_NE) op = "!=";
+            else if (self->arena->nodes[n].aux == B_AND) op = "&&";
+            else if (self->arena->nodes[n].aux == B_OR) op = "||";
+            else if (self->arena->nodes[n].aux == B_XOR) op = "^";
             fputs("(", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fprintf(self->out, " %s ", op);
-            if (self->emit_expr(g_nodes[n].b) != 0) return -1;
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_UNARY) {
-            fputs(g_nodes[n].aux == U_NEG ? "(-" : "(!", self->out);
-            if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+        if (self->arena->nodes[n].kind == N_UNARY) {
+            fputs(self->arena->nodes[n].aux == U_NEG ? "(-" : "(!", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_BOX) {
+        if (self->arena->nodes[n].kind == N_BOX) {
             /* aux: bit 0 = the source operand is a pointer, bit 1 = take the
                address of the literal (a pointer-to-interface target) */
-            int a = g_nodes[n].aux;
+            int a = self->arena->nodes[n].aux;
             if (a >= 2) fputs("&", self->out);
-            fprintf(self->out, "(struct %s_iface){ (void *)", g_nodes[n].text);
+            fprintf(self->out, "(struct %s_iface){ (void *)", self->arena->nodes[n].text);
             if (a == 1 || a == 3) {
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             } else {
                 fputs("&", self->out);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             }
-            fprintf(self->out, ", &%s_%s_vtable }", g_nodes[n].text2, g_nodes[n].text);
+            fprintf(self->out, ", &%s_%s_vtable }", self->arena->nodes[n].text2, self->arena->nodes[n].text);
             return 0;
         }
-        if (g_nodes[n].kind == N_MCALL) {
+        if (self->arena->nodes[n].kind == N_MCALL) {
             char tname[MAX_TEXT];
             char low[MAX_TEXT];
             int i, c2, rk;
-            if (g_nodes[n].a < 0) return self->fail("method call without a receiver");
-            rk = g_nodes[g_nodes[n].a].kind;
+            if (self->arena->nodes[n].a < 0) return self->fail("method call without a receiver");
+            rk = self->arena->nodes[self->arena->nodes[n].a].kind;
             if (rk != N_VAR && rk != N_INDEX && rk != N_CALL
                 && rk != N_MEMBER && rk != N_ARROW)
                 return self->fail("method receiver must be a variable, an element, a call or a field chain");
-            if (!g_nodes[n].text[0])
+            if (!self->arena->nodes[n].text[0])
                 return self->fail("cannot resolve the method trait (unknown receiver type)");
-            snprintf(tname, sizeof tname, "%s", g_nodes[n].text);
+            snprintf(tname, sizeof tname, "%s", self->arena->nodes[n].text);
             for (i = 0; tname[i] && i + 1 < MAX_TEXT; i++) {
                 char c = tname[i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;
             }
             low[i] = 0;
-            if (g_nodes[n].aux == 4) {
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-                fprintf(self->out, "->vt->%s(", g_nodes[n].text2);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            if (self->arena->nodes[n].aux == 4) {
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, "->vt->%s(", self->arena->nodes[n].text2);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs("->self", self->out);
-            } else if (g_nodes[n].aux == 3) {
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-                fprintf(self->out, ".vt->%s(", g_nodes[n].text2);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            } else if (self->arena->nodes[n].aux == 3) {
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, ".vt->%s(", self->arena->nodes[n].text2);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs(".self", self->out);
-            } else if (g_nodes[n].aux == 2) {
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-                fprintf(self->out, "->__%s_vptr->%s(", low, g_nodes[n].text2);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+            } else if (self->arena->nodes[n].aux == 2) {
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, "->__%s_vptr->%s(", low, self->arena->nodes[n].text2);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             } else {
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
-                fprintf(self->out, ".__%s_vptr->%s(&", low, g_nodes[n].text2);
-                if (self->emit_expr(g_nodes[n].a) != 0) return -1;
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, ".__%s_vptr->%s(&", low, self->arena->nodes[n].text2);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             }
-            c2 = g_nodes[n].b;
+            c2 = self->arena->nodes[n].b;
             while (c2 >= 0) {
                 fputs(", ", self->out);
                 if (self->emit_expr(c2) != 0) return -1;
-                c2 = g_nodes[c2].next;
+                c2 = self->arena->nodes[c2].next;
             }
             fputs(")", self->out);
             return 0;
         }
-        if (g_nodes[n].kind == N_CALL) {
-            if (g_nodes[n].text3[0] && n != self->raw_call) {
-                fputs(g_nodes[n].text3, self->out);
+        if (self->arena->nodes[n].kind == N_CALL) {
+            if (self->arena->nodes[n].text3[0] && n != self->raw_call) {
+                fputs(self->arena->nodes[n].text3, self->out);
                 return 0;
             }
-            fprintf(self->out, "%s(", g_nodes[n].text2);
-            c = g_nodes[n].a;
+            fprintf(self->out, "%s(", self->arena->nodes[n].text2);
+            c = self->arena->nodes[n].a;
             while (c >= 0) {
                 if (self->emit_expr(c) != 0) return -1;
-                c = g_nodes[c].next;
+                c = self->arena->nodes[c].next;
                 if (c >= 0) fputs(", ", self->out);
             }
             fputs(")", self->out);
@@ -5594,16 +5564,16 @@ impl EmitOps for Ast {
         fputs("\n", self->out);
         if (self->line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
-        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next)
-            if (g_nodes[n].kind == N_PP) fprintf(self->out, "%s\n", g_nodes[n].text);
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
 
         if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
         if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
 
-        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next) {
-            if ((g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
-                 || g_nodes[n].kind == N_GLOBAL) && g_nodes[n].d != 1) {
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
+                 || self->arena->nodes[n].kind == N_GLOBAL) && self->arena->nodes[n].d != 1) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }
@@ -5615,8 +5585,8 @@ impl EmitOps for Ast {
 
         if (self->emit_maps(u) != 0) return -1;
 
-        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next)
-            if (g_nodes[n].kind == N_FUNC && self->emit_node(n, 0) != 0) return -1;
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_FUNC && self->emit_node(n, 0) != 0) return -1;
 
         if (fclose(f) != 0) return self->fail("cannot write the output file");
         return 0;
@@ -5652,9 +5622,9 @@ impl EmitOps for Ast {
         if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
 
-        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next) {
-            if ((g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF)
-                && g_nodes[n].d == 1) {
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF)
+                && self->arena->nodes[n].d == 1) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }
@@ -5757,17 +5727,17 @@ impl EmitOps for Ast {
 
         fputs("  \"structs\": [", f);
         first = 1;
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
-            if (g_nodes[n].kind != N_STRUCT) continue;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_STRUCT) continue;
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, g_nodes[n].text2);
+            self->emit_json_str(f, self->arena->nodes[n].text2);
             fputs("\",\"cname\":\"", f);
-            self->emit_json_str(f, g_nodes[n].text2);
+            self->emit_json_str(f, self->arena->nodes[n].text2);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"uses\":[", g_nodes[n].line);
-            si = self->find_struct(g_nodes[n].text2);
+            fprintf(f, "\",\"line\":%d,\"uses\":[", self->arena->nodes[n].line);
+            si = self->find_struct(self->arena->nodes[n].text2);
             if (si >= 0) {
                 for (i = 0; i < self->structs[si].nuse; i++) {
                     if (i > 0) fputc(',', f);
@@ -5798,28 +5768,28 @@ impl EmitOps for Ast {
 
         fputs("  \"impls\": [", f);
         first = 1;
-        for (n = g_nodes[prog].a; n >= 0; n = g_nodes[n].next) {
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             const char *tname;
-            if (g_nodes[n].kind != N_IMPL) continue;
-            si = g_nodes[n].aux;
-            tname = g_nodes[n].text2;
-            for (m = g_nodes[n].a; m >= 0; m = g_nodes[m].next) {
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            si = self->arena->nodes[n].aux;
+            tname = self->arena->nodes[n].text2;
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 if (!first) fputc(',', f);
                 fputs("{\"struct\":\"", f);
                 self->emit_json_str(f, self->structs[si].name);
                 fputs("\",\"trait\":\"", f);
                 self->emit_json_str(f, tname);
                 fputs("\",\"method\":\"", f);
-                self->emit_json_str(f, g_nodes[m].text2);
+                self->emit_json_str(f, self->arena->nodes[m].text2);
                 fputs("\",\"symbol\":\"", f);
-                fprintf(f, "%s_%s_%s", self->structs[si].name, tname, g_nodes[m].text2);
+                fprintf(f, "%s_%s_%s", self->structs[si].name, tname, self->arena->nodes[m].text2);
                 fputs("\",\"ret\":\"", f);
-                self->emit_json_str(f, g_nodes[m].text);
+                self->emit_json_str(f, self->arena->nodes[m].text);
                 count = 0;
-                for (i = g_nodes[m].a; i > 0; i = g_nodes[i].next) count++;
+                for (i = self->arena->nodes[m].a; i > 0; i = self->arena->nodes[i].next) count++;
                 fprintf(f, "\",\"params\":%d,\"file\":\"", count);
                 self->emit_json_str(f, path);
-                fprintf(f, "\",\"line\":%d}", g_nodes[n].line);
+                fprintf(f, "\",\"line\":%d}", self->arena->nodes[n].line);
                 first = 0;
             }
         }
@@ -5959,16 +5929,16 @@ impl MemoryOps for Ast {
         int d;
         (void)self;
         d = n;
-        if (g_nodes[n].kind == N_DECLS) d = g_nodes[n].a;
+        if (self->arena->nodes[n].kind == N_DECLS) d = self->arena->nodes[n].a;
         while (d >= 0) {
             char base[MAX_TEXT];
             char msg[MAX_TEXT];
-            const char *tp = g_nodes[d].text;
+            const char *tp = self->arena->nodes[d].text;
             size_t bl;
             int si, vi;
-            if (g_nodes[d].text3[0] != 0)
+            if (self->arena->nodes[d].text3[0] != 0)
                 return ct_sem_error(line, 1, "'own' does not support arrays", self->path);
-            if (!self->expr_alloc(g_nodes[d].a))
+            if (!self->expr_alloc(self->arena->nodes[d].a))
                 return ct_sem_error(line, 1,
                                        "'own' requires a malloc or calloc initialiser", self->path);
             if (strncmp(tp, "struct ", 7) == 0) tp += 7;
@@ -5983,12 +5953,12 @@ impl MemoryOps for Ast {
                 snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Drop'", base);
                 return ct_sem_error(line, 1, msg, self->path);
             }
-            vi = self->find_var(g_nodes[d].text2);
+            vi = self->find_var(self->arena->nodes[d].text2);
             if (vi >= 0) self->vars[vi].autodrop = 1;
             if (self->nowner >= MAX_VARS) return self->fail("too many owned variables");
             self->own_decl[self->nowner] = d;
             self->nowner++;
-            d = g_nodes[d].next;
+            d = self->arena->nodes[d].next;
         }
         return 0;
     }
@@ -5999,9 +5969,9 @@ impl MemoryOps for Ast {
     {
         (void)self;
         if (e < 0) return 0;
-        if (g_nodes[e].kind != N_CALL) return 0;
-        if (strcmp(g_nodes[e].text2, "malloc") == 0) return 1;
-        if (strcmp(g_nodes[e].text2, "calloc") == 0) return 1;
+        if (self->arena->nodes[e].kind != N_CALL) return 0;
+        if (strcmp(self->arena->nodes[e].text2, "malloc") == 0) return 1;
+        if (strcmp(self->arena->nodes[e].text2, "calloc") == 0) return 1;
         return 0;
     }
 
@@ -6012,21 +5982,21 @@ impl MemoryOps for Ast {
         int p;
         (void)self;
         if (e < 0) return 0;
-        if (g_nodes[e].kind == N_VAR) return strcmp(g_nodes[e].text2, name) == 0;
-        if (g_nodes[e].kind == N_MEMBER || g_nodes[e].kind == N_ARROW) {
-            if (strcmp(g_nodes[e].text2, name) == 0) return 1;
-            return self->expr_mentions(g_nodes[e].a, name);
+        if (self->arena->nodes[e].kind == N_VAR) return strcmp(self->arena->nodes[e].text2, name) == 0;
+        if (self->arena->nodes[e].kind == N_MEMBER || self->arena->nodes[e].kind == N_ARROW) {
+            if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
+            return self->expr_mentions(self->arena->nodes[e].a, name);
         }
-        if (g_nodes[e].kind == N_CALL) {
-            if (strcmp(g_nodes[e].text2, name) == 0) return 1;
-            for (p = g_nodes[e].a; p >= 0; p = g_nodes[p].next)
+        if (self->arena->nodes[e].kind == N_CALL) {
+            if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
+            for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
                 if (self->expr_mentions(p, name)) return 1;
             return 0;
         }
-        if (self->expr_mentions(g_nodes[e].a, name)) return 1;
-        if (self->expr_mentions(g_nodes[e].b, name)) return 1;
-        if (self->expr_mentions(g_nodes[e].c, name)) return 1;
-        if (self->expr_mentions(g_nodes[e].d, name)) return 1;
+        if (self->expr_mentions(self->arena->nodes[e].a, name)) return 1;
+        if (self->expr_mentions(self->arena->nodes[e].b, name)) return 1;
+        if (self->expr_mentions(self->arena->nodes[e].c, name)) return 1;
+        if (self->expr_mentions(self->arena->nodes[e].d, name)) return 1;
         return 0;
     }
 
@@ -6038,18 +6008,18 @@ impl MemoryOps for Ast {
         int p;
         (void)self;
         if (e < 0) return 0;
-        if (g_nodes[e].kind == N_VAR) return strcmp(g_nodes[e].text2, name) == 0;
-        if (g_nodes[e].kind == N_MEMBER || g_nodes[e].kind == N_ARROW) return 0;
-        if (g_nodes[e].kind == N_INDEX) return self->expr_returns(g_nodes[e].a, name);
-        if (g_nodes[e].kind == N_CALL) {
-            for (p = g_nodes[e].a; p >= 0; p = g_nodes[p].next)
+        if (self->arena->nodes[e].kind == N_VAR) return strcmp(self->arena->nodes[e].text2, name) == 0;
+        if (self->arena->nodes[e].kind == N_MEMBER || self->arena->nodes[e].kind == N_ARROW) return 0;
+        if (self->arena->nodes[e].kind == N_INDEX) return self->expr_returns(self->arena->nodes[e].a, name);
+        if (self->arena->nodes[e].kind == N_CALL) {
+            for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
                 if (self->expr_returns(p, name)) return 1;
             return 0;
         }
-        if (self->expr_returns(g_nodes[e].a, name)) return 1;
-        if (self->expr_returns(g_nodes[e].b, name)) return 1;
-        if (self->expr_returns(g_nodes[e].c, name)) return 1;
-        if (self->expr_returns(g_nodes[e].d, name)) return 1;
+        if (self->expr_returns(self->arena->nodes[e].a, name)) return 1;
+        if (self->expr_returns(self->arena->nodes[e].b, name)) return 1;
+        if (self->expr_returns(self->arena->nodes[e].c, name)) return 1;
+        if (self->expr_returns(self->arena->nodes[e].d, name)) return 1;
         return 0;
     }
 
@@ -6082,7 +6052,7 @@ impl MemoryOps for Ast {
         int e, vi, i, si, heap, call_owned;
         (void)self;
 
-        e = g_nodes[n].a;
+        e = self->arena->nodes[n].a;
         if (e < 0) return 0;
         heap = self->expr_alloc(e);
         call_owned = 0;
@@ -6090,9 +6060,9 @@ impl MemoryOps for Ast {
         {
             char base[MAX_TEXT];
             char sname[MAX_TEXT];
-            const char *tp = g_nodes[n].text;
+            const char *tp = self->arena->nodes[n].text;
             size_t bl = strlen(tp);
-            if (bl > 0 && tp[bl - 1] == '*' && g_nodes[n].text3[0] == 0) {
+            if (bl > 0 && tp[bl - 1] == '*' && self->arena->nodes[n].text3[0] == 0) {
                 snprintf(base, sizeof base, "%s", tp);
                 bl = strlen(base);
                 while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
@@ -6104,19 +6074,19 @@ impl MemoryOps for Ast {
                 else
                     snprintf(sname, sizeof sname, "%s", base);
                 si = self->find_struct(sname);
-                if (!heap && si >= 0 && g_nodes[e].kind == N_CALL) {
-                    int fi = self->find_func(g_nodes[e].text2);
+                if (!heap && si >= 0 && self->arena->nodes[e].kind == N_CALL) {
+                    int fi = self->find_func(self->arena->nodes[e].text2);
                     if (fi >= 0 && self->funcs[fi].ret_owned)
                         call_owned = self->ret_same_struct(self->funcs[fi].ret, si);
                 }
             }
         }
-        vi = self->find_var(g_nodes[n].text2);
+        vi = self->find_var(self->arena->nodes[n].text2);
         if (vi >= 0 && si >= 0) {
             self->vars[vi].st = si;
             if (heap || call_owned) {
                 self->vars[vi].owned = 1;
-                self->vars[vi].own_line = g_nodes[n].line;
+                self->vars[vi].own_line = self->arena->nodes[n].line;
             }
         }
         for (i = 0; i < self->nvar; i++) {
@@ -6146,21 +6116,21 @@ impl MemoryOps for Ast {
     {
         int lhs, rhs, bv, i;
         (void)self;
-        lhs = g_nodes[n].a;
-        rhs = g_nodes[n].b;
+        lhs = self->arena->nodes[n].a;
+        rhs = self->arena->nodes[n].b;
         bv = -1;
         if (lhs >= 0) {
-            if (g_nodes[lhs].kind == N_VAR)
-                bv = self->find_var(g_nodes[lhs].text2);
-            else if (g_nodes[lhs].kind == N_MEMBER || g_nodes[lhs].kind == N_ARROW) {
-                int b = g_nodes[lhs].a;
-                if (b >= 0 && g_nodes[b].kind == N_VAR)
-                    bv = self->find_var(g_nodes[b].text2);
+            if (self->arena->nodes[lhs].kind == N_VAR)
+                bv = self->find_var(self->arena->nodes[lhs].text2);
+            else if (self->arena->nodes[lhs].kind == N_MEMBER || self->arena->nodes[lhs].kind == N_ARROW) {
+                int b = self->arena->nodes[lhs].a;
+                if (b >= 0 && self->arena->nodes[b].kind == N_VAR)
+                    bv = self->find_var(self->arena->nodes[b].text2);
             }
         }
         for (i = 0; i < self->nvar; i++) {
             if (i == bv) {
-                if (self->vars[i].autodrop && lhs >= 0 && g_nodes[lhs].kind == N_VAR)
+                if (self->vars[i].autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
                     self->vars[i].autodrop = 0;
                 continue;
             }
@@ -6209,8 +6179,8 @@ impl MemoryOps for Ast {
     {
         int vi;
         (void)self;
-        if (e < 0 || g_nodes[e].kind != N_VAR) return 0;
-        vi = self->find_var(g_nodes[e].text2);
+        if (e < 0 || self->arena->nodes[e].kind != N_VAR) return 0;
+        vi = self->find_var(self->arena->nodes[e].text2);
         if (vi < 0) return 0;
         self->vars[vi].owned = 0;
         self->vars[vi].autodrop = 0;
@@ -6389,6 +6359,9 @@ int main(int argc, char **argv)
     g_ast.prog = "ct-ast";
     g_ast.line_force = -1;
     g_ast.std_flag = "-std=c99";
+    /* the node and literal pools live in runtime::arena; point the object at its
+       singleton before anything can build a node */
+    g_ast.arena = arena_get();
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];

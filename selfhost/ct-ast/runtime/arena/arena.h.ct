@@ -1,0 +1,119 @@
+/*
+ * arena.h.ct - the node pool and the string-literal pool, one class of its own.
+ *
+ * Node storage and literal storage are the compiler's two big fixed arrays.
+ * They live here as an explicit `Arena` object so `main.ct` reaches them through
+ * a pointer instead of two file-scope globals, and the two capacity macros it
+ * used to carry stay with the arrays that consume them. Macros do not cross a
+ * unit boundary, so the array lengths are spelled out as the literals below;
+ * they must stay equal to the old values (65536 nodes, a 256 KiB string pool).
+ */
+namespace runtime::arena {
+/* The pool owns storage only: node kinds and the meaning of the child slots are
+   documented where the nodes are built (main.ct). The field layout matches the
+   `Node` shape the whole pipeline reads and writes. It is a plain `pub struct`
+   (no `use`) -- an exported value type the caller can read through the pointer,
+   not an object with behaviour. */
+pub struct Node {
+    int  kind;
+    int  a;
+    int  b;
+    int  c;
+    int  d;
+    int  next;
+    int  aux;
+    int  line;
+    long num;
+    char text[160];
+    char text2[160];
+    char text3[160];
+}
+
+pub trait ArenaOps {
+    int  alloc(int kind, int line);
+    int  str_begin(void);
+    int  str_put(int c);
+    void str_end(void);
+    const char *str_at(int off);
+    void reset(void);
+}
+
+pub struct Arena {
+    struct Node nodes[65536];
+    int  nnode;
+    char strpool[262144];
+    int  nstrpool;
+} use ArenaOps;
+
+pub struct Arena *arena_get(void);
+
+impl ArenaOps for Arena {
+    /* A fresh node with every child slot cleared. `text3` is left alone: the
+       parser writes it before the emitter ever reads it. Overflow stays a hard
+       error -- the caller turns -1 into a diagnostic. */
+    int alloc(int kind, int line)
+    {
+        int n;
+        if (self->nnode >= 65536) return -1;
+        n = self->nnode;
+        self->nnode++;
+        self->nodes[n].kind = kind;
+        self->nodes[n].a = -1;
+        self->nodes[n].b = -1;
+        self->nodes[n].c = -1;
+        self->nodes[n].d = -1;
+        self->nodes[n].next = -1;
+        self->nodes[n].aux = 0;
+        self->nodes[n].line = line;
+        self->nodes[n].num = 0;
+        self->nodes[n].text[0] = 0;
+        self->nodes[n].text2[0] = 0;
+        return n;
+    }
+
+    /* Literals are copied into a pool, not kept in `Node.text`: adjacent
+       literals join into one C string and easily exceed the 160-byte field.
+       `str_begin` marks the literal's start, `str_put` appends a byte and
+       `str_end` terminates it, keeping the NUL for good. */
+    int str_begin(void)
+    {
+        return self->nstrpool;
+    }
+
+    int str_put(int c)
+    {
+        if (self->nstrpool + 2 >= 262144) return -1;   /* room for this byte and the NUL */
+        self->strpool[self->nstrpool] = (char)c;
+        self->nstrpool++;
+        return 0;
+    }
+
+    void str_end(void)
+    {
+        self->strpool[self->nstrpool] = 0;
+        self->nstrpool++;
+    }
+
+    const char *str_at(int off)
+    {
+        return self->strpool + off;
+    }
+
+    /* Drop the nodes a previous unit used. The literal pool is *not* wound back:
+       old nodes keep their offsets, and new literals simply append after them,
+       which is what the compiler did when the pool was a file-scope array. */
+    void reset(void)
+    {
+        self->nnode = 0;
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Arena g_arena;
+
+struct Arena *arena_get(void)
+{
+    return &g_arena;
+}
+}
