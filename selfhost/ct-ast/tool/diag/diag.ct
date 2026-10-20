@@ -20,8 +20,9 @@
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
 
+namespace tool::diag {
 /* One collected warning (10.2 signature mismatch, 10.3 leak). */
-typedef struct Warn {
+struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path */
     int  line;
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
@@ -30,7 +31,7 @@ typedef struct Warn {
     char tname[MAX_TEXT]; /* leak: struct type; mismatch: trait */
     char stype[MAX_TEXT];
     char msg[MAX_TEXT];
-} Warn;
+}
 
 trait DiagStore {
     int  sem_error(int line, int col, const char *msg, const char *path);
@@ -45,7 +46,7 @@ trait DiagStore {
 }
 
 struct Diag {
-    Warn warns[MAX_WARNINGS];
+    struct Warn warns[MAX_WARNINGS];
     int  nwarns;
     int  nsem;
 } use DiagStore;
@@ -70,7 +71,7 @@ impl DiagStore for Diag {
     int record_sig_warn(int line, const char *method, const char *trait,
                         const char *stype, const char *msg, const char *path)
     {
-        Warn *w;
+        struct Warn *w;
         (void)self;
         if (self->nwarns >= MAX_WARNINGS) return -1;
         w = &self->warns[self->nwarns];
@@ -91,7 +92,7 @@ impl DiagStore for Diag {
     int record_leak(int kind, int line, int path_line, const char *file,
                     const char *var, const char *tname)
     {
-        Warn *w;
+        struct Warn *w;
         (void)self;
         if (self->nwarns >= MAX_WARNINGS) return -1;
         w = &self->warns[self->nwarns];
@@ -144,7 +145,7 @@ impl DiagStore for Diag {
         if (json) {
             fputs("{\"warnings\":[", jf);
             for (i = 0; i < self->nwarns; i++) {
-                Warn *w = &self->warns[i];
+                struct Warn *w = &self->warns[i];
                 if (i) fputc(',', jf);
                 if (w->kind == 1) {
                     fputs("{\"type\":\"signature_mismatch\",\"file\":\"", jf);
@@ -180,7 +181,7 @@ impl DiagStore for Diag {
             fputs("]}\n", jf);
         } else {
             for (i = 0; i < self->nwarns; i++) {
-                Warn *w = &self->warns[i];
+                struct Warn *w = &self->warns[i];
                 if (w->kind == 1)
                     fprintf(tf, "%s:%d: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
                             w->file, w->line, w->var, w->tname, w->stype, w->msg);
@@ -251,4 +252,5 @@ pub void ct_diag_reset(void);
 void ct_diag_reset(void)
 {
     g_diag.reset();
+}
 }

@@ -20,8 +20,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-import pkg;
-import diag;
+import tool::pkg::pkg;
+import tool::diag::diag;
 import runtime::arena::arena;
 
 #include <stdio.h>
