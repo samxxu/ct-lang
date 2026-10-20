@@ -1,0 +1,360 @@
+/*
+ * support.h.ct - the parser's shared primitives.
+ *
+ * Everything the parser and the build driver both rely on that only touches a
+ * collaborator: the token cursor helpers (`fail` / `lex_next` / `accept` /
+ * `expect` / `new_node`), the thin wrappers onto the symbol tables, the type
+ * layer and the memory pass, and the two error-recovery scans. It is its own
+ * unit so the parser proper holds nothing but parsing; `Parser` keeps a
+ * pointer to the single instance and calls it as `self->sup`.
+ *
+ * Macros do not cross a unit boundary, so the caps and token kinds used here
+ * are restated; they must stay equal to main.ct.
+ */
+#include <stdio.h>
+#include <string.h>
+
+import runtime::arena::arena;
+import frontend::lex::lexer;
+import frontend::sym::sym;
+import frontend::type::type;
+import backend::mem::mem;
+
+#define MAX_FUNCS 256
+#define MAX_PARAMS 16
+#define MAX_TEXT 160
+#define T_EOF 0
+#define T_PUNCT 4
+
+namespace frontend::parse {
+pub trait SupportOps {
+    int  fail(const char *msg);
+    void lex_next(void);
+    int  accept(const char *p);
+    int  expect(const char *p);
+    int  new_node(int kind);
+    int  push_scope(void);
+    int  pop_scope(void);
+    int  declare_var(const char *name, const char *type);
+    int  var_type(const char *name, char *out, int cap);
+    int  add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param);
+    int  add_type(const char *name, int kind);
+    int  add_struct(const char *name);
+    int  add_trait(const char *name);
+    int  method_trait(const char *stype, const char *method, char *tout, int tcap);
+    int  ns_decl_name(const char *name, char *out, int cap);
+    int  resolve_type(const char *name, char *out, int cap);
+    int  is_iface_type(const char *type, char *tout, int tcap);
+    int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
+    int  expr_type(int n, char *out, int cap);
+    int  maybe_box(int n, const char *trait, int addr);
+    int  rewrite_init_text(const char *stype, const char *raw, char *out, int cap);
+    int  mark_owned(int n, int line);
+    int  leak_decl(int n);
+    int  leak_scope(int from, int to);
+    int  leak_assign(int n);
+    int  leak_return(int ret, int conditional, int line);
+    int  leak_delete(int e);
+    int  skip_body(void);
+    int  skip_after_error(void);
+    const char *last_error(void);
+}
+
+pub struct ParseSupport {
+    struct runtime_arena_Arena *arena;
+    struct frontend_lex_Lexer *lex;
+    struct frontend_sym_Symbols *sym;
+    struct frontend_type_TypeCheck *ty;
+    struct backend_mem_Memory *mem;
+    char errmsg[160];
+} use SupportOps;
+
+pub struct ParseSupport *parse_support_get(void);
+
+impl SupportOps for ParseSupport {
+    int new_node(int kind)
+    {
+        int n = self->arena->alloc(kind, self->lex->tokline);
+        if (n < 0) return self->fail("too many AST nodes");
+        return n;
+    }
+
+    int fail(const char *msg)
+    {
+        (void)self;
+        /* the line and the offending token are the two things a self-hosting
+           run needs to locate a gap; diagnostics are not compared (D34) */
+        if (!self->errmsg[0])
+            snprintf(self->errmsg, sizeof self->errmsg, "line %d: %s (at '%s')", self->lex->tokline, msg, self->lex->toktext);
+        return -1;
+    }
+
+    void lex_next(void)
+    {
+        (void)self;
+        self->lex->next();
+    }
+
+    int accept(const char *p)
+    {
+        (void)self;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, p) == 0) {
+            self->lex_next();
+            return 1;
+        }
+        return 0;
+    }
+
+    int expect(const char *p)
+    {
+        (void)self;
+        if (self->accept(p)) return 0;
+        return self->fail("unexpected token");
+    }
+
+    int push_scope(void)
+    {
+        if (self->sym->push_scope() != 0) return self->fail(self->sym->last_error());
+        self->mem->own_base[self->sym->nscope - 1] = self->mem->nowner;
+        return 0;
+    }
+
+    int pop_scope(void)
+    {
+        if (self->sym->pop_scope() != 0) return self->fail(self->sym->last_error());
+        self->mem->nowner = self->mem->own_base[self->sym->nscope];
+        return 0;
+    }
+
+    int declare_var(const char *name, const char *type)
+    {
+        if (self->sym->declare_var(name, type) != 0)
+            return self->fail(self->sym->last_error());
+        return 0;
+    }
+
+    int var_type(const char *name, char *out, int cap)
+    {
+        const char *why;
+        self->sym->errmsg[0] = 0;
+        if (self->sym->var_type(name, out, (int)cap) != 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
+    {
+        int i, k, p;
+
+        i = self->sym->find_func(name);
+        if (i < 0) {
+            if (self->sym->nfunc >= MAX_FUNCS) return self->fail("too many functions");
+            i = self->sym->nfunc;
+            self->sym->nfunc++;
+            snprintf(self->sym->funcs[i].name, MAX_TEXT, "%s", name);
+            self->sym->funcs[i].is_pub = 0;
+            self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
+        }
+        if (is_pub) self->sym->funcs[i].is_pub = 1;
+        snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
+        self->sym->funcs[i].is_static = is_static;
+        self->sym->funcs[i].nparams = 0;
+        p = first_param;
+        k = 0;
+        while (p > 0 && k < MAX_PARAMS) {
+            snprintf(self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
+            snprintf(self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
+            k++;
+            p = self->arena->nodes[p].next;
+        }
+        if (k >= MAX_PARAMS && p > 0) return self->fail("too many parameters");
+        self->sym->funcs[i].nparams = k;
+        return i;
+    }
+
+    int add_type(const char *name, int kind)
+    {
+        if (self->sym->add_type(name, kind) != 0)
+            return self->fail(self->sym->last_error());
+        return 0;
+    }
+
+    int add_struct(const char *name)
+    {
+        const char *why;
+        int i;
+        self->sym->errmsg[0] = 0;
+        i = self->sym->add_struct(name);
+        if (i < 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return i;
+    }
+
+    int add_trait(const char *name)
+    {
+        int i = self->sym->add_trait(name);
+        if (i < 0) return self->fail(self->sym->last_error());
+        return i;
+    }
+
+    int method_trait(const char *stype, const char *method, char *tout, int tcap)
+    {
+        const char *why;
+        self->sym->errmsg[0] = 0;
+        if (self->sym->method_trait(stype, method, tout, (int)tcap) != 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int ns_decl_name(const char *name, char *out, int cap)
+    {
+        if (self->sym->ns_decl_name(name, out, (int)cap) != 0)
+            return self->fail(self->sym->last_error());
+        return 0;
+    }
+
+    int resolve_type(const char *name, char *out, int cap)
+    {
+        if (self->sym->resolve_type(name, out, (int)cap) != 0)
+            return self->fail(self->sym->last_error());
+        return 0;
+    }
+
+    int is_iface_type(const char *type, char *tout, int tcap)
+    {
+        return self->ty->is_iface_type(type, tout, (int)tcap);
+    }
+
+    int iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr)
+    {
+        return self->ty->iface_ref_type(type, tout, (int)tcap, is_ptr);
+    }
+
+    int expr_type(int n, char *out, int cap)
+    {
+        return self->ty->expr_type(n, out, (int)cap);
+    }
+
+    int maybe_box(int n, const char *trait, int addr)
+    {
+        const char *why;
+        int box;
+        self->ty->errmsg[0] = 0;
+        box = self->ty->maybe_box(n, trait, addr);
+        if (box < 0) {
+            why = self->ty->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return box;
+    }
+
+    int rewrite_init_text(const char *stype, const char *raw, char *out, int cap)
+    {
+        const char *why;
+        self->ty->errmsg[0] = 0;
+        if (self->ty->rewrite_init_text(stype, raw, out, (int)cap) != 0) {
+            why = self->ty->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int skip_body(void)
+    {
+        int depth;
+        (void)self;
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "{") != 0)
+            return self->fail("expected '{'");
+        depth = 0;
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                depth++;
+            } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0) {
+                depth--;
+                if (depth == 0) {
+                    self->lex_next();
+                    return 0;
+                }
+            }
+            self->lex_next();
+        }
+        return self->fail("unterminated body");
+    }
+
+    int skip_after_error(void)
+    {
+        (void)self;
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0) {
+                self->lex_next();
+                return 0;
+            }
+            self->lex_next();
+            if (self->lex->bol) return 0;
+        }
+        return 0;
+    }
+
+    int mark_owned(int n, int line)
+    {
+        if (self->mem->mark_owned(n, line) != 0)
+            return self->fail(self->mem->last_error());
+        return 0;
+    }
+
+    int leak_decl(int n)
+    {
+        return self->mem->leak_decl(n);
+    }
+
+    int leak_scope(int from, int to)
+    {
+        if (self->mem->leak_scope(from, to) != 0)
+            return self->fail(self->mem->last_error());
+        return 0;
+    }
+
+    int leak_assign(int n)
+    {
+        return self->mem->leak_assign(n);
+    }
+
+    int leak_return(int ret, int conditional, int line)
+    {
+        if (self->mem->leak_return(ret, conditional, line) != 0)
+            return self->fail(self->mem->last_error());
+        return 0;
+    }
+
+    int leak_delete(int e)
+    {
+        return self->mem->leak_delete(e);
+    }
+
+    const char *last_error(void)
+    {
+        (void)self;
+        return self->errmsg;
+    }
+}
+
+/* The instance lives after the impl: its vptr initialisers need the vtable
+   the emitter places with the impl. */
+static struct ParseSupport g_support;
+
+struct ParseSupport *parse_support_get(void)
+{
+    return &g_support;
+}
+}
