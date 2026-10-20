@@ -271,7 +271,6 @@ typedef struct Map {
 
 static Node g_nodes[MAX_NODES];
 static int  g_nnode;
-static int  g_nparams;
 
 /* String literals live in a pool, not in Node.text: adjacent literals join into
    one C string and easily exceed MAX_TEXT. Node.num holds the pool offset. */
@@ -279,17 +278,9 @@ static int  g_nparams;
 static char g_strpool[MAX_STRPOOL];
 static int  g_nstrpool;
 
-/* fields of an untagged `typedef struct { ... }`, parked until the alias exists */
-static Field g_pend_fields[MAX_FIELDS];
-static int   g_npend;
-
 /* An rvalue receiver (`f().m()`) is hoisted into a temp so the call is
    evaluated once; the declarations are flushed before the statement. */
 #define MAX_HOISTS 4
-static int g_hoist_calls[MAX_HOISTS];
-static int g_nhoist;
-static int g_ntmp;
-static int g_raw_call;                /* emit this call, not its temp name */
 
 /* The entry name and the run options live on the `Ast` object now; see the
    fields below. `main` seeds the defaults before dispatching. */
@@ -543,6 +534,15 @@ struct Ast {
     const char *prog;
     int  diag_json;             /* --diagnostics=json */
     const char *std_flag;       /* --std=c99 | --std=gnu99 */
+    /* Emission scratch: hoisted rvalue temporaries (MAX_HOISTS) and the fields
+       of an untagged `typedef struct { ... }` parked until the alias exists. */
+    int  nparams;
+    Field pend_fields[MAX_FIELDS];
+    int  npend;
+    int  hoist_calls[MAX_HOISTS];
+    int  nhoist;
+    int  ntmp;
+    int  raw_call;              /* emit this call, not its temp name */
     /* AutoDrop: where each scope's `own` declarations start */
     int own_decl[MAX_VARS];
     int nowner;
@@ -952,7 +952,7 @@ impl AstOps for Ast {
         self->ntraits = 0;
         self->nstructs = 0;
         self->self_mode = 0;
-        g_nparams = 0;
+        self->nparams = 0;
         self->ncalls = 0;
         self->cur_func[0] = 0;
         self->errmsg[0] = 0;
@@ -1558,7 +1558,7 @@ impl ParseOps for Ast {
         char name[MAX_TEXT];
         (void)self;
 
-        g_nparams = 0;
+        self->nparams = 0;
         first = 0;
         tail = 0;
         if (self->expect("(") != 0) return -1;
@@ -1589,7 +1589,7 @@ impl ParseOps for Ast {
             if (tail == 0) first = p;
             else g_nodes[tail].next = p;
             tail = p;
-            g_nparams++;
+            self->nparams++;
             if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
                 self->lex_next();
                 continue;
@@ -1666,7 +1666,7 @@ impl ParseOps for Ast {
         g_nodes[s].line = struct_line;
         snprintf(g_nodes[s].text2, MAX_TEXT, "%s", qname);
         tail = -1;
-        g_npend = 0;
+        self->npend = 0;
         while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
             m = self->parse_field_def();
             if (m < 0) return -1;
@@ -1684,11 +1684,11 @@ impl ParseOps for Ast {
                              "%s", g_nodes[m].text3);
                     self->structs[si2].nfields++;
                 }
-            } else if (g_npend < MAX_FIELDS) {
-                snprintf(g_pend_fields[g_npend].name, MAX_TEXT, "%s", g_nodes[m].text2);
-                snprintf(g_pend_fields[g_npend].type, MAX_TEXT, "%s", g_nodes[m].text);
-                snprintf(g_pend_fields[g_npend].dims, MAX_TEXT, "%s", g_nodes[m].text3);
-                g_npend++;
+            } else if (self->npend < MAX_FIELDS) {
+                snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", g_nodes[m].text2);
+                snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", g_nodes[m].text);
+                snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", g_nodes[m].text3);
+                self->npend++;
             }
             if (tail < 0) g_nodes[s].a = m;
             else g_nodes[tail].next = m;
@@ -1772,14 +1772,14 @@ impl ParseOps for Ast {
                     }
                 } else if (ai >= 0 && !g_nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
-                    self->structs[ai].nfields = g_npend;
-                    for (ui = 0; ui < g_npend; ui++) {
+                    self->structs[ai].nfields = self->npend;
+                    for (ui = 0; ui < self->npend; ui++) {
                         snprintf(self->structs[ai].fields[ui].name, MAX_TEXT, "%s",
-                                 g_pend_fields[ui].name);
+                                 self->pend_fields[ui].name);
                         snprintf(self->structs[ai].fields[ui].type, MAX_TEXT, "%s",
-                                 g_pend_fields[ui].type);
+                                 self->pend_fields[ui].type);
                         snprintf(self->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
-                                 g_pend_fields[ui].dims);
+                                 self->pend_fields[ui].dims);
                     }
                 }
             }
@@ -3635,7 +3635,7 @@ impl ModuleOps for Ast {
         self->self_mode = 0;
         self->ret_type[0] = 0;
         self->cur_func[0] = 0;
-        g_nparams = 0;
+        self->nparams = 0;
         self->path = path;
         self->units[u].fn_start = self->nfunc;
         self->units[u].tr_start = self->ntraits;
@@ -4270,7 +4270,7 @@ impl ModuleOps for Ast {
         self->ntraits = 0;
         self->nstructs = 0;
         self->nrels = 0;
-        g_nparams = 0;
+        self->nparams = 0;
         self->self_mode = 0;
         self->ret_type[0] = 0;
         self->ns[0] = 0;
@@ -4378,7 +4378,7 @@ impl EmitOps for Ast {
     {
         int saved;
         (void)self;
-        g_nhoist = 0;
+        self->nhoist = 0;
         saved = g_nodes[n].next;
         g_nodes[n].next = -1;
         if (self->hoist_scan(n) != 0) {
@@ -4406,12 +4406,12 @@ impl EmitOps for Ast {
             if (root >= 0 && g_nodes[root].kind == N_CALL
                 && !g_nodes[root].text3[0]
                 && self->find_func(g_nodes[root].text2) >= 0) {
-                if (g_nhoist >= MAX_HOISTS)
+                if (self->nhoist >= MAX_HOISTS)
                     return self->fail("too many hoisted receivers in one statement");
-                snprintf(g_nodes[root].text3, MAX_TEXT, "__ct_tmp%d", g_ntmp);
-                g_ntmp++;
-                g_hoist_calls[g_nhoist] = root;
-                g_nhoist++;
+                snprintf(g_nodes[root].text3, MAX_TEXT, "__ct_tmp%d", self->ntmp);
+                self->ntmp++;
+                self->hoist_calls[self->nhoist] = root;
+                self->nhoist++;
             }
         }
         if (g_nodes[n].a >= 0 && self->hoist_scan(g_nodes[n].a) != 0) return -1;
@@ -4427,20 +4427,20 @@ impl EmitOps for Ast {
         int i, f;
         (void)self;
 
-        for (i = 0; i < g_nhoist; i++) {
-            f = self->find_func(g_nodes[g_hoist_calls[i]].text2);
+        for (i = 0; i < self->nhoist; i++) {
+            f = self->find_func(g_nodes[self->hoist_calls[i]].text2);
             if (f < 0) return self->fail("cannot infer the type of a hoisted receiver");
             self->emit_indent(ind);
-            fprintf(self->out, "%s %s = ", self->funcs[f].ret, g_nodes[g_hoist_calls[i]].text3);
-            g_raw_call = g_hoist_calls[i];
-            if (self->emit_expr(g_hoist_calls[i]) != 0) {
-                g_raw_call = -1;
+            fprintf(self->out, "%s %s = ", self->funcs[f].ret, g_nodes[self->hoist_calls[i]].text3);
+            self->raw_call = self->hoist_calls[i];
+            if (self->emit_expr(self->hoist_calls[i]) != 0) {
+                self->raw_call = -1;
                 return -1;
             }
-            g_raw_call = -1;
+            self->raw_call = -1;
             fputs(";\n", self->out);
         }
-        g_nhoist = 0;
+        self->nhoist = 0;
         return 0;
     }
 
@@ -5524,7 +5524,7 @@ impl EmitOps for Ast {
             return 0;
         }
         if (g_nodes[n].kind == N_CALL) {
-            if (g_nodes[n].text3[0] && n != g_raw_call) {
+            if (g_nodes[n].text3[0] && n != self->raw_call) {
                 fputs(g_nodes[n].text3, self->out);
                 return 0;
             }
