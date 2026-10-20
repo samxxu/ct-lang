@@ -291,22 +291,6 @@ static int g_nhoist;
 static int g_ntmp;
 static int g_raw_call;                /* emit this call, not its temp name */
 
-static Unit g_units[MAX_UNITS];
-static int  g_nunits;
-static int  g_build_mode;
-static char g_ns[MAX_TEXT];           /* current namespace prefix, e.g. "hal_" */
-static char g_ns_decl[MAX_TEXT];      /* namespace path declared by the current unit */
-static char g_outdir[MAX_PATH];
-static const char *g_incdirs[MAX_INCDIRS];
-static int  g_ninc;
-static const char *g_nsroot;
-static char g_rels[MAX_IMPORTS][MAX_TEXT];  /* import paths seen by the scanner */
-static int  g_nrels;
-static Call g_calls[MAX_CALLS];
-static int  g_ncalls;
-static Map g_maps[MAX_MAPS];
-static int g_nmaps;
-static char g_cur_func[MAX_TEXT];     /* caller recorded for the map */
 static int  g_line_mode;              /* emit `#line`: 0 off, 1 on */
 static int  g_line_force = -1;        /* -1 mode default, 0 --no-line, 1 --line */
 static char g_map_path[MAX_PATH];
@@ -538,6 +522,25 @@ struct Ast {
     int  nstructs;
     int  self_mode;             /* inside an impl body: `self` -> `_self` */
     char ret_type[MAX_TEXT];    /* return type of the function being parsed */
+    /* Build mode: the unit table, the import search roots and the current
+       namespace prefix, plus the calls and maps collected for the JSON map.
+       The driver fills these before a build and reads them while emitting. */
+    Unit units[MAX_UNITS];
+    int  nunits;
+    int  build_mode;
+    char ns[MAX_TEXT];          /* current namespace prefix, e.g. "hal_" */
+    char ns_decl[MAX_TEXT];     /* namespace path declared by the current unit */
+    char outdir[MAX_PATH];
+    const char *incdirs[MAX_INCDIRS];
+    int  ninc;
+    const char *nsroot;
+    char rels[MAX_IMPORTS][MAX_TEXT];  /* import paths seen by the scanner */
+    int  nrels;
+    Call calls[MAX_CALLS];
+    int  ncalls;
+    Map  maps[MAX_MAPS];
+    int  nmaps;
+    char cur_func[MAX_TEXT];    /* caller recorded for the map */
     /* AutoDrop: where each scope's `own` declarations start */
     int own_decl[MAX_VARS];
     int nowner;
@@ -822,7 +825,7 @@ impl AstOps for Ast {
         out = NULL;
         if (argc > 1 && strcmp(argv[1], "build") == 0)
             return self->build_main(argc - 1, argv + 1);
-        g_build_mode = 0;
+        self->build_mode = 0;
         g_line_mode = 0;
         g_line_force = -1;
         g_have_map = 0;
@@ -948,8 +951,8 @@ impl AstOps for Ast {
         self->nstructs = 0;
         self->self_mode = 0;
         g_nparams = 0;
-        g_ncalls = 0;
-        g_cur_func[0] = 0;
+        self->ncalls = 0;
+        self->cur_func[0] = 0;
         self->errmsg[0] = 0;
         if (self->read_file(in) != 0) {
             fprintf(stderr, "ctc: %s\n", self->errmsg);
@@ -1209,7 +1212,7 @@ impl SymOps for Ast {
     int ns_decl_name(const char *name, char *out, size_t cap)
     {
         (void)self;
-        if (snprintf(out, cap, "%s%s", g_ns, name) >= (int)cap)
+        if (snprintf(out, cap, "%s%s", self->ns, name) >= (int)cap)
             return self->fail("name is too long");
         return 0;
     }
@@ -1220,8 +1223,8 @@ impl SymOps for Ast {
         char qname[MAX_TEXT];
         (void)self;
 
-        if (g_ns[0]) {
-            if (snprintf(qname, sizeof qname, "%s%s", g_ns, name) >= (int)sizeof qname)
+        if (self->ns[0]) {
+            if (snprintf(qname, sizeof qname, "%s%s", self->ns, name) >= (int)sizeof qname)
                 return self->fail("name is too long");
             if (self->find_type(qname) >= 0 || self->find_trait(qname) >= 0
                 || self->find_struct(qname) >= 0) {
@@ -1239,12 +1242,12 @@ impl SymOps for Ast {
     int record_call(const char *callee, int line)
     {
         (void)self;
-        if (!g_cur_func[0]) return 0;
-        if (g_ncalls >= MAX_CALLS) return self->fail("too many calls");
-        snprintf(g_calls[g_ncalls].caller, MAX_TEXT, "%s", g_cur_func);
-        snprintf(g_calls[g_ncalls].callee, MAX_TEXT, "%s", callee);
-        g_calls[g_ncalls].line = line;
-        g_ncalls++;
+        if (!self->cur_func[0]) return 0;
+        if (self->ncalls >= MAX_CALLS) return self->fail("too many calls");
+        snprintf(self->calls[self->ncalls].caller, MAX_TEXT, "%s", self->cur_func);
+        snprintf(self->calls[self->ncalls].callee, MAX_TEXT, "%s", callee);
+        self->calls[self->ncalls].line = line;
+        self->ncalls++;
         return 0;
     }
 }
@@ -1420,7 +1423,7 @@ impl ParseOps for Ast {
                 continue;
             }
             if (self->tok == T_ID && strcmp(self->toktext, "import") == 0) {
-                if (!g_build_mode)
+                if (!self->build_mode)
                     return self->fail("'import' is not supported in compile mode");
                 if (self->skip_import() != 0) return -1;
                 continue;
@@ -1507,7 +1510,7 @@ impl ParseOps for Ast {
             return NO_NODE;
         }
         snprintf(self->ret_type, sizeof self->ret_type, "%s", ret);
-        snprintf(g_cur_func, sizeof g_cur_func, "%s", name);
+        snprintf(self->cur_func, sizeof self->cur_func, "%s", name);
         /* the body is the leak analysis window; its own scope is the frame a
            deeper return counts as conditional against */
         self->leak_active = 1;
@@ -1517,7 +1520,7 @@ impl ParseOps for Ast {
         b = self->parse_block();
         self->leak_active = 0;
         self->leak_frame = -1;
-        g_cur_func[0] = 0;
+        self->cur_func[0] = 0;
         self->ret_type[0] = 0;
         if (b < 0) {
             self->pop_scope();
@@ -2014,7 +2017,7 @@ impl ParseOps for Ast {
                 }
             }
             snprintf(self->ret_type, sizeof self->ret_type, "%s", ret);
-            snprintf(g_cur_func, sizeof g_cur_func, "%s_%s_%s",
+            snprintf(self->cur_func, sizeof self->cur_func, "%s_%s_%s",
                      self->structs[si].name, rtrait, mname);
             /* the method body tracks leaks too; a method symbol is not in the
                function table, so nothing feeds `ret_owned` back to callers */
@@ -2025,7 +2028,7 @@ impl ParseOps for Ast {
             self->leak_active = 0;
             self->leak_frame = -1;
             self->leak_impl = 0;
-            g_cur_func[0] = 0;
+            self->cur_func[0] = 0;
             self->ret_type[0] = 0;
             if (body < 0) {
                 self->pop_scope();
@@ -3189,8 +3192,8 @@ impl TypeOps for Ast {
             mptr = 1;
         }
         if (iname[0]) {
-            for (i = 0; i < g_nmaps; i++)
-                if (strcmp(g_maps[i].inst, iname) == 0 && strcmp(g_maps[i].trait, trait) == 0) {
+            for (i = 0; i < self->nmaps; i++)
+                if (strcmp(self->maps[i].inst, iname) == 0 && strcmp(self->maps[i].trait, trait) == 0) {
                     box = self->new_node(N_BOX);
                     if (box < 0) return -1;
                     g_nodes[box].a = n;
@@ -3497,9 +3500,9 @@ impl ModuleOps for Ast {
             break;
         }
         if (self->expect(";") != 0) return -1;
-        if (g_nrels >= MAX_IMPORTS) return self->fail("too many imports");
-        snprintf(g_rels[g_nrels], MAX_TEXT, "%s", rel);
-        g_nrels++;
+        if (self->nrels >= MAX_IMPORTS) return self->fail("too many imports");
+        snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
+        self->nrels++;
         return 0;
     }
 
@@ -3508,7 +3511,7 @@ impl ModuleOps for Ast {
     int scan_imports(const char *from)
     {
         (void)self;
-        g_nrels = 0;
+        self->nrels = 0;
         self->path = from;
         self->pos = 0;
         self->bol = 1;
@@ -3540,8 +3543,8 @@ impl ModuleOps for Ast {
         (void)self;
 
         if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
-        for (r = -1; r < g_ninc; r++) {
-            root = (r < 0) ? dir : g_incdirs[r];
+        for (r = -1; r < self->ninc; r++) {
+            root = (r < 0) ? dir : self->incdirs[r];
             if (snprintf(cand, sizeof cand, "%s/%s.ct", root, rel) >= (int)sizeof cand)
                 return self->fail("import path is too long");
             f = fopen(cand, "rb");
@@ -3575,41 +3578,41 @@ impl ModuleOps for Ast {
         int u, i, d, nrels, is_hdr;
         (void)self;
 
-        for (u = 0; u < g_nunits; u++)
-            if (strcmp(g_units[u].path, path) == 0) return u;
-        if (g_nunits >= MAX_UNITS) {
+        for (u = 0; u < self->nunits; u++)
+            if (strcmp(self->units[u].path, path) == 0) return u;
+        if (self->nunits >= MAX_UNITS) {
             self->fail("too many units");
             return -1;
         }
-        u = g_nunits;
-        g_nunits++;
-        if (snprintf(g_units[u].path, MAX_PATH, "%s", path) >= MAX_PATH) {
+        u = self->nunits;
+        self->nunits++;
+        if (snprintf(self->units[u].path, MAX_PATH, "%s", path) >= MAX_PATH) {
             self->fail("path is too long");
             return -1;
         }
-        g_units[u].ndep = 0;
-        g_units[u].prog = -1;
-        g_units[u].digest = 0;
-        g_units[u].ns[0] = 0;
-        if (self->base_name(path, g_units[u].base, MAX_TEXT, &is_hdr) != 0) return -1;
-        g_units[u].is_hdr = is_hdr;
+        self->units[u].ndep = 0;
+        self->units[u].prog = -1;
+        self->units[u].digest = 0;
+        self->units[u].ns[0] = 0;
+        if (self->base_name(path, self->units[u].base, MAX_TEXT, &is_hdr) != 0) return -1;
+        self->units[u].is_hdr = is_hdr;
 
         if (self->read_file(path) != 0) return -1;
         mysrc = (char *)self->src;
         if (self->scan_imports(path) != 0) return -1;
-        nrels = g_nrels;
-        for (i = 0; i < nrels; i++) snprintf(rels[i], MAX_TEXT, "%s", g_rels[i]);
+        nrels = self->nrels;
+        for (i = 0; i < nrels; i++) snprintf(rels[i], MAX_TEXT, "%s", self->rels[i]);
         for (i = 0; i < nrels; i++) {
             if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr) != 0) return -1;
             d = self->load_unit(dep);
             if (d < 0) return -1;
-            if (g_units[u].ndep >= MAX_IMPORTS) {
+            if (self->units[u].ndep >= MAX_IMPORTS) {
                 self->fail("too many imports");
                 return -1;
             }
-            snprintf(g_units[u].dep[g_units[u].ndep], MAX_TEXT, "%s", g_units[d].base);
-            g_units[u].depu[g_units[u].ndep] = d;
-            g_units[u].ndep++;
+            snprintf(self->units[u].dep[self->units[u].ndep], MAX_TEXT, "%s", self->units[d].base);
+            self->units[u].depu[self->units[u].ndep] = d;
+            self->units[u].ndep++;
         }
 
         self->src = mysrc;
@@ -3625,22 +3628,22 @@ impl ModuleOps for Ast {
         self->leak_frame = -1;
         self->leak_impl = 0;
         self->ret_owned = 0;
-        g_ns[0] = 0;
-        g_ns_decl[0] = 0;
+        self->ns[0] = 0;
+        self->ns_decl[0] = 0;
         self->self_mode = 0;
         self->ret_type[0] = 0;
-        g_cur_func[0] = 0;
+        self->cur_func[0] = 0;
         g_nparams = 0;
         self->path = path;
-        g_units[u].fn_start = self->nfunc;
-        g_units[u].tr_start = self->ntraits;
-        g_units[u].call_start = g_ncalls;
-        g_units[u].prog = self->parse_program();
-        if (g_units[u].prog < 0) return -1;
-        g_units[u].fn_end = self->nfunc;
-        g_units[u].tr_end = self->ntraits;
-        g_units[u].call_end = g_ncalls;
-        snprintf(g_units[u].ns, MAX_TEXT, "%s", g_ns_decl);
+        self->units[u].fn_start = self->nfunc;
+        self->units[u].tr_start = self->ntraits;
+        self->units[u].call_start = self->ncalls;
+        self->units[u].prog = self->parse_program();
+        if (self->units[u].prog < 0) return -1;
+        self->units[u].fn_end = self->nfunc;
+        self->units[u].tr_end = self->ntraits;
+        self->units[u].call_end = self->ncalls;
+        snprintf(self->units[u].ns, MAX_TEXT, "%s", self->ns_decl);
         return u;
     }
 
@@ -3655,11 +3658,11 @@ impl ModuleOps for Ast {
         size_t rn, k, m;
 
         (void)self;
-        if (!g_units[u].ns[0]) return 0;
-        if (!g_nsroot || !g_nsroot[0]) return 0;
-        rn = strlen(g_nsroot);
-        if (strncmp(g_units[u].path, g_nsroot, rn) != 0) return 0;
-        p = g_units[u].path + rn;
+        if (!self->units[u].ns[0]) return 0;
+        if (!self->nsroot || !self->nsroot[0]) return 0;
+        rn = strlen(self->nsroot);
+        if (strncmp(self->units[u].path, self->nsroot, rn) != 0) return 0;
+        p = self->units[u].path + rn;
         if (*p == '/') p++;
         snprintf(rest, sizeof rest, "%s", p);
         if (strncmp(rest, "./", 2) == 0 || strncmp(rest, "../", 3) == 0
@@ -3672,14 +3675,14 @@ impl ModuleOps for Ast {
         snprintf(dir, sizeof dir, "%.*s", (int)k, rest);
 
         m = 0;
-        for (k = 0; g_units[u].ns[k]; k++) {
+        for (k = 0; self->units[u].ns[k]; k++) {
             if (m + 1 >= sizeof want) return self->fail("namespace is too long");
-            if (g_units[u].ns[k] == ':' && g_units[u].ns[k + 1] == ':') {
+            if (self->units[u].ns[k] == ':' && self->units[u].ns[k + 1] == ':') {
                 want[m] = '/';
                 m++;
                 k++;
             } else {
-                want[m] = g_units[u].ns[k];
+                want[m] = self->units[u].ns[k];
                 m++;
             }
         }
@@ -3687,7 +3690,7 @@ impl ModuleOps for Ast {
         if (strcmp(dir, want) != 0) {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "namespace '%s' does not match the directory '%s'",
-                     g_units[u].ns, dir);
+                     self->units[u].ns, dir);
             return self->fail(msg);
         }
         return 0;
@@ -3800,10 +3803,10 @@ impl ModuleOps for Ast {
             }
             break;
         }
-        if (!g_ns[0]) snprintf(g_ns_decl, MAX_TEXT, "%s", path);
+        if (!self->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
         if (self->expect("{") != 0) return -1;
-        snprintf(save, sizeof save, "%s", g_ns);
-        if (snprintf(g_ns, sizeof g_ns, "%s%s", save, prefix) >= (int)sizeof g_ns)
+        snprintf(save, sizeof save, "%s", self->ns);
+        if (snprintf(self->ns, sizeof self->ns, "%s%s", save, prefix) >= (int)sizeof self->ns)
             return self->fail("namespace is too long");
         while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
             if (self->tok == T_PP) {
@@ -3820,7 +3823,7 @@ impl ModuleOps for Ast {
             if (self->append_node(prog, n) != 0) return -1;
         }
         if (self->expect("}") != 0) return -1;
-        snprintf(g_ns, sizeof g_ns, "%s", save);
+        snprintf(self->ns, sizeof self->ns, "%s", save);
         return 0;
     }
 
@@ -3864,14 +3867,14 @@ impl ModuleOps for Ast {
         }
         self->lex_next();
         if (self->expect("{") != 0) return -1;
-        if (g_nmaps >= MAX_MAPS) return self->fail("too many maps");
-        m = &g_maps[g_nmaps];
+        if (self->nmaps >= MAX_MAPS) return self->fail("too many maps");
+        m = &self->maps[self->nmaps];
         snprintf(m->trait, MAX_TEXT, "%s", rtrait);
         snprintf(m->inst, MAX_TEXT, "%s", inst);
         snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", inst, rtrait);
         m->nb = 0;
         m->line = line;
-        m->unit = g_nunits - 1;
+        m->unit = self->nunits - 1;
 
         while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
             if (m->nb >= MAX_METHODS) return self->fail("too many map bindings");
@@ -3982,7 +3985,7 @@ impl ModuleOps for Ast {
                 return self->fail(msg);
             }
         }
-        g_nmaps++;
+        self->nmaps++;
         return NO_NODE;
     }
 
@@ -4122,8 +4125,8 @@ impl ModuleOps for Ast {
 
         ninput = 0;
         outdir = NULL;
-        g_ninc = 0;
-        g_nsroot = NULL;
+        self->ninc = 0;
+        self->nsroot = NULL;
         g_line_mode = 1;
         g_line_force = -1;
         g_have_map = 0;
@@ -4203,12 +4206,12 @@ impl ModuleOps for Ast {
                     return 1;
                 }
                 i++;
-                if (g_ninc >= MAX_INCDIRS) {
+                if (self->ninc >= MAX_INCDIRS) {
                     fprintf(stderr, "ctc: too many -I roots\n");
                     return 1;
                 }
-                g_incdirs[g_ninc] = argv[i];
-                g_ninc++;
+                self->incdirs[self->ninc] = argv[i];
+                self->ninc++;
                 continue;
             }
             if (strcmp(argv[i], "--ns-root") == 0) {
@@ -4217,7 +4220,7 @@ impl ModuleOps for Ast {
                     return 1;
                 }
                 i++;
-                g_nsroot = argv[i];
+                self->nsroot = argv[i];
                 continue;
             }
             if (argv[i][0] == '-' && argv[i][1]) {
@@ -4239,19 +4242,19 @@ impl ModuleOps for Ast {
             fprintf(stderr, "ctc: build needs -o <dir>\n");
             return 1;
         }
-        if (snprintf(g_outdir, sizeof g_outdir, "%s", outdir) >= (int)sizeof g_outdir) {
+        if (snprintf(self->outdir, sizeof self->outdir, "%s", outdir) >= (int)sizeof self->outdir) {
             fprintf(stderr, "ctc: output directory is too long\n");
             return 1;
         }
-        if (!g_nsroot) {
+        if (!self->nsroot) {
             if (self->path_dir(inputs[0], root, sizeof root) != 0) {
                 fprintf(stderr, "ctc: %s\n", self->errmsg);
                 return 1;
             }
-            g_nsroot = root;
+            self->nsroot = root;
         }
 
-        g_nunits = 0;
+        self->nunits = 0;
         g_nnode = 0;
         self->nfunc = 0;
         self->nvar = 0;
@@ -4264,21 +4267,21 @@ impl ModuleOps for Ast {
         self->ntype = 0;
         self->ntraits = 0;
         self->nstructs = 0;
-        g_nrels = 0;
+        self->nrels = 0;
         g_nparams = 0;
         self->self_mode = 0;
         self->ret_type[0] = 0;
-        g_ns[0] = 0;
-        g_ns_decl[0] = 0;
+        self->ns[0] = 0;
+        self->ns_decl[0] = 0;
         self->line = 1;
         self->tokline = 1;
         self->lstart = 0;
         self->tokstart = 0;
-        g_ncalls = 0;
+        self->ncalls = 0;
         ct_diag_reset();
-        g_cur_func[0] = 0;
+        self->cur_func[0] = 0;
         self->errmsg[0] = 0;
-        g_build_mode = 1;
+        self->build_mode = 1;
 
         for (i = 0; i < ninput; i++) {
             if (self->load_unit(inputs[i]) < 0) {
@@ -4287,7 +4290,7 @@ impl ModuleOps for Ast {
                 return 1;
             }
         }
-        for (u = 0; u < g_nunits; u++) {
+        for (u = 0; u < self->nunits; u++) {
             if (self->check_ns_dir(u) != 0) {
                 fprintf(stderr, "ctc: %s\n", self->errmsg);
                 return 1;
@@ -4298,9 +4301,9 @@ impl ModuleOps for Ast {
            dependency-first postorder, so a unit's key can fold its dependencies'
            digests; a unit whose dependency is dirty is dirty too. `--emit-map`
            never reuses, because the map spans the whole run. */
-        for (u = 0; u < g_nunits; u++) cstate[u] = 0;
+        for (u = 0; u < self->nunits; u++) cstate[u] = 0;
         cn = 0;
-        for (u = 0; u < g_nunits; u++)
+        for (u = 0; u < self->nunits; u++)
             if (self->cache_order(u, cstate, corder, &cn) != 0) {
                 fprintf(stderr, "ctc: %s\n", self->errmsg);
                 return 1;
@@ -4311,7 +4314,7 @@ impl ModuleOps for Ast {
             int k;
             u = corder[o];
             dirty[u] = 1;
-            if (snprintf(outc, sizeof outc, "%s/%s.c", g_outdir, g_units[u].base)
+            if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
                     >= (int)sizeof outc) {
                 fprintf(stderr, "ctc: output path is too long\n");
                 return 1;
@@ -4319,8 +4322,8 @@ impl ModuleOps for Ast {
             if (!g_have_map && self->cache_key(u, key, sizeof key) == 0
                 && self->cache_hit(outc, key))
                 dirty[u] = 0;
-            for (k = 0; k < g_units[u].ndep; k++)
-                if (dirty[g_units[u].depu[k]]) dirty[u] = 1;
+            for (k = 0; k < self->units[u].ndep; k++)
+                if (dirty[self->units[u].depu[k]]) dirty[u] = 1;
         }
         for (o = 0; o < cn; o++) {
             char outc[MAX_PATH];
@@ -4337,20 +4340,20 @@ impl ModuleOps for Ast {
             }
             /* stamped only after a successful emit: a failed unit must never be
                reused, and a stale key must never vouch for new sources */
-            if (snprintf(outc, sizeof outc, "%s/%s.c", g_outdir, g_units[u].base)
+            if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
                     < (int)sizeof outc
                 && self->cache_key(u, key, sizeof key) == 0)
                 self->cache_store(outc, key);
         }
-        if (g_have_map && self->write_map(g_map_path, g_units[0].prog, 0) != 0) {
+        if (g_have_map && self->write_map(g_map_path, self->units[0].prog, 0) != 0) {
             fprintf(stderr, "ctc: %s\n", self->errmsg);
             return 1;
         }
         /* The command the user runs next, in the same shape L2 prints; the
            target C standard (Phase 6.4) is the only option it carries. */
         printf("cc %s", g_std_flag);
-        for (u = 0; u < g_nunits; u++)
-            printf(" %s/%s.c", g_outdir, g_units[u].base);
+        for (u = 0; u < self->nunits; u++)
+            printf(" %s/%s.c", self->outdir, self->units[u].base);
         printf(" -o a.out\n");
         if (ct_diag_emit(g_diag_json, 1) != 0) return 1;
         return 0;
@@ -4950,12 +4953,12 @@ impl EmitOps for Ast {
         int i, j, k;
         (void)self;
 
-        for (i = 0; i < g_nmaps; i++) {
-            if (u >= 0 && g_maps[i].unit != u) continue;
-            for (j = 0; j < g_maps[i].nb; j++) {
+        for (i = 0; i < self->nmaps; i++) {
+            if (u >= 0 && self->maps[i].unit != u) continue;
+            for (j = 0; j < self->maps[i].nb; j++) {
                 MapBind *b;
                 MethodSig *sig;
-                b = &g_maps[i].b[j];
+                b = &self->maps[i].b[j];
                 sig = &self->traits[b->ti].m[b->mi];
                 fprintf(self->out, "static %s %s(void *self", sig->ret, b->wrapper);
                 for (k = 0; k < b->nparams; k++)
@@ -4968,13 +4971,13 @@ impl EmitOps for Ast {
                     fprintf(self->out, "    %s;\n", b->call);
                 fputs("}\n", self->out);
             }
-            if (g_maps[i].nb > 0) {
+            if (self->maps[i].nb > 0) {
                 fprintf(self->out, "static struct %s_vtbl %s = {\n",
-                        g_maps[i].trait, g_maps[i].vtable);
-                for (j = 0; j < g_maps[i].nb; j++) {
+                        self->maps[i].trait, self->maps[i].vtable);
+                for (j = 0; j < self->maps[i].nb; j++) {
                     if (j > 0) fputs(",\n", self->out);
-                    fprintf(self->out, "    .%s = %s", g_maps[i].b[j].method,
-                            g_maps[i].b[j].wrapper);
+                    fprintf(self->out, "    .%s = %s", self->maps[i].b[j].method,
+                            self->maps[i].b[j].wrapper);
                 }
                 fputs("\n};\n\n", self->out);
             }
@@ -5573,44 +5576,44 @@ impl EmitOps for Ast {
         FILE *f;
         (void)self;
 
-        if (snprintf(path, sizeof path, "%s/%s.c", g_outdir, g_units[u].base) >= (int)sizeof path)
+        if (snprintf(path, sizeof path, "%s/%s.c", self->outdir, self->units[u].base) >= (int)sizeof path)
             return self->fail("output path is too long");
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the output file");
         self->out = f;
-        self->path = g_units[u].path;
+        self->path = self->units[u].path;
         fprintf(self->out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
                 CTC_VERSION, self->path);
         fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
               self->out);
-        fprintf(self->out, "#include \"%s.h\"\n", g_units[u].base);
-        for (i = 0; i < g_units[u].ndep; i++)
-            fprintf(self->out, "#include \"%s.h\"\n", g_units[u].dep[i]);
+        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
+        for (i = 0; i < self->units[u].ndep; i++)
+            fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
         fputs("\n", self->out);
         if (g_line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
-        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next)
+        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_PP) fprintf(self->out, "%s\n", g_nodes[n].text);
 
         if (self->emit_struct_fwd() != 0) return -1;
-        if (self->emit_trait_range(g_units[u].tr_start, g_units[u].tr_end, 2) != 0) return -1;
-        if (self->emit_vtable_fwd(g_units[u].prog) != 0) return -1;
+        if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
+        if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
 
-        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next) {
+        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next) {
             if ((g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF
                  || g_nodes[n].kind == N_GLOBAL) && g_nodes[n].d != 1) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }
 
-        if (self->emit_impls(g_units[u].prog) != 0) return -1;
+        if (self->emit_impls(self->units[u].prog) != 0) return -1;
 
-        for (i = g_units[u].fn_start; i < g_units[u].fn_end; i++)
+        for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
             if (self->emit_proto(i) != 0) return -1;
 
         if (self->emit_maps(u) != 0) return -1;
 
-        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next)
+        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_FUNC && self->emit_node(n, 0) != 0) return -1;
 
         if (fclose(f) != 0) return self->fail("cannot write the output file");
@@ -5627,34 +5630,34 @@ impl EmitOps for Ast {
         FILE *f;
         (void)self;
 
-        if (snprintf(path, sizeof path, "%s/%s.h", g_outdir, g_units[u].base) >= (int)sizeof path)
+        if (snprintf(path, sizeof path, "%s/%s.h", self->outdir, self->units[u].base) >= (int)sizeof path)
             return self->fail("output path is too long");
-        if (self->header_guard(g_units[u].base, guard, sizeof guard) != 0) return -1;
+        if (self->header_guard(self->units[u].base, guard, sizeof guard) != 0) return -1;
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the header");
         self->out = f;
-        self->path = g_units[u].path;
+        self->path = self->units[u].path;
         fprintf(self->out, "#ifndef %s\n", guard);
         fprintf(self->out, "#define %s\n\n", guard);
         fprintf(self->out, "/* Generated by ct v%s from %s (multi-file mode: exported types; the matching .c\n"
                        "   includes this header).\n"
                        "   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n",
                 CTC_VERSION, self->path);
-        for (i = 0; i < g_units[u].ndep; i++)
-            fprintf(self->out, "#include \"%s.h\"\n", g_units[u].dep[i]);
-        if (g_units[u].ndep > 0) fputs("\n", self->out);
+        for (i = 0; i < self->units[u].ndep; i++)
+            fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        if (self->units[u].ndep > 0) fputs("\n", self->out);
 
         if (self->emit_struct_fwd() != 0) return -1;
-        if (self->emit_trait_range(g_units[u].tr_start, g_units[u].tr_end, 1) != 0) return -1;
+        if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
 
-        for (n = g_nodes[g_units[u].prog].a; n >= 0; n = g_nodes[n].next) {
+        for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next) {
             if ((g_nodes[n].kind == N_STRUCT || g_nodes[n].kind == N_TYPEDEF)
                 && g_nodes[n].d == 1) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }
 
-        for (i = g_units[u].fn_start; i < g_units[u].fn_end; i++) {
+        for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++) {
             if (!self->funcs[i].is_pub || self->funcs[i].is_static) continue;
             if (self->emit_proto(i) != 0) return -1;
         }
@@ -5703,13 +5706,13 @@ impl EmitOps for Ast {
             if (!f) return self->fail("cannot write the map");
         }
         if (u >= 0) {
-            path = g_units[u].path;
-            trs = g_units[u].tr_start;
-            tre = g_units[u].tr_end;
-            fns = g_units[u].fn_start;
-            fne = g_units[u].fn_end;
-            cls = g_units[u].call_start;
-            cle = g_units[u].call_end;
+            path = self->units[u].path;
+            trs = self->units[u].tr_start;
+            tre = self->units[u].tr_end;
+            fns = self->units[u].fn_start;
+            fne = self->units[u].fn_end;
+            cls = self->units[u].call_start;
+            cle = self->units[u].call_end;
         } else {
             path = self->path;
             trs = 0;
@@ -5717,7 +5720,7 @@ impl EmitOps for Ast {
             fns = 0;
             fne = self->nfunc;
             cls = 0;
-            cle = g_ncalls;
+            cle = self->ncalls;
         }
 
         fputs("{\n", f);
@@ -5824,31 +5827,31 @@ impl EmitOps for Ast {
         for (i = cls; i < cle; i++) {
             if (i > cls) fputc(',', f);
             fputs("{\"caller\":\"", f);
-            self->emit_json_str(f, g_calls[i].caller);
+            self->emit_json_str(f, self->calls[i].caller);
             fputs("\",\"callee\":\"", f);
-            self->emit_json_str(f, g_calls[i].callee);
+            self->emit_json_str(f, self->calls[i].callee);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d}", g_calls[i].line);
+            fprintf(f, "\",\"line\":%d}", self->calls[i].line);
         }
         fputs("],\n", f);
 
         fputs("  \"maps\": [", f);
-        for (i = 0; i < g_nmaps; i++) {
+        for (i = 0; i < self->nmaps; i++) {
             if (i > 0) fputc(',', f);
             fputs("{\"trait\":\"", f);
-            self->emit_json_str(f, g_maps[i].trait);
+            self->emit_json_str(f, self->maps[i].trait);
             fputs("\",\"instance\":\"", f);
-            self->emit_json_str(f, g_maps[i].inst);
+            self->emit_json_str(f, self->maps[i].inst);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"bindings\":[", g_maps[i].line);
-            for (j = 0; j < g_maps[i].nb; j++) {
+            fprintf(f, "\",\"line\":%d,\"bindings\":[", self->maps[i].line);
+            for (j = 0; j < self->maps[i].nb; j++) {
                 if (j > 0) fputc(',', f);
                 fputs("{\"method\":\"", f);
-                self->emit_json_str(f, g_maps[i].b[j].method);
+                self->emit_json_str(f, self->maps[i].b[j].method);
                 fputs("\",\"symbol\":\"", f);
-                self->emit_json_str(f, g_maps[i].b[j].wrapper);
+                self->emit_json_str(f, self->maps[i].b[j].wrapper);
                 fputs("\"}", f);
             }
             fputs("]}", f);
@@ -6259,8 +6262,8 @@ impl CacheOps for Ast {
         (void)self;
         if (state[u] != 0) return 0;
         state[u] = 1;
-        for (k = 0; k < g_units[u].ndep; k++)
-            if (self->cache_order(g_units[u].depu[k], state, order, n) != 0)
+        for (k = 0; k < self->units[u].ndep; k++)
+            if (self->cache_order(self->units[u].depu[k], state, order, n) != 0)
                 return -1;
         state[u] = 2;
         order[*n] = u;
@@ -6281,24 +6284,24 @@ impl CacheOps for Ast {
         int w;
         (void)self;
 
-        if (stat(g_units[u].path, &st) != 0) return -1;
+        if (stat(self->units[u].path, &st) != 0) return -1;
         snprintf(stamp, sizeof stamp, "%lu.%lu",
                  (unsigned long)st.st_mtime, (unsigned long)st.st_size);
         n = 0;
         ih[0] = 0;
-        for (k = 0; k < (size_t)g_units[u].ndep; k++) {
-            w = snprintf(ih + n, sizeof ih - n, "%s.h;", g_units[u].dep[k]);
+        for (k = 0; k < (size_t)self->units[u].ndep; k++) {
+            w = snprintf(ih + n, sizeof ih - n, "%s.h;", self->units[u].dep[k]);
             if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
             n += (size_t)w;
         }
         dep = 0;
-        for (k = 0; k < (size_t)g_units[u].ndep; k++)
-            dep = dep * (unsigned long)1099511628211 + g_units[g_units[u].depu[k]].digest;
+        for (k = 0; k < (size_t)self->units[u].ndep; k++)
+            dep = dep * (unsigned long)1099511628211 + self->units[self->units[u].depu[k]].digest;
         w = snprintf(out, cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
-                     CTC_VERSION, g_line_force, g_diag_json, g_nsroot,
-                     g_units[u].path, stamp, self->cache_digest(ih), dep);
+                     CTC_VERSION, g_line_force, g_diag_json, self->nsroot,
+                     self->units[u].path, stamp, self->cache_digest(ih), dep);
         if (w < 0 || (size_t)w >= cap) return -1;
-        g_units[u].digest = self->cache_digest(out);
+        self->units[u].digest = self->cache_digest(out);
         return 0;
     }
 
