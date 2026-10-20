@@ -1742,12 +1742,25 @@ impl PipeOps for Pipe {
         buf_init(&out);
 
         while (i < n) {
-            size_t j = i, depth = 0;
+            size_t j = i, depth = 0, k0;
             int ia = -1, ib = -1, need_struct = 0, ptr = 0, idx, tr, arr = 0;
             char fname[MAX_NAME], cbase[MAX_NAME];
 
             while (j < n) {
                 char c = body[j];
+                /* A field body may carry comments; skip them whole so the
+                   quotes and brackets inside never take part in the scan. */
+                if (c == '/' && j + 1 < n && body[j + 1] == '*') {
+                    j += 2;
+                    while (j + 1 < n && !(body[j] == '*' && body[j + 1] == '/')) j++;
+                    j += 2;
+                    if (j > n) j = n;
+                    continue;
+                }
+                if (c == '/' && j + 1 < n && body[j + 1] == '/') {
+                    while (j < n && body[j] != '\n') j++;
+                    continue;
+                }
                 if (c == '"' || c == '\'') {
                     char q = c;
                     j++;
@@ -1764,24 +1777,48 @@ impl PipeOps for Pipe {
                 j++;
             }
 
-            idx = self->analyse_param(body + i, j - i, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
-            self->emit_qualified_type(&out, body + i, j - i, ia, ib, cbase, need_struct, tr >= 0);
+            /* Leading whitespace and comments carry no declaration text, so the
+               analyser sees only the field itself: a long comment would otherwise
+               push the base type past its buffer. The comment stays in the
+               emitted text, which keeps the source verbatim. */
+            k0 = i;
+            for (;;) {
+                while (k0 < j && isspace((unsigned char)body[k0])) k0++;
+                if (k0 + 1 < j && body[k0] == '/' && body[k0 + 1] == '*') {
+                    k0 += 2;
+                    while (k0 + 1 < j && !(body[k0] == '*' && body[k0 + 1] == '/')) k0++;
+                    k0 += 2;
+                    continue;
+                }
+                if (k0 + 1 < j && body[k0] == '/' && body[k0 + 1] == '/') {
+                    while (k0 < j && body[k0] != '\n') k0++;
+                    continue;
+                }
+                break;
+            }
+            if (k0 > j) k0 = j;
+
+            idx = self->analyse_param(body + k0, j - k0, &ia, &ib, cbase, &need_struct, fname, &ptr, &tr);
+            self->emit_qualified_type(&out, body + i, j - i,
+                                      ia < 0 ? -1 : ia + (int)k0 - (int)i,
+                                      ib < 0 ? -1 : ib + (int)k0 - (int)i,
+                                      cbase, need_struct, tr >= 0);
 
             /* an interface array field (`T x[n]` / `T *x[n]`) carries no object
                name out of analyse_param -- the name sits before the '[' */
             {
-                const char *lb = memchr(body + i, '[', j - i);
+                const char *lb = memchr(body + k0, '[', j - k0);
                 if (lb) {
-                    size_t e2 = (size_t)(lb - (body + i));
+                    size_t e2 = (size_t)(lb - (body + k0));
                     size_t s2;
                     arr = 1;
-                    while (e2 > 0 && isspace((unsigned char)body[i + e2 - 1])) e2--;
+                    while (e2 > 0 && isspace((unsigned char)body[k0 + e2 - 1])) e2--;
                     s2 = e2;
-                    while (s2 > 0 && is_ident_char((unsigned char)body[i + s2 - 1])) s2--;
+                    while (s2 > 0 && is_ident_char((unsigned char)body[k0 + s2 - 1])) s2--;
                     if (tr >= 0 && !fname[0] && e2 > s2) {
                         size_t ml = e2 - s2;
                         if (ml >= MAX_NAME) ml = MAX_NAME - 1;
-                        memcpy(fname, body + i + s2, ml);
+                        memcpy(fname, body + k0 + s2, ml);
                         fname[ml] = 0;
                     }
                 }
