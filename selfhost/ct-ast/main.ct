@@ -291,18 +291,8 @@ static int g_nhoist;
 static int g_ntmp;
 static int g_raw_call;                /* emit this call, not its temp name */
 
-static int  g_line_mode;              /* emit `#line`: 0 off, 1 on */
-static int  g_line_force = -1;        /* -1 mode default, 0 --no-line, 1 --line */
-static char g_map_path[MAX_PATH];
-static int  g_have_map;
-
-/* The name `-v` and usage print (D44): `ct` when installed under that name,
-   `ctc` for the compatibility alias, `ct-ast` for the development binary.
-   Driver diagnostics keep the published `ctc:` prefix (SH-3 / phase10 non-goal),
-   so logs and assertions do not move when the entry name changes. */
-static const char *g_prog = "ct-ast";
-static int  g_diag_json;              /* --diagnostics=json (warnings land in 10.3) */
-static const char *g_std_flag = "-std=c99";   /* --std=c99 | --std=gnu99 */
+/* The entry name and the run options live on the `Ast` object now; see the
+   fields below. `main` seeds the defaults before dispatching. */
 
 /* Collected warnings and the semantic-error counter live in diag.ct; this unit
    only reaches them through the primitive wrappers declared there. */
@@ -541,6 +531,18 @@ struct Ast {
     Map  maps[MAX_MAPS];
     int  nmaps;
     char cur_func[MAX_TEXT];    /* caller recorded for the map */
+    /* Run options. `prog` is the entry name `-v` and the usage lines print
+       (D44): `ct` when installed under that name, `ctc` for the compatibility
+       alias, `ct-ast` for the development binary. Driver diagnostics keep the
+       published `ctc:` prefix (SH-3 / phase10 non-goal), so logs and assertions
+       do not move when the entry name changes. */
+    int  line_mode;             /* emit `#line`: 0 off, 1 on */
+    int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
+    char map_path[MAX_PATH];
+    int  have_map;
+    const char *prog;
+    int  diag_json;             /* --diagnostics=json */
+    const char *std_flag;       /* --std=c99 | --std=gnu99 */
     /* AutoDrop: where each scope's `own` declarations start */
     int own_decl[MAX_VARS];
     int nowner;
@@ -826,9 +828,9 @@ impl AstOps for Ast {
         if (argc > 1 && strcmp(argv[1], "build") == 0)
             return self->build_main(argc - 1, argv + 1);
         self->build_mode = 0;
-        g_line_mode = 0;
-        g_line_force = -1;
-        g_have_map = 0;
+        self->line_mode = 0;
+        self->line_force = -1;
+        self->have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s <input.ct> [-o <output.c>] [-I <dir>] [--line|--no-line]\n"
@@ -838,21 +840,21 @@ impl AstOps for Ast {
                        "                 [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s get <spec>[@<range>]\n"
                        "       %s install\n",
-                       g_prog, g_prog, g_prog, g_prog);
+                       self->prog, self->prog, self->prog, self->prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                printf("%s v%s\n", g_prog, CTC_VERSION);
+                printf("%s v%s\n", self->prog, CTC_VERSION);
                 return 0;
             }
             if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
                 const char *v = argv[i] + 14;
                 if (strcmp(v, "json") == 0) {
-                    g_diag_json = 1;
+                    self->diag_json = 1;
                     continue;
                 }
                 if (strcmp(v, "text") == 0) {
-                    g_diag_json = 0;
+                    self->diag_json = 0;
                     continue;
                 }
                 fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
@@ -861,11 +863,11 @@ impl AstOps for Ast {
             if (strncmp(argv[i], "--std=", 6) == 0) {
                 const char *v = argv[i] + 6;
                 if (strcmp(v, "c99") == 0) {
-                    g_std_flag = "-std=c99";
+                    self->std_flag = "-std=c99";
                     continue;
                 }
                 if (strcmp(v, "gnu99") == 0) {
-                    g_std_flag = "-std=gnu99";
+                    self->std_flag = "-std=gnu99";
                     continue;
                 }
                 fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
@@ -880,13 +882,13 @@ impl AstOps for Ast {
                 continue;
             }
             if (strcmp(argv[i], "--line") == 0) {
-                g_line_mode = 1;
-                g_line_force = 1;
+                self->line_mode = 1;
+                self->line_force = 1;
                 continue;
             }
             if (strcmp(argv[i], "--no-line") == 0) {
-                g_line_mode = 0;
-                g_line_force = 0;
+                self->line_mode = 0;
+                self->line_force = 0;
                 continue;
             }
             if (strcmp(argv[i], "--emit-map") == 0) {
@@ -895,11 +897,11 @@ impl AstOps for Ast {
                     return 1;
                 }
                 i++;
-                if (snprintf(g_map_path, sizeof g_map_path, "%s", argv[i]) >= (int)sizeof g_map_path) {
+                if (snprintf(self->map_path, sizeof self->map_path, "%s", argv[i]) >= (int)sizeof self->map_path) {
                     fprintf(stderr, "ctc: map path is too long\n");
                     return 1;
                 }
-                g_have_map = 1;
+                self->have_map = 1;
                 continue;
             }
             if (strcmp(argv[i], "-o") == 0) {
@@ -918,7 +920,7 @@ impl AstOps for Ast {
             in = argv[i];
         }
         if (!in) {
-            fprintf(stderr, "usage: %s <input.ct> [-o <output.c>]\n", g_prog);
+            fprintf(stderr, "usage: %s <input.ct> [-o <output.c>]\n", self->prog);
             return 1;
         }
         if (!out) {
@@ -977,7 +979,7 @@ impl AstOps for Ast {
                 CTC_VERSION, self->path);
         fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
               self->out);
-        if (g_line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
+        if (self->line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
         if (self->emit_program(prog) != 0) {
             fclose(f);
             fprintf(stderr, "ctc: %s\n", self->errmsg);
@@ -991,11 +993,11 @@ impl AstOps for Ast {
             fprintf(stderr, "ctc: %s\n", self->errmsg);
             return 1;
         }
-        if (g_have_map && self->write_map(g_map_path, prog, -1) != 0) {
+        if (self->have_map && self->write_map(self->map_path, prog, -1) != 0) {
             fprintf(stderr, "ctc: %s\n", self->errmsg);
             return 1;
         }
-        if (ct_diag_emit(g_diag_json, 0) != 0) return 1;
+        if (ct_diag_emit(self->diag_json, 0) != 0) return 1;
         return 0;
     }
 }
@@ -4127,29 +4129,29 @@ impl ModuleOps for Ast {
         outdir = NULL;
         self->ninc = 0;
         self->nsroot = NULL;
-        g_line_mode = 1;
-        g_line_force = -1;
-        g_have_map = 0;
+        self->line_mode = 1;
+        self->line_force = -1;
+        self->have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
-                       g_prog);
+                       self->prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                printf("%s v%s\n", g_prog, CTC_VERSION);
+                printf("%s v%s\n", self->prog, CTC_VERSION);
                 return 0;
             }
             if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
                 const char *v = argv[i] + 14;
                 if (strcmp(v, "json") == 0) {
-                    g_diag_json = 1;
+                    self->diag_json = 1;
                     continue;
                 }
                 if (strcmp(v, "text") == 0) {
-                    g_diag_json = 0;
+                    self->diag_json = 0;
                     continue;
                 }
                 fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
@@ -4158,24 +4160,24 @@ impl ModuleOps for Ast {
             if (strncmp(argv[i], "--std=", 6) == 0) {
                 const char *v = argv[i] + 6;
                 if (strcmp(v, "c99") == 0) {
-                    g_std_flag = "-std=c99";
+                    self->std_flag = "-std=c99";
                     continue;
                 }
                 if (strcmp(v, "gnu99") == 0) {
-                    g_std_flag = "-std=gnu99";
+                    self->std_flag = "-std=gnu99";
                     continue;
                 }
                 fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
                 return 1;
             }
             if (strcmp(argv[i], "--line") == 0) {
-                g_line_mode = 1;
-                g_line_force = 1;
+                self->line_mode = 1;
+                self->line_force = 1;
                 continue;
             }
             if (strcmp(argv[i], "--no-line") == 0) {
-                g_line_mode = 0;
-                g_line_force = 0;
+                self->line_mode = 0;
+                self->line_force = 0;
                 continue;
             }
             if (strcmp(argv[i], "--emit-map") == 0) {
@@ -4184,11 +4186,11 @@ impl ModuleOps for Ast {
                     return 1;
                 }
                 i++;
-                if (snprintf(g_map_path, sizeof g_map_path, "%s", argv[i]) >= (int)sizeof g_map_path) {
+                if (snprintf(self->map_path, sizeof self->map_path, "%s", argv[i]) >= (int)sizeof self->map_path) {
                     fprintf(stderr, "ctc: map path is too long\n");
                     return 1;
                 }
-                g_have_map = 1;
+                self->have_map = 1;
                 continue;
             }
             if (strcmp(argv[i], "-o") == 0) {
@@ -4235,7 +4237,7 @@ impl ModuleOps for Ast {
             ninput++;
         }
         if (ninput == 0) {
-            fprintf(stderr, "usage: %s build <input.ct>... -o <dir>\n", g_prog);
+            fprintf(stderr, "usage: %s build <input.ct>... -o <dir>\n", self->prog);
             return 1;
         }
         if (!outdir) {
@@ -4319,7 +4321,7 @@ impl ModuleOps for Ast {
                 fprintf(stderr, "ctc: output path is too long\n");
                 return 1;
             }
-            if (!g_have_map && self->cache_key(u, key, sizeof key) == 0
+            if (!self->have_map && self->cache_key(u, key, sizeof key) == 0
                 && self->cache_hit(outc, key))
                 dirty[u] = 0;
             for (k = 0; k < self->units[u].ndep; k++)
@@ -4345,17 +4347,17 @@ impl ModuleOps for Ast {
                 && self->cache_key(u, key, sizeof key) == 0)
                 self->cache_store(outc, key);
         }
-        if (g_have_map && self->write_map(g_map_path, self->units[0].prog, 0) != 0) {
+        if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
             fprintf(stderr, "ctc: %s\n", self->errmsg);
             return 1;
         }
         /* The command the user runs next, in the same shape L2 prints; the
            target C standard (Phase 6.4) is the only option it carries. */
-        printf("cc %s", g_std_flag);
+        printf("cc %s", self->std_flag);
         for (u = 0; u < self->nunits; u++)
             printf(" %s/%s.c", self->outdir, self->units[u].base);
         printf(" -o a.out\n");
-        if (ct_diag_emit(g_diag_json, 1) != 0) return 1;
+        if (ct_diag_emit(self->diag_json, 1) != 0) return 1;
         return 0;
     }
 }
@@ -5590,7 +5592,7 @@ impl EmitOps for Ast {
         for (i = 0; i < self->units[u].ndep; i++)
             fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
         fputs("\n", self->out);
-        if (g_line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
+        if (self->line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
         for (n = g_nodes[self->units[u].prog].a; n >= 0; n = g_nodes[n].next)
             if (g_nodes[n].kind == N_PP) fprintf(self->out, "%s\n", g_nodes[n].text);
@@ -6298,7 +6300,7 @@ impl CacheOps for Ast {
         for (k = 0; k < (size_t)self->units[u].ndep; k++)
             dep = dep * (unsigned long)1099511628211 + self->units[self->units[u].depu[k]].digest;
         w = snprintf(out, cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
-                     CTC_VERSION, g_line_force, g_diag_json, self->nsroot,
+                     CTC_VERSION, self->line_force, self->diag_json, self->nsroot,
                      self->units[u].path, stamp, self->cache_digest(ih), dep);
         if (w < 0 || (size_t)w >= cap) return -1;
         self->units[u].digest = self->cache_digest(out);
@@ -6382,15 +6384,21 @@ int main(int argc, char **argv)
 {
     const char *base;
 
+    /* Run-option defaults: the struct is zero-initialised, so the two values
+       that are not 0/off are seeded here, the one place that owns the process. */
+    g_ast.prog = "ct-ast";
+    g_ast.line_force = -1;
+    g_ast.std_flag = "-std=c99";
+
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];
-    if (strcmp(base, "ct") == 0) g_prog = "ct";
-    else if (strcmp(base, "ctc") == 0) g_prog = "ctc";
+    if (strcmp(base, "ct") == 0) g_ast.prog = "ct";
+    else if (strcmp(base, "ctc") == 0) g_ast.prog = "ctc";
     /* Phase 8 (ported in 10.6): the package subcommands live in their own unit
        and never reach the compile core; only primitives cross the boundary */
     if (argc > 1 && strcmp(argv[1], "get") == 0)
-        return ct_pkg_get(argc - 2, argv + 2, g_prog, CTC_VERSION);
+        return ct_pkg_get(argc - 2, argv + 2, g_ast.prog, CTC_VERSION);
     if (argc > 1 && strcmp(argv[1], "install") == 0)
-        return ct_pkg_install(argc - 2, argv + 2, g_prog, CTC_VERSION);
+        return ct_pkg_install(argc - 2, argv + 2, g_ast.prog, CTC_VERSION);
     return g_ast.run(argc, argv);
 }
