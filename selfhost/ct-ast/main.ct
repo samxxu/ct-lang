@@ -355,20 +355,10 @@ static int  g_lstart;
 /* Collected warnings and the semantic-error counter live in diag.ct; this unit
    only reaches them through the primitive wrappers declared there. */
 
-/* AutoDrop (Phase 5, landed here in 10.3): every scope records where its `own`
-   declarations start, so the block can append the deletes in reverse order. */
-static int  g_own_decl[MAX_VARS];
-static int  g_nowner;
-static int  g_own_base[MAX_SCOPE];
-
-/* Leak analysis state (10.3): active only while a function or method body is
-   being parsed, so file-scope declarations are never tracked. `g_leak_frame`
-   is the body's own scope number -- a return in a deeper block is conditional.
-   `g_ret_owned` is the current function's ownership hint for its caller. */
-static int  g_leak_active;
-static int  g_leak_frame;
-static int  g_leak_impl;              /* 1 while parsing an impl method body */
-static int  g_ret_owned;
+/* AutoDrop (Phase 5, landed here in 10.3) and the leak analysis (10.3) keep
+   their state on the `Ast` object: every scope records where its `own`
+   declarations start, and the leak pass runs only while a function or method
+   body is being parsed. See the fields below. */
 
 trait AstOps {
     int  new_node(int kind);
@@ -538,10 +528,22 @@ trait CacheOps {
 }
 
 
-/* The state lives in file-scope globals (9.x is a small compiler); the struct
-   exists so the methods live in impl blocks (MAX_FUNCS is a real cap). */
+/* The struct carries the memory-analysis state so those methods are real OO
+   methods on the object rather than free functions over file-scope globals; the
+   remaining tables are still file-scope until their own slices land. */
 struct Ast {
     int nerr;
+    /* AutoDrop: where each scope's `own` declarations start */
+    int own_decl[MAX_VARS];
+    int nowner;
+    int own_base[MAX_SCOPE];
+    /* Leak analysis, active only inside a function or method body. `leak_frame`
+       is the body's own scope number -- a return in a deeper block is
+       conditional. `ret_owned` is the current function's ownership hint. */
+    int leak_active;
+    int leak_frame;
+    int leak_impl;              /* 1 while parsing an impl method body */
+    int ret_owned;
 } use AstOps, SymOps, ParseOps, TypeOps, ModuleOps, EmitOps, RecoverOps, MemoryOps,
     CacheOps;
 
@@ -931,11 +933,11 @@ impl AstOps for Ast {
         g_nfunc = 0;
         g_nvar = 0;
         g_nscope = 0;
-        g_nowner = 0;
-        g_leak_active = 0;
-        g_leak_frame = -1;
-        g_leak_impl = 0;
-        g_ret_owned = 0;
+        self->nowner = 0;
+        self->leak_active = 0;
+        self->leak_frame = -1;
+        self->leak_impl = 0;
+        self->ret_owned = 0;
         g_ntype = 0;
         g_ntraits = 0;
         g_nstructs = 0;
@@ -996,7 +998,7 @@ impl SymOps for Ast {
         (void)self;
         if (g_nscope >= MAX_SCOPE) return self->fail("too many nested scopes");
         g_scope[g_nscope] = g_nvar;
-        g_own_base[g_nscope] = g_nowner;
+        self->own_base[g_nscope] = self->nowner;
         g_nscope++;
         return 0;
     }
@@ -1007,7 +1009,7 @@ impl SymOps for Ast {
         if (g_nscope <= 0) return self->fail("scope stack underflow");
         g_nscope--;
         g_nvar = g_scope[g_nscope];
-        g_nowner = g_own_base[g_nscope];
+        self->nowner = self->own_base[g_nscope];
         return 0;
     }
 
@@ -1503,13 +1505,13 @@ impl ParseOps for Ast {
         snprintf(g_cur_func, sizeof g_cur_func, "%s", name);
         /* the body is the leak analysis window; its own scope is the frame a
            deeper return counts as conditional against */
-        g_leak_active = 1;
-        g_leak_frame = g_nscope + 1;
-        g_leak_impl = 0;
-        g_ret_owned = 0;
+        self->leak_active = 1;
+        self->leak_frame = g_nscope + 1;
+        self->leak_impl = 0;
+        self->ret_owned = 0;
         b = self->parse_block();
-        g_leak_active = 0;
-        g_leak_frame = -1;
+        self->leak_active = 0;
+        self->leak_frame = -1;
         g_cur_func[0] = 0;
         g_ret_type[0] = 0;
         if (b < 0) {
@@ -1521,7 +1523,7 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
-        g_funcs[fi].ret_owned = g_ret_owned;
+        g_funcs[fi].ret_owned = self->ret_owned;
         g_funcs[fi].line = func_line;
         f = self->new_node(N_FUNC);
         if (f < 0) {
@@ -2011,13 +2013,13 @@ impl ParseOps for Ast {
                      g_structs[si].name, rtrait, mname);
             /* the method body tracks leaks too; a method symbol is not in the
                function table, so nothing feeds `ret_owned` back to callers */
-            g_leak_active = 1;
-            g_leak_frame = g_nscope + 1;
-            g_leak_impl = 1;
+            self->leak_active = 1;
+            self->leak_frame = g_nscope + 1;
+            self->leak_impl = 1;
             body = self->parse_block();
-            g_leak_active = 0;
-            g_leak_frame = -1;
-            g_leak_impl = 0;
+            self->leak_active = 0;
+            self->leak_frame = -1;
+            self->leak_impl = 0;
             g_cur_func[0] = 0;
             g_ret_type[0] = 0;
             if (body < 0) {
@@ -2104,7 +2106,7 @@ impl ParseOps for Ast {
 
         if (self->expect("{") != 0) return -1;
         if (self->push_scope() != 0) return -1;
-        base = g_own_base[g_nscope - 1];
+        base = self->own_base[g_nscope - 1];
         blk = self->new_node(N_BLOCK);
         if (blk < 0) {
             self->pop_scope();
@@ -2125,7 +2127,7 @@ impl ParseOps for Ast {
            reverse order, just before the closing brace (L2's line rewrite does
            the same). A brace that shares its line with code cannot host the
            deletes, so that layout is rejected. */
-        if (g_nowner > base) {
+        if (self->nowner > base) {
             int p, at_start, d;
             at_start = 1;
             for (p = g_lstart; p < g_tokstart; p++)
@@ -2135,13 +2137,13 @@ impl ParseOps for Ast {
                 return ct_sem_error(g_tokline, 1,
                     "auto-drop requires the closing '}' at the start of a line", g_path);
             }
-            for (d = g_nowner - 1; d >= base; d--) {
+            for (d = self->nowner - 1; d >= base; d--) {
                 int del, v, vi;
                 const char *tp;
                 size_t bl;
                 /* a reassigned / returned / moved `own` variable is no longer
                    ours to release (L2 clears the same flag before its rewrite) */
-                vi = self->find_var(g_nodes[g_own_decl[d]].text2);
+                vi = self->find_var(g_nodes[self->own_decl[d]].text2);
                 if (vi >= 0 && !g_vars[vi].autodrop) continue;
                 del = self->new_node(N_DELETE);
                 v = self->new_node(N_VAR);
@@ -2149,10 +2151,10 @@ impl ParseOps for Ast {
                     self->pop_scope();
                     return -1;
                 }
-                g_nodes[del].line = g_nodes[g_own_decl[d]].line;
-                snprintf(g_nodes[v].text2, MAX_TEXT, "%s", g_nodes[g_own_decl[d]].text2);
+                g_nodes[del].line = g_nodes[self->own_decl[d]].line;
+                snprintf(g_nodes[v].text2, MAX_TEXT, "%s", g_nodes[self->own_decl[d]].text2);
                 g_nodes[del].a = v;
-                tp = g_nodes[g_own_decl[d]].text;
+                tp = g_nodes[self->own_decl[d]].text;
                 if (strncmp(tp, "struct ", 7) == 0) tp += 7;
                 snprintf(g_nodes[del].text, MAX_TEXT, "%s", tp);
                 bl = strlen(g_nodes[del].text);
@@ -2172,7 +2174,7 @@ impl ParseOps for Ast {
         }
         /* a scope that closes with a still-owned heap object leaks it (L2
            reports it at the same point, keeping the warning order) */
-        if (g_leak_active && self->leak_scope(g_scope[g_nscope - 1], g_nvar) != 0) {
+        if (self->leak_active && self->leak_scope(g_scope[g_nscope - 1], g_nvar) != 0) {
             self->pop_scope();
             return -1;
         }
@@ -2196,8 +2198,8 @@ impl ParseOps for Ast {
             if (g_tok == T_PUNCT && strcmp(g_toktext, ";") == 0) {
                 self->lex_next();
                 /* a bare `return;` leaves every owned object behind */
-                if (g_leak_active
-                    && self->leak_return(-1, !at_start || g_nscope > g_leak_frame, rline) != 0)
+                if (self->leak_active
+                    && self->leak_return(-1, !at_start || g_nscope > self->leak_frame, rline) != 0)
                     return -1;
                 return s;
             }
@@ -2214,8 +2216,8 @@ impl ParseOps for Ast {
             g_nodes[s].a = e;
             /* a return nested in a block (or written mid-line) may be skipped
                at run time, so it only warns about what it leaves behind */
-            if (g_leak_active
-                && self->leak_return(e, !at_start || g_nscope > g_leak_frame, rline) != 0)
+            if (self->leak_active
+                && self->leak_return(e, !at_start || g_nscope > self->leak_frame, rline) != 0)
                 return -1;
             if (self->expect(";") != 0) return -1;
             return s;
@@ -2228,7 +2230,7 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             g_nodes[s].a = e;
             /* the object is released: it can neither leak nor auto-drop */
-            if (g_leak_active && self->leak_delete(e) != 0) return -1;
+            if (self->leak_active && self->leak_delete(e) != 0) return -1;
             /* resolve the pointee's struct now (the variable may leave scope
                before the delete is emitted) and remember it only when it uses
                Drop; otherwise the emitter stays on the plain `free` path */
@@ -2486,7 +2488,7 @@ impl ParseOps for Ast {
                     g_nodes[n].a = e;
                 }
             }
-            if (g_leak_active && self->leak_decl(n) != 0) return -1;
+            if (self->leak_active && self->leak_decl(n) != 0) return -1;
             if (head < 0) head = n;
             else g_nodes[tail].next = n;
             tail = n;
@@ -2529,7 +2531,7 @@ impl ParseOps for Ast {
             g_nodes[n].a = e;
             g_nodes[n].b = rhs;
             g_nodes[n].aux = op;
-            if (g_leak_active && self->leak_assign(n) != 0) return -1;
+            if (self->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
         if (g_tok == T_PUNCT && strcmp(g_toktext, "=") == 0) {
@@ -2555,7 +2557,7 @@ impl ParseOps for Ast {
             if (n < 0) return -1;
             g_nodes[n].a = e;
             g_nodes[n].b = rhs;
-            if (g_leak_active && self->leak_assign(n) != 0) return -1;
+            if (self->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
         if (g_nodes[e].kind == N_POST) return e;
@@ -3613,11 +3615,11 @@ impl ModuleOps for Ast {
         g_tok = 0;
         g_nvar = 0;
         g_nscope = 0;
-        g_nowner = 0;
-        g_leak_active = 0;
-        g_leak_frame = -1;
-        g_leak_impl = 0;
-        g_ret_owned = 0;
+        self->nowner = 0;
+        self->leak_active = 0;
+        self->leak_frame = -1;
+        self->leak_impl = 0;
+        self->ret_owned = 0;
         g_ns[0] = 0;
         g_ns_decl[0] = 0;
         g_self_mode = 0;
@@ -4249,11 +4251,11 @@ impl ModuleOps for Ast {
         g_nfunc = 0;
         g_nvar = 0;
         g_nscope = 0;
-        g_nowner = 0;
-        g_leak_active = 0;
-        g_leak_frame = -1;
-        g_leak_impl = 0;
-        g_ret_owned = 0;
+        self->nowner = 0;
+        self->leak_active = 0;
+        self->leak_frame = -1;
+        self->leak_impl = 0;
+        self->ret_owned = 0;
         g_ntype = 0;
         g_ntraits = 0;
         g_nstructs = 0;
@@ -5973,9 +5975,9 @@ impl MemoryOps for Ast {
             }
             vi = self->find_var(g_nodes[d].text2);
             if (vi >= 0) g_vars[vi].autodrop = 1;
-            if (g_nowner >= MAX_VARS) return self->fail("too many owned variables");
-            g_own_decl[g_nowner] = d;
-            g_nowner++;
+            if (self->nowner >= MAX_VARS) return self->fail("too many owned variables");
+            self->own_decl[self->nowner] = d;
+            self->nowner++;
             d = g_nodes[d].next;
         }
         return 0;
@@ -6181,7 +6183,7 @@ impl MemoryOps for Ast {
             if (!conditional) {
                 if (pos) {
                     g_vars[i].owned = 0;
-                    if (!g_leak_impl) g_ret_owned = 1;
+                    if (!self->leak_impl) self->ret_owned = 1;
                 }
                 continue;
             }
