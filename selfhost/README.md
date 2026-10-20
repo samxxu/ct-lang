@@ -48,7 +48,7 @@ falsify that comment and lengthen every user-facing command.
 | `l0/ctc.c` | L0 | the minimal compiler in C (the frozen seed / differential oracle since Phase 1; bug fixes only), built by the host C compiler; the binary lands at the **repository root** |
 | `l1/ctc.ct` | L1 | The frozen seed: all capabilities hand-written in the CT OO subset as a single file, compiled by L0 (`l0/ctc.c`); capability stops at Phase 2 and **never grows** (comments included) |
 | `l2/{core,driver}.ct` | L2 | The same compiler re-partitioned across units (`import` / `pub`), built by L1's own `build`; since Phase 10.7 it is the **regression oracle** only |
-| `ct-ast/{main,pkg,diag}.ct` | ct-ast | The Phase 9 AST compiler, built by L2 with `build`: `main.ct` is the driver + compile core, `pkg.ct` the package manager, `diag.ct` the warning store and error counter (each keeps its state private and exports `pub` wrappers only); **the installed entry (`ct` / `ctc`) since Phase 10.7** |
+| `ct-ast/**` | ct-ast | The Phase 9 AST compiler, built by L2 with `build` (`-I selfhost/ct-ast`): grouped units, each owning its state and exporting `pub` primitives only — `main.ct` binds and dispatches, `tool/driver` is the compile-mode driver (`ct <file> -o <file>`), `frontend/module` the build driver (unit table, imports, `pub` routing), `frontend/parse` the parser, `frontend/{lex,sym,type}` the lexer, symbol tables and type/boxing layer, `runtime/arena` the node and literal pool, `backend/{mem,emit}` AutoDrop/leak analysis and the C emitter, `tool/{pkg,diag,cache}` the package manager, warning store and incremental cache; **the installed entry (`ct` / `ctc`) since Phase 10.7** |
 
 ### Scripts (the gates)
 

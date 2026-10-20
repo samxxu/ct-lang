@@ -138,7 +138,7 @@
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md)，D46–D52 见 [design/phase12.md](design/phase12.md) |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 → ct-ast | 用 CT 重写编译器 |
-| AST 版编译器（ct-ast） | `selfhost/ct-ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；单文件、纯 CT，自编并达到全量行为等价 |
+| AST 版编译器（ct-ast） | `selfhost/ct-ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；纯 CT 的多单元树（`main.ct` 只做绑定与分派），自编并达到全量行为等价 |
 | 行为等价（behavioural equivalence） | D34 | 等价口径 = 退出码 + 产物零警告可编 + **程序输出一致**（不比对生成的 C 文本） |
 | 自编不动点（fixpoint） | `ct-ast` → `ct-ast2` | 编译器的产物再编同一源码，输出**逐字节一致** |
 | 归档点（archive tag） | `pre-ast-mainline` | 2026-10-17 的 frozen 边界（`l2/**` 仍在 frozen L1 表容量之内）；Phase 9 的起点由 `v0.8.0`（`db667df`）标出 |
@@ -300,7 +300,7 @@
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md), D46–D52 in [design/phase12.md](design/phase12.md) |
 | bootstrap / self-hosting | L0 → L1 → L2 → ct-ast | rewriting the compiler in CT |
-| AST compiler (ct-ast) | `selfhost/ct-ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; one plain-CT file that self-compiles and is behaviourally equivalent |
+| AST compiler (ct-ast) | `selfhost/ct-ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; a plain-CT multi-unit tree (`main.ct` only binds and dispatches) that self-compiles and is behaviourally equivalent |
 | behavioural equivalence | D34 | the equivalence rule = exit status + warning-free build + **identical program output** (the generated C text is not compared) |
 | self-compilation fixpoint | `ct-ast` → `ct-ast2` | the emitted compiler recompiles the same source and produces **byte-identical** output |
 | archive tag | `pre-ast-mainline` | the frozen boundary of 2026-10-17 (when `l2/**` still fit the frozen L1 tables); Phase 9 starts at the `v0.8.0` close (`db667df`) |

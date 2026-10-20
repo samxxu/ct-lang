@@ -63,7 +63,7 @@ gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc
 mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2
 
 # Step 4: L2 编译 ct-ast（AST 版主线，安装入口）
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build selfhost/ct-ast/main.ct -o /tmp/ct-ast
+mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast
 ```
 
 L0 改动（修 bug）后需重走完整自举流程；日常只改 CT 侧时用已有的编译器重编即可。完整流程见 `bash selfhost/ct-tour.sh`。
@@ -185,7 +185,7 @@ gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc
 mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2
 
 # Step 4: L2 compiles ct-ast (the AST mainline, the installed entry)
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build selfhost/ct-ast/main.ct -o /tmp/ct-ast
+mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast
 ```
 
 After an L0 change (a bug fix), rerun the whole bootstrap; for day-to-day CT-side work, rebuilding with
