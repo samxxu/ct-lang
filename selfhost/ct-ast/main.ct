@@ -25,6 +25,7 @@ import tool::diag::diag;
 import runtime::arena::arena;
 import frontend::lex::lexer;
 import frontend::module::unit;
+import frontend::sym::sym;
 import tool::cache::cache;
 
 #include <stdio.h>
@@ -147,69 +148,9 @@ import tool::cache::cache;
 /* `Node` and the two pools now live in `runtime::arena`; this unit holds a
    pointer to the arena singleton and works through it. */
 
-typedef struct Fn {
-    char name[MAX_TEXT];
-    char ret[MAX_TEXT];
-    char ptype[MAX_PARAMS][MAX_TEXT];
-    /* array dims are kept apart from the type: the prototype must spell them
-       (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
-       call side still compares bare types for boxing */
-    char pdim[MAX_PARAMS][MAX_TEXT];
-    int  nparams;
-    int  is_static;
-    int  is_pub;
-    int  line;
-    int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */
-} Fn;
-
-typedef struct Var {
-    char name[MAX_TEXT];
-    char type[MAX_TEXT];
-    /* an array's declared type carries no star of its own, but `T *a[N]` and
-       `T *p` spell the same type; indexing tells them apart only through this */
-    int  is_array;
-    /* leak tracking (10.3), mirroring L2's conservative rules */
-    int  st;            /* struct index when the type is `struct T *`, else -1 */
-    int  owned;         /* 1 when a heap object (malloc/calloc/owned callee) */
-    int  own_line;      /* source line of that allocation */
-    int  autodrop;      /* 1 when declared `own`: release at scope exit */
-    int  path_warned;   /* 1 once reported as possibly leaking on a return path */
-} Var;
-
-typedef struct MethodSig {
-    char name[MAX_TEXT];
-    char ret[MAX_TEXT];
-    char ptype[MAX_PARAMS][MAX_TEXT];
-    int  nparams;
-} MethodSig;
-
-typedef struct Trait {
-    char name[MAX_TEXT];
-    MethodSig m[MAX_METHODS];
-    int  nm;
-    int  is_pub;
-    int  line;
-} Trait;
-
-typedef struct Field {
-    char name[MAX_TEXT];
-    char type[MAX_TEXT];
-    /* array dims (`[2]`, `[N]`): a designated initialiser cannot reach an
-       element, so such a field's vptrs are written by a loop instead */
-    char dims[MAX_TEXT];
-} Field;
-
-typedef struct StructDef {
-    char name[MAX_TEXT];
-    char use[MAX_TRAITS][MAX_TEXT];
-    int  nuse;
-    /* field types: a receiver chain (`s.owner.greet()`) needs them, and so does
-       the nested vptr initialiser of a struct-typed field */
-    Field fields[MAX_FIELDS];
-    int  nfields;
-    int  defined;               /* a body was parsed; a forward declaration is not */
-    int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
-} StructDef;
+/* `Fn`, `Var`, `MethodSig`, `Trait`, `Field` and `StructDef` now live in
+   `frontend::sym`; this unit holds a pointer to that singleton and works
+   through it. */
 
 /* One translation unit of a `build` is a value type of the module layer; see
    frontend/module/unit.h.ct. The caps its fields need stay in this unit's
@@ -228,7 +169,7 @@ typedef struct MapBind {
     char method[MAX_TEXT];                  /* trait method name */
     char params[MAX_PARAMS][MAX_TEXT];      /* CT-side parameter names, from the map's () */
     int  nparams;
-    int  ti;                                /* index into self->traits */
+    int  ti;                                /* index into self->sym->traits */
     int  mi;                                /* index into that trait's m[] */
     char call[MAX_TEXT];                    /* raw, validated RHS text (no trailing ';') */
     char wrapper[MAX_TEXT];                 /* "<inst>_<Trait>_<method>" */
@@ -423,8 +364,7 @@ trait MemoryOps {
 
 /* The struct carries the output, lexer and memory-analysis state so those
    methods are real OO methods on the object rather than free functions over
-   file-scope globals; the remaining tables stay file-scope until their own
-   slices land. */
+   file-scope globals; the tables still on it move out slice by slice. */
 struct Ast {
     int nerr;
     /* Output state for one run: where emitted C goes, the source path the banner
@@ -441,31 +381,16 @@ struct Ast {
     /* The source cursor and the current token live in frontend::lex; the driver
        points this at that singleton before it dispatches to `run`. */
     struct frontend_lex_Lexer *lex;
-    /* Symbol tables of the unit being compiled: functions, locals and scopes,
-       type tags, traits and structs, plus the impl/return context the parser
-       threads through. The driver resets them per unit. */
-    Fn   funcs[MAX_FUNCS];
-    int  nfunc;
-    Var  vars[MAX_VARS];
-    int  nvar;
-    int  scope[MAX_SCOPE];
-    int  nscope;
-    char types[MAX_TYPES][MAX_TEXT];
-    int  type_kind[MAX_TYPES];  /* 1 = struct tag, 2 = typedef */
-    int  ntype;
-    Trait traits[MAX_TRAITS];
-    int  ntraits;
-    StructDef structs[MAX_STRUCTS];
-    int  nstructs;
-    int  self_mode;             /* inside an impl body: `self` -> `_self` */
-    char ret_type[MAX_TEXT];    /* return type of the function being parsed */
-    /* Build mode: the unit table, the import search roots and the current
-       namespace prefix, plus the calls and maps collected for the JSON map.
-       The driver fills these before a build and reads them while emitting. */
+    /* The symbol tables of the unit being compiled live in frontend::sym; the
+       driver points this at that singleton before it dispatches to `run`. */
+    struct frontend_sym_Symbols *sym;
+    /* Build mode: the unit table, the import search roots and the namespace
+       path declared by the current unit, plus the calls and maps collected for
+       the JSON map. The driver fills these before a build and reads them while
+       emitting. */
     struct frontend_module_Unit units[MAX_UNITS];
     int  nunits;
     int  build_mode;
-    char ns[MAX_TEXT];          /* current namespace prefix, e.g. "hal_" */
     char ns_decl[MAX_TEXT];     /* namespace path declared by the current unit */
     char outdir[MAX_PATH];
     const char *incdirs[MAX_INCDIRS];
@@ -493,7 +418,7 @@ struct Ast {
     /* Emission scratch: hoisted rvalue temporaries (MAX_HOISTS) and the fields
        of an untagged `typedef struct { ... }` parked until the alias exists. */
     int  nparams;
-    Field pend_fields[MAX_FIELDS];
+    struct frontend_sym_Field pend_fields[MAX_FIELDS];
     int  npend;
     int  hoist_calls[MAX_HOISTS];
     int  nhoist;
@@ -729,18 +654,18 @@ impl AstOps for Ast {
         self->lex->tokstart = 0;
         ct_diag_reset();
         self->arena->reset();
-        self->nfunc = 0;
-        self->nvar = 0;
-        self->nscope = 0;
+        self->sym->nfunc = 0;
+        self->sym->nvar = 0;
+        self->sym->nscope = 0;
         self->nowner = 0;
         self->leak_active = 0;
         self->leak_frame = -1;
         self->leak_impl = 0;
         self->ret_owned = 0;
-        self->ntype = 0;
-        self->ntraits = 0;
-        self->nstructs = 0;
-        self->self_mode = 0;
+        self->sym->ntype = 0;
+        self->sym->ntraits = 0;
+        self->sym->nstructs = 0;
+        self->sym->self_mode = 0;
         self->nparams = 0;
         self->ncalls = 0;
         self->cur_func[0] = 0;
@@ -791,71 +716,52 @@ impl AstOps for Ast {
     }
 }
 
+/* The tables live in frontend::sym; this facade keeps the parser's trait shape
+   and wraps the reasons the tables record with the current position. */
 impl SymOps for Ast {
     int push_scope(void)
     {
-        (void)self;
-        if (self->nscope >= MAX_SCOPE) return self->fail("too many nested scopes");
-        self->scope[self->nscope] = self->nvar;
-        self->own_base[self->nscope] = self->nowner;
-        self->nscope++;
+        if (self->sym->push_scope() != 0) return self->fail(self->sym->last_error());
+        self->own_base[self->sym->nscope - 1] = self->nowner;
         return 0;
     }
 
     int pop_scope(void)
     {
-        (void)self;
-        if (self->nscope <= 0) return self->fail("scope stack underflow");
-        self->nscope--;
-        self->nvar = self->scope[self->nscope];
-        self->nowner = self->own_base[self->nscope];
+        if (self->sym->pop_scope() != 0) return self->fail(self->sym->last_error());
+        self->nowner = self->own_base[self->sym->nscope];
         return 0;
     }
 
     int declare_var(const char *name, const char *type)
     {
-        int i;
-        (void)self;
-        if (self->nvar >= MAX_VARS) return self->fail("too many variables");
-        i = self->nvar;
-        snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
-        snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
-        self->vars[i].is_array = 0;
-        self->vars[i].st = -1;
-        self->vars[i].owned = 0;
-        self->vars[i].own_line = 0;
-        self->vars[i].autodrop = 0;
-        self->vars[i].path_warned = 0;
-        self->nvar++;
+        if (self->sym->declare_var(name, type) != 0)
+            return self->fail(self->sym->last_error());
         return 0;
     }
 
     int find_var(const char *name)
     {
-        int i;
-        (void)self;
-        for (i = self->nvar - 1; i >= 0; i--)
-            if (strcmp(self->vars[i].name, name) == 0) return i;
-        return -1;
+        return self->sym->find_var(name);
     }
 
+    /* A miss is not an error: the parser probes names while inferring types, so
+       only a recorded reason (overflow) becomes a diagnostic. */
     int var_type(const char *name, char *out, size_t cap)
     {
-        int i;
-        (void)self;
-        i = self->find_var(name);
-        if (i < 0) return -1;
-        if (snprintf(out, cap, "%s", self->vars[i].type) >= (int)cap) return -1;
+        const char *why;
+        self->sym->errmsg[0] = 0;
+        if (self->sym->var_type(name, out, (int)cap) != 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
         return 0;
     }
 
     int find_func(const char *name)
     {
-        int i;
-        (void)self;
-        for (i = 0; i < self->nfunc; i++)
-            if (strcmp(self->funcs[i].name, name) == 0) return i;
-        return -1;
+        return self->sym->find_func(name);
     }
 
     /* A prototype followed by its definition updates the same entry. `pub` on
@@ -863,169 +769,101 @@ impl SymOps for Ast {
     int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
         int i, k, p;
-        (void)self;
 
-        i = self->find_func(name);
+        i = self->sym->find_func(name);
         if (i < 0) {
-            if (self->nfunc >= MAX_FUNCS) return self->fail("too many functions");
-            i = self->nfunc;
-            self->nfunc++;
-            snprintf(self->funcs[i].name, MAX_TEXT, "%s", name);
-            self->funcs[i].is_pub = 0;
-            self->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
+            if (self->sym->nfunc >= MAX_FUNCS) return self->fail("too many functions");
+            i = self->sym->nfunc;
+            self->sym->nfunc++;
+            snprintf(self->sym->funcs[i].name, MAX_TEXT, "%s", name);
+            self->sym->funcs[i].is_pub = 0;
+            self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
         }
-        if (is_pub) self->funcs[i].is_pub = 1;
-        snprintf(self->funcs[i].ret, MAX_TEXT, "%s", ret);
-        self->funcs[i].is_static = is_static;
-        self->funcs[i].nparams = 0;
+        if (is_pub) self->sym->funcs[i].is_pub = 1;
+        snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
+        self->sym->funcs[i].is_static = is_static;
+        self->sym->funcs[i].nparams = 0;
         p = first_param;
         k = 0;
         while (p > 0 && k < MAX_PARAMS) {
-            snprintf(self->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
-            snprintf(self->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
+            snprintf(self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
+            snprintf(self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
             k++;
             p = self->arena->nodes[p].next;
         }
         if (k >= MAX_PARAMS && p > 0) return self->fail("too many parameters");
-        self->funcs[i].nparams = k;
+        self->sym->funcs[i].nparams = k;
         return i;
     }
 
     int find_type(const char *name)
     {
-        int i;
-        (void)self;
-        for (i = 0; i < self->ntype; i++)
-            if (strcmp(self->types[i], name) == 0) return i;
-        return -1;
+        return self->sym->find_type(name);
     }
 
     int add_type(const char *name, int kind)
     {
-        int i;
-        (void)self;
-        i = self->find_type(name);
-        if (i >= 0) {
-            /* a struct tag discovered while parsing a type keeps its kind */
-            if (self->type_kind[i] == 0) self->type_kind[i] = kind;
-            return 0;
-        }
-        if (self->ntype >= MAX_TYPES) return self->fail("too many types");
-        snprintf(self->types[self->ntype], MAX_TEXT, "%s", name);
-        self->type_kind[self->ntype] = kind;
-        self->ntype++;
+        if (self->sym->add_type(name, kind) != 0)
+            return self->fail(self->sym->last_error());
         return 0;
     }
 
     int find_struct(const char *name)
     {
-        int i;
-        (void)self;
-        for (i = 0; i < self->nstructs; i++)
-            if (strcmp(self->structs[i].name, name) == 0) return i;
-        return -1;
+        return self->sym->find_struct(name);
     }
 
     int add_struct(const char *name)
     {
+        const char *why;
         int i;
-        (void)self;
-        if (!name[0]) return -1;
-        i = self->find_struct(name);
-        if (i >= 0) return i;
-        if (self->nstructs >= MAX_STRUCTS) return self->fail("too many structs");
-        snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
-        self->structs[self->nstructs].nuse = 0;
-        self->structs[self->nstructs].uses_drop = 0;
-        self->nstructs++;
-        return self->nstructs - 1;
+        self->sym->errmsg[0] = 0;
+        i = self->sym->add_struct(name);
+        if (i < 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return i;
     }
 
     int find_trait(const char *name)
     {
-        int i;
-        (void)self;
-        for (i = 0; i < self->ntraits; i++)
-            if (strcmp(self->traits[i].name, name) == 0) return i;
-        return -1;
+        return self->sym->find_trait(name);
     }
 
     int add_trait(const char *name)
     {
-        int i;
-        (void)self;
-        i = self->find_trait(name);
-        if (i >= 0) return i;
-        if (self->ntraits >= MAX_TRAITS) return self->fail("too many traits");
-        snprintf(self->traits[self->ntraits].name, MAX_TEXT, "%s", name);
-        self->traits[self->ntraits].nm = 0;
-        self->ntraits++;
-        return self->ntraits - 1;
+        int i = self->sym->add_trait(name);
+        if (i < 0) return self->fail(self->sym->last_error());
+        return i;
     }
 
-    /* Which trait of `stype` declares `method`: the vtable field name and the
-       dispatch target both need it. `stype` may carry a `struct ` prefix or a
-       trailing `*` (a pointer receiver). */
+    /* A miss is not an error here either: the emitter tries trait methods of a
+       receiver type and moves on when none matches. */
     int method_trait(const char *stype, const char *method, char *tout, size_t tcap)
     {
-        char buf[MAX_TEXT];
-        char *base;
-        size_t n;
-        int s, ti, mi;
-        (void)self;
-
-        if (snprintf(buf, sizeof buf, "%s", stype) >= (int)sizeof buf) return -1;
-        base = buf;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        n = strlen(base);
-        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
-            base[n - 1] = 0;
-            n--;
+        const char *why;
+        self->sym->errmsg[0] = 0;
+        if (self->sym->method_trait(stype, method, tout, (int)tcap) != 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
         }
-        s = self->find_struct(base);
-        if (s < 0) return -1;
-        for (ti = 0; ti < self->structs[s].nuse; ti++) {
-            int t = self->find_trait(self->structs[s].use[ti]);
-            if (t < 0) continue;
-            for (mi = 0; mi < self->traits[t].nm; mi++) {
-                if (strcmp(self->traits[t].m[mi].name, method) == 0) {
-                    if (snprintf(tout, tcap, "%s", self->traits[t].name) >= (int)tcap) return -1;
-                    return 0;
-                }
-            }
-        }
-        return -1;
-    }
-
-    /* A declaration inside `namespace A::B` is stored under its C name,
-       `A_B_<name>`; the top level adds no prefix. */
-    int ns_decl_name(const char *name, char *out, size_t cap)
-    {
-        (void)self;
-        if (snprintf(out, cap, "%s%s", self->ns, name) >= (int)cap)
-            return self->fail("name is too long");
         return 0;
     }
 
-    /* Unqualified lookup: the current namespace first, then the top level. */
+    int ns_decl_name(const char *name, char *out, size_t cap)
+    {
+        if (self->sym->ns_decl_name(name, out, (int)cap) != 0)
+            return self->fail(self->sym->last_error());
+        return 0;
+    }
+
     int resolve_type(const char *name, char *out, size_t cap)
     {
-        char qname[MAX_TEXT];
-        (void)self;
-
-        if (self->ns[0]) {
-            if (snprintf(qname, sizeof qname, "%s%s", self->ns, name) >= (int)sizeof qname)
-                return self->fail("name is too long");
-            if (self->find_type(qname) >= 0 || self->find_trait(qname) >= 0
-                || self->find_struct(qname) >= 0) {
-                if (snprintf(out, cap, "%s", qname) >= (int)cap)
-                    return self->fail("name is too long");
-                return 0;
-            }
-        }
-        if (snprintf(out, cap, "%s", name) >= (int)cap)
-            return self->fail("name is too long");
+        if (self->sym->resolve_type(name, out, (int)cap) != 0)
+            return self->fail(self->sym->last_error());
         return 0;
     }
 
@@ -1103,9 +941,9 @@ impl ParseOps for Ast {
                 ti = self->find_type(rname);
                 if (ti < 0) break;
                 /* a bare struct tag needs `struct`; a trait becomes its iface */
-                if (self->type_kind[ti] == 1) {
+                if (self->sym->type_kind[ti] == 1) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
-                } else if (self->type_kind[ti] == 3) {
+                } else if (self->sym->type_kind[ti] == 3) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                     if (snprintf(iface, sizeof iface, "%s_iface", rname) >= (int)sizeof iface)
                         return self->fail("type name is too long");
@@ -1296,23 +1134,23 @@ impl ParseOps for Ast {
                 self->pop_scope();
                 return -1;
             }
-            self->funcs[fi].line = func_line;
+            self->sym->funcs[fi].line = func_line;
             self->pop_scope();
             return NO_NODE;
         }
-        snprintf(self->ret_type, sizeof self->ret_type, "%s", ret);
+        snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
         snprintf(self->cur_func, sizeof self->cur_func, "%s", name);
         /* the body is the leak analysis window; its own scope is the frame a
            deeper return counts as conditional against */
         self->leak_active = 1;
-        self->leak_frame = self->nscope + 1;
+        self->leak_frame = self->sym->nscope + 1;
         self->leak_impl = 0;
         self->ret_owned = 0;
         b = self->parse_block();
         self->leak_active = 0;
         self->leak_frame = -1;
         self->cur_func[0] = 0;
-        self->ret_type[0] = 0;
+        self->sym->ret_type[0] = 0;
         if (b < 0) {
             self->pop_scope();
             return -1;
@@ -1322,8 +1160,8 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
-        self->funcs[fi].ret_owned = self->ret_owned;
-        self->funcs[fi].line = func_line;
+        self->sym->funcs[fi].ret_owned = self->ret_owned;
+        self->sym->funcs[fi].line = func_line;
         f = self->new_node(N_FUNC);
         if (f < 0) {
             self->pop_scope();
@@ -1373,7 +1211,7 @@ impl ParseOps for Ast {
             if (self->declare_var(name, typebuf) != 0) return -1;
             if (self->arena->nodes[p].text3[0]) {
                 int vi = self->find_var(name);
-                if (vi >= 0) self->vars[vi].is_array = 1;
+                if (vi >= 0) self->sym->vars[vi].is_array = 1;
             }
             if (tail == 0) first = p;
             else self->arena->nodes[tail].next = p;
@@ -1440,7 +1278,7 @@ impl ParseOps for Ast {
            declaration above it is fine. L2 reports it at the '{'. */
         if (qname[0]) {
             int ex = self->find_struct(qname);
-            if (ex >= 0 && self->structs[ex].defined) {
+            if (ex >= 0 && self->sym->structs[ex].defined) {
                 char msg[MAX_TEXT];
                 snprintf(msg, sizeof msg, "duplicate struct '%s'", name);
                 return ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->path);
@@ -1464,14 +1302,14 @@ impl ParseOps for Ast {
                which parse_typedef attaches to the alias. */
             if (qname[0]) {
                 int si2 = self->find_struct(qname);
-                if (si2 >= 0 && self->structs[si2].nfields < MAX_FIELDS) {
-                    snprintf(self->structs[si2].fields[self->structs[si2].nfields].name, MAX_TEXT,
+                if (si2 >= 0 && self->sym->structs[si2].nfields < MAX_FIELDS) {
+                    snprintf(self->sym->structs[si2].fields[self->sym->structs[si2].nfields].name, MAX_TEXT,
                              "%s", self->arena->nodes[m].text2);
-                    snprintf(self->structs[si2].fields[self->structs[si2].nfields].type, MAX_TEXT,
+                    snprintf(self->sym->structs[si2].fields[self->sym->structs[si2].nfields].type, MAX_TEXT,
                              "%s", self->arena->nodes[m].text);
-                    snprintf(self->structs[si2].fields[self->structs[si2].nfields].dims, MAX_TEXT,
+                    snprintf(self->sym->structs[si2].fields[self->sym->structs[si2].nfields].dims, MAX_TEXT,
                              "%s", self->arena->nodes[m].text3);
-                    self->structs[si2].nfields++;
+                    self->sym->structs[si2].nfields++;
                 }
             } else if (self->npend < MAX_FIELDS) {
                 snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", self->arena->nodes[m].text2);
@@ -1494,12 +1332,12 @@ impl ParseOps for Ast {
                 int si3, ui3;
                 si3 = self->find_struct(qname);
                 if (si3 >= 0) {
-                    for (ui3 = 0; ui3 < self->structs[si3].nuse; ui3++) {
-                        if (self->find_trait(self->structs[si3].use[ui3]) < 0) {
+                    for (ui3 = 0; ui3 < self->sym->structs[si3].nuse; ui3++) {
+                        if (self->find_trait(self->sym->structs[si3].use[ui3]) < 0) {
                             char msg[MAX_TEXT];
                             snprintf(msg, sizeof msg,
                                      "struct '%s' uses undefined trait '%s'",
-                                     name, self->structs[si3].use[ui3]);
+                                     name, self->sym->structs[si3].use[ui3]);
                             return ct_sem_error(brace_line, brace_col, msg, self->path);
                         }
                     }
@@ -1508,7 +1346,7 @@ impl ParseOps for Ast {
         }
         if (qname[0]) {
             int di = self->find_struct(qname);
-            if (di >= 0) self->structs[di].defined = 1;
+            if (di >= 0) self->sym->structs[di].defined = 1;
         }
         return s;
     }
@@ -1548,26 +1386,26 @@ impl ParseOps for Ast {
                 if (self->arena->nodes[t].text[0]) tagi = self->find_struct(self->arena->nodes[t].text);
                 ai = self->find_struct(qname);
                 if (tagi >= 0 && ai >= 0 && tagi != ai) {
-                    self->structs[ai].nuse = self->structs[tagi].nuse;
-                    self->structs[ai].uses_drop = self->structs[tagi].uses_drop;
-                    for (ui = 0; ui < self->structs[tagi].nuse; ui++)
-                        snprintf(self->structs[ai].use[ui], MAX_TEXT, "%s", self->structs[tagi].use[ui]);
-                    self->structs[ai].nfields = self->structs[tagi].nfields;
-                    for (ui = 0; ui < self->structs[tagi].nfields; ui++) {
-                        snprintf(self->structs[ai].fields[ui].name, MAX_TEXT, "%s",
-                                 self->structs[tagi].fields[ui].name);
-                        snprintf(self->structs[ai].fields[ui].type, MAX_TEXT, "%s",
-                                 self->structs[tagi].fields[ui].type);
+                    self->sym->structs[ai].nuse = self->sym->structs[tagi].nuse;
+                    self->sym->structs[ai].uses_drop = self->sym->structs[tagi].uses_drop;
+                    for (ui = 0; ui < self->sym->structs[tagi].nuse; ui++)
+                        snprintf(self->sym->structs[ai].use[ui], MAX_TEXT, "%s", self->sym->structs[tagi].use[ui]);
+                    self->sym->structs[ai].nfields = self->sym->structs[tagi].nfields;
+                    for (ui = 0; ui < self->sym->structs[tagi].nfields; ui++) {
+                        snprintf(self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s",
+                                 self->sym->structs[tagi].fields[ui].name);
+                        snprintf(self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s",
+                                 self->sym->structs[tagi].fields[ui].type);
                     }
                 } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
-                    self->structs[ai].nfields = self->npend;
+                    self->sym->structs[ai].nfields = self->npend;
                     for (ui = 0; ui < self->npend; ui++) {
-                        snprintf(self->structs[ai].fields[ui].name, MAX_TEXT, "%s",
+                        snprintf(self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s",
                                  self->pend_fields[ui].name);
-                        snprintf(self->structs[ai].fields[ui].type, MAX_TEXT, "%s",
+                        snprintf(self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s",
                                  self->pend_fields[ui].type);
-                        snprintf(self->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
+                        snprintf(self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
                                  self->pend_fields[ui].dims);
                     }
                 }
@@ -1602,7 +1440,7 @@ impl ParseOps for Ast {
             /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
                never joins the `use` list -- only the flag matters */
             if (strcmp(tname, "Drop") == 0) {
-                self->structs[sindex].uses_drop = 1;
+                self->sym->structs[sindex].uses_drop = 1;
                 self->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->lex_next();
@@ -1610,9 +1448,9 @@ impl ParseOps for Ast {
                 }
                 break;
             }
-            if (self->structs[sindex].nuse >= MAX_TRAITS) return self->fail("too many used traits");
-            snprintf(self->structs[sindex].use[self->structs[sindex].nuse], MAX_TEXT, "%s", tname);
-            self->structs[sindex].nuse++;
+            if (self->sym->structs[sindex].nuse >= MAX_TRAITS) return self->fail("too many used traits");
+            snprintf(self->sym->structs[sindex].use[self->sym->structs[sindex].nuse], MAX_TEXT, "%s", tname);
+            self->sym->structs[sindex].nuse++;
             self->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                 self->lex_next();
@@ -1648,26 +1486,26 @@ impl ParseOps for Ast {
         }
         ti = self->add_trait(qname);
         if (ti < 0) return -1;
-        self->traits[ti].is_pub = is_pub;
-        self->traits[ti].line = trait_line;
+        self->sym->traits[ti].is_pub = is_pub;
+        self->sym->traits[ti].line = trait_line;
         if (self->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
         self->lex_next();
         if (self->expect("{") != 0) return -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             if (self->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->lex->tok != T_ID) return self->fail("expected a method name");
-            if (self->traits[ti].nm >= MAX_METHODS) return self->fail("too many trait methods");
-            mi = self->traits[ti].nm;
-            snprintf(self->traits[ti].m[mi].name, MAX_TEXT, "%s", self->lex->toktext);
-            snprintf(self->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
-            self->traits[ti].m[mi].nparams = 0;
+            if (self->sym->traits[ti].nm >= MAX_METHODS) return self->fail("too many trait methods");
+            mi = self->sym->traits[ti].nm;
+            snprintf(self->sym->traits[ti].m[mi].name, MAX_TEXT, "%s", self->lex->toktext);
+            snprintf(self->sym->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
+            self->sym->traits[ti].m[mi].nparams = 0;
             self->lex_next();
             if (self->expect("(") != 0) return -1;
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "void") == 0) {
                 self->lex_next();
                 if (self->expect(")") != 0) return -1;
                 if (self->expect(";") != 0) return -1;
-                self->traits[ti].nm++;
+                self->sym->traits[ti].nm++;
                 continue;
             }
             np = 0;
@@ -1688,7 +1526,7 @@ impl ParseOps for Ast {
                                      sizeof ptype - strlen(ptype), "%s", self->arena->nodes[sp].text3);
                     }
                     if (np >= MAX_PARAMS) return self->fail("too many method parameters");
-                    snprintf(self->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
+                    snprintf(self->sym->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
                     np++;
                     if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                         self->lex_next();
@@ -1699,8 +1537,8 @@ impl ParseOps for Ast {
             }
             if (self->expect(")") != 0) return -1;
             if (self->expect(";") != 0) return -1;
-            self->traits[ti].m[mi].nparams = np;
-            self->traits[ti].nm++;
+            self->sym->traits[ti].m[mi].nparams = np;
+            self->sym->traits[ti].nm++;
         }
         if (self->expect("}") != 0) return -1;
         return NO_NODE;
@@ -1752,7 +1590,7 @@ impl ParseOps for Ast {
             return NO_NODE;
         }
         type_index = self->find_type(rstruct);
-        if (type_index >= 0 && self->type_kind[type_index] == 1)
+        if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
             snprintf(stype, sizeof stype, "struct %s", rstruct);
         else
             snprintf(stype, sizeof stype, "%s", rstruct);
@@ -1787,40 +1625,40 @@ impl ParseOps for Ast {
             for (k2 = params; k2 > 0; k2 = self->arena->nodes[k2].next) nimpl++;
             tm_i = 0;
             if (ti >= 0)
-                for (tm_i = 0; tm_i < self->traits[ti].nm; tm_i++)
-                    if (strcmp(self->traits[ti].m[tm_i].name, mname) == 0) break;
-            if (ti >= 0 && tm_i < self->traits[ti].nm) {
+                for (tm_i = 0; tm_i < self->sym->traits[ti].nm; tm_i++)
+                    if (strcmp(self->sym->traits[ti].m[tm_i].name, mname) == 0) break;
+            if (ti >= 0 && tm_i < self->sym->traits[ti].nm) {
                 char wmsg[MAX_TEXT];
-                if (ret[0] && strcmp(ret, self->traits[ti].m[tm_i].ret) != 0) {
+                if (ret[0] && strcmp(ret, self->sym->traits[ti].m[tm_i].ret) != 0) {
                     snprintf(wmsg, sizeof wmsg, "return type '%s' does not match the trait's '%s'",
-                             ret, self->traits[ti].m[tm_i].ret);
+                             ret, self->sym->traits[ti].m[tm_i].ret);
                     if (ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->path) != 0) {
                         self->pop_scope();
                         return -1;
                     }
-                } else if (nimpl != self->traits[ti].m[tm_i].nparams) {
+                } else if (nimpl != self->sym->traits[ti].m[tm_i].nparams) {
                     snprintf(wmsg, sizeof wmsg, "takes %d parameter(s), the trait declares %d",
-                             nimpl, self->traits[ti].m[tm_i].nparams);
+                             nimpl, self->sym->traits[ti].m[tm_i].nparams);
                     if (ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->path) != 0) {
                         self->pop_scope();
                         return -1;
                     }
                 }
             }
-            snprintf(self->ret_type, sizeof self->ret_type, "%s", ret);
+            snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
             snprintf(self->cur_func, sizeof self->cur_func, "%s_%s_%s",
-                     self->structs[si].name, rtrait, mname);
+                     self->sym->structs[si].name, rtrait, mname);
             /* the method body tracks leaks too; a method symbol is not in the
                function table, so nothing feeds `ret_owned` back to callers */
             self->leak_active = 1;
-            self->leak_frame = self->nscope + 1;
+            self->leak_frame = self->sym->nscope + 1;
             self->leak_impl = 1;
             body = self->parse_block();
             self->leak_active = 0;
             self->leak_frame = -1;
             self->leak_impl = 0;
             self->cur_func[0] = 0;
-            self->ret_type[0] = 0;
+            self->sym->ret_type[0] = 0;
             if (body < 0) {
                 self->pop_scope();
                 return -1;
@@ -1833,8 +1671,8 @@ impl ParseOps for Ast {
             /* The emitted function takes the trait's return type (L2 does the
                same), so a mismatching impl still yields C that compiles; the
                map keeps the impl's written type in `text`. */
-            if (ti >= 0 && tm_i < self->traits[ti].nm)
-                snprintf(self->arena->nodes[mnode].text3, MAX_TEXT, "%s", self->traits[ti].m[tm_i].ret);
+            if (ti >= 0 && tm_i < self->sym->traits[ti].nm)
+                snprintf(self->arena->nodes[mnode].text3, MAX_TEXT, "%s", self->sym->traits[ti].m[tm_i].ret);
             self->arena->nodes[mnode].a = params;
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = ti;
@@ -1905,7 +1743,7 @@ impl ParseOps for Ast {
 
         if (self->expect("{") != 0) return -1;
         if (self->push_scope() != 0) return -1;
-        base = self->own_base[self->nscope - 1];
+        base = self->own_base[self->sym->nscope - 1];
         blk = self->new_node(N_BLOCK);
         if (blk < 0) {
             self->pop_scope();
@@ -1943,7 +1781,7 @@ impl ParseOps for Ast {
                 /* a reassigned / returned / moved `own` variable is no longer
                    ours to release (L2 clears the same flag before its rewrite) */
                 vi = self->find_var(self->arena->nodes[self->own_decl[d]].text2);
-                if (vi >= 0 && !self->vars[vi].autodrop) continue;
+                if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
                 del = self->new_node(N_DELETE);
                 v = self->new_node(N_VAR);
                 if (del < 0 || v < 0) {
@@ -1973,7 +1811,7 @@ impl ParseOps for Ast {
         }
         /* a scope that closes with a still-owned heap object leaks it (L2
            reports it at the same point, keeping the warning order) */
-        if (self->leak_active && self->leak_scope(self->scope[self->nscope - 1], self->nvar) != 0) {
+        if (self->leak_active && self->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
             self->pop_scope();
             return -1;
         }
@@ -1998,7 +1836,7 @@ impl ParseOps for Ast {
                 self->lex_next();
                 /* a bare `return;` leaves every owned object behind */
                 if (self->leak_active
-                    && self->leak_return(-1, !at_start || self->nscope > self->leak_frame, rline) != 0)
+                    && self->leak_return(-1, !at_start || self->sym->nscope > self->leak_frame, rline) != 0)
                     return -1;
                 return s;
             }
@@ -2007,7 +1845,7 @@ impl ParseOps for Ast {
             {
                 char tr[MAX_TEXT];
                 int ip = 0;
-                if (self->iface_ref_type(self->ret_type, tr, sizeof tr, &ip)) {
+                if (self->iface_ref_type(self->sym->ret_type, tr, sizeof tr, &ip)) {
                     e = self->maybe_box(e, tr, ip);
                     if (e < 0) return -1;
                 }
@@ -2016,7 +1854,7 @@ impl ParseOps for Ast {
             /* a return nested in a block (or written mid-line) may be skipped
                at run time, so it only warns about what it leaves behind */
             if (self->leak_active
-                && self->leak_return(e, !at_start || self->nscope > self->leak_frame, rline) != 0)
+                && self->leak_return(e, !at_start || self->sym->nscope > self->leak_frame, rline) != 0)
                 return -1;
             if (self->expect(";") != 0) return -1;
             return s;
@@ -2048,7 +1886,7 @@ impl ParseOps for Ast {
                         self->arena->nodes[s].text[dl] = 0;
                     }
                     si = self->find_struct(self->arena->nodes[s].text);
-                    if (si < 0 || !self->structs[si].uses_drop) self->arena->nodes[s].text[0] = 0;
+                    if (si < 0 || !self->sym->structs[si].uses_drop) self->arena->nodes[s].text[0] = 0;
                 }
             }
             if (self->expect(";") != 0) return -1;
@@ -2260,7 +2098,7 @@ impl ParseOps for Ast {
             if (self->parse_array_dims(n) != 0) return -1;
             if (self->arena->nodes[n].text3[0]) {
                 int vi = self->find_var(name);
-                if (vi >= 0) self->vars[vi].is_array = 1;
+                if (vi >= 0) self->sym->vars[vi].is_array = 1;
             }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
                 self->lex_next();
@@ -2648,8 +2486,8 @@ impl ParseOps for Ast {
                             int t = self->find_trait(trname);
                             int mi, ok = 0;
                             if (t >= 0) {
-                                for (mi = 0; mi < self->traits[t].nm; mi++)
-                                    if (strcmp(self->traits[t].m[mi].name, fname) == 0) ok = 1;
+                                for (mi = 0; mi < self->sym->traits[t].nm; mi++)
+                                    if (strcmp(self->sym->traits[t].m[mi].name, fname) == 0) ok = 1;
                             }
                             if (ok) {
                                 self->arena->nodes[m].aux = piface ? 4 : 3;
@@ -2734,10 +2572,10 @@ impl ParseOps for Ast {
                     prev = -1;
                     k = 0;
                     first_arg = args;
-                    while (cur > 0 && k < self->funcs[fi].nparams) {
+                    while (cur > 0 && k < self->sym->funcs[fi].nparams) {
                         char tr[MAX_TEXT];
                         int ip = 0;
-                        if (self->iface_ref_type(self->funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
+                        if (self->iface_ref_type(self->sym->funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
                             int boxed = self->maybe_box(cur, tr, ip);
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
@@ -2893,7 +2731,7 @@ impl TypeOps for Ast {
             if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
             if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
                 int vi = self->find_var(self->arena->nodes[self->arena->nodes[n].a].text2);
-                if (vi >= 0 && self->vars[vi].is_array) return 0;
+                if (vi >= 0 && self->sym->vars[vi].is_array) return 0;
             }
             ln = strlen(out);
             while (ln > 0 && out[ln - 1] == ' ') ln--;
@@ -2913,7 +2751,7 @@ impl TypeOps for Ast {
         if (self->arena->nodes[n].kind == N_CALL) {
             i = self->find_func(self->arena->nodes[n].text2);
             if (i < 0) return -1;
-            if (snprintf(out, cap, "%s", self->funcs[i].ret) >= (int)cap) return -1;
+            if (snprintf(out, cap, "%s", self->sym->funcs[i].ret) >= (int)cap) return -1;
             return 0;
         }
         if (self->arena->nodes[n].kind == N_MEMBER || self->arena->nodes[n].kind == N_ARROW) {
@@ -2925,9 +2763,9 @@ impl TypeOps for Ast {
             if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
             si = self->find_struct(sname);
             if (si < 0) return -1;
-            for (fi = 0; fi < self->structs[si].nfields; fi++)
-                if (strcmp(self->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-                    if (snprintf(out, cap, "%s", self->structs[si].fields[fi].type) >= (int)cap) return -1;
+            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+                if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
+                    if (snprintf(out, cap, "%s", self->sym->structs[si].fields[fi].type) >= (int)cap) return -1;
                     return 0;
                 }
             return -1;
@@ -3001,7 +2839,7 @@ impl TypeOps for Ast {
                 /* an array of interface values decays to a pointer */
                 if (!ip && addr && self->arena->nodes[n].kind == N_VAR) {
                     int vi = self->find_var(self->arena->nodes[n].text2);
-                    if (vi >= 0 && self->vars[vi].is_array) return n;
+                    if (vi >= 0 && self->sym->vars[vi].is_array) return n;
                 }
             }
             return self->fail("interface type mismatch");
@@ -3011,8 +2849,8 @@ impl TypeOps for Ast {
         si = self->find_struct(sname);
         if (si < 0) return self->fail("cannot box an unknown struct");
         found = 0;
-        for (u = 0; u < self->structs[si].nuse; u++)
-            if (strcmp(self->structs[si].use[u], trait) == 0) found = 1;
+        for (u = 0; u < self->sym->structs[si].nuse; u++)
+            if (strcmp(self->sym->structs[si].use[u], trait) == 0) found = 1;
         if (!found) return self->fail("the struct does not use this trait");
         box = self->new_node(N_BOX);
         if (box < 0) return -1;
@@ -3036,10 +2874,10 @@ impl TypeOps for Ast {
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         si = self->find_struct(base);
-        for (fi = 0; si >= 0 && fi < self->structs[si].nfields; fi++) {
+        for (fi = 0; si >= 0 && fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
-            if (!self->structs[si].fields[fi].dims[0]) continue;
-            snprintf(ft, sizeof ft, "%s", self->structs[si].fields[fi].type);
+            if (!self->sym->structs[si].fields[fi].dims[0]) continue;
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
             if (self->type_needs_init(ft)) return 1;
         }
@@ -3095,12 +2933,12 @@ impl TypeOps for Ast {
         si = ok ? self->find_struct(base) : -1;
         if (si < 0) ok = 0;
         fi = -1;
-        for (u = 0; ok && u < self->structs[si].nfields; u++)
-            if (strcmp(self->structs[si].fields[u].name, fname) == 0) fi = u;
-        if (ok && (fi < 0 || self->structs[si].fields[fi].dims[0])) ok = 0;
+        for (u = 0; ok && u < self->sym->structs[si].nfields; u++)
+            if (strcmp(self->sym->structs[si].fields[u].name, fname) == 0) fi = u;
+        if (ok && (fi < 0 || self->sym->structs[si].fields[fi].dims[0])) ok = 0;
         is_ptr = 0;
         if (ok) {
-            snprintf(ftype, sizeof ftype, "%s", self->structs[si].fields[fi].type);
+            snprintf(ftype, sizeof ftype, "%s", self->sym->structs[si].fields[fi].type);
             if (!self->iface_ref_type(ftype, tname, sizeof tname, &is_ptr)) ok = 0;
         }
 
@@ -3133,8 +2971,8 @@ impl TypeOps for Ast {
         if (ok && srcptr && vptr) ok = 0;     /* `&p` on a struct pointer is not a box source */
         found = 0;
         si = ok ? self->find_struct(sname) : -1;
-        for (u = 0; ok && si >= 0 && u < self->structs[si].nuse; u++)
-            if (strcmp(self->structs[si].use[u], tname) == 0) found = 1;
+        for (u = 0; ok && si >= 0 && u < self->sym->structs[si].nuse; u++)
+            if (strcmp(self->sym->structs[si].use[u], tname) == 0) found = 1;
         if (ok && !found) ok = 0;
 
         if (!ok) {
@@ -3410,27 +3248,27 @@ impl ModuleOps for Ast {
         self->lex->line = 1;
         self->lex->tokline = 1;
         self->lex->tok = 0;
-        self->nvar = 0;
-        self->nscope = 0;
+        self->sym->nvar = 0;
+        self->sym->nscope = 0;
         self->nowner = 0;
         self->leak_active = 0;
         self->leak_frame = -1;
         self->leak_impl = 0;
         self->ret_owned = 0;
-        self->ns[0] = 0;
+        self->sym->ns[0] = 0;
         self->ns_decl[0] = 0;
-        self->self_mode = 0;
-        self->ret_type[0] = 0;
+        self->sym->self_mode = 0;
+        self->sym->ret_type[0] = 0;
         self->cur_func[0] = 0;
         self->nparams = 0;
         self->path = path;
-        self->units[u].fn_start = self->nfunc;
-        self->units[u].tr_start = self->ntraits;
+        self->units[u].fn_start = self->sym->nfunc;
+        self->units[u].tr_start = self->sym->ntraits;
         self->units[u].call_start = self->ncalls;
         self->units[u].prog = self->parse_program();
         if (self->units[u].prog < 0) return -1;
-        self->units[u].fn_end = self->nfunc;
-        self->units[u].tr_end = self->ntraits;
+        self->units[u].fn_end = self->sym->nfunc;
+        self->units[u].tr_end = self->sym->ntraits;
         self->units[u].call_end = self->ncalls;
         snprintf(self->units[u].ns, MAX_TEXT, "%s", self->ns_decl);
         return u;
@@ -3592,10 +3430,10 @@ impl ModuleOps for Ast {
             }
             break;
         }
-        if (!self->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
+        if (!self->sym->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
         if (self->expect("{") != 0) return -1;
-        snprintf(save, sizeof save, "%s", self->ns);
-        if (snprintf(self->ns, sizeof self->ns, "%s%s", save, prefix) >= (int)sizeof self->ns)
+        snprintf(save, sizeof save, "%s", self->sym->ns);
+        if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
             return self->fail("namespace is too long");
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             if (self->lex->tok == T_PP) {
@@ -3612,7 +3450,7 @@ impl ModuleOps for Ast {
             if (self->append_node(prog, n) != 0) return -1;
         }
         if (self->expect("}") != 0) return -1;
-        snprintf(self->ns, sizeof self->ns, "%s", save);
+        snprintf(self->sym->ns, sizeof self->sym->ns, "%s", save);
         return 0;
     }
 
@@ -3672,8 +3510,8 @@ impl ModuleOps for Ast {
             if (self->lex->tok != T_ID) return self->fail("expected a method name");
             snprintf(b->method, MAX_TEXT, "%s", self->lex->toktext);
             mi = -1;
-            for (k = 0; k < self->traits[ti].nm; k++)
-                if (strcmp(self->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
+            for (k = 0; k < self->sym->traits[ti].nm; k++)
+                if (strcmp(self->sym->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
             if (mi < 0) {
                 snprintf(msg, sizeof msg, "'%s' is not a method of trait '%s'",
                          b->method, rtrait);
@@ -3698,10 +3536,10 @@ impl ModuleOps for Ast {
             }
             if (self->expect(")") != 0) return -1;
             b->nparams = np;
-            if (np != self->traits[ti].m[mi].nparams) {
+            if (np != self->sym->traits[ti].m[mi].nparams) {
                 snprintf(msg, sizeof msg,
                          "map binding for '%s' takes %d parameter(s), the trait declares %d",
-                         b->method, np, self->traits[ti].m[mi].nparams);
+                         b->method, np, self->sym->traits[ti].m[mi].nparams);
                 return self->fail(msg);
             }
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "->") == 0))
@@ -3761,16 +3599,16 @@ impl ModuleOps for Ast {
                     return self->fail(msg);
                 }
         }
-        for (k = 0; k < self->traits[ti].nm; k++) {
+        for (k = 0; k < self->sym->traits[ti].nm; k++) {
             bound = 0;
             for (i = 0; i < m->nb; i++)
-                if (strcmp(m->b[i].method, self->traits[ti].m[k].name) == 0) {
+                if (strcmp(m->b[i].method, self->sym->traits[ti].m[k].name) == 0) {
                     bound = 1;
                     break;
                 }
             if (!bound) {
                 snprintf(msg, sizeof msg, "trait method '%s' is not bound by the map",
-                         self->traits[ti].m[k].name);
+                         self->sym->traits[ti].m[k].name);
                 return self->fail(msg);
             }
         }
@@ -4094,22 +3932,22 @@ impl ModuleOps for Ast {
 
         self->nunits = 0;
         self->arena->reset();
-        self->nfunc = 0;
-        self->nvar = 0;
-        self->nscope = 0;
+        self->sym->nfunc = 0;
+        self->sym->nvar = 0;
+        self->sym->nscope = 0;
         self->nowner = 0;
         self->leak_active = 0;
         self->leak_frame = -1;
         self->leak_impl = 0;
         self->ret_owned = 0;
-        self->ntype = 0;
-        self->ntraits = 0;
-        self->nstructs = 0;
+        self->sym->ntype = 0;
+        self->sym->ntraits = 0;
+        self->sym->nstructs = 0;
         self->nrels = 0;
         self->nparams = 0;
-        self->self_mode = 0;
-        self->ret_type[0] = 0;
-        self->ns[0] = 0;
+        self->sym->self_mode = 0;
+        self->sym->ret_type[0] = 0;
+        self->sym->ns[0] = 0;
         self->ns_decl[0] = 0;
         self->lex->line = 1;
         self->lex->tokline = 1;
@@ -4267,7 +4105,7 @@ impl EmitOps for Ast {
             f = self->find_func(self->arena->nodes[self->hoist_calls[i]].text2);
             if (f < 0) return self->fail("cannot infer the type of a hoisted receiver");
             self->emit_indent(ind);
-            fprintf(self->out, "%s %s = ", self->funcs[f].ret, self->arena->nodes[self->hoist_calls[i]].text3);
+            fprintf(self->out, "%s %s = ", self->sym->funcs[f].ret, self->arena->nodes[self->hoist_calls[i]].text3);
             self->raw_call = self->hoist_calls[i];
             if (self->emit_expr(self->hoist_calls[i]) != 0) {
                 self->raw_call = -1;
@@ -4303,7 +4141,7 @@ impl EmitOps for Ast {
 
         if (self->emit_impls(prog) != 0) return -1;
 
-        for (i = 0; i < self->nfunc; i++)
+        for (i = 0; i < self->sym->nfunc; i++)
             if (self->emit_proto(i) != 0) return -1;
 
         if (self->emit_maps(-1) != 0) return -1;
@@ -4317,21 +4155,21 @@ impl EmitOps for Ast {
         return 0;
     }
 
-    /* One prototype line for `self->funcs[i]`. */
+    /* One prototype line for `self->sym->funcs[i]`. */
     int emit_proto(int i)
     {
         int k;
         (void)self;
 
-        if (self->funcs[i].is_static) fputs("static ", self->out);
-        fprintf(self->out, "%s %s(", self->funcs[i].ret, self->funcs[i].name);
-        if (self->funcs[i].nparams == 0) {
+        if (self->sym->funcs[i].is_static) fputs("static ", self->out);
+        fprintf(self->out, "%s %s(", self->sym->funcs[i].ret, self->sym->funcs[i].name);
+        if (self->sym->funcs[i].nparams == 0) {
             fputs("void", self->out);
         } else {
-            for (k = 0; k < self->funcs[i].nparams; k++) {
+            for (k = 0; k < self->sym->funcs[i].nparams; k++) {
                 if (k > 0) fputs(", ", self->out);
-                fputs(self->funcs[i].ptype[k], self->out);
-                fputs(self->funcs[i].pdim[k], self->out);
+                fputs(self->sym->funcs[i].ptype[k], self->out);
+                fputs(self->sym->funcs[i].pdim[k], self->out);
             }
         }
         fputs(");\n", self->out);
@@ -4352,13 +4190,13 @@ impl EmitOps for Ast {
             tname = self->arena->nodes[n].text2;
             if (strcmp(tname, "Drop") == 0) continue;   /* no vptr, no vtable */
             fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n",
-                    tname, self->structs[si].name, tname);
+                    tname, self->sym->structs[si].name, tname);
         }
         /* a `delete` in a function body runs before the drop definition below */
-        for (si = 0; si < self->nstructs; si++)
-            if (self->structs[si].uses_drop)
-                fprintf(self->out, "static void %s_Drop_drop(void *self);\n", self->structs[si].name);
-        if (self->nstructs) fputs("\n", self->out);
+        for (si = 0; si < self->sym->nstructs; si++)
+            if (self->sym->structs[si].uses_drop)
+                fprintf(self->out, "static void %s_Drop_drop(void *self);\n", self->sym->structs[si].name);
+        if (self->sym->nstructs) fputs("\n", self->out);
         return 0;
     }
 
@@ -4366,7 +4204,7 @@ impl EmitOps for Ast {
     int emit_trait_decls(void)
     {
         (void)self;
-        return self->emit_trait_range(0, self->ntraits, 0);
+        return self->emit_trait_range(0, self->sym->ntraits, 0);
     }
 
     /* A vtable field may name a struct by pointer (`void (*m)(void *, struct S *)`)
@@ -4377,10 +4215,10 @@ impl EmitOps for Ast {
         int i, ti;
         (void)self;
 
-        for (i = 0; i < self->nstructs; i++) {
-            ti = self->find_type(self->structs[i].name);
-            if (ti < 0 || self->type_kind[ti] != 1) continue;
-            fprintf(self->out, "struct %s;\n", self->structs[i].name);
+        for (i = 0; i < self->sym->nstructs; i++) {
+            ti = self->find_type(self->sym->structs[i].name);
+            if (ti < 0 || self->sym->type_kind[ti] != 1) continue;
+            fprintf(self->out, "struct %s;\n", self->sym->structs[i].name);
         }
         return 0;
     }
@@ -4392,19 +4230,19 @@ impl EmitOps for Ast {
         (void)self;
 
         for (t = start; t < end; t++) {
-            if (mode == 1 && !self->traits[t].is_pub) continue;
-            if (mode == 2 && self->traits[t].is_pub) continue;
-            fprintf(self->out, "struct %s_vtbl {\n", self->traits[t].name);
-            for (m = 0; m < self->traits[t].nm; m++) {
-                fprintf(self->out, "    %s (*%s)(void *", self->traits[t].m[m].ret,
-                        self->traits[t].m[m].name);
-                for (k = 0; k < self->traits[t].m[m].nparams; k++)
-                    fprintf(self->out, ", %s", self->traits[t].m[m].ptype[k]);
+            if (mode == 1 && !self->sym->traits[t].is_pub) continue;
+            if (mode == 2 && self->sym->traits[t].is_pub) continue;
+            fprintf(self->out, "struct %s_vtbl {\n", self->sym->traits[t].name);
+            for (m = 0; m < self->sym->traits[t].nm; m++) {
+                fprintf(self->out, "    %s (*%s)(void *", self->sym->traits[t].m[m].ret,
+                        self->sym->traits[t].m[m].name);
+                for (k = 0; k < self->sym->traits[t].m[m].nparams; k++)
+                    fprintf(self->out, ", %s", self->sym->traits[t].m[m].ptype[k]);
                 fputs(");\n", self->out);
             }
             fputs("};\n", self->out);
             fprintf(self->out, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n\n",
-                    self->traits[t].name, self->traits[t].name);
+                    self->sym->traits[t].name, self->sym->traits[t].name);
         }
         return 0;
     }
@@ -4419,7 +4257,7 @@ impl EmitOps for Ast {
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         si = self->find_struct(base);
-        return (si >= 0 && self->structs[si].nuse > 0) ? 1 : 0;
+        return (si >= 0 && self->sym->structs[si].nuse > 0) ? 1 : 0;
     }
 
     /* Does this *value* type need a vptr written somewhere -- itself or through a
@@ -4445,10 +4283,10 @@ impl EmitOps for Ast {
         if (strchr(tb, '*') != 0) return 0;
         si = self->find_struct(tb);
         if (si < 0) return 0;
-        if (self->structs[si].nuse > 0) return 1;
-        for (fi = 0; fi < self->structs[si].nfields; fi++) {
+        if (self->sym->structs[si].nuse > 0) return 1;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->structs[si].fields[fi].type);
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
             if (self->type_needs_init(ft)) return 1;
         }
@@ -4466,16 +4304,16 @@ impl EmitOps for Ast {
         while (*base == ' ') base++;
         si = self->find_struct(base);
         if (si < 0) return 0;
-        for (u = 0; u < self->structs[si].nuse; u++) {
+        for (u = 0; u < self->sym->structs[si].nuse; u++) {
             char low[MAX_TEXT];
-            for (i = 0; self->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
-                char c = self->structs[si].use[u][i];
+            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                char c = self->sym->structs[si].use[u][i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;
             }
             low[i] = 0;
             if (u > 0) fputs(", ", self->out);
-            fprintf(self->out, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, self->structs[si].use[u]);
+            fprintf(self->out, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, self->sym->structs[si].use[u]);
         }
         return 0;
     }
@@ -4502,25 +4340,25 @@ impl EmitOps for Ast {
         }
         si = self->find_struct(tb);
         if (si < 0) return 0;
-        for (u = 0; u < self->structs[si].nuse; u++) {
+        for (u = 0; u < self->sym->structs[si].nuse; u++) {
             char low[MAX_TEXT];
-            for (i = 0; self->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
-                char c = self->structs[si].use[u][i];
+            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                char c = self->sym->structs[si].use[u][i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;
             }
             low[i] = 0;
             self->emit_indent(ind);
-            fprintf(self->out, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->structs[si].use[u]);
+            fprintf(self->out, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->sym->structs[si].use[u]);
         }
-        for (fi = 0; fi < self->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
             char sub[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->structs[si].fields[fi].type);
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
-            if (self->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
+            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
             if (!self->type_needs_init(ft)) continue;
-            snprintf(sub, sizeof sub, "%s.%s", recv, self->structs[si].fields[fi].name);
+            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
             if (self->emit_vptr_stmts(sub, ft, ind) != 0) return -1;
         }
         return self->emit_array_field_vptrs(si, recv, ind);
@@ -4621,14 +4459,14 @@ impl EmitOps for Ast {
     {
         int fi;
         (void)self;
-        for (fi = 0; fi < self->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
             char prefix[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->structs[si].fields[fi].type);
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
-            if (self->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
+            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
             if (!self->type_needs_init(ft)) continue;
-            snprintf(prefix, sizeof prefix, ".%s", self->structs[si].fields[fi].name);
+            snprintf(prefix, sizeof prefix, ".%s", self->sym->structs[si].fields[fi].name);
             if (started) fputs(", ", self->out);
             if (self->emit_vptr_items(prefix, ft) != 0) return -1;
             started = 1;
@@ -4643,17 +4481,17 @@ impl EmitOps for Ast {
     {
         int fi;
         (void)self;
-        for (fi = 0; fi < self->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
             char sub[MAX_TEXT];
             const char *d;
             int depth, started;
-            if (!self->structs[si].fields[fi].dims[0]) continue;
-            snprintf(ft, sizeof ft, "%s", self->structs[si].fields[fi].type);
+            if (!self->sym->structs[si].fields[fi].dims[0]) continue;
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
             if (!self->type_needs_init(ft)) continue;
-            snprintf(sub, sizeof sub, "%s.%s", recv, self->structs[si].fields[fi].name);
-            d = self->structs[si].fields[fi].dims;
+            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
+            d = self->sym->structs[si].fields[fi].dims;
             depth = 0;
             started = 0;
             while (*d == '[') {
@@ -4700,15 +4538,15 @@ impl EmitOps for Ast {
             si = self->arena->nodes[n].aux;
             tname = self->arena->nodes[n].text2;
             ti = -1;
-            for (k = 0; k < self->ntraits; k++)
-                if (strcmp(self->traits[k].name, tname) == 0) ti = k;
+            for (k = 0; k < self->sym->ntraits; k++)
+                if (strcmp(self->sym->traits[k].name, tname) == 0) ti = k;
             if (ti < 0 && strcmp(tname, "Drop") != 0)
                 return self->fail("impl of an unknown trait");
             sname = self->arena->nodes[n].text;
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 fprintf(self->out, "static %s %s_%s_%s(void *self",
                         self->arena->nodes[m].text3[0] ? self->arena->nodes[m].text3 : self->arena->nodes[m].text,
-                        self->structs[si].name, tname, self->arena->nodes[m].text2);
+                        self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
                     fprintf(self->out, ", %s %s", self->arena->nodes[k].text, self->arena->nodes[k].text2);
@@ -4717,26 +4555,26 @@ impl EmitOps for Ast {
                 }
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
-                self->self_mode = 1;
+                self->sym->self_mode = 1;
                 k = self->arena->nodes[self->arena->nodes[m].b].a;
                 while (k >= 0) {
                     if (self->emit_node(k, 1) != 0) {
-                        self->self_mode = 0;
+                        self->sym->self_mode = 0;
                         return -1;
                     }
                     k = self->arena->nodes[k].next;
                 }
-                self->self_mode = 0;
+                self->sym->self_mode = 0;
                 fputs("}\n\n", self->out);
             }
             if (strcmp(tname, "Drop") != 0) {
                 fprintf(self->out, "static struct %s_vtbl %s_%s_vtable = {\n",
-                        tname, self->structs[si].name, tname);
+                        tname, self->sym->structs[si].name, tname);
                 u = 0;
                 for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                     if (u > 0) fputs(",\n", self->out);
                     fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
-                            self->structs[si].name, tname, self->arena->nodes[m].text2);
+                            self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                     u++;
                 }
                 fputs("\n};\n\n", self->out);
@@ -4746,19 +4584,19 @@ impl EmitOps for Ast {
            into its Drop-using value fields, the same shape L2 generates. */
         {
         int si;
-        for (si = 0; si < self->nstructs; si++) {
+        for (si = 0; si < self->sym->nstructs; si++) {
             int has = 0, fi, used = 0;
-            if (!self->structs[si].uses_drop) continue;
+            if (!self->sym->structs[si].uses_drop) continue;
             for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
                 if (self->arena->nodes[n].kind == N_IMPL && self->arena->nodes[n].aux == si
                     && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
             if (has) continue;
-            fprintf(self->out, "static void %s_Drop_drop(void *self) {\n", self->structs[si].name);
+            fprintf(self->out, "static void %s_Drop_drop(void *self) {\n", self->sym->structs[si].name);
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n",
-                    self->structs[si].name, self->structs[si].name);
-            for (fi = 0; fi < self->structs[si].nfields; fi++) {
+                    self->sym->structs[si].name, self->sym->structs[si].name);
+            for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
                 char base[MAX_TEXT];
-                const char *ft = self->structs[si].fields[fi].type;
+                const char *ft = self->sym->structs[si].fields[fi].type;
                 size_t bl;
                 int ci;
                 if (strncmp(ft, "struct ", 7) == 0) ft += 7;
@@ -4769,9 +4607,9 @@ impl EmitOps for Ast {
                     base[bl] = 0;
                 }
                 ci = self->find_struct(base);
-                if (ci >= 0 && self->structs[ci].uses_drop) {
+                if (ci >= 0 && self->sym->structs[ci].uses_drop) {
                     fprintf(self->out, "    %s_Drop_drop(&_self->%s);\n",
-                            self->structs[ci].name, self->structs[si].fields[fi].name);
+                            self->sym->structs[ci].name, self->sym->structs[si].fields[fi].name);
                     used = 1;
                 }
             }
@@ -4795,9 +4633,9 @@ impl EmitOps for Ast {
             if (u >= 0 && self->maps[i].unit != u) continue;
             for (j = 0; j < self->maps[i].nb; j++) {
                 MapBind *b;
-                MethodSig *sig;
+                struct frontend_sym_MethodSig *sig;
                 b = &self->maps[i].b[j];
-                sig = &self->traits[b->ti].m[b->mi];
+                sig = &self->sym->traits[b->ti].m[b->mi];
                 fprintf(self->out, "static %s %s(void *self", sig->ret, b->wrapper);
                 for (k = 0; k < b->nparams; k++)
                     fprintf(self->out, ", %s %s", sig->ptype[k], b->params[k]);
@@ -4850,18 +4688,18 @@ impl EmitOps for Ast {
             }
             si = self->find_struct(self->arena->nodes[n].text2);
             if (si >= 0) {
-                for (u = 0; u < self->structs[si].nuse; u++) {
+                for (u = 0; u < self->sym->structs[si].nuse; u++) {
                     char low[MAX_TEXT];
                     int i;
-                    for (i = 0; self->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
-                        char c = self->structs[si].use[u][i];
+                    for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                        char c = self->sym->structs[si].use[u][i];
                         if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                         low[i] = c;
                     }
                     low[i] = 0;
                     self->emit_indent(ind + 1);
                     fprintf(self->out, "struct %s_vtbl *__%s_vptr;\n",
-                            self->structs[si].use[u], low);
+                            self->sym->structs[si].use[u], low);
                 }
             }
             self->emit_indent(ind);
@@ -4951,11 +4789,11 @@ impl EmitOps for Ast {
             si = -1;
             if (self->arena->nodes[n].text[0]) si = self->find_struct(self->arena->nodes[n].text);
             self->emit_indent(ind);
-            if (si >= 0 && self->structs[si].uses_drop) {
+            if (si >= 0 && self->sym->structs[si].uses_drop) {
                 /* a Drop struct runs its drop before the memory goes away */
                 fputs("if (", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out, ") { %s_Drop_drop(", self->structs[si].name);
+                fprintf(self->out, ") { %s_Drop_drop(", self->sym->structs[si].name);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs("); free(", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
@@ -5206,7 +5044,7 @@ impl EmitOps for Ast {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_VAR) {
-            if (self->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) fputs("_self", self->out);
+            if (self->sym->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) fputs("_self", self->out);
             else fputs(self->arena->nodes[n].text2, self->out);
             return 0;
         }
@@ -5496,7 +5334,7 @@ impl EmitOps for Ast {
         }
 
         for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++) {
-            if (!self->funcs[i].is_pub || self->funcs[i].is_static) continue;
+            if (!self->sym->funcs[i].is_pub || self->sym->funcs[i].is_static) continue;
             if (self->emit_proto(i) != 0) return -1;
         }
 
@@ -5554,9 +5392,9 @@ impl EmitOps for Ast {
         } else {
             path = self->path;
             trs = 0;
-            tre = self->ntraits;
+            tre = self->sym->ntraits;
             fns = 0;
-            fne = self->nfunc;
+            fne = self->sym->nfunc;
             cls = 0;
             cle = self->ncalls;
         }
@@ -5572,19 +5410,19 @@ impl EmitOps for Ast {
         for (i = trs; i < tre; i++) {
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, self->traits[i].name);
+            self->emit_json_str(f, self->sym->traits[i].name);
             fputs("\",\"cname\":\"", f);
-            self->emit_json_str(f, self->traits[i].name);
+            self->emit_json_str(f, self->sym->traits[i].name);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"methods\":[", self->traits[i].line);
-            for (m = 0; m < self->traits[i].nm; m++) {
+            fprintf(f, "\",\"line\":%d,\"methods\":[", self->sym->traits[i].line);
+            for (m = 0; m < self->sym->traits[i].nm; m++) {
                 if (m > 0) fputc(',', f);
                 fputs("{\"name\":\"", f);
-                self->emit_json_str(f, self->traits[i].m[m].name);
+                self->emit_json_str(f, self->sym->traits[i].m[m].name);
                 fputs("\",\"ret\":\"", f);
-                self->emit_json_str(f, self->traits[i].m[m].ret);
-                fprintf(f, "\",\"params\":%d}", self->traits[i].m[m].nparams);
+                self->emit_json_str(f, self->sym->traits[i].m[m].ret);
+                fprintf(f, "\",\"params\":%d}", self->sym->traits[i].m[m].nparams);
             }
             fputs("]}", f);
             first = 0;
@@ -5605,10 +5443,10 @@ impl EmitOps for Ast {
             fprintf(f, "\",\"line\":%d,\"uses\":[", self->arena->nodes[n].line);
             si = self->find_struct(self->arena->nodes[n].text2);
             if (si >= 0) {
-                for (i = 0; i < self->structs[si].nuse; i++) {
+                for (i = 0; i < self->sym->structs[si].nuse; i++) {
                     if (i > 0) fputc(',', f);
                     fputc('"', f);
-                    self->emit_json_str(f, self->structs[si].use[i]);
+                    self->emit_json_str(f, self->sym->structs[si].use[i]);
                     fputc('"', f);
                 }
             }
@@ -5622,12 +5460,12 @@ impl EmitOps for Ast {
         for (i = fns; i < fne; i++) {
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, self->funcs[i].name);
+            self->emit_json_str(f, self->sym->funcs[i].name);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"ret\":\"", self->funcs[i].line);
-            self->emit_json_str(f, self->funcs[i].ret);
-            fprintf(f, "\",\"params\":%d}", self->funcs[i].nparams);
+            fprintf(f, "\",\"line\":%d,\"ret\":\"", self->sym->funcs[i].line);
+            self->emit_json_str(f, self->sym->funcs[i].ret);
+            fprintf(f, "\",\"params\":%d}", self->sym->funcs[i].nparams);
             first = 0;
         }
         fputs("],\n", f);
@@ -5642,13 +5480,13 @@ impl EmitOps for Ast {
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 if (!first) fputc(',', f);
                 fputs("{\"struct\":\"", f);
-                self->emit_json_str(f, self->structs[si].name);
+                self->emit_json_str(f, self->sym->structs[si].name);
                 fputs("\",\"trait\":\"", f);
                 self->emit_json_str(f, tname);
                 fputs("\",\"method\":\"", f);
                 self->emit_json_str(f, self->arena->nodes[m].text2);
                 fputs("\",\"symbol\":\"", f);
-                fprintf(f, "%s_%s_%s", self->structs[si].name, tname, self->arena->nodes[m].text2);
+                fprintf(f, "%s_%s_%s", self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                 fputs("\",\"ret\":\"", f);
                 self->emit_json_str(f, self->arena->nodes[m].text);
                 count = 0;
@@ -5815,12 +5653,12 @@ impl MemoryOps for Ast {
                 base[bl] = 0;
             }
             si = self->find_struct(base);
-            if (si < 0 || !self->structs[si].uses_drop) {
+            if (si < 0 || !self->sym->structs[si].uses_drop) {
                 snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Drop'", base);
                 return ct_sem_error(line, 1, msg, self->path);
             }
             vi = self->find_var(self->arena->nodes[d].text2);
-            if (vi >= 0) self->vars[vi].autodrop = 1;
+            if (vi >= 0) self->sym->vars[vi].autodrop = 1;
             if (self->nowner >= MAX_VARS) return self->fail("too many owned variables");
             self->own_decl[self->nowner] = d;
             self->nowner++;
@@ -5905,8 +5743,8 @@ impl MemoryOps for Ast {
             rt[bl] = 0;
         }
         if (strncmp(rt, "struct ", 7) == 0)
-            return strcmp(rt + 7, self->structs[si].name) == 0;
-        return strcmp(rt, self->structs[si].name) == 0;
+            return strcmp(rt + 7, self->sym->structs[si].name) == 0;
+        return strcmp(rt, self->sym->structs[si].name) == 0;
     }
 
     /* A declaration: `struct T *p = malloc(...)` (or a call to a function that
@@ -5942,25 +5780,25 @@ impl MemoryOps for Ast {
                 si = self->find_struct(sname);
                 if (!heap && si >= 0 && self->arena->nodes[e].kind == N_CALL) {
                     int fi = self->find_func(self->arena->nodes[e].text2);
-                    if (fi >= 0 && self->funcs[fi].ret_owned)
-                        call_owned = self->ret_same_struct(self->funcs[fi].ret, si);
+                    if (fi >= 0 && self->sym->funcs[fi].ret_owned)
+                        call_owned = self->ret_same_struct(self->sym->funcs[fi].ret, si);
                 }
             }
         }
         vi = self->find_var(self->arena->nodes[n].text2);
         if (vi >= 0 && si >= 0) {
-            self->vars[vi].st = si;
+            self->sym->vars[vi].st = si;
             if (heap || call_owned) {
-                self->vars[vi].owned = 1;
-                self->vars[vi].own_line = self->arena->nodes[n].line;
+                self->sym->vars[vi].owned = 1;
+                self->sym->vars[vi].own_line = self->arena->nodes[n].line;
             }
         }
-        for (i = 0; i < self->nvar; i++) {
+        for (i = 0; i < self->sym->nvar; i++) {
             if (i == vi) continue;
-            if (!self->vars[i].owned && !self->vars[i].autodrop) continue;
-            if (!self->expr_mentions(e, self->vars[i].name)) continue;
-            self->vars[i].owned = 0;
-            if (self->expr_returns(e, self->vars[i].name)) self->vars[i].autodrop = 0;
+            if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
+            if (!self->expr_mentions(e, self->sym->vars[i].name)) continue;
+            self->sym->vars[i].owned = 0;
+            if (self->expr_returns(e, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;
         }
         return 0;
     }
@@ -5971,7 +5809,7 @@ impl MemoryOps for Ast {
         int i;
         (void)self;
         for (i = from; i < to; i++)
-            if (self->vars[i].owned && !self->vars[i].autodrop && !self->vars[i].path_warned)
+            if (self->sym->vars[i].owned && !self->sym->vars[i].autodrop && !self->sym->vars[i].path_warned)
                 if (self->warn_leak(i, 0) != 0) return -1;
         return 0;
     }
@@ -5994,17 +5832,17 @@ impl MemoryOps for Ast {
                     bv = self->find_var(self->arena->nodes[b].text2);
             }
         }
-        for (i = 0; i < self->nvar; i++) {
+        for (i = 0; i < self->sym->nvar; i++) {
             if (i == bv) {
-                if (self->vars[i].autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
-                    self->vars[i].autodrop = 0;
+                if (self->sym->vars[i].autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
+                    self->sym->vars[i].autodrop = 0;
                 continue;
             }
-            if (!self->vars[i].owned && !self->vars[i].autodrop) continue;
-            if (!self->expr_mentions(lhs, self->vars[i].name)
-                && !self->expr_mentions(rhs, self->vars[i].name)) continue;
-            self->vars[i].owned = 0;
-            if (self->expr_returns(rhs, self->vars[i].name)) self->vars[i].autodrop = 0;
+            if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
+            if (!self->expr_mentions(lhs, self->sym->vars[i].name)
+                && !self->expr_mentions(rhs, self->sym->vars[i].name)) continue;
+            self->sym->vars[i].owned = 0;
+            if (self->expr_returns(rhs, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;
         }
         return 0;
     }
@@ -6017,24 +5855,24 @@ impl MemoryOps for Ast {
     {
         int i;
         (void)self;
-        for (i = 0; i < self->nvar; i++) {
+        for (i = 0; i < self->sym->nvar; i++) {
             int pos = 0;
-            if (self->vars[i].autodrop) {
-                if (ret >= 0 && self->expr_mentions(ret, self->vars[i].name))
-                    self->vars[i].autodrop = 0;
+            if (self->sym->vars[i].autodrop) {
+                if (ret >= 0 && self->expr_mentions(ret, self->sym->vars[i].name))
+                    self->sym->vars[i].autodrop = 0;
                 continue;
             }
-            if (!self->vars[i].owned) continue;
-            if (ret >= 0 && self->expr_returns(ret, self->vars[i].name)) pos = 1;
+            if (!self->sym->vars[i].owned) continue;
+            if (ret >= 0 && self->expr_returns(ret, self->sym->vars[i].name)) pos = 1;
             if (!conditional) {
                 if (pos) {
-                    self->vars[i].owned = 0;
+                    self->sym->vars[i].owned = 0;
                     if (!self->leak_impl) self->ret_owned = 1;
                 }
                 continue;
             }
-            if (!pos && !self->vars[i].path_warned) {
-                self->vars[i].path_warned = 1;
+            if (!pos && !self->sym->vars[i].path_warned) {
+                self->sym->vars[i].path_warned = 1;
                 if (self->warn_leak(i, line) != 0) return -1;
             }
         }
@@ -6048,8 +5886,8 @@ impl MemoryOps for Ast {
         if (e < 0 || self->arena->nodes[e].kind != N_VAR) return 0;
         vi = self->find_var(self->arena->nodes[e].text2);
         if (vi < 0) return 0;
-        self->vars[vi].owned = 0;
-        self->vars[vi].autodrop = 0;
+        self->sym->vars[vi].owned = 0;
+        self->sym->vars[vi].autodrop = 0;
         return 0;
     }
 
@@ -6062,12 +5900,12 @@ impl MemoryOps for Ast {
         char tname[MAX_TEXT];
         (void)self;
         kind = (path_line > 0) ? 2 : 0;
-        if (self->vars[vi].st >= 0)
-            snprintf(tname, sizeof tname, "%s", self->structs[self->vars[vi].st].name);
+        if (self->sym->vars[vi].st >= 0)
+            snprintf(tname, sizeof tname, "%s", self->sym->structs[self->sym->vars[vi].st].name);
         else
             tname[0] = 0;
-        if (ct_leak_warn(kind, self->vars[vi].own_line, path_line, self->path,
-                         self->vars[vi].name, tname) != 0)
+        if (ct_leak_warn(kind, self->sym->vars[vi].own_line, path_line, self->path,
+                         self->sym->vars[vi].name, tname) != 0)
             return self->fail("too many warnings");
         return 0;
     }
@@ -6094,6 +5932,8 @@ int main(int argc, char **argv)
     /* the cache keys carry the compiler version; seed it once here */
     g_ast.cache = cache_get();
     g_ast.cache->version = CTC_VERSION;
+    /* the symbol tables live in frontend::sym; point the object at its singleton */
+    g_ast.sym = symbols_get();
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];

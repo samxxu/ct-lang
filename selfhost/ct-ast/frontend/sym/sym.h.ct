@@ -1,0 +1,370 @@
+/*
+ * sym.h.ct - the symbol tables of one translation unit, one class of its own.
+ *
+ * The tables and the lookups over them (functions, variables and their scopes,
+ * type tags, traits and structs, plus the namespace prefix and the parser's
+ * impl/return context) are a property of the unit being compiled, not of the
+ * parser. Keeping them here lets the driver hold a pointer to the singleton
+ * and lets `main.ct` fail with a position while this unit reports the bare
+ * message.
+ *
+ * Macros do not cross a unit boundary, so the caps are restated here; they must
+ * stay equal to MAX_TEXT 160, MAX_PARAMS 16, MAX_FUNCS 256, MAX_VARS 4096,
+ * MAX_SCOPE 256, MAX_TYPES 256, MAX_METHODS 64, MAX_TRAITS 64, MAX_STRUCTS 128
+ * and MAX_FIELDS 64 in main.ct. The array lengths are spelled out as literals
+ * because a `pub struct` lands in the generated header, which carries no
+ * macros.
+ */
+#include <stdio.h>
+#include <string.h>
+
+#define MAX_TEXT    160
+#define MAX_PARAMS  16
+#define MAX_FUNCS   256
+#define MAX_VARS    4096
+#define MAX_SCOPE   256
+#define MAX_TYPES   256
+#define MAX_METHODS 64
+#define MAX_TRAITS  64
+#define MAX_STRUCTS 128
+#define MAX_FIELDS  64
+
+namespace frontend::sym {
+pub struct Fn {
+    char name[160];
+    char ret[160];
+    char ptype[16][160];
+    /* array dims are kept apart from the type: the prototype must spell them
+       (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
+       call side still compares bare types for boxing */
+    char pdim[16][160];
+    int  nparams;
+    int  is_static;
+    int  is_pub;
+    int  line;
+    int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */
+}
+
+pub struct Var {
+    char name[160];
+    char type[160];
+    /* an array's declared type carries no star of its own, but `T *a[N]` and
+       `T *p` spell the same type; indexing tells them apart only through this */
+    int  is_array;
+    /* leak tracking (10.3), mirroring L2's conservative rules */
+    int  st;            /* struct index when the type is `struct T *`, else -1 */
+    int  owned;         /* 1 when a heap object (malloc/calloc/owned callee) */
+    int  own_line;      /* source line of that allocation */
+    int  autodrop;      /* 1 when declared `own`: release at scope exit */
+    int  path_warned;   /* 1 once reported as possibly leaking on a return path */
+}
+
+pub struct MethodSig {
+    char name[160];
+    char ret[160];
+    char ptype[16][160];
+    int  nparams;
+}
+
+pub struct Trait {
+    char name[160];
+    struct MethodSig m[64];
+    int  nm;
+    int  is_pub;
+    int  line;
+}
+
+pub struct Field {
+    char name[160];
+    char type[160];
+    /* array dims (`[2]`, `[N]`): a designated initialiser cannot reach an
+       element, so such a field's vptrs are written by a loop instead */
+    char dims[160];
+}
+
+pub struct StructDef {
+    char name[160];
+    char use[64][160];
+    int  nuse;
+    /* field types: a receiver chain (`s.owner.greet()`) needs them, and so does
+       the nested vptr initialiser of a struct-typed field */
+    struct Field fields[64];
+    int  nfields;
+    int  defined;               /* a body was parsed; a forward declaration is not */
+    int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
+}
+
+pub trait SymbolOps {
+    int  declare_var(const char *name, const char *type);
+    int  find_var(const char *name);
+    int  var_type(const char *name, char *out, int cap);
+    int  find_func(const char *name);
+    int  find_type(const char *name);
+    int  add_type(const char *name, int kind);
+    int  find_struct(const char *name);
+    int  add_struct(const char *name);
+    int  find_trait(const char *name);
+    int  add_trait(const char *name);
+    int  method_trait(const char *stype, const char *method, char *tout, int tcap);
+    int  ns_decl_name(const char *name, char *out, int cap);
+    int  resolve_type(const char *name, char *out, int cap);
+    int  push_scope(void);
+    int  pop_scope(void);
+    int  fail(const char *msg);
+    const char *last_error(void);
+}
+
+pub struct Symbols {
+    struct Fn   funcs[256];
+    int  nfunc;
+    struct Var  vars[4096];
+    int  nvar;
+    int  scope[256];
+    int  nscope;
+    char types[256][160];
+    int  type_kind[256];        /* 1 = struct tag, 2 = typedef */
+    int  ntype;
+    struct Trait traits[64];
+    int  ntraits;
+    struct StructDef structs[128];
+    int  nstructs;
+    char ns[160];               /* current namespace prefix, set by the module layer */
+    int  self_mode;             /* inside an impl body: `self` -> `_self` */
+    char ret_type[160];         /* return type of the function being parsed */
+    char errmsg[160];           /* the bare message `fail` recorded; Ast adds the position */
+} use SymbolOps;
+
+pub struct Symbols *symbols_get(void);
+
+impl SymbolOps for Symbols {
+    /* The tables report the bare reason; the position belongs to the parser
+       object, which wraps this message with the current line and token. */
+    int fail(const char *msg)
+    {
+        (void)self;
+        snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        return -1;
+    }
+
+    const char *last_error(void)
+    {
+        (void)self;
+        return self->errmsg;
+    }
+
+    int push_scope(void)
+    {
+        (void)self;
+        if (self->nscope >= MAX_SCOPE) return self->fail("too many nested scopes");
+        self->scope[self->nscope] = self->nvar;
+        self->nscope++;
+        return 0;
+    }
+
+    int pop_scope(void)
+    {
+        (void)self;
+        if (self->nscope <= 0) return self->fail("scope stack underflow");
+        self->nscope--;
+        self->nvar = self->scope[self->nscope];
+        return 0;
+    }
+
+    int declare_var(const char *name, const char *type)
+    {
+        int i;
+        (void)self;
+        if (self->nvar >= MAX_VARS) return self->fail("too many variables");
+        i = self->nvar;
+        snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
+        snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
+        self->vars[i].is_array = 0;
+        self->vars[i].st = -1;
+        self->vars[i].owned = 0;
+        self->vars[i].own_line = 0;
+        self->vars[i].autodrop = 0;
+        self->vars[i].path_warned = 0;
+        self->nvar++;
+        return 0;
+    }
+
+    int find_var(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = self->nvar - 1; i >= 0; i--)
+            if (strcmp(self->vars[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int var_type(const char *name, char *out, int cap)
+    {
+        int i, w;
+        (void)self;
+        i = self->find_var(name);
+        if (i < 0) return -1;
+        w = snprintf(out, (size_t)cap, "%s", self->vars[i].type);
+        if (w < 0 || w >= cap) return -1;
+        return 0;
+    }
+
+    int find_func(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < self->nfunc; i++)
+            if (strcmp(self->funcs[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int find_type(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < self->ntype; i++)
+            if (strcmp(self->types[i], name) == 0) return i;
+        return -1;
+    }
+
+    int add_type(const char *name, int kind)
+    {
+        int i;
+        (void)self;
+        i = self->find_type(name);
+        if (i >= 0) {
+            /* a struct tag discovered while parsing a type keeps its kind */
+            if (self->type_kind[i] == 0) self->type_kind[i] = kind;
+            return 0;
+        }
+        if (self->ntype >= MAX_TYPES) return self->fail("too many types");
+        snprintf(self->types[self->ntype], MAX_TEXT, "%s", name);
+        self->type_kind[self->ntype] = kind;
+        self->ntype++;
+        return 0;
+    }
+
+    int find_struct(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < self->nstructs; i++)
+            if (strcmp(self->structs[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int add_struct(const char *name)
+    {
+        int i;
+        (void)self;
+        if (!name[0]) return -1;
+        i = self->find_struct(name);
+        if (i >= 0) return i;
+        if (self->nstructs >= MAX_STRUCTS) return self->fail("too many structs");
+        snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
+        self->structs[self->nstructs].nuse = 0;
+        self->structs[self->nstructs].uses_drop = 0;
+        self->nstructs++;
+        return self->nstructs - 1;
+    }
+
+    int find_trait(const char *name)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < self->ntraits; i++)
+            if (strcmp(self->traits[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    int add_trait(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_trait(name);
+        if (i >= 0) return i;
+        if (self->ntraits >= MAX_TRAITS) return self->fail("too many traits");
+        snprintf(self->traits[self->ntraits].name, MAX_TEXT, "%s", name);
+        self->traits[self->ntraits].nm = 0;
+        self->ntraits++;
+        return self->ntraits - 1;
+    }
+
+    /* Which trait of `stype` declares `method`: the vtable field name and the
+       dispatch target both need it. `stype` may carry a `struct ` prefix or a
+       trailing `*` (a pointer receiver). */
+    int method_trait(const char *stype, const char *method, char *tout, int tcap)
+    {
+        char buf[MAX_TEXT];
+        char *base;
+        size_t n;
+        int s, ti, mi, w;
+        (void)self;
+
+        if (snprintf(buf, sizeof buf, "%s", stype) >= (int)sizeof buf) return -1;
+        base = buf;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        n = strlen(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
+            base[n - 1] = 0;
+            n--;
+        }
+        s = self->find_struct(base);
+        if (s < 0) return -1;
+        for (ti = 0; ti < self->structs[s].nuse; ti++) {
+            int t = self->find_trait(self->structs[s].use[ti]);
+            if (t < 0) continue;
+            for (mi = 0; mi < self->traits[t].nm; mi++) {
+                if (strcmp(self->traits[t].m[mi].name, method) == 0) {
+                    w = snprintf(tout, (size_t)tcap, "%s", self->traits[t].name);
+                    if (w < 0 || w >= tcap) return -1;
+                    return 0;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /* A declaration inside `namespace A::B` is stored under its C name,
+       `A_B_<name>`; the top level adds no prefix. */
+    int ns_decl_name(const char *name, char *out, int cap)
+    {
+        int w;
+        (void)self;
+        w = snprintf(out, (size_t)cap, "%s%s", self->ns, name);
+        if (w < 0 || w >= cap) return self->fail("name is too long");
+        return 0;
+    }
+
+    /* Unqualified lookup: the current namespace first, then the top level. */
+    int resolve_type(const char *name, char *out, int cap)
+    {
+        char qname[MAX_TEXT];
+        int w;
+        (void)self;
+
+        if (self->ns[0]) {
+            w = snprintf(qname, sizeof qname, "%s%s", self->ns, name);
+            if (w < 0 || w >= (int)sizeof qname) return self->fail("name is too long");
+            if (self->find_type(qname) >= 0 || self->find_trait(qname) >= 0
+                || self->find_struct(qname) >= 0) {
+                w = snprintf(out, (size_t)cap, "%s", qname);
+                if (w < 0 || w >= cap) return self->fail("name is too long");
+                return 0;
+            }
+        }
+        w = snprintf(out, (size_t)cap, "%s", name);
+        if (w < 0 || w >= cap) return self->fail("name is too long");
+        return 0;
+    }
+}
+
+/* The instance lives after the impl: its vptr initialiser needs the vtable
+   forward declaration the emitter places with the impl. */
+static struct Symbols g_symbols;
+
+struct Symbols *symbols_get(void)
+{
+    return &g_symbols;
+}
+}
