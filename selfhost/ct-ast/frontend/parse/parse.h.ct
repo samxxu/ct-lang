@@ -128,6 +128,22 @@ pub trait ParseOps {
     int  record_call(const char *callee, int line);
 }
 
+/* The translation-unit passes: top-level declarations, namespaces, imports and
+   `map`. They are members so the parser owns every stage; a trait of its own
+   keeps ParseOps clear of the 32-method ceiling. The binding pointer rides in
+   as `char *` and is cast in the body: a trait parameter list takes neither
+   `void *` nor another unit's `struct` tag (the generated header has no
+   #include, and naming the tag there trips -Wvisibility). */
+pub trait ParseDeclOps {
+    int  struct_def_ahead(void);
+    int  append_node(int prog, int n);
+    int  skip_import(void);
+    int  map_check_call(char *b, const char *inst);
+    int  parse_map(void);
+    int  top_decl(int is_pub);
+    int  parse_namespace(int prog);
+}
+
 pub struct Parser {
     struct runtime_arena_Arena *arena;
     struct frontend_lex_Lexer *lex;
@@ -157,459 +173,464 @@ pub struct Parser {
     struct frontend_sym_Field *pend_fields;   /* storage owned by this unit */
     int  npend;
     struct frontend_parse_ParseSupport *sup;
-} use ParseOps;
+} use ParseOps, ParseDeclOps;
 
-static int tu_struct_def_ahead(struct Parser *self)
-{
-    int pos, bol, tok, is_def;
-    long num;
-    char text[MAX_TEXT];
-    (void)self;
+impl ParseDeclOps for Parser {
+    int struct_def_ahead(void)
+    {
+        int pos, bol, tok, is_def;
+        long num;
+        char text[MAX_TEXT];
+        (void)self;
 
-    pos = self->lex->pos;
-    bol = self->lex->bol;
-    tok = self->lex->tok;
-    num = self->lex->toknum;
-    snprintf(text, sizeof text, "%s", self->lex->toktext);
-    self->sup->lex_next();
-    is_def = 0;
-    if (self->lex->tok == T_ID) self->sup->lex_next();
-    /* a body (`{`) or a forward declaration (`;`) both start a CT struct */
-    if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "{") == 0 || strcmp(self->lex->toktext, ";") == 0))
-        is_def = 1;
-    self->lex->pos = pos;
-    self->lex->bol = bol;
-    self->lex->tok = tok;
-    self->lex->toknum = num;
-    snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
-    return is_def;
-}
+        pos = self->lex->pos;
+        bol = self->lex->bol;
+        tok = self->lex->tok;
+        num = self->lex->toknum;
+        snprintf(text, sizeof text, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        is_def = 0;
+        if (self->lex->tok == T_ID) self->sup->lex_next();
+        /* a body (`{`) or a forward declaration (`;`) both start a CT struct */
+        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "{") == 0 || strcmp(self->lex->toktext, ";") == 0))
+            is_def = 1;
+        self->lex->pos = pos;
+        self->lex->bol = bol;
+        self->lex->tok = tok;
+        self->lex->toknum = num;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
+        return is_def;
+    }
 
-static int tu_append_node(struct Parser *self, int prog, int n)
-{
-    int t;
-    (void)self;
+    int append_node(int prog, int n)
+    {
+        int t;
+        (void)self;
 
-    self->arena->nodes[n].next = -1;
-    if (self->arena->nodes[prog].a < 0) {
-        self->arena->nodes[prog].a = n;
+        self->arena->nodes[n].next = -1;
+        if (self->arena->nodes[prog].a < 0) {
+            self->arena->nodes[prog].a = n;
+            return 0;
+        }
+        t = self->arena->nodes[prog].a;
+        while (self->arena->nodes[t].next >= 0) t = self->arena->nodes[t].next;
+        self->arena->nodes[t].next = n;
         return 0;
     }
-    t = self->arena->nodes[prog].a;
-    while (self->arena->nodes[t].next >= 0) t = self->arena->nodes[t].next;
-    self->arena->nodes[t].next = n;
-    return 0;
-}
 
-static int tu_skip_import(struct Parser *self)
-{
-    char rel[MAX_TEXT];
-    size_t n;
-    (void)self;
+    int skip_import(void)
+    {
+        char rel[MAX_TEXT];
+        size_t n;
+        (void)self;
 
-    n = 0;
-    rel[0] = 0;
-    self->sup->lex_next();
-    for (;;) {
-        if (self->lex->tok != T_ID) return self->sup->fail("expected an import path");
-        if (n > 0) {
-            if (n + 1 >= sizeof rel) return self->sup->fail("import path is too long");
-            rel[n] = '/';
-            n++;
-        }
-        if (n + strlen(self->lex->toktext) >= sizeof rel) return self->sup->fail("import path is too long");
-        snprintf(rel + n, sizeof rel - n, "%s", self->lex->toktext);
-        n += strlen(self->lex->toktext);
-        self->sup->lex_next();
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
-            self->sup->lex_next();
-            continue;
-        }
-        break;
-    }
-    if (self->sup->expect(";") != 0) return -1;
-    if (self->nrels >= MAX_IMPORTS) return self->sup->fail("too many imports");
-    snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
-    self->nrels++;
-    return 0;
-}
-
-static int tu_map_check_call(struct Parser *self, const struct frontend_module_MapBind *b, const char *inst)
-{
-    char msg[MAX_TEXT];
-    char arg[MAX_TEXT];
-    char root[MAX_TEXT];
-    const char *p;
-    const char *w;
-    int n, depth, k, ai, ok;
-    int rl;
-    int q;
-    (void)self;
-
-    p = b->call;
-    for (;;) {
-        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; continue; }
-        break;
-    }
-    if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_'))
-        return self->sup->fail("a map call must name a function");
-    while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-           || (*p >= '0' && *p <= '9') || *p == '_') p++;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p != '(') return self->sup->fail("a map call must be a single call");
-    p++;
-    for (;;) {
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-        if (*p == ')') { p++; break; }
-        if (!*p) return self->sup->fail("unterminated map call");
         n = 0;
-        depth = 0;
-        while (*p) {
-            if (depth == 0 && (*p == ',' || *p == ')')) break;
-            if (*p == '"' || *p == '\'') {
-                q = *p;
-                if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
-                arg[n] = (char)q; n++; p++;
-                while (*p && *p != (char)q) {
-                    if (*p == '\\' && *(p + 1)) {
-                        if (n + 2 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
-                        arg[n] = *p; n++; p++;
-                        arg[n] = *p; n++; p++;
-                        continue;
-                    }
-                    if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
-                    arg[n] = *p; n++; p++;
-                }
-                if (*p != (char)q) return self->sup->fail("unterminated literal in a map call");
-                if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
-                arg[n] = *p; n++; p++;
+        rel[0] = 0;
+        self->sup->lex_next();
+        for (;;) {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected an import path");
+            if (n > 0) {
+                if (n + 1 >= sizeof rel) return self->sup->fail("import path is too long");
+                rel[n] = '/';
+                n++;
+            }
+            if (n + strlen(self->lex->toktext) >= sizeof rel) return self->sup->fail("import path is too long");
+            snprintf(rel + n, sizeof rel - n, "%s", self->lex->toktext);
+            n += strlen(self->lex->toktext);
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                self->sup->lex_next();
                 continue;
             }
-            if (*p == '(') depth++;
-            else if (*p == ')') depth--;
-            if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
-            arg[n] = *p; n++; p++;
+            break;
         }
-        arg[n] = 0;
-        while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\t'
-                         || arg[n - 1] == '\n' || arg[n - 1] == '\r')) {
-            n--;
-            arg[n] = 0;
+        if (self->sup->expect(";") != 0) return -1;
+        if (self->nrels >= MAX_IMPORTS) return self->sup->fail("too many imports");
+        snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
+        self->nrels++;
+        return 0;
+    }
+
+    int map_check_call(char *b, const char *inst)
+    {
+        char msg[MAX_TEXT];
+        char arg[MAX_TEXT];
+        char root[MAX_TEXT];
+        const char *p;
+        const char *w;
+        struct frontend_module_MapBind *bb;
+        int n, depth, k, ai, ok;
+        int rl;
+        int q;
+        (void)self;
+
+        bb = (struct frontend_module_MapBind *)b;
+        p = bb->call;
+        for (;;) {
+            if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; continue; }
+            break;
         }
-        ai = 0;
-        while (arg[ai] == ' ' || arg[ai] == '\t') ai++;
-        /* A bare name must be visible here (a binding parameter, this map's
-           instance, or a declared variable); a member path must be rooted at
-           the instance. Anything else would name an unknown symbol in the
-           emitted wrapper. */
-        ok = 0;
-        if (arg[ai] == '"' || arg[ai] == '\'') {
-            ok = 1;
-        } else if (arg[ai] >= '0' && arg[ai] <= '9') {
-            ok = 1;
-        } else {
-            w = arg + ai;
-            if (*w == '&') {
-                w++;
-                while (*w == ' ' || *w == '\t') w++;
-            }
-            rl = 0;
-            if ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z') || *w == '_') {
-                while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
-                       || (*w >= '0' && *w <= '9') || *w == '_') {
-                    if (rl + 1 < MAX_TEXT) { root[rl] = *w; rl++; }
-                    w++;
-                }
-                root[rl] = 0;
-                if (*w == '.' || (*w == '-' && *(w + 1) == '>')) {
-                    ok = (strcmp(root, inst) == 0);
-                    while (ok && (*w == '.' || (*w == '-' && *(w + 1) == '>'))) {
-                        w += (*w == '.') ? 1 : 2;
-                        if (!((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
-                              || *w == '_'))
-                            ok = 0;
-                        while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
-                               || (*w >= '0' && *w <= '9') || *w == '_') w++;
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_'))
+            return self->sup->fail("a map call must name a function");
+        while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+               || (*p >= '0' && *p <= '9') || *p == '_') p++;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p != '(') return self->sup->fail("a map call must be a single call");
+        p++;
+        for (;;) {
+            while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+            if (*p == ')') { p++; break; }
+            if (!*p) return self->sup->fail("unterminated map call");
+            n = 0;
+            depth = 0;
+            while (*p) {
+                if (depth == 0 && (*p == ',' || *p == ')')) break;
+                if (*p == '"' || *p == '\'') {
+                    q = *p;
+                    if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                    arg[n] = (char)q; n++; p++;
+                    while (*p && *p != (char)q) {
+                        if (*p == '\\' && *(p + 1)) {
+                            if (n + 2 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                            arg[n] = *p; n++; p++;
+                            arg[n] = *p; n++; p++;
+                            continue;
+                        }
+                        if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                        arg[n] = *p; n++; p++;
                     }
-                } else if (strcmp(root, inst) == 0) {
-                    ok = 1;
-                } else {
-                    for (k = 0; k < b->nparams; k++)
-                        if (strcmp(root, b->params[k]) == 0) { ok = 1; break; }
-                    if (!ok && self->sym->find_var(root) >= 0) ok = 1;
-                }
-                while (*w == ' ' || *w == '\t') w++;
-                if (*w) ok = 0;
-            }
-        }
-        if (!ok) {
-            snprintf(msg, sizeof msg, "map argument '%s' is not allowed", arg + ai);
-            return self->sup->fail(msg);
-        }
-        if (*p == ',') { p++; continue; }
-        if (*p == ')') continue;
-        return self->sup->fail("unterminated map call");
-    }
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-    if (*p) return self->sup->fail("trailing text after the map call");
-    return 0;
-}
-
-static int tu_map(struct Parser *self)
-{
-    char tname[MAX_TEXT];
-    char rtrait[MAX_TEXT];
-    char inst[MAX_TEXT];
-    char msg[MAX_TEXT];
-    struct frontend_module_Map *m;
-    struct frontend_module_MapBind *b;
-    int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound;
-    (void)self;
-
-    line = self->lex->tokline;
-    self->sup->lex_next();                       /* consume `map` */
-    if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0))
-        return self->sup->fail("expected 'trait'");
-    self->sup->lex_next();
-    if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
-    snprintf(tname, sizeof tname, "%s", self->lex->toktext);
-    if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
-    ti = self->sym->find_trait(rtrait);
-    if (ti < 0) return self->sup->fail("map of an unknown trait");
-    self->sup->lex_next();
-    if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0))
-        return self->sup->fail("expected 'for'");
-    self->sup->lex_next();
-    if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "instance") == 0))
-        return self->sup->fail("expected 'instance'");
-    self->sup->lex_next();
-    if (self->lex->tok != T_ID) return self->sup->fail("expected an instance name");
-    snprintf(inst, sizeof inst, "%s", self->lex->toktext);
-    if (self->sym->find_var(inst) < 0) {
-        snprintf(msg, sizeof msg, "map instance '%s' is not a declared variable", inst);
-        return self->sup->fail(msg);
-    }
-    self->sup->lex_next();
-    if (self->sup->expect("{") != 0) return -1;
-    if (self->nmaps >= MAX_MAPS) return self->sup->fail("too many maps");
-    m = &self->maps[self->nmaps];
-    snprintf(m->trait, MAX_TEXT, "%s", rtrait);
-    snprintf(m->inst, MAX_TEXT, "%s", inst);
-    snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", inst, rtrait);
-    m->nb = 0;
-    m->line = line;
-    m->unit = self->cur_unit;
-
-    while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-        if (m->nb >= MAX_METHODS) return self->sup->fail("too many map bindings");
-        b = &m->b[m->nb];
-        b->line = self->lex->tokline;
-        if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-        snprintf(b->method, MAX_TEXT, "%s", self->lex->toktext);
-        mi = -1;
-        for (k = 0; k < self->sym->traits[ti].nm; k++)
-            if (strcmp(self->sym->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
-        if (mi < 0) {
-            snprintf(msg, sizeof msg, "'%s' is not a method of trait '%s'",
-                     b->method, rtrait);
-            return self->sup->fail(msg);
-        }
-        self->sup->lex_next();
-        if (self->sup->expect("(") != 0) return -1;
-        np = 0;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
-            for (;;) {
-                if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
-                if (np >= MAX_PARAMS) return self->sup->fail("too many map parameters");
-                snprintf(b->params[np], MAX_TEXT, "%s", self->lex->toktext);
-                np++;
-                self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
-                    self->sup->lex_next();
+                    if (*p != (char)q) return self->sup->fail("unterminated literal in a map call");
+                    if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                    arg[n] = *p; n++; p++;
                     continue;
                 }
-                break;
+                if (*p == '(') depth++;
+                else if (*p == ')') depth--;
+                if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                arg[n] = *p; n++; p++;
             }
-        }
-        if (self->sup->expect(")") != 0) return -1;
-        b->nparams = np;
-        if (np != self->sym->traits[ti].m[mi].nparams) {
-            snprintf(msg, sizeof msg,
-                     "map binding for '%s' takes %d parameter(s), the trait declares %d",
-                     b->method, np, self->sym->traits[ti].m[mi].nparams);
-            return self->sup->fail(msg);
-        }
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "->") == 0))
-            return self->sup->fail("expected '->'");
-        /* Capture the RHS verbatim from self->lex->pos: no lex_next has run since the
-           '->' token, so self->lex->pos sits just past it (the parse_init_raw trick). */
-        i = self->lex->pos;
-        n = 0;
-        q = 0;
-        depth = 0;
-        eof = 0;
-        long_call = 0;
-        while (self->lex->src[i] == ' ' || self->lex->src[i] == '\t'
-               || self->lex->src[i] == '\n' || self->lex->src[i] == '\r') i++;
-        for (;;) {
-            c = (unsigned char)self->lex->src[i];
-            if (c == 0) { eof = 1; break; }
-            if (q == 0 && depth == 0 && c == ';') break;
-            if (n + 1 >= MAX_TEXT) { long_call = 1; break; }
-            if (q == 0 && (c == '"' || c == '\'')) {
-                q = c;
-            } else if (q != 0 && c == q) {
-                q = 0;
-            } else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
-                b->call[n] = (char)c; n++; i++;
-                c = (unsigned char)self->lex->src[i];
-            } else if (q == 0 && c == '(') {
-                depth++;
-            } else if (q == 0 && c == ')') {
-                depth--;
+            arg[n] = 0;
+            while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\t'
+                             || arg[n - 1] == '\n' || arg[n - 1] == '\r')) {
+                n--;
+                arg[n] = 0;
             }
-            b->call[n] = (char)c; n++; i++;
-        }
-        if (eof) return self->sup->fail("unterminated map call");
-        if (long_call) return self->sup->fail("map call is too long");
-        while (n > 0 && (b->call[n - 1] == ' ' || b->call[n - 1] == '\t'
-                         || b->call[n - 1] == '\n' || b->call[n - 1] == '\r')) n--;
-        b->call[n] = 0;
-        self->lex->pos = i;
-        self->sup->lex_next();
-        if (tu_map_check_call(self, b, inst) != 0) return -1;
-        if (self->sup->expect(";") != 0) return -1;
-        snprintf(b->wrapper, MAX_TEXT, "%s_%s_%s", inst, rtrait, b->method);
-        b->ti = ti;
-        b->mi = mi;
-        m->nb++;
-    }
-    if (self->sup->expect("}") != 0) return -1;
-    /* A map must bind every trait method exactly once: an unbound slot stays
-       a null pointer (calling it crashes at run time), and a duplicate
-       binding would emit the wrapper function twice (a C redefinition). */
-    for (i = 0; i < m->nb; i++) {
-        for (j = i + 1; j < m->nb; j++)
-            if (strcmp(m->b[i].method, m->b[j].method) == 0) {
-                snprintf(msg, sizeof msg, "duplicate binding for method '%s'",
-                         m->b[i].method);
+            ai = 0;
+            while (arg[ai] == ' ' || arg[ai] == '\t') ai++;
+            /* A bare name must be visible here (a binding parameter, this map's
+               instance, or a declared variable); a member path must be rooted at
+               the instance. Anything else would name an unknown symbol in the
+               emitted wrapper. */
+            ok = 0;
+            if (arg[ai] == '"' || arg[ai] == '\'') {
+                ok = 1;
+            } else if (arg[ai] >= '0' && arg[ai] <= '9') {
+                ok = 1;
+            } else {
+                w = arg + ai;
+                if (*w == '&') {
+                    w++;
+                    while (*w == ' ' || *w == '\t') w++;
+                }
+                rl = 0;
+                if ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z') || *w == '_') {
+                    while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
+                           || (*w >= '0' && *w <= '9') || *w == '_') {
+                        if (rl + 1 < MAX_TEXT) { root[rl] = *w; rl++; }
+                        w++;
+                    }
+                    root[rl] = 0;
+                    if (*w == '.' || (*w == '-' && *(w + 1) == '>')) {
+                        ok = (strcmp(root, inst) == 0);
+                        while (ok && (*w == '.' || (*w == '-' && *(w + 1) == '>'))) {
+                            w += (*w == '.') ? 1 : 2;
+                            if (!((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
+                                  || *w == '_'))
+                                ok = 0;
+                            while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
+                                   || (*w >= '0' && *w <= '9') || *w == '_') w++;
+                        }
+                    } else if (strcmp(root, inst) == 0) {
+                        ok = 1;
+                    } else {
+                        for (k = 0; k < bb->nparams; k++)
+                            if (strcmp(root, bb->params[k]) == 0) { ok = 1; break; }
+                        if (!ok && self->sym->find_var(root) >= 0) ok = 1;
+                    }
+                    while (*w == ' ' || *w == '\t') w++;
+                    if (*w) ok = 0;
+                }
+            }
+            if (!ok) {
+                snprintf(msg, sizeof msg, "map argument '%s' is not allowed", arg + ai);
                 return self->sup->fail(msg);
             }
+            if (*p == ',') { p++; continue; }
+            if (*p == ')') continue;
+            return self->sup->fail("unterminated map call");
+        }
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        if (*p) return self->sup->fail("trailing text after the map call");
+        return 0;
     }
-    for (k = 0; k < self->sym->traits[ti].nm; k++) {
-        bound = 0;
-        for (i = 0; i < m->nb; i++)
-            if (strcmp(m->b[i].method, self->sym->traits[ti].m[k].name) == 0) {
-                bound = 1;
-                break;
-            }
-        if (!bound) {
-            snprintf(msg, sizeof msg, "trait method '%s' is not bound by the map",
-                     self->sym->traits[ti].m[k].name);
+
+    int parse_map(void)
+    {
+        char tname[MAX_TEXT];
+        char rtrait[MAX_TEXT];
+        char inst[MAX_TEXT];
+        char msg[MAX_TEXT];
+        struct frontend_module_Map *m;
+        struct frontend_module_MapBind *b;
+        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound;
+        (void)self;
+
+        line = self->lex->tokline;
+        self->sup->lex_next();                       /* consume `map` */
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0))
+            return self->sup->fail("expected 'trait'");
+        self->sup->lex_next();
+        if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
+        snprintf(tname, sizeof tname, "%s", self->lex->toktext);
+        if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+        ti = self->sym->find_trait(rtrait);
+        if (ti < 0) return self->sup->fail("map of an unknown trait");
+        self->sup->lex_next();
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0))
+            return self->sup->fail("expected 'for'");
+        self->sup->lex_next();
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "instance") == 0))
+            return self->sup->fail("expected 'instance'");
+        self->sup->lex_next();
+        if (self->lex->tok != T_ID) return self->sup->fail("expected an instance name");
+        snprintf(inst, sizeof inst, "%s", self->lex->toktext);
+        if (self->sym->find_var(inst) < 0) {
+            snprintf(msg, sizeof msg, "map instance '%s' is not a declared variable", inst);
             return self->sup->fail(msg);
         }
-    }
-    self->nmaps++;
-    return NO_NODE;
-}
-
-static int tu_top_decl(struct Parser *self, int is_pub)
-{
-    int n;
-    (void)self;
-
-    if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
-        if (is_pub) return self->sup->fail("duplicate 'pub'");
         self->sup->lex_next();
-        return tu_top_decl(self, 1);
-    }
-    if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
-        return ct_sem_error(self->lex->tokline, 1,
-            "'own' is only allowed inside a function body", self->mem->path);
-    if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "typedef") == 0) {
-        n = self->parse_typedef(is_pub);
-    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0) {
-        n = self->parse_trait(is_pub);
-    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "impl") == 0) {
-        n = self->parse_impl();
-    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "map") == 0) {
-        n = tu_map(self);
-    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "struct") == 0
-               && tu_struct_def_ahead(self)) {
-        n = self->parse_struct_def();
-        /* CT writes `struct X { ... }` bare (the old pipeline accepts both) */
-        if (n >= 0) self->sup->accept(";");
-    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
-        self->sup->lex_next();
-        n = self->parse_func(1, is_pub);
-    } else {
-        n = self->parse_func(0, is_pub);
-    }
-    if (n == NO_NODE) return NO_NODE;
-    if (n < 0) return -1;
-    self->arena->nodes[n].d = is_pub ? 1 : 0;
-    return n;
-}
+        if (self->sup->expect("{") != 0) return -1;
+        if (self->nmaps >= MAX_MAPS) return self->sup->fail("too many maps");
+        m = &self->maps[self->nmaps];
+        snprintf(m->trait, MAX_TEXT, "%s", rtrait);
+        snprintf(m->inst, MAX_TEXT, "%s", inst);
+        snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", inst, rtrait);
+        m->nb = 0;
+        m->line = line;
+        m->unit = self->cur_unit;
 
-static int tu_namespace(struct Parser *self, int prog)
-{
-    char path[MAX_TEXT];
-    char prefix[MAX_TEXT];
-    char save[MAX_TEXT];
-    size_t np, npre;
-    int n;
-    (void)self;
-
-    self->sup->lex_next();
-    np = 0;
-    npre = 0;
-    path[0] = 0;
-    prefix[0] = 0;
-    for (;;) {
-        if (self->lex->tok != T_ID) return self->sup->fail("expected a namespace name");
-        if (np > 0) {
-            if (np + 2 >= sizeof path) return self->sup->fail("namespace is too long");
-            path[np] = ':';
-            path[np + 1] = ':';
-            np += 2;
-            path[np] = 0;
-        }
-        if (np + strlen(self->lex->toktext) >= sizeof path) return self->sup->fail("namespace is too long");
-        snprintf(path + np, sizeof path - np, "%s", self->lex->toktext);
-        np += strlen(self->lex->toktext);
-        if (npre + strlen(self->lex->toktext) + 1 >= sizeof prefix)
-            return self->sup->fail("namespace is too long");
-        snprintf(prefix + npre, sizeof prefix - npre, "%s_", self->lex->toktext);
-        npre += strlen(self->lex->toktext) + 1;
-        self->sup->lex_next();
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            if (m->nb >= MAX_METHODS) return self->sup->fail("too many map bindings");
+            b = &m->b[m->nb];
+            b->line = self->lex->tokline;
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
+            snprintf(b->method, MAX_TEXT, "%s", self->lex->toktext);
+            mi = -1;
+            for (k = 0; k < self->sym->traits[ti].nm; k++)
+                if (strcmp(self->sym->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
+            if (mi < 0) {
+                snprintf(msg, sizeof msg, "'%s' is not a method of trait '%s'",
+                         b->method, rtrait);
+                return self->sup->fail(msg);
+            }
             self->sup->lex_next();
-            continue;
-        }
-        break;
-    }
-    if (!self->sym->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
-    if (self->sup->expect("{") != 0) return -1;
-    snprintf(save, sizeof save, "%s", self->sym->ns);
-    if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
-        return self->sup->fail("namespace is too long");
-    while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-        if (self->lex->tok == T_PP) {
-            n = self->sup->new_node(N_PP);
-            if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
-            if (tu_append_node(self, prog, n) != 0) return -1;
+            if (self->sup->expect("(") != 0) return -1;
+            np = 0;
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+                for (;;) {
+                    if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
+                    if (np >= MAX_PARAMS) return self->sup->fail("too many map parameters");
+                    snprintf(b->params[np], MAX_TEXT, "%s", self->lex->toktext);
+                    np++;
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                        self->sup->lex_next();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            if (self->sup->expect(")") != 0) return -1;
+            b->nparams = np;
+            if (np != self->sym->traits[ti].m[mi].nparams) {
+                snprintf(msg, sizeof msg,
+                         "map binding for '%s' takes %d parameter(s), the trait declares %d",
+                         b->method, np, self->sym->traits[ti].m[mi].nparams);
+                return self->sup->fail(msg);
+            }
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "->") == 0))
+                return self->sup->fail("expected '->'");
+            /* Capture the RHS verbatim from self->lex->pos: no lex_next has run since the
+               '->' token, so self->lex->pos sits just past it (the parse_init_raw trick). */
+            i = self->lex->pos;
+            n = 0;
+            q = 0;
+            depth = 0;
+            eof = 0;
+            long_call = 0;
+            while (self->lex->src[i] == ' ' || self->lex->src[i] == '\t'
+                   || self->lex->src[i] == '\n' || self->lex->src[i] == '\r') i++;
+            for (;;) {
+                c = (unsigned char)self->lex->src[i];
+                if (c == 0) { eof = 1; break; }
+                if (q == 0 && depth == 0 && c == ';') break;
+                if (n + 1 >= MAX_TEXT) { long_call = 1; break; }
+                if (q == 0 && (c == '"' || c == '\'')) {
+                    q = c;
+                } else if (q != 0 && c == q) {
+                    q = 0;
+                } else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
+                    b->call[n] = (char)c; n++; i++;
+                    c = (unsigned char)self->lex->src[i];
+                } else if (q == 0 && c == '(') {
+                    depth++;
+                } else if (q == 0 && c == ')') {
+                    depth--;
+                }
+                b->call[n] = (char)c; n++; i++;
+            }
+            if (eof) return self->sup->fail("unterminated map call");
+            if (long_call) return self->sup->fail("map call is too long");
+            while (n > 0 && (b->call[n - 1] == ' ' || b->call[n - 1] == '\t'
+                             || b->call[n - 1] == '\n' || b->call[n - 1] == '\r')) n--;
+            b->call[n] = 0;
+            self->lex->pos = i;
             self->sup->lex_next();
-            continue;
+            if (self->map_check_call((char *)b, inst) != 0) return -1;
+            if (self->sup->expect(";") != 0) return -1;
+            snprintf(b->wrapper, MAX_TEXT, "%s_%s_%s", inst, rtrait, b->method);
+            b->ti = ti;
+            b->mi = mi;
+            m->nb++;
         }
-        n = tu_top_decl(self, 0);
-        if (n == NO_NODE) continue;
+        if (self->sup->expect("}") != 0) return -1;
+        /* A map must bind every trait method exactly once: an unbound slot stays
+           a null pointer (calling it crashes at run time), and a duplicate
+           binding would emit the wrapper function twice (a C redefinition). */
+        for (i = 0; i < m->nb; i++) {
+            for (j = i + 1; j < m->nb; j++)
+                if (strcmp(m->b[i].method, m->b[j].method) == 0) {
+                    snprintf(msg, sizeof msg, "duplicate binding for method '%s'",
+                             m->b[i].method);
+                    return self->sup->fail(msg);
+                }
+        }
+        for (k = 0; k < self->sym->traits[ti].nm; k++) {
+            bound = 0;
+            for (i = 0; i < m->nb; i++)
+                if (strcmp(m->b[i].method, self->sym->traits[ti].m[k].name) == 0) {
+                    bound = 1;
+                    break;
+                }
+            if (!bound) {
+                snprintf(msg, sizeof msg, "trait method '%s' is not bound by the map",
+                         self->sym->traits[ti].m[k].name);
+                return self->sup->fail(msg);
+            }
+        }
+        self->nmaps++;
+        return NO_NODE;
+    }
+
+    int top_decl(int is_pub)
+    {
+        int n;
+        (void)self;
+
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+            if (is_pub) return self->sup->fail("duplicate 'pub'");
+            self->sup->lex_next();
+            return self->top_decl(1);
+        }
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
+            return ct_sem_error(self->lex->tokline, 1,
+                "'own' is only allowed inside a function body", self->mem->path);
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "typedef") == 0) {
+            n = self->parse_typedef(is_pub);
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0) {
+            n = self->parse_trait(is_pub);
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "impl") == 0) {
+            n = self->parse_impl();
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "map") == 0) {
+            n = self->parse_map();
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "struct") == 0
+                   && self->struct_def_ahead()) {
+            n = self->parse_struct_def();
+            /* CT writes `struct X { ... }` bare (the old pipeline accepts both) */
+            if (n >= 0) self->sup->accept(";");
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
+            self->sup->lex_next();
+            n = self->parse_func(1, is_pub);
+        } else {
+            n = self->parse_func(0, is_pub);
+        }
+        if (n == NO_NODE) return NO_NODE;
         if (n < 0) return -1;
-        if (tu_append_node(self, prog, n) != 0) return -1;
+        self->arena->nodes[n].d = is_pub ? 1 : 0;
+        return n;
     }
-    if (self->sup->expect("}") != 0) return -1;
-    snprintf(self->sym->ns, sizeof self->sym->ns, "%s", save);
-    return 0;
+
+    int parse_namespace(int prog)
+    {
+        char path[MAX_TEXT];
+        char prefix[MAX_TEXT];
+        char save[MAX_TEXT];
+        size_t np, npre;
+        int n;
+        (void)self;
+
+        self->sup->lex_next();
+        np = 0;
+        npre = 0;
+        path[0] = 0;
+        prefix[0] = 0;
+        for (;;) {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a namespace name");
+            if (np > 0) {
+                if (np + 2 >= sizeof path) return self->sup->fail("namespace is too long");
+                path[np] = ':';
+                path[np + 1] = ':';
+                np += 2;
+                path[np] = 0;
+            }
+            if (np + strlen(self->lex->toktext) >= sizeof path) return self->sup->fail("namespace is too long");
+            snprintf(path + np, sizeof path - np, "%s", self->lex->toktext);
+            np += strlen(self->lex->toktext);
+            if (npre + strlen(self->lex->toktext) + 1 >= sizeof prefix)
+                return self->sup->fail("namespace is too long");
+            snprintf(prefix + npre, sizeof prefix - npre, "%s_", self->lex->toktext);
+            npre += strlen(self->lex->toktext) + 1;
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                self->sup->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (!self->sym->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
+        if (self->sup->expect("{") != 0) return -1;
+        snprintf(save, sizeof save, "%s", self->sym->ns);
+        if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
+            return self->sup->fail("namespace is too long");
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            if (self->lex->tok == T_PP) {
+                n = self->sup->new_node(N_PP);
+                if (n < 0) return -1;
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
+                if (self->append_node(prog, n) != 0) return -1;
+                self->sup->lex_next();
+                continue;
+            }
+            n = self->top_decl(0);
+            if (n == NO_NODE) continue;
+            if (n < 0) return -1;
+            if (self->append_node(prog, n) != 0) return -1;
+        }
+        if (self->sup->expect("}") != 0) return -1;
+        snprintf(self->sym->ns, sizeof self->sym->ns, "%s", save);
+        return 0;
+    }
+
 }
 
 impl ParseOps for Parser {
@@ -778,21 +799,21 @@ impl ParseOps for Parser {
                 n = self->sup->new_node(N_PP);
                 if (n < 0) return -1;
                 snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
-                if (tu_append_node(self, prog, n) != 0) return -1;
+                if (self->append_node(prog, n) != 0) return -1;
                 self->sup->lex_next();
                 continue;
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
                 if (!*self->build_mode)
                     return self->sup->fail("'import' is not supported in compile mode");
-                if (tu_skip_import(self) != 0) return -1;
+                if (self->skip_import() != 0) return -1;
                 continue;
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "namespace") == 0) {
-                if (tu_namespace(self, prog) != 0) return -1;
+                if (self->parse_namespace(prog) != 0) return -1;
                 continue;
             }
-            n = tu_top_decl(self, 0);
+            n = self->top_decl(0);
             if (n == NO_NODE) continue;
             if (n < 0) {
                 /* A reported error is recoverable: resynchronise and keep going
@@ -802,7 +823,7 @@ impl ParseOps for Parser {
                 if (self->sup->skip_after_error() != 0) return -1;
                 continue;
             }
-            if (tu_append_node(self, prog, n) != 0) return -1;
+            if (self->append_node(prog, n) != 0) return -1;
         }
         /* errors leave the unit (and its artifacts) behind */
         if (ct_diag_nsem() > base) return -1;
@@ -2444,7 +2465,7 @@ int ct_parse_program(void)
 pub int ct_parse_skip_import(void);
 int ct_parse_skip_import(void)
 {
-    return tu_skip_import(&g_parse);
+    return g_parse.skip_import();
 }
 
 pub int ct_parse_fail(const char *msg);
