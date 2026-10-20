@@ -25,6 +25,7 @@ import tool::diag::diag;
 import runtime::arena::arena;
 import frontend::lex::lexer;
 import frontend::module::unit;
+import frontend::module::map;
 import frontend::sym::sym;
 import tool::cache::cache;
 import backend::mem::mem;
@@ -158,35 +159,8 @@ import backend::mem::mem;
    MAX_* list too, because the driver sizes the table and spells the same
    numbers. */
 
-/* One `callee(...)` in a function body, for the map's call graph. */
-typedef struct Call {
-    char caller[MAX_TEXT];
-    char callee[MAX_TEXT];
-    int  line;
-} Call;
-
-/* One `method(params) -> call` inside a `map` block (Phase 11.1). */
-typedef struct MapBind {
-    char method[MAX_TEXT];                  /* trait method name */
-    char params[MAX_PARAMS][MAX_TEXT];      /* CT-side parameter names, from the map's () */
-    int  nparams;
-    int  ti;                                /* index into self->sym->traits */
-    int  mi;                                /* index into that trait's m[] */
-    char call[MAX_TEXT];                    /* raw, validated RHS text (no trailing ';') */
-    char wrapper[MAX_TEXT];                 /* "<inst>_<Trait>_<method>" */
-    int  line;
-} MapBind;
-
-/* `map trait T for instance x { ... }`: binds trait methods to a global instance. */
-typedef struct Map {
-    char trait[MAX_TEXT];
-    char inst[MAX_TEXT];
-    char vtable[MAX_TEXT];                  /* "<inst>_<Trait>_vtable" */
-    MapBind b[MAX_METHODS];
-    int  nb;
-    int  line;
-    int  unit;                              /* the unit that declared this map */
-} Map;
+/* The `map` records and the call-graph edge are value types of the module
+   layer; see frontend/module/map.h.ct. */
 
 /* An rvalue receiver (`f().m()`) is hoisted into a temp so the call is
    evaluated once; the declarations are flushed before the statement. */
@@ -293,7 +267,7 @@ trait ModuleOps {
     int  parse_top_decl(int is_pub);
     int  parse_namespace(int prog);
     int  parse_map(void);
-    int  map_check_call(const MapBind *b, const char *inst);
+    int  map_check_call(const struct frontend_module_MapBind *b, const char *inst);
     int  struct_def_ahead(void);
     int  cache_order(int u, int *state, int *order, int *n);
     int  cache_key_of(int u, char *out, int cap);
@@ -399,9 +373,9 @@ struct Ast {
     const char *nsroot;
     char rels[MAX_IMPORTS][MAX_TEXT];  /* import paths seen by the scanner */
     int  nrels;
-    Call calls[MAX_CALLS];
+    struct frontend_module_Call calls[MAX_CALLS];
     int  ncalls;
-    Map  maps[MAX_MAPS];
+    struct frontend_module_Map maps[MAX_MAPS];
     int  nmaps;
     char cur_func[MAX_TEXT];    /* caller recorded for the map */
     /* Run options. `prog` is the entry name `-v` and the usage lines print
@@ -3460,8 +3434,8 @@ impl ModuleOps for Ast {
         char rtrait[MAX_TEXT];
         char inst[MAX_TEXT];
         char msg[MAX_TEXT];
-        Map *m;
-        MapBind *b;
+        struct frontend_module_Map *m;
+        struct frontend_module_MapBind *b;
         int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound;
         (void)self;
 
@@ -3614,7 +3588,7 @@ impl ModuleOps for Ast {
 
     /* The subset check: the RHS must be one `f(args)` call whose every argument
        is a literal, a bare name, or a member path rooted at the instance. */
-    int map_check_call(const MapBind *b, const char *inst)
+    int map_check_call(const struct frontend_module_MapBind *b, const char *inst)
     {
         char msg[MAX_TEXT];
         char arg[MAX_TEXT];
@@ -4628,7 +4602,7 @@ impl EmitOps for Ast {
         for (i = 0; i < self->nmaps; i++) {
             if (u >= 0 && self->maps[i].unit != u) continue;
             for (j = 0; j < self->maps[i].nb; j++) {
-                MapBind *b;
+                struct frontend_module_MapBind *b;
                 struct frontend_sym_MethodSig *sig;
                 b = &self->maps[i].b[j];
                 sig = &self->sym->traits[b->ti].m[b->mi];

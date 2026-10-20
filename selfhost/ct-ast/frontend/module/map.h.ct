@@ -1,0 +1,43 @@
+/*
+ * map.h.ct - the `map` construct's records and the call graph edge.
+ *
+ * These are plain value types of the module layer: the parser fills them, the
+ * type checker reads the map table while boxing, and the emitter writes the
+ * wrappers and the JSON map. Keeping them beside Unit means each consumer names
+ * them through the module namespace instead of through the driver object.
+ *
+ * Macros do not cross a unit boundary, so the caps are restated; they must stay
+ * equal to MAX_TEXT 160, MAX_PARAMS 16 and MAX_METHODS 64 in main.ct. The array
+ * lengths are literals because a `pub struct` lands in a header with no macros.
+ */
+namespace frontend::module {
+/* One `callee(...)` in a function body, for the map's call graph. */
+pub struct Call {
+    char caller[160];
+    char callee[160];
+    int  line;
+}
+
+/* One `method(params) -> call` inside a `map` block (Phase 11.1). */
+pub struct MapBind {
+    char method[160];               /* trait method name */
+    char params[16][160];           /* CT-side parameter names, from the map's () */
+    int  nparams;
+    int  ti;                        /* index into the trait table */
+    int  mi;                        /* index into that trait's m[] */
+    char call[160];                 /* raw, validated RHS text (no trailing ';') */
+    char wrapper[160];              /* "<inst>_<Trait>_<method>" */
+    int  line;
+}
+
+/* `map trait T for instance x { ... }`: binds trait methods to a global instance. */
+pub struct Map {
+    char trait[160];
+    char inst[160];
+    char vtable[160];               /* "<inst>_<Trait>_vtable" */
+    struct MapBind b[64];
+    int  nb;
+    int  line;
+    int  unit;                      /* the unit that declared this map */
+}
+}
