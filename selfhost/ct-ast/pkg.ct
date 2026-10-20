@@ -1,0 +1,1112 @@
+/*
+ * pkg.ct - the package manager (`ct get` / `ct install`), one unit of its own.
+ *
+ * It is a leaf: it owns its lock/seen state and never touches the AST, so it is
+ * the first object split out of main.ct. The whole trait stays in this unit on
+ * purpose -- the emitter makes each impl's vtable `static`, and an instance's
+ * vptr initialisers can only name vtables its own unit can see, so one struct's
+ * impls cannot be spread across units.
+ *
+ * Macros do not cross units, so the caps this unit needs are restated here; they
+ * must stay equal to the ones in main.ct.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+
+#define MAX_TEXT       160
+#define MAX_PATH       1024
+#define MAX_LOCK       4096             /* MAX_PKG_PATH * 8, spelled out */
+#define MAX_PKG_DEPS   16
+#define MAX_PKG_PATH   512
+#define MAX_PKG_CMD    2048
+#define MAX_PKG_DEPTH  8
+#define MAX_PKG_LINE   1024             /* MAX_PKG_PATH * 2, spelled out */
+
+/* The package manager (Phase 8, ported in 10.6). `get`/`install` never reach the
+   compile core: only `get` may run `git`, and `install` is offline (D42). */
+trait PkgOps {
+    int  read_manifest(const char *dir, char *name, size_t ncap, char *ver, size_t vcap,
+                       char deps[][MAX_PKG_PATH], int *ndeps);
+    int  version_parse(const char *s, int v[3]);
+    int  version_cmp(const int a[3], const int b[3]);
+    int  range_match(const char *range, const char *ver);
+    int  copy_file(const char *src, const char *dst);
+    int  copy_tree(const char *src, const char *dst);
+    unsigned long pkg_digest(const char *s);
+    unsigned long file_digest(const char *path);
+    unsigned long dir_sum(const char *dir, const char *rel);
+    int  dir_digest(const char *dir, char *out, size_t cap);
+    int  ensure_dir(const char *path);
+    int  split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap);
+    int  is_git_ref(const char *spec);
+    int  git_url(const char *spec, char *url, size_t cap);
+    int  git_name(const char *spec, char *name, size_t cap);
+    int  git_avail(void);
+    int  sh_quote(const char *s, char *out, size_t cap);
+    int  git_run(const char *cmd, const char *outfile);
+    int  read_line_of(const char *path, char *buf, size_t cap);
+    int  git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap);
+    int  get_git(const char *spec, const char *range, int depth);
+    int  get_spec(const char *spec, const char *base, int depth);
+    int  get_one(const char *dir, const char *range, int depth);
+    int  remember_dep(const char *spec);
+    int  dep_name(const char *spec, char *name, size_t cap);
+    int  get(const char *spec, const char *root);
+    int  install(const char *prog);
+    int  get_main(int argc, char **argv);
+    int  install_main(int argc, char **argv);
+}
+
+/* The manager's state used to be file-scope in main.ct; it lives in this struct
+   now so the unit owns it outright. `prog` and `version` are wired at start-up,
+   which keeps CTC_VERSION defined in exactly one place. */
+struct Pkg {
+    char lock[MAX_LOCK];
+    int  locklen;
+    int  nlocks;
+    char seen[MAX_PKG_DEPS][MAX_TEXT];
+    int  nseen;
+    const char *prog;
+    const char *version;
+} use PkgOps;
+impl PkgOps for Pkg {
+    /* Parse `<dir>/ct.pkg`. Line-oriented: `#` starts a comment, `key = value`,
+       and `dep` may repeat. A missing name or version is an error. */
+    int read_manifest(const char *dir, char *name, size_t ncap, char *ver, size_t vcap,
+                      char deps[][MAX_PKG_PATH], int *ndeps)
+    {
+        char path[MAX_PKG_PATH];
+        char line[MAX_PKG_PATH];
+        FILE *f;
+        int ok;
+        (void)self;
+
+        if (snprintf(path, sizeof path, "%s/ct.pkg", dir) >= (int)sizeof path) return -1;
+        f = fopen(path, "r");
+        if (!f) return -1;
+        name[0] = 0;
+        ver[0] = 0;
+        *ndeps = 0;
+        ok = 1;
+        while (fgets(line, sizeof line, f) != NULL) {
+            char *ls, *le, *eq, *k, *v, *ve;
+            size_t kl, vl, ll;
+            ll = strlen(line);
+            while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+                ll = ll - 1;
+                line[ll] = 0;
+            }
+            ls = line;
+            while (*ls == ' ' || *ls == '\t') ls++;
+            if (*ls == 0 || *ls == '#') continue;
+            le = ls + strlen(ls);
+            eq = ls;
+            while (eq < le && *eq != '=') eq++;
+            if (eq == le) continue;
+            k = eq;
+            while (k > ls && (k[-1] == ' ' || k[-1] == '\t')) k = k - 1;
+            v = eq + 1;
+            while (*v == ' ' || *v == '\t') v++;
+            ve = v + strlen(v);
+            while (ve > v && (ve[-1] == ' ' || ve[-1] == '\t')) ve = ve - 1;
+            kl = (size_t)(k - ls);
+            vl = (size_t)(ve - v);
+            if (kl == 4 && strncmp(ls, "name", 4) == 0) {
+                if (vl >= ncap) { ok = 0; break; }
+                memcpy(name, v, vl);
+                name[vl] = 0;
+            } else if (kl == 7 && strncmp(ls, "version", 7) == 0) {
+                if (vl >= vcap) { ok = 0; break; }
+                memcpy(ver, v, vl);
+                ver[vl] = 0;
+            } else if (kl == 3 && strncmp(ls, "dep", 3) == 0) {
+                if (*ndeps >= MAX_PKG_DEPS || vl >= MAX_PKG_PATH) { ok = 0; break; }
+                memcpy(deps[*ndeps], v, vl);
+                deps[*ndeps][vl] = 0;
+                (*ndeps)++;
+            }
+        }
+        fclose(f);
+        if (!ok) return -1;
+        return (name[0] && ver[0]) ? 0 : -1;
+    }
+
+    int version_parse(const char *s, int v[3])
+    {
+        int n;
+        (void)self;
+        v[0] = 0;
+        v[1] = 0;
+        v[2] = 0;
+        n = sscanf(s, "%d.%d.%d", &v[0], &v[1], &v[2]);
+        return (n >= 1) ? 0 : -1;
+    }
+
+    int version_cmp(const int a[3], const int b[3])
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < 3; i++) {
+            if (a[i] < b[i]) return -1;
+            if (a[i] > b[i]) return 1;
+        }
+        return 0;
+    }
+
+    /* `^x.y.z` = same major and >= x.y.z; `~x.y.z` = same major.minor; anything
+       else is exact. An empty range or `*` accepts any version. */
+    int range_match(const char *range, const char *ver)
+    {
+        int v[3], lo[3], op;
+        const char *r;
+        (void)self;
+
+        op = 0;
+        r = range;
+        if (!range || !range[0] || strcmp(range, "*") == 0) return 1;
+        if (r[0] == '^') {
+            op = 1;
+            r++;
+        } else if (r[0] == '~') {
+            op = 2;
+            r++;
+        }
+        if (self->version_parse(r, lo) != 0) return 0;
+        if (self->version_parse(ver, v) != 0) return 0;
+        if (op == 1) {
+            if (v[0] != lo[0]) return 0;
+            return self->version_cmp(v, lo) >= 0;
+        }
+        if (op == 2) {
+            if (v[0] != lo[0] || v[1] != lo[1]) return 0;
+            return self->version_cmp(v, lo) >= 0;
+        }
+        return self->version_cmp(v, lo) == 0;
+    }
+
+    int copy_file(const char *src, const char *dst)
+    {
+        FILE *in, *out;
+        char buf[4096];
+        size_t n;
+        (void)self;
+
+        in = fopen(src, "rb");
+        if (!in) return -1;
+        out = fopen(dst, "wb");
+        if (!out) { fclose(in); return -1; }
+        for (;;) {
+            n = fread(buf, 1, sizeof buf, in);
+            if (n == 0) break;
+            if (fwrite(buf, 1, n, out) != n) { fclose(in); fclose(out); return -1; }
+        }
+        fclose(in);
+        if (fclose(out) != 0) return -1;
+        return 0;
+    }
+
+    /* Copy a package directory; build caches and VCS metadata are not package
+       content, so they are skipped rather than vendored. */
+    int copy_tree(const char *src, const char *dst)
+    {
+        DIR *d;
+        struct dirent *e;
+        struct stat st;
+        struct stat ds;
+        char s[MAX_PKG_PATH], t[MAX_PKG_PATH];
+        int rc;
+        (void)self;
+
+        rc = 0;
+        if (mkdir(dst, 0755) != 0) {
+            if (stat(dst, &ds) != 0 || !S_ISDIR(ds.st_mode)) return -1;
+        }
+        d = opendir(src);
+        if (!d) return -1;
+        for (;;) {
+            e = readdir(d);
+            if (e == NULL) break;
+            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+            if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
+            if (strcmp(e->d_name, ".ctcache") == 0) continue;
+            snprintf(s, sizeof s, "%s/%s", src, e->d_name);
+            snprintf(t, sizeof t, "%s/%s", dst, e->d_name);
+            if (stat(s, &st) != 0) { rc = -1; break; }
+            if (S_ISDIR(st.st_mode)) {
+                if (self->copy_tree(s, t) != 0) { rc = -1; break; }
+            } else if (S_ISREG(st.st_mode)) {
+                if (self->copy_file(s, t) != 0) { rc = -1; break; }
+            }
+        }
+        closedir(d);
+        return rc;
+    }
+
+    /* FNV-1a over a string, the same fold the cache key uses. */
+    unsigned long pkg_digest(const char *s)
+    {
+        unsigned long h;
+        size_t i;
+        (void)self;
+        h = (unsigned long)2166136261;
+        i = 0;
+        while (s[i]) {
+            h = h ^ (unsigned long)(unsigned char)s[i];
+            h = h * (unsigned long)16777619;
+            i++;
+        }
+        return h;
+    }
+
+    unsigned long file_digest(const char *path)
+    {
+        unsigned long h;
+        FILE *f;
+        int c;
+        (void)self;
+        h = (unsigned long)2166136261;
+        f = fopen(path, "rb");
+        if (!f) return 0;
+        c = fgetc(f);
+        while (c != EOF) {
+            h = h ^ (unsigned long)(unsigned char)c;
+            h = h * (unsigned long)16777619;
+            c = fgetc(f);
+        }
+        fclose(f);
+        return h;
+    }
+
+    /* Additively fold every regular file under `dir`; addition is commutative,
+       so readdir order cannot change the digest. */
+    unsigned long dir_sum(const char *dir, const char *rel)
+    {
+        DIR *d;
+        struct dirent *e;
+        struct stat st;
+        char full[MAX_PKG_PATH], r[MAX_PKG_PATH];
+        unsigned long total;
+        int w;
+        (void)self;
+
+        total = 0;
+        d = opendir(dir);
+        if (!d) return 0;
+        for (;;) {
+            e = readdir(d);
+            if (e == NULL) break;
+            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+            if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
+            if (strcmp(e->d_name, ".ctcache") == 0) continue;
+            if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >= (int)sizeof full) continue;
+            if (rel[0]) w = snprintf(r, sizeof r, "%s/%s", rel, e->d_name);
+            else        w = snprintf(r, sizeof r, "%s", e->d_name);
+            if (w < 0 || (size_t)w >= sizeof r) continue;
+            if (stat(full, &st) != 0) continue;
+            if (S_ISDIR(st.st_mode)) {
+                total += self->dir_sum(full, r);
+            } else if (S_ISREG(st.st_mode)) {
+                total += self->file_digest(full) ^ self->pkg_digest(r);
+            }
+        }
+        closedir(d);
+        return total;
+    }
+
+    int dir_digest(const char *dir, char *out, size_t cap)
+    {
+        struct stat st;
+        unsigned long h;
+        int w;
+        (void)self;
+        if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) return -1;
+        h = self->dir_sum(dir, "");
+        w = snprintf(out, cap, "%016lx", h);
+        if (w < 0 || (size_t)w >= cap) return -1;
+        return 0;
+    }
+
+    int ensure_dir(const char *path)
+    {
+        struct stat st;
+        (void)self;
+        if (mkdir(path, 0755) == 0) return 0;
+        if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return 0;
+        return -1;
+    }
+
+    /* `path[@range]`: the last `@` separates the two, so a path may contain one. */
+    int split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap)
+    {
+        const char *at, *q;
+        size_t n;
+        (void)self;
+
+        at = NULL;
+        for (q = spec; *q; q++)
+            if (*q == '@') at = q;
+        if (!at) {
+            if (strlen(spec) >= pcap) return -1;
+            snprintf(path, pcap, "%s", spec);
+            range[0] = 0;
+            return 0;
+        }
+        n = (size_t)(at - spec);
+        if (n >= pcap || strlen(at + 1) >= rcap) return -1;
+        memcpy(path, spec, n);
+        path[n] = 0;
+        snprintf(range, rcap, "%s", at + 1);
+        return 0;
+    }
+
+    /* A spec is a git source unless it names a filesystem location. */
+    int is_git_ref(const char *spec)
+    {
+        (void)self;
+        if (spec[0] == '.' || spec[0] == '/') return 0;
+        if (strncmp(spec, "file://", 7) == 0) return 0;
+        return 1;
+    }
+
+    int git_url(const char *spec, char *url, size_t cap)
+    {
+        const char *reg;
+        int w;
+        (void)self;
+
+        if (strstr(spec, "://")) {
+            if (strlen(spec) >= cap) return -1;
+            snprintf(url, cap, "%s", spec);
+            return 0;
+        }
+        if (strchr(spec, '/')) {
+            w = snprintf(url, cap, "https://%s", spec);
+            if (w < 0 || (size_t)w >= cap) return -1;
+            return 0;
+        }
+        reg = getenv("CT_REGISTRY");
+        if (!reg || !reg[0]) reg = "https://github.com/ct-pkg";
+        w = snprintf(url, cap, "%s/%s", reg, spec);
+        if (w < 0 || (size_t)w >= cap) return -1;
+        return 0;
+    }
+
+    int git_name(const char *spec, char *name, size_t cap)
+    {
+        const char *b, *e;
+        size_t l;
+        (void)self;
+
+        e = spec + strlen(spec);
+        while (e > spec && e[-1] == '/') e = e - 1;
+        b = e;
+        while (b > spec && b[-1] != '/') b = b - 1;
+        l = (size_t)(e - b);
+        if (l == 0 || l >= cap) return -1;
+        memcpy(name, b, l);
+        name[l] = 0;
+        return 0;
+    }
+
+    int git_avail(void)
+    {
+        (void)self;
+        return system("git --version >/dev/null 2>&1") == 0;
+    }
+
+    /* Single-quote `s` for the shell; every path and URL that reaches `git_run`
+       goes through here, so a spec can never break out of its argument. */
+    int sh_quote(const char *s, char *out, size_t cap)
+    {
+        size_t n, i;
+        (void)self;
+
+        n = 0;
+        if (cap < 4) return -1;
+        out[n] = '\'';
+        n++;
+        for (i = 0; s[i]; i++) {
+            if (s[i] == '\'') {
+                if (n + 5 >= cap) return -1;
+                out[n] = '\'';
+                out[n + 1] = '\\';
+                out[n + 2] = '\'';
+                out[n + 3] = '\'';
+                n += 4;
+            } else {
+                if (n + 2 >= cap) return -1;
+                out[n] = s[i];
+                n++;
+            }
+        }
+        out[n] = '\'';
+        n++;
+        out[n] = 0;
+        return 0;
+    }
+
+    /* The one subprocess call site. */
+    int git_run(const char *cmd, const char *outfile)
+    {
+        char full[MAX_PKG_CMD], qo[MAX_PKG_CMD];
+        int w;
+        (void)self;
+
+        if (outfile) {
+            if (self->sh_quote(outfile, qo, sizeof qo) != 0) return -1;
+            w = snprintf(full, sizeof full, "%s > %s 2>/dev/null", cmd, qo);
+        } else {
+            w = snprintf(full, sizeof full, "%s 2>/dev/null", cmd);
+        }
+        if (w < 0 || (size_t)w >= sizeof full) return -1;
+        return system(full);
+    }
+
+    int read_line_of(const char *path, char *buf, size_t cap)
+    {
+        FILE *f;
+        size_t n;
+        int c;
+        (void)self;
+
+        n = 0;
+        f = fopen(path, "r");
+        if (!f) return -1;
+        c = fgetc(f);
+        while (c != EOF && c != '\n' && c != '\r') {
+            if (n + 1 >= cap) { fclose(f); return -1; }
+            buf[n] = (char)c;
+            n++;
+            c = fgetc(f);
+        }
+        fclose(f);
+        buf[n] = 0;
+        return 0;
+    }
+
+    /* Pick the lowest tag satisfying `range` (minimal version selection).
+       `0` = a tag was chosen, `-2` = no tags and any version is acceptable
+       (fall back to the default branch), `-1` = no tag fits. */
+    int git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap)
+    {
+        char q1[MAX_PKG_CMD], cmd[MAX_PKG_CMD], out[MAX_PKG_CMD], root[MAX_PKG_CMD];
+        char line[MAX_PKG_CMD];
+        const char *home;
+        FILE *f;
+        int have, v[3], best[3], w;
+
+        home = getenv("HOME");
+        if (!home || !home[0]) return -1;
+        if (snprintf(root, sizeof root, "%s/.cache/ct-pkg", home) >= (int)sizeof root) return -1;
+        if (snprintf(out, sizeof out, "%s/.ct-pkg.tags", root) >= (int)sizeof out) return -1;
+        tag[0] = 0;
+        if (self->sh_quote(cache, q1, sizeof q1) != 0) return -1;
+        w = snprintf(cmd, sizeof cmd, "git -C %s tag -l", q1);
+        if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+        if (self->git_run(cmd, out) != 0) return -1;
+
+        f = fopen(out, "r");
+        if (!f) return -1;
+        have = 0;
+        while (fgets(line, sizeof line, f) != NULL) {
+            char *ls, *le, *vp;
+            char tmp[MAX_TEXT];
+            size_t vl, tl, ll;
+            ll = strlen(line);
+            while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r'
+                              || line[ll - 1] == ' ' || line[ll - 1] == '\t')) {
+                ll = ll - 1;
+                line[ll] = 0;
+            }
+            ls = line;
+            while (*ls == ' ' || *ls == '\t') ls++;
+            le = ls + strlen(ls);
+            if (ls == le) continue;
+            vp = ls;
+            vl = (size_t)(le - ls);
+            if (vl && *vp == 'v') {
+                vp++;
+                vl = vl - 1;
+            }
+            if (vl == 0 || vl >= sizeof tmp) continue;
+            memcpy(tmp, vp, vl);
+            tmp[vl] = 0;
+            if (self->version_parse(tmp, v) != 0) continue;
+            if (!self->range_match(range, tmp)) continue;
+            tl = (size_t)(le - ls);
+            if (tl == 0 || tl >= tcap) continue;
+            if (!have || self->version_cmp(v, best) < 0) {
+                memcpy(tag, ls, tl);
+                tag[tl] = 0;
+                best[0] = v[0];
+                best[1] = v[1];
+                best[2] = v[2];
+                have = 1;
+            }
+        }
+        fclose(f);
+        if (have) return 0;
+        if (!range || !range[0] || strcmp(range, "*") == 0) return -2;
+        return -1;
+    }
+
+    /* Fetch a git package into the cache, check out the version the range
+       picks, pin the commit, then resolve and vendor it like a local source. */
+    int get_git(const char *spec, const char *range, int depth)
+    {
+        char url[MAX_PKG_CMD], name[MAX_TEXT], hdir[MAX_PKG_CMD], root[MAX_PKG_CMD];
+        char cache[MAX_PKG_CMD], gitdir[MAX_PKG_CMD], out[MAX_PKG_CMD];
+        char q1[MAX_PKG_CMD], q2[MAX_PKG_CMD], cmd[MAX_PKG_CMD];
+        char mname[MAX_TEXT], mver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        char tag[MAX_TEXT], commit[64], dig[32], dst[MAX_PKG_PATH];
+        const char *home;
+        struct stat st;
+        int ndeps, i, w, rc, fresh;
+
+        ndeps = 0;
+        if (depth > MAX_PKG_DEPTH) {
+            fprintf(stderr, "ctc: dependency chain is too deep at '%s'\n", spec);
+            return -1;
+        }
+        if (!self->git_avail()) {
+            fprintf(stderr, "ctc: git is required for '%s' but was not found; "
+                            "install git or use a local directory source\n", spec);
+            return -1;
+        }
+        if (self->git_url(spec, url, sizeof url) != 0) {
+            fprintf(stderr, "ctc: cannot resolve a git url for '%s'\n", spec);
+            return -1;
+        }
+        if (self->git_name(spec, name, sizeof name) != 0) {
+            fprintf(stderr, "ctc: cannot derive a package name from '%s'\n", spec);
+            return -1;
+        }
+        home = getenv("HOME");
+        if (!home || !home[0]) {
+            fprintf(stderr, "ctc: cannot locate the package cache (HOME is unset)\n");
+            return -1;
+        }
+        if (snprintf(hdir, sizeof hdir, "%s/.cache", home) >= (int)sizeof hdir) return -1;
+        if (snprintf(root, sizeof root, "%s/.cache/ct-pkg", home) >= (int)sizeof root) return -1;
+        if (snprintf(cache, sizeof cache, "%s/%s", root, name) >= (int)sizeof cache) return -1;
+        if (snprintf(gitdir, sizeof gitdir, "%s/.git", cache) >= (int)sizeof gitdir) return -1;
+        if (snprintf(out, sizeof out, "%s/.ct-pkg.out", root) >= (int)sizeof out) return -1;
+        if (self->ensure_dir(hdir) != 0 || self->ensure_dir(root) != 0) {
+            fprintf(stderr, "ctc: cannot create the package cache '%s'\n", root);
+            return -1;
+        }
+
+        fresh = 0;
+        if (stat(gitdir, &st) != 0) fresh = 1;
+        else if (!S_ISDIR(st.st_mode)) fresh = 1;
+        if (self->sh_quote(url, q1, sizeof q1) != 0) return -1;
+        if (self->sh_quote(cache, q2, sizeof q2) != 0) return -1;
+        if (fresh) {
+            w = snprintf(cmd, sizeof cmd, "git clone --quiet %s %s", q1, q2);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, NULL) != 0) {
+                fprintf(stderr, "ctc: git clone of '%s' failed\n", url);
+                return -1;
+            }
+        } else {
+            w = snprintf(cmd, sizeof cmd, "git -C %s fetch --quiet --tags --force", q2);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, NULL) != 0) {
+                fprintf(stderr, "ctc: git fetch of '%s' failed\n", url);
+                return -1;
+            }
+        }
+
+        rc = self->git_pick_tag(cache, range, tag, sizeof tag);
+        if (rc == 0) {
+            if (self->sh_quote(tag, q1, sizeof q1) != 0) return -1;
+            w = snprintf(cmd, sizeof cmd, "git -C %s checkout --quiet --detach %s", q2, q1);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, NULL) != 0) {
+                fprintf(stderr, "ctc: git checkout of '%s' failed\n", tag);
+                return -1;
+            }
+        } else if (rc == -2) {
+            if (!fresh) {
+                w = snprintf(cmd, sizeof cmd, "git -C %s reset --hard --quiet origin/HEAD", q2);
+                if (w >= 0 && (size_t)w < sizeof cmd) self->git_run(cmd, NULL);
+            }
+        } else {
+            fprintf(stderr, "ctc: no tag of '%s' satisfies '%s'\n", name, range);
+            return -1;
+        }
+
+        w = snprintf(cmd, sizeof cmd, "git -C %s rev-parse --verify HEAD", q2);
+        if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+        if (self->git_run(cmd, out) != 0) {
+            fprintf(stderr, "ctc: git cannot resolve a commit for '%s'\n", name);
+            return -1;
+        }
+        if (self->read_line_of(out, commit, sizeof commit) != 0 || commit[0] == 0) {
+            fprintf(stderr, "ctc: git returned no commit for '%s'\n", name);
+            return -1;
+        }
+
+        if (self->read_manifest(cache, mname, sizeof mname, mver, sizeof mver, deps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", cache);
+            return -1;
+        }
+        if (strcmp(mname, name) != 0) {
+            fprintf(stderr, "ctc: '%s/ct.pkg' names '%s', but the source is '%s'\n",
+                    cache, mname, name);
+            return -1;
+        }
+        if (!self->range_match(range, mver)) {
+            fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", mname, mver, range);
+            return -1;
+        }
+        for (i = 0; i < self->nseen; i++)
+            if (strcmp(self->seen[i], mname) == 0) return 0;
+        if (self->nseen >= MAX_PKG_DEPS) {
+            fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
+            return -1;
+        }
+        snprintf(self->seen[self->nseen], MAX_TEXT, "%s", mname);
+        self->nseen++;
+
+        for (i = 0; i < ndeps; i++)
+            if (self->get_spec(deps[i], cache, depth + 1) != 0) return -1;
+
+        if (snprintf(dst, sizeof dst, "./vendor/%s", mname) >= (int)sizeof dst) return -1;
+        if (self->copy_tree(cache, dst) != 0) {
+            fprintf(stderr, "ctc: cannot vendor '%s' from '%s'\n", mname, cache);
+            return -1;
+        }
+        if (self->dir_digest(cache, dig, sizeof dig) != 0) {
+            fprintf(stderr, "ctc: cannot hash '%s'\n", cache);
+            return -1;
+        }
+        w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
+                     "%s %s git %s %s\n", mname, mver, commit, dig);
+        if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
+        self->locklen += w;
+        self->nlocks++;
+        return 0;
+    }
+
+    /* Every dependency edge takes this: split off the range, then route to
+       `get_git` or, for a filesystem location, to `get_one`. */
+    int get_spec(const char *spec, const char *base, int depth)
+    {
+        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
+        (void)self;
+
+        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        if (self->is_git_ref(path)) return self->get_git(path, range, depth);
+        if (strncmp(path, "file://", 7) == 0) {
+            if (snprintf(full, sizeof full, "%s", path + 7) >= (int)sizeof full) return -1;
+        } else if (path[0] == '/') {
+            if (snprintf(full, sizeof full, "%s", path) >= (int)sizeof full) return -1;
+        } else if (snprintf(full, sizeof full, "%s/%s", base, path) >= (int)sizeof full) {
+            return -1;
+        }
+        return self->get_one(full, range, depth);
+    }
+
+    int get_one(const char *dir, const char *range, int depth)
+    {
+        char name[MAX_TEXT], ver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        char dig[32], dst[MAX_PKG_PATH];
+        int ndeps, i, w;
+
+        ndeps = 0;
+        if (depth > MAX_PKG_DEPTH) {
+            fprintf(stderr, "ctc: dependency chain is too deep at '%s'\n", dir);
+            return -1;
+        }
+        if (self->read_manifest(dir, name, sizeof name, ver, sizeof ver, deps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", dir);
+            return -1;
+        }
+        if (!self->range_match(range, ver)) {
+            fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", name, ver, range);
+            return -1;
+        }
+        for (i = 0; i < self->nseen; i++)
+            if (strcmp(self->seen[i], name) == 0) return 0;
+        if (self->nseen >= MAX_PKG_DEPS) {
+            fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
+            return -1;
+        }
+        snprintf(self->seen[self->nseen], MAX_TEXT, "%s", name);
+        self->nseen++;
+
+        for (i = 0; i < ndeps; i++)
+            if (self->get_spec(deps[i], dir, depth + 1) != 0) return -1;
+
+        if (snprintf(dst, sizeof dst, "./vendor/%s", name) >= (int)sizeof dst) return -1;
+        if (self->copy_tree(dir, dst) != 0) {
+            fprintf(stderr, "ctc: cannot vendor '%s' from '%s'\n", name, dir);
+            return -1;
+        }
+        if (self->dir_digest(dir, dig, sizeof dig) != 0) {
+            fprintf(stderr, "ctc: cannot hash '%s'\n", dir);
+            return -1;
+        }
+        w = snprintf(self->lock + self->locklen, sizeof self->lock - (size_t)self->locklen,
+                     "%s %s dir %s %s\n", name, ver, dir, dig);
+        if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
+        self->locklen += w;
+        self->nlocks++;
+        return 0;
+    }
+
+    /* D24: `get` records the spec as a `dep = ...` line unless that line (or
+       the same package spelled differently) is already there. */
+    int remember_dep(const char *spec)
+    {
+        char buf[MAX_LOCK];
+        char newname[MAX_TEXT], cur[MAX_PKG_PATH], cn[MAX_TEXT];
+        char *p, *end;
+        long len;
+        size_t n, sl, cl;
+        int found, have_name;
+        FILE *f;
+        (void)self;
+
+        f = fopen("./ct.pkg", "r");
+        if (!f) return 0;
+        len = -1;
+        n = 0;
+        if (fseek(f, 0, SEEK_END) == 0) {
+            long sz;
+            size_t sz2;
+            sz = ftell(f);
+            if (sz >= 0 && (size_t)sz < sizeof buf && fseek(f, 0, SEEK_SET) == 0) {
+                sz2 = (size_t)sz;
+                if (sz2 > 0) n = fread(buf, 1, sz2, f);
+                if (n == sz2) len = sz;
+            }
+        }
+        if (len < 0) {
+            fclose(f);
+            fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+            return -1;
+        }
+        fclose(f);
+        buf[n] = 0;
+        sl = strlen(spec);
+        have_name = (self->dep_name(spec, newname, sizeof newname) == 0);
+        found = 0;
+        p = buf;
+        end = buf + n;
+        while (p < end) {
+            char *ls, *le, *v, *ve;
+            size_t vl;
+            ls = p;
+            le = p;
+            while (le < end && *le != '\n') le = le + 1;
+            p = (le < end) ? le + 1 : end;
+            while (ls < le && (*ls == ' ' || *ls == '\t')) ls = ls + 1;
+            if ((size_t)(le - ls) < 4 || strncmp(ls, "dep", 3) != 0) continue;
+            v = ls + 3;
+            while (v < le && (*v == ' ' || *v == '\t')) v = v + 1;
+            if (v >= le || *v != '=') continue;
+            v = v + 1;
+            while (v < le && (*v == ' ' || *v == '\t')) v = v + 1;
+            ve = le;
+            while (ve > v && (ve[-1] == ' ' || ve[-1] == '\t' || ve[-1] == '\r')) ve = ve - 1;
+            vl = (size_t)(ve - v);
+            if (sl == vl && strncmp(v, spec, vl) == 0) {
+                found = 1;
+                break;
+            }
+            if (have_name) {
+                cl = vl < sizeof cur - 1 ? vl : sizeof cur - 1;
+                memcpy(cur, v, cl);
+                cur[cl] = 0;
+                if (self->dep_name(cur, cn, sizeof cn) == 0 && strcmp(cn, newname) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            f = fopen("./ct.pkg", "a");
+            if (!f) {
+                fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
+                return -1;
+            }
+            if (n > 0 && buf[n - 1] != '\n') fputc('\n', f);
+            fprintf(f, "dep = %s\n", spec);
+            if (fclose(f) != 0) {
+                fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    /* The name a dependency resolves to: a local package by its manifest, a git
+       package by its spec tail; falls back to the tail when the local source is
+       gone. */
+    int dep_name(const char *spec, char *name, size_t cap)
+    {
+        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
+        char mp[MAX_PKG_PATH], sname[MAX_TEXT], sver[32];
+        char deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        int ndeps;
+        FILE *f;
+        (void)self;
+
+        ndeps = 0;
+        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        if (self->is_git_ref(path)) return self->git_name(path, name, cap);
+        if (strncmp(path, "file://", 7) == 0) {
+            if (snprintf(full, sizeof full, "%s", path + 7) >= (int)sizeof full) return -1;
+        } else if (path[0] == '/') {
+            if (snprintf(full, sizeof full, "%s", path) >= (int)sizeof full) return -1;
+        } else if (snprintf(full, sizeof full, "./%s", path) >= (int)sizeof full) {
+            return -1;
+        }
+        if (snprintf(mp, sizeof mp, "%s/ct.pkg", full) >= (int)sizeof mp) return -1;
+        f = fopen(mp, "r");
+        if (!f) return self->git_name(path, name, cap);
+        fclose(f);
+        if (self->read_manifest(full, sname, sizeof sname, sver, sizeof sver, deps, &ndeps) != 0)
+            return self->git_name(path, name, cap);
+        if (snprintf(name, cap, "%s", sname) >= (int)cap) return -1;
+        return 0;
+    }
+
+    int get(const char *spec, const char *root)
+    {
+        FILE *f;
+        (void)self;
+
+        self->locklen = 0;
+        self->nseen = 0;
+        self->nlocks = 0;
+        self->lock[0] = 0;
+        /* `copy_tree` creates the package directory itself, not its parent */
+        if (self->ensure_dir("./vendor") != 0) {
+            fprintf(stderr, "ctc: cannot create 'vendor/'\n");
+            return 1;
+        }
+        if (self->get_spec(spec, root, 0) != 0) return 1;
+
+        f = fopen("./ct.lock", "w");
+        if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        fputs(self->lock, f);
+        if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        if (self->remember_dep(spec) != 0) return 1;
+        printf("vendored %d package(s)\n", self->nlocks);
+        return 0;
+    }
+
+    /* `ct install`: verify the lock against the vendored tree and the project
+       manifest, then print the `ct build` command. Offline, no subprocess. */
+    int install(const char *prog)
+    {
+        FILE *f;
+        DIR *d;
+        struct dirent *e;
+        struct stat st;
+        char line[MAX_PKG_LINE];
+        char pname[MAX_TEXT], pver[32], pdeps[MAX_PKG_DEPS][MAX_PKG_PATH];
+        char lname[MAX_PKG_DEPS][MAX_TEXT], lver[MAX_PKG_DEPS][32];
+        char vdir[MAX_PKG_PATH], vdig[32];
+        char dpath[MAX_PKG_PATH], drange[32], dname[MAX_TEXT];
+        int ndeps, nlock, i, j, rc, units, seen;
+        size_t nl;
+        (void)self;
+
+        ndeps = 0;
+        nlock = 0;
+        rc = 0;
+        units = 0;
+        /* a missing manifest reads differently from an incomplete one, and both
+           are pinned diagnostics (L2 opens first, then parses) */
+        f = fopen("./ct.pkg", "r");
+        if (!f) {
+            fprintf(stderr, "ctc: cannot open './ct.pkg'\n");
+            return 1;
+        }
+        fclose(f);
+        if (self->read_manifest(".", pname, sizeof pname, pver, sizeof pver, pdeps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+            return 1;
+        }
+        f = fopen("./ct.lock", "r");
+        if (!f) {
+            fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog);
+            return 1;
+        }
+        while (fgets(line, sizeof line, f) != NULL) {
+            char *tok[12];
+            char *p;
+            int ntok;
+            size_t ll;
+            ntok = 0;
+            p = line;
+            ll = strlen(line);
+            while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+                ll = ll - 1;
+                line[ll] = 0;
+            }
+            while (*p) {
+                while (*p == ' ' || *p == '\t') p++;
+                if (!*p) break;
+                if (ntok < 12) {
+                    tok[ntok] = p;
+                    ntok++;
+                }
+                while (*p && *p != ' ' && *p != '\t') p++;
+                if (*p) {
+                    *p = 0;
+                    p++;
+                }
+            }
+            if (ntok < 4) continue;
+            if (nlock >= MAX_PKG_DEPS) {
+                fprintf(stderr, "ctc: ct.lock lists more than %d packages\n", MAX_PKG_DEPS);
+                fclose(f);
+                return 1;
+            }
+            snprintf(lname[nlock], MAX_TEXT, "%s", tok[0]);
+            snprintf(lver[nlock], 32, "%s", tok[1]);
+            /* the digest is the last token; the ref in between may hold spaces */
+            if (snprintf(vdir, sizeof vdir, "./vendor/%s", tok[0]) >= (int)sizeof vdir) {
+                fprintf(stderr, "ctc: package path too long for '%s'\n", tok[0]);
+                rc = 1;
+            } else if (self->dir_digest(vdir, vdig, sizeof vdig) != 0) {
+                fprintf(stderr, "ctc: '%s' is locked but not vendored at '%s'\n", tok[0], vdir);
+                rc = 1;
+            } else if (strcmp(vdig, tok[ntok - 1]) != 0) {
+                fprintf(stderr, "ctc: '%s' does not match ct.lock (vendor %s, lock %s)\n",
+                        tok[0], vdig, tok[ntok - 1]);
+                rc = 1;
+            }
+            nlock++;
+        }
+        if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
+        if (nlock == 0) { fprintf(stderr, "ctc: ct.lock is empty\n"); return 1; }
+
+        for (i = 0; i < ndeps; i++) {
+            if (self->split_spec(pdeps[i], dpath, sizeof dpath, drange, sizeof drange) != 0
+                || self->dep_name(pdeps[i], dname, sizeof dname) != 0) {
+                fprintf(stderr, "ctc: bad dependency '%s'\n", pdeps[i]);
+                rc = 1;
+                continue;
+            }
+            seen = 0;
+            for (j = 0; j < nlock; j++)
+                if (strcmp(lname[j], dname) == 0 && self->range_match(drange, lver[j])) seen = 1;
+            if (!seen) {
+                fprintf(stderr, "ctc: dependency '%s' is not satisfied by ct.lock\n", pdeps[i]);
+                rc = 1;
+            }
+        }
+        if (rc != 0) return 1;
+
+        printf("%s build", prog);
+        for (i = 0; i < nlock; i++) printf(" -I vendor/%s", lname[i]);
+        d = opendir(".");
+        if (d) {
+            for (;;) {
+                e = readdir(d);
+                if (e == NULL) break;
+                nl = strlen(e->d_name);
+                if (nl <= 3 || strcmp(e->d_name + nl - 3, ".ct") != 0) continue;
+                if (stat(e->d_name, &st) != 0 || !S_ISREG(st.st_mode)) continue;
+                printf(" %s", e->d_name);
+                units++;
+            }
+            closedir(d);
+        }
+        if (units == 0) printf(" <unit>.ct");
+        printf(" -o build\n");
+        return 0;
+    }
+
+    /* `ct get <spec>[@<range>]`: a local directory or a git package. */
+    int get_main(int argc, char **argv)
+    {
+        const char *spec;
+        int i;
+        (void)self;
+
+        spec = NULL;
+        for (i = 0; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: %s get <spec>[@<range>]\n", self->prog);
+                printf("  spec: a local directory (. or / or file://) or a git package\n"
+                       "        (name resolved against CT_REGISTRY, else an https URL)\n");
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("%s v%s\n", self->prog, self->version);
+                return 0;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            spec = argv[i];
+        }
+        if (!spec) {
+            fprintf(stderr, "usage: %s get <spec>[@<range>]\n", self->prog);
+            return 1;
+        }
+        return self->get(spec, ".");
+    }
+
+    /* `ct install` takes no operands: anything but help/version is rejected. */
+    int install_main(int argc, char **argv)
+    {
+        int ai;
+        (void)self;
+
+        for (ai = 0; ai < argc; ai++) {
+            if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
+                printf("usage: %s install\n", self->prog);
+                printf("  verify vendor/ against ct.lock and print the suggested build command\n");
+                return 0;
+            }
+            if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
+                printf("%s v%s\n", self->prog, self->version);
+                return 0;
+            }
+            if (argv[ai][0] == '-') {
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[ai]);
+                return 1;
+            }
+            fprintf(stderr, "ctc: unexpected argument '%s'\n", argv[ai]);
+            return 1;
+        }
+        return self->install(self->prog);
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. The state stays
+   private to this unit -- a generated header cannot carry the MAX_* macros its
+   fixed-size fields need -- so the driver reaches it through the wrappers below
+   instead of through a struct accessor. */
+static struct Pkg g_pkg;
+
+/* Only primitives cross the unit boundary (the same shape L2 uses for core.ct):
+   the driver hands over its name and the version string, then dispatches. */
+pub int ct_pkg_get(int argc, char **argv, const char *prog, const char *version);
+int ct_pkg_get(int argc, char **argv, const char *prog, const char *version)
+{
+    g_pkg.prog = prog;
+    g_pkg.version = version;
+    return g_pkg.get_main(argc, argv);
+}
+
+pub int ct_pkg_install(int argc, char **argv, const char *prog, const char *version);
+int ct_pkg_install(int argc, char **argv, const char *prog, const char *version)
+{
+    g_pkg.prog = prog;
+    g_pkg.version = version;
+    return g_pkg.install_main(argc, argv);
+}

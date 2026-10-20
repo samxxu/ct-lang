@@ -844,15 +844,18 @@ fi
 
 echo
 echo "== self-hosting (9.6) =="
-# The AST compiler compiles its own source; the result must build warning-free,
+# The AST compiler builds its own source; the result must compile warning-free,
 # and the rebuilt compiler must reproduce the same output byte for byte (a
-# fixpoint: the compiler agrees with itself on its own subset).
-if "$work/ct-ast" selfhost/ct-ast/main.ct -o "$work/self1.c" \
+# fixpoint: the compiler agrees with itself on its own subset). The source is a
+# multi-unit tree now, so the build mode drives both halves and the whole output
+# directory is compared.
+mkdir -p "$work/self1" "$work/self2"
+if "$work/ct-ast" build selfhost/ct-ast/main.ct -o "$work/self1" \
         >"$work/self1.out" 2>"$work/self1.err" \
-   && "$CC" -Wall -Wextra -std=c99 "$work/self1.c" -o "$work/ct-ast2" 2>"$work/selfcc.log" \
-   && "$work/ct-ast2" selfhost/ct-ast/main.ct -o "$work/self2.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/self1"/*.c -o "$work/ct-ast2" 2>"$work/selfcc.log" \
+   && "$work/ct-ast2" build selfhost/ct-ast/main.ct -o "$work/self2" \
         >"$work/self2.out" 2>"$work/self2.err" \
-   && cmp -s "$work/self1.c" "$work/self2.c"; then
+   && diff -r -q -x .ctcache "$work/self1" "$work/self2" >/dev/null 2>&1; then
     ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"
 else
     bad "self-compile" "$(cat "$work/self1.err" "$work/selfcc.log" "$work/self2.err" 2>/dev/null | head -5)"
