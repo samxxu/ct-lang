@@ -27,6 +27,7 @@ import frontend::lex::lexer;
 import frontend::module::unit;
 import frontend::sym::sym;
 import tool::cache::cache;
+import backend::mem::mem;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -424,17 +425,9 @@ struct Ast {
     int  nhoist;
     int  ntmp;
     int  raw_call;              /* emit this call, not its temp name */
-    /* AutoDrop: where each scope's `own` declarations start */
-    int own_decl[MAX_VARS];
-    int nowner;
-    int own_base[MAX_SCOPE];
-    /* Leak analysis, active only inside a function or method body. `leak_frame`
-       is the body's own scope number -- a return in a deeper block is
-       conditional. `ret_owned` is the current function's ownership hint. */
-    int leak_active;
-    int leak_frame;
-    int leak_impl;              /* 1 while parsing an impl method body */
-    int ret_owned;
+    /* AutoDrop and the leak analysis live in backend::mem; the driver wires its
+       arena, symbol table and path before it dispatches to `run`. */
+    struct backend_mem_Memory *mem;
 } use AstOps, SymOps, ParseOps, TypeOps, ModuleOps, EmitOps, RecoverOps, MemoryOps;
 
 impl AstOps for Ast {
@@ -646,6 +639,7 @@ impl AstOps for Ast {
         }
 
         self->path = in;
+        self->mem->path = self->path;
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->line = 1;
@@ -657,11 +651,11 @@ impl AstOps for Ast {
         self->sym->nfunc = 0;
         self->sym->nvar = 0;
         self->sym->nscope = 0;
-        self->nowner = 0;
-        self->leak_active = 0;
-        self->leak_frame = -1;
-        self->leak_impl = 0;
-        self->ret_owned = 0;
+        self->mem->nowner = 0;
+        self->mem->leak_active = 0;
+        self->mem->leak_frame = -1;
+        self->mem->leak_impl = 0;
+        self->mem->ret_owned = 0;
         self->sym->ntype = 0;
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
@@ -722,14 +716,14 @@ impl SymOps for Ast {
     int push_scope(void)
     {
         if (self->sym->push_scope() != 0) return self->fail(self->sym->last_error());
-        self->own_base[self->sym->nscope - 1] = self->nowner;
+        self->mem->own_base[self->sym->nscope - 1] = self->mem->nowner;
         return 0;
     }
 
     int pop_scope(void)
     {
         if (self->sym->pop_scope() != 0) return self->fail(self->sym->last_error());
-        self->nowner = self->own_base[self->sym->nscope];
+        self->mem->nowner = self->mem->own_base[self->sym->nscope];
         return 0;
     }
 
@@ -1142,13 +1136,13 @@ impl ParseOps for Ast {
         snprintf(self->cur_func, sizeof self->cur_func, "%s", name);
         /* the body is the leak analysis window; its own scope is the frame a
            deeper return counts as conditional against */
-        self->leak_active = 1;
-        self->leak_frame = self->sym->nscope + 1;
-        self->leak_impl = 0;
-        self->ret_owned = 0;
+        self->mem->leak_active = 1;
+        self->mem->leak_frame = self->sym->nscope + 1;
+        self->mem->leak_impl = 0;
+        self->mem->ret_owned = 0;
         b = self->parse_block();
-        self->leak_active = 0;
-        self->leak_frame = -1;
+        self->mem->leak_active = 0;
+        self->mem->leak_frame = -1;
         self->cur_func[0] = 0;
         self->sym->ret_type[0] = 0;
         if (b < 0) {
@@ -1160,7 +1154,7 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
-        self->sym->funcs[fi].ret_owned = self->ret_owned;
+        self->sym->funcs[fi].ret_owned = self->mem->ret_owned;
         self->sym->funcs[fi].line = func_line;
         f = self->new_node(N_FUNC);
         if (f < 0) {
@@ -1650,13 +1644,13 @@ impl ParseOps for Ast {
                      self->sym->structs[si].name, rtrait, mname);
             /* the method body tracks leaks too; a method symbol is not in the
                function table, so nothing feeds `ret_owned` back to callers */
-            self->leak_active = 1;
-            self->leak_frame = self->sym->nscope + 1;
-            self->leak_impl = 1;
+            self->mem->leak_active = 1;
+            self->mem->leak_frame = self->sym->nscope + 1;
+            self->mem->leak_impl = 1;
             body = self->parse_block();
-            self->leak_active = 0;
-            self->leak_frame = -1;
-            self->leak_impl = 0;
+            self->mem->leak_active = 0;
+            self->mem->leak_frame = -1;
+            self->mem->leak_impl = 0;
             self->cur_func[0] = 0;
             self->sym->ret_type[0] = 0;
             if (body < 0) {
@@ -1743,7 +1737,7 @@ impl ParseOps for Ast {
 
         if (self->expect("{") != 0) return -1;
         if (self->push_scope() != 0) return -1;
-        base = self->own_base[self->sym->nscope - 1];
+        base = self->mem->own_base[self->sym->nscope - 1];
         blk = self->new_node(N_BLOCK);
         if (blk < 0) {
             self->pop_scope();
@@ -1764,7 +1758,7 @@ impl ParseOps for Ast {
            reverse order, just before the closing brace (L2's line rewrite does
            the same). A brace that shares its line with code cannot host the
            deletes, so that layout is rejected. */
-        if (self->nowner > base) {
+        if (self->mem->nowner > base) {
             int p, at_start, d;
             at_start = 1;
             for (p = self->lex->lstart; p < self->lex->tokstart; p++)
@@ -1774,13 +1768,13 @@ impl ParseOps for Ast {
                 return ct_sem_error(self->lex->tokline, 1,
                     "auto-drop requires the closing '}' at the start of a line", self->path);
             }
-            for (d = self->nowner - 1; d >= base; d--) {
+            for (d = self->mem->nowner - 1; d >= base; d--) {
                 int del, v, vi;
                 const char *tp;
                 size_t bl;
                 /* a reassigned / returned / moved `own` variable is no longer
                    ours to release (L2 clears the same flag before its rewrite) */
-                vi = self->find_var(self->arena->nodes[self->own_decl[d]].text2);
+                vi = self->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
                 if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
                 del = self->new_node(N_DELETE);
                 v = self->new_node(N_VAR);
@@ -1788,10 +1782,10 @@ impl ParseOps for Ast {
                     self->pop_scope();
                     return -1;
                 }
-                self->arena->nodes[del].line = self->arena->nodes[self->own_decl[d]].line;
-                snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->own_decl[d]].text2);
+                self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
+                snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->mem->own_decl[d]].text2);
                 self->arena->nodes[del].a = v;
-                tp = self->arena->nodes[self->own_decl[d]].text;
+                tp = self->arena->nodes[self->mem->own_decl[d]].text;
                 if (strncmp(tp, "struct ", 7) == 0) tp += 7;
                 snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
                 bl = strlen(self->arena->nodes[del].text);
@@ -1811,7 +1805,7 @@ impl ParseOps for Ast {
         }
         /* a scope that closes with a still-owned heap object leaks it (L2
            reports it at the same point, keeping the warning order) */
-        if (self->leak_active && self->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
+        if (self->mem->leak_active && self->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
             self->pop_scope();
             return -1;
         }
@@ -1835,8 +1829,8 @@ impl ParseOps for Ast {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->lex_next();
                 /* a bare `return;` leaves every owned object behind */
-                if (self->leak_active
-                    && self->leak_return(-1, !at_start || self->sym->nscope > self->leak_frame, rline) != 0)
+                if (self->mem->leak_active
+                    && self->leak_return(-1, !at_start || self->sym->nscope > self->mem->leak_frame, rline) != 0)
                     return -1;
                 return s;
             }
@@ -1853,8 +1847,8 @@ impl ParseOps for Ast {
             self->arena->nodes[s].a = e;
             /* a return nested in a block (or written mid-line) may be skipped
                at run time, so it only warns about what it leaves behind */
-            if (self->leak_active
-                && self->leak_return(e, !at_start || self->sym->nscope > self->leak_frame, rline) != 0)
+            if (self->mem->leak_active
+                && self->leak_return(e, !at_start || self->sym->nscope > self->mem->leak_frame, rline) != 0)
                 return -1;
             if (self->expect(";") != 0) return -1;
             return s;
@@ -1867,7 +1861,7 @@ impl ParseOps for Ast {
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;
             /* the object is released: it can neither leak nor auto-drop */
-            if (self->leak_active && self->leak_delete(e) != 0) return -1;
+            if (self->mem->leak_active && self->leak_delete(e) != 0) return -1;
             /* resolve the pointee's struct now (the variable may leave scope
                before the delete is emitted) and remember it only when it uses
                Drop; otherwise the emitter stays on the plain `free` path */
@@ -2125,7 +2119,7 @@ impl ParseOps for Ast {
                     self->arena->nodes[n].a = e;
                 }
             }
-            if (self->leak_active && self->leak_decl(n) != 0) return -1;
+            if (self->mem->leak_active && self->leak_decl(n) != 0) return -1;
             if (head < 0) head = n;
             else self->arena->nodes[tail].next = n;
             tail = n;
@@ -2168,7 +2162,7 @@ impl ParseOps for Ast {
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
             self->arena->nodes[n].aux = op;
-            if (self->leak_active && self->leak_assign(n) != 0) return -1;
+            if (self->mem->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
@@ -2194,7 +2188,7 @@ impl ParseOps for Ast {
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
-            if (self->leak_active && self->leak_assign(n) != 0) return -1;
+            if (self->mem->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
         if (self->arena->nodes[e].kind == N_POST) return e;
@@ -3140,6 +3134,7 @@ impl ModuleOps for Ast {
         (void)self;
         self->nrels = 0;
         self->path = from;
+        self->mem->path = self->path;
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->tok = 0;
@@ -3250,11 +3245,11 @@ impl ModuleOps for Ast {
         self->lex->tok = 0;
         self->sym->nvar = 0;
         self->sym->nscope = 0;
-        self->nowner = 0;
-        self->leak_active = 0;
-        self->leak_frame = -1;
-        self->leak_impl = 0;
-        self->ret_owned = 0;
+        self->mem->nowner = 0;
+        self->mem->leak_active = 0;
+        self->mem->leak_frame = -1;
+        self->mem->leak_impl = 0;
+        self->mem->ret_owned = 0;
         self->sym->ns[0] = 0;
         self->ns_decl[0] = 0;
         self->sym->self_mode = 0;
@@ -3262,6 +3257,7 @@ impl ModuleOps for Ast {
         self->cur_func[0] = 0;
         self->nparams = 0;
         self->path = path;
+        self->mem->path = self->path;
         self->units[u].fn_start = self->sym->nfunc;
         self->units[u].tr_start = self->sym->ntraits;
         self->units[u].call_start = self->ncalls;
@@ -3935,11 +3931,11 @@ impl ModuleOps for Ast {
         self->sym->nfunc = 0;
         self->sym->nvar = 0;
         self->sym->nscope = 0;
-        self->nowner = 0;
-        self->leak_active = 0;
-        self->leak_frame = -1;
-        self->leak_impl = 0;
-        self->ret_owned = 0;
+        self->mem->nowner = 0;
+        self->mem->leak_active = 0;
+        self->mem->leak_frame = -1;
+        self->mem->leak_impl = 0;
+        self->mem->ret_owned = 0;
         self->sym->ntype = 0;
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
@@ -5258,6 +5254,7 @@ impl EmitOps for Ast {
         if (!f) return self->fail("cannot write the output file");
         self->out = f;
         self->path = self->units[u].path;
+        self->mem->path = self->path;
         fprintf(self->out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
                 CTC_VERSION, self->path);
         fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
@@ -5313,6 +5310,7 @@ impl EmitOps for Ast {
         if (!f) return self->fail("cannot write the header");
         self->out = f;
         self->path = self->units[u].path;
+        self->mem->path = self->path;
         fprintf(self->out, "#ifndef %s\n", guard);
         fprintf(self->out, "#define %s\n\n", guard);
         fprintf(self->out, "/* Generated by ct v%s from %s (multi-file mode: exported types; the matching .c\n"
@@ -5625,288 +5623,70 @@ impl RecoverOps for Ast {
     }
 }
 
+/* The analysis itself lives in backend::mem; this facade keeps the trait the
+   parser already calls and wraps the methods that can fail with the current
+   position, exactly as the old bodies did. */
 impl MemoryOps for Ast {
-    /* `own T *x = malloc(...)`: the declaration is validated and remembered so
-       the enclosing block can append its release (L2's AutoDrop). */
     int mark_owned(int n, int line)
     {
-        int d;
-        (void)self;
-        d = n;
-        if (self->arena->nodes[n].kind == N_DECLS) d = self->arena->nodes[n].a;
-        while (d >= 0) {
-            char base[MAX_TEXT];
-            char msg[MAX_TEXT];
-            const char *tp = self->arena->nodes[d].text;
-            size_t bl;
-            int si, vi;
-            if (self->arena->nodes[d].text3[0] != 0)
-                return ct_sem_error(line, 1, "'own' does not support arrays", self->path);
-            if (!self->expr_alloc(self->arena->nodes[d].a))
-                return ct_sem_error(line, 1,
-                                       "'own' requires a malloc or calloc initialiser", self->path);
-            if (strncmp(tp, "struct ", 7) == 0) tp += 7;
-            snprintf(base, sizeof base, "%s", tp);
-            bl = strlen(base);
-            while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
-                bl = bl - 1;
-                base[bl] = 0;
-            }
-            si = self->find_struct(base);
-            if (si < 0 || !self->sym->structs[si].uses_drop) {
-                snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Drop'", base);
-                return ct_sem_error(line, 1, msg, self->path);
-            }
-            vi = self->find_var(self->arena->nodes[d].text2);
-            if (vi >= 0) self->sym->vars[vi].autodrop = 1;
-            if (self->nowner >= MAX_VARS) return self->fail("too many owned variables");
-            self->own_decl[self->nowner] = d;
-            self->nowner++;
-            d = self->arena->nodes[d].next;
-        }
+        if (self->mem->mark_owned(n, line) != 0)
+            return self->fail(self->mem->last_error());
         return 0;
     }
 
-    /* Is this expression a direct `malloc` / `calloc` call? Only that spelling
-       counts, exactly as in L2 (a cast in front already hides the allocation). */
     int expr_alloc(int e)
     {
-        (void)self;
-        if (e < 0) return 0;
-        if (self->arena->nodes[e].kind != N_CALL) return 0;
-        if (strcmp(self->arena->nodes[e].text2, "malloc") == 0) return 1;
-        if (strcmp(self->arena->nodes[e].text2, "calloc") == 0) return 1;
-        return 0;
+        return self->mem->expr_alloc(e);
     }
 
-    /* Does any name in the expression spell `name`? Field names count too: L2
-       scans words on the line, not values. */
     int expr_mentions(int e, const char *name)
     {
-        int p;
-        (void)self;
-        if (e < 0) return 0;
-        if (self->arena->nodes[e].kind == N_VAR) return strcmp(self->arena->nodes[e].text2, name) == 0;
-        if (self->arena->nodes[e].kind == N_MEMBER || self->arena->nodes[e].kind == N_ARROW) {
-            if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
-            return self->expr_mentions(self->arena->nodes[e].a, name);
-        }
-        if (self->arena->nodes[e].kind == N_CALL) {
-            if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
-            for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
-                if (self->expr_mentions(p, name)) return 1;
-            return 0;
-        }
-        if (self->expr_mentions(self->arena->nodes[e].a, name)) return 1;
-        if (self->expr_mentions(self->arena->nodes[e].b, name)) return 1;
-        if (self->expr_mentions(self->arena->nodes[e].c, name)) return 1;
-        if (self->expr_mentions(self->arena->nodes[e].d, name)) return 1;
-        return 0;
+        return self->mem->expr_mentions(e, name);
     }
 
-    /* Does the expression hand `name` back by value? A field or member read
-       (`p->n`, `p.n`) is not a transfer; `p` and `p[0]` are, matching the
-       character test L2 applies after the name. */
     int expr_returns(int e, const char *name)
     {
-        int p;
-        (void)self;
-        if (e < 0) return 0;
-        if (self->arena->nodes[e].kind == N_VAR) return strcmp(self->arena->nodes[e].text2, name) == 0;
-        if (self->arena->nodes[e].kind == N_MEMBER || self->arena->nodes[e].kind == N_ARROW) return 0;
-        if (self->arena->nodes[e].kind == N_INDEX) return self->expr_returns(self->arena->nodes[e].a, name);
-        if (self->arena->nodes[e].kind == N_CALL) {
-            for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
-                if (self->expr_returns(p, name)) return 1;
-            return 0;
-        }
-        if (self->expr_returns(self->arena->nodes[e].a, name)) return 1;
-        if (self->expr_returns(self->arena->nodes[e].b, name)) return 1;
-        if (self->expr_returns(self->arena->nodes[e].c, name)) return 1;
-        if (self->expr_returns(self->arena->nodes[e].d, name)) return 1;
-        return 0;
+        return self->mem->expr_returns(e, name);
     }
 
-    /* Is `ret` a pointer to struct `si`? L2 compares the recorded return type
-       with the variable's struct before trusting its `ret_owned` hint. */
     int ret_same_struct(const char *ret, int si)
     {
-        char rt[MAX_TEXT];
-        size_t bl;
-        (void)self;
-        bl = strlen(ret);
-        if (bl == 0 || ret[bl - 1] != '*') return 0;
-        snprintf(rt, sizeof rt, "%s", ret);
-        bl = strlen(rt);
-        while (bl > 0 && (rt[bl - 1] == '*' || rt[bl - 1] == ' ')) {
-            bl = bl - 1;
-            rt[bl] = 0;
-        }
-        if (strncmp(rt, "struct ", 7) == 0)
-            return strcmp(rt + 7, self->sym->structs[si].name) == 0;
-        return strcmp(rt, self->sym->structs[si].name) == 0;
+        return self->mem->ret_same_struct(ret, si);
     }
 
-    /* A declaration: `struct T *p = malloc(...)` (or a call to a function that
-       returns an owned pointer of the same struct) starts tracking `p`. Any
-       other owned variable named in the initialiser escapes here, because L2
-       runs its assignment scan on the declaration line as well. */
     int leak_decl(int n)
     {
-        int e, vi, i, si, heap, call_owned;
-        (void)self;
-
-        e = self->arena->nodes[n].a;
-        if (e < 0) return 0;
-        heap = self->expr_alloc(e);
-        call_owned = 0;
-        si = -1;
-        {
-            char base[MAX_TEXT];
-            char sname[MAX_TEXT];
-            const char *tp = self->arena->nodes[n].text;
-            size_t bl = strlen(tp);
-            if (bl > 0 && tp[bl - 1] == '*' && self->arena->nodes[n].text3[0] == 0) {
-                snprintf(base, sizeof base, "%s", tp);
-                bl = strlen(base);
-                while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
-                    bl = bl - 1;
-                    base[bl] = 0;
-                }
-                if (strncmp(base, "struct ", 7) == 0)
-                    snprintf(sname, sizeof sname, "%s", base + 7);
-                else
-                    snprintf(sname, sizeof sname, "%s", base);
-                si = self->find_struct(sname);
-                if (!heap && si >= 0 && self->arena->nodes[e].kind == N_CALL) {
-                    int fi = self->find_func(self->arena->nodes[e].text2);
-                    if (fi >= 0 && self->sym->funcs[fi].ret_owned)
-                        call_owned = self->ret_same_struct(self->sym->funcs[fi].ret, si);
-                }
-            }
-        }
-        vi = self->find_var(self->arena->nodes[n].text2);
-        if (vi >= 0 && si >= 0) {
-            self->sym->vars[vi].st = si;
-            if (heap || call_owned) {
-                self->sym->vars[vi].owned = 1;
-                self->sym->vars[vi].own_line = self->arena->nodes[n].line;
-            }
-        }
-        for (i = 0; i < self->sym->nvar; i++) {
-            if (i == vi) continue;
-            if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
-            if (!self->expr_mentions(e, self->sym->vars[i].name)) continue;
-            self->sym->vars[i].owned = 0;
-            if (self->expr_returns(e, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;
-        }
-        return 0;
+        return self->mem->leak_decl(n);
     }
 
-    /* A scope is closing: a still-owned object in it is unreachable. */
     int leak_scope(int from, int to)
     {
-        int i;
-        (void)self;
-        for (i = from; i < to; i++)
-            if (self->sym->vars[i].owned && !self->sym->vars[i].autodrop && !self->sym->vars[i].path_warned)
-                if (self->warn_leak(i, 0) != 0) return -1;
+        if (self->mem->leak_scope(from, to) != 0)
+            return self->fail(self->mem->last_error());
         return 0;
     }
 
-    /* An assignment: the target keeps ownership (`p = x` only stops AutoDrop),
-       anything else owned and named on the line escapes. */
     int leak_assign(int n)
     {
-        int lhs, rhs, bv, i;
-        (void)self;
-        lhs = self->arena->nodes[n].a;
-        rhs = self->arena->nodes[n].b;
-        bv = -1;
-        if (lhs >= 0) {
-            if (self->arena->nodes[lhs].kind == N_VAR)
-                bv = self->find_var(self->arena->nodes[lhs].text2);
-            else if (self->arena->nodes[lhs].kind == N_MEMBER || self->arena->nodes[lhs].kind == N_ARROW) {
-                int b = self->arena->nodes[lhs].a;
-                if (b >= 0 && self->arena->nodes[b].kind == N_VAR)
-                    bv = self->find_var(self->arena->nodes[b].text2);
-            }
-        }
-        for (i = 0; i < self->sym->nvar; i++) {
-            if (i == bv) {
-                if (self->sym->vars[i].autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
-                    self->sym->vars[i].autodrop = 0;
-                continue;
-            }
-            if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
-            if (!self->expr_mentions(lhs, self->sym->vars[i].name)
-                && !self->expr_mentions(rhs, self->sym->vars[i].name)) continue;
-            self->sym->vars[i].owned = 0;
-            if (self->expr_returns(rhs, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;
-        }
-        return 0;
+        return self->mem->leak_assign(n);
     }
 
-    /* A return: at the body's own level it moves the returned object's
-       ownership out and tells the caller (one level, via `ret_owned`); nested in
-       a block it may be skipped, so everything it leaves behind is reported once
-       as a possible leak. */
     int leak_return(int ret, int conditional, int line)
     {
-        int i;
-        (void)self;
-        for (i = 0; i < self->sym->nvar; i++) {
-            int pos = 0;
-            if (self->sym->vars[i].autodrop) {
-                if (ret >= 0 && self->expr_mentions(ret, self->sym->vars[i].name))
-                    self->sym->vars[i].autodrop = 0;
-                continue;
-            }
-            if (!self->sym->vars[i].owned) continue;
-            if (ret >= 0 && self->expr_returns(ret, self->sym->vars[i].name)) pos = 1;
-            if (!conditional) {
-                if (pos) {
-                    self->sym->vars[i].owned = 0;
-                    if (!self->leak_impl) self->ret_owned = 1;
-                }
-                continue;
-            }
-            if (!pos && !self->sym->vars[i].path_warned) {
-                self->sym->vars[i].path_warned = 1;
-                if (self->warn_leak(i, line) != 0) return -1;
-            }
-        }
+        if (self->mem->leak_return(ret, conditional, line) != 0)
+            return self->fail(self->mem->last_error());
         return 0;
     }
 
     int leak_delete(int e)
     {
-        int vi;
-        (void)self;
-        if (e < 0 || self->arena->nodes[e].kind != N_VAR) return 0;
-        vi = self->find_var(self->arena->nodes[e].text2);
-        if (vi < 0) return 0;
-        self->sym->vars[vi].owned = 0;
-        self->sym->vars[vi].autodrop = 0;
-        return 0;
+        return self->mem->leak_delete(e);
     }
 
-    /* Record one leak warning. `path_line` 0 means a definite leak; otherwise it
-       is the conditional return that leaves the object behind. The store lives in
-       diag.ct; this method only computes the fields it needs. */
     int warn_leak(int vi, int path_line)
     {
-        int kind;
-        char tname[MAX_TEXT];
-        (void)self;
-        kind = (path_line > 0) ? 2 : 0;
-        if (self->sym->vars[vi].st >= 0)
-            snprintf(tname, sizeof tname, "%s", self->sym->structs[self->sym->vars[vi].st].name);
-        else
-            tname[0] = 0;
-        if (ct_leak_warn(kind, self->sym->vars[vi].own_line, path_line, self->path,
-                         self->sym->vars[vi].name, tname) != 0)
-            return self->fail("too many warnings");
+        if (self->mem->warn_leak(vi, path_line) != 0)
+            return self->fail(self->mem->last_error());
         return 0;
     }
 }
@@ -5934,6 +5714,10 @@ int main(int argc, char **argv)
     g_ast.cache->version = CTC_VERSION;
     /* the symbol tables live in frontend::sym; point the object at its singleton */
     g_ast.sym = symbols_get();
+    /* the memory analysis (backend::mem) reads both through the driver */
+    g_ast.mem = memory_get();
+    g_ast.mem->arena = g_ast.arena;
+    g_ast.mem->sym = g_ast.sym;
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];
