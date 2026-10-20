@@ -18,7 +18,7 @@
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
 | `pkg/` | 跨层 | 包管理器 `ct get` / `ct install` 用例 | `test/pkg/run.sh` |
 
-`run.sh` 只驱动 **L0**（`selfhost/ctc.c`）；CT 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
+`run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；CT 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
 见 [README §5](../README.md#5-测试) 与 [selfhost/README.md](../selfhost/README.md)。
 
 > `*.expected.*` 一律由编译器生成后人工核对，**禁止手写**；只有在确认编译器行为变更是有意为之
@@ -36,7 +36,7 @@ code alone (no `.expected-err`).
 | Directory | Layer | Shape | Driver |
 | --- | --- | --- | --- |
 | `run.sh` | L0 | the eight-layer driver: build → unit → cases → examples → dialect → errors → limits → cli | itself |
-| `unit/` | L0 | white-box unit tests in `test_helpers.c` (includes `selfhost/ctc.c` to reach statics) | `run.sh`'s unit layer |
+| `unit/` | L0 | white-box unit tests in `test_helpers.c` (includes `selfhost/l0/ctc.c` to reach statics) | `run.sh`'s unit layer |
 | `cases/` | L0 | golden positives: flat pairs `<name>.ct` + `.expected.c` / `.h` / `.out` | `run.sh`'s cases layer |
 | `errors/` | L0 | negatives: flat pairs `<name>.ct` + `<name>.expected-err` | `run.sh`'s errors layer |
 | `archive/` | L0 (historical) | Phase 0.3 over-reach fixtures, the Phases 2–5 diff baseline; **not run** | `selfhost/check-archive.sh` |
@@ -45,7 +45,7 @@ code alone (no `.expected-err`).
 | `acceptance/` | cross-layer | the end-to-end acceptance checklist (`ast_spike.ct` / `ast_parse_spike.ct`); `PENDING` is expected and **non-blocking** | `test/acceptance/run.sh` |
 | `pkg/` | cross-layer | package-manager `ct get` / `ct install` cases | `test/pkg/run.sh` |
 
-`run.sh` drives **L0** (`selfhost/ctc.c`) only; the CT line's gates (`selfhost/**`) are aggregated by
+`run.sh` drives **L0** (`selfhost/l0/ctc.c`) only; the CT line's gates (`selfhost/**`) are aggregated by
 `selfhost/check-all.sh` — see [README §5](../README.md#5-tests) and
 [selfhost/README.md](../selfhost/README.md).
 

@@ -4,7 +4,7 @@
  * A minimal source-to-source compiler: it rewrites the .ct trait syntax
  * into plain C. No type checking, no optimisation, structure only.
  *
- *   gcc selfhost/ctc.c -o ctc
+ *   gcc selfhost/l0/ctc.c -o ctc
  *   ./ctc example.ct -o example.c
  *
  * Input constructs:

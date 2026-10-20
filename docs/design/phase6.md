@@ -167,8 +167,8 @@ v1 只定义**C 方言目标**：`--std=c99`（默认）与 `--std=gnu99`，差�
   下载目录名。
 - **验证**：`./test/run.sh` 118/118、`bash selfhost/check-all.sh` 全绿、手工三件套通过；**编译器与
   CT 线零改动**（本切片不动 L0 / L1 / L2）。
-- **收口（2026-10-17）**：版本按阶段规范 bump 到 **v0.6.0**（`ctc.c` / `selfhost/ctc.ct` /
-  `selfhost/src/{core,driver}.ct` 四处一致），`test/cases/**` 50 个与 `test/modules/**` 51 个
+- **收口（2026-10-17）**：版本按阶段规范 bump 到 **v0.6.0**（`ctc.c` / `selfhost/l1/ctc.ct` /
+  `selfhost/l2/{core,driver}.ct` 四处一致），`test/cases/**` 50 个与 `test/modules/**` 51 个
   golden（含 `map/expected.stdout`）按新版本重生成；归档 oracle 由 `same_modulo_version` 归一化。
 
 ### 8. 测试与验收
@@ -351,7 +351,7 @@ out of this phase.
 - **Verification**: `./test/run.sh` 118/118, `bash selfhost/check-all.sh` green, and the manual
   three-step check; **the compiler and the CT line are untouched** (this slice changes no L0/L1/L2).
 - **Close-out (2026-10-17)**: the version is bumped to **v0.6.0** per the phase-boundary rule (all
-  four sites agree: `ctc.c`, `selfhost/ctc.ct`, `selfhost/src/{core,driver}.ct`), and the 50 goldens
+  four sites agree: `ctc.c`, `selfhost/l1/ctc.ct`, `selfhost/l2/{core,driver}.ct`), and the 50 goldens
   under `test/cases/**` plus the 51 under `test/modules/**` (including `map/expected.stdout`) are
   regenerated for the new version; the archived oracle is normalised by `same_modulo_version`.
 

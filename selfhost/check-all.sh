@@ -2,8 +2,8 @@
 #
 # check-all.sh - run every hard gate in one command.
 #
-# `./test/run.sh` only drives L0 (selfhost/ctc.c); the CT line (selfhost/ctc.ct plus
-# selfhost/src/**) has its own scripts. The 2026-10-17 review found no single
+# `./test/run.sh` only drives L0 (selfhost/l0/ctc.c); the CT line (selfhost/l1/ctc.ct plus
+# selfhost/l2/**) has its own scripts. The 2026-10-17 review found no single
 # entry point that runs them all (issues/ci/no-aggregate-gate-entry.md), so this
 # wrapper is that entry point.
 #

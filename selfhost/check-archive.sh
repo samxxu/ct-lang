@@ -25,9 +25,9 @@
 #   * the *.expected.h include guard is derived from the output basename, so the
 #     output is named after the case.
 #
-# The compiler under test is L2, not L1. Steps 1-3 build L1 (= selfhost/ctc.ct
+# The compiler under test is L2, not L1. Steps 1-3 build L1 (= selfhost/l1/ctc.ct
 # compiled by L0); from Phase 3 on, L1 is a frozen seed and every new capability
-# is implemented in the multi-unit tree selfhost/src/**, which L1 builds into L2.
+# is implemented in the multi-unit tree selfhost/l2/**, which L1 builds into L2.
 # Step 3b does exactly that and then hands L2 to groups 4-7, so promoting a case
 # here means "the current compiler source restores this feature". L1's own corpus
 # is still checked byte for byte by check-goldens.sh steps 4-5, and its agreement
@@ -226,16 +226,16 @@ same_modulo_version() {
 }
 
 # ---------------------------------------------------------------- 1) L0
-banner "1) build L0 (selfhost/ctc.c) warning-free"
-if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o "$l0"; then
+banner "1) build L0 (selfhost/l0/ctc.c) warning-free"
+if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$l0"; then
     echo "FATAL: L0 did not build; cannot continue." >&2
     exit 1
 fi
 
 # ------------------------------------------------- 2) L0 compiles the compiler
-banner "2) L0 compiles the self-hosted compiler (selfhost/ctc.ct -> $l1_c)"
-if ! run "L0 compile selfhost/ctc.ct" "$l0" selfhost/ctc.ct -o "$l1_c"; then
-    echo "FATAL: L0 could not compile selfhost/ctc.ct; cannot continue." >&2
+banner "2) L0 compiles the self-hosted compiler (selfhost/l1/ctc.ct -> $l1_c)"
+if ! run "L0 compile selfhost/l1/ctc.ct" "$l0" selfhost/l1/ctc.ct -o "$l1_c"; then
+    echo "FATAL: L0 could not compile selfhost/l1/ctc.ct; cannot continue." >&2
     exit 1
 fi
 
@@ -250,20 +250,20 @@ fail=0
 l2_ok=0
 
 # ------------------------------------------------- 3b) build L2 (the compiler under test)
-# Steps 1-3 build L1 = selfhost/ctc.ct compiled by L0. Since Phase 3 L1 is a
+# Steps 1-3 build L1 = selfhost/l1/ctc.ct compiled by L0. Since Phase 3 L1 is a
 # *frozen seed*: new capabilities are implemented in the multi-unit tree
-# selfhost/src/**, which L1 builds into L2. The ratchet below therefore runs L2,
+# selfhost/l2/**, which L1 builds into L2. The ratchet below therefore runs L2,
 # not L1 -- that is what "the compiler restores this feature" now means. L1's own
 # corpus (test/cases) is still checked by check-goldens.sh steps 4-5.
-banner "3b) L2 built by L1 from the split tree (selfhost/src/**)"
+banner "3b) L2 built by L1 from the split tree (selfhost/l2/**)"
 l2src="$work/l2src"
 l2="$work/ctc-l2"
 l2_log="$work/ctc-l2.log"
 rm -rf "$l2src"
 mkdir -p "$l2src"
 
-if ! run "L1 builds the split tree" "$l1" build selfhost/src/driver.ct -o "$l2src"; then
-    printf 'FAIL: L1 could not build selfhost/src/**\n'
+if ! run "L1 builds the split tree" "$l1" build selfhost/l2/driver.ct -o "$l2src"; then
+    printf 'FAIL: L1 could not build selfhost/l2/**\n'
     fail=1
 elif ! run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2" 2>"$l2_log" ||
      [ -s "$l2_log" ]; then

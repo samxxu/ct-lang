@@ -2,18 +2,20 @@
 
 > 中文 · [English](#english)
 
-本目录承载 CT 编译器自身的源码与门禁脚本，分两层：**四代编译器源码**（`ctc.c` / `ctc.ct` / `src/` / `ast/`）
-与**门禁脚本**（`check-*.sh` / `ct-tour.sh`，聚合入口 `check-all.sh`）。脚本与源码**平级存放**是刻意的
-——移动它们会牵动冻结文件 `ctc.ct` 里的一行注释与数十处文档引用，收益不抵成本。
+本目录承载 CT 编译器自身的源码与门禁脚本。**每一代编译器占一个目录**（`l0/` / `l1/` / `l2/` /
+`ct-ast/`），代际边界就是目录边界；门禁脚本（`check-*.sh` / `ct-tour.sh`）留在本目录顶层。
+
+脚本与源码平级存放是刻意的——它们要在仓库根构建 `./ctc`，且冻结文件 `l1/ctc.ct` 的头注释里
+写着 `selfhost/check-*.sh` 的路径；把脚本再下沉一层会让那句注释失真，也会拉长所有用户命令。
 
 ## 源码（四代编译器）
 
 | 路径 | 代号 | 身份 |
 | --- | --- | --- |
-| `ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
-| `ctc.ct` | L1 | 冻结种子：用 CT OO 子集、单文件手写全部能力，由 L0（`ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
-| `src/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
-| `ast/main.ct` | ct-ast | Phase 9 的 AST 版编译器，由 L2 编译；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
+| `l0/ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
+| `l1/ctc.ct` | L1 | 冻结种子：用 CT OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
+| `l2/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
+| `ct-ast/main.ct` | ct-ast | Phase 9 的 AST 版编译器，由 L2 编译；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
 
 ## 脚本（门禁）
 
@@ -31,20 +33,22 @@
 
 ## English
 
-This directory holds the CT compiler's own sources and gate scripts, in two layers: **four compiler
-generations** (`ctc.c` / `ctc.ct` / `src/` / `ast/`) and the **gate scripts** (`check-*.sh` / `ct-tour.sh`,
-with `check-all.sh` as the aggregate entry). Keeping the scripts beside the sources is deliberate — moving
-them would touch a comment in the frozen `ctc.ct` and dozens of documentation references, at a cost
-that outweighs the benefit.
+This directory holds the CT compiler's own sources and gate scripts. **Each compiler generation owns one
+directory** (`l0/` / `l1/` / `l2/` / `ct-ast/`), so the generation boundary is the directory boundary; the
+gate scripts (`check-*.sh` / `ct-tour.sh`) stay at the top of this directory.
+
+Keeping the scripts beside the sources is deliberate — they build `./ctc` at the repository root, and the
+frozen `l1/ctc.ct` header names `selfhost/check-*.sh` paths; sinking the scripts one level deeper would
+falsify that comment and lengthen every user-facing command.
 
 ### Sources (the four generations)
 
 | Path | Level | Role |
 | --- | --- | --- |
-| `ctc.c` | L0 | the minimal compiler in C (the frozen seed / differential oracle since Phase 1; bug fixes only), built by the host C compiler; the binary lands at the **repository root** |
-| `ctc.ct` | L1 | The frozen seed: all capabilities hand-written in the CT OO subset as a single file, compiled by L0 (`ctc.c`); capability stops at Phase 2 and **never grows** (comments included) |
-| `src/{core,driver}.ct` | L2 | The same compiler re-partitioned across units (`import` / `pub`), built by L1's own `build`; since Phase 10.7 it is the **regression oracle** only |
-| `ast/main.ct` | ct-ast | The Phase 9 AST compiler, built by L2; **the installed entry (`ct` / `ctc`) since Phase 10.7** |
+| `l0/ctc.c` | L0 | the minimal compiler in C (the frozen seed / differential oracle since Phase 1; bug fixes only), built by the host C compiler; the binary lands at the **repository root** |
+| `l1/ctc.ct` | L1 | The frozen seed: all capabilities hand-written in the CT OO subset as a single file, compiled by L0 (`l0/ctc.c`); capability stops at Phase 2 and **never grows** (comments included) |
+| `l2/{core,driver}.ct` | L2 | The same compiler re-partitioned across units (`import` / `pub`), built by L1's own `build`; since Phase 10.7 it is the **regression oracle** only |
+| `ct-ast/main.ct` | ct-ast | The Phase 9 AST compiler, built by L2; **the installed entry (`ct` / `ctc`) since Phase 10.7** |
 
 ### Scripts (the gates)
 

@@ -11,8 +11,8 @@
 >
 > 前置：`map` 构造（Phase 11，收口于 v0.11.1）提供了「把 trait 方法绑定到某个**已声明的全局实例**」的底座；
 > CT 的「顶层构造与直通 C 混排」语言特性（[language-spec](../language-spec.md) §4.10）已足以表达 binding，
-> **无需新增任何语言特性**。冻结层 `ctc.c`（L0）、`selfhost/ctc.ct`（L1）、`selfhost/src/**`（L2）一律不动；
-> Phase 12 的新代码只落 **ct-ast**（`selfhost/ast/main.ct`）。
+> **无需新增任何语言特性**。冻结层 `ctc.c`（L0）、`selfhost/l1/ctc.ct`（L1）、`selfhost/l2/**`（L2）一律不动；
+> Phase 12 的新代码只落 **ct-ast**（`selfhost/ct-ast/main.ct`）。
 
 ---
 

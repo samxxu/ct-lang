@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 #
-# check-goldens.sh - the incremental golden oracle for L1 (selfhost/ctc.ct).
+# check-goldens.sh - the incremental golden oracle for L1 (selfhost/l1/ctc.ct).
 #
 # One command that answers "how far has L1 got?":
-#   1) build L0 from selfhost/ctc.c (warning-free)
-#   2) L0 compiles L1            (selfhost/ctc.ct -> <tmp>/ctc-l1.c)
+#   1) build L0 from selfhost/l0/ctc.c (warning-free)
+#   2) L0 compiles L1            (selfhost/l1/ctc.ct -> <tmp>/ctc-l1.c)
 #   3) build L1 warning-free
 #   4) L1 compiles every test/cases/*.ct into <tmp>/<case>.c -- the golden
 #      basename, so the .h include guard matches -- and both outputs are compared
 #      byte for byte with the committed .expected.c / .expected.h
 #   5) [self-hosting] L1 compiles itself into L1', L1' is built warning-free and
 #      runs over the same corpus; every output must still be byte-identical
-#   6) [Phase 2 split] L1 builds the multi-unit tree selfhost/src/** into L2; L2 is
+#   6) [Phase 2 split] L1 builds the multi-unit tree selfhost/l2/** into L2; L2 is
 #      built warning-free and must reproduce the same corpus byte for byte. This is
 #      the split's exit criterion: the compiler partitioned across units still is
 #      the compiler, and it now shares one source with the OO-in-CT rewrite.
-#   7) [Phase 3 fixpoint] L2 compiles selfhost/src/** too, and its output must be
+#   7) [Phase 3 fixpoint] L2 compiles selfhost/l2/** too, and its output must be
 #      byte-identical with L1's -- the two compilers must agree on the construct
 #      the compiler itself is written in.
 #
@@ -104,15 +104,15 @@ run() {
 }
 
 # ---------------------------------------------------------------- 1) L0
-banner "1) build L0 (selfhost/ctc.c) warning-free"
-if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc; then
+banner "1) build L0 (selfhost/l0/ctc.c) warning-free"
+if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc; then
     echo "FATAL: L0 did not build; cannot continue." >&2
     exit 1
 fi
 
 # ------------------------------------------------------- 2) L0 compiles L1
-banner "2) L0 compiles L1 (selfhost/ctc.ct -> $l1_c)"
-if ! run "L0 compile L1" ./ctc selfhost/ctc.ct -o "$l1_c"; then
+banner "2) L0 compiles L1 (selfhost/l1/ctc.ct -> $l1_c)"
+if ! run "L0 compile L1" ./ctc selfhost/l1/ctc.ct -o "$l1_c"; then
     echo "FATAL: L0 could not compile L1; cannot continue." >&2
     exit 1
 fi
@@ -193,7 +193,7 @@ banner "5) L1' (L1 compiling itself) vs the goldens"
 nselfpass=0
 nselffail=0
 
-if ! run "L1 compiles itself" "$l1_bin" selfhost/ctc.ct -o "$self_c"; then
+if ! run "L1 compiles itself" "$l1_bin" selfhost/l1/ctc.ct -o "$self_c"; then
     printf 'FAIL: L1 could not compile itself\n'
     fail=1
 elif ! run "build L1'" "$CC" -Wall -Wextra -std=c99 "$self_c" -o "$self_bin" 2>"$self_log" ||
@@ -229,10 +229,10 @@ else
 fi
 
 # --------------------------------------------- 6) L2 vs every golden (the split)
-# selfhost/src/** is the same compiler re-partitioned across units. L1 builds it in
+# selfhost/l2/** is the same compiler re-partitioned across units. L1 builds it in
 # multi-unit mode into L2, and L2 must reproduce the whole corpus byte for byte --
 # the exit criterion for the Phase 2 split. A mismatch fails the gate.
-banner "6) L2 (L1 builds selfhost/src/**) vs the goldens"
+banner "6) L2 (L1 builds selfhost/l2/**) vs the goldens"
 n2pass=0
 n2fail=0
 l2src="$work/ctc-l2src"
@@ -242,8 +242,8 @@ l2_log="$work/ctc-l2.log"
 rm -rf "$l2src"
 mkdir -p "$l2src"
 
-if ! run "L1 builds the split tree" "$l1_bin" build selfhost/src/driver.ct -o "$l2src"; then
-    printf 'FAIL: L1 could not build selfhost/src/**\n'
+if ! run "L1 builds the split tree" "$l1_bin" build selfhost/l2/driver.ct -o "$l2src"; then
+    printf 'FAIL: L1 could not build selfhost/l2/**\n'
     fail=1
 elif ! run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$l2_log" ||
      [ -s "$l2_log" ]; then
@@ -279,10 +279,10 @@ fi
 
 # ------------------------------- 7) L1 and L2 agree on the split tree (fixpoint)
 # The strongest cheap check that L2 really is "L1's source, grown": L2 compiles
-# selfhost/src/** too, and every emitted .c/.h must be byte-identical with L1's
+# selfhost/l2/** too, and every emitted .c/.h must be byte-identical with L1's
 # (step 6 kept them in $l2src). A difference means the two compilers disagree on
 # a construct the compiler is written in, i.e. a real defect the corpus cannot see.
-banner "7) L1 and L2 agree on compiling selfhost/src/** (fixpoint)"
+banner "7) L1 and L2 agree on compiling selfhost/l2/** (fixpoint)"
 nfixok=0
 nfixfail=0
 l2self="$work/ctc-l2-self"
@@ -293,8 +293,8 @@ mkdir -p "$l2self"
 if [ "$fail" -ne 0 ] && [ ! -x "$l2_bin" ]; then
     printf 'SKIP: L2 was not built (see step 6)\n'
     fail=1
-elif ! run "L2 builds the split tree" "$l2_bin" build selfhost/src/driver.ct -o "$l2self"; then
-    printf 'FAIL: L2 could not build selfhost/src/**\n'
+elif ! run "L2 builds the split tree" "$l2_bin" build selfhost/l2/driver.ct -o "$l2self"; then
+    printf 'FAIL: L2 could not build selfhost/l2/**\n'
     fail=1
 else
     for u in core driver; do

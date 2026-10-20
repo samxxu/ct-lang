@@ -4,14 +4,14 @@
 #
 # What it does, in order:
 #   0) shows the sample CT program it is going to compile
-#   1) builds L0      -- the frozen C compiler (selfhost/ctc.c), warning-free
+#   1) builds L0      -- the frozen C compiler (selfhost/l0/ctc.c), warning-free
 #   2) L0 compiles the sample .ct into C -> shows the generated C, builds it, runs it
-#   3) builds L1      -- the same compiler rewritten in CT (selfhost/ctc.ct), compiled by L0
+#   3) builds L1      -- the same compiler rewritten in CT (selfhost/l1/ctc.ct), compiled by L0
 #   4) L1 compiles the same sample -> the output must be byte-identical with L0's
 #   5) true self-hosting: L1 compiles itself into L1', and L1' compiles the sample too
-#   6) the split compiler: L1 builds the multi-unit tree selfhost/src/** into L2,
+#   6) the split compiler: L1 builds the multi-unit tree selfhost/l2/** into L2,
 #      and L2 compiles the sample identically as well
-#   7) the shipped entry (Phase 10.7): L2 builds ct-ast from selfhost/ast/main.ct,
+#   7) the shipped entry (Phase 10.7): L2 builds ct-ast from selfhost/ct-ast/main.ct,
 #      and that binary answers to `ct`, with `ctc` kept as a compatibility alias
 #   8) the incremental cache (Phase 6.3): a second `build` of unchanged sources
 #      reuses the artifacts, and a changed dependency invalidates them
@@ -36,10 +36,10 @@ work="${work%/}/ct-tour"
 rm -rf "$work"
 mkdir -p "$work"
 
-l0="$work/ctc-l0"           # C compiler built from selfhost/ctc.c
-l1_c="$work/ctc-l1.c"       # selfhost/ctc.ct compiled by L0
+l0="$work/ctc-l0"           # C compiler built from selfhost/l0/ctc.c
+l1_c="$work/ctc-l1.c"       # selfhost/l1/ctc.ct compiled by L0
 l1="$work/ctc-l1"           # that, built
-self_c="$work/ctc-self.c"   # selfhost/ctc.ct compiled by L1
+self_c="$work/ctc-self.c"   # selfhost/l1/ctc.ct compiled by L1
 self_bin="$work/ctc-self"   # that, built (= L1')
 
 sample="$work/tour_sample.ct"
@@ -156,9 +156,9 @@ printf '\n'
 sed 's/^/    /' "$sample_abs"
 
 # ------------------------------------------------------------------- 1) L0
-banner "1) build L0 - the frozen C compiler (selfhost/ctc.c)"
+banner "1) build L0 - the frozen C compiler (selfhost/l0/ctc.c)"
 say "L0 is plain C, built by your host compiler. It is frozen: bug fixes only."
-build_clean "$l0" selfhost/ctc.c || exit 1
+build_clean "$l0" selfhost/l0/ctc.c || exit 1
 
 # ------------------------------------------------------- 2) L0 compiles it
 banner "2) L0 compiles your CT program into C"
@@ -184,8 +184,8 @@ printf '\n+ %s\n' "$bin"
 
 # ------------------------------------------------------------------- 3) L1
 banner "3) bootstrap: build L1 - the same compiler, written in CT"
-say "selfhost/ctc.ct is the compiler rewritten in CT. L0 compiles it:"
-run "L0 compiling L1" "$l0" selfhost/ctc.ct -o "$l1_c" || exit 1
+say "selfhost/l1/ctc.ct is the compiler rewritten in CT. L0 compiles it:"
+run "L0 compiling L1" "$l0" selfhost/l1/ctc.ct -o "$l1_c" || exit 1
 build_clean "$l1" "$l1_c" || exit 1
 say "L1 is a working compiler binary now - CT source compiled by C source."
 
@@ -203,7 +203,7 @@ fi
 
 # ------------------------------------------- 5) true self-hosting: L1 -> L1'
 banner "5) true self-hosting: L1 compiles itself into L1'"
-run "L1 compiling itself" "$l1" selfhost/ctc.ct -o "$self_c" || exit 1
+run "L1 compiling itself" "$l1" selfhost/l1/ctc.ct -o "$self_c" || exit 1
 build_clean "$self_bin" "$self_c" || exit 1
 say "L1' is L1's output compiled by L1 - a compiler that built itself. Sanity check:"
 printf '\n+ %s %s -o %s\n' "$self_bin" "$sample_abs" "$out_c"
@@ -214,16 +214,16 @@ else
     fail=1
 fi
 
-# --------------------------------- 6) the split compiler: L1 builds selfhost/src/**
-banner "6) the split compiler: L1 builds selfhost/src/** into L2"
-say "selfhost/src/** is the same compiler partitioned across units, written in the"
+# --------------------------------- 6) the split compiler: L1 builds selfhost/l2/**
+banner "6) the split compiler: L1 builds selfhost/l2/** into L2"
+say "selfhost/l2/** is the same compiler partitioned across units, written in the"
 say "multi-file CT that L1 implements. L1 builds it with a single 'build' command:"
 l2src="$work/l2src"
 l2_bin="$work/ctc-l2"
 rm -rf "$l2src"
 mkdir -p "$l2src"
 
-if run "L1 building the split tree" "$l1" build selfhost/src/driver.ct -o "$l2src"; then
+if run "L1 building the split tree" "$l1" build selfhost/l2/driver.ct -o "$l2src"; then
     say "The units it wrote:"
     printf '\n'
     ls -1 "$l2src" | sed 's/^/    /'
@@ -245,12 +245,12 @@ if run "L1 building the split tree" "$l1" build selfhost/src/driver.ct -o "$l2sr
         fail=1
     fi
 else
-    printf 'FAIL: L1 could not build selfhost/src/**\n'
+    printf 'FAIL: L1 could not build selfhost/l2/**\n'
 fi
 
 # ------------------------------------- 7) the shipped entry `ct` (Phase 10.7)
 banner "7) the shipped entry: ct-ast answers to 'ct'"
-say "Phase 10.7: the installed compiler is built from selfhost/ast/main.ct (ct-ast);"
+say "Phase 10.7: the installed compiler is built from selfhost/ct-ast/main.ct (ct-ast);"
 say "L2 stays as the regression oracle. The identity comes from argv[0]:"
 ast_src="$work/astsrc"
 ast_bin="$work/ct-ast-bin"
@@ -259,7 +259,7 @@ alias_bin="$work/ctc"
 rm -rf "$ast_src"
 mkdir -p "$ast_src"
 
-if run "L2 building the AST compiler" "$l2_bin" build selfhost/ast/main.ct -o "$ast_src"; then
+if run "L2 building the AST compiler" "$l2_bin" build selfhost/ct-ast/main.ct -o "$ast_src"; then
     printf '\n+ %s -Wall -Wextra -std=c99 %s/*.c -o %s\n' "$CC" "$ast_src" "$ast_bin"
     if "$CC" -Wall -Wextra -std=c99 "$ast_src"/*.c -o "$ast_bin" 2>"$work/ast.log" &&
        [ ! -s "$work/ast.log" ]; then
@@ -270,7 +270,7 @@ if run "L2 building the AST compiler" "$l2_bin" build selfhost/ast/main.ct -o "$
         fail=1
     fi
 else
-    printf 'FAIL: L2 could not build selfhost/ast/main.ct\n'
+    printf 'FAIL: L2 could not build selfhost/ct-ast/main.ct\n'
     fail=1
 fi
 cp "$ast_bin" "$ct_bin"
@@ -410,8 +410,8 @@ banner "9) where to go next"
 say "  your own file      bash selfhost/ct-tour.sh path/to/your.ct"
 say "  full test suite    ./test/run.sh                    (build, unit, goldens, examples, errors)"
 say "  bootstrap gates    bash selfhost/check-goldens.sh   (L1 vs goldens, plus L1' vs goldens)"
-say "  shipped compiler   selfhost/ast/main.ct             (ct-ast: the ct entry since Phase 10.7)"
-say "  split compiler     selfhost/src/**                  (L2, the frozen regression oracle)"
+say "  shipped compiler   selfhost/ct-ast/main.ct             (ct-ast: the ct entry since Phase 10.7)"
+say "  split compiler     selfhost/l2/**                  (L2, the frozen regression oracle)"
 say "  syntax reference   docs/language-spec.md"
 say "  runnable examples  examples/01_greeter ... 06_iface_field  (<name>.ct + <name>.expected.out)"
 say "  editor comfort     editors/vscode                   (highlighting only, no build step)"

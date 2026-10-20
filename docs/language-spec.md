@@ -2,8 +2,8 @@
 
 > 中文 · [English](#english)
 
-> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）与 CT 线（L2，`selfhost/src/**`；
-> v0.10.0 起安装入口由行为等价的 ct-ast，`selfhost/ast/main.ct`，提供）**共同**
+> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）与 CT 线（L2，`selfhost/l2/**`；
+> v0.10.0 起安装入口由行为等价的 ct-ast，`selfhost/ct-ast/main.ct`，提供）**共同**
 > 接受与产出的部分。CT 线是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
 > `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
 > [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
@@ -313,7 +313,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
   声明后为空（`vt == NULL`），需自行赋值；装箱仅覆盖**语句赋值**（`s.lhs = v;`），**指定初始化式**
   （`Pair p = { .lhs = v };`）中的接口字段**不装箱**；**指针**接口字段（`struct T *x`）只支持派发，
   赋值保持原样（需要已有胖指针的地址，如 `s.x = &someIface;`）。
-- **CT 侧（L2）已扩展**：`selfhost/src/**` 放开上一条的全部限制，并给出统一的「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」模型；装箱规则在**赋值、构造点、`return`、实参**四处完全一致：
+- **CT 侧（L2）已扩展**：`selfhost/l2/**` 放开上一条的全部限制，并给出统一的「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」模型；装箱规则在**赋值、构造点、`return`、实参**四处完全一致：
 
 | 形态 | 含义 | 派发 | 下标元素的种类 |
 | --- | --- | --- | --- |
@@ -329,7 +329,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 
 `own` 是一个**上下文关键字**，只出现在声明行的行首：它把变量标记为「持有对象生命周期」，
 编译器在作用域出口自动释放。它是 Phase 5 新增项，**L0（`ctc.c`）不认识它**（会原样透传），
-由 CT 线（L2，`selfhost/src/**`；ct-ast 行为等价）实现。
+由 CT 线（L2，`selfhost/l2/**`；ct-ast 行为等价）实现。
 
 | 源码形态 | 处理 |
 | --- | --- |
@@ -357,7 +357,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 `map` 把一个 trait 的方法绑定到某个**已声明的全局实例**上的具体调用，为实例发射一个「实例级包装函数」
 与一张 vtable；**Phase 11.2 已把该实例接入派发**——它被当作 trait 接口值使用时（赋给 `T` 类型的
 变量、传给 `T` 接口参数、从接口返回、或作为函数实参），装箱会使用这张**实例级** vtable，从而作为该
-trait 的实例运行。它是 Phase 11 新增项，**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ast/main.ct`）支持。
+trait 的实例运行。它是 Phase 11 新增项，**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ct-ast/main.ct`）支持。
 
 ```c
 trait Controller {
@@ -398,7 +398,7 @@ map trait Controller for instance uart1 {
 
 ### 5. 命名规则（稳定契约）
 
-命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/src/**` 恢复（本文不描述它）。
+命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
 
 | 产物 | 规则 | 示例（trait `Greeter`，struct `Person`，方法 `greet`） |
 | --- | --- | --- |
@@ -492,8 +492,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 ## English
 
 > **Status**: this document specifies the **core ct grammar** — the subset that both L0 (`ctc.c`) and
-> the CT line (L2, `selfhost/src/**`; since v0.10.0 the installed entry is the behaviourally
-> equivalent ct-ast, `selfhost/ast/main.ct`) **accept and emit**. The CT line is a superset: it also supports
+> the CT line (L2, `selfhost/l2/**`; since v0.10.0 the installed entry is the behaviourally
+> equivalent ct-ast, `selfhost/ct-ast/main.ct`) **accept and emit**. The CT line is a superset: it also supports
 > `namespace` / `import` / `pub` / multi-file `ct build` / `Drop` / `#line` / leak warnings and
 > `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
 > landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
@@ -845,7 +845,7 @@ Rules and limits:
   (`Pair p = { .lhs = v };`) is **not** boxed; and a **pointer** interface field (`struct T *x`)
   supports dispatch only, its assignment staying verbatim (it needs the address of an existing fat
   pointer, e.g. `s.x = &someIface;`).
-- **Extended on the CT side (L2)**: `selfhost/src/**` lifts every limit above and gives one uniform
+- **Extended on the CT side (L2)**: `selfhost/l2/**` lifts every limit above and gives one uniform
   model for "interface value / pointer to an interface value / array of interface values / array of
   interface pointers"; boxing behaves identically in all four places (assignment, construction point,
   `return`, argument):
@@ -872,7 +872,7 @@ Rules and limits:
 `own` is a **contextual keyword** recognised only at the start of a declaration line. It marks the
 variable as owning its object's lifetime, so the compiler releases it at scope exit. This is a Phase 5
 addition: **L0 (`ctc.c`) does not know it** (it passes the line through), and the CT line
-(L2, `selfhost/src/**`; ct-ast is behaviourally equivalent) implements it.
+(L2, `selfhost/l2/**`; ct-ast is behaviourally equivalent) implements it.
 
 | Shape | Expansion |
 | --- | --- |
@@ -904,7 +904,7 @@ instance-level wrapper plus a vtable; **Phase 11.2 has wired the instance into d
 used as a trait interface value (assigned to a `T`-typed variable, passed to a `T` interface parameter,
 returned from an interface, or used as a call argument), boxing uses that **instance-level** vtable, so
 it runs as an instance of the trait. It is a Phase 11 addition: **neither L0 nor L2 knows it** — only
-**ct-ast** (`selfhost/ast/main.ct`) supports it.
+**ct-ast** (`selfhost/ct-ast/main.ct`) supports it.
 
 ```c
 trait Controller {
@@ -944,7 +944,7 @@ Constraints and limits:
 
 ### 5. Naming contract
 
-The namespace prefix is a **feature removed from L0**; Phase 2 restored it under `selfhost/src/**`
+The namespace prefix is a **feature removed from L0**; Phase 2 restored it under `selfhost/l2/**`
 (this document does not cover it).
 
 | Artifact | Rule | Example (trait `Greeter`, struct `Person`, method `greet`) |

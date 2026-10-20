@@ -93,8 +93,8 @@
 | 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
 | 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发。**同上，已移出 L0** |
-| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）；Phase 6.2 起 `T *q = f();` 若 `f` 可能返回它自己的分配（`ret_owned`），`q` 也计为 owned。**已由 Phase 4/5/6 在 `selfhost/src/**` 实现** |
-| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；Phase 6.2 起 `T *q = f()`（`f` 的 `ret_owned` 为真且返回同一 struct 指针）也标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/src/**` 实现** |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）；Phase 6.2 起 `T *q = f();` 若 `f` 可能返回它自己的分配（`ret_owned`），`q` 也计为 owned。**已由 Phase 4/5/6 在 `selfhost/l2/**` 实现** |
+| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；Phase 6.2 起 `T *q = f()`（`f` 的 `ret_owned` 为真且返回同一 struct 指针）也标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/l2/**` 实现** |
 | 错误恢复（error recovery） | `setjmp` 守卫 + `recover_pos` | `die` 报告后长跳到 `compile_range` 的守卫，并重同步到下一个 `}` 之后或下一行行首；上限 `MAX_ERRORS=20`，失败的编译删除产物并在末尾补 `ctc: N error(s) generated`。Phase 4 切片 3 **新增**（无 oracle） |
 | 语义诊断（semantic check） | `duplicate trait/struct` · `signature_mismatch` | 重复定义按 cname 报错（namespace 隔离）；impl 的返回类型 / 参数个数与 trait 不符时告警（**不比参数类型**）。Phase 4 切片 4 **新增**（无 oracle） |
 
@@ -111,7 +111,7 @@
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
-| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/src/**` 恢复** |
+| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/l2/**` 恢复** |
 | 增量缓存（incremental cache） | `<outdir>/.ctcache/<unit>.key` | Phase 6.3：每个单元一枚键（路径 + `mtime.size` + 版本 + `--line`/`--diagnostics` + 依赖 digest），键一致且 `.c/.h` 在盘即跳过重生成。**缓存命中不重放 `#line` 与告警**；`--emit-map` 下不命中。重编译集 = `order` 前缀 ∪ 依赖闭包 |
 
 ### 5. 测试
@@ -124,7 +124,7 @@
 | 用例（fixture） | `test/cases/*.ct`、`test/errors/*.ct` | |
 | 正例（positive case） | `test/cases/` | 生成→逐字节比对→编译→运行 |
 | 负例（negative case） | `test/errors/<name>.expected-err` | `ctc` 必须非 0 退出且带期望诊断 |
-| 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | `#include "../../selfhost/ctc.c"` 以触达 `static` 函数 |
+| 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | `#include "../../selfhost/l0/ctc.c"` 以触达 `static` 函数 |
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
 | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
@@ -138,10 +138,10 @@
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md)，D46–D52 见 [design/phase12.md](design/phase12.md) |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 → ct-ast | 用 CT 重写编译器 |
-| AST 版编译器（ct-ast） | `selfhost/ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；单文件、纯 CT，自编并达到全量行为等价 |
+| AST 版编译器（ct-ast） | `selfhost/ct-ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；单文件、纯 CT，自编并达到全量行为等价 |
 | 行为等价（behavioural equivalence） | D34 | 等价口径 = 退出码 + 产物零警告可编 + **程序输出一致**（不比对生成的 C 文本） |
 | 自编不动点（fixpoint） | `ct-ast` → `ct-ast2` | 编译器的产物再编同一源码，输出**逐字节一致** |
-| 归档点（archive tag） | `pre-ast-mainline` | 2026-10-17 的 frozen 边界（`src/**` 仍在 frozen L1 表容量之内）；Phase 9 的起点由 `v0.8.0`（`db667df`）标出 |
+| 归档点（archive tag） | `pre-ast-mainline` | 2026-10-17 的 frozen 边界（`l2/**` 仍在 frozen L1 表容量之内）；Phase 9 的起点由 `v0.8.0`（`db667df`）标出 |
 | 吃自己的狗粮（dogfooding） | — | 用 CT 写 CT 工具链 |
 | 非目标（non-goal） | — | 明确不做的事 |
 | 设计债（design debt） | architecture §7 | 已知取舍 |
@@ -255,8 +255,8 @@
 | driver | `compile_range` / `compile_file` / `compile_main` | orchestration; touches no parsing / generation logic — L0 is single-file only now |
 | `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | line emission | `line_of` / `line_at` / `line_break` | offset→line cache / emit / force a re-emit at a block boundary. **Same; moved out of L0** |
-| leak warning | `potential_leak` · `leak_check_scope` · `leak_check_return` | conservative: still owned at scope end is a definite leak (kind 0); a conditional `return` leaving a non-returned object behind reports once as `may leak on a return path` (kind 2, JSON carries `path_line`); since Phase 6.2 a `T *q = f();` whose callee may return its own allocation (`ret_owned`) counts `q` as owned too. **Implemented by Phases 4/5/6 under `selfhost/src/**`** |
-| owned (heap-holding) | `Var.owned` / `own_line` / `autodrop` | marked at the creation site by `T *p = malloc/calloc(...)`; from Phase 6.2 also by `T *q = f()` when `f`'s `ret_owned` is set and it returns the same struct pointer; `own` additionally sets `autodrop` (Phase 5). **Implemented under `selfhost/src/**`** |
+| leak warning | `potential_leak` · `leak_check_scope` · `leak_check_return` | conservative: still owned at scope end is a definite leak (kind 0); a conditional `return` leaving a non-returned object behind reports once as `may leak on a return path` (kind 2, JSON carries `path_line`); since Phase 6.2 a `T *q = f();` whose callee may return its own allocation (`ret_owned`) counts `q` as owned too. **Implemented by Phases 4/5/6 under `selfhost/l2/**`** |
+| owned (heap-holding) | `Var.owned` / `own_line` / `autodrop` | marked at the creation site by `T *p = malloc/calloc(...)`; from Phase 6.2 also by `T *q = f()` when `f`'s `ret_owned` is set and it returns the same struct pointer; `own` additionally sets `autodrop` (Phase 5). **Implemented under `selfhost/l2/**`** |
 | error recovery | `setjmp` guard + `recover_pos` | `die` reports and longjmps back to `compile_range`'s guard, resyncing past the next `}` or the start of the next line; capped by `MAX_ERRORS=20`, and a failing compile drops its artifacts and closes with `ctc: N error(s) generated`. Added by Phase 4 slice 3 (**new**, no oracle) |
 | semantic check | `duplicate trait/struct` · `signature_mismatch` | duplicate definitions are errors judged on the cname (namespaces stay isolated); a differing return type / parameter count between impl and trait is a warning (**parameter types are not compared**). Added by Phase 4 slice 4 (**new**, no oracle) |
 
@@ -273,7 +273,7 @@
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
 | C standard target | `--std=c99` (default) / `--std=gnu99` | Phase 6.4: no emission point differs yet, so `build` only writes it into the suggested `cc` command; any other value is a hard error |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
-| JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7). **Restored by Phase 4 slice 2 under `selfhost/src/**`** |
+| JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7). **Restored by Phase 4 slice 2 under `selfhost/l2/**`** |
 | incremental cache | `<outdir>/.ctcache/<unit>.key` | Phase 6.3: one key per unit (path + `mtime.size` + version + `--line`/`--diagnostics` + dependency digests); a matching key with the `.c/.h` still on disk skips regeneration. **A hit replays neither `#line` nor warnings**; `--emit-map` never hits. The recompile set is the `order` prefix plus the dependency closure |
 
 ### 5. Testing
@@ -286,7 +286,7 @@
 | fixture | `test/cases/*.ct`, `test/errors/*.ct` | |
 | positive case | `test/cases/` | generate → byte diff → compile → run |
 | negative case | `test/errors/<name>.expected-err` | `ctc` must exit non-zero with the expected diagnostic |
-| white-box unit test | `test/unit/test_helpers.c` | `#include "../../selfhost/ctc.c"` to reach `static` functions |
+| white-box unit test | `test/unit/test_helpers.c` | `#include "../../selfhost/l0/ctc.c"` to reach `static` functions |
 | regeneration | `./ctc <case>.ct -o <case>.expected.c` | after an intended behaviour change, regenerate **and review the diff** |
 | grammar smoke test | `python3 editors/vscode/test/check-grammar.py` | checks the editor grammar, **stays out of** run.sh |
 | end-to-end | the examples layer | generate → build → run → compare |
@@ -300,10 +300,10 @@
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md), D46–D52 in [design/phase12.md](design/phase12.md) |
 | bootstrap / self-hosting | L0 → L1 → L2 → ct-ast | rewriting the compiler in CT |
-| AST compiler (ct-ast) | `selfhost/ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; one plain-CT file that self-compiles and is behaviourally equivalent |
+| AST compiler (ct-ast) | `selfhost/ct-ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; one plain-CT file that self-compiles and is behaviourally equivalent |
 | behavioural equivalence | D34 | the equivalence rule = exit status + warning-free build + **identical program output** (the generated C text is not compared) |
 | self-compilation fixpoint | `ct-ast` → `ct-ast2` | the emitted compiler recompiles the same source and produces **byte-identical** output |
-| archive tag | `pre-ast-mainline` | the frozen boundary of 2026-10-17 (when `src/**` still fit the frozen L1 tables); Phase 9 starts at the `v0.8.0` close (`db667df`) |
+| archive tag | `pre-ast-mainline` | the frozen boundary of 2026-10-17 (when `l2/**` still fit the frozen L1 tables); Phase 9 starts at the `v0.8.0` close (`db667df`) |
 | dogfooding | — | using CT to build CT's own toolchain |
 | non-goal | — | something explicitly out of scope |
 | design debt | architecture §7 | a known trade-off |

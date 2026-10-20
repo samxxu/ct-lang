@@ -10,7 +10,7 @@
  */
 
 #define main ctc_main_unused_in_tests
-#include "../../selfhost/ctc.c"
+#include "../../selfhost/l0/ctc.c"
 #undef main
 
 static int g_checks;

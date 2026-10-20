@@ -3,7 +3,7 @@
 # check-ast.sh - the AST compiler's behavioural gate (Phase 9.1-9.7, Phase 10.x).
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
-# (selfhost/ast/main.ct, D30: a separate tree in parallel with the old
+# (selfhost/ct-ast/main.ct, D30: a separate tree in parallel with the old
 # pipeline), and runs every fixture under test/ast/*/:
 #
 #   prog.ct -> ct-ast -> <name>.c + <name>.h -> cc (warning-free) -> run
@@ -81,24 +81,24 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 echo "cc: $CC"
 echo
 echo "== build the bootstrap chain and the AST compiler =="
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
+if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
     echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
 fi
-if ! "$work/ctc" selfhost/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
+if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
     echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
     echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
 fi
 mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/src/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
+if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
     echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
     echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
 fi
 mkdir -p "$work/astsrc"
-if ! "$work/l2" build selfhost/ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
+if ! "$work/l2" build selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
     echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
@@ -847,10 +847,10 @@ echo "== self-hosting (9.6) =="
 # The AST compiler compiles its own source; the result must build warning-free,
 # and the rebuilt compiler must reproduce the same output byte for byte (a
 # fixpoint: the compiler agrees with itself on its own subset).
-if "$work/ct-ast" selfhost/ast/main.ct -o "$work/self1.c" \
+if "$work/ct-ast" selfhost/ct-ast/main.ct -o "$work/self1.c" \
         >"$work/self1.out" 2>"$work/self1.err" \
    && "$CC" -Wall -Wextra -std=c99 "$work/self1.c" -o "$work/ct-ast2" 2>"$work/selfcc.log" \
-   && "$work/ct-ast2" selfhost/ast/main.ct -o "$work/self2.c" \
+   && "$work/ct-ast2" selfhost/ct-ast/main.ct -o "$work/self2.c" \
         >"$work/self2.out" 2>"$work/self2.err" \
    && cmp -s "$work/self1.c" "$work/self2.c"; then
     ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"

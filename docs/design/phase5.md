@@ -35,7 +35,7 @@ Phase 5 只做 roadmap 列出的三项：
 
 | 现状 | 位置 | Phase 5 如何用 |
 | --- | --- | --- |
-| `Var.owned` / `own_line` | [core.ct](../../selfhost/src/core.ct) | AutoDrop 复用同一套「谁持有堆对象」的登记 |
+| `Var.owned` / `own_line` | [core.ct](../../selfhost/l2/core.ct) | AutoDrop 复用同一套「谁持有堆对象」的登记 |
 | `new_var` 复用槽位时清 ownership | `SymTabOps::new_var` | 新增的 autodrop 标记也必须清零 |
 | `scope[]` / `nscope` 按 `}` 回滚 `nvars` | `RewriteOps::scope_track` | AutoDrop 的「作用域归属」直接以 `scope[top]` 为边界 |
 | `leak_check_scope` / `leak_observe` | `SymTabOps` | 路径敏感分析只改这两个方法的判定，不新增 AST |

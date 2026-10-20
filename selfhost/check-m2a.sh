@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# check-m2a.sh - M2-a acceptance gate for L1 (selfhost/ctc.ct).
+# check-m2a.sh - M2-a acceptance gate for L1 (selfhost/l1/ctc.ct).
 #
 # One command that reproduces the whole M2-a path:
-#   1) build L0 from selfhost/ctc.c (warning-free)
-#   2) L0 compiles L1  (selfhost/ctc.ct -> /tmp/ctc-l1.c)
+#   1) build L0 from selfhost/l0/ctc.c (warning-free)
+#   2) L0 compiles L1  (selfhost/l1/ctc.ct -> /tmp/ctc-l1.c)
 #   3) build L1 warning-free
 #   4) L1 compiles test/cases/01_trait_basic.ct
 #   5) diff the generated .c and .h against the golden (byte for byte)
 #   6) [beyond M2-a] L1 compiles itself; reported but never changes the verdict
-#   7) [beyond M2-a] L1 builds the split tree selfhost/src/** into L2, warning-free;
+#   7) [beyond M2-a] L1 builds the split tree selfhost/l2/** into L2, warning-free;
 #      reported but never changes the verdict (the corpus gate for L2 is
 #      check-goldens.sh step 6)
 #
@@ -57,15 +57,15 @@ run() {
 }
 
 # ---------------------------------------------------------------- 1) L0
-banner "1) build L0 (selfhost/ctc.c) warning-free"
-if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc; then
+banner "1) build L0 (selfhost/l0/ctc.c) warning-free"
+if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc; then
     echo "FATAL: L0 did not build; cannot continue." >&2
     exit 1
 fi
 
 # ------------------------------------------------------- 2) L0 compiles L1
-banner "2) L0 compiles L1 (selfhost/ctc.ct -> $l1_c)"
-if ! run "L0 compile L1" ./ctc selfhost/ctc.ct -o "$l1_c"; then
+banner "2) L0 compiles L1 (selfhost/l1/ctc.ct -> $l1_c)"
+if ! run "L0 compile L1" ./ctc selfhost/l1/ctc.ct -o "$l1_c"; then
     echo "FATAL: L0 could not compile L1; cannot continue." >&2
     exit 1
 fi
@@ -124,7 +124,7 @@ fi
 
 # ---------------------------------------- 6) beyond-M2-a: L1 self-compiles
 banner "6) [beyond M2-a] L1 compiles itself ($self_c) and builds"
-if run "L1 compile itself" "$l1_bin" selfhost/ctc.ct -o "$self_c"; then
+if run "L1 compile itself" "$l1_bin" selfhost/l1/ctc.ct -o "$self_c"; then
     if run "build L1-self" "$CC" -Wall -Wextra -std=c99 "$self_c" -o "$self_bin"; then
         printf 'OK: L1 can compile itself (later-milestone precondition met)\n'
     else
@@ -137,17 +137,17 @@ else
 fi
 
 # ------------------------ 7) [beyond M2-a] L2 from the split tree
-# selfhost/src/** is the same compiler partitioned across units and built by L1.
+# selfhost/l2/** is the same compiler partitioned across units and built by L1.
 # Like step 6 this is a later-milestone precondition: it is reported but never
 # changes the M2-a verdict (the corpus gate for L2 is check-goldens.sh step 6).
-banner "7) [beyond M2-a] L2 built from the split tree (selfhost/src/**)"
+banner "7) [beyond M2-a] L2 built from the split tree (selfhost/l2/**)"
 l2src="$work/l2src"
 l2_bin="$work/ctc-l2"
 l2_log="$work/ctc-l2.log"
 rm -rf "$l2src"
 mkdir -p "$l2src"
 
-if run "L1 builds the split tree" "$l1_bin" build selfhost/src/driver.ct -o "$l2src"; then
+if run "L1 builds the split tree" "$l1_bin" build selfhost/l2/driver.ct -o "$l2src"; then
     if run "build L2" "$CC" -Wall -Wextra -std=c99 "$l2src"/*.c -o "$l2_bin" 2>"$l2_log" &&
        [ ! -s "$l2_log" ]; then
         printf 'OK: L2 built warning-free from the split tree\n'
@@ -157,7 +157,7 @@ if run "L1 builds the split tree" "$l1_bin" build selfhost/src/driver.ct -o "$l2
         split_fail=1
     fi
 else
-    printf 'NOTE (beyond M2-a): L1 could not build selfhost/src/**; does not affect M2-a\n'
+    printf 'NOTE (beyond M2-a): L1 could not build selfhost/l2/**; does not affect M2-a\n'
     split_fail=1
 fi
 

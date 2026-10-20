@@ -40,26 +40,26 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 echo "cc: $CC"
 echo
 echo "== build the bootstrap chain =="
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
+if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
     echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
 fi
-if ! "$work/ctc" selfhost/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
+if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
     echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
     echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
 fi
 mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/src/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
+if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
     echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
     echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
 fi
 # Phase 10.6: the package subcommands now ship with the AST compiler (ct-ast),
-# which L2 builds from selfhost/ast/main.ct. This gate drives that entry.
+# which L2 builds from selfhost/ct-ast/main.ct. This gate drives that entry.
 mkdir -p "$work/astsrc"
-if ! "$work/l2" build selfhost/ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
+if ! "$work/l2" build selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
     echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then

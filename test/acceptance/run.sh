@@ -40,13 +40,13 @@ if [ -z "$CT" ]; then
     # instead is still possible via `CT=<l2 binary>` and used to be the default
     # until Phase 12; L0 (`CT=<l0 binary>`) is also honoured, but its PENDING
     # verdicts are then expected, not failures.
-    if ! $CC $CFLAGS selfhost/ctc.c -o "$TMP/ctc-l0" 2>"$TMP/build.log"; then
-        echo "building selfhost/ctc.c (L0) failed:"
+    if ! $CC $CFLAGS selfhost/l0/ctc.c -o "$TMP/ctc-l0" 2>"$TMP/build.log"; then
+        echo "building selfhost/l0/ctc.c (L0) failed:"
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi
-    if ! "$TMP/ctc-l0" selfhost/ctc.ct -o "$TMP/ctc-l1.c" 2>"$TMP/build.log"; then
-        echo "L0 could not compile L1 (selfhost/ctc.ct):"
+    if ! "$TMP/ctc-l0" selfhost/l1/ctc.ct -o "$TMP/ctc-l1.c" 2>"$TMP/build.log"; then
+        echo "L0 could not compile L1 (selfhost/l1/ctc.ct):"
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi
@@ -56,8 +56,8 @@ if [ -z "$CT" ]; then
         exit 1
     fi
     mkdir -p "$TMP/l2src"
-    if ! "$TMP/ctc-l1" build selfhost/src/driver.ct -o "$TMP/l2src" 2>"$TMP/build.log"; then
-        echo "L1 could not build selfhost/src/**:"
+    if ! "$TMP/ctc-l1" build selfhost/l2/driver.ct -o "$TMP/l2src" 2>"$TMP/build.log"; then
+        echo "L1 could not build selfhost/l2/**:"
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi
@@ -67,8 +67,8 @@ if [ -z "$CT" ]; then
         exit 1
     fi
     mkdir -p "$TMP/astsrc"
-    if ! "$TMP/ctc-l2" build selfhost/ast/main.ct -o "$TMP/astsrc" 2>"$TMP/build.log"; then
-        echo "L2 could not build ct-ast (selfhost/ast/main.ct):"
+    if ! "$TMP/ctc-l2" build selfhost/ct-ast/main.ct -o "$TMP/astsrc" 2>"$TMP/build.log"; then
+        echo "L2 could not build ct-ast (selfhost/ct-ast/main.ct):"
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi

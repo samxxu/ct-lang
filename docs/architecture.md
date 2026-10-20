@@ -12,7 +12,7 @@
 
 | 目标 | 具体含义 |
 | --- | --- |
-| 单文件 | 全部实现放在 `selfhost/ctc.c`，`gcc selfhost/ctc.c -o ctc` 一步可构建 |
+| 单文件 | 全部实现放在 `selfhost/l0/ctc.c`，`gcc selfhost/l0/ctc.c -o ctc` 一步可构建 |
 | 可通读 | 无第三方依赖、无自动生成代码、无构建系统；总量控制在千行量级 |
 | 结构转换 | 只做「识别 + 重写」，不做类型检查、不做语义分析、不做优化 |
 | 输出可读 | 生成结果是普通 C，命名可预测，缩进干净，可直接被人阅读和调试 |
@@ -153,15 +153,15 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 
 | 新特性 | 状态 / 主要改动位置 |
 | --- | --- |
-| namespace | ⛔ 已随 Phase 0.3 移出 L0（命中即 `die`：`'namespace' is not supported by this compiler`）；Phase 2–5 用 CT（L1 / `selfhost/src/**`）重做 |
+| namespace | ⛔ 已随 Phase 0.3 移出 L0（命中即 `die`：`'namespace' is not supported by this compiler`）；Phase 2–5 用 CT（L1 / `selfhost/l2/**`）重做 |
 | 变量作用域 | ✅ 已落地（0.1.9）：`scope_track` 在 `{}` 处压栈、`}` 处回滚 `g_nvars` |
-| 多文件编译 | ⛔ 已随 Phase 0.3 移出 L0；Phase 2 起由 CT 层的多单元构建承载（L1 的 `build` + `import`，`selfhost/src/**`） |
+| 多文件编译 | ⛔ 已随 Phase 0.3 移出 L0；Phase 2 起由 CT 层的多单元构建承载（L1 的 `build` + `import`，`selfhost/l2/**`） |
 | 错误恢复 | ✅ Phase 4 已在 CT 侧落地（`setjmp` 守卫 + `recover_pos`，`MAX_ERRORS=20`），见 `roadmap.md` Phase 4；L0 仍是「一处错误即停」 |
 | 自动化回归 | 见 `roadmap.md` 的测试策略 |
 
 ### 9. 测试如何挂到这份代码上
 
-- `test/unit/test_helpers.c` 用 `#define main ctc_main_unused_in_tests` 再 `#include "../../selfhost/ctc.c"`，
+- `test/unit/test_helpers.c` 用 `#define main ctc_main_unused_in_tests` 再 `#include "../../selfhost/l0/ctc.c"`，
   把整个编译器拉进同一个翻译单元，从而能直接调用 `static` 函数 —— 在「单文件 + 全部 static」的结构下，
   这是做白盒单测的唯一办法。被覆盖的纯函数清单就写在那个文件里。
 - 因此：**重命名、改签名或删除被单测覆盖的 `static` 函数，必须同步改 `test/unit/test_helpers.c`**。
@@ -177,7 +177,7 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 
 ### 1. Design goals
 
-Single file — everything lives in `selfhost/ctc.c` and `gcc selfhost/ctc.c -o ctc` builds it in one
+Single file — everything lives in `selfhost/l0/ctc.c` and `gcc selfhost/l0/ctc.c -o ctc` builds it in one
 step. Readable end to end — no third-party dependencies, no generated code, no build system, kept
 within roughly a thousand lines. Structure rewriting only — recognise and rewrite, with no type
 checking, no semantic analysis and no optimisation. Readable output — plain C with predictable naming
@@ -325,7 +325,7 @@ golden under `test/cases/**` and they must be regenerated together.
 
 Namespaces **⛔ removed from L0 in Phase 0.3** (hitting `namespace` now `die`s with
 `'namespace' is not supported by this compiler`); from Phase 2–5 they are redone in CT (L1 /
-`selfhost/src/**`) instead. Multi-file compilation was removed the same way and, since Phase 2, is
+`selfhost/l2/**`) instead. Multi-file compilation was removed the same way and, since Phase 2, is
 carried by the CT layer's multi-unit build (L1's `build` + `import`). Variable scopes
 **✅ landed (0.1.9)** — `scope_track` pushes at `{` and rolls `g_nvars` back at `}`. Still to come:
 error recovery (after `die`, skip to the next line start or the next `}` and continue, which needs an
@@ -334,7 +334,7 @@ error counter), and the automated regression suite described in `roadmap.md`.
 ### 9. How the tests attach to this code
 
 `test/unit/test_helpers.c` uses `#define main ctc_main_unused_in_tests` followed by
-`#include "../../selfhost/ctc.c"` to pull the whole compiler into a single translation unit — with a one-file,
+`#include "../../selfhost/l0/ctc.c"` to pull the whole compiler into a single translation unit — with a one-file,
 all-`static` design this is the only way to call the helpers directly. The list of covered helpers
 lives in that file, so **renaming, re-signing or removing a covered helper requires updating it too**.
 The golden cases in `test/cases/*` do not use that trick: `test/run.sh` drives the real CLI

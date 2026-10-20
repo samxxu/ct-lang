@@ -1,5 +1,5 @@
 # Build products — never committed (see AGENTS.md §2).
-# Only the root compiler binary is ignored by name; the source (selfhost/ctc.c) stays tracked.
+# Only the root compiler binary is ignored by name; the source (selfhost/l0/ctc.c) stays tracked.
 /ctc
 *.o
 a.out

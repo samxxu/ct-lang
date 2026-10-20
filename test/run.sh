@@ -47,7 +47,7 @@ echo "cc: $CC"
 # ------------------------------------------------------------------ build
 echo
 echo "== build ctc =="
-if ! $CC $CFLAGS selfhost/ctc.c -o "$TMP/ctc" 2>"$TMP/build.log"; then
+if ! $CC $CFLAGS selfhost/l0/ctc.c -o "$TMP/ctc" 2>"$TMP/build.log"; then
     echo "  compiler build failed:"
     sed 's/^/    /' "$TMP/build.log"
     exit 1
@@ -55,7 +55,7 @@ fi
 if [ -s "$TMP/build.log" ]; then
     echo "  compiler build emitted warnings:"
     sed 's/^/    /' "$TMP/build.log"
-    bad "build" "selfhost/ctc.c must be warning-free"
+    bad "build" "selfhost/l0/ctc.c must be warning-free"
 else
     ok "build (warning-free)"
 fi
