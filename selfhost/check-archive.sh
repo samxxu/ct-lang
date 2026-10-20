@@ -226,8 +226,8 @@ same_modulo_version() {
 }
 
 # ---------------------------------------------------------------- 1) L0
-banner "1) build L0 (ctc.c) warning-free"
-if ! run "build L0" "$CC" -Wall -Wextra -std=c99 ctc.c -o "$l0"; then
+banner "1) build L0 (selfhost/ctc.c) warning-free"
+if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o "$l0"; then
     echo "FATAL: L0 did not build; cannot continue." >&2
     exit 1
 fi

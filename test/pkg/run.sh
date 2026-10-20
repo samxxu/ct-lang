@@ -40,7 +40,7 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 echo "cc: $CC"
 echo
 echo "== build the bootstrap chain =="
-if ! "$CC" -Wall -Wextra -std=c99 ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
+if ! "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
     echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
 fi
 if ! "$work/ctc" selfhost/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then

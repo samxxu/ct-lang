@@ -3,7 +3,7 @@
 # check-goldens.sh - the incremental golden oracle for L1 (selfhost/ctc.ct).
 #
 # One command that answers "how far has L1 got?":
-#   1) build L0 from ctc.c (warning-free)
+#   1) build L0 from selfhost/ctc.c (warning-free)
 #   2) L0 compiles L1            (selfhost/ctc.ct -> <tmp>/ctc-l1.c)
 #   3) build L1 warning-free
 #   4) L1 compiles every test/cases/*.ct into <tmp>/<case>.c -- the golden
@@ -104,8 +104,8 @@ run() {
 }
 
 # ---------------------------------------------------------------- 1) L0
-banner "1) build L0 (ctc.c) warning-free"
-if ! run "build L0" "$CC" -Wall -Wextra -std=c99 ctc.c -o ctc; then
+banner "1) build L0 (selfhost/ctc.c) warning-free"
+if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc; then
     echo "FATAL: L0 did not build; cannot continue." >&2
     exit 1
 fi

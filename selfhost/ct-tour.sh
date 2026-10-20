@@ -4,7 +4,7 @@
 #
 # What it does, in order:
 #   0) shows the sample CT program it is going to compile
-#   1) builds L0      -- the frozen C compiler (ctc.c), warning-free
+#   1) builds L0      -- the frozen C compiler (selfhost/ctc.c), warning-free
 #   2) L0 compiles the sample .ct into C -> shows the generated C, builds it, runs it
 #   3) builds L1      -- the same compiler rewritten in CT (selfhost/ctc.ct), compiled by L0
 #   4) L1 compiles the same sample -> the output must be byte-identical with L0's
@@ -36,7 +36,7 @@ work="${work%/}/ct-tour"
 rm -rf "$work"
 mkdir -p "$work"
 
-l0="$work/ctc-l0"           # C compiler built from ctc.c
+l0="$work/ctc-l0"           # C compiler built from selfhost/ctc.c
 l1_c="$work/ctc-l1.c"       # selfhost/ctc.ct compiled by L0
 l1="$work/ctc-l1"           # that, built
 self_c="$work/ctc-self.c"   # selfhost/ctc.ct compiled by L1
@@ -156,9 +156,9 @@ printf '\n'
 sed 's/^/    /' "$sample_abs"
 
 # ------------------------------------------------------------------- 1) L0
-banner "1) build L0 - the frozen C compiler (ctc.c)"
+banner "1) build L0 - the frozen C compiler (selfhost/ctc.c)"
 say "L0 is plain C, built by your host compiler. It is frozen: bug fixes only."
-build_clean "$l0" ctc.c || exit 1
+build_clean "$l0" selfhost/ctc.c || exit 1
 
 # ------------------------------------------------------- 2) L0 compiles it
 banner "2) L0 compiles your CT program into C"

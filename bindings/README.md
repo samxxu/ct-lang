@@ -99,7 +99,7 @@ pub int mock_hal_send(char *buf, int len) {
 
 ### 6. 构建与测试
 
-binding **不是**编译器的构建步骤：`gcc ctc.c` 与 `test/run.sh` 的编译相关层都不依赖它。
+binding **不是**编译器的构建步骤：`gcc selfhost/ctc.c` 与 `test/run.sh` 的编译相关层都不依赖它。
 演示由 `selfhost/check-ast.sh` 的 bindings 小节驱动：
 
 ```
@@ -206,7 +206,7 @@ cross-unit interface values are supported.
 
 ### 6. Building and testing
 
-A binding is **not** a compiler build step: neither `gcc ctc.c` nor the compilation layers of
+A binding is **not** a compiler build step: neither `gcc selfhost/ctc.c` nor the compilation layers of
 `test/run.sh` depend on it. The demo is driven by the bindings section of
 `selfhost/check-ast.sh` (build → `cc` → run → compare). Manual reproduction:
 

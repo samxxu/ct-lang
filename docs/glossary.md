@@ -124,7 +124,7 @@
 | 用例（fixture） | `test/cases/*.ct`、`test/errors/*.ct` | |
 | 正例（positive case） | `test/cases/` | 生成→逐字节比对→编译→运行 |
 | 负例（negative case） | `test/errors/<name>.expected-err` | `ctc` 必须非 0 退出且带期望诊断 |
-| 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | `#include "../../ctc.c"` 以触达 `static` 函数 |
+| 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | `#include "../../selfhost/ctc.c"` 以触达 `static` 函数 |
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
 | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
@@ -286,7 +286,7 @@
 | fixture | `test/cases/*.ct`, `test/errors/*.ct` | |
 | positive case | `test/cases/` | generate → byte diff → compile → run |
 | negative case | `test/errors/<name>.expected-err` | `ctc` must exit non-zero with the expected diagnostic |
-| white-box unit test | `test/unit/test_helpers.c` | `#include "../../ctc.c"` to reach `static` functions |
+| white-box unit test | `test/unit/test_helpers.c` | `#include "../../selfhost/ctc.c"` to reach `static` functions |
 | regeneration | `./ctc <case>.ct -o <case>.expected.c` | after an intended behaviour change, regenerate **and review the diff** |
 | grammar smoke test | `python3 editors/vscode/test/check-grammar.py` | checks the editor grammar, **stays out of** run.sh |
 | end-to-end | the examples layer | generate → build → run → compare |

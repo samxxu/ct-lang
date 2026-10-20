@@ -371,21 +371,21 @@ map trait Controller for instance huart1 {
 > **首版（Phase 1.7，用户 2026-10-13 拍板 Q1=A）**：`--diagnostics=json` **只输出诊断列表**（`{"warnings":[…]}`），
 > 符号表与调用图**尚未实现**，另开子项。`--diagnostics=text`（默认）为人可读 stderr。
 
-#### 自举策略与单文件边界（已定；`ctc.c` 自举启动即冻结，目录随布局定型落地）
+#### 自举策略与单文件边界（已定；`ctc.c` 自举启动即冻结，源码与三代 CT 编译器同处 `selfhost/`）
 
-- **渐进自举**：L0（C 写的最简 trait 编译器，即今天的 `ctc.c`）→ L1（CT trait-only 子集写的基础编译器）→ L2（全特性 CT 写的完整编译器）。
-- **Phase 0 边界**：`ctc.c` 留在仓库根目录、保持单文件（2026-10-11 用户确认）；不建 `src/`、不拆分。自举启动后才谈搬迁。
+- **渐进自举**：L0（C 写的最简 trait 编译器，即今天的 `selfhost/ctc.c`）→ L1（CT trait-only 子集写的基础编译器）→ L2（全特性 CT 写的完整编译器）。
+- **Phase 0 边界**：`ctc.c` 保持单文件；「留在仓库根目录」的旧口径（2026-10-11）已于 2026-10-20 修订为 `selfhost/ctc.c`（见下「冻结与位置」）。
 - **最小可自举版（2026-10-14 用户确认）**：优先用**单文件**（不用 namespace / `import` / 多文件）达成自举，
   以绕开前置条件 #1「跨单元引用带 trait 的对象」（vtable 变量为 `static`、`.h` 只放类型，跨翻译单元
   既写不了 vptr 也无法派发）。单文件路径的唯一硬阻塞是「`impl` 方法体内无法跨对象派发」，已由
   **Phase 1.9c** 解决（方法体走与顶层完全相同的重写管线：登记 `self` / 方法参数后逐行 `transform_line`）。
   结论：**单文件 + 完全 OO 已可自举**——namespace、多文件、诊断等非 OO 特性**不作为自举前提**，一律改用 CT 实现；C 侧的越位实现**先剥除归档（Phase 0.3）**，再由 Phase 2–5 用 CT 重做。
-- **冻结与搬迁**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）；移入 `ctrait/` 随自举结构稳定时一并做——**2026-10-15 用户确认：CT 侧布局定型前不搬**，`ctc.c` 继续留在仓库根目录。理由：这次搬迁并非单文件 `git mv`——草案里 `ctrait/` = 「`ctc.c` + 它自己的 `test/`」，隐含「把今天的 `test/` 拆成 L0 单测 vs 集成测试」这一设计任务；而 L1/L2 的 `src/` 分文件又依赖 L2 恢复多文件。故搬迁与 `src/` + `test/` 布局定型合并为**一次**独立 `chore` 提交，不做半次搬迁（见 [design/bootstrap.md](design/bootstrap.md)）。新特性一律在 CT 侧实现。
+- **冻结与位置（2026-10-20 修订）**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）。位置：2026-10-11 曾定「留仓库根目录」、2026-10-15 又定「等 CT 侧布局定型再一次性搬入 `ctrait/`」；**两版口径均已于 2026-10-20 作废**——最终决定是把 `ctc.c` 直接移入 **`selfhost/ctc.c`**，与三代 CT 编译器（`ctc.ct` / `src/` / `ast/`）同处，取消从未落地的 `ctrait/` 草案；二进制仍构建到仓库根 `./ctc`，故所有 `./ctc` 引用不变。理由：自举链已在 `selfhost/**` 运行，四代编译器同处一处更自洽，也免去一次性搬迁隐含的 `test/` 拆分前置。新特性一律在 CT 侧实现（见 [design/bootstrap.md](design/bootstrap.md)）。
 - **清理口径（2026-10-14 修订为「剥离在前」）**：**先**把越位落在 C 里的 namespace / 多文件 / import / Drop / `#line` / 诊断从 `ctc.c` **移出并归档为 oracle**（Phase 0.3），使 L0 成为**纯 OO 核心**（+底层设施）；**再**自举（Phase 1）；**最后**由 Phase 2 用 CT 逐项重做并向归档对差。两条硬前提：① **移出件不销毁**——归档件既是种子（唯一能生产 L1 的那个行为基准）也是差分 oracle（唯一能产出 byte-identical golden 的对照实现）；② **`ctc.c` 永不整体删除**，作为种子与差分 oracle 长期保留（先例：Rust 长期保留 stage0，Go 1.5 起弃用 stage0，两者皆可）。
 - **阶梯约束（源语言滞后一级）**：第 n 级编译器只能编译「第 n−1 级所支持的语法子集」写成的源码。因此 L1 源码只能用**单文件 + OO 子集**；CT 侧要**使用** namespace / Drop / import 组织编译器源码，必须先有支持它们的 CT 级编译器。**"重写完就删 C"顺序错**，必须逐级爬升。
-- **单仓库**：跨层编译与特性耦合决定了不拆仓库；`ctrait/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
+- **单仓库**：跨层编译与特性耦合决定了不拆仓库；`selfhost/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
 
-目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)（设计草案；目标 `ctrait/` 布局未落地，自举链已在 `selfhost/**` 运行）。
+目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)（自举链已落地于 `selfhost/**`，含 L0 种子 `selfhost/ctc.c`；早期 `ctrait/` 草案已废弃）。
 
 #### 自举前置条件（清单）
 
@@ -435,7 +435,7 @@ L1 / L2 要用 CT 写编译器，下列能力必须先成立（**2026-10-11 逐�
 既有验收（仍适用：零警告构建 + golden + 回归套件）：
 
 ```bash
-gcc -Wall -Wextra -std=c99 ctc.c -o ctc                            # 零警告
+gcc -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc                    # 零警告
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c             # 无报错，同时生成 /tmp/greeter.h
 gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 # Hello, I'm Tom, age 36
@@ -1286,12 +1286,12 @@ compilation or analysis of its own, so compiler upgrades never require extension
 > **diagnostic list only** (`{"warnings":[…]}`); the symbol table and call graph are **not implemented
 > yet** and are separate sub-items. `--diagnostics=text` (the default) is human-readable stderr.
 
-#### Bootstrap strategy and the single-file boundary (decided; `ctc.c` freezes when self-hosting starts, the layout lands once it settles)
+#### Bootstrap strategy and the single-file boundary (decided; `ctc.c` freezes when self-hosting starts, its source now sits beside the three CT generations under `selfhost/`)
 
-- **Progressive self-hosting**: L0 (the minimal trait compiler in C — today's `ctc.c`) → L1 (a base
+- **Progressive self-hosting**: L0 (the minimal trait compiler in C — today's `selfhost/ctc.c`) → L1 (a base
   compiler written in the CT trait-only subset) → L2 (the full compiler written in full-featured CT).
-- **Phase 0 boundary**: `ctc.c` stays at the repository root as a single file (confirmed by the
-  user on 2026-10-11); no `src/`, no splitting. The move is only discussed once self-hosting starts.
+- **Phase 0 boundary**: `ctc.c` stays a single file; the old "at the repository root" wording (2026-10-11)
+  was revised on 2026-10-20 to `selfhost/ctc.c` (see "Freezing and location" below).
 - **Minimal self-hostable version (confirmed by the user on 2026-10-14)**: aim for self-hosting in a
   **single file** first (no namespaces / `import` / multi-file), side-stepping prerequisite #1
   "referencing a trait-carrying object across units" (vtable variables are `static` and the `.h`
@@ -1302,15 +1302,16 @@ compilation or analysis of its own, so compiler upgrades never require extension
   **single-file, fully-OO program is self-hostable now** — non-OO features (namespaces, multi-file,
   diagnostics) are not a prerequisite for self-hosting; they are to be implemented in CT, while the C
   side over-reach is **stripped and archived first (Phase 0.3)** and redone in CT in Phases 2–5.
-- **Freezing and moving**: **once Phase 0.3's strip is done (i.e. when self-hosting starts)**,
-  `ctc.c` freezes as **L0 + the differential oracle** (bug fixes only, no new features); moving it into
-  `ctrait/` happens once the self-hosting layout settles — **confirmed by the user on 2026-10-15: do
-  not move before the CT-side layout settles**, so `ctc.c` stays at the repository root for now. The
-  reason is that this is not a single-file `git mv`: in the draft `ctrait/` = "`ctc.c` + its own
-  `test/`", which implies the design task of splitting today's `test/` into L0 unit tests vs
-  integration tests; and the L1/L2 `src/` split depends on L2 restoring multi-file. So the move is
-  merged with the `src/` + `test/` layout work into **one** `chore` commit rather than done half-way
-  (see [design/bootstrap.md](design/bootstrap.md)). New features are written in CT from then on.
+- **Freezing and location (revised 2026-10-20)**: **once Phase 0.3's strip is done (i.e. when self-hosting
+  starts)**, `ctc.c` freezes as **L0 + the differential oracle** (bug fixes only, no new features). On
+  location: 2026-10-11 first said "stay at the repository root" and 2026-10-15 said "wait for the CT-side
+  layout to settle, then move everything into `ctrait/`"; **both were superseded on 2026-10-20** — the
+  final decision moves `ctc.c` straight into **`selfhost/ctc.c`**, beside the three CT generations
+  (`ctc.ct` / `src/` / `ast/`), dropping the never-built `ctrait/` draft; the binary is still built to the
+  repository root (`./ctc`), so every `./ctc` reference is unchanged. The reason: the chain already runs
+  under `selfhost/**`, and putting all four generations together is more coherent and avoids the `test/`
+  split that the one-shot move implied. New features are written in CT from then on
+  (see [design/bootstrap.md](design/bootstrap.md)).
 - **Cleanup scope (revised 2026-10-14 to "strip first")**: **first** move the namespace / multi-file /
   import / Drop / `#line` / diagnostics implementations that over-reached into C **out of `ctc.c` and
   into the archive as the oracle** (Phase 0.3), so L0 becomes the **pure-OO core** (+ low-level
@@ -1326,11 +1327,12 @@ compilation or analysis of its own, so compiler upgrades never require extension
   CT-level compiler that supports them must already exist. **"Rewrite, then delete the C" is the wrong
   order** — the climb has to be level by level.
 - **Single repository**: cross-layer compilation and feature coupling rule out splitting repos; if
-  `ctrait/` ever needs standalone distribution, `git subtree` / `git filter-repo` splits it without
+  `selfhost/` ever needs standalone distribution, `git subtree` / `git filter-repo` splits it without
   losing history.
 
-The target layout, layering rules, build flow and milestones (M1–M6) live in
-[design/bootstrap.md](design/bootstrap.md) (design draft, not implemented).
+The layout, layering rules, build flow and milestones (M1–M6) live in
+[design/bootstrap.md](design/bootstrap.md) (the chain has landed under `selfhost/**`, including the L0
+seed `selfhost/ctc.c`; the earlier `ctrait/` draft is abandoned).
 
 #### Bootstrap prerequisites (checklist)
 
@@ -1386,7 +1388,7 @@ defect to patch.
 The existing acceptance still applies (warning-free build + goldens + the regression suite):
 
 ```bash
-gcc -Wall -Wextra -std=c99 ctc.c -o ctc                            # zero warnings
+gcc -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc                    # zero warnings
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c             # no errors; also emits /tmp/greeter.h
 gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 # Hello, I'm Tom, age 36

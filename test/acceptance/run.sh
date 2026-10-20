@@ -40,8 +40,8 @@ if [ -z "$CT" ]; then
     # instead is still possible via `CT=<l2 binary>` and used to be the default
     # until Phase 12; L0 (`CT=<l0 binary>`) is also honoured, but its PENDING
     # verdicts are then expected, not failures.
-    if ! $CC $CFLAGS ctc.c -o "$TMP/ctc-l0" 2>"$TMP/build.log"; then
-        echo "building ctc.c (L0) failed:"
+    if ! $CC $CFLAGS selfhost/ctc.c -o "$TMP/ctc-l0" 2>"$TMP/build.log"; then
+        echo "building selfhost/ctc.c (L0) failed:"
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi

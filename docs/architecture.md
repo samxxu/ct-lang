@@ -12,7 +12,7 @@
 
 | 目标 | 具体含义 |
 | --- | --- |
-| 单文件 | 全部实现放在 `ctc.c`，`gcc ctc.c -o ctc` 一步可构建 |
+| 单文件 | 全部实现放在 `selfhost/ctc.c`，`gcc selfhost/ctc.c -o ctc` 一步可构建 |
 | 可通读 | 无第三方依赖、无自动生成代码、无构建系统；总量控制在千行量级 |
 | 结构转换 | 只做「识别 + 重写」，不做类型检查、不做语义分析、不做优化 |
 | 输出可读 | 生成结果是普通 C，命名可预测，缩进干净，可直接被人阅读和调试 |
@@ -161,7 +161,7 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 
 ### 9. 测试如何挂到这份代码上
 
-- `test/unit/test_helpers.c` 用 `#define main ctc_main_unused_in_tests` 再 `#include "../../ctc.c"`，
+- `test/unit/test_helpers.c` 用 `#define main ctc_main_unused_in_tests` 再 `#include "../../selfhost/ctc.c"`，
   把整个编译器拉进同一个翻译单元，从而能直接调用 `static` 函数 —— 在「单文件 + 全部 static」的结构下，
   这是做白盒单测的唯一办法。被覆盖的纯函数清单就写在那个文件里。
 - 因此：**重命名、改签名或删除被单测覆盖的 `static` 函数，必须同步改 `test/unit/test_helpers.c`**。
@@ -177,12 +177,12 @@ ImplMethod { name, params, bstart, blen }   /* 方法体只存 g_src 的偏移+�
 
 ### 1. Design goals
 
-Single file — everything lives in `ctc.c` and `gcc ctc.c -o ctc` builds it in one step. Readable end
-to end — no third-party dependencies, no generated code, no build system, kept within roughly a
-thousand lines. Structure rewriting only — recognise and rewrite, with no type checking, no semantic
-analysis and no optimisation. Readable output — plain C with predictable naming and clean
-indentation, meant to be read and debugged by a human. Fail loud — unparseable input exits with a
-line/column error and never silently produces bad code (a few truncations excepted, see §7).
+Single file — everything lives in `selfhost/ctc.c` and `gcc selfhost/ctc.c -o ctc` builds it in one
+step. Readable end to end — no third-party dependencies, no generated code, no build system, kept
+within roughly a thousand lines. Structure rewriting only — recognise and rewrite, with no type
+checking, no semantic analysis and no optimisation. Readable output — plain C with predictable naming
+and clean indentation, meant to be read and debugged by a human. Fail loud — unparseable input exits
+with a line/column error and never silently produces bad code (a few truncations excepted, see §7).
 
 Non-goals: full C parsing (no token stream, no AST), error recovery, multiple files, and a
 cross-platform build system.
@@ -334,7 +334,7 @@ error counter), and the automated regression suite described in `roadmap.md`.
 ### 9. How the tests attach to this code
 
 `test/unit/test_helpers.c` uses `#define main ctc_main_unused_in_tests` followed by
-`#include "../../ctc.c"` to pull the whole compiler into a single translation unit — with a one-file,
+`#include "../../selfhost/ctc.c"` to pull the whole compiler into a single translation unit — with a one-file,
 all-`static` design this is the only way to call the helpers directly. The list of covered helpers
 lives in that file, so **renaming, re-signing or removing a covered helper requires updating it too**.
 The golden cases in `test/cases/*` do not use that trick: `test/run.sh` drives the real CLI

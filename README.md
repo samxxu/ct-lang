@@ -8,7 +8,7 @@
 命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
 
 ```bash
-gcc ctc.c -o ctc
+gcc selfhost/ctc.c -o ctc
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c
 gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ```
@@ -31,7 +31,7 @@ C 没有虚函数表，想在 C 里模拟「接口 + 多态」要手写一大堆
 
 ```bash
 # 1) 构建编译器
-gcc ctc.c -o ctc
+gcc selfhost/ctc.c -o ctc
 
 # 2) 编译 .ct 到 .c（同时生成同名 .h）；产物可放任意目录
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c
@@ -71,7 +71,7 @@ gcc /tmp/greeter.c -o /tmp/greeter
 `ct` 由 **ct-ast**（`selfhost/ast/main.ct`）提供，**不引入构建系统或安装脚本**：把自举链编到 L2，由 L2 编出 ct-ast，把二进制命名为 `ct`，再用软链补上 `ctc` 别名即可（L0 种子本身也叫 `ctc`，故别名要装到**独立目录**，不要和种子同名同处）。L2（`selfhost/src/**`）自 Phase 10.7 起只作回归 oracle。
 
 ```sh
-gcc -Wall -Wextra -std=c99 ctc.c -o ctc                      # L0 种子（唯一的 C 构建，名字是 ctc）
+gcc -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc             # L0 种子（唯一的 C 构建，名字是 ctc）
 ./ctc selfhost/ctc.ct -o /tmp/ctc-l1.c                       # L0 编出 L1 的 C
 gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # 得到 L1
 mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/src/driver.ct -o /tmp/ct-l2   # L1 编出 L2 源
@@ -231,12 +231,16 @@ CC=gcc ./test/run.sh     # 指定 C 编译器（默认 cc）
 ```
 
 ```
-test/
-├── run.sh                       驱动器：构建 → 单测 → golden → examples → dialect → 负例 → limits → cli
-├── unit/test_helpers.c          白盒单测（直接 include ctc.c 以触达 static 函数）
-├── cases/                       golden 正例：<name>.ct + <name>.expected.c / .h / .out
-├── errors/                      负例：<name>.ct + <name>.expected-err
-└── archive/                     Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
+test/                             测试（分层地图见 test/README.md）
+├── run.sh                        L0 驱动器：构建 → 单测 → golden → examples → dialect → 负例 → limits → cli
+├── unit/test_helpers.c           白盒单测（直接 include ctc.c 以触达 static 函数）
+├── cases/                        golden 正例：<name>.ct + <name>.expected.c / .h / .out
+├── errors/                       负例：<name>.ct + <name>.expected-err
+├── archive/                      Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
+├── modules/                      CT 线（L2 / ct-ast）多单元与特性探针：一目录一用例
+├── ast/                          ct-ast 行为探针：一目录一用例；errors/ 为裸负例（由 check-ast 断言退出码）
+├── acceptance/                   端到端验收清单（run.sh；PENDING 属预期，不阻断）
+└── pkg/                          包管理器 `ct get` / `ct install` 用例（run.sh）
 ```
 
 八层断言：
@@ -294,28 +298,35 @@ bash selfhost/ct-tour.sh           # 演示整条自举链
 
 ```
 ct/
-├── ctc.c                     编译器全部实现（单文件，无第三方依赖）
-├── examples/                 可运行示例，每个例子一个目录
-│   ├── 01_greeter/           greeter.ct       + greeter.expected.out
-│   ├── 02_market/            market.ct        + market.expected.out
-│   ├── 03_receivers/         receivers.ct     + receivers.expected.out
-│   ├── 04_rvalue/            rvalue.ct        + rvalue.expected.out
-│   ├── 05_body_dispatch/     body_dispatch.ct + body_dispatch.expected.out
-│   ├── 06_iface_field/       iface_field.ct   + iface_field.expected.out
-│   └── 07_dialect/           registry.ct + ct-dialects/register-map.sh（方言插件，见 AGENTS §2）
-├── test/                     测试：runner、白盒单测、golden 正例与负例
-├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
-├── .gitignore                忽略构建产物与 examples 下的生成物
-├── LICENSE                   GPL-3.0 全文（编译器本体）
-├── LICENSE.EXCEPTION         输出例外 + examples/test/editors 的 MIT
 ├── README.md                 本文件
 ├── AGENTS.md                 给 AI 编码代理的项目规约
-└── docs/
-    ├── vision.md             定位、设计原则与生态策略（为什么）
-    ├── roadmap.md            阶段规划、已定决策与验收标准（接下来做什么）
-    ├── language-spec.md      .ct 语法规范与展开规则（现状）
-    ├── architecture.md       编译器内部结构与关键算法
-    └── design/bootstrap.md   自举设计草案（未实现）
+├── LICENSE                   GPL-3.0 全文（编译器本体）
+├── LICENSE.EXCEPTION         输出例外 + examples/test/editors 的 MIT
+├── .gitignore                忽略构建产物与 examples 下的生成物
+├── examples/                 可运行示例，每个例子一目录（<name>.ct + <name>.expected.out）
+│   ├── 01_greeter/ … 06_iface_field/
+│   └── 07_dialect/           registry.ct + ct-dialects/（方言插件，见 AGENTS §2）
+├── selfhost/                 自举链：四代编译器源码 + 7 个门禁脚本（详见 selfhost/README.md）
+│   ├── ctc.c                 L0 C 种子（单文件，无第三方依赖）
+│   ├── ctc.ct                L1 种子（冻结；能力停在 Phase 2）
+│   ├── src/                  L2：多单元源码树（core.ct + driver.ct；Phase 10.7 起为回归 oracle）
+│   ├── ast/main.ct           ct-ast：Phase 9 主线，Phase 10.7 起提供安装入口
+│   └── check-*.sh / ct-tour.sh   门禁脚本（aggregate 入口 check-all.sh；用法见 README §5）
+├── bindings/                 C 库的声明式 binding（Phase 12）：直通 #include + 镜像 trait/struct + map
+│   └── mock-hal/             首个官方 binding（自带假 HAL 的 C 头/实现，仅作演示与测试）
+├── test/                     测试（分层地图见 test/README.md）
+├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
+├── docs/                     文档
+│   ├── vision.md             定位、设计原则与生态策略（为什么）
+│   ├── roadmap.md            阶段规划、已定决策与验收标准（接下来做什么）
+│   ├── language-spec.md      .ct 语法规范与展开规则（现状）
+│   ├── architecture.md       编译器内部结构与关键算法
+│   ├── construction.md       对象构造语义（vptr 由谁、何时写入）
+│   ├── polymorphism.md       接口多态与派发
+│   ├── glossary.md           术语表
+│   └── design/               各阶段设计（草案与已实现的并存，冲突时以代码为准）
+├── issues/                   审查发现台账（元工件：每条一文件，索引见 issues/README.md）
+└── reports/                  评审报告与交付 HTML（元工件：自包含，各自带 _shared 资产）
 ```
 
 展开产物（`.c` / `.h`、可执行文件）一律不入库，写到临时目录或按需生成。
@@ -411,7 +422,7 @@ library dependency.
 ### 2. Quick start
 
 ```bash
-gcc ctc.c -o ctc
+gcc selfhost/ctc.c -o ctc
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c
 gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ```
@@ -458,7 +469,7 @@ the identity.
 `ct` comes from **ct-ast** (`selfhost/ast/main.ct`); there is **no build system and no install script**. Compile the bootstrap chain up to L2, have L2 build ct-ast, name the binary `ct`, and provide the `ctc` alias with a symlink (the L0 seed is itself named `ctc`, so install the alias into a **separate directory**, not next to the seed). L2 (`selfhost/src/**`) is the regression oracle only from Phase 10.7 on.
 
 ```sh
-gcc -Wall -Wextra -std=c99 ctc.c -o ctc                      # the L0 seed (the only C build; named ctc)
+gcc -Wall -Wextra -std=c99 selfhost/ctc.c -o ctc             # the L0 seed (the only C build; named ctc)
 ./ctc selfhost/ctc.ct -o /tmp/ctc-l1.c                       # L0 compiles L1 to C
 gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # build L1
 mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/src/driver.ct -o /tmp/ct-l2   # L1 builds L2
@@ -656,12 +667,17 @@ CC=gcc ./test/run.sh     # pick a C compiler (default: cc)
 ```
 
 ```
-test/
-├── run.sh                       driver: build → unit → golden → examples → dialect → errors → limits → cli
-├── unit/test_helpers.c          white-box unit tests (includes ctc.c to reach statics)
-├── cases/                       golden positives: <name>.ct + <name>.expected.c / .h / .out
-├── errors/                      negatives: <name>.ct + <name>.expected-err
-└── archive/                     Phase 0.3 fixtures for the removed over-reach (Phases 2–5 diff baseline; not run)
+test/                             tests (layer map in test/README.md)
+├── run.sh                        L0 driver: build → unit → golden → examples → dialect → errors → limits → cli
+├── unit/test_helpers.c           white-box unit tests (includes ctc.c to reach statics)
+├── cases/                        golden positives: <name>.ct + <name>.expected.c / .h / .out
+├── errors/                       negatives: <name>.ct + <name>.expected-err
+├── archive/                      Phase 0.3 over-reach fixtures (Phases 2–5 diff baseline; not run)
+├── modules/                      CT-line (L2 / ct-ast) multi-unit and feature probes: one directory per case
+├── ast/                          ct-ast behavioural probes: one directory per case; errors/ holds bare negatives
+│                                 (asserted on exit code by check-ast.sh, no .expected-err)
+├── acceptance/                   end-to-end acceptance checklist (run.sh; PENDING is expected, non-blocking)
+└── pkg/                          package-manager `ct get` / `ct install` cases (run.sh)
 ```
 
 Eight layers of assertions:
@@ -735,28 +751,36 @@ bash selfhost/ct-tour.sh           # walk the whole bootstrap chain
 
 ```
 ct/
-├── ctc.c                     the whole compiler (single file, no third-party dependencies)
-├── examples/                 runnable demos, one directory per example
-│   ├── 01_greeter/           greeter.ct       + greeter.expected.out
-│   ├── 02_market/            market.ct        + market.expected.out
-│   ├── 03_receivers/         receivers.ct     + receivers.expected.out
-│   ├── 04_rvalue/            rvalue.ct        + rvalue.expected.out
-│   ├── 05_body_dispatch/     body_dispatch.ct + body_dispatch.expected.out
-│   ├── 06_iface_field/       iface_field.ct   + iface_field.expected.out
-│   └── 07_dialect/           registry.ct + ct-dialects/register-map.sh (dialect plugin, see AGENTS §2)
-├── test/                     tests: runner, white-box unit tests, golden positives and negatives
-├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
-├── .gitignore                ignores build products and the files generated under examples
-├── LICENSE                   GPL-3.0 full text (the compiler itself)
-├── LICENSE.EXCEPTION         the output exception + MIT for examples/test/editors
 ├── README.md                 this file
 ├── AGENTS.md                 the project contract for AI coding agents
-└── docs/
-    ├── vision.md             positioning, design principles and ecosystem strategy (the why)
-    ├── roadmap.md            phase plan, decided decisions and acceptance criteria (what is next)
-    ├── language-spec.md      .ct grammar and expansion rules (current state)
-    ├── architecture.md       compiler internals and key algorithms
-    └── design/bootstrap.md   bootstrap design draft (not implemented)
+├── LICENSE                   GPL-3.0 full text (the compiler itself)
+├── LICENSE.EXCEPTION         the output exception + MIT for examples/test/editors
+├── .gitignore                ignores build products and the files generated under examples
+├── examples/                 runnable demos, one directory per example (<name>.ct + <name>.expected.out)
+│   ├── 01_greeter/ … 06_iface_field/
+│   └── 07_dialect/           registry.ct + ct-dialects/ (dialect plugin, see AGENTS §2)
+├── selfhost/                 the bootstrap chain: four compiler generations + 7 gate scripts
+│                             (every detail in selfhost/README.md)
+│   ├── ctc.c                 the L0 C seed (single file, no third-party dependencies)
+│   ├── ctc.ct                L1 seed (frozen; capability stops at Phase 2)
+│   ├── src/                  L2: the multi-unit tree (core.ct + driver.ct; regression oracle since 10.7)
+│   ├── ast/main.ct           ct-ast: the Phase 9 mainline, the installed entry since 10.7
+│   └── check-*.sh / ct-tour.sh   gate scripts (check-all.sh aggregates; usage in README §5)
+├── bindings/                 declarative bindings to C libraries (Phase 12): #include + mirrored traits/structs + map
+│   └── mock-hal/             the first official binding (ships a fake HAL header/impl, for demos and tests only)
+├── test/                     tests (layer map in test/README.md)
+├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
+├── docs/                     documentation
+│   ├── vision.md             positioning, design principles and ecosystem strategy (the why)
+│   ├── roadmap.md            phase plan, decided decisions and acceptance criteria (what is next)
+│   ├── language-spec.md      .ct grammar and expansion rules (current state)
+│   ├── architecture.md       compiler internals and key algorithms
+│   ├── construction.md       object-construction semantics (who writes the vptr, and when)
+│   ├── polymorphism.md       interface polymorphism and dispatch
+│   ├── glossary.md           glossary of terms
+│   └── design/               per-phase design notes (drafts and shipped ones; the code wins on conflict)
+├── issues/                   review-findings register (meta; one file per finding, index in issues/README.md)
+└── reports/                  review reports and delivered HTML (meta; self-contained, each with _shared assets)
 ```
 
 Expanded artifacts (`.c` / `.h`, executables) are never committed; write them to a temporary
