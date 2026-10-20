@@ -23,6 +23,7 @@
 import tool::pkg::pkg;
 import tool::diag::diag;
 import runtime::arena::arena;
+import frontend::lex::lexer;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -456,18 +457,9 @@ struct Ast {
     /* The node pool and the literal pool live in runtime::arena; the driver
        points this at that singleton before it dispatches to `run`. */
     struct runtime_arena_Arena *arena;
-    /* Lexer: the source, the cursor and the current token. `tokstart` and
-       `lstart` give a column as tokstart - lstart + 1. */
-    const char *src;
-    int  pos;
-    int  bol;
-    int  tok;
-    char toktext[MAX_TEXT];
-    long toknum;
-    int  line;                  /* 1-based */
-    int  tokline;               /* line of the current token */
-    int  tokstart;
-    int  lstart;
+    /* The source cursor and the current token live in frontend::lex; the driver
+       points this at that singleton before it dispatches to `run`. */
+    struct frontend_lex_Lexer *lex;
     /* Symbol tables of the unit being compiled: functions, locals and scopes,
        type tags, traits and structs, plus the impl/return context the parser
        threads through. The driver resets them per unit. */
@@ -546,7 +538,7 @@ impl AstOps for Ast {
        stay here. */
     int new_node(int kind)
     {
-        int n = self->arena->alloc(kind, self->tokline);
+        int n = self->arena->alloc(kind, self->lex->tokline);
         if (n < 0) return self->fail("too many AST nodes");
         return n;
     }
@@ -557,177 +549,22 @@ impl AstOps for Ast {
         /* the line and the offending token are the two things a self-hosting
            run needs to locate a gap; diagnostics are not compared (D34) */
         if (!self->errmsg[0])
-            snprintf(self->errmsg, sizeof self->errmsg, "line %d: %s (at '%s')", self->tokline, msg, self->toktext);
+            snprintf(self->errmsg, sizeof self->errmsg, "line %d: %s (at '%s')", self->lex->tokline, msg, self->lex->toktext);
         return -1;
     }
 
+    /* The characters are frontend::lex's business; the parser only asks for the
+       next token. */
     void lex_next(void)
     {
-        int c, n;
         (void)self;
-
-        for (;;) {
-            c = (unsigned char)self->src[self->pos];
-            if (c == 0) { self->tok = T_EOF; self->toktext[0] = 0; return; }
-            if (c == '\n') { self->bol = 1; self->line++; self->pos++; self->lstart = self->pos; continue; }
-            if (c == ' ' || c == '\t' || c == '\r') { self->pos++; continue; }
-            if (c == '/' && self->src[self->pos + 1] == '/') {
-                while (self->src[self->pos] && self->src[self->pos] != '\n') self->pos++;
-                continue;
-            }
-            if (c == '/' && self->src[self->pos + 1] == '*') {
-                self->pos += 2;
-                while (self->src[self->pos] && !(self->src[self->pos] == '*' && self->src[self->pos + 1] == '/')) {
-                    if (self->src[self->pos] == '\n') self->line++;
-                    self->pos++;
-                }
-                if (self->src[self->pos]) self->pos += 2;
-                continue;
-            }
-            break;
-        }
-        self->tokstart = self->pos;
-        self->tokline = self->line;
-        if (self->bol && c == '#') {
-            n = 0;
-            while (self->src[self->pos] && self->src[self->pos] != '\n') {
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                self->pos++;
-            }
-            self->toktext[n] = 0;
-            self->tok = T_PP;
-            self->bol = 0;
-            return;
-        }
-        self->bol = 0;
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
-            n = 0;
-            while (self->src[self->pos] && ((self->src[self->pos] >= 'a' && self->src[self->pos] <= 'z')
-                   || (self->src[self->pos] >= 'A' && self->src[self->pos] <= 'Z')
-                   || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
-                   || self->src[self->pos] == '_')) {
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                self->pos++;
-            }
-            self->toktext[n] = 0;
-            self->tok = T_ID;
-            return;
-        }
-        if (c >= '0' && c <= '9') {
-            self->toknum = 0;
-            if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
-                self->pos += 2;
-                for (;;) {
-                    char h = self->src[self->pos];
-                    int dv;
-                    if (h >= '0' && h <= '9') dv = h - '0';
-                    else if (h >= 'a' && h <= 'f') dv = h - 'a' + 10;
-                    else if (h >= 'A' && h <= 'F') dv = h - 'A' + 10;
-                    else break;
-                    self->toknum = self->toknum * 16 + dv;
-                    self->pos++;
-                }
-            } else if (c == '0' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '7') {
-                /* a leading zero makes the literal octal in C; reading it as
-                   decimal changed 0755 into 755 (a mode argument silently became
-                   a decimal value) */
-                self->pos++;
-                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '7') {
-                    self->toknum = self->toknum * 8 + (self->src[self->pos] - '0');
-                    self->pos++;
-                }
-            } else {
-                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
-                    self->toknum = self->toknum * 10 + (self->src[self->pos] - '0');
-                    self->pos++;
-                }
-            }
-            self->tok = T_NUM;
-            return;
-        }
-        if (c == '"' || c == '\'') {
-            char q = (char)c;
-            n = 0;
-            self->toktext[n] = q;
-            n++;
-            self->pos++;
-            while (self->src[self->pos] && self->src[self->pos] != q) {
-                if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
-                    if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                    self->pos++;
-                }
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                self->pos++;
-            }
-            if (self->src[self->pos] == q) {
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = q; n++; }
-                self->pos++;
-            }
-            self->toktext[n] = 0;
-            self->tok = T_STR;
-            return;
-        }
-        if (c == '-' && self->src[self->pos + 1] == '>') {
-            self->toktext[0] = '-';
-            self->toktext[1] = '>';
-            self->toktext[2] = 0;
-            self->tok = T_PUNCT;
-            self->pos += 2;
-            return;
-        }
-        if (c == ':' && self->src[self->pos + 1] == ':') {
-            self->toktext[0] = ':';
-            self->toktext[1] = ':';
-            self->toktext[2] = 0;
-            self->tok = T_PUNCT;
-            self->pos += 2;
-            return;
-        }
-        if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = '=';
-            self->toktext[2] = 0;
-            self->tok = T_PUNCT;
-            self->pos += 2;
-            return;
-        }
-        if ((c == '+' || c == '-') && self->src[self->pos + 1] == c) {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = (char)c;
-            self->toktext[2] = 0;
-            self->tok = T_PUNCT;
-            self->pos += 2;
-            return;
-        }
-        /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
-        if ((c == '&' || c == '|') && self->src[self->pos + 1] == c) {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = (char)c;
-            self->toktext[2] = 0;
-            self->tok = T_PUNCT;
-            self->pos += 2;
-            return;
-        }
-        /* compound assignment: `+=` `-=` `*=` `/=` `%=` */
-        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
-            && self->src[self->pos + 1] == '=') {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = '=';
-            self->toktext[2] = 0;
-            self->tok = T_PUNCT;
-            self->pos += 2;
-            return;
-        }
-        self->toktext[0] = (char)c;
-        self->toktext[1] = 0;
-        self->tok = T_PUNCT;
-        self->pos++;
+        self->lex->next();
     }
 
     int accept(const char *p)
     {
         (void)self;
-        if (self->tok == T_PUNCT && strcmp(self->toktext, p) == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, p) == 0) {
             self->lex_next();
             return 1;
         }
@@ -769,7 +606,7 @@ impl AstOps for Ast {
         }
         fclose(f);
         buf[sz] = 0;
-        self->src = buf;
+        self->lex->src = buf;
         return 0;
     }
 
@@ -904,12 +741,12 @@ impl AstOps for Ast {
         }
 
         self->path = in;
-        self->pos = 0;
-        self->bol = 1;
-        self->line = 1;
-        self->tokline = 1;
-        self->lstart = 0;
-        self->tokstart = 0;
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->lstart = 0;
+        self->lex->tokstart = 0;
         ct_diag_reset();
         self->arena->reset();
         self->nfunc = 0;
@@ -1265,24 +1102,24 @@ impl ParseOps for Ast {
         n = 0;
         out[0] = 0;
         for (;;) {
-            if (self->tok == T_ID && self->is_type_word(self->toktext)) {
-                if (self->type_append(out, cap, &n, self->toktext) != 0) return -1;
-                if (strcmp(self->toktext, "struct") == 0) {
+            if (self->lex->tok == T_ID && self->is_type_word(self->lex->toktext)) {
+                if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
+                if (strcmp(self->lex->toktext, "struct") == 0) {
                     char sname[MAX_TEXT];
                     self->lex_next();
-                    if (self->tok != T_ID) return self->fail("expected a struct name");
-                    if (self->resolve_type(self->toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->lex->tok != T_ID) return self->fail("expected a struct name");
+                    if (self->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->add_type(sname, 1) != 0) return -1;
                 }
                 self->lex_next();
                 continue;
             }
-            if (self->tok == T_ID) {
+            if (self->lex->tok == T_ID) {
                 int ti;
                 char rname[MAX_TEXT];
                 char iface[MAX_TEXT];
-                if (self->resolve_type(self->toktext, rname, sizeof rname) != 0) return -1;
+                if (self->resolve_type(self->lex->toktext, rname, sizeof rname) != 0) return -1;
                 ti = self->find_type(rname);
                 if (ti < 0) break;
                 /* a bare struct tag needs `struct`; a trait becomes its iface */
@@ -1300,7 +1137,7 @@ impl ParseOps for Ast {
                 self->lex_next();
                 continue;
             }
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "*") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
                 if (self->type_append(out, cap, &n, "*") != 0) return -1;
                 self->lex_next();
                 continue;
@@ -1309,7 +1146,7 @@ impl ParseOps for Ast {
         }
         if (n == 0) {
             char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "expected a type (tok %d '%s')", self->tok, self->toktext);
+            snprintf(msg, sizeof msg, "expected a type (tok %d '%s')", self->lex->tok, self->lex->toktext);
             return self->fail(msg);
         }
         return 0;
@@ -1322,17 +1159,17 @@ impl ParseOps for Ast {
     int parse_array_dims(int n)
     {
         (void)self;
-        while (self->tok == T_PUNCT && strcmp(self->toktext, "[") == 0) {
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
             char dim[MAX_TEXT];
             char cur[MAX_TEXT];
             int unsized;
             unsized = 0;
             self->lex_next();
-            if (self->tok == T_NUM) {
-                snprintf(dim, sizeof dim, "[%ld]", self->toknum);
-            } else if (self->tok == T_ID) {
-                snprintf(dim, sizeof dim, "[%s]", self->toktext);
-            } else if (self->tok == T_PUNCT && strcmp(self->toktext, "]") == 0) {
+            if (self->lex->tok == T_NUM) {
+                snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
+            } else if (self->lex->tok == T_ID) {
+                snprintf(dim, sizeof dim, "[%s]", self->lex->toktext);
+            } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0) {
                 /* `T a[][N]`: an unsized parameter dimension (10.6) */
                 snprintf(dim, sizeof dim, "[]");
                 unsized = 1;
@@ -1358,23 +1195,23 @@ impl ParseOps for Ast {
         size_t save_pos;
         char save_text[MAX_TEXT];
         (void)self;
-        save_tok = self->tok;
-        save_num = self->toknum;
-        save_line = self->tokline;
-        save_pos = self->pos;
-        save_srcline = self->line;
-        save_bol = self->bol;
-        snprintf(save_text, sizeof save_text, "%s", self->toktext);
+        save_tok = self->lex->tok;
+        save_num = self->lex->toknum;
+        save_line = self->lex->tokline;
+        save_pos = self->lex->pos;
+        save_srcline = self->lex->line;
+        save_bol = self->lex->bol;
+        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
         self->lex_next();
-        res = (self->tok == T_ID && (self->is_type_word(self->toktext)
-                                 || self->find_type(self->toktext) >= 0));
-        self->tok = save_tok;
-        self->toknum = save_num;
-        self->tokline = save_line;
-        self->pos = save_pos;
-        self->line = save_srcline;
-        self->bol = save_bol;
-        snprintf(self->toktext, MAX_TEXT, "%s", save_text);
+        res = (self->lex->tok == T_ID && (self->is_type_word(self->lex->toktext)
+                                 || self->find_type(self->lex->toktext) >= 0));
+        self->lex->tok = save_tok;
+        self->lex->toknum = save_num;
+        self->lex->tokline = save_line;
+        self->lex->pos = save_pos;
+        self->lex->line = save_srcline;
+        self->lex->bol = save_bol;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
         return res;
     }
 
@@ -1387,22 +1224,22 @@ impl ParseOps for Ast {
         if (prog < 0) return -1;
         base = ct_diag_nsem();
         self->lex_next();
-        while (self->tok != T_EOF) {
-            if (self->tok == T_PP) {
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PP) {
                 n = self->new_node(N_PP);
                 if (n < 0) return -1;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->toktext);
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
                 if (self->append_node(prog, n) != 0) return -1;
                 self->lex_next();
                 continue;
             }
-            if (self->tok == T_ID && strcmp(self->toktext, "import") == 0) {
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
                 if (!self->build_mode)
                     return self->fail("'import' is not supported in compile mode");
                 if (self->skip_import() != 0) return -1;
                 continue;
             }
-            if (self->tok == T_ID && strcmp(self->toktext, "namespace") == 0) {
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "namespace") == 0) {
                 if (self->parse_namespace(prog) != 0) return -1;
                 continue;
             }
@@ -1431,12 +1268,12 @@ impl ParseOps for Ast {
         char name[MAX_TEXT];
         (void)self;
 
-        func_line = self->tokline;
+        func_line = self->lex->tokline;
         if (self->parse_type(ret, sizeof ret) != 0) return -1;
-        if (self->tok != T_ID) return self->fail("expected a name");
-        snprintf(name, sizeof name, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a name");
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
         self->lex_next();
-        if (self->tok != T_PUNCT || strcmp(self->toktext, "(") != 0) {
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
             g = self->new_node(N_GLOBAL);
             if (g < 0) return -1;
@@ -1449,7 +1286,7 @@ impl ParseOps for Ast {
             if (self->declare_var(name, ret) != 0) return -1;
             if (self->parse_array_dims(g) != 0) return -1;
             if (self->accept("=")) {
-                if (self->tok == T_PUNCT && strcmp(self->toktext, "{") == 0) {
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
                     char raw[MAX_TEXT];
                     char fixed[MAX_TEXT];
                     e = self->new_node(N_RAW);
@@ -1472,7 +1309,7 @@ impl ParseOps for Ast {
             self->pop_scope();
             return -1;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             self->lex_next();
             fi = self->add_func(name, ret, is_static, is_pub, params);
             if (fi < 0) {
@@ -1534,19 +1371,19 @@ impl ParseOps for Ast {
         first = 0;
         tail = 0;
         if (self->expect("(") != 0) return -1;
-        if (self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
             self->lex_next();
             return 0;
         }
         for (;;) {
             if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0 &&
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0 &&
                 strcmp(typebuf, "void") == 0) {
                 self->lex_next();
                 return 0;
             }
-            if (self->tok != T_ID) return self->fail("expected a parameter name");
-            snprintf(name, sizeof name, "%s", self->toktext);
+            if (self->lex->tok != T_ID) return self->fail("expected a parameter name");
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->lex_next();
             p = self->new_node(N_PARAM);
             if (p < 0) return -1;
@@ -1562,7 +1399,7 @@ impl ParseOps for Ast {
             else self->arena->nodes[tail].next = p;
             tail = p;
             self->nparams++;
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                 self->lex_next();
                 continue;
             }
@@ -1580,8 +1417,8 @@ impl ParseOps for Ast {
         (void)self;
 
         if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-        if (self->tok != T_ID) return self->fail("expected a field name");
-        snprintf(name, sizeof name, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a field name");
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
         self->lex_next();
         m = self->new_node(N_FIELD);
         if (m < 0) return -1;
@@ -1600,20 +1437,20 @@ impl ParseOps for Ast {
         char qname[MAX_TEXT];
         (void)self;
 
-        struct_line = self->tokline;
+        struct_line = self->lex->tokline;
         brace_line = 0;
         brace_col = 1;
         self->lex_next();
         name[0] = 0;
         qname[0] = 0;
-        if (self->tok == T_ID) {
-            snprintf(name, sizeof name, "%s", self->toktext);
+        if (self->lex->tok == T_ID) {
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
             if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
             if (self->add_type(qname, 1) != 0) return -1;
             if (self->add_struct(qname) < 0) return -1;
             self->lex_next();
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             /* `struct X;` -- a forward declaration: the tag is registered above,
                so `struct X *p` parses; the body may follow later */
             self->lex_next();
@@ -1626,12 +1463,12 @@ impl ParseOps for Ast {
             if (ex >= 0 && self->structs[ex].defined) {
                 char msg[MAX_TEXT];
                 snprintf(msg, sizeof msg, "duplicate struct '%s'", name);
-                return ct_sem_error(self->tokline, self->tokstart - self->lstart + 1, msg, self->path);
+                return ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->path);
             }
         }
         /* the body's `{` is where L2 reports an unresolved `use` trait */
-        brace_line = self->tokline;
-        brace_col = self->tokstart - self->lstart + 1;
+        brace_line = self->lex->tokline;
+        brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->expect("{") != 0) return -1;
         s = self->new_node(N_STRUCT);
         if (s < 0) return -1;
@@ -1639,7 +1476,7 @@ impl ParseOps for Ast {
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
         tail = -1;
         self->npend = 0;
-        while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             m = self->parse_field_def();
             if (m < 0) return -1;
             /* record the field type: receiver chains and nested vptr writes need it.
@@ -1667,7 +1504,7 @@ impl ParseOps for Ast {
             tail = m;
         }
         if (self->expect("}") != 0) return -1;
-        if (self->tok == T_ID && strcmp(self->toktext, "use") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
             self->lex_next();
             if (qname[0] && self->parse_use_list(self->find_struct(qname)) != 0) return -1;
             /* every trait named in `use` must already be defined (the built-in
@@ -1705,13 +1542,13 @@ impl ParseOps for Ast {
         char qname[MAX_TEXT];
         (void)self;
 
-        td_line = self->tokline;
+        td_line = self->lex->tokline;
         self->lex_next();
-        if (self->tok == T_ID && strcmp(self->toktext, "struct") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "struct") == 0) {
             t = self->parse_struct_def();
             if (t < 0) return -1;
-            if (self->tok != T_ID) return self->fail("expected a typedef name");
-            snprintf(name, sizeof name, "%s", self->toktext);
+            if (self->lex->tok != T_ID) return self->fail("expected a typedef name");
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->lex_next();
             if (self->expect(";") != 0) return -1;
             if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
@@ -1758,8 +1595,8 @@ impl ParseOps for Ast {
             return t;
         }
         if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-        if (self->tok != T_ID) return self->fail("expected a typedef name");
-        snprintf(name, sizeof name, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a typedef name");
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
         self->lex_next();
         if (self->expect(";") != 0) return -1;
         if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
@@ -1780,14 +1617,14 @@ impl ParseOps for Ast {
         (void)self;
         if (sindex < 0) return self->fail("unknown struct in 'use'");
         for (;;) {
-            if (self->tok != T_ID) return self->fail("expected a trait name");
-            if (self->resolve_type(self->toktext, tname, sizeof tname) != 0) return -1;
+            if (self->lex->tok != T_ID) return self->fail("expected a trait name");
+            if (self->resolve_type(self->lex->toktext, tname, sizeof tname) != 0) return -1;
             /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
                never joins the `use` list -- only the flag matters */
             if (strcmp(tname, "Drop") == 0) {
                 self->structs[sindex].uses_drop = 1;
                 self->lex_next();
-                if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->lex_next();
                     continue;
                 }
@@ -1797,7 +1634,7 @@ impl ParseOps for Ast {
             snprintf(self->structs[sindex].use[self->structs[sindex].nuse], MAX_TEXT, "%s", tname);
             self->structs[sindex].nuse++;
             self->lex_next();
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                 self->lex_next();
                 continue;
             }
@@ -1816,10 +1653,10 @@ impl ParseOps for Ast {
         char ptype[MAX_TEXT];
         (void)self;
 
-        trait_line = self->tokline;
+        trait_line = self->lex->tokline;
         self->lex_next();
-        if (self->tok != T_ID) return self->fail("expected a trait name");
-        snprintf(name, sizeof name, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a trait name");
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
         if (self->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
         /* A second body for the same trait is a hard error. L2 reports it at the
            opening '{', so step there first and use its line/column. */
@@ -1827,7 +1664,7 @@ impl ParseOps for Ast {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "duplicate trait '%s'", name);
             self->lex_next();
-            return ct_sem_error(self->tokline, self->tokstart - self->lstart + 1, msg, self->path);
+            return ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->path);
         }
         ti = self->add_trait(qname);
         if (ti < 0) return -1;
@@ -1836,17 +1673,17 @@ impl ParseOps for Ast {
         if (self->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
         self->lex_next();
         if (self->expect("{") != 0) return -1;
-        while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             if (self->parse_type(ret, sizeof ret) != 0) return -1;
-            if (self->tok != T_ID) return self->fail("expected a method name");
+            if (self->lex->tok != T_ID) return self->fail("expected a method name");
             if (self->traits[ti].nm >= MAX_METHODS) return self->fail("too many trait methods");
             mi = self->traits[ti].nm;
-            snprintf(self->traits[ti].m[mi].name, MAX_TEXT, "%s", self->toktext);
+            snprintf(self->traits[ti].m[mi].name, MAX_TEXT, "%s", self->lex->toktext);
             snprintf(self->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
             self->traits[ti].m[mi].nparams = 0;
             self->lex_next();
             if (self->expect("(") != 0) return -1;
-            if (self->tok == T_ID && strcmp(self->toktext, "void") == 0) {
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "void") == 0) {
                 self->lex_next();
                 if (self->expect(")") != 0) return -1;
                 if (self->expect(";") != 0) return -1;
@@ -1854,10 +1691,10 @@ impl ParseOps for Ast {
                 continue;
             }
             np = 0;
-            if (!(self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0)) {
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
                 for (;;) {
                     if (self->parse_type(ptype, sizeof ptype) != 0) return -1;
-                    if (self->tok == T_ID) self->lex_next();
+                    if (self->lex->tok == T_ID) self->lex_next();
                     /* a parameter may be an array (`char a[][N]`): the dims
                        belong in the vtable signature too, or the impl's type
                        would not match it */
@@ -1873,7 +1710,7 @@ impl ParseOps for Ast {
                     if (np >= MAX_PARAMS) return self->fail("too many method parameters");
                     snprintf(self->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
                     np++;
-                    if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                         self->lex_next();
                         continue;
                     }
@@ -1904,10 +1741,10 @@ impl ParseOps for Ast {
         int type_index;
         (void)self;
 
-        impl_line = self->tokline;
+        impl_line = self->lex->tokline;
         self->lex_next();
-        if (self->tok != T_ID) return self->fail("expected a trait name");
-        snprintf(tname, sizeof tname, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a trait name");
+        snprintf(tname, sizeof tname, "%s", self->lex->toktext);
         if (self->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->find_trait(rtrait);
         /* `Drop` is built in: no `trait Drop` declaration exists, but
@@ -1915,11 +1752,11 @@ impl ParseOps for Ast {
         if (ti < 0 && strcmp(rtrait, "Drop") != 0)
             return self->fail("impl of an unknown trait");
         self->lex_next();
-        if (self->tok != T_ID || strcmp(self->toktext, "for") != 0)
+        if (self->lex->tok != T_ID || strcmp(self->lex->toktext, "for") != 0)
             return self->fail("expected 'for' after the trait name");
         self->lex_next();
-        if (self->tok != T_ID) return self->fail("expected a struct name");
-        snprintf(sname, sizeof sname, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a struct name");
+        snprintf(sname, sizeof sname, "%s", self->lex->toktext);
         if (self->resolve_type(sname, rstruct, sizeof rstruct) != 0) return -1;
         /* the struct must exist (a forward declaration is enough); an undefined
            one is reported at the body's `{`, like L2, and the body is skipped so
@@ -1929,7 +1766,7 @@ impl ParseOps for Ast {
         if (si < 0) {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "impl for undefined struct '%s'", sname);
-            if (ct_sem_error(self->tokline, self->tokstart - self->lstart + 1, msg, self->path) != 0)
+            if (ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->path) != 0)
                 return -1;
             if (self->skip_body() != 0) return -1;
             return NO_NODE;
@@ -1947,11 +1784,11 @@ impl ParseOps for Ast {
         self->arena->nodes[node].aux = si;
         snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", stype);
         tail = -1;
-        while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
-            mline = self->tokline;
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            mline = self->lex->tokline;
             if (self->parse_type(ret, sizeof ret) != 0) return -1;
-            if (self->tok != T_ID) return self->fail("expected a method name");
-            snprintf(mname, sizeof mname, "%s", self->toktext);
+            if (self->lex->tok != T_ID) return self->fail("expected a method name");
+            snprintf(mname, sizeof mname, "%s", self->lex->toktext);
             self->lex_next();
             if (self->push_scope() != 0) return -1;
             if (self->declare_var("self", stype) != 0) {
@@ -2041,30 +1878,30 @@ impl ParseOps for Ast {
         out[n] = '{';
         n++;
         depth = 1;
-        while (self->src[self->pos] && depth > 0) {
-            c = (unsigned char)self->src[self->pos];
+        while (self->lex->src[self->lex->pos] && depth > 0) {
+            c = (unsigned char)self->lex->src[self->lex->pos];
             if (c == '"') {
                 if (n + 1 >= (int)cap) return self->fail("initializer is too long");
                 out[n] = '"';
                 n++;
-                self->pos++;
-                while (self->src[self->pos] && self->src[self->pos] != '"') {
-                    if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
+                self->lex->pos++;
+                while (self->lex->src[self->lex->pos] && self->lex->src[self->lex->pos] != '"') {
+                    if (self->lex->src[self->lex->pos] == '\\' && self->lex->src[self->lex->pos + 1]) {
                         if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-                        out[n] = self->src[self->pos];
+                        out[n] = self->lex->src[self->lex->pos];
                         n++;
-                        self->pos++;
+                        self->lex->pos++;
                     }
                     if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-                    out[n] = self->src[self->pos];
+                    out[n] = self->lex->src[self->lex->pos];
                     n++;
-                    self->pos++;
+                    self->lex->pos++;
                 }
-                if (self->src[self->pos] == '"') {
+                if (self->lex->src[self->lex->pos] == '"') {
                     if (n + 1 >= (int)cap) return self->fail("initializer is too long");
                     out[n] = '"';
                     n++;
-                    self->pos++;
+                    self->lex->pos++;
                 }
                 continue;
             }
@@ -2073,7 +1910,7 @@ impl ParseOps for Ast {
             if (n + 1 >= (int)cap) return self->fail("initializer is too long");
             out[n] = (char)c;
             n++;
-            self->pos++;
+            self->lex->pos++;
         }
         if (depth != 0) return self->fail("unterminated initializer");
         out[n] = 0;
@@ -2095,7 +1932,7 @@ impl ParseOps for Ast {
             return -1;
         }
         tail = -1;
-        while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             s = self->parse_stmt();
             if (s < 0) {
                 self->pop_scope();
@@ -2112,11 +1949,11 @@ impl ParseOps for Ast {
         if (self->nowner > base) {
             int p, at_start, d;
             at_start = 1;
-            for (p = self->lstart; p < self->tokstart; p++)
-                if (self->src[p] != ' ' && self->src[p] != '\t' && self->src[p] != '\r') at_start = 0;
+            for (p = self->lex->lstart; p < self->lex->tokstart; p++)
+                if (self->lex->src[p] != ' ' && self->lex->src[p] != '\t' && self->lex->src[p] != '\r') at_start = 0;
             if (!at_start) {
                 self->pop_scope();
-                return ct_sem_error(self->tokline, 1,
+                return ct_sem_error(self->lex->tokline, 1,
                     "auto-drop requires the closing '}' at the start of a line", self->path);
             }
             for (d = self->nowner - 1; d >= base; d--) {
@@ -2169,15 +2006,15 @@ impl ParseOps for Ast {
         int s, e, c;
         (void)self;
 
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "{") == 0) return self->parse_block();
-        if (self->tok == T_ID && strcmp(self->toktext, "return") == 0) {
-            int rline = self->tokline, at_start = 1, rp;
-            for (rp = self->lstart; rp < self->tokstart; rp++)
-                if (self->src[rp] != ' ' && self->src[rp] != '\t' && self->src[rp] != '\r') at_start = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
+            int rline = self->lex->tokline, at_start = 1, rp;
+            for (rp = self->lex->lstart; rp < self->lex->tokstart; rp++)
+                if (self->lex->src[rp] != ' ' && self->lex->src[rp] != '\t' && self->lex->src[rp] != '\r') at_start = 0;
             s = self->new_node(N_RET);
             if (s < 0) return -1;
             self->lex_next();
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->lex_next();
                 /* a bare `return;` leaves every owned object behind */
                 if (self->leak_active
@@ -2204,7 +2041,7 @@ impl ParseOps for Ast {
             if (self->expect(";") != 0) return -1;
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "delete") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "delete") == 0) {
             s = self->new_node(N_DELETE);
             if (s < 0) return -1;
             self->lex_next();
@@ -2237,21 +2074,21 @@ impl ParseOps for Ast {
             if (self->expect(";") != 0) return -1;
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "break") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "break") == 0) {
             s = self->new_node(N_BREAK);
             if (s < 0) return -1;
             self->lex_next();
             if (self->expect(";") != 0) return -1;
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "continue") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
             s = self->new_node(N_CONT);
             if (s < 0) return -1;
             self->lex_next();
             if (self->expect(";") != 0) return -1;
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "if") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "if") == 0) {
             s = self->new_node(N_IF);
             if (s < 0) return -1;
             self->lex_next();
@@ -2263,7 +2100,7 @@ impl ParseOps for Ast {
             e = self->parse_branch();
             if (e < 0) return -1;
             self->arena->nodes[s].b = e;
-            if (self->tok == T_ID && strcmp(self->toktext, "else") == 0) {
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "else") == 0) {
                 self->lex_next();
                 e = self->parse_branch();
                 if (e < 0) return -1;
@@ -2271,7 +2108,7 @@ impl ParseOps for Ast {
             }
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "while") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "while") == 0) {
             s = self->new_node(N_WHILE);
             if (s < 0) return -1;
             self->lex_next();
@@ -2285,16 +2122,16 @@ impl ParseOps for Ast {
             self->arena->nodes[s].b = e;
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "for") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0) {
             s = self->new_node(N_FOR);
             if (s < 0) return -1;
             self->lex_next();
             if (self->expect("(") != 0) return -1;
             if (self->push_scope() != 0) return -1;
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->arena->nodes[s].a = -1;
-            } else if (self->tok == T_ID && (self->is_type_word(self->toktext)
-                       || self->find_type(self->toktext) >= 0)) {
+            } else if (self->lex->tok == T_ID && (self->is_type_word(self->lex->toktext)
+                       || self->find_type(self->lex->toktext) >= 0)) {
                 e = self->parse_decl_node();
                 if (e < 0) {
                     self->pop_scope();
@@ -2313,7 +2150,7 @@ impl ParseOps for Ast {
                 self->pop_scope();
                 return -1;
             }
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ";") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->arena->nodes[s].b = -1;
             } else {
                 c = self->parse_expr();
@@ -2327,7 +2164,7 @@ impl ParseOps for Ast {
                 self->pop_scope();
                 return -1;
             }
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
                 self->arena->nodes[s].c = -1;
             } else {
                 e = self->parse_expr_stmt_node();
@@ -2350,8 +2187,8 @@ impl ParseOps for Ast {
             self->pop_scope();
             return s;
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "own") == 0) {
-            int own_line = self->tokline;
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0) {
+            int own_line = self->lex->tokline;
             self->lex_next();
             s = self->parse_decl_node();
             if (s < 0) return -1;
@@ -2359,8 +2196,8 @@ impl ParseOps for Ast {
             if (self->mark_owned(s, own_line) != 0) return -1;
             return s;
         }
-        if (self->tok == T_ID && (self->is_type_word(self->toktext)
-                              || self->find_type(self->toktext) >= 0)) {
+        if (self->lex->tok == T_ID && (self->is_type_word(self->lex->toktext)
+                              || self->find_type(self->lex->toktext) >= 0)) {
             s = self->parse_decl_node();
             if (s < 0) return -1;
             if (self->expect(";") != 0) return -1;
@@ -2377,7 +2214,7 @@ impl ParseOps for Ast {
         int b, s;
         (void)self;
 
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "{") == 0) return self->parse_block();
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->push_scope() != 0) return -1;
         s = self->parse_stmt();
         if (s < 0) {
@@ -2411,7 +2248,7 @@ impl ParseOps for Ast {
             size_t tl;
             char t2[MAX_TEXT];
 
-            while (self->tok == T_PUNCT && strcmp(self->toktext, "*") == 0) {
+            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
                 stars++;
                 self->lex_next();
             }
@@ -2432,8 +2269,8 @@ impl ParseOps for Ast {
                 snprintf(t2, sizeof t2, "%s *", typebuf);
                 snprintf(typebuf, sizeof typebuf, "%s", t2);
             }
-            if (self->tok != T_ID) return self->fail("expected a variable name");
-            snprintf(name, sizeof name, "%s", self->toktext);
+            if (self->lex->tok != T_ID) return self->fail("expected a variable name");
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->lex_next();
             n = self->new_node(N_DECL);
             if (n < 0) return -1;
@@ -2445,9 +2282,9 @@ impl ParseOps for Ast {
                 int vi = self->find_var(name);
                 if (vi >= 0) self->vars[vi].is_array = 1;
             }
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "=") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
                 self->lex_next();
-                if (self->tok == T_PUNCT && strcmp(self->toktext, "{") == 0) {
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
                     char raw[MAX_TEXT];
                     char fixed[MAX_TEXT];
                     e = self->new_node(N_RAW);
@@ -2492,11 +2329,11 @@ impl ParseOps for Ast {
 
         e = self->parse_expr();
         if (e < 0) return -1;
-        if (self->tok == T_PUNCT && (strcmp(self->toktext, "+=") == 0 || strcmp(self->toktext, "-=") == 0
-                                 || strcmp(self->toktext, "*=") == 0 || strcmp(self->toktext, "/=") == 0
-                                 || strcmp(self->toktext, "%=") == 0)) {
+        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
+                                 || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
+                                 || strcmp(self->lex->toktext, "%=") == 0)) {
             int op = 0, k2;
-            char oc = self->toktext[0];
+            char oc = self->lex->toktext[0];
             k2 = self->arena->nodes[e].kind;
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
                 return self->fail("assignment target is not assignable");
@@ -2516,7 +2353,7 @@ impl ParseOps for Ast {
             if (self->leak_active && self->leak_assign(n) != 0) return -1;
             return n;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "=") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
             int k;
             char tt[MAX_TEXT];
             char tr[MAX_TEXT];
@@ -2560,7 +2397,7 @@ impl ParseOps for Ast {
         if (left < 0) return -1;
         /* `^` sits between the comparisons and `&&`; the cache's FNV fold is the
            first source to need it */
-        while (self->tok == T_PUNCT && strcmp(self->toktext, "^") == 0) {
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "^") == 0) {
             self->lex_next();
             right = self->parse_cmp();
             if (right < 0) return -1;
@@ -2571,7 +2408,7 @@ impl ParseOps for Ast {
             self->arena->nodes[n].aux = B_XOR;
             left = n;
         }
-        while (self->tok == T_PUNCT && strcmp(self->toktext, "&&") == 0) {
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
             self->lex_next();
             right = self->parse_cmp();
             if (right < 0) return -1;
@@ -2582,11 +2419,11 @@ impl ParseOps for Ast {
             self->arena->nodes[n].aux = B_AND;
             left = n;
         }
-        while (self->tok == T_PUNCT && strcmp(self->toktext, "||") == 0) {
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "||") == 0) {
             self->lex_next();
             right = self->parse_cmp();
             if (right < 0) return -1;
-            while (self->tok == T_PUNCT && strcmp(self->toktext, "&&") == 0) {
+            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
                 self->lex_next();
                 inner = self->parse_cmp();
                 if (inner < 0) return -1;
@@ -2604,7 +2441,7 @@ impl ParseOps for Ast {
             self->arena->nodes[n].aux = B_OR;
             left = n;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "?") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "?") == 0) {
             int a, b;
             self->lex_next();
             a = self->parse_expr();
@@ -2629,14 +2466,14 @@ impl ParseOps for Ast {
 
         left = self->parse_add();
         if (left < 0) return -1;
-        while (self->tok == T_PUNCT) {
+        while (self->lex->tok == T_PUNCT) {
             op = 0;
-            if (strcmp(self->toktext, "<") == 0) op = B_LT;
-            else if (strcmp(self->toktext, ">") == 0) op = B_GT;
-            else if (strcmp(self->toktext, "<=") == 0) op = B_LE;
-            else if (strcmp(self->toktext, ">=") == 0) op = B_GE;
-            else if (strcmp(self->toktext, "==") == 0) op = B_EQ;
-            else if (strcmp(self->toktext, "!=") == 0) op = B_NE;
+            if (strcmp(self->lex->toktext, "<") == 0) op = B_LT;
+            else if (strcmp(self->lex->toktext, ">") == 0) op = B_GT;
+            else if (strcmp(self->lex->toktext, "<=") == 0) op = B_LE;
+            else if (strcmp(self->lex->toktext, ">=") == 0) op = B_GE;
+            else if (strcmp(self->lex->toktext, "==") == 0) op = B_EQ;
+            else if (strcmp(self->lex->toktext, "!=") == 0) op = B_NE;
             if (op == 0) break;
             self->lex_next();
             right = self->parse_add();
@@ -2658,8 +2495,8 @@ impl ParseOps for Ast {
 
         left = self->parse_mul();
         if (left < 0) return -1;
-        while (self->tok == T_PUNCT && (strcmp(self->toktext, "+") == 0 || strcmp(self->toktext, "-") == 0)) {
-            op = (self->toktext[0] == '+') ? B_ADD : B_SUB;
+        while (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+") == 0 || strcmp(self->lex->toktext, "-") == 0)) {
+            op = (self->lex->toktext[0] == '+') ? B_ADD : B_SUB;
             self->lex_next();
             right = self->parse_mul();
             if (right < 0) return -1;
@@ -2680,11 +2517,11 @@ impl ParseOps for Ast {
 
         left = self->parse_unary();
         if (left < 0) return -1;
-        while (self->tok == T_PUNCT && (strcmp(self->toktext, "*") == 0
-               || strcmp(self->toktext, "/") == 0 || strcmp(self->toktext, "%") == 0)) {
+        while (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "*") == 0
+               || strcmp(self->lex->toktext, "/") == 0 || strcmp(self->lex->toktext, "%") == 0)) {
             op = B_MUL;
-            if (self->toktext[0] == '/') op = B_DIV;
-            else if (self->toktext[0] == '%') op = B_MOD;
+            if (self->lex->toktext[0] == '/') op = B_DIV;
+            else if (self->lex->toktext[0] == '%') op = B_MOD;
             self->lex_next();
             right = self->parse_unary();
             if (right < 0) return -1;
@@ -2703,10 +2540,10 @@ impl ParseOps for Ast {
         int n, e, op;
         (void)self;
 
-        if (self->tok == T_ID && strcmp(self->toktext, "sizeof") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "sizeof") == 0) {
             char tbuf[MAX_TEXT];
             self->lex_next();
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
                 && self->next_is_type_name()) {
                 self->lex_next();
                 if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
@@ -2724,7 +2561,7 @@ impl ParseOps for Ast {
             self->arena->nodes[n].a = e;
             return n;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
             && self->next_is_type_name()) {
             char tbuf[MAX_TEXT];
             self->lex_next();
@@ -2739,8 +2576,8 @@ impl ParseOps for Ast {
             return n;
         }
         op = 0;
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "-") == 0) op = U_NEG;
-        else if (self->tok == T_PUNCT && strcmp(self->toktext, "!") == 0) op = U_NOT;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) op = U_NEG;
+        else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "!") == 0) op = U_NOT;
         if (op != 0) {
             self->lex_next();
             e = self->parse_unary();
@@ -2751,7 +2588,7 @@ impl ParseOps for Ast {
             self->arena->nodes[n].aux = op;
             return n;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "&") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&") == 0) {
             self->lex_next();
             e = self->parse_unary();
             if (e < 0) return -1;
@@ -2760,7 +2597,7 @@ impl ParseOps for Ast {
             self->arena->nodes[n].a = e;
             return n;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "*") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
             self->lex_next();
             e = self->parse_unary();
             if (e < 0) return -1;
@@ -2783,7 +2620,7 @@ impl ParseOps for Ast {
         n = self->parse_primary();
         if (n < 0) return -1;
         for (;;) {
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "[") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
                 self->lex_next();
                 idx = self->parse_expr();
                 if (idx < 0) return -1;
@@ -2795,15 +2632,15 @@ impl ParseOps for Ast {
                 n = m;
                 continue;
             }
-            if (self->tok == T_PUNCT && (strcmp(self->toktext, ".") == 0
-                                     || strcmp(self->toktext, "->") == 0)) {
+            if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, ".") == 0
+                                     || strcmp(self->lex->toktext, "->") == 0)) {
                 int arrow;
-                arrow = (self->toktext[0] == '-') ? 1 : 0;
+                arrow = (self->lex->toktext[0] == '-') ? 1 : 0;
                 self->lex_next();
-                if (self->tok != T_ID) return self->fail("expected a field or method name");
-                snprintf(fname, sizeof fname, "%s", self->toktext);
+                if (self->lex->tok != T_ID) return self->fail("expected a field or method name");
+                snprintf(fname, sizeof fname, "%s", self->lex->toktext);
                 self->lex_next();
-                if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0) {
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
                     args = self->parse_args();
                     if (args < 0) return -1;
                     m = self->new_node(N_MCALL);
@@ -2853,7 +2690,7 @@ impl ParseOps for Ast {
             }
             break;
         }
-        if (self->tok == T_PUNCT && (strcmp(self->toktext, "++") == 0 || strcmp(self->toktext, "--") == 0)) {
+        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "++") == 0 || strcmp(self->lex->toktext, "--") == 0)) {
             int k;
             k = self->arena->nodes[n].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
@@ -2861,7 +2698,7 @@ impl ParseOps for Ast {
             m = self->new_node(N_POST);
             if (m < 0) return -1;
             self->arena->nodes[m].a = n;
-            self->arena->nodes[m].aux = (self->toktext[0] == '+') ? P_INC : P_DEC;
+            self->arena->nodes[m].aux = (self->lex->toktext[0] == '+') ? P_INC : P_DEC;
             self->lex_next();
             return m;
         }
@@ -2873,23 +2710,23 @@ impl ParseOps for Ast {
         int n, args, id_line;
         (void)self;
 
-        if (self->tok == T_NUM) {
+        if (self->lex->tok == T_NUM) {
             n = self->new_node(N_NUM);
             if (n < 0) return -1;
-            self->arena->nodes[n].num = self->toknum;
+            self->arena->nodes[n].num = self->lex->toknum;
             self->lex_next();
             return n;
         }
-        if (self->tok == T_STR) {
+        if (self->lex->tok == T_STR) {
             int off = self->arena->str_begin();
             n = self->new_node(N_STR);
             if (n < 0) return -1;
             /* adjacent literals concatenate; they are copied into the pool so the
                joined string is not limited by MAX_TEXT */
-            while (self->tok == T_STR) {
+            while (self->lex->tok == T_STR) {
                 int m = 0;
-                while (self->toktext[m]) {
-                    if (self->arena->str_put((unsigned char)self->toktext[m]) != 0)
+                while (self->lex->toktext[m]) {
+                    if (self->arena->str_put((unsigned char)self->lex->toktext[m]) != 0)
                         return self->fail("string pool is full");
                     m++;
                 }
@@ -2899,13 +2736,13 @@ impl ParseOps for Ast {
             self->arena->nodes[n].num = off;
             return n;
         }
-        if (self->tok == T_ID) {
-            id_line = self->tokline;
+        if (self->lex->tok == T_ID) {
+            id_line = self->lex->tokline;
             n = self->new_node(N_VAR);
             if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->toktext);
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
             self->lex_next();
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
                 int fi;
                 args = self->parse_args();
                 if (args < 0) return -1;
@@ -2962,7 +2799,7 @@ impl ParseOps for Ast {
             }
             return n;
         }
-        if (self->tok == T_PUNCT && strcmp(self->toktext, "(") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
             self->lex_next();
             n = self->parse_expr();
             if (n < 0) return -1;
@@ -2978,7 +2815,7 @@ impl ParseOps for Ast {
         (void)self;
 
         if (self->expect("(") != 0) return -1;
-        if (self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0) {
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
             self->lex_next();
             return 0;
         }
@@ -2990,7 +2827,7 @@ impl ParseOps for Ast {
             if (tail < 0) first = e;
             else self->arena->nodes[tail].next = e;
             tail = e;
-            if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                 self->lex_next();
                 continue;
             }
@@ -3455,17 +3292,17 @@ impl ModuleOps for Ast {
         rel[0] = 0;
         self->lex_next();
         for (;;) {
-            if (self->tok != T_ID) return self->fail("expected an import path");
+            if (self->lex->tok != T_ID) return self->fail("expected an import path");
             if (n > 0) {
                 if (n + 1 >= sizeof rel) return self->fail("import path is too long");
                 rel[n] = '/';
                 n++;
             }
-            if (n + strlen(self->toktext) >= sizeof rel) return self->fail("import path is too long");
-            snprintf(rel + n, sizeof rel - n, "%s", self->toktext);
-            n += strlen(self->toktext);
+            if (n + strlen(self->lex->toktext) >= sizeof rel) return self->fail("import path is too long");
+            snprintf(rel + n, sizeof rel - n, "%s", self->lex->toktext);
+            n += strlen(self->lex->toktext);
             self->lex_next();
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "::") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
                 self->lex_next();
                 continue;
             }
@@ -3485,16 +3322,16 @@ impl ModuleOps for Ast {
         (void)self;
         self->nrels = 0;
         self->path = from;
-        self->pos = 0;
-        self->bol = 1;
-        self->tok = 0;
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->tok = 0;
         self->lex_next();
         for (;;) {
-            if (self->tok == T_PP) {
+            if (self->lex->tok == T_PP) {
                 self->lex_next();
                 continue;
             }
-            if (self->tok == T_ID && strcmp(self->toktext, "import") == 0) {
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
                 if (self->skip_import() != 0) return -1;
                 continue;
             }
@@ -3570,7 +3407,7 @@ impl ModuleOps for Ast {
         self->units[u].is_hdr = is_hdr;
 
         if (self->read_file(path) != 0) return -1;
-        mysrc = (char *)self->src;
+        mysrc = (char *)self->lex->src;
         if (self->scan_imports(path) != 0) return -1;
         nrels = self->nrels;
         for (i = 0; i < nrels; i++) snprintf(rels[i], MAX_TEXT, "%s", self->rels[i]);
@@ -3587,12 +3424,12 @@ impl ModuleOps for Ast {
             self->units[u].ndep++;
         }
 
-        self->src = mysrc;
-        self->pos = 0;
-        self->bol = 1;
-        self->line = 1;
-        self->tokline = 1;
-        self->tok = 0;
+        self->lex->src = mysrc;
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->tok = 0;
         self->nvar = 0;
         self->nscope = 0;
         self->nowner = 0;
@@ -3677,22 +3514,22 @@ impl ModuleOps for Ast {
         char text[MAX_TEXT];
         (void)self;
 
-        pos = self->pos;
-        bol = self->bol;
-        tok = self->tok;
-        num = self->toknum;
-        snprintf(text, sizeof text, "%s", self->toktext);
+        pos = self->lex->pos;
+        bol = self->lex->bol;
+        tok = self->lex->tok;
+        num = self->lex->toknum;
+        snprintf(text, sizeof text, "%s", self->lex->toktext);
         self->lex_next();
         is_def = 0;
-        if (self->tok == T_ID) self->lex_next();
+        if (self->lex->tok == T_ID) self->lex_next();
         /* a body (`{`) or a forward declaration (`;`) both start a CT struct */
-        if (self->tok == T_PUNCT && (strcmp(self->toktext, "{") == 0 || strcmp(self->toktext, ";") == 0))
+        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "{") == 0 || strcmp(self->lex->toktext, ";") == 0))
             is_def = 1;
-        self->pos = pos;
-        self->bol = bol;
-        self->tok = tok;
-        self->toknum = num;
-        snprintf(self->toktext, MAX_TEXT, "%s", text);
+        self->lex->pos = pos;
+        self->lex->bol = bol;
+        self->lex->tok = tok;
+        self->lex->toknum = num;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
         return is_def;
     }
 
@@ -3702,28 +3539,28 @@ impl ModuleOps for Ast {
         int n;
         (void)self;
 
-        if (self->tok == T_ID && strcmp(self->toktext, "pub") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
             if (is_pub) return self->fail("duplicate 'pub'");
             self->lex_next();
             return self->parse_top_decl(1);
         }
-        if (self->tok == T_ID && strcmp(self->toktext, "own") == 0)
-            return ct_sem_error(self->tokline, 1,
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
+            return ct_sem_error(self->lex->tokline, 1,
                 "'own' is only allowed inside a function body", self->path);
-        if (self->tok == T_ID && strcmp(self->toktext, "typedef") == 0) {
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "typedef") == 0) {
             n = self->parse_typedef(is_pub);
-        } else if (self->tok == T_ID && strcmp(self->toktext, "trait") == 0) {
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0) {
             n = self->parse_trait(is_pub);
-        } else if (self->tok == T_ID && strcmp(self->toktext, "impl") == 0) {
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "impl") == 0) {
             n = self->parse_impl();
-        } else if (self->tok == T_ID && strcmp(self->toktext, "map") == 0) {
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "map") == 0) {
             n = self->parse_map();
-        } else if (self->tok == T_ID && strcmp(self->toktext, "struct") == 0
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "struct") == 0
                    && self->struct_def_ahead()) {
             n = self->parse_struct_def();
             /* CT writes `struct X { ... }` bare (the old pipeline accepts both) */
             if (n >= 0) self->accept(";");
-        } else if (self->tok == T_ID && strcmp(self->toktext, "static") == 0) {
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
             self->lex_next();
             n = self->parse_func(1, is_pub);
         } else {
@@ -3753,7 +3590,7 @@ impl ModuleOps for Ast {
         path[0] = 0;
         prefix[0] = 0;
         for (;;) {
-            if (self->tok != T_ID) return self->fail("expected a namespace name");
+            if (self->lex->tok != T_ID) return self->fail("expected a namespace name");
             if (np > 0) {
                 if (np + 2 >= sizeof path) return self->fail("namespace is too long");
                 path[np] = ':';
@@ -3761,15 +3598,15 @@ impl ModuleOps for Ast {
                 np += 2;
                 path[np] = 0;
             }
-            if (np + strlen(self->toktext) >= sizeof path) return self->fail("namespace is too long");
-            snprintf(path + np, sizeof path - np, "%s", self->toktext);
-            np += strlen(self->toktext);
-            if (npre + strlen(self->toktext) + 1 >= sizeof prefix)
+            if (np + strlen(self->lex->toktext) >= sizeof path) return self->fail("namespace is too long");
+            snprintf(path + np, sizeof path - np, "%s", self->lex->toktext);
+            np += strlen(self->lex->toktext);
+            if (npre + strlen(self->lex->toktext) + 1 >= sizeof prefix)
                 return self->fail("namespace is too long");
-            snprintf(prefix + npre, sizeof prefix - npre, "%s_", self->toktext);
-            npre += strlen(self->toktext) + 1;
+            snprintf(prefix + npre, sizeof prefix - npre, "%s_", self->lex->toktext);
+            npre += strlen(self->lex->toktext) + 1;
             self->lex_next();
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "::") == 0) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
                 self->lex_next();
                 continue;
             }
@@ -3780,11 +3617,11 @@ impl ModuleOps for Ast {
         snprintf(save, sizeof save, "%s", self->ns);
         if (snprintf(self->ns, sizeof self->ns, "%s%s", save, prefix) >= (int)sizeof self->ns)
             return self->fail("namespace is too long");
-        while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
-            if (self->tok == T_PP) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            if (self->lex->tok == T_PP) {
                 n = self->new_node(N_PP);
                 if (n < 0) return -1;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->toktext);
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
                 if (self->append_node(prog, n) != 0) return -1;
                 self->lex_next();
                 continue;
@@ -3814,25 +3651,25 @@ impl ModuleOps for Ast {
         int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound;
         (void)self;
 
-        line = self->tokline;
+        line = self->lex->tokline;
         self->lex_next();                       /* consume `map` */
-        if (!(self->tok == T_ID && strcmp(self->toktext, "trait") == 0))
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0))
             return self->fail("expected 'trait'");
         self->lex_next();
-        if (self->tok != T_ID) return self->fail("expected a trait name");
-        snprintf(tname, sizeof tname, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected a trait name");
+        snprintf(tname, sizeof tname, "%s", self->lex->toktext);
         if (self->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->find_trait(rtrait);
         if (ti < 0) return self->fail("map of an unknown trait");
         self->lex_next();
-        if (!(self->tok == T_ID && strcmp(self->toktext, "for") == 0))
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0))
             return self->fail("expected 'for'");
         self->lex_next();
-        if (!(self->tok == T_ID && strcmp(self->toktext, "instance") == 0))
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "instance") == 0))
             return self->fail("expected 'instance'");
         self->lex_next();
-        if (self->tok != T_ID) return self->fail("expected an instance name");
-        snprintf(inst, sizeof inst, "%s", self->toktext);
+        if (self->lex->tok != T_ID) return self->fail("expected an instance name");
+        snprintf(inst, sizeof inst, "%s", self->lex->toktext);
         if (self->find_var(inst) < 0) {
             snprintf(msg, sizeof msg, "map instance '%s' is not a declared variable", inst);
             return self->fail(msg);
@@ -3848,12 +3685,12 @@ impl ModuleOps for Ast {
         m->line = line;
         m->unit = self->nunits - 1;
 
-        while (self->tok != T_EOF && !(self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0)) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             if (m->nb >= MAX_METHODS) return self->fail("too many map bindings");
             b = &m->b[m->nb];
-            b->line = self->tokline;
-            if (self->tok != T_ID) return self->fail("expected a method name");
-            snprintf(b->method, MAX_TEXT, "%s", self->toktext);
+            b->line = self->lex->tokline;
+            if (self->lex->tok != T_ID) return self->fail("expected a method name");
+            snprintf(b->method, MAX_TEXT, "%s", self->lex->toktext);
             mi = -1;
             for (k = 0; k < self->traits[ti].nm; k++)
                 if (strcmp(self->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
@@ -3865,14 +3702,14 @@ impl ModuleOps for Ast {
             self->lex_next();
             if (self->expect("(") != 0) return -1;
             np = 0;
-            if (!(self->tok == T_PUNCT && strcmp(self->toktext, ")") == 0)) {
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
                 for (;;) {
-                    if (self->tok != T_ID) return self->fail("expected a parameter name");
+                    if (self->lex->tok != T_ID) return self->fail("expected a parameter name");
                     if (np >= MAX_PARAMS) return self->fail("too many map parameters");
-                    snprintf(b->params[np], MAX_TEXT, "%s", self->toktext);
+                    snprintf(b->params[np], MAX_TEXT, "%s", self->lex->toktext);
                     np++;
                     self->lex_next();
-                    if (self->tok == T_PUNCT && strcmp(self->toktext, ",") == 0) {
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                         self->lex_next();
                         continue;
                     }
@@ -3887,20 +3724,20 @@ impl ModuleOps for Ast {
                          b->method, np, self->traits[ti].m[mi].nparams);
                 return self->fail(msg);
             }
-            if (!(self->tok == T_PUNCT && strcmp(self->toktext, "->") == 0))
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "->") == 0))
                 return self->fail("expected '->'");
-            /* Capture the RHS verbatim from self->pos: no lex_next has run since the
-               '->' token, so self->pos sits just past it (the parse_init_raw trick). */
-            i = self->pos;
+            /* Capture the RHS verbatim from self->lex->pos: no lex_next has run since the
+               '->' token, so self->lex->pos sits just past it (the parse_init_raw trick). */
+            i = self->lex->pos;
             n = 0;
             q = 0;
             depth = 0;
             eof = 0;
             long_call = 0;
-            while (self->src[i] == ' ' || self->src[i] == '\t'
-                   || self->src[i] == '\n' || self->src[i] == '\r') i++;
+            while (self->lex->src[i] == ' ' || self->lex->src[i] == '\t'
+                   || self->lex->src[i] == '\n' || self->lex->src[i] == '\r') i++;
             for (;;) {
-                c = (unsigned char)self->src[i];
+                c = (unsigned char)self->lex->src[i];
                 if (c == 0) { eof = 1; break; }
                 if (q == 0 && depth == 0 && c == ';') break;
                 if (n + 1 >= MAX_TEXT) { long_call = 1; break; }
@@ -3908,9 +3745,9 @@ impl ModuleOps for Ast {
                     q = c;
                 } else if (q != 0 && c == q) {
                     q = 0;
-                } else if (q != 0 && c == '\\' && self->src[i + 1]) {
+                } else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
                     b->call[n] = (char)c; n++; i++;
-                    c = (unsigned char)self->src[i];
+                    c = (unsigned char)self->lex->src[i];
                 } else if (q == 0 && c == '(') {
                     depth++;
                 } else if (q == 0 && c == ')') {
@@ -3923,7 +3760,7 @@ impl ModuleOps for Ast {
             while (n > 0 && (b->call[n - 1] == ' ' || b->call[n - 1] == '\t'
                              || b->call[n - 1] == '\n' || b->call[n - 1] == '\r')) n--;
             b->call[n] = 0;
-            self->pos = i;
+            self->lex->pos = i;
             self->lex_next();
             if (self->map_check_call(b, inst) != 0) return -1;
             if (self->expect(";") != 0) return -1;
@@ -4245,10 +4082,10 @@ impl ModuleOps for Ast {
         self->ret_type[0] = 0;
         self->ns[0] = 0;
         self->ns_decl[0] = 0;
-        self->line = 1;
-        self->tokline = 1;
-        self->lstart = 0;
-        self->tokstart = 0;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->lstart = 0;
+        self->lex->tokstart = 0;
         self->ncalls = 0;
         ct_diag_reset();
         self->cur_func[0] = 0;
@@ -5886,13 +5723,13 @@ impl RecoverOps for Ast {
     {
         int depth;
         (void)self;
-        if (self->tok != T_PUNCT || strcmp(self->toktext, "{") != 0)
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "{") != 0)
             return self->fail("expected '{'");
         depth = 0;
-        while (self->tok != T_EOF) {
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "{") == 0) {
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
                 depth++;
-            } else if (self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0) {
+            } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0) {
                 depth--;
                 if (depth == 0) {
                     self->lex_next();
@@ -5909,13 +5746,13 @@ impl RecoverOps for Ast {
     int skip_after_error(void)
     {
         (void)self;
-        while (self->tok != T_EOF) {
-            if (self->tok == T_PUNCT && strcmp(self->toktext, "}") == 0) {
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0) {
                 self->lex_next();
                 return 0;
             }
             self->lex_next();
-            if (self->bol) return 0;
+            if (self->lex->bol) return 0;
         }
         return 0;
     }
@@ -6362,6 +6199,8 @@ int main(int argc, char **argv)
     /* the node and literal pools live in runtime::arena; point the object at its
        singleton before anything can build a node */
     g_ast.arena = arena_get();
+    /* likewise the source cursor and the current token */
+    g_ast.lex = lexer_get();
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];

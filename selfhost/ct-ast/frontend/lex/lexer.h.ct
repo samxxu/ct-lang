@@ -1,0 +1,221 @@
+/*
+ * lexer.h.ct - the source cursor and the current token, one class of its own.
+ *
+ * The lexer owns the source buffer, the byte cursor and the one-token lookahead
+ * the parser reads (`tok`, `toktext`, `toknum`, the token's line and its start
+ * offset). `main.ct` reaches it through a pointer to the singleton and asks it
+ * for the next token; `accept` / `expect` / `fail` stay on the parser object
+ * because they are about grammar, not about characters.
+ *
+ * Macros do not cross a unit boundary, so the capacity and the token kinds are
+ * restated here; they must stay equal to the ones in main.ct (MAX_TEXT 160 and
+ * T_EOF..T_PP 0..5). The `toktext` length is spelled out as a literal because a
+ * `pub struct` lands in the generated header, which carries no macros.
+ */
+#include <stdio.h>
+
+#define MAX_TEXT   160
+#define T_EOF    0
+#define T_ID     1
+#define T_NUM    2
+#define T_STR    3
+#define T_PUNCT  4
+#define T_PP     5
+
+namespace frontend::lex {
+pub trait LexOps {
+    void next(void);
+}
+
+pub struct Lexer {
+    const char *src;
+    int  pos;
+    int  bol;
+    int  tok;
+    char toktext[160];
+    long toknum;
+    int  line;                  /* 1-based */
+    int  tokline;               /* line of the current token */
+    int  tokstart;
+    int  lstart;                /* column = tokstart - lstart + 1 */
+} use LexOps;
+
+pub struct Lexer *lexer_get(void);
+
+impl LexOps for Lexer {
+    /* Whitespace, comments and preprocessor lines are skipped before the token
+       starts; every branch leaves `tok` and, where it applies, `toktext` /
+       `toknum` set for the parser to read. */
+    void next(void)
+    {
+        int c, n;
+        (void)self;
+
+        for (;;) {
+            c = (unsigned char)self->src[self->pos];
+            if (c == 0) { self->tok = T_EOF; self->toktext[0] = 0; return; }
+            if (c == '\n') { self->bol = 1; self->line++; self->pos++; self->lstart = self->pos; continue; }
+            if (c == ' ' || c == '\t' || c == '\r') { self->pos++; continue; }
+            if (c == '/' && self->src[self->pos + 1] == '/') {
+                while (self->src[self->pos] && self->src[self->pos] != '\n') self->pos++;
+                continue;
+            }
+            if (c == '/' && self->src[self->pos + 1] == '*') {
+                self->pos += 2;
+                while (self->src[self->pos] && !(self->src[self->pos] == '*' && self->src[self->pos + 1] == '/')) {
+                    if (self->src[self->pos] == '\n') self->line++;
+                    self->pos++;
+                }
+                if (self->src[self->pos]) self->pos += 2;
+                continue;
+            }
+            break;
+        }
+        self->tokstart = self->pos;
+        self->tokline = self->line;
+        if (self->bol && c == '#') {
+            n = 0;
+            while (self->src[self->pos] && self->src[self->pos] != '\n') {
+                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                self->pos++;
+            }
+            self->toktext[n] = 0;
+            self->tok = T_PP;
+            self->bol = 0;
+            return;
+        }
+        self->bol = 0;
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+            n = 0;
+            while (self->src[self->pos] && ((self->src[self->pos] >= 'a' && self->src[self->pos] <= 'z')
+                   || (self->src[self->pos] >= 'A' && self->src[self->pos] <= 'Z')
+                   || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
+                   || self->src[self->pos] == '_')) {
+                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                self->pos++;
+            }
+            self->toktext[n] = 0;
+            self->tok = T_ID;
+            return;
+        }
+        if (c >= '0' && c <= '9') {
+            self->toknum = 0;
+            if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
+                self->pos += 2;
+                for (;;) {
+                    char h = self->src[self->pos];
+                    int dv;
+                    if (h >= '0' && h <= '9') dv = h - '0';
+                    else if (h >= 'a' && h <= 'f') dv = h - 'a' + 10;
+                    else if (h >= 'A' && h <= 'F') dv = h - 'A' + 10;
+                    else break;
+                    self->toknum = self->toknum * 16 + dv;
+                    self->pos++;
+                }
+            } else if (c == '0' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '7') {
+                /* a leading zero makes the literal octal in C; reading it as
+                   decimal changed 0755 into 755 (a mode argument silently became
+                   a decimal value) */
+                self->pos++;
+                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '7') {
+                    self->toknum = self->toknum * 8 + (self->src[self->pos] - '0');
+                    self->pos++;
+                }
+            } else {
+                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
+                    self->toknum = self->toknum * 10 + (self->src[self->pos] - '0');
+                    self->pos++;
+                }
+            }
+            self->tok = T_NUM;
+            return;
+        }
+        if (c == '"' || c == '\'') {
+            char q = (char)c;
+            n = 0;
+            self->toktext[n] = q;
+            n++;
+            self->pos++;
+            while (self->src[self->pos] && self->src[self->pos] != q) {
+                if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
+                    if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                    self->pos++;
+                }
+                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                self->pos++;
+            }
+            if (self->src[self->pos] == q) {
+                if (n + 1 < MAX_TEXT) { self->toktext[n] = q; n++; }
+                self->pos++;
+            }
+            self->toktext[n] = 0;
+            self->tok = T_STR;
+            return;
+        }
+        if (c == '-' && self->src[self->pos + 1] == '>') {
+            self->toktext[0] = '-';
+            self->toktext[1] = '>';
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        if (c == ':' && self->src[self->pos + 1] == ':') {
+            self->toktext[0] = ':';
+            self->toktext[1] = ':';
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
+            self->toktext[0] = (char)c;
+            self->toktext[1] = '=';
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        if ((c == '+' || c == '-') && self->src[self->pos + 1] == c) {
+            self->toktext[0] = (char)c;
+            self->toktext[1] = (char)c;
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
+        if ((c == '&' || c == '|') && self->src[self->pos + 1] == c) {
+            self->toktext[0] = (char)c;
+            self->toktext[1] = (char)c;
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        /* compound assignment: `+=` `-=` `*=` `/=` `%=` */
+        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
+            && self->src[self->pos + 1] == '=') {
+            self->toktext[0] = (char)c;
+            self->toktext[1] = '=';
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        self->toktext[0] = (char)c;
+        self->toktext[1] = 0;
+        self->tok = T_PUNCT;
+        self->pos++;
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Lexer g_lexer;
+
+struct Lexer *lexer_get(void)
+{
+    return &g_lexer;
+}
+}
