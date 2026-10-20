@@ -660,6 +660,15 @@ impl AstOps for Ast {
                     g_toknum = g_toknum * 16 + dv;
                     g_pos++;
                 }
+            } else if (c == '0' && g_src[g_pos + 1] >= '0' && g_src[g_pos + 1] <= '7') {
+                /* a leading zero makes the literal octal in C; reading it as
+                   decimal changed 0755 into 755 (a mode argument silently became
+                   a decimal value) */
+                g_pos++;
+                while (g_src[g_pos] >= '0' && g_src[g_pos] <= '7') {
+                    g_toknum = g_toknum * 8 + (g_src[g_pos] - '0');
+                    g_pos++;
+                }
             } else {
                 while (g_src[g_pos] >= '0' && g_src[g_pos] <= '9') {
                     g_toknum = g_toknum * 10 + (g_src[g_pos] - '0');
