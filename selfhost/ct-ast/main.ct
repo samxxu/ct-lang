@@ -27,6 +27,7 @@ import frontend::lex::lexer;
 import frontend::module::unit;
 import frontend::module::map;
 import frontend::sym::sym;
+import frontend::type::type;
 import tool::cache::cache;
 import backend::mem::mem;
 
@@ -402,6 +403,9 @@ struct Ast {
     /* AutoDrop and the leak analysis live in backend::mem; the driver wires its
        arena, symbol table and path before it dispatches to `run`. */
     struct backend_mem_Memory *mem;
+    /* Type inference and the boxing decision live in frontend::type; the driver
+       wires the arena, the symbol table, the map table, its count and the lexer. */
+    struct frontend_type_TypeCheck *ty;
 } use AstOps, SymOps, ParseOps, TypeOps, ModuleOps, EmitOps, RecoverOps, MemoryOps;
 
 impl AstOps for Ast {
@@ -2624,387 +2628,73 @@ impl ParseOps for Ast {
     }
 }
 
+/* The type queries and the boxing decision live in frontend::type; this half
+   only forwards, so the parser keeps calling them on the driver object. */
 impl TypeOps for Ast {
-    /* `struct T_iface` -> T. */
     int is_iface_type(const char *type, char *tout, size_t tcap)
     {
-        const char *base;
-        size_t n;
-        (void)self;
-
-        base = type;
-        if (strncmp(base, "struct ", 7) != 0) return 0;
-        base += 7;
-        n = strlen(base);
-        if (n <= 6 || strcmp(base + n - 6, "_iface") != 0) return 0;
-        if (n - 6 >= tcap) return 0;
-        snprintf(tout, tcap, "%.*s", (int)(n - 6), base);
-        return 1;
+        return self->ty->is_iface_type(type, tout, (int)tcap);
     }
 
-    /* `struct X_iface` -> (X, 0); `struct X_iface *` -> (X, 1). */
     int iface_ref_type(const char *type, char *tout, size_t tcap, int *is_ptr)
     {
-        char buf[MAX_TEXT];
-        size_t n;
-        (void)self;
-
-        *is_ptr = 0;
-        if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
-        n = strlen(buf);
-        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {
-            if (buf[n - 1] == '*') *is_ptr = 1;
-            buf[n - 1] = 0;
-            n--;
-        }
-        return self->is_iface_type(buf, tout, tcap);
+        return self->ty->iface_ref_type(type, tout, (int)tcap, is_ptr);
     }
 
-    /* `struct S` / `S` / `struct S *` -> S (and whether it was a pointer). */
     int concrete_struct(const char *type, char *sout, size_t scap, int *is_ptr)
     {
-        char buf[MAX_TEXT];
-        char *base;
-        size_t n;
-        (void)self;
-
-        if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
-        base = buf;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        n = strlen(base);
-        *is_ptr = 0;
-        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
-            if (base[n - 1] == '*') *is_ptr = 1;
-            base[n - 1] = 0;
-            n--;
-        }
-        if (self->find_struct(base) < 0) return 0;
-        if (snprintf(sout, scap, "%s", base) >= (int)scap) return 0;
-        return 1;
+        return self->ty->concrete_struct(type, sout, (int)scap, is_ptr);
     }
 
-    /* A best-effort static type for the expressions boxing needs. */
     int expr_type(int n, char *out, size_t cap)
     {
-        int i;
-        (void)self;
-
-        if (self->arena->nodes[n].kind == N_VAR) return self->var_type(self->arena->nodes[n].text2, out, cap);
-        if (self->arena->nodes[n].kind == N_INDEX) {
-            /* a[i] is the pointee: a pointer's star drops, while an array's
-               declared type has none to drop -- unless it is an array *of*
-               pointers, which `is_array` keeps intact */
-            size_t ln;
-            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
-            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
-                int vi = self->find_var(self->arena->nodes[self->arena->nodes[n].a].text2);
-                if (vi >= 0 && self->sym->vars[vi].is_array) return 0;
-            }
-            ln = strlen(out);
-            while (ln > 0 && out[ln - 1] == ' ') ln--;
-            if (ln > 0 && out[ln - 1] == '*') {
-                ln--;
-                while (ln > 0 && out[ln - 1] == ' ') ln--;
-                out[ln] = 0;
-            }
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_ADDR) {
-            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
-            if (strlen(out) + 2 >= cap) return -1;
-            strcat(out, " *");
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_CALL) {
-            i = self->find_func(self->arena->nodes[n].text2);
-            if (i < 0) return -1;
-            if (snprintf(out, cap, "%s", self->sym->funcs[i].ret) >= (int)cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_MEMBER || self->arena->nodes[n].kind == N_ARROW) {
-            char rt[MAX_TEXT];
-            char sname[MAX_TEXT];
-            int is_ptr, si, fi;
-            if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
-            is_ptr = (self->arena->nodes[n].kind == N_ARROW);
-            if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
-            si = self->find_struct(sname);
-            if (si < 0) return -1;
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-                    if (snprintf(out, cap, "%s", self->sym->structs[si].fields[fi].type) >= (int)cap) return -1;
-                    return 0;
-                }
-            return -1;
-        }
-        if (self->arena->nodes[n].kind == N_BOX) {
-            if (snprintf(out, cap, "struct %s_iface%s", self->arena->nodes[n].text,
-                         self->arena->nodes[n].aux >= 2 ? " *" : "") >= (int)cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_CAST) {
-            if (snprintf(out, cap, "%s", self->arena->nodes[n].text) >= (int)cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_SIZEOF) {
-            if (snprintf(out, cap, "%s", "int") >= (int)cap) return -1;
-            return 0;
-        }
-        return -1;
+        return self->ty->expr_type(n, out, (int)cap);
     }
 
-    /* Wrap `n` in a fat pointer when `trait` is expected; an expression that is
-       already the right interface passes through unchanged. A declared global
-       instance bound by `map` (11.2) boxes with its instance-level vtable even
-       when its struct never `use`d the trait. */
+    /* The type layer returns the box node's index on success (0 is a valid
+       node), so only a negative result is a failure. */
     int maybe_box(int n, const char *trait, int addr)
     {
-        char t[MAX_TEXT];
-        char tname[MAX_TEXT];
-        char sname[MAX_TEXT];
-        char iname[MAX_TEXT];
-        int is_ptr, si, u, box, found, i, mptr, ip;
-        (void)self;
-
-        if (self->arena->nodes[n].kind == N_BOX) {
-            /* already an interface value; a pointer target takes its address */
-            if (!addr) return n;
-            box = self->new_node(N_ADDR);
-            if (box < 0) return -1;
-            self->arena->nodes[box].a = n;
-            return box;
+        const char *why;
+        int box;
+        self->ty->errmsg[0] = 0;
+        box = self->ty->maybe_box(n, trait, addr);
+        if (box < 0) {
+            why = self->ty->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
         }
-        /* N_BOX text2 names the vtable's owner: the struct for a struct-level
-           box, the instance for a `map` box, so the same `<owner>_<trait>_vtable`
-           emit rule covers both. */
-        mptr = 0;
-        iname[0] = 0;
-        if (self->arena->nodes[n].kind == N_VAR) {
-            snprintf(iname, sizeof iname, "%s", self->arena->nodes[n].text2);
-        } else if (self->arena->nodes[n].kind == N_ADDR && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
-            snprintf(iname, sizeof iname, "%s", self->arena->nodes[self->arena->nodes[n].a].text2);
-            mptr = 1;
-        }
-        if (iname[0]) {
-            for (i = 0; i < self->nmaps; i++)
-                if (strcmp(self->maps[i].inst, iname) == 0 && strcmp(self->maps[i].trait, trait) == 0) {
-                    box = self->new_node(N_BOX);
-                    if (box < 0) return -1;
-                    self->arena->nodes[box].a = n;
-                    self->arena->nodes[box].aux = mptr + (addr ? 2 : 0);
-                    snprintf(self->arena->nodes[box].text, MAX_TEXT, "%s", trait);
-                    snprintf(self->arena->nodes[box].text2, MAX_TEXT, "%s", iname);
-                    return box;
-                }
-        }
-        if (self->expr_type(n, t, sizeof t) != 0)
-            return self->fail("cannot infer the type to box");
-        ip = 0;
-        if (self->iface_ref_type(t, tname, sizeof tname, &ip)) {
-            if (strcmp(tname, trait) == 0) {
-                if (ip == addr) return n;
-                /* an array of interface values decays to a pointer */
-                if (!ip && addr && self->arena->nodes[n].kind == N_VAR) {
-                    int vi = self->find_var(self->arena->nodes[n].text2);
-                    if (vi >= 0 && self->sym->vars[vi].is_array) return n;
-                }
-            }
-            return self->fail("interface type mismatch");
-        }
-        if (!self->concrete_struct(t, sname, sizeof sname, &is_ptr))
-            return self->fail("cannot box this expression");
-        si = self->find_struct(sname);
-        if (si < 0) return self->fail("cannot box an unknown struct");
-        found = 0;
-        for (u = 0; u < self->sym->structs[si].nuse; u++)
-            if (strcmp(self->sym->structs[si].use[u], trait) == 0) found = 1;
-        if (!found) return self->fail("the struct does not use this trait");
-        box = self->new_node(N_BOX);
-        if (box < 0) return -1;
-        self->arena->nodes[box].a = n;
-        self->arena->nodes[box].aux = is_ptr + (addr ? 2 : 0);
-        snprintf(self->arena->nodes[box].text, MAX_TEXT, "%s", trait);
-        snprintf(self->arena->nodes[box].text2, MAX_TEXT, "%s", sname);
         return box;
     }
 
-    /* Does `type` carry a struct-typed array field whose elements need vptrs?
-       Such a field cannot be initialised by designator, so the declaration site
-       has to emit a loop after it. */
     int type_has_array_init(const char *type)
     {
-        const char *base;
-        int si, fi;
-        (void)self;
-
-        base = type;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        si = self->find_struct(base);
-        for (fi = 0; si >= 0 && fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
-            if (!self->sym->structs[si].fields[fi].dims[0]) continue;
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
-            if (strchr(ft, '*') != 0) continue;
-            if (self->type_needs_init(ft)) return 1;
-        }
-        return 0;
+        return self->ty->type_has_array_init(type);
     }
 
-    /* Rewrite one initialiser item when it fills an interface field from a
-       concrete struct (`.l = a`, `.l = &a`). Both forms need boxing: a value
-       field takes the fat pointer, a pointer field its address. Anything else
-       (including a value that is already an interface) is copied verbatim, so
-       existing initialisers stay byte for byte as they were. */
+    /* A miss is not the only failure here: an over-long initialiser records a
+       reason inside the type layer, and the position has to be added here. */
     int init_item_text(const char *stype, const char *item, char *out, size_t cap)
     {
-        const char *p, *rhs, *base;
-        char fname[MAX_TEXT];
-        char ftype[MAX_TEXT];
-        char sname[MAX_TEXT];
-        char tname[MAX_TEXT];
-        char vname[MAX_TEXT];
-        char vtype[MAX_TEXT];
-        int si, fi, is_ptr, srcptr, vptr, u, found, ok;
-        size_t k;
-
-        fname[0] = 0;
-        ftype[0] = 0;
-        sname[0] = 0;
-        tname[0] = 0;
-        vname[0] = 0;
-        vtype[0] = 0;
-        rhs = item;
-        base = stype;
-
-        /* shape: `.field = <operand>` */
-        p = item;
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-        ok = (*p == '.');
-        if (ok) p++;
-        k = 0;
-        while (ok && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-                      || (*p >= '0' && *p <= '9') || *p == '_')) {
-            if (k + 1 >= sizeof fname) ok = 0;
-            else { fname[k] = *p; k++; p++; }
+        const char *why;
+        self->ty->errmsg[0] = 0;
+        if (self->ty->init_item_text(stype, item, out, (int)cap) != 0) {
+            why = self->ty->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
         }
-        fname[k] = 0;
-        if (!k) ok = 0;
-        while (ok && (*p == ' ' || *p == '\t')) p++;
-        if (ok && *p != '=') ok = 0;
-        if (ok) { p++; rhs = p; }
-
-        /* the field must be an interface (value or pointer) of a known struct */
-        if (ok && strncmp(base, "struct ", 7) == 0) base += 7;
-        while (ok && *base == ' ') base++;
-        si = ok ? self->find_struct(base) : -1;
-        if (si < 0) ok = 0;
-        fi = -1;
-        for (u = 0; ok && u < self->sym->structs[si].nfields; u++)
-            if (strcmp(self->sym->structs[si].fields[u].name, fname) == 0) fi = u;
-        if (ok && (fi < 0 || self->sym->structs[si].fields[fi].dims[0])) ok = 0;
-        is_ptr = 0;
-        if (ok) {
-            snprintf(ftype, sizeof ftype, "%s", self->sym->structs[si].fields[fi].type);
-            if (!self->iface_ref_type(ftype, tname, sizeof tname, &is_ptr)) ok = 0;
-        }
-
-        /* the operand must be a bare variable, optionally addressed */
-        srcptr = 0;
-        if (ok) {
-            p = rhs;
-            while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-            if (*p == '&') {
-                srcptr = 1;
-                p++;
-                while (*p == ' ' || *p == '\t') p++;
-            }
-            k = 0;
-            while (ok && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-                          || (*p >= '0' && *p <= '9') || *p == '_')) {
-                if (k + 1 >= sizeof vname) ok = 0;
-                else { vname[k] = *p; k++; p++; }
-            }
-            vname[k] = 0;
-            if (!k) ok = 0;
-            while (ok && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++;
-            if (ok && *p) ok = 0;
-        }
-
-        /* ... of a struct that implements the trait, with matching indirection */
-        vptr = 0;
-        if (ok && self->var_type(vname, vtype, sizeof vtype) != 0) ok = 0;
-        if (ok && !self->concrete_struct(vtype, sname, sizeof sname, &vptr)) ok = 0;
-        if (ok && srcptr && vptr) ok = 0;     /* `&p` on a struct pointer is not a box source */
-        found = 0;
-        si = ok ? self->find_struct(sname) : -1;
-        for (u = 0; ok && si >= 0 && u < self->sym->structs[si].nuse; u++)
-            if (strcmp(self->sym->structs[si].use[u], tname) == 0) found = 1;
-        if (ok && !found) ok = 0;
-
-        if (!ok) {
-            if (snprintf(out, cap, "%s", item) >= (int)cap) return -1;
-            return 0;
-        }
-        /* the self pointer is the operand itself when it already is a pointer */
-        if (snprintf(out, cap, ".%s = %s(struct %s_iface){ (void *)%s%s, &%s_%s_vtable }",
-                     fname, is_ptr ? "&" : "", tname,
-                     (srcptr || !vptr) ? "&" : "", vname, sname, tname) >= (int)cap) return -1;
         return 0;
     }
 
-    /* Rewrite a captured `{ ... }` list item by item. Runs at parse time: the
-       operand types come from the local variable table, which is gone by the
-       time the emitter walks the AST. */
     int rewrite_init_text(const char *stype, const char *raw, char *out, size_t cap)
     {
-        int len, i, depth, in_str, start, seg;
-        char item[MAX_TEXT];
-        char fixed[MAX_TEXT];
-
-        len = (int)strlen(raw);
-        if (len < 2 || raw[len - 1] != '}') {
-            if (snprintf(out, cap, "%s", raw) >= (int)cap) return -1;
-            return 0;
+        const char *why;
+        self->ty->errmsg[0] = 0;
+        if (self->ty->rewrite_init_text(stype, raw, out, (int)cap) != 0) {
+            why = self->ty->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
         }
-        if (cap < 3) return -1;
-        out[0] = '{';
-        out[1] = 0;
-        start = 1;
-        depth = 0;
-        in_str = 0;
-        for (i = 1; i < len - 1; i++) {
-            char c = raw[i];
-            if (in_str) {
-                if (c == '\\' && raw[i + 1]) i++;
-                else if (c == '"') in_str = 0;
-                continue;
-            }
-            if (c == '"') { in_str = 1; continue; }
-            if (c == '{' || c == '[' || c == '(') depth++;
-            else if (c == '}' || c == ']' || c == ')') depth--;
-            else if (c == ',' && depth == 0) {
-                seg = i - start;
-                if (seg >= (int)sizeof item) return self->fail("initializer is too long");
-                memcpy(item, raw + start, (size_t)seg);
-                item[seg] = 0;
-                if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) return -1;
-                if (strlen(out) + strlen(fixed) + 2 >= cap) return -1;
-                strcat(out, fixed);
-                strcat(out, ",");
-                start = i + 1;
-            }
-        }
-        seg = len - 1 - start;
-        if (seg < 0) seg = 0;
-        if (seg >= (int)sizeof item) return self->fail("initializer is too long");
-        memcpy(item, raw + start, (size_t)seg);
-        item[seg] = 0;
-        if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) return -1;
-        if (strlen(out) + strlen(fixed) + 2 >= cap) return -1;
-        strcat(out, fixed);
-        strcat(out, "}");
         return 0;
     }
 }
@@ -5692,6 +5382,13 @@ int main(int argc, char **argv)
     g_ast.mem = memory_get();
     g_ast.mem->arena = g_ast.arena;
     g_ast.mem->sym = g_ast.sym;
+    /* static typing and boxing (frontend::type) read the same tables */
+    g_ast.ty = type_get();
+    g_ast.ty->arena = g_ast.arena;
+    g_ast.ty->sym = g_ast.sym;
+    g_ast.ty->lex = g_ast.lex;
+    g_ast.ty->maps = g_ast.maps;
+    g_ast.ty->nmaps = &g_ast.nmaps;
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];
