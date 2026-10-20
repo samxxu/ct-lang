@@ -1,0 +1,767 @@
+/*
+ * module.h.ct - the build driver: unit loading and the output side.
+ *
+ * The module layer of a `build`: path and import resolution, loading the unit
+ * closure, validating a unit's directory against its `namespace`, ordering the
+ * units for the incremental cache, and driving the emitter for every unit. The
+ * compile-mode entry (`run`) stays with the driver object in main.ct; this unit
+ * holds the state the two share -- the unit table, the run options and the
+ * current path -- so those methods are real methods on an object rather than
+ * free functions over file-scope globals.
+ *
+ * Macros do not cross a unit boundary, so the caps and the token kinds used
+ * here are restated; they must stay equal to main.ct.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import runtime::arena::arena;
+import frontend::lex::lexer;
+import frontend::module::unit;
+import frontend::sym::sym;
+import frontend::type::type;
+import frontend::parse::parse;
+import tool::cache::cache;
+import tool::diag::diag;
+import backend::mem::mem;
+import backend::emit::emit;
+
+#define MAX_TEXT   160
+#define MAX_PATH   1024
+#define MAX_UNITS  64
+#define MAX_IMPORTS 16
+#define MAX_INCDIRS 16
+#define MAX_IH     2560                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
+#define MAX_KEY    768                  /* one unit's incremental-cache key */
+
+/* token kinds (the scanner only needs these two) */
+#define T_ID     1
+#define T_PP     5
+
+namespace frontend::module {
+pub trait ModuleOps {
+    int  fail(const char *msg);
+    int  read_file(const char *path);
+    int  base_name(const char *path, char *out, int cap, int *is_hdr);
+    int  path_dir(const char *path, char *out, int cap);
+    int  scan_imports(const char *from);
+    int  resolve_import(const char *from, const char *rel, char *out, int cap, int *is_hdr);
+    int  load_unit(const char *path);
+    int  check_ns_dir(int u);
+    int  cache_order(int u, int *state, int *order, int *n);
+    int  cache_key_of(int u, char *out, int cap);
+    int  build_main(int argc, char **argv);
+    int  emit_program(int prog);
+    int  emit_unit(int u);
+    int  write_unit_header(int u);
+    int  write_header(const char *outc);
+    int  write_map(const char *dest, int prog, int u);
+}
+
+pub struct Module {
+    /* Collaborators the methods reach through; the driver wires them once. */
+    struct runtime_arena_Arena *arena;
+    struct frontend_lex_Lexer *lex;
+    struct frontend_sym_Symbols *sym;
+    struct frontend_type_TypeCheck *ty;
+    struct backend_mem_Memory *mem;
+    struct frontend_parse_Parser *p;
+    struct tool_cache_Cache *cache;
+    /* Output state for one run: the source path the banner and diagnostics
+       report. The driver re-points it for each unit in build mode. */
+    const char *path;
+    /* Build mode: the unit table and the import search roots. These tables have
+       element types from this same namespace; a generated header carries no
+       `#include`, so their storage lives in this unit's `.c` and the object
+       keeps a pointer. */
+    struct frontend_module_Unit *units;
+    int  nunits;
+    int  build_mode;
+    /* Array bounds are literals because this struct lands in a generated header
+       that carries no macros; they must stay equal to MAX_PATH 1024 in main.ct
+       and MAX_INCDIRS 16 here. */
+    char outdir[1024];
+    const char *incdirs[16];
+    int  ninc;
+    const char *nsroot;
+    /* Run options. `prog` is the entry name `-v` and the usage lines print
+       (D44): `ct` when installed under that name, `ctc` for the compatibility
+       alias, `ct-ast` for the development binary. Driver diagnostics keep the
+       published `ctc:` prefix (SH-3 / phase10 non-goal). */
+    int  line_mode;             /* emit `#line`: 0 off, 1 on */
+    int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
+    char map_path[1024];
+    int  have_map;
+    const char *prog;
+    int  diag_json;             /* --diagnostics=json */
+    const char *std_flag;       /* --std=c99 | --std=gnu99 */
+    const char *version;        /* CTC_VERSION, bound by the driver */
+} use ModuleOps;
+
+impl ModuleOps for Module {
+    /* The token cursor and the error store live in frontend::parse; the driver
+       forwards so the store stays single. */
+    int fail(const char *msg)
+    {
+        (void)self;
+        return ct_parse_fail(msg);
+    }
+
+    int read_file(const char *path)
+    {
+        FILE *f;
+        long sz;
+        char *buf;
+
+        f = fopen(path, "rb");
+        if (!f) return self->fail("cannot open the input file");
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz < 0) {
+            fclose(f);
+            return self->fail("cannot read the input file");
+        }
+        buf = (char *)malloc((size_t)sz + 1);
+        if (!buf) {
+            fclose(f);
+            return self->fail("out of memory");
+        }
+        if (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+            free(buf);
+            fclose(f);
+            return self->fail("short read");
+        }
+        fclose(f);
+        buf[sz] = 0;
+        self->lex->src = buf;
+        return 0;
+    }
+
+    /* `foo.ct` -> `foo`; `foo.h.ct` -> `foo` and `is_hdr = 1`. */
+    int base_name(const char *path, char *out, int cap, int *is_hdr)
+    {
+        const char *slash, *name;
+        size_t n;
+        (void)self;
+
+        slash = strrchr(path, '/');
+        name = slash ? slash + 1 : path;
+        n = strlen(name);
+        *is_hdr = 0;
+        if (n > 5 && strcmp(name + n - 5, ".h.ct") == 0) {
+            *is_hdr = 1;
+            n -= 5;
+        } else if (n > 3 && strcmp(name + n - 3, ".ct") == 0) {
+            n -= 3;
+        }
+        if (n + 1 > (size_t)cap) return self->fail("output name is too long");
+        snprintf(out, (size_t)cap, "%.*s", (int)n, name);
+        return 0;
+    }
+
+    int path_dir(const char *path, char *out, int cap)
+    {
+        const char *slash;
+        size_t n;
+        (void)self;
+
+        slash = strrchr(path, '/');
+        if (!slash) {
+            if (cap < 2) return self->fail("path is too long");
+            snprintf(out, (size_t)cap, "%s", ".");
+            return 0;
+        }
+        n = (size_t)(slash - path);
+        if (n == 0) n = 1;   /* "/x" -> "/" */
+        if (n + 1 > (size_t)cap) return self->fail("path is too long");
+        snprintf(out, (size_t)cap, "%.*s", (int)n, path);
+        return 0;
+    }
+
+    /* Imports are the leading declarations of a unit, so one pass finds them
+       before anything is parsed. */
+    int scan_imports(const char *from)
+    {
+        self->p->nrels = 0;
+        self->path = from;
+        self->mem->path = self->path;
+        ct_emit_set_path(self->path);
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->tok = 0;
+        ct_parse_lex_next();
+        for (;;) {
+            if (self->lex->tok == T_PP) {
+                ct_parse_lex_next();
+                continue;
+            }
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
+                if (ct_parse_skip_import() != 0) return -1;
+                continue;
+            }
+            break;
+        }
+        return 0;
+    }
+
+    /* `a::b` -> `<root>/a/b.ct`, then `a/b.h.ct`, for the importing file's own
+       directory and then every `-I` root. */
+    int resolve_import(const char *from, const char *rel, char *out, int cap, int *is_hdr)
+    {
+        char dir[MAX_PATH];
+        char cand[MAX_PATH];
+        const char *root;
+        FILE *f;
+        int r;
+        (void)self;
+
+        if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
+        for (r = -1; r < self->ninc; r++) {
+            root = (r < 0) ? dir : self->incdirs[r];
+            if (snprintf(cand, sizeof cand, "%s/%s.ct", root, rel) >= (int)sizeof cand)
+                return self->fail("import path is too long");
+            f = fopen(cand, "rb");
+            if (f) {
+                fclose(f);
+                *is_hdr = 0;
+                if (snprintf(out, (size_t)cap, "%s", cand) >= cap) return self->fail("import path is too long");
+                return 0;
+            }
+            if (snprintf(cand, sizeof cand, "%s/%s.h.ct", root, rel) >= (int)sizeof cand)
+                return self->fail("import path is too long");
+            f = fopen(cand, "rb");
+            if (f) {
+                fclose(f);
+                *is_hdr = 1;
+                if (snprintf(out, (size_t)cap, "%s", cand) >= cap) return self->fail("import path is too long");
+                return 0;
+            }
+        }
+        snprintf(cand, sizeof cand, "cannot resolve import '%s'", rel);
+        return self->fail(cand);
+    }
+
+    /* Parse the import closure depth first, so a unit's declarations are in the
+       shared tables before its importers are parsed. Returns the unit index. */
+    int load_unit(const char *path)
+    {
+        char rels[MAX_IMPORTS][MAX_TEXT];
+        char dep[MAX_PATH];
+        char *mysrc;
+        int u, i, d, nrels, is_hdr;
+        (void)self;
+
+        for (u = 0; u < self->nunits; u++)
+            if (strcmp(self->units[u].path, path) == 0) return u;
+        if (self->nunits >= MAX_UNITS) {
+            self->fail("too many units");
+            return -1;
+        }
+        u = self->nunits;
+        self->nunits++;
+        if (snprintf(self->units[u].path, MAX_PATH, "%s", path) >= MAX_PATH) {
+            self->fail("path is too long");
+            return -1;
+        }
+        self->units[u].ndep = 0;
+        self->units[u].prog = -1;
+        self->units[u].digest = 0;
+        self->units[u].ns[0] = 0;
+        if (self->base_name(path, self->units[u].base, MAX_TEXT, &is_hdr) != 0) return -1;
+        self->units[u].is_hdr = is_hdr;
+
+        if (self->read_file(path) != 0) return -1;
+        mysrc = (char *)self->lex->src;
+        if (self->scan_imports(path) != 0) return -1;
+        nrels = self->p->nrels;
+        for (i = 0; i < nrels; i++) snprintf(rels[i], MAX_TEXT, "%s", self->p->rels[i]);
+        for (i = 0; i < nrels; i++) {
+            if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr) != 0) return -1;
+            d = self->load_unit(dep);
+            if (d < 0) return -1;
+            if (self->units[u].ndep >= MAX_IMPORTS) {
+                self->fail("too many imports");
+                return -1;
+            }
+            snprintf(self->units[u].dep[self->units[u].ndep], MAX_TEXT, "%s", self->units[d].base);
+            self->units[u].depu[self->units[u].ndep] = d;
+            self->units[u].ndep++;
+        }
+
+        self->lex->src = mysrc;
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->tok = 0;
+        self->sym->nvar = 0;
+        self->sym->nscope = 0;
+        self->mem->nowner = 0;
+        self->mem->leak_active = 0;
+        self->mem->leak_frame = -1;
+        self->mem->leak_impl = 0;
+        self->mem->ret_owned = 0;
+        self->sym->ns[0] = 0;
+        self->p->ns_decl[0] = 0;
+        self->sym->self_mode = 0;
+        self->sym->ret_type[0] = 0;
+        self->p->cur_func[0] = 0;
+        self->p->nparams = 0;
+        /* `scan_imports` counted this unit's imports into `rels`, but the
+           recursive loads above left the counter at a dependency's value, and
+           parsing skips the same `import` lines again -- start that pass from
+           zero so a unit is never charged for its dependencies' imports. */
+        self->p->nrels = 0;
+        self->path = path;
+        self->mem->path = self->path;
+        ct_emit_set_path(self->path);
+        self->units[u].fn_start = self->sym->nfunc;
+        self->units[u].tr_start = self->sym->ntraits;
+        self->units[u].call_start = self->p->ncalls;
+        self->p->cur_unit = u;
+        self->units[u].prog = ct_parse_program();
+        if (self->units[u].prog < 0) return -1;
+        self->units[u].fn_end = self->sym->nfunc;
+        self->units[u].tr_end = self->sym->ntraits;
+        self->units[u].call_end = self->p->ncalls;
+        snprintf(self->units[u].ns, MAX_TEXT, "%s", self->p->ns_decl);
+        return u;
+    }
+
+    /* A unit that declares a namespace must sit in the matching directory under
+       `--ns-root` (D13 option A: validation, not derivation). */
+    int check_ns_dir(int u)
+    {
+        char rest[MAX_PATH];
+        char dir[MAX_TEXT];
+        char want[MAX_TEXT];
+        const char *p;
+        size_t rn, k, m;
+
+        (void)self;
+        if (!self->units[u].ns[0]) return 0;
+        if (!self->nsroot || !self->nsroot[0]) return 0;
+        rn = strlen(self->nsroot);
+        if (strncmp(self->units[u].path, self->nsroot, rn) != 0) return 0;
+        p = self->units[u].path + rn;
+        if (*p == '/') p++;
+        snprintf(rest, sizeof rest, "%s", p);
+        if (strncmp(rest, "./", 2) == 0 || strncmp(rest, "../", 3) == 0
+            || strstr(rest, "/./") != NULL || strstr(rest, "/../") != NULL) return 0;
+
+        k = strlen(rest);
+        while (k > 0 && rest[k - 1] != '/') k--;
+        if (k > 0) k--;                    /* drop the slash before the basename */
+        if (k >= sizeof dir) return self->fail("path is too long");
+        snprintf(dir, sizeof dir, "%.*s", (int)k, rest);
+
+        m = 0;
+        for (k = 0; self->units[u].ns[k]; k++) {
+            if (m + 1 >= sizeof want) return self->fail("namespace is too long");
+            if (self->units[u].ns[k] == ':' && self->units[u].ns[k + 1] == ':') {
+                want[m] = '/';
+                m++;
+                k++;
+            } else {
+                want[m] = self->units[u].ns[k];
+                m++;
+            }
+        }
+        want[m] = 0;
+        if (strcmp(dir, want) != 0) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "namespace '%s' does not match the directory '%s'",
+                     self->units[u].ns, dir);
+            return self->fail(msg);
+        }
+        return 0;
+    }
+
+    /* Dependency-first order for the cache. `load_unit` assigns an importer its
+       index before recursing, so unit indices are neither a topological order
+       nor its reverse; this postorder DFS is (same shape as L2's `order[]`).
+       The graph belongs to this layer, not to the cache. */
+    int cache_order(int u, int *state, int *order, int *n)
+    {
+        int k;
+        (void)self;
+        if (state[u] != 0) return 0;
+        state[u] = 1;
+        for (k = 0; k < self->units[u].ndep; k++)
+            if (self->cache_order(self->units[u].depu[k], state, order, n) != 0)
+                return -1;
+        state[u] = 2;
+        order[*n] = u;
+        (*n)++;
+        return 0;
+    }
+
+    /* The key material of unit `u`: its import list as text and the folded
+       dependency digest. The cache turns this into a stamped key; the module
+       layer owns the graph, so the folding happens here. */
+    int cache_key_of(int u, char *out, int cap)
+    {
+        char ih[MAX_IH];
+        unsigned long dep;
+        size_t n, k;
+        int w;
+        (void)self;
+
+        n = 0;
+        ih[0] = 0;
+        for (k = 0; k < (size_t)self->units[u].ndep; k++) {
+            w = snprintf(ih + n, sizeof ih - n, "%s.h;", self->units[u].dep[k]);
+            if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+            n += (size_t)w;
+        }
+        dep = 0;
+        for (k = 0; k < (size_t)self->units[u].ndep; k++)
+            dep = dep * (unsigned long)1099511628211
+                + self->units[self->units[u].depu[k]].digest;
+        if (self->cache->key(self->units[u].path, ih, dep, self->line_force,
+                             self->diag_json, self->nsroot, out, cap) != 0)
+            return -1;
+        /* the unit's own digest is what its dependants fold next */
+        self->units[u].digest = self->cache->digest(out);
+        return 0;
+    }
+
+    int build_main(int argc, char **argv)
+    {
+        const char *inputs[MAX_UNITS];
+        int ninput, i, u, o, cn;
+        int dirty[MAX_UNITS];
+        int cstate[MAX_UNITS];
+        int corder[MAX_UNITS];
+        const char *outdir;
+        char root[MAX_PATH];
+        (void)self;
+
+        ninput = 0;
+        outdir = NULL;
+        self->ninc = 0;
+        self->nsroot = NULL;
+        self->line_mode = 1;
+        self->line_force = -1;
+        self->have_map = 0;
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("usage: %s build <input.ct>... -o <dir> [-I <dir>] [--ns-root <dir>]\n"
+                       "                 [--line|--no-line] [--emit-map <file|->]\n"
+                       "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
+                       self->prog);
+                return 0;
+            }
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+                printf("%s v%s\n", self->prog, self->version);
+                return 0;
+            }
+            if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
+                const char *v = argv[i] + 14;
+                if (strcmp(v, "json") == 0) {
+                    self->diag_json = 1;
+                    continue;
+                }
+                if (strcmp(v, "text") == 0) {
+                    self->diag_json = 0;
+                    continue;
+                }
+                fprintf(stderr, "ctc: unknown diagnostics format '%s'\n", v);
+                return 1;
+            }
+            if (strncmp(argv[i], "--std=", 6) == 0) {
+                const char *v = argv[i] + 6;
+                if (strcmp(v, "c99") == 0) {
+                    self->std_flag = "-std=c99";
+                    continue;
+                }
+                if (strcmp(v, "gnu99") == 0) {
+                    self->std_flag = "-std=gnu99";
+                    continue;
+                }
+                fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
+                return 1;
+            }
+            if (strcmp(argv[i], "--line") == 0) {
+                self->line_mode = 1;
+                self->line_force = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--no-line") == 0) {
+                self->line_mode = 0;
+                self->line_force = 0;
+                continue;
+            }
+            if (strcmp(argv[i], "--emit-map") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: --emit-map needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (snprintf(self->map_path, sizeof self->map_path, "%s", argv[i]) >= (int)sizeof self->map_path) {
+                    fprintf(stderr, "ctc: map path is too long\n");
+                    return 1;
+                }
+                self->have_map = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "-o") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: -o needs an argument\n");
+                    return 1;
+                }
+                i++;
+                outdir = argv[i];
+                continue;
+            }
+            if (strcmp(argv[i], "-I") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: -I needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (self->ninc >= MAX_INCDIRS) {
+                    fprintf(stderr, "ctc: too many -I roots\n");
+                    return 1;
+                }
+                self->incdirs[self->ninc] = argv[i];
+                self->ninc++;
+                continue;
+            }
+            if (strcmp(argv[i], "--ns-root") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: --ns-root needs an argument\n");
+                    return 1;
+                }
+                i++;
+                self->nsroot = argv[i];
+                continue;
+            }
+            if (argv[i][0] == '-' && argv[i][1]) {
+                fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            if (ninput >= MAX_UNITS) {
+                fprintf(stderr, "ctc: too many inputs\n");
+                return 1;
+            }
+            inputs[ninput] = argv[i];
+            ninput++;
+        }
+        if (ninput == 0) {
+            fprintf(stderr, "usage: %s build <input.ct>... -o <dir>\n", self->prog);
+            return 1;
+        }
+        if (!outdir) {
+            fprintf(stderr, "ctc: build needs -o <dir>\n");
+            return 1;
+        }
+        if (snprintf(self->outdir, sizeof self->outdir, "%s", outdir) >= (int)sizeof self->outdir) {
+            fprintf(stderr, "ctc: output directory is too long\n");
+            return 1;
+        }
+        if (!self->nsroot) {
+            if (self->path_dir(inputs[0], root, sizeof root) != 0) {
+                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                return 1;
+            }
+            self->nsroot = root;
+        }
+
+        self->nunits = 0;
+        self->arena->reset();
+        self->sym->nfunc = 0;
+        self->sym->nvar = 0;
+        self->sym->nscope = 0;
+        self->mem->nowner = 0;
+        self->mem->leak_active = 0;
+        self->mem->leak_frame = -1;
+        self->mem->leak_impl = 0;
+        self->mem->ret_owned = 0;
+        self->sym->ntype = 0;
+        self->sym->ntraits = 0;
+        self->sym->nstructs = 0;
+        self->p->nrels = 0;
+        self->p->nparams = 0;
+        self->sym->self_mode = 0;
+        self->sym->ret_type[0] = 0;
+        self->sym->ns[0] = 0;
+        self->p->ns_decl[0] = 0;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->lstart = 0;
+        self->lex->tokstart = 0;
+        self->p->ncalls = 0;
+        ct_diag_reset();
+        self->p->cur_func[0] = 0;
+        ct_parse_clear_error();
+        self->build_mode = 1;
+
+        for (i = 0; i < ninput; i++) {
+            if (self->load_unit(inputs[i]) < 0) {
+                if (ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", ct_diag_nsem());
+                else fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                return 1;
+            }
+        }
+        for (u = 0; u < self->nunits; u++) {
+            if (self->check_ns_dir(u) != 0) {
+                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                return 1;
+            }
+        }
+        /* Incremental cache (Phase 6.3, ported in 10.5): a unit whose key still
+           matches and whose .c/.h are on disk is not regenerated. The walk is a
+           dependency-first postorder, so a unit's key can fold its dependencies'
+           digests; a unit whose dependency is dirty is dirty too. `--emit-map`
+           never reuses, because the map spans the whole run. */
+        for (u = 0; u < self->nunits; u++) cstate[u] = 0;
+        cn = 0;
+        for (u = 0; u < self->nunits; u++)
+            if (self->cache_order(u, cstate, corder, &cn) != 0) {
+                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                return 1;
+            }
+        for (o = 0; o < cn; o++) {
+            char outc[MAX_PATH];
+            char key[MAX_KEY];
+            int k;
+            u = corder[o];
+            dirty[u] = 1;
+            if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
+                    >= (int)sizeof outc) {
+                fprintf(stderr, "ctc: output path is too long\n");
+                return 1;
+            }
+            if (!self->have_map && self->cache_key_of(u, key, sizeof key) == 0
+                && self->cache->hit(outc, key))
+                dirty[u] = 0;
+            for (k = 0; k < self->units[u].ndep; k++)
+                if (dirty[self->units[u].depu[k]]) dirty[u] = 1;
+        }
+        for (o = 0; o < cn; o++) {
+            char outc[MAX_PATH];
+            char key[MAX_KEY];
+            u = corder[o];
+            if (!dirty[u]) continue;
+            if (self->emit_unit(u) != 0) {
+                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                return 1;
+            }
+            if (self->write_unit_header(u) != 0) {
+                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                return 1;
+            }
+            /* stamped only after a successful emit: a failed unit must never be
+               reused, and a stale key must never vouch for new sources */
+            if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
+                    < (int)sizeof outc
+                && self->cache_key_of(u, key, sizeof key) == 0)
+                self->cache->store(outc, key);
+        }
+        if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
+            fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+            return 1;
+        }
+        /* The command the user runs next, in the same shape L2 prints; the
+           target C standard (Phase 6.4) is the only option it carries. */
+        printf("cc %s", self->std_flag);
+        for (u = 0; u < self->nunits; u++)
+            printf(" %s/%s.c", self->outdir, self->units[u].base);
+        printf(" -o a.out\n");
+        if (ct_diag_emit(self->diag_json, 1) != 0) return 1;
+        return 0;
+    }
+
+    /* The emitter (backend::emit) owns the code generation; these facades wrap
+       the first raw failure with the current position, as the old bodies did. */
+    int emit_program(int prog)
+    {
+        const char *why;
+        if (ct_emit_program(prog) != 0) {
+            why = ct_emit_last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int emit_unit(int u)
+    {
+        const char *why;
+        if (ct_emit_unit(u) != 0) {
+            why = ct_emit_last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int write_unit_header(int u)
+    {
+        const char *why;
+        if (ct_emit_unit_header(u) != 0) {
+            why = ct_emit_last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int write_header(const char *outc)
+    {
+        const char *why;
+        if (ct_emit_header(outc) != 0) {
+            why = ct_emit_last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int write_map(const char *dest, int prog, int u)
+    {
+        const char *why;
+        if (ct_emit_map(dest, prog, u) != 0) {
+            why = ct_emit_last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Module g_module;
+
+/* Storage for the unit table: its element type belongs to `unit.h.ct`, and a
+   generated header carries no `#include`, so the array stays here and
+   `g_module` points at it. */
+static struct frontend_module_Unit g_units[MAX_UNITS];
+
+pub struct frontend_module_Module *module_get(void);
+struct frontend_module_Module *module_get(void)
+{
+    return &g_module;
+}
+
+/* The driver wires the collaborators and the shared table once, before it
+   dispatches; the name and the version it sets through the object itself. */
+pub void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache);
+void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache)
+{
+    g_module.arena = (struct runtime_arena_Arena *)arena;
+    g_module.lex = (struct frontend_lex_Lexer *)lex;
+    g_module.sym = (struct frontend_sym_Symbols *)sym;
+    g_module.ty = (struct frontend_type_TypeCheck *)ty;
+    g_module.mem = (struct backend_mem_Memory *)mem;
+    g_module.p = (struct frontend_parse_Parser *)p;
+    g_module.cache = (struct tool_cache_Cache *)cache;
+    g_module.units = g_units;
+}
+}
