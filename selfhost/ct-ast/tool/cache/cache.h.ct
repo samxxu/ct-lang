@@ -1,0 +1,154 @@
+/*
+ * cache.h.ct - the incremental cache: key spelling, hit and store.
+ *
+ * Phase 6.3 (ported in 10.5). A cache is a property of a build directory, not
+ * of the compiler's syntax state, so it is an object of its own: it owns the
+ * version string that goes into every key and turns a unit's key material into
+ * a stamped key. Nothing here parses or emits.
+ *
+ * Macros do not cross a unit boundary, so the caps are restated; they must stay
+ * equal to MAX_PATH 1024 and MAX_KEY 768 in main.ct. The cache deliberately
+ * knows nothing about `Unit`: the module layer hands in the key material as
+ * strings and numbers, so this unit never imports upward.
+ */
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+
+#define MAX_PATH 1024
+#define MAX_KEY  768
+
+namespace tool::cache {
+pub trait CacheOps {
+    unsigned long digest(const char *s);
+    int  key(const char *path, const char *imports, unsigned long dep,
+             int line_force, int diag_json, const char *nsroot, char *out, int cap);
+    int  paths(const char *outc, char *dir, int dcap, char *kf, int kcap);
+    int  hit(const char *outc, const char *key);
+    void store(const char *outc, const char *key);
+}
+
+pub struct Cache {
+    const char *version;        /* CTC_VERSION, seeded by the driver at start-up */
+} use CacheOps;
+
+pub struct Cache *cache_get(void);
+
+impl CacheOps for Cache {
+    /* FNV-1a: folds a variable-length string into the fixed-width number a key
+       carries, so dependency chains stay bounded (L2's `digest`, D41). */
+    unsigned long digest(const char *s)
+    {
+        unsigned long h;
+        size_t i;
+        (void)self;
+        h = (unsigned long)2166136261;
+        i = 0;
+        while (s[i]) {
+            h = h ^ (unsigned long)(unsigned char)s[i];
+            h = h * (unsigned long)16777619;
+            i++;
+        }
+        return h;
+    }
+
+    /* The key of one unit: what its .c/.h are a function of. The caller (the
+       module layer, which owns the graph) hands in the imports text and the
+       folded dependency digest; the cache adds the file stamp and the run's
+       options. `-1` means "no key" and is treated as "cannot be reused" (a
+       missing stamp must never be papered over). The spelling matches L2 byte
+       for byte. */
+    int key(const char *path, const char *imports, unsigned long dep,
+            int line_force, int diag_json, const char *nsroot, char *out, int cap)
+    {
+        char stamp[64];
+        struct stat st;
+        int w;
+        (void)self;
+
+        if (stat(path, &st) != 0) return -1;
+        snprintf(stamp, sizeof stamp, "%lu.%lu",
+                 (unsigned long)st.st_mtime, (unsigned long)st.st_size);
+        w = snprintf(out, (size_t)cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
+                     self->version, line_force, diag_json, nsroot,
+                     path, stamp, self->digest(imports), dep);
+        if (w < 0 || w >= cap) return -1;
+        return 0;
+    }
+
+    /* `<dir of outc>/.ctcache/<base>.key`: the cache sits beside the unit's own
+       outputs, so `-o <dir>` keeps it out of the source tree. */
+    int paths(const char *outc, char *dir, int dcap, char *kf, int kcap)
+    {
+        const char *slash;
+        const char *base;
+        int w;
+        (void)self;
+        slash = strrchr(outc, '/');
+        base = slash ? slash + 1 : outc;
+        if (slash) w = snprintf(dir, (size_t)dcap, "%.*s/.ctcache", (int)(slash - outc), outc);
+        else w = snprintf(dir, (size_t)dcap, ".ctcache");
+        if (w < 0 || w >= dcap) return -1;
+        w = snprintf(kf, (size_t)kcap, "%s/%s.key", dir, base);
+        if (w < 0 || w >= kcap) return -1;
+        return 0;
+    }
+
+    /* A hit needs the key file to match byte for byte and both artefacts on
+       disk: a key whose .c/.h were deleted must not be reused. */
+    int hit(const char *outc, const char *key)
+    {
+        char dir[MAX_PATH];
+        char kf[MAX_PATH];
+        char hp[MAX_PATH];
+        char buf[MAX_KEY];
+        FILE *f;
+        size_t n, kl, hl;
+        (void)self;
+
+        if (self->paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return 0;
+        f = fopen(kf, "r");
+        if (!f) return 0;
+        n = fread(buf, 1, sizeof buf, f);
+        fclose(f);
+        kl = strlen(key);
+        if (n != kl || memcmp(buf, key, kl) != 0) return 0;
+        if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
+        hl = strlen(hp);
+        if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
+        hp[hl - 1] = 'h';
+        f = fopen(hp, "rb");
+        if (!f) return 0;
+        fclose(f);
+        f = fopen(outc, "rb");
+        if (!f) return 0;
+        fclose(f);
+        return 1;
+    }
+
+    /* Best effort by design: a cache that cannot be written costs a rebuild,
+       never a broken build, so an unwritable directory stays silent. */
+    void store(const char *outc, const char *key)
+    {
+        char dir[MAX_PATH];
+        char kf[MAX_PATH];
+        FILE *f;
+        (void)self;
+        if (self->paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return;
+        mkdir(dir, 0755);            /* EEXIST on a warm cache is the normal case */
+        f = fopen(kf, "w");
+        if (!f) return;
+        fprintf(f, "%s", key);       /* no newline: `hit` compares byte for byte */
+        fclose(f);
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Cache g_cache;
+
+struct Cache *cache_get(void)
+{
+    return &g_cache;
+}
+}

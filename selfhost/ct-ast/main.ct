@@ -24,6 +24,8 @@ import tool::pkg::pkg;
 import tool::diag::diag;
 import runtime::arena::arena;
 import frontend::lex::lexer;
+import frontend::module::unit;
+import tool::cache::cache;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -209,25 +211,10 @@ typedef struct StructDef {
     int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
 } StructDef;
 
-/* One translation unit of a `build`: its source, output base, declared
-   namespace and the exported names of the units it imports. */
-typedef struct Unit {
-    char path[MAX_PATH];
-    char base[MAX_TEXT];
-    char ns[MAX_TEXT];
-    char dep[MAX_IMPORTS][MAX_TEXT];
-    int  depu[MAX_IMPORTS];     /* the dependency's unit index (cache folding) */
-    int  ndep;
-    int  prog;
-    int  is_hdr;
-    int  fn_start;
-    int  fn_end;
-    int  tr_start;
-    int  tr_end;
-    int  call_start;
-    int  call_end;
-    unsigned long digest;       /* this unit's key digest (10.5) */
-} Unit;
+/* One translation unit of a `build` is a value type of the module layer; see
+   frontend/module/unit.h.ct. The caps its fields need stay in this unit's
+   MAX_* list too, because the driver sizes the table and spells the same
+   numbers. */
 
 /* One `callee(...)` in a function body, for the map's call graph. */
 typedef struct Call {
@@ -366,6 +353,8 @@ trait ModuleOps {
     int  parse_map(void);
     int  map_check_call(const MapBind *b, const char *inst);
     int  struct_def_ahead(void);
+    int  cache_order(int u, int *state, int *order, int *n);
+    int  cache_key_of(int u, char *out, int cap);
     int  build_main(int argc, char **argv);
 }
 
@@ -428,18 +417,8 @@ trait MemoryOps {
     int  warn_leak(int vi, int path_line);
 }
 
-/* Incremental build cache (Phase 6.3, ported in 10.5). The key is a function of
-   the compiler version, the run's options and the unit's path, stamp, imports
-   and dependency digests -- the same spelling L2 writes (D41). */
-trait CacheOps {
-    unsigned long cache_digest(const char *s);
-    int  cache_order(int u, int *state, int *order, int *n);
-    int  cache_key(int u, char *out, size_t cap);
-    int  cache_paths(const char *outc, char *dir, size_t dcap,
-                     char *kf, size_t kcap);
-    int  cache_hit(const char *outc, const char *key);
-    void cache_store(const char *outc, const char *key);
-}
+/* The incremental build cache is an object of its own (tool/cache); the driver
+   only hands it the unit table and the run's options. */
 
 
 /* The struct carries the output, lexer and memory-analysis state so those
@@ -457,6 +436,8 @@ struct Ast {
     /* The node pool and the literal pool live in runtime::arena; the driver
        points this at that singleton before it dispatches to `run`. */
     struct runtime_arena_Arena *arena;
+    /* The incremental cache (tool::cache) and its version stamp. */
+    struct tool_cache_Cache *cache;
     /* The source cursor and the current token live in frontend::lex; the driver
        points this at that singleton before it dispatches to `run`. */
     struct frontend_lex_Lexer *lex;
@@ -481,7 +462,7 @@ struct Ast {
     /* Build mode: the unit table, the import search roots and the current
        namespace prefix, plus the calls and maps collected for the JSON map.
        The driver fills these before a build and reads them while emitting. */
-    Unit units[MAX_UNITS];
+    struct frontend_module_Unit units[MAX_UNITS];
     int  nunits;
     int  build_mode;
     char ns[MAX_TEXT];          /* current namespace prefix, e.g. "hal_" */
@@ -529,8 +510,7 @@ struct Ast {
     int leak_frame;
     int leak_impl;              /* 1 while parsing an impl method body */
     int ret_owned;
-} use AstOps, SymOps, ParseOps, TypeOps, ModuleOps, EmitOps, RecoverOps, MemoryOps,
-    CacheOps;
+} use AstOps, SymOps, ParseOps, TypeOps, ModuleOps, EmitOps, RecoverOps, MemoryOps;
 
 impl AstOps for Ast {
     /* The pool owns the storage and the reset of a fresh node; the line number
@@ -3921,6 +3901,55 @@ impl ModuleOps for Ast {
         return 0;
     }
 
+    /* Dependency-first order for the cache. `load_unit` assigns an importer its
+       index before recursing, so unit indices are neither a topological order
+       nor its reverse; this postorder DFS is (same shape as L2's `order[]`).
+       The graph belongs to this layer, not to the cache. */
+    int cache_order(int u, int *state, int *order, int *n)
+    {
+        int k;
+        (void)self;
+        if (state[u] != 0) return 0;
+        state[u] = 1;
+        for (k = 0; k < self->units[u].ndep; k++)
+            if (self->cache_order(self->units[u].depu[k], state, order, n) != 0)
+                return -1;
+        state[u] = 2;
+        order[*n] = u;
+        (*n)++;
+        return 0;
+    }
+
+    /* The key material of unit `u`: its import list as text and the folded
+       dependency digest. The cache turns this into a stamped key; the module
+       layer owns the graph, so the folding happens here. */
+    int cache_key_of(int u, char *out, int cap)
+    {
+        char ih[MAX_IH];
+        unsigned long dep;
+        size_t n, k;
+        int w;
+        (void)self;
+
+        n = 0;
+        ih[0] = 0;
+        for (k = 0; k < (size_t)self->units[u].ndep; k++) {
+            w = snprintf(ih + n, sizeof ih - n, "%s.h;", self->units[u].dep[k]);
+            if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+            n += (size_t)w;
+        }
+        dep = 0;
+        for (k = 0; k < (size_t)self->units[u].ndep; k++)
+            dep = dep * (unsigned long)1099511628211
+                + self->units[self->units[u].depu[k]].digest;
+        if (self->cache->key(self->units[u].path, ih, dep, self->line_force,
+                             self->diag_json, self->nsroot, out, cap) != 0)
+            return -1;
+        /* the unit's own digest is what its dependants fold next */
+        self->units[u].digest = self->cache->digest(out);
+        return 0;
+    }
+
     int build_main(int argc, char **argv)
     {
         const char *inputs[MAX_UNITS];
@@ -4128,8 +4157,8 @@ impl ModuleOps for Ast {
                 fprintf(stderr, "ctc: output path is too long\n");
                 return 1;
             }
-            if (!self->have_map && self->cache_key(u, key, sizeof key) == 0
-                && self->cache_hit(outc, key))
+            if (!self->have_map && self->cache_key_of(u, key, sizeof key) == 0
+                && self->cache->hit(outc, key))
                 dirty[u] = 0;
             for (k = 0; k < self->units[u].ndep; k++)
                 if (dirty[self->units[u].depu[k]]) dirty[u] = 1;
@@ -4151,8 +4180,8 @@ impl ModuleOps for Ast {
                reused, and a stale key must never vouch for new sources */
             if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
                     < (int)sizeof outc
-                && self->cache_key(u, key, sizeof key) == 0)
-                self->cache_store(outc, key);
+                && self->cache_key_of(u, key, sizeof key) == 0)
+                self->cache->store(outc, key);
         }
         if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
             fprintf(stderr, "ctc: %s\n", self->errmsg);
@@ -6044,145 +6073,6 @@ impl MemoryOps for Ast {
     }
 }
 
-impl CacheOps for Ast {
-    /* FNV-1a: folds a variable-length string into the fixed-width number a key
-       carries, so dependency chains stay bounded (L2's `digest`, D41). */
-    unsigned long cache_digest(const char *s)
-    {
-        unsigned long h;
-        size_t i;
-        (void)self;
-        h = (unsigned long)2166136261;
-        i = 0;
-        while (s[i]) {
-            h = h ^ (unsigned long)(unsigned char)s[i];
-            h = h * (unsigned long)16777619;
-            i++;
-        }
-        return h;
-    }
-
-    /* Dependency-first order for the cache. `load_unit` assigns an importer its
-       index before recursing, so unit indices are neither a topological order
-       nor its reverse; this postorder DFS is (same shape as L2's `order[]`). */
-    int cache_order(int u, int *state, int *order, int *n)
-    {
-        int k;
-        (void)self;
-        if (state[u] != 0) return 0;
-        state[u] = 1;
-        for (k = 0; k < self->units[u].ndep; k++)
-            if (self->cache_order(self->units[u].depu[k], state, order, n) != 0)
-                return -1;
-        state[u] = 2;
-        order[*n] = u;
-        (*n)++;
-        return 0;
-    }
-
-    /* The key of unit `u`: what its .c/.h are a function of. `-1` means "no key"
-       and is treated as "cannot be reused" (a missing stamp must never be
-       papered over). The spelling matches L2 byte for byte. */
-    int cache_key(int u, char *out, size_t cap)
-    {
-        char stamp[64];
-        char ih[MAX_IH];
-        unsigned long dep;
-        struct stat st;
-        size_t n, k;
-        int w;
-        (void)self;
-
-        if (stat(self->units[u].path, &st) != 0) return -1;
-        snprintf(stamp, sizeof stamp, "%lu.%lu",
-                 (unsigned long)st.st_mtime, (unsigned long)st.st_size);
-        n = 0;
-        ih[0] = 0;
-        for (k = 0; k < (size_t)self->units[u].ndep; k++) {
-            w = snprintf(ih + n, sizeof ih - n, "%s.h;", self->units[u].dep[k]);
-            if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
-            n += (size_t)w;
-        }
-        dep = 0;
-        for (k = 0; k < (size_t)self->units[u].ndep; k++)
-            dep = dep * (unsigned long)1099511628211 + self->units[self->units[u].depu[k]].digest;
-        w = snprintf(out, cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
-                     CTC_VERSION, self->line_force, self->diag_json, self->nsroot,
-                     self->units[u].path, stamp, self->cache_digest(ih), dep);
-        if (w < 0 || (size_t)w >= cap) return -1;
-        self->units[u].digest = self->cache_digest(out);
-        return 0;
-    }
-
-    /* `<dir of outc>/.ctcache/<base>.key`: the cache sits beside the unit's own
-       outputs, so `-o <dir>` keeps it out of the source tree. */
-    int cache_paths(const char *outc, char *dir, size_t dcap,
-                    char *kf, size_t kcap)
-    {
-        const char *slash;
-        const char *base;
-        int w;
-        (void)self;
-        slash = strrchr(outc, '/');
-        base = slash ? slash + 1 : outc;
-        if (slash) w = snprintf(dir, dcap, "%.*s/.ctcache", (int)(slash - outc), outc);
-        else w = snprintf(dir, dcap, ".ctcache");
-        if (w < 0 || (size_t)w >= dcap) return -1;
-        w = snprintf(kf, kcap, "%s/%s.key", dir, base);
-        if (w < 0 || (size_t)w >= kcap) return -1;
-        return 0;
-    }
-
-    /* A hit needs the key file to match byte for byte and both artefacts on
-       disk: a key whose .c/.h were deleted must not be reused. */
-    int cache_hit(const char *outc, const char *key)
-    {
-        char dir[MAX_PATH];
-        char kf[MAX_PATH];
-        char hp[MAX_PATH];
-        char buf[MAX_KEY];
-        FILE *f;
-        size_t n, kl, hl;
-        (void)self;
-
-        if (self->cache_paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return 0;
-        f = fopen(kf, "r");
-        if (!f) return 0;
-        n = fread(buf, 1, sizeof buf, f);
-        fclose(f);
-        kl = strlen(key);
-        if (n != kl || memcmp(buf, key, kl) != 0) return 0;
-        if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
-        hl = strlen(hp);
-        if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
-        hp[hl - 1] = 'h';
-        f = fopen(hp, "rb");
-        if (!f) return 0;
-        fclose(f);
-        f = fopen(outc, "rb");
-        if (!f) return 0;
-        fclose(f);
-        return 1;
-    }
-
-    /* Best effort by design: a cache that cannot be written costs a rebuild,
-       never a broken build, so an unwritable directory stays silent. */
-    void cache_store(const char *outc, const char *key)
-    {
-        char dir[MAX_PATH];
-        char kf[MAX_PATH];
-        FILE *f;
-        (void)self;
-        if (self->cache_paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return;
-        mkdir(dir, 0755);            /* EEXIST on a warm cache is the normal case */
-        f = fopen(kf, "w");
-        if (!f) return;
-        fprintf(f, "%s", key);       /* no newline: `hit` compares byte for byte */
-        fclose(f);
-    }
-}
-
-
 /* The instance lives after the impls: its vptr initialisers need the vtable
    forward declarations the emitter places with each impl. */
 static struct Ast g_ast;
@@ -6201,6 +6091,9 @@ int main(int argc, char **argv)
     g_ast.arena = arena_get();
     /* likewise the source cursor and the current token */
     g_ast.lex = lexer_get();
+    /* the cache keys carry the compiler version; seed it once here */
+    g_ast.cache = cache_get();
+    g_ast.cache->version = CTC_VERSION;
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];
