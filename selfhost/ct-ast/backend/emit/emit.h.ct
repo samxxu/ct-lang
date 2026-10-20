@@ -264,10 +264,13 @@ impl EmitOps for Emitter {
             }
         }
 
-        if (self->emit_impls(prog) != 0) return -1;
-
+        /* Prototypes come before the impl bodies: an impl method may call a
+           free function declared earlier in the unit, and C needs the prototype
+           in scope at the call site. */
         for (i = 0; i < self->sym->nfunc; i++)
             if (self->emit_proto(i) != 0) return -1;
+
+        if (self->emit_impls(prog) != 0) return -1;
 
         if (self->emit_maps(-1) != 0) return -1;
 
@@ -1407,10 +1410,10 @@ impl EmitOps for Emitter {
             }
         }
 
-        if (self->emit_impls(self->units[u].prog) != 0) return -1;
-
         for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
             if (self->emit_proto(i) != 0) return -1;
+
+        if (self->emit_impls(self->units[u].prog) != 0) return -1;
 
         if (self->emit_maps(u) != 0) return -1;
 
