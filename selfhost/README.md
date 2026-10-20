@@ -50,6 +50,11 @@ falsify that comment and lengthen every user-facing command.
 | `l2/{core,driver}.ct` | L2 | The same compiler re-partitioned across units (`import` / `pub`), built by L1's own `build`; since Phase 10.7 it is the **regression oracle** only |
 | `ct-ast/**` | ct-ast | The Phase 9 AST compiler, built by L2 with `build` (`-I selfhost/ct-ast`): grouped units, each owning its state and exporting `pub` primitives only — `main.ct` binds and dispatches, `tool/driver` is the compile-mode driver (`ct <file> -o <file>`), `frontend/module` the build driver (unit table, imports, `pub` routing), `frontend/parse` the parser (with its shared primitives, the expression and type grammar and the `map` builder), `frontend/{lex,sym,type}` the lexer, symbol tables and type/boxing layer, `runtime/arena` the node and literal pool, `backend/{mem,emit}` AutoDrop/leak analysis and the C emitter, `tool/{pkg,diag,cache}` the package manager, warning store and incremental cache; **the installed entry (`ct` / `ctc`) since Phase 10.7** |
 
+`build` module syntax: `namespace A::B { … }` (block form) or `namespace A::B;` (file-scoped — the
+prefix holds until the unit ends); `import a::b;` pulls in a unit, and `import a::b::C [as D];` also
+brings that unit's exported name `C` in under `D` (default `C`) for this file's source only —
+emission still uses `<ns>_C`.
+
 ### Scripts (the gates)
 
 `check-all.sh` is the aggregate entry and runs the rest of this directory's scripts in order; each

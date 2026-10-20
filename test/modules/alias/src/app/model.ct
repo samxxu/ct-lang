@@ -1,0 +1,15 @@
+/* File-scoped namespace: `namespace app;` holds until the unit ends and needs
+   no closing brace (the module layer resets the prefix per unit). */
+namespace app;
+
+pub struct Point {
+    int x;
+    int y;
+};
+
+pub int scaled(int v);
+
+int scaled(int v)
+{
+    return v * 3;
+}

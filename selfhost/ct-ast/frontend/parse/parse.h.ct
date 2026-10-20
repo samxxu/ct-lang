@@ -176,25 +176,29 @@ impl ParseDeclOps for Parser {
         return 0;
     }
 
+    /* `import a::b;` pulls in a unit: its `pub` functions become callable.
+       `import a::b::C as D;` pulls in one exported name instead -- the unit is
+       `a::b`, `C` is what it exports and `D` (default `C`) is how this file
+       spells it. A trailing segment that starts upper-case is a name, not a
+       directory: files are lower-case by convention. */
     int skip_import(void)
     {
+        char seg[16][MAX_TEXT];
         char rel[MAX_TEXT];
+        char full[MAX_TEXT];
+        char alias[MAX_TEXT];
         size_t n;
+        int nseg, i, w, symbolic;
         (void)self;
 
-        n = 0;
+        nseg = 0;
         rel[0] = 0;
-        self->sup->lex_next();
+        self->sup->lex_next();                       /* consume `import` */
         for (;;) {
             if (self->lex->tok != T_ID) return self->sup->fail("expected an import path");
-            if (n > 0) {
-                if (n + 1 >= sizeof rel) return self->sup->fail("import path is too long");
-                rel[n] = '/';
-                n++;
-            }
-            if (n + strlen(self->lex->toktext) >= sizeof rel) return self->sup->fail("import path is too long");
-            snprintf(rel + n, sizeof rel - n, "%s", self->lex->toktext);
-            n += strlen(self->lex->toktext);
+            if (nseg >= 16) return self->sup->fail("import path is too long");
+            snprintf(seg[nseg], MAX_TEXT, "%s", self->lex->toktext);
+            nseg++;
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
                 self->sup->lex_next();
@@ -202,10 +206,51 @@ impl ParseDeclOps for Parser {
             }
             break;
         }
+        snprintf(alias, sizeof alias, "%s", seg[nseg - 1]);
+        symbolic = (seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z');
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "as") == 0) {
+            symbolic = 1;
+            self->sup->lex_next();
+            if (self->lex->tok != T_ID) return self->sup->fail("expected an alias after 'as'");
+            snprintf(alias, sizeof alias, "%s", self->lex->toktext);
+            self->sup->lex_next();
+        }
         if (self->sup->expect(";") != 0) return -1;
-        if (self->nrels >= MAX_IMPORTS) return self->sup->fail("too many imports");
-        snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
-        self->nrels++;
+        if (symbolic && nseg < 2) return self->sup->fail("an imported name needs a unit");
+        n = 0;
+        for (i = 0; i < (symbolic ? nseg - 1 : nseg); i++) {
+            if (n > 0) {
+                if (n + 1 >= sizeof rel) return self->sup->fail("import path is too long");
+                rel[n] = '/';
+                n++;
+            }
+            if (n + strlen(seg[i]) >= sizeof rel) return self->sup->fail("import path is too long");
+            snprintf(rel + n, sizeof rel - n, "%s", seg[i]);
+            n += strlen(seg[i]);
+        }
+        if (rel[0]) {
+            if (self->nrels >= MAX_IMPORTS) return self->sup->fail("too many imports");
+            snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
+            self->nrels++;
+        }
+        if (!symbolic) return 0;
+        /* The mangled C name: the namespace segments plus the name. The unit's
+           file name (the segment before the name) is not part of the namespace. */
+        w = 0;
+        for (i = 0; i < nseg; i++) {
+            int k;
+            if (i == nseg - 2) continue;
+            if (w > 0) {
+                if (w + 1 >= (int)sizeof full) return self->sup->fail("import path is too long");
+                full[w] = '_';
+                w++;
+            }
+            k = snprintf(full + w, (size_t)((int)sizeof full - w), "%s", seg[i]);
+            if (k < 0 || k >= (int)sizeof full - w) return self->sup->fail("import path is too long");
+            w += k;
+        }
+        if (self->sym->add_alias(alias, full) != 0)
+            return self->sup->fail(self->sym->last_error());
         return 0;
     }
 
@@ -285,6 +330,15 @@ impl ParseDeclOps for Parser {
             break;
         }
         if (!self->sym->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
+        /* File-scoped form: `namespace A::B;` holds for the rest of the unit and
+           carries no closing brace; the module layer resets the prefix per unit. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
+            self->sup->lex_next();
+            snprintf(save, sizeof save, "%s", self->sym->ns);
+            if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
+                return self->sup->fail("namespace is too long");
+            return 0;
+        }
         if (self->sup->expect("{") != 0) return -1;
         snprintf(save, sizeof save, "%s", self->sym->ns);
         if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)

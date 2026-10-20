@@ -232,7 +232,9 @@ static int file_exists(const char *p)
     return 1;
 }
 
-/* Collect every `import a::b;` module in `path`, each as "a/b". Returns the count. */
+/* Collect every `import a::b;` module in `path`, each as "a/b". Returns the count.
+   `import a::b::C as D;` names one exported type: the dependency is still `a/b`,
+   so the trailing name segment is dropped from the path. */
 static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
 {
     size_t pos = 0;
@@ -247,18 +249,16 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
             (q + 6 == len || !ct_is_ident_char((unsigned char)src[q + 6]))) {
             size_t t = q + 6, k = 0;
             char mod[MAX_NAME];
-            int ok = 1;
+            char segs[16][MAX_NAME];
+            int ns = 0, symbolic = 0, ok = 1, j;
             while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
-            mod[0] = 0;
             for (;;) {
                 size_t s = t;
                 while (t < len && ct_is_ident_char((unsigned char)src[t])) t++;
-                if (t == s) { ok = 0; break; }
-                if (k && k + 1 < sizeof mod) mod[k++] = '/';
-                if (k + (t - s) + 1 >= sizeof mod) { ok = 0; break; }
-                memcpy(mod + k, src + s, t - s);
-                k += t - s;
-                mod[k] = 0;
+                if (t == s || ns >= 16 || t - s >= sizeof segs[0]) { ok = 0; break; }
+                memcpy(segs[ns], src + s, t - s);
+                segs[ns][t - s] = 0;
+                ns++;
                 while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
                 if (t + 1 < len && src[t] == ':' && src[t + 1] == ':') {
                     t += 2;
@@ -266,6 +266,38 @@ static int collect_imports(const char *path, char mods[][MAX_NAME], int max)
                     continue;
                 }
                 break;
+            }
+            if (ok && ns) {
+                size_t after = t;
+                char kw[MAX_NAME];
+                int kl = 0;
+                while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                while (t < len && ct_is_ident_char((unsigned char)src[t])) {
+                    if (kl + 1 < (int)sizeof kw) kw[kl++] = src[t];
+                    t++;
+                }
+                kw[kl] = 0;
+                if (kl && strcmp(kw, "as") == 0) {
+                    symbolic = 1;
+                    while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                    while (t < len && ct_is_ident_char((unsigned char)src[t])) t++;
+                    while (t < len && (src[t] == ' ' || src[t] == '\t')) t++;
+                } else {
+                    t = after;
+                    symbolic = (segs[ns - 1][0] >= 'A' && segs[ns - 1][0] <= 'Z');
+                }
+            }
+            mod[0] = 0;
+            if (ok && ns) {
+                int upto = symbolic ? ns - 1 : ns;
+                for (j = 0; j < upto; j++) {
+                    size_t sl = strlen(segs[j]);
+                    if (k && k + 1 < sizeof mod) mod[k++] = '/';
+                    if (k + sl + 1 >= sizeof mod) { ok = 0; break; }
+                    memcpy(mod + k, segs[j], sl);
+                    k += sl;
+                    mod[k] = 0;
+                }
             }
             if (ok && k && t < len && src[t] == ';') {
                 if (n >= max) {   /* overflow dies, never truncates */

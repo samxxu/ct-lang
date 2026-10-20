@@ -1,0 +1,17 @@
+/* `import app::model::Point;` brings the exported name in under `Point` (the
+   default alias); `import app::model;` brings the unit in for its `pub`
+   functions. Both resolve to the mangled `app_*` names when emitted. */
+import app::model;
+import app::model::Point;
+
+#include <stdio.h>
+
+int main(void)
+{
+    struct Point p;
+
+    p.x = 1;
+    p.y = 2;
+    printf("%d %d\n", p.x + p.y, scaled(4));
+    return 0;
+}

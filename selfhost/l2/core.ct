@@ -523,6 +523,11 @@ struct SymTab {
        compile several units into one symbol table, so per-entry `file` fields
        carry the unit and only the root is a single value here. */
     const char *root_file;
+    /* `import a::b::C as D;` binds `D` to the mangled name `a_b_C` for the unit
+       being compiled; the table resets at the start of every unit. */
+    char      alias_name[MAX_IMPORTS][MAX_NAME];
+    char      alias_full[MAX_IMPORTS][MAX_NAME * 2];
+    int       nalias;
 } use SymTabOps;
 
 impl SymTabOps for SymTab {
@@ -731,30 +736,44 @@ impl SymTabOps for SymTab {
     }
 
     Trait *find_trait(const char *name) {
-        int i;
+        int i, aliased = 0;
         char q[MAX_NAME * 2];
-        /* an unqualified name inside a namespace resolves there first, then at
-           the root; comparison is on the mangled C name, so "" (top level)
-           collapses the two passes into one */
-        if (g_ns[0]) {
-            snprintf(q, sizeof q, "%s%s", g_ns, name);
+        const char *nm = name;
+        /* an explicit `import ... as ...` binding wins; then an unqualified name
+           inside a namespace resolves there first, then at the root; comparison
+           is on the mangled C name */
+        for (i = 0; i < self->nalias; i++)
+            if (strcmp(self->alias_name[i], name) == 0) {
+                nm = self->alias_full[i];
+                aliased = 1;
+                break;
+            }
+        if (!aliased && g_ns[0]) {
+            snprintf(q, sizeof q, "%s%s", g_ns, nm);
             for (i = 0; i < self->ntraits; i++)
                 if (strcmp(self->traits[i].cname, q) == 0) return &self->traits[i];
         }
         for (i = 0; i < self->ntraits; i++)
-            if (strcmp(self->traits[i].cname, name) == 0) return &self->traits[i];
+            if (strcmp(self->traits[i].cname, nm) == 0) return &self->traits[i];
         return NULL;
     }
     Struct *find_struct(const char *name) {
-        int i;
+        int i, aliased = 0;
         char q[MAX_NAME * 2];
-        if (g_ns[0]) {
-            snprintf(q, sizeof q, "%s%s", g_ns, name);
+        const char *nm = name;
+        for (i = 0; i < self->nalias; i++)
+            if (strcmp(self->alias_name[i], name) == 0) {
+                nm = self->alias_full[i];
+                aliased = 1;
+                break;
+            }
+        if (!aliased && g_ns[0]) {
+            snprintf(q, sizeof q, "%s%s", g_ns, nm);
             for (i = 0; i < self->nstructs; i++)
                 if (strcmp(self->structs[i].cname, q) == 0) return &self->structs[i];
         }
         for (i = 0; i < self->nstructs; i++)
-            if (strcmp(self->structs[i].cname, name) == 0) return &self->structs[i];
+            if (strcmp(self->structs[i].cname, nm) == 0) return &self->structs[i];
         return NULL;
     }
     /* which trait of struct `s` declares method `m`? NULL when none does */
@@ -1613,7 +1632,6 @@ impl PipeOps for Pipe {
         char buf[MAX_NAME * 2], seg[MAX_NAME];
         size_t i;
 
-        (void)self;  /* a pure string helper; the receiver is not used */
         *qualified = 0;
         for (i = 0; is_ident_char((unsigned char)p[i]); i++)
             if (i + 1 >= MAX_NAME) die(0, "identifier too long (max %d)", MAX_NAME - 1);
@@ -1645,8 +1663,18 @@ impl PipeOps for Pipe {
         }
 
         snprintf(shortname, MAX_NAME, "%s", seg);
-        if (*qualified) snprintf(cname, MAX_NAME, "%s", buf);
-        else snprintf(cname, MAX_NAME, "%s%s", g_ns, buf);
+        if (*qualified) {
+            snprintf(cname, MAX_NAME, "%s", buf);
+        } else {
+            int a;
+            for (a = 0; a < self->sym->nalias; a++)
+                if (strcmp(self->sym->alias_name[a], buf) == 0) {
+                    snprintf(cname, MAX_NAME, "%s", self->sym->alias_full[a]);
+                    *qualified = 1;
+                    return p;
+                }
+            snprintf(cname, MAX_NAME, "%s%s", g_ns, buf);
+        }
         return p;
     }
 
@@ -2535,18 +2563,28 @@ impl PipeOps for Pipe {
 
             /* `import A::B;` is a compilation-unit declaration: the build driver
                resolves it and turns it into an `#include` line, so the line itself
-               is consumed here and never emitted. Anything less than a complete
-               header falls through as a plain line, which keeps a line that merely
-               starts with the word from being mistaken for one. */
+               is consumed here and never emitted. `import A::B::C as D;` names one
+               exported type instead; it still depends on A::B but binds D to the
+               mangled name A_B_C for this unit only. A trailing segment that
+               starts upper-case is a name, not a directory (files are lower-case
+               by convention). Anything less than a complete header falls through
+               as a plain line, which keeps a line that merely starts with the
+               word from being mistaken for one. */
             if (word_at(q, "import")) {
                 size_t t = skip_ws_comments(q + 6);
                 int ok = 1;
                 size_t nseg = 0;
+                char seg[MAX_IMPORTS][MAX_NAME];
+                char alias[MAX_NAME];
+                char full[MAX_NAME * 2];
+                int symbolic = 0;
+
+                seg[0][0] = 0;
                 for (;;) {
-                    char seg[MAX_NAME];
-                    t = read_ident(t, seg, sizeof seg);
-                    if (!seg[0]) { ok = 0; break; }
+                    t = read_ident(t, seg[nseg], sizeof seg[nseg]);
+                    if (!seg[nseg][0]) { ok = 0; break; }
                     nseg++;
+                    if (nseg >= MAX_IMPORTS) { ok = 0; break; }
                     t = skip_ws_comments(t);
                     if (t + 1 < g_len && g_src[t] == ':' && g_src[t + 1] == ':') {
                         t = skip_ws_comments(t + 2);
@@ -2554,10 +2592,63 @@ impl PipeOps for Pipe {
                     }
                     break;
                 }
+                if (ok && nseg) {
+                    char kw[MAX_NAME];
+                    size_t t2, t3;
+
+                    snprintf(alias, sizeof alias, "%s", seg[nseg - 1]);
+                    symbolic = (seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z');
+                    t2 = skip_ws_comments(t);
+                    t3 = read_ident(t2, kw, sizeof kw);
+                    if (kw[0] && strcmp(kw, "as") == 0) {
+                        symbolic = 1;
+                        t3 = skip_ws_comments(t3);
+                        t3 = read_ident(t3, alias, sizeof alias);
+                        if (!alias[0]) ok = 0;
+                        t = t3;
+                    } else {
+                        t = t2;
+                    }
+                }
                 if (ok && nseg && t < g_len && g_src[t] == ';') {
-                    size_t e = t;
-                    while (e < end && g_src[e] != '\n') e++;
-                    pos = (e < end) ? e + 1 : end;
+                    if (symbolic) {
+                        size_t w = 0;
+                        int i2, dup = 0;
+
+                        for (i2 = 0; i2 < (int)nseg; i2++) {
+                            int w2;
+                            /* the segment before the name is the unit's file
+                               name, not part of the namespace */
+                            if (i2 == (int)nseg - 2) continue;
+                            if (w > 0) {
+                                if (w + 1 >= sizeof full) { ok = 0; break; }
+                                full[w] = '_';
+                                w++;
+                            }
+                            w2 = snprintf(full + w, sizeof full - w, "%s", seg[i2]);
+                            if (w2 < 0 || w2 >= (int)(sizeof full - w)) { ok = 0; break; }
+                            w += (size_t)w2;
+                        }
+                        if (!ok) die(t, "import path too long");
+                        for (i2 = 0; i2 < sym->nalias; i2++) {
+                            if (strcmp(sym->alias_name[i2], alias) != 0) continue;
+                            if (strcmp(sym->alias_full[i2], full) != 0)
+                                die(t, "one alias names two imports");
+                            dup = 1;
+                            break;
+                        }
+                        if (!dup) {
+                            if (sym->nalias >= MAX_IMPORTS) die(t, "too many import aliases");
+                            snprintf(sym->alias_name[sym->nalias], MAX_NAME, "%s", alias);
+                            snprintf(sym->alias_full[sym->nalias], MAX_NAME * 2, "%s", full);
+                            sym->nalias++;
+                        }
+                    }
+                    {
+                        size_t e = t;
+                        while (e < end && g_src[e] != '\n') e++;
+                        pos = (e < end) ? e + 1 : end;
+                    }
                     continue;
                 }
             }
@@ -2623,6 +2714,22 @@ impl PipeOps for Pipe {
                         continue;
                     }
                     break;
+                }
+
+                if (ok && t < g_len && g_src[t] == ';') {
+                    /* file-scoped form: `namespace A::B;` holds for the rest of
+                       the unit and has no closing brace, so nothing is restored
+                       here -- the per-unit reset clears the prefix. */
+                    if (g_ns[0] == 0 && self->ns_expect[0] &&
+                        strcmp(nspath, self->ns_expect) != 0)
+                        die(q, "namespace '%s' does not match directory '%s'",
+                            nspath, self->ns_expect);
+                    if (snprintf(open, sizeof open, "%s%s_", g_ns, pre) >= (int)sizeof g_ns)
+                        die(t, "namespace path too long");
+                    snprintf(g_ns, sizeof g_ns, "%s", open);
+                    while (t < end && g_src[t] != '\n') t++;
+                    pos = (t < end) ? t + 1 : end;
+                    continue;
                 }
 
                 if (ok && t < g_len && g_src[t] == '{') {
@@ -2857,6 +2964,7 @@ impl PipeOps for Pipe {
 
         self->multi = multi;
         g_ns[0] = 0;
+        sym->nalias = 0;
         sym->nvars = 0;
         self->nscope = 0;
         self->body_abs = 0;

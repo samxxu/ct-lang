@@ -108,6 +108,7 @@ pub trait SymbolOps {
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  ns_decl_name(const char *name, char *out, int cap);
     int  resolve_type(const char *name, char *out, int cap);
+    int  add_alias(const char *name, const char *full);
     int  push_scope(void);
     int  pop_scope(void);
     int  fail(const char *msg);
@@ -129,6 +130,11 @@ pub struct Symbols {
     struct StructDef structs[128];
     int  nstructs;
     char ns[160];               /* current namespace prefix, set by the module layer */
+    /* `import a::b::C as D;` brings one exported name in under `D` for this unit
+       only (the table resets per unit); `alias_full` is the mangled C name. */
+    char alias_name[16][160];
+    char alias_full[16][160];
+    int  nalias;
     int  self_mode;             /* inside an impl body: `self` -> `_self` */
     char ret_type[160];         /* return type of the function being parsed */
     char errmsg[160];           /* the bare message `fail` recorded; Ast adds the position */
@@ -336,13 +342,40 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
-    /* Unqualified lookup: the current namespace first, then the top level. */
+    /* Register one `import ... as ...` alias for the current unit. A second
+       import that binds the same alias to a different name is ambiguous, so it
+       is an error rather than a silent override. */
+    int add_alias(const char *name, const char *full)
+    {
+        int i;
+        (void)self;
+
+        for (i = 0; i < self->nalias; i++) {
+            if (strcmp(self->alias_name[i], name) != 0) continue;
+            if (strcmp(self->alias_full[i], full) == 0) return 0;
+            return self->fail("one alias names two imports");
+        }
+        if (self->nalias >= 16) return self->fail("too many import aliases");
+        snprintf(self->alias_name[self->nalias], sizeof self->alias_name[0], "%s", name);
+        snprintf(self->alias_full[self->nalias], sizeof self->alias_full[0], "%s", full);
+        self->nalias++;
+        return 0;
+    }
+
+    /* Unqualified lookup: an explicit import alias first, then the current
+       namespace, then the top level. */
     int resolve_type(const char *name, char *out, int cap)
     {
         char qname[MAX_TEXT];
-        int w;
+        int w, i;
         (void)self;
 
+        for (i = 0; i < self->nalias; i++) {
+            if (strcmp(self->alias_name[i], name) != 0) continue;
+            w = snprintf(out, (size_t)cap, "%s", self->alias_full[i]);
+            if (w < 0 || w >= cap) return self->fail("name is too long");
+            return 0;
+        }
         if (self->ns[0]) {
             w = snprintf(qname, sizeof qname, "%s%s", self->ns, name);
             if (w < 0 || w >= (int)sizeof qname) return self->fail("name is too long");

@@ -306,6 +306,7 @@ impl ModuleOps for Module {
         self->mem->leak_impl = 0;
         self->mem->ret_owned = 0;
         self->sym->ns[0] = 0;
+        self->sym->nalias = 0;
         self->p->ns_decl[0] = 0;
         self->sym->self_mode = 0;
         self->sym->ret_type[0] = 0;
@@ -590,6 +591,7 @@ impl ModuleOps for Module {
         self->sym->self_mode = 0;
         self->sym->ret_type[0] = 0;
         self->sym->ns[0] = 0;
+        self->sym->nalias = 0;
         self->p->ns_decl[0] = 0;
         self->lex->line = 1;
         self->lex->tokline = 1;

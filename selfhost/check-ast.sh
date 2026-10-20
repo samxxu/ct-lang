@@ -264,6 +264,19 @@ else
     bad "ns_dir" "$(cat "$work/mns.err" "$work/mns.cc" "$work/mns.stdout")"
 fi
 
+rm -rf "$mod-alias"
+mkdir -p "$mod-alias"
+if "$work/ct-ast" build --ns-root test/modules/alias/src \
+        test/modules/alias/src/main.ct -o "$mod-alias" \
+        >"$work/malias.out" 2>"$work/malias.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-alias"/*.c -o "$work/malias.bin" 2>"$work/malias.cc" \
+   && "$work/malias.bin" >"$work/malias.stdout" 2>&1 \
+   && cmp -s "$work/malias.stdout" test/modules/alias/expected.out; then
+    ok "alias (namespace A::B; + import a::b::C)"
+else
+    bad "alias" "$(cat "$work/malias.err" "$work/malias.cc" "$work/malias.stdout")"
+fi
+
 rm -rf "$mod-inc"
 mkdir -p "$mod-inc"
 if "$work/ct-ast" build test/modules/inc/main.ct -I test/modules/inc/extra \
