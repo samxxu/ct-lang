@@ -98,7 +98,7 @@ if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.l
     echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
 fi
 mkdir -p "$work/astsrc"
-if ! "$work/l2" build selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
+if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
     echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
@@ -850,10 +850,10 @@ echo "== self-hosting (9.6) =="
 # multi-unit tree now, so the build mode drives both halves and the whole output
 # directory is compared.
 mkdir -p "$work/self1" "$work/self2"
-if "$work/ct-ast" build selfhost/ct-ast/main.ct -o "$work/self1" \
+if "$work/ct-ast" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self1" \
         >"$work/self1.out" 2>"$work/self1.err" \
    && "$CC" -Wall -Wextra -std=c99 "$work/self1"/*.c -o "$work/ct-ast2" 2>"$work/selfcc.log" \
-   && "$work/ct-ast2" build selfhost/ct-ast/main.ct -o "$work/self2" \
+   && "$work/ct-ast2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self2" \
         >"$work/self2.out" 2>"$work/self2.err" \
    && diff -r -q -x .ctcache "$work/self1" "$work/self2" >/dev/null 2>&1; then
     ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"

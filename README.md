@@ -76,7 +76,7 @@ gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # L0 种子（�
 gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # 得到 L1
 mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 编出 L2 源
 gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2     # 得到 L2（回归 oracle）
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build selfhost/ct-ast/main.ct -o /tmp/ct-ast   # L2 编出 ct-ast 源
+mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast   # L2 编出 ct-ast 源（各分组按全路径互相 import，故要 -I）
 OUT="$HOME/.local/bin"                                       # 任选一个在 PATH 上的目录
 mkdir -p "$OUT"
 gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$OUT/ct"      # 单入口 ct（ct-ast）
@@ -310,7 +310,7 @@ ct/
 │   ├── l0/ctc.c              L0 C 种子（单文件，无第三方依赖）
 │   ├── l1/ctc.ct             L1 种子（冻结；能力停在 Phase 2）
 │   ├── l2/                   L2：多单元源码树（core.ct + driver.ct；Phase 10.7 起为回归 oracle）
-│   ├── ct-ast/               ct-ast：Phase 9 主线（main.ct = driver + 核心，pkg.ct = 包管理器，diag.ct = 告警存储），Phase 10.7 起提供安装入口
+│   ├── ct-ast/               ct-ast：Phase 9 主线（main.ct = driver + 编译核心），按组分子目录：runtime/arena（节点池）、frontend/{lex,sym,module}、tool/{diag,cache,pkg}；Phase 10.7 起提供安装入口
 │   └── check-*.sh / ct-tour.sh   门禁脚本（aggregate 入口 check-all.sh；用法见 README §5）
 ├── bindings/                 C 库的声明式 binding（Phase 12）：直通 #include + 镜像 trait/struct + map
 │   └── mock-hal/             首个官方 binding（自带假 HAL 的 C 头/实现，仅作演示与测试）
@@ -474,7 +474,7 @@ gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # the L0 seed (t
 gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # build L1
 mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 builds L2
 gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2     # build L2 (the oracle)
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build selfhost/ct-ast/main.ct -o /tmp/ct-ast   # L2 builds ct-ast
+mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast   # L2 builds ct-ast (groups import each other by full path, hence -I)
 OUT="$HOME/.local/bin"                                       # any directory on your PATH
 mkdir -p "$OUT"
 gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$OUT/ct"      # the single entry (ct-ast)

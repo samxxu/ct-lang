@@ -259,7 +259,7 @@ alias_bin="$work/ctc"
 rm -rf "$ast_src"
 mkdir -p "$ast_src"
 
-if run "L2 building the AST compiler" "$l2_bin" build selfhost/ct-ast/main.ct -o "$ast_src"; then
+if run "L2 building the AST compiler" "$l2_bin" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$ast_src"; then
     printf '\n+ %s -Wall -Wextra -std=c99 %s/*.c -o %s\n' "$CC" "$ast_src" "$ast_bin"
     if "$CC" -Wall -Wextra -std=c99 "$ast_src"/*.c -o "$ast_bin" 2>"$work/ast.log" &&
        [ ! -s "$work/ast.log" ]; then

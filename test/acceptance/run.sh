@@ -67,7 +67,7 @@ if [ -z "$CT" ]; then
         exit 1
     fi
     mkdir -p "$TMP/astsrc"
-    if ! "$TMP/ctc-l2" build selfhost/ct-ast/main.ct -o "$TMP/astsrc" 2>"$TMP/build.log"; then
+    if ! "$TMP/ctc-l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$TMP/astsrc" 2>"$TMP/build.log"; then
         echo "L2 could not build ct-ast (selfhost/ct-ast/main.ct):"
         sed 's/^/    /' "$TMP/build.log"
         exit 1

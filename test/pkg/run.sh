@@ -59,7 +59,7 @@ fi
 # Phase 10.6: the package subcommands now ship with the AST compiler (ct-ast),
 # which L2 builds from selfhost/ct-ast/main.ct. This gate drives that entry.
 mkdir -p "$work/astsrc"
-if ! "$work/l2" build selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
+if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
     echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then

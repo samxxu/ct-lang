@@ -141,6 +141,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   包管理器：本地目录源、git 源与 `install` 校验）与 `selfhost/check-ast.sh`（Phase 9.1–9.7 + 10.x
   AST 编译器的行为用例、CLI 错误分支、自编不动点与全量语料等价；任一失败即整体非零）；
   `bash test/acceptance/run.sh` 单独报告（其 PENDING 属预期，不阻断）。改动 `selfhost/**` 后必须跑一遍。
+- **ct-ast 是分组多单元树**：各分组（`runtime/`、`frontend/`、`tool/`）按全路径互相 `import`，
+  构建时必须带 `-I selfhost/ct-ast`（门禁脚本与 README 的安装命令已内置；手工构建同样要加）。
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
 - **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
@@ -407,6 +409,9 @@ Also required:
   failure makes the whole run non-zero; `bash test/acceptance/run.sh` reports
   separately (its PENDING entries are expected and do not block). Run it after touching
   `selfhost/**`.
+- **ct-ast is a grouped multi-unit tree**: the groups (`runtime/`, `frontend/`, `tool/`) `import` each
+  other by full path, so a build needs `-I selfhost/ct-ast` (the gate scripts and the README install
+  recipe already pass it; a hand-rolled build must too).
 - **The manual three-step check stays required** — the suite's internal paths differ from the commands
   you type, so run the three commands above yourself and paste the output.
 - **New or changed syntax needs new cases** — see the checklist in §9.
