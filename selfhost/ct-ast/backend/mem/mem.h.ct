@@ -12,8 +12,10 @@
 #include <stdio.h>
 #include <string.h>
 
-import runtime::arena::arena;
 import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
 import tool::diag::diag;
 
 #define MAX_TEXT  160
@@ -28,7 +30,7 @@ import tool::diag::diag;
 #define N_INDEX  26
 #define N_RET    5
 
-namespace backend::mem {
+namespace backend::mem;
 pub trait MemoryOps {
     int  mark_owned(int n, int line);
     int  expr_alloc(int e);
@@ -46,8 +48,8 @@ pub trait MemoryOps {
 }
 
 pub struct Memory {
-    struct runtime_arena_Arena *arena;
-    struct frontend_sym_Symbols *sym;
+    struct Arena *arena;
+    struct Symbols *sym;
     const char *path;            /* the file name diagnostics report, kept by the driver */
     int  own_decl[4096];         /* where each scope's `own` declarations start */
     int  nowner;
@@ -371,5 +373,4 @@ static struct Memory g_memory;
 struct Memory *memory_get(void)
 {
     return &g_memory;
-}
 }

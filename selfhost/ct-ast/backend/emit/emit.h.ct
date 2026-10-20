@@ -13,12 +13,22 @@
 #include <stdio.h>
 #include <string.h>
 
-import runtime::arena::arena;
-import frontend::sym::sym;
-import frontend::type::type;
-import frontend::module::unit;
-import frontend::module::map;
 import frontend::lex::lexer;
+import frontend::lex::lexer::Lexer;
+import frontend::module::map;
+import frontend::module::map::Call;
+import frontend::module::map::Map;
+import frontend::module::map::MapBind;
+import frontend::module::unit;
+import frontend::module::unit::Unit;
+import frontend::sym::sym;
+import frontend::sym::sym::Field;
+import frontend::sym::sym::MethodSig;
+import frontend::sym::sym::Symbols;
+import frontend::type::type;
+import frontend::type::type::TypeCheck;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
 
 #define MAX_TEXT   160
 #define MAX_PATH   1024
@@ -90,7 +100,7 @@ import frontend::lex::lexer;
 #define P_INC 1
 #define P_DEC 2
 
-namespace backend::emit {
+namespace backend::emit;
 /* The whole emitter API. One trait, not two: L2 (which still builds this tree)
    caps a trait at 32 methods and the build at 16 traits in total, and the other
    units already use all sixteen. `last_error` is not a method -- the driver
@@ -135,23 +145,23 @@ trait EmitOps {
    lives here too; the parser's signature/field scratch is only *pointed at*
    (it belongs to the driver), and so is the version string. */
 struct Emitter {
-    struct runtime_arena_Arena *arena;
-    struct frontend_sym_Symbols *sym;
-    struct frontend_type_TypeCheck *ty;
-    struct frontend_lex_Lexer *lex;
+    struct Arena *arena;
+    struct Symbols *sym;
+    struct TypeCheck *ty;
+    struct Lexer *lex;
     FILE *out;
     const char *path;
     const char *version;
-    struct frontend_module_Unit *units;  int *nunits;
-    struct frontend_module_Map  *maps;   int *nmaps;
-    struct frontend_module_Call *calls;  int *ncalls;
+    struct Unit *units;  int *nunits;
+    struct Map  *maps;   int *nmaps;
+    struct Call *calls;  int *ncalls;
     int  *build_mode;
     int  *line_mode;
     char *outdir;
     const char *prog;
     /* parse-time scratch owned by the driver */
     int  *nparams;
-    struct frontend_sym_Field *pend_fields;
+    struct Field *pend_fields;
     int  *npend;
     /* emission scratch */
     int  hoist_calls[4];
@@ -760,8 +770,8 @@ impl EmitOps for Emitter {
         for (i = 0; i < (*self->nmaps); i++) {
             if (u >= 0 && self->maps[i].unit != u) continue;
             for (j = 0; j < self->maps[i].nb; j++) {
-                struct frontend_module_MapBind *b;
-                struct frontend_sym_MethodSig *sig;
+                struct MapBind *b;
+                struct MethodSig *sig;
                 b = &self->maps[i].b[j];
                 sig = &self->sym->traits[b->ti].m[b->mi];
                 fprintf(self->out, "static %s %s(void *self", sig->ret, b->wrapper);
@@ -1725,17 +1735,17 @@ static struct Emitter g_emit;
 
 /* Only primitives cross the unit boundary. Every pointer to another unit's
    type goes in as `void *` and is cast here, because a generated header carries
-   no #include and a prototype that named `struct frontend_sym_Symbols *` would
+   no #include and a prototype that named `struct Symbols *` would
    scope a fresh, incompatible type. The bind calls are split so no signature
    exceeds MAX_PARAMS. */
 pub void ct_emit_bind(void *arena, void *sym, void *ty, void *lex, const char *version, char *outdir, const char *prog);
 void ct_emit_bind(void *arena, void *sym, void *ty, void *lex,
                   const char *version, char *outdir, const char *prog)
 {
-    g_emit.arena = (struct runtime_arena_Arena *)arena;
-    g_emit.sym = (struct frontend_sym_Symbols *)sym;
-    g_emit.ty = (struct frontend_type_TypeCheck *)ty;
-    g_emit.lex = (struct frontend_lex_Lexer *)lex;
+    g_emit.arena = (struct Arena *)arena;
+    g_emit.sym = (struct Symbols *)sym;
+    g_emit.ty = (struct TypeCheck *)ty;
+    g_emit.lex = (struct Lexer *)lex;
     g_emit.version = version;
     g_emit.outdir = outdir;
     g_emit.prog = prog;
@@ -1745,11 +1755,11 @@ pub void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps, v
 void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
                          void *calls, int *ncalls, int *build_mode, int *line_mode)
 {
-    g_emit.units = (struct frontend_module_Unit *)units;
+    g_emit.units = (struct Unit *)units;
     g_emit.nunits = nunits;
-    g_emit.maps = (struct frontend_module_Map *)maps;
+    g_emit.maps = (struct Map *)maps;
     g_emit.nmaps = nmaps;
-    g_emit.calls = (struct frontend_module_Call *)calls;
+    g_emit.calls = (struct Call *)calls;
     g_emit.ncalls = ncalls;
     g_emit.build_mode = build_mode;
     g_emit.line_mode = line_mode;
@@ -1759,7 +1769,7 @@ pub void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend);
 void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend)
 {
     g_emit.nparams = nparams;
-    g_emit.pend_fields = (struct frontend_sym_Field *)pend_fields;
+    g_emit.pend_fields = (struct Field *)pend_fields;
     g_emit.npend = npend;
 }
 
@@ -1809,5 +1819,4 @@ pub const char *ct_emit_last_error(void);
 const char *ct_emit_last_error(void)
 {
     return g_emit.errmsg;
-}
 }

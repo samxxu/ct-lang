@@ -29,7 +29,7 @@
 #define MAX_STRUCTS 128
 #define MAX_FIELDS  64
 
-namespace frontend::sym {
+namespace frontend::sym;
 pub struct Fn {
     char name[160];
     char ret[160];
@@ -399,5 +399,4 @@ static struct Symbols g_symbols;
 struct Symbols *symbols_get(void)
 {
     return &g_symbols;
-}
 }

@@ -25,7 +25,7 @@
 #define MAX_PKG_DEPTH  8
 #define MAX_PKG_LINE   1024             /* MAX_PKG_PATH * 2, spelled out */
 
-namespace tool::pkg {
+namespace tool::pkg;
 /* The package manager (Phase 8, ported in 10.6). `get`/`install` never reach the
    compile core: only `get` may run `git`, and `install` is offline (D42). */
 trait PkgOps {
@@ -1110,5 +1110,4 @@ int ct_pkg_install(int argc, char **argv, const char *prog, const char *version)
     g_pkg.prog = prog;
     g_pkg.version = version;
     return g_pkg.install_main(argc, argv);
-}
 }

@@ -20,18 +20,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-import runtime::arena::arena;
-import frontend::lex::lexer;
-import frontend::module::module;
-import frontend::sym::sym;
-import frontend::parse::parse;
-import tool::diag::diag;
-import backend::mem::mem;
 import backend::emit::emit;
+import backend::mem::mem;
+import backend::mem::mem::Memory;
+import frontend::lex::lexer;
+import frontend::lex::lexer::Lexer;
+import frontend::module::module;
+import frontend::module::module::Module;
+import frontend::parse::parse;
+import frontend::parse::parse::Parser;
+import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
+import tool::diag::diag;
 
 #define MAX_PATH 1024
 
-namespace tool::driver {
+namespace tool::driver;
 /* The compile-mode entry and the plumbing `main` cannot see through the trait. */
 trait DriverOps {
     int  fail(const char *msg);
@@ -45,12 +51,12 @@ trait DriverOps {
    banner and `-v` do not restate the macro. */
 struct Driver {
     FILE *out;
-    struct runtime_arena_Arena *arena;
-    struct frontend_lex_Lexer *lex;
-    struct frontend_sym_Symbols *sym;
-    struct frontend_module_Module *m;
-    struct backend_mem_Memory *mem;
-    struct frontend_parse_Parser *p;
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Symbols *sym;
+    struct Module *m;
+    struct Memory *mem;
+    struct Parser *p;
     const char *version;
 } use DriverOps;
 
@@ -271,17 +277,17 @@ static struct Driver g_driver;
 
 /* Only primitives cross the unit boundary. Every pointer to another unit's type
    goes in as `void *` and is cast here, because a generated header carries no
-   #include and a prototype that named `struct frontend_sym_Symbols *` would
+   #include and a prototype that named `struct Symbols *` would
    scope a fresh, incompatible type. */
 pub void ct_driver_bind(void *arena, void *lex, void *sym, void *mem, void *m, void *p, const char *version);
 void ct_driver_bind(void *arena, void *lex, void *sym, void *mem, void *m, void *p, const char *version)
 {
-    g_driver.arena = (struct runtime_arena_Arena *)arena;
-    g_driver.lex = (struct frontend_lex_Lexer *)lex;
-    g_driver.sym = (struct frontend_sym_Symbols *)sym;
-    g_driver.mem = (struct backend_mem_Memory *)mem;
-    g_driver.m = (struct frontend_module_Module *)m;
-    g_driver.p = (struct frontend_parse_Parser *)p;
+    g_driver.arena = (struct Arena *)arena;
+    g_driver.lex = (struct Lexer *)lex;
+    g_driver.sym = (struct Symbols *)sym;
+    g_driver.mem = (struct Memory *)mem;
+    g_driver.m = (struct Module *)m;
+    g_driver.p = (struct Parser *)p;
     g_driver.version = version;
 }
 
@@ -289,5 +295,4 @@ pub int ct_driver_run(int argc, char **argv);
 int ct_driver_run(int argc, char **argv)
 {
     return g_driver.run(argc, argv);
-}
 }

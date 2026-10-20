@@ -10,7 +10,7 @@
  * equal to MAX_TEXT 160, MAX_PARAMS 16 and MAX_METHODS 64 in main.ct. The array
  * lengths are literals because a `pub struct` lands in a header with no macros.
  */
-namespace frontend::module {
+namespace frontend::module;
 /* One `callee(...)` in a function body, for the map's call graph. */
 pub struct Call {
     char caller[160];
@@ -39,5 +39,4 @@ pub struct Map {
     int  nb;
     int  line;
     int  unit;                      /* the unit that declared this map */
-}
 }

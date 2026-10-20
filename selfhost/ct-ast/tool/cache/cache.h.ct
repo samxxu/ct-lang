@@ -18,7 +18,7 @@
 #define MAX_PATH 1024
 #define MAX_KEY  768
 
-namespace tool::cache {
+namespace tool::cache;
 pub trait CacheOps {
     unsigned long digest(const char *s);
     int  key(const char *path, const char *imports, unsigned long dep,
@@ -150,5 +150,4 @@ static struct Cache g_cache;
 struct Cache *cache_get(void)
 {
     return &g_cache;
-}
 }

@@ -20,7 +20,7 @@
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
 
-namespace tool::diag {
+namespace tool::diag;
 /* One collected warning (10.2 signature mismatch, 10.3 leak). */
 struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path */
@@ -252,5 +252,4 @@ pub void ct_diag_reset(void);
 void ct_diag_reset(void)
 {
     g_diag.reset();
-}
 }

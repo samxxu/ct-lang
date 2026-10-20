@@ -6,15 +6,15 @@
  * ranges). It lives in its own unit so those three can name it without going
  * through the driver object; the caps it needs are restated here because macros
  * do not cross a unit boundary and a `pub struct` lands in a header that carries
- * none. They must stay equal to MAX_PATH 1024, MAX_TEXT 160 and MAX_IMPORTS 16.
+ * none. They must stay equal to MAX_PATH 1024, MAX_TEXT 160 and MAX_IMPORTS 32.
  */
-namespace frontend::module {
+namespace frontend::module;
 pub struct Unit {
     char path[1024];
     char base[160];
     char ns[160];
-    char dep[16][160];
-    int  depu[16];              /* the dependency's unit index (cache folding) */
+    char dep[32][160];
+    int  depu[32];              /* the dependency's unit index (cache folding) */
     int  ndep;
     int  prog;
     int  is_hdr;
@@ -25,5 +25,4 @@ pub struct Unit {
     int  call_start;
     int  call_end;
     unsigned long digest;       /* this unit's key digest (10.5) */
-}
 }

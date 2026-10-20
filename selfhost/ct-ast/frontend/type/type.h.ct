@@ -12,10 +12,14 @@
 #include <stdio.h>
 #include <string.h>
 
-import runtime::arena::arena;
-import frontend::sym::sym;
-import frontend::module::map;
 import frontend::lex::lexer;
+import frontend::lex::lexer::Lexer;
+import frontend::module::map;
+import frontend::module::map::Map;
+import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
 
 #define MAX_TEXT 160
 /* only the node kinds this unit reads; the numbers must stay equal to main.ct */
@@ -29,7 +33,7 @@ import frontend::lex::lexer;
 #define N_CAST   35
 #define N_SIZEOF 36
 
-namespace frontend::type {
+namespace frontend::type;
 pub trait TypeOps {
     int  is_iface_type(const char *type, char *tout, int tcap);
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
@@ -48,10 +52,10 @@ pub trait TypeOps {
 }
 
 pub struct TypeCheck {
-    struct runtime_arena_Arena *arena;
-    struct frontend_sym_Symbols *sym;
-    struct frontend_lex_Lexer   *lex;   /* only for the line of a fresh node */
-    struct frontend_module_Map  *maps;  /* the map table itself */
+    struct Arena *arena;
+    struct Symbols *sym;
+    struct Lexer   *lex;   /* only for the line of a fresh node */
+    struct Map  *maps;  /* the map table itself */
     int  *nmaps;                        /* points at the driver's count: the table grows while parsing */
     char errmsg[160];
 } use TypeOps;
@@ -521,5 +525,4 @@ static struct TypeCheck g_type;
 struct TypeCheck *type_get(void)
 {
     return &g_type;
-}
 }

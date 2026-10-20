@@ -20,20 +20,28 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-import tool::pkg::pkg;
-import tool::diag::diag;
-import runtime::arena::arena;
+import backend::emit::emit;
+import backend::mem::mem;
+import backend::mem::mem::Memory;
 import frontend::lex::lexer;
-import frontend::module::unit;
+import frontend::lex::lexer::Lexer;
 import frontend::module::map;
 import frontend::module::module;
-import frontend::sym::sym;
-import frontend::type::type;
+import frontend::module::module::Module;
+import frontend::module::unit;
 import frontend::parse::parse;
+import frontend::parse::parse::Parser;
+import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
+import frontend::type::type;
+import frontend::type::type::TypeCheck;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
 import tool::cache::cache;
-import backend::mem::mem;
-import backend::emit::emit;
+import tool::cache::cache::Cache;
+import tool::diag::diag;
 import tool::driver::driver;
+import tool::pkg::pkg;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,13 +69,13 @@ import tool::driver::driver;
 #define MAX_STRUCTS 128
 #define MAX_FIELDS 64
 #define MAX_UNITS  64
-#define MAX_IMPORTS 16
+#define MAX_IMPORTS 32
 #define MAX_INCDIRS 16
 #define MAX_CALLS  1024
 #define MAX_MAPS   64
 #define MAX_ERRORS 20                   /* recovery cap: past this the compiler stops */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
-#define MAX_IH     2560                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
+#define MAX_IH     5120                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
 /* the package manager (Phase 8, ported in 10.6) */
 #define MAX_PKG_DEPS   16
 #define MAX_PKG_PATH   512
@@ -193,14 +201,14 @@ import tool::driver::driver;
 int main(int argc, char **argv)
 {
     const char *base;
-    struct runtime_arena_Arena *arena;
-    struct frontend_lex_Lexer *lex;
-    struct tool_cache_Cache *cache;
-    struct frontend_sym_Symbols *sym;
-    struct backend_mem_Memory *mem;
-    struct frontend_type_TypeCheck *ty;
-    struct frontend_module_Module *m;
-    struct frontend_parse_Parser *p;
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Cache *cache;
+    struct Symbols *sym;
+    struct Memory *mem;
+    struct TypeCheck *ty;
+    struct Module *m;
+    struct Parser *p;
 
     /* the node and literal pools live in runtime::arena; point the object at its
        singleton before anything can build a node */

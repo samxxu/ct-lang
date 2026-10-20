@@ -29,7 +29,7 @@ import core;
 #define MAX_NAME   128
 #define MAX_UNITS  64                     /* units in one `ctc build` run */
 #define MAX_BUILD  32                     /* inputs on a single command line */
-#define MAX_IMPORTS 16                    /* `import` lines per unit */
+#define MAX_IMPORTS 32                    /* `import` lines per unit */
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
 #define MAX_KEY   768                     /* one unit's cache key, stored as text */
 

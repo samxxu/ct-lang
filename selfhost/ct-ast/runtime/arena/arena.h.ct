@@ -8,7 +8,7 @@
  * unit boundary, so the array lengths are spelled out as the literals below;
  * they must stay equal to the old values (65536 nodes, a 256 KiB string pool).
  */
-namespace runtime::arena {
+namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
    documented where the nodes are built (main.ct). The field layout matches the
    `Node` shape the whole pipeline reads and writes. It is a plain `pub struct`
@@ -115,5 +115,4 @@ static struct Arena g_arena;
 struct Arena *arena_get(void)
 {
     return &g_arena;
-}
 }

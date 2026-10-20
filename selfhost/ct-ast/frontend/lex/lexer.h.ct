@@ -22,7 +22,7 @@
 #define T_PUNCT  4
 #define T_PP     5
 
-namespace frontend::lex {
+namespace frontend::lex;
 pub trait LexOps {
     void next(void);
 }
@@ -217,5 +217,4 @@ static struct Lexer g_lexer;
 struct Lexer *lexer_get(void)
 {
     return &g_lexer;
-}
 }

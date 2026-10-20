@@ -17,9 +17,14 @@
 #include <string.h>
 
 import frontend::lex::lexer;
+import frontend::lex::lexer::Lexer;
 import frontend::module::map;
-import frontend::sym::sym;
+import frontend::module::map::Map;
+import frontend::module::map::MapBind;
 import frontend::parse::support;
+import frontend::parse::support::ParseSupport;
+import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
 
 #define MAX_TEXT   160
 #define MAX_PARAMS 16
@@ -34,7 +39,7 @@ import frontend::parse::support;
 /* `parse` returns this when the declaration produced no node. */
 #define NO_NODE (-2)
 
-namespace frontend::parse {
+namespace frontend::parse;
 pub trait MapBuildOps {
     int  check_call(char *b, const char *inst);
     int  parse(int unit);
@@ -44,10 +49,10 @@ pub trait MapBuildOps {
    record), so this object points at them; `unit` is the index of the unit being
    parsed, handed in by the caller. */
 pub struct MapBuild {
-    struct frontend_lex_Lexer *lex;
-    struct frontend_parse_ParseSupport *sup;
-    struct frontend_sym_Symbols *sym;
-    struct frontend_module_Map *maps;
+    struct Lexer *lex;
+    struct ParseSupport *sup;
+    struct Symbols *sym;
+    struct Map *maps;
     int *nmaps;
 } use MapBuildOps;
 
@@ -59,13 +64,13 @@ impl MapBuildOps for MapBuild {
         char root[MAX_TEXT];
         const char *p;
         const char *w;
-        struct frontend_module_MapBind *bb;
+        struct MapBind *bb;
         int n, depth, k, ai, ok;
         int rl;
         int q;
         (void)self;
 
-        bb = (struct frontend_module_MapBind *)b;
+        bb = (struct MapBind *)b;
         p = bb->call;
         for (;;) {
             if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; continue; }
@@ -181,8 +186,8 @@ impl MapBuildOps for MapBuild {
         char rtrait[MAX_TEXT];
         char inst[MAX_TEXT];
         char msg[MAX_TEXT];
-        struct frontend_module_Map *m;
-        struct frontend_module_MapBind *b;
+        struct Map *m;
+        struct MapBind *b;
         int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound;
         (void)self;
 
@@ -343,16 +348,15 @@ static struct MapBuild g_mapbuild;
 pub void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps);
 void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps)
 {
-    g_mapbuild.lex = (struct frontend_lex_Lexer *)lex;
-    g_mapbuild.sup = (struct frontend_parse_ParseSupport *)sup;
-    g_mapbuild.sym = (struct frontend_sym_Symbols *)sym;
-    g_mapbuild.maps = (struct frontend_module_Map *)maps;
+    g_mapbuild.lex = (struct Lexer *)lex;
+    g_mapbuild.sup = (struct ParseSupport *)sup;
+    g_mapbuild.sym = (struct Symbols *)sym;
+    g_mapbuild.maps = (struct Map *)maps;
     g_mapbuild.nmaps = nmaps;
 }
 
-pub struct frontend_parse_MapBuild *mapbuild_get(void);
-struct frontend_parse_MapBuild *mapbuild_get(void)
+pub struct MapBuild *mapbuild_get(void);
+struct MapBuild *mapbuild_get(void)
 {
     return &g_mapbuild;
-}
 }

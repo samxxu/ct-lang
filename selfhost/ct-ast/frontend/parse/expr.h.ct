@@ -17,11 +17,16 @@
 #include <stdio.h>
 #include <string.h>
 
-import runtime::arena::arena;
 import frontend::lex::lexer;
-import frontend::sym::sym;
+import frontend::lex::lexer::Lexer;
 import frontend::module::map;
+import frontend::module::map::Call;
 import frontend::parse::support;
+import frontend::parse::support::ParseSupport;
+import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
 
 #define B_ADD 1
 #define B_AND 12
@@ -65,7 +70,7 @@ import frontend::parse::support;
 #define U_NEG 1
 #define U_NOT 2
 
-namespace frontend::parse {
+namespace frontend::parse;
 /* `cur_func` and the call table stay the parser's (the driver reads them back),
    so this object points at them; `calls` points into storage that unit owns. */
 pub trait ExprOps {
@@ -86,12 +91,12 @@ pub trait ExprOps {
 }
 
 pub struct Expr {
-    struct runtime_arena_Arena *arena;
-    struct frontend_lex_Lexer *lex;
-    struct frontend_sym_Symbols *sym;
-    struct frontend_parse_ParseSupport *sup;
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Symbols *sym;
+    struct ParseSupport *sup;
     char *cur_func;                      /* the parser's current function name */
-    struct frontend_module_Call *calls;  /* storage owned by parse.h.ct */
+    struct Call *calls;  /* storage owned by parse.h.ct */
     int *ncalls;
 } use ExprOps;
 
@@ -235,8 +240,18 @@ impl ExprOps for Expr {
         save_bol = self->lex->bol;
         snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
         self->sup->lex_next();
-        res = (self->lex->tok == T_ID && (self->is_type_word(self->lex->toktext)
-                                 || self->sym->find_type(self->lex->toktext) >= 0));
+        res = 0;
+        if (self->lex->tok == T_ID) {
+            char rn[MAX_TEXT];
+            /* resolve first: an imported name is a type even though the table
+               only holds its mangled spelling */
+            if (self->is_type_word(self->lex->toktext)) {
+                res = 1;
+            } else if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) == 0
+                       && self->sym->find_type(rn) >= 0) {
+                res = 1;
+            }
+        }
         self->lex->tok = save_tok;
         self->lex->toknum = save_num;
         self->lex->tokline = save_line;
@@ -720,18 +735,17 @@ static struct Expr g_expr;
 pub void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls);
 void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls)
 {
-    g_expr.arena = (struct runtime_arena_Arena *)arena;
-    g_expr.lex = (struct frontend_lex_Lexer *)lex;
-    g_expr.sym = (struct frontend_sym_Symbols *)sym;
-    g_expr.sup = (struct frontend_parse_ParseSupport *)sup;
+    g_expr.arena = (struct Arena *)arena;
+    g_expr.lex = (struct Lexer *)lex;
+    g_expr.sym = (struct Symbols *)sym;
+    g_expr.sup = (struct ParseSupport *)sup;
     g_expr.cur_func = (char *)cur_func;
-    g_expr.calls = (struct frontend_module_Call *)calls;
+    g_expr.calls = (struct Call *)calls;
     g_expr.ncalls = (int *)ncalls;
 }
 
-pub struct frontend_parse_Expr *expr_get(void);
-struct frontend_parse_Expr *expr_get(void)
+pub struct Expr *expr_get(void);
+struct Expr *expr_get(void)
 {
     return &g_expr;
-}
 }

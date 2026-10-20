@@ -43,7 +43,7 @@
 #define MAX_FUNCS  128
 #define MAX_UNITS  64                     /* units in one `ctc build` run */
 #define MAX_BUILD  32                     /* inputs on a single command line */
-#define MAX_IMPORTS 16                    /* `import` lines per unit */
+#define MAX_IMPORTS 32                    /* `import` lines per unit */
 #define MAX_INCDIRS 16                    /* `-I` search roots per command */
 #define MAX_WARNS  64                     /* collected leak warnings per run */
 #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
@@ -1381,6 +1381,9 @@ trait RewriteOps {
     char *try_return(const char *line);
     char *try_delete(const char *line);
     char *transform_line(const char *line);
+    /* An imported name is short in the source only: `struct Arena` in a cast or a
+       `sizeof` must reach the C compiler as `struct runtime_arena_Arena`. */
+    char *expand_aliases(const char *line);
     char *try_var_decl(const char *line);
     void transform_calls(const char *s, Buf *out);
     int walk_method(const char *s, size_t n, size_t pos, int cur, int isptr, int *out_cur, int *out_need_amp, const char **out_tr, size_t *out_rend, size_t *mp, char *memb);
@@ -3787,8 +3790,75 @@ impl RewriteOps for Pipe {
         return b.p;
     }
 
+    /* Expand `struct <alias>` to the mangled name the C compiler must see: an
+       imported name is short in the source only. Literals and comments are
+       copied untouched, like every other rewrite. */
+    char *expand_aliases(const char *line) {
+        struct SymTab *sym = self->sym;
+        Buf b;
+        size_t i = 0, n = strlen(line);
+
+        buf_init(&b);
+        while (i < n) {
+            char c = line[i];
+            if (c == '"' || c == '\'') {
+                char q = c;
+                buf_putc(&b, c);
+                i++;
+                while (i < n && line[i] != q) {
+                    if (line[i] == '\\' && i + 1 < n) { buf_putc(&b, line[i]); i++; }
+                    buf_putc(&b, line[i]);
+                    i++;
+                }
+                if (i < n) { buf_putc(&b, line[i]); i++; }
+                continue;
+            }
+            if (c == '/' && i + 1 < n && line[i + 1] == '*') {
+                size_t j = i + 2;
+                while (j + 1 < n && !(line[j] == '*' && line[j + 1] == '/')) j++;
+                j = (j + 1 < n) ? j + 2 : n;
+                buf_putn(&b, line + i, j - i);
+                i = j;
+                continue;
+            }
+            if (c == '/' && i + 1 < n && line[i + 1] == '/') {
+                buf_puts(&b, line + i);
+                break;
+            }
+            if (strncmp(line + i, "struct", 6) == 0
+                && (i == 0 || !is_ident_char((unsigned char)line[i - 1]))
+                && !is_ident_char((unsigned char)line[i + 6])) {
+                char nm[MAX_NAME];
+                size_t j = i + 6, k = 0;
+                int a;
+                buf_puts(&b, "struct");
+                while (j < n && (line[j] == ' ' || line[j] == '\t')) {
+                    buf_putc(&b, line[j]);
+                    j++;
+                }
+                while (j < n && is_ident_char((unsigned char)line[j]) && k + 1 < sizeof nm) {
+                    nm[k] = line[j];
+                    k++;
+                    j++;
+                }
+                nm[k] = 0;
+                for (a = 0; a < sym->nalias; a++)
+                    if (strcmp(sym->alias_name[a], nm) == 0) {
+                        snprintf(nm, sizeof nm, "%s", sym->alias_full[a]);
+                        break;
+                    }
+                buf_puts(&b, nm);
+                i = j;
+                continue;
+            }
+            buf_putc(&b, c);
+            i++;
+        }
+        return b.p;
+    }
+
     char *transform_line(const char *line) {
-        char *del, *ret, *asg, *decl;
+        char *del, *ret, *asg, *decl, *exp;
         const char *base;
         Buf out;
         char *res;
@@ -3825,8 +3895,10 @@ impl RewriteOps for Pipe {
         if (own_decl && !decl)
             die(self->line_off, "'own' must declare a struct pointer with Drop");
         base = decl ? decl : line;
+        exp = self->expand_aliases(base);
         buf_init(&out);
-        self->transform_calls(base, &out);
+        self->transform_calls(exp, &out);
+        free(exp);
         free(decl);
         res = out.p;
         return res;

@@ -16,18 +16,28 @@
 #include <stdio.h>
 #include <string.h>
 
-import runtime::arena::arena;
-import frontend::lex::lexer;
-import frontend::sym::sym;
 import backend::mem::mem;
+import backend::mem::mem::Memory;
+import frontend::lex::lexer;
+import frontend::lex::lexer::Lexer;
 import frontend::module::map;
-import tool::diag::diag;
-import frontend::parse::support;
-import frontend::parse::mapbuild;
+import frontend::module::map::Call;
+import frontend::module::map::Map;
 import frontend::parse::expr;
+import frontend::parse::expr::Expr;
+import frontend::parse::mapbuild;
+import frontend::parse::support;
+import frontend::parse::support::ParseSupport;
+import frontend::sym::sym;
+import frontend::sym::sym::Field;
+import frontend::sym::sym::Symbols;
+import frontend::type::type::TypeCheck;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
+import tool::diag::diag;
 
 #define MAX_FIELDS 64
-#define MAX_IMPORTS 16
+#define MAX_IMPORTS 32
 #define MAX_MAPS 64
 #define MAX_METHODS 64
 #define MAX_PARAMS 16
@@ -68,7 +78,7 @@ import frontend::parse::expr;
 #define T_PP 5
 #define T_PUNCT 4
 
-namespace frontend::parse {
+namespace frontend::parse;
 pub trait ParseOps {
     int  parse_program(void);
     int  parse_func(int is_static, int is_pub);
@@ -102,23 +112,23 @@ pub trait ParseDeclOps {
 }
 
 pub struct Parser {
-    struct runtime_arena_Arena *arena;
-    struct frontend_lex_Lexer *lex;
-    struct frontend_sym_Symbols *sym;   /* the tables the direct lookups read */
-    struct backend_mem_Memory *mem;     /* the current unit's path for diagnostics */
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Symbols *sym;   /* the tables the direct lookups read */
+    struct Memory *mem;     /* the current unit's path for diagnostics */
     int *build_mode;                    /* points at the driver's flag */
     /* The module tables the translation-unit passes fill: the import list the
        scanner and the parser share, and the call graph and `map` records the
        map JSON reports. The driver reads them back through this object. */
-    char rels[16][160];
+    char rels[32][160];
     int  nrels;
     /* These tables have element types from other units, and a generated header
        carries no `#include`, so their storage lives in this unit's `.c` and the
        object keeps a pointer (the arrangement `ct_emit_bind_tables` already
        uses for the same tables). */
-    struct frontend_module_Call *calls;
+    struct Call *calls;
     int  ncalls;
-    struct frontend_module_Map *maps;
+    struct Map *maps;
     int  nmaps;
     int  cur_unit;                      /* index of the unit being parsed */
     /* The namespace path the current unit declared and the caller recorded for
@@ -127,10 +137,10 @@ pub struct Parser {
     char cur_func[160];
     /* Parse scratch the emitter reads through pointers (`ct_emit_bind_parse`). */
     int  nparams;
-    struct frontend_sym_Field *pend_fields;   /* storage owned by this unit */
+    struct Field *pend_fields;   /* storage owned by this unit */
     int  npend;
-    struct frontend_parse_ParseSupport *sup;
-    struct frontend_parse_Expr *ex;     /* the expression and type grammar */
+    struct ParseSupport *sup;
+    struct Expr *ex;     /* the expression and type grammar */
 } use ParseOps, ParseDeclOps;
 
 impl ParseDeclOps for Parser {
@@ -1543,26 +1553,26 @@ static struct Parser g_parse;
 /* Storage for the tables whose element types belong to other units (see the
    comment on the fields): a generated header carries no `#include`, so the
    arrays stay here and `g_parse` points at them. */
-static struct frontend_module_Call g_calls[1024];
-static struct frontend_module_Map  g_maps[64];
-static struct frontend_sym_Field   g_pend_fields[64];
+static struct Call g_calls[1024];
+static struct Map  g_maps[64];
+static struct Field   g_pend_fields[64];
 
 /* The parser's shared primitives live in support.h.ct; the driver reaches all
    of them through these wrappers, so no trait name crosses the unit line. */
 pub void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode);
 void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode)
 {
-    g_parse.arena = (struct runtime_arena_Arena *)arena;
-    g_parse.lex = (struct frontend_lex_Lexer *)lex;
-    g_parse.sym = (struct frontend_sym_Symbols *)sym;
-    g_parse.mem = (struct backend_mem_Memory *)mem;
+    g_parse.arena = (struct Arena *)arena;
+    g_parse.lex = (struct Lexer *)lex;
+    g_parse.sym = (struct Symbols *)sym;
+    g_parse.mem = (struct Memory *)mem;
     g_parse.build_mode = (int *)build_mode;
     g_parse.sup = parse_support_get();
-    g_parse.sup->arena = (struct runtime_arena_Arena *)arena;
-    g_parse.sup->lex = (struct frontend_lex_Lexer *)lex;
-    g_parse.sup->sym = (struct frontend_sym_Symbols *)sym;
-    g_parse.sup->ty = (struct frontend_type_TypeCheck *)ty;
-    g_parse.sup->mem = (struct backend_mem_Memory *)mem;
+    g_parse.sup->arena = (struct Arena *)arena;
+    g_parse.sup->lex = (struct Lexer *)lex;
+    g_parse.sup->sym = (struct Symbols *)sym;
+    g_parse.sup->ty = (struct TypeCheck *)ty;
+    g_parse.sup->mem = (struct Memory *)mem;
     g_parse.calls = g_calls;
     g_parse.maps = g_maps;
     g_parse.pend_fields = g_pend_fields;
@@ -1575,8 +1585,8 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
     g_parse.ex = expr_get();
 }
 
-pub struct frontend_parse_Parser *parse_get(void);
-struct frontend_parse_Parser *parse_get(void)
+pub struct Parser *parse_get(void);
+struct Parser *parse_get(void)
 {
     return &g_parse;
 }
@@ -1615,5 +1625,4 @@ pub void ct_parse_clear_error(void);
 void ct_parse_clear_error(void)
 {
     g_parse.sup->errmsg[0] = 0;
-}
 }

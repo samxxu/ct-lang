@@ -18,30 +18,38 @@
 #include <stdlib.h>
 #include <string.h>
 
-import runtime::arena::arena;
-import frontend::lex::lexer;
-import frontend::module::unit;
-import frontend::sym::sym;
-import frontend::type::type;
-import frontend::parse::parse;
-import tool::cache::cache;
-import tool::diag::diag;
-import backend::mem::mem;
 import backend::emit::emit;
+import backend::mem::mem;
+import backend::mem::mem::Memory;
+import frontend::lex::lexer;
+import frontend::lex::lexer::Lexer;
+import frontend::module::unit;
+import frontend::module::unit::Unit;
+import frontend::parse::parse;
+import frontend::parse::parse::Parser;
+import frontend::sym::sym;
+import frontend::sym::sym::Symbols;
+import frontend::type::type;
+import frontend::type::type::TypeCheck;
+import runtime::arena::arena;
+import runtime::arena::arena::Arena;
+import tool::cache::cache;
+import tool::cache::cache::Cache;
+import tool::diag::diag;
 
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_UNITS  64
-#define MAX_IMPORTS 16
+#define MAX_IMPORTS 32
 #define MAX_INCDIRS 16
-#define MAX_IH     2560                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
+#define MAX_IH     5120                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
 
 /* token kinds (the scanner only needs these two) */
 #define T_ID     1
 #define T_PP     5
 
-namespace frontend::module {
+namespace frontend::module;
 pub trait ModuleOps {
     int  fail(const char *msg);
     int  read_file(const char *path);
@@ -63,13 +71,13 @@ pub trait ModuleOps {
 
 pub struct Module {
     /* Collaborators the methods reach through; the driver wires them once. */
-    struct runtime_arena_Arena *arena;
-    struct frontend_lex_Lexer *lex;
-    struct frontend_sym_Symbols *sym;
-    struct frontend_type_TypeCheck *ty;
-    struct backend_mem_Memory *mem;
-    struct frontend_parse_Parser *p;
-    struct tool_cache_Cache *cache;
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Symbols *sym;
+    struct TypeCheck *ty;
+    struct Memory *mem;
+    struct Parser *p;
+    struct Cache *cache;
     /* Output state for one run: the source path the banner and diagnostics
        report. The driver re-points it for each unit in build mode. */
     const char *path;
@@ -77,7 +85,7 @@ pub struct Module {
        element types from this same namespace; a generated header carries no
        `#include`, so their storage lives in this unit's `.c` and the object
        keeps a pointer. */
-    struct frontend_module_Unit *units;
+    struct Unit *units;
     int  nunits;
     int  build_mode;
     /* Array bounds are literals because this struct lands in a generated header
@@ -744,10 +752,10 @@ static struct Module g_module;
 /* Storage for the unit table: its element type belongs to `unit.h.ct`, and a
    generated header carries no `#include`, so the array stays here and
    `g_module` points at it. */
-static struct frontend_module_Unit g_units[MAX_UNITS];
+static struct Unit g_units[MAX_UNITS];
 
-pub struct frontend_module_Module *module_get(void);
-struct frontend_module_Module *module_get(void)
+pub struct Module *module_get(void);
+struct Module *module_get(void)
 {
     return &g_module;
 }
@@ -757,13 +765,12 @@ struct frontend_module_Module *module_get(void)
 pub void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache);
 void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache)
 {
-    g_module.arena = (struct runtime_arena_Arena *)arena;
-    g_module.lex = (struct frontend_lex_Lexer *)lex;
-    g_module.sym = (struct frontend_sym_Symbols *)sym;
-    g_module.ty = (struct frontend_type_TypeCheck *)ty;
-    g_module.mem = (struct backend_mem_Memory *)mem;
-    g_module.p = (struct frontend_parse_Parser *)p;
-    g_module.cache = (struct tool_cache_Cache *)cache;
+    g_module.arena = (struct Arena *)arena;
+    g_module.lex = (struct Lexer *)lex;
+    g_module.sym = (struct Symbols *)sym;
+    g_module.ty = (struct TypeCheck *)ty;
+    g_module.mem = (struct Memory *)mem;
+    g_module.p = (struct Parser *)p;
+    g_module.cache = (struct Cache *)cache;
     g_module.units = g_units;
-}
 }
