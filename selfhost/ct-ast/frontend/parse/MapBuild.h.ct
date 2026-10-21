@@ -1,5 +1,5 @@
 /*
- * mapbuild.h.ct - the `map` construct, one sub-object of the parser.
+ * MapBuild.h.ct - the `map` construct, one sub-object of the parser.
  *
  * `map trait T for instance x { m() -> CALL; }` takes no expression from the
  * grammar: it validates the binding set against the trait (every method bound
@@ -8,8 +8,9 @@
  * parser's shared primitives and the symbol tables, so it is its own object;
  * the parser hands it the unit index and reaches it through `mapbuild_get`.
  *
- * Macros do not cross a unit boundary, so the caps and token kinds used here
- * are restated; they must stay equal to main.ct.
+ * Macros do not cross a unit boundary, so the caps, token kinds and node kind
+ * used here are declared here; MAX_TEXT 160, MAX_PARAMS 16 and MAX_METHODS 64
+ * are the values `frontend/sym/Symbols.h.ct` lists.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */

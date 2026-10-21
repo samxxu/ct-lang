@@ -1,17 +1,19 @@
 /*
- * parse.h.ct - the parser: statements, declarations and the translation-unit
+ * Parser.h.ct - the parser: statements, declarations and the translation-unit
  * level (top-level declarations, namespaces, `map`). The expression chain and
- * the type grammar live on a sub-object (expr.h.ct) reached through
+ * the type grammar live on a sub-object (Expr.h.ct) reached through
  * `expr_get`.
  *
  * The node pool, the symbol tables, the type layer and the memory pass are
  * reached through collaborator pointers; everything that is not parsing lives
- * on `ParseSupport` (support.h.ct) or in the driver (main.ct). The driver only
- * ever calls the pub primitives below, so `main.ct` keeps nothing but the CLI
- * and the build orchestration.
+ * on `ParseSupport` (ParseSupport.h.ct) or in the driver
+ * (tool/driver/driver.ct). The driver only ever calls the pub primitives below,
+ * so `main.ct` keeps nothing but the wiring and the dispatch.
  *
  * Macros do not cross a unit boundary, so the caps, node kinds, token kinds and
- * operator codes used here are restated; they must stay equal to main.ct.
+ * operator codes used here are declared here; the symbol caps are the values
+ * `frontend/sym/Symbols.h.ct` lists and MAX_IMPORTS the one
+ * `frontend/module/Module.h.ct` spells.
  */
 #include <stdio.h>
 #include <string.h>
@@ -32,41 +34,24 @@ import tool::diag::diag;
 
 #define MAX_FIELDS 64
 #define MAX_IMPORTS 32
-#define MAX_MAPS 64
 #define MAX_METHODS 64
 #define MAX_PARAMS 16
 #define MAX_TEXT 160
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
-#define N_ARROW 25
-#define N_ASSIGN 13
-#define N_BLOCK 4
-#define N_BREAK 38
-#define N_CONT 39
-#define N_DECL 12
-#define N_DECLS 40
-#define N_DELETE 41
-#define N_DEREF 28
-#define N_EXPR 6
+/* only the node kinds this pass builds or reads; the numbers are the shared
+   contract with the expression/statement sub-objects and the emitter */
 #define N_FIELD 23
-#define N_FOR 16
 #define N_FUNC 3
 #define N_GLOBAL 22
-#define N_IF 14
 #define N_IMPL 33
-#define N_INDEX 26
-#define N_MEMBER 24
 #define N_METHOD 29
 #define N_PARAM 19
-#define N_POST 18
 #define N_PP 2
 #define N_PROG 1
 #define N_RAW 31
-#define N_RET 5
 #define N_STRUCT 20
 #define N_TYPEDEF 21
-#define N_VAR 10
-#define N_WHILE 15
 #define T_EOF 0
 #define T_ID 1
 #define T_PP 5

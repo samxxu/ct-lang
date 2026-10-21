@@ -1,15 +1,16 @@
 /*
- * lexer.h.ct - the source cursor and the current token, one class of its own.
+ * Lexer.h.ct - the source cursor and the current token, one class of its own.
  *
  * The lexer owns the source buffer, the byte cursor and the one-token lookahead
  * the parser reads (`tok`, `toktext`, `toknum`, the token's line and its start
- * offset). `main.ct` reaches it through a pointer to the singleton and asks it
+ * offset). The parser reaches it through a pointer to the singleton and asks it
  * for the next token; `accept` / `expect` / `fail` stay on the parser object
  * because they are about grammar, not about characters.
  *
  * Macros do not cross a unit boundary, so the capacity and the token kinds are
- * restated here; they must stay equal to the ones in main.ct (MAX_TEXT 160 and
- * T_EOF..T_PP 0..5). The `toktext` length is spelled out as a literal because a
+ * declared here: MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists and
+ * T_EOF..T_PP 0..5 are the kinds `frontend/parse/ParseSupport.h.ct` and the
+ * parser spell. The `toktext` length is spelled out as a literal because a
  * `pub struct` lands in the generated header, which carries no macros.
  */
 #include <stdio.h>

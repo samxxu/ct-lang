@@ -1,5 +1,5 @@
 /*
- * support.h.ct - the parser's shared primitives.
+ * ParseSupport.h.ct - the parser's shared primitives.
  *
  * Everything the parser and the build driver both rely on that only touches a
  * collaborator: the token cursor helpers (`fail` / `lex_next` / `accept` /
@@ -9,7 +9,8 @@
  * pointer to the single instance and calls it as `self->sup`.
  *
  * Macros do not cross a unit boundary, so the caps and token kinds used here
- * are restated; they must stay equal to main.ct.
+ * are declared here; MAX_FUNCS 256, MAX_PARAMS 16 and MAX_TEXT 160 are the
+ * values `frontend/sym/Symbols.h.ct` lists.
  */
 #include <stdio.h>
 #include <string.h>

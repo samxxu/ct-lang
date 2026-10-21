@@ -1,14 +1,15 @@
 /*
- * map.h.ct - the `map` construct's records and the call graph edge.
+ * Map.h.ct - the `map` construct's records and the call graph edge.
  *
  * These are plain value types of the module layer: the parser fills them, the
  * type checker reads the map table while boxing, and the emitter writes the
  * wrappers and the JSON map. Keeping them beside Unit means each consumer names
  * them through the module namespace instead of through the driver object.
  *
- * Macros do not cross a unit boundary, so the caps are restated; they must stay
- * equal to MAX_TEXT 160, MAX_PARAMS 16 and MAX_METHODS 64 in main.ct. The array
- * lengths are literals because a `pub struct` lands in a header with no macros.
+ * Macros do not cross a unit boundary, so the caps are declared here; MAX_TEXT
+ * 160, MAX_PARAMS 16 and MAX_METHODS 64 are the values
+ * `frontend/sym/Symbols.h.ct` lists. The array lengths are literals because a
+ * `pub struct` lands in a header with no macros.
  */
 namespace frontend::module;
 /* One `callee(...)` in a function body, for the map's call graph. */

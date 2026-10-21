@@ -1,19 +1,19 @@
 /*
- * arena.h.ct - the node pool and the string-literal pool, one class of its own.
+ * Arena.h.ct - the node pool and the string-literal pool, one class of its own.
  *
  * Node storage and literal storage are the compiler's two big fixed arrays.
- * They live here as an explicit `Arena` object so `main.ct` reaches them through
- * a pointer instead of two file-scope globals, and the two capacity macros it
- * used to carry stay with the arrays that consume them. Macros do not cross a
- * unit boundary, so the array lengths are spelled out as the literals below;
- * they must stay equal to the old values (65536 nodes, a 256 KiB string pool).
+ * They live here as an explicit `Arena` object so the driver and the parser
+ * reach them through a pointer instead of two file-scope globals, and the
+ * capacity macros stay with the arrays that consume them. Macros do not cross a
+ * unit boundary, so the array lengths are spelled out as the literals below
+ * (65536 nodes, a 256 KiB string pool).
  */
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
-   documented where the nodes are built (main.ct). The field layout matches the
-   `Node` shape the whole pipeline reads and writes. It is a plain `pub struct`
-   (no `use`) -- an exported value type the caller can read through the pointer,
-   not an object with behaviour. */
+   documented where the nodes are built (frontend/parse/Parser.h.ct, Expr.h.ct
+   and Stmt.h.ct). The field layout matches the `Node` shape the whole pipeline
+   reads and writes. It is a plain `pub struct` (no `use`) -- an exported value
+   type the caller can read through the pointer, not an object with behaviour. */
 pub struct Node {
     int  kind;
     int  a;

@@ -13,8 +13,9 @@
  * #include, so neither the FILE * nor the trait may appear in its surface.
  * `main` reaches it through the `pub` primitives at the end of the file.
  *
- * Macros do not cross a unit boundary, so the caps used here are restated;
- * they must stay equal to main.ct.
+ * Macros do not cross a unit boundary, so the caps used here are declared here;
+ * MAX_PATH 1024 is also the path length `frontend/module/Module.h.ct` and the
+ * emitter spell.
  */
 #include <stdio.h>
 #include <stdlib.h>

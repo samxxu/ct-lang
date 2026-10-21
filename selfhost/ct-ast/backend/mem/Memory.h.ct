@@ -1,13 +1,14 @@
 /*
- * mem.h.ct - AutoDrop and the leak analysis, one unit of its own.
+ * Memory.h.ct - AutoDrop and the leak analysis, one unit of its own.
  *
  * The rules are deliberately the conservative ones L2 uses (D40), so the
  * warnings match its output byte for byte. The analysis needs the node pool and
  * the symbol tables, so it holds pointers to both, and it writes warnings
  * through the pub wrappers tool::diag exports. Macros do not cross a unit
- * boundary, so the caps are restated here; the array lengths are spelled out as
- * literals because a `pub struct` lands in the generated header, which carries
- * no macros.
+ * boundary, so the caps are declared here (MAX_TEXT 160 and MAX_VARS 4096 are
+ * the values `frontend/sym/Symbols.h.ct` lists); the array lengths are spelled
+ * out as literals because a `pub struct` lands in the generated header, which
+ * carries no macros.
  */
 #include <stdio.h>
 #include <string.h>
@@ -18,15 +19,14 @@ import tool::diag::diag;
 
 #define MAX_TEXT  160
 #define MAX_VARS  4096
-#define MAX_SCOPE 256
-/* only the node kinds this unit reads; the numbers must stay equal to main.ct */
+/* only the node kinds this unit reads; the numbers are the ones the parser
+   builds and the emitter dispatches on */
 #define N_CALL   7
 #define N_DECLS  40
 #define N_VAR    10
 #define N_MEMBER 24
 #define N_ARROW  25
 #define N_INDEX  26
-#define N_RET    5
 
 namespace backend::mem;
 pub trait MemoryOps {

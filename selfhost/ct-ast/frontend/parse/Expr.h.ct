@@ -1,5 +1,5 @@
 /*
- * expr.h.ct - the expression and type grammar, one sub-object of the parser.
+ * Expr.h.ct - the expression and type grammar, one sub-object of the parser.
  *
  * The precedence chain (`parse_expr` down to `parse_primary`), the argument
  * list and the call-graph record sit here with the type specifier reader the
@@ -10,7 +10,8 @@
  * pool and the call table the driver reads back.
  *
  * Macros do not cross a unit boundary, so the caps, node kinds, token kinds and
- * operator codes used here are restated; they must stay equal to main.ct.
+ * operator codes used here are declared here; MAX_TEXT 160 is the value
+ * `frontend/sym/Symbols.h.ct` lists.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */

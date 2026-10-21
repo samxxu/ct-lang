@@ -8,7 +8,8 @@
  * unit and reaches this layer through `stmt_get`.
  *
  * Macros do not cross a unit boundary, so the caps and node kinds used here are
- * restated; they must stay equal to main.ct.
+ * declared here; MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists and
+ * the node-kind numbers are the ones the parser builds.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */

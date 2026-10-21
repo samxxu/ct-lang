@@ -8,8 +8,8 @@
  * primitive wrappers -- a generated header cannot carry the MAX_* macros or the
  * FILE * a richer interface would need.
  *
- * Macros do not cross units, so the caps this unit needs are restated; they must
- * stay equal to the ones in main.ct.
+ * Macros do not cross units, so the caps this unit needs are declared here;
+ * MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists.
  */
 #include <stdio.h>
 #include <stdlib.h>

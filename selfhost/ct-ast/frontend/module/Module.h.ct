@@ -1,16 +1,18 @@
 /*
- * module.h.ct - the build driver: unit loading and the output side.
+ * Module.h.ct - the build driver: unit loading and the output side.
  *
  * The module layer of a `build`: path and import resolution, loading the unit
  * closure, validating a unit's directory against its `namespace`, ordering the
  * units for the incremental cache, and driving the emitter for every unit. The
- * compile-mode entry (`run`) stays with the driver object in main.ct; this unit
- * holds the state the two share -- the unit table, the run options and the
- * current path -- so those methods are real methods on an object rather than
- * free functions over file-scope globals.
+ * compile-mode entry (`run`) stays with the driver object in
+ * tool/driver/driver.ct; this unit holds the state the two share -- the unit
+ * table, the run options and the current path -- so those methods are real
+ * methods on an object rather than free functions over file-scope globals.
  *
  * Macros do not cross a unit boundary, so the caps and the token kinds used
- * here are restated; they must stay equal to main.ct.
+ * here are declared here; MAX_TEXT 160 is the value
+ * `frontend/sym/Symbols.h.ct` lists and MAX_KEY 768 the one
+ * `tool/cache/Cache.h.ct` spells.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
@@ -81,8 +83,7 @@ pub struct Module {
     int  nunits;
     int  build_mode;
     /* Array bounds are literals because this struct lands in a generated header
-       that carries no macros; they must stay equal to MAX_PATH 1024 in main.ct
-       and MAX_INCDIRS 16 here. */
+       that carries no macros; 1024 is MAX_PATH and 16 is MAX_INCDIRS here. */
     char outdir[1024];
     const char *incdirs[16];
     int  ninc;

@@ -1,15 +1,15 @@
 /*
- * cache.h.ct - the incremental cache: key spelling, hit and store.
+ * Cache.h.ct - the incremental cache: key spelling, hit and store.
  *
  * Phase 6.3 (ported in 10.5). A cache is a property of a build directory, not
  * of the compiler's syntax state, so it is an object of its own: it owns the
  * version string that goes into every key and turns a unit's key material into
  * a stamped key. Nothing here parses or emits.
  *
- * Macros do not cross a unit boundary, so the caps are restated; they must stay
- * equal to MAX_PATH 1024 and MAX_KEY 768 in main.ct. The cache deliberately
- * knows nothing about `Unit`: the module layer hands in the key material as
- * strings and numbers, so this unit never imports upward.
+ * Macros do not cross a unit boundary, so the caps are declared here; MAX_PATH
+ * 1024 and MAX_KEY 768 are the values `frontend/module/Module.h.ct` spells. The
+ * cache deliberately knows nothing about `Unit`: the module layer hands in the
+ * key material as strings and numbers, so this unit never imports upward.
  */
 #include <stdio.h>
 #include <string.h>

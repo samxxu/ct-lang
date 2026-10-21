@@ -1,10 +1,11 @@
 /*
- * emit.h.ct - the C emitter, one class of its own.
+ * Emit.h.ct - the C emitter, one class of its own.
  *
  * It turns the AST into C: it reads the node pool, the symbol tables, the type
  * queries and the module tables, and writes the `.c`/`.h` files and the map
  * JSON. Macros do not cross a unit boundary, so the node kinds, the operator
- * tags and the caps are restated here; they must stay equal to main.ct.
+ * tags and the caps are declared here; MAX_TEXT 160 and MAX_PARAMS 16 are the
+ * values `frontend/sym/Symbols.h.ct` lists.
  *
  * The instance is private to this unit: a generated header carries no
  * #include, so neither the FILE * nor the trait may appear in its surface.
@@ -30,8 +31,7 @@ import runtime::arena::Arena;
 #define MAX_HOISTS 4
 #define MAX_PARAMS 16
 
-/* node kinds (D32: one tag, one dispatch) */
-#define N_PROG    1
+/* the node kinds this unit dispatches on (D32: one tag, one dispatch) */
 #define N_PP      2
 #define N_FUNC    3
 #define N_BLOCK   4
@@ -49,7 +49,6 @@ import runtime::arena::Arena;
 #define N_FOR     16
 #define N_UNARY   17
 #define N_POST    18
-#define N_PARAM   19
 #define N_STRUCT  20
 #define N_TYPEDEF 21
 #define N_GLOBAL  22
@@ -59,10 +58,8 @@ import runtime::arena::Arena;
 #define N_INDEX   26
 #define N_ADDR    27
 #define N_DEREF   28
-#define N_METHOD  29
 #define N_MCALL   30
 #define N_RAW     31
-#define N_TRAIT   32
 #define N_IMPL    33
 #define N_BOX     34
 #define N_CAST    35
@@ -74,7 +71,6 @@ import runtime::arena::Arena;
 #define N_DELETE  41
 
 /* binary operators (stored in `aux`) */
-#define B_ADD 1
 #define B_SUB 2
 #define B_MUL 3
 #define B_DIV 4
@@ -91,9 +87,7 @@ import runtime::arena::Arena;
 
 /* unary / postfix operators */
 #define U_NEG 1
-#define U_NOT 2
 #define P_INC 1
-#define P_DEC 2
 
 namespace backend::emit;
 /* The whole emitter API. The vptr / initialiser writer lives on a sub-object
@@ -1238,8 +1232,8 @@ impl EmitOps for Emitter {
         return 0;
     }
 
-    /* Build mode: the unit's exported surface (D34 keeps the naming contract,
-       not byte equality with the old pipeline). */
+    /* Build mode: the unit's exported surface (D34 fixes the naming rules, not
+       the wording of the header). */
     int write_unit_header(int u)
     {
         char path[MAX_PATH];
@@ -1306,9 +1300,9 @@ impl EmitOps for Emitter {
         return 0;
     }
 
-    /* `--emit-map`: the same shape the old pipeline emits (compiler / file /
-       traits / structs / functions / impls / calls). `u < 0` means compile
-       mode, where the tables cover the single unit. */
+    /* `--emit-map`: the published JSON shape (compiler / file / traits /
+       structs / functions / impls / calls). `u < 0` means compile mode, where
+       the tables cover the single unit. */
     int write_map(const char *dest, int prog, int u)
     {
         FILE *f;
@@ -1523,7 +1517,7 @@ impl EmitOps for Emitter {
     }
 
     /* A failure is recorded without a position; the driver's facade wraps the
-       first message with the current line and token, as the old bodies did. */
+       first message with the current line and token. */
     int fail(const char *msg)
     {
         (void)self;

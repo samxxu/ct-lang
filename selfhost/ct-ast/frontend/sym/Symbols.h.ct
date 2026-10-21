@@ -1,19 +1,19 @@
 /*
- * sym.h.ct - the symbol tables of one translation unit, one class of its own.
+ * Symbols.h.ct - the symbol tables of one translation unit, one class of its own.
  *
  * The tables and the lookups over them (functions, variables and their scopes,
  * type tags, traits and structs, plus the namespace prefix and the parser's
  * impl/return context) are a property of the unit being compiled, not of the
- * parser. Keeping them here lets the driver hold a pointer to the singleton
- * and lets `main.ct` fail with a position while this unit reports the bare
+ * parser. Keeping them here lets the driver hold a pointer to the singleton and
+ * keep its own position-carrying failures while this unit reports the bare
  * message.
  *
- * Macros do not cross a unit boundary, so the caps are restated here; they must
- * stay equal to MAX_TEXT 160, MAX_PARAMS 16, MAX_FUNCS 256, MAX_VARS 4096,
- * MAX_SCOPE 256, MAX_TYPES 256, MAX_METHODS 64, MAX_TRAITS 64, MAX_STRUCTS 128
- * and MAX_FIELDS 64 in main.ct. The array lengths are spelled out as literals
- * because a `pub struct` lands in the generated header, which carries no
- * macros.
+ * Macros do not cross a unit boundary, so this unit declares the symbol-table
+ * caps; a unit that reads one of them mirrors the value listed here (MAX_TEXT
+ * 160, MAX_PARAMS 16, MAX_FUNCS 256, MAX_VARS 4096, MAX_SCOPE 256, MAX_TYPES
+ * 256, MAX_METHODS 64, MAX_TRAITS 64, MAX_STRUCTS 128, MAX_FIELDS 64). The
+ * array lengths are spelled out as literals because a `pub struct` lands in the
+ * generated header, which carries no macros.
  */
 #include <stdio.h>
 #include <string.h>

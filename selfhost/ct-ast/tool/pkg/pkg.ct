@@ -1,14 +1,15 @@
 /*
  * pkg.ct - the package manager (`ct get` / `ct install`), one unit of its own.
  *
- * It is a leaf: it owns its lock/seen state and never touches the AST, so it is
- * the first object split out of main.ct. The whole trait stays in this unit on
+ * It is a leaf: it owns its lock/seen state and never touches the AST, so it
+ * has no collaborators at all. The whole trait stays in this unit on
  * purpose -- the emitter makes each impl's vtable `static`, and an instance's
  * vptr initialisers can only name vtables its own unit can see, so one struct's
  * impls cannot be spread across units.
  *
- * Macros do not cross units, so the caps this unit needs are restated here; they
- * must stay equal to the ones in main.ct.
+ * Macros do not cross units, so the caps this unit needs are declared here;
+ * MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists, the MAX_PKG_*
+ * and MAX_LOCK caps are this package manager's own.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +18,6 @@
 #include <dirent.h>
 
 #define MAX_TEXT       160
-#define MAX_PATH       1024
 #define MAX_LOCK       4096             /* MAX_PKG_PATH * 8, spelled out */
 #define MAX_PKG_DEPS   16
 #define MAX_PKG_PATH   512
@@ -61,9 +61,9 @@ trait PkgOps {
     int  install_main(int argc, char **argv);
 }
 
-/* The manager's state used to be file-scope in main.ct; it lives in this struct
-   now so the unit owns it outright. `prog` and `version` are wired at start-up,
-   which keeps CTC_VERSION defined in exactly one place. */
+/* The manager's state lives in this struct so the unit owns it outright; `prog`
+   and `version` are wired at start-up, which keeps CTC_VERSION defined in
+   exactly one place. */
 struct Pkg {
     char lock[MAX_LOCK];
     int  locklen;

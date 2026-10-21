@@ -1,12 +1,12 @@
 /*
- * unit.h.ct - one translation unit of a `build`, as a value type.
+ * Unit.h.ct - one translation unit of a `build`, as a value type.
  *
  * A unit is plain data shared by the module layer (which fills it), the cache
  * (which folds its dependencies into a key) and the emitter (which reads the
  * ranges). It lives in its own unit so those three can name it without going
- * through the driver object; the caps it needs are restated here because macros
- * do not cross a unit boundary and a `pub struct` lands in a header that carries
- * none. They must stay equal to MAX_PATH 1024, MAX_TEXT 160 and MAX_IMPORTS 32.
+ * through the driver object; the array lengths are literals because a `pub
+ * struct` lands in a header that carries no macros (1024 = MAX_PATH, 160 =
+ * MAX_TEXT and 32 = MAX_IMPORTS of the module layer).
  */
 namespace frontend::module;
 pub struct Unit {

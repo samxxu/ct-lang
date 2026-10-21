@@ -1,13 +1,15 @@
 /*
- * type.h.ct - static type inference and the boxing decision.
+ * TypeCheck.h.ct - static type inference and the boxing decision.
  *
  * None of this is parsing: the unit reads the node pool, the symbol tables and
  * the map table, and it writes back into the pool (boxing allocates fresh
  * N_ADDR / N_BOX nodes, hence the lexer for their line numbers). It lives on
- * its own so `main.ct` only forwards to it through the driver object.
+ * its own so the driver and the parser reach it through pointers instead of
+ * file-scope globals.
  *
  * Macros do not cross a unit boundary, so the cap and the node kinds this unit
- * reads are restated here; they must stay equal to main.ct.
+ * reads are declared here; MAX_TEXT 160 is the value
+ * `frontend/sym/Symbols.h.ct` lists.
  */
 #include <stdio.h>
 #include <string.h>
@@ -18,7 +20,8 @@ import frontend::sym::Symbols;
 import runtime::arena::Arena;
 
 #define MAX_TEXT 160
-/* only the node kinds this unit reads; the numbers must stay equal to main.ct */
+/* only the node kinds this unit reads; the numbers are the ones the parser
+   builds and the emitter dispatches on */
 #define N_CALL   7
 #define N_VAR    10
 #define N_MEMBER 24
