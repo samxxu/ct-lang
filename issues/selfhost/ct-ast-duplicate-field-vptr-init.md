@@ -6,7 +6,7 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `6d764bc`（2026-10-21） |
 | 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct:451-457](../../selfhost/ct-ast/backend/emit/Emit.h.ct#L451-L457)、[selfhost/ct-ast/backend/emit/Init.h.ct:165-183](../../selfhost/ct-ast/backend/emit/Init.h.ct#L165-L183) |
-| 状态 | ⬜ 未修复 |
+| 状态 | ✅ 已修复（2026-10-21，`Init.h.ct` 的 `emit_field_vptrs` 跳过已被初始化式赋值的字段） |
 
 ## 现象
 

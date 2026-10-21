@@ -4,14 +4,15 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总四轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
+本目录汇总五轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）、
-[reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）与
-[reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）。
+[reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）、
+[reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）与
+[reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）——各文件行号以其自身锚点为准。
-- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）——各文件行号以其自身锚点为准。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 **8 条待修**（SH-8…SH-12、DOC-19…DOC-21，SH-10 从 Low 升级为 Medium，见文末一节），另 SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 - 硬关卡计数随阶段演进：6 → 7 → **8**（`check-ast.sh` 于 Phase 9 作为第 8 关接入 `check-all.sh`）。下文各**带日期的验证记录**里出现的「六道 / 七道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「8 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
@@ -39,6 +40,9 @@
 | DOC-16 | Medium | 「零警告」只在 Apple clang 下成立，GCC 会在冻结层报 `-Wformat-truncation` | 见文末「容器复验」（2026-10-21） |
 | DOC-17 | Medium | 两个探针依赖 BSD libc（`cli/short-read`、`cli/tmpfile-cannot-create`） | 见文末「容器复验」（2026-10-21） |
 | DOC-18 | Medium | language-spec §4.8 仍把「struct 类型的数组字段」列为不支持，与 §6 及实际行为相反 | [language-spec-struct-array-field-stale.md](docs/language-spec-struct-array-field-stale.md) |
+| DOC-19 | Medium | 教程四处与实现不符：`delete` 的 `p = 0`、`ctc` 建议、数组字段、示例行号 | [tutorial-claims-vs-impl.md](docs/tutorial-claims-vs-impl.md) |
+| DOC-20 | Low | README 快速开始 1b 只构建 `ctc`，后续步骤却调用 `ct` | [readme-quickstart-branch.md](docs/readme-quickstart-branch.md) |
+| DOC-21 | Low | construction.md 自称「描述现状」却未标适用编译器，两处描述在 ct-ast 上不成立 | [construction-scope-unspecified.md](docs/construction-scope-unspecified.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -68,6 +72,11 @@
 | SH-5 | Medium | ct-ast 存在 27 个定义后从未使用的宏 | [ct-ast-dead-macros.md](selfhost/ct-ast-dead-macros.md) |
 | SH-6 | Medium | 16 处「上限账本在 main.ct」注释已悬空，且 `main.ct` 自相矛盾 | [ct-ast-stale-cap-comments.md](selfhost/ct-ast-stale-cap-comments.md) |
 | SH-7 | Medium | ct-ast 对已赋值的 struct 值字段仍发嵌套 vptr 指定初始化式（`-Winitializer-overrides`） | [ct-ast-duplicate-field-vptr-init.md](selfhost/ct-ast-duplicate-field-vptr-init.md) |
+| SH-8 | High | ct-ast 不校验 impl 完整性，缺方法时生成 NULL vtable 槽并在运行期段错误 | [ct-ast-missing-impl-check.md](selfhost/ct-ast-missing-impl-check.md) |
+| SH-9 | Medium | ct-ast 解析期诊断缺文件名与列号，与四份文档的 `file:line:col: error:` 不符 | [ct-ast-parse-diag-format.md](selfhost/ct-ast-parse-diag-format.md) |
+| SH-10 | Medium | 生成物触发 `-Wall -Wextra` 告警家族：`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数 | [ct-ast-unused-self-warning.md](selfhost/ct-ast-unused-self-warning.md) |
+| SH-11 | Medium | ct-ast 在表达式中间静默提升右值接收者，改变求值顺序 | [ct-ast-rvalue-hoist-order.md](selfhost/ct-ast-rvalue-hoist-order.md) |
+| SH-12 | Medium | `map` 语法（`map trait T for instance x`）在 test/cases 与 examples 中无正例，新用户入口缺失 | [ct-ast-map-no-positive-example.md](selfhost/ct-ast-map-no-positive-example.md) |
 
 ## 汇总
 
@@ -79,6 +88,10 @@
 合计 20 条：已处理 20（其中 TEST-5 / TEST-6 为部分覆盖，未覆盖项已在文件内列明）。
 另有 Phase 9 复审的 14 项发现，未单独立文件，逐项状态见文末「Phase 9 复审」一节。
 **Phase 12 复审（2026-10-21）新增 8 条：DOC-10…15、SH-5、SH-6，已全部修复**（见文末一节）。
+
+**第二轮复审（2026-10-21，锚点 `dde0dda`）新增 8 条待修**：SH-8（High）、SH-9 / SH-10 / SH-11 / SH-12 / DOC-19（Medium）、DOC-20 / DOC-21（Low）；SH-7 与 DOC-18 复核后仍复现（见文末一节）。
+
+状态附注：第二轮复审覆盖了上一轮评审的同一 HEAD `dde0dda`，工作树当时包含第二轮产生的 7 个 issue 文件 + 报告目录 + 本文件编辑（均为新增/只读产物，不触碰源码）。**全量生成物 `-Wall -Wextra` 扫描（2026-10-21）**发现 ct-ast 对 test/cases、test/ast、test/modules 生成的 C 文件有 3 类告警家族（`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数）——check-all.sh 当前只对 ct-ast 自身构建跑告警检查，不对生成物跑；详见 SH-10（扩展为 Medium）。
 
 ## 修复进展（2026-10-17）
 
@@ -247,6 +260,44 @@ macOS（Apple clang）侧同期复跑：`./test/run.sh` 118 passed / 0 failed。
 
 两条均**不影响八关**（`check-all: OK (8 hard gates green)`）：SH-7 的写法不在语料里，DOC-18 的
 口径矛盾不产生 golden 差异。
+
+## 第二轮复审（2026-10-21，锚点 `dde0dda`）
+
+完整报告见 [reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)。
+本轮仍为**只读评审**，工作树干净，覆盖上一轮（`4ef8b68`）之后的全部 9 个提交。
+
+验证基线：`bash selfhost/check-all.sh` → **`check-all: OK (8 hard gates green)`**（310 个 `ok`、0 `FAIL`，
+`SCRIPT_EXIT=0`）；另在 `/tmp` 重建 L0 → L1 → L2 → ct-ast 四层，**零警告**，`ct v0.12.0`；
+新增的 `install.sh` 用本地源（`CT_SOURCE_DIR=.`）端到端安装成功（`install_exit=0`，产出 `ct` 与 `ctc -> ct`）。
+差分实验：`impl` 缺方法（L0/L2 报错、ct-ast 放行）、`int x = ;`（L0/L2 透传、ct-ast 报错）、
+表达式中间右值接收者（仅 ct-ast 静默提升并改变求值顺序）。
+
+本轮新增 **8 条待修**（覆盖上一轮评审同一 HEAD 的更深层 `gcc -Wall -Wextra` 生成物告警扫描）：
+
+| ID | 严重度 | 摘要 | 文件 |
+| --- | --- | --- | --- |
+| SH-8 | **High** | ct-ast 不校验 impl 完整性，缺方法时生成 `NULL` vtable 槽，运行期 SIGSEGV；L0 / L2 均正确报错 | [ct-ast-missing-impl-check.md](selfhost/ct-ast-missing-impl-check.md) |
+| SH-9 | Medium | ct-ast 解析期诊断只有 `ctc: line N:`，缺文件名与列号，与 README / tutorial / glossary 的 `file:line:col: error:` 不符 | [ct-ast-parse-diag-format.md](selfhost/ct-ast-parse-diag-format.md) |
+| SH-10 | **Medium**（从 Low 升级） | **生成物 `-Wall -Wextra` 告警家族**：`_self` 未使用（L2/ct-ast 同）、未被引用的 vtable（`Dict_Hashable_vtable`、`uart1_Controller_vtable`）、未被引用的 Drop 函数（`Person_Drop_drop`）；全量扫描 3 类告警、10+ 个语料 | [ct-ast-unused-self-warning.md](selfhost/ct-ast-unused-self-warning.md) |
+| SH-11 | Medium | ct-ast 在表达式中间静默提升右值接收者，改变求值顺序，与 language-spec §4.9 的「必须报错」冲突 | [ct-ast-rvalue-hoist-order.md](selfhost/ct-ast-rvalue-hoist-order.md) |
+| SH-12 | **Medium（新增）** | `map` 语法（`map trait T for instance x`）在 test/cases（25 正例）与 examples（7 正例）中无端到端正例，新用户入口缺失 | [ct-ast-map-no-positive-example.md](selfhost/ct-ast-map-no-positive-example.md) |
+| DOC-19 | Medium | 教程四处与实现不符：`delete` 的 `p = 0`、`ctc` 建议、数组字段、示例行号 | [tutorial-claims-vs-impl.md](docs/tutorial-claims-vs-impl.md) |
+| DOC-20 | Low | README 快速开始 1b 只构建 `ctc`，步骤 2/3 却统一调用 `ct`（中英同） | [readme-quickstart-branch.md](docs/readme-quickstart-branch.md) |
+| DOC-21 | Low | `construction.md` 自称「描述现状」却未标适用编译器，两处描述在 ct-ast 上不成立 | [construction-scope-unspecified.md](docs/construction-scope-unspecified.md) |
+
+**关键数据补充**（第二轮追加扫描）：
+
+- 全量生成物 `gcc -Wall -Wextra` 扫描：test/cases 2/25 有告警、test/ast 1/18 有告警、test/modules 至少 6 个文件有告警；examples 7/7 零告警；ct-ast 自举产物 20 个 `.c` 零告警。
+- **check-archive.sh 的被测编译器是 L2**（冻结回归 oracle），而非 ct-ast——L2 接受 block-style namespace，ct-ast 拒绝（已知分叉，DOC-11 已记录）。archive cases 的 expected 由 L2 生成，ct-ast 根本没法编这些文件。
+- `test/ast/11_map/prog.ct` **不含** `map` 语法——它测的是 `-emit-map` 元数据输出（trait + impl + 函数调用映射），不是 `map trait T for instance x { ... }` 构造。真正的 map 语法正例只存在于 test/ast/13-15 与 test/modules/map*。
+
+复核上一轮：**DOC-10…15、SH-5、SH-6 已确认修复**（死宏机器复扫 0 命中、20 个头注释文件名全部匹配）；
+**SH-7 与 DOC-18 仍复现**（SH-7 实测 2 条 `-Winitializer-overrides`；DOC-18 另新增同源站点
+`docs/tutorial.md:403`，已并入 DOC-19）。
+
+非缺陷观察（详见报告 §5）：L0 对普通 C 语法零校验是设计使然；BSD 探针在 Linux `skip` 是 `6395f5d`
+的有意设计；`install.sh` 的 `ctc` 别名在目标已存在普通文件时用 `cp`，与 README 措辞略有出入但行为正确；
+leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`malloc` 后没再引用也没调 `delete`），不是 ct-ast 发射问题。
 
 
 
