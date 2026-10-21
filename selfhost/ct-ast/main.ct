@@ -203,21 +203,23 @@ int main(int argc, char **argv)
     struct Parser *p;
 
     /* the node and literal pools live in runtime::arena; point the object at its
-       singleton before anything can build a node */
-    arena = arena_get();
+       singleton before anything can build a node. Every facade call here is
+       qualified: the entry file is at the root, and a bare call would have to
+       fall back to "the only row with that name". */
+    arena = runtime::arena::arena_get();
     /* likewise the source cursor and the current token */
-    lex = lexer_get();
+    lex = frontend::lex::lexer_get();
     /* the cache keys carry the compiler version; seed it once here */
-    cache = cache_get();
+    cache = tool::cache::cache_get();
     cache->version = CTC_VERSION;
     /* the symbol tables live in frontend::sym; point the object at its singleton */
-    sym = symbols_get();
+    sym = frontend::sym::symbols_get();
     /* the memory analysis (backend::mem) reads both through the driver */
-    mem = memory_get();
+    mem = backend::mem::memory_get();
     mem->arena = arena;
     mem->sym = sym;
     /* static typing and boxing (frontend::type) read the same tables */
-    ty = type_get();
+    ty = frontend::type::type_get();
     ty->arena = arena;
     ty->sym = sym;
     ty->lex = lex;
@@ -225,20 +227,20 @@ int main(int argc, char **argv)
        options; seed the options the struct does not zero-init: `prog` (the entry
        name `-v` and the usage lines print) and the version (the banner and the
        cache key). */
-    m = module_get();
+    m = frontend::module::module_get();
     m->prog = "ct-ast";
     m->line_force = -1;
     m->std_flag = "-std=c99";
     m->version = CTC_VERSION;
     /* the parser (frontend::parse) reads the same collaborators; bind it once
        they are all in place so its own support object is wired too */
-    p = parse_get();
-    ct_parse_bind(arena, lex, sym, ty, mem, &m->build_mode);
+    p = frontend::parse::parse_get();
+    frontend::parse::ct_parse_bind(arena, lex, sym, ty, mem, &m->build_mode);
     ty->maps = p->maps;
     ty->nmaps = &p->nmaps;
     /* the module driver draws on the same collaborators; wire it once they are
        all in place. It owns the unit table and the options the emitter reads. */
-    ct_module_bind(arena, lex, sym, ty, mem, p, cache);
+    frontend::module::ct_module_bind(arena, lex, sym, ty, mem, p, cache);
 
     base = strrchr(argv[0], '/');
     base = base ? base + 1 : argv[0];
@@ -248,17 +250,17 @@ int main(int argc, char **argv)
        tables, the options and the version; `out`/`path` follow through the
        setters as the driver re-points them. Bind after the entry-name branch
        because `prog` is part of the wired state. */
-    ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
-    ct_emit_bind_tables(m->units, &m->nunits, p->maps, &p->nmaps, p->calls, &p->ncalls, &m->build_mode, &m->line_mode);
-    ct_emit_bind_parse(&p->nparams, p->pend_fields, &p->npend);
+    backend::emit::ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
+    backend::emit::ct_emit_bind_tables(m->units, &m->nunits, p->maps, &p->nmaps, p->calls, &p->ncalls, &m->build_mode, &m->line_mode);
+    backend::emit::ct_emit_bind_parse(&p->nparams, p->pend_fields, &p->npend);
     /* the compile-mode driver (tool::driver) holds the output sink and the
        collaborators of one run; bind it once they are all in place. */
-    ct_driver_bind(arena, lex, sym, mem, m, p, CTC_VERSION);
+    tool::driver::ct_driver_bind(arena, lex, sym, mem, m, p, CTC_VERSION);
     /* Phase 8 (ported in 10.6): the package subcommands live in their own unit
        and never reach the compile core; only primitives cross the boundary */
     if (argc > 1 && strcmp(argv[1], "get") == 0)
-        return ct_pkg_get(argc - 2, argv + 2, m->prog, CTC_VERSION);
+        return tool::pkg::ct_pkg_get(argc - 2, argv + 2, m->prog, CTC_VERSION);
     if (argc > 1 && strcmp(argv[1], "install") == 0)
-        return ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    return ct_driver_run(argc, argv);
+        return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
+    return tool::driver::ct_driver_run(argc, argv);
 }

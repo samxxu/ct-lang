@@ -169,7 +169,7 @@ impl StmtOps for Stmt {
                 if (self->lex->src[p] != ' ' && self->lex->src[p] != '\t' && self->lex->src[p] != '\r') at_start = 0;
             if (!at_start) {
                 self->sup->pop_scope();
-                return ct_sem_error(self->lex->tokline, 1,
+                return tool::diag::ct_sem_error(self->lex->tokline, 1,
                     "auto-drop requires the closing '}' at the start of a line", self->mem->path);
             }
             for (d = self->mem->nowner - 1; d >= base; d--) {

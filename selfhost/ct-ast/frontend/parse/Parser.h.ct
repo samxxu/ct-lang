@@ -286,7 +286,7 @@ impl ParseDeclOps for Parser {
             return self->top_decl(1);
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
-            return ct_sem_error(self->lex->tokline, 1,
+            return tool::diag::ct_sem_error(self->lex->tokline, 1,
                 "'own' is only allowed inside a function body", self->mem->path);
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "typedef") == 0) {
             n = self->parse_typedef(is_pub);
@@ -374,7 +374,7 @@ impl ParseOps for Parser {
 
         prog = self->sup->new_node(N_PROG);
         if (prog < 0) return -1;
-        base = ct_diag_nsem();
+        base = tool::diag::ct_diag_nsem();
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
@@ -401,14 +401,14 @@ impl ParseOps for Parser {
                 /* A reported error is recoverable: resynchronise and keep going
                    so one bad construct does not hide the rest of the file. A
                    parse failure without a diagnostic is still fatal. */
-                if (ct_diag_nsem() == base) return -1;
+                if (tool::diag::ct_diag_nsem() == base) return -1;
                 if (self->sup->skip_after_error() != 0) return -1;
                 continue;
             }
             if (self->append_node(prog, n) != 0) return -1;
         }
         /* errors leave the unit (and its artifacts) behind */
-        if (ct_diag_nsem() > base) return -1;
+        if (tool::diag::ct_diag_nsem() > base) return -1;
         return prog;
     }
 
@@ -616,7 +616,7 @@ impl ParseOps for Parser {
             if (ex >= 0 && self->sym->structs[ex].defined) {
                 char msg[MAX_TEXT];
                 snprintf(msg, sizeof msg, "duplicate struct '%s'", name);
-                return ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
+                return tool::diag::ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
             }
         }
         /* the body's `{` is where L2 reports an unresolved `use` trait */
@@ -673,7 +673,7 @@ impl ParseOps for Parser {
                             snprintf(msg, sizeof msg,
                                      "struct '%s' uses undefined trait '%s'",
                                      name, self->sym->structs[si3].use[ui3]);
-                            return ct_sem_error(brace_line, brace_col, msg, self->mem->path);
+                            return tool::diag::ct_sem_error(brace_line, brace_col, msg, self->mem->path);
                         }
                     }
                 }
@@ -817,7 +817,7 @@ impl ParseOps for Parser {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "duplicate trait '%s'", name);
             self->sup->lex_next();
-            return ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
+            return tool::diag::ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
         }
         ti = self->sup->add_trait(qname);
         if (ti < 0) return -1;
@@ -919,7 +919,7 @@ impl ParseOps for Parser {
         if (si < 0) {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "impl for undefined struct '%s'", sname);
-            if (ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path) != 0)
+            if (tool::diag::ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path) != 0)
                 return -1;
             if (self->sup->skip_body() != 0) return -1;
             return NO_NODE;
@@ -967,14 +967,14 @@ impl ParseOps for Parser {
                 if (ret[0] && strcmp(ret, self->sym->traits[ti].m[tm_i].ret) != 0) {
                     snprintf(wmsg, sizeof wmsg, "return type '%s' does not match the trait's '%s'",
                              ret, self->sym->traits[ti].m[tm_i].ret);
-                    if (ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
+                    if (tool::diag::ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
                         self->sup->pop_scope();
                         return -1;
                     }
                 } else if (nimpl != self->sym->traits[ti].m[tm_i].nparams) {
                     snprintf(wmsg, sizeof wmsg, "takes %d parameter(s), the trait declares %d",
                              nimpl, self->sym->traits[ti].m[tm_i].nparams);
-                    if (ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
+                    if (tool::diag::ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
                         self->sup->pop_scope();
                         return -1;
                     }

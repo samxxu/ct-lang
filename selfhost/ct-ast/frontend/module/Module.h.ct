@@ -107,7 +107,7 @@ impl ModuleOps for Module {
     int fail(const char *msg)
     {
         (void)self;
-        return ct_parse_fail(msg);
+        return frontend::parse::ct_parse_fail(msg);
     }
 
     int read_file(const char *path)
@@ -192,18 +192,18 @@ impl ModuleOps for Module {
         self->p->scan_only = 1;
         self->path = from;
         self->mem->path = self->path;
-        ct_emit_set_path(self->path);
+        backend::emit::ct_emit_set_path(self->path);
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->tok = 0;
-        ct_parse_lex_next();
+        frontend::parse::ct_parse_lex_next();
         for (;;) {
             if (self->lex->tok == T_PP) {
-                ct_parse_lex_next();
+                frontend::parse::ct_parse_lex_next();
                 continue;
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
-                if (ct_parse_skip_import() != 0) { self->p->scan_only = 0; return -1; }
+                if (frontend::parse::ct_parse_skip_import() != 0) { self->p->scan_only = 0; return -1; }
                 continue;
             }
             break;
@@ -324,12 +324,12 @@ impl ModuleOps for Module {
         self->p->scan_only = 0;
         self->path = path;
         self->mem->path = self->path;
-        ct_emit_set_path(self->path);
+        backend::emit::ct_emit_set_path(self->path);
         self->units[u].fn_start = self->sym->nfunc;
         self->units[u].tr_start = self->sym->ntraits;
         self->units[u].call_start = self->p->ncalls;
         self->p->cur_unit = u;
-        self->units[u].prog = ct_parse_program();
+        self->units[u].prog = frontend::parse::ct_parse_program();
         if (self->units[u].prog < 0) return -1;
         self->units[u].fn_end = self->sym->nfunc;
         self->units[u].tr_end = self->sym->ntraits;
@@ -572,7 +572,7 @@ impl ModuleOps for Module {
         }
         if (!self->nsroot) {
             if (self->path_dir(inputs[0], root, sizeof root) != 0) {
-                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
                 return 1;
             }
             self->nsroot = root;
@@ -604,21 +604,21 @@ impl ModuleOps for Module {
         self->lex->lstart = 0;
         self->lex->tokstart = 0;
         self->p->ncalls = 0;
-        ct_diag_reset();
+        tool::diag::ct_diag_reset();
         self->p->cur_func[0] = 0;
-        ct_parse_clear_error();
+        frontend::parse::ct_parse_clear_error();
         self->build_mode = 1;
 
         for (i = 0; i < ninput; i++) {
             if (self->load_unit(inputs[i]) < 0) {
-                if (ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", ct_diag_nsem());
-                else fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                if (tool::diag::ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
+                else fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
                 return 1;
             }
         }
         for (u = 0; u < self->nunits; u++) {
             if (self->check_ns_dir(u) != 0) {
-                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
                 return 1;
             }
         }
@@ -631,7 +631,7 @@ impl ModuleOps for Module {
         cn = 0;
         for (u = 0; u < self->nunits; u++)
             if (self->cache_order(u, cstate, corder, &cn) != 0) {
-                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
                 return 1;
             }
         for (o = 0; o < cn; o++) {
@@ -657,11 +657,11 @@ impl ModuleOps for Module {
             u = corder[o];
             if (!dirty[u]) continue;
             if (self->emit_unit(u) != 0) {
-                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
                 return 1;
             }
             if (self->write_unit_header(u) != 0) {
-                fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
                 return 1;
             }
             /* stamped only after a successful emit: a failed unit must never be
@@ -672,7 +672,7 @@ impl ModuleOps for Module {
                 self->cache->store(outc, key);
         }
         if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
-            fprintf(stderr, "ctc: %s\n", ct_parse_last_error());
+            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
             return 1;
         }
         /* The command the user runs next, in the same shape L2 prints; the
@@ -681,7 +681,7 @@ impl ModuleOps for Module {
         for (u = 0; u < self->nunits; u++)
             printf(" %s/%s.c", self->outdir, self->units[u].base);
         printf(" -o a.out\n");
-        if (ct_diag_emit(self->diag_json, 1) != 0) return 1;
+        if (tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
         return 0;
     }
 
@@ -690,8 +690,8 @@ impl ModuleOps for Module {
     int emit_program(int prog)
     {
         const char *why;
-        if (ct_emit_program(prog) != 0) {
-            why = ct_emit_last_error();
+        if (backend::emit::ct_emit_program(prog) != 0) {
+            why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
             return -1;
         }
@@ -701,8 +701,8 @@ impl ModuleOps for Module {
     int emit_unit(int u)
     {
         const char *why;
-        if (ct_emit_unit(u) != 0) {
-            why = ct_emit_last_error();
+        if (backend::emit::ct_emit_unit(u) != 0) {
+            why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
             return -1;
         }
@@ -712,8 +712,8 @@ impl ModuleOps for Module {
     int write_unit_header(int u)
     {
         const char *why;
-        if (ct_emit_unit_header(u) != 0) {
-            why = ct_emit_last_error();
+        if (backend::emit::ct_emit_unit_header(u) != 0) {
+            why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
             return -1;
         }
@@ -723,8 +723,8 @@ impl ModuleOps for Module {
     int write_header(const char *outc)
     {
         const char *why;
-        if (ct_emit_header(outc) != 0) {
-            why = ct_emit_last_error();
+        if (backend::emit::ct_emit_header(outc) != 0) {
+            why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
             return -1;
         }
@@ -734,8 +734,8 @@ impl ModuleOps for Module {
     int write_map(const char *dest, int prog, int u)
     {
         const char *why;
-        if (ct_emit_map(dest, prog, u) != 0) {
-            why = ct_emit_last_error();
+        if (backend::emit::ct_emit_map(dest, prog, u) != 0) {
+            why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
             return -1;
         }

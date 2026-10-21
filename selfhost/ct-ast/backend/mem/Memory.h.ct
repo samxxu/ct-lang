@@ -80,9 +80,9 @@ impl MemoryOps for Memory {
             size_t bl;
             int si, vi;
             if (self->arena->nodes[d].text3[0] != 0)
-                return ct_sem_error(line, 1, "'own' does not support arrays", self->path);
+                return tool::diag::ct_sem_error(line, 1, "'own' does not support arrays", self->path);
             if (!self->expr_alloc(self->arena->nodes[d].a))
-                return ct_sem_error(line, 1,
+                return tool::diag::ct_sem_error(line, 1,
                                        "'own' requires a malloc or calloc initialiser", self->path);
             if (strncmp(tp, "struct ", 7) == 0) tp += 7;
             snprintf(base, sizeof base, "%s", tp);
@@ -94,7 +94,7 @@ impl MemoryOps for Memory {
             si = self->sym->find_struct(base);
             if (si < 0 || !self->sym->structs[si].uses_drop) {
                 snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Drop'", base);
-                return ct_sem_error(line, 1, msg, self->path);
+                return tool::diag::ct_sem_error(line, 1, msg, self->path);
             }
             vi = self->sym->find_var(self->arena->nodes[d].text2);
             if (vi >= 0) self->sym->vars[vi].autodrop = 1;
@@ -343,7 +343,7 @@ impl MemoryOps for Memory {
             snprintf(tname, sizeof tname, "%s", self->sym->structs[self->sym->vars[vi].st].name);
         else
             tname[0] = 0;
-        if (ct_leak_warn(kind, self->sym->vars[vi].own_line, path_line, self->path,
+        if (tool::diag::ct_leak_warn(kind, self->sym->vars[vi].own_line, path_line, self->path,
                          self->sym->vars[vi].name, tname) != 0)
             return self->fail("too many warnings");
         return 0;
