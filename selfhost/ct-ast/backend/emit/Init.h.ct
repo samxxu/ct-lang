@@ -194,6 +194,7 @@ impl InitOps for Init {
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
             char sub[MAX_TEXT];
+            char next[MAX_TEXT];
             const char *d;
             int depth, started;
             if (!self->sym->structs[si].fields[fi].dims[0]) continue;
@@ -217,7 +218,11 @@ impl InitOps for Init {
                 put_indent(f, ind + depth);
                 fprintf(f, "for (unsigned long __ct_j%d = 0; __ct_j%d < %s; __ct_j%d++) {\n",
                         depth, depth, bound, depth);
-                snprintf(sub, sizeof sub, "%s[__ct_j%d]", sub, depth);
+                /* `sub` is both the source and the destination here, which is
+                   undefined behaviour: glibc's snprintf clears the destination
+                   first, so the base name would vanish. Build in `next`, copy. */
+                snprintf(next, sizeof next, "%s[__ct_j%d]", sub, depth);
+                snprintf(sub, sizeof sub, "%s", next);
                 depth++;
                 d = close + 1;
                 started = 1;
