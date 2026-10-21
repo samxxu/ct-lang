@@ -20,7 +20,7 @@ import frontend::sym::Symbols;
 
 #define MAX_TEXT 160
 
-namespace backend::emit {
+namespace backend::emit;
 pub trait InitOps {
     int type_has_vptr(const char *type);
     int type_needs_init(const char *type);
@@ -251,5 +251,4 @@ pub struct Init *init_get(void);
 struct Init *init_get(void)
 {
     return &g_init;
-}
 }
