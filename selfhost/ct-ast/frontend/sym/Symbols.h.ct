@@ -232,15 +232,14 @@ impl SymbolOps for Symbols {
         return -1;
     }
 
-    /* A plain call names the enclosing namespace first, then the root, then the
-       only row left with that source name -- the last step keeps the existing
-       tree compiling, where a helper lives in one namespace and is called from
-       another. Two namespaces exporting the same name make that fallback
-       genuinely ambiguous, so it is refused. */
+    /* A plain call names the enclosing namespace first, then the root. Reaching
+       into another namespace takes a qualified call (`a::f`, `Type::f`), so a
+       bare name that only matches rows elsewhere is refused -- and two rows
+       sharing the name is the ambiguity the qualification exists to settle. */
     int resolve_func(const char *name)
     {
         char full[160];
-        int i, hits, uniq;
+        int i, hits;
         (void)self;
 
         if (self->ns[0] && snprintf(full, sizeof full, "%s%s", self->ns, name) < (int)sizeof full) {
@@ -250,16 +249,13 @@ impl SymbolOps for Symbols {
         i = self->find_func(name);
         if (i >= 0) return i;
         hits = 0;
-        uniq = -1;
         for (i = 0; i < self->nfunc; i++)
-            if (strcmp(self->funcs[i].name, name) == 0) {
-                uniq = i;
-                hits++;
-                if (hits > 1) break;
-            }
+            if (strcmp(self->funcs[i].name, name) == 0) hits++;
         if (hits > 1)
             return self->fail("that function is exported by more than one namespace");
-        return uniq;
+        if (hits == 1)
+            return self->fail("that function lives in another namespace and needs a qualified call");
+        return -1;
     }
 
     int find_type(const char *name)

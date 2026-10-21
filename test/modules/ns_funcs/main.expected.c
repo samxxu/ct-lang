@@ -10,6 +10,7 @@
 
 int main(void)
 {
+    /* each namespace exports a `size` of its own: the call has to say which */
     printf("%d %d\n", a_one(), b_two());
     return 0;
 }

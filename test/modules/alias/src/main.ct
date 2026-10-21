@@ -11,6 +11,6 @@ int main(void)
 
     p.x = 1;
     p.y = 2;
-    printf("%d %d\n", p.x + p.y, scaled(4));
+    printf("%d %d\n", p.x + p.y, app::scaled(4));
     return 0;
 }

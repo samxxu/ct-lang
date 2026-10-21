@@ -5,6 +5,7 @@ import b::two;
 
 int main(void)
 {
-    printf("%d %d\n", one(), two());
+    /* each namespace exports a `size` of its own: the call has to say which */
+    printf("%d %d\n", a::one(), b::two());
     return 0;
 }

@@ -886,6 +886,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **模块语法（2026-10-20，用户确认）**：namespace 增加**文件级**写法 `namespace A::B;`——前缀生效到单元结束、没有闭合花括号，模块层逐单元重置；**块式在 ct-ast 已禁止**（报 `a namespace is file-scoped`，只有 L2 为归档棘轮的块式 fixture 保留解析）。`import` 增加**按名引入**：路径最后一段是单元文件名；无 `as` 时整条路径就是单元，若文件名以大写开头（文件按主类型命名），该主类型同时以短名可用；`import a::b::C::D as E;` 才是按名引入——`a::b::C` 是单元、`D` 是导出名、`E` 是本文件的写法。发射时展开为既有的 `<ns>_<Name>`，不新增命名规则。别名只作用于源码、不进产物；同名绑定到不同全名直接报错。L2 与 ct-ast 同步实现（**只加语法能力，L2 自身源码仍用旧写法**），新增正例 `test/modules/alias/`（分号式 namespace + `import app::model::Point as Point;`），`check-ast.sh` 127 项全绿。随后 ct-ast 全树迁移到这两条语法（17 个文件改分号式、跨单元引用改短名并补 `import`），并把 14 个单元文件重命名为主类型名（`Parser.h.ct`、`Symbols.h.ct`、`Arena.h.ct`…），`import runtime::arena::Arena;` 由此成立；迁移暴露出两处必需配套：L2 行重写器新增 `expand_aliases`（cast / `sizeof` 里的短名必须展开成落库 C 名），`MAX_IMPORTS` 16→32（逐类型 import 最多 22 条）并修掉 `unit.h.ct` 中与常量不同步的 `dep[16]`/`depu[16]`（超过 16 个依赖会越界，自编时在 `cache_order` 段错误）。
 - **`pub` 函数按命名空间 mangle（2026-10-21，用户确认）**：`namespace` 里的 `pub` 函数不再脱离命名空间，而是发射为 `<ns>_<name>`——`namespace runtime::arena;` 里的 `pub struct Arena *arena_get(void);` 落成 `runtime_arena_arena_get`，**函数与类型此后遵循同一条规则**；`static` 辅助函数与根作用域函数保持裸名，调用点跟着定义走。符号表改按 **C 拼写**建键，于是两个命名空间可以各自导出同名函数（`test/modules/ns_funcs/`：`a::size` 与 `b::size` 并存，各自单元内的裸调用解析回本命名空间）。裸调用按「本单元命名空间 → 根 → 全程序唯一同名」三级解析；第三级是迁移期的桥（既有语料里一个命名空间的辅助函数被另一命名空间调用），一旦两个命名空间导出同名函数它必然歧义，此时硬报错（`test/modules/ns_fn_ambiguous/`），等限定调用落地后改写。`--emit-map` 与调用图仍记源码短名（对外可见的名字不变），只有发射到 C 的拼写加前缀。L2 同步实现（`find_cfunc` / `resolve_func`，`transform_calls` 与四处按名探测改走解析），`test/modules/ns_dir` 的 golden 因 `ping` → `hal_ping` 重生成（3 行）。**已知缺口**：限定调用 `a::b::get()` 仍按旧规则丢路径（当时函数不 mangle），两个命名空间导出同名函数时会误报歧义——由下一条解决。
 - **限定调用 `Qual::fn(...)`（2026-10-21，用户确认）**：`Qual` 既可以是命名空间路径（`app::size(p)` → `app_size`），也可以是**类型名**（`Point::size(p)`：`Point` 的 C 名是 `app_Point`，去掉末段得到前缀 `app_`，于是命中 `app_size`）——后者是 OO 里「类型上的函数」的基本写法。第一版**只做调用**：定义仍写普通 `pub int size(Point p);`，不引入声明形式。`Qual` 解析为类型时命名空间是确定的，找不到函数即硬报错（`test/modules/ns_qual_missing/`）；解析为命名空间路径时 ct-ast 同样报错，L2 的行重写器没有命名空间表，退回「丢路径」的旧行为（只影响 L2 的错误质量）。正例 `test/modules/ns_qual/`（`Point::size`、`app::size`、裸 `scaled` 三者输出一致）。随后 ct-ast 全树把**跨命名空间的裸调用**（各单元的 `pub` 门面，如 `frontend::parse::ct_parse_program`、`backend::emit::ct_emit_unit`、`tool::diag::ct_sem_error`）一律改成限定写法，「全程序唯一同名」的第三级回退只留给迁移期语料；落库 C 名不变，golden 未动。
+- **退役「全程序唯一同名」回退（2026-10-21，仅 ct-ast）**：ct-ast 的 `resolve_func` 现在只查**本单元命名空间 → 根**，跨命名空间的裸调用一律硬报错（`that function lives in another namespace and needs a qualified call`，新负例 `test/modules/ns_bare_call/`）——调用目标从此静态可判定，不再依赖「全程序恰好只有一个同名函数」这种重构时会静默改变绑定的规则。两个命名空间导出同名函数时的歧义诊断保留（`test/modules/ns_fn_ambiguous/` 仍逐字匹配）。ct-ast 自身在片 3 的迁移后已不依赖该回退（自编不动点仍通过），此前实验（收紧后跑 `check-ast.sh`）只有 5 个 fixture 的裸调用失败，已改写成限定写法：`ns_dir`（`hal::ping` / `plain::twice`）、`alias`（`app::scaled`）、`ns_funcs`（`a::one` / `b::two`）、`ns_qual`（`app::scaled`），`test/modules/ns_funcs/main.expected.c` 随注释一同重生成。**L2 不跟随**：它是冻结的回归 oracle，保留回退行为，因此 `ns_bare_call` 只进 `check-ast.sh`（无 `build.args`，不进归档棘轮）。
 
 ### 决策待定项
 
@@ -2311,6 +2312,19 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   `backend::emit::ct_emit_unit`, `tool::diag::ct_sem_error`, …) to the qualified form, leaving the
   "only row with that name" fallback to the migrated corpus only; the emitted C names do not move and
   no golden was regenerated.
+- **The unique-name fallback is retired (2026-10-21, ct-ast only)**: ct-ast's `resolve_func` now looks
+  in the unit's own namespace and then the root, so a bare call into another namespace is a hard
+  error (`that function lives in another namespace and needs a qualified call`, new negative fixture
+  `test/modules/ns_bare_call/`). A call target is statically decidable again, instead of depending on
+  "exactly one function of the program has that name" — a rule that silently rebinds calls when the
+  tree is refactored. The two-namespace ambiguity diagnostic stays (`test/modules/ns_fn_ambiguous/`
+  still matches verbatim). ct-ast itself stopped relying on the fallback in the previous slice (the
+  self-compile fixpoint still passes); an experiment that tightened the rule and ran `check-ast.sh`
+  showed only five fixtures failing, now rewritten with qualified calls — `ns_dir` (`hal::ping` /
+  `plain::twice`), `alias` (`app::scaled`), `ns_funcs` (`a::one` / `b::two`) and `ns_qual`
+  (`app::scaled`) — and `test/modules/ns_funcs/main.expected.c` was regenerated with its comment.
+  **L2 does not follow**: as the frozen regression oracle it keeps the fallback, so `ns_bare_call`
+  lives in `check-ast.sh` only (no `build.args`, and therefore not in the archive ratchet).
 
 ### Open decisions
 

@@ -1,0 +1,11 @@
+namespace app;
+
+pub struct Point {
+    int x;
+}
+
+pub int size(Point p);
+int size(Point p)
+{
+    return p.x + 1;
+}

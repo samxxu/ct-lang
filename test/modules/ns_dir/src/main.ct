@@ -4,6 +4,6 @@ import plain::extra;
 #include <stdio.h>
 
 int main(void) {
-    printf("%d %d\n", ping(4), twice(3));
+    printf("%d %d\n", hal::ping(4), plain::twice(3));
     return 0;
 }

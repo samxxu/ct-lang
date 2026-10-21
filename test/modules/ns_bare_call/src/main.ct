@@ -1,0 +1,13 @@
+/* `size` is exported by `app` while this unit sits at the root, so the call has
+   to be qualified (`app::size(p)` or `Point::size(p)`); a bare call is refused.
+   ct-ast only: L2 keeps the unique-name fallback it was the oracle for. */
+import app::model;
+import app::model::Point as Point;
+
+#include <stdio.h>
+
+int main(void)
+{
+    Point p = { 1 };
+    return size(p);
+}

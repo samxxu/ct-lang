@@ -538,6 +538,16 @@ else
     bad "ns_qual_missing" "no qualified-call diagnostic: $(cat "$work/mnqm.err")"
 fi
 
+if "$work/ct-ast" build --ns-root test/modules/ns_bare_call/src \
+        test/modules/ns_bare_call/src/main.ct -o "$work/mod-bad" \
+        >"$work/mnbc.out" 2>"$work/mnbc.err"; then
+    bad "ns_bare_call" "expected a non-zero exit"
+elif grep -q "lives in another namespace and needs a qualified call" "$work/mnbc.err"; then
+    ok "ns_bare_call (reaching into another namespace takes a qualified call)"
+else
+    bad "ns_bare_call" "no unqualified-call diagnostic: $(cat "$work/mnbc.err")"
+fi
+
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 for f in test/ast/errors/*.ct; do
