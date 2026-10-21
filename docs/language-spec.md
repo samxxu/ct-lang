@@ -2,13 +2,20 @@
 
 > 中文 · [English](#english)
 
-> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）与 CT 线（L2，`selfhost/l2/**`；
-> v0.10.0 起安装入口由行为等价的 ct-ast，`selfhost/ct-ast/main.ct`，提供）**共同**
-> 接受与产出的部分。CT 线是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
+> **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）、CT 线（L2，`selfhost/l2/**`；冻结的回归
+> oracle）与安装入口 ct-ast（`selfhost/ct-ast/main.ct`）**共同**接受与产出的部分。CT 线是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
 > `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
 > [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
 > [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
 > Phase 11.1 新增的 `map`（把 trait 方法绑定到已声明的全局实例）**仅 ct-ast** 支持，L0 与 L2 都不接受，见 §4.10。
+>
+> 三者并非逐字节等价：ct-ast 是安装入口，L2 只是回归 oracle。已知分叉如下：
+>
+> | 构造 | L2 | ct-ast |
+> | --- | --- | --- |
+> | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
+> | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
+> | 其它 C 透传（`switch` / `do-while` 等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -491,15 +498,24 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 ## English
 
-> **Status**: this document specifies the **core ct grammar** — the subset that both L0 (`ctc.c`) and
-> the CT line (L2, `selfhost/l2/**`; since v0.10.0 the installed entry is the behaviourally
-> equivalent ct-ast, `selfhost/ct-ast/main.ct`) **accept and emit**. The CT line is a superset: it also supports
+> **Status**: this document specifies the **core ct grammar** — the subset that L0 (`ctc.c`), the
+> CT line (L2, `selfhost/l2/**`, the frozen regression oracle) and the installed entry ct-ast
+> (`selfhost/ct-ast/main.ct`) **accept and emit**. The CT line is a superset: it also supports
 > `namespace` / `import` / `pub` / multi-file `ct build` / `Drop` / `#line` / leak warnings and
 > `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
 > landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
 > and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also CT-line-only but is described in §4.9.
 > The `map` construct added in Phase 11.1 (binding a trait method to a declared global instance) is
 > supported by **ct-ast only** — neither L0 nor L2 accepts it; see §4.10.
+>
+> The three are not byte-equivalent: ct-ast is the installed entry and L2 is only the regression
+> oracle. Known divergences:
+>
+> | Construct | L2 | ct-ast |
+> | --- | --- | --- |
+> | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
+> | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
+> | other C passthrough (`switch` / `do-while`, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /

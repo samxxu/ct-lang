@@ -56,7 +56,7 @@
 | 10.3 | 内存：Drop / AutoDrop / 泄漏分析 | ✅ **已落地（2026-10-19）**：`Drop` 内置 trait（`use Drop` / `impl Drop` / 递归释放 / `delete` 调用）与 AutoDrop（`own`，作用域末逆序释放，布局/Drop/作用域三种负例按 L2 措辞报错）落地；泄漏分析按 D40 复刻 L2 的保守规则（声明即跟踪 `malloc`/`calloc`/`ret_owned` 调用、赋值逃逸、`delete` 释放、条件 return 的路径告警、作用域末确定泄漏），text / JSON 均逐字节一致。新增 trait `MemoryOps`（11 个方法，未触碰 `ParseOps`）。`check-ast.sh` 新增 10.3 段：autodrop 4 例 + leak 7 例（76 → **87**） |
 | 10.4 | 多错误恢复 | ✅ **已落地（2026-10-19）**：`parse_program` 在报错后重同步（到下一条行首或 `}` 之后，同 L2 的 `recover_pos`），继续解析后续声明；`impl` 指向未定义 struct 时按 L2 在 `{` 处报 `impl for undefined struct 'X'` 并跳过整个 body；`use` 引用未定义 trait 时在 struct 的 `{` 处报错；超过 `MAX_ERRORS=20` 输出 `ctc: too many errors, stopping` 并以 1 退出。报错单元一律返回失败，产物不落盘。`check-ast.sh` 新增 `multi_err` / `multi_err_build` / `max_errors` 三项（逐字节比对 L2，87 → **90**） |
 | 10.5 | 增量缓存 | ✅ **已落地（2026-10-19）**：`build` 为每个单元写 `<outdir>/.ctcache/<base>.c.key`，键覆盖编译器版本、`--line` 强制度、诊断格式、`--ns-root`、单元路径、`mtime.size`、import 摘要与依赖 digest，拼写与 L2 **逐字节一致**（D41）。依赖按后序 DFS 保证 digest 先算；依赖变脏则下游变脏；`--emit-map` 不复用；键只在成功发射后落盘，`-c/-h` 缺失或键不符时重编。`check-ast.sh` 新增 10.5 段：冷编盖章、键对 L2、暖编复用、依赖失效、产物缺失重建（90 → **95**） |
-| 10.6 | 包管理迁移 | ✅ **已落地（2026-10-19）**：`get` / `install` 按 D42 整体搬进 ct-ast 的驱动层（新 trait `PkgOps`，28 个方法），清单解析 / SemVer 子集与 MVS / 本地目录源 / git 源（`CT_REGISTRY`、`~/.cache/ct-pkg`、tag 选择与默认分支回退、commit + 内容摘要锁定）/ 五列 `ct.lock` / `ct.pkg` 回写去重 / `install` 离线校验与建议命令全部按 L2 措辞实现；编译核仍零网络零子进程。`test/pkg/run.sh` 的链路扩到 L0→L1→L2→ct-ast，并被 `get`/`install`/`build` 用例直接驱动（35 项全绿） |
+| 10.6 | 包管理迁移 | ✅ **已落地（2026-10-19）**：`get` / `install` 按 D42 整体搬进 ct-ast 的驱动层（新 trait `PkgOps`，29 个方法），清单解析 / SemVer 子集与 MVS / 本地目录源 / git 源（`CT_REGISTRY`、`~/.cache/ct-pkg`、tag 选择与默认分支回退、commit + 内容摘要锁定）/ 五列 `ct.lock` / `ct.pkg` 回写去重 / `install` 离线校验与建议命令全部按 L2 措辞实现；编译核仍零网络零子进程。`test/pkg/run.sh` 的链路扩到 L0→L1→L2→ct-ast，并被 `get`/`install`/`build` 用例直接驱动（35 项全绿） |
 | 10.7 | 切主线 | ✅ **已落地（2026-10-19）**：安装形态改由 **ct-ast** 构建（链到 L2 后由 L2 编出 `selfhost/ct-ast/main.ct`，二进制命名为 `ct` + `ln -s ct ctc`），L2 降级为回归 oracle；`ct-tour.sh` 的第 7 步改为展示 ct-ast 的身份与多文件构建、第 8 步缓存改用 ct-ast，README 的安装段落同步；切换前打 tag `pre-ct-ast-switch`。五处 `CTC_VERSION` 同步 bump 到 **v0.10.0**，108 个 golden（`test/cases/**` 50 + `test/modules/**` 58，含 map JSON 与 stdout）按真实二进制重生成，仅版本 token 变化；`check-all.sh` 8 关全绿，**Phase 10 收口** |
 
 每片要求：`check-all.sh` 零回退；`check-ast.sh` 全绿；新增/修改语料必须由真实二进制输出生成期望值。
@@ -71,7 +71,7 @@
 | D41 | 缓存键 | 与 L2 同格式同算法（FNV-1a），命中的行为也一致：**不重放 `#line` 与告警**，`--emit-map` 不命中 |
 | D42 | 包管理归属 | `get`/`install` 留在**驱动层**，不进编译核；入口由新编译器提供，编译核仍零网络零子进程 |
 | D43 | 切换与回退 | 双轨期 ct-ast 为主、L2 为 oracle；切换前打 tag `pre-ct-ast-switch`；`v0.9.0` 永远是回退点 |
-| D44 | 身份识别 | ct-ast 也按 `argv[0]` basename 识别：`ct` → `ct`，其余 → `ctc`（与 L2 相同） |
+| D44 | 身份识别 | ct-ast 也按 `argv[0]` basename 识别，共三态：`ct` → `ct`、`ctc` → `ctc`、其余（开发 / 自编译名 `ct-ast`）→ `ct-ast`；`ct-ast` 是 `prog` 的初值，仅用于开发二进制 |
 | D45 | 版本与收口 | Phase 10 ↔ `v0.10.x`；只有 10.7 全绿后才 bump `v0.10.0` |
 
 ### 6. 风险

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# check-ast.sh - the AST compiler's behavioural gate (Phase 9.1-9.7, Phase 10.x).
+# check-ast.sh - the AST compiler's behavioural gate (Phase 9.1-9.7, 10.x, 11.x, 12.1).
 #
 # Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
 # (selfhost/ct-ast/main.ct, D30: a separate tree in parallel with the old

@@ -1,12 +1,17 @@
 # 审查发现的问题（issues）
 
-本目录汇总三轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
-[reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）与
-[reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）。
+> **历史快照（2026-10-21）**：下文早期段落引自 `selfhost/ast/**`（单文件主线）与 `selfhost/src/**` 时代，
+> 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
+> （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
+
+本目录汇总四轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
+[reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）、
+[reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）与
+[reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）——各文件行号以其自身锚点为准。
-- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）——各文件行号以其自身锚点为准。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 - 硬关卡计数随阶段演进：6 → 7 → **8**（`check-ast.sh` 于 Phase 9 作为第 8 关接入 `check-all.sh`）。下文各**带日期的验证记录**里出现的「六道 / 七道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「8 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
@@ -25,6 +30,12 @@
 | DOC-7 | Medium | README / AGENTS 仍写「当前命令 `ctc`」，与 Phase 7 矛盾 | [naming-command-stale.md](docs/naming-command-stale.md) |
 | DOC-8 | Medium | README CLI 表缺 `-I` / `--line` / `--ns-root` / `--diagnostics` | [readme-cli-flags-missing.md](docs/readme-cli-flags-missing.md) |
 | DOC-9 | Medium | language-spec 范围与时态过期（仍称 L2 语法「正在重做」） | [language-spec-scope-stale.md](docs/language-spec-scope-stale.md) |
+| DOC-10 | High | glossary 仍把 namespace 写成块式，编译器已拒绝 | [glossary-block-namespace.md](docs/glossary-block-namespace.md) |
+| DOC-11 | High | language-spec 仍称 ct-ast 与 L2「行为等价」，实际已有两处分叉 | [language-spec-equivalence-false.md](docs/language-spec-equivalence-false.md) |
+| DOC-12 | Medium | README「其它任意 C 代码原样透传」对出厂 ct-ast 不成立 | [readme-passthrough-scope.md](docs/readme-passthrough-scope.md) |
+| DOC-13 | Medium | phase10 的 D44 写两态（实为三态）、PkgOps 写 28（实为 29） | [phase10-identity-and-counts.md](docs/phase10-identity-and-counts.md) |
+| DOC-14 | Low | 关卡脚本头注释过期：20 vs 21 断言、缺 11.x / 12.x | [gate-comment-drift.md](docs/gate-comment-drift.md) |
+| DOC-15 | Medium | issues / reports 指向已消失的 `selfhost/ast/**`、`selfhost/src/**` | [stale-selfhost-ast-paths.md](docs/stale-selfhost-ast-paths.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -51,6 +62,8 @@
 | SH-1 | Medium | `MAX_FUNCS` 余量极小，是 CT 线最紧的扩展瓶颈 | [max-funcs-headroom.md](selfhost/max-funcs-headroom.md) |
 | SH-2 | Info | L2 状态无归属：`SymTab *sym` 参数化 63 次 + 52 处文件作用域 static | [unowned-state-sym-param.md](selfhost/unowned-state-sym-param.md) |
 | SH-3 | Low | 以 `ct` 运行时驱动错误仍打印 `ctc:` 前缀（37 处硬编码） | [ct-error-prefix.md](selfhost/ct-error-prefix.md) |
+| SH-5 | Medium | ct-ast 存在 27 个定义后从未使用的宏 | [ct-ast-dead-macros.md](selfhost/ct-ast-dead-macros.md) |
+| SH-6 | Medium | 16 处「上限账本在 main.ct」注释已悬空，且 `main.ct` 自相矛盾 | [ct-ast-stale-cap-comments.md](selfhost/ct-ast-stale-cap-comments.md) |
 
 ## 汇总
 
@@ -61,6 +74,7 @@
 
 合计 20 条：已处理 20（其中 TEST-5 / TEST-6 为部分覆盖，未覆盖项已在文件内列明）。
 另有 Phase 9 复审的 14 项发现，未单独立文件，逐项状态见文末「Phase 9 复审」一节。
+**Phase 12 复审（2026-10-21）新增 8 条：DOC-10…15、SH-5、SH-6，已全部修复**（见文末一节）。
 
 ## 修复进展（2026-10-17）
 
@@ -163,9 +177,42 @@
 | [issues/testing/l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) 状态行 | 未覆盖清单漏了 `too many units` | 状态行补齐「build 缺参 / `--ns-root` 缺参 / `too many units`」 |
 | [glossary.md](../docs/glossary.md) 自举链与单入口条目（中英） | 自举链写「L0 → L1 → L2」；单入口写「L2 二进制名为 ct」 | 补为「L0 → L1 → L2 → ct-ast」，并注明 10.7 起 `ct` 二进制由 ct-ast 构建 |
 | [selfhost/ast/main.ct](../selfhost/ast/main.ct#L821-L827) 顶层 usage | 只列 compile / build，未列 `get` / `install`（F5 在 L2 修过，但 10.7 切主线后未同步到 ct-ast） | 补上 `get <spec>[@<range>]` 与 `install` 两行；`check-ast.sh` 的 `-h` 断言同时钉住三条子命令 |
-| [selfhost/ast/main.ct](../selfhost/ast/main.ct) 驱动诊断前缀 | CLI / I/O 错误仍打印 `ct-ast:`，违反 README 与 phase10 非目标「驱动错误前缀固定 `ctc:`」（SH-3） | 35 处诊断消息统一改回 `ctc:`；`check-ast.sh` 的负例断言同步，自编不动点与 105 项全绿 |
+| [selfhost/ct-ast/main.ct](../selfhost/ct-ast/main.ct) 驱动诊断前缀 | CLI / I/O 错误仍打印 `ct-ast:`，违反 README 与 phase10 非目标「驱动错误前缀固定 `ctc:`」（SH-3） | ✅ 已修：35 处诊断消息统一改回 `ctc:`；`check-ast.sh` 的负例断言同步，自编不动点与 105 项全绿 |
 | [polymorphism.md](../docs/polymorphism.md) 英文头部 | 中文头部已改「已于 2026-10-17 补齐」，英文仍写「Not implemented yet: interface arrays / automatic boxing」 | 英文同步为「landed on 2026-10-17，由 `test/cases/28_iface_field.ct` 与 p01–p08 钉住」，与中文一致 |
 | [design/dialect.md](../docs/design/dialect.md) §0.1 表（中英） | 「包管理未落地、命名未定」/「the package manager is unimplemented (named `ct-pkg`)」 | 改为「包管理（`ct-pkg`）已在 Phase 8 落地（`ct get` / `ct install`）；方言的全局分发仍属远期」 |
 | [design/dialect.md](../docs/design/dialect.md) §15 表第 7 项（中英） | 「远期（依赖未落地的包管理）」/「depends on the unimplemented package manager」 | 改为「包管理已在 Phase 8 落地；方言的全局分发目录尚未落地」 |
+
+## Phase 12 复审（2026-10-21，锚点 `4ef8b68`）
+
+完整报告见 [reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)。本轮为只读评审，
+加权「垃圾代码 / 垃圾注释」与「文档-代码-注释一致性」。评审时工作树**不干净**：
+`selfhost/ct-ast/main.ct` 有一处未提交改动（删除主文件里的上限宏与节点/词法/算符宏）。
+
+验证基线：`bash selfhost/check-all.sh` → **`check-all: OK (8 hard gates green)`**（315 个 `ok`、0 `FAIL`），
+`check-grammar.py` `21 checks, 0 failed`；另建 `/tmp` 全链（L0→L1→L2→ct-ast）四层零警告，
+并用同一输入对 L2 与 ct-ast 做差分（块式 namespace、跨命名空间裸调用、`switch` / `do-while`）。
+
+本轮新增 8 条，**已于 2026-10-21 全部修复**：
+
+| ID | 严重度 | 摘要 | 修复 |
+| --- | --- | --- | --- |
+| [DOC-10](docs/glossary-block-namespace.md) | High | 术语表仍把 namespace 写成块式 `{ … }`，ct-ast 实测直接拒绝 | ✅ 中英两条均改为分号式 `namespace A::B;`，并注明块式被拒（`a namespace is file-scoped`） |
+| [DOC-11](docs/language-spec-equivalence-false.md) | High | language-spec 仍称 ct-ast 与 L2「行为等价」，实际已有块式 namespace 与跨命名空间裸调用两处分叉 | ✅ 删除「行为等价」，改为 L0 / L2（冻结 oracle）/ ct-ast（安装入口）并列，并新增中英分叉表（块式 namespace、裸调用、C 透传） |
+| [DOC-12](docs/readme-passthrough-scope.md) | Medium | README「其它任意 C 代码｜原样透传」对出厂 ct-ast 不成立（`switch` / `do-while` 实测报错） | ✅ 中英转换表末行按编译器分述，表下注补「透传只对 L0 / L2 成立」 |
+| [DOC-13](docs/phase10-identity-and-counts.md) | Medium | phase10 的 D44 写两态（实为 `ct` / `ctc` / `ct-ast` 三态）、`PkgOps` 写 28 个方法（实为 29） | ✅ D44 改为三态并注明 `ct-ast` 是 `prog` 初值；10.6 的方法数改为 29 |
+| [DOC-14](docs/gate-comment-drift.md) | Low | `check-all.sh` 头注释写「20 assertions」（实为 21），第 8 关标签缺 Phase 11.x / 12.1 | ✅ 20 → 21；第 8 关标签与 `check-ast.sh` 头注释统一为「Phase 9.1–9.7 + 10.x + 11.x + 12.1」 |
+| [DOC-15](docs/stale-selfhost-ast-paths.md) | Medium | issues / reports 仍指向已消失的 `selfhost/ast/**`、`selfhost/src/**`，且部分已修条目未回填 | ✅ `issues/README.md` 与 `reports/phase9-review/**` 顶部加历史快照横幅（给出等价路径）；SH-3 前缀条目回填为已修并指向 `selfhost/ct-ast/main.ct` |
+| [SH-5](selfhost/ct-ast-dead-macros.md) | Medium | ct-ast 有 27 个定义后从未使用的宏（`Parser.h.ct` 占 18 个 `N_*` 加 `MAX_MAPS`） | ✅ 27 个死宏全部删除（Parser 19、Emit 7、Memory 2、pkg 1），复核扫描无残留 |
+| [SH-6](selfhost/ct-ast-stale-cap-comments.md) | Medium | 16 处「caps must stay equal to … in main.ct」注释已悬空；`main.ct` 内两段注释自相矛盾 | ✅ `frontend/sym/Symbols.h.ct` 定为上限权威清单，其余单元注释改为指向真实持有者；`main.ct` 只留版本与一条宏作用域说明，删去 8 段重构流水账 |
+
+验证（2026-10-21）：`bash selfhost/check-all.sh` → **`check-all: OK (8 hard gates green)`**——
+`test/run.sh` 118、`check-goldens` L1′ 25 + L2 25（含不动点）、`check-archive` 0 pending / 0 regression、
+`check-m2a: PASS`、`ct-tour` OK、`check-grammar.py` **21 checks, 0 failed**、`test/pkg` 35、
+`check-ast` **136 passed, 0 failed**（含自编不动点）；`test/acceptance` 20 pass / 0 pending。
+手工三件套：L0 零警告、生成静默、`greeter` 输出两行。
+
+另有三条**非缺陷澄清**（见报告 §5）：跨命名空间裸调用被拒符合提交意图；驱动诊断形态 `ctc: line N:`
+与 AGENTS §4 的 `file:line:col: error:` 不一致属独立议题；`pre-ast-mainline` tag 位置偏早属仓库元数据问题。
+
 
 

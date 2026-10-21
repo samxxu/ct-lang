@@ -30,7 +30,7 @@
 | 实现块（impl） | `impl T for S { … }` | 把 trait 的方法绑定到具体 struct |
 | use 子句（use-clause） | `} use T, U;` | struct 声明它实现哪些 trait |
 | self | `self`、`self->m()` | 方法体内指代自身；生成时展开为 `_self` |
-| 命名空间（namespace） | `namespace A::B { … }` | 唯一可嵌套构造；符号加 `A_B_` 前缀。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
+| 命名空间（namespace） | `namespace A::B;` | 文件级声明；符号加 `A_B_` 前缀。块式书写 `namespace A::B { … }` 会被拒绝（`a namespace is file-scoped`）。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 命名空间路径 | `A::B`、`A::B::Name` | `::` 分隔各段；访问成员/方法用末尾 `.` |
 | 导入（import） | `import A::B;` | 编译单元依赖声明（`ct build`）。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 导出（pub） | `pub trait` / `pub struct` / `pub int f(…);` | 多文件模式下符号进 `.h`；前缀本身被剥离 |
@@ -192,7 +192,7 @@
 | impl | `impl T for S { … }` | binds a trait's methods to a concrete struct |
 | use-clause | `} use T, U;` | the traits a struct implements |
 | self | `self`, `self->m()` | the receiver inside a method body; expanded to `_self` |
-| namespace | `namespace A::B { … }` | the only nestable construct; symbols get the `A_B_` prefix. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
+| namespace | `namespace A::B;` | a file-scoped declaration; symbols get the `A_B_` prefix. The block form (`namespace A::B { … }`) is rejected (`a namespace is file-scoped`). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | namespace path | `A::B`, `A::B::Name` | `::` separates segments; the trailing `.` accesses a member / method |
 | import | `import A::B;` | a compilation-unit dependency (in `ct build`). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | pub | `pub trait` / `pub struct` / `pub int f(…);` | in multi-file mode the symbol crosses into the `.h`; the prefix itself is stripped |

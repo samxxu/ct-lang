@@ -112,9 +112,9 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
-| 其它任意 C 代码 | 原样透传 |
+| 其它普通 C 代码 | **L0 / L2**：原样透传；**ct-ast**（安装入口）只接受已实现的语法子集，`switch` / `do-while` / `goto` 等在 `{` 处报 `unexpected token`（分叉表见 [language-spec](docs/language-spec.md) 的状态段） |
 
-> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。`map`（Phase 11）**只属 ct-ast**，L0 与 L2 都不认识。
+> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。`map`（Phase 11）**只属 ct-ast**，L0 与 L2 都不认识。反过来，「原样透传」只对 L0 / L2 成立：ct-ast 只接受已实现的语法子集，`switch` / `do-while` / `goto` 等会直接报错。
 
 命名规则：
 
@@ -510,13 +510,15 @@ From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, an
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
 | `g.greet();` | `g.vt->greet(g.self);` (dispatches at run time to whatever was boxed) |
-| anything else | copied through verbatim |
+| any other ordinary C code | **L0 / L2**: copied through verbatim; **ct-ast** (the installed entry) accepts only the implemented subset — `switch` / `do-while` / `goto` … report `unexpected token` at the `{` (see the divergence table in the [language-spec](docs/language-spec.md) status note) |
 
 > Module-system syntax — `namespace` / `A::B::Name` qualified references / `pub` / `import` — is **not
 > accepted by L0** (moved out in Phase 0.3; redone on the CT line in Phases 2–5, see below). Written in
 > a source file it is reported as an error rather than copied through. `own` (AutoDrop) is likewise
 > **CT-line only** (L2 / ct-ast); L0 copies it through unchanged. `map` (Phase 11) is **ct-ast
-> only** — neither L0 nor L2 knows it.
+> only** — neither L0 nor L2 knows it. Conversely, "copied through verbatim" holds for L0 / L2 only:
+> ct-ast accepts the implemented subset alone, so `switch` / `do-while` / `goto` … are reported as
+> errors.
 
 Naming rules:
 
