@@ -1,8 +1,12 @@
 {
   "name": "ct-vscode",
   "displayName": "CT — C with Traits",
-  "description": "Syntax highlighting, snippets and language configuration for CT (C with Traits), the trait-flavoured C compiled by ct (ctc is the compatibility alias).",
-  "version": "0.0.1",
+  "description": "Syntax highlighting, snippets, go-to-definition and language configuration for CT (C with Traits), the trait-flavoured C compiled by ct (ctc is the compatibility alias).",
+  "version": "0.1.0",
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:ct"
+  ],
   "publisher": "samxxu",
   "license": "MIT",
   "engines": {
