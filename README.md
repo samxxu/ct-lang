@@ -166,7 +166,7 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 
 ### 4. 示例
 
-`examples/` 下每个例子一个目录，只放源文件 `<name>.ct` 与期望输出 `<name>.expected.out`（展开出的 `.c`/`.h` 按需生成，不入库）。唯一的例外是方言示例 `07_dialect/`：它的 `.ct` 里是**写在注释里的 DSL**（`ctc` 看不到），须先由同目录 `ct-dialects/` 下的插件展开成纯 CT——豁免范围与约束见 [AGENTS.md](AGENTS.md) §2、设计见 [design/dialect.md](docs/design/dialect.md)：
+`examples/` 下每个例子一个目录，只放源文件 `<name>.ct` 与期望输出 `<name>.expected.out`（展开出的 `.c`/`.h` 按需生成，不入库）。有两处例外：方言示例 `07_dialect/` 的 `.ct` 里是**写在注释里的 DSL**（`ctc` 看不到），须先由同目录 `ct-dialects/` 下的插件展开成纯 CT——豁免范围与约束见 [AGENTS.md](AGENTS.md) §2、设计见 [design/dialect.md](docs/design/dialect.md)；`08_map_binding/` 用了只有 ct-ast 认识的 `map`，首行标记 `//@ct-requires: ct-ast`，由 `selfhost/check-ast.sh` 的语料等价层构建（`test/run.sh` 驱动的是 L0，会跳过并标 `skip`）：
 
 | 目录 | 展示的内容 |
 | --- | --- |
@@ -177,8 +177,9 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 | [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | 方法体内的派发：字段链递归（`self->lhs->emit()`）、参数与局部变量接收者 |
 | [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | 接口值作 struct 字段：子节点是胖指针，`sum.lhs = one;` 装箱、`self->lhs.show()` 派发，递归组合成表达式树 |
 | [examples/07_dialect/](examples/07_dialect/registry.ct) | 方言（dialect）：寄存器表写在 `//@` 注释里，`ct-dialects/register-map.sh`（sh + awk，作者语言自选）把它展开成 trait / struct / impl；`ctc` 全程零感知，未展开的源无法直接编译 |
+| [examples/08_map_binding/](examples/08_map_binding/map_binding.ct) | `map`：把 trait 绑到两个已有的 `struct Uart` 全局实例上（不 `use`、不改库），装箱成 `Controller` 后经实例级 vtable 派发；需 ct-ast |
 
-一键跑通全部示例：`./test/run.sh`（examples 层会生成 → 编译 → 运行 → 与 `.expected.out` 比对；方言示例由 `dialect` 层先展开，再走同一套流程）。
+一键跑通全部示例：`./test/run.sh`（examples 层会生成 → 编译 → 运行 → 与 `.expected.out` 比对；方言示例由 `dialect` 层先展开，再走同一套流程；`08_map_binding` 标了 `//@ct-requires: ct-ast`，在该层显示为 `skip`，实际由 `selfhost/check-ast.sh` 编译并比对）。
 
 `examples/01_greeter/greeter.ct`：
 
@@ -280,7 +281,7 @@ test/                             测试（分层地图见 test/README.md）
 | limits | `known limitations` 特征化断言：把已知限制钉成行为契约，改动时立刻暴露 |
 | cli | CLI 参数与驱动分支（默认子命令 / `build` / 输出路径 / 读写失败路径） |
 
-当前 25 个 golden 正例（`test/cases`）、7 个端到端示例（`examples`，含 1 个方言示例）与 60 个负例诊断用例（`test/errors`），另加 unit / dialect / limits / cli 等分层断言，合计 118 项。
+当前 25 个 golden 正例（`test/cases`）、8 个端到端示例（`examples`，含 1 个方言示例；`08_map_binding` 需 ct-ast，在本驱动器里标 `skip`、由第 8 关构建）与 60 个负例诊断用例（`test/errors`），另加 unit / dialect / limits / cli 等分层断言，合计 118 项。
 
 `test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
 
@@ -356,7 +357,8 @@ ct/
 ├── .gitignore                忽略构建产物与 examples 下的生成物
 ├── examples/                 可运行示例，每个例子一目录（<name>.ct + <name>.expected.out）
 │   ├── 01_greeter/ … 06_iface_field/
-│   └── 07_dialect/           registry.ct + ct-dialects/（方言插件，见 AGENTS §2）
+│   ├── 07_dialect/           registry.ct + ct-dialects/（方言插件，见 AGENTS §2）
+│   └── 08_map_binding/       需 ct-ast（首行 //@ct-requires: ct-ast，由第 8 关构建）
 ├── selfhost/                 自举链：每代编译器一个目录 + 7 个门禁脚本（详见 selfhost/README.md）
 │   ├── l0/ctc.c              L0 C 种子（单文件，无第三方依赖）
 │   ├── l1/ctc.ct             L1 种子（冻结；能力停在 Phase 2）
@@ -664,10 +666,12 @@ The full grammar lives in [docs/language-spec.md](docs/language-spec.md).
 
 Each example lives in its own directory under `examples/` and holds only its source (`<name>.ct`)
 plus its expected output (`<name>.expected.out`); the expanded `.c`/`.h` are generated on demand and
-never committed. The one exception is the dialect demo `07_dialect/`: its `.ct` carries **DSL written
-into comments** (`ctc` cannot see it) and has to be expanded into plain CT by the plugin under its
+never committed. There are two exceptions: the dialect demo `07_dialect/` carries **DSL written into
+comments** (`ctc` cannot see it) and has to be expanded into plain CT by the plugin under its
 `ct-dialects/` directory first — for the exemption's scope and limits see [AGENTS.md](AGENTS.md) §2, for
-the design [design/dialect.md](docs/design/dialect.md):
+the design [design/dialect.md](docs/design/dialect.md); `08_map_binding/` uses `map`, which only ct-ast
+knows, and declares so with `//@ct-requires: ct-ast` on its first line, so `selfhost/check-ast.sh`'s
+corpus layer builds it while `test/run.sh` (which drives L0) reports `skip`:
 
 | Directory | What it shows |
 | --- | --- |
@@ -678,9 +682,12 @@ the design [design/dialect.md](docs/design/dialect.md):
 | [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | Dispatch inside a method body: a recursive field chain (`self->lhs->emit()`), parameter and local-variable receivers |
 | [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | An interface value as a struct field: children are fat pointers, `sum.lhs = one;` boxes and `self->lhs.show()` dispatches, composing a recursive expression tree |
 | [examples/07_dialect/](examples/07_dialect/registry.ct) | A dialect: a register table written into `//@` comments, expanded into the trait / structs / impls by `ct-dialects/register-map.sh` (sh + awk; the author picks the language); `ctc` stays unaware and the unexpanded source does not compile |
+| [examples/08_map_binding/](examples/08_map_binding/map_binding.ct) | `map`: binds a trait to two existing global `struct Uart` instances (no `use`, no library change), then boxes them into `Controller` and dispatches through the instance-level vtable; needs ct-ast |
 
 `./test/run.sh` builds and runs every example and compares its output with the committed expectation
-(the dialect demo is expanded by the `dialect` layer first and then follows the same path).
+(the dialect demo is expanded by the `dialect` layer first and then follows the same path; `08_map_binding`
+carries `//@ct-requires: ct-ast`, so that layer reports `skip` and `selfhost/check-ast.sh` builds and
+compares it instead).
 
 `examples/01_greeter/greeter.ct`:
 
@@ -783,9 +790,10 @@ Eight layers of assertions:
 | limits | characterisation assertions for the `known limitations`, so a behaviour change is visible immediately |
 | cli | argument parsing and driver branches (default subcommand / `build` / output paths / read-write failures) |
 
-Currently 25 golden positives (`test/cases`), 7 end-to-end examples (`examples`, one of them a dialect
-demo) and 60 negative diagnostic cases (`test/errors`), plus layered assertions for unit / dialect /
-limits / cli — 118 in total.
+Currently 25 golden positives (`test/cases`), 8 end-to-end examples (`examples`, one of them a dialect
+demo; `08_map_binding` needs ct-ast, so this driver reports `skip` and the eighth gate builds it) and 60
+negative diagnostic cases (`test/errors`), plus layered assertions for unit / dialect / limits / cli —
+118 in total.
 
 `test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
 (`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
@@ -890,7 +898,8 @@ ct/
 ├── .gitignore                ignores build products and the files generated under examples
 ├── examples/                 runnable demos, one directory per example (<name>.ct + <name>.expected.out)
 │   ├── 01_greeter/ … 06_iface_field/
-│   └── 07_dialect/           registry.ct + ct-dialects/ (dialect plugin, see AGENTS §2)
+│   ├── 07_dialect/           registry.ct + ct-dialects/ (dialect plugin, see AGENTS §2)
+│   └── 08_map_binding/       needs ct-ast (first line //@ct-requires: ct-ast; built by gate 8)
 ├── selfhost/                 the bootstrap chain: one directory per compiler generation + 7 gate scripts
 │                             (every detail in selfhost/README.md)
 │   ├── l0/ctc.c              the L0 C seed (single file, no third-party dependencies)

@@ -367,7 +367,8 @@ pub int mock_hal_send(char *buf, int len) {
 硬约束：实例必须是文件作用域全局；绑定要覆盖 trait 的**每个**方法且**只绑一次**；`->` 右侧只接受
 受限的调用子集（字面量、可见名字、以实例为根的成员路径）。
 
-`map` 只在 **ct-ast** 支持，L0 与 L2 都不认识。
+`map` 只在 **ct-ast** 支持，L0 与 L2 都不认识。可直接跑的完整例子见
+[examples/08_map_binding/](../examples/08_map_binding/map_binding.ct)（两个实例、各自一份 vtable）。
 
 ## 10. 命令行速查
 
@@ -772,7 +773,8 @@ dispatches through it. Hard rules: the instance must be file-scope; every trait 
 exactly once; the right-hand side accepts only a restricted call subset (literals, visible names,
 member paths rooted at the instance).
 
-`map` is ct-ast only — L0 and L2 do not accept it.
+`map` is ct-ast only — L0 and L2 do not accept it. A complete runnable example lives in
+[examples/08_map_binding/](../examples/08_map_binding/map_binding.ct) (two instances, one vtable each).
 
 ### 10. CLI cheat sheet
 

@@ -18,6 +18,11 @@
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 #
+# An example whose first line is `//@ct-requires: ct-ast` is skipped here: L0 is
+# what this script drives, and a construct L0 does not know (e.g. `map`) is
+# passed through verbatim. `selfhost/check-ast.sh`'s corpus layer builds those
+# examples with the AST compiler instead, so they stay covered.
+#
 # test/archive/ holds the Phases 2–5 (CT-side) fixtures -- namespaces, multi-file
 # `ct build`, imports, Drop, `#line` and warning diagnostics -- that Phase 0.3
 # moved out of ctc.c. They are kept, not run here, as the diff baseline for the
@@ -137,6 +142,12 @@ for ct in examples/*/*.ct; do
     # CT it describes does not exist until a plugin generates it, so this loop
     # skips it -- the dialect layer further down drives it instead.
     if [ -d "$dir/ct-dialects" ]; then continue; fi
+    # An example that needs a construct L0 does not know declares itself so; the
+    # AST compiler's corpus layer builds it instead (see the header comment).
+    if grep -q '^//@ct-requires: ct-ast' "$ct"; then
+        skip "$dir/$(basename "$ct")" "needs ct-ast (built by selfhost/check-ast.sh)"
+        continue
+    fi
     name=$(basename "$ct" .ct)
     label="$dir/$name.ct"
     exp_out="$dir/$name.expected.out"
