@@ -8,8 +8,11 @@
     { "include": "#ct-namespace" },
     { "include": "#ct-path" },
     { "include": "#ct-trait" },
+    { "include": "#ct-trait-open" },
     { "include": "#ct-impl" },
+    { "include": "#ct-impl-open" },
     { "include": "#ct-map" },
+    { "include": "#ct-map-open" },
     { "include": "#ct-use" },
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
@@ -56,7 +59,7 @@
       ]
     },
     "ct-import": {
-      "match": "^[ \\t]*(import)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)[ \\t]*;",
+      "match": "^[ \\t]*(import)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)(?:[ \\t]+(as)[ \\t]+([A-Za-z_][A-Za-z0-9_]*))?[ \\t]*;",
       "captures": {
         "1": { "name": "keyword.other.import.ct" },
         "2": {
@@ -64,7 +67,9 @@
             { "match": "::", "name": "punctuation.separator.namespace.ct" },
             { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.namespace.ct" }
           ]
-        }
+        },
+        "3": { "name": "keyword.other.as.ct" },
+        "4": { "name": "entity.name.type.alias.ct" }
       }
     },
     "ct-namespace": {
@@ -99,6 +104,19 @@
         "3": { "name": "entity.name.type.trait.ct" }
       }
     },
+    "ct-trait-open": {
+      "begin": "^[ \\t]*(?:(pub)[ \\t]+)?(trait)[ \\t]+(?=[A-Za-z_])",
+      "end": "(?=\\{)",
+      "beginCaptures": {
+        "1": { "name": "storage.modifier.pub.ct" },
+        "2": { "name": "storage.type.trait.ct" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#strings" },
+        { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.trait.ct" }
+      ]
+    },
     "ct-impl": {
       "match": "^\\s*(impl)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(for)\\s+([A-Za-z_][A-Za-z0-9_]*)",
       "captures": {
@@ -107,6 +125,19 @@
         "3": { "name": "keyword.control.ct" },
         "4": { "name": "entity.name.type.struct.ct" }
       }
+    },
+    "ct-impl-open": {
+      "begin": "^[ \\t]*(impl)[ \\t]+(?=[A-Za-z_])",
+      "end": "(?=\\{)",
+      "beginCaptures": {
+        "1": { "name": "storage.type.impl.ct" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#strings" },
+        { "match": "\\b(for)\\b", "name": "keyword.control.ct" },
+        { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.ct" }
+      ]
     },
     "ct-map": {
       "match": "^[ \\t]*(map)[ \\t]+(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]+(for)[ \\t]+(instance)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)",
@@ -118,6 +149,19 @@
         "5": { "name": "keyword.other.instance.ct" },
         "6": { "name": "entity.name.type.struct.ct" }
       }
+    },
+    "ct-map-open": {
+      "begin": "^[ \\t]*(map)[ \\t]+(?=trait\\b)",
+      "end": "(?=\\{)",
+      "beginCaptures": {
+        "1": { "name": "storage.type.map.ct" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#strings" },
+        { "match": "\\b(trait|for|instance)\\b", "name": "keyword.control.ct" },
+        { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.ct" }
+      ]
     },
     "ct-use": {
       "match": "\\b(use)\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*;",
@@ -147,7 +191,7 @@
       }
     },
     "ct-pub": {
-      "match": "\\b(pub)\\b",
+      "match": "^[ \\t]*(pub)\\b",
       "captures": {
         "1": { "name": "storage.modifier.pub.ct" }
       }

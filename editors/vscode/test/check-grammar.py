@@ -35,6 +35,7 @@ CT_CASES = (
     "test/archive/cases/19_namespace.ct",
     "test/archive/multifile/calc.ct",
     "test/archive/import/app.ct",
+    "test/modules/alias/src/main.ct",
     "test/archive/cases/22_drop.ct",
     # Phase 5 AutoDrop (`own`) lives on the CT line only, so its fixture is under
     # test/modules rather than test/cases.
@@ -50,6 +51,14 @@ TRICKY = "\n".join([
     "selfish = 1;",
     "/* use self",
     "   self->x */",
+])
+# Headers whose tokens are split by an inline comment: the strict one-line rules
+# do not fire, the `*-open` fallbacks must.
+EXTRA = "\n".join([
+    "int pub = 1;",
+    "pub int exported(void);",
+    "impl Greeter /* note */ for Person {",
+    "map trait Controller /* note */ for instance uart1 {",
 ])
 
 
@@ -198,6 +207,13 @@ def main():
             check("`import shapes;` -> ct-import",
                   any(h[0] == "ct-import" for _, l, hs in rows
                       if l.strip().startswith("import ") for h in hs))
+        if "modules/alias" in rel:
+            imports = [t for n2, t in all_hits if n2 == "ct-import"]
+            check("every `import` line -> ct-import",
+                  len(imports) == len([l for _, l, _ in rows if l.strip().startswith("import ")]),
+                  str(imports))
+            check("`import app::model::Point as Point;` -> ct-import",
+                  any(" as " in t for t in imports), str(imports))
         if "22_drop" in rel:
             check("`impl Drop for Inner` -> ct-impl",
                   any(h[0] == "ct-impl" for _, l, hs in rows
@@ -234,6 +250,19 @@ def main():
     check("block comment spans lines without leaking CT rules",
           all(h[0] == "comment-block" for h in by_line[6] + by_line[7]),
           str(by_line[6] + by_line[7]))
+
+    print()
+    print("synthetic headers -- tokens split by comments:")
+    rows = scan(EXTRA, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`int pub = 1;` does not fire ct-pub", "ct-pub" not in by_line[1], str(by_line[1]))
+    check("line-start `pub int` -> ct-pub", "ct-pub" in by_line[2], str(by_line[2]))
+    check("`impl ... /* */ ... for` -> ct-impl-open",
+          "ct-impl-open" in by_line[3], str(by_line[3]))
+    check("`map trait ... /* */ ...` -> ct-map-open",
+          "ct-map-open" in by_line[4], str(by_line[4]))
 
     print()
     print("== %d checks, %d failed ==" % (checks, len(failures)))
