@@ -386,8 +386,9 @@ cli_expect build-removed nonzero "'build' (multi-file) is not supported" build a
 cli_expect diagnostics-removed nonzero "unknown option" --diagnostics=json test/cases/01_trait_basic.ct
 cli_expect line-removed nonzero "unknown option" --line test/cases/01_trait_basic.ct
 
-# the output write is a failure site: the .c cannot be created
-cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o /nonexistent-dir/x.c
+# the output write is a failure site: the .c cannot be created. The directory
+# stays inside $TMP so no sandbox rule has to be relaxed for a test.
+cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o "$TMP/no-such-dir/x.c"
 cli_expect short-read nonzero "short read" "$TMP"
 
 # two more reachable driver failure sites (2026-10-17 audit): a non-seekable

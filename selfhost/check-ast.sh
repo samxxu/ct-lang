@@ -353,7 +353,9 @@ elif grep -q "needs an argument" "$work/mapa.err"; then
 else
     bad "--emit-map without an argument" "no diagnostic on stderr"
 fi
-if "$work/ct-ast" --emit-map /no/such/dir/x.map test/ast/11_map/prog.ct \
+# the directory does not exist (and sits inside $work, so no sandbox rule is
+# involved); the map write must fail with a diagnostic
+if "$work/ct-ast" --emit-map "$work/no-such-dir/x.map" test/ast/11_map/prog.ct \
         -o "$work/m11u.c" >"$work/mapu.out" 2>"$work/mapu.err"; then
     bad "--emit-map to an unwritable path" "expected a non-zero exit"
 elif grep -q "cannot write the map" "$work/mapu.err"; then
