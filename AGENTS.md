@@ -33,6 +33,7 @@
 | `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
 | `selfhost/**` | 源码：自举编译器 —— **L0 C 种子** `selfhost/l0/ctc.c` ＋ 冻结种子 `selfhost/l1/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/ct-ast/**`（`main.ct` = 只做绑定与分派的驱动入口，`runtime/arena/` = 节点池 + 字面量池（`namespace runtime::arena`），`frontend/lex/` = 词法器（源码游标 + 当前 token，`namespace frontend::lex`），`frontend/module/` = 单元表与 `map` 记录的取值类型 ＋ build 驱动（`namespace frontend::module`），`frontend/parse/` = 解析器、其共享原语、表达式与类型文法及 `map` 构造的构建器（`namespace frontend::parse`），`frontend/sym/` = 符号表（函数/变量/作用域/类型/trait/struct，`namespace frontend::sym`），`frontend/type/` = 类型推断与装箱判定（`namespace frontend::type`），`tool/diag/` = 告警存储（`namespace tool::diag`），`tool/cache/` = 增量缓存（`namespace tool::cache`），`tool/pkg/` = 包管理器（`namespace tool::pkg`），`tool/driver/` = compile 模式驱动（`namespace tool::driver`），`backend/mem/` = AutoDrop 与泄漏分析（`namespace backend::mem`），`backend/emit/` = 代码发射器（`.c`/`.h`/map JSON，`namespace backend::emit`）；Phase 9 的 AST 版编译器，ct-ast）＋ **冻结归档** `selfhost/l2/**`（`core.ct` + `driver.ct`，Phase 3–8 的旧管线 L2；只修 bug，不再加能力） | ✅ Phase 1 起新增；放编译器源码（含 L0 C 种子）与门禁脚本，生成物不入库 |
 | `bindings/**` | 源码：C 库的**声明式 binding**（Phase 12 起）—— 直通 `#include "<lib>.h"` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`；仓库内假 HAL 自带其头与实现 | ✅ Phase 12 起新增；只放 binding 源与（假 HAL 的）最小 C 头 / 实现，**不 vendored、不下载**、不成为编译器构建步骤；生成物不入库 |
+| `install.sh` | 源码：**唯一的安装脚本**——下载 GitHub 源码归档 → 本地四级自举 → 安装 `ct` 与 `ctc` 软链 | ✅ 可改；只准维护「下载 + 现有自举步骤 + 安装」三件事，不得演变成构建系统，不得进入编译路径 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
 | `ctc`、生成的 `.c`/`.h`、`.o` | 编译产物 | ❌ 不入库 |
@@ -41,7 +42,12 @@
 
 - 生成的 `.c` 必须**自包含**（不 `#include` 生成的 `.h`），保证生成物可单独编译。
 - 生成的头文件只放类型（trait vtable、struct 定义），不放 `static` 函数/变量。
-- 不引入任何第三方库、构建系统、代码生成脚本。**例外（Phase 6.6 方言）**：方言展开器是**仓库外**的
+- 不引入任何第三方库、构建系统、代码生成脚本。**例外（安装脚本）**：仓库根只有**一个** `install.sh`，
+  它把 README 第 2 节的手工自举步骤串起来（下载源码归档 → L0→L1→L2→ct-ast → 安装），只用系统
+  `cc` / `tar` / `curl`（或 `wget`），不需要 `git`；**不是**构建系统，**不参与**编译路径，
+  `gcc selfhost/l0/ctc.c` 与全部门禁不得依赖它。它的行为变更（新增选项、改变安装位置、改变下载来源）
+  按「行为变更」走用户确认。
+  **例外（Phase 6.6 方言）**：方言展开器是**仓库外**的
   独立脚本（bash / Python / awk 均可，作者自选语言），`ctc` 对它**零感知**——编译器只见纯 CT，且
   **永不**调用展开器、**永不**内置任何方言；本禁令只约束**仓库内的编译器构建管线**。仓库内**只允许**
   在 `examples/**`（演示）与 `test/**`（测试）下携带方言源与方言插件，且必须满足：插件放在约定目录
@@ -239,6 +245,7 @@ user before changing code**.
 | `editors/**` | Editor extensions: `editors/vscode/` (VS Code, declarative JSON) | ✅ editable; see the hard boundaries below |
 | `selfhost/**` | Source: the self-hosted compiler — the **L0 C seed** `selfhost/l0/ctc.c` plus the frozen seed `selfhost/l1/ctc.ct` (L1, its capability stops at Phase 2), the **development mainline** `selfhost/ct-ast/**` (`main.ct` = the binding-and-dispatch entry only, `runtime/arena/` = the node and literal pool (`namespace runtime::arena`), `frontend/lex/` = the lexer (source cursor + current token, `namespace frontend::lex`), `frontend/module/` = the unit-table and `map` value types plus the build driver (`namespace frontend::module`), `frontend/parse/` = the parser, its shared primitives, the expression and type grammar and the `map` builder (`namespace frontend::parse`), `frontend/sym/` = the symbol tables (functions, variables, scopes, types, traits, structs, `namespace frontend::sym`), `frontend/type/` = type inference and the boxing decision (`namespace frontend::type`), `tool/diag/` = warning store (`namespace tool::diag`), `tool/cache/` = the incremental cache (`namespace tool::cache`), `tool/pkg/` = package manager (`namespace tool::pkg`), `tool/driver/` = the compile-mode driver (`namespace tool::driver`), `backend/mem/` = AutoDrop and the leak analysis (`namespace backend::mem`), `backend/emit/` = the C emitter (`.c`/`.h`/map JSON, `namespace backend::emit`); the Phase 9 AST compiler, ct-ast) and the **frozen archive** `selfhost/l2/**` (`core.ct` + `driver.ct`, the Phase 3–8 old pipeline L2; bug fixes only, no new capability) | ✅ new from Phase 1 on; compiler source (including the L0 C seed) and gate scripts, never generated files |
 | `bindings/**` | Source: declarative bindings to C libraries (from Phase 12) — pass-through `#include "<lib>.h"` + mirrored `trait` / `struct` + a declared global instance + `map`; an in-repo fake HAL ships its own header and implementation | ✅ new from Phase 12 on; binding sources plus (for the fake HAL) a minimal C header / implementation only, which **vendor nothing and download nothing** and never become a compiler build step; generated files are never committed |
+| `install.sh` | Source: the **only install script** — download the GitHub source archive → bootstrap the chain locally → install `ct` and the `ctc` symlink | ✅ editable; it must only do "download + the existing bootstrap steps + install", must never grow into a build system, and must stay out of the compile path |
 | `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
 | `ctc`, generated `.c`/`.h`, `.o` | Build products | ❌ never commit |
@@ -248,7 +255,13 @@ Hard boundaries:
 - The generated `.c` must stay self-contained (it must not `#include` the generated `.h`) so that it
   compiles on its own.
 - The generated header carries types only (trait vtables, struct definitions) — no `static` code.
-- No third-party libraries, build systems, or code-generation scripts. **Exception (Phase 6.6 dialects)**:
+- No third-party libraries, build systems, or code-generation scripts. **Exception (the install script)**:
+  the repository root holds **exactly one** `install.sh`; it chains the manual bootstrap steps from README §2
+  (download the source archive → L0→L1→L2→ct-ast → install) and uses only the system `cc` / `tar` /
+  `curl` (or `wget`) — `git` is not required. It is **not** a build system, it stays **out of** the compile
+  path, and neither `gcc selfhost/l0/ctc.c` nor any gate may depend on it. Changing its behaviour (new
+  options, a different install location, a different download source) is a behaviour change and needs user
+  sign-off. **Exception (Phase 6.6 dialects)**:
   a dialect expander is a standalone script **outside the repository** (bash / Python / awk — the author
   picks the language); `ctc` stays **unaware** of it — the compiler only ever sees plain CT, **never**
   invokes an expander and **never** ships a dialect. The ban covers the **in-repo compiler build

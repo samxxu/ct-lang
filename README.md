@@ -30,16 +30,21 @@ C 没有虚函数表，想在 C 里模拟「接口 + 多态」要手写一大堆
 ### 2. 快速开始
 
 ```bash
-# 1) 构建编译器
+# 1a) 直接安装（下载源码 → 本地四级自举 → 装到 ~/.local/bin）
+curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
+
+# 1b) 或者不安装，只用 L0 种子（单文件、核心语法）
 gcc selfhost/l0/ctc.c -o ctc
 
 # 2) 编译 .ct 到 .c（同时生成同名 .h）；产物可放任意目录
-./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c
+ct examples/01_greeter/greeter.ct -o /tmp/greeter.c
 
 # 3) 用系统 C 编译器构建产物
 gcc /tmp/greeter.c -o /tmp/greeter
 /tmp/greeter
 ```
+
+新用户从这里开始：[docs/tutorial.md](docs/tutorial.md)（逐章教程，每条命令都可直接粘贴）。
 
 命令行接口：
 
@@ -68,7 +73,23 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 #### 单入口 `ct` 的构建与安装（Phase 7.2；10.7 起由 ct-ast 提供）
 
-`ct` 由 **ct-ast**（`selfhost/ct-ast/main.ct`）提供，**不引入构建系统或安装脚本**：把自举链编到 L2，由 L2 编出 ct-ast，把二进制命名为 `ct`，再用软链补上 `ctc` 别名即可（L0 种子本身也叫 `ctc`，故别名要装到**独立目录**，不要和种子同名同处）。L2（`selfhost/l2/**`）自 Phase 10.7 起只作回归 oracle。
+`ct` 由 **ct-ast**（`selfhost/ct-ast/main.ct`）提供。仓库里**只有一个**安装脚本 `install.sh`：它下载
+源码归档、本地四级自举、把 `ct` 装进指定目录并补 `ctc` 软链——**没有** Makefile、第三方依赖或预编译二进制。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
+```
+
+| 选项 / 环境变量 | 作用 |
+| --- | --- |
+| `--prefix DIR` / `CT_PREFIX` | 安装目录（默认 `~/.local/bin`） |
+| `--version REF` / `CT_REF` | 构建的分支、tag 或 commit（默认 `main`） |
+| `CT_SOURCE_DIR=<dir>` | 不下载，直接编译本地工作树（离线安装） |
+| `CC=gcc` | 换 C 编译器（GCC ≥ 8 时的 `-Wno-format-truncation` 由脚本自动探测） |
+
+脚本按目录布局自适应：`v0.12.0` 及更早的 tag 仍是 `ctc.c` 在根、L2 在 `selfhost/src/**`、ct-ast 在
+`selfhost/ast/**` 的旧布局，`main` 已迁到 `selfhost/{l0,l1,l2,ct-ast}/`。手动等价步骤如下（也可直接照抄
+`install.sh`）：
 
 ```sh
 gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # L0 种子（唯一的 C 构建，名字是 ctc）
@@ -330,6 +351,7 @@ ct/
 ├── AGENTS.md                 给 AI 编码代理的项目规约
 ├── LICENSE                   GPL-3.0 全文（编译器本体）
 ├── LICENSE.EXCEPTION         输出例外 + examples/test/editors 的 MIT
+├── install.sh                唯一的安装脚本：下载源码 → 四级自举 → 装 ct + ctc 软链
 ├── .gitignore                忽略构建产物与 examples 下的生成物
 ├── examples/                 可运行示例，每个例子一目录（<name>.ct + <name>.expected.out）
 │   ├── 01_greeter/ … 06_iface_field/
@@ -345,6 +367,7 @@ ct/
 ├── test/                     测试（分层地图见 test/README.md）
 ├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
 ├── docs/                     文档
+│   ├── tutorial.md           入门教程（安装 → 派发 → 模块 → 内存 → map）
 │   ├── vision.md             定位、设计原则与生态策略（为什么）
 │   ├── roadmap.md            阶段规划、已定决策与验收标准（接下来做什么）
 │   ├── language-spec.md      .ct 语法规范与展开规则（现状）
@@ -389,6 +412,7 @@ ct/
 ### 8. 相关文档
 
 - [AGENTS.md](AGENTS.md) —— 改动边界、代码风格、验证流程
+- [docs/tutorial.md](docs/tutorial.md) —— 入门教程：新用户从这里开始
 - [docs/glossary.md](docs/glossary.md) —— 术语表：统一项目名、语言构造与内部符号
 - [docs/vision.md](docs/vision.md) —— 定位、设计原则与生态策略
 - [docs/roadmap.md](docs/roadmap.md) —— 后续阶段与已定决策
@@ -450,10 +474,20 @@ library dependency.
 ### 2. Quick start
 
 ```bash
+# 1a) install directly (downloads the source, bootstraps locally, installs to ~/.local/bin)
+curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
+
+# 1b) or skip the install and use the L0 seed (single file, core grammar only)
 gcc selfhost/l0/ctc.c -o ctc
-./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c
+
+# 2) compile a .ct to .c (a sibling .h is written too)
+ct examples/01_greeter/greeter.ct -o /tmp/greeter.c
+
+# 3) build the output with the system C compiler
 gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ```
+
+New here? Start with the [tutorial](docs/tutorial.md); every command in it can be pasted as is.
 
 | Usage | Result |
 | --- | --- |
@@ -494,7 +528,25 @@ the identity.
 
 #### Building and installing the single-entry `ct` (Phase 7.2; ct-ast since 10.7)
 
-`ct` comes from **ct-ast** (`selfhost/ct-ast/main.ct`); there is **no build system and no install script**. Compile the bootstrap chain up to L2, have L2 build ct-ast, name the binary `ct`, and provide the `ctc` alias with a symlink (the L0 seed is itself named `ctc`, so install the alias into a **separate directory**, not next to the seed). L2 (`selfhost/l2/**`) is the regression oracle only from Phase 10.7 on.
+`ct` comes from **ct-ast** (`selfhost/ct-ast/main.ct`). The repository ships **exactly one** install
+script, `install.sh`: it downloads the source archive, bootstraps the chain locally, installs `ct` into a
+directory and adds the `ctc` symlink — there is **no Makefile, no third-party dependency and no prebuilt
+binary**.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
+```
+
+| Option / env var | Effect |
+| --- | --- |
+| `--prefix DIR` / `CT_PREFIX` | install directory (default `~/.local/bin`) |
+| `--version REF` / `CT_REF` | branch, tag or commit to build (default `main`) |
+| `CT_SOURCE_DIR=<dir>` | build this local checkout instead of downloading (offline install) |
+| `CC=gcc` | choose the C compiler (the `-Wno-format-truncation` needed by GCC ≥ 8 is probed automatically) |
+
+The script adapts to the tree layout: tags up to `v0.12.0` still keep `ctc.c` at the root, L2 under
+`selfhost/src/**` and ct-ast under `selfhost/ast/**`; `main` moved them to `selfhost/{l0,l1,l2,ct-ast}/`.
+The manual equivalent (or just read `install.sh`) is:
 
 ```sh
 gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # the L0 seed (the only C build; named ctc)
@@ -832,6 +884,7 @@ ct/
 ├── AGENTS.md                 the project contract for AI coding agents
 ├── LICENSE                   GPL-3.0 full text (the compiler itself)
 ├── LICENSE.EXCEPTION         the output exception + MIT for examples/test/editors
+├── install.sh                the only install script: download, bootstrap, install ct + the ctc symlink
 ├── .gitignore                ignores build products and the files generated under examples
 ├── examples/                 runnable demos, one directory per example (<name>.ct + <name>.expected.out)
 │   ├── 01_greeter/ … 06_iface_field/
@@ -848,6 +901,7 @@ ct/
 ├── test/                     tests (layer map in test/README.md)
 ├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
 ├── docs/                     documentation
+│   ├── tutorial.md           getting-started tutorial (install → dispatch → modules → memory → map)
 │   ├── vision.md             positioning, design principles and ecosystem strategy (the why)
 │   ├── roadmap.md            phase plan, decided decisions and acceptance criteria (what is next)
 │   ├── language-spec.md      .ct grammar and expansion rules (current state)
@@ -901,6 +955,7 @@ Implementation limits:
 ### 8. Documentation
 
 - [AGENTS.md](AGENTS.md) — change boundaries, code style, verification workflow
+- [docs/tutorial.md](docs/tutorial.md) — getting-started tutorial (start here if you are new)
 - [docs/glossary.md](docs/glossary.md) — glossary: canonical project, language and internal-symbol terms
 - [docs/vision.md](docs/vision.md) — positioning, design principles, ecosystem strategy
 - [docs/roadmap.md](docs/roadmap.md) — phase plan and decided design decisions
