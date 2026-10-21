@@ -1,0 +1,8 @@
+import app::model;
+import app::model::Point as Point;
+
+int main(void)
+{
+    Point p = { 1 };
+    return Point::nope(p);
+}

@@ -171,6 +171,8 @@ ns_dir
 ns_dir_mismatch
 ns_funcs
 ns_fn_ambiguous
+ns_qual
+ns_qual_missing
 map
 map_noarg
 map_file

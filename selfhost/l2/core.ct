@@ -478,6 +478,10 @@ trait SymTabOps {
     /* A plain call names the enclosing namespace first, then the root, then the
        only row left with that source name (see the body for why). */
     FuncSig *resolve_func(const char *name);
+    /* The row a qualified call `Qual::fn` names: `Qual` is a namespace path or a
+       type name, and `fn` is looked up in that namespace. NULL when there is no
+       such function. */
+    FuncSig *resolve_qual(const char *qual, const char *fn);
     int is_any_trait_method(const char *m);
     /* does trait `tr` declare a method named `m`? (interface dispatch needs the
        trait-specific answer, not `is_any_trait_method`'s) */
@@ -1167,6 +1171,49 @@ impl SymTabOps for SymTab {
         if (hits > 1)
             die(0, "'%s' is exported by more than one namespace; qualify the call", name);
         return uniq;
+    }
+    FuncSig *resolve_qual(const char *qual, const char *fn) {
+        char flat[MAX_NAME * 2], cand[MAX_NAME * 2];
+        const char *p, *us;
+        size_t w = 0;
+        FuncSig *FS;
+        /* a namespace path is just the prefix: `runtime::arena` -> `runtime_arena_` */
+        for (p = qual; *p && w + 1 < sizeof flat; p++) {
+            if (*p == ':') {
+                if (w + 1 < sizeof flat) flat[w++] = '_';
+                if (*(p + 1) == ':') p++;
+            } else if (w + 1 < sizeof flat) {
+                flat[w++] = *p;
+            }
+        }
+        flat[w] = 0;
+        if (w > 0 && w + 1 < sizeof flat) { flat[w++] = '_'; flat[w] = 0; }
+        if ((size_t)snprintf(cand, sizeof cand, "%s%s", flat, fn) < sizeof cand) {
+            FS = self->find_cfunc(cand);
+            if (FS) return FS;
+        }
+        /* a lone segment may name a type: its C name is `<prefix><Type>`, so the
+           namespace prefix is everything up to its last '_' */
+        if (!strchr(qual, ':')) {
+            Struct *S = self->find_struct(qual);
+            const char *cn = NULL;
+            if (S) cn = S->cname;
+            else {
+                Trait *T = self->find_trait(qual);
+                if (T) cn = T->cname;
+            }
+            if (cn && cn[0]) {
+                us = strrchr(cn, '_');
+                if (us) snprintf(cand, sizeof cand, "%.*s%s", (int)(us - cn + 1), cn, fn);
+                else snprintf(cand, sizeof cand, "%s", fn);
+                FS = self->find_cfunc(cand);
+                if (FS) return FS;
+                /* the qualifier is a type, so its namespace is known: a missing
+                   function is a real error, not an unresolvable path */
+                die(0, "no function of that name in that namespace");
+            }
+        }
+        return NULL;
     }
     /* does any declared trait have a method named `m`? */
     int is_any_trait_method(const char *m) {
@@ -4328,6 +4375,25 @@ impl RewriteOps for Pipe {
                     }
                     if (ok) {
                         if (chainend < n && s[chainend] == '(') {
+                            /* a qualified call: `Qual::fn` names the function in
+                               that namespace, so the call takes its C spelling;
+                               when no such row exists the path is dropped (a
+                               root helper, as before) */
+                            char qual[MAX_NAME * 2], fname[MAX_NAME];
+                            FuncSig *FS;
+                            size_t w3 = i, q3 = 0;
+                            while (w3 < finalstart && q3 + 1 < sizeof qual) qual[q3++] = s[w3++];
+                            while (q3 > 0 && (qual[q3 - 1] == ':' || qual[q3 - 1] == ' ' ||
+                                              qual[q3 - 1] == '\t')) q3--;
+                            qual[q3] = 0;
+                            snprintf(fname, sizeof fname, "%.*s",
+                                     (int)(chainend - finalstart), s + finalstart);
+                            FS = sym->resolve_qual(qual, fname);
+                            if (FS) {
+                                buf_puts(out, FS->cname);
+                                i = chainend;
+                                continue;
+                            }
                             i = finalstart;
                         } else {
                             char mc[MAX_NAME * 2];

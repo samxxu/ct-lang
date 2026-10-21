@@ -59,7 +59,9 @@ emission still uses `<ns>_<Name>`. A **`pub` function takes the same prefix the 
 while a `static` helper and a root-scope function keep the plain name; the symbol table is keyed by
 that C spelling, so two namespaces may each export the same name. A bare call resolves in the unit's
 own namespace first, then the root, then the only row left with that name — and is refused when two
-namespaces export it.
+namespaces export it. A **qualified call** names the function through its namespace path
+(`app::size(p)`) or through a type (`Point::size(p)`, i.e. `size` in `Point`'s namespace); the
+definition keeps the plain `pub` form.
 
 ### Scripts (the gates)
 

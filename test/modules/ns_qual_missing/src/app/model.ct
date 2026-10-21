@@ -1,0 +1,7 @@
+/* `Point::nope()` must fail: the qualifier is a type, so its namespace is
+   known and the function simply is not there */
+namespace app;
+
+pub struct Point {
+    int x;
+}

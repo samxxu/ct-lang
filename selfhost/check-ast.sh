@@ -290,6 +290,19 @@ else
     bad "ns_funcs" "$(cat "$work/mnsf.err" "$work/mnsf.cc" "$work/mnsf.stdout")"
 fi
 
+rm -rf "$work/mod-nsq"
+mkdir -p "$work/mod-nsq"
+if "$work/ct-ast" build --ns-root test/modules/ns_qual/src \
+        test/modules/ns_qual/src/main.ct -o "$work/mod-nsq" \
+        >"$work/mnsq.out" 2>"$work/mnsq.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/mod-nsq"/*.c -o "$work/mnsq.bin" 2>"$work/mnsq.cc" \
+   && "$work/mnsq.bin" >"$work/mnsq.stdout" 2>&1 \
+   && cmp -s "$work/mnsq.stdout" test/modules/ns_qual/expected.out; then
+    ok "ns_qual (Point::size() and app::size() both reach app_size)"
+else
+    bad "ns_qual" "$(cat "$work/mnsq.err" "$work/mnsq.cc" "$work/mnsq.stdout")"
+fi
+
 rm -rf "$mod-inc"
 mkdir -p "$mod-inc"
 if "$work/ct-ast" build test/modules/inc/main.ct -I test/modules/inc/extra \
@@ -513,6 +526,16 @@ elif grep -q "exported by more than one namespace" "$work/mnfa.err"; then
     ok "ns_fn_ambiguous (an unqualified call to a doubly exported name is refused)"
 else
     bad "ns_fn_ambiguous" "no ambiguity diagnostic: $(cat "$work/mnfa.err")"
+fi
+
+if "$work/ct-ast" build --ns-root test/modules/ns_qual_missing/src \
+        test/modules/ns_qual_missing/src/main.ct -o "$work/mod-bad" \
+        >"$work/mnqm.out" 2>"$work/mnqm.err"; then
+    bad "ns_qual_missing" "expected a non-zero exit"
+elif grep -q "no function of that name in that namespace" "$work/mnqm.err"; then
+    ok "ns_qual_missing (a qualified call to a missing function is refused)"
+else
+    bad "ns_qual_missing" "no qualified-call diagnostic: $(cat "$work/mnqm.err")"
 fi
 
 echo

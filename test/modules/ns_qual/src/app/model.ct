@@ -1,0 +1,19 @@
+/* a type and a function in the same namespace: `Point::size()` should reach
+   `app_size`, and the unit's own bare `size()` has to as well */
+namespace app;
+
+pub struct Point {
+    int x;
+}
+
+pub int size(Point p);
+int size(Point p)
+{
+    return p.x + 1;
+}
+
+pub int scaled(Point p);
+int scaled(Point p)
+{
+    return size(p) * 10;
+}

@@ -1,0 +1,11 @@
+import app::model;
+import app::model::Point as Point;
+
+#include <stdio.h>
+
+int main(void)
+{
+    Point p = { 4 };
+    printf("%d %d %d\n", Point::size(p), app::size(p), scaled(p));
+    return 0;
+}
