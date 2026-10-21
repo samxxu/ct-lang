@@ -296,6 +296,32 @@ bash selfhost/check-archive.sh     # 归档越位用例逐字节对差
 bash selfhost/ct-tour.sh           # 演示整条自举链
 ```
 
+#### 干净 clone 与容器复验
+
+发布前想确认「仓库自洽」而不是「我这台机器的残留产物恰好能跑」，就在一个空目录里重跑全部硬门禁：
+
+```bash
+git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
+bash selfhost/check-all.sh         # 期望末行：check-all: OK (8 hard gates green)
+```
+
+干净 clone 不需要任何预处理：`.gitignore` 里的生成物（`ctc`、`*.c`/`*.h`、`vendor/`）都不入库，门禁自己会从 `selfhost/l0/ctc.c` 一路构建到 `ct-ast`。在 Linux 容器里复验同理，只需 `gcc`、`git`、`python3` 与常规 POSIX 工具（`sh`/`bash`、`diff`、`sed`、`awk`、`mktemp`）：
+
+```bash
+podman machine start                                   # macOS：先起 applehv 虚拟机
+podman run -d --name ctclean debian:bookworm-slim sleep infinity
+podman cp /tmp/ct-clean ctclean:/src                   # 不要用 -v /tmp/...：宿主的 /tmp 不在 VM 共享路径里
+podman exec ctclean bash -c 'apt-get update && apt-get install -y build-essential git python3'
+podman exec -w /src ctclean bash selfhost/check-all.sh
+```
+
+两点与 macOS 有意的差异，都属于「平台事实」而不是失败：
+
+- **GCC 的警告集更宽**。`-Wall -Wextra` 下 GCC ≥ 8 额外启用 `-Wformat-truncation`，会对冻结的 L0 / L1 / L2 里一批 `snprintf` 报疑似截断（误报）。`check-all.sh` 检测到 `CC` 是 GCC 时会自动包一层只追加 `-Wno-format-truncation` 的 wrapper，所以门禁在两边语义相同，且冻结层一个字都不用改 —— 细则见 [AGENTS.md](AGENTS.md) §6。
+- **两个探针需要 BSD libc**。`cli/short-read` 与 `cli/tmpfile-cannot-create`（以及 `check-archive` 的 `cli_short_read`）依赖 BSD 下「把目录当输入会短读」「`$TMPDIR` 不可用时 `tmpfile()` 失败」的行为，glibc 分别读成 0 字节、退回 `P_tmpdir`，因此在 Linux 上以 `skip` 呈现、不计入失败。`./test/run.sh` 的总项数因此比 macOS 少 2 项（118 → 116），这是预期的。
+
+容器里若拉不到镜像或 apt 超时，换镜像源即可（不入库，因人因机而异）：镜像走 `docker.m.daocloud.io/library/debian:bookworm-slim`，apt 换 `mirrors.aliyun.com`。
+
 ### 6. 目录结构
 
 ```
@@ -757,6 +783,46 @@ bash selfhost/check-m2a.sh         # M2-a single-case acceptance
 bash selfhost/check-archive.sh     # byte-for-byte diff of the archived over-reach cases
 bash selfhost/ct-tour.sh           # walk the whole bootstrap chain
 ```
+
+#### Re-verifying from a clean clone and in a container
+
+Before shipping, check that the repository is self-contained rather than that your machine's leftovers
+happen to work, by re-running every hard gate in an empty directory:
+
+```bash
+git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
+bash selfhost/check-all.sh         # expected last line: check-all: OK (8 hard gates green)
+```
+
+A clean clone needs no preparation: every build product (`ctc`, `*.c`/`*.h`, `vendor/`) is
+`.gitignore`d, and the gates build the whole chain from `selfhost/l0/ctc.c` up to `ct-ast` themselves.
+The same holds in a Linux container, which only needs `gcc`, `git`, `python3` and the usual POSIX tools
+(`sh`/`bash`, `diff`, `sed`, `awk`, `mktemp`):
+
+```bash
+podman machine start                                   # macOS: boot the applehv VM first
+podman run -d --name ctclean debian:bookworm-slim sleep infinity
+podman cp /tmp/ct-clean ctclean:/src                   # not -v /tmp/...: the host /tmp is not a VM share
+podman exec ctclean bash -c 'apt-get update && apt-get install -y build-essential git python3'
+podman exec -w /src ctclean bash selfhost/check-all.sh
+```
+
+Two differences from macOS are deliberate and are platform facts, not failures:
+
+- **GCC warns more.** Under `-Wall -Wextra`, GCC ≥ 8 also enables `-Wformat-truncation`, which fires
+  on a batch of `snprintf` calls in the frozen L0 / L1 / L2 sources (false positives). When `check-all.sh`
+  sees that `CC` is GCC it wraps it in a shim that appends only `-Wno-format-truncation`, so the gates
+  mean the same thing on both sides without editing a single character of the frozen layers — see
+  [AGENTS.md](AGENTS.md) §6.
+- **Two probes need BSD libc.** `cli/short-read` and `cli/tmpfile-cannot-create` (plus
+  `cli_short_read` in `check-archive`) rely on BSD reading a directory as a short read and failing
+  `tmpfile()` when `$TMPDIR` is unusable; glibc reads zero bytes and falls back to `P_tmpdir`, so they
+  report `skip` on Linux and never count as failures. That is why `./test/run.sh` totals two fewer
+  entries there than on macOS (118 → 116).
+
+If the image pull or apt times out in the container, just switch mirrors (nothing of this is committed —
+it varies per person and machine): pull through `docker.m.daocloud.io/library/debian:bookworm-slim` and
+point apt at `mirrors.aliyun.com`.
 
 ### 6. Directory layout
 
