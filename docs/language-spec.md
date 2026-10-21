@@ -330,7 +330,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `T *xs[n]` | 接口指针数组 | `xs[i]->m()` | 指针 |
 | 形参 `T xs[]` / `T *xs` | 同上，函数体内可下标 | 同左 | 值 |
 
-  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）、以及 **struct 类型的数组字段**（`struct Duo { Num ab[2]; }`，见 [roadmap](roadmap.md) 的 `p18` 探针，按决定延后）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 CT 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
+  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）。**struct 类型的数组字段**（`struct Duo { Num ab[2]; }`）L0 / L2 不支持，**ct-ast 已支持**（逐元素写 vptr，见 §6）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 CT 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
 
 #### 4.9 AutoDrop（Phase 5 新增，仅 CT 线）
 
@@ -455,6 +455,10 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 - 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）
 - 不完整的 `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套。
+- **生成物里的「声明了但没用到」的 `static` 实体**：一个 `impl` 总会发射 `<S>_<T>_vtable`，一个 `use Drop`
+  的 struct 总会发射 `<S>_Drop_drop`，即使本单元从不调用该 trait 的方法、也从不 `delete`。ct-ast 不做跨过程
+  可达性分析，这些 `static` 符号保持原样，因此 `cc -Wall -Wextra` 可能报 `-Wunused-variable` /
+  `-Wunused-function`。它们**不影响**语义与运行；要把告警当错误（`-Werror`）时需自行抑制。
 
 ### 7. 容量上限
 
@@ -878,10 +882,11 @@ Rules and limits:
   interface field (`s.f[0].m()`), **construction-point** boxing (`Pair p = { .l = v, .ptr = &v };` —
   value and pointer fields take their own path) and **heap-object** boxing
   (`Num *p = malloc(sizeof(struct Num)); Expr e = p;`). **Still unsupported**: an interface pointer
-  with an aggregate initialiser (`T *g = { ... };`) and **struct-typed array fields**
-  (`struct Duo { Num ab[2]; }` — see probe `p18` in the [roadmap](roadmap.md), deferred by decision).
-  Rationale as in the status note at the top: this document stays accurate for L0, and the new
-  capability belongs to the CT line (L2 / ct-ast) alone, pinned by `test/acceptance/run.sh`.
+  with an aggregate initialiser (`T *g = { ... };`). **Struct-typed array fields**
+  (`struct Duo { Num ab[2]; }`) are unsupported by L0 / L2 but **supported by ct-ast** (element-wise
+  vptr writes, see §6). Rationale as in the status note at the top: this document stays accurate for
+  L0, and the new capability belongs to the CT line (L2 / ct-ast) alone, pinned by
+  `test/acceptance/run.sh`.
 
 #### 4.9 AutoDrop (new in Phase 5, CT line only)
 
@@ -1035,6 +1040,12 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   an attempted construct, so a malformed header is an error (other follows, like `impl[n] = 0;`, still
   pass through).
 - Top-level constructs cannot be nested.
+- **`static` entities in the output that are declared but never used**: an `impl` always emits
+  `<S>_<T>_vtable` and a struct that `use Drop` always emits `<S>_Drop_drop`, even when the unit never
+  calls that trait's methods and never `delete`s. ct-ast does no cross-procedure reachability, so these
+  `static` symbols stay as they are and `cc -Wall -Wextra` may report `-Wunused-variable` /
+  `-Wunused-function`. They **do not** affect semantics or behaviour; suppress them yourself when you
+  build with `-Werror`.
 
 ### 7. Capacity limits
 

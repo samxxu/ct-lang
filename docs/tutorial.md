@@ -302,7 +302,7 @@ impl Drop for Box {
 int main(void) {
     Box *p = malloc(sizeof(struct Box));
     p->n = 1;
-    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); p = 0; } */
+    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); } */
 
     {
         own Box *b = malloc(sizeof(struct Box));
@@ -322,7 +322,8 @@ $ ct leak.ct -o leak.c
 leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 ```
 
-- **`delete p;`** 立刻释放：有 `Drop` 就先调 `drop()`，再 `free`。
+- **`delete p;`** 立刻释放：有 `Drop` 就先调 `drop()`，再 `free`。**不置空**——`p` 仍是悬空指针，
+  要继续用就先自己 `p = 0;`。
 - **`own T *p = malloc(...)`** 交所有权：作用域闭合 `}` 与函数帧顶层的 `return` 前自动释放，
   按声明逆序；重新赋值或把 `p` 当独立右值传出（`q = p;`）即视为所有权转移，不再兜底。
   约束：必须是带 `use Drop` 的**结构体指针**、必须由 `malloc`/`calloc` 初始化、`}` 与 `return`
@@ -331,7 +332,7 @@ leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 
 ```sh
 $ ct leak.ct -o leak.c
-leak.ct:9: warning: potential leak: 'leak' (Box*) allocated but never deleted
+leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 
 $ ct --diagnostics=json leak.ct -o leak.c    # 机器可读，写 stdout
 ```
@@ -398,9 +399,11 @@ pub int mock_hal_send(char *buf, int len) {
    多行注释里别写看似代码的东西。
 4. **单行函数体不处理**：`int f() { return 1; }` 与函数头同处一行时，体内的派发不重写。
 5. **ct-ast 只接受已实现的子集**：`switch` / `do-while` / `goto` 等普通 C 会在 `{` 处报
-   `unexpected token`。要写这类代码，用 `ctc`（L0 种子）或 L2。
+   `unexpected token`。要写这类代码只能手工构建 L0 种子（`gcc selfhost/l0/ctc.c -o ctc`）并用它编译；
+   `install.sh` 装出的 `ctc` 是 `ct` 的别名（同一个 ct-ast 二进制），一样不支持。
 6. **块式 namespace 与跨命名空间裸调用**会被 ct-ast 拒绝；用分号式声明 + 限定调用。
-7. **struct 类型的数组字段**等少数组合仍不支持——先查 [language-spec §4.8](language-spec.md)。
+7. **struct 类型的数组字段**：L0 / L2 不支持，ct-ast 已支持（逐元素写 vptr，见 §6 与
+   [language-spec §6](language-spec.md)）；其余组合先查 [language-spec §4.8](language-spec.md)。
 8. **上限是硬报错**：ct-ast 提高到 `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、
    `MAX_FUNCS` 256、`MAX_VARS` 4096…，越界直接报错，绝不静默截断。[§7](language-spec.md) 有全表。
 
@@ -702,7 +705,7 @@ impl Drop for Box {
 int main(void) {
     Box *p = malloc(sizeof(struct Box));
     p->n = 1;
-    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); p = 0; } */
+    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); } */
 
     {
         own Box *b = malloc(sizeof(struct Box));
@@ -722,7 +725,8 @@ $ ct leak.ct -o leak.c
 leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 ```
 
-- **`delete p;`** frees immediately: `drop()` first when the struct uses `Drop`, then `free`.
+- **`delete p;`** frees immediately: `drop()` first when the struct uses `Drop`, then `free`. It does
+  **not** null the pointer — `p` is left dangling, so write `p = 0;` yourself before reusing it.
 - **`own T *p = malloc(...)`** hands over ownership: released before the scope's closing `}` and at a
   top-level `return`, in reverse declaration order; reassigning `p` or passing it on as a bare rvalue
   (`q = p;`) transfers ownership and disables the safety net. The struct must `use Drop`, the pointer must
@@ -731,7 +735,7 @@ leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 
 ```sh
 $ ct leak.ct -o leak.c
-leak.ct:9: warning: potential leak: 'leak' (Box*) allocated but never deleted
+leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 
 $ ct --diagnostics=json leak.ct -o leak.c    # machine readable, on stdout
 ```
@@ -799,10 +803,13 @@ Ordered by how often they bite; every one is grounded in [language-spec §6](lan
    `self` / method calls in them are rewritten as usual.
 4. **Single-line function bodies are not processed**: `int f() { return 1; }` on one line is left as is.
 5. **ct-ast accepts only the implemented subset**: `switch` / `do-while` / `goto` report
-   `unexpected token` at the `{`. Use `ctc` (the L0 seed) or L2 for those.
+   `unexpected token` at the `{`. For those, build the L0 seed by hand
+   (`gcc selfhost/l0/ctc.c -o ctc`) and use that; the `ctc` installed by `install.sh` is an alias of
+   `ct` (the same ct-ast binary) and does not support them either.
 6. **Block namespaces and bare cross-namespace calls are rejected** by ct-ast; use the semicolon form and
    qualified calls.
-7. A few combinations (for example struct-typed array fields) are still unsupported — check §4.8 first.
+7. **Struct-typed array fields**: L0 / L2 do not support them, ct-ast does (element-wise vptr writes —
+   see §6 and [language-spec §6](language-spec.md)); for anything else check §4.8 first.
 8. **Limits fail hard**: ct-ast raises them to `MAX_TRAITS` 64, `MAX_STRUCTS` 128, `MAX_METHODS` 64,
    `MAX_FUNCS` 256, `MAX_VARS` 4096…, and overflow is an error, never a silent truncation (§7).
 

@@ -33,11 +33,12 @@ C 没有虚函数表，想在 C 里模拟「接口 + 多态」要手写一大堆
 # 1a) 直接安装（下载源码 → 本地四级自举 → 装到 ~/.local/bin）
 curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 
-# 1b) 或者不安装，只用 L0 种子（单文件、核心语法）
+# 1b) 或者不安装，只用 L0 种子（单文件、核心语法；没有 `ct`，下面一律用 ./ctc）
 gcc selfhost/l0/ctc.c -o ctc
 
 # 2) 编译 .ct 到 .c（同时生成同名 .h）；产物可放任意目录
-ct examples/01_greeter/greeter.ct -o /tmp/greeter.c
+ct examples/01_greeter/greeter.ct -o /tmp/greeter.c      # 走了 1a
+./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # 走了 1b（L0 只认核心语法）
 
 # 3) 用系统 C 编译器构建产物
 gcc /tmp/greeter.c -o /tmp/greeter
@@ -477,11 +478,12 @@ library dependency.
 # 1a) install directly (downloads the source, bootstraps locally, installs to ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 
-# 1b) or skip the install and use the L0 seed (single file, core grammar only)
+# 1b) or skip the install and use the L0 seed (single file, core grammar only; no `ct` — use ./ctc below)
 gcc selfhost/l0/ctc.c -o ctc
 
 # 2) compile a .ct to .c (a sibling .h is written too)
-ct examples/01_greeter/greeter.ct -o /tmp/greeter.c
+ct examples/01_greeter/greeter.ct -o /tmp/greeter.c      # after 1a
+./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # after 1b (L0 knows the core grammar only)
 
 # 3) build the output with the system C compiler
 gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter

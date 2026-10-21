@@ -433,10 +433,10 @@ int main(void) {
     return 0;
 }
 EOF
-# p18 stays PENDING on purpose: a *struct-typed* array field (as opposed to the
-# interface arrays above) needs per-element vptr writes inside the enclosing
-# object's construction, which the AST mainline does not need -- node children are
-# interface values (p13). Deferred by decision; see docs/roadmap.md.
+# p18 is a *struct-typed* array field (as opposed to the interface arrays above):
+# it needs per-element vptr writes inside the enclosing object's construction.
+# ct-ast emits them, so the probe is a baseline entry when the default compiler is
+# ct-ast; L2 does not, which is why it is reported as unsupported there.
 
 echo "== the whole target program =="
 if ! "$CT" test/acceptance/ast_spike.ct -o "$TMP/spike.c" 2>"$TMP/spike.err"; then

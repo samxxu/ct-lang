@@ -6,6 +6,12 @@
 > 对应 [roadmap](roadmap.md) 的 0.1.6 / 0.1.7 / 0.1.8（组合 / 数组 / 释放）。
 > 这些语义**已实现**：栈变量、嵌套字段、数组元素与堆对象四种构造形态都写 vptr
 > （堆对象见 3.5 与 [restore](design/restore.md) 的 D1=A）。第 6 节保留决策记录。
+>
+> **适用范围**：正文以 **L0**（`selfhost/l0/ctc.c`，`try_var_decl()` 等）为主语，因为这套语义先在
+> 那里定型。ct-ast 实现同一套构造点语义，代码在
+> [`backend/emit/Init.h.ct`](../selfhost/ct-ast/backend/emit/Init.h.ct)，但**放宽**了其中几项——
+> 字段数组 `Person xs[3];` 等参见 [language-spec §6](language-spec.md)。凡本文与 ct-ast 实测不符处，
+> 以 language-spec 与安装入口的行为为准。
 
 ---
 
@@ -60,7 +66,8 @@ struct Shop { struct Person owner; };
 - 需要**部分解析 struct 体**：识别形如 `Ident Name ;` 的简单字段，其中 `Ident` 是已知 ct struct
   → 插入 `struct `。其余字段原样保留。
 - 明确不处理（保持透传，并记为限制）：多声明符 `Person a, b;`、位域、字段数组 `Person xs[3];`、
-  匿名嵌套 struct、宏展开出的字段。
+  匿名嵌套 struct、宏展开出的字段。**其中字段数组仅限 L0 / L2**——ct-ast 已支持（逐元素写 vptr，
+  见 [language-spec §6](language-spec.md)）。
 
 #### 3.2 组合：递归 vptr 写入（0.1.6b）
 
@@ -229,6 +236,12 @@ D2 = 只支持无初始化式声明 + 常量下标；**D3 = 不引入 `new`**（
 > are **implemented**: stack variables, nested fields, array elements and heap objects all get a
 > vptr (heap objects as described in 3.5 and [restore](design/restore.md) D1=A). §6 keeps the
 > decision record.
+>
+> **Scope**: the body speaks in terms of **L0** (`selfhost/l0/ctc.c`, `try_var_decl()` &c.), because
+> these semantics were first pinned down there. ct-ast implements the same construction points in
+> [`backend/emit/Init.h.ct`](../selfhost/ct-ast/backend/emit/Init.h.ct) but **relaxes** a few of them —
+> struct-typed array fields (`Person xs[3];`) among them; see [language-spec §6](language-spec.md).
+> Wherever this document disagrees with ct-ast, language-spec and the installed entry win.
 
 ### 1. Why this needs its own semantics
 
@@ -270,7 +283,8 @@ Corollaries: (1) **recursive** — constructing `Shop s` includes constructing `
 - **3.1 Composition — field type qualification (0.1.6a, lightest):** `struct Shop { Person owner; }` →
   `struct Shop { struct Person owner; }`, by partially parsing struct bodies for simple
   `Ident Name;` fields. Multi-declarators, bit-fields, field arrays, anonymous nested structs and
-  macro-produced fields stay verbatim and are recorded as limitations.
+  macro-produced fields stay verbatim and are recorded as limitations (field arrays apply to
+  L0 / L2 only — ct-ast writes their vptrs per element, see language-spec §6).
 - **3.2 Composition — recursive vptr (0.1.6b):**
   `Shop s;` → `struct Shop s = { .owner = { .__greeter_vptr = &Person_Greeter_vtable } };`, reusing
   **nested designated initialisers**.
