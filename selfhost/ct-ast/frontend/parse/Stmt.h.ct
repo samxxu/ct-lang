@@ -50,6 +50,7 @@ import tool::diag::diag;
 
 namespace frontend::parse;
 pub trait StmtOps {
+    int  is_decl_start(void);
     int  parse_block(void);
     int  parse_stmt(void);
     int  parse_branch(void);
@@ -68,6 +69,20 @@ pub struct Stmt {
 } use StmtOps;
 
 impl StmtOps for Stmt {
+    /* Does the current token start a declaration? A short name has to be
+       resolved first: the type table only holds the mangled spelling, so
+       `Arena *p` would otherwise look like an expression statement. */
+    int is_decl_start(void)
+    {
+        char rn[MAX_TEXT];
+        (void)self;
+
+        if (self->lex->tok != T_ID) return 0;
+        if (self->ex->is_type_word(self->lex->toktext)) return 1;
+        if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
+        return self->sym->find_type(rn) >= 0;
+    }
+
     /* Capture a `{ ... }` initializer verbatim; the caller appends vptr items. */
     int parse_init_raw(char *out, int cap)
     {
@@ -331,8 +346,7 @@ impl StmtOps for Stmt {
             if (self->sup->push_scope() != 0) return -1;
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->arena->nodes[s].a = -1;
-            } else if (self->lex->tok == T_ID && (self->ex->is_type_word(self->lex->toktext)
-                       || self->sym->find_type(self->lex->toktext) >= 0)) {
+            } else if (self->is_decl_start()) {
                 e = self->parse_decl_node();
                 if (e < 0) {
                     self->sup->pop_scope();
@@ -397,8 +411,7 @@ impl StmtOps for Stmt {
             if (self->sup->mark_owned(s, own_line) != 0) return -1;
             return s;
         }
-        if (self->lex->tok == T_ID && (self->ex->is_type_word(self->lex->toktext)
-                              || self->sym->find_type(self->lex->toktext) >= 0)) {
+        if (self->is_decl_start()) {
             s = self->parse_decl_node();
             if (s < 0) return -1;
             if (self->sup->expect(";") != 0) return -1;
