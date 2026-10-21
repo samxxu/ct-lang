@@ -37,6 +37,8 @@
 | DOC-14 | Low | 关卡脚本头注释过期：20 vs 21 断言、缺 11.x / 12.x | [gate-comment-drift.md](docs/gate-comment-drift.md) |
 | DOC-15 | Medium | issues / reports 指向已消失的 `selfhost/ast/**`、`selfhost/src/**` | [stale-selfhost-ast-paths.md](docs/stale-selfhost-ast-paths.md) |
 | DOC-16 | Medium | 「零警告」只在 Apple clang 下成立，GCC 会在冻结层报 `-Wformat-truncation` | 见文末「容器复验」（2026-10-21） |
+| DOC-17 | Medium | 两个探针依赖 BSD libc（`cli/short-read`、`cli/tmpfile-cannot-create`） | 见文末「容器复验」（2026-10-21） |
+| DOC-18 | Medium | language-spec §4.8 仍把「struct 类型的数组字段」列为不支持，与 §6 及实际行为相反 | [language-spec-struct-array-field-stale.md](docs/language-spec-struct-array-field-stale.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -65,6 +67,7 @@
 | SH-3 | Low | 以 `ct` 运行时驱动错误仍打印 `ctc:` 前缀（37 处硬编码） | [ct-error-prefix.md](selfhost/ct-error-prefix.md) |
 | SH-5 | Medium | ct-ast 存在 27 个定义后从未使用的宏 | [ct-ast-dead-macros.md](selfhost/ct-ast-dead-macros.md) |
 | SH-6 | Medium | 16 处「上限账本在 main.ct」注释已悬空，且 `main.ct` 自相矛盾 | [ct-ast-stale-cap-comments.md](selfhost/ct-ast-stale-cap-comments.md) |
+| SH-7 | Medium | ct-ast 对已赋值的 struct 值字段仍发嵌套 vptr 指定初始化式（`-Winitializer-overrides`） | [ct-ast-duplicate-field-vptr-init.md](selfhost/ct-ast-duplicate-field-vptr-init.md) |
 
 ## 汇总
 
@@ -232,6 +235,19 @@
 `test/run.sh` 116 passed / 0 failed（2 项 BSD libc 探针 skip）、`check-archive` 46 designed / 0 regression
 （`cli_short_read` skip）、`check-ast` 136、`test/pkg` 35、`check-grammar.py` 21。
 macOS（Apple clang）侧同期复跑：`./test/run.sh` 118 passed / 0 failed。
+
+## 新发现（2026-10-21，未修）
+
+写安装脚本与入门教程时的实测副产物，两条都**未修**，供后续处理：
+
+| ID | 严重度 | 摘要 | 证据 |
+| --- | --- | --- | --- |
+| [SH-7](selfhost/ct-ast-duplicate-field-vptr-init.md) | Medium | ct-ast 在构造点对**已赋值**的 struct 值字段仍追加 `.字段.__x_vptr` 嵌套指定初始化式，clang `-Wall -Wextra` 报 `-Winitializer-overrides`；L2 对同一输入不追加、零警告 | `/tmp/ctissue1/dup2.ct`，`ct` 与 `/tmp/l2` 对差 |
+| [DOC-18](docs/language-spec-struct-array-field-stale.md) | Medium | language-spec §4.8 仍把「struct 类型的数组字段」列为不支持并引 `p18`「按决定延后」，而 §6 已写 ct-ast 逐元素写 vptr；roadmap 743 与 `test/acceptance/run.sh:436-439` 也还停在「p18 为唯一 PENDING」 | `p18` 探针：ct-ast 输出 `3`，L2 编不过；`BASELINE` 已含 p18、整套 20 pass / 0 pending |
+
+两条均**不影响八关**（`check-all: OK (8 hard gates green)`）：SH-7 的写法不在语料里，DOC-18 的
+口径矛盾不产生 golden 差异。
+
 
 
 
