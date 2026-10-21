@@ -26,7 +26,7 @@ pub trait InitOps {
     int type_needs_init(const char *type);
     int emit_vptr_items(const char *prefix, const char *type);
     int emit_vptr_stmts(const char *recv, const char *type, int ind);
-    int emit_field_vptrs(int si, int started);
+    int emit_field_vptrs(int si, int started, const char *raw);
     int emit_array_field_vptrs(int si, const char *recv, int ind);
 }
 
@@ -162,11 +162,19 @@ impl InitOps for Init {
     }
 
     /* A struct-typed field with traits of its own needs a nested designator
-       (`.owner.__greeter_vptr = ...`), or `s.owner.greet()` dereferences NULL. */
-    int emit_field_vptrs(int si, int started)
+       (`.owner.__greeter_vptr = ...`), or `s.owner.greet()` dereferences NULL.
+
+       `raw` is the captured initialiser (`{ .who = p }`), or NULL when the
+       declaration had none. A field the initialiser already assigns by value
+       carries its vptr in the struct copy, so adding the nested designator on
+       top would only re-write the same value and make clang warn
+       (-Winitializer-overrides). A brace initialiser for the field is the
+       exception: it starts the sub-object from scratch, so the vptr is needed. */
+    int emit_field_vptrs(int si, int started, const char *raw)
     {
         FILE *f = (FILE *)(*self->out);
-        int fi;
+        int fi, i, j, n, depth, skip;
+        char name[MAX_TEXT];
         (void)self;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
@@ -175,6 +183,42 @@ impl InitOps for Init {
             if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
             if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
             if (!self->type_needs_init(ft)) continue;
+            skip = 0;
+            depth = 0;
+            for (i = 0; raw && raw[i]; i++) {
+                if (raw[i] == '"' || raw[i] == '\'') {
+                    char q = raw[i];
+                    i++;
+                    while (raw[i] && raw[i] != q) {
+                        if (raw[i] == '\\' && raw[i + 1]) i++;
+                        i++;
+                    }
+                    continue;
+                }
+                if (raw[i] == '{' || raw[i] == '(' || raw[i] == '[') { depth++; continue; }
+                if (raw[i] == '}' || raw[i] == ')' || raw[i] == ']') { depth--; continue; }
+                if (raw[i] != '.' || depth != 1) continue;
+                /* a top-level designator: `.name`
+                   (whitespace after the dot is legal C) */
+                j = i + 1;
+                while (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r') j++;
+                n = 0;
+                while ((raw[j] >= 'a' && raw[j] <= 'z') || (raw[j] >= 'A' && raw[j] <= 'Z')
+                       || (raw[j] >= '0' && raw[j] <= '9') || raw[j] == '_') {
+                    if (n + 1 < MAX_TEXT) { name[n] = raw[j]; n++; }
+                    j++;
+                }
+                name[n] = 0;
+                i = j - 1;
+                if (n == 0 || strcmp(name, self->sym->structs[si].fields[fi].name) != 0) continue;
+                while (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r') j++;
+                if (raw[j] != '=' || raw[j + 1] == '=') continue;
+                j++;
+                while (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r') j++;
+                skip = (raw[j] != '{');
+                break;
+            }
+            if (skip) continue;
             snprintf(prefix, sizeof prefix, ".%s", self->sym->structs[si].fields[fi].name);
             if (started) fputs(", ", f);
             if (self->emit_vptr_items(prefix, ft) != 0) return -1;

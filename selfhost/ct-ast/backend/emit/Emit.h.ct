@@ -109,7 +109,7 @@ trait EmitOps {
     int  emit_inline(int n);
     int  emit_expr(int n);
     int  hoist_rvalue(int n);
-    int  hoist_scan(int n);
+    int  hoist_scan(int n, int top);
     int  emit_hoists(int ind);
     int  emit_cond(int n);
     int  emit_indent(int n);
@@ -151,6 +151,7 @@ struct Emitter {
     int  nhoist;
     int  ntmp;
     int  raw_call;
+    int  self_used;             /* the method body referenced `self` */
     char errmsg[160];
     /* the vptr / initialiser writer (Init.h.ct) */
     struct Init *init;
@@ -167,15 +168,22 @@ impl EmitOps for Emitter {
 
     /* Fresh state for one statement's hoist scan. The statement's `next` is the
        following statement (not part of this expression), so it is cut off
-       while the children are walked. */
+       while the children are walked.
+
+       Only the statement's own expression root may be hoisted: at the start of
+       a statement's expression, or at the start of an assignment / declaration
+       initialiser, evaluation is unconditional and ordered, so moving the
+       receiver to the line before cannot change what it reads. Anywhere else
+       the hoist would reorder it, so `hoist_scan` reports instead. */
     int hoist_rvalue(int n)
     {
-        int saved;
+        int saved, root;
         (void)self;
         self->nhoist = 0;
+        root = (self->arena->nodes[n].kind == N_ASSIGN) ? self->arena->nodes[n].b : self->arena->nodes[n].a;
         saved = self->arena->nodes[n].next;
         self->arena->nodes[n].next = -1;
-        if (self->hoist_scan(n) != 0) {
+        if (self->hoist_scan(root, 1) != 0) {
             self->arena->nodes[n].next = saved;
             return -1;
         }
@@ -185,8 +193,10 @@ impl EmitOps for Emitter {
 
     /* A chain like `f().a.b` as a method receiver has to be materialised: C
        will not take the address of the call result. Root calls are recorded
-       and named `__ct_tmpN`. */
-    int hoist_scan(int n)
+       and named `__ct_tmpN`. `top` marks the statement's expression root; an
+       rvalue receiver found below it has no defined evaluation point to hoist
+       to, so it is an error rather than a silent reordering. */
+    int hoist_scan(int n, int top)
     {
         int root;
         (void)self;
@@ -200,6 +210,8 @@ impl EmitOps for Emitter {
             if (root >= 0 && self->arena->nodes[root].kind == N_CALL
                 && !self->arena->nodes[root].text3[0]
                 && self->sym->find_func(self->arena->nodes[root].text2) >= 0) {
+                if (!top)
+                    return self->fail("a method call on a temporary is only allowed at the start of a statement or of an assignment");
                 if (self->nhoist >= MAX_HOISTS)
                     return self->fail("too many hoisted receivers in one statement");
                 snprintf(self->arena->nodes[root].text3, MAX_TEXT, "__ct_tmp%d", self->ntmp);
@@ -208,11 +220,11 @@ impl EmitOps for Emitter {
                 self->nhoist++;
             }
         }
-        if (self->arena->nodes[n].a >= 0 && self->hoist_scan(self->arena->nodes[n].a) != 0) return -1;
-        if (self->arena->nodes[n].b >= 0 && self->hoist_scan(self->arena->nodes[n].b) != 0) return -1;
-        if (self->arena->nodes[n].c >= 0 && self->hoist_scan(self->arena->nodes[n].c) != 0) return -1;
-        if (self->arena->nodes[n].d >= 0 && self->hoist_scan(self->arena->nodes[n].d) != 0) return -1;
-        if (self->arena->nodes[n].next >= 0 && self->hoist_scan(self->arena->nodes[n].next) != 0) return -1;
+        if (self->arena->nodes[n].a >= 0 && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
+        if (self->arena->nodes[n].b >= 0 && self->hoist_scan(self->arena->nodes[n].b, 0) != 0) return -1;
+        if (self->arena->nodes[n].c >= 0 && self->hoist_scan(self->arena->nodes[n].c, 0) != 0) return -1;
+        if (self->arena->nodes[n].d >= 0 && self->hoist_scan(self->arena->nodes[n].d, 0) != 0) return -1;
+        if (self->arena->nodes[n].next >= 0 && self->hoist_scan(self->arena->nodes[n].next, 0) != 0) return -1;
         return 0;
     }
 
@@ -444,7 +456,7 @@ impl EmitOps for Emitter {
             if (self->init->type_has_vptr(type)) {
                 if (self->init->emit_vptr_items("", type) != 0) return -1;
             }
-            if (si >= 0 && self->init->emit_field_vptrs(si, self->init->type_has_vptr(type)) != 0) return -1;
+            if (si >= 0 && self->init->emit_field_vptrs(si, self->init->type_has_vptr(type), 0) != 0) return -1;
             fputs(" }", self->out);
             return 0;
         }
@@ -454,7 +466,7 @@ impl EmitOps for Emitter {
             if (self->init->emit_vptr_items("", type) != 0) return -1;
         }
         /* the captured text already has members, so a nested item needs its comma */
-        if (si >= 0 && self->init->emit_field_vptrs(si, 1) != 0) return -1;
+        if (si >= 0 && self->init->emit_field_vptrs(si, 1, t) != 0) return -1;
         fputs("}", self->out);
         return 0;
     }
@@ -492,6 +504,7 @@ impl EmitOps for Emitter {
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 self->sym->self_mode = 1;
+                self->self_used = 0;
                 k = self->arena->nodes[self->arena->nodes[m].b].a;
                 while (k >= 0) {
                     if (self->emit_node(k, 1) != 0) {
@@ -501,6 +514,10 @@ impl EmitOps for Emitter {
                     k = self->arena->nodes[k].next;
                 }
                 self->sym->self_mode = 0;
+                /* The cast is emitted before the body, so a method that never
+                   touches `self` leaves an unused variable behind; the same
+                   suppression the synthesised Drop below uses. */
+                if (!self->self_used) fputs("    (void)_self;\n", self->out);
                 fputs("}\n\n", self->out);
             }
             if (strcmp(tname, "Drop") != 0) {
@@ -665,7 +682,7 @@ impl EmitOps for Emitter {
                 if (self->init->emit_field_vptrs(self->sym->find_struct(
                         strncmp(self->arena->nodes[n].text, "struct ", 7) == 0
                             ? self->arena->nodes[n].text + 7 : self->arena->nodes[n].text),
-                        self->init->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
+                        self->init->type_has_vptr(self->arena->nodes[n].text), 0) != 0) return -1;
                 fputs(" }", self->out);
             }
             if (with_semi) fputs(";\n", self->out);
@@ -913,7 +930,7 @@ impl EmitOps for Emitter {
                     if (self->init->emit_field_vptrs(self->sym->find_struct(
                             strncmp(self->arena->nodes[n].text, "struct ", 7) == 0
                                 ? self->arena->nodes[n].text + 7 : self->arena->nodes[n].text),
-                            self->init->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
+                            self->init->type_has_vptr(self->arena->nodes[n].text), 0) != 0) return -1;
                     fputs(" }", self->out);
                 }
             }
@@ -980,8 +997,12 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_VAR) {
-            if (self->sym->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) fputs("_self", self->out);
-            else fputs(self->arena->nodes[n].text2, self->out);
+            if (self->sym->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) {
+                self->self_used = 1;
+                fputs("_self", self->out);
+            } else {
+                fputs(self->arena->nodes[n].text2, self->out);
+            }
             return 0;
         }
         if (self->arena->nodes[n].kind == N_MEMBER) {
