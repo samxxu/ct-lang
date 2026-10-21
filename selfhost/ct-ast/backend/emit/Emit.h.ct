@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
+import backend::emit::Init;
 import frontend::lex::Lexer;
 import frontend::module::Map::Call as Call;
 import frontend::module::Map::MapBind as MapBind;
@@ -95,10 +96,10 @@ import runtime::arena::Arena;
 #define P_DEC 2
 
 namespace backend::emit;
-/* The whole emitter API. One trait, not two: L2 (which still builds this tree)
-   caps a trait at 32 methods and the build at 16 traits in total, and the other
-   units already use all sixteen. `last_error` is not a method -- the driver
-   reads the message through `ct_emit_last_error`, so the method set fits 32. */
+/* The whole emitter API. The vptr / initialiser writer lives on a sub-object
+   (`Init.h.ct`), which keeps this trait clear of the method ceiling; `last_error`
+   is not a method -- the driver reads the message through
+   `ct_emit_last_error`. */
 trait EmitOps {
     int  emit_program(int prog);
     int  emit_unit(int u);
@@ -122,12 +123,6 @@ trait EmitOps {
     int  emit_trait_decls(void);
     int  emit_impls(int prog);
     int  emit_maps(int u);
-    int  type_has_vptr(const char *type);
-    int  type_needs_init(const char *type);
-    int  emit_vptr_items(const char *prefix, const char *type);
-    int  emit_field_vptrs(int si, int started);
-    int  emit_array_field_vptrs(int si, const char *recv, int ind);
-    int  emit_vptr_stmts(const char *recv, const char *type, int ind);
     int  emit_unit_init(int prog);
     int  emit_raw_init(int raw, const char *type);
     int  write_header(const char *outc);
@@ -163,6 +158,8 @@ struct Emitter {
     int  ntmp;
     int  raw_call;
     char errmsg[160];
+    /* the vptr / initialiser writer (Init.h.ct) */
+    struct Init *init;
 } use EmitOps;
 
 impl EmitOps for Emitter {
@@ -379,123 +376,6 @@ impl EmitOps for Emitter {
         return 0;
     }
 
-    int type_has_vptr(const char *type)
-    {
-        const char *base;
-        int si;
-        (void)self;
-
-        base = type;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        si = self->sym->find_struct(base);
-        return (si >= 0 && self->sym->structs[si].nuse > 0) ? 1 : 0;
-    }
-
-    /* Does this *value* type need a vptr written somewhere -- itself or through a
-       nested value field? `Outer { Inner in; }` needs one even though Outer uses
-       no trait of its own. Pointer types are not initialised this way. */
-    int type_needs_init(const char *type)
-    {
-        const char *base;
-        char tb[MAX_TEXT];
-        size_t tl;
-        int si, fi;
-        (void)self;
-
-        base = type;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        snprintf(tb, sizeof tb, "%s", base);
-        tl = strlen(tb);
-        while (tl > 0 && (tb[tl - 1] == ' ')) {
-            tl--;
-            tb[tl] = 0;
-        }
-        if (strchr(tb, '*') != 0) return 0;
-        si = self->sym->find_struct(tb);
-        if (si < 0) return 0;
-        if (self->sym->structs[si].nuse > 0) return 1;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
-            if (strchr(ft, '*') != 0) continue;
-            if (self->type_needs_init(ft)) return 1;
-        }
-        return 0;
-    }
-
-    int emit_vptr_items(const char *prefix, const char *type)
-    {
-        const char *base;
-        int si, u, i;
-        (void)self;
-
-        base = type;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        si = self->sym->find_struct(base);
-        if (si < 0) return 0;
-        for (u = 0; u < self->sym->structs[si].nuse; u++) {
-            char low[MAX_TEXT];
-            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
-                char c = self->sym->structs[si].use[u][i];
-                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
-                low[i] = c;
-            }
-            low[i] = 0;
-            if (u > 0) fputs(", ", self->out);
-            fprintf(self->out, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, self->sym->structs[si].use[u]);
-        }
-        return 0;
-    }
-
-    /* The statement form of `emit_vptr_items`: write `recv.__x_vptr = ...` (and
-       one level of nested value fields) for an object that could not carry an
-       initialiser -- an array element, or a heap object after malloc. */
-    int emit_vptr_stmts(const char *recv, const char *type, int ind)
-    {
-        const char *base;
-        char tb[MAX_TEXT];
-        size_t tl;
-        int si, u, i, fi;
-        (void)self;
-
-        base = type;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        snprintf(tb, sizeof tb, "%s", base);
-        tl = strlen(tb);
-        while (tl > 0 && (tb[tl - 1] == '*' || tb[tl - 1] == ' ')) {
-            tl--;
-            tb[tl] = 0;
-        }
-        si = self->sym->find_struct(tb);
-        if (si < 0) return 0;
-        for (u = 0; u < self->sym->structs[si].nuse; u++) {
-            char low[MAX_TEXT];
-            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
-                char c = self->sym->structs[si].use[u][i];
-                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
-                low[i] = c;
-            }
-            low[i] = 0;
-            self->emit_indent(ind);
-            fprintf(self->out, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->sym->structs[si].use[u]);
-        }
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
-            char sub[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
-            if (strchr(ft, '*') != 0) continue;
-            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
-            if (!self->type_needs_init(ft)) continue;
-            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
-            if (self->emit_vptr_stmts(sub, ft, ind) != 0) return -1;
-        }
-        return self->emit_array_field_vptrs(si, recv, ind);
-    }
-
     /* File-scope arrays cannot carry per-element writes in an initialiser, so
        they go into the per-unit constructor (the same shape as D5=A in the old
        pipeline). Emitted only when such an array exists. */
@@ -506,7 +386,7 @@ impl EmitOps for Emitter {
 
         any = 0;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-            if (self->arena->nodes[n].kind == N_GLOBAL && self->type_needs_init(self->arena->nodes[n].text)
+            if (self->arena->nodes[n].kind == N_GLOBAL && self->init->type_needs_init(self->arena->nodes[n].text)
                 && (self->arena->nodes[n].text3[0]
                     || self->ty->type_has_array_init(self->arena->nodes[n].text))) any = 1;
         if (!any) return 0;
@@ -518,11 +398,11 @@ impl EmitOps for Emitter {
             char recv[MAX_TEXT];
             int i, k;
             if (self->arena->nodes[n].kind != N_GLOBAL) continue;
-            if (!self->type_needs_init(self->arena->nodes[n].text)) continue;
+            if (!self->init->type_needs_init(self->arena->nodes[n].text)) continue;
             if (!self->arena->nodes[n].text3[0]) {
                 /* a scalar object whose struct has array fields */
                 if (self->ty->type_has_array_init(self->arena->nodes[n].text)
-                    && self->emit_vptr_stmts(self->arena->nodes[n].text2, self->arena->nodes[n].text, 2) != 0)
+                    && self->init->emit_vptr_stmts(self->arena->nodes[n].text2, self->arena->nodes[n].text, 2) != 0)
                     return -1;
                 continue;
             }
@@ -535,7 +415,7 @@ impl EmitOps for Emitter {
             cnt[k] = 0;
             snprintf(recv, sizeof recv, "%s[__ct_i]", self->arena->nodes[n].text2);
             fprintf(self->out, "    for (__ct_i = 0; __ct_i < %s; __ct_i++) {\n", cnt);
-            if (self->emit_vptr_stmts(recv, self->arena->nodes[n].text, 2) != 0) return -1;
+            if (self->init->emit_vptr_stmts(recv, self->arena->nodes[n].text, 2) != 0) return -1;
             fputs("    }\n", self->out);
         }
         fputs("}\n\n", self->out);
@@ -567,91 +447,21 @@ impl EmitOps for Emitter {
             if (t[i] != ' ' && t[i] != '\t' && t[i] != '\n' && t[i] != '\r') only_space = 0;
         if (only_space) {
             fputs("{ ", self->out);
-            if (self->type_has_vptr(type)) {
-                if (self->emit_vptr_items("", type) != 0) return -1;
+            if (self->init->type_has_vptr(type)) {
+                if (self->init->emit_vptr_items("", type) != 0) return -1;
             }
-            if (si >= 0 && self->emit_field_vptrs(si, self->type_has_vptr(type)) != 0) return -1;
+            if (si >= 0 && self->init->emit_field_vptrs(si, self->init->type_has_vptr(type)) != 0) return -1;
             fputs(" }", self->out);
             return 0;
         }
         fwrite(t, 1, (size_t)(len - 1), self->out);
-        if (self->type_has_vptr(type)) {
+        if (self->init->type_has_vptr(type)) {
             fputs(", ", self->out);
-            if (self->emit_vptr_items("", type) != 0) return -1;
+            if (self->init->emit_vptr_items("", type) != 0) return -1;
         }
         /* the captured text already has members, so a nested item needs its comma */
-        if (si >= 0 && self->emit_field_vptrs(si, 1) != 0) return -1;
+        if (si >= 0 && self->init->emit_field_vptrs(si, 1) != 0) return -1;
         fputs("}", self->out);
-        return 0;
-    }
-
-    /* A struct-typed field with traits of its own needs a nested designator
-       (`.owner.__greeter_vptr = ...`), or `s.owner.greet()` dereferences NULL. */
-    int emit_field_vptrs(int si, int started)
-    {
-        int fi;
-        (void)self;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
-            char prefix[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
-            if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
-            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
-            if (!self->type_needs_init(ft)) continue;
-            snprintf(prefix, sizeof prefix, ".%s", self->sym->structs[si].fields[fi].name);
-            if (started) fputs(", ", self->out);
-            if (self->emit_vptr_items(prefix, ft) != 0) return -1;
-            started = 1;
-        }
-        return 0;
-    }
-
-    /* vptr writes for struct-typed array fields. A designated initialiser cannot
-       reach an array element (`.f.__x_vptr` is not valid C), so the caller emits
-       these as statements after the declaration. One loop per dimension. */
-    int emit_array_field_vptrs(int si, const char *recv, int ind)
-    {
-        int fi;
-        (void)self;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
-            char sub[MAX_TEXT];
-            const char *d;
-            int depth, started;
-            if (!self->sym->structs[si].fields[fi].dims[0]) continue;
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
-            if (strchr(ft, '*') != 0) continue;
-            if (!self->type_needs_init(ft)) continue;
-            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
-            d = self->sym->structs[si].fields[fi].dims;
-            depth = 0;
-            started = 0;
-            while (*d == '[') {
-                const char *close = strchr(d, ']');
-                char bound[MAX_TEXT];
-                size_t bl;
-                if (!close) break;
-                bl = (size_t)(close - d - 1);
-                if (bl >= sizeof bound) bl = sizeof bound - 1;
-                memcpy(bound, d + 1, bl);
-                bound[bl] = 0;
-                if (!bound[0]) break;   /* `[]`: not a definition */
-                self->emit_indent(ind + depth);
-                fprintf(self->out, "for (unsigned long __ct_j%d = 0; __ct_j%d < %s; __ct_j%d++) {\n",
-                        depth, depth, bound, depth);
-                snprintf(sub, sizeof sub, "%s[__ct_j%d]", sub, depth);
-                depth++;
-                d = close + 1;
-                started = 1;
-            }
-            if (!started) continue;
-            if (self->emit_vptr_stmts(sub, ft, ind + depth) != 0) return -1;
-            while (depth > 0) {
-                depth--;
-                self->emit_indent(ind + depth);
-                fputs("}\n", self->out);
-            }
-        }
         return 0;
     }
 
@@ -853,15 +663,15 @@ impl EmitOps for Emitter {
             } else if (self->arena->nodes[n].a >= 0) {
                 fputs(" = ", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            } else if (self->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
+            } else if (self->init->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
                 /* an array gets per-element writes (local) or a constructor
                    (file scope); a designator on the array itself is invalid */
                 fputs(" = { ", self->out);
-                if (self->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;
-                if (self->emit_field_vptrs(self->sym->find_struct(
+                if (self->init->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;
+                if (self->init->emit_field_vptrs(self->sym->find_struct(
                         strncmp(self->arena->nodes[n].text, "struct ", 7) == 0
                             ? self->arena->nodes[n].text + 7 : self->arena->nodes[n].text),
-                        self->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
+                        self->init->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
                 fputs(" }", self->out);
             }
             if (with_semi) fputs(";\n", self->out);
@@ -971,7 +781,7 @@ impl EmitOps for Emitter {
                     || strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "calloc") == 0))
                 heap_ptr = 1;
 
-            if (self->arena->nodes[n].text3[0] && self->arena->nodes[n].a < 0 && self->type_needs_init(tp)) {
+            if (self->arena->nodes[n].text3[0] && self->arena->nodes[n].a < 0 && self->init->type_needs_init(tp)) {
                 /* a local array of trait-carrying values: one loop writes every
                    element's vptr (`Type name[n];` has no initialiser to extend) */
                 char cnt[MAX_TEXT];
@@ -990,12 +800,12 @@ impl EmitOps for Emitter {
                 snprintf(recv, sizeof recv, "%s[__ct_i]", self->arena->nodes[n].text2);
                 self->emit_indent(ind);
                 fprintf(self->out, "for (unsigned long __ct_i = 0; __ct_i < %s; __ct_i++) {\n", cnt);
-                if (self->emit_vptr_stmts(recv, tp, ind + 1) != 0) return -1;
+                if (self->init->emit_vptr_stmts(recv, tp, ind + 1) != 0) return -1;
                 self->emit_indent(ind);
                 fputs("}\n", self->out);
                 return 0;
             }
-            if (!self->arena->nodes[n].text3[0] && self->type_needs_init(tp)
+            if (!self->arena->nodes[n].text3[0] && self->init->type_needs_init(tp)
                 && (self->arena->nodes[n].a < 0
                     || self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW)
                 && self->ty->type_has_array_init(tp)) {
@@ -1008,7 +818,7 @@ impl EmitOps for Emitter {
                 self->emit_indent(ind);
                 if (self->emit_inline(n) != 0) return -1;
                 fputs(";\n", self->out);
-                return self->emit_array_field_vptrs(si, self->arena->nodes[n].text2, ind);
+                return self->init->emit_array_field_vptrs(si, self->arena->nodes[n].text2, ind);
             }
             if (heap_ptr) {
                 char recv[MAX_TEXT];
@@ -1016,7 +826,7 @@ impl EmitOps for Emitter {
                 if (self->emit_inline(n) != 0) return -1;
                 fputs(";\n", self->out);
                 snprintf(recv, sizeof recv, "(*%s)", self->arena->nodes[n].text2);
-                return self->emit_vptr_stmts(recv, tp, ind);
+                return self->init->emit_vptr_stmts(recv, tp, ind);
             }
         }
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_ASSIGN
@@ -1103,13 +913,13 @@ impl EmitOps for Emitter {
                 } else if (self->arena->nodes[n].a >= 0) {
                     fputs(" = ", self->out);
                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                } else if (self->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
+                } else if (self->init->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
                     fputs(" = { ", self->out);
-                    if (self->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;
-                    if (self->emit_field_vptrs(self->sym->find_struct(
+                    if (self->init->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;
+                    if (self->init->emit_field_vptrs(self->sym->find_struct(
                             strncmp(self->arena->nodes[n].text, "struct ", 7) == 0
                                 ? self->arena->nodes[n].text + 7 : self->arena->nodes[n].text),
-                            self->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
+                            self->init->type_has_vptr(self->arena->nodes[n].text)) != 0) return -1;
                     fputs(" }", self->out);
                 }
             }
@@ -1743,6 +1553,10 @@ void ct_emit_bind(void *arena, void *sym, void *ty, void *lex,
     g_emit.version = version;
     g_emit.outdir = outdir;
     g_emit.prog = prog;
+    /* the vptr writer follows the emitter's output stream, which changes per
+       unit, so it holds the address of the field rather than a copy */
+    ct_init_bind(sym, (void **)&g_emit.out);
+    g_emit.init = init_get();
 }
 
 pub void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps, void *calls, int *ncalls, int *build_mode, int *line_mode);

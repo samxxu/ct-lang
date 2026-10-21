@@ -1,0 +1,255 @@
+/*
+ * Init.h.ct - the vptr and initialiser writer, one sub-object of the emitter.
+ *
+ * A CT object carries one vptr per trait it uses, and a plain C initialiser
+ * cannot always fill them: an array element and a heap object have no
+ * designator to reach, so they need statements after the declaration. This
+ * object owns every such write -- the designator items, the statement form,
+ * and the per-field / per-array-element recursion. `Emit` keeps the rest and
+ * calls in through `init_get`.
+ *
+ * The output stream belongs to `Emit` and changes per unit, so this object
+ * holds a pointer to that pointer, never a copy.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+
+import frontend::sym::Symbols;
+
+#define MAX_TEXT 160
+
+namespace backend::emit {
+pub trait InitOps {
+    int type_has_vptr(const char *type);
+    int type_needs_init(const char *type);
+    int emit_vptr_items(const char *prefix, const char *type);
+    int emit_vptr_stmts(const char *recv, const char *type, int ind);
+    int emit_field_vptrs(int si, int started);
+    int emit_array_field_vptrs(int si, const char *recv, int ind);
+}
+
+pub struct Init {
+    struct Symbols *sym;
+    void **out;                 /* points at the emitter's current FILE * */
+} use InitOps;
+
+static void put_indent(FILE *f, int n)
+{
+    int i;
+    for (i = 0; i < n * 4; i++) fputc(' ', f);
+}
+
+impl InitOps for Init {
+    int type_has_vptr(const char *type)
+    {
+        const char *base;
+        int si;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        si = self->sym->find_struct(base);
+        return (si >= 0 && self->sym->structs[si].nuse > 0) ? 1 : 0;
+    }
+
+    /* Does this *value* type need a vptr written somewhere -- itself or through a
+       nested value field? `Outer { Inner in; }` needs one even though Outer uses
+       no trait of its own. Pointer types are not initialised this way. */
+    int type_needs_init(const char *type)
+    {
+        const char *base;
+        char tb[MAX_TEXT];
+        size_t tl;
+        int si, fi;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        snprintf(tb, sizeof tb, "%s", base);
+        tl = strlen(tb);
+        while (tl > 0 && (tb[tl - 1] == ' ')) {
+            tl--;
+            tb[tl] = 0;
+        }
+        if (strchr(tb, '*') != 0) return 0;
+        si = self->sym->find_struct(tb);
+        if (si < 0) return 0;
+        if (self->sym->structs[si].nuse > 0) return 1;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;
+            if (self->type_needs_init(ft)) return 1;
+        }
+        return 0;
+    }
+
+    int emit_vptr_items(const char *prefix, const char *type)
+    {
+        const char *base;
+        FILE *f = (FILE *)(*self->out);
+        int si, u, i;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        si = self->sym->find_struct(base);
+        if (si < 0) return 0;
+        for (u = 0; u < self->sym->structs[si].nuse; u++) {
+            char low[MAX_TEXT];
+            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                char c = self->sym->structs[si].use[u][i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+                low[i] = c;
+            }
+            low[i] = 0;
+            if (u > 0) fputs(", ", f);
+            fprintf(f, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, self->sym->structs[si].use[u]);
+        }
+        return 0;
+    }
+
+    /* The statement form of `emit_vptr_items`: write `recv.__x_vptr = ...` (and
+       one level of nested value fields) for an object that could not carry an
+       initialiser -- an array element, or a heap object after malloc. */
+    int emit_vptr_stmts(const char *recv, const char *type, int ind)
+    {
+        const char *base;
+        char tb[MAX_TEXT];
+        size_t tl;
+        FILE *f = (FILE *)(*self->out);
+        int si, u, i, fi;
+        (void)self;
+
+        base = type;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        snprintf(tb, sizeof tb, "%s", base);
+        tl = strlen(tb);
+        while (tl > 0 && (tb[tl - 1] == '*' || tb[tl - 1] == ' ')) {
+            tl--;
+            tb[tl] = 0;
+        }
+        si = self->sym->find_struct(tb);
+        if (si < 0) return 0;
+        for (u = 0; u < self->sym->structs[si].nuse; u++) {
+            char low[MAX_TEXT];
+            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+                char c = self->sym->structs[si].use[u][i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+                low[i] = c;
+            }
+            low[i] = 0;
+            put_indent(f, ind);
+            fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->sym->structs[si].use[u]);
+        }
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            char sub[MAX_TEXT];
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;
+            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
+            if (!self->type_needs_init(ft)) continue;
+            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
+            if (self->emit_vptr_stmts(sub, ft, ind) != 0) return -1;
+        }
+        return self->emit_array_field_vptrs(si, recv, ind);
+    }
+
+    /* A struct-typed field with traits of its own needs a nested designator
+       (`.owner.__greeter_vptr = ...`), or `s.owner.greet()` dereferences NULL. */
+    int emit_field_vptrs(int si, int started)
+    {
+        FILE *f = (FILE *)(*self->out);
+        int fi;
+        (void)self;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            char prefix[MAX_TEXT];
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
+            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
+            if (!self->type_needs_init(ft)) continue;
+            snprintf(prefix, sizeof prefix, ".%s", self->sym->structs[si].fields[fi].name);
+            if (started) fputs(", ", f);
+            if (self->emit_vptr_items(prefix, ft) != 0) return -1;
+            started = 1;
+        }
+        return 0;
+    }
+
+    /* vptr writes for struct-typed array fields. A designated initialiser cannot
+       reach an array element (`.f.__x_vptr` is not valid C), so the caller emits
+       these as statements after the declaration. One loop per dimension. */
+    int emit_array_field_vptrs(int si, const char *recv, int ind)
+    {
+        FILE *f = (FILE *)(*self->out);
+        int fi;
+        (void)self;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            char sub[MAX_TEXT];
+            const char *d;
+            int depth, started;
+            if (!self->sym->structs[si].fields[fi].dims[0]) continue;
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;
+            if (!self->type_needs_init(ft)) continue;
+            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
+            d = self->sym->structs[si].fields[fi].dims;
+            depth = 0;
+            started = 0;
+            while (*d == '[') {
+                const char *close = strchr(d, ']');
+                char bound[MAX_TEXT];
+                size_t bl;
+                if (!close) break;
+                bl = (size_t)(close - d - 1);
+                if (bl >= sizeof bound) bl = sizeof bound - 1;
+                memcpy(bound, d + 1, bl);
+                bound[bl] = 0;
+                if (!bound[0]) break;   /* `[]`: not a definition */
+                put_indent(f, ind + depth);
+                fprintf(f, "for (unsigned long __ct_j%d = 0; __ct_j%d < %s; __ct_j%d++) {\n",
+                        depth, depth, bound, depth);
+                snprintf(sub, sizeof sub, "%s[__ct_j%d]", sub, depth);
+                depth++;
+                d = close + 1;
+                started = 1;
+            }
+            if (!started) continue;
+            if (self->emit_vptr_stmts(sub, ft, ind + depth) != 0) return -1;
+            while (depth > 0) {
+                depth--;
+                put_indent(f, ind + depth);
+                fputs("}\n", f);
+            }
+        }
+        return 0;
+    }
+}
+
+/* The instance lives after the impls: its vptr initialisers need the vtable
+   forward declarations the emitter places with each impl. */
+static struct Init g_init;
+
+/* Only primitives cross the unit boundary (a generated header carries no
+   #include, so the collaborators arrive as `void *` and are cast here). */
+pub void ct_init_bind(void *sym, void **out);
+void ct_init_bind(void *sym, void **out)
+{
+    g_init.sym = (struct Symbols *)sym;
+    g_init.out = out;
+}
+
+pub struct Init *init_get(void);
+struct Init *init_get(void)
+{
+    return &g_init;
+}
+}
