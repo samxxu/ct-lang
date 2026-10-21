@@ -249,9 +249,11 @@
 （`cli_short_read` skip）、`check-ast` 136、`test/pkg` 35、`check-grammar.py` 21。
 macOS（Apple clang）侧同期复跑：`./test/run.sh` 118 passed / 0 failed。
 
-## 新发现（2026-10-21，未修）
+## 新发现（2026-10-21，同日已修复）
 
-写安装脚本与入门教程时的实测副产物，两条都**未修**，供后续处理：
+写安装脚本与入门教程时的实测副产物，两条当时**未修**，已于同日修复（状态见各自 issue 文件）：
+SH-7 在 `015946a` 修掉（`emit_field_vptrs` 跳过已被初始化式赋值的字段），DOC-18 在 `776bfc3`
+按编译器分述。
 
 | ID | 严重度 | 摘要 | 证据 |
 | --- | --- | --- | --- |
@@ -298,6 +300,15 @@ macOS（Apple clang）侧同期复跑：`./test/run.sh` 118 passed / 0 failed。
 非缺陷观察（详见报告 §5）：L0 对普通 C 语法零校验是设计使然；BSD 探针在 Linux `skip` 是 `6395f5d`
 的有意设计；`install.sh` 的 `ctc` 别名在目标已存在普通文件时用 `cp`，与 README 措辞略有出入但行为正确；
 leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`malloc` 后没再引用也没调 `delete`），不是 ct-ast 发射问题。
+
+### 处置（2026-10-21，同日）
+
+本轮 8 条已全部关闭：SH-8 / SH-11 / SH-9 见 `84c6677` 与 `9050ed2`；SH-10 的 `_self` 与 vtable /
+`Drop_drop` 两族见 `015946a` 与「未被引用符号带 `__attribute__((unused))`」的后续修复；SH-12 见
+`e383798`（`examples/08_map_binding/`）；DOC-19 / DOC-20 / DOC-21 见 `776bfc3`。
+
+复扫结果（ct-ast 生成物，`gcc -Wall -Wextra -std=c99 -fsyntax-only`，69 个 `.c`）：只剩 5 条**源文件层面**
+的告警——3 个 leak fixture 的 `p` unused、2 个 sig_mismatch fixture 的 `-Wreturn-type`，均非发射器产出。
 
 
 

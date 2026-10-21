@@ -6,7 +6,7 @@
 | 严重度 | **Low** → **Medium**（2026-10-21 复核升级：发现三类告警、多个语料） |
 | 锚点 | commit `dde0dda`（2026-10-21） |
 | 文件 | [backend/emit/Emit.h.ct:493](../../selfhost/ct-ast/backend/emit/Emit.h.ct#L493)、[:531](../../selfhost/ct-ast/backend/emit/Emit.h.ct#L531)（`_self` 发射）；Emit.h.ct 各 vtable / wrapper / Drop 函数发射点 |
-| 状态 | 🔶 部分修复（2026-10-21）：`_self` 未使用已消除（`Emit.h.ct` 在方法体未引用 `self` 时补 `(void)_self;`，与既有 Drop 同法）；未被引用的 vtable / Drop 函数需可达性分析，已记为 [language-spec §6.2](../../docs/language-spec.md) 的已知限制 |
+| 状态 | ✅ 已修复（2026-10-21，分两步）：① `_self` 未使用——方法体未引用 `self` 时补 `(void)_self;`（与既有 Drop 同法）；② 未被引用的 vtable / `Drop_drop`——三处发射点（vtable 前向声明与定义、map 实例 vtable、Drop 函数定义）统一加 `__attribute__((unused))`，与既有 `__ct_init` 的 `__attribute__((constructor))` 同源。复扫 69 个生成物，发射器产出的告警归零 |
 
 ## 现象
 

@@ -5,10 +5,10 @@
 | 源码锚点 | `294d7fb`（本轮评审修复收尾：`84c6677` / `015946a` / `776bfc3` / `294d7fb`） |
 | 对应评审 | [review-2026-10-21-round2](../review-2026-10-21-round2/review-2026-10-21-round2.md) |
 | 范围 | 本轮**未修**的 3 条（SH-9 / SH-10 残余 / SH-12）+ 准备本报告时新发现的 1 条（SH-11 附带缺陷） |
-| 结论 | **没有阻断发布的缺陷**；§5 与 SH-9 已在报告之后修复（见 §8），§3 / §4 维持「可不修」 |
+| 结论 | **没有阻断发布的缺陷**；§2 / §3 / §4 / §5 均已在报告之后修复（见 §8），无遗留项 |
 
-> **处置更新（2026-10-21，紧随本报告）**：用户批准后，§2（SH-9）与 §5（SH-11 附带缺陷）已按本文的方案
-> 落地；§3（SH-10 残余）与 §4（SH-12）维持「可不修」。落点见 §8。
+> **处置更新（2026-10-21，紧随本报告）**：用户批准后，§2（SH-9）、§5（SH-11 附带缺陷）、§4（SH-12，
+> 方案 A）与 §3（SH-10 残余）全部落地。落点见 §8。
 
 ---
 
@@ -23,8 +23,8 @@
 | --- | --- | --- |
 | ~~P1~~ ✅ 已修 | §5 SH-11 附带缺陷（错误位置 + 残留产物） | 见 §8 |
 | ~~P2~~ ✅ 已修 | §2 SH-9 诊断格式统一 | 见 §8 |
-| P3 可不修 | §3 SH-10 残余（未引用 vtable / Drop） | 只是告警，已写进 known limitations |
-| P3 可不修 | §4 SH-12（map 无 examples 正例） | 功能有文档有测试，缺的只是「逛仓库时看得到」 |
+| ~~P3~~ ✅ 已修 | §3 SH-10 残余（未引用 vtable / Drop） | 改用 `__attribute__((unused))`，见 §8 |
+| ~~P3~~ ✅ 已修 | §4 SH-12（map 无 examples 正例） | 方案 A：新例子 + `//@ct-requires:` 跳过标记，见 §8 |
 
 ---
 
@@ -289,7 +289,9 @@ $ tail -2 order.c
 
 | 内容 | 落点 |
 | --- | --- |
-| 诊断通道拆分 + SH-11 位置/产物 | `fix(diagnostics): report source errors with a position` |
+| 诊断通道拆分 + SH-11 位置/产物 | `9050ed2` |
+| SH-12：map 例子 + `//@ct-requires:` 跳过标记 | `e383798` |
+| SH-10 残余：`__attribute__((unused))` | 本文 §8.3 |
 
 ### 8.2 改了什么
 
@@ -312,7 +314,19 @@ $ tail -2 order.c
   行、且不留产物」。
 - `docs/tutorial.md`（中英）区分「源码诊断」与「驱动层错误」两种形态。
 
-### 8.3 验证
+### 8.3 后续修复（同日）
+
+- **§3（SH-10 残余）**：不再走「可达性分析」，改用发射器侧标注——vtable 的前向声明与定义、
+  map 实例 vtable、`Drop_drop` 的定义一律加 `__attribute__((unused))`。之前担心的「扩展写进产物」已经
+  不成立：生成物早就在用 `__attribute__((constructor))`（`__ct_init`），两者同源。
+  属性必须写在**声明符之前**（`static void __attribute__((unused)) f(void)`）——写在参数列表之后时
+  clang 报 `-Wgcc-compat`，这是第一版踩到的坑。
+  复扫 69 个生成物：发射器产出的告警归零，只剩 5 条源文件层面的告警（3 个 leak fixture 的 `p` unused、
+  2 个 sig_mismatch fixture 的 `-Wreturn-type`）。
+- **§4（SH-12）**：方案 A 落地——`examples/08_map_binding/`（两个实例、各一份 vtable）+ `test/run.sh`
+  的 `//@ct-requires: ct-ast` 跳过标记；例子实际由第 8 关的语料等价层编译运行（check-ast 139 → 140）。
+
+### 8.4 诊断形态（§2 / §5 的验证）
 
 ```text
 $ ct order.ct -o order.c
@@ -330,6 +344,9 @@ dup.ct:2:9: error: duplicate trait 'T'
 ctc: 1 error(s) generated
 ```
 
-`bash selfhost/check-all.sh`：八关全绿（`test/run.sh` 118 / pkg 35 / `check-ast` 139 / acceptance
-20 pass 0 pending，`check-all: OK (8 hard gates green)`，EXIT=0）。手工三件套输出不变。
+### 8.5 全量门禁
+
+`bash selfhost/check-all.sh`：八关全绿（`test/run.sh` 118 — examples 层对 08 标 `skip`；pkg 35；
+`check-ast` 140；acceptance 20 pass 0 pending；`check-all: OK (8 hard gates green)`，EXIT=0）。
+手工三件套输出不变。
 
