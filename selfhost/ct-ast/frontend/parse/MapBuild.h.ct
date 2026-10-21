@@ -182,6 +182,7 @@ impl MapBuildOps for MapBuild {
         char tname[MAX_TEXT];
         char rtrait[MAX_TEXT];
         char inst[MAX_TEXT];
+        char wname[MAX_TEXT];
         char msg[MAX_TEXT];
         struct Map *m;
         struct MapBind *b;
@@ -301,7 +302,11 @@ impl MapBuildOps for MapBuild {
             self->sup->lex_next();
             if (self->check_call((char *)b, inst) != 0) return -1;
             if (self->sup->expect(";") != 0) return -1;
-            snprintf(b->wrapper, MAX_TEXT, "%s_%s_%s", inst, rtrait, b->method);
+            /* `wrapper` and `method` are sibling arrays of the same struct, so
+               GCC's -Wrestrict cannot prove they miss each other; build the
+               name aside and copy it in. */
+            snprintf(wname, sizeof wname, "%s_%s_%s", inst, rtrait, b->method);
+            snprintf(b->wrapper, MAX_TEXT, "%s", wname);
             b->ti = ti;
             b->mi = mi;
             m->nb++;
