@@ -397,7 +397,7 @@ echo "== map construct (11.1-11.2) =="
 if "$work/ct-ast" test/ast/13_map_instance/prog.ct -o "$work/mmap.c" \
         >"$work/mmap.out" 2>"$work/mmap.err" \
    && grep -q 'static int uart1_Controller_send(void \*self' "$work/mmap.c" \
-   && grep -q 'static struct Controller_vtbl uart1_Controller_vtable = {' "$work/mmap.c"; then
+   && grep -q 'static struct Controller_vtbl uart1_Controller_vtable __attribute__((unused)) = {' "$work/mmap.c"; then
     ok "map (wrapper + vtable emitted)"
 else
     bad "map emit" "$(cat "$work/mmap.err")"

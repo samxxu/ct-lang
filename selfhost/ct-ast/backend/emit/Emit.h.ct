@@ -328,13 +328,14 @@ impl EmitOps for Emitter {
             si = self->arena->nodes[n].aux;
             tname = self->arena->nodes[n].text2;
             if (strcmp(tname, "Drop") == 0) continue;   /* no vptr, no vtable */
-            fprintf(self->out, "static struct %s_vtbl %s_%s_vtable;\n",
+            fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
                     tname, self->sym->structs[si].name, tname);
         }
         /* a `delete` in a function body runs before the drop definition below */
         for (si = 0; si < self->sym->nstructs; si++)
             if (self->sym->structs[si].uses_drop)
-                fprintf(self->out, "static void %s_Drop_drop(void *self);\n", self->sym->structs[si].name);
+                fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
+                        self->sym->structs[si].name);
         if (self->sym->nstructs) fputs("\n", self->out);
         return 0;
     }
@@ -486,6 +487,7 @@ impl EmitOps for Emitter {
             int si, ti;
             const char *tname;
             const char *sname;
+            const char *mret;
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             si = self->arena->nodes[n].aux;
             tname = self->arena->nodes[n].text2;
@@ -496,8 +498,14 @@ impl EmitOps for Emitter {
                 return self->fail_from(n, "impl of an unknown trait");
             sname = self->arena->nodes[n].text;
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
-                fprintf(self->out, "static %s %s_%s_%s(void *self",
-                        self->arena->nodes[m].text3[0] ? self->arena->nodes[m].text3 : self->arena->nodes[m].text,
+                mret = self->arena->nodes[m].text3[0] ? self->arena->nodes[m].text3 : self->arena->nodes[m].text;
+                fprintf(self->out, "static %s ", mret);
+                /* A drop that nothing deletes is dead code; marking it keeps the
+                   output clean under -Wall without changing what is emitted. The
+                   attribute goes before the declarator: clang rejects the
+                   trailing position on a definition (-Wgcc-compat). */
+                if (strcmp(tname, "Drop") == 0) fputs("__attribute__((unused)) ", self->out);
+                fprintf(self->out, "%s_%s_%s(void *self",
                         self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
@@ -525,7 +533,8 @@ impl EmitOps for Emitter {
                 fputs("}\n\n", self->out);
             }
             if (strcmp(tname, "Drop") != 0) {
-                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable = {\n",
+                /* a trait nothing dispatches leaves the table unreferenced */
+                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
                         tname, self->sym->structs[si].name, tname);
                 u = 0;
                 for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
@@ -548,7 +557,8 @@ impl EmitOps for Emitter {
                 if (self->arena->nodes[n].kind == N_IMPL && self->arena->nodes[n].aux == si
                     && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
             if (has) continue;
-            fprintf(self->out, "static void %s_Drop_drop(void *self) {\n", self->sym->structs[si].name);
+            fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n",
+                    self->sym->structs[si].name);
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n",
                     self->sym->structs[si].name, self->sym->structs[si].name);
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
@@ -605,7 +615,8 @@ impl EmitOps for Emitter {
                 fputs("}\n", self->out);
             }
             if (self->maps[i].nb > 0) {
-                fprintf(self->out, "static struct %s_vtbl %s = {\n",
+                /* an instance nothing boxes leaves its table unreferenced */
+                fprintf(self->out, "static struct %s_vtbl %s __attribute__((unused)) = {\n",
                         self->maps[i].trait, self->maps[i].vtable);
                 for (j = 0; j < self->maps[i].nb; j++) {
                     if (j > 0) fputs(",\n", self->out);
