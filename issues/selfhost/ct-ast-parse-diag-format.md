@@ -6,7 +6,7 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `dde0dda`（2026-10-21） |
 | 文件 | [selfhost/ct-ast/frontend/parse/](../../selfhost/ct-ast/frontend/parse/)、[README.md:68](../../README.md#L68)（英文 [:509](../../README.md#L509)）、[docs/tutorial.md:388](../../docs/tutorial.md#L388)（英文 [:789](../../docs/tutorial.md#L789)）、[docs/glossary.md:81](../../docs/glossary.md#L81)（英文 [:243](../../docs/glossary.md#L243)）、[AGENTS.md:104](../../AGENTS.md#L104) |
-| 状态 | ⬜ 未修复（2026-10-21 复核：解析期与驱动期共用同一个 `errmsg` 缓冲，`cannot open the input file` 之类驱动错误也从这里出；正确定位需要先把两条错误通道分开，属独立议题） |
+| 状态 | ✅ 已修复（2026-10-21，采用方案 1：`ParseSupport` 记录位置 + `fail`/`fail_at`/`fail_driver` 三分；源码诊断统一 `file:line:col: error:`，驱动错误保留 `ctc:`） |
 
 ## 现象
 
