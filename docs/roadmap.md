@@ -728,7 +728,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 2. **顺序 = 先落验收关卡、再逐条补**（消费者驱动：完整缺口清单从编译报错中长出，而非靠读码推断）。
 3. **定位 = AST 版编译器作**新主线**，旧 `selfhost/l1/ctc.ct`（L1）打 tag 归档**；出口口径由 **byte-identical** 换成 **行为等价**（同输入、同运行输出，不要求产物逐字节相同）。
 
-**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，退出码仅 `REGRESSION` 非零）。基线 `BASELINE` 现含**全部 19 项**（`p01`–`p17` + `ast_spike` + `ast_parse_spike`），即当前**19 pass / 0 pending / 0 regression**；第 20 个探针 `p18_struct_array_field` 按决定刻意留在 PENDING。**默认探针目标为 L2**（L0→L1→L2 链）——`ctc.c` 冻结、能力只落 CT 侧，故只有显式 `CT=<l0>` 才探 L0，其 PENDING 属预期而非失败。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。
+**关卡**：[test/acceptance/run.sh](../test/acceptance/run.sh)（`PASS` / `PENDING` / `NEW PASS` / `REGRESSION` 四态，退出码仅 `REGRESSION` 非零）。基线 `BASELINE` 现含**全部 20 项**（`p01`–`p18` + `ast_spike` + `ast_parse_spike`），即当前**20 pass / 0 pending / 0 regression**；`p18_struct_array_field` 当时按决定留在 PENDING，2026-10-21 起已晋升基线（ct-ast 实现逐元素 vptr 写入，L2 仍不支持，故以 ct-ast 为默认目标）。**默认探针目标为 ct-ast**（L0→L1→L2→ct-ast 链）——`ctc.c` 冻结、能力只落 CT 侧，故只有显式 `CT=<l0>` / `CT=<l2>` 才分别探 L0 / L2。**故意不进 `./test/run.sh`**——`run.sh` 的绿必须继续意味着「编译器正确」，而非「编译器完备」。
 
 **落地记录**：
 
