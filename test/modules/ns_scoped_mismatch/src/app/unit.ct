@@ -1,0 +1,10 @@
+/* directory = namespace applies to the file-scoped form too: this unit sits in
+   `app/` but declares `other`, so --ns-root must reject it */
+namespace other;
+
+pub int ping(int x);
+
+int ping(int x)
+{
+    return x;
+}

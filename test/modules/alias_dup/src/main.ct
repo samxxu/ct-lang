@@ -1,0 +1,8 @@
+/* one alias may not name two different imports */
+import mod::alpha::Alpha as T;
+import mod::beta::Beta as T;
+
+int main(void)
+{
+    return 0;
+}

@@ -1,0 +1,5 @@
+namespace mod;
+
+pub struct Alpha {
+    int a;
+};

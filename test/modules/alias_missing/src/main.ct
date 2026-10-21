@@ -1,0 +1,7 @@
+/* the unit exports `Alpha`, not `Nope`: a by-name import must name something */
+import mod::alpha::Nope as N;
+
+int main(void)
+{
+    return 0;
+}

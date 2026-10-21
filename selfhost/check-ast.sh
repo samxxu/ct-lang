@@ -455,6 +455,33 @@ elif grep -q "^ctc: " "$work/mincm.err"; then
 else
     bad "inc_missing" "no diagnostic on stderr"
 fi
+if "$work/ct-ast" build --ns-root test/modules/alias_dup/src \
+        test/modules/alias_dup/src/main.ct -o "$work/mod-bad" \
+        >"$work/madup.out" 2>"$work/madup.err"; then
+    bad "alias_dup" "expected a non-zero exit"
+elif grep -q "one alias names two imports" "$work/madup.err"; then
+    ok "alias_dup (one alias, two imports)"
+else
+    bad "alias_dup" "no alias diagnostic: $(cat "$work/madup.err")"
+fi
+if "$work/ct-ast" build --ns-root test/modules/alias_missing/src \
+        test/modules/alias_missing/src/main.ct -o "$work/mod-bad" \
+        >"$work/mamiss.out" 2>"$work/mamiss.err"; then
+    bad "alias_missing" "expected a non-zero exit"
+elif grep -q "does not export that name" "$work/mamiss.err"; then
+    ok "alias_missing (by-name import of an unknown name)"
+else
+    bad "alias_missing" "no alias diagnostic: $(cat "$work/mamiss.err")"
+fi
+if "$work/ct-ast" build --ns-root test/modules/ns_scoped_mismatch/src \
+        test/modules/ns_scoped_mismatch/src/app/unit.ct -o "$work/mod-bad" \
+        >"$work/mnsm.out" 2>"$work/mnsm.err"; then
+    bad "ns_scoped_mismatch" "expected a non-zero exit"
+elif grep -q "does not match the directory" "$work/mnsm.err"; then
+    ok "ns_scoped_mismatch (file-scoped namespace vs --ns-root)"
+else
+    bad "ns_scoped_mismatch" "no namespace diagnostic: $(cat "$work/mnsm.err")"
+fi
 
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
