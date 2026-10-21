@@ -1,0 +1,6 @@
+/* the block form is gone: a namespace must be file-scoped */
+namespace demo {
+
+pub int ping(int x);
+
+}

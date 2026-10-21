@@ -319,8 +319,8 @@ impl ParseDeclOps for Parser {
         char prefix[MAX_TEXT];
         char save[MAX_TEXT];
         size_t np, npre;
-        int n;
         (void)self;
+        (void)prog;
 
         self->sup->lex_next();
         np = 0;
@@ -351,35 +351,15 @@ impl ParseDeclOps for Parser {
             break;
         }
         if (!self->sym->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
-        /* File-scoped form: `namespace A::B;` holds for the rest of the unit and
-           carries no closing brace; the module layer resets the prefix per unit. */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
-            self->sup->lex_next();
-            snprintf(save, sizeof save, "%s", self->sym->ns);
-            if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
-                return self->sup->fail("namespace is too long");
-            return 0;
-        }
-        if (self->sup->expect("{") != 0) return -1;
+        /* Only the file-scoped form is accepted: a block would let one unit
+           declare several namespaces, which the per-unit prefix and the
+           directory check both assume away. */
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ";") != 0)
+            return self->sup->fail("a namespace is file-scoped: write 'namespace A::B;'");
+        self->sup->lex_next();
         snprintf(save, sizeof save, "%s", self->sym->ns);
         if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
             return self->sup->fail("namespace is too long");
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-            if (self->lex->tok == T_PP) {
-                n = self->sup->new_node(N_PP);
-                if (n < 0) return -1;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
-                if (self->append_node(prog, n) != 0) return -1;
-                self->sup->lex_next();
-                continue;
-            }
-            n = self->top_decl(0);
-            if (n == NO_NODE) continue;
-            if (n < 0) return -1;
-            if (self->append_node(prog, n) != 0) return -1;
-        }
-        if (self->sup->expect("}") != 0) return -1;
-        snprintf(self->sym->ns, sizeof self->sym->ns, "%s", save);
         return 0;
     }
 

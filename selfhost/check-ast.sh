@@ -482,6 +482,14 @@ elif grep -q "does not match the directory" "$work/mnsm.err"; then
 else
     bad "ns_scoped_mismatch" "no namespace diagnostic: $(cat "$work/mnsm.err")"
 fi
+if "$work/ct-ast" build test/modules/ns_block/src/main.ct -o "$work/mod-bad" \
+        >"$work/mnsb.out" 2>"$work/mnsb.err"; then
+    bad "ns_block" "expected a non-zero exit"
+elif grep -q "a namespace is file-scoped" "$work/mnsb.err"; then
+    ok "ns_block (the block form is rejected)"
+else
+    bad "ns_block" "no namespace diagnostic: $(cat "$work/mnsb.err")"
+fi
 
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="

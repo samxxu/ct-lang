@@ -1,4 +1,4 @@
-namespace b {
+namespace b;
+
 pub int ping(int x);
 int ping(int x) { return x; }
-}

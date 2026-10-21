@@ -4,7 +4,7 @@
 
 #line 1 "test/modules/ns_dir/src/hal/uart.ct"
 /* the directory under --ns-root names the namespace: src/hal/ -> `hal` */
+#line 3 "test/modules/ns_dir/src/hal/uart.ct"
 
 
 int ping(int x) { return x + 1; }
-
