@@ -277,6 +277,19 @@ else
     bad "alias" "$(cat "$work/malias.err" "$work/malias.cc" "$work/malias.stdout")"
 fi
 
+rm -rf "$work/mod-nsf"
+mkdir -p "$work/mod-nsf"
+if "$work/ct-ast" build --ns-root test/modules/ns_funcs/src \
+        test/modules/ns_funcs/src/main.ct -o "$work/mod-nsf" \
+        >"$work/mnsf.out" 2>"$work/mnsf.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/mod-nsf"/*.c -o "$work/mnsf.bin" 2>"$work/mnsf.cc" \
+   && "$work/mnsf.bin" >"$work/mnsf.stdout" 2>&1 \
+   && cmp -s "$work/mnsf.stdout" test/modules/ns_funcs/expected.out; then
+    ok "ns_funcs (pub functions mangled by namespace; a::size and b::size coexist)"
+else
+    bad "ns_funcs" "$(cat "$work/mnsf.err" "$work/mnsf.cc" "$work/mnsf.stdout")"
+fi
+
 rm -rf "$mod-inc"
 mkdir -p "$mod-inc"
 if "$work/ct-ast" build test/modules/inc/main.ct -I test/modules/inc/extra \
@@ -491,6 +504,15 @@ elif grep -q "a namespace is file-scoped" "$work/mnsb.err"; then
     ok "ns_block (the block form is rejected)"
 else
     bad "ns_block" "no namespace diagnostic: $(cat "$work/mnsb.err")"
+fi
+if "$work/ct-ast" build --ns-root test/modules/ns_fn_ambiguous/src \
+        test/modules/ns_fn_ambiguous/src/main.ct -o "$work/mod-bad" \
+        >"$work/mnfa.out" 2>"$work/mnfa.err"; then
+    bad "ns_fn_ambiguous" "expected a non-zero exit"
+elif grep -q "exported by more than one namespace" "$work/mnfa.err"; then
+    ok "ns_fn_ambiguous (an unqualified call to a doubly exported name is refused)"
+else
+    bad "ns_fn_ambiguous" "no ambiguity diagnostic: $(cat "$work/mnfa.err")"
 fi
 
 echo

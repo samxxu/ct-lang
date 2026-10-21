@@ -54,7 +54,12 @@ falsify that comment and lengthen every user-facing command.
 block form is rejected: `a namespace is file-scoped`). `import a::b::C;` pulls in the unit `a::b::C`;
 an upper-case file name (units are named after their main type) also makes that type usable short.
 `import a::b::C::D as E;` brings one exported name in under `E`, for this file's source only —
-emission still uses `<ns>_<Name>`.
+emission still uses `<ns>_<Name>`. A **`pub` function takes the same prefix the types do**
+(`namespace runtime::arena;` + `pub struct Arena *arena_get(void);` → `runtime_arena_arena_get`),
+while a `static` helper and a root-scope function keep the plain name; the symbol table is keyed by
+that C spelling, so two namespaces may each export the same name. A bare call resolves in the unit's
+own namespace first, then the root, then the only row left with that name — and is refused when two
+namespaces export it.
 
 ### Scripts (the gates)
 

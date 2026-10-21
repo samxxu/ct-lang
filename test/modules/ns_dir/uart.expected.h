@@ -5,5 +5,5 @@
    exported types; the matching .c includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-int ping(int x);
+int hal_ping(int x);
 #endif /* UART_H */

@@ -1,0 +1,10 @@
+import a::one;
+import b::two;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d %d\n", one(), two());
+    return 0;
+}

@@ -7,4 +7,4 @@
 #line 3 "test/modules/ns_dir/src/hal/uart.ct"
 
 
-int ping(int x) { return x + 1; }
+int hal_ping(int x) { return x + 1; }

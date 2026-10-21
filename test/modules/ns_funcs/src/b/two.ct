@@ -1,0 +1,13 @@
+namespace b;
+
+pub int size(void);
+int size(void)
+{
+    return 2;
+}
+
+pub int two(void);
+int two(void)
+{
+    return size() + 20;
+}

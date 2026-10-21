@@ -618,8 +618,17 @@ impl ExprOps for Expr {
                 int fi;
                 args = self->parse_args();
                 if (args < 0) return -1;
-                fi = self->sym->find_func(self->arena->nodes[n].text2);
+                self->sym->errmsg[0] = 0;
+                fi = self->sym->resolve_func(self->arena->nodes[n].text2);
+                if (fi < 0) {
+                    const char *why = self->sym->last_error();
+                    if (why[0]) return self->sup->fail(why);
+                }
+                /* the call graph keeps the name the source wrote */
                 if (fi >= 0 && self->record_call(self->arena->nodes[n].text2, id_line) != 0) return -1;
+                /* the emitted call must spell the definition's C name */
+                if (fi >= 0)
+                    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);
                 if (fi >= 0 && args > 0) {
                     int cur, prev, k, first_arg;
                     cur = args;

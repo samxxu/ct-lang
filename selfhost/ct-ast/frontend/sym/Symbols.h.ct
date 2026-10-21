@@ -32,6 +32,9 @@
 namespace frontend::sym;
 pub struct Fn {
     char name[160];
+    /* the C spelling: a `pub` function inside a namespace is mangled with its
+       prefix, a static helper keeps the plain name */
+    char cname[160];
     char ret[160];
     char ptype[16][160];
     /* array dims are kept apart from the type: the prototype must spell them
@@ -98,7 +101,11 @@ pub trait SymbolOps {
     int  declare_var(const char *name, const char *type);
     int  find_var(const char *name);
     int  var_type(const char *name, char *out, int cap);
-    int  find_func(const char *name);
+    int  find_func(const char *cname);
+    /* The row a plain call names: the unit's own namespace first, then the
+       root. Fails when the name is exported only from another namespace, which
+       an unqualified call cannot reach. */
+    int  resolve_func(const char *name);
     int  find_type(const char *name);
     int  add_type(const char *name, int kind);
     int  find_struct(const char *name);
@@ -214,13 +221,45 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
-    int find_func(const char *name)
+    /* Rows are keyed by the C spelling, not by the source name: two namespaces
+       may each export a `get`, and the mangled names keep them apart. */
+    int find_func(const char *cname)
     {
         int i;
         (void)self;
         for (i = 0; i < self->nfunc; i++)
-            if (strcmp(self->funcs[i].name, name) == 0) return i;
+            if (strcmp(self->funcs[i].cname, cname) == 0) return i;
         return -1;
+    }
+
+    /* A plain call names the enclosing namespace first, then the root, then the
+       only row left with that source name -- the last step keeps the existing
+       tree compiling, where a helper lives in one namespace and is called from
+       another. Two namespaces exporting the same name make that fallback
+       genuinely ambiguous, so it is refused. */
+    int resolve_func(const char *name)
+    {
+        char full[160];
+        int i, hits, uniq;
+        (void)self;
+
+        if (self->ns[0] && snprintf(full, sizeof full, "%s%s", self->ns, name) < (int)sizeof full) {
+            i = self->find_func(full);
+            if (i >= 0) return i;
+        }
+        i = self->find_func(name);
+        if (i >= 0) return i;
+        hits = 0;
+        uniq = -1;
+        for (i = 0; i < self->nfunc; i++)
+            if (strcmp(self->funcs[i].name, name) == 0) {
+                uniq = i;
+                hits++;
+                if (hits > 1) break;
+            }
+        if (hits > 1)
+            return self->fail("that function is exported by more than one namespace");
+        return uniq;
     }
 
     int find_type(const char *name)

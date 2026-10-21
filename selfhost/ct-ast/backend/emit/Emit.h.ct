@@ -291,7 +291,7 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (self->sym->funcs[i].is_static) fputs("static ", self->out);
-        fprintf(self->out, "%s %s(", self->sym->funcs[i].ret, self->sym->funcs[i].name);
+        fprintf(self->out, "%s %s(", self->sym->funcs[i].ret, self->sym->funcs[i].cname);
         if (self->sym->funcs[i].nparams == 0) {
             fputs("void", self->out);
         } else {

@@ -1,0 +1,7 @@
+namespace a;
+
+pub int size(void);
+int size(void)
+{
+    return 1;
+}

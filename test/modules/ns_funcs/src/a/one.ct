@@ -1,0 +1,15 @@
+/* two namespaces may both export `size`: the mangled C names keep them apart,
+   and a call inside namespace `a` resolves there first */
+namespace a;
+
+pub int size(void);
+int size(void)
+{
+    return 1;
+}
+
+pub int one(void);
+int one(void)
+{
+    return size() + 10;
+}

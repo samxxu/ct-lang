@@ -1,0 +1,9 @@
+/* `size` is exported by two namespaces, so a plain call from the root cannot
+   pick one: the compiler has to refuse it */
+import a::one;
+import b::two;
+
+int main(void)
+{
+    return size();
+}

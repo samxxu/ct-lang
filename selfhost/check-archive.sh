@@ -169,6 +169,8 @@ leak_path_json
 leak_method
 ns_dir
 ns_dir_mismatch
+ns_funcs
+ns_fn_ambiguous
 map
 map_noarg
 map_file

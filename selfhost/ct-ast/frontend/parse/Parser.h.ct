@@ -502,7 +502,8 @@ impl ParseOps for Parser {
             return -1;
         }
         snprintf(self->arena->nodes[f].text, MAX_TEXT, "%s", ret);
-        snprintf(self->arena->nodes[f].text2, MAX_TEXT, "%s", name);
+        /* the C spelling only: `cur_func` and the map keep the short name */
+        snprintf(self->arena->nodes[f].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);
         self->arena->nodes[f].aux = is_static;
         self->arena->nodes[f].d = is_pub;
         self->arena->nodes[f].line = func_line;

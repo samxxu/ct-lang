@@ -9,6 +9,6 @@
 #include <stdio.h>
 
 int main(void) {
-    printf("%d %d\n", ping(4), twice(3));
+    printf("%d %d\n", hal_ping(4), twice(3));
     return 0;
 }

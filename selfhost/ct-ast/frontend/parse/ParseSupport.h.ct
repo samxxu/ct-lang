@@ -147,9 +147,23 @@ impl SupportOps for ParseSupport {
 
     int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
-        int i, k, p;
+        char cname[MAX_TEXT];
+        int i, k, p, pub_now;
 
-        i = self->sym->find_func(name);
+        /* Rows are keyed by the C spelling, so the declaration has to find the
+           row that belongs to it first: the namespace-prefixed spelling (a
+           `pub` function) is tried before the plain one (a static helper).
+           `pub` sticks to the row -- a prototype may carry it while the
+           definition repeats the signature without it, and both must spell the
+           same C name -- so a prefixed row is found from either line. */
+        i = -1;
+        cname[0] = 0;
+        if (self->sym->ns[0]
+            && snprintf(cname, sizeof cname, "%s%s", self->sym->ns, name) < (int)sizeof cname)
+            i = self->sym->find_func(cname);
+        if (i < 0 && !is_pub) i = self->sym->find_func(name);
+        pub_now = is_pub;
+        if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
         if (i < 0) {
             if (self->sym->nfunc >= MAX_FUNCS) return self->fail("too many functions");
             i = self->sym->nfunc;
@@ -158,7 +172,14 @@ impl SupportOps for ParseSupport {
             self->sym->funcs[i].is_pub = 0;
             self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
         }
-        if (is_pub) self->sym->funcs[i].is_pub = 1;
+        if (pub_now) self->sym->funcs[i].is_pub = 1;
+        if (pub_now && self->sym->ns[0]) {
+            if (snprintf(cname, sizeof cname, "%s%s", self->sym->ns, name) >= (int)sizeof cname)
+                return self->fail("function name is too long");
+        } else {
+            snprintf(cname, sizeof cname, "%s", name);
+        }
+        snprintf(self->sym->funcs[i].cname, MAX_TEXT, "%s", cname);
         snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
         self->sym->funcs[i].is_static = is_static;
         self->sym->funcs[i].nparams = 0;
