@@ -36,6 +36,7 @@
 | DOC-13 | Medium | phase10 的 D44 写两态（实为三态）、PkgOps 写 28（实为 29） | [phase10-identity-and-counts.md](docs/phase10-identity-and-counts.md) |
 | DOC-14 | Low | 关卡脚本头注释过期：20 vs 21 断言、缺 11.x / 12.x | [gate-comment-drift.md](docs/gate-comment-drift.md) |
 | DOC-15 | Medium | issues / reports 指向已消失的 `selfhost/ast/**`、`selfhost/src/**` | [stale-selfhost-ast-paths.md](docs/stale-selfhost-ast-paths.md) |
+| DOC-16 | Medium | 「零警告」只在 Apple clang 下成立，GCC 会在冻结层报 `-Wformat-truncation` | 见文末「容器复验」（2026-10-21） |
 
 ### `testing/` —— 测试覆盖度
 
@@ -213,6 +214,24 @@
 
 另有三条**非缺陷澄清**（见报告 §5）：跨命名空间裸调用被拒符合提交意图；驱动诊断形态 `ctc: line N:`
 与 AGENTS §4 的 `file:line:col: error:` 不一致属独立议题；`pre-ast-mainline` tag 位置偏早属仓库元数据问题。
+
+## 容器复验（2026-10-21，提交后）
+
+在 podman 里用 Debian 12 + gcc 12 从干净 clone 重跑八关，暴露两个平台相关的问题：
+
+| 发现 | 证据 | 处理 |
+| --- | --- | --- |
+| **BUG-1**：`snprintf` 源与目标同缓冲（未定义行为），gcc 下生成出残缺 C | `backend/emit/Init.h.ct` 的 `emit_array_field_vptrs` 里 `snprintf(sub, sizeof sub, "%s[__ct_j%d]", sub, depth)`；glibc 会先清空目标，基址丢失，产出 `[__ct_j0].__expr_vptr = …`（缺 `d.ab`），`p18_struct_array_field` 由 PASS 变 REGRESSION | ✅ 改为先写中间缓冲 `next` 再拷回；容器内重跑输出 `3`，host `check-ast` 136/136，golden 与不动点未变 |
+| **DOC-16**：`零警告` 只在 Apple clang 下成立 | gcc 12 在 `-Wall -Wextra` 下对 L0 / L1 / L2 报一大批 `-Wformat-truncation`（误报），第 2/3/4/5 关在 Linux 上必然红 | ✅ AGENTS §6（中英）与 README 声明基准编译器是 Apple clang 并给出 `-Wno-format-truncation`；`check-all.sh` 检测到 GCC 时自动加一层只追加该开关的 wrapper，冻结层代码不动 |
+| **DOC-17**：两个探针依赖 BSD libc | `cli/short-read`（把目录当输入）与 `cli/tmpfile-cannot-create`（`$TMPDIR` 不可用）在 glibc 下分别读成 0 字节与退回 `P_tmpdir`，Linux 上必然红；`check-archive` 的 `cli_short_read` 同源 | ✅ 三处在非 Darwin 上以 `skip` 呈现（不计数、不隐藏回归），AGENTS §6 与 README 记录 |
+| **BUG-2**：`-Wrestrict` 疑似重叠 | gcc 对 `snprintf(b->wrapper, MAX_TEXT, "%s_%s_%s", inst, rtrait, b->method)` 报「argument 6 overlaps destination」，因两数组是同一 struct 的兄弟字段 | ✅ 先拼进局部 `wname` 再拷入；不改用 `-Wno-restrict`，以免掩盖 BUG-1 那一类真问题 |
+
+结论：仓库本身**可发布**（macOS 干净 clone 与 Linux 容器各跑一遍八关，均绿）；BUG-1 是本次复验的主要收获，其余三条是平台差异的收口。
+
+验证（2026-10-21，容器）：`podman` + Debian 12 / gcc 12 / arm64 上 `check-all: OK (8 hard gates green)`——
+`test/run.sh` 116 passed / 0 failed（2 项 BSD libc 探针 skip）、`check-archive` 46 designed / 0 regression
+（`cli_short_read` skip）、`check-ast` 136、`test/pkg` 35、`check-grammar.py` 21。
+macOS（Apple clang）侧同期复跑：`./test/run.sh` 118 passed / 0 failed。
 
 
 

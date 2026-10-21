@@ -85,6 +85,8 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 
 此后 `ct compile <in.ct>` / `ct <in.ct>` 与旧写法 `ctc <in.ct>` 等价，`ct build … -o <dir>` 走多文件模式；`ct -v` 打印 `ct v0.12.0`，`ctc -v` 仍打印 `ctc v0.12.0`。L0 种子（`ctc.c`）本身仍只叫 `ctc`。完整自举链见 [docs/design/bootstrap.md](docs/design/bootstrap.md) 与 `bash selfhost/ct-tour.sh`。
 
+> **用 GCC ≥ 8 构建时请追加 `-Wno-format-truncation`**。上面的「零警告」以 Apple clang（macOS 默认 `cc`）为基准；GCC 在 `-Wall -Wextra` 下额外启用 `-Wformat-truncation`，会对冻结的 L0 / L1 / L2 里一批 `snprintf` 报疑似截断（误报，源码不改）。`bash selfhost/check-all.sh` 会自动处理；另有两个依赖 BSD libc 的探针在 Linux 上显示为 `skip`。细则见 [AGENTS.md](AGENTS.md) §6。
+
 ### 3. 语法与展开规则
 
 | 输入（`.ct`） | 输出（`.c`） |
@@ -482,6 +484,12 @@ ln -s ct "$OUT/ctc"                                          # the ctc compatibi
 ```
 
 From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, and `ct build … -o <dir>` is multi-file mode; `ct -v` prints `ct v0.12.0` while `ctc -v` still prints `ctc v0.12.0`. The L0 seed (`ctc.c`) itself stays named `ctc`. See [docs/design/bootstrap.md](docs/design/bootstrap.md) and `bash selfhost/ct-tour.sh` for the whole chain.
+
+> **Building with GCC ≥ 8? Add `-Wno-format-truncation`.** The "zero warnings" claim above is
+> measured with Apple clang (macOS's default `cc`); GCC enables `-Wformat-truncation` on top of
+> `-Wall -Wextra` and reports suspected truncation across the frozen L0 / L1 / L2 sources (false
+> positives, the sources are not changed). `bash selfhost/check-all.sh` applies it automatically;
+> two probes that need a BSD libc show up as `skip` on Linux. Details in [AGENTS.md](AGENTS.md) §6.
 
 ### 3. Syntax and expansion rules
 

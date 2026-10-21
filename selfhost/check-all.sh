@@ -30,6 +30,21 @@ set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
+# Under -Wall -Wextra, GCC >= 8 also enables -Wformat-truncation and fires on a
+# batch of snprintf calls in the frozen L0/L1/L2 sources; Apple clang, the
+# baseline compiler for "zero warnings", does not. Wrap GCC so the gates mean the
+# same thing on both, without editing the frozen layers (AGENTS.md section 6).
+tmpcc="$(mktemp -d)" || exit 1
+trap 'rm -rf "$tmpcc"' EXIT HUP INT TERM
+if "${CC:-cc}" --version 2>/dev/null | grep -q 'Free Software Foundation'; then
+    ccbin="$(command -v "${CC:-cc}")" || ccbin="${CC:-cc}"
+    printf '#!/bin/sh\nexec "%s" -Wno-format-truncation "$@"\n' "$ccbin" > "$tmpcc/cc-gcc"
+    chmod +x "$tmpcc/cc-gcc"
+    CC="$tmpcc/cc-gcc"
+    export CC
+    printf 'CC is GCC: wrapping it with -Wno-format-truncation (AGENTS.md section 6)\n'
+fi
+
 fail=0
 nrun=0
 

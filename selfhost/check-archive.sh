@@ -483,6 +483,12 @@ for fdir in test/modules/*/; do
     [ -d "$fdir" ] || continue
     fdir="${fdir%/}"
     name="${fdir#test/modules/}"
+    # `cli_short_read` compiles `.`: BSD libc reports a directory's size and then
+    # short-reads it, while glibc reports zero and succeeds. Keep it on macOS.
+    if [ "$name" = cli_short_read ] && [ "$(uname -s)" != Darwin ]; then
+        printf '  skip  %s (needs a BSD libc)\n' "$name"
+        continue
+    fi
     if [ -f "$fdir/compile.args" ]; then mode=compile
     elif [ -f "$fdir/build.args" ]; then mode=build
     else continue; fi

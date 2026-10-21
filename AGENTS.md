@@ -126,6 +126,24 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 # Hello Jerry, I'm Tom
 ```
 
+> **「零警告」的基准编译器是 Apple clang**（macOS 默认 `cc`）。GCC ≥ 8 在
+> `-Wall -Wextra` 下额外启用 `-Wformat-truncation`，会对 L0 / L1 / L2 里一大批
+> 「`snprintf(dst, sizeof dst, "%s…", 至多 255 字节的源)`」报疑似截断——这些是误报
+> （源串实际不会那么长），但三层都是冻结层，不为消警告而改。因此在 GCC 上核实零警告时，
+> 追加 `-Wno-format-truncation`：
+>
+> ```bash
+> gcc -Wall -Wextra -std=c99 -Wno-format-truncation selfhost/l0/ctc.c -o ctc
+> ```
+>
+> `selfhost/check-all.sh` 已自动做这件事：检测到 `CC` 是 GCC 时会包一层只追加该开关的
+> wrapper 再传给各子关卡，所以 Linux / 容器里跑关卡不必手工加参数。clang 不受影响。
+>
+> 另有两个探针依赖 **BSD libc**，在 Linux 上以 `skip` 呈现（不计入失败，也不隐藏回归）：
+> `test/run.sh` 的 `cli/short-read` / `cli/tmpfile-cannot-create` 与 `check-archive` 的
+> `cli_short_read`——BSD 下「把目录当输入」会短读、`tmpfile()` 在 `$TMPDIR` 不可用时会失败，
+> 而 glibc 分别把目录读成 0 字节、退回 `P_tmpdir`。这两条只在 macOS 上真正执行。
+
 补充要求：
 
 - **自动化测试**：`./test/run.sh` 必须全绿（退出码 0）。**八层覆盖**：ctc 自身零警告构建、
@@ -402,6 +420,27 @@ gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc                # zero warnin
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c         # silent (no errors)
 gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter   # prints two lines
 ```
+
+> **The baseline compiler for "zero warnings" is Apple clang** (macOS's default `cc`). Under
+> `-Wall -Wextra` GCC ≥ 8 also enables `-Wformat-truncation`, which fires on a large batch of
+> `snprintf(dst, sizeof dst, "%s…", source-of-up-to-255-bytes)` calls in L0 / L1 / L2 — false
+> positives (those sources never actually get that long), but all three layers are frozen, so the
+> code is not changed to silence them. To verify zero warnings under GCC, add
+> `-Wno-format-truncation`:
+>
+> ```bash
+> gcc -Wall -Wextra -std=c99 -Wno-format-truncation selfhost/l0/ctc.c -o ctc
+> ```
+>
+> `selfhost/check-all.sh` already does this: when `CC` is GCC it wraps it in a shim that appends
+> exactly that switch before handing it to the sub-gates, so Linux and containers need no manual
+> flags. clang is unaffected.
+>
+> Two probes depend on **BSD libc** and show up as `skip` on Linux (they neither fail nor hide a
+> regression): `cli/short-read` / `cli/tmpfile-cannot-create` in `test/run.sh` and
+> `cli_short_read` in `check-archive` — under BSD a directory input short-reads and `tmpfile()`
+> fails when `$TMPDIR` is unusable, while glibc reads the directory as zero bytes and falls back to
+> `P_tmpdir`. They only run for real on macOS.
 
 Also required:
 

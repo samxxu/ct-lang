@@ -41,6 +41,14 @@ failed_names=""
 
 ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
 bad() { fail=$((fail + 1)); failed_names="$failed_names\n  - $1: $2"; printf '  FAIL  %s: %s\n' "$1" "$2"; }
+skip() { printf '  skip  %s: %s\n' "$1" "$2"; }
+
+# Two driver failure sites are only reachable through libc behaviour BSD has and
+# glibc does not: reading a directory yields a short read there but a zero-length
+# file here, and tmpfile() falls back to P_tmpdir when $TMPDIR is unusable. The
+# probes stay on macOS and are skipped elsewhere (AGENTS.md section 6).
+bsd_libc=0
+[ "$(uname -s)" = Darwin ] && bsd_libc=1
 
 echo "cc: $CC"
 
@@ -389,7 +397,11 @@ cli_expect line-removed nonzero "unknown option" --line test/cases/01_trait_basi
 # the output write is a failure site: the .c cannot be created. The directory
 # stays inside $TMP so no sandbox rule has to be relaxed for a test.
 cli_expect compile-cannot-write nonzero "cannot write" compile test/cases/21_empty_init_iface.ct -o "$TMP/no-such-dir/x.c"
-cli_expect short-read nonzero "short read" "$TMP"
+if [ "$bsd_libc" = 1 ]; then
+    cli_expect short-read nonzero "short read" "$TMP"
+else
+    skip "cli/short-read" "a directory reads as zero bytes under glibc, not a short read"
+fi
 
 # two more reachable driver failure sites (2026-10-17 audit): a non-seekable
 # input — a pipe — makes read_file's fseek/ftell fail (`cannot read`), and an
@@ -403,12 +415,16 @@ else
     bad "cli/cannot-read" "wrong message: $(cat "$TMP/cli.err")"
 fi
 
-if TMPDIR=/nonexistent/zzz "$TMP/ctc" test/cases/21_empty_init_iface.ct -o "$TMP/tmpdir.c" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
-    bad "cli/tmpfile-cannot-create" "expected a non-zero exit"
-elif grep -Fq "cannot create a temporary file" "$TMP/cli.err"; then
-    ok "cli/tmpfile-cannot-create"
+if [ "$bsd_libc" = 1 ]; then
+    if TMPDIR=/nonexistent/zzz "$TMP/ctc" test/cases/21_empty_init_iface.ct -o "$TMP/tmpdir.c" >"$TMP/cli.out" 2>"$TMP/cli.err"; then
+        bad "cli/tmpfile-cannot-create" "expected a non-zero exit"
+    elif grep -Fq "cannot create a temporary file" "$TMP/cli.err"; then
+        ok "cli/tmpfile-cannot-create"
+    else
+        bad "cli/tmpfile-cannot-create" "wrong message: $(cat "$TMP/cli.err")"
+    fi
 else
-    bad "cli/tmpfile-cannot-create" "wrong message: $(cat "$TMP/cli.err")"
+    skip "cli/tmpfile-cannot-create" "glibc's tmpfile() falls back to P_tmpdir when \$TMPDIR is unusable"
 fi
 
 # the header write is a separate failure site from the .c write above: make the
