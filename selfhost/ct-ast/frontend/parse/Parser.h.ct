@@ -868,7 +868,7 @@ impl ParseOps for Parser {
     int parse_impl(void)
     {
         int ti, si, node, mnode, params, body, tail, impl_line;
-        int mline, nimpl, tm_i, k2;
+        int mline, nimpl, tm_i, k2, brace_line, brace_col, found;
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
         char rtrait[MAX_TEXT];
@@ -914,6 +914,8 @@ impl ParseOps for Parser {
             snprintf(stype, sizeof stype, "struct %s", rstruct);
         else
             snprintf(stype, sizeof stype, "%s", rstruct);
+        brace_line = self->lex->tokline;
+        brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->expect("{") != 0) return -1;
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
@@ -1002,6 +1004,27 @@ impl ParseOps for Parser {
             tail = mnode;
         }
         if (self->sup->expect("}") != 0) return -1;
+        /* A missing method would leave a NULL slot in the vtable and crash on
+           the first call; L0 and L2 reject the same input up front, so accepting
+           it here would be a regression against our own oracle. Reported at the
+           impl's `{` -- the position and the wording L2 uses. The error counter
+           makes `parse_program` drop the unit, so no C is emitted. */
+        if (ti >= 0) {
+            for (tm_i = 0; tm_i < self->sym->traits[ti].nm; tm_i++) {
+                found = 0;
+                for (k2 = self->arena->nodes[node].a; k2 >= 0; k2 = self->arena->nodes[k2].next)
+                    if (strcmp(self->arena->nodes[k2].text2, self->sym->traits[ti].m[tm_i].name) == 0) {
+                        found = 1;
+                        break;
+                    }
+                if (!found) {
+                    char emsg[MAX_TEXT];
+                    snprintf(emsg, sizeof emsg, "trait method '%s' is not implemented for struct '%s'",
+                             self->sym->traits[ti].m[tm_i].name, sname);
+                    tool::diag::ct_sem_error(brace_line, brace_col, emsg, self->mem->path);
+                }
+            }
+        }
         return node;
     }
 

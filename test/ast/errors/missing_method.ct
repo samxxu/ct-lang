@@ -1,0 +1,18 @@
+/* A trait with two methods but an impl for only one: a NULL vtable slot would
+   crash on the first `b()` call, so this must be rejected up front (SH-8). */
+#include <stdio.h>
+
+trait G { void a(); void b(); }
+
+struct P { int x; } use G;
+
+impl G for P {
+    void a() { printf("a\n"); }
+}
+
+int main(void)
+{
+    struct P p;
+    p.b();
+    return 0;
+}

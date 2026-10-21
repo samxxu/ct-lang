@@ -550,18 +550,33 @@ fi
 
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
+# Two positioned shapes: a parse failure (`ctc: line N: ...`) and a semantic one
+# (`file:line:col: error: ...`). Both name a location, so either is acceptable
+# here; cases with a more specific requirement assert it on their own.
 for f in test/ast/errors/*.ct; do
     [ -f "$f" ] || continue
     b="$(basename "$f" .ct)"
     if "$work/ct-ast" "$f" -o "$work/bad-$b.c" \
             >"$work/bad-$b.out" 2>"$work/bad-$b.err"; then
         bad "$b" "expected a non-zero exit"
-    elif grep -Eq '^ctc: line [0-9]+: ' "$work/bad-$b.err"; then
-        ok "$b (rejected with a line diagnostic)"
+    elif grep -Eq '^(ctc: line [0-9]+: |[^:]+:[0-9]+:[0-9]+: error: )' "$work/bad-$b.err"; then
+        ok "$b (rejected with a positioned diagnostic)"
     else
-        bad "$b" "no line diagnostic on stderr: $(cat "$work/bad-$b.err")"
+        bad "$b" "no positioned diagnostic on stderr: $(cat "$work/bad-$b.err")"
     fi
 done
+
+# SH-8: a missing impl method must be reported the way L0/L2 report it, and no
+# artifact may be left behind (a NULL vtable slot would crash at run time).
+if "$work/ct-ast" test/ast/errors/missing_method.ct -o "$work/mmethod.c" \
+        >"$work/mmethod.out" 2>"$work/mmethod.err"; then
+    bad "impl completeness" "expected a non-zero exit"
+elif grep -q "trait method 'b' is not implemented for struct 'P'" "$work/mmethod.err" \
+        && [ ! -f "$work/mmethod.c" ]; then
+    ok "impl (every trait method must be implemented)"
+else
+    bad "impl completeness" "$(cat "$work/mmethod.err")"
+fi
 
 echo
 echo "== output contract =="
