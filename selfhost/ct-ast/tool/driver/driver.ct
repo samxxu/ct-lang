@@ -222,8 +222,7 @@ impl DriverOps for Driver {
         self->p->cur_func[0] = 0;
         frontend::parse::ct_parse_clear_error();
         if (self->m->read_file(in) != 0) {
-            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-            return 1;
+            return frontend::parse::ct_parse_report();
         }
         prog = frontend::parse::ct_parse_program();
         if (prog < 0) {
@@ -231,8 +230,7 @@ impl DriverOps for Driver {
                 fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
                 return 1;
             }
-            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-            return 1;
+            return frontend::parse::ct_parse_report();
         }
         f = fopen(out, "w");
         if (!f) {
@@ -248,20 +246,20 @@ impl DriverOps for Driver {
         if (self->m->line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->m->path);
         if (self->m->emit_program(prog) != 0) {
             fclose(f);
-            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-            return 1;
+            /* the file was opened before emission, so a failure in the middle of
+               it would leave a truncated `.c` that looks like a real artefact */
+            remove(out);
+            return frontend::parse::ct_parse_report();
         }
         if (fclose(f) != 0) {
             fprintf(stderr, "ctc: cannot write '%s'\n", out);
             return 1;
         }
         if (self->m->write_header(out) != 0) {
-            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-            return 1;
+            return frontend::parse::ct_parse_report();
         }
         if (self->m->have_map && self->m->write_map(self->m->map_path, prog, -1) != 0) {
-            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-            return 1;
+            return frontend::parse::ct_parse_report();
         }
         if (tool::diag::ct_diag_emit(self->m->diag_json, 0) != 0) return 1;
         return 0;

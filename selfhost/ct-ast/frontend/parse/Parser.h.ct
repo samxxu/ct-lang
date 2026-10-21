@@ -1100,6 +1100,24 @@ int ct_parse_fail(const char *msg)
     return g_parse.sup->fail(msg);
 }
 
+pub int ct_parse_fail_at(int line, const char *msg);
+int ct_parse_fail_at(int line, const char *msg)
+{
+    return g_parse.sup->fail_at(line, msg);
+}
+
+pub int ct_parse_fail_driver(const char *msg);
+int ct_parse_fail_driver(const char *msg)
+{
+    return g_parse.sup->fail_driver(msg);
+}
+
+pub int ct_parse_report(void);
+int ct_parse_report(void)
+{
+    return g_parse.sup->report();
+}
+
 pub void ct_parse_lex_next(void);
 void ct_parse_lex_next(void)
 {
@@ -1116,4 +1134,7 @@ pub void ct_parse_clear_error(void);
 void ct_parse_clear_error(void)
 {
     g_parse.sup->errmsg[0] = 0;
+    g_parse.sup->errfile[0] = 0;
+    g_parse.sup->errline = 0;
+    g_parse.sup->errcol = 0;
 }

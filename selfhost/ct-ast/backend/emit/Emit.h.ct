@@ -121,6 +121,7 @@ trait EmitOps {
     int  emit_raw_init(int raw, const char *type);
     int  write_header(const char *outc);
     int  fail(const char *msg);
+    int  fail_from(int n, const char *msg);
 }
 
 /* The driver points the collaborators, the module tables, the options and the
@@ -152,6 +153,7 @@ struct Emitter {
     int  ntmp;
     int  raw_call;
     int  self_used;             /* the method body referenced `self` */
+    int  failline;              /* the source line of the node that failed, 0 = none */
     char errmsg[160];
     /* the vptr / initialiser writer (Init.h.ct) */
     struct Init *init;
@@ -211,9 +213,9 @@ impl EmitOps for Emitter {
                 && !self->arena->nodes[root].text3[0]
                 && self->sym->find_func(self->arena->nodes[root].text2) >= 0) {
                 if (!top)
-                    return self->fail("a method call on a temporary is only allowed at the start of a statement or of an assignment");
+                    return self->fail_from(n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
                 if (self->nhoist >= MAX_HOISTS)
-                    return self->fail("too many hoisted receivers in one statement");
+                    return self->fail_from(n, "too many hoisted receivers in one statement");
                 snprintf(self->arena->nodes[root].text3, MAX_TEXT, "__ct_tmp%d", self->ntmp);
                 self->ntmp++;
                 self->hoist_calls[self->nhoist] = root;
@@ -235,7 +237,7 @@ impl EmitOps for Emitter {
 
         for (i = 0; i < self->nhoist; i++) {
             f = self->sym->find_func(self->arena->nodes[self->hoist_calls[i]].text2);
-            if (f < 0) return self->fail("cannot infer the type of a hoisted receiver");
+            if (f < 0) return self->fail_from(self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
             self->emit_indent(ind);
             fprintf(self->out, "%s %s = ", self->sym->funcs[f].ret, self->arena->nodes[self->hoist_calls[i]].text3);
             self->raw_call = self->hoist_calls[i];
@@ -257,6 +259,8 @@ impl EmitOps for Emitter {
         int n, i;
         (void)self;
 
+        self->errmsg[0] = 0;
+        self->failline = 0;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
             if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
 
@@ -489,7 +493,7 @@ impl EmitOps for Emitter {
             for (k = 0; k < self->sym->ntraits; k++)
                 if (strcmp(self->sym->traits[k].name, tname) == 0) ti = k;
             if (ti < 0 && strcmp(tname, "Drop") != 0)
-                return self->fail("impl of an unknown trait");
+                return self->fail_from(n, "impl of an unknown trait");
             sname = self->arena->nodes[n].text;
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 fprintf(self->out, "static %s %s_%s_%s(void *self",
@@ -688,7 +692,7 @@ impl EmitOps for Emitter {
             if (with_semi) fputs(";\n", self->out);
             return 0;
         }
-        return self->fail("unknown declaration node");
+        return self->fail_from(n, "unknown declaration node");
     }
 
     int emit_node(int n, int ind)
@@ -953,7 +957,7 @@ impl EmitOps for Emitter {
             fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
             return 0;
         }
-        return self->fail("cannot inline this node");
+        return self->fail_from(n, "cannot inline this node");
     }
 
     int emit_cond(int n)
@@ -1112,13 +1116,13 @@ impl EmitOps for Emitter {
             char tname[MAX_TEXT];
             char low[MAX_TEXT];
             int i, c2, rk;
-            if (self->arena->nodes[n].a < 0) return self->fail("method call without a receiver");
+            if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");
             rk = self->arena->nodes[self->arena->nodes[n].a].kind;
             if (rk != N_VAR && rk != N_INDEX && rk != N_CALL
                 && rk != N_MEMBER && rk != N_ARROW)
-                return self->fail("method receiver must be a variable, an element, a call or a field chain");
+                return self->fail_from(n, "method receiver must be a variable, an element, a call or a field chain");
             if (!self->arena->nodes[n].text[0])
-                return self->fail("cannot resolve the method trait (unknown receiver type)");
+                return self->fail_from(n, "cannot resolve the method trait (unknown receiver type)");
             snprintf(tname, sizeof tname, "%s", self->arena->nodes[n].text);
             for (i = 0; tname[i] && i + 1 < MAX_TEXT; i++) {
                 char c = tname[i];
@@ -1169,7 +1173,7 @@ impl EmitOps for Emitter {
             fputs(")", self->out);
             return 0;
         }
-        return self->fail("unknown expression node");
+        return self->fail_from(n, "unknown expression node");
     }
 
     /* `foo` -> `FOO_H`; a leading digit gets an underscore so the guard is a
@@ -1209,6 +1213,8 @@ impl EmitOps for Emitter {
         FILE *f;
         (void)self;
 
+        self->errmsg[0] = 0;
+        self->failline = 0;
         if (snprintf(path, sizeof path, "%s/%s.c", self->outdir, self->units[u].base) >= (int)sizeof path)
             return self->fail("output path is too long");
         f = fopen(path, "w");
@@ -1546,6 +1552,15 @@ impl EmitOps for Emitter {
             snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
         return -1;
     }
+
+    /* The failure is about a source node, so its line is the position to report.
+       The lexer is useless here: parsing finished long before emission. */
+    int fail_from(int n, const char *msg)
+    {
+        (void)self;
+        if (n >= 0 && !self->errmsg[0]) self->failline = self->arena->nodes[n].line;
+        return self->fail(msg);
+    }
 }
 
 /* The instance lives after the impls: its vptr initialisers need the vtable
@@ -1642,4 +1657,11 @@ pub const char *ct_emit_last_error(void);
 const char *ct_emit_last_error(void)
 {
     return g_emit.errmsg;
+}
+
+/* The source line the failure blames; 0 means it is not about the source. */
+pub int ct_emit_error_line(void);
+int ct_emit_error_line(void)
+{
+    return g_emit.failline;
 }

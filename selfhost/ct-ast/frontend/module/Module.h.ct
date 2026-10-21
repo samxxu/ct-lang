@@ -46,6 +46,7 @@ import tool::diag::diag;
 namespace frontend::module;
 pub trait ModuleOps {
     int  fail(const char *msg);
+    int  fail_emit(const char *msg);
     int  read_file(const char *path);
     int  base_name(const char *path, char *out, int cap, int *is_hdr);
     int  path_dir(const char *path, char *out, int cap);
@@ -103,12 +104,25 @@ pub struct Module {
 } use ModuleOps;
 
 impl ModuleOps for Module {
-    /* The token cursor and the error store live in frontend::parse; the driver
-       forwards so the store stays single. */
+    /* Module failures are about the build itself -- an unreadable input, an
+       import that does not resolve, a path that does not fit, a limit. None of
+       them has a source position, so they keep the `ctc:` shape. A diagnostic
+       that *is* about the source goes through `fail_emit` / the parser. */
     int fail(const char *msg)
     {
         (void)self;
-        return frontend::parse::ct_parse_fail(msg);
+        return frontend::parse::ct_parse_fail_driver(msg);
+    }
+
+    /* An emitter failure may blame an AST node (its line is exact) or be about
+       the output file (no position at all). */
+    int fail_emit(const char *msg)
+    {
+        int line;
+        (void)self;
+        line = backend::emit::ct_emit_error_line();
+        if (line > 0) return frontend::parse::ct_parse_fail_at(line, msg);
+        return frontend::parse::ct_parse_fail_driver(msg);
     }
 
     int read_file(const char *path)
@@ -573,8 +587,7 @@ impl ModuleOps for Module {
         }
         if (!self->nsroot) {
             if (self->path_dir(inputs[0], root, sizeof root) != 0) {
-                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-                return 1;
+                return frontend::parse::ct_parse_report();
             }
             self->nsroot = root;
         }
@@ -613,14 +626,13 @@ impl ModuleOps for Module {
         for (i = 0; i < ninput; i++) {
             if (self->load_unit(inputs[i]) < 0) {
                 if (tool::diag::ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
-                else fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
+                else frontend::parse::ct_parse_report();
                 return 1;
             }
         }
         for (u = 0; u < self->nunits; u++) {
             if (self->check_ns_dir(u) != 0) {
-                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-                return 1;
+                return frontend::parse::ct_parse_report();
             }
         }
         /* Incremental cache (Phase 6.3, ported in 10.5): a unit whose key still
@@ -632,8 +644,7 @@ impl ModuleOps for Module {
         cn = 0;
         for (u = 0; u < self->nunits; u++)
             if (self->cache_order(u, cstate, corder, &cn) != 0) {
-                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-                return 1;
+                return frontend::parse::ct_parse_report();
             }
         for (o = 0; o < cn; o++) {
             char outc[MAX_PATH];
@@ -658,12 +669,15 @@ impl ModuleOps for Module {
             u = corder[o];
             if (!dirty[u]) continue;
             if (self->emit_unit(u) != 0) {
-                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-                return 1;
+                /* the `.c` was already opened, so a failure leaves half a file;
+                   a failed unit must not leave an artefact behind */
+                if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
+                        < (int)sizeof outc)
+                    remove(outc);
+                return frontend::parse::ct_parse_report();
             }
             if (self->write_unit_header(u) != 0) {
-                fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-                return 1;
+                return frontend::parse::ct_parse_report();
             }
             /* stamped only after a successful emit: a failed unit must never be
                reused, and a stale key must never vouch for new sources */
@@ -673,8 +687,7 @@ impl ModuleOps for Module {
                 self->cache->store(outc, key);
         }
         if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
-            fprintf(stderr, "ctc: %s\n", frontend::parse::ct_parse_last_error());
-            return 1;
+            return frontend::parse::ct_parse_report();
         }
         /* The command the user runs next, in the same shape L2 prints; the
            target C standard (Phase 6.4) is the only option it carries. */
@@ -686,14 +699,15 @@ impl ModuleOps for Module {
         return 0;
     }
 
-    /* The emitter (backend::emit) owns the code generation; these facades wrap
-       the first raw failure with the current position, as the old bodies did. */
+    /* The emitter (backend::emit) owns the code generation; these facades hand
+       the first raw failure to the error store in the shape it deserves: a node
+       error keeps its line, an output-file error has none. */
     int emit_program(int prog)
     {
         const char *why;
         if (backend::emit::ct_emit_program(prog) != 0) {
             why = backend::emit::ct_emit_last_error();
-            if (why[0]) return self->fail(why);
+            if (why[0]) return self->fail_emit(why);
             return -1;
         }
         return 0;
@@ -702,9 +716,13 @@ impl ModuleOps for Module {
     int emit_unit(int u)
     {
         const char *why;
+        /* a diagnostic raised while emitting this unit must name this unit, and
+           the error store reads the path from the memory object */
+        self->path = self->units[u].path;
+        self->mem->path = self->path;
         if (backend::emit::ct_emit_unit(u) != 0) {
             why = backend::emit::ct_emit_last_error();
-            if (why[0]) return self->fail(why);
+            if (why[0]) return self->fail_emit(why);
             return -1;
         }
         return 0;

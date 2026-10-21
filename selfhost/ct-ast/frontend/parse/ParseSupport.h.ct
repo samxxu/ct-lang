@@ -30,6 +30,9 @@ import runtime::arena::Arena;
 namespace frontend::parse;
 pub trait SupportOps {
     int  fail(const char *msg);
+    int  fail_at(int line, const char *msg);
+    int  fail_driver(const char *msg);
+    int  report(void);
     void lex_next(void);
     int  accept(const char *p);
     int  expect(const char *p);
@@ -61,6 +64,9 @@ pub trait SupportOps {
     const char *last_error(void);
 }
 
+/* The field sizes are literals, not the macros above: a generated header carries
+   no `#define`s, so a struct field cannot name one. 160 is MAX_TEXT and 1024 is
+   MAX_PATH in `frontend/sym/Symbols.h.ct`. */
 pub struct ParseSupport {
     struct Arena *arena;
     struct Lexer *lex;
@@ -68,6 +74,9 @@ pub struct ParseSupport {
     struct TypeCheck *ty;
     struct Memory *mem;
     char errmsg[160];
+    char errfile[1024];         /* the input the message was recorded against */
+    int  errline;               /* 0 = a driver-level message, no source position */
+    int  errcol;
 } use SupportOps;
 
 pub struct ParseSupport *parse_support_get(void);
@@ -80,14 +89,64 @@ impl SupportOps for ParseSupport {
         return n;
     }
 
+    /* A source diagnostic: the position is the token the parser stopped at, and
+       the shape is L2's (`file:line:col: error: ...`). Recorded, not printed, so
+       the driver can decide when to flush it (and so recovery can drop it). */
     int fail(const char *msg)
     {
         (void)self;
-        /* the line and the offending token are the two things a self-hosting
-           run needs to locate a gap; diagnostics are not compared (D34) */
-        if (!self->errmsg[0])
-            snprintf(self->errmsg, sizeof self->errmsg, "line %d: %s (at '%s')", self->lex->tokline, msg, self->lex->toktext);
+        if (!self->errmsg[0]) {
+            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+            self->errfile[0] = 0;
+            if (self->mem->path) snprintf(self->errfile, sizeof self->errfile, "%s", self->mem->path);
+            self->errline = self->lex->tokline;
+            self->errcol = self->lex->tokstart - self->lex->lstart + 1;
+            /* at EOF the cursor's start is not on the line it reports */
+            if (self->errcol < 1) self->errcol = 1;
+        }
         return -1;
+    }
+
+    /* The caller knows where the fault is. An emitter error is about an AST node
+       whose line is exact, while the lexer already sits at EOF by then. */
+    int fail_at(int line, const char *msg)
+    {
+        (void)self;
+        if (!self->errmsg[0]) {
+            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+            self->errfile[0] = 0;
+            if (self->mem->path) snprintf(self->errfile, sizeof self->errfile, "%s", self->mem->path);
+            self->errline = line;
+            self->errcol = 1;
+        }
+        return -1;
+    }
+
+    /* A driver-level failure -- an unreadable input, a path that does not fit, a
+       container limit. There is no source position to blame, so it keeps the
+       `ctc:` prefix instead of pretending to point at a line. */
+    int fail_driver(const char *msg)
+    {
+        (void)self;
+        if (!self->errmsg[0]) {
+            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+            self->errfile[0] = 0;
+            self->errline = 0;
+            self->errcol = 0;
+        }
+        return -1;
+    }
+
+    /* Flush the recorded failure once, in the shape it was recorded with. */
+    int report(void)
+    {
+        (void)self;
+        if (!self->errmsg[0]) return 1;
+        if (self->errline > 0)
+            fprintf(stderr, "%s:%d:%d: error: %s\n", self->errfile, self->errline, self->errcol, self->errmsg);
+        else
+            fprintf(stderr, "ctc: %s\n", self->errmsg);
+        return 1;
     }
 
     void lex_next(void)

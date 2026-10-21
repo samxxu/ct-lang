@@ -550,16 +550,16 @@ fi
 
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
-# Two positioned shapes: a parse failure (`ctc: line N: ...`) and a semantic one
-# (`file:line:col: error: ...`). Both name a location, so either is acceptable
-# here; cases with a more specific requirement assert it on their own.
+# Every source diagnostic now carries the full position (`file:line:col: error:`);
+# driver-level failures (an unreadable input, a limit) keep the `ctc:` prefix and
+# are asserted where they are produced.
 for f in test/ast/errors/*.ct; do
     [ -f "$f" ] || continue
     b="$(basename "$f" .ct)"
     if "$work/ct-ast" "$f" -o "$work/bad-$b.c" \
             >"$work/bad-$b.out" 2>"$work/bad-$b.err"; then
         bad "$b" "expected a non-zero exit"
-    elif grep -Eq '^(ctc: line [0-9]+: |[^:]+:[0-9]+:[0-9]+: error: )' "$work/bad-$b.err"; then
+    elif grep -Eq '^[^:]+:[0-9]+:[0-9]+: error: ' "$work/bad-$b.err"; then
         ok "$b (rejected with a positioned diagnostic)"
     else
         bad "$b" "no positioned diagnostic on stderr: $(cat "$work/bad-$b.err")"
@@ -576,6 +576,46 @@ elif grep -q "trait method 'b' is not implemented for struct 'P'" "$work/mmethod
     ok "impl (every trait method must be implemented)"
 else
     bad "impl completeness" "$(cat "$work/mmethod.err")"
+fi
+
+# SH-11: an rvalue receiver below the statement's expression root has no point to
+# hoist to without reordering evaluation, so it is rejected. The position must be
+# the node's own line (the lexer sits at EOF during emission), and the `.c` is
+# opened before emission, so the failure must not leave a truncated artefact.
+cat > "$work/hoist-mid.ct" <<'HOISTEOF'
+#include <stdio.h>
+
+trait G { int m(); }
+struct P { int v; } use G;
+
+impl G for P {
+    int m() { return self->v; }
+}
+
+int gi = 0;
+
+struct P mk(void)
+{
+    struct P p = { .v = 1 };
+    return p;
+}
+
+int main(void)
+{
+    int x = 0;
+    x = (gi++) + mk().m();
+    printf("%d\n", x);
+    return 0;
+}
+HOISTEOF
+if "$work/ct-ast" "$work/hoist-mid.ct" -o "$work/hoist-mid.c" \
+        >"$work/hoist-mid.out" 2>"$work/hoist-mid.err"; then
+    bad "rvalue hoist" "expected a non-zero exit"
+elif grep -q "hoist-mid.ct:21:1: error: a method call on a temporary" "$work/hoist-mid.err" \
+        && [ ! -f "$work/hoist-mid.c" ]; then
+    ok "rvalue hoist (mid-expression receiver rejected at its own line)"
+else
+    bad "rvalue hoist" "$(cat "$work/hoist-mid.err")"
 fi
 
 echo

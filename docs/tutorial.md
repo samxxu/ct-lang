@@ -386,7 +386,8 @@ pub int mock_hal_send(char *buf, int len) {
 | `ct install` | 离线校验 `ct.lock` 与 `vendor/`，打印建议的构建命令 |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
-退出码：成功 `0`，语法或 I/O 错误 `1`；错误格式 `文件:行:列: error: 描述`。
+退出码：成功 `0`，语法或 I/O 错误 `1`。**源码诊断**（解析期与语义期）格式为 `文件:行:列: error: 描述`；
+**驱动层**错误（输入打不开、参数不对、超过上限）以 `ctc: ` 开头，不假装指向某一行。
 
 ## 11. 会踩的坑
 
@@ -790,7 +791,9 @@ member paths rooted at the instance).
 | `ct install` | verify `ct.lock` against `vendor/` offline, print the suggested build command |
 | `ct -v` / `ct -h` | version / usage |
 
-Exit codes: `0` on success, `1` on syntax or I/O errors; errors read `file:line:col: error: message`.
+Exit codes: `0` on success, `1` on syntax or I/O errors. **Source diagnostics** (parse and semantic)
+read `file:line:col: error: message`; **driver-level** failures (an input that cannot be opened, a bad
+option, a limit) start with `ctc: ` and do not pretend to point at a line.
 
 ### 11. Traps
 
