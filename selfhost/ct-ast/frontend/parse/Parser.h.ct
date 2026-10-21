@@ -23,6 +23,7 @@ import frontend::module::Map;
 import frontend::parse::Expr;
 import frontend::parse::MapBuild;
 import frontend::parse::ParseSupport;
+import frontend::parse::Stmt;
 import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
@@ -79,15 +80,9 @@ pub trait ParseOps {
     int  parse_struct_def(void);
     int  parse_typedef(int is_pub);
     int  parse_field_def(void);
-    int  parse_block(void);
-    int  parse_stmt(void);
-    int  parse_branch(void);
-    int  parse_decl_node(void);
-    int  parse_expr_stmt_node(void);
     int  parse_trait(int is_pub);
     int  parse_impl(void);
     int  parse_use_list(int sindex);
-    int  parse_init_raw(char *out, int cap);
 }
 
 /* The translation-unit passes: top-level declarations, namespaces, imports and
@@ -134,6 +129,7 @@ pub struct Parser {
     int  npend;
     struct ParseSupport *sup;
     struct Expr *ex;     /* the expression and type grammar */
+    struct Stmt *st;     /* the statement layer */
     /* The pre-pass only collects the import list: the dependencies are not
        parsed yet, so nothing can be resolved into an alias. */
     int  scan_only;
@@ -467,7 +463,7 @@ impl ParseOps for Parser {
                     char fixed[MAX_TEXT];
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
-                    if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
+                    if (self->st->parse_init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->sup->rewrite_init_text(ret, raw, fixed, sizeof fixed) != 0) return -1;
                     snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {
@@ -504,7 +500,7 @@ impl ParseOps for Parser {
         self->mem->leak_frame = self->sym->nscope + 1;
         self->mem->leak_impl = 0;
         self->mem->ret_owned = 0;
-        b = self->parse_block();
+        b = self->st->parse_block();
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func[0] = 0;
@@ -1011,7 +1007,7 @@ impl ParseOps for Parser {
             self->mem->leak_active = 1;
             self->mem->leak_frame = self->sym->nscope + 1;
             self->mem->leak_impl = 1;
-            body = self->parse_block();
+            body = self->st->parse_block();
             self->mem->leak_active = 0;
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
@@ -1043,524 +1039,11 @@ impl ParseOps for Parser {
         return node;
     }
 
-    /* Capture a `{ ... }` initializer verbatim; the caller appends vptr items. */
-    int parse_init_raw(char *out, int cap)
-    {
-        int depth, n, c;
-        (void)self;
 
-        n = 0;
-        if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-        out[n] = '{';
-        n++;
-        depth = 1;
-        while (self->lex->src[self->lex->pos] && depth > 0) {
-            c = (unsigned char)self->lex->src[self->lex->pos];
-            if (c == '"') {
-                if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                out[n] = '"';
-                n++;
-                self->lex->pos++;
-                while (self->lex->src[self->lex->pos] && self->lex->src[self->lex->pos] != '"') {
-                    if (self->lex->src[self->lex->pos] == '\\' && self->lex->src[self->lex->pos + 1]) {
-                        if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                        out[n] = self->lex->src[self->lex->pos];
-                        n++;
-                        self->lex->pos++;
-                    }
-                    if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                    out[n] = self->lex->src[self->lex->pos];
-                    n++;
-                    self->lex->pos++;
-                }
-                if (self->lex->src[self->lex->pos] == '"') {
-                    if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                    out[n] = '"';
-                    n++;
-                    self->lex->pos++;
-                }
-                continue;
-            }
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
-            if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-            out[n] = (char)c;
-            n++;
-            self->lex->pos++;
-        }
-        if (depth != 0) return self->sup->fail("unterminated initializer");
-        out[n] = 0;
-        self->sup->lex_next();
-        return 0;
-    }
 
-    int parse_block(void)
-    {
-        int blk, tail, s, base;
-        (void)self;
 
-        if (self->sup->expect("{") != 0) return -1;
-        if (self->sup->push_scope() != 0) return -1;
-        base = self->mem->own_base[self->sym->nscope - 1];
-        blk = self->sup->new_node(N_BLOCK);
-        if (blk < 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        tail = -1;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-            s = self->parse_stmt();
-            if (s < 0) {
-                self->sup->pop_scope();
-                return -1;
-            }
-            if (tail < 0) self->arena->nodes[blk].a = s;
-            else self->arena->nodes[tail].next = s;
-            tail = s;
-        }
-        /* AutoDrop: append `delete v;` for this scope's `own` declarations, in
-           reverse order, just before the closing brace (L2's line rewrite does
-           the same). A brace that shares its line with code cannot host the
-           deletes, so that layout is rejected. */
-        if (self->mem->nowner > base) {
-            int p, at_start, d;
-            at_start = 1;
-            for (p = self->lex->lstart; p < self->lex->tokstart; p++)
-                if (self->lex->src[p] != ' ' && self->lex->src[p] != '\t' && self->lex->src[p] != '\r') at_start = 0;
-            if (!at_start) {
-                self->sup->pop_scope();
-                return ct_sem_error(self->lex->tokline, 1,
-                    "auto-drop requires the closing '}' at the start of a line", self->mem->path);
-            }
-            for (d = self->mem->nowner - 1; d >= base; d--) {
-                int del, v, vi;
-                const char *tp;
-                size_t bl;
-                /* a reassigned / returned / moved `own` variable is no longer
-                   ours to release (L2 clears the same flag before its rewrite) */
-                vi = self->sym->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
-                if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
-                del = self->sup->new_node(N_DELETE);
-                v = self->sup->new_node(N_VAR);
-                if (del < 0 || v < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-                self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
-                snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->mem->own_decl[d]].text2);
-                self->arena->nodes[del].a = v;
-                tp = self->arena->nodes[self->mem->own_decl[d]].text;
-                if (strncmp(tp, "struct ", 7) == 0) tp += 7;
-                snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
-                bl = strlen(self->arena->nodes[del].text);
-                while (bl > 0 && (self->arena->nodes[del].text[bl - 1] == '*'
-                                  || self->arena->nodes[del].text[bl - 1] == ' ')) {
-                    bl = bl - 1;
-                    self->arena->nodes[del].text[bl] = 0;
-                }
-                if (tail < 0) self->arena->nodes[blk].a = del;
-                else self->arena->nodes[tail].next = del;
-                tail = del;
-            }
-        }
-        if (self->sup->expect("}") != 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        /* a scope that closes with a still-owned heap object leaks it (L2
-           reports it at the same point, keeping the warning order) */
-        if (self->mem->leak_active && self->sup->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        self->sup->pop_scope();
-        return blk;
-    }
 
-    int parse_stmt(void)
-    {
-        int s, e, c;
-        (void)self;
 
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
-            int rline = self->lex->tokline, at_start = 1, rp;
-            for (rp = self->lex->lstart; rp < self->lex->tokstart; rp++)
-                if (self->lex->src[rp] != ' ' && self->lex->src[rp] != '\t' && self->lex->src[rp] != '\r') at_start = 0;
-            s = self->sup->new_node(N_RET);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
-                self->sup->lex_next();
-                /* a bare `return;` leaves every owned object behind */
-                if (self->mem->leak_active
-                    && self->sup->leak_return(-1, !at_start || self->sym->nscope > self->mem->leak_frame, rline) != 0)
-                    return -1;
-                return s;
-            }
-            e = self->ex->parse_expr();
-            if (e < 0) return -1;
-            {
-                char tr[MAX_TEXT];
-                int ip = 0;
-                if (self->sup->iface_ref_type(self->sym->ret_type, tr, sizeof tr, &ip)) {
-                    e = self->sup->maybe_box(e, tr, ip);
-                    if (e < 0) return -1;
-                }
-            }
-            self->arena->nodes[s].a = e;
-            /* a return nested in a block (or written mid-line) may be skipped
-               at run time, so it only warns about what it leaves behind */
-            if (self->mem->leak_active
-                && self->sup->leak_return(e, !at_start || self->sym->nscope > self->mem->leak_frame, rline) != 0)
-                return -1;
-            if (self->sup->expect(";") != 0) return -1;
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "delete") == 0) {
-            s = self->sup->new_node(N_DELETE);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            e = self->ex->parse_expr();
-            if (e < 0) return -1;
-            self->arena->nodes[s].a = e;
-            /* the object is released: it can neither leak nor auto-drop */
-            if (self->mem->leak_active && self->sup->leak_delete(e) != 0) return -1;
-            /* resolve the pointee's struct now (the variable may leave scope
-               before the delete is emitted) and remember it only when it uses
-               Drop; otherwise the emitter stays on the plain `free` path */
-            {
-                char dt[MAX_TEXT];
-                if (self->sup->expr_type(e, dt, sizeof dt) == 0) {
-                    const char *dp = dt;
-                    size_t dl;
-                    int si;
-                    if (strncmp(dp, "struct ", 7) == 0) dp += 7;
-                    snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", dp);
-                    dl = strlen(self->arena->nodes[s].text);
-                    while (dl > 0 && (self->arena->nodes[s].text[dl - 1] == '*'
-                                      || self->arena->nodes[s].text[dl - 1] == ' ')) {
-                        dl = dl - 1;
-                        self->arena->nodes[s].text[dl] = 0;
-                    }
-                    si = self->sym->find_struct(self->arena->nodes[s].text);
-                    if (si < 0 || !self->sym->structs[si].uses_drop) self->arena->nodes[s].text[0] = 0;
-                }
-            }
-            if (self->sup->expect(";") != 0) return -1;
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "break") == 0) {
-            s = self->sup->new_node(N_BREAK);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            if (self->sup->expect(";") != 0) return -1;
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
-            s = self->sup->new_node(N_CONT);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            if (self->sup->expect(";") != 0) return -1;
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "if") == 0) {
-            s = self->sup->new_node(N_IF);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            if (self->sup->expect("(") != 0) return -1;
-            c = self->ex->parse_expr();
-            if (c < 0) return -1;
-            if (self->sup->expect(")") != 0) return -1;
-            self->arena->nodes[s].a = c;
-            e = self->parse_branch();
-            if (e < 0) return -1;
-            self->arena->nodes[s].b = e;
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "else") == 0) {
-                self->sup->lex_next();
-                e = self->parse_branch();
-                if (e < 0) return -1;
-                self->arena->nodes[s].c = e;
-            }
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "while") == 0) {
-            s = self->sup->new_node(N_WHILE);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            if (self->sup->expect("(") != 0) return -1;
-            c = self->ex->parse_expr();
-            if (c < 0) return -1;
-            if (self->sup->expect(")") != 0) return -1;
-            self->arena->nodes[s].a = c;
-            e = self->parse_branch();
-            if (e < 0) return -1;
-            self->arena->nodes[s].b = e;
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0) {
-            s = self->sup->new_node(N_FOR);
-            if (s < 0) return -1;
-            self->sup->lex_next();
-            if (self->sup->expect("(") != 0) return -1;
-            if (self->sup->push_scope() != 0) return -1;
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
-                self->arena->nodes[s].a = -1;
-            } else if (self->lex->tok == T_ID && (self->ex->is_type_word(self->lex->toktext)
-                       || self->sym->find_type(self->lex->toktext) >= 0)) {
-                e = self->parse_decl_node();
-                if (e < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-                self->arena->nodes[s].a = e;
-            } else {
-                e = self->parse_expr_stmt_node();
-                if (e < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-                self->arena->nodes[s].a = e;
-            }
-            if (self->sup->expect(";") != 0) {
-                self->sup->pop_scope();
-                return -1;
-            }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
-                self->arena->nodes[s].b = -1;
-            } else {
-                c = self->ex->parse_expr();
-                if (c < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-                self->arena->nodes[s].b = c;
-            }
-            if (self->sup->expect(";") != 0) {
-                self->sup->pop_scope();
-                return -1;
-            }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
-                self->arena->nodes[s].c = -1;
-            } else {
-                e = self->parse_expr_stmt_node();
-                if (e < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-                self->arena->nodes[s].c = e;
-            }
-            if (self->sup->expect(")") != 0) {
-                self->sup->pop_scope();
-                return -1;
-            }
-            e = self->parse_branch();
-            if (e < 0) {
-                self->sup->pop_scope();
-                return -1;
-            }
-            self->arena->nodes[s].d = e;
-            self->sup->pop_scope();
-            return s;
-        }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0) {
-            int own_line = self->lex->tokline;
-            self->sup->lex_next();
-            s = self->parse_decl_node();
-            if (s < 0) return -1;
-            if (self->sup->expect(";") != 0) return -1;
-            if (self->sup->mark_owned(s, own_line) != 0) return -1;
-            return s;
-        }
-        if (self->lex->tok == T_ID && (self->ex->is_type_word(self->lex->toktext)
-                              || self->sym->find_type(self->lex->toktext) >= 0)) {
-            s = self->parse_decl_node();
-            if (s < 0) return -1;
-            if (self->sup->expect(";") != 0) return -1;
-            return s;
-        }
-        s = self->parse_expr_stmt_node();
-        if (s < 0) return -1;
-        if (self->sup->expect(";") != 0) return -1;
-        return s;
-    }
-
-    int parse_branch(void)
-    {
-        int b, s;
-        (void)self;
-
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
-        if (self->sup->push_scope() != 0) return -1;
-        s = self->parse_stmt();
-        if (s < 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        self->sup->pop_scope();
-        b = self->sup->new_node(N_BLOCK);
-        if (b < 0) return -1;
-        self->arena->nodes[b].a = s;
-        return b;
-    }
-
-    /* `<type> name[dims] [= expr] (, name[dims] [= expr])*` without the trailing
-       semicolon. Several declarators share the type and come back as an N_DECLS
-       wrapper, so every consumer still sees one statement node. */
-    int parse_decl_node(void)
-    {
-        int n, e, head, tail, base_stars, first_decl;
-        char typebuf[MAX_TEXT];
-        char name[MAX_TEXT];
-        (void)self;
-
-        if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-        head = -1;
-        tail = -1;
-        base_stars = 0;
-        first_decl = 1;
-        for (;;) {
-            int stars = 0, si;
-            size_t tl;
-            char t2[MAX_TEXT];
-
-            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
-                stars++;
-                self->sup->lex_next();
-            }
-            /* `parse_type` folds the first declarator's stars into the type; each
-               later declarator brings its own, so the star suffix is rebuilt per
-               declarator (`const char *p, *q;` and `int *a, **b;` both work) */
-            tl = strlen(typebuf);
-            while (tl > 0 && (typebuf[tl - 1] == '*' || typebuf[tl - 1] == ' ')) {
-                if (first_decl && typebuf[tl - 1] == '*') base_stars++;
-                tl--;
-            }
-            typebuf[tl] = 0;
-            if (first_decl) {
-                stars = base_stars;
-                first_decl = 0;
-            }
-            for (si = 0; si < stars; si++) {
-                snprintf(t2, sizeof t2, "%s *", typebuf);
-                snprintf(typebuf, sizeof typebuf, "%s", t2);
-            }
-            if (self->lex->tok != T_ID) return self->sup->fail("expected a variable name");
-            snprintf(name, sizeof name, "%s", self->lex->toktext);
-            self->sup->lex_next();
-            n = self->sup->new_node(N_DECL);
-            if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
-            if (self->sup->declare_var(name, typebuf) != 0) return -1;
-            if (self->ex->parse_array_dims(n) != 0) return -1;
-            if (self->arena->nodes[n].text3[0]) {
-                int vi = self->sym->find_var(name);
-                if (vi >= 0) self->sym->vars[vi].is_array = 1;
-            }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
-                self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
-                    char raw[MAX_TEXT];
-                    char fixed[MAX_TEXT];
-                    e = self->sup->new_node(N_RAW);
-                    if (e < 0) return -1;
-                    if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
-                    if (self->sup->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
-                    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
-                } else {
-                    e = self->ex->parse_expr();
-                    if (e < 0) return -1;
-                }
-                self->arena->nodes[n].a = e;
-            }
-            if (self->arena->nodes[n].a >= 0) {
-                char tr[MAX_TEXT];
-                int ip = 0;
-                if (self->sup->iface_ref_type(typebuf, tr, sizeof tr, &ip)) {
-                    e = self->sup->maybe_box(self->arena->nodes[n].a, tr, ip);
-                    if (e < 0) return -1;
-                    self->arena->nodes[n].a = e;
-                }
-            }
-            if (self->mem->leak_active && self->sup->leak_decl(n) != 0) return -1;
-            if (head < 0) head = n;
-            else self->arena->nodes[tail].next = n;
-            tail = n;
-            if (!self->sup->accept(",")) break;
-        }
-        if (self->arena->nodes[head].next >= 0) {
-            int w = self->sup->new_node(N_DECLS);
-            if (w < 0) return -1;
-            self->arena->nodes[w].a = head;
-            return w;
-        }
-        return head;
-    }
-
-    int parse_expr_stmt_node(void)
-    {
-        int e, rhs, n;
-        (void)self;
-
-        e = self->ex->parse_expr();
-        if (e < 0) return -1;
-        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
-                                 || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
-                                 || strcmp(self->lex->toktext, "%=") == 0)) {
-            int op = 0, k2;
-            char oc = self->lex->toktext[0];
-            k2 = self->arena->nodes[e].kind;
-            if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
-                return self->sup->fail("assignment target is not assignable");
-            if (oc == '+') op = 1;
-            else if (oc == '-') op = 2;
-            else if (oc == '*') op = 3;
-            else if (oc == '/') op = 4;
-            else op = 5;
-            self->sup->lex_next();
-            rhs = self->ex->parse_expr();
-            if (rhs < 0) return -1;
-            n = self->sup->new_node(N_ASSIGN);
-            if (n < 0) return -1;
-            self->arena->nodes[n].a = e;
-            self->arena->nodes[n].b = rhs;
-            self->arena->nodes[n].aux = op;
-            if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
-            return n;
-        }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
-            int k;
-            char tt[MAX_TEXT];
-            char tr[MAX_TEXT];
-            k = self->arena->nodes[e].kind;
-            if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
-                return self->sup->fail("assignment target is not assignable");
-            self->sup->lex_next();
-            rhs = self->ex->parse_expr();
-            if (rhs < 0) return -1;
-            if ((k == N_VAR && self->sup->var_type(self->arena->nodes[e].text2, tt, sizeof tt) == 0)
-                || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
-                    && self->sup->expr_type(e, tt, sizeof tt) == 0)) {
-                int ip = 0;
-                if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)) {
-                    rhs = self->sup->maybe_box(rhs, tr, ip);
-                    if (rhs < 0) return -1;
-                }
-            }
-            n = self->sup->new_node(N_ASSIGN);
-            if (n < 0) return -1;
-            self->arena->nodes[n].a = e;
-            self->arena->nodes[n].b = rhs;
-            if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
-            return n;
-        }
-        if (self->arena->nodes[e].kind == N_POST) return e;
-        n = self->sup->new_node(N_EXPR);
-        if (n < 0) return -1;
-        self->arena->nodes[n].a = e;
-        return n;
-    }
 }
 
 static struct Parser g_parse;
@@ -1598,6 +1081,10 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
        the call table and the current-function name this unit owns */
     ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, g_parse.calls, &g_parse.ncalls);
     g_parse.ex = expr_get();
+    /* the statement layer reads the same cursor and tables and writes nodes
+       through the same primitives */
+    ct_stmt_bind(arena, lex, sym, g_parse.mem, g_parse.sup, g_parse.ex);
+    g_parse.st = stmt_get();
 }
 
 pub struct Parser *parse_get(void);
