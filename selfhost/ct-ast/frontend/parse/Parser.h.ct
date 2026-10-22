@@ -867,11 +867,34 @@ impl ParseOps for Parser {
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "void") == 0) {
+                /* `(void)` is C's empty parameter list, but `void *p` is a
+                   parameter like any other: look one token ahead before taking
+                   the shortcut. */
+                int save_tok, save_line, save_srcline, save_bol;
+                long save_num;
+                size_t save_pos;
+                char save_text[MAX_TEXT];
+                save_tok = self->lex->tok;
+                save_num = self->lex->toknum;
+                save_line = self->lex->tokline;
+                save_pos = self->lex->pos;
+                save_srcline = self->lex->line;
+                save_bol = self->lex->bol;
+                snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
                 self->sup->lex_next();
-                if (self->sup->expect(")") != 0) return -1;
-                if (self->sup->expect(";") != 0) return -1;
-                self->sym->traits[ti].nm++;
-                continue;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    self->sup->lex_next();
+                    if (self->sup->expect(";") != 0) return -1;
+                    self->sym->traits[ti].nm++;
+                    continue;
+                }
+                self->lex->tok = save_tok;
+                self->lex->toknum = save_num;
+                self->lex->tokline = save_line;
+                self->lex->pos = save_pos;
+                self->lex->line = save_srcline;
+                self->lex->bol = save_bol;
+                snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
             }
             np = 0;
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {

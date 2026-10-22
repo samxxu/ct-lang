@@ -1,0 +1,29 @@
+/* 24: a trait method may take a bare `void *` parameter (SH-19). `(void)` alone
+   still means "no parameters"; `void *p` is an ordinary parameter, and the
+   vtable slot spells it the same way. */
+#include <stdio.h>
+
+trait Sink {
+    int put(void *buf, int len);
+}
+
+struct Buf {
+    int n;
+} use Sink;
+
+struct Buf b;
+
+impl Sink for Buf {
+    int put(void *buf, int len) {
+        char *p = (char *)buf;
+        return self->n + len + p[0];
+    }
+}
+
+int main(void) {
+    Sink s;
+    b.n = 1;
+    s = b;
+    printf("%d\n", s.put("A", 2));
+    return 0;
+}
