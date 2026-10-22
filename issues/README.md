@@ -356,9 +356,11 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 | SH-17 | 已修（2c.2） | `xunit_box` 生成物中 `#include "net.h"` 只出现一次 |
 | SH-18 | 仅文档化（规格 3.4 非目标） | `language-spec.md` §4.11 / §4.12 记录类型位置不支持限定名，绕法为 `import net::conn::Conn as Conn;` |
 
-口径说明（2b.3）：规格写的是 `map … for instance A::B::h` → C 名 `A_B_h`，但 ct-ast 对全局变量
-**不做 mangling**（同 §4.11），故实现为"接受限定写法、按最后一段取已声明的 C 名"。`test/modules/map_ns`
-与该节文档均按实际行为记录，未引入全局变量 mangling。
+口径说明（2b.3）：规格写的是 `map … for instance A::B::h` → C 名 `A_B_h`。最初实现为"接受限定写法、
+按最后一段取已声明的 C 名"，随后按用户决定补齐**全局 mangling**（批次见
+[docs/design/global-mangling.md](../docs/design/global-mangling.md)）：命名空间内的全局发射为 `A_B_h`，
+`extern` 豁免（C 库符号保持原名），表达式支持限定引用 `a::h`，两个被导入的命名空间导出同名全局时
+裸名报错并要求限定。`test/modules/map_ns`、`test/modules/ns_globals` 与 §4.10/§4.11 均按该行为描述。
 
 门禁：`bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`bash selfhost/check-warnings.sh` 对全部
 正例、示例与测试用例的生成 C 执行 `-Wall -Wextra -std=c99` 零告警。

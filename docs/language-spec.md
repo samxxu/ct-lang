@@ -410,8 +410,8 @@ map trait Controller for instance uart1 {
 约束与限制：
 
 - `map trait T for instance x { … }` 中，`x` 必须是**已声明的全局变量**（文件作用域），否则编译期报错。
-  实例名可写成**命名空间限定形式** `A::B::h`（2b.3）；全局变量不做 mangling（见 §4.11），故实际绑定的
-  C 名是路径的最后一段。
+  实例名可写成**命名空间限定形式** `A::B::h`（2b.3）；全局按命名空间 mangling（见 §4.11），实际绑定的
+  C 名是 `A_B_h`，实例的 vtable 与包装函数也以它为前缀（`A_B_h_T_vtable`）。
 - `T` 必须是已定义的 trait；无 vtbl 的 trait 不可映射。
 - 绑定方法名必须是 `T` 的既有方法，`( … )` 里的参数个数须与 trait 声明一致。
 - 绑定必须覆盖 `T` 的**每一个**方法，且每个方法**只绑一次**：漏绑会让 vtable 留一个空指针槽（调用即崩溃），
@@ -439,7 +439,10 @@ map trait Controller for instance uart1 {
   其它单元 `import` 后即可按名引用。`pub` 只表示导出：未标 `pub` 的全局仍只属于本单元。
 - `extern int lib_flag;` 只声明、不定义：声明进入 `.h`，本单元的 `.c` 不发射定义，符号由外部 C 目标文件
   或库提供。`extern` 不能带初始化式（编译期报错）。
-- 命名空间内的全局变量**不做 mangling**：`namespace A::B; int h;` 的 C 名仍是 `h`（与类型名不同）。
+- 命名空间内的全局变量按命名空间 **mangling**：`namespace A::B; int h;` 的 C 名是 `A_B_h`，因此两个命名空间
+  可以各有一个 `h` 而不会在链接期冲突。`extern` 是例外——它声明的符号由 C 库提供，保留原名与空命名空间。
+- 导入单元可以用**限定名**引用导出的全局：`a::h` 读写 `a_h`；只有一个候选时裸名同样可用。若两个被导入的
+  命名空间导出同名全局，裸名会被拒绝并提示改用限定名，避免静默选错对象。
 - 跨单元可装箱的边界：`impl` 的 vtable 仅在 **`pub` trait 且 `pub` struct** 同时成立时外部链接——
   头文件声明 `extern struct T_vtbl S_T_vtable;`，实现单元给出定义（不再是 `static`）；否则保持单元私有。
   同一 `struct` 的同一 trait 只能有一个 `impl`，重复定义在编译期报错并指出首个定义所在位置。
@@ -1031,7 +1034,8 @@ Constraints and limits:
 
 - In `map trait T for instance x { … }`, `x` must be a **declared global variable** (file scope), else
   a compile-time error. The instance may be spelled namespace-qualified, `A::B::h` (2b.3); globals are
-  not mangled (§4.11), so the C name actually bound is the last path segment.
+  mangled by their namespace (§4.11), so the C name bound is `A_B_h` and the instance's vtable / wrappers
+  carry it as their prefix (`A_B_h_T_vtable`).
 - `T` must be a defined trait; a trait without a vtbl cannot be mapped.
 - The bound method must be an existing method of `T`, and its `( … )` parameter count must match the
   trait declaration.
@@ -1066,8 +1070,12 @@ Constraints and limits:
 - `extern int lib_flag;` declares without defining: the declaration goes into the `.h`, and the
   unit's `.c` emits no definition — the symbol comes from an external C object file or library.
   `extern` cannot carry an initializer (a compile-time error).
-- Globals inside a namespace are **not mangled**: `namespace A::B; int h;` still has the C name
-  `h` (unlike type names).
+- Globals inside a namespace are **mangled**, like type and exported function names: `namespace A::B; int h;`
+  has the C name `A_B_h`, so two namespaces may each declare `h` without a link-time collision. `extern` is
+  the exception — the symbol belongs to a C library, so it keeps its own name and no namespace.
+- An importing unit may reference an exported global with the **qualified** form: `a::h` reads and writes
+  `a_h`; a bare name works while only one candidate exists. If two imported namespaces export the same name,
+  the bare reference is refused with an instruction to qualify, instead of silently picking one.
 - The boundary of cross-unit boxing: an `impl` vtable gets external linkage only when the trait is
   **`pub`** and the struct is **`pub`** — the header declares `extern struct T_vtbl S_T_vtable;`
   and the implementing unit defines it (no longer `static`); otherwise it stays unit-private.
