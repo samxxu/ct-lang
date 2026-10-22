@@ -27,6 +27,8 @@ import runtime::arena::Arena;
 
 #define B_ADD 1
 #define B_AND 12
+#define B_BAND 15
+#define B_BOR 16
 #define B_DIV 4
 #define B_EQ 9
 #define B_GE 8
@@ -37,6 +39,8 @@ import runtime::arena::Arena;
 #define B_MUL 3
 #define B_NE 10
 #define B_OR 13
+#define B_SHL 17
+#define B_SHR 18
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 1024
@@ -66,6 +70,7 @@ import runtime::arena::Arena;
 #define T_STR 3
 #define U_NEG 1
 #define U_NOT 2
+#define U_BNOT 3
 
 namespace frontend::parse;
 /* `cur_func` and the call table stay the parser's (the driver reads them back),
@@ -77,6 +82,10 @@ pub trait ExprOps {
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  parse_expr(void);
+    int  parse_bitor(void);
+    int  parse_bxor(void);
+    int  parse_bitand(void);
+    int  parse_shift(void);
     int  parse_cmp(void);
     int  parse_add(void);
     int  parse_mul(void);
@@ -265,26 +274,14 @@ impl ExprOps for Expr {
         int left, right, inner, n, c;
         (void)self;
 
-        /* `&&` binds tighter than `||`; both are looser than parse_cmp's operators.
-           The loops live here so the trait's method budget stays put. */
-        left = self->parse_cmp();
+        /* C precedence, loosest first: `||`, `&&`, then the bitwise levels
+           (`|` `^` `&`) owned by parse_bitor. The loops live here so the
+           trait's method budget stays put. */
+        left = self->parse_bitor();
         if (left < 0) return -1;
-        /* `^` sits between the comparisons and `&&`; the cache's FNV fold is the
-           first source to need it */
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "^") == 0) {
-            self->sup->lex_next();
-            right = self->parse_cmp();
-            if (right < 0) return -1;
-            n = self->sup->new_node(N_BIN);
-            if (n < 0) return -1;
-            self->arena->nodes[n].a = left;
-            self->arena->nodes[n].b = right;
-            self->arena->nodes[n].aux = B_XOR;
-            left = n;
-        }
         while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
             self->sup->lex_next();
-            right = self->parse_cmp();
+            right = self->parse_bitor();
             if (right < 0) return -1;
             n = self->sup->new_node(N_BIN);
             if (n < 0) return -1;
@@ -295,11 +292,11 @@ impl ExprOps for Expr {
         }
         while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "||") == 0) {
             self->sup->lex_next();
-            right = self->parse_cmp();
+            right = self->parse_bitor();
             if (right < 0) return -1;
             while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
                 self->sup->lex_next();
-                inner = self->parse_cmp();
+                inner = self->parse_bitor();
                 if (inner < 0) return -1;
                 n = self->sup->new_node(N_BIN);
                 if (n < 0) return -1;
@@ -333,12 +330,100 @@ impl ExprOps for Expr {
         return left;
     }
 
-    int parse_cmp(void)
+    /* `|`, `^`, `&` are three separate levels in C, and `<<` / `>>` bind
+       tighter than the comparisons but looser than `+` / `-`. */
+    int parse_bitor(void)
+    {
+        int left, right, n;
+        (void)self;
+
+        left = self->parse_bxor();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "|") == 0) {
+            self->sup->lex_next();
+            right = self->parse_bxor();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_BOR;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_bxor(void)
+    {
+        int left, right, n;
+        (void)self;
+
+        left = self->parse_bitand();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "^") == 0) {
+            self->sup->lex_next();
+            right = self->parse_bitand();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_XOR;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_bitand(void)
+    {
+        int left, right, n;
+        (void)self;
+
+        left = self->parse_cmp();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&") == 0) {
+            self->sup->lex_next();
+            right = self->parse_cmp();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = B_BAND;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_shift(void)
     {
         int left, right, n, op;
         (void)self;
 
         left = self->parse_add();
+        if (left < 0) return -1;
+        while (self->lex->tok == T_PUNCT
+               && (strcmp(self->lex->toktext, "<<") == 0 || strcmp(self->lex->toktext, ">>") == 0)) {
+            op = (self->lex->toktext[0] == '<') ? B_SHL : B_SHR;
+            self->sup->lex_next();
+            right = self->parse_add();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_BIN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
+            left = n;
+        }
+        return left;
+    }
+
+    int parse_cmp(void)
+    {
+        int left, right, n, op;
+        (void)self;
+
+        left = self->parse_shift();
         if (left < 0) return -1;
         while (self->lex->tok == T_PUNCT) {
             op = 0;
@@ -350,7 +435,7 @@ impl ExprOps for Expr {
             else if (strcmp(self->lex->toktext, "!=") == 0) op = B_NE;
             if (op == 0) break;
             self->sup->lex_next();
-            right = self->parse_add();
+            right = self->parse_shift();
             if (right < 0) return -1;
             n = self->sup->new_node(N_BIN);
             if (n < 0) return -1;
@@ -452,6 +537,7 @@ impl ExprOps for Expr {
         op = 0;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) op = U_NEG;
         else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "!") == 0) op = U_NOT;
+        else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "~") == 0) op = U_BNOT;
         if (op != 0) {
             self->sup->lex_next();
             e = self->parse_unary();

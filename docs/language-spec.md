@@ -80,6 +80,27 @@ type-spec   ::= <C 类型写法，取到方法名/参数名之前的全部字符
 - struct 定义后的分号可选（`};` 与 `}` 都接受）。
 - `param` 的类型与名字靠**启发式**切分：取参数文本的最后一个标识符作为参数名，除非它是类型关键字（`void`/`char`/`int`/`unsigned`/`size_t` …）或参数文本以 `*` 结尾。
 
+#### 3.1 表达式（ct-ast）
+
+ct-ast 按 C 的优先级解析表达式，支持的运算符子集由紧到松为：
+
+| 层级 | 运算符 |
+| --- | --- |
+| 一元 | `!` `~` `-` `&`（取地址） `*`（解引用）、强制转换、`sizeof` |
+| 乘除 | `*` `/` `%` |
+| 加减 | `+` `-` |
+| 移位 | `<<` `>>` |
+| 比较 | `<` `>` `<=` `>=` `==` `!=` |
+| 位与 | `&` |
+| 位异或 | `^` |
+| 位或 | `\|` |
+| 逻辑 | `&&` `\|\|` |
+| 条件 | `?:` |
+| 赋值 | `=` 以及复合赋值 `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
+
+生成物给每个二元 / 一元运算都加括号，因此源码语义不依赖 C 侧的优先级重排。
+L0 / L1 / L2 不解析表达式（按行透传），本表只约束 ct-ast。
+
 ### 4. 展开规则
 
 #### 4.1 trait → vtable 类型
@@ -591,6 +612,28 @@ Conventions: the `use` clause may follow `}` on the same line or start a new lin
 parameter means "no parameters"; the semicolon after a struct definition is optional. Parameter types
 and names are split heuristically — the last identifier is taken as the parameter name unless it is a
 type keyword (`void` / `char` / `int` / `unsigned` / `size_t` …) or the text ends with `*`.
+
+#### 3.1 Expressions (ct-ast)
+
+ct-ast parses expressions with C's precedence. The supported operator subset, tightest first:
+
+| Level | Operators |
+| --- | --- |
+| unary | `!` `~` `-` `&` (address-of) `*` (dereference), casts, `sizeof` |
+| multiplicative | `*` `/` `%` |
+| additive | `+` `-` |
+| shift | `<<` `>>` |
+| relational / equality | `<` `>` `<=` `>=` `==` `!=` |
+| bitwise AND | `&` |
+| bitwise XOR | `^` |
+| bitwise OR | `\|` |
+| logical | `&&` `\|\|` |
+| conditional | `?:` |
+| assignment | `=` and the compound forms `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
+
+Every binary / unary operation is parenthesised in the output, so the source semantics never rely on
+C's own precedence. L0 / L1 / L2 do not parse expressions (they rewrite line by line); this table
+describes ct-ast only.
 
 ### 4. Expansion rules
 

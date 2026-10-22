@@ -169,6 +169,23 @@ impl LexOps for Lexer {
             self->pos += 2;
             return;
         }
+        /* shifts: `<<=` / `>>=` first, then `<<` / `>>`, then the comparisons
+           `<=` / `>=` below must not swallow the first character */
+        if ((c == '<' || c == '>') && self->src[self->pos + 1] == c) {
+            self->toktext[0] = (char)c;
+            self->toktext[1] = (char)c;
+            if (self->src[self->pos + 2] == '=') {
+                self->toktext[2] = '=';
+                self->toktext[3] = 0;
+                self->tok = T_PUNCT;
+                self->pos += 3;
+            } else {
+                self->toktext[2] = 0;
+                self->tok = T_PUNCT;
+                self->pos += 2;
+            }
+            return;
+        }
         if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
             self->toktext[0] = (char)c;
             self->toktext[1] = '=';
@@ -194,8 +211,9 @@ impl LexOps for Lexer {
             self->pos += 2;
             return;
         }
-        /* compound assignment: `+=` `-=` `*=` `/=` `%=` */
-        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
+        /* compound assignment: `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` */
+        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
+             || c == '&' || c == '|' || c == '^')
             && self->src[self->pos + 1] == '=') {
             self->toktext[0] = (char)c;
             self->toktext[1] = '=';

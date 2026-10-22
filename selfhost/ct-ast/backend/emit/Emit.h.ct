@@ -84,9 +84,15 @@ import runtime::arena::Arena;
 #define B_AND 12
 #define B_OR  13
 #define B_XOR 14
+#define B_BAND 15
+#define B_BOR  16
+#define B_SHL  17
+#define B_SHR  18
 
 /* unary / postfix operators */
 #define U_NEG 1
+#define U_NOT 2
+#define U_BNOT 3
 #define P_INC 1
 
 namespace backend::emit;
@@ -958,6 +964,11 @@ impl EmitOps for Emitter {
             else if (self->arena->nodes[n].aux == 3) aop = " *= ";
             else if (self->arena->nodes[n].aux == 4) aop = " /= ";
             else if (self->arena->nodes[n].aux == 5) aop = " %= ";
+            else if (self->arena->nodes[n].aux == 6) aop = " &= ";
+            else if (self->arena->nodes[n].aux == 7) aop = " |= ";
+            else if (self->arena->nodes[n].aux == 8) aop = " ^= ";
+            else if (self->arena->nodes[n].aux == 9) aop = " <<= ";
+            else if (self->arena->nodes[n].aux == 10) aop = " >>= ";
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(aop, self->out);
             return self->emit_expr(self->arena->nodes[n].b);
@@ -1095,6 +1106,10 @@ impl EmitOps for Emitter {
             else if (self->arena->nodes[n].aux == B_AND) op = "&&";
             else if (self->arena->nodes[n].aux == B_OR) op = "||";
             else if (self->arena->nodes[n].aux == B_XOR) op = "^";
+            else if (self->arena->nodes[n].aux == B_BAND) op = "&";
+            else if (self->arena->nodes[n].aux == B_BOR) op = "|";
+            else if (self->arena->nodes[n].aux == B_SHL) op = "<<";
+            else if (self->arena->nodes[n].aux == B_SHR) op = ">>";
             fputs("(", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fprintf(self->out, " %s ", op);
@@ -1103,7 +1118,9 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_UNARY) {
-            fputs(self->arena->nodes[n].aux == U_NEG ? "(-" : "(!", self->out);
+            if (self->arena->nodes[n].aux == U_NEG) fputs("(-", self->out);
+            else if (self->arena->nodes[n].aux == U_BNOT) fputs("(~", self->out);
+            else fputs("(!", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;

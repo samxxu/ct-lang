@@ -546,7 +546,9 @@ impl StmtOps for Stmt {
         if (e < 0) return -1;
         if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
                                  || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
-                                 || strcmp(self->lex->toktext, "%=") == 0)) {
+                                 || strcmp(self->lex->toktext, "%=") == 0 || strcmp(self->lex->toktext, "&=") == 0
+                                 || strcmp(self->lex->toktext, "|=") == 0 || strcmp(self->lex->toktext, "^=") == 0
+                                 || strcmp(self->lex->toktext, "<<=") == 0 || strcmp(self->lex->toktext, ">>=") == 0)) {
             int op = 0, k2;
             char oc = self->lex->toktext[0];
             k2 = self->arena->nodes[e].kind;
