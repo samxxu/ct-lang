@@ -111,6 +111,10 @@ pub struct Expr {
        here: the generated header carries no macros. (D-7) */
     char fnptr_name[160];
     int  fnptr_state;
+    /* Set while the expression being parsed may name a C library function
+       (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
+       emitted verbatim instead of being rejected. */
+    int  fnval_ok;
 } use ExprOps;
 
 impl ExprOps for Expr {
@@ -629,8 +633,12 @@ impl ExprOps for Expr {
             return n;
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&") == 0) {
+            int save;
             self->sup->lex_next();
+            save = self->fnval_ok;
+            self->fnval_ok = 1;      /* `&handler` may name a C library function */
             e = self->parse_unary();
+            self->fnval_ok = save;
             if (e < 0) return -1;
             n = self->sup->new_node(N_ADDR);
             if (n < 0) return -1;
@@ -907,6 +915,15 @@ impl ExprOps for Expr {
                 if (vf >= 0) {
                     self->arena->nodes[n].kind = N_RAW;
                     snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->sym->funcs[vf].cname);
+                    return n;
+                }
+                /* A name this unit never declared: while a function-pointer
+                   value is expected it may come from a C header (`p = strcmp;`),
+                   so it is emitted verbatim and the C compiler is the judge.
+                   Anywhere else it is a typo, which is reported here. */
+                if (self->fnval_ok) {
+                    self->arena->nodes[n].kind = N_RAW;
+                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", nm);
                     return n;
                 }
                 return self->sup->fail("use of an undeclared variable");

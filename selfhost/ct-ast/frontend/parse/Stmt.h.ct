@@ -519,7 +519,10 @@ impl StmtOps for Stmt {
                     if (self->sup->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
                     snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {
+                    /* `int (*p)(int) = strcmp;` may name a C library function */
+                    if (strstr(typebuf, "(*")) self->ex->fnval_ok = 1;
                     e = self->ex->parse_expr();
+                    self->ex->fnval_ok = 0;
                     if (e < 0) return -1;
                 }
                 self->arena->nodes[n].a = e;
@@ -587,23 +590,27 @@ impl StmtOps for Stmt {
             return n;
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
-            int k;
+            int k, ip;
             char tt[MAX_TEXT];
             char tr[MAX_TEXT];
+            ip = 0;
             k = self->arena->nodes[e].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->sup->fail("assignment target is not assignable");
             self->sup->lex_next();
+            /* `p = strcmp;`: when the target is a function pointer, an unknown
+               bare name may be a C library function, so it is emitted as-is. */
+            if (((k == N_VAR && self->sup->var_type(self->arena->nodes[e].text2, tt, sizeof tt) == 0)
+                 || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
+                     && self->sup->expr_type(e, tt, sizeof tt) == 0))
+                && strstr(tt, "(*"))
+                self->ex->fnval_ok = 1;
             rhs = self->ex->parse_expr();
+            self->ex->fnval_ok = 0;
             if (rhs < 0) return -1;
-            if ((k == N_VAR && self->sup->var_type(self->arena->nodes[e].text2, tt, sizeof tt) == 0)
-                || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
-                    && self->sup->expr_type(e, tt, sizeof tt) == 0)) {
-                int ip = 0;
-                if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)) {
-                    rhs = self->sup->maybe_box(rhs, tr, ip);
-                    if (rhs < 0) return -1;
-                }
+            if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)) {
+                rhs = self->sup->maybe_box(rhs, tr, ip);
+                if (rhs < 0) return -1;
             }
             n = self->sup->new_node(N_ASSIGN);
             if (n < 0) return -1;

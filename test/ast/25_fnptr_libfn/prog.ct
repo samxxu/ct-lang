@@ -1,0 +1,12 @@
+/* 25: a function pointer may take a C library function as its value (SH-21).
+   The name is not in the CT function table; it is emitted verbatim and the C
+   compiler checks it against the prototype the `#include` brought in. */
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    int (*cmp)(const char *, const char *);
+    cmp = strcmp;
+    printf("%d\n", (*cmp)("a", "b") < 0);
+    return 0;
+}
