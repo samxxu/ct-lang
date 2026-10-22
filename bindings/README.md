@@ -185,13 +185,14 @@ If the library header already carries the full definition, the binding must **no
 struct (that is a C redefinition). Treat the header as opaque and supply the layout in the binding,
 or rename the mirror and hide the library type behind a `void *`.
 
-### 5. Cross-unit limit (v1)
+### 5. Cross-unit interface values
 
-In `build` mode the generated header only **forward-declares** interface types
-(`struct <Trait>_iface` is undefined), so interface values cannot cross unit boundaries; boxing a
-mapped instance is unit-private anyway ([language-spec](../docs/language-spec.md) §4.10).
+Since Batch 2 a `pub` trait implemented for a `pub` struct exports its vtable, and the generated
+header defines the interface type, so a consumer may declare an interface value, receive one from a
+`pub` function, and box the struct itself ([language-spec](../docs/language-spec.md) §4.11).
 
-A binding therefore boxes inside its own unit and exposes **scalar entry points**:
+This binding keeps its trait and instance private, so its table stays `static` and it boxes
+internally, exposing **scalar entry points**:
 
 ```c
 pub int mock_hal_send(char *buf, int len) {
@@ -201,8 +202,8 @@ pub int mock_hal_send(char *buf, int len) {
 }
 ```
 
-The consumer does `import uart;` and calls `mock_hal_send(...)`. This layer goes away once
-cross-unit interface values are supported.
+The consumer does `import uart;` and calls `mock_hal_send(...)`. Marking the trait and the instance
+`pub` would let it box `uart1` directly instead.
 
 ### 6. Building and testing
 
@@ -224,8 +225,8 @@ gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
 - [ ] the mirrored struct matches the library layout (prefer an opaque handle)
 - [ ] every trait method is bound **exactly once** (a gap crashes on a null slot, a duplicate is a
       C redefinition)
-- [ ] provide a `pub` entry point when initialisation is needed; do not hand interface values across
-      units (v1)
+- [ ] provide a `pub` entry point when initialisation is needed; mark the trait and the instance
+      `pub` if consumers should box the instance themselves
 - [ ] `demo.ct` + `demo.expected.out`, with expectations produced by the **real binary**
 - [ ] end to end: `ct build` → warning-free `cc` → run → compare
 - [ ] nothing vendored, nothing downloaded, never a compiler build step

@@ -43,6 +43,7 @@
 | DOC-19 | Medium | 教程四处与实现不符：`delete` 的 `p = 0`、`ctc` 建议、数组字段、示例行号 | [tutorial-claims-vs-impl.md](docs/tutorial-claims-vs-impl.md) |
 | DOC-20 | Low | README 快速开始 1b 只构建 `ctc`，后续步骤却调用 `ct` | [readme-quickstart-branch.md](docs/readme-quickstart-branch.md) |
 | DOC-21 | Low | construction.md 自称「描述现状」却未标适用编译器，两处描述在 ct-ast 上不成立 | [construction-scope-unspecified.md](docs/construction-scope-unspecified.md) |
+| DOC-22 | Low | Batch 2 落地后仍残留 `unit-private` / `not mangled` 陈述，设计文档状态仍写「待实现」 | [doc22-batch2-stale-statements.md](docs/doc22-batch2-stale-statements.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -83,7 +84,11 @@
 | SH-15 | Medium | `map` 每条绑定无条件生成 wrapper，缺少直绑零生成路径 | [ct-ast-map-wrapper-per-binding.md](selfhost/ct-ast-map-wrapper-per-binding.md) |
 | SH-16 | Medium | impl 未用参数触发 `-Wunused-parameter`；`(void)_self;` 落在 `return` 之后 | [ct-ast-impl-unused-param-warning.md](selfhost/ct-ast-impl-unused-param-warning.md) |
 | SH-17 | Low | 同一单元被多次 import 时生成物重复 `#include` 其头文件 | [ct-ast-import-dep-duplicate.md](selfhost/ct-ast-import-dep-duplicate.md) |
-| SH-18 | Low | 类型位置不接受命名空间限定名，诊断指向函数查找 | [ct-ast-qualified-type-name-rejected.md](selfhost/ct-ast-qualified-type-name-rejected.md) |
+| SH-18 | Medium | 类型位置不接受命名空间限定名，诊断指向函数查找；trait 类型连裸名也不可用 | [ct-ast-qualified-type-name-rejected.md](selfhost/ct-ast-qualified-type-name-rejected.md) |
+| SH-19 | **High** | trait 方法的裸 `void *` 参数被当成空参数列表，直接报 `unexpected token` | [ct-ast-trait-void-pointer-param.md](selfhost/ct-ast-trait-void-pointer-param.md) |
+| SH-20 | Medium | `map` 仍强制要求已声明实例，命名空间级绑定不可用 | [ct-ast-map-requires-instance.md](selfhost/ct-ast-map-requires-instance.md) |
+| SH-21 | Medium | 函数指针不能指向 C 库函数，只能指向 CT 声明的函数或 ALL_CAPS 宏 | [ct-ast-fnptr-cannot-name-libfn.md](selfhost/ct-ast-fnptr-cannot-name-libfn.md) |
+| SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
 
 ## 汇总
 
@@ -99,6 +104,7 @@
 **第二轮复审（2026-10-21，锚点 `dde0dda`）新增 8 条待修**：SH-8（High）、SH-9 / SH-10 / SH-11 / SH-12 / DOC-19（Medium）、DOC-20 / DOC-21（Low）；SH-7 与 DOC-18 复核后仍复现（见文末一节）。
 
 **Batch 2（2026-10-22）新增 6 条：SH-13…SH-18；其中 5 条已修（SH-13…SH-17），SH-18 按需求规格仅文档化**（见文末一节）。
+**同日复核（锚点 `224c08f`）再新增 5 条：SH-19（High）、SH-20 / SH-21 / SH-22（Medium）、DOC-22（Low）；SH-18 由 Low 升 Medium**（见文末「Batch 2 落地复核」一节）。
 
 状态附注：第二轮复审覆盖了上一轮评审的同一 HEAD `dde0dda`，工作树当时包含第二轮产生的 7 个 issue 文件 + 报告目录 + 本文件编辑（均为新增/只读产物，不触碰源码）。**全量生成物 `-Wall -Wextra` 扫描（2026-10-21）**发现 ct-ast 对 test/cases、test/ast、test/modules 生成的 C 文件有 3 类告警家族（`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数）——check-all.sh 当前只对 ct-ast 自身构建跑告警检查，不对生成物跑；详见 SH-10（扩展为 Medium）。
 
@@ -364,6 +370,50 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 
 门禁：`bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`bash selfhost/check-warnings.sh` 对全部
 正例、示例与测试用例的生成 C 执行 `-Wall -Wextra -std=c99` 零告警。
+
+## Batch 2 落地复核（2026-10-22，锚点 `224c08f`）
+
+复核方式：自建 L0 → L1 → L2 → ct-ast 四层链（`/tmp/b2r`），九关全绿的基础上，按第三方的
+四条诉求逐条搭最小工程实测，不以读码代替运行。**结论：诉求 (1)(3) 已真正可用，(4) 兑现一半，
+(2) 仍缺「无实例绑定」。**
+
+| 第三方诉求 | 复核结果 | 证据 |
+| --- | --- | --- |
+| (1) 跨单元接口值 | **已解决**：`pub trait` + `pub struct` 的 vtable 导出，消费单元可直接装箱，也能接住 `pub` 函数返回的接口值 | 两单元工程（`pub trait Stream` / `pub struct Conn` / `pub Stream stream_open(void)`）编译、运行、零告警；`net.h` 出 `extern struct Stream_vtbl Conn_Stream_vtable;`；map 实例跨单元装箱同样通过 |
+| (3) `.h` 复制 `#include` | **已解决**：`#include <sys/socket.h>` 进头文件，`struct sockaddr *` 参数不再退化成 `void *` | `net.h` 前部含 `#include <stdio.h>` / `#include <sys/socket.h>`，`int (*send)(void *, struct sockaddr *, int);` |
+| (2) `map` 两级绑定 | **部分**：直绑零生成、表达式实参、宏常量、限定实例都已可用；**仍要求实例是已声明变量** | `-> real_put;` 生成 `.put = real_put` 且 `--emit-map` 为 `"wrapper": false`；`map trait Writer for instance hal::netlib` 报 `is not a declared variable` → [SH-20](selfhost/ct-ast-map-requires-instance.md) |
+| (4) `extern` + 函数指针 | **部分**：`extern` 变量、函数指针的声明/赋值/调用/字段/跨单元导出都可用；函数原型被拒，库函数名不能作右值 | `p = exit;` 报 `use of an undeclared variable` → [SH-21](selfhost/ct-ast-fnptr-cannot-name-libfn.md)；`extern int lib_fn(int);` 报 `extern declares a variable, not a function` 且位置漂移 → [SH-22](selfhost/ct-ast-extern-function-prototype.md) |
+
+复核中新发现的硬阻塞：
+
+| ID | 严重度 | 结论 |
+| --- | --- | --- |
+| SH-19 | **High** | `trait T { int f(void *p); }` 直接报 `unexpected token`；`const void *` 可绕过。C 的 buffer/ownership API 几乎都用裸 `void *`，跨单元链接通了但接口签名写不出来 |
+| SH-18 | Medium（升级） | 命名空间内的 trait 类型在消费单元**裸名也不可用**（`Writer w;` → undeclared variable），只有 alias import 可行；struct 裸名却可用，两者不一致 |
+| SH-20 | Medium | 命名空间级绑定仍需一行 dummy 实例（`void *h;` 可充当，但不是「无需实例」） |
+| SH-21 | Medium | 函数指针右值必须是 CT 函数或 ALL_CAPS 宏，库函数要 `#define` 绕过——诉求里明确不要宏 |
+| SH-22 | Medium | `extern` 函数原型被拒，且诊断位置落在后续行（违反 `file:line:col:` 约定） |
+| DOC-22 | Low | `bindings/mock-hal/uart.ct`、`bindings/README.md`、`test/modules/map_ns/hal/uart.ct` 的 `unit-private` / `not mangled` 注释过期；设计文档状态仍写「待实现」 |
+
+新用例覆盖：`test/modules/{xunit_box,extern_decl,dup_impl,map_ns,pub_global,ns_globals,ambig_global}`、
+`test/ast/{15_map_args,20_map_expr,21_fnptr,22_map_direct,23_impl_unused,19_bitops}` 与
+`test/ast/errors/{extern_function,map_unknown_arg,bitops_assign_target}`，均由 `check-ast.sh` 钉住。
+
+### 处置（2026-10-22，同日）
+
+本轮 6 条全部落地：4 条修复、1 条部分修复、1 条文档化 + 诊断改进。
+
+| ID | 处置 | 验收点 |
+| --- | --- | --- |
+| SH-19 | 已修：`parse_trait` 在 `void` 后前瞻一个 token，`(void)` 仍表示空参数，`void *p` 按普通参数解析 | `test/ast/24_trait_voidptr`（trait 方法与 impl 都用 `void *`，装箱调用） |
+| SH-22 | 已修：`extern` 接受函数原型（只声明，`pub extern` 进 `.h`、`.c` 不定义）；`extern` 名不 mangling；诊断位置改用 `extern` 行的快照 | `test/modules/extern_decl` 增 `pub extern int lib_fn(int x);` + `lib_impl.c` 提供符号；负例 `extern_function.ct` 报在 `extern` 行 |
+| SH-21 | 已修：裸名右值在 CT 符号表里查不到时原样发射，由 C 编译器按原型校验（与普通调用、map wrapper 的既有策略一致） | `test/ast/25_fnptr_libfn`：`p = strcmp;` 后调用 |
+| SH-18 | 部分修复：导出的 `pub struct` / `pub trait` / `pub typedef` 可按**裸名**引用（`Writer w;` / `struct Uart u;` 解析到 `hal_Writer` / `hal_Uart`）；两个命名空间同名时裸名报错并提示 alias import；限定类型写法仍不支持，但诊断已明确 | `test/modules/ns_types`（正例）、`test/modules/ambig_type`（负例） |
+| SH-20 | 文档化 + 诊断改进：实例仍须是已声明全局（不合成宿主，避免拼写错误变成静默对象）；错误信息直接给出 `void *name;` 占位写法 | `test/ast/errors/map_no_instance.ct` + `check-ast.sh` 断言该提示；language-spec §4.10 中英各一条 |
+| DOC-22 | 已修：mock-hal 注释、`bindings/README.md` §5、`map_ns` 注释、Batch 2 设计文档状态与 `phase12.md` 状态注记 | `grep -rn "unit-private\|not mangled" bindings test/modules docs` 只剩已标注为历史的冻结正文 |
+
+门禁：`bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`bash selfhost/check-warnings.sh` 零告警。
+
 
 
 

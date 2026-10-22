@@ -410,6 +410,8 @@ map trait Controller for instance uart1 {
 约束与限制：
 
 - `map trait T for instance x { … }` 中，`x` 必须是**已声明的全局变量**（文件作用域），否则编译期报错。
+  纯函数式 C 库（socket / zlib 等）没有对象可挂，可用一行占位宿主：`void *netlib;`，再
+  `map trait Writer for instance netlib { … }`。编译器不会替未声明的名字合成宿主（拼写错误会变成静默的宿主）。
   实例名可写成**命名空间限定形式** `A::B::h`（2b.3）；全局按命名空间 mangling（见 §4.11），实际绑定的
   C 名是 `A_B_h`，实例的 vtable 与包装函数也以它为前缀（`A_B_h_T_vtable`）。
 - `T` 必须是已定义的 trait；无 vtbl 的 trait 不可映射。
@@ -438,7 +440,12 @@ map trait Controller for instance uart1 {
 - `pub int g_counter = 5;` 在其定义单元的 `.c` 里发射定义，在该单元的 `.h` 里发射 `extern int g_counter;`；
   其它单元 `import` 后即可按名引用。`pub` 只表示导出：未标 `pub` 的全局仍只属于本单元。
 - `extern int lib_flag;` 只声明、不定义：声明进入 `.h`，本单元的 `.c` 不发射定义，符号由外部 C 目标文件
-  或库提供。`extern` 不能带初始化式（编译期报错）。
+  或库提供。`extern` 不能带初始化式（编译期报错）。`extern` 同样接受函数原型
+  （`extern int lib_fn(int);`）：只声明、不定义，`pub extern` 的原型进入 `.h`；`extern` 的名字不参与
+  mangling，因为它指向 C 库的符号。
+- 导出的类型（`pub struct` / `pub trait` / `pub typedef`）在命名空间内仍可**用裸名**引用：消费者写
+  `Writer w;` 或 `struct Uart u;`，编译器解析到 `hal_Writer` / `hal_Uart`。两个被导入的命名空间导出同名
+  类型时，裸名报错并要求用别名 import（`import a::b::T as T;`）。类型的**限定写法**（`struct A::B`）仍不支持。
 - 命名空间内的全局变量按命名空间 **mangling**：`namespace A::B; int h;` 的 C 名是 `A_B_h`，因此两个命名空间
   可以各有一个 `h` 而不会在链接期冲突。`extern` 是例外——它声明的符号由 C 库提供，保留原名与空命名空间。
 - 导入单元可以用**限定名**引用导出的全局：`a::h` 读写 `a_h`；只有一个候选时裸名同样可用。若两个被导入的
@@ -457,7 +464,8 @@ struct Box { int (*op)(int); };
 static int apply(int (*fn)(int), int v) { return (*fn)(v); }
 ```
 
-- 赋值接受 `p = handler;` 与 `p = &handler;`；函数名作为右值时发射其 C 名。
+- 赋值接受 `p = handler;` 与 `p = &handler;`；函数名作为右值时发射其 C 名。`#include` 引入的库函数
+  同样可用（`p = strcmp;`）：CT 符号表里没有的名字原样发射，由 C 编译器按原型校验；普通调用一直如此。
 - 调用接受 `p(args)` 与 `(*p)(args)`，两种写法统一发射为 `(*p)(args)`。
 - 限制：不支持 `typedef` 函数指针、不返回函数指针、不支持嵌套函数指针（编译期报错）；
   一条声明只写一个名字（`int (*a)(void), (*b)(void);` 报错）。
@@ -1033,7 +1041,11 @@ map trait Controller for instance uart1 {
 Constraints and limits:
 
 - In `map trait T for instance x { … }`, `x` must be a **declared global variable** (file scope), else
-  a compile-time error. The instance may be spelled namespace-qualified, `A::B::h` (2b.3); globals are
+  a compile-time error. A function-only C library (socket, zlib, …) has no object to hang the binding
+  on, so declare a placeholder host: `void *netlib;` and then
+  `map trait Writer for instance netlib { … }`. An undeclared name is never turned into a host silently —
+  a typo would otherwise become a hidden object.
+- The instance may be spelled namespace-qualified, `A::B::h` (2b.3); globals are
   mangled by their namespace (§4.11), so the C name bound is `A_B_h` and the instance's vtable / wrappers
   carry it as their prefix (`A_B_h_T_vtable`).
 - `T` must be a defined trait; a trait without a vtbl cannot be mapped.
@@ -1069,7 +1081,14 @@ Constraints and limits:
   `pub` means export only: a global without `pub` still belongs to its own unit.
 - `extern int lib_flag;` declares without defining: the declaration goes into the `.h`, and the
   unit's `.c` emits no definition — the symbol comes from an external C object file or library.
-  `extern` cannot carry an initializer (a compile-time error).
+  `extern` cannot carry an initializer (a compile-time error). It also accepts a function prototype
+  (`extern int lib_fn(int);`): declaration only, and a `pub extern` prototype reaches the `.h`.
+  An `extern` name is never mangled, because it names a C library symbol.
+- Exported types (`pub struct` / `pub trait` / `pub typedef`) inside a namespace are still reachable by
+  their **bare name**: a consumer writes `Writer w;` or `struct Uart u;`, and the compiler resolves
+  `hal_Writer` / `hal_Uart`. When two imported namespaces export the same bare name, the bare reference
+  is refused and an alias import is required (`import a::b::T as T;`). A **qualified** type spelling
+  (`struct A::B`) is still not supported.
 - Globals inside a namespace are **mangled**, like type and exported function names: `namespace A::B; int h;`
   has the C name `A_B_h`, so two namespaces may each declare `h` without a link-time collision. `extern` is
   the exception — the symbol belongs to a C library, so it keeps its own name and no namespace.
@@ -1094,7 +1113,9 @@ static int apply(int (*fn)(int), int v) { return (*fn)(v); }
 ```
 
 - Assignment accepts `p = handler;` and `p = &handler;`; a function name used as an rvalue emits
-  its C name.
+  its C name. A library function brought in by `#include` works the same way (`p = strcmp;`): a name
+  CT never declared is emitted verbatim and the C compiler checks it against the prototype, just as an
+  ordinary call already does.
 - A call accepts `p(args)` and `(*p)(args)`; both are emitted as `(*p)(args)`.
 - Limits: no `typedef` of a function pointer, no returning a function pointer, no nested function
   pointers (compile-time errors); one declaration names exactly one pointer

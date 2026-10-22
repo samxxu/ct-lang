@@ -1,11 +1,16 @@
-# Batch 2 需求规格：跨单元 OO（已批准，待实现）
+# Batch 2 需求规格：跨单元 OO（已实现）
 
 > 中文 · [English](#english)
 >
-> **状态：已获用户批准（2026-10-22），本文件是本批次的实现依据。**
-> 实现方按第 3–4 节落码，按第 6 节验收。与既有 `docs/design/*.md` 的「草案」不同，
-> 本文件不是未定稿的设想，而是经确认的工作项；AGENTS §2「`docs/design/` 下不得照此创建目录」的
-> 约束在**本文件**上按用户授权解除，其余约束（不动 L0/L1/L2、不 bump 版本、不重生成 golden）继续有效。
+> **状态：已实现（2026-10-22，出口验证见本节末）。** 本文件是经用户批准的原始需求规格，
+> 保留作实现依据与历史记录。
+> 出口验证：`bash selfhost/check-all.sh` → `check-all: OK (9 hard gates green)`；新增
+> `test/modules/{pub_global,xunit_box,extern_decl,dup_impl,map_ns}` 与
+> `test/ast/{20_map_expr,21_fnptr,22_map_direct,23_impl_unused}`（均见 `check-ast.sh`），
+> 生成物零告警。落地提交：`10928c5`（Batch 1 位运算）、`ca5f824`（告警关卡）、`836c2e2`（2a.2 / 2c.1 / 2c.2）、
+> `329016d`（2a.1 / 2a.3 / 2a.4 / 2b.1–2b.5）、`a758fa4`（2b.3 的全局 mangling 补齐）、`c554d10` / `224c08f`（文档）。
+> 后续：2b.3 最初按「取最后一段」实现，Batch 3（[global-mangling.md](global-mangling.md)）改为真正的
+> 命名空间 mangling，本文件 §3.2 的目标即完全达成。
 >
 > 锚点：commit `2ead601`（v0.12.0，2026-10-22）。
 > 前置：工作树另含 Batch 1 的未提交改动（位运算、`map` ALL_CAPS 实参、`.h` 的 `#include` 序言、

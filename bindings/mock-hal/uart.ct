@@ -5,8 +5,11 @@
 // binds the trait's methods to real calls on that instance. No new language
 // feature is involved - only `map` (Phase 11) and top-level pass-through C.
 //
-// v1 limitation: boxing a mapped instance is unit-private, so the instance is
-// boxed here and this unit exposes plain entry points to other units.
+// Boxing happens here and the unit exposes plain entry points. Batch 2 made
+// this optional: a `pub` trait on a `pub` instance exports its vtable, so a
+// consumer could box the instance itself. This binding keeps both private, so
+// the generated table stays `static` and the scalar entry points are the only
+// surface.
 #include "mock_hal.h"
 
 trait Controller {

@@ -13,6 +13,9 @@
 > CT 的「顶层构造与直通 C 混排」语言特性（[language-spec](../language-spec.md) §4.10）已足以表达 binding，
 > **无需新增任何语言特性**。冻结层 `ctc.c`（L0）、`selfhost/l1/ctc.ct`（L1）、`selfhost/l2/**`（L2）一律不动；
 > Phase 12 的新代码只落 **ct-ast**（`selfhost/ct-ast/main.ct`）。
+>
+> **状态注记（2026-10-22）**：下文表格（以及 mock-hal 注释）里「跨单元装箱是单元私有」一栏已由 Batch 2
+> 解除——`pub` trait × `pub` struct 的 vtable 现在外部链接，消费单元可直接装箱。冻结正文保持原样作为历史记录。
 
 ---
 
