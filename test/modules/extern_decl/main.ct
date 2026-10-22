@@ -1,11 +1,11 @@
 /* The consumer: it imports the declaration unit and reads the C library's
-   global through the accessor that unit exports. */
+   global, then calls the library function through the declared prototype. */
 #include <stdio.h>
 
 import lib;
 
 int main(void)
 {
-    printf("%d\n", lib_flag_get());
+    printf("%d %d\n", lib_flag_get(), lib_fn(2));
     return 0;
 }

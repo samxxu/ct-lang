@@ -389,6 +389,8 @@ if "$work/ct-ast" build test/modules/extern_decl/main.ct -o "$mod-ex" \
         >"$work/mex.out" 2>"$work/mex.err" \
    && grep -q '^extern int lib_flag;$' "$mod-ex/lib.h" \
    && ! grep -Eq '^int lib_flag[ ;=]' "$mod-ex/lib.c" \
+   && grep -q '^int lib_fn(int);$' "$mod-ex/lib.h" \
+   && ! grep -q 'lib_fn(int x) {' "$mod-ex/lib.c" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-ex"/*.c test/modules/extern_decl/lib_impl.c \
         -o "$work/mex.bin" 2>"$work/mex.cc" \
    && "$work/mex.bin" >"$work/mex.stdout" 2>&1 \
