@@ -1,0 +1,33 @@
+/* 21: function pointers (2b.4) - a pointer is declared with its name inside
+   the type (`int (*p)(int)`), may be a parameter or a struct field, takes a
+   function with `p = handler;` or `p = &handler;`, and is called as `p(x)` or
+   `(*p)(x)`. */
+#include <stdio.h>
+
+struct Box {
+    int base;
+    int (*op)(int);
+};
+
+static int twice(int x) { return x * 2; }
+static int plus_one(int x) { return x + 1; }
+
+static int apply(int (*fn)(int), int v) {
+    return (*fn)(v);
+}
+
+int main(void) {
+    struct Box b;
+    int (*p)(int);
+    int a, c, d;
+
+    p = twice;
+    a = p(10);
+    p = &plus_one;
+    c = (*p)(10);
+    b.base = 5;
+    b.op = twice;
+    d = apply(b.op, b.base);
+    printf("%d %d %d\n", a, c, d);
+    return 0;
+}

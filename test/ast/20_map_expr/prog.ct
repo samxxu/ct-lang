@@ -1,0 +1,43 @@
+/* 20: `map` arguments may be expressions, not just one name. Every identifier
+   in them must resolve - a binding parameter, this map's instance, a declared
+   variable, or an ALL_CAPS macro constant - and member names are skipped. The
+   wrapper is still generated (only a bare function name is a direct binding). */
+#include <stdio.h>
+
+#define GPIO_MAX 3
+
+trait Reader {
+    int read(int v);
+    int size(void);
+}
+
+struct Box {
+    int base;
+    int len;
+};
+
+struct Box box_a;
+struct Box box_b;
+struct Box *p;
+int g_base;
+
+static int pick(struct Box *b, int off) {
+    return b->base + off;
+}
+
+map trait Reader for instance box_a {
+    read(v) -> pick(&box_b, g_base + v * 2);
+    size() -> pick(&box_b, GPIO_MAX + p->len);
+}
+
+int main(void) {
+    Reader r;
+    box_b.base = 10;
+    box_b.len = 9;
+    g_base = 5;
+    p = &box_b;
+    r = box_a;
+    printf("%d\n", r.read(1));
+    printf("%d\n", r.size());
+    return 0;
+}

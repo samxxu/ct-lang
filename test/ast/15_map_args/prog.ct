@@ -1,5 +1,9 @@
-// 15: `map` CALL arguments — `&<another global>` and a member path on the instance
+// 15: `map` CALL arguments — `&<another global>`, a member path on the
+// instance, and an ALL_CAPS macro constant (15.4: the expression side already
+// accepts macro constants, and the map side must agree).
 #include <stdio.h>
+
+#define MAP_OFFSET 5
 
 trait Reader {
     int read(void);
@@ -20,11 +24,18 @@ map trait Reader for instance box_a {
     read() -> pick(&box_b, box_a.base);
 }
 
+map trait Reader for instance box_b {
+    read() -> pick(&box_a, MAP_OFFSET);
+}
+
 int main(void) {
     Reader r;
+    Reader s;
     box_a.base = 2;
     box_b.base = 10;
     r = box_a;
+    s = box_b;
     printf("%d\n", r.read());
+    printf("%d\n", s.read());
     return 0;
 }

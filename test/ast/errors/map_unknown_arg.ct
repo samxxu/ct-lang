@@ -1,0 +1,15 @@
+/* 2b.2: a parenthesised CALL argument may be an expression, but every
+   identifier in it must resolve; an undeclared lowercase name is refused. */
+trait T {
+    void m(int a);
+}
+
+struct S {
+    int x;
+};
+
+struct S s;
+
+map trait T for instance s {
+    m(a) -> g(missing);
+}

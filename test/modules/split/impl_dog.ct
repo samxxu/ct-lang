@@ -2,8 +2,11 @@ import shapes;
 
 #include <stdio.h>
 
-/* The impl and the vtable it builds are `static` and live here, in impl_dog.c: no
-   other unit can name them. Only the object pointer crosses the unit boundary. */
+/* A `pub` trait on a `pub` struct exports its vtable (2a.1): `shapes.h`
+   declares `struct Speak_vtbl Dog_Speak_vtable;` and this unit defines it with
+   external linkage, so another unit that boxes a Dog points at the same table.
+   `Dog_Speak_hi` itself stays static here -- callers dispatch through the vptr
+   stored in the object, never through the function symbol. */
 impl Speak for Dog {
     void hi() {
         printf("woof %d\n", self->n);

@@ -1,0 +1,10 @@
+/* The consumer: it calls the namespaced entry that boxes the mapped instance. */
+#include <stdio.h>
+
+import hal::uart;
+
+int main(void)
+{
+    printf("%d\n", hal::write_hello());
+    return 0;
+}

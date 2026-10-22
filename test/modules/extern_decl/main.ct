@@ -1,0 +1,11 @@
+/* The consumer: it imports the declaration unit and reads the C library's
+   global through the accessor that unit exports. */
+#include <stdio.h>
+
+import lib;
+
+int main(void)
+{
+    printf("%d\n", lib_flag_get());
+    return 0;
+}

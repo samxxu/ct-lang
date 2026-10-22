@@ -1,0 +1,31 @@
+/* 2b.3: the map lives in the `hal` namespace (the directory under the build
+   root decides it) and spells its instance with the qualified name. Globals are
+   not mangled by this compiler yet, so the path is accepted for readability and
+   the declared name (the last segment) is used. */
+namespace hal;
+
+trait Writer {
+    int write(char *buf, int len);
+}
+
+struct Uart {
+    int fd;
+};
+
+struct Uart uart1;
+
+static int uart_put(void *self, char *buf, int len) {
+    struct Uart *u = (struct Uart *)self;
+    return u->fd + len + buf[0];
+}
+
+map trait Writer for instance hal::uart1 {
+    write(buf, len) -> uart_put;
+}
+
+pub int write_hello(void) {
+    Writer w;
+    uart1.fd = 2;
+    w = uart1;
+    return w.write("A", 3);
+}

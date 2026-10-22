@@ -1,0 +1,27 @@
+/* The implementation unit: it owns the impl, the vtable and the instance. The
+   vtable has external linkage because both halves are public, so an importing
+   unit may box a `Conn` of its own; `net.h` declares it. */
+#include <stdio.h>
+
+pub trait Stream {
+    int write(char *buf, int len);
+}
+
+pub struct Conn {
+    int fd;
+} use Stream;
+
+struct Conn conn1;
+
+impl Stream for Conn {
+    int write(char *buf, int len) {
+        return len + self->fd + buf[0];
+    }
+}
+
+pub Stream stream_open(void) {
+    Stream s;
+    conn1.fd = 1;
+    s = conn1;
+    return s;
+}

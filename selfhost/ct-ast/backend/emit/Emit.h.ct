@@ -113,6 +113,7 @@ trait EmitOps {
     int  emit_json_str(FILE *f, const char *s);
     int  emit_node(int n, int ind);
     int  emit_inline(int n);
+    int  emit_type_name(const char *type, const char *name);
     int  emit_expr(int n);
     int  hoist_rvalue(int n);
     int  hoist_scan(int n, int top);
@@ -341,8 +342,12 @@ impl EmitOps for Emitter {
             si = self->arena->nodes[n].aux;
             tname = self->arena->nodes[n].text2;
             if (strcmp(tname, "Drop") == 0) continue;   /* no vptr, no vtable */
-            fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
-                    tname, self->sym->structs[si].name, tname);
+            if (self->vtable_exported(si, tname))
+                fprintf(self->out, "struct %s_vtbl %s_%s_vtable;\n",
+                        tname, self->sym->structs[si].name, tname);
+            else
+                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
+                        tname, self->sym->structs[si].name, tname);
         }
         /* a `delete` in a function body runs before the drop definition below */
         for (si = 0; si < self->sym->nstructs; si++)
@@ -493,7 +498,7 @@ impl EmitOps for Emitter {
        `main` can already dispatch through them. */
     int emit_impls(int prog)
     {
-        int n, m, k, u;
+        int n, m, k, u, body;
         (void)self;
 
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
@@ -547,16 +552,17 @@ impl EmitOps for Emitter {
                     k = self->arena->nodes[k].next;
                 }
                 self->sym->self_mode = 0;
-                /* The cast is emitted before the body, so a method that never
-                   touches `self` leaves an unused variable behind; the same
-                   suppression the synthesised Drop below uses. */
-                if (!self->self_used) fputs("    (void)_self;\n", self->out);
                 fputs("}\n\n", self->out);
             }
             if (strcmp(tname, "Drop") != 0) {
-                /* a trait nothing dispatches leaves the table unreferenced */
-                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
-                        tname, self->sym->structs[si].name, tname);
+                /* a trait nothing dispatches leaves the table unreferenced; an
+                   exported one is reachable from the consumer unit instead */
+                if (self->vtable_exported(si, tname))
+                    fprintf(self->out, "struct %s_vtbl %s_%s_vtable = {\n",
+                            tname, self->sym->structs[si].name, tname);
+                else
+                    fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+                            tname, self->sym->structs[si].name, tname);
                 u = 0;
                 for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                     if (u > 0) fputs(",\n", self->out);
@@ -624,9 +630,13 @@ impl EmitOps for Emitter {
                 struct MethodSig *sig;
                 b = &self->maps[i].b[j];
                 sig = &self->sym->traits[b->ti].m[b->mi];
+                /* a direct binding fills the slot with the C function itself */
+                if (b->direct) continue;
                 fprintf(self->out, "static %s %s(void *self", sig->ret, b->wrapper);
-                for (k = 0; k < b->nparams; k++)
-                    fprintf(self->out, ", %s %s", sig->ptype[k], b->params[k]);
+                for (k = 0; k < b->nparams; k++) {
+                    fputs(", ", self->out);
+                    if (self->emit_type_name(sig->ptype[k], b->params[k]) != 0) return -1;
+                }
                 fputs(") {\n", self->out);
                 fputs("    (void)self;\n", self->out);
                 if (strcmp(sig->ret, "void") != 0)
@@ -636,13 +646,20 @@ impl EmitOps for Emitter {
                 fputs("}\n", self->out);
             }
             if (self->maps[i].nb > 0) {
-                /* an instance nothing boxes leaves its table unreferenced */
-                fprintf(self->out, "static struct %s_vtbl %s __attribute__((unused)) = {\n",
-                        self->maps[i].trait, self->maps[i].vtable);
+                /* an instance nothing boxes leaves its table unreferenced; a
+                   mapped `pub` global is reachable from every importing unit */
+                if (self->map_vtable_exported(i))
+                    fprintf(self->out, "struct %s_vtbl %s = {\n",
+                            self->maps[i].trait, self->maps[i].vtable);
+                else
+                    fprintf(self->out, "static struct %s_vtbl %s __attribute__((unused)) = {\n",
+                            self->maps[i].trait, self->maps[i].vtable);
                 for (j = 0; j < self->maps[i].nb; j++) {
                     if (j > 0) fputs(",\n", self->out);
                     fprintf(self->out, "    .%s = %s", self->maps[i].b[j].method,
-                            self->maps[i].b[j].wrapper);
+                            self->maps[i].b[j].direct
+                                ? self->maps[i].b[j].call
+                                : self->maps[i].b[j].wrapper);
                 }
                 fputs("\n};\n\n", self->out);
             }
@@ -1324,7 +1341,17 @@ impl EmitOps for Emitter {
                 fputs(self->arena->nodes[n].text3, self->out);
                 return 0;
             }
-            fprintf(self->out, "%s(", self->arena->nodes[n].text2);
+            /* aux 1: `p(args)` on a function-pointer variable; aux 2: the
+               callee is an expression, `(*p)(args)`. Both spell the call the
+               same way (D-7). */
+            if (self->arena->nodes[n].aux == 1) {
+                fprintf(self->out, "(*%s)(", self->arena->nodes[n].text2);
+            } else if (self->arena->nodes[n].aux == 2) {
+                if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+                fputs("(", self->out);
+            } else {
+                fprintf(self->out, "%s(", self->arena->nodes[n].text2);
+            }
             c = self->arena->nodes[n].a;
             while (c >= 0) {
                 if (self->emit_expr(c) != 0) return -1;
@@ -1432,7 +1459,7 @@ impl EmitOps for Emitter {
     {
         char path[MAX_PATH];
         char guard[MAX_PATH];
-        int n, i;
+        int n, i, pp;
         FILE *f;
         (void)self;
 
@@ -1449,17 +1476,32 @@ impl EmitOps for Emitter {
                        "   includes this header).\n"
                        "   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n",
                 self->version, self->path);
+        /* The exported types may name types from the source's own C includes,
+           so those lines lead the header. Only `#include` is copied: other `#`
+           lines belong to the implementation and would be duplicated. */
+        pp = 0;
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_PP) continue;
+            if (strncmp(self->arena->nodes[n].text, "#include", 8) != 0) continue;
+            fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+            pp++;
+        }
+        if (pp > 0) fputs("\n", self->out);
         for (i = 0; i < self->units[u].ndep; i++)
             fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
         if (self->units[u].ndep > 0) fputs("\n", self->out);
 
         if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
+        if (self->emit_link_externs(self->units[u].prog, u) != 0) return -1;
 
         for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
             if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF)
                 && self->arena->nodes[n].d == 1) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+            } else if (self->arena->nodes[n].kind == N_GLOBAL
+                       && (self->arena->nodes[n].d == 1 || self->arena->nodes[n].aux == 2)) {
+                if (self->emit_global_extern(n) != 0) return -1;
             }
         }
 
@@ -1657,8 +1699,11 @@ impl EmitOps for Emitter {
                 fputs("{\"method\":\"", f);
                 self->emit_json_str(f, self->maps[i].b[j].method);
                 fputs("\",\"symbol\":\"", f);
-                self->emit_json_str(f, self->maps[i].b[j].wrapper);
-                fputs("\"}", f);
+                self->emit_json_str(f, self->maps[i].b[j].direct
+                                          ? self->maps[i].b[j].call
+                                          : self->maps[i].b[j].wrapper);
+                fprintf(f, "\",\"wrapper\":%s}",
+                        self->maps[i].b[j].direct ? "false" : "true");
             }
             fputs("]}", f);
         }

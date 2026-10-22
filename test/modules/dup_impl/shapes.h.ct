@@ -1,0 +1,8 @@
+/* the trait and the struct are shared; two units each write an impl */
+pub trait Speak {
+    void hi();
+}
+
+pub struct Dog {
+    int n;
+} use Speak;

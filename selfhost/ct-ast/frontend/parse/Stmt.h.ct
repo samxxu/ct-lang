@@ -448,7 +448,7 @@ impl StmtOps for Stmt {
        wrapper, so every consumer still sees one statement node. */
     int parse_decl_node(void)
     {
-        int n, e, head, tail, base_stars, first_decl;
+        int n, e, head, tail, base_stars, first_decl, is_fnptr;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
@@ -457,12 +457,22 @@ impl StmtOps for Stmt {
         head = -1;
         tail = -1;
         base_stars = 0;
+        is_fnptr = 0;
         first_decl = 1;
         for (;;) {
             int stars = 0, si;
             size_t tl;
             char t2[MAX_TEXT];
 
+            is_fnptr = self->ex->fnptr_state;
+            if (is_fnptr) {
+                /* the declarator name came with the type (`int (*cb)(void *)`)
+                   and a function pointer declares exactly one name */
+                if (!first_decl)
+                    return self->sup->fail("a function pointer declares one name");
+                snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+                first_decl = 0;
+            } else {
             while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
                 stars++;
                 self->sup->lex_next();
@@ -487,6 +497,7 @@ impl StmtOps for Stmt {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a variable name");
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
+            }
             n = self->sup->new_node(N_DECL);
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
@@ -558,7 +569,12 @@ impl StmtOps for Stmt {
             else if (oc == '-') op = 2;
             else if (oc == '*') op = 3;
             else if (oc == '/') op = 4;
-            else op = 5;
+            else if (oc == '%') op = 5;
+            else if (oc == '&') op = 6;
+            else if (oc == '|') op = 7;
+            else if (oc == '^') op = 8;
+            else if (oc == '<') op = 9;
+            else op = 10;
             self->sup->lex_next();
             rhs = self->ex->parse_expr();
             if (rhs < 0) return -1;

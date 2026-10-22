@@ -171,6 +171,9 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
   `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`，以解决 vtable 变量的前向引用
   （C 的 tentative definition，随后再带初始化式定义，合法）。
 - vtable 初始化项按 **trait 中方法的声明顺序**排列，而不是 impl 中的书写顺序。
+- 跨单元（ct-ast `build` 模式）：当 trait 与 struct **都标 `pub`** 时，vtable 改为外部链接——声明单元的
+  头文件发射 `extern struct <Trait>_vtbl <Struct>_<Trait>_vtable;`，实现单元给出定义，消费单元可直接装箱。
+  其它情况仍为 `static`，且同一对 `struct`/trait 的 `impl` 必须位于同一编译单元。
 
 #### 4.4 变量声明 → 限定 `struct` + 追加 vptr 指定初始化
 
@@ -401,28 +404,60 @@ map trait Controller for instance uart1 {
 
 | 产物 | 规则 | 示例（实例 `uart1`，trait `Controller`，方法 `send`） |
 | --- | --- | --- |
-| 包装函数 | `<实例>_<Trait>_<方法>`，首参 `void *self`（体内 `(void)self;`） | `static int uart1_Controller_send(void *self, char *buf, int len)` |
-| vtable 变量 | `<实例>_<Trait>_vtable`，指定初始化 `.方法 = 包装函数` | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
+| 包装函数 | fallback 时 `<实例>_<Trait>_<方法>`，首参 `void *self`（体内 `(void)self;`）；**直绑时不生成** | `static int uart1_Controller_send(void *self, char *buf, int len)` |
+| vtable 变量 | `<实例>_<Trait>_vtable`，指定初始化 `.方法 = 包装函数`（直绑时为被绑定的 C 函数本身） | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
 
 约束与限制：
 
 - `map trait T for instance x { … }` 中，`x` 必须是**已声明的全局变量**（文件作用域），否则编译期报错。
+  实例名可写成**命名空间限定形式** `A::B::h`（2b.3）；全局变量不做 mangling（见 §4.11），故实际绑定的
+  C 名是路径的最后一段。
 - `T` 必须是已定义的 trait；无 vtbl 的 trait 不可映射。
 - 绑定方法名必须是 `T` 的既有方法，`( … )` 里的参数个数须与 trait 声明一致。
 - 绑定必须覆盖 `T` 的**每一个**方法，且每个方法**只绑一次**：漏绑会让 vtable 留一个空指针槽（调用即崩溃），
   重复绑定会发射两份同名包装函数（C 重定义）；两种情况都在编译期报错。
-- `->` 右侧（CALL）只接受受限子集——单层调用 `f(args)`，每个实参只能是：数字 / `"…"` / `'…'` 字面量、
-  一个**可见名字**（左括号内出现过的形参名、本 map 的实例、或此前已声明的变量），或以**实例为根**的成员路径
-  `x.f` / `x->f`（可带前置 `&`）；其余实参编译期报错。
+- `->` 右侧（CALL）是**两级绑定**：
+  - **直绑**：调用名是裸 C 函数名（纯标识符）时零生成，vtable 槽直接指向它；直绑不校验签名，
+    被绑函数必须自行满足 trait 的槽类型（首参 `void *`）。
+  - **fallback**：调用含表达式或成员路径时生成实例级包装函数。每个实参按标识符逐个校验：字符串 / 字符
+    字面量、数字字面量、`.` / `->` 后的成员名、`A::B` 限定名直接放行；其余标识符必须是左括号内的形参名、
+    本 map 的实例、此前已声明的变量或 ALL_CAPS 宏，否则编译期报错。
 - 多个 map 可作用于同一实例；`MAX_MAPS`（64）是 map 构造总数上限，超限报错。
-- **跨单元**：映射实例只在**定义它的单元内**装箱——把一个实例箱成接口值与 `impl` 的 vtable 一样是单元私有的
-  （跨单元时该实例的全局变量本身也不可见，故其它单元应在定义单元先装箱、再传出接口值）。`build` 模式下，
-  包装函数与 vtable 发射在**声明该 map 的单元**的 `.c` 里（`static`），不会重复出现在其它单元。
+- **跨单元**：vtable 在 `pub` trait 且实例是有 `pub` 全局时外部链接（同 §4.11 的 impl 规则）：头文件
+  声明 `extern`、声明单元给出定义，其它单元可直接装箱。否则包装函数与 vtable 发射在**声明该 map 的单元**
+  的 `.c` 里（`static`），不会重复出现在其它单元。
 - **派发（11.2）**：把映射实例装箱为 trait 接口值时，用**实例级** vtable——
   `Controller c = uart1;` → `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };`
   （注意不是 struct 级的 `&Uart_Controller_vtable`）。因此**即便 `Uart` 未 `use Controller`**，
   `uart1` 也能作为 `Controller` 实例使用；此后 `c.send(...)` 经 `c.vt->send(c.self, ...)` 派发到包装函数。
-- `--emit-map` 的 JSON 新增 `maps` 字段，逐条列出 trait / instance / file / line 与 `bindings`（method → 生成符号）。
+- `--emit-map` 的 JSON 新增 `maps` 字段，逐条列出 trait / instance / file / line 与 `bindings`
+  （method → 生成符号）；每个 binding 另有 `"wrapper": true|false` 区分 fallback 与直绑。
+
+#### 4.11 跨单元链接：`pub` 全局与 `extern`（ct-ast）
+
+- `pub int g_counter = 5;` 在其定义单元的 `.c` 里发射定义，在该单元的 `.h` 里发射 `extern int g_counter;`；
+  其它单元 `import` 后即可按名引用。`pub` 只表示导出：未标 `pub` 的全局仍只属于本单元。
+- `extern int lib_flag;` 只声明、不定义：声明进入 `.h`，本单元的 `.c` 不发射定义，符号由外部 C 目标文件
+  或库提供。`extern` 不能带初始化式（编译期报错）。
+- 命名空间内的全局变量**不做 mangling**：`namespace A::B; int h;` 的 C 名仍是 `h`（与类型名不同）。
+- 跨单元可装箱的边界：`impl` 的 vtable 仅在 **`pub` trait 且 `pub` struct** 同时成立时外部链接——
+  头文件声明 `extern struct T_vtbl S_T_vtable;`，实现单元给出定义（不再是 `static`）；否则保持单元私有。
+  同一 `struct` 的同一 trait 只能有一个 `impl`，重复定义在编译期报错并指出首个定义所在位置。
+
+#### 4.12 函数指针（ct-ast）
+
+声明位置支持 `ret (*name)(params)`：参数、struct 字段、全局与局部。生成 C 与源码同形，名字留在类型内部。
+
+```c
+int (*p)(int);
+struct Box { int (*op)(int); };
+static int apply(int (*fn)(int), int v) { return (*fn)(v); }
+```
+
+- 赋值接受 `p = handler;` 与 `p = &handler;`；函数名作为右值时发射其 C 名。
+- 调用接受 `p(args)` 与 `(*p)(args)`，两种写法统一发射为 `(*p)(args)`。
+- 限制：不支持 `typedef` 函数指针、不返回函数指针、不支持嵌套函数指针（编译期报错）；
+  一条声明只写一个名字（`int (*a)(void), (*b)(void);` 报错）。
 
 ### 5. 命名规则（稳定契约）
 
@@ -712,6 +747,10 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
   initialiser — both are valid together).
 - vtable initialisers follow the **declaration order of the methods in the trait**, not the order they
   are written in the impl.
+- Across units (ct-ast `build` mode): when **both the trait and the struct are `pub`**, the vtable gets
+  external linkage — the declaring unit's header emits `extern struct <Trait>_vtbl <Struct>_<Trait>_vtable;`
+  and the implementing unit defines it, so a consumer unit can box directly. Otherwise it stays `static`,
+  and every `impl` of one struct/trait pair must live in a single compilation unit.
 
 #### 4.4 Variable declarations → `struct` qualifier + appended vptr designator
 
@@ -985,27 +1024,73 @@ map trait Controller for instance uart1 {
 
 | Artifact | Rule | Example (instance `uart1`, trait `Controller`, method `send`) |
 | --- | --- | --- |
-| wrapper | `<inst>_<Trait>_<method>` with a leading `void *self` (body `(void)self;`) | `static int uart1_Controller_send(void *self, char *buf, int len)` |
-| vtable | `<inst>_<Trait>_vtable`, designated-init `.method = wrapper` | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
+| wrapper | fallback only: `<inst>_<Trait>_<method>` with a leading `void *self` (body `(void)self;`); **a direct binding generates none** | `static int uart1_Controller_send(void *self, char *buf, int len)` |
+| vtable | `<inst>_<Trait>_vtable`, designated-init `.method = wrapper` (the bound C function itself when direct) | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
 
 Constraints and limits:
 
 - In `map trait T for instance x { … }`, `x` must be a **declared global variable** (file scope), else
-  a compile-time error.
+  a compile-time error. The instance may be spelled namespace-qualified, `A::B::h` (2b.3); globals are
+  not mangled (§4.11), so the C name actually bound is the last path segment.
 - `T` must be a defined trait; a trait without a vtbl cannot be mapped.
 - The bound method must be an existing method of `T`, and its `( … )` parameter count must match the
   trait declaration.
-- The right-hand side of `->` (the CALL) accepts a restricted subset only — one `f(args)` call whose
-  every argument is a **parameter name** from the `( … )`, `&<instance>` (equal to this map's
-  instance), or a numeric / `"…"` / `'…'` literal; anything else is a compile-time error.
+- The right-hand side of `->` (the CALL) is a **two-level binding**:
+  - **direct**: when the callee is a bare C function name (a single identifier) nothing is generated
+    and the vtable slot points at that function. Signatures are not checked: the bound function must
+    itself match the slot type (a leading `void *`).
+  - **fallback**: a call containing an expression or member path gets an instance-level wrapper. Every
+    argument is validated identifier by identifier: string / character literals, numeric literals,
+    member names after `.` / `->`, and `A::B` qualified names pass; any other identifier must be a
+    parameter name from the `( … )`, this map's instance, an already-declared variable, or an ALL_CAPS
+    macro — otherwise it is a compile-time error.
 - Several maps may target the same instance; `MAX_MAPS` (64) caps the total number of map blocks.
+- **Across units**: the vtable gets external linkage when the trait is `pub` and the instance is a
+  `pub` global (the same rule as the impl vtable in §4.11): the header declares it `extern` and the
+  declaring unit defines it, so another unit can box the instance. Otherwise wrappers and the vtable
+  are emitted `static` in the unit that declares the map and never repeat elsewhere.
 - **Dispatch (11.2)**: boxing a mapped instance as a trait interface value uses the **instance-level**
   vtable — `Controller c = uart1;` becomes
   `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };` (not the struct-level
   `&Uart_Controller_vtable`). So **even when `Uart` never `use`d `Controller`**, `uart1` works as a
   `Controller` instance; afterwards `c.send(...)` dispatches via `c.vt->send(c.self, ...)` to the wrapper.
 - The `--emit-map` JSON gains a `maps` field listing trait / instance / file / line and `bindings`
-  (method → generated symbol) per map.
+  (method → generated symbol) per map; each binding also carries `"wrapper": true|false` to tell
+  fallback from a direct binding.
+
+#### 4.11 Cross-unit linkage: `pub` globals and `extern` (ct-ast)
+
+- `pub int g_counter = 5;` emits its definition into the defining unit's `.c` and
+  `extern int g_counter;` into that unit's `.h`; any importing unit may then refer to it by name.
+  `pub` means export only: a global without `pub` still belongs to its own unit.
+- `extern int lib_flag;` declares without defining: the declaration goes into the `.h`, and the
+  unit's `.c` emits no definition — the symbol comes from an external C object file or library.
+  `extern` cannot carry an initializer (a compile-time error).
+- Globals inside a namespace are **not mangled**: `namespace A::B; int h;` still has the C name
+  `h` (unlike type names).
+- The boundary of cross-unit boxing: an `impl` vtable gets external linkage only when the trait is
+  **`pub`** and the struct is **`pub`** — the header declares `extern struct T_vtbl S_T_vtable;`
+  and the implementing unit defines it (no longer `static`); otherwise it stays unit-private.
+  One struct may have only one `impl` per trait; a duplicate is a compile-time error naming the
+  first definition's location.
+
+#### 4.12 Function pointers (ct-ast)
+
+The declarator form `ret (*name)(params)` is accepted as a parameter, a struct field, a global
+and a local. The generated C matches the source, with the name kept inside the type.
+
+```c
+int (*p)(int);
+struct Box { int (*op)(int); };
+static int apply(int (*fn)(int), int v) { return (*fn)(v); }
+```
+
+- Assignment accepts `p = handler;` and `p = &handler;`; a function name used as an rvalue emits
+  its C name.
+- A call accepts `p(args)` and `(*p)(args)`; both are emitted as `(*p)(args)`.
+- Limits: no `typedef` of a function pointer, no returning a function pointer, no nested function
+  pointers (compile-time errors); one declaration names exactly one pointer
+  (`int (*a)(void), (*b)(void);` is an error).
 
 ### 5. Naming contract
 

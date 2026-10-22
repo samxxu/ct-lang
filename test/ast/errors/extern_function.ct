@@ -1,0 +1,7 @@
+/* 2a.3: `extern` declares a variable whose storage lives in another C object.
+   A function definition is not such a declaration and must be rejected. */
+#include <stdio.h>
+
+extern int counter(void) {
+    return 0;
+}

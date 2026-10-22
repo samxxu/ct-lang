@@ -289,6 +289,18 @@ impl ParseDeclOps for Parser {
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
             self->sup->lex_next();
             n = self->parse_func(1, is_pub);
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "extern") == 0) {
+            /* a declaration only, for a symbol the C library owns: it goes to
+               the header as `extern` and never defines anything */
+            self->sup->lex_next();
+            n = self->parse_func(0, is_pub);
+            if (n == NO_NODE || (n >= 0 && self->arena->nodes[n].kind == N_FUNC))
+                return self->sup->fail("extern declares a variable, not a function");
+            if (n >= 0) {
+                self->arena->nodes[n].aux = 2;
+                if (self->arena->nodes[n].a >= 0)
+                    return self->sup->fail("an extern declaration cannot have an initialiser");
+            }
         } else {
             n = self->parse_func(0, is_pub);
         }
@@ -407,9 +419,13 @@ impl ParseOps for Parser {
 
         func_line = self->lex->tokline;
         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
-        if (self->lex->tok != T_ID) return self->sup->fail("expected a name");
-        snprintf(name, sizeof name, "%s", self->lex->toktext);
-        self->sup->lex_next();
+        if (self->ex->fnptr_state) {
+            snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+        } else {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a name");
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
+            self->sup->lex_next();
+        }
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
             g = self->sup->new_node(N_GLOBAL);
@@ -515,14 +531,19 @@ impl ParseOps for Parser {
         }
         for (;;) {
             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0 &&
-                strcmp(typebuf, "void") == 0) {
+            if (self->ex->fnptr_state) {
+                /* the declarator name came with the type (`int (*cb)(void *)`) */
+                snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+            } else {
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0 &&
+                    strcmp(typebuf, "void") == 0) {
+                    self->sup->lex_next();
+                    return 0;
+                }
+                if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
+                snprintf(name, sizeof name, "%s", self->lex->toktext);
                 self->sup->lex_next();
-                return 0;
             }
-            if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
-            snprintf(name, sizeof name, "%s", self->lex->toktext);
-            self->sup->lex_next();
             p = self->sup->new_node(N_PARAM);
             if (p < 0) return -1;
             snprintf(self->arena->nodes[p].text, MAX_TEXT, "%s", typebuf);
@@ -555,9 +576,13 @@ impl ParseOps for Parser {
         (void)self;
 
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-        if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
-        snprintf(name, sizeof name, "%s", self->lex->toktext);
-        self->sup->lex_next();
+        if (self->ex->fnptr_state) {
+            snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+        } else {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
+            self->sup->lex_next();
+        }
         m = self->sup->new_node(N_FIELD);
         if (m < 0) return -1;
         snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", typebuf);
@@ -813,6 +838,8 @@ impl ParseOps for Parser {
         if (self->sup->expect("{") != 0) return -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->fnptr_state)
+                return self->sup->fail("a trait method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
             if (self->sym->traits[ti].nm >= MAX_METHODS) return self->sup->fail("too many trait methods");
             mi = self->sym->traits[ti].nm;
@@ -868,7 +895,7 @@ impl ParseOps for Parser {
     int parse_impl(void)
     {
         int ti, si, node, mnode, params, body, tail, impl_line;
-        int mline, nimpl, tm_i, k2, brace_line, brace_col, found;
+        int mline, nimpl, tm_i, k2, brace_line, brace_col, found, dup_i;
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
         char rtrait[MAX_TEXT];
@@ -914,6 +941,20 @@ impl ParseOps for Parser {
             snprintf(stype, sizeof stype, "struct %s", rstruct);
         else
             snprintf(stype, sizeof stype, "%s", rstruct);
+        /* A second impl of the same (struct, trait) would emit the vtable and the
+           methods twice; with external linkage that is a duplicate symbol, so the
+           duplicate is refused and the first definition is named by its unit. */
+        for (dup_i = 0; dup_i < self->arena->nnode; dup_i++)
+            if (self->arena->nodes[dup_i].kind == N_IMPL && self->arena->nodes[dup_i].aux == si
+                && strcmp(self->arena->nodes[dup_i].text2, rtrait) == 0) {
+                char dmsg[512];
+                snprintf(dmsg, sizeof dmsg,
+                         "duplicate impl of trait '%s' for struct '%s' (first at %s:%d)",
+                         tname, sname, self->arena->nodes[dup_i].text3, self->arena->nodes[dup_i].line);
+                if (tool::diag::ct_sem_error(impl_line, 1, dmsg, self->mem->path) != 0) return -1;
+                if (self->sup->skip_body() != 0) return -1;
+                return NO_NODE;
+            }
         brace_line = self->lex->tokline;
         brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->expect("{") != 0) return -1;
@@ -923,10 +964,13 @@ impl ParseOps for Parser {
         snprintf(self->arena->nodes[node].text2, MAX_TEXT, "%s", rtrait);
         self->arena->nodes[node].aux = si;
         snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", stype);
+        snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
         tail = -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             mline = self->lex->tokline;
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->fnptr_state)
+                return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
             snprintf(mname, sizeof mname, "%s", self->lex->toktext);
             self->sup->lex_next();

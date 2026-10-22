@@ -1,0 +1,8 @@
+import shapes;
+import a;
+import b;
+
+int main(void)
+{
+    return 0;
+}

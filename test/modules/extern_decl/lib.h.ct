@@ -1,0 +1,7 @@
+/* The declaration unit of a C library's global. `extern` is a declaration
+   only: it lands in `lib.h` and `lib.c` defines nothing for it. The accessor
+   shows the declared symbol is usable; the definition lives in lib_impl.c. */
+extern int lib_flag;
+
+pub int lib_flag_get(void);
+int lib_flag_get(void) { return lib_flag; }

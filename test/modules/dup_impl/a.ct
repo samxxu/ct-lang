@@ -1,0 +1,8 @@
+/* the first impl: this unit owns the vtable and the method */
+import shapes;
+
+impl Speak for Dog {
+    void hi() {
+        self->n = 1;
+    }
+}

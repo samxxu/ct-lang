@@ -1,0 +1,21 @@
+/* The consumer unit: it boxes a `Conn` of its own through the vtable that
+   `net.h` declares, and it also takes one back from `stream_open`. Three
+   identical imports still yield a single `#include "net.h"`. */
+#include <stdio.h>
+
+import net;
+import net;
+import net;
+
+int main(void)
+{
+    struct Conn c;
+    Stream s;
+    Stream t;
+    c.fd = 2;
+    s = c;
+    printf("%d\n", s.write("A", 3));
+    t = stream_open();
+    printf("%d\n", t.write("B", 1));
+    return 0;
+}

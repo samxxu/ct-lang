@@ -17,11 +17,13 @@
 #include <stdio.h>
 #include <string.h>
 
+import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Map::MapBind as MapBind;
 import frontend::module::Map;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
+import tool::diag::diag;
 
 #define MAX_TEXT   160
 #define MAX_PARAMS 16
@@ -61,10 +63,12 @@ impl MapBuildOps for MapBuild {
         char root[MAX_TEXT];
         const char *p;
         const char *w;
+        const char *b4;
         struct MapBind *bb;
         int n, depth, k, ai, ok;
         int rl;
         int q;
+        int qq, ci;
         (void)self;
 
         bb = (struct MapBind *)b;
@@ -120,48 +124,79 @@ impl MapBuildOps for MapBuild {
             }
             ai = 0;
             while (arg[ai] == ' ' || arg[ai] == '\t') ai++;
-            /* A bare name must be visible here (a binding parameter, this map's
-               instance, or a declared variable); a member path must be rooted at
-               the instance. Anything else would name an unknown symbol in the
-               emitted wrapper. */
-            ok = 0;
-            if (arg[ai] == '"' || arg[ai] == '\'') {
-                ok = 1;
-            } else if (arg[ai] >= '0' && arg[ai] <= '9') {
-                ok = 1;
-            } else {
-                w = arg + ai;
-                if (*w == '&') {
+            /* 2b.2: the argument may be an expression. Every identifier in it
+               must resolve - a binding parameter, this map's instance, a
+               declared variable, an ALL_CAPS macro constant or a qualified
+               name - while literals and member names are skipped. */
+            w = arg + ai;
+            ok = 1;
+            while (*w && ok) {
+                if (*w == '"' || *w == '\'') {
+                    qq = *w;
                     w++;
-                    while (*w == ' ' || *w == '\t') w++;
-                }
-                rl = 0;
-                if ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z') || *w == '_') {
-                    while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
-                           || (*w >= '0' && *w <= '9') || *w == '_') {
-                        if (rl + 1 < MAX_TEXT) { root[rl] = *w; rl++; }
+                    while (*w && *w != qq) {
+                        if (*w == '\\' && *(w + 1)) w++;
                         w++;
                     }
-                    root[rl] = 0;
-                    if (*w == '.' || (*w == '-' && *(w + 1) == '>')) {
-                        ok = (strcmp(root, inst) == 0);
-                        while (ok && (*w == '.' || (*w == '-' && *(w + 1) == '>'))) {
-                            w += (*w == '.') ? 1 : 2;
-                            if (!((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
-                                  || *w == '_'))
-                                ok = 0;
-                            while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
-                                   || (*w >= '0' && *w <= '9') || *w == '_') w++;
+                    if (*w != qq)
+                        return self->sup->fail("unterminated literal in a map call");
+                    w++;
+                    continue;
+                }
+                /* a numeric literal, including a hex or suffixed spelling */
+                if (*w >= '0' && *w <= '9') {
+                    while ((*w >= '0' && *w <= '9') || (*w >= 'a' && *w <= 'z')
+                           || (*w >= 'A' && *w <= 'Z') || *w == '.')
+                        w++;
+                    continue;
+                }
+                if (!((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z') || *w == '_')) {
+                    w++;
+                    continue;
+                }
+                /* `x.field` / `x->field`: a field name is not a symbol here */
+                b4 = w;
+                while (b4 > arg + ai && (*(b4 - 1) == ' ' || *(b4 - 1) == '\t')) b4--;
+                if (b4 > arg + ai
+                    && (*(b4 - 1) == '.'
+                        || (*(b4 - 1) == '>' && b4 - 1 > arg + ai && *(b4 - 2) == '-'))) {
+                    while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
+                           || (*w >= '0' && *w <= '9') || *w == '_')
+                        w++;
+                    continue;
+                }
+                rl = 0;
+                while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
+                       || (*w >= '0' && *w <= '9') || *w == '_') {
+                    if (rl + 1 < MAX_TEXT) { root[rl] = *w; rl++; }
+                    w++;
+                }
+                root[rl] = 0;
+                if (*w == ':' && *(w + 1) == ':') {
+                    /* a qualified name (`A::B::x`): the expression side resolves it */
+                    while (*w == ':' || (*w >= 'a' && *w <= 'z')
+                           || (*w >= 'A' && *w <= 'Z') || (*w >= '0' && *w <= '9') || *w == '_')
+                        w++;
+                    continue;
+                }
+                ok = 0;
+                if (strcmp(root, inst) == 0) ok = 1;
+                for (k = 0; !ok && k < bb->nparams; k++)
+                    if (strcmp(root, bb->params[k]) == 0) ok = 1;
+                if (!ok && self->sym->find_var(root) >= 0) ok = 1;
+                /* CT has no preprocessor: an ALL_CAPS name is a macro constant
+                   (MAX_TEXT, NULL, ...), accepted verbatim by the expression
+                   side too (frontend::parse::Expr). */
+                if (!ok) {
+                    ci = (root[0] != 0);
+                    for (k = 0; root[k]; k++) {
+                        char rc = root[k];
+                        if (!((rc >= 'A' && rc <= 'Z') || (rc >= '0' && rc <= '9') || rc == '_')) {
+                            ci = 0;
+                            break;
                         }
-                    } else if (strcmp(root, inst) == 0) {
-                        ok = 1;
-                    } else {
-                        for (k = 0; k < bb->nparams; k++)
-                            if (strcmp(root, bb->params[k]) == 0) { ok = 1; break; }
-                        if (!ok && self->sym->find_var(root) >= 0) ok = 1;
                     }
-                    while (*w == ' ' || *w == '\t') w++;
-                    if (*w) ok = 0;
+                    if (ci) ok = 1;
                 }
             }
             if (!ok) {
@@ -186,10 +221,11 @@ impl MapBuildOps for MapBuild {
         char msg[MAX_TEXT];
         struct Map *m;
         struct MapBind *b;
-        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound;
+        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident;
         (void)self;
 
         line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
         self->sup->lex_next();                       /* consume `map` */
         if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0))
             return self->sup->fail("expected 'trait'");
@@ -207,18 +243,42 @@ impl MapBuildOps for MapBuild {
             return self->sup->fail("expected 'instance'");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected an instance name");
-        snprintf(inst, sizeof inst, "%s", self->lex->toktext);
+        /* 2b.3: the instance may be spelled namespace-qualified. Globals are
+           not mangled by this compiler, so the declared C name is the last
+           segment; the path is accepted for readability and normalised away. */
+        for (;;) {
+            snprintf(inst, sizeof inst, "%s", self->lex->toktext);
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                self->sup->lex_next();
+                if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
+                continue;
+            }
+            break;
+        }
         if (self->sym->find_var(inst) < 0) {
             snprintf(msg, sizeof msg, "map instance '%s' is not a declared variable", inst);
             return self->sup->fail(msg);
         }
-        self->sup->lex_next();
+        /* One map per (instance, trait), across units: two declarations would
+           emit the same wrappers and the same vtable twice. */
+        for (k2 = 0; k2 < *self->nmaps; k2++)
+            if (strcmp(self->maps[k2].trait, rtrait) == 0 && strcmp(self->maps[k2].inst, inst) == 0) {
+                char dmsg[512];
+                snprintf(dmsg, sizeof dmsg,
+                         "duplicate map of trait '%s' for instance '%s' (first at %s:%d)",
+                         tname, inst, self->maps[k2].path, self->maps[k2].line);
+                tool::diag::ct_sem_error(line, col, dmsg, self->sup->mem->path);
+                if (self->sup->skip_body() != 0) return -1;
+                return NO_NODE;
+            }
         if (self->sup->expect("{") != 0) return -1;
         if (*self->nmaps >= MAX_MAPS) return self->sup->fail("too many maps");
         m = &self->maps[*self->nmaps];
         snprintf(m->trait, MAX_TEXT, "%s", rtrait);
         snprintf(m->inst, MAX_TEXT, "%s", inst);
         snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", inst, rtrait);
+        snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
         m->nb = 0;
         m->line = line;
         m->unit = unit;
@@ -300,7 +360,20 @@ impl MapBuildOps for MapBuild {
             b->call[n] = 0;
             self->lex->pos = i;
             self->sup->lex_next();
-            if (self->check_call((char *)b, inst) != 0) return -1;
+            /* `-> f` with a bare name binds the C function itself: no wrapper is
+               generated, so the target's first parameter must already be
+               `void *` (the slot type). Its prototype may come from an
+               `#include`, so ct does not look it up or check the signature. */
+            b->direct = 0;
+            ident = (b->call[0] != 0) && !(b->call[0] >= '0' && b->call[0] <= '9');
+            for (j2 = 0; ident && b->call[j2]; j2++) {
+                char cc = b->call[j2];
+                if (!((cc >= 'a' && cc <= 'z') || (cc >= 'A' && cc <= 'Z')
+                      || (cc >= '0' && cc <= '9') || cc == '_'))
+                    ident = 0;
+            }
+            if (ident) b->direct = 1;
+            if (!b->direct && self->check_call((char *)b, inst) != 0) return -1;
             if (self->sup->expect(";") != 0) return -1;
             /* `wrapper` and `method` are sibling arrays of the same struct, so
                GCC's -Wrestrict cannot prove they miss each other; build the

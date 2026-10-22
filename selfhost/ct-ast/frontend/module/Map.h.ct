@@ -28,6 +28,7 @@ pub struct MapBind {
     int  mi;                        /* index into that trait's m[] */
     char call[160];                 /* raw, validated RHS text (no trailing ';') */
     char wrapper[160];              /* "<inst>_<Trait>_<method>" */
+    int  direct;                    /* 1 when `-> f` binds the C function itself */
     int  line;
 }
 
@@ -40,4 +41,5 @@ pub struct Map {
     int  nb;
     int  line;
     int  unit;                      /* the unit that declared this map */
+    char path[160];                 /* that unit's source path, for duplicates */
 }

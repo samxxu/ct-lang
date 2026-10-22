@@ -1,0 +1,8 @@
+/* the duplicate: the same (struct, trait) may only be implemented once */
+import shapes;
+
+impl Speak for Dog {
+    void hi() {
+        self->n = 2;
+    }
+}

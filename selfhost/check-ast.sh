@@ -319,12 +319,111 @@ rm -rf "$mod-hdr"
 mkdir -p "$mod-hdr"
 if "$work/ct-ast" build test/modules/hdr/main.ct -o "$mod-hdr" \
         >"$work/mhdr.out" 2>"$work/mhdr.err" \
+   && grep -q '^#include <stdio.h>$' "$mod-hdr/main.h" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-hdr"/*.c -o "$work/mhdr.bin" 2>"$work/mhdr.cc" \
    && "$work/mhdr.bin" >"$work/mhdr.stdout" 2>&1 \
    && cmp -s "$work/mhdr.stdout" test/modules/hdr/expected.out; then
-    ok "hdr (foo.h.ct header unit)"
+    ok "hdr (foo.h.ct header unit; the source's #include leads main.h)"
 else
     bad "hdr" "$(cat "$work/mhdr.err" "$work/mhdr.cc" "$work/mhdr.stdout")"
+fi
+
+echo
+echo "== header prologue (build mode copies the source's #include lines) =="
+rm -rf "$mod-pro"
+mkdir -p "$mod-pro"
+if "$work/ct-ast" build test/modules/hdr_prologue/main.ct -o "$mod-pro" \
+        >"$work/mpro.out" 2>"$work/mpro.err" \
+   && grep -q '^#include <stdio.h>$' "$mod-pro/main.h" \
+   && ! grep -q 'PROLOGUE_MACRO' "$mod-pro/main.h" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-pro"/*.c -o "$work/mpro.bin" 2>"$work/mpro.cc" \
+   && "$work/mpro.bin" >"$work/mpro.stdout" 2>&1 \
+   && cmp -s "$work/mpro.stdout" test/modules/hdr_prologue/expected.out; then
+    ok "hdr_prologue (#include yes, #define no)"
+else
+    bad "hdr_prologue" "$(cat "$work/mpro.err" "$work/mpro.cc" "$work/mpro.stdout")"
+fi
+
+echo
+echo "== cross-unit linking (Batch 2) =="
+# A `pub` global is defined by its own unit and declared `extern` in that unit's
+# header, so an importing unit sees the same object instead of a private copy.
+rm -rf "$mod-pg"
+mkdir -p "$mod-pg"
+if "$work/ct-ast" build test/modules/pub_global/main.ct -o "$mod-pg" \
+        >"$work/mpg.out" 2>"$work/mpg.err" \
+   && grep -q '^extern int g_counter;$' "$mod-pg/count.h" \
+   && grep -q '^int g_counter = 5;$' "$mod-pg/count.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-pg"/*.c -o "$work/mpg.bin" 2>"$work/mpg.cc" \
+   && "$work/mpg.bin" >"$work/mpg.stdout" 2>&1 \
+   && cmp -s "$work/mpg.stdout" test/modules/pub_global/expected.out; then
+    ok "pub_global (the header declares, the owning unit defines)"
+else
+    bad "pub_global" "$(cat "$work/mpg.err" "$work/mpg.cc" "$work/mpg.stdout" 2>/dev/null)"
+fi
+
+# A `pub trait` implemented for a `pub struct` gives its vtable external
+# linkage: the owning unit defines it, its header declares it `extern`, and
+# another unit may box an instance of that struct. Three identical imports must
+# still produce a single `#include`.
+rm -rf "$mod-xb"
+mkdir -p "$mod-xb"
+if "$work/ct-ast" build test/modules/xunit_box/main.ct -o "$mod-xb" \
+        >"$work/mxb.out" 2>"$work/mxb.err" \
+   && grep -q '^extern struct Stream_vtbl Conn_Stream_vtable;$' "$mod-xb/net.h" \
+   && grep -q '^struct Stream_vtbl Conn_Stream_vtable = {$' "$mod-xb/net.c" \
+   && [ "$(grep -c '#include "net.h"' "$mod-xb/main.c")" = "1" ] \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-xb"/*.c -o "$work/mxb.bin" 2>"$work/mxb.cc" \
+   && "$work/mxb.bin" >"$work/mxb.stdout" 2>&1 \
+   && cmp -s "$work/mxb.stdout" test/modules/xunit_box/expected.out; then
+    ok "xunit_box (a public vtable crosses the unit boundary; imports dedupe)"
+else
+    bad "xunit_box" "$(cat "$work/mxb.err" "$work/mxb.cc" "$work/mxb.stdout" 2>/dev/null)"
+fi
+
+# An `extern` declaration names a symbol the C library owns: it lands in the
+# header and defines nothing, so a hand-written C file can supply the object.
+rm -rf "$mod-ex"
+mkdir -p "$mod-ex"
+if "$work/ct-ast" build test/modules/extern_decl/main.ct -o "$mod-ex" \
+        >"$work/mex.out" 2>"$work/mex.err" \
+   && grep -q '^extern int lib_flag;$' "$mod-ex/lib.h" \
+   && ! grep -Eq '^int lib_flag[ ;=]' "$mod-ex/lib.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-ex"/*.c test/modules/extern_decl/lib_impl.c \
+        -o "$work/mex.bin" 2>"$work/mex.cc" \
+   && "$work/mex.bin" >"$work/mex.stdout" 2>&1 \
+   && cmp -s "$work/mex.stdout" test/modules/extern_decl/expected.out; then
+    ok "extern_decl (declaration only; the C library owns the symbol)"
+else
+    bad "extern_decl" "$(cat "$work/mex.err" "$work/mex.cc" "$work/mex.stdout" 2>/dev/null)"
+fi
+
+# 2b.3: a map instance may be spelled namespace-qualified. Globals are not
+# mangled by this compiler, so the path normalises to the declared name.
+rm -rf "$mod-mn"
+mkdir -p "$mod-mn"
+if "$work/ct-ast" build test/modules/map_ns/main.ct -o "$mod-mn" \
+        >"$work/mmn.out" 2>"$work/mmn.err" \
+   && grep -q 'uart1_hal_Writer_vtable' "$mod-mn/uart.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-mn"/*.c -o "$work/mmn.bin" 2>"$work/mmn.cc" \
+   && "$work/mmn.bin" >"$work/mmn.stdout" 2>&1 \
+   && cmp -s "$work/mmn.stdout" test/modules/map_ns/expected.out; then
+    ok "map_ns (a qualified instance name resolves to the declared name)"
+else
+    bad "map_ns" "$(cat "$work/mmn.err" "$work/mmn.cc" "$work/mmn.stdout" 2>/dev/null)"
+fi
+
+# An impl may ignore a parameter (the trait owns the signature). The casts that
+# silence the warning must lead the body: a trailing `(void)_self;` would sit
+# after the `return`, where it can never run.
+if "$work/ct-ast" test/ast/23_impl_unused/prog.ct -o "$work/munused.c" \
+        >"$work/munused.out" 2>"$work/munused.err" \
+   && grep -q '    (void)mode;$' "$work/munused.c" \
+   && awk '/\(void\)_self;/{u=NR} /return/{if(!r) r=NR} END{exit !(u>0 && r>0 && u<r)}' \
+        "$work/munused.c"; then
+    ok "impl (an unused parameter is silenced at the top of the body)"
+else
+    bad "impl unused parameter" "$(cat "$work/munused.err")"
 fi
 
 echo
@@ -421,15 +520,20 @@ if "$work/ct-ast" --emit-map - test/ast/13_map_instance/prog.ct -o "$work/mmapm.
 else
     bad "map JSON" "$(cat "$work/mmapm.err")"
 fi
-# The 65th map overflows MAX_MAPS (64).
+# The 65th map overflows MAX_MAPS (64). Each map needs its own instance now that
+# a duplicate (instance, trait) pair is refused before the cap can be reached.
 mi=0
 {
     printf 'trait Controller {\n    int send(char *buf, int len);\n}\n'
     printf 'struct Uart {\n    int fd;\n};\n'
-    printf 'struct Uart uart1;\n'
     printf 'int mock_send(struct Uart *u, char *b, int n) {\n    (void)b;\n    return n + u->fd;\n}\n'
+    while [ "$mi" -le 65 ]; do
+        printf 'struct Uart u%d;\n' "$mi"
+        mi=$((mi + 1))
+    done
+    mi=0
     while [ "$mi" -lt 65 ]; do
-        printf 'map trait Controller for instance uart1 {\n    send(buf, len) -> mock_send(&uart1, buf, len);\n}\n'
+        printf 'map trait Controller for instance u%d {\n    send(buf, len) -> mock_send(&u%d, buf, len);\n}\n' "$mi" "$mi"
         mi=$((mi + 1))
     done
     printf 'int main(void) { return 0; }\n'
@@ -460,6 +564,27 @@ if "$work/ct-ast" test/ast/15_map_args/prog.ct -o "$work/mmap4.c" \
     ok "map (CALL args: &other-global and instance member path)"
 else
     bad "map args" "$(cat "$work/mmap4.err")"
+fi
+# 2b.1 / 2b.5: a bare name binds the C function itself - no wrapper is emitted,
+# the slot points at the function, and the map JSON marks the binding.
+if "$work/ct-ast" test/ast/22_map_direct/prog.ct -o "$work/mmd.c" \
+        >"$work/mmd.out" 2>"$work/mmd.err" \
+   && ! grep -q 'buf1_Sink_put' "$work/mmd.c" \
+   && grep -q '^    \.put = real_put$' "$work/mmd.c" \
+   && "$work/ct-ast" --emit-map - test/ast/22_map_direct/prog.ct -o "$work/mmd2.c" \
+        >"$work/mmd.map" 2>/dev/null \
+   && grep -q '"symbol":"real_put","wrapper":false' "$work/mmd.map"; then
+    ok "map (direct binding: no wrapper, JSON says wrapper:false)"
+else
+    bad "map direct" "$(cat "$work/mmd.err")"
+fi
+# A parenthesised CALL keeps its wrapper, and the JSON says so.
+if "$work/ct-ast" --emit-map - test/ast/15_map_args/prog.ct -o "$work/mmd3.c" \
+        >"$work/mmd3.map" 2>"$work/mmd3.err" \
+   && grep -q '"symbol":"box_a_Reader_read","wrapper":true' "$work/mmd3.map"; then
+    ok "map (expression argument keeps the wrapper; JSON says wrapper:true)"
+else
+    bad "map wrapper flag" "$(cat "$work/mmd3.err")"
 fi
 
 echo
@@ -546,6 +671,18 @@ elif grep -q "lives in another namespace and needs a qualified call" "$work/mnbc
     ok "ns_bare_call (reaching into another namespace takes a qualified call)"
 else
     bad "ns_bare_call" "no unqualified-call diagnostic: $(cat "$work/mnbc.err")"
+fi
+
+# 2a.4: a second impl of the same (struct, trait) would define the same externally
+# linked vtable twice, so it is refused and the first definition is named.
+if "$work/ct-ast" build test/modules/dup_impl/main.ct -o "$work/mod-bad" \
+        >"$work/mdup.out" 2>"$work/mdup.err"; then
+    bad "dup_impl" "expected a non-zero exit"
+elif grep -q "duplicate impl of trait 'Speak' for struct 'Dog'" "$work/mdup.err" \
+     && grep -q "first at .*a\.ct:" "$work/mdup.err"; then
+    ok "dup_impl (one impl per struct and trait, the first one is named)"
+else
+    bad "dup_impl" "no duplicate diagnostic: $(cat "$work/mdup.err")"
 fi
 
 echo
