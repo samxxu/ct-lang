@@ -1,0 +1,27 @@
+#include <stdio.h>
+
+// The trait fixes the signature, so an implementation may ignore a parameter.
+// Both `mode` and `self` are unused here: the casts must lead the body, since a
+// trailing `(void)_self;` would sit after the `return`.
+
+trait Handle {
+    int open(int flags, int mode);
+}
+
+struct Sock {
+    int fd;
+} use Handle;
+
+impl Handle for Sock {
+    int open(int flags, int mode) {
+        return flags + 1;
+    }
+}
+
+int main(void) {
+    struct Sock s = { .fd = 3 };
+    Handle h;
+    h = s;
+    printf("%d\n", h.open(41, 7));
+    return 0;
+}

@@ -120,6 +120,12 @@ trait EmitOps {
     int  emit_cond(int n);
     int  emit_indent(int n);
     int  emit_type_decl(int n, int ind, int with_semi);
+    int  emit_global_extern(int n);
+    int  decl_is_pub(int kind, const char *name);
+    int  vtable_exported(int si, const char *tname);
+    int  map_vtable_exported(int i);
+    int  emit_link_externs(int prog, int u);
+    int  node_mentions(int n, const char *name);
     int  emit_trait_decls(void);
     int  emit_impls(int prog);
     int  emit_maps(int u);
@@ -158,7 +164,6 @@ struct Emitter {
     int  nhoist;
     int  ntmp;
     int  raw_call;
-    int  self_used;             /* the method body referenced `self` */
     int  failline;              /* the source line of the node that failed, 0 = none */
     char errmsg[160];
     /* the vptr / initialiser writer (Init.h.ct) */
@@ -275,6 +280,8 @@ impl EmitOps for Emitter {
         if (self->emit_vtable_fwd(prog) != 0) return -1;
 
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            /* an `extern` global is a declaration only: it adds no definition */
+            if (self->arena->nodes[n].kind == N_GLOBAL && self->arena->nodes[n].aux == 2) continue;
             if (self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
                 || self->arena->nodes[n].kind == N_GLOBAL) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
@@ -515,15 +522,23 @@ impl EmitOps for Emitter {
                         self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
-                    fprintf(self->out, ", %s %s", self->arena->nodes[k].text, self->arena->nodes[k].text2);
+                    fputs(", ", self->out);
+                    if (self->emit_type_name(self->arena->nodes[k].text, self->arena->nodes[k].text2) != 0) return -1;
                     if (self->arena->nodes[k].text3[0]) fputs(self->arena->nodes[k].text3, self->out);
                     k = self->arena->nodes[k].next;
                 }
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 self->sym->self_mode = 1;
-                self->self_used = 0;
-                k = self->arena->nodes[self->arena->nodes[m].b].a;
+                /* The trait fixes the signature, so an implementation may ignore
+                   a parameter. The cast to void has to lead the body: a trailing
+                   one would sit after the `return` and be dead code. */
+                body = self->arena->nodes[m].b;
+                for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
+                    if (!self->node_mentions(body, self->arena->nodes[k].text2))
+                        fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
+                if (!self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
+                k = self->arena->nodes[body].a;
                 while (k >= 0) {
                     if (self->emit_node(k, 1) != 0) {
                         self->sym->self_mode = 0;
@@ -687,8 +702,8 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_GLOBAL) {
             self->emit_indent(ind);
-            if (self->arena->nodes[n].aux) fputs("static ", self->out);
-            fprintf(self->out, "%s %s", self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            if (self->arena->nodes[n].aux == 1) fputs("static ", self->out);
+            if (self->emit_type_name(self->arena->nodes[n].text, self->arena->nodes[n].text2) != 0) return -1;
             if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
             if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
                 if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text) != 0) return -1;
@@ -712,6 +727,108 @@ impl EmitOps for Emitter {
         return self->fail_from(n, "unknown declaration node");
     }
 
+    /* The header's view of a global: a declaration, never the definition and
+       never the initialiser. A `pub` global is defined in its unit's `.c`; an
+       `extern` global is defined by the C library the source includes. */
+    int emit_global_extern(int n)
+    {
+        (void)self;
+
+        fputs("extern ", self->out);
+        if (self->emit_type_name(self->arena->nodes[n].text, self->arena->nodes[n].text2) != 0) return -1;
+        if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
+        fputs(";\n", self->out);
+        return 0;
+    }
+
+    /* A declaration is exported when its node carries `pub`. The arena holds
+       every unit's nodes, so the declaring unit need not be the current one --
+       a header unit usually is not the implementing unit. */
+    int decl_is_pub(int kind, const char *name)
+    {
+        int n;
+        (void)self;
+
+        for (n = 0; n < self->arena->nnode; n++)
+            if (self->arena->nodes[n].kind == kind && self->arena->nodes[n].d == 1
+                && strcmp(self->arena->nodes[n].text2, name) == 0) return 1;
+        return 0;
+    }
+
+    /* Linkage rule (D-2): export only when both halves of the pair are public.
+       A private struct cannot even be named by a consumer, so its vtable stays
+       static and encapsulated. `Drop` never has a vtable. */
+    int vtable_exported(int si, const char *tname)
+    {
+        int t;
+        (void)self;
+
+        if (strcmp(tname, "Drop") == 0) return 0;
+        t = self->sym->find_trait(tname);
+        if (t < 0 || !self->sym->traits[t].is_pub) return 0;
+        return self->decl_is_pub(N_STRUCT, self->sym->structs[si].name);
+    }
+
+    int map_vtable_exported(int i)
+    {
+        int t;
+        (void)self;
+
+        t = self->sym->find_trait(self->maps[i].trait);
+        if (t < 0 || !self->sym->traits[t].is_pub) return 0;
+        return self->decl_is_pub(N_GLOBAL, self->maps[i].inst);
+    }
+
+    /* The header's half of the external-linkage contract: the consumer unit
+       boxes with `&S_T_vtable`, so the implementation unit declares it here.
+       `u < 0` is compile mode, which writes no header. */
+    int emit_link_externs(int prog, int u)
+    {
+        int n, i, si, any;
+        const char *tname;
+        (void)self;
+
+        any = 0;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            si = self->arena->nodes[n].aux;
+            tname = self->arena->nodes[n].text2;
+            if (!self->vtable_exported(si, tname)) continue;
+            fprintf(self->out, "extern struct %s_vtbl %s_%s_vtable;\n",
+                    tname, self->sym->structs[si].name, tname);
+            any = 1;
+        }
+        if (u >= 0)
+            for (i = 0; i < (*self->nmaps); i++) {
+                if (self->maps[i].unit != u) continue;
+                if (!self->map_vtable_exported(i)) continue;
+                fprintf(self->out, "extern struct %s_vtbl %s;\n",
+                        self->maps[i].trait, self->maps[i].vtable);
+                any = 1;
+            }
+        if (any) fputs("\n", self->out);
+        return 0;
+    }
+
+    /* Does this subtree name `name` as a variable? An impl parameter is a
+       variable too, so the same walk decides the `(void)` casts. Field names
+       are stored in `text2` as well but keep their own node kind, so only N_VAR
+       matches; the child slots of a body node are all node indexes. */
+    int node_mentions(int n, const char *name)
+    {
+        (void)self;
+
+        for (; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind == N_VAR && strcmp(self->arena->nodes[n].text2, name) == 0)
+                return 1;
+            if (self->node_mentions(self->arena->nodes[n].a, name)) return 1;
+            if (self->node_mentions(self->arena->nodes[n].b, name)) return 1;
+            if (self->node_mentions(self->arena->nodes[n].c, name)) return 1;
+            if (self->node_mentions(self->arena->nodes[n].d, name)) return 1;
+        }
+        return 0;
+    }
+
     int emit_node(int n, int ind)
     {
         int c;
@@ -728,7 +845,7 @@ impl EmitOps for Emitter {
                 first = 1;
                 while (c > 0) {
                     if (!first) fputs(", ", self->out);
-                    fprintf(self->out, "%s %s", self->arena->nodes[c].text, self->arena->nodes[c].text2);
+                    if (self->emit_type_name(self->arena->nodes[c].text, self->arena->nodes[c].text2) != 0) return -1;
                     if (self->arena->nodes[c].text3[0]) fputs(self->arena->nodes[c].text3, self->out);
                     first = 0;
                     c = self->arena->nodes[c].next;
@@ -908,6 +1025,23 @@ impl EmitOps for Emitter {
         }
     }
 
+    /* `<type> <name>`, except that a function-pointer type keeps its
+       declarator around the name: `int (*)(void *)` + `cb` becomes
+       `int (*cb)(void *)` (D-7). */
+    int emit_type_name(const char *type, const char *name)
+    {
+        const char *star;
+        (void)self;
+
+        star = strstr(type, "(*)");
+        if (!star) {
+            fprintf(self->out, "%s %s", type, name);
+            return 0;
+        }
+        fprintf(self->out, "%.*s(*%s)%s", (int)(star - type), type, name, star + 3);
+        return 0;
+    }
+
     int emit_inline(int n)
     {
         (void)self;
@@ -937,7 +1071,7 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_FIELD) {
-            fprintf(self->out, "%s %s", self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            if (self->emit_type_name(self->arena->nodes[n].text, self->arena->nodes[n].text2) != 0) return -1;
             if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
             if (self->arena->nodes[n].kind == N_DECL) {
                 if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
@@ -1024,7 +1158,6 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_VAR) {
             if (self->sym->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) {
-                self->self_used = 1;
                 fputs("_self", self->out);
             } else {
                 fputs(self->arena->nodes[n].text2, self->out);
@@ -1267,8 +1400,14 @@ impl EmitOps for Emitter {
         if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
 
         for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
-                 || self->arena->nodes[n].kind == N_GLOBAL) && self->arena->nodes[n].d != 1) {
+            /* A `pub` struct/typedef is in the header; a `pub` global still needs
+               its definition here (the header only declares it), and an `extern`
+               global needs nothing at all. */
+            if (self->arena->nodes[n].kind == N_GLOBAL) {
+                if (self->arena->nodes[n].aux == 2) continue;
+                if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+            } else if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF)
+                       && self->arena->nodes[n].d != 1) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }

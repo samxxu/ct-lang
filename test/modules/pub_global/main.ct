@@ -1,0 +1,16 @@
+#include <stdio.h>
+
+import count;
+
+int main(void)
+{
+    int a;
+    int b;
+    /* the importing unit names the exported global directly: `count.h` declares
+       it `extern`, so both units see one object */
+    g_counter = g_counter + 10;
+    a = counter_bump();
+    b = counter_bump();
+    printf("%d %d %d\n", g_counter, a, b);
+    return 0;
+}

@@ -42,6 +42,8 @@ import tool::diag::diag;
 /* token kinds (the scanner only needs these two) */
 #define T_ID     1
 #define T_PP     5
+/* node kind: a file-scope variable, the same value `Arena.h.ct` assigns */
+#define N_GLOBAL 22
 
 namespace frontend::module;
 pub trait ModuleOps {
@@ -271,7 +273,7 @@ impl ModuleOps for Module {
         char rels[MAX_IMPORTS][MAX_TEXT];
         char dep[MAX_PATH];
         char *mysrc;
-        int u, i, d, nrels, is_hdr;
+        int u, i, k, d, nrels, is_hdr, dup, dn, gn;
         (void)self;
 
         for (u = 0; u < self->nunits; u++)
@@ -302,6 +304,12 @@ impl ModuleOps for Module {
             if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr) != 0) return -1;
             d = self->load_unit(dep);
             if (d < 0) return -1;
+            /* Two `import` lines may name the same unit; a dependency is listed
+               once, so the generated `#include` is emitted once. */
+            dup = 0;
+            for (k = 0; k < self->units[u].ndep; k++)
+                if (self->units[u].depu[k] == d) dup = 1;
+            if (dup) continue;
             if (self->units[u].ndep >= MAX_IMPORTS) {
                 self->fail("too many imports");
                 return -1;
@@ -331,6 +339,20 @@ impl ModuleOps for Module {
         self->sym->ret_type[0] = 0;
         self->p->cur_func[0] = 0;
         self->p->nparams = 0;
+        /* 2a.2: an imported unit's `pub` global is declared `extern` in that
+           unit's header, so C links one object for both units. Register it here
+           as well, or this unit could not name it in `import count; g_counter`.
+           Only exported globals cross; a private one stays in its owner. */
+        for (i = 0; i < self->units[u].ndep; i++) {
+            dn = self->units[u].depu[i];
+            for (gn = self->arena->nodes[self->units[dn].prog].a; gn >= 0;
+                 gn = self->arena->nodes[gn].next)
+                if (self->arena->nodes[gn].kind == N_GLOBAL && self->arena->nodes[gn].d == 1) {
+                    if (self->sym->declare_var(self->arena->nodes[gn].text2,
+                                               self->arena->nodes[gn].text) != 0)
+                        return self->fail(self->sym->last_error());
+                }
+        }
         /* `scan_imports` counted this unit's imports into `rels`, but the
            recursive loads above left the counter at a dependency's value, and
            parsing skips the same `import` lines again -- start that pass from
