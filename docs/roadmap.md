@@ -30,6 +30,8 @@
 | Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | ✅ 完成（2026-10-19；11.1–11.3 全部落地：解析 + 实例级包装/vtable + `--emit-map` 的 `maps` 字段 + 负例，11.2 接入派发，11.3 加固绑定完整性与唯一性并放宽 CALL 子集，收口 bump 到 v0.11.0、11.3 后 patch bump 到 v0.11.1；D19 解除，见 [design/phase6.md](design/phase6.md) §6.5） | 设计冻结 + 新用例全绿；收口 bump v0.11.0、patch bump v0.11.1 |
 | Phase 12 | **生态扩展**：官方 / 示范 bindings（首个为仓库内假 HAL）＋ 方言深化（多方言并存 + 作者指南） | 扩展 | ✅ 完成（2026-10-19；12.1–12.4 全部落地：首个官方 binding `bindings/mock-hal/`、binding 规约 `bindings/README.md`、多方言并存演示 + 作者指南；收口 bump 到 v0.12.0；[design/phase12.md](design/phase12.md)，D46–D52） | 设计冻结 + 新用例全绿；收口 bump v0.12.0 |
 
+> **L2 冻结声明（2026-10-22）**：`selfhost/l2/**` 是 Phase 9 之前的旧管线，现降为**回归 oracle**——只修 bug，不再新增语言特性。所有新特性一律落在 `selfhost/ct-ast/**`；`check-archive.sh` 以 L2 为对差基准，任何「为了让新用例通过而改 L2 行为」的做法都不被接受。L2 与 ct-ast 之间已有的语义分叉（块式 namespace、跨命名空间裸调用）保持原样，视为 oracle 的既有边界，不判为缺陷。
+
 > **历史说明**：Phase 0 之后曾一度把 namespace / import / Drop / 诊断 / 多文件**直接实现在 C 侧**（`ctc.c`，即旧称的 Phase 1）。按本路线，这些属**越位实现**：语法决策保持冻结，但**实现要用 CT 重做**——先由 **Phase 0.3** 把它们从 `ctc.c` 移出并归档为 oracle，再由 **Phase 2–5** 用 CT 逐项恢复（回归清单见下方「自举之后的恢复与新增」节）。
 >
 > **编号约定**：下文出现的 `Phase 1.0`–`Phase 1.9`、`Phase 1.6/1.7/1.9c` 等，是**越位实现期的历史子阶段编号**，与新的 **Phase 1（自举）**无关。`Phase 0.1` / `0.2` / `0.3` 是 Phase 0 的**历史子阶段**，编号保留不动。
@@ -931,6 +933,13 @@ as confirmed by the user.
 | 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | ✅ 10.1–10.7 all landed (2026-10-19; [design/phase10.md](design/phase10.md), D38–D45 confirmed as proposed): CLI/identity, semantic diagnostics, memory, multi-error recovery, the incremental cache, the package-manager migration and the switch itself; the installed entry comes from ct-ast (tag `pre-ct-ast-switch` marks the state before it), **bumped to v0.10.0 and closed** | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
 | 11 | **The `map` construct**: `map trait T for instance x { m() → CALL; }` (binds a trait's method to a declared global instance) | new | ✅ 11.1–11.3 landed (2026-10-19): parsing + instance-level wrapper/vtable emission + the `maps` field of `--emit-map` + negative cases, 11.2 wires dispatch, 11.3 hardens binding completeness/uniqueness and relaxes the CALL subset (D19 lifted, see [design/phase6.md](design/phase6.md) §6.5); **closed at v0.11.0, then patch-bumped to v0.11.1** | design frozen + new cases green; bumped to v0.11.0, patch-bumped to v0.11.1 |
 | 12 | **Ecosystem extension**: official / sample bindings (first: an in-repo fake HAL) + dialect deepening (multi-dialect coexistence + an authoring guide) | extension | ✅ 12.1–12.4 all landed (2026-10-19, [design/phase12.md](design/phase12.md), D46–D52 confirmed): the first official binding `bindings/mock-hal/` (pass-through `#include` + mirrored `trait`/`struct` + a declared global instance + `map`, **zero new language features**), the binding guidelines `bindings/README.md`, and the multi-dialect coexistence demo + authoring guide; **bumped to v0.12.0 and closed** | design frozen + new cases green; closing bump to v0.12.0 |
+
+> **L2 freeze declaration (2026-10-22)**: `selfhost/l2/**` is the pre-Phase-9 pipeline and now serves as
+> the **regression oracle**: bug fixes only, no new language features. Every new feature lands in
+> `selfhost/ct-ast/**` instead. `check-archive.sh` diffs against L2, so "change L2's behaviour so a new
+> case passes" is never accepted. The semantic forks that already exist between L2 and ct-ast (block
+> namespace syntax, bare cross-namespace calls) stay as they are: they are the oracle's own boundary,
+> not defects.
 
 > **Historical note**: right after Phase 0 the namespace / import / Drop / diagnostics / multi-file
 > features were once implemented **directly in C** (`ctc.c`, the old "Phase 1"). Under this roadmap

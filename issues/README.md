@@ -61,6 +61,7 @@
 | --- | --- | --- | --- |
 | CI-1 | High | `./test/run.sh` 完全不覆盖 CT 线（L1/L2 ≈8k 行） | [run-sh-misses-ct-line.md](ci/run-sh-misses-ct-line.md) |
 | CI-2 | High | 无聚合入口 / 无 CI：不存在一条命令能跑全部门禁 | [no-aggregate-gate-entry.md](ci/no-aggregate-gate-entry.md) |
+| CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
 
 ### `selfhost/` —— 代码结构与容量
 
@@ -77,6 +78,12 @@
 | SH-10 | Medium | 生成物触发 `-Wall -Wextra` 告警家族：`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数 | [ct-ast-unused-self-warning.md](selfhost/ct-ast-unused-self-warning.md) |
 | SH-11 | Medium | ct-ast 在表达式中间静默提升右值接收者，改变求值顺序 | [ct-ast-rvalue-hoist-order.md](selfhost/ct-ast-rvalue-hoist-order.md) |
 | SH-12 | Medium | `map` 语法（`map trait T for instance x`）在 test/cases 与 examples 中无正例，新用户入口缺失 | [ct-ast-map-no-positive-example.md](selfhost/ct-ast-map-no-positive-example.md) |
+| SH-13 | **High** | `pub` 全局变量在 build 模式下被整个丢弃，连定义单元自身都无法编译 | [ct-ast-pub-global-dropped.md](selfhost/ct-ast-pub-global-dropped.md) |
+| SH-14 | **High** | vtable 为 `static`，接口值无法在消费单元装箱（跨单元 OO 的唯一阻塞） | [ct-ast-cross-unit-vtable-static.md](selfhost/ct-ast-cross-unit-vtable-static.md) |
+| SH-15 | Medium | `map` 每条绑定无条件生成 wrapper，缺少直绑零生成路径 | [ct-ast-map-wrapper-per-binding.md](selfhost/ct-ast-map-wrapper-per-binding.md) |
+| SH-16 | Medium | impl 未用参数触发 `-Wunused-parameter`；`(void)_self;` 落在 `return` 之后 | [ct-ast-impl-unused-param-warning.md](selfhost/ct-ast-impl-unused-param-warning.md) |
+| SH-17 | Low | 同一单元被多次 import 时生成物重复 `#include` 其头文件 | [ct-ast-import-dep-duplicate.md](selfhost/ct-ast-import-dep-duplicate.md) |
+| SH-18 | Low | 类型位置不接受命名空间限定名，诊断指向函数查找 | [ct-ast-qualified-type-name-rejected.md](selfhost/ct-ast-qualified-type-name-rejected.md) |
 
 ## 汇总
 
@@ -90,6 +97,8 @@
 **Phase 12 复审（2026-10-21）新增 8 条：DOC-10…15、SH-5、SH-6，已全部修复**（见文末一节）。
 
 **第二轮复审（2026-10-21，锚点 `dde0dda`）新增 8 条待修**：SH-8（High）、SH-9 / SH-10 / SH-11 / SH-12 / DOC-19（Medium）、DOC-20 / DOC-21（Low）；SH-7 与 DOC-18 复核后仍复现（见文末一节）。
+
+**Batch 2（2026-10-22）新增 6 条：SH-13…SH-18；其中 5 条已修（SH-13…SH-17），SH-18 按需求规格仅文档化**（见文末一节）。
 
 状态附注：第二轮复审覆盖了上一轮评审的同一 HEAD `dde0dda`，工作树当时包含第二轮产生的 7 个 issue 文件 + 报告目录 + 本文件编辑（均为新增/只读产物，不触碰源码）。**全量生成物 `-Wall -Wextra` 扫描（2026-10-21）**发现 ct-ast 对 test/cases、test/ast、test/modules 生成的 C 文件有 3 类告警家族（`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数）——check-all.sh 当前只对 ct-ast 自身构建跑告警检查，不对生成物跑；详见 SH-10（扩展为 Medium）。
 
@@ -309,6 +318,51 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 
 复扫结果（ct-ast 生成物，`gcc -Wall -Wextra -std=c99 -fsyntax-only`，69 个 `.c`）：只剩 5 条**源文件层面**
 的告警——3 个 leak fixture 的 `p` unused、2 个 sig_mismatch fixture 的 `-Wreturn-type`，均非发射器产出。
+
+## Batch 2 需求来源（2026-10-22，锚点 `2ead601`）
+
+本轮不是评审产出，而是**第三方使用反馈 + 定向 spike**。完整需求规格（含设计决策、实现顺序、
+验收标准与出口条件）见 [docs/design/batch2-cross-unit-oo.md](../docs/design/batch2-cross-unit-oo.md)，
+该文件经用户批准，是本批次的**实现依据**。
+
+第三方在写网络库时提出四条阻塞：(1) 跨单元接口值传不出去；(2) `map` 需要命名空间级绑定与表达式实参；
+(3) 生成 `.h` 需要复制源文件顶部的 `#include`；(4) 需要 `extern` 与函数指针。
+用自建四层链（L0 → L1 → L2 → ct-ast）逐条实测后，状态拆分为：
+
+| 第三方诉求 | 实测结论 | 本批处理 |
+| --- | --- | --- |
+| (3) `.h` 复制 `#include` | **已修**（Batch 1 / #8） | 无需处理 |
+| (2) 宏常量作 `map` 实参 | **已修**（Batch 1 / #11） | 无需处理 |
+| (2) 不造空 struct 实例 | **已可用**：`void *h;` 直接作实例 | 仅补文档 |
+| (1) 跨单元接口值 | 传递与派发都已通；**只有"在消费单元装箱"失败**，原因是 vtable 为 `static` | [SH-14](selfhost/ct-ast-cross-unit-vtable-static.md) |
+| (4) `extern` / `pub` 全局 | `pub` 全局符号被整个丢弃 | [SH-13](selfhost/ct-ast-pub-global-dropped.md) |
+| (2) 表达式实参 / (4) 零 wrapper | 两者冲突，需要两级设计 | [SH-15](selfhost/ct-ast-map-wrapper-per-binding.md) |
+| 附带发现 | 未用参数告警、`(void)_self` 位置、重复 `#include`、限定类型名被拒 | SH-16 / SH-17 / SH-18 |
+
+本轮新增 6 条（SH-13…SH-18），全部**待修**，实现由其他 agent 按需求规格执行。
+其中 SH-13 / SH-14 为 High，是"OO 只能停在单文件演示级别"这一判断的实际来源。
+
+### 处置（2026-10-22，同日）
+
+六条按需求规格第 5 节顺序落码，改动仅在 ct-ast；L0 / L1 / L2 未动，未 bump `CTC_VERSION`，
+`test/cases/**` 与 `examples/**` 的 golden 未改。
+
+| ID | 处置 | 验收点 |
+| --- | --- | --- |
+| SH-13 | 已修（2a.2） | `test/modules/pub_global`：`count.h` 出 `extern int g_counter;`，`count.c` 出定义 |
+| SH-14 | 已修（2a.1） | `test/modules/xunit_box`：`net.h` 出 `extern struct Stream_vtbl Conn_Stream_vtable;`，消费单元装箱通过 |
+| SH-15 | 已修（2b.1 / 2b.5） | `test/ast/22_map_direct`：直绑零 wrapper，`--emit-map` 标 `"wrapper": false`；`15_map_args` 仍标 `true` |
+| SH-16 | 已修（2c.1） | `test/ast/23_impl_unused`：未用参数发 `(void)x;`，所有 `(void)` 语句前移到函数体开头，生成物零告警 |
+| SH-17 | 已修（2c.2） | `xunit_box` 生成物中 `#include "net.h"` 只出现一次 |
+| SH-18 | 仅文档化（规格 3.4 非目标） | `language-spec.md` §4.11 / §4.12 记录类型位置不支持限定名，绕法为 `import net::conn::Conn as Conn;` |
+
+口径说明（2b.3）：规格写的是 `map … for instance A::B::h` → C 名 `A_B_h`，但 ct-ast 对全局变量
+**不做 mangling**（同 §4.11），故实现为"接受限定写法、按最后一段取已声明的 C 名"。`test/modules/map_ns`
+与该节文档均按实际行为记录，未引入全局变量 mangling。
+
+门禁：`bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`bash selfhost/check-warnings.sh` 对全部
+正例、示例与测试用例的生成 C 执行 `-Wall -Wextra -std=c99` 零告警。
+
 
 
 
