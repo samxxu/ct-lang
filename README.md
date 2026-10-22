@@ -309,7 +309,8 @@ python3 editors/vscode/test/check-grammar.py   # 21 项断言；退出码 0 = �
 | `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
 | `test/pkg/run.sh` | Phase 8.1/8.2/8.3 包管理器：构建 L0→L1→L2→`ct-ast` 并以新入口驱动 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock`（本地包与 git 包；git 用例用本地 git 仓库作 registry，含无 `git` 硬报错），以及 `ct install` 的摘要校验、清单覆盖、建议命令，并证明 `ct build` 可用 `vendor/` 编译 |
 | `selfhost/check-ast.sh` | Phase 9.1–9.7 + Phase 10.x AST 编译器：构建 L0→L1→L2→`ct-ast`，对 `test/ast/*/prog.ct` 做「编译 → cc 零警告 → 运行 → 与 `prog.expected.out` 比对」；`test/ast/errors/` 的负例必须非零退出；模块层对 `test/modules` 的 split / ns_dir / inc / hdr 跑 `ct-ast build` 并做行为比对；元数据层校验 `--emit-map`（stdout / 文件）与 `#line`（build 默认开、`--line` / `--no-line`）；另有自编不动点、全量语料行为等价、CLI/身份与 CLI 错误分支（帮助、缺参、未知选项、不可读/不可写、compile 模式 `import`、build 缺 `-o`）、L2 形状的语义诊断、内存层（AutoDrop 正例与三种负例、泄漏告警的 text / JSON 逐字节比对）、多错误恢复（多错误语料与 `MAX_ERRORS` 上限）与增量缓存（冷编盖章、键对 L2、暖编复用、依赖失效）断言 |
-| `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面六个 CT / 包管理 / AST 脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
+| `selfhost/check-warnings.sh` | 生成物零告警关卡：构建 L0→L1→L2→`ct-ast` 后，用 `-Wall -Wextra -std=c99 -c` 逐个编译自举链产物、`test/ast/*`、`test/cases/**`、`examples/**`、`test/modules/**` 与 `bindings/mock-hal/` 的生成 C，stderr 非空即失败 |
+| `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面七个 CT / 包管理 / AST / 告警脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
 
 ```bash
 bash selfhost/check-all.sh         # 一条命令跑完全部硬门禁
@@ -325,7 +326,7 @@ bash selfhost/ct-tour.sh           # 演示整条自举链
 
 ```bash
 git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # 期望末行：check-all: OK (8 hard gates green)
+bash selfhost/check-all.sh         # 期望末行：check-all: OK (9 hard gates green)
 ```
 
 干净 clone 不需要任何预处理：`.gitignore` 里的生成物（`ctc`、`*.c`/`*.h`、`vendor/`）都不入库，门禁自己会从 `selfhost/l0/ctc.c` 一路构建到 `ct-ast`。在 Linux 容器里复验同理，只需 `gcc`、`git`、`python3` 与常规 POSIX 工具（`sh`/`bash`、`diff`、`sed`、`awk`、`mktemp`）：
@@ -836,7 +837,8 @@ after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 | `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
 | `test/pkg/run.sh` | Phase 8.1/8.2/8.3 package manager: builds L0→L1→L2→`ct-ast` and drives the new entry through `ct get` — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock`, for both local and git packages (the git cases use a local git repo as the registry and assert the no-`git` hard failure) — plus `ct install`'s digest verification, manifest coverage and suggested command, proving `ct build` compiles against `vendor/` |
 | `selfhost/check-ast.sh` | Phase 9.1–9.7 + Phase 10.x AST compiler: builds L0→L1→L2→`ct-ast` and runs every `test/ast/*/prog.ct` through "compile → warning-free cc → run → compare with `prog.expected.out`"; the `test/ast/errors/` negative must exit non-zero; its module layer runs `ct-ast build` on split / ns_dir / inc / hdr from `test/modules` and compares behaviour; its metadata layer checks `--emit-map` (stdout / file) and `#line` (on by default in build mode, `--line` / `--no-line`); it also covers self-compilation fixpoint, whole-corpus behavioural equivalence, CLI/identity and the CLI error branches (help, missing option arguments, unknown options, unreadable input / unwritable output, `import` in compile mode, build without `-o`), L2-shaped semantic diagnostics, the memory layer (AutoDrop positives and negatives, leak warnings byte-diffed in text and JSON), multi-error recovery (multi-error fixtures plus the `MAX_ERRORS` cap), and the incremental cache (cold stamping, key parity with L2, warm reuse, dependency invalidation) |
-| `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the six CT / package / AST scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
+| `selfhost/check-warnings.sh` | the zero-warning gate for generated code: after building L0→L1→L2→`ct-ast`, it compiles every artefact produced by ct-ast (the chain's own units, `test/ast/*`, `test/cases/**`, `examples/**`, `test/modules/**`, `bindings/mock-hal/`) with `-Wall -Wextra -std=c99 -c` and fails on any stderr output |
+| `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the seven CT / package / AST / warning scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
 
 ```bash
 bash selfhost/check-all.sh         # every hard gate in one command
@@ -853,7 +855,7 @@ happen to work, by re-running every hard gate in an empty directory:
 
 ```bash
 git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # expected last line: check-all: OK (8 hard gates green)
+bash selfhost/check-all.sh         # expected last line: check-all: OK (9 hard gates green)
 ```
 
 A clean clone needs no preparation: every build product (`ctc`, `*.c`/`*.h`, `vendor/`) is

@@ -17,6 +17,7 @@
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
 #   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7 + 10.x + 11.x + 12.1:
 #                                                probes, corpus equivalence, fixpoint, negatives)
+#   9. selfhost/check-warnings.sh                generated C compiles warning-free (-Wall -Wextra)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning
@@ -73,6 +74,7 @@ run_gate "5) CT: ct-tour" bash selfhost/ct-tour.sh
 run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
 run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x + 11.x + 12.1)" bash selfhost/check-ast.sh
+run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warnings.sh
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then
