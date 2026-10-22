@@ -65,7 +65,7 @@
 - `issues/README.md`：SH-20 处置行。
 - 验收：`grep` 无残留「命名空间级绑定不可用」表述。
 
-## T8 全量门禁与提交
+## [x] T8 全量门禁与提交
 
 - `bash selfhost/check-all.sh` → 九关全绿、`ALL_EXIT=0`。
 - 提交拆分：`feat(codegen): bind a trait to a namespace`（代码 + 测试）、
