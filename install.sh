@@ -98,8 +98,10 @@ elif [ -f "$src/ctc.c" ]; then
 else
     die "'$src' does not look like a ct source tree (no ctc.c)"
 fi
-[ -f "$l1_src" ] || die "this ref has no $l1_src"
-[ -f "$l2_src" ] || die "this ref has no $l2_src (it predates the L2 split; install a newer tag)"
+# These paths are resolved against $src: the shell is still in the caller's
+# directory here, so a bare relative test would look in the wrong tree.
+[ -f "$src/$l1_src" ] || die "this ref has no $l1_src"
+[ -f "$src/$l2_src" ] || die "this ref has no $l2_src (it predates the L2 split; install a newer tag)"
 
 # --- 2. pick the C compiler flags ----------------------------------------------
 
