@@ -1,0 +1,27 @@
+/* An exported trait and struct in a namespace (SH-18). The consumer writes
+   their bare names; the compiler resolves them to the qualified C spellings
+   (`hal_Writer` / `hal_Uart`). */
+namespace hal;
+
+pub trait Writer {
+    int write(char *buf, int len);
+}
+
+pub struct Uart {
+    int fd;
+} use Writer;
+
+pub struct Uart uart1;
+
+impl Writer for Uart {
+    int write(char *buf, int len) {
+        return self->fd + len + buf[0];
+    }
+}
+
+pub Writer open_uart(void) {
+    Writer w;
+    uart1.fd = 7;
+    w = uart1;
+    return w;
+}

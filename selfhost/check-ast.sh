@@ -445,6 +445,44 @@ else
     bad "ambig_global" "no ambiguity diagnostic: $(cat "$work/mag.err")"
 fi
 
+# SH-18: an exported type in a namespace is reachable by its bare name, so a
+# consumer need not alias-import it. `Uart` becomes `struct hal_Uart` and
+# `Writer` becomes `struct hal_Writer_iface`.
+rm -rf "$mod-nt"
+mkdir -p "$mod-nt"
+if "$work/ct-ast" build test/modules/ns_types/main.ct -o "$mod-nt" \
+        >"$work/mnt.out" 2>"$work/mnt.err" \
+   && grep -q 'struct hal_Uart u' "$mod-nt/main.c" \
+   && grep -q 'struct hal_Writer_iface w;' "$mod-nt/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-nt"/*.c -o "$work/mnt.bin" 2>"$work/mnt.cc" \
+   && "$work/mnt.bin" >"$work/mnt.stdout" 2>&1 \
+   && cmp -s "$work/mnt.stdout" test/modules/ns_types/expected.out; then
+    ok "ns_types (a bare exported type name resolves to its namespaced C name)"
+else
+    bad "ns_types" "$(cat "$work/mnt.err" "$work/mnt.cc" "$work/mnt.stdout" 2>/dev/null)"
+fi
+
+# ... and two namespaces exporting one bare type name make it ambiguous.
+if "$work/ct-ast" build test/modules/ambig_type/main.ct -o "$work/mod-bad" \
+        >"$work/mat.out" 2>"$work/mat.err"; then
+    bad "ambig_type" "expected a non-zero exit"
+elif grep -q "that type is exported by more than one namespace" "$work/mat.err"; then
+    ok "ambig_type (a bare type name that two namespaces export is refused)"
+else
+    bad "ambig_type" "no ambiguity diagnostic: $(cat "$work/mat.err")"
+fi
+
+# SH-20: a map instance must be declared, and the diagnostic names the
+# `void *` placeholder that serves as a host.
+if "$work/ct-ast" test/ast/errors/map_no_instance.ct -o "$work/mni.c" \
+        >"$work/mni.out" 2>"$work/mni.err"; then
+    bad "map instance" "expected a non-zero exit"
+elif grep -q "use 'void \*missing;' as its host" "$work/mni.err"; then
+    ok "map (an undeclared instance names the void * placeholder)"
+else
+    bad "map instance" "$(cat "$work/mni.err")"
+fi
+
 # An impl may ignore a parameter (the trait owns the signature). The casts that
 # silence the warning must lead the body: a trailing `(void)_self;` would sit
 # after the `return`, where it can never run.

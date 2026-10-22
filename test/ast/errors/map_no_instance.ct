@@ -1,8 +1,13 @@
-// map: the instance is not a declared variable
+/* SH-20: a map instance must be a declared variable. The diagnostic names the
+   `void *name;` placeholder that serves as a host for a function-only library. */
 trait T {
-    void m();
+    void m(int a);
 }
 
-map trait T for instance ghost {
-    m() -> g();
+struct S {
+    int x;
+};
+
+map trait T for instance missing {
+    m(a) -> g(a);
 }

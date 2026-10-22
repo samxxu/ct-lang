@@ -1,0 +1,5 @@
+namespace a;
+
+pub struct Thing {
+    int x;
+};

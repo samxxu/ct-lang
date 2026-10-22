@@ -817,7 +817,9 @@ impl ExprOps for Expr {
                 if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
                     if (self->sym->find_qualified_global(qv, self->arena->nodes[n].text2,
                                                          qc, MAX_TEXT) != 0)
-                        return self->sup->fail("no variable of that name in that namespace");
+                        return self->sup->fail("no variable of that name in that namespace"
+                                               " (qualified type names are not supported;"
+                                               " use the bare name or an alias import)");
                     snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", qc);
                     return n;
                 }

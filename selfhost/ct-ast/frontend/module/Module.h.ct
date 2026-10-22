@@ -42,8 +42,11 @@ import tool::diag::diag;
 /* token kinds (the scanner only needs these two) */
 #define T_ID     1
 #define T_PP     5
-/* node kind: a file-scope variable, the same value `Arena.h.ct` assigns */
-#define N_GLOBAL 22
+/* node kinds: file-scope variables and the two type declarations, the same
+   values `Arena.h.ct` assigns */
+#define N_STRUCT  20
+#define N_TYPEDEF 21
+#define N_GLOBAL  22
 
 namespace frontend::module;
 pub trait ModuleOps {
@@ -327,6 +330,9 @@ impl ModuleOps for Module {
         self->lex->tok = 0;
         self->sym->nvar = 0;
         self->sym->nscope = 0;
+        /* the bare-name table for exported types is rebuilt from this unit's
+           direct dependencies below */
+        self->sym->ntb = 0;
         self->mem->nowner = 0;
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
@@ -368,6 +374,36 @@ impl ModuleOps for Module {
                 }
                 if (self->sym->declare_global(gname, self->arena->nodes[gn].text,
                                               gcn, gns, 1) < 0)
+                    return self->fail(self->sym->last_error());
+            }
+            /* Exported types of the dependency, reachable by their bare name
+               here (SH-18). The table is per importing unit, so an unrelated
+               namespace elsewhere in the program cannot make a name ambiguous. */
+            for (gn = self->arena->nodes[self->units[dn].prog].a; gn >= 0;
+                 gn = self->arena->nodes[gn].next) {
+                const char *full;
+                const char *bare;
+                size_t pl;
+                if (self->arena->nodes[gn].d != 1) continue;
+                if (self->arena->nodes[gn].kind != N_STRUCT
+                    && self->arena->nodes[gn].kind != N_TYPEDEF) continue;
+                full = self->arena->nodes[gn].text2;
+                bare = full;
+                pl = strlen(self->units[dn].nsprefix);
+                if (pl > 0 && strncmp(full, self->units[dn].nsprefix, pl) == 0) bare = full + pl;
+                if (self->sym->add_bare_type(bare, full) != 0)
+                    return self->fail(self->sym->last_error());
+            }
+            for (gn = self->units[dn].tr_start; gn < self->units[dn].tr_end; gn++) {
+                const char *full;
+                const char *bare;
+                size_t pl;
+                if (!self->sym->traits[gn].is_pub) continue;
+                full = self->sym->traits[gn].name;
+                bare = full;
+                pl = strlen(self->units[dn].nsprefix);
+                if (pl > 0 && strncmp(full, self->units[dn].nsprefix, pl) == 0) bare = full + pl;
+                if (self->sym->add_bare_type(bare, full) != 0)
                     return self->fail(self->sym->last_error());
             }
         }
@@ -648,6 +684,7 @@ impl ModuleOps for Module {
         self->sym->ntype = 0;
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
+        self->sym->ntb = 0;
         self->p->nrels = 0;
         self->p->scan_only = 0;
         self->p->nparams = 0;

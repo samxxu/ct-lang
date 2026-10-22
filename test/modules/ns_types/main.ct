@@ -1,0 +1,15 @@
+/* The consumer uses the imported type names without an alias import: `Uart`
+   and `Writer` resolve to `hal_Uart` and `hal_Writer_iface`. */
+#include <stdio.h>
+
+import hal::uart;
+
+int main(void)
+{
+    struct Uart u;
+    Writer w;
+    u.fd = 3;
+    w = hal::open_uart();
+    printf("%d %d %d\n", u.fd, w.write("A", 1), hal::uart1.fd);
+    return 0;
+}

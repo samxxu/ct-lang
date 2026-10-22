@@ -1,0 +1,11 @@
+/* Both namespaces export `Thing`: the bare name is ambiguous, so the compiler
+   must ask for the alias import instead of picking one silently. */
+import a::one;
+import b::two;
+
+int main(void)
+{
+    struct Thing t;
+    t.x = 1;
+    return 0;
+}

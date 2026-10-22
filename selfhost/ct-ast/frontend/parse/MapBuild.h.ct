@@ -333,7 +333,11 @@ impl MapBuildOps for MapBuild {
             break;
         }
         if (self->sym->find_var(inst) < 0) {
-            snprintf(msg, sizeof msg, "map instance '%s' is not a declared variable", inst);
+            /* Nothing is synthesised: a typo would become a silent host. A
+               `void *name;` placeholder is the documented workaround. */
+            snprintf(msg, sizeof msg,
+                     "map instance '%s' is not declared (use 'void *%s;' as its host)",
+                     inst, inst);
             return self->sup->fail(msg);
         }
         if (self->sym->var_cname(inst, icn, sizeof icn) != 0)

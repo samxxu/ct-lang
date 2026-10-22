@@ -155,10 +155,12 @@ for d in test/modules/*/; do
     d="${d%/}"
     name="$(basename "$d")"
     [ -f "$d/main.ct" ] || continue
-    # dup_impl and ambig_global are negative fixtures: the compiler must refuse
-    # them (check-ast.sh owns those assertions), so they have no generated C.
+    # dup_impl, ambig_global and ambig_type are negative fixtures: the compiler
+    # must refuse them (check-ast.sh owns those assertions), so they have no
+    # generated C.
     [ "$name" = "dup_impl" ] && continue
     [ "$name" = "ambig_global" ] && continue
+    [ "$name" = "ambig_type" ] && continue
     rm -rf "$work/mod-$name"
     mkdir -p "$work/mod-$name" || continue
     if [ -d "$d/extra" ]; then
