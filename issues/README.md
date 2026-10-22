@@ -86,7 +86,7 @@
 | SH-17 | Low | 同一单元被多次 import 时生成物重复 `#include` 其头文件 | [ct-ast-import-dep-duplicate.md](selfhost/ct-ast-import-dep-duplicate.md) |
 | SH-18 | Medium | 类型位置不接受命名空间限定名，诊断指向函数查找；trait 类型连裸名也不可用 | [ct-ast-qualified-type-name-rejected.md](selfhost/ct-ast-qualified-type-name-rejected.md) |
 | SH-19 | **High** | trait 方法的裸 `void *` 参数被当成空参数列表，直接报 `unexpected token` | [ct-ast-trait-void-pointer-param.md](selfhost/ct-ast-trait-void-pointer-param.md) |
-| SH-20 | Medium | `map` 仍强制要求已声明实例，命名空间级绑定不可用 | [ct-ast-map-requires-instance.md](selfhost/ct-ast-map-requires-instance.md) |
+| SH-20 | Medium | `map` 曾强制要求已声明实例（命名空间级绑定曾不可用；2026-10-22 已修） | [ct-ast-map-requires-instance.md](selfhost/ct-ast-map-requires-instance.md) |
 | SH-21 | Medium | 函数指针不能指向 C 库函数，只能指向 CT 声明的函数或 ALL_CAPS 宏 | [ct-ast-fnptr-cannot-name-libfn.md](selfhost/ct-ast-fnptr-cannot-name-libfn.md) |
 | SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
 
@@ -375,13 +375,13 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 
 复核方式：自建 L0 → L1 → L2 → ct-ast 四层链（`/tmp/b2r`），九关全绿的基础上，按第三方的
 四条诉求逐条搭最小工程实测，不以读码代替运行。**结论：诉求 (1)(3) 已真正可用，(4) 兑现一半，
-(2) 仍缺「无实例绑定」。**
+(2) 当时仍缺「无实例绑定」（当日由 [SH-20](selfhost/ct-ast-map-requires-instance.md) 补齐）。**
 
 | 第三方诉求 | 复核结果 | 证据 |
 | --- | --- | --- |
 | (1) 跨单元接口值 | **已解决**：`pub trait` + `pub struct` 的 vtable 导出，消费单元可直接装箱，也能接住 `pub` 函数返回的接口值 | 两单元工程（`pub trait Stream` / `pub struct Conn` / `pub Stream stream_open(void)`）编译、运行、零告警；`net.h` 出 `extern struct Stream_vtbl Conn_Stream_vtable;`；map 实例跨单元装箱同样通过 |
 | (3) `.h` 复制 `#include` | **已解决**：`#include <sys/socket.h>` 进头文件，`struct sockaddr *` 参数不再退化成 `void *` | `net.h` 前部含 `#include <stdio.h>` / `#include <sys/socket.h>`，`int (*send)(void *, struct sockaddr *, int);` |
-| (2) `map` 两级绑定 | **部分**：直绑零生成、表达式实参、宏常量、限定实例都已可用；**仍要求实例是已声明变量** | `-> real_put;` 生成 `.put = real_put` 且 `--emit-map` 为 `"wrapper": false`；`map trait Writer for instance hal::netlib` 报 `is not a declared variable` → [SH-20](selfhost/ct-ast-map-requires-instance.md) |
+| (2) `map` 两级绑定 | **部分（当日补齐）**：直绑零生成、表达式实参、宏常量、限定实例都已可用；**当时仍要求实例是已声明变量**，同日由 SH-20 的命名空间宿主补上 | `-> real_put;` 生成 `.put = real_put` 且 `--emit-map` 为 `"wrapper": false`；`map trait Writer for instance hal::netlib` 当时报 `is not a declared variable` → [SH-20](selfhost/ct-ast-map-requires-instance.md) |
 | (4) `extern` + 函数指针 | **部分**：`extern` 变量、函数指针的声明/赋值/调用/字段/跨单元导出都可用；函数原型被拒，库函数名不能作右值 | `p = exit;` 报 `use of an undeclared variable` → [SH-21](selfhost/ct-ast-fnptr-cannot-name-libfn.md)；`extern int lib_fn(int);` 报 `extern declares a variable, not a function` 且位置漂移 → [SH-22](selfhost/ct-ast-extern-function-prototype.md) |
 
 复核中新发现的硬阻塞：
@@ -390,7 +390,7 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 | --- | --- | --- |
 | SH-19 | **High** | `trait T { int f(void *p); }` 直接报 `unexpected token`；`const void *` 可绕过。C 的 buffer/ownership API 几乎都用裸 `void *`，跨单元链接通了但接口签名写不出来 |
 | SH-18 | Medium（升级） | 命名空间内的 trait 类型在消费单元**裸名也不可用**（`Writer w;` → undeclared variable），只有 alias import 可行；struct 裸名却可用，两者不一致 |
-| SH-20 | Medium | 命名空间级绑定仍需一行 dummy 实例（`void *h;` 可充当，但不是「无需实例」） |
+| SH-20 | Medium | 命名空间级绑定当时仍需一行 dummy 实例（`void *h;` 可充当，但不是「无需实例」）；当日已修 |
 | SH-21 | Medium | 函数指针右值必须是 CT 函数或 ALL_CAPS 宏，库函数要 `#define` 绕过——诉求里明确不要宏 |
 | SH-22 | Medium | `extern` 函数原型被拒，且诊断位置落在后续行（违反 `file:line:col:` 约定） |
 | DOC-22 | Low | `bindings/mock-hal/uart.ct`、`bindings/README.md`、`test/modules/map_ns/hal/uart.ct` 的 `unit-private` / `not mangled` 注释过期；设计文档状态仍写「待实现」 |
@@ -409,7 +409,7 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 | SH-22 | 已修：`extern` 接受函数原型（只声明，`pub extern` 进 `.h`、`.c` 不定义）；`extern` 名不 mangling；诊断位置改用 `extern` 行的快照 | `test/modules/extern_decl` 增 `pub extern int lib_fn(int x);` + `lib_impl.c` 提供符号；负例 `extern_function.ct` 报在 `extern` 行 |
 | SH-21 | 已修：裸名右值在 CT 符号表里查不到时原样发射，由 C 编译器按原型校验（与普通调用、map wrapper 的既有策略一致） | `test/ast/25_fnptr_libfn`：`p = strcmp;` 后调用 |
 | SH-18 | 部分修复：导出的 `pub struct` / `pub trait` / `pub typedef` 可按**裸名**引用（`Writer w;` / `struct Uart u;` 解析到 `hal_Writer` / `hal_Uart`）；两个命名空间同名时裸名报错并提示 alias import；限定类型写法仍不支持，但诊断已明确 | `test/modules/ns_types`（正例）、`test/modules/ambig_type`（负例） |
-| SH-20 | 文档化 + 诊断改进：实例仍须是已声明全局（不合成宿主，避免拼写错误变成静默对象）；错误信息直接给出 `void *name;` 占位写法 | `test/ast/errors/map_no_instance.ct` + `check-ast.sh` 断言该提示；language-spec §4.10 中英各一条 |
+| SH-20 | **已修（同日追加）**：新增命名空间宿主 `map trait T for namespace A::B { … }` 与 `T::A::B` 装箱，`self` 为 `NULL`，不再需要占位实例；命名空间宿主禁用直绑（无 `self` 可交）；`pub` trait 时 vtable 跨单元导出；`--emit-map` 每条 map 带 `"host"` | `test/ast/26_ns_host`（输出 68）、`test/modules/ns_host`（`writer.h` 出 `extern`、消费单元 NULL 装箱）、负例 `ns_host_no_map.ct` / `ns_host_direct.ct`；language-spec §4.10 中英对称 |
 | DOC-22 | 已修：mock-hal 注释、`bindings/README.md` §5、`map_ns` 注释、Batch 2 设计文档状态与 `phase12.md` 状态注记 | `grep -rn "unit-private\|not mangled" bindings test/modules docs` 只剩已标注为历史的冻结正文 |
 
 门禁：`bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`bash selfhost/check-warnings.sh` 零告警。

@@ -7,7 +7,7 @@
 > `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
 > [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
 > [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
-> Phase 11.1 新增的 `map`（把 trait 方法绑定到已声明的全局实例）**仅 ct-ast** 支持，L0 与 L2 都不接受，见 §4.10。
+> Phase 11.1 新增的 `map`（把 trait 方法绑定到已声明的全局实例；SH-20 起也可绑定到命名空间）**仅 ct-ast** 支持，L0 与 L2 都不接受，见 §4.10。
 >
 > 三者并非逐字节等价：ct-ast 是安装入口，L2 只是回归 oracle。已知分叉如下：
 >
@@ -383,57 +383,87 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
   优于错放（重复释放 / 释放借用对象）。
 
-#### 4.10 `map`（Phase 11 新增，仅 ct-ast）
+#### 4.10 `map`（Phase 11 新增 + SH-20 扩展，仅 ct-ast）
 
-`map` 把一个 trait 的方法绑定到某个**已声明的全局实例**上的具体调用，为实例发射一个「实例级包装函数」
-与一张 vtable；**Phase 11.2 已把该实例接入派发**——它被当作 trait 接口值使用时（赋给 `T` 类型的
-变量、传给 `T` 接口参数、从接口返回、或作为函数实参），装箱会使用这张**实例级** vtable，从而作为该
-trait 的实例运行。它是 Phase 11 新增项，**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ct-ast/main.ct`）支持。
+`map` 把一个 trait 的方法绑定到一处具体的 C 调用，并为该绑定发射包装函数与一张 vtable。宿主有两种
+形态；**Phase 11.2 已把两者接入派发**——被当作 trait 接口值使用时（赋给 `T` 类型的变量、传给 `T`
+接口参数、从接口返回、或作为函数实参），装箱会使用绑定的 vtable，从而作为该 trait 的实例运行：
+
+- **对象宿主**：`map trait T for instance x { … }`，`x` 是已声明的全局变量，接口值的 `self` 指向它。
+- **命名空间宿主**（SH-20）：`map trait T for namespace A::B { … }`，绑定的是命名空间里的一组函数，
+  没有对象可挂，接口值的 `self` 为 `NULL`。
+
+`map` 是 Phase 11 新增项，**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ct-ast/main.ct`）支持。
 
 ```c
 trait Controller {
     int send(char *buf, int len);
 }
 struct Uart { int fd; };
-struct Uart uart1;                                    /* 必须是已声明的全局变量 */
+struct Uart uart1;                                    /* 对象宿主：必须是已声明的全局变量 */
 
 map trait Controller for instance uart1 {
     send(buf, len) -> mock_uart_send(&uart1, buf, len);
 }
+
+namespace hal;
+pub trait Writer { int write(char *buf, int len); }
+int hal_write(char *buf, int len) { return len + buf[0]; }
+
+map trait Writer for namespace hal {                  /* 命名空间宿主：没有对象 */
+    write(buf, len) -> hal_write(buf, len);
+}
+Writer w = Writer::hal;                               /* 装箱：self 为 NULL，vt 指向 hal_Writer_vtable */
 ```
 
-| 产物 | 规则 | 示例（实例 `uart1`，trait `Controller`，方法 `send`） |
+符号命名：宿主路径把 `::` 换成 `_` 得到 `h`，trait 的 C 名记为 `tr`；若 `tr` 已经以 `h_` 开头则
+`p = tr`，否则 `p = h_tr`。包装函数是 `p_<方法>`，vtable 是 `p_vtable`。对象宿主的 `h` 是实例的
+C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`）。
+
+| 产物 | 规则 | 示例 |
 | --- | --- | --- |
-| 包装函数 | fallback 时 `<实例>_<Trait>_<方法>`，首参 `void *self`（体内 `(void)self;`）；**直绑时不生成** | `static int uart1_Controller_send(void *self, char *buf, int len)` |
-| vtable 变量 | `<实例>_<Trait>_vtable`，指定初始化 `.方法 = 包装函数`（直绑时为被绑定的 C 函数本身） | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
+| 包装函数 | `<宿主>_<Trait>_<方法>`，首参 `void *self`（体内 `(void)self;`）；对象宿主的**直绑不生成**，命名空间宿主**必然生成** | `static int uart1_Controller_send(void *self, char *buf, int len)`；`static int hal_Writer_write(void *self, char *buf, int len)` |
+| vtable 变量 | `<宿主>_<Trait>_vtable`，指定初始化 `.方法 = 包装函数`（直绑时为被绑定的 C 函数本身） | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
 
 约束与限制：
 
-- `map trait T for instance x { … }` 中，`x` 必须是**已声明的全局变量**（文件作用域），否则编译期报错。
-  纯函数式 C 库（socket / zlib 等）没有对象可挂，可用一行占位宿主：`void *netlib;`，再
-  `map trait Writer for instance netlib { … }`。编译器不会替未声明的名字合成宿主（拼写错误会变成静默的宿主）。
-  实例名可写成**命名空间限定形式** `A::B::h`（2b.3）；全局按命名空间 mangling（见 §4.11），实际绑定的
-  C 名是 `A_B_h`，实例的 vtable 与包装函数也以它为前缀（`A_B_h_T_vtable`）。
+- `for` 之后只能跟 `instance` 或 `namespace`，其它写法编译期报错。
+- 对象宿主的 `x` 必须是**已声明的全局变量**（文件作用域），否则编译期报错。实例名可写成**命名空间
+  限定形式** `A::B::h`（2b.3）；全局按命名空间 mangling（见 §4.11），实际绑定的 C 名是 `A_B_h`，
+  实例的 vtable 与包装函数也以它为前缀（`A_B_h_T_vtable`）。
+- **不合成宿主**：编译器不会替未声明的名字合成对象（拼写错误会变成静默的宿主）。没有对象可挂时用
+  **命名空间宿主**（`map trait Writer for namespace hal { … }`），而不是伪造 `void *netlib;` 占位变量
+  ——后者仍可用，但已不必要。
+- 命名空间宿主的路径逐段写 `A::B`。装箱 `T::A::B` 在找不到对应 map 时报
+  `no map binds trait 'T' to namespace '<宿主路径>'`（`<宿主路径>` 按源写法回显，如 `nosuch` / `a::b`）。
+- 命名空间宿主**不接受直绑**：没有 `self` 可以交给被绑函数，`-> fn;` 会被拒绝
+  （`a namespace host has no self: bind with a wrapper call`）。
+- 命名空间宿主的装箱语法是 `Trait::ns`，且**只能作为接口值**使用；放进其它上下文（如 `int x = Writer::hal;`）
+  报 `a namespace host value is only usable as an interface value`。`Trait::ns(...)` 仍是限定调用，不产生装箱。
 - `T` 必须是已定义的 trait；无 vtbl 的 trait 不可映射。
 - 绑定方法名必须是 `T` 的既有方法，`( … )` 里的参数个数须与 trait 声明一致。
 - 绑定必须覆盖 `T` 的**每一个**方法，且每个方法**只绑一次**：漏绑会让 vtable 留一个空指针槽（调用即崩溃），
   重复绑定会发射两份同名包装函数（C 重定义）；两种情况都在编译期报错。
 - `->` 右侧（CALL）是**两级绑定**：
   - **直绑**：调用名是裸 C 函数名（纯标识符）时零生成，vtable 槽直接指向它；直绑不校验签名，
-    被绑函数必须自行满足 trait 的槽类型（首参 `void *`）。
-  - **fallback**：调用含表达式或成员路径时生成实例级包装函数。每个实参按标识符逐个校验：字符串 / 字符
+    被绑函数必须自行满足 trait 的槽类型（首参 `void *`）。命名空间宿主禁用直绑（见上）。
+  - **fallback**：调用含表达式或成员路径时生成宿主级包装函数。每个实参按标识符逐个校验：字符串 / 字符
     字面量、数字字面量、`.` / `->` 后的成员名、`A::B` 限定名直接放行；其余标识符必须是左括号内的形参名、
     本 map 的实例、此前已声明的变量或 ALL_CAPS 宏，否则编译期报错。
-- 多个 map 可作用于同一实例；`MAX_MAPS`（64）是 map 构造总数上限，超限报错。
-- **跨单元**：vtable 在 `pub` trait 且实例是有 `pub` 全局时外部链接（同 §4.11 的 impl 规则）：头文件
-  声明 `extern`、声明单元给出定义，其它单元可直接装箱。否则包装函数与 vtable 发射在**声明该 map 的单元**
-  的 `.c` 里（`static`），不会重复出现在其它单元。
-- **派发（11.2）**：把映射实例装箱为 trait 接口值时，用**实例级** vtable——
+- 多个 map 可作用于同一实例或同一命名空间；`MAX_MAPS`（64）是 map 构造总数上限，超限报错。
+- **跨单元**：vtable 在 `pub` trait 且（对象宿主）实例是有 `pub` 全局时外部链接（同 §4.11 的 impl 规则）；
+  命名空间宿主没有实例，只看 `pub` trait。头文件声明 `extern`、声明单元给出定义，其它单元可直接装箱。
+  否则包装函数与 vtable 发射在**声明该 map 的单元**的 `.c` 里（`static`），不会重复出现在其它单元。
+- **派发（11.2 / SH-20）**：对象宿主装箱用**实例级** vtable——
   `Controller c = uart1;` → `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };`
   （注意不是 struct 级的 `&Uart_Controller_vtable`）。因此**即便 `Uart` 未 `use Controller`**，
-  `uart1` 也能作为 `Controller` 实例使用；此后 `c.send(...)` 经 `c.vt->send(c.self, ...)` 派发到包装函数。
+  `uart1` 也能作为 `Controller` 实例使用。命名空间宿主装箱写成
+  `Writer w = Writer::hal;` → `w = (struct hal_Writer_iface){ (void *)0, &hal_Writer_vtable };`。
+  此后 `c.send(...)` / `w.write(...)` 都经 `<接口>.vt->方法(<接口>.self, ...)` 派发到包装函数；
+  命名空间宿主的 `self` 恒为 `NULL`，被绑函数不得解引用首参。
 - `--emit-map` 的 JSON 新增 `maps` 字段，逐条列出 trait / instance / file / line 与 `bindings`
-  （method → 生成符号）；每个 binding 另有 `"wrapper": true|false` 区分 fallback 与直绑。
+  （method → 生成符号）；每个 map 另有 `"host": "instance"|"namespace"` 标明宿主形态，
+  每个 binding 还有 `"wrapper": true|false` 区分 fallback 与直绑。
 
 #### 4.11 跨单元链接：`pub` 全局与 `extern`（ct-ast）
 
@@ -577,8 +607,9 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
 > landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
 > and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also CT-line-only but is described in §4.9.
-> The `map` construct added in Phase 11.1 (binding a trait method to a declared global instance) is
-> supported by **ct-ast only** — neither L0 nor L2 accepts it; see §4.10.
+> The `map` construct added in Phase 11.1 (binding a trait method to a declared global instance, or —
+> since SH-20 — to a namespace) is supported by **ct-ast only** — neither L0 nor L2 accepts it;
+> see §4.10.
 >
 > The three are not byte-equivalent: ct-ast is the installed entry and L2 is only the regression
 > oracle. Known divergences:
@@ -1012,67 +1043,104 @@ Constraints and limits:
   or on a `return` line cancels auto-drop, because a missed release (a leak) beats a wrong one
   (double free / freeing a borrow).
 
-#### 4.10 `map` (new in Phase 11, ct-ast only)
+#### 4.10 `map` (new in Phase 11, extended by SH-20, ct-ast only)
 
-`map` binds a trait's method to a concrete call on a **declared global instance**, emitting an
-instance-level wrapper plus a vtable; **Phase 11.2 has wired the instance into dispatch** — when it is
-used as a trait interface value (assigned to a `T`-typed variable, passed to a `T` interface parameter,
-returned from an interface, or used as a call argument), boxing uses that **instance-level** vtable, so
-it runs as an instance of the trait. It is a Phase 11 addition: **neither L0 nor L2 knows it** — only
-**ct-ast** (`selfhost/ct-ast/main.ct`) supports it.
+`map` binds a trait's method to a concrete C call, emitting a wrapper plus a vtable. The host takes two
+forms; **Phase 11.2 has wired both into dispatch** — when the binding is used as a trait interface
+value (assigned to a `T`-typed variable, passed to a `T` interface parameter, returned from an
+interface, or used as a call argument), boxing uses the bound vtable, so it runs as an instance of the
+trait:
+
+- **Object host**: `map trait T for instance x { … }`, where `x` is a declared global variable; the
+  interface value's `self` points at it.
+- **Namespace host** (SH-20): `map trait T for namespace A::B { … }`, binding a set of functions in
+  that namespace. There is no object, so the interface value's `self` is `NULL`.
+
+`map` is a Phase 11 addition: **neither L0 nor L2 knows it** — only **ct-ast**
+(`selfhost/ct-ast/main.ct`) supports it.
 
 ```c
 trait Controller {
     int send(char *buf, int len);
 }
 struct Uart { int fd; };
-struct Uart uart1;                                    /* must be a declared global */
+struct Uart uart1;                                    /* object host: a declared global */
 
 map trait Controller for instance uart1 {
     send(buf, len) -> mock_uart_send(&uart1, buf, len);
 }
+
+namespace hal;
+pub trait Writer { int write(char *buf, int len); }
+int hal_write(char *buf, int len) { return len + buf[0]; }
+
+map trait Writer for namespace hal {                  /* namespace host: no object */
+    write(buf, len) -> hal_write(buf, len);
+}
+Writer w = Writer::hal;                               /* boxes with a NULL self and hal_Writer_vtable */
 ```
 
-| Artifact | Rule | Example (instance `uart1`, trait `Controller`, method `send`) |
+Symbol naming: the host path with `::` turned into `_` gives `h`, and the trait's C name is `tr`; if
+`tr` already starts with `h_` then `p = tr`, else `p = h_tr`. A wrapper is `p_<method>` and the vtable
+is `p_vtable`. For an object host `h` is the instance's C name (e.g. `uart1`); for a namespace host
+`h` is the host path (e.g. `hal`).
+
+| Artifact | Rule | Example |
 | --- | --- | --- |
-| wrapper | fallback only: `<inst>_<Trait>_<method>` with a leading `void *self` (body `(void)self;`); **a direct binding generates none** | `static int uart1_Controller_send(void *self, char *buf, int len)` |
-| vtable | `<inst>_<Trait>_vtable`, designated-init `.method = wrapper` (the bound C function itself when direct) | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
+| wrapper | `<host>_<Trait>_<method>` with a leading `void *self` (body `(void)self;`); **an object host's direct binding generates none**, a namespace host **always gets one** | `static int uart1_Controller_send(void *self, char *buf, int len)`; `static int hal_Writer_write(void *self, char *buf, int len)` |
+| vtable | `<host>_<Trait>_vtable`, designated-init `.method = wrapper` (the bound C function itself when direct) | `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` |
 
 Constraints and limits:
 
-- In `map trait T for instance x { … }`, `x` must be a **declared global variable** (file scope), else
-  a compile-time error. A function-only C library (socket, zlib, …) has no object to hang the binding
-  on, so declare a placeholder host: `void *netlib;` and then
-  `map trait Writer for instance netlib { … }`. An undeclared name is never turned into a host silently —
-  a typo would otherwise become a hidden object.
-- The instance may be spelled namespace-qualified, `A::B::h` (2b.3); globals are
-  mangled by their namespace (§4.11), so the C name bound is `A_B_h` and the instance's vtable / wrappers
-  carry it as their prefix (`A_B_h_T_vtable`).
+- `for` is followed by either `instance` or `namespace`; anything else is a compile-time error.
+- An object host's `x` must be a **declared global variable** (file scope), else a compile-time error.
+  The instance may be spelled namespace-qualified, `A::B::h` (2b.3); globals are mangled by their
+  namespace (§4.11), so the C name bound is `A_B_h` and the instance's vtable / wrappers carry it as
+  their prefix (`A_B_h_T_vtable`).
+- **No synthesised host**: an undeclared name is never turned into an object silently — a typo would
+  otherwise become a hidden host. When there is no object to hang the binding on, use a **namespace
+  host** (`map trait Writer for namespace hal { … }`) instead of faking a `void *netlib;` placeholder
+  — the placeholder still works but is no longer needed.
+- A namespace host is written path segment by path segment, `A::B`. Boxing `T::A::B` with no matching
+  map reports `no map binds trait 'T' to namespace '<host path>'` (the path is echoed as written,
+  e.g. `nosuch` / `a::b`).
+- A namespace host **rejects a direct binding**: there is no `self` to hand the bound function, so
+  `-> fn;` is rejected (`a namespace host has no self: bind with a wrapper call`).
+- A namespace host is boxed with `Trait::ns`, and that value is **usable only as an interface value**;
+  in any other context (e.g. `int x = Writer::hal;`) it reports
+  `a namespace host value is only usable as an interface value`. `Trait::ns(...)` stays a qualified
+  call and boxes nothing.
 - `T` must be a defined trait; a trait without a vtbl cannot be mapped.
 - The bound method must be an existing method of `T`, and its `( … )` parameter count must match the
   trait declaration.
 - The right-hand side of `->` (the CALL) is a **two-level binding**:
   - **direct**: when the callee is a bare C function name (a single identifier) nothing is generated
     and the vtable slot points at that function. Signatures are not checked: the bound function must
-    itself match the slot type (a leading `void *`).
-  - **fallback**: a call containing an expression or member path gets an instance-level wrapper. Every
+    itself match the slot type (a leading `void *`). A namespace host forbids this (see above).
+  - **fallback**: a call containing an expression or member path gets a host-level wrapper. Every
     argument is validated identifier by identifier: string / character literals, numeric literals,
     member names after `.` / `->`, and `A::B` qualified names pass; any other identifier must be a
     parameter name from the `( … )`, this map's instance, an already-declared variable, or an ALL_CAPS
     macro — otherwise it is a compile-time error.
-- Several maps may target the same instance; `MAX_MAPS` (64) caps the total number of map blocks.
-- **Across units**: the vtable gets external linkage when the trait is `pub` and the instance is a
-  `pub` global (the same rule as the impl vtable in §4.11): the header declares it `extern` and the
-  declaring unit defines it, so another unit can box the instance. Otherwise wrappers and the vtable
-  are emitted `static` in the unit that declares the map and never repeat elsewhere.
-- **Dispatch (11.2)**: boxing a mapped instance as a trait interface value uses the **instance-level**
-  vtable — `Controller c = uart1;` becomes
+- Several maps may target the same instance or the same namespace; `MAX_MAPS` (64) caps the total
+  number of map blocks.
+- **Across units**: the vtable gets external linkage when the trait is `pub` and (for an object host)
+  the instance is a `pub` global (the same rule as the impl vtable in §4.11); a namespace host has no
+  instance, so only the `pub` trait matters. The header declares it `extern` and the declaring unit
+  defines it, so another unit can box the binding. Otherwise wrappers and the vtable are emitted
+  `static` in the unit that declares the map and never repeat elsewhere.
+- **Dispatch (11.2 / SH-20)**: boxing an object host uses the **instance-level** vtable —
+  `Controller c = uart1;` becomes
   `c = (struct Controller_iface){ (void *)&uart1, &uart1_Controller_vtable };` (not the struct-level
   `&Uart_Controller_vtable`). So **even when `Uart` never `use`d `Controller`**, `uart1` works as a
-  `Controller` instance; afterwards `c.send(...)` dispatches via `c.vt->send(c.self, ...)` to the wrapper.
+  `Controller` instance. A namespace host is boxed as
+  `Writer w = Writer::hal;` → `w = (struct hal_Writer_iface){ (void *)0, &hal_Writer_vtable };`.
+  Afterwards both `c.send(...)` and `w.write(...)` dispatch via `<iface>.vt->method(<iface>.self, ...)`
+  to the wrapper; a namespace host's `self` is always `NULL`, so the bound function must not
+  dereference it.
 - The `--emit-map` JSON gains a `maps` field listing trait / instance / file / line and `bindings`
-  (method → generated symbol) per map; each binding also carries `"wrapper": true|false` to tell
-  fallback from a direct binding.
+  (method → generated symbol) per map; each map also carries `"host": "instance"|"namespace"` for the
+  host form, and each binding carries `"wrapper": true|false` to tell fallback from a direct binding.
 
 #### 4.11 Cross-unit linkage: `pub` globals and `extern` (ct-ast)
 
