@@ -342,16 +342,34 @@ impl ModuleOps for Module {
         /* 2a.2: an imported unit's `pub` global is declared `extern` in that
            unit's header, so C links one object for both units. Register it here
            as well, or this unit could not name it in `import count; g_counter`.
-           Only exported globals cross; a private one stays in its owner. */
+           The C spelling is mangled by the owner's namespace (the same rule the
+           owner used when it declared the global); an `extern` declaration keeps
+           the library's own name and has no namespace to qualify with. */
         for (i = 0; i < self->units[u].ndep; i++) {
+            char gcn[MAX_TEXT];
+            char gns[MAX_TEXT];
+            const char *gname;
+            size_t gl;
             dn = self->units[u].depu[i];
             for (gn = self->arena->nodes[self->units[dn].prog].a; gn >= 0;
-                 gn = self->arena->nodes[gn].next)
-                if (self->arena->nodes[gn].kind == N_GLOBAL && self->arena->nodes[gn].d == 1) {
-                    if (self->sym->declare_var(self->arena->nodes[gn].text2,
-                                               self->arena->nodes[gn].text) != 0)
-                        return self->fail(self->sym->last_error());
+                 gn = self->arena->nodes[gn].next) {
+                if (self->arena->nodes[gn].kind != N_GLOBAL || self->arena->nodes[gn].d != 1) continue;
+                gname = self->arena->nodes[gn].text2;
+                if (self->arena->nodes[gn].aux == 2 || !self->units[dn].nsprefix[0]) {
+                    snprintf(gcn, sizeof gcn, "%s", gname);
+                    gns[0] = 0;
+                } else {
+                    if (snprintf(gcn, sizeof gcn, "%s%s",
+                                 self->units[dn].nsprefix, gname) >= (int)sizeof gcn)
+                        return self->fail("variable name is too long");
+                    snprintf(gns, sizeof gns, "%s", self->units[dn].nsprefix);
+                    gl = strlen(gns);
+                    if (gl > 0) gns[gl - 1] = 0;
                 }
+                if (self->sym->declare_global(gname, self->arena->nodes[gn].text,
+                                              gcn, gns, 1) < 0)
+                    return self->fail(self->sym->last_error());
+            }
         }
         /* `scan_imports` counted this unit's imports into `rels`, but the
            recursive loads above left the counter at a dependency's value, and
@@ -372,6 +390,9 @@ impl ModuleOps for Module {
         self->units[u].tr_end = self->sym->ntraits;
         self->units[u].call_end = self->p->ncalls;
         snprintf(self->units[u].ns, MAX_TEXT, "%s", self->p->ns_decl);
+        /* `sym->ns` is the mangled prefix the unit's parser used for its
+           exported names; its globals need the same prefix here. */
+        snprintf(self->units[u].nsprefix, MAX_TEXT, "%s", self->sym->ns);
         return u;
     }
 

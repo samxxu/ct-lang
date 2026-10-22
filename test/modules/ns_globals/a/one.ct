@@ -1,0 +1,11 @@
+/* A namespaced global is emitted under a mangled C name, so two namespaces may
+   each declare `h` without colliding at link time. The exporting unit owns the
+   object; an importing unit names it with `a::h`. */
+namespace a;
+
+pub int h = 1;
+
+pub int get_a(void) {
+    h = h + 1;
+    return h;
+}

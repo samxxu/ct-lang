@@ -35,7 +35,8 @@ pub struct MapBind {
 /* `map trait T for instance x { ... }`: binds trait methods to a global instance. */
 pub struct Map {
     char trait[160];
-    char inst[160];
+    char inst[160];                 /* the declared variable's source name */
+    char cname[160];                /* its C spelling (mangled by its namespace) */
     char vtable[160];               /* "<inst>_<Trait>_vtable" */
     struct MapBind b[64];
     int  nb;

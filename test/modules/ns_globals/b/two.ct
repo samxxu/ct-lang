@@ -1,0 +1,9 @@
+/* The second owner of a global called `h`; its C name is `b_h`. */
+namespace b;
+
+pub int h = 10;
+
+pub int get_b(void) {
+    h = h + 1;
+    return h;
+}

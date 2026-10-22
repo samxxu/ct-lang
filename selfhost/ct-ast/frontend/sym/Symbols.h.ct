@@ -60,6 +60,16 @@ pub struct Var {
     int  own_line;      /* source line of that allocation */
     int  autodrop;      /* 1 when declared `own`: release at scope exit */
     int  path_warned;   /* 1 once reported as possibly leaking on a return path */
+    /* A namespaced global is emitted under a mangled C name, so `cname` carries
+       that spelling (equal to `name` for a local or a root global). `ns` holds
+       the declaring namespace in underscore form (`a_b`), which is what a
+       qualified reference (`a::b::h`) is matched against. `extern` globals keep
+       their C name and an empty `ns`: the library owns the symbol. */
+    char cname[160];
+    char ns[160];
+    int  is_global;     /* file-scope: the mangling / qualification rules apply */
+    int  imported;      /* copied in from an imported unit's export */
+    int  ambiguous;     /* a bare reference cannot pick between two imports */
 }
 
 pub struct MethodSig {
@@ -99,6 +109,11 @@ pub struct StructDef {
 
 pub trait SymbolOps {
     int  declare_var(const char *name, const char *type);
+    int  declare_global(const char *name, const char *type, const char *cname,
+                        const char *ns, int imported);
+    int  var_cname(const char *name, char *out, int cap);
+    int  var_ambiguous(const char *name);
+    int  find_qualified_global(const char *qual, const char *name, char *cname, int cap);
     int  find_var(const char *name);
     int  var_type(const char *name, char *out, int cap);
     int  find_func(const char *cname);
@@ -191,6 +206,11 @@ impl SymbolOps for Symbols {
         i = self->nvar;
         snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
         snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
+        snprintf(self->vars[i].cname, MAX_TEXT, "%s", name);
+        self->vars[i].ns[0] = 0;
+        self->vars[i].is_global = 0;
+        self->vars[i].imported = 0;
+        self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;
         self->vars[i].st = -1;
         self->vars[i].owned = 0;
@@ -199,6 +219,75 @@ impl SymbolOps for Symbols {
         self->vars[i].path_warned = 0;
         self->nvar++;
         return 0;
+    }
+
+    /* A file-scope variable. `cname` is the C spelling to emit and `ns` the
+       declaring namespace in underscore form (empty at the root, and for an
+       `extern` declaration whose symbol belongs to a C library). Two imported
+       units exporting the same source name make the bare name ambiguous; a
+       declaration later in this unit shadows them instead. */
+    int declare_global(const char *name, const char *type, const char *cname,
+                       const char *ns, int imported)
+    {
+        int i, k;
+        (void)self;
+        if (self->nvar >= MAX_VARS) return self->fail("too many variables");
+        i = self->nvar;
+        self->nvar++;
+        snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
+        snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
+        snprintf(self->vars[i].cname, MAX_TEXT, "%s", cname);
+        snprintf(self->vars[i].ns, MAX_TEXT, "%s", ns);
+        self->vars[i].is_global = 1;
+        self->vars[i].imported = imported;
+        self->vars[i].ambiguous = 0;
+        self->vars[i].is_array = 0;
+        self->vars[i].st = -1;
+        self->vars[i].owned = 0;
+        self->vars[i].own_line = 0;
+        self->vars[i].autodrop = 0;
+        self->vars[i].path_warned = 0;
+        if (imported)
+            for (k = 0; k < i; k++)
+                if (self->vars[k].is_global && self->vars[k].imported
+                    && strcmp(self->vars[k].name, name) == 0
+                    && strcmp(self->vars[k].cname, cname) != 0) {
+                    self->vars[k].ambiguous = 1;
+                    self->vars[i].ambiguous = 1;
+                }
+        return i;
+    }
+
+    int var_cname(const char *name, char *out, int cap)
+    {
+        int i;
+        (void)self;
+        i = self->find_var(name);
+        if (i < 0) return -1;
+        return (snprintf(out, (size_t)cap, "%s", self->vars[i].cname) >= cap) ? -1 : 0;
+    }
+
+    int var_ambiguous(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_var(name);
+        return (i >= 0) ? self->vars[i].ambiguous : 0;
+    }
+
+    /* `A::B::h` in an expression: match the path (underscore form, no trailing
+       separator) against the namespace a global was declared in. */
+    int find_qualified_global(const char *qual, const char *name, char *cname, int cap)
+    {
+        int i;
+        (void)self;
+        for (i = self->nvar - 1; i >= 0; i--)
+            if (self->vars[i].is_global && strcmp(self->vars[i].name, name) == 0
+                && strcmp(self->vars[i].ns, qual) == 0) {
+                if (snprintf(cname, (size_t)cap, "%s", self->vars[i].cname) >= cap) return -1;
+                return 0;
+            }
+        return -1;
     }
 
     int find_var(const char *name)

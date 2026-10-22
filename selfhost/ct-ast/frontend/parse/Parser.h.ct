@@ -60,7 +60,7 @@ import tool::diag::diag;
 namespace frontend::parse;
 pub trait ParseOps {
     int  parse_program(void);
-    int  parse_func(int is_static, int is_pub);
+    int  parse_func(int is_static, int is_pub, int is_extern);
     int  parse_params(void);
     int  parse_struct_def(void);
     int  parse_typedef(int is_pub);
@@ -288,12 +288,12 @@ impl ParseDeclOps for Parser {
             if (n >= 0) self->sup->accept(";");
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
             self->sup->lex_next();
-            n = self->parse_func(1, is_pub);
+            n = self->parse_func(1, is_pub, 0);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "extern") == 0) {
             /* a declaration only, for a symbol the C library owns: it goes to
                the header as `extern` and never defines anything */
             self->sup->lex_next();
-            n = self->parse_func(0, is_pub);
+            n = self->parse_func(0, is_pub, 1);
             if (n == NO_NODE || (n >= 0 && self->arena->nodes[n].kind == N_FUNC))
                 return self->sup->fail("extern declares a variable, not a function");
             if (n >= 0) {
@@ -302,7 +302,7 @@ impl ParseDeclOps for Parser {
                     return self->sup->fail("an extern declaration cannot have an initialiser");
             }
         } else {
-            n = self->parse_func(0, is_pub);
+            n = self->parse_func(0, is_pub, 0);
         }
         if (n == NO_NODE) return NO_NODE;
         if (n < 0) return -1;
@@ -410,11 +410,13 @@ impl ParseOps for Parser {
     }
 
     /* A function (prototype or definition) or a global variable. */
-    int parse_func(int is_static, int is_pub)
+    int parse_func(int is_static, int is_pub, int is_extern)
     {
         int f, b, params, fi, func_line;
         char ret[MAX_TEXT];
         char name[MAX_TEXT];
+        char cname[MAX_TEXT];
+        char gns[MAX_TEXT];
         (void)self;
 
         func_line = self->lex->tokline;
@@ -428,6 +430,21 @@ impl ParseOps for Parser {
         }
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
+            /* A namespaced global is emitted under a prefixed C name, the same
+               rule `pub` functions follow; `extern` is exempt because the symbol
+               belongs to the C library and keeps its own spelling. `gns` is the
+               underscore form a qualified reference matches (`a_b`). */
+            if (is_extern || !self->sym->ns[0]) {
+                snprintf(cname, sizeof cname, "%s", name);
+                gns[0] = 0;
+            } else {
+                size_t nl;
+                if (snprintf(cname, sizeof cname, "%s%s", self->sym->ns, name) >= (int)sizeof cname)
+                    return self->sup->fail("variable name is too long");
+                snprintf(gns, sizeof gns, "%s", self->sym->ns);
+                nl = strlen(gns);
+                if (nl > 0) gns[nl - 1] = 0;      /* drop the trailing '_' */
+            }
             g = self->sup->new_node(N_GLOBAL);
             if (g < 0) return -1;
             snprintf(self->arena->nodes[g].text, MAX_TEXT, "%s", ret);
@@ -436,7 +453,8 @@ impl ParseOps for Parser {
             self->arena->nodes[g].d = is_pub;
             self->arena->nodes[g].line = func_line;
             /* a file-scope name is visible to every function body */
-            if (self->sup->declare_var(name, ret) != 0) return -1;
+            if (self->sym->declare_global(name, ret, cname, gns, 0) < 0)
+                return self->sup->fail(self->sym->last_error());
             if (self->ex->parse_array_dims(g) != 0) return -1;
             if (self->sup->accept("=")) {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {

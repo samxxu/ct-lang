@@ -121,6 +121,7 @@ trait EmitOps {
     int  emit_cond(int n);
     int  emit_indent(int n);
     int  emit_type_decl(int n, int ind, int with_semi);
+    int  emit_global_decl(int n);
     int  emit_global_extern(int n);
     int  decl_is_pub(int kind, const char *name);
     int  vtable_exported(int si, const char *tname);
@@ -167,6 +168,10 @@ struct Emitter {
     int  raw_call;
     int  failline;              /* the source line of the node that failed, 0 = none */
     char errmsg[160];
+    /* The mangled prefix of the unit being written (`a_b_`, empty at the root).
+       A namespaced global is emitted as `<prefix><name>`; `emit_program` sets
+       this from `sym->ns`, the build writers from `units[u].nsprefix`. */
+    const char *gprefix;
     /* the vptr / initialiser writer (Init.h.ct) */
     struct Init *init;
 } use EmitOps;
@@ -273,6 +278,8 @@ impl EmitOps for Emitter {
 
         self->errmsg[0] = 0;
         self->failline = 0;
+        /* compile mode is one file: the parser's prefix is this file's */
+        self->gprefix = self->sym->ns;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
             if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
 
@@ -720,8 +727,7 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_GLOBAL) {
             self->emit_indent(ind);
             if (self->arena->nodes[n].aux == 1) fputs("static ", self->out);
-            if (self->emit_type_name(self->arena->nodes[n].text, self->arena->nodes[n].text2) != 0) return -1;
-            if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
+            if (self->emit_global_decl(n) != 0) return -1;
             if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
                 if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text) != 0) return -1;
             } else if (self->arena->nodes[n].a >= 0) {
@@ -752,9 +758,29 @@ impl EmitOps for Emitter {
         (void)self;
 
         fputs("extern ", self->out);
-        if (self->emit_type_name(self->arena->nodes[n].text, self->arena->nodes[n].text2) != 0) return -1;
-        if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
+        if (self->emit_global_decl(n) != 0) return -1;
         fputs(";\n", self->out);
+        return 0;
+    }
+
+    /* `<type> <name>[dims]` for a file-scope variable. A namespaced global is
+       spelled with the unit's mangled prefix (the same rule `pub` functions
+       follow); `extern` keeps the C library's own name. The declarator may also
+       be a function pointer, so the name goes through `emit_type_name`. */
+    int emit_global_decl(int n)
+    {
+        char cn[MAX_TEXT];
+        const char *nm = self->arena->nodes[n].text2;
+        (void)self;
+
+        if (self->arena->nodes[n].aux != 2 && self->gprefix && self->gprefix[0]) {
+            if (snprintf(cn, sizeof cn, "%s%s", self->gprefix, nm) >= (int)sizeof cn)
+                return self->fail("variable name is too long");
+        } else {
+            snprintf(cn, sizeof cn, "%s", nm);
+        }
+        if (self->emit_type_name(self->arena->nodes[n].text, cn) != 0) return -1;
+        if (self->arena->nodes[n].text3[0]) fputs(self->arena->nodes[n].text3, self->out);
         return 0;
     }
 
@@ -1176,6 +1202,9 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_VAR) {
             if (self->sym->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) {
                 fputs("_self", self->out);
+            } else if (self->arena->nodes[n].text3[0]) {
+                /* a namespaced global: `text3` carries the mangled C spelling */
+                fputs(self->arena->nodes[n].text3, self->out);
             } else {
                 fputs(self->arena->nodes[n].text2, self->out);
             }
@@ -1403,6 +1432,7 @@ impl EmitOps for Emitter {
 
         self->errmsg[0] = 0;
         self->failline = 0;
+        self->gprefix = self->units[u].nsprefix;
         if (snprintf(path, sizeof path, "%s/%s.c", self->outdir, self->units[u].base) >= (int)sizeof path)
             return self->fail("output path is too long");
         f = fopen(path, "w");
@@ -1463,6 +1493,7 @@ impl EmitOps for Emitter {
         FILE *f;
         (void)self;
 
+        self->gprefix = self->units[u].nsprefix;
         if (snprintf(path, sizeof path, "%s/%s.h", self->outdir, self->units[u].base) >= (int)sizeof path)
             return self->fail("output path is too long");
         if (self->header_guard(self->units[u].base, guard, sizeof guard) != 0) return -1;

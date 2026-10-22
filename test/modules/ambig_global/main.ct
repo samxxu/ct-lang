@@ -1,0 +1,8 @@
+import a::one;
+import b::two;
+
+int main(void)
+{
+    h = 1;
+    return 0;
+}

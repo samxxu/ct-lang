@@ -93,7 +93,7 @@ pub trait ExprOps {
     int  parse_postfix(void);
     int  parse_primary(void);
     int  parse_args(void);
-    int  parse_qual_path(char *name, int ncap, char *cname, int ccap);
+    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap);
     int  record_call(const char *callee, int line);
 }
 
@@ -762,9 +762,11 @@ impl ExprOps for Expr {
     {
         int n, args, id_line;
         char qc[MAX_TEXT];
+        char qv[MAX_TEXT];
         (void)self;
 
         qc[0] = 0;
+        qv[0] = 0;
         if (self->lex->tok == T_NUM) {
             n = self->sup->new_node(N_NUM);
             if (n < 0) return -1;
@@ -798,12 +800,19 @@ impl ExprOps for Expr {
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
             self->sup->lex_next();
             /* `Qual::fn(...)`: the qualifier names a namespace path or a type,
-               and the callee lives in that namespace */
+               and the callee lives in that namespace. Without the call it names
+               a variable instead (`a::h`), whose C spelling is the mangled one. */
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
-                if (self->parse_qual_path(self->arena->nodes[n].text2, MAX_TEXT, qc, MAX_TEXT) != 0)
+                if (self->parse_qual_path(self->arena->nodes[n].text2, MAX_TEXT, qc, MAX_TEXT,
+                                          qv, MAX_TEXT) != 0)
                     return -1;
-                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0)
-                    return self->sup->fail("a qualified name must be a call");
+                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
+                    if (self->sym->find_qualified_global(qv, self->arena->nodes[n].text2,
+                                                         qc, MAX_TEXT) != 0)
+                        return self->sup->fail("no variable of that name in that namespace");
+                    snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", qc);
+                    return n;
+                }
             }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
                 int fi;
@@ -858,7 +867,21 @@ impl ExprOps for Expr {
                 }
                 self->arena->nodes[n].kind = N_CALL;
                 self->arena->nodes[n].a = (args == 0) ? -1 : args;
-            } else if (self->sym->find_var(self->arena->nodes[n].text2) < 0) {
+            } else if (self->sym->find_var(self->arena->nodes[n].text2) >= 0) {
+                /* a declared variable: a namespaced global is emitted under its
+                   mangled C name, which is kept on the node for the emitter; a
+                   bare name may not pick between two imported exports */
+                char cn[MAX_TEXT];
+                const char *nm = self->arena->nodes[n].text2;
+                if (self->sym->var_ambiguous(nm)) {
+                    char amsg[512];
+                    snprintf(amsg, sizeof amsg,
+                             "variable '%s' is exported by more than one namespace; use a qualified name", nm);
+                    return self->sup->fail(amsg);
+                }
+                if (self->sym->var_cname(nm, cn, sizeof cn) == 0 && strcmp(cn, nm) != 0)
+                    snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", cn);
+            } else {
                 /* CT has no preprocessor: an ALL_CAPS name is a macro constant
                    (MAX_NODES, NULL, ...) and is emitted verbatim. Anything else
                    still has to be declared. */
@@ -900,18 +923,20 @@ impl ExprOps for Expr {
         return self->sup->fail("expected an expression");
     }
 
-    /* Consume the rest of a `Qual::fn` path -- the cursor sits on its first
-       '::' -- and resolve the callee. The qualifier is a namespace path
-       (`runtime::arena`) or a type name (`Arena`), whose mangled spelling
-       carries the namespace it belongs to; `fn` is looked up in that namespace.
-       Writes the call's source name into `name`, its C spelling into `cname`. */
-    int parse_qual_path(char *name, int ncap, char *cname, int ccap)
+    /* Consume the rest of a `Qual::name` path -- the cursor sits on its first
+       '::'. Writes the last segment into `name`, the namespace path in
+       underscore form (`a_b`, no trailing separator) into `qpath`, and, when the
+       path is followed by `(`, the callee's C spelling into `cname`. The
+       qualifier is a namespace path (`runtime::arena`) or a type name (`Arena`),
+       whose mangled spelling carries the namespace it belongs to. A path that is
+       not followed by `(` names a variable, which the caller resolves. */
+    int parse_qual_path(char *name, int ncap, char *cname, int ccap,
+                        char *qpath, int qcap)
     {
         char seg[8][MAX_TEXT];
-        char qual[MAX_TEXT];
         char cand[MAX_TEXT];
         char tn[MAX_TEXT];
-        int nseg, fi, i, w;
+        int nseg, fi, i, w, is_call;
         size_t us;
         (void)self;
 
@@ -928,14 +953,26 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "::") != 0) break;
         }
+        /* the qualifier: every segment but the last, joined with '_' */
         w = 0;
+        qpath[0] = 0;
         for (i = 0; i < nseg - 1; i++) {
-            w += snprintf(qual + w, sizeof qual - (size_t)w, "%s_", seg[i]);
-            if (w >= (int)sizeof qual) return self->sup->fail("qualified name is too long");
+            if (i > 0) {
+                if (w + 1 >= qcap) return self->sup->fail("qualified name is too long");
+                qpath[w] = '_';
+                w++;
+                qpath[w] = 0;
+            }
+            if (w + (int)strlen(seg[i]) >= qcap)
+                return self->sup->fail("qualified name is too long");
+            snprintf(qpath + w, (size_t)(qcap - w), "%s", seg[i]);
+            w += (int)strlen(seg[i]);
         }
-        if (w + (int)strlen(seg[nseg - 1]) >= (int)sizeof qual)
+        snprintf(name, (size_t)ncap, "%s", seg[nseg - 1]);
+        is_call = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0);
+        if (!is_call) return 0;
+        if (snprintf(cand, sizeof cand, "%s_%s", qpath, seg[nseg - 1]) >= (int)sizeof cand)
             return self->sup->fail("qualified name is too long");
-        snprintf(cand, sizeof cand, "%s%s", qual, seg[nseg - 1]);
         fi = self->sym->find_func(cand);
         if (fi < 0 && nseg == 2) {
             /* a lone segment may be a type: its C name is `<prefix><Type>`, so
@@ -949,7 +986,6 @@ impl ExprOps for Expr {
             }
         }
         if (fi < 0) return self->sup->fail("no function of that name in that namespace");
-        snprintf(name, (size_t)ncap, "%s", seg[nseg - 1]);
         snprintf(cname, (size_t)ccap, "%s", self->sym->funcs[fi].cname);
         return 0;
     }

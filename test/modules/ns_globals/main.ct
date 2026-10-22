@@ -1,0 +1,15 @@
+/* The consumer: it reads and writes both exports, which are distinct objects
+   because the namespace prefixes the C name. */
+#include <stdio.h>
+
+import a::one;
+import b::two;
+
+int main(void)
+{
+    printf("%d %d\n", a::h, b::h);
+    a::h = 5;
+    b::h = 50;
+    printf("%d %d %d %d\n", a::h, b::h, a::get_a(), b::get_b());
+    return 0;
+}

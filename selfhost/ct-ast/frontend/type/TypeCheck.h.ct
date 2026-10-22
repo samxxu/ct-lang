@@ -264,7 +264,9 @@ impl TypeOps for TypeCheck {
                     self->arena->nodes[box].a = n;
                     self->arena->nodes[box].aux = mptr + (addr ? 2 : 0);
                     snprintf(self->arena->nodes[box].text, MAX_TEXT, "%s", trait);
-                    snprintf(self->arena->nodes[box].text2, MAX_TEXT, "%s", iname);
+                    /* the map's instance-level vtable is named from the
+                       instance's C spelling, which carries its namespace */
+                    snprintf(self->arena->nodes[box].text2, MAX_TEXT, "%s", self->maps[i].cname);
                     return box;
                 }
         }

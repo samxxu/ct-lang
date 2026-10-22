@@ -13,6 +13,7 @@ pub struct Unit {
     char path[1024];
     char base[160];
     char ns[160];
+    char nsprefix[160];         /* `ns` in mangled form (`a_b_`), for globals */
     char dep[32][160];
     int  depu[32];              /* the dependency's unit index (cache folding) */
     int  ndep;

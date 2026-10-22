@@ -398,19 +398,49 @@ else
     bad "extern_decl" "$(cat "$work/mex.err" "$work/mex.cc" "$work/mex.stdout" 2>/dev/null)"
 fi
 
-# 2b.3: a map instance may be spelled namespace-qualified. Globals are not
-# mangled by this compiler, so the path normalises to the declared name.
+# 2b.3: a map instance may be spelled namespace-qualified. Globals carry their
+# namespace in the C name, so the instance and everything named after it are
+# mangled together.
 rm -rf "$mod-mn"
 mkdir -p "$mod-mn"
 if "$work/ct-ast" build test/modules/map_ns/main.ct -o "$mod-mn" \
         >"$work/mmn.out" 2>"$work/mmn.err" \
-   && grep -q 'uart1_hal_Writer_vtable' "$mod-mn/uart.c" \
+   && grep -q 'hal_uart1_hal_Writer_vtable' "$mod-mn/uart.c" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-mn"/*.c -o "$work/mmn.bin" 2>"$work/mmn.cc" \
    && "$work/mmn.bin" >"$work/mmn.stdout" 2>&1 \
    && cmp -s "$work/mmn.stdout" test/modules/map_ns/expected.out; then
     ok "map_ns (a qualified instance name resolves to the declared name)"
 else
     bad "map_ns" "$(cat "$work/mmn.err" "$work/mmn.cc" "$work/mmn.stdout" 2>/dev/null)"
+fi
+
+# Globals are mangled by their namespace, so two units may each export `h`.
+# The consumer reads and writes both through the qualified form.
+rm -rf "$mod-ng"
+mkdir -p "$mod-ng"
+if "$work/ct-ast" build test/modules/ns_globals/main.ct -o "$mod-ng" \
+        >"$work/mng.out" 2>"$work/mng.err" \
+   && grep -q '^extern int a_h;$' "$mod-ng/one.h" \
+   && grep -q '^extern int b_h;$' "$mod-ng/two.h" \
+   && grep -q '^int a_h = 1;$' "$mod-ng/one.c" \
+   && grep -q '^int b_h = 10;$' "$mod-ng/two.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-ng"/*.c -o "$work/mng.bin" 2>"$work/mng.cc" \
+   && "$work/mng.bin" >"$work/mng.stdout" 2>&1 \
+   && cmp -s "$work/mng.stdout" test/modules/ns_globals/expected.out; then
+    ok "ns_globals (the namespace prefixes the C name; a::h names one object)"
+else
+    bad "ns_globals" "$(cat "$work/mng.err" "$work/mng.cc" "$work/mng.stdout" 2>/dev/null)"
+fi
+
+# Two imports exporting one source name: a bare reference is refused, and the
+# diagnostic asks for the qualified form.
+if "$work/ct-ast" build test/modules/ambig_global/main.ct -o "$work/mod-bad" \
+        >"$work/mag.out" 2>"$work/mag.err"; then
+    bad "ambig_global" "expected a non-zero exit"
+elif grep -q "variable 'h' is exported by more than one namespace" "$work/mag.err"; then
+    ok "ambig_global (a bare name that two namespaces export is refused)"
+else
+    bad "ambig_global" "no ambiguity diagnostic: $(cat "$work/mag.err")"
 fi
 
 # An impl may ignore a parameter (the trait owns the signature). The casts that

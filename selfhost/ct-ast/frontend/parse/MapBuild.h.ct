@@ -41,6 +41,7 @@ import tool::diag::diag;
 namespace frontend::parse;
 pub trait MapBuildOps {
     int  check_call(char *b, const char *inst);
+    int  rewrite_globals(char *s);
     int  parse(int unit);
 }
 
@@ -212,11 +213,86 @@ impl MapBuildOps for MapBuild {
         return 0;
     }
 
+    /* The wrapper body is the bound call copied verbatim, so a global it names
+       must be spelled the way the declaration was emitted (mangled by its
+       namespace). Identifiers after `.` / `->` are member names and literals are
+       skipped; everything else is looked up, and an unknown name is left alone
+       (it is a C function or macro the `#include` brought in). */
+    int rewrite_globals(char *s)
+    {
+        char out[MAX_TEXT];
+        char cn[MAX_TEXT];
+        char tok[MAX_TEXT];
+        int i, o, k, prev, member, q;
+        (void)self;
+
+        i = 0;
+        o = 0;
+        out[0] = 0;
+        while (s[i]) {
+            if (s[i] == '"' || s[i] == '\'') {
+                q = (unsigned char)s[i];
+                if (o + 2 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
+                out[o] = s[i];
+                o++;
+                i++;
+                while (s[i]) {
+                    if (o + 2 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
+                    out[o] = s[i];
+                    o++;
+                    if (s[i] == '\\' && s[i + 1]) {
+                        out[o] = s[i + 1];
+                        o++;
+                        i += 2;
+                        continue;
+                    }
+                    if ((unsigned char)s[i] == q) { i++; break; }
+                    i++;
+                }
+                out[o] = 0;
+                continue;
+            }
+            if (!((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || s[i] == '_')) {
+                if (o + 2 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
+                out[o] = s[i];
+                o++;
+                out[o] = 0;
+                i++;
+                continue;
+            }
+            prev = o - 1;
+            while (prev >= 0 && (out[prev] == ' ' || out[prev] == '\t')) prev--;
+            member = 0;
+            if (prev >= 0 && out[prev] == '.') member = 1;
+            if (prev > 0 && out[prev] == '>' && out[prev - 1] == '-') member = 1;
+            k = 0;
+            while ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z')
+                   || (s[i] >= '0' && s[i] <= '9') || s[i] == '_') {
+                if (k + 1 < MAX_TEXT) { tok[k] = s[i]; k++; }
+                i++;
+            }
+            tok[k] = 0;
+            if (!member && self->sym->var_cname(tok, cn, sizeof cn) == 0) {
+                if (o + (int)strlen(cn) + 1 >= MAX_TEXT)
+                    return self->sup->fail("the bound call is too long");
+                snprintf(out + o, (size_t)(MAX_TEXT - o), "%s", cn);
+                o += (int)strlen(cn);
+            } else {
+                if (o + k + 1 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
+                snprintf(out + o, (size_t)(MAX_TEXT - o), "%s", tok);
+                o += k;
+            }
+        }
+        snprintf(s, MAX_TEXT, "%s", out);
+        return 0;
+    }
+
     int parse(int unit)
     {
         char tname[MAX_TEXT];
         char rtrait[MAX_TEXT];
         char inst[MAX_TEXT];
+        char icn[MAX_TEXT];
         char wname[MAX_TEXT];
         char msg[MAX_TEXT];
         struct Map *m;
@@ -243,9 +319,9 @@ impl MapBuildOps for MapBuild {
             return self->sup->fail("expected 'instance'");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected an instance name");
-        /* 2b.3: the instance may be spelled namespace-qualified. Globals are
-           not mangled by this compiler, so the declared C name is the last
-           segment; the path is accepted for readability and normalised away. */
+        /* 2b.3: the instance may be spelled namespace-qualified (`hal::uart1`).
+           The declared name is the last segment; the C spelling is the one the
+           global was emitted under (mangled by its namespace). */
         for (;;) {
             snprintf(inst, sizeof inst, "%s", self->lex->toktext);
             self->sup->lex_next();
@@ -260,6 +336,8 @@ impl MapBuildOps for MapBuild {
             snprintf(msg, sizeof msg, "map instance '%s' is not a declared variable", inst);
             return self->sup->fail(msg);
         }
+        if (self->sym->var_cname(inst, icn, sizeof icn) != 0)
+            snprintf(icn, sizeof icn, "%s", inst);
         /* One map per (instance, trait), across units: two declarations would
            emit the same wrappers and the same vtable twice. */
         for (k2 = 0; k2 < *self->nmaps; k2++)
@@ -277,7 +355,8 @@ impl MapBuildOps for MapBuild {
         m = &self->maps[*self->nmaps];
         snprintf(m->trait, MAX_TEXT, "%s", rtrait);
         snprintf(m->inst, MAX_TEXT, "%s", inst);
-        snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", inst, rtrait);
+        snprintf(m->cname, MAX_TEXT, "%s", icn);
+        snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", icn, rtrait);
         snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
         m->nb = 0;
         m->line = line;
@@ -374,11 +453,12 @@ impl MapBuildOps for MapBuild {
             }
             if (ident) b->direct = 1;
             if (!b->direct && self->check_call((char *)b, inst) != 0) return -1;
+            if (!b->direct && self->rewrite_globals(b->call) != 0) return -1;
             if (self->sup->expect(";") != 0) return -1;
             /* `wrapper` and `method` are sibling arrays of the same struct, so
                GCC's -Wrestrict cannot prove they miss each other; build the
                name aside and copy it in. */
-            snprintf(wname, sizeof wname, "%s_%s_%s", inst, rtrait, b->method);
+            snprintf(wname, sizeof wname, "%s_%s_%s", icn, rtrait, b->method);
             snprintf(b->wrapper, MAX_TEXT, "%s", wname);
             b->ti = ti;
             b->mi = mi;

@@ -1,0 +1,5 @@
+/* A negative fixture: both units export `h`, so a bare reference cannot pick
+   one. The compiler must ask for a qualified name. */
+namespace a;
+
+pub int h = 1;
