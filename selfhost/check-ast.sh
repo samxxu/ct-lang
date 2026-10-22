@@ -416,6 +416,25 @@ else
     bad "map_ns" "$(cat "$work/mmn.err" "$work/mmn.cc" "$work/mmn.stdout" 2>/dev/null)"
 fi
 
+# SH-20: a namespace host crosses units through the header. The provider
+# defines the exported vtable, the wrapper stays static, and the consumer boxes
+# NULL through `Trait::ns` (it declares no instance).
+rm -rf "$mod-nh"
+mkdir -p "$mod-nh"
+if "$work/ct-ast" build test/modules/ns_host/main.ct -o "$mod-nh" \
+        >"$work/mnh4.out" 2>"$work/mnh4.err" \
+   && grep -q '^extern struct hal_Writer_vtbl hal_Writer_vtable;$' "$mod-nh/writer.h" \
+   && grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' "$mod-nh/writer.c" \
+   && grep -q '^static int hal_Writer_write(void \*self' "$mod-nh/writer.c" \
+   && grep -q '(void \*)0, &hal_Writer_vtable' "$mod-nh/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-nh"/*.c -o "$work/mnh4.bin" 2>"$work/mnh4.cc" \
+   && "$work/mnh4.bin" >"$work/mnh4.stdout" 2>&1 \
+   && cmp -s "$work/mnh4.stdout" test/modules/ns_host/expected.out; then
+    ok "ns_host (a namespace host exports its vtable and boxes NULL cross-unit)"
+else
+    bad "ns_host" "$(cat "$work/mnh4.err" "$work/mnh4.cc" "$work/mnh4.stdout" 2>/dev/null)"
+fi
+
 # Globals are mangled by their namespace, so two units may each export `h`.
 # The consumer reads and writes both through the qualified form.
 rm -rf "$mod-ng"
@@ -655,6 +674,34 @@ if "$work/ct-ast" --emit-map - test/ast/15_map_args/prog.ct -o "$work/mmd3.c" \
     ok "map (expression argument keeps the wrapper; JSON says wrapper:true)"
 else
     bad "map wrapper flag" "$(cat "$work/mmd3.err")"
+fi
+# SH-20: a namespace host boxes NULL and names the vtable after the namespace
+# (no object exists), and the map JSON says `"host":"namespace"`.
+if "$work/ct-ast" --emit-map - test/ast/26_ns_host/prog.ct -o "$work/mnh.c" \
+        >"$work/mnh.map" 2>"$work/mnh.err" \
+   && grep -q '(void \*)0, &hal_Writer_vtable' "$work/mnh.c" \
+   && grep -q '^static int hal_Writer_write(void \*self' "$work/mnh.c" \
+   && grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' "$work/mnh.c" \
+   && grep -q '"host":"namespace"' "$work/mnh.map"; then
+    ok "map (namespace host: NULL self, exported vtable, JSON host)"
+else
+    bad "map namespace host" "$(cat "$work/mnh.err")"
+fi
+if "$work/ct-ast" test/ast/errors/ns_host_no_map.ct -o "$work/mnh2.c" \
+        >"$work/mnh2.out" 2>"$work/mnh2.err"; then
+    bad "ns_host_no_map" "expected a non-zero exit"
+elif grep -q "no map binds trait 'Writer' to namespace 'nosuch'" "$work/mnh2.err"; then
+    ok "map (a namespace host with no map is refused at the box site)"
+else
+    bad "ns_host_no_map" "$(cat "$work/mnh2.err")"
+fi
+if "$work/ct-ast" test/ast/errors/ns_host_direct.ct -o "$work/mnh3.c" \
+        >"$work/mnh3.out" 2>"$work/mnh3.err"; then
+    bad "ns_host_direct" "expected a non-zero exit"
+elif grep -q "a namespace host has no self: bind with a wrapper call" "$work/mnh3.err"; then
+    ok "map (a namespace host refuses a direct binding)"
+else
+    bad "ns_host_direct" "$(cat "$work/mnh3.err")"
 fi
 
 echo

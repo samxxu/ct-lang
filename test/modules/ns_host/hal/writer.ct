@@ -1,0 +1,15 @@
+/* The provider: a namespace-host map. Nothing is declared as a host object, so
+   `Writer::hal` boxes NULL into the exported vtable. */
+namespace hal;
+
+pub trait Writer {
+    int write(char *buf, int len);
+}
+
+int hal_write(char *buf, int len) {
+    return len + buf[0];
+}
+
+map trait Writer for namespace hal {
+    write(buf, len) -> hal_write(buf, len);
+}

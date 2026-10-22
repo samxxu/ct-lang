@@ -1,0 +1,11 @@
+// SH-20: `Trait::ns` is only usable when a map binds that trait to that host.
+namespace hal;
+
+trait Writer {
+    int write(char *buf, int len);
+}
+
+int main(void) {
+    Writer w = Writer::nosuch;
+    return 0;
+}

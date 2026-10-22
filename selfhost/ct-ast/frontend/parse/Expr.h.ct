@@ -48,6 +48,7 @@ import runtime::arena::Arena;
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_BIN 11
+#define N_BOX 34
 #define N_CALL 7
 #define N_CAST 35
 #define N_DEREF 28
@@ -93,7 +94,8 @@ pub trait ExprOps {
     int  parse_postfix(void);
     int  parse_primary(void);
     int  parse_args(void);
-    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap);
+    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
+                         int *form);
     int  record_call(const char *callee, int line);
 }
 
@@ -771,6 +773,9 @@ impl ExprOps for Expr {
         int n, args, id_line;
         char qc[MAX_TEXT];
         char qv[MAX_TEXT];
+        char tsrc[MAX_TEXT];
+        char tag[MAX_TEXT];
+        int qf;
         (void)self;
 
         qc[0] = 0;
@@ -811,9 +816,27 @@ impl ExprOps for Expr {
                and the callee lives in that namespace. Without the call it names
                a variable instead (`a::h`), whose C spelling is the mangled one. */
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                snprintf(tsrc, sizeof tsrc, "%s", self->arena->nodes[n].text2);
                 if (self->parse_qual_path(self->arena->nodes[n].text2, MAX_TEXT, qc, MAX_TEXT,
-                                          qv, MAX_TEXT) != 0)
+                                          qv, MAX_TEXT, &qf) != 0)
                     return -1;
+                /* `Trait::ns`: a namespace-host interface value (SH-20). The
+                   host has no object, so the node carries no operand (`a`), the
+                   vtable is named after `text2` and `text3` keeps the source
+                   spelling for the emitter's diagnostics. */
+                if (qf == 2) {
+                    if (snprintf(tag, sizeof tag, "%s|%s", tsrc, qv) >= MAX_TEXT)
+                        return self->sup->fail("qualified name is too long");
+                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s",
+                             self->arena->nodes[n].text2);
+                    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", qc);
+                    snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", tag);
+                    self->arena->nodes[n].kind = N_BOX;
+                    self->arena->nodes[n].a = -1;
+                    self->arena->nodes[n].aux = 4;
+                    self->arena->nodes[n].b = -1;
+                    return n;
+                }
                 if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
                     if (self->sym->find_qualified_global(qv, self->arena->nodes[n].text2,
                                                          qc, MAX_TEXT) != 0)
@@ -948,17 +971,26 @@ impl ExprOps for Expr {
        path is followed by `(`, the callee's C spelling into `cname`. The
        qualifier is a namespace path (`runtime::arena`) or a type name (`Arena`),
        whose mangled spelling carries the namespace it belongs to. A path that is
-       not followed by `(` names a variable, which the caller resolves. */
+       not followed by `(` names a variable, which the caller resolves.
+
+       `form` tells the caller which of those the path turned out to be:
+       0 = a qualified variable (resolve with `find_qualified_global`),
+       1 = a qualified call (`cname` holds the callee),
+       2 = a namespace-host interface value (`Trait::ns`, SH-20): `name` holds
+           the trait's C name, `cname` the host's underscore prefix and `qpath`
+           the host's source path, for the emitter's diagnostics. */
     int parse_qual_path(char *name, int ncap, char *cname, int ccap,
-                        char *qpath, int qcap)
+                        char *qpath, int qcap, int *form)
     {
         char seg[8][MAX_TEXT];
         char cand[MAX_TEXT];
         char tn[MAX_TEXT];
+        char hp[MAX_TEXT];
         int nseg, fi, i, w, is_call;
         size_t us;
         (void)self;
 
+        *form = 0;
         snprintf(seg[0], MAX_TEXT, "%s", name);
         nseg = 1;
         for (;;) {
@@ -989,23 +1021,73 @@ impl ExprOps for Expr {
         }
         snprintf(name, (size_t)ncap, "%s", seg[nseg - 1]);
         is_call = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0);
-        if (!is_call) return 0;
-        if (snprintf(cand, sizeof cand, "%s_%s", qpath, seg[nseg - 1]) >= (int)sizeof cand)
-            return self->sup->fail("qualified name is too long");
-        fi = self->sym->find_func(cand);
-        if (fi < 0 && nseg == 2) {
-            /* a lone segment may be a type: its C name is `<prefix><Type>`, so
-               the namespace prefix is everything up to its last '_' */
-            if (self->sym->resolve_type(seg[0], tn, sizeof tn) == 0) {
-                us = strlen(tn);
-                while (us > 0 && tn[us - 1] != '_') us--;
-                tn[us] = 0;
-                if (snprintf(cand, sizeof cand, "%s%s", tn, seg[1]) < (int)sizeof cand)
-                    fi = self->sym->find_func(cand);
+        if (is_call) {
+            if (snprintf(cand, sizeof cand, "%s_%s", qpath, seg[nseg - 1]) >= (int)sizeof cand)
+                return self->sup->fail("qualified name is too long");
+            fi = self->sym->find_func(cand);
+            if (fi < 0 && nseg == 2) {
+                /* a lone segment may be a type: its C name is `<prefix><Type>`, so
+                   the namespace prefix is everything up to its last '_' */
+                if (self->sym->resolve_type(seg[0], tn, sizeof tn) == 0) {
+                    us = strlen(tn);
+                    while (us > 0 && tn[us - 1] != '_') us--;
+                    tn[us] = 0;
+                    if (snprintf(cand, sizeof cand, "%s%s", tn, seg[1]) < (int)sizeof cand)
+                        fi = self->sym->find_func(cand);
+                }
             }
+            if (fi < 0) return self->sup->fail("no function of that name in that namespace");
+            snprintf(cname, (size_t)ccap, "%s", self->sym->funcs[fi].cname);
+            *form = 1;
+            return 0;
         }
-        if (fi < 0) return self->sup->fail("no function of that name in that namespace");
-        snprintf(cname, (size_t)ccap, "%s", self->sym->funcs[fi].cname);
+        /* SH-20: `Trait::ns` names a namespace host, not a variable. Only a
+           trait qualifier takes this form; a struct or typedef stays a
+           (rejected) qualified variable. */
+        if (nseg >= 2 && self->sym->resolve_type(seg[0], tn, sizeof tn) == 0
+            && self->sym->find_trait(tn) >= 0) {
+            /* the host in underscore form, then the symbol prefix spelled the
+               way `map` spells it: a trait that already carries the namespace
+               keeps its own name (SH-20 §4) */
+            w = 0;
+            hp[0] = 0;
+            for (i = 1; i < nseg; i++) {
+                if (i > 1) {
+                    if (w + 1 >= (int)sizeof hp)
+                        return self->sup->fail("qualified name is too long");
+                    hp[w] = '_';
+                    w++;
+                    hp[w] = 0;
+                }
+                if (w + (int)strlen(seg[i]) >= (int)sizeof hp)
+                    return self->sup->fail("qualified name is too long");
+                snprintf(hp + w, sizeof hp - (size_t)w, "%s", seg[i]);
+                w += (int)strlen(seg[i]);
+            }
+            if (strncmp(tn, hp, strlen(hp)) == 0 && tn[strlen(hp)] == '_')
+                snprintf(cname, (size_t)ccap, "%s", tn);
+            else if (snprintf(cname, (size_t)ccap, "%s_%s", hp, tn) >= ccap)
+                return self->sup->fail("qualified name is too long");
+            /* and the host in source form, for the emitter's diagnostic */
+            w = 0;
+            qpath[0] = 0;
+            for (i = 1; i < nseg; i++) {
+                if (i > 1) {
+                    if (w + 2 >= qcap) return self->sup->fail("qualified name is too long");
+                    qpath[w] = ':';
+                    qpath[w + 1] = ':';
+                    w += 2;
+                    qpath[w] = 0;
+                }
+                if (w + (int)strlen(seg[i]) >= qcap)
+                    return self->sup->fail("qualified name is too long");
+                snprintf(qpath + w, (size_t)(qcap - w), "%s", seg[i]);
+                w += (int)strlen(seg[i]);
+            }
+            snprintf(name, (size_t)ncap, "%s", tn);
+            *form = 2;
+            return 0;
+        }
         return 0;
     }
 

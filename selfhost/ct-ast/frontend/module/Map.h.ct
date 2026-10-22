@@ -32,12 +32,15 @@ pub struct MapBind {
     int  line;
 }
 
-/* `map trait T for instance x { ... }`: binds trait methods to a global instance. */
+/* `map trait T for instance x { ... }` binds trait methods to a global instance;
+   `map trait T for namespace ns { ... }` binds them to a namespace (SH-20). */
 pub struct Map {
     char trait[160];
-    char inst[160];                 /* the declared variable's source name */
-    char cname[160];                /* its C spelling (mangled by its namespace) */
-    char vtable[160];               /* "<inst>_<Trait>_vtable" */
+    char inst[160];                 /* the variable's source name, or the namespace path */
+    char cname[160];                /* the variable's C spelling, or the namespace prefix */
+    char prefix[160];               /* what wrappers and the vtable are named after */
+    char vtable[160];               /* "<prefix>_vtable" */
+    int  ns_host;                   /* 1 when the host is a namespace, not an object */
     struct MapBind b[64];
     int  nb;
     int  line;

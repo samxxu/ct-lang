@@ -819,6 +819,9 @@ impl EmitOps for Emitter {
 
         t = self->sym->find_trait(self->maps[i].trait);
         if (t < 0 || !self->sym->traits[t].is_pub) return 0;
+        /* a namespace host has no object to be private: `pub trait` is the
+           whole contract (SH-20) */
+        if (self->maps[i].ns_host) return 1;
         return self->decl_is_pub(N_GLOBAL, self->maps[i].inst);
     }
 
@@ -1306,11 +1309,43 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_BOX) {
             /* aux: bit 0 = the source operand is a pointer, bit 1 = take the
-               address of the literal (a pointer-to-interface target) */
+               address of the literal (a pointer-to-interface target),
+               bit 2 = a namespace host (SH-20): no operand, self is NULL,
+               bit 3 = the value reached an interface context (see maybe_box) */
             int a = self->arena->nodes[n].aux;
-            if (a >= 2) fputs("&", self->out);
+            if (a & 4) {
+                int i, found, bar;
+                char dmsg[512];
+                if (!(a & 8))
+                    return self->fail_from(n, "a namespace host value is only usable as an interface value");
+                found = 0;
+                for (i = 0; i < (*self->nmaps); i++)
+                    if (self->maps[i].ns_host
+                        && strcmp(self->maps[i].trait, self->arena->nodes[n].text) == 0
+                        && strcmp(self->maps[i].prefix, self->arena->nodes[n].text2) == 0) {
+                        found = 1;
+                        break;
+                    }
+                if (!found) {
+                    bar = -1;
+                    for (i = 0; self->arena->nodes[n].text3[i]; i++)
+                        if (self->arena->nodes[n].text3[i] == '|') { bar = i; break; }
+                    if (bar >= 0)
+                        snprintf(dmsg, sizeof dmsg, "no map binds trait '%.*s' to namespace '%s'",
+                                 bar, self->arena->nodes[n].text3,
+                                 self->arena->nodes[n].text3 + bar + 1);
+                    else
+                        snprintf(dmsg, sizeof dmsg, "no map binds trait '%s' to namespace ''",
+                                 self->arena->nodes[n].text3);
+                    return self->fail_from(n, dmsg);
+                }
+                fprintf(self->out, "(struct %s_iface){ (void *)0, &%s_vtable }",
+                        self->arena->nodes[n].text, self->arena->nodes[n].text2);
+                return 0;
+            }
+            if (a & 2) fputs("&", self->out);
             fprintf(self->out, "(struct %s_iface){ (void *)", self->arena->nodes[n].text);
-            if (a == 1 || a == 3) {
+            if (a & 1) {
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             } else {
                 fputs("&", self->out);
@@ -1722,6 +1757,8 @@ impl EmitOps for Emitter {
             self->emit_json_str(f, self->maps[i].trait);
             fputs("\",\"instance\":\"", f);
             self->emit_json_str(f, self->maps[i].inst);
+            fputs("\",\"host\":\"", f);
+            fputs(self->maps[i].ns_host ? "namespace" : "instance", f);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
             fprintf(f, "\",\"line\":%d,\"bindings\":[", self->maps[i].line);

@@ -1,0 +1,22 @@
+// 26 (SH-20): `map` may bind a trait to a namespace - no host object, NULL self
+#include <stdio.h>
+
+namespace hal;
+
+pub trait Writer {
+    int write(char *buf, int len);
+}
+
+int hal_write(char *buf, int len) {
+    return len + buf[0];
+}
+
+map trait Writer for namespace hal {
+    write(buf, len) -> hal_write(buf, len);
+}
+
+int main(void) {
+    Writer w = Writer::hal;
+    printf("%d\n", w.write("A", 3));
+    return 0;
+}

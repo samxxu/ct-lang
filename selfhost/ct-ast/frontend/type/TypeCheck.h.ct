@@ -210,7 +210,7 @@ impl TypeOps for TypeCheck {
         }
         if (self->arena->nodes[n].kind == N_BOX) {
             if (snprintf(out, (size_t)cap, "struct %s_iface%s", self->arena->nodes[n].text,
-                         self->arena->nodes[n].aux >= 2 ? " *" : "") >= cap) return -1;
+                         (self->arena->nodes[n].aux & 2) ? " *" : "") >= cap) return -1;
             return 0;
         }
         if (self->arena->nodes[n].kind == N_CAST) {
@@ -238,7 +238,15 @@ impl TypeOps for TypeCheck {
         (void)self;
 
         if (self->arena->nodes[n].kind == N_BOX) {
-            /* already an interface value; a pointer target takes its address */
+            /* already an interface value; the trait must be the expected one.
+               Bit 3 of aux marks the node as accepted by an interface context,
+               which is what the emitter requires of a namespace-host value
+               (SH-20). `b` stays a child slot: the emitter's hoist walk reads
+               it as a node index. */
+            if (strcmp(self->arena->nodes[n].text, trait) != 0)
+                return self->fail("interface type mismatch");
+            self->arena->nodes[n].aux |= 8;
+            /* a pointer target takes its address */
             if (!addr) return n;
             box = self->new_node(N_ADDR);
             if (box < 0) return -1;

@@ -1,0 +1,12 @@
+/* The consumer: it imports the provider and boxes the namespace host without
+   declaring any instance. */
+#include <stdio.h>
+
+import hal::writer;
+
+int main(void)
+{
+    Writer w = Writer::hal;
+    printf("%d\n", w.write("A", 3));
+    return 0;
+}

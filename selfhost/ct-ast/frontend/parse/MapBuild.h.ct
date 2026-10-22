@@ -293,11 +293,16 @@ impl MapBuildOps for MapBuild {
         char rtrait[MAX_TEXT];
         char inst[MAX_TEXT];
         char icn[MAX_TEXT];
+        char prefix[MAX_TEXT];
+        char vt[MAX_TEXT];
+        char hostpath[MAX_TEXT];
+        char hostcn[MAX_TEXT];
         char wname[MAX_TEXT];
         char msg[MAX_TEXT];
         struct Map *m;
         struct MapBind *b;
-        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident;
+        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident, ns_host, hl, cl;
+        size_t wl;
         (void)self;
 
         line = self->lex->tokline;
@@ -315,37 +320,96 @@ impl MapBuildOps for MapBuild {
         if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0))
             return self->sup->fail("expected 'for'");
         self->sup->lex_next();
-        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "instance") == 0))
-            return self->sup->fail("expected 'instance'");
-        self->sup->lex_next();
-        if (self->lex->tok != T_ID) return self->sup->fail("expected an instance name");
-        /* 2b.3: the instance may be spelled namespace-qualified (`hal::uart1`).
-           The declared name is the last segment; the C spelling is the one the
-           global was emitted under (mangled by its namespace). */
-        for (;;) {
-            snprintf(inst, sizeof inst, "%s", self->lex->toktext);
+        ns_host = 0;
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "instance") == 0) {
             self->sup->lex_next();
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected an instance name");
+            /* 2b.3: the instance may be spelled namespace-qualified (`hal::uart1`).
+               The declared name is the last segment; the C spelling is the one the
+               global was emitted under (mangled by its namespace). */
+            for (;;) {
+                snprintf(inst, sizeof inst, "%s", self->lex->toktext);
                 self->sup->lex_next();
-                if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
-                continue;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
+                    continue;
+                }
+                break;
             }
-            break;
+            if (self->sym->find_var(inst) < 0) {
+                /* Nothing is synthesised: a typo would become a silent host. A
+                   `void *name;` placeholder is the documented workaround, and a
+                   namespace host (SH-20) is the object-free form. */
+                snprintf(msg, sizeof msg,
+                         "map instance '%s' is not declared (use 'void *%s;' as its host)",
+                         inst, inst);
+                return self->sup->fail(msg);
+            }
+            if (self->sym->var_cname(inst, icn, sizeof icn) != 0)
+                snprintf(icn, sizeof icn, "%s", inst);
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "namespace") == 0) {
+            /* SH-20: the host is a namespace, not an object. Nothing is declared,
+               so the binding names its symbols after the namespace path and the
+               interface value's self is NULL (the wrapper never uses it). */
+            self->sup->lex_next();
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a namespace name");
+            ns_host = 1;
+            hl = 0;
+            cl = 0;
+            hostpath[0] = 0;
+            hostcn[0] = 0;
+            for (;;) {
+                wl = strlen(self->lex->toktext);
+                if (hl > 0) {
+                    if (hl + 3 >= (int)sizeof hostpath)
+                        return self->sup->fail("namespace path is too long");
+                    hostpath[hl] = ':';
+                    hostpath[hl + 1] = ':';
+                    hl += 2;
+                    hostpath[hl] = 0;
+                    if (cl + 2 >= (int)sizeof hostcn)
+                        return self->sup->fail("namespace path is too long");
+                    hostcn[cl] = '_';
+                    cl++;
+                    hostcn[cl] = 0;
+                }
+                if (hl + (int)wl >= (int)sizeof hostpath)
+                    return self->sup->fail("namespace path is too long");
+                snprintf(hostpath + hl, (size_t)sizeof hostpath - (size_t)hl, "%s", self->lex->toktext);
+                hl += (int)wl;
+                if (cl + (int)wl >= (int)sizeof hostcn)
+                    return self->sup->fail("namespace path is too long");
+                snprintf(hostcn + cl, (size_t)sizeof hostcn - (size_t)cl, "%s", self->lex->toktext);
+                cl += (int)wl;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
+                    continue;
+                }
+                break;
+            }
+            snprintf(inst, sizeof inst, "%s", hostpath);
+            snprintf(icn, sizeof icn, "%s", hostcn);
+        } else {
+            return self->sup->fail("expected 'instance' or 'namespace'");
         }
-        if (self->sym->find_var(inst) < 0) {
-            /* Nothing is synthesised: a typo would become a silent host. A
-               `void *name;` placeholder is the documented workaround. */
-            snprintf(msg, sizeof msg,
-                     "map instance '%s' is not declared (use 'void *%s;' as its host)",
-                     inst, inst);
-            return self->sup->fail(msg);
+        /* Wrappers and the vtable share one prefix. A namespace host whose trait
+           already carries that namespace in its C name (`hal::Writer` on `hal`)
+           keeps the trait's spelling; otherwise the host prefix leads. */
+        if (ns_host && strncmp(rtrait, icn, strlen(icn)) == 0 && rtrait[strlen(icn)] == '_') {
+            snprintf(prefix, sizeof prefix, "%s", rtrait);
+        } else {
+            if (snprintf(prefix, sizeof prefix, "%s_%s", icn, rtrait) >= (int)sizeof prefix)
+                return self->sup->fail("map symbol name is too long");
         }
-        if (self->sym->var_cname(inst, icn, sizeof icn) != 0)
-            snprintf(icn, sizeof icn, "%s", inst);
-        /* One map per (instance, trait), across units: two declarations would
-           emit the same wrappers and the same vtable twice. */
+        if (snprintf(vt, sizeof vt, "%s_vtable", prefix) >= (int)sizeof vt)
+            return self->sup->fail("map symbol name is too long");
+        /* One map per prefix, across units: two declarations would emit the same
+           wrappers and the same vtable twice. */
         for (k2 = 0; k2 < *self->nmaps; k2++)
-            if (strcmp(self->maps[k2].trait, rtrait) == 0 && strcmp(self->maps[k2].inst, inst) == 0) {
+            if (strcmp(self->maps[k2].prefix, prefix) == 0) {
                 char dmsg[512];
                 snprintf(dmsg, sizeof dmsg,
                          "duplicate map of trait '%s' for instance '%s' (first at %s:%d)",
@@ -360,7 +424,9 @@ impl MapBuildOps for MapBuild {
         snprintf(m->trait, MAX_TEXT, "%s", rtrait);
         snprintf(m->inst, MAX_TEXT, "%s", inst);
         snprintf(m->cname, MAX_TEXT, "%s", icn);
-        snprintf(m->vtable, MAX_TEXT, "%s_%s_vtable", icn, rtrait);
+        snprintf(m->prefix, MAX_TEXT, "%s", prefix);
+        snprintf(m->vtable, MAX_TEXT, "%s", vt);
+        m->ns_host = ns_host;
         snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
         m->nb = 0;
         m->line = line;
@@ -456,13 +522,17 @@ impl MapBuildOps for MapBuild {
                     ident = 0;
             }
             if (ident) b->direct = 1;
+            /* A direct binding hands the host pointer to the target as `self`,
+               and a namespace host has none (SH-20). */
+            if (b->direct && m->ns_host)
+                return self->sup->fail("a namespace host has no self: bind with a wrapper call");
             if (!b->direct && self->check_call((char *)b, inst) != 0) return -1;
             if (!b->direct && self->rewrite_globals(b->call) != 0) return -1;
             if (self->sup->expect(";") != 0) return -1;
             /* `wrapper` and `method` are sibling arrays of the same struct, so
                GCC's -Wrestrict cannot prove they miss each other; build the
                name aside and copy it in. */
-            snprintf(wname, sizeof wname, "%s_%s_%s", icn, rtrait, b->method);
+            snprintf(wname, sizeof wname, "%s_%s", m->prefix, b->method);
             snprintf(b->wrapper, MAX_TEXT, "%s", wname);
             b->ti = ti;
             b->mi = mi;

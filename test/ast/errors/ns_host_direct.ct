@@ -1,0 +1,16 @@
+// SH-20: a namespace host has no self, so a direct binding is refused.
+namespace hal;
+
+trait Writer {
+    int write(char *buf, int len);
+}
+
+int hal_write(void *self, char *buf, int len) {
+    (void)self;
+    (void)buf;
+    return len;
+}
+
+map trait Writer for namespace hal {
+    write(buf, len) -> hal_write;
+}
