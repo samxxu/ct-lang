@@ -81,6 +81,7 @@ import runtime::arena::Arena;
 #define N_COMPOUND 51
 #define N_EMPTY   52
 #define N_VAARG   53
+#define N_FNUM    54
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -1374,6 +1375,11 @@ impl EmitOps for Emitter {
 
         if (self->arena->nodes[n].kind == N_NUM) {
             fprintf(self->out, "%ld", self->arena->nodes[n].num);
+            return 0;
+        }
+        /* a floating literal is emitted with its spelling (`1.5`, `2.25f`, `1e9`) */
+        if (self->arena->nodes[n].kind == N_FNUM) {
+            fputs(self->arena->nodes[n].text, self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_STR) {

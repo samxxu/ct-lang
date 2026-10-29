@@ -1,0 +1,13 @@
+/* batch 15: a case label must be an integer constant expression, and a
+   floating literal is not one. */
+int main(void) {
+    int k;
+
+    k = 1;
+    switch (k) {
+    case 1.5:
+        return 1;
+    default:
+        return 0;
+    }
+}

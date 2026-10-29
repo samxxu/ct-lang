@@ -39,6 +39,10 @@ pub struct Lexer {
     int  tokline;               /* line of the current token */
     int  tokstart;
     int  lstart;                /* column = tokstart - lstart + 1 */
+    /* 1 when the T_NUM token just read is a floating literal (`1.5`, `1e9`,
+       `2.25f`, `.5`): the parser stores those as text, since a `long` cannot
+       hold the value and re-printing it would lose the spelling */
+    int  tokfloat;
 } use LexOps;
 
 pub struct Lexer *lexer_get(void);
@@ -100,7 +104,9 @@ impl LexOps for Lexer {
             return;
         }
         if (c >= '0' && c <= '9') {
+            int nstart = self->pos;
             self->toknum = 0;
+            self->tokfloat = 0;
             if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
                 self->pos += 2;
                 for (;;) {
@@ -123,9 +129,40 @@ impl LexOps for Lexer {
                     self->pos++;
                 }
             } else {
+                int isflt = 0;
                 while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
                     self->toknum = self->toknum * 10 + (self->src[self->pos] - '0');
                     self->pos++;
+                }
+                /* A fraction or an exponent makes the literal floating. `1...5`
+                   stays an integer: three dots are a range or a variadic tail,
+                   not a decimal point. */
+                if (self->src[self->pos] == '.' && self->src[self->pos + 1] != '.') {
+                    isflt = 1;
+                    self->pos++;
+                    while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') self->pos++;
+                }
+                if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
+                    int k = self->pos + 1;
+                    if (self->src[k] == '+' || self->src[k] == '-') k++;
+                    if (self->src[k] >= '0' && self->src[k] <= '9') {
+                        isflt = 1;
+                        self->pos = k;
+                        while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') self->pos++;
+                    }
+                }
+                if (isflt) {
+                    int q = 0;
+                    if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
+                        || self->src[self->pos] == 'l' || self->src[self->pos] == 'L')
+                        self->pos++;
+                    /* keep the spelling: the parser stores floats as text */
+                    while (nstart + q < self->pos && q + 1 < MAX_TEXT) {
+                        self->toktext[q] = self->src[nstart + q];
+                        q++;
+                    }
+                    self->toktext[q] = 0;
+                    self->tokfloat = 1;
                 }
             }
             self->tok = T_NUM;
@@ -162,6 +199,37 @@ impl LexOps for Lexer {
             self->toktext[3] = 0;
             self->tok = T_PUNCT;
             self->pos += 3;
+            return;
+        }
+        /* `.5` -- a floating literal that starts with the point. The `...` case
+           above already took the three-dot form, so this one is unambiguous. */
+        if (c == '.' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '9') {
+            int q = 0;
+            self->tokfloat = 1;
+            self->toknum = 0;
+            while (q + 1 < MAX_TEXT && (self->src[self->pos] == '.'
+                   || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9'))) {
+                self->toktext[q] = self->src[self->pos];
+                q++;
+                self->pos++;
+            }
+            if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
+                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+                if (self->src[self->pos] == '+' || self->src[self->pos] == '-') {
+                    if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+                }
+                while (q + 1 < MAX_TEXT && self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
+                    self->toktext[q] = self->src[self->pos];
+                    q++;
+                    self->pos++;
+                }
+            }
+            if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
+                || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
+                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+            }
+            self->toktext[q] = 0;
+            self->tok = T_NUM;
             return;
         }
         if (c == '-' && self->src[self->pos + 1] == '>') {

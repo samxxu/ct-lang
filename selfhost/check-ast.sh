@@ -84,6 +84,9 @@
 # batch 14 aligns the built-in type words with L2 and accepts `inline`:
 # test/ast/39_builtin_types plus the `inline` diagnostic.
 #
+# batch 15 adds floating-point literals: test/ast/40_float_literal plus the
+# case-label diagnostic that now also covers floats.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1091,6 +1094,22 @@ do
         ok "batch 14 ($cf)"
     else
         bad "batch 14: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 15: a floating literal is not an integer constant expression.
+for pair in \
+    "float_case|a case label must be an integer constant"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 15: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 15 ($cf)"
+    else
+        bad "batch 15: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

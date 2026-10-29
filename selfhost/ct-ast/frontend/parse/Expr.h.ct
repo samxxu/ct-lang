@@ -66,6 +66,7 @@ import runtime::arena::Arena;
 #define N_VAR 10
 #define N_COMPOUND 51
 #define N_VAARG 53
+#define N_FNUM 54
 #define P_DEC 2
 #define P_INC 1
 #define T_ID 1
@@ -1002,9 +1003,15 @@ impl ExprOps for Expr {
         qc[0] = 0;
         qv[0] = 0;
         if (self->lex->tok == T_NUM) {
-            n = self->sup->new_node(N_NUM);
+            /* an integer keeps its value (`long`, emitted in decimal); a
+               floating literal keeps its spelling, since neither the value nor
+               the `f` / `L` suffix survives a `long` */
+            n = self->sup->new_node(self->lex->tokfloat ? N_FNUM : N_NUM);
             if (n < 0) return -1;
-            self->arena->nodes[n].num = self->lex->toknum;
+            if (self->lex->tokfloat)
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
+            else
+                self->arena->nodes[n].num = self->lex->toknum;
             self->sup->lex_next();
             return n;
         }

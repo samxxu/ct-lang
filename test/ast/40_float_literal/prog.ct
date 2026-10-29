@@ -1,0 +1,26 @@
+/* 40: floating-point literals (batch 15) - `1.5`, `.5`, `1e9`, `2.25f` and
+   `3.5L` lex as one token and are emitted with their spelling, so the `f` / `L`
+   suffix survives. `1...5` still reads as an integer followed by three dots. */
+#include <stdio.h>
+
+static double half(double v) { return v / 2.0; }
+
+int main(void) {
+    double d;
+    float f;
+    long double ld;
+    int n;
+
+    d = 1.5;
+    f = 2.25f;
+    ld = 3.5L;
+    n = (int)9.99;
+
+    printf("double %.2f\n", d);
+    printf("float %.2f\n", f);
+    printf("long double %.1Lf\n", ld);
+    printf("half %.3f\n", half(5.0));
+    printf("cast %d\n", n);
+    printf("exp %.1f %.1f\n", 1.5e3, .5);
+    return 0;
+}
