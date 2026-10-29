@@ -612,7 +612,8 @@ struct Holder { int tag; union Value v; };
   `duplicate union 'Value'`。
 - `offsetof` 同样接受 union 类型（`offsetof(union Value, c)`），字段校验与 struct 共用一套代码；
   字段缺失报 `union 'Value' has no field 'd'`。
-- 匿名成员（`union { int a; float b; };` 这类无名成员）**不在支持的子集内**。
+- 既无标签也无别名的**顶层**记录定义（`union { int a; float b; };`）没有可引用的类型名，
+  不在本文描述的范围内；作为**成员**出现的匿名 struct / union 见 §4.18。
 
 #### 4.16 `goto` 与标签（ct-ast）
 
@@ -683,6 +684,35 @@ typedef struct {
 - 位域不写入 `structs[]` 的维度槽，因此成员访问的类型推断、普通字段的 `offsetof` 与 vptr 追加
   都不受影响；带 `use` 的 struct，vptr 字段排在该 struct 的所有位域之后。
 - `offsetof` 取位域在 C 里是未定义行为，不做特殊处理。
+
+#### 4.18 匿名成员（ct-ast）
+
+```c
+struct Outer {
+    int tag;
+    union {
+        int i;
+        struct {
+            short lo;
+            short hi;
+        };
+    };
+    unsigned bits : 4;
+};
+```
+
+- 记录体内直接写 `struct { … };` 或 `union { … };`（**无名字**）就是匿名成员（C11）。它的成员名
+  **提升**进外层记录：`o.i`、`o.lo`、`o.hi` 都按提升后的名字访问，`sizeof(struct Outer)` 由 C 计算。
+- 可以嵌套：匿名 `union` 里再放匿名 `struct`，名字逐层提升。匿名成员里可以有位域，`use` 的
+  vptr 字段仍排在外层记录的最后。
+- 提升后的名字在解析期写进外层记录的字段表，因此成员访问的类型推断、`offsetof(struct Outer, i)`
+  的字段校验、以及 trait 字段的 vptr 初始化（`.obj.__x_vptr`）都不需要第二套代码。
+- 提升后重名（与已有具名字段同名，或两个匿名成员之间同名）报 `duplicate member '<name>'`。
+- 两条拒绝的形态：`union { int i; } u;`（无名记录类型的**具名**字段）报
+  `an anonymous record member cannot have a name; tag the record instead`；
+  空的 `union { };` 报 `an anonymous record needs a member`。
+- 匿名成员是 C11 语法：生成物照原样发射嵌套记录，用 C99 编译时需要编译器把它当扩展接受
+  （`cc -std=c99` 下 clang / gcc 都不告警）。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1499,7 +1529,9 @@ struct Holder { int tag; union Value v; };
   body for one tag reports `duplicate union 'Value'`.
 - `offsetof` accepts a union type too (`offsetof(union Value, c)`); the field check is shared with struct and a
   missing field reports `union 'Value' has no field 'd'`.
-- Anonymous members (nameless ones such as `union { int a; float b; };`) are **not part of the supported subset**.
+- A **top-level** record definition with neither a tag nor an alias (`union { int a; float b; };`) has no
+  type name to be referred to and is outside this document; an anonymous struct / union used as a
+  **member** is described in §4.18.
 
 #### 4.16 `goto` and labels (ct-ast)
 
@@ -1580,6 +1612,40 @@ typedef struct {
   plain field and the vptr append are unchanged; in a struct with `use`, the vptr field follows every
   bit-field.
 - `offsetof` of a bit-field is undefined behaviour in C and is not special-cased.
+
+#### 4.18 Anonymous members (ct-ast)
+
+```c
+struct Outer {
+    int tag;
+    union {
+        int i;
+        struct {
+            short lo;
+            short hi;
+        };
+    };
+    unsigned bits : 4;
+};
+```
+
+- A `struct { … };` or `union { … };` written directly inside a record body (**without a name**) is an
+  anonymous member (C11). Its member names are **promoted** into the enclosing record: `o.i`, `o.lo`
+  and `o.hi` all use the promoted spelling, and `sizeof(struct Outer)` is what C computes.
+- Nesting works: an anonymous `union` may hold another anonymous `struct`, and the names promote
+  level by level. An anonymous member may carry bit-fields, and a `use` vptr field still comes last
+  in the enclosing record.
+- The promoted names are written into the enclosing record's field table at parse time, so member
+  type inference, the field check of `offsetof(struct Outer, i)` and the vptr initialisation of a
+  trait-carrying field (`.obj.__x_vptr`) all need no second code path.
+- A collision after promotion (with an existing named field, or between two anonymous members)
+  reports `duplicate member '<name>'`.
+- Two shapes are refused: a **named** field of an untagged record type (`union { int i; } u;`) reports
+  `an anonymous record member cannot have a name; tag the record instead`, and an empty
+  `union { };` reports `an anonymous record needs a member`.
+- Anonymous members are C11 syntax: the output emits the nested record as written, so compiling it
+  under `-std=c99` relies on the C compiler accepting the form as an extension (both clang and gcc
+  do so without a warning).
 
 ### 5. Naming contract
 
