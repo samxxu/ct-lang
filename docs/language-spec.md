@@ -15,7 +15,7 @@
 > | --- | --- | --- |
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
-> | 其它 C 透传（`goto` / 标签、`enum`、`union`、`offsetof` 等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
+> | 其它 C 透传（`goto` / 标签、`union` 等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -532,9 +532,10 @@ do {
 
 - 一个标签拥有从自身到下一个标签（或 `}`）之间的语句，因此 `case` 与它后面的 `break` 同处一级缩进；
   连续的 `case 1: case 2:` 共享下一段语句，中间可以没有语句。
-- `case` 的取值只接受数字（可带一个前置 `-`）、字符 / 字符串字面量、单个标识符（`#define` 常量原样发射，
-  已知全局按其 C 拼写发射）。ct-ast 不做常量折叠，所以 `case (1 + 2):` 报
-  `a case label must be an integer constant`。
+- `case` 的取值是任意整数常量表达式：数字、字符字面量、枚举成员、`#define` 常量、括号与算术 / 位运算、
+  一元 `- ! ~`、`sizeof`、`offsetof`，一律原样发射并由 C 折叠，因此 `case (1 << 2):` 与 `case 1 + 2:` 都合法。
+  表达式里出现普通变量（`case key + 1:`）报 `a case label must be an integer constant`；
+  整棵树就是单个名字（宏名或已声明全局）时始终放行。
 - `switch` 体可以直接写声明，但**不能**紧跟在标签之后（C 的标签不构成作用域）：
   `case 1: int x;` 报 `a declaration cannot follow a case label; wrap it in a block`；
   标签后直接就是 `}` 报 `a case label needs a statement`。
@@ -545,6 +546,49 @@ do {
 - `case` / `default` 出现在 `switch` 体之外（包括 `switch` 体内的嵌套块）报
   `a case label is only allowed inside a switch`。
 - 不做 `case 1 ... 5:` 范围语法；重复的 case 值原样发射，由 C 编译器报错。
+
+#### 4.14 `enum`、常量表达式与 `offsetof`（ct-ast）
+
+```c
+enum Color { RED, GREEN = 5, BLUE, };
+
+typedef enum Mode { Fast, Slow } Mode;
+
+struct Point { int x; int y; };
+typedef struct Pair { int a; int b; } Pair;
+
+int off = (int)offsetof(struct Point, y);
+```
+
+```c
+enum Color {
+    RED,
+    GREEN = 5,
+    BLUE
+};
+
+typedef enum Mode {
+    Fast,
+    Slow
+} Mode;
+
+/* struct Point / Pair 的定义不变；offsetof 原样发射 */
+int off = (int)(offsetof(struct Point, y));
+```
+
+- 顶层 `enum Tag { … }` 的标签必填（缺标签报 `expected an enum name`），花括号紧跟其名，没有前置声明形式；
+  允许尾逗号。同一命名空间内重复的标签报 `duplicate enum 'Color'`。
+- `typedef enum [Tag] { … } Alias;` 两种写法都接受：有标签时 `enum Tag` 与 `Alias` 都是类型名。
+- 类型名与 struct 同规则：`enum Color c;` 与裸名 `Color c;` 等价，前者发射 `enum <C 名>`，裸名由编译器补回 `enum` 前缀。
+- 每个成员都是文件作用域的 `int` 常量，命名空间 mangling 与全局变量相同（`namespace a::b;` 里的 `RED` 发射为 `a_b_RED`）。
+- 成员初值必须是整数常量表达式，否则报 `an enum value must be an integer constant`。初值不做折叠，
+  `GREEN = RED + 1` 原样发射；无初值的成员不发射 `= …`，自增语义交给 C。
+- `pub enum` 的声明进入依赖单元的生成头文件，成员作为常量导入消费单元：裸名 `Mid` 与限定名 `app::High` 都能用。
+- `offsetof(<struct 类型>, <字段>)` 是**内建**（CT 没有预处理器，无法把它当宏）：第一个参数接受 `struct S`
+  与 typedef 别名；编译器校验结构体存在且字段存在，否则报 `offsetof needs a struct type` /
+  `struct 'S' has no field 'f'`（前向声明的结构体字段未知，放行交给 C）。
+- 生成物按原样发射 `offsetof(struct S, f)`，因此**源文件必须自己写 `#include <stddef.h>`**——
+  生成物只透传源文件里的 `#include`，不会替它补。
 
 ### 5. 命名规则（稳定契约）
 
@@ -664,7 +708,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | --- | --- | --- |
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
-> | other C passthrough (`goto` / labels, `enum`, `union`, `offsetof`, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
+> | other C passthrough (`goto` / labels, `union`, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -1272,9 +1316,11 @@ do {
 - A label owns the statements from itself to the next label (or `}`), so a `case` and the `break` after it share
   one indentation level; `case 1: case 2:` share the next statements, and a label run may have no statements
   between its members.
-- A case value is a number with at most one leading `-`, a quoted character / string literal, or a single
-  identifier (`#define` constants keep their spelling; a known global is emitted under its C name). ct-ast folds
-  no constants, so `case (1 + 2):` reports `a case label must be an integer constant`.
+- A case value is any integer constant expression: a number, a character literal, an enum member, a `#define`
+  constant, parentheses with arithmetic / bit operators, a unary `- ! ~`, `sizeof`, `offsetof`. It is emitted
+  as written and C folds it, so `case (1 << 2):` and `case 1 + 2:` are both accepted. A plain variable inside
+  the expression (`case key + 1:`) reports `a case label must be an integer constant`; a tree that is a single
+  name (a macro or a declared global) is always let through.
 - A `switch` body may hold declarations, but not directly after a label (C labels open no scope):
   `case 1: int x;` reports `a declaration cannot follow a case label; wrap it in a block`, and a label that
   runs straight into `}` reports `a case label needs a statement`.
@@ -1286,6 +1332,55 @@ do {
 - A `case` / `default` outside a `switch` body (including in a block nested inside one) reports
   `a case label is only allowed inside a switch`.
 - No `case 1 ... 5:` ranges; a duplicated case value is emitted as written and left to the C compiler.
+
+#### 4.14 `enum`, constant expressions and `offsetof` (ct-ast)
+
+```c
+enum Color { RED, GREEN = 5, BLUE, };
+
+typedef enum Mode { Fast, Slow } Mode;
+
+struct Point { int x; int y; };
+typedef struct Pair { int a; int b; } Pair;
+
+int off = (int)offsetof(struct Point, y);
+```
+
+```c
+enum Color {
+    RED,
+    GREEN = 5,
+    BLUE
+};
+
+typedef enum Mode {
+    Fast,
+    Slow
+} Mode;
+
+/* the struct Point / Pair definitions are unchanged; offsetof is re-emitted */
+int off = (int)(offsetof(struct Point, y));
+```
+
+- A top-level `enum Tag { … }` needs its tag (a missing one reports `expected an enum name`); the braces follow
+  the name directly, there is no forward form, and a trailing comma is allowed. A repeated tag in one namespace
+  reports `duplicate enum 'Color'`.
+- Both forms of `typedef enum [Tag] { … } Alias;` are accepted: with a tag, `enum Tag` and `Alias` are both type names.
+- Type names follow the struct rule: `enum Color c;` and the bare `Color c;` are equivalent — the first emits
+  `enum <C name>`, the bare one gets the `enum` prefix back.
+- Every member is a file-scope `int` constant, mangled by its namespace like any global (`RED` inside
+  `namespace a::b;` is emitted as `a_b_RED`).
+- A member value must be an integer constant expression, otherwise `an enum value must be an integer constant`.
+  Values are not folded: `GREEN = RED + 1` is emitted as written, and a member without a value emits no `= …`
+  so C supplies the increment.
+- A `pub enum` reaches the dependency unit's generated header, and its members import into a consumer as
+  constants: both the bare `Mid` and the qualified `app::High` work.
+- `offsetof(<struct type>, <field>)` is a **builtin** (CT has no preprocessor, so it cannot be a macro). The first
+  argument accepts `struct S` and a typedef alias; the compiler checks that the struct and the field exist and
+  otherwise reports `offsetof needs a struct type` / `struct 'S' has no field 'f'` (a forward-declared struct has
+  no field list yet, so it is let through to C).
+- The output re-emits `offsetof(struct S, f)` verbatim, so **the source must supply `#include <stddef.h>` itself** —
+  the generated file only passes through the `#include`s the source wrote.
 
 ### 5. Naming contract
 
