@@ -686,7 +686,7 @@ typedef struct {
 - 位域必须是整数类型：指针（含函数指针）与显式 `struct` / `union` 类型报
   `a bit-field must have an integer type`；typedef 别名放行，由 C 编译器判断。
 - 不能是数组：`int a[2] : 3;` 报 `a bit-field cannot be an array`。
-- 一条声明只写一个位域：`int a : 3, b : 4;` 不在子集内（字段文法一直是一条一个名字）。
+- 一条声明可写多个声明符：`unsigned a : 3, b : 5;`，与普通字段的 `int lo, hi;` 同一文法。
 - 位域不写入 `structs[]` 的维度槽，因此成员访问的类型推断、普通字段的 `offsetof` 与 vptr 追加
   都不受影响；带 `use` 的 struct，vptr 字段排在该 struct 的所有位域之后。
 - `offsetof` 取位域在 C 里是未定义行为，不做特殊处理。
@@ -939,6 +939,27 @@ static int check(int v) {
   定义过的 struct / enum 仍然成立；引用**后面**才定义的类型则不行。
 - 判定的最终结果仍由 C 编译器给出（断言失败时是它的错误消息）。
 - 范围外：`_Alignas`、`_Generic`、`__attribute__((…))` 仍不在子集内。
+
+#### 4.27 一条声明多个字段（ct-ast）
+
+```c
+struct Buf {
+    char name[8];
+    unsigned len, cap;
+    int *data, count;
+    unsigned a : 3, b : 5;
+    struct Range first, second;
+};
+```
+
+- 记录体内的一条声明可以写多个声明符，共享同一类型：`int lo, hi;`、`unsigned len, cap;`。
+  第一个声明符的拼写作为共享类型，后续声明符各自补上自己的星号、维度与位宽。
+- `*` 只属于带它的那个声明符：`int *data, count;` 里 `data` 是 `int *`，`count` 是 `int`，
+  与局部声明的规则一致。
+- 位域可以成列：`unsigned a : 3, b : 5;`，每个声明符各自检查宽度与类型。
+- 函数指针仍是一声明一个名字：`int (*a)(int), (*b)(int);` 报
+  `a function pointer declares one name`。
+- 字段表按名字逐个登记，因此成员访问、`offsetof`、匿名成员提升、vptr 追加都不受影响。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1840,8 +1861,8 @@ typedef struct {
   `struct` / `union` type report `a bit-field must have an integer type`; a typedef alias is left to
   the C compiler.
 - It cannot be an array: `int a[2] : 3;` reports `a bit-field cannot be an array`.
-- One declaration carries one bit-field: `int a : 3, b : 4;` is not part of the subset (the field
-  grammar has always read one name per declaration).
+- One declaration may carry several declarators: `unsigned a : 3, b : 5;` follows the same grammar as
+  an ordinary `int lo, hi;`.
 - A width never lands in the `structs[]` dimension slot, so member type inference, `offsetof` on a
   plain field and the vptr append are unchanged; in a struct with `use`, the vptr field follows every
   bit-field.
@@ -2121,6 +2142,30 @@ static int check(int v) {
   work.
 - The verdict itself still comes from the C compiler (a failing assertion is its error message).
 - Out of scope: `_Alignas`, `_Generic` and `__attribute__((…))` are still not part of the subset.
+
+#### 4.27 Several declarators in one field declaration (ct-ast)
+
+```c
+struct Buf {
+    char name[8];
+    unsigned len, cap;
+    int *data, count;
+    unsigned a : 3, b : 5;
+    struct Range first, second;
+};
+```
+
+- One declaration inside a record body may carry several declarators sharing a type:
+  `int lo, hi;`, `unsigned len, cap;`. The first declarator's spelling is the shared type, and each
+  later one adds its own stars, dimensions and width.
+- A `*` belongs to the declarator that carries it: in `int *data, count;` `data` is `int *` and
+  `count` is `int`, the same rule local declarations follow.
+- Bit-fields may share a list: `unsigned a : 3, b : 5;`, with each declarator checked for its width
+  and type.
+- A function pointer still declares one name: `int (*a)(int), (*b)(int);` reports
+  `a function pointer declares one name`.
+- Names are registered one by one, so member access, `offsetof`, anonymous-member promotion and the
+  vptr append are unaffected.
 
 ### 5. Naming contract
 
