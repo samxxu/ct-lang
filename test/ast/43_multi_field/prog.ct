@@ -1,0 +1,54 @@
+/* 43: several declarators in one field declaration (batch 18) - the shared type
+   is written once, each name keeps its own dimensions, and a pointer applies only
+   to the declarator that carries the star. Bit-fields may share a list too. */
+#include <stdio.h>
+
+struct Range {
+    int lo, hi;
+};
+
+struct Buf {
+    char name[8];
+    unsigned len, cap;
+    int *data, count;
+    unsigned a : 3, b : 5;
+    struct Range first, second;
+};
+
+typedef struct {
+    long x, y;
+} Point2;
+
+union Both {
+    int i, j;
+    char c;
+};
+
+int main(void) {
+    struct Buf b;
+    Point2 p;
+    union Both u;
+
+    b.len = 4;
+    b.cap = 16;
+    b.count = 7;
+    b.data = NULL;
+    b.a = 5;
+    b.b = 21;
+    b.first.lo = 1;
+    b.first.hi = 2;
+    b.second.lo = 3;
+    b.second.hi = 4;
+
+    p.x = 10;
+    p.y = 20;
+
+    u.i = 65;
+
+    printf("buf %u %u %d %d\n", b.len, b.cap, b.count, (int)(b.data == NULL));
+    printf("bits %d %d\n", (int)b.a, (int)b.b);
+    printf("ranges %d %d\n", b.first.lo + b.first.hi, b.second.lo + b.second.hi);
+    printf("point %ld %ld\n", p.x, p.y);
+    printf("union %d\n", u.i);
+    return 0;
+}

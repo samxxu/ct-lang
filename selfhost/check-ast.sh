@@ -93,6 +93,9 @@
 # batch 17 adds `_Static_assert`: test/ast/42_static_assert plus the condition
 # and message diagnostics.
 #
+# batch 18 allows several declarators in one field declaration:
+# test/ast/43_multi_field (the batch adds no diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
