@@ -15,7 +15,7 @@
 > | --- | --- | --- |
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
-> | 其它 C 透传（`goto` / 标签、`union` 等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
+> | 其它 C 透传（`goto` / 标签等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -590,6 +590,30 @@ int off = (int)(offsetof(struct Point, y));
 - 生成物按原样发射 `offsetof(struct S, f)`，因此**源文件必须自己写 `#include <stddef.h>`**——
   生成物只透传源文件里的 `#include`，不会替它补。
 
+#### 4.15 `union`（ct-ast）
+
+```c
+union Value { int i; char c; long long ll; };
+
+typedef union Tagged { int i; char c; } Tagged;
+
+typedef union { int a[2]; long long ll; } Wide;
+
+struct Holder { int tag; union Value v; };
+```
+
+- `union` 与 `struct` 是同一套记录文法：标签必填的前置声明形式相同（`union Value;` 也接受），
+  `typedef union [Tag] { … } Alias;` 两种写法都接受，允许尾逗号，`};` 与 `}` 都可收尾。
+- 标签与 struct 标签共享一张表但**类型类别不同**：`union Value v;` 与裸名 `Value v;` 等价，
+  前者发射 `union <C 名>`，裸名由编译器补回 `union` 前缀。命名空间 mangling 同 struct。
+- `pub union` 的声明进入依赖单元的生成头文件，消费单元按裸名引用。
+- **没有 `use` 子句**：union 的成员共享同一块存储，追加 vptr 字段会与用户成员冲突，因此
+  `union Value { … } use Greeter;` 报 `a union cannot use a trait`。同一标签的第二个函数体报
+  `duplicate union 'Value'`。
+- `offsetof` 同样接受 union 类型（`offsetof(union Value, c)`），字段校验与 struct 共用一套代码；
+  字段缺失报 `union 'Value' has no field 'd'`。
+- 匿名成员（`union { int a; float b; };` 这类无名成员）**不在支持的子集内**。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -708,7 +732,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | --- | --- | --- |
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
-> | other C passthrough (`goto` / labels, `union`, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
+> | other C passthrough (`goto` / labels, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -1381,6 +1405,31 @@ int off = (int)(offsetof(struct Point, y));
   no field list yet, so it is let through to C).
 - The output re-emits `offsetof(struct S, f)` verbatim, so **the source must supply `#include <stddef.h>` itself** —
   the generated file only passes through the `#include`s the source wrote.
+
+#### 4.15 `union` (ct-ast)
+
+```c
+union Value { int i; char c; long long ll; };
+
+typedef union Tagged { int i; char c; } Tagged;
+
+typedef union { int a[2]; long long ll; } Wide;
+
+struct Holder { int tag; union Value v; };
+```
+
+- A `union` is the same record grammar as a `struct`: the same forward form (`union Value;` is accepted), both
+  spellings of `typedef union [Tag] { … } Alias;`, a trailing comma, and either `};` or `}` closing the body.
+- The tag shares the table with struct tags but has its **own type kind**: `union Value v;` and the bare
+  `Value v;` are equivalent — the first emits `union <C name>`, the bare one gets the `union` prefix back.
+  Namespace mangling matches struct.
+- A `pub union` reaches the dependency unit's generated header and a consumer names it bare.
+- **There is no `use` clause**: the members of a union share one storage, so an appended vptr field would collide
+  with a user member; `union Value { … } use Greeter;` therefore reports `a union cannot use a trait`. A second
+  body for one tag reports `duplicate union 'Value'`.
+- `offsetof` accepts a union type too (`offsetof(union Value, c)`); the field check is shared with struct and a
+  missing field reports `union 'Value' has no field 'd'`.
+- Anonymous members (nameless ones such as `union { int a; float b; };`) are **not part of the supported subset**.
 
 ### 5. Naming contract
 
