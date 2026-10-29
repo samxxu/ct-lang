@@ -830,6 +830,36 @@ static int sum_all(int n, ...) {
   （vtable 槽位是固定的函数指针类型）；trait 声明本身也不接受 `...`，会在参数位置报
   `expected a type`。
 
+#### 4.23 内置类型词与 `inline`（ct-ast）
+
+```c
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+static volatile int ticks;
+
+static inline int twice(int v) { return v + v; }
+
+inline static int thrice(int v) { return v + v + v; }
+
+static int first(int *restrict p, int n) { return p[0] + n; }
+
+static bool positive(int32_t v) { return v > 0; }
+```
+
+- 类型关键字与 L0 / L1 / L2 对齐：`void` / `char` / `short` / `int` / `long` / `float` /
+  `double` / `signed` / `unsigned` / `_Bool` / `bool` / `const` / `volatile` / `restrict` /
+  `struct` / `union` / `enum` / `size_t` / `ssize_t` / `ptrdiff_t` / `wchar_t` /
+  `int8_t`–`uint64_t` / `FILE` / `DIR` / `va_list`。声明**原样发射**，语义由 C 与对应头文件负责。
+- `volatile` / `restrict` 是类型的一部分，因此 `volatile int x;`、`int *restrict p`、
+  `volatile unsigned char *reg;` 在全局、局部、字段、参数、返回值上都成立。
+- `inline` 是函数说明符：顶层接受 `static inline` 与 `inline static` 两种顺序，发射为
+  `static inline ` / `inline `。生成的**原型**不带 `inline`（C 允许原型与定义不同）。
+- `inline` 后面不是函数（`inline int value = 1;`）报 `'inline' can only declare a function`。
+- 范围外：`_Static_assert` / `_Alignas` / `_Generic` / `__attribute__((…))` 仍不在子集内；
+  浮点字面量（`1.5`）仍不支持（词法器不扫小数点）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1889,6 +1919,41 @@ static int sum_all(int n, ...) {
 - A trait method cannot be variadic: `...` inside an `impl` reports
   `a trait method cannot be variadic` (a vtable slot is a fixed function-pointer type), and a trait
   declaration does not accept `...` either — it reports `expected a type` at the parameter position.
+
+#### 4.23 Built-in type words and `inline` (ct-ast)
+
+```c
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+static volatile int ticks;
+
+static inline int twice(int v) { return v + v; }
+
+inline static int thrice(int v) { return v + v + v; }
+
+static int first(int *restrict p, int n) { return p[0] + n; }
+
+static bool positive(int32_t v) { return v > 0; }
+```
+
+- The type keywords match L0 / L1 / L2: `void` / `char` / `short` / `int` / `long` / `float` /
+  `double` / `signed` / `unsigned` / `_Bool` / `bool` / `const` / `volatile` / `restrict` /
+  `struct` / `union` / `enum` / `size_t` / `ssize_t` / `ptrdiff_t` / `wchar_t` /
+  `int8_t`–`uint64_t` / `FILE` / `DIR` / `va_list`. A declaration is **emitted as written**; the C
+  compiler and the matching header own the meaning.
+- `volatile` and `restrict` are part of the type, so `volatile int x;`, `int *restrict p` and
+  `volatile unsigned char *reg;` all work — globally, locally, as a field, a parameter or a return
+  type.
+- `inline` is a function specifier: the top level accepts `static inline` and `inline static` alike
+  and emits `static inline ` / `inline `. The generated **prototype** does not repeat `inline`
+  (C lets a prototype differ from the definition).
+- `inline` in front of something that is not a function (`inline int value = 1;`) reports
+  `'inline' can only declare a function`.
+- Out of scope: `_Static_assert` / `_Alignas` / `_Generic` / `__attribute__((…))` are still not part
+  of the subset, and floating-point literals (`1.5`) are still unsupported (the lexer does not scan
+  a decimal point).
 
 ### 5. Naming contract
 
