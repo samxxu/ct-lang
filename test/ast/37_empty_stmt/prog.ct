@@ -1,0 +1,55 @@
+/* 37: the empty statement and for-init statics (batch 12) - `;` is a statement
+   of its own, so `for (...) ;`, `case 1: ;` and a label followed by `;` all
+   work; a `static` in a for's first clause initialises once and keeps its value
+   across calls. */
+#include <stdio.h>
+
+static int counted(void) {
+    int total;
+
+    total = 0;
+    for (static int i = 0; i < 2; i++) {
+        total = total + 1;
+    }
+    return total;
+}
+
+int main(void) {
+    int i;
+    int n;
+    int first;
+    int second;
+
+    for (i = 0; i < 3; i++) ;
+    printf("for %d\n", i);
+
+    n = 0;
+    if (n == 0) ;
+    else n = 1;
+    printf("if %d\n", n);
+
+    while (n < 4) n = n + 1;
+    while (n < 4) ;
+    printf("while %d\n", n);
+
+    switch (i) {
+    case 3:
+        ;
+        printf("case\n");
+        break;
+    default:
+        ;
+        break;
+    }
+
+    if (n == 4) goto done;
+    n = 9;
+done:
+    ;
+    printf("goto %d\n", n);
+
+    first = counted();
+    second = counted();
+    printf("static-for %d %d\n", first, second);
+    return 0;
+}

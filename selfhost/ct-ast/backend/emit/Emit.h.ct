@@ -79,6 +79,7 @@ import runtime::arena::Arena;
 #define N_LABEL   49
 #define N_GOTO    50
 #define N_COMPOUND 51
+#define N_EMPTY   52
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -1054,6 +1055,9 @@ impl EmitOps for Emitter {
             fputs("continue;\n", self->out);
             return 0;
         }
+        /* `;` prints nothing at all: the surrounding block (or the `if` body
+           `parse_branch` wrapped it in) already carries the braces */
+        if (self->arena->nodes[n].kind == N_EMPTY) return 0;
         if (self->arena->nodes[n].kind == N_GOTO) {
             self->emit_indent(ind);
             fprintf(self->out, "goto %s;\n", self->arena->nodes[n].text2);

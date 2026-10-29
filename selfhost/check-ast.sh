@@ -75,6 +75,9 @@
 # batch 11 adds compound literals: test/ast/36_compound_literal plus the
 # pointer-type diagnostic.
 #
+# batch 12 adds the empty statement and `for`-init statics: test/ast/37_empty_stmt
+# only (the batch adds no diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
