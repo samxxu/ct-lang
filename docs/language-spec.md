@@ -15,7 +15,7 @@
 > | --- | --- | --- |
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
-> | 其它 C 透传（`goto` / 标签等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
+> | 其它 C 透传（位域、空语句等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -614,6 +614,44 @@ struct Holder { int tag; union Value v; };
   字段缺失报 `union 'Value' has no field 'd'`。
 - 匿名成员（`union { int a; float b; };` 这类无名成员）**不在支持的子集内**。
 
+#### 4.16 `goto` 与标签（ct-ast）
+
+```c
+static int find(int n) {
+    int i;
+    int found;
+
+    found = -1;
+    for (i = 0; i < n; i++) {
+        if (i * i == 9) {
+            found = i;
+            goto done;
+        }
+    }
+done:
+    return found;
+}
+```
+
+- 语句层接受两条 C 的跳转形式：`goto <label>;` 与 `<label>:`。生成物同形：标签独占一行，
+  `goto` 原样发射。
+- 标签是**函数作用域**：同一函数内重复的标签报 `duplicate label '<name>'`（即使分处不同的块）；
+  `goto` 的目标必须出现在同一个函数里，否则在函数体解析结束时报
+  `label '<name>' is not defined`（位置指向那条 `goto`）。不同函数可以复用同名标签。
+- 标签拥有语句链，规则与 `case` 相同：从标签到下一个标签（`goto` 标签 / `case` / `default`）或 `}`
+  之间的语句都属于它，发射时整条链缩进一级。连续的标签（`again: done:`）允许，第一条标签拥有第二条：
+  发射为嵌套标签，语义不变。因此 `goto` 既可以向后跳（手写循环），也可以向前跳出
+  多层循环或 `switch`。
+- 标签后不能直接跟声明（C 的标签不构成作用域）：`again: int x;` 报
+  `a declaration cannot follow a label; wrap it in a block`，把声明包进块即可。
+- 标签不能直接碰 `}`（C99 要求标签后面必须有一条语句）：`again: }` 报 `a label needs a statement`。
+  空语句 `;` 不在支持的子集内，把标签写在一条真实语句前即可（`again: return r;`）。
+- `goto` 可以跳入 / 跳出块与循环（C 允许）。`goto` 跳出 `own` 的声明作用域**不会**触发自动释放（§4.9）。
+- 一个函数最多 64 个标签与 64 条 `goto`，超出报 `too many labels in one function` /
+  `too many gotos in one function`。
+- 已知边界：`out:` 直接接 `case 2:` 不在子集内——标签链在 `case` / `default` 处终止，链空即按上面
+  的「标签需要一条语句」报错。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -732,7 +770,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | --- | --- | --- |
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
-> | other C passthrough (`goto` / labels, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
+> | other C passthrough (bit-fields, the empty statement, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -1430,6 +1468,48 @@ struct Holder { int tag; union Value v; };
 - `offsetof` accepts a union type too (`offsetof(union Value, c)`); the field check is shared with struct and a
   missing field reports `union 'Value' has no field 'd'`.
 - Anonymous members (nameless ones such as `union { int a; float b; };`) are **not part of the supported subset**.
+
+#### 4.16 `goto` and labels (ct-ast)
+
+```c
+static int find(int n) {
+    int i;
+    int found;
+
+    found = -1;
+    for (i = 0; i < n; i++) {
+        if (i * i == 9) {
+            found = i;
+            goto done;
+        }
+    }
+done:
+    return found;
+}
+```
+
+- The statement layer accepts both C jump forms: `goto <label>;` and `<label>:`. The output keeps the
+  shape — the label sits on its own line and `goto` is emitted as written.
+- Labels are **function-scoped**: a second label with the same name in one function reports
+  `duplicate label '<name>'` (even when the two sit in different blocks); a `goto` whose target never
+  appears in the same function reports `label '<name>' is not defined` when the body ends, pointing at
+  the `goto`. Different functions may reuse one label name.
+- A label owns the statements up to the next label of any kind (`goto` label / `case` / `default`) or
+  the closing `}`, the chain rule `case` follows; the whole chain is emitted one level deeper. A run of
+  labels (`again: done:`) is allowed — the first label owns the second and the output nests them, with
+  the meaning unchanged. So a `goto` may jump backwards (a hand-written loop) or forwards out of nested
+  loops or a `switch`.
+- A declaration cannot sit directly behind a label (C opens no scope at one): `again: int x;` reports
+  `a declaration cannot follow a label; wrap it in a block` — wrap the declaration in a block.
+- A label cannot run straight into `}` (C99 requires a statement after it): `again: }` reports
+  `a label needs a statement`. The empty statement `;` is not part of the supported subset, so put the
+  label before a real statement (`again: return r;`).
+- A `goto` may jump into or out of blocks and loops (C allows it). Jumping out of an `own`
+  declaration's scope does **not** release it (§4.9).
+- One function holds at most 64 labels and 64 `goto`s; beyond that it reports
+  `too many labels in one function` / `too many gotos in one function`.
+- Known edge: `out:` followed directly by `case 2:` is not part of the subset — the label chain stops
+  at `case` / `default`, and an empty chain reports the "label needs a statement" complaint above.
 
 ### 5. Naming contract
 
