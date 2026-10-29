@@ -1,0 +1,10 @@
+/* batch 4: a `do` body must be followed by `while (...)`, not by another
+   statement. */
+int main(void) {
+    int i;
+    i = 0;
+    do {
+        i = i + 1;
+    } i = i + 1;
+    return i;
+}

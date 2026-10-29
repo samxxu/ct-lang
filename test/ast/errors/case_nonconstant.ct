@@ -1,0 +1,14 @@
+/* batch 4: ct-ast folds no constants, so a case value is a number, a quoted
+   literal or one name; a parenthesised expression is refused rather than
+   emitted as C for gcc to reject. */
+int main(void) {
+    int key;
+    key = 1;
+    switch (key) {
+    case (1 + 2):
+        return 1;
+    default:
+        break;
+    }
+    return 0;
+}

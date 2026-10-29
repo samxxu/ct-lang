@@ -69,6 +69,9 @@ import runtime::arena::Arena;
 #define N_CONT    39
 #define N_DECLS   40
 #define N_DELETE  41
+#define N_SWITCH  42
+#define N_CASE    43
+#define N_DOWHILE 44
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -1075,6 +1078,39 @@ impl EmitOps for Emitter {
             if (self->arena->nodes[n].c >= 0 && self->emit_inline(self->arena->nodes[n].c) != 0) return -1;
             fputs(") ", self->out);
             return self->emit_node(self->arena->nodes[n].d, ind);
+        }
+        if (self->arena->nodes[n].kind == N_SWITCH) {
+            self->emit_indent(ind);
+            fputs("switch (", self->out);
+            if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
+            fputs(") ", self->out);
+            return self->emit_node(self->arena->nodes[n].b, ind);
+        }
+        if (self->arena->nodes[n].kind == N_CASE) {
+            int c;
+            self->emit_indent(ind);
+            if (self->arena->nodes[n].aux) fputs("default:", self->out);
+            else fprintf(self->out, "case %s:", self->arena->nodes[n].text);
+            fputs("\n", self->out);
+            for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
+                if (self->emit_node(c, ind + 1) != 0) return -1;
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_DOWHILE) {
+            int b, c;
+            self->emit_indent(ind);
+            fputs("do {\n", self->out);
+            /* `parse_branch` wraps even a single statement in an N_BLOCK, so
+               the body always walks here instead of going through
+               `emit_node`, which would put the closing brace on its own line */
+            b = self->arena->nodes[n].b;
+            for (c = self->arena->nodes[b].a; c >= 0; c = self->arena->nodes[c].next)
+                if (self->emit_node(c, ind + 1) != 0) return -1;
+            self->emit_indent(ind);
+            fputs("} while (", self->out);
+            if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
+            fputs(");\n", self->out);
+            return 0;
         }
         {
             char msg[MAX_TEXT];

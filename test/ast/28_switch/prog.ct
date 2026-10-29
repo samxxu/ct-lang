@@ -1,0 +1,99 @@
+/* 28: switch (batch 4) - `case` / `default` guard the statements up to the
+   next label, a bare `case 1:` before another label shares that chain, a label
+   takes a number, a quoted literal or a macro name, and declarations may sit
+   in the switch block as long as no label guards them. A method call and a
+   function-pointer field call are ordinary expressions inside a case. */
+#include <stdio.h>
+
+#define KIND_B 5
+
+trait Calc {
+    int base();
+    int twice();
+}
+
+struct Num {
+    int v;
+} use Calc;
+
+impl Calc for Num {
+    int base() { return self->v; }
+    int twice() { return self->base() + self->base(); }
+}
+
+struct Ops {
+    int (*add)(int, int);
+    int (*sub)(int, int);
+}
+
+static int plus(int a, int b) { return a + b; }
+static int minus(int a, int b) { return a - b; }
+
+static int pick(int key) {
+    int out;
+    out = 0;
+    switch (key) {
+    case 1:
+        out = 10;
+        break;
+    case 2:
+    case KIND_B:
+        out = 20;
+        break;
+    case 'a':
+        out = 30;
+        break;
+    case -1:
+        out = 40;
+        break;
+    default:
+        out = 50;
+        break;
+    }
+    return out;
+}
+
+int main(void) {
+    struct Num n;
+    struct Ops o;
+    int key;
+    int extra;
+
+    n.v = 21;
+    o.add = plus;
+    o.sub = minus;
+    key = 3;
+
+    printf("pick %d %d %d\n", pick(1), pick(KIND_B), pick('a'));
+    printf("pick %d %d\n", pick(-1), pick(7));
+
+    switch (key) {
+        int local;
+    case 3:
+        local = 9;
+        printf("three %d %d\n", n.base(), local);
+        printf("calls %d %d\n", o.add(2, 3), o.sub(2, 3));
+    case 4:
+        printf("four %d\n", n.twice());
+        break;
+    default:
+        printf("default\n");
+        break;
+    }
+
+    extra = 0;
+    switch (key) {
+    case 3:
+        switch (extra) {
+        case 0:
+            printf("nested\n");
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    return 0;
+}

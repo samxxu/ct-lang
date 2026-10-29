@@ -1,0 +1,32 @@
+/* 29: do-while (batch 4) - the condition sits after the body, the body may be a
+   block or a single statement, and a `for` with `continue` inside the body
+   keeps its own break/continue target. */
+#include <stdio.h>
+
+int main(void) {
+    int i, inner, total;
+
+    total = 0;
+    i = 0;
+    do {
+        total = total + i;
+        i = i + 1;
+    } while (i < 4);
+    printf("sum %d\n", total);
+
+    i = 0;
+    do i = i + 1; while (i < 3);
+    printf("count %d\n", i);
+
+    total = 0;
+    i = 0;
+    do {
+        for (inner = 0; inner < 4; inner = inner + 1) {
+            if (inner == 2) continue;
+            total = total + inner;
+        }
+        i = i + 1;
+    } while (i < 2);
+    printf("inner %d\n", total);
+    return 0;
+}

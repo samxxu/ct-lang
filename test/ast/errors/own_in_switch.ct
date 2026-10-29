@@ -1,0 +1,27 @@
+/* batch 4: a switch may skip a case or fall through, so an `own` object inside
+   one has no defined release point; refused by name until the ownership pass
+   learns case reachability. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop() { printf("drop %d\n", self->n); }
+}
+
+int main(void) {
+    int key;
+    key = 1;
+    switch (key) {
+    case 1:
+        own Box *b = malloc(sizeof(struct Box));
+        b->n = 1;
+        break;
+    default:
+        break;
+    }
+    return 0;
+}

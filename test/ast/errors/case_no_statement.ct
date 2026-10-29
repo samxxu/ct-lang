@@ -1,0 +1,10 @@
+/* batch 4: a label with nothing to guard would emit `case 1: }`, which C
+   rejects, so it is refused before emission. */
+int main(void) {
+    int key;
+    key = 1;
+    switch (key) {
+    case 1:
+    }
+    return 0;
+}

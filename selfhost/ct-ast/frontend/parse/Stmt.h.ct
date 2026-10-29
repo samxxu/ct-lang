@@ -31,11 +31,13 @@ import tool::diag::diag;
 #define N_ASSIGN 13
 #define N_BLOCK 4
 #define N_BREAK 38
+#define N_CASE 43
 #define N_CONT 39
 #define N_DECL 12
 #define N_DECLS 40
 #define N_DELETE 41
 #define N_DEREF 28
+#define N_DOWHILE 44
 #define N_EXPR 6
 #define N_FOR 16
 #define N_IF 14
@@ -43,11 +45,14 @@ import tool::diag::diag;
 #define N_POST 18
 #define N_RAW 31
 #define N_RET 5
+#define N_SWITCH 42
 #define N_VAR 10
 #define N_WHILE 15
 #define T_EOF 0
 #define T_ID 1
+#define T_NUM 2
 #define T_PUNCT 4
+#define T_STR 3
 
 namespace frontend::parse;
 pub trait StmtOps {
@@ -58,6 +63,9 @@ pub trait StmtOps {
     int  parse_decl_node(void);
     int  parse_expr_stmt_node(void);
     int  parse_init_raw(char *out, int cap);
+    int  parse_switch_body(void);
+    int  parse_label(void);
+    int  parse_case_value(char *out, int cap);
 }
 
 pub struct Stmt {
@@ -67,6 +75,11 @@ pub struct Stmt {
     struct Memory *mem;
     struct ParseSupport *sup;
     struct Expr *ex;
+    /* A switch may skip a case or fall through, so the ordered-block ownership
+       rules do not hold inside one: `own` is refused while this is non-zero
+       (D-7). The body has its own label grammar, so `parse_block` is not used.
+       g_stmt is static, so this starts at zero. */
+    int switch_depth;
 } use StmtOps;
 
 impl StmtOps for Stmt {
@@ -403,8 +416,50 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return s;
         }
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "switch") == 0) {
+            s = self->sup->new_node(N_SWITCH);
+            if (s < 0) return -1;
+            self->sup->lex_next();
+            if (self->sup->expect("(") != 0) return -1;
+            e = self->ex->parse_expr();
+            if (e < 0) return -1;
+            self->arena->nodes[s].a = e;
+            if (self->sup->expect(")") != 0) return -1;
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+                return self->sup->fail("expected a block after switch (...)");
+            e = self->parse_switch_body();
+            if (e < 0) return -1;
+            self->arena->nodes[s].b = e;
+            return s;
+        }
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "do") == 0) {
+            s = self->sup->new_node(N_DOWHILE);
+            if (s < 0) return -1;
+            self->sup->lex_next();
+            e = self->parse_branch();
+            if (e < 0) return -1;
+            self->arena->nodes[s].b = e;
+            if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "while") == 0))
+                return self->sup->fail("a do statement must be followed by while (...)");
+            self->sup->lex_next();
+            if (self->sup->expect("(") != 0) return -1;
+            e = self->ex->parse_expr();
+            if (e < 0) return -1;
+            self->arena->nodes[s].a = e;
+            if (self->sup->expect(")") != 0) return -1;
+            if (self->sup->expect(";") != 0) return -1;
+            return s;
+        }
+        /* `parse_switch_body` consumes every label of its own body, so a label
+           seen here sits outside a switch (or in a block nested inside one).
+           Named here so the message says why, instead of the undeclared-variable
+           report the expression path would produce (D-8). */
+        if (self->lex->tok == T_ID
+            && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0))
+            return self->sup->fail("a case label is only allowed inside a switch");
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0) {
             int own_line = self->lex->tokline;
+            if (self->switch_depth > 0) return self->sup->fail("own is not supported inside a switch");
             self->sup->lex_next();
             s = self->parse_decl_node();
             if (s < 0) return -1;
@@ -441,6 +496,133 @@ impl StmtOps for Stmt {
         if (b < 0) return -1;
         self->arena->nodes[b].a = s;
         return b;
+    }
+
+    /* The body of a `switch`. `parse_block` cannot be used: `case` / `default`
+       are not statements the dispatcher knows, so the labels are read here and
+       the statements they guard follow as ordinary statements (declarations
+       directly inside the switch block included, which C allows). The body
+       still opens a scope, since its declarations do not outlive the switch. */
+    int parse_switch_body(void)
+    {
+        int blk, s, tail;
+        (void)self;
+
+        if (self->sup->expect("{") != 0) return -1;
+        if (self->sup->push_scope() != 0) return -1;
+        blk = self->sup->new_node(N_BLOCK);
+        if (blk < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        self->switch_depth = self->switch_depth + 1;
+        tail = -1;
+        while (self->lex->tok != T_EOF
+               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            if (self->lex->tok == T_ID
+                && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0))
+                s = self->parse_label();
+            else
+                s = self->parse_stmt();
+            if (s < 0) {
+                self->switch_depth = self->switch_depth - 1;
+                self->sup->pop_scope();
+                return -1;
+            }
+            if (tail < 0) self->arena->nodes[blk].a = s;
+            else self->arena->nodes[tail].next = s;
+            tail = s;
+        }
+        self->switch_depth = self->switch_depth - 1;
+        if (self->sup->expect("}") != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        self->sup->pop_scope();
+        return blk;
+    }
+
+    /* A label owns the statements up to the next label or the closing brace
+       (D-3): `text` carries the case value, `aux` marks `default`, `a` the
+       chain of guarded statements. A chain rather than one statement keeps
+       `case 1: f(); break;` on one indentation level; an empty chain is how a
+       bare `case 1:` before another label is spelled. C does not let a label
+       guard a declaration (labels open no scope), so a declaration anywhere in
+       the chain is rejected. */
+    int parse_label(void)
+    {
+        int s, c, head, tail, is_def;
+        char val[MAX_TEXT];
+        (void)self;
+
+        s = self->sup->new_node(N_CASE);
+        if (s < 0) return -1;
+        is_def = strcmp(self->lex->toktext, "default") == 0;
+        self->arena->nodes[s].aux = is_def;
+        self->sup->lex_next();
+        if (!is_def) {
+            if (self->parse_case_value(val, sizeof val) != 0) return -1;
+            snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", val);
+        }
+        if (self->sup->expect(":") != 0) return -1;
+        head = -1;
+        tail = -1;
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)
+               && !(self->lex->tok == T_ID
+                    && (strcmp(self->lex->toktext, "case") == 0
+                        || strcmp(self->lex->toktext, "default") == 0))) {
+            if (self->is_decl_start())
+                return self->sup->fail("a declaration cannot follow a case label; wrap it in a block");
+            c = self->parse_stmt();
+            if (c < 0) return -1;
+            if (tail < 0) head = c;
+            else self->arena->nodes[tail].next = c;
+            tail = c;
+        }
+        if (head < 0
+            && (self->lex->tok == T_EOF
+                || (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)))
+            return self->sup->fail("a case label needs a statement");
+        self->arena->nodes[s].a = head;
+        return s;
+    }
+
+    /* A case value is an integer constant expression and ct-ast folds nothing,
+       so only three shapes qualify (D-5): a number with an optional leading
+       `-`, a quoted literal, or a single name. A name is either a `#define`
+       the compiler never sees (kept as written) or a known global, which is
+       emitted under its C spelling like any other reference. */
+    int parse_case_value(char *out, int cap)
+    {
+        int n;
+        char cn[MAX_TEXT];
+        (void)self;
+
+        n = 0;
+        out[0] = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) {
+            out[n] = '-';
+            n++;
+            out[n] = 0;
+            self->sup->lex_next();
+            if (self->lex->tok != T_NUM) return self->sup->fail("a case label must be an integer constant");
+        }
+        if (self->lex->tok == T_NUM) {
+            if (snprintf(out + n, (size_t)(cap - n), "%ld", self->lex->toknum) >= cap - n)
+                return self->sup->fail("case label is too long");
+        } else if (self->lex->tok == T_STR) {
+            if (snprintf(out + n, (size_t)(cap - n), "%s", self->lex->toktext) >= cap - n)
+                return self->sup->fail("case label is too long");
+        } else if (self->lex->tok == T_ID) {
+            if (self->sym->var_cname(self->lex->toktext, cn, sizeof cn) != 0)
+                snprintf(cn, sizeof cn, "%s", self->lex->toktext);
+            if (snprintf(out + n, (size_t)(cap - n), "%s", cn) >= cap - n)
+                return self->sup->fail("case label is too long");
+        } else {
+            return self->sup->fail("a case label must be an integer constant");
+        }
+        self->sup->lex_next();
+        return 0;
     }
 
     /* `<type> name[dims] [= expr] (, name[dims] [= expr])*` without the trailing

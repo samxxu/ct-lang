@@ -845,6 +845,29 @@ for f in test/ast/errors/*.ct; do
     fi
 done
 
+# Batch 4: `switch` and `do-while` carry diagnostics of their own, so a mistake
+# never falls through to the expression path's "undeclared variable" report.
+# Each fixture is also swept by the loop above; the message is pinned here.
+for pair in \
+    "case_outside_switch|a case label is only allowed inside a switch" \
+    "case_after_decl|a declaration cannot follow a case label; wrap it in a block" \
+    "case_no_statement|a case label needs a statement" \
+    "case_nonconstant|a case label must be an integer constant" \
+    "do_missing_while|a do statement must be followed by while (...)" \
+    "own_in_switch|own is not supported inside a switch"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "control flow: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "control flow ($cf)"
+    else
+        bad "control flow: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
 # SH-8: a missing impl method must be reported the way L0/L2 report it, and no
 # artifact may be left behind (a NULL vtable slot would crash at run time).
 if "$work/ct-ast" test/ast/errors/missing_method.ct -o "$work/mmethod.c" \

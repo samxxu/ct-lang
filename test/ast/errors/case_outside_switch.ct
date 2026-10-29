@@ -1,0 +1,7 @@
+/* batch 4: a label outside a switch body. `case` and `default` are ordinary
+   identifiers to the lexer, so the statement layer has to name this mistake. */
+int main(void) {
+    case 1:
+        return 1;
+    return 0;
+}

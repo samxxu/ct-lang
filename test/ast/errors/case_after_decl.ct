@@ -1,0 +1,15 @@
+/* batch 4: C labels open no scope, so a declaration cannot sit directly after
+   a case label; wrapping it in a block is the fix. */
+int main(void) {
+    int key;
+    key = 1;
+    switch (key) {
+    case 1:
+        int extra;
+        extra = 2;
+        break;
+    default:
+        break;
+    }
+    return 0;
+}
