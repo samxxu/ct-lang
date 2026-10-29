@@ -797,6 +797,39 @@ for (static int i = 0; i < 2; i++) {
 - 空语句与 `for` 首句的 static 都不新增诊断；`static` 后面不是声明时沿用
   `expected a declaration after 'static'`。
 
+#### 4.22 变参函数（ct-ast）
+
+```c
+#include <stdarg.h>
+
+static int sum_all(int n, ...);
+
+static int sum_all(int n, ...) {
+    va_list ap;
+    int total;
+    int i;
+
+    total = 0;
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        total = total + va_arg(ap, int);
+    }
+    va_end(ap);
+    return total;
+}
+```
+
+- 参数表末尾可以写 `...`，它前面必须至少有一个具名参数（`int f(...)` 报
+  `'...' needs a named parameter before it`）。声明与定义都支持，原型同样带 `...`。
+- `va_list` 是内置类型词，`va_list ap;` 是普通声明，原样发射。
+- `va_arg(ap, <类型>)` 是内建（第二个实参是类型，不能按普通调用解析），发射为同形调用；
+  它的类型就是括号里写的类型，因此可以直接参与运算或赋给同类型变量。
+- `va_start` / `va_end` 是普通调用：ct 不声明它们，与 `printf` 一样按未知被调函数发射，
+  由源文件的 `#include <stdarg.h>` 提供声明。
+- trait 方法不能变参：`impl` 里出现 `...` 报 `a trait method cannot be variadic`
+  （vtable 槽位是固定的函数指针类型）；trait 声明本身也不接受 `...`，会在参数位置报
+  `expected a type`。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1820,6 +1853,42 @@ for (static int i = 0; i < 2; i++) {
   its value across calls, so entering the same `for` again tests the leftover value (as C specifies).
 - Neither form adds a diagnostic; `static` that does not introduce a declaration keeps reporting
   `expected a declaration after 'static'`.
+
+#### 4.22 Variadic functions (ct-ast)
+
+```c
+#include <stdarg.h>
+
+static int sum_all(int n, ...);
+
+static int sum_all(int n, ...) {
+    va_list ap;
+    int total;
+    int i;
+
+    total = 0;
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        total = total + va_arg(ap, int);
+    }
+    va_end(ap);
+    return total;
+}
+```
+
+- A parameter list may end with `...`, which needs at least one named parameter in front of it
+  (`int f(...)` reports `'...' needs a named parameter before it`). Declarations and definitions both
+  accept it, and the generated prototype carries the `...` too.
+- `va_list` is a built-in type word, so `va_list ap;` is an ordinary declaration and is emitted
+  as written.
+- `va_arg(ap, <type>)` is a builtin (its second argument is a type, so it cannot be parsed as a
+  normal call) and is emitted as the same call; its type is the one written in the parentheses, so it
+  can feed arithmetic or a variable of that type directly.
+- `va_start` / `va_end` are ordinary calls: ct does not declare them, so they are emitted like
+  `printf` — as an unknown callee — and the source's `#include <stdarg.h>` supplies the declarations.
+- A trait method cannot be variadic: `...` inside an `impl` reports
+  `a trait method cannot be variadic` (a vtable slot is a fixed function-pointer type), and a trait
+  declaration does not accept `...` either — it reports `expected a type` at the parameter position.
 
 ### 5. Naming contract
 
