@@ -494,11 +494,20 @@ struct Box { int (*op)(int); };
 static int apply(int (*fn)(int), int v) { return (*fn)(v); }
 ```
 
+- `typedef` 可用：`typedef int (*BinOp)(int, int);` 发射为 `typedef int (*BinOp)(int, int);`，
+  别名可作局部、参数与 struct 字段；typedef 一个函数指针数组同理（`typedef int (*Table[2])(int, int);`）。
+- 函数指针数组把维度写进声明子内部：`int (*tbl[2])(int, int);`。全局可带初始化器
+  （`static int (*tbl[2])(int, int) = { plus, minus };`），局部可逐元素赋值，struct 字段同样支持
+  （`int (*cb[2])(int);`）；`tbl[i](x)` 直接调用。
+- 文件作用域的初始化器可以命名本单元的函数（`static int (*gp)(int, int) = plus;`）：原型先于全局发射。
 - 赋值接受 `p = handler;` 与 `p = &handler;`；函数名作为右值时发射其 C 名。`#include` 引入的库函数
   同样可用（`p = strcmp;`）：CT 符号表里没有的名字原样发射，由 C 编译器按原型校验；普通调用一直如此。
-- 调用接受 `p(args)` 与 `(*p)(args)`，两种写法统一发射为 `(*p)(args)`。
-- 限制：不支持 `typedef` 函数指针、不返回函数指针、不支持嵌套函数指针（编译期报错）；
-  一条声明只写一个名字（`int (*a)(void), (*b)(void);` 报错）。
+- 调用接受 `p(args)` 与 `(*p)(args)`，两种写法统一发射为 `(*p)(args)`。函数指针字段可以直接调用：
+  `c.add(2, 3)`（`.`）与 `p->add(2, 3)`（`->`）分别发射为 `c.add(2, 3)` 与 `p->add(2, 3)`。
+- 限制：不返回函数指针；不支持嵌套函数指针（`int (**f)(int)` 报
+  `nested function pointers are not supported`）；函数指针数组不能作参数（报
+  `function-pointer arrays are not supported as parameters`）；一条声明只写一个名字
+  （`int (*a)(void), (*b)(void);` 报错）。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1180,14 +1189,27 @@ struct Box { int (*op)(int); };
 static int apply(int (*fn)(int), int v) { return (*fn)(v); }
 ```
 
+- `typedef` works: `typedef int (*BinOp)(int, int);` is emitted as
+  `typedef int (*BinOp)(int, int);`, and the alias is usable as a local, a parameter and a struct
+  field. A typedef of an array of pointers works the same way
+  (`typedef int (*Table[2])(int, int);`).
+- A function-pointer array keeps its dimensions inside the declarator (`int (*tbl[2])(int, int);`).
+  A global may carry an initialiser (`static int (*tbl[2])(int, int) = { plus, minus };`), a local
+  is filled element by element, and a struct field is supported too (`int (*cb[2])(int);`);
+  `tbl[i](x)` calls an element directly.
+- A file-scope initialiser may name a function of this unit
+  (`static int (*gp)(int, int) = plus;`): the prototypes are emitted before the globals.
 - Assignment accepts `p = handler;` and `p = &handler;`; a function name used as an rvalue emits
   its C name. A library function brought in by `#include` works the same way (`p = strcmp;`): a name
   CT never declared is emitted verbatim and the C compiler checks it against the prototype, just as an
   ordinary call already does.
-- A call accepts `p(args)` and `(*p)(args)`; both are emitted as `(*p)(args)`.
-- Limits: no `typedef` of a function pointer, no returning a function pointer, no nested function
-  pointers (compile-time errors); one declaration names exactly one pointer
-  (`int (*a)(void), (*b)(void);` is an error).
+- A call accepts `p(args)` and `(*p)(args)`; both are emitted as `(*p)(args)`. A function-pointer
+  field may be called directly: `c.add(2, 3)` (`.`) and `p->add(2, 3)` (`->`) are emitted as
+  `c.add(2, 3)` and `p->add(2, 3)`.
+- Limits: no returning a function pointer; no nested function pointers (`int (**f)(int)` reports
+  `nested function pointers are not supported`); a function-pointer array cannot be a parameter
+  (`function-pointer arrays are not supported as parameters`); one declaration names exactly one
+  pointer (`int (*a)(void), (*b)(void);` is an error).
 
 ### 5. Naming contract
 
