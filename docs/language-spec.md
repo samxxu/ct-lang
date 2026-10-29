@@ -858,7 +858,27 @@ static bool positive(int32_t v) { return v > 0; }
   `static inline ` / `inline `。生成的**原型**不带 `inline`（C 允许原型与定义不同）。
 - `inline` 后面不是函数（`inline int value = 1;`）报 `'inline' can only declare a function`。
 - 范围外：`_Static_assert` / `_Alignas` / `_Generic` / `__attribute__((…))` 仍不在子集内；
-  浮点字面量（`1.5`）仍不支持（词法器不扫小数点）。
+  浮点字面量见 §4.24。
+
+#### 4.24 浮点字面量（ct-ast）
+
+```c
+double d = 1.5;
+float f = 2.25f;
+long double ld = 3.5L;
+double tiny = .5;
+double big = 1.5e3;
+
+n = (int)9.99;              /* 截断为 9 */
+```
+
+- 支持 `<digits>.<digits>`、以点开头的 `.5`、带指数的 `1e9` / `1.5E-3`，以及后缀
+  `f` / `F` / `l` / `L`。字面量按**原文**发射，因此后缀与指数写法都不会丢。
+- 整数不受影响：`0x1F` / `0755` 仍按十六进制 / 八进制读成数值，并按十进制发射；
+  `1...5` 里的三连点仍是范围 / 变参记号，不会被当成小数点。
+- 浮点字面量**不是**整数常量表达式：`case 1.5:` 报 `a case label must be an integer constant`
+  （位域宽度、枚举值同理）。
+- 范围外：十六进制浮点（`0x1p3`）；`printf` 的格式串与实参类型匹配由用户负责，与 C 一致。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1952,8 +1972,29 @@ static bool positive(int32_t v) { return v > 0; }
 - `inline` in front of something that is not a function (`inline int value = 1;`) reports
   `'inline' can only declare a function`.
 - Out of scope: `_Static_assert` / `_Alignas` / `_Generic` / `__attribute__((…))` are still not part
-  of the subset, and floating-point literals (`1.5`) are still unsupported (the lexer does not scan
-  a decimal point).
+  of the subset; floating-point literals are described in §4.24.
+
+#### 4.24 Floating-point literals (ct-ast)
+
+```c
+double d = 1.5;
+float f = 2.25f;
+long double ld = 3.5L;
+double tiny = .5;
+double big = 1.5e3;
+
+n = (int)9.99;              /* truncates to 9 */
+```
+
+- Supported forms: `<digits>.<digits>`, the leading-dot `.5`, exponents (`1e9`, `1.5E-3`) and the
+  suffixes `f` / `F` / `l` / `L`. A literal is emitted **exactly as written**, so neither the suffix
+  nor the exponent spelling is lost.
+- Integers are unchanged: `0x1F` / `0755` are still read as hex / octal and emitted in decimal, and
+  the three dots in `1...5` remain a range / variadic marker rather than a decimal point.
+- A floating literal is **not** an integer constant expression: `case 1.5:` reports
+  `a case label must be an integer constant` (the same holds for a bit-field width or an enum value).
+- Out of scope: hexadecimal floating literals (`0x1p3`); a `printf` format string matching its
+  arguments stays the programmer's job, exactly as in C.
 
 ### 5. Naming contract
 
