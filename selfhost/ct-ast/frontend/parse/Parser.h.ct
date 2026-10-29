@@ -124,6 +124,9 @@ pub struct Parser {
     char cur_record[160];
     /* Parse scratch the emitter reads through pointers (`ct_emit_bind_parse`). */
     int  nparams;
+    /* Set by `parse_params` when the list ends with `...`; the caller stores it
+       on the symbol row (for the prototype) and on the function node. */
+    int  variadic;
     struct Field *pend_fields;   /* storage owned by this unit */
     int  npend;
     struct ParseSupport *sup;
@@ -529,6 +532,7 @@ impl ParseOps for Parser {
             /* `extern` names a C library symbol: never mangled, even when the
                prototype is exported to the header */
             if (is_extern && is_pub) self->sym->funcs[fi].is_pub = 1;
+            self->sym->funcs[fi].variadic = self->variadic;
             self->sym->funcs[fi].line = func_line;
             self->sup->pop_scope();
             return NO_NODE;
@@ -563,6 +567,7 @@ impl ParseOps for Parser {
             return -1;
         }
         self->sym->funcs[fi].ret_owned = self->mem->ret_owned;
+        self->sym->funcs[fi].variadic = self->variadic;
         self->sym->funcs[fi].line = func_line;
         f = self->sup->new_node(N_FUNC);
         if (f < 0) {
@@ -577,6 +582,7 @@ impl ParseOps for Parser {
         self->arena->nodes[f].line = func_line;
         self->arena->nodes[f].a = params;
         self->arena->nodes[f].b = b;
+        self->arena->nodes[f].c = self->variadic;
         self->sup->pop_scope();
         return f;
     }
@@ -589,6 +595,7 @@ impl ParseOps for Parser {
         (void)self;
 
         self->nparams = 0;
+        self->variadic = 0;
         first = 0;
         tail = 0;
         if (self->sup->expect("(") != 0) return -1;
@@ -597,6 +604,15 @@ impl ParseOps for Parser {
             return 0;
         }
         for (;;) {
+            /* `...` closes the list: C requires at least one named parameter
+               before it, and it is not a parameter of its own */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0) {
+                if (self->nparams == 0)
+                    return self->sup->fail("'...' needs a named parameter before it");
+                self->variadic = 1;
+                self->sup->lex_next();
+                break;
+            }
             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
             if (self->ex->fnptr_state) {
                 /* the declarator name came with the type (`int (*cb)(void *)`) */
@@ -1339,6 +1355,12 @@ impl ParseOps for Parser {
             if (params < 0) {
                 self->sup->pop_scope();
                 return -1;
+            }
+            /* the vtable slot is a fixed function-pointer type, so a method
+               cannot carry a variadic tail */
+            if (self->variadic) {
+                self->sup->pop_scope();
+                return self->sup->fail("a trait method cannot be variadic");
             }
             /* Signature consistency against the trait -- a warning, not an error.
                The wording and the line (the method's, not the impl's) match L2

@@ -1,0 +1,17 @@
+/* batch 13: a vtable slot is a plain function pointer, so an impl method cannot
+   carry a variadic tail (the trait's declaration could not match it). */
+trait Fmt {
+    int show(int n);
+}
+
+struct Plain {
+    int v;
+} use Fmt;
+
+impl Fmt for Plain {
+    int show(int n, ...) { return n; }
+}
+
+int main(void) {
+    return 0;
+}

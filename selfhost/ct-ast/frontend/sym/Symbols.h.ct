@@ -44,6 +44,7 @@ pub struct Fn {
     int  nparams;
     int  is_static;
     int  is_pub;
+    int  variadic;      /* `int f(int n, ...)`: the prototype needs the `...` */
     int  line;
     int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */
 }

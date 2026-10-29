@@ -153,6 +153,17 @@ impl LexOps for Lexer {
             self->tok = T_STR;
             return;
         }
+        /* `...` (a variadic parameter list) has to be one token: the parser
+           cannot tell three `.` tokens from three field accesses */
+        if (c == '.' && self->src[self->pos + 1] == '.' && self->src[self->pos + 2] == '.') {
+            self->toktext[0] = '.';
+            self->toktext[1] = '.';
+            self->toktext[2] = '.';
+            self->toktext[3] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 3;
+            return;
+        }
         if (c == '-' && self->src[self->pos + 1] == '>') {
             self->toktext[0] = '-';
             self->toktext[1] = '>';

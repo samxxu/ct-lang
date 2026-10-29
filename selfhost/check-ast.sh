@@ -78,6 +78,9 @@
 # batch 12 adds the empty statement and `for`-init statics: test/ast/37_empty_stmt
 # only (the batch adds no diagnostic).
 #
+# batch 13 adds variadic functions: test/ast/38_variadic plus the two rejected
+# shapes (no named parameter, a variadic impl method).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1051,6 +1054,24 @@ do
         ok "batch 11 ($cf)"
     else
         bad "batch 11: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 13: `...` needs a named parameter in front of it, and a vtable slot
+# cannot be variadic.
+for pair in \
+    "variadic_no_named|'...' needs a named parameter before it" \
+    "variadic_impl|a trait method cannot be variadic"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 13: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 13 ($cf)"
+    else
+        bad "batch 13: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

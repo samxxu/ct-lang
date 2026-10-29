@@ -65,6 +65,7 @@ import runtime::arena::Arena;
 #define N_UNARY 17
 #define N_VAR 10
 #define N_COMPOUND 51
+#define N_VAARG 53
 #define P_DEC 2
 #define P_INC 1
 #define T_ID 1
@@ -145,6 +146,7 @@ impl ExprOps for Expr {
             || strcmp(w, "double") == 0 || strcmp(w, "const") == 0
             || strcmp(w, "struct") == 0 || strcmp(w, "enum") == 0
             || strcmp(w, "union") == 0 || strcmp(w, "size_t") == 0
+            || strcmp(w, "va_list") == 0
             || strcmp(w, "FILE") == 0 || strcmp(w, "DIR") == 0;
     }
 
@@ -1067,6 +1069,26 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", fname);
+            return n;
+        }
+        /* `va_arg(<ap>, <type>)` is the one stdarg macro that is not a call: its
+           second argument is a type, so it is a builtin like `offsetof` and the
+           generated `.c` keeps the same spelling (D-9). */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "va_arg") == 0
+            && self->offsetof_ahead()) {
+            char tbuf[MAX_TEXT];
+            int ap;
+            self->sup->lex_next();
+            if (self->sup->expect("(") != 0) return -1;
+            ap = self->parse_expr();
+            if (ap < 0) return -1;
+            if (self->sup->expect(",") != 0) return -1;
+            if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+            if (self->sup->expect(")") != 0) return -1;
+            n = self->sup->new_node(N_VAARG);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = ap;
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
             return n;
         }
         if (self->lex->tok == T_ID) {

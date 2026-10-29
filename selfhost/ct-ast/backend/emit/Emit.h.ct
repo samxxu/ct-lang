@@ -80,6 +80,7 @@ import runtime::arena::Arena;
 #define N_GOTO    50
 #define N_COMPOUND 51
 #define N_EMPTY   52
+#define N_VAARG   53
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -351,6 +352,7 @@ impl EmitOps for Emitter {
                 fputs(self->sym->funcs[i].ptype[k], self->out);
                 fputs(self->sym->funcs[i].pdim[k], self->out);
             }
+            if (self->sym->funcs[i].variadic) fputs(", ...", self->out);
         }
         fputs(");\n", self->out);
         return 0;
@@ -997,6 +999,7 @@ impl EmitOps for Emitter {
                     first = 0;
                     c = self->arena->nodes[c].next;
                 }
+                if (self->arena->nodes[n].c) fputs(", ...", self->out);
                 fputs(") ", self->out);
             }
             return self->emit_node(self->arena->nodes[n].b, ind);
@@ -1430,6 +1433,12 @@ impl EmitOps for Emitter {
                uses, so a trait-carrying struct gets its vptr items here too */
             fprintf(self->out, "(%s)", self->arena->nodes[n].text);
             return self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text, 0);
+        }
+        if (self->arena->nodes[n].kind == N_VAARG) {
+            fputs("va_arg(", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fprintf(self->out, ", %s)", self->arena->nodes[n].text);
+            return 0;
         }
         if (self->arena->nodes[n].kind == N_SIZEOF) {
             if (self->arena->nodes[n].aux) {

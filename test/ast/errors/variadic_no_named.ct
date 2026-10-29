@@ -1,0 +1,9 @@
+/* batch 13: C wants at least one named parameter before `...`, and `va_start`
+   needs a name to anchor on, so the empty prefix is refused. */
+static int bad(...) {
+    return 0;
+}
+
+int main(void) {
+    return bad();
+}

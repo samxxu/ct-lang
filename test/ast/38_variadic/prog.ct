@@ -1,0 +1,43 @@
+/* 38: variadic functions (batch 13) - a parameter list may end with `...`, the
+   generated prototype carries it too, a `va_list` local is an ordinary
+   declaration, and `va_arg(ap, T)` takes a type instead of an expression. */
+#include <stdio.h>
+#include <stdarg.h>
+
+static int sum_all(int n, ...);
+
+static int sum_all(int n, ...) {
+    va_list ap;
+    int total;
+    int i;
+
+    total = 0;
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        total = total + va_arg(ap, int);
+    }
+    va_end(ap);
+    return total;
+}
+
+static int max_of(int n, ...) {
+    va_list ap;
+    int best;
+    int i;
+    int v;
+
+    best = 0;
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        v = va_arg(ap, int);
+        if (v > best) best = v;
+    }
+    va_end(ap);
+    return best;
+}
+
+int main(void) {
+    printf("sum %d %d %d\n", sum_all(0), sum_all(2, 3, 4), sum_all(4, 1, 2, 3, 4));
+    printf("max %d %d\n", max_of(3, 5, 9, 2), max_of(1, 7));
+    return 0;
+}
