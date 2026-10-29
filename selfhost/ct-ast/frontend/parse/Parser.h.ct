@@ -531,12 +531,19 @@ impl ParseOps for Parser {
         self->mem->leak_frame = self->sym->nscope + 1;
         self->mem->leak_impl = 0;
         self->mem->ret_owned = 0;
+        self->st->func_begin();
         b = self->st->parse_block();
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func[0] = 0;
         self->sym->ret_type[0] = 0;
         if (b < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* labels are function-scoped: the goto table is judged once the whole
+           body has been seen (a label may follow its `goto`) */
+        if (self->st->func_end() != 0) {
             self->sup->pop_scope();
             return -1;
         }
@@ -1215,6 +1222,7 @@ impl ParseOps for Parser {
             self->mem->leak_active = 1;
             self->mem->leak_frame = self->sym->nscope + 1;
             self->mem->leak_impl = 1;
+            self->st->func_begin();
             body = self->st->parse_block();
             self->mem->leak_active = 0;
             self->mem->leak_frame = -1;
@@ -1222,6 +1230,10 @@ impl ParseOps for Parser {
             self->cur_func[0] = 0;
             self->sym->ret_type[0] = 0;
             if (body < 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            if (self->st->func_end() != 0) {
                 self->sup->pop_scope();
                 return -1;
             }

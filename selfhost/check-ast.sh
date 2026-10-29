@@ -60,6 +60,10 @@
 # test/ast/27_fnptr_forms, plus the two named diagnostics (a nested declarator
 # and an array parameter).
 #
+# batch 7 adds `goto` and labels: test/ast/32_goto plus the four function-scoped
+# diagnostics (an undefined target, a duplicate label, a declaration behind a
+# label, and a label that guards nothing).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -938,6 +942,27 @@ do
         ok "batch 6 ($cf)"
     else
         bad "batch 6: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 7: labels are function-scoped, so the four goto diagnostics are judged
+# without help from the C compiler (an undefined target, a duplicate, a
+# declaration behind a label, and a label that guards nothing).
+for pair in \
+    "goto_undefined|label 'missing' is not defined" \
+    "label_duplicate|duplicate label 'again'" \
+    "label_decl|a declaration cannot follow a label; wrap it in a block" \
+    "label_no_statement|a label needs a statement"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 7: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 7 ($cf)"
+    else
+        bad "batch 7: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

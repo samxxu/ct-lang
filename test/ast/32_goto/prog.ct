@@ -1,0 +1,94 @@
+/* 32: goto and labels (batch 7) - a `goto` leaves any number of loops, a
+   backward `goto` builds a loop without `while`, a label may sit in a nested
+   block (jumping into it is legal C), a `case` may `goto` out of its switch, and
+   two functions may reuse one label name. */
+#include <stdio.h>
+
+static int scan(int n) {
+    int i, j, found;
+
+    found = -1;
+    i = 0;
+    while (i < n) {
+        j = 0;
+        while (j < n) {
+            if (i * j == 6) {
+                found = i * 10 + j;
+                goto done;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+done:
+    return found;
+}
+
+static int countdown(int n) {
+    int k, total;
+
+    total = 0;
+    k = n;
+loop:
+    if (k > 0) {
+        total = total + k;
+        k = k - 1;
+        goto loop;
+    }
+    goto tail;
+    total = 99;
+tail:
+    return total;
+}
+
+static int pick(int key) {
+    int out;
+
+    out = 0;
+    switch (key) {
+    case 1:
+        goto after;
+    case 2:
+        out = 20;
+        break;
+    default:
+        out = 30;
+        break;
+    }
+after:
+    out = out + 1;
+    return out;
+}
+
+static int jumpin(int v) {
+    int r;
+
+    r = 0;
+    if (v) goto in;
+    r = 1;
+    {
+    in:
+        r = r + 2;
+    }
+    return r;
+}
+
+static int shared(int v) {
+    int r;
+
+    r = v;
+    if (r > 3) goto again;
+    goto done;
+again:
+done:
+    return r;
+}
+
+int main(void) {
+    printf("scan %d %d\n", scan(4), scan(3));
+    printf("countdown %d\n", countdown(4));
+    printf("pick %d %d %d\n", pick(1), pick(2), pick(3));
+    printf("jumpin %d %d\n", jumpin(1), jumpin(0));
+    printf("shared %d %d\n", shared(5), shared(0));
+    return 0;
+}

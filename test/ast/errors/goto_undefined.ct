@@ -1,0 +1,6 @@
+/* batch 7: a goto whose label never appears in the same function would emit C
+   that only the C compiler rejects, so the name is checked when the body ends. */
+int main(void) {
+    goto missing;
+    return 0;
+}

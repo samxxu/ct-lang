@@ -1,0 +1,8 @@
+/* batch 7: a label opens no scope, so a declaration cannot follow it (C99
+   would reject the emitted `again: int x;`). */
+int main(void) {
+again:
+    int x;
+    x = 1;
+    return x;
+}

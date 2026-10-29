@@ -76,6 +76,8 @@ import runtime::arena::Arena;
 #define N_ENUMVAL 46
 #define N_OFFSETOF 47
 #define N_UNION   48
+#define N_LABEL   49
+#define N_GOTO    50
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -1024,6 +1026,20 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_CONT) {
             self->emit_indent(ind);
             fputs("continue;\n", self->out);
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_GOTO) {
+            self->emit_indent(ind);
+            fprintf(self->out, "goto %s;\n", self->arena->nodes[n].text2);
+            return 0;
+        }
+        /* A label owns its statements, so it prints the name and then walks the
+           chain one level deeper (the same shape a `case` label uses). */
+        if (self->arena->nodes[n].kind == N_LABEL) {
+            self->emit_indent(ind);
+            fprintf(self->out, "%s:\n", self->arena->nodes[n].text2);
+            for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
+                if (self->emit_node(c, ind + 1) != 0) return -1;
             return 0;
         }
         if (self->arena->nodes[n].kind == N_DECLS) {

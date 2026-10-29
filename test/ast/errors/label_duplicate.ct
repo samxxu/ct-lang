@@ -1,0 +1,14 @@
+/* batch 7: C labels are function-scoped, so a second `again:` in one body is a
+   duplicate even when the two sit in different blocks. */
+int main(void) {
+    int r;
+
+    r = 0;
+again:
+    r = r + 1;
+    {
+    again:
+        r = r + 2;
+    }
+    return r;
+}

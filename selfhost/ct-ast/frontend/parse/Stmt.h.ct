@@ -25,6 +25,7 @@ import frontend::parse::Expr;
 import tool::diag::diag;
 
 #define MAX_TEXT 160
+#define MAX_LABELS 64
 
 #define N_INDEX 26
 #define N_ARROW 25
@@ -40,7 +41,9 @@ import tool::diag::diag;
 #define N_DOWHILE 44
 #define N_EXPR 6
 #define N_FOR 16
+#define N_GOTO 50
 #define N_IF 14
+#define N_LABEL 49
 #define N_MEMBER 24
 #define N_POST 18
 #define N_RAW 31
@@ -66,6 +69,12 @@ pub trait StmtOps {
     int  parse_switch_body(void);
     int  parse_label(void);
     int  parse_case_value(void);
+    int  label_ahead(void);
+    int  label_find(const char *name);
+    int  parse_named_label(void);
+    int  parse_goto(void);
+    int  func_begin(void);
+    int  func_end(void);
 }
 
 pub struct Stmt {
@@ -80,6 +89,17 @@ pub struct Stmt {
        (D-7). The body has its own label grammar, so `parse_block` is not used.
        g_stmt is static, so this starts at zero. */
     int switch_depth;
+    /* C labels are function-scoped, so both tables are reset at every function
+       (or method) body: a duplicate is caught at the second spelling, and a
+       `goto` whose label never shows up is reported when the body ends. The
+       lengths are literals because a `pub struct` lands in the generated
+       header, which carries no macros (`MAX_LABELS` is the value used here). */
+    int  nlabels;
+    char label_names[64][160];
+    int  label_lines[64];
+    int  ngotos;
+    char goto_names[64][160];
+    int  goto_lines[64];
 } use StmtOps;
 
 impl StmtOps for Stmt {
@@ -318,6 +338,7 @@ impl StmtOps for Stmt {
             if (self->sup->expect(";") != 0) return -1;
             return s;
         }
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "goto") == 0) return self->parse_goto();
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "if") == 0) {
             s = self->sup->new_node(N_IF);
             if (s < 0) return -1;
@@ -467,6 +488,10 @@ impl StmtOps for Stmt {
             if (self->sup->mark_owned(s, own_line) != 0) return -1;
             return s;
         }
+        /* `name:` -- a label opens no scope and declares nothing, so this sits
+           after every keyword branch and before the declaration test; the
+           lookahead keeps a qualified `A::f()` on the expression path (D-2). */
+        if (self->label_ahead()) return self->parse_named_label();
         if (self->is_decl_start()) {
             s = self->parse_decl_node();
             if (s < 0) return -1;
@@ -570,7 +595,8 @@ impl StmtOps for Stmt {
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)
                && !(self->lex->tok == T_ID
                     && (strcmp(self->lex->toktext, "case") == 0
-                        || strcmp(self->lex->toktext, "default") == 0))) {
+                        || strcmp(self->lex->toktext, "default") == 0))
+               && !self->label_ahead()) {
             if (self->is_decl_start())
                 return self->sup->fail("a declaration cannot follow a case label; wrap it in a block");
             c = self->parse_stmt();
@@ -603,6 +629,149 @@ impl StmtOps for Stmt {
             && self->arena->nodes[e].kind != N_RAW)
             return self->sup->fail("a case label must be an integer constant");
         return e;
+    }
+
+    /* Is the current identifier the start of `name:`? The lexer has no peek,
+       so every state field is saved, the next token is read and the cursor is
+       put back. `::` is one token, so a qualified name never looks like a label
+       (D-2); `default:` is handled by the case branch before this runs. */
+    int label_ahead(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
+        long snum;
+        char stext[MAX_TEXT];
+        (void)self;
+
+        if (self->lex->tok != T_ID) return 0;
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        r = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) r = 1;
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        return r;
+    }
+
+    int label_find(const char *name)
+    {
+        int i;
+        (void)self;
+
+        for (i = 0; i < self->nlabels; i++)
+            if (strcmp(self->label_names[i], name) == 0) return i;
+        return -1;
+    }
+
+    /* `name:` owns the statements up to the next label of any kind or the
+       closing brace, the same chain rule `case` follows (D-3). A run of
+       labels (`again: done:`) is allowed: while nothing has been taken yet the
+       next label is a statement too, so the first label owns the second one.
+       C opens no scope at a label, so a declaration cannot sit directly behind
+       it (D-4), and C99 rejects a label that runs straight into `}` -- an
+       empty chain is an error rather than an emitted `name: }`. */
+    int parse_named_label(void)
+    {
+        int s, c, head, tail, line;
+        char name[MAX_TEXT];
+        char msg[MAX_TEXT];
+        (void)self;
+
+        line = self->lex->tokline;
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
+        if (self->nlabels >= MAX_LABELS) return self->sup->fail("too many labels in one function");
+        if (self->label_find(name) >= 0) {
+            snprintf(msg, sizeof msg, "duplicate label '%s'", name);
+            return self->sup->fail(msg);
+        }
+        s = self->sup->new_node(N_LABEL);
+        if (s < 0) return -1;
+        snprintf(self->label_names[self->nlabels], MAX_TEXT, "%s", name);
+        self->label_lines[self->nlabels] = line;
+        self->nlabels = self->nlabels + 1;
+        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
+        self->sup->lex_next();
+        if (self->sup->expect(":") != 0) return -1;
+        head = -1;
+        tail = -1;
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)
+               && !(self->lex->tok == T_ID
+                    && (strcmp(self->lex->toktext, "case") == 0
+                        || strcmp(self->lex->toktext, "default") == 0))
+               && !(head >= 0 && self->label_ahead())) {
+            if (self->is_decl_start())
+                return self->sup->fail("a declaration cannot follow a label; wrap it in a block");
+            c = self->parse_stmt();
+            if (c < 0) return -1;
+            if (tail < 0) head = c;
+            else self->arena->nodes[tail].next = c;
+            tail = c;
+        }
+        if (head < 0) return self->sup->fail("a label needs a statement");
+        self->arena->nodes[s].a = head;
+        return s;
+    }
+
+    /* `goto name;` -- recorded for the end-of-body check, since the label may
+       be defined later in the same function (D-5). */
+    int parse_goto(void)
+    {
+        int s;
+        char name[MAX_TEXT];
+        (void)self;
+
+        s = self->sup->new_node(N_GOTO);
+        if (s < 0) return -1;
+        self->sup->lex_next();
+        if (self->lex->tok != T_ID) return self->sup->fail("expected a label name");
+        if (self->ngotos >= MAX_LABELS) return self->sup->fail("too many gotos in one function");
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
+        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
+        snprintf(self->goto_names[self->ngotos], MAX_TEXT, "%s", name);
+        self->goto_lines[self->ngotos] = self->arena->nodes[s].line;
+        self->ngotos = self->ngotos + 1;
+        self->sup->lex_next();
+        if (self->sup->expect(";") != 0) return -1;
+        return s;
+    }
+
+    int func_begin(void)
+    {
+        (void)self;
+        self->nlabels = 0;
+        self->ngotos = 0;
+        return 0;
+    }
+
+    /* Labels are function-scoped, so an unresolved `goto` is judged here, when
+       the whole body has been seen; the complaint points at the `goto` line. */
+    int func_end(void)
+    {
+        int i;
+        char msg[MAX_TEXT];
+        (void)self;
+
+        for (i = 0; i < self->ngotos; i++) {
+            if (self->label_find(self->goto_names[i]) < 0) {
+                snprintf(msg, sizeof msg, "label '%s' is not defined", self->goto_names[i]);
+                return self->sup->fail_at(self->goto_lines[i], msg);
+            }
+        }
+        return 0;
     }
 
     /* `<type> name[dims] [= expr] (, name[dims] [= expr])*` without the trailing
