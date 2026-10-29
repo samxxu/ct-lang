@@ -546,7 +546,7 @@ do {
   `a do statement must be followed by while (...)`。
 - `case` / `default` 出现在 `switch` 体之外（包括 `switch` 体内的嵌套块）报
   `a case label is only allowed inside a switch`。
-- 不做 `case 1 ... 5:` 范围语法；重复的 case 值原样发射，由 C 编译器报错。
+- 重复的 case 值原样发射，由 C 编译器报错；`case 1 ... 5:` 范围标签见 §4.25。
 
 #### 4.14 `enum`、常量表达式与 `offsetof`（ct-ast）
 
@@ -879,6 +879,38 @@ n = (int)9.99;              /* 截断为 9 */
 - 浮点字面量**不是**整数常量表达式：`case 1.5:` 报 `a case label must be an integer constant`
   （位域宽度、枚举值同理）。
 - 范围外：十六进制浮点（`0x1p3`）；`printf` 的格式串与实参类型匹配由用户负责，与 C 一致。
+
+#### 4.25 `case` 范围标签（ct-ast）
+
+```c
+switch (score) {
+case 0 ... 59:
+    return 1;
+case 60 ... 89:
+    return 2;
+case 90 ... 100:
+    return 3;
+default:
+    return 0;
+}
+
+switch (c) {
+case 'a' ... 'z':
+    return 1;
+case 'A' ... 'Z':
+    return 2;
+default:
+    return 0;
+}
+```
+
+- `case <low> ... <high>:` 按原样发射。两端都是整数常量表达式，规则与单值标签相同
+  （`const_ok`，或整棵树是单个名字时放行）；任一端出现变量报
+  `a case label must be an integer constant`。
+- 范围标签与单值标签可以混排在同一个 `switch` 里；区间重叠、上下界颠倒不检查，交给 C 编译器。
+- 缺下端（`case ... 5:`）在表达式位置报 `expected an expression`。
+- 范围是 GNU 扩展（C23 正式化）：`cc -Wall -Wextra -std=c99` 下 clang 与 gcc 都接受且不告警，
+  这是本特性的编译期依赖。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1623,7 +1655,8 @@ do {
   `a do statement must be followed by while (...)`.
 - A `case` / `default` outside a `switch` body (including in a block nested inside one) reports
   `a case label is only allowed inside a switch`.
-- No `case 1 ... 5:` ranges; a duplicated case value is emitted as written and left to the C compiler.
+- A duplicated case value is emitted as written and left to the C compiler; `case 1 ... 5:` ranges
+  are described in §4.25.
 
 #### 4.14 `enum`, constant expressions and `offsetof` (ct-ast)
 
@@ -1995,6 +2028,39 @@ n = (int)9.99;              /* truncates to 9 */
   `a case label must be an integer constant` (the same holds for a bit-field width or an enum value).
 - Out of scope: hexadecimal floating literals (`0x1p3`); a `printf` format string matching its
   arguments stays the programmer's job, exactly as in C.
+
+#### 4.25 `case` ranges (ct-ast)
+
+```c
+switch (score) {
+case 0 ... 59:
+    return 1;
+case 60 ... 89:
+    return 2;
+case 90 ... 100:
+    return 3;
+default:
+    return 0;
+}
+
+switch (c) {
+case 'a' ... 'z':
+    return 1;
+case 'A' ... 'Z':
+    return 2;
+default:
+    return 0;
+}
+```
+
+- `case <low> ... <high>:` is emitted as written. Both ends are integer constant expressions under the
+  same rule as a single value (`const_ok`, or a whole name that may be a macro); a variable in either
+  end reports `a case label must be an integer constant`.
+- Ranges and single-value labels may be mixed in one `switch`; overlapping or inverted ranges are not
+  checked and are left to the C compiler.
+- A missing low end (`case ... 5:`) reports `expected an expression` at the expression position.
+- The range is a GNU extension (standardised in C23): `cc -Wall -Wextra -std=c99` accepts it in both
+  clang and gcc without a warning, and that is this feature's compile-time dependency.
 
 ### 5. Naming contract
 
