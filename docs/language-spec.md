@@ -9,15 +9,20 @@
 > [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
 > Phase 11.1 新增的 `map`（把 trait 方法绑定到已声明的全局实例；SH-20 起也可绑定到命名空间）**仅 ct-ast** 支持，L0 与 L2 都不接受，见 §4.10。
 >
-> 三者并非逐字节等价：ct-ast 是安装入口，L2 只是回归 oracle。已知分叉如下：
+> 三者并非逐字节等价：ct-ast 是安装入口，L2 只是回归 oracle。已知分叉分两类。
 >
-> | 构造 | L2 | ct-ast |
-> | --- | --- | --- |
-> | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
-> | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
-> | 其它 C 透传（空语句、变参等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
+> **有意拒绝**（设计决定，不是缺失）：
 >
-> 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
+> | 构造 | L2 | ct-ast | 理由 |
+> | --- | --- | --- | --- |
+> | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） | 单元级前缀与目录校验都假设一个文件只声明一个命名空间 |
+> | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） | 避免在两个同名导出之间静默选错对象 |
+>
+> **仍未实现**（ct-ast 报具体消息）：`_Alignas`、`_Generic`、`__attribute__((…))`。
+> 其余 C 形式（`goto` / 标签、`switch` 范围、位域、匿名成员、变参、`inline`、
+> `_Static_assert`、浮点字面量等）两侧都接受，见 §4 各节。
+>
+> 这是两层的**能力差**，不是同一条流水线上的进度差：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
 > `--line` / `--no-line` / `--diagnostics` 报 `unknown option`）。归档 fixture 见 `test/archive/`，
 > 特性完整的旧实现见 git tag `overreach-oracle`。
@@ -912,6 +917,29 @@ default:
 - 范围是 GNU 扩展（C23 正式化）：`cc -Wall -Wextra -std=c99` 下 clang 与 gcc 都接受且不告警，
   这是本特性的编译期依赖。
 
+#### 4.26 `_Static_assert`（ct-ast）
+
+```c
+struct Pair { int a; int b; };
+
+_Static_assert(sizeof(int) == 4, "int is four bytes");
+_Static_assert(sizeof(struct Pair) >= 8, "a pair holds two ints");
+
+static int check(int v) {
+    _Static_assert(sizeof(char) == 1, "char is one byte");
+    return v;
+}
+```
+
+- 文件作用域与函数体内都可以写 `_Static_assert(<条件>, "<消息>");`，生成物同形。
+- 条件必须是整数常量表达式（规则同 `case` 标签），否则报
+  `a static assertion needs a constant condition`；消息必须是字符串字面量，否则报
+  `a static assertion message must be a string literal`。消息可以省略（C23 放宽）。
+- 文件作用域的多条断言统一在「类型之后、原型之前」发射，因此断言里引用本单元上面
+  定义过的 struct / enum 仍然成立；引用**后面**才定义的类型则不行。
+- 判定的最终结果仍由 C 编译器给出（断言失败时是它的错误消息）。
+- 范围外：`_Alignas`、`_Generic`、`__attribute__((…))` 仍不在子集内。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1024,19 +1052,25 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > see §4.10.
 >
 > The three are not byte-equivalent: ct-ast is the installed entry and L2 is only the regression
-> oracle. Known divergences:
+> oracle. Known divergences fall into two groups.
 >
-> | Construct | L2 | ct-ast |
-> | --- | --- | --- |
-> | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
-> | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
-> | other C passthrough (the empty statement, variadic functions, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
+> **Deliberately rejected** (a design decision, not a gap):
 >
-> This is a **capability gap between the two layers**, not work in progress: L0 still reports
-> `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
-> `ct build`; `--line` / `--no-line` / `--diagnostics` report `unknown option`). Archived fixtures
-> live in `test/archive/`, and the old, feature-complete implementation is at git tag
-> `overreach-oracle`.
+> | Construct | L2 | ct-ast | Why |
+> | --- | --- | --- | --- |
+> | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) | the per-unit prefix and the directory check both assume one namespace per file |
+> | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) | never silently pick the wrong object between two same-named exports |
+>
+> **Still unimplemented** (ct-ast reports a specific message): `_Alignas`, `_Generic`,
+> `__attribute__((…))`. Every other C form (`goto` / labels, `switch` ranges, bit-fields, anonymous
+> members, variadics, `inline`, `_Static_assert`, floating literals, …) is accepted by both layers;
+> see the sections under 4.
+>
+> This is a **capability gap between the two layers**, not a progress difference on one pipeline:
+> L0 still reports `'namespace' is not supported by this compiler` for those constructs (same for
+> `pub` / `import` / `ct build`; `--line` / `--no-line` / `--diagnostics` report `unknown option`).
+> Archived fixtures live in `test/archive/`, and the old, feature-complete implementation is at git
+> tag `overreach-oracle`.
 
 This document specifies the input rules, expansion rules, naming rules and diagnostics of the core
 grammar. Anything not described here is undefined behaviour and must not be relied upon.
@@ -2061,6 +2095,32 @@ default:
 - A missing low end (`case ... 5:`) reports `expected an expression` at the expression position.
 - The range is a GNU extension (standardised in C23): `cc -Wall -Wextra -std=c99` accepts it in both
   clang and gcc without a warning, and that is this feature's compile-time dependency.
+
+#### 4.26 `_Static_assert` (ct-ast)
+
+```c
+struct Pair { int a; int b; };
+
+_Static_assert(sizeof(int) == 4, "int is four bytes");
+_Static_assert(sizeof(struct Pair) >= 8, "a pair holds two ints");
+
+static int check(int v) {
+    _Static_assert(sizeof(char) == 1, "char is one byte");
+    return v;
+}
+```
+
+- `_Static_assert(<condition>, "<message>");` may appear at file scope and inside a function body,
+  and is emitted as written.
+- The condition must be an integer constant expression (the rule `case` labels follow), otherwise it
+  reports `a static assertion needs a constant condition`; the message must be a string literal,
+  otherwise `a static assertion message must be a string literal`. The message may be omitted (C23
+  relaxed it).
+- File-scope assertions are emitted together between the types and the prototypes, so an assertion
+  may name a struct / enum defined above it in the unit; naming a type defined **after** it does not
+  work.
+- The verdict itself still comes from the C compiler (a failing assertion is its error message).
+- Out of scope: `_Alignas`, `_Generic` and `__attribute__((…))` are still not part of the subset.
 
 ### 5. Naming contract
 
