@@ -121,6 +121,7 @@ trait EmitOps {
     int  write_map(const char *dest, int prog, int u);
     int  emit_json_str(FILE *f, const char *s);
     int  emit_node(int n, int ind);
+    int  emit_field(int n, int ind);
     int  emit_inline(int n);
     int  emit_type_name(const char *type, const char *name);
     int  emit_type_name_dims(const char *type, const char *name, const char *dims);
@@ -693,6 +694,28 @@ impl EmitOps for Emitter {
         return 0;
     }
 
+    /* One row of a record body. An anonymous member (`aux == 2`) prints its own
+       `struct {` / `union {`, the inner fields one level deeper and its closing
+       brace; the caller adds the `;\n`, so the row still reads as one member. */
+    int emit_field(int n, int ind)
+    {
+        int c;
+        (void)self;
+
+        if (self->arena->nodes[n].kind == N_FIELD && self->arena->nodes[n].aux == 2) {
+            fprintf(self->out, "%s {\n", self->arena->nodes[n].text);
+            for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next) {
+                self->emit_indent(ind + 1);
+                if (self->emit_field(c, ind + 1) != 0) return -1;
+                fputs(";\n", self->out);
+            }
+            self->emit_indent(ind);
+            fputs("}", self->out);
+            return 0;
+        }
+        return self->emit_inline(n);
+    }
+
     /* Top-level declarations: struct / typedef / global (with a semicolon as
        appropriate). */
     int emit_type_decl(int n, int ind, int with_semi)
@@ -715,7 +738,7 @@ impl EmitOps for Emitter {
             }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 self->emit_indent(ind + 1);
-                if (self->emit_inline(m) != 0) return -1;
+                if (self->emit_field(m, ind + 1) != 0) return -1;
                 fputs(";\n", self->out);
             }
             si = self->sym->find_struct(self->arena->nodes[n].text2);
@@ -753,7 +776,7 @@ impl EmitOps for Emitter {
             }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 self->emit_indent(ind + 1);
-                if (self->emit_inline(m) != 0) return -1;
+                if (self->emit_field(m, ind + 1) != 0) return -1;
                 fputs(";\n", self->out);
             }
             self->emit_indent(ind);

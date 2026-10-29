@@ -1,0 +1,10 @@
+/* batch 9: an anonymous member with no member of its own would emit `union {
+   };`, which C rejects. */
+struct Bad {
+    union {
+    };
+};
+
+int main(void) {
+    return 0;
+}

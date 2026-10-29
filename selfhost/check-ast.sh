@@ -66,6 +66,9 @@
 #
 # batch 8 adds bit-fields: test/ast/33_bitfield plus four width/type diagnostics.
 #
+# batch 9 adds anonymous struct / union members: test/ast/34_anon_member plus
+# the three promotion diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -985,6 +988,26 @@ do
         ok "batch 8 ($cf)"
     else
         bad "batch 8: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 9: an anonymous member promotes its names into the enclosing record, so
+# the three rejected shapes are a named untagged member, a promoted name that
+# collides, and a body with nothing to promote.
+for pair in \
+    "anon_member_name|an anonymous record member cannot have a name; tag the record instead" \
+    "anon_member_dup|duplicate member 'i'" \
+    "anon_member_empty|an anonymous record needs a member"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 9: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 9 ($cf)"
+    else
+        bad "batch 9: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

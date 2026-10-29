@@ -1,0 +1,5 @@
+outer 1 42 9 12
+nested 7
+choice A B
+rec 7 11
+pair 5 6 11

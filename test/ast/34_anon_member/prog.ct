@@ -1,0 +1,75 @@
+/* 34: anonymous members (batch 9) - a `union { … };` or `struct { … };` member
+   without a name promotes its members into the enclosing record (C11), so `o.i`
+   works directly; two levels nest, an anonymous member may hold bit-fields, and
+   a trait-carrying struct inside one still dispatches through the promoted
+   name. */
+#include <stdio.h>
+
+trait Named {
+    int pair_sum();
+}
+
+struct Pair {
+    int a;
+    int b;
+} use Named;
+
+impl Named for Pair {
+    int pair_sum() { return self->a + self->b; }
+}
+
+struct Outer {
+    int tag;
+    union {
+        int i;
+        struct {
+            short lo;
+            short hi;
+        };
+    };
+    unsigned bits : 4;
+};
+
+union Choice {
+    int all;
+    struct {
+        char c0;
+        char c1;
+    };
+};
+
+typedef struct {
+    int id;
+    union {
+        int num;
+        struct Pair obj;
+    };
+} Rec;
+
+int main(void) {
+    struct Outer o;
+    union Choice c;
+    Rec r;
+
+    o.tag = 1;
+    o.i = 42;
+    o.bits = 9;
+    printf("outer %d %d %d %d\n", o.tag, o.i, (int)o.bits, (int)sizeof(struct Outer));
+
+    o.lo = 3;
+    o.hi = 4;
+    printf("nested %d\n", (int)o.lo + (int)o.hi);
+
+    c.all = 0;
+    c.c0 = 'A';
+    c.c1 = 'B';
+    printf("choice %c %c\n", c.c0, c.c1);
+
+    r.id = 7;
+    r.num = 11;
+    printf("rec %d %d\n", r.id, r.num);
+    r.obj.a = 5;
+    r.obj.b = 6;
+    printf("pair %d %d %d\n", r.obj.a, r.obj.b, r.obj.pair_sum());
+    return 0;
+}

@@ -70,6 +70,10 @@ pub trait ParseOps {
     int  parse_enum_def(int is_pub, int tag_required);
     int  parse_typedef(int is_pub);
     int  parse_field_def(void);
+    int  parse_record_body(int node, int reg);
+    int  parse_anon_member(void);
+    int  record_body_ahead(void);
+    int  register_field(int m);
     int  parse_trait(int is_pub);
     int  parse_impl(void);
     int  parse_use_list(int sindex);
@@ -113,6 +117,11 @@ pub struct Parser {
        the map; the driver re-reads both after a unit is parsed. */
     char ns_decl[160];
     char cur_func[160];
+    /* The record whose body is being read. Its fields land in
+       `structs[].fields[]`; when the body has no tag (`typedef struct { … }`),
+       this stays empty and the fields land in `pend_fields` instead. An
+       anonymous member promotes its own fields into this same table. */
+    char cur_record[160];
     /* Parse scratch the emitter reads through pointers (`ct_emit_bind_parse`). */
     int  nparams;
     struct Field *pend_fields;   /* storage owned by this unit */
@@ -630,12 +639,147 @@ impl ParseOps for Parser {
         return first;
     }
 
+    /* Does the current token open a body-less record member (`union { … };`)?
+       The lexer has no peek, so the state is saved, the next token is read and
+       everything is put back -- including the line bookkeeping, because the
+       node built afterwards takes its line from the cursor. */
+    int record_body_ahead(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
+        long snum;
+        char stext[MAX_TEXT];
+        (void)self;
+
+        if (self->lex->tok != T_ID) return 0;
+        if (strcmp(self->lex->toktext, "struct") != 0 && strcmp(self->lex->toktext, "union") != 0) return 0;
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        r = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0);
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        return r;
+    }
+
+    /* Register one field, flattening an anonymous member (C11 6.7.2.1p13): its
+       inner names join the enclosing record, so `o.i` and the vptr writers that
+       build `.name.__x_vptr` need no second table. Two levels of nesting are the
+       same walk, and a collision is what C would reject too. The row lands in
+       the tag's table, or in `pend_fields` while the body has no tag. */
+    int register_field(int m)
+    {
+        int c, i, si;
+        char msg[MAX_TEXT];
+        const char *nm;
+        (void)self;
+
+        if (self->arena->nodes[m].kind == N_FIELD && self->arena->nodes[m].aux == 2) {
+            for (c = self->arena->nodes[m].a; c >= 0; c = self->arena->nodes[c].next)
+                if (self->register_field(c) != 0) return -1;
+            return 0;
+        }
+        nm = self->arena->nodes[m].text2;
+        if (!nm[0]) return 0;                       /* a nameless padding bit-field */
+        if (self->cur_record[0]) {
+            si = self->sym->find_struct(self->cur_record);
+            if (si < 0) return 0;
+            for (i = 0; i < self->sym->structs[si].nfields; i++)
+                if (strcmp(self->sym->structs[si].fields[i].name, nm) == 0) {
+                    snprintf(msg, sizeof msg, "duplicate member '%s'", nm);
+                    return self->sup->fail_at(self->arena->nodes[m].line, msg);
+                }
+            if (self->sym->structs[si].nfields < MAX_FIELDS) {
+                snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].name, MAX_TEXT, "%s", nm);
+                snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].type, MAX_TEXT,
+                         "%s", self->arena->nodes[m].text);
+                snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].dims, MAX_TEXT,
+                         "%s", self->arena->nodes[m].text3);
+                self->sym->structs[si].nfields++;
+            }
+            return 0;
+        }
+        for (i = 0; i < self->npend; i++)
+            if (strcmp(self->pend_fields[i].name, nm) == 0) {
+                snprintf(msg, sizeof msg, "duplicate member '%s'", nm);
+                return self->sup->fail_at(self->arena->nodes[m].line, msg);
+            }
+        if (self->npend < MAX_FIELDS) {
+            snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", nm);
+            snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
+            snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
+            self->npend++;
+        }
+        return 0;
+    }
+
+    /* The body of a record, from `{` to `}`; the caller owns the node. `reg`
+       registers the rows as they are read -- an anonymous member's own body
+       passes 0, because its names are promoted once, by the enclosing body's
+       `register_field` walk. */
+    int parse_record_body(int node, int reg)
+    {
+        int m, tail;
+        (void)self;
+
+        if (self->sup->expect("{") != 0) return -1;
+        tail = -1;
+        while (self->lex->tok != T_EOF
+               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            m = self->parse_field_def();
+            if (m < 0) return -1;
+            if (reg && self->register_field(m) != 0) return -1;
+            if (tail < 0) self->arena->nodes[node].a = m;
+            else self->arena->nodes[tail].next = m;
+            tail = m;
+        }
+        if (self->sup->expect("}") != 0) return -1;
+        return 0;
+    }
+
+    /* `union { … };` as a member: the keyword, a nameless body and the closing
+       `;`. `text` keeps the keyword for emission and `a` the inner chain;
+       `aux = 2` marks the form (`aux = 1` is a bit-field). The body is read
+       with the *enclosing* `cur_record`, so its names promote into it. */
+    int parse_anon_member(void)
+    {
+        int m;
+        (void)self;
+
+        m = self->sup->new_node(N_FIELD);
+        if (m < 0) return -1;
+        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", self->lex->toktext);
+        self->arena->nodes[m].aux = 2;
+        self->sup->lex_next();
+        if (self->parse_record_body(m, 0) != 0) return -1;
+        if (self->arena->nodes[m].a < 0)
+            return self->sup->fail("an anonymous record needs a member");
+        if (self->lex->tok == T_ID)
+            return self->sup->fail("an anonymous record member cannot have a name; tag the record instead");
+        if (self->sup->expect(";") != 0) return -1;
+        return m;
+    }
+
     /* `<type> name[dims] [= …];` — or, when a `:` follows, a bit-field
        `<type> [name] : <width>;`. A bit-field reuses this node: `aux = 1` marks
        it and `a` holds the width expression, so a width of `(1 << 2)` or a macro
        name emits as written. The width never reaches `text3`, which stays the
        array-dimension slot the type checker and the vptr writer read. A leading
-       `:` means the field is nameless (padding). */
+       `:` means the field is nameless (padding). A `struct` / `union` followed
+       by `{` is an anonymous member instead (`aux = 2`, D-6). */
     int parse_field_def(void)
     {
         int m, w;
@@ -643,6 +787,7 @@ impl ParseOps for Parser {
         char name[MAX_TEXT];
         (void)self;
 
+        if (self->record_body_ahead()) return self->parse_anon_member();
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
         if (self->ex->fnptr_state) {
             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
@@ -692,7 +837,7 @@ impl ParseOps for Parser {
        no `use` clause (there is no vptr to append). */
     int parse_record_def(int is_union)
     {
-        int s, tail, m, struct_line, brace_line, brace_col, kind;
+        int s, struct_line, brace_line, brace_col, kind;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         (void)self;
@@ -730,41 +875,19 @@ impl ParseOps for Parser {
         /* the body's `{` is where L2 reports an unresolved `use` trait */
         brace_line = self->lex->tokline;
         brace_col = self->lex->tokstart - self->lex->lstart + 1;
-        if (self->sup->expect("{") != 0) return -1;
         s = self->sup->new_node(kind);
         if (s < 0) return -1;
         self->arena->nodes[s].line = struct_line;
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
-        tail = -1;
         self->npend = 0;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-            m = self->parse_field_def();
-            if (m < 0) return -1;
-            /* record the field type: receiver chains and nested vptr writes need it.
-               An untagged body (typedef struct { ... }) lands in the pending list,
-               which parse_typedef attaches to the alias. */
-            if (qname[0]) {
-                int si2 = self->sym->find_struct(qname);
-                if (si2 >= 0 && self->sym->structs[si2].nfields < MAX_FIELDS) {
-                    snprintf(self->sym->structs[si2].fields[self->sym->structs[si2].nfields].name, MAX_TEXT,
-                             "%s", self->arena->nodes[m].text2);
-                    snprintf(self->sym->structs[si2].fields[self->sym->structs[si2].nfields].type, MAX_TEXT,
-                             "%s", self->arena->nodes[m].text);
-                    snprintf(self->sym->structs[si2].fields[self->sym->structs[si2].nfields].dims, MAX_TEXT,
-                             "%s", self->arena->nodes[m].text3);
-                    self->sym->structs[si2].nfields++;
-                }
-            } else if (self->npend < MAX_FIELDS) {
-                snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", self->arena->nodes[m].text2);
-                snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
-                snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
-                self->npend++;
-            }
-            if (tail < 0) self->arena->nodes[s].a = m;
-            else self->arena->nodes[tail].next = m;
-            tail = m;
+        /* the fields of this body (and of any anonymous member inside it) are
+           registered under `cur_record`; an untagged body leaves it empty */
+        snprintf(self->cur_record, MAX_TEXT, "%s", qname);
+        if (self->parse_record_body(s, 1) != 0) {
+            self->cur_record[0] = 0;
+            return -1;
         }
-        if (self->sup->expect("}") != 0) return -1;
+        self->cur_record[0] = 0;
         if (is_union && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0)
             return self->sup->fail("a union cannot use a trait");
         if (!is_union && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {

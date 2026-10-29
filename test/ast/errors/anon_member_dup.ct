@@ -1,0 +1,12 @@
+/* batch 9: promoted names must be unique in the enclosing record, exactly as C
+   requires of the flattened struct. */
+struct Bad {
+    int i;
+    union {
+        int i;
+    };
+};
+
+int main(void) {
+    return 0;
+}

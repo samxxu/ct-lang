@@ -1,0 +1,12 @@
+/* batch 9: a member with an untagged record type (`union { … } u;`) has no C
+   name to give the field table, so it is refused; tag the record instead. */
+struct Bad {
+    union {
+        int i;
+        char c;
+    } u;
+};
+
+int main(void) {
+    return 0;
+}
