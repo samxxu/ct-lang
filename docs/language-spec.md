@@ -742,6 +742,32 @@ static const char *greeting(void) {
 - 范围外：`for (static int i = 0; …)` 不在子集内（`for` 的首句只认普通声明或表达式）；
   `static` 直接跟在 `case` / goto 标签之后仍按「声明不能跟在标签后」拒绝。
 
+#### 4.20 复合字面量（ct-ast）
+
+```c
+struct Point { int x; int y; };
+
+p = (struct Point){ 1, 2 };
+total = sum_point((struct Point){ 3, 4 });
+tail = (struct Point){ .y = 9, .x = 8 }.y;
+
+static struct Point make(int x, int y) {
+    return (struct Point){ x, y };
+}
+```
+
+- `(type){ … }` 是 C99 的复合字面量：一个**临时对象**。它可以用在赋值右侧、实参、`return`，
+  也可以直接接 `.field` / `[i]` 后缀。
+- 花括号里的内容按声明的初始化器处理：位置式、指定式（`.y = 9`）、嵌套花括号、字符串字面量都原样发射；
+  ct-ast 不折叠初始化器，是否常量由 C 判断。
+- 带 trait 的 struct 由编译器补 vptr 项：
+  `(struct Pair){ 10, 20 , .__named_vptr = &Pair_Named_vtable}`。
+- 类型必须是**对象类型**：`(struct P *){ … }` 报 `a compound literal needs an object type`。
+- 范围外：数组类型 `(int[]){ … }`（类型文法不读 `[]`，报 `unexpected token`）；
+  对复合字面量直接调 trait 方法（`((struct Pair){ … }).val()`）不支持——方法接收者的允许形态仍是
+  变量 / 元素 / 调用 / 字段链，先赋给变量再调用。
+- 存储期由 C 决定：函数内是自动存储期，文件作用域是静态存储期，ct-ast 不做区分。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1708,6 +1734,36 @@ static const char *greeting(void) {
 - Out of scope: `for (static int i = 0; …)` is not part of the subset (the `for` first clause takes a
   plain declaration or an expression), and `static` directly after a `case` / goto label is still
   refused as "a declaration cannot follow a label".
+
+#### 4.20 Compound literals (ct-ast)
+
+```c
+struct Point { int x; int y; };
+
+p = (struct Point){ 1, 2 };
+total = sum_point((struct Point){ 3, 4 });
+tail = (struct Point){ .y = 9, .x = 8 }.y;
+
+static struct Point make(int x, int y) {
+    return (struct Point){ x, y };
+}
+```
+
+- `(type){ … }` is a C99 compound literal: a **temporary object**. It may sit on the right-hand side of
+  an assignment, as an argument, in a `return`, and it takes a `.field` / `[i]` suffix directly.
+- The braces are handled exactly like a declaration initialiser: positional, designated (`.y = 9`),
+  nested braces and string literals all pass through; ct-ast never folds an initialiser, so whether it
+  is constant is the C compiler's call.
+- A struct that carries a trait gets its vptr item from the compiler:
+  `(struct Pair){ 10, 20 , .__named_vptr = &Pair_Named_vtable}`.
+- The type must be an **object type**: `(struct P *){ … }` reports
+  `a compound literal needs an object type`.
+- Out of scope: an array type (`(int[]){ … }` — the type grammar does not read `[]`, so it reports
+  `unexpected token`), and calling a trait method straight on a compound literal
+  (`((struct Pair){ … }).val()`) — the allowed receiver shapes stay variable / element / call / field
+  chain, so assign it to a variable first.
+- Storage duration is C's: automatic inside a function, static at file scope; ct-ast does not
+  distinguish them.
 
 ### 5. Naming contract
 
