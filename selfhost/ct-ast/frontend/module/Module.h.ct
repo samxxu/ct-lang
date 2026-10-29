@@ -49,6 +49,7 @@ import tool::diag::diag;
 #define N_GLOBAL  22
 #define N_ENUM    45
 #define N_ENUMVAL 46
+#define N_UNION   48
 
 namespace frontend::module;
 pub trait ModuleOps {
@@ -417,7 +418,8 @@ impl ModuleOps for Module {
                 if (self->arena->nodes[gn].d != 1) continue;
                 if (self->arena->nodes[gn].kind != N_STRUCT
                     && self->arena->nodes[gn].kind != N_TYPEDEF
-                    && self->arena->nodes[gn].kind != N_ENUM) continue;
+                    && self->arena->nodes[gn].kind != N_ENUM
+                    && self->arena->nodes[gn].kind != N_UNION) continue;
                 full = self->arena->nodes[gn].text2;
                 bare = full;
                 pl = strlen(self->units[dn].nsprefix);

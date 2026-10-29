@@ -1,0 +1,11 @@
+/* An exported union in a namespace (batch 6): the tag joins the header as
+   `union app_Value`, and a consumer reaches both the tag and its members by
+   bare name. */
+namespace app;
+
+pub union Value {
+    int i;
+    char c;
+};
+
+pub union Value value1;

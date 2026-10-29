@@ -1,0 +1,41 @@
+/* 31: unions (batch 6) - a tagged union, a `typedef union Tag { … } Alias;`,
+   an untagged typedef union, and one nested as a struct field. The tag is
+   usable with and without its `union` keyword, and `offsetof` reads the shared
+   offset like any other record. Anonymous members are not part of the subset. */
+#include <stdio.h>
+#include <stddef.h>
+
+union Value { int i; char c; long long ll; };
+
+typedef union Tagged { int i; char c; } Tagged;
+
+typedef union { int a[2]; long long ll; } Wide;
+
+struct Holder { int tag; union Value v; };
+
+int main(void)
+{
+    union Value v;
+    Value w;
+    Tagged t;
+    Wide x;
+    struct Holder h;
+    int o1;
+    int o2;
+
+    v.i = 7;
+    w.ll = 11;
+    t.c = 'x';
+    x.a[0] = 3;
+    x.a[1] = 4;
+    h.tag = 1;
+    h.v.i = 9;
+    o1 = (int)offsetof(union Value, c);
+    o2 = (int)offsetof(Tagged, c);
+
+    printf("union %d %d %d\n", (int)sizeof(union Value), (int)sizeof(Value), (int)sizeof(Wide));
+    printf("offset %d %d\n", o1, o2);
+    printf("member %d %d %d %d %d\n", v.i, (int)w.ll, (int)t.c,
+           x.a[0] + x.a[1], h.v.i);
+    return 0;
+}

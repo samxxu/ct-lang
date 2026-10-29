@@ -1,0 +1,4 @@
+/* batch 6: a second body for the same union tag is rejected. */
+union Value { int i; };
+
+union Value { char c; };

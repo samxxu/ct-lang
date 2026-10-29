@@ -54,6 +54,7 @@ import tool::diag::diag;
 #define N_RAW 31
 #define N_STRUCT 20
 #define N_TYPEDEF 21
+#define N_UNION 48
 #define T_EOF 0
 #define T_ID 1
 #define T_PP 5
@@ -64,7 +65,7 @@ pub trait ParseOps {
     int  parse_program(void);
     int  parse_func(int is_static, int is_pub, int is_extern);
     int  parse_params(void);
-    int  parse_struct_def(void);
+    int  parse_record_def(int is_union);
     int  parse_enum_def(int is_pub, int tag_required);
     int  parse_typedef(int is_pub);
     int  parse_field_def(void);
@@ -291,8 +292,12 @@ impl ParseDeclOps for Parser {
             if (n >= 0) self->sup->accept(";");
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "struct") == 0
                    && self->struct_def_ahead()) {
-            n = self->parse_struct_def();
+            n = self->parse_record_def(0);
             /* CT writes `struct X { ... }` bare (the old pipeline accepts both) */
+            if (n >= 0) self->sup->accept(";");
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "union") == 0
+                   && self->struct_def_ahead()) {
+            n = self->parse_record_def(1);
             if (n >= 0) self->sup->accept(";");
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
             self->sup->lex_next();
@@ -643,10 +648,14 @@ impl ParseOps for Parser {
         return m;
     }
 
-    /* `struct Name { ... }` (the trailing `;` is the caller's business). */
-    int parse_struct_def(void)
+    /* `struct Name { ... }` (the trailing `;` is the caller's business). A
+       `union` is the same record shape: the tags share the `structs` table so
+       field chains and `offsetof` keep resolving, and they differ only in the
+       emitted keyword, the type kind (`6`) and the fact that a union can carry
+       no `use` clause (there is no vptr to append). */
+    int parse_record_def(int is_union)
     {
-        int s, tail, m, struct_line, brace_line, brace_col;
+        int s, tail, m, struct_line, brace_line, brace_col, kind;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         (void)self;
@@ -654,13 +663,14 @@ impl ParseOps for Parser {
         struct_line = self->lex->tokline;
         brace_line = 0;
         brace_col = 1;
+        kind = is_union ? N_UNION : N_STRUCT;
         self->sup->lex_next();
         name[0] = 0;
         qname[0] = 0;
         if (self->lex->tok == T_ID) {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
-            if (self->sup->add_type(qname, 1) != 0) return -1;
+            if (self->sup->add_type(qname, is_union ? 6 : 1) != 0) return -1;
             if (self->sup->add_struct(qname) < 0) return -1;
             self->sup->lex_next();
         }
@@ -676,7 +686,7 @@ impl ParseOps for Parser {
             int ex = self->sym->find_struct(qname);
             if (ex >= 0 && self->sym->structs[ex].defined) {
                 char msg[MAX_TEXT];
-                snprintf(msg, sizeof msg, "duplicate struct '%s'", name);
+                snprintf(msg, sizeof msg, "duplicate %s '%s'", is_union ? "union" : "struct", name);
                 return tool::diag::ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
             }
         }
@@ -684,7 +694,7 @@ impl ParseOps for Parser {
         brace_line = self->lex->tokline;
         brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->expect("{") != 0) return -1;
-        s = self->sup->new_node(N_STRUCT);
+        s = self->sup->new_node(kind);
         if (s < 0) return -1;
         self->arena->nodes[s].line = struct_line;
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
@@ -718,7 +728,9 @@ impl ParseOps for Parser {
             tail = m;
         }
         if (self->sup->expect("}") != 0) return -1;
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
+        if (is_union && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0)
+            return self->sup->fail("a union cannot use a trait");
+        if (!is_union && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
             self->sup->lex_next();
             if (qname[0] && self->parse_use_list(self->sym->find_struct(qname)) != 0) return -1;
             /* every trait named in `use` must already be defined (the built-in
@@ -858,8 +870,9 @@ impl ParseOps for Parser {
             if (self->sup->add_type(qname, 2) != 0) return -1;
             return t;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "struct") == 0) {
-            t = self->parse_struct_def();
+        if (self->lex->tok == T_ID
+            && (strcmp(self->lex->toktext, "struct") == 0 || strcmp(self->lex->toktext, "union") == 0)) {
+            t = self->parse_record_def(strcmp(self->lex->toktext, "union") == 0);
             if (t < 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
             snprintf(name, sizeof name, "%s", self->lex->toktext);

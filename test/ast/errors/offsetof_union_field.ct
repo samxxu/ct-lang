@@ -1,0 +1,15 @@
+/* batch 6: `offsetof` on a union checks the member name the same way it does
+   for a struct. */
+#include <stddef.h>
+
+union Value {
+    int i;
+    char c;
+};
+
+int main(void) {
+    int off;
+
+    off = (int)offsetof(union Value, d);
+    return off;
+}

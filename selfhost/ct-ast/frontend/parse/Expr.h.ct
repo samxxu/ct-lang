@@ -187,6 +187,15 @@ impl ExprOps for Expr {
                     if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 5) != 0) return -1;
+                } else if (strcmp(self->lex->toktext, "union") == 0) {
+                    /* a union tag is mangled like a struct tag and joins the table
+                       under kind 6 */
+                    char sname[MAX_TEXT];
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID) return self->sup->fail("expected a union name");
+                    if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->type_append(out, cap, &n, sname) != 0) return -1;
+                    if (self->sup->add_type(sname, 6) != 0) return -1;
                 }
                 self->sup->lex_next();
                 continue;
@@ -204,6 +213,8 @@ impl ExprOps for Expr {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                 } else if (self->sym->type_kind[ti] == 5) {
                     if (self->type_append(out, cap, &n, "enum") != 0) return -1;
+                } else if (self->sym->type_kind[ti] == 6) {
+                    if (self->type_append(out, cap, &n, "union") != 0) return -1;
                 } else if (self->sym->type_kind[ti] == 3) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                     if (snprintf(iface, sizeof iface, "%s_iface", rname) >= (int)sizeof iface)
@@ -979,6 +990,7 @@ impl ExprOps for Expr {
             char fname[MAX_TEXT];
             char base[MAX_TEXT];
             char msg[MAX_TEXT];
+            char kw[16];
             char *bp;
             size_t bl;
             int si, fi, known;
@@ -992,7 +1004,13 @@ impl ExprOps for Expr {
                diagnostic points at the argument the user has to fix. */
             snprintf(base, sizeof base, "%s", tbuf);
             bp = base;
-            if (strncmp(bp, "struct ", 7) == 0) bp += 7;
+            snprintf(kw, sizeof kw, "%s", "struct");
+            if (strncmp(bp, "struct ", 7) == 0) {
+                bp += 7;
+            } else if (strncmp(bp, "union ", 6) == 0) {
+                snprintf(kw, sizeof kw, "%s", "union");
+                bp += 6;
+            }
             while (*bp == ' ') bp++;
             bl = strlen(bp);
             while (bl > 0 && (bp[bl - 1] == ' ' || bp[bl - 1] == '*')) {
@@ -1006,7 +1024,7 @@ impl ExprOps for Expr {
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
                 if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) known = 1;
             if (!known) {
-                if (snprintf(msg, sizeof msg, "struct '%s' has no field '%s'", bp, fname)
+                if (snprintf(msg, sizeof msg, "%s '%s' has no field '%s'", kw, bp, fname)
                     >= (int)sizeof msg)
                     return self->sup->fail("offsetof field name is too long");
                 return self->sup->fail(msg);

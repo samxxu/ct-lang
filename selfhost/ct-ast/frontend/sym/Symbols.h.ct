@@ -154,7 +154,7 @@ pub struct Symbols {
     int  nscope;
     char types[256][160];
     int  type_kind[256];        /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
-                                   5 = enum tag */
+                                   5 = enum tag, 6 = union tag */
     int  ntype;
     struct Trait traits[64];
     int  ntraits;

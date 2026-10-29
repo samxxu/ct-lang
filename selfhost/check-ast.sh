@@ -502,6 +502,22 @@ else
     bad "enum_export" "$(cat "$work/mne.err" "$work/mne.cc" "$work/mne.stdout" 2>/dev/null)"
 fi
 
+# ... and an exported union travels the same route: the header carries the tag
+# under its namespace prefix and a consumer reaches it by its bare name.
+rm -rf "$mod-nu"
+mkdir -p "$mod-nu"
+if "$work/ct-ast" build test/modules/union_export/main.ct -o "$mod-nu" \
+        >"$work/mnu.out" 2>"$work/mnu.err" \
+   && grep -q 'union app_Value {' "$mod-nu/kinds.h" \
+   && grep -q 'union app_Value v' "$mod-nu/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-nu"/*.c -o "$work/mnu.bin" 2>"$work/mnu.cc" \
+   && "$work/mnu.bin" >"$work/mnu.stdout" 2>&1 \
+   && cmp -s "$work/mnu.stdout" test/modules/union_export/expected.out; then
+    ok "union_export (an exported union reaches the header and imports by bare name)"
+else
+    bad "union_export" "$(cat "$work/mnu.err" "$work/mnu.cc" "$work/mnu.stdout" 2>/dev/null)"
+fi
+
 # ... and two namespaces exporting one bare type name make it ambiguous.
 if "$work/ct-ast" build test/modules/ambig_type/main.ct -o "$work/mod-bad" \
         >"$work/mat.out" 2>"$work/mat.err"; then
@@ -903,6 +919,25 @@ do
         ok "batch 5 ($cf)"
     else
         bad "batch 5: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 6: a union is a record without a vptr, so it gets its own three
+# diagnostics (a second body, a `use` clause, an `offsetof` on a bad member).
+for pair in \
+    "union_duplicate|duplicate union 'Value'" \
+    "union_use|a union cannot use a trait" \
+    "offsetof_union_field|union 'Value' has no field 'd'"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 6: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 6 ($cf)"
+    else
+        bad "batch 6: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

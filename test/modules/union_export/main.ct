@@ -1,0 +1,19 @@
+/* The consumer names the exported union type bare (`Value`) and reaches the
+   exported instance through its namespace (`app::value1`); the header carries
+   `union app_Value`. */
+#include <stdio.h>
+
+import app::kinds;
+
+int main(void)
+{
+    Value v;
+
+    v.i = 4;
+    printf("%d %d\n", v.i, (int)app::value1.i);
+    app::value1.i = 6;
+    printf("%d\n", (int)app::value1.i);
+    v.c = 'a';
+    printf("%d\n", (int)v.c);
+    return 0;
+}

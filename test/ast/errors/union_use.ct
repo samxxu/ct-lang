@@ -1,0 +1,4 @@
+/* batch 6: a union has no vptr slot, so it cannot take a `use` clause. */
+trait Greeter { void greet(); }
+
+union Value { int i; } use Greeter;
