@@ -69,6 +69,9 @@
 # batch 9 adds anonymous struct / union members: test/ast/34_anon_member plus
 # the three promotion diagnostics.
 #
+# batch 10 adds `static` locals: test/ast/35_static_local plus the `own` and
+# missing-declaration diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1008,6 +1011,24 @@ do
         ok "batch 9 ($cf)"
     else
         bad "batch 9: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 10: a static local outlives its scope, so it cannot be `own`, and the
+# keyword has to introduce a declaration.
+for pair in \
+    "static_own|a static local cannot be 'own'" \
+    "static_no_decl|expected a declaration after 'static'"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 10: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 10 ($cf)"
+    else
+        bad "batch 10: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

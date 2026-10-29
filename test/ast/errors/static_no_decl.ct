@@ -1,0 +1,6 @@
+/* batch 10: `static` must introduce a declaration, or the emitted `static;`
+   would be rejected by the C compiler with a far worse message. */
+int main(void) {
+    static;
+    return 0;
+}

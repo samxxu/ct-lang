@@ -1,0 +1,10 @@
+/* batch 10: a static object outlives the scope that names it, so it cannot be
+   an `own` allocation (AutoDrop would release it at the wrong time). */
+struct Node {
+    int v;
+};
+
+int main(void) {
+    static own struct Node *p = malloc(sizeof(struct Node));
+    return 0;
+}

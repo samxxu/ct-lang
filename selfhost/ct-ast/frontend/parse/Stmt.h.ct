@@ -89,6 +89,10 @@ pub struct Stmt {
        (D-7). The body has its own label grammar, so `parse_block` is not used.
        g_stmt is static, so this starts at zero. */
     int switch_depth;
+    /* Non-zero while `parse_decl_node` reads a `static` local: each N_DECL it
+       builds is marked (`aux = 1`) and kept out of the leak analysis, since a
+       static object outlives every scope that names it. */
+    int static_decl;
     /* C labels are function-scoped, so both tables are reset at every function
        (or method) body: a duplicate is caught at the second spelling, and a
        `goto` whose label never shows up is reported when the body ends. The
@@ -488,6 +492,22 @@ impl StmtOps for Stmt {
             if (self->sup->mark_owned(s, own_line) != 0) return -1;
             return s;
         }
+        /* `static <type> name …;` -- a function-local object with static storage
+           duration. The declaration itself is the ordinary one; only the
+           keyword and the leak bookkeeping differ (a static object is not the
+           scope's to release, and `own` would mean the opposite of static). */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
+            self->sup->lex_next();
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
+                return self->sup->fail("a static local cannot be 'own'");
+            if (!self->is_decl_start()) return self->sup->fail("expected a declaration after 'static'");
+            self->static_decl = 1;
+            s = self->parse_decl_node();
+            self->static_decl = 0;
+            if (s < 0) return -1;
+            if (self->sup->expect(";") != 0) return -1;
+            return s;
+        }
         /* `name:` -- a label opens no scope and declares nothing, so this sits
            after every keyword branch and before the declaration test; the
            lookahead keeps a qualified `A::f()` on the expression path (D-2). */
@@ -597,7 +617,8 @@ impl StmtOps for Stmt {
                     && (strcmp(self->lex->toktext, "case") == 0
                         || strcmp(self->lex->toktext, "default") == 0))
                && !self->label_ahead()) {
-            if (self->is_decl_start())
+            if (self->is_decl_start()
+                || (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0))
                 return self->sup->fail("a declaration cannot follow a case label; wrap it in a block");
             c = self->parse_stmt();
             if (c < 0) return -1;
@@ -713,7 +734,8 @@ impl StmtOps for Stmt {
                     && (strcmp(self->lex->toktext, "case") == 0
                         || strcmp(self->lex->toktext, "default") == 0))
                && !(head >= 0 && self->label_ahead())) {
-            if (self->is_decl_start())
+            if (self->is_decl_start()
+                || (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0))
                 return self->sup->fail("a declaration cannot follow a label; wrap it in a block");
             c = self->parse_stmt();
             if (c < 0) return -1;
@@ -831,6 +853,7 @@ impl StmtOps for Stmt {
             }
             n = self->sup->new_node(N_DECL);
             if (n < 0) return -1;
+            if (self->static_decl) self->arena->nodes[n].aux = 1;
             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
             if (self->sup->declare_var(name, typebuf) != 0) return -1;
@@ -871,7 +894,9 @@ impl StmtOps for Stmt {
                     self->arena->nodes[n].a = e;
                 }
             }
-            if (self->mem->leak_active && self->sup->leak_decl(n) != 0) return -1;
+            /* a static local is deliberately not tracked: it outlives the scope,
+               so neither a leak warning nor AutoDrop applies (D-4) */
+            if (!self->static_decl && self->mem->leak_active && self->sup->leak_decl(n) != 0) return -1;
             if (head < 0) head = n;
             else self->arena->nodes[tail].next = n;
             tail = n;

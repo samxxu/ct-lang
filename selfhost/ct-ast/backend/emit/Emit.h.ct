@@ -1284,6 +1284,9 @@ impl EmitOps for Emitter {
             return self->emit_expr(self->arena->nodes[n].a);
         }
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_FIELD) {
+            /* `aux == 1` marks a function-local with static storage duration */
+            if (self->arena->nodes[n].kind == N_DECL && self->arena->nodes[n].aux == 1)
+                fputs("static ", self->out);
             if (self->emit_type_name_dims(self->arena->nodes[n].text, self->arena->nodes[n].text2,
                                           self->arena->nodes[n].text3) != 0) return -1;
             if (self->arena->nodes[n].kind == N_DECL) {

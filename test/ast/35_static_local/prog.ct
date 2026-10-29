@@ -1,0 +1,78 @@
+/* 35: static locals (batch 10) - a function-local `static` keeps its value
+   across calls, one declared without an initialiser starts zeroed, arrays and
+   strings keep their initialisers, and a struct that carries a trait gets its
+   vptr through a constant initialiser. */
+#include <stdio.h>
+
+trait Named {
+    int val();
+}
+
+struct Pair {
+    int a;
+    int b;
+} use Named;
+
+impl Named for Pair {
+    int val() { return self->a + self->b; }
+}
+
+static int next_id(void) {
+    static int n = 0;
+    n = n + 1;
+    return n;
+}
+
+static int block_once(void) {
+    int total;
+
+    total = 0;
+    {
+        static int calls;
+        calls = calls + 1;
+        total = calls;
+    }
+    return total;
+}
+
+static int table_sum(int i) {
+    static int tbl[3] = { 1, 2, 3 };
+    return tbl[i];
+}
+
+static const char *greeting(void) {
+    static const char *msg = "hi";
+    return msg;
+}
+
+static int pair_val(void) {
+    static struct Pair p;
+
+    p.a = 3;
+    p.b = 4;
+    return p.val();
+}
+
+int main(void) {
+    int first;
+    int second;
+    int one;
+    int two;
+
+    next_id();
+    next_id();
+    first = next_id();
+    second = next_id();
+    printf("ids %d %d\n", first, second);
+
+    one = block_once();
+    two = block_once();
+    printf("block %d %d\n", one, two);
+    printf("table %d %d\n", table_sum(0), table_sum(2));
+    printf("greet %s\n", greeting());
+
+    one = pair_val();
+    two = pair_val();
+    printf("pair %d %d\n", one, two);
+    return 0;
+}
