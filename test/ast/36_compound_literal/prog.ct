@@ -1,0 +1,54 @@
+/* 36: compound literals (batch 11) - `(type){ … }` is a temporary value: it
+   can be assigned, passed as a struct argument, returned, read through a member
+   suffix, and built with designated initialisers. A struct that carries a trait
+   gets its vptr appended by the compiler, the same way a declaration does. */
+#include <stdio.h>
+
+trait Named {
+    int val();
+}
+
+struct Pair {
+    int a;
+    int b;
+} use Named;
+
+impl Named for Pair {
+    int val() { return self->a + self->b; }
+}
+
+struct Point {
+    int x;
+    int y;
+};
+
+static int sum_point(struct Point p) {
+    return p.x + p.y;
+}
+
+static struct Point make(int x, int y) {
+    return (struct Point){ x, y };
+}
+
+int main(void) {
+    struct Point a;
+    struct Point b;
+    struct Pair q;
+
+    a = (struct Point){ 1, 2 };
+    printf("assign %d %d\n", a.x, a.y);
+
+    printf("arg %d\n", sum_point((struct Point){ 3, 4 }));
+    printf("member %d\n", (struct Point){ 5, 6 }.y);
+
+    b = make(7, 8);
+    printf("return %d %d\n", b.x, b.y);
+
+    printf("designated %d\n", ((struct Point){ .y = 9, .x = 8 }).x);
+
+    q = (struct Pair){ 10, 20 };
+    printf("trait %d\n", q.val());
+
+    printf("scalar %d\n", (int){ 42 });
+    return 0;
+}

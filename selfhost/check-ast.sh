@@ -72,6 +72,9 @@
 # batch 10 adds `static` locals: test/ast/35_static_local plus the `own` and
 # missing-declaration diagnostics.
 #
+# batch 11 adds compound literals: test/ast/36_compound_literal plus the
+# pointer-type diagnostic.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1029,6 +1032,22 @@ do
         ok "batch 10 ($cf)"
     else
         bad "batch 10: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 11: a compound literal builds an object, so a pointer type is refused.
+for pair in \
+    "compound_pointer|a compound literal needs an object type"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 11: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 11 ($cf)"
+    else
+        bad "batch 11: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

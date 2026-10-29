@@ -60,6 +60,7 @@ pub trait SupportOps {
     int  leak_return(int ret, int conditional, int line);
     int  leak_delete(int e);
     int  skip_body(void);
+    int  init_raw(char *out, int cap);
     int  skip_after_error(void);
     const char *last_error(void);
 }
@@ -371,6 +372,62 @@ impl SupportOps for ParseSupport {
             self->lex_next();
         }
         return self->fail("unterminated body");
+    }
+
+    /* Capture a `{ ... }` initializer verbatim on behalf of whoever is reading
+       one -- a declaration (the statement layer) or a compound literal (the
+       expression layer). The cursor sits on the `{` token, so `pos` already
+       points behind it; the scan works on the source characters because braces
+       and commas are not tokens the caller wants. The captured text includes
+       both braces and the caller appends the vptr items. */
+    int init_raw(char *out, int cap)
+    {
+        int depth, n, c;
+        (void)self;
+
+        n = 0;
+        if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+        out[n] = '{';
+        n++;
+        depth = 1;
+        while (self->lex->src[self->lex->pos] && depth > 0) {
+            c = (unsigned char)self->lex->src[self->lex->pos];
+            if (c == '"') {
+                if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                out[n] = '"';
+                n++;
+                self->lex->pos++;
+                while (self->lex->src[self->lex->pos] && self->lex->src[self->lex->pos] != '"') {
+                    if (self->lex->src[self->lex->pos] == '\\' && self->lex->src[self->lex->pos + 1]) {
+                        if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                        out[n] = self->lex->src[self->lex->pos];
+                        n++;
+                        self->lex->pos++;
+                    }
+                    if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                    out[n] = self->lex->src[self->lex->pos];
+                    n++;
+                    self->lex->pos++;
+                }
+                if (self->lex->src[self->lex->pos] == '"') {
+                    if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+                    out[n] = '"';
+                    n++;
+                    self->lex->pos++;
+                }
+                continue;
+            }
+            if (c == '{') depth++;
+            else if (c == '}') depth--;
+            if (n + 1 >= (int)cap) return self->fail("initializer is too long");
+            out[n] = (char)c;
+            n++;
+            self->lex->pos++;
+        }
+        if (depth != 0) return self->fail("unterminated initializer");
+        out[n] = 0;
+        self->lex_next();
+        return 0;
     }
 
     int skip_after_error(void)

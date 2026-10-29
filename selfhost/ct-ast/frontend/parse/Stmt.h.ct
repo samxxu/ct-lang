@@ -65,7 +65,6 @@ pub trait StmtOps {
     int  parse_branch(void);
     int  parse_decl_node(void);
     int  parse_expr_stmt_node(void);
-    int  parse_init_raw(char *out, int cap);
     int  parse_switch_body(void);
     int  parse_label(void);
     int  parse_case_value(void);
@@ -119,57 +118,6 @@ impl StmtOps for Stmt {
         if (self->ex->is_type_word(self->lex->toktext)) return 1;
         if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
         return self->sym->find_type(rn) >= 0;
-    }
-
-    /* Capture a `{ ... }` initializer verbatim; the caller appends vptr items. */
-    int parse_init_raw(char *out, int cap)
-    {
-        int depth, n, c;
-        (void)self;
-
-        n = 0;
-        if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-        out[n] = '{';
-        n++;
-        depth = 1;
-        while (self->lex->src[self->lex->pos] && depth > 0) {
-            c = (unsigned char)self->lex->src[self->lex->pos];
-            if (c == '"') {
-                if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                out[n] = '"';
-                n++;
-                self->lex->pos++;
-                while (self->lex->src[self->lex->pos] && self->lex->src[self->lex->pos] != '"') {
-                    if (self->lex->src[self->lex->pos] == '\\' && self->lex->src[self->lex->pos + 1]) {
-                        if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                        out[n] = self->lex->src[self->lex->pos];
-                        n++;
-                        self->lex->pos++;
-                    }
-                    if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                    out[n] = self->lex->src[self->lex->pos];
-                    n++;
-                    self->lex->pos++;
-                }
-                if (self->lex->src[self->lex->pos] == '"') {
-                    if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-                    out[n] = '"';
-                    n++;
-                    self->lex->pos++;
-                }
-                continue;
-            }
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
-            if (n + 1 >= (int)cap) return self->sup->fail("initializer is too long");
-            out[n] = (char)c;
-            n++;
-            self->lex->pos++;
-        }
-        if (depth != 0) return self->sup->fail("unterminated initializer");
-        out[n] = 0;
-        self->sup->lex_next();
-        return 0;
     }
 
     int parse_block(void)
@@ -873,7 +821,7 @@ impl StmtOps for Stmt {
                     char fixed[MAX_TEXT];
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
-                    if (self->parse_init_raw(raw, sizeof raw) != 0) return -1;
+                    if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->sup->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
                     snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {

@@ -501,7 +501,7 @@ impl ParseOps for Parser {
                     char fixed[MAX_TEXT];
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
-                    if (self->st->parse_init_raw(raw, sizeof raw) != 0) return -1;
+                    if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->sup->rewrite_init_text(ret, raw, fixed, sizeof fixed) != 0) return -1;
                     snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
                 } else {

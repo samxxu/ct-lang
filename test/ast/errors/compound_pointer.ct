@@ -1,0 +1,11 @@
+/* batch 11: a pointer type has no object to build, so `(struct P *){ … }` is
+   refused instead of emitting C that only the C compiler rejects. */
+struct P {
+    int x;
+};
+
+int main(void) {
+    struct P *p;
+    p = (struct P *){ 1 };
+    return 0;
+}

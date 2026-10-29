@@ -32,6 +32,7 @@ import runtime::arena::Arena;
 #define N_CAST   35
 #define N_SIZEOF 36
 #define N_OFFSETOF 47
+#define N_COMPOUND 51
 
 namespace frontend::type;
 pub trait TypeOps {
@@ -214,7 +215,9 @@ impl TypeOps for TypeCheck {
                          (self->arena->nodes[n].aux & 2) ? " *" : "") >= cap) return -1;
             return 0;
         }
-        if (self->arena->nodes[n].kind == N_CAST) {
+        if (self->arena->nodes[n].kind == N_CAST || self->arena->nodes[n].kind == N_COMPOUND) {
+            /* a compound literal has the type it names, so the rest of the
+               inference (member access, assignment, arguments) is unchanged */
             if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text) >= cap) return -1;
             return 0;
         }

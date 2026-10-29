@@ -64,6 +64,7 @@ import runtime::arena::Arena;
 #define N_TERN 37
 #define N_UNARY 17
 #define N_VAR 10
+#define N_COMPOUND 51
 #define P_DEC 2
 #define P_INC 1
 #define T_ID 1
@@ -125,6 +126,12 @@ pub struct Expr {
        (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
        emitted verbatim instead of being rejected. */
     int  fnval_ok;
+    /* A compound literal is parsed where a cast would be (`(type){ … }`), but a
+       postfix suffix still belongs to it (`(struct P){1,2}.y`). The cast branch
+       leaves the finished node here and calls `parse_postfix`, which consumes
+       the seed instead of parsing another primary. -1 = none; `ct_expr_bind`
+       sets that up, since the instance is static. */
+    int  postfix_seed;
 } use ExprOps;
 
 impl ExprOps for Expr {
@@ -772,6 +779,27 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
+            /* `(type){ … }` is a compound literal: the braces are captured like
+               a declaration initialiser, and the emitter adds the vptr items a
+               trait-carrying struct needs. A postfix suffix still applies, so
+               the node rides through `postfix_seed` instead of returning here. */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                char raw[MAX_TEXT];
+                int rn, cn;
+                size_t tl = strlen(tbuf);
+                if (tl > 0 && tbuf[tl - 1] == '*')
+                    return self->sup->fail("a compound literal needs an object type");
+                rn = self->sup->new_node(N_RAW);
+                if (rn < 0) return -1;
+                if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                snprintf(self->arena->nodes[rn].text, MAX_TEXT, "%s", raw);
+                cn = self->sup->new_node(N_COMPOUND);
+                if (cn < 0) return -1;
+                snprintf(self->arena->nodes[cn].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[cn].a = rn;
+                self->postfix_seed = cn;
+                return self->parse_postfix();
+            }
             e = self->parse_unary();
             if (e < 0) return -1;
             n = self->sup->new_node(N_CAST);
@@ -827,8 +855,12 @@ impl ExprOps for Expr {
         char trname[MAX_TEXT];
         (void)self;
 
-        n = self->parse_primary();
-        if (n < 0) return -1;
+        n = self->postfix_seed;
+        self->postfix_seed = -1;
+        if (n < 0) {
+            n = self->parse_primary();
+            if (n < 0) return -1;
+        }
         for (;;) {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
                 self->sup->lex_next();
@@ -1379,6 +1411,7 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.cur_func = (char *)cur_func;
     g_expr.calls = (struct Call *)calls;
     g_expr.ncalls = (int *)ncalls;
+    g_expr.postfix_seed = -1;
 }
 
 pub struct Expr *expr_get(void);
