@@ -1202,9 +1202,14 @@ impl EmitOps for Emitter {
                 fputs("default:", self->out);
             } else {
                 /* the label is whatever the constant expression printed: a
-                   literal, an enum member's C name, or a folded-by-C form */
+                   literal, an enum member's C name, or a folded-by-C form.
+                   `c >= 0` makes it a range (`case 1 ... 5:`). */
                 fputs("case ", self->out);
                 if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+                if (self->arena->nodes[n].c >= 0) {
+                    fputs(" ... ", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].c) != 0) return -1;
+                }
                 fputs(":", self->out);
             }
             fputs("\n", self->out);

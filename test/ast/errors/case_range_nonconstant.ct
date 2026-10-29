@@ -1,0 +1,13 @@
+/* batch 16: the high end of a range follows the same rule as a single value --
+   it has to be an integer constant expression, so a variable in it is refused. */
+int main(void) {
+    int k;
+
+    k = 1;
+    switch (k) {
+    case 1 ... (k + 2):
+        return 1;
+    default:
+        return 0;
+    }
+}

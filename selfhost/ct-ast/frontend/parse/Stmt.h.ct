@@ -89,6 +89,9 @@ pub struct Stmt {
        (D-7). The body has its own label grammar, so `parse_block` is not used.
        g_stmt is static, so this starts at zero. */
     int switch_depth;
+    /* The high end of `case 1 ... 5:` (`-1` when the label is a single value).
+       `parse_case_value` fills it and `parse_label` moves it onto the node. */
+    int case_hi;
     /* Non-zero while `parse_decl_node` reads a `static` local: each N_DECL it
        builds is marked (`aux = 1`) and kept out of the leak analysis, since a
        static object outlives every scope that names it. */
@@ -581,6 +584,7 @@ impl StmtOps for Stmt {
             val = self->parse_case_value();
             if (val < 0) return -1;
             self->arena->nodes[s].b = val;
+            self->arena->nodes[s].c = self->case_hi;
         }
         if (self->sup->expect(":") != 0) return -1;
         head = -1;
@@ -614,14 +618,25 @@ impl StmtOps for Stmt {
        as in batch 4, a global the C compiler judges. */
     int parse_case_value(void)
     {
-        int e;
+        int e, hi;
         (void)self;
 
+        self->case_hi = -1;
         e = self->ex->parse_expr();
         if (e < 0) return -1;
         if (!self->ex->const_ok(e) && self->arena->nodes[e].kind != N_VAR
             && self->arena->nodes[e].kind != N_RAW)
             return self->sup->fail("a case label must be an integer constant");
+        /* `case <low> ... <high>:` -- a GNU / C23 range. Both ends follow the
+           same constant rule, and the high end waits in `case_hi`. */
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0)) return e;
+        self->sup->lex_next();
+        hi = self->ex->parse_expr();
+        if (hi < 0) return -1;
+        if (!self->ex->const_ok(hi) && self->arena->nodes[hi].kind != N_VAR
+            && self->arena->nodes[hi].kind != N_RAW)
+            return self->sup->fail("a case label must be an integer constant");
+        self->case_hi = hi;
         return e;
     }
 

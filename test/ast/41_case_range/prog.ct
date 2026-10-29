@@ -1,0 +1,49 @@
+/* 41: `case` ranges (batch 16) - `case <low> ... <high>:` is a GNU / C23
+   extension the C compiler accepts; both ends are integer constant expressions,
+   and a range may sit beside ordinary labels in the same switch. */
+#include <stdio.h>
+
+static int grade(int score) {
+    switch (score) {
+    case 0 ... 59:
+        return 1;
+    case 60 ... 89:
+        return 2;
+    case 90 ... 100:
+        return 3;
+    default:
+        return 0;
+    }
+}
+
+static int letter(char c) {
+    switch (c) {
+    case 'a' ... 'z':
+        return 1;
+    case 'A' ... 'Z':
+        return 2;
+    default:
+        return 0;
+    }
+}
+
+static int mixed(int k) {
+    switch (k) {
+    case 1:
+        return 10;
+    case 2 ... 4:
+        return 20;
+    case 5:
+        return 30;
+    default:
+        return 0;
+    }
+}
+
+int main(void) {
+    printf("grade %d %d %d %d\n", grade(0), grade(59), grade(75), grade(100));
+    printf("grade %d\n", grade(101));
+    printf("letter %d %d %d\n", letter('q'), letter('Q'), letter('5'));
+    printf("mixed %d %d %d %d\n", mixed(1), mixed(3), mixed(5), mixed(9));
+    return 0;
+}

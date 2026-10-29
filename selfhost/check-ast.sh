@@ -87,6 +87,9 @@
 # batch 15 adds floating-point literals: test/ast/40_float_literal plus the
 # case-label diagnostic that now also covers floats.
 #
+# batch 16 adds `case` ranges: test/ast/41_case_range plus the constant check
+# that now covers both ends of a range.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1110,6 +1113,23 @@ do
         ok "batch 15 ($cf)"
     else
         bad "batch 15: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 16: a case range checks both ends, so a variable in the high end is
+# refused exactly like one in a single value.
+for pair in \
+    "case_range_nonconstant|a case label must be an integer constant"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 16: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 16 ($cf)"
+    else
+        bad "batch 16: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 
