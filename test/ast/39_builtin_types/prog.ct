@@ -1,0 +1,47 @@
+/* 39: built-in type words and `inline` (batch 14) - the stdint / stddef /
+   stdbool spellings, the `volatile` and `restrict` qualifiers and `inline` in
+   both orders are pass-through declarations, so a program written against those
+   headers compiles here the same way L0 / L2 accept it. */
+#include <stdio.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+static volatile int ticks;
+
+static inline int twice(int v) { return v + v; }
+
+inline static int thrice(int v) { return v + v + v; }
+
+static int first(int *restrict p, int n) { return p[0] + n; }
+
+static bool positive(int32_t v) { return v > 0; }
+
+static uint8_t low(uint32_t v) { return (uint8_t)v; }
+
+int main(void) {
+    int v;
+    size_t sz;
+    ssize_t ssz;
+    ptrdiff_t off;
+    wchar_t wc;
+    volatile int local;
+    _Bool flag;
+
+    v = 4;
+    ticks = 2;
+    local = 1;
+    flag = 1;
+    sz = sizeof(int);
+    ssz = -1;
+    off = 2;
+    wc = 'w';
+
+    printf("inline %d %d\n", twice(2), thrice(3));
+    printf("restrict %d\n", first(&v, 1));
+    printf("bool %d %d\n", (int)positive(7), (int)positive(-1));
+    printf("low %d\n", (int)low(0x1FF));
+    printf("sizes %d %d %d %d\n", (int)sz, (int)ssz, (int)off, (int)wc);
+    printf("flags %d %d %d\n", ticks, local, (int)flag);
+    return 0;
+}

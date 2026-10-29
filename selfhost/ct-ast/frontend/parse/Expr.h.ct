@@ -136,17 +136,29 @@ pub struct Expr {
 } use ExprOps;
 
 impl ExprOps for Expr {
+    /* The type keywords. L0 / L1 / L2 have always accepted the `stdint` /
+       `stddef` / `stdbool` spellings and the qualifiers, so ct-ast lists the same
+       set (`restrict` included): a program written against those headers is a
+       pass-through declaration here, and the C compiler still owns the meaning.
+       `DIR` is ct-ast's own addition (the directory handle `opendir` returns). */
     int is_type_word(const char *w)
     {
         (void)self;
-        return strcmp(w, "int") == 0 || strcmp(w, "void") == 0
-            || strcmp(w, "char") == 0 || strcmp(w, "unsigned") == 0
-            || strcmp(w, "signed") == 0 || strcmp(w, "long") == 0
-            || strcmp(w, "short") == 0 || strcmp(w, "float") == 0
-            || strcmp(w, "double") == 0 || strcmp(w, "const") == 0
-            || strcmp(w, "struct") == 0 || strcmp(w, "enum") == 0
-            || strcmp(w, "union") == 0 || strcmp(w, "size_t") == 0
-            || strcmp(w, "va_list") == 0
+        return strcmp(w, "void") == 0 || strcmp(w, "char") == 0
+            || strcmp(w, "short") == 0 || strcmp(w, "int") == 0
+            || strcmp(w, "long") == 0 || strcmp(w, "float") == 0
+            || strcmp(w, "double") == 0 || strcmp(w, "signed") == 0
+            || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0
+            || strcmp(w, "bool") == 0 || strcmp(w, "const") == 0
+            || strcmp(w, "volatile") == 0 || strcmp(w, "restrict") == 0
+            || strcmp(w, "struct") == 0 || strcmp(w, "union") == 0
+            || strcmp(w, "enum") == 0 || strcmp(w, "size_t") == 0
+            || strcmp(w, "ssize_t") == 0 || strcmp(w, "ptrdiff_t") == 0
+            || strcmp(w, "wchar_t") == 0 || strcmp(w, "va_list") == 0
+            || strcmp(w, "int8_t") == 0 || strcmp(w, "int16_t") == 0
+            || strcmp(w, "int32_t") == 0 || strcmp(w, "int64_t") == 0
+            || strcmp(w, "uint8_t") == 0 || strcmp(w, "uint16_t") == 0
+            || strcmp(w, "uint32_t") == 0 || strcmp(w, "uint64_t") == 0
             || strcmp(w, "FILE") == 0 || strcmp(w, "DIR") == 0;
     }
 

@@ -1,0 +1,7 @@
+/* batch 14: `inline` is a function specifier; applying it to a variable would
+   silently emit a plain global, so it is refused. */
+inline int value = 1;
+
+int main(void) {
+    return 0;
+}

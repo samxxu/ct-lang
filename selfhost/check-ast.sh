@@ -81,6 +81,9 @@
 # batch 13 adds variadic functions: test/ast/38_variadic plus the two rejected
 # shapes (no named parameter, a variadic impl method).
 #
+# batch 14 aligns the built-in type words with L2 and accepts `inline`:
+# test/ast/39_builtin_types plus the `inline` diagnostic.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1072,6 +1075,22 @@ do
         ok "batch 13 ($cf)"
     else
         bad "batch 13: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 14: `inline` is a function specifier, so a variable behind it is refused.
+for pair in \
+    "inline_var|'inline' can only declare a function"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 14: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 14 ($cf)"
+    else
+        bad "batch 14: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

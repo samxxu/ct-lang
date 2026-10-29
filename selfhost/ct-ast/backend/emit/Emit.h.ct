@@ -984,6 +984,8 @@ impl EmitOps for Emitter {
 
         if (self->arena->nodes[n].kind == N_FUNC) {
             if (self->arena->nodes[n].aux) fputs("static ", self->out);
+            /* `num` carries the `inline` specifier (0 = plain function) */
+            if (self->arena->nodes[n].num) fputs("inline ", self->out);
             fprintf(self->out, "%s %s(", self->arena->nodes[n].text, self->arena->nodes[n].text2);
             c = self->arena->nodes[n].a;
             if (c == 0) {
