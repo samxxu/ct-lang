@@ -380,6 +380,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - 闭合 `}` 与 `return` 必须位于**行首**；行内形式（`b->n = 1; }`、`if (p) return 0;`）编译期报错，
   不静默跳过——逐行注入无法把释放语句安全地放进条件分支。
 - `goto` 跳出声明作用域不会触发释放。
+- `static` 局部变量不能是 `own`（`a static local cannot be 'own'`）：静态对象的生命期不归作用域管。
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
   优于错放（重复释放 / 释放借用对象）。
 
@@ -713,6 +714,33 @@ struct Outer {
   空的 `union { };` 报 `an anonymous record needs a member`。
 - 匿名成员是 C11 语法：生成物照原样发射嵌套记录，用 C99 编译时需要编译器把它当扩展接受
   （`cc -std=c99` 下 clang / gcc 都不告警）。
+
+#### 4.19 `static` 局部变量（ct-ast）
+
+```c
+static int next_id(void) {
+    static int n = 0;
+    n = n + 1;
+    return n;
+}
+
+static const char *greeting(void) {
+    static const char *msg = "hi";
+    return msg;
+}
+```
+
+- 函数体内可以写 `static <type> name[dims] [= init] (, name …)*;`：对象具有静态存储期，
+  跨调用保持取值，未写初始化器时按 C 规则零初始化。生成物原样发射 `static` 前缀。
+- 初始化器不做折叠：是否常量由 C 编译期判断（`initializer element is not constant`）。
+- 声明本身与普通局部变量相同（`declare_var` 照常登记），因此成员访问、数组下标、方法调用
+  的类型推断都不变；带 trait 的 struct 仍由编译器补 vptr 初始化器
+  （`static struct Pair p = { .__named_vptr = &Pair_Named_vtable };`，常量地址，合法）。
+- 静态对象不归作用域管，因此：`static own …` 报 `a static local cannot be 'own'`；
+  static 声明**不**进入泄漏分析，`static T *p = malloc(...)` 这种刻意的单例不会被报泄漏。
+- `static` 后面必须是声明：`static;` 报 `expected a declaration after 'static'`。
+- 范围外：`for (static int i = 0; …)` 不在子集内（`for` 的首句只认普通声明或表达式）；
+  `static` 直接跟在 `case` / goto 标签之后仍按「声明不能跟在标签后」拒绝。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1253,6 +1281,8 @@ Constraints and limits:
   `if (p) return 0;`) are a compile-time error rather than a silent skip — a line-oriented injector
   cannot place the release inside a conditional.
 - `goto` out of the declaring scope does not release.
+- A `static` local cannot be `own` (`a static local cannot be 'own'`): a static object's lifetime is
+  not the scope's to end.
 - Escape detection is **conservative**: a standalone mention on the right-hand side of an assignment
   or on a `return` line cancels auto-drop, because a missed release (a leak) beats a wrong one
   (double free / freeing a borrow).
@@ -1646,6 +1676,38 @@ struct Outer {
 - Anonymous members are C11 syntax: the output emits the nested record as written, so compiling it
   under `-std=c99` relies on the C compiler accepting the form as an extension (both clang and gcc
   do so without a warning).
+
+#### 4.19 `static` locals (ct-ast)
+
+```c
+static int next_id(void) {
+    static int n = 0;
+    n = n + 1;
+    return n;
+}
+
+static const char *greeting(void) {
+    static const char *msg = "hi";
+    return msg;
+}
+```
+
+- A function body may write `static <type> name[dims] [= init] (, name …)*;`: the object has static
+  storage duration, keeps its value across calls and starts zeroed when no initialiser is given. The
+  output carries the `static` prefix as written.
+- Initialisers are not folded: whether one is constant is judged by the C compiler
+  (`initializer element is not constant`).
+- The declaration is otherwise an ordinary local (`declare_var` still registers it), so member
+  access, array indexing and method-call type inference are unchanged; a trait-carrying struct still
+  gets its vptr through the compiler's initialiser
+  (`static struct Pair p = { .__named_vptr = &Pair_Named_vtable };` — a constant address, legal).
+- A static object is not the scope's to release: `static own …` reports
+  `a static local cannot be 'own'`, and a static declaration stays out of the leak analysis, so a
+  deliberate singleton such as `static T *p = malloc(...)` is never reported as a leak.
+- `static` has to introduce a declaration: `static;` reports `expected a declaration after 'static'`.
+- Out of scope: `for (static int i = 0; …)` is not part of the subset (the `for` first clause takes a
+  plain declaration or an expression), and `static` directly after a `case` / goto label is still
+  refused as "a declaration cannot follow a label".
 
 ### 5. Naming contract
 
