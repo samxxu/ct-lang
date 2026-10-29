@@ -15,7 +15,7 @@
 > | --- | --- | --- |
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
-> | 其它 C 透传（位域、空语句等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
+> | 其它 C 透传（空语句、变参等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -652,6 +652,38 @@ done:
 - 已知边界：`out:` 直接接 `case 2:` 不在子集内——标签链在 `case` / `default` 处终止，链空即按上面
   的「标签需要一条语句」报错。
 
+#### 4.17 位域（ct-ast）
+
+```c
+struct Flags {
+    unsigned a : 3;
+    unsigned b : 5;
+    unsigned : 4;            /* 填充位：无名 */
+    unsigned c : 8;
+};
+
+typedef struct {
+    unsigned kind : 2;
+    unsigned size : 6;
+} Header;
+```
+
+- 字段可以带位宽：`<type> [name] : <宽度>;`。`struct`、`union`、`typedef struct { … }` 的匿名体
+  以及 `pub` 版本都支持。
+- 宽度是整数常量表达式，规则与 `case` 取值相同：数字、字符字面量、枚举成员、宏名、括号与算术 /
+  位运算、一元 `- ! ~`、`sizeof`、`offsetof`。宽度**不做折叠**，原样发射，因此
+  `unsigned nib : NIBBLE;`（宏为 `(1 << 2)`）与 `unsigned m : (2 + 2);` 都成立。表达式里出现
+  变量（`a : (w + 1)`）报 `a bit-field width must be an integer constant`；整棵树就是单个名字时
+  始终放行（可能来自 `#define`）。缺宽度报 `expected a bit-field width`。
+- 名字可以省略：`unsigned : 4;` 是填充位。空名不进成员查找，不影响同 struct 的其它字段。
+- 位域必须是整数类型：指针（含函数指针）与显式 `struct` / `union` 类型报
+  `a bit-field must have an integer type`；typedef 别名放行，由 C 编译器判断。
+- 不能是数组：`int a[2] : 3;` 报 `a bit-field cannot be an array`。
+- 一条声明只写一个位域：`int a : 3, b : 4;` 不在子集内（字段文法一直是一条一个名字）。
+- 位域不写入 `structs[]` 的维度槽，因此成员访问的类型推断、普通字段的 `offsetof` 与 vptr 追加
+  都不受影响；带 `use` 的 struct，vptr 字段排在该 struct 的所有位域之后。
+- `offsetof` 取位域在 C 里是未定义行为，不做特殊处理。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -770,7 +802,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | --- | --- | --- |
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
-> | other C passthrough (bit-fields, the empty statement, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
+> | other C passthrough (the empty statement, variadic functions, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -1510,6 +1542,44 @@ done:
   `too many labels in one function` / `too many gotos in one function`.
 - Known edge: `out:` followed directly by `case 2:` is not part of the subset — the label chain stops
   at `case` / `default`, and an empty chain reports the "label needs a statement" complaint above.
+
+#### 4.17 Bit-fields (ct-ast)
+
+```c
+struct Flags {
+    unsigned a : 3;
+    unsigned b : 5;
+    unsigned : 4;            /* padding: nameless */
+    unsigned c : 8;
+};
+
+typedef struct {
+    unsigned kind : 2;
+    unsigned size : 6;
+} Header;
+```
+
+- A field may carry a width: `<type> [name] : <width>;`. This works in a `struct`, a `union`, the
+  anonymous body of a `typedef struct { … }` and in the `pub` form.
+- The width is an integer constant expression under the same rule as a `case` value: numbers, character
+  literals, enum members, macro names, parentheses and arithmetic / bitwise operators, unary
+  `- ! ~`, `sizeof`, `offsetof`. The width is **not folded** — it is emitted as written, so
+  `unsigned nib : NIBBLE;` (with `#define NIBBLE (1 << 2)`) and `unsigned m : (2 + 2);` both work. A
+  variable inside the expression (`a : (w + 1)`) reports
+  `a bit-field width must be an integer constant`; a tree that is a single name is always let through
+  (it may come from a `#define`). A missing width reports `expected a bit-field width`.
+- The name may be omitted: `unsigned : 4;` is padding. An empty name never reaches member lookup, so
+  the other fields of the struct are unaffected.
+- A bit-field must have an integer type: a pointer (function pointers included) and an explicit
+  `struct` / `union` type report `a bit-field must have an integer type`; a typedef alias is left to
+  the C compiler.
+- It cannot be an array: `int a[2] : 3;` reports `a bit-field cannot be an array`.
+- One declaration carries one bit-field: `int a : 3, b : 4;` is not part of the subset (the field
+  grammar has always read one name per declaration).
+- A width never lands in the `structs[]` dimension slot, so member type inference, `offsetof` on a
+  plain field and the vptr append are unchanged; in a struct with `use`, the vptr field follows every
+  bit-field.
+- `offsetof` of a bit-field is undefined behaviour in C and is not special-cased.
 
 ### 5. Naming contract
 
