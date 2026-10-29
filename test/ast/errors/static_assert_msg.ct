@@ -1,0 +1,6 @@
+/* batch 17: the message after the condition must be a string literal. */
+_Static_assert(1 == 1, message);
+
+int main(void) {
+    return 0;
+}

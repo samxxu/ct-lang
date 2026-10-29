@@ -90,6 +90,9 @@
 # batch 16 adds `case` ranges: test/ast/41_case_range plus the constant check
 # that now covers both ends of a range.
 #
+# batch 17 adds `_Static_assert`: test/ast/42_static_assert plus the condition
+# and message diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1130,6 +1133,24 @@ do
         ok "batch 16 ($cf)"
     else
         bad "batch 16: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 17: a static assertion checks its two operands up front -- the condition
+# must be constant and the message must be a string literal.
+for pair in \
+    "static_assert_nonconstant|a static assertion needs a constant condition" \
+    "static_assert_msg|a static assertion message must be a string literal"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 17: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 17 ($cf)"
+    else
+        bad "batch 17: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

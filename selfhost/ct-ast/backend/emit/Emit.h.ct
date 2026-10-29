@@ -82,6 +82,7 @@ import runtime::arena::Arena;
 #define N_EMPTY   52
 #define N_VAARG   53
 #define N_FNUM    54
+#define N_SASSERT 55
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -317,6 +318,12 @@ impl EmitOps for Emitter {
            in scope at the call site. */
         for (i = 0; i < self->sym->nfunc; i++)
             if (self->emit_proto(i) != 0) return -1;
+
+        /* A file-scope `_Static_assert` lands here: after every type, so an
+           assertion about a struct or enum declared above it still resolves. */
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_SASSERT)
+                if (self->emit_node(n, 0) != 0) return -1;
 
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             /* an `extern` global is a declaration only: it adds no definition */
@@ -1064,6 +1071,15 @@ impl EmitOps for Emitter {
         /* `;` prints nothing at all: the surrounding block (or the `if` body
            `parse_branch` wrapped it in) already carries the braces */
         if (self->arena->nodes[n].kind == N_EMPTY) return 0;
+        if (self->arena->nodes[n].kind == N_SASSERT) {
+            self->emit_indent(ind);
+            fputs("_Static_assert(", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            if (self->arena->nodes[n].text[0])
+                fprintf(self->out, ", %s", self->arena->nodes[n].text);
+            fputs(");\n", self->out);
+            return 0;
+        }
         if (self->arena->nodes[n].kind == N_GOTO) {
             self->emit_indent(ind);
             fprintf(self->out, "goto %s;\n", self->arena->nodes[n].text2);
@@ -1715,6 +1731,11 @@ impl EmitOps for Emitter {
 
         for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
             if (self->emit_proto(i) != 0) return -1;
+
+        /* file-scope static assertions, after every type of this unit */
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_SASSERT)
+                if (self->emit_node(n, 0) != 0) return -1;
 
         /* A `pub` global still needs its definition here (the header only
            declares it), and an `extern` global needs nothing at all. The

@@ -1,0 +1,26 @@
+/* 42: `_Static_assert` (batch 17) - a compile-time check at file scope and
+   inside a function body. The condition is emitted as written and the C
+   compiler still owns the verdict; a non-constant condition is refused here
+   with a message of its own. */
+#include <stdio.h>
+#include <stddef.h>
+
+struct Pair {
+    int a;
+    int b;
+};
+
+_Static_assert(sizeof(int) == 4, "int is four bytes");
+_Static_assert(sizeof(struct Pair) >= 8, "a pair holds two ints");
+_Static_assert(1 == 1, "the obvious one");
+
+static int check(int v) {
+    _Static_assert(sizeof(char) == 1, "char is one byte");
+    return v;
+}
+
+int main(void) {
+    _Static_assert(sizeof(long) >= 4, "long is at least four bytes");
+    printf("ok %d\n", check(7));
+    return 0;
+}

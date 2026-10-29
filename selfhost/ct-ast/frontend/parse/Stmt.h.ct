@@ -40,6 +40,7 @@ import tool::diag::diag;
 #define N_DEREF 28
 #define N_DOWHILE 44
 #define N_EMPTY 52
+#define N_SASSERT 55
 #define N_EXPR 6
 #define N_FOR 16
 #define N_GOTO 50
@@ -212,6 +213,32 @@ impl StmtOps for Stmt {
         int s, e, c;
         (void)self;
 
+        /* `_Static_assert(<constant>, "<message>");` -- C11, emitted as written.
+           The condition follows the same constant rule as a case label, so a
+           mistake is reported here instead of by the C compiler. It is accepted
+           at file scope too: `top_decl` routes the keyword back into this
+           branch, which keeps the construct in one place. */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Static_assert") == 0) {
+            int cnd;
+            s = self->sup->new_node(N_SASSERT);
+            if (s < 0) return -1;
+            self->sup->lex_next();
+            if (self->sup->expect("(") != 0) return -1;
+            cnd = self->ex->parse_expr();
+            if (cnd < 0) return -1;
+            if (!self->ex->const_ok(cnd))
+                return self->sup->fail("a static assertion needs a constant condition");
+            self->arena->nodes[s].a = cnd;
+            if (self->sup->accept(",")) {
+                if (self->lex->tok != T_STR)
+                    return self->sup->fail("a static assertion message must be a string literal");
+                snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", self->lex->toktext);
+                self->sup->lex_next();
+            }
+            if (self->sup->expect(")") != 0) return -1;
+            if (self->sup->expect(";") != 0) return -1;
+            return s;
+        }
         /* `;` is a statement of its own (C's empty statement): it keeps
            `for (...) ;` and `case 1: ;` on the ordinary path and emits nothing */
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {

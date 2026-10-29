@@ -339,6 +339,10 @@ impl ParseDeclOps for Parser {
                 return tool::diag::ct_sem_error(iline, icol,
                     "'inline' can only declare a function", self->mem->path);
             if (n > 0) self->arena->nodes[n].num = 1;
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Static_assert") == 0) {
+            /* a file-scope static assertion is the statement form; the statement
+               layer owns the grammar and the constant check */
+            n = self->st->parse_stmt();
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "extern") == 0) {
             /* A declaration only, for a symbol the C library owns. Both forms
                are accepted: `extern int flag;` (a variable) and

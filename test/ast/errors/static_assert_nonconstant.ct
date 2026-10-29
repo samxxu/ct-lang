@@ -1,0 +1,9 @@
+/* batch 17: a static assertion is a compile-time check, so its condition has to
+   be an integer constant expression. */
+int limit;
+
+_Static_assert(limit == 4, "limit is four");
+
+int main(void) {
+    return 0;
+}
