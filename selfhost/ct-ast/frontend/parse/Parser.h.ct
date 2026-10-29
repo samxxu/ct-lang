@@ -469,6 +469,8 @@ impl ParseOps for Parser {
             /* a file-scope name is visible to every function body */
             if (self->sym->declare_global(name, ret, cname, gns, 0) < 0)
                 return self->sup->fail(self->sym->last_error());
+            if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
+                snprintf(self->arena->nodes[g].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(g) != 0) return -1;
             if (self->sup->accept("=")) {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
@@ -579,6 +581,10 @@ impl ParseOps for Parser {
                 snprintf(name, sizeof name, "%s", self->lex->toktext);
                 self->sup->lex_next();
             }
+            /* C would adjust `int (*tbl[2])(int)` into a pointer to a pointer,
+               which the abstract declarator the prototype spells cannot express */
+            if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
+                return self->sup->fail("function-pointer arrays are not supported as parameters");
             p = self->sup->new_node(N_PARAM);
             if (p < 0) return -1;
             snprintf(self->arena->nodes[p].text, MAX_TEXT, "%s", typebuf);
@@ -622,6 +628,8 @@ impl ParseOps for Parser {
         if (m < 0) return -1;
         snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", typebuf);
         snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", name);
+        if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
+            snprintf(self->arena->nodes[m].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
         if (self->ex->parse_array_dims(m) != 0) return -1;
         if (self->sup->expect(";") != 0) return -1;
         return m;
@@ -793,18 +801,27 @@ impl ParseOps for Parser {
             return t;
         }
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
-        if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
-        snprintf(name, sizeof name, "%s", self->lex->toktext);
-        self->sup->lex_next();
+        if (self->ex->fnptr_state) {
+            /* `typedef int (*BinOp)(int, int);`: the alias came with the type */
+            snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+        } else {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
+            snprintf(name, sizeof name, "%s", self->lex->toktext);
+            self->sup->lex_next();
+        }
         if (self->sup->expect(";") != 0) return -1;
         if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
         t = self->sup->new_node(N_TYPEDEF);
         if (t < 0) return -1;
         snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", typebuf);
         snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
+        snprintf(self->arena->nodes[t].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
         self->arena->nodes[t].d = is_pub;
         self->arena->nodes[t].line = td_line;
-        if (self->sup->add_type(qname, 2) != 0) return -1;
+        /* kind 4 marks a function-pointer alias: the type string alone is the
+           abstract declarator `int (*)(int, int)`, so a field of that alias
+           would otherwise look like an opaque typedef (D-2) */
+        if (self->sup->add_type(qname, strstr(typebuf, "(*") ? 4 : 2) != 0) return -1;
         return t;
     }
 

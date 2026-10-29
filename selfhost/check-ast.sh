@@ -56,6 +56,10 @@
 # global instance + `map`), built end to end and compared with expected output.
 # It also pins the fix that emits map wrappers in build mode.
 #
+# batch 3 adds the function-pointer forms: the typedef / array fixtures under
+# test/ast/27_fnptr_forms, plus the two named diagnostics (a nested declarator
+# and an array parameter).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -500,6 +504,27 @@ elif grep -q "use 'void \*missing;' as its host" "$work/mni.err"; then
     ok "map (an undeclared instance names the void * placeholder)"
 else
     bad "map instance" "$(cat "$work/mni.err")"
+fi
+
+# Nested function pointers and function-pointer array parameters are refused
+# with a message of their own (batch 3: D-7 and the parameter rule), never with
+# the generic "declarator has no name" / "unexpected token" fallback.
+if "$work/ct-ast" test/ast/errors/fnptr_nested.ct -o "$work/fpn.c" \
+        >"$work/fpn.out" 2>"$work/fpn.err"; then
+    bad "fnptr nested" "expected a non-zero exit"
+elif grep -q "nested function pointers are not supported" "$work/fpn.err"; then
+    ok "fnptr (a nested declarator is refused by name)"
+else
+    bad "fnptr nested" "$(cat "$work/fpn.err")"
+fi
+
+if "$work/ct-ast" test/ast/errors/fnptr_array_param.ct -o "$work/fpa.c" \
+        >"$work/fpa.out" 2>"$work/fpa.err"; then
+    bad "fnptr array parameter" "expected a non-zero exit"
+elif grep -q "function-pointer arrays are not supported as parameters" "$work/fpa.err"; then
+    ok "fnptr (an array parameter is refused by name)"
+else
+    bad "fnptr array parameter" "$(cat "$work/fpa.err")"
 fi
 
 # An impl may ignore a parameter (the trait owns the signature). The casts that

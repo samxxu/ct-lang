@@ -1,0 +1,3 @@
+/* A function pointer is one level: `(**f)` would need a second declarator where
+   the name belongs, so it is refused by name (batch 3, D-7). */
+int (**f)(int);

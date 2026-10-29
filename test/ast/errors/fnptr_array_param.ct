@@ -1,0 +1,3 @@
+/* C adjusts a function-pointer array parameter into a pointer to a pointer,
+   which the abstract declarator a prototype spells cannot express. */
+void take(int (*tbl[2])(int));

@@ -1,0 +1,49 @@
+/* 27: the function-pointer forms the batch completed - a typedef, a
+   typedef'd array, a direct call through a field (`c.add(2, 3)` and
+   `p->add(2, 3)`), a function-pointer array as a file-scope global with an
+   initialiser, one as a local filled element by element, and a struct field
+   array `int (*cb[2])(int)`. A file-scope pointer may name a function of this
+   unit because the prototypes are emitted before the globals (D-6). */
+#include <stdio.h>
+
+typedef int (*BinOp)(int, int);
+typedef int (*OpTable[2])(int, int);
+
+struct Calc {
+    BinOp add;
+    int (*cb[2])(int);
+    int base;
+};
+
+static int plus(int a, int b) { return a + b; }
+static int minus(int a, int b) { return a - b; }
+static int twice(int x) { return x * 2; }
+static int inc(int x) { return x + 1; }
+
+static int (*gp)(int, int) = plus;
+static int (*tbl[2])(int, int) = { plus, minus };
+
+static int apply(int (*fn)(int), int v) { return fn(v); }
+
+int main(void) {
+    struct Calc c;
+    struct Calc *p;
+    int (*local[2])(int);
+    int r0, r1, r2, r3, r4;
+
+    c.add = plus;
+    c.base = 7;
+    c.cb[0] = twice;
+    c.cb[1] = inc;
+    p = &c;
+    r0 = c.add(2, 3);
+    r1 = p->add(2, 3);
+    r2 = gp(4, 5);
+    r3 = tbl[1](9, 2);
+    local[0] = twice;
+    local[1] = inc;
+    r4 = local[1](c.base);
+    printf("%d %d %d %d %d %d %d %d\n", r0, r1, r2, r3, r4, c.cb[0](c.base),
+           apply(c.cb[1], c.base), tbl[0](1, 2));
+    return 0;
+}

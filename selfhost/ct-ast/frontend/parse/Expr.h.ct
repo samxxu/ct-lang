@@ -82,6 +82,7 @@ pub trait ExprOps {
     int  parse_type(char *out, int cap);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
+    int  fnptr_field(const char *stype, const char *field);
     int  parse_expr(void);
     int  parse_bitor(void);
     int  parse_bxor(void);
@@ -112,6 +113,10 @@ pub struct Expr {
        from here instead of expecting an identifier of its own. 160 is MAX_TEXT
        here: the generated header carries no macros. (D-7) */
     char fnptr_name[160];
+    /* The array dimensions of a function pointer live inside its declarator
+       (`int (*tbl[2])(int)`), so `parse_type` collects them here and the four
+       declaration entries copy them into the node's `text3` (D-5). */
+    char fnptr_dims[160];
     int  fnptr_state;
     /* Set while the expression being parsed may name a C library function
        (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
@@ -159,6 +164,7 @@ impl ExprOps for Expr {
         out[0] = 0;
         self->fnptr_state = 0;
         self->fnptr_name[0] = 0;
+        self->fnptr_dims[0] = 0;
         for (;;) {
             if (self->lex->tok == T_ID && self->is_type_word(self->lex->toktext)) {
                 if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
@@ -223,14 +229,47 @@ impl ExprOps for Expr {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
                 char plist[MAX_TEXT];
                 char dname[MAX_TEXT];
+                char fdims[MAX_TEXT];
                 int pn;
                 self->sup->lex_next();
+                /* `int (**f)(int)` and `int (*(*f)(void))(int)` put a second
+                   declarator where the name belongs: only one level is
+                   supported, and the diagnostic says so (D-7). */
+                if (self->lex->tok == T_PUNCT
+                    && (strcmp(self->lex->toktext, "*") == 0
+                        || strcmp(self->lex->toktext, "(") == 0))
+                    return self->sup->fail("nested function pointers are not supported");
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a name in the function-pointer declarator");
                 /* keep the name here: parsing the parameter list below calls
                    `parse_type` again, which clears `fnptr_name` */
                 snprintf(dname, sizeof dname, "%s", self->lex->toktext);
                 self->sup->lex_next();
+                /* dimensions sit inside the declarator, before the `)`: a
+                   function-pointer array (`int (*tbl[2])(int)`) (D-5) */
+                fdims[0] = 0;
+                while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+                    char dim[MAX_TEXT];
+                    char cur[MAX_TEXT];
+                    int unsized;
+                    unsized = 0;
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_NUM) {
+                        snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
+                    } else if (self->lex->tok == T_ID) {
+                        snprintf(dim, sizeof dim, "[%s]", self->lex->toktext);
+                    } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0) {
+                        snprintf(dim, sizeof dim, "[]");
+                        unsized = 1;
+                    } else {
+                        return self->sup->fail("expected an array length");
+                    }
+                    if (!unsized) self->sup->lex_next();
+                    if (self->sup->expect("]") != 0) return -1;
+                    if (snprintf(cur, sizeof cur, "%s%s", fdims, dim) >= MAX_TEXT)
+                        return self->sup->fail("array dimensions are too long");
+                    snprintf(fdims, sizeof fdims, "%s", cur);
+                }
                 if (self->sup->expect(")") != 0) return -1;
                 if (self->sup->expect("(") != 0) return -1;
                 pn = 0;
@@ -263,6 +302,7 @@ impl ExprOps for Expr {
                     if (self->type_append(out, cap, &n, sig) != 0) return -1;
                 }
                 snprintf(self->fnptr_name, MAX_TEXT, "%s", dname);
+                snprintf(self->fnptr_dims, MAX_TEXT, "%s", fdims);
                 self->fnptr_state = 1;
             } else {
                 self->lex->tok = save_tok;
@@ -353,6 +393,37 @@ impl ExprOps for Expr {
         self->lex->bol = save_bol;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
         return res;
+    }
+
+    /* Is `field` of the struct `stype` a function pointer? A field declared in
+       place keeps the `(*)` in its type; a typedef field (`BinOp cb;`) is only
+       known through the type table's kind 4 (D-4). */
+    int fnptr_field(const char *stype, const char *field)
+    {
+        char buf[MAX_TEXT];
+        char *base;
+        size_t n;
+        int s, fi, ti;
+        (void)self;
+
+        snprintf(buf, sizeof buf, "%s", stype);
+        base = buf;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        n = strlen(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
+            base[n - 1] = 0;
+            n--;
+        }
+        s = self->sym->find_struct(base);
+        if (s < 0) return 0;
+        for (fi = 0; fi < self->sym->structs[s].nfields; fi++) {
+            if (strcmp(self->sym->structs[s].fields[fi].name, field) != 0) continue;
+            if (strstr(self->sym->structs[s].fields[fi].type, "(*")) return 1;
+            ti = self->sym->find_type(self->sym->structs[s].fields[fi].type);
+            return (ti >= 0 && self->sym->type_kind[ti] == 4);
+        }
+        return 0;
     }
 
     int parse_expr(void)
@@ -727,6 +798,21 @@ impl ExprOps for Expr {
                             }
                         } else if (self->sup->method_trait(rtype, fname, trname, sizeof trname) == 0) {
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
+                        }
+                        /* No trait answered: a function-pointer field called
+                           directly is the callee itself, so `o.add(2, 3)` is
+                           a call through `o.add` -- the shape `p(x)` takes, but
+                           with a member node as the callee (D-4). */
+                        if (!self->arena->nodes[m].text[0] && self->fnptr_field(rtype, fname)) {
+                            int mf;
+                            mf = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
+                            if (mf < 0) return -1;
+                            self->arena->nodes[mf].a = n;
+                            snprintf(self->arena->nodes[mf].text2, MAX_TEXT, "%s", fname);
+                            self->arena->nodes[m].kind = N_CALL;
+                            self->arena->nodes[m].a = (args == 0) ? -1 : args;
+                            self->arena->nodes[m].b = mf;
+                            self->arena->nodes[m].aux = 2;
                         }
                     }
                 } else {

@@ -503,6 +503,10 @@ impl StmtOps for Stmt {
             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
             if (self->sup->declare_var(name, typebuf) != 0) return -1;
+            /* `int (*tbl[2])(int)`: the dimensions came with the declarator, and
+               `parse_array_dims` only appends what follows the name (D-5) */
+            if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
+                snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(n) != 0) return -1;
             if (self->arena->nodes[n].text3[0]) {
                 int vi = self->sym->find_var(name);
