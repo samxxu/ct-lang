@@ -647,7 +647,7 @@ done:
 - 标签后不能直接跟声明（C 的标签不构成作用域）：`again: int x;` 报
   `a declaration cannot follow a label; wrap it in a block`，把声明包进块即可。
 - 标签不能直接碰 `}`（C99 要求标签后面必须有一条语句）：`again: }` 报 `a label needs a statement`。
-  空语句 `;` 不在支持的子集内，把标签写在一条真实语句前即可（`again: return r;`）。
+  最省的写法是空语句 `again: ;`（见 §4.21）。
 - `goto` 可以跳入 / 跳出块与循环（C 允许）。`goto` 跳出 `own` 的声明作用域**不会**触发自动释放（§4.9）。
 - 一个函数最多 64 个标签与 64 条 `goto`，超出报 `too many labels in one function` /
   `too many gotos in one function`。
@@ -739,8 +739,8 @@ static const char *greeting(void) {
 - 静态对象不归作用域管，因此：`static own …` 报 `a static local cannot be 'own'`；
   static 声明**不**进入泄漏分析，`static T *p = malloc(...)` 这种刻意的单例不会被报泄漏。
 - `static` 后面必须是声明：`static;` 报 `expected a declaration after 'static'`。
-- 范围外：`for (static int i = 0; …)` 不在子集内（`for` 的首句只认普通声明或表达式）；
-  `static` 直接跟在 `case` / goto 标签之后仍按「声明不能跟在标签后」拒绝。
+- 范围外：`static` 直接跟在 `case` / goto 标签之后仍按「声明不能跟在标签后」拒绝；
+  `for (static int i = 0; …)` 见 §4.21。
 
 #### 4.20 复合字面量（ct-ast）
 
@@ -767,6 +767,35 @@ static struct Point make(int x, int y) {
   对复合字面量直接调 trait 方法（`((struct Pair){ … }).val()`）不支持——方法接收者的允许形态仍是
   变量 / 元素 / 调用 / 字段链，先赋给变量再调用。
 - 存储期由 C 决定：函数内是自动存储期，文件作用域是静态存储期，ct-ast 不做区分。
+
+#### 4.21 空语句与 `for` 首句的 `static`（ct-ast）
+
+```c
+for (i = 0; i < 3; i++) ;
+
+if (n == 0) ;
+else n = 1;
+
+switch (i) {
+case 3:
+    ;
+    break;
+default:
+    break;
+}
+
+for (static int i = 0; i < 2; i++) {
+    total = total + 1;
+}
+```
+
+- `;` 是空语句：`for (...) ;`、`while (c) ;`、`if (c) ; else …` 都可以写，
+  也是「标签后必须有语句」的最省写法（`case 3: ;`、`done: ;`）。空语句不发射任何字符，
+  外层块的 `{` `}` 照常输出。
+- `for` 的首句可以写 `static` 声明：初始化只执行一次，变量跨调用保持取值，
+  因此第二次进入同一 `for` 时直接以余值判断条件（C 的规定）。
+- 空语句与 `for` 首句的 static 都不新增诊断；`static` 后面不是声明时沿用
+  `expected a declaration after 'static'`。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1622,8 +1651,7 @@ done:
 - A declaration cannot sit directly behind a label (C opens no scope at one): `again: int x;` reports
   `a declaration cannot follow a label; wrap it in a block` — wrap the declaration in a block.
 - A label cannot run straight into `}` (C99 requires a statement after it): `again: }` reports
-  `a label needs a statement`. The empty statement `;` is not part of the supported subset, so put the
-  label before a real statement (`again: return r;`).
+  `a label needs a statement`. The cheapest fix is the empty statement, `again: ;` (§4.21).
 - A `goto` may jump into or out of blocks and loops (C allows it). Jumping out of an `own`
   declaration's scope does **not** release it (§4.9).
 - One function holds at most 64 labels and 64 `goto`s; beyond that it reports
@@ -1731,9 +1759,8 @@ static const char *greeting(void) {
   `a static local cannot be 'own'`, and a static declaration stays out of the leak analysis, so a
   deliberate singleton such as `static T *p = malloc(...)` is never reported as a leak.
 - `static` has to introduce a declaration: `static;` reports `expected a declaration after 'static'`.
-- Out of scope: `for (static int i = 0; …)` is not part of the subset (the `for` first clause takes a
-  plain declaration or an expression), and `static` directly after a `case` / goto label is still
-  refused as "a declaration cannot follow a label".
+- Out of scope: `static` directly after a `case` / goto label is still refused as "a declaration
+  cannot follow a label"; `for (static int i = 0; …)` is described in §4.21.
 
 #### 4.20 Compound literals (ct-ast)
 
@@ -1764,6 +1791,35 @@ static struct Point make(int x, int y) {
   chain, so assign it to a variable first.
 - Storage duration is C's: automatic inside a function, static at file scope; ct-ast does not
   distinguish them.
+
+#### 4.21 The empty statement and `for`-init statics (ct-ast)
+
+```c
+for (i = 0; i < 3; i++) ;
+
+if (n == 0) ;
+else n = 1;
+
+switch (i) {
+case 3:
+    ;
+    break;
+default:
+    break;
+}
+
+for (static int i = 0; i < 2; i++) {
+    total = total + 1;
+}
+```
+
+- `;` is the empty statement: `for (...) ;`, `while (c) ;` and `if (c) ; else …` all work, and it is
+  the cheapest way to satisfy "a label needs a statement" (`case 3: ;`, `done: ;`). It emits no
+  characters — the surrounding block still prints its braces.
+- The first clause of a `for` may declare a `static`: the initialiser runs once and the variable keeps
+  its value across calls, so entering the same `for` again tests the leftover value (as C specifies).
+- Neither form adds a diagnostic; `static` that does not introduce a declaration keeps reporting
+  `expected a declaration after 'static'`.
 
 ### 5. Naming contract
 
