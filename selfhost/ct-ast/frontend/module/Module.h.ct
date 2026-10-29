@@ -47,6 +47,8 @@ import tool::diag::diag;
 #define N_STRUCT  20
 #define N_TYPEDEF 21
 #define N_GLOBAL  22
+#define N_ENUM    45
+#define N_ENUMVAL 46
 
 namespace frontend::module;
 pub trait ModuleOps {
@@ -376,6 +378,34 @@ impl ModuleOps for Module {
                                               gcn, gns, 1) < 0)
                     return self->fail(self->sym->last_error());
             }
+            /* An exported enum's members are file-scope constants (D-3). The
+               var table was reset for this unit, so they are registered here
+               under the owner's C spelling, exactly as the owner declared them. */
+            for (gn = self->arena->nodes[self->units[dn].prog].a; gn >= 0;
+                 gn = self->arena->nodes[gn].next) {
+                char ccn[MAX_TEXT];
+                char cns[MAX_TEXT];
+                const char *cmn;
+                size_t cl;
+                int mv;
+                if (self->arena->nodes[gn].kind != N_ENUM || self->arena->nodes[gn].d != 1) continue;
+                for (mv = self->arena->nodes[gn].a; mv >= 0; mv = self->arena->nodes[mv].next) {
+                    cmn = self->arena->nodes[mv].text2;
+                    if (!self->units[dn].nsprefix[0]) {
+                        snprintf(ccn, sizeof ccn, "%s", cmn);
+                        cns[0] = 0;
+                    } else {
+                        if (snprintf(ccn, sizeof ccn, "%s%s",
+                                     self->units[dn].nsprefix, cmn) >= (int)sizeof ccn)
+                            return self->fail("variable name is too long");
+                        snprintf(cns, sizeof cns, "%s", self->units[dn].nsprefix);
+                        cl = strlen(cns);
+                        if (cl > 0) cns[cl - 1] = 0;
+                    }
+                    if (self->sym->declare_const(cmn, ccn, cns, 1) < 0)
+                        return self->fail(self->sym->last_error());
+                }
+            }
             /* Exported types of the dependency, reachable by their bare name
                here (SH-18). The table is per importing unit, so an unrelated
                namespace elsewhere in the program cannot make a name ambiguous. */
@@ -386,7 +416,8 @@ impl ModuleOps for Module {
                 size_t pl;
                 if (self->arena->nodes[gn].d != 1) continue;
                 if (self->arena->nodes[gn].kind != N_STRUCT
-                    && self->arena->nodes[gn].kind != N_TYPEDEF) continue;
+                    && self->arena->nodes[gn].kind != N_TYPEDEF
+                    && self->arena->nodes[gn].kind != N_ENUM) continue;
                 full = self->arena->nodes[gn].text2;
                 bare = full;
                 pl = strlen(self->units[dn].nsprefix);

@@ -1,0 +1,7 @@
+/* batch 5: a top-level enum declaration needs its tag, because the members are
+   file-scope constants and the tag is the handle a consumer names. */
+enum { A, B };
+
+int main(void) {
+    return 0;
+}

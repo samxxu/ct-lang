@@ -485,6 +485,23 @@ else
     bad "ns_types" "$(cat "$work/mnt.err" "$work/mnt.cc" "$work/mnt.stdout" 2>/dev/null)"
 fi
 
+# Batch 5: a `pub enum` reaches the dependency's header and its members import
+# as constants. The consumer writes `Level` (bare), `Mid` (bare member) and
+# `app::High` (qualified member), and the compiler emits the owner's C names.
+rm -rf "$mod-ne"
+mkdir -p "$mod-ne"
+if "$work/ct-ast" build test/modules/enum_export/main.ct -o "$mod-ne" \
+        >"$work/mne.out" 2>"$work/mne.err" \
+   && grep -q 'enum app_Level {' "$mod-ne/kinds.h" \
+   && grep -q 'enum app_Level l' "$mod-ne/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-ne"/*.c -o "$work/mne.bin" 2>"$work/mne.cc" \
+   && "$work/mne.bin" >"$work/mne.stdout" 2>&1 \
+   && cmp -s "$work/mne.stdout" test/modules/enum_export/expected.out; then
+    ok "enum_export (an exported enum reaches the header and its members import)"
+else
+    bad "enum_export" "$(cat "$work/mne.err" "$work/mne.cc" "$work/mne.stdout" 2>/dev/null)"
+fi
+
 # ... and two namespaces exporting one bare type name make it ambiguous.
 if "$work/ct-ast" build test/modules/ambig_type/main.ct -o "$work/mod-bad" \
         >"$work/mat.out" 2>"$work/mat.err"; then
@@ -865,6 +882,27 @@ do
         ok "control flow ($cf)"
     else
         bad "control flow: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 5: each enum / constant-expression / offsetof diagnostic is pinned
+# verbatim. `case_nonconstant` is already covered above; the four below are new.
+for pair in \
+    "enum_duplicate|duplicate enum 'Color'" \
+    "enum_bad_value|an enum value must be an integer constant" \
+    "enum_no_name|expected an enum name" \
+    "offsetof_bad_type|offsetof needs a struct type" \
+    "offsetof_bad_field|struct 'S' has no field 'b'"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 5: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 5 ($cf)"
+    else
+        bad "batch 5: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

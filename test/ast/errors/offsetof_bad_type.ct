@@ -1,0 +1,10 @@
+/* batch 5: `offsetof` takes a struct type first, so a scalar is refused here
+   rather than emitted as C for gcc to reject. */
+#include <stddef.h>
+
+int main(void) {
+    int off;
+
+    off = (int)offsetof(int, a);
+    return off;
+}

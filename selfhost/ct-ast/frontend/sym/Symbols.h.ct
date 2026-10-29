@@ -70,6 +70,10 @@ pub struct Var {
     int  is_global;     /* file-scope: the mangling / qualification rules apply */
     int  imported;      /* copied in from an imported unit's export */
     int  ambiguous;     /* a bare reference cannot pick between two imports */
+    /* An enum member is emitted as a C enumerator and behaves like a constant
+       in an expression, so it sits in this table under a masked type (`int`) and
+       this flag tells the constant-expression check it may be folded (5.0). */
+    int  is_const;
 }
 
 pub struct MethodSig {
@@ -111,6 +115,9 @@ pub trait SymbolOps {
     int  declare_var(const char *name, const char *type);
     int  declare_global(const char *name, const char *type, const char *cname,
                         const char *ns, int imported);
+    /* An enum member: a file-scope `int` the source may not assign to. */
+    int  declare_const(const char *name, const char *cname, const char *ns, int imported);
+    int  is_const_name(const char *name);
     int  var_cname(const char *name, char *out, int cap);
     int  var_ambiguous(const char *name);
     int  find_qualified_global(const char *qual, const char *name, char *cname, int cap);
@@ -146,7 +153,8 @@ pub struct Symbols {
     int  scope[256];
     int  nscope;
     char types[256][160];
-    int  type_kind[256];        /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef */
+    int  type_kind[256];        /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
+                                   5 = enum tag */
     int  ntype;
     struct Trait traits[64];
     int  ntraits;
@@ -226,6 +234,7 @@ impl SymbolOps for Symbols {
         self->vars[i].own_line = 0;
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
+        self->vars[i].is_const = 0;
         self->nvar++;
         return 0;
     }
@@ -256,6 +265,7 @@ impl SymbolOps for Symbols {
         self->vars[i].own_line = 0;
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
+        self->vars[i].is_const = 0;
         if (imported)
             for (k = 0; k < i; k++)
                 if (self->vars[k].is_global && self->vars[k].imported
@@ -265,6 +275,26 @@ impl SymbolOps for Symbols {
                     self->vars[i].ambiguous = 1;
                 }
         return i;
+    }
+
+    /* An enum member: the type the expression grammar expects is `int`, and
+       `is_const` lets the constant-expression check fold it. */
+    int declare_const(const char *name, const char *cname, const char *ns, int imported)
+    {
+        int i;
+        (void)self;
+        i = self->declare_global(name, "int", cname, ns, imported);
+        if (i < 0) return -1;
+        self->vars[i].is_const = 1;
+        return i;
+    }
+
+    int is_const_name(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_var(name);
+        return (i >= 0) ? self->vars[i].is_const : 0;
     }
 
     int var_cname(const char *name, char *out, int cap)

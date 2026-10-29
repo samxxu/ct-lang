@@ -1,0 +1,9 @@
+/* batch 5: a second `enum Tag { ... }` would define the tag twice, so the
+   declaration is refused rather than emitted as C for gcc to reject. */
+enum Color { RED, GREEN };
+
+enum Color { BLUE, BLACK };
+
+int main(void) {
+    return 0;
+}

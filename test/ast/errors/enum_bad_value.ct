@@ -1,0 +1,9 @@
+/* batch 5: an enum value must be an integer constant expression; a plain
+   variable is refused (ct-ast folds nothing, so it cannot prove the value). */
+int seed = 3;
+
+enum E { A = seed };
+
+int main(void) {
+    return 0;
+}

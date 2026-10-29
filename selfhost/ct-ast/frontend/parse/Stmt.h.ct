@@ -65,7 +65,7 @@ pub trait StmtOps {
     int  parse_init_raw(char *out, int cap);
     int  parse_switch_body(void);
     int  parse_label(void);
-    int  parse_case_value(char *out, int cap);
+    int  parse_case_value(void);
 }
 
 pub struct Stmt {
@@ -543,16 +543,15 @@ impl StmtOps for Stmt {
     }
 
     /* A label owns the statements up to the next label or the closing brace
-       (D-3): `text` carries the case value, `aux` marks `default`, `a` the
-       chain of guarded statements. A chain rather than one statement keeps
+       (D-3): `b` carries the case value, `aux` marks `default`, `a` the chain
+       of guarded statements. A chain rather than one statement keeps
        `case 1: f(); break;` on one indentation level; an empty chain is how a
        bare `case 1:` before another label is spelled. C does not let a label
        guard a declaration (labels open no scope), so a declaration anywhere in
        the chain is rejected. */
     int parse_label(void)
     {
-        int s, c, head, tail, is_def;
-        char val[MAX_TEXT];
+        int s, c, head, tail, is_def, val;
         (void)self;
 
         s = self->sup->new_node(N_CASE);
@@ -561,8 +560,9 @@ impl StmtOps for Stmt {
         self->arena->nodes[s].aux = is_def;
         self->sup->lex_next();
         if (!is_def) {
-            if (self->parse_case_value(val, sizeof val) != 0) return -1;
-            snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", val);
+            val = self->parse_case_value();
+            if (val < 0) return -1;
+            self->arena->nodes[s].b = val;
         }
         if (self->sup->expect(":") != 0) return -1;
         head = -1;
@@ -587,42 +587,22 @@ impl StmtOps for Stmt {
         return s;
     }
 
-    /* A case value is an integer constant expression and ct-ast folds nothing,
-       so only three shapes qualify (D-5): a number with an optional leading
-       `-`, a quoted literal, or a single name. A name is either a `#define`
-       the compiler never sees (kept as written) or a known global, which is
-       emitted under its C spelling like any other reference. */
-    int parse_case_value(char *out, int cap)
+    /* A case value is an integer constant expression (D-7): the expression is
+       parsed as usual and then judged structurally, so `case (1 << 2):` is
+       accepted while `case key + 1:` is an error. A whole name is allowed
+       whether or not it is a declared constant: it may be a `#define` macro or,
+       as in batch 4, a global the C compiler judges. */
+    int parse_case_value(void)
     {
-        int n;
-        char cn[MAX_TEXT];
+        int e;
         (void)self;
 
-        n = 0;
-        out[0] = 0;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) {
-            out[n] = '-';
-            n++;
-            out[n] = 0;
-            self->sup->lex_next();
-            if (self->lex->tok != T_NUM) return self->sup->fail("a case label must be an integer constant");
-        }
-        if (self->lex->tok == T_NUM) {
-            if (snprintf(out + n, (size_t)(cap - n), "%ld", self->lex->toknum) >= cap - n)
-                return self->sup->fail("case label is too long");
-        } else if (self->lex->tok == T_STR) {
-            if (snprintf(out + n, (size_t)(cap - n), "%s", self->lex->toktext) >= cap - n)
-                return self->sup->fail("case label is too long");
-        } else if (self->lex->tok == T_ID) {
-            if (self->sym->var_cname(self->lex->toktext, cn, sizeof cn) != 0)
-                snprintf(cn, sizeof cn, "%s", self->lex->toktext);
-            if (snprintf(out + n, (size_t)(cap - n), "%s", cn) >= cap - n)
-                return self->sup->fail("case label is too long");
-        } else {
+        e = self->ex->parse_expr();
+        if (e < 0) return -1;
+        if (!self->ex->const_ok(e) && self->arena->nodes[e].kind != N_VAR
+            && self->arena->nodes[e].kind != N_RAW)
             return self->sup->fail("a case label must be an integer constant");
-        }
-        self->sup->lex_next();
-        return 0;
+        return e;
     }
 
     /* `<type> name[dims] [= expr] (, name[dims] [= expr])*` without the trailing

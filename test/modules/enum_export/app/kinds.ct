@@ -1,0 +1,10 @@
+/* An exported enum in a namespace (batch 5): the tag joins the header as
+   `enum app_Level`, and every member is a file-scope constant spelled with the
+   owner's prefix (`app_Low` ...). */
+namespace app;
+
+pub enum Level {
+    Low,
+    Mid,
+    High
+}

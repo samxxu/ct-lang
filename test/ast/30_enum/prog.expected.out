@@ -1,0 +1,6 @@
+enum 0 6 1 0
+offset 4 4
+toggle 0 1
+switch 10 20 30 40 50 90
+macro 60 90
+size 4

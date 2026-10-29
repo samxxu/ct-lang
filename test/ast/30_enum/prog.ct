@@ -1,0 +1,89 @@
+/* 30: enums, constant expressions and offsetof (batch 5) - a top-level enum
+   with explicit values, auto-increment and a trailing comma; a typedef enum
+   with and without a tag; the tag used with and without its `enum` keyword;
+   `case` accepting any integer constant expression (parenthesised arithmetic,
+   an enum member, a character literal, a unary minus, a macro); and
+   `offsetof` on a struct tag and on a typedef alias. ct-ast folds nothing and
+   re-emits the source spelling, so C computes the values. */
+#include <stdio.h>
+#include <stddef.h>
+
+#define KIND_B 5
+
+enum Color { RED, GREEN = 5, BLUE, };
+
+typedef enum Mode { Fast, Slow } Mode;
+
+typedef enum { On, Off } Toggle;
+
+typedef struct Pair { int a; int b; } Pair;
+
+static int pick(int key)
+{
+    int out;
+
+    out = 0;
+    switch (key) {
+    case (1 << 2):
+        out = 10;
+        break;
+    case RED:
+        out = 20;
+        break;
+    case 'a':
+        out = 30;
+        break;
+    case -1:
+        out = 40;
+        break;
+    case 1 + 2:
+        out = 50;
+        break;
+    default:
+        out = 90;
+        break;
+    }
+    return out;
+}
+
+static int named(int key)
+{
+    int out;
+
+    out = 0;
+    switch (key) {
+    case KIND_B:
+        out = 60;
+        break;
+    default:
+        out = 90;
+        break;
+    }
+    return out;
+}
+
+int main(void)
+{
+    enum Color c;
+    Color d;
+    Mode m;
+    int off1;
+    int off2;
+    int size;
+
+    c = RED;
+    d = BLUE;
+    m = Slow;
+    off1 = (int)offsetof(struct Pair, b);
+    off2 = (int)offsetof(Pair, b);
+    size = sizeof(Mode);
+
+    printf("enum %d %d %d %d\n", (int)c, (int)d, (int)m, (int)Fast);
+    printf("offset %d %d\n", off1, off2);
+    printf("toggle %d %d\n", (int)On, (int)Off);
+    printf("switch %d %d %d %d %d %d\n",
+           pick(1 << 2), pick(RED), pick('a'), pick(-1), pick(3), pick(99));
+    printf("macro %d %d\n", named(KIND_B), named(99));
+    printf("size %d\n", size);
+    return 0;
+}

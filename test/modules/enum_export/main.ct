@@ -1,0 +1,16 @@
+/* The consumer uses the exported enum type by its bare name and reaches a
+   member both bare (`Mid`) and qualified (`app::High`). */
+#include <stdio.h>
+
+import app::kinds;
+
+int main(void)
+{
+    Level l;
+    int q;
+
+    l = Mid;
+    q = app::High;
+    printf("%d %d\n", (int)l, q);
+    return 0;
+}

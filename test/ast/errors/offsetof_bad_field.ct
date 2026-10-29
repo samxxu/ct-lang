@@ -1,0 +1,14 @@
+/* batch 5: `offsetof` checks the field against the struct's declared fields,
+   so a typo is refused instead of becoming a C error. */
+#include <stddef.h>
+
+struct S {
+    int a;
+};
+
+int main(void) {
+    int off;
+
+    off = (int)offsetof(struct S, b);
+    return off;
+}
