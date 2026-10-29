@@ -63,24 +63,26 @@ expect "}" ; pop_scope
 
 `N_SWITCH`：`a = 条件表达式`，`b = 体内 N_BLOCK`。
 
-### D-3 标签与语句合并为 `N_CASE`
+### D-3 标签拥有到下一条标签之间的语句
 
-C 要求标签后面必须跟**语句**，因此一条标签与它修饰的那条语句合成一个节点，而不是独立标签节点：
+C 要求标签后面必须跟**语句**，而标签本身不构成作用域。实现时标签节点持有**语句链**，而不是单条语句：
 
 ```
 N_CASE: text = 标签文本（数字 / 字符字面量 / 常量名），aux = 0 为 case、1 为 default，
-        a = 被修饰的语句
+        a = 被守卫的语句链（用 next 串起来）
 ```
 
-连续标签（`case 1: case 2: stmt`）天然支持：`parse_label` 发现下一个 token 仍是 `case` / `default` 时递归一层，外层 `N_CASE` 的子节点即内层。
+这样 `case 1: f(); break;` 的 `f()` 与 `break` 同处一级缩进，块内其它语句的对齐规则不变；这也正是
+C 里标签不引入作用域的直接后果。连续标签（`case 1: case 2: stmt`）就是前一个标签的链为空。
 
 ### D-4 标签之后必须是语句
 
-`case 1: int x;` 是非法 C（标签不能修饰声明）。`parse_label` 在取完标签后若发现下一个是 `is_decl_start()` 或 `own`，报
+`case 1: int x;` 是非法 C（标签不构成作用域，块内的声明不能跟在标签后面）。`parse_label` 在收集语句链时
+若遇到声明（`is_decl_start()`），报
 
 `a declaration cannot follow a case label; wrap it in a block`
 
-紧挨 `}` 时报 `a case label needs a statement`。
+紧挨 `}` 时报 `a case label needs a statement`；链里的 `own` 走 D-7 的消息。
 
 ### D-5 `case` 的取值只接受三种形态
 
@@ -122,7 +124,8 @@ do {
 
 ### D-9 发射缩进
 
-`N_CASE` 的标签行与 `switch` 同级缩进（`emit_indent(ind)`），其子语句用 `ind + 1`；`N_SWITCH` 复用 `N_BLOCK`，因此体内声明、`break`、嵌套 `if` 的缩进与既有块一致。
+`switch` 体走 `N_BLOCK`，因此标签行拿到 `switch` 内一层缩进；`N_CASE` 的语句链再深一层，同一 case 内
+的所有语句（含 `break`）因此对齐。空链的连续标签不会递进缩进。
 
 ## 4. 验收标准
 

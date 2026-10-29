@@ -15,7 +15,7 @@
 > | --- | --- | --- |
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） |
-> | 其它 C 透传（`switch` / `do-while` 等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
+> | 其它 C 透传（`goto` / 标签、`enum`、`union`、`offsetof` 等） | 原样透传 | 只接受已实现的语法子集，报 `unexpected token` |
 >
 > 这是两层的**能力差**，不是「尚未实现」：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -509,6 +509,43 @@ static int apply(int (*fn)(int), int v) { return (*fn)(v); }
   `function-pointer arrays are not supported as parameters`）；一条声明只写一个名字
   （`int (*a)(void), (*b)(void);` 报错）。
 
+#### 4.13 `switch` 与 `do-while`（ct-ast）
+
+```c
+switch (key) {
+case 1:
+    out = 10;
+    break;
+case 2:
+case KIND_B:                  /* 两个标签共享下一段语句 */
+    out = 20;
+    break;
+default:
+    break;
+}
+
+do {
+    total = total + i;
+    i = i + 1;
+} while (i < 4);
+```
+
+- 一个标签拥有从自身到下一个标签（或 `}`）之间的语句，因此 `case` 与它后面的 `break` 同处一级缩进；
+  连续的 `case 1: case 2:` 共享下一段语句，中间可以没有语句。
+- `case` 的取值只接受数字（可带一个前置 `-`）、字符 / 字符串字面量、单个标识符（`#define` 常量原样发射，
+  已知全局按其 C 拼写发射）。ct-ast 不做常量折叠，所以 `case (1 + 2):` 报
+  `a case label must be an integer constant`。
+- `switch` 体可以直接写声明，但**不能**紧跟在标签之后（C 的标签不构成作用域）：
+  `case 1: int x;` 报 `a declaration cannot follow a case label; wrap it in a block`；
+  标签后直接就是 `}` 报 `a case label needs a statement`。
+- `switch` 体内的 `own` 被拒绝（`own is not supported inside a switch`）：一个 case 可能被跳过、也可能贯穿，
+  按顺序块假设的释放点不成立，留待所有权分析支持 case 可达性。
+- `do-while` 的体可以带花括号，也可以只写一条语句；`while (...)` 之后必须写 `;`，否则报
+  `a do statement must be followed by while (...)`。
+- `case` / `default` 出现在 `switch` 体之外（包括 `switch` 体内的嵌套块）报
+  `a case label is only allowed inside a switch`。
+- 不做 `case 1 ... 5:` 范围语法；重复的 case 值原样发射，由 C 编译器报错。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -627,7 +664,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | --- | --- | --- |
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) |
-> | other C passthrough (`switch` / `do-while`, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
+> | other C passthrough (`goto` / labels, `enum`, `union`, `offsetof`, …) | passed through as-is | only the implemented subset; reports `unexpected token` |
 >
 > This is a **capability gap between the two layers**, not work in progress: L0 still reports
 > `'namespace' is not supported by this compiler` for those constructs (same for `pub` / `import` /
@@ -1210,6 +1247,45 @@ static int apply(int (*fn)(int), int v) { return (*fn)(v); }
   `nested function pointers are not supported`); a function-pointer array cannot be a parameter
   (`function-pointer arrays are not supported as parameters`); one declaration names exactly one
   pointer (`int (*a)(void), (*b)(void);` is an error).
+
+#### 4.13 `switch` and `do-while` (ct-ast)
+
+```c
+switch (key) {
+case 1:
+    out = 10;
+    break;
+case 2:
+case KIND_B:                  /* both labels guard the same statements */
+    out = 20;
+    break;
+default:
+    break;
+}
+
+do {
+    total = total + i;
+    i = i + 1;
+} while (i < 4);
+```
+
+- A label owns the statements from itself to the next label (or `}`), so a `case` and the `break` after it share
+  one indentation level; `case 1: case 2:` share the next statements, and a label run may have no statements
+  between its members.
+- A case value is a number with at most one leading `-`, a quoted character / string literal, or a single
+  identifier (`#define` constants keep their spelling; a known global is emitted under its C name). ct-ast folds
+  no constants, so `case (1 + 2):` reports `a case label must be an integer constant`.
+- A `switch` body may hold declarations, but not directly after a label (C labels open no scope):
+  `case 1: int x;` reports `a declaration cannot follow a case label; wrap it in a block`, and a label that
+  runs straight into `}` reports `a case label needs a statement`.
+- `own` inside a `switch` is refused (`own is not supported inside a switch`): a case may be skipped or fall
+  through, so the ordered-block release point does not hold; this waits for case reachability in the ownership
+  pass.
+- A `do-while` body may be braced or a single statement; `while (...)` must be followed by `;`, otherwise
+  `a do statement must be followed by while (...)`.
+- A `case` / `default` outside a `switch` body (including in a block nested inside one) reports
+  `a case label is only allowed inside a switch`.
+- No `case 1 ... 5:` ranges; a duplicated case value is emitted as written and left to the C compiler.
 
 ### 5. Naming contract
 
