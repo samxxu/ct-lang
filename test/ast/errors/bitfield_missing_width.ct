@@ -1,0 +1,8 @@
+/* batch 8: `name : ;` has no width, which would emit a trailing `:;`. */
+struct Bad {
+    unsigned a : ;
+};
+
+int main(void) {
+    return 0;
+}

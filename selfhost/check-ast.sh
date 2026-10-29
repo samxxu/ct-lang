@@ -64,6 +64,8 @@
 # diagnostics (an undefined target, a duplicate label, a declaration behind a
 # label, and a label that guards nothing).
 #
+# batch 8 adds bit-fields: test/ast/33_bitfield plus four width/type diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -963,6 +965,26 @@ do
         ok "batch 7 ($cf)"
     else
         bad "batch 7: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 8: a bit-field width is an integer constant expression and the field
+# itself has to be a plain integer, so four shapes are refused up front.
+for pair in \
+    "bitfield_nonconstant|a bit-field width must be an integer constant" \
+    "bitfield_missing_width|expected a bit-field width" \
+    "bitfield_array|a bit-field cannot be an array" \
+    "bitfield_pointer|a bit-field must have an integer type"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 8: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 8 ($cf)"
+    else
+        bad "batch 8: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

@@ -1,0 +1,9 @@
+/* batch 8: a bit-field must have an integer type; a pointer is rejected before
+   the width is even read. */
+struct Bad {
+    int *p : 3;
+};
+
+int main(void) {
+    return 0;
+}

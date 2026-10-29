@@ -1252,6 +1252,14 @@ impl EmitOps for Emitter {
             }
             return 0;
         }
+        /* A bit-field keeps its width in `a` (`aux` marks the form); the width
+           is an expression so `(1 << 2)` and macro names print as written. */
+        if (self->arena->nodes[n].kind == N_FIELD && self->arena->nodes[n].aux == 1) {
+            fputs(self->arena->nodes[n].text, self->out);
+            if (self->arena->nodes[n].text2[0]) fprintf(self->out, " %s", self->arena->nodes[n].text2);
+            fputs(" : ", self->out);
+            return self->emit_expr(self->arena->nodes[n].a);
+        }
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_FIELD) {
             if (self->emit_type_name_dims(self->arena->nodes[n].text, self->arena->nodes[n].text2,
                                           self->arena->nodes[n].text3) != 0) return -1;

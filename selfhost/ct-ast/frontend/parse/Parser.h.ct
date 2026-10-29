@@ -55,6 +55,7 @@ import tool::diag::diag;
 #define N_STRUCT 20
 #define N_TYPEDEF 21
 #define N_UNION 48
+#define N_VAR 10
 #define T_EOF 0
 #define T_ID 1
 #define T_PP 5
@@ -629,9 +630,15 @@ impl ParseOps for Parser {
         return first;
     }
 
+    /* `<type> name[dims] [= …];` — or, when a `:` follows, a bit-field
+       `<type> [name] : <width>;`. A bit-field reuses this node: `aux = 1` marks
+       it and `a` holds the width expression, so a width of `(1 << 2)` or a macro
+       name emits as written. The width never reaches `text3`, which stays the
+       array-dimension slot the type checker and the vptr writer read. A leading
+       `:` means the field is nameless (padding). */
     int parse_field_def(void)
     {
-        int m;
+        int m, w;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
@@ -639,6 +646,8 @@ impl ParseOps for Parser {
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
         if (self->ex->fnptr_state) {
             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+        } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
+            name[0] = 0;
         } else {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
             snprintf(name, sizeof name, "%s", self->lex->toktext);
@@ -651,6 +660,27 @@ impl ParseOps for Parser {
         if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
             snprintf(self->arena->nodes[m].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
         if (self->ex->parse_array_dims(m) != 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
+            if (self->arena->nodes[m].text3[0])
+                return self->sup->fail("a bit-field cannot be an array");
+            /* C wants an integer; a pointer or a record spelled out here is
+               certainly wrong, while a typedef alias is left to the C compiler */
+            if (strstr(typebuf, "*") || strncmp(typebuf, "struct ", 7) == 0
+                || strncmp(typebuf, "union ", 6) == 0)
+                return self->sup->fail("a bit-field must have an integer type");
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0)
+                return self->sup->fail("expected a bit-field width");
+            w = self->ex->parse_expr();
+            if (w < 0) return -1;
+            /* the same constant rule a `case` label follows: a whole name is
+               allowed whether or not it is declared (it may be a macro) */
+            if (!self->ex->const_ok(w) && self->arena->nodes[w].kind != N_VAR
+                && self->arena->nodes[w].kind != N_RAW)
+                return self->sup->fail("a bit-field width must be an integer constant");
+            self->arena->nodes[m].aux = 1;
+            self->arena->nodes[m].a = w;
+        }
         if (self->sup->expect(";") != 0) return -1;
         return m;
     }

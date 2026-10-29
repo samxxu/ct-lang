@@ -1,0 +1,71 @@
+/* 33: bit-fields (batch 8) - a field may carry a width, the width is an integer
+   constant expression printed as written (a macro or `(1 << 2)`), a nameless
+   `: 4` pads, and the form works in `struct`, `union`, an anonymous
+   `typedef struct` and a struct that also carries a trait vptr. */
+#include <stdio.h>
+
+#define NIBBLE (1 << 2)
+
+trait Tagged {
+    int tag();
+}
+
+struct Flags {
+    unsigned a : 3;
+    unsigned b : 5;
+    unsigned : 4;
+    unsigned c : 8;
+    unsigned d : (2 + 2);
+};
+
+struct Mixed {
+    int plain;
+    unsigned lo : 4;
+    unsigned hi : 4;
+    unsigned long wide : 8;
+    unsigned nib : NIBBLE;
+} use Tagged;
+
+impl Tagged for Mixed {
+    int tag() { return self->plain + (int)self->hi; }
+}
+
+typedef struct {
+    unsigned kind : 2;
+    unsigned size : 6;
+} Header;
+
+union Word {
+    unsigned all;
+    unsigned low : 8;
+};
+
+int main(void) {
+    struct Flags f;
+    struct Mixed m;
+    Header h;
+    union Word w;
+
+    f.a = 5;
+    f.b = 21;
+    f.c = 200;
+    f.d = 9;
+    printf("flags %d %d %d %d %d\n", (int)f.a, (int)f.b, (int)f.c, (int)f.d,
+           (int)sizeof(struct Flags));
+
+    m.plain = 1;
+    m.lo = 9;
+    m.hi = 3;
+    m.wide = 250;
+    m.nib = 15;
+    printf("mixed %d %d %d %d %d\n", m.tag(), (int)m.lo, (int)m.hi, (int)m.wide, (int)m.nib);
+
+    h.kind = 3;
+    h.size = 40;
+    printf("header %d %d %d\n", (int)h.kind, (int)h.size, (int)sizeof(Header));
+
+    w.all = 0;
+    w.low = 129;
+    printf("word %d\n", (int)w.low);
+    return 0;
+}

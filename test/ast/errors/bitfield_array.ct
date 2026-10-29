@@ -1,0 +1,9 @@
+/* batch 8: an array cannot carry a width (`text3` is the array-dimension slot,
+   and C has no array bit-field). */
+struct Bad {
+    int a[2] : 3;
+};
+
+int main(void) {
+    return 0;
+}

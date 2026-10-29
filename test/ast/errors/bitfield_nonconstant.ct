@@ -1,0 +1,12 @@
+/* batch 8: only a whole name is allowed to be an unknown integer constant (it
+   may be a macro); an expression over a variable is refused, the same rule a
+   `case` label follows. */
+int width;
+
+struct Bad {
+    unsigned a : (width + 1);
+};
+
+int main(void) {
+    return 0;
+}
