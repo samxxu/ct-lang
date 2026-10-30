@@ -1003,6 +1003,25 @@ k = i++;                       /* k 取更新前的值 */
 - 值是**更新后**的值，与后缀形式相反；ct-ast 只按原顺序发射运算符与操作数。
 - 没有额外限制，也不需要类型推断（与后缀形式处境相同）。
 
+#### 4.30 初始化器的长度（ct-ast）
+
+```c
+static const char *kw[] = {
+    "void", "char", "short", "int", "long", "float", "double", /* ... 一整张表 */
+};
+
+static const char *notes[] = {
+    "单个列表项也可以是长字符串，整项保留",
+    "short"
+};
+```
+
+- 花括号初始化器不再受节点的 160 字节 `text` 字段限制：捕获与重写各用独立的
+  大缓冲区（单个初始化器 4 KiB，重写后 16 KiB，单个列表项 4 KiB），最终文本存进
+  arena 的字符串池。
+- 因此关键字表、消息表这类长列表，以及由长字符串组成的列表项，都能完整保留。
+- 超出上述上限仍报 `error: initializer is too long`，绝不静默截断。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2254,6 +2273,25 @@ k = i++;                       /* k takes the value before the update */
 - The value is the **updated** one, unlike the postfix form; ct-ast only emits the operator and the
   operand in their original order.
 - There is no extra restriction and no type inference (the same position the postfix form is in).
+
+#### 4.30 Initialiser length (ct-ast)
+
+```c
+static const char *kw[] = {
+    "void", "char", "short", "int", "long", "float", "double", /* ... a whole table */
+};
+
+static const char *notes[] = {
+    "a single item may be a long string too; it is kept whole",
+    "short"
+};
+```
+
+- A braced initialiser is no longer bound by the node's 160-byte `text` field: the capture and the
+  rewrite each get their own large buffer (4 KiB for one initialiser, 16 KiB after rewriting, 4 KiB
+  for one item), and the final text lives in the arena's string pool.
+- Keyword tables, message tables and items made of long string literals therefore survive in full.
+- Exceeding those caps still reports `error: initializer is too long`; nothing is truncated silently.
 
 ### 5. Naming contract
 
