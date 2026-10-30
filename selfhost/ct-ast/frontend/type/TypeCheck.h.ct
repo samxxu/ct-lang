@@ -20,6 +20,10 @@ import frontend::sym::Symbols;
 import runtime::arena::Arena;
 
 #define MAX_TEXT 160
+/* one item of a `{ … }` list, and the text it rewrites to (boxing a struct
+   operand appends to it); a long string literal makes an item large */
+#define MAX_INIT_ITEM 4096
+#define MAX_INIT_TEXT 16384
 /* only the node kinds this unit reads; the numbers are the ones the parser
    builds and the emitter dispatches on */
 #define N_CALL   7
@@ -486,8 +490,8 @@ impl TypeOps for TypeCheck {
     int rewrite_init_text(const char *stype, const char *raw, char *out, int cap)
     {
         int len, i, depth, in_str, start, seg;
-        char item[MAX_TEXT];
-        char fixed[MAX_TEXT];
+        char item[MAX_INIT_ITEM];
+        char fixed[MAX_INIT_TEXT];
 
         len = (int)strlen(raw);
         if (len < 2 || raw[len - 1] != '}') {

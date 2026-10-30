@@ -44,6 +44,7 @@ import runtime::arena::Arena;
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 1024
+#define MAX_RAW_INIT 4096
 #define MAX_TEXT 160
 #define N_ADDR 27
 #define N_ARROW 25
@@ -839,15 +840,24 @@ impl ExprOps for Expr {
                trait-carrying struct needs. A postfix suffix still applies, so
                the node rides through `postfix_seed` instead of returning here. */
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
-                char raw[MAX_TEXT];
-                int rn, cn;
+                /* a compound literal's braces go to the arena string pool for the
+                   same reason a declaration initialiser does (`aux = 1`,
+                   `num` = offset) */
+                char raw[MAX_RAW_INIT];
+                int rn, cn, off, k;
                 size_t tl = strlen(tbuf);
                 if (tl > 0 && tbuf[tl - 1] == '*')
                     return self->sup->fail("a compound literal needs an object type");
                 rn = self->sup->new_node(N_RAW);
                 if (rn < 0) return -1;
                 if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
-                snprintf(self->arena->nodes[rn].text, MAX_TEXT, "%s", raw);
+                off = self->arena->str_begin();
+                for (k = 0; raw[k]; k++)
+                    if (self->arena->str_put(raw[k]) != 0)
+                        return self->sup->fail("initializer is too long");
+                self->arena->str_end();
+                self->arena->nodes[rn].num = off;
+                self->arena->nodes[rn].aux = 1;
                 cn = self->sup->new_node(N_COMPOUND);
                 if (cn < 0) return -1;
                 snprintf(self->arena->nodes[cn].text, MAX_TEXT, "%s", tbuf);

@@ -1,0 +1,42 @@
+/* 46: initialiser lists longer than the 160-byte text field (batch 21) - a
+   global keyword table, a static local table, a table of structs and one item
+   that is itself long all keep their whole text; nothing is truncated. */
+#include <stdio.h>
+#include <string.h>
+
+static const char *kw[] = {
+    "void", "char", "short", "int", "long", "float", "double",
+    "signed", "unsigned", "_Bool", "bool", "const", "volatile",
+    "struct", "union", "enum", "size_t", "ssize_t", "FILE", "wchar_t",
+    "int8_t", "int16_t", "int32_t", "int64_t",
+    "uint8_t", "uint16_t", "uint32_t", "uint64_t", "ptrdiff_t"
+};
+
+struct Pair {
+    int a;
+    int b;
+};
+
+static const struct Pair pairs[] = {
+    { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 },
+    { 11, 12 }, { 13, 14 }, { 15, 16 }, { 17, 18 }, { 19, 20 }
+};
+
+static const char *notes[] = {
+    "one single item may also be longer than the 160-byte text field, which is what this sentence is for",
+    "short"
+};
+
+int main(void) {
+    static const char *locals[] = {
+        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+        "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi",
+        "rho", "sigma", "tau", "upsilon"
+    };
+
+    printf("kw %d %s\n", (int)(sizeof kw / sizeof(kw[0])), kw[28]);
+    printf("pairs %d %d %d\n", (int)(sizeof pairs / sizeof(pairs[0])), pairs[0].a, pairs[9].b);
+    printf("notes %d %d\n", (int)(strlen(notes[0])), (int)(strlen(notes[1])));
+    printf("locals %d %s %s\n", (int)(sizeof locals / sizeof(locals[0])), locals[0], locals[19]);
+    return 0;
+}

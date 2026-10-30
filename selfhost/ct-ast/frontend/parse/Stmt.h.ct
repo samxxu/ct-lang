@@ -25,6 +25,8 @@ import frontend::parse::Expr;
 import tool::diag::diag;
 
 #define MAX_TEXT 160
+#define MAX_RAW_INIT 4096
+#define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 
 #define N_INDEX 26
@@ -884,13 +886,22 @@ impl StmtOps for Stmt {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
-                    char raw[MAX_TEXT];
-                    char fixed[MAX_TEXT];
+                    /* local `static` tables can be long, so the text goes to the
+                       arena string pool (`aux = 1`, `num` = offset) */
+                    char raw[MAX_RAW_INIT];
+                    char fixed[MAX_INIT_TEXT];
+                    int off, k;
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
                     if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->sup->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
-                    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
+                    off = self->arena->str_begin();
+                    for (k = 0; fixed[k]; k++)
+                        if (self->arena->str_put(fixed[k]) != 0)
+                            return self->sup->fail("initializer is too long");
+                    self->arena->str_end();
+                    self->arena->nodes[e].num = off;
+                    self->arena->nodes[e].aux = 1;
                 } else {
                     /* `int (*p)(int) = strcmp;` may name a C library function */
                     if (strstr(typebuf, "(*")) self->ex->fnval_ok = 1;

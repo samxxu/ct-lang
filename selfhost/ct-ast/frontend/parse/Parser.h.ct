@@ -34,8 +34,10 @@ import tool::diag::diag;
 
 #define MAX_FIELDS 64
 #define MAX_IMPORTS 32
+#define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
 #define MAX_PARAMS 16
+#define MAX_RAW_INIT 4096
 #define MAX_TEXT 160
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
@@ -529,13 +531,24 @@ impl ParseOps for Parser {
             if (self->ex->parse_array_dims(g) != 0) return -1;
             if (self->sup->accept("=")) {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
-                    char raw[MAX_TEXT];
-                    char fixed[MAX_TEXT];
+                    /* A keyword or message table is easily longer than the
+                       `text` field, so the rewritten initialiser is copied into
+                       the arena string pool; `aux = 1` records that and `num`
+                       holds the offset (see `emit_raw_init`). */
+                    char raw[MAX_RAW_INIT];
+                    char fixed[MAX_INIT_TEXT];
+                    int off, k;
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
                     if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
                     if (self->sup->rewrite_init_text(ret, raw, fixed, sizeof fixed) != 0) return -1;
-                    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", fixed);
+                    off = self->arena->str_begin();
+                    for (k = 0; fixed[k]; k++)
+                        if (self->arena->str_put(fixed[k]) != 0)
+                            return self->sup->fail("initializer is too long");
+                    self->arena->str_end();
+                    self->arena->nodes[e].num = off;
+                    self->arena->nodes[e].aux = 1;
                 } else {
                     e = self->ex->parse_expr();
                     if (e < 0) return -1;

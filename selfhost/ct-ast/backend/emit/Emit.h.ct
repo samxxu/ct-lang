@@ -502,7 +502,13 @@ impl EmitOps for Emitter {
         int len, i, only_space, si;
         (void)self;
 
-        t = self->arena->nodes[raw].text;
+        /* A captured initialiser may be longer than `text` holds; the parser
+           then keeps it in the arena string pool and sets `aux = 1` with the
+           offset in `num`. An `N_RAW` naming a macro or a function keeps its
+           spelling in `text` as before. */
+        t = self->arena->nodes[raw].aux
+                ? self->arena->str_at((int)self->arena->nodes[raw].num)
+                : self->arena->nodes[raw].text;
         len = (int)strlen(t);
         base = type;
         if (strncmp(base, "struct ", 7) == 0) base += 7;
@@ -1437,7 +1443,10 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_RAW) {
-            fputs(self->arena->nodes[n].text, self->out);
+            /* a pooled initialiser (`aux = 1`) or a bare spelling in `text` */
+            fputs(self->arena->nodes[n].aux
+                      ? self->arena->str_at((int)self->arena->nodes[n].num)
+                      : self->arena->nodes[n].text, self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_VAR) {
