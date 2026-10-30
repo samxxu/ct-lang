@@ -989,6 +989,20 @@ int main(void) {
   `sizeof`、`offsetof` 与 vptr 初始化没有区别。
 - 运行期长度（VLA）同样原样发射，由 C 判断；维度里的字符串字面量不做特殊处理。
 
+#### 4.29 前缀 `++` / `--`（ct-ast）
+
+```c
+while (n && s[n - 1] == 0) s[--n] = 9;
+i = *(--p);
+j = ++i;                       /* j 取更新后的值 */
+k = i++;                       /* k 取更新前的值 */
+```
+
+- 前缀自增 / 自减与其它一元运算符同级：操作数是再一个一元表达式，因此
+  `s[--n]`、`*--p` 与独立的 `--n;` 都按 C 的读法成立。
+- 值是**更新后**的值，与后缀形式相反；ct-ast 只按原顺序发射运算符与操作数。
+- 没有额外限制，也不需要类型推断（与后缀形式处境相同）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2225,6 +2239,21 @@ int main(void) {
   vptr initialisation.
 - A run-time length (a VLA) is emitted as written too and left to C; string literals inside a
   dimension are not special-cased.
+
+#### 4.29 Prefix `++` / `--` (ct-ast)
+
+```c
+while (n && s[n - 1] == 0) s[--n] = 9;
+i = *(--p);
+j = ++i;                       /* j takes the updated value */
+k = i++;                       /* k takes the value before the update */
+```
+
+- Prefix increment / decrement binds like the other unary operators: the operand is another unary
+  expression, so `s[--n]`, `*--p` and a standalone `--n;` all read the way C reads them.
+- The value is the **updated** one, unlike the postfix form; ct-ast only emits the operator and the
+  operand in their original order.
+- There is no extra restriction and no type inference (the same position the postfix form is in).
 
 ### 5. Naming contract
 
