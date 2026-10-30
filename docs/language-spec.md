@@ -1095,8 +1095,10 @@ int main(void)
 - 判据：该名字既不能是已登记的类型（struct / union / enum / trait / typedef），也不能是
   已声明的变量或函数，还不能是语句关键字。所以 `return found;`、`goto done;`、
   `own Box *b` 仍按语句解析，`a * b;`（`a` 是变量）仍是表达式。
-- 不做：转换与 `sizeof` 里的未知类型（`(time_t)x`、`sizeof(time_t)`）。那里
-  `(NAME) + x` 与宏常量无法区分，ct 保持保守，仍按表达式解析。
+- 转换与 `sizeof` 里同样可用：`(time_t)raw`、`(time_t *)&t`、`sizeof(time_t)`。
+  判据比声明位置更严——括号里的名字必须紧跟 `)`（可隔着若干 `*`），并且既不是
+  已声明的变量 / 函数，也不是全大写宏常量。因此 `(f(x))` 仍是被括号包住的调用，
+  `(MAX) + 1` 仍是表达式。
 
 ### 5. 命名规则（稳定契约）
 
@@ -2451,9 +2453,10 @@ int main(void)
   not already be a declared variable or function, and must not be a statement keyword. So
   `return found;`, `goto done;` and `own Box *b` still parse as statements, and `a * b;` (with `a`
   a variable) is still an expression.
-- Not covered: an unknown type in a cast or `sizeof` (`(time_t)x`, `sizeof(time_t)`). There
-  `(NAME) + x` cannot be told from a macro constant, so ct stays conservative and reads an
-  expression.
+- A cast or `sizeof` takes one too: `(time_t)raw`, `(time_t *)&t`, `sizeof(time_t)`. The test is
+  stricter than in a declaration — the name must be followed by `)` (optionally behind stars), and
+  it must be neither a declared variable / function nor an ALL_CAPS macro constant. So `(f(x))`
+  is still a call in parentheses and `(MAX) + 1` is still an expression.
 
 ### 5. Naming contract
 
