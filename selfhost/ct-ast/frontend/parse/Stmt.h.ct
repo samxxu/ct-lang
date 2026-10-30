@@ -121,12 +121,59 @@ impl StmtOps for Stmt {
     int is_decl_start(void)
     {
         char rn[MAX_TEXT];
+        char save_text[MAX_TEXT];
+        int save_tok, save_float, save_line, save_tokline, save_start;
+        int save_lstart, save_bol, save_pos, look, i;
+        long save_num;
+        /* Statement keywords that may be followed by a name (`return found;`,
+           `goto done;`, `own Box *b`). None of them can be a type, so they must
+           not enter the unknown-type fallback below. */
+        static const char *kw[] = {
+            "break", "case", "continue", "default", "delete", "do", "else",
+            "extern", "for", "goto", "if", "impl", "import", "inline", "map",
+            "namespace", "own", "pub", "return", "sizeof", "static", "switch",
+            "trait", "typedef", "while", NULL
+        };
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
         if (self->ex->is_type_word(self->lex->toktext)) return 1;
         if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
-        return self->sym->find_type(rn) >= 0;
+        if (self->sym->find_type(rn) >= 0) return 1;
+        for (i = 0; kw[i]; i++)
+            if (strcmp(self->lex->toktext, kw[i]) == 0) return 0;
+        /* A type name this unit never saw -- a typedef from a header, such as
+           `time_t`. It is a type rather than an operand when the next token is
+           the declarator's name, directly (`time_t now`) or behind some stars
+           (`time_t *t`); a name that already resolves to a variable or a
+           function is an operand, which keeps `a * b;` an expression. */
+        if (self->sym->find_var(self->lex->toktext) >= 0) return 0;
+        if (self->sym->find_func(self->lex->toktext) >= 0) return 0;
+        save_tok = self->lex->tok;
+        save_num = self->lex->toknum;
+        save_float = self->lex->tokfloat;
+        save_line = self->lex->line;
+        save_tokline = self->lex->tokline;
+        save_start = self->lex->tokstart;
+        save_lstart = self->lex->lstart;
+        save_bol = self->lex->bol;
+        save_pos = self->lex->pos;
+        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0)
+            self->sup->lex_next();
+        look = (self->lex->tok == T_ID);
+        self->lex->tok = save_tok;
+        self->lex->toknum = save_num;
+        self->lex->tokfloat = save_float;
+        self->lex->line = save_line;
+        self->lex->tokline = save_tokline;
+        self->lex->tokstart = save_start;
+        self->lex->lstart = save_lstart;
+        self->lex->bol = save_bol;
+        self->lex->pos = save_pos;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        return look;
     }
 
     int parse_block(void)

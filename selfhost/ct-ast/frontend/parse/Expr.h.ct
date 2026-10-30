@@ -231,7 +231,19 @@ impl ExprOps for Expr {
                 char iface[MAX_TEXT];
                 if (self->sup->resolve_type(self->lex->toktext, rname, sizeof rname) != 0) return -1;
                 ti = self->sym->find_type(rname);
-                if (ti < 0) break;
+                if (ti < 0) {
+                    /* A type name the unit has never seen (a typedef from a
+                       header, such as `time_t`). It can only stand where a type
+                       is expected, so the spelling is kept as written; the
+                       cast / `sizeof` decision happens before this point, so
+                       `(NAME) + x` is never turned into one. */
+                    if (n == 0) {
+                        if (self->type_append(out, cap, &n, rname) != 0) return -1;
+                        self->sup->lex_next();
+                        continue;
+                    }
+                    break;
+                }
                 /* a bare struct / enum tag needs its keyword; a trait becomes
                    its iface */
                 if (self->sym->type_kind[ti] == 1) {

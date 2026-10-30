@@ -1,0 +1,43 @@
+/* 50: a type name that only a header declares (batch 25) - `time_t` and
+   `clock_t` are not in the built-in word list, yet a declaration can name them:
+   the spelling is kept as written and the C compiler supplies the typedef. */
+#include <stdio.h>
+#include <time.h>
+
+struct Stamp {
+    const char *label;
+    time_t when;
+};
+
+static time_t g_base;
+static time_t *g_ref;
+
+static void show(time_t t, const char *label) {
+    printf("%s %ld\n", label, (long)t);
+}
+
+int main(void) {
+    time_t now;
+    time_t *ref;
+    clock_t ticks;
+    struct Stamp s;
+    int i;
+    int j;
+    int k;
+
+    now = 7;
+    ref = &now;
+    ticks = 3;
+    g_base = now;
+    g_ref = ref;
+    s.label = "field";
+    s.when = now;
+    i = 2;
+    j = 5;
+    k = i * j;
+    show(*ref, "ref");
+    show(s.when, s.label);
+    show(g_base, "base");
+    printf("ticks %ld k %d ref %d\n", (long)ticks, k, (int)*g_ref);
+    return 0;
+}

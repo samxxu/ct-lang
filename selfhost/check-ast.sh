@@ -116,6 +116,10 @@
 # batch 24 also accepts a parenthesised comma list in a value position:
 # test/ast/49_comma_value (no new diagnostic).
 #
+# batch 25 accepts a type name that only a header declares (`time_t`): in a
+# declaration position an unknown name followed by its declarator is taken as
+# the type: test/ast/50_header_type (no new diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
