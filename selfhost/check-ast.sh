@@ -109,6 +109,10 @@
 # test/ast/47_vararg_fnptr plus the two rejected shapes (`(...)` with nothing in
 # front, and `(void, ...)`).
 #
+# batch 23 accepts a comma list where a full expression is expected (an
+# expression statement and a `for` init / step): test/ast/48_comma (no new
+# diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #

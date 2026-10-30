@@ -1,0 +1,38 @@
+/* 48: the comma operator (batch 23) - a full expression may list several
+   assignment-expressions; they run left to right and the value is the last
+   one. The list is accepted where a statement or a `for` init / step clause
+   expects a full expression. */
+#include <stdio.h>
+
+static int bump(int *p) {
+    *p = *p + 1;
+    return 0;
+}
+
+int main(void) {
+    int i;
+    int j;
+    int sum;
+    int last;
+
+    i = 1, j = 2;
+    printf("pair %d %d\n", i, j);
+
+    sum = 0;
+    for (i = 0, j = 10; i < 3; i++, j--) sum = sum + j;
+    printf("step %d %d %d\n", i, j, sum);
+
+    i = 0;
+    for (i = 0, j = 0; i < 2; i++, j = j + 2) {
+        printf("loop %d %d\n", i, j);
+    }
+
+    i = 0;
+    j = 0;
+    bump(&i), bump(&j);
+    printf("bump %d %d\n", i, j);
+
+    last = i, last = last + 1;
+    printf("last %d\n", last);
+    return 0;
+}

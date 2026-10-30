@@ -29,9 +29,11 @@ import tool::diag::diag;
 #define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 
+#define B_COMMA 19
 #define N_INDEX 26
 #define N_ARROW 25
 #define N_ASSIGN 13
+#define N_BIN 11
 #define N_BLOCK 4
 #define N_BREAK 38
 #define N_CASE 43
@@ -939,7 +941,7 @@ impl StmtOps for Stmt {
 
     int parse_expr_stmt_node(void)
     {
-        int e, rhs, n;
+        int e, rhs, n, w;
         (void)self;
 
         e = self->ex->parse_expr();
@@ -973,9 +975,7 @@ impl StmtOps for Stmt {
             self->arena->nodes[n].b = rhs;
             self->arena->nodes[n].aux = op;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
-            return n;
-        }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
+        } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
             int k, ip;
             char tt[MAX_TEXT];
             char tr[MAX_TEXT];
@@ -1003,12 +1003,30 @@ impl StmtOps for Stmt {
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
-            return n;
+        } else if (self->arena->nodes[e].kind == N_POST) {
+            n = e;
+        } else {
+            n = self->sup->new_node(N_EXPR);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = e;
         }
-        if (self->arena->nodes[e].kind == N_POST) return e;
-        n = self->sup->new_node(N_EXPR);
-        if (n < 0) return -1;
-        self->arena->nodes[n].a = e;
+        /* A comma list is the loosest level of a full expression, and the only
+           callers that need it (an expression statement, a `for` init / step)
+           come through here; `parse_expr` stays comma-free because call
+           arguments are comma-separated by the same token. Each operand is
+           itself parsed by this function, so `a, b, c` nests to the right --
+           the evaluation is left to right either way, which is all `,` says. */
+        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+            self->sup->lex_next();
+            rhs = self->parse_expr_stmt_node();
+            if (rhs < 0) return -1;
+            w = self->sup->new_node(N_BIN);
+            if (w < 0) return -1;
+            self->arena->nodes[w].a = n;
+            self->arena->nodes[w].b = rhs;
+            self->arena->nodes[w].aux = B_COMMA;
+            n = w;
+        }
         return n;
     }
 }
