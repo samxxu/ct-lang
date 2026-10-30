@@ -96,6 +96,9 @@
 # batch 18 allows several declarators in one field declaration:
 # test/ast/43_multi_field (the batch adds no diagnostic).
 #
+# batch 19 accepts expressions as array lengths: test/ast/44_array_length (no new
+# diagnostic either).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #

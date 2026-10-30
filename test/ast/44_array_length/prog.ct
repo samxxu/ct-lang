@@ -1,0 +1,34 @@
+/* 44: array lengths may be expressions (batch 19) - a macro, a product, a shift
+   or a parenthesised sum is kept as written inside the brackets, so `int a[W * 2]`
+   and `char b[(1 << 3)]` work in globals, locals, fields and typedefs. */
+#include <stdio.h>
+
+#define WIDTH 4
+#define SLOTS (WIDTH * 2)
+
+static int g_tbl[WIDTH * 2];
+
+struct Box {
+    int cells[SLOTS];
+    char name[(1 << 3)];
+    short pairs[WIDTH + 1];
+};
+
+int main(void) {
+    int local[WIDTH + 1];
+    struct Box b;
+    int i;
+
+    for (i = 0; i < WIDTH + 1; i++) local[i] = i * 2;
+    g_tbl[0] = 5;
+    b.cells[0] = 9;
+    b.name[0] = 'x';
+    b.pairs[0] = 3;
+
+    printf("local %d %d\n", local[0], local[4]);
+    printf("box %d %c %d\n", b.cells[0], b.name[0], (int)(sizeof(b.cells) / sizeof(int)));
+    printf("sizes %d %d %d\n", (int)(sizeof(g_tbl) / sizeof(int)),
+           (int)sizeof(b.name), (int)(sizeof(b.pairs) / sizeof(short)));
+    printf("global %d %d\n", g_tbl[0], b.pairs[0]);
+    return 0;
+}

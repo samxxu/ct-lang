@@ -380,8 +380,11 @@ impl ExprOps for Expr {
         while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
             char dim[MAX_TEXT];
             char cur[MAX_TEXT];
-            int unsized;
+            int unsized, open, raw;
             unsized = 0;
+            raw = 0;
+            open = self->lex->tokstart;             /* the `[` itself */
+            dim[0] = 0;
             self->sup->lex_next();
             if (self->lex->tok == T_NUM) {
                 snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
@@ -398,10 +401,46 @@ impl ExprOps for Expr {
                 snprintf(dim, sizeof dim, "[]");
                 unsized = 1;
             } else {
-                return self->sup->fail("expected an array length");
+                raw = 1;
             }
-            if (!unsized) self->sup->lex_next();
-            if (self->sup->expect("]") != 0) return -1;
+            if (!unsized && !raw) {
+                self->sup->lex_next();
+                /* more than one token inside the brackets (`[MAX_NAME * 2]`):
+                   the expression is kept as written */
+                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)) {
+                    raw = 1;
+                    dim[0] = 0;
+                }
+            }
+            if (raw) {
+                /* copy the source text between the brackets, then let the lexer
+                   re-read from just past the closing one */
+                int p2, d2, q2;
+                p2 = open + 1;
+                d2 = 0;
+                q2 = 0;
+                dim[q2] = '[';
+                q2++;
+                while (self->lex->src[p2] && q2 + 2 < MAX_TEXT) {
+                    char ch = self->lex->src[p2];
+                    if (ch == '[') d2++;
+                    else if (ch == ']') {
+                        if (d2 == 0) break;
+                        d2--;
+                    }
+                    dim[q2] = ch;
+                    q2++;
+                    p2++;
+                }
+                if (self->lex->src[p2] != ']') return self->sup->fail("expected an array length");
+                dim[q2] = ']';
+                q2++;
+                dim[q2] = 0;
+                self->lex->pos = p2 + 1;
+                self->sup->lex_next();
+            } else if (self->sup->expect("]") != 0) {
+                return -1;
+            }
             snprintf(cur, sizeof cur, "%s%s", self->arena->nodes[n].text3, dim);
             snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", cur);
             self->arena->nodes[n].num = 0;      /* text3 is the authoritative spelling */
