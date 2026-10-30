@@ -120,6 +120,10 @@
 # declaration position an unknown name followed by its declarator is taken as
 # the type: test/ast/50_header_type (no new diagnostic).
 #
+# batch 26 extends that to casts and `sizeof` (`(time_t)raw`, `sizeof(time_t)`),
+# where the name must also close the parenthesis: test/ast/51_cast_header_type
+# (no new diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #

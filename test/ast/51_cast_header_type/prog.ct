@@ -1,0 +1,23 @@
+/* 51: a header's type name in a cast and in `sizeof` (batch 26) - `time_t` and
+   `clock_t` are unknown to the parser, but inside `(...)` a name that closes the
+   parenthesis (optionally behind stars) is a type, so the cast and `sizeof`
+   forms work while `(MAX) + 1` stays an expression. */
+#include <stdio.h>
+#include <time.h>
+
+int main(void) {
+    long raw;
+    time_t t;
+    time_t *ref;
+    clock_t ticks;
+
+    raw = 5;
+    t = (time_t)raw;
+    ref = (time_t *)&t;
+    ticks = (clock_t)t;
+    printf("cast %ld %ld\n", (long)t, (long)ticks);
+    printf("ref %ld\n", (long)*ref);
+    printf("size %d %d\n", (int)(sizeof(time_t) == sizeof(long)),
+           (int)(sizeof(time_t *) == sizeof(void *)));
+    return 0;
+}

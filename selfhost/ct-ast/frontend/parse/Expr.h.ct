@@ -482,7 +482,7 @@ impl ExprOps for Expr {
        (`(a + b)`) without consuming anything, so postfix binding stays intact. */
     int next_is_type_name(void)
     {
-        int save_tok, save_line, save_bol, save_srcline, res;
+        int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
         long save_num;
         size_t save_pos;
         char save_text[MAX_TEXT];
@@ -493,6 +493,8 @@ impl ExprOps for Expr {
         save_pos = self->lex->pos;
         save_srcline = self->lex->line;
         save_bol = self->lex->bol;
+        save_start = self->lex->tokstart;
+        save_lstart = self->lex->lstart;
         snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
         self->sup->lex_next();
         res = 0;
@@ -505,6 +507,30 @@ impl ExprOps for Expr {
             } else if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) == 0
                        && self->sym->find_type(rn) >= 0) {
                 res = 1;
+            } else {
+                /* A type name only a header declares (`time_t`), used in a cast
+                   or `sizeof`. A declared variable or function is an operand,
+                   and an ALL_CAPS name is a macro constant by the same rule
+                   `parse_primary` applies, so `(MAX) + 1` keeps reading as an
+                   expression. A cast's type also has to close the parenthesis
+                   (`(time_t)`, `(time_t *)`); `(f(x))` is a call in parentheses,
+                   which is what an undeclared library name looks like. */
+                int i, caps;
+                caps = (self->lex->toktext[0] != 0);
+                for (i = 0; self->lex->toktext[i]; i++) {
+                    char cc = self->lex->toktext[i];
+                    if (!((cc >= 'A' && cc <= 'Z') || (cc >= '0' && cc <= '9') || cc == '_')) {
+                        caps = 0;
+                        break;
+                    }
+                }
+                if (!caps && self->sym->find_var(self->lex->toktext) < 0
+                    && self->sym->find_func(self->lex->toktext) < 0) {
+                    self->sup->lex_next();
+                    while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0)
+                        self->sup->lex_next();
+                    res = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0);
+                }
             }
         }
         self->lex->tok = save_tok;
@@ -513,6 +539,8 @@ impl ExprOps for Expr {
         self->lex->pos = save_pos;
         self->lex->line = save_srcline;
         self->lex->bol = save_bol;
+        self->lex->tokstart = save_start;
+        self->lex->lstart = save_lstart;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
         return res;
     }
