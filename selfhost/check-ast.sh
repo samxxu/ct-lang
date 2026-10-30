@@ -105,6 +105,10 @@
 # test/ast/46_long_init (no new diagnostic; an over-long list still reports
 # `initializer is too long` rather than truncating).
 #
+# batch 22 lets a function-pointer declarator carry a variadic tail:
+# test/ast/47_vararg_fnptr plus the two rejected shapes (`(...)` with nothing in
+# front, and `(void, ...)`).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1163,6 +1167,24 @@ do
         ok "batch 17 ($cf)"
     else
         bad "batch 17: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 22: a variadic tail in a function-pointer declarator needs a named
+# parameter in front of it; `void` is the empty list, so it does not count.
+for pair in \
+    "vararg_fnptr_no_named|a variadic function pointer needs a named parameter before '...'" \
+    "vararg_fnptr_void|a variadic function pointer needs a named parameter before '...'"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 22: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 22 ($cf)"
+    else
+        bad "batch 22: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

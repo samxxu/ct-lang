@@ -328,6 +328,20 @@ impl ExprOps for Expr {
                     for (;;) {
                         char pt[MAX_TEXT];
                         const char *joiner;
+                        /* A variadic tail belongs to the signature like any
+                           other parameter (`int (*log)(const char *, ...)`), so
+                           it is copied into the spelling; C requires a named
+                           parameter before it, and it closes the list. */
+                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0) {
+                            if (pn == 0 || strcmp(plist, "void") == 0)
+                                return self->sup->fail("a variadic function pointer needs a named parameter before '...'");
+                            if (pn + 6 > MAX_TEXT)
+                                return self->sup->fail("a function-pointer signature is too long");
+                            snprintf(plist + pn, (size_t)(MAX_TEXT - pn), "%s", ", ...");
+                            pn += 5;
+                            self->sup->lex_next();
+                            break;
+                        }
                         if (self->parse_type(pt, sizeof pt) != 0) return -1;
                         if (self->fnptr_state)
                             return self->sup->fail("nested function pointers are not supported");

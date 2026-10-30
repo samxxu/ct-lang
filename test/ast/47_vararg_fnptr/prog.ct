@@ -1,0 +1,57 @@
+/* 47: a variadic function pointer (batch 22) - `...` belongs to the signature
+   spelling, so it survives inside a typedef, a struct field, an array of
+   pointers and a local; calls through all of them pass extra arguments on. */
+#include <stdio.h>
+#include <stdarg.h>
+
+typedef int (*logger_fn)(const char *fmt, ...);
+typedef int (*counter_fn)(int n, ...);
+
+struct Sink {
+    const char *name;
+    logger_fn log;
+};
+
+static int counts(int n, ...) {
+    va_list ap;
+    int i;
+    int total;
+
+    total = 0;
+    va_start(ap, n);
+    for (i = 0; i < n; i++) total = total + va_arg(ap, int);
+    va_end(ap);
+    return total;
+}
+
+static void vlog(const char *fmt, va_list ap) {
+    vprintf(fmt, ap);
+}
+
+static int say(const char *fmt, ...) {
+    va_list ap;
+
+    va_start(ap, fmt);
+    vlog(fmt, ap);
+    va_end(ap);
+    return 0;
+}
+
+static logger_fn g_log = say;
+static logger_fn tbl[2] = { say, say };
+
+int main(void) {
+    struct Sink s;
+    counter_fn local;
+    int r;
+
+    s.name = "sink";
+    s.log = say;
+    local = counts;
+    r = local(2, 3, 4);
+    printf("sum %d\n", r);
+    s.log("sink %s %d\n", s.name, r);
+    tbl[1]("table %d\n", 5);
+    g_log("global %d\n", counts(3, 1, 2, 3));
+    return 0;
+}

@@ -1,0 +1,3 @@
+/* batch 22: `void` is the empty parameter list, not a parameter, so it cannot
+   stand in front of `...` either. */
+int (*f)(void, ...);
