@@ -124,6 +124,9 @@
 # where the name must also close the parenthesis: test/ast/51_cast_header_type
 # (no new diagnostic).
 #
+# batch 27 keeps the batch probes as a gate: ct-ast compiles `selfhost/l0/ctc.c`
+# itself, the generated C is built, and the resulting compiler runs an example.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1656,6 +1659,27 @@ if "$work/ct-ast" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/sel
     ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"
 else
     bad "self-compile" "$(cat "$work/self1.err" "$work/selfcc.log" "$work/self2.err" 2>/dev/null | head -5)"
+fi
+
+echo
+echo "== the L0 seed (ct-ast compiles ctc.c itself) =="
+# The C-subset coverage the batch probes established, kept as a gate: every
+# construct `selfhost/l0/ctc.c` uses must parse, the generated C must compile,
+# and the compiler that comes out must run an example end to end. Without this
+# a parse branch could narrow again and only the probes would notice.
+mkdir -p "$work/seed"
+if "$work/ct-ast" compile selfhost/l0/ctc.c -o "$work/seed/ctc.c" \
+        >"$work/seed.out" 2>"$work/seed.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/seed/ctc.c" -o "$work/seed/ctc" 2>"$work/seedcc.log" \
+   && "$work/seed/ctc" examples/01_greeter/greeter.ct -o "$work/seed/greeter.c" \
+        >"$work/seedrun.out" 2>"$work/seedrun.err" \
+   && "$CC" "$work/seed/greeter.c" -o "$work/seed/greeter" 2>"$work/seedgreet.log" \
+   && "$work/seed/greeter" >"$work/seed/greeter.out" 2>&1 \
+   && diff -u examples/01_greeter/greeter.expected.out "$work/seed/greeter.out" >/dev/null 2>&1; then
+    ok "L0 seed (ctc.c compiles; the result builds and runs an example)"
+else
+    bad "L0 seed" "$(cat "$work/seed.err" "$work/seedcc.log" "$work/seedrun.err" \
+                       "$work/seedgreet.log" 2>/dev/null | head -5)"
 fi
 
 echo
