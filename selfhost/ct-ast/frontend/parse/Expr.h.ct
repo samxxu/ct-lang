@@ -67,6 +67,7 @@ import runtime::arena::Arena;
 #define N_COMPOUND 51
 #define N_VAARG 53
 #define N_FNUM 54
+#define N_PRE 57
 #define P_DEC 2
 #define P_INC 1
 #define T_ID 1
@@ -863,6 +864,21 @@ impl ExprOps for Expr {
             return n;
         }
         op = 0;
+        /* prefix `++` / `--`: the same increment as the postfix form, but the
+           value is the updated one (D-9 of this batch). It binds like the other
+           unary operators, so `s[--n]` and `*--p` work as in C. */
+        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "++") == 0
+                                          || strcmp(self->lex->toktext, "--") == 0)) {
+            int pre = (self->lex->toktext[0] == '+') ? P_INC : P_DEC;
+            self->sup->lex_next();
+            e = self->parse_unary();
+            if (e < 0) return -1;
+            n = self->sup->new_node(N_PRE);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = e;
+            self->arena->nodes[n].aux = pre;
+            return n;
+        }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) op = U_NEG;
         else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "!") == 0) op = U_NOT;
         else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "~") == 0) op = U_BNOT;

@@ -84,6 +84,7 @@ import runtime::arena::Arena;
 #define N_FNUM    54
 #define N_SASSERT 55
 #define N_FIELDS  56
+#define N_PRE     57
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -1518,6 +1519,11 @@ impl EmitOps for Emitter {
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
             return 0;
+        }
+        /* prefix form: the operator comes first, the operand follows */
+        if (self->arena->nodes[n].kind == N_PRE) {
+            fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
+            return self->emit_expr(self->arena->nodes[n].a);
         }
         if (self->arena->nodes[n].kind == N_TERN) {
             fputs("(", self->out);

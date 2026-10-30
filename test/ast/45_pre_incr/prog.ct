@@ -1,0 +1,43 @@
+/* 45: prefix `++` / `--` (batch 20) - the operator binds like the other unary
+   forms, so it works inside a subscript, a dereference and an ordinary
+   expression; the value is the updated one, unlike the postfix spelling. */
+#include <stdio.h>
+
+#define WIDTH 4
+
+static int trim(int *s, int n) {
+    while (n && s[n - 1] == 0) s[--n] = 9;
+    return n;
+}
+
+int main(void) {
+    int i;
+    int j;
+    int k;
+    int a[WIDTH];
+    int buf[3];
+    int *p;
+
+    i = 0;
+    j = ++i;
+    k = i++;
+    printf("pre %d %d %d\n", i, j, k);
+
+    a[0] = 0;
+    a[1] = 0;
+    a[2] = 5;
+    a[3] = 6;
+    printf("trim %d %d %d\n", trim(a, 2), a[0], a[1]);
+
+    i = 2;
+    a[--i] = 7;
+    printf("index %d %d\n", i, a[1]);
+
+    buf[0] = 1;
+    buf[1] = 2;
+    buf[2] = 3;
+    p = buf + 3;
+    i = *(--p);                       /* sequenced before the next read of p */
+    printf("ptr %d %d\n", i, (int)(p - buf));
+    return 0;
+}

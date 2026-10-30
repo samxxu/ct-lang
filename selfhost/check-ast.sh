@@ -99,6 +99,8 @@
 # batch 19 accepts expressions as array lengths: test/ast/44_array_length (no new
 # diagnostic either).
 #
+# batch 20 adds prefix `++` / `--`: test/ast/45_pre_incr (no new diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
