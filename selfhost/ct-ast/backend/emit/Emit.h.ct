@@ -1558,6 +1558,19 @@ impl EmitOps for Emitter {
             fputs(")", self->out);
             return 0;
         }
+        /* A comma list in a value position (`x = (a, b);`): both operands
+           evaluate in order and the value is the last one, which is exactly what
+           C's `,` does, so the spelling is kept. Its operands are ordinary
+           expressions here; the statement form's operands go through
+           `emit_inline` instead. */
+        if (self->arena->nodes[n].kind == N_BIN && self->arena->nodes[n].aux == B_COMMA) {
+            fputs("(", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(", ", self->out);
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+            fputs(")", self->out);
+            return 0;
+        }
         if (self->arena->nodes[n].kind == N_BIN) {
             op = "+";
             if (self->arena->nodes[n].aux == B_SUB) op = "-";

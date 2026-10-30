@@ -113,6 +113,9 @@
 # expression statement and a `for` init / step): test/ast/48_comma (no new
 # diagnostic).
 #
+# batch 24 also accepts a parenthesised comma list in a value position:
+# test/ast/49_comma_value (no new diagnostic).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #

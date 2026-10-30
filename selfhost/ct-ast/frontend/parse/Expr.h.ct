@@ -29,6 +29,7 @@ import runtime::arena::Arena;
 #define B_AND 12
 #define B_BAND 15
 #define B_BOR 16
+#define B_COMMA 19
 #define B_DIV 4
 #define B_EQ 9
 #define B_GE 8
@@ -1342,6 +1343,23 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             n = self->parse_expr();
             if (n < 0) return -1;
+            /* A parenthesised comma list is a value (`x = (a, b);`,
+               `f((a, b))`): both operands evaluate, the value is the last one.
+               The node is the one the statement form builds; the operands here
+               are ordinary expressions, since an assignment inside parentheses
+               is not part of the expression grammar. */
+            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                int r, w;
+                self->sup->lex_next();
+                r = self->parse_expr();
+                if (r < 0) return -1;
+                w = self->sup->new_node(N_BIN);
+                if (w < 0) return -1;
+                self->arena->nodes[w].a = n;
+                self->arena->nodes[w].b = r;
+                self->arena->nodes[w].aux = B_COMMA;
+                n = w;
+            }
             if (self->sup->expect(")") != 0) return -1;
             return n;
         }

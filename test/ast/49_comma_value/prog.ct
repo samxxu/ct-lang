@@ -1,0 +1,40 @@
+/* 49: a comma list in a value position (batch 24) - a parenthesised list is an
+   ordinary expression, so its value is the last operand and it may stand in an
+   assignment, an argument or a condition, where a bare comma would have been a
+   separator. */
+#include <stdio.h>
+
+static int bump(int *p) {
+    *p = *p + 1;
+    return *p;
+}
+
+static int pair(int a, int b) {
+    return a * 10 + b;
+}
+
+int main(void) {
+    int i;
+    int j;
+    int x;
+
+    i = 3;
+    j = 4;
+    x = (i++, j * 2);
+    printf("value %d %d %d\n", x, i, j);
+
+    i = 0;
+    j = 0;
+    x = (bump(&i), bump(&j));
+    printf("bump %d %d %d\n", i, j, x);
+
+    i = 5;
+    x = pair((i++, i + 1), 7);
+    printf("arg %d %d\n", x, i);
+
+    i = 1;
+    j = 9;
+    while ((i++, j > 8)) j = 0;
+    printf("cond %d %d\n", i, j);
+    return 0;
+}
