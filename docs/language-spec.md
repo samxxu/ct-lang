@@ -1022,6 +1022,30 @@ static const char *notes[] = {
 - 因此关键字表、消息表这类长列表，以及由长字符串组成的列表项，都能完整保留。
 - 超出上述上限仍报 `error: initializer is too long`，绝不静默截断。
 
+#### 4.31 变参函数指针（ct-ast）
+
+```c
+typedef int (*logger_fn)(const char *fmt, ...);
+
+struct Sink {
+    const char *name;
+    logger_fn log;
+};
+
+static logger_fn g_log = say;
+static logger_fn tbl[2] = { say, say };
+
+p = counts;                 /* 局部变量同样可以指向变参函数 */
+r = p(2, 3, 4);
+s.log("sink %s %d\n", s.name, r);
+```
+
+- `...` 属于函数指针**签名拼写**的一部分：它连同其余参数一起写进 `(*)(…)`，因此
+  typedef、结构体字段、指针数组与局部声明都自动带上它（§4.22 已说明 `...` 的含义）。
+- 与 §4.22 的规则一致：`...` 前面必须至少有一个具名参数。`(...)` 与 `(void, ...)`
+  都报 `a variadic function pointer needs a named parameter before '...'`。
+- 通过指针调用就是普通调用，多余实参原样透传；ct 不检查实参类型（与 `printf` 一致）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2292,6 +2316,32 @@ static const char *notes[] = {
   for one item), and the final text lives in the arena's string pool.
 - Keyword tables, message tables and items made of long string literals therefore survive in full.
 - Exceeding those caps still reports `error: initializer is too long`; nothing is truncated silently.
+
+#### 4.31 Variadic function pointers (ct-ast)
+
+```c
+typedef int (*logger_fn)(const char *fmt, ...);
+
+struct Sink {
+    const char *name;
+    logger_fn log;
+};
+
+static logger_fn g_log = say;
+static logger_fn tbl[2] = { say, say };
+
+p = counts;                 /* a local may point at a variadic function too */
+r = p(2, 3, 4);
+s.log("sink %s %d\n", s.name, r);
+```
+
+- The `...` is part of the function pointer's **signature spelling**: it is written into `(*)(…)`
+  together with the other parameters, so a typedef, a struct field, an array of pointers and a local
+  declaration all carry it (§4.22 explains what `...` means).
+- The rule matches §4.22: there must be at least one named parameter in front of `...`. Both `(...)`
+  and `(void, ...)` report `a variadic function pointer needs a named parameter before '...'`.
+- A call through the pointer is an ordinary call; extra arguments are passed through unchanged, and
+  ct does not check their types (exactly as with `printf`).
 
 ### 5. Naming contract
 
