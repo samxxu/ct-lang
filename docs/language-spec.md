@@ -1100,6 +1100,25 @@ int main(void)
   已声明的变量 / 函数，也不是全大写宏常量。因此 `(f(x))` 仍是被括号包住的调用，
   `(MAX) + 1` 仍是表达式。
 
+#### 4.34 表达式里的赋值（ct-ast）
+
+```c
+while ((c = getchar()) != EOF) { … }
+if ((n = parse(line)) > 0) { … }
+
+x = (a = b = 0);          /* 右结合 */
+y = (arr[0] = 4) + 1;     /* 下标目标 */
+z = (p->n = 7);           /* 成员目标 */
+w = (a += 2);             /* 复合赋值 */
+```
+
+- 括号里，以及 `if` / `while` / `do … while` / `switch` / `for` 的条件里，赋值可以当作
+  取值使用：`(c = getchar())` 的值就是赋进去的值；`a = b = 0` 右结合；`+=` 等复合赋值同样可用。
+- 语句层的赋值完全不变：`x = 1;` 仍由语句解析，生成物不加括号。
+- 目标必须是变量、成员、下标或解引用，否则报 `assignment target is not assignable`。
+- 目标是 `own` 变量时拒绝：`an 'own' variable can only be assigned in a statement`。
+  所有权（AutoDrop / 泄漏分析）只在语句层记账，值位置的赋值会绕过它，所以宁可报错。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2457,6 +2476,29 @@ int main(void)
   stricter than in a declaration — the name must be followed by `)` (optionally behind stars), and
   it must be neither a declared variable / function nor an ALL_CAPS macro constant. So `(f(x))`
   is still a call in parentheses and `(MAX) + 1` is still an expression.
+
+#### 4.34 An assignment used as a value (ct-ast)
+
+```c
+while ((c = getchar()) != EOF) { … }
+if ((n = parse(line)) > 0) { … }
+
+x = (a = b = 0);          /* right-associative */
+y = (arr[0] = 4) + 1;     /* subscript target */
+z = (p->n = 7);           /* member target */
+w = (a += 2);             /* compound assignment */
+```
+
+- Inside parentheses, and in an `if` / `while` / `do … while` / `switch` / `for` condition, an
+  assignment may be used as a value: `(c = getchar())` yields the assigned value, `a = b = 0` nests
+  to the right, and `+=` and friends work the same way.
+- A statement's own assignment is unchanged: `x = 1;` still goes through the statement layer and is
+  emitted without parentheses.
+- The target must be a variable, member, subscript or dereference; otherwise
+  `assignment target is not assignable` is reported.
+- An `own` target is refused: `an 'own' variable can only be assigned in a statement`. Ownership
+  (AutoDrop / the leak analysis) is accounted for at statement level only, and a value-position
+  assignment would slip past it.
 
 ### 5. Naming contract
 
