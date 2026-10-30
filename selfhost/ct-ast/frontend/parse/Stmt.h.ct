@@ -386,7 +386,9 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
+            self->ex->assign_ok = 1;
             c = self->ex->parse_expr();
+            self->ex->assign_ok = 0;
             if (c < 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
             self->arena->nodes[s].a = c;
@@ -406,7 +408,9 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
+            self->ex->assign_ok = 1;
             c = self->ex->parse_expr();
+            self->ex->assign_ok = 0;
             if (c < 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
             self->arena->nodes[s].a = c;
@@ -461,7 +465,9 @@ impl StmtOps for Stmt {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->arena->nodes[s].b = -1;
             } else {
+                self->ex->assign_ok = 1;
                 c = self->ex->parse_expr();
+                self->ex->assign_ok = 0;
                 if (c < 0) {
                     self->sup->pop_scope();
                     return -1;
@@ -500,7 +506,9 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
+            self->ex->assign_ok = 1;
             e = self->ex->parse_expr();
+            self->ex->assign_ok = 0;
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;
             if (self->sup->expect(")") != 0) return -1;
@@ -522,7 +530,9 @@ impl StmtOps for Stmt {
                 return self->sup->fail("a do statement must be followed by while (...)");
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
+            self->ex->assign_ok = 1;
             e = self->ex->parse_expr();
+            self->ex->assign_ok = 0;
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;
             if (self->sup->expect(")") != 0) return -1;

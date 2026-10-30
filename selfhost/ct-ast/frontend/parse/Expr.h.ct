@@ -49,6 +49,7 @@ import runtime::arena::Arena;
 #define MAX_TEXT 160
 #define N_ADDR 27
 #define N_ARROW 25
+#define N_ASSIGN 13
 #define N_BIN 11
 #define N_BOX 34
 #define N_CALL 7
@@ -131,6 +132,10 @@ pub struct Expr {
        (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
        emitted verbatim instead of being rejected. */
     int  fnval_ok;
+    /* Set while a full expression may carry an assignment (`(c = f())` and a
+       condition): the statement layer owns top-level assignments, so this stays
+       0 there and `x = 1;` is unchanged. */
+    int  assign_ok;
     /* A compound literal is parsed where a cast would be (`(type){ … }`), but a
        postfix suffix still belongs to it (`(struct P){1,2}.y`). The cast branch
        leaves the finished node here and calls `parse_postfix`, which consumes
@@ -690,6 +695,51 @@ impl ExprOps for Expr {
             self->arena->nodes[c].b = a;
             self->arena->nodes[c].c = b;
             return c;
+        }
+        /* An assignment used as a value: `(c = f())`, `(a = b = 0)`. Only the
+           `(` branch below and a statement's condition turn `assign_ok` on, so a
+           statement's own assignment (`x = 1;`) still goes through the statement
+           layer, which is where AutoDrop keeps its bookkeeping. Parsing the right
+           side here again makes the operator right-associative. */
+        if (self->assign_ok && self->lex->tok == T_PUNCT
+            && (strcmp(self->lex->toktext, "=") == 0
+                || strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
+                || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
+                || strcmp(self->lex->toktext, "%=") == 0 || strcmp(self->lex->toktext, "&=") == 0
+                || strcmp(self->lex->toktext, "|=") == 0 || strcmp(self->lex->toktext, "^=") == 0
+                || strcmp(self->lex->toktext, "<<=") == 0 || strcmp(self->lex->toktext, ">>=") == 0)) {
+            int op = 0, k2;
+            char oc = self->lex->toktext[0];
+            k2 = self->arena->nodes[left].kind;
+            if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
+                return self->sup->fail("assignment target is not assignable");
+            /* An `own` variable is tracked by statement-level assignments; an
+               assignment in a value position would slip past that bookkeeping,
+               so it is refused instead of silently leaking. */
+            if (k2 == N_VAR) {
+                int vi = self->sym->find_var(self->arena->nodes[left].text2);
+                if (vi >= 0 && self->sym->vars[vi].autodrop)
+                    return self->sup->fail("an 'own' variable can only be assigned in a statement");
+            }
+            if (oc == '+') op = 1;
+            else if (oc == '-') op = 2;
+            else if (oc == '*') op = 3;
+            else if (oc == '/') op = 4;
+            else if (oc == '%') op = 5;
+            else if (oc == '&') op = 6;
+            else if (oc == '|') op = 7;
+            else if (oc == '^') op = 8;
+            else if (oc == '<') op = 9;
+            else if (oc == '>') op = 10;
+            self->sup->lex_next();
+            right = self->parse_expr();
+            if (right < 0) return -1;
+            n = self->sup->new_node(N_ASSIGN);
+            if (n < 0) return -1;
+            self->arena->nodes[n].a = left;
+            self->arena->nodes[n].b = right;
+            self->arena->nodes[n].aux = op;
+            return n;
         }
         return left;
     }
@@ -1380,14 +1430,16 @@ impl ExprOps for Expr {
             return n;
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+            int save_assign;
             self->sup->lex_next();
+            save_assign = self->assign_ok;
+            self->assign_ok = 1;
             n = self->parse_expr();
             if (n < 0) return -1;
             /* A parenthesised comma list is a value (`x = (a, b);`,
                `f((a, b))`): both operands evaluate, the value is the last one.
-               The node is the one the statement form builds; the operands here
-               are ordinary expressions, since an assignment inside parentheses
-               is not part of the expression grammar. */
+               The node is the one the statement form builds; each operand is a
+               full expression, so an assignment may appear on either side. */
             while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                 int r, w;
                 self->sup->lex_next();
@@ -1400,6 +1452,7 @@ impl ExprOps for Expr {
                 self->arena->nodes[w].aux = B_COMMA;
                 n = w;
             }
+            self->assign_ok = save_assign;
             if (self->sup->expect(")") != 0) return -1;
             return n;
         }

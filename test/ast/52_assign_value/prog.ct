@@ -1,0 +1,52 @@
+/* 52: an assignment used as a value (batch 28) - a parenthesized assignment is
+   an expression, so it can stand in an assignment, be chained, and drive a
+   condition; the statement form is unchanged. */
+#include <stdio.h>
+
+static int calls;
+
+static int next(void) {
+    calls = calls + 1;
+    return calls;
+}
+
+struct Box {
+    int n;
+};
+
+int main(void) {
+    int a;
+    int b;
+    int c;
+    int got;
+    int arr[3];
+    struct Box box;
+
+    a = 1;
+    b = 2;
+    got = (a = b = 0);
+    printf("chain %d %d %d\n", a, b, got);
+
+    arr[0] = 0;
+    got = (arr[0] = 4) + 1;
+    printf("index %d %d\n", arr[0], got);
+
+    box.n = 0;
+    got = (box.n = 7);
+    printf("member %d %d\n", box.n, got);
+
+    a = 5;
+    got = (a += 2);
+    printf("compound %d %d\n", a, got);
+
+    a = 1;
+    got = ((a = 9), a + 1);
+    printf("mix %d %d\n", a, got);
+
+    c = 0;
+    while ((c = next()) < 3) {
+        printf("cond %d\n", c);
+    }
+    if ((a = c) == 3) printf("if %d\n", a);
+    return 0;
+}

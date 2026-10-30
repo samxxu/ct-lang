@@ -127,6 +127,9 @@
 # batch 27 keeps the batch probes as a gate: ct-ast compiles `selfhost/l0/ctc.c`
 # itself, the generated C is built, and the resulting compiler runs an example.
 #
+# batch 28 accepts an assignment used as a value (`(c = f())`, and in a
+# condition): test/ast/52_assign_value plus the rejected `own` target.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1203,6 +1206,23 @@ do
         ok "batch 22 ($cf)"
     else
         bad "batch 22: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 28: an `own` variable is tracked by statement-level assignments, so a
+# value-position assignment to one is refused by name.
+for pair in \
+    "assign_own_value|an 'own' variable can only be assigned in a statement"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 28: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 28 ($cf)"
+    else
+        bad "batch 28: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

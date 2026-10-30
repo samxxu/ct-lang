@@ -1,0 +1,22 @@
+/* batch 28: an `own` variable is tracked by statement-level assignments only,
+   so assigning one in a value position is refused instead of silently slipping
+   past the ownership bookkeeping. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop() { printf("drop %d\n", self->n); }
+}
+
+int main(void) {
+    own Box *b = malloc(sizeof(struct Box));
+    int x;
+
+    b->n = 1;
+    x = (b = b, 1);
+    return x;
+}
