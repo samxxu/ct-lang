@@ -1053,15 +1053,18 @@ i = 1, j = 2;
 for (i = 0, j = 10; i < 3; i++, j--) sum = sum + j;
 
 bump(&i), bump(&j);
+x = (i++, j * 2);              /* 取值位置要加括号 */
 ```
 
 - 一个完整表达式可以是若干「赋值表达式」用 `,` 连成的列表：从左到右求值，值是最后一项。
-- 接受的位置是表达式语句、以及 `for` 的初始化子句与步进子句（后两者与表达式语句共用
-  同一个解析入口）。每个操作数按赋值表达式解析，所以 `i = 1, j = 2` 就是
-  `(i = 1), (j = 2)`，与 C 的读法一致。
+- 接受的位置：
+  - 表达式语句、以及 `for` 的初始化子句与步进子句（三者共用同一个解析入口）。每个操作数
+    按赋值表达式解析，所以 `i = 1, j = 2` 就是 `(i = 1), (j = 2)`，与 C 的读法一致；
+  - **括号内的取值位置**：`x = (a, b);`、`f((a, b))`、`while ((a, b))`。此时列表就是一个
+    普通表达式，值取最后一项；括号里的操作数是普通表达式（括号内的赋值仍不在表达式文法里）。
 - 生成物把列表写成 `(a, (b, c))`：右结合只是解析产物，求值顺序仍是左到右。
-- `for` 的条件子句、函数实参与括号内的逗号表达式不在此范围内——实参之间的 `,` 是分隔符，
-  因此 `x = (a, b);` 目前仍报 `unexpected token`。
+- 仍然不做：`for` 条件子句里**不带括号**的逗号（`for (; a, b; )`）。实参之间的 `,` 永远是
+  分隔符，要写取值逗号必须加括号。
 
 ### 5. 命名规则（稳定契约）
 
@@ -2367,17 +2370,23 @@ i = 1, j = 2;
 for (i = 0, j = 10; i < 3; i++, j--) sum = sum + j;
 
 bump(&i), bump(&j);
+x = (i++, j * 2);              /* a value position needs the parentheses */
 ```
 
 - A full expression may be a list of assignment-expressions joined by `,`: they run left to
   right and the value is the last one.
-- It is accepted in an expression statement and in a `for` init / step clause (the latter two share
-  the same parse entry point). Each operand is parsed as an assignment-expression, so `i = 1, j = 2`
-  is `(i = 1), (j = 2)`, exactly as C reads it.
+- Accepted positions:
+  - an expression statement and a `for` init / step clause (all three share one parse entry
+    point). Each operand is parsed as an assignment-expression, so `i = 1, j = 2` is
+    `(i = 1), (j = 2)`, exactly as C reads it;
+  - **a parenthesised list in a value position**: `x = (a, b);`, `f((a, b))`, `while ((a, b))`.
+    There the list is an ordinary expression whose value is the last operand; its operands are
+    ordinary expressions (an assignment inside parentheses is still outside the expression
+    grammar).
 - The generated C writes the list as `(a, (b, c))`: the right-nesting is a parse artefact and the
   evaluation order is still left to right.
-- A `for` condition, a call argument and a parenthesised comma expression are outside this batch —
-  a comma between arguments is a separator, so `x = (a, b);` still reports `unexpected token`.
+- Still not accepted: a **bare** comma in a `for` condition (`for (; a, b; )`). A comma between
+  arguments is always a separator, so a value comma needs the parentheses.
 
 ### 5. Naming contract
 
