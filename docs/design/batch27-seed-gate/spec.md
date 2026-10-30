@@ -35,3 +35,9 @@
 - `bash selfhost/check-all.sh` → 9 hard gates green。
 - 手工确认过的新断言覆盖：解析（ctc.c 全量）、生成物编译（零错误）、
   端到端（示例输出与 `.expected.out` 一致）。
+- **负向验证**（关卡的失败路径确实会触发）：临时给 `Expr.h.ct` 的前缀 `++`/`--`
+  分支加上 `0 &&`（只让分支不生效，代码不动），`check-ast.sh` 随即 **exit 1**，
+  两项失败：`45_pre_incr`（`expected an expression`）与
+  `L0 seed`（`selfhost/l0/ctc.c:196:53: error: expected an expression`）。
+  恢复改动后复跑 276 passed、工作树干净。因此这条断言既可正向通过，也能在
+  能力收窄时变红，并给出 ctc.c 的行列位置。

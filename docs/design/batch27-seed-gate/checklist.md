@@ -10,6 +10,8 @@
 - [x] 产物（ct-ast 编出的 ctc）能编 `examples/01_greeter/greeter.ct`
 - [x] 示例产物运行输出与 `greeter.expected.out` 逐字节一致
 - [x] 失败时汇总四个日志的前 5 行，风格与其它断言一致
+- [x] 负向验证：临时让前缀 `++`/`--` 分支不生效 → 关卡 exit 1 并报
+      `ctc.c:196:53`；恢复后 276 passed、工作树干净
 - [x] 全部产物落在 `$work` 下，仓库无新增生成物
 
 ## 回归与关卡
