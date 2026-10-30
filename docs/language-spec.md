@@ -961,6 +961,34 @@ struct Buf {
   `a function pointer declares one name`。
 - 字段表按名字逐个登记，因此成员访问、`offsetof`、匿名成员提升、vptr 追加都不受影响。
 
+#### 4.28 数组长度表达式（ct-ast）
+
+```c
+#define WIDTH 4
+#define SLOTS (WIDTH * 2)
+
+static int g_tbl[WIDTH * 2];
+
+struct Box {
+    int cells[SLOTS];
+    char name[(1 << 3)];
+    short pairs[WIDTH + 1];
+};
+
+int main(void) {
+    int local[WIDTH + 1];
+    return local[0];
+}
+```
+
+- 方括号里除了数字、单个名字与空之外，还可以写**表达式**：宏乘倍数、位移、括号求和等，
+  一律按源码原文发射，因此 `[MAX_NAME * 2]` 与 `[(1 << 3)]` 都成立，长度由 C 折叠。
+- 单个名字若解析为枚举成员，仍按其 C 拼写（命名空间 mangling 后的名字）发射；多 token 的
+  表达式不做这种归一化，原样保留。
+- 维度只用于发射与「是不是数组」的判定，因此数组长度是表达式还是字面量，对成员访问、
+  `sizeof`、`offsetof` 与 vptr 初始化没有区别。
+- 运行期长度（VLA）同样原样发射，由 C 判断；维度里的字符串字面量不做特殊处理。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2166,6 +2194,37 @@ struct Buf {
   `a function pointer declares one name`.
 - Names are registered one by one, so member access, `offsetof`, anonymous-member promotion and the
   vptr append are unaffected.
+
+#### 4.28 Array-length expressions (ct-ast)
+
+```c
+#define WIDTH 4
+#define SLOTS (WIDTH * 2)
+
+static int g_tbl[WIDTH * 2];
+
+struct Box {
+    int cells[SLOTS];
+    char name[(1 << 3)];
+    short pairs[WIDTH + 1];
+};
+
+int main(void) {
+    int local[WIDTH + 1];
+    return local[0];
+}
+```
+
+- Besides a number, a single name and the empty form, the brackets accept an **expression**: a macro
+  product, a shift, a parenthesised sum. It is emitted exactly as written, so `[MAX_NAME * 2]` and
+  `[(1 << 3)]` both work and C folds the length.
+- A single name that resolves to an enum member is still emitted under its C spelling (the mangled
+  name); a multi-token expression is kept verbatim instead.
+- The dimension is only used for emission and for the "is this an array?" test, so whether the length
+  is a literal or an expression makes no difference to member access, `sizeof`, `offsetof` or the
+  vptr initialisation.
+- A run-time length (a VLA) is emitted as written too and left to C; string literals inside a
+  dimension are not special-cased.
 
 ### 5. Naming contract
 
