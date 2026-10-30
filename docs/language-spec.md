@@ -1066,6 +1066,38 @@ x = (i++, j * 2);              /* 取值位置要加括号 */
 - 仍然不做：`for` 条件子句里**不带括号**的逗号（`for (; a, b; )`）。实参之间的 `,` 永远是
   分隔符，要写取值逗号必须加括号。
 
+#### 4.33 头文件里的类型名（ct-ast）
+
+```c
+#include <time.h>
+
+static time_t g_base;
+
+struct Stamp {
+    time_t when;
+};
+
+static void show(time_t t) { printf("%ld\n", (long)t); }
+
+int main(void)
+{
+    time_t now;                /* 未知类型 + 名字 */
+    time_t *ref;               /* 未知类型 + `*` + 名字 */
+    now = 7;
+    ref = &now;
+    show(*ref);
+    return 0;
+}
+```
+
+- ct 不展开 `#include`，头文件里的 typedef 对解析器就是未知名字。在声明位置上，
+  「未知标识符 + 声明符名」的序列按类型处理，拼写原样发射，是否真是类型交给 C 编译器判断。
+- 判据：该名字既不能是已登记的类型（struct / union / enum / trait / typedef），也不能是
+  已声明的变量或函数，还不能是语句关键字。所以 `return found;`、`goto done;`、
+  `own Box *b` 仍按语句解析，`a * b;`（`a` 是变量）仍是表达式。
+- 不做：转换与 `sizeof` 里的未知类型（`(time_t)x`、`sizeof(time_t)`）。那里
+  `(NAME) + x` 与宏常量无法区分，ct 保持保守，仍按表达式解析。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2387,6 +2419,41 @@ x = (i++, j * 2);              /* a value position needs the parentheses */
   evaluation order is still left to right.
 - Still not accepted: a **bare** comma in a `for` condition (`for (; a, b; )`). A comma between
   arguments is always a separator, so a value comma needs the parentheses.
+
+#### 4.33 Type names that only a header declares (ct-ast)
+
+```c
+#include <time.h>
+
+static time_t g_base;
+
+struct Stamp {
+    time_t when;
+};
+
+static void show(time_t t) { printf("%ld\n", (long)t); }
+
+int main(void)
+{
+    time_t now;                /* unknown type + name */
+    time_t *ref;               /* unknown type + `*` + name */
+    now = 7;
+    ref = &now;
+    show(*ref);
+    return 0;
+}
+```
+
+- ct does not expand `#include`, so a header's typedefs are unknown names to the parser. In a
+  declaration position, an unknown identifier followed by its declarator is taken as the type and
+  its spelling is kept; whether it really is a type is the C compiler's call.
+- The test: the name must not be a registered type (struct / union / enum / trait / typedef), must
+  not already be a declared variable or function, and must not be a statement keyword. So
+  `return found;`, `goto done;` and `own Box *b` still parse as statements, and `a * b;` (with `a`
+  a variable) is still an expression.
+- Not covered: an unknown type in a cast or `sizeof` (`(time_t)x`, `sizeof(time_t)`). There
+  `(NAME) + x` cannot be told from a macro constant, so ct stays conservative and reads an
+  expression.
 
 ### 5. Naming contract
 
