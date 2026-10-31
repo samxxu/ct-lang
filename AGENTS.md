@@ -142,8 +142,11 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 > gcc -Wall -Wextra -std=c99 -Wno-format-truncation selfhost/l0/ctc.c -o ctc
 > ```
 >
-> `selfhost/check-all.sh` 已自动做这件事：检测到 `CC` 是 GCC 时会包一层只追加该开关的
-> wrapper 再传给各子关卡，所以 Linux / 容器里跑关卡不必手工加参数。clang 不受影响。
+> `selfhost/check-all.sh` 已自动做这件事：检测到 `CC` 是 GCC 时会在 wrapper 里同时追加
+> `-Wno-format-truncation` 与 `-Wno-implicit-fallthrough` 再传给各子关卡，所以 Linux /
+> 容器里跑关卡不必手工加参数。后者同样只在 GCC 的 `-Wextra` 下启用：输入源里**有意**的
+> `switch` 贯穿会告警，而 ct 不保留注释（`/* fall through */` 传不过去），只能由 wrapper
+> 静音。clang 不受影响。
 >
 > 另有两个探针依赖 **BSD libc**，在 Linux 上以 `skip` 呈现（不计入失败，也不隐藏回归）：
 > `test/run.sh` 的 `cli/short-read` / `cli/tmpfile-cannot-create` 与 `check-archive` 的
@@ -446,9 +449,12 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter   # prints two 
 > gcc -Wall -Wextra -std=c99 -Wno-format-truncation selfhost/l0/ctc.c -o ctc
 > ```
 >
-> `selfhost/check-all.sh` already does this: when `CC` is GCC it wraps it in a shim that appends
-> exactly that switch before handing it to the sub-gates, so Linux and containers need no manual
-> flags. clang is unaffected.
+> `selfhost/check-all.sh` already does this: when `CC` is GCC its shim appends both
+> `-Wno-format-truncation` and `-Wno-implicit-fallthrough` before handing it to the sub-gates, so
+> Linux and containers need no manual flags. The second one is also a `-Wextra`-only GCC warning
+> about a **deliberate** `switch` fall-through in the input; ct drops comments (so the customary
+> `/* fall through */` marker cannot survive), which leaves the shim as the only place to silence
+> it. clang is unaffected.
 >
 > Two probes depend on **BSD libc** and show up as `skip` on Linux (they neither fail nor hide a
 > regression): `cli/short-read` / `cli/tmpfile-cannot-create` in `test/run.sh` and

@@ -35,15 +35,18 @@ cd "$root" || exit 1
 # batch of snprintf calls in the frozen L0/L1/L2 sources; Apple clang, the
 # baseline compiler for "zero warnings", does not. Wrap GCC so the gates mean the
 # same thing on both, without editing the frozen layers (AGENTS.md section 6).
+# -Wimplicit-fallthrough is silenced for the same reason: a deliberate
+# fall-through in the *input* warns whoever generated the C, and ct drops
+# comments, so the customary `/* fall through */` marker cannot survive.
 tmpcc="$(mktemp -d)" || exit 1
 trap 'rm -rf "$tmpcc"' EXIT HUP INT TERM
 if "${CC:-cc}" --version 2>/dev/null | grep -q 'Free Software Foundation'; then
     ccbin="$(command -v "${CC:-cc}")" || ccbin="${CC:-cc}"
-    printf '#!/bin/sh\nexec "%s" -Wno-format-truncation "$@"\n' "$ccbin" > "$tmpcc/cc-gcc"
+    printf '#!/bin/sh\nexec "%s" -Wno-format-truncation -Wno-implicit-fallthrough "$@"\n' "$ccbin" > "$tmpcc/cc-gcc"
     chmod +x "$tmpcc/cc-gcc"
     CC="$tmpcc/cc-gcc"
     export CC
-    printf 'CC is GCC: wrapping it with -Wno-format-truncation (AGENTS.md section 6)\n'
+    printf 'CC is GCC: wrapping it with -Wno-format-truncation -Wno-implicit-fallthrough (AGENTS.md section 6)\n'
 fi
 
 fail=0
