@@ -378,6 +378,7 @@ ct/
 │   ├── architecture.md       编译器内部结构与关键算法
 │   ├── construction.md       对象构造语义（vptr 由谁、何时写入）
 │   ├── polymorphism.md       接口多态与派发
+│   ├── patterns.md           设计模式在现有语言特性下的写法（新增能力的判据）
 │   ├── glossary.md           术语表
 │   └── design/               各阶段设计（草案与已实现的并存，冲突时以代码为准）
 ├── issues/                   审查发现台账（元工件：每条一文件，索引见 issues/README.md）
@@ -421,6 +422,7 @@ ct/
 - [docs/vision.md](docs/vision.md) —— 定位、设计原则与生态策略
 - [docs/roadmap.md](docs/roadmap.md) —— 后续阶段与已定决策
 - [docs/language-spec.md](docs/language-spec.md) —— 语法规范
+- [docs/patterns.md](docs/patterns.md) —— 设计模式与语言特性的对应（没有新特性时的写法）
 - [docs/architecture.md](docs/architecture.md) —— 内部实现
 - [docs/design/bootstrap.md](docs/design/bootstrap.md) —— 自举设计草案（未实现）
 
@@ -922,6 +924,7 @@ ct/
 │   ├── architecture.md       compiler internals and key algorithms
 │   ├── construction.md       object-construction semantics (who writes the vptr, and when)
 │   ├── polymorphism.md       interface polymorphism and dispatch
+│   ├── patterns.md           design patterns with the existing language (the test for new features)
 │   ├── glossary.md           glossary of terms
 │   └── design/               per-phase design notes (drafts and shipped ones; the code wins on conflict)
 ├── issues/                   review-findings register (meta; one file per finding, index in issues/README.md)
@@ -974,6 +977,7 @@ Implementation limits:
 - [docs/vision.md](docs/vision.md) — positioning, design principles, ecosystem strategy
 - [docs/roadmap.md](docs/roadmap.md) — phase plan and decided design decisions
 - [docs/language-spec.md](docs/language-spec.md) — language specification
+- [docs/patterns.md](docs/patterns.md) — design patterns and the language features they need (the no-new-feature test)
 - [docs/architecture.md](docs/architecture.md) — implementation internals
 - [docs/design/bootstrap.md](docs/design/bootstrap.md) — bootstrap design draft (not implemented)
 
