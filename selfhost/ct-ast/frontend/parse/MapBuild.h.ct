@@ -102,6 +102,7 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
 {
     char tok[MAX_TEXT];
     char prev[MAX_TEXT];
+    char pn[MAX_TEXT];
     char msg[MAX_TEXT];
     const char *p;
     int depth, n, i, seen_callee, member, after_type, after_sizeof, after_inc, inc;
@@ -207,7 +208,30 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
                     b->uses[i]++;
                 }
             } else if (strcmp(tok, "sizeof") == 0 || mapb_type_word(tok)) {
-                /* context words: the next token decides how it reads */
+                /* context words: the next token decides how it reads. A
+                   binding parameter is named directly (`sizeof s`); the
+                   parenthesised form would emit `sizeof((actual))` -- the
+                   value's size, not the declared type -- so reject it here
+                   (spec §6.3). A type operand may stay parenthesised. */
+                if (strcmp(tok, "sizeof") == 0) {
+                    const char *r = p;
+                    while (*r == ' ' || *r == '\t' || *r == '\n' || *r == '\r') r++;
+                    if (*r == '(') {
+                        r++;
+                        while (*r == ' ' || *r == '\t' || *r == '\n' || *r == '\r') r++;
+                        n = 0;
+                        while (mapb_ident((unsigned char)r[n]) && n + 1 < MAX_TEXT) {
+                            pn[n] = r[n];
+                            n++;
+                        }
+                        pn[n] = 0;
+                        if (n > 0 && mapb_param_index(b, pn) >= 0) {
+                            snprintf(msg, sizeof msg,
+                                     "map recipe takes 'sizeof %s', not 'sizeof(%s)'", pn, pn);
+                            return self->sup->fail(msg);
+                        }
+                    }
+                }
             } else if (!seen_callee || member || after_type || mapb_all_caps(tok)) {
                 /* the callee, a member name, a type word's tag, or a macro */
             } else {
@@ -217,6 +241,13 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
             }
             seen_callee = 1;
             snprintf(prev, sizeof prev, "%s", tok);
+            continue;
+        }
+        /* Whitespace never becomes `prev`: the context tests (`sizeof p`,
+           `p.field`, `++p`) look at the previous *token*, and the canonical
+           form `sizeof s` has a space after `sizeof` (spec §6.3). */
+        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+            p++;
             continue;
         }
         /* operators and punctuation: `->` must stay two characters */

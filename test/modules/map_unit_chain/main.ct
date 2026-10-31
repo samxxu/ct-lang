@@ -1,0 +1,10 @@
+import lib::lib;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d %lu\n", lib::Num.parse("42"),
+           (unsigned long)lib::Text.len("abcd"));
+    return 0;
+}

@@ -1,0 +1,13 @@
+#include <string.h>
+
+import base;
+
+namespace lib;
+
+pub trait Text {
+    int len(char *s);
+}
+
+map trait Text for namespace lib {
+    len(s) -> strlen(s);
+}

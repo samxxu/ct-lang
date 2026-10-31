@@ -1,0 +1,11 @@
+#include <stdlib.h>
+
+namespace lib;
+
+pub trait Num {
+    int parse(char *s);
+}
+
+map trait Num for namespace lib {
+    parse(s) -> atoi(s);
+}

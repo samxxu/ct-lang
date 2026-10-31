@@ -582,6 +582,64 @@ else
     bad "map_unit_cross" "$(cat "$work/mmuc.err" "$work/mmuc.cc" "$work/mmuc.stdout" 2>/dev/null | head -5)"
 fi
 
+# A chain of mapping units: `lib.m.ct` imports `base.m.ct`, so one consumer sees
+# both maps and both prologues, and a change to the deeper unit still reaches
+# the consumer's cache (the `.m` dependency digest follows the chain).
+rm -rf "$work/mmch" "$work/mmchsrc"
+mkdir -p "$work/mmch"
+cp -r test/modules/map_unit_chain "$work/mmchsrc"
+if "$work/ct-ast" build "$work/mmchsrc/main.ct" -o "$work/mmch" \
+        >"$work/mmch.out" 2>"$work/mmch.err" \
+   && [ ! -f "$work/mmch/lib.c" ] && [ ! -f "$work/mmch/lib.h" ] \
+   && [ ! -f "$work/mmch/base.c" ] && [ ! -f "$work/mmch/base.h" ] \
+   && grep -q '^#include <stdlib.h>' "$work/mmch/main.c" \
+   && grep -q '^#include <string.h>' "$work/mmch/main.c" \
+   && ! grep -Eq '_iface|_vtbl|vtable|vt->|(void \*)0' "$work/mmch/main.c" \
+   && ! grep -q 'lib\.c' "$work/mmch.out" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/mmch"/*.c -o "$work/mmch.bin" 2>"$work/mmch.cc" \
+   && "$work/mmch.bin" >"$work/mmch.stdout" 2>&1 \
+   && cmp -s "$work/mmch.stdout" test/modules/map_unit_chain/expected.out; then
+    ok "map_unit_chain (a mapping unit imports another; both prologues reach the consumer)"
+else
+    bad "map_unit_chain" "$(cat "$work/mmch.err" "$work/mmch.cc" "$work/mmch.stdout" 2>/dev/null | head -5)"
+fi
+
+stamp() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
+t0=$(stamp "$work/mmch/main.c")
+"$work/ct-ast" build "$work/mmchsrc/main.ct" -o "$work/mmch" >/dev/null 2>&1
+if [ "$(stamp "$work/mmch/main.c")" = "$t0" ]; then
+    ok "map_unit_chain cache: a warm build reuses the consumer"
+else
+    bad "map_unit_chain cache" "main.c was regenerated although nothing changed"
+fi
+sleep 1
+touch "$work/mmchsrc/lib/base.m.ct"
+"$work/ct-ast" build "$work/mmchsrc/main.ct" -o "$work/mmch" >/dev/null 2>&1
+if [ "$(stamp "$work/mmch/main.c")" != "$t0" ]; then
+    ok "map_unit_chain cache: a transitive .m.ct change rebuilds the consumer"
+else
+    bad "map_unit_chain cache" "main.c was not rebuilt after the transitive .m.ct changed"
+fi
+
+# `sizeof p` is not an evaluation (spec §6.3): a side-effecting actual is still
+# wrapped in the `(void)(…)` prefix, and two occurrences are not a duplicate use.
+rm -rf "$work/mso"
+mkdir -p "$work/mso/lib" "$work/mso/out"
+printf '#include <stdlib.h>\nnamespace lib;\npub trait T { int sz(); }\nmap trait T for type char * { sz(s) -> pair(sizeof s, 0); }\npub trait U { int twice(); }\nmap trait U for type char * { twice(s) -> pair(sizeof s, sizeof s); }\n' >"$work/mso/lib/lib.m.ct"
+printf 'import lib::lib;\n#include <stdio.h>\nstatic int hits;\nint pair(int a, int b) { return a + b; }\nchar *side(void) { hits++; return "x"; }\nint main(void)\n{\n    int n = side().sz();\n    int m = side().twice();\n    (void)n;\n    (void)m;\n    printf("%%d\\n", hits);\n    return 0;\n}\n' >"$work/mso/main.ct"
+if "$work/ct-ast" build "$work/mso/main.ct" -o "$work/mso/out" \
+        >"$work/mso.out" 2>"$work/mso.err" \
+   && grep -qF 'sizeof(char *)' "$work/mso/out/main.c" \
+   && grep -qF 'sizeof(char *), sizeof(char *)' "$work/mso/out/main.c" \
+   && grep -qF '(void)(' "$work/mso/out/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/mso/out"/*.c -o "$work/mso.bin" 2>"$work/mso.cc" \
+   && "$work/mso.bin" >"$work/mso.stdout" 2>&1 \
+   && [ "$(cat "$work/mso.stdout")" = "2" ]; then
+    ok "static sizeof (not evaluated; the prefix keeps the side effect; duplicates allowed)"
+else
+    bad "static sizeof" "$(cat "$work/mso.err" "$work/mso.cc" "$work/mso.stdout" 2>/dev/null | head -5)"
+fi
+
 echo
 echo "== header prologue (build mode copies the source's #include lines) =="
 rm -rf "$mod-pro"
@@ -1207,6 +1265,27 @@ mapbad ambiguous_type_host \
     'pub trait T { int m(); }\npub trait U { int m(); }\nmap trait T for type char * { m(s) -> atoi(s); }\nmap trait U for type char * { m(s) -> strlen(s); }\n' \
     "ambiguous type-host map for method 'm' on type 'char *'" \
     'import lib::lib;\n\nint main(void)\n{\n    char *a = "1";\n    int x = a.m();\n    (void)x;\n    return 0;\n}\n'
+# `sizeof s` is the declared type's size, so a parenthesised form would silently
+# mean `sizeof((actual))`; the recipe must spell it without parentheses (§6.3).
+mapbad sizeof_paren \
+    'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> malloc(sizeof(s)); }\n' \
+    "map recipe takes 'sizeof s', not 'sizeof(s)'" \
+    'import lib::lib;\n\nint main(void) { return 0; }\n'
+
+# A type host needs the `.m.ct` whitelist: a normal unit maps instances only.
+rm -rf "$work/mbto"
+mkdir -p "$work/mbto/lib" "$work/mbto/out"
+printf '%b' '#include <stdlib.h>\nnamespace lib;\npub trait T { int m(); }\nmap trait T for type char * { m(s) -> atoi(s); }\n' \
+    >"$work/mbto/lib/lib.h.ct"
+printf 'import lib::lib;\n\nint main(void) { return 0; }\n' >"$work/mbto/main.ct"
+if "$work/ct-ast" build "$work/mbto/main.ct" -o "$work/mbto/out" \
+        >"$work/mbto/out.txt" 2>"$work/mbto/err.txt"; then
+    bad "batch 38: type_host_outside" "expected a non-zero exit"
+elif grep -qF 'a type host is only allowed in a .m.ct unit' "$work/mbto/err.txt"; then
+    ok "batch 38 (type_host_outside)"
+else
+    bad "batch 38: type_host_outside" "$(head -2 "$work/mbto/err.txt")"
+fi
 
 # A static trait is bound by its `map`, never implemented / adopted / boxed.
 static_trait='pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n'
