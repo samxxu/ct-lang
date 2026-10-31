@@ -66,6 +66,8 @@
   `incomplete definition of 'struct Cache'`。全新目录重建正常，`check-all` 的九关也全绿
   （关卡每次都用新目录）。怀疑：被判定「命中缓存」的 import 单元没有重新解析，符号表
   缺少它的导出，导致下游重新生成的单元按源名写类型。留给后续批次定位。
+  **（第三十四批已定位并修复：编译集合改为脏单元的依赖闭包，见
+  `docs/design/batch34-cache-closure/`。）**
 
 ## 5. 验证
 
