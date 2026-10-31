@@ -2403,6 +2403,116 @@ else
 fi
 
 echo
+echo "== borrow parameter annotations (stage one) =="
+# A `borrow` annotation is a lifetime hint, not a code-generation switch: the
+# same function compiled with and without it must produce the same C text.
+# The banner names the input path, so it is dropped before the comparison.
+rm -rf "$work/bw-a" "$work/bw-b"
+mkdir -p "$work/bw-a" "$work/bw-b"
+cat > "$work/bw-a/prog.ct" <<'BWEOF'
+#include <stdio.h>
+
+struct Req { int n; };
+
+void render(struct Req *r)
+{
+    printf("%d\n", r->n);
+}
+
+int main(void)
+{
+    struct Req q;
+    q.n = 7;
+    render(&q);
+    return 0;
+}
+BWEOF
+cat > "$work/bw-b/prog.ct" <<'BWEOF'
+#include <stdio.h>
+
+struct Req { int n; };
+
+void render(borrow struct Req *r)
+{
+    printf("%d\n", r->n);
+}
+
+int main(void)
+{
+    struct Req q;
+    q.n = 7;
+    render(&q);
+    return 0;
+}
+BWEOF
+if ( cd "$work/bw-a" && "$work/ct-ast" prog.ct -o prog.c ) >"$work/bw-a.out" 2>"$work/bw-a.err" \
+   && ( cd "$work/bw-b" && "$work/ct-ast" prog.ct -o prog.c ) >"$work/bw-b.out" 2>"$work/bw-b.err" \
+   && tail -n +2 "$work/bw-a/prog.c" >"$work/bw-a.body" \
+   && tail -n +2 "$work/bw-b/prog.c" >"$work/bw-b.body" \
+   && cmp -s "$work/bw-a.body" "$work/bw-b.body" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/bw-b/prog.c" -o "$work/bw-b.bin" 2>"$work/bw-b.cc" \
+   && printf '7\n' >"$work/bw-b.want" \
+   && "$work/bw-b.bin" >"$work/bw-b.run" 2>&1 \
+   && cmp -s "$work/bw-b.run" "$work/bw-b.want"; then
+    ok "borrow annotation leaves the generated C unchanged (the program runs)"
+else
+    bad "borrow annotation" "$(cat "$work/bw-a.err" "$work/bw-b.err" "$work/bw-b.cc" 2>/dev/null | head -5)"
+fi
+
+# The four refusals. Each fixture is compiled and its stderr grepped for the
+# exact message the design fixes.
+bw_neg() {
+    bw_name="$1"
+    bw_msg="$2"
+    bw_src="$3"
+    printf '%s' "$bw_src" >"$work/$bw_name.ct"
+    if "$work/ct-ast" "$work/$bw_name.ct" -o "$work/$bw_name.c" \
+            >"$work/$bw_name.out" 2>"$work/$bw_name.err"; then
+        bad "borrow $bw_name" "expected a non-zero exit"
+    elif grep -qF "$bw_msg" "$work/$bw_name.err"; then
+        ok "borrow $bw_name"
+    else
+        bad "borrow $bw_name" "$(cat "$work/$bw_name.err")"
+    fi
+}
+bw_neg non_struct_ptr "'borrow' requires a struct pointer parameter" \
+'#include <stdio.h>
+void f(borrow int *p)
+{
+    (void)p;
+}
+int main(void) { return 0; }
+'
+bw_neg array_param "'borrow' requires a struct pointer parameter" \
+'#include <stdio.h>
+struct Req { int n; };
+void f(borrow struct Req *r[])
+{
+    (void)r;
+}
+int main(void) { return 0; }
+'
+bw_neg delete_borrow "a borrowed pointer cannot be deleted" \
+'#include <stdio.h>
+struct Req { int n; };
+void f(borrow struct Req *r)
+{
+    delete r;
+}
+int main(void) { return 0; }
+'
+bw_neg store_global "a borrowed pointer cannot be stored in 'g' (its scope outlives the borrow)" \
+'#include <stdio.h>
+struct Req { int n; };
+struct Req *g;
+void f(borrow struct Req *r)
+{
+    g = r;
+}
+int main(void) { return 0; }
+'
+
+echo
 echo "== multi-error recovery (10.4) =="
 # A bad construct must not hide the rest of the file: every error is reported and
 # the run closes with the summary. Both fixtures are byte-diffed against L2 and

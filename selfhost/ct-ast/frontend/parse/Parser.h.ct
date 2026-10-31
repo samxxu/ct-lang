@@ -153,6 +153,50 @@ pub struct Parser {
     int  scan_only;
 } use ParseOps, ParseDeclOps;
 
+/* The struct a `borrow`-able type points to, or -1 when the type is not a
+   pointer to a struct this unit knows. A borrow is meaningless elsewhere: the
+   later stage generates the exit call from that struct's name. */
+static int borrow_struct_of(struct Parser *self, const char *type, int is_array)
+{
+    char t[MAX_TEXT];
+    char base[MAX_TEXT];
+    size_t bl;
+
+    if (is_array) return -1;
+    snprintf(t, sizeof t, "%s", type);
+    bl = strlen(t);
+    if (bl == 0 || t[bl - 1] != '*') return -1;
+    while (bl > 0 && (t[bl - 1] == '*' || t[bl - 1] == ' ')) {
+        bl = bl - 1;
+        t[bl] = 0;
+    }
+    if (strncmp(t, "struct ", 7) == 0) snprintf(base, sizeof base, "%s", t + 7);
+    else snprintf(base, sizeof base, "%s", t);
+    return self->sym->find_struct(base);
+}
+
+/* A `borrow` parameter annotation changes nothing in the generated C; it only
+   records that the pointer is lent, which is what refuses `delete` on it and a
+   store into a longer-lived variable (stage one). The N_PARAM node carries the
+   name, the base type and the dims. */
+static int check_borrow_param(struct Parser *self, int pnode, int line, int col)
+{
+    int si, vi;
+
+    si = borrow_struct_of(self, self->arena->nodes[pnode].text,
+                          self->arena->nodes[pnode].text3[0] != 0);
+    if (si < 0)
+        return tool::diag::ct_sem_error(line, col,
+                               "'borrow' requires a struct pointer parameter", self->mem->path);
+    vi = self->sym->find_var(self->arena->nodes[pnode].text2);
+    if (vi >= 0) {
+        self->sym->vars[vi].borrowed = 1;
+        self->sym->vars[vi].is_param = 1;
+        self->sym->vars[vi].own_line = line;
+    }
+    return 0;
+}
+
 /* Parse the `{ … }` of a trait method's default body. The adopting struct is
    unknown here, so `self` is bound to `void *`; the emitter expands the block
    once per struct, where `self` becomes `struct <S> *`. The parameter names
@@ -174,6 +218,13 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
         if (self->arena->nodes[p].text3[0]) {
             int vi = self->sym->find_var(self->arena->nodes[p].text2);
             if (vi >= 0) self->sym->vars[vi].is_array = 1;
+        }
+        /* the annotation rides on the N_PARAM node (`aux`): the default body
+           is the only place where that parameter becomes a variable */
+        if (self->arena->nodes[p].aux
+            && check_borrow_param(self, p, self->arena->nodes[p].line, 1) != 0) {
+            self->sup->pop_scope();
+            return -1;
         }
     }
     if (self->sup->declare_var("self", "void *") != 0) {
@@ -873,6 +924,7 @@ impl ParseOps for Parser {
     int parse_params(void)
     {
         int first, tail, p, ar, ao;
+        int seen_borrow, bline, bcol;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
@@ -895,6 +947,15 @@ impl ParseOps for Parser {
                 self->variadic = 1;
                 self->sup->lex_next();
                 break;
+            }
+            /* `borrow` is a contextual keyword: as the first token of a
+               parameter it can only be the annotation, never a type name */
+            seen_borrow = 0;
+            bline = self->lex->tokline;
+            bcol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0) {
+                seen_borrow = 1;
+                self->sup->lex_next();
             }
             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
             if (self->ex->fnptr_state) {
@@ -924,6 +985,10 @@ impl ParseOps for Parser {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0) self->sym->vars[vi].is_array = 1;
             }
+            /* the annotation never reaches the C text: only the symbol table
+               learns that this parameter is lent */
+            if (seen_borrow && check_borrow_param(self, p, bline, bcol) != 0)
+                return -1;
             /* a trailing attribute belongs to the parameter (`int *p
                __attribute__((nonnull))`), so it rides with its name/dims */
             ao = -1;
@@ -1547,6 +1612,7 @@ impl ParseOps for Parser {
     int parse_trait(int is_pub)
     {
         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
+        int seen_borrow, bline;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char ret[MAX_TEXT];
@@ -1644,6 +1710,15 @@ impl ParseOps for Parser {
             np = 0;
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
                 for (;;) {
+                    /* a `borrow` annotation is not part of the vtable
+                       signature: it only marks the parameter in `vars[]` when
+                       the default body declares it (parse_trait_body) */
+                    seen_borrow = 0;
+                    bline = self->lex->tokline;
+                    if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0) {
+                        seen_borrow = 1;
+                        self->sup->lex_next();
+                    }
                     if (self->ex->parse_type(ptype, sizeof ptype) != 0) return -1;
                     pname[0] = 0;
                     if (self->lex->tok == T_ID) {
@@ -1665,6 +1740,11 @@ impl ParseOps for Parser {
                         if (self->arena->nodes[sp].text3[0])
                             snprintf(ptype + strlen(ptype),
                                      sizeof ptype - strlen(ptype), "%s", self->arena->nodes[sp].text3);
+                        /* `aux` carries the annotation to the default body,
+                           which is where the parameter becomes a variable;
+                           `line` keeps the position for its diagnostic */
+                        self->arena->nodes[sp].aux = seen_borrow;
+                        if (seen_borrow) self->arena->nodes[sp].line = bline;
                         if (pfirst < 0) pfirst = sp;
                         else self->arena->nodes[ptail].next = sp;
                         ptail = sp;

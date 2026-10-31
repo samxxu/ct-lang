@@ -190,6 +190,67 @@ static int retire_before_return(struct Stmt *self, int ret, int permanent)
     return ret;
 }
 
+/* The scope a variable belongs to: the innermost scope whose opening boundary
+   is at or before it. A parameter sits in the function's own scope and a local
+   in the block's, so a shallower scope index is a longer-lived variable. */
+static int var_scope(struct Symbols *sym, int vi)
+{
+    int s;
+
+    for (s = sym->nscope - 1; s >= 0; s--)
+        if (sym->scope[s] <= vi) return s;
+    return -1;
+}
+
+/* `delete r;` on a borrowed pointer frees an object the lender still owns: a
+   pooled object stays live after the handback, and a stack object was never
+   ours to free. Only the bare spelling is judged, as in the design. */
+static int check_borrow_delete(struct Stmt *self, int e)
+{
+    int vi;
+
+    if (e < 0 || self->arena->nodes[e].kind != N_VAR) return 0;
+    vi = self->sym->find_var(self->arena->nodes[e].text2);
+    if (vi < 0 || !self->sym->vars[vi].borrowed) return 0;
+    return tool::diag::ct_sem_error(self->arena->nodes[e].line, 1,
+                           "a borrowed pointer cannot be deleted", self->mem->path);
+}
+
+/* Storing a borrow into a variable that lives longer hands out a pointer that
+   dies with the borrow. Only `x = r` and `x = r[0]` are judged; a field store
+   (`s->p = r`) and a call (`store(r)`) would need interprocedural analysis,
+   which this compiler does not do (design 7.1 / 7.2). A global and a shallower
+   scope both outlive the borrow; a sibling in the same scope dies with it, so
+   that store stays legal. */
+static int check_borrow_store(struct Stmt *self, int n)
+{
+    int lhs, rhs, bv, lv, bs, ls;
+    char msg[MAX_TEXT];
+
+    if (n < 0) return 0;
+    lhs = self->arena->nodes[n].a;
+    rhs = self->arena->nodes[n].b;
+    bv = -1;
+    if (rhs >= 0) {
+        if (self->arena->nodes[rhs].kind == N_VAR)
+            bv = self->sym->find_var(self->arena->nodes[rhs].text2);
+        else if (self->arena->nodes[rhs].kind == N_INDEX && self->arena->nodes[rhs].a >= 0
+                 && self->arena->nodes[self->arena->nodes[rhs].a].kind == N_VAR)
+            bv = self->sym->find_var(self->arena->nodes[self->arena->nodes[rhs].a].text2);
+    }
+    if (bv < 0 || !self->sym->vars[bv].borrowed) return 0;
+    if (lhs < 0 || self->arena->nodes[lhs].kind != N_VAR) return 0;
+    lv = self->sym->find_var(self->arena->nodes[lhs].text2);
+    if (lv < 0) return 0;
+    bs = var_scope(self->sym, bv);
+    ls = var_scope(self->sym, lv);
+    if (!self->sym->vars[lv].is_global && ls >= bs) return 0;
+    snprintf(msg, sizeof msg,
+             "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
+             self->sym->vars[lv].name);
+    return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1, msg, self->mem->path);
+}
+
 impl StmtOps for Stmt {
     /* Does the current token start a declaration? A short name has to be
        resolved first: the type table only holds the mangled spelling, so
@@ -205,10 +266,10 @@ impl StmtOps for Stmt {
            `goto done;`, `own Box *b`). None of them can be a type, so they must
            not enter the unknown-type fallback below. */
         static const char *kw[] = {
-            "break", "case", "continue", "default", "delete", "do", "else",
-            "extern", "for", "goto", "if", "impl", "import", "inline", "map",
-            "namespace", "own", "pub", "return", "sizeof", "static", "switch",
-            "trait", "typedef", "while", NULL
+            "borrow", "break", "case", "continue", "default", "delete", "do",
+            "else", "extern", "for", "goto", "if", "impl", "import", "inline",
+            "map", "namespace", "own", "pub", "return", "sizeof", "static",
+            "switch", "trait", "typedef", "while", NULL
         };
         (void)self;
 
@@ -406,6 +467,9 @@ impl StmtOps for Stmt {
             e = self->ex->parse_expr();
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;
+            /* a borrowed pointer belongs to the lender: freeing it here would
+               double-free a pool slot (stage one refuses the spelling) */
+            if (check_borrow_delete(self, e) != 0) return -1;
             /* the object is released: it can neither leak nor auto-drop */
             if (self->mem->leak_active && self->sup->leak_delete(e) != 0) return -1;
             /* resolve the pointee's struct now (the variable may leave scope
@@ -1170,6 +1234,7 @@ impl StmtOps for Stmt {
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
             self->arena->nodes[n].aux = op;
+            if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
         } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
             int k, ip;
@@ -1198,6 +1263,7 @@ impl StmtOps for Stmt {
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
+            if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
         } else if (self->arena->nodes[e].kind == N_POST) {
             n = e;

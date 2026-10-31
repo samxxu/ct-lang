@@ -66,6 +66,12 @@ pub struct Var {
     int  own_line;      /* source line of that allocation */
     int  autodrop;      /* 1 when declared `own`: release at scope exit */
     int  path_warned;   /* 1 once reported as possibly leaking on a return path */
+    /* `borrow`: the pointer is lent, not owned. `borrowed` refuses `delete` on
+       it and storing it somewhere that outlives the borrow; `is_param` keeps a
+       parameter (whose lifetime the caller owns) apart from a local
+       declaration, which a `return` may hand back (D5). */
+    int  borrowed;
+    int  is_param;
     /* A namespaced global is emitted under a mangled C name, so `cname` carries
        that spelling (equal to `name` for a local or a root global). `ns` holds
        the declaring namespace in underscore form (`a_b`), which is what a
@@ -256,6 +262,8 @@ impl SymbolOps for Symbols {
         self->vars[i].own_line = 0;
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
+        self->vars[i].borrowed = 0;
+        self->vars[i].is_param = 0;
         self->vars[i].is_const = 0;
         self->nvar++;
         return 0;
@@ -287,6 +295,8 @@ impl SymbolOps for Symbols {
         self->vars[i].own_line = 0;
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
+        self->vars[i].borrowed = 0;
+        self->vars[i].is_param = 0;
         self->vars[i].is_const = 0;
         if (imported)
             for (k = 0; k < i; k++)
