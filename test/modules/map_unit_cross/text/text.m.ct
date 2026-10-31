@@ -1,0 +1,11 @@
+#include <stdlib.h>
+
+namespace text;
+
+pub trait CStr {
+    int toInt();
+}
+
+map trait CStr for type char * {
+    toInt(s) -> atoi(s);
+}

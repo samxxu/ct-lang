@@ -186,6 +186,15 @@ impl DriverOps for Driver {
             fprintf(stderr, "usage: %s <input.ct> [-o <output.c>]\n", self->m->prog);
             return 1;
         }
+        /* compile mode resolves no imports, so a mapping unit has no consumer
+           and no output; it is a `build`-only input. */
+        {
+            size_t pl = strlen(in);
+            if (pl > 5 && strcmp(in + pl - 5, ".m.ct") == 0) {
+                fprintf(stderr, "ctc: a .m.ct unit produces no output; import it from a .ct unit\n");
+                return 1;
+            }
+        }
         if (!out) {
             if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
                 fprintf(stderr, "ctc: output path too long\n");
@@ -221,6 +230,7 @@ impl DriverOps for Driver {
         self->p->nparams = 0;
         self->p->ncalls = 0;
         self->p->cur_func[0] = 0;
+        self->p->unit_is_map = 0;
         frontend::parse::ct_parse_clear_error();
         if (self->m->read_file(in) != 0) {
             return frontend::parse::ct_parse_report();

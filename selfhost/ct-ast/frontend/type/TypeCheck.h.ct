@@ -28,6 +28,7 @@ import runtime::arena::Arena;
    builds and the emitter dispatches on */
 #define N_CALL   7
 #define N_VAR    10
+#define N_MCALL  30
 #define N_MEMBER 24
 #define N_ARROW  25
 #define N_INDEX  26
@@ -65,6 +66,20 @@ pub struct TypeCheck {
     int  *nmaps;                        /* points at the driver's count: the table grows while parsing */
     char errmsg[160];
 } use TypeOps;
+
+/* A type spelling with every whitespace character dropped: `char *` and
+   `char*` are the same type host, while `const char *` still differs. */
+static void type_key(const char *in, char *out)
+{
+    while (*in) {
+        if (*in != ' ' && *in != '\t' && *in != '\n' && *in != '\r') {
+            *out = *in;
+            out++;
+        }
+        in++;
+    }
+    *out = 0;
+}
 
 pub struct TypeCheck *type_get(void);
 
@@ -193,6 +208,47 @@ impl TypeOps for TypeCheck {
             strcat(out, " *");
             return 0;
         }
+        if (self->arena->nodes[n].kind == N_MCALL) {
+            /* A static mapping call: the return type comes from the trait's
+               method signature. `aux == 5` names the trait directly; `aux == 6`
+               is a type host and the receiver's static type finds it. */
+            if (self->arena->nodes[n].aux == 5) {
+                int ti = self->sym->find_trait(self->arena->nodes[n].text);
+                int mi;
+                if (ti < 0) return -1;
+                for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
+                    if (strcmp(self->sym->traits[ti].m[mi].name,
+                               self->arena->nodes[n].text2) == 0) {
+                        if (snprintf(out, (size_t)cap, "%s",
+                                     self->sym->traits[ti].m[mi].ret) >= cap) return -1;
+                        return 0;
+                    }
+                return -1;
+            }
+            if (self->arena->nodes[n].aux == 6) {
+                char rt[MAX_TEXT];
+                char rk[MAX_TEXT];
+                char tk[MAX_TEXT];
+                int i, j;
+                snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
+                if (!rt[0]) return -1;
+                type_key(rt, rk);
+                for (i = 0; i < (*self->nmaps); i++) {
+                    if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
+                    type_key(self->maps[i].host_type, tk);
+                    if (strcmp(tk, rk) != 0) continue;
+                    for (j = 0; j < self->maps[i].nb; j++)
+                        if (strcmp(self->maps[i].b[j].method, self->arena->nodes[n].text2) == 0) {
+                            if (snprintf(out, (size_t)cap, "%s",
+                                         self->sym->traits[self->maps[i].b[j].ti]
+                                             .m[self->maps[i].b[j].mi].ret) >= cap) return -1;
+                            return 0;
+                        }
+                }
+                return -1;
+            }
+            return -1;
+        }
         if (self->arena->nodes[n].kind == N_CALL) {
             i = self->sym->find_func(self->arena->nodes[n].text2);
             if (i < 0) return -1;
@@ -249,6 +305,11 @@ impl TypeOps for TypeCheck {
         int is_ptr, si, u, box, found, i, mptr, ip;
         (void)self;
 
+        {
+            int st = self->sym->find_trait(trait);
+            if (st >= 0 && self->sym->traits[st].is_static)
+                return self->fail("a static trait has no interface value");
+        }
         if (self->arena->nodes[n].kind == N_BOX) {
             /* already an interface value; the trait must be the expected one.
                Bit 3 of aux marks the node as accepted by an interface context,

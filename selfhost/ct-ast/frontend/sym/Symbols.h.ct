@@ -101,9 +101,12 @@ pub struct Trait {
     struct MethodSig m[64];
     int  nm;
     int  is_pub;
+    int  is_static;             /* declared in a `.m.ct` unit: no iface, no vtable */
     int  line;
     /* the declaring unit's path, for the D-7 expansion diagnostic */
     char path[160];
+    /* the declaring namespace in underscore form, for a static namespace host */
+    char ns[160];
 }
 
 pub struct Field {

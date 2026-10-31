@@ -1,0 +1,19 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+namespace ctypes;
+
+pub trait CStr {
+    int  toInt();
+    int  scanInto(int *out);
+    long toLong(char *end);
+    void probe();
+}
+
+map trait CStr for type char * {
+    toInt(s)         -> atoi(s);
+    scanInto(s, out) -> sscanf(s, "%d", out);
+    toLong(s, end)   -> strtol(s, &end, 10);
+    probe(s)         -> strlen("");
+}

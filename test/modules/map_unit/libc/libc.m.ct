@@ -1,0 +1,29 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+namespace libc;
+
+pub trait CStr {
+    int   toInt();
+    int   length();
+    int   compare(char *other);
+    void  fill(int value, int count);
+    int   scanInto(int *out);
+}
+
+map trait CStr for type char * {
+    toInt(s)              -> atoi(s);
+    length(s)             -> strlen(s);
+    compare(s, other)     -> strcmp(s, other);
+    fill(s, value, count) -> memset(s, value, count);
+    scanInto(s, out)      -> sscanf(s, "%d", out);
+}
+
+pub trait Env {
+    char *get(char *name);
+}
+
+map trait Env for namespace libc {
+    get(name) -> getenv(name);
+}

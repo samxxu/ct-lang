@@ -19,6 +19,7 @@ pub struct Unit {
     int  ndep;
     int  prog;
     int  is_hdr;                /* a `.h.ct` unit: publishes a header, importable */
+    int  is_map;                /* a `.m.ct` unit: a compile-time mapping, no output */
     int  fn_start;
     int  fn_end;
     int  tr_start;

@@ -1,0 +1,7 @@
+import text::text;
+
+pub int parse(char *s);
+int parse(char *s)
+{
+    return s.toInt();
+}

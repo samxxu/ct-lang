@@ -1,0 +1,17 @@
+import ctypes::ctypes;
+#include <stdio.h>
+
+int main(void)
+{
+    char a[] = "42";
+    int scanned = 0;
+
+    int n = a.toInt();
+    int r = a.scanInto(&scanned);
+    long v = a.toLong(0);
+
+    a.probe();
+
+    printf("%d %d %d %ld\n", n, r, scanned, v);
+    return 0;
+}

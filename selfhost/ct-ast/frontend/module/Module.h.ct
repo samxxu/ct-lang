@@ -56,10 +56,11 @@ pub trait ModuleOps {
     int  fail(const char *msg);
     int  fail_emit(const char *msg);
     int  read_file(const char *path);
-    int  base_name(const char *path, char *out, int cap, int *is_hdr);
+    int  base_name(const char *path, char *out, int cap, int *is_hdr, int *is_map);
     int  path_dir(const char *path, char *out, int cap);
     int  scan_imports(const char *from);
-    int  resolve_import(const char *from, const char *rel, char *out, int cap, int *is_hdr);
+    int  resolve_import(const char *from, const char *rel, char *out, int cap,
+                        int *is_hdr, int *is_map, int line);
     int  load_unit(const char *path);
     int  check_ns_dir(int u);
     int  cache_order(int u, int *state, int *order, int *n);
@@ -164,8 +165,9 @@ impl ModuleOps for Module {
         return 0;
     }
 
-    /* `foo.ct` -> `foo`; `foo.h.ct` -> `foo` and `is_hdr = 1`. */
-    int base_name(const char *path, char *out, int cap, int *is_hdr)
+    /* `foo.ct` -> `foo`; `foo.h.ct` -> `foo` and `is_hdr = 1`;
+       `foo.m.ct` -> `foo` and `is_map = 1`. */
+    int base_name(const char *path, char *out, int cap, int *is_hdr, int *is_map)
     {
         const char *slash, *name;
         size_t n;
@@ -175,8 +177,12 @@ impl ModuleOps for Module {
         name = slash ? slash + 1 : path;
         n = strlen(name);
         *is_hdr = 0;
+        *is_map = 0;
         if (n > 5 && strcmp(name + n - 5, ".h.ct") == 0) {
             *is_hdr = 1;
+            n -= 5;
+        } else if (n > 5 && strcmp(name + n - 5, ".m.ct") == 0) {
+            *is_map = 1;
             n -= 5;
         } else if (n > 3 && strcmp(name + n - 3, ".ct") == 0) {
             n -= 3;
@@ -218,6 +224,8 @@ impl ModuleOps for Module {
         backend::emit::ct_emit_set_path(self->path);
         self->lex->pos = 0;
         self->lex->bol = 1;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
         self->lex->tok = 0;
         frontend::parse::ct_parse_lex_next();
         for (;;) {
@@ -235,29 +243,52 @@ impl ModuleOps for Module {
         return 0;
     }
 
-    /* A unit's interface lives in its header, so only a `.h.ct` unit can be
-       imported. The search is two passes -- first every root for `a/b.h.ct`
-       (the importer's own directory, then the `-I` roots, in command-line
-       order), then every root for `a/b.ct`: a plain unit there is the mistake
-       worth naming, because it is an implementation file. */
-    int resolve_import(const char *from, const char *rel, char *out, int cap, int *is_hdr)
+    /* A unit's interface lives in its header, so a `.h.ct` or `.m.ct` unit can
+       be imported. The search is two passes -- first every root for `a/b.h.ct`
+       and `a/b.m.ct` (the importer's own directory, then the `-I` roots, in
+       command-line order), then every root for `a/b.ct`: a plain unit there is
+       the mistake worth naming, because it is an implementation file. The two
+       importable suffixes in one root are an ambiguity. */
+    int resolve_import(const char *from, const char *rel, char *out, int cap,
+                       int *is_hdr, int *is_map, int line)
     {
         char dir[MAX_PATH];
         char cand[MAX_PATH];
+        char hdr[MAX_PATH];
         const char *root;
         FILE *f;
         int r;
         (void)self;
 
         if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
+        *is_map = 0;
         for (r = -1; r < self->ninc; r++) {
+            int has_h, has_m;
             root = (r < 0) ? dir : self->incdirs[r];
-            if (snprintf(cand, sizeof cand, "%s/%s.h.ct", root, rel) >= (int)sizeof cand)
+            if (snprintf(hdr, sizeof hdr, "%s/%s.h.ct", root, rel) >= (int)sizeof hdr)
+                return self->fail("import path is too long");
+            f = fopen(hdr, "rb");
+            has_h = (f != NULL);
+            if (f) fclose(f);
+            if (snprintf(cand, sizeof cand, "%s/%s.m.ct", root, rel) >= (int)sizeof cand)
                 return self->fail("import path is too long");
             f = fopen(cand, "rb");
-            if (f) {
-                fclose(f);
+            has_m = (f != NULL);
+            if (f) fclose(f);
+            if (has_h && has_m) {
+                char msg[MAX_PATH + MAX_PATH];
+                snprintf(msg, sizeof msg,
+                         "import '%s' is ambiguous: both %s and %s exist", rel, hdr, cand);
+                if (line > 0) return tool::diag::ct_sem_error(line, 1, msg, from);
+                return self->fail(msg);
+            }
+            if (has_h) {
                 *is_hdr = 1;
+                if (snprintf(out, (size_t)cap, "%s", hdr) >= cap) return self->fail("import path is too long");
+                return 0;
+            }
+            if (has_m) {
+                *is_map = 1;
                 if (snprintf(out, (size_t)cap, "%s", cand) >= cap) return self->fail("import path is too long");
                 return 0;
             }
@@ -285,9 +316,10 @@ impl ModuleOps for Module {
     int load_unit(const char *path)
     {
         char rels[MAX_IMPORTS][MAX_TEXT];
+        int  lines[MAX_IMPORTS];
         char dep[MAX_PATH];
         char *mysrc;
-        int u, i, k, d, nrels, is_hdr, dup, dn, gn;
+        int u, i, k, d, nrels, is_hdr, is_map, dep_is_map, dup, dn, gn;
         (void)self;
 
         for (u = 0; u < self->nunits; u++)
@@ -306,16 +338,26 @@ impl ModuleOps for Module {
         self->units[u].prog = -1;
         self->units[u].digest = 0;
         self->units[u].ns[0] = 0;
-        if (self->base_name(path, self->units[u].base, MAX_TEXT, &is_hdr) != 0) return -1;
+        if (self->base_name(path, self->units[u].base, MAX_TEXT, &is_hdr, &is_map) != 0) return -1;
         self->units[u].is_hdr = is_hdr;
+        self->units[u].is_map = is_map;
+        self->p->unit_is_map = is_map;
 
         if (self->read_file(path) != 0) return -1;
         mysrc = (char *)self->lex->src;
         if (self->scan_imports(path) != 0) return -1;
         nrels = self->p->nrels;
-        for (i = 0; i < nrels; i++) snprintf(rels[i], MAX_TEXT, "%s", self->p->rels[i]);
         for (i = 0; i < nrels; i++) {
-            if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr) != 0) return -1;
+            snprintf(rels[i], MAX_TEXT, "%s", self->p->rels[i]);
+            lines[i] = self->p->rel_line[i];
+        }
+        for (i = 0; i < nrels; i++) {
+            if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr, &dep_is_map,
+                                    lines[i]) != 0) return -1;
+            if (is_map && !dep_is_map) {
+                return tool::diag::ct_sem_error(lines[i], 1,
+                    "a .m.ct unit can only import another .m.ct unit", path);
+            }
             d = self->load_unit(dep);
             if (d < 0) return -1;
             /* Two `import` lines may name the same unit; a dependency is listed
@@ -461,6 +503,8 @@ impl ModuleOps for Module {
         self->units[u].tr_start = self->sym->ntraits;
         self->units[u].call_start = self->p->ncalls;
         self->p->cur_unit = u;
+        /* dependencies were parsed recursively and overwrote the flag */
+        self->p->unit_is_map = self->units[u].is_map;
         self->units[u].prog = frontend::parse::ct_parse_program();
         if (self->units[u].prog < 0) return -1;
         self->units[u].fn_end = self->sym->nfunc;
@@ -555,7 +599,8 @@ impl ModuleOps for Module {
         n = 0;
         ih[0] = 0;
         for (k = 0; k < (size_t)self->units[u].ndep; k++) {
-            w = snprintf(ih + n, sizeof ih - n, "%s.h;", self->units[u].dep[k]);
+            w = snprintf(ih + n, sizeof ih - n, "%s%s;", self->units[u].dep[k],
+                         self->units[self->units[u].depu[k]].is_map ? ".m" : ".h");
             if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
             n += (size_t)w;
         }
@@ -697,6 +742,15 @@ impl ModuleOps for Module {
             fprintf(stderr, "usage: %s build <input.ct>... -o <dir>\n", self->prog);
             return 1;
         }
+        /* A `.m.ct` unit is a compile-time mapping: it is loaded through
+           `import`, never as a build input, and it never writes an artefact. */
+        for (i = 0; i < ninput; i++) {
+            size_t pl = strlen(inputs[i]);
+            if (pl > 5 && strcmp(inputs[i] + pl - 5, ".m.ct") == 0) {
+                fprintf(stderr, "ctc: a .m.ct unit produces no output; import it from a .ct unit\n");
+                return 1;
+            }
+        }
         if (!outdir) {
             fprintf(stderr, "ctc: build needs -o <dir>\n");
             return 1;
@@ -773,6 +827,14 @@ impl ModuleOps for Module {
             int k;
             u = corder[o];
             dirty[u] = 1;
+            /* A map unit writes nothing, but its digest is folded by every
+               consumer, so the key is computed and it is never a cache hit. */
+            if (self->units[u].is_map) {
+                if (self->cache_key_of(u, key, sizeof key) != 0)
+                    return frontend::parse::ct_parse_report();
+                dirty[u] = 0;
+                continue;
+            }
             if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
                     >= (int)sizeof outc) {
                 fprintf(stderr, "ctc: output path is too long\n");
@@ -788,6 +850,7 @@ impl ModuleOps for Module {
             char outc[MAX_PATH];
             char key[MAX_KEY];
             u = corder[o];
+            if (self->units[u].is_map) continue;
             if (!dirty[u]) continue;
             if (self->emit_unit(u) != 0) {
                 /* the `.c` was already opened, so a failure leaves half a file;
@@ -813,8 +876,10 @@ impl ModuleOps for Module {
         /* The command the user runs next, in the same shape L2 prints; the
            target C standard (Phase 6.4) is the only option it carries. */
         printf("cc %s", self->std_flag);
-        for (u = 0; u < self->nunits; u++)
+        for (u = 0; u < self->nunits; u++) {
+            if (self->units[u].is_map) continue;
             printf(" %s/%s.c", self->outdir, self->units[u].base);
+        }
         printf(" -o a.out\n");
         if (tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
         return 0;

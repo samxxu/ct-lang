@@ -166,6 +166,14 @@
 # cycle, the missing abstract method and the per-struct expansion failure are
 # pinned negatives.
 #
+# batch 38 adds `.m.ct` mapping units: a mapping-only unit publishes no artefact, and
+# every bound call is expanded at the consumer's call site into a plain C call
+# (no wrapper, no `_iface` / `_vtbl`, no vtable). test/modules/map_unit covers a
+# namespace host and a type host, map_unit_type the array decay / pointer
+# argument / compound literal / unused-receiver forms, and map_unit_cross a
+# mapping shared by a `.h.ct` and a `.ct` consumer. The whitelist of a `.m.ct`
+# unit, the static-trait restrictions and the recipe rules are pinned negatives.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -510,6 +518,68 @@ if "$work/ct-ast" build test/modules/hdr/main.h.ct -o "$mod-hdr" \
     ok "hdr (foo.h.ct header unit; the source's #include leads main.h)"
 else
     bad "hdr" "$(cat "$work/mhdr.err" "$work/mhdr.cc" "$work/mhdr.stdout")"
+fi
+
+echo
+echo "== static map units (batch 38) =="
+# A `.m.ct` unit is a mapping, not an implementation: it writes no `.c` / `.h`,
+# and every bound call is expanded at the consumer's call site. The generated C
+# must therefore read like hand-written C -- no wrapper, no interface value.
+rm -rf "$mod-mu"
+mkdir -p "$mod-mu"
+if "$work/ct-ast" build test/modules/map_unit/main.ct -o "$mod-mu" \
+        >"$work/mmu.out" 2>"$work/mmu.err" \
+   && [ ! -f "$mod-mu/libc.c" ] && [ ! -f "$mod-mu/libc.h" ] \
+   && grep -qF 'atoi((a))' "$mod-mu/main.c" \
+   && grep -qF "memset((b), ('z'), (3))" "$mod-mu/main.c" \
+   && grep -qF 'getenv(("HOME"))' "$mod-mu/main.c" \
+   && ! grep -Eq '_iface|_vtbl|vtable|vt->|(void \*)0' "$mod-mu/main.c" \
+   && grep -q '^#include <stdlib.h>' "$mod-mu/main.c" \
+   && ! grep -q 'libc\.c' "$work/mmu.out" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-mu"/*.c -o "$work/mmu.bin" 2>"$work/mmu.cc" \
+   && "$work/mmu.bin" >"$work/mmu.stdout" 2>&1 \
+   && cmp -s "$work/mmu.stdout" test/modules/map_unit/expected.out; then
+    ok "map_unit (a namespace + type host expands inline; no artefact, no vtable)"
+else
+    bad "map_unit" "$(cat "$work/mmu.err" "$work/mmu.cc" "$work/mmu.stdout" 2>/dev/null | head -5)"
+fi
+
+rm -rf "$mod-mut"
+mkdir -p "$mod-mut"
+if "$work/ct-ast" build test/modules/map_unit_type/main.ct -o "$mod-mut" \
+        >"$work/mmut.out" 2>"$work/mmut.err" \
+   && grep -qF 'strtol((a), &(char *){0}, 10)' "$mod-mut/main.c" \
+   && grep -qF '((void)(a), strlen(""));' "$mod-mut/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-mut"/*.c -o "$work/mmut.bin" 2>"$work/mmut.cc" \
+   && "$work/mmut.bin" >"$work/mmut.stdout" 2>&1 \
+   && cmp -s "$work/mmut.stdout" test/modules/map_unit_type/expected.out; then
+    ok "map_unit_type (array decay, pointer argument, compound literal, unused receiver)"
+else
+    bad "map_unit_type" "$(cat "$work/mmut.err" "$work/mmut.cc" "$work/mmut.stdout" 2>/dev/null | head -5)"
+fi
+
+# One mapping, two consumers (a `.h.ct` and a `.ct`): neither one gets a
+# wrapper symbol, and the map JSON describes the static shape.
+rm -rf "$mod-muc"
+mkdir -p "$mod-muc"
+if "$work/ct-ast" build --emit-map "$work/mmuc.map" test/modules/map_unit_cross/main.ct \
+        -o "$mod-muc" >"$work/mmuc.out" 2>"$work/mmuc.err" \
+   && [ -f "$mod-muc/main.c" ] && [ -f "$mod-muc/parse.c" ] && [ -f "$mod-muc/parse.h" ] \
+   && [ ! -f "$mod-muc/text.c" ] && [ ! -f "$mod-muc/text.h" ] \
+   && grep -qF 'atoi((s))' "$mod-muc/parse.c" \
+   && grep -q '^#include <stdlib.h>' "$mod-muc/parse.c" \
+   && grep -q '^#include <stdlib.h>' "$mod-muc/main.c" \
+   && grep -q '"static":true' "$work/mmuc.map" \
+   && grep -q '"host":"type"' "$work/mmuc.map" \
+   && grep -q '"type":"char \*"' "$work/mmuc.map" \
+   && grep -q '"inline":true' "$work/mmuc.map" \
+   && ! grep -q 'text\.c' "$work/mmuc.out" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-muc"/*.c -o "$work/mmuc.bin" 2>"$work/mmuc.cc" \
+   && "$work/mmuc.bin" >"$work/mmuc.stdout" 2>&1 \
+   && cmp -s "$work/mmuc.stdout" test/modules/map_unit_cross/expected.out; then
+    ok "map_unit_cross (one .m.ct shared by a .h.ct and a .ct consumer; both inline)"
+else
+    bad "map_unit_cross" "$(cat "$work/mmuc.err" "$work/mmuc.cc" "$work/mmuc.stdout" 2>/dev/null | head -5)"
 fi
 
 echo
@@ -1052,6 +1122,144 @@ elif grep -q "duplicate impl of trait 'Speak' for struct 'Dog'" "$work/mdup.err"
     ok "dup_impl (one impl per struct and trait, the first one is named)"
 else
     bad "dup_impl" "no duplicate diagnostic: $(cat "$work/mdup.err")"
+fi
+
+echo
+echo "== static map units: negatives (batch 38) =="
+# Every `.m.ct` fixture is a two-unit tree: lib/lib.m.ct carries the construct
+# under test, main.ct imports it. A shared header keeps the fixtures one
+# construct apart.
+mapbad() {
+    label="$1"; body="$2"; want="$3"
+    mainbody='import lib::lib;\nint main(void) { return 0; }\n'
+    if [ $# -ge 4 ]; then mainbody="$4"; fi
+    rm -rf "$work/mb"
+    mkdir -p "$work/mb/lib" "$work/mb/out"
+    printf '%b' "#include <stdlib.h>\nnamespace lib;\n$body" >"$work/mb/lib/lib.m.ct"
+    printf '%b' "$mainbody" >"$work/mb/main.ct"
+    if "$work/ct-ast" build "$work/mb/main.ct" -o "$work/mb/out" \
+            >"$work/mb/out.txt" 2>"$work/mb/err.txt"; then
+        bad "batch 38: $label" "expected a non-zero exit"
+    elif grep -qF "$want" "$work/mb/err.txt"; then
+        ok "batch 38 ($label)"
+    else
+        bad "batch 38: $label" "$(head -2 "$work/mb/err.txt")"
+    fi
+}
+
+mapbad funcs \
+    'pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\nint helper(void) { return 1; }\n' \
+    'a .m.ct unit cannot define a function'
+mapbad proto \
+    'pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\nint helper(void);\n' \
+    'a .m.ct unit cannot declare a function'
+mapbad global \
+    'pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\nint g;\n' \
+    'a .m.ct unit cannot declare a global variable'
+mapbad type_decl \
+    'pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\nstruct S { int v; };\n' \
+    'a .m.ct unit cannot declare a type'
+mapbad impl_unit \
+    'pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\nimpl T for S { int m() { return 1; } }\n' \
+    'a .m.ct unit cannot contain an impl'
+mapbad instance_host \
+    'pub trait T { int m(); }\nmap trait T for instance g { m() -> rand(); }\n' \
+    'a .m.ct unit cannot bind a trait to an instance'
+mapbad prologue_line \
+    '#pragma once\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    'a .m.ct unit allows only #include and #define in its prologue'
+mapbad nonpub \
+    'trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    "a trait in a .m.ct unit must be 'pub'"
+mapbad default_body \
+    'pub trait T { int m() { return 1; } }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    'a .m.ct trait cannot carry a default body'
+mapbad ns_host_mismatch \
+    'pub trait T { int m(); }\nmap trait T for namespace other { m() -> rand(); }\n' \
+    'a static trait for a namespace host must be declared in that namespace'
+mapbad for_type_missing \
+    'pub trait T { int m(); }\nmap trait T for type { m() -> rand(); }\n' \
+    "expected a type after 'for type'"
+mapbad for_type_array \
+    'pub trait T { int m(); }\nmap trait T for type char[] { m(s) -> 0; }\n' \
+    "expected a type after 'for type'"
+mapbad type_arity \
+    'pub trait T { int m(int a); }\nmap trait T for type char * { m(s) -> 1; }\n' \
+    "a type host binding has 1 parameters but method 'm' takes 1"
+mapbad recipe_name \
+    'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> strcmp(s, k); }\n' \
+    "map recipe names 'k' but it is not a binding parameter"
+mapbad recipe_modifies \
+    'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> strcmp(s = s, s); }\n' \
+    "map recipe modifies binding parameter 's'"
+mapbad recipe_not_call \
+    'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> atoi(s) + 1; }\n' \
+    'a map recipe must be a single call'
+mapbad no_type_hit \
+    'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> strlen(s); }\n' \
+    "no method 'm' for type 'struct P'" \
+    'import lib::lib;\nstruct P { int v; };\n\nint main(void)\n{\n    struct P p = { 1 };\n    int x = p.m();\n    (void)x;\n    return 0;\n}\n'
+mapbad recipe_twice \
+    'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> strcmp(s, s); }\n' \
+    "map recipe uses 's' more than once; bind the argument to a local first" \
+    'import lib::lib;\nchar *mk(void) { return "x"; }\n\nint main(void)\n{\n    int x = mk().m();\n    (void)x;\n    return 0;\n}\n'
+mapbad ambiguous_type_host \
+    'pub trait T { int m(); }\npub trait U { int m(); }\nmap trait T for type char * { m(s) -> atoi(s); }\nmap trait U for type char * { m(s) -> strlen(s); }\n' \
+    "ambiguous type-host map for method 'm' on type 'char *'" \
+    'import lib::lib;\n\nint main(void)\n{\n    char *a = "1";\n    int x = a.m();\n    (void)x;\n    return 0;\n}\n'
+
+# A static trait is bound by its `map`, never implemented / adopted / boxed.
+static_trait='pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n'
+mapbad impl_static "$static_trait" 'a static trait cannot be implemented' \
+    'import lib::lib;\nstruct S { int v; }\nimpl T for S { int m() { return 1; } }\nint main(void) { return 0; }\n'
+mapbad adopt_static "$static_trait" 'a static trait cannot be adopted' \
+    'import lib::lib;\nstruct S { int v; } use T;\nint main(void) { return 0; }\n'
+mapbad static_as_type "$static_trait" 'a static trait has no interface value' \
+    'import lib::lib;\nint use(T t) { return 0; }\nint main(void) { return 0; }\n'
+mapbad box_static "$static_trait" "call 'lib::T.<method>()'" \
+    'import lib::lib;\nint main(void) { void *v = T::lib; (void)v; return 0; }\n'
+
+# `ct compile` has no import closure, so a `.m.ct` input is refused outright.
+if "$work/ct-ast" compile test/modules/map_unit/libc/libc.m.ct -o "$work/mc.c" \
+        >"$work/mc.out" 2>"$work/mc.err"; then
+    bad "batch 38: compile_map" "expected a non-zero exit"
+elif grep -qF 'a .m.ct unit produces no output; import it from a .ct unit' "$work/mc.err"; then
+    ok "batch 38 (compile_map)"
+else
+    bad "batch 38: compile_map" "$(head -2 "$work/mc.err")"
+fi
+
+# A `.m.ct` unit may import only another `.m.ct` unit.
+rm -rf "$work/mbimp"
+mkdir -p "$work/mbimp/lib/x" "$work/mbimp/out"
+printf 'pub int h(void);\nint h(void) { return 1; }\n' >"$work/mbimp/lib/x/plain.h.ct"
+printf '%b' 'import x::plain;\n#include <stdlib.h>\nnamespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    >"$work/mbimp/lib/lib.m.ct"
+printf 'import lib::lib;\n\nint main(void) { return 0; }\n' >"$work/mbimp/main.ct"
+if "$work/ct-ast" build "$work/mbimp/main.ct" -o "$work/mbimp/out" \
+        >"$work/mbimp/out.txt" 2>"$work/mbimp/err.txt"; then
+    bad "batch 38: map_imports_plain" "expected a non-zero exit"
+elif grep -qF 'a .m.ct unit can only import another .m.ct unit' "$work/mbimp/err.txt"; then
+    ok "batch 38 (map_imports_plain)"
+else
+    bad "batch 38: map_imports_plain" "$(head -2 "$work/mbimp/err.txt")"
+fi
+
+# Both importable suffixes in one root is an ambiguity, and the message names
+# the two candidates.
+rm -rf "$work/mbamb"
+mkdir -p "$work/mbamb/foo" "$work/mbamb/out"
+printf 'pub int helper(void);\n' >"$work/mbamb/foo/foo.h.ct"
+printf '%b' '#include <stdlib.h>\nnamespace foo;\npub trait T { int m(); }\nmap trait T for namespace foo { m() -> rand(); }\n' \
+    >"$work/mbamb/foo/foo.m.ct"
+printf 'import foo::foo;\n\nint main(void) { return 0; }\n' >"$work/mbamb/main.ct"
+if "$work/ct-ast" build "$work/mbamb/main.ct" -o "$work/mbamb/out" \
+        >"$work/mbamb/out.txt" 2>"$work/mbamb/err.txt"; then
+    bad "batch 38: import_ambiguous" "expected a non-zero exit"
+elif grep -qF "import 'foo/foo' is ambiguous: both" "$work/mbamb/err.txt"; then
+    ok "batch 38 (import_ambiguous)"
+else
+    bad "batch 38: import_ambiguous" "$(head -2 "$work/mbamb/err.txt")"
 fi
 
 echo

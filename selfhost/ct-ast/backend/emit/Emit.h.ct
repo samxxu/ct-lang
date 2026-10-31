@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 #define MAX_PATH   1024
 #define MAX_HOISTS 4
 #define MAX_PARAMS 16
+#define MAX_UNITS  64
 
 /* the node kinds this unit dispatches on (D32: one tag, one dispatch) */
 #define N_PP      2
@@ -193,6 +194,8 @@ struct Emitter {
     const char *gprefix;
     /* the vptr / initialiser writer (Init.h.ct) */
     struct Init *init;
+    /* the unit being written: `-1` in compile mode, which has no map closure */
+    int  cur_unit;
 } use EmitOps;
 
 /* Does the impl node `node` write `name`? */
@@ -321,6 +324,448 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
     return 0;
 }
 
+/* Is map `i` declared by a unit in the current unit's transitive import
+   closure? Compile mode (`cur_unit < 0`) has one unit, so every map belongs to
+   it. A `.m.ct` unit can only be used through `import`. */
+static int map_visible(struct Emitter *e, int i)
+{
+    char reach[MAX_UNITS];
+    int u, d, k, changed;
+    if (e->cur_unit < 0) return 1;
+    if (e->maps[i].unit == e->cur_unit) return 1;
+    for (u = 0; u < MAX_UNITS; u++) reach[u] = 0;
+    reach[e->cur_unit] = 1;
+    changed = 1;
+    while (changed) {
+        changed = 0;
+        for (d = 0; d < (*e->nunits); d++) {
+            if (!reach[d]) continue;
+            for (k = 0; k < e->units[d].ndep; k++) {
+                int dep = e->units[d].depu[k];
+                if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                    reach[dep] = 1;
+                    changed = 1;
+                }
+            }
+        }
+    }
+    return e->maps[i].unit >= 0 && e->maps[i].unit < MAX_UNITS && reach[e->maps[i].unit];
+}
+
+/* The prologue of the map closure: every `#include` / `#define` line of an
+   imported `.m.ct` unit, deduplicated by whole line. Emitted only in build
+   mode, where the unit table exists. */
+static int emit_map_prologues(struct Emitter *e, int u)
+{
+    char reach[MAX_UNITS];
+    char seen[64][MAX_TEXT];
+    int nseen, d, k, n, i, dup, changed;
+    for (i = 0; i < MAX_UNITS; i++) reach[i] = 0;
+    reach[u] = 1;
+    changed = 1;
+    while (changed) {
+        changed = 0;
+        for (d = 0; d < (*e->nunits); d++) {
+            if (!reach[d]) continue;
+            for (k = 0; k < e->units[d].ndep; k++) {
+                int dep = e->units[d].depu[k];
+                if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                    reach[dep] = 1;
+                    changed = 1;
+                }
+            }
+        }
+    }
+    nseen = 0;
+    for (d = 0; d < (*e->nunits); d++) {
+        if (!reach[d] || !e->units[d].is_map || e->units[d].prog < 0) continue;
+        for (n = e->arena->nodes[e->units[d].prog].a; n >= 0; n = e->arena->nodes[n].next) {
+            if (e->arena->nodes[n].kind != N_PP) continue;
+            dup = 0;
+            for (i = 0; i < nseen; i++)
+                if (strcmp(seen[i], e->arena->nodes[n].text) == 0) dup = 1;
+            if (dup) continue;
+            if (nseen < 64) {
+                snprintf(seen[nseen], MAX_TEXT, "%s", e->arena->nodes[n].text);
+                nseen++;
+            }
+            fprintf(e->out, "%s\n", e->arena->nodes[n].text);
+        }
+    }
+    if (nseen > 0) fputs("\n", e->out);
+    return 0;
+}
+
+/* A type spelling with every whitespace character dropped (the type-host match
+   rule; `const` is still a token and therefore still differs). */
+static void map_type_key(const char *in, char *out)
+{
+    while (*in) {
+        if (*in != ' ' && *in != '\t' && *in != '\n' && *in != '\r') {
+            *out = *in;
+            out++;
+        }
+        in++;
+    }
+    *out = 0;
+}
+
+/* The parameter's declared type, without array dims (a compound literal needs
+   the base type). */
+static void map_clean_type(const char *in, char *out)
+{
+    int n = 0;
+    while (*in && *in != '[') {
+        out[n] = *in;
+        n++;
+        in++;
+    }
+    while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == '\t')) n--;
+    out[n] = 0;
+}
+
+/* The actual node for binding parameter `idx`: a type host's parameter 0 is the
+   receiver, the rest walk the call's argument chain. */
+static int map_actual_at(struct Arena *a, int recv, int args, int type_host, int idx)
+{
+    int n = args;
+    if (type_host) {
+        if (idx == 0) return recv;
+        idx--;
+    }
+    while (idx > 0 && n >= 0) {
+        n = a->nodes[n].next;
+        idx--;
+    }
+    return n;
+}
+
+/* A repeated recipe occurrence may not evaluate a side effect twice. */
+static int map_repeatable(struct Arena *a, int n)
+{
+    int k;
+    if (n < 0) return 0;
+    k = a->nodes[n].kind;
+    if (k == N_VAR || k == N_NUM || k == N_STR) return 1;
+    if (k == N_MEMBER || k == N_ARROW || k == N_ADDR) return map_repeatable(a, a->nodes[n].a);
+    if (k == N_INDEX) return map_repeatable(a, a->nodes[n].a) && map_repeatable(a, a->nodes[n].b);
+    return 0;
+}
+
+static int map_param_index(struct MapBind *b, const char *name)
+{
+    int i;
+    for (i = 0; i < b->nparams; i++)
+        if (strcmp(b->params[i], name) == 0) return i;
+    return -1;
+}
+
+/* The callee of a recipe (`atoi` in `atoi(s)`), for the map JSON. */
+static void map_recipe_callee(const char *call, char *out)
+{
+    int n = 0;
+    while (*call == ' ' || *call == '\t' || *call == '\n' || *call == '\r') call++;
+    while (((*call >= 'a' && *call <= 'z') || (*call >= 'A' && *call <= 'Z')
+            || (*call >= '0' && *call <= '9') || *call == '_') && n + 1 < MAX_TEXT) {
+        out[n] = *call;
+        n++;
+        call++;
+    }
+    out[n] = 0;
+}
+
+static int map_param_type(struct Emitter *e, struct Map *m, struct MapBind *b, int i, char *out)
+{
+    int k;
+    if (m->type_host && i == 0) {
+        snprintf(out, MAX_TEXT, "%s", m->host_type);
+        return 0;
+    }
+    k = m->type_host ? i - 1 : i;
+    if (k < 0 || k >= e->sym->traits[b->ti].m[b->mi].nparams) return -1;
+    snprintf(out, MAX_TEXT, "%s", e->sym->traits[b->ti].m[b->mi].ptype[k]);
+    return 0;
+}
+
+static int map_is_ident(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+        || c == '_';
+}
+
+/* Copy one balanced `[…]` group from `s`; returns the position after it. */
+static const char *map_copy_brackets(struct Emitter *e, const char *s)
+{
+    int depth = 0;
+    do {
+        if (*s == '\'' || *s == '"') {
+            int q = (unsigned char)*s;
+            fputc(*s, e->out);
+            s++;
+            while (*s) {
+                fputc(*s, e->out);
+                if (*s == '\\' && *(s + 1)) {
+                    s++;
+                    fputc(*s, e->out);
+                } else if ((unsigned char)*s == q) {
+                    s++;
+                    break;
+                }
+                s++;
+            }
+            continue;
+        }
+        if (*s == '[') depth++;
+        if (*s == ']') depth--;
+        fputc(*s, e->out);
+        s++;
+    } while (depth > 0 && *s);
+    return s;
+}
+
+/* Emit one recipe argument span, substituting the binding parameters (spec
+   §6.3): `p`, `&p`, `&p[…]`, `sizeof p`, `p.field` / `p->field` / `p[i]`. */
+static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct MapBind *b, int *actual)
+{
+    char tok[MAX_TEXT];
+    char tp[MAX_TEXT];
+    char suf[MAX_TEXT];
+    int i, n, sl;
+
+    while (*s) {
+        if (*s == '\'' || *s == '"') {
+            int q = (unsigned char)*s;
+            fputc(*s, e->out);
+            s++;
+            while (*s) {
+                fputc(*s, e->out);
+                if (*s == '\\' && *(s + 1)) {
+                    s++;
+                    fputc(*s, e->out);
+                } else if ((unsigned char)*s == q) {
+                    s++;
+                    break;
+                }
+                s++;
+            }
+            continue;
+        }
+        if (*s == '&') {
+            const char *q = s + 1;
+            while (*q == ' ' || *q == '\t') q++;
+            n = 0;
+            while (map_is_ident((unsigned char)q[n]) && n + 1 < MAX_TEXT) {
+                tok[n] = q[n];
+                n++;
+            }
+            tok[n] = 0;
+            i = (n > 0) ? map_param_index(b, tok) : -1;
+            if (i >= 0) {
+                const char *r = q + n;
+                while (*r == ' ' || *r == '\t') r++;
+                if (*r == '[') {
+                    if (map_param_type(e, m, b, i, tp) != 0) return -1;
+                    fputs("&((", e->out);
+                    e->emit_expr(actual[i]);
+                    fputc(')', e->out);
+                    s = map_copy_brackets(e, r);
+                    fputc(')', e->out);
+                    continue;
+                }
+                if (map_param_type(e, m, b, i, tp) != 0) return -1;
+                map_clean_type(tp, tok);
+                fprintf(e->out, "&(%s){", tok);
+                e->emit_expr(actual[i]);
+                fputc('}', e->out);
+                s = r;
+                continue;
+            }
+        }
+        if (map_is_ident((unsigned char)*s)
+            && !(*s >= '0' && *s <= '9')) {
+            n = 0;
+            while (map_is_ident((unsigned char)*s) && n + 1 < MAX_TEXT) {
+                tok[n] = *s;
+                n++;
+                s++;
+            }
+            tok[n] = 0;
+            /* `sizeof p` -> `sizeof(TP)`: no evaluation */
+            if (strcmp(tok, "sizeof") == 0) {
+                const char *q = s;
+                while (*q == ' ' || *q == '\t') q++;
+                n = 0;
+                while (map_is_ident((unsigned char)q[n]) && n + 1 < MAX_TEXT) {
+                    suf[n] = q[n];
+                    n++;
+                }
+                suf[n] = 0;
+                i = (n > 0) ? map_param_index(b, suf) : -1;
+                if (i >= 0) {
+                    if (map_param_type(e, m, b, i, tp) != 0) return -1;
+                    map_clean_type(tp, suf);
+                    fprintf(e->out, "sizeof(%s)", suf);
+                    s = q + n;
+                    continue;
+                }
+                fputs("sizeof", e->out);
+                continue;
+            }
+            i = map_param_index(b, tok);
+            if (i < 0) {
+                fputs(tok, e->out);
+                continue;
+            }
+            /* a member / index suffix keeps the table's parenthesised shape */
+            sl = 0;
+            for (;;) {
+                if (*s == '.') {
+                    suf[sl] = '.';
+                    sl++;
+                    s++;
+                    while (map_is_ident((unsigned char)*s) && sl + 1 < MAX_TEXT) {
+                        suf[sl] = *s;
+                        sl++;
+                        s++;
+                    }
+                    continue;
+                }
+                if (*s == '-' && *(s + 1) == '>') {
+                    suf[sl] = '-';
+                    suf[sl + 1] = '>';
+                    sl += 2;
+                    s += 2;
+                    while (map_is_ident((unsigned char)*s) && sl + 1 < MAX_TEXT) {
+                        suf[sl] = *s;
+                        sl++;
+                        s++;
+                    }
+                    continue;
+                }
+                if (*s == '[') {
+                    int depth = 0;
+                    do {
+                        if (*s == '[') depth++;
+                        if (*s == ']') depth--;
+                        if (sl + 1 < MAX_TEXT) {
+                            suf[sl] = *s;
+                            sl++;
+                        }
+                        s++;
+                    } while (depth > 0 && *s);
+                    continue;
+                }
+                break;
+            }
+            suf[sl] = 0;
+            if (sl > 0) fputs("((", e->out);
+            else fputc('(', e->out);
+            e->emit_expr(actual[i]);
+            if (sl > 0) {
+                fputc(')', e->out);
+                fputs(suf, e->out);
+                fputc(')', e->out);
+            } else {
+                fputc(')', e->out);
+            }
+            continue;
+        }
+        fputc(*s, e->out);
+        s++;
+    }
+    return 0;
+}
+
+/* Expand one static recipe at the call site (spec §6.3 / §6.4): no wrapper,
+   no vtable, the call is what a hand-written `.c` would say. */
+static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int recv, int args, int at)
+{
+    char tok[MAX_TEXT];
+    char arg[MAX_TEXT];
+    char msg[512];
+    int actual[16];
+    int i, unused, first, depth, n, q;
+    const char *p;
+
+    for (i = 0; i < b->nparams; i++) {
+        actual[i] = map_actual_at(e->arena, recv, args, m->type_host, i);
+        if (actual[i] < 0)
+            return e->fail_from(at, "a map call has fewer arguments than its binding");
+        if (b->uses[i] >= 2 && !map_repeatable(e->arena, actual[i])) {
+            snprintf(msg, sizeof msg,
+                     "map recipe uses '%s' more than once; bind the argument to a local first",
+                     b->params[i]);
+            return e->fail_from(at, msg);
+        }
+    }
+    unused = 0;
+    for (i = 0; i < b->nparams; i++) if (b->uses[i] == 0) unused = 1;
+    if (unused) fputc('(', e->out);
+    for (i = 0; i < b->nparams; i++)
+        if (b->uses[i] == 0) {
+            fputs("(void)(", e->out);
+            e->emit_expr(actual[i]);
+            fputs("), ", e->out);
+        }
+    p = b->call;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+    n = 0;
+    while (map_is_ident((unsigned char)*p) && n + 1 < MAX_TEXT) {
+        tok[n] = *p;
+        n++;
+        p++;
+    }
+    tok[n] = 0;
+    fputs(tok, e->out);
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != '(') return e->fail_from(at, "a map recipe must be a single call");
+    fputc('(', e->out);
+    p++;
+    first = 1;
+    for (;;) {
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        if (*p == ')') { p++; break; }
+        if (*p == 0) return e->fail_from(at, "a map recipe must be a single call");
+        if (!first) fputs(", ", e->out);
+        n = 0;
+        depth = 0;
+        while (*p) {
+            if (depth == 0 && (*p == ',' || *p == ')')) break;
+            if (*p == '\'' || *p == '"') {
+                q = (unsigned char)*p;
+                if (n + 1 < MAX_TEXT) arg[n++] = *p;
+                p++;
+                while (*p) {
+                    if (n + 1 < MAX_TEXT) arg[n++] = *p;
+                    if (*p == '\\' && *(p + 1)) {
+                        p++;
+                        if (n + 1 < MAX_TEXT) arg[n++] = *p;
+                    } else if ((unsigned char)*p == q) {
+                        p++;
+                        break;
+                    }
+                    p++;
+                }
+                continue;
+            }
+            if (*p == '(') depth++;
+            else if (*p == ')') depth--;
+            if (n + 1 < MAX_TEXT) arg[n++] = *p;
+            p++;
+        }
+        while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\t')) n--;
+        arg[n] = 0;
+        if (map_subst_arg(e, arg, m, b, actual) != 0) return -1;
+        first = 0;
+        if (*p == ',') { p++; continue; }
+        if (*p == ')') { p++; break; }
+        return e->fail_from(at, "a map recipe must be a single call");
+    }
+    fputc(')', e->out);
+    if (unused) fputc(')', e->out);
+    return 0;
+}
+
 impl EmitOps for Emitter {
     int emit_indent(int n)
     {
@@ -423,6 +868,7 @@ impl EmitOps for Emitter {
 
         self->errmsg[0] = 0;
         self->failline = 0;
+        self->cur_unit = -1;
         /* compile mode is one file: the parser's prefix is this file's */
         self->gprefix = self->sym->ns;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
@@ -578,6 +1024,7 @@ impl EmitOps for Emitter {
         (void)self;
 
         for (t = start; t < end; t++) {
+            if (self->sym->traits[t].is_static) continue;
             if (mode == 1 && !self->sym->traits[t].is_pub) continue;
             if (mode == 2 && self->sym->traits[t].is_pub) continue;
             fprintf(self->out, "struct %s_vtbl {\n", self->sym->traits[t].name);
@@ -888,6 +1335,7 @@ impl EmitOps for Emitter {
 
         for (i = 0; i < (*self->nmaps); i++) {
             if (u >= 0 && self->maps[i].unit != u) continue;
+            if (self->maps[i].is_static) continue;
             for (j = 0; j < self->maps[i].nb; j++) {
                 struct MapBind *b;
                 struct MethodSig *sig;
@@ -1246,6 +1694,7 @@ impl EmitOps for Emitter {
         if (u >= 0)
             for (i = 0; i < (*self->nmaps); i++) {
                 if (self->maps[i].unit != u) continue;
+                if (self->maps[i].is_static) continue;
                 if (!self->map_vtable_exported(i)) continue;
                 fprintf(self->out, "extern struct %s_vtbl %s;\n",
                         self->maps[i].trait, self->maps[i].vtable);
@@ -1946,6 +2395,74 @@ impl EmitOps for Emitter {
             char tname[MAX_TEXT];
             char low[MAX_TEXT];
             int i, c2, rk;
+            /* Static mapping calls: no iface, no vtable, the recipe is expanded
+               at the call site (spec §6.1 / §6.2). */
+            if (self->arena->nodes[n].aux == 5) {
+                char msg[MAX_TEXT];
+                int mi, bj, found = -1, bind = -1;
+                for (mi = 0; mi < (*self->nmaps); mi++) {
+                    if (!self->maps[mi].is_static || self->maps[mi].type_host) continue;
+                    if (!map_visible(self, mi)) continue;
+                    if (strcmp(self->maps[mi].trait, self->arena->nodes[n].text) != 0) continue;
+                    if (strcmp(self->maps[mi].inst, self->arena->nodes[n].text3) != 0) continue;
+                    for (bj = 0; bj < self->maps[mi].nb; bj++)
+                        if (strcmp(self->maps[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
+                            found = mi;
+                            bind = bj;
+                            break;
+                        }
+                    if (found >= 0) break;
+                }
+                if (found < 0) {
+                    snprintf(msg, sizeof msg, "no map binds trait '%s' to namespace '%s'",
+                             self->arena->nodes[n].text, self->arena->nodes[n].text3);
+                    return self->fail_from(n, msg);
+                }
+                return emit_recipe(self, &self->maps[found], &self->maps[found].b[bind],
+                                   -1, self->arena->nodes[n].b, n);
+            }
+            if (self->arena->nodes[n].aux == 6) {
+                char rt[MAX_TEXT];
+                char rk[MAX_TEXT];
+                char tk[MAX_TEXT];
+                char msg[512];
+                int r, mi, bj, cand = -1, cand2 = -1, bind = -1;
+                r = self->arena->nodes[n].a;
+                snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
+                if (r < 0 || !rt[0])
+                    return self->fail_from(n, "cannot infer the receiver type for a type-host map");
+                map_type_key(rt, rk);
+                for (mi = 0; mi < (*self->nmaps); mi++) {
+                    if (!self->maps[mi].is_static || !self->maps[mi].type_host) continue;
+                    if (!map_visible(self, mi)) continue;
+                    map_type_key(self->maps[mi].host_type, tk);
+                    if (strcmp(tk, rk) != 0) continue;
+                    for (bj = 0; bj < self->maps[mi].nb; bj++)
+                        if (strcmp(self->maps[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
+                            if (cand < 0) {
+                                cand = mi;
+                                bind = bj;
+                            } else if (cand2 < 0) {
+                                cand2 = mi;
+                            }
+                            break;
+                        }
+                }
+                if (cand < 0) {
+                    snprintf(msg, sizeof msg, "no method '%s' for type '%s'",
+                             self->arena->nodes[n].text2, rt);
+                    return self->fail_from(n, msg);
+                }
+                if (cand2 >= 0) {
+                    snprintf(msg, sizeof msg,
+                             "ambiguous type-host map for method '%s' on type '%s': '%s' and '%s'",
+                             self->arena->nodes[n].text2, rt,
+                             self->maps[cand].path, self->maps[cand2].path);
+                    return self->fail_from(n, msg);
+                }
+                return emit_recipe(self, &self->maps[cand], &self->maps[cand].b[bind],
+                                   r, self->arena->nodes[n].b, n);
+            }
             if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");
             rk = self->arena->nodes[self->arena->nodes[n].a].kind;
             if (rk != N_VAR && rk != N_INDEX && rk != N_CALL
@@ -2062,17 +2579,23 @@ impl EmitOps for Emitter {
         if (!f) return self->fail("cannot write the output file");
         self->out = f;
         self->path = self->units[u].path;
+        self->cur_unit = u;
         fprintf(self->out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
                 self->version, self->path);
         fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
               self->out);
+        /* The imported `.m.ct` prologue leads the unit: the recipes call C
+           functions whose declarations (and macros) come from those lines. */
+        if (emit_map_prologues(self, u) != 0) return -1;
         /* Only a `.h.ct` unit publishes a header, so only it includes one of
            its own; an implementation unit's `.c` carries every declaration it
            needs (the types are emitted below, no longer skipped as `pub`). */
         if (self->units[u].is_hdr)
             fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
-        for (i = 0; i < self->units[u].ndep; i++)
+        for (i = 0; i < self->units[u].ndep; i++) {
+            if (self->units[self->units[u].depu[i]].is_map) continue;
             fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        }
         fputs("\n", self->out);
         if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
@@ -2156,8 +2679,10 @@ impl EmitOps for Emitter {
             pp++;
         }
         if (pp > 0) fputs("\n", self->out);
-        for (i = 0; i < self->units[u].ndep; i++)
+        for (i = 0; i < self->units[u].ndep; i++) {
+            if (self->units[self->units[u].depu[i]].is_map) continue;
             fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        }
         if (self->units[u].ndep > 0) fputs("\n", self->out);
 
         if (self->emit_struct_fwd() != 0) return -1;
@@ -2359,23 +2884,38 @@ impl EmitOps for Emitter {
             if (i > 0) fputc(',', f);
             fputs("{\"trait\":\"", f);
             self->emit_json_str(f, self->maps[i].trait);
-            fputs("\",\"instance\":\"", f);
+            if (self->maps[i].is_static) fputs("\",\"static\":true,\"instance\":\"", f);
+            else fputs("\",\"instance\":\"", f);
             self->emit_json_str(f, self->maps[i].inst);
             fputs("\",\"host\":\"", f);
-            fputs(self->maps[i].ns_host ? "namespace" : "instance", f);
+            if (self->maps[i].type_host) fputs("type", f);
+            else fputs(self->maps[i].ns_host ? "namespace" : "instance", f);
+            if (self->maps[i].type_host) {
+                fputs("\",\"type\":\"", f);
+                self->emit_json_str(f, self->maps[i].host_type);
+            }
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
             fprintf(f, "\",\"line\":%d,\"bindings\":[", self->maps[i].line);
             for (j = 0; j < self->maps[i].nb; j++) {
+                char callee[MAX_TEXT];
                 if (j > 0) fputc(',', f);
                 fputs("{\"method\":\"", f);
                 self->emit_json_str(f, self->maps[i].b[j].method);
                 fputs("\",\"symbol\":\"", f);
-                self->emit_json_str(f, self->maps[i].b[j].direct
-                                          ? self->maps[i].b[j].call
-                                          : self->maps[i].b[j].wrapper);
-                fprintf(f, "\",\"wrapper\":%s}",
-                        self->maps[i].b[j].direct ? "false" : "true");
+                if (self->maps[i].is_static) {
+                    map_recipe_callee(self->maps[i].b[j].call, callee);
+                    self->emit_json_str(f, callee);
+                } else {
+                    self->emit_json_str(f, self->maps[i].b[j].direct
+                                              ? self->maps[i].b[j].call
+                                              : self->maps[i].b[j].wrapper);
+                }
+                if (self->maps[i].is_static)
+                    fputs("\",\"wrapper\":false,\"inline\":true}", f);
+                else
+                    fprintf(f, "\",\"wrapper\":%s}",
+                            self->maps[i].b[j].direct ? "false" : "true");
             }
             fputs("]}", f);
         }

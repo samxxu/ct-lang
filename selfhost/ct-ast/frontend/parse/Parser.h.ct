@@ -123,6 +123,12 @@ pub struct Parser {
        the map; the driver re-reads both after a unit is parsed. */
     char ns_decl[160];
     char cur_func[160];
+    /* Set while the unit being parsed is a `.m.ct` mapping unit: the content
+       whitelist and the static-trait rules key off it. */
+    int  unit_is_map;
+    /* The line of each import, recorded by `skip_import` so a `.m.ct` unit that
+       imports a non-map unit is reported at the import line. */
+    int  rel_line[32];
     /* The record whose body is being read. Its fields land in
        `structs[].fields[]`; when the body has no tag (`typedef struct { … }`),
        this stays empty and the fields land in `pend_fields` instead. An
@@ -275,9 +281,10 @@ impl ParseDeclOps for Parser {
         char full[MAX_TEXT];
         char alias[MAX_TEXT];
         size_t n;
-        int nseg, i, w, has_as, ns_end;
+        int nseg, i, w, has_as, ns_end, import_line;
         (void)self;
 
+        import_line = self->lex->tokline;
         nseg = 0;
         rel[0] = 0;
         has_as = 0;
@@ -318,6 +325,7 @@ impl ParseDeclOps for Parser {
         if (rel[0]) {
             if (self->nrels >= MAX_IMPORTS) return self->sup->fail("too many imports");
             snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
+            self->rel_line[self->nrels] = import_line;
             self->nrels++;
         }
         /* A by-name import binds `seg[last]`; a unit import binds the type named
@@ -369,6 +377,53 @@ impl ParseDeclOps for Parser {
             if (is_pub) return self->sup->fail("duplicate 'pub'");
             self->sup->lex_next();
             return self->top_decl(1);
+        }
+        /* A `.m.ct` unit is a mapping-only unit: its whitelist is `pub trait`,
+           `map` and `_Static_assert`; everything else is refused here so the
+           message names what the unit is not allowed to carry. */
+        if (self->unit_is_map && !(self->lex->tok == T_ID
+                && (strcmp(self->lex->toktext, "trait") == 0
+                    || strcmp(self->lex->toktext, "map") == 0
+                    || strcmp(self->lex->toktext, "_Static_assert") == 0
+                    || strcmp(self->lex->toktext, "static_assert") == 0))) {
+            int dline, dcol, dn, dk;
+            dline = self->lex->tokline;
+            dcol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "impl") == 0)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a .m.ct unit cannot contain an impl", self->mem->path);
+            if (self->lex->tok == T_ID
+                && (strcmp(self->lex->toktext, "typedef") == 0
+                    || strcmp(self->lex->toktext, "struct") == 0
+                    || strcmp(self->lex->toktext, "union") == 0
+                    || strcmp(self->lex->toktext, "enum") == 0))
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a .m.ct unit cannot declare a type", self->mem->path);
+            if (self->lex->tok == T_ID
+                && (strcmp(self->lex->toktext, "static") == 0
+                    || strcmp(self->lex->toktext, "inline") == 0))
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a .m.ct unit cannot declare a function", self->mem->path);
+            if (self->lex->tok == T_ID
+                && (strcmp(self->lex->toktext, "extern") == 0
+                    || strcmp(self->lex->toktext, "own") == 0
+                    || strcmp(self->lex->toktext, "__attribute__") == 0
+                    || strcmp(self->lex->toktext, "_Alignas") == 0))
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a .m.ct unit cannot declare a global variable", self->mem->path);
+            dn = self->parse_func(0, 0, 0);
+            /* NO_NODE is a prototype: its row lives in the function table. It
+               is negative, so it must be handled before the generic error test. */
+            if (dn < 0 && dn != NO_NODE) return -1;
+            dk = (dn == NO_NODE) ? -1 : self->arena->nodes[dn].kind;
+            if (dn == NO_NODE)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a .m.ct unit cannot declare a function", self->mem->path);
+            if (dk == N_FUNC)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a .m.ct unit cannot define a function", self->mem->path);
+            return tool::diag::ct_sem_error(dline, dcol,
+                "a .m.ct unit cannot declare a global variable", self->mem->path);
         }
         /* A leading `__attribute__((…))` and a leading `_Alignas(…)` are both
            declaration prefixes: the attribute is held for `parse_func`, the
@@ -594,6 +649,12 @@ impl ParseOps for Parser {
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
+                if (self->unit_is_map
+                    && !(strncmp(self->lex->toktext, "#include", 8) == 0
+                         || strncmp(self->lex->toktext, "#define", 7) == 0))
+                    return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                        "a .m.ct unit allows only #include and #define in its prologue",
+                        self->mem->path);
                 n = self->sup->new_node(N_PP);
                 if (n < 0) return -1;
                 snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
@@ -1445,11 +1506,17 @@ impl ParseOps for Parser {
     int parse_use_list(int sindex)
     {
         char tname[MAX_TEXT];
+        int uti;
         (void)self;
         if (sindex < 0) return self->sup->fail("unknown struct in 'use'");
         for (;;) {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
             if (self->sup->resolve_type(self->lex->toktext, tname, sizeof tname) != 0) return -1;
+            uti = self->sym->find_trait(tname);
+            if (uti >= 0 && self->sym->traits[uti].is_static)
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "a static trait cannot be adopted", self->mem->path);
             /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
                never joins the `use` list -- only the flag matters */
             if (strcmp(tname, "Drop") == 0) {
@@ -1489,6 +1556,9 @@ impl ParseOps for Parser {
         (void)self;
 
         trait_line = self->lex->tokline;
+        if (self->unit_is_map && !is_pub)
+            return tool::diag::ct_sem_error(trait_line, 1,
+                "a trait in a .m.ct unit must be 'pub'", self->mem->path);
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         snprintf(name, sizeof name, "%s", self->lex->toktext);
@@ -1504,8 +1574,15 @@ impl ParseOps for Parser {
         ti = self->sup->add_trait(qname);
         if (ti < 0) return -1;
         self->sym->traits[ti].is_pub = is_pub;
+        self->sym->traits[ti].is_static = self->unit_is_map;
         self->sym->traits[ti].line = trait_line;
         snprintf(self->sym->traits[ti].path, MAX_TEXT, "%s", self->mem->path);
+        snprintf(self->sym->traits[ti].ns, MAX_TEXT, "%s", self->sym->ns);
+        {
+            size_t nl = strlen(self->sym->traits[ti].ns);
+            if (nl > 0 && self->sym->traits[ti].ns[nl - 1] == '_')
+                self->sym->traits[ti].ns[nl - 1] = 0;
+        }
         if (self->sup->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
         self->sup->lex_next();
         if (self->sup->expect("{") != 0) return -1;
@@ -1546,6 +1623,9 @@ impl ParseOps for Parser {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
                     self->sup->lex_next();
                     if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                        if (self->unit_is_map)
+                            return tool::diag::ct_sem_error(mline, 1,
+                                "a .m.ct trait cannot carry a default body", self->mem->path);
                         if (parse_trait_body(self, ti, mi, ret) != 0) return -1;
                     } else if (self->sup->expect(";") != 0) {
                         return -1;
@@ -1603,6 +1683,9 @@ impl ParseOps for Parser {
             self->sym->traits[ti].m[mi].nparams = np;
             self->sym->traits[ti].m[mi].pnode = pfirst;
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                if (self->unit_is_map)
+                    return tool::diag::ct_sem_error(mline, 1,
+                        "a .m.ct trait cannot carry a default body", self->mem->path);
                 if (parse_trait_body(self, ti, mi, ret) != 0) return -1;
             } else if (self->sup->expect(";") != 0) {
                 return -1;
@@ -1657,6 +1740,14 @@ impl ParseOps for Parser {
         snprintf(tname, sizeof tname, "%s", self->lex->toktext);
         if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->sym->find_trait(rtrait);
+        /* A static trait has no iface and no vtable: it is bound by a `map`,
+           never implemented. */
+        if (ti >= 0 && self->sym->traits[ti].is_static) {
+            if (tool::diag::ct_sem_error(impl_line, 1,
+                    "a static trait cannot be implemented", self->mem->path) != 0) return -1;
+            if (self->sup->skip_body() != 0) return -1;
+            return NO_NODE;
+        }
         /* `Drop` is built in: no `trait Drop` declaration exists, but
            `impl Drop for S` is legal and emits `S_Drop_drop` */
         if (ti < 0 && strcmp(rtrait, "Drop") != 0)
@@ -1867,7 +1958,8 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
     g_parse.pend_fields = g_pend_fields;
     /* the `map` construct (mapbuild.h.ct) reads the same cursor, primitives and
        tables, and records into the map array this unit owns */
-    ct_mapbuild_bind(lex, g_parse.sup, sym, g_parse.maps, &g_parse.nmaps);
+    ct_mapbuild_bind(lex, g_parse.sup, sym, g_parse.maps, &g_parse.nmaps,
+                     &g_parse.unit_is_map);
     /* the expression chain: it reads the same cursor and primitives, and writes
        the call table and the current-function name this unit owns */
     ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, g_parse.calls, &g_parse.ncalls);

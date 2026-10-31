@@ -6,7 +6,9 @@
  * reach them through a pointer instead of two file-scope globals, and the
  * capacity macros stay with the arrays that consume them. Macros do not cross a
  * unit boundary, so the array lengths are spelled out as the literals below
- * (65536 nodes, a 256 KiB string pool).
+ * (131072 nodes, a 256 KiB string pool). The node pool is compiled for the
+ * whole unit closure at once, so its size follows the compiler's own source
+ * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
@@ -43,7 +45,7 @@ pub trait ArenaOps {
 }
 
 pub struct Arena {
-    struct Node nodes[65536];
+    struct Node nodes[131072];
     int  nnode;
     char strpool[262144];
     int  nstrpool;
@@ -58,7 +60,7 @@ impl ArenaOps for Arena {
     int alloc(int kind, int line)
     {
         int n;
-        if (self->nnode >= 65536) return -1;
+        if (self->nnode >= 131072) return -1;
         n = self->nnode;
         self->nnode++;
         self->nodes[n].kind = kind;

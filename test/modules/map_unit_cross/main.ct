@@ -1,0 +1,9 @@
+import parse;
+#include <stdio.h>
+
+int main(void)
+{
+    int n = parse("7");
+    printf("%d\n", n);
+    return 0;
+}

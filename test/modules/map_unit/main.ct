@@ -1,0 +1,25 @@
+import libc::libc;
+#include <stdio.h>
+#include <string.h>
+
+int main(void)
+{
+    char a[] = "42";
+    char b[16];
+    int scanned = 0;
+
+    int n = a.toInt();
+    int l = a.length();
+    int c = a.compare("42");
+    int r = a.scanInto(&scanned);
+
+    strcpy(b, "abc");
+    b.fill('z', 3);
+
+    char *home = libc::Env.get("HOME");
+
+    printf("%d %d %d %d %s %s\n", n, l, c, r, b,
+           home ? "env-ok" : "env-none");
+    (void)home;
+    return 0;
+}

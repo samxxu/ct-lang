@@ -27,8 +27,11 @@ pub struct MapBind {
     int  ti;                        /* index into the trait table */
     int  mi;                        /* index into that trait's m[] */
     char call[160];                 /* raw, validated RHS text (no trailing ';') */
-    char wrapper[160];              /* "<inst>_<Trait>_<method>" */
+    char wrapper[160];              /* "<inst>_<Trait>_<method>" (empty when static) */
     int  direct;                    /* 1 when `-> f` binds the C function itself */
+    int  recv;                      /* 1 when the first parameter is a type-host receiver */
+    int  uses[16];                  /* evaluation occurrences of each parameter in the recipe */
+    int  sizeofs[16];               /* `sizeof p` occurrences (not evaluated) */
     int  line;
 }
 
@@ -41,6 +44,9 @@ pub struct Map {
     char prefix[160];               /* what wrappers and the vtable are named after */
     char vtable[160];               /* "<prefix>_vtable" */
     int  ns_host;                   /* 1 when the host is a namespace, not an object */
+    int  is_static;                 /* declared in a `.m.ct` unit: no wrapper, no vtable */
+    int  type_host;                 /* 1 when the host is a C type (`for type`) */
+    char host_type[160];            /* the type host's receiver spelling */
     struct MapBind b[64];
     int  nb;
     int  line;
