@@ -1,0 +1,8 @@
+packed 5
+fielded 8 1
+align 0
+word 1
+sum 2 9
+noinline 13
+enum 0
+say 9

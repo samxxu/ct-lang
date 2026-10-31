@@ -24,6 +24,10 @@ pub struct Node {
     int  aux;
     int  line;
     long num;
+    /* A GNU `__attribute__((…))` on this declaration: -1 when it carried none,
+       otherwise the offset of its captured spelling in the string pool (the
+       emitter prints it at the declaration's trailing position). */
+    int  attr;
     char text[160];
     char text2[160];
     char text3[160];
@@ -66,6 +70,7 @@ impl ArenaOps for Arena {
         self->nodes[n].aux = 0;
         self->nodes[n].line = line;
         self->nodes[n].num = 0;
+        self->nodes[n].attr = -1;
         self->nodes[n].text[0] = 0;
         self->nodes[n].text2[0] = 0;
         return n;

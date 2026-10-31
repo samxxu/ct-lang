@@ -232,6 +232,7 @@ impl SupportOps for ParseSupport {
             snprintf(self->sym->funcs[i].name, MAX_TEXT, "%s", name);
             self->sym->funcs[i].is_pub = 0;
             self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
+            self->sym->funcs[i].attr = -1;       /* fresh row: no attribute yet */
         }
         if (pub_now) self->sym->funcs[i].is_pub = 1;
         if (pub_now && self->sym->ns[0]) {
@@ -249,6 +250,13 @@ impl SupportOps for ParseSupport {
         while (p > 0 && k < MAX_PARAMS) {
             snprintf(self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
             snprintf(self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
+            /* a parameter's trailing `__attribute__` rides with its name/dims,
+               so the prototype and the definition spell it the same way */
+            if (self->arena->nodes[p].attr >= 0) {
+                size_t dl = strlen(self->sym->funcs[i].pdim[k]);
+                snprintf(self->sym->funcs[i].pdim[k] + dl, MAX_TEXT - dl, " %s",
+                         self->arena->str_at(self->arena->nodes[p].attr));
+            }
             k++;
             p = self->arena->nodes[p].next;
         }

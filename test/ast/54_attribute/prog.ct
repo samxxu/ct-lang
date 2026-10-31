@@ -1,0 +1,61 @@
+/* 54: GNU `__attribute__((…))` (batch 31) - captured verbatim and re-emitted at
+   the declaration's trailing position; the C compiler owns the meaning. */
+#include <stdio.h>
+#include <stdarg.h>
+
+typedef int word __attribute__((aligned(8)));
+
+int g_aligned __attribute__((aligned(16)));
+
+enum Kind { KIND_A, KIND_B } __attribute__((aligned(8)));
+
+struct Packed {
+    char c;
+    int n;
+} __attribute__((packed));
+
+typedef struct {
+    char c;
+    int n;
+} Small __attribute__((packed));
+
+struct Fielded {
+    int x __attribute__((aligned(8)));
+    int y;
+};
+
+static int sum(int a, int b __attribute__((unused))) { return a; }
+
+static int plus(int a, int b) __attribute__((unused));
+static int plus(int a, int b) { return a + b; }
+
+static void say(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void say(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+}
+
+static int noinline_sum(int a, int b) __attribute__((unused)) __attribute__((noinline));
+
+static int noinline_sum(int a, int b)
+{
+    return a + b;
+}
+
+int main(void)
+{
+    printf("packed %d\n", (int)sizeof(Small));
+    printf("fielded %d %d\n", (int)sizeof(struct Fielded),
+           _Alignof(struct Fielded) >= 8);
+    printf("align %d\n", (int)((long)&g_aligned % 16));
+    printf("word %d\n", _Alignof(word) >= 8);
+    printf("sum %d %d\n", sum(2, 3), plus(4, 5));
+    printf("noinline %d\n", noinline_sum(6, 7));
+    printf("enum %d\n", (int)KIND_A);
+    say("say %d\n", 9);
+    return 0;
+}

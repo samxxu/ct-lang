@@ -61,14 +61,17 @@ import tool::diag::diag;
 #define N_VAR 10
 #define T_EOF 0
 #define T_ID 1
+#define T_NUM 2
 #define T_PP 5
 #define T_PUNCT 4
+#define T_STR 3
 
 namespace frontend::parse;
 pub trait ParseOps {
     int  parse_program(void);
     int  parse_func(int is_static, int is_pub, int is_extern);
     int  parse_params(void);
+    int  attr_pool(int *out);
     int  parse_record_def(int is_union);
     int  parse_enum_def(int is_pub, int tag_required);
     int  parse_typedef(int is_pub);
@@ -483,7 +486,7 @@ impl ParseOps for Parser {
     /* A function (prototype or definition) or a global variable. */
     int parse_func(int is_static, int is_pub, int is_extern)
     {
-        int f, b, params, fi, func_line;
+        int f, b, params, fi, func_line, ar, attr;
         char ret[MAX_TEXT];
         char name[MAX_TEXT];
         char cname[MAX_TEXT];
@@ -529,6 +532,10 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
                 snprintf(self->arena->nodes[g].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(g) != 0) return -1;
+            attr = -1;
+            ar = self->attr_pool(&attr);
+            if (ar < 0) return -1;
+            if (attr >= 0) self->arena->nodes[g].attr = attr;
             if (self->sup->accept("=")) {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
                     /* A keyword or message table is easily longer than the
@@ -564,6 +571,15 @@ impl ParseOps for Parser {
             self->sup->pop_scope();
             return -1;
         }
+        /* the trailing GNU attribute belongs to the declaration, not to the
+           parameter list, so `void f(void) __attribute__((noreturn));` and the
+           definition form both land here */
+        attr = -1;
+        ar = self->attr_pool(&attr);
+        if (ar < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             self->sup->lex_next();
             fi = self->sup->add_func(name, ret, is_static, is_extern ? 0 : is_pub, params);
@@ -571,6 +587,7 @@ impl ParseOps for Parser {
                 self->sup->pop_scope();
                 return -1;
             }
+            if (attr >= 0) self->sym->funcs[fi].attr = attr;
             /* `extern` names a C library symbol: never mangled, even when the
                prototype is exported to the header */
             if (is_extern && is_pub) self->sym->funcs[fi].is_pub = 1;
@@ -608,6 +625,7 @@ impl ParseOps for Parser {
             self->sup->pop_scope();
             return -1;
         }
+        if (attr >= 0) self->sym->funcs[fi].attr = attr;
         self->sym->funcs[fi].ret_owned = self->mem->ret_owned;
         self->sym->funcs[fi].variadic = self->variadic;
         self->sym->funcs[fi].line = func_line;
@@ -622,6 +640,7 @@ impl ParseOps for Parser {
         self->arena->nodes[f].aux = is_static;
         self->arena->nodes[f].d = is_pub;
         self->arena->nodes[f].line = func_line;
+        self->arena->nodes[f].attr = attr;
         self->arena->nodes[f].a = params;
         self->arena->nodes[f].b = b;
         self->arena->nodes[f].c = self->variadic;
@@ -631,7 +650,7 @@ impl ParseOps for Parser {
 
     int parse_params(void)
     {
-        int first, tail, p;
+        int first, tail, p, ar, ao;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
@@ -683,6 +702,12 @@ impl ParseOps for Parser {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0) self->sym->vars[vi].is_array = 1;
             }
+            /* a trailing attribute belongs to the parameter (`int *p
+               __attribute__((nonnull))`), so it rides with its name/dims */
+            ao = -1;
+            ar = self->attr_pool(&ao);
+            if (ar < 0) return -1;
+            if (ao >= 0) self->arena->nodes[p].attr = ao;
             if (tail == 0) first = p;
             else self->arena->nodes[tail].next = p;
             tail = p;
@@ -695,6 +720,54 @@ impl ParseOps for Parser {
         }
         if (self->sup->expect(")") != 0) return -1;
         return first;
+    }
+
+    /* A GNU `__attribute__((…))` carries no CT meaning, so the whole spelling
+       is captured into the arena string pool and re-emitted at the same
+       trailing position; the C compiler owns it. Tokens are joined with a
+       single space, which keeps a nested call such as `format(printf, 1, 2)`
+       intact, and consecutive groups are captured together. Returns 1 with the
+       pool offset in `out`, 0 when the cursor is not on an attribute, -1 on a
+       malformed one. */
+    int attr_pool(int *out)
+    {
+        char tbuf[MAX_TEXT];
+        int depth, got, k, first;
+        (void)self;
+
+        *out = -1;
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0)) return 0;
+        *out = self->arena->str_begin();
+        got = 0;
+        first = 1;
+        while (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
+            got = 1;
+            depth = 0;
+            for (;;) {
+                if (self->lex->tok == T_EOF) return self->sup->fail("unterminated __attribute__");
+                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
+                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                else
+                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                if (!first && self->arena->str_put(' ') != 0)
+                    return self->sup->fail("__attribute__ is too long");
+                for (k = 0; tbuf[k]; k++)
+                    if (self->arena->str_put(tbuf[k]) != 0)
+                        return self->sup->fail("__attribute__ is too long");
+                first = 0;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    depth--;
+                    if (depth == 0) {
+                        self->sup->lex_next();
+                        break;
+                    }
+                }
+                self->sup->lex_next();
+            }
+        }
+        self->arena->str_end();
+        return got;
     }
 
     /* Does the current token open a body-less record member (`union { … };`)?
@@ -848,7 +921,7 @@ impl ParseOps for Parser {
        N_FIELDS wrapper, the way a local uses N_DECLS. */
     int parse_field_def(void)
     {
-        int m, w, head, tail, count;
+        int m, w, head, tail, count, ar, ao;
         char typebuf[MAX_TEXT];
         char base[MAX_TEXT];
         char firsttype[MAX_TEXT];
@@ -903,6 +976,12 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
                 snprintf(self->arena->nodes[m].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(m) != 0) return -1;
+            /* `int x __attribute__((aligned(8)));`: the attribute follows the
+               declarator (and a bit-field's width is emitted before it) */
+            ao = -1;
+            ar = self->attr_pool(&ao);
+            if (ar < 0) return -1;
+            if (ao >= 0) self->arena->nodes[m].attr = ao;
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
                 if (self->arena->nodes[m].text3[0])
                     return self->sup->fail("a bit-field cannot be an array");
@@ -950,7 +1029,7 @@ impl ParseOps for Parser {
        no `use` clause (there is no vptr to append). */
     int parse_record_def(int is_union)
     {
-        int s, struct_line, brace_line, brace_col, kind;
+        int s, struct_line, brace_line, brace_col, kind, ar, ao;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         (void)self;
@@ -1029,6 +1108,12 @@ impl ParseOps for Parser {
             int di = self->sym->find_struct(qname);
             if (di >= 0) self->sym->structs[di].defined = 1;
         }
+        /* `struct S { … } __attribute__((packed));`: either after the body or,
+           in the typedef form, between the body and the alias */
+        ao = -1;
+        ar = self->attr_pool(&ao);
+        if (ar < 0) return -1;
+        if (ao >= 0) self->arena->nodes[s].attr = ao;
         return s;
     }
 
@@ -1038,7 +1123,7 @@ impl ParseOps for Parser {
        untagged body, then owns the alias half of the node. */
     int parse_enum_def(int is_pub, int tag_required)
     {
-        int s, m, tail, ti, mline, e;
+        int s, m, tail, ti, mline, e, ar, ao;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char mname[MAX_TEXT];
@@ -1110,13 +1195,17 @@ impl ParseOps for Parser {
             if (!self->sup->accept(",")) break;
         }
         if (self->sup->expect("}") != 0) return -1;
+        ao = -1;
+        ar = self->attr_pool(&ao);
+        if (ar < 0) return -1;
+        if (ao >= 0) self->arena->nodes[s].attr = ao;
         return s;
     }
 
     /* `typedef struct { ... } Name;` or `typedef <type> Name;`. */
     int parse_typedef(int is_pub)
     {
-        int t, td_line;
+        int t, td_line, ar, ao;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
@@ -1132,6 +1221,14 @@ impl ParseOps for Parser {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
+            ao = -1;
+            ar = self->attr_pool(&ao);
+            if (ar < 0) return -1;
+            if (ao >= 0) {
+                if (self->arena->nodes[t].attr >= 0)
+                    return self->sup->fail("duplicate __attribute__ on one declaration");
+                self->arena->nodes[t].attr = ao;
+            }
             if (self->sup->expect(";") != 0) return -1;
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
             self->arena->nodes[t].aux = 1;
@@ -1150,6 +1247,14 @@ impl ParseOps for Parser {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
+            ao = -1;
+            ar = self->attr_pool(&ao);
+            if (ar < 0) return -1;
+            if (ao >= 0) {
+                if (self->arena->nodes[t].attr >= 0)
+                    return self->sup->fail("duplicate __attribute__ on one declaration");
+                self->arena->nodes[t].attr = ao;
+            }
             if (self->sup->expect(";") != 0) return -1;
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
             /* keep the tag in `text`: `typedef struct Tag {...} Alias;` must emit
@@ -1203,10 +1308,14 @@ impl ParseOps for Parser {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
         }
+        ao = -1;
+        ar = self->attr_pool(&ao);
+        if (ar < 0) return -1;
         if (self->sup->expect(";") != 0) return -1;
         if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
         t = self->sup->new_node(N_TYPEDEF);
         if (t < 0) return -1;
+        if (ao >= 0) self->arena->nodes[t].attr = ao;
         snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", typebuf);
         snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
         snprintf(self->arena->nodes[t].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);

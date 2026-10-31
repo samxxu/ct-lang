@@ -1,0 +1,5 @@
+/* One declaration carries at most one captured attribute: the two positions of a
+   typedef'd record (after the body and after the alias) may not both be used. */
+typedef struct {
+    int x;
+} __attribute__((packed)) Pair __attribute__((aligned(4)));

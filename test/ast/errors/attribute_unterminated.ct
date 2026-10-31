@@ -1,0 +1,2 @@
+/* The attribute's parenthesized list must close. */
+static int f(void) __attribute__((unused);

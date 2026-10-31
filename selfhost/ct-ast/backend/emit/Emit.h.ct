@@ -365,7 +365,11 @@ impl EmitOps for Emitter {
             }
             if (self->sym->funcs[i].variadic) fputs(", ...", self->out);
         }
-        fputs(");\n", self->out);
+        fputs(")", self->out);
+        /* a GNU attribute rides after the parameter list, where the source had it */
+        if (self->sym->funcs[i].attr >= 0)
+            fprintf(self->out, " %s", self->arena->str_at(self->sym->funcs[i].attr));
+        fputs(";\n", self->out);
         return 0;
     }
 
@@ -749,6 +753,9 @@ impl EmitOps for Emitter {
                     fputs(" : ", self->out);
                     if (self->emit_expr(self->arena->nodes[c].a) != 0) return -1;
                 }
+                /* the attribute follows the width for a bit-field, else the dims */
+                if (self->arena->nodes[c].attr >= 0)
+                    fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[c].attr));
             }
             return 0;
         }
@@ -808,8 +815,14 @@ impl EmitOps for Emitter {
                 }
             }
             self->emit_indent(ind);
-            if (self->arena->nodes[n].aux) fprintf(self->out, "} %s;\n", self->arena->nodes[n].text2);
-            else fputs("};\n", self->out);
+            fputs("}", self->out);
+            /* `struct S { … } __attribute__((packed));` — a typedef form puts it
+               between the body and the alias, the one position clang and GCC
+               both honour for `packed` / `aligned` on the type */
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
+            if (self->arena->nodes[n].aux) fprintf(self->out, " %s", self->arena->nodes[n].text2);
+            fputs(";\n", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_UNION) {
@@ -830,8 +843,14 @@ impl EmitOps for Emitter {
                 fputs(";\n", self->out);
             }
             self->emit_indent(ind);
-            if (self->arena->nodes[n].aux) fprintf(self->out, "} %s;\n", self->arena->nodes[n].text2);
-            else fputs("};\n", self->out);
+            fputs("}", self->out);
+            /* `struct S { … } __attribute__((packed));` — a typedef form puts it
+               between the body and the alias, the one position clang and GCC
+               both honour for `packed` / `aligned` on the type */
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
+            if (self->arena->nodes[n].aux) fprintf(self->out, " %s", self->arena->nodes[n].text2);
+            fputs(";\n", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_ENUM) {
@@ -859,14 +878,22 @@ impl EmitOps for Emitter {
                 fputs("\n", self->out);
             }
             self->emit_indent(ind);
-            if (self->arena->nodes[n].aux) fprintf(self->out, "} %s;\n", self->arena->nodes[n].text2);
-            else fputs("};\n", self->out);
+            fputs("}", self->out);
+            /* `struct S { … } __attribute__((packed));` — a typedef form puts it
+               between the body and the alias, the one position clang and GCC
+               both honour for `packed` / `aligned` on the type */
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
+            if (self->arena->nodes[n].aux) fprintf(self->out, " %s", self->arena->nodes[n].text2);
+            fputs(";\n", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_TYPEDEF) {
             fputs("typedef ", self->out);
             if (self->emit_type_name_dims(self->arena->nodes[n].text, self->arena->nodes[n].text2,
                                           self->arena->nodes[n].text3) != 0) return -1;
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
             fputs(";\n", self->out);
             return 0;
         }
@@ -927,6 +954,8 @@ impl EmitOps for Emitter {
         }
         if (self->emit_type_name_dims(self->arena->nodes[n].text, cn,
                                       self->arena->nodes[n].text3) != 0) return -1;
+        if (self->arena->nodes[n].attr >= 0)
+            fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
         return 0;
     }
 
@@ -1042,12 +1071,17 @@ impl EmitOps for Emitter {
                     if (self->emit_type_name_dims(self->arena->nodes[c].text,
                                                   self->arena->nodes[c].text2,
                                                   self->arena->nodes[c].text3) != 0) return -1;
+                    if (self->arena->nodes[c].attr >= 0)
+                        fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[c].attr));
                     first = 0;
                     c = self->arena->nodes[c].next;
                 }
                 if (self->arena->nodes[n].c) fputs(", ...", self->out);
                 fputs(") ", self->out);
             }
+            /* a GNU attribute rides between the parameter list and the body */
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, "%s ", self->arena->str_at(self->arena->nodes[n].attr));
             return self->emit_node(self->arena->nodes[n].b, ind);
         }
         if (self->arena->nodes[n].kind == N_BLOCK) {
@@ -1352,7 +1386,10 @@ impl EmitOps for Emitter {
             fputs(self->arena->nodes[n].text, self->out);
             if (self->arena->nodes[n].text2[0]) fprintf(self->out, " %s", self->arena->nodes[n].text2);
             fputs(" : ", self->out);
-            return self->emit_expr(self->arena->nodes[n].a);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
+            return 0;
         }
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_FIELD) {
             /* `aux == 1` marks a function-local with static storage duration */
@@ -1360,6 +1397,8 @@ impl EmitOps for Emitter {
                 fputs("static ", self->out);
             if (self->emit_type_name_dims(self->arena->nodes[n].text, self->arena->nodes[n].text2,
                                           self->arena->nodes[n].text3) != 0) return -1;
+            if (self->arena->nodes[n].attr >= 0)
+                fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
             if (self->arena->nodes[n].kind == N_DECL) {
                 if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
                     if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text, 1) != 0) return -1;

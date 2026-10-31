@@ -137,6 +137,9 @@
 # compile mode), and only it can be imported; test/modules/* was renamed
 # accordingly, and the split case pins the artefact set.
 #
+# batch 31 accepts GNU `__attribute__((…))` as a trailing pass-through:
+# test/ast/54_attribute plus the two shape diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1265,6 +1268,24 @@ do
         ok "batch 29 ($cf)"
     else
         bad "batch 29: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 31: a GNU `__attribute__((…))` is captured verbatim and re-emitted; its
+# list must close, and one declaration carries at most one captured group.
+for pair in \
+    "attribute_unterminated|unterminated __attribute__" \
+    "attribute_duplicate|duplicate __attribute__ on one declaration"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 31: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 31 ($cf)"
+    else
+        bad "batch 31: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

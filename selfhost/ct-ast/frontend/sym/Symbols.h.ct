@@ -47,6 +47,11 @@ pub struct Fn {
     int  variadic;      /* `int f(int n, ...)`: the prototype needs the `...` */
     int  line;
     int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */
+    /* A GNU `__attribute__((…))` on the declaration: -1 when it carried none,
+       otherwise the offset of its captured spelling in the string pool. The
+       prototype re-emits it after the parameter list (the C compiler owns the
+       meaning). */
+    int  attr;
 }
 
 pub struct Var {
