@@ -174,6 +174,14 @@
 # mapping shared by a `.h.ct` and a `.ct` consumer. The whitelist of a `.m.ct`
 # unit, the static-trait restrictions and the recipe rules are pinned negatives.
 #
+# batch 39 adds the sibling C shim of a `.m.ct`: `<base>.shim.h` is included by
+# the consumer's generated C and its directory joins the printed `cc` line as an
+# include root, while an existing `<base>.shim.c` joins that line as a source.
+# test/modules/map_unit_shim pins the wiring, the cold/warm cache and the
+# touching of the shim header; bindings/posix-socket is the real-library demo
+# (a header-only shim over socketpair / write / read / errno). A shim source
+# without its header is rejected by name.
+#
 # The unit-name lint keeps `selfhost/ct-ast/**` on the layout rule: a unit file
 # is named after its main type, so every `.h.ct` declares a type or trait whose
 # name matches its own basename (`main.ct` is the entry, not a unit).
@@ -657,6 +665,79 @@ if "$work/ct-ast" build "$work/mso/main.ct" -o "$work/mso/out" \
     ok "static sizeof (not evaluated; the prefix keeps the side effect; duplicates allowed)"
 else
     bad "static sizeof" "$(cat "$work/mso.err" "$work/mso.cc" "$work/mso.stdout" 2>/dev/null | head -5)"
+fi
+
+# A mapping unit may ship a sibling C shim (batch 39): `<base>.shim.h` declares
+# what a recipe cannot spell (a global such as `errno`) and `<base>.shim.c`
+# carries the implementation. The consumer's `.c` includes the header by base
+# name, and the suggested `cc` line carries the include root and the shim source.
+rm -rf "$work/mmsh" "$work/mmshsrc"
+mkdir -p "$work/mmsh"
+cp -r test/modules/map_unit_shim "$work/mmshsrc"
+if "$work/ct-ast" build "$work/mmshsrc/main.ct" -o "$work/mmsh" \
+        >"$work/mmsh.out" 2>"$work/mmsh.err" \
+   && [ ! -f "$work/mmsh/lib.c" ] && [ ! -f "$work/mmsh/lib.h" ] \
+   && grep -qF '#include "lib.shim.h"' "$work/mmsh/main.c" \
+   && grep -qF -- "-I $work/mmshsrc/lib" "$work/mmsh.out" \
+   && grep -qF "$work/mmshsrc/lib/lib.shim.c" "$work/mmsh.out" \
+   && "$CC" -Wall -Wextra -std=c99 -I "$work/mmshsrc/lib" "$work/mmsh"/*.c \
+        "$work/mmshsrc/lib/lib.shim.c" -o "$work/mmsh.bin" 2>"$work/mmsh.cc" \
+   && "$work/mmsh.bin" >"$work/mmsh.stdout" 2>&1 \
+   && cmp -s "$work/mmsh.stdout" test/modules/map_unit_shim/expected.out; then
+    ok "map_unit_shim (sibling shim header/source wired into the consumer)"
+else
+    bad "map_unit_shim" "$(cat "$work/mmsh.err" "$work/mmsh.cc" "$work/mmsh.stdout" 2>/dev/null | head -5)"
+fi
+
+t0=$(stamp "$work/mmsh/main.c")
+"$work/ct-ast" build "$work/mmshsrc/main.ct" -o "$work/mmsh" >/dev/null 2>&1
+if [ "$(stamp "$work/mmsh/main.c")" = "$t0" ]; then
+    ok "map_unit_shim cache: a warm build reuses the consumer"
+else
+    bad "map_unit_shim cache" "main.c was regenerated although nothing changed"
+fi
+sleep 1
+touch "$work/mmshsrc/lib/lib.shim.h"
+"$work/ct-ast" build "$work/mmshsrc/main.ct" -o "$work/mmsh" >/dev/null 2>&1
+if [ "$(stamp "$work/mmsh/main.c")" != "$t0" ]; then
+    ok "map_unit_shim cache: a shim change rebuilds the consumer"
+else
+    bad "map_unit_shim cache" "main.c was not rebuilt after the shim header changed"
+fi
+
+# A shim source without its header cannot declare anything for a recipe, so it
+# is rejected by name rather than left for the linker.
+rm -rf "$work/mbsc"
+mkdir -p "$work/mbsc/lib" "$work/mbsc/out"
+printf 'namespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> ct_x(); }\n' \
+    >"$work/mbsc/lib/lib.m.ct"
+printf 'int ct_x(void) { return 1; }\n' >"$work/mbsc/lib/lib.shim.c"
+printf 'import lib::lib;\n\nint main(void) { return lib::T.m(); }\n' >"$work/mbsc/main.ct"
+if "$work/ct-ast" build "$work/mbsc/main.ct" -o "$work/mbsc/out" \
+        >"$work/mbsc.out" 2>"$work/mbsc.err"; then
+    bad "batch 39: shim_source_without_header" "expected a non-zero exit"
+elif grep -qF 'a shim source needs a matching .shim.h' "$work/mbsc.err"; then
+    ok "batch 39 (shim_source_without_header)"
+else
+    bad "batch 39: shim_source_without_header" "$(head -2 "$work/mbsc.err")"
+fi
+
+# The reference binding: a POSIX socket mapping whose shim holds the casts, the
+# out-parameter and the `errno` accessor. Header-only, so no `.shim.c` is listed.
+rm -rf "$work/mpsock"
+mkdir -p "$work/mpsock"
+if "$work/ct-ast" build bindings/posix-socket/demo.ct -o "$work/mpsock" \
+        >"$work/mpsock.out" 2>"$work/mpsock.err" \
+   && grep -qF '#include "socket.shim.h"' "$work/mpsock/demo.c" \
+   && grep -qF -- '-I bindings/posix-socket/posix' "$work/mpsock.out" \
+   && ! grep -qF '.shim.c' "$work/mpsock.out" \
+   && "$CC" -Wall -Wextra -std=c99 -I bindings/posix-socket/posix "$work/mpsock"/*.c \
+        -o "$work/mpsock.bin" 2>"$work/mpsock.cc" \
+   && "$work/mpsock.bin" >"$work/mpsock.stdout" 2>&1 \
+   && cmp -s "$work/mpsock.stdout" bindings/posix-socket/demo.expected.out; then
+    ok "posix-socket binding (shim casts + errno accessor; header-only)"
+else
+    bad "posix-socket binding" "$(cat "$work/mpsock.err" "$work/mpsock.cc" "$work/mpsock.stdout" 2>/dev/null | head -5)"
 fi
 
 echo

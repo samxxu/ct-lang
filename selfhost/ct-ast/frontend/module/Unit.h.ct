@@ -20,6 +20,10 @@ pub struct Unit {
     int  prog;
     int  is_hdr;                /* a `.h.ct` unit: publishes a header, importable */
     int  is_map;                /* a `.m.ct` unit: a compile-time mapping, no output */
+    int  has_shim;              /* a `.m.ct` unit with a sibling C shim (batch 39) */
+    char shim_dir[1024];        /* directory of the shim (an include root) */
+    char shim_h[1024];          /* `<base>.shim.h`; empty when absent */
+    char shim_c[1024];          /* `<base>.shim.c`; empty when absent */
     int  fn_start;
     int  fn_end;
     int  tr_start;

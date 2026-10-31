@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 import backend::emit::Emitter;
 import backend::mem::Memory;
@@ -342,6 +343,34 @@ impl ModuleOps for Module {
         self->units[u].is_hdr = is_hdr;
         self->units[u].is_map = is_map;
         self->p->unit_is_map = is_map;
+        /* A shim belongs to a mapping unit only (batch 39): `<base>.shim.h` is
+           an include root for the consumer, `<base>.shim.c` joins the program.
+           Header-only shims are the normal case; a source without its header
+           cannot declare anything for a recipe, so it is rejected by name. */
+        self->units[u].has_shim = 0;
+        self->units[u].shim_dir[0] = 0;
+        self->units[u].shim_h[0] = 0;
+        self->units[u].shim_c[0] = 0;
+        if (is_map) {
+            char dir[MAX_PATH];
+            char h[MAX_PATH];
+            char c[MAX_PATH];
+            struct stat st;
+            if (self->path_dir(path, dir, sizeof dir) != 0) return -1;
+            snprintf(h, sizeof h, "%s/%s.shim.h", dir, self->units[u].base);
+            snprintf(c, sizeof c, "%s/%s.shim.c", dir, self->units[u].base);
+            if (stat(h, &st) == 0)
+                snprintf(self->units[u].shim_h, MAX_PATH, "%s", h);
+            if (stat(c, &st) == 0)
+                snprintf(self->units[u].shim_c, MAX_PATH, "%s", c);
+            if (self->units[u].shim_c[0] && !self->units[u].shim_h[0])
+                return tool::diag::ct_sem_error(1, 1,
+                    "a shim source needs a matching .shim.h", path);
+            if (self->units[u].shim_h[0]) {
+                self->units[u].has_shim = 1;
+                snprintf(self->units[u].shim_dir, MAX_PATH, "%s", dir);
+            }
+        }
 
         if (self->read_file(path) != 0) return -1;
         mysrc = (char *)self->lex->src;
@@ -603,6 +632,23 @@ impl ModuleOps for Module {
                          self->units[self->units[u].depu[k]].is_map ? ".m" : ".h");
             if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
             n += (size_t)w;
+        }
+        /* A shim is part of the mapping's definition: touching either file must
+           rebuild the consumers, so its stamp joins the key material. */
+        if (self->units[u].is_map && self->units[u].has_shim) {
+            struct stat st;
+            if (stat(self->units[u].shim_h, &st) == 0) {
+                w = snprintf(ih + n, sizeof ih - n, "sh@%lu.%lu;",
+                             (unsigned long)st.st_mtime, (unsigned long)st.st_size);
+                if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+                n += (size_t)w;
+            }
+            if (self->units[u].shim_c[0] && stat(self->units[u].shim_c, &st) == 0) {
+                w = snprintf(ih + n, sizeof ih - n, "sc@%lu.%lu;",
+                             (unsigned long)st.st_mtime, (unsigned long)st.st_size);
+                if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+                n += (size_t)w;
+            }
         }
         dep = 0;
         for (k = 0; k < (size_t)self->units[u].ndep; k++)
@@ -876,9 +922,26 @@ impl ModuleOps for Module {
         /* The command the user runs next, in the same shape L2 prints; the
            target C standard (Phase 6.4) is the only option it carries. */
         printf("cc %s", self->std_flag);
+        /* A shim header is included by base name, so its directory becomes an
+           include root; one root is printed once even for several mappings. */
+        for (u = 0; u < self->nunits; u++) {
+            int dupd = 0;
+            if (!self->units[u].is_map || !self->units[u].has_shim) continue;
+            for (i = 0; i < u; i++)
+                if (self->units[i].is_map && self->units[i].has_shim
+                    && strcmp(self->units[i].shim_dir, self->units[u].shim_dir) == 0)
+                    dupd = 1;
+            if (!dupd) printf(" -I %s", self->units[u].shim_dir);
+        }
         for (u = 0; u < self->nunits; u++) {
             if (self->units[u].is_map) continue;
             printf(" %s/%s.c", self->outdir, self->units[u].base);
+        }
+        /* The shim implementation is part of the program, not an artefact: it
+           is compiled straight from its source next to the mapping unit. */
+        for (u = 0; u < self->nunits; u++) {
+            if (!self->units[u].is_map || !self->units[u].shim_c[0]) continue;
+            printf(" %s", self->units[u].shim_c);
         }
         printf(" -o a.out\n");
         if (tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;

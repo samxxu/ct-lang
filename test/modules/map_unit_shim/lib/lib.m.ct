@@ -1,0 +1,11 @@
+namespace lib;
+
+pub trait Io {
+    int err();
+    int next();
+}
+
+map trait Io for namespace lib {
+    err() -> ct_shim_errno();
+    next() -> ct_shim_next();
+}

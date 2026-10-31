@@ -15,7 +15,7 @@
 #   - test/cases/*.ct + examples/*/*.ct (compile mode; a dialect demo is
 #     expanded by its plugins first, as in check-ast.sh);
 #   - test/modules/*/main.ct or main.h.ct (build mode, all units);
-#   - bindings/mock-hal/demo.ct     (build mode, with the binding's -I root).
+#   - bindings/*/demo.ct            (build mode, with the roots the build prints).
 #
 # The gate is strict on purpose. `_self` / vtable / Drop helpers used to warn
 # when unused (issue SH-10); the emitter now silences them at the source
@@ -196,23 +196,34 @@ for d in test/modules/*/; do
             continue
         fi
     fi
+    # A shim header is included by base name, so the build's suggested `cc`
+    # line carries the include roots; reuse them (`-I <dir>` pairs).
+    roots=$(grep '^cc ' "$work/mod-$name.out" 2>/dev/null \
+        | awk '{ for (i = 2; i <= NF; i++) if ($i == "-I") printf " -I %s", $(i + 1) }')
     for f in "$work/mod-$name"/*.c; do
-        scan_one "modules/$name/$(basename "$f")" "$f" -I "$work/mod-$name"
+        scan_one "modules/$name/$(basename "$f")" "$f" -I "$work/mod-$name" $roots
     done
 done
 
 echo
 echo "== bindings (Phase 12) =="
-bd=bindings/mock-hal
-rm -rf "$work/bind"
-mkdir -p "$work/bind"
-if ! "$work/ct-ast" build "$bd/demo.ct" -o "$work/bind" >"$work/bind.out" 2>"$work/bind.err"; then
-    bad "bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
-else
+for bd in bindings/*/; do
+    bd="${bd%/}"
+    bname="$(basename "$bd")"
+    [ -f "$bd/demo.ct" ] || continue
+    rm -rf "$work/bind"
+    mkdir -p "$work/bind"
+    if ! "$work/ct-ast" build "$bd/demo.ct" -o "$work/bind" \
+            >"$work/bind.out" 2>"$work/bind.err"; then
+        bad "bindings/$bname" "ct-ast failed: $(cat "$work/bind.err")"
+        continue
+    fi
+    roots=$(grep '^cc ' "$work/bind.out" 2>/dev/null \
+        | awk '{ for (i = 2; i <= NF; i++) if ($i == "-I") printf " -I %s", $(i + 1) }')
     for f in "$work/bind"/*.c; do
-        scan_one "bindings/mock-hal/$(basename "$f")" "$f" -I "$bd"
+        scan_one "bindings/$bname/$(basename "$f")" "$f" -I "$bd" $roots
     done
-fi
+done
 
 echo
 printf 'check-warnings: %d ok, %d failed\n' "$pass" "$fail"

@@ -1,0 +1,9 @@
+import lib::lib;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d %d %d\n", lib::Io.err() == 0, lib::Io.next(), lib::Io.next());
+    return 0;
+}
