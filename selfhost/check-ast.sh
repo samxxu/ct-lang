@@ -2324,6 +2324,36 @@ for c in autodrop autodrop_layout autodrop_nodrop autodrop_scope; do
     fi
 done
 
+# SH-33: an `own` object is released on the `return` path, before the value
+# leaves. In the 61 fixture every return in `pick` / `pick2` is directly
+# preceded by its release, and the pointer is nulled afterwards; a release
+# emitted after the return (the defect) fails the first check, because the
+# preceding line is then no longer the release.
+"$work/ct-ast" test/ast/61_autodrop_return/prog.ct -o "$work/sh33.c" \
+    >"$work/sh33.out" 2>"$work/sh33.err"
+if [ $? -ne 0 ]; then
+    bad "sh33" "ct-ast failed: $(cat "$work/sh33.err")"
+else
+    for fn in pick pick2; do
+        # the definition, not the prototype: the prototype line ends with `;`
+        awk -v fn="$fn" '
+            !inb && $0 ~ ("^int " fn "\\(") && index($0, "{") { inb = 1 }
+            inb { print }
+            inb && /^}/ { exit }
+        ' "$work/sh33.c" >"$work/sh33-$fn.body"
+        if [ ! -s "$work/sh33-$fn.body" ]; then
+            bad "sh33 $fn" "could not extract the function body"
+        elif ! awk 'prev !~ /Box_Drop_drop/ && /^ *return/ { bad = 1 } { prev = $0 } END { exit bad }' \
+                "$work/sh33-$fn.body"; then
+            bad "sh33 $fn" "a return is not preceded by its release"
+        elif ! grep -q 'b = 0;' "$work/sh33-$fn.body"; then
+            bad "sh33 $fn" "the release does not null the pointer"
+        else
+            ok "sh33 $fn (release runs before the return, then nulls)"
+        fi
+    done
+fi
+
 for c in leak leak_path leak_call leak_method; do
     rm -rf "$mem-$c"
     mkdir -p "$mem-$c"

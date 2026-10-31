@@ -118,6 +118,78 @@ pub struct Stmt {
     int  goto_lines[64];
 } use StmtOps;
 
+/* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
+   in reverse order. `blk` receives them, `*tail` is the last node already linked
+   (or -1) and ends up pointing at the newest release. Returns -1 on allocation
+   failure. The caller owns the scope: `parse_block` closes a source `}`, and
+   `parse_branch` closes the block it synthesises for a braceless branch, so a
+   braceless `own` reaches the same release the braced form gets. */
+static int autodrop_append(struct Stmt *self, int blk, int base, int *tail)
+{
+    int d;
+
+    for (d = self->mem->nowner - 1; d >= base; d--) {
+        int del, v, vi;
+        const char *tp;
+        size_t bl;
+        /* a reassigned / returned / moved `own` variable is no longer ours to
+           release (L2 clears the same flag before its rewrite) */
+        vi = self->sym->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
+        if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
+        del = self->sup->new_node(N_DELETE);
+        v = self->sup->new_node(N_VAR);
+        if (del < 0 || v < 0) return -1;
+        self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
+        snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->mem->own_decl[d]].text2);
+        self->arena->nodes[del].a = v;
+        tp = self->arena->nodes[self->mem->own_decl[d]].text;
+        if (strncmp(tp, "struct ", 7) == 0) tp += 7;
+        snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
+        bl = strlen(self->arena->nodes[del].text);
+        while (bl > 0 && (self->arena->nodes[del].text[bl - 1] == '*'
+                          || self->arena->nodes[del].text[bl - 1] == ' ')) {
+            bl = bl - 1;
+            self->arena->nodes[del].text[bl] = 0;
+        }
+        if (*tail < 0) self->arena->nodes[blk].a = del;
+        else self->arena->nodes[*tail].next = del;
+        *tail = del;
+    }
+    return 0;
+}
+
+/* A `return` has to release what the scope holds before it leaves, or the
+   release appended at the closing `}` is dead code and the object is leaked
+   (SH-33). The releases hang off the return node's `b` slot, in reverse
+   declaration order, so the emitter prints them at the return's own
+   indentation; the caller links the return as one node and cannot carry a
+   chain. `permanent` (a return at the body's own level) also clears the flags:
+   the fall-through path cannot reach the `}` anyway, and a second release
+   there would only be dead code. The maintained flags keep the nested-block
+   path correct, where the `}` release still serves the branch that does not
+   return; `owned` is cleared either way, because every path now releases. */
+static int retire_before_return(struct Stmt *self, int ret, int permanent)
+{
+    int blk, tail, d;
+
+    if (self->mem->nowner <= 0) return ret;
+    /* `autodrop_append` links into a container; the block is scratch and only
+       its head is kept, which is then moved onto the return */
+    blk = self->sup->new_node(N_BLOCK);
+    if (blk < 0) return -1;
+    tail = -1;
+    if (autodrop_append(self, blk, 0, &tail) != 0) return -1;
+    if (tail < 0) return ret;
+    self->arena->nodes[ret].b = self->arena->nodes[blk].a;
+    for (d = 0; d < self->mem->nowner; d++) {
+        int vi = self->sym->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
+        if (vi < 0 || !self->sym->vars[vi].autodrop) continue;
+        self->sym->vars[vi].owned = 0;
+        if (permanent) self->sym->vars[vi].autodrop = 0;
+    }
+    return ret;
+}
+
 impl StmtOps for Stmt {
     /* Does the current token start a declaration? A short name has to be
        resolved first: the type table only holds the mangled spelling, so
@@ -212,7 +284,7 @@ impl StmtOps for Stmt {
            the same). A brace that shares its line with code cannot host the
            deletes, so that layout is rejected. */
         if (self->mem->nowner > base) {
-            int p, at_start, d;
+            int p, at_start;
             at_start = 1;
             for (p = self->lex->lstart; p < self->lex->tokstart; p++)
                 if (self->lex->src[p] != ' ' && self->lex->src[p] != '\t' && self->lex->src[p] != '\r') at_start = 0;
@@ -221,35 +293,9 @@ impl StmtOps for Stmt {
                 return tool::diag::ct_sem_error(self->lex->tokline, 1,
                     "auto-drop requires the closing '}' at the start of a line", self->mem->path);
             }
-            for (d = self->mem->nowner - 1; d >= base; d--) {
-                int del, v, vi;
-                const char *tp;
-                size_t bl;
-                /* a reassigned / returned / moved `own` variable is no longer
-                   ours to release (L2 clears the same flag before its rewrite) */
-                vi = self->sym->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
-                if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
-                del = self->sup->new_node(N_DELETE);
-                v = self->sup->new_node(N_VAR);
-                if (del < 0 || v < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-                self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
-                snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->mem->own_decl[d]].text2);
-                self->arena->nodes[del].a = v;
-                tp = self->arena->nodes[self->mem->own_decl[d]].text;
-                if (strncmp(tp, "struct ", 7) == 0) tp += 7;
-                snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
-                bl = strlen(self->arena->nodes[del].text);
-                while (bl > 0 && (self->arena->nodes[del].text[bl - 1] == '*'
-                                  || self->arena->nodes[del].text[bl - 1] == ' ')) {
-                    bl = bl - 1;
-                    self->arena->nodes[del].text[bl] = 0;
-                }
-                if (tail < 0) self->arena->nodes[blk].a = del;
-                else self->arena->nodes[tail].next = del;
-                tail = del;
+            if (autodrop_append(self, blk, base, &tail) != 0) {
+                self->sup->pop_scope();
+                return -1;
             }
         }
         if (self->sup->expect("}") != 0) {
@@ -311,18 +357,24 @@ impl StmtOps for Stmt {
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
-            int rline = self->lex->tokline, at_start = 1, rp;
+            int rline = self->lex->tokline, at_start = 1, rp, cond;
             for (rp = self->lex->lstart; rp < self->lex->tokstart; rp++)
                 if (self->lex->src[rp] != ' ' && self->lex->src[rp] != '\t' && self->lex->src[rp] != '\r') at_start = 0;
+            /* a return nested in a block (or written mid-line) may be skipped
+               at run time, so it only warns about what it leaves behind */
+            cond = !at_start || self->sym->nscope > self->mem->leak_frame;
             s = self->sup->new_node(N_RET);
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->sup->lex_next();
                 /* a bare `return;` leaves every owned object behind */
-                if (self->mem->leak_active
-                    && self->sup->leak_return(-1, !at_start || self->sym->nscope > self->mem->leak_frame, rline) != 0)
+                if (self->mem->leak_active && self->sup->leak_return(-1, cond, rline) != 0)
                     return -1;
+                if (self->mem->leak_active) {
+                    s = retire_before_return(self, s, !cond);
+                    if (s < 0) return -1;
+                }
                 return s;
             }
             e = self->ex->parse_expr();
@@ -336,12 +388,15 @@ impl StmtOps for Stmt {
                 }
             }
             self->arena->nodes[s].a = e;
-            /* a return nested in a block (or written mid-line) may be skipped
-               at run time, so it only warns about what it leaves behind */
-            if (self->mem->leak_active
-                && self->sup->leak_return(e, !at_start || self->sym->nscope > self->mem->leak_frame, rline) != 0)
+            if (self->mem->leak_active && self->sup->leak_return(e, cond, rline) != 0)
                 return -1;
             if (self->sup->expect(";") != 0) return -1;
+            /* SH-33: release what is still owned before the value leaves, so
+               the release is on the taken path instead of after the `return` */
+            if (self->mem->leak_active) {
+                s = retire_before_return(self, s, !cond);
+                if (s < 0) return -1;
+            }
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "delete") == 0) {

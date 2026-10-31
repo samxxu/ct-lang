@@ -302,7 +302,7 @@ impl Drop for Box {
 int main(void) {
     Box *p = malloc(sizeof(struct Box));
     p->n = 1;
-    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); } */
+    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); p = 0; } */
 
     {
         own Box *b = malloc(sizeof(struct Box));
@@ -772,7 +772,7 @@ impl Drop for Box {
 int main(void) {
     Box *p = malloc(sizeof(struct Box));
     p->n = 1;
-    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); } */
+    delete p;                     /* -> if (p) { Box_Drop_drop(p); free(p); p = 0; } */
 
     {
         own Box *b = malloc(sizeof(struct Box));

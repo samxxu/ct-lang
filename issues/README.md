@@ -110,6 +110,7 @@
 | SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
 | SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 | [ct-ast-identifier-truncation.md](selfhost/ct-ast-identifier-truncation.md) |
 | SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉 | [cli-parser-duplication.md](selfhost/cli-parser-duplication.md) |
+| SH-33 | **High** | AutoDrop 只在 `}` 注入：含 `return` 的函数静默泄漏，生成死代码且不置空 | [sh33-autodrop-return-no-inject.md](selfhost/sh33-autodrop-return-no-inject.md) |
 
 ## 汇总
 
@@ -531,3 +532,26 @@ $ gcc -Wall /tmp/idc.c
 
 修复后的门禁：`check-ast.sh` 351 passed、`check-warnings.sh` 152 ok、`check-all.sh` 九关全绿；
 生成物、golden 与 `CTC_VERSION` 未变，L0 / L1 / L2 未动（SH-23 只落 ct-ast）。
+- `borrow` / `Handback` 提案评审追加 **1 条 High**（SH-33：AutoDrop 在 `return` 前不注入、
+  不置空 → 含 `return` 的函数静默泄漏并留下死代码）。
+
+### 提案评审追加（2026-10-31）
+
+评审 `borrow` / `Handback` 提案时实测追加 1 条；设计规格见
+[docs/design/borrow.md](../docs/design/borrow.md)。
+
+| ID | 严重度 | 标题 |
+| --- | --- | --- |
+| SH-33 | **High** | AutoDrop 只在 `}` 注入：含 `return` 的函数静默泄漏，生成死代码且不置空 |
+
+```text
+# SH-33：函数体内 own + return，对象既不 drop 也不 free，释放语句落在 return 之后
+$ ct-ast body.ct -o body.c ; echo $?
+0
+$ cc -Wall -Wextra -std=c99 body.c -o body && ./body
+using 7                 # 没有 "dropped 7"，stderr 也没有告警
+$ awk '/^int f\(void\)/,/^}/' body.c
+    return 1;
+    if (p) { Box_Drop_drop(p); free(p); }    # 死代码，且没有 p = 0
+# L2（oracle）同一输入：`if (p) { Box_Drop_drop(p); free(p); p = 0; }` 在 return 之前
+```

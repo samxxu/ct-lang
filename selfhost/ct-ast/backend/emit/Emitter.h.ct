@@ -1783,8 +1783,13 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_RET) {
+            int r;
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
+            /* the parser hangs the scope's releases off `b`; they run at the
+               return's own indentation, before the value leaves (SH-33) */
+            for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
+                if (self->emit_node(r, ind) != 0) return -1;
             self->emit_indent(ind);
             if (self->arena->nodes[n].a < 0) {
                 fputs("return;\n", self->out);
@@ -1808,14 +1813,20 @@ impl EmitOps for Emitter {
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs("); free(", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fputs("); }\n", self->out);
+                /* null the pointer: L2's shape (README / language-spec list it),
+                   and the second release on another path is then a no-op */
+                fputs("); ", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(" = 0; }\n", self->out);
                 return 0;
             }
             fputs("if (", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fputs(") free(", self->out);
+            fputs(") { free(", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fputs(");\n", self->out);
+            fputs("); ", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(" = 0; }\n", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_BREAK) {
