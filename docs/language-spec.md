@@ -60,7 +60,8 @@ item     ::= trait-def | struct-def | impl-def | raw-text
 - 空白、换行、`//` 行注释、`/* */` 块注释在构造头部可自由插入。
 - trait 体内的方法声明以 `;` 分隔，允许一条声明跨多行；注释在切分前被剥离。
 - struct 体内的字段原样保留、不做解析。
-- 标识符为 `[A-Za-z_][A-Za-z0-9_]*`；超出 127 字符会**报错**（`identifier too long`），不再静默截断。
+- 标识符为 `[A-Za-z_][A-Za-z0-9_]*`；ct-ast 对超过 159 字符的名字**报错**
+  （`identifier is too long`），不再静默截断（L0 种子的上限是 127 字符）。
 
 ### 3. 语法
 
@@ -1421,8 +1422,8 @@ comment in its header); it is not part of the source content.
 - Method declarations inside a trait are separated by `;` and may span lines; comments are stripped
   before splitting.
 - Struct bodies are preserved verbatim and not parsed.
-- Identifiers are `[A-Za-z_][A-Za-z0-9_]*`; longer than 127 characters is an **error**
-  (`identifier too long`) — no longer a silent truncation.
+- Identifiers are `[A-Za-z_][A-Za-z0-9_]*`; ct-ast reports `identifier is too long` above 159
+  characters instead of silently truncating (the L0 seed's limit is 127).
 
 ### 3. Grammar
 

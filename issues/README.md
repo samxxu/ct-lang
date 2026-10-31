@@ -4,17 +4,20 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总五轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
+本目录汇总六轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）、
 [reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）、
-[reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）与
-[reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）。
+[reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
+[reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）与
+[reports/audit-2026-10-31](../reports/audit-2026-10-31/audit-2026-10-31.md)（测试覆盖度与文档一致性审计）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）——各文件行号以其自身锚点为准。
-- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 **8 条待修**（SH-8…SH-12、DOC-19…DOC-21，SH-10 从 Low 升级为 Medium，见文末一节），另 SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）——各文件行号以其自身锚点为准。
+- 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 8 条（SH-8…SH-12、DOC-19…DOC-21）**已于 2026-10-21 全部关闭**（见文末「处置」节），SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
+- 2026-10-31 审计新增 **18 条**，已于同日处置：**13 条修复**、2 条部分处置（TEST-9 / CI-4）、
+  2 条不采纳（TEST-7 / SH-24，理由见文末「处置」节）；DOC-28 复核确认已修复。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
-- 硬关卡计数随阶段演进：6 → 7 → **8**（`check-ast.sh` 于 Phase 9 作为第 8 关接入 `check-all.sh`）。下文各**带日期的验证记录**里出现的「六道 / 七道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「8 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
+- 硬关卡计数随阶段演进：6 → 7 → 8 → **9**（`check-warnings.sh` 接入后为九关；构成见 [check-all.sh:72-80](../selfhost/check-all.sh#L72-L80)）。下文各**带日期的验证记录**里出现的「六道 / 七道 / 八道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「9 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
 ## 模块索引
 
@@ -44,6 +47,14 @@
 | DOC-20 | Low | README 快速开始 1b 只构建 `ctc`，后续步骤却调用 `ct` | [readme-quickstart-branch.md](docs/readme-quickstart-branch.md) |
 | DOC-21 | Low | construction.md 自称「描述现状」却未标适用编译器，两处描述在 ct-ast 上不成立 | [construction-scope-unspecified.md](docs/construction-scope-unspecified.md) |
 | DOC-22 | Low | Batch 2 落地后仍残留 `unit-private` / `not mangled` 陈述，设计文档状态仍写「待实现」 | [doc22-batch2-stale-statements.md](docs/doc22-batch2-stale-statements.md) |
+| DOC-23 | **High** | README 把 `build --emit-map -` 写成不可用，实测可用 | [doc23-emit-map-build-stdout.md](docs/doc23-emit-map-build-stdout.md) |
+| DOC-24 | **High** | 教程称普通 `.ct` 会生成 `.h`，与 batch 30 规则和 README 相反 | [doc24-tutorial-h-output.md](docs/doc24-tutorial-h-output.md) |
+| DOC-25 | Medium | README 称 `-I` 两模式均限 16，compile 实际无上限（且忽略该开关） | [doc25-include-roots-asymmetry.md](docs/doc25-include-roots-asymmetry.md) |
+| DOC-26 | Medium | 多处断言计数与 tag 布局过期（grammar 21→27、check-ast 105→317、v0.13.0 仍写旧布局） | [doc26-stale-counts-and-tag-layout.md](docs/doc26-stale-counts-and-tag-layout.md) |
+| DOC-27 | Medium | `test/README.md` 的层图与负例约定过期（01..18、缺 patterns、include 路径错误） | [doc27-test-readme-stale.md](docs/doc27-test-readme-stale.md) |
+| DOC-28 | Medium | `issues/README.md` 仍写 8 关、把已关闭的第二轮 8 条列为待修 | [doc28-issues-readme-gate-count.md](docs/doc28-issues-readme-gate-count.md) |
+| DOC-29 | Low | batch 4 的 checklist 27 项全未勾，与其他 32 份不一致 | [doc29-batch4-checklist-unchecked.md](docs/doc29-batch4-checklist-unchecked.md) |
+| DOC-30 | Low | 版本登记漂移：glossary 暗示 Phase 13，AGENTS 中文版 bump 登记缺 v0.13.0 | [doc30-version-register-drift.md](docs/doc30-version-register-drift.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -55,6 +66,13 @@
 | TEST-4 | Low | Phase 7 的 `ct` 身份只测了一半（`ct build` / `-h` / `ctc compile` 未测） | [phase7-ct-identity-coverage.md](testing/phase7-ct-identity-coverage.md) |
 | TEST-5 | Medium | L2 驱动的错误分支仍无负例（10+ 个站点） | [l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) |
 | TEST-6 | Medium | `--emit-map <file>` 成功路径没有用例 | [emit-map-file-path-untested.md](testing/emit-map-file-path-untested.md) |
+| TEST-7 | **High** | ct-ast 的生成 C 无逐字节 oracle；§4.12–4.38 共 27 节只有行为探针 | [test7-ct-ast-no-byte-golden.md](testing/test7-ct-ast-no-byte-golden.md) |
+| TEST-8 | Medium | 12 个负例只断言「有位置」，消息文本可静默漂移 | [test8-negative-messages-not-pinned.md](testing/test8-negative-messages-not-pinned.md) |
+| TEST-9 | Medium | 绝大多数容量上限可达但无用例（仅 MAX_MAPS / MAX_ERRORS 有夹具） | [test9-cap-limits-untested.md](testing/test9-cap-limits-untested.md) |
+| TEST-10 | Medium | build 模式的 CLI 错误分支几乎未测 | [test10-build-cli-errors-untested.md](testing/test10-build-cli-errors-untested.md) |
+| TEST-11 | Medium | compile 与 build 两模式没有同一特性的镜像用例 | [test11-mode-mirror-missing.md](testing/test11-mode-mirror-missing.md) |
+| TEST-12 | Low | `check-warnings.sh` 未扫描 `test/patterns`（及 archive / acceptance） | [test12-check-warnings-patterns.md](testing/test12-check-warnings-patterns.md) |
+| TEST-13 | Low | `missing_method.ct` 在两个负例目录各一份，清点时易重复计数 | [test13-missing-method-duplicate.md](testing/test13-missing-method-duplicate.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -63,6 +81,7 @@
 | CI-1 | High | `./test/run.sh` 完全不覆盖 CT 线（L1/L2 ≈8k 行） | [run-sh-misses-ct-line.md](ci/run-sh-misses-ct-line.md) |
 | CI-2 | High | 无聚合入口 / 无 CI：不存在一条命令能跑全部门禁 | [no-aggregate-gate-entry.md](ci/no-aggregate-gate-entry.md) |
 | CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
+| CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行 | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
 
 ### `selfhost/` —— 代码结构与容量
 
@@ -89,6 +108,8 @@
 | SH-20 | Medium | `map` 曾强制要求已声明实例（命名空间级绑定曾不可用；2026-10-22 已修） | [ct-ast-map-requires-instance.md](selfhost/ct-ast-map-requires-instance.md) |
 | SH-21 | Medium | 函数指针不能指向 C 库函数，只能指向 CT 声明的函数或 ALL_CAPS 宏 | [ct-ast-fnptr-cannot-name-libfn.md](selfhost/ct-ast-fnptr-cannot-name-libfn.md) |
 | SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
+| SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 | [ct-ast-identifier-truncation.md](selfhost/ct-ast-identifier-truncation.md) |
+| SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉 | [cli-parser-duplication.md](selfhost/cli-parser-duplication.md) |
 
 ## 汇总
 
@@ -101,10 +122,14 @@
 另有 Phase 9 复审的 14 项发现，未单独立文件，逐项状态见文末「Phase 9 复审」一节。
 **Phase 12 复审（2026-10-21）新增 8 条：DOC-10…15、SH-5、SH-6，已全部修复**（见文末一节）。
 
-**第二轮复审（2026-10-21，锚点 `dde0dda`）新增 8 条待修**：SH-8（High）、SH-9 / SH-10 / SH-11 / SH-12 / DOC-19（Medium）、DOC-20 / DOC-21（Low）；SH-7 与 DOC-18 复核后仍复现（见文末一节）。
+**第二轮复审（2026-10-21，锚点 `dde0dda`）新增 8 条，已于 2026-10-21 全部关闭**：SH-8（High）、SH-9 / SH-10 / SH-11 / SH-12 / DOC-19（Medium）、DOC-20 / DOC-21（Low）；SH-7 与 DOC-18 复核后仍复现（见文末一节）。
 
 **Batch 2（2026-10-22）新增 6 条：SH-13…SH-18；其中 5 条已修（SH-13…SH-17），SH-18 按需求规格仅文档化**（见文末一节）。
 **同日复核（锚点 `224c08f`）再新增 5 条：SH-19（High）、SH-20 / SH-21 / SH-22（Medium）、DOC-22（Low）；SH-18 由 Low 升 Medium**（见文末「Batch 2 落地复核」一节）。
+
+**测试覆盖度与文档一致性审计（2026-10-31，锚点 `f4c77b1`）新增 18 条**：DOC-23 / DOC-24 / TEST-7 / SH-23 为 High，
+DOC-25…28 / TEST-8…11 / CI-4 为 Medium，DOC-29 / DOC-30 / TEST-12 / TEST-13 为 Low，SH-24 为 Info；
+DOC-28 已随本轮同步修正（见文末「测试覆盖度与文档一致性审计（2026-10-31）」一节）。
 
 状态附注：第二轮复审覆盖了上一轮评审的同一 HEAD `dde0dda`，工作树当时包含第二轮产生的 7 个 issue 文件 + 报告目录 + 本文件编辑（均为新增/只读产物，不触碰源码）。**全量生成物 `-Wall -Wextra` 扫描（2026-10-21）**发现 ct-ast 对 test/cases、test/ast、test/modules 生成的 C 文件有 3 类告警家族（`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数）——check-all.sh 当前只对 ct-ast 自身构建跑告警检查，不对生成物跑；详见 SH-10（扩展为 Medium）。
 
@@ -414,8 +439,95 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 
 门禁：`bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`bash selfhost/check-warnings.sh` 零告警。
 
+## 测试覆盖度与文档一致性审计（2026-10-31）
+
+完整报告：[reports/audit-2026-10-31](../reports/audit-2026-10-31/audit-2026-10-31.md)。锚点 `f4c77b1`、
+`v0.13.0`；基线 `bash selfhost/check-all.sh` → `check-all: OK (9 hard gates green)`。
+
+### 结论
+
+- 九关全绿，但**ct-ast 的生成 C 没有任何逐字节 oracle**：判据是 D34（退出码 + 零警告构建 + 程序输出），
+  `test/cases` 的 25 个 golden 仍是 L0 时代构造，`docs/language-spec.md` §4.12–4.38 的 27 个特性只有行为探针。
+- 负例强度被高估：68 个 ct-ast 负例中 56 个钉死消息文本，12 个只断言「有位置」，约 140 条诊断消息无夹具。
+- 文档有 8 处事实性漂移，其中 **DOC-23 / DOC-24** 会让用户按文档操作得到错误结果。
+
+### 新增 18 条
+
+| ID | 严重度 | 标题 |
+| --- | --- | --- |
+| DOC-23 | High | README 把 `build --emit-map -` 写成不可用，实测可用 |
+| DOC-24 | High | 教程称普通 `.ct` 会生成 `.h`，与 batch 30 规则和 README 相反 |
+| DOC-25 | Medium | README 称 `-I` 两模式均限 16，compile 实际无上限（且忽略该开关） |
+| DOC-26 | Medium | 多处断言计数与 tag 布局过期（grammar 21→27、check-ast 105→317、v0.13.0 仍写旧布局） |
+| DOC-27 | Medium | `test/README.md` 的层图与负例约定过期（01..18、缺 patterns、include 路径错误） |
+| DOC-28 | Medium | `issues/README.md` 仍写 8 关、把已关闭的第二轮 8 条列为待修（本轮已同步修正） |
+| DOC-29 | Low | batch 4 的 checklist 27 项全未勾，与其他 32 份不一致 |
+| DOC-30 | Low | 版本登记漂移：glossary 暗示 Phase 13，AGENTS 中文版 bump 登记缺 v0.13.0 |
+| TEST-7 | **High** | ct-ast 的生成 C 无逐字节 oracle；§4.12–4.38 共 27 节只有行为探针 |
+| TEST-8 | Medium | 12 个负例只断言「有位置」，消息文本可静默漂移 |
+| TEST-9 | Medium | 绝大多数容量上限可达但无用例（仅 MAX_MAPS / MAX_ERRORS 有夹具） |
+| TEST-10 | Medium | build 模式的 CLI 错误分支几乎未测 |
+| TEST-11 | Medium | compile 与 build 两模式没有同一特性的镜像用例 |
+| TEST-12 | Low | `check-warnings.sh` 未扫描 `test/patterns`（及 archive / acceptance） |
+| TEST-13 | Low | `missing_method.ct` 在两个负例目录各一份，清点时易重复计数 |
+| CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行 |
+| SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 |
+| SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉 |
+
+### 关键探针（原始结果）
+
+```text
+# build --emit-map -（DOC-23）
+$ mkdir -p out && ct-ast build h.ct -o out --emit-map -
+{…JSON…}                                   # exit 0
+
+# 普通 .ct 不产 .h（DOC-24）
+$ ct-ast hello.ct -o hello.c
+$ ls hello.h
+ls: hello.h: No such file or directory
+
+# -I 两模式不对称（DOC-25 / SH-24）
+$ ct-ast -I d1 … -I d30 in.ct -o out.c     # exit 0（compile 忽略该开关）
+$ ct-ast build -I d1 … -I d17 in.ct -o out # ctc: too many -I roots / exit 1
+
+# 超长标识符静默截断（SH-23）
+$ ct-ast /tmp/idc.ct -o /tmp/idc.c         # exit 0
+$ gcc -Wall /tmp/idc.c
+/tmp/idc.c:7:9: error: redefinition of 'aaa…（159 个 a）'
+```
+
+### 建议的处理顺序（按风险）
+
+1. TEST-7：为 ct-ast 的开关 / enum / union / goto / 位域 / 匿名成员各建一条逐字节 golden；
+2. SH-23：超长标识符改为报错，并补负例；
+3. TEST-8 / TEST-9：补齐 12 条消息文本与各 `MAX_*` 夹具；
+4. TEST-10 / DOC-25：先定 `-I` 口径，再补 build 的 CLI 错误分支；
+5. DOC-23 / DOC-24：两处面向用户的高危漂移；
+6. CI-4：加 `check` 别名与最小 CI，让九关不再依赖个人记忆。
+
+### 审计未覆盖
+
+- 未在 Linux / glibc 上复跑；两条 BSD 探针仍 `skip`（macOS 专属）。
+- 未逐条审计 `docs/design/batch5..35/**` 正文，只做了状态行与计数抽样。
+- 审计期间观察到一次并发 `check-all.sh` 的 `FAIL`，串行重跑九关全绿且未复现；门禁的并发安全性未设计、未验证。
 
 
 
 
 
+
+
+
+## 处置（2026-10-31，审计 18 条的结论）
+
+设计记录与验证数据见 [docs/design/batch37-audit-fixes](../docs/design/batch37-audit-fixes/spec.md)。
+
+| 结论 | 条目 |
+| --- | --- |
+| 已修复（13） | DOC-23 / 24 / 25 / 26 / 27 / 29 / 30；TEST-8 / 10 / 11 / 12 / 13；SH-23 |
+| 复核确认已修复（1） | DOC-28 |
+| 部分处置（2） | TEST-9：新增 5 个生成式上限用例（params / methods / funcs / scopes / vars），其余按需再补；CI-4：新增 `Makefile` 的 `make check`，不加云端 workflow（宿主与凭据未定，BSD 探针需跳过策略） |
+| 不采纳（2） | TEST-7：不建 27 节逐字节 golden——D34 的判据是行为，且 L0 golden、自编不动点、L0 种子关已提供字节级覆盖；SH-24：不合并两套 CLI 解析器——Info 级、两种行为都可工作，合并属结构改动，差异已在 README 写清 |
+
+修复后的门禁：`check-ast.sh` 351 passed、`check-warnings.sh` 152 ok、`check-all.sh` 九关全绿；
+生成物、golden 与 `CTC_VERSION` 未变，L0 / L1 / L2 未动（SH-23 只落 ct-ast）。

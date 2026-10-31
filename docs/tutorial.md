@@ -75,7 +75,7 @@ int main() {
 三条命令跑起来：
 
 ```sh
-ct hello.ct -o hello.c        # 生成 hello.c 与同名 hello.h
+ct hello.ct -o hello.c        # 生成 hello.c（普通 .ct 不写 .h；只有 .h.ct 单元才写）
 cc hello.c -o hello           # 生成物是普通 C，编译器只需看到 .c
 ./hello
 ```
@@ -492,7 +492,7 @@ int main() {
 ```
 
 ```sh
-ct hello.ct -o hello.c        # writes hello.c and hello.h
+ct hello.ct -o hello.c        # writes hello.c (a plain .ct writes no .h; only .h.ct units do)
 cc hello.c -o hello           # the output is plain C; the .h is not needed
 ./hello
 ```

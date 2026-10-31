@@ -54,10 +54,10 @@ gcc /tmp/greeter.c -o /tmp/greeter
 | `ctc <input.ct>` | 输出到 `<input>.c`；输入是 `.h.ct` 时同时写 `<input>.h`（L0 / L2 仍总是写 `.h`） |
 | `ctc <input.ct> -o <output.c>` | 输出到指定路径；输入是 `.h.ct` 时头文件为同目录同名的 `.h` |
 | `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
-| `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，仅 compile 可用，`build` 须写文件 |
+| `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，`compile` 与 `build` 都可用 |
 | `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`（`.h.ct` 单元另有 `.h`）并打印建议 `cc` 命令；只有 `.h.ct` 单元可被 `import`。在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
 | `ctc … --std=c99\|gnu99` | 目标 C 标准（默认 `c99`）；暂无产物差异，`build` 将其写入建议的 `cc` 命令，其他值硬报错（Phase 6.4） |
-| `ctc … -I <dir>` | 追加一个导入搜索根（可重复，最多 16 个；Phase 2，`compile` 与 `build` 均可用） |
+| `ctc … -I <dir>` | `build` 追加一个导入搜索根（可重复，最多 16 个，第 17 个报 `too many -I roots`）；`compile` 接受该开关但不解析导入（无上限，见 SH-24） |
 | `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3：`spec` 以 `.` / `/` / `file://` 开头为本地包（复制），否则为 git 包（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`）；解析 `ct.pkg`、递归 `dep`、复制到 `vendor/<name>/`、写 `ct.lock`（五列 `name ver dir\|git <ref> <digest>`，摘要为逐文件加法折叠的 FNV-1a）。git 源调用系统 `git`——**唯一**子进程调用点，仅 `ct get` 触发，`ct compile` / `ct build` / `ct install` 零网络零子进程 |
 | `ctc install` | Phase 8.3：离线校验 `ct.lock` 与 `vendor/`（逐包摘要相符、清单 `dep` 均被锁覆盖且在范围内），全部通过则打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`）；摘要不符 / 缺包 / 未覆盖依赖硬报错 |
 | `ctc … --line` / `--no-line` | 覆盖 `#line` 的默认开关（`build` 默认开、`compile` 默认关；Phase 4） |
@@ -88,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 | `CT_SOURCE_DIR=<dir>` | 不下载，直接编译本地工作树（离线安装） |
 | `CC=gcc` | 换 C 编译器（GCC ≥ 8 时的 `-Wno-format-truncation` 由脚本自动探测） |
 
-脚本按目录布局自适应：`v0.13.0` 及更早的 tag 仍是 `ctc.c` 在根、L2 在 `selfhost/src/**`、ct-ast 在
+脚本按目录布局自适应：`v0.12.0` 及更早的 tag 仍是 `ctc.c` 在根、L2 在 `selfhost/src/**`、ct-ast 在
 `selfhost/ast/**` 的旧布局，`main` 已迁到 `selfhost/{l0,l1,l2,ct-ast}/`。手动等价步骤如下（也可直接照抄
 `install.sh`）：
 
@@ -263,7 +263,8 @@ test/                             测试（分层地图见 test/README.md）
 ├── errors/                       负例：<name>.ct + <name>.expected-err
 ├── archive/                      Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
 ├── modules/                      CT 线（L2 / ct-ast）多单元与特性探针：一目录一用例
-├── ast/                          ct-ast 行为探针：一目录一用例；errors/ 为裸负例（由 check-ast 断言退出码）
+├── ast/                          ct-ast 行为探针：一目录一用例；errors/ 为裸负例（多数钉死消息文本）
+├── patterns/                     设计模式用例：一目录一 `prog.ct` + `expected.out`（由 check-ast 驱动）
 ├── acceptance/                   端到端验收清单（run.sh；PENDING 属预期，不阻断）
 └── pkg/                          包管理器 `ct get` / `ct install` 用例（run.sh）
 ```
@@ -290,7 +291,7 @@ test/                             测试（分层地图见 test/README.md）
 VS Code 插件另有一份独立的语法冒烟测试，校验的是高亮规则而不是编译器，因此不进 `./test/run.sh`：
 
 ```bash
-python3 editors/vscode/test/check-grammar.py   # 21 项断言；退出码 0 = 通过
+python3 editors/vscode/test/check-grammar.py   # 27 项断言；退出码 0 = 通过
 ```
 
 #### 自举 gate（`selfhost/`）
@@ -309,7 +310,7 @@ python3 editors/vscode/test/check-grammar.py   # 21 项断言；退出码 0 = �
 | `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
 | `test/pkg/run.sh` | Phase 8.1/8.2/8.3 包管理器：构建 L0→L1→L2→`ct-ast` 并以新入口驱动 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock`（本地包与 git 包；git 用例用本地 git 仓库作 registry，含无 `git` 硬报错），以及 `ct install` 的摘要校验、清单覆盖、建议命令，并证明 `ct build` 可用 `vendor/` 编译 |
 | `selfhost/check-ast.sh` | Phase 9.1–9.7 + Phase 10.x AST 编译器：构建 L0→L1→L2→`ct-ast`，对 `test/ast/*/prog.ct` 做「编译 → cc 零警告 → 运行 → 与 `prog.expected.out` 比对」；`test/ast/errors/` 的负例必须非零退出；模块层对 `test/modules` 的 split / ns_dir / inc / hdr 跑 `ct-ast build` 并做行为比对；元数据层校验 `--emit-map`（stdout / 文件）与 `#line`（build 默认开、`--line` / `--no-line`）；另有自编不动点、全量语料行为等价、CLI/身份与 CLI 错误分支（帮助、缺参、未知选项、不可读/不可写、compile 模式 `import`、build 缺 `-o`）、L2 形状的语义诊断、内存层（AutoDrop 正例与三种负例、泄漏告警的 text / JSON 逐字节比对）、多错误恢复（多错误语料与 `MAX_ERRORS` 上限）与增量缓存（冷编盖章、键对 L2、暖编复用、依赖失效）断言 |
-| `selfhost/check-warnings.sh` | 生成物零告警关卡：构建 L0→L1→L2→`ct-ast` 后，用 `-Wall -Wextra -std=c99 -c` 逐个编译自举链产物、`test/ast/*`、`test/cases/**`、`examples/**`、`test/modules/**` 与 `bindings/mock-hal/` 的生成 C，stderr 非空即失败 |
+| `selfhost/check-warnings.sh` | 生成物零告警关卡：构建 L0→L1→L2→`ct-ast` 后，用 `-Wall -Wextra -std=c99 -c` 逐个编译自举链产物、`test/ast/*`、`test/cases/**`、`examples/**`、`test/modules/**`、`test/patterns/**` 与 `bindings/mock-hal/` 的生成 C，stderr 非空即失败 |
 | `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面七个 CT / 包管理 / AST / 告警脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
 
 ```bash
@@ -501,10 +502,10 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 | `ctc <input.ct>` | writes `<input>.c`; a `.h.ct` input also writes `<input>.h` (L0 / L2 still always write the `.h`) |
 | `ctc <input.ct> -o <output.c>` | writes the given path; a `.h.ct` input gets a sibling `.h` |
 | `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
-| `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, compile mode only — `build` must write a file |
+| `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, accepted by both `compile` and `build` |
 | `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits a `.c` (a `.h.ct` unit also emits its `.h`) and the suggested `cc` command is printed; only `.h.ct` units can be imported. A key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
 | `ctc … --std=c99\|gnu99` | target C standard (default `c99`); nothing in the output differs yet, so `build` writes it into the suggested `cc` command, and any other value is a hard error (Phase 6.4) |
-| `ctc … -I <dir>` | adds an import search root (repeatable, up to 16; Phase 2 — works in both `compile` and `build`) |
+| `ctc … -I <dir>` | `build` adds an import search root (repeatable, up to 16 — the 17th reports `too many -I roots`); `compile` accepts the flag but resolves no imports (no limit; see SH-24) |
 | `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3: a `spec` starting with `.` / `/` / `file://` is a local package (copied), anything else is a git package (a `scheme://` URL verbatim, a `host/path` given `https://`, a bare name via `CT_REGISTRY`); it parses `ct.pkg`, resolves `dep` recursively, copies into `vendor/<name>/` and writes `ct.lock` (five columns `name ver dir\|git <ref> <digest>`, the digest being an additive per-file FNV-1a fold). git sources call the system `git` — the **only** subprocess call site, reached by `ct get` alone; `ct compile` / `ct build` / `ct install` stay network-free and process-free |
 | `ctc install` | Phase 8.3: verifies `ct.lock` against `vendor/` offline (each locked package present with a matching digest, every manifest `dep` covered by the lock at a satisfying version) and, on success, prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`); a mismatch, a missing package or an uncovered dependency fails hard |
 | `ctc … --line` / `--no-line` | overrides the `#line` default (on for `build`, off for `compile`; Phase 4) |
@@ -551,7 +552,7 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 | `CT_SOURCE_DIR=<dir>` | build this local checkout instead of downloading (offline install) |
 | `CC=gcc` | choose the C compiler (the `-Wno-format-truncation` needed by GCC ≥ 8 is probed automatically) |
 
-The script adapts to the tree layout: tags up to `v0.13.0` still keep `ctc.c` at the root, L2 under
+The script adapts to the tree layout: tags up to `v0.12.0` still keep `ctc.c` at the root, L2 under
 `selfhost/src/**` and ct-ast under `selfhost/ast/**`; `main` moved them to `selfhost/{l0,l1,l2,ct-ast}/`.
 The manual equivalent (or just read `install.sh`) is:
 
@@ -815,7 +816,7 @@ The VS Code extension carries its own smoke test for the highlighting rules. It 
 not the compiler, so it is deliberately not part of `./test/run.sh`:
 
 ```bash
-python3 editors/vscode/test/check-grammar.py   # 21 checks; exit code 0 means it passed
+python3 editors/vscode/test/check-grammar.py   # 27 checks; exit code 0 means it passed
 ```
 
 #### Self-hosting gates (`selfhost/`)
@@ -840,7 +841,7 @@ after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
 | `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
 | `test/pkg/run.sh` | Phase 8.1/8.2/8.3 package manager: builds L0→L1→L2→`ct-ast` and drives the new entry through `ct get` — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock`, for both local and git packages (the git cases use a local git repo as the registry and assert the no-`git` hard failure) — plus `ct install`'s digest verification, manifest coverage and suggested command, proving `ct build` compiles against `vendor/` |
 | `selfhost/check-ast.sh` | Phase 9.1–9.7 + Phase 10.x AST compiler: builds L0→L1→L2→`ct-ast` and runs every `test/ast/*/prog.ct` through "compile → warning-free cc → run → compare with `prog.expected.out`"; the `test/ast/errors/` negative must exit non-zero; its module layer runs `ct-ast build` on split / ns_dir / inc / hdr from `test/modules` and compares behaviour; its metadata layer checks `--emit-map` (stdout / file) and `#line` (on by default in build mode, `--line` / `--no-line`); it also covers self-compilation fixpoint, whole-corpus behavioural equivalence, CLI/identity and the CLI error branches (help, missing option arguments, unknown options, unreadable input / unwritable output, `import` in compile mode, build without `-o`), L2-shaped semantic diagnostics, the memory layer (AutoDrop positives and negatives, leak warnings byte-diffed in text and JSON), multi-error recovery (multi-error fixtures plus the `MAX_ERRORS` cap), and the incremental cache (cold stamping, key parity with L2, warm reuse, dependency invalidation) |
-| `selfhost/check-warnings.sh` | the zero-warning gate for generated code: after building L0→L1→L2→`ct-ast`, it compiles every artefact produced by ct-ast (the chain's own units, `test/ast/*`, `test/cases/**`, `examples/**`, `test/modules/**`, `bindings/mock-hal/`) with `-Wall -Wextra -std=c99 -c` and fails on any stderr output |
+| `selfhost/check-warnings.sh` | the zero-warning gate for generated code: after building L0→L1→L2→`ct-ast`, it compiles every artefact produced by ct-ast (the chain's own units, `test/ast/*`, `test/cases/**`, `examples/**`, `test/modules/**`, `test/patterns/**`, `bindings/mock-hal/`) with `-Wall -Wextra -std=c99 -c` and fails on any stderr output |
 | `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the seven CT / package / AST / warning scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
 
 ```bash
