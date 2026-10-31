@@ -899,6 +899,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **第三十批（2026-10-31，`.h.ct` 规则）**：仅 ct-ast——普通 `.ct` 不再写 `.h` 且**不可被 `import`**（`import` 只解析 `.h.ct`，命中普通 `.ct` 报 `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`），compile 模式同理；实现单元的 `.c` 自包含（`pub` 类型本地发射），缓存命中按 `need_h`。被导入单元统一改名（ct-ast 自身 3 个、bindings 1 个、`test/modules/**` 27 个）。L2 保持附加式（归档 oracle 依赖），登记为已知分叉。
 - **第三十一批（2026-10-31，`__attribute__`）**：GNU `__attribute__((…))` 按「声明尾部透传」接受——函数声明/定义、形参、字段、全局、`typedef` 别名之后，以及 `struct` / `union` / `enum` 定义体之后；整段原文进字符串池并在同一尾部位置重新发射（连续多个组一起捕获），typedef 记录类型统一发射在别名之前。新增 `test/ast/54_attribute` 与两条形状负例（`unterminated __attribute__` / `duplicate __attribute__ on one declaration`），language-spec §4.36；至此 §4 的 C 形式没有已知缺口。
 - **第三十二批（2026-10-31，C 兼容性收尾）**：整数字面量后缀（`U` / `L` / `UL` / `LL` / `ULL`，大小写与顺序不限，十进制 / 十六进制 / 八进制同路径）由词法器收集、解析器校验并规范化为「先 `U` 后 `L`」后存进 `N_NUM.text`，发射时原样带出；非法组合报 `an integer suffix may be U, L or LL`。`static_assert` 作为 `_Static_assert` 的别名接受，生成物统一写 `_Static_assert`。`add_func` 的返回类型改为「先声明者胜」，`_Noreturn void f(void);` 之后的 `void f(void) {}` 不再把它抹掉。`__restrict` / `__restrict__` 进入类型词表。新增 `test/ast/55_c_compat` 与两条后缀负例，language-spec §4.37；`check-ast.sh` 300 passed、`check-warnings.sh` 145 ok、`check-all.sh` 九关全绿。
+- **第三十三批（2026-10-31，真实头文件兼容）**：`_Atomic(type)`（含裸 `_Atomic`）进入类型拼写，`sizeof` / cast 的类型探测也认它；`_Alignas(…)` 可以写在存储类之前（文件与块作用域都接受，发射统一为 `static _Alignas ( 16 ) int g;`）；GNU 属性可以写在声明符之前（全局、函数原型 / 定义、局部变量），局部变量也接受尾部属性。`attr_pool` 从 `ParseOps` 搬到 `SupportOps`（零新增方法，impl 预算 256 恰好到顶）。新诊断：`unterminated _Atomic`、`an attribute must prefix a declaration`、`duplicate _Alignas on one declaration`。新增 `test/ast/56_header_compat` 与四条形状负例，language-spec §4.38；`check-ast.sh` 309 passed、`check-warnings.sh` 146 ok、`check-all.sh` 九关全绿。容量策略同批定为 A（见 [design/next-decisions.md](design/next-decisions.md)）。
 
 ### 决策待定项
 
@@ -910,7 +911,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | 工具链形态 | ✅ 已定：单入口 `ct`，`ctc` 保留为兼容别名 | 见「已定的设计决策」；**7.1–7.3 已落地**（入口身份 + 安装形态 + banner 改名），调用写法保持兼容 |
 | 包管理器的名字 | ✅ 已定：`ct-pkg`（2026-10-17） | 命令层仍是 `ct get` / `ct install`；registry 与组织名需趁早占位 |
 | 包管理的获取形态 | ✅ 已定（2026-10-18）：git 即 registry + 本地目录源；无 `git` 时 git 源硬报错 | 见 [design/phase8.md](design/phase8.md)（D22 / D26） |
-| 容量上限策略 | A. 继续固定上限／B. 超限即报错／C. 改动态分配 | 与「失败要响」原则的落地方式 |
+| 容量上限策略 | ✅ 已定（2026-10-31）：A. 维持「固定上限 + 越界硬报错」；回访触发条件=真实项目 / 官方 binding 撞顶，或自举再次逼近 `MAX_NODES`。触发时先做定点抬高（B），只有「抬到多大都会撞」时才评估动态分配（C） | 见 [design/next-decisions.md](design/next-decisions.md) §1 |
 | 过渡期是否冻结一切新特性 | ✅ 已定：自举（Phase 1）启动起冻结一切新的 C 侧语言特性，`ctc.c` 只接受 bug 修复（2026-10-14 相位重排） | 防止 Phase 0 历史偏差复发 |
 | C 实现最终删除还是归档 | ✅ 已定（2026-10-14）：「**剥离在前**」——Phase 0.3 先把越位特性移出 `ctc.c` 并**归档为 oracle**（不销毁），Phase 2 起用 CT 逐项重做并向归档对差；`ctc.c` 剥回纯 OO 核心并**永不整体删除** | 见「Phase 0.3」「自举策略与单文件边界」 |
 | 类型检查 / 泛型 / 生成物可读性硬指标 | 仍待定；Phase 5 **明确不引入**（见 [design/phase5.md](design/phase5.md) §8 非目标） | 若引入类型检查，编译器性质改变，需要 AST |
@@ -2394,11 +2395,25 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   `__restrict__` join the type words. Fixture `test/ast/55_c_compat` plus two suffix negatives;
   spec §4.37. `check-ast.sh` 300 passed, `check-warnings.sh` 145 ok, `check-all.sh` nine gates
   green.
+- **Batch 33 (2026-10-31, real-world header compatibility)**: `_Atomic(type)` (and bare `_Atomic`)
+  joins the type spelling, and the cast / `sizeof` type probe recognises it. `_Alignas(…)` may be
+  written before the storage class (file and block scope; emitted in the canonical
+  `static _Alignas ( 16 ) int g;` order), and a GNU attribute may prefix a declaration (globals,
+  function prototypes / definitions, locals); a local also accepts a trailing attribute. `attr_pool`
+  moves from `ParseOps` to `SupportOps` (no new impl method — the 256 budget was exactly full).
+  New diagnostics: `unterminated _Atomic`, `an attribute must prefix a declaration`,
+  `duplicate _Alignas on one declaration`. Fixture `test/ast/56_header_compat` plus four shape
+  negatives; spec §4.38. `check-ast.sh` 309 passed, `check-warnings.sh` 146 ok, `check-all.sh` nine
+  gates green. The capacity policy is decided in the same batch (A; see
+  [design/next-decisions.md](design/next-decisions.md)).
 
 ### Open decisions
 
-Only the fixed-capacity policy stays open: whether limits stay, become hard errors, or turn into
-dynamic allocation. The package manager is named `ct-pkg` (2026-10-17), and its fetch model is
+The fixed-capacity policy is decided (2026-10-31): **keep fixed caps with a hard error** (A). The
+revisit trigger is a real project or official binding hitting a cap, or self-hosting approaching
+`MAX_NODES` again; when triggered, raise the specific cap (B) first and only evaluate dynamic
+allocation (C) if no cap size would do (see [design/next-decisions.md](design/next-decisions.md) §1).
+The package manager is named `ct-pkg` (2026-10-17), and its fetch model is
 decided (2026-10-18): git as the registry plus local directory sources, with git sources failing hard
 when `git` is absent (see [design/phase8.md](design/phase8.md), D22/D26). Positional initialisers are
 decided (automatic vptr designators, 0.1.2). Pointer declarations are decided too: they are generated

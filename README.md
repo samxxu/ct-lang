@@ -136,7 +136,7 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
 | `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
-| 其它普通 C 代码 | **L0 / L2**：原样透传；**ct-ast**（安装入口）解析并重新发射已实现的 C 子集（逐项见 [language-spec](docs/language-spec.md) §4），没有已知的未实现形式（`__attribute__((…))` 见 §4.36；整数字面量后缀、`static_assert`、`_Noreturn`、`__restrict` 见 §4.37） |
+| 其它普通 C 代码 | **L0 / L2**：原样透传；**ct-ast**（安装入口）解析并重新发射已实现的 C 子集（逐项见 [language-spec](docs/language-spec.md) §4），没有已知的未实现形式（`__attribute__((…))` 见 §4.36；整数字面量后缀、`static_assert`、`_Noreturn`、`__restrict` 见 §4.37；`_Atomic(type)`、`_Alignas` 与属性的前置写法见 §4.38） |
 
 > `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。`map`（Phase 11）**只属 ct-ast**，L0 与 L2 都不认识。反过来，「原样透传」只对 L0 / L2 成立：ct-ast 会解析并重新发射，因此它接受的是 language-spec §4 记录的 C 子集——`switch` / `do-while` / `goto` / 位域 / 变参 / 逗号 / 表达式里的赋值等都已支持。
 
@@ -601,7 +601,7 @@ From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, an
 | `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
 | `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
 | `g.greet();` | `g.vt->greet(g.self);` (dispatches at run time to whatever was boxed) |
-| any other ordinary C code | **L0 / L2**: copied through verbatim; **ct-ast** (the installed entry) parses and re-emits the implemented C subset (item by item in §4 of the [language-spec](docs/language-spec.md)); no known form is missing (`__attribute__((…))` is in §4.36; integer literal suffixes, `static_assert`, `_Noreturn` and `__restrict` are in §4.37) |
+| any other ordinary C code | **L0 / L2**: copied through verbatim; **ct-ast** (the installed entry) parses and re-emits the implemented C subset (item by item in §4 of the [language-spec](docs/language-spec.md)); no known form is missing (`__attribute__((…))` is in §4.36; integer literal suffixes, `static_assert`, `_Noreturn` and `__restrict` are in §4.37; `_Atomic(type)`, `_Alignas` and leading attributes are in §4.38) |
 
 > Module-system syntax — `namespace` / `A::B::Name` qualified references / `pub` / `import` — is **not
 > accepted by L0** (moved out in Phase 0.3; redone on the CT line in Phases 2–5, see below). Written in

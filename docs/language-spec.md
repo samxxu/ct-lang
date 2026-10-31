@@ -1214,6 +1214,39 @@ static int mix(const int *__restrict a, int *__restrict__ b) { return *a + *b; }
   `void f(void) {}` 不会把它抹掉。
 - `__restrict` / `__restrict__` 与 `restrict` 同义，原样保留在类型拼写里。
 
+#### 4.38 头文件里的写法顺序（ct-ast）
+
+```c
+_Atomic(int) counter;                          /* 也可写 _Atomic int */
+_Alignas(16) static int aligned;
+__attribute__((aligned(32))) static int tagged;
+
+__attribute__((unused)) static int helper(int n);   /* 原型在前，定义不带属性 */
+
+int main(void)
+{
+    _Alignas(8) static int local;
+    __attribute__((unused)) int spare = 7;
+    int trailing __attribute__((unused));
+
+    printf("%d\n", (int)sizeof(_Atomic(int)));
+    return 0;
+}
+```
+
+- `_Atomic(type)` 与裸 `_Atomic` 都作为类型拼写原样保留，声明、块作用域、cast 与 `sizeof`
+  都能识别；原子语义完全由 C 编译器负责。
+- `_Alignas(…)` 可以写在存储类**之前**（文件与块作用域都接受）。发射统一为规范顺序
+  `static _Alignas ( 16 ) int aligned;`；同一声明写两次报
+  `duplicate _Alignas on one declaration`。
+- GNU `__attribute__((…))` 可以写在**声明符之前**：全局变量、函数原型 / 定义、局部变量；
+  局部变量也接受尾部写法。无论源里写在哪一侧，发射都放在声明尾部（局部变量的 `=`
+  之前）。同一声明两侧都写报 `duplicate __attribute__ on one declaration`；属性后面
+  不是声明时报 `an attribute must prefix a declaration`。
+- `_Atomic(type)` 的括号未闭合报 `unterminated _Atomic`。
+- 边界：`typedef` / `trait` / `impl` / 记录定义上的属性仍不在子集内；`_Alignas` 的语义
+  （能否用于某个对象）由 C 编译器判断。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2698,6 +2731,41 @@ static int mix(const int *__restrict a, int *__restrict__ b) { return *a + *b; }
 - A function's `_Noreturn` belongs to the **first declaration**: `void f(void) {}` after
   `_Noreturn void f(void);` does not erase it.
 - `__restrict` / `__restrict__` are synonyms of `restrict` and stay in the type spelling verbatim.
+
+#### 4.38 Header-style declaration order (ct-ast)
+
+```c
+_Atomic(int) counter;                          /* `_Atomic int` works too */
+_Alignas(16) static int aligned;
+__attribute__((aligned(32))) static int tagged;
+
+__attribute__((unused)) static int helper(int n);   /* prototype first, plain definition */
+
+int main(void)
+{
+    _Alignas(8) static int local;
+    __attribute__((unused)) int spare = 7;
+    int trailing __attribute__((unused));
+
+    printf("%d\n", (int)sizeof(_Atomic(int)));
+    return 0;
+}
+```
+
+- `_Atomic(type)` and bare `_Atomic` are both kept in the type spelling, and declarations,
+  block scope, casts and `sizeof` all recognise them; the atomic semantics belong to the C
+  compiler.
+- `_Alignas(…)` may be written **before** the storage class (file and block scope alike). The
+  emitter normalises the order to `static _Alignas ( 16 ) int aligned;`; writing it twice in one
+  declaration reports `duplicate _Alignas on one declaration`.
+- A GNU `__attribute__((…))` may appear **before the declarator** on globals, function prototypes /
+  definitions and local variables; a local also accepts the trailing form. Wherever it is written,
+  it is emitted at the declaration's trailing position (before `=` on a local). Writing it on both
+  sides reports `duplicate __attribute__ on one declaration`; an attribute that is not followed by
+  a declaration reports `an attribute must prefix a declaration`.
+- An unclosed `_Atomic(type)` reports `unterminated _Atomic`.
+- Boundaries: attributes on `typedef` / `trait` / `impl` / record definitions remain outside the
+  subset; whether `_Alignas` applies to a given object is the C compiler's verdict.
 
 ### 5. Naming contract
 
