@@ -2901,8 +2901,25 @@ impl EmitOps for Emitter {
             if (i > 0) fputc(',', f);
             fputs("{\"trait\":\"", f);
             self->emit_json_str(f, self->maps[i].trait);
-            if (self->maps[i].is_static) fputs("\",\"static\":true,\"instance\":\"", f);
-            else fputs("\",\"instance\":\"", f);
+            if (self->maps[i].is_static) {
+                int su = self->maps[i].unit;
+                fputs("\",\"static\":true", f);
+                /* A mapping unit's shim is part of that map's definition, so the
+                   JSON names the files a consumer build has to carry. */
+                if (self->units && su >= 0 && su < *self->nunits
+                    && self->units[su].has_shim) {
+                    fputs(",\"shim\":{\"header\":\"", f);
+                    self->emit_json_str(f, self->units[su].shim_h);
+                    if (self->units[su].shim_c[0]) {
+                        fputs("\",\"source\":\"", f);
+                        self->emit_json_str(f, self->units[su].shim_c);
+                    }
+                    fputs("\"}", f);
+                }
+                fputs(",\"instance\":\"", f);
+            } else {
+                fputs("\",\"instance\":\"", f);
+            }
             self->emit_json_str(f, self->maps[i].inst);
             fputs("\",\"host\":\"", f);
             if (self->maps[i].type_host) fputs("type", f);

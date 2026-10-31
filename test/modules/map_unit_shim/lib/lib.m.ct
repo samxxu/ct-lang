@@ -2,10 +2,12 @@ namespace lib;
 
 pub trait Io {
     int err();
+    void clear();
     int next();
 }
 
 map trait Io for namespace lib {
-    err() -> ct_shim_errno();
-    next() -> ct_shim_next();
+    err()   -> ct_shim_errno();
+    clear() -> ct_shim_clear();
+    next()  -> ct_shim_next();
 }

@@ -180,7 +180,9 @@
 # test/modules/map_unit_shim pins the wiring, the cold/warm cache and the
 # touching of the shim header; bindings/posix-socket is the real-library demo
 # (a header-only shim over socketpair / write / read / errno). A shim source
-# without its header is rejected by name.
+# without its header is rejected by name, a shim header that is not a regular
+# file is rejected too, a static map's JSON carries the shim files, and two
+# mapping units that share a base name are an error rather than a silent pick.
 #
 # The unit-name lint keeps `selfhost/ct-ast/**` on the layout rule: a unit file
 # is named after its main type, so every `.h.ct` declares a type or trait whose
@@ -705,6 +707,22 @@ else
     bad "map_unit_shim cache" "main.c was not rebuilt after the shim header changed"
 fi
 
+# A static map's JSON names its shim, so a tool that consumes the map (an IDE,
+# a packager) can carry the two C files; a map without one keeps the old shape.
+rm -rf "$work/mmshmap" "$work/mnumap"
+mkdir -p "$work/mmshmap" "$work/mnumap"
+if "$work/ct-ast" build --emit-map "$work/mmshmap/main.map" "$work/mmshsrc/main.ct" \
+        -o "$work/mmshmap" >"$work/mmshmap.out" 2>"$work/mmshmap.err" \
+   && grep -qF "\"shim\":{\"header\":\"$work/mmshsrc/lib/lib.shim.h\"" "$work/mmshmap/main.map" \
+   && grep -qF "\"source\":\"$work/mmshsrc/lib/lib.shim.c\"" "$work/mmshmap/main.map" \
+   && "$work/ct-ast" build --emit-map "$work/mnumap/main.map" test/modules/map_unit/main.ct \
+        -o "$work/mnumap" >/dev/null 2>&1 \
+   && ! grep -qF '"shim"' "$work/mnumap/main.map"; then
+    ok "map_unit_shim (--emit-map names the shim files; a plain map says nothing)"
+else
+    bad "map_unit_shim map JSON" "$(cat "$work/mmshmap.err" 2>/dev/null | head -5)"
+fi
+
 # A shim source without its header cannot declare anything for a recipe, so it
 # is rejected by name rather than left for the linker.
 rm -rf "$work/mbsc"
@@ -716,10 +734,51 @@ printf 'import lib::lib;\n\nint main(void) { return lib::T.m(); }\n' >"$work/mbs
 if "$work/ct-ast" build "$work/mbsc/main.ct" -o "$work/mbsc/out" \
         >"$work/mbsc.out" 2>"$work/mbsc.err"; then
     bad "batch 39: shim_source_without_header" "expected a non-zero exit"
-elif grep -qF 'a shim source needs a matching .shim.h' "$work/mbsc.err"; then
+elif grep -qF 'a shim source needs a matching .shim.h' "$work/mbsc.err" \
+     && grep -qF "$work/mbsc/lib/lib.shim.h" "$work/mbsc.err"; then
     ok "batch 39 (shim_source_without_header)"
 else
     bad "batch 39: shim_source_without_header" "$(head -2 "$work/mbsc.err")"
+fi
+
+# A shim header must be a regular file: a directory with that name is rejected
+# up front rather than left to the C compiler's include search.
+rm -rf "$work/mbsd"
+mkdir -p "$work/mbsd/lib" "$work/mbsd/out"
+printf 'namespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> ct_x(); }\n' \
+    >"$work/mbsd/lib/lib.m.ct"
+mkdir "$work/mbsd/lib/lib.shim.h"
+printf 'import lib::lib;\n\nint main(void) { return lib::T.m(); }\n' >"$work/mbsd/main.ct"
+if "$work/ct-ast" build "$work/mbsd/main.ct" -o "$work/mbsd/out" \
+        >/dev/null 2>"$work/mbsd.err"; then
+    bad "batch 39: shim_header_not_a_file" "expected a non-zero exit"
+elif grep -qF 'a shim header is not a readable file' "$work/mbsd.err"; then
+    ok "batch 39 (shim_header_not_a_file)"
+else
+    bad "batch 39: shim_header_not_a_file" "$(head -2 "$work/mbsd.err")"
+fi
+
+# Two mapping units in different directories may share a base name; both would
+# become include roots for `<base>.shim.h`, so the build refuses to pick one.
+rm -rf "$work/mdup"
+mkdir -p "$work/mdup/a" "$work/mdup/b" "$work/mdup/out"
+printf 'namespace a;\npub trait TA { int m(); }\nmap trait TA for namespace a { m() -> ct_a_x(); }\n' \
+    >"$work/mdup/a/lib.m.ct"
+printf 'static inline int ct_a_x(void) { return 1; }\n' >"$work/mdup/a/lib.shim.h"
+printf 'namespace b;\npub trait TB { int m(); }\nmap trait TB for namespace b { m() -> ct_b_x(); }\n' \
+    >"$work/mdup/b/lib.m.ct"
+printf 'static inline int ct_b_x(void) { return 2; }\n' >"$work/mdup/b/lib.shim.h"
+printf 'import a::lib;\nimport b::lib;\n\nint main(void) { return a::TA.m() + b::TB.m(); }\n' \
+    >"$work/mdup/main.ct"
+if "$work/ct-ast" build "$work/mdup/main.ct" -o "$work/mdup/out" \
+        >/dev/null 2>"$work/mdup.err"; then
+    bad "batch 39: shim_base_ambiguous" "expected a non-zero exit"
+elif grep -qF "shim base name 'lib' is ambiguous" "$work/mdup.err" \
+     && grep -qF "$work/mdup/b" "$work/mdup.err" \
+     && [ ! -f "$work/mdup/out/main.c" ]; then
+    ok "batch 39 (shim_base_ambiguous, no artifacts)"
+else
+    bad "batch 39: shim_base_ambiguous" "$(head -2 "$work/mdup.err")"
 fi
 
 # The reference binding: a POSIX socket mapping whose shim holds the casts, the

@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 import backend::emit::Emitter;
 import backend::mem::Memory;
@@ -356,16 +357,33 @@ impl ModuleOps for Module {
             char h[MAX_PATH];
             char c[MAX_PATH];
             struct stat st;
+            /* The diagnostic names the file the user has to add, so it holds a
+               path; `sem_error` prints the message directly (no 160-byte cap). */
+            char msg[MAX_PATH + 128];
             if (self->path_dir(path, dir, sizeof dir) != 0) return -1;
-            snprintf(h, sizeof h, "%s/%s.shim.h", dir, self->units[u].base);
-            snprintf(c, sizeof c, "%s/%s.shim.c", dir, self->units[u].base);
-            if (stat(h, &st) == 0)
+            if (snprintf(h, sizeof h, "%s/%s.shim.h", dir, self->units[u].base) >= (int)sizeof h
+             || snprintf(c, sizeof c, "%s/%s.shim.c", dir, self->units[u].base) >= (int)sizeof c) {
+                self->fail("path is too long");
+                return -1;
+            }
+            if (stat(h, &st) == 0) {
+                if (!S_ISREG(st.st_mode) || access(h, R_OK) != 0) {
+                    snprintf(msg, sizeof msg, "a shim header is not a readable file: %s", h);
+                    return tool::diag::ct_sem_error(1, 1, msg, path);
+                }
                 snprintf(self->units[u].shim_h, MAX_PATH, "%s", h);
-            if (stat(c, &st) == 0)
+            }
+            if (stat(c, &st) == 0) {
+                if (!S_ISREG(st.st_mode)) {
+                    snprintf(msg, sizeof msg, "a shim source is not a regular file: %s", c);
+                    return tool::diag::ct_sem_error(1, 1, msg, path);
+                }
                 snprintf(self->units[u].shim_c, MAX_PATH, "%s", c);
-            if (self->units[u].shim_c[0] && !self->units[u].shim_h[0])
-                return tool::diag::ct_sem_error(1, 1,
-                    "a shim source needs a matching .shim.h", path);
+            }
+            if (self->units[u].shim_c[0] && !self->units[u].shim_h[0]) {
+                snprintf(msg, sizeof msg, "a shim source needs a matching .shim.h: %s", h);
+                return tool::diag::ct_sem_error(1, 1, msg, path);
+            }
             if (self->units[u].shim_h[0]) {
                 self->units[u].has_shim = 1;
                 snprintf(self->units[u].shim_dir, MAX_PATH, "%s", dir);
@@ -854,6 +872,23 @@ impl ModuleOps for Module {
         for (u = 0; u < self->nunits; u++) {
             if (self->check_ns_dir(u) != 0) {
                 return frontend::parse::ct_parse_report();
+            }
+        }
+        /* A shim header is found by base name, so two mapping units with the
+           same base in different directories would both put `<base>.shim.h` on
+           the include path and the C compiler would silently pick the first
+           root. A clash is a build error, not a coin toss. */
+        for (u = 0; u < self->nunits; u++) {
+            int k;
+            if (!self->units[u].is_map || !self->units[u].has_shim) continue;
+            for (k = 0; k < u; k++) {
+                if (!self->units[k].is_map || !self->units[k].has_shim) continue;
+                if (strcmp(self->units[k].base, self->units[u].base) != 0) continue;
+                if (strcmp(self->units[k].shim_dir, self->units[u].shim_dir) == 0) continue;
+                fprintf(stderr, "ctc: shim base name '%s' is ambiguous: %s and %s\n",
+                        self->units[u].base,
+                        self->units[k].shim_dir, self->units[u].shim_dir);
+                return 1;
             }
         }
         /* Incremental cache (Phase 6.3, ported in 10.5): a unit whose key still
