@@ -1,5 +1,5 @@
 /*
- * diag.ct - the warning store and the semantic-error counter, one unit of its own.
+ * diag.h.ct - the warning store and the semantic-error counter, one unit of its own.
  *
  * Warnings are recorded from two places (a signature mismatch while parsing an
  * impl, a potential leak while analysing memory) and printed once at the end;

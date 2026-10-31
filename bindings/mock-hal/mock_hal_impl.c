@@ -1,7 +1,7 @@
 /*
  * mock_hal_impl.c - the fake HAL implementation (no external dependency).
  *
- * The layout below is the one the binding mirrors in uart.ct.
+ * The layout below is the one the binding mirrors in uart.h.ct.
  */
 #include "mock_hal.h"
 

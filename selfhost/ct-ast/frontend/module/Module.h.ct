@@ -5,7 +5,7 @@
  * closure, validating a unit's directory against its `namespace`, ordering the
  * units for the incremental cache, and driving the emitter for every unit. The
  * compile-mode entry (`run`) stays with the driver object in
- * tool/driver/driver.ct; this unit holds the state the two share -- the unit
+ * tool/driver/driver.h.ct; this unit holds the state the two share -- the unit
  * table, the run options and the current path -- so those methods are real
  * methods on an object rather than free functions over file-scope globals.
  *
@@ -235,8 +235,11 @@ impl ModuleOps for Module {
         return 0;
     }
 
-    /* `a::b` -> `<root>/a/b.ct`, then `a/b.h.ct`, for the importing file's own
-       directory and then every `-I` root. */
+    /* A unit's interface lives in its header, so only a `.h.ct` unit can be
+       imported. The search is two passes -- first every root for `a/b.h.ct`
+       (the importer's own directory, then the `-I` roots, in command-line
+       order), then every root for `a/b.ct`: a plain unit there is the mistake
+       worth naming, because it is an implementation file. */
     int resolve_import(const char *from, const char *rel, char *out, int cap, int *is_hdr)
     {
         char dir[MAX_PATH];
@@ -249,15 +252,6 @@ impl ModuleOps for Module {
         if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
         for (r = -1; r < self->ninc; r++) {
             root = (r < 0) ? dir : self->incdirs[r];
-            if (snprintf(cand, sizeof cand, "%s/%s.ct", root, rel) >= (int)sizeof cand)
-                return self->fail("import path is too long");
-            f = fopen(cand, "rb");
-            if (f) {
-                fclose(f);
-                *is_hdr = 0;
-                if (snprintf(out, (size_t)cap, "%s", cand) >= cap) return self->fail("import path is too long");
-                return 0;
-            }
             if (snprintf(cand, sizeof cand, "%s/%s.h.ct", root, rel) >= (int)sizeof cand)
                 return self->fail("import path is too long");
             f = fopen(cand, "rb");
@@ -266,6 +260,20 @@ impl ModuleOps for Module {
                 *is_hdr = 1;
                 if (snprintf(out, (size_t)cap, "%s", cand) >= cap) return self->fail("import path is too long");
                 return 0;
+            }
+        }
+        for (r = -1; r < self->ninc; r++) {
+            root = (r < 0) ? dir : self->incdirs[r];
+            if (snprintf(cand, sizeof cand, "%s/%s.ct", root, rel) >= (int)sizeof cand)
+                return self->fail("import path is too long");
+            f = fopen(cand, "rb");
+            if (f) {
+                fclose(f);
+                if (snprintf(cand, sizeof cand,
+                             "only a .h.ct unit can be imported: rename '%s.ct' to '%s.h.ct'",
+                             rel, rel) >= (int)sizeof cand)
+                    return self->fail("import path is too long");
+                return self->fail(cand);
             }
         }
         snprintf(cand, sizeof cand, "cannot resolve import '%s'", rel);
@@ -771,7 +779,7 @@ impl ModuleOps for Module {
                 return 1;
             }
             if (!self->have_map && self->cache_key_of(u, key, sizeof key) == 0
-                && self->cache->hit(outc, key))
+                && self->cache->hit(outc, key, self->units[u].is_hdr))
                 dirty[u] = 0;
             for (k = 0; k < self->units[u].ndep; k++)
                 if (dirty[self->units[u].depu[k]]) dirty[u] = 1;
@@ -789,7 +797,7 @@ impl ModuleOps for Module {
                     remove(outc);
                 return frontend::parse::ct_parse_report();
             }
-            if (self->write_unit_header(u) != 0) {
+            if (self->units[u].is_hdr && self->write_unit_header(u) != 0) {
                 return frontend::parse::ct_parse_report();
             }
             /* stamped only after a successful emit: a failed unit must never be
@@ -852,9 +860,15 @@ impl ModuleOps for Module {
         return 0;
     }
 
+    /* Compile mode has no unit table, so the rule is read from the input path:
+       a `.h.ct` source publishes its header, a plain `.ct` one does not. */
     int write_header(const char *outc)
     {
         const char *why;
+        size_t pl;
+        (void)self;
+        pl = strlen(self->path);
+        if (!(pl > 5 && strcmp(self->path + pl - 5, ".h.ct") == 0)) return 0;
         if (backend::emit::ct_emit_header(outc) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);

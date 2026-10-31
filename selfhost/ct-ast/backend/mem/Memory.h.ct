@@ -332,7 +332,7 @@ impl MemoryOps for Memory {
 
     /* Record one leak warning. `path_line` 0 means a definite leak; otherwise it
        is the conditional return that leaves the object behind. The store lives in
-       diag.ct; this method only computes the fields it needs. */
+       diag.h.ct; this method only computes the fields it needs. */
     int warn_leak(int vi, int path_line)
     {
         int kind;

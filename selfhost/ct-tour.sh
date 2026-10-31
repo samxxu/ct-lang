@@ -361,7 +361,8 @@ fi
 banner "8) the incremental cache: a second build reuses unchanged units"
 say "Phase 6.3: 'build' stamps every unit with a key -- its path, mtime, size, the"
 say "run's options and its dependencies' keys -- under <outdir>/.ctcache/. When the"
-say "key still matches and the .c/.h are on disk, the unit is not regenerated."
+say "key still matches and the artefacts are on disk (.c always, .h only for a .h.ct unit), the"
+say "unit is not regenerated."
 cachesrc="$work/cachesrc"
 cacheout="$work/cacheout"
 rm -rf "$cachesrc" "$cacheout"
@@ -375,7 +376,7 @@ mtime() {
 
 printf '\n+ %s build %s -o %s   (cold cache)\n' "$ct_bin" "$cachesrc/main.ct" "$cacheout"
 "$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
-if [ -f "$cacheout/main.c" ] && [ -f "$cacheout/main.h" ]; then
+if [ -f "$cacheout/main.c" ] && [ -f "$cacheout/shapes.h" ] && [ ! -f "$cacheout/main.h" ]; then
     # Back-date the artifacts: if a second build rewrites them, their mtime moves.
     touch -t 200001010000 "$cacheout/main.c" "$cacheout/shapes.c" "$cacheout/impl_dog.c"
     before="$(mtime "$cacheout/main.c")"
@@ -401,7 +402,7 @@ if [ -f "$cacheout/main.c" ] && [ -f "$cacheout/main.h" ]; then
         fail=1
     fi
 else
-    printf 'FAIL: the cold build produced no main.c/main.h\n'
+    printf 'FAIL: the cold build produced no main.c/shapes.h (or wrote a header for the plain main.ct)\n'
     fail=1
 fi
 

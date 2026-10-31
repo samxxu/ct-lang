@@ -18,7 +18,7 @@ pub struct Unit {
     int  depu[32];              /* the dependency's unit index (cache folding) */
     int  ndep;
     int  prog;
-    int  is_hdr;
+    int  is_hdr;                /* a `.h.ct` unit: publishes a header, importable */
     int  fn_start;
     int  fn_end;
     int  tr_start;

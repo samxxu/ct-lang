@@ -73,7 +73,7 @@ mkdir -p "$work/proj" "$work/pkgs/util" "$work/pkgs/extra"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
 printf 'import util;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$work/proj/main.ct"
 printf 'name = util\nversion = 0.2.0\nlicense = MIT\ndep = ../extra@^0.1.0\n' >"$work/pkgs/util/ct.pkg"
-printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/pkgs/util/util.ct"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/pkgs/util/util.h.ct"
 printf 'name = extra\nversion = 0.1.0\n' >"$work/pkgs/extra/ct.pkg"
 printf 'int extra_value(void) { return 7; }\n' >"$work/pkgs/extra/extra.c"
 ok "fixtures created"
@@ -85,7 +85,7 @@ if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/util >"$work/get.out" 2>"$wor
 else
     bad "ct get" "non-zero exit: $(cat "$work/get.err")"
 fi
-if [ -f "$work/proj/vendor/util/ct.pkg" ] && [ -f "$work/proj/vendor/util/util.ct" ]; then
+if [ -f "$work/proj/vendor/util/ct.pkg" ] && [ -f "$work/proj/vendor/util/util.h.ct" ]; then
     ok "vendors the requested package"
 else
     bad "ct get" "vendor/util is incomplete"
@@ -133,7 +133,7 @@ fi
 
 echo
 echo "== ct install rejects a tampered vendor tree =="
-printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.ct"
+printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.h.ct"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/it.out" 2>"$work/it.err" ); then
     bad "install tamper" "expected a non-zero exit"
 elif grep -Fq "does not match ct.lock" "$work/it.err"; then
@@ -141,7 +141,7 @@ elif grep -Fq "does not match ct.lock" "$work/it.err"; then
 else
     bad "install tamper" "wrong diagnostic: $(cat "$work/it.err")"
 fi
-printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.ct"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
 
 echo
 echo "== ct install rejects a missing vendored package =="

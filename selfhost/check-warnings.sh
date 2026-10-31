@@ -13,7 +13,7 @@
 #   - test/ast/*/prog.ct            (one unit per fixture);
 #   - test/cases/*.ct + examples/*/*.ct (compile mode; a dialect demo is
 #     expanded by its plugins first, as in check-ast.sh);
-#   - test/modules/*/main.ct        (build mode, all units);
+#   - test/modules/*/main.ct or main.h.ct (build mode, all units);
 #   - bindings/mock-hal/demo.ct     (build mode, with the binding's -I root).
 #
 # The gate is strict on purpose. `_self` / vtable / Drop helpers used to warn
@@ -154,7 +154,15 @@ echo "== modules (build mode) =="
 for d in test/modules/*/; do
     d="${d%/}"
     name="$(basename "$d")"
-    [ -f "$d/main.ct" ] || continue
+    # a fixture's entry is `main.ct`, or `main.h.ct` when the unit that carries
+    # the source `#include` lines must publish a header (hdr, hdr_prologue)
+    if [ -f "$d/main.ct" ]; then
+        main="$d/main.ct"
+    elif [ -f "$d/main.h.ct" ]; then
+        main="$d/main.h.ct"
+    else
+        continue
+    fi
     # dup_impl, ambig_global and ambig_type are negative fixtures: the compiler
     # must refuse them (check-ast.sh owns those assertions), so they have no
     # generated C.
@@ -164,12 +172,12 @@ for d in test/modules/*/; do
     rm -rf "$work/mod-$name"
     mkdir -p "$work/mod-$name" || continue
     if [ -d "$d/extra" ]; then
-        if ! "$work/ct-ast" build "$d/main.ct" -I "$d/extra" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
+        if ! "$work/ct-ast" build "$main" -I "$d/extra" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
             bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
             continue
         fi
     else
-        if ! "$work/ct-ast" build "$d/main.ct" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
+        if ! "$work/ct-ast" build "$main" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
             bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
             continue
         fi

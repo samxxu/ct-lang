@@ -1802,7 +1802,11 @@ impl EmitOps for Emitter {
                 self->version, self->path);
         fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
               self->out);
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
+        /* Only a `.h.ct` unit publishes a header, so only it includes one of
+           its own; an implementation unit's `.c` carries every declaration it
+           needs (the types are emitted below, no longer skipped as `pub`). */
+        if (self->units[u].is_hdr)
+            fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
         for (i = 0; i < self->units[u].ndep; i++)
             fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
         fputs("\n", self->out);
@@ -1816,11 +1820,12 @@ impl EmitOps for Emitter {
         if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
 
         for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            /* A `pub` struct/typedef/enum/union is in the header, so only a
-               private one is emitted here. */
+            /* A `pub` struct/typedef/enum/union is in the header of a header
+               unit, so only a private one is emitted here; an implementation
+               unit has no header, so it emits all of them. */
             if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
                  || self->arena->nodes[n].kind == N_ENUM || self->arena->nodes[n].kind == N_UNION)
-                && self->arena->nodes[n].d != 1) {
+                && (self->arena->nodes[n].d != 1 || !self->units[u].is_hdr)) {
                 if (self->emit_type_decl(n, 0, 1) != 0) return -1;
             }
         }

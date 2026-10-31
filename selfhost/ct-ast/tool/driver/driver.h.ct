@@ -1,5 +1,5 @@
 /*
- * driver.ct - the compile-mode driver, one unit of its own.
+ * driver.h.ct - the compile-mode driver, one unit of its own.
  *
  * `ct <file> -o <file>` (compile mode): the CLI loop, the one-shot run setup
  * (reset the pools and the tables, point the source path, lex and parse) and

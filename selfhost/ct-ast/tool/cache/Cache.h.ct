@@ -24,7 +24,7 @@ pub trait CacheOps {
     int  key(const char *path, const char *imports, unsigned long dep,
              int line_force, int diag_json, const char *nsroot, char *out, int cap);
     int  paths(const char *outc, char *dir, int dcap, char *kf, int kcap);
-    int  hit(const char *outc, const char *key);
+    int  hit(const char *outc, const char *key, int need_h);
     void store(const char *outc, const char *key);
 }
 
@@ -95,8 +95,10 @@ impl CacheOps for Cache {
     }
 
     /* A hit needs the key file to match byte for byte and both artefacts on
-       disk: a key whose .c/.h were deleted must not be reused. */
-    int hit(const char *outc, const char *key)
+       disk: a key whose .c/.h were deleted must not be reused. Only a `.h.ct`
+       unit writes a header, so `need_h` is 0 for an implementation unit and the
+       `.h` probe is skipped there. */
+    int hit(const char *outc, const char *key, int need_h)
     {
         char dir[MAX_PATH];
         char kf[MAX_PATH];
@@ -113,13 +115,15 @@ impl CacheOps for Cache {
         fclose(f);
         kl = strlen(key);
         if (n != kl || memcmp(buf, key, kl) != 0) return 0;
-        if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
-        hl = strlen(hp);
-        if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
-        hp[hl - 1] = 'h';
-        f = fopen(hp, "rb");
-        if (!f) return 0;
-        fclose(f);
+        if (need_h) {
+            if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
+            hl = strlen(hp);
+            if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
+            hp[hl - 1] = 'h';
+            f = fopen(hp, "rb");
+            if (!f) return 0;
+            fclose(f);
+        }
         f = fopen(outc, "rb");
         if (!f) return 0;
         fclose(f);
