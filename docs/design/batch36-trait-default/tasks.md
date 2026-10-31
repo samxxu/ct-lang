@@ -2,7 +2,7 @@
 
 依据：`docs/design/batch36-trait-default/spec.md`
 
-## [ ] T1 解析：trait 方法可带默认体
+## [x] T1 解析：trait 方法可带默认体
 
 - `selfhost/ct-ast/frontend/sym/Symbols.h.ct` 的 `struct MethodSig`（第 85 行起）增加
   `int has_default;` 与默认体节点索引；`struct Trait` 不变。
@@ -12,7 +12,7 @@
   默认体解析不要回退这个前瞻。
 - 此时先**不改**完整性校验，确保现有用例仍全绿（纯解析层落地）。
 
-## [ ] T2 发射：混合形态补齐默认方法
+## [x] T2 发射：混合形态补齐默认方法
 
 - `selfhost/ct-ast/backend/emit/Emit.h.ct` 的 `emit_impls`（第 552 行起）：对每个 impl，
   先发射显式方法，再对「trait 有默认体且 impl 未写」的方法用默认体展开为
@@ -21,7 +21,7 @@
 - 确认展开时 `self` 的绑定与现有 impl 方法一致（`struct <S> *`），派发沿用发射期规则，
   不新增派发路径。
 
-## [ ] T3 采纳无 impl：全 default trait
+## [x] T3 采纳无 impl：全 default trait
 
 - `use Trait;` 存在、无对应 `impl` 时，仍为该 (struct, trait) 生成默认实现与 vtable。
   位置：`emit_impls` 的方法遍历需要同时覆盖 `sym->structs[si].use[]`（`nuse`），
@@ -29,7 +29,7 @@
 - 复用 `vtable_exported`（第 979 行）判定 `pub` 导出，规则不变。
 - 非全 default 的 trait 若只有 `use` 没有 `impl`，仍按 SH-8 报缺方法。
 
-## [ ] T4 诊断
+## [x] T4 诊断
 
 - 环检测：对默认体的派发调用图做一次检查，无 abstract 叶子且成环时报
   `trait 'T' has no non-default method to break the cycle`（位置在 trait 声明行）。
@@ -38,7 +38,7 @@
 - 两个新负例：`test/ast/errors/default_cycle.ct`、`test/ast/errors/abstract_missing.ct`
   （后者钉住 SH-8 的行为不变）。
 
-## [ ] T5 用例与文档
+## [x] T5 用例与文档
 
 - 正例：`test/ast/25_trait_default/`（混合 + 覆盖一个默认方法）、
   `test/ast/26_trait_all_default/`（只有 `use`、无 `impl`），各含 `prog.ct` 与
@@ -48,7 +48,7 @@
   覆盖优先级、环诊断；与 D-1（每 struct 一份）写明。
 - `docs/roadmap.md` 的 Post-Phase-12 补记第三十六批（中英）。
 
-## [ ] T6 验证与提交
+## [x] T6 验证与提交
 
 - `bash selfhost/check-ast.sh`、`bash selfhost/check-warnings.sh`、`bash selfhost/check-all.sh`
   如实记录数字。
