@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 
-> **适用版本**：v0.12.0，安装入口为 **ct-ast**。本教程只使用 `examples/**` 与 `test/**` 中已被门禁
+> **适用版本**：v0.13.0，安装入口为 **ct-ast**。本教程只使用 `examples/**` 与 `test/**` 中已被门禁
 > 跑过的写法，每条命令都可以直接粘贴执行；语法细节以 [language-spec](language-spec.md) 为准。
 >
 > 读完你会知道：怎么装、怎么编译第一个程序、生成物长什么样、方法派发怎么写、接口怎么装箱、
@@ -22,14 +22,14 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 → 用符号链接补上 `ctc` 别名。只下载源码，**不下载预编译二进制**，也不需要 `git`。
 
 ```sh
-ct -v            # ct v0.12.0        （安装入口，能力最全）
-ctc -v           # ctc v0.12.0       （兼容别名，同一个二进制）
+ct -v            # ct v0.13.0        （安装入口，能力最全）
+ctc -v           # ctc v0.13.0       （兼容别名，同一个二进制）
 ```
 
 | 需求 | 做法 |
 | --- | --- |
 | 装到别处 | `install.sh --prefix "$HOME/bin"` |
-| 装指定版本 | `install.sh --version v0.12.0`（默认装 `main`） |
+| 装指定版本 | `install.sh --version v0.13.0`（默认装 `main`） |
 | 从本地 clone 装（离线） | `CT_SOURCE_DIR=. sh install.sh` |
 | 换编译器 | `CC=gcc sh install.sh` |
 | 只想试一下，不安装 | `gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc`（L0 只支持单文件核心语法） |
@@ -424,7 +424,7 @@ pub int mock_hal_send(char *buf, int len) {
 
 ## English
 
-> **Scope**: v0.12.0, installed entry is **ct-ast**. Every snippet below is taken from `examples/**` or
+> **Scope**: v0.13.0, installed entry is **ct-ast**. Every snippet below is taken from `examples/**` or
 > `test/**`, both of which the gates run; the grammar itself is defined in
 > [language-spec](language-spec.md).
 
@@ -440,14 +440,14 @@ It downloads the source archive, bootstraps the chain locally (L0 → L1 → L2 
 into `~/.local/bin` and adds the `ctc` alias as a symlink. No prebuilt binaries, no `git`.
 
 ```sh
-ct -v            # ct v0.12.0     (the installed entry, full capability)
-ctc -v           # ctc v0.12.0    (compatibility alias, same binary)
+ct -v            # ct v0.13.0     (the installed entry, full capability)
+ctc -v           # ctc v0.13.0    (compatibility alias, same binary)
 ```
 
 | Need | Command |
 | --- | --- |
 | install elsewhere | `install.sh --prefix "$HOME/bin"` |
-| pin a version | `install.sh --version v0.12.0` (default: `main`) |
+| pin a version | `install.sh --version v0.13.0` (default: `main`) |
 | install offline from a clone | `CT_SOURCE_DIR=. sh install.sh` |
 | different compiler | `CC=gcc sh install.sh` |
 | just try it, no install | `gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc` (single-file core only) |

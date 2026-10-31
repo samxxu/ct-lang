@@ -890,6 +890,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **限定调用 `Qual::fn(...)`（2026-10-21，用户确认）**：`Qual` 既可以是命名空间路径（`app::size(p)` → `app_size`），也可以是**类型名**（`Point::size(p)`：`Point` 的 C 名是 `app_Point`，去掉末段得到前缀 `app_`，于是命中 `app_size`）——后者是 OO 里「类型上的函数」的基本写法。第一版**只做调用**：定义仍写普通 `pub int size(Point p);`，不引入声明形式。`Qual` 解析为类型时命名空间是确定的，找不到函数即硬报错（`test/modules/ns_qual_missing/`）；解析为命名空间路径时 ct-ast 同样报错，L2 的行重写器没有命名空间表，退回「丢路径」的旧行为（只影响 L2 的错误质量）。正例 `test/modules/ns_qual/`（`Point::size`、`app::size`、裸 `scaled` 三者输出一致）。随后 ct-ast 全树把**跨命名空间的裸调用**（各单元的 `pub` 门面，如 `frontend::parse::ct_parse_program`、`backend::emit::ct_emit_unit`、`tool::diag::ct_sem_error`）一律改成限定写法，「全程序唯一同名」的第三级回退只留给迁移期语料；落库 C 名不变，golden 未动。
 - **退役「全程序唯一同名」回退（2026-10-21，仅 ct-ast）**：ct-ast 的 `resolve_func` 现在只查**本单元命名空间 → 根**，跨命名空间的裸调用一律硬报错（`that function lives in another namespace and needs a qualified call`，新负例 `test/modules/ns_bare_call/`）——调用目标从此静态可判定，不再依赖「全程序恰好只有一个同名函数」这种重构时会静默改变绑定的规则。两个命名空间导出同名函数时的歧义诊断保留（`test/modules/ns_fn_ambiguous/` 仍逐字匹配）。ct-ast 自身在片 3 的迁移后已不依赖该回退（自编不动点仍通过），此前实验（收紧后跑 `check-ast.sh`）只有 5 个 fixture 的裸调用失败，已改写成限定写法：`ns_dir`（`hal::ping` / `plain::twice`）、`alias`（`app::scaled`）、`ns_funcs`（`a::one` / `b::two`）、`ns_qual`（`app::scaled`），`test/modules/ns_funcs/main.expected.c` 随注释一同重生成。**L2 不跟随**：它是冻结的回归 oracle，保留回退行为，因此 `ns_bare_call` 只进 `check-ast.sh`（无 `build.args`，不进归档棘轮）。
 
+- **v0.13.0（2026-10-31，用户授权的一次 bump）**：ct-ast 的 C 子集补齐（第二十一至二十八批）——长初始化器（4 KiB/16 KiB 上限 + 字符串池）、变参函数指针、逗号表达式（语句 / `for` 首句 / 步进 / 括号内取值）、头文件里的类型名（声明、转换、`sizeof`）、表达式里的赋值（括号与条件，`own` 目标拒绝）、前缀 `++` / `--`；并把「ct-ast 编 `selfhost/l0/ctc.c` → 产物可编译 → 与 25 个 L0 golden 逐字节一致 → 跑通示例」固化为 `check-ast.sh` 的一节关卡。`CTC_VERSION` 五处同步 bump，`test/cases/**`（50 个文件）与三份 map golden 重生成（**仅版本 token 变化**）；clang 与 GCC 16 下九关全绿。
+
 ### 决策待定项
 
 | 问题 | 候选 | 影响 |
@@ -1007,7 +1009,7 @@ changing it requires regenerating every golden (see [AGENTS.md](../AGENTS.md) §
   not bumped gets a non-version tag (today `phase1-m2` marks the v0.1.0 milestone).
 - **Superseded (2026-10-17)**: the earlier "bump together with the single-entry `ct`" decision
   (option A) is replaced — the version is now bumped at each phase boundary (v0.4.0 → v0.5.0 →
-  v0.6.0 → v0.7.0 → v0.8.0 → v0.9.0 → v0.10.0 → v0.11.0 → v0.11.1 → v0.12.0), all goldens are regenerated each time, and the v0.1.0–v0.3.0 milestones are not
+  v0.6.0 → v0.7.0 → v0.8.0 → v0.9.0 → v0.10.0 → v0.11.0 → v0.11.1 → v0.12.0 → v0.13.0), all goldens are regenerated each time, and the v0.1.0–v0.3.0 milestones are not
   tagged separately (their non-version tags stay).
 - **Why a bump must be careful**: `CTC_VERSION` goes into the output banner, so one bump means
   regenerating the goldens under `test/cases/**` and `test/modules/**` (107 files for v0.8.0), and
@@ -2334,6 +2336,15 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   (`app::scaled`) — and `test/modules/ns_funcs/main.expected.c` was regenerated with its comment.
   **L2 does not follow**: as the frozen regression oracle it keeps the fallback, so `ns_bare_call`
   lives in `check-ast.sh` only (no `build.args`, and therefore not in the archive ratchet).
+- **v0.13.0 (2026-10-31, a user-authorised bump)**: the ct-ast C-subset batches 21–28 — long
+  initialisers (4 KiB / 16 KiB capture caps plus the string pool), variadic function pointers, the
+  comma operator (statement / `for` init / step / parenthesised value position), type names that only
+  a header declares (declarations, casts, `sizeof`), value-position assignments (parentheses and
+  conditions, `own` targets refused), and prefix `++` / `--`. The probe work is now a gate:
+  ct-ast compiles `selfhost/l0/ctc.c`, the generated C builds, its output matches all 25 L0 goldens
+  byte for byte, and the binary runs an example. `CTC_VERSION` is bumped in five places,
+  `test/cases/**` (50 files) and three map goldens are regenerated (**version token only**), and all
+  nine gates are green under both clang and GCC 16.
 
 ### Open decisions
 
