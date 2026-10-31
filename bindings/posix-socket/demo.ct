@@ -1,0 +1,20 @@
+import posix::socket;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int sv[2];
+    char buf[8];
+    int n;
+
+    if (posix::Socket.pair(sv) != 0) {
+        printf("pair failed: %d\n", posix::Socket.err());
+        return 1;
+    }
+    posix::Socket.send(sv[0], "hello", 5);
+    n = posix::Socket.recv(sv[1], buf, 5);
+    buf[n] = 0;
+    printf("%s %d\n", buf, n);
+    return 0;
+}

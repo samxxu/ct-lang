@@ -909,6 +909,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **第三十六批（2026-10-31，trait 默认方法）**：trait 方法可直接带默认体（`{ … }`；`;` 仍是抽象），impl 只写抽象方法；全 default 的 trait 只写 `use`、不需要 `impl`（外来类型写空 `impl T for S { }`，D-3）。默认体按 (struct, trait) 各展开一份，函数名与 vtable 槽沿用 `<S>_<T>_<m>`，派发沿用既有规则；impl 显式方法覆盖默认体。诊断：默认体成环（没有抽象叶子）报 `trait 'T' has no non-default method to break the cycle`；默认体在某个 struct 上不成立报 `trait T::m (declared at <path>:<line>) cannot be expanded for struct S: <reason>`，指回 trait 声明。新增正例 `test/ast/57_trait_default`（混合 + 覆盖）与 `58_trait_all_default`（仅 `use`），负例 `default_cycle` / `abstract_missing` / `default_bad_field`；language-spec §4.39。同批按用户授权把 `CTC_VERSION` 五处同步 bump 到 **v0.14.0**（L0/L1/L2 只动这一行），`test/cases/**` 50 个 golden 与 21 个含 banner 的 `test/modules/**` golden 重生成（仅版本 token 变化）；`check-ast.sh` 359 passed、`check-warnings.sh` 154 ok、`check-all.sh` 九关全绿。
 - **第三十八批（2026-10-31，已落地）**：`.m.ct` 零成本静态映射——新增编译期映射单元（不产任何 `.c`/`.h`）、静态 trait（无 `_iface`/`_vtable`）、命名空间静态调用 `host::Trait.method(…)` 与类型宿主 `map trait T for type char *`；调用点按 recipe 直接替换成裸 C 调用（`&p` 用 C99 compound literal），prologue 展开进消费者 `.c`，跨单元同样零 wrapper。正例 `test/modules/map_unit`（命名空间 + 类型宿主）、`map_unit_type`（数组 decay / 指针参数 / compound literal / 未用接收者）与 `map_unit_cross`（`.h.ct` 与 `.ct` 共用一份映射）；`check-ast.sh` 增加零产物、内联文本、`cc` 行、`--emit-map` 字段与 25 条负例精确消息断言。既有动态 `map` 产物逐字节不变；同批按用户授权把 `CTC_VERSION` 五处同步 bump 到 **v0.15.0**，`test/cases/**` 与 `test/modules/**` golden 仅版本 token 变化。规格见 [design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md)；附录记录了「C 库全量映射」的分层边界（`.m.ct` → C shim → `.h.ct` → 不支持）。节点池从 65536 抬到 131072（自编实测 69199 节点，属容量而非语言上限）。
 - **v0.15.1（2026-10-31，用户授权）**：修复 recipe 的 `sizeof` 两处缺陷（空白覆盖 `prev` 导致 `sizeof p` 被计为一次求值、实参副作用丢失与重复求值误报；`sizeof(p)` 的静默错义改为编译期拒绝），并把这两条与「普通单元里的 `for type`」固化为负例；新增 `test/modules/map_unit_chain` 与 warm / touch 断言覆盖传递 `.m.ct` import 及传递依赖缓存；修正 language-spec 的 `MAX_NODES` 文档漂移（65536 → 131072）与第三十八批 checklist。`CTC_VERSION` 五处同步，golden 仅版本 token 变化。
+- **第三十九批（2026-10-31，v0.15.1 之后，未 bump 版本）**：`.m.ct` 的**伴随 C shim**——映射单元可用同目录同名的 `<base>.shim.h` / `<base>.shim.c` 承接 recipe 写不出的形状（宏 / 语句宏、`errno` 等全局量、需要转换的调用、变参前缀转发、无 userdata 回调）。编译器只为 `.m.ct` 探测 shim；消费者的生成 `.c` 自动 `#include "<base>.shim.h"`（整行去重、先于该单元 prologue），`ct build` 的 `cc` 行自动加 `-I <shim 目录>` 并把存在的 `.shim.c` 列为源文件；shim 两文件的 `mtime.size` 折叠进映射单元缓存 key，改动即重建消费者；只有 `.shim.c` 没有 `.shim.h` 报 `a shim source needs a matching .shim.h`。正例 `test/modules/map_unit_shim`（头文件 + 源文件 + 缓存 warm/touch）与 `bindings/posix-socket/`（`socketpair` / `write` / `read` / `errno` 的头文件式 shim，真实库 demo）；`check-warnings.sh` 改为从 `cc` 行提取 `-I` 对并覆盖 `bindings/*/demo.ct`。规格见 [design/batch39-shim-layer/spec.md](design/batch39-shim-layer/spec.md)；`CTC_VERSION` 与既有 golden 均未变。
 
 ### 决策待定项
 
@@ -2482,6 +2483,21 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   and transitive cache invalidation; the language-spec `MAX_NODES` drift (65536 → 131072) and the
   batch-38 checklist are corrected. `CTC_VERSION` moved in lockstep; goldens moved by the version
   token only.
+
+**Batch 39 (2026-10-31, after v0.15.1, no version bump)**: the **sibling C shim** of a `.m.ct` — a
+  mapping unit may delegate the shapes a recipe cannot spell (macros and statement macros, globals
+  such as `errno`, calls that need a cast, prefixed varargs forwarding, callbacks without userdata) to
+  same-directory, same-base `<base>.shim.h` / `<base>.shim.c`. Only a `.m.ct` is probed; the
+  consumer's generated `.c` automatically carries `#include "<base>.shim.h"` (de-duplicated per whole
+  line, before that unit's prologue), the `ct build` `cc` line gains `-I <shim directory>` and lists an
+  existing `.shim.c` as a source, both shim files' `mtime.size` fold into the mapping unit's cache
+  key (touching either rebuilds the consumer), and a `.shim.c` without its `.shim.h` is rejected with
+  `a shim source needs a matching .shim.h`. Positives are `test/modules/map_unit_shim` (a header plus a
+  source, with cold / warm / touch assertions) and `bindings/posix-socket/` (a header-only shim over
+  `socketpair` / `write` / `read` / `errno`, a real-library demo); `check-warnings.sh` now takes the
+  `-I` pairs from the `cc` line and covers `bindings/*/demo.ct`. See
+  [design/batch39-shim-layer/spec.md](design/batch39-shim-layer/spec.md); neither `CTC_VERSION` nor
+  any existing golden moved.
 
 ### Open decisions
 

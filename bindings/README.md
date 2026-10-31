@@ -2,7 +2,8 @@
 
 > 中文 · [English](#english)
 >
-> 状态：v1（Phase 12，2026-10-19）。首个 binding 为 [mock-hal/](mock-hal/)。
+> 状态：v1（Phase 12，2026-10-19）。首个 binding 为 [mock-hal/](mock-hal/)；真实库参考为
+> [posix-socket/](posix-socket/)（第三十九批的伴随 C shim）。
 
 ---
 
@@ -50,6 +51,23 @@ map trait Controller for instance uart1 {          /* 5. 把方法绑到具体�
 v1 的 [mock-hal/](mock-hal/) 仍是**有状态**的 `.h.ct` + 动态 `map`（全局实例 `uart1`）；无状态部分
 可以另写 `mock_hal/mock_hal.m.ct` 走 `.m.ct`。`.m.ct` 的文件目录必须等于它的 `namespace`，且只承载
 `#include` / `#define` / `pub trait` / `map`，不产任何产物。
+
+### 2.2 C shim 的约定（第三十九批）
+
+recipe 写不出的形状（宏 / 语句宏、`errno` 这类全局量、需要转换的调用、变参前缀转发、无 userdata
+的回调）交给**同目录同名**的两个 C 文件：
+
+```
+<dir>/<base>.m.ct     映射单元
+<dir>/<base>.shim.h   shim 头（消费者生成 .c 会自动 #include 它）
+<dir>/<base>.shim.c   shim 源（可选；有它就必须有 .shim.h）
+```
+
+- `ct build` 的 `cc` 行自动加 `-I <shim 目录>`；`.shim.c` 直接列入该行源文件。
+- shim 两文件的变化会重建消费者；`.m.ct` 本身仍不产任何产物。
+- 头文件式 shim（只有 `.shim.h`，全 `static inline`）是最常见的形态。
+- 参考实现：[posix-socket/](posix-socket/)（`socketpair` / `write` / `read` / `errno` 的
+  `static inline` 包装，header-only）与 [mock-hal/](mock-hal/)（`mock_hal.h` + `mock_hal_impl.c`）。
 
 ### 3. 目录与命名
 
@@ -171,6 +189,26 @@ The v1 [mock-hal/](mock-hal/) binding is still a **stateful** `.h.ct` + dynamic 
 instance `uart1`); its stateless part can be split into `mock_hal/mock_hal.m.ct`. A `.m.ct` file's
 directory must equal its `namespace`; it carries only `#include` / `#define` / `pub trait` / `map`
 and produces no artefact.
+
+### 2.2 The C shim convention (batch 39)
+
+Shapes a recipe cannot spell (macros and statement macros, globals such as `errno`, calls that need a
+cast, prefixed varargs forwarding, callbacks without userdata) go into two **same-directory,
+same-base** C files:
+
+```
+<dir>/<base>.m.ct     the mapping unit
+<dir>/<base>.shim.h   the shim header (the consumer's generated .c includes it)
+<dir>/<base>.shim.c   the shim source (optional; it requires the header)
+```
+
+- `ct build`'s `cc` line automatically gains `-I <shim directory>`; a `.shim.c` joins that line as a
+  source.
+- Touching either shim file rebuilds the consumer; the `.m.ct` itself still produces nothing.
+- A header-only shim (just the `.shim.h`, everything `static inline`) is the common case.
+- Reference implementations: [posix-socket/](posix-socket/) (`static inline` wrappers over
+  `socketpair` / `write` / `read` / `errno`, header-only) and [mock-hal/](mock-hal/)
+  (`mock_hal.h` + `mock_hal_impl.c`).
 
 ### 3. Layout and naming
 

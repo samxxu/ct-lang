@@ -523,6 +523,20 @@ recipe 替换（逐出现点）：
 消费者不写这些 `#include` 也能编译；消费者 `.h` 不含 prologue。`ct compile` 不解析 import，
 故不参与展开。
 
+**伴随 C shim（第三十九批，仅 ct-ast）**：映射单元可以让同目录同名的 C 文件承担 recipe 写不出的
+形状——宏 / 语句宏、全局量（`errno` / `stdin`）、需要类型转换的调用、变参前缀转发、无 userdata 的
+回调。约定是 `<base>.shim.h` 与 `<base>.shim.c`（两个都可选，但**有 `.shim.c` 就必须有
+`.shim.h`**，否则报 `a shim source needs a matching .shim.h`）。
+
+- 编译器只为 `.m.ct` 探测 shim（`foo.h.ct` / `foo.ct` 旁的 `foo.shim.h` 被忽略）。
+- 消费者的生成 `.c` 自动出现 `#include "<base>.shim.h>"`（在该单元的 prologue **之前**，按整行
+  去重）；shim 头按**文件名**解析，`ct build` 因此在该 `cc` 行打印 `-I <shim 目录>`（同一目录
+  只一次）。
+- 存在的 `<base>.shim.c` 直接列入同一条 `cc` 行的源文件（不复制、不进产物目录），头文件式 shim
+  只增加 `-I`。
+- shim 两文件的 `mtime.size` 折叠进映射单元的缓存 key，任一方变化都会重建消费者。
+- `.m.ct` 仍然零产物；shim 不是生成物，也不是编译器构建步骤。
+
 `--emit-map` 的静态条目带 `"static": true`、`"host": "namespace"|"type"`、类型宿主另有
 `"type": "<ctype>"`，每个 binding 带 `"inline": true`、`"wrapper": false` 与 `"symbol": <callee>`；
 动态 `map` 的字段与取值不变。
@@ -2048,6 +2062,22 @@ The `.m.ct` prologue (`#include` / `#define`) expands, de-duplicated per whole l
 every **consumer** `.c` (after the banner); the consumer compiles without writing those `#include`
 lines itself, and a consumer `.h` never carries the prologue. `ct compile` resolves no imports, so
 it never expands one.
+
+**Sibling C shim (batch 39, ct-ast only)**: a mapping unit may delegate the shapes a recipe cannot
+spell -- macros and statement macros, globals (`errno` / `stdin`), calls that need a cast, prefixed
+varargs forwarding, callbacks without userdata -- to same-directory, same-base C files:
+`<base>.shim.h` and `<base>.shim.c` (both optional, but **a `.shim.c` requires its `.shim.h`**,
+otherwise `a shim source needs a matching .shim.h` is reported).
+
+- Only a `.m.ct` is probed for a shim (`foo.shim.h` beside `foo.h.ct` / `foo.ct` is ignored).
+- The consumer's generated `.c` automatically carries `#include "<base>.shim.h"` (before that
+  unit's prologue, de-duplicated per whole line); the shim header is resolved **by file name**,
+  so `ct build` prints `-I <shim directory>` on that `cc` line (once per directory).
+- An existing `<base>.shim.c` joins the same `cc` line as a source (never copied, never written to
+  the output directory); a header-only shim adds just the `-I`.
+- Both shim files' `mtime.size` are folded into the mapping unit's cache key, so touching either
+  rebuilds the consumer.
+- The `.m.ct` still produces nothing; a shim is not an artefact and never a compiler build step.
 
 A static `--emit-map` entry carries `"static": true`, `"host": "namespace"|"type"` and, for a type
 host, `"type": "<ctype>"`; each binding carries `"inline": true`, `"wrapper": false` and

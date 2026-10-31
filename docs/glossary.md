@@ -45,6 +45,7 @@
 | 类型宿主（type host） | `map trait CStr for type char * { … }` | 接收者由调用点表达式的静态类型决定（数组先 decay）；`a.toInt()` → `atoi((a))` |
 | recipe | `-> memset(s, value, count)` | `->` 右侧的 C 调用模板；绑定参数按出现点替换，`&p` 用 C99 compound literal，未求值参数加 `(void)(…)` 前缀 |
 | prologue | `.m.ct` 里的 `#include` / `#define` | 按整行去重展开进消费者 `.c` 顶部；消费者 `.h` 不含它 |
+| 伴随 C shim（sibling shim） | `posix/socket.shim.h`（+ 可选 `socket.shim.c`） | 与 `<base>.m.ct` 同目录同名的 C 适配层：shim 头自动被消费者 `.c` include、其目录进 `cc` 行的 `-I`，shim 源直接进 `cc` 行；承接宏 / 全局量 / 转换 / 变参 / 回调（第三十九批，仅 ct-ast） |
 | 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](design/dialect.md)） |
 | 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
@@ -82,6 +83,7 @@
 | 导出虚表（exported vtable） | `extern struct <T>_vtbl <S>_<T>_vtable;` | `pub trait` × `pub struct` 时 vtable 去掉 `static`，实现单元定义、头文件声明，消费单元可直接装箱；否则保持 `static`（单元私有） |
 | 实例级虚表（instance-level vtable） | `<实例 C 名>_<Trait>_vtable` | `map` 的虚表；实例是 `pub` 全局且 trait 为 `pub` 时同样导出 |
 | 全局 C 名（global cname） | `namespace A::B; int h;` → `A_B_h` | 命名空间内全局按前缀 mangling；`extern` 豁免（保持 C 库原名） |
+| 单元命名（unit naming） | 文件 `Parser.h.ct` ↔ `struct Parser` | 每个单元以主类型命名，一个单元一个主类型，附属记录类型可同文件；主类型过大可拆**子对象单元**（文件头注明所属主对象）；入口 `main.ct` 例外；`check-ast.sh` 的 unit-name lint 校验 |
 
 > 以上是**已发布命名规则**，除非用户明确要求，不得更改（AGENTS §2）。
 
@@ -275,6 +277,7 @@
 | type host | `map trait CStr for type char * { … }` | the receiver comes from the call site's static type (arrays decay first); `a.toInt()` → `atoi((a))` |
 | recipe | `-> memset(s, value, count)` | the C call template on the right of `->`; binding parameters are substituted per occurrence, `&p` uses a C99 compound literal, and an unevaluated parameter gets a `(void)(…)` prefix |
 | prologue | the `#include` / `#define` lines in a `.m.ct` | expanded, de-duplicated per whole line, at the top of the consumer `.c`; never in the consumer `.h` |
+| sibling C shim | `posix/socket.shim.h` (plus an optional `socket.shim.c`) | a C adaptation layer named after and sitting beside `<base>.m.ct`: its header is included by every consumer `.c` and its directory joins the `cc` line's `-I`, while its source joins the `cc` line; it carries macros / globals / casts / varargs / callbacks (batch 39, ct-ast only) |
 | dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](design/dialect.md)) |
 | dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
@@ -312,6 +315,7 @@
 | exported vtable | `extern struct <T>_vtbl <S>_<T>_vtable;` | with a `pub trait` × `pub struct` the vtable drops `static`: the implementing unit defines it and the header declares it, so a consumer unit may box directly; otherwise it stays `static` (unit-private) |
 | instance-level vtable | `<instance C name>_<Trait>_vtable` | the vtable of a `map`; exported on the same terms when the instance is a `pub` global and the trait is `pub` |
 | global cname | `namespace A::B; int h;` → `A_B_h` | a namespaced global is mangled with the prefix; `extern` is exempt and keeps the library's own name |
+| unit naming | file `Parser.h.ct` ↔ `struct Parser` | every unit is named after its main type, one main type per unit, attached record types may share the file; an object too large for one unit may split off **sub-object units** (whose header names the owning object); the entry `main.ct` is exempt; the unit-name lint in `check-ast.sh` pins this |
 
 > These are **published naming rules**; do not change them unless the user explicitly asks (AGENTS §2).
 

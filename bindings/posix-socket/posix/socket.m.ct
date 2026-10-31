@@ -1,0 +1,15 @@
+namespace posix;
+
+pub trait Socket {
+    int pair(int *sv);
+    int send(int fd, char *buf, int n);
+    int recv(int fd, char *buf, int n);
+    int err();
+}
+
+map trait Socket for namespace posix {
+    pair(sv) -> ct_sock_pair(sv);
+    send(fd, buf, n) -> ct_sock_send(fd, buf, n);
+    recv(fd, buf, n) -> ct_sock_recv(fd, buf, n);
+    err() -> ct_sock_errno();
+}

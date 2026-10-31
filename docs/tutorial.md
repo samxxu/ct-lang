@@ -404,6 +404,37 @@ prologue 的 `#include <stdlib.h>` 已展开进 `main.c`，没有 wrapper、没�
 `map trait CStr for type char *` 让 `char a[] = "42"; a.toInt()` 直接变成 `atoi((a))`。
 可运行例子见 `test/modules/map_unit{,_type,_cross}`。
 
+### 9.2 伴生 C shim：recipe 写不出的形状
+
+recipe 只能写**一次顶层调用**，宏、全局量、需要转换的调用都写不了。给映射单元加一对同目录同名的
+C 文件 `<base>.shim.h` / `<base>.shim.c`，把适配写在里面，recipe 绑到它：
+
+```c
+/* posix/socket.shim.h —— 头文件式 shim，没有 .shim.c */
+#include <errno.h>
+#include <sys/socket.h>
+
+static inline int ct_sock_pair(int *sv) { return socketpair(AF_UNIX, SOCK_STREAM, 0, sv); }
+static inline int ct_sock_errno(void) { return errno; }
+```
+
+```c
+/* posix/socket.m.ct */
+namespace posix;
+
+pub trait Socket { int pair(int *sv); int err(); }
+
+map trait Socket for namespace posix {
+    pair(sv) -> ct_sock_pair(sv);
+    err() -> ct_sock_errno();
+}
+```
+
+消费者的生成 `.c` 自动带上 `#include "socket.shim.h"`，`ct build` 的 `cc` 行自动加
+`-I <shim 目录>`（有 `.shim.c` 时同时把它列为源文件）。`posix::Socket.err()` 于是展开成
+`ct_sock_errno()`。完整例子见 `bindings/posix-socket/`；改了 shim 会让消费者重建。
+有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
+
 ## 10. 命令行速查
 
 | 命令 | 作用 |
@@ -845,6 +876,39 @@ int main(void)
 and no vtable. A type host works the same way: `map trait CStr for type char *` turns
 `char a[] = "42"; a.toInt()` into `atoi((a))`. Runnable examples live under
 `test/modules/map_unit{,_type,_cross}`.
+
+#### 9.2 The sibling C shim: shapes a recipe cannot spell
+
+A recipe is **one top-level call**, so macros, globals and casts are out of reach. Add a same-directory,
+same-base pair `<base>.shim.h` / `<base>.shim.c` to the mapping unit, write the adaptation there, and
+bind the recipe to it:
+
+```c
+/* posix/socket.shim.h -- a header-only shim, no .shim.c */
+#include <errno.h>
+#include <sys/socket.h>
+
+static inline int ct_sock_pair(int *sv) { return socketpair(AF_UNIX, SOCK_STREAM, 0, sv); }
+static inline int ct_sock_errno(void) { return errno; }
+```
+
+```c
+/* posix/socket.m.ct */
+namespace posix;
+
+pub trait Socket { int pair(int *sv); int err(); }
+
+map trait Socket for namespace posix {
+    pair(sv) -> ct_sock_pair(sv);
+    err() -> ct_sock_errno();
+}
+```
+
+The consumer's generated `.c` automatically carries `#include "socket.shim.h"`, and `ct build`'s `cc`
+line automatically gains `-I <shim directory>` (plus the `.shim.c` as a source when one exists). So
+`posix::Socket.err()` expands into `ct_sock_errno()`. The full example is
+`bindings/posix-socket/`; touching the shim rebuilds the consumer. A `.shim.c` without its `.shim.h`
+is rejected with `a shim source needs a matching .shim.h`.
 
 ### 10. CLI cheat sheet
 

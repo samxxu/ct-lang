@@ -669,6 +669,9 @@ S2 再把替换规则补全（两者都改 `emit_recipe`）。
 **可映射子集零成本；不可映射处显式报错，让用户写 C shim 或 `.h.ct` 包装**，
 禁止编译器静默生成 wrapper。
 
+> 第三十九批已把「C shim 头」这一层制度化（同目录同名 `.shim.h` / `.shim.c`，自动 include、
+> `-I`、入 `cc` 行、进缓存），见 [batch39-shim-layer/spec.md](../batch39-shim-layer/spec.md)。
+
 | 层 | 承载 | 成本 |
 | --- | --- | --- |
 | `.m.ct` 静态映射 | 单次调用型函数式 / 句柄式 API、命名空间函数、C 类型上的方法 | 零 wrapper、零中间符号 |
