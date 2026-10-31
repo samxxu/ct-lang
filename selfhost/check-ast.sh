@@ -1685,21 +1685,47 @@ echo
 echo "== the L0 seed (ct-ast compiles ctc.c itself) =="
 # The C-subset coverage the batch probes established, kept as a gate: every
 # construct `selfhost/l0/ctc.c` uses must parse, the generated C must compile,
-# and the compiler that comes out must run an example end to end. Without this
-# a parse branch could narrow again and only the probes would notice.
-mkdir -p "$work/seed"
+# the compiler that comes out must reproduce every L0 golden byte for byte, and
+# it must run an example end to end. Without this a parse branch could narrow
+# again and only the probes would notice.
+mkdir -p "$work/seed" "$work/seed/goldens"
 if "$work/ct-ast" compile selfhost/l0/ctc.c -o "$work/seed/ctc.c" \
         >"$work/seed.out" 2>"$work/seed.err" \
-   && "$CC" -Wall -Wextra -std=c99 "$work/seed/ctc.c" -o "$work/seed/ctc" 2>"$work/seedcc.log" \
-   && "$work/seed/ctc" examples/01_greeter/greeter.ct -o "$work/seed/greeter.c" \
-        >"$work/seedrun.out" 2>"$work/seedrun.err" \
-   && "$CC" "$work/seed/greeter.c" -o "$work/seed/greeter" 2>"$work/seedgreet.log" \
-   && "$work/seed/greeter" >"$work/seed/greeter.out" 2>&1 \
-   && diff -u examples/01_greeter/greeter.expected.out "$work/seed/greeter.out" >/dev/null 2>&1; then
-    ok "L0 seed (ctc.c compiles; the result builds and runs an example)"
+   && "$CC" -Wall -Wextra -std=c99 "$work/seed/ctc.c" -o "$work/seed/ctc" 2>"$work/seedcc.log"; then
+    ok "L0 seed (ctc.c compiles; the generated C builds)"
 else
-    bad "L0 seed" "$(cat "$work/seed.err" "$work/seedcc.log" "$work/seedrun.err" \
-                       "$work/seedgreet.log" 2>/dev/null | head -5)"
+    bad "L0 seed compile" "$(cat "$work/seed.err" "$work/seedcc.log" 2>/dev/null | head -5)"
+fi
+
+if [ -x "$work/seed/ctc" ]; then
+    seed_bad=""
+    for f in test/cases/*.ct; do
+        b="$(basename "$f" .ct)"
+        if ! "$work/seed/ctc" "$f" -o "$work/seed/goldens/$b.c" \
+                >"$work/seed/$b.out" 2>"$work/seed/$b.err"; then
+            seed_bad="$b (compile failed)"
+            break
+        fi
+        if ! diff -q "$work/seed/goldens/$b.c" "test/cases/$b.expected.c" >/dev/null 2>&1; then
+            seed_bad="$b (output differs)"
+            break
+        fi
+    done
+    if [ -z "$seed_bad" ]; then
+        ok "L0 seed (every test/cases golden is reproduced byte for byte)"
+    else
+        bad "L0 seed goldens" "$seed_bad"
+    fi
+
+    if "$work/seed/ctc" examples/01_greeter/greeter.ct -o "$work/seed/greeter.c" \
+            >"$work/seedrun.out" 2>"$work/seedrun.err" \
+       && "$CC" "$work/seed/greeter.c" -o "$work/seed/greeter" 2>"$work/seedgreet.log" \
+       && "$work/seed/greeter" >"$work/seed/greeter.out" 2>&1 \
+       && diff -u examples/01_greeter/greeter.expected.out "$work/seed/greeter.out" >/dev/null 2>&1; then
+        ok "L0 seed (the result runs an example end to end)"
+    else
+        bad "L0 seed example" "$(cat "$work/seedrun.err" "$work/seedgreet.log" 2>/dev/null | head -5)"
+    fi
 fi
 
 echo

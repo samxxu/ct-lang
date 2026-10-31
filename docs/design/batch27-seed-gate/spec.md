@@ -21,20 +21,27 @@
 - **D-2 失败信息取四个日志的前 5 行**（解析、生成物编译、示例编译、示例运行），
   和本脚本其它断言的风格一致。
 - **D-3 全部写在 `$work` 下**，不污染仓库；不引入新脚本、不新增构建步骤。
+- **D-4 比对一个例子还不够（扩展）**：「能编 ctc.c + 跑通一个示例」只证明能编译，
+  不证明行为与冻结基线一致。因此另加一条断言：ct-ast 编出的 ctc 对 `test/cases/*.ct`
+  逐例重新生成，必须与 `*.expected.c` **逐字节一致**（实测 25/25）。这条把「C 子集覆盖」
+  从「语法能解析」提升到「产物与基线等价」。
 
 ## 3. 影响面
 
-- 只改 `selfhost/check-ast.sh`：头注释一行 + 一节断言（+1 断言）。
+- 只改 `selfhost/check-ast.sh`：头注释一行 + 一节断言（三项：解析与生成物编译、
+  全部 golden 逐字节一致、示例端到端）。
 - 不碰编译器源码、不新增 impl 方法、不动 `CTC_VERSION` 与 golden。
 
 ## 4. 验证
 
-- `bash selfhost/check-ast.sh` → 276 passed, 0 failed（新增项为
-  `L0 seed (ctc.c compiles; the result builds and runs an example)`）。
-- `bash selfhost/check-warnings.sh` → 141 ok, 0 failed。
+- `bash selfhost/check-ast.sh` → 281 passed, 0 failed（新增三项：
+  `L0 seed (ctc.c compiles; the generated C builds)`、
+  `L0 seed (every test/cases golden is reproduced byte for byte)`、
+  `L0 seed (the result runs an example end to end)`）。
+- `bash selfhost/check-warnings.sh` → 142 ok, 0 failed。
 - `bash selfhost/check-all.sh` → 9 hard gates green。
 - 手工确认过的新断言覆盖：解析（ctc.c 全量）、生成物编译（零错误）、
-  端到端（示例输出与 `.expected.out` 一致）。
+  产物与 25 个 golden 逐字节一致、端到端（示例输出与 `.expected.out` 一致）。
 - **负向验证**（关卡的失败路径确实会触发）：临时给 `Expr.h.ct` 的前缀 `++`/`--`
   分支加上 `0 &&`（只让分支不生效，代码不动），`check-ast.sh` 随即 **exit 1**，
   两项失败：`45_pre_incr`（`expected an expression`）与
