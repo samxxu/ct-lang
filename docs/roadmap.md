@@ -898,6 +898,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **第二十九批（2026-10-31，C11 三件套）**：`_Alignas` / `_Alignof` / `_Generic` 按「能透传就不建 AST」落地——`_Alignas` 进类型拼写（全局 / 局部 / 字段 / 参数 / `typedef` 五个入口自动生效），`_Alignof` 复用 `sizeof` 节点（`aux = 2`），`_Generic` 整段捕获进字符串池、由 C 编译器选臂；新增 `test/ast/53_c11_align_generic` 与三条形状负例，language-spec §4.35。
 - **第三十批（2026-10-31，`.h.ct` 规则）**：仅 ct-ast——普通 `.ct` 不再写 `.h` 且**不可被 `import`**（`import` 只解析 `.h.ct`，命中普通 `.ct` 报 `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`），compile 模式同理；实现单元的 `.c` 自包含（`pub` 类型本地发射），缓存命中按 `need_h`。被导入单元统一改名（ct-ast 自身 3 个、bindings 1 个、`test/modules/**` 27 个）。L2 保持附加式（归档 oracle 依赖），登记为已知分叉。
 - **第三十一批（2026-10-31，`__attribute__`）**：GNU `__attribute__((…))` 按「声明尾部透传」接受——函数声明/定义、形参、字段、全局、`typedef` 别名之后，以及 `struct` / `union` / `enum` 定义体之后；整段原文进字符串池并在同一尾部位置重新发射（连续多个组一起捕获），typedef 记录类型统一发射在别名之前。新增 `test/ast/54_attribute` 与两条形状负例（`unterminated __attribute__` / `duplicate __attribute__ on one declaration`），language-spec §4.36；至此 §4 的 C 形式没有已知缺口。
+- **第三十二批（2026-10-31，C 兼容性收尾）**：整数字面量后缀（`U` / `L` / `UL` / `LL` / `ULL`，大小写与顺序不限，十进制 / 十六进制 / 八进制同路径）由词法器收集、解析器校验并规范化为「先 `U` 后 `L`」后存进 `N_NUM.text`，发射时原样带出；非法组合报 `an integer suffix may be U, L or LL`。`static_assert` 作为 `_Static_assert` 的别名接受，生成物统一写 `_Static_assert`。`add_func` 的返回类型改为「先声明者胜」，`_Noreturn void f(void);` 之后的 `void f(void) {}` 不再把它抹掉。`__restrict` / `__restrict__` 进入类型词表。新增 `test/ast/55_c_compat` 与两条后缀负例，language-spec §4.37；`check-ast.sh` 300 passed、`check-warnings.sh` 145 ok、`check-all.sh` 九关全绿。
 
 ### 决策待定项
 
@@ -2383,6 +2384,16 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   together); a typedef'd record emits it before the alias. Fixture `test/ast/54_attribute` plus two
   shape negatives (`unterminated __attribute__` / `duplicate __attribute__ on one declaration`);
   spec §4.36. With it, §4's C forms have no known gap.
+- **Batch 32 (2026-10-31, C compatibility close-out)**: an integer literal suffix (`U` / `L` /
+  `UL` / `LL` / `ULL`, any case and order; decimal / hex / octal alike) is collected by the lexer,
+  validated and normalized to `U` before `L` by the parser, and stored in `N_NUM.text` so the
+  emitter reproduces it; a malformed suffix reports `an integer suffix may be U, L or LL`.
+  `static_assert` is accepted as the alias of `_Static_assert`, and the emitter always writes
+  `_Static_assert`. `add_func` now keeps the return type of the **first** declaration, so
+  `void f(void) {}` after `_Noreturn void f(void);` no longer erases it. `__restrict` /
+  `__restrict__` join the type words. Fixture `test/ast/55_c_compat` plus two suffix negatives;
+  spec §4.37. `check-ast.sh` 300 passed, `check-warnings.sh` 145 ok, `check-all.sh` nine gates
+  green.
 
 ### Open decisions
 

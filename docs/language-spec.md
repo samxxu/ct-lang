@@ -20,7 +20,8 @@
 > | `import` 一个普通 `.ct` 单元 | 接受（附加式：普通 `.ct` 也产 `.h`） | 拒绝（`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`） | 只有 `.h.ct` 发布接口；ct-ast 下普通 `.ct` 不产 `.h`（build 与 compile 一致） |
 >
 > **C 形式覆盖**：`goto` / 标签、`switch` 范围、位域、匿名成员、变参、`inline`、
-> `_Static_assert`、浮点字面量（§4.24）、`_Alignas` / `_Alignof` / `_Generic`（§4.35）与
+> `_Static_assert`（含 `static_assert` 别名）、整数字面量后缀（§4.37）、浮点字面量（§4.24）、
+> `_Alignas` / `_Alignof` / `_Generic`（§4.35）与
 > GNU `__attribute__((…))`（§4.36）等两侧都接受，没有已知的未实现形式，见 §4 各节。
 >
 > 这是两层的**能力差**，不是同一条流水线上的进度差：L0 命中上述构造仍报
@@ -1188,6 +1189,31 @@ static int twice(int n __attribute__((unused))) { return 2 * n; }
   `duplicate __attribute__ on one declaration`。
 - 生成的 `.c` 保留属性原文，因此构建它的 C 编译器需要认识它（clang 与 GCC 都接受）。
 
+#### 4.37 整数字面量后缀与其余 C 拼写（ct-ast）
+
+```c
+_Noreturn void stop(void);
+static_assert(1 + 1 == 2, "arithmetic works");
+
+unsigned long a = 0xFFu;      /* 大小写不限 */
+long b = 0777L;
+unsigned long long c = 1ULL;  /* 写法顺序不限：uLL / LLu / lL 都成 */
+
+static int mix(const int *__restrict a, int *__restrict__ b) { return *a + *b; }
+```
+
+- 整数字面量接受 `U` / `L` / `UL` / `LL` / `ULL` 及其任意大小写与顺序（十进制、十六进制、
+  八进制同路径）。后缀只影响**拼写**，不改变数值；发射时规范化为「先 `U` 后 `L`」
+  （`0xFFu` → `0xFFU`，`16l` → `16L`）。
+- 非法组合（`U` 多于一个、`L` 多于两个）报 `an integer suffix may be U, L or LL`。
+- 值仍存放在 `long` 里：超过 `LONG_MAX` 的 `ULL` 字面量会按 `long` 回绕，这是既有的容量
+  边界（与浮点字面量按拼写保留的做法不同）。
+- `static_assert` 是 `_Static_assert` 在 C23 / `<assert.h>` 下的同义拼写，两者都接受，
+  生成物统一写 `_Static_assert`。
+- 函数声明的 `_Noreturn` 以**第一处声明**为准：`_Noreturn void f(void);` 之后的
+  `void f(void) {}` 不会把它抹掉。
+- `__restrict` / `__restrict__` 与 `restrict` 同义，原样保留在类型拼写里。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1313,7 +1339,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | `import` a plain `.ct` unit | accepted (additive: every unit also writes a `.h`) | rejected (`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`) | only `.h.ct` publishes an interface; under ct-ast a plain `.ct` writes no `.h` (build and compile mode alike) |
 >
 > **C-form coverage**: `goto` / labels, `switch` ranges, bit-fields, anonymous members, variadics,
-> `inline`, `_Static_assert`, floating literals (§4.24), `_Alignas` / `_Alignof` / `_Generic`
+> `inline`, `_Static_assert` (including the `static_assert` alias), integer literal suffixes
+> (§4.37), floating literals (§4.24), `_Alignas` / `_Alignof` / `_Generic`
 > (§4.35) and GNU `__attribute__((…))` (§4.36) are accepted by both layers — no known form is
 > missing; see the sections under 4.
 >
@@ -2645,6 +2672,32 @@ static int twice(int n __attribute__((unused))) { return 2 * n; }
   reports `duplicate __attribute__ on one declaration`.
 - The generated `.c` keeps the attribute spelling, so the C compiler that builds it must accept it
   (clang and GCC do).
+
+#### 4.37 Integer literal suffixes and the remaining C spellings (ct-ast)
+
+```c
+_Noreturn void stop(void);
+static_assert(1 + 1 == 2, "arithmetic works");
+
+unsigned long a = 0xFFu;      /* any case */
+long b = 0777L;
+unsigned long long c = 1ULL;  /* any order: uLL / LLu / lL all become ULL */
+
+static int mix(const int *__restrict a, int *__restrict__ b) { return *a + *b; }
+```
+
+- An integer literal accepts `U` / `L` / `UL` / `LL` / `ULL` in any case and order (decimal,
+  hexadecimal and octal alike). The suffix is **spelling only**: the value does not change, and the
+  emitter normalizes it to `U` before `L` (`0xFFu` → `0xFFU`, `16l` → `16L`).
+- A malformed suffix (more than one `U`, more than two `L`s) reports
+  `an integer suffix may be U, L or LL`.
+- The value is still held in a `long`: a `ULL` literal above `LONG_MAX` wraps as a `long`. That is
+  the existing capacity boundary (unlike a floating literal, which is kept as spelling).
+- `static_assert` is the C23 / `<assert.h>` spelling of `_Static_assert`; both are accepted and the
+  emitter always writes `_Static_assert`.
+- A function's `_Noreturn` belongs to the **first declaration**: `void f(void) {}` after
+  `_Noreturn void f(void);` does not erase it.
+- `__restrict` / `__restrict__` are synonyms of `restrict` and stay in the type spelling verbatim.
 
 ### 5. Naming contract
 
