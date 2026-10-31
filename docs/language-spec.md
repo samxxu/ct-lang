@@ -516,6 +516,8 @@ recipe 替换（逐出现点）：
 
 一个参数最多一次求值出现；出现多次时实参必须是可重复表达式（字面量、变量或它们的稳定成员
 链），否则要求先提局部变量。`<TP>` 是该绑定参数的声明类型（类型宿主的接收者是 `host_type`）。
+`sizeof` 后只接受不加括号的绑定参数（`sizeof p`）；`sizeof(p)` 会替换成实参值的大小，故作为
+编译期错误拒绝（`map recipe takes 'sizeof p', not 'sizeof(p)'`）。
 
 `.m.ct` 的 prologue（`#include` / `#define`）按整行去重后展开进**消费者** `.c` 顶部（banner 之后），
 消费者不写这些 `#include` 也能编译；消费者 `.h` 不含 prologue。`ct compile` 不解析 import，
@@ -1396,7 +1398,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 ### 7. 容量上限
 
-> 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 65536、
+> 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 131072、
 > `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、`MAX_FIELDS` 64、`MAX_FUNCS` 256、
 > `MAX_PARAMS` 16、`MAX_VARS` 4096、`MAX_TYPES` 256、`MAX_CALLS` 1024；其余（`MAX_TEXT` / `MAX_PATH` /
 > `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` / `MAX_MAPS`）不变。策略仍是「固定上限 + 越界硬报错」，未改成动态分配。
@@ -2038,7 +2040,9 @@ Recipe substitution (per occurrence):
 A parameter may be evaluated at most once; when it occurs more than once the argument must be a
 repeatable expression (a literal, a variable, or a stable member chain of them), otherwise the
 argument has to be bound to a local first. `<TP>` is that binding parameter's declared type (the
-type host's receiver uses `host_type`).
+type host's receiver uses `host_type`). After `sizeof`, a binding parameter must be spelled without
+parentheses (`sizeof p`); `sizeof(p)` would substitute the argument value's size, so it is rejected
+with a compile-time error (`map recipe takes 'sizeof p', not 'sizeof(p)'`).
 
 The `.m.ct` prologue (`#include` / `#define`) expands, de-duplicated per whole line, at the top of
 every **consumer** `.c` (after the banner); the consumer compiles without writing those `#include`
@@ -3042,7 +3046,7 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 ### 7. Capacity limits
 
 > The table below lists the **L0** (frozen seed) caps. **ct-ast** (the installed entry) raises the
-> user-facing ones: `MAX_NODES` 65536, `MAX_TRAITS` 64, `MAX_STRUCTS` 128, `MAX_METHODS` 64,
+> user-facing ones: `MAX_NODES` 131072, `MAX_TRAITS` 64, `MAX_STRUCTS` 128, `MAX_METHODS` 64,
 > `MAX_FIELDS` 64, `MAX_FUNCS` 256, `MAX_PARAMS` 16, `MAX_VARS` 4096, `MAX_TYPES` 256,
 > `MAX_CALLS` 1024; the rest (`MAX_TEXT` / `MAX_PATH` / `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` /
 > `MAX_MAPS`) are unchanged. The policy is still "fixed cap + hard error", not dynamic allocation.

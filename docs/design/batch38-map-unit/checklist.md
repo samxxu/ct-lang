@@ -10,6 +10,8 @@
       `a .m.ct unit produces no output; import it from a .ct unit`。
 - [x] 同一 root 下 `foo.h.ct` 与 `foo.m.ct` 并存 → 歧义消息含两个路径。
 - [x] 修改 `foo.m.ct` 后消费者重建（缓存 key 折叠 `.m` 依赖）；不改时消费者命中缓存。
+- [x] `.m.ct` 可 `import` 另一个 `.m.ct`：两段 prologue 都展开进消费者，传递依赖变化也重建消费者
+      （`test/modules/map_unit_chain` + check-ast 的 warm / touch 断言）。
 - [x] `.m.ct` 目录与 `namespace` 不符时报既有的 `namespace '…' does not match the directory '…'`。
 
 ## 内容白名单
@@ -36,6 +38,7 @@
 ## 类型宿主
 
 - [x] `map trait CStr for type char *` 能编过；`for type char[]` 报错。
+- [x] 普通 `.h.ct` 单元里写 `for type` 报 `a type host is only allowed in a .m.ct unit`。
 - [x] `char a[] = "42"; a.toInt()` 命中（数组 decay），生成 `atoi(a)`。
 - [x] `b.fill('z', 3)` → `memset(b, 'z', 3)`。
 - [x] `a.scanInto(&scanned)` → `sscanf(a, "%d", &scanned)`（recipe 里 `out` 原位替换）。
@@ -47,6 +50,9 @@
 
 - [x] 值参数 → `(<actual>)`；`&p` → `&(<TP>){<actual>}`；`sizeof p` → `sizeof(<TP>)`；
       `p.field` / `p->field` / `p[i]` 的括号正确。
+- [x] `sizeof p` 不计为一次求值：实参副作用仍以 `(void)(…)` 前缀保留；同一参数出现两次
+      `sizeof` 不报「more than once」。
+- [x] `sizeof(p)` 报 `map recipe takes 'sizeof p', not 'sizeof(p)'`（拒绝静默错义）。
 - [x] 未使用参数在调用表达式前生成 `(void)(<actual>),`，实参副作用保留。
 - [x] `p++` / `p = …` 报 `map recipe modifies binding parameter '<p>'`。
 - [x] 多次求值 + 函数调用/赋值实参报
@@ -75,10 +81,10 @@
 - [x] 生成物没有 `_iface` / `_vtable` / `vt->` / `(void *)0`（对照 `test/modules/map_unit/main.c`）。
 - [x] 既有动态 `map` 用例（`26_ns_host`、`modules/ns_host`、`modules/map_ns`、`ast/14/15/22`）
       产物逐字节不变。
-- [x] `test/cases/**` 与 `test/modules/**` 既有 golden 只有版本 token 变化（v0.15.0）
+- [x] `test/cases/**` 与 `test/modules/**` 既有 golden 只有版本 token 变化（v0.15.0 → v0.15.1）
 - [x] `bash selfhost/check-ast.sh`、`bash selfhost/check-warnings.sh`、
       `bash selfhost/check-all.sh` 全绿。
-- [x] `CTC_VERSION` 五处同步 bump 到 v0.15.0（用户授权），L0 / L1 / L2 只动这一行
+- [x] `CTC_VERSION` 五处同步 bump 到 v0.15.1（用户授权），L0 / L1 / L2 只动这一行
 
 ## 文档
 

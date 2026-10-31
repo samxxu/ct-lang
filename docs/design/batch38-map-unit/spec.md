@@ -230,6 +230,9 @@ recipe 的每个绑定参数在调用点一一替换为对应实参（§6.3 的�
   （即字面量、简单变量、稳定成员链）。出现函数调用、赋值、自增自减、复合字面量等**有副作用**
   的实参 → 报错，要求用户先提局部变量。
 - `sizeof p` 不计入求值次数，但为了让实参副作用仍然发生，会触发上面的 `(void)(…)` 前缀。
+- `sizeof` 只接受**不加括号**的绑定参数：`sizeof p` 是声明类型 `TP` 的大小；若写成
+  `sizeof(p)`，替换结果会是 `sizeof((actual))`（实参值的大小），语义无声地变了，故按编译期报错
+  处理（§7）。类型单词（`sizeof(int)`）仍可带括号。
 - 求值顺序不做额外保证（与手写 C 一致）。
 
 ### 6.4 调用点生成物示例
@@ -392,11 +395,13 @@ include guard，重复包含无害）。`atoi/strlen/strcmp/sscanf/getenv` 的�
 | 静态 trait 装箱（`T::host`） | `a static trait has no interface value; call '<host>::<Trait>.<method>()'` | 装箱行 |
 | 命名空间静态 trait 不在宿主命名空间 | `a static trait for a namespace host must be declared in that namespace` | map 行 |
 | `for type` 后没有类型 | `expected a type after 'for type'` | map 行 |
+| 非 `.m.ct` 单元里的类型宿主 | `a type host is only allowed in a .m.ct unit` | map 行 |
 | 类型宿主绑定参数个数不符 | `a type host binding has <n> parameters but method '<m>' takes <k>`（`<n>` 是绑定参数个数（含接收者），`<k>` 是方法自身参数个数） | 绑定行 |
 | 无 map 命中类型宿主调用 | `no method '<m>' for type '<type>'` | 调用行 |
 | 类型宿主多个候选 | `ambiguous type-host map for method '<m>' on type '<type>': '<a>' and '<b>'` | 调用行 |
 | recipe 改名了非绑定参数的小写标识符 | `map recipe names '<id>' but it is not a binding parameter` | 绑定行 |
 | recipe 修改绑定参数 | `map recipe modifies binding parameter '<p>'` | 绑定行 |
+| recipe 对绑定参数用了 `sizeof(...)` | `map recipe takes 'sizeof <p>', not 'sizeof(<p>)'` | 绑定行 |
 | recipe 多次求值且实参不稳定 | `map recipe uses '<p>' more than once; bind the argument to a local first` | 调用行 |
 | recipe 不是一次顶层调用 | `a map recipe must be a single call` | 绑定行 |
 
