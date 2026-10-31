@@ -279,7 +279,7 @@ cc build/*.c -o app && ./app        # woof 7
 - **`pub` 才导出**。`pub` 的函数/struct/trait 写进 `.h`；`impl` 的方法与 vtable 永远 `static`。
 - **跨单元只走指针 + vptr**：vtable 符号不出单元，「把对象传出去」比「把类型传出去」更省事。
 - **`namespace a;` 是文件级声明**（分号式），块式 `namespace A { … }` 会被拒绝；目录也可以用
-  `--ns-root <dir>` 映射成 namespace（`src/hal/uart.ct` → `hal`）。
+  `--ns-root <dir>` 映射成 namespace（`src/hal/uart.h.ct` → `hal`）。
 - **跨命名空间调用必须带限定**：`a::one()`、`Point::size(p)`；裸调用只在同命名空间内合法。
 - **`import` 支持别名**：`import app::model::Point as Point;`。
 
@@ -342,7 +342,7 @@ $ ct --diagnostics=json leak.ct -o leak.c    # 机器可读，写 stdout
 ## 9. `map` 与 bindings：把 trait 绑到已有的 C 库
 
 不想为了用 C 库而改库的代码，就用 `map` 把一个**已声明的全局实例**绑定成 trait 实现。
-这是把假 HAL 接进 CT 的官方做法（[bindings/mock-hal/uart.ct](../bindings/mock-hal/uart.ct)）：
+这是把假 HAL 接进 CT 的官方做法（[bindings/mock-hal/uart.h.ct](../bindings/mock-hal/uart.h.ct)）：
 
 ```c
 #include "mock_hal.h"          /* 直通，让你看见库的真实声明 */
@@ -685,7 +685,7 @@ cc build/*.c -o app && ./app        # woof 7
 - **Cross-unit access goes through pointers and vptrs** — passing the object around is easier than
   exporting the type.
 - **`namespace a;` is file-scoped** (semicolon form); block form is rejected. Directories can also become
-  namespaces with `--ns-root <dir>` (`src/hal/uart.ct` → `hal`).
+  namespaces with `--ns-root <dir>` (`src/hal/uart.h.ct` → `hal`).
 - **Cross-namespace calls must be qualified**: `a::one()`, `Point::size(p)`. Bare calls are legal only
   inside the same namespace.
 - **`import` supports aliases**: `import app::model::Point as Point;`.
@@ -747,7 +747,7 @@ Escape analysis is deliberately conservative: it would rather miss a release tha
 ### 9. `map` and bindings: binding a trait to an existing C library
 
 When you cannot change the library, `map` binds a **declared global instance** of it to a trait
-([bindings/mock-hal/uart.ct](../bindings/mock-hal/uart.ct)):
+([bindings/mock-hal/uart.h.ct](../bindings/mock-hal/uart.h.ct)):
 
 ```c
 #include "mock_hal.h"          /* pass-through: the library's real declarations */

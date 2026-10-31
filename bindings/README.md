@@ -18,7 +18,7 @@ binding 是**纯 CT 源**，把某个 C 库的符号映射成 CT 的 `trait`，�
 
 ### 2. 配方（五步）
 
-以 [mock-hal/uart.ct](mock-hal/uart.ct) 为例：
+以 [mock-hal/uart.h.ct](mock-hal/uart.h.ct) 为例：
 
 ```c
 #include "mock_hal.h"          /* 1. 直通 C：看见库的声明 */
@@ -141,7 +141,7 @@ which binds a trait's methods to concrete calls on a **declared global instance*
 
 ### 2. The recipe (five steps)
 
-See [mock-hal/uart.ct](mock-hal/uart.ct): a pass-through `#include` so the library's declarations are
+See [mock-hal/uart.h.ct](mock-hal/uart.h.ct): a pass-through `#include` so the library's declarations are
 visible, a mirrored `trait` whose signatures copy the library API, a mirrored `struct` matching the
 library's layout, one declared global instance, and a `map` that binds each method to a real call.
 

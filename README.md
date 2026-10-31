@@ -36,9 +36,9 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 # 1b) 或者不安装，只用 L0 种子（单文件、核心语法；没有 `ct`，下面一律用 ./ctc）
 gcc selfhost/l0/ctc.c -o ctc
 
-# 2) 编译 .ct 到 .c（同时生成同名 .h）；产物可放任意目录
+# 2) 编译 .ct 到 .c（只有 `.h.ct` 输入才同时生成同名 .h）；产物可放任意目录
 ct examples/01_greeter/greeter.ct -o /tmp/greeter.c      # 走了 1a
-./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # 走了 1b（L0 只认核心语法）
+./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # 走了 1b（L0 只认核心语法，仍写 .h）
 
 # 3) 用系统 C 编译器构建产物
 gcc /tmp/greeter.c -o /tmp/greeter
@@ -51,11 +51,11 @@ gcc /tmp/greeter.c -o /tmp/greeter
 
 | 用法 | 说明 |
 | --- | --- |
-| `ctc <input.ct>` | 输出到 `<input>.c`、`<input>.h` |
-| `ctc <input.ct> -o <output.c>` | 输出到指定路径，头文件为同目录同名的 `.h` |
+| `ctc <input.ct>` | 输出到 `<input>.c`；输入是 `.h.ct` 时同时写 `<input>.h`（L0 / L2 仍总是写 `.h`） |
+| `ctc <input.ct> -o <output.c>` | 输出到指定路径；输入是 `.h.ct` 时头文件为同目录同名的 `.h` |
 | `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
 | `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，仅 compile 可用，`build` 须写文件 |
-| `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`/`.h` 并打印建议 `cc` 命令；在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
+| `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`（`.h.ct` 单元另有 `.h`）并打印建议 `cc` 命令；只有 `.h.ct` 单元可被 `import`。在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
 | `ctc … --std=c99\|gnu99` | 目标 C 标准（默认 `c99`）；暂无产物差异，`build` 将其写入建议的 `cc` 命令，其他值硬报错（Phase 6.4） |
 | `ctc … -I <dir>` | 追加一个导入搜索根（可重复，最多 16 个；Phase 2，`compile` 与 `build` 均可用） |
 | `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3：`spec` 以 `.` / `/` / `file://` 开头为本地包（复制），否则为 git 包（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`）；解析 `ct.pkg`、递归 `dep`、复制到 `vendor/<name>/`、写 `ct.lock`（五列 `name ver dir\|git <ref> <digest>`，摘要为逐文件加法折叠的 FNV-1a）。git 源调用系统 `git`——**唯一**子进程调用点，仅 `ct get` 触发，`ct compile` / `ct build` / `ct install` 零网络零子进程 |
@@ -484,7 +484,7 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 # 1b) or skip the install and use the L0 seed (single file, core grammar only; no `ct` — use ./ctc below)
 gcc selfhost/l0/ctc.c -o ctc
 
-# 2) compile a .ct to .c (a sibling .h is written too)
+# 2) compile a .ct to .c (a sibling .h is written only for a .h.ct input)
 ct examples/01_greeter/greeter.ct -o /tmp/greeter.c      # after 1a
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # after 1b (L0 knows the core grammar only)
 
@@ -496,11 +496,11 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 
 | Usage | Result |
 | --- | --- |
-| `ctc <input.ct>` | writes `<input>.c` and `<input>.h` (single-file mode) |
-| `ctc <input.ct> -o <output.c>` | writes the given path plus a sibling `.h` |
+| `ctc <input.ct>` | writes `<input>.c`; a `.h.ct` input also writes `<input>.h` (L0 / L2 still always write the `.h`) |
+| `ctc <input.ct> -o <output.c>` | writes the given path; a `.h.ct` input gets a sibling `.h` |
 | `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
 | `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, compile mode only — `build` must write a file |
-| `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits `.c`/`.h` and the suggested `cc` command is printed; a key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
+| `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits a `.c` (a `.h.ct` unit also emits its `.h`) and the suggested `cc` command is printed; only `.h.ct` units can be imported. A key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
 | `ctc … --std=c99\|gnu99` | target C standard (default `c99`); nothing in the output differs yet, so `build` writes it into the suggested `cc` command, and any other value is a hard error (Phase 6.4) |
 | `ctc … -I <dir>` | adds an import search root (repeatable, up to 16; Phase 2 — works in both `compile` and `build`) |
 | `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3: a `spec` starting with `.` / `/` / `file://` is a local package (copied), anything else is a git package (a `scheme://` URL verbatim, a `host/path` given `https://`, a bare name via `CT_REGISTRY`); it parses `ct.pkg`, resolves `dep` recursively, copies into `vendor/<name>/` and writes `ct.lock` (five columns `name ver dir\|git <ref> <digest>`, the digest being an additive per-file FNV-1a fold). git sources call the system `git` — the **only** subprocess call site, reached by `ct get` alone; `ct compile` / `ct build` / `ct install` stay network-free and process-free |

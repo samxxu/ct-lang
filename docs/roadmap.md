@@ -255,10 +255,14 @@ Phase 0 不做 import（单文件），Phase 1 实现。
 | `foo.ct` | 只生成 `foo.c`（实现文件，不对外暴露接口），文件内符号默认只在当前编译单元可见 |
 | `foo.h.ct` | 生成 `foo.h` + `foo.c`（接口 + 实现分离） |
 
-> **落地说明（2026-10-16）**：**附加式落地**——`foo.h.ct` 这一半已实现：基名去掉 `.h.ct` 后产出 `foo.c` + `foo.h`，
-> `import foo;` 也会回退命中 `foo.h.ct`（并因此产出 `foo.h`）。`foo.ct` 「只产出 `foo.c`、不对外暴露」的那一半
-> **未落地**：冻结归档对 `foo.ct` 的 `.h` 也做逐字节比对（`check-archive.sh` 组 6），砍掉 `.h` 会立刻判 REGRESSION，
-> 故推迟到 **Phase 5**。用户 2026-10-16 拍板：本轮只做附加式，不改 `*.ct` 既有产物。
+> **落地说明**：`foo.h.ct` 这一半自 Phase 2 起生效（基名去掉 `.h.ct`，产出 `foo.c` + `foo.h`，
+> `import foo;` 回退命中 `foo.h.ct`）。`foo.ct`「只产出 `foo.c`」这一半在 **2026-10-31 落到 ct-ast
+> （安装入口）**：普通 `.ct` 单元不再写 `.h`，并且**不能被 `import`**——`import` 只解析 `.h.ct`，
+> 命中普通 `.ct` 时报 `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`；编译模式
+> （`ct compile foo.ct`）同样只写 `.c`。被导入的单元因此必须改名 `.h.ct`（`test/modules/**`、
+> `bindings/**` 与 `selfhost/ct-ast/**` 已按此迁移）。L2 是冻结的回归 oracle，仍按**附加式**
+> 行为对所有单元产出 `.h`（`test/archive/**` 的逐字节比对依赖它），所以这条规则是 **ct-ast 与
+> L2 的已知分叉**，登记在 language-spec 顶部的「有意拒绝」表。
 
 编译器从 `pub` 关键字识别需要暴露的符号，自动生成 `.h`（含 `#ifndef` 守卫、struct 定义、函数声明、vtable 类型）和 `.c`（含实现）：
 
@@ -1171,6 +1175,17 @@ The file name decides what the compiler emits — no extra keywords or config fi
 | `foo.ct` | only `foo.c` (implementation; nothing exported), symbols are file-local by default |
 | `foo.h.ct` | `foo.h` + `foo.c` (interface / implementation split) |
 
+> **Landing note**: the `foo.h.ct` half has been in place since Phase 2 (the basename drops `.h.ct`
+> and produces `foo.c` + `foo.h`; `import foo;` falls back to `foo.h.ct`). The `foo.ct` half — "only
+> `foo.c`" — landed **in ct-ast (the installed entry) on 2026-10-31**: a plain `.ct` unit writes no
+> header and **cannot be imported**; `import` resolves `.h.ct` only and reports
+> `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'` when it finds a plain unit.
+> Compile mode (`ct compile foo.ct`) follows the same rule. Imported units were therefore renamed
+> to `.h.ct` (`test/modules/**`, `bindings/**`, `selfhost/ct-ast/**`). L2 is the frozen regression
+> oracle and keeps the additive behaviour (every unit gets a `.h`, which `test/archive/**`
+> byte-compares), so this rule is a **known divergence between ct-ast and L2**, listed in the
+> language-spec's "intentionally rejected" table at the top.
+
 The compiler recognises the symbols to export via the `pub` keyword and generates the `.h` (with
 `#ifndef` guards, struct definitions, function declarations, vtable types) and the `.c` (with the
 implementations):
@@ -1921,7 +1936,8 @@ M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignmen
   A `*.h.ct` basename strips the whole `.h.ct` for the output (`foo.h.ct` -> `foo.c` + `foo.h`) and an
   `import foo;` falls back to `foo.h.ct`, so the pair is published under the name a consumer would
   import; a plain `*.ct` keeps producing the `.c`/`.h` pair it always has (its "publishes no header"
-  half is deferred to Phase 5 — the frozen archive compares `foo.ct`'s `.h` too). `-I <dir>` is
+  half is deferred to Phase 5 — the frozen archive compares `foo.ct`'s `.h` too; **later landed for
+  ct-ast on 2026-10-31 — see the file-naming note above**). `-I <dir>` is
   repeatable and is searched after the importing file's own directory, in command-line order
   (local-first, the decision D7 recommends). The new semantics are pinned in `test/modules/**` by
   `check-archive.sh` **group 7 (designed)**, which has no archive oracle: each fixture byte-diffs its

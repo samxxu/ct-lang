@@ -17,6 +17,7 @@
 > | --- | --- | --- | --- |
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） | 单元级前缀与目录校验都假设一个文件只声明一个命名空间 |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） | 避免在两个同名导出之间静默选错对象 |
+> | `import` 一个普通 `.ct` 单元 | 接受（附加式：普通 `.ct` 也产 `.h`） | 拒绝（`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`） | 只有 `.h.ct` 发布接口；ct-ast 下普通 `.ct` 不产 `.h`（build 与 compile 一致） |
 >
 > **仍未实现**（ct-ast 报具体消息）：`__attribute__((…))`。
 > 其余 C 形式（`goto` / 标签、`switch` 范围、位域、匿名成员、变参、`inline`、
@@ -1278,6 +1279,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | --- | --- | --- | --- |
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) | the per-unit prefix and the directory check both assume one namespace per file |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) | never silently pick the wrong object between two same-named exports |
+> | `import` a plain `.ct` unit | accepted (additive: every unit also writes a `.h`) | rejected (`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`) | only `.h.ct` publishes an interface; under ct-ast a plain `.ct` writes no `.h` (build and compile mode alike) |
 >
 > **Still unimplemented** (ct-ast reports a specific message): `__attribute__((…))`. Every other C
 > form (`goto` / labels, `switch` ranges, bit-fields, anonymous members, variadics, `inline`,

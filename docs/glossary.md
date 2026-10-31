@@ -88,7 +88,7 @@
 | 生成物 banner | 生成物首部 | 溯源注释 + **输出例外**声明，不得删除 |
 | 自包含（self-contained） | 单文件 `.c` | 不 `#include` 生成的 `.h` |
 | 头文件守卫（include guard） | `.h` 的 `#ifndef` … `#endif` | |
-| 编译单元（unit） | 一个 `.ct` → 一对 `.c`/`.h` | `ct build` 中每单元只编一次。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
+| 编译单元（unit） | 一个 `.ct` → `.c`（`.h.ct` → `.c` + `.h`） | `ct build` 中每单元只编一次；只有 `.h.ct` 发布接口、可被 `import`。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
 | 依赖顺序（dependency order） | 拓扑序 | import 的 DAG 拓扑排序。**同上，已移出 L0** |
 | 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 CT 重做** |
@@ -112,7 +112,7 @@
 | C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
 | JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/l2/**` 恢复** |
-| 增量缓存（incremental cache） | `<outdir>/.ctcache/<unit>.key` | Phase 6.3：每个单元一枚键（路径 + `mtime.size` + 版本 + `--line`/`--diagnostics` + 依赖 digest），键一致且 `.c/.h` 在盘即跳过重生成。**缓存命中不重放 `#line` 与告警**；`--emit-map` 下不命中。重编译集 = `order` 前缀 ∪ 依赖闭包 |
+| 增量缓存（incremental cache） | `<outdir>/.ctcache/<unit>.key` | Phase 6.3：每个单元一枚键（路径 + `mtime.size` + 版本 + `--line`/`--diagnostics` + 依赖 digest），键一致且产物在盘即跳过重生成（`.c` 必有；`.h.ct` 单元另需 `.h`）。**缓存命中不重放 `#line` 与告警**；`--emit-map` 下不命中。重编译集 = `order` 前缀 ∪ 依赖闭包 |
 
 ### 5. 测试
 
@@ -250,7 +250,7 @@
 | output banner | top of every generated file | provenance comment + the **output exception**, never deleted |
 | self-contained | the single-file `.c` | does not `#include` the generated `.h` |
 | include guard | `#ifndef` … `#endif` in the `.h` | |
-| unit | one `.ct` → a `.c`/`.h` pair | compiled once in `ct build`. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
+| unit | one `.ct` → `.c` (`.h.ct` → `.c` + `.h`) | compiled once in `ct build`; only a `.h.ct` unit publishes an interface and can be imported. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | dependency order | topological order | the import DAG sorted. **Same; moved out of L0** |
 | driver | `compile_range` / `compile_file` / `compile_main` | orchestration; touches no parsing / generation logic — L0 is single-file only now |
 | `#line` mapping | `#line <src line> "<.ct>"` | on by default in multi-file, off single-file (D4=A). **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
@@ -274,7 +274,7 @@
 | C standard target | `--std=c99` (default) / `--std=gnu99` | Phase 6.4: no emission point differs yet, so `build` only writes it into the suggested `cc` command; any other value is a hard error |
 | help / version | `-h`/`--help`, `-v`/`--version` | |
 | JSON diagnostics | `--diagnostics=json` / `--diagnostics=text` | warning format: JSON to stdout (`ct compile`), text human-readable stderr (default); leak warnings only, for now (Phase 1.7). **Restored by Phase 4 slice 2 under `selfhost/l2/**`** |
-| incremental cache | `<outdir>/.ctcache/<unit>.key` | Phase 6.3: one key per unit (path + `mtime.size` + version + `--line`/`--diagnostics` + dependency digests); a matching key with the `.c/.h` still on disk skips regeneration. **A hit replays neither `#line` nor warnings**; `--emit-map` never hits. The recompile set is the `order` prefix plus the dependency closure |
+| incremental cache | `<outdir>/.ctcache/<unit>.key` | Phase 6.3: one key per unit (path + `mtime.size` + version + `--line`/`--diagnostics` + dependency digests); a matching key with the artefacts still on disk skips regeneration (`.c` always, `.h` only for a `.h.ct` unit). **A hit replays neither `#line` nor warnings**; `--emit-map` never hits. The recompile set is the `order` prefix plus the dependency closure |
 
 ### 5. Testing
 

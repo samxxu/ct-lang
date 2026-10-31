@@ -15,7 +15,7 @@
 | `l0/ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
 | `l1/ctc.ct` | L1 | 冻结种子：用 CT OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
 | `l2/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
-| `ct-ast/{main,pkg,diag}.ct` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译：`main.ct` 是 driver + 编译核心，`pkg.ct` 是包管理器，`diag.ct` 是告警存储与错误计数（各自状态私有，只导出 `pub` 包装器）；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
+| `ct-ast/{main.ct,pkg.h.ct,diag.h.ct}` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译：`main.ct` 是 driver + 编译核心，`pkg.h.ct` 是包管理器，`diag.h.ct` 是告警存储与错误计数（各自状态私有，只导出 `pub` 包装器；被 `import` 的单元按规则必须是 `.h.ct`）；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
 
 ## 脚本（门禁）
 
