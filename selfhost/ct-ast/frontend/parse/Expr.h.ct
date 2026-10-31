@@ -73,6 +73,7 @@ import runtime::arena::Arena;
 #define N_PRE 57
 #define P_DEC 2
 #define P_INC 1
+#define T_EOF 0
 #define T_ID 1
 #define T_NUM 2
 #define T_PUNCT 4
@@ -199,6 +200,39 @@ impl ExprOps for Expr {
         self->fnptr_name[0] = 0;
         self->fnptr_dims[0] = 0;
         for (;;) {
+            /* C11 `_Alignas(…)`: the specifier is copied into the type spelling
+               and handed to the C compiler as written (the argument may be a
+               type name or a constant expression), so every declaration entry
+               -- global, local, field, parameter, typedef -- picks it up without
+               a node of its own. */
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Alignas") == 0) {
+                int depth;
+                if (self->type_append(out, cap, &n, "_Alignas") != 0) return -1;
+                self->sup->lex_next();
+                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0)
+                    return self->sup->fail("expected '(' after _Alignas");
+                depth = 0;
+                for (;;) {
+                    char tbuf[MAX_TEXT];
+                    if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Alignas");
+                    /* an integer token keeps its value, not its spelling */
+                    if (self->lex->tok == T_NUM && !self->lex->tokfloat)
+                        snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                    else
+                        snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                    if (self->type_append(out, cap, &n, tbuf) != 0) return -1;
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                        depth--;
+                        if (depth == 0) {
+                            self->sup->lex_next();
+                            break;
+                        }
+                    }
+                    self->sup->lex_next();
+                }
+                continue;
+            }
             if (self->lex->tok == T_ID && self->is_type_word(self->lex->toktext)) {
                 if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
                 if (strcmp(self->lex->toktext, "struct") == 0) {
@@ -913,8 +947,10 @@ impl ExprOps for Expr {
         int n, e, op;
         (void)self;
 
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "sizeof") == 0) {
+        if (self->lex->tok == T_ID && (strcmp(self->lex->toktext, "sizeof") == 0
+                                       || strcmp(self->lex->toktext, "_Alignof") == 0)) {
             char tbuf[MAX_TEXT];
+            int align = (self->lex->toktext[0] == '_');
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
                 && self->next_is_type_name()) {
@@ -924,9 +960,12 @@ impl ExprOps for Expr {
                 n = self->sup->new_node(N_SIZEOF);
                 if (n < 0) return -1;
                 snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
-                self->arena->nodes[n].aux = 1;
+                self->arena->nodes[n].aux = align ? 2 : 1;
                 return n;
             }
+            /* C11 spells the alignment query with a type name only, so the
+               operand form stays `sizeof`'s alone. */
+            if (align) return self->sup->fail("_Alignof needs a type in parentheses");
             e = self->parse_unary();
             if (e < 0) return -1;
             n = self->sup->new_node(N_SIZEOF);
@@ -1172,6 +1211,53 @@ impl ExprOps for Expr {
 
         qc[0] = 0;
         qv[0] = 0;
+        /* C11 `_Generic(…)` is a pass-through: the whole selection is copied
+           into the string pool (`N_RAW`, `aux = 1`, `num` = offset) and handed
+           to the C compiler, which owns the arm choice. ct does not read the
+           arms, so a trait call or a boxing inside one is not rewritten. */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Generic") == 0) {
+            char gname[MAX_TEXT];
+            int off, depth, k;
+            n = self->sup->new_node(N_RAW);
+            if (n < 0) return -1;
+            off = self->arena->str_begin();
+            snprintf(gname, sizeof gname, "%s", "_Generic");
+            for (k = 0; gname[k]; k++)
+                if (self->arena->str_put(gname[k]) != 0)
+                    return self->sup->fail("string pool is full");
+            self->sup->lex_next();
+            if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0)
+                return self->sup->fail("expected '(' after _Generic");
+            depth = 0;
+            for (;;) {
+                char tbuf[MAX_TEXT];
+                int m;
+                if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Generic");
+                if (self->arena->str_put(' ') != 0)
+                    return self->sup->fail("string pool is full");
+                /* an integer token keeps its value, not its spelling */
+                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
+                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                else
+                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                for (m = 0; tbuf[m]; m++)
+                    if (self->arena->str_put(tbuf[m]) != 0)
+                        return self->sup->fail("string pool is full");
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    depth--;
+                    if (depth == 0) {
+                        self->sup->lex_next();
+                        break;
+                    }
+                }
+                self->sup->lex_next();
+            }
+            self->arena->str_end();
+            self->arena->nodes[n].num = off;
+            self->arena->nodes[n].aux = 1;
+            return n;
+        }
         if (self->lex->tok == T_NUM) {
             /* an integer keeps its value (`long`, emitted in decimal); a
                floating literal keeps its spelling, since neither the value nor

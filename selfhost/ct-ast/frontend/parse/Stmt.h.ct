@@ -137,6 +137,8 @@ impl StmtOps for Stmt {
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
+        /* an alignment specifier may open a block-scope declaration */
+        if (strcmp(self->lex->toktext, "_Alignas") == 0) return 1;
         if (self->ex->is_type_word(self->lex->toktext)) return 1;
         if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
         if (self->sym->find_type(rn) >= 0) return 1;

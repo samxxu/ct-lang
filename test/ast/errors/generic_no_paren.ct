@@ -1,0 +1,6 @@
+/* A generic selection is always followed by its parenthesized list. */
+int main(void)
+{
+    int n = 1;
+    return _Generic n;
+}

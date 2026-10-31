@@ -130,6 +130,9 @@
 # batch 28 accepts an assignment used as a value (`(c = f())`, and in a
 # condition): test/ast/52_assign_value plus the rejected `own` target.
 #
+# batch 29 adds the C11 forms `_Alignas` / `_Alignof` / `_Generic`:
+# test/ast/53_c11_align_generic plus the three shape diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1223,6 +1226,25 @@ do
         ok "batch 28 ($cf)"
     else
         bad "batch 28: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 29: each C11 form must be followed by its parenthesized list, and the
+# alignment query takes a type name only (`sizeof`'s operand form is not C11).
+for pair in \
+    "alignas_no_paren|expected '(' after _Alignas" \
+    "alignof_operand|_Alignof needs a type in parentheses" \
+    "generic_no_paren|expected '(' after _Generic"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 29: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 29 ($cf)"
+    else
+        bad "batch 29: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

@@ -1522,8 +1522,11 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_SIZEOF) {
+            /* `aux` 1 is `sizeof(type)`, 2 is C11 `_Alignof(type)` */
             if (self->arena->nodes[n].aux) {
-                fprintf(self->out, "sizeof(%s)", self->arena->nodes[n].text);
+                fprintf(self->out, "%s(%s)",
+                        self->arena->nodes[n].aux == 2 ? "_Alignof" : "sizeof",
+                        self->arena->nodes[n].text);
                 return 0;
             }
             fputs("sizeof(", self->out);

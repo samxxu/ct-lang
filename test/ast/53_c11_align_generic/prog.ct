@@ -1,0 +1,44 @@
+/* 53: C11 alignment and generic selection (batch 29) - `_Alignas` is part of
+   the type spelling, `_Alignof` shares `sizeof`'s node and `_Generic` is
+   captured verbatim; the C compiler owns all three. */
+#include <stdio.h>
+
+typedef int myint;
+
+_Alignas(16) int g_aligned;
+
+struct Aligned {
+    _Alignas(8) int x;
+    int y;
+};
+
+int main(void) {
+    _Alignas(16) int local;
+    int i;
+    double d;
+    myint m;
+    int pick_i;
+    int pick_d;
+    int pick_m;
+    int pick_ptr;
+
+    printf("align %d %d %d\n",
+           _Alignof(int) >= 1,
+           _Alignof(double) >= _Alignof(char),
+           _Alignof(struct Aligned) >= _Alignof(int));
+    printf("address %d %d\n",
+           (int)((long)&g_aligned % 16),
+           (int)((long)&local % 16));
+
+    i = 0;
+    d = 0.0;
+    m = 0;
+    pick_i = _Generic(i, int: 1, double: 2, default: 3);
+    pick_d = _Generic(d, int: 1, double: 2, default: 3);
+    pick_m = _Generic(m, int: 1, double: 2, default: 3);
+    pick_ptr = _Generic(&i, int: 1, double: 2, default: 3);
+    printf("generic %d %d %d %d\n", pick_i, pick_d, pick_m, pick_ptr);
+    printf("arg %d\n", _Generic(i, int: (10), double: 20, default: 30));
+    if (_Generic(d, int: 0, double: 1, default: 0)) printf("cond yes\n");
+    return 0;
+}

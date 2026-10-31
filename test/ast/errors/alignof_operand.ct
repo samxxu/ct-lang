@@ -1,0 +1,7 @@
+/* C11 spells the alignment query with a type name only, so the operand form
+   (which `sizeof` allows) is refused. */
+int main(void)
+{
+    int n = 1;
+    return _Alignof n;
+}
