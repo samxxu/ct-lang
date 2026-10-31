@@ -157,6 +157,14 @@ impl SupportOps for ParseSupport {
     {
         (void)self;
         self->lex->next();
+        /* a name that did not fit in `toktext` is a hard error, not a silent
+           truncation: two long names sharing a prefix would collapse into one
+           symbol and the generated C would fail to compile */
+        if (self->lex->toktrunc) {
+            self->lex->toktrunc = 0;
+            self->fail("identifier is too long");
+            self->lex->tok = T_EOF;
+        }
     }
 
     int accept(const char *p)

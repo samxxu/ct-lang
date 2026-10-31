@@ -39,6 +39,10 @@ pub struct Lexer {
        the parser validates and normalizes it. 8 fits any invalid run too, so a
        suffix that is too long is never silently truncated into a legal one. */
     char toksuffix[8];
+    /* 1 when the current identifier did not fit in `toktext`: the parser turns
+       it into `identifier is too long` instead of letting a silently truncated
+       name collide with another one. */
+    int  toktrunc;
     int  line;                  /* 1-based */
     int  tokline;               /* line of the current token */
     int  tokstart;
@@ -82,6 +86,7 @@ impl LexOps for Lexer {
         }
         self->tokstart = self->pos;
         self->tokline = self->line;
+        self->toktrunc = 0;
         if (self->bol && c == '#') {
             n = 0;
             while (self->src[self->pos] && self->src[self->pos] != '\n') {
@@ -101,6 +106,7 @@ impl LexOps for Lexer {
                    || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
                    || self->src[self->pos] == '_')) {
                 if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                else self->toktrunc = 1;
                 self->pos++;
             }
             self->toktext[n] = 0;

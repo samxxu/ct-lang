@@ -285,6 +285,41 @@ for d in test/patterns/*/; do
 done
 
 echo
+echo "== build-mode mirrors (compile / build parity) =="
+# The compile path (`emit_program`) and the build path (`emit_unit` +
+# `write_header`) are separate; these probes take an existing compile-mode
+# fixture through `build` as a single unit and run it the same way, so a
+# divergence in one path fails here.
+for name in 28_switch 30_enum 31_union 33_bitfield 34_anon_member \
+            35_static_local 36_compound_literal 54_attribute
+do
+    d="test/ast/$name"
+    [ -f "$d/prog.ct" ] || continue
+    mdir="$work/mirror-$name"
+    rm -rf "$mdir"
+    mkdir -p "$mdir"
+    if ! "$work/ct-ast" build "$d/prog.ct" -o "$mdir" >"$work/mirror-$name.out" \
+            2>"$work/mirror-$name.err"; then
+        bad "mirror/$name" "build failed: $(cat "$work/mirror-$name.err")"
+        continue
+    fi
+    if ! "$CC" -Wall -Wextra -std=c99 "$mdir"/*.c -o "$work/mirror-$name.bin" \
+            2>"$work/mirror-$name.cc"; then
+        bad "mirror/$name" "generated C did not build warning-free: $(cat "$work/mirror-$name.cc")"
+        continue
+    fi
+    if ! "$work/mirror-$name.bin" >"$work/mirror-$name.stdout" 2>&1; then
+        bad "mirror/$name" "the program exited non-zero"
+        continue
+    fi
+    if ! cmp -s "$work/mirror-$name.stdout" "$d/prog.expected.out"; then
+        bad "mirror/$name" "program output differs: $(cat "$work/mirror-$name.stdout")"
+        continue
+    fi
+    ok "mirror/$name"
+done
+
+echo
 echo "== bindings (Phase 12: the fake HAL demo) =="
 # A binding is plain CT - a pass-through include, a mirrored trait / struct, a
 # declared global instance and a `map` - so no language feature is involved.
@@ -1378,9 +1413,39 @@ do
     fi
 done
 
+# Batch 37 pins the message text of the twelve negatives that only asserted a
+# position, and covers the identifier-length guard (a name longer than the
+# token buffer used to be truncated silently).
+for pair in \
+    "assign_target|assignment target is not assignable" \
+    "bitops_assign_target|assignment target is not assignable" \
+    "extern_function|an extern declaration cannot define a function" \
+    "map_bad_arg|map argument 'free_name' is not allowed" \
+    "map_bad_arity|map binding for 'm' takes 0 parameter(s), the trait declares 1" \
+    "map_bad_method|'nope' is not a method of trait 'T'" \
+    "map_dup|duplicate binding for method 'm'" \
+    "map_unknown_arg|map argument 'missing' is not allowed" \
+    "map_unknown_trait|map of an unknown trait" \
+    "missing_semi|unexpected token" \
+    "undeclared_var|use of an undeclared variable" \
+    "unknown_trait|impl of an unknown trait" \
+    "identifier_too_long|identifier is too long"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 37: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 37 ($cf)"
+    else
+        bad "batch 37: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
 # SH-8: a missing impl method must be reported the way L0/L2 report it, and no
 # artifact may be left behind (a NULL vtable slot would crash at run time).
-if "$work/ct-ast" test/ast/errors/missing_method.ct -o "$work/mmethod.c" \
+if "$work/ct-ast" test/ast/errors/null_vtable_slot.ct -o "$work/mmethod.c" \
         >"$work/mmethod.out" 2>"$work/mmethod.err"; then
     bad "impl completeness" "expected a non-zero exit"
 elif grep -q "trait method 'b' is not implemented for struct 'P'" "$work/mmethod.err" \
@@ -1514,6 +1579,61 @@ else
     bad "--std=c11" "wrong diagnostic: $(cat "$work/cli-std.err")"
 fi
 
+echo
+echo "== capacity limits (generated) =="
+# A fixed cap must fail loudly and never truncate. These fixtures are generated
+# (a 4097-line file is not worth checking in) and each asserts the message.
+cap_check() {
+    cap_name="$1"
+    cap_msg="$2"
+    cap_file="$3"
+    if "$work/ct-ast" "$cap_file" -o "$work/cap-$cap_name.c" \
+            >"$work/cap-$cap_name.out" 2>"$work/cap-$cap_name.err"; then
+        bad "cap $cap_name" "expected a non-zero exit"
+    elif grep -q "$cap_msg" "$work/cap-$cap_name.err"; then
+        ok "cap $cap_name"
+    else
+        bad "cap $cap_name" "$(cat "$work/cap-$cap_name.err")"
+    fi
+}
+{
+    printf 'int f(int a0'
+    i=1
+    while [ "$i" -lt 17 ]; do printf ', int a%d' "$i"; i=$((i + 1)); done
+    printf ');\nint main(void) { return 0; }\n'
+} >"$work/cap_params.ct"
+cap_check params "too many parameters" "$work/cap_params.ct"
+{
+    printf 'trait T {\n'
+    i=0
+    while [ "$i" -lt 65 ]; do printf '    int m%d();\n' "$i"; i=$((i + 1)); done
+    printf '}\nint main(void) { return 0; }\n'
+} >"$work/cap_methods.ct"
+cap_check methods "too many trait methods" "$work/cap_methods.ct"
+{
+    i=0
+    while [ "$i" -lt 256 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
+    printf 'int main(void) { return 0; }\n'
+} >"$work/cap_funcs.ct"
+cap_check funcs "too many functions" "$work/cap_funcs.ct"
+{
+    printf 'int main(void)\n'
+    i=0
+    while [ "$i" -lt 257 ]; do printf '{'; i=$((i + 1)); done
+    printf '\nreturn 0;\n'
+    i=0
+    while [ "$i" -lt 257 ]; do printf '}'; i=$((i + 1)); done
+    printf '\n}\n'
+} >"$work/cap_scopes.ct"
+cap_check scopes "too many nested scopes" "$work/cap_scopes.ct"
+{
+    printf 'int main(void) {\n'
+    i=0
+    while [ "$i" -lt 4097 ]; do printf '    int v%d = 0;\n' "$i"; i=$((i + 1)); done
+    printf '    return 0;\n}\n'
+} >"$work/cap_vars.ct"
+cap_check vars "too many variables" "$work/cap_vars.ct"
+
 # The remaining driver branches (Phase 9 review §3.2-1): help, missing
 # option arguments, unknown options, an unreadable input, an unwritable
 # output, `import` in compile mode and a build without `-o`.
@@ -1593,6 +1713,66 @@ elif grep -q "build needs -o" "$work/cli-bo.err"; then
     ok "build without -o is rejected"
 else
     bad "build without -o" "wrong diagnostic: $(cat "$work/cli-bo.err")"
+fi
+if "$work/ct-ast" build -o >"$work/cli-boa.out" 2>"$work/cli-boa.err"; then
+    bad "build: -o needs an argument" "expected a non-zero exit"
+elif grep -q -- "-o needs an argument" "$work/cli-boa.err"; then
+    ok "build: -o without an argument is rejected"
+else
+    bad "build: -o needs an argument" "wrong diagnostic: $(cat "$work/cli-boa.err")"
+fi
+if "$work/ct-ast" build -I >"$work/cli-bia.out" 2>"$work/cli-bia.err"; then
+    bad "build: -I needs an argument" "expected a non-zero exit"
+elif grep -q -- "-I needs an argument" "$work/cli-bia.err"; then
+    ok "build: -I without an argument is rejected"
+else
+    bad "build: -I needs an argument" "wrong diagnostic: $(cat "$work/cli-bia.err")"
+fi
+if "$work/ct-ast" build --std=c11 test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+        >"$work/cli-bstd.out" 2>"$work/cli-bstd.err"; then
+    bad "build: --std=c11" "expected a non-zero exit"
+elif grep -q "unknown C standard 'c11'" "$work/cli-bstd.err"; then
+    ok "build: an unknown --std is rejected"
+else
+    bad "build: --std=c11" "wrong diagnostic: $(cat "$work/cli-bstd.err")"
+fi
+if "$work/ct-ast" build --bogus test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+        >"$work/cli-bu.out" 2>"$work/cli-bu.err"; then
+    bad "build: unknown option" "expected a non-zero exit"
+elif grep -q "unknown option '--bogus'" "$work/cli-bu.err"; then
+    ok "build: an unknown option is rejected"
+else
+    bad "build: unknown option" "wrong diagnostic: $(cat "$work/cli-bu.err")"
+fi
+mkdir -p "$work/cli-bdir"
+if "$work/ct-ast" build -o "$work/cli-bdir" >"$work/cli-bnone.out" 2>"$work/cli-bnone.err"; then
+    bad "build: no input" "expected a non-zero exit"
+elif grep -q "usage: .* build " "$work/cli-bnone.err"; then
+    ok "build: no input prints usage"
+else
+    bad "build: no input" "wrong diagnostic: $(cat "$work/cli-bnone.err")"
+fi
+bargs="-I /tmp"
+i=0
+while [ "$i" -lt 17 ]; do bargs="$bargs -I /tmp"; i=$((i + 1)); done
+if "$work/ct-ast" build $bargs test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+        >"$work/cli-binc.out" 2>"$work/cli-binc.err"; then
+    bad "build: 17 -I roots" "expected a non-zero exit"
+elif grep -q "too many -I roots" "$work/cli-binc.err"; then
+    ok "build: the 17th -I root is rejected"
+else
+    bad "build: 17 -I roots" "wrong diagnostic: $(cat "$work/cli-binc.err")"
+fi
+bargs=""
+i=0
+while [ "$i" -lt 65 ]; do bargs="$bargs test/ast/02_expr/prog.ct"; i=$((i + 1)); done
+if "$work/ct-ast" build $bargs -o "$work/cli-bdir" \
+        >"$work/cli-bin.out" 2>"$work/cli-bin.err"; then
+    bad "build: 65 inputs" "expected a non-zero exit"
+elif grep -q "too many inputs" "$work/cli-bin.err"; then
+    ok "build: too many inputs is rejected"
+else
+    bad "build: 65 inputs" "wrong diagnostic: $(cat "$work/cli-bin.err")"
 fi
 
 echo

@@ -11,6 +11,7 @@
 #   - the bootstrap chain's own artefacts (l1.c, l2/*.c, ast/*.c), so ct-ast
 #     keeps emitting warning-free C for the compiler itself;
 #   - test/ast/*/prog.ct            (one unit per fixture);
+#   - test/patterns/*/prog.ct       (one unit per design pattern);
 #   - test/cases/*.ct + examples/*/*.ct (compile mode; a dialect demo is
 #     expanded by its plugins first, as in check-ast.sh);
 #   - test/modules/*/main.ct or main.h.ct (build mode, all units);
@@ -108,6 +109,19 @@ for d in test/ast/*/; do
         continue
     fi
     scan_one "$name" "$work/$name.c"
+done
+
+echo
+echo "== test/patterns =="
+for d in test/patterns/*/; do
+    [ -d "$d" ] || continue
+    pname="$(basename "$d")"
+    if ! "$work/ct-ast" "$d/prog.ct" -o "$work/pat-$pname.c" \
+            >"$work/pat-$pname.out" 2>"$work/pat-$pname.err"; then
+        bad "patterns/$pname" "ct-ast failed: $(cat "$work/pat-$pname.err")"
+        continue
+    fi
+    scan_one "patterns/$pname" "$work/pat-$pname.c"
 done
 
 echo
