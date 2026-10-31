@@ -1354,6 +1354,69 @@ impl Logger for Conn {
   指回 trait 声明而不是采纳点。
 - 边界：不做字段注入、不做 supertrait、不做 trait 层共享默认体；`Drop` 不受影响。
 
+#### 4.40 `borrow` 与 `Handback`（Phase 5 续，仅 ct-ast）
+
+`borrow` 与 `own` 一样是**上下文关键字**：只在参数列表或语句行首被识别，其它位置仍是普通标识符
+（函数名 `borrow` 不受影响）。它表达「这个指针是借来的：出口归还，绝不释放」。`Handback` 是
+**内建 trait**（照 `Drop` 处理：无 vptr、无 vtable，只发 `<S>_Handback_handback`），用户不自己声明。
+
+```c
+struct Conn { int fd; int in_use; } use Handback;
+
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }      /* 归还：对象仍活着 */
+}
+
+void render(borrow struct Conn *c)             /* 阶段一：参数注解，代码生成零变化 */
+{
+    printf("%d\n", c->fd);
+}
+
+int main(void)
+{
+    borrow struct Conn *c = acquire(0);        /* 阶段二：声明 + 出口自动归还 */
+    render(c);
+    return 0;                                  /* → if (c) { Conn_Handback_handback(c); c = 0; } */
+}
+```
+
+| 源码形态 | 处理 |
+| --- | --- |
+| 参数 `void f(borrow Request *r)` | 去掉 `borrow`；参数登记为借用（代码生成不变） |
+| `borrow Conn *c = expr;` | 去掉 `borrow` 后照常声明；登记为借用 |
+| 声明作用域的闭合 `}` / 函数帧顶层的行首 `return` | 插入 `if (c) { Conn_Handback_handback(c); c = 0; }`（与 `own` 共用一张表，按声明逆序） |
+| `delete c;`（`c` 是借用） | 编译错误：借用对象不归本作用域 |
+| `g = c;` / 外层局部 `x = c;` | 编译错误：借用的生命期比目标短 |
+
+约束与限制：
+
+- 参数与声明都必须是**结构体指针**；数组、`static` 局部、文件作用域、`switch` 体内一律报错。
+- 声明必须带初始化式，且类型须 `use Handback` 并已有 `impl Handback for S`；缺失即报错
+  （不提供默认空体，否则「归还」会静默变成空操作）。
+- 出口注入与 `own` 同构：**不释放内存**，只调 `handback` 并置空——归还后对象仍在池里，可能被他人借走。
+- `return c;`（局部借用逃逸）报 `warning: a borrowed pointer escapes through 'return'` 并**取消注入**；
+  `return r;`（借用参数逃逸）只警告。
+- `Handback` 实现在**被借出的对象**上（出口时编译器只有 `T *c`），与 `Drop` 一致。
+- 已知限制（诚实标注）：`store(c)`（实参未标 `borrow`）与字段级 `s->p = c` 不检查；`goto` 跨过声明
+  静默失效；不区分池对象与栈对象。**不要宣称「有了 borrow 就不会悬垂」**。
+
+诊断文本（英文、小写、无句号、标识符单引号）：
+
+```text
+'borrow' requires a struct pointer parameter
+'borrow' requires an initialiser of struct pointer type
+struct '<S>' does not use trait 'Handback'
+struct '<S>' uses trait 'Handback' but has no impl
+a borrowed pointer cannot be deleted
+a borrowed pointer cannot be stored in '<name>' (its scope outlives the borrow)
+'borrow' is not supported inside a switch
+'borrow' does not support arrays
+a static local cannot be 'borrow'
+warning: a borrowed pointer escapes through 'return'
+```
+
+设计与实现说明见 [design/borrow.md](design/borrow.md)。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -2996,6 +3059,75 @@ impl Logger for Conn {
   at the trait rather than at the adoption site.
 - Boundaries: no field injection, no supertraits, no shared trait-level default body; `Drop` is
   unaffected.
+
+#### 4.40 `borrow` and `Handback` (Phase 5 follow-on, ct-ast only)
+
+Like `own`, `borrow` is a **contextual keyword**: it is recognised only in a parameter list or as
+the first token of a statement, and stays an ordinary identifier everywhere else (the function name
+`borrow` is unaffected). It states that the pointer is borrowed: hand it back at exit, never free it.
+`Handback` is a **built-in trait** handled like `Drop` (no vptr, no vtable; only
+`<S>_Handback_handback` is emitted), and users do not declare it.
+
+```c
+struct Conn { int fd; int in_use; } use Handback;
+
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }      /* return: the object stays alive */
+}
+
+void render(borrow struct Conn *c)             /* stage one: annotation, no codegen change */
+{
+    printf("%d\n", c->fd);
+}
+
+int main(void)
+{
+    borrow struct Conn *c = acquire(0);        /* stage two: declaration + handback at exit */
+    render(c);
+    return 0;                                  /* → if (c) { Conn_Handback_handback(c); c = 0; } */
+}
+```
+
+| Shape | Expansion |
+| --- | --- |
+| parameter `void f(borrow Request *r)` | drop `borrow`; the parameter is recorded as borrowed (output unchanged) |
+| `borrow Conn *c = expr;` | drop `borrow` and declare as usual; recorded as borrowed |
+| the declaring scope's closing `}` / a line-initial `return` at the function frame's own level | insert `if (c) { Conn_Handback_handback(c); c = 0; }` (one list shared with `own`, reverse declaration order) |
+| `delete c;` on a borrow | compile error: the object is not this scope's to free |
+| `g = c;` / outer local `x = c;` | compile error: the borrow outlives its target |
+
+Constraints and limits:
+
+- Both the parameter and the declaration must be a **struct pointer**; arrays, `static` locals,
+  file scope and a `switch` body are all errors.
+- A declaration needs an initialiser, the type must `use Handback`, and `impl Handback for S` must
+  exist; otherwise it is an error (no default body — "hand back" would silently do nothing).
+- Exit injection mirrors `own` but **never frees**: it calls `handback` and nulls the pointer, because
+  a handed-back object still lives in the pool and may be re-borrowed.
+- `return c;` (a local borrow escapes) reports `warning: a borrowed pointer escapes through 'return'`
+  and **cancels the injection**; `return r;` (a borrowed parameter) only warns.
+- The `Handback` implementation lives on the **borrowed object** (at exit the compiler only holds
+  `T *c`), exactly as `Drop` does.
+- Known limits (state them honestly): `store(c)` (a callee parameter not marked `borrow`) and the field
+  store `s->p = c` are not checked; a `goto` jumping over the declaration fails silently; pooled and
+  stack objects are not distinguished. **Never claim that `borrow` removes dangling altogether.**
+
+Diagnostics (English, lowercase, no trailing period, identifiers in single quotes):
+
+```text
+'borrow' requires a struct pointer parameter
+'borrow' requires an initialiser of struct pointer type
+struct '<S>' does not use trait 'Handback'
+struct '<S>' uses trait 'Handback' but has no impl
+a borrowed pointer cannot be deleted
+a borrowed pointer cannot be stored in '<name>' (its scope outlives the borrow)
+'borrow' is not supported inside a switch
+'borrow' does not support arrays
+a static local cannot be 'borrow'
+warning: a borrowed pointer escapes through 'return'
+```
+
+Design and implementation notes: [design/borrow.md](design/borrow.md).
 
 ### 5. Naming contract
 

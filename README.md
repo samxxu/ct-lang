@@ -131,6 +131,7 @@ ln -s ct "$OUT/ctc"                                          # ctc 兼容别名�
 | `Person ps[2];` | 声明 + 块内循环逐元素写 vptr，之后 `ps[0].greet()`、`ps[i].greet()` 可派发；`Person *ptrs[2]` 的元素自身是指针，用 `ptrs[i]->greet()` |
 | `delete q;` | `if (q) free(q);`（现对**任意指针**成立，含 `char *`） |
 | `own T *p = malloc(sizeof(struct T));` | 去掉 `own`；作用域闭合 `}` / 行首 `return` 之前自动插入 `if (p) { T_Drop_drop(p); free(p); p = 0; }`（**Phase 5，仅 CT 线**） |
+| `borrow T *c = pool.acquire(...);` | 去掉 `borrow`；作用域闭合 `}` / 行首 `return` 之前插入 `if (c) { T_Handback_handback(c); c = 0; }`（**不释放内存**；`use Handback` + `impl` 缺失即报错；仅 ct-ast） |
 | `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | 发射实例级包装函数 + vtable：`static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` 与 `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };`（**Phase 11，仅 ct-ast**；11.2 已接入派发——`Controller c = uart1;` 装箱用 `&uart1_Controller_vtable`） |
 | `T *p = malloc(sizeof(struct T));` | 声明后自动写 vptr（含嵌套值字段）：`p->__x_vptr = &T_X_vtable;` |
 | `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
@@ -926,6 +927,7 @@ ct/
 │   ├── construction.md       object-construction semantics (who writes the vptr, and when)
 │   ├── polymorphism.md       interface polymorphism and dispatch
 │   ├── patterns.md           design patterns with the existing language (the test for new features)
+│   ├── memory-guide.md       memory-management practice guide (own / borrow / factories / pools / arena)
 │   ├── glossary.md           glossary of terms
 │   └── design/               per-phase design notes (drafts and shipped ones; the code wins on conflict)
 ├── issues/                   review-findings register (meta; one file per finding, index in issues/README.md)

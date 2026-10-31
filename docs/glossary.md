@@ -38,6 +38,8 @@
 | 析构特征 Drop | `use Drop`、`impl Drop for S { … }` | **保留名**内置 trait；惰性生成释放函数 |
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
 | 自动释放（AutoDrop） | `own T *p = malloc(…);` | 作用域出口 / 行首 `return` 前自动 `drop()` + `free()` + 置空（Phase 5；仅 CT 线，L0 不识别） |
+| 借用（borrow） | `borrow T *p = …;` / 参数 `borrow T *r` | 借来的指针：作用域出口 / 行首 `return` 前注入 `handback()` + 置空，**不** `free`；禁 `delete`、禁存入更长寿变量（Phase 5 续；仅 ct-ast，见 [language-spec](language-spec.md) §4.40） |
+| 归还特征 Handback | `use Handback`、`impl Handback for S { … }` | **内置 trait**，照 `Drop` 无 vptr / 无 vtable；`borrow` 的出口调用它（仅 ct-ast） |
 | 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到某个**已声明的全局实例**上的调用；**Phase 11 已在 ct-ast 落地**（11.1 解析 + 实例级包装 / vtable + `maps` JSON，11.2 接入派发，11.3 加固），L0 / L2 不认识，见 [language-spec](language-spec.md) §4.10 |
 | 映射单元（mapping unit） | `lib/lib.m.ct` | 只承载 prologue（`#include` / `#define`）、`pub trait` 与 `map` 的编译期单元；**不产任何产物**，只能被 import（第三十八批，仅 ct-ast） |
 | 静态 trait（static trait） | `.m.ct` 里的 `pub trait T { …; }` | 无 `_iface` / `_vtbl` / vtable；不能 `impl`、`use`、作类型、装箱，也不能带默认体 |
@@ -270,6 +272,8 @@
 | Drop | `use Drop`, `impl Drop for S { … }` | a **reserved** built-in trait; the release function is emitted lazily |
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
 | AutoDrop | `own T *p = malloc(…);` | releases at scope exit / before a line-initial `return`: `drop()` + `free()` + null (Phase 5; CT line only, L0 does not know it) |
+| borrow | `borrow T *p = …;` / parameter `borrow T *r` | a borrowed pointer: injection of `handback()` + nulling at scope exit / before a line-initial `return`, **never** `free`; `delete` and stores into longer-lived variables are errors (Phase 5 follow-on; ct-ast only, see [language-spec](language-spec.md) §4.40) |
+| Handback trait | `use Handback`, `impl Handback for S { … }` | a **built-in** trait, handled like `Drop` (no vptr / no vtable); `borrow` calls it at scope exit (ct-ast only) |
 | map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto a call on a declared global instance; **landed in Phase 11 on ct-ast** (11.1 parse + instance-level wrapper / vtable + the `maps` JSON, 11.2 wires dispatch, 11.3 hardening); L0 / L2 do not know it, see [language-spec](language-spec.md) §4.10 |
 | mapping unit | `lib/lib.m.ct` | a compile-time unit carrying only the prologue (`#include` / `#define`), `pub trait` and `map`; it **produces no artefact** and can only be imported (batch 38, ct-ast only) |
 | static trait | a `.m.ct`'s `pub trait T { …; }` | no `_iface` / `_vtbl` / vtable; it cannot be `impl`ed, `use`d, used as a type, boxed, or carry a default body |
