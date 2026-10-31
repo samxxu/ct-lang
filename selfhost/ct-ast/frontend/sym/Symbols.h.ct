@@ -87,6 +87,13 @@ pub struct MethodSig {
     char ret[160];
     char ptype[16][160];
     int  nparams;
+    /* A default body (`{ … }` after the signature): the N_BLOCK's index and
+       the N_PARAM chain that names its parameters. Both are -1 for an abstract
+       method, whose body the adopting impl must write. `line` is where the
+       signature was declared, which is what an expansion failure points at. */
+    int  body;
+    int  pnode;
+    int  line;
 }
 
 pub struct Trait {
@@ -95,6 +102,8 @@ pub struct Trait {
     int  nm;
     int  is_pub;
     int  line;
+    /* the declaring unit's path, for the D-7 expansion diagnostic */
+    char path[160];
 }
 
 pub struct Field {
@@ -182,6 +191,10 @@ pub struct Symbols {
     int  nalias;
     int  self_mode;             /* inside an impl body: `self` -> `_self` */
     char ret_type[160];         /* return type of the function being parsed */
+    /* Inside a trait method's default body: the trait `self->m(...)` dispatches
+       through. Empty everywhere else. The adopting struct is unknown at parse
+       time, so the receiver resolves to the enclosing trait by construction. */
+    char trait_default[160];
     char errmsg[160];           /* the bare message `fail` recorded; Ast adds the position */
 } use SymbolOps;
 

@@ -1,0 +1,19 @@
+/* a cycle among default bodies has no non-default method to break it, so it
+   would recurse forever at run time (D-6). */
+trait T {
+    int a(void) {
+        return self->b();
+    }
+
+    int b(void) {
+        return self->a();
+    }
+}
+
+struct S {
+    int x;
+} use T;
+
+int main(void) {
+    return 0;
+}

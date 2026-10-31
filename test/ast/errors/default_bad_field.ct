@@ -1,0 +1,16 @@
+/* a default body written against `self->fd` cannot expand for a struct that has
+   no `fd`: the diagnostic points back at the trait declaration (D-7). */
+trait T {
+    int read(void) {
+        return self->fd;
+    }
+}
+
+struct S {
+    int x;
+} use T;
+
+int main(void) {
+    S s;
+    return s.read();
+}

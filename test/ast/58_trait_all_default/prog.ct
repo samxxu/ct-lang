@@ -1,0 +1,37 @@
+/* every method has a default body, so `use Counted;` is the whole adoption:
+   no `impl` block, and the vtable is still emitted once per struct (D-3). */
+#include <stdio.h>
+
+trait Counted {
+    int base(void) {
+        return 10;
+    }
+
+    int extra(void) {
+        return 2;
+    }
+
+    int total(void) {
+        return self->base() + self->extra();
+    }
+
+    int scaled(int k) {
+        return self->total() * k;
+    }
+}
+
+struct Plain {
+    int n;
+} use Counted;
+
+int main(void) {
+    Plain p;
+    Counted i;
+
+    p.n = 0;
+    printf("%d %d %d\n", p.base(), p.total(), p.scaled(3));
+
+    i = p;
+    printf("%d\n", i.total());
+    return 0;
+}

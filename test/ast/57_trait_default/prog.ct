@@ -1,0 +1,64 @@
+/* trait default methods: `write` is the only method an impl must write. The
+   default bodies expand per struct (D-1), dispatch siblings through the vtable,
+   and an impl method of the same name overrides one (D-4). */
+#include <stdio.h>
+
+trait Logger {
+    int write(char *buf, int len);
+
+    int write_all(char *buf, int len) {
+        int sent = 0;
+        while (sent < len) sent = sent + self->write(buf + sent, len - sent);
+        return sent;
+    }
+
+    int report(char *buf, int len) {
+        return self->write_all(buf, len) + self->write(buf, len);
+    }
+}
+
+struct Conn {
+    int fd;
+} use Logger;
+
+struct Short {
+    int fd;
+    int cap;
+} use Logger;
+
+impl Logger for Conn {
+    int write(char *buf, int len) {
+        (void)buf;
+        return len + self->fd;
+    }
+}
+
+impl Logger for Short {
+    int write(char *buf, int len) {
+        (void)buf;
+        return len * self->fd + self->cap;
+    }
+
+    /* the impl's version wins over the default body */
+    int write_all(char *buf, int len) {
+        (void)buf;
+        return len;
+    }
+}
+
+int main(void) {
+    Conn c;
+    Short s;
+    Logger l;
+
+    c.fd = 1;
+    s.fd = 2;
+    s.cap = 3;
+
+    printf("%d %d\n", c.write_all("abc", 3), c.report("abc", 3));
+    printf("%d %d\n", s.write_all("abc", 3), s.report("abc", 3));
+
+    l = c;
+    printf("%d\n", l.write_all("abcd", 4));
+    return 0;
+}

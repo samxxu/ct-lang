@@ -159,6 +159,13 @@
 # test/patterns/**, so an OO gap surfaces as a failing pattern, not a new
 # feature.
 #
+# batch 36 lets a trait method carry a default body: an impl writes only the
+# abstract methods, and a trait whose methods are all default needs no `impl`
+# at all (`use` is the adoption). test/ast/57_trait_default covers the mixed
+# shape (with one override) and 58_trait_all_default the `use`-only shape; the
+# cycle, the missing abstract method and the per-struct expansion failure are
+# pinned negatives.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1454,6 +1461,27 @@ elif grep -q "trait method 'b' is not implemented for struct 'P'" "$work/mmethod
 else
     bad "impl completeness" "$(cat "$work/mmethod.err")"
 fi
+
+# Batch 36 (trait default methods): a cycle among default bodies, an abstract
+# method that only `use` leaves missing, and a default body that cannot expand
+# for one struct are pinned verbatim. Each fixture is also swept by the
+# test/ast/errors loop above.
+for pair in \
+    "default_cycle|trait 'T' has no non-default method to break the cycle" \
+    "abstract_missing|trait method 'write' is not implemented for struct 'S'" \
+    "default_bad_field|cannot be expanded for struct S: no field 'fd'"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 36: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 36 ($cf)"
+    else
+        bad "batch 36: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
 
 # SH-11: an rvalue receiver below the statement's expression root has no point to
 # hoist to without reordering evaluation, so it is rejected. The position must be

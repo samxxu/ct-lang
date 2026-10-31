@@ -50,6 +50,7 @@ import tool::diag::diag;
 #define N_FUNC 3
 #define N_GLOBAL 22
 #define N_IMPL 33
+#define N_MCALL 30
 #define N_METHOD 29
 #define N_PARAM 19
 #define N_PP 2
@@ -145,6 +146,79 @@ pub struct Parser {
        parsed yet, so nothing can be resolved into an alias. */
     int  scan_only;
 } use ParseOps, ParseDeclOps;
+
+/* Parse the `{ … }` of a trait method's default body. The adopting struct is
+   unknown here, so `self` is bound to `void *`; the emitter expands the block
+   once per struct, where `self` becomes `struct <S> *`. The parameter names
+   ride on the N_PARAM chain the caller built. */
+static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret)
+{
+    int p, body;
+    char save_trait[MAX_TEXT];
+    char save_ret[MAX_TEXT];
+    (void)self;
+
+    if (self->sup->push_scope() != 0) return -1;
+    for (p = self->sym->traits[ti].m[mi].pnode; p >= 0; p = self->arena->nodes[p].next) {
+        if (!self->arena->nodes[p].text2[0]) continue;
+        if (self->sup->declare_var(self->arena->nodes[p].text2, self->arena->nodes[p].text) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        if (self->arena->nodes[p].text3[0]) {
+            int vi = self->sym->find_var(self->arena->nodes[p].text2);
+            if (vi >= 0) self->sym->vars[vi].is_array = 1;
+        }
+    }
+    if (self->sup->declare_var("self", "void *") != 0) {
+        self->sup->pop_scope();
+        return -1;
+    }
+    snprintf(save_trait, sizeof save_trait, "%s", self->sym->trait_default);
+    snprintf(save_ret, sizeof save_ret, "%s", self->sym->ret_type);
+    snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+    snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s",
+             self->sym->traits[ti].name);
+    self->mem->leak_active = 1;
+    self->mem->leak_frame = self->sym->nscope + 1;
+    self->mem->leak_impl = 1;
+    self->st->func_begin();
+    body = self->st->parse_block();
+    self->mem->leak_active = 0;
+    self->mem->leak_frame = -1;
+    self->mem->leak_impl = 0;
+    snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", save_ret);
+    snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s", save_trait);
+    self->sup->pop_scope();
+    if (body < 0) return -1;
+    if (self->st->func_end() != 0) return -1;
+    self->sym->traits[ti].m[mi].body = body;
+    return 0;
+}
+
+/* Record one edge per `self->m(...)` in a default body: a cycle among default
+   bodies would recurse forever at run time (D-6). Only calls the parser tagged
+   with this trait (`N_MCALL.text`) count, which is exactly the sibling set. */
+static void trait_default_edges(struct Arena *arena, int n, struct Symbols *sym,
+                                int ti, int from, char *edge)
+{
+    int mi;
+
+    for (; n >= 0; n = arena->nodes[n].next) {
+        if (arena->nodes[n].kind == N_MCALL
+            && strcmp(arena->nodes[n].text, sym->traits[ti].name) == 0) {
+            for (mi = 0; mi < sym->traits[ti].nm; mi++)
+                if (strcmp(sym->traits[ti].m[mi].name, arena->nodes[n].text2) == 0) {
+                    edge[from * MAX_METHODS + mi] = 1;
+                    break;
+                }
+        }
+        trait_default_edges(arena, arena->nodes[n].a, sym, ti, from, edge);
+        trait_default_edges(arena, arena->nodes[n].b, sym, ti, from, edge);
+        trait_default_edges(arena, arena->nodes[n].c, sym, ti, from, edge);
+        trait_default_edges(arena, arena->nodes[n].d, sym, ti, from, edge);
+    }
+}
 
 impl ParseDeclOps for Parser {
     int struct_def_ahead(void)
@@ -1400,14 +1474,18 @@ impl ParseOps for Parser {
         return 0;
     }
 
-    /* `trait Name { ret m(params); ... }` -- no node, the table is enough. */
+    /* `trait Name { ret m(params); ... }` -- no node, the table is enough. A
+       method may instead carry a default body (`{ … }`), which the emitter
+       expands once per adopting struct. */
     int parse_trait(int is_pub)
     {
-        int ti, mi, np, trait_line;
+        int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char ret[MAX_TEXT];
         char ptype[MAX_TEXT];
+        char pname[MAX_TEXT];
+        char edge[MAX_METHODS * MAX_METHODS];
         (void)self;
 
         trait_line = self->lex->tokline;
@@ -1427,10 +1505,12 @@ impl ParseOps for Parser {
         if (ti < 0) return -1;
         self->sym->traits[ti].is_pub = is_pub;
         self->sym->traits[ti].line = trait_line;
+        snprintf(self->sym->traits[ti].path, MAX_TEXT, "%s", self->mem->path);
         if (self->sup->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
         self->sup->lex_next();
         if (self->sup->expect("{") != 0) return -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            mline = self->lex->tokline;
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("a trait method cannot return a function pointer");
@@ -1440,6 +1520,11 @@ impl ParseOps for Parser {
             snprintf(self->sym->traits[ti].m[mi].name, MAX_TEXT, "%s", self->lex->toktext);
             snprintf(self->sym->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
             self->sym->traits[ti].m[mi].nparams = 0;
+            self->sym->traits[ti].m[mi].body = -1;
+            self->sym->traits[ti].m[mi].pnode = -1;
+            self->sym->traits[ti].m[mi].line = mline;
+            pfirst = -1;
+            ptail = -1;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "void") == 0) {
@@ -1460,7 +1545,11 @@ impl ParseOps for Parser {
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
                     self->sup->lex_next();
-                    if (self->sup->expect(";") != 0) return -1;
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                        if (parse_trait_body(self, ti, mi, ret) != 0) return -1;
+                    } else if (self->sup->expect(";") != 0) {
+                        return -1;
+                    }
                     self->sym->traits[ti].nm++;
                     continue;
                 }
@@ -1476,18 +1565,29 @@ impl ParseOps for Parser {
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
                 for (;;) {
                     if (self->ex->parse_type(ptype, sizeof ptype) != 0) return -1;
-                    if (self->lex->tok == T_ID) self->sup->lex_next();
+                    pname[0] = 0;
+                    if (self->lex->tok == T_ID) {
+                        snprintf(pname, sizeof pname, "%s", self->lex->toktext);
+                        self->sup->lex_next();
+                    }
                     /* a parameter may be an array (`char a[][N]`): the dims
                        belong in the vtable signature too, or the impl's type
-                       would not match it */
+                       would not match it. The N_PARAM node keeps the base
+                       type, the name and the dims apart, which is what a
+                       default body's definition needs. */
                     {
                         int sp;
                         sp = self->sup->new_node(N_PARAM);
                         if (sp < 0) return -1;
+                        snprintf(self->arena->nodes[sp].text, MAX_TEXT, "%s", ptype);
+                        snprintf(self->arena->nodes[sp].text2, MAX_TEXT, "%s", pname);
                         if (self->ex->parse_array_dims(sp) != 0) return -1;
                         if (self->arena->nodes[sp].text3[0])
                             snprintf(ptype + strlen(ptype),
                                      sizeof ptype - strlen(ptype), "%s", self->arena->nodes[sp].text3);
+                        if (pfirst < 0) pfirst = sp;
+                        else self->arena->nodes[ptail].next = sp;
+                        ptail = sp;
                     }
                     if (np >= MAX_PARAMS) return self->sup->fail("too many method parameters");
                     snprintf(self->sym->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
@@ -1500,11 +1600,39 @@ impl ParseOps for Parser {
                 }
             }
             if (self->sup->expect(")") != 0) return -1;
-            if (self->sup->expect(";") != 0) return -1;
             self->sym->traits[ti].m[mi].nparams = np;
+            self->sym->traits[ti].m[mi].pnode = pfirst;
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                if (parse_trait_body(self, ti, mi, ret) != 0) return -1;
+            } else if (self->sup->expect(";") != 0) {
+                return -1;
+            }
             self->sym->traits[ti].nm++;
         }
         if (self->sup->expect("}") != 0) return -1;
+        /* D-6: a cycle of default bodies has no non-default method to break it
+           and would recurse forever at run time. The declaration line is where
+           the diagnostic belongs. */
+        for (di = 0; di < MAX_METHODS * MAX_METHODS; di++) edge[di] = 0;
+        for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
+            if (self->sym->traits[ti].m[dm].body >= 0)
+                trait_default_edges(self->arena,
+                                    self->arena->nodes[self->sym->traits[ti].m[dm].body].a,
+                                    self->sym, ti, dm, edge);
+        for (dk = 0; dk < self->sym->traits[ti].nm; dk++)
+            for (di = 0; di < self->sym->traits[ti].nm; di++)
+                if (edge[di * MAX_METHODS + dk])
+                    for (dj = 0; dj < self->sym->traits[ti].nm; dj++)
+                        if (edge[dk * MAX_METHODS + dj]) edge[di * MAX_METHODS + dj] = 1;
+        dcycle = 0;
+        for (di = 0; di < self->sym->traits[ti].nm; di++)
+            if (edge[di * MAX_METHODS + di]) dcycle = 1;
+        if (dcycle) {
+            char cmsg[MAX_TEXT];
+            snprintf(cmsg, sizeof cmsg,
+                     "trait '%s' has no non-default method to break the cycle", name);
+            return tool::diag::ct_sem_error(trait_line, 1, cmsg, self->mem->path);
+        }
         return NO_NODE;
     }
 
@@ -1678,11 +1806,13 @@ impl ParseOps for Parser {
         if (self->sup->expect("}") != 0) return -1;
         /* A missing method would leave a NULL slot in the vtable and crash on
            the first call; L0 and L2 reject the same input up front, so accepting
-           it here would be a regression against our own oracle. Reported at the
-           impl's `{` -- the position and the wording L2 uses. The error counter
-           makes `parse_program` drop the unit, so no C is emitted. */
+           it here would be a regression against our own oracle. A method with a
+           default body is not missing: the emitter expands it (D-4). Reported at
+           the impl's `{` -- the position and the wording L2 uses. The error
+           counter makes `parse_program` drop the unit, so no C is emitted. */
         if (ti >= 0) {
             for (tm_i = 0; tm_i < self->sym->traits[ti].nm; tm_i++) {
+                if (self->sym->traits[ti].m[tm_i].body >= 0) continue;
                 found = 0;
                 for (k2 = self->arena->nodes[node].a; k2 >= 0; k2 = self->arena->nodes[k2].next)
                     if (strcmp(self->arena->nodes[k2].text2, self->sym->traits[ti].m[tm_i].name) == 0) {

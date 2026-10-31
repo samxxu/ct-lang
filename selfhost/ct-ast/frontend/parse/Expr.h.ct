@@ -1165,8 +1165,19 @@ impl ExprOps for Expr {
                     self->arena->nodes[m].aux = arrow ? 2 : 1;
                     snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
                     /* resolve the trait now: locals are out of scope by the time
-                       the emitter runs */
-                    if (self->sup->expr_type(n, rtype, sizeof rtype) == 0) {
+                       the emitter runs. Inside a trait's default body the
+                       adopting struct is unknown, so a call on `self` names the
+                       enclosing trait directly. */
+                    if (self->sym->trait_default[0]
+                        && self->arena->nodes[n].kind == N_VAR
+                        && strcmp(self->arena->nodes[n].text2, "self") == 0) {
+                        /* a forward sibling call (`a` calling a later `b`) is
+                           legal, so the trait name is recorded without looking
+                           the method up; the cycle check runs after the whole
+                           trait has been parsed. */
+                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
+                                 self->sym->trait_default);
+                    } else if (self->sup->expr_type(n, rtype, sizeof rtype) == 0) {
                         char ibase[MAX_TEXT];
                         size_t il;
                         int piface = 0;

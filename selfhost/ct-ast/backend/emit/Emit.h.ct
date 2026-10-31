@@ -195,6 +195,132 @@ struct Emitter {
     struct Init *init;
 } use EmitOps;
 
+/* Does the impl node `node` write `name`? */
+static int impl_writes(struct Arena *arena, int node, const char *name)
+{
+    int m;
+    for (m = arena->nodes[node].a; m >= 0; m = arena->nodes[m].next)
+        if (strcmp(arena->nodes[m].text2, name) == 0) return 1;
+    return 0;
+}
+
+/* Is there an impl of `tname` for struct `si` in any unit of this run? A struct
+   may be defined in one unit and implemented in another (`test/modules/split`),
+   so a per-unit view would wrongly synthesise defaults twice. The arena holds
+   every unit's nodes. */
+static int impl_exists_anywhere(struct Arena *arena, int si, const char *tname)
+{
+    int n;
+    for (n = 0; n < arena->nnode; n++)
+        if (arena->nodes[n].kind == N_IMPL && arena->nodes[n].aux == si
+            && strcmp(arena->nodes[n].text2, tname) == 0) return 1;
+    return 0;
+}
+
+/* A (struct, trait) pair that needs no `impl` at all: every method has a
+   default body (D-3: the `use` clause is the adoption). */
+static int adoption_default_only(struct Emitter *e, int si, const char *tname)
+{
+    int ti, mi;
+    ti = e->sym->find_trait(tname);
+    if (ti < 0) return 0;
+    if (impl_exists_anywhere(e->arena, si, tname)) return 0;
+    if (e->sym->traits[ti].nm == 0) return 0;
+    for (mi = 0; mi < e->sym->traits[ti].nm; mi++)
+        if (e->sym->traits[ti].m[mi].body < 0) return 0;
+    return 1;
+}
+
+/* The first `self->field` a default body names that `struct si` does not
+   define. The body is written once against an unknown struct, so this is the
+   per-struct check D-7 turns into an expansion diagnostic. */
+static int default_missing_field(struct Arena *arena, int n, struct Symbols *sym,
+                                 int si, char *out)
+{
+    for (; n >= 0; n = arena->nodes[n].next) {
+        if (arena->nodes[n].kind == N_ARROW && arena->nodes[n].a >= 0) {
+            int r = arena->nodes[n].a;
+            if (arena->nodes[r].kind == N_VAR && strcmp(arena->nodes[r].text2, "self") == 0) {
+                int fi, found = 0;
+                for (fi = 0; fi < sym->structs[si].nfields; fi++)
+                    if (strcmp(sym->structs[si].fields[fi].name, arena->nodes[n].text2) == 0) found = 1;
+                if (!found) {
+                    snprintf(out, MAX_TEXT, "%s", arena->nodes[n].text2);
+                    return 1;
+                }
+            }
+        }
+        if (default_missing_field(arena, arena->nodes[n].a, sym, si, out)) return 1;
+        if (default_missing_field(arena, arena->nodes[n].b, sym, si, out)) return 1;
+        if (default_missing_field(arena, arena->nodes[n].c, sym, si, out)) return 1;
+        if (default_missing_field(arena, arena->nodes[n].d, sym, si, out)) return 1;
+    }
+    return 0;
+}
+
+/* Expand trait method `mi` of `ti` for struct `si`: the default body is a
+   normal impl body once `self` is bound to `struct <S> *`, so dispatch inside
+   it keeps the existing emission rule and the vtable slot stays unchanged. */
+static int emit_default_method(struct Emitter *e, int si, const char *stype, int ti, int mi, int at)
+{
+    struct MethodSig *sig;
+    int p, k, ai;
+    char uname[32];
+    char fld[MAX_TEXT];
+    char msg[512];
+
+    sig = &e->sym->traits[ti].m[mi];
+    if (default_missing_field(e->arena, sig->body, e->sym, si, fld)) {
+        snprintf(msg, sizeof msg,
+                 "trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'",
+                 e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path,
+                 sig->line, e->sym->structs[si].name, fld);
+        return e->fail_from(at, msg);
+    }
+    fprintf(e->out, "static %s ", sig->ret);
+    fprintf(e->out, "%s_%s_%s(void *self",
+            e->sym->structs[si].name, e->sym->traits[ti].name, sig->name);
+    ai = 0;
+    for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
+        fputs(", ", e->out);
+        if (e->arena->nodes[p].text2[0]) {
+            if (e->emit_type_name_dims(e->arena->nodes[p].text, e->arena->nodes[p].text2,
+                                       e->arena->nodes[p].text3) != 0) return -1;
+        } else {
+            snprintf(uname, sizeof uname, "__arg%d", ai);
+            if (e->emit_type_name_dims(e->arena->nodes[p].text, uname,
+                                       e->arena->nodes[p].text3) != 0) return -1;
+        }
+        ai++;
+    }
+    fputs(") {\n", e->out);
+    fprintf(e->out, "    %s *_self = (%s *)self;\n", stype, stype);
+    e->sym->self_mode = 1;
+    ai = 0;
+    for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
+        if (e->arena->nodes[p].text2[0]) {
+            if (!e->node_mentions(sig->body, e->arena->nodes[p].text2))
+                fprintf(e->out, "    (void)%s;\n", e->arena->nodes[p].text2);
+        } else {
+            snprintf(uname, sizeof uname, "__arg%d", ai);
+            fprintf(e->out, "    (void)%s;\n", uname);
+        }
+        ai++;
+    }
+    if (!e->node_mentions(sig->body, "self")) fputs("    (void)_self;\n", e->out);
+    k = e->arena->nodes[sig->body].a;
+    while (k >= 0) {
+        if (e->emit_node(k, 1) != 0) {
+            e->sym->self_mode = 0;
+            return -1;
+        }
+        k = e->arena->nodes[k].next;
+    }
+    e->sym->self_mode = 0;
+    fputs("}\n\n", e->out);
+    return 0;
+}
+
 impl EmitOps for Emitter {
     int emit_indent(int n)
     {
@@ -393,6 +519,25 @@ impl EmitOps for Emitter {
                 fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
                         tname, self->sym->structs[si].name, tname);
         }
+        /* adoptions that need no impl: an all-default trait fills its own
+           slots, so the vtable must be visible to the initialisers below */
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            int ui;
+            const char *tname;
+            if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
+            si = self->sym->find_struct(self->arena->nodes[n].text2);
+            if (si < 0) continue;
+            for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
+                tname = self->sym->structs[si].use[ui];
+                if (!adoption_default_only(self, si, tname)) continue;
+                if (self->vtable_exported(si, tname))
+                    fprintf(self->out, "struct %s_vtbl %s_%s_vtable;\n",
+                            tname, self->sym->structs[si].name, tname);
+                else
+                    fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
+                            tname, self->sym->structs[si].name, tname);
+            }
+        }
         /* a `delete` in a function body runs before the drop definition below */
         for (si = 0; si < self->sym->nstructs; si++)
             if (self->sym->structs[si].uses_drop)
@@ -551,7 +696,7 @@ impl EmitOps for Emitter {
        `main` can already dispatch through them. */
     int emit_impls(int prog)
     {
-        int n, m, k, u, body;
+        int n, m, k, u, body, dm;
         (void)self;
 
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
@@ -608,6 +753,14 @@ impl EmitOps for Emitter {
                 self->sym->self_mode = 0;
                 fputs("}\n\n", self->out);
             }
+            /* A trait method the impl does not write inherits its default body
+               (override priority: the impl's version wins, D-4). */
+            if (ti >= 0)
+                for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
+                    if (self->sym->traits[ti].m[dm].body < 0) continue;
+                    if (impl_writes(self->arena, n, self->sym->traits[ti].m[dm].name)) continue;
+                    if (emit_default_method(self, si, sname, ti, dm, n) != 0) return -1;
+                }
             if (strcmp(tname, "Drop") != 0) {
                 /* a trait nothing dispatches leaves the table unreferenced; an
                    exported one is reachable from the consumer unit instead */
@@ -623,6 +776,62 @@ impl EmitOps for Emitter {
                     fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
                             self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                     u++;
+                }
+                /* inherited defaults fill the remaining slots */
+                if (ti >= 0)
+                    for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
+                        if (self->sym->traits[ti].m[dm].body < 0) continue;
+                        if (impl_writes(self->arena, n, self->sym->traits[ti].m[dm].name)) continue;
+                        if (u > 0) fputs(",\n", self->out);
+                        fprintf(self->out, "    .%s = %s_%s_%s", self->sym->traits[ti].m[dm].name,
+                                self->sym->structs[si].name, tname, self->sym->traits[ti].m[dm].name);
+                        u++;
+                    }
+                fputs("\n};\n\n", self->out);
+            }
+        }
+        /* D-3: a struct that only `use`s an all-default trait needs no `impl`.
+           The slot bodies are expanded here, once per struct, and the `use`
+           clause is the sole adoption. A trait with an abstract method in this
+           position is still SH-8 (`trait method 'x' is not implemented`). */
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            int si, ti, ui, type_index;
+            const char *tname;
+            char stype[MAX_TEXT];
+            if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
+            si = self->sym->find_struct(self->arena->nodes[n].text2);
+            if (si < 0) continue;
+            for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
+                tname = self->sym->structs[si].use[ui];
+                ti = self->sym->find_trait(tname);
+                if (ti < 0) continue;
+                if (impl_exists_anywhere(self->arena, si, tname)) continue;
+                if (self->sym->traits[ti].nm == 0) continue;
+                for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
+                    if (self->sym->traits[ti].m[dm].body < 0) {
+                        char emsg[MAX_TEXT];
+                        snprintf(emsg, sizeof emsg,
+                                 "trait method '%s' is not implemented for struct '%s'",
+                                 self->sym->traits[ti].m[dm].name, self->sym->structs[si].name);
+                        return self->fail_from(n, emsg);
+                    }
+                type_index = self->sym->find_type(self->sym->structs[si].name);
+                if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
+                    snprintf(stype, sizeof stype, "struct %s", self->sym->structs[si].name);
+                else
+                    snprintf(stype, sizeof stype, "%s", self->sym->structs[si].name);
+                for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
+                    if (emit_default_method(self, si, stype, ti, dm, n) != 0) return -1;
+                if (self->vtable_exported(si, tname))
+                    fprintf(self->out, "struct %s_vtbl %s_%s_vtable = {\n",
+                            tname, self->sym->structs[si].name, tname);
+                else
+                    fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+                            tname, self->sym->structs[si].name, tname);
+                for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
+                    if (dm > 0) fputs(",\n", self->out);
+                    fprintf(self->out, "    .%s = %s_%s_%s", self->sym->traits[ti].m[dm].name,
+                            self->sym->structs[si].name, tname, self->sym->traits[ti].m[dm].name);
                 }
                 fputs("\n};\n\n", self->out);
             }
@@ -1018,6 +1227,21 @@ impl EmitOps for Emitter {
             fprintf(self->out, "extern struct %s_vtbl %s_%s_vtable;\n",
                     tname, self->sym->structs[si].name, tname);
             any = 1;
+        }
+        /* an all-default adoption exports its vtable under the same rule */
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            int ui;
+            if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
+            si = self->sym->find_struct(self->arena->nodes[n].text2);
+            if (si < 0) continue;
+            for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
+                tname = self->sym->structs[si].use[ui];
+                if (!adoption_default_only(self, si, tname)) continue;
+                if (!self->vtable_exported(si, tname)) continue;
+                fprintf(self->out, "extern struct %s_vtbl %s_%s_vtable;\n",
+                        tname, self->sym->structs[si].name, tname);
+                any = 1;
+            }
         }
         if (u >= 0)
             for (i = 0; i < (*self->nmaps); i++) {

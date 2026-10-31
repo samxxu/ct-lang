@@ -1,0 +1,13 @@
+/* an abstract method with only `use` and no `impl` is still missing: SH-8's
+   wording is unchanged (a default body is the only thing an impl may omit). */
+trait Writer {
+    int write(char *buf, int len);
+}
+
+struct S {
+    int x;
+} use Writer;
+
+int main(void) {
+    return 0;
+}
