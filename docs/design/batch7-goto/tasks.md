@@ -24,7 +24,7 @@
 - `parse_func` 的函数体与 `parse_impl` 的方法体：`parse_block()` 之前 `func_begin()`，
   之后（`b < 0` 检查之后）`func_end()`，失败即 `pop_scope` + 返回 -1。
 
-## [x] T3 发射（`backend/emit/Emit.h.ct`）
+## [x] T3 发射（`backend/emit/Emitter.h.ct`）
 
 - `N_LABEL 49`、`N_GOTO 50`（与 Stmt / Parser 各写一份）。
 - `emit_node`：`N_GOTO` 发 `goto <text2>;`；`N_LABEL` 发 `<text2>:` 一行，再把 `a` 链逐条

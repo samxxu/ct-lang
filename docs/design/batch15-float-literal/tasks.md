@@ -12,7 +12,7 @@
 - 新增 `.digit` 分支（放在 `...` 之后）：扫 `.digits` + 可选指数 + 可选后缀，同样置
   `tokfloat`。
 
-## [x] T2 解析与发射（`Expr.h.ct` / `Emit.h.ct`）
+## [x] T2 解析与发射（`Expr.h.ct` / `Emitter.h.ct`）
 
 - `N_FNUM 54`；`parse_primary` 的 `T_NUM` 分支按 `tokfloat` 分流：整数写 `num`，
   浮点写 `text`。

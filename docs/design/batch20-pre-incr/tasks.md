@@ -3,7 +3,7 @@
 依据：`docs/design/batch20-pre-incr/spec.md`
 顺序即依赖顺序；每步完成后保持工作树可编译。
 
-## [x] T1 解析与发射（`Expr.h.ct` / `Emit.h.ct`）
+## [x] T1 解析与发射（`Expr.h.ct` / `Emitter.h.ct`）
 
 - `N_PRE 57`；`parse_unary` 在 `-` `!` `~` 之前加前缀分支：读 `++`/`--`、再读一个
   `parse_unary`、建 `N_PRE`（`a` = 操作数、`aux` = `P_INC`/`P_DEC`）。

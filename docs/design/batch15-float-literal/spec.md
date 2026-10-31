@@ -31,7 +31,7 @@
 
 - 改：`frontend/lex/Lexer.h.ct`（`tokfloat` 字段、小数 / 指数 / 后缀扫描、`.5` 分支）、
   `frontend/parse/Expr.h.ct`（`N_FNUM`、数字分支按 `tokfloat` 分流）、
-  `backend/emit/Emit.h.ct`（`N_FNUM` 一支）。
+  `backend/emit/Emitter.h.ct`（`N_FNUM` 一支）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：`TypeCheck`（浮点字面量不参与类型推断，与整数一致）、`ctc.c` / `l1` / `l2`、
   `CTC_VERSION`、golden。

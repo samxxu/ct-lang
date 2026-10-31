@@ -29,7 +29,7 @@
 
 - 改：`frontend/parse/Stmt.h.ct`（`N_SASSERT`、`parse_stmt` 分支）、
   `frontend/parse/Parser.h.ct`（`top_decl` 的转发分支）、
-  `backend/emit/Emit.h.ct`（`N_SASSERT` 的语句发射、`emit_program` 与 `emit_unit`
+  `backend/emit/Emitter.h.ct`（`N_SASSERT` 的语句发射、`emit_program` 与 `emit_unit`
   各一个顶层循环）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：`Expr` / `TypeCheck` / 符号表、`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。

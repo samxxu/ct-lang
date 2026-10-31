@@ -38,7 +38,7 @@
 - 改动：`frontend/parse/Parser.h.ct`（`parse_struct_def` 泛化为 `parse_record_def(is_union)`、
   `top_decl` 与 `parse_typedef` 各加一条分支）、`frontend/parse/Expr.h.ct`（`parse_type` 的
   `union` 与 kind 6、`offsetof` 的 `union` 前缀与消息关键字）、`frontend/sym/Symbols.h.ct`
-  （类别注释）、`backend/emit/Emit.h.ct`（`N_UNION` 宏、三处类型循环、`emit_type_decl`、
+  （类别注释）、`backend/emit/Emitter.h.ct`（`N_UNION` 宏、三处类型循环、`emit_type_decl`、
   `emit_struct_fwd`）、`frontend/module/Module.h.ct`（裸名导出循环）。
 - 不动：`ctc.c` / `l1` / `l2`（union 在 L2 仍按原样透传）、`CTC_VERSION`、`test/cases/**`
   与 `examples/**` 的 golden。

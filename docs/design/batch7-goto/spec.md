@@ -45,7 +45,7 @@
 - 改：`frontend/parse/Stmt.h.ct`（节点宏、`label_ahead` / `parse_named_label` / `parse_goto` /
   `func_begin` / `func_end` / `label_find`、标签表与 goto 表字段、`parse_label` 的链终止条件）、
   `frontend/parse/Parser.h.ct`（函数体与方法体前后各一次 `func_begin` / `func_end`）、
-  `backend/emit/Emit.h.ct`（两个节点宏与两条发射分支）。
+  `backend/emit/Emitter.h.ct`（两个节点宏与两条发射分支）。
 - 不动：`ctc.c` / `l1` / `l2`（L2 仍原样透传）、`CTC_VERSION`、`test/cases/**` 与 `examples/**`
   的 golden。
 

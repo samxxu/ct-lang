@@ -61,7 +61,7 @@ struct <T>_vtbl → struct <T>_iface → 每条绑定一个 static <宿主>_<Tra
 - `ct build` **不发射** `.c`、**不写** `.h`、**不进** 缓存 artifact、**不进** 末尾 `cc …` 命令的源文件列表。
 - `ct compile` 拒绝 `.m.ct` 输入：`a .m.ct unit produces no output; import it from a .ct unit`
   （在 `driver.run` 里按输入后缀判定，早于 `read_file`）。
-  **理由**：`ct compile` 是单文件模式，**不解析 import**（[driver.h.ct:144](../../../selfhost/ct-ast/tool/driver/driver.h.ct)
+  **理由**：`ct compile` 是单文件模式，**不解析 import**（[Driver.h.ct:144](../../../selfhost/ct-ast/tool/driver/Driver.h.ct)
   的注释即 `compile mode resolves no imports`），没有单元表也就没有 map 闭包；因此 `.m.ct`
   **只能**经 `ct build` 使用。
 - 同一个单元树里同名 `.h.ct` 与 `.m.ct` 同时存在 → 歧义，见 §3.3。
@@ -524,7 +524,7 @@ include guard，重复包含无害）。`atoi/strlen/strcmp/sscanf/getenv` 的�
   store，并拒绝把 `.m.ct` 作为命令行输入（`load_unit` 之前按后缀判定，报
   `a .m.ct unit produces no output; import it from a .ct unit`）。
 
-### 8.9 `backend/emit/Emit.h.ct`
+### 8.9 `backend/emit/Emitter.h.ct`
 
 - `emit_unit(u)`：banner 之后、`#include "<base>.h"` 之前调用 `emit_map_prologues(u)`；
   依赖头循环跳过 `is_map` 依赖。
@@ -533,7 +533,7 @@ include guard，重复包含无害）。`atoi/strlen/strcmp/sscanf/getenv` 的�
   按整行文本去重后逐行输出（每条后接 `\n`）。
 - `emit_maps(u)`：`m->is_static` 的条目整体跳过（不发射 wrapper、不发射 vtable）。
 - `emit_link_externs` / `map_vtable_exported`：静态映射跳过。
-- `emit_expr` 的 `N_MCALL` 分支（[Emit.h.ct:1945](../../../selfhost/ct-ast/backend/emit/Emit.h.ct)）在既有
+- `emit_expr` 的 `N_MCALL` 分支（[Emitter.h.ct:1945](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct)）在既有
   `aux` 分派前加两支：
 
   ```ct
@@ -560,7 +560,7 @@ include guard，重复包含无害）。`atoi/strlen/strcmp/sscanf/getenv` 的�
   - 「可见」= map 的 `unit` 在消费者单元的 `depu` 传递闭包内（与绑定/静态调用的可见性一致）。
 - `write_map`：静态映射输出 §6.6 字段；`symbol` 取 recipe 顶层 callee（解析不出时留空）。
 
-### 8.10 `tool/driver/driver.h.ct`
+### 8.10 `tool/driver/Driver.h.ct`
 
 - `run` 在解析参数后按输入后缀判定：`.m.ct` →
   `ctc: a .m.ct unit produces no output; import it from a .ct unit`，退出码 1。

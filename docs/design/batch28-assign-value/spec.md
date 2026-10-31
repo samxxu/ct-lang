@@ -31,7 +31,7 @@
 
 - 改：`frontend/parse/Expr.h.ct`（`N_ASSIGN`、`assign_ok`、`parse_expr` 的赋值一级、
   括号分支开关）、`frontend/parse/Stmt.h.ct`（五处条件的开关）、
-  `backend/emit/Emit.h.ct`（`emit_expr` 的 `N_ASSIGN` 一支）。
+  `backend/emit/Emitter.h.ct`（`emit_expr` 的 `N_ASSIGN` 一支）。
 - **impl 方法预算**：不新增方法（255/256），不新增节点编号。
 - 不动：`TypeCheck` / `Symbols` / `ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

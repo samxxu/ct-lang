@@ -7,7 +7,7 @@
 
 - `Expr.h.ct`：`B_COMMA 19`；`parse_primary` 的括号分支在第一个表达式之后按 `,` 循环，
   建 `N_BIN` + `B_COMMA`。
-- `Emit.h.ct`：`emit_expr` 在通用 `N_BIN` 之前加逗号一支，打印 `(a, b)`。
+- `Emitter.h.ct`：`emit_expr` 在通用 `N_BIN` 之前加逗号一支，打印 `(a, b)`。
 
 ## [x] T2 fixture、关卡、文档与提交
 

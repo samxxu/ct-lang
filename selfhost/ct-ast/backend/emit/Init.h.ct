@@ -5,10 +5,10 @@
  * cannot always fill them: an array element and a heap object have no
  * designator to reach, so they need statements after the declaration. This
  * object owns every such write -- the designator items, the statement form,
- * and the per-field / per-array-element recursion. `Emit` keeps the rest and
+ * and the per-field / per-array-element recursion. `Emitter` keeps the rest and
  * calls in through `init_get`.
  *
- * The output stream belongs to `Emit` and changes per unit, so this object
+ * The output stream belongs to `Emitter` and changes per unit, so this object
  * holds a pointer to that pointer, never a copy.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).

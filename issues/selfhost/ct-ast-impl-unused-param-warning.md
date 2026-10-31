@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | Medium |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
-| 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct](../../selfhost/ct-ast/backend/emit/Emit.h.ct)（impl 方法体发射） |
+| 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（impl 方法体发射） |
 | 状态 | 待修（Batch 2 / 2c.1） |
 
 ## 现象

@@ -33,7 +33,7 @@
 
 - 改：`frontend/parse/Stmt.h.ct`（结构体字段 `static_decl`、`parse_stmt` 的 static 分支、
   `parse_decl_node` 的标记与 `leak_decl` 跳过、两处标签链的声明判定加上 `static`）、
-  `backend/emit/Emit.h.ct`（`emit_inline` 的 `N_DECL` 分支加前缀）。
+  `backend/emit/Emitter.h.ct`（`emit_inline` 的 `N_DECL` 分支加前缀）。
 - **impl 方法预算**：L2 的 `MAX_MAP_IMPLS` 是 256，当前 255。本批不新增任何 impl 方法
   （全部内联进既有方法）。
 - 不动：`frontend/sym/Symbols.h.ct`、`frontend/type/TypeCheck.h.ct`、`backend/mem/Memory.h.ct`、

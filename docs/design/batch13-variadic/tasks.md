@@ -24,7 +24,7 @@
   `(` 表达式 `,` 类型 `)`，节点 `a` = 表达式、`text` = 类型。
 - `expr_type`：`N_VAARG` 返回 `text`。
 
-## [x] T4 发射（`Emit.h.ct`）
+## [x] T4 发射（`Emitter.h.ct`）
 
 - `N_VAARG 53`；`emit_expr` 发 `va_arg(<expr>, <type>)`。
 - `emit_proto` 与 `emit_node` 的 `N_FUNC`：参数表末尾按 variadic 标志补 `, ...`。

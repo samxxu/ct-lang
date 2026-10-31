@@ -36,7 +36,7 @@
 - 改：`frontend/parse/Expr.h.ct`（`parse_type` 的 `_Alignas` 分支、`parse_unary` 的
   `_Alignof`、`parse_primary` 的 `_Generic`、`T_EOF` 常量）、
   `frontend/parse/Stmt.h.ct`（`is_decl_start` 一行）、
-  `backend/emit/Emit.h.ct`（`N_SIZEOF` 按 `aux` 选关键字）。
+  `backend/emit/Emitter.h.ct`（`N_SIZEOF` 按 `aux` 选关键字）。
 - **impl 方法预算**：不新增方法（255/256），不新增节点编号（`N_RAW` / `N_SIZEOF` 复用）。
 - 不动：`TypeCheck` / `Symbols` / `ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

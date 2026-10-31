@@ -157,7 +157,7 @@ int  ns_host;       /* 1 = 命名空间宿主 */
   - 通过后置 `nodes[n].b = 1`（表示「已被正确接口上下文接收」），再按现有逻辑处理
     `addr`（需要取地址时套 `N_ADDR`）。
 
-### 7.5 `selfhost/ct-ast/backend/emit/Emit.h.ct`
+### 7.5 `selfhost/ct-ast/backend/emit/Emitter.h.ct`
 
 - `emit_expr` 的 `N_BOX` 分支改为按位处理：
   - `aux & 2` → 前缀 `&`；

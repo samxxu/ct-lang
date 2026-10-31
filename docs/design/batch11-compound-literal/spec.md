@@ -40,7 +40,7 @@
   `frontend/parse/Parser.h.ct`（一处调用点改名）、
   `frontend/parse/Expr.h.ct`（`N_COMPOUND`、`postfix_seed`、cast 分支与 `parse_postfix`）、
   `frontend/type/TypeCheck.h.ct`（`expr_type` 一支）、
-  `backend/emit/Emit.h.ct`（`N_COMPOUND`、`emit_raw_init` 的 `assign` 参数与三个调用点、
+  `backend/emit/Emitter.h.ct`（`N_COMPOUND`、`emit_raw_init` 的 `assign` 参数与三个调用点、
   `emit_expr` 一支）。
 - **impl 方法预算**：+1（ParseSupport::init_raw）/ −1（Stmt::parse_init_raw），总数仍 255。
 - 不动：`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden、`Symbols.h.ct`、`Memory.h.ct`。

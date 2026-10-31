@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast 发射器） |
 | 严重度 | **Medium** |
 | 锚点 | commit `6d764bc`（2026-10-21） |
-| 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct:451-457](../../selfhost/ct-ast/backend/emit/Emit.h.ct#L451-L457)、[selfhost/ct-ast/backend/emit/Init.h.ct:165-183](../../selfhost/ct-ast/backend/emit/Init.h.ct#L165-L183) |
+| 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct:451-457](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L451-L457)、[selfhost/ct-ast/backend/emit/Init.h.ct:165-183](../../selfhost/ct-ast/backend/emit/Init.h.ct#L165-L183) |
 | 状态 | ✅ 已修复（2026-10-21，`Init.h.ct` 的 `emit_field_vptrs` 跳过已被初始化式赋值的字段） |
 
 ## 现象
@@ -59,7 +59,7 @@ dup2.c:56:66: warning: initializer partially overrides prior initialization of t
 
 ## 根因
 
-`Emit.h.ct` 在构造点带成员时无条件追加：
+`Emitter.h.ct` 在构造点带成员时无条件追加：
 
 ```c
 fwrite(t, 1, (size_t)(len - 1), self->out);
@@ -70,7 +70,7 @@ if (si >= 0 && self->init->emit_field_vptrs(si, 1) != 0) return -1;   /* ← 不
 `Init.h.ct` 的 `emit_field_vptrs` 对所有「非指针、非数组、需要 init」的字段一律发
 `.字段.__x_vptr = …`，没有「该字段已在捕获到的初始化式里被指定」这条判断。
 
-注意别把 `Box b = { }`（空花括号，`Emit.h.ct:442-449`）那条分支一起删掉——那里字段确实没被赋值，
+注意别把 `Box b = { }`（空花括号，`Emitter.h.ct:442-449`）那条分支一起删掉——那里字段确实没被赋值，
 嵌套初始化式是必需的。
 
 ## 修复建议

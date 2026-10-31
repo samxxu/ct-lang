@@ -39,7 +39,7 @@
   `frontend/sym/Symbols.h.ct`（`Func.variadic`）、
   `frontend/parse/Expr.h.ct`（`va_list` 类型词、`N_VAARG` 分支）、
   `frontend/type/TypeCheck.h.ct`（`expr_type`）、
-  `backend/emit/Emit.h.ct`（`N_VAARG`、`emit_proto`、`N_FUNC` 的 `, ...`）。
+  `backend/emit/Emitter.h.ct`（`N_VAARG`、`emit_proto`、`N_FUNC` 的 `, ...`）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

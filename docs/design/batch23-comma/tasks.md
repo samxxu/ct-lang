@@ -7,7 +7,7 @@
 
 - `Stmt.h.ct`：`B_COMMA 19`、`N_BIN 11`；`parse_expr_stmt_node` 把三处 early return
   收拢成一个结果，再接逗号循环；每个操作数递归走同一函数。
-- `Emit.h.ct`：`B_COMMA`；`emit_node` 的语句分支接纳「`N_BIN` + `B_COMMA`」；
+- `Emitter.h.ct`：`B_COMMA`；`emit_node` 的语句分支接纳「`N_BIN` + `B_COMMA`」；
   `emit_inline` 打印 `(a, b)`。
 
 ## [x] T2 fixture、关卡、文档与提交

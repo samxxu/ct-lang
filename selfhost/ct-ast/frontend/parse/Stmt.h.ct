@@ -22,7 +22,7 @@ import frontend::sym::Symbols;
 import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
-import tool::diag::diag;
+import tool::diag::Diag;
 
 #define MAX_TEXT 160
 #define MAX_RAW_INIT 4096

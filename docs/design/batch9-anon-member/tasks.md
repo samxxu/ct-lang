@@ -14,7 +14,7 @@
 - `parse_record_def` 的字段循环替换为 `parse_record_body`，并在读体前设置 `cur_record`、
   结束后清空。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `EmitOps` / `Emitter` 新增 `emit_field(int n, int ind)`：`aux == 2` 的字段发
   `union {` / `struct {` + 内层逐条 + `}`；其余转给 `emit_inline`。

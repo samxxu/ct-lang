@@ -9,7 +9,7 @@
   `ptrdiff_t` / `int8_t`–`uint64_t`，并加 `restrict`；注释说明这是对齐 L2 的
   `is_type_keyword`。
 
-## [x] T2 `inline`（`frontend/parse/Parser.h.ct` / `backend/emit/Emit.h.ct`）
+## [x] T2 `inline`（`frontend/parse/Parser.h.ct` / `backend/emit/Emitter.h.ct`）
 
 - `top_decl` 的 `static` 分支：`static` 之后若是 `inline`，消费后仍按
   `parse_func(1, …)` 解析，成功时把函数节点 `num` 置 1。

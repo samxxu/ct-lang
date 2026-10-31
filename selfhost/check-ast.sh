@@ -174,6 +174,10 @@
 # mapping shared by a `.h.ct` and a `.ct` consumer. The whitelist of a `.m.ct`
 # unit, the static-trait restrictions and the recipe rules are pinned negatives.
 #
+# The unit-name lint keeps `selfhost/ct-ast/**` on the layout rule: a unit file
+# is named after its main type, so every `.h.ct` declares a type or trait whose
+# name matches its own basename (`main.ct` is the entry, not a unit).
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -197,6 +201,21 @@ ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
 bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 
 echo "cc: $CC"
+echo
+echo "== unit names (a unit file is named after its main type) =="
+name_bad=""
+for f in $(find selfhost/ct-ast -name '*.h.ct' | sort); do
+    b="$(basename "$f" .h.ct)"
+    if ! grep -qE "^(pub )?(struct|union|enum|trait) $b( |$)" "$f"; then
+        name_bad="$name_bad $b"
+    fi
+done
+if [ -z "$name_bad" ]; then
+    ok "every .h.ct unit declares a type named after its file"
+else
+    bad "unit names" "$name_bad"
+fi
+
 echo
 echo "== build the bootstrap chain and the AST compiler =="
 if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then

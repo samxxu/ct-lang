@@ -29,7 +29,7 @@
 ## 3. 影响面
 
 - 改：`frontend/parse/Stmt.h.ct`（`N_EMPTY`、`parse_stmt` 的 `;` 分支、`for` 分支的 static
-  子分支）、`backend/emit/Emit.h.ct`（`N_EMPTY` 与一条空发射分支）。
+  子分支）、`backend/emit/Emitter.h.ct`（`N_EMPTY` 与一条空发射分支）。
 - **impl 方法预算**：不新增任何方法（255/256）。
 - 不动：`ParseSupport` / `Expr` / `TypeCheck` / `Memory`、`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

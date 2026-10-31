@@ -23,7 +23,7 @@
 - `Module::build_main`：两处循环跳过 map 单元的发射 / 头 / `cache->hit` / `cache->store`；
   末尾 `cc` 行只列非 map 单元；命令行直接传 `.m.ct` 报
   `a .m.ct unit produces no output; import it from a .ct unit`。
-- `tool/driver/driver.h.ct`：compile 模式输入 `.m.ct` 同报该消息。
+- `tool/driver/Driver.h.ct`：compile 模式输入 `.m.ct` 同报该消息。
 - `frontend/parse/Parser.h.ct`：
   - `top_decl` 按 spec §3.5 白名单；禁止项按 §7 报错；
   - N_PP 行只允许 `#include` / `#define`；

@@ -12,7 +12,7 @@
 
 - 词法器整数分支（`Lexer.h.ct`）只写 `toknum`，不写 `toktext`：整数 token 的
   `toktext` 是脏值，后缀也不可能留在拼写里。
-- `parse_primary` 把整数建成 `N_NUM`，值进 `num`；`Emit.h.ct` 用 `%ld` 打印 `num`。
+- `parse_primary` 把整数建成 `N_NUM`，值进 `num`；`Emitter.h.ct` 用 `%ld` 打印 `num`。
   `N_NUM` 的 `text` 没有任何读者，是空槽。
 - `add_func` 命中既有行时无条件覆盖 `ret`：原型先写 `_Noreturn void`，定义再写
   `void`，后者胜出，`_Noreturn` 静默丢失。
@@ -28,7 +28,7 @@
   后缀不参与数值计算，`toknum` 的行为不变。
 - **D-2 合法性在 `parse_primary` 判定**（不新增 impl 方法）：U 至多一个、L 至多两个、
   总长至多 3；否则报 `an integer suffix may be U, L or LL`。合法时把规范后缀写进
-  `N_NUM.text`，`Emit.h.ct` 的整数分支由 `%ld` 改为 `%ld%s`。
+  `N_NUM.text`，`Emitter.h.ct` 的整数分支由 `%ld` 改为 `%ld%s`。
 - **D-3 `add_func` 的 `ret` 先声明者胜**：只在新建行时写 `ret`；命中既有行时保留原值。
   原型 / 定义同签名时其余字段（`cname`、`is_static`、`nparams`、形参表）行为不变。
 - **D-4 `static_assert` 作为 `_Static_assert` 的别名**：`parse_stmt` 与 `top_decl` 两处
@@ -49,7 +49,7 @@
   （`parse_primary` 后缀校验与存储、`is_type_word`）、
   `frontend/parse/ParseSupport.h.ct`（`add_func` 的 `ret`）、
   `frontend/parse/Stmt.h.ct` / `frontend/parse/Parser.h.ct`（`static_assert` 别名）、
-  `backend/emit/Emit.h.ct`（`N_NUM` 打印后缀）。
+  `backend/emit/Emitter.h.ct`（`N_NUM` 打印后缀）。
 - 不新增 impl 方法（预算 256 已满）；不改节点编号，不 bump `CTC_VERSION`，
   不动 L0 / L1 / L2，既有 golden 零改动。
 

@@ -25,7 +25,7 @@
 ## 3. 影响面
 
 - 改：`frontend/parse/Stmt.h.ct`（`B_COMMA` / `N_BIN`、`parse_expr_stmt_node` 重构）、
-  `backend/emit/Emit.h.ct`（`B_COMMA`、语句分派、`emit_inline` 一支）。
+  `backend/emit/Emitter.h.ct`（`B_COMMA`、语句分派、`emit_inline` 一支）。
 - **impl 方法预算**：不新增方法（255/256），不新增节点编号。
 - 不动：`Expr` / `TypeCheck` / `Symbols` / `ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

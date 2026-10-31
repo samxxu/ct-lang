@@ -42,6 +42,13 @@ CT_CASES = (
     "test/modules/autodrop/prog.ct",
     # Phase 11.1 `map`: a CT-line-only construct (ct-ast).
     "test/ast/13_map_instance/prog.ct",
+    # Batch 36 trait default methods: a body may live in the trait itself.
+    "test/ast/57_trait_default/prog.ct",
+    # Batch 38 zero-cost static mapping: `.m.ct` units with `for type` and
+    # `for namespace` hosts, plus the call sites that consume them.
+    "test/modules/map_unit/libc/libc.m.ct",
+    "test/modules/map_unit/main.ct",
+    "test/modules/map_unit_type/ctypes/ctypes.m.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -228,6 +235,19 @@ def main():
             check("`map trait T for instance x {` -> ct-map",
                   any(h[0] == "ct-map" for _, l, hs in rows
                       if l.strip().startswith("map ") for h in hs))
+        if "libc.m.ct" in rel:
+            check("`map trait T for type char * {` -> ct-map-type",
+                  any(h[0] == "ct-map-type" for _, l, hs in rows
+                      if l.strip().startswith("map ") and " for type " in l for h in hs))
+            check("`map trait T for namespace n {` -> ct-map-namespace",
+                  any(h[0] == "ct-map-namespace" for _, l, hs in rows
+                      if l.strip().startswith("map ") and " for namespace " in l for h in hs))
+        if "57_trait_default" in rel:
+            check("trait with default bodies -> ct-trait",
+                  any(h[0] == "ct-trait" for _, l, hs in rows
+                      if l.strip().startswith("trait ") for h in hs))
+            check("`self->` inside a default body -> ct-self",
+                  any(h[0] == "ct-self" for _, l, hs in rows if "self->" in l for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

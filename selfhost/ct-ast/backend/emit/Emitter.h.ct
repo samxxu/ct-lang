@@ -1,5 +1,5 @@
 /*
- * Emit.h.ct - the C emitter, one class of its own.
+ * Emitter.h.ct - the C emitter, one class of its own.
  *
  * It turns the AST into C: it reads the node pool, the symbol tables, the type
  * queries and the module tables, and writes the `.c`/`.h` files and the map

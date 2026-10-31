@@ -44,7 +44,7 @@
 - 改：`frontend/parse/Parser.h.ct`（`attr_pool` + 六个调用点）、
   `frontend/parse/ParseSupport.h.ct`（`add_func` 拼 `pdim`、新行清 `attr`）、
   `frontend/sym/Symbols.h.ct`（`Fn.attr`）、`runtime/arena/Arena.h.ct`（`Node.attr`）、
-  `backend/emit/Emit.h.ct`（原型 / 定义 / 形参 / 字段 / 全局 / `typedef` / 记录与枚举尾部）。
+  `backend/emit/Emitter.h.ct`（原型 / 定义 / 形参 / 字段 / 全局 / `typedef` / 记录与枚举尾部）。
 - **impl 方法预算**：新增 1 个（`ParseOps::attr_pool`）；构建未触发 `MAX_MAP_IMPLS`（256），
   但余量已极少，下一批若再加方法需先扩该上限（需用户授权改 `l2/**`）。
 - 不动：节点编号、L0 / L1 / L2、`CTC_VERSION`、既有 golden（新 fixture 之外零改动）。

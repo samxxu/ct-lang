@@ -41,7 +41,7 @@ C 语义就是类型限定符，后者是函数说明符（L2 原样透传整行
 ## 3. 影响面
 
 - 改：`frontend/parse/Expr.h.ct`（`is_type_word`）、`frontend/parse/Parser.h.ct`
-  （`top_decl` 的 `static` 分支与新增 `inline` 分支）、`backend/emit/Emit.h.ct`
+  （`top_decl` 的 `static` 分支与新增 `inline` 分支）、`backend/emit/Emitter.h.ct`
   （`N_FUNC` 的 `inline `）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden、符号表结构。

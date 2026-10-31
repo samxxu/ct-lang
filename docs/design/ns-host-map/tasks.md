@@ -40,7 +40,7 @@
 
 ## [x] T5 发射
 
-- `backend/emit/Emit.h.ct`：
+- `backend/emit/Emitter.h.ct`：
   - `N_BOX` 按位发射，`aux & 4` 时 self 为 `0`；
   - 发射期两条校验（非接口目标、缺 map），使用 `fail_from` 保证 `file:line:col:`
     归属到声明装箱的单元；

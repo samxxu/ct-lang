@@ -27,8 +27,8 @@
 | --- | --- | --- |
 | F1 | 函数指针 `typedef`（含 typedef 一个函数指针数组） | `frontend/parse/Parser.h.ct`、`frontend/parse/Expr.h.ct`、`frontend/sym/Symbols.h.ct` |
 | F2 | 函数指针字段直接调用 `o.f(x)` / `p->f(x)` | `frontend/parse/Expr.h.ct` |
-| F3 | 函数指针数组：局部、全局、struct 字段、`{ plus, minus }` 初始化 | `frontend/parse/**`、`backend/emit/Emit.h.ct` |
-| F4 | 文件作用域全局初始化器可命名本单元的函数（原型先于全局） | `backend/emit/Emit.h.ct` |
+| F3 | 函数指针数组：局部、全局、struct 字段、`{ plus, minus }` 初始化 | `frontend/parse/**`、`backend/emit/Emitter.h.ct` |
+| F4 | 文件作用域全局初始化器可命名本单元的函数（原型先于全局） | `backend/emit/Emitter.h.ct` |
 | F5 | 精确诊断：嵌套函数指针 | `frontend/parse/Expr.h.ct` |
 | 配套 | 正例 / 负例 fixture、`check-ast.sh` 断言、§4.12 中英对称文档 | `test/ast/**`、`selfhost/check-ast.sh`、`docs/language-spec.md` |
 
@@ -64,7 +64,7 @@
 
 ### D-3 typedef 发射走 `emit_type_name`
 
-`Emit.h.ct:723` 现为 `typedef %s %s;`，对 `int (*)(int, int)` 会拼出非法 C。
+`Emitter.h.ct:723` 现为 `typedef %s %s;`，对 `int (*)(int, int)` 会拼出非法 C。
 改为经 `emit_type_name`（含 D-6 的维度版本）发射，得到 `typedef int (*BinOp)(int, int);`。
 头文件与 `.c` 共用 `emit_type_decl`，一处修复覆盖两条路径。
 
@@ -111,14 +111,14 @@ aux  = 2
 
 ### D-6 全局与原型换位（编译模式与 build 模式一致）
 
-`emit_program`（`Emit.h.ct:289-296`）按源码顺序一次性发射 struct / typedef / global，之后才发射原型；
+`emit_program`（`Emitter.h.ct:289-296`）按源码顺序一次性发射 struct / typedef / global，之后才发射原型；
 文件作用域初始化器一旦命名函数，C 就看不到声明。改为三段：
 
 1. `N_STRUCT` / `N_TYPEDEF`（按源码顺序）；
 2. 全部函数原型（`emit_proto`）；
 3. `N_GLOBAL`（跳过 `extern`，按源码顺序），仍在 `emit_impls` 与函数体之前。
 
-`write_unit_file`（`Emit.h.ct:1493-1504`）做同样拆分。globals 的 vptr 初始化仍安全：
+`write_unit_file`（`Emitter.h.ct:1493-1504`）做同样拆分。globals 的 vptr 初始化仍安全：
 vtable 的 tentative definition 已在 `emit_vtable_fwd` 出现。
 
 ### D-7 嵌套函数指针的精确诊断

@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | Medium |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
-| 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct](../../selfhost/ct-ast/backend/emit/Emit.h.ct)（`emit_maps`）、[selfhost/ct-ast/frontend/parse/MapBuild.h.ct](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct) |
+| 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`emit_maps`）、[selfhost/ct-ast/frontend/parse/MapBuild.h.ct](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct) |
 | 状态 | 待修（Batch 2 / 2b.1、2b.5） |
 
 ## 现象

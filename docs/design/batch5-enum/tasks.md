@@ -47,15 +47,15 @@
 - `parse_label`：把返回值存进 `N_CASE.b`，不再写 `text`。
 - 验收：`case (1 << 2):`、`case 1 + 2:`、`case RED:`、`case 'a':`、`case -1:` 解析通过。
 
-## [x] T6 `offsetof`（`frontend/parse/Expr.h.ct`、`backend/emit/Emit.h.ct`、`frontend/type/TypeCheck.h.ct`）
+## [x] T6 `offsetof`（`frontend/parse/Expr.h.ct`、`backend/emit/Emitter.h.ct`、`frontend/type/TypeCheck.h.ct`）
 
 - `N_OFFSETOF 47`（Expr / Emit 各写一份）。
 - `parse_primary` 的 `T_ID` 分支之前拦截 `offsetof` + `(`：`parse_type`、`expect(",")`、
   读字段标识符、`expect(")")`，按 spec D-8 校验结构体与字段，生成 `N_OFFSETOF`（`text` = 类型、`text2` = 字段）。
-- `Emit.h.ct` 的 `emit_expr` 新增分支：`offsetof(<text>, <text2>)`。
+- `Emitter.h.ct` 的 `emit_expr` 新增分支：`offsetof(<text>, <text2>)`。
 - `TypeCheck.h.ct` 的 `expr_type` 把 `N_OFFSETOF` 当作 `size_t`（与 `N_SIZEOF` 同一处理）。
 
-## [x] T7 发射（`backend/emit/Emit.h.ct`）
+## [x] T7 发射（`backend/emit/Emitter.h.ct`）
 
 - 宏 `N_ENUM 45`、`N_ENUMVAL 46`、`N_OFFSETOF 47`。
 - `emit_type_decl` 新增 `N_ENUM` 分支（spec D-10 的排版）；成员一行的 ` = ` 走 `emit_expr(a)`。

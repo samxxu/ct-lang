@@ -12,6 +12,8 @@
     { "include": "#ct-impl" },
     { "include": "#ct-impl-open" },
     { "include": "#ct-map" },
+    { "include": "#ct-map-namespace" },
+    { "include": "#ct-map-type" },
     { "include": "#ct-map-open" },
     { "include": "#ct-use" },
     { "include": "#ct-self" },
@@ -150,6 +152,33 @@
         "6": { "name": "entity.name.type.struct.ct" }
       }
     },
+    "ct-map-namespace": {
+      "match": "^[ \\t]*(map)[ \\t]+(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]+(for)[ \\t]+(namespace)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
+      "captures": {
+        "1": { "name": "storage.type.map.ct" },
+        "2": { "name": "storage.type.trait.ct" },
+        "3": { "name": "entity.name.type.trait.ct" },
+        "4": { "name": "keyword.control.ct" },
+        "5": { "name": "keyword.other.namespace.ct" },
+        "6": {
+          "patterns": [
+            { "match": "::", "name": "punctuation.separator.namespace.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.namespace.ct" }
+          ]
+        }
+      }
+    },
+    "ct-map-type": {
+      "match": "^[ \\t]*(map)[ \\t]+(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]+(for)[ \\t]+(type)[ \\t]+([^;{}]*?)[ \\t]*\\{",
+      "captures": {
+        "1": { "name": "storage.type.map.ct" },
+        "2": { "name": "storage.type.trait.ct" },
+        "3": { "name": "entity.name.type.trait.ct" },
+        "4": { "name": "keyword.control.ct" },
+        "5": { "name": "keyword.other.type.ct" },
+        "6": { "patterns": [ { "include": "source.c" } ] }
+      }
+    },
     "ct-map-open": {
       "begin": "^[ \\t]*(map)[ \\t]+(?=trait\\b)",
       "end": "(?=\\{)",
@@ -159,7 +188,9 @@
       "patterns": [
         { "include": "#comments" },
         { "include": "#strings" },
-        { "match": "\\b(trait|for|instance)\\b", "name": "keyword.control.ct" },
+        { "match": "\\b(trait|for)\\b", "name": "keyword.control.ct" },
+        { "match": "\\b(instance|namespace|type)\\b", "name": "keyword.other.host.ct" },
+        { "match": "::", "name": "punctuation.separator.namespace.ct" },
         { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.ct" }
       ]
     },

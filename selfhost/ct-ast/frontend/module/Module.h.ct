@@ -5,7 +5,7 @@
  * closure, validating a unit's directory against its `namespace`, ordering the
  * units for the incremental cache, and driving the emitter for every unit. The
  * compile-mode entry (`run`) stays with the driver object in
- * tool/driver/driver.h.ct; this unit holds the state the two share -- the unit
+ * tool/driver/Driver.h.ct; this unit holds the state the two share -- the unit
  * table, the run options and the current path -- so those methods are real
  * methods on an object rather than free functions over file-scope globals.
  *
@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-import backend::emit::Emit;
+import backend::emit::Emitter;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
@@ -29,7 +29,7 @@ import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import tool::cache::Cache;
-import tool::diag::diag;
+import tool::diag::Diag;
 
 #define MAX_TEXT   160
 #define MAX_PATH   1024

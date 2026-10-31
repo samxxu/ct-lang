@@ -26,7 +26,7 @@
 - `offsetof`：剥离 `union ` 前缀；缺失字段的消息按类型关键字打印
   （`union 'V' has no field 'd'` / 原来的 `struct 'S' has no field 'b'`）。
 
-## [x] T4 发射（`backend/emit/Emit.h.ct`）
+## [x] T4 发射（`backend/emit/Emitter.h.ct`）
 
 - `N_UNION 48`（与 Parser / Module 各写一份）。
 - `emit_type_decl` 新增 `N_UNION` 分支：`union <text2> { … };` 或

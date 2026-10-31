@@ -11,7 +11,7 @@
   `is_decl_start()` 不成立报 `expected a declaration after 'static'`、置 `static_decl` 后
   `parse_decl_node()`，结束清零。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `N_EMPTY 52`；`emit_node` 里直接 `return 0`（不输出字符）。
 

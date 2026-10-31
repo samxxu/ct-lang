@@ -24,7 +24,7 @@
 
 ## [x] T3 发射器维度方法
 
-- `backend/emit/Emit.h.ct`：
+- `backend/emit/Emitter.h.ct`：
   - 新增 `emit_type_name_dims(type, name, dims)`：类型含 `(*)` 时维度进括号内
     （`int (*tbl[2])(int, int)`），否则接在名字后（与原行为逐字节一致）；
   - `emit_type_name(type, name)` 以 `dims = ""` 委托；
@@ -57,7 +57,7 @@
 
 ## [x] T6 全局与原型换位
 
-- `backend/emit/Emit.h.ct` `emit_program`（约 289-303 行）拆三段：
+- `backend/emit/Emitter.h.ct` `emit_program`（约 289-303 行）拆三段：
   struct/typedef → `emit_proto` → global（`extern` 仍跳过）。
 - `write_unit_file`（约 1493-1507 行）同样拆三段（`pub` struct/typedef 仍不进 `.c`）。
 - 验收：`static int (*gp)(int, int) = plus;` 生成物零告警；全部既有 fixture 通过。

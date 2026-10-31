@@ -13,7 +13,7 @@
 - 函数指针后跟 `,` 报 `a function pointer declares one name`。
 - `register_field`：`N_FIELDS` 逐个展开登记。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `N_FIELDS 56`；`emit_field` 打印共享类型一次，后续声明符各自补星号、维度、位宽。
 

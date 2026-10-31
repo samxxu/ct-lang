@@ -115,10 +115,10 @@ return 0;           // p 从未被再引用，也没有调 delete
 
 | ID | 严重度 | 摘要 | 位置 | 新/旧 |
 | --- | --- | --- | --- | --- |
-| SH-8 | **High** | ct-ast 不校验 impl 完整性：缺方法时生成 NULL vtable 槽，运行期 SIGSEGV；L0 / L2 都正确报错 | `frontend/parse/Parser.h.ct`、`backend/emit/Emit.h.ct` | 上一轮 |
+| SH-8 | **High** | ct-ast 不校验 impl 完整性：缺方法时生成 NULL vtable 槽，运行期 SIGSEGV；L0 / L2 都正确报错 | `frontend/parse/Parser.h.ct`、`backend/emit/Emitter.h.ct` | 上一轮 |
 | SH-9 | Medium | ct-ast 解析期诊断缺文件名与列号（`ctc: line N:`），与多处文档的 `file:line:col: error:` 不符 | `frontend/parse/**` | 上一轮 |
-| **SH-10** | **Medium（升级）** | 生成物 `-Wall -Wextra` 告警家族扩大到三类：`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数；10+ 个语料 | `Emit.h.ct:493,531` 及各发射点 | 上一轮 + 本轮扩展 |
-| SH-11 | Medium | ct-ast 对处于表达式中间的右值接收者静默提升，改变求值顺序；规范要求报错 | `backend/emit/Emit.h.ct:188-210` | 上一轮 |
+| **SH-10** | **Medium（升级）** | 生成物 `-Wall -Wextra` 告警家族扩大到三类：`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数；10+ 个语料 | `Emitter.h.ct:493,531` 及各发射点 | 上一轮 + 本轮扩展 |
+| SH-11 | Medium | ct-ast 对处于表达式中间的右值接收者静默提升，改变求值顺序；规范要求报错 | `backend/emit/Emitter.h.ct:188-210` | 上一轮 |
 | **SH-12** | **Medium（新增）** | `map` 语法在 test/cases（25 正例）与 examples（7 正例）中无端到端正例，新用户入口缺失 | `test/cases/`、`examples/` | **本轮新增** |
 | DOC-19 | Medium | 教程四处与实现不符：`delete` 的 `p = 0`、`ctc` 建议、数组字段、示例行号 | `docs/tutorial.md:305,401,403,322/334` | 上一轮 |
 | DOC-20 | Low | README 快速开始 1b 只构建 `ctc`，步骤 2/3 却调用 `ct` | `README.md:34-41`、`:478-484` | 上一轮 |
@@ -204,7 +204,7 @@ ctc: line 2: expected an expression (at ';')
 impl 方法体不引用 `self` 时，生成物仍无条件输出
 
 ```c
-struct P *_self = (struct P *)self;      /* Emit.h.ct:493 / 531 */
+struct P *_self = (struct P *)self;      /* Emitter.h.ct:493 / 531 */
 ```
 
 `cc -Wall -Wextra` 报 `-Wunused-variable`（L2 与 ct-ast 同）。上一轮只记录这一条，本轮扩展为完整家族。

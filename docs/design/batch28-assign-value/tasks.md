@@ -11,7 +11,7 @@
 
 ## [x] T2 发射
 
-- `Emit.h.ct`：`emit_expr` 增加 `N_ASSIGN` 一支，输出 `(lhs = rhs)`（含复合赋值映射）。
+- `Emitter.h.ct`：`emit_expr` 增加 `N_ASSIGN` 一支，输出 `(lhs = rhs)`（含复合赋值映射）。
 
 ## [x] T3 fixture、负例、关卡、文档与提交
 

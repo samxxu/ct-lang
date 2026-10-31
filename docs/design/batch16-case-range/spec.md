@@ -29,7 +29,7 @@
 ## 3. 影响面
 
 - 改：`frontend/parse/Stmt.h.ct`（`case_hi` 字段、`parse_case_value` 的 `...` 分支、
-  `parse_label` 的一行搬运）、`backend/emit/Emit.h.ct`（`N_CASE` 的发射）。
+  `parse_label` 的一行搬运）、`backend/emit/Emitter.h.ct`（`N_CASE` 的发射）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：词法器、`Expr`、`TypeCheck`、符号表、`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

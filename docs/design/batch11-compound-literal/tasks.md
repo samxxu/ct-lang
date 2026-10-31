@@ -18,7 +18,7 @@
   置 `postfix_seed` 后 `return self->parse_postfix();`。
 - `parse_postfix`：入口先取 `postfix_seed`，`>= 0` 时跳过 `parse_primary`。
 
-## [x] T3 推断与发射（`TypeCheck.h.ct` / `Emit.h.ct`）
+## [x] T3 推断与发射（`TypeCheck.h.ct` / `Emitter.h.ct`）
 
 - `expr_type`：`N_COMPOUND` 返回 `text`。
 - `Emit`：`N_COMPOUND 51`；`emit_raw_init(int raw, const char *type, int assign)`

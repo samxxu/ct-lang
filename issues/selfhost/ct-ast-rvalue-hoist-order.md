@@ -5,8 +5,8 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | **Medium** |
 | 锚点 | commit `dde0dda`（2026-10-21） |
-| 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct:188-210](../../selfhost/ct-ast/backend/emit/Emit.h.ct#L188-L210)、[docs/language-spec.md:211-214](../../docs/language-spec.md#L211-L214) |
-| 状态 | ✅ 已修复（2026-10-21，采用方案 1：`Emit.h.ct` 的 `hoist_scan` 只提升语句表达式根部，其它位置报错退出） |
+| 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct:188-210](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L188-L210)、[docs/language-spec.md:211-214](../../docs/language-spec.md#L211-L214) |
+| 状态 | ✅ 已修复（2026-10-21，采用方案 1：`Emitter.h.ct` 的 `hoist_scan` 只提升语句表达式根部，其它位置报错退出） |
 
 ## 现象
 

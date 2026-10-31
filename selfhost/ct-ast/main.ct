@@ -14,7 +14,7 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-import backend::emit::Emit;
+import backend::emit::Emitter;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Map;
@@ -25,9 +25,9 @@ import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import tool::cache::Cache;
-import tool::diag::diag;
-import tool::driver::driver;
-import tool::pkg::pkg;
+import tool::diag::Diag;
+import tool::driver::Driver;
+import tool::pkg::Pkg;
 
 #include <stdio.h>
 #include <stdlib.h>

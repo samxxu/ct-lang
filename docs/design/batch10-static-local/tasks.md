@@ -13,7 +13,7 @@
 - `parse_label` / `parse_named_label` 的链循环：判定「声明」时把 `static` 也算上，
   维持既有 `a declaration cannot follow a case label; …` / `a declaration cannot follow a label; …`。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `emit_inline` 的 `N_DECL` 分支：`aux == 1` 时先发 `static `。
 

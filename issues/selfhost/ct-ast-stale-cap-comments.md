@@ -21,7 +21,7 @@
 - HEAD 里 24 个上限宏挂在 `main.ct`，**在 `main.ct` 内一次都没被使用**；
 - 工作树改动把它们整块删掉之后，这 16 处注释指向的文件不再持有任何上限宏。
 
-涉及：`frontend/sym/Symbols.h.ct`、`frontend/lex/Lexer.h.ct`、`frontend/module/{Map,Module,Unit}.h.ct`、`frontend/parse/{Parser,ParseSupport,Expr,Stmt,MapBuild}.h.ct`、`frontend/type/TypeCheck.h.ct`、`backend/emit/Emit.h.ct`、`backend/mem/Memory.h.ct`、`tool/{diag/diag,cache/Cache.h,driver/driver,pkg/pkg}.ct`。
+涉及：`frontend/sym/Symbols.h.ct`、`frontend/lex/Lexer.h.ct`、`frontend/module/{Map,Module,Unit}.h.ct`、`frontend/parse/{Parser,ParseSupport,Expr,Stmt,MapBuild}.h.ct`、`frontend/type/TypeCheck.h.ct`、`backend/emit/Emitter.h.ct`、`backend/mem/Memory.h.ct`、`tool/{diag/diag,cache/Cache.h,driver/driver,pkg/pkg}.ct`。
 
 ### 2. main.ct 内自相矛盾
 

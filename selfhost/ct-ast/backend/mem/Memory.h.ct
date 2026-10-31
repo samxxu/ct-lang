@@ -15,7 +15,7 @@
 
 import frontend::sym::Symbols;
 import runtime::arena::Arena;
-import tool::diag::diag;
+import tool::diag::Diag;
 
 #define MAX_TEXT  160
 #define MAX_VARS  4096
@@ -332,7 +332,7 @@ impl MemoryOps for Memory {
 
     /* Record one leak warning. `path_line` 0 means a definite leak; otherwise it
        is the conditional return that leaves the object behind. The store lives in
-       diag.h.ct; this method only computes the fields it needs. */
+       Diag.h.ct; this method only computes the fields it needs. */
     int warn_leak(int vi, int path_line)
     {
         int kind;

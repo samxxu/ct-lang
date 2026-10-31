@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | Low |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
-| 文件 | [selfhost/ct-ast/frontend/module/Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct)、[selfhost/ct-ast/backend/emit/Emit.h.ct](../../selfhost/ct-ast/backend/emit/Emit.h.ct)（`write_unit_c` / `write_unit_header` 的 `dep` 循环） |
+| 文件 | [selfhost/ct-ast/frontend/module/Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct)、[selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`write_unit_c` / `write_unit_header` 的 `dep` 循环） |
 | 状态 | 待修（Batch 2 / 2c.2） |
 
 ## 现象

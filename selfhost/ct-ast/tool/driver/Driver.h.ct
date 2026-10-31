@@ -1,5 +1,5 @@
 /*
- * driver.h.ct - the compile-mode driver, one unit of its own.
+ * Driver.h.ct - the compile-mode driver, one unit of its own.
  *
  * `ct <file> -o <file>` (compile mode): the CLI loop, the one-shot run setup
  * (reset the pools and the tables, point the source path, lex and parse) and
@@ -21,14 +21,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-import backend::emit::Emit;
+import backend::emit::Emitter;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Module;
 import frontend::parse::Parser;
 import frontend::sym::Symbols;
 import runtime::arena::Arena;
-import tool::diag::diag;
+import tool::diag::Diag;
 
 #define MAX_PATH 1024
 

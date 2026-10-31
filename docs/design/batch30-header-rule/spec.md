@@ -44,7 +44,7 @@
 
 - 改：`frontend/module/Module.h.ct`（`resolve_import` 两遍搜索、条件写头、`write_header`
   后缀判断、缓存调用）、`frontend/module/Unit.h.ct`（字段注释）、
-  `backend/emit/Emit.h.ct`（条件自包含 + `pub` 类型本地发射）、
+  `backend/emit/Emitter.h.ct`（条件自包含 + `pub` 类型本地发射）、
   `tool/cache/Cache.h.ct`（`hit` 增加 `need_h`）。
 - 改名：ct-ast 3 个单元、bindings 1 个、`test/modules/**` 27 个（含 `inc_missing`、`hdr`、
   `hdr_prologue` 的入口）。

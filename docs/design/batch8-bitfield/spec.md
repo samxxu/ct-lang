@@ -39,7 +39,7 @@
 ## 3. 影响面
 
 - 改：`frontend/parse/Parser.h.ct`（`parse_field_def` 的宽度分支与三条诊断、`N_VAR 10` 宏
-  复制）、`backend/emit/Emit.h.ct`（`emit_inline` 的位域分支）。
+  复制）、`backend/emit/Emitter.h.ct`（`emit_inline` 的位域分支）。
 - 不动：`frontend/sym/Symbols.h.ct`（字段表结构够用）、`frontend/type/TypeCheck.h.ct`、
   `backend/emit/Init.h.ct`、`ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

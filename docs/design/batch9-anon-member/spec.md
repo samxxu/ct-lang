@@ -41,7 +41,7 @@
 
 - 改：`frontend/parse/Parser.h.ct`（`cur_record` 状态、`record_body_ahead`、`parse_record_body`、
   `parse_anon_member`、`register_field`，`parse_record_def` 改用它们）、
-  `backend/emit/Emit.h.ct`（`emit_field` 方法，`emit_type_decl` 两处循环）。
+  `backend/emit/Emitter.h.ct`（`emit_field` 方法，`emit_type_decl` 两处循环）。
 - **impl 方法预算**：L2 构建 ct-ast 时 `MAX_MAP_IMPLS` 是 256（基线 250）。本批最终只新增 5 个
   impl 方法（`parse_record_body` / `parse_anon_member` / `record_body_ahead` / `register_field` /
   `emit_field`），总数 255；最初拆出的 `field_dup` / `field_add` 两个 helper 已合并进

@@ -27,10 +27,10 @@ ct-ast 实编实测（`/tmp/b4/ct-ast`，逐构造微探针）：
 
 | 编号 | 内容 | 归属 |
 | --- | --- | --- |
-| F1 | `enum Tag { A, B = <常量>, C };`（顶层，标签必填，允许尾逗号）与 `typedef enum [Tag] { … } Alias;` | `frontend/parse/Parser.h.ct`、`frontend/sym/Symbols.h.ct`、`backend/emit/Emit.h.ct` |
+| F1 | `enum Tag { A, B = <常量>, C };`（顶层，标签必填，允许尾逗号）与 `typedef enum [Tag] { … } Alias;` | `frontend/parse/Parser.h.ct`、`frontend/sym/Symbols.h.ct`、`backend/emit/Emitter.h.ct` |
 | F2 | 枚举成员作为常量：裸名引用、命名空间 mangling、`pub enum` 进头文件、跨单元按常量表导入 | 同上 + `frontend/module/Module.h.ct` |
-| F3 | `case` 标签接受整数常量表达式（`+ - * / % << >> \| & ^ ~`、括号、`!`、`sizeof`、`offsetof`、字符字面量、枚举成员、全大写宏名） | `frontend/parse/Stmt.h.ct`、`frontend/parse/Expr.h.ct`、`backend/emit/Emit.h.ct` |
-| F4 | `offsetof(struct S, f)` 内建（含字段有效性校验） | `frontend/parse/Expr.h.ct`、`backend/emit/Emit.h.ct`、`frontend/type/TypeCheck.h.ct` |
+| F3 | `case` 标签接受整数常量表达式（`+ - * / % << >> \| & ^ ~`、括号、`!`、`sizeof`、`offsetof`、字符字面量、枚举成员、全大写宏名） | `frontend/parse/Stmt.h.ct`、`frontend/parse/Expr.h.ct`、`backend/emit/Emitter.h.ct` |
+| F4 | `offsetof(struct S, f)` 内建（含字段有效性校验） | `frontend/parse/Expr.h.ct`、`backend/emit/Emitter.h.ct`、`frontend/type/TypeCheck.h.ct` |
 | 配套 | 正例 / 负例 fixture、`check-ast.sh` 断言、`docs/language-spec.md` 中英对称 | `test/ast/**`、`selfhost/check-ast.sh`、`docs/` |
 
 ### 非目标
@@ -54,7 +54,7 @@ ct-ast 实编实测（`/tmp/b4/ct-ast`，逐构造微探针）：
 - `N_ENUMVAL 46`：一个枚举成员；
 - `N_OFFSETOF 47`：`offsetof` 表达式。
 
-宏按「复制契约」分别写进用到的单元：`frontend/parse/Parser.h.ct`（45/46）、`frontend/parse/Expr.h.ct`（47）、`backend/emit/Emit.h.ct`（45/46/47）、`frontend/module/Module.h.ct`（45/46）。
+宏按「复制契约」分别写进用到的单元：`frontend/parse/Parser.h.ct`（45/46）、`frontend/parse/Expr.h.ct`（47）、`backend/emit/Emitter.h.ct`（45/46/47）、`frontend/module/Module.h.ct`（45/46）。
 
 ### D-2 `enum` 的两种形态与裸名类型
 
@@ -95,7 +95,7 @@ N_ENUMVAL:text  = 成员的 C 名，text2 = 成员的源名，a = 初值表达�
           line = 成员所在行
 ```
 
-`text2` 就是「这个类型对外叫什么」，所以 `decl_is_pub(N_ENUM, name)`（[Emit.h.ct](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emit.h.ct#L805-L815) 按 `text2` 匹配）与 Module 的裸名导出（按 `text2` 去前缀）都无需特殊判断。
+`text2` 就是「这个类型对外叫什么」，所以 `decl_is_pub(N_ENUM, name)`（[Emitter.h.ct](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emitter.h.ct#L805-L815) 按 `text2` 匹配）与 Module 的裸名导出（按 `text2` 去前缀）都无需特殊判断。
 
 ### D-6 常量表达式的判据：`const_ok`
 
@@ -153,8 +153,8 @@ offsetof ( <type> , <field> )
 
 ### D-10 发射与导出
 
-- `emit_type_decl`（[Emit.h.ct](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emit.h.ct#L690-L765)）新增 `N_ENUM` 分支：`enum <text2> {` / `typedef enum <text3> {`，成员每行 `ind+1` 缩进，收尾 `};` 或 `} <text2>;`；
-- `.c` 的私有类型循环（[1550-1557](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emit.h.ct#L1550-L1557)）与头文件的 `pub` 循环（[1624-1632](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emit.h.ct#L1624-L1632)）都要把 `N_ENUM` 加进 `N_STRUCT || N_TYPEDEF` 的条件；
+- `emit_type_decl`（[Emitter.h.ct](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emitter.h.ct#L690-L765)）新增 `N_ENUM` 分支：`enum <text2> {` / `typedef enum <text3> {`，成员每行 `ind+1` 缩进，收尾 `};` 或 `} <text2>;`；
+- `.c` 的私有类型循环（[1550-1557](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emitter.h.ct#L1550-L1557)）与头文件的 `pub` 循环（[1624-1632](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emitter.h.ct#L1624-L1632)）都要把 `N_ENUM` 加进 `N_STRUCT || N_TYPEDEF` 的条件；
 - `Module.h.ct` 的「依赖单元的裸名类型导出」循环（[386-399](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/frontend/module/Module.h.ct#L386-L399)）加上 `N_ENUM`；并新增一段：遍历依赖单元的 `N_ENUM` 成员，按 `d == 1` 逐个 `declare_const(name, cname, ns, 1)`，使导入单元的 `Red` 一类不加引号的名字也能解析（全大写宏名本来就走 `N_RAW`）。
 
 ### D-11 诊断原文

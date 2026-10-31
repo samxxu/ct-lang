@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | **High** |
 | 锚点 | commit `dde0dda`（2026-10-21） |
-| 文件 | [selfhost/ct-ast/frontend/parse/Parser.h.ct](../../selfhost/ct-ast/frontend/parse/Parser.h.ct)、[selfhost/ct-ast/backend/emit/Emit.h.ct](../../selfhost/ct-ast/backend/emit/Emit.h.ct) |
+| 文件 | [selfhost/ct-ast/frontend/parse/Parser.h.ct](../../selfhost/ct-ast/frontend/parse/Parser.h.ct)、[selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct) |
 | 状态 | ✅ 已修复（2026-10-21，`frontend/parse/Parser.h.ct` 的 impl 收尾处校验；`test/ast/errors/missing_method.ct` + `check-ast.sh` 断言） |
 
 ## 现象

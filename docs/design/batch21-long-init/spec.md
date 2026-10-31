@@ -28,7 +28,7 @@
 - 改：`frontend/parse/Parser.h.ct`（全局初始化器）、`frontend/parse/Stmt.h.ct`
   （局部 `static`）、`frontend/parse/Expr.h.ct`（复合字面量）、
   `frontend/type/TypeCheck.h.ct`（单项与重写缓冲）、
-  `backend/emit/Emit.h.ct`（`emit_raw_init` 与 `emit_expr` 的 `N_RAW` 两支读取）。
+  `backend/emit/Emitter.h.ct`（`emit_raw_init` 与 `emit_expr` 的 `N_RAW` 两支读取）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：`Symbols` / `ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

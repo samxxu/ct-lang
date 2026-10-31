@@ -93,6 +93,7 @@
   - 函数 `snake_case`（`parse_impl`、`transform_calls`）；「动作」动词开头（`parse_` / `emit_` / `try_` / `find_` / `skip_`）
   - 宏与上限常量 `UPPER_SNAKE`（`MAX_TRAITS`、`MAX_VARS`）
   - 类型 `typedef struct { … } Name;`，**不加** `_t` 后缀（`Trait`、`Struct`、`Method`）
+  - 单元文件以**主类型**命名（`selfhost/ct-ast/**` 的 `.h.ct`）：一个单元只有一个主类型（承载该单元语义的那个 struct / trait），附属记录类型可同文件，围绕主类型的代码留在同一文件；主类型过大时可拆**子对象单元**，其文件头必须注明所属主对象；入口 `main.ct` 例外。`check-ast.sh` 的 unit-name lint 校验文件名与顶层类型一致
 - 注释：**英文**，`/* … */` 风格；只解释「为什么」，不复述代码。
 - 内存：一律走 `xmalloc` / `xstrndup`（失败即 `exit(1)`）；拼接字符串用 `Buf`（`buf_puts` / `buf_putc` / `buf_putn`），不要写 `strcat`。
 - 上限：所有固定容量常量集中在文件头部，越界一律 `die()` 报错，不允许静默截断。
@@ -395,7 +396,12 @@ Hard boundaries:
 - Every internal function is `static`.
 - Naming: globals `g_snake_case`, functions `snake_case` with a verb prefix
   (`parse_`, `emit_`, `try_`, `find_`, `skip_`), constants `UPPER_SNAKE`, types
-  `typedef struct { … } Name;` (no `_t` suffix).
+  `typedef struct { … } Name;` (no `_t` suffix). A unit file is named after its **main type**
+  (`selfhost/ct-ast/**` `.h.ct`): one main type per unit (the struct / trait that carries the unit's
+  meaning), attached record types may share the file, and the code around the main type stays there.
+  An object too large for one unit may split off **sub-object units**, whose header must name the
+  owning object; the entry `main.ct` is exempt. The unit-name lint in `check-ast.sh` pins the file
+  name to the top-level type.
 - Comments in **English**, `/* … */` style, explaining *why*, not *what*.
 - Memory goes through `xmalloc` / `xstrndup` (fail fast), string building through `Buf`.
 - All fixed capacities live as `MAX_*` constants at the top of the file; overflow must `die()`, never

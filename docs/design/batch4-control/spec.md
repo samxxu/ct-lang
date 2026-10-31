@@ -21,13 +21,13 @@ ct-ast 实编实测（`/tmp/b3/ct-ast`，逐构造微探针）：
 - `switch (x)` 被 [parse_stmt](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/frontend/parse/Stmt.h.ct#L221-L425) 的兜底路径当成**函数调用**解析成功，随后 `{` 撞上 `expect(";")` → `unexpected token`；
 - `do` 走同一兜底路径进入表达式解析，[parse_primary](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/frontend/parse/Expr.h.ct#L1035-L1040) 按「未声明变量」报错，且诊断在 `lex_next()` 之后，列号指到下一个 token。
 
-发射侧按节点 `kind` 分支（语句从 [N_BLOCK](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emit.h.ct#L915-L921) 起，`N_BREAK` / `N_CONT` 在 959/964，`N_IF` / `N_WHILE` / `N_FOR` 在 1048–1068），所以新语句必须同时进解析与发射两侧。
+发射侧按节点 `kind` 分支（语句从 [N_BLOCK](file:///Users/samxx/vscspace/ct/selfhost/ct-ast/backend/emit/Emitter.h.ct#L915-L921) 起，`N_BREAK` / `N_CONT` 在 959/964，`N_IF` / `N_WHILE` / `N_FOR` 在 1048–1068），所以新语句必须同时进解析与发射两侧。
 
 ## 2. 范围
 
 | 编号 | 内容 | 归属 |
 | --- | --- | --- |
-| F1 | `switch (expr) { … }` 与 `case <常量>:` / `default:` | `frontend/parse/Stmt.h.ct`、`backend/emit/Emit.h.ct` |
+| F1 | `switch (expr) { … }` 与 `case <常量>:` / `default:` | `frontend/parse/Stmt.h.ct`、`backend/emit/Emitter.h.ct` |
 | F2 | `do { … } while (cond);` | 同上 |
 | F3 | 五条明确诊断（见 §4 表） | `frontend/parse/Stmt.h.ct` |
 | 配套 | 正例 / 负例 fixture、`check-ast.sh` 断言、`docs/language-spec.md` 语句章节中英对称 | `test/ast/**`、`selfhost/check-ast.sh`、`docs/` |
@@ -45,7 +45,7 @@ ct-ast 实编实测（`/tmp/b3/ct-ast`，逐构造微探针）：
 
 ### D-1 节点编号 42 / 43 / 44
 
-现有最大语句节点号是 `N_DELETE 41`。新增 `N_SWITCH 42`、`N_CASE 43`、`N_DOWHILE 44`，宏同时写进 `Stmt.h.ct` 与 `Emit.h.ct`（节点编号是两单元之间的复制契约，跨单元无共享宏）。
+现有最大语句节点号是 `N_DELETE 41`。新增 `N_SWITCH 42`、`N_CASE 43`、`N_DOWHILE 44`，宏同时写进 `Stmt.h.ct` 与 `Emitter.h.ct`（节点编号是两单元之间的复制契约，跨单元无共享宏）。
 
 ### D-2 `switch` 自建体内循环，不复用 `parse_block`
 

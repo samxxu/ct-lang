@@ -20,7 +20,7 @@
 
 ## [x] T3 发射
 
-- `Emit.h.ct`：`emit_proto`、`N_FUNC`（`)` 后）、形参、`N_FIELDS`/`N_FIELD`（含位域）、
+- `Emitter.h.ct`：`emit_proto`、`N_FUNC`（`)` 后）、形参、`N_FIELDS`/`N_FIELD`（含位域）、
   全局、`N_TYPEDEF`、`N_STRUCT`/`N_UNION`/`N_ENUM` 尾部；typedef 记录统一放别名之前。
 
 ## [x] T4 fixture、负例、关卡与文档

@@ -8,7 +8,7 @@
 - `frontend/lex/Lexer.h.ct`：`toksuffix` 字段；整数分支收集 `[uUlL]`；每个 token 起始清空。
 - `frontend/parse/Expr.h.ct`：`parse_primary` 校验（U ≤ 1、L ≤ 2、长度 ≤ 3）并把规范后缀
   写进 `N_NUM.text`。
-- `backend/emit/Emit.h.ct`：`N_NUM` 打印 `%ld%s`。
+- `backend/emit/Emitter.h.ct`：`N_NUM` 打印 `%ld%s`。
 
 ## [x] T2 `add_func` 的 `ret` 先声明者胜
 

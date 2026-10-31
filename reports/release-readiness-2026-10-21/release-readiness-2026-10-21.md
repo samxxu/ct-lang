@@ -225,7 +225,7 @@ $ tail -2 order.c
 
 | 步骤 | 内容 | 触及 |
 | --- | --- | --- |
-| 1 | 发射器记录出错节点的行号（`N_MCALL` 自带 `line`），并暴露一个访问器 | `Emit.h.ct` |
+| 1 | 发射器记录出错节点的行号（`N_MCALL` 自带 `line`），并暴露一个访问器 | `Emitter.h.ct` |
 | 2 | `ParseSupport` 增加 `fail_at(line, msg)`：位置由调用方给，而不是取当前 token | `ParseSupport.h.ct` |
 | 3 | `Module::emit_program` 转发发射器错误时改用 `fail_at`（行号有效时） | `Module.h.ct` |
 | 4 | 发射失败时删除半截 `.c`（`driver.ct` / `Module::emit_unit`） | `driver.ct`、`Module.h.ct` |

@@ -30,7 +30,7 @@
 ## 3. 影响面
 
 - 改：`frontend/parse/Parser.h.ct`（`N_FIELDS`、`parse_field_def` 的声明符循环、
-  `register_field` 一支）、`backend/emit/Emit.h.ct`（`N_FIELDS`、`emit_field` 一支）。
+  `register_field` 一支）、`backend/emit/Emitter.h.ct`（`N_FIELDS`、`emit_field` 一支）。
 - **impl 方法预算**：不新增方法（255/256）。
 - 不动：`Expr` / `TypeCheck` / `Init`（字段表早已拍平）、`ctc.c` / `l1` / `l2`、
   `CTC_VERSION`、golden。

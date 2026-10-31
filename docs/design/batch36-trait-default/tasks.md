@@ -14,7 +14,7 @@
 
 ## [x] T2 发射：混合形态补齐默认方法
 
-- `selfhost/ct-ast/backend/emit/Emit.h.ct` 的 `emit_impls`（第 552 行起）：对每个 impl，
+- `selfhost/ct-ast/backend/emit/Emitter.h.ct` 的 `emit_impls`（第 552 行起）：对每个 impl，
   先发射显式方法，再对「trait 有默认体且 impl 未写」的方法用默认体展开为
   `<Struct>_<Trait>_<method>`，并为其占用 vtable 槽。
 - `Parser.h.ct` 第 1684–1701 行的完整性校验改为「缺方法**且**无默认体才报错」。

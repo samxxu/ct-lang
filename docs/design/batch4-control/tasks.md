@@ -5,7 +5,7 @@
 
 ## [x] T1 节点编号与 `parse_stmt` 分发
 
-- `frontend/parse/Stmt.h.ct` / `backend/emit/Emit.h.ct`：新增 `N_SWITCH 42`、`N_CASE 43`、
+- `frontend/parse/Stmt.h.ct` / `backend/emit/Emitter.h.ct`：新增 `N_SWITCH 42`、`N_CASE 43`、
   `N_DOWHILE 44`（两单元各写一份）。
 - `Stmt.h.ct` `parse_stmt`：在 `for` 之后增加 `switch` / `do` 分支骨架；
   `case` / `default` 守卫（不在 switch 体内时报
@@ -34,7 +34,7 @@
 
 ## [x] T5 发射三个节点
 
-- `Emit.h.ct`：
+- `Emitter.h.ct`：
   - `N_SWITCH`：`switch (` cond `) ` + `emit_node(b, ind)`（体内是 `N_BLOCK`）；
   - `N_CASE`：`emit_indent(ind)` + `case <text>:` 或 `default:`，子语句 `ind + 1`；
   - `N_DOWHILE`：`do {` + 子语句 + `} while (` cond `);`（`}` 与 `while` 不换行）。

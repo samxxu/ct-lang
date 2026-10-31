@@ -102,9 +102,26 @@ function matchDeclaration(line) {
   return m ? nameOf(m, line) : null;
 }
 
+// Canonical spelling of a C type so `char *`, `char*` and `char a[]` (array
+// decay, per the `.m.ct` type-host rule) compare equal.
+function normalizeCType(text) {
+  return text
+    .replace(/\[[^\]]*\]/g, ' * ')
+    .replace(/\b(?:const|volatile|static|extern|register|struct|union|enum)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[ \t]*\*[ \t]*/g, '*');
+}
+
+const MAP_HOST_RE = /^\s*map\s+trait\s+([A-Za-z_]\w*)\s+for\s+(instance|namespace|type)\s+([^;{}]*?)\s*\{/;
+const USE_CLAUSE_RE = /^\s*\}\s*use\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*;/;
+
 function parseSource(text, uri) {
   const defs = [];
   const impls = [];
+  const traits = [];
+  const typeHosts = [];
+  const adoptions = [];
   const lines = text.split(/\r?\n/);
   const stack = [];
   const nsStack = [''];
@@ -143,8 +160,15 @@ function parseSource(text, uri) {
             stack.push({ kind: 'namespace', endDepth: depth });
             nsStack.push(joinNs(nsStack[nsStack.length - 1], m[1]));
           }
-        } else if ((m = /^\s*map\s+trait\s+([A-Za-z_]\w*)\s+for\s+instance\s+([A-Za-z_]\w*)[^;{}]*\{/.exec(line))) {
-          stack.push({ kind: 'map', trait: m[1], instance: m[2], endDepth: depth });
+        } else if ((m = MAP_HOST_RE.exec(line))) {
+          stack.push({ kind: 'map', trait: m[1], host: m[2], target: m[3].trim(), endDepth: depth });
+          if (m[2] === 'type') {
+            typeHosts.push({
+              trait: m[1],
+              namespace: nsStack[nsStack.length - 1],
+              type: normalizeCType(m[3])
+            });
+          }
         } else if ((m = /^\s*impl\s+([A-Za-z_]\w*)\s+for\s+([A-Za-z_]\w*)[^;{}]*\{/.exec(line))) {
           const impl = {
             uri,
@@ -156,8 +180,15 @@ function parseSource(text, uri) {
           impls.push(impl);
           stack.push({ kind: 'impl', trait: m[1], struct: m[2], endDepth: depth, impl });
         } else if ((m = /^\s*(?:pub\s+)?trait\s+([A-Za-z_]\w*)[^;{}]*\{/.exec(line))) {
+          const trait = {
+            uri,
+            name: m[1],
+            startLine: lineNo,
+            endLine: lines.length - 1
+          };
+          traits.push(trait);
           add(m[1], 'trait', lineNo, line.indexOf(m[1]));
-          stack.push({ kind: 'trait', name: m[1], endDepth: depth });
+          stack.push({ kind: 'trait', name: m[1], endDepth: depth, trait });
         } else if ((m = /^\s*(?:pub\s+)?struct\s+([A-Za-z_]\w*)[^;{}]*\{/.exec(line))) {
           add(m[1], 'struct', lineNo, line.indexOf(m[1]));
           stack.push({ kind: 'struct', name: m[1], endDepth: depth });
@@ -170,10 +201,21 @@ function parseSource(text, uri) {
         if (fn) add(fn.name, 'method', lineNo, fn.index, { owner: scope.struct, trait: scope.trait });
       } else if (scope.kind === 'trait') {
         const decl = matchDeclaration(line);
-        if (decl) add(decl.name, 'traitMethod', lineNo, decl.index, { owner: scope.name });
+        if (decl) {
+          add(decl.name, 'traitMethod', lineNo, decl.index, { owner: scope.name });
+        } else {
+          const fn = matchDefinition(line);
+          if (fn) add(fn.name, 'traitMethod', lineNo, fn.index, { owner: scope.name });
+        }
+      } else if (scope.kind === 'struct') {
+        if ((m = USE_CLAUSE_RE.exec(line))) {
+          for (const name of m[1].split(',')) {
+            adoptions.push({ uri, struct: scope.name, trait: name.trim() });
+          }
+        }
       } else if (scope.kind === 'map') {
         if ((m = /^\s*([A-Za-z_]\w*)\s*\([^)]*\)\s*->/.exec(line))) {
-          add(m[1], 'binding', lineNo, line.indexOf(m[1]), { owner: scope.instance, trait: scope.trait });
+          add(m[1], 'binding', lineNo, line.indexOf(m[1]), { owner: scope.target, trait: scope.trait });
         }
       }
     }
@@ -183,16 +225,28 @@ function parseSource(text, uri) {
       const done = stack.pop();
       if (done.kind === 'namespace') nsStack.pop();
       if (done.kind === 'impl') done.impl.endLine = lineNo;
+      if (done.kind === 'trait') done.trait.endLine = lineNo;
     }
   }
 
-  return { defs, impls };
+  return { defs, impls, traits, typeHosts, adoptions };
 }
 
 async function buildIndex() {
   const defs = [];
   const impls = [];
+  const traits = [];
+  const typeHosts = [];
+  const adoptions = [];
   const seen = new Set();
+
+  const merge = (parsed) => {
+    defs.push(...parsed.defs);
+    impls.push(...parsed.impls);
+    traits.push(...parsed.traits);
+    typeHosts.push(...parsed.typeHosts);
+    adoptions.push(...parsed.adoptions);
+  };
 
   // Open documents first: this picks up unsaved buffers.
   for (const doc of vscode.workspace.textDocuments) {
@@ -200,9 +254,7 @@ async function buildIndex() {
     const key = doc.uri.toString();
     if (seen.has(key)) continue;
     seen.add(key);
-    const parsed = parseSource(doc.getText(), doc.uri);
-    defs.push(...parsed.defs);
-    impls.push(...parsed.impls);
+    merge(parseSource(doc.getText(), doc.uri));
   }
 
   const uris = await vscode.workspace.findFiles(CT_GLOB, CT_EXCLUDE, MAX_FILES);
@@ -217,9 +269,7 @@ async function buildIndex() {
     } catch (err) {
       continue;
     }
-    const parsed = parseSource(text, uri);
-    defs.push(...parsed.defs);
-    impls.push(...parsed.impls);
+    merge(parseSource(text, uri));
   }
 
   const types = new Map();
@@ -228,7 +278,7 @@ async function buildIndex() {
       types.set(def.name, def.namespace);
     }
   }
-  return { defs, impls, types };
+  return { defs, impls, traits, typeHosts, adoptions, types };
 }
 
 function getIndex() {
@@ -266,6 +316,35 @@ function nsMatches(defNs, wanted) {
   return wanted !== '' && defNs.endsWith('::' + wanted);
 }
 
+// The declared C type of a receiver, canonicalised. `.m.ct` type hosts bind
+// methods to a C type (`map trait CStr for type char *`), so `a.toInt()` with
+// `char a[]` needs `char *` after array decay.
+function inferDeclaredCType(document, position, receiver) {
+  const before = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
+  const re = new RegExp(
+    '(?:^|[;{}\\n])\\s*' +
+    '(?:(?:static|extern|const|volatile|register)\\s+)*' +
+    '((?:(?:struct|union|enum)\\s+)?' +
+    '(?:(?:unsigned|signed|long|short|const)\\s+)*' +
+    '[A-Za-z_][A-Za-z0-9_]*)\\s*' +
+    '((?:\\*[ \\t]*)*)' +
+    '&?\\s*' + escapeRegExp(receiver) + '\\s*' +
+    '((?:\\[[^\\]\\n]*\\])*)\\s*(?=[;=,.)\\[\\n])',
+    'g');
+  let found = null;
+  let m;
+  while ((m = re.exec(before)) !== null) found = m;
+  if (!found) return null;
+  return normalizeCType(found[1] + ' ' + found[2] + (found[3] ? ' * ' : ''));
+}
+
+function traitsForCType(type, index) {
+  if (!type) return [];
+  return index.typeHosts
+    .filter((host) => host.type === type)
+    .map((host) => host.trait);
+}
+
 function dedupe(defs) {
   const seen = new Set();
   const out = [];
@@ -297,25 +376,72 @@ class CtDefinitionProvider {
 
     let candidates = [];
     const qualifier = /([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)::$/.exec(prefix);
+    const dotted = /([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\s*(\.|->)$/.exec(prefix);
 
     if (qualifier) {
       const raw = qualifier[1];
       const ns = index.types.has(raw) ? index.types.get(raw) : raw;
       candidates = index.defs.filter((d) => d.name === word && nsMatches(d.namespace, ns));
-    } else if (/\.$/.test(prefix) || /->$/.test(prefix)) {
-      const recv = /([A-Za-z_]\w*)\s*(?:\.|->)$/.exec(prefix);
-      const struct = recv ? inferReceiverType(document, position, recv[1], index) : null;
-      const methods = index.defs.filter((d) => d.name === word && d.kind === 'method');
-      if (struct) {
-        candidates = methods.filter((d) => d.owner === struct);
-        candidates = candidates.concat(index.defs.filter((d) =>
-          d.name === word && d.kind === 'binding' && d.trait === struct));
+    } else if (dotted) {
+      const path = dotted[1];
+      const segs = path.split('::');
+      const receiver = segs[segs.length - 1];
+
+      // `Host::Trait.method(…)`: a zero-cost static-mapping call, no receiver.
+      if (dotted[2] === '.' && segs.length > 1 && index.types.has(receiver)) {
+        const ns = index.types.get(receiver) || segs.slice(0, -1).join('::');
+        candidates = index.defs.filter((d) => d.name === word && d.kind === 'traitMethod' &&
+          d.owner === receiver && nsMatches(d.namespace, ns));
+        if (!candidates.length) {
+          candidates = index.defs.filter((d) =>
+            d.name === word && d.kind === 'traitMethod' && d.owner === receiver);
+        }
+      } else {
+        let struct = null;
+        let traitScope = null;
+        if (receiver === 'self' || receiver === 'this') {
+          const key = document.uri.toString();
+          const impl = index.impls.find((i) =>
+            i.uri.toString() === key && i.startLine <= position.line && position.line <= i.endLine);
+          if (impl) {
+            struct = impl.struct;
+          } else {
+            const trait = index.traits.find((t) =>
+              t.uri.toString() === key && t.startLine <= position.line && position.line <= t.endLine);
+            if (trait) traitScope = trait.name;
+          }
+        } else {
+          struct = inferReceiverType(document, position, receiver, index);
+        }
+
+        const methods = index.defs.filter((d) => d.name === word && d.kind === 'method');
+        const traitMethods = index.defs.filter((d) => d.name === word && d.kind === 'traitMethod');
+        if (struct) {
+          // An impl method wins; default bodies and adopted traits follow.
+          const traits = new Set();
+          for (const impl of index.impls) if (impl.struct === struct) traits.add(impl.trait);
+          for (const adoption of index.adoptions) if (adoption.struct === struct) traits.add(adoption.trait);
+          candidates = methods.filter((d) => d.owner === struct);
+          candidates = candidates.concat(traitMethods.filter((d) => traits.has(d.owner)));
+          candidates = candidates.concat(index.defs.filter((d) =>
+            d.name === word && d.kind === 'binding' && d.owner === receiver));
+        } else if (traitScope) {
+          candidates = traitMethods.filter((d) => d.owner === traitScope);
+          if (!candidates.length) candidates = methods;
+        } else {
+          const typeTraits = traitsForCType(inferDeclaredCType(document, position, receiver), index);
+          if (typeTraits.length) {
+            candidates = traitMethods.filter((d) => typeTraits.indexOf(d.owner) !== -1);
+          }
+          if (!candidates.length) {
+            candidates = index.defs.filter((d) =>
+              d.name === word && d.kind === 'binding' && d.owner === receiver);
+          }
+          if (!candidates.length) candidates = methods;
+        }
+        if (!candidates.length) candidates = traitMethods;
+        if (!candidates.length) candidates = index.defs.filter((d) => d.name === word);
       }
-      if (!candidates.length) candidates = methods;
-      if (!candidates.length) {
-        candidates = index.defs.filter((d) => d.name === word && d.kind === 'traitMethod');
-      }
-      if (!candidates.length) candidates = index.defs.filter((d) => d.name === word);
     } else {
       candidates = index.defs.filter((d) => d.name === word);
     }

@@ -11,7 +11,7 @@
 ## [x] T2 发射 / 缓存 / 编译模式
 
 - `Module.h.ct`：只有 `is_hdr` 单元写头；`write_header` 按输入路径后缀判断。
-- `Emit.h.ct`：实现单元不包含自己的头；`pub` 类型在实现单元的 `.c` 里发射。
+- `Emitter.h.ct`：实现单元不包含自己的头；`pub` 类型在实现单元的 `.c` 里发射。
 - `Cache.h.ct`：`hit(outc, key, need_h)`，实现单元不要求 `.h`。
 
 ## [x] T3 迁移与 fixture

@@ -12,7 +12,7 @@
 
 ## [x] T2 发射
 
-- `Emit.h.ct`：`N_SIZEOF` 分支按 `aux`（1 / 2）输出 `sizeof(…)` 或 `_Alignof(…)`。
+- `Emitter.h.ct`：`N_SIZEOF` 分支按 `aux`（1 / 2）输出 `sizeof(…)` 或 `_Alignof(…)`。
   `_Alignas` 与 `_Generic` 走既有的类型字符串 / `N_RAW` 打印路径，无需改动。
 
 ## [x] T3 fixture、负例、关卡、文档与提交

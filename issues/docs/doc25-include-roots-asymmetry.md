@@ -36,7 +36,7 @@ ctc: too many -I roots
 - build：[Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct#L38) `#define MAX_INCDIRS 16`，
   解析分支在 `build_main` 里检查并报 `ctc: too many -I roots`；
 - compile：另一套解析器（见 [SH-24](../selfhost/cli-parser-duplication.md)），**接受 `-I` 但直接忽略**
-  （`driver.h.ct:144` 注释为 `accepted for CLI parity; compile mode resolves no imports`），
+  （`Driver.h.ct:144` 注释为 `accepted for CLI parity; compile mode resolves no imports`），
   既不设上限、也不参与解析。因此「compile 接受 30 个」只说明它不报错，不代表该开关生效。
 
 ## 影响

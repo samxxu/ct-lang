@@ -11,7 +11,7 @@
   通过则记入 `case_hi`。
 - `parse_label`：`parse_case_value` 之后把 `case_hi` 写到 `nodes[s].c`。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `N_CASE` 分支：`c >= 0` 时在两端之间发 ` ... `。
 

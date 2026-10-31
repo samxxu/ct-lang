@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | **High** |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
-| 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct](../../selfhost/ct-ast/backend/emit/Emit.h.ct)（`write_unit_c`、`write_unit_header`） |
+| 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`write_unit_c`、`write_unit_header`） |
 | 状态 | 待修（Batch 2 / 2a.2） |
 
 ## 现象

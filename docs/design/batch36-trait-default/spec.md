@@ -62,7 +62,7 @@ static int Conn_Logger_write_all(void *self, char *buf, int len) {
 ```
 
 `self->write(...)` 展开为 `_self->__logger_vptr->write(...)`，正是现有规则
-（[Emit.h.ct:1751-1755](../../../selfhost/ct-ast/backend/emit/Emit.h.ct#L1751-L1755) 的发射期派发生成），
+（[Emitter.h.ct:1751-1755](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1751-L1755) 的发射期派发生成），
 不新增任何派发逻辑。
 
 ### 2.3 全 default 的采纳

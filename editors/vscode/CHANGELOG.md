@@ -1,5 +1,20 @@
 # Change Log
 
+## 0.2.0
+
+- Highlighting for the batch-36 / batch-38 syntax: `map trait T for namespace
+  A::B`, `map trait T for type char *` (the host C type is left to the C
+  grammar), and trait default method bodies. `.m.ct` mapping units need no
+  extra registration — the `.ct` suffix already covers them.
+- Go-to-definition for the same features: trait default methods (an `impl`
+  override wins, otherwise the body in the trait; `self->m()` inside a default
+  body stays in that trait; `} use T;`-only structs resolve), zero-cost static
+  mapping calls (`a.toInt()` on a `char *`/array receiver via the
+  `for type` host, and `Host::Trait.method(…)` via the `for namespace` host),
+  and `map` bindings keyed by the mapped instance.
+- `test/check-grammar.py`: 31 assertions, covering the two new `map` hosts and
+  the default-method fixtures.
+
 ## 0.1.0
 
 - Go-to-definition (`Ctrl+Click` / `F12`) for `.ct` files via a single

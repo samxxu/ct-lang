@@ -26,7 +26,7 @@
 ## 3. 影响面
 
 - 改：`frontend/parse/Expr.h.ct`（`B_COMMA`、括号分支的循环）、
-  `backend/emit/Emit.h.ct`（`emit_expr` 的逗号一支）。
+  `backend/emit/Emitter.h.ct`（`emit_expr` 的逗号一支）。
 - **impl 方法预算**：不新增方法（255/256），不新增节点编号。
 - 不动：`Stmt` / `TypeCheck` / `Symbols` / `ctc.c` / `l1` / `l2`、`CTC_VERSION`、golden。
 

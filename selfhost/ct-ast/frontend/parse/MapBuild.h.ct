@@ -23,7 +23,7 @@ import frontend::module::Map::MapBind as MapBind;
 import frontend::module::Map;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
-import tool::diag::diag;
+import tool::diag::Diag;
 
 #define MAX_TEXT   160
 #define MAX_PARAMS 16

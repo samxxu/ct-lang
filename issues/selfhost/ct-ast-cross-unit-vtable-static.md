@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast） |
 | 严重度 | **High** |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
-| 文件 | [selfhost/ct-ast/backend/emit/Emit.h.ct](../../selfhost/ct-ast/backend/emit/Emit.h.ct)（`emit_vtable_fwd`、impl 的 vtable 定义、`emit_box` 所在的装箱发射、`write_unit_header`） |
+| 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`emit_vtable_fwd`、impl 的 vtable 定义、`emit_box` 所在的装箱发射、`write_unit_header`） |
 | 状态 | 待修（Batch 2 / 2a.1，前置 SH-13） |
 
 ## 现象

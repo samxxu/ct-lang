@@ -10,7 +10,7 @@
   可选 `,` + 字符串字面量 → `)` → `;`，节点 `a` = 条件、`text` = 消息。
 - `top_decl` 加转发分支：关键字命中时 `n = self->st->parse_stmt();`。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `N_SASSERT 55`；`emit_node` 发 `_Static_assert(<cond>[, "<msg>"]);`。
 - `emit_program` 与 `emit_unit` 各加一个顶层循环，在原型之后发射这些断言。

@@ -7,7 +7,7 @@
  * The node pool, the symbol tables, the type layer and the memory pass are
  * reached through collaborator pointers; everything that is not parsing lives
  * on `ParseSupport` (ParseSupport.h.ct) or in the driver
- * (tool/driver/driver.h.ct). The driver only ever calls the pub primitives below,
+ * (tool/driver/Driver.h.ct). The driver only ever calls the pub primitives below,
  * so `main.ct` keeps nothing but the wiring and the dispatch.
  *
  * Macros do not cross a unit boundary, so the caps, node kinds, token kinds and
@@ -30,7 +30,7 @@ import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
-import tool::diag::diag;
+import tool::diag::Diag;
 
 #define MAX_FIELDS 64
 #define MAX_IMPORTS 32

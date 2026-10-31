@@ -15,7 +15,7 @@
     `a bit-field width must be an integer constant`；
   - `aux = 1`、`a = 宽度节点`。
 
-## [x] T2 发射（`backend/emit/Emit.h.ct`）
+## [x] T2 发射（`backend/emit/Emitter.h.ct`）
 
 - `emit_inline` 在 `N_DECL || N_FIELD` 共用分支之前加位域分支：
   发 `text`，名字非空时发 ` <name>`，再发 ` : ` 与 `emit_expr(a)`。
