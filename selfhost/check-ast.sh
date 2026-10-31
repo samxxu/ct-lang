@@ -149,6 +149,11 @@
 # before the storage class, and GNU attributes before the declarator (globals,
 # functions, locals): test/ast/56_header_compat plus four shape diagnostics.
 #
+# batch 34 fixes L2's incremental build: a recompiled unit now pulls in the
+# whole dependency closure, because the shared symbol table must hold every
+# imported unit's exports (a clean dependency can sit after the first dirty
+# unit). The cache section pins the shape with a three-unit project.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1774,6 +1779,60 @@ if [ -f "$cac/ast/shapes.c" ]; then
     ok "cache: a missing artefact is regenerated"
 else
     bad "cache artifact" "shapes.c was not restored"
+fi
+# L2's build shares one symbol table across the units it compiles, so a unit it
+# recompiles needs every imported unit compiled too -- including a clean
+# dependency that sits *after* the first dirty unit in the order. The shape:
+# A (dirty) -> B (clean) -> C (dirty, imports both).
+inc="$work/incremental"
+rm -rf "$inc"
+mkdir -p "$inc/pa" "$inc/cache" "$inc/m" "$inc/out"
+cat > "$inc/pa/A.h.ct" <<'INCEOF'
+namespace pa;
+pub struct A {
+    int x;
+};
+INCEOF
+cat > "$inc/cache/B.h.ct" <<'INCEOF'
+namespace cache;
+pub struct B {
+    int y;
+};
+INCEOF
+cat > "$inc/m/C.h.ct" <<'INCEOF'
+import pa::A;
+import cache::B;
+namespace m;
+pub struct C {
+    struct A *a;
+    struct B *b;
+};
+INCEOF
+cat > "$inc/main.ct" <<'INCEOF'
+import pa::A;
+import m::C;
+int main(void)
+{
+    struct A *a = 0;
+    struct C *c = 0;
+    return (a != 0) || (c != 0);
+}
+INCEOF
+if "$work/l2" build -I "$inc" --ns-root "$inc" "$inc/main.ct" -o "$inc/out" \
+        >/dev/null 2>"$inc/1.err" \
+   && grep -q "struct cache_B" "$inc/out/C.h"; then
+    ok "cache: L2 cold build resolves imported types"
+else
+    bad "cache: L2 cold build" "$(cat "$inc/1.err" "$inc/out/C.h" 2>/dev/null)"
+fi
+printf '\n/* changed */\n' >> "$inc/pa/A.h.ct"
+if "$work/l2" build -I "$inc" --ns-root "$inc" "$inc/main.ct" -o "$inc/out" \
+        >/dev/null 2>"$inc/2.err" \
+   && grep -q "struct cache_B" "$inc/out/C.h" \
+   && "$CC" -Wall -Wextra -std=c99 "$inc/out"/*.c -o "$inc/bin" >/dev/null 2>"$inc/cc.err"; then
+    ok "cache: L2 recompiles the dependency closure of a dirty unit"
+else
+    bad "cache: L2 dependency closure" "$(cat "$inc/2.err" "$inc/cc.err" 2>/dev/null)"
 fi
 
 echo

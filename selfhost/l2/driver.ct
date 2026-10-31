@@ -411,7 +411,7 @@ static int build_main(int argc, char **argv, const char *prog)
     const char *outdir = NULL;
     int n = 0, i, o;
     int dirty[MAX_UNITS];              /* 1 = must be compiled this run */
-    int first = -1;                    /* first unit that is not reused */
+    int need[MAX_UNITS];               /* 1 = must be in the shared symbol table */
     int line_force = -1;               /* -1 mode default, 0 --no-line, 1 --line */
     int diag = 0;                      /* 0 text warnings, 1 `--diagnostics=json` */
     /* The target C standard (Phase 6.4). Nothing in the emitted C needs a GNU
@@ -540,7 +540,20 @@ static int build_main(int argc, char **argv, const char *prog)
             dirty[u] = 0;
         for (k = 0; k < g_build.unit_ndep[u]; k++)
             if (dirty[g_build.unit_dep[u][k]]) dirty[u] = 1;
-        if (dirty[u] && first < 0) first = o;
+    }
+
+    /* A compiled unit reads the symbols of every unit it imports, so the
+       recompiled set is the dependency closure of the dirty units. A clean
+       dependency can sit *after* the first dirty unit in `order`, and skipping
+       it left its exported types out of the shared table. Walk backwards so a
+       unit marked here passes the mark on to its own dependencies. */
+    for (o = 0; o < g_build.order_n; o++) need[g_build.order[o]] = dirty[g_build.order[o]];
+    for (o = g_build.order_n - 1; o >= 0; o--) {
+        int u = g_build.order[o];
+        int k;
+        if (!need[u]) continue;
+        for (k = 0; k < g_build.unit_ndep[u]; k++)
+            need[g_build.unit_dep[u][k]] = 1;
     }
 
     for (o = 0; o < g_build.order_n; o++) {
@@ -548,8 +561,8 @@ static int build_main(int argc, char **argv, const char *prog)
         int k;
         char ns_expect[MAX_NAME * 4];
         char key[MAX_KEY];
-        /* the cache is warm for this unit and every unit before it */
-        if (first < 0 || (o > first && !dirty[u])) continue;
+        /* the cache is warm for this unit and every unit its compile reads */
+        if (!need[u]) continue;
         /* Derive the unit's directory namespace from the root. A unit outside
            the root, or one with a non-normalised (`./`, `../`) component, gets
            no expectation and is not checked. */
