@@ -18,9 +18,9 @@
 > | 块式 `namespace A::B { … }` | 接受 | 拒绝（`a namespace is file-scoped`） | 单元级前缀与目录校验都假设一个文件只声明一个命名空间 |
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） | 避免在两个同名导出之间静默选错对象 |
 >
-> **仍未实现**（ct-ast 报具体消息）：`_Alignas`、`_Generic`、`__attribute__((…))`。
+> **仍未实现**（ct-ast 报具体消息）：`__attribute__((…))`。
 > 其余 C 形式（`goto` / 标签、`switch` 范围、位域、匿名成员、变参、`inline`、
-> `_Static_assert`、浮点字面量等）两侧都接受，见 §4 各节。
+> `_Static_assert`、浮点字面量、`_Alignas` / `_Alignof` / `_Generic` 等）两侧都接受，见 §4 各节。
 >
 > 这是两层的**能力差**，不是同一条流水线上的进度差：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -862,8 +862,8 @@ static bool positive(int32_t v) { return v > 0; }
 - `inline` 是函数说明符：顶层接受 `static inline` 与 `inline static` 两种顺序，发射为
   `static inline ` / `inline `。生成的**原型**不带 `inline`（C 允许原型与定义不同）。
 - `inline` 后面不是函数（`inline int value = 1;`）报 `'inline' can only declare a function`。
-- 范围外：`_Alignas` / `_Generic` / `__attribute__((…))` 仍不在子集内（`_Static_assert` 见 §4.26）；
-  浮点字面量见 §4.24。
+- 范围外：`__attribute__((…))` 仍不在子集内（`_Static_assert` 见 §4.26；
+  `_Alignas` / `_Alignof` / `_Generic` 见 §4.35）；浮点字面量见 §4.24。
 
 #### 4.24 浮点字面量（ct-ast）
 
@@ -938,7 +938,7 @@ static int check(int v) {
 - 文件作用域的多条断言统一在「类型之后、原型之前」发射，因此断言里引用本单元上面
   定义过的 struct / enum 仍然成立；引用**后面**才定义的类型则不行。
 - 判定的最终结果仍由 C 编译器给出（断言失败时是它的错误消息）。
-- 范围外：`_Alignas`、`_Generic`、`__attribute__((…))` 仍不在子集内。
+- 范围外：`__attribute__((…))` 仍不在子集内（`_Alignas` / `_Generic` 见 §4.35）。
 
 #### 4.27 一条声明多个字段（ct-ast）
 
@@ -1119,6 +1119,43 @@ w = (a += 2);             /* 复合赋值 */
 - 目标是 `own` 变量时拒绝：`an 'own' variable can only be assigned in a statement`。
   所有权（AutoDrop / 泄漏分析）只在语句层记账，值位置的赋值会绕过它，所以宁可报错。
 
+#### 4.35 C11 对齐与泛型选择（ct-ast）
+
+```c
+_Alignas(16) int g_a;            /* 文件作用域 */
+static _Alignas(16) int g_b;
+
+struct Frame {
+    _Alignas(8) int kind;
+    int size;
+};
+
+int main(void)
+{
+    _Alignas(16) int local;      /* 块作用域 */
+
+    printf("%d\n", (int)_Alignof(double));   /* 只接受类型名，不接受操作数 */
+
+    int n = 0;
+    double d = 0.0;
+    int kind_n = _Generic(n, int: 1, double: 2, default: 3);   /* 1 */
+    int kind_d = _Generic(d, int: 1, double: 2, default: 3);   /* 2 */
+    return 0;
+}
+```
+
+- `_Alignas(…)` 是类型拼写的一部分：解析器把它**原样**放到声明类型之前，全局、局部、字段、
+  参数、`typedef` 五个入口因此自动生效，不需要额外语法。生成物写成
+  `_Alignas ( 16 ) int x`，是否合法由 C 编译器判断。其他说明符仍写在前面
+  （`static _Alignas(16) int g;`）；`_Alignas(16) static int g;` 这种顺序不在子集内。
+- `_Alignof(type)` 与 `sizeof(type)` 共用一个节点，只接受**类型**形式：写 `_Alignof x`
+  报 `_Alignof needs a type in parentheses`（C11 本来也只允许类型）。
+- `_Generic(…)` 整段透传：控制表达式与每个分支都交给 C 编译器（各 token 之间补一个空格），
+  类型匹配与分支选择都由它完成。ct 不读分支，所以分支里的 trait 调用、装箱等重写
+  **不会发生**——分支要写成 C 编译器自己能接受的代码。
+- 三者都由 ct-ast 解析并重新发射；L0 / L2 的透传行为不变。生成的 `.c` 保留 C11 拼写，
+  因此构建它的 C 编译器需要接受该写法（clang 与 GCC 都可以）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1242,10 +1279,10 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | block form `namespace A::B { … }` | accepted | rejected (`a namespace is file-scoped`) | the per-unit prefix and the directory check both assume one namespace per file |
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) | never silently pick the wrong object between two same-named exports |
 >
-> **Still unimplemented** (ct-ast reports a specific message): `_Alignas`, `_Generic`,
-> `__attribute__((…))`. Every other C form (`goto` / labels, `switch` ranges, bit-fields, anonymous
-> members, variadics, `inline`, `_Static_assert`, floating literals, …) is accepted by both layers;
-> see the sections under 4.
+> **Still unimplemented** (ct-ast reports a specific message): `__attribute__((…))`. Every other C
+> form (`goto` / labels, `switch` ranges, bit-fields, anonymous members, variadics, `inline`,
+> `_Static_assert`, floating literals, `_Alignas` / `_Alignof` / `_Generic`, …) is accepted by
+> both layers; see the sections under 4.
 >
 > This is a **capability gap between the two layers**, not a progress difference on one pipeline:
 > L0 still reports `'namespace' is not supported by this compiler` for those constructs (same for
@@ -2219,8 +2256,9 @@ static bool positive(int32_t v) { return v > 0; }
   (C lets a prototype differ from the definition).
 - `inline` in front of something that is not a function (`inline int value = 1;`) reports
   `'inline' can only declare a function`.
-- Out of scope: `_Alignas` / `_Generic` / `__attribute__((…))` are still not part of the subset
-  (`_Static_assert` is covered in §4.26); floating-point literals are described in §4.24.
+- Out of scope: `__attribute__((…))` is still not part of the subset (`_Static_assert` is covered
+  in §4.26; `_Alignas` / `_Alignof` / `_Generic` in §4.35); floating-point literals are described
+  in §4.24.
 
 #### 4.24 Floating-point literals (ct-ast)
 
@@ -2301,7 +2339,8 @@ static int check(int v) {
   may name a struct / enum defined above it in the unit; naming a type defined **after** it does not
   work.
 - The verdict itself still comes from the C compiler (a failing assertion is its error message).
-- Out of scope: `_Alignas`, `_Generic` and `__attribute__((…))` are still not part of the subset.
+- Out of scope: `__attribute__((…))` is still not part of the subset (`_Alignas` / `_Generic` are
+  covered in §4.35).
 
 #### 4.27 Several declarators in one field declaration (ct-ast)
 
@@ -2500,6 +2539,46 @@ w = (a += 2);             /* compound assignment */
 - An `own` target is refused: `an 'own' variable can only be assigned in a statement`. Ownership
   (AutoDrop / the leak analysis) is accounted for at statement level only, and a value-position
   assignment would slip past it.
+
+#### 4.35 C11 alignment and generic selection (ct-ast)
+
+```c
+_Alignas(16) int g_a;            /* file scope */
+static _Alignas(16) int g_b;
+
+struct Frame {
+    _Alignas(8) int kind;
+    int size;
+};
+
+int main(void)
+{
+    _Alignas(16) int local;      /* block scope */
+
+    printf("%d\n", (int)_Alignof(double));   /* a type name, not an operand */
+
+    int n = 0;
+    double d = 0.0;
+    int kind_n = _Generic(n, int: 1, double: 2, default: 3);   /* 1 */
+    int kind_d = _Generic(d, int: 1, double: 2, default: 3);   /* 2 */
+    return 0;
+}
+```
+
+- `_Alignas(…)` is part of the type spelling: the parser copies it verbatim in front of the
+  declared type, so all five declaration entries — global, local, field, parameter, `typedef` —
+  pick it up with no extra syntax. The output is `_Alignas ( 16 ) int x`, and whether that is
+  valid is the C compiler's call. Other specifiers still come first
+  (`static _Alignas(16) int g;`); the order `_Alignas(16) static int g;` is not part of the subset.
+- `_Alignof(type)` shares `sizeof(type)`'s node and accepts the **type** form only: `_Alignof x`
+  reports `_Alignof needs a type in parentheses` (C11 allows nothing else either).
+- `_Generic(…)` is passed through whole: the controlling expression and every arm are handed to
+  the C compiler (the tokens are joined with a space), which does the type match and the arm
+  choice. ct never reads an arm, so a trait call or a boxing inside one is **not** rewritten —
+  write arms the C compiler can take on its own.
+- All three are parsed and re-emitted by ct-ast; the pass-through behaviour of L0 / L2 is
+  unchanged, and the generated `.c` keeps the C11 spelling, so the C compiler that builds it must
+  accept the form (clang and GCC do).
 
 ### 5. Naming contract
 
