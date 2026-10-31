@@ -1,0 +1,40 @@
+/* Factory Method: one interface-returning function picks the concrete product;
+   the caller only knows the interface. */
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Shape {
+    int area();
+}
+
+struct Square { int side; } use Shape;
+struct Rect { int w; int h; } use Shape;
+
+impl Shape for Square { int area() { return self->side * self->side; } }
+impl Shape for Rect { int area() { return self->w * self->h; } }
+
+static Shape make(int kind)
+{
+    if (kind == 0) {
+        struct Square *p = malloc(sizeof(struct Square));
+
+        p->side = 3;
+        return p;
+    }
+    {
+        struct Rect *q = malloc(sizeof(struct Rect));
+
+        q->w = 2;
+        q->h = 5;
+        return q;
+    }
+}
+
+int main(void)
+{
+    Shape a = make(0);
+    Shape b = make(1);
+
+    printf("%d %d\n", a.area(), b.area());
+    return 0;
+}

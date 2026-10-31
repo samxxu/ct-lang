@@ -1,0 +1,23 @@
+/* Strategy: one interface parameter, two interchangeable algorithms. */
+#include <stdio.h>
+
+trait Strategy {
+    int run(int x);
+}
+
+struct Add { int k; } use Strategy;
+struct Mul { int k; } use Strategy;
+
+impl Strategy for Add { int run(int x) { return x + self->k; } }
+impl Strategy for Mul { int run(int x) { return x * self->k; } }
+
+static int apply(Strategy s, int x) { return s.run(x); }
+
+int main(void)
+{
+    struct Add a = { .k = 3 };
+    struct Mul m = { .k = 4 };
+
+    printf("%d %d\n", apply(a, 10), apply(m, 10));
+    return 0;
+}

@@ -1,0 +1,57 @@
+/* Composite: a group holds interface values and treats itself like a leaf, so
+   the recursive call walks the whole tree. */
+#include <stdio.h>
+
+trait Node {
+    int sum();
+    int count();
+}
+
+struct Leaf { int v; } use Node;
+struct Group { Node items[4]; int n; } use Node;
+
+impl Node for Leaf {
+    int sum() { return self->v; }
+    int count() { return 1; }
+}
+
+impl Node for Group {
+    int sum() {
+        int i;
+        int s = 0;
+
+        for (i = 0; i < self->n; i++) s = s + self->items[i].sum();
+        return s;
+    }
+    int count() {
+        int i;
+        int c = 0;
+
+        for (i = 0; i < self->n; i++) c = c + self->items[i].count();
+        return c;
+    }
+}
+
+static void add(Group *g, Node x)
+{
+    g->items[g->n] = x;
+    g->n = g->n + 1;
+}
+
+int main(void)
+{
+    struct Leaf a = { .v = 1 };
+    struct Leaf b = { .v = 2 };
+    struct Leaf c = { .v = 3 };
+    struct Group g;
+    struct Group root;
+
+    g.n = 0;
+    root.n = 0;
+    add(&g, a);
+    add(&g, b);
+    add(&root, g);
+    add(&root, c);
+    printf("%d %d %d %d\n", g.sum(), g.count(), root.sum(), root.count());
+    return 0;
+}

@@ -1,0 +1,43 @@
+/* Observer: an interface array field, registered and notified through a
+   Subject pointer. */
+#include <stdio.h>
+
+trait Observer {
+    void update(int v);
+}
+
+struct Log { int n; } use Observer;
+struct Adder { int n; } use Observer;
+
+impl Observer for Log { void update(int v) { self->n = self->n + v; } }
+impl Observer for Adder { void update(int v) { self->n = self->n + v * 2; } }
+
+struct Subject {
+    Observer obs[4];
+    int n;
+};
+
+static void notify(Subject *s, int v)
+{
+    int i;
+
+    for (i = 0; i < s->n; i++) s->obs[i].update(v);
+}
+
+int main(void)
+{
+    struct Log l;
+    struct Adder a;
+    struct Subject s;
+
+    l.n = 0;
+    a.n = 0;
+    s.n = 0;
+    s.obs[s.n] = l;
+    s.n = s.n + 1;
+    s.obs[s.n] = a;
+    s.n = s.n + 1;
+    notify(&s, 5);
+    printf("%d %d %d\n", l.n, a.n, s.n);
+    return 0;
+}

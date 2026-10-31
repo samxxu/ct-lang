@@ -1,0 +1,23 @@
+/* Decorator: the same interface wraps another implementation of itself, so
+   the outer object forwards to the inner one. */
+#include <stdio.h>
+
+trait Text {
+    int len();
+}
+
+struct Plain { int n; } use Text;
+struct Wrap { Text inner; } use Text;
+
+impl Text for Plain { int len() { return self->n; } }
+impl Text for Wrap { int len() { return self->inner.len() + 1; } }
+
+int main(void)
+{
+    struct Plain p = { .n = 3 };
+    struct Wrap w = { .inner = p };
+    struct Wrap w2 = { .inner = w };
+
+    printf("%d %d %d\n", p.len(), w.len(), w2.len());
+    return 0;
+}

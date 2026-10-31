@@ -154,6 +154,11 @@
 # imported unit's exports (a clean dependency can sit after the first dirty
 # unit). The cache section pins the shape with a three-unit project.
 #
+# batch 35 adds no language feature: six design patterns are written with the
+# existing traits / interface values / composition and run as fixtures under
+# test/patterns/**, so an OO gap surfaces as a failing pattern, not a new
+# feature.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -240,6 +245,43 @@ for d in test/ast/*/; do
         continue
     fi
     ok "$name"
+done
+
+echo
+echo "== design patterns (OO coverage) =="
+# Each pattern is written with the language as it stands -- traits, impl,
+# interface values / arrays / fields, composition, namespaces and `map` -- and
+# is compiled, built warning-free and run like a behavioural case. Nothing is
+# added to the language for them: a pattern that could not be written would be
+# reported as a gap instead of being patched into a new feature.
+for d in test/patterns/*/; do
+    [ -d "$d" ] || continue
+    d="${d%/}"
+    name="$(basename "$d")"
+    out="$work/pat_$name.c"
+    exe="$work/pat_$name.bin"
+
+    if ! "$work/ct-ast" "$d/prog.ct" -o "$out" >"$work/pat_$name.out" 2>"$work/pat_$name.err"; then
+        bad "pattern/$name" "ct-ast failed: $(cat "$work/pat_$name.err")"
+        continue
+    fi
+    if [ -f "$work/pat_$name.h" ]; then
+        bad "pattern/$name" "a plain .ct unit must not emit a header"
+        continue
+    fi
+    if ! "$CC" -Wall -Wextra -std=c99 "$out" -o "$exe" 2>"$work/pat_$name.cc"; then
+        bad "pattern/$name" "generated C did not build warning-free: $(cat "$work/pat_$name.cc")"
+        continue
+    fi
+    if ! "$exe" >"$work/pat_$name.stdout" 2>&1; then
+        bad "pattern/$name" "the program exited non-zero"
+        continue
+    fi
+    if ! cmp -s "$work/pat_$name.stdout" "$d/expected.out"; then
+        bad "pattern/$name" "program output differs: $(cat "$work/pat_$name.stdout")"
+        continue
+    fi
+    ok "pattern/$name"
 done
 
 echo

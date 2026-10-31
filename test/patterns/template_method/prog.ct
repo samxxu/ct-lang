@@ -1,0 +1,43 @@
+/* Template Method: a free function owns the skeleton and calls the steps of an
+   interface it receives, so two implementations share one algorithm. */
+#include <stdio.h>
+
+trait Steps {
+    void begin();
+    void item(int x);
+    void end();
+}
+
+struct Sum { int total; } use Steps;
+struct Max { int best; } use Steps;
+
+impl Steps for Sum {
+    void begin() { self->total = 0; }
+    void item(int x) { self->total = self->total + x; }
+    void end() { printf("sum %d\n", self->total); }
+}
+
+impl Steps for Max {
+    void begin() { self->best = 0; }
+    void item(int x) { if (x > self->best) self->best = x; }
+    void end() { printf("max %d\n", self->best); }
+}
+
+static void run(Steps s, int n)
+{
+    int i;
+
+    s.begin();
+    for (i = 1; i <= n; i++) s.item(i * 2);
+    s.end();
+}
+
+int main(void)
+{
+    struct Sum sum;
+    struct Max mx;
+
+    run(sum, 4);
+    run(mx, 4);
+    return 0;
+}
