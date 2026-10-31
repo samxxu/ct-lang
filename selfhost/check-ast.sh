@@ -140,6 +140,11 @@
 # batch 31 accepts GNU `__attribute__((…))` as a trailing pass-through:
 # test/ast/54_attribute plus the two shape diagnostics.
 #
+# batch 32 closes the C compatibility list: integer suffixes (`U` / `L` / `UL` /
+# `LL` / `ULL`, normalized), the `static_assert` alias, `_Noreturn` kept from the
+# first declaration and GNU `__restrict`: test/ast/55_c_compat plus the two
+# malformed-suffix diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1286,6 +1291,20 @@ do
         ok "batch 31 ($cf)"
     else
         bad "batch 31: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 32: an integer suffix is U at most once and L at most twice; any other
+# run is refused with one message.
+for cf in integer_suffix_lll integer_suffix_uu
+do
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 32: $cf" "expected a non-zero exit"
+    elif grep -q "an integer suffix may be U, L or LL" "$work/$cf.err"; then
+        ok "batch 32 ($cf)"
+    else
+        bad "batch 32: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

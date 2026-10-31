@@ -209,7 +209,7 @@ impl SupportOps for ParseSupport {
     int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
         char cname[MAX_TEXT];
-        int i, k, p, pub_now;
+        int i, k, p, pub_now, fresh;
 
         /* Rows are keyed by the C spelling, so the declaration has to find the
            row that belongs to it first: the namespace-prefixed spelling (a
@@ -225,6 +225,7 @@ impl SupportOps for ParseSupport {
         if (i < 0 && !is_pub) i = self->sym->find_func(name);
         pub_now = is_pub;
         if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
+        fresh = 0;
         if (i < 0) {
             if (self->sym->nfunc >= MAX_FUNCS) return self->fail("too many functions");
             i = self->sym->nfunc;
@@ -233,6 +234,7 @@ impl SupportOps for ParseSupport {
             self->sym->funcs[i].is_pub = 0;
             self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
             self->sym->funcs[i].attr = -1;       /* fresh row: no attribute yet */
+            fresh = 1;
         }
         if (pub_now) self->sym->funcs[i].is_pub = 1;
         if (pub_now && self->sym->ns[0]) {
@@ -242,7 +244,10 @@ impl SupportOps for ParseSupport {
             snprintf(cname, sizeof cname, "%s", name);
         }
         snprintf(self->sym->funcs[i].cname, MAX_TEXT, "%s", cname);
-        snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
+        /* The return type belongs to the first declaration: a prototype such as
+           `_Noreturn void f(void);` keeps its prefix when the definition repeats
+           the signature as `void f(void) {}`. */
+        if (fresh) snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
         self->sym->funcs[i].is_static = is_static;
         self->sym->funcs[i].nparams = 0;
         p = first_param;

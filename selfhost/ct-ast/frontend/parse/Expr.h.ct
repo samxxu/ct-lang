@@ -161,6 +161,7 @@ impl ExprOps for Expr {
             || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0
             || strcmp(w, "bool") == 0 || strcmp(w, "const") == 0
             || strcmp(w, "volatile") == 0 || strcmp(w, "restrict") == 0
+            || strcmp(w, "__restrict") == 0 || strcmp(w, "__restrict__") == 0
             || strcmp(w, "struct") == 0 || strcmp(w, "union") == 0
             || strcmp(w, "enum") == 0 || strcmp(w, "size_t") == 0
             || strcmp(w, "ssize_t") == 0 || strcmp(w, "ptrdiff_t") == 0
@@ -1207,6 +1208,7 @@ impl ExprOps for Expr {
         char tsrc[MAX_TEXT];
         char tag[MAX_TEXT];
         int qf;
+        int nu, nl, sl;
         (void)self;
 
         qc[0] = 0;
@@ -1266,8 +1268,25 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             if (self->lex->tokfloat)
                 snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
-            else
+            else {
                 self->arena->nodes[n].num = self->lex->toknum;
+                /* An integer suffix is spelling, not value: `U` may appear once
+                   and `L` twice, and the emitted form always orders them U then
+                   L (`uLL`, `LLu`, `lL` all become `ULL` / `LL`). */
+                nu = 0;
+                nl = 0;
+                for (sl = 0; self->lex->toksuffix[sl]; sl++) {
+                    if (self->lex->toksuffix[sl] == 'u' || self->lex->toksuffix[sl] == 'U') nu++;
+                    else nl++;
+                }
+                if (nu > 1 || nl > 2 || sl > 3)
+                    return self->sup->fail("an integer suffix may be U, L or LL");
+                if (nu && nl == 2) snprintf(self->arena->nodes[n].text, MAX_TEXT, "ULL");
+                else if (nu && nl == 1) snprintf(self->arena->nodes[n].text, MAX_TEXT, "UL");
+                else if (nu) snprintf(self->arena->nodes[n].text, MAX_TEXT, "U");
+                else if (nl == 2) snprintf(self->arena->nodes[n].text, MAX_TEXT, "LL");
+                else if (nl == 1) snprintf(self->arena->nodes[n].text, MAX_TEXT, "L");
+            }
             self->sup->lex_next();
             return n;
         }

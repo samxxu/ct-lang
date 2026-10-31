@@ -345,7 +345,9 @@ impl ParseDeclOps for Parser {
                 return tool::diag::ct_sem_error(iline, icol,
                     "'inline' can only declare a function", self->mem->path);
             if (n > 0) self->arena->nodes[n].num = 1;
-        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Static_assert") == 0) {
+        } else if (self->lex->tok == T_ID
+                   && (strcmp(self->lex->toktext, "_Static_assert") == 0
+                       || strcmp(self->lex->toktext, "static_assert") == 0)) {
             /* a file-scope static assertion is the statement form; the statement
                layer owns the grammar and the constant check */
             n = self->st->parse_stmt();

@@ -1,0 +1,33 @@
+/* 55: C compatibility close-out (batch 32) - an integer suffix keeps its
+   spelling (`U` / `L` / `UL` / `LL` / `ULL`, any case, normalized), the
+   `static_assert` alias is accepted, `_Noreturn` survives a prototype followed
+   by a plain definition, and GNU `__restrict` is a type word. */
+#include <stdio.h>
+#include <stdlib.h>
+
+_Static_assert(sizeof(int) >= 2, "int is wide enough");
+static_assert(sizeof(char) == 1, "char is one byte");
+
+_Noreturn void stop(void);
+
+void stop(void) { exit(0); }
+
+static int mix(const int *__restrict a, int *__restrict__ b)
+{
+    return *a + *b;
+}
+
+int main(void)
+{
+    int x = 20, y = 22;
+    unsigned long h = 0xFFu;
+    long o = 0777L;
+
+    static_assert(1 + 1 == 2, "arithmetic works");
+    printf("%d %d %d\n", (int)1U, (int)1L, (int)1LL);
+    printf("%lu %lu %lu\n", h, (unsigned long)1UL, (unsigned long)1ULL);
+    printf("%ld %ld\n", o, 16l);
+    printf("%d\n", mix(&x, &y));
+    stop();
+    return 0;
+}

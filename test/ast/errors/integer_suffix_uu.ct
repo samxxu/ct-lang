@@ -1,0 +1,2 @@
+/* An integer literal carries at most one `U`. */
+int main(void) { return (int)1UU; }

@@ -1,0 +1,2 @@
+/* An integer literal carries at most two `L`s after the value. */
+int main(void) { return (int)1LLL; }

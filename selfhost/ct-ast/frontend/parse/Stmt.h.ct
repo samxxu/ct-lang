@@ -267,11 +267,15 @@ impl StmtOps for Stmt {
         (void)self;
 
         /* `_Static_assert(<constant>, "<message>");` -- C11, emitted as written.
+           `static_assert` is the same construct under its C23 / `<assert.h>`
+           spelling, and the emitter always writes the `_Static_assert` form.
            The condition follows the same constant rule as a case label, so a
            mistake is reported here instead of by the C compiler. It is accepted
            at file scope too: `top_decl` routes the keyword back into this
            branch, which keeps the construct in one place. */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Static_assert") == 0) {
+        if (self->lex->tok == T_ID
+            && (strcmp(self->lex->toktext, "_Static_assert") == 0
+                || strcmp(self->lex->toktext, "static_assert") == 0)) {
             int cnd;
             s = self->sup->new_node(N_SASSERT);
             if (s < 0) return -1;

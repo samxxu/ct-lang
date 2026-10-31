@@ -35,6 +35,10 @@ pub struct Lexer {
     int  tok;
     char toktext[160];
     long toknum;
+    /* the `U` / `L` suffix of an integer literal, as written (`uLL`, `LLu`):
+       the parser validates and normalizes it. 8 fits any invalid run too, so a
+       suffix that is too long is never silently truncated into a legal one. */
+    char toksuffix[8];
     int  line;                  /* 1-based */
     int  tokline;               /* line of the current token */
     int  tokstart;
@@ -107,6 +111,7 @@ impl LexOps for Lexer {
             int nstart = self->pos;
             self->toknum = 0;
             self->tokfloat = 0;
+            self->toksuffix[0] = 0;
             if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
                 self->pos += 2;
                 for (;;) {
@@ -164,6 +169,21 @@ impl LexOps for Lexer {
                     self->toktext[q] = 0;
                     self->tokfloat = 1;
                 }
+            }
+            /* An integer literal may carry `U` / `L` letters (case-insensitive,
+               in any order). They do not affect the value, so they are collected
+               verbatim for the parser; the spelling is what the emitter keeps. */
+            if (!self->tokfloat) {
+                int q = 0;
+                while (self->src[self->pos] == 'u' || self->src[self->pos] == 'U'
+                       || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
+                    if (q + 1 < 8) {            /* the toksuffix capacity */
+                        self->toksuffix[q] = self->src[self->pos];
+                        q++;
+                    }
+                    self->pos++;
+                }
+                self->toksuffix[q] = 0;
             }
             self->tok = T_NUM;
             return;

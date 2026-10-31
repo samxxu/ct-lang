@@ -1483,7 +1483,8 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (self->arena->nodes[n].kind == N_NUM) {
-            fprintf(self->out, "%ld", self->arena->nodes[n].num);
+            /* `text` holds the normalized integer suffix (`U`, `UL`, `LL`, …) */
+            fprintf(self->out, "%ld%s", self->arena->nodes[n].num, self->arena->nodes[n].text);
             return 0;
         }
         /* a floating literal is emitted with its spelling (`1.5`, `2.25f`, `1e9`) */
