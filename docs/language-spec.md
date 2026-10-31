@@ -862,7 +862,7 @@ static bool positive(int32_t v) { return v > 0; }
 - `inline` 是函数说明符：顶层接受 `static inline` 与 `inline static` 两种顺序，发射为
   `static inline ` / `inline `。生成的**原型**不带 `inline`（C 允许原型与定义不同）。
 - `inline` 后面不是函数（`inline int value = 1;`）报 `'inline' can only declare a function`。
-- 范围外：`_Static_assert` / `_Alignas` / `_Generic` / `__attribute__((…))` 仍不在子集内；
+- 范围外：`_Alignas` / `_Generic` / `__attribute__((…))` 仍不在子集内（`_Static_assert` 见 §4.26）；
   浮点字面量见 §4.24。
 
 #### 4.24 浮点字面量（ct-ast）
@@ -1061,7 +1061,7 @@ x = (i++, j * 2);              /* 取值位置要加括号 */
   - 表达式语句、以及 `for` 的初始化子句与步进子句（三者共用同一个解析入口）。每个操作数
     按赋值表达式解析，所以 `i = 1, j = 2` 就是 `(i = 1), (j = 2)`，与 C 的读法一致；
   - **括号内的取值位置**：`x = (a, b);`、`f((a, b))`、`while ((a, b))`。此时列表就是一个
-    普通表达式，值取最后一项；括号里的操作数是普通表达式（括号内的赋值仍不在表达式文法里）。
+    普通表达式，值取最后一项；括号里的操作数也可以是赋值（见 §4.34）。
 - 生成物把列表写成 `(a, (b, c))`：右结合只是解析产物，求值顺序仍是左到右。
 - 仍然不做：`for` 条件子句里**不带括号**的逗号（`for (; a, b; )`）。实参之间的 `,` 永远是
   分隔符，要写取值逗号必须加括号。
@@ -1200,12 +1200,14 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 ### 8. 明确不支持
 
-可见性修饰符的完整集合（`pub readonly` / `setter`）、泛型、继承、类型检查、错误恢复、嵌套定义。
+可见性修饰符的完整集合（`pub readonly` / `setter`）、泛型、继承、类型检查、嵌套定义。
+（错误恢复是 L0 的边界；CT 线会先收集多个错误再报告，见 §10。）
 
 ### 9. 诊断与退出码
 
-- **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；**遇错即 `exit(1)`**（不做错误恢复）。
-- **当前不产生任何警告**，只有错误。
+- **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；L0 **遇错即 `exit(1)`**，
+  CT 线则先收集多个错误（§10）。
+- **L0 不产生任何警告**；CT 线会输出泄漏警告与签名不一致告警，`--diagnostics` 可切 JSON（§10）。
 - 退出码：`0` 成功；`1` 语法 / 语义 / I/O 错误。
 
 ### 10. L2 独有：模块系统与诊断（本文不描述其语法）
@@ -2217,8 +2219,8 @@ static bool positive(int32_t v) { return v > 0; }
   (C lets a prototype differ from the definition).
 - `inline` in front of something that is not a function (`inline int value = 1;`) reports
   `'inline' can only declare a function`.
-- Out of scope: `_Static_assert` / `_Alignas` / `_Generic` / `__attribute__((…))` are still not part
-  of the subset; floating-point literals are described in §4.24.
+- Out of scope: `_Alignas` / `_Generic` / `__attribute__((…))` are still not part of the subset
+  (`_Static_assert` is covered in §4.26); floating-point literals are described in §4.24.
 
 #### 4.24 Floating-point literals (ct-ast)
 
@@ -2433,9 +2435,8 @@ x = (i++, j * 2);              /* a value position needs the parentheses */
     point). Each operand is parsed as an assignment-expression, so `i = 1, j = 2` is
     `(i = 1), (j = 2)`, exactly as C reads it;
   - **a parenthesised list in a value position**: `x = (a, b);`, `f((a, b))`, `while ((a, b))`.
-    There the list is an ordinary expression whose value is the last operand; its operands are
-    ordinary expressions (an assignment inside parentheses is still outside the expression
-    grammar).
+    There the list is an ordinary expression whose value is the last operand; its operands may also
+    be assignments (§4.34).
 - The generated C writes the list as `(a, (b, c))`: the right-nesting is a parse artefact and the
   evaluation order is still left to right.
 - Still not accepted: a **bare** comma in a `for` condition (`for (; a, b; )`). A comma between
@@ -2609,13 +2610,15 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 ### 8. Out of scope
 
 The full set of visibility modifiers (`pub readonly` / `setter`), generics, inheritance, type checking,
-error recovery, nested definitions.
+nested definitions. (Error recovery is an L0 boundary; the CT line collects several errors before
+reporting, see §10.)
 
 ### 9. Diagnostics
 
-- **Errors**: `<file>:<line>:<col>: error: <message>` on stderr; an error **exits immediately** with
-  code `1` (no error recovery).
-- **No warnings are produced at all**; errors are the only diagnostics.
+- **Errors**: `<file>:<line>:<col>: error: <message>` on stderr; L0 **exits immediately** with code
+  `1`, while the CT line collects several errors first (§10).
+- **L0 produces no warnings at all**; the CT line reports leak and signature-mismatch warnings, and
+  `--diagnostics` switches them to JSON (§10).
 - Exit code: `0` on success; `1` on syntax / semantic / I/O errors.
 
 ### 10. L2 only: module system and diagnostics (syntax not described here)
