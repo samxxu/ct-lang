@@ -526,9 +526,12 @@ recipe 替换（逐出现点）：
 **伴随 C shim（第三十九批，仅 ct-ast）**：映射单元可以让同目录同名的 C 文件承担 recipe 写不出的
 形状——宏 / 语句宏、全局量（`errno` / `stdin`）、需要类型转换的调用、变参前缀转发、无 userdata 的
 回调。约定是 `<base>.shim.h` 与 `<base>.shim.c`（两个都可选，但**有 `.shim.c` 就必须有
-`.shim.h`**，否则报 `a shim source needs a matching .shim.h`）。
+`.shim.h`**，否则报 `a shim source needs a matching .shim.h: <头路径>`）。
 
-- 编译器只为 `.m.ct` 探测 shim（`foo.h.ct` / `foo.ct` 旁的 `foo.shim.h` 被忽略）。
+- 编译器只为 `.m.ct` 探测 shim（`foo.h.ct` / `foo.ct` 旁的 `foo.shim.h` 被忽略）；命中的文件必须是
+  可读普通文件，否则报 `a shim header is not a readable file` / `a shim source is not a regular file`。
+- 两个映射单元的 shim 同名但目录不同 → 构建失败：
+  `ctc: shim base name '<base>' is ambiguous: <dir1> and <dir2>`（不静默取先命中者）。
 - 消费者的生成 `.c` 自动出现 `#include "<base>.shim.h>"`（在该单元的 prologue **之前**，按整行
   去重）；shim 头按**文件名**解析，`ct build` 因此在该 `cc` 行打印 `-I <shim 目录>`（同一目录
   只一次）。
@@ -539,7 +542,8 @@ recipe 替换（逐出现点）：
 
 `--emit-map` 的静态条目带 `"static": true`、`"host": "namespace"|"type"`、类型宿主另有
 `"type": "<ctype>"`，每个 binding 带 `"inline": true`、`"wrapper": false` 与 `"symbol": <callee>`；
-动态 `map` 的字段与取值不变。
+带 shim 的静态条目还带 `"shim": {"header": "<path>", "source": "<path>"}`（无 `.shim.c` 时省略
+`source`）。动态 `map` 的字段与取值不变。
 
 #### 4.11 跨单元链接：`pub` 全局与 `extern`（ct-ast）
 
@@ -2067,9 +2071,13 @@ it never expands one.
 spell -- macros and statement macros, globals (`errno` / `stdin`), calls that need a cast, prefixed
 varargs forwarding, callbacks without userdata -- to same-directory, same-base C files:
 `<base>.shim.h` and `<base>.shim.c` (both optional, but **a `.shim.c` requires its `.shim.h`**,
-otherwise `a shim source needs a matching .shim.h` is reported).
+otherwise `a shim source needs a matching .shim.h: <header path>` is reported).
 
-- Only a `.m.ct` is probed for a shim (`foo.shim.h` beside `foo.h.ct` / `foo.ct` is ignored).
+- Only a `.m.ct` is probed for a shim (`foo.shim.h` beside `foo.h.ct` / `foo.ct` is ignored); a
+  hit must be a readable regular file, otherwise `a shim header is not a readable file` /
+  `a shim source is not a regular file` is reported.
+- Two mapping units whose shims share a base name in different directories fail the build:
+  `ctc: shim base name '<base>' is ambiguous: <dir1> and <dir2>` (no silent first-win).
 - The consumer's generated `.c` automatically carries `#include "<base>.shim.h"` (before that
   unit's prologue, de-duplicated per whole line); the shim header is resolved **by file name**,
   so `ct build` prints `-I <shim directory>` on that `cc` line (once per directory).
@@ -2081,7 +2089,9 @@ otherwise `a shim source needs a matching .shim.h` is reported).
 
 A static `--emit-map` entry carries `"static": true`, `"host": "namespace"|"type"` and, for a type
 host, `"type": "<ctype>"`; each binding carries `"inline": true`, `"wrapper": false` and
-`"symbol": <callee>`. Dynamic `map` fields and values are unchanged.
+`"symbol": <callee>`. A static entry with a shim also carries
+`"shim": {"header": "<path>", "source": "<path>"}` (`source` is omitted without a `.shim.c`).
+Dynamic `map` fields and values are unchanged.
 
 #### 4.11 Cross-unit linkage: `pub` globals and `extern` (ct-ast)
 

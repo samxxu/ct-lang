@@ -12,9 +12,10 @@
 
 ## [x] T1 探测与诊断（S0）
 
-- `frontend/module/Module.h.ct`：`#include <sys/stat.h>`；`load_unit` 在 `base_name` 之后探测
-  同目录同名 `.shim.h` / `.shim.c`，只在 `is_map` 时探测；`.shim.c` 无 `.shim.h` 报
-  `a shim source needs a matching .shim.h`（`<path>:1:1: error:`）。
+- `frontend/module/Module.h.ct`：`#include <sys/stat.h>` / `<unistd.h>`；`load_unit` 在 `base_name`
+  之后探测同目录同名 `.shim.h` / `.shim.c`，只在 `is_map` 时探测；命中项必须是普通文件且可读
+  （`S_ISREG` + `access(R_OK)`）；`.shim.c` 无 `.shim.h` 报
+  `a shim source needs a matching .shim.h: <头路径>`（`<path>:1:1: error:`）。
 - 验收：`test/modules/map_unit_shim` 的映射单元被识别为 `has_shim`。
 
 ## [x] T2 prologue 引入 shim 头（S1）
@@ -47,7 +48,7 @@
   binding（头文件式，`cc` 行不含 `.shim.c`）。
 - `selfhost/check-warnings.sh`：modules / bindings 两段从 `cc` 行用 `awk` 提取 `-I <dir>` 对，
   连同「build 目录」与「binding 目录」传给 `scan_one`；bindings 段遍历 `bindings/*/demo.ct`。
-- 验收：`bash selfhost/check-ast.sh`（400 通过）与 `bash selfhost/check-warnings.sh`（161 通过）
+- 验收：`bash selfhost/check-ast.sh`（403 通过）与 `bash selfhost/check-warnings.sh`（161 通过）
   全绿。
 
 ## [x] T6 文档
@@ -65,3 +66,13 @@
 - `bash selfhost/check-all.sh` 九关全绿。
 - 手工三件套：ct-ast 自编零警告、`ct <file> -o /tmp/x.c`、`cc -Wall -Wextra` 编译运行。
 - 既有 `test/cases/**` 与 `test/modules/**` golden 不变；动态 `map` 产物不变。
+
+## [x] T8 收尾（S5）
+
+- 诊断带期望路径；`.shim.h` / `.shim.c` 非普通文件（如目录）在探测阶段拒绝。
+- `--emit-map` 的静态映射条目加 `"shim":{"header":…,"source":…}`（无 `.shim.c` 时只有 `header`；
+  无 shim 的条目不变）。
+- `build_main` 在产物落盘前检测「两个映射单元 shim 同名且目录不同」，报
+  `ctc: shim base name '<base>' is ambiguous: <dir1> and <dir2>`，输出目录不留半成品。
+- `test/modules/map_unit_shim` 先 `lib::Io.clear()` 再断言 `errno == 0`（`errno` 不保证启动时为 0）。
+- 验收：`check-ast.sh` 403 通过（含 JSON、目录拒绝、同名冲突三条新断言）；九关全绿。

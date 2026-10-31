@@ -54,7 +54,8 @@ shim 头不会被 include，shim 源不会进 `cc` 行，改了 shim 也不会�
 - 三个文件**必须**同目录同名；编译器只按这个约定探测，没有配置项。
 - shim 只对 `.m.ct` 生效。`foo.h.ct` / `foo.ct` 旁边的 `foo.shim.h` 被忽略。
 - `.shim.h` 是本批唯一触发点：只有 `.shim.c` 而没有 `.shim.h` 时报
-  `a shim source needs a matching .shim.h`（位置 `<path>:1:1: error:`）。
+  `a shim source needs a matching .shim.h: <期望的头路径>`（位置 `<path>:1:1: error:`）；
+  消息里带路径，用户不必自己拼文件名。
 
 ### 3.2 最小形状
 
@@ -100,9 +101,11 @@ static inline int ct_sock_errno(void) { return errno; }
 
 - `stat("<dir>/<base>.shim.h")` / `stat("<dir>/<base>.shim.c")`，命中的路径记入
   `Unit.shim_h` / `Unit.shim_c`；
-- `has_shim = 1` 当且仅当 `.shim.h` 存在（`shim_dir` 同时记为该目录）；
+- 命中的文件必须是**普通文件**且可读（`S_ISREG` + `access(R_OK)`），否则报
+  `a shim header is not a readable file` / `a shim source is not a regular file`，消息带路径；
+- `has_shim = 1` 当且仅当 `.shim.h` 存在且可读（`shim_dir` 同时记为该目录）；
 - `.shim.c` 存在而 `.shim.h` 缺失 → `tool::diag::ct_sem_error(1, 1,
-  "a shim source needs a matching .shim.h", path)`。
+  "a shim source needs a matching .shim.h: <头路径>", path)`。
 
 `Unit` 新增四个字段（[Unit.h.ct](../../../selfhost/ct-ast/frontend/module/Unit.h.ct)）：
 
@@ -155,11 +158,27 @@ sh@<mtime>.<size>;  sc@<mtime>.<size>;
 
 | 情形 | 消息 | 位置 |
 | --- | --- | --- |
-| 有 `.shim.c` 无 `.shim.h` | `a shim source needs a matching .shim.h` | `<path>:1:1: error:` |
-| shim 头里的符号拼错 | C 编译器报错（`cc` 行已含 `-I` 与 `-I` 目录） | 生成物 `main.c` 对应行（`#line` 默认开） |
+| 有 `.shim.c` 无 `.shim.h` | `a shim source needs a matching .shim.h: <头路径>` | `<path>:1:1: error:` |
+| `.shim.h` 不是普通文件 / 不可读 | `a shim header is not a readable file: <路径>` | `<path>:1:1: error:` |
+| `.shim.c` 不是普通文件 | `a shim source is not a regular file: <路径>` | `<path>:1:1: error:` |
+| 两个映射单元的 shim 同名（不同目录） | `ctc: shim base name '<base>' is ambiguous: <dir1> and <dir2>` | 构建失败，无 `ctc:` 之外的位置 |
+| shim 头里的符号拼错 | C 编译器报错（`cc` 行已含 `-I`） | 生成物 `main.c` 对应行（`#line` 默认开） |
 
-本批不新增其它诊断，也不校验 shim 的签名（签名契约是「recipe 里写的 callee 必须存在」，
-由 C 编译器兜底）。
+同名冲突在 `build_main` 里于**产物落盘之前**检测（遍历已加载单元，按 `base` 比较、
+目录不同即冲突），所以失败时输出目录里没有半成品。不校验 shim 的签名（签名契约是
+「recipe 里写的 callee 必须存在」，由 C 编译器兜底）。
+
+### 4.6 `--emit-map` 的 shim 字段
+
+静态映射条目在 `"static":true` 之后多一个 `"shim"` 对象：
+
+```json
+{"trait":"Io","static":true,"shim":{"header":"lib/lib.shim.h","source":"lib/lib.shim.c"},"instance":"lib",…}
+```
+
+- `header` 恒在；`source` 只在 `.shim.c` 存在时出现；
+- 无 shim 的映射条目逐字节不变（既有 golden 与 grep 断言不受影响）；
+- 目的是让读 map 的工具（IDE、打包器）知道该映射还有两个 C 文件要带。
 
 ## 5. recipe 因此解锁的形状
 
@@ -179,11 +198,15 @@ sh@<mtime>.<size>;  sc@<mtime>.<size>;
 
 正例 `test/modules/map_unit_shim/`：
 
-- `lib/lib.m.ct`（`namespace lib`，`trait Io { int err(); int next(); }`，`for namespace lib`）；
-- `lib/lib.shim.h`（`errno` 访问器 + `next` 的声明与 `<errno.h>`）；
+- `lib/lib.m.ct`（`namespace lib`，`trait Io { int err(); void clear(); int next(); }`，`for namespace lib`）；
+- `lib/lib.shim.h`（`errno` 读/写访问器 + `next` 的声明与 `<errno.h>`）；
 - `lib/lib.shim.c`（`next` 的实现，带状态计数）；
-- `main.ct`（`import lib::lib;`，`printf("%d %d %d\n", lib::Io.err() == 0, lib::Io.next(), lib::Io.next());`）；
+- `main.ct`（`import lib::lib;`，先 `lib::Io.clear()`，再
+  `printf("%d %d %d\n", lib::Io.err() == 0, lib::Io.next(), lib::Io.next());`）；
 - `expected.out` = `1 1 2`。
+
+先 `clear()` 是刻意的：`errno` 在进程启动时不保证为 0（C 运行时自己可能失败一次），
+不清零的话这条断言会随环境漂。
 
 断言（[check-ast.sh](../../../selfhost/check-ast.sh)）：
 
@@ -191,10 +214,18 @@ sh@<mtime>.<size>;  sc@<mtime>.<size>;
 - `main.c` 含 `#include "lib.shim.h"`；
 - `cc` 行含 `-I <fixture>/lib` 与 `lib.shim.c`；
 - 用该 `cc` 行（`-Wall -Wextra -std=c99`）编译运行，输出等于 `expected.out`；
-- 冷/暖缓存：无改动时消费者不重生成；`touch lib.shim.h` 后重生成。
+- 冷/暖缓存：无改动时消费者不重生成；`touch lib.shim.h` 后重生成；
+- `--emit-map` JSON 含 `"shim":{"header":…,"source":…}`，而不带 shim 的 `test/modules/map_unit`
+  的 JSON 里没有 `"shim"`。
 
-负例 `shim_source_without_header`：`lib.m.ct` + `lib.shim.c`（无 `.shim.h`）→ 非零退出，
-stderr 含 `a shim source needs a matching .shim.h`。
+负例：
+
+- `shim_source_without_header`：`lib.m.ct` + `lib.shim.c`（无 `.shim.h`）→ 非零退出，
+  stderr 含 `a shim source needs a matching .shim.h` **且含期望头路径**；
+- `shim_header_not_a_file`：`.shim.h` 是一个目录 → 非零退出，stderr 含
+  `a shim header is not a readable file`；
+- `shim_base_ambiguous`：两个目录各有一份 `lib.m.ct` + `lib.shim.h`，一个 `main.ct` 同时
+  import 两个 → 非零退出，stderr 含 `shim base name 'lib' is ambiguous`，且输出目录没有 `main.c`。
 
 真实库例子 `bindings/posix-socket/`：
 
@@ -219,7 +250,8 @@ stderr 含 `a shim source needs a matching .shim.h`。
 - 不支持跨目录 / 改名 / 多个 shim（没有配置项，只有同目录同名约定）。
 - 不在 `.m.ct` 里镜像 C `struct` / `enum` / 全局变量（第三十八批的非目标仍然成立，shim 是出口）。
 - 不引入 `ct.pkg` / `ldflags` / `-l`（仍需用户自己加链接参数）。
-- 不改既有动态 `map` 的行为、产物、命名与 JSON 形状；不改 `--emit-map` 字段。
+- 不改既有动态 `map` 的行为、产物、命名与 JSON 形状；`--emit-map` 只在静态映射条目上加一个
+  `shim` 对象（§4.6），其余字段不变。
 - 不 bump `CTC_VERSION`（用户未要求；本批是能力增量而非版本事件）。
 
 ## 8. 已定取舍
@@ -234,7 +266,7 @@ stderr 含 `a shim source needs a matching .shim.h`。
 | 缓存 | shim 两文件的 `mtime.size` 折叠进 map 单元 key（`sh@…; sc@…;`） |
 | 头文件式 shim | 支持（最常见的形态），`cc` 行只有 `-I` |
 | 与 prologue 的顺序 | shim 行在前，单元自己的 `#include` 在后 |
-| JSON | 不加字段（避免 golden 抖动） |
+| JSON | 静态映射条目加 `"shim":{"header","source"}`；无 shim 时形状不变 |
 
 ## 9. 分片
 
@@ -245,3 +277,4 @@ stderr 含 `a shim source needs a matching .shim.h`。
 | S2 | `build_main` 的 `-I` 与 `.shim.c` | `cc` 行自洽 |
 | S3 | 缓存折叠 + warm / touch 断言 | 改 shim 触发重建 |
 | S4 | 真实库 binding（posix-socket）+ `check-warnings.sh` roots | 九关全绿 |
+| S5 | 收尾：诊断带路径、非普通文件拒绝、`--emit-map` 的 `shim` 字段、同名 base 冲突 | 三条新断言 + 九关全绿 |
