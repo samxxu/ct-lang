@@ -895,6 +895,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **退役「全程序唯一同名」回退（2026-10-21，仅 ct-ast）**：ct-ast 的 `resolve_func` 现在只查**本单元命名空间 → 根**，跨命名空间的裸调用一律硬报错（`that function lives in another namespace and needs a qualified call`，新负例 `test/modules/ns_bare_call/`）——调用目标从此静态可判定，不再依赖「全程序恰好只有一个同名函数」这种重构时会静默改变绑定的规则。两个命名空间导出同名函数时的歧义诊断保留（`test/modules/ns_fn_ambiguous/` 仍逐字匹配）。ct-ast 自身在片 3 的迁移后已不依赖该回退（自编不动点仍通过），此前实验（收紧后跑 `check-ast.sh`）只有 5 个 fixture 的裸调用失败，已改写成限定写法：`ns_dir`（`hal::ping` / `plain::twice`）、`alias`（`app::scaled`）、`ns_funcs`（`a::one` / `b::two`）、`ns_qual`（`app::scaled`），`test/modules/ns_funcs/main.expected.c` 随注释一同重生成。**L2 不跟随**：它是冻结的回归 oracle，保留回退行为，因此 `ns_bare_call` 只进 `check-ast.sh`（无 `build.args`，不进归档棘轮）。
 
 - **v0.13.0（2026-10-31，用户授权的一次 bump）**：ct-ast 的 C 子集补齐（第二十一至二十八批）——长初始化器（4 KiB/16 KiB 上限 + 字符串池）、变参函数指针、逗号表达式（语句 / `for` 首句 / 步进 / 括号内取值）、头文件里的类型名（声明、转换、`sizeof`）、表达式里的赋值（括号与条件，`own` 目标拒绝）、前缀 `++` / `--`；并把「ct-ast 编 `selfhost/l0/ctc.c` → 产物可编译 → 与 25 个 L0 golden 逐字节一致 → 跑通示例」固化为 `check-ast.sh` 的一节关卡。`CTC_VERSION` 五处同步 bump，`test/cases/**`（50 个文件）与三份 map golden 重生成（**仅版本 token 变化**）；clang 与 GCC 16 下九关全绿。
+- **第二十九批（2026-10-31，C11 三件套）**：`_Alignas` / `_Alignof` / `_Generic` 按「能透传就不建 AST」落地——`_Alignas` 进类型拼写（全局 / 局部 / 字段 / 参数 / `typedef` 五个入口自动生效），`_Alignof` 复用 `sizeof` 节点（`aux = 2`），`_Generic` 整段捕获进字符串池、由 C 编译器选臂；新增 `test/ast/53_c11_align_generic` 与三条形状负例，language-spec §4.35。
+- **第三十批（2026-10-31，`.h.ct` 规则）**：仅 ct-ast——普通 `.ct` 不再写 `.h` 且**不可被 `import`**（`import` 只解析 `.h.ct`，命中普通 `.ct` 报 `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`），compile 模式同理；实现单元的 `.c` 自包含（`pub` 类型本地发射），缓存命中按 `need_h`。被导入单元统一改名（ct-ast 自身 3 个、bindings 1 个、`test/modules/**` 27 个）。L2 保持附加式（归档 oracle 依赖），登记为已知分叉。
+- **第三十一批（2026-10-31，`__attribute__`）**：GNU `__attribute__((…))` 按「声明尾部透传」接受——函数声明/定义、形参、字段、全局、`typedef` 别名之后，以及 `struct` / `union` / `enum` 定义体之后；整段原文进字符串池并在同一尾部位置重新发射（连续多个组一起捕获），typedef 记录类型统一发射在别名之前。新增 `test/ast/54_attribute` 与两条形状负例（`unterminated __attribute__` / `duplicate __attribute__ on one declaration`），language-spec §4.36；至此 §4 的 C 形式没有已知缺口。
 
 ### 决策待定项
 
@@ -2361,6 +2364,25 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   byte for byte, and the binary runs an example. `CTC_VERSION` is bumped in five places,
   `test/cases/**` (50 files) and three map goldens are regenerated (**version token only**), and all
   nine gates are green under both clang and GCC 16.
+- **Batch 29 (2026-10-31, the C11 trio)**: `_Alignas` / `_Alignof` / `_Generic` landed as
+  pass-through ("build an AST node only when you must") — `_Alignas` joins the type spelling (so
+  global / local / field / parameter / `typedef` all pick it up), `_Alignof` reuses the `sizeof`
+  node (`aux = 2`), and `_Generic` is captured whole into the string pool with the C compiler
+  choosing the arm. Fixture `test/ast/53_c11_align_generic` plus three shape negatives; spec §4.35.
+- **Batch 30 (2026-10-31, the `.h.ct` rule)**: ct-ast only — a plain `.ct` unit writes no header
+  and **cannot be imported** (`import` resolves `.h.ct` only and reports
+  `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`); compile mode follows the same
+  rule. An implementation unit's `.c` is self-contained (`pub` types emitted locally) and the
+  cache hit no longer requires a `.h`. Every imported unit was renamed (three in ct-ast itself,
+  one binding, 27 under `test/modules/**`). L2 keeps the additive behaviour (the archive oracle
+  depends on it) and is recorded as a known divergence.
+- **Batch 31 (2026-10-31, `__attribute__`)**: GNU `__attribute__((…))` is accepted as a trailing
+  pass-through — function declarations / definitions, parameters, fields, globals, after a
+  `typedef` alias, and after a `struct` / `union` / `enum` body. The whole spelling goes into the
+  string pool and is re-emitted at the same trailing position (consecutive groups are captured
+  together); a typedef'd record emits it before the alias. Fixture `test/ast/54_attribute` plus two
+  shape negatives (`unterminated __attribute__` / `duplicate __attribute__ on one declaration`);
+  spec §4.36. With it, §4's C forms have no known gap.
 
 ### Open decisions
 

@@ -19,9 +19,9 @@
 > | 跨命名空间裸调用 | 接受并回退到根表 | 拒绝（要求限定写法 `A::f()`） | 避免在两个同名导出之间静默选错对象 |
 > | `import` 一个普通 `.ct` 单元 | 接受（附加式：普通 `.ct` 也产 `.h`） | 拒绝（`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`） | 只有 `.h.ct` 发布接口；ct-ast 下普通 `.ct` 不产 `.h`（build 与 compile 一致） |
 >
-> **仍未实现**（ct-ast 报具体消息）：`__attribute__((…))`。
-> 其余 C 形式（`goto` / 标签、`switch` 范围、位域、匿名成员、变参、`inline`、
-> `_Static_assert`、浮点字面量、`_Alignas` / `_Alignof` / `_Generic` 等）两侧都接受，见 §4 各节。
+> **C 形式覆盖**：`goto` / 标签、`switch` 范围、位域、匿名成员、变参、`inline`、
+> `_Static_assert`、浮点字面量（§4.24）、`_Alignas` / `_Alignof` / `_Generic`（§4.35）与
+> GNU `__attribute__((…))`（§4.36）等两侧都接受，没有已知的未实现形式，见 §4 各节。
 >
 > 这是两层的**能力差**，不是同一条流水线上的进度差：L0 命中上述构造仍报
 > `'namespace' is not supported by this compiler`（`pub` / `import` / `ct build` 同类；
@@ -863,8 +863,8 @@ static bool positive(int32_t v) { return v > 0; }
 - `inline` 是函数说明符：顶层接受 `static inline` 与 `inline static` 两种顺序，发射为
   `static inline ` / `inline `。生成的**原型**不带 `inline`（C 允许原型与定义不同）。
 - `inline` 后面不是函数（`inline int value = 1;`）报 `'inline' can only declare a function`。
-- 范围外：`__attribute__((…))` 仍不在子集内（`_Static_assert` 见 §4.26；
-  `_Alignas` / `_Alignof` / `_Generic` 见 §4.35）；浮点字面量见 §4.24。
+- 范围外：无（`_Static_assert` 见 §4.26；`_Alignas` / `_Alignof` / `_Generic` 见 §4.35；
+  `__attribute__((…))` 见 §4.36；浮点字面量见 §4.24）。
 
 #### 4.24 浮点字面量（ct-ast）
 
@@ -939,7 +939,7 @@ static int check(int v) {
 - 文件作用域的多条断言统一在「类型之后、原型之前」发射，因此断言里引用本单元上面
   定义过的 struct / enum 仍然成立；引用**后面**才定义的类型则不行。
 - 判定的最终结果仍由 C 编译器给出（断言失败时是它的错误消息）。
-- 范围外：`__attribute__((…))` 仍不在子集内（`_Alignas` / `_Generic` 见 §4.35）。
+- 范围外：无（`_Alignas` / `_Generic` 见 §4.35；`__attribute__((…))` 见 §4.36）。
 
 #### 4.27 一条声明多个字段（ct-ast）
 
@@ -1157,6 +1157,37 @@ int main(void)
 - 三者都由 ct-ast 解析并重新发射；L0 / L2 的透传行为不变。生成的 `.c` 保留 C11 拼写，
   因此构建它的 C 编译器需要接受该写法（clang 与 GCC 都可以）。
 
+#### 4.36 GNU `__attribute__((…))`（ct-ast）
+
+```c
+static void trace(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
+int g_tick __attribute__((aligned(16)));
+
+struct Frame {
+    int kind __attribute__((aligned(8)));
+    int size;
+} __attribute__((packed));
+
+typedef int word __attribute__((aligned(8)));
+
+static int twice(int n __attribute__((unused))) { return 2 * n; }
+```
+
+- `__attribute__((…))` 是 GNU 扩展，ct 只负责把它**原样带进生成物**：属性列表（含
+  `format(printf, 1, 2)`、`aligned(8)` 这类嵌套实参）按 token 原文捕获，连续的多个
+  `__attribute__` 组一起捕获，在声明的**同一尾部位置**重新发射；语义完全交给 C 编译器。
+- 接受的位置：函数声明与定义（参数表之后、`;` 或 `{` 之前）、形参（名字/维度之后）、
+  结构体字段（名字/维度之后；位域的宽度之后）、全局变量（声明符之后、`=` 之前）、
+  `typedef` 别名之后，以及 `struct` / `union` / `enum` 定义体的 `}` 之后。
+- typedef 的记录类型统一发射在**别名之前**：`} __attribute__((packed)) Alias;`。
+  这是 clang 与 GCC 对 `packed` / `aligned` 都生效的位置；源里写在别名之后也会被挪到这里。
+- 边界：写在声明符**之前**的属性（`__attribute__((unused)) static int x;`）、局部变量、
+  `impl` 方法与 trait 方法上的属性不在子集内。未闭合的属性列表报
+  `unterminated __attribute__`；同一声明同时写在两个捕获位置报
+  `duplicate __attribute__ on one declaration`。
+- 生成的 `.c` 保留属性原文，因此构建它的 C 编译器需要认识它（clang 与 GCC 都接受）。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1281,10 +1312,10 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > | cross-namespace bare call | accepted, falls back to the root table | rejected (needs the qualified `A::f()`) | never silently pick the wrong object between two same-named exports |
 > | `import` a plain `.ct` unit | accepted (additive: every unit also writes a `.h`) | rejected (`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`) | only `.h.ct` publishes an interface; under ct-ast a plain `.ct` writes no `.h` (build and compile mode alike) |
 >
-> **Still unimplemented** (ct-ast reports a specific message): `__attribute__((…))`. Every other C
-> form (`goto` / labels, `switch` ranges, bit-fields, anonymous members, variadics, `inline`,
-> `_Static_assert`, floating literals, `_Alignas` / `_Alignof` / `_Generic`, …) is accepted by
-> both layers; see the sections under 4.
+> **C-form coverage**: `goto` / labels, `switch` ranges, bit-fields, anonymous members, variadics,
+> `inline`, `_Static_assert`, floating literals (§4.24), `_Alignas` / `_Alignof` / `_Generic`
+> (§4.35) and GNU `__attribute__((…))` (§4.36) are accepted by both layers — no known form is
+> missing; see the sections under 4.
 >
 > This is a **capability gap between the two layers**, not a progress difference on one pipeline:
 > L0 still reports `'namespace' is not supported by this compiler` for those constructs (same for
@@ -2258,9 +2289,8 @@ static bool positive(int32_t v) { return v > 0; }
   (C lets a prototype differ from the definition).
 - `inline` in front of something that is not a function (`inline int value = 1;`) reports
   `'inline' can only declare a function`.
-- Out of scope: `__attribute__((…))` is still not part of the subset (`_Static_assert` is covered
-  in §4.26; `_Alignas` / `_Alignof` / `_Generic` in §4.35); floating-point literals are described
-  in §4.24.
+- Out of scope: none (`_Static_assert` is covered in §4.26; `_Alignas` / `_Alignof` / `_Generic`
+  in §4.35; `__attribute__((…))` in §4.36; floating-point literals in §4.24).
 
 #### 4.24 Floating-point literals (ct-ast)
 
@@ -2341,8 +2371,7 @@ static int check(int v) {
   may name a struct / enum defined above it in the unit; naming a type defined **after** it does not
   work.
 - The verdict itself still comes from the C compiler (a failing assertion is its error message).
-- Out of scope: `__attribute__((…))` is still not part of the subset (`_Alignas` / `_Generic` are
-  covered in §4.35).
+- Out of scope: none (`_Alignas` / `_Generic` are covered in §4.35; `__attribute__((…))` in §4.36).
 
 #### 4.27 Several declarators in one field declaration (ct-ast)
 
@@ -2581,6 +2610,41 @@ int main(void)
 - All three are parsed and re-emitted by ct-ast; the pass-through behaviour of L0 / L2 is
   unchanged, and the generated `.c` keeps the C11 spelling, so the C compiler that builds it must
   accept the form (clang and GCC do).
+
+#### 4.36 GNU `__attribute__((…))` (ct-ast)
+
+```c
+static void trace(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
+int g_tick __attribute__((aligned(16)));
+
+struct Frame {
+    int kind __attribute__((aligned(8)));
+    int size;
+} __attribute__((packed));
+
+typedef int word __attribute__((aligned(8)));
+
+static int twice(int n __attribute__((unused))) { return 2 * n; }
+```
+
+- `__attribute__((…))` is a GNU extension; ct only carries it into the output **verbatim**. The
+  attribute list (including nested arguments such as `format(printf, 1, 2)` or `aligned(8)`) is
+  captured token by token, consecutive `__attribute__` groups are captured together, and the text
+  is re-emitted at the declaration's **same trailing position**; the C compiler owns the meaning.
+- Accepted positions: function declarations and definitions (after the parameter list, before `;`
+  or `{`), parameters (after the name / dims), struct fields (after the name / dims, and after a
+  bit-field's width), globals (after the declarator, before `=`), after a `typedef` alias, and after
+  the `}` of a `struct` / `union` / `enum` definition.
+- A typedef'd record emits its attribute **before the alias** — `} __attribute__((packed)) Alias;`
+  — the one position where clang and GCC both honour `packed` / `aligned` on the type; an attribute
+  written after the alias is moved there.
+- Boundaries: an attribute **before** the declarator (`__attribute__((unused)) static int x;`),
+  local variables, and `impl` / trait methods are outside the subset. An unclosed list reports
+  `unterminated __attribute__`; writing one declaration's attribute in both captured positions
+  reports `duplicate __attribute__ on one declaration`.
+- The generated `.c` keeps the attribute spelling, so the C compiler that builds it must accept it
+  (clang and GCC do).
 
 ### 5. Naming contract
 
