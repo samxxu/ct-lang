@@ -1,0 +1,2 @@
+/* An attribute is a declaration prefix, not a prefix for a typedef. */
+__attribute__((unused)) typedef int T;

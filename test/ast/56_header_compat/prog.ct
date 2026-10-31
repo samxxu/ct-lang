@@ -1,0 +1,31 @@
+/* 56: real-world header compatibility (batch 33) - `_Atomic(type)` in every
+   type position, `_Alignas` before the storage class, and GNU attributes
+   before the declarator (global, function, local; trailing on a local too). */
+#include <stdio.h>
+
+_Atomic(int) counter;
+_Alignas(16) static int aligned_g;
+__attribute__((aligned(32))) static int attributed_g;
+__attribute__((unused)) static int helper(int n);
+
+static int helper(int n) { return n * 2; }
+
+int main(void)
+{
+    _Atomic(int) local = 5;
+    _Alignas(8) static int aligned_l;
+    __attribute__((unused)) int spare = 7;
+    int trailing __attribute__((unused));
+
+    counter = 3;
+    local = local + 1;
+    aligned_l = 1;
+    printf("%d %d %d\n", counter, local, spare);
+    printf("%d\n", helper(21));
+    printf("%d %d %d\n",
+           (unsigned long)&aligned_g % 16 == 0,
+           (unsigned long)&attributed_g % 32 == 0,
+           (unsigned long)&aligned_l % 8 == 0);
+    printf("%d %d\n", (int)sizeof(_Atomic(int)), (int)sizeof(int));
+    return 0;
+}

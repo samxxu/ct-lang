@@ -1,0 +1,2 @@
+/* `_Atomic(type)` needs its closing parenthesis. */
+_Atomic(int x;

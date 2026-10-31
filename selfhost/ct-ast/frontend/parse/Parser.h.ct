@@ -71,7 +71,6 @@ pub trait ParseOps {
     int  parse_program(void);
     int  parse_func(int is_static, int is_pub, int is_extern);
     int  parse_params(void);
-    int  attr_pool(int *out);
     int  parse_record_def(int is_union);
     int  parse_enum_def(int is_pub, int tag_required);
     int  parse_typedef(int is_pub);
@@ -133,6 +132,10 @@ pub struct Parser {
     /* Set by `parse_params` when the list ends with `...`; the caller stores it
        on the symbol row (for the prototype) and on the function node. */
     int  variadic;
+    /* A GNU `__attribute__((…))` written before the declaration specifiers is
+       captured first and consumed by `parse_func` (`0` = none, else the pool
+       offset plus one, so the zero-initialised singleton needs no setup). */
+    int  pending_attr;
     struct Field *pend_fields;   /* storage owned by this unit */
     int  npend;
     struct ParseSupport *sup;
@@ -292,6 +295,72 @@ impl ParseDeclOps for Parser {
             if (is_pub) return self->sup->fail("duplicate 'pub'");
             self->sup->lex_next();
             return self->top_decl(1);
+        }
+        /* A leading `__attribute__((…))` and a leading `_Alignas(…)` are both
+           declaration prefixes: the attribute is held for `parse_func`, the
+           alignment spelling is prepended to the type. Either may sit before
+           the storage class (`__attribute__((unused)) static int g;`,
+           `_Alignas(16) static int g;`). */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
+            int a, r;
+            if (self->sup->attr_pool(&a) < 0) return -1;
+            if (a < 0) return -1;
+            if (self->pending_attr)
+                return self->sup->fail("duplicate __attribute__ on one declaration");
+            self->pending_attr = a + 1;
+            r = self->top_decl(is_pub);
+            if (r < 0) {
+                self->pending_attr = 0;
+                return r;
+            }
+            if (self->pending_attr) {
+                self->pending_attr = 0;
+                return self->sup->fail("an attribute must prefix a declaration");
+            }
+            return r;
+        }
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Alignas") == 0) {
+            int r, np, depth;
+            char tbuf[MAX_TEXT];
+            if (self->ex->decl_prefix[0])
+                return self->sup->fail("duplicate _Alignas on one declaration");
+            /* Capture only the specifier; the rest of the declaration (a
+               storage class included) is read by the recursive call. */
+            np = 0;
+            if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, "_Alignas") != 0)
+                return -1;
+            self->sup->lex_next();
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0))
+                return self->sup->fail("expected '(' after _Alignas");
+            depth = 0;
+            for (;;) {
+                if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Alignas");
+                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
+                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                else
+                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, tbuf) != 0)
+                    return -1;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    depth--;
+                    if (depth == 0) {
+                        self->sup->lex_next();
+                        break;
+                    }
+                }
+                self->sup->lex_next();
+            }
+            r = self->top_decl(is_pub);
+            if (r < 0) {
+                self->ex->decl_prefix[0] = 0;
+                return r;
+            }
+            if (self->ex->decl_prefix[0]) {
+                self->ex->decl_prefix[0] = 0;
+                return self->sup->fail("an _Alignas specifier must prefix a variable declaration");
+            }
+            return r;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline, 1,
@@ -488,13 +557,17 @@ impl ParseOps for Parser {
     /* A function (prototype or definition) or a global variable. */
     int parse_func(int is_static, int is_pub, int is_extern)
     {
-        int f, b, params, fi, func_line, ar, attr;
+        int f, b, params, fi, func_line, ar, attr, lead;
         char ret[MAX_TEXT];
         char name[MAX_TEXT];
         char cname[MAX_TEXT];
         char gns[MAX_TEXT];
         (void)self;
 
+        /* a leading attribute was captured by `top_decl`; it is this
+           declaration's and must not leak into a later one */
+        lead = self->pending_attr ? self->pending_attr - 1 : -1;
+        self->pending_attr = 0;
         func_line = self->lex->tokline;
         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
         if (self->ex->fnptr_state) {
@@ -535,8 +608,13 @@ impl ParseOps for Parser {
                 snprintf(self->arena->nodes[g].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(g) != 0) return -1;
             attr = -1;
-            ar = self->attr_pool(&attr);
+            ar = self->sup->attr_pool(&attr);
             if (ar < 0) return -1;
+            if (lead >= 0) {
+                if (attr >= 0)
+                    return self->sup->fail("duplicate __attribute__ on one declaration");
+                attr = lead;
+            }
             if (attr >= 0) self->arena->nodes[g].attr = attr;
             if (self->sup->accept("=")) {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
@@ -577,10 +655,17 @@ impl ParseOps for Parser {
            parameter list, so `void f(void) __attribute__((noreturn));` and the
            definition form both land here */
         attr = -1;
-        ar = self->attr_pool(&attr);
+        ar = self->sup->attr_pool(&attr);
         if (ar < 0) {
             self->sup->pop_scope();
             return -1;
+        }
+        if (lead >= 0) {
+            if (attr >= 0) {
+                self->sup->pop_scope();
+                return self->sup->fail("duplicate __attribute__ on one declaration");
+            }
+            attr = lead;
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             self->sup->lex_next();
@@ -707,7 +792,7 @@ impl ParseOps for Parser {
             /* a trailing attribute belongs to the parameter (`int *p
                __attribute__((nonnull))`), so it rides with its name/dims */
             ao = -1;
-            ar = self->attr_pool(&ao);
+            ar = self->sup->attr_pool(&ao);
             if (ar < 0) return -1;
             if (ao >= 0) self->arena->nodes[p].attr = ao;
             if (tail == 0) first = p;
@@ -722,54 +807,6 @@ impl ParseOps for Parser {
         }
         if (self->sup->expect(")") != 0) return -1;
         return first;
-    }
-
-    /* A GNU `__attribute__((…))` carries no CT meaning, so the whole spelling
-       is captured into the arena string pool and re-emitted at the same
-       trailing position; the C compiler owns it. Tokens are joined with a
-       single space, which keeps a nested call such as `format(printf, 1, 2)`
-       intact, and consecutive groups are captured together. Returns 1 with the
-       pool offset in `out`, 0 when the cursor is not on an attribute, -1 on a
-       malformed one. */
-    int attr_pool(int *out)
-    {
-        char tbuf[MAX_TEXT];
-        int depth, got, k, first;
-        (void)self;
-
-        *out = -1;
-        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0)) return 0;
-        *out = self->arena->str_begin();
-        got = 0;
-        first = 1;
-        while (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
-            got = 1;
-            depth = 0;
-            for (;;) {
-                if (self->lex->tok == T_EOF) return self->sup->fail("unterminated __attribute__");
-                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
-                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
-                else
-                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
-                if (!first && self->arena->str_put(' ') != 0)
-                    return self->sup->fail("__attribute__ is too long");
-                for (k = 0; tbuf[k]; k++)
-                    if (self->arena->str_put(tbuf[k]) != 0)
-                        return self->sup->fail("__attribute__ is too long");
-                first = 0;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
-                    depth--;
-                    if (depth == 0) {
-                        self->sup->lex_next();
-                        break;
-                    }
-                }
-                self->sup->lex_next();
-            }
-        }
-        self->arena->str_end();
-        return got;
     }
 
     /* Does the current token open a body-less record member (`union { … };`)?
@@ -981,7 +1018,7 @@ impl ParseOps for Parser {
             /* `int x __attribute__((aligned(8)));`: the attribute follows the
                declarator (and a bit-field's width is emitted before it) */
             ao = -1;
-            ar = self->attr_pool(&ao);
+            ar = self->sup->attr_pool(&ao);
             if (ar < 0) return -1;
             if (ao >= 0) self->arena->nodes[m].attr = ao;
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
@@ -1113,7 +1150,7 @@ impl ParseOps for Parser {
         /* `struct S { … } __attribute__((packed));`: either after the body or,
            in the typedef form, between the body and the alias */
         ao = -1;
-        ar = self->attr_pool(&ao);
+        ar = self->sup->attr_pool(&ao);
         if (ar < 0) return -1;
         if (ao >= 0) self->arena->nodes[s].attr = ao;
         return s;
@@ -1198,7 +1235,7 @@ impl ParseOps for Parser {
         }
         if (self->sup->expect("}") != 0) return -1;
         ao = -1;
-        ar = self->attr_pool(&ao);
+        ar = self->sup->attr_pool(&ao);
         if (ar < 0) return -1;
         if (ao >= 0) self->arena->nodes[s].attr = ao;
         return s;
@@ -1224,7 +1261,7 @@ impl ParseOps for Parser {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
             ao = -1;
-            ar = self->attr_pool(&ao);
+            ar = self->sup->attr_pool(&ao);
             if (ar < 0) return -1;
             if (ao >= 0) {
                 if (self->arena->nodes[t].attr >= 0)
@@ -1250,7 +1287,7 @@ impl ParseOps for Parser {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
             ao = -1;
-            ar = self->attr_pool(&ao);
+            ar = self->sup->attr_pool(&ao);
             if (ar < 0) return -1;
             if (ao >= 0) {
                 if (self->arena->nodes[t].attr >= 0)
@@ -1311,7 +1348,7 @@ impl ParseOps for Parser {
             self->sup->lex_next();
         }
         ao = -1;
-        ar = self->attr_pool(&ao);
+        ar = self->sup->attr_pool(&ao);
         if (ar < 0) return -1;
         if (self->sup->expect(";") != 0) return -1;
         if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;

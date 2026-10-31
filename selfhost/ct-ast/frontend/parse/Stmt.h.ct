@@ -101,6 +101,10 @@ pub struct Stmt {
        builds is marked (`aux = 1`) and kept out of the leak analysis, since a
        static object outlives every scope that names it. */
     int static_decl;
+    /* A GNU `__attribute__((…))` written before a block-scope declaration
+       (`0` = none, else the pool offset plus one). `parse_decl_node` moves it
+       onto every `N_DECL` it builds, so a multi-declarator line shares it. */
+    int decl_attr;
     /* C labels are function-scoped, so both tables are reset at every function
        (or method) body: a duplicate is caught at the second spelling, and a
        `goto` whose label never shows up is reported when the body ends. The
@@ -137,8 +141,9 @@ impl StmtOps for Stmt {
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
-        /* an alignment specifier may open a block-scope declaration */
+        /* an alignment or atomic specifier may open a block-scope declaration */
         if (strcmp(self->lex->toktext, "_Alignas") == 0) return 1;
+        if (strcmp(self->lex->toktext, "_Atomic") == 0) return 1;
         if (self->ex->is_type_word(self->lex->toktext)) return 1;
         if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
         if (self->sym->find_type(rn) >= 0) return 1;
@@ -562,6 +567,65 @@ impl StmtOps for Stmt {
             if (self->sup->mark_owned(s, own_line) != 0) return -1;
             return s;
         }
+        /* Declaration prefixes: a GNU attribute and `_Alignas(…)` may precede
+           the storage class. The attribute is held for `parse_decl_node`, the
+           alignment spelling is prepended to the type; either form is legal
+           before `static` (`__attribute__((unused)) static int x;`). */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
+            int a, r;
+            if (self->sup->attr_pool(&a) < 0) return -1;
+            if (a < 0) return -1;
+            if (self->decl_attr)
+                return self->sup->fail("duplicate __attribute__ on one declaration");
+            if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0)
+                && !self->is_decl_start())
+                return self->sup->fail("an attribute must prefix a declaration");
+            self->decl_attr = a + 1;
+            r = self->parse_stmt();
+            self->decl_attr = 0;
+            return r;
+        }
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Alignas") == 0) {
+            int r, np, depth;
+            char tbuf[MAX_TEXT];
+            if (self->ex->decl_prefix[0])
+                return self->sup->fail("duplicate _Alignas on one declaration");
+            np = 0;
+            if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, "_Alignas") != 0)
+                return -1;
+            self->sup->lex_next();
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0))
+                return self->sup->fail("expected '(' after _Alignas");
+            depth = 0;
+            for (;;) {
+                if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Alignas");
+                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
+                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                else
+                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, tbuf) != 0)
+                    return -1;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    depth--;
+                    if (depth == 0) {
+                        self->sup->lex_next();
+                        break;
+                    }
+                }
+                self->sup->lex_next();
+            }
+            r = self->parse_stmt();
+            if (r < 0) {
+                self->ex->decl_prefix[0] = 0;
+                return r;
+            }
+            if (self->ex->decl_prefix[0]) {
+                self->ex->decl_prefix[0] = 0;
+                return self->sup->fail("an _Alignas specifier must prefix a variable declaration");
+            }
+            return r;
+        }
         /* `static <type> name …;` -- a function-local object with static storage
            duration. The declaration itself is the ordinary one; only the
            keyword and the leak bookkeeping differ (a static object is not the
@@ -883,11 +947,15 @@ impl StmtOps for Stmt {
        wrapper, so every consumer still sees one statement node. */
     int parse_decl_node(void)
     {
-        int n, e, head, tail, base_stars, first_decl, is_fnptr;
+        int n, e, head, tail, base_stars, first_decl, is_fnptr, ap;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
 
+        /* the leading attribute belongs to this declaration and every name on
+           the line; clear the slot before parsing so it cannot leak */
+        ap = self->decl_attr ? self->decl_attr - 1 : -1;
+        self->decl_attr = 0;
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
         head = -1;
         tail = -1;
@@ -944,6 +1012,16 @@ impl StmtOps for Stmt {
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
                 snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(n) != 0) return -1;
+            {
+                /* A trailing attribute on a local (`int x __attribute__((unused));`)
+                   is accepted as well; a declaration may not carry both forms. */
+                int ta;
+                if (self->sup->attr_pool(&ta) < 0) return -1;
+                if (ap >= 0 && ta >= 0)
+                    return self->sup->fail("duplicate __attribute__ on one declaration");
+                if (ta >= 0) self->arena->nodes[n].attr = ta;
+                else if (ap >= 0) self->arena->nodes[n].attr = ap;
+            }
             if (self->arena->nodes[n].text3[0]) {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0) self->sym->vars[vi].is_array = 1;

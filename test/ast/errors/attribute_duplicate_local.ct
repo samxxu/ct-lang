@@ -1,0 +1,6 @@
+/* One local declaration carries the attribute on one side only. */
+int main(void)
+{
+    __attribute__((unused)) int x __attribute__((aligned(4)));
+    return 0;
+}

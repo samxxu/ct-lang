@@ -25,6 +25,8 @@ import runtime::arena::Arena;
 #define MAX_PARAMS 16
 #define MAX_TEXT 160
 #define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
 #define T_PUNCT 4
 
 namespace frontend::parse;
@@ -42,6 +44,7 @@ pub trait SupportOps {
     int  declare_var(const char *name, const char *type);
     int  var_type(const char *name, char *out, int cap);
     int  add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param);
+    int  attr_pool(int *out);
     int  add_type(const char *name, int kind);
     int  add_struct(const char *name);
     int  add_trait(const char *name);
@@ -268,6 +271,50 @@ impl SupportOps for ParseSupport {
         if (k >= MAX_PARAMS && p > 0) return self->fail("too many parameters");
         self->sym->funcs[i].nparams = k;
         return i;
+    }
+
+    /* Capture a GNU `__attribute__((…))` at the cursor into the arena string
+       pool and report its offset (`-1` when the token is not an attribute).
+       Consecutive groups are captured as one spelling, so the emitter can put
+       them back at the declaration's trailing position verbatim. */
+    int attr_pool(int *out)
+    {
+        char tbuf[MAX_TEXT];
+        int depth, got, k, first;
+
+        *out = -1;
+        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0)) return 0;
+        *out = self->arena->str_begin();
+        got = 0;
+        first = 1;
+        while (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
+            got = 1;
+            depth = 0;
+            for (;;) {
+                if (self->lex->tok == T_EOF) return self->fail("unterminated __attribute__");
+                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
+                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                else
+                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                if (!first && self->arena->str_put(' ') != 0)
+                    return self->fail("__attribute__ is too long");
+                for (k = 0; tbuf[k]; k++)
+                    if (self->arena->str_put(tbuf[k]) != 0)
+                        return self->fail("__attribute__ is too long");
+                first = 0;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    depth--;
+                    if (depth == 0) {
+                        self->lex_next();
+                        break;
+                    }
+                }
+                self->lex_next();
+            }
+        }
+        self->arena->str_end();
+        return got;
     }
 
     int add_type(const char *name, int kind)

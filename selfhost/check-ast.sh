@@ -145,6 +145,10 @@
 # first declaration and GNU `__restrict`: test/ast/55_c_compat plus the two
 # malformed-suffix diagnostics.
 #
+# batch 33 accepts the header-order spellings: `_Atomic(type)`, `_Alignas(…)`
+# before the storage class, and GNU attributes before the declarator (globals,
+# functions, locals): test/ast/56_header_compat plus four shape diagnostics.
+#
 # Usage:  bash selfhost/check-ast.sh
 #         CC=gcc bash selfhost/check-ast.sh
 #
@@ -1305,6 +1309,25 @@ do
         ok "batch 32 ($cf)"
     else
         bad "batch 32: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 33: the header-order forms. Each malformed shape has one message.
+for pair in \
+    "atomic_unterminated|unterminated _Atomic" \
+    "attribute_misplaced|an attribute must prefix a declaration" \
+    "attribute_duplicate_local|duplicate __attribute__ on one declaration" \
+    "alignas_duplicate|duplicate _Alignas on one declaration"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 33: $cf" "expected a non-zero exit"
+    elif grep -q "$cfmsg" "$work/$cf.err"; then
+        ok "batch 33 ($cf)"
+    else
+        bad "batch 33: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

@@ -129,6 +129,10 @@ pub struct Expr {
        declaration entries copy them into the node's `text3` (D-5). */
     char fnptr_dims[160];
     int  fnptr_state;
+    /* A specifier captured before the storage class (`_Alignas(16) static int
+       g;`) arrives here; `parse_type` prepends it and clears the slot, so the
+       declaration keeps its canonical spelling (`static _Alignas(16) int g`). */
+    char decl_prefix[160];
     /* Set while the expression being parsed may name a C library function
        (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
        emitted verbatim instead of being rejected. */
@@ -188,8 +192,11 @@ impl ExprOps for Expr {
         return 0;
     }
 
-    /* Consume a type specifier. `struct X` keeps the tag; a known typedef name
-       is part of the type; `*` accumulates (9.3 supports a single pointer). */
+    /* Capture a parenthesized C11 specifier at the cursor: `_Alignas(…)` (the
+       list is required) or `_Atomic(…)` (bare `_Atomic` is the qualifier form
+       and is accepted too). Both are appended to the type spelling, so every
+       declaration entry -- global, local, field, parameter, typedef -- picks
+       them up unchanged. */
     int parse_type(char *out, int cap)
     {
         int n;
@@ -197,25 +204,42 @@ impl ExprOps for Expr {
 
         n = 0;
         out[0] = 0;
+        if (self->decl_prefix[0]) {
+            int pn = snprintf(out, (size_t)cap, "%s", self->decl_prefix);
+            if (pn < 0 || pn >= cap) return self->sup->fail("type is too long");
+            n = pn;
+            self->decl_prefix[0] = 0;
+        }
         self->fnptr_state = 0;
         self->fnptr_name[0] = 0;
         self->fnptr_dims[0] = 0;
         for (;;) {
-            /* C11 `_Alignas(…)`: the specifier is copied into the type spelling
-               and handed to the C compiler as written (the argument may be a
-               type name or a constant expression), so every declaration entry
-               -- global, local, field, parameter, typedef -- picks it up without
-               a node of its own. */
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Alignas") == 0) {
-                int depth;
-                if (self->type_append(out, cap, &n, "_Alignas") != 0) return -1;
+            /* C11 `_Alignas(…)` and `_Atomic(…)`: the specifier is copied into
+               the type spelling and handed to the C compiler as written (the
+               argument may be a type name or a constant expression), so every
+               declaration entry -- global, local, field, parameter, typedef --
+               picks it up without a node of its own. `_Atomic int` is the
+               qualifier spelling and is accepted too. */
+            if (self->lex->tok == T_ID
+                && (strcmp(self->lex->toktext, "_Alignas") == 0
+                    || strcmp(self->lex->toktext, "_Atomic") == 0)) {
+                int need_paren, depth;
+                const char *word;
+                need_paren = (strcmp(self->lex->toktext, "_Alignas") == 0);
+                word = need_paren ? "_Alignas" : "_Atomic";
+                if (self->type_append(out, cap, &n, word) != 0) return -1;
                 self->sup->lex_next();
-                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0)
-                    return self->sup->fail("expected '(' after _Alignas");
+                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
+                    if (need_paren) return self->sup->fail("expected '(' after _Alignas");
+                    continue;                 /* bare `_Atomic` is the qualifier */
+                }
                 depth = 0;
                 for (;;) {
                     char tbuf[MAX_TEXT];
-                    if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Alignas");
+                    if (self->lex->tok == T_EOF) {
+                        if (need_paren) return self->sup->fail("unterminated _Alignas");
+                        return self->sup->fail("unterminated _Atomic");
+                    }
                     /* an integer token keeps its value, not its spelling */
                     if (self->lex->tok == T_NUM && !self->lex->tokfloat)
                         snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
@@ -540,6 +564,30 @@ impl ExprOps for Expr {
         res = 0;
         if (self->lex->tok == T_ID) {
             char rn[MAX_TEXT];
+            /* `_Atomic(type)` is a type on its own: the word is a keyword, so
+               the balanced list (and optional stars) is all that stands between
+               it and the cast's closing parenthesis. */
+            if (strcmp(self->lex->toktext, "_Atomic") == 0) {
+                int d = 0;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                    for (;;) {
+                        if (self->lex->tok == T_EOF) break;
+                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) d++;
+                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                            d--;
+                            if (d == 0) {
+                                self->sup->lex_next();
+                                break;
+                            }
+                        }
+                        self->sup->lex_next();
+                    }
+                    while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0)
+                        self->sup->lex_next();
+                    res = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0);
+                }
+            } else
             /* resolve first: an imported name is a type even though the table
                only holds its mangled spelling */
             if (self->is_type_word(self->lex->toktext)) {
