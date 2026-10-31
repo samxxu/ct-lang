@@ -67,7 +67,7 @@ item     ::= trait-def | struct-def | impl-def | raw-text
 
 ```ebnf
 trait-def   ::= "trait" IDENT "{" { method-decl } "}" ;
-method-decl ::= type-spec IDENT "(" [ param-list ] ")" ";" ;
+method-decl ::= type-spec IDENT "(" [ param-list ] ")" ( ";" | block ) ;
 
 struct-def  ::= "struct" IDENT "{" raw-text "}" [ use-clause ] [ ";" ] ;
 use-clause  ::= "use" IDENT { "," IDENT } ";" ;
@@ -86,6 +86,8 @@ type-spec   ::= <C 类型写法，取到方法名/参数名之前的全部字符
 - `use` 子句可紧跟 `}` 写在同一行，也可另起一行。
 - 单个参数写成 `void` 视为**无参数**。
 - struct 定义后的分号可选（`};` 与 `}` 都接受）。
+- trait 方法以 `;` 结尾是无体的**抽象方法**；以 `{ … }` 结尾则是带**默认实现**的方法
+  （ct-ast；见 §4.39）。
 - `param` 的类型与名字靠**启发式**切分：取参数文本的最后一个标识符作为参数名，除非它是类型关键字（`void`/`char`/`int`/`unsigned`/`size_t` …）或参数文本以 `*` 结尾。
 
 #### 3.1 表达式（ct-ast）
@@ -1248,6 +1250,41 @@ int main(void)
 - 边界：`typedef` / `trait` / `impl` / 记录定义上的属性仍不在子集内；`_Alignas` 的语义
   （能否用于某个对象）由 C 编译器判断。
 
+#### 4.39 trait 默认方法（第三十六批，仅 ct-ast）
+
+```ct
+trait Logger {
+    int write(char *buf, int len);                 /* abstract */
+
+    int write_all(char *buf, int len) {            /* default */
+        int sent = 0;
+        while (sent < len) sent = sent + self->write(buf + sent, len - sent);
+        return sent;
+    }
+}
+
+struct Conn { int fd; } use Logger;                /* 全 default：impl 整块可省 */
+
+impl Logger for Conn {
+    int write(char *buf, int len) { return send(self->fd, buf, len); }
+}
+```
+
+- 展开语义：默认体在**每个采纳点**各展开一份，函数名仍是 `<Struct>_<Trait>_<method>`，
+  vtable 槽与普通 impl 方法一致；`self->other()` 沿用既有派发规则生成
+  `_self->__<trait>_vptr->other(_self, …)`。不共享一份，也不新增派发路径。
+- `self` 在默认体里是 `struct <S> *`：可读字段、可派发兄弟方法、可调自由函数。采纳的 struct
+  由 `use` 决定，所以同一 trait 被两个 struct 采纳时生成两份实现。
+- 覆盖优先级：impl 显式方法 > 默认方法。抽象方法仍必须实现，缺失仍报
+  `trait method 'x' is not implemented for struct 'S'`；全 default 的 trait 只写 `use` 即可
+  （外来类型写空 `impl T for S { }`，见 D-3）。
+- 诊断：默认体互相派发成环、没有抽象叶子时报
+  `trait 'T' has no non-default method to break the cycle`（位置在 trait 声明行）；默认体在某个
+  struct 上不成立（例如用了 `self->fd` 而该 struct 没有 `fd`）时报
+  `trait T::m (declared at <path>:<line>) cannot be expanded for struct S: <reason>`，
+  指回 trait 声明而不是采纳点。
+- 边界：不做字段注入、不做 supertrait、不做 trait 层共享默认体；`Drop` 不受影响。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1272,7 +1309,9 @@ int main(void)
 | `impl` 的 trait 与 struct 必须已定义 | `error: impl for undefined trait/struct 'X'` + `exit 1` |
 | struct 必须 `use` 了对应 trait 才可 `impl` | `error: struct 'S' does not use trait 'T'` |
 | impl 不得出现 trait 未声明的方法 | `error: method 'm' is not declared in trait 'T'` |
-| impl 必须实现 trait 的**每一个**方法 | `error: trait method 'm' is not implemented for struct 'S'` |
+| impl 必须实现 trait 的**每一个**方法（ct-ast：带默认体的方法可不写） | `error: trait method 'm' is not implemented for struct 'S'` |
+| ct-ast：默认体互相派发成环、没有抽象叶子 | `error: trait 'T' has no non-default method to break the cycle` |
+| ct-ast：默认体在某个采纳 struct 上不成立 | `error: trait T::m (declared at <path>:<line>) cannot be expanded for struct S: <reason>` |
 | 大括号/圆括号必须配对 | `error: unterminated '{'` |
 | `trait` / `impl` 头部必须完整（名字、`{`、`for`） | `error: expected trait name` / `expected '{' after trait 'X'` / `expected trait name after 'impl'` / `expected 'for' in impl of 'T'` |
 
@@ -1429,7 +1468,7 @@ comment in its header); it is not part of the source content.
 
 ```ebnf
 trait-def   ::= "trait" IDENT "{" { method-decl } "}" ;
-method-decl ::= type-spec IDENT "(" [ param-list ] ")" ";" ;
+method-decl ::= type-spec IDENT "(" [ param-list ] ")" ( ";" | block ) ;
 
 struct-def  ::= "struct" IDENT "{" raw-text "}" [ use-clause ] [ ";" ] ;
 use-clause  ::= "use" IDENT { "," IDENT } ";" ;
@@ -1444,7 +1483,8 @@ type-spec   ::= <C type spelling: everything up to the method/parameter name>
 ```
 
 Conventions: the `use` clause may follow `}` on the same line or start a new line; a sole `void`
-parameter means "no parameters"; the semicolon after a struct definition is optional. Parameter types
+parameter means "no parameters"; the semicolon after a struct definition is optional. A trait method
+ending in `;` is abstract; one ending in `{ … }` carries a default implementation (ct-ast; §4.39). Parameter types
 and names are split heuristically — the last identifier is taken as the parameter name unless it is a
 type keyword (`void` / `char` / `int` / `unsigned` / `size_t` …) or the text ends with `*`.
 
@@ -2768,6 +2808,44 @@ int main(void)
 - Boundaries: attributes on `typedef` / `trait` / `impl` / record definitions remain outside the
   subset; whether `_Alignas` applies to a given object is the C compiler's verdict.
 
+#### 4.39 Trait default methods (batch 36, ct-ast only)
+
+```ct
+trait Logger {
+    int write(char *buf, int len);                 /* abstract */
+
+    int write_all(char *buf, int len) {            /* default */
+        int sent = 0;
+        while (sent < len) sent = sent + self->write(buf + sent, len - sent);
+        return sent;
+    }
+}
+
+struct Conn { int fd; } use Logger;                /* all default: no impl at all */
+
+impl Logger for Conn {
+    int write(char *buf, int len) { return send(self->fd, buf, len); }
+}
+```
+
+- Expansion: a default body is expanded **once per adopting struct**. The function name is still
+  `<Struct>_<Trait>_<method>` and its vtable slot is like any impl method; `self->other()` keeps the
+  existing dispatch rule (`_self->__<trait>_vptr->other(_self, …)`). There is no shared copy and no
+  new dispatch path.
+- Inside a default body `self` is `struct <S> *`: fields are readable, sibling methods dispatch, and
+  free functions are callable. The adopting struct comes from `use`, so one trait adopted by two
+  structs produces two expansions.
+- Override priority: an impl method wins over the default body. Abstract methods are still required,
+  and a missing one still reports `trait method 'x' is not implemented for struct 'S'`; a trait whose
+  methods are all default needs only `use` (a foreign type writes an empty `impl T for S { }`, D-3).
+- Diagnostics: a cycle among default bodies with no abstract leaf reports
+  `trait 'T' has no non-default method to break the cycle` (at the trait declaration line); a body
+  that does not hold for one struct (for example `self->fd` on a struct without `fd`) reports
+  `trait T::m (declared at <path>:<line>) cannot be expanded for struct S: <reason>`, pointing back
+  at the trait rather than at the adoption site.
+- Boundaries: no field injection, no supertraits, no shared trait-level default body; `Drop` is
+  unaffected.
+
 ### 5. Naming contract
 
 The namespace prefix is a **feature removed from L0**; Phase 2 restored it under `selfhost/l2/**`
@@ -2793,7 +2871,9 @@ The namespace prefix is a **feature removed from L0**; Phase 2 restored it under
 | the trait and struct of an `impl` must both be defined | `error: impl for undefined trait/struct 'X'` + `exit 1` |
 | a struct must `use` a trait before it can `impl` it | `error: struct 'S' does not use trait 'T'` |
 | an impl must not contain methods the trait does not declare | `error: method 'm' is not declared in trait 'T'` |
-| an impl must implement **every** method of the trait | `error: trait method 'm' is not implemented for struct 'S'` |
+| an impl must implement **every** method of the trait (ct-ast: a default body exempts it) | `error: trait method 'm' is not implemented for struct 'S'` |
+| ct-ast: default bodies dispatch each other in a cycle with no abstract leaf | `error: trait 'T' has no non-default method to break the cycle` |
+| ct-ast: a default body does not hold for one adopting struct | `error: trait T::m (declared at <path>:<line>) cannot be expanded for struct S: <reason>` |
 | braces and parentheses must balance | `error: unterminated '{'` |
 | a `trait` / `impl` header must be complete (name, `{`, `for`) | `error: expected trait name` / `expected '{' after trait 'X'` / `expected trait name after 'impl'` / `expected 'for' in impl of 'T'` |
 
