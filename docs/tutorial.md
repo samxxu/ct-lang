@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 
-> **适用版本**：v0.14.0，安装入口为 **ct-ast**。本教程只使用 `examples/**` 与 `test/**` 中已被门禁
+> **适用版本**：v0.15.0，安装入口为 **ct-ast**。本教程只使用 `examples/**` 与 `test/**` 中已被门禁
 > 跑过的写法，每条命令都可以直接粘贴执行；语法细节以 [language-spec](language-spec.md) 为准。
 >
 > 读完你会知道：怎么装、怎么编译第一个程序、生成物长什么样、方法派发怎么写、接口怎么装箱、
@@ -22,14 +22,14 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 → 用符号链接补上 `ctc` 别名。只下载源码，**不下载预编译二进制**，也不需要 `git`。
 
 ```sh
-ct -v            # ct v0.14.0        （安装入口，能力最全）
-ctc -v           # ctc v0.14.0       （兼容别名，同一个二进制）
+ct -v            # ct v0.15.0        （安装入口，能力最全）
+ctc -v           # ctc v0.15.0       （兼容别名，同一个二进制）
 ```
 
 | 需求 | 做法 |
 | --- | --- |
 | 装到别处 | `install.sh --prefix "$HOME/bin"` |
-| 装指定版本 | `install.sh --version v0.14.0`（默认装 `main`） |
+| 装指定版本 | `install.sh --version v0.15.0`（默认装 `main`） |
 | 从本地 clone 装（离线） | `CT_SOURCE_DIR=. sh install.sh` |
 | 换编译器 | `CC=gcc sh install.sh` |
 | 只想试一下，不安装 | `gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc`（L0 只支持单文件核心语法） |
@@ -370,6 +370,40 @@ pub int mock_hal_send(char *buf, int len) {
 `map` 只在 **ct-ast** 支持，L0 与 L2 都不认识。可直接跑的完整例子见
 [examples/08_map_binding/](../examples/08_map_binding/map_binding.ct)（两个实例、各自一份 vtable）。
 
+### 9.1 零成本映射：`.m.ct` 与类型宿主
+
+不需要对象、也不想要 wrapper 时，把映射写进后缀 `.m.ct` 的**映射单元**。它只承载 `#include` /
+`#define`、`pub trait` 与 `map`，**不产生任何 `.c` / `.h`**；文件所在目录必须等于它的 `namespace`：
+
+```c
+/* libc/libc.m.ct */
+#include <stdlib.h>
+
+namespace libc;
+
+pub trait Env { char *get(char *name); }
+
+map trait Env for namespace libc {
+    get(name) -> getenv(name);
+}
+```
+
+```c
+/* main.ct */
+import libc::libc;
+
+int main(void)
+{
+    char *home = libc::Env.get("HOME");
+    ...
+}
+```
+
+`ct build main.ct -o out/` 只产出 `main.c`（没有 `libc.c`），调用点被直接替换成 `getenv(("HOME"))`；
+prologue 的 `#include <stdlib.h>` 已展开进 `main.c`，没有 wrapper、没有 vtable。类型宿主同理：
+`map trait CStr for type char *` 让 `char a[] = "42"; a.toInt()` 直接变成 `atoi((a))`。
+可运行例子见 `test/modules/map_unit{,_type,_cross}`。
+
 ## 10. 命令行速查
 
 | 命令 | 作用 |
@@ -424,7 +458,7 @@ pub int mock_hal_send(char *buf, int len) {
 
 ## English
 
-> **Scope**: v0.14.0, installed entry is **ct-ast**. Every snippet below is taken from `examples/**` or
+> **Scope**: v0.15.0, installed entry is **ct-ast**. Every snippet below is taken from `examples/**` or
 > `test/**`, both of which the gates run; the grammar itself is defined in
 > [language-spec](language-spec.md).
 
@@ -440,14 +474,14 @@ It downloads the source archive, bootstraps the chain locally (L0 → L1 → L2 
 into `~/.local/bin` and adds the `ctc` alias as a symlink. No prebuilt binaries, no `git`.
 
 ```sh
-ct -v            # ct v0.14.0     (the installed entry, full capability)
-ctc -v           # ctc v0.14.0    (compatibility alias, same binary)
+ct -v            # ct v0.15.0     (the installed entry, full capability)
+ctc -v           # ctc v0.15.0    (compatibility alias, same binary)
 ```
 
 | Need | Command |
 | --- | --- |
 | install elsewhere | `install.sh --prefix "$HOME/bin"` |
-| pin a version | `install.sh --version v0.14.0` (default: `main`) |
+| pin a version | `install.sh --version v0.15.0` (default: `main`) |
 | install offline from a clone | `CT_SOURCE_DIR=. sh install.sh` |
 | different compiler | `CC=gcc sh install.sh` |
 | just try it, no install | `gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc` (single-file core only) |
@@ -775,6 +809,42 @@ member paths rooted at the instance).
 
 `map` is ct-ast only — L0 and L2 do not accept it. A complete runnable example lives in
 [examples/08_map_binding/](../examples/08_map_binding/map_binding.ct) (two instances, one vtable each).
+
+#### 9.1 Zero-cost mapping: `.m.ct` and type hosts
+
+When there is no object and no wrapper is wanted, put the mapping in a suffix-`.m.ct` **mapping
+unit**. It carries only `#include` / `#define`, `pub trait` and `map`, and **produces no `.c` /
+`.h`**; the file's directory must equal its `namespace`:
+
+```c
+/* libc/libc.m.ct */
+#include <stdlib.h>
+
+namespace libc;
+
+pub trait Env { char *get(char *name); }
+
+map trait Env for namespace libc {
+    get(name) -> getenv(name);
+}
+```
+
+```c
+/* main.ct */
+import libc::libc;
+
+int main(void)
+{
+    char *home = libc::Env.get("HOME");
+    ...
+}
+```
+
+`ct build main.ct -o out/` writes only `main.c` (no `libc.c`), and the call site is replaced by
+`getenv(("HOME"))`; the prologue's `#include <stdlib.h>` is expanded into `main.c`, with no wrapper
+and no vtable. A type host works the same way: `map trait CStr for type char *` turns
+`char a[] = "42"; a.toInt()` into `atoi((a))`. Runnable examples live under
+`test/modules/map_unit{,_type,_cross}`.
 
 ### 10. CLI cheat sheet
 

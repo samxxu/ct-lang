@@ -406,6 +406,12 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 
 `map` 是 Phase 11 新增项，**L0 与 L2 都不认识**，只由 **ct-ast**（`selfhost/ct-ast/main.ct`）支持。
 
+**零成本静态映射（第三十八批，已实现）**：`.m.ct` 编译期映射单元、静态 trait、命名空间静态调用
+`host::Trait.method(…)` 与类型宿主 `map trait T for type <ctype>`——绑定在**调用点**直接展开为裸 C
+调用，不生成 wrapper / `_iface` / `_vtbl` / vtable，跨单元同样零成本。规格见
+[design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md)。本节其余内容描述动态 `map`，
+其产物与行为不变。
+
 ```c
 trait Controller {
     int send(char *buf, int len);
@@ -475,6 +481,49 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
 - `--emit-map` 的 JSON 新增 `maps` 字段，逐条列出 trait / instance / file / line 与 `bindings`
   （method → 生成符号）；每个 map 另有 `"host": "instance"|"namespace"` 标明宿主形态，
   每个 binding 还有 `"wrapper": true|false` 区分 fallback 与直绑。
+
+**静态映射（第三十八批，仅 ct-ast）**
+
+`.m.ct` 是**映射单元**：只允许 `namespace`、`import`、`#include` / `#define`（prologue）、`pub trait`
+（只写抽象方法）、`map` 与 `_Static_assert`；函数 / 全局 / 类型声明、`impl` 与对象宿主都报错。它
+**不产生任何产物**（无 `.c` / `.h`、不进末尾 `cc` 行、不写缓存），只能在 `ct build` 里被 import；
+`ct compile` 直接拒绝 `.m.ct` 输入。同一 root 下同名 `foo.h.ct` 与 `foo.m.ct` 并存时报 import 歧义；
+映射单元只能 import 另一个映射单元。
+
+声明在 `.m.ct` 里的 `pub trait` 自动是**静态 trait**：没有 `_iface` / `_vtbl` / vtable，不能 `impl`、
+不能进 `use`、不能作类型、不能装箱（`T::host`），也不能带默认体。
+
+两类宿主：
+
+- **命名空间宿主**：`map trait T for namespace A::B { m(p…) -> callee(…); }`，trait 必须声明在
+  宿主命名空间内；调用写成 `A::B::T.m(args)`，直接展开为 recipe 里的 C 调用（无接收者、无 `self`）。
+- **类型宿主**：`map trait T for type <ctype> { m(recv, p…) -> callee(…); }`，首个绑定参数是接收者，
+  trait 方法本身不声明它；绑定参数个数 = 方法参数个数 + 1。调用 `value.m(args)` 时按接收者的静态
+  类型（数组先 decay 成元素指针）做规范化文本比较，命中后把 `recv` 换成接收者表达式；普通
+  struct / 接口方法优先，查找失败才回退到类型宿主，多个候选报歧义。
+
+recipe 替换（逐出现点）：
+
+| recipe 写法 | 生成的 C |
+| --- | --- |
+| `p`（值位） | `(<actual>)` |
+| `&p`（后接的不是 `[`） | `&(<TP>){<actual>}`（C99 compound literal） |
+| `&p[…]` | `&((<actual>)[…])` |
+| `sizeof p` | `sizeof(<TP>)`（不求值） |
+| `p.field` / `p->field` / `p[i]` | `((<actual>).field)` / `((<actual>)->field)` / `((<actual>)[i])` |
+| 参数没有求值出现 | 调用式前缀 `(void)(<actual>), `（按绑定参数顺序） |
+| `p++` / `p--` / `p = …` / `p += …` | 编译期报错 |
+
+一个参数最多一次求值出现；出现多次时实参必须是可重复表达式（字面量、变量或它们的稳定成员
+链），否则要求先提局部变量。`<TP>` 是该绑定参数的声明类型（类型宿主的接收者是 `host_type`）。
+
+`.m.ct` 的 prologue（`#include` / `#define`）按整行去重后展开进**消费者** `.c` 顶部（banner 之后），
+消费者不写这些 `#include` 也能编译；消费者 `.h` 不含 prologue。`ct compile` 不解析 import，
+故不参与展开。
+
+`--emit-map` 的静态条目带 `"static": true`、`"host": "namespace"|"type"`、类型宿主另有
+`"type": "<ctype>"`，每个 binding 带 `"inline": true`、`"wrapper": false` 与 `"symbol": <callee>`；
+动态 `map` 的字段与取值不变。
 
 #### 4.11 跨单元链接：`pub` 全局与 `extern`（ct-ast）
 
@@ -1856,6 +1905,13 @@ trait:
 - **Namespace host** (SH-20): `map trait T for namespace A::B { … }`, binding a set of functions in
   that namespace. There is no object, so the interface value's `self` is `NULL`.
 
+**Zero-cost static mapping (batch 38, implemented)**: compile-time `.m.ct` mapping units, static
+traits, namespace static calls `host::Trait.method(…)` and the type host
+`map trait T for type <ctype>` expand every binding **at the call site** into a plain C call —
+no wrapper, no `_iface` / `_vtbl`, no vtable, and the same across units. See
+[design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md). The rest of this section
+describes the dynamic `map`, whose output and behaviour are unchanged.
+
 `map` is a Phase 11 addition: **neither L0 nor L2 knows it** — only **ct-ast**
 (`selfhost/ct-ast/main.ct`) supports it.
 
@@ -1941,6 +1997,57 @@ Constraints and limits:
 - The `--emit-map` JSON gains a `maps` field listing trait / instance / file / line and `bindings`
   (method → generated symbol) per map; each map also carries `"host": "instance"|"namespace"` for the
   host form, and each binding carries `"wrapper": true|false` to tell fallback from a direct binding.
+
+**Static mapping (batch 38, ct-ast only)**
+
+A `.m.ct` file is a **mapping unit**: it admits only `namespace`, `import`, `#include` / `#define`
+(the prologue), `pub trait` (abstract methods only), `map` and `_Static_assert`. Functions, globals,
+type declarations, `impl` and object hosts are all errors. It **produces no artefact** (no `.c` /
+`.h`, absent from the trailing `cc` line, never stored in the cache) and can only be imported in a
+`ct build`; `ct compile` refuses a `.m.ct` input outright. A `foo.h.ct` and a `foo.m.ct` in the same
+root make an import ambiguous, and a mapping unit may only import another mapping unit.
+
+A `pub trait` declared in a `.m.ct` is automatically a **static trait**: it emits no `_iface` /
+`_vtbl` / vtable, cannot be `impl`ed, cannot appear in a `use` list, cannot be used as a type, cannot
+be boxed (`T::host`), and cannot carry a default body.
+
+Two host forms:
+
+- **Namespace host**: `map trait T for namespace A::B { m(p…) -> callee(…); }`, where the trait must
+  be declared in that namespace. The call `A::B::T.m(args)` expands directly into the recipe's C call
+  (no receiver, no `self`).
+- **Type host**: `map trait T for type <ctype> { m(recv, p…) -> callee(…); }`, where the first binding
+  parameter is the receiver and the trait method itself does not declare it; the binding has one
+  parameter more than the method. In `value.m(args)` the receiver's static type is compared as
+  normalized text (arrays decay to an element pointer first), and a hit substitutes `recv` with the
+  receiver expression. Ordinary struct / interface methods win; the type host is only a fallback
+  when that lookup fails, and several candidates are ambiguous.
+
+Recipe substitution (per occurrence):
+
+| In the recipe | Generated C |
+| --- | --- |
+| `p` (value position) | `(<actual>)` |
+| `&p` (not followed by `[`) | `&(<TP>){<actual>}` (C99 compound literal) |
+| `&p[…]` | `&((<actual>)[…])` |
+| `sizeof p` | `sizeof(<TP>)` (not evaluated) |
+| `p.field` / `p->field` / `p[i]` | `((<actual>).field)` / `((<actual>)->field)` / `((<actual>)[i])` |
+| a parameter with no evaluated occurrence | call prefix `(void)(<actual>), ` (in binding order) |
+| `p++` / `p--` / `p = …` / `p += …` | a compile-time error |
+
+A parameter may be evaluated at most once; when it occurs more than once the argument must be a
+repeatable expression (a literal, a variable, or a stable member chain of them), otherwise the
+argument has to be bound to a local first. `<TP>` is that binding parameter's declared type (the
+type host's receiver uses `host_type`).
+
+The `.m.ct` prologue (`#include` / `#define`) expands, de-duplicated per whole line, at the top of
+every **consumer** `.c` (after the banner); the consumer compiles without writing those `#include`
+lines itself, and a consumer `.h` never carries the prologue. `ct compile` resolves no imports, so
+it never expands one.
+
+A static `--emit-map` entry carries `"static": true`, `"host": "namespace"|"type"` and, for a type
+host, `"type": "<ctype>"`; each binding carries `"inline": true`, `"wrapper": false` and
+`"symbol": <callee>`. Dynamic `map` fields and values are unchanged.
 
 #### 4.11 Cross-unit linkage: `pub` globals and `extern` (ct-ast)
 

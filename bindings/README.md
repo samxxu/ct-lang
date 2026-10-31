@@ -38,6 +38,19 @@ map trait Controller for instance uart1 {          /* 5. 把方法绑到具体�
 }
 ```
 
+### 2.1 分层：`.m.ct`、C shim、`.h.ct`、不支持
+
+| 层 | 承载 | 成本 |
+| --- | --- | --- |
+| `.m.ct` 静态映射（第三十八批） | 无状态、单次调用型的函数式 / 句柄式 API（`for namespace` 或 `for type`） | 零 wrapper、零中间符号；C 类型上的 `.method` 直接在调用点展开 |
+| C shim 头 | 无 userdata 的回调、语句宏、全局量、结构体字段、变参转发 | 用户手写一处适配 |
+| `.h.ct` 真实类型 | 有状态封装、所有权 / RAII、错误翻译、动态派发 | 有对象与 vtable，非零成本但可控 |
+| 不支持 | C++ ABI、需要完整预处理器的 API、位域 / 按值大结构体 | 明确拒绝 |
+
+v1 的 [mock-hal/](mock-hal/) 仍是**有状态**的 `.h.ct` + 动态 `map`（全局实例 `uart1`）；无状态部分
+可以另写 `mock_hal/mock_hal.m.ct` 走 `.m.ct`。`.m.ct` 的文件目录必须等于它的 `namespace`，且只承载
+`#include` / `#define` / `pub trait` / `map`，不产任何产物。
+
 ### 3. 目录与命名
 
 ```
@@ -144,6 +157,20 @@ which binds a trait's methods to concrete calls on a **declared global instance*
 See [mock-hal/uart.h.ct](mock-hal/uart.h.ct): a pass-through `#include` so the library's declarations are
 visible, a mirrored `trait` whose signatures copy the library API, a mirrored `struct` matching the
 library's layout, one declared global instance, and a `map` that binds each method to a real call.
+
+### 2.1 Layering: `.m.ct`, C shim, `.h.ct`, unsupported
+
+| Layer | Carries | Cost |
+| --- | --- | --- |
+| `.m.ct` static mapping (batch 38) | stateless, single-call functional / handle APIs (`for namespace` or `for type`) | no wrapper, no intermediate symbol; a `.method` on a C type expands at the call site |
+| C shim header | callbacks without userdata, statement macros, globals, struct fields, forwarding varargs | one hand-written adaptation |
+| `.h.ct` real type | stateful wrappers, ownership / RAII, error translation, dynamic dispatch | objects and a vtable: not free, but controlled |
+| Unsupported | C++ ABI, APIs needing a full preprocessor, bit-fields / large by-value structs | refused outright |
+
+The v1 [mock-hal/](mock-hal/) binding is still a **stateful** `.h.ct` + dynamic `map` (the global
+instance `uart1`); its stateless part can be split into `mock_hal/mock_hal.m.ct`. A `.m.ct` file's
+directory must equal its `namespace`; it carries only `#include` / `#define` / `pub trait` / `map`
+and produces no artefact.
 
 ### 3. Layout and naming
 

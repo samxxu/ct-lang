@@ -39,6 +39,12 @@
 | 释放（delete） | `delete p;` | 对指针展开为 `free`；`use Drop` 时先递归 `drop()` |
 | 自动释放（AutoDrop） | `own T *p = malloc(…);` | 作用域出口 / 行首 `return` 前自动 `drop()` + `free()` + 置空（Phase 5；仅 CT 线，L0 不识别） |
 | 映射（map） | `map trait T for instance x { m() → CALL; }` | 把 trait 方法映射到某个**已声明的全局实例**上的调用；**Phase 11 已在 ct-ast 落地**（11.1 解析 + 实例级包装 / vtable + `maps` JSON，11.2 接入派发，11.3 加固），L0 / L2 不认识，见 [language-spec](language-spec.md) §4.10 |
+| 映射单元（mapping unit） | `lib/lib.m.ct` | 只承载 prologue（`#include` / `#define`）、`pub trait` 与 `map` 的编译期单元；**不产任何产物**，只能被 import（第三十八批，仅 ct-ast） |
+| 静态 trait（static trait） | `.m.ct` 里的 `pub trait T { …; }` | 无 `_iface` / `_vtbl` / vtable；不能 `impl`、`use`、作类型、装箱，也不能带默认体 |
+| 命名空间静态调用 | `libc::Env.get("HOME")` | 静态 trait 的限定调用，直接展开成 recipe 的 C 调用（无 `self`） |
+| 类型宿主（type host） | `map trait CStr for type char * { … }` | 接收者由调用点表达式的静态类型决定（数组先 decay）；`a.toInt()` → `atoi((a))` |
+| recipe | `-> memset(s, value, count)` | `->` 右侧的 C 调用模板；绑定参数按出现点替换，`&p` 用 C99 compound literal，未求值参数加 `(void)(…)` 前缀 |
+| prologue | `.m.ct` 里的 `#include` / `#define` | 按整行去重展开进消费者 `.c` 顶部；消费者 `.h` 不含它 |
 | 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](design/dialect.md)） |
 | 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
@@ -52,6 +58,14 @@
 | 位置式初始化 | `Person p = { "Tom" };` | 按字段顺序 |
 | 指定初始化 | `Person p = { .name = "Tom" };` | 按字段名 |
 | 空初始化式 | `Person p = {};` | 只写 vptr |
+| 抽象方法（abstract method） | `trait T { void m(); };` | 只有签名、没有方法体；采纳处**必须**实现（缺失报错，见 SH-8） |
+| 默认方法（default method） | `trait T { int m() { … } }` | 签名后带方法体；采纳处可继承，也可在 `impl` 里覆盖。每 (struct, trait) 各展开一份，不是共享函数（第三十六批） |
+| 方法覆盖（override） | impl 里写同名方法 | impl 显式方法优先于默认方法 |
+| 直接绑定（direct binding） | `map … { m(buf, len) -> real_put; }` | 裸函数名 → vtable 槽直接指向该 C 函数，**不生成包装函数**；被绑函数首参须为 `void *` |
+| 包装函数（wrapper） | `<实例>_<Trait>_<方法>` | `-> f(args)` 形态生成的转发函数；首参 `void *self`，体内 `(void)self;` 后原样调用 |
+| 函数指针（function pointer） | `int (*p)(int)`、`p(x)`、`(*p)(x)` | 可作参数 / 字段 / 全局 / 局部；赋值可写 `p = f` 或 `p = &f`；不支持 typedef、不支持返回函数指针 |
+| 外部声明（extern） | `extern int lib_flag;` | **只声明不定义**：进 `.h`，`.c` 不发射定义；不能带初始化式、不能是函数 |
+| 导出全局（pub global） | `pub int g_counter = 5;` | `.h` 出 `extern`，定义单元 `.c` 出定义；跨单元可读写 |
 
 ### 2. 命名 / 修饰规则（已发布契约）
 
@@ -65,6 +79,9 @@
 | 方法函数 | `<Struct>_<Trait>_<method>` | |
 | vtable 变量 | `<Struct>_<Trait>_vtable` | |
 | 文件作用域构造器 | `__ct_init` | `static void __ct_init(void) __attribute__((constructor))`：在 `main` 前为文件作用域对象 / 数组写 vptr（D5=A） |
+| 导出虚表（exported vtable） | `extern struct <T>_vtbl <S>_<T>_vtable;` | `pub trait` × `pub struct` 时 vtable 去掉 `static`，实现单元定义、头文件声明，消费单元可直接装箱；否则保持 `static`（单元私有） |
+| 实例级虚表（instance-level vtable） | `<实例 C 名>_<Trait>_vtable` | `map` 的虚表；实例是 `pub` 全局且 trait 为 `pub` 时同样导出 |
+| 全局 C 名（global cname） | `namespace A::B; int h;` → `A_B_h` | 命名空间内全局按前缀 mangling；`extern` 豁免（保持 C 库原名） |
 
 > 以上是**已发布命名规则**，除非用户明确要求，不得更改（AGENTS §2）。
 
@@ -97,6 +114,12 @@
 | owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；Phase 6.2 起 `T *q = f()`（`f` 的 `ret_owned` 为真且返回同一 struct 指针）也标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/l2/**` 实现** |
 | 错误恢复（error recovery） | `setjmp` 守卫 + `recover_pos` | `die` 报告后长跳到 `compile_range` 的守卫，并重同步到下一个 `}` 之后或下一行行首；上限 `MAX_ERRORS=20`，失败的编译删除产物并在末尾补 `ctc: N error(s) generated`。Phase 4 切片 3 **新增**（无 oracle） |
 | 语义诊断（semantic check） | `duplicate trait/struct` · `signature_mismatch` | 重复定义按 cname 报错（namespace 隔离）；impl 的返回类型 / 参数个数与 trait 不符时告警（**不比参数类型**）。Phase 4 切片 4 **新增**（无 oracle） |
+| 前端 / 后端（frontend / backend） | `selfhost/ct-ast/frontend/**` · `backend/**` | 前端：词法 → 解析 → 符号表 → 类型检查 → 模块；后端：发射（`.c` / `.h` / JSON / vptr 初始化） |
+| 抽象语法树（AST） | `arena` 里的节点链 | ct-ast 的中间表示；节点种类见 `N_*`（`N_FUNC` / `N_IMPL` / `N_MAP` / `N_GLOBAL` …） |
+| 节点（node） | `struct Node`、`self->arena->nodes[n]` | 一条 AST 记录：`kind` + 最多 4 个子节点 + 4 段文本 + `aux` + `d`（`pub` 标志） |
+| 节点池（arena） | `backend::mem::Memory` | 一次性分配的节点与字符串池；不回收，随编译结束释放 |
+| 分组多单元（grouped multi-unit） | `selfhost/ct-ast/{frontend,backend,tool}/**` | ct-ast 的源码组织：按全路径 `import`，构建需 `-I selfhost/ct-ast`；宏不跨翻译单元 |
+| 行管线（line pipeline） | L2 的 `Pipe` / `RewriteOps` | 旧路线：逐行扫描 + 行重写；ct-ast 已改为 AST 路线，L2 仅作回归 oracle |
 
 ### 4. CLI 与产物
 
@@ -128,12 +151,19 @@
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
 | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
+| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 9 个条目 | 任一失败即整体失败；当前九关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings` |
+| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (9 hard gates green)` |
+| 棘轮（ratchet） | `check-archive.sh` 的 PASS / PENDING 四态 | 只允许 PENDING → PASS，不允许 PASS → PENDING |
+| 差分 oracle（differential oracle） | L2 / 归档 golden | 新主线与旧实现逐字节或逐行为对照的基准 |
+| 归档 oracle（archive oracle） | `test/archive/**`、tag `overreach-oracle` | Phase 2–4 恢复期的历史编译器产物，作为对差基准 |
+| 用例分区（fixture area） | `test/cases`（L0 逐字节）/ `test/ast`（ct-ast 行为）/ `test/modules`（多单元）/ `test/patterns`（模式）/ `test/pkg`（包管理）/ `test/acceptance`（只报告不阻塞） | 不同分区判据不同：前者比生成文本，后者比退出码 + 零告警 + 运行输出 |
+| 探针（probe） | `test/acceptance/run.sh` | 能力探针；PENDING 是预期状态，**不阻塞**关卡 |
 
 ### 6. 阶段与路线
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
-| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`）。例外：`v0.13.0` / `v0.14.0` 是 Phase 12 之后的能力补丁收口（C 子集补齐 / trait 默认方法），不对应新阶段 |
+| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`）。例外：`v0.13.0` / `v0.14.0` / `v0.15.0` 是 Phase 12 之后的能力补丁收口（C 子集补齐 / trait 默认方法 / `.m.ct` 静态映射），不对应新阶段 |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md)，D46–D52 见 [design/phase12.md](design/phase12.md) |
@@ -145,6 +175,10 @@
 | 吃自己的狗粮（dogfooding） | — | 用 CT 写 CT 工具链 |
 | 非目标（non-goal） | — | 明确不做的事 |
 | 设计债（design debt） | architecture §7 | 已知取舍 |
+| 批次（batch） | 第三十二批、第三十六批… | 一个可独立收口的工作单元；**不是** Phase（Phase 对应版本号，批次可在一个 Phase 后继续累加）。设计档案在 `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
+| 切片（slice） | 12.1、2a.1、9.5a | 一个批次内的最小可验证步骤；每个切片完成后必须过全量关卡 |
+| 锚点（anchor） | `> 锚点：commit \`f75c32c\`` | 文档撰写时的源码快照；文中行号以该提交为准，代码变更后需复核 |
+| 能力补丁（capability patch） | v0.13.0 / v0.14.0 / v0.15.0 | Phase 12 之后不新开 Phase、只补能力的版本；版本号仍遵循 `v0.MINOR.PATCH` |
 
 ### 7. 生态与嵌入式
 
@@ -152,7 +186,7 @@
 | --- | --- | --- |
 | 平台映射头 | `ct_platform.h` | 厂商提供；宏只出现在这里 |
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
-| 绑定（bindings） | 每个库一个 `.h.ct` | 随 Phase 11 的 `map` 推进（map 本体已落地，bindings 清单仍未出现）；**未实现** |
+| 绑定（bindings） | `bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct install` 子命令，Phase 8 已落地（本地目录源 + git 源） |
 | 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21） |
@@ -167,6 +201,40 @@
 | 编译器许可 | GPL-3.0-or-later | `LICENSE` |
 | 输出例外（output exception） | `LICENSE.EXCEPTION` | 生成物**不受** GPL 约束，声明随产物走 |
 | 许可标识 | SPDX | `ctc.c` 顶部与生成物 banner 中保留 |
+
+### 9. 易混淆术语对照（先查这里）
+
+| 容易混的两项 | 区分 |
+| --- | --- |
+| trait ↔ iface | trait 是语言构造（契约，可带默认体）；`<T>_iface` 是它在 C 里的**值表示**——胖指针 `{ void *self; <T>_vtbl *vt; }` |
+| vtable ↔ vptr | vtable 是函数指针**表**（每 (struct, trait) 一份）；vptr 是 struct **内部字段**，指向该表（`__<trait>_vptr`） |
+| impl ↔ map | impl 为**自有 struct** 提供实现，虚表名 `<S>_<T>_vtable`；map 给**已声明的实例**绑定外部函数，虚表名 `<实例C名>_<T>_vtable` |
+| `use` ↔ `impl` | `use` 只声明"采纳"（决定 vptr 字段、是否可装箱）；`impl` 提供方法体。trait 全 default 时只写 `use` 即可 |
+| 抽象方法 ↔ 默认方法 | 抽象方法必须实现；默认方法可继承、可在 impl 里覆盖 |
+| 装箱 ↔ 派发 | 装箱是 struct → iface 的转换（写 `{ &obj, &vtable }`）；派发是转换之后经 vtable 调方法 |
+| compile 模式 ↔ build 模式 | 单文件、`.c` 自包含；多单元、每单元出 `.c` + `.h`，`.c` 里 `#include` 自己的头 |
+| 单元（unit） ↔ 翻译单元（TU） | CT 的 unit = 一个 `.ct`；C 的 TU = 一个 `.c` 连同它的 `#include` |
+| 包装函数 ↔ 直接绑定 | 前者多一层转发（`-> f(args)`）；后者 vtable 槽直接指向 C 函数（`-> f;`），零生成 |
+| mangling ↔ cname | mangling 是**规则**（加 `A_B_` 前缀）；cname 是**结果**（`A_B_S`） |
+| 正例 ↔ 负例 | 正例必须成功且输出匹配；负例必须非零退出且诊断匹配 |
+| golden ↔ oracle | golden 是具体期望产物；oracle 是产出这些期望的**参照实现**（L0 / L2 / `overreach-oracle` tag） |
+| 关卡 ↔ 测试层 | 关卡是 `check-all.sh` 的 9 个条目（整体判据）；层是 `test/run.sh` 内部的分组（build / unit / cases …） |
+| Phase ↔ Batch | Phase 与版本一一对应（`v0.n.x`）；Batch 是可独立收口的工作单元，Phase 结束后仍可继续累加 |
+| 生成物 ↔ 源码 | 生成物（artefact）指 `ct` 输出的 `.c` / `.h` / JSON；banner 与输出例外声明必须保留 |
+| 透传 ↔ 行重写 | 透传：非构造行原样输出；行重写：构造行被替换为等价的 C |
+| 命名空间路径 ↔ 限定引用 | `A::B` 是**写法**；"限定引用"是按该写法跨命名空间取符号的**行为** |
+| 导出（`pub`） ↔ 私有（`static`） | `pub` 的符号进 `.h`；`static` 只留在本 `.c` |
+
+### 10. 协作与流程术语
+
+| 术语 | 形式 | 说明 |
+| --- | --- | --- |
+| issue 编号 | `SH-` selfhost · `DOC-` 文档 · `TEST-` 测试 · `CI-` 门禁 | 编号用于索引与条目标题，**文件名不带前缀**（如 `ct-ast-pub-global-dropped.md`）；文件放 `issues/<模块>/` |
+| 严重度 | `High` / `Medium` / `Low` / `Info` | High 指对外失真或影响正确性认知；Info 是设计观察 |
+| 设计决策编号 | `D-1` … `D-n` | 每批次一组，**全局不重复**；决策正文写在对应 `docs/design/**` |
+| 出口条件（exit） | 关卡全绿 + 用例覆盖 + 文档对称 | 缺一不算收口 |
+| 收口（close） | 打 tag、勾完 checklist、更新 roadmap | tag 名与 `CTC_VERSION` 必须一致（未 bump 的里程碑用非版本 tag） |
+| 验收命令 | `bash selfhost/check-all.sh` | 唯一判定"能不能合"的命令 |
 
 ---
 
@@ -201,6 +269,12 @@
 | delete | `delete p;` | expands to `free` for a pointer; with `use Drop` it recurses `drop()` first |
 | AutoDrop | `own T *p = malloc(…);` | releases at scope exit / before a line-initial `return`: `drop()` + `free()` + null (Phase 5; CT line only, L0 does not know it) |
 | map | `map trait T for instance x { m() → CALL; }` | maps a trait method onto a call on a declared global instance; **landed in Phase 11 on ct-ast** (11.1 parse + instance-level wrapper / vtable + the `maps` JSON, 11.2 wires dispatch, 11.3 hardening); L0 / L2 do not know it, see [language-spec](language-spec.md) §4.10 |
+| mapping unit | `lib/lib.m.ct` | a compile-time unit carrying only the prologue (`#include` / `#define`), `pub trait` and `map`; it **produces no artefact** and can only be imported (batch 38, ct-ast only) |
+| static trait | a `.m.ct`'s `pub trait T { …; }` | no `_iface` / `_vtbl` / vtable; it cannot be `impl`ed, `use`d, used as a type, boxed, or carry a default body |
+| namespace static call | `libc::Env.get("HOME")` | a qualified call on a static trait, expanded into the recipe's C call (no `self`) |
+| type host | `map trait CStr for type char * { … }` | the receiver comes from the call site's static type (arrays decay first); `a.toInt()` → `atoi((a))` |
+| recipe | `-> memset(s, value, count)` | the C call template on the right of `->`; binding parameters are substituted per occurrence, `&p` uses a C99 compound literal, and an unevaluated parameter gets a `(void)(…)` prefix |
+| prologue | the `#include` / `#define` lines in a `.m.ct` | expanded, de-duplicated per whole line, at the top of the consumer `.c`; never in the consumer `.h` |
 | dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](design/dialect.md)) |
 | dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
@@ -214,6 +288,14 @@
 | positional initialiser | `Person p = { "Tom" };` | in field order |
 | designated initialiser | `Person p = { .name = "Tom" };` | by field name |
 | empty initialiser | `Person p = {};` | writes only the vptr |
+| abstract method | `trait T { void m(); };` | signature only; the adopting site **must** implement it (a missing one is an error, SH-8) |
+| default method | `trait T { int m() { … } }` | carries a body; the adopting site inherits it or overrides it in the `impl`. Expanded once per (struct, trait), not shared (batch 36) |
+| override | a same-named method in the impl | an explicit impl method wins over the default |
+| direct binding | `map … { m(buf, len) -> real_put; }` | a bare function name makes the vtable slot point at that C function, **no wrapper generated**; the target's first parameter must be `void *` |
+| wrapper | `<instance>_<Trait>_<method>` | the forwarding function generated for `-> f(args)`: leading `void *self`, body `(void)self;` then the call verbatim |
+| function pointer | `int (*p)(int)`, `p(x)`, `(*p)(x)` | allowed as a parameter / field / global / local; assign with `p = f` or `p = &f`; no typedef, no returning one |
+| extern | `extern int lib_flag;` | **declaration only**: lands in the `.h`, the `.c` emits no definition; no initialiser, not a function |
+| pub global | `pub int g_counter = 5;` | the `.h` gets `extern` and the defining unit's `.c` gets the definition; readable and writable across units |
 
 ### 2. Naming / mangling rules (a published contract)
 
@@ -227,6 +309,9 @@
 | method function | `<Struct>_<Trait>_<method>` | |
 | vtable variable | `<Struct>_<Trait>_vtable` | |
 | file-scope constructor | `__ct_init` | `static void __ct_init(void) __attribute__((constructor))`: writes file-scope objects' / arrays' vptrs before `main` (D5=A) |
+| exported vtable | `extern struct <T>_vtbl <S>_<T>_vtable;` | with a `pub trait` × `pub struct` the vtable drops `static`: the implementing unit defines it and the header declares it, so a consumer unit may box directly; otherwise it stays `static` (unit-private) |
+| instance-level vtable | `<instance C name>_<Trait>_vtable` | the vtable of a `map`; exported on the same terms when the instance is a `pub` global and the trait is `pub` |
+| global cname | `namespace A::B; int h;` → `A_B_h` | a namespaced global is mangled with the prefix; `extern` is exempt and keeps the library's own name |
 
 > These are **published naming rules**; do not change them unless the user explicitly asks (AGENTS §2).
 
@@ -259,6 +344,12 @@
 | owned (heap-holding) | `Var.owned` / `own_line` / `autodrop` | marked at the creation site by `T *p = malloc/calloc(...)`; from Phase 6.2 also by `T *q = f()` when `f`'s `ret_owned` is set and it returns the same struct pointer; `own` additionally sets `autodrop` (Phase 5). **Implemented under `selfhost/l2/**`** |
 | error recovery | `setjmp` guard + `recover_pos` | `die` reports and longjmps back to `compile_range`'s guard, resyncing past the next `}` or the start of the next line; capped by `MAX_ERRORS=20`, and a failing compile drops its artifacts and closes with `ctc: N error(s) generated`. Added by Phase 4 slice 3 (**new**, no oracle) |
 | semantic check | `duplicate trait/struct` · `signature_mismatch` | duplicate definitions are errors judged on the cname (namespaces stay isolated); a differing return type / parameter count between impl and trait is a warning (**parameter types are not compared**). Added by Phase 4 slice 4 (**new**, no oracle) |
+| frontend / backend | `selfhost/ct-ast/frontend/**` · `backend/**` | frontend: lexing → parsing → symbols → type check → modules; backend: emission (`.c` / `.h` / JSON / vptr init) |
+| AST | the node chains in the `arena` | ct-ast's intermediate form; node kinds are `N_*` (`N_FUNC` / `N_IMPL` / `N_MAP` / `N_GLOBAL` …) |
+| node | `struct Node`, `self->arena->nodes[n]` | one AST record: `kind` + up to four child nodes + four text slots + `aux` + `d` (the `pub` flag) |
+| arena | `backend::mem::Memory` | the bump-allocated node and string pool; never freed individually, released when the compile ends |
+| grouped multi-unit | `selfhost/ct-ast/{frontend,backend,tool}/**` | how ct-ast is organised: full-path `import`, built with `-I selfhost/ct-ast`; macros do not cross a translation unit |
+| line pipeline | L2's `Pipe` / `RewriteOps` | the old route: line scan + line rewriting; ct-ast moved to an AST, so L2 survives only as the regression oracle |
 
 ### 4. CLI and output
 
@@ -290,12 +381,19 @@
 | regeneration | `./ctc <case>.ct -o <case>.expected.c` | after an intended behaviour change, regenerate **and review the diff** |
 | grammar smoke test | `python3 editors/vscode/test/check-grammar.py` | checks the editor grammar, **stays out of** run.sh |
 | end-to-end | the examples layer | generate → build → run → compare |
+| hard gate | the 9 entries of `selfhost/check-all.sh` | any failure fails the run; today: `test/run.sh`, `check-goldens`, `check-archive`, `check-m2a`, `ct-tour`, the editor grammar, `test/pkg/run.sh`, `check-ast`, `check-warnings` |
+| aggregate entry | `bash selfhost/check-all.sh` | the only command that runs every gate at once; prints `check-all: OK (9 hard gates green)` |
+| ratchet | the four states of `check-archive.sh` | only PENDING → PASS is allowed, never PASS → PENDING |
+| differential oracle | L2 / the archived goldens | the baseline the new mainline is compared against, byte-for-byte or behaviourally |
+| archive oracle | `test/archive/**`, tag `overreach-oracle` | the historical compiler output from the Phase 2–4 restore, used as the comparison baseline |
+| fixture area | `test/cases` (L0 byte-for-byte) / `test/ast` (ct-ast behaviour) / `test/modules` (multi-unit) / `test/patterns` (design patterns) / `test/pkg` (package manager) / `test/acceptance` (reported only) | the criteria differ: the first compares generated text, the rest compare exit status + warning-free build + program output |
+| probe | `test/acceptance/run.sh` | capability probes; PENDING is expected and **never blocks** a gate |
 
 ### 6. Stages and roadmap
 
 | Term | Form | Notes |
 | --- | --- | --- |
-| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) / 12 (bindings + dialect deepening) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`). Exception: `v0.13.0` / `v0.14.0` close capability patches after Phase 12 (the C-subset work / trait default methods) and do not start a new phase |
+| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) / 12 (bindings + dialect deepening) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`). Exception: `v0.13.0` / `v0.14.0` / `v0.15.0` close capability patches after Phase 12 (the C-subset work / trait default methods / `.m.ct` static mapping) and do not start a new phase |
 | sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 6) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md), D46–D52 in [design/phase12.md](design/phase12.md) |
@@ -307,6 +405,10 @@
 | dogfooding | — | using CT to build CT's own toolchain |
 | non-goal | — | something explicitly out of scope |
 | design debt | architecture §7 | a known trade-off |
+| batch | batch 32, batch 36, … | one unit of work that can close on its own; **not** a phase (a phase maps onto a version, while batches keep accumulating after it). Its design record lives in `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
+| slice | 12.1, 2a.1, 9.5a | the smallest verifiable step inside a batch; every slice must pass the full gate set before the next starts |
+| anchor | `> anchor: commit \`f75c32c\`` | the source snapshot a document was written against; its line numbers are relative to that commit and need re-checking after it moves |
+| capability patch | v0.13.0 / v0.14.0 / v0.15.0 | a post-Phase-12 version that adds capability without opening a new phase; the `v0.MINOR.PATCH` scheme still applies |
 
 ### 7. Ecosystem and embedded
 
@@ -314,7 +416,7 @@
 | --- | --- | --- |
 | platform mapping header | `ct_platform.h` | vendor-provided; macros appear only here |
 | standard peripheral traits | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | covering 80% of platform-difference needs |
-| bindings | one `.h.ct` per library | lands with Phase 11's `map` (the map construct has landed, the bindings list has not); **not implemented** |
+| bindings | `bindings/<library>/`: `.ct` sources / `#include` + mirrored trait / struct + `map` | **implemented**: the first binding is `bindings/mock-hal/` (Phase 12.1); the cross-unit limit was lifted by Batch 2 |
 | reverse mapping table | the JSON written by `--emit-map <file\|->` | generated C symbol ← CT definition site; landed in Phase 6.1 (D16) |
 | package manager | `ct-pkg` | named on 2026-10-17; the everyday entry points are the `ct get` / `ct install` subcommands, landed in Phase 8 (local directory sources + git sources) |
 | package manifest | `ct.pkg` | minimal `key = value`: `name` / `version` / `license` / repeatable `dep = <spec>[@<range>]` (D21) |
@@ -329,3 +431,37 @@
 | compiler licence | GPL-3.0-or-later | `LICENSE` |
 | output exception | `LICENSE.EXCEPTION` | generated output is **not** covered by the GPL; the notice travels with the output |
 | licence identifier | SPDX | kept at the top of `ctc.c` and in the generated banner |
+
+### 9. Confusables (check here first)
+
+| Easily confused pair | Distinction |
+| --- | --- |
+| trait ↔ iface | `trait` is the language construct (a contract, optionally with defaults); `<T>_iface` is its **value representation** in C — the fat pointer `{ void *self; <T>_vtbl *vt; }` |
+| vtable ↔ vptr | the vtable is the function-pointer **table** (one per (struct, trait)); the vptr is the struct **field** pointing at it (`__<trait>_vptr`) |
+| impl ↔ map | `impl` implements a trait for a **struct you own**, vtable `<S>_<T>_vtable`; `map` binds an **already-declared instance** to external functions, vtable `<instance C name>_<T>_vtable` |
+| `use` ↔ `impl` | `use` merely declares adoption (it decides the vptr field and whether boxing is possible); `impl` supplies bodies. With an all-default trait, `use` alone is enough |
+| abstract ↔ default method | an abstract method must be implemented; a default method is inherited and may be overridden |
+| boxing ↔ dispatch | boxing converts struct → iface (emitting `{ &obj, &vtable }`); dispatch calls a method through the vtable afterwards |
+| compile mode ↔ build mode | single file, self-contained `.c`; versus many units, each emitting `.c` + `.h`, with the `.c` including its own header |
+| unit ↔ translation unit | a CT unit is one `.ct`; a C translation unit is one `.c` plus its `#include`s |
+| wrapper ↔ direct binding | a wrapper adds a forwarding layer (`-> f(args)`); a direct binding points the slot straight at the C function (`-> f;`), emitting nothing |
+| mangling ↔ cname | mangling is the **rule** (add the `A_B_` prefix); the cname is the **result** (`A_B_S`) |
+| positive ↔ negative case | a positive must succeed and match its output; a negative must exit non-zero and match its diagnostic |
+| golden ↔ oracle | a golden is a concrete expected artefact; an oracle is the **reference implementation** that produced it (L0 / L2 / the `overreach-oracle` tag) |
+| gate ↔ test layer | a gate is one of the 9 entries in `check-all.sh` (the overall verdict); a layer is a group inside `test/run.sh` (build / unit / cases …) |
+| phase ↔ batch | a phase maps one-to-one onto a version (`v0.n.x`); a batch is a work unit that closes on its own and keeps accumulating after the phase ends |
+| artefact ↔ source | an artefact is what `ct` emits (`.c` / `.h` / JSON); the banner and the output-exception notice must stay in it |
+| pass-through ↔ line rewriting | pass-through copies a non-construct line verbatim; line rewriting replaces a construct with equivalent C |
+| namespace path ↔ qualified reference | `A::B` is the **spelling**; "qualified reference" is the **behaviour** of naming a symbol across namespaces with it |
+| exported (`pub`) ↔ private (`static`) | a `pub` symbol crosses into the `.h`; a `static` one stays in its `.c` |
+
+### 10. Collaboration and process terms
+
+| Term | Form | Notes |
+| --- | --- | --- |
+| issue id | `SH-` selfhost · `DOC-` docs · `TEST-` testing · `CI-` gates | the id appears in the index and the entry title, **not in the file name** (e.g. `ct-ast-pub-global-dropped.md`); files live under `issues/<module>/` |
+| severity | `High` / `Medium` / `Low` / `Info` | High means the outside world is misled or correctness perception is at stake; Info is a design observation |
+| design-decision id | `D-1` … `D-n` | one sequence per batch, **globally unique**; the text lives in the matching `docs/design/**` |
+| exit criteria | every gate green + fixtures cover the change + docs symmetrical | missing one of the three is not a close |
+| close | tag it, tick the checklist, update the roadmap | the tag name must equal `CTC_VERSION` (a milestone that did not bump uses a non-version tag) |
+| acceptance command | `bash selfhost/check-all.sh` | the only command that answers "may this land?" |
