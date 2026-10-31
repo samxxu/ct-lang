@@ -139,6 +139,7 @@ static int autodrop_append(struct Stmt *self, int blk, int base, int *tail)
         del = self->sup->new_node(N_DELETE);
         v = self->sup->new_node(N_VAR);
         if (del < 0 || v < 0) return -1;
+        self->arena->nodes[del].aux = self->mem->own_kind[d];
         self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
         snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->mem->own_decl[d]].text2);
         self->arena->nodes[del].a = v;
@@ -249,6 +250,149 @@ static int check_borrow_store(struct Stmt *self, int n)
              "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
              self->sym->vars[lv].name);
     return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1, msg, self->mem->path);
+}
+
+/* The token after a leading `borrow` decides what the statement is: a type
+   start makes it a declaration, while `(` makes it a call to a function of that
+   name (`test/modules/leak_call/prog.ct` keeps `borrow` as a function). The
+   cursor is restored, since the caller consumes the keyword itself. */
+static int borrow_decl_ahead(struct Stmt *self)
+{
+    char save_text[MAX_TEXT];
+    int save_tok, save_float, save_line, save_tokline, save_start;
+    int save_lstart, save_bol, save_pos, look;
+    long save_num;
+
+    save_tok = self->lex->tok;
+    save_num = self->lex->toknum;
+    save_float = self->lex->tokfloat;
+    save_line = self->lex->line;
+    save_tokline = self->lex->tokline;
+    save_start = self->lex->tokstart;
+    save_lstart = self->lex->lstart;
+    save_bol = self->lex->bol;
+    save_pos = self->lex->pos;
+    snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+    self->sup->lex_next();
+    look = self->is_decl_start();
+    self->lex->tok = save_tok;
+    self->lex->toknum = save_num;
+    self->lex->tokfloat = save_float;
+    self->lex->line = save_line;
+    self->lex->tokline = save_tokline;
+    self->lex->tokstart = save_start;
+    self->lex->lstart = save_lstart;
+    self->lex->bol = save_bol;
+    self->lex->pos = save_pos;
+    snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+    return look;
+}
+
+/* `borrow Conn *c = pool.acquire(…);`: at scope exit the compiler hands the
+   object back with `Conn_Handback_handback(c)` and nulls the pointer. The
+   declaration is checked here, because a pooled object that nobody hands back
+   leaks its slot, and a handback on a type without an impl would compile to a
+   call of an undefined symbol. */
+static int mark_borrow(struct Stmt *self, int n, int line, int col)
+{
+    char base[MAX_TEXT];
+    char et[MAX_TEXT];
+    char msg[MAX_TEXT];
+    char eb[MAX_TEXT];
+    int d, si, vi;
+    size_t bl, el;
+
+    d = n;
+    if (self->arena->nodes[n].kind == N_DECLS) d = self->arena->nodes[n].a;
+    while (d >= 0) {
+        const char *tp = self->arena->nodes[d].text;
+        if (self->arena->nodes[d].text3[0] != 0)
+            return tool::diag::ct_sem_error(line, col, "'borrow' does not support arrays",
+                                            self->mem->path);
+        bl = strlen(tp);
+        if (bl == 0 || tp[bl - 1] != '*')
+            return tool::diag::ct_sem_error(line, col,
+                                   "'borrow' requires an initialiser of struct pointer type",
+                                   self->mem->path);
+        snprintf(base, sizeof base, "%s", tp);
+        bl = strlen(base);
+        while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
+            bl = bl - 1;
+            base[bl] = 0;
+        }
+        if (strncmp(base, "struct ", 7) == 0) memmove(base, base + 7, strlen(base + 7) + 1);
+        si = self->sym->find_struct(base);
+        if (si < 0 || self->arena->nodes[d].a < 0)
+            return tool::diag::ct_sem_error(line, col,
+                                   "'borrow' requires an initialiser of struct pointer type",
+                                   self->mem->path);
+        /* the initialiser must name a pointer to the same struct whenever its
+           type is resolvable here; an untyped expression is left to the C
+           compiler, as the rest of the compiler does */
+        if (self->sup->expr_type(self->arena->nodes[d].a, et, sizeof et) == 0) {
+            el = strlen(et);
+            if (el > 0 && et[el - 1] == '*') {
+                snprintf(eb, sizeof eb, "%s", et);
+                el = strlen(eb);
+                while (el > 0 && (eb[el - 1] == '*' || eb[el - 1] == ' ')) {
+                    el = el - 1;
+                    eb[el] = 0;
+                }
+                if (strncmp(eb, "struct ", 7) == 0) memmove(eb, eb + 7, strlen(eb + 7) + 1);
+                if (strcmp(eb, base) != 0)
+                    return tool::diag::ct_sem_error(line, col,
+                                           "'borrow' requires an initialiser of struct pointer type",
+                                           self->mem->path);
+            } else {
+                return tool::diag::ct_sem_error(line, col,
+                                       "'borrow' requires an initialiser of struct pointer type",
+                                       self->mem->path);
+            }
+        }
+        if (!self->sym->structs[si].uses_handback) {
+            snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Handback'", base);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        if (!self->sym->structs[si].has_handback_impl) {
+            snprintf(msg, sizeof msg, "struct '%s' uses trait 'Handback' but has no impl", base);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        vi = self->sym->find_var(self->arena->nodes[d].text2);
+        if (vi >= 0) {
+            self->sym->vars[vi].borrowed = 1;
+            self->sym->vars[vi].autodrop = 1;
+            self->sym->vars[vi].owned = 0;
+            self->sym->vars[vi].own_line = line;
+        }
+        /* the pools live in Memory, whose cap is 4096; the guard keeps the two
+           arrays in step instead of running past the second one */
+        if (self->mem->nowner >= 4096) return self->mem->fail("too many owned variables");
+        self->mem->own_decl[self->mem->nowner] = d;
+        self->mem->own_kind[self->mem->nowner] = 1;
+        self->mem->nowner++;
+        d = self->arena->nodes[d].next;
+    }
+    return 0;
+}
+
+/* A borrowed pointer handed back through `return`: the caller would keep a
+   pointer whose borrow ended with this frame. A parameter belongs to the
+   caller and may legitimately be passed on, so it only warns; a local cannot
+   be handed back at all, so its injection is cancelled -- returning it would
+   put the object back in the pool while the caller still reads the slot. */
+static int borrow_escape(struct Stmt *self, int ret, int line)
+{
+    int i;
+
+    if (ret < 0) return 0;
+    for (i = 0; i < self->sym->nvar; i++) {
+        if (!self->sym->vars[i].borrowed) continue;
+        if (!self->mem->expr_returns(ret, self->sym->vars[i].name)) continue;
+        if (tool::diag::ct_borrow_warn(line, self->sym->vars[i].name, self->mem->path) != 0)
+            return self->mem->fail("too many warnings");
+        if (!self->sym->vars[i].is_param) self->sym->vars[i].autodrop = 0;
+    }
+    return 0;
 }
 
 impl StmtOps for Stmt {
@@ -430,6 +574,8 @@ impl StmtOps for Stmt {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->sup->lex_next();
                 /* a bare `return;` leaves every owned object behind */
+                if (self->mem->leak_active && borrow_escape(self, -1, rline) != 0)
+                    return -1;
                 if (self->mem->leak_active && self->sup->leak_return(-1, cond, rline) != 0)
                     return -1;
                 if (self->mem->leak_active) {
@@ -449,6 +595,8 @@ impl StmtOps for Stmt {
                 }
             }
             self->arena->nodes[s].a = e;
+            if (self->mem->leak_active && borrow_escape(self, e, rline) != 0)
+                return -1;
             if (self->mem->leak_active && self->sup->leak_return(e, cond, rline) != 0)
                 return -1;
             if (self->sup->expect(";") != 0) return -1;
@@ -676,6 +824,23 @@ impl StmtOps for Stmt {
         if (self->lex->tok == T_ID
             && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0))
             return self->sup->fail("a case label is only allowed inside a switch");
+        /* `borrow Conn *c = …` declares a borrowed pointer whose handback runs
+           at scope exit; `borrow(x);` is a call to a function of that name, so
+           the next token decides (see `borrow_decl_ahead`) */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0
+            && borrow_decl_ahead(self)) {
+            int bline = self->lex->tokline;
+            int bcol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->switch_depth > 0)
+                return tool::diag::ct_sem_error(bline, bcol,
+                                       "'borrow' is not supported inside a switch", self->mem->path);
+            self->sup->lex_next();
+            s = self->parse_decl_node();
+            if (s < 0) return -1;
+            if (self->sup->expect(";") != 0) return -1;
+            if (mark_borrow(self, s, bline, bcol) != 0) return -1;
+            return s;
+        }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0) {
             int own_line = self->lex->tokline;
             if (self->switch_depth > 0) return self->sup->fail("own is not supported inside a switch");
@@ -753,6 +918,8 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
                 return self->sup->fail("a static local cannot be 'own'");
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0)
+                return self->sup->fail("a static local cannot be 'borrow'");
             if (!self->is_decl_start()) return self->sup->fail("expected a declaration after 'static'");
             self->static_decl = 1;
             s = self->parse_decl_node();

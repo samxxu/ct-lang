@@ -133,6 +133,8 @@ pub struct StructDef {
     int  nfields;
     int  defined;               /* a body was parsed; a forward declaration is not */
     int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
+    int  uses_handback;         /* built-in `Handback`: no vptr, no vtable, `borrow` calls it */
+    int  has_handback_impl;     /* this unit parsed `impl Handback for S` */
 }
 
 pub trait SymbolOps {
@@ -464,6 +466,8 @@ impl SymbolOps for Symbols {
         snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
         self->structs[self->nstructs].nuse = 0;
         self->structs[self->nstructs].uses_drop = 0;
+        self->structs[self->nstructs].uses_handback = 0;
+        self->structs[self->nstructs].has_handback_impl = 0;
         self->nstructs++;
         return self->nstructs - 1;
     }

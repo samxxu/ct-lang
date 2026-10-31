@@ -2512,6 +2512,150 @@ void f(borrow struct Req *r)
 int main(void) { return 0; }
 '
 
+# Stage two: a `borrow` declaration hands the object back at scope exit.
+# The 62 fixture is the behavioural proof (reverse order, one handback each,
+# and the program's own output); the generated C is checked here for the
+# shape design 5 fixes: handback plus nulling, never `free`.
+"$work/ct-ast" test/ast/62_borrow_handback/prog.ct -o "$work/bh62.c" \
+    >"$work/bh62.out" 2>"$work/bh62.err"
+if [ $? -ne 0 ]; then
+    bad "borrow handback" "ct-ast failed: $(cat "$work/bh62.err")"
+elif ! grep -q 'if (a) { Conn_Handback_handback(a); a = 0; }' "$work/bh62.c"; then
+    bad "borrow handback" "the exit does not hand back and null"
+elif ! grep -q 'if (b) { Conn_Handback_handback(b); b = 0; }' "$work/bh62.c"; then
+    bad "borrow handback" "the second exit does not hand back and null"
+elif grep -q 'free(a)' "$work/bh62.c" || grep -q 'free(b)' "$work/bh62.c"; then
+    bad "borrow handback" "a borrow is freed instead of handed back"
+elif grep -q 'Handback_vtbl' "$work/bh62.c" || grep -q '__Handback_vptr' "$work/bh62.c"; then
+    bad "borrow handback" "Handback must not carry a vptr or a vtable"
+else
+    ok "borrow handback (exit hands back and nulls, never frees)"
+fi
+
+# The refusals and the escape warning. Fixtures are inline; the messages are
+# the ones design 6 lists.
+bw_neg no_handback "struct 'Conn' does not use trait 'Handback'" \
+'#include <stdio.h>
+struct Conn { int fd; int in_use; };
+static struct Conn g;
+int main(void)
+{
+    borrow struct Conn *c = &g;
+    c->in_use = 1;
+    return 0;
+}
+'
+bw_neg no_impl "struct 'Conn' uses trait 'Handback' but has no impl" \
+'#include <stdio.h>
+struct Conn { int fd; int in_use; } use Handback;
+static struct Conn g;
+int main(void)
+{
+    borrow struct Conn *c = &g;
+    c->in_use = 1;
+    return 0;
+}
+'
+bw_neg borrow_no_init "'borrow' requires an initialiser of struct pointer type" \
+'#include <stdio.h>
+struct Conn { int fd; int in_use; } use Handback;
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }
+}
+int main(void)
+{
+    borrow struct Conn *c;
+    (void)c;
+    return 0;
+}
+'
+bw_neg borrow_array "'borrow' does not support arrays" \
+'#include <stdio.h>
+struct Conn { int fd; int in_use; } use Handback;
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }
+}
+static struct Conn g[2];
+int main(void)
+{
+    borrow struct Conn *a[2];
+    a[0] = &g[0];
+    return 0;
+}
+'
+bw_neg borrow_static "a static local cannot be 'borrow'" \
+'#include <stdio.h>
+struct Conn { int fd; int in_use; } use Handback;
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }
+}
+static struct Conn g;
+int main(void)
+{
+    static borrow struct Conn *c = &g;
+    c->in_use = 1;
+    return 0;
+}
+'
+bw_neg borrow_switch "'borrow' is not supported inside a switch" \
+'#include <stdio.h>
+struct Conn { int fd; int in_use; } use Handback;
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }
+}
+static struct Conn g;
+int main(void)
+{
+    int n = 1;
+    switch (n) {
+    case 1:
+        borrow struct Conn *c = &g;
+        c->in_use = 1;
+        break;
+    }
+    return 0;
+}
+'
+
+# `return c;` on a local borrow: a warning, and the handout injection is cancelled
+# (returning the object to the pool while the caller still reads the slot would
+# be worse than leaking it).
+cat >"$work/bw_escape.ct" <<'BWEOF'
+#include <stdio.h>
+
+struct Conn { int fd; int in_use; } use Handback;
+
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }
+}
+
+static struct Conn g_slot;
+
+static struct Conn *get(void)
+{
+    borrow struct Conn *c = &g_slot;
+    return c;
+}
+
+int main(void)
+{
+    struct Conn *p = get();
+    printf("%d\n", p->fd);
+    return 0;
+}
+BWEOF
+if "$work/ct-ast" "$work/bw_escape.ct" -o "$work/bw_escape.c" \
+        >"$work/bw_escape.out" 2>"$work/bw_escape.err"; then
+    if grep -q "warning: a borrowed pointer escapes through 'return'" "$work/bw_escape.err" \
+       && ! grep -q 'Handback_handback(c)' "$work/bw_escape.c"; then
+        ok "borrow escape (warns and cancels the handback)"
+    else
+        bad "borrow escape" "$(cat "$work/bw_escape.err")"
+    fi
+else
+    bad "borrow escape" "expected generation to succeed with a warning: $(cat "$work/bw_escape.err")"
+fi
+
 echo
 echo "== multi-error recovery (10.4) =="
 # A bad construct must not hide the rest of the file: every error is reported and

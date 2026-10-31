@@ -51,6 +51,7 @@ pub struct Memory {
     const char *path;            /* the file name diagnostics report, kept by the driver */
     int  own_decl[4096];         /* where each scope's `own` declarations start */
     int  nowner;
+    int  own_kind[4096];         /* 0 = `own` (drop + free), 1 = `borrow` (handback only) */
     int  own_base[256];
     /* Leak analysis, active only inside a function or method body. `leak_frame`
        is the body's own scope number -- a return in a deeper block is
@@ -99,6 +100,7 @@ impl MemoryOps for Memory {
             vi = self->sym->find_var(self->arena->nodes[d].text2);
             if (vi >= 0) self->sym->vars[vi].autodrop = 1;
             if (self->nowner >= MAX_VARS) return self->fail("too many owned variables");
+            self->own_kind[self->nowner] = 0;
             self->own_decl[self->nowner] = d;
             self->nowner++;
             d = self->arena->nodes[d].next;

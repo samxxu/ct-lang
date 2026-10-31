@@ -23,7 +23,7 @@
 namespace tool::diag;
 /* One collected warning (10.2 signature mismatch, 10.3 leak). */
 struct Warn {
-    int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path */
+    int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape */
     int  line;
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
     char file[MAX_PATH];
@@ -168,6 +168,12 @@ impl DiagStore for Diag {
                     self->put_json(jf, w->tname);
                     fprintf(jf, "*\",\"message\":\"may leak on a return path\","
                                  "\"path_line\":%d}", w->path_line);
+                } else if (w->kind == 3) {
+                    fputs("{\"type\":\"borrow_escape\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
                 } else {
                     fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -188,6 +194,9 @@ impl DiagStore for Diag {
                 else if (w->kind == 2)
                     fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
                             w->file, w->line, w->var, w->tname, w->path_line);
+                else if (w->kind == 3)
+                    fprintf(tf, "%s:%d: warning: a borrowed pointer escapes through 'return'\n",
+                            w->file, w->line);
                 else
                     fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
                             w->file, w->line, w->var, w->tname);
@@ -234,6 +243,14 @@ int ct_leak_warn(int kind, int line, int path_line, const char *file,
                  const char *var, const char *tname)
 {
     return g_diag.record_leak(kind, line, path_line, file, var, tname);
+}
+
+/* A borrowed pointer handed back through `return` (kind 3); the type name is
+   empty because the warning only names the variable. */
+pub int ct_borrow_warn(int line, const char *var, const char *path);
+int ct_borrow_warn(int line, const char *var, const char *path)
+{
+    return g_diag.record_leak(3, line, 0, path, var, "");
 }
 
 pub int ct_diag_emit(int json, int to_stderr);

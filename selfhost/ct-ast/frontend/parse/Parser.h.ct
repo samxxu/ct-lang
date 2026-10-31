@@ -1514,6 +1514,8 @@ impl ParseOps for Parser {
                 if (tagi >= 0 && ai >= 0 && tagi != ai) {
                     self->sym->structs[ai].nuse = self->sym->structs[tagi].nuse;
                     self->sym->structs[ai].uses_drop = self->sym->structs[tagi].uses_drop;
+                    self->sym->structs[ai].uses_handback = self->sym->structs[tagi].uses_handback;
+                    self->sym->structs[ai].has_handback_impl = self->sym->structs[tagi].has_handback_impl;
                     for (ui = 0; ui < self->sym->structs[tagi].nuse; ui++)
                         snprintf(self->sym->structs[ai].use[ui], MAX_TEXT, "%s", self->sym->structs[tagi].use[ui]);
                     self->sym->structs[ai].nfields = self->sym->structs[tagi].nfields;
@@ -1586,6 +1588,18 @@ impl ParseOps for Parser {
                never joins the `use` list -- only the flag matters */
             if (strcmp(tname, "Drop") == 0) {
                 self->sym->structs[sindex].uses_drop = 1;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+            /* `Handback` is built in as well: a borrowed object is handed back
+               to its pool, so it carries no vptr or vtable and never joins the
+               `use` list -- only the flag matters */
+            if (strcmp(tname, "Handback") == 0) {
+                self->sym->structs[sindex].uses_handback = 1;
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->sup->lex_next();
@@ -1830,7 +1844,7 @@ impl ParseOps for Parser {
         }
         /* `Drop` is built in: no `trait Drop` declaration exists, but
            `impl Drop for S` is legal and emits `S_Drop_drop` */
-        if (ti < 0 && strcmp(rtrait, "Drop") != 0)
+        if (ti < 0 && strcmp(rtrait, "Drop") != 0 && strcmp(rtrait, "Handback") != 0)
             return self->sup->fail("impl of an unknown trait");
         self->sup->lex_next();
         if (self->lex->tok != T_ID || strcmp(self->lex->toktext, "for") != 0)
@@ -1871,6 +1885,9 @@ impl ParseOps for Parser {
                 if (self->sup->skip_body() != 0) return -1;
                 return NO_NODE;
             }
+        /* the borrow declaration needs to know that this unit wrote the handback
+           body: `use Handback` alone would hand back to nothing */
+        if (strcmp(rtrait, "Handback") == 0) self->sym->structs[si].has_handback_impl = 1;
         brace_line = self->lex->tokline;
         brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->expect("{") != 0) return -1;

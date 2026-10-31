@@ -974,7 +974,8 @@ impl EmitOps for Emitter {
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             si = self->arena->nodes[n].aux;
             tname = self->arena->nodes[n].text2;
-            if (strcmp(tname, "Drop") == 0) continue;   /* no vptr, no vtable */
+            if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
+                continue;   /* no vptr, no vtable */
             if (self->vtable_exported(si, tname))
                 fprintf(self->out, "struct %s_vtbl %s_%s_vtable;\n",
                         tname, self->sym->structs[si].name, tname);
@@ -1005,6 +1006,11 @@ impl EmitOps for Emitter {
         for (si = 0; si < self->sym->nstructs; si++)
             if (self->sym->structs[si].uses_drop)
                 fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
+                        self->sym->structs[si].name);
+        /* a `borrow` release runs before the handback definition below */
+        for (si = 0; si < self->sym->nstructs; si++)
+            if (self->sym->structs[si].has_handback_impl)
+                fprintf(self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n",
                         self->sym->structs[si].name);
         if (self->sym->nstructs) fputs("\n", self->out);
         return 0;
@@ -1174,7 +1180,7 @@ impl EmitOps for Emitter {
             ti = -1;
             for (k = 0; k < self->sym->ntraits; k++)
                 if (strcmp(self->sym->traits[k].name, tname) == 0) ti = k;
-            if (ti < 0 && strcmp(tname, "Drop") != 0)
+            if (ti < 0 && strcmp(tname, "Drop") != 0 && strcmp(tname, "Handback") != 0)
                 return self->fail_from(n, "impl of an unknown trait");
             sname = self->arena->nodes[n].text;
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
@@ -1184,7 +1190,8 @@ impl EmitOps for Emitter {
                    output clean under -Wall without changing what is emitted. The
                    attribute goes before the declarator: clang rejects the
                    trailing position on a definition (-Wgcc-compat). */
-                if (strcmp(tname, "Drop") == 0) fputs("__attribute__((unused)) ", self->out);
+                if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
+                    fputs("__attribute__((unused)) ", self->out);
                 fprintf(self->out, "%s_%s_%s(void *self",
                         self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                 k = self->arena->nodes[m].a;
@@ -1225,7 +1232,7 @@ impl EmitOps for Emitter {
                     if (impl_writes(self->arena, n, self->sym->traits[ti].m[dm].name)) continue;
                     if (emit_default_method(self, si, sname, ti, dm, n) != 0) return -1;
                 }
-            if (strcmp(tname, "Drop") != 0) {
+            if (strcmp(tname, "Drop") != 0 && strcmp(tname, "Handback") != 0) {
                 /* a trait nothing dispatches leaves the table unreferenced; an
                    exported one is reachable from the consumer unit instead */
                 if (self->vtable_exported(si, tname))
@@ -1655,7 +1662,7 @@ impl EmitOps for Emitter {
         int t;
         (void)self;
 
-        if (strcmp(tname, "Drop") == 0) return 0;
+        if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0) return 0;
         t = self->sym->find_trait(tname);
         if (t < 0 || !self->sym->traits[t].is_pub) return 0;
         return self->decl_is_pub(N_STRUCT, self->sym->structs[si].name);
@@ -1804,6 +1811,22 @@ impl EmitOps for Emitter {
             int si;
             si = -1;
             if (self->arena->nodes[n].text[0]) si = self->sym->find_struct(self->arena->nodes[n].text);
+            /* a `borrow` release hands the object back to its pool: the
+               memory is not ours to free, and an unresolvable type must fail
+               rather than fall back to `free` (design 5) */
+            if (self->arena->nodes[n].aux == 1) {
+                if (si < 0)
+                    return self->fail_from(n, "cannot resolve the borrowed type");
+                self->emit_indent(ind);
+                fputs("if (", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, ") { %s_Handback_handback(", self->sym->structs[si].name);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs("); ", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(" = 0; }\n", self->out);
+                return 0;
+            }
             self->emit_indent(ind);
             if (si >= 0 && self->sym->structs[si].uses_drop) {
                 /* a Drop struct runs its drop before the memory goes away */
