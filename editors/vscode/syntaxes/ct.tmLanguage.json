@@ -19,6 +19,9 @@
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
     { "include": "#ct-own" },
+    { "include": "#ct-borrow" },
+    { "include": "#ct-borrow-param" },
+    { "include": "#ct-trait-builtin" },
     { "include": "#ct-pub" },
     { "include": "source.c" }
   ],
@@ -219,6 +222,24 @@
       "match": "^[ \\t]*(own)\\b",
       "captures": {
         "1": { "name": "storage.modifier.own.ct" }
+      }
+    },
+    "ct-borrow": {
+      "match": "^[ \\t]*(borrow)\\b",
+      "captures": {
+        "1": { "name": "storage.modifier.borrow.ct" }
+      }
+    },
+    "ct-borrow-param": {
+      "match": "\\b(borrow)[ \\t]+(?=[A-Za-z_])",
+      "captures": {
+        "1": { "name": "storage.modifier.borrow.ct" }
+      }
+    },
+    "ct-trait-builtin": {
+      "match": "\\b(Handback|Drop)\\b",
+      "captures": {
+        "1": { "name": "entity.name.type.trait.ct" }
       }
     },
     "ct-pub": {

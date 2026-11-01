@@ -44,6 +44,9 @@ CT_CASES = (
     "test/ast/13_map_instance/prog.ct",
     # Batch 36 trait default methods: a body may live in the trait itself.
     "test/ast/57_trait_default/prog.ct",
+    # Phase 4.40 `borrow` / `Handback`: a contextual keyword in both its
+    # statement-initial and parameter-annotation forms.
+    "test/ast/62_borrow_handback/prog.ct",
     # Batch 38 zero-cost static mapping: `.m.ct` units with `for type` and
     # `for namespace` hosts, plus the call sites that consume them.
     "test/modules/map_unit/libc/libc.m.ct",
@@ -231,6 +234,13 @@ def main():
             check("`own Box *b` -> ct-own",
                   any(h[0] == "ct-own" for _, l, hs in rows
                       if l.strip().startswith("own ") for h in hs))
+        if "62_borrow_handback" in rel:
+            check("line-start `borrow Conn *a` -> ct-borrow",
+                  any(h[0] == "ct-borrow" for _, l, hs in rows
+                      if l.strip().startswith("borrow ") for h in hs))
+            check("`render(borrow struct Conn *c)` -> ct-borrow-param",
+                  any(h[0] == "ct-borrow-param" for _, l, hs in rows
+                      if "render(borrow " in l for h in hs))
         if "13_map_instance" in rel:
             check("`map trait T for instance x {` -> ct-map",
                   any(h[0] == "ct-map" for _, l, hs in rows

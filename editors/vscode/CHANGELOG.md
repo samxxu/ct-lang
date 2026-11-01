@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.3.0
+
+- Highlighting for `borrow` (`storage.modifier.borrow.ct`) in both of its
+  contextual-keyword forms: a statement-initial declaration (`borrow struct
+  Conn *c = …`) and a parameter annotation (`void render(borrow struct Conn *c)`).
+- The built-in traits `Handback` and `Drop` highlight as trait types.
+- `test/check-grammar.py`: 33 assertions, covering the two `borrow` forms.
+
 ## 0.2.0
 
 - Highlighting for the batch-36 / batch-38 syntax: `map trait T for namespace
