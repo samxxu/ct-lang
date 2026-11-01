@@ -1,15 +1,16 @@
 /*
  * Arena.h.ct - the node pool and the string-literal pool, one class of its own.
  *
- * Node storage and literal storage are the compiler's two big fixed arrays.
+ * Node storage and literal storage are the compiler's two big pools.
  * They live here as an explicit `Arena` object so the driver and the parser
  * reach them through a pointer instead of two file-scope globals, and the
- * capacity macros stay with the arrays that consume them. Macros do not cross a
- * unit boundary, so `MAX_NODES` is only usable in this unit -- the generated
- * header carries the arrays' expanded lengths. The node pool is compiled for the
+ * capacity macros stay with the code that consumes them. Macros do not cross a
+ * unit boundary, so `MAX_NODES` is only usable in this unit -- the pools are
+ * heap blocks sized by it at first use. The node pool is compiled for the
  * whole unit closure at once, so its size follows the compiler's own source
  * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
+#include <stdlib.h>
 #define MAX_NODES 131072
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
@@ -46,16 +47,35 @@ pub trait ArenaOps {
 }
 
 pub struct Arena {
-    /* MAX_NODES expanded by hand: this field lands in the generated header,
-       which carries no macros, so the length has to be a literal. `alloc`
-       still bounds against MAX_NODES, so the two values must stay equal. */
-    struct Node nodes[131072];
+    /* The two pools are calloc'd on first use (SH-42): as inline arrays in a
+       file-scope `static` instance they put ~69 MB of zeroes into __DATA and
+       shipped an 88 MB compiler. The lengths stay literal -- the generated
+       header carries no macros -- and `alloc` / `str_put` still bound against
+       MAX_NODES / 262144, so the capacity semantics are unchanged. */
+    struct Node *nodes;
     int  nnode;
-    char strpool[262144];
+    char *strpool;
     int  nstrpool;
 } use ArenaOps;
 
 pub struct Arena *arena_get(void);
+
+/* Lazily give the pools their backing store. calloc keeps the zero-filled
+   semantics the static arrays had; a failure is reported as -1 (nodes) or a
+   skipped byte (strings) so the caller's existing diagnostics still fire. */
+static int arena_grow_nodes(struct Arena *self)
+{
+    if (self->nodes) return 0;
+    self->nodes = calloc(MAX_NODES, sizeof(*self->nodes));
+    return self->nodes ? 0 : -1;
+}
+
+static int arena_grow_strpool(struct Arena *self)
+{
+    if (self->strpool) return 0;
+    self->strpool = calloc(262144, 1);
+    return self->strpool ? 0 : -1;
+}
 
 impl ArenaOps for Arena {
     /* A fresh node with every child slot cleared. `text3` is left alone: the
@@ -65,6 +85,7 @@ impl ArenaOps for Arena {
     {
         int n;
         if (self->nnode >= MAX_NODES) return -1;
+        if (arena_grow_nodes(self) != 0) return -1;
         n = self->nnode;
         self->nnode++;
         self->nodes[n].kind = kind;
@@ -94,6 +115,7 @@ impl ArenaOps for Arena {
     int str_put(int c)
     {
         if (self->nstrpool + 2 >= 262144) return -1;   /* room for this byte and the NUL */
+        if (arena_grow_strpool(self) != 0) return -1;
         self->strpool[self->nstrpool] = (char)c;
         self->nstrpool++;
         return 0;
@@ -101,12 +123,14 @@ impl ArenaOps for Arena {
 
     void str_end(void)
     {
+        if (arena_grow_strpool(self) != 0) return;
         self->strpool[self->nstrpool] = 0;
         self->nstrpool++;
     }
 
     const char *str_at(int off)
     {
+        if (!self->strpool) return "";
         return self->strpool + off;
     }
 
@@ -120,7 +144,8 @@ impl ArenaOps for Arena {
 }
 
 /* The instance lives after the impls: its vptr initialisers need the vtable
-   forward declarations the emitter places with each impl. */
+   forward declarations the emitter places with each impl. It starts all-zero
+   and grows its pools on first use. */
 static struct Arena g_arena;
 
 struct Arena *arena_get(void)

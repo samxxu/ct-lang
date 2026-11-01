@@ -1063,8 +1063,9 @@ static struct Module g_module;
 
 /* Storage for the unit table: its element type belongs to `unit.h.ct`, and a
    generated header carries no `#include`, so the array stays here and
-   `g_module` points at it. */
-static struct Unit g_units[MAX_UNITS];
+   `g_module` points at it. It is a heap block (SH-42): a `struct Unit` caches
+   its parsed text, so 64 of them inline put ~620 KB of zeroes into __DATA. */
+static struct Unit *g_units;
 
 pub struct Module *module_get(void);
 struct Module *module_get(void)
@@ -1084,5 +1085,12 @@ void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void
     g_module.mem = (struct Memory *)mem;
     g_module.p = (struct Parser *)p;
     g_module.cache = (struct Cache *)cache;
+    if (!g_units) {
+        g_units = calloc(MAX_UNITS, sizeof(*g_units));
+        if (!g_units) {
+            fprintf(stderr, "ctc: out of memory\n");
+            exit(1);
+        }
+    }
     g_module.units = g_units;
 }

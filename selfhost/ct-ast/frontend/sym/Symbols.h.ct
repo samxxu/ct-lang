@@ -16,6 +16,7 @@
  * generated header, which carries no macros.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAX_TEXT    160
@@ -173,9 +174,12 @@ pub trait SymbolOps {
 }
 
 pub struct Symbols {
-    struct Fn   funcs[256];
+    /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
+       as inline arrays in the file-scope instance they put ~21 MB of zeroes
+       into __DATA. Their caps stay literal, mirroring the MAX_* values above. */
+    struct Fn   *funcs;
     int  nfunc;
-    struct Var  vars[4096];
+    struct Var  *vars;
     int  nvar;
     int  scope[256];
     int  nscope;
@@ -183,9 +187,9 @@ pub struct Symbols {
     int  type_kind[256];        /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
                                    5 = enum tag, 6 = union tag */
     int  ntype;
-    struct Trait traits[64];
+    struct Trait *traits;
     int  ntraits;
-    struct StructDef structs[128];
+    struct StructDef *structs;
     int  nstructs;
     /* An exported type declared in a namespace is also reachable by its bare
        name, so a consumer need not alias-import it. A second unit exporting the
@@ -629,7 +633,35 @@ impl SymbolOps for Symbols {
    forward declaration the emitter places with the impl. */
 static struct Symbols g_symbols;
 
+/* Give the four big tables their backing store. calloc keeps the zero-filled
+   semantics the static arrays had, and it runs before any writer -- the parser
+   appends to `funcs` directly -- so no access can meet a NULL table. */
+static int symbols_grow(struct Symbols *self)
+{
+    if (!self->funcs) {
+        self->funcs = calloc(MAX_FUNCS, sizeof(*self->funcs));
+        if (!self->funcs) return -1;
+    }
+    if (!self->vars) {
+        self->vars = calloc(MAX_VARS, sizeof(*self->vars));
+        if (!self->vars) return -1;
+    }
+    if (!self->traits) {
+        self->traits = calloc(MAX_TRAITS, sizeof(*self->traits));
+        if (!self->traits) return -1;
+    }
+    if (!self->structs) {
+        self->structs = calloc(MAX_STRUCTS, sizeof(*self->structs));
+        if (!self->structs) return -1;
+    }
+    return 0;
+}
+
 struct Symbols *symbols_get(void)
 {
+    if (symbols_grow(&g_symbols) != 0) {
+        fprintf(stderr, "ctc: out of memory\n");
+        exit(1);
+    }
     return &g_symbols;
 }

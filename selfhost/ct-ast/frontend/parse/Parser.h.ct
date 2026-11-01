@@ -16,6 +16,7 @@
  * `frontend/module/Module.h.ct` spells.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 import backend::mem::Memory;
@@ -2058,9 +2059,11 @@ static struct Parser g_parse;
 
 /* Storage for the tables whose element types belong to other units (see the
    comment on the fields): a generated header carries no `#include`, so the
-   arrays stay here and `g_parse` points at them. */
+   arrays stay here and `g_parse` points at them. `g_maps` is a heap block
+   (SH-42): one `struct Map` carries 64 `MapBind` rows, so 64 of them inline
+   put ~14 MB of zeroes into __DATA and shipped a 21 MB compiler. */
 static struct Call g_calls[1024];
-static struct Map  g_maps[64];
+static struct Map  *g_maps;
 static struct Field   g_pend_fields[64];
 
 /* The parser's shared primitives live in support.h.ct; the driver reaches all
@@ -2080,6 +2083,13 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
     g_parse.sup->ty = (struct TypeCheck *)ty;
     g_parse.sup->mem = (struct Memory *)mem;
     g_parse.calls = g_calls;
+    if (!g_maps) {
+        g_maps = calloc(64, sizeof(*g_maps));
+        if (!g_maps) {
+            fprintf(stderr, "ctc: out of memory\n");
+            exit(1);
+        }
+    }
     g_parse.maps = g_maps;
     g_parse.pend_fields = g_pend_fields;
     /* the `map` construct (mapbuild.h.ct) reads the same cursor, primitives and
