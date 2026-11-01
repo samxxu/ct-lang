@@ -90,6 +90,12 @@ impl DriverOps for Driver {
         out = NULL;
         if (argc > 1 && strcmp(argv[1], "build") == 0)
             return self->m->build_main(argc - 1, argv + 1);
+        /* `ct compile <file>` is the documented spelling, so the keyword is
+           consumed here; otherwise the loop below would take it for the input */
+        if (argc > 1 && strcmp(argv[1], "compile") == 0) {
+            argv++;
+            argc--;
+        }
         self->m->build_mode = 0;
         self->m->line_mode = 0;
         self->m->line_force = -1;
@@ -178,6 +184,10 @@ impl DriverOps for Driver {
             }
             if (argv[i][0] == '-' && argv[i][1]) {
                 fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
+                return 1;
+            }
+            if (in) {
+                fprintf(stderr, "ctc: compile mode takes one input; '%s' is extra\n", argv[i]);
                 return 1;
             }
             in = argv[i];

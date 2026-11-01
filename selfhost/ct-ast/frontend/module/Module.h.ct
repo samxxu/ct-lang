@@ -942,6 +942,11 @@ impl ModuleOps for Module {
                 return frontend::parse::ct_parse_report();
             }
             if (self->units[u].is_hdr && self->write_unit_header(u) != 0) {
+                /* symmetric with the `.c` above: a half-written `.h` looks like
+                   a real artefact, so drop it too */
+                if (snprintf(outc, sizeof outc, "%s/%s.h", self->outdir, self->units[u].base)
+                        < (int)sizeof outc)
+                    remove(outc);
                 return frontend::parse::ct_parse_report();
             }
             /* stamped only after a successful emit: a failed unit must never be

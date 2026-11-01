@@ -231,6 +231,15 @@ static int check_borrow_store(struct Stmt *self, int n)
     if (n < 0) return 0;
     lhs = self->arena->nodes[n].a;
     rhs = self->arena->nodes[n].b;
+    /* The handle itself is not assignable: a second object would overwrite the
+       one the exit still has to hand back (SH-35). */
+    if (lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR) {
+        lv = self->sym->find_var(self->arena->nodes[lhs].text2);
+        if (lv >= 0 && self->sym->vars[lv].borrowed)
+            return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
+                                   "a borrowed pointer cannot be reassigned",
+                                   self->mem->path);
+    }
     bv = -1;
     if (rhs >= 0) {
         if (self->arena->nodes[rhs].kind == N_VAR)
@@ -245,7 +254,8 @@ static int check_borrow_store(struct Stmt *self, int n)
     if (lv < 0) return 0;
     bs = var_scope(self->sym, bv);
     ls = var_scope(self->sym, lv);
-    if (!self->sym->vars[lv].is_global && ls >= bs) return 0;
+    /* a static local outlives the borrow just like a global (SH-37) */
+    if (!self->sym->vars[lv].is_global && !self->sym->vars[lv].is_static && ls >= bs) return 0;
     snprintf(msg, sizeof msg,
              "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
              self->sym->vars[lv].name);
@@ -354,7 +364,10 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
         if (!self->sym->structs[si].has_handback_impl) {
-            snprintf(msg, sizeof msg, "struct '%s' uses trait 'Handback' but has no impl", base);
+            /* the impl table is per unit (design E-B), so a cross-unit impl is
+               not visible here; the message says "in this unit" rather than
+               claiming the impl does not exist (SH-38 / SH-39) */
+            snprintf(msg, sizeof msg, "struct '%s' uses trait 'Handback' but this unit has no impl", base);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
         vi = self->sym->find_var(self->arena->nodes[d].text2);
@@ -946,20 +959,35 @@ impl StmtOps for Stmt {
 
     int parse_branch(void)
     {
-        int b, s;
+        int b, s, base, tail;
         (void)self;
 
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->sup->push_scope() != 0) return -1;
+        base = self->mem->own_base[self->sym->nscope - 1];
         s = self->parse_stmt();
         if (s < 0) {
             self->sup->pop_scope();
             return -1;
         }
-        self->sup->pop_scope();
         b = self->sup->new_node(N_BLOCK);
-        if (b < 0) return -1;
+        if (b < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         self->arena->nodes[b].a = s;
+        tail = s;
+        /* a braceless branch is still a scope: its `own` has to be released, or
+           it leaks with no warning (`parse_block` does the same before its `}`) */
+        if (self->mem->nowner > base && autodrop_append(self, b, base, &tail) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        if (self->mem->leak_active && self->sup->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        self->sup->pop_scope();
         return b;
     }
 
@@ -1293,6 +1321,10 @@ impl StmtOps for Stmt {
             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
             if (self->sup->declare_var(name, typebuf) != 0) return -1;
+            if (self->static_decl) {
+                int vi = self->sym->find_var(name);
+                if (vi >= 0) self->sym->vars[vi].is_static = 1;
+            }
             /* `int (*tbl[2])(int)`: the dimensions came with the declarator, and
                `parse_array_dims` only appends what follows the name (D-5) */
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
@@ -1408,6 +1440,9 @@ impl StmtOps for Stmt {
             char tt[MAX_TEXT];
             char tr[MAX_TEXT];
             ip = 0;
+            /* `N_DEREF` never fills `tt` below, and `iface_ref_type` reads it:
+               an empty string is the "no type derived" case */
+            tt[0] = 0;
             k = self->arena->nodes[e].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->sup->fail("assignment target is not assignable");

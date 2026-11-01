@@ -132,6 +132,7 @@ impl TypeOps for TypeCheck {
         (void)self;
 
         *is_ptr = 0;
+        if (!type[0]) return 0;                  /* no type derived: not an interface */
         if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
         n = strlen(buf);
         while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {

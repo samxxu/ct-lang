@@ -80,6 +80,7 @@ pub struct Var {
     char cname[160];
     char ns[160];
     int  is_global;     /* file-scope: the mangling / qualification rules apply */
+    int  is_static;     /* a block-scope `static`: its lifetime outlives the block */
     int  imported;      /* copied in from an imported unit's export */
     int  ambiguous;     /* a bare reference cannot pick between two imports */
     /* An enum member is emitted as a C enumerator and behaves like a constant
@@ -256,6 +257,7 @@ impl SymbolOps for Symbols {
         snprintf(self->vars[i].cname, MAX_TEXT, "%s", name);
         self->vars[i].ns[0] = 0;
         self->vars[i].is_global = 0;
+        self->vars[i].is_static = 0;
         self->vars[i].imported = 0;
         self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;
@@ -289,6 +291,7 @@ impl SymbolOps for Symbols {
         snprintf(self->vars[i].cname, MAX_TEXT, "%s", cname);
         snprintf(self->vars[i].ns, MAX_TEXT, "%s", ns);
         self->vars[i].is_global = 1;
+        self->vars[i].is_static = 0;
         self->vars[i].imported = imported;
         self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;

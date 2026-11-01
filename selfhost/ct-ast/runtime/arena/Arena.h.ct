@@ -5,11 +5,12 @@
  * They live here as an explicit `Arena` object so the driver and the parser
  * reach them through a pointer instead of two file-scope globals, and the
  * capacity macros stay with the arrays that consume them. Macros do not cross a
- * unit boundary, so the array lengths are spelled out as the literals below
- * (131072 nodes, a 256 KiB string pool). The node pool is compiled for the
+ * unit boundary, so `MAX_NODES` is only usable in this unit -- the generated
+ * header carries the arrays' expanded lengths. The node pool is compiled for the
  * whole unit closure at once, so its size follows the compiler's own source
  * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
+#define MAX_NODES 131072
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
    documented where the nodes are built (frontend/parse/Parser.h.ct, Expr.h.ct
@@ -45,6 +46,9 @@ pub trait ArenaOps {
 }
 
 pub struct Arena {
+    /* MAX_NODES expanded by hand: this field lands in the generated header,
+       which carries no macros, so the length has to be a literal. `alloc`
+       still bounds against MAX_NODES, so the two values must stay equal. */
     struct Node nodes[131072];
     int  nnode;
     char strpool[262144];
@@ -60,7 +64,7 @@ impl ArenaOps for Arena {
     int alloc(int kind, int line)
     {
         int n;
-        if (self->nnode >= 131072) return -1;
+        if (self->nnode >= MAX_NODES) return -1;
         n = self->nnode;
         self->nnode++;
         self->nodes[n].kind = kind;

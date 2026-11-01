@@ -236,6 +236,8 @@ impl MemoryOps for Memory {
         }
         for (i = 0; i < self->sym->nvar; i++) {
             if (i == vi) continue;
+            /* a borrow keeps its handback (SH-35) */
+            if (self->sym->vars[i].borrowed) continue;
             if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
             if (!self->expr_mentions(e, self->sym->vars[i].name)) continue;
             self->sym->vars[i].owned = 0;
@@ -274,6 +276,10 @@ impl MemoryOps for Memory {
             }
         }
         for (i = 0; i < self->sym->nvar; i++) {
+            /* a borrow keeps its handback: its escape rules live in
+               check_borrow_store, and the exit must still hand the object back
+               (SH-35) */
+            if (self->sym->vars[i].borrowed) continue;
             if (i == bv) {
                 if (self->sym->vars[i].autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
                     self->sym->vars[i].autodrop = 0;
@@ -299,8 +305,14 @@ impl MemoryOps for Memory {
         for (i = 0; i < self->sym->nvar; i++) {
             int pos = 0;
             if (self->sym->vars[i].autodrop) {
-                if (ret >= 0 && self->expr_mentions(ret, self->sym->vars[i].name))
+                /* Only a real transfer cancels the exit call: `return b->n;`
+                   reads a field and still has to release (SH-36); a returned
+                   `p` moves the ownership to the caller, so it must not be
+                   reported as a leak either (SH-41). */
+                if (ret >= 0 && self->expr_returns(ret, self->sym->vars[i].name)) {
                     self->sym->vars[i].autodrop = 0;
+                    self->sym->vars[i].owned = 0;
+                }
                 continue;
             }
             if (!self->sym->vars[i].owned) continue;

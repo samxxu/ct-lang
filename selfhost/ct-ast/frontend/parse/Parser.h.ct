@@ -280,7 +280,7 @@ static void trait_default_edges(struct Arena *arena, int n, struct Symbols *sym,
 impl ParseDeclOps for Parser {
     int struct_def_ahead(void)
     {
-        int pos, bol, tok, is_def;
+        int pos, bol, tok, line, tokline, tokstart, lstart, is_def;
         long num;
         char text[MAX_TEXT];
         (void)self;
@@ -288,6 +288,10 @@ impl ParseDeclOps for Parser {
         pos = self->lex->pos;
         bol = self->lex->bol;
         tok = self->lex->tok;
+        line = self->lex->line;
+        tokline = self->lex->tokline;
+        tokstart = self->lex->tokstart;
+        lstart = self->lex->lstart;
         num = self->lex->toknum;
         snprintf(text, sizeof text, "%s", self->lex->toktext);
         self->sup->lex_next();
@@ -296,9 +300,16 @@ impl ParseDeclOps for Parser {
         /* a body (`{`) or a forward declaration (`;`) both start a CT struct */
         if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "{") == 0 || strcmp(self->lex->toktext, ";") == 0))
             is_def = 1;
+        /* restoring the cursor must restore the line state too: the lookahead
+           may cross a newline, and a stale `line` shifts every later
+           diagnostic in the file */
         self->lex->pos = pos;
         self->lex->bol = bol;
         self->lex->tok = tok;
+        self->lex->line = line;
+        self->lex->tokline = tokline;
+        self->lex->tokstart = tokstart;
+        self->lex->lstart = lstart;
         self->lex->toknum = num;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
         return is_def;
@@ -545,6 +556,12 @@ impl ParseDeclOps for Parser {
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline, 1,
                 "'own' is only allowed inside a function body", self->mem->path);
+        /* `borrow` at file scope has no exit to hand the pointer back at, and
+           passing it through as a type name emits C the C compiler rejects
+           (SH-34) */
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                "'borrow' is only allowed inside a function body", self->mem->path);
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "typedef") == 0) {
             n = self->parse_typedef(is_pub);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0) {
@@ -1085,6 +1102,10 @@ impl ParseOps for Parser {
                 snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].dims, MAX_TEXT,
                          "%s", self->arena->nodes[m].text3);
                 self->sym->structs[si].nfields++;
+            } else {
+                /* silently dropping the 65th field would skip its vptr and
+                   misjudge the default body; the cap is a hard error */
+                return self->sup->fail_at(self->arena->nodes[m].line, "too many fields in a record");
             }
             return 0;
         }
@@ -1098,6 +1119,8 @@ impl ParseOps for Parser {
             snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
             snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
             self->npend++;
+        } else {
+            return self->sup->fail_at(self->arena->nodes[m].line, "too many fields in a record");
         }
         return 0;
     }
@@ -1524,6 +1547,12 @@ impl ParseOps for Parser {
                                  self->sym->structs[tagi].fields[ui].name);
                         snprintf(self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s",
                                  self->sym->structs[tagi].fields[ui].type);
+                        /* `dims` makes an array field an array; without it the
+                           alias emits a scalar and the vptr initialiser targets
+                           `.items.__t_vptr` on a struct array, which no C
+                           compiler accepts */
+                        snprintf(self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
+                                 self->sym->structs[tagi].fields[ui].dims);
                     }
                 } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
