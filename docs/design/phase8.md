@@ -104,8 +104,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 - **版本语义**：SemVer 子集（`MAJOR.MINOR.PATCH` + 可选 `-pre`）；范围只支持 `^x.y.z`、`~x.y.z`、精确值。
 - **解析策略**：**最小版本选择（MVS，Go 式）**——每个依赖取满足所有约束的最低版本。它不需要回溯搜索，
   结果确定，和「不做复杂求解」的非目标一致。
-- **锁文件 `ct.lock`**：每个依赖一行、**五列** `name ver kind ref digest`——`kind` 为 `dir`（`ref` 是规范化后的源目录路径）或 `git`（`ref` 是 commit id），末列是整棵包树的 FNV-1a 折叠摘要（D27），复用 `CacheOps::digest` 的折叠方式，使锁文件与 `.ctcache` 键可互相验证。**锁文件不记录依赖边**：解析顺序已保证依赖先于依赖者写入；`ct install` 用工程清单的 `dep` 行核对覆盖。
-  **FNV-1a 只做变更检测，不承担安全校验**；SHA-256 留到需要签名/供应链安全时再引入。
+- **锁文件 `ct.lock`**：每个依赖一行、**五列** `name ver kind ref digest`——`kind` 为 `dir`（`ref` 是规范化后的源目录路径）或 `git`（`ref` 是 commit id），末列是整棵包树的摘要（D27）。~~原定复用 `CacheOps::digest` 的 FNV-1a 折叠~~——**2026-11-01 起改为 SHA-256（SH-44）**：按路径排序后把每个文件的 `相对路径\n` 与内容汇入单一流，输出 `sha256:<64 hex>`；旧 16 位摘要显式报「unsupported digest」，不做静默降级。**锁文件不记录依赖边**：解析顺序已保证依赖先于依赖者写入；`ct install` 用工程清单的 `dep` 行核对覆盖。
 - **可重复构建**：`ct build` 只读 `vendor/` 与 `ct.lock`；缺锁或摘要不符即失败（不静默重解析）。
 
 ### 6. 命令面（D24，已定：先 `get` + `install`）
@@ -150,7 +149,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 | --- | --- |
 | 系统 `git` 依赖 | **已定策略**：无 `git` 时 git 源硬报错并提示安装；本地目录源照常可用（见 §4） |
 | `MAX_UNITS` / `MAX_IMPORTS` | 依赖多的大包会触顶；`vendor/` 的单元可能超过 64，需要分批或提高上限（提高上限属语言层变更） |
-| 锁文件摘要 | **已定**：复用 FNV-1a，仅做变更检测；SHA-256 留作后续安全需求 |
+| 锁文件摘要 | **已定（2026-10-18）：复用 FNV-1a，仅做变更检测**；**2026-11-01 改为 SHA-256（SH-44）** |
 | registry 占位 | `github.com/ct-pkg` 当前可用（2026-10-17 检索），应尽早注册组织名 |
 | 许可与供应链 | `pub` 边界是 trait，但包可能携带任意 C 代码；是否要求清单声明 license、是否做摘要校验需定 |
 
@@ -164,7 +163,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 | D24 | 命令面 | ✅ **已定（2026-10-18）：先 `get` + `install`** |
 | D25 | 实现落点 | ✅ **已定（2026-10-18）：新 `PkgOps` trait** |
 | D26 | 无 `git` 时的行为 | ✅ **已定（2026-10-18）：git 源硬报错并提示；本地目录源照常可用** |
-| D27 | 锁文件摘要 | ✅ **已定（2026-10-18）：复用 FNV-1a（仅变更检测）** |
+| D27 | 锁文件摘要 | ✅ **已定（2026-10-18）：复用 FNV-1a（仅变更检测）**；⚠️ **2026-11-01 由 SH-44 取代：SHA-256 + `sha256:` 前缀** |
 
 ### 11. 实现切片（冻结后的推进顺序）
 
@@ -172,7 +171,7 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 | --- | --- | --- |
 | 8.1 | 清单解析 + `ct.pkg` / `ct.lock` 往返 + **本地目录源**同步进 `vendor/` | ✅ **已落地（2026-10-18）**：无 `git` 也能 `ct get ../local-util`；`test/pkg/run.sh` 全绿 |
 | 8.2 | git 源获取（系统 `git`，commit 锁定） | ✅ **已落地（2026-10-18）**：git 源可 `get`（本地 git 仓库作 registry 的离线用例），MVS 取最低满足 tag、无 tag 回退 HEAD、`ct.lock` 记 `name ver git <commit> <digest>`；无 `git` 时硬报错并提示，本地源照常可用；`test/pkg/run.sh` 扩到 14 项断言 |
-| 8.3 | `ct install` 校验与建议命令 | ✅ **已落地（2026-10-18）**：锁文件统一五列 `name ver kind ref <digest>`（逐文件加法折叠的 FNV-1a，只做变更检测）；`ct install` 离线校验每个锁定包的 `vendor/<name>` 存在且摘要相符、清单 `dep` 均被锁覆盖且版本在范围内，成功即打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`）；摘要不符 / 缺包 / 未覆盖依赖 / 清单不完整 / 空锁均硬报错，`test/pkg/run.sh` 扩到 27 项断言（含上述错误分支负例），另证 `ct build` 可用 `vendor/` 编译 |
+| 8.3 | `ct install` 校验与建议命令 | ✅ **已落地（2026-10-18）**：锁文件统一五列 `name ver kind ref <digest>`（当时为逐文件加法折叠的 FNV-1a，SH-44 起改为 SHA-256）；`ct install` 离线校验每个锁定包的 `vendor/<name>` 存在且摘要相符、清单 `dep` 均被锁覆盖且版本在范围内，成功即打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`）；摘要不符 / 缺包 / 未覆盖依赖 / 清单不完整 / 空锁均硬报错，`test/pkg/run.sh` 扩到 27 项断言（含上述错误分支负例），另证 `ct build` 可用 `vendor/` 编译 |
 
 每片出口都要求既有硬关卡全绿（Phase 8 时为七道；Phase 9 起 `check-ast.sh` 接入为第 8 关）；8.1 不引入任何网络/子进程代码，8.2 引入唯一子进程调用点（`ct get` 里的系统 `git`），`ct install` 仍零网络零子进程，编译路径（`ct compile` / `ct build`）全程零网络零子进程。
 
@@ -248,13 +247,14 @@ dep = file:///opt/ct-pkgs/xml@1.2.0
 SemVer subset with `^`, `~` and exact ranges; **minimal version selection** (Go-style), which is
 deterministic and needs no backtracking. `ct.lock` holds **one five-column line per dependency**,
 `name ver kind ref digest`: `kind` is `dir` (`ref` = the normalised source directory) or `git`
-(`ref` = the commit id), and the last column is the FNV-1a fold of the whole package tree, reusing the
-`CacheOps::digest` fold (**D27 decided**). **The lock records no dependency edges**: resolution order
-already writes dependencies before their dependents, and `ct install` checks coverage against the
-project manifest's `dep` lines.
-**FNV-1a is change detection only, not a security digest**; SHA-256 is deferred until a
-signing/supply-chain requirement appears. `ct build` reads only `vendor/` and `ct.lock` and fails on a
-missing lock or digest mismatch.
+(`ref` = the commit id), and the last column is the digest of the whole package tree (**D27**).
+~~The original decision reused the `CacheOps::digest` FNV-1a fold~~ — **from 2026-11-01 it is SHA-256
+(SH-44)**: every file's `relative path\n` plus its bytes, in sorted path order, folded into one stream
+and written as `sha256:<64 hex>`; a legacy 16-hex value is reported as an unsupported digest rather than
+silently downgraded. **The lock records no dependency edges**: resolution order already writes
+dependencies before their dependents, and `ct install` checks coverage against the project manifest's
+`dep` lines. `ct build` reads only `vendor/` and `ct.lock` and fails on a missing lock or digest
+mismatch.
 
 ### 6. Command surface (D24, decided: `get` + `install` first)
 
@@ -284,9 +284,9 @@ with `git` masked. The existing hard gates must stay green (seven at Phase 8; `c
 
 The system `git` may be missing — **decided policy**: git sources fail hard with an installation
 hint, while local directory sources keep working (see §4). `MAX_UNITS` / `MAX_IMPORTS` will be
-hit by large dependency trees; lock digests reuse FNV-1a for change detection only (SHA-256 is
-deferred); the registry name should be claimed early; and supply-chain questions (license
-declarations, digest verification) are still open.
+hit by large dependency trees; lock digests use SHA-256 since SH-44 (2026-11-01); the registry name
+should be claimed early; and supply-chain questions (license declarations, digest verification) are
+still open.
 
 ### 10. Decision register (all decided)
 
@@ -298,7 +298,7 @@ declarations, digest verification) are still open.
 | D24 | Command surface | ✅ **decided (2026-10-18): `get` + `install` first** |
 | D25 | Implementation home | ✅ **decided (2026-10-18): new `PkgOps` trait** |
 | D26 | Behaviour without `git` | ✅ **decided (2026-10-18): git sources fail hard with a hint; local sources keep working** |
-| D27 | Lock digest | ✅ **decided (2026-10-18): reuse FNV-1a (change detection only)** |
+| D27 | Lock digest | ✅ **decided (2026-10-18): reuse FNV-1a (change detection only)**; ⚠️ **superseded on 2026-11-01 by SH-44: SHA-256 + the `sha256:` prefix** |
 
 ### 11. Implementation slices (the order after the freeze)
 
@@ -306,7 +306,7 @@ declarations, digest verification) are still open.
 | --- | --- | --- |
 | 8.1 | Manifest parsing + `ct.pkg` / `ct.lock` round-trips + **local directory sources** synced into `vendor/` | ✅ **landed (2026-10-18)**: `ct get ../local-util` works without `git`; `test/pkg/run.sh` is green |
 | 8.2 | git-sourced packages (system `git`, commit pinning) | ✅ **landed (2026-10-18)**: git sources fetch (offline cases use a local git repo as the registry); MVS picks the lowest satisfying tag with an HEAD fallback when there are none; `ct.lock` records `name ver git <commit> <digest>`; without `git` the command fails hard with a hint while local sources keep working; `test/pkg/run.sh` grew to 14 assertions |
-| 8.3 | `ct install` verification and the suggested command | ✅ **landed (2026-10-18)**: the lock is a uniform five columns `name ver kind ref <digest>` (an additive per-file FNV-1a fold, change detection only); `ct install` checks offline that each locked `vendor/<name>` exists with a matching digest and that every manifest `dep` is covered by the lock at a satisfying version, then prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`); a mismatch, a missing package, an uncovered dependency, an incomplete manifest or an empty lock fails hard, `test/pkg/run.sh` grew to 27 assertions (including those error branches), and it additionally proves `ct build` compiles against `vendor/` |
+| 8.3 | `ct install` verification and the suggested command | ✅ **landed (2026-10-18)**: the lock is a uniform five columns `name ver kind ref <digest>` (FNV-1a at the time, SHA-256 since SH-44); `ct install` checks offline that each locked `vendor/<name>` exists with a matching digest and that every manifest `dep` is covered by the lock at a satisfying version, then prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`); a mismatch, a missing package, an uncovered dependency, an incomplete manifest or an empty lock fails hard, `test/pkg/run.sh` grew to 27 assertions (including those error branches), and it additionally proves `ct build` compiles against `vendor/` |
 
 Every slice keeps the existing hard gates green (seven at Phase 8; `check-ast.sh` became the 8th when
 Phase 9 wired it into `check-all.sh`); 8.1 introduces no network or subprocess code, and

@@ -194,7 +194,7 @@
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct install` 子命令，Phase 8 已落地（本地目录源 + git 源） |
 | 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21） |
-| 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 FNV-1a 目录摘要（D23 / D27） |
+| 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44） |
 | vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct build -I vendor/<name>` 使用它 |
 | 最小版本选择（MVS） | `ct get` | 每个依赖取满足所有范围的最低版本；无 tag 的 git 源回退默认分支 HEAD（D23） |
 
@@ -428,7 +428,7 @@
 | reverse mapping table | the JSON written by `--emit-map <file\|->` | generated C symbol ← CT definition site; landed in Phase 6.1 (D16) |
 | package manager | `ct-pkg` | named on 2026-10-17; the everyday entry points are the `ct get` / `ct install` subcommands, landed in Phase 8 (local directory sources + git sources) |
 | package manifest | `ct.pkg` | minimal `key = value`: `name` / `version` / `license` / repeatable `dep = <spec>[@<range>]` (D21) |
-| lock file | `ct.lock` | one line per dependency, `name ver kind ref digest`; `kind` is `dir` or `git` and the last column is an FNV-1a directory digest (D23 / D27) |
+| lock file | `ct.lock` | one line per dependency, `name ver kind ref digest`; `kind` is `dir` or `git` and the last column is a `sha256:<64 hex>` digest of the whole package tree (paths sorted, hashed as one stream; D23 / D27, SH-44) |
 | vendored tree | `vendor/<name>/` | the package tree `ct get` synced in; `ct build -I vendor/<name>` compiles against it |
 | minimal version selection (MVS) | `ct get` | each dependency takes the lowest version satisfying every range; a git source without tags falls back to the default branch tip (D23) |
 
