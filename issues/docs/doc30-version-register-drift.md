@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [docs/glossary.md:136](../../docs/glossary.md#L136)（中文）、[:298](../../docs/glossary.md#L298)（英文）、[AGENTS.md:78](../../AGENTS.md#L78)（中文） |
-| 状态 | 待修 |
+| 状态 | 已修（2026-10-31）：`docs/glossary.md` 的阶段行改为「编号与版本一一对应」+ 能力补丁例外清单（含 v0.13.0…v0.16.0），`AGENTS.md` 中英的 bump 登记补齐 |
 
 ## 现象
 

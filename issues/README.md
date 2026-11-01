@@ -4,18 +4,28 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总六轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
+本目录汇总八轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）、
 [reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）、
 [reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
-[reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）与
-[reports/audit-2026-10-31](../reports/audit-2026-10-31/audit-2026-10-31.md)（测试覆盖度与文档一致性审计）。
+[reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）、
+[reports/audit-2026-10-31](../reports/audit-2026-10-31/audit-2026-10-31.md)（测试覆盖度与文档一致性审计）与
+[reports/review-2026-10-31](../reports/review-2026-10-31/review-2026-10-31.md)（代码审查 + 文档一致性审查）、
+[reports/review-2026-11-01](../reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）——各文件行号以其自身锚点为准。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）——各文件行号以其自身锚点为准。
 - 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 8 条（SH-8…SH-12、DOC-19…DOC-21）**已于 2026-10-21 全部关闭**（见文末「处置」节），SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 2026-10-31 审计新增 **18 条**，已于同日处置：**13 条修复**、2 条部分处置（TEST-9 / CI-4）、
   2 条不采纳（TEST-7 / SH-24，理由见文末「处置」节）；DOC-28 复核确认已修复。
+- 2026-10-31 代码审查新增 **21 条**（DOC-31…DOC-43、SH-25…SH-32），**已于同日全部修复**
+  （无「不采纳」条目），见文末「代码审查与文档一致性审查（2026-10-31）」与其后的「处置」节。
+- 2026-10-31 `borrow` / `Handback` 提案评审追加 **1 条**（**SH-33**，High：AutoDrop 在
+  `return` 前不注入、不置空），**已于 2026-11-01 修复**（探针 `test/ast/61_autodrop_return`，
+  `check-ast.sh` 的 `sh33` 断言），见同节「提案评审追加」。
+- 2026-11-01 `borrow` / `Handback` 实现审查新增 **15 条**（**SH-34**…**SH-41**、**DOC-44**…**DOC-50**），
+  **已于同日全部修复/文档化**；其中 3 条 High 均为新特性的语义漏洞（文件作用域静默接受、同层赋值取消归还、
+  `return` 表达式提到借用对象即跳过归还），见文末「代码审查（2026-11-01）」与其后的「处置」节。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 - 硬关卡计数随阶段演进：6 → 7 → 8 → **9**（`check-warnings.sh` 接入后为九关；构成见 [check-all.sh:72-80](../selfhost/check-all.sh#L72-L80)）。下文各**带日期的验证记录**里出现的「六道 / 七道 / 八道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「9 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
@@ -55,6 +65,26 @@
 | DOC-28 | Medium | `issues/README.md` 仍写 8 关、把已关闭的第二轮 8 条列为待修 | [doc28-issues-readme-gate-count.md](docs/doc28-issues-readme-gate-count.md) |
 | DOC-29 | Low | batch 4 的 checklist 27 项全未勾，与其他 32 份不一致 | [doc29-batch4-checklist-unchecked.md](docs/doc29-batch4-checklist-unchecked.md) |
 | DOC-30 | Low | 版本登记漂移：glossary 暗示 Phase 13，AGENTS 中文版 bump 登记缺 v0.13.0 | [doc30-version-register-drift.md](docs/doc30-version-register-drift.md) |
+| DOC-31 | **High** | 教程称 `switch` / `do-while` / `goto` 不受 ct-ast 支持，实际早已支持 | [doc31-tutorial-c-forms-unsupported.md](docs/doc31-tutorial-c-forms-unsupported.md) |
+| DOC-32 | Medium | 教程命令表称普通 `.ct` 同时产出 `.h`，与同文 §1 和 README 相反 | [doc32-tutorial-cli-h-output.md](docs/doc32-tutorial-cli-h-output.md) |
+| DOC-33 | Low | 教程称 `examples/` 有 7 个可运行示例，实际 8 个 | [doc33-tutorial-example-count.md](docs/doc33-tutorial-example-count.md) |
+| DOC-34 | Low | 编辑器语法断言数仍写 27（实为 31），`check-all.sh` 第 8 关标签停在 12.1 | [doc34-grammar-assertion-count.md](docs/doc34-grammar-assertion-count.md) |
+| DOC-35 | Medium | `test/README.md` 的探针区间与负例计数过期（01..56 / 56-of-68） | [doc35-test-readme-probe-counts.md](docs/doc35-test-readme-probe-counts.md) |
+| DOC-36 | **High** | `bindings/README.md` 中文 §5 仍称接口值不能跨单元，与英文 §5 和实现相反 | [doc36-bindings-cross-unit-interface.md](docs/doc36-bindings-cross-unit-interface.md) |
+| DOC-37 | Medium | `selfhost/README.md` 中文表仍是 ct-ast 三文件旧布局，且门禁清单漏 `check-warnings.sh` | [doc37-selfhost-readme-ct-ast-layout.md](docs/doc37-selfhost-readme-ct-ast-layout.md) |
+| DOC-38 | Medium | README 干净 clone 段对 `.gitignore` 的描述不成立 | [doc38-readme-gitignore-claim.md](docs/doc38-readme-gitignore-claim.md) |
+| DOC-39 | Medium | glossary 把节点池模块指成 `backend::mem::Memory` | [doc39-glossary-arena-module.md](docs/doc39-glossary-arena-module.md) |
+| DOC-40 | Low | roadmap 对 `check-ast.sh` 断言数给出两个互斥且均已过期的数字（317 / 359） | [doc40-roadmap-check-ast-count.md](docs/doc40-roadmap-check-ast-count.md) |
+| DOC-41 | Low | glossary 的「能力补丁」例外清单漏 `v0.15.1` | [doc41-glossary-capability-patch-list.md](docs/doc41-glossary-capability-patch-list.md) |
+| DOC-42 | Low | README 英文版称 `test/ast/errors/` 只按退出码断言 | [doc42-readme-ast-errors-assertion.md](docs/doc42-readme-ast-errors-assertion.md) |
+| DOC-43 | Low | `MAX_NODES` 只存在于文档与注释里，代码中没有这个宏 | [doc43-max-nodes-not-a-macro.md](docs/doc43-max-nodes-not-a-macro.md) |
+| DOC-44 | Medium | `SH-25`…`SH-32` 已修复，8 个 issue 文件的「状态」仍写「待修」 | [doc44-ledger-statuses-stale.md](docs/doc44-ledger-statuses-stale.md) |
+| DOC-45 | **High** | 教程 §8 自相矛盾：代码块已写 `p = 0`，正文仍称 `delete` 不置空；`return` 行首要求也已不成立 | [doc45-tutorial-memory-delete-null.md](docs/doc45-tutorial-memory-delete-null.md) |
+| DOC-46 | Medium | README 变换表三行过期：`delete` 未置空、`own`/`borrow` 仍写「行首 `return`」 | [doc46-readme-transform-table-stale.md](docs/doc46-readme-transform-table-stale.md) |
+| DOC-47 | Medium | `memory-guide.md` 整篇以「SH-33 未修 + `delete` 不置空」为前提，六处过期 | [doc47-memory-guide-stale.md](docs/doc47-memory-guide-stale.md) |
+| DOC-48 | Medium | `design/borrow.md` 头部写「已实现」，§2 仍以 SH-33 未修为据；D1/D6 未归档 | [doc48-borrow-design-stale-status.md](docs/doc48-borrow-design-stale-status.md) |
+| DOC-49 | Medium | 新语法 `borrow` / `Handback` 未同步编辑器语法，`check-grammar.py` 无断言 | [doc49-editor-grammar-borrow.md](docs/doc49-editor-grammar-borrow.md) |
+| DOC-50 | Low | roadmap 没有 `borrow` / `Handback` 的阶段与版本归属 | [doc50-roadmap-borrow-missing.md](docs/doc50-roadmap-borrow-missing.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -110,7 +140,23 @@
 | SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
 | SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 | [ct-ast-identifier-truncation.md](selfhost/ct-ast-identifier-truncation.md) |
 | SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉 | [cli-parser-duplication.md](selfhost/cli-parser-duplication.md) |
+| SH-25 | **High** | 带 tag 的 `typedef` 别名漏拷 `dims`，数组字段生成编译不过的 C | [sh25-typedef-alias-drops-dims.md](selfhost/sh25-typedef-alias-drops-dims.md) |
+| SH-26 | Medium | `*p = v;` 的赋值路径读取未初始化的 `tt` | [sh26-assign-deref-uninit-type.md](selfhost/sh26-assign-deref-uninit-type.md) |
+| SH-27 | Medium | `struct_def_ahead` 不回滚行号状态，跨行前瞻后诊断行号永久偏移 | [sh27-struct-ahead-line-drift.md](selfhost/sh27-struct-ahead-line-drift.md) |
+| SH-28 | Medium | 无花括号分支里的 `own` 既不 AutoDrop 也不告警，静默泄漏 | [sh28-own-in-braceless-branch.md](selfhost/sh28-own-in-braceless-branch.md) |
+| SH-29 | Medium | 第 65 个字段被静默丢弃（`MAX_FIELDS` 越界不报错） | [sh29-max-fields-silent-drop.md](selfhost/sh29-max-fields-silent-drop.md) |
+| SH-30 | Low | `emit_unit` / `write_unit_header` 的失败路径漏 `fclose`，`build` 还留下半截 `.h` | [sh30-emit-error-cleanup.md](selfhost/sh30-emit-error-cleanup.md) |
+| SH-31 | Info | `emit_cond` 的 `B_AND` / `B_OR` / `B_XOR` 分支永远不可达 | [sh31-emit-cond-dead-branches.md](selfhost/sh31-emit-cond-dead-branches.md) |
+| SH-32 | Low | compile 模式接受多个位置参数，静默只编译最后一个 | [sh32-multi-input-silently-ignored.md](selfhost/sh32-multi-input-silently-ignored.md) |
 | SH-33 | **High** | AutoDrop 只在 `}` 注入：含 `return` 的函数静默泄漏，生成死代码且不置空 | [sh33-autodrop-return-no-inject.md](selfhost/sh33-autodrop-return-no-inject.md) |
+| SH-34 | **High** | 文件作用域的 `borrow` 被静默接受，`borrow` 原样写进生成的 C | [sh34-file-scope-borrow.md](selfhost/sh34-file-scope-borrow.md) |
+| SH-35 | **High** | 同作用域 `q = c;` 取消 `borrow` 的出口归还，池槽位静默泄漏 | [sh35-borrow-store-cancels-handback.md](selfhost/sh35-borrow-store-cancels-handback.md) |
+| SH-36 | **High** | `return` 表达式「提到」变量就取消出口释放：`return b->n;` / `return c->fd;` 不释放 | [sh36-return-mention-cancels-autodrop.md](selfhost/sh36-return-mention-cancels-autodrop.md) |
+| SH-37 | Medium | `static` 局部变量可以接收借用指针，逃逸检查漏判 | [sh37-static-local-holds-borrow.md](selfhost/sh37-static-local-holds-borrow.md) |
+| SH-38 | Medium | `borrow` 无法跨单元使用：`impl Handback` 必须与借用点同单元 | [sh38-borrow-cross-unit.md](selfhost/sh38-borrow-cross-unit.md) |
+| SH-39 | Low | `impl Handback` 写在 `borrow` 之后被误报「has no impl」 | [sh39-impl-order-false-no-impl.md](selfhost/sh39-impl-order-false-no-impl.md) |
+| SH-40 | Medium | 新增的置空让 `delete <非左值>` 生成非法 C（`get() = 0`） | [sh40-delete-non-lvalue-null.md](selfhost/sh40-delete-non-lvalue-null.md) |
+| SH-41 | Medium | 归还所有权的 `return p;` 被误报为泄漏（L2 不报） | [sh41-return-transfer-false-leak.md](selfhost/sh41-return-transfer-false-leak.md) |
 
 ## 汇总
 
@@ -532,8 +578,47 @@ $ gcc -Wall /tmp/idc.c
 
 修复后的门禁：`check-ast.sh` 351 passed、`check-warnings.sh` 152 ok、`check-all.sh` 九关全绿；
 生成物、golden 与 `CTC_VERSION` 未变，L0 / L1 / L2 未动（SH-23 只落 ct-ast）。
+
+## 代码审查与文档一致性审查（2026-10-31，锚点 `524ba99`、`v0.15.1`）
+
+完整报告：[reports/review-2026-10-31](../reports/review-2026-10-31/review-2026-10-31.md)。
+
+### 结论
+
+- 九关全绿（`test/run.sh` 118、`check-ast.sh` **403**、`check-warnings.sh` 161、acceptance 20）。
+- 文档 **13 处**事实漂移：2 条 High（教程把已支持的 `switch`/`do-while`/`goto` 说成不支持；
+  `bindings/README.md` 中文 §5 与英文 §5、实现相反），5 条 Medium，6 条 Low。
+- 代码 **8 处**缺陷候选：1 条 High（带 tag 的 `typedef` 别名丢 `dims` → 生成 C 编译失败），
+  4 条 Medium（未初始化读、诊断行号永久偏移、无花括号分支的 `own` 静默泄漏、第 65 个字段静默丢弃），
+  2 条 Low，1 条 Info。
 - `borrow` / `Handback` 提案评审追加 **1 条 High**（SH-33：AutoDrop 在 `return` 前不注入、
   不置空 → 含 `return` 的函数静默泄漏并留下死代码）。
+
+### 新增 21 条
+
+| ID | 严重度 | 标题 |
+| --- | --- | --- |
+| DOC-31 | **High** | 教程称 `switch` / `do-while` / `goto` 不受 ct-ast 支持，实际早已支持 |
+| DOC-32 | Medium | 教程命令表称普通 `.ct` 同时产出 `.h`，与同文 §1 和 README 相反 |
+| DOC-33 | Low | 教程称 `examples/` 有 7 个可运行示例，实际 8 个 |
+| DOC-34 | Low | 编辑器语法断言数仍写 27（实为 31），`check-all.sh` 第 8 关标签停在 12.1 |
+| DOC-35 | Medium | `test/README.md` 的探针区间与负例计数过期（01..56 / 56-of-68） |
+| DOC-36 | **High** | `bindings/README.md` 中文 §5 仍称接口值不能跨单元，与英文 §5 和实现相反 |
+| DOC-37 | Medium | `selfhost/README.md` 中文表仍是 ct-ast 三文件旧布局，且门禁清单漏 `check-warnings.sh` |
+| DOC-38 | Medium | README 干净 clone 段对 `.gitignore` 的描述不成立 |
+| DOC-39 | Medium | glossary 把节点池模块指成 `backend::mem::Memory` |
+| DOC-40 | Low | roadmap 对 `check-ast.sh` 断言数给出两个互斥且均已过期的数字（317 / 359） |
+| DOC-41 | Low | glossary 的「能力补丁」例外清单漏 `v0.15.1` |
+| DOC-42 | Low | README 英文版称 `test/ast/errors/` 只按退出码断言 |
+| DOC-43 | Low | `MAX_NODES` 只存在于文档与注释里，代码中没有这个宏 |
+| SH-25 | **High** | 带 tag 的 `typedef` 别名漏拷 `dims`，数组字段生成编译不过的 C |
+| SH-26 | Medium | `*p = v;` 的赋值路径读取未初始化的 `tt` |
+| SH-27 | Medium | `struct_def_ahead` 不回滚行号状态，跨行前瞻后诊断行号永久偏移 |
+| SH-28 | Medium | 无花括号分支里的 `own` 既不 AutoDrop 也不告警，静默泄漏 |
+| SH-29 | Medium | 第 65 个字段被静默丢弃（`MAX_FIELDS` 越界不报错） |
+| SH-30 | Low | `emit_unit` / `write_unit_header` 的失败路径漏 `fclose`，`build` 还留下半截 `.h` |
+| SH-31 | Info | `emit_cond` 的 `B_AND` / `B_OR` / `B_XOR` 分支永远不可达 |
+| SH-32 | Low | compile 模式接受多个位置参数，静默只编译最后一个 |
 
 ### 提案评审追加（2026-10-31）
 
@@ -555,3 +640,150 @@ $ awk '/^int f\(void\)/,/^}/' body.c
     if (p) { Box_Drop_drop(p); free(p); }    # 死代码，且没有 p = 0
 # L2（oracle）同一输入：`if (p) { Box_Drop_drop(p); free(p); p = 0; }` 在 return 之前
 ```
+
+### 关键探针（原始结果）
+
+```text
+# SH-25：typedef 别名丢 dims（DOC 之外的唯一 High 代码缺陷）
+$ ct-ast td.ct -o td.c ; echo $?
+0
+$ grep 'WrapT w' td.c
+    WrapT w = { .items.__t_vptr = &Inner_T_vtable };
+$ cc -Wall -Wextra -std=c99 -c td.c
+td.c:34:23: error: field designator cannot initialize a non-struct, non-union type 'struct Inner[2]'
+
+# SH-27：struct 头跨行后诊断行号 +1
+$ ct-ast ln.ct -o ln.c          # 重复定义实际在第 3 行
+ln.ct:4:10: error: duplicate struct 'S'
+
+# SH-29：第 65 个字段被丢弃（63 个 int + Inner 正常，64 个 int + Inner 丢 init）
+n=63 → struct Big b = { .in.__t_vptr = &Inner_T_vtable };
+n=64 → struct Big b;
+
+# SH-28：无花括号分支的 own 不生成 drop/free，且无告警
+$ ct-ast own2.ct -o own2.c ; echo $?
+0
+
+# SH-32：多个位置参数只编最后一个
+$ ct-ast a.ct b.ct -o out.c ; echo $?
+0
+```
+
+### 本轮未覆盖
+
+- 未在 Linux / glibc 上复跑；两条 BSD 探针仍按设计 `skip`。
+- 未逐条审计 `docs/design/**` 的 59 份批次档案正文（只核对 batch 38/39 的状态与计数）。
+- SH-30 / SH-31 为读码确认，未构造触发（前者需要「发射中途失败」的输入，后者只影响死代码可读性）。
+- batch 39 的伴生 C shim 收尾改动为在途状态（10 个已修改文件），本报告不评判。
+
+### 处置（2026-10-31，代码审查 21 条）
+
+21 条全部确认为真实问题并于同日修复，**无「不采纳」条目**。逐条状态已回填到各 issue 文件；
+验收点如下：
+
+| ID | 处置 | 验收点 |
+| --- | --- | --- |
+| DOC-31 / DOC-32 / DOC-33 | 已修 | `docs/tutorial.md` 中英：§11.5 改「均已支持」；§10 命令表改「普通 `.ct` 只写 `.c`，`.h.ct` 才额外写 `.h`」；§12 examples 7 → 8 |
+| DOC-34 | 已修 | `README.md` / `AGENTS.md`（中英）/ `check-all.sh` 第 6 关 27 → 31；第 8 关标签补到 batches 3–39 |
+| DOC-35 | 已修 | `test/README.md` 中英：探针 `01..60`；负例 72/72 全部钉死（63 进表 + 9 个独立 `grep -q`） |
+| DOC-36 | 已修 | `bindings/README.md` 中文 §5 与英文对齐（Batch 2 起接口值可跨单元）；检查清单同步 |
+| DOC-37 | 已修 | `selfhost/README.md` 中文表改分组多单元；中英门禁清单补 `check-warnings.sh` |
+| DOC-38 / DOC-42 | 已修 | `README.md` 中英 `.gitignore` 段按实际改写；英文 negatives 描述补「源位置 + 钉死文本」 |
+| DOC-39 / DOC-41 | 已修 | glossary 中英：arena → `runtime::arena::Arena`；能力补丁清单补 `v0.15.1` |
+| DOC-40 | 已修 | roadmap 中英 317 / 359 → 2026-10-31 实测 408，去掉「当前」字样 |
+| DOC-43 | 已修（含代码） | `Arena.h.ct` 新增 `#define MAX_NODES 131072`；数组字段仍写字面量（宏不跨翻译单元）；language-spec 中英补实现说明 |
+| SH-25 | 已修 | `Parser.h.ct` tag→别名字段复制补 `dims`；新增行为探针 `test/ast/59_typedef_alias_array` |
+| SH-26 | 已修 | `Stmt.h.ct` 的 `=` 分支初始化 `tt`；`iface_ref_type` 增空串短路 |
+| SH-27 | 已修 | `struct_def_ahead` 回滚 `line` / `tokline` / `tokstart` / `lstart`；新增 `struct lookahead line` 断言 |
+| SH-28 | 已修 | `parse_branch` 无花括号也建 `N_BLOCK` 并追加 AutoDrop；新增行为探针 `test/ast/60_branch_autodrop` |
+| SH-29 | 已修 | `register_field` 两处越界改硬报错 `too many fields in a record`；新增 `cap fields` 断言 |
+| SH-30 | 已修 | 两个发射函数的正文拆到文件作用域静态 helper（不新增 trait 方法），失败路径对称 `fclose`；`.h` 失败时删除半截产物 |
+| SH-31 | 已修 | 删除 `emit_cond` 的三个不可达分支 |
+| SH-32 | 已修 | compile 模式拒绝第二个位置参数；显式消费 `compile` 关键字；新增 `compile mode refuses a second input` 断言 |
+
+取舍说明（用户可据此复核，均非「不采纳」）：
+
+1. **DOC-43 不能只加一个宏**：节点数组会进生成的 `Arena.h`，而宏不跨翻译单元，字段长度必须是
+   字面量 `131072`；实现保留宏供 `alloc` 判界，并在注释与 language-spec 里写明两者必须相等。
+2. **SH-32 保留 `compile` 关键字**：`ct compile <file>` 是 README 记载的合法写法，加多输入校验前
+   必须先显式消费该关键字，否则会把关键字本身当成第一个输入。
+3. **SH-30 用静态 helper 而非 trait 方法**：L2 oracle 的 `MAX_MAP_IMPLS` 已到顶
+   （`selfhost/l2/core.ct:50`），新增 impl 方法会让 L2 编 ct-ast 直接失败；按既有约定
+   （`docs/design/batch33-header-compat/spec.md`）不抬上限。
+
+修复后门禁：`check-ast.sh` **408 passed**、`check-warnings.sh` 163 ok、
+`check-all.sh` 九关全绿（`test/run.sh` 118、editor grammar 31、pkg 与 acceptance 全绿）；
+`CTC_VERSION` 未动（v0.15.1），`*.expected.*` 未重生成，`selfhost/l2/**` 未改。
+
+
+## 代码审查（2026-11-01，锚点 `8b047f5`，`borrow` / `Handback` 实现）
+
+完整报告：[reports/review-2026-11-01](../reports/review-2026-11-01/review-2026-11-01.md)。
+
+### 结论
+
+工作树里的 `borrow` / `Handback` 已实现到「声明 + 出口归还 + 逃逸警告」的完整形态，
+`test/ast/61_autodrop_return` 与 `62_borrow_handback` 两条探针钉住了 SH-33 的修复与出口生成，
+九道硬关卡全绿（`check-ast.sh` **425 passed**、`check-warnings.sh` **165 ok**）。
+
+但新特性有 3 条 High 级语义漏洞，都指向同一个模式：**「归还」被挂在 `own` 的逃逸分析上，
+任何一处把 `autodrop` 清掉，出口就静默不归还**：
+
+```
+`q = c;`        → leak_assign 清 autodrop          → 无 handback，无告警   （SH-35）
+`return c->f;`  → leak_return 清 autodrop          → 无 handback，无告警   （SH-36）
+文件作用域声明  → 根本不进 parse_stmt              → `borrow` 原样进 C     （SH-34）
+```
+
+其余 5 条是判定覆盖不到的位置（`static` 局部、跨单元、impl 顺序）与置空带出的回归（SH-40 / SH-41）。
+
+### 新增 15 条
+
+| 类别 | 条目 |
+| --- | --- |
+| 代码（8） | SH-34、SH-35、SH-36（High）；SH-37、SH-38、SH-40、SH-41（Medium）；SH-39（Low） |
+| 文档（7） | DOC-45（High）；DOC-44、DOC-46、DOC-47、DOC-48、DOC-49（Medium）；DOC-50（Low） |
+
+### 复核确认已修的 8 条
+
+SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
+[DOC-44](docs/doc44-ledger-statuses-stale.md) 的表）；这 8 个 issue 文件的 `状态` 曾一律写「待修」，
+台账与代码不同步——这就是 DOC-44 本身，其状态行已在本轮回填。
+
+### 建议的处理顺序
+
+1. SH-36 → SH-35 → SH-34：三条 High 互相咬合，一起修（`leak_*` 只对 `!borrowed` 清标志 +
+   `expr_mentions` 换 `expr_returns` + 顶层拒绝文件作用域 `borrow`）。
+2. SH-40：置空只对可赋值实参，属 SH-33 修复带出的回归，改动最小。
+3. SH-37 / SH-38 / SH-39：借用判定的同一模块，建议一次改完；SH-38 若不修，必须先写进 §4.40「已知限制」。
+4. 文档：DOC-45 → DOC-47 → DOC-46 → DOC-48 → DOC-49 → DOC-44 → DOC-50 一次改完（前三者是同一行为变更的下游残留）。
+
+### 未覆盖与不采纳
+
+`goto` 跨声明静默失效、池对象与栈对象不区分、`store(c)` / `s->p = c` 不检查，均为设计已声明的已知限制，
+本轮不重复立案；batch 39 的在途改动同样不在范围内。
+
+### 处置（2026-11-01，代码审查 15 条）
+
+15 条全部处理完毕：**14 条修复 + 1 条按建议文档化（SH-38 的跨单元 `Handback` 不实现）**。
+逐条状态已回填到各 issue 文件；验收点如下：
+
+| ID | 处置 | 验收点 |
+| --- | --- | --- |
+| SH-34 | 已修 | `Parser.h.ct` 顶层声明入口拒绝 `borrow`（`'borrow' is only allowed inside a function body`）；门禁 `bw_neg borrow_file_scope` |
+| SH-35 | 已修 | `Memory.h.ct` 的 `leak_assign` / `leak_decl` 跳过 `borrowed`（逃逸交给 `check_borrow_store`）；`Stmt.h.ct` 拒绝重赋值（`a borrowed pointer cannot be reassigned`）；门禁 `bw_neg borrow_reassign` + 正例 `bw_copy.ct` |
+| SH-36 | 已修 | `Memory.h.ct` 的 `leak_return` 在 `autodrop` 分支改用 `expr_returns`（`p` / `p[0]` 才算移交，`p->n` 不算）并同时清 `owned`；门禁正例 `bw_ret.ct` |
+| SH-37 | 已修 | `Symbols.h.ct` 的 `Var` 新增 `is_static`、`parse_var` 置位；`check_borrow_store` 拒 `static` 局部与文件作用域目标；门禁 `bw_neg store_static` |
+| SH-38 | 已修（文档化不实现） | 跨单元 `impl Handback` 需跨单元 impl 表（`Drop` 同样没有），记入 `docs/design/borrow.md` §7 与 `language-spec` §4.40 的已知限制；门禁 `bw_neg no_impl` 钉死 `but this unit has no impl` |
+| SH-39 | 已修 | `mark_borrow` 失败消息改为 `struct '<S>' uses trait 'Handback' but this unit has no impl`（impl 写在 `borrow` 之后也不再误报）；门禁 `bw_neg no_impl` |
+| SH-40 | 已修 | `Emitter.h.ct` 的 `N_DELETE` 只在实参可赋值（`N_VAR` / `N_MEMBER` / `N_ARROW` / `N_INDEX` / `N_DEREF`）时追加 ` = 0; `，否则生成 `if (e) { …; }`；门禁正例 `bw_delete.ct` |
+| SH-41 | 已修 | 与 SH-36 同一处 `expr_returns` 判定，`return b;` 不再误报 `potential leak`；门禁正例 `bw_handoff.ct` |
+| DOC-44 | 已修 | SH-25…SH-32（8 个）与 DOC-31…DOC-43（13 个）的状态行全部回填，本文顶部与本节同步 |
+| DOC-45 | 已修 | `docs/tutorial.md` §8 中英：`delete` 会置空（非左值只释放）；`own` 在 `}` 与每个 `return` 之前释放，「行首」只属 L2 |
+| DOC-46 | 已修 | `README.md` 中英变换表：`delete` / `own` / `borrow` 三行与生成物一致，英文侧补回 borrow 行 |
+| DOC-47 | 已修 | `docs/memory-guide.md` 中英 10 处旧 AutoDrop 表述改为 v0.16.0 现状（含出口示例与决策树） |
+| DOC-48 | 已修 | `docs/design/borrow.md` 头部锚点与状态、§2 前提订正、§8 同批落地、§11 决策表加「状态」列、§7 已知限制第 7/8 条 |
+| DOC-49 | 已修 | `ct.tmLanguage.json` 新增 `ct-borrow` / `ct-borrow-param` / `ct-trait-builtin` 并入 `patterns`；`check-grammar.py` 31 → **33** 断言全绿，README / AGENTS / `check-all.sh` / 插件 README 同步（插件版本 0.3.0） |
+| DOC-50 | 已修 | `docs/roadmap.md` 的 v0.16.0 记录四处（版本表 / 批次记录 / 英文表 / 英文记录）与 `docs/glossary.md` 的 borrow / AutoDrop 措辞改为「每个 `return`、无位置要求」 |
+
+门禁结果见本轮提交正文；`CTC_VERSION` 未动（仍 v0.16.0），`*.expected.*` 未重生成。
