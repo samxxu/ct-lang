@@ -247,7 +247,8 @@ pub struct Dog { int n; } use Speak;
 ```
 
 ```c
-/* impl_dog.ct —— impl 与它建的 vtable 都是 static，只在本单元可见 */
+/* impl_dog.h.ct —— 承载 impl 的单元必须写成 .h.ct 才能被 import；
+   impl 与它建的 vtable 都是 static，只在本单元可见 */
 import shapes;
 #include <stdio.h>
 
@@ -271,12 +272,14 @@ int main(void) { dog_get()->hi(); return 0; }
 ```sh
 mkdir -p build                      # 输出目录须预先存在
 ct build -I . main.ct -o build      # 每单元产出 .c/.h，并打印建议的 cc 命令
-cc build/*.c -o app && ./app        # woof 7
+cc build/*.c -o app && ./app        # woof 7（shapes.h.ct / impl_dog.h.ct / main.ct）
 ```
 
 要点：
 
 - **`pub` 才导出**。`pub` 的函数/struct/trait 写进 `.h`；`impl` 的方法与 vtable 永远 `static`。
+- **承载 `impl` 的单元要写成 `.h.ct`**：`import x;` 只接受 `x.h.ct`，普通 `.ct` 不发布接口
+  （写 `import impl_dog;` 时磁盘上必须是 `impl_dog.h.ct`；`language-spec` §6.2 有同一规则）。
 - **跨单元只走指针 + vptr**：vtable 符号不出单元，「把对象传出去」比「把类型传出去」更省事。
 - **`namespace a;` 是文件级声明**（分号式），块式 `namespace A { … }` 会被拒绝；目录也可以用
   `--ns-root <dir>` 映射成 namespace（`src/hal/uart.h.ct` → `hal`）。
@@ -460,14 +463,18 @@ map trait Socket for namespace posix {
 
 ## 11. 会踩的坑
 
-按「最常遇到」排序，全部有 [language-spec §6](language-spec.md) 的原文依据：
+按「最常遇到」排序。第 2–4 条是**冻结的 L2 行重写管线**的限制，ct-ast（主线）是 AST 管线，
+「跨行 / 单行函数体 / 注释续行」都不适用（对照见 [language-spec §6.2](language-spec.md)）：
 
 1. **顺序敏感**：编译器单趟顺序扫描，定义必须在使用之前；签名表里还没有的函数不会被特判。
-2. **跨行的语句不重写**：`p.greet()` 跨行书写，或构造与语句写在同一行（`int main(){ … p.greet(); }`），
-   都不会被改写。一行一句是硬要求。
-3. **块注释只保护第一行**：`/* … */` 的续行会被当普通代码行处理，其中的 `self`、方法调用照常改写。
-   多行注释里别写看似代码的东西。
-4. **单行函数体不处理**：`int f() { return 1; }` 与函数头同处一行时，体内的派发不重写。
+2. **跨行的语句不重写（仅 L2）**：L2 按行处理，`p.greet()` 跨行书写，或构造与语句写在同一行
+   （`int main(){ … p.greet(); }`），都不会被改写；一行一句是 **L2** 的硬要求。ct-ast 没有这个限制，
+   两种写法都照常派发。
+3. **块注释只保护第一行（仅 L2）**：L2 里 `/* … */` 的续行会被当普通代码行处理，其中的 `self`、
+   方法调用照常改写；多行注释里别写看似代码的东西。ct-ast 则**整段丢弃注释**（生成物不保留源码注释），
+   注释里的代码既不改写也不留下痕迹。
+4. **单行函数体不处理（仅 L2）**：`int f() { return 1; }` 与函数头同处一行时，L2 不重写体内的派发；
+   ct-ast 照常派发。
 5. **`switch` / `do-while` / `goto` 均已支持**（第 7 批起，见 §4.13 / §4.16 与 README 的变换表）；
    早期「在 `{` 处报 `unexpected token`」的说法已过时，也不必再手工构建 L0 种子绕过。
 6. **块式 namespace 与跨命名空间裸调用**会被 ct-ast 拒绝；用分号式声明 + 限定调用。
@@ -721,7 +728,8 @@ pub struct Dog { int n; } use Speak;
 ```
 
 ```c
-/* impl_dog.ct — the impl and its vtable are static, private to this unit */
+/* impl_dog.h.ct — a unit that carries an impl must be named .h.ct to be importable;
+   the impl and its vtable are static, private to this unit */
 import shapes;
 #include <stdio.h>
 
@@ -745,10 +753,13 @@ int main(void) { dog_get()->hi(); return 0; }
 ```sh
 mkdir -p build                      # the output directory must exist
 ct build -I . main.ct -o build      # one .c/.h per unit, plus a suggested cc command
-cc build/*.c -o app && ./app        # woof 7
+cc build/*.c -o app && ./app        # woof 7 (shapes.h.ct / impl_dog.h.ct / main.ct)
 ```
 
 - **Only `pub` is exported**; `impl` methods and vtables stay `static`.
+- **A unit that carries an `impl` must be named `.h.ct`**: `import x;` only accepts `x.h.ct`, and a
+  plain `.ct` publishes no interface (writing `import impl_dog;` requires `impl_dog.h.ct` on disk;
+  `language-spec` §6.2 states the same rule).
 - **Cross-unit access goes through pointers and vptrs** — passing the object around is easier than
   exporting the type.
 - **`namespace a;` is file-scoped** (semicolon form); block form is rejected. Directories can also become
@@ -941,14 +952,21 @@ option, a limit) start with `ctc: ` and do not pretend to point at a line.
 
 ### 11. Traps
 
-Ordered by how often they bite; every one is grounded in [language-spec §6](language-spec.md):
+Ordered by how often they bite. Items 2–4 are limits of the **frozen L2 line-rewriting pipeline**;
+ct-ast (the main line) is an AST pipeline, so multi-line statements, single-line function bodies and
+comment continuations are all fine there (compare [language-spec §6.2](language-spec.md)):
 
 1. **Order matters**: the compiler is a single forward pass, so definitions must precede uses.
-2. **Multi-line statements are not rewritten**, nor is a construct sharing a line with a statement
-   (`int main(){ … p.greet(); }`). One statement per line is a hard requirement.
-3. **A block comment protects only its first line**: continuation lines are treated as ordinary code, and
-   `self` / method calls in them are rewritten as usual.
-4. **Single-line function bodies are not processed**: `int f() { return 1; }` on one line is left as is.
+2. **Multi-line statements are not rewritten (L2 only)**: L2 works line by line, so a `p.greet()` split
+   across lines, or a construct sharing a line with a statement (`int main(){ … p.greet(); }`), is not
+   rewritten — one statement per line is a **L2** requirement. ct-ast has no such limit and dispatches
+   both spellings.
+3. **A block comment protects only its first line (L2 only)**: in L2, continuation lines are treated as
+   ordinary code and `self` / method calls in them are rewritten. ct-ast instead **drops the whole
+   comment** (generated output keeps no source comments), so the code inside it is neither rewritten nor
+   left behind.
+4. **Single-line function bodies are not processed (L2 only)**: `int f() { return 1; }` on one line is
+   left as is by L2; ct-ast dispatches normally.
 5. **`switch` / `do-while` / `goto` are supported** (since batch 7 — see §4.13 / §4.16 and the README
    transform table); the old "`unexpected token` at the `{`" note is stale, and the L0-seed workaround
    is no longer needed.

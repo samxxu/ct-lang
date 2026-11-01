@@ -1464,8 +1464,8 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 
 - 变量表无类型信息；变量按**花括号块作用域**回滚（`{` 压栈、`}` 恢复），同一作用域内出现同名时取**最先**登记者（`find_var` 首命中）。
 - **登记顺序 = 源码顺序**：在变量声明之前出现的方法调用不会被重写。
-- 跨行的方法调用语句不重写（按行处理）；函数签名的**参数列表**跨多行时同样不识别。
-- **跨行的块注释 `/* … */` 只保护第一行**：续行会被当作普通代码行处理，其中的 `self`、方法调用等照常改写（单行 `/* … */`、`//` 与字符串 / 字符字面量不受影响）。这是按行处理管线的固有限制，Phase 2–5 用 CT 重做特性时随实现一并保留（见 [roadmap](roadmap.md) 的「自举之后的恢复与新增」）。
+- **（仅 L2，行重写管线）**跨行的方法调用语句不重写（按行处理）；函数签名的**参数列表**跨多行时同样不识别。ct-ast 是 AST 管线，两者都不受限。
+- **（仅 L2，行重写管线）**跨行的块注释 `/* … */` 只保护第一行：续行会被当作普通代码行处理，其中的 `self`、方法调用等照常改写（单行 `/* … */`、`//` 与字符串 / 字符字面量不受影响）。这是按行处理管线的固有限制，Phase 2–5 用 CT 重做特性时随实现一并保留（见 [roadmap](roadmap.md) 的「自举之后的恢复与新增」）。**ct-ast 不保留源码注释**：整段注释连同其中的代码一起丢弃，生成物只带溯源 banner（若要保留需单独立项）。
 - **文件作用域的对象 / 数组**：vptr 由编译器生成的构造器 `__ct_init`（`__attribute__((constructor))`）在 `main` 前写入（D5=A）。
 - 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
 - **堆对象自动初始化**（Phase 1，D1=A）：`T *p = malloc(sizeof(struct T));` / `calloc` 在声明后自动写 vptr（含嵌套字段）。
@@ -1478,7 +1478,7 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
   变量 / 参数（`Expr *xs`）按元素派发（`xs[i].m()`，元素是值而非指针）；结构体类型的**数组字段**逐元素
   写 vptr（`Num ab[2]` 的元素可直接派发）；函数原型的数组参数保留维度（`int f(Expr a[])`）。其它更复杂的
   初始化表达式（如算术式、函数调用结果直接灌进接口字段）仍按原样透传。
-- 单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）
+- **（仅 L2）**单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）ct-ast 没有这些限制，跨行语句与单行函数体都照常回写。
 - 不完整的 `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套。
 - **生成物里「声明了但没用到」的 `static` 实体**：一个 `impl` 总会发射 `<S>_<T>_vtable`，一个
@@ -3195,13 +3195,16 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   (`find_var` returns the first match).
 - **Registration order = source order**: calls appearing before the variable's declaration are not
   rewritten.
-- Call statements spanning multiple lines are not rewritten (processing is line by line); a function
-  signature whose **parameter list** spans several lines is not recognised either.
-- **A block comment `/* … */` is only protected on its first line**: continuation lines are treated as
-  ordinary source lines, so `self`, method calls and the rest inside them ARE rewritten (single-line
-  `/* … */`, `//` and string / character literals are unaffected). This is an inherent limit of
-  line-based processing and Phases 2–5 keep it as they redo the features in CT (see "Restoring and
-  adding features after self-hosting" in the [roadmap](roadmap.md)).
+- **(L2 only, the line-rewriting pipeline)** Call statements spanning multiple lines are not rewritten
+  (processing is line by line); a function signature whose **parameter list** spans several lines is not
+  recognised either. ct-ast is an AST pipeline and is bound by neither.
+- **(L2 only, the line-rewriting pipeline)** A block comment `/* … */` is only protected on its first
+  line: continuation lines are treated as ordinary source lines, so `self`, method calls and the rest
+  inside them ARE rewritten (single-line `/* … */`, `//` and string / character literals are unaffected).
+  This is an inherent limit of line-based processing and Phases 2–5 keep it as they redo the features in
+  CT (see "Restoring and adding features after self-hosting" in the [roadmap](roadmap.md)). **ct-ast
+  keeps no source comments**: a whole comment, including any code inside it, is dropped, and generated
+  output carries only the provenance banner (retaining them would be a separate project).
 - **File-scope objects / arrays**: the vptr is written before `main` by the generated constructor
   `__ct_init` (`__attribute__((constructor))`, D5 = A).
 - Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
@@ -3222,11 +3225,12 @@ are never compared — everything is copied verbatim); whether a trait/struct na
   vptrs written per element (`Num ab[2]` dispatches directly); and a function prototype keeps the
   array dimension of a parameter (`int f(Expr a[])`). Richer initialiser expressions (an arithmetic
   expression or a call result poured straight into an interface field) still pass through verbatim.
-- A single-line function body (`int f() { … }` on one line) is not processed, matching Phase 0's
-  line-by-line rewriting. By the same rule, a statement **sharing its line** with a construct is not
-  rewritten either: a one-line interface boxing and a one-line rvalue receiver both pass through.
-  (An `impl` construct is the exception: its method body is extracted as a whole by block matching, so
-  it goes through the rewriting pipeline even when it shares the header's line.)
+- **(L2 only)** A single-line function body (`int f() { … }` on one line) is not processed, matching
+  Phase 0's line-by-line rewriting. By the same rule, a statement **sharing its line** with a construct
+  is not rewritten either: a one-line interface boxing and a one-line rvalue receiver both pass
+  through. (An `impl` construct is the exception: its method body is extracted as a whole by block
+  matching, so it goes through the rewriting pipeline even when it shares the header's line.) ct-ast
+  has none of these limits: multi-line statements and single-line bodies are rewritten normally.
 - An incomplete `struct` header (no `{`) is not treated as a construct and passes through. `trait` /
   `impl` are ct-only keywords: a line that starts with one and is followed by an identifier or `{` is
   an attempted construct, so a malformed header is an error (other follows, like `impl[n] = 0;`, still
