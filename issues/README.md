@@ -26,6 +26,11 @@
 - 2026-11-01 `borrow` / `Handback` 实现审查新增 **15 条**（**SH-34**…**SH-41**、**DOC-44**…**DOC-50**），
   **已于同日全部修复/文档化**；其中 3 条 High 均为新特性的语义漏洞（文件作用域静默接受、同层赋值取消归还、
   `return` 表达式提到借用对象即跳过归还），见文末「代码审查（2026-11-01）」与其后的「处置」节。
+- 2026-11-01 第三方评估复核（`v0.16.1`，锚点 `61e35e4`）新增 **5 条**（**DOC-51**、**DOC-52**、**SH-42**、
+  **SH-43**、**SH-44**）：2 条文档漂移（教程 §7 的 import 后缀、§11 与 spec §6.2 的行管线限制）、
+  1 条分发体积（arena 静态数组 → 88MB 二进制）、1 条工具缺口（`ct build` 不代为编译，Info / 待决）、
+  1 条包摘要加固（FNV-1a → SHA-256）；**已于同日处置**：4 条修复 + SH-43 维持待决。报告其余条目复验后
+  不立案，逐条理由见文末「第三方评估复核（2026-11-01）」一节。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 - 硬关卡计数随阶段演进：6 → 7 → 8 → **9**（`check-warnings.sh` 接入后为九关；构成见 [check-all.sh:72-80](../selfhost/check-all.sh#L72-L80)）。下文各**带日期的验证记录**里出现的「六道 / 七道 / 八道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「9 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
@@ -85,6 +90,8 @@
 | DOC-48 | Medium | `design/borrow.md` 头部写「已实现」，§2 仍以 SH-33 未修为据；D1/D6 未归档 | [doc48-borrow-design-stale-status.md](docs/doc48-borrow-design-stale-status.md) |
 | DOC-49 | Medium | 新语法 `borrow` / `Handback` 未同步编辑器语法，`check-grammar.py` 无断言 | [doc49-editor-grammar-borrow.md](docs/doc49-editor-grammar-borrow.md) |
 | DOC-50 | Low | roadmap 没有 `borrow` / `Handback` 的阶段与版本归属 | [doc50-roadmap-borrow-missing.md](docs/doc50-roadmap-borrow-missing.md) |
+| DOC-51 | **High** | 教程 §7 的跨单元示例把普通 `.ct` 当可 import 单元，照抄必失败 | [doc51-tutorial-impl-unit-import.md](docs/doc51-tutorial-impl-unit-import.md) |
+| DOC-52 | Medium | 教程 §11 与 spec §6.2 的「跨行 / 单行函数体 / 注释续行不重写」在 ct-ast 上均不成立 | [doc52-line-pipeline-scope-stale.md](docs/doc52-line-pipeline-scope-stale.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -157,6 +164,9 @@
 | SH-39 | Low | `impl Handback` 写在 `borrow` 之后被误报「has no impl」 | [sh39-impl-order-false-no-impl.md](selfhost/sh39-impl-order-false-no-impl.md) |
 | SH-40 | Medium | 新增的置空让 `delete <非左值>` 生成非法 C（`get() = 0`） | [sh40-delete-non-lvalue-null.md](selfhost/sh40-delete-non-lvalue-null.md) |
 | SH-41 | Medium | 归还所有权的 `return p;` 被误报为泄漏（L2 不报） | [sh41-return-transfer-false-leak.md](selfhost/sh41-return-transfer-false-leak.md) |
+| SH-42 | Medium | arena 的 `nodes[131072]` / `strpool` 是静态数组，装出的 `ct` 有 88MB（`__DATA` 105MB） | [sh42-arena-static-footprint.md](selfhost/sh42-arena-static-footprint.md) |
+| SH-43 | Info | `ct build` 只发 `.c/.h` 并打印 `cc` 行，不代为编译（工具缺口，待决） | [sh43-build-no-cc.md](selfhost/sh43-build-no-cc.md) |
+| SH-44 | Medium | `ct.lock` 的内容摘要用 FNV-1a + 加法折叠，非抗碰撞 | [sh44-pkg-digest-fnv.md](selfhost/sh44-pkg-digest-fnv.md) |
 
 ## 汇总
 
@@ -787,3 +797,60 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 | DOC-50 | 已修 | `docs/roadmap.md` 的 v0.16.0 记录四处（版本表 / 批次记录 / 英文表 / 英文记录）与 `docs/glossary.md` 的 borrow / AutoDrop 措辞改为「每个 `return`、无位置要求」 |
 
 门禁结果见本轮提交正文；`CTC_VERSION` 未动（仍 v0.16.0），`*.expected.*` 未重生成。
+
+## 第三方评估复核（2026-11-01，`v0.16.1`，锚点 `61e35e4`）
+
+被复核对象是仓库外的一份独立评估报告（`v0.16.1` 快照，10 条缺点 + 10 条优点）。本轮把它能在本仓
+复现的部分逐条实测，凡确认为真的按既有格式立项，不可复现或属定位取舍的记入「不立案」。
+报告的环境数据与现状吻合：`ct v0.16.1`、`88M`、文档行数 `3290 / 971 / 2550` 全部一致。
+
+### 复验结果
+
+| 报告条目 | 复验 | 处置 |
+| --- | --- | --- |
+| D1 impl ↔ trait 签名不一致不报错 | 成立：`ct` exit 0，`cc` 在生成物上报 `incompatible function pointer types`；**L0 同样 exit 0**，故不是主线退化 | 不立案：`language-spec.md:1460` 与 `AGENTS.md:23` 已明写「不做签名检查 / 不做类型检查」，属定位取舍；只建议给 `vision.md` §2.4 加「由 C 编译器在生成物上报」的限定语 |
+| D2 四层逐字节一致是结构性成本 | 事实成立；「日常降级为发行前快照」的建议不采纳 | 不立案：`check-archive` / `check-m2a` 是四层不漂移的唯一自动防线；容量问题按 SH-1 / SH-42 处理 |
+| D3 88MB 二进制，根因静态 arena | 成立：`__DATA 105267200`，`Node ≈ 528 B × 131072` | **SH-42** |
+| D4 文档漂移两处 | 两处均复现，且**漏项**：§11 另有第 3、4 条与 spec §6.2 三行同样过期 | **DOC-51**、**DOC-52** |
+| D5 无标准库 | 描述成立 | 不立案（窄定位取舍，报告自身 A1 亦如此论证） |
+| D6 限定名与消歧弱 | `Rep::OK` 被拒成立；但限定**调用**（`a::one()` / `Point::size(p)`）是支持的，标题与结论不符；「多 trait 同名静默取首个」无可复现脚本 | 不立案：限定调用部分失实，其余待最小复现再开 |
+| D7 全是 `int` 返回码 | 描述成立 | 不立案（C 直通定位） |
+| D8 无 CI / `build` 不编译 / 无 LSP | CI 部分 = 在册 CI-4（已有 `make check`，仍无 workflow）；其余成立 | 不立案 CI（CI-4 已覆盖）；`ct build` 记 **SH-43** |
+| D9 FNV-1a 摘要 | 成立（`Pkg.h.ct:249-318`，逐文件 `file_digest ^ name_digest` 相加） | **SH-44** |
+| D10 `borrow` 语义陡 | 条数引自本轮 SH-34…SH-41，未做独立审计 | 不立案；3 条 High 的根因已在本文「代码审查（2026-11-01）」记录 |
+
+### 新增 5 条
+
+| 类别 | 条目 |
+| --- | --- |
+| 文档（2） | DOC-51（High）、DOC-52（Medium） |
+| 代码 / 工程（3） | SH-42（Medium）、SH-44（Medium）、SH-43（Info / 待决） |
+
+### 处置（2026-11-01，第三方复核 5 条）
+
+4 条修复 + 1 条维持待决（SH-43）。逐条状态已回填到各 issue 文件；验收点如下：
+
+| ID | 处置 | 验收点 |
+| --- | --- | --- |
+| DOC-51 | 已修 | `docs/tutorial.md` §7 中英把 `impl_dog.ct` 改为 `impl_dog.h.ct`，并补「承载 `impl` 的单元要写成 `.h.ct` 才能被 import」；未照抄评估报告关于 `ct build` 拒绝 `.h.ct` 的错误提示 |
+| DOC-52 | 已修 | `docs/tutorial.md` §11 第 2–4 条与 `docs/language-spec.md` §6.2 三处标注「仅 L2」，删除「一行一句是硬要求」，补「ct-ast 不保留源码注释」；中英同改 |
+| SH-42 | 已修 | `Arena` 的 `nodes` / `strpool`、`Symbols` 四张大表、`Parser.g_maps`、`Module.g_units` 改为 `calloc`；`ls -lh ct` **637K**（验收 < 5MB）、`size -m ct` 的 `__DATA` **589824 B**（验收 < 1MB）；`test/ast/**` 生成物零字节变化 |
+| SH-43 | 待决（不实现） | 维持「`ct build` 只发 `.c/.h`、打印 `cc` 行」的现状；不新增 `--emit-build-plan` / `--cc`，能力变更留待维护者决定 |
+| SH-44 | 已修 | `Pkg.h.ct` 改 SHA-256（FIPS 180-4，单流：按路径排序后逐个喂 `相对路径\n` + 内容），lock 写 `sha256:<64 hex>`；旧 16 位 FNV 摘要显式报 `unsupported digest`；`test/pkg/run.sh` 夹具同步并新增「同尺寸篡改」与「旧格式」两个负例（37 断言全绿）。摘要与 Python `hashlib` 参考实现逐字节一致 |
+
+迁移影响：SH-44 使既有 `ct.lock` 失效（需重新 `ct get` 生成）；本轮未 bump `CTC_VERSION`，也未打新 tag。
+
+### 建议处理顺序
+
+1. DOC-51 → DOC-52：同一页 §7 / §11，中英同改，改完用报告附录的探针自查；
+2. SH-42（arena 堆化）：唯一动运行时的一步，先量后改，验收以 `ls -lh ct` 与九关为准；
+3. SH-44（摘要换 SHA-256）：涉及 `ct.lock` 兼容（旧 lock 失效需授权），并重生成 `test/pkg` 夹具；
+4. SH-43（`ct build` 能力）：先定「加不加」，再加则同步 README / spec / usage 与门禁。
+
+### 不立案与偏差订正
+
+- D1 / D5 / D7 / D10 属定位取舍或已在册，未新开条目；D2 的降级建议明确不采纳；
+- D6 的「限定调用不支持」不成立，修复本条时不要照抄该报告；
+- 报告称「`ct build` 会拒绝 `.h.ct` 单元」，实测不成立（`ct build -I <dir> <unit>.h.ct -o <out>` 返回 0）；
+  真正被拒的是 **compile 单文件模式**里的 `import`（`error: 'import' is not supported in compile mode`）；
+- 仓库根残留 `demo.o` / `impl_dog.o`（已被 `.gitignore` 挡住，未入库）属信息级整洁问题，不单独立项。
