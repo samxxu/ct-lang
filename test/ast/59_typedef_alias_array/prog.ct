@@ -1,0 +1,32 @@
+/* A tagged typedef alias must carry the array flag of its fields: the alias
+   copies the tag row's `name` / `type`, and `dims` is what marks a field as an
+   array. Without it the default initialiser takes the scalar vptr path and
+   emits `.items.__t_vptr = ...` on an array, which C rejects. */
+#include <stdio.h>
+
+trait T {
+    int twice(void);
+}
+
+struct Inner {
+    int x;
+} use T;
+
+impl T for Inner {
+    int twice(void) {
+        return self->x * 2;
+    }
+}
+
+typedef struct Wrap {
+    Inner items[2];
+} WrapT;
+
+int main(void) {
+    WrapT w;
+
+    w.items[0].x = 3;
+    w.items[1].x = 5;
+    printf("%d %d\n", w.items[0].twice(), w.items[1].twice());
+    return 0;
+}

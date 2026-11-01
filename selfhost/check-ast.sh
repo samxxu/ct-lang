@@ -2107,6 +2107,29 @@ cap_check scopes "too many nested scopes" "$work/cap_scopes.ct"
     printf '    return 0;\n}\n'
 } >"$work/cap_vars.ct"
 cap_check vars "too many variables" "$work/cap_vars.ct"
+{
+    printf 'struct Big {\n'
+    i=0
+    while [ "$i" -lt 65 ]; do printf '    int f%d;\n' "$i"; i=$((i + 1)); done
+    printf '};\nint main(void) { return 0; }\n'
+} >"$work/cap_fields.ct"
+cap_check fields "too many fields in a record" "$work/cap_fields.ct"
+
+# A struct whose body opens on the line after its name makes the parser look
+# ahead across a newline. The lookahead has to restore the lexer's line state
+# with the cursor, or every later diagnostic in the file shifts by one; the
+# duplicate member on line 4 is the witness.
+{
+    printf 'struct Foo\n{\n    int a;\n    int a;\n};\nint main(void) { return 0; }\n'
+} >"$work/lahead.ct"
+if "$work/ct-ast" "$work/lahead.ct" -o "$work/lahead.c" \
+        >"$work/lahead.out" 2>"$work/lahead.err"; then
+    bad "struct lookahead line" "expected a non-zero exit"
+elif grep -q ":4:1: error: duplicate member 'a'" "$work/lahead.err"; then
+    ok "struct lookahead restores the line state"
+else
+    bad "struct lookahead line" "wrong line: $(cat "$work/lahead.err")"
+fi
 
 # The remaining driver branches (Phase 9 review §3.2-1): help, missing
 # option arguments, unknown options, an unreadable input, an unwritable
@@ -2125,6 +2148,14 @@ elif grep -q '^usage: ' "$work/cli-none.err"; then
     ok "compile with no input prints usage"
 else
     bad "compile with no input" "wrong diagnostic: $(cat "$work/cli-none.err")"
+fi
+if "$work/ct-ast" test/ast/02_expr/prog.ct test/ast/02_expr/prog.ct \
+        -o "$work/cli-two.c" >"$work/cli-two.out" 2>"$work/cli-two.err"; then
+    bad "compile with two inputs" "expected a non-zero exit"
+elif grep -q "compile mode takes one input" "$work/cli-two.err"; then
+    ok "compile mode refuses a second input"
+else
+    bad "compile with two inputs" "wrong diagnostic: $(cat "$work/cli-two.err")"
 fi
 if "$work/ct-ast" -o >"$work/cli-o.out" 2>"$work/cli-o.err"; then
     bad "-o needs an argument" "expected a non-zero exit"
@@ -2545,7 +2576,7 @@ int main(void)
     return 0;
 }
 '
-bw_neg no_impl "struct 'Conn' uses trait 'Handback' but has no impl" \
+bw_neg no_impl "struct 'Conn' uses trait 'Handback' but this unit has no impl" \
 '#include <stdio.h>
 struct Conn { int fd; int in_use; } use Handback;
 static struct Conn g;
@@ -2654,6 +2685,144 @@ if "$work/ct-ast" "$work/bw_escape.ct" -o "$work/bw_escape.c" \
     fi
 else
     bad "borrow escape" "expected generation to succeed with a warning: $(cat "$work/bw_escape.err")"
+fi
+
+# `borrow` is a block-scope keyword: a file-scope declaration is refused rather
+# than silently parsed as a plain pointer.
+bw_neg borrow_file_scope "'borrow' is only allowed inside a function body" \
+'struct Conn { int fd; } use Handback;
+impl Handback for Conn { void handback() { self->fd = 0; } }
+borrow struct Conn *g = 0;
+int main(void) { return 0; }
+'
+
+# A borrowed handle may not be stored where the borrow cannot see it end: a
+# `static` block-scope local outlives the block exactly as a global does.
+bw_neg store_static "a borrowed pointer cannot be stored in 's' (its scope outlives the borrow)" \
+'struct Conn { int fd; } use Handback;
+impl Handback for Conn { void handback() { self->fd = 0; } }
+static struct Conn g_c;
+static struct Conn *acq(void) { return &g_c; }
+void f(void) {
+    static struct Conn *s;
+    borrow struct Conn *c = acq();
+    s = c;
+}
+int main(void) { return 0; }
+'
+
+# Rebinding a borrowed handle would drop the old object's handback without
+# handing it back, so the assignment is refused instead of leaking it silently.
+bw_neg borrow_reassign "a borrowed pointer cannot be reassigned" \
+'struct Conn { int fd; } use Handback;
+impl Handback for Conn { void handback() { self->fd = 0; } }
+static struct Conn g_c;
+static struct Conn *acq(int k) { g_c.fd = k; return &g_c; }
+int main(void) {
+    borrow struct Conn *c = acq(1);
+    c = acq(2);
+    return 0;
+}
+'
+
+# A same-scope copy (`struct Conn *q = c;`) is allowed: its lifetime ends with
+# the borrow, so the handback at the exit must survive that copy (it used to be
+# cancelled by the copy's own leak bookkeeping).
+cat >"$work/bw_copy.ct" <<'BWEOF'
+#include <stdio.h>
+struct Conn { int fd; int in_use; } use Handback;
+impl Handback for Conn { void handback() { self->in_use = 0; } }
+static struct Conn g_c;
+static struct Conn *acq(void) { g_c.fd = 1; g_c.in_use = 1; return &g_c; }
+int main(void)
+{
+    borrow struct Conn *c = acq();
+    struct Conn *q = c;
+    printf("%d\n", q->fd);
+    return 0;
+}
+BWEOF
+if "$work/ct-ast" "$work/bw_copy.ct" -o "$work/bw_copy.c" \
+        >"$work/bw_copy.out" 2>"$work/bw_copy.err" \
+   && grep -q 'if (c) { Conn_Handback_handback(c); c = 0; }' "$work/bw_copy.c"; then
+    ok "borrow same-scope copy keeps the handback"
+else
+    bad "borrow same-scope copy" "$(cat "$work/bw_copy.err")"
+fi
+
+# A `return` hands back the object it actually owns: `return c->fd;` releases
+# nothing, so the borrow's handback (and the `own`'s drop) must still run first.
+cat >"$work/bw_ret.ct" <<'BWEOF'
+#include <stdlib.h>
+struct Conn { int fd; int in_use; } use Handback;
+impl Handback for Conn { void handback() { self->in_use = 0; } }
+struct Box { int n; } use Drop;
+impl Drop for Box { void drop() { } }
+static struct Conn g_c;
+static struct Conn *acq(void) { g_c.fd = 9; g_c.in_use = 1; return &g_c; }
+int from_field(void)
+{
+    borrow struct Conn *c = acq();
+    return c->fd;
+}
+int drop_field(void)
+{
+    own Box *b = malloc(sizeof(struct Box));
+    b->n = 7;
+    return b->n;
+}
+int main(void) { return from_field() + drop_field(); }
+BWEOF
+if "$work/ct-ast" "$work/bw_ret.ct" -o "$work/bw_ret.c" \
+        >"$work/bw_ret.out" 2>"$work/bw_ret.err" \
+   && grep -q 'if (c) { Conn_Handback_handback(c); c = 0; }' "$work/bw_ret.c" \
+   && grep -q 'if (b) { Box_Drop_drop(b); free(b); b = 0; }' "$work/bw_ret.c" \
+   && "$CC" -Wall -Wextra -std=c99 -c "$work/bw_ret.c" -o "$work/bw_ret.o" 2>"$work/bw_ret.cc"; then
+    ok "return of a member still releases the borrow / own object"
+else
+    bad "return of a member" "$(cat "$work/bw_ret.err" "$work/bw_ret.cc" 2>/dev/null | head -5)"
+fi
+
+# `delete` only nulls an assignable operand: `delete get();` must stay a plain
+# `if (get()) { free(get()); }` (a call is not an lvalue).
+cat >"$work/bw_delete.ct" <<'BWEOF'
+#include <stdlib.h>
+static int *get(void) { return 0; }
+int main(void)
+{
+    delete get();
+    return 0;
+}
+BWEOF
+if "$work/ct-ast" "$work/bw_delete.ct" -o "$work/bw_delete.c" \
+        >"$work/bw_delete.out" 2>"$work/bw_delete.err" \
+   && ! grep -q 'get() = 0' "$work/bw_delete.c" \
+   && "$CC" -Wall -Wextra -std=c99 -c "$work/bw_delete.c" -o "$work/bw_delete.o" 2>"$work/bw_delete.cc"; then
+    ok "delete of a call does not assign to it"
+else
+    bad "delete of a call" "$(cat "$work/bw_delete.err" "$work/bw_delete.cc" 2>/dev/null | head -5)"
+fi
+
+# A `return` that hands an `own` object back is a transfer, not a leak: no
+# `potential leak` may be reported for it.
+cat >"$work/bw_handoff.ct" <<'BWEOF'
+#include <stdlib.h>
+struct Box { int n; } use Drop;
+impl Drop for Box { void drop() { } }
+struct Box *make(void)
+{
+    own Box *b = malloc(sizeof(struct Box));
+    b->n = 5;
+    return b;
+}
+int main(void) { struct Box *p = make(); return p->n; }
+BWEOF
+if "$work/ct-ast" "$work/bw_handoff.ct" -o "$work/bw_handoff.c" \
+        >"$work/bw_handoff.out" 2>"$work/bw_handoff.err" \
+   && ! grep -q 'potential leak' "$work/bw_handoff.err"; then
+    ok "returning an own object is a handoff, not a leak"
+else
+    bad "returning an own object" "$(cat "$work/bw_handoff.err" | head -5)"
 fi
 
 echo

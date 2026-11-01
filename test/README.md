@@ -4,7 +4,8 @@
 
 `test/` 下每个子目录的**归属层级**、**数据形状**与**驱动脚本**如下。两套负例约定**不同**：
 `errors/` 用 `<name>.ct` + `<name>.expected-err` 做逐字节比对；`ast/errors/` 是裸 `.ct`，
-由 `check-ast.sh` 断言「非零退出 + 带位置」，其中多数（当前 68 个中的 56 个）另把消息文本钉死。
+由 `check-ast.sh` 断言「非零退出 + 带位置」，并**全部钉死消息文本**：63 个进 `"fixture|message"` 表，
+另 9 个（`fnptr_nested`、`map_no_instance`、`ns_host_*`、`null_vtable_slot` 等）各有独立的 `grep -q`。
 
 | 目录 | 层级 | 形状 | 驱动脚本 |
 | --- | --- | --- | --- |
@@ -32,7 +33,9 @@
 Below is each subdirectory under `test/` with its **layer**, its **data shape** and its **driver**.
 The two negative conventions **differ**: `errors/` pairs `<name>.ct` with `<name>.expected-err` for a
 byte-for-byte diff, while `ast/errors/` holds bare `.ct` files that `check-ast.sh` asserts on
-"non-zero exit + a source position"; most of them (56 of 68 today) also pin the message text.
+"non-zero exit + a source position", and **every one of them pins the message text**: 63 sit in a
+`"fixture|message"` table, the other 9 (`fnptr_nested`, `map_no_instance`, `ns_host_*`,
+`null_vtable_slot`, …) each have their own `grep -q`.
 
 | Directory | Layer | Shape | Driver |
 | --- | --- | --- | --- |

@@ -1,0 +1,23 @@
+/* A brace-less branch ends a scope just like a braced block, so an `own`
+   declaration written there is released at the end of the branch: the emitter
+   writes the braces, and the AutoDrop `delete` has somewhere to live. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop(void) {
+        printf("drop\n");
+    }
+}
+
+int main(void) {
+    int c = 1;
+
+    if (c) own Box *b = malloc(sizeof(Box));
+    printf("after branch\n");
+    return 0;
+}

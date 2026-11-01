@@ -13,10 +13,11 @@
 #   3. selfhost/check-archive.sh                 L2 against the archived oracle (ratchet)
 #   4. selfhost/check-m2a.sh                     L1 output byte-identical with L0
 #   5. selfhost/ct-tour.sh                       end-to-end tour
-#   6. editors/vscode/test/check-grammar.py      editor grammar (27 assertions)
+#   6. editors/vscode/test/check-grammar.py      editor grammar (33 assertions)
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
-#   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7 + 10.x + 11.x + 12.1:
-#                                                probes, corpus equivalence, fixpoint, negatives)
+#   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7 + 10.x–12.x +
+#                                                batches 13–39: probes, corpus equivalence,
+#                                                fixpoint, negatives)
 #   9. selfhost/check-warnings.sh                generated C compiles warning-free (-Wall -Wextra)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
@@ -76,7 +77,7 @@ run_gate "4) CT: check-m2a" bash selfhost/check-m2a.sh
 run_gate "5) CT: ct-tour" bash selfhost/ct-tour.sh
 run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
-run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x + 11.x + 12.1)" bash selfhost/check-ast.sh
+run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x–12.x + batches 13–39)" bash selfhost/check-ast.sh
 run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warnings.sh
 
 banner "acceptance probes (reported only, never blocking)"
