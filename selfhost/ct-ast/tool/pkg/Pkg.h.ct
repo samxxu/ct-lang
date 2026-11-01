@@ -36,9 +36,6 @@ trait PkgOps {
     int  range_match(const char *range, const char *ver);
     int  copy_file(const char *src, const char *dst);
     int  copy_tree(const char *src, const char *dst);
-    unsigned long pkg_digest(const char *s);
-    unsigned long file_digest(const char *path);
-    unsigned long dir_sum(const char *dir, const char *rel);
     int  dir_digest(const char *dir, char *out, size_t cap);
     int  ensure_dir(const char *path);
     int  split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap);
@@ -73,6 +70,250 @@ struct Pkg {
     const char *prog;
     const char *version;
 } use PkgOps;
+
+/* --- SHA-256 (FIPS 180-4) -------------------------------------------------
+   `ct.lock` pins vendored content, so its digest has to resist collisions.
+   FNV-1a plus an additive per-file fold (SH-44) did not: two files could be
+   made to cancel out. The tree now hashes as one stream -- each file's
+   relative path and bytes, in sorted path order -- and the lock spells the
+   result `sha256:<64 hex>`, so a legacy 16-hex value is rejected rather than
+   compared loosely. */
+
+#define MAX_DIGEST_FILES 4096
+
+static const char *g_hexd = "0123456789abcdef";
+
+static const unsigned int g_sha_k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+struct Sha256 {
+    unsigned int h[8];
+    unsigned int nbuf;
+    unsigned long total;
+    unsigned char buf[64];
+};
+
+#define CT_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+static void sha256_init(struct Sha256 *s)
+{
+    s->h[0] = 0x6a09e667;
+    s->h[1] = 0xbb67ae85;
+    s->h[2] = 0x3c6ef372;
+    s->h[3] = 0xa54ff53a;
+    s->h[4] = 0x510e527f;
+    s->h[5] = 0x9b05688c;
+    s->h[6] = 0x1f83d9ab;
+    s->h[7] = 0x5be0cd19;
+    s->nbuf = 0;
+    s->total = 0;
+}
+
+static void sha256_block(struct Sha256 *s, const unsigned char *p)
+{
+    unsigned int w[64];
+    unsigned int a, b, c, d, e, f, g, h;
+    unsigned int t1, t2, s0, s1;
+    int i;
+
+    for (i = 0; i < 16; i++)
+        w[i] = ((unsigned int)p[4 * i] << 24)
+             | ((unsigned int)p[4 * i + 1] << 16)
+             | ((unsigned int)p[4 * i + 2] << 8)
+             | (unsigned int)p[4 * i + 3];
+    for (i = 16; i < 64; i++) {
+        s0 = CT_ROR(w[i - 15], 7) ^ CT_ROR(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        s1 = CT_ROR(w[i - 2], 17) ^ CT_ROR(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    a = s->h[0];
+    b = s->h[1];
+    c = s->h[2];
+    d = s->h[3];
+    e = s->h[4];
+    f = s->h[5];
+    g = s->h[6];
+    h = s->h[7];
+    for (i = 0; i < 64; i++) {
+        s1 = CT_ROR(e, 6) ^ CT_ROR(e, 11) ^ CT_ROR(e, 25);
+        t1 = h + s1 + ((e & f) ^ ((~e) & g)) + g_sha_k[i] + w[i];
+        s0 = CT_ROR(a, 2) ^ CT_ROR(a, 13) ^ CT_ROR(a, 22);
+        t2 = s0 + ((a & b) ^ (a & c) ^ (b & c));
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
+    }
+    s->h[0] = s->h[0] + a;
+    s->h[1] = s->h[1] + b;
+    s->h[2] = s->h[2] + c;
+    s->h[3] = s->h[3] + d;
+    s->h[4] = s->h[4] + e;
+    s->h[5] = s->h[5] + f;
+    s->h[6] = s->h[6] + g;
+    s->h[7] = s->h[7] + h;
+}
+
+static void sha256_update(struct Sha256 *s, const unsigned char *p, size_t n)
+{
+    size_t i;
+    for (i = 0; i < n; i++) {
+        s->buf[s->nbuf] = p[i];
+        s->nbuf++;
+        s->total++;
+        if (s->nbuf == 64) {
+            sha256_block(s, s->buf);
+            s->nbuf = 0;
+        }
+    }
+}
+
+static void sha256_final(struct Sha256 *s)
+{
+    unsigned char pad[64];
+    unsigned long bits;
+    unsigned int i;
+    int k;
+
+    bits = s->total * 8;
+    memset(pad, 0, sizeof pad);
+    pad[0] = 128;
+    k = (s->nbuf < 56) ? 56 - (int)s->nbuf : 120 - (int)s->nbuf;
+    sha256_update(s, pad, (size_t)k);
+    for (i = 0; i < 8; i++)
+        pad[i] = (unsigned char)((bits >> (56 - 8 * (int)i)) & 255);
+    sha256_update(s, pad, 8);
+}
+
+static void sha256_hex(const struct Sha256 *s, char *out)
+{
+    int i, j;
+    unsigned int v;
+    for (i = 0; i < 8; i++) {
+        v = s->h[i];
+        for (j = 0; j < 8; j++)
+            out[i * 8 + j] = g_hexd[(v >> (28 - 4 * j)) & 15];
+    }
+    out[64] = 0;
+}
+
+/* One file's contribution: its relative path, a newline, then its bytes. The
+   path is what `readdir` yielded, so the order is fixed by `sha_sort`. */
+static int sha256_file(struct Sha256 *s, const char *rel, const char *path)
+{
+    FILE *f;
+    int c;
+    unsigned char b;
+
+    sha256_update(s, (const unsigned char *)rel, strlen(rel));
+    b = (unsigned char)'\n';
+    sha256_update(s, &b, 1);
+    f = fopen(path, "rb");
+    if (!f) return -1;
+    c = fgetc(f);
+    while (c != EOF) {
+        b = (unsigned char)c;
+        sha256_update(s, &b, 1);
+        c = fgetc(f);
+    }
+    fclose(f);
+    return 0;
+}
+
+/* Collect the relative paths of every regular file under `dir` into `list`
+   (row stride MAX_PKG_PATH); `vendor`, `.git` and `.ctcache` are not part of
+   a package, matching what `copy_tree` ships. */
+static int sha_collect(const char *dir, const char *rel, char *list, int *n, int cap)
+{
+    DIR *d;
+    struct dirent *e;
+    struct stat st;
+    char full[MAX_PKG_PATH], r[MAX_PKG_PATH];
+    int w;
+
+    d = opendir(dir);
+    if (!d) return -1;
+    for (;;) {
+        e = readdir(d);
+        if (e == NULL) break;
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+        if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
+        if (strcmp(e->d_name, ".ctcache") == 0) continue;
+        if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >= (int)sizeof full) continue;
+        if (rel[0]) w = snprintf(r, sizeof r, "%s/%s", rel, e->d_name);
+        else        w = snprintf(r, sizeof r, "%s", e->d_name);
+        if (w < 0 || (size_t)w >= sizeof r) continue;
+        if (stat(full, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            if (sha_collect(full, r, list, n, cap) != 0) {
+                closedir(d);
+                return -1;
+            }
+        } else if (S_ISREG(st.st_mode)) {
+            if (*n >= cap) {
+                closedir(d);
+                return -1;
+            }
+            snprintf(list + (size_t)(*n) * MAX_PKG_PATH, MAX_PKG_PATH, "%s", r);
+            *n = *n + 1;
+        }
+    }
+    closedir(d);
+    return 0;
+}
+
+/* Insertion sort on the collected rows: the digest must not depend on the
+   `readdir` order, which differs between filesystems. */
+static void sha_sort(char *list, int n)
+{
+    char tmp[MAX_PKG_PATH];
+    int i, j;
+
+    for (i = 1; i < n; i++) {
+        snprintf(tmp, sizeof tmp, "%s", list + (size_t)i * MAX_PKG_PATH);
+        j = i - 1;
+        while (j >= 0 && strcmp(list + (size_t)j * MAX_PKG_PATH, tmp) > 0) {
+            snprintf(list + (size_t)(j + 1) * MAX_PKG_PATH, MAX_PKG_PATH, "%s",
+                     list + (size_t)j * MAX_PKG_PATH);
+            j--;
+        }
+        snprintf(list + (size_t)(j + 1) * MAX_PKG_PATH, MAX_PKG_PATH, "%s", tmp);
+    }
+}
+
+/* `sha256:<64 lowercase hex>` is the only accepted lock spelling (SH-44). */
+static int sha_hex_ok(const char *s)
+{
+    int i;
+    if (strncmp(s, "sha256:", 7) != 0) return 0;
+    if (strlen(s) != 71) return 0;
+    for (i = 7; i < 71; i++) {
+        if ((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f')) continue;
+        return 0;
+    }
+    return 1;
+}
+
 impl PkgOps for Pkg {
     /* Parse `<dir>/ct.pkg`. Line-oriented: `#` starts a comment, `key = value`,
        and `dep` may repeat. A missing name or version is an error. */
@@ -246,86 +487,44 @@ impl PkgOps for Pkg {
         return rc;
     }
 
-    /* FNV-1a over a string, the same fold the cache key uses. */
-    unsigned long pkg_digest(const char *s)
-    {
-        unsigned long h;
-        size_t i;
-        (void)self;
-        h = (unsigned long)2166136261;
-        i = 0;
-        while (s[i]) {
-            h = h ^ (unsigned long)(unsigned char)s[i];
-            h = h * (unsigned long)16777619;
-            i++;
-        }
-        return h;
-    }
-
-    unsigned long file_digest(const char *path)
-    {
-        unsigned long h;
-        FILE *f;
-        int c;
-        (void)self;
-        h = (unsigned long)2166136261;
-        f = fopen(path, "rb");
-        if (!f) return 0;
-        c = fgetc(f);
-        while (c != EOF) {
-            h = h ^ (unsigned long)(unsigned char)c;
-            h = h * (unsigned long)16777619;
-            c = fgetc(f);
-        }
-        fclose(f);
-        return h;
-    }
-
-    /* Additively fold every regular file under `dir`; addition is commutative,
-       so readdir order cannot change the digest. */
-    unsigned long dir_sum(const char *dir, const char *rel)
-    {
-        DIR *d;
-        struct dirent *e;
-        struct stat st;
-        char full[MAX_PKG_PATH], r[MAX_PKG_PATH];
-        unsigned long total;
-        int w;
-        (void)self;
-
-        total = 0;
-        d = opendir(dir);
-        if (!d) return 0;
-        for (;;) {
-            e = readdir(d);
-            if (e == NULL) break;
-            if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
-            if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
-            if (strcmp(e->d_name, ".ctcache") == 0) continue;
-            if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >= (int)sizeof full) continue;
-            if (rel[0]) w = snprintf(r, sizeof r, "%s/%s", rel, e->d_name);
-            else        w = snprintf(r, sizeof r, "%s", e->d_name);
-            if (w < 0 || (size_t)w >= sizeof r) continue;
-            if (stat(full, &st) != 0) continue;
-            if (S_ISDIR(st.st_mode)) {
-                total += self->dir_sum(full, r);
-            } else if (S_ISREG(st.st_mode)) {
-                total += self->file_digest(full) ^ self->pkg_digest(r);
-            }
-        }
-        closedir(d);
-        return total;
-    }
-
+    /* One digest per tree: every regular file's relative path and bytes feed
+       a single SHA-256 in sorted path order, so neither `readdir` order nor an
+       additive fold can make two different trees agree (SH-44). */
     int dir_digest(const char *dir, char *out, size_t cap)
     {
+        struct Sha256 sha;
         struct stat st;
-        unsigned long h;
-        int w;
+        char *list;
+        char hex[65];
+        int i, n, w;
         (void)self;
+
         if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) return -1;
-        h = self->dir_sum(dir, "");
-        w = snprintf(out, cap, "%016lx", h);
+        list = (char *)malloc((size_t)MAX_DIGEST_FILES * (size_t)MAX_PKG_PATH);
+        if (!list) return -1;
+        n = 0;
+        if (sha_collect(dir, "", list, &n, MAX_DIGEST_FILES) != 0) {
+            free(list);
+            return -1;
+        }
+        sha_sort(list, n);
+        sha256_init(&sha);
+        for (i = 0; i < n; i++) {
+            char full[MAX_PKG_PATH];
+            if (snprintf(full, sizeof full, "%s/%s", dir, list + (size_t)i * MAX_PKG_PATH)
+                >= (int)sizeof full) {
+                free(list);
+                return -1;
+            }
+            if (sha256_file(&sha, list + (size_t)i * MAX_PKG_PATH, full) != 0) {
+                free(list);
+                return -1;
+            }
+        }
+        free(list);
+        sha256_final(&sha);
+        sha256_hex(&sha, hex);
+        w = snprintf(out, cap, "sha256:%s", hex);
         if (w < 0 || (size_t)w >= cap) return -1;
         return 0;
     }
@@ -562,7 +761,7 @@ impl PkgOps for Pkg {
         char cache[MAX_PKG_CMD], gitdir[MAX_PKG_CMD], out[MAX_PKG_CMD];
         char q1[MAX_PKG_CMD], q2[MAX_PKG_CMD], cmd[MAX_PKG_CMD];
         char mname[MAX_TEXT], mver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
-        char tag[MAX_TEXT], commit[64], dig[32], dst[MAX_PKG_PATH];
+        char tag[MAX_TEXT], commit[64], dig[80], dst[MAX_PKG_PATH];
         const char *home;
         struct stat st;
         int ndeps, i, w, rc, fresh;
@@ -715,7 +914,7 @@ impl PkgOps for Pkg {
     int get_one(const char *dir, const char *range, int depth)
     {
         char name[MAX_TEXT], ver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
-        char dig[32], dst[MAX_PKG_PATH];
+        char dig[80], dst[MAX_PKG_PATH];
         int ndeps, i, w;
 
         ndeps = 0;
@@ -914,7 +1113,7 @@ impl PkgOps for Pkg {
         char line[MAX_PKG_LINE];
         char pname[MAX_TEXT], pver[32], pdeps[MAX_PKG_DEPS][MAX_PKG_PATH];
         char lname[MAX_PKG_DEPS][MAX_TEXT], lver[MAX_PKG_DEPS][32];
-        char vdir[MAX_PKG_PATH], vdig[32];
+        char vdir[MAX_PKG_PATH], vdig[80];
         char dpath[MAX_PKG_PATH], drange[32], dname[MAX_TEXT];
         int ndeps, nlock, i, j, rc, units, seen;
         size_t nl;
@@ -974,8 +1173,13 @@ impl PkgOps for Pkg {
             }
             snprintf(lname[nlock], MAX_TEXT, "%s", tok[0]);
             snprintf(lver[nlock], 32, "%s", tok[1]);
-            /* the digest is the last token; the ref in between may hold spaces */
-            if (snprintf(vdir, sizeof vdir, "./vendor/%s", tok[0]) >= (int)sizeof vdir) {
+            /* the digest is the last token; the ref in between may hold spaces.
+               Its algorithm is part of the format: a legacy 16-hex FNV value is
+               reported, never compared as if it were a SHA-256 (SH-44). */
+            if (!sha_hex_ok(tok[ntok - 1])) {
+                fprintf(stderr, "ctc: '%s' has an unsupported digest '%s' in ct.lock; re-run '%s get' to regenerate\n", tok[0], tok[ntok - 1], prog);
+                rc = 1;
+            } else if (snprintf(vdir, sizeof vdir, "./vendor/%s", tok[0]) >= (int)sizeof vdir) {
                 fprintf(stderr, "ctc: package path too long for '%s'\n", tok[0]);
                 rc = 1;
             } else if (self->dir_digest(vdir, vdig, sizeof vdig) != 0) {

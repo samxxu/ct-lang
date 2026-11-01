@@ -144,6 +144,34 @@ fi
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
 
 echo
+echo "== ct install rejects a same-size tamper =="
+# SH-44: a change that keeps the file's length must still be caught.
+printf 'pub int twice(int x);\nint twice(int x) { return 3 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/is.out" 2>"$work/is.err" ); then
+    bad "install same-size tamper" "expected a non-zero exit"
+elif grep -Fq "does not match ct.lock" "$work/is.err"; then
+    ok "rejects a same-size digest mismatch"
+else
+    bad "install same-size tamper" "wrong diagnostic: $(cat "$work/is.err")"
+fi
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
+
+echo
+echo "== ct install rejects a legacy FNV digest =="
+# SH-44: the algorithm is part of the lock format. A 16-hex FNV value must be
+# reported, not silently compared against a SHA-256.
+cp "$work/proj/ct.lock" "$work/proj/ct.lock.good"
+sed -E 's/sha256:[0-9a-f]{64}/0123456789abcdef/' "$work/proj/ct.lock.good" >"$work/proj/ct.lock"
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/il.out" 2>"$work/il.err" ); then
+    bad "install legacy digest" "expected a non-zero exit"
+elif grep -Fq "unsupported digest" "$work/il.err"; then
+    ok "rejects a legacy FNV digest"
+else
+    bad "install legacy digest" "wrong diagnostic: $(cat "$work/il.err")"
+fi
+mv "$work/proj/ct.lock.good" "$work/proj/ct.lock"
+
+echo
 echo "== ct install rejects a missing vendored package =="
 mv "$work/proj/vendor/extra" "$work/proj/vendor/extra.bak"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/im.out" 2>"$work/im.err" ); then
@@ -309,10 +337,10 @@ else
     else
         bad "ct.pkg <git>" "missing the gutil dep: $(cat "$work/proj/ct.pkg")"
     fi
-    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} [0-9a-f]+$" "$work/proj/ct.lock"; then
+    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
         ok "MVS picks the lowest satisfying tag and pins its commit"
     else
-        bad "ct.lock <git>" "expected 'gutil 0.1.0 git <commit> <digest>', got: $(grep gutil "$work/proj/ct.lock")"
+        bad "ct.lock <git>" "expected 'gutil 0.1.0 git <commit> sha256:<digest>', got: $(grep gutil "$work/proj/ct.lock")"
     fi
 
     echo
@@ -325,10 +353,10 @@ else
         && git add -A && git commit -qm one )
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
             "$work/ct-ast" get "notags@*" >"$work/h.out" 2>"$work/h.err" ); then
-        if grep -Eq "^notags 0\.0\.1 git [0-9a-f]{40} [0-9a-f]+$" "$work/proj/ct.lock"; then
+        if grep -Eq "^notags 0\.0\.1 git [0-9a-f]{40} sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
             ok "locks the default branch tip when there is no tag"
         else
-            bad "ct.lock <HEAD>" "expected 'notags 0.0.1 git <commit> <digest>', got: $(grep notags "$work/proj/ct.lock")"
+            bad "ct.lock <HEAD>" "expected 'notags 0.0.1 git <commit> sha256:<digest>', got: $(grep notags "$work/proj/ct.lock")"
         fi
     else
         bad "ct get <HEAD>" "non-zero exit: $(cat "$work/h.err")"
