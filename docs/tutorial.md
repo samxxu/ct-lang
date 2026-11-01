@@ -287,7 +287,8 @@ cc build/*.c -o app && ./app        # woof 7
 
 ## 8. 内存：Drop、delete、own、泄漏告警
 
-三种释放手段，按需要选（`test/modules/autodrop`、`test/modules/leak`）：
+三种释放手段，按需要选（`test/modules/autodrop`、`test/modules/leak`）。
+完整的所有权、工厂与池化实践见 [memory-guide](memory-guide.md)（其中记录了 AutoDrop 缺陷 SH-33 已于 v0.16.0 修复）。
 
 ```c
 #include <stdio.h>
@@ -322,12 +323,14 @@ $ ct leak.ct -o leak.c
 leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 ```
 
-- **`delete p;`** 立刻释放：有 `Drop` 就先调 `drop()`，再 `free`。**不置空**——`p` 仍是悬空指针，
-  要继续用就先自己 `p = 0;`。
-- **`own T *p = malloc(...)`** 交所有权：作用域闭合 `}` 与函数帧顶层的 `return` 前自动释放，
-  按声明逆序；重新赋值或把 `p` 当独立右值传出（`q = p;`）即视为所有权转移，不再兜底。
-  约束：必须是带 `use Drop` 的**结构体指针**、必须由 `malloc`/`calloc` 初始化、`}` 与 `return`
-  必须位于**行首**。
+- **`delete p;`** 立刻释放：有 `Drop` 就先调 `drop()`，再 `free`，**并把可赋值的实参置空**
+  （`p = 0;`），所以之后 `p == 0` 恒成立，不需要手工清空；实参不是左值（如 `delete get();`）时
+  只释放、不赋值。
+- **`own T *p = malloc(...)`** 交所有权：作用域闭合 `}` 与每个 `return` 之前自动释放，
+  按声明逆序；重新赋值或把 `p` 当独立右值传出（`q = p;`、`return p;`）即视为所有权转移，不再兜底。
+  约束：必须是带 `use Drop` 的**结构体指针**、必须由 `malloc`/`calloc` 初始化；`}` 必须位于
+  **行首**，`return` 则没有位置要求（行内的 `if (c) return 1;` 同样会在分支内注入释放）。
+  该「行首」要求其实只属于冻结的 L2 行重写管线。
 - **泄漏是告警不是错误**，格式固定：
 
 ```sh
@@ -439,7 +442,7 @@ map trait Socket for namespace posix {
 
 | 命令 | 作用 |
 | --- | --- |
-| `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译，产出同名 `.c`/`.h` |
+| `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
 | `ct build <in.ct>… -o <dir>` | 多文件编译，每单元一份 `.c`/`.h`，带增量缓存 |
 | `ct build … -I <dir>` | 追加导入搜索根（可重复） |
@@ -465,9 +468,8 @@ map trait Socket for namespace posix {
 3. **块注释只保护第一行**：`/* … */` 的续行会被当普通代码行处理，其中的 `self`、方法调用照常改写。
    多行注释里别写看似代码的东西。
 4. **单行函数体不处理**：`int f() { return 1; }` 与函数头同处一行时，体内的派发不重写。
-5. **ct-ast 只接受已实现的子集**：`switch` / `do-while` / `goto` 等普通 C 会在 `{` 处报
-   `unexpected token`。要写这类代码只能手工构建 L0 种子（`gcc selfhost/l0/ctc.c -o ctc`）并用它编译；
-   `install.sh` 装出的 `ctc` 是 `ct` 的别名（同一个 ct-ast 二进制），一样不支持。
+5. **`switch` / `do-while` / `goto` 均已支持**（第 7 批起，见 §4.13 / §4.16 与 README 的变换表）；
+   早期「在 `{` 处报 `unexpected token`」的说法已过时，也不必再手工构建 L0 种子绕过。
 6. **块式 namespace 与跨命名空间裸调用**会被 ct-ast 拒绝；用分号式声明 + 限定调用。
 7. **struct 类型的数组字段**：L0 / L2 不支持，ct-ast 已支持（逐元素写 vptr，见 §6 与
    [language-spec §6](language-spec.md)）；其余组合先查 [language-spec §4.8](language-spec.md)。
@@ -480,7 +482,7 @@ map trait Socket for namespace posix {
 - [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
 - [architecture.md](architecture.md) —— 编译器内部怎么按行改写
 - [roadmap.md](roadmap.md) —— 已落地与后续阶段
-- `examples/**` —— 7 个可运行示例；`test/cases/**` —— 每个语法点的最小快照
+- `examples/**` —— 8 个可运行示例；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知
 - 包管理：`ct get` / `ct install`，清单格式见 [design/phase8.md](design/phase8.md)
@@ -759,6 +761,9 @@ These shapes are exercised daily by `test/modules/{split,ns_funcs,ns_qual,ns_dir
 
 ### 8. Memory: Drop, delete, own, leak warnings
 
+Ownership, factories and pooling in full are covered by the [memory guide](memory-guide.md)
+(it records that the AutoDrop defect SH-33 was fixed in v0.16.0).
+
 ```c
 #include <stdio.h>
 #include <stdlib.h>
@@ -792,12 +797,15 @@ $ ct leak.ct -o leak.c
 leak.ct:20: warning: potential leak: 'leak' (Box*) allocated but never deleted
 ```
 
-- **`delete p;`** frees immediately: `drop()` first when the struct uses `Drop`, then `free`. It does
-  **not** null the pointer — `p` is left dangling, so write `p = 0;` yourself before reusing it.
-- **`own T *p = malloc(...)`** hands over ownership: released before the scope's closing `}` and at a
-  top-level `return`, in reverse declaration order; reassigning `p` or passing it on as a bare rvalue
-  (`q = p;`) transfers ownership and disables the safety net. The struct must `use Drop`, the pointer must
-  come from `malloc`/`calloc`, and the `}` / `return` must start a line.
+- **`delete p;`** frees immediately: `drop()` first when the struct uses `Drop`, then `free`. It
+  **nulls the argument** when it is assignable (`p = 0;`), so `p == 0` holds afterwards and no manual
+  clearing is needed; a non-lvalue argument (`delete get();`) is only freed, not assigned.
+- **`own T *p = malloc(...)`** hands over ownership: released before the scope's closing `}` and before
+  every `return`, in reverse declaration order; reassigning `p` or passing it on as a bare rvalue
+  (`q = p;`, `return p;`) transfers ownership and disables the safety net. The struct must `use Drop`,
+  the pointer must come from `malloc`/`calloc`, and the `}` must start a line (`return` has no
+  position requirement — `if (c) return 1;` is released inside the branch too). That "line start"
+  requirement belongs to the frozen L2 only.
 - **Leaks are warnings, not errors**:
 
 ```sh
@@ -914,7 +922,7 @@ is rejected with `a shim source needs a matching .shim.h`.
 
 | Command | Purpose |
 | --- | --- |
-| `ct <in.ct>` / `ct compile <in.ct>` | single-file compile, writes `<in>.c`/`.h` |
+| `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes only the `.c`, a `.h.ct` input also writes `<in>.h` |
 | `ct <in.ct> -o <out.c>` | explicit output path |
 | `ct build <in.ct>… -o <dir>` | multi-file compile, one `.c`/`.h` per unit, incremental cache |
 | `ct build … -I <dir>` | extra import roots (repeatable) |
@@ -941,10 +949,9 @@ Ordered by how often they bite; every one is grounded in [language-spec §6](lan
 3. **A block comment protects only its first line**: continuation lines are treated as ordinary code, and
    `self` / method calls in them are rewritten as usual.
 4. **Single-line function bodies are not processed**: `int f() { return 1; }` on one line is left as is.
-5. **ct-ast accepts only the implemented subset**: `switch` / `do-while` / `goto` report
-   `unexpected token` at the `{`. For those, build the L0 seed by hand
-   (`gcc selfhost/l0/ctc.c -o ctc`) and use that; the `ctc` installed by `install.sh` is an alias of
-   `ct` (the same ct-ast binary) and does not support them either.
+5. **`switch` / `do-while` / `goto` are supported** (since batch 7 — see §4.13 / §4.16 and the README
+   transform table); the old "`unexpected token` at the `{`" note is stale, and the L0-seed workaround
+   is no longer needed.
 6. **Block namespaces and bare cross-namespace calls are rejected** by ct-ast; use the semicolon form and
    qualified calls.
 7. **Struct-typed array fields**: L0 / L2 do not support them, ct-ast does (element-wise vptr writes —
@@ -958,7 +965,7 @@ Ordered by how often they bite; every one is grounded in [language-spec §6](lan
 - [polymorphism.md](polymorphism.md) — why vtables and not something else
 - [architecture.md](architecture.md) — how the line-based rewriting works internally
 - [roadmap.md](roadmap.md) — what has landed and what comes next
-- `examples/**` — seven runnable demos; `test/cases/**` — a minimal snapshot per feature
+- `examples/**` — eight runnable demos; `test/cases/**` — a minimal snapshot per feature
 - Editor support: `editors/vscode/` (declarative highlighting, zero dependencies)
 - Dialects: `examples/07_dialect/` turns comment-embedded DSLs into plain CT; the compiler stays unaware
 - Packages: `ct get` / `ct install`, manifest format in [design/phase8.md](design/phase8.md)

@@ -370,13 +370,14 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 
 `own` 是一个**上下文关键字**，只出现在声明行的行首：它把变量标记为「持有对象生命周期」，
 编译器在作用域出口自动释放。它是 Phase 5 新增项，**L0（`ctc.c`）不认识它**（会原样透传），
-由 CT 线（L2，`selfhost/l2/**`；ct-ast 行为等价）实现。
+由 CT 线实现：L2（`selfhost/l2/**`，冻结 oracle）与 ct-ast（安装入口）。两者在出口注入的**位置要求**上
+自 v0.16.0 起不同，见下表与约束。
 
 | 源码形态 | 处理 |
 | --- | --- |
 | `own Person *p = malloc(sizeof(struct Person));` | 去掉 `own` 后照常声明；登记 autodrop |
 | 声明作用域的闭合 `}`（行首） | 在该行之前插入 `if (p) { Person_Drop_drop(p); free(p); p = 0; }` |
-| 函数帧顶层的 `return`（行首） | 同上，插入全部 autodrop 变量的释放（声明逆序） |
+| 每个 `return` 之前（L2 要求行首；ct-ast 无位置要求） | 同上，插入全部 autodrop 变量的释放（声明逆序） |
 | `delete p;` | 既有的 `free`/`drop` 照旧；同时取消 autodrop（不重复释放） |
 | `p = …;`（重新赋值） | 取消 autodrop（所有权已转移，不再兜底） |
 | `p` 以**独立值**形式出现在赋值右值（`q = p;`）或 `return` 的返回表达式中 | 取消 autodrop（逃逸）；读取字段 / 元素（`x = p->n;`、`x = p[0];`）**不**算逃逸 |
@@ -387,8 +388,9 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
   且该 struct 必须 `use Drop`；否则编译期报错。
 - `own` 只允许出现在**函数体内**（文件作用域报错）；不支持数组形态（`own T *ps[n]`）。
 - 同一作用域的多个 `own` 变量按**声明逆序**释放。
-- 闭合 `}` 与 `return` 必须位于**行首**；行内形式（`b->n = 1; }`、`if (p) return 0;`）编译期报错，
-  不静默跳过——逐行注入无法把释放语句安全地放进条件分支。
+- L2 要求闭合 `}` 与 `return` 位于**行首**；行内形式（`b->n = 1; }`、`if (p) return 0;`）编译期报错，
+  不静默跳过——逐行注入无法把释放语句安全地放进条件分支。**ct-ast 只对 `}` 有该要求**：`return`
+  无位置要求，分支内与行内的 `return` 都会在它之前注入（v0.16.0 起，见 §4.40）。
 - `goto` 跳出声明作用域不会触发释放。
 - `static` 局部变量不能是 `own`（`a static local cannot be 'own'`）：静态对象的生命期不归作用域管。
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
@@ -1384,30 +1386,38 @@ int main(void)
 | --- | --- |
 | 参数 `void f(borrow Request *r)` | 去掉 `borrow`；参数登记为借用（代码生成不变） |
 | `borrow Conn *c = expr;` | 去掉 `borrow` 后照常声明；登记为借用 |
-| 声明作用域的闭合 `}` / 函数帧顶层的行首 `return` | 插入 `if (c) { Conn_Handback_handback(c); c = 0; }`（与 `own` 共用一张表，按声明逆序） |
+| 声明作用域的闭合 `}` / **每个** `return` 之前（分支内、行内均可，无位置要求） | 插入 `if (c) { Conn_Handback_handback(c); c = 0; }`（与 `own` 共用一张表，按声明逆序） |
 | `delete c;`（`c` 是借用） | 编译错误：借用对象不归本作用域 |
 | `g = c;` / 外层局部 `x = c;` | 编译错误：借用的生命期比目标短 |
+| `c = other;`（借用句柄重新赋值） | 编译错误：会静默丢失归还动作 |
 
 约束与限制：
 
-- 参数与声明都必须是**结构体指针**；数组、`static` 局部、文件作用域、`switch` 体内一律报错。
+- 参数与声明都必须是**结构体指针**；数组、`static` 局部、`switch` 体内一律报错；文件作用域直接用
+  `borrow` 报 `'borrow' is only allowed inside a function body`。
+- 借用句柄**不可重新赋值**，也**不可存入** `static` 局部或文件作用域变量（一律编译错误）——
+  这三条都会让归还动作静默丢失。
 - 声明必须带初始化式，且类型须 `use Handback` 并已有 `impl Handback for S`；缺失即报错
   （不提供默认空体，否则「归还」会静默变成空操作）。
 - 出口注入与 `own` 同构：**不释放内存**，只调 `handback` 并置空——归还后对象仍在池里，可能被他人借走。
 - `return c;`（局部借用逃逸）报 `warning: a borrowed pointer escapes through 'return'` 并**取消注入**；
   `return r;`（借用参数逃逸）只警告。
 - `Handback` 实现在**被借出的对象**上（出口时编译器只有 `T *c`），与 `Drop` 一致。
+  但结构体表按**翻译单元**重建：`impl Handback for S` 必须与 `borrow` 同单元，跨单元借用会报
+  `struct '<S>' uses trait 'Handback' but this unit has no impl`（与 `Drop` 的跨单元限制同源）。
 - 已知限制（诚实标注）：`store(c)`（实参未标 `borrow`）与字段级 `s->p = c` 不检查；`goto` 跨过声明
   静默失效；不区分池对象与栈对象。**不要宣称「有了 borrow 就不会悬垂」**。
 
 诊断文本（英文、小写、无句号、标识符单引号）：
 
 ```text
+'borrow' is only allowed inside a function body
 'borrow' requires a struct pointer parameter
 'borrow' requires an initialiser of struct pointer type
 struct '<S>' does not use trait 'Handback'
-struct '<S>' uses trait 'Handback' but has no impl
+struct '<S>' uses trait 'Handback' but this unit has no impl
 a borrowed pointer cannot be deleted
+a borrowed pointer cannot be reassigned
 a borrowed pointer cannot be stored in '<name>' (its scope outlives the borrow)
 'borrow' is not supported inside a switch
 'borrow' does not support arrays
@@ -1483,6 +1493,10 @@ trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，�
 > `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、`MAX_FIELDS` 64、`MAX_FUNCS` 256、
 > `MAX_PARAMS` 16、`MAX_VARS` 4096、`MAX_TYPES` 256、`MAX_CALLS` 1024；其余（`MAX_TEXT` / `MAX_PATH` /
 > `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` / `MAX_MAPS`）不变。策略仍是「固定上限 + 越界硬报错」，未改成动态分配。
+>
+> 实现细节（ct-ast）：`MAX_NODES` 是 `selfhost/ct-ast/runtime/arena/Arena.h.ct` 里的宏，只在 `alloc` 判界时使用；
+> 而节点数组会随 `pub struct Arena` 进入生成的 `Arena.h`，**宏不跨翻译单元**，所以该字段写的是字面量
+> `131072`。两者必须相等，改一处就要同步改另一处。
 
 | 常量 | 值 | 含义 | 超限行为 |
 | --- | --- | --- | --- |
@@ -1947,14 +1961,15 @@ Rules and limits:
 
 `own` is a **contextual keyword** recognised only at the start of a declaration line. It marks the
 variable as owning its object's lifetime, so the compiler releases it at scope exit. This is a Phase 5
-addition: **L0 (`ctc.c`) does not know it** (it passes the line through), and the CT line
-(L2, `selfhost/l2/**`; ct-ast is behaviourally equivalent) implements it.
+addition: **L0 (`ctc.c`) does not know it** (it passes the line through), and the CT line implements
+it: L2 (`selfhost/l2/**`, the frozen oracle) and ct-ast (the installed entry). The two differ in the
+**position requirement** for exit injection from v0.16.0 on, see the table and the constraints.
 
 | Shape | Expansion |
 | --- | --- |
 | `own Person *p = malloc(sizeof(struct Person));` | emit the declaration without `own`; register it as auto-dropped |
 | the declaring scope's closing `}` (line-initial) | insert `if (p) { Person_Drop_drop(p); free(p); p = 0; }` before it |
-| a `return` at the function frame's own level (line-initial) | the same, for every auto-dropped variable in reverse declaration order |
+| before every `return` (line-initial for L2; no position requirement for ct-ast) | the same, for every auto-dropped variable in reverse declaration order |
 | `delete p;` | the usual `free`/`drop`; auto-drop is cancelled (no double release) |
 | `p = …;` (reassignment) | auto-drop is cancelled (ownership moved) |
 | `p` as a standalone value on the right-hand side of an assignment (`q = p;`) or in the returned expression | auto-drop is cancelled (escape); reading a field or an element (`x = p->n;`, `x = p[0];`) is **not** an escape |
@@ -1965,9 +1980,11 @@ Constraints and limits:
   `malloc` / `calloc`, whose struct `use Drop`; anything else is a compile-time error.
 - `own` is allowed **inside a function body only** (file scope is an error), and arrays are rejected.
 - Multiple auto-dropped variables in one scope are released in **reverse declaration order**.
-- The closing `}` and the `return` must start their line; inline forms (`b->n = 1; }`,
+- L2 requires the closing `}` and the `return` to start their line; inline forms (`b->n = 1; }`,
   `if (p) return 0;`) are a compile-time error rather than a silent skip — a line-oriented injector
-  cannot place the release inside a conditional.
+  cannot place the release inside a conditional. **ct-ast only requires that of the `}`**: a `return`
+  has no position requirement, and branch-internal or inline `return`s get the injection before them
+  (from v0.16.0 on, see §4.40).
 - `goto` out of the declaring scope does not release.
 - A `static` local cannot be `own` (`a static local cannot be 'own'`): a static object's lifetime is
   not the scope's to end.
@@ -3092,14 +3109,17 @@ int main(void)
 | --- | --- |
 | parameter `void f(borrow Request *r)` | drop `borrow`; the parameter is recorded as borrowed (output unchanged) |
 | `borrow Conn *c = expr;` | drop `borrow` and declare as usual; recorded as borrowed |
-| the declaring scope's closing `}` / a line-initial `return` at the function frame's own level | insert `if (c) { Conn_Handback_handback(c); c = 0; }` (one list shared with `own`, reverse declaration order) |
+| the declaring scope's closing `}` / before **every** `return` (branches and inline included, no position requirement) | insert `if (c) { Conn_Handback_handback(c); c = 0; }` (one list shared with `own`, reverse declaration order) |
 | `delete c;` on a borrow | compile error: the object is not this scope's to free |
 | `g = c;` / outer local `x = c;` | compile error: the borrow outlives its target |
+| `c = other;` (reassigning a borrow handle) | compile error: the handback would be silently lost |
 
 Constraints and limits:
 
-- Both the parameter and the declaration must be a **struct pointer**; arrays, `static` locals,
-  file scope and a `switch` body are all errors.
+- Both the parameter and the declaration must be a **struct pointer**; arrays, `static` locals and a
+  `switch` body are errors; a file-scope `borrow` reports `'borrow' is only allowed inside a function body`.
+- A borrow handle **cannot be reassigned** and **cannot be stored** in a `static` local or a
+  file-scope variable (all compile errors) — each would silently lose the handback.
 - A declaration needs an initialiser, the type must `use Handback`, and `impl Handback for S` must
   exist; otherwise it is an error (no default body — "hand back" would silently do nothing).
 - Exit injection mirrors `own` but **never frees**: it calls `handback` and nulls the pointer, because
@@ -3107,7 +3127,9 @@ Constraints and limits:
 - `return c;` (a local borrow escapes) reports `warning: a borrowed pointer escapes through 'return'`
   and **cancels the injection**; `return r;` (a borrowed parameter) only warns.
 - The `Handback` implementation lives on the **borrowed object** (at exit the compiler only holds
-  `T *c`), exactly as `Drop` does.
+  `T *c`), exactly as `Drop` does. The struct table is rebuilt per **translation unit** though, so
+  `impl Handback for S` must share the unit with the `borrow`; borrowing across units reports
+  `struct '<S>' uses trait 'Handback' but this unit has no impl` (the same cross-unit limit `Drop` has).
 - Known limits (state them honestly): `store(c)` (a callee parameter not marked `borrow`) and the field
   store `s->p = c` are not checked; a `goto` jumping over the declaration fails silently; pooled and
   stack objects are not distinguished. **Never claim that `borrow` removes dangling altogether.**
@@ -3115,11 +3137,13 @@ Constraints and limits:
 Diagnostics (English, lowercase, no trailing period, identifiers in single quotes):
 
 ```text
+'borrow' is only allowed inside a function body
 'borrow' requires a struct pointer parameter
 'borrow' requires an initialiser of struct pointer type
 struct '<S>' does not use trait 'Handback'
-struct '<S>' uses trait 'Handback' but has no impl
+struct '<S>' uses trait 'Handback' but this unit has no impl
 a borrowed pointer cannot be deleted
+a borrowed pointer cannot be reassigned
 a borrowed pointer cannot be stored in '<name>' (its scope outlives the borrow)
 'borrow' is not supported inside a switch
 'borrow' does not support arrays
@@ -3222,6 +3246,11 @@ are never compared — everything is copied verbatim); whether a trait/struct na
 > `MAX_FIELDS` 64, `MAX_FUNCS` 256, `MAX_PARAMS` 16, `MAX_VARS` 4096, `MAX_TYPES` 256,
 > `MAX_CALLS` 1024; the rest (`MAX_TEXT` / `MAX_PATH` / `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` /
 > `MAX_MAPS`) are unchanged. The policy is still "fixed cap + hard error", not dynamic allocation.
+>
+> Implementation note (ct-ast): `MAX_NODES` is a macro in `selfhost/ct-ast/runtime/arena/Arena.h.ct` and is
+> used only to bound `alloc`; the node array itself travels with `pub struct Arena` into the generated
+> `Arena.h`, where **macros do not cross a translation unit**, so the field is the literal `131072`. The
+> two values must stay equal: changing one means changing the other.
 
 | Constant | Value | Meaning | On overflow |
 | --- | --- | --- | --- |

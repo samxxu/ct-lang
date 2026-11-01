@@ -107,12 +107,14 @@ C 允许每个翻译单元把不完整类型补全一次，因此生成物里的
 若库头已经给出完整定义，则 binding **不能**再定义同名 struct（C 重定义）。此时把库头判为
 不透明、由 binding 提供布局，或给镜像 struct 换名并把库类型藏在 `void *` 之后。
 
-### 5. 跨单元限制（v1）
+### 5. 跨单元接口值
 
-`build` 模式的生成头只**前置声明**接口类型（`struct <Trait>_iface` 没有定义），因此**接口值不能
-跨单元传递**；而映射实例的装箱本来就是单元私有的（[language-spec](../docs/language-spec.md) §4.10）。
+自第 2 批起，`pub` struct 上的 `pub` trait 会导出 vtable，生成头也会定义接口类型，因此消费方可以
+声明接口值、接住 `pub` 函数的返回值、甚至直接装箱该 struct（见
+[language-spec](../docs/language-spec.md) §4.11）。
 
-因此 binding 在自己的单元内完成装箱，对外只暴露**标量入口**：
+本 binding 把 trait 与实例都保持私有，其 vtable 仍是 `static`，所以在单元内完成装箱，对外只暴露
+**标量入口**：
 
 ```c
 pub void mock_hal_init(int fd) {
@@ -126,7 +128,8 @@ pub int mock_hal_send(char *buf, int len) {
 }
 ```
 
-消费方 `import uart;` 后调用 `mock_hal_send(...)`。等跨单元接口值可用后，这一层可以去掉。
+消费方 `import uart;` 后调用 `mock_hal_send(...)`。若把 trait 与实例标成 `pub`，消费方即可直接装箱
+`uart1`。
 
 ### 6. 构建与测试
 
@@ -154,7 +157,7 @@ gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
 - [ ] 直通 `#include` 能看见全部被绑定的符号
 - [ ] 镜像 struct 的布局与库实现一致（不透明句柄优先）
 - [ ] `trait` 的每个方法都在 `map` 里**恰好绑定一次**（漏绑=空槽崩溃，重复=重定义）
-- [ ] 需要初始化时提供 `pub` 入口；不要把接口值传出单元（v1）
+- [ ] 需要初始化时提供 `pub` 入口；trait 私有就只能在单元内装箱（标量入口）
 - [ ] `demo.ct` + `demo.expected.out`，期望值由**真实二进制**跑出来
 - [ ] 端到端跑通：`ct build` → `cc` 零警告 → 运行 → 比对
 - [ ] 不 vendored、不下载、不成为编译器构建步骤

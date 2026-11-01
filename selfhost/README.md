@@ -15,7 +15,7 @@
 | `l0/ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
 | `l1/ctc.ct` | L1 | 冻结种子：用 CT OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
 | `l2/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
-| `ct-ast/{main.ct,Pkg.h.ct,Diag.h.ct}` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译：`main.ct` 是 driver + 编译核心，`Pkg.h.ct` 是包管理器，`Diag.h.ct` 是告警存储与错误计数（各自状态私有，只导出 `pub` 包装器；被 `import` 的单元按规则必须是 `.h.ct`）；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
+| `ct-ast/**` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译（带 `-I selfhost/ct-ast`）：**分组多单元**，每个单元自持状态、只导出 `pub` 原语——`main.ct` 只做绑定与分派，`tool/driver` 是 compile 模式驱动（`ct <file> -o <file>`），`frontend/module` 是 build 驱动（单元表、import、`pub` 路由），`frontend/parse` 是解析器（含共享原语、表达式与类型文法及 `map` 构造器），`frontend/{lex,sym,type}` 是词法器、符号表与类型/装箱层，`runtime/arena` 是节点与字面量池，`backend/{mem,emit}` 是 AutoDrop/泄漏分析与 C 发射器，`tool/{pkg,diag,cache}` 是包管理器、告警存储与增量缓存；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
 
 **单元命名**：每个单元以它的主类型命名（`Parser.h.ct` ↔ `struct Parser`），一个单元一个主类型，附属记录类型可同文件；主类型过大可拆子对象单元（文件头注明所属主对象），入口 `main.ct` 例外。这条与其它命名约定同在 [AGENTS.md](../AGENTS.md) §3，并由 `check-ast.sh` 的 unit-name lint 校验。
 
@@ -24,7 +24,7 @@
 `check-all.sh` 是聚合入口，依次跑本目录其余脚本；每个脚本的职责、步骤与用法见
 [README §5](../README.md#5-测试)。
 
-`check-goldens.sh` · `check-archive.sh` · `check-m2a.sh` · `ct-tour.sh` · `check-ast.sh`
+`check-goldens.sh` · `check-archive.sh` · `check-m2a.sh` · `ct-tour.sh` · `check-ast.sh` · `check-warnings.sh`
 （聚合入口另含 [test/pkg/run.sh](../test/pkg/run.sh) 与
 [editors/vscode/test/check-grammar.py](../editors/vscode/test/check-grammar.py)）。
 
@@ -78,7 +78,7 @@ lives in [AGENTS.md](../AGENTS.md) §3 and is pinned by the unit-name lint in `c
 script's duties, steps and usage are documented in
 [README §5](../README.md#5-tests).
 
-`check-goldens.sh` · `check-archive.sh` · `check-m2a.sh` · `ct-tour.sh` · `check-ast.sh`
+`check-goldens.sh` · `check-archive.sh` · `check-m2a.sh` · `ct-tour.sh` · `check-ast.sh` · `check-warnings.sh`
 (the aggregate entry additionally runs [test/pkg/run.sh](../test/pkg/run.sh) and
 [editors/vscode/test/check-grammar.py](../editors/vscode/test/check-grammar.py)).
 
