@@ -182,7 +182,7 @@
 | 批次（batch） | 第三十二批、第三十六批… | 一个可独立收口的工作单元；**不是** Phase（Phase 对应版本号，批次可在一个 Phase 后继续累加）。设计档案在 `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
 | 切片（slice） | 12.1、2a.1、9.5a | 一个批次内的最小可验证步骤；每个切片完成后必须过全量关卡 |
 | 锚点（anchor） | `> 锚点：commit \`f75c32c\`` | 文档撰写时的源码快照；文中行号以该提交为准，代码变更后需复核 |
-| 能力补丁（capability patch） | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 | Phase 12 之后不新开 Phase、只补能力的版本；版本号仍遵循 `v0.MINOR.PATCH` |
+| 能力补丁（capability patch） | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 | Phase 12 之后不新开 Phase、只补能力的版本；版本号仍遵循 `v0.MINOR.PATCH` |
 
 ### 7. 生态与嵌入式
 
@@ -416,7 +416,7 @@
 | batch | batch 32, batch 36, … | one unit of work that can close on its own; **not** a phase (a phase maps onto a version, while batches keep accumulating after it). Its design record lives in `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
 | slice | 12.1, 2a.1, 9.5a | the smallest verifiable step inside a batch; every slice must pass the full gate set before the next starts |
 | anchor | `> anchor: commit \`f75c32c\`` | the source snapshot a document was written against; its line numbers are relative to that commit and need re-checking after it moves |
-| capability patch | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 | a post-Phase-12 version that adds capability without opening a new phase; the `v0.MINOR.PATCH` scheme still applies |
+| capability patch | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 | a post-Phase-12 version that adds capability without opening a new phase; the `v0.MINOR.PATCH` scheme still applies |
 
 ### 7. Ecosystem and embedded
 
