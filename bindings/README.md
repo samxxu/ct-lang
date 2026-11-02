@@ -3,7 +3,9 @@
 > 中文 · [English](#english)
 >
 > 状态：v1（Phase 12，2026-10-19）。首个 binding 为 [mock-hal/](mock-hal/)；真实库参考为
-> [posix-socket/](posix-socket/)（第三十九批的伴随 C shim）。
+> [posix-socket/](posix-socket/)（第三十九批的伴随 C shim）。规范化的首批官方 binding 见
+> `ct-pkg/hal-posix`（平台实现 [契约包 `ct-pkg/hal`](https://github.com/ct-pkg/hal)），
+> 发行与索引用 [docs/package-guide.md](../docs/package-guide.md)。
 
 ---
 

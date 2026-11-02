@@ -196,11 +196,15 @@
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
 | 绑定（bindings） | `bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
-| 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引 |
+| 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引，Phase 18 建组织（`github.com/ct-pkg`）并发布首批官方包 |
 | 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires` |
 | 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44） |
 | vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct build -I vendor/<name>` 使用它 |
 | 最小版本选择（MVS） | `ct get` | 每个依赖取满足所有范围的最低版本；无 tag 的 git 源回退默认分支 HEAD（D23） |
+| 契约包（contract package） | `ct-pkg/hal` | 只有 `pub trait` 声明的纯 `.h.ct` 包（`Uart` / `Gpio` / `Clock` / `Log`），不含实现；平台包按它提供实现（Phase 18.3，`hal 1.0.0` 冻结） |
+| 平台包（platform package） | `ct-pkg/hal-posix` | binding 形式（`#include` 直通 + 镜像 trait/struct + 全局实例 + `map`）实现契约包；一份源码覆盖 macOS / Linux，`ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`（glibc 在 `-std=c99` 下隐藏 POSIX 声明；生成头先于源码 PP 行输出，故只能走 cc 命令行）。一个 `posix_hal` 实例可装箱成四个 trait（Phase 18.4） |
+| C 映射包（C-mapping package） | `ct-pkg/clib` | `.m.ct` 零成本静态映射到 libc（`clib::String` / `clib::Stdio` / `clib::Math`）：调用点展开为普通 C 调用，无 wrapper / `_iface` / vtable；`ldflags = -lm` 由 `ct install` 拼进命令（Phase 18.5） |
+| 索引仓库（index repository） | `ct-pkg/index` | 托管五字段纯文本 `index`；`tools/gen-index.sh` 按 `ct` 的同一摘要算法计算 `sha256`，`tools/refresh-index.sh` 取各包最高 tag 后重建，夜间 workflow 提交差异（Phase 18.2） |
 
 ### 8. 许可
 
