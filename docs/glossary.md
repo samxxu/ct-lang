@@ -167,7 +167,7 @@
 
 | 术语 | 形式 | 说明 |
 | --- | --- | --- |
-| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`）。例外：`v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` 是 Phase 12 之后的补丁收口（C 子集补齐 / trait 默认方法 / `.m.ct` 静态映射 / 静态映射的 `sizeof` 修复 / `borrow` + `Handback` / borrow 审查修复 / 静态表堆化 + `ct.lock` 改 SHA-256），不对应新阶段 |
+| 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`）。例外：`v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` / `v0.16.3` 是 Phase 12 之后的补丁收口（C 子集补齐 / trait 默认方法 / `.m.ct` 静态映射 / 静态映射的 `sizeof` 修复 / `borrow` + `Handback` / borrow 审查修复 / 静态表堆化 + `ct.lock` 改 SHA-256 / `return` 求值顺序 + 字段上限文案 + 文档漂移），不对应新阶段 |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
 | 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md)，D46–D52 见 [design/phase12.md](design/phase12.md) |
@@ -182,7 +182,7 @@
 | 批次（batch） | 第三十二批、第三十六批… | 一个可独立收口的工作单元；**不是** Phase（Phase 对应版本号，批次可在一个 Phase 后继续累加）。设计档案在 `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
 | 切片（slice） | 12.1、2a.1、9.5a | 一个批次内的最小可验证步骤；每个切片完成后必须过全量关卡 |
 | 锚点（anchor） | `> 锚点：commit \`f75c32c\`` | 文档撰写时的源码快照；文中行号以该提交为准，代码变更后需复核 |
-| 能力补丁（capability patch） | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 / v0.16.1 / v0.16.2 | Phase 12 之后不新开 Phase、只补能力的版本；版本号仍遵循 `v0.MINOR.PATCH` |
+| 能力补丁（capability patch） | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 / v0.16.1 / v0.16.2 / v0.16.3 | Phase 12 之后不新开 Phase、只补能力的版本；版本号仍遵循 `v0.MINOR.PATCH` |
 
 ### 7. 生态与嵌入式
 
@@ -401,7 +401,7 @@
 
 | Term | Form | Notes |
 | --- | --- | --- |
-| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) / 12 (bindings + dialect deepening) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`). Exception: `v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` close patches after Phase 12 (the C-subset work / trait default methods / `.m.ct` static mapping / the static-mapping `sizeof` fix / `borrow` + `Handback` / the borrow review fixes / heap-allocated static tables plus the SHA-256 lock digest) and do not start a new phase |
+| phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) / 12 (bindings + dialect deepening) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`). Exception: `v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` / `v0.16.3` close patches after Phase 12 (the C-subset work / trait default methods / `.m.ct` static mapping / the static-mapping `sizeof` fix / `borrow` + `Handback` / the borrow review fixes / heap-allocated static tables plus the SHA-256 lock digest / return-order fix, clearer capacity diagnostic and doc drift) and do not start a new phase |
 | sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 6) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
 | design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md), D46–D52 in [design/phase12.md](design/phase12.md) |
@@ -416,7 +416,7 @@
 | batch | batch 32, batch 36, … | one unit of work that can close on its own; **not** a phase (a phase maps onto a version, while batches keep accumulating after it). Its design record lives in `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
 | slice | 12.1, 2a.1, 9.5a | the smallest verifiable step inside a batch; every slice must pass the full gate set before the next starts |
 | anchor | `> anchor: commit \`f75c32c\`` | the source snapshot a document was written against; its line numbers are relative to that commit and need re-checking after it moves |
-| capability patch | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 / v0.16.1 / v0.16.2 | a post-Phase-12 version that adds capability without opening a new phase; the `v0.MINOR.PATCH` scheme still applies |
+| capability patch | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 / v0.16.1 / v0.16.2 / v0.16.3 | a post-Phase-12 version that adds capability without opening a new phase; the `v0.MINOR.PATCH` scheme still applies |
 
 ### 7. Ecosystem and embedded
 
