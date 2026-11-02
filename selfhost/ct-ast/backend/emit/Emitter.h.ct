@@ -2182,6 +2182,32 @@ impl EmitOps for Emitter {
             return self->emit_node(self->arena->nodes[n].b, ind);
         }
         if (self->arena->nodes[n].kind == N_FOR) {
+            int init = self->arena->nodes[n].a;
+            /* C only allows `register` or no storage class in a for's first
+               declaration (C99 6.8.5.3), so `for (static int i = 0; ...)` is a
+               GNU extension that gcc rejects under -std=c99. Emit the
+               declaration in a block of its own: the initialiser still runs
+               once, the name keeps the same scope, and the loop is plain C. */
+            if (init >= 0 && self->arena->nodes[init].kind == N_DECL
+                && self->arena->nodes[init].aux) {
+                int q;
+                self->emit_indent(ind);
+                fputs("{\n", self->out);
+                for (q = init; q >= 0; q = self->arena->nodes[q].next)
+                    if (self->emit_node(q, ind + 1) != 0) return -1;
+                self->emit_indent(ind + 1);
+                fputs("for (; ", self->out);
+                if (self->arena->nodes[n].b >= 0
+                    && self->emit_cond(self->arena->nodes[n].b) != 0) return -1;
+                fputs("; ", self->out);
+                if (self->arena->nodes[n].c >= 0
+                    && self->emit_inline(self->arena->nodes[n].c) != 0) return -1;
+                fputs(") ", self->out);
+                if (self->emit_node(self->arena->nodes[n].d, ind + 1) != 0) return -1;
+                self->emit_indent(ind);
+                fputs("}\n", self->out);
+                return 0;
+            }
             self->emit_indent(ind);
             fputs("for (", self->out);
             if (self->arena->nodes[n].a >= 0 && self->emit_inline(self->arena->nodes[n].a) != 0) return -1;

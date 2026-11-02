@@ -893,7 +893,10 @@ for (static int i = 0; i < 2; i++) {
   也是「标签后必须有语句」的最省写法（`case 3: ;`、`done: ;`）。空语句不发射任何字符，
   外层块的 `{` `}` 照常输出。
 - `for` 的首句可以写 `static` 声明：初始化只执行一次，变量跨调用保持取值，
-  因此第二次进入同一 `for` 时直接以余值判断条件（C 的规定）。
+  因此第二次进入同一 `for` 时直接以余值判断条件。
+- 标准 C 的 `for` 首句只允许 `register` 或无存储类（C99 6.8.5.3），`static` 在那里是 GNU 扩展；
+  ct-ast 因此把它提到一个自带的块里发射——`{ static int i = 0; for (; i < 2; i++) … }`：
+  初始化仍只跑一次、名字的作用域不变，生成的 C 是标准 C99，gcc 与 clang 都接受。
 - 空语句与 `for` 首句的 static 都不新增诊断；`static` 后面不是声明时沿用
   `expected a declaration after 'static'`。
 
@@ -2631,7 +2634,11 @@ for (static int i = 0; i < 2; i++) {
   the cheapest way to satisfy "a label needs a statement" (`case 3: ;`, `done: ;`). It emits no
   characters — the surrounding block still prints its braces.
 - The first clause of a `for` may declare a `static`: the initialiser runs once and the variable keeps
-  its value across calls, so entering the same `for` again tests the leftover value (as C specifies).
+  its value across calls, so entering the same `for` again tests the leftover value.
+- Standard C allows only `register` or no storage class in a `for`-init declaration (C99 6.8.5.3),
+  where `static` is a GNU extension. ct-ast therefore emits it inside a block of its own —
+  `{ static int i = 0; for (; i < 2; i++) … }` — so the initialiser still runs once, the name keeps
+  its scope, and the generated C is standard C99 that gcc and clang both accept.
 - Neither form adds a diagnostic; `static` that does not introduce a declaration keeps reporting
   `expected a declaration after 'static'`.
 

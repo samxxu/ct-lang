@@ -1,7 +1,7 @@
 # Phase 19 · 受限语义检查
 
 > 中文 · [English](#english)
-> **状态：规划中**（2026-11-02，spike GO；待实施） · 版本：`v0.19.0`（收口时 bump）
+> **状态：实施中**（2026-11-03，19.0 已完成；19.1–19.4 待实施） · 版本：`v0.19.0`（收口时 bump）
 > 前置：[spike-semantic-check.md](spike-semantic-check.md)（GO）；Phase 17 / 18 不阻塞本阶段
 
 ---
@@ -35,6 +35,7 @@
 
 | 切片 | 内容 | 主要改动 | 出口 | 风险 |
 | --- | --- | --- | --- | --- |
+| **19.0** | 前置：`for` 首句 `static` 的发射改为自带块内的声明（标准 C99，不再依赖 GNU 扩展） | `backend/emit/Emitter` | `gcc -std=c99` 下 `37_empty_stmt` 通过；行为输出不变 | 作用域/缩进回归 |
 | **19.1** | 调用点 arity：函数与 trait 方法；可变参、map 绑定路径不重复检查 | `Parser` / `Expr` / `TypeCheck` / `Diag` | 探针「`s.f()` 少参」「`add(1)` 少参」被捕获；383 文件零误报 | 误报；需 unknown 跳过 |
 | **19.2** | 实参类型粗粒度兼容：精确名、指针层级、struct / interface；未知跳过 | `TypeCheck` / `Symbols` | 明显类型错配被捕获；无误报 | 字符串类型误判 |
 | **19.3** | 歧义与跨单元：多 trait 同名方法（SH-46）报错；导入导出签名一致性 | `Symbols` / `Module` / `Parser` | SH-46 用例报错；跨单元签名负例通过 | 实例级 `map` 与静态映射的边界 |
@@ -42,7 +43,7 @@
 
 ### 5. 顺序与依赖
 
-19.1 → 19.2 → 19.3 → 19.4。19.2 依赖 19.1 的调用点解析；19.3 依赖 19.1 的方法解析；19.4 最后接入门禁。每片独立可回退。
+19.0 → 19.1 → 19.2 → 19.3 → 19.4。19.0 先清掉标准 C 的潜在红项（gcc 收紧时不再翻车），其余顺序不变；19.2 依赖 19.1 的调用点解析；19.3 依赖 19.1 的方法解析；19.4 最后接入门禁。每片独立可回退。
 
 ### 6. 版本与发布
 
@@ -96,6 +97,7 @@ The spike proved that method existence, impl/trait signature mismatch (warning),
 
 | Slice | Content | Touch points | Exit | Risk |
 | --- | --- | --- | --- | --- |
+| **19.0** | prerequisite: emit a `for`-init `static` as a declaration inside its own block (standard C99, no GNU extension) | `backend/emit/Emitter` | `37_empty_stmt` passes under `gcc -std=c99`; program output unchanged | scope/indent regressions |
 | **19.1** | call-site arity for functions and trait methods; variadics; no duplicate map-binding checks | `Parser` / `Expr` / `TypeCheck` / `Diag` | both arity probes caught; zero false positives on 383 files | false positives; need `unknown` skip |
 | **19.2** | coarse argument-type compatibility | `TypeCheck` / `Symbols` | clear mismatches caught; no false positives | string-based types |
 | **19.3** | ambiguity (SH-46) and cross-unit signature drift | `Symbols` / `Module` / `Parser` | SH-46 case errors; cross-unit negative case passes | instance-level `map` edges |
@@ -103,7 +105,7 @@ The spike proved that method existence, impl/trait signature mismatch (warning),
 
 ### 5. Order
 
-19.1 → 19.2 → 19.3 → 19.4. Each slice is independently revertible.
+19.0 → 19.1 → 19.2 → 19.3 → 19.4. 19.0 first removes the standard-C hazard so a stricter gcc cannot trip it; each slice is independently revertible.
 
 ### 6. Version
 
