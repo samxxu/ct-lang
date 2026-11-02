@@ -50,6 +50,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **内存**：`Drop` / `delete`、`own`（AutoDrop）、路径敏感泄漏告警、`borrow` + `Handback`
 - **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace
 - **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`bindings/` 声明式 C 库对接
+- **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`）
 - **诊断与工具**：`#line` 溯源、`--diagnostics=json|text`、多错误恢复、增量缓存、`ct get` / `ct install`
 - **明确不做**：类型检查、泛型、继承、优化（语言在 `1.0.0` 才定稿）
 
@@ -128,6 +129,7 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **memory**: `Drop` / `delete`, `own` (AutoDrop), path-sensitive leak warnings, `borrow` + `Handback`
 - **modules**: `namespace` / `import` / `pub` / multi-file `ct build` / directory = namespace
 - **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `bindings/` for C libraries
+- **passthrough**: `#ct-raw` / `#ct-endraw` raw blocks (macros and hand-written C land in the generated `.c` byte for byte)
 - **diagnostics and tooling**: `#line` traceability, `--diagnostics=json|text`, multi-error recovery, incremental cache, `ct get` / `ct install`
 - **not done by design**: type checking, generics, inheritance, optimisation (the language is not final until `1.0.0`)
 

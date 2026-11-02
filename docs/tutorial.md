@@ -442,6 +442,22 @@ map trait Socket for namespace posix {
 `ct_sock_errno()`。完整例子见 `bindings/posix-socket/`；改了 shim 会让消费者重建。
 有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
 
+### 9.3 原样块：`#ct-raw`
+
+映射 / shim 之外的第三种接法：把一段 C **逐字节**带进生成的 `.c`。`#ct-raw` 与 `#ct-endraw`
+必须各占一行且位于第 1 列，块内文本不经过词法/语法分析：
+
+```ct
+#ct-raw
+#define TRIPLE(x) ((x) * 3)
+static int raw_helper(int n) { return n + 1; }
+#ct-endraw
+```
+
+生成物在块后写一行 `#line`（恢复到块后的源行号）；`--no-line` 只去掉这行锚点，块内容不变。
+一个块上限 32768 字节；`.m.ct` 仍只接受 `#include` / `#define`；ct-ast 自身的源码不得使用块。
+规则与诊断见 [language-spec §4.41](language-spec.md#441-raw-透传ct-rawphase-173仅-ct-ast)。
+
 ## 10. 标准库：`std`
 
 `std` 是随仓库发布的**源码库**，不在 `ct` 二进制里；导入要显式给 `-I`（没有默认搜索路径）：
@@ -974,6 +990,24 @@ The consumer's generated `.c` automatically carries `#include "socket.shim.h"`, 
 `posix::Socket.err()` expands into `ct_sock_errno()`. The full example is
 `bindings/posix-socket/`; touching the shim rebuilds the consumer. A `.shim.c` without its `.shim.h`
 is rejected with `a shim source needs a matching .shim.h`.
+
+#### 9.3 Raw blocks: `#ct-raw`
+
+A third way in besides mappings and shims: carry a C fragment **byte for byte** into the generated
+`.c`. `#ct-raw` and `#ct-endraw` must each own a line at column 1, and the text between them never
+touches the lexer or the parser:
+
+```ct
+#ct-raw
+#define TRIPLE(x) ((x) * 3)
+static int raw_helper(int n) { return n + 1; }
+#ct-endraw
+```
+
+The output writes a `#line` after the block (restoring the source line number); `--no-line` drops
+only that anchor, not the text. One block is capped at 32768 bytes; a `.m.ct` still admits only
+`#include` / `#define`, and ct-ast's own sources must stay free of blocks. The rules and diagnostics
+are in [language-spec §4.41](language-spec.md#441-raw-passthrough-ct-rawphase-173-ct-ast-only).
 
 ### 10. The standard library: `std`
 

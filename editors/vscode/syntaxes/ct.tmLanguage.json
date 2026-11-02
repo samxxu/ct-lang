@@ -4,6 +4,8 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#ct-raw" },
+    { "include": "#ct-raw-end" },
     { "include": "#ct-import" },
     { "include": "#ct-namespace" },
     { "include": "#ct-path" },
@@ -62,6 +64,16 @@
       "patterns": [
         { "match": "\\\\.", "name": "constant.character.escape.ct" }
       ]
+    },
+    "ct-raw": {
+      "begin": "^#ct-raw[ \\t]*$",
+      "end": "^#ct-endraw[ \\t]*$",
+      "name": "meta.raw.ct",
+      "contentName": "source.c"
+    },
+    "ct-raw-end": {
+      "match": "^#ct-endraw[ \\t]*$",
+      "name": "meta.raw.ct"
     },
     "ct-import": {
       "match": "^[ \\t]*(import)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)(?:[ \\t]+(as)[ \\t]+([A-Za-z_][A-Za-z0-9_]*))?[ \\t]*;",

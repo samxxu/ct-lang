@@ -47,6 +47,9 @@ CT_CASES = (
     # Phase 4.40 `borrow` / `Handback`: a contextual keyword in both its
     # statement-initial and parameter-annotation forms.
     "test/ast/62_borrow_handback/prog.ct",
+    # Phase 17.3 raw passthrough: the marker pair, with a macro and a C
+    # function inside that must not be read as a CT construct.
+    "test/ast/65_raw/prog.ct",
     # Batch 38 zero-cost static mapping: `.m.ct` units with `for type` and
     # `for namespace` hosts, plus the call sites that consume them.
     "test/modules/map_unit/libc/libc.m.ct",
@@ -258,6 +261,18 @@ def main():
                       if l.strip().startswith("trait ") for h in hs))
             check("`self->` inside a default body -> ct-self",
                   any(h[0] == "ct-self" for _, l, hs in rows if "self->" in l for h in hs))
+        if "65_raw" in rel:
+            check("`#ct-raw` at column 1 -> ct-raw",
+                  any(h[0] == "ct-raw" for _, l, hs in rows
+                      if l.strip() == "#ct-raw" for h in hs))
+            check("`#ct-endraw` -> ct-raw-end",
+                  any(h[0] == "ct-raw-end" for _, l, hs in rows
+                      if l.strip() == "#ct-endraw" for h in hs))
+            check("no CT keyword rule fires inside the raw block",
+                  not any(h[0] in ("ct-use", "ct-self", "ct-trait", "ct-impl",
+                                  "ct-own", "ct-borrow", "ct-pub")
+                          for _, l, hs in rows if "TRIPLE" in l or "raw_helper" in l
+                          for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")

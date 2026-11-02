@@ -1,0 +1,17 @@
+/* A raw block is copied byte for byte: it carries a macro the parser would
+   not understand and a C function the emitter would not derive from CT. */
+#include <stdio.h>
+
+#ct-raw
+#define TRIPLE(x) ((x) * 3)
+static int raw_helper(int n)
+{
+    return n + 1;
+}
+#ct-endraw
+
+int main(void)
+{
+    printf("%d\n", TRIPLE(raw_helper(2)));
+    return 0;
+}

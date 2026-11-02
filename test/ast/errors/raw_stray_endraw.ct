@@ -1,0 +1,7 @@
+/* A closing marker without an opening one is a mistake, not C source. */
+int main(void)
+{
+    return 0;
+}
+
+#ct-endraw

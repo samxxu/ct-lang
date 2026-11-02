@@ -1,0 +1,11 @@
+/* #ct-raw without a closing marker: the error is reported at the start line. */
+int main(void)
+{
+    return 0;
+}
+
+#ct-raw
+static int never_closed(void)
+{
+    return 1;
+}

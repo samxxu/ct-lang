@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.4.0
+
+- Highlighting for raw pass-through (Phase 17.3): `#ct-raw` / `#ct-endraw`
+  form an embedded block (`meta.raw.ct`) whose body is left to the C grammar,
+  so a macro or a hand-written function inside it is not read as a CT construct.
+- `test/check-grammar.py`: 36 assertions, adding the raw marker pair and a
+  "no CT keyword inside the block" check.
+
 ## 0.3.0
 
 - Highlighting for `borrow` (`storage.modifier.borrow.ct`) in both of its

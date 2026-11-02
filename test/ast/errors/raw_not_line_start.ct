@@ -1,0 +1,9 @@
+/* #ct-raw is a line-level directive: an indented marker is refused. */
+int main(void)
+{
+    return 0;
+}
+
+  #ct-raw
+static int helper(void) { return 1; }
+  #ct-endraw

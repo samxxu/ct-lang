@@ -1,0 +1,9 @@
+/* The closing marker must stand alone on its line. */
+int main(void)
+{
+    return 0;
+}
+
+#ct-raw
+static int helper(void) { return 1; }
+#ct-endraw trailing junk

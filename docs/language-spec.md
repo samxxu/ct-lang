@@ -1446,6 +1446,47 @@ warning: a borrowed pointer escapes through 'return'
 
 设计与实现说明见 [design/borrow.md](history/design/borrow.md)。
 
+#### 4.41 raw 透传（`#ct-raw`，Phase 17.3，仅 ct-ast）
+
+ct-ast 逐节点重新生成 C，因此它无法重写的 C 片段（宏、手写函数、`#pragma`）需要一个显式的
+原样通道：`#ct-raw` 与 `#ct-endraw` 之间的一切**逐字节**进入生成的 `.c`，从不经过词法/语法分析。
+
+```c
+#include <stdio.h>
+
+#ct-raw
+#define TRIPLE(x) ((x) * 3)
+static int raw_helper(int n)
+{
+    return n + 1;
+}
+#ct-endraw
+
+int main(void)
+{
+    printf("%d\n", TRIPLE(raw_helper(2)));
+    return 0;
+}
+```
+
+| 形态 | 处理 |
+| --- | --- |
+| `#ct-raw` 单独一行且**位于第 1 列** | 打开块；块内容按源顺序插入顶层声明的流中 |
+| 块内任何文本 | 原样复制到字面量池，发射时逐个字节写出（不 token 化、不补空格） |
+| `#ct-endraw` 单独一行且位于第 1 列 | 关闭块；生成的 `.c` 在块后写 `#line <块后第一行>`（默认开启的行模式） |
+| `--no-line` | 块文本照旧原样发射，只是不写 `#line` 重锚 |
+| `.h.ct` 单元 | 块只进 `.c`，不进 `.h` |
+
+约束与诊断：
+
+- 一个块最多 **32768 字节**（超限报 `raw block exceeds 32768 bytes`）。
+- 标记必须在**第 1 列**（`  #ct-raw` 报 `#ct-raw must start at column 1`），其后只允许空白。
+- 未闭合在**起始行**报 `unclosed #ct-raw (expected #ct-endraw)`；孤立的 `#ct-endraw` 报
+  `#ct-endraw without #ct-raw`；关闭行后跟非空白文本报 `unexpected text after #ct-endraw`。
+- 只在普通 `.ct` / `.h.ct` 单元可用：`.m.ct` 的 prologue 白名单仍只放行 `#include` / `#define`。
+- L0 / L1 按行透传，本来就会原样输出块内容；本规定只约束 ct-ast。编译器**自身源码**
+  （`selfhost/ct-ast/**`）不得使用块，由 `selfhost/check-ast.sh` 的护栏检查。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -3192,6 +3233,52 @@ warning: a borrowed pointer escapes through 'return'
 ```
 
 Design and implementation notes: [design/borrow.md](history/design/borrow.md).
+
+#### 4.41 Raw passthrough (`#ct-raw`, Phase 17.3, ct-ast only)
+
+ct-ast regenerates C node by node, so a C fragment it cannot rewrite (a macro, a hand-written
+function, a `#pragma`) needs an explicit pass-through: everything between `#ct-raw` and
+`#ct-endraw` lands in the generated `.c` **byte for byte**, never touching the lexer or the parser.
+
+```c
+#include <stdio.h>
+
+#ct-raw
+#define TRIPLE(x) ((x) * 3)
+static int raw_helper(int n)
+{
+    return n + 1;
+}
+#ct-endraw
+
+int main(void)
+{
+    printf("%d\n", TRIPLE(raw_helper(2)));
+    return 0;
+}
+```
+
+| Shape | Expansion |
+| --- | --- |
+| `#ct-raw` on its own line **at column 1** | opens the block; its text joins the top-level declaration stream in source order |
+| any text inside the block | copied into the literal pool and written out byte by byte (no tokenising, no padding) |
+| `#ct-endraw` on its own line at column 1 | closes the block; the generated `.c` then writes `#line <first line after the block>` (line mode is on) |
+| `--no-line` | the block is still emitted verbatim, only the `#line` re-anchor is dropped |
+| a `.h.ct` unit | the block goes into the `.c` only, never into the `.h` |
+
+Constraints and diagnostics:
+
+- One block is capped at **32768 bytes** (`raw block exceeds 32768 bytes`).
+- The markers must sit **at column 1** (`  #ct-raw` reports `#ct-raw must start at column 1`), and
+  only whitespace may follow them.
+- An unclosed block is reported at its **opening line** (`unclosed #ct-raw (expected #ct-endraw)`);
+  a stray `#ct-endraw` is `#ct-endraw without #ct-raw`; trailing text on the closing line is
+  `unexpected text after #ct-endraw`.
+- The block is available in an ordinary `.ct` / `.h.ct` unit only: the `.m.ct` prologue whitelist
+  still admits `#include` / `#define` alone.
+- L0 / L1 pass lines through as they stand, so the block already reaches their output; the rule binds
+  ct-ast only. The compiler's **own sources** (`selfhost/ct-ast/**`) must not use a block, which
+  `selfhost/check-ast.sh` enforces.
 
 ### 5. Naming contract
 

@@ -13,11 +13,11 @@
 #   3. selfhost/check-archive.sh                 L2 against the archived oracle (ratchet)
 #   4. selfhost/check-m2a.sh                     L1 output byte-identical with L0
 #   5. selfhost/ct-tour.sh                       end-to-end tour
-#   6. editors/vscode/test/check-grammar.py      editor grammar (33 assertions)
+#   6. editors/vscode/test/check-grammar.py      editor grammar (36 assertions)
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
 #   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7 + 10.x–12.x +
-#                                                batches 13–39: probes, corpus equivalence,
-#                                                fixpoint, negatives)
+#                                                batches 13–40: probes, corpus equivalence,
+#                                                fixpoint, negatives, raw pass-through)
 #   9. selfhost/check-warnings.sh                generated C compiles warning-free (-Wall -Wextra)
 #  10. test/docs/check-docs.py                   docs links, version, gate count and phase status
 #  11. test/std/run.sh                           std layer (Phase 17.2: seven modules)

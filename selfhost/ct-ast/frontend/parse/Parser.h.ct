@@ -39,6 +39,7 @@ import tool::diag::Diag;
 #define MAX_METHODS 64
 #define MAX_PARAMS 16
 #define MAX_RAW_INIT 4096
+#define MAX_RAW_BLOCK 32768
 #define MAX_TEXT 160
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
@@ -57,6 +58,7 @@ import tool::diag::Diag;
 #define N_PP 2
 #define N_PROG 1
 #define N_RAW 31
+#define N_RAW_TEXT 58
 #define N_STRUCT 20
 #define N_TYPEDEF 21
 #define N_UNION 48
@@ -276,6 +278,73 @@ static void trait_default_edges(struct Arena *arena, int n, struct Symbols *sym,
         trait_default_edges(arena, arena->nodes[n].c, sym, ti, from, edge);
         trait_default_edges(arena, arena->nodes[n].d, sym, ti, from, edge);
     }
+}
+
+/* `#ct-raw` is a preprocessor line the parser treats as a directive: the
+   spelling must match exactly, and trailing spaces / tabs / CR are allowed. */
+static int pp_is(const char *text, const char *name)
+{
+    int i = 0;
+    while (name[i] && text[i] == name[i]) i++;
+    if (name[i]) return 0;
+    while (text[i] == ' ' || text[i] == '\t' || text[i] == '\r') i++;
+    return text[i] == 0;
+}
+
+/* `#ct-raw` … `#ct-endraw`: copy the bytes between the two marker lines into
+   the literal pool verbatim and hand back an `N_RAW_TEXT` node. The block is
+   never tokenised; the lexer is rewound onto the line after `#ct-endraw` so
+   the rest of the file lexes normally. `num` is the pool offset, `a` the
+   length. The markers must start at column 1, and a block that runs into EOF
+   is reported at the `#ct-raw` line. */
+static int raw_text_node(struct Parser *self)
+{
+    const char *src;
+    int line, curline, i, ls, j, end, after, len, off, n, atbol;
+
+    src = self->lex->src;
+    line = self->lex->tokline;
+    if (self->lex->tokstart != self->lex->lstart)
+        return self->sup->fail_at(line, "#ct-raw must start at column 1");
+    i = self->lex->pos;
+    if (src[i] != '\n')
+        return self->sup->fail_at(line, "unclosed #ct-raw (expected #ct-endraw)");
+    i = i + 1;
+    ls = i;
+    curline = line + 1;
+    atbol = 1;
+    for (;;) {
+        if (!src[i])
+            return self->sup->fail_at(line, "unclosed #ct-raw (expected #ct-endraw)");
+        if (atbol && src[i] == '#' && strncmp(src + i, "#ct-endraw", 10) == 0) {
+            j = i + 10;
+            while (src[j] == ' ' || src[j] == '\t' || src[j] == '\r') j++;
+            if (src[j] == '\n' || src[j] == 0) { end = i; after = j; break; }
+            return self->sup->fail_at(curline, "unexpected text after #ct-endraw");
+        }
+        if (src[i] == '\n') { curline++; i++; atbol = 1; continue; }
+        atbol = 0;
+        i++;
+    }
+    len = end - ls;
+    if (len > MAX_RAW_BLOCK)
+        return self->sup->fail_at(line, "raw block exceeds 32768 bytes");
+    off = self->arena->str_begin();
+    for (i = 0; i < len; i++)
+        if (self->arena->str_put((int)src[ls + i]) != 0)
+            return self->sup->fail_at(line, "raw block exceeds the literal pool");
+    self->arena->str_end();
+    n = self->sup->new_node(N_RAW_TEXT);
+    if (n < 0) return -1;
+    self->arena->nodes[n].line = line;
+    self->arena->nodes[n].num = off;
+    self->arena->nodes[n].a = len;
+    /* resume lexing on the line after the marker */
+    self->lex->line = curline;
+    self->lex->pos = after;
+    self->lex->bol = 1;
+    self->sup->lex_next();
+    return n;
 }
 
 impl ParseDeclOps for Parser {
@@ -724,6 +793,14 @@ impl ParseOps for Parser {
                     return tool::diag::ct_sem_error(self->lex->tokline, 1,
                         "a .m.ct unit allows only #include and #define in its prologue",
                         self->mem->path);
+                if (pp_is(self->lex->toktext, "#ct-raw")) {
+                    n = raw_text_node(self);
+                    if (n < 0) return -1;
+                    if (self->append_node(prog, n) != 0) return -1;
+                    continue;
+                }
+                if (pp_is(self->lex->toktext, "#ct-endraw"))
+                    return self->sup->fail_at(self->lex->tokline, "#ct-endraw without #ct-raw");
                 n = self->sup->new_node(N_PP);
                 if (n < 0) return -1;
                 snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);

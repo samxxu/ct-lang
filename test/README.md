@@ -15,7 +15,7 @@
 | `errors/` | L0 | 负例：扁平文件对 `<name>.ct` + `<name>.expected-err` | `run.sh` 的 errors 层 |
 | `archive/` | L0（历史） | Phase 0.3 移出的越位特性 fixture，Phase 2–5 的对差基线，**不跑** | `selfhost/check-archive.sh` |
 | `modules/` | CT 线 | 特性/多单元探针：一目录一用例（输入 + `.expected.*` + 可选 `<mode>.args` 驱动提示，可含 `src/`） | `selfhost/check-ast.sh`、`selfhost/check-archive.sh` |
-| `ast/` | CT 线 | 行为探针 `01..62`（逐批增长，以目录数为准）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
+| `ast/` | CT 线 | 行为探针 `01..65`（逐批增长，以目录数为准）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
 | `patterns/` | CT 线 | 设计模式用例：一目录一 `prog.ct` + `expected.out`（编译 → 零告警构建 → 运行 → 比对） | `selfhost/check-ast.sh` |
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
 | `pkg/` | 跨层 | 包管理器 `ct get` / `ct install` 用例 | `test/pkg/run.sh` |
@@ -46,7 +46,7 @@ byte-for-byte diff, while `ast/errors/` holds bare `.ct` files that `check-ast.s
 | `errors/` | L0 | negatives: flat pairs `<name>.ct` + `<name>.expected-err` | `run.sh`'s errors layer |
 | `archive/` | L0 (historical) | Phase 0.3 over-reach fixtures, the Phases 2–5 diff baseline; **not run** | `selfhost/check-archive.sh` |
 | `modules/` | CT line | feature / multi-unit probes: one directory per case (input + `.expected.*` + an optional `<mode>.args` hint, may nest `src/`) | `selfhost/check-ast.sh`, `selfhost/check-archive.sh` |
-| `ast/` | CT line | behavioural probes `01..62` (growing per batch; count the directories): one directory per case (`prog.ct` + `prog.expected.out`); `ast/errors/` holds bare negatives | `selfhost/check-ast.sh` |
+| `ast/` | CT line | behavioural probes `01..65` (growing per batch; count the directories): one directory per case (`prog.ct` + `prog.expected.out`); `ast/errors/` holds bare negatives | `selfhost/check-ast.sh` |
 | `patterns/` | CT line | design-pattern cases: one directory per pattern (`prog.ct` + `expected.out`; compile → warning-free build → run → compare) | `selfhost/check-ast.sh` |
 | `acceptance/` | cross-layer | the end-to-end acceptance checklist (`ast_spike.ct` / `ast_parse_spike.ct`); `PENDING` is expected and **non-blocking** | `test/acceptance/run.sh` |
 | `pkg/` | cross-layer | package-manager `ct get` / `ct install` cases | `test/pkg/run.sh` |

@@ -30,7 +30,7 @@
 | 3 | `check-archive.sh` | `test/archive/**` 越位特性 fixture 的对差 ratchet |
 | 4 | `check-m2a.sh` | M2-a 单用例验收（L0 → L1 → 01_trait_basic 与 golden 逐字节一致） |
 | 5 | `ct-tour.sh` | 一条龙演示整条自举链 |
-| 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（33 项断言） |
+| 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（36 项断言） |
 | 7 | `test/pkg/run.sh` | 包管理器 `ct get` / `ct install` |
 | 8 | `check-ast.sh` | ct-ast 行为、语料等价、不动点、负例、缓存与诊断 |
 | 9 | `check-warnings.sh` | 全部生成 C 在 `-Wall -Wextra` 下零告警 |
@@ -125,7 +125,7 @@ lives in [AGENTS.md](../AGENTS.md) §3 and is pinned by the unit-name lint in `c
 | 3 | `check-archive.sh` | the diff ratchet over the `test/archive/**` over-reach fixtures |
 | 4 | `check-m2a.sh` | M2-a acceptance (L0 → L1 → 01_trait_basic byte-identical with the golden) |
 | 5 | `ct-tour.sh` | a single run through the whole bootstrap chain |
-| 6 | `editors/vscode/test/check-grammar.py` | editor highlight grammar (33 assertions) |
+| 6 | `editors/vscode/test/check-grammar.py` | editor highlight grammar (36 assertions) |
 | 7 | `test/pkg/run.sh` | the package manager `ct get` / `ct install` |
 | 8 | `check-ast.sh` | ct-ast behaviour, corpus equivalence, fixpoint, negatives, cache and diagnostics |
 | 9 | `check-warnings.sh` | every generated C compiles warning-free under `-Wall -Wextra` |

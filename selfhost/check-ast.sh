@@ -184,6 +184,14 @@
 # file is rejected too, a static map's JSON carries the shim files, and two
 # mapping units that share a base name are an error rather than a silent pick.
 #
+# batch 40 adds raw pass-through (17.3): `#ct-raw` at column 1 opens a block
+# whose lines are copied verbatim into the generated C (never tokenised), and
+# `#ct-endraw` closes it; the emitted text is re-anchored with a `#line` on the
+# line after the block. test/ast/65_raw pins the verbatim copy and the anchor,
+# and four negatives pin the column-1 rule, the unclosed block, the stray
+# `#ct-endraw` and trailing text. The cap is 32768 bytes, and the compiler's
+# own sources must stay free of raw blocks.
+#
 # The unit-name lint keeps `selfhost/ct-ast/**` on the layout rule: a unit file
 # is named after its main type, so every `.h.ct` declares a type or trait whose
 # name matches its own basename (`main.ct` is the entry, not a unit).
@@ -224,6 +232,16 @@ if [ -z "$name_bad" ]; then
     ok "every .h.ct unit declares a type named after its file"
 else
     bad "unit names" "$name_bad"
+fi
+
+echo
+echo "== the AST compiler's own sources carry no raw blocks (17.3) =="
+# ct-ast is built by L2, which does not know `#ct-raw`; a marker line here
+# would break the bootstrap chain, so the marker is banned from this tree.
+if grep -rq '^#ct-raw' selfhost/ct-ast; then
+    bad "self-host guard" "selfhost/ct-ast must not use #ct-raw"
+else
+    ok "no #ct-raw in selfhost/ct-ast"
 fi
 
 echo
@@ -361,6 +379,85 @@ do
         continue
     fi
     ok "mirror/$name"
+done
+
+echo
+echo "== raw pass-through (17.3) =="
+# A `#ct-raw` block is copied byte for byte -- the macro and the helper function
+# below would not survive the parser/emitter pair -- and the text is re-anchored
+# on the line after `#ct-endraw`. The plain behavioural loop above already runs
+# the fixture; these probes pin the emitted text and the anchor.
+rawd=test/ast/65_raw
+if ! "$work/ct-ast" --line "$rawd/prog.ct" -o "$work/raw65.c" \
+        >"$work/raw65.out" 2>"$work/raw65.err"; then
+    bad "raw 65_raw" "ct-ast failed: $(cat "$work/raw65.err")"
+elif ! grep -Fq '#define TRIPLE(x) ((x) * 3)' "$work/raw65.c"; then
+    bad "raw 65_raw" "the macro was not copied verbatim"
+elif ! grep -Fq 'static int raw_helper(int n)' "$work/raw65.c"; then
+    bad "raw 65_raw" "the raw function was not copied verbatim"
+elif ! grep -Fq '#line 12 "test/ast/65_raw/prog.ct"' "$work/raw65.c"; then
+    bad "raw 65_raw" "the #line anchor after the block is missing"
+else
+    ok "raw (verbatim copy + #line anchor)"
+fi
+
+if ! "$work/ct-ast" --no-line "$rawd/prog.ct" -o "$work/raw65b.c" \
+        >"$work/raw65b.out" 2>"$work/raw65b.err"; then
+    bad "raw 65_raw (no-line)" "ct-ast failed: $(cat "$work/raw65b.err")"
+elif ! grep -Fq '#define TRIPLE(x) ((x) * 3)' "$work/raw65b.c"; then
+    bad "raw 65_raw (no-line)" "the macro was not copied verbatim"
+elif grep -Fq '#line 12 "test/ast/65_raw/prog.ct"' "$work/raw65b.c"; then
+    bad "raw 65_raw (no-line)" "--no-line still anchored the block"
+else
+    ok "raw (verbatim copy with --no-line)"
+fi
+
+rm -rf "$work/raw-build"
+mkdir -p "$work/raw-build"
+if ! "$work/ct-ast" build --emit-c "$rawd/prog.ct" -o "$work/raw-build" \
+        >"$work/raw-build.out" 2>"$work/raw-build.err"; then
+    bad "raw 65_raw (build)" "build failed: $(cat "$work/raw-build.err")"
+elif ! grep -Fq '#define TRIPLE(x) ((x) * 3)' "$work/raw-build"/*.c; then
+    bad "raw 65_raw (build)" "the macro was not copied verbatim"
+elif ! grep -Fq '#line 12 "test/ast/65_raw/prog.ct"' "$work/raw-build"/*.c; then
+    bad "raw 65_raw (build)" "the #line anchor after the block is missing"
+else
+    ok "raw (build mode mirrors the anchor)"
+fi
+
+# The cap is 32768 bytes for one block; one byte more is refused by name.
+{
+    printf '#include <stdio.h>\n\n#ct-raw\n'
+    awk 'BEGIN { for (i = 0; i < 32769; i++) printf "x"; printf "\n" }'
+    printf '#ct-endraw\n\nint main(void) { return 0; }\n'
+} > "$work/raw-big.ct"
+if "$work/ct-ast" "$work/raw-big.ct" -o "$work/raw-big.c" \
+        >"$work/raw-big.out" 2>"$work/raw-big.err"; then
+    bad "raw cap" "an over-long block was accepted"
+elif grep -q "raw block exceeds 32768 bytes" "$work/raw-big.err"; then
+    ok "raw (the 32768-byte cap)"
+else
+    bad "raw cap" "$(cat "$work/raw-big.err")"
+fi
+
+# The four raw diagnostics are pinned verbatim; the generic errors loop also
+# sweeps them for the positioned shape.
+for pair in \
+    "raw_unclosed|unclosed #ct-raw (expected #ct-endraw)" \
+    "raw_not_line_start|#ct-raw must start at column 1" \
+    "raw_stray_endraw|#ct-endraw without #ct-raw" \
+    "raw_end_trailing|unexpected text after #ct-endraw"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "raw: $cf" "expected a non-zero exit"
+    elif grep -Fq "$cfmsg" "$work/$cf.err"; then
+        ok "raw ($cf)"
+    else
+        bad "raw: $cf" "$(cat "$work/$cf.err")"
+    fi
 done
 
 echo
