@@ -11,13 +11,19 @@ on:
   push:
     paths:
       - 'examples/wave1-demo/**'
-      - 'selfhost/ct-ast/tool/pkg/**'
+      - 'selfhost/ct-ast/**'
+      - 'selfhost/l0/**'
+      - 'selfhost/l1/**'
+      - 'selfhost/l2/**'
       - 'test/pkg/**'
       - '.github/workflows/packages.yml'
   pull_request:
     paths:
       - 'examples/wave1-demo/**'
-      - 'selfhost/ct-ast/tool/pkg/**'
+      - 'selfhost/ct-ast/**'
+      - 'selfhost/l0/**'
+      - 'selfhost/l1/**'
+      - 'selfhost/l2/**'
       - 'test/pkg/**'
       - '.github/workflows/packages.yml'
   schedule:
@@ -52,7 +58,7 @@ jobs:
           echo "$RUNNER_TEMP/ct" >> "$GITHUB_PATH"
 
       - name: fetch the package index
-        run: curl -fsSL https://raw.githubusercontent.com/ct-pkg/index/main/index -o "$RUNNER_TEMP/index"
+        run: curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 https://raw.githubusercontent.com/ct-pkg/index/main/index -o "$RUNNER_TEMP/index"
 
       - name: resolve, verify and run the demo
         env:
@@ -65,6 +71,8 @@ jobs:
           ct get --index "$CT_INDEX" hal-posix
           ct get --index "$CT_INDEX" clib
           ct update
+          test "$(wc -l <ct.lock)" -eq 3
+          grep -q '^hal-posix 1.0.1 ' ct.lock
           ct verify
           ct install >install.txt
           sh install.txt
@@ -96,7 +104,7 @@ jobs:
           echo "$RUNNER_TEMP/ct" >> "$GITHUB_PATH"
 
       - name: fetch the package index
-        run: curl -fsSL https://raw.githubusercontent.com/ct-pkg/index/main/index -o "$RUNNER_TEMP/index"
+        run: curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 https://raw.githubusercontent.com/ct-pkg/index/main/index -o "$RUNNER_TEMP/index"
 
       - name: resolve and verify on the target
         env:
@@ -109,6 +117,8 @@ jobs:
           ct get --index "$CT_INDEX" hal-posix
           ct get --index "$CT_INDEX" clib
           ct update
+          test "$(wc -l <ct.lock)" -eq 3
+          grep -q '^hal-posix 1.0.1 ' ct.lock
           ct verify
 
       - name: build and run with the aarch64 compiler
