@@ -2187,6 +2187,19 @@ cap_check methods "too many trait methods" "$work/cap_methods.ct"
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_funcs.ct"
 cap_check funcs "too many functions" "$work/cap_funcs.ct"
+# The boundary itself: 255 helpers plus `main` is exactly the cap and must build,
+# while one more is refused above.
+{
+    i=0
+    while [ "$i" -lt 255 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
+    printf 'int main(void) { return 0; }\n'
+} >"$work/cap_funcs_max.ct"
+if "$work/ct-ast" "$work/cap_funcs_max.ct" -o "$work/cap-funcs-max.c" \
+        >"$work/cap-funcs-max.out" 2>"$work/cap-funcs-max.err"; then
+    ok "cap funcs (256 accepted)"
+else
+    bad "cap funcs (256 accepted)" "$(cat "$work/cap-funcs-max.err")"
+fi
 {
     printf 'int main(void)\n'
     i=0

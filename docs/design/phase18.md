@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：实施中（2026-11-02 起；18.0 容量解除执行中，18.1–18.6 待落地）。**
+> **状态：实施中（2026-11-02 起；18.0 容量解除已完成，18.1–18.6 待落地）。**
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
 > （`hal` 契约 + 平台包 + C 库映射）、索引与 CI 产出**，为 `1.0.0` 做准备。
 > **D18-1…D18-11 已按建议值经用户确认**（2026-11-02）。本文件只记录计划，不描述现状；
@@ -70,6 +70,8 @@
 - 断言：`check-ast.sh` 的自举链（L0 → L1 → L2 → ct-ast）继续绿；现有 cap 用例以 ct-ast 的 256 为准，
   保持不变；补一条「256 函数可编、257 报 `too many functions`」的边界断言（走 ct-ast，L2 只作为构建者）。
 - 记录：改动前后 `ct` 二进制体积与 `__DATA` 的对比，写入 roadmap 的版本记录。
+- **实测（2026-11-02，macOS arm64 / Apple clang）**：L2 二进制 **13,403,192 B → 918,712 B**，
+  `__DATA` **13,107,200 B → 720,896 B**；L0 → L1 → L2 → ct-ast 自举链、11 道硬门禁与既有语料产物不变。
 
 #### 18.1 包规范
 
@@ -222,6 +224,9 @@
   target ct-ast's 256 and stay unchanged; add a boundary probe (256 functions compile, 257 reports
   `too many functions`) against ct-ast, with L2 used only as the builder.
 - Record the before / after binary size and `__DATA` in the roadmap release notes.
+- **Measured (2026-11-02, macOS arm64 / Apple clang)**: the L2 binary went **13,403,192 B → 918,712 B**
+  and `__DATA` **13,107,200 B → 720,896 B**; the L0 → L1 → L2 → ct-ast chain, all 11 hard gates and the
+  existing corpus artefacts are unchanged.
 
 #### 18.1 package conventions
 
