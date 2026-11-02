@@ -20,6 +20,7 @@ import frontend::lex::Lexer;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import tool::diag::Diag;
 
 #define MAX_FUNCS 256
 #define MAX_PARAMS 16
@@ -49,6 +50,7 @@ pub trait SupportOps {
     int  add_struct(const char *name);
     int  add_trait(const char *name);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
+    int  arity_warn(int line, const char *callee, const char *msg);
     int  ns_decl_name(const char *name, char *out, int cap);
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
@@ -363,6 +365,14 @@ impl SupportOps for ParseSupport {
             return -1;
         }
         return 0;
+    }
+
+    /* A call-site arity mismatch (19.1). The caller (the expression grammar)
+       knows the position and the signature; this unit only supplies the path
+       the driver re-points at each unit. */
+    int arity_warn(int line, const char *callee, const char *msg)
+    {
+        return tool::diag::ct_arity_warn(line, callee, msg, self->mem->path);
     }
 
     int ns_decl_name(const char *name, char *out, int cap)

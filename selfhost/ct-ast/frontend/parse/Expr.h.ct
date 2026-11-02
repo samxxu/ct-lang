@@ -109,6 +109,7 @@ pub trait ExprOps {
     int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
                          int *form);
     int  record_call(const char *callee, int line);
+    int  arity_check(int line, const char *callee, int got, int want);
 }
 
 pub struct Expr {
@@ -149,7 +150,37 @@ pub struct Expr {
     int  postfix_seed;
 } use ExprOps;
 
+/* Argument count of a call: `parse_args` hands back the first node of the
+   chain, or 0 for an empty list, and a fresh node carries `next = -1`. */
+static int arg_count(struct Arena *a, int first)
+{
+    int c = 0;
+    while (first > 0) {
+        c++;
+        first = a->nodes[first].next;
+    }
+    return c;
+}
+
+/* 19.1 call-site arity: only a callee whose signature is known is compared.
+   A call through a function pointer, an undeclared C library name, a `map`
+   recipe and a static type host all stay unknown and pass. The caller passes
+   the expected count it already knows (a variadic function's named part), so
+   this method only reports the mismatch; warning severity keeps `ct compile`
+   exit codes and artifacts unchanged (D19-4), and `ct check` (19.4) raises the
+   same record to an error. */
+
 impl ExprOps for Expr {
+    int arity_check(int line, const char *callee, int got, int want)
+    {
+        char msg[MAX_TEXT];
+        if (got == want) return 0;
+        snprintf(msg, sizeof msg, "takes %d argument(s), %d given", want, got);
+        if (self->sup->arity_warn(line, callee, msg) != 0)
+            return self->sup->fail("too many warnings");
+        return 0;
+    }
+
     /* The type keywords. L0 / L1 / L2 have always accepted the `stdint` /
        `stddef` / `stdbool` spellings and the qualifiers, so ct-ast lists the same
        set (`restrict` included): a program written against those headers is a
@@ -1125,7 +1156,7 @@ impl ExprOps for Expr {
 
     int parse_postfix(void)
     {
-        int n, m, idx, args;
+        int n, m, idx, args, mline;
         char fname[MAX_TEXT];
         char rtype[MAX_TEXT];
         char trname[MAX_TEXT];
@@ -1157,6 +1188,7 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field or method name");
                 snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+                mline = self->lex->tokline;
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
                     args = self->parse_args();
@@ -1249,6 +1281,26 @@ impl ExprOps for Expr {
                     if (m < 0) return -1;
                     self->arena->nodes[m].a = n;
                     snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                }
+                /* 19.1: a resolved trait method is compared against the call's
+                   argument count. A static trait (a `.m.ct` recipe), a `map`
+                   binding (the receiver's type stays in `text`) and a call
+                   through a function-pointer field (`kind` became N_CALL) are
+                   all unknown here and pass. `arity_check` only reports, so the
+                   generated call is unchanged. */
+                if (self->arena->nodes[m].kind == N_MCALL
+                    && self->arena->nodes[m].text[0]) {
+                    int t = self->sym->find_trait(self->arena->nodes[m].text);
+                    if (t >= 0 && !self->sym->traits[t].is_static) {
+                        int mi;
+                        for (mi = 0; mi < self->sym->traits[t].nm; mi++)
+                            if (strcmp(self->sym->traits[t].m[mi].name, fname) == 0) break;
+                        if (mi < self->sym->traits[t].nm
+                            && self->arity_check(mline, fname,
+                                                 arg_count(self->arena, args),
+                                                 self->sym->traits[t].m[mi].nparams) != 0)
+                            return -1;
+                    }
                 }
                 n = m;
                 continue;
@@ -1555,6 +1607,18 @@ impl ExprOps for Expr {
                 }
                 /* the call graph keeps the name the source wrote */
                 if (fi >= 0 && self->record_call(self->arena->nodes[n].text2, id_line) != 0) return -1;
+                /* 19.1: a resolved signature says how many arguments the callee
+                   takes; a variadic tail accepts any surplus past its named
+                   parameters. The message keeps the name the source wrote. */
+                if (fi >= 0) {
+                    int got, want, tail_ok;
+                    got = arg_count(self->arena, args);
+                    want = self->sym->funcs[fi].nparams;
+                    tail_ok = self->sym->funcs[fi].variadic && got > want;
+                    if (!tail_ok && self->arity_check(id_line, self->arena->nodes[n].text2,
+                                                      got, want) != 0)
+                        return -1;
+                }
                 /* the emitted call must spell the definition's C name */
                 if (fi >= 0)
                     snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);

@@ -226,5 +226,17 @@ for bd in bindings/*/; do
 done
 
 echo
+echo "== call-site arity stays quiet on the corpus (Phase 19.1) =="
+# Every fixture above is valid code, so a 19.1 arity record here would be a
+# false positive. check-ast.sh compares behaviour, not diagnostics, so this is
+# where the zero-false-positive rule for the whole corpus is enforced.
+arm=$(grep -l 'arity mismatch' "$work"/*.err 2>/dev/null)
+if [ -n "$arm" ]; then
+    bad "corpus arity" "unexpected arity warnings in: $arm"
+else
+    ok "no arity warnings across the corpus"
+fi
+
+echo
 printf 'check-warnings: %d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

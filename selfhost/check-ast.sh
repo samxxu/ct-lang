@@ -2511,6 +2511,73 @@ else
 fi
 
 echo
+echo "== call-site arity (19.1) =="
+# A resolved signature owns the argument count: a function call and a trait
+# method call are compared, while a function-pointer call, a C library name,
+# a `map` recipe and a static type host stay unknown and pass. A mismatch is a
+# warning in compile mode (D19-4 keeps `ct compile` / `ct build` exit codes
+# unchanged); `ct check` (19.4) raises the same record to an error.
+cat > "$work/arity_fn.ct" <<'AFEOF'
+int add(int a, int b) { return a + b; }
+
+int main(void)
+{
+    return add(1);
+}
+AFEOF
+if "$work/ct-ast" "$work/arity_fn.ct" -o "$work/arity_fn.c" \
+        >"$work/arity_fn.out" 2>"$work/arity_fn.err" \
+   && grep -q "warning: arity mismatch: 'add' takes 2 argument(s), 1 given" "$work/arity_fn.err"; then
+    ok "arity: a function call with a missing argument warns"
+else
+    bad "arity: function call" "$(cat "$work/arity_fn.err")"
+fi
+
+cat > "$work/arity_m.ct" <<'AMEOF'
+trait Shape {
+    int area(int scale);
+}
+
+struct Sq { int side; } use Shape;
+
+impl Shape for Sq {
+    int area(int scale) { return self->side * scale; }
+}
+
+int main(void)
+{
+    struct Sq s;
+    s.side = 2;
+    return s.area();
+}
+AMEOF
+if "$work/ct-ast" "$work/arity_m.ct" -o "$work/arity_m.c" \
+        >"$work/arity_m.out" 2>"$work/arity_m.err" \
+   && grep -q "warning: arity mismatch: 'area' takes 1 argument(s), 0 given" "$work/arity_m.err"; then
+    ok "arity: a trait method call with a missing argument warns"
+else
+    bad "arity: trait method" "$(cat "$work/arity_m.err")"
+fi
+
+cat > "$work/arity_ok.ct" <<'AKEOF'
+int add(int a, int b) { return a + b; }
+int total(int n, ...) { return n; }
+
+int main(void)
+{
+    int (*p)(int, int) = add;
+    return add(1, 2) + total(1, 2, 3) + p(4, 5);
+}
+AKEOF
+if "$work/ct-ast" "$work/arity_ok.ct" -o "$work/arity_ok.c" \
+        >"$work/arity_ok.out" 2>"$work/arity_ok.err" \
+   && [ ! -s "$work/arity_ok.err" ]; then
+    ok "arity: an exact call, a variadic tail and a function pointer stay quiet"
+else
+    bad "arity: known-good calls" "$(cat "$work/arity_ok.err")"
+fi
+
+echo
 echo "== memory: auto-drop and leak warnings (10.3) =="
 # AutoDrop releases every `own` object at its scope exit, in reverse order; the
 # three negative fixtures pin the layout / Drop / scope diagnostics. Every

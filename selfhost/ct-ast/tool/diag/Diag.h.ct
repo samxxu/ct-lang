@@ -1,8 +1,9 @@
 /*
  * Diag.h.ct - the warning store and the semantic-error counter, one unit of its own.
  *
- * Warnings are recorded from two places (a signature mismatch while parsing an
- * impl, a potential leak while analysing memory) and printed once at the end;
+ * Warnings are recorded from three places (a signature mismatch while parsing
+ * an impl, a potential leak while analysing memory, a call-site arity
+ * mismatch while parsing an expression) and printed once at the end;
  * the error counter also drives the "too many errors" stop and the driver's
  * summary line. Keeping the store here means both producers reach it through
  * primitive wrappers -- a generated header cannot carry the MAX_* macros or the
@@ -21,9 +22,10 @@
 #define MAX_WARNINGS 32
 
 namespace tool::diag;
-/* One collected warning (10.2 signature mismatch, 10.3 leak). */
+/* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity). */
 struct Warn {
-    int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape */
+    int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
+                           4 arity_mismatch */
     int  line;
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
     char file[MAX_PATH];
@@ -37,6 +39,8 @@ trait DiagStore {
     int  sem_error(int line, int col, const char *msg, const char *path);
     int  record_sig_warn(int line, const char *method, const char *trait,
                          const char *stype, const char *msg, const char *path);
+    int  record_arity_warn(int line, const char *callee, const char *msg,
+                           const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
     int  emit(int json, int to_stderr);
@@ -82,6 +86,29 @@ impl DiagStore for Diag {
         snprintf(w->var, sizeof w->var, "%s", method);
         snprintf(w->tname, sizeof w->tname, "%s", trait);
         snprintf(w->stype, sizeof w->stype, "%s", stype);
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* A call whose argument count does not match the resolved signature (19.1).
+       Compile mode keeps it a warning so `ct compile` / `ct build` keep their
+       exit codes and artifacts (D19-4); `ct check` (19.4) raises the same
+       record to an error. */
+    int record_arity_warn(int line, const char *callee, const char *msg,
+                          const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 4;
+        w->line = line;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        snprintf(w->var, sizeof w->var, "%s", callee);
+        w->tname[0] = 0;
+        w->stype[0] = 0;
         snprintf(w->msg, sizeof w->msg, "%s", msg);
         self->nwarns++;
         return 0;
@@ -174,6 +201,14 @@ impl DiagStore for Diag {
                     fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
                     self->put_json(jf, w->var);
                     fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
+                } else if (w->kind == 4) {
+                    fputs("{\"type\":\"arity_mismatch\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"callee\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else {
                     fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -197,6 +232,9 @@ impl DiagStore for Diag {
                 else if (w->kind == 3)
                     fprintf(tf, "%s:%d: warning: a borrowed pointer escapes through 'return'\n",
                             w->file, w->line);
+                else if (w->kind == 4)
+                    fprintf(tf, "%s:%d: warning: arity mismatch: '%s' %s\n",
+                            w->file, w->line, w->var, w->msg);
                 else
                     fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
                             w->file, w->line, w->var, w->tname);
@@ -236,6 +274,12 @@ int ct_sig_warn(int line, const char *method, const char *trait,
                 const char *stype, const char *msg, const char *path)
 {
     return g_diag.record_sig_warn(line, method, trait, stype, msg, path);
+}
+
+pub int ct_arity_warn(int line, const char *callee, const char *msg, const char *path);
+int ct_arity_warn(int line, const char *callee, const char *msg, const char *path)
+{
+    return g_diag.record_arity_warn(line, callee, msg, path);
 }
 
 pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);
