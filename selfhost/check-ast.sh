@@ -2113,7 +2113,7 @@ cap_check vars "too many variables" "$work/cap_vars.ct"
     while [ "$i" -lt 65 ]; do printf '    int f%d;\n' "$i"; i=$((i + 1)); done
     printf '};\nint main(void) { return 0; }\n'
 } >"$work/cap_fields.ct"
-cap_check fields "too many fields in a record" "$work/cap_fields.ct"
+cap_check fields "too many fields in struct 'Big' (limit 64)" "$work/cap_fields.ct"
 
 # A struct whose body opens on the line after its name makes the parser look
 # ahead across a newline. The lookahead has to restore the lexer's line state

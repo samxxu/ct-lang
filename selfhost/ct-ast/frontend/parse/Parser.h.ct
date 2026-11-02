@@ -1105,8 +1105,11 @@ impl ParseOps for Parser {
                 self->sym->structs[si].nfields++;
             } else {
                 /* silently dropping the 65th field would skip its vptr and
-                   misjudge the default body; the cap is a hard error */
-                return self->sup->fail_at(self->arena->nodes[m].line, "too many fields in a record");
+                   misjudge the default body; the cap is a hard error, and the
+                   message names the struct so a large file needs no backtracking */
+                snprintf(msg, sizeof msg, "too many fields in struct '%s' (limit %d)",
+                         self->cur_record, MAX_FIELDS);
+                return self->sup->fail_at(self->arena->nodes[m].line, msg);
             }
             return 0;
         }
@@ -1121,7 +1124,8 @@ impl ParseOps for Parser {
             snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
             self->npend++;
         } else {
-            return self->sup->fail_at(self->arena->nodes[m].line, "too many fields in a record");
+            snprintf(msg, sizeof msg, "too many fields in a record (limit %d)", MAX_FIELDS);
+            return self->sup->fail_at(self->arena->nodes[m].line, msg);
         }
         return 0;
     }
