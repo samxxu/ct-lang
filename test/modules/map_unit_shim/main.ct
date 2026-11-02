@@ -4,7 +4,16 @@ import lib::lib;
 
 int main(void)
 {
+    int err;
+    int first;
+    int second;
+
     lib::Io.clear();
-    printf("%d %d %d\n", lib::Io.err() == 0, lib::Io.next(), lib::Io.next());
+    /* One call per statement: a C argument list has no evaluation order, and
+       gcc evaluates right to left, which would swap the two `next()` results. */
+    err = lib::Io.err() == 0;
+    first = lib::Io.next();
+    second = lib::Io.next();
+    printf("%d %d %d\n", err, first, second);
     return 0;
 }

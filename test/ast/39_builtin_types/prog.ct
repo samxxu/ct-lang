@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+/* `ssize_t` is a POSIX spelling that glibc declares here, not in <stdio.h>. */
+#include <sys/types.h>
 
 static volatile int ticks;
 

@@ -14,6 +14,7 @@ int main(void) {
     int i;
     int j;
     int k;
+    int n;
     int a[WIDTH];
     int buf[3];
     int *p;
@@ -27,7 +28,10 @@ int main(void) {
     a[1] = 0;
     a[2] = 5;
     a[3] = 6;
-    printf("trim %d %d %d\n", trim(a, 2), a[0], a[1]);
+    /* The call has to be sequenced before the reads: C leaves the order of
+       argument evaluation to the compiler, and gcc evaluates right to left. */
+    n = trim(a, 2);
+    printf("trim %d %d %d\n", n, a[0], a[1]);
 
     i = 2;
     a[--i] = 7;
