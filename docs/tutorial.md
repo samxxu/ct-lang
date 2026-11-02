@@ -278,8 +278,9 @@ cc build/*.c -o app && ./app        # woof 7（shapes.h.ct / impl_dog.h.ct / mai
 要点：
 
 - **`pub` 才导出**。`pub` 的函数/struct/trait 写进 `.h`；`impl` 的方法与 vtable 永远 `static`。
-- **承载 `impl` 的单元要写成 `.h.ct`**：`import x;` 只接受 `x.h.ct`，普通 `.ct` 不发布接口
-  （写 `import impl_dog;` 时磁盘上必须是 `impl_dog.h.ct`；`language-spec` §6.2 有同一规则）。
+- **承载 `impl` 的单元要写成 `.h.ct`**：`import x;` 接受 `x.h.ct` 或映射单元 `x.m.ct`；普通 `.ct`
+  不发布接口、不能导入（写 `import impl_dog;` 时磁盘上必须是 `impl_dog.h.ct`；同一 root 下
+  `x.h.ct` 与 `x.m.ct` 并存报 import 歧义；完整规则见 `language-spec` §4.10）。
 - **跨单元只走指针 + vptr**：vtable 符号不出单元，「把对象传出去」比「把类型传出去」更省事。
 - **`namespace a;` 是文件级声明**（分号式），块式 `namespace A { … }` 会被拒绝；目录也可以用
   `--ns-root <dir>` 映射成 namespace（`src/hal/uart.h.ct` → `hal`）。
@@ -757,9 +758,10 @@ cc build/*.c -o app && ./app        # woof 7 (shapes.h.ct / impl_dog.h.ct / main
 ```
 
 - **Only `pub` is exported**; `impl` methods and vtables stay `static`.
-- **A unit that carries an `impl` must be named `.h.ct`**: `import x;` only accepts `x.h.ct`, and a
-  plain `.ct` publishes no interface (writing `import impl_dog;` requires `impl_dog.h.ct` on disk;
-  `language-spec` §6.2 states the same rule).
+- **A unit that carries an `impl` must be named `.h.ct`**: `import x;` accepts `x.h.ct` or a mapping
+  unit `x.m.ct`; a plain `.ct` publishes no interface and cannot be imported (writing
+  `import impl_dog;` requires `impl_dog.h.ct` on disk; an `x.h.ct` and an `x.m.ct` in the same root make
+  an import ambiguous; `language-spec` §4.10 has the full rules).
 - **Cross-unit access goes through pointers and vptrs** — passing the object around is easier than
   exporting the type.
 - **`namespace a;` is file-scoped** (semicolon form); block form is rejected. Directories can also become

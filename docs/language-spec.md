@@ -177,6 +177,9 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
   - 字段链：`self->field->m()` → `_self->field->__<trait>_vptr->m(_self->field)`（可递归，见 §4.5）；
   - 方法参数：`o->m()` → `o->__<trait>_vptr->m(o)`、`v.m()` → `v.__<trait>_vptr->m(&v)`；
   - 方法体内局部变量：`P q; q.m();` → `q.__<trait>_vptr->m(&q)`。
+  - **同名跨 trait**：宿主 `use` 的多个 trait 都声明方法 `f` 时，裸调用 `s.f()` 按 `use` 顺序**取第一个**
+    匹配（`s.__<首个 trait>_vptr->f(&s)`）。顺序即语义，属**已知限制**；要调用另一个实现，需把 `s`
+    装箱成目标 trait 的接口值（`struct B_iface x = B_of(&s); x->f();`）或改名。
 - 只要某个方法体会产生派发，就会在方法函数之前先输出一行前向声明
   `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;`，以解决 vtable 变量的前向引用
   （C 的 tentative definition，随后再带初始化式定义，合法）。
@@ -491,6 +494,22 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
 **不产生任何产物**（无 `.c` / `.h`、不进末尾 `cc` 行、不写缓存），只能在 `ct build` 里被 import；
 `ct compile` 直接拒绝 `.m.ct` 输入。同一 root 下同名 `foo.h.ct` 与 `foo.m.ct` 并存时报 import 歧义；
 映射单元只能 import 另一个映射单元。
+
+三种单元的产物与用法：
+
+| 后缀 | 发布 `.h` | 可 import | 可单独 build | 用途 |
+| --- | --- | --- | --- | --- |
+| `<name>.ct` | 否 | 否 | 是 | 实现 / 入口；接口写在同目录的 `.h.ct` |
+| `<name>.h.ct` | 是 | 是 | 是 | 发布类型、`pub` 声明与 vtable 接口 |
+| `<name>.m.ct` | 否 | 是（映射单元之间） | 否（`ct compile` 直接拒绝） | 静态映射 recipe |
+
+`import` 的搜索顺序：先 importer 所在目录，再按 `-I` 顺序逐个 root；每个 root 先探 `<name>.h.ct`、
+再探 `<name>.m.ct`，两者都没有才回落到 `<name>.ct` 并报
+`only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`。
+
+`.h.ct` 文件名与其中的**主类型**同名（`Parser.h.ct` ↔ `struct Parser`，入口 `main.ct` 例外）是
+**仓库约定**、不是编译器规则：`selfhost/check-ast.sh` 的 unit-name lint 只扫描 `selfhost/ct-ast/**`，
+用户工程不受检查。
 
 声明在 `.m.ct` 里的 `pub trait` 自动是**静态 trait**：没有 `_iface` / `_vtbl` / vtable，不能 `impl`、
 不能进 `use`、不能作类型、不能装箱（`T::host`），也不能带默认体。
@@ -1457,8 +1476,9 @@ warning: a borrowed pointer escapes through 'return'
 | 大括号/圆括号必须配对 | `error: unterminated '{'` |
 | `trait` / `impl` 头部必须完整（名字、`{`、`for`） | `error: expected trait name` / `expected '{' after trait 'X'` / `expected trait name after 'impl'` / `expected 'for' in impl of 'T'` |
 
-**不做**的检查：方法签名是否与 trait 一致（参数类型、个数、返回类型都不比对，原样搬运）；
-trait / struct 是否重名（`find_*` 取最先出现者，后者不可达，不报错）。
+**不做**的检查：方法签名是否与 trait 一致（参数类型、个数、返回类型都不比对，原样搬运）。
+trait / struct **重名**不是静默接受：ct-ast 报 `duplicate trait '<name>'` / `duplicate struct '<name>'`；
+L0 / L2 仍取最先出现者，后者不可达、不报错。
 
 #### 6.2 已知限制
 
@@ -1727,6 +1747,10 @@ static struct Greeter_vtbl Person_Greeter_vtable = {
   - field chain: `self->field->m()` → `_self->field->__<trait>_vptr->m(_self->field)` (recursive, §4.5);
   - method parameter: `o->m()` → `o->__<trait>_vptr->m(o)`, `v.m()` → `v.__<trait>_vptr->m(&v)`;
   - a local variable declared in the body: `P q; q.m();` → `q.__<trait>_vptr->m(&q)`.
+  - **Same name in several traits**: when more than one trait in the host's `use` list declares `f`,
+    a bare `s.f()` takes the **first match in `use` order** (`s.__<first trait>_vptr->f(&s)`). The order
+    is part of the semantics and is a **known limitation**; to reach the other implementation, box `s`
+    into that trait's interface value (`struct B_iface x = B_of(&s); x->f();`) or rename the method.
 - Whenever a body produces a dispatch, a forward declaration
   `static struct <Trait>_vtbl <Struct>_<Trait>_vtable;` is emitted before the method functions, to
   resolve the forward reference to the vtable variable (a C tentative definition, later given its
@@ -2106,6 +2130,22 @@ type declarations, `impl` and object hosts are all errors. It **produces no arte
 `.h`, absent from the trailing `cc` line, never stored in the cache) and can only be imported in a
 `ct build`; `ct compile` refuses a `.m.ct` input outright. A `foo.h.ct` and a `foo.m.ct` in the same
 root make an import ambiguous, and a mapping unit may only import another mapping unit.
+
+The three unit kinds, by artefact and usage:
+
+| Suffix | Publishes `.h` | Importable | Buildable on its own | Purpose |
+| --- | --- | --- | --- | --- |
+| `<name>.ct` | no | no | yes | implementation / entry; its interface lives in a sibling `.h.ct` |
+| `<name>.h.ct` | yes | yes | yes | publishes types, `pub` declarations and vtable interfaces |
+| `<name>.m.ct` | no | yes (between mapping units) | no (`ct compile` refuses it) | static mapping recipes |
+
+`import` searches the importer's own directory first, then every `-I` root in order; within each root
+`<name>.h.ct` is probed before `<name>.m.ct`, and only when neither exists does `<name>.ct` fall through
+to `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`.
+
+A `.h.ct` file name matching the **main type** it declares (`Parser.h.ct` ↔ `struct Parser`, with
+`main.ct` as the exception) is a **repository convention**, not a compiler rule: the unit-name lint in
+`selfhost/check-ast.sh` scans only `selfhost/ct-ast/**`, and user projects are not checked.
 
 A `pub trait` declared in a `.m.ct` is automatically a **static trait**: it emits no `_iface` /
 `_vtbl` / vtable, cannot be `impl`ed, cannot appear in a `use` list, cannot be used as a type, cannot
@@ -3185,8 +3225,9 @@ The namespace prefix is a **feature removed from L0**; Phase 2 restored it under
 | a `trait` / `impl` header must be complete (name, `{`, `for`) | `error: expected trait name` / `expected '{' after trait 'X'` / `expected trait name after 'impl'` / `expected 'for' in impl of 'T'` |
 
 **Not** checked: whether method signatures agree with the trait (parameter types, arity and return type
-are never compared — everything is copied verbatim); whether a trait/struct name is redefined
-(`find_*` picks the first occurrence; the later definition is unreachable and no error is reported).
+are never compared — everything is copied verbatim). A redefined trait/struct name is not silently
+accepted: ct-ast reports `duplicate trait '<name>'` / `duplicate struct '<name>'`, while L0 and L2 still
+pick the first occurrence and leave the later definition unreachable.
 
 #### 6.2 Known limitations
 
