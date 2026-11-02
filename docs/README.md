@@ -22,13 +22,14 @@
 | [construction.md](construction.md) | 对象构造语义（vptr 由谁、何时写入） | 排查构造期问题 |
 | [patterns.md](patterns.md) | 设计模式在现有特性下的写法 | 判断「要不要新增语言特性」 |
 | [memory-guide.md](memory-guide.md) | 内存实践：`own` / `borrow` / 工厂 / 池 / arena | 写持有资源的代码 |
+| [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、命名 / 版本 / tag、索引收录、许可证、常见失败 | 发布或消费一个包 |
 
 ### 计划与台账
 
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 阶段总览、已定决策、版本记录与验收标准 |
-| [design/phase17.md](design/phase17.md) | 当前阶段的计划（CI / `std` / raw 透传 / 文档分层 / 包管理 / `ct build`） |
+| [design/phase18.md](design/phase18.md) | 当前阶段的计划（生态建设：包规范 / 索引与 CI / `hal` 契约 / 平台包 / C 映射） |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 
@@ -70,13 +71,14 @@
 | [construction.md](construction.md) | object-construction semantics (who writes the vptr, and when) | debugging construction |
 | [patterns.md](patterns.md) | design patterns under today's features | judging whether a new feature is needed |
 | [memory-guide.md](memory-guide.md) | memory practice: `own` / `borrow` / factories / pools / arena | writing resource-owning code |
+| [package-guide.md](package-guide.md) | package authoring: `ct.pkg` keys, names / versions / tags, the index, licensing, common failures | publishing or consuming a package |
 
 ### Plans and ledgers
 
 | Document | Content |
 | --- | --- |
 | [roadmap.md](roadmap.md) | phase overview, decided questions, version record and exit criteria |
-| [design/phase17.md](design/phase17.md) | the current phase plan (CI / `std` / raw passthrough / docs layering / packages / `ct build`) |
+| [design/phase18.md](design/phase18.md) | the current phase plan (ecosystem: package conventions / index and CI / the `hal` contract / platform package / C mappings) |
 | [../issues/README.md](../issues/README.md) | the review ledger (one file per finding, with status and disposition) |
 | [history/README.md](history/README.md) | the history index: closed design records and review reports |
 

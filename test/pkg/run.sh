@@ -616,6 +616,51 @@ else
 fi
 
 echo
+echo "== package conventions: the agreed manifest keys (Phase 18.1) =="
+# `licence` and other agreed-but-unparsed keys must not disturb resolution, and
+# must not leak into the command `install` prints.
+mkdir -p "$work/pkgs/lic" "$work/cproj"
+printf '# the agreed keys, plus keys the tool ignores\nname = lic\nversion = 1.0.0\nlicence = MIT\nwebsite = https://example.invalid\n' >"$work/pkgs/lic/ct.pkg"
+printf 'int lic_value(void) { return 0; }\n' >"$work/pkgs/lic/l.c"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/lic@^1.0.0\n' >"$work/cproj/ct.pkg"
+if ( cd "$work/cproj" && "$work/ct-ast" get ../pkgs/lic >"$work/cg.out" 2>"$work/cg.err" ); then
+    if [ -f "$work/cproj/vendor/lic/ct.pkg" ]; then
+        ok "get ignores licence and an unknown manifest key"
+    else
+        bad "conventions get" "vendor/lic is missing"
+    fi
+else
+    bad "conventions get" "non-zero exit: $(cat "$work/cg.err")"
+fi
+if ( cd "$work/cproj" && "$work/ct-ast" install >"$work/ci.out" 2>"$work/ci.err" ); then
+    if grep -Fq "licence" "$work/ci.out"; then
+        bad "conventions install" "licence leaked into the printed command"
+    else
+        ok "licence stays a convention out of the build command"
+    fi
+else
+    bad "conventions install" "non-zero exit: $(cat "$work/ci.err")"
+fi
+# `name` and `version` are the only required keys, and an empty one counts as missing.
+mkdir -p "$work/pkgs/nover" "$work/pkgs/noname"
+printf 'name = nover\n' >"$work/pkgs/nover/ct.pkg"
+printf 'name =\nversion = 0.1.0\n' >"$work/pkgs/noname/ct.pkg"
+if ( cd "$work/cproj" && "$work/ct-ast" get ../pkgs/nover >"$work/nv.out" 2>"$work/nv.err" ); then
+    bad "manifest version" "expected a non-zero exit"
+elif grep -Fq "ct.pkg" "$work/nv.err"; then
+    ok "a manifest without version is refused"
+else
+    bad "manifest version" "wrong diagnostic: $(cat "$work/nv.err")"
+fi
+if ( cd "$work/cproj" && "$work/ct-ast" get ../pkgs/noname >"$work/nn.out" 2>"$work/nn.err" ); then
+    bad "manifest name" "expected a non-zero exit"
+elif grep -Fq "ct.pkg" "$work/nn.err"; then
+    ok "a manifest with an empty name is refused"
+else
+    bad "manifest name" "wrong diagnostic: $(cat "$work/nn.err")"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

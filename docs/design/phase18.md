@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：实施中（2026-11-02 起；18.0 容量解除已完成，18.1–18.6 待落地）。**
+> **状态：实施中（2026-11-02 起；18.0 容量解除、18.1 包规范已完成，18.2–18.6 待落地）。**
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
 > （`hal` 契约 + 平台包 + C 库映射）、索引与 CI 产出**，为 `1.0.0` 做准备。
 > **D18-1…D18-11 已按建议值经用户确认**（2026-11-02）。本文件只记录计划，不描述现状；
@@ -81,7 +81,7 @@
 - 目录：包仓库根即包根（`ct.pkg`、`LICENSE`、源码单元）；单元命名遵守 `AGENTS.md` §2 的「一单元一主类型」。
 - licence：官方 `.ct` 包 MIT；C 映射包沿用上游 licence；包内必须有 `LICENSE`（D18-9）。
 - 依赖：`dep` 的行格式与 Phase 8 一致（`name` 或 `name@range`）；本阶段不做传递更新策略研究。
-- 作者指南 `docs/package-guide.md`：发布步骤、索引收录、`ct get` / `ct verify` / `ct install` 的正确用法、
+- 作者指南 [docs/package-guide.md](../package-guide.md)：发布步骤、索引收录、`ct get` / `ct verify` / `ct install` 的正确用法、
   常见失败（摘要不符、tag 不存在、`requires` 不符仅告警）。
 
 #### 18.2 索引与 CI
@@ -238,7 +238,7 @@
 - Licence: official `.ct` packages are MIT; C mapping packages inherit the upstream licence; every package ships a
   `LICENSE` (D18-9).
 - Dependencies: `dep` keeps the Phase-8 line format (`name` or `name@range`); no transitive-update research here.
-- The author guide `docs/package-guide.md` covers publishing, index inclusion, the correct `ct get` / `ct verify` /
+- The author guide [docs/package-guide.md](../package-guide.md) covers publishing, index inclusion, the correct `ct get` / `ct verify` /
   `ct install` usage and common failures (digest mismatch, missing tag, `requires` mismatch warns only).
 
 #### 18.2 index and CI
