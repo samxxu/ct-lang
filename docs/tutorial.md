@@ -515,8 +515,10 @@ int main(void)
 | `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr） |
 | `ct … --line` / `--no-line` | 覆盖 `#line` 默认（`build` 默认开、`compile` 默认关） |
 | `ct … --std=c99\|gnu99` | 写进 C 编译器的命令行，产物暂无异 |
-| `ct get <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令） |
-| `ct install` | 离线校验 `ct.lock` 与 `vendor/`，打印建议的构建命令 |
+| `ct get <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引 |
+| `ct update` | 离线按 `ct.pkg` 重解依赖，沿用 `ct.lock` 已钉住的提交并重写 `ct.lock` |
+| `ct install` | 离线校验 `ct.lock` 与 `vendor/`，把各包的 `cflags` / `ldflags` 与 `-I` 拼成**一条**构建命令 |
+| `ct verify` | 离线校验 `vendor/` 与 `ct.lock`，只报告，不写任何文件 |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
 退出码：成功 `0`，语法或 I/O 错误 `1`。**源码诊断**（解析期与语义期）格式为 `文件:行:列: error: 描述`；
@@ -553,7 +555,8 @@ int main(void)
 - `examples/**` —— 8 个可运行示例；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知
-- 包管理：`ct get` / `ct install`，清单格式见 [design/phase8.md](history/design/phase8.md)
+- 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
+  17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](design/phase17.md)
 
 ---
 
@@ -1069,8 +1072,10 @@ fixed-capacity, refuses new keys when full and never rehashes. Details in
 | `ct … --diagnostics=json\|text` | warning format (`text` on stderr by default) |
 | `ct … --line` / `--no-line` | override `#line` (on for `build`, off for `compile`) |
 | `ct … --std=c99\|gnu99` | lands on the C compiler's command line; output is unchanged so far |
-| `ct get <spec>[@<range>]` | fetch packages into `vendor/`, write `ct.lock` (the only subcommand using system `git`) |
-| `ct install` | verify `ct.lock` against `vendor/` offline, print the suggested build command |
+| `ct get <spec>[@<range>]` | fetch packages into `vendor/`, write `ct.lock` (the only subcommand using system `git`); a bare name may resolve through `--index <file>` / `CT_INDEX` |
+| `ct update` | re-resolve `ct.pkg` offline, keep the commits `ct.lock` already pinned, and rewrite `ct.lock` |
+| `ct install` | verify `ct.lock` against `vendor/` offline and fold each package's `cflags` / `ldflags` and `-I` into **one** build command |
+| `ct verify` | verify `vendor/` against `ct.lock` offline and only report; it writes nothing |
 | `ct -v` / `ct -h` | version / usage |
 
 Exit codes: `0` on success, `1` on syntax or I/O errors. **Source diagnostics** (parse and semantic)
@@ -1113,4 +1118,6 @@ comment continuations are all fine there (compare [language-spec §6.2](language
 - `examples/**` — eight runnable demos; `test/cases/**` — a minimal snapshot per feature
 - Editor support: `editors/vscode/` (declarative highlighting, zero dependencies)
 - Dialects: `examples/07_dialect/` turns comment-embedded DSLs into plain CT; the compiler stays unaware
-- Packages: `ct get` / `ct install`, manifest format in [design/phase8.md](history/design/phase8.md)
+- Packages: `ct get` / `ct update` / `ct install` / `ct verify`, manifest format in
+  [design/phase8.md](history/design/phase8.md); the 17.5 additions (comparator ranges, offline
+  re-resolution, the explicit index, build metadata) are in [design/phase17.md](design/phase17.md)

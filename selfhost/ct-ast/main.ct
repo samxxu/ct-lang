@@ -111,5 +111,9 @@ int main(int argc, char **argv)
         return tool::pkg::ct_pkg_get(argc - 2, argv + 2, m->prog, CTC_VERSION);
     if (argc > 1 && strcmp(argv[1], "install") == 0)
         return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
+    if (argc > 1 && strcmp(argv[1], "update") == 0)
+        return tool::pkg::ct_pkg_update(argc - 2, argv + 2, m->prog, CTC_VERSION);
+    if (argc > 1 && strcmp(argv[1], "verify") == 0)
+        return tool::pkg::ct_pkg_verify(argc - 2, argv + 2, m->prog, CTC_VERSION);
     return tool::driver::ct_driver_run(argc, argv);
 }

@@ -133,7 +133,11 @@
 | 子命令 compile | `ct compile <in.ct> [-o out.c]` | 默认子命令（等价 `ctc <in.ct>`） |
 | 子命令 build | `ct build <in.ct>… [-o <exe>]` | 多文件驱动；默认一步产出可执行文件（中间 C 在 `.ctbuild/`），`--emit-c` 只出 `.c`/`.h` 并打印建议 `cc` 命令。**已随 Phase 0.3 移出 L0，现由自举编译器 `selfhost/` 用 CT 重做** |
 | 子命令 get | `ct get <spec>[@<range>]` | 把本地目录源或 git 源同步进 `vendor/<name>/`，写 `ct.lock` 并把 spec 记入工程 `ct.pkg` 的 `dep` 行（D24；**唯一允许调用系统 `git` 的入口**，Phase 8） |
-| 子命令 install | `ct install` | 离线校验 `vendor/` 与 `ct.lock`（逐包摘要 + 清单依赖覆盖），打印建议的 `ct build` 命令；不修改清单、不联网、不调 `cc`（Phase 8.3，D24） |
+| 子命令 update | `ct update` | 离线按 `ct.pkg` 重解依赖（尊重 `ct.lock` 已钉住的提交与 `vendor/` 缓存），重写 `ct.lock`；不联网、不调 `cc`（Phase 17.5） |
+| 子命令 install | `ct install` | 离线校验 `vendor/` 与 `ct.lock`（逐包摘要 + 清单依赖覆盖），把各包的 `-I` / `cflags` / `ldflags` 拼成**一条** `ct build` 命令；不修改清单、不联网、不调 `cc`（Phase 8.3，17.5 扩元数据） |
+| 子命令 verify | `ct verify` | 离线校验 `vendor/` 与 `ct.lock` 后报 `verified N package(s)`；只读，不写任何文件（Phase 17.5） |
+| 版本范围（range） | `^` / `~` / 精确 / `*` / `>=` `>` `<` `<=` `=` | 空格分隔的子句视为 AND；`^` / `~` 沿用原语义，比较器按三段版本数比较（Phase 17.5，不做完整 SemVer） |
+| 显式索引（index） | `--index <file>` / `CT_INDEX` | 纯文本，每行 `name version git-url tag sha256:<hex>`；仅在 `ct get` 的裸名（无 spec 前缀）时查询，无内建 URL、不走 HTTP（Phase 17.5） |
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |
@@ -192,8 +196,8 @@
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
 | 绑定（bindings） | `bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
-| 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct install` 子命令，Phase 8 已落地（本地目录源 + git 源） |
-| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21） |
+| 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引 |
+| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires` |
 | 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44） |
 | vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct build -I vendor/<name>` 使用它 |
 | 最小版本选择（MVS） | `ct get` | 每个依赖取满足所有范围的最低版本；无 tag 的 git 源回退默认分支 HEAD（D23） |
@@ -367,7 +371,11 @@
 | the `compile` subcommand | `ct compile <in.ct> [-o out.c]` | the default subcommand (same as `ctc <in.ct>`) |
 | the `build` subcommand | `ct build <in.ct>… [-o <exe>]` | the multi-file driver; by default it produces an executable in one step (the intermediate C lands in `.ctbuild/`), while `--emit-c` emits `.c`/`.h` and prints the suggested `cc` command. **Moved out of L0 in Phase 0.3; now implemented in CT by the self-hosted compiler (`selfhost/`)** |
 | the `get` subcommand | `ct get <spec>[@<range>]` | syncs a local directory or git source into `vendor/<name>/`, writes `ct.lock` and records the spec in the project's `ct.pkg` `dep` lines (D24; **the only entry point allowed to invoke the system `git`**, Phase 8) |
-| the `install` subcommand | `ct install` | verifies `vendor/` against `ct.lock` offline (per-package digest + manifest dependency coverage) and prints the suggested `ct build` command; it edits no manifest, goes online never and never invokes `cc` (Phase 8.3, D24) |
+| the `update` subcommand | `ct update` | re-resolves `ct.pkg` offline (honouring the commits `ct.lock` already pinned and the `vendor/` cache) and rewrites `ct.lock`; it goes online never and never invokes `cc` (Phase 17.5) |
+| the `install` subcommand | `ct install` | verifies `vendor/` against `ct.lock` offline (per-package digest + manifest dependency coverage) and folds each package's `-I` / `cflags` / `ldflags` into **one** `ct build` command; it edits no manifest, goes online never and never invokes `cc` (Phase 8.3; metadata added in 17.5) |
+| the `verify` subcommand | `ct verify` | verifies `vendor/` against `ct.lock` offline and reports `verified N package(s)`; it only reads and writes nothing (Phase 17.5) |
+| version range | `^` / `~` / exact / `*` / `>=` `>` `<` `<=` `=` | space-separated clauses are ANDed; `^` / `~` keep their meaning and comparators order the three version numbers (Phase 17.5; no full SemVer) |
+| explicit index | `--index <file>` / `CT_INDEX` | plain text, one line per package: `name version git-url tag sha256:<hex>`; consulted only for a bare name in `ct get`; nothing is built in and nothing goes over HTTP (Phase 17.5) |
 | output option | `-o <file\|dir>` | |
 | `#line` switch | `--line` / `--no-line` | overrides the per-mode default |
 | C standard target | `--std=c99` (default) / `--std=gnu99` | Phase 6.4: no emission point differs yet, so `build` only writes it into the suggested `cc` command; any other value is a hard error |
@@ -426,8 +434,8 @@
 | standard peripheral traits | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | covering 80% of platform-difference needs |
 | bindings | `bindings/<library>/`: `.ct` sources / `#include` + mirrored trait / struct + `map` | **implemented**: the first binding is `bindings/mock-hal/` (Phase 12.1); the cross-unit limit was lifted by Batch 2 |
 | reverse mapping table | the JSON written by `--emit-map <file\|->` | generated C symbol ← CT definition site; landed in Phase 6.1 (D16) |
-| package manager | `ct-pkg` | named on 2026-10-17; the everyday entry points are the `ct get` / `ct install` subcommands, landed in Phase 8 (local directory sources + git sources) |
-| package manifest | `ct.pkg` | minimal `key = value`: `name` / `version` / `license` / repeatable `dep = <spec>[@<range>]` (D21) |
+| package manager | `ct-pkg` | named on 2026-10-17; the everyday entry points are the `ct get` / `ct update` / `ct install` / `ct verify` subcommands, landed in Phase 8 (local directory sources + git sources) and completed in Phase 17.5 (update, verify, index) |
+| package manifest | `ct.pkg` | minimal `key = value`: `name` / `version` / `license` / repeatable `dep = <spec>[@<range>]` (D21); 17.5 adds optional `cflags` / `ldflags` / `requires` |
 | lock file | `ct.lock` | one line per dependency, `name ver kind ref digest`; `kind` is `dir` or `git` and the last column is a `sha256:<64 hex>` digest of the whole package tree (paths sorted, hashed as one stream; D23 / D27, SH-44) |
 | vendored tree | `vendor/<name>/` | the package tree `ct get` synced in; `ct build -I vendor/<name>` compiles against it |
 | minimal version selection (MVS) | `ct get` | each dependency takes the lowest version satisfying every range; a git source without tags falls back to the default branch tip (D23) |

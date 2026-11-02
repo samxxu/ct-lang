@@ -57,10 +57,11 @@
   构建步骤——`gcc selfhost/l0/ctc.c`、`./test/run.sh` 的编译相关层与 CT 线全部关卡都不得依赖它，方言演示只由
   `test/run.sh` 的 `dialect` 层驱动。方言所需的符号信息由编译器已产出的 map JSON（`--emit-map`）
   提供，不在仓库内另造一套。
-- **例外（Phase 8 包管理）**：`ct get` / `ct install` 可调用**系统 `git`** 获取 git 源包，并可把**本地目录源**同步进
+- **例外（Phase 8 包管理）**：`ct get` 可调用**系统 `git`** 获取 git 源包，`ct get` / `ct install` 可把**本地目录源**同步进
   `vendor/`。这是包管理子命令的受控例外——**零网络**不变，编译器核（`ct compile` / `ct build --emit-c`）仍
-  **零子进程**，且不得内置 HTTP 客户端。无 `git` 时 git 源硬报错并提示，本地源照常可用。见
-  [design/phase8.md](docs/history/design/phase8.md)（D22 / D26）。
+  **零子进程**，且不得内置 HTTP 客户端。无 `git` 时 git 源硬报错并提示，本地源照常可用。Phase 17.5 的
+  `ct update` / `ct verify` 完全离线：`update` 只复用 `vendor/` 缓存与 `ct.lock` 已钉住的提交，`verify` 只读。
+  见 [design/phase8.md](docs/history/design/phase8.md)（D22 / D26）。
 - **例外（Phase 17 `ct build` 一步到位）**：`ct build` **默认**在发射 `.c` / `.h` 之后调用**本地 C 编译器**
   （`$CC` / `--cc`，默认 `cc`）产出可执行文件——用户 2026-11-02 授权的受控子进程例外。**零网络**不变；
   `ct compile` 与 `ct build --emit-c` 仍**零子进程**；`ct build` 不解析 `cc` 的诊断、不做增量链接、
@@ -286,11 +287,13 @@ Hard boundaries:
   and every CT-line gate must not depend on it, and the dialect demo is driven by the `dialect` layer of
   `test/run.sh` alone. The symbols a dialect needs come from the map JSON the compiler already emits
   (`--emit-map`); nothing parallel is built in the repo.
-- **Exception (Phase 8 package management)**: `ct get` / `ct install` may invoke the **system `git`** to
-  fetch git-sourced packages and may sync **local directory sources** into `vendor/`. This is a
+- **Exception (Phase 8 package management)**: `ct get` may invoke the **system `git`** to
+  fetch git-sourced packages, and `ct get` / `ct install` may sync **local directory sources** into `vendor/`. This is a
   controlled exception for the package subcommands only — **network-free** is unchanged, the compiler
   core (`ct compile` / `ct build --emit-c`) stays **process-free**, and no HTTP client may be built in.
-  Without `git`, git sources fail hard with a hint while local sources keep working. See
+  Without `git`, git sources fail hard with a hint while local sources keep working. Phase 17.5's
+  `ct update` / `ct verify` are entirely offline: `update` reuses the `vendor/` cache and the commits
+  `ct.lock` already pins, and `verify` only reads. See
   [design/phase8.md](docs/history/design/phase8.md) (D22 / D26).
 - **Exception (Phase 17 one-step `ct build`)**: **by default** `ct build` invokes a **local C compiler**
   (`$CC` / `--cc`, default `cc`) after emitting `.c` / `.h`, producing an executable — a controlled

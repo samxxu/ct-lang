@@ -14,6 +14,9 @@
 # command; a tampered tree, a missing package or an uncovered dependency fails.
 # The error branches of both subcommands are covered too: no or empty `ct.lock`,
 # a missing or incomplete `ct.pkg`, a malformed `dep` and bad `ct get` arguments.
+# Phase 17.5 adds the comparator ranges, `ct update` / `ct verify`, the explicit
+# plain-text index (`CT_INDEX` / `--index`) and the build metadata that `ct
+# install` folds into its single printed command.
 #
 # Usage:  bash test/pkg/run.sh
 #         CC=gcc bash test/pkg/run.sh
@@ -390,6 +393,73 @@ else
     else
         bad "name mismatch" "wrong diagnostic: $(cat "$work/mis.err")"
     fi
+
+    echo
+    echo "== an explicit index resolves a bare package name =="
+    # A throwaway project pins gutil 0.1.0 and its digest; the digest is the
+    # index entry's fifth field, so the index can vouch for the vendored tree.
+    mkdir -p "$work/idxseed" "$work/home2"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/idxseed/ct.pkg"
+    if ( cd "$work/idxseed" && HOME="$work/home2" CT_REGISTRY="file://$reg" \
+            "$work/ct-ast" get "gutil@^0.1.0" >"$work/is.out" 2>"$work/is.err" ); then
+        dig="$(awk '$1 == "gutil" { print $NF }' "$work/idxseed/ct.lock")"
+        printf 'gutil 0.1.0 file://%s/gutil 0.1.0 %s\n' "$reg" "$dig" >"$work/index"
+        ok "a seeded lock supplies the index digest"
+    else
+        bad "index seed" "non-zero exit: $(cat "$work/is.err")"
+    fi
+    mkdir -p "$work/idxuse"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/idxuse/ct.pkg"
+    if ( cd "$work/idxuse" && HOME="$work/home2" \
+            "$work/ct-ast" get --index "$work/index" gutil >"$work/ix.out" 2>"$work/ix.err" ); then
+        ok "resolves a bare name through --index"
+    else
+        bad "index lookup" "non-zero exit: $(cat "$work/ix.err")"
+    fi
+    if [ -f "$work/idxuse/vendor/gutil/ct.pkg" ]; then
+        ok "the index entry's git source is vendored"
+    else
+        bad "index vendor" "vendor/gutil is missing"
+    fi
+    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} sha256:[0-9a-f]{64}$" "$work/idxuse/ct.lock"; then
+        ok "the indexed version and digest reach ct.lock"
+    else
+        bad "index lock" "unexpected lock line: $(grep gutil "$work/idxuse/ct.lock")"
+    fi
+    mkdir -p "$work/idxenv"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/idxenv/ct.pkg"
+    if ( cd "$work/idxenv" && HOME="$work/home2" CT_INDEX="$work/index" \
+            "$work/ct-ast" get gutil >"$work/ie.out" 2>"$work/ie.err" ); then
+        ok "CT_INDEX names the same index as --index"
+    else
+        bad "CT_INDEX" "non-zero exit: $(cat "$work/ie.err")"
+    fi
+    if ( cd "$work/idxuse" && HOME="$work/home2" \
+            "$work/ct-ast" get --index "$work/index" absent >"$work/ia.out" 2>"$work/ia.err" ); then
+        bad "index missing-name" "expected a non-zero exit"
+    elif grep -Fq "package 'absent' is not in the index" "$work/ia.err"; then
+        ok "a name the index does not list is rejected"
+    else
+        bad "index missing-name" "wrong diagnostic: $(cat "$work/ia.err")"
+    fi
+    if ( cd "$work/idxuse" && HOME="$work/home2" \
+            "$work/ct-ast" get --index "$work/no-such-index" gutil >"$work/ir.out" 2>"$work/ir.err" ); then
+        bad "index unreadable" "expected a non-zero exit"
+    elif grep -Fq "cannot read the package index" "$work/ir.err"; then
+        ok "an unreadable index fails with its path"
+    else
+        bad "index unreadable" "wrong diagnostic: $(cat "$work/ir.err")"
+    fi
+    badsha="sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    printf 'gutil 0.1.0 file://%s/gutil 0.1.0 %s\n' "$reg" "$badsha" >"$work/index-bad"
+    if ( cd "$work/idxuse" && HOME="$work/home2" \
+            "$work/ct-ast" get --index "$work/index-bad" gutil >"$work/ib.out" 2>"$work/ib.err" ); then
+        bad "index digest" "expected a non-zero exit"
+    elif grep -Fq "does not match the index" "$work/ib.err"; then
+        ok "the index digest is checked against the fetched source"
+    else
+        bad "index digest" "wrong diagnostic: $(cat "$work/ib.err")"
+    fi
 fi
 
 echo
@@ -436,6 +506,113 @@ if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/dirname >"$work/rn.out" 2>"$w
     fi
 else
     bad "get dirname" "non-zero exit: $(cat "$work/rn.err")"
+fi
+
+echo
+echo "== version ranges: comparators and space-separated AND =="
+mkdir -p "$work/pkgs/rutil" "$work/rproj"
+printf 'name = rutil\nversion = 1.2.0\n' >"$work/pkgs/rutil/ct.pkg"
+printf 'int rutil_value(void) { return 1; }\n' >"$work/pkgs/rutil/r.c"
+printf 'name = demo\nversion = 0.1.0\n' >"$work/rproj/ct.pkg"
+if ( cd "$work/rproj" && "$work/ct-ast" get '../pkgs/rutil@>=1.0.0 <2.0.0' >"$work/rg1.out" 2>"$work/rg1.err" ); then
+    ok "space-separated comparators accept a version inside the range"
+else
+    bad "range AND" "non-zero exit: $(cat "$work/rg1.err")"
+fi
+if ( cd "$work/rproj" && "$work/ct-ast" get '../pkgs/rutil@>=2.0.0' >"$work/rg2.out" 2>"$work/rg2.err" ); then
+    bad "range reject" "expected a non-zero exit"
+elif grep -Fq "does not satisfy '>=2.0.0'" "$work/rg2.err"; then
+    ok "a comparator range rejects a version outside it"
+else
+    bad "range reject" "wrong diagnostic: $(cat "$work/rg2.err")"
+fi
+
+echo
+echo "== build metadata: cflags / ldflags / requires =="
+mkdir -p "$work/pkgs/meta" "$work/pkgs/mbad" "$work/mproj"
+printf 'name = meta\nversion = 0.1.0\ncflags = -DMETA=1\nldflags = -lm\nrequires = ct >= 0.1.0\n' >"$work/pkgs/meta/ct.pkg"
+printf 'int meta_value(void) { return 1; }\n' >"$work/pkgs/meta/m.c"
+printf 'name = mbad\nversion = 0.1.0\nrequires = ct >= 9.0.0\n' >"$work/pkgs/mbad/ct.pkg"
+printf 'int mbad_value(void) { return 2; }\n' >"$work/pkgs/mbad/b.c"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/meta@^0.1.0\ndep = ../pkgs/mbad@^0.1.0\n' >"$work/mproj/ct.pkg"
+if ( cd "$work/mproj" && "$work/ct-ast" get ../pkgs/meta >"$work/mg.out" 2>"$work/mg.err" ); then
+    ok "get vendors the first metadata package"
+else
+    bad "metadata get" "non-zero exit: $(cat "$work/mg.err")"
+fi
+
+echo
+echo "== ct update: resolve ct.pkg offline, keep the lock honest =="
+if ( cd "$work/mproj" && "$work/ct-ast" update >"$work/u.out" 2>"$work/u.err" ); then
+    if grep -Fq "updated 2 package(s)" "$work/u.out"; then
+        ok "update re-resolves every ct.pkg dependency and rewrites ct.lock"
+    else
+        bad "update" "wrong output: $(cat "$work/u.out")"
+    fi
+else
+    bad "update" "non-zero exit: $(cat "$work/u.err")"
+fi
+if [ -f "$work/mproj/vendor/mbad/ct.pkg" ] && [ -f "$work/mproj/vendor/meta/ct.pkg" ]; then
+    ok "update vendors the dependencies ct.pkg names"
+else
+    bad "update" "vendor/ is incomplete"
+fi
+if ( cd "$work/mproj" && "$work/ct-ast" update --bogus >"$work/uo.out" 2>"$work/uo.err" ); then
+    bad "update unknown-option" "expected a non-zero exit"
+elif grep -Fq "unknown option '--bogus'" "$work/uo.err"; then
+    ok "update rejects an unknown option"
+else
+    bad "update unknown-option" "wrong diagnostic: $(cat "$work/uo.err")"
+fi
+if ( cd "$work/mproj" && "$work/ct-ast" update stray >"$work/us.out" 2>"$work/us.err" ); then
+    bad "update extra-arg" "expected a non-zero exit"
+elif grep -Fq "unexpected argument 'stray'" "$work/us.err"; then
+    ok "update rejects a stray argument"
+else
+    bad "update extra-arg" "wrong diagnostic: $(cat "$work/us.err")"
+fi
+
+echo
+echo "== ct install: one command carrying each package's flags =="
+if ( cd "$work/mproj" && "$work/ct-ast" install >"$work/mi.out" 2>"$work/mi.err" ); then
+    ok "install accepts a lock that update wrote"
+else
+    bad "install after update" "non-zero exit: $(cat "$work/mi.err")"
+fi
+if grep -Fq -- "--cflags '-DMETA=1'" "$work/mi.out"; then
+    ok "install folds a package's cflags into the printed command"
+else
+    bad "cflags" "no --cflags in: $(cat "$work/mi.out")"
+fi
+if grep -Fq -- "--ldflags '-lm'" "$work/mi.out"; then
+    ok "install folds a package's ldflags into the printed command"
+else
+    bad "ldflags" "no --ldflags in: $(cat "$work/mi.out")"
+fi
+if grep -Fq "requires 'ct >= 9.0.0'" "$work/mi.err"; then
+    ok "an unsatisfied requires is a warning, not a refusal"
+else
+    bad "requires" "no warning on stderr: $(cat "$work/mi.err")"
+fi
+
+echo
+echo "== ct verify: the lock against the vendored tree =="
+if ( cd "$work/mproj" && "$work/ct-ast" verify >"$work/v.out" 2>"$work/v.err" ); then
+    if grep -Fq "verified 2 package(s)" "$work/v.out"; then
+        ok "verify accepts an untampered vendor tree"
+    else
+        bad "verify" "wrong output: $(cat "$work/v.out")"
+    fi
+else
+    bad "verify" "non-zero exit: $(cat "$work/v.err")"
+fi
+printf 'int meta_value(void) { return 3; }\n' >"$work/mproj/vendor/meta/m.c"
+if ( cd "$work/mproj" && "$work/ct-ast" verify >"$work/vt.out" 2>"$work/vt.err" ); then
+    bad "verify tampered" "expected a non-zero exit"
+elif grep -Fq "does not match ct.lock" "$work/vt.err"; then
+    ok "verify rejects a tampered vendored file"
+else
+    bad "verify tampered" "wrong diagnostic: $(cat "$work/vt.err")"
 fi
 
 echo
