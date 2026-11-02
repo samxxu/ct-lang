@@ -5,8 +5,8 @@
 > **状态**：本文描述 **ct 语言的核心语法**——L0（`ctc.c`）、CT 线（L2，`selfhost/l2/**`；冻结的回归
 > oracle）与安装入口 ct-ast（`selfhost/ct-ast/main.ct`）**共同**接受与产出的部分。CT 线是 L0 的超集，额外支持 `namespace` / `import` / `pub` / 多文件 `ct build` /
 > `Drop` / `#line` / 泄漏警告与 `--diagnostics`；这些**不在本文的语法章节内**，语义与落地记录见
-> [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](design/restore.md) 与
-> [design/phase5.md](design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
+> [roadmap](roadmap.md) 的 Phase 2–5、[design/restore.md](history/design/restore.md) 与
+> [design/phase5.md](history/design/phase5.md)。AutoDrop（`own`）虽然也是 CT 线独有，但在 §4.9 一并描述。
 > Phase 11.1 新增的 `map`（把 trait 方法绑定到已声明的全局实例；SH-20 起也可绑定到命名空间）**仅 ct-ast** 支持，L0 与 L2 都不接受，见 §4.10。
 >
 > 三者并非逐字节等价：ct-ast 是安装入口，L2 只是回归 oracle。已知分叉分两类。
@@ -414,7 +414,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 **零成本静态映射（第三十八批，已实现）**：`.m.ct` 编译期映射单元、静态 trait、命名空间静态调用
 `host::Trait.method(…)` 与类型宿主 `map trait T for type <ctype>`——绑定在**调用点**直接展开为裸 C
 调用，不生成 wrapper / `_iface` / `_vtbl` / vtable，跨单元同样零成本。规格见
-[design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md)。本节其余内容描述动态 `map`，
+[design/batch38-map-unit/spec.md](history/design/batch38-map-unit/spec.md)。本节其余内容描述动态 `map`，
 其产物与行为不变。
 
 ```c
@@ -1444,7 +1444,7 @@ a static local cannot be 'borrow'
 warning: a borrowed pointer escapes through 'return'
 ```
 
-设计与实现说明见 [design/borrow.md](design/borrow.md)。
+设计与实现说明见 [design/borrow.md](history/design/borrow.md)。
 
 ### 5. 命名规则（稳定契约）
 
@@ -1548,7 +1548,7 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 
 多文件模式（`ct build`）、`namespace`、`import`、`pub`、`Drop`、`#line`（含 `--line` / `--no-line`）、
 泄漏警告与 `--diagnostics`，以及语义诊断（重复定义 / 签名不一致）**均由 CT 线（L2 / ct-ast）支持**，L0 不接受。
-这些语法的定义与实现记录见 [roadmap](roadmap.md) 的 Phase 2–5 与 [design/restore.md](design/restore.md)；
+这些语法的定义与实现记录见 [roadmap](roadmap.md) 的 Phase 2–5 与 [design/restore.md](history/design/restore.md)；
 归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见 git tag `overreach-oracle`。
 
 ---
@@ -1560,8 +1560,8 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 > (`selfhost/ct-ast/main.ct`) **accept and emit**. The CT line is a superset: it also supports
 > `namespace` / `import` / `pub` / multi-file `ct build` / `Drop` / `#line` / leak warnings and
 > `--diagnostics`. Those are **not covered by the grammar chapters below**; their semantics and
-> landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](design/restore.md)
-> and [design/phase5.md](design/phase5.md). AutoDrop (`own`) is also CT-line-only but is described in §4.9.
+> landing record live in [roadmap](roadmap.md) (Phases 2–5), [design/restore.md](history/design/restore.md)
+> and [design/phase5.md](history/design/phase5.md). AutoDrop (`own`) is also CT-line-only but is described in §4.9.
 > The `map` construct added in Phase 11.1 (binding a trait method to a declared global instance, or —
 > since SH-20 — to a namespace) is supported by **ct-ast only** — neither L0 nor L2 accepts it;
 > see §4.10.
@@ -2033,7 +2033,7 @@ trait:
 traits, namespace static calls `host::Trait.method(…)` and the type host
 `map trait T for type <ctype>` expand every binding **at the call site** into a plain C call —
 no wrapper, no `_iface` / `_vtbl`, no vtable, and the same across units. See
-[design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md). The rest of this section
+[design/batch38-map-unit/spec.md](history/design/batch38-map-unit/spec.md). The rest of this section
 describes the dynamic `map`, whose output and behaviour are unchanged.
 
 `map` is a Phase 11 addition: **neither L0 nor L2 knows it** — only **ct-ast**
@@ -3191,7 +3191,7 @@ a static local cannot be 'borrow'
 warning: a borrowed pointer escapes through 'return'
 ```
 
-Design and implementation notes: [design/borrow.md](design/borrow.md).
+Design and implementation notes: [design/borrow.md](history/design/borrow.md).
 
 ### 5. Naming contract
 
@@ -3331,5 +3331,5 @@ Multi-file mode (`ct build`), `namespace`, `import`, `pub`, `Drop`, `#line` (wit
 `--no-line` overrides), leak warnings and `--diagnostics`, plus semantic checks (duplicate
 definitions / signature mismatches) are **all supported by the CT line (L2 / ct-ast)** and rejected by L0. Their grammar
 and implementation record live in [roadmap](roadmap.md) (Phases 2–5) and
-[design/restore.md](design/restore.md); archived test fixtures are in `test/archive/`, and the
+[design/restore.md](history/design/restore.md); archived test fixtures are in `test/archive/`, and the
 feature-complete old compiler is at git tag `overreach-oracle`.

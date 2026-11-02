@@ -59,7 +59,7 @@
 - **例外（Phase 8 包管理）**：`ct get` / `ct install` 可调用**系统 `git`** 获取 git 源包，并可把**本地目录源**同步进
   `vendor/`。这是包管理子命令的受控例外——**零网络**不变，编译器核（`ct compile` / `ct build --emit-c`）仍
   **零子进程**，且不得内置 HTTP 客户端。无 `git` 时 git 源硬报错并提示，本地源照常可用。见
-  [design/phase8.md](docs/design/phase8.md)（D22 / D26）。
+  [design/phase8.md](docs/history/design/phase8.md)（D22 / D26）。
 - **例外（Phase 17 `ct build` 一步到位）**：`ct build` **默认**在发射 `.c` / `.h` 之后调用**本地 C 编译器**
   （`$CC` / `--cc`，默认 `cc`）产出可执行文件——用户 2026-11-02 授权的受控子进程例外。**零网络**不变；
   `ct compile` 与 `ct build --emit-c` 仍**零子进程**；`ct build` 不解析 `cc` 的诊断、不做增量链接、
@@ -68,12 +68,12 @@
   （`selfhost` 之外的第二类源码目录）。binding 只是 CT 源——直通 `#include` ＋ 镜像声明 ＋ `map`，
   **只声明外部符号，不 vendored、不下载、不链接**；仓库内假 HAL 的 C 头 / 实现仅作**演示与测试**，
   **绝不**成为编译器构建步骤（`gcc selfhost/l0/ctc.c`、`./test/run.sh` 的编译相关层与 CT 线关卡都不得依赖它）。
-  见 [roadmap](docs/roadmap.md) 的 Phase 12 与 [design/phase12.md](docs/design/phase12.md)。
+  见 [roadmap](docs/roadmap.md) 的 Phase 12 与 [design/phase12.md](docs/history/design/phase12.md)。
 - `editors/**` 必须保持**纯声明式 JSON**：无构建步骤、无 npm 依赖、无需打包器，改完可直接
   `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、**不调用 `ctc`**（方言亦不例外：
   插件不代跑展开器，`--watch` / 后台自动展开推迟；消费映射信息只能读编译器已产出的 map JSON）。
 - 不改变已发布产物的命名规则（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`、`<Struct>_<Trait>_vtable`），除非用户明确要求。
-- `docs/design/` 下是**未实现的设计草案**（如自举的目标目录结构），不是实现依据；不要照着草案创建目录或文件。
+- `docs/design/` 只放**当前阶段**的计划与未决草案（如 [phase17.md](docs/design/phase17.md)），不是早已落地的实现依据；已关闭阶段的设计记录在 `docs/history/design/`，只作历史索引。不要照着草案创建目录或文件。
 - **`ctc.c` 在自举启动后冻结**：Phase 0.3 剥离完成后**只接受 bug 修复**，**不再新增任何能力**（2026-10-15 用户明确重申：bug 修复可以接受，其他一律不行）。自举要求 `ctc.c` 的 `main` 加 `#ifndef CTC_NO_MAIN` 守卫——这是冻结期**唯一**允许的结构性改造。判据如下，**含混时按「不允许」处理**：
   - **允许**：修正既有行为中的缺陷（错判、错发射、崩溃、越界、状态未还原等）。出口是**既有语料产物不动**——改完 `./test/run.sh` 与 `bash selfhost/check-goldens.sh` 仍须全绿，且**不得重新生成任何 `*.expected.*`**；必须是一个独立的 `fix(...)` 提交，正文写明缺陷、触发条件与验证方式，并登记进下面的清单。
   - **不允许**：新增或加回任何语言特性 / CLI 选项 / 诊断；放宽或绕开任何 `MAX_*` 上限（含为了让 L1 过 `MAX_FUNCS` / `MAX_METHOD` 而改 `ctc.c`）；改动产物命名规则、banner 或 `CTC_VERSION`；重构、重命名、重排既有符号；新增 `#include` 或改变生成物结构。这些一律只能做在 **CT 侧**（L1 及以后）。
@@ -288,7 +288,7 @@ Hard boundaries:
   controlled exception for the package subcommands only — **network-free** is unchanged, the compiler
   core (`ct compile` / `ct build --emit-c`) stays **process-free**, and no HTTP client may be built in.
   Without `git`, git sources fail hard with a hint while local sources keep working. See
-  [design/phase8.md](docs/design/phase8.md) (D22 / D26).
+  [design/phase8.md](docs/history/design/phase8.md) (D22 / D26).
 - **Exception (Phase 17 one-step `ct build`)**: **by default** `ct build` invokes a **local C compiler**
   (`$CC` / `--cc`, default `cc`) after emitting `.c` / `.h`, producing an executable — a controlled
   subprocess exception authorised by the user on 2026-11-02. **Network-free** is unchanged;
@@ -301,7 +301,7 @@ Hard boundaries:
   vendoring, downloading or linking** them; the in-repo fake HAL's C header / implementation exists for
   **demos and tests only** and **never** becomes a compiler build step (`gcc selfhost/l0/ctc.c`, the
   compilation-related layers of `./test/run.sh` and every CT-line gate must not depend on it). See the
-  Phase 12 section of [roadmap](docs/roadmap.md) and [design/phase12.md](docs/design/phase12.md).
+  Phase 12 section of [roadmap](docs/roadmap.md) and [design/phase12.md](docs/history/design/phase12.md).
 - `editors/**` must stay **declarative JSON only**: no build step, no npm dependencies, no bundler —
   `npx @vscode/vsce package` must work as-is. Extensions cover highlighting and editing comfort only;
   they do not validate syntax and do not invoke `ctc` (dialects included: the extension runs no
@@ -309,8 +309,10 @@ Hard boundaries:
   the map JSON the compiler already emitted).
 - Do not change published naming rules (`<Trait>_vtbl`, `__<trait>_vptr`, `<Struct>_<Trait>_<method>`,
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
-- `docs/design/` holds **unimplemented design drafts** (e.g. the bootstrap target layout) — they are
-  not a mandate to implement anything; never create directories or files from a draft.
+- `docs/design/` holds the **current phase's plan and open drafts only** (e.g.
+  [phase17.md](docs/design/phase17.md)); closed-phase records live in `docs/history/design/` as a
+  historical index. Neither is a mandate to implement anything; never create directories or files from
+  a draft.
 - **`ctc.c` freezes once self-hosting starts**: after Phase 0.3 strips it, **only bug fixes** are
   allowed and **no new capability is added** (the user restated this explicitly on 2026-10-15: bug
   fixes are fine, nothing else). Self-hosting requires an `#ifndef CTC_NO_MAIN` guard on `ctc.c`'s

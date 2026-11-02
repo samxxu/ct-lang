@@ -2,497 +2,103 @@
 
 > **v0.16.3** · 中文 · [English](#english)
 
-**ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件，翻译成纯 C 的 `.c` 文件。
-它不做类型检查、不做优化；Phase 0（用 trait 写完整 OO）及其子阶段 0.1 / 0.2 / 0.3（剥离越位特性）、**Phase 1（自举，2026-10-15）**、**Phase 2（模块化，2026-10-16）**、**Phase 3（内存，2026-10-16）**、**Phase 4（诊断与溯源，2026-10-16）**、**Phase 5（新增特性，2026-10-17）**、**Phase 6（生态与扩展，2026-10-17）**、**Phase 7（工具链形态，2026-10-17）**与 **Phase 8（包管理与分发，`ct-pkg`，2026-10-18）**均已完成；Phase 6 的 6.1–6.4（反向映射表 / 调用图 / 增量缓存 / 多目标）与 6.6（方言系统）已落地，6.5 `map` 仅设计冻结；Phase 7 的 7.1–7.3 已落地（`ct` 身份 / 安装形态 / banner 改名）；Phase 8 的 8.1–8.3 全部落地（`ct get` 支持本地目录源与 git 源、commit + 摘要锁定；`ct install` 离线校验并给建议命令），收口 bump 到 **v0.8.0**；**Phase 9（AST 版编译器，新主线）设计已冻结（2026-10-18，D28–D37 全部定案），9.1–9.7 已落地**（自编 + 不动点 + 全量行为等价，旧管线 `selfhost/l2/**` 按 D36 冻结归档），收口 bump 到 **v0.9.0**；**Phase 10（主线切换）已完成，10.1–10.7 全部落地**（ct-ast 承接诊断 / 内存 / 多错误恢复 / 增量缓存 / 包管理，10.7 起安装入口由 `selfhost/ct-ast/main.ct` 提供，L2 降为回归 oracle），收口 bump 到 **v0.10.0**；**Phase 11（`map` 构造，D19 解除）的 11.1–11.2 已落地（2026-10-19，仅 ct-ast）**——11.2 已把映射实例接入派发（装箱用实例级 vtable，未 `use` 该 trait 的 struct 亦可作为其实例运行），收口 bump 至 **v0.11.0**；**11.3 加固**（绑定完整性 / 唯一性校验 + CALL 子集放宽）后 patch bump 至 **v0.11.1**；**Phase 12（官方 bindings + 方言深化）已完成，12.1–12.4 全部落地**（首个官方 binding `bindings/mock-hal/`、binding 规约 `bindings/README.md`、多方言并存演示与作者指南），收口 bump 至 **v0.12.0**；**v0.13.0（2026-10-31）**：ct-ast 的 C 子集补齐（长初始化器、变参函数指针、逗号表达式、头文件类型名、表达式里的赋值、前缀 `++` / `--`），并把「ct-ast 能编 `ctc.c`、产物与 L0 golden 逐字节一致」固化为关卡；**v0.14.0（2026-10-31，用户授权）**：trait 默认方法——方法体可直接写在 trait 里，采纳点只实现抽象方法，全 default 的 trait 连 `impl` 都不需要（`use` 即采纳），默认体按 (struct, trait) 各展开一份、vtable / 装箱 / 派发零改动；**v0.15.0（2026-10-31，用户授权）**：`.m.ct` 零成本静态映射（batch 38）——C 库映射在调用点直接展开成普通 C 调用，不生成 wrapper / `_iface` / vtable，跨单元同样零成本；**v0.15.1（2026-10-31，用户授权）**：修复静态映射 recipe 的 `sizeof`（`sizeof p` 不再被计为一次求值、`sizeof(p)` 改为编译期拒绝），并把传递 `.m.ct` import 与传递依赖缓存固化为关卡；**v0.16.1（2026-11-01，用户授权）**：`borrow` 参数注解 + `Handback` 内建 trait——借用指针在出口自动归还、绝不释放，并前置修复 SH-33（行首 `return` 前 AutoDrop 不注入）；**v0.16.2（2026-11-02，用户授权）**：修复 2026-11-01 第三方复核的 5 条——SH-42 把 `Arena` / `Symbols` / `Parser.g_maps` / `Module.g_units` 四张超大静态表改为堆分配（`ct` 二进制 88M → 637K、`__DATA` 105MB → 589824 B），SH-44 把 `ct.lock` 摘要从 16 位 FNV 换成 SHA-256（`sha256:<64 hex>`，旧摘要显式报 `unsupported digest`），DOC-51 / DOC-52 订正教程与 language-spec 的文档漂移（SH-43 维持待决）；**v0.16.3（2026-11-02，用户授权）**：修复 2026-11-02 复核的 SH-45（`return` 读取 `own` / `borrow` 字段时改为先求值到临时变量、再释放、再返回，原先生成释放后使用）、SH-47（字段容量报错点名 struct 与 `limit 64`）、DOC-53（spec §6.1 的重名陈述）与 DOC-54（教程 / spec 的单元种类、import 搜索顺序与命名约定归属）；SH-46 不采纳硬报错，改为在 spec 写明「按 `use` 顺序取第一个」——已达成的能力与后续计划见 [docs/roadmap.md](docs/roadmap.md)。
-
-命名约定：项目与语言叫 **ct**（*C with Traits*，源文件后缀 `.ct`），入口命令叫 **`ct`**（Phase 7 起；`ctc` 保留为**兼容别名**，L0 种子 `ctc.c` 编出的二进制仍叫 `ctc`），GitHub 仓库叫 **`ct-lang`**（`ct` 作仓库名太短、检索不到）。
-
-```bash
-gcc selfhost/l0/ctc.c -o ctc
-./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c
-gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
-```
-
-```
-Hello, I'm Tom, age 36
-Hello Jerry, I'm Tom
-```
+**ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
+它不做类型检查、不做优化；生成物是**可读的普通 C**，不依赖任何运行时库，vtable 与 `_self` 强转等样板代码都由编译器生成。
+已完成的能力与后续阶段见 [docs/roadmap.md](docs/roadmap.md)，术语见 [docs/glossary.md](docs/glossary.md)。
 
 ---
 
 ## 中文
 
-### 1. 它解决什么问题
-
-C 没有虚函数表，想在 C 里模拟「接口 + 多态」要手写一大堆样板代码：vtable 结构体、函数指针赋值、每个方法的第一参数手工强转、构造对象时手工填充 vptr。
-`ctc` 让你用接近 Rust/D 的语法写这些声明，然后由编译器把样板代码生成出来 —— 生成结果是**可读的普通 C**，不依赖任何运行时库。
-
-### 2. 快速开始
+### 1. 快速开始
 
 ```bash
-# 1a) 直接安装（下载源码 → 本地四级自举 → 装到 ~/.local/bin）
+# 1a) 安装（下载源码 → 本地四级自举 → 装到 ~/.local/bin）
 curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 
-# 1b) 或者不安装，只用 L0 种子（单文件、核心语法；没有 `ct`，下面一律用 ./ctc）
+# 1b) 或者不安装，只用 L0 种子（单文件、核心语法；没有 ct，下面用 ./ctc）
 gcc selfhost/l0/ctc.c -o ctc
 
-# 2) 编译 .ct 到 .c（只有 `.h.ct` 输入才同时生成同名 .h）；产物可放任意目录
-ct examples/01_greeter/greeter.ct -o /tmp/greeter.c      # 走了 1a
-./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # 走了 1b（L0 只认核心语法，仍写 .h）
+# 2) 编译 .ct 到 .c（只有 .h.ct 输入才同时写同名 .h）
+ct compile examples/01_greeter/greeter.ct -o /tmp/greeter.c      # 走了 1a
+./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c           # 走了 1b
 
 # 3) 用系统 C 编译器构建产物
-gcc /tmp/greeter.c -o /tmp/greeter
-/tmp/greeter
+gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ```
 
-新用户从这里开始：[docs/tutorial.md](docs/tutorial.md)（逐章教程，每条命令都可直接粘贴）。
+新用户从这里开始：[docs/tutorial.md](docs/tutorial.md)——逐章教程，每条命令都可直接粘贴。
 
-命令行接口：
+### 2. 常用命令
 
-| 用法 | 说明 |
+| 命令 | 作用 |
 | --- | --- |
-| `ctc <input.ct>` | 输出到 `<input>.c`；输入是 `.h.ct` 时同时写 `<input>.h`（L0 / L2 仍总是写 `.h`） |
-| `ctc <input.ct> -o <output.c>` | 输出到指定路径；输入是 `.h.ct` 时头文件为同目录同名的 `.h` |
-| `ctc compile <input.ct>` | 同上（`compile` 是默认子命令） |
-| `ctc <input.ct> --emit-map <file\|->` | 额外写出反向映射表 JSON（trait / struct / function / impl → 生成的 C 符号，以及直接调用边）；`-` 表示 stdout，`compile` 与 `build` 都可用 |
-| `ctc build <in.ct>… -o <dir>`（CT 线） | 多文件编译：每单元产出 `.c`（`.h.ct` 单元另有 `.h`）并打印建议 `cc` 命令；只有 `.h.ct` 单元可被 `import`。在 `<dir>/.ctcache/<unit>.key` 记键做**增量缓存**，键一致且产物在盘则跳过重生成（Phase 6.3） |
-| `ctc … --std=c99\|gnu99` | 目标 C 标准（默认 `c99`）；暂无产物差异，`build` 将其写入建议的 `cc` 命令，其他值硬报错（Phase 6.4） |
-| `ctc … -I <dir>` | `build` 追加一个导入搜索根（可重复，最多 16 个，第 17 个报 `too many -I roots`）；`compile` 接受该开关但不解析导入（无上限，见 SH-24） |
-| `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3：`spec` 以 `.` / `/` / `file://` 开头为本地包（复制），否则为 git 包（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`）；解析 `ct.pkg`、递归 `dep`、复制到 `vendor/<name>/`、写 `ct.lock`（五列 `name ver dir\|git <ref> <digest>`，摘要为逐文件加法折叠的 FNV-1a）。git 源调用系统 `git`——**唯一**子进程调用点，仅 `ct get` 触发，`ct compile` / `ct build` / `ct install` 零网络零子进程 |
-| `ctc install` | Phase 8.3：离线校验 `ct.lock` 与 `vendor/`（逐包摘要相符、清单 `dep` 均被锁覆盖且在范围内），全部通过则打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`）；摘要不符 / 缺包 / 未覆盖依赖硬报错 |
-| `ctc … --line` / `--no-line` | 覆盖 `#line` 的默认开关（`build` 默认开、`compile` 默认关；Phase 4） |
-| `ctc build … --ns-root <dir>` | 目录 = namespace 校验的树根（仅 `build`；Phase 5） |
-| `ctc … --diagnostics=json\|text` | 告警格式：`text` 为人可读 stderr（默认），`json` 写 stdout（含泄漏与签名告警；Phase 4） |
-| `ctc -v` / `ctc --version` | 打印版本，如 `ctc v0.16.3`；二进制名为 `ct` 时打印 `ct v0.16.3` |
-| `ctc -h` / `ctc --help` | 打印用法 |
+| `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
+| `ct <in.ct> -o <out.c>` | 指定输出路径 |
+| `ct build <in.ct>… -o <dir>` | 多文件编译：每单元一份 `.c`（`.h.ct` 另写 `.h`），打印建议的 `cc` 行；带增量缓存 |
+| `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
+| `ct get <spec>[@<range>]` / `ct install` | 包管理：拉包到 `vendor/`、写 `ct.lock`；离线校验并打印建议命令 |
+| `ct -v` / `ct -h` | 版本 / 用法 |
 
-退出码：成功 `0`；语法错误或 I/O 错误 `1`。错误信息格式为 `文件:行:列: error: 描述`。L0（`ctc.c`）**不产生任何警告**；CT 线（L2 / ct-ast）会输出泄漏与签名不一致告警（`--diagnostics` 可切 JSON）。**驱动层错误前缀固定为 `ctc:`**（即使二进制以 `ct` 身份运行），以保持日志与既有断言稳定——这与 `-v` / usage 随身份变化是两件事。
+退出码：成功 `0`，语法或 I/O 错误 `1`。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
+（二进制改名为 `ct` 也不变，以保持日志与断言稳定）。完整开关（`-I` / `--std` / `--line` / `--diagnostics` /
+`--ns-root`）见[教程 §10](docs/tutorial.md#10-命令行速查)。
 
-> **L0 当前只支持单文件**：越位实现过的模块系统与诊断能力（`namespace` / `import` / `pub` / `ct build` 多文件、`Drop`、`#line`、泄漏警告与 `--diagnostics`）已于 Phase 0.3 从 `ctc.c` 移出，L0 命中仍报 `'xxx' is not supported by this compiler`；这些能力已由 **Phase 2–5** 在 CT 线（`selfhost/l2/**`，即 L2）全部重做完成（见 [docs/roadmap.md](docs/roadmap.md)）。
->
-> 命令的最终形态是单入口 `ct`（`ctc` 保留为兼容别名）。**Phase 7.1–7.3 已落地**：把编译器产出的二进制命名为 `ct` 即可用 `ct …`（`ct compile` / `ct build`，默认子命令仍是 `compile`），`ctc` 仍是别名（可 `ln -s ct ctc`）；生成物 banner 已由 `Generated by ctc …` 改为 `Generated by ct …`（7.3，经用户授权一次性解冻 L0/L1）。**Phase 10.7 起该二进制由 ct-ast（`selfhost/ct-ast/main.ct`）提供**，L2（`selfhost/l2/**`）降为回归 oracle。L0 种子（`ctc.c`）本身仍只叫 `ctc`。见 [docs/roadmap.md](docs/roadmap.md)。
+### 3. 能力一览
 
-#### 单入口 `ct` 的构建与安装（Phase 7.2；10.7 起由 ct-ast 提供）
+- **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法
+- **内存**：`Drop` / `delete`、`own`（AutoDrop）、路径敏感泄漏告警、`borrow` + `Handback`
+- **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace
+- **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`bindings/` 声明式 C 库对接
+- **诊断与工具**：`#line` 溯源、`--diagnostics=json|text`、多错误恢复、增量缓存、`ct get` / `ct install`
+- **明确不做**：类型检查、泛型、继承、优化（语言在 `1.0.0` 才定稿）
 
-`ct` 由 **ct-ast**（`selfhost/ct-ast/main.ct`）提供。仓库里**只有一个**安装脚本 `install.sh`：它下载
-源码归档、本地四级自举、把 `ct` 装进指定目录并补 `ctc` 软链——**没有** Makefile、第三方依赖或预编译二进制。
+每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准；写法范例见 [docs/patterns.md](docs/patterns.md)，
+内存约定见 [docs/memory-guide.md](docs/memory-guide.md)。
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
-```
+### 4. 仓库结构
 
-| 选项 / 环境变量 | 作用 |
-| --- | --- |
-| `--prefix DIR` / `CT_PREFIX` | 安装目录（默认 `~/.local/bin`） |
-| `--version REF` / `CT_REF` | 构建的分支、tag 或 commit（默认 `main`） |
-| `CT_SOURCE_DIR=<dir>` | 不下载，直接编译本地工作树（离线安装） |
-| `CC=gcc` | 换 C 编译器（GCC ≥ 8 时的 `-Wno-format-truncation` 由脚本自动探测） |
+`selfhost/` 是自举链：`l0/`（C 种子）→ `l1/`（冻结）→ `l2/`（回归 oracle）→ `ct-ast/`（主线，提供 `ct` 安装入口）；
+`test/` 是测试与 golden；`docs/` 是文档；`bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
+目录级说明见 [selfhost/README.md](selfhost/README.md)、[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
 
-脚本按目录布局自适应：`v0.12.0` 及更早的 tag 仍是 `ctc.c` 在根、L2 在 `selfhost/src/**`、ct-ast 在
-`selfhost/ast/**` 的旧布局，`main` 已迁到 `selfhost/{l0,l1,l2,ct-ast}/`。手动等价步骤如下（也可直接照抄
-`install.sh`）：
+### 5. 文档与测试
 
-```sh
-gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # L0 种子（唯一的 C 构建，名字是 ctc）
-./ctc selfhost/l1/ctc.ct -o /tmp/ctc-l1.c                       # L0 编出 L1 的 C
-gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # 得到 L1
-mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 编出 L2 源
-gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2     # 得到 L2（回归 oracle）
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast   # L2 编出 ct-ast 源（各分组按全路径互相 import，故要 -I）
-OUT="$HOME/.local/bin"                                       # 任选一个在 PATH 上的目录
-mkdir -p "$OUT"
-gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$OUT/ct"      # 单入口 ct（ct-ast）
-ln -s ct "$OUT/ctc"                                          # ctc 兼容别名（副本亦可）
-```
+- 文档导航：[docs/README.md](docs/README.md)
+- 测试：`bash selfhost/check-all.sh` 跑 10 道硬门禁；分层地图见 [test/README.md](test/README.md)
+- 改动代码前先读 [AGENTS.md](AGENTS.md)
 
-此后 `ct compile <in.ct>` / `ct <in.ct>` 与旧写法 `ctc <in.ct>` 等价，`ct build … -o <dir>` 走多文件模式；`ct -v` 打印 `ct v0.16.3`，`ctc -v` 仍打印 `ctc v0.16.3`。L0 种子（`ctc.c`）本身仍只叫 `ctc`。完整自举链见 [docs/design/bootstrap.md](docs/design/bootstrap.md) 与 `bash selfhost/ct-tour.sh`。
+### 6. 许可
 
-> **用 GCC ≥ 8 构建时请追加 `-Wno-format-truncation`**。上面的「零警告」以 Apple clang（macOS 默认 `cc`）为基准；GCC 在 `-Wall -Wextra` 下额外启用 `-Wformat-truncation`，会对冻结的 L0 / L1 / L2 里一批 `snprintf` 报疑似截断（误报，源码不改）。`bash selfhost/check-all.sh` 会自动处理；另有两个依赖 BSD libc 的探针在 Linux 上显示为 `skip`。细则见 [AGENTS.md](AGENTS.md) §6。
+GPL-3.0-or-later（编译器本体，见 [LICENSE](LICENSE)）；生成的 `.c`/`.h` 与你的 `.ct` **不受 GPL 约束**
+（[LICENSE.EXCEPTION](LICENSE.EXCEPTION)）；`examples/`、`test/`、`editors/` 为 MIT。
 
-### 3. 语法与展开规则
+### 7. 联系
 
-| 输入（`.ct`） | 输出（`.c`） |
-| --- | --- |
-| `trait Greeter { void greet(); }` | `struct Greeter_vtbl { void (*greet)(void *); };` |
-| `struct Person { char *name; } use Greeter;` | `struct Person { char *name; struct Greeter_vtbl *__greeter_vptr; };` |
-| `impl Greeter for Person { void greet() {…} }` | `static void Person_Greeter_greet(void *self) { struct Person *_self = (struct Person *)self; … }` + `static struct Greeter_vtbl Person_Greeter_vtable = { .greet = Person_Greeter_greet };` |
-| `Person p = { .name = "Tom" };` | `struct Person p = { .name = "Tom", .__greeter_vptr = &Person_Greeter_vtable };` |
-| `Person p = { "Tom", 36 };` | `struct Person p = { "Tom", 36, .__greeter_vptr = &Person_Greeter_vtable };` |
-| `Person p;` | `struct Person p = { .__greeter_vptr = &Person_Greeter_vtable };` |
-| `p.greet();` | `p.__greeter_vptr->greet(&p);` |
-| `Person *q = &p; q->greet();` | `struct Person *q = &p; q->__greeter_vptr->greet(q);` |
-| 方法体内 `self->other();` | `_self->__greeter_vptr->other(_self);`（并在方法函数前补一行 vtable 前向声明） |
-| 方法体内 `self->who->greet();` | `_self->who->__greeter_vptr->greet(_self->who);`（字段链递归） |
-| 方法体内参数 `o` / 局部变量 `q` 上的 `o->greet();`、`q.greet();` | `o->__greeter_vptr->greet(o);`、`q.__greeter_vptr->greet(&q);`（方法体与顶层代码走同一重写管线） |
-| 函数签名 `void f(Person p)` / `Person *q` | `void f(struct Person p)` / `struct Person *q`（参数登记后，体内 `p.greet()` / `q->greet()` 照常重写） |
-| `static Person mk(char *n)` | `static struct Person mk(char *n)` |
-| `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
-| `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
-| `Person ps[2];` | 声明 + 块内循环逐元素写 vptr，之后 `ps[0].greet()`、`ps[i].greet()` 可派发；`Person *ptrs[2]` 的元素自身是指针，用 `ptrs[i]->greet()` |
-| `delete q;` | `if (q) { free(q); q = 0; }`（现对**任意可赋值指针**成立，含 `char *`；非左值实参只释放、不赋值） |
-| `own T *p = malloc(sizeof(struct T));` | 去掉 `own`；作用域闭合 `}` 与**每个 `return` 之前**（含分支内与行内）插入 `if (p) { T_Drop_drop(p); free(p); p = 0; }`（**Phase 5，仅 CT 线**） |
-| `borrow T *c = pool.acquire(...);` | 去掉 `borrow`；作用域闭合 `}` 与**每个 `return` 之前**插入 `if (c) { T_Handback_handback(c); c = 0; }`（**不释放内存**；`use Handback` + 同单元 `impl` 缺失即报错；仅 ct-ast） |
-| `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | 发射实例级包装函数 + vtable：`static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` 与 `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };`（**Phase 11，仅 ct-ast**；11.2 已接入派发——`Controller c = uart1;` 装箱用 `&uart1_Controller_vtable`） |
-| `T *p = malloc(sizeof(struct T));` | 声明后自动写 vptr（含嵌套值字段）：`p->__x_vptr = &T_X_vtable;` |
-| `Greeter g = p;`（`Greeter` 是 trait） | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
-| `void announce(Greeter who)` / `announce(p)` | 形参展开为 `struct Greeter_iface`；实参按签名表自动装箱 |
-| `g.greet();` | `g.vt->greet(g.self);`（运行时按装箱对象派发） |
-| 其它普通 C 代码 | **L0 / L2**：原样透传；**ct-ast**（安装入口）解析并重新发射已实现的 C 子集（逐项见 [language-spec](docs/language-spec.md) §4），没有已知的未实现形式（`__attribute__((…))` 见 §4.36；整数字面量后缀、`static_assert`、`_Noreturn`、`__restrict` 见 §4.37；`_Atomic(type)`、`_Alignas` 与属性的前置写法见 §4.38） |
-
-> `namespace` / `A::B::Name` 限定引用 / `pub` / `import` 等模块系统语法**L0 不接受**（Phase 0.3 已移出；Phase 2–5 已在 CT 线重做，见下文），写在源码里会直接报错，不会透传。`own`（AutoDrop）同理**只属 CT 线**（L2 / ct-ast），L0 会原样透传。`map`（Phase 11）**只属 ct-ast**，L0 与 L2 都不认识。反过来，「原样透传」只对 L0 / L2 成立：ct-ast 会解析并重新发射，因此它接受的是 language-spec §4 记录的 C 子集——`switch` / `do-while` / `goto` / 位域 / 变参 / 逗号 / 表达式里的赋值等都已支持。
-
-命名规则：
-
-| 产物 | 规则 | 例子（trait `Greeter`，struct `Person`，方法 `greet`） |
-| --- | --- | --- |
-| vtable 类型 | `<Trait>_vtbl` | `Greeter_vtbl` |
-| vptr 字段 | `__<trait小写>_vptr` | `__greeter_vptr` |
-| 方法实现函数 | `<Struct>_<Trait>_<method>` | `Person_Greeter_greet` |
-| vtable 变量 | `<Struct>_<Trait>_vtable` | `Person_Greeter_vtable` |
-
-细节约定：
-
-- **`self` 是隐式参数**。方法体与顶层代码走**同一重写管线**：先登记 `self`（指向当前 struct 的指针）与方法参数，再逐行改写，最后把标识符 `self` 重命名为 `_self`。因此 `self->field` → `_self->field`、兄弟调用 `self->other()` → `_self->__<trait>_vptr->other(_self, …)`，字段链 `self->who->m()`、方法参数 `o->m()`、方法体内局部变量 `q.m()` 也都照常派发；生成的函数第一行固定插入 `struct <Struct> *_self = (struct <Struct> *)self;`。
-- **调用方传值地址**。`p.greet(1)` → `p.__greeter_vptr->greet(&p, 1)`，`&p` 由编译器自动补上；指针接收者 `p->greet(1)` → `p->__greeter_vptr->greet(p, 1)`，不再补 `&`。
-- **多 trait**：`use Greeter, Counter;` 合法，每个 trait 生成一个 vptr 字段；方法名冲突时按 `use` 中的书写顺序取第一个匹配。
-- **初始化列表**：指定初始化、位置式初始化、空列表都会在 `}` 前追加 vptr 项；无初始化式的声明 `Person p;` 会被补成 `struct Person p = { .__<trait>_vptr = &… };`。
-- **函数签名**：普通函数的返回类型与参数里的已知 struct 名会自动加 `struct `（含 `static` 前缀、多词类型、指针返回、原型）；有函数体的函数，其参数会登记进变量表，体内 `p.greet()` / `q->greet()` 照常重写。
-- **块作用域**：变量与参数按花括号块作用域回滚，同名局部变量/参数在不同函数间不会串味。
-- **组合 / 数组**：struct 字段若是另一 ct struct 会自动补 `struct ` 并**递归写入内层 vptr**（用声明后的赋值，不会覆盖用户自己写的初始化）；`ps[0].m()`、`ps[i].m()`、`s.owner.m()` 与指针字段链 `b.who->m()` 都会派发（下标可为任意表达式）。`delete q;` 展开为 `if (q) { free(q); q = 0; }`。**变量下标**接收者的表达式会被求值两次，带副作用的下标（`ps[i++]`）不保证正确；**右值接收者** `f().m()`（值返回）、`mk()->m()`（指针返回，含字段跳 `f().a.b.m()`）已支持：接收者提升为临时变量 `__ct_tmp<N>` 只求值一次，且仅允许出现在**语句行首**或**赋值/声明初始化式 RHS 行首**，其它位置按 `文件:行:列: error:` 报错。
-- **接口多态**：把 trait 当类型用（`Greeter g`）→ 生成胖指针 `struct <Trait>_iface { self, vt }`；`g.greet()` 运行期派发到装箱的具体实现。装箱覆盖**声明、赋值、实参、`return`**（`Greeter g = p;`、`announce(p)`、`return p;`）。
-- **字符串/注释安全**：`"p.greet()"` 或 `// p.greet()` 不会被改写；`#` 开头的预处理行完全不参与改写。
-- **生成物带溯源注释**：生成的 `.c` 首行与 `.h` 的版本注释形如 `Generated by ct v0.16.3 from <输入路径>`（版本号来自 `ctc.c` 的 `CTC_VERSION`）。
-
-完整语法定义见 [docs/language-spec.md](docs/language-spec.md)。
-
-### 4. 示例
-
-`examples/` 下每个例子一个目录，只放源文件 `<name>.ct` 与期望输出 `<name>.expected.out`（展开出的 `.c`/`.h` 按需生成，不入库）。有两处例外：方言示例 `07_dialect/` 的 `.ct` 里是**写在注释里的 DSL**（`ctc` 看不到），须先由同目录 `ct-dialects/` 下的插件展开成纯 CT——豁免范围与约束见 [AGENTS.md](AGENTS.md) §2、设计见 [design/dialect.md](docs/design/dialect.md)；`08_map_binding/` 用了只有 ct-ast 认识的 `map`，首行标记 `//@ct-requires: ct-ast`，由 `selfhost/check-ast.sh` 的语料等价层构建（`test/run.sh` 驱动的是 L0，会跳过并标 `skip`）：
-
-| 目录 | 展示的内容 |
-| --- | --- |
-| [examples/01_greeter/](examples/01_greeter/greeter.ct) | 最小用例：一个 trait、一个 struct、一次 impl、带参与不带参的方法调用 |
-| [examples/02_market/](examples/02_market/market.ct) | 三个 trait / 两个 struct / 三个对象：同一 trait 在不同类型上有不同实现，对象之间传值与嵌套调用（`bob.earn(alice.spend(6))`），解析 `examples/02_market/market.ct` 得到 11 行输出 |
-| [examples/03_receivers/](examples/03_receivers/receivers.ct) | 一般接收者：下标元素 `ps[i]`、指针数组元素 `slots[0]`、指针字段链 `b.who` 都能正常派发 |
-| [examples/04_rvalue/](examples/04_rvalue/rvalue.ct) | 右值接收者：工厂调用返回的 struct 直接作接收者（`make_person("Ann", 30).greet()`），接收者只求值一次 |
-| [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | 方法体内的派发：字段链递归（`self->lhs->emit()`）、参数与局部变量接收者 |
-| [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | 接口值作 struct 字段：子节点是胖指针，`sum.lhs = one;` 装箱、`self->lhs.show()` 派发，递归组合成表达式树 |
-| [examples/07_dialect/](examples/07_dialect/registry.ct) | 方言（dialect）：寄存器表写在 `//@` 注释里，`ct-dialects/register-map.sh`（sh + awk，作者语言自选）把它展开成 trait / struct / impl；`ctc` 全程零感知，未展开的源无法直接编译 |
-| [examples/08_map_binding/](examples/08_map_binding/map_binding.ct) | `map`：把 trait 绑到两个已有的 `struct Uart` 全局实例上（不 `use`、不改库），装箱成 `Controller` 后经实例级 vtable 派发；需 ct-ast |
-
-一键跑通全部示例：`./test/run.sh`（examples 层会生成 → 编译 → 运行 → 与 `.expected.out` 比对；方言示例由 `dialect` 层先展开，再走同一套流程；`08_map_binding` 标了 `//@ct-requires: ct-ast`，在该层显示为 `skip`，实际由 `selfhost/check-ast.sh` 编译并比对）。
-
-`examples/01_greeter/greeter.ct`：
-
-```c
-trait Greeter {
-    void greet();
-    void greet_name(char *name);
-}
-
-struct Person {
-    char *name;
-    int age;
-} use Greeter;
-
-impl Greeter for Person {
-    void greet() {
-        printf("Hello, I'm %s, age %d\n", self->name, self->age);
-    }
-    void greet_name(char *name) {
-        printf("Hello %s, I'm %s\n", name, self->name);
-    }
-}
-
-int main() {
-    Person p = { .name = "Tom", .age = 36 };
-    p.greet();
-    p.greet_name("Jerry");
-    return 0;
-}
-```
-
-生成的核心片段：
-
-```c
-struct Greeter_vtbl {
-    void (*greet)(void *);
-    void (*greet_name)(void *, char *);
-};
-
-struct Person {
-    char *name;
-    int age;
-    struct Greeter_vtbl *__greeter_vptr;
-};
-
-static void Person_Greeter_greet(void *self) {
-    struct Person *_self = (struct Person *)self;
-    printf("Hello, I'm %s, age %d\n", _self->name, _self->age);
-}
-
-static void Person_Greeter_greet_name(void *self, char *name) {
-    struct Person *_self = (struct Person *)self;
-    printf("Hello %s, I'm %s\n", name, _self->name);
-}
-
-static struct Greeter_vtbl Person_Greeter_vtable = {
-    .greet = Person_Greeter_greet,
-    .greet_name = Person_Greeter_greet_name
-};
-
-int main() {
-    struct Person p = { .name = "Tom", .age = 36, .__greeter_vptr = &Person_Greeter_vtable };
-    p.__greeter_vptr->greet(&p);
-    p.__greeter_vptr->greet_name(&p, "Jerry");
-    return 0;
-}
-```
-
-### 5. 测试
-
-```bash
-./test/run.sh            # 全部跑一遍；退出码 0 = 通过
-CC=gcc ./test/run.sh     # 指定 C 编译器（默认 cc）
-```
-
-```
-test/                             测试（分层地图见 test/README.md）
-├── run.sh                        L0 驱动器：构建 → 单测 → golden → examples → dialect → 负例 → limits → cli
-├── unit/test_helpers.c           白盒单测（直接 include ctc.c 以触达 static 函数）
-├── cases/                        golden 正例：<name>.ct + <name>.expected.c / .h / .out
-├── errors/                       负例：<name>.ct + <name>.expected-err
-├── archive/                      Phase 0.3 移出的越位特性 fixture（Phase 2–5 对差基线，不跑）
-├── modules/                      CT 线（L2 / ct-ast）多单元与特性探针：一目录一用例
-├── ast/                          ct-ast 行为探针：一目录一用例；errors/ 为裸负例（多数钉死消息文本）
-├── patterns/                     设计模式用例：一目录一 `prog.ct` + `expected.out`（由 check-ast 驱动）
-├── acceptance/                   端到端验收清单（run.sh；PENDING 属预期，不阻断）
-└── pkg/                          包管理器 `ct get` / `ct install` 用例（run.sh）
-```
-
-八层断言：
-
-| 层 | 断言内容 |
-| --- | --- |
-| build | `ctc` 自身在 `-Wall -Wextra -std=c99` 下零警告 |
-| unit | `trim` / `param_type_only` / `parse_params` / `split_decl` / `decl_end_is_bare` / `put_own_vptr` / `put_nested_assignments` / `last_ident` / `already_qualified` / `analyse_param` / `emit_qualified_type` / `word_at` / `match_delim` 等纯函数的断言 |
-| cases | `ctc` 退出 0 → 生成物与 golden 逐字节一致（`.c` 与 `.h`）→ 生成物编译通过 → 含 `main` 的用例运行 stdout 与 golden 一致 |
-| examples | `examples/**` 端到端：生成 → 用 `-Wall -Wextra` 构建 → 运行 → stdout 与 `.expected.out` 一致（不做逐字节比对，只保证示例真的能跑） |
-| errors | `ctc` 必须非 0 退出，诊断必须带 `文件:行:列: error:` 前缀且包含期望文案 |
-| dialect | 方言示例：`ct-dialects/` 下的插件把 `.ct` 展开成纯 CT → 走同一套生成 / 构建 / 运行 → 与 `.expected.out` 比对；并断言**未展开**的源无法直接编译（编译器零感知） |
-| limits | `known limitations` 特征化断言：把已知限制钉成行为契约，改动时立刻暴露 |
-| cli | CLI 参数与驱动分支（默认子命令 / `build` / 输出路径 / 读写失败路径） |
-
-当前 25 个 golden 正例（`test/cases`）、8 个端到端示例（`examples`，含 1 个方言示例；`08_map_binding` 需 ct-ast，在本驱动器里标 `skip`、由第 8 关构建）与 60 个负例诊断用例（`test/errors`），另加 unit / dialect / limits / cli 等分层断言，合计 118 项。
-
-`test/archive/` 保存 Phase 0.3 从编译器移出的越位特性 fixture（`namespace` / 多文件 / `import` / `Drop` / `#line` / 泄漏警告），**不参与** `run.sh`，留作 Phase 2–5 用 CT 重做时的对差基线；特性完整的旧编译器见 git tag `overreach-oracle`。
-
-`test/cases/*.expected.*` 是 golden 基线，**只能**用 `./ctc <case>.ct -o <case>.expected.c` 重新生成后人工核对，禁止手写；`examples/**/*.expected.out` 同理（见 [AGENTS.md](AGENTS.md) 第 6 节）。`test/cases/01_trait_basic.ct` 与 `examples/01_greeter/greeter.ct` 内容相同，但前者做生成物逐字节比对、后者做运行结果比对，两者互补。
-
-VS Code 插件另有一份独立的语法冒烟测试，校验的是高亮规则而不是编译器，因此不进 `./test/run.sh`：
-
-```bash
-python3 editors/vscode/test/check-grammar.py   # 33 项断言；退出码 0 = 通过
-```
-
-#### 自举 gate（`selfhost/`）
-
-`selfhost/` 承载自举链：每代编译器一个目录——`l0/`（C 种子）编译出 **L1**（`l1/`），L1 编译出 **L2**（`l2/`），L2 再编译出 **ct-ast**（`ct-ast/`，Phase 9 的 AST 主线，Phase 10.7 起提供安装入口）。它与 `./test/run.sh` **相互独立**；[AGENTS.md](AGENTS.md) 要求改动 `selfhost/**` 后把这些脚本全部跑一遍，`check-all.sh` 是它们的聚合入口。
-
-- `selfhost/l1/ctc.ct` —— **L1**：用 CT（OO 子集、单文件）重写全部能力的编译器，由 `l0/ctc.c`（L0）编译得到；
-- `selfhost/l2/**` —— 同一编译器拆成多单元（`core.ct` + `driver.ct`），由 **L1 自身的 `build`** 编译成 **L2**（Phase 10.7 起只作回归 oracle）；
-- `selfhost/ct-ast/main.ct` —— **ct-ast**：Phase 9 的 AST 版编译器，由 L2 用 `build` 编译而成，是安装入口。
-
-| 脚本 | 作用 |
-| --- | --- |
-| `selfhost/check-goldens.sh` | L1 的增量 golden oracle：构建 L0 → L0 编译 L1 → 构建 L1 → 逐字节比对 `test/cases/**` 的 `.expected.c`/`.expected.h`；再做自举闭环（L1 编译自身为 L1′，L1′ 重跑同一语料仍逐字节一致）；最后 L1 用 `build` 把 `selfhost/l2/**` 拆出的 L2 对同一语料仍逐字节一致（Phase 2 拆分出口） |
-| `selfhost/check-m2a.sh` | M2-a 验收 gate：复现「构建 L0 → L0 编译 L1 → 构建 L1 → L1 编译 `test/cases/01_trait_basic.ct` → 与 golden 逐字节 diff」；自举闭环与 L2 构建仅作报告，不影响判定 |
-| `selfhost/check-archive.sh` | Phase 2+ 的对差 oracle：把 `test/archive/**` 中 Phase 0.3 移出的越位特性 fixture 当 ratchet，逐字节比对 CT 侧恢复出的特性（namespace / 多文件 / `import` / `Drop` / 诊断）；第 3b 步另建 L2 并要求零警告 |
-| `selfhost/ct-tour.sh` | 一条龙演示：编译一个 CT 程序 → 构建 L0 → L1 → 自举闭环 L1′ → 拆分的 L2，走完整个自举链 |
-| `test/pkg/run.sh` | Phase 8.1/8.2/8.3 包管理器：构建 L0→L1→L2→`ct-ast` 并以新入口驱动 `ct get` 的清单解析、版本范围、递归依赖、`vendor/` 与 `ct.lock`（本地包与 git 包；git 用例用本地 git 仓库作 registry，含无 `git` 硬报错），以及 `ct install` 的摘要校验、清单覆盖、建议命令，并证明 `ct build` 可用 `vendor/` 编译 |
-| `selfhost/check-ast.sh` | Phase 9.1–9.7 + Phase 10.x AST 编译器：构建 L0→L1→L2→`ct-ast`，对 `test/ast/*/prog.ct` 做「编译 → cc 零警告 → 运行 → 与 `prog.expected.out` 比对」；`test/ast/errors/` 的负例必须非零退出；模块层对 `test/modules` 的 split / ns_dir / inc / hdr 跑 `ct-ast build` 并做行为比对；元数据层校验 `--emit-map`（stdout / 文件）与 `#line`（build 默认开、`--line` / `--no-line`）；另有自编不动点、全量语料行为等价、CLI/身份与 CLI 错误分支（帮助、缺参、未知选项、不可读/不可写、compile 模式 `import`、build 缺 `-o`）、L2 形状的语义诊断、内存层（AutoDrop 正例与三种负例、泄漏告警的 text / JSON 逐字节比对）、多错误恢复（多错误语料与 `MAX_ERRORS` 上限）与增量缓存（冷编盖章、键对 L2、暖编复用、依赖失效）断言 |
-| `selfhost/check-warnings.sh` | 生成物零告警关卡：构建 L0→L1→L2→`ct-ast` 后，用 `-Wall -Wextra -std=c99 -c` 逐个编译自举链产物、`test/ast/*`、`test/cases/**`、`examples/**`、`test/modules/**`、`test/patterns/**` 与 `bindings/mock-hal/` 的生成 C，stderr 非空即失败 |
-| `selfhost/check-all.sh` | **聚合入口**：依次跑 `./test/run.sh`、上面七个 CT / 包管理 / AST / 告警脚本与 `editors/vscode/test/check-grammar.py`，任一失败即整体非零；`test/acceptance/run.sh` 单独报告、不阻断 |
-
-```bash
-bash selfhost/check-all.sh         # 一条命令跑完全部硬门禁
-bash selfhost/check-goldens.sh     # L1 / L1′ / L2 对 test/cases/** 逐字节一致
-bash selfhost/check-m2a.sh         # M2-a 单用例验收
-bash selfhost/check-archive.sh     # 归档越位用例逐字节对差
-bash selfhost/ct-tour.sh           # 演示整条自举链
-```
-
-#### 干净 clone 与容器复验
-
-发布前想确认「仓库自洽」而不是「我这台机器的残留产物恰好能跑」，就在一个空目录里重跑全部硬门禁：
-
-```bash
-git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # 期望末行：check-all: OK (9 hard gates green)
-```
-
-干净 clone 不需要任何预处理：`.gitignore` 只忽略按名字的 `/ctc`、`*.o`、`a.out`、`examples/*/*.c` 与 `examples/*/*.h`、`.ctcache/` 等生成物（**没有**全局 `*.c`/`*.h` 规则，`test/cases/*.expected.c|h` 是有意的 golden，`vendor/` 亦不忽略），门禁自己会从 `selfhost/l0/ctc.c` 一路构建到 `ct-ast`。在 Linux 容器里复验同理，只需 `gcc`、`git`、`python3` 与常规 POSIX 工具（`sh`/`bash`、`diff`、`sed`、`awk`、`mktemp`）：
-
-```bash
-podman machine start                                   # macOS：先起 applehv 虚拟机
-podman run -d --name ctclean debian:bookworm-slim sleep infinity
-podman cp /tmp/ct-clean ctclean:/src                   # 不要用 -v /tmp/...：宿主的 /tmp 不在 VM 共享路径里
-podman exec ctclean bash -c 'apt-get update && apt-get install -y build-essential git python3'
-podman exec -w /src ctclean bash selfhost/check-all.sh
-```
-
-两点与 macOS 有意的差异，都属于「平台事实」而不是失败：
-
-- **GCC 的警告集更宽**。`-Wall -Wextra` 下 GCC ≥ 8 额外启用 `-Wformat-truncation`，会对冻结的 L0 / L1 / L2 里一批 `snprintf` 报疑似截断（误报）。`check-all.sh` 检测到 `CC` 是 GCC 时会自动包一层只追加 `-Wno-format-truncation` 的 wrapper，所以门禁在两边语义相同，且冻结层一个字都不用改 —— 细则见 [AGENTS.md](AGENTS.md) §6。
-- **两个探针需要 BSD libc**。`cli/short-read` 与 `cli/tmpfile-cannot-create`（以及 `check-archive` 的 `cli_short_read`）依赖 BSD 下「把目录当输入会短读」「`$TMPDIR` 不可用时 `tmpfile()` 失败」的行为，glibc 分别读成 0 字节、退回 `P_tmpdir`，因此在 Linux 上以 `skip` 呈现、不计入失败。`./test/run.sh` 的总项数因此比 macOS 少 2 项（118 → 116），这是预期的。
-
-容器里若拉不到镜像或 apt 超时，换镜像源即可（不入库，因人因机而异）：镜像走 `docker.m.daocloud.io/library/debian:bookworm-slim`，apt 换 `mirrors.aliyun.com`。
-
-### 6. 目录结构
-
-```
-ct/
-├── README.md                 本文件
-├── AGENTS.md                 给 AI 编码代理的项目规约
-├── LICENSE                   GPL-3.0 全文（编译器本体）
-├── LICENSE.EXCEPTION         输出例外 + examples/test/editors 的 MIT
-├── install.sh                唯一的安装脚本：下载源码 → 四级自举 → 装 ct + ctc 软链
-├── .gitignore                忽略构建产物与 examples 下的生成物
-├── examples/                 可运行示例，每个例子一目录（<name>.ct + <name>.expected.out）
-│   ├── 01_greeter/ … 06_iface_field/
-│   ├── 07_dialect/           registry.ct + ct-dialects/（方言插件，见 AGENTS §2）
-│   └── 08_map_binding/       需 ct-ast（首行 //@ct-requires: ct-ast，由第 8 关构建）
-├── selfhost/                 自举链：每代编译器一个目录 + 7 个门禁脚本（详见 selfhost/README.md）
-│   ├── l0/ctc.c              L0 C 种子（单文件，无第三方依赖）
-│   ├── l1/ctc.ct             L1 种子（冻结；能力停在 Phase 2）
-│   ├── l2/                   L2：多单元源码树（core.ct + driver.ct；Phase 10.7 起为回归 oracle）
-│   ├── ct-ast/               ct-ast：Phase 9 主线（main.ct 只做绑定与分派），按组分子目录：runtime/arena（节点池）、frontend/{lex,module,parse,sym,type}、tool/{driver,diag,cache,pkg}、backend/{mem,emit}；Phase 10.7 起提供安装入口
-│   └── check-*.sh / ct-tour.sh   门禁脚本（aggregate 入口 check-all.sh；用法见 README §5）
-├── bindings/                 C 库的声明式 binding（Phase 12）：直通 #include + 镜像 trait/struct + map
-│   └── mock-hal/             首个官方 binding（自带假 HAL 的 C 头/实现，仅作演示与测试）
-├── test/                     测试（分层地图见 test/README.md）
-├── editors/vscode/           VS Code 插件：CT 语法高亮 + 片段（纯 JSON，无构建，MIT）
-├── docs/                     文档
-│   ├── tutorial.md           入门教程（安装 → 派发 → 模块 → 内存 → map）
-│   ├── vision.md             定位、设计原则与生态策略（为什么）
-│   ├── roadmap.md            阶段规划、已定决策与验收标准（接下来做什么）
-│   ├── language-spec.md      .ct 语法规范与展开规则（现状）
-│   ├── architecture.md       编译器内部结构与关键算法
-│   ├── construction.md       对象构造语义（vptr 由谁、何时写入）
-│   ├── polymorphism.md       接口多态与派发
-│   ├── patterns.md           设计模式在现有语言特性下的写法（新增能力的判据）
-│   ├── memory-guide.md       内存管理实践指南（own / 借用 / 工厂 / 池 / arena）
-│   ├── glossary.md           术语表
-│   └── design/               各阶段设计（草案与已实现的并存，冲突时以代码为准）
-├── issues/                   审查发现台账（元工件：每条一文件，索引见 issues/README.md）
-└── reports/                  评审报告与交付 HTML（元工件：自包含，各自带 _shared 资产）
-```
-
-展开产物（`.c` / `.h`、可执行文件）一律不入库，写到临时目录或按需生成。
-
-### 7. 已知限制与问题
-
-**设计内不做**
-
-- 可见性修饰符（`readonly` / `setter`）
-- 泛型、继承
-- 类型检查、错误恢复（遇错即退出）
-- 嵌套定义
-
-**当前实现限制**
-
-- 变量与参数按花括号块作用域回滚（同一作用域内同名取最先登记者）；跨行的方法调用语句、以及参数列表跨多行的函数签名不识别。
-- **文件作用域的对象 / 数组**：vptr 由生成的构造器 `__ct_init`（`__attribute__((constructor))`，D5=A）在 `main` 前写入。
-- 数组只支持 `Type name[<n>];`（无初始化式、常量下标）。
-- **堆对象 vptr 自动写入**：`T *p = malloc(sizeof(struct T));`（或 `calloc`）会在声明后自动写 vptr（含嵌套值字段）；不再需要手写。
-- 接口多态：接口**数组**不支持；接口**字段**不参与构造期自动装箱（类型会展开，可手动赋值）；装箱只接受变量、`&变量` 或返回同款接口的调用。（以上是 **L0（`ctc.c`）** 的边界；**CT 线**（L2 / ct-ast）已放开这三条——接口数组、接口数组字段与构造点装箱，见 [language-spec](docs/language-spec.md) §4.8 与 [roadmap](docs/roadmap.md)。）
-- 定义必须先于使用：`impl` 必须出现在调用它的函数之前，否则生成的 C 无法编译。
-- **构造头部必须完整**：`trait IDENT {` / `struct IDENT {` / `impl IDENT for` 缺一不可；只写到一半
-  （如 `trait T`、`struct S`、`impl`）**不报错**，该行按普通 C **原样透传**——这是为兼容把
-  `trait` / `impl` 当普通标识符的合法 C（如 `impl[i] = 0;`）。
-- **构造与语句写在同一行时不重写**：重写按行进行，`int main(void){ Person p = { … }; p.greet(); }`
-  里的 `p.greet()` 不会被改写（拆成多行即可）。
-- **容量上限一律报错、不静默截断**（对应 `ctc.c` 顶部的 `MAX_*` 常量，一一对应）：`MAX_NAME` 128（标识符 ≤ 127）、
-  `MAX_PARAM` 256（参数表文本）、`MAX_PARAMS` 16（函数参数）、`MAX_METHOD` 32（方法）、`MAX_TRAITS` 16（trait）、
-  `MAX_STRUCT` 32（struct）、`MAX_FIELDS` 32（struct 字段）、`MAX_VARS` 512（变量）、`MAX_SCOPE` 256（嵌套作用域）、
-  `MAX_DEPTH` 8（嵌套深度）、`MAX_FUNCS` 64（函数签名表）。
-
-### 8. 相关文档
-
-- [AGENTS.md](AGENTS.md) —— 改动边界、代码风格、验证流程
-- [docs/tutorial.md](docs/tutorial.md) —— 入门教程：新用户从这里开始
-- [docs/glossary.md](docs/glossary.md) —— 术语表：统一项目名、语言构造与内部符号
-- [docs/vision.md](docs/vision.md) —— 定位、设计原则与生态策略
-- [docs/roadmap.md](docs/roadmap.md) —— 后续阶段与已定决策
-- [docs/language-spec.md](docs/language-spec.md) —— 语法规范
-- [docs/patterns.md](docs/patterns.md) —— 设计模式与语言特性的对应（没有新特性时的写法）
-- [docs/memory-guide.md](docs/memory-guide.md) —— 内存管理实践指南（谁拥有、工厂与池、arena 的边界）
-- [docs/architecture.md](docs/architecture.md) —— 内部实现
-- [docs/design/bootstrap.md](docs/design/bootstrap.md) —— 自举设计草案（未实现）
-
-### 9. 许可
-
-| 对象 | 许可 |
-| --- | --- |
-| 编译器本体（`ctc.c`、`ctc`） | **GPL-3.0-or-later**，全文见 [LICENSE](LICENSE) |
-| 你的 `.ct` 源码、ctc 生成的 `.c`/`.h`、以及用它们构建的程序 | **不受 GPL 约束**，可任意许可、可闭源分发，见 [LICENSE.EXCEPTION](LICENSE.EXCEPTION) |
-| `examples/`、`test/` 与 `editors/vscode/`（VS Code 插件） | **MIT**（方便直接抄进你自己的项目） |
-
-ctc 会往产物里插入样板（vtable 结构体、`__<trait>_vptr` 字段、`_self` 强转行），而"编译器输出算不算衍生作品"本有争议，因此这里照 GNU Bison 的先例**显式声明例外**，并让它**随产物走**——每条生成的 `.c`/`.h` 都在 banner 里重复这句话。
-
-### 10. 联系
-
-- 作者：Sam X. Xu
-- 邮箱：samxxu@gmail.com
-- 问题、建议与 bug：优先开 [Issue](https://github.com/samxxu/ct-lang/issues)，这样答案能被别人搜到；不适合公开的内容再发邮件。
+作者 Sam X. Xu · samxxu@gmail.com · 问题与建议优先开 [Issue](https://github.com/samxxu/ct-lang/issues)。
 
 ---
 
 ## English
 
-**ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into
-plain C. It performs no type checking and no optimisation; Phase 0 (writing full OO with traits) and
-its sub-phases 0.1 / 0.2 / 0.3 (stripping the over-reach), **Phase 1 (self-hosting, 2026-10-15)**,
-**Phase 2 (modularity, 2026-10-16)**, **Phase 3 (memory, 2026-10-16)**, **Phase 4 (diagnostics and
-traceability, 2026-10-16)**, **Phase 5: new features** (AutoDrop / path-sensitive leak analysis /
-directory = namespace, 2026-10-17) and **Phase 6 (ecosystem and extension, 2026-10-17)** are all
-complete. Phase 6's slices 6.1–6.4 (reverse mapping table / call graph / incremental cache /
-multi-target) and 6.6 (the dialect system) have landed, while 6.5 (`map`) is design-frozen only.
-**Phase 7 (toolchain shape, 2026-10-17)** is complete: 7.1–7.3 landed (the `ct` identity, the install
-shape, the banner rename). **Phase 8 (package management and distribution, `ct-pkg`, 2026-10-18)** is
-complete: slices 8.1–8.3 have landed (`ct get` handles local directory sources and git sources, pinning
-commits and content digests; `ct install` verifies offline and prints the suggested build command), and
-the phase closed with the bump to **v0.8.0**. **Phase 9 (the AST-based compiler, the new mainline) is
-design-frozen as of 2026-10-18 (D28–D37 all decided) and slices 9.1–9.7 have landed** (self-compilation
-+ fixpoint + whole-corpus behavioural equivalence; the old pipeline `selfhost/l2/**` is frozen and
-archived per D36), closing with the bump to **v0.9.0**; **Phase 10 (mainline switch) is complete, slices 10.1–10.7 all landed** (ct-ast takes over diagnostics / memory / multi-error recovery / the incremental cache / package management, and from 10.7 the installed entry comes from `selfhost/ct-ast/main.ct` with L2 demoted to the regression oracle), closing with the bump to **v0.10.0**; **Phase 11 (the `map` construct, D19 lifted) has landed slices 11.1–11.2 (2026-10-19, ct-ast only)** — 11.2 wires the mapped instance into dispatch (boxing uses the instance-level vtable, so a struct that never `use`d the trait still runs as its instance), closing with the bump to **v0.11.0**; after the **11.3 hardening** (binding completeness / uniqueness checks and the relaxed CALL subset) the patch bump to **v0.11.1**; **Phase 12 (official bindings + dialect deepening) is complete, slices 12.1–12.4 all landed** (the first official binding `bindings/mock-hal/`, the binding guidelines `bindings/README.md`, and a multi-dialect demo with an author guide), closing with the bump to **v0.12.0**; **v0.13.0 (2026-10-31)**: the ct-ast C-subset work (long initialisers, variadic function pointers, the comma operator, header type names, value-position assignments, prefix `++` / `--`) plus the gate that keeps `ctc.c` compiling and the L0 goldens byte-identical; **v0.14.0 (2026-10-31, user-authorised)**: trait default methods — a method body may live in the trait, an adopting impl writes only the abstract methods, and an all-default trait needs no `impl` at all (`use` is the adoption); each default body expands once per (struct, trait) with vtable / boxing / dispatch unchanged; **v0.15.0 (2026-10-31, user-authorised)**: zero-cost static mapping via `.m.ct` units (batch 38) — a C-library mapping expands at the call site into a plain C call, with no wrapper / `_iface` / vtable and the same zero cost across units; **v0.15.1 (2026-10-31, user-authorised)**: fixes the static recipe's `sizeof` (`sizeof p` is no longer counted as an evaluation and `sizeof(p)` is now a compile-time error), and pins chained `.m.ct` imports with transitive cache invalidation as a gate; **v0.16.1 (2026-11-01, user-authorised)**: `borrow` parameter annotations plus the built-in `Handback` trait — a borrowed pointer is handed back at exit and never freed, with the SH-33 fix (no AutoDrop injection before a line-initial `return`) landed as a prerequisite; **v0.16.2 (2026-11-02, user-authorised)**: closes the 2026-11-01 third-party review's five findings — SH-42 moves the four oversized static tables (`Arena`, `Symbols`, `Parser.g_maps`, `Module.g_units`) to the heap (`ct` binary 88M → 637K, `__DATA` 105MB → 589824 B), SH-44 switches the `ct.lock` digest from 16-bit FNV to SHA-256 (`sha256:<64 hex>`, with legacy digests failing hard as `unsupported digest`), and DOC-51 / DOC-52 correct the tutorial and language-spec drift (SH-43 stays open); **v0.16.3 (2026-11-02, user-authorised)**: closes the 2026-11-02 review's SH-45 (`return` of an `own` / `borrow` field now evaluates into a temporary before the exit release, which used to use after free), SH-47 (the field-cap diagnostic names the struct and `limit 64`), DOC-53 (spec §6.1's redefinition claim) and DOC-54 (the unit kinds, import search order and naming-convention ownership in the tutorial and spec); SH-46 is not adopted as a hard error and instead documents the "first trait in `use` order" rule — see
-[docs/roadmap.md](docs/roadmap.md) for what is done and what is next.
+**ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into plain C.
+It performs no type checking and no optimisation; the output is **readable, ordinary C** with no runtime
+library dependency, and the boilerplate (vtables, `_self` casts) is generated for you.
+See [docs/roadmap.md](docs/roadmap.md) for what is done and what is next, and
+[docs/glossary.md](docs/glossary.md) for the terminology.
 
-Naming: the project and language are **ct** (*C with Traits*, files end in `.ct`), the entry command
-is **`ct`** (since Phase 7; `ctc` is kept as a **compatibility alias**, and the binary built from the
-L0 seed `ctc.c` is still called `ctc`), and the GitHub repository is **`ct-lang`** (`ct` alone is too
-short to be findable there).
-
-### 1. Motivation
-
-C has no vtables. Simulating interfaces and polymorphism by hand means writing the same boilerplate
-over and over: the vtable struct, the function-pointer assignments, a cast at the top of every method,
-and filling in the vptr when an object is created. `ctc` lets you declare those things with near-Rust
-syntax and generates the boilerplate for you. The output is **readable, ordinary C** with no runtime
-library dependency.
-
-### 2. Quick start
+### 1. Quick start
 
 ```bash
-# 1a) install directly (downloads the source, bootstraps locally, installs to ~/.local/bin)
+# 1a) install (downloads the source, bootstraps locally, installs to ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 
-# 1b) or skip the install and use the L0 seed (single file, core grammar only; no `ct` — use ./ctc below)
+# 1b) or skip the install and use the L0 seed (single file, core grammar only; no ct, so use ./ctc)
 gcc selfhost/l0/ctc.c -o ctc
 
 # 2) compile a .ct to .c (a sibling .h is written only for a .h.ct input)
-ct examples/01_greeter/greeter.ct -o /tmp/greeter.c      # after 1a
-./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c   # after 1b (L0 knows the core grammar only)
+ct compile examples/01_greeter/greeter.ct -o /tmp/greeter.c      # after 1a
+./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c           # after 1b
 
 # 3) build the output with the system C compiler
 gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
@@ -500,512 +106,54 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 New here? Start with the [tutorial](docs/tutorial.md); every command in it can be pasted as is.
 
-| Usage | Result |
+### 2. Common commands
+
+| Command | Result |
 | --- | --- |
-| `ctc <input.ct>` | writes `<input>.c`; a `.h.ct` input also writes `<input>.h` (L0 / L2 still always write the `.h`) |
-| `ctc <input.ct> -o <output.c>` | writes the given path; a `.h.ct` input gets a sibling `.h` |
-| `ctc compile <input.ct>` | the same (`compile` is the default subcommand) |
-| `ctc <input.ct> --emit-map <file\|->` | also writes the reverse-mapping JSON (traits / structs / functions / impls → generated C symbols, plus direct call edges); `-` means stdout, accepted by both `compile` and `build` |
-| `ctc build <in.ct>… -o <dir>` (CT line) | multi-file compile: each unit emits a `.c` (a `.h.ct` unit also emits its `.h`) and the suggested `cc` command is printed; only `.h.ct` units can be imported. A key under `<dir>/.ctcache/<unit>.key` makes it an **incremental** build — a matching key with the artefacts on disk skips regeneration (Phase 6.3) |
-| `ctc … --std=c99\|gnu99` | target C standard (default `c99`); nothing in the output differs yet, so `build` writes it into the suggested `cc` command, and any other value is a hard error (Phase 6.4) |
-| `ctc … -I <dir>` | `build` adds an import search root (repeatable, up to 16 — the 17th reports `too many -I roots`); `compile` accepts the flag but resolves no imports (no limit; see SH-24) |
-| `ctc get <spec>[@<range>]` | Phase 8.1/8.2/8.3: a `spec` starting with `.` / `/` / `file://` is a local package (copied), anything else is a git package (a `scheme://` URL verbatim, a `host/path` given `https://`, a bare name via `CT_REGISTRY`); it parses `ct.pkg`, resolves `dep` recursively, copies into `vendor/<name>/` and writes `ct.lock` (five columns `name ver dir\|git <ref> <digest>`, the digest being an additive per-file FNV-1a fold). git sources call the system `git` — the **only** subprocess call site, reached by `ct get` alone; `ct compile` / `ct build` / `ct install` stay network-free and process-free |
-| `ctc install` | Phase 8.3: verifies `ct.lock` against `vendor/` offline (each locked package present with a matching digest, every manifest `dep` covered by the lock at a satisfying version) and, on success, prints the suggested `ct build -I vendor/<name> … <unit>.ct -o build` (it never calls `cc`); a mismatch, a missing package or an uncovered dependency fails hard |
-| `ctc … --line` / `--no-line` | overrides the `#line` default (on for `build`, off for `compile`; Phase 4) |
-| `ctc build … --ns-root <dir>` | the tree root for directory = namespace validation (`build` only; Phase 5) |
-| `ctc … --diagnostics=json\|text` | warning format: `text` is human-readable stderr (default), `json` goes to stdout (leak and signature warnings; Phase 4) |
-| `ctc -v` / `ctc --version` | prints the version, e.g. `ctc v0.16.3`; a binary named `ct` prints `ct v0.16.3` |
-| `ctc -h` / `ctc --help` | prints usage |
+| `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes `.c`, a `.h.ct` also writes its sibling `.h` |
+| `ct <in.ct> -o <out.c>` | write to the given path |
+| `ct build <in.ct>… -o <dir>` | multi-file compile: one `.c` per unit (plus `.h` for `.h.ct`), prints the suggested `cc` line; incremental cache |
+| `ct … --emit-map <file\|->` | also write the reverse-mapping JSON (trait / struct / function / impl → generated C symbols) |
+| `ct get <spec>[@<range>]` / `ct install` | package management: fetch into `vendor/`, write `ct.lock`; verify offline and print the suggested command |
+| `ct -v` / `ct -h` | version / usage |
 
-Exit code `0` on success, `1` on syntax or I/O errors. Diagnostics use `file:line:col: error: message`.
-L0 (`ctc.c`) emits **no warnings at all**; the CT line (L2 / ct-ast) emits leak and signature-mismatch warnings
-(`--diagnostics` switches to JSON). **Driver-level errors keep the `ctc:` prefix** even when the binary
-runs as `ct`, so logs and pinned assertions stay stable — that is separate from `-v` / usage following
-the identity.
+Exit code `0` on success, `1` on syntax or I/O errors. Source diagnostics use `file:line:col: error: message`;
+driver-level errors keep the `ctc:` prefix even when the binary is named `ct`, so logs and existing assertions
+stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `--ns-root`) is in the
+[tutorial §10](docs/tutorial.md#10-cli-cheat-sheet).
 
-> **L0 is single-file only**: the module system and diagnostics that once over-reached into C
-> (`namespace` / `import` / `pub` / `ct build` multi-file, `Drop`, `#line`, leak warnings and
-> `--diagnostics`) were moved out of `ctc.c` in Phase 0.3 — L0 still fails with
-> `'xxx' is not supported by this compiler`; they were all redone on the CT line
-> (`selfhost/l2/**`, i.e. L2) by **Phases 2–5** (see [docs/roadmap.md](docs/roadmap.md)).
->
-> The final command shape is the single entry `ct` (`ctc` stays a compatibility alias).
-> **Phases 7.1–7.3 have landed**: name the compiler binary `ct` and `ct …` works (`ct compile` / `ct build`,
-> with `compile` still the default subcommand); `ctc` remains an alias (`ln -s ct ctc`); and the
-> generated banner changed from `Generated by ctc …` to `Generated by ct …` (slice 7.3, a one-off
-> unfreeze of L0/L1 authorised by the user). **From Phase 10.7 that binary comes from ct-ast
-> (`selfhost/ct-ast/main.ct`)**; L2 (`selfhost/l2/**`) is demoted to the regression oracle. The L0 seed
-> (`ctc.c`) itself is still called `ctc`.
+### 3. Capabilities
 
-#### Building and installing the single-entry `ct` (Phase 7.2; ct-ast since 10.7)
+- **traits**: `trait` / `impl` / `use`, dispatch, traits as types (interface values / arrays / fields / boxing), trait default methods
+- **memory**: `Drop` / `delete`, `own` (AutoDrop), path-sensitive leak warnings, `borrow` + `Handback`
+- **modules**: `namespace` / `import` / `pub` / multi-file `ct build` / directory = namespace
+- **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `bindings/` for C libraries
+- **diagnostics and tooling**: `#line` traceability, `--diagnostics=json|text`, multi-error recovery, incremental cache, `ct get` / `ct install`
+- **not done by design**: type checking, generics, inheritance, optimisation (the language is not final until `1.0.0`)
 
-`ct` comes from **ct-ast** (`selfhost/ct-ast/main.ct`). The repository ships **exactly one** install
-script, `install.sh`: it downloads the source archive, bootstraps the chain locally, installs `ct` into a
-directory and adds the `ctc` symlink — there is **no Makefile, no third-party dependency and no prebuilt
-binary**.
+The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idioms in
+[docs/patterns.md](docs/patterns.md); ownership conventions in [docs/memory-guide.md](docs/memory-guide.md).
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
-```
+### 4. Repository layout
 
-| Option / env var | Effect |
-| --- | --- |
-| `--prefix DIR` / `CT_PREFIX` | install directory (default `~/.local/bin`) |
-| `--version REF` / `CT_REF` | branch, tag or commit to build (default `main`) |
-| `CT_SOURCE_DIR=<dir>` | build this local checkout instead of downloading (offline install) |
-| `CC=gcc` | choose the C compiler (the `-Wno-format-truncation` needed by GCC ≥ 8 is probed automatically) |
+`selfhost/` is the bootstrap chain: `l0/` (the C seed) → `l1/` (frozen) → `l2/` (regression oracle) → `ct-ast/`
+(the mainline that provides the installed `ct`); `test/` holds tests and goldens; `docs/` holds documentation;
+`bindings/` holds declarative C-library bindings; `issues/` is the review ledger; `AGENTS.md` is the change contract.
+Directory-level notes are in [selfhost/README.md](selfhost/README.md), [test/README.md](test/README.md) and
+[docs/architecture.md](docs/architecture.md).
 
-The script adapts to the tree layout: tags up to `v0.12.0` still keep `ctc.c` at the root, L2 under
-`selfhost/src/**` and ct-ast under `selfhost/ast/**`; `main` moved them to `selfhost/{l0,l1,l2,ct-ast}/`.
-The manual equivalent (or just read `install.sh`) is:
+### 5. Docs and tests
 
-```sh
-gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # the L0 seed (the only C build; named ctc)
-./ctc selfhost/l1/ctc.ct -o /tmp/ctc-l1.c                       # L0 compiles L1 to C
-gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1      # build L1
-mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 builds L2
-gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2     # build L2 (the oracle)
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast   # L2 builds ct-ast (groups import each other by full path, hence -I)
-OUT="$HOME/.local/bin"                                       # any directory on your PATH
-mkdir -p "$OUT"
-gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$OUT/ct"      # the single entry (ct-ast)
-ln -s ct "$OUT/ctc"                                          # the ctc compatibility alias (a copy works too)
-```
+- Documentation index: [docs/README.md](docs/README.md)
+- Tests: `bash selfhost/check-all.sh` runs 10 hard gates; the layer map is in [test/README.md](test/README.md)
+- Read [AGENTS.md](AGENTS.md) before changing code
 
-From then on `ct compile <in.ct>` / `ct <in.ct>` match the old `ctc <in.ct>`, and `ct build … -o <dir>` is multi-file mode; `ct -v` prints `ct v0.16.3` while `ctc -v` still prints `ctc v0.16.3`. The L0 seed (`ctc.c`) itself stays named `ctc`. See [docs/design/bootstrap.md](docs/design/bootstrap.md) and `bash selfhost/ct-tour.sh` for the whole chain.
+### 6. License
 
-> **Building with GCC ≥ 8? Add `-Wno-format-truncation`.** The "zero warnings" claim above is
-> measured with Apple clang (macOS's default `cc`); GCC enables `-Wformat-truncation` on top of
-> `-Wall -Wextra` and reports suspected truncation across the frozen L0 / L1 / L2 sources (false
-> positives, the sources are not changed). `bash selfhost/check-all.sh` applies it automatically;
-> two probes that need a BSD libc show up as `skip` on Linux. Details in [AGENTS.md](AGENTS.md) §6.
+GPL-3.0-or-later for the compiler itself (see [LICENSE](LICENSE)); the `.c` / `.h` it generates and your `.ct`
+sources are **not covered by the GPL** ([LICENSE.EXCEPTION](LICENSE.EXCEPTION)); `examples/`, `test/` and
+`editors/` are MIT.
 
-### 3. Syntax and expansion rules
+### 7. Contact
 
-| Input (`.ct`) | Output (`.c`) |
-| --- | --- |
-| `trait Greeter { void greet(); }` | `struct Greeter_vtbl { void (*greet)(void *); };` |
-| `struct Person { char *name; } use Greeter;` | `struct Person { char *name; struct Greeter_vtbl *__greeter_vptr; };` |
-| `impl Greeter for Person { void greet() {…} }` | `static void Person_Greeter_greet(void *self) { struct Person *_self = (struct Person *)self; … }` + `static struct Greeter_vtbl Person_Greeter_vtable = { .greet = Person_Greeter_greet };` |
-| `Person p = { .name = "Tom" };` | `struct Person p = { .name = "Tom", .__greeter_vptr = &Person_Greeter_vtable };` |
-| `Person p = { "Tom", 36 };` | `struct Person p = { "Tom", 36, .__greeter_vptr = &Person_Greeter_vtable };` |
-| `Person p;` | `struct Person p = { .__greeter_vptr = &Person_Greeter_vtable };` |
-| `p.greet();` | `p.__greeter_vptr->greet(&p);` |
-| `Person *q = &p; q->greet();` | `struct Person *q = &p; q->__greeter_vptr->greet(q);` |
-| `self->other();` inside a method body | `_self->__greeter_vptr->other(_self);` (plus a vtable forward declaration before the method functions) |
-| `self->who->greet();` inside a method body | `_self->who->__greeter_vptr->greet(_self->who);` (recursive field chain) |
-| `o->greet();` / `q.greet();` on a method-body parameter `o` or local `q` | `o->__greeter_vptr->greet(o);` / `q.__greeter_vptr->greet(&q);` (bodies share the top-level pipeline) |
-| signature `void f(Person p)` / `Person *q` | `void f(struct Person p)` / `struct Person *q` (with the parameter registered, so `p.greet()` / `q->greet()` inside the body is rewritten) |
-| `static Person mk(char *n)` | `static struct Person mk(char *n)` |
-| `struct Shop { Person owner; };` | `struct Shop { struct Person owner; };` |
-| `s.owner.greet();` | `s.owner.__greeter_vptr->greet(&s.owner);` |
-| `Person ps[2];` | the declaration plus a scoped loop writing each element's vptr, after which `ps[0].greet()` and `ps[i].greet()` dispatch; an element of `Person *ptrs[2]` is itself a pointer, so `ptrs[i]->greet()` |
-| `delete q;` | `if (q) { free(q); q = 0; }` (this now holds for **any assignable** pointer, `char *` included; a non-lvalue operand is only freed, not assigned) |
-| `own T *p = malloc(sizeof(struct T));` | `own` is dropped; before the scope's closing `}` and **before every `return`** (branch-internal and inline included) the compiler inserts `if (p) { T_Drop_drop(p); free(p); p = 0; }` (**Phase 5, CT line only**) |
-| `borrow T *c = pool.acquire(...);` | `borrow` is dropped; before the closing `}` and before every `return` the compiler inserts `if (c) { T_Handback_handback(c); c = 0; }` (**never frees**; a missing `use Handback` or a same-unit `impl` is an error; ct-ast only) |
-| `map trait Controller for instance uart1 { send(buf, len) -> mock_send(&uart1, buf, len); }` | emits an instance-level wrapper plus a vtable: `static int uart1_Controller_send(void *self, char *buf, int len) { … return mock_send(&uart1, buf, len); }` and `static struct Controller_vtbl uart1_Controller_vtable = { .send = uart1_Controller_send };` (**Phase 11, ct-ast only**; 11.2 wires it into dispatch — `Controller c = uart1;` boxes with `&uart1_Controller_vtable`) |
-| `T *p = malloc(sizeof(struct T));` | the vptrs (including nested value fields) are written right after the declaration: `p->__x_vptr = &T_X_vtable;` |
-| `Greeter g = p;` (`Greeter` is a trait) | `struct Greeter_iface g = (struct Greeter_iface){ (void *)&p, &Person_Greeter_vtable };` |
-| `void announce(Greeter who)` / `announce(p)` | the parameter becomes `struct Greeter_iface`; the argument is boxed from the signature table |
-| `g.greet();` | `g.vt->greet(g.self);` (dispatches at run time to whatever was boxed) |
-| any other ordinary C code | **L0 / L2**: copied through verbatim; **ct-ast** (the installed entry) parses and re-emits the implemented C subset (item by item in §4 of the [language-spec](docs/language-spec.md)); no known form is missing (`__attribute__((…))` is in §4.36; integer literal suffixes, `static_assert`, `_Noreturn` and `__restrict` are in §4.37; `_Atomic(type)`, `_Alignas` and leading attributes are in §4.38) |
-
-> Module-system syntax — `namespace` / `A::B::Name` qualified references / `pub` / `import` — is **not
-> accepted by L0** (moved out in Phase 0.3; redone on the CT line in Phases 2–5, see below). Written in
-> a source file it is reported as an error rather than copied through. `own` (AutoDrop) is likewise
-> **CT-line only** (L2 / ct-ast); L0 copies it through unchanged. `map` (Phase 11) is **ct-ast
-> only** — neither L0 nor L2 knows it. Conversely, "copied through verbatim" holds for L0 / L2 only:
-> ct-ast parses and re-emits, so it accepts the C subset recorded in §4 of the language-spec
-> (`switch` / `do-while` / `goto` / bit-fields / variadics / commas / value-position assignments all
-> work).
-
-Naming rules:
-
-| Artifact | Rule | Example |
-| --- | --- | --- |
-| vtable type | `<Trait>_vtbl` | `Greeter_vtbl` |
-| vptr field | `__<lowercase trait>_vptr` | `__greeter_vptr` |
-| method body | `<Struct>_<Trait>_<method>` | `Person_Greeter_greet` |
-| vtable variable | `<Struct>_<Trait>_vtable` | `Person_Greeter_vtable` |
-
-Additional rules:
-
-- **`self` is an implicit parameter.** A method body goes through the **same rewriting pipeline as
-  top-level code**: `self` (a pointer to the current struct) and the method parameters are registered
-  first, then every line is rewritten, and finally the identifier `self` is renamed to `_self`. Hence
-  `self->field` → `_self->field`, a sibling call `self->other()` →
-  `_self->__<trait>_vptr->other(_self, …)`, and a field chain `self->who->m()`, a parameter `o->m()` or
-  a body-local `q.m()` all dispatch; the generated function always starts with
-  `struct <Struct> *_self = (struct <Struct> *)self;`.
-- **Callers pass the address.** `p.greet(1)` becomes `p.__greeter_vptr->greet(&p, 1)`; a pointer
-  receiver `p->greet(1)` becomes `p->__greeter_vptr->greet(p, 1)` — no `&` is added.
-- **Multiple traits** are allowed: `use Greeter, Counter;` adds one vptr field per trait. If two traits
-  declare the same method name, the first one in the `use` list wins.
-- **Initialiser lists** get vptr designators whether they are designated, positional or empty; a
-  declaration without an initialiser, `Person p;`, becomes
-  `struct Person p = { .__<trait>_vptr = &… };`.
-- **Function signatures:** known struct names in a function's return type and parameters get a
-  `struct ` prefix (including `static` prefixes, multi-word types, pointer returns and prototypes);
-  when the function has a body its parameters are registered, so `p.greet()` / `q->greet()` inside
-  the body is rewritten as usual.
-- **Block scoping:** variables and parameters roll back at brace block scope, so same-named locals or
-  parameters in different functions no longer bleed into each other.
-- **Composition / arrays:** a struct field of another ct struct gains `struct ` and its inner vptr is
-  written **recursively** (via post-declaration assignments, so user initialisers are never
-  overridden); `ps[0].m()`, `ps[i].m()`, `s.owner.m()` and the pointer field chain `b.who->m()` all
-  dispatch (any subscript expression is accepted). `delete q;` expands to `if (q) { free(q); q = 0; }`. A
-  **variable-subscript** receiver's expression is evaluated twice, so a subscript with a side effect
-  (`ps[i++]`) is not guaranteed correct; an **rvalue receiver** `f().m()` (returned by value),
-  `mk()->m()` (returned by pointer, including the field hop `f().a.b.m()`) is supported: the receiver
-  is hoisted into a `__ct_tmp<N>` temporary and evaluated exactly once, and may only appear at the
-  **statement head** or the **RHS of an assignment / declaration initialiser** — any other position
-  reports `file:line:col: error:`.
-- **Interface polymorphism:** using a trait as a type (`Greeter g`) generates the fat pointer
-  `struct <Trait>_iface { self, vt }`; `g.greet()` dispatches at run time to the boxed implementation.
-  Boxing covers **declarations, assignments, arguments and `return`** (`Greeter g = p;`, `announce(p)`,
-  `return p;`).
-- **String and comment safe:** `"p.greet()"` and `// p.greet()` are left alone, and lines starting
-  with `#` are never rewritten.
-- **Provenance banner:** the generated `.c` starts with, and the `.h` carries, a comment of the form
-  `Generated by ct v0.16.3 from <input path>` (the version comes from `CTC_VERSION` in `ctc.c`).
-
-The full grammar lives in [docs/language-spec.md](docs/language-spec.md).
-
-### 4. Examples
-
-Each example lives in its own directory under `examples/` and holds only its source (`<name>.ct`)
-plus its expected output (`<name>.expected.out`); the expanded `.c`/`.h` are generated on demand and
-never committed. There are two exceptions: the dialect demo `07_dialect/` carries **DSL written into
-comments** (`ctc` cannot see it) and has to be expanded into plain CT by the plugin under its
-`ct-dialects/` directory first — for the exemption's scope and limits see [AGENTS.md](AGENTS.md) §2, for
-the design [design/dialect.md](docs/design/dialect.md); `08_map_binding/` uses `map`, which only ct-ast
-knows, and declares so with `//@ct-requires: ct-ast` on its first line, so `selfhost/check-ast.sh`'s
-corpus layer builds it while `test/run.sh` (which drives L0) reports `skip`:
-
-| Directory | What it shows |
-| --- | --- |
-| [examples/01_greeter/](examples/01_greeter/greeter.ct) | The minimal case: one trait, one struct, one impl, calls with and without arguments |
-| [examples/02_market/](examples/02_market/market.ct) | Three traits, two structs, three objects: the same trait implemented differently per type, values flowing between objects, and a nested call (`bob.earn(alice.spend(6))`); compiling `examples/02_market/market.ct` yields 11 lines of output |
-| [examples/03_receivers/](examples/03_receivers/receivers.ct) | General receivers: a subscripted element `ps[i]`, a pointer-array element `slots[0]` and a pointer field chain `b.who` all dispatch normally |
-| [examples/04_rvalue/](examples/04_rvalue/rvalue.ct) | An rvalue receiver: the struct returned by a factory call is used directly (`make_person("Ann", 30).greet()`); the receiver is evaluated exactly once |
-| [examples/05_body_dispatch/](examples/05_body_dispatch/body_dispatch.ct) | Dispatch inside a method body: a recursive field chain (`self->lhs->emit()`), parameter and local-variable receivers |
-| [examples/06_iface_field/](examples/06_iface_field/iface_field.ct) | An interface value as a struct field: children are fat pointers, `sum.lhs = one;` boxes and `self->lhs.show()` dispatches, composing a recursive expression tree |
-| [examples/07_dialect/](examples/07_dialect/registry.ct) | A dialect: a register table written into `//@` comments, expanded into the trait / structs / impls by `ct-dialects/register-map.sh` (sh + awk; the author picks the language); `ctc` stays unaware and the unexpanded source does not compile |
-| [examples/08_map_binding/](examples/08_map_binding/map_binding.ct) | `map`: binds a trait to two existing global `struct Uart` instances (no `use`, no library change), then boxes them into `Controller` and dispatches through the instance-level vtable; needs ct-ast |
-
-`./test/run.sh` builds and runs every example and compares its output with the committed expectation
-(the dialect demo is expanded by the `dialect` layer first and then follows the same path; `08_map_binding`
-carries `//@ct-requires: ct-ast`, so that layer reports `skip` and `selfhost/check-ast.sh` builds and
-compares it instead).
-
-`examples/01_greeter/greeter.ct`:
-
-```c
-trait Greeter {
-    void greet();
-    void greet_name(char *name);
-}
-
-struct Person {
-    char *name;
-    int age;
-} use Greeter;
-
-impl Greeter for Person {
-    void greet() {
-        printf("Hello, I'm %s, age %d\n", self->name, self->age);
-    }
-    void greet_name(char *name) {
-        printf("Hello %s, I'm %s\n", name, self->name);
-    }
-}
-
-int main() {
-    Person p = { .name = "Tom", .age = 36 };
-    p.greet();
-    p.greet_name("Jerry");
-    return 0;
-}
-```
-
-The core of the generated expansion:
-
-```c
-struct Greeter_vtbl {
-    void (*greet)(void *);
-    void (*greet_name)(void *, char *);
-};
-
-struct Person {
-    char *name;
-    int age;
-    struct Greeter_vtbl *__greeter_vptr;
-};
-
-static void Person_Greeter_greet(void *self) {
-    struct Person *_self = (struct Person *)self;
-    printf("Hello, I'm %s, age %d\n", _self->name, _self->age);
-}
-
-static void Person_Greeter_greet_name(void *self, char *name) {
-    struct Person *_self = (struct Person *)self;
-    printf("Hello %s, I'm %s\n", name, _self->name);
-}
-
-static struct Greeter_vtbl Person_Greeter_vtable = {
-    .greet = Person_Greeter_greet,
-    .greet_name = Person_Greeter_greet_name
-};
-
-int main() {
-    struct Person p = { .name = "Tom", .age = 36, .__greeter_vptr = &Person_Greeter_vtable };
-    p.__greeter_vptr->greet(&p);
-    p.__greeter_vptr->greet_name(&p, "Jerry");
-    return 0;
-}
-```
-
-### 5. Tests
-
-```bash
-./test/run.sh            # run everything; exit code 0 means it passed
-CC=gcc ./test/run.sh     # pick a C compiler (default: cc)
-```
-
-```
-test/                             tests (layer map in test/README.md)
-├── run.sh                        L0 driver: build → unit → golden → examples → dialect → errors → limits → cli
-├── unit/test_helpers.c           white-box unit tests (includes ctc.c to reach statics)
-├── cases/                        golden positives: <name>.ct + <name>.expected.c / .h / .out
-├── errors/                       negatives: <name>.ct + <name>.expected-err
-├── archive/                      Phase 0.3 over-reach fixtures (Phases 2–5 diff baseline; not run)
-├── modules/                      CT-line (L2 / ct-ast) multi-unit and feature probes: one directory per case
-├── ast/                          ct-ast behavioural probes: one directory per case; errors/ holds bare negatives
-│                                 (check-ast.sh pins the source position, and the message text for every one of them)
-├── acceptance/                   end-to-end acceptance checklist (run.sh; PENDING is expected, non-blocking)
-└── pkg/                          package-manager `ct get` / `ct install` cases (run.sh)
-```
-
-Eight layers of assertions:
-
-| Layer | What is asserted |
-| --- | --- |
-| build | `ctc` itself compiles warning-free under `-Wall -Wextra -std=c99` |
-| unit | assertions on pure helpers (`trim`, `param_type_only`, `parse_params`, `split_decl`, `decl_end_is_bare`, `put_own_vptr`, `put_nested_assignments`, `last_ident`, `already_qualified`, `analyse_param`, `emit_qualified_type`, `word_at`, `match_delim`, …) |
-| cases | `ctc` exits 0 → generated `.c` and `.h` are byte-identical to the goldens → the generated C compiles → runnable cases produce the golden stdout |
-| examples | `examples/**` end to end: generate → build with `-Wall -Wextra` → run → stdout matches `.expected.out` (no byte-level diff; the point is that the demos really run) |
-| errors | `ctc` must exit non-zero, and the diagnostic must carry a `file:line:col: error:` prefix and contain the expected text |
-| dialect | the dialect demo: the plugin under `ct-dialects/` expands the `.ct` into plain CT → the same generate / build / run path → compared with `.expected.out`; it also asserts that the **unexpanded** source does not compile (the compiler stays unaware) |
-| limits | characterisation assertions for the `known limitations`, so a behaviour change is visible immediately |
-| cli | argument parsing and driver branches (default subcommand / `build` / output paths / read-write failures) |
-
-Currently 25 golden positives (`test/cases`), 8 end-to-end examples (`examples`, one of them a dialect
-demo; `08_map_binding` needs ct-ast, so this driver reports `skip` and the eighth gate builds it) and 60
-negative diagnostic cases (`test/errors`), plus layered assertions for unit / dialect / limits / cli —
-118 in total.
-
-`test/archive/` keeps the fixtures of the over-reach features that Phase 0.3 moved out of the compiler
-(`namespace` / multi-file / `import` / `Drop` / `#line` / leak warnings). They are **not** run by
-`run.sh`; they are the diff baseline for the Phases 2–5 CT reimplementation. The feature-complete old
-compiler is preserved as the git tag `overreach-oracle`.
-
-`test/cases/*.expected.*` are golden baselines: regenerate them with
-`./ctc <case>.ct -o <case>.expected.c` and review the result — never hand-write them. The same rule
-applies to `examples/**/*.expected.out` (see [AGENTS.md](AGENTS.md) §6).
-`test/cases/01_trait_basic.ct` and `examples/01_greeter/greeter.ct` hold the same program, but the
-former asserts a byte-identical expansion while the latter asserts runtime output — they complement
-each other.
-
-The VS Code extension carries its own smoke test for the highlighting rules. It checks the extension,
-not the compiler, so it is deliberately not part of `./test/run.sh`:
-
-```bash
-python3 editors/vscode/test/check-grammar.py   # 33 checks; exit code 0 means it passed
-```
-
-#### Self-hosting gates (`selfhost/`)
-
-`selfhost/` carries the bootstrap chain with one directory per compiler generation: `l0/` (the C seed)
-compiles **L1** (`l1/`), which builds **L2** (`l2/`), which builds **ct-ast** (`ct-ast/`, the Phase 9
-AST mainline and, since Phase 10.7, the installed entry). It is
-**separate** from `./test/run.sh`; [AGENTS.md](AGENTS.md) requires all of these scripts
-after touching `selfhost/**`, and `check-all.sh` is their aggregate entry point.
-
-- `selfhost/l1/ctc.ct` — **L1**: the whole compiler rewritten in CT (OO subset, single file), compiled by
-  `l0/ctc.c` (L0);
-- `selfhost/l2/**` — the same compiler split into units (`core.ct` + `driver.ct`), built **by L1's own
-  `build`** into **L2** (the regression oracle since Phase 10.7);
-- `selfhost/ct-ast/main.ct` — **ct-ast**: the Phase 9 AST compiler, built by L2, and the installed entry.
-
-| Script | What it does |
-| --- | --- |
-| `selfhost/check-goldens.sh` | the incremental golden oracle for L1: build L0 → L0 compiles L1 → build L1 → byte-compare `test/cases/**` against `.expected.c`/`.expected.h`; then close the self-hosting loop (L1 compiles itself into L1′, which reproduces the same corpus byte for byte); finally L1's `build` splits `selfhost/l2/**` into L2, which must match the same corpus byte for byte (the Phase 2 split exit) |
-| `selfhost/check-m2a.sh` | the M2-a acceptance gate: reproduces "build L0 → L0 compiles L1 → build L1 → L1 compiles `test/cases/01_trait_basic.ct` → byte diff against the golden"; the self-hosting loop and the L2 build are reported only and never change the verdict |
-| `selfhost/check-archive.sh` | the Phase 2+ diff oracle: treats the over-reach fixtures Phase 0.3 moved into `test/archive/**` as a ratchet, diffing byte for byte the features the CT side has restored (namespace / multi-file / `import` / `Drop` / diagnostics); step 3b rebuilds L2 and requires it to be warning-free |
-| `selfhost/ct-tour.sh` | a hands-on tour: compile a CT program → build L0 → L1 → the self-hosting loop L1′ → the split L2, walking the whole bootstrap chain |
-| `test/pkg/run.sh` | Phase 8.1/8.2/8.3 package manager: builds L0→L1→L2→`ct-ast` and drives the new entry through `ct get` — manifest parsing, version ranges, recursive dependencies, `vendor/` and `ct.lock`, for both local and git packages (the git cases use a local git repo as the registry and assert the no-`git` hard failure) — plus `ct install`'s digest verification, manifest coverage and suggested command, proving `ct build` compiles against `vendor/` |
-| `selfhost/check-ast.sh` | Phase 9.1–9.7 + Phase 10.x AST compiler: builds L0→L1→L2→`ct-ast` and runs every `test/ast/*/prog.ct` through "compile → warning-free cc → run → compare with `prog.expected.out`"; the `test/ast/errors/` negative must exit non-zero; its module layer runs `ct-ast build` on split / ns_dir / inc / hdr from `test/modules` and compares behaviour; its metadata layer checks `--emit-map` (stdout / file) and `#line` (on by default in build mode, `--line` / `--no-line`); it also covers self-compilation fixpoint, whole-corpus behavioural equivalence, CLI/identity and the CLI error branches (help, missing option arguments, unknown options, unreadable input / unwritable output, `import` in compile mode, build without `-o`), L2-shaped semantic diagnostics, the memory layer (AutoDrop positives and negatives, leak warnings byte-diffed in text and JSON), multi-error recovery (multi-error fixtures plus the `MAX_ERRORS` cap), and the incremental cache (cold stamping, key parity with L2, warm reuse, dependency invalidation) |
-| `selfhost/check-warnings.sh` | the zero-warning gate for generated code: after building L0→L1→L2→`ct-ast`, it compiles every artefact produced by ct-ast (the chain's own units, `test/ast/*`, `test/cases/**`, `examples/**`, `test/modules/**`, `test/patterns/**`, `bindings/mock-hal/`) with `-Wall -Wextra -std=c99 -c` and fails on any stderr output |
-| `selfhost/check-all.sh` | **the aggregate entry point**: runs `./test/run.sh`, the seven CT / package / AST / warning scripts above and `editors/vscode/test/check-grammar.py`, failing as a whole if any of them fails; `test/acceptance/run.sh` reports separately and never blocks |
-
-```bash
-bash selfhost/check-all.sh         # every hard gate in one command
-bash selfhost/check-goldens.sh     # L1 / L1′ / L2 byte-identical on test/cases/**
-bash selfhost/check-m2a.sh         # M2-a single-case acceptance
-bash selfhost/check-archive.sh     # byte-for-byte diff of the archived over-reach cases
-bash selfhost/ct-tour.sh           # walk the whole bootstrap chain
-```
-
-#### Re-verifying from a clean clone and in a container
-
-Before shipping, check that the repository is self-contained rather than that your machine's leftovers
-happen to work, by re-running every hard gate in an empty directory:
-
-```bash
-git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # expected last line: check-all: OK (9 hard gates green)
-```
-
-A clean clone needs no preparation: `.gitignore` ignores only the by-name build products (`/ctc`, `*.o`,
-`a.out`), `examples/*/*.c` / `examples/*/*.h` and `.ctcache/` — there is **no** global `*.c` / `*.h` rule
-(`test/cases/*.expected.c|h` are deliberate goldens), and `vendor/` is not ignored either. The gates build
-the whole chain from `selfhost/l0/ctc.c` up to `ct-ast` themselves.
-The same holds in a Linux container, which only needs `gcc`, `git`, `python3` and the usual POSIX tools
-(`sh`/`bash`, `diff`, `sed`, `awk`, `mktemp`):
-
-```bash
-podman machine start                                   # macOS: boot the applehv VM first
-podman run -d --name ctclean debian:bookworm-slim sleep infinity
-podman cp /tmp/ct-clean ctclean:/src                   # not -v /tmp/...: the host /tmp is not a VM share
-podman exec ctclean bash -c 'apt-get update && apt-get install -y build-essential git python3'
-podman exec -w /src ctclean bash selfhost/check-all.sh
-```
-
-Two differences from macOS are deliberate and are platform facts, not failures:
-
-- **GCC warns more.** Under `-Wall -Wextra`, GCC ≥ 8 also enables `-Wformat-truncation`, which fires
-  on a batch of `snprintf` calls in the frozen L0 / L1 / L2 sources (false positives). When `check-all.sh`
-  sees that `CC` is GCC it wraps it in a shim that appends only `-Wno-format-truncation`, so the gates
-  mean the same thing on both sides without editing a single character of the frozen layers — see
-  [AGENTS.md](AGENTS.md) §6.
-- **Two probes need BSD libc.** `cli/short-read` and `cli/tmpfile-cannot-create` (plus
-  `cli_short_read` in `check-archive`) rely on BSD reading a directory as a short read and failing
-  `tmpfile()` when `$TMPDIR` is unusable; glibc reads zero bytes and falls back to `P_tmpdir`, so they
-  report `skip` on Linux and never count as failures. That is why `./test/run.sh` totals two fewer
-  entries there than on macOS (118 → 116).
-
-If the image pull or apt times out in the container, just switch mirrors (nothing of this is committed —
-it varies per person and machine): pull through `docker.m.daocloud.io/library/debian:bookworm-slim` and
-point apt at `mirrors.aliyun.com`.
-
-### 6. Directory layout
-
-```
-ct/
-├── README.md                 this file
-├── AGENTS.md                 the project contract for AI coding agents
-├── LICENSE                   GPL-3.0 full text (the compiler itself)
-├── LICENSE.EXCEPTION         the output exception + MIT for examples/test/editors
-├── install.sh                the only install script: download, bootstrap, install ct + the ctc symlink
-├── .gitignore                ignores build products and the files generated under examples
-├── examples/                 runnable demos, one directory per example (<name>.ct + <name>.expected.out)
-│   ├── 01_greeter/ … 06_iface_field/
-│   ├── 07_dialect/           registry.ct + ct-dialects/ (dialect plugin, see AGENTS §2)
-│   └── 08_map_binding/       needs ct-ast (first line //@ct-requires: ct-ast; built by gate 8)
-├── selfhost/                 the bootstrap chain: one directory per compiler generation + 7 gate scripts
-│                             (every detail in selfhost/README.md)
-│   ├── l0/ctc.c              the L0 C seed (single file, no third-party dependencies)
-│   ├── l1/ctc.ct             L1 seed (frozen; capability stops at Phase 2)
-│   ├── l2/                   L2: the multi-unit tree (core.ct + driver.ct; regression oracle since 10.7)
-│   ├── ct-ast/               ct-ast: the Phase 9 mainline (main.ct binds and dispatches only), grouped units: runtime/arena (node pool), frontend/{lex,module,parse,sym,type}, tool/{driver,diag,cache,pkg}, backend/{mem,emit}; the installed entry since 10.7
-│   └── check-*.sh / ct-tour.sh   gate scripts (check-all.sh aggregates; usage in README §5)
-├── bindings/                 declarative bindings to C libraries (Phase 12): #include + mirrored traits/structs + map
-│   └── mock-hal/             the first official binding (ships a fake HAL header/impl, for demos and tests only)
-├── test/                     tests (layer map in test/README.md)
-├── editors/vscode/           VS Code extension: CT highlighting + snippets (pure JSON, no build, MIT)
-├── docs/                     documentation
-│   ├── tutorial.md           getting-started tutorial (install → dispatch → modules → memory → map)
-│   ├── vision.md             positioning, design principles and ecosystem strategy (the why)
-│   ├── roadmap.md            phase plan, decided decisions and acceptance criteria (what is next)
-│   ├── language-spec.md      .ct grammar and expansion rules (current state)
-│   ├── architecture.md       compiler internals and key algorithms
-│   ├── construction.md       object-construction semantics (who writes the vptr, and when)
-│   ├── polymorphism.md       interface polymorphism and dispatch
-│   ├── patterns.md           design patterns with the existing language (the test for new features)
-│   ├── memory-guide.md       memory-management practice guide (own / borrow / factories / pools / arena)
-│   ├── glossary.md           glossary of terms
-│   └── design/               per-phase design notes (drafts and shipped ones; the code wins on conflict)
-├── issues/                   review-findings register (meta; one file per finding, index in issues/README.md)
-└── reports/                  review reports and delivered HTML (meta; self-contained, each with _shared assets)
-```
-
-Expanded artifacts (`.c` / `.h`, executables) are never committed; write them to a temporary
-directory or generate them on demand.
-
-### 7. Known limitations
-
-Not supported by design: visibility modifiers, generics, inheritance, type checking, error recovery,
-nested definitions.
-
-Implementation limits:
-
-- Variables and parameters roll back at brace block scope (within one scope a repeated name resolves
-  to the earliest registration); multi-line call statements, and function signatures whose parameter
-  list spans several lines, are not rewritten.
-- **File-scope objects / arrays**: the vptr is written before `main` by the generated constructor
-  `__ct_init` (`__attribute__((constructor))`, D5=A).
-- Arrays only support `Type name[<n>];` (no initialiser, constant subscripts).
-- **Heap-object vptrs are written automatically**: `T *p = malloc(sizeof(struct T));` (or `calloc`)
-  writes the vptrs (including nested value fields) right after the declaration; no hand-written vptr is
-  needed any more.
-- Interface polymorphism: interface **arrays** are unsupported; interface **fields** are not boxed
-  automatically at construction (the type is expanded and can be assigned by hand); boxing accepts only
-  a variable, `&variable` or a call returning the same interface. (Those are **L0 (`ctc.c`)** bounds;
-  the **CT line** (L2 / ct-ast) has lifted all three — interface arrays, interface
-  array fields and construction-point boxing — see [language-spec](docs/language-spec.md) §4.8 and the
-  [roadmap](docs/roadmap.md).)
-- Definitions must precede use: an `impl` must appear before any function that calls its methods.
-- **A construct header must be complete**: `trait IDENT {` / `struct IDENT {` / `impl IDENT for`. A
-  half-written header (`trait T`, `struct S`, `impl`) is **not an error** — the line is **passed through
-  as plain C**, so that legal C using `trait` / `impl` as ordinary identifiers (`impl[i] = 0;`) keeps
-  working.
-- **A construct and a statement on the same line**: rewriting is line-based, so `p.greet()` inside
-  `int main(void){ Person p = { … }; p.greet(); }` is not rewritten (split it across lines).
-- **Capacity limits are hard errors, never silent truncation** (the `MAX_*` constants at the top of
-  `ctc.c`, one to one): `MAX_NAME` 128 (identifier ≤ 127), `MAX_PARAM` 256 (parameter-list text),
-  `MAX_PARAMS` 16 (function parameters), `MAX_METHOD` 32 (methods), `MAX_TRAITS` 16 (traits),
-  `MAX_STRUCT` 32 (structs), `MAX_FIELDS` 32 (struct fields), `MAX_VARS` 512 (variables),
-  `MAX_SCOPE` 256 (nested scopes), `MAX_DEPTH` 8 (nesting depth), `MAX_FUNCS` 64 (signature table).
-
-### 8. Documentation
-
-- [AGENTS.md](AGENTS.md) — change boundaries, code style, verification workflow
-- [docs/tutorial.md](docs/tutorial.md) — getting-started tutorial (start here if you are new)
-- [docs/glossary.md](docs/glossary.md) — glossary: canonical project, language and internal-symbol terms
-- [docs/vision.md](docs/vision.md) — positioning, design principles, ecosystem strategy
-- [docs/roadmap.md](docs/roadmap.md) — phase plan and decided design decisions
-- [docs/language-spec.md](docs/language-spec.md) — language specification
-- [docs/patterns.md](docs/patterns.md) — design patterns and the language features they need (the no-new-feature test)
-- [docs/memory-guide.md](docs/memory-guide.md) — memory-management practice: who owns what, factories and pools, arena boundaries
-- [docs/architecture.md](docs/architecture.md) — implementation internals
-- [docs/design/bootstrap.md](docs/design/bootstrap.md) — bootstrap design draft (not implemented)
-
-### 9. License
-
-| What | License |
-| --- | --- |
-| The compiler itself (`ctc.c`, `ctc`) | **GPL-3.0-or-later**, full text in [LICENSE](LICENSE) |
-| Your `.ct` sources, the `.c`/`.h` ctc generates from them, and the programs you build from that code | **not covered by the GPL** — license them however you like, including closed source; see [LICENSE.EXCEPTION](LICENSE.EXCEPTION) |
-| Everything under `examples/`, `test/` and `editors/vscode/` (the VS Code extension) | **MIT**, so you can copy the samples straight into your own projects |
-
-ctc inserts boilerplate of its own into the output (vtable structs, `__<trait>_vptr`
-fields, the `_self` cast line), and whether compiler output counts as a derivative
-work is debated. So ctc states the exception explicitly, following the GNU Bison
-precedent, and makes it **travel with the output**: every generated `.c`/`.h`
-repeats that sentence in its banner.
-
-### 10. Contact
-
-- Author: Sam X. Xu
-- Email: samxxu@gmail.com
-- Questions, suggestions and bugs: please open an [issue](https://github.com/samxxu/ct-lang/issues) first, so the answer stays searchable for everyone; email me directly for anything that should not be public.
+Author: Sam X. Xu · samxxu@gmail.com · please open an [issue](https://github.com/samxxu/ct-lang/issues) first.

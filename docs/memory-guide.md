@@ -5,7 +5,7 @@
 > **适用版本**：v0.16.0，主线编译器 **ct-ast**（`selfhost/ct-ast/main.ct`）。冻结的 L2 只作回归对照；
 > 凡两者行为不同的地方，下文单独标注。
 > **配套**：[language-spec](language-spec.md) §4.9（AutoDrop）与 §4.40（`borrow`）、[tutorial](tutorial.md) 第 8 节、
-> [design/borrow.md](design/borrow.md)（`borrow` / `Handback`，**已落地**）。
+> [design/borrow.md](history/design/borrow.md)（`borrow` / `Handback`，**已落地**）。
 > **一句话**：CT 把内存管理从「树形复杂度」压成「常数复杂度」，剩下的难点只有「谁拥有」这一件。
 
 ---
@@ -542,7 +542,7 @@ tooling 还差最后一公里——Arena 未作为官方库暴露（§8）。
 
 ### 15. `borrow` + `Handback`（v0.16.0 已落地）
 
-想给「借用」补上语法标记，设计见 [design/borrow.md](design/borrow.md)（完整提案 + 前提订正 + 决策项 D1–D6）。
+想给「借用」补上语法标记，设计见 [design/borrow.md](history/design/borrow.md)（完整提案 + 前提订正 + 决策项 D1–D6）。
 一句话版本：
 
 - **`borrow` 作为参数注解**（阶段一）：零代码生成变化，只做两项检查——禁止 `delete`、禁止存入更长寿命处
@@ -1131,7 +1131,7 @@ factory convergence); tooling is one mile short — Arena is not an official lib
 ### 15. `borrow` + `Handback` (landed in v0.16.0)
 
 The full design — including corrections to its premises and the decisions D1–D6 — is in
-[design/borrow.md](design/borrow.md). In one paragraph:
+[design/borrow.md](history/design/borrow.md). In one paragraph:
 
 - **`borrow` as a parameter annotation** (stage one): no codegen change, just two checks — no `delete`,
   no storing into a longer-lived location

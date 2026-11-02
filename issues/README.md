@@ -4,14 +4,14 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总八轮审查的发现：[reports/repo-review](../reports/repo-review/repo-review.md)（首轮）、
-[reports/phase7-review](../reports/phase7-review/phase7-review.md)（Phase 7 复审）、
-[reports/phase9-review](../reports/phase9-review/phase9-review.md)（Phase 9 复审）、
-[reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
-[reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）、
-[reports/audit-2026-10-31](../reports/audit-2026-10-31/audit-2026-10-31.md)（测试覆盖度与文档一致性审计）与
-[reports/review-2026-10-31](../reports/review-2026-10-31/review-2026-10-31.md)（代码审查 + 文档一致性审查）、
-[reports/review-2026-11-01](../reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）。
+本目录汇总八轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
+[reports/phase7-review](../docs/history/reports/phase7-review/phase7-review.md)（Phase 7 复审）、
+[reports/phase9-review](../docs/history/reports/phase9-review/phase9-review.md)（Phase 9 复审）、
+[reports/review-2026-10-21](../docs/history/reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
+[reports/review-2026-10-21-round2](../docs/history/reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）、
+[reports/audit-2026-10-31](../docs/history/reports/audit-2026-10-31/audit-2026-10-31.md)（测试覆盖度与文档一致性审计）与
+[reports/review-2026-10-31](../docs/history/reports/review-2026-10-31/review-2026-10-31.md)（代码审查 + 文档一致性审查）、
+[reports/review-2026-11-01](../docs/history/reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
 - 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）——各文件行号以其自身锚点为准。
@@ -237,7 +237,7 @@ DOC-28 已随本轮同步修正（见文末「测试覆盖度与文档一致性�
 
 ## Phase 7 复审（2026-10-17，锚点 `ec97f99`）
 
-完整报告见 [reports/phase7-review](../reports/phase7-review/phase7-review.md)。所有硬关卡实测绿色：
+完整报告见 [reports/phase7-review](../docs/history/reports/phase7-review/phase7-review.md)。所有硬关卡实测绿色：
 
 - `./test/run.sh` → `118 passed, 0 failed`（八层：1/1/25/6/1/60/6/18）
 - `bash selfhost/check-all.sh` → `OK (6 hard gates green)`，`SCRIPT_EXIT=0`
@@ -263,7 +263,7 @@ DOC-28 已随本轮同步修正（见文末「测试覆盖度与文档一致性�
 
 ## Phase 9 复审（2026-10-19，锚点 `8010875`）
 
-完整报告见 [reports/phase9-review](../reports/phase9-review/phase9-review.md)。评审基线为八关全绿；本轮在
+完整报告见 [reports/phase9-review](../docs/history/reports/phase9-review/phase9-review.md)。评审基线为八关全绿；本轮在
 **v0.10.0（`885d01b`）** 上复核，仍为八关全绿（`test/run.sh` 118、`check-ast.sh` 105、`test/pkg` 35、
 `check-grammar.py` 20）。报告列出的 14 项发现**全部关闭**：
 
@@ -291,10 +291,10 @@ DOC-28 已随本轮同步修正（见文末「测试覆盖度与文档一致性�
 
 | 文档 | 原表述 | 订正 |
 | --- | --- | --- |
-| [design/phase9.md](../docs/design/phase9.md) 头部 | 「设计已冻结，未实现；不要照此创建 `selfhost/ast/**`」 | 改为 9.1–9.7 已全部落地（v0.9.0 收口），Phase 10 起该实现是安装入口主线 |
-| [construction.md](../docs/construction.md) 状态行 / §1 表 / §2 推论 2 / §3.5 / §6（中英） | 堆对象创建「推迟到 Phase 1」，需手写 vptr | 堆对象已落地（[restore](../docs/design/restore.md) D1=A：`T *p = malloc\|calloc(...)` 声明后自动补 vptr），D5 记为「源文件自带 `<stdlib.h>`」 |
+| [design/phase9.md](../docs/history/design/phase9.md) 头部 | 「设计已冻结，未实现；不要照此创建 `selfhost/ast/**`」 | 改为 9.1–9.7 已全部落地（v0.9.0 收口），Phase 10 起该实现是安装入口主线 |
+| [construction.md](../docs/construction.md) 状态行 / §1 表 / §2 推论 2 / §3.5 / §6（中英） | 堆对象创建「推迟到 Phase 1」，需手写 vptr | 堆对象已落地（[restore](../docs/history/design/restore.md) D1=A：`T *p = malloc\|calloc(...)` 声明后自动补 vptr），D5 记为「源文件自带 `<stdlib.h>`」 |
 | [polymorphism.md](../docs/polymorphism.md) 头部 | 「尚未实现：接口数组、接口字段的装箱」 | 已于 2026-10-17 补齐，由 `test/cases/28_iface_field.ct` 与 acceptance 的 p01–p08 钉住 |
-| [design/bootstrap.md](../docs/design/bootstrap.md) 状态行（中英） | 「目录结构与构建流程都还不存在」 | 自举链已在 `selfhost/**` 运行；仅目标 `ctrait/` 布局未落地 |
+| [design/bootstrap.md](../docs/history/design/bootstrap.md) 状态行（中英） | 「目录结构与构建流程都还不存在」 | 自举链已在 `selfhost/**` 运行；仅目标 `ctrait/` 布局未落地 |
 | [roadmap.md](../docs/roadmap.md) Phase 7 三处（中英） | `ct get` / `ct install`「待做 / remain unimplemented」 | 标注 Phase 8 已落地（`ct-pkg`） |
 | [architecture.md](../docs/architecture.md) 英文表 | 仍称 2837 / 2708 / 1491「已逐个探针确认不可达」；`cannot open` / `short read` 行号也偏一行 | 与中文表同步为四态分桶：2837 / 2708 已由 `cli/tmpfile-cannot-create` / `cli/cannot-read` 钉住，1491 仅记为「未复现」；行号改为实测的 L2703 / L2711 |
 | [language-spec.md](../docs/language-spec.md) 状态行 / §4.8 注 / §4.9（中英） | 称 L2 是「当前编译器」 | 改为「CT 线（L2；v0.10.0 起安装入口由行为等价的 ct-ast 提供）」 |
@@ -305,19 +305,19 @@ DOC-28 已随本轮同步修正（见文末「测试覆盖度与文档一致性�
 | [issues/selfhost/unowned-state-sym-param.md](selfhost/unowned-state-sym-param.md) 与 [roadmap](../docs/roadmap.md) 重构记录 | 剩余文件作用域 static 仍写 11 个 | 实测 **13 个**（Phase 7 的 `g_ct_prog` 与 Phase 8 的 `g_pkg` 各加一个单例），issue 列表与 roadmap 记录均已补 |
 | [roadmap.md](../docs/roadmap.md) Phase 0.2 / 0.3 行（中英） | 0.2 仍写「接口数组尚未实现」；0.3 写 `ctc.c` 2897 行 | 0.2 注明这是 **L0** 边界、CT 线已由 Phase 5 补齐；0.3 补「现为 2930 行」 |
 | [vision.md](../docs/vision.md) §2.4（中英） | 泄漏警告「尚属展望，计划 Phase 4 用 CT 重做」 | 改为「已在 Phase 4 落地（text / JSON，`--diagnostics`）」 |
-| [design/dialect.md](../docs/design/dialect.md) 状态行（中英） | 「设计定型，暂缓实现；方言展开器尚不存在」 | 改为「设计草案存档；能力已在 Phase 6.6 以仓库外展开器落地」，实现形态指向 phase6.md §7（D20） |
+| [design/dialect.md](../docs/history/design/dialect.md) 状态行（中英） | 「设计定型，暂缓实现；方言展开器尚不存在」 | 改为「设计草案存档；能力已在 Phase 6.6 以仓库外展开器落地」，实现形态指向 phase6.md §7（D20） |
 | [editors/vscode](../editors/vscode) README / package.json / snippets | 仍称编译器为 `ctc`；语法自检写「13 assertions」 | 统一为「`ct`（`ctc` 为兼容别名）」；断言数改为实测 **20**（CHANGELOG 标注「发布时 13、现 20」） |
 | [issues/testing/l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) 状态行 | 未覆盖清单漏了 `too many units` | 状态行补齐「build 缺参 / `--ns-root` 缺参 / `too many units`」 |
 | [glossary.md](../docs/glossary.md) 自举链与单入口条目（中英） | 自举链写「L0 → L1 → L2」；单入口写「L2 二进制名为 ct」 | 补为「L0 → L1 → L2 → ct-ast」，并注明 10.7 起 `ct` 二进制由 ct-ast 构建 |
 | [selfhost/ast/main.ct](../selfhost/ast/main.ct#L821-L827) 顶层 usage | 只列 compile / build，未列 `get` / `install`（F5 在 L2 修过，但 10.7 切主线后未同步到 ct-ast） | 补上 `get <spec>[@<range>]` 与 `install` 两行；`check-ast.sh` 的 `-h` 断言同时钉住三条子命令 |
 | [selfhost/ct-ast/main.ct](../selfhost/ct-ast/main.ct) 驱动诊断前缀 | CLI / I/O 错误仍打印 `ct-ast:`，违反 README 与 phase10 非目标「驱动错误前缀固定 `ctc:`」（SH-3） | ✅ 已修：35 处诊断消息统一改回 `ctc:`；`check-ast.sh` 的负例断言同步，自编不动点与 105 项全绿 |
 | [polymorphism.md](../docs/polymorphism.md) 英文头部 | 中文头部已改「已于 2026-10-17 补齐」，英文仍写「Not implemented yet: interface arrays / automatic boxing」 | 英文同步为「landed on 2026-10-17，由 `test/cases/28_iface_field.ct` 与 p01–p08 钉住」，与中文一致 |
-| [design/dialect.md](../docs/design/dialect.md) §0.1 表（中英） | 「包管理未落地、命名未定」/「the package manager is unimplemented (named `ct-pkg`)」 | 改为「包管理（`ct-pkg`）已在 Phase 8 落地（`ct get` / `ct install`）；方言的全局分发仍属远期」 |
-| [design/dialect.md](../docs/design/dialect.md) §15 表第 7 项（中英） | 「远期（依赖未落地的包管理）」/「depends on the unimplemented package manager」 | 改为「包管理已在 Phase 8 落地；方言的全局分发目录尚未落地」 |
+| [design/dialect.md](../docs/history/design/dialect.md) §0.1 表（中英） | 「包管理未落地、命名未定」/「the package manager is unimplemented (named `ct-pkg`)」 | 改为「包管理（`ct-pkg`）已在 Phase 8 落地（`ct get` / `ct install`）；方言的全局分发仍属远期」 |
+| [design/dialect.md](../docs/history/design/dialect.md) §15 表第 7 项（中英） | 「远期（依赖未落地的包管理）」/「depends on the unimplemented package manager」 | 改为「包管理已在 Phase 8 落地；方言的全局分发目录尚未落地」 |
 
 ## Phase 12 复审（2026-10-21，锚点 `4ef8b68`）
 
-完整报告见 [reports/review-2026-10-21](../reports/review-2026-10-21/review-2026-10-21.md)。本轮为只读评审，
+完整报告见 [reports/review-2026-10-21](../docs/history/reports/review-2026-10-21/review-2026-10-21.md)。本轮为只读评审，
 加权「垃圾代码 / 垃圾注释」与「文档-代码-注释一致性」。评审时工作树**不干净**：
 `selfhost/ct-ast/main.ct` 有一处未提交改动（删除主文件里的上限宏与节点/词法/算符宏）。
 
@@ -381,7 +381,7 @@ SH-7 在 `015946a` 修掉（`emit_field_vptrs` 跳过已被初始化式赋值的
 
 ## 第二轮复审（2026-10-21，锚点 `dde0dda`）
 
-完整报告见 [reports/review-2026-10-21-round2](../reports/review-2026-10-21-round2/review-2026-10-21-round2.md)。
+完整报告见 [reports/review-2026-10-21-round2](../docs/history/reports/review-2026-10-21-round2/review-2026-10-21-round2.md)。
 本轮仍为**只读评审**，工作树干净，覆盖上一轮（`4ef8b68`）之后的全部 9 个提交。
 
 验证基线：`bash selfhost/check-all.sh` → **`check-all: OK (8 hard gates green)`**（310 个 `ok`、0 `FAIL`，
@@ -429,7 +429,7 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 ## Batch 2 需求来源（2026-10-22，锚点 `2ead601`）
 
 本轮不是评审产出，而是**第三方使用反馈 + 定向 spike**。完整需求规格（含设计决策、实现顺序、
-验收标准与出口条件）见 [docs/design/batch2-cross-unit-oo.md](../docs/design/batch2-cross-unit-oo.md)，
+验收标准与出口条件）见 [docs/design/batch2-cross-unit-oo.md](../docs/history/design/batch2-cross-unit-oo.md)，
 该文件经用户批准，是本批次的**实现依据**。
 
 第三方在写网络库时提出四条阻塞：(1) 跨单元接口值传不出去；(2) `map` 需要命名空间级绑定与表达式实参；
@@ -465,7 +465,7 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 
 口径说明（2b.3）：规格写的是 `map … for instance A::B::h` → C 名 `A_B_h`。最初实现为"接受限定写法、
 按最后一段取已声明的 C 名"，随后按用户决定补齐**全局 mangling**（批次见
-[docs/design/global-mangling.md](../docs/design/global-mangling.md)）：命名空间内的全局发射为 `A_B_h`，
+[docs/design/global-mangling.md](../docs/history/design/global-mangling.md)）：命名空间内的全局发射为 `A_B_h`，
 `extern` 豁免（C 库符号保持原名），表达式支持限定引用 `a::h`，两个被导入的命名空间导出同名全局时
 裸名报错并要求限定。`test/modules/map_ns`、`test/modules/ns_globals` 与 §4.10/§4.11 均按该行为描述。
 
@@ -517,7 +517,7 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 
 ## 测试覆盖度与文档一致性审计（2026-10-31）
 
-完整报告：[reports/audit-2026-10-31](../reports/audit-2026-10-31/audit-2026-10-31.md)。锚点 `f4c77b1`、
+完整报告：[reports/audit-2026-10-31](../docs/history/reports/audit-2026-10-31/audit-2026-10-31.md)。锚点 `f4c77b1`、
 `v0.13.0`；基线 `bash selfhost/check-all.sh` → `check-all: OK (9 hard gates green)`。
 
 ### 结论
@@ -596,7 +596,7 @@ $ gcc -Wall /tmp/idc.c
 
 ## 处置（2026-10-31，审计 18 条的结论）
 
-设计记录与验证数据见 [docs/design/batch37-audit-fixes](../docs/design/batch37-audit-fixes/spec.md)。
+设计记录与验证数据见 [docs/design/batch37-audit-fixes](../docs/history/design/batch37-audit-fixes/spec.md)。
 
 | 结论 | 条目 |
 | --- | --- |
@@ -610,7 +610,7 @@ $ gcc -Wall /tmp/idc.c
 
 ## 代码审查与文档一致性审查（2026-10-31，锚点 `524ba99`、`v0.15.1`）
 
-完整报告：[reports/review-2026-10-31](../reports/review-2026-10-31/review-2026-10-31.md)。
+完整报告：[reports/review-2026-10-31](../docs/history/reports/review-2026-10-31/review-2026-10-31.md)。
 
 ### 结论
 
@@ -652,7 +652,7 @@ $ gcc -Wall /tmp/idc.c
 ### 提案评审追加（2026-10-31）
 
 评审 `borrow` / `Handback` 提案时实测追加 1 条；设计规格见
-[docs/design/borrow.md](../docs/design/borrow.md)。
+[docs/design/borrow.md](../docs/history/design/borrow.md)。
 
 | ID | 严重度 | 标题 |
 | --- | --- | --- |
@@ -747,7 +747,7 @@ $ ct-ast a.ct b.ct -o out.c ; echo $?
 
 ## 代码审查（2026-11-01，锚点 `8b047f5`，`borrow` / `Handback` 实现）
 
-完整报告：[reports/review-2026-11-01](../reports/review-2026-11-01/review-2026-11-01.md)。
+完整报告：[reports/review-2026-11-01](../docs/history/reports/review-2026-11-01/review-2026-11-01.md)。
 
 ### 结论
 

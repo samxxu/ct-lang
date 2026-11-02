@@ -26,10 +26,10 @@
 | Phase 7 | **工具链形态**：单入口 `ct` + `ctc` 兼容别名 | 落地 | ✅ 完成（2026-10-17；7.1–7.3 落地，bump 到 v0.7.0；`ct get` / `ct install` 后由 Phase 8 落地） | `ct compile` 可用、`ctc …` 不失效、banner 写 `ct` |
 | Phase 8 | **包管理与分发**：`ct-pkg`（git registry + 本地目录源）、`ct get` / `ct install` | 新增 | ✅ 完成（2026-10-18；8.1–8.3 全部落地；bump 到 v0.8.0；D21–D27 已冻结） | `ct get` / `ct install` 可用，编译路径仍零网络 |
 | Phase 9 | **AST 版编译器**（新主线） | 新增 | ✅ 9.1–9.7 已落地（2026-10-18）：自编 + 不动点 + **全量行为等价**（`check-ast.sh`，Phase 9 收口时 60 项，2026-10-31 实测 408 项，以脚本末行 summary 为准）；旧管线 `selfhost/l2/**` 按 D36 冻结归档（tag `pre-ast-mainline`）；**已 bump 到 v0.9.0 收口** | 自编 + 行为等价 |
-| Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | ✅ 10.1–10.7 全部落地（2026-10-19；[design/phase10.md](design/phase10.md)，D38–D45 已按建议值确认）：CLI/身份、语义诊断、内存、多错误恢复、增量缓存、包管理迁移、切主线；安装入口由 ct-ast 提供（切换前 tag `pre-ct-ast-switch`），**已 bump 到 v0.10.0 收口** | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
-| Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | ✅ 完成（2026-10-19；11.1–11.3 全部落地：解析 + 实例级包装/vtable + `--emit-map` 的 `maps` 字段 + 负例，11.2 接入派发，11.3 加固绑定完整性与唯一性并放宽 CALL 子集，收口 bump 到 v0.11.0、11.3 后 patch bump 到 v0.11.1；D19 解除，见 [design/phase6.md](design/phase6.md) §6.5） | 设计冻结 + 新用例全绿；收口 bump v0.11.0、patch bump v0.11.1 |
-| Phase 12 | **生态扩展**：官方 / 示范 bindings（首个为仓库内假 HAL）＋ 方言深化（多方言并存 + 作者指南） | 扩展 | ✅ 完成（2026-10-19；12.1–12.4 全部落地：首个官方 binding `bindings/mock-hal/`、binding 规约 `bindings/README.md`、多方言并存演示 + 作者指南；收口 bump 到 v0.12.0；[design/phase12.md](design/phase12.md)，D46–D52） | 设计冻结 + 新用例全绿；收口 bump v0.12.0 |
-| Phase 17 | **工程质量与新能力**：CI 矩阵 + ASAN/UBSAN + 确定性 fuzz、官方 `std`（含容器模块 `std::map`）、raw 透传、文档分层与链接门禁、包管理补全（`ct update` / `ct verify` / index / 比较器范围 / `ct.pkg` 构建元数据）、**`ct build` 一步到位产出可执行文件**（`--emit-c` 保留只发 C） | 新增 + 治理 | 🟨 实施中（2026-11-02 起；17.1 CI 矩阵 / ASAN / 确定性 fuzz 已落地，其余切片待实施；`v0.17.0`；[design/phase17.md](design/phase17.md)，D17-1–D17-9 已确认） | 11 道硬门禁 + CI 三个 job + nightly 全绿；六项各有独立测试层；零网络契约不变，零子进程收窄为 `ct compile` / `ct build --emit-c` |
+| Phase 10 | **主线切换**：安装入口改由 AST 版编译器（ct-ast）提供 | 迁移 | ✅ 10.1–10.7 全部落地（2026-10-19；[design/phase10.md](history/design/phase10.md)，D38–D45 已按建议值确认）：CLI/身份、语义诊断、内存、多错误恢复、增量缓存、包管理迁移、切主线；安装入口由 ct-ast 提供（切换前 tag `pre-ct-ast-switch`），**已 bump 到 v0.10.0 收口** | 以 ct-ast 构建的 `ct` 跑完整套关卡；L2 降为回归 oracle |
+| Phase 11 | **`map` 构造**：`map trait T for instance x { m() → CALL; }`（把 trait 方法绑定到已声明的全局实例） | 新增 | ✅ 完成（2026-10-19；11.1–11.3 全部落地：解析 + 实例级包装/vtable + `--emit-map` 的 `maps` 字段 + 负例，11.2 接入派发，11.3 加固绑定完整性与唯一性并放宽 CALL 子集，收口 bump 到 v0.11.0、11.3 后 patch bump 到 v0.11.1；D19 解除，见 [design/phase6.md](history/design/phase6.md) §6.5） | 设计冻结 + 新用例全绿；收口 bump v0.11.0、patch bump v0.11.1 |
+| Phase 12 | **生态扩展**：官方 / 示范 bindings（首个为仓库内假 HAL）＋ 方言深化（多方言并存 + 作者指南） | 扩展 | ✅ 完成（2026-10-19；12.1–12.4 全部落地：首个官方 binding `bindings/mock-hal/`、binding 规约 `bindings/README.md`、多方言并存演示 + 作者指南；收口 bump 到 v0.12.0；[design/phase12.md](history/design/phase12.md)，D46–D52） | 设计冻结 + 新用例全绿；收口 bump v0.12.0 |
+| Phase 17 | **工程质量与新能力**：CI 矩阵 + ASAN/UBSAN + 确定性 fuzz、官方 `std`（含容器模块 `std::map`）、raw 透传、文档分层与链接门禁、包管理补全（`ct update` / `ct verify` / index / 比较器范围 / `ct.pkg` 构建元数据）、**`ct build` 一步到位产出可执行文件**（`--emit-c` 保留只发 C） | 新增 + 治理 | 🟨 实施中（2026-11-02 起；17.1 CI 矩阵 / ASAN / 确定性 fuzz、17.4 文档分层 / 链接门禁已落地，其余切片待实施；`v0.17.0`；[design/phase17.md](design/phase17.md)，D17-1–D17-9 已确认） | 11 道硬门禁 + CI 三个 job + nightly 全绿；六项各有独立测试层；零网络契约不变，零子进程收窄为 `ct compile` / `ct build --emit-c` |
 | Phase 18 | **生态建设**：ct-pkg 组织、包规范与首批包（`hal` 契约 + 平台包 + C 库映射 + 索引 / CI 复用），为 1.0 做准备 | 生态 | ⬜ 规划中（设计文档待 Phase 18 立项时补写；Phase 17 只承接其中重叠的 std / index / CI / 构建元数据） | Wave 1 包在宿主与目标机上端到端跑通；索引与包门禁由 CI 生成；`1.0.0` 单独立项 |
 
 > **阶段编号说明（2026-11-02，计划）**：`v0.13.0`–`v0.16.3` 已在下方「版本记录」中标为 **Phase 12 之后的能力 / 修复补丁**，并未作为 Phase 13–16 的阶段号。下一阶段因此取 **Phase 17 ↔ `v0.17.0`**，以维持「Phase *n* ↔ `v0.n.x`」不变量；该编号已由用户确认（D17-1）。
@@ -108,12 +108,12 @@
 
 - 真正的**前置是「多文件编译」**（Phase 1 已列）：类型定义下沉到 `.h`，生成的 `.c` 改为 `#include` 自己的头。这会打破 Phase 0 的「`.c` 自包含」约定，属破坏性变更。
 - 包的**接口边界天然是 trait**：一个包 = 一组 `.ct` + 对外暴露的 `.h`（trait 声明）。这条决定了包管理器与 registry 能长成什么样。
-- **设计冻结（2026-10-18）**：D21–D27 全部定案（清单 `ct.pkg` / git registry + 本地源 / MVS / `get` + `install` / 新 `PkgOps` trait / FNV-1a）。实现按 8.1（清单 + 本地源）→ 8.2（git 源）→ 8.3（`install` 校验）推进，见 [design/phase8.md](design/phase8.md) §11。
+- **设计冻结（2026-10-18）**：D21–D27 全部定案（清单 `ct.pkg` / git registry + 本地源 / MVS / `get` + `install` / 新 `PkgOps` trait / FNV-1a）。实现按 8.1（清单 + 本地源）→ 8.2（git 源）→ 8.3（`install` 校验）推进，见 [design/phase8.md](history/design/phase8.md) §11。
 - **8.1 已落地（2026-10-18）**：`ct get <local-dir>[@<range>]` 解析 `ct.pkg`、递归处理本地 `dep`、复制到 `vendor/<name>/`、按拓扑序写 `ct.lock`。新增 `PkgOps` trait（`driver.ct`），零网络零子进程；`test/pkg/run.sh` 已接入 `check-all.sh` 第 7 关。
 - **8.2 已落地（2026-10-18）**：`ct get` 增加 **git 源**——spec 以 `.` / `/` / `file://` 开头为本地目录（复制），其余为 git 源（`scheme://` 原样、`host/path` 补 `https://`、裸名按 `CT_REGISTRY`，默认 `https://github.com/ct-pkg`）。`git` 是**唯一**子进程调用点，且只由 `ct get` 触发；`git clone/fetch` 进 `~/.cache/ct-pkg/<name>/`，按 **MVS** 取满足范围的最低 tag（可带/不带 `v`；无 tag 且范围为空时回退默认分支 HEAD），`ct.lock` 记为 `name ver git <commit> <digest>`。无 `git` 时 git 源硬报错并提示安装，本地源照常可用（D26）。`test/pkg/run.sh` 扩到 14 项断言（含本地 git 仓库作 registry 的离线用例）。
 - **8.3 已落地（2026-10-18）**：`ct.lock` 统一为五列 `name ver kind ref <digest>`（`digest` 为**逐文件加法折叠**的 FNV-1a，顺序无关、只做变更检测，与 `.ctcache` 键同源；见 D27）。`ct install` **离线**校验每个锁定包的 `vendor/<name>` 存在且摘要相符，并要求工程 `ct.pkg` 的每条 `dep` 都被锁覆盖且在范围内；全部通过即打印建议的 `ct build -I vendor/<name> … <unit>.ct -o build`（不调用 `cc`，与 `ct build` 的「只出 C」一致，D24）。摘要不符 / 缺包 / 未覆盖依赖 / 清单不完整 / 空锁均硬报错。`test/pkg/run.sh` 扩到 27 项断言（含 install/get 的错误分支负例），另证 `ct build` 可用 `vendor/` 编译（导入 vendored 包并运行）。`ct install` 零网络零子进程。
 - **摘要加固（2026-11-01，SH-44）**：`ct.lock` 末列由 FNV-1a 加法折叠改为 **SHA-256**（按路径排序后把每个文件的 `相对路径\n` 与内容汇入单一流），写法为 `sha256:<64 hex>`；旧 16 位摘要显式报「unsupported digest」，不做静默降级。既有 `ct.lock` 因此失效、需重新 `ct get`；`test/pkg/run.sh` 同步夹具并新增「同尺寸篡改」与「旧格式」两个负例。D27 的这一处被取代。
-- **Phase 8 收口（2026-10-18）**：8.1–8.3 全部落地后，四处 `CTC_VERSION`（`ctc.c` / `selfhost/l1/ctc.ct` / `selfhost/l2/{core,driver}.ct`）同步 bump 到 **v0.8.0**，`test/cases/**` 与 `test/modules/**` 共 **107 个 golden 重生成**（逐文件仅版本 token 一行变化，含 `map` 的 `compiler` 字段与 `expected.map`）。按 D24，`ct remove` / `ct update` / `ct publish` 仍属**设计上推迟**，不是本阶段欠账。已知风险见 [design/phase8.md](design/phase8.md) §9（`MAX_UNITS` 上限、license 与供应链口径、registry 组织名占位）。
+- **Phase 8 收口（2026-10-18）**：8.1–8.3 全部落地后，四处 `CTC_VERSION`（`ctc.c` / `selfhost/l1/ctc.ct` / `selfhost/l2/{core,driver}.ct`）同步 bump 到 **v0.8.0**，`test/cases/**` 与 `test/modules/**` 共 **107 个 golden 重生成**（逐文件仅版本 token 一行变化，含 `map` 的 `compiler` 字段与 `expected.map`）。按 D24，`ct remove` / `ct update` / `ct publish` 仍属**设计上推迟**，不是本阶段欠账。已知风险见 [design/phase8.md](history/design/phase8.md) §9（`MAX_UNITS` 上限、license 与供应链口径、registry 组织名占位）。
 
 #### 包管理器的命名（已定：`ct-pkg`）
 
@@ -126,7 +126,7 @@
 #### Phase 9：AST 版编译器（设计已冻结；9.1 已落地，2026-10-18）
 
 **主题已定（用户 2026-10-18 确认）**：把 2026-10-17 已定的 AST 主线正式立项为 Phase 9，设计见
-[design/phase9.md](design/phase9.md)。**D28–D37 全部定案**：主题 = AST 编译器、9.1 取**最小端到端子集**、
+[design/phase9.md](history/design/phase9.md)。**D28–D37 全部定案**：主题 = AST 编译器、9.1 取**最小端到端子集**、
 代码落**新目录 `selfhost/ct-ast/**` 并与旧管线并行**、阶段出口为**自编 + 行为等价**、AST 节点用
 **`typedef struct` + `kind` 判别**、符号表用**分类扁平表 + 变量作用域栈**、等价判据为
 **退出码 + 产物零警告可编 + 程序输出一致**、新增 **`check-ast.sh`** 硬门禁、旧管线在 **9.7 全绿后归档**、
@@ -399,12 +399,12 @@ map trait Controller for instance huart1 {
   既写不了 vptr 也无法派发）。单文件路径的唯一硬阻塞是「`impl` 方法体内无法跨对象派发」，已由
   **Phase 1.9c** 解决（方法体走与顶层完全相同的重写管线：登记 `self` / 方法参数后逐行 `transform_line`）。
   结论：**单文件 + 完全 OO 已可自举**——namespace、多文件、诊断等非 OO 特性**不作为自举前提**，一律改用 CT 实现；C 侧的越位实现**先剥除归档（Phase 0.3）**，再由 Phase 2–5 用 CT 重做。
-- **冻结与位置（2026-10-20 修订）**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）。位置：2026-10-11 曾定「留仓库根目录」、2026-10-15 又定「等 CT 侧布局定型再一次性搬入 `ctrait/`」；**两版口径均已于 2026-10-20 作废**——最终决定是把 `ctc.c` 直接移入 **`selfhost/l0/ctc.c`**，与三代 CT 编译器（`l1/ctc.ct` / `l2/` / `ct-ast/`）同处，取消从未落地的 `ctrait/` 草案；二进制仍构建到仓库根 `./ctc`，故所有 `./ctc` 引用不变。理由：自举链已在 `selfhost/**` 运行，四代编译器同处一处更自洽，也免去一次性搬迁隐含的 `test/` 拆分前置。新特性一律在 CT 侧实现（见 [design/bootstrap.md](design/bootstrap.md)）。
+- **冻结与位置（2026-10-20 修订）**：**Phase 0.3 剥离完成后（即自举启动时）** `ctc.c` 即冻结为 **L0 + 差分 oracle**（只修 bug，不加特性）。位置：2026-10-11 曾定「留仓库根目录」、2026-10-15 又定「等 CT 侧布局定型再一次性搬入 `ctrait/`」；**两版口径均已于 2026-10-20 作废**——最终决定是把 `ctc.c` 直接移入 **`selfhost/l0/ctc.c`**，与三代 CT 编译器（`l1/ctc.ct` / `l2/` / `ct-ast/`）同处，取消从未落地的 `ctrait/` 草案；二进制仍构建到仓库根 `./ctc`，故所有 `./ctc` 引用不变。理由：自举链已在 `selfhost/**` 运行，四代编译器同处一处更自洽，也免去一次性搬迁隐含的 `test/` 拆分前置。新特性一律在 CT 侧实现（见 [design/bootstrap.md](history/design/bootstrap.md)）。
 - **清理口径（2026-10-14 修订为「剥离在前」）**：**先**把越位落在 C 里的 namespace / 多文件 / import / Drop / `#line` / 诊断从 `ctc.c` **移出并归档为 oracle**（Phase 0.3），使 L0 成为**纯 OO 核心**（+底层设施）；**再**自举（Phase 1）；**最后**由 Phase 2 用 CT 逐项重做并向归档对差。两条硬前提：① **移出件不销毁**——归档件既是种子（唯一能生产 L1 的那个行为基准）也是差分 oracle（唯一能产出 byte-identical golden 的对照实现）；② **`ctc.c` 永不整体删除**，作为种子与差分 oracle 长期保留（先例：Rust 长期保留 stage0，Go 1.5 起弃用 stage0，两者皆可）。
 - **阶梯约束（源语言滞后一级）**：第 n 级编译器只能编译「第 n−1 级所支持的语法子集」写成的源码。因此 L1 源码只能用**单文件 + OO 子集**；CT 侧要**使用** namespace / Drop / import 组织编译器源码，必须先有支持它们的 CT 级编译器。**"重写完就删 C"顺序错**，必须逐级爬升。
 - **单仓库**：跨层编译与特性耦合决定了不拆仓库；`selfhost/` 需要独立分发时用 `git subtree` / `git filter-repo` 无损拆分。
 
-目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](design/bootstrap.md)（自举链已落地于 `selfhost/**`，含 L0 种子 `selfhost/l0/ctc.c`；早期 `ctrait/` 草案已废弃）。
+目标目录结构、分层规则、构建流程与里程碑（M1–M6）见 [design/bootstrap.md](history/design/bootstrap.md)（自举链已落地于 `selfhost/**`，含 L0 种子 `selfhost/l0/ctc.c`；早期 `ctrait/` 草案已废弃）。
 
 #### 自举前置条件（清单）
 
@@ -663,7 +663,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 > **本阶段既不新增语言特性，也不恢复被剥离的特性**：只把 Phase 0 出口 1–9 的能力用 CT 重写一遍。特性恢复与新增一律从 Phase 2 开始。
 
-**入口条件**：Phase 0.3 完成即满足。纯 OO 前提下自举**没有剩余硬阻塞**——就绪报告点名的「跨单元引用带 trait 对象」已随多文件一并移出；报告余下的表达力缺口（接口数组 `die`、构造期装箱、按行重写纪律）仍是 L1 源码必须遵守的纪律，见 [自举就绪总结报告](../reports/selfhost-readiness/selfhost-readiness.html) 与下方「已知约束」。
+**入口条件**：Phase 0.3 完成即满足。纯 OO 前提下自举**没有剩余硬阻塞**——就绪报告点名的「跨单元引用带 trait 对象」已随多文件一并移出；报告余下的表达力缺口（接口数组 `die`、构造期装箱、按行重写纪律）仍是 L1 源码必须遵守的纪律，见 [自举就绪总结报告](history/reports/selfhost-readiness/selfhost-readiness.html) 与下方「已知约束」。
 
 **L1 出口标准（go/no-go 门）**：L1 能被冻结的 `ctc`（L0）端到端编译并运行，且对同一批语料与 C 版输出**逐字节一致**。
 
@@ -677,7 +677,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 6. **增量 oracle 落地为常驻关卡**（2026-10-15 用户确认）：`selfhost/check-goldens.sh` 把「L1 vs 全部 `test/cases/**` golden」做成一条命令，逐例比对 `.c` / `.h` 的字节，输出 `PASS / NEW / PENDING / REGRESSION` 四态与计数。脚本内的 baseline 名单是**棘轮**：只有已在名单里的用例失配才算回归并令关卡非零退出，未实现的族记 `PENDING`（连同 L1 的拒绝原因）不阻塞。起点实测（2026-10-15）：**13 pass / 0 new / 12 pending / 0 regression（共 25 例）**——12 个 pending 全部是 L1 主动 `die` 报「不支持」的留空能力族，不是算错。补齐顺序按**由小到大**：`13` 初始化形式 → `17` heap → 接口值（`21` → `18` → `28`）→ arrays（`16`）→ composition（`15`）→ 回头收互锁的 `23/24/25/26/27`（这些同时要 arrays 与 composition）。每片的出口是「byte-identical 不退化 + 把新通过的用例提升进 baseline 名单」。
 7. **M2 达成，且 L1′ 自举闭环成为常驻关卡**（2026-10-15 实测）：`test/cases/**` 全量 **25 例逐字节一致**（25 pass / 0 new / 0 pending / **0 regression**），M2 出口达成。更强的一条也已实测——**L1 编译 L1 自身**得到 L1′，L1′ 以 `-Wall -Wextra -std=c99` **零警告**构建，再用**同一批语料**重跑，仍 **25 例逐字节一致**（`.c` / `.h` 与 L0 完全相同，含 banner）。这两条都固化进 `selfhost/check-goldens.sh`：第 4 步是 L1 vs golden，**第 5 步**是 L1′=L1 源码经 L1 编译 → 零警告构建 → 与 golden 逐字节比对，任一不符即令关卡非零退出。至此决策 4 的**出口附加项**（用 L1 编译自身）满足：Phase 1 的 go/no-go 门通过。此后新增能力一律排在 Phase 2 起（CT 侧重做），`ctc.c` 仍只接受 bug 修复。
 
-**阶梯（M1→M2 属本阶段；M3–M6 属 Phase 2–5）**：L1 仅用 OO 子集写就；此后按 [bootstrap.md](design/bootstrap.md) 逐层爬升，每层以 **byte-identical golden** 为出口：
+**阶梯（M1→M2 属本阶段；M3–M6 属 Phase 2–5）**：L1 仅用 OO 子集写就；此后按 [bootstrap.md](history/design/bootstrap.md) 逐层爬升，每层以 **byte-identical golden** 为出口：
 
 | 层 | 用 CT 实现 / 搬入 CT | 归属 |
 | --- | --- | --- |
@@ -787,7 +787,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 **自举之后的恢复与新增（Phase 2–5 共用前提）**
 
-自举（Phase 1）完成后才动手。出口判据按**类别**分两类（不再按子阶段分）：Phase 2–4 是**恢复**（有归档 oracle + 冻结 golden，出口 = **byte-identical**，无需再拍设计）；Phase 5 是**新增**（无 oracle 可对差，出口 = **设计冻结 + 新用例 + `run.sh` 全绿**）。实现层面的设计见 [design/restore.md](design/restore.md)（决策 D1–D8，仅 D6 待定；D7 已定为「本地优先」，D8：`map` 移出，见 Phase 6）。
+自举（Phase 1）完成后才动手。出口判据按**类别**分两类（不再按子阶段分）：Phase 2–4 是**恢复**（有归档 oracle + 冻结 golden，出口 = **byte-identical**，无需再拍设计）；Phase 5 是**新增**（无 oracle 可对差，出口 = **设计冻结 + 新用例 + `run.sh` 全绿**）。实现层面的设计见 [design/restore.md](history/design/restore.md)（决策 D1–D8，仅 D6 待定；D7 已定为「本地优先」，D8：`map` 移出，见 Phase 6）。
 
 **实现方针——保真优先（2026-10-16 用户确认）**：用 CT 重做这些特性时，以**与归档 oracle 逐字节一致**为准，**包括复刻其既有行为与限制**（例如跨行块注释的 `/* … */` **续行**会被当作普通代码行处理，见 [language-spec](language-spec.md) §6.2）。因此**不修改 `test/archive/**` 的输入、也不重新生成任何归档 golden**——fixture 与 golden 都是冻结的 oracle；既有缺陷照实写进 §6.2，而不是靠改语料把它绕开。对差关卡是 [selfhost/check-archive.sh](../selfhost/check-archive.sh)。
 
@@ -797,7 +797,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 2. **Phase 3 是 Phase 5 的前置**——AutoDrop 依赖 Drop，路径敏感分析依赖作用域 + Drop。
 3. **目录 = namespace 绑定依赖 Phase 2**，只能落在 Phase 5。
 
-与 [bootstrap.md](design/bootstrap.md) 的阶梯对齐：M3 → Phase 2 前半；M4 → Phase 2 后半 + Phase 3；M5 → Phase 4；**M6（全功能对齐）在 Phase 5 收口**。
+与 [bootstrap.md](history/design/bootstrap.md) 的阶梯对齐：M3 → Phase 2 前半；M4 → Phase 2 后半 + Phase 3；M5 → Phase 4；**M6（全功能对齐）在 Phase 5 收口**。
 
 ### Phase 2：模块化（原 2.1）
 
@@ -846,7 +846,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **目录 = namespace 强制绑定**。
 - **前置约束（2026-10-17 审查记录）**：`MAX_FUNCS`（64，**计入所有顶层 plain-C 签名，`static` 也算**）余量只剩 1；Phase 5 的新逻辑**必须**写进 `impl` 块（impl 方法不计数），并注意 `MAX_METHOD`（32）——把方法放进 `PipeOps` / `RewriteOps` 对应的一半。**不得**为扩容改 `ctc.c` 的 `MAX_*`（冻结期明令禁止）。
 - **出口**：**设计先行 → 冻结 → 新用例 → `run.sh` 全绿**；明确**不追求** byte-identical（无 oracle 可对）。此处同时收口阶梯 **M6**。
-- **设计（2026-10-17，已冻结）**：实现层面的设计、发射形状、v1 限制、测试切片与 **D9–D14** 决策表见 [design/phase5.md](design/phase5.md)。D9–D14 **均取推荐项**：AutoDrop 用 `own` 前缀；释放动作 = `drop` + `free` + 置空；行内 `}` / `return` 报错；路径敏感只做「条件 return」判定；目录 = namespace 取**校验式**；推进顺序 AutoDrop → 路径分析 → 目录绑定。**AST 主线不提前**，仍按原计划推进。
+- **设计（2026-10-17，已冻结）**：实现层面的设计、发射形状、v1 限制、测试切片与 **D9–D14** 决策表见 [design/phase5.md](history/design/phase5.md)。D9–D14 **均取推荐项**：AutoDrop 用 `own` 前缀；释放动作 = `drop` + `free` + 置空；行内 `}` / `return` 报错；路径敏感只做「条件 return」判定；目录 = namespace 取**校验式**；推进顺序 AutoDrop → 路径分析 → 目录绑定。**AST 主线不提前**，仍按原计划推进。
 - **审查修复（2026-10-17，Phase 5 后复查）**：泄漏分析补上 **impl 方法体**覆盖——`emit_body` 逐行调用 `leak_observe`（赋值转移不再误报），并在方法体隐式结束处调用 `leak_check_scope`（分配未释放报确定泄漏，`own` 变量除外）。新增 designed fixture `leak_method`。同时修正文档漂移：README 的「五层 / 115 项 / 19 项断言」改为「七层 / 117 项 / 20 项断言」并补 `limits` / `cli` 两层；glossary 增 AutoDrop / `own` 与路径敏感泄漏条目；roadmap 清理「Phase 5 展望 / 仅 D6·D7 待定 / include 方案待定」等已完成残留。**验证**：designed **25 pass**、run.sh 117/117、goldens OK + 不动点、archive 0 退化、m2a/ct-tour、acceptance 19 pass / 1 pending、grammar 20/20、手工三件套通过。
 - **收口（2026-10-17，切片 5.5）**：版本按阶段规范同步 bump 到 **v0.5.0**（`ctc.c` / `selfhost/l1/ctc.ct` / `core.ct` / `driver.ct` 四处一致；`test/cases/**` 与 `test/modules/**` 共 **94** 个 golden 按新版本重生成，归档 oracle 由 `same_modulo_version` 归一化），README / AGENTS / roadmap 的版本与阶段行同步。**阶梯 M6 收口，Phase 5 完成**；下一步 Phase 6。
 - **进展（2026-10-17，切片 5.4：目录 = namespace）**：`build` 新增 **`--ns-root <dir>`**（缺省 = 第一个输入所在目录）；driver 逐单元算出「相对 root 的目录分量」（`src/hal/uart.ct` → `hal`）并作为 `ns_expect` 传给 `ct_compile_file`，core 在解析**最外层** `namespace` 时与声明比对，不一致即 `namespace 'X' does not match directory 'a::b'`。无声明、root 之外、路径含 `.`/`..` 的单元不校验（D13 = A：校验式，不隐式加前缀、不改变既有产物）。新增 designed fixture **2 个**：`ns_dir`（匹配的 `hal` + 无声明子目录单元，构建并运行输出 `5 6`）与 `ns_dir_mismatch`（不匹配报错、无产物）。**验证**：designed **24 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` 117/117、`check-m2a` / `ct-tour` OK、acceptance 19 pass / 1 pending、grammar 20/20、手工三件套通过。
@@ -858,9 +858,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### Phase 6：生态与扩展（原 Phase 3）
 
 - **生态绑定**：`map` + 反向映射表（经 D8 移出自举主线；落定时与官方 bindings 清单一并定案；**2026-10-19 由 Phase 11 解冻并落地 11.1**）。
-- **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突**已在 Phase 6.6 修订**（展开器留在仓库外、`ctc` 零感知；仓库内只允许在 `examples/**` / `test/**` 下携带演示 / 测试用方言插件；包管理分发方言仍不在本阶段）。详见 [design/dialect.md](design/dialect.md)（设计草案，未实现）。
+- **方言系统（Dialect）**：写在注释里的领域专用语法，由编译器之外的展开器脚本转成纯 CT，`ctc` 全程零感知。设计已定型，**排期在本阶段**（2026-10-13 用户确认；排期口径随 2026-10-14 相位重排更新）——排序选择而非技术依赖，展开器是外部脚本、不与自举耦合。与 [AGENTS.md](../AGENTS.md) §2 的三处边界冲突**已在 Phase 6.6 修订**（展开器留在仓库外、`ctc` 零感知；仓库内只允许在 `examples/**` / `test/**` 下携带演示 / 测试用方言插件；包管理分发方言仍不在本阶段）。详见 [design/dialect.md](history/design/dialect.md)（设计草案，未实现）。
 - **构建**：增量编译缓存、跨函数泄漏分析、多目标编译。
-- **设计（2026-10-17，已冻结）**：切片顺序、6.1 的 `--emit-map` JSON 形状、缓存键、多目标口径、`map` / 方言的边界处理与 **D15–D20** 决策表见 [design/phase6.md](design/phase6.md)。顺序：反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map`（等 bindings）→ 方言（仓库外展开器）。
+- **设计（2026-10-17，已冻结）**：切片顺序、6.1 的 `--emit-map` JSON 形状、缓存键、多目标口径、`map` / 方言的边界处理与 **D15–D20** 决策表见 [design/phase6.md](history/design/phase6.md)。顺序：反向映射表 → 调用图/跨函数分析 → 增量缓存 → 多目标 → `map`（等 bindings）→ 方言（仓库外展开器）。
 - **切片进展**：**6.1 反向映射表已落地**（`--emit-map <file|->`，`test/modules/map/` 钉住 JSON 形状；trait / struct / function / impl 方法与 `Drop` 生成符号全部可反查；`build` 模式只写文件，且由最后一个单元落盘）。**6.2 调用图与跨函数所有权已落地**（`calls` 段记录直接调用边；`ret_owned` 事实让 `T *q = f();` 继承分配并参与泄漏分析，`test/modules/leak_call/` 钉正/负例）。**6.3 增量编译缓存已落地**（`build` 按单元在 `<outdir>/.ctcache/<unit>.key` 记键，键一致且 `.c/.h` 在盘即跳过重生成；改动传播按 `order` 前缀 + 依赖闭包，`ct-tour.sh` 第 8 步钉「二次构建命中 / 触源失效」）。**6.4 多目标编译已落地**（`--std=c99`（默认）/ `--std=gnu99`，暂无可差异发射点，故只落 CLI 与 `cc` 建议命令里的 `-std=`；`test/modules/std_default|std_gnu|std_bad/` 钉正/负例）。**6.5 `map` 仅做设计冻结**（`map trait T for instance x` 的实例语义不落实现，等官方 bindings 清单；D19）。**6.6 方言系统已落地**（展开器在仓库外、`ctc` 零感知；AGENTS §2 豁免与 §6「八层覆盖」已同步；演示 `examples/07_dialect/` + `test/run.sh` 的 `dialect` 层：展开 → `ctc` → `cc` → 运行 → 比对，并断言未展开的源不可直接编译；**编译器与 CT 线零改动**）。**Phase 6 收口，版本 bump 至 v0.6.0**。
 
 ### Phase 7：工具链形态（单入口 `ct`）
@@ -875,7 +875,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **收口（切片 7.4，2026-10-17）**：Phase 7 的三项出口全部达成——`ct compile` 可用、`ctc …` 调用不失效、生成物 banner 写 `ct`。按「版本 ↔ phase」规范 bump 到 **v0.7.0**：四处 `CTC_VERSION` 同步、101 个 golden 重生成（逐文件仅版本 token 变化）。**未落地的仅是 `ct get` / `ct install`**：它们依赖包管理器 `ct-pkg`（已定名，见「包管理器的命名」），不作为本阶段出口判据（**Phase 8 已落地**）。
 - **诊断前缀保持 `ctc:`**：驱动层 37 处 `ctc:` 前缀不随 `argv[0]` 变化（`-v` / usage 变、诊断前缀不变）。理由：`core.ct` 要用到身份就得新增 `pub` 包装器，而 `MAX_FUNCS` 余量已近乎为零；保持不变也避免移动既有日志与断言。README 已写明该约定。
 
-自举的目录结构、分层规则（L0/L1/L2）与构建流程见 [design/bootstrap.md](design/bootstrap.md)。
+自举的目录结构、分层规则（L0/L1/L2）与构建流程见 [design/bootstrap.md](history/design/bootstrap.md)。
 
 ### Phase 11：`map` 构造（新增；D19 解除）
 
@@ -888,11 +888,11 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 ### Phase 12：生态扩展（新增：官方 bindings + 方言深化）
 
-- **背景（2026-10-19 用户确认）**：Phase 11 落地 `map` 后，CT 已具备「把 trait 方法绑定到已声明的全局实例」的底座；本阶段把它用于**消费既有 C 库**——以**声明式 binding**（直通 `#include` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`）**零新增语言特性**地对接 C 库，同时**深化方言系统**（多方言并存 + 作者指南）。设计冻结见 [design/phase12.md](design/phase12.md)（D46–D52）。
+- **背景（2026-10-19 用户确认）**：Phase 11 落地 `map` 后，CT 已具备「把 trait 方法绑定到已声明的全局实例」的底座；本阶段把它用于**消费既有 C 库**——以**声明式 binding**（直通 `#include` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`）**零新增语言特性**地对接 C 库，同时**深化方言系统**（多方言并存 + 作者指南）。设计冻结见 [design/phase12.md](history/design/phase12.md)（D46–D52）。
 - **切片**（全部落地）：
   - **12.1 binding 形态 + 首个 binding**：新建顶层 `bindings/**`，首个为**仓库内假 HAL**（`bindings/mock-hal/`，自带假 HAL 头与实现，零外部依赖）。**已落地（2026-10-19）**：`bindings/mock-hal/` 已建（`mock_hal.h` 不透明句柄 + `mock_hal_impl.c` + binding `uart.ct` + 消费方 `demo.ct` + `demo.expected.out`），`check-ast.sh` 新增 bindings 小节（端到端 build → `cc` → 运行 → 比对）。前置缺陷已修：**`map` 的包装函数与 vtable 在 `build`（多文件）模式下从未发射**，导致引用未定义 vtable；现按「声明该 map 的单元」发射（`emit_maps(u)`，compile 模式传 `-1` 保持原行为）。
   - **12.2 binding 规约文档**：`bindings/README.md` 记配方 / 命名 / self-contained 与跨单元限制。**已落地（2026-10-19）**：中英双语，含五步配方、目录与命名（binding 单元名不得与库头同名）、不透明句柄 + 镜像布局的 ABI 契约、跨单元限制、构建与测试命令、新增 binding 检查清单。
-  - **12.3 方言深化**：同一 `.ct` 内多 dialect 块路由演示 + [dialect.md](design/dialect.md) 的作者指南。**已落地（2026-10-19）**：`examples/07_dialect/registry.ct` 同时含 `register/map` 与新增的 `fsm/state` 两个块，新增插件 `ct-dialects/fsm-state.sh`；确立「插件只处理自己的标记、其余逐字节透传」的归属规则，`test/run.sh` 的 `dialect` 层与 `check-ast.sh` 的语料段改为按文件内首次出现顺序**依次**路由全部方言（原实现只取第一个标记）；[dialect.md](design/dialect.md) §4.5 新增作者指南（中英）。
+  - **12.3 方言深化**：同一 `.ct` 内多 dialect 块路由演示 + [dialect.md](history/design/dialect.md) 的作者指南。**已落地（2026-10-19）**：`examples/07_dialect/registry.ct` 同时含 `register/map` 与新增的 `fsm/state` 两个块，新增插件 `ct-dialects/fsm-state.sh`；确立「插件只处理自己的标记、其余逐字节透传」的归属规则，`test/run.sh` 的 `dialect` 层与 `check-ast.sh` 的语料段改为按文件内首次出现顺序**依次**路由全部方言（原实现只取第一个标记）；[dialect.md](history/design/dialect.md) §4.5 新增作者指南（中英）。
   - **12.4 加固与收口**：`check-all.sh` 全绿。**已落地（2026-10-19）**：`CTC_VERSION` 五处同步 bump 到 **v0.12.0**（经用户授权），全量 golden 重生成（仅版本 token 变化），`check-all.sh` 八道硬关卡全绿。
 - **规约前置**：`bindings/**` 需先修订 [AGENTS.md](../AGENTS.md) §2（文件所有权表 + 硬性边界）——binding 只声明外部库符号，**不 vendored、不下载**、**不成为编译器构建步骤**；L0 / L1 / L2 一律不动，新代码只落 ct-ast。
 - **出口**：✅ 达成（2026-10-19）——设计冻结 + 新用例全绿；**收口 bump v0.12.0**（冻结期例外，已获用户授权）。
@@ -912,14 +912,14 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **第三十批（2026-10-31，`.h.ct` 规则）**：仅 ct-ast——普通 `.ct` 不再写 `.h` 且**不可被 `import`**（`import` 只解析 `.h.ct`，命中普通 `.ct` 报 `only a .h.ct unit can be imported: rename 'x.ct' to 'x.h.ct'`），compile 模式同理；实现单元的 `.c` 自包含（`pub` 类型本地发射），缓存命中按 `need_h`。被导入单元统一改名（ct-ast 自身 3 个、bindings 1 个、`test/modules/**` 27 个）。L2 保持附加式（归档 oracle 依赖），登记为已知分叉。
 - **第三十一批（2026-10-31，`__attribute__`）**：GNU `__attribute__((…))` 按「声明尾部透传」接受——函数声明/定义、形参、字段、全局、`typedef` 别名之后，以及 `struct` / `union` / `enum` 定义体之后；整段原文进字符串池并在同一尾部位置重新发射（连续多个组一起捕获），typedef 记录类型统一发射在别名之前。新增 `test/ast/54_attribute` 与两条形状负例（`unterminated __attribute__` / `duplicate __attribute__ on one declaration`），language-spec §4.36；至此 §4 的 C 形式没有已知缺口。
 - **第三十二批（2026-10-31，C 兼容性收尾）**：整数字面量后缀（`U` / `L` / `UL` / `LL` / `ULL`，大小写与顺序不限，十进制 / 十六进制 / 八进制同路径）由词法器收集、解析器校验并规范化为「先 `U` 后 `L`」后存进 `N_NUM.text`，发射时原样带出；非法组合报 `an integer suffix may be U, L or LL`。`static_assert` 作为 `_Static_assert` 的别名接受，生成物统一写 `_Static_assert`。`add_func` 的返回类型改为「先声明者胜」，`_Noreturn void f(void);` 之后的 `void f(void) {}` 不再把它抹掉。`__restrict` / `__restrict__` 进入类型词表。新增 `test/ast/55_c_compat` 与两条后缀负例，language-spec §4.37；`check-ast.sh` 300 passed、`check-warnings.sh` 145 ok、`check-all.sh` 九关全绿。
-- **第三十三批（2026-10-31，真实头文件兼容）**：`_Atomic(type)`（含裸 `_Atomic`）进入类型拼写，`sizeof` / cast 的类型探测也认它；`_Alignas(…)` 可以写在存储类之前（文件与块作用域都接受，发射统一为 `static _Alignas ( 16 ) int g;`）；GNU 属性可以写在声明符之前（全局、函数原型 / 定义、局部变量），局部变量也接受尾部属性。`attr_pool` 从 `ParseOps` 搬到 `SupportOps`（零新增方法，impl 预算 256 恰好到顶）。新诊断：`unterminated _Atomic`、`an attribute must prefix a declaration`、`duplicate _Alignas on one declaration`。新增 `test/ast/56_header_compat` 与四条形状负例，language-spec §4.38；`check-ast.sh` 309 passed、`check-warnings.sh` 146 ok、`check-all.sh` 九关全绿。容量策略同批定为 A（见 [design/next-decisions.md](design/next-decisions.md)）。
+- **第三十三批（2026-10-31，真实头文件兼容）**：`_Atomic(type)`（含裸 `_Atomic`）进入类型拼写，`sizeof` / cast 的类型探测也认它；`_Alignas(…)` 可以写在存储类之前（文件与块作用域都接受，发射统一为 `static _Alignas ( 16 ) int g;`）；GNU 属性可以写在声明符之前（全局、函数原型 / 定义、局部变量），局部变量也接受尾部属性。`attr_pool` 从 `ParseOps` 搬到 `SupportOps`（零新增方法，impl 预算 256 恰好到顶）。新诊断：`unterminated _Atomic`、`an attribute must prefix a declaration`、`duplicate _Alignas on one declaration`。新增 `test/ast/56_header_compat` 与四条形状负例，language-spec §4.38；`check-ast.sh` 309 passed、`check-warnings.sh` 146 ok、`check-all.sh` 九关全绿。容量策略同批定为 A（见 [design/next-decisions.md](history/design/next-decisions.md)）。
 - **第三十四批（2026-10-31，增量构建的依赖闭包）**：修正 L2 `build` 的重编译集合——旧规则是「首个脏单元之前的前缀 + 之后的脏单元」，但依赖优先序并不保证干净依赖都在前缀里；顺序 `A(脏) → B(干净) → C(脏，依赖 A 与 B)` 会跳过 B，C 重新生成时把导入类型写回源名（`struct Cache`），产物无法编译。现在先算 `need = dirty`，再从 `order` 末尾向前把每个 `need` 单元的依赖标为 `need`，发射循环只看 `need`；干净依赖因此可能被重编译，但产物与缓存键逐字节不变。ct-ast 不受影响（它先解析全部单元）。新增 `check-ast.sh` 的两条断言（三单元工程：冷构建解析导入类型、改 A 后重建仍解析且产物零告警）；`check-ast.sh` 311 passed、`check-warnings.sh` 146 ok、`check-all.sh` 九关全绿。L2 属冻结层，按 bug 修复处理，生成物与 `CTC_VERSION` 均未变。
 - **第三十五批（2026-10-31，设计模式覆盖）**：不新增任何语言特性。用现有的 `trait` / `impl`、接口值 / 数组 / 字段、组合、`namespace` / `import`、`map` 与 `own` / `Drop` 写出六个可运行的模式程序（Strategy、Observer、Decorator、Composite、Factory Method、Template Method，见 `test/patterns/**`），由 `check-ast.sh` 新增的「design patterns」一节编译、零告警构建、运行并比对输出；[docs/patterns.md](patterns.md) 给出模式 → 机制的对照、无继承 / 无泛型时的三条替换规则与其余 GoF 模式的落法。继承、泛型、类型检查、完整可见性修饰符保持 §8 的「明确不支持」——这是设计决定，不是待办。`check-ast.sh` 317 passed、`check-warnings.sh` 146 ok、`check-all.sh` 九关全绿；未改编译器、生成物与 `CTC_VERSION`。
 - **第三十六批（2026-10-31，trait 默认方法）**：trait 方法可直接带默认体（`{ … }`；`;` 仍是抽象），impl 只写抽象方法；全 default 的 trait 只写 `use`、不需要 `impl`（外来类型写空 `impl T for S { }`，D-3）。默认体按 (struct, trait) 各展开一份，函数名与 vtable 槽沿用 `<S>_<T>_<m>`，派发沿用既有规则；impl 显式方法覆盖默认体。诊断：默认体成环（没有抽象叶子）报 `trait 'T' has no non-default method to break the cycle`；默认体在某个 struct 上不成立报 `trait T::m (declared at <path>:<line>) cannot be expanded for struct S: <reason>`，指回 trait 声明。新增正例 `test/ast/57_trait_default`（混合 + 覆盖）与 `58_trait_all_default`（仅 `use`），负例 `default_cycle` / `abstract_missing` / `default_bad_field`；language-spec §4.39。同批按用户授权把 `CTC_VERSION` 五处同步 bump 到 **v0.14.0**（L0/L1/L2 只动这一行），`test/cases/**` 50 个 golden 与 21 个含 banner 的 `test/modules/**` golden 重生成（仅版本 token 变化）；`check-ast.sh` 359 passed、`check-warnings.sh` 154 ok、`check-all.sh` 九关全绿。
-- **第三十八批（2026-10-31，已落地）**：`.m.ct` 零成本静态映射——新增编译期映射单元（不产任何 `.c`/`.h`）、静态 trait（无 `_iface`/`_vtable`）、命名空间静态调用 `host::Trait.method(…)` 与类型宿主 `map trait T for type char *`；调用点按 recipe 直接替换成裸 C 调用（`&p` 用 C99 compound literal），prologue 展开进消费者 `.c`，跨单元同样零 wrapper。正例 `test/modules/map_unit`（命名空间 + 类型宿主）、`map_unit_type`（数组 decay / 指针参数 / compound literal / 未用接收者）与 `map_unit_cross`（`.h.ct` 与 `.ct` 共用一份映射）；`check-ast.sh` 增加零产物、内联文本、`cc` 行、`--emit-map` 字段与 25 条负例精确消息断言。既有动态 `map` 产物逐字节不变；同批按用户授权把 `CTC_VERSION` 五处同步 bump 到 **v0.15.0**，`test/cases/**` 与 `test/modules/**` golden 仅版本 token 变化。规格见 [design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md)；附录记录了「C 库全量映射」的分层边界（`.m.ct` → C shim → `.h.ct` → 不支持）。节点池从 65536 抬到 131072（自编实测 69199 节点，属容量而非语言上限）。
+- **第三十八批（2026-10-31，已落地）**：`.m.ct` 零成本静态映射——新增编译期映射单元（不产任何 `.c`/`.h`）、静态 trait（无 `_iface`/`_vtable`）、命名空间静态调用 `host::Trait.method(…)` 与类型宿主 `map trait T for type char *`；调用点按 recipe 直接替换成裸 C 调用（`&p` 用 C99 compound literal），prologue 展开进消费者 `.c`，跨单元同样零 wrapper。正例 `test/modules/map_unit`（命名空间 + 类型宿主）、`map_unit_type`（数组 decay / 指针参数 / compound literal / 未用接收者）与 `map_unit_cross`（`.h.ct` 与 `.ct` 共用一份映射）；`check-ast.sh` 增加零产物、内联文本、`cc` 行、`--emit-map` 字段与 25 条负例精确消息断言。既有动态 `map` 产物逐字节不变；同批按用户授权把 `CTC_VERSION` 五处同步 bump 到 **v0.15.0**，`test/cases/**` 与 `test/modules/**` golden 仅版本 token 变化。规格见 [design/batch38-map-unit/spec.md](history/design/batch38-map-unit/spec.md)；附录记录了「C 库全量映射」的分层边界（`.m.ct` → C shim → `.h.ct` → 不支持）。节点池从 65536 抬到 131072（自编实测 69199 节点，属容量而非语言上限）。
 - **v0.15.1（2026-10-31，用户授权）**：修复 recipe 的 `sizeof` 两处缺陷（空白覆盖 `prev` 导致 `sizeof p` 被计为一次求值、实参副作用丢失与重复求值误报；`sizeof(p)` 的静默错义改为编译期拒绝），并把这两条与「普通单元里的 `for type`」固化为负例；新增 `test/modules/map_unit_chain` 与 warm / touch 断言覆盖传递 `.m.ct` import 及传递依赖缓存；修正 language-spec 的 `MAX_NODES` 文档漂移（65536 → 131072）与第三十八批 checklist。`CTC_VERSION` 五处同步，golden 仅版本 token 变化。
-- **第三十九批（2026-10-31，v0.15.1 之后，未 bump 版本）**：`.m.ct` 的**伴随 C shim**——映射单元可用同目录同名的 `<base>.shim.h` / `<base>.shim.c` 承接 recipe 写不出的形状（宏 / 语句宏、`errno` 等全局量、需要转换的调用、变参前缀转发、无 userdata 回调）。编译器只为 `.m.ct` 探测 shim；消费者的生成 `.c` 自动 `#include "<base>.shim.h"`（整行去重、先于该单元 prologue），`ct build` 的 `cc` 行自动加 `-I <shim 目录>` 并把存在的 `.shim.c` 列为源文件；shim 两文件的 `mtime.size` 折叠进映射单元缓存 key，改动即重建消费者；只有 `.shim.c` 没有 `.shim.h` 报 `a shim source needs a matching .shim.h`。正例 `test/modules/map_unit_shim`（头文件 + 源文件 + 缓存 warm/touch）与 `bindings/posix-socket/`（`socketpair` / `write` / `read` / `errno` 的头文件式 shim，真实库 demo）；`check-warnings.sh` 改为从 `cc` 行提取 `-I` 对并覆盖 `bindings/*/demo.ct`。规格见 [design/batch39-shim-layer/spec.md](design/batch39-shim-layer/spec.md)；`CTC_VERSION` 与既有 golden 均未变。
-- **v0.16.0（2026-11-01，用户授权）**：`borrow` + `Handback`（仅 ct-ast）——`borrow` 作为上下文关键字接入参数注解与语句行首声明，`Handback` 为内建 trait（照 `Drop` 处理，只发 `<S>_Handback_handback`）；声明作用域闭合与**每个** `return` 之前（无位置要求，分支内 / 行内均可）按声明逆序注入 `if (c) { <S>_Handback_handback(c); c = 0; }`（归还，对象仍活着），与 `own` 共用逆序表；借用句柄重新赋值、存入 `static` / 文件作用域更长寿位置、文件作用域 `borrow` 均为编译错误（SH-35 / SH-37 / SH-34），`delete` 借用指针被拒绝。前置修复 SH-33（行首 `return` 前 AutoDrop 不注入、不置空）。正例 `test/ast/61_autodrop_return` / `62_borrow_handback`。规格见 [design/borrow.md](design/borrow.md)。`CTC_VERSION` 五处同步，`test/cases/**` 50 + `test/modules/**` 21 共 71 个 golden 仅版本 token 变化。
+- **第三十九批（2026-10-31，v0.15.1 之后，未 bump 版本）**：`.m.ct` 的**伴随 C shim**——映射单元可用同目录同名的 `<base>.shim.h` / `<base>.shim.c` 承接 recipe 写不出的形状（宏 / 语句宏、`errno` 等全局量、需要转换的调用、变参前缀转发、无 userdata 回调）。编译器只为 `.m.ct` 探测 shim；消费者的生成 `.c` 自动 `#include "<base>.shim.h"`（整行去重、先于该单元 prologue），`ct build` 的 `cc` 行自动加 `-I <shim 目录>` 并把存在的 `.shim.c` 列为源文件；shim 两文件的 `mtime.size` 折叠进映射单元缓存 key，改动即重建消费者；只有 `.shim.c` 没有 `.shim.h` 报 `a shim source needs a matching .shim.h`。正例 `test/modules/map_unit_shim`（头文件 + 源文件 + 缓存 warm/touch）与 `bindings/posix-socket/`（`socketpair` / `write` / `read` / `errno` 的头文件式 shim，真实库 demo）；`check-warnings.sh` 改为从 `cc` 行提取 `-I` 对并覆盖 `bindings/*/demo.ct`。规格见 [design/batch39-shim-layer/spec.md](history/design/batch39-shim-layer/spec.md)；`CTC_VERSION` 与既有 golden 均未变。
+- **v0.16.0（2026-11-01，用户授权）**：`borrow` + `Handback`（仅 ct-ast）——`borrow` 作为上下文关键字接入参数注解与语句行首声明，`Handback` 为内建 trait（照 `Drop` 处理，只发 `<S>_Handback_handback`）；声明作用域闭合与**每个** `return` 之前（无位置要求，分支内 / 行内均可）按声明逆序注入 `if (c) { <S>_Handback_handback(c); c = 0; }`（归还，对象仍活着），与 `own` 共用逆序表；借用句柄重新赋值、存入 `static` / 文件作用域更长寿位置、文件作用域 `borrow` 均为编译错误（SH-35 / SH-37 / SH-34），`delete` 借用指针被拒绝。前置修复 SH-33（行首 `return` 前 AutoDrop 不注入、不置空）。正例 `test/ast/61_autodrop_return` / `62_borrow_handback`。规格见 [design/borrow.md](history/design/borrow.md)。`CTC_VERSION` 五处同步，`test/cases/**` 50 + `test/modules/**` 21 共 71 个 golden 仅版本 token 变化。
 - **v0.16.1（2026-11-01，用户授权）**：收掉同日的代码审查 15 条（SH-34…SH-41、DOC-44…DOC-50）——`borrow` 的语义漏洞修复（文件作用域拒绝、借用句柄不可重赋值 / 不可存 `static` 或全局、`return` 按「真正移交」判定、impl 顺序不再误报、`delete` 只在可赋值实参后置空），跨单元 `Handback` 按建议只文档化不实现；文档与编辑器语法同步（新增 `ct-borrow` / `ct-borrow-param` / 内建 trait 高亮，`check-grammar.py` 31 → 33）。正例 `test/ast/59_typedef_alias_array` / `60_branch_autodrop`，`check-ast.sh` 425 → 432。`CTC_VERSION` 五处同步，golden 仅版本 token 变化。
 - **v0.16.2（2026-11-02，用户授权）**：收掉 2026-11-01 第三方复核的 5 条（SH-42 / SH-44 / DOC-51 / DOC-52；SH-43 维持待决）——`Arena` / `Symbols` / `Parser.g_maps` / `Module.g_units` 四张超大静态表改为堆分配（`ct` 二进制 88M → 637K、`__DATA` 105MB → 589824 B）；`ct.lock` 的包摘要改 SHA-256（`sha256:<64 hex>`），旧 16 位 FNV 摘要报 `unsupported digest`，`test/pkg/run.sh` 37 项断言全绿；教程与 language-spec 的 import 后缀、L2 限域与注释保留说明同步订正。`CTC_VERSION` 五处同步，71 个 golden 仅版本 token 变化。
 - **v0.16.3（2026-11-02，用户授权）**：处置 2026-11-02 复核的 5 条（SH-45 / SH-46 / SH-47 / DOC-53 / DOC-54）——SH-45 修 `return` 的求值顺序：表达式读取仍被 AutoDrop 的对象时，先物化为 `<T> __ct_retN`、再执行出口释放、最后 `return __ct_retN`（此前先释放再读取，返回的是已释放的值），新增 `test/ast/63_own_return_field`（`return b->n;`）与 `64_borrow_return_field`（`return c->fd;`）钉住「读取字段不释放后读」与「`return b;` 仍移交不释放」；SH-47 把字段上限诊断改为点名 struct 与上限（`too many fields in struct 'Big' (limit 64)`），`check-ast.sh` 断言同步（+2）；DOC-53 订正 language-spec §6.1 的重名陈述（方法签名不比对；trait/struct 重名由 ct-ast 报 `duplicate trait/struct`、L0/L2 取最先出现者）；SH-46 **不采纳**「同名跨 trait 的裸调用改为硬报错」，改为在 §4.3 记录「按 `use` 顺序取第一个、顺序即语义」为已知限制（`test/cases/06_name_collision.ct` 已钉死该输出，硬报错会破坏既有 golden 与用户既有代码）；DOC-54 在 language-spec §4.10 补单元种类表（`.ct` / `.h.ct` / `.m.ct` 的产物、可 import、可单独 build）与 import 搜索顺序（先 `.h.ct` 再 `.m.ct`，否则报 `only a .h.ct unit can be imported`），tutorial 同步。`CTC_VERSION` 五处同步，71 个 golden 仅版本 token 变化。
@@ -933,11 +933,11 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | 指针声明的处理 | ✅ 已定：修正生成（`struct Person *p`）并登记为指针，`p->m()` 重写 | 已落地于 Phase 0.1.1 / 0.1.4 |
 | 工具链形态 | ✅ 已定：单入口 `ct`，`ctc` 保留为兼容别名 | 见「已定的设计决策」；**7.1–7.3 已落地**（入口身份 + 安装形态 + banner 改名），调用写法保持兼容 |
 | 包管理器的名字 | ✅ 已定：`ct-pkg`（2026-10-17） | 命令层仍是 `ct get` / `ct install`；registry 与组织名需趁早占位 |
-| 包管理的获取形态 | ✅ 已定（2026-10-18）：git 即 registry + 本地目录源；无 `git` 时 git 源硬报错 | 见 [design/phase8.md](design/phase8.md)（D22 / D26） |
-| 容量上限策略 | ✅ 已定（2026-10-31）：A. 维持「固定上限 + 越界硬报错」；回访触发条件=真实项目 / 官方 binding 撞顶，或自举再次逼近 `MAX_NODES`。触发时先做定点抬高（B），只有「抬到多大都会撞」时才评估动态分配（C） | 见 [design/next-decisions.md](design/next-decisions.md) §1 |
+| 包管理的获取形态 | ✅ 已定（2026-10-18）：git 即 registry + 本地目录源；无 `git` 时 git 源硬报错 | 见 [design/phase8.md](history/design/phase8.md)（D22 / D26） |
+| 容量上限策略 | ✅ 已定（2026-10-31）：A. 维持「固定上限 + 越界硬报错」；回访触发条件=真实项目 / 官方 binding 撞顶，或自举再次逼近 `MAX_NODES`。触发时先做定点抬高（B），只有「抬到多大都会撞」时才评估动态分配（C） | 见 [design/next-decisions.md](history/design/next-decisions.md) §1 |
 | 过渡期是否冻结一切新特性 | ✅ 已定：自举（Phase 1）启动起冻结一切新的 C 侧语言特性，`ctc.c` 只接受 bug 修复（2026-10-14 相位重排） | 防止 Phase 0 历史偏差复发 |
 | C 实现最终删除还是归档 | ✅ 已定（2026-10-14）：「**剥离在前**」——Phase 0.3 先把越位特性移出 `ctc.c` 并**归档为 oracle**（不销毁），Phase 2 起用 CT 逐项重做并向归档对差；`ctc.c` 剥回纯 OO 核心并**永不整体删除** | 见「Phase 0.3」「自举策略与单文件边界」 |
-| 类型检查 / 泛型 / 生成物可读性硬指标 | 仍待定；Phase 5 **明确不引入**（见 [design/phase5.md](design/phase5.md) §8 非目标） | 若引入类型检查，编译器性质改变，需要 AST |
+| 类型检查 / 泛型 / 生成物可读性硬指标 | 仍待定；Phase 5 **明确不引入**（见 [design/phase5.md](history/design/phase5.md) §8 非目标） | 若引入类型检查，编译器性质改变，需要 AST |
 
 ---
 
@@ -964,10 +964,10 @@ as confirmed by the user.
 | 7 | **Toolchain shape**: single-entry `ct` + the `ctc` compatibility alias | landing | ✅ done (2026-10-17; 7.1–7.3 landed, bumped to v0.7.0; `ct get` / `ct install` landed later in Phase 8) | `ct compile` works, `ctc …` keeps working, the banner says `ct` |
 | 8 | **Package management and distribution**: `ct-pkg` (git registry + local directory sources), `ct get` / `ct install` | new | ✅ done (2026-10-18; 8.1–8.3 all landed; bumped to v0.8.0; D21–D27 frozen) | `ct get` / `ct install` work, and the compile path stays network-free |
 | 9 | **AST-based compiler** (the new mainline) | new | ✅ 9.1–9.7 landed (2026-10-18): self-compilation + fixpoint + **whole-corpus behavioural equivalence** (`check-ast.sh`, 60 assertions at close, 408 measured on 2026-10-31 — the script's summary line is authoritative); the old pipeline `selfhost/l2/**` is frozen and archived per D36 (tag `pre-ast-mainline`); **bumped to v0.9.0 and closed** | self-compilation + behavioural equivalence |
-| 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | ✅ 10.1–10.7 all landed (2026-10-19; [design/phase10.md](design/phase10.md), D38–D45 confirmed as proposed): CLI/identity, semantic diagnostics, memory, multi-error recovery, the incremental cache, the package-manager migration and the switch itself; the installed entry comes from ct-ast (tag `pre-ct-ast-switch` marks the state before it), **bumped to v0.10.0 and closed** | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
-| 11 | **The `map` construct**: `map trait T for instance x { m() → CALL; }` (binds a trait's method to a declared global instance) | new | ✅ 11.1–11.3 landed (2026-10-19): parsing + instance-level wrapper/vtable emission + the `maps` field of `--emit-map` + negative cases, 11.2 wires dispatch, 11.3 hardens binding completeness/uniqueness and relaxes the CALL subset (D19 lifted, see [design/phase6.md](design/phase6.md) §6.5); **closed at v0.11.0, then patch-bumped to v0.11.1** | design frozen + new cases green; bumped to v0.11.0, patch-bumped to v0.11.1 |
-| 12 | **Ecosystem extension**: official / sample bindings (first: an in-repo fake HAL) + dialect deepening (multi-dialect coexistence + an authoring guide) | extension | ✅ 12.1–12.4 all landed (2026-10-19, [design/phase12.md](design/phase12.md), D46–D52 confirmed): the first official binding `bindings/mock-hal/` (pass-through `#include` + mirrored `trait`/`struct` + a declared global instance + `map`, **zero new language features**), the binding guidelines `bindings/README.md`, and the multi-dialect coexistence demo + authoring guide; **bumped to v0.12.0 and closed** | design frozen + new cases green; closing bump to v0.12.0 |
-| 17 | **Engineering quality and new capabilities**: CI matrix + ASAN/UBSAN + deterministic fuzz, the official `std` (incl. the `std::map` container), raw passthrough, documentation layering with a link gate, package-manager completion (`ct update` / `ct verify` / index / comparator ranges / `ct.pkg` build metadata), and **one-step `ct build` producing an executable** (`--emit-c` still emits C only) | new + governance | 🟨 in progress (since 2026-11-02; 17.1 CI matrix / ASAN / deterministic fuzz landed, remaining slices pending; `v0.17.0`; [design/phase17.md](design/phase17.md), D17-1–D17-9 confirmed) | 11 hard gates + three CI jobs + nightly green; each of the six items has its own test layer; network-free is unchanged and subprocess-free narrows to `ct compile` / `ct build --emit-c` |
+| 10 | **Mainline switch**: the installed entry moves to the AST compiler (ct-ast) | migration | ✅ 10.1–10.7 all landed (2026-10-19; [design/phase10.md](history/design/phase10.md), D38–D45 confirmed as proposed): CLI/identity, semantic diagnostics, memory, multi-error recovery, the incremental cache, the package-manager migration and the switch itself; the installed entry comes from ct-ast (tag `pre-ct-ast-switch` marks the state before it), **bumped to v0.10.0 and closed** | a `ct` built from ct-ast passes the whole suite; L2 becomes the regression oracle |
+| 11 | **The `map` construct**: `map trait T for instance x { m() → CALL; }` (binds a trait's method to a declared global instance) | new | ✅ 11.1–11.3 landed (2026-10-19): parsing + instance-level wrapper/vtable emission + the `maps` field of `--emit-map` + negative cases, 11.2 wires dispatch, 11.3 hardens binding completeness/uniqueness and relaxes the CALL subset (D19 lifted, see [design/phase6.md](history/design/phase6.md) §6.5); **closed at v0.11.0, then patch-bumped to v0.11.1** | design frozen + new cases green; bumped to v0.11.0, patch-bumped to v0.11.1 |
+| 12 | **Ecosystem extension**: official / sample bindings (first: an in-repo fake HAL) + dialect deepening (multi-dialect coexistence + an authoring guide) | extension | ✅ 12.1–12.4 all landed (2026-10-19, [design/phase12.md](history/design/phase12.md), D46–D52 confirmed): the first official binding `bindings/mock-hal/` (pass-through `#include` + mirrored `trait`/`struct` + a declared global instance + `map`, **zero new language features**), the binding guidelines `bindings/README.md`, and the multi-dialect coexistence demo + authoring guide; **bumped to v0.12.0 and closed** | design frozen + new cases green; closing bump to v0.12.0 |
+| 17 | **Engineering quality and new capabilities**: CI matrix + ASAN/UBSAN + deterministic fuzz, the official `std` (incl. the `std::map` container), raw passthrough, documentation layering with a link gate, package-manager completion (`ct update` / `ct verify` / index / comparator ranges / `ct.pkg` build metadata), and **one-step `ct build` producing an executable** (`--emit-c` still emits C only) | new + governance | 🟨 in progress (since 2026-11-02; 17.1 CI matrix / ASAN / deterministic fuzz and 17.4 docs layering / link gate landed, remaining slices pending; `v0.17.0`; [design/phase17.md](design/phase17.md), D17-1–D17-9 confirmed) | 11 hard gates + three CI jobs + nightly green; each of the six items has its own test layer; network-free is unchanged and subprocess-free narrows to `ct compile` / `ct build --emit-c` |
 | 18 | **Ecosystem build-out**: the ct-pkg organisation, package conventions and the first wave of packages (the `hal` contract + platform packages + C-library mappings + index / CI reuse), preparing 1.0 | ecosystem | ⬜ planned (its design doc is written when Phase 18 opens; Phase 17 only absorbs the overlapping std / index / CI / build-metadata parts) | Wave-1 packages run end to end on host and target; the index and package gates are produced by CI; `1.0.0` is a separate milestone |
 
 > **Numbering note (planned, 2026-11-02)**: `v0.13.0`–`v0.16.3` are recorded below as **capability / fix
@@ -1105,7 +1105,7 @@ Migration checklist (executed from the over-reach phase on; updated 2026-10-17):
 - **Design frozen (2026-10-18)**: D21–D27 are settled (`ct.pkg` manifest / git registry + local
   sources / MVS / `get` + `install` / a new `PkgOps` trait / FNV-1a). Implementation proceeds as 8.1
   (manifest + local sources) → 8.2 (git sources) → 8.3 (`install` verification); see
-  [design/phase8.md](design/phase8.md) §11.
+  [design/phase8.md](history/design/phase8.md) §11.
 - **8.1 landed (2026-10-18)**: `ct get <local-dir>[@<range>]` parses `ct.pkg`, resolves local `dep`
   lines recursively, copies packages into `vendor/<name>/` and writes `ct.lock` in dependency order.
   A new `PkgOps` trait lives in `driver.ct`; no network and no subprocess. `test/pkg/run.sh` is gate 7
@@ -1139,7 +1139,7 @@ Migration checklist (executed from the over-reach phase on; updated 2026-10-17):
   **107 goldens** under `test/cases/**` and `test/modules/**` are regenerated (one version-token line
   each, including the map `compiler` field and `expected.map`). Per D24, `ct remove` / `ct update` /
   `ct publish` remain **deferred by design**, not unfinished work. Known risks are listed in
-  [design/phase8.md](design/phase8.md) §9 (`MAX_UNITS`, licensing/supply chain, the registry name).
+  [design/phase8.md](history/design/phase8.md) §9 (`MAX_UNITS`, licensing/supply chain, the registry name).
 
 #### Naming the package manager (decided: `ct-pkg`)
 
@@ -1388,7 +1388,7 @@ compilation or analysis of its own, so compiler upgrades never require extension
   repository root (`./ctc`), so every `./ctc` reference is unchanged. The reason: the chain already runs
   under `selfhost/**`, and putting all four generations together is more coherent and avoids the `test/`
   split that the one-shot move implied. New features are written in CT from then on
-  (see [design/bootstrap.md](design/bootstrap.md)).
+  (see [design/bootstrap.md](history/design/bootstrap.md)).
 - **Cleanup scope (revised 2026-10-14 to "strip first")**: **first** move the namespace / multi-file /
   import / Drop / `#line` / diagnostics implementations that over-reached into C **out of `ctc.c` and
   into the archive as the oracle** (Phase 0.3), so L0 becomes the **pure-OO core** (+ low-level
@@ -1408,7 +1408,7 @@ compilation or analysis of its own, so compiler upgrades never require extension
   losing history.
 
 The layout, layering rules, build flow and milestones (M1–M6) live in
-[design/bootstrap.md](design/bootstrap.md) (the chain has landed under `selfhost/**`, including the L0
+[design/bootstrap.md](history/design/bootstrap.md) (the chain has landed under `selfhost/**`, including the L0
 seed `selfhost/l0/ctc.c`; the earlier `ctrait/` draft is abandoned).
 
 #### Bootstrap prerequisites (checklist)
@@ -1751,7 +1751,7 @@ below); the exit is **byte-identical** output with L0. Everything else comes aft
 blocker** — the cross-unit trait-carrying object named by the readiness report went out with
 multi-file; the report's remaining expressiveness gaps (interface arrays `die`, boxing at
 construction, the line-rewriting discipline) stay as rules L1's source must follow — see the
-[self-hosting readiness report](../reports/selfhost-readiness/selfhost-readiness.html) and
+[self-hosting readiness report](history/reports/selfhost-readiness/selfhost-readiness.html) and
 "Known constraints" below.
 
 **L1 exit criterion (the go/no-go gate)**: L1 is compiled end to end by the frozen `ctc` (L0) and runs,
@@ -1818,7 +1818,7 @@ and its output is **byte-identical** to the C version's for the same corpus.
    `ctc.c` still accepts bug fixes only.
 
 **The ladder (M1→M2 in this phase; M3–M6 in Phases 2–5)**: L1 is written purely in the OO subset;
-afterwards climb layer by layer per [design/bootstrap.md](design/bootstrap.md), every layer exiting on a
+afterwards climb layer by layer per [design/bootstrap.md](history/design/bootstrap.md), every layer exiting on a
 **byte-identical golden**:
 
 | Layer | Implemented in CT / moved into CT | Phase |
@@ -1922,7 +1922,7 @@ definition**, not patched in passing (this is exactly the relapse point of Phase
 Only after self-hosting (Phase 1) is done. Exit criteria are grouped by **Class** (not by sub-phase):
 Phases 2–4 are **restoration** (archived oracle + frozen goldens; exit = **byte-identical**, no new
 design needed); Phase 5 is **new work** (no oracle to diff against; exit = **design frozen + new cases
-+ `run.sh` green**). The implementation-level design is in [design/restore.md](design/restore.md)
++ `run.sh` green**). The implementation-level design is in [design/restore.md](history/design/restore.md)
 (decisions D1–D8, only D6 open; D7 is decided as "local first"; D8: `map` moves out, see Phase 6 — **lifted on 2026-10-19: Phase 11 lands 11.1 on the ct-ast mainline**).
 
 **Implementation policy — fidelity first (confirmed by the user on 2026-10-16)**: redoing these features
@@ -1940,7 +1940,7 @@ changing the corpus. The diff gate is [selfhost/check-archive.sh](../selfhost/ch
 2. **Phase 3 precedes Phase 5** — AutoDrop depends on Drop, and path-sensitive analysis on scope + Drop.
 3. **Directory = namespace binding depends on Phase 2**, so it can only land in Phase 5.
 
-Alignment with the [bootstrap.md](design/bootstrap.md) ladder: M3 → the first half of Phase 2;
+Alignment with the [bootstrap.md](history/design/bootstrap.md) ladder: M3 → the first half of Phase 2;
 M4 → the second half of Phase 2 + Phase 3; M5 → Phase 4; **M6 (full alignment) closes in Phase 5**.
 
 ### Phase 2 — module system (was 2.1)
@@ -2190,11 +2190,11 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   three boundary conflicts with [AGENTS.md](../AGENTS.md) §2 **were amended in Phase 6.6** (the expander
   stays outside the repository and `ctc` never sees it; inside the repository dialects may ride along
   only as demos / tests under `examples/**` and `test/**`; dialect distribution via the package manager
-  is still out of scope). See [design/dialect.md](design/dialect.md) (design draft, not implemented).
+  is still out of scope). See [design/dialect.md](history/design/dialect.md) (design draft, not implemented).
 - **Build**: incremental compilation cache, cross-function leak analysis, multi-target builds.
 - **Design (2026-10-17, frozen)**: the slice order, the `--emit-map` JSON shape, the cache key, the
   multi-target scope, the `map` / dialect boundaries and the **D15–D20** decisions live in
-  [design/phase6.md](design/phase6.md). Order: reverse map → call graph / cross-function analysis →
+  [design/phase6.md](history/design/phase6.md). Order: reverse map → call graph / cross-function analysis →
   incremental cache → multi-target → `map` (waiting for bindings) → dialect (expander outside the repo).
 - **Slice progress**: **6.1, the reverse mapping table, has landed** (`--emit-map <file|->`, with
   `test/modules/map/` pinning the JSON shape; traits, structs, functions and impl methods — including
@@ -2256,7 +2256,7 @@ budget** for the generated output (max nesting indent, name-length caps, …).
   documentation — it has to be replaced in one go and re-checked.
 
 The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
-[design/bootstrap.md](design/bootstrap.md).
+[design/bootstrap.md](history/design/bootstrap.md).
 
 ### Phase 11 — the `map` construct (new; D19 lifted)
 
@@ -2295,7 +2295,7 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   **consuming existing C libraries** — declarative bindings (pass-through `#include` + mirrored
   `trait` / `struct` + a declared global instance + `map`) connect to C libraries with **zero new
   language features** — and **deepens the dialect system** (multi-dialect coexistence + an authoring
-  guide). The design is frozen in [design/phase12.md](design/phase12.md) (D46–D52).
+  guide). The design is frozen in [design/phase12.md](history/design/phase12.md) (D46–D52).
 - **Slices** (all landed): **12.1** the binding shape plus the first binding (a new top-level
   `bindings/**`, the first for an **in-repo fake HAL** under `bindings/mock-hal/` with its own header
   and implementation and zero external dependencies) — *landed (2026-10-19)*: the directory,
@@ -2310,7 +2310,7 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   new `fsm/state` block and plugin, the "a plugin owns only its own marker, everything else passes
   through byte for byte" rule is established, both `test/run.sh`'s `dialect` layer and
   `check-ast.sh`'s corpus section now route **every** dialect in first-appearance order (they used
-  to take only the first marker), and [dialect.md](design/dialect.md) §4.5 gained the authoring
+  to take only the first marker), and [dialect.md](history/design/dialect.md) §4.5 gained the authoring
   guide; **12.4** hardening and closing — *landed (2026-10-19)*: `check-all.sh` is green,
   `CTC_VERSION` was bumped to **v0.12.0** in lockstep with authorisation and every golden was
   regenerated (version token only).
@@ -2447,7 +2447,7 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   `duplicate _Alignas on one declaration`. Fixture `test/ast/56_header_compat` plus four shape
   negatives; spec §4.38. `check-ast.sh` 309 passed, `check-warnings.sh` 146 ok, `check-all.sh` nine
   gates green. The capacity policy is decided in the same batch (A; see
-  [design/next-decisions.md](design/next-decisions.md)).
+  [design/next-decisions.md](history/design/next-decisions.md)).
 - **Batch 34 (2026-10-31, incremental-build dependency closure)**: L2's `build` used to recompile
   the units before the first dirty one plus the dirty units after it, but dependency-first order
   does not make a clean dependency part of that prefix. With the order `A (dirty) → B (clean) →
@@ -2498,7 +2498,7 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   negative messages. Existing dynamic `map` output is byte-identical; the same batch, with user
   authorisation, moves `CTC_VERSION` in lockstep to **v0.15.0** and the `test/cases/**` /
   `test/modules/**` goldens move by the version token only. See
-  [design/batch38-map-unit/spec.md](design/batch38-map-unit/spec.md); its appendix records the
+  [design/batch38-map-unit/spec.md](history/design/batch38-map-unit/spec.md); its appendix records the
   layering for "mapping every C library" (`.m.ct` → C shim → `.h.ct` → unsupported). The node
   pool grows from 65536 to 131072 (the compiler's own source needs 69199 nodes — a capacity,
   not a language limit).
@@ -2524,7 +2524,7 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   source, with cold / warm / touch assertions) and `bindings/posix-socket/` (a header-only shim over
   `socketpair` / `write` / `read` / `errno`, a real-library demo); `check-warnings.sh` now takes the
   `-I` pairs from the `cc` line and covers `bindings/*/demo.ct`. See
-  [design/batch39-shim-layer/spec.md](design/batch39-shim-layer/spec.md); neither `CTC_VERSION` nor
+  [design/batch39-shim-layer/spec.md](history/design/batch39-shim-layer/spec.md); neither `CTC_VERSION` nor
   any existing golden moved.
 
 **v0.16.0 (2026-11-01, user-authorised)**: `borrow` + `Handback` (ct-ast only) — `borrow` joins
@@ -2537,7 +2537,7 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   a borrowed pointer is rejected. Prerequisite SH-33 fix: AutoDrop now
   destroys before a line-initial `return` and zeroes the pointer. Positives are
   `test/ast/61_autodrop_return` and `test/ast/62_borrow_handback`; the design is in
-  [design/borrow.md](design/borrow.md). `CTC_VERSION` moved in lockstep and the 71 goldens (50 under
+  [design/borrow.md](history/design/borrow.md). `CTC_VERSION` moved in lockstep and the 71 goldens (50 under
   `test/cases/**`, 21 under `test/modules/**`) moved by the version token only.
 
 **v0.16.1 (2026-11-01, user-authorised)**: closes the same-day review's 15 findings (SH-34…SH-41,
@@ -2579,10 +2579,10 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
 The fixed-capacity policy is decided (2026-10-31): **keep fixed caps with a hard error** (A). The
 revisit trigger is a real project or official binding hitting a cap, or self-hosting approaching
 `MAX_NODES` again; when triggered, raise the specific cap (B) first and only evaluate dynamic
-allocation (C) if no cap size would do (see [design/next-decisions.md](design/next-decisions.md) §1).
+allocation (C) if no cap size would do (see [design/next-decisions.md](history/design/next-decisions.md) §1).
 The package manager is named `ct-pkg` (2026-10-17), and its fetch model is
 decided (2026-10-18): git as the registry plus local directory sources, with git sources failing hard
-when `git` is absent (see [design/phase8.md](design/phase8.md), D22/D26). Positional initialisers are
+when `git` is absent (see [design/phase8.md](history/design/phase8.md), D22/D26). Positional initialisers are
 decided (automatic vptr designators, 0.1.2). Pointer declarations are decided too: they are generated
 correctly and pointer variables are registered as pointers so `p->m()` is rewritten (0.1.4). The
 toolchain shape is decided: a single-entry `ct` with `ctc` kept as a compatibility alias. And the
@@ -2595,4 +2595,4 @@ strict version** — `ctc.c` is peeled back to the pure-OO core, the rest of the
 archived once their CT versions pass differential verification, and `ctc.c` itself is never deleted
 outright (see "Bootstrap strategy and the single-file boundary"). Still open: type checking, generics,
 and hard readability budgets for the generated output — Phase 5 **explicitly did not introduce them**
-(see [design/phase5.md](design/phase5.md) §8 non-goals).
+(see [design/phase5.md](history/design/phase5.md) §8 non-goals).

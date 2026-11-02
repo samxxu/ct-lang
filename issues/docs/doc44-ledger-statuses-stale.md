@@ -44,4 +44,4 @@ sh33-autodrop-return-no-inject.md                      已修（2026-11-01）：
 
 ## 关联
 
-- [DOC-31](../docs/doc31-tutorial-c-forms-unsupported.md)…[DOC-43](../docs/doc43-max-nodes-not-a-macro.md)：同批 13 条文档修复，`状态` 字段同样需要回填
+- [DOC-31](doc31-tutorial-c-forms-unsupported.md)…[DOC-43](doc43-max-nodes-not-a-macro.md)：同批 13 条文档修复，`状态` 字段同样需要回填

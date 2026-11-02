@@ -5,7 +5,7 @@
 > **性质：机制说明（描述现状）。** 本文说明「对象的 vptr 由谁、在何时写入」这一套语义，
 > 对应 [roadmap](roadmap.md) 的 0.1.6 / 0.1.7 / 0.1.8（组合 / 数组 / 释放）。
 > 这些语义**已实现**：栈变量、嵌套字段、数组元素与堆对象四种构造形态都写 vptr
-> （堆对象见 3.5 与 [restore](design/restore.md) 的 D1=A）。第 6 节保留决策记录。
+> （堆对象见 3.5 与 [restore](history/design/restore.md) 的 D1=A）。第 6 节保留决策记录。
 >
 > **适用范围**：正文以 **L0**（`selfhost/l0/ctc.c`，`try_var_decl()` 等）为主语，因为这套语义先在
 > 那里定型。ct-ast 实现同一套构造点语义，代码在
@@ -125,7 +125,7 @@ struct Person ps[2];
 #### 3.5 堆对象：`new` / `delete`（0.1.8）
 
 > **本节已演化**：`delete` 落地；**`new` 未引入**，堆对象改由 `T *p = malloc|calloc(...)` 声明识别
-> （[restore](design/restore.md) D1=A，见第 6 节的实现注记）。下面保留原始 `new` 草案作为决策记录。
+> （[restore](history/design/restore.md) D1=A，见第 6 节的实现注记）。下面保留原始 `new` 草案作为决策记录。
 
 ```c
 Person *q = new Person;
@@ -184,7 +184,7 @@ D2 = 只支持无初始化式声明 + 常量下标；**D3 = 不引入 `new`**（
 `malloc` 那条洞）；**D4 = 推迟**（Phase 0 只落地 `delete q;` → `if (q) free(q);`，Drop 版留 Phase 1）；
 **D5 = A**（堆 vptr 落地后仍要求源文件自己 `#include <stdlib.h>`，编译器不插入 include）。
 
-> **堆对象的创建（已落地，[restore](design/restore.md) D1=A）**：`new` 未引入；`T *p = malloc|calloc(...)`（结构体指针）
+> **堆对象的创建（已落地，[restore](history/design/restore.md) D1=A）**：`new` 未引入；`T *p = malloc|calloc(...)`（结构体指针）
 > 被视为堆构造点，声明后自动补写 vptr（含嵌套字段），`delete` 展开为 `if (q) free(q);`。
 > 空白 `malloc` / 未登记形态仍是裸内存，不受影响。见 [language-spec](language-spec.md) §4.7。
 
@@ -234,7 +234,7 @@ D2 = 只支持无初始化式声明 + 常量下标；**D3 = 不引入 `new`**（
 > **Kind: mechanism note (describes current behaviour).** This document explains *who writes an
 > object's vptr and when*, covering [roadmap](roadmap.md) items 0.1.6 / 0.1.7 / 0.1.8. These semantics
 > are **implemented**: stack variables, nested fields, array elements and heap objects all get a
-> vptr (heap objects as described in 3.5 and [restore](design/restore.md) D1=A). §6 keeps the
+> vptr (heap objects as described in 3.5 and [restore](history/design/restore.md) D1=A). §6 keeps the
 > decision record.
 >
 > **Scope**: the body speaks in terms of **L0** (`selfhost/l0/ctc.c`, `try_var_decl()` &c.), because
@@ -297,7 +297,7 @@ Corollaries: (1) **recursive** — constructing `Shop s` includes constructing `
   declarations plus constant subscripts only.
 - **3.5 Heap objects — `new` / `delete` (0.1.8):** *(evolved: `delete` landed, `new` was never
   introduced, and heap objects are recognised from `T *p = malloc|calloc(...)` declarations instead
-  — [restore](design/restore.md) D1=A, see §6. The draft text below is kept as the decision record.)* `Person *q = new Person;` expands to an allocation
+  — [restore](history/design/restore.md) D1=A, see §6. The draft text below is kept as the decision record.)* `Person *q = new Person;` expands to an allocation
   plus a vptr assignment (recursively), and `delete q;` to a minimal `if (q) free(q);`. `new` / `delete`
   are not C keywords, so `word_at()` word boundaries plus shape checks are required. `malloc` / `free`
   need `<stdlib.h>`, which the source file should include itself (see D5).
@@ -333,7 +333,7 @@ D2 = uninitialised declarations plus constant subscripts only; **D3 = do not int
 Phase 1); **D5 = A** (with heap vptrs landed the source file must still include `<stdlib.h>`
 itself; the compiler never inserts includes).
 
-> **Heap-object creation (landed, [restore](design/restore.md) D1=A)**: of the `new` / `delete` pair
+> **Heap-object creation (landed, [restore](history/design/restore.md) D1=A)**: of the `new` / `delete` pair
 > in draft 3.5 only `delete` is kept; `new` was never introduced. A struct-pointer declaration
 > initialised by `malloc` / `calloc` is treated as a heap construction point and gets its vptrs
 > written after the declaration. A bare `malloc` without such a declaration stays raw memory.

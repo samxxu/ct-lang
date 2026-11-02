@@ -48,7 +48,7 @@
 | recipe | `-> memset(s, value, count)` | `->` 右侧的 C 调用模板；绑定参数按出现点替换，`&p` 用 C99 compound literal，未求值参数加 `(void)(…)` 前缀 |
 | prologue | `.m.ct` 里的 `#include` / `#define` | 按整行去重展开进消费者 `.c` 顶部；消费者 `.h` 不含它 |
 | 伴随 C shim（sibling shim） | `posix/socket.shim.h`（+ 可选 `socket.shim.c`） | 与 `<base>.m.ct` 同目录同名的 C 适配层：shim 头自动被消费者 `.c` include、其目录进 `cc` 行的 `-I`，shim 源直接进 `cc` 行；承接宏 / 全局量 / 转换 / 变参 / 回调（第三十九批，仅 ct-ast） |
-| 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](design/dialect.md)） |
+| 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](history/design/dialect.md)） |
 | 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
@@ -155,8 +155,8 @@
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
 | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
-| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 9 个条目 | 任一失败即整体失败；当前九关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings` |
-| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (9 hard gates green)` |
+| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 10 个条目 | 任一失败即整体失败；当前 10 关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、`test/docs/check-docs.py` |
+| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (10 hard gates green)` |
 | 棘轮（ratchet） | `check-archive.sh` 的 PASS / PENDING 四态 | 只允许 PENDING → PASS，不允许 PASS → PENDING |
 | 差分 oracle（differential oracle） | L2 / 归档 golden | 新主线与旧实现逐字节或逐行为对照的基准 |
 | 归档 oracle（archive oracle） | `test/archive/**`、tag `overreach-oracle` | Phase 2–4 恢复期的历史编译器产物，作为对差基准 |
@@ -170,7 +170,7 @@
 | 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`）。例外：`v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` / `v0.16.3` 是 Phase 12 之后的补丁收口（C 子集补齐 / trait 默认方法 / `.m.ct` 静态映射 / 静态映射的 `sizeof` 修复 / `borrow` + `Handback` / borrow 审查修复 / 静态表堆化 + `ct.lock` 改 SHA-256 / `return` 求值顺序 + 字段上限文案 + 文档漂移），不对应新阶段 |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
-| 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](design/restore.md) §6，D9–D14 见 [design/phase5.md](design/phase5.md)，D15–D20 见 [design/phase6.md](design/phase6.md)，D21–D27 见 [design/phase8.md](design/phase8.md)，D28–D37 见 [design/phase9.md](design/phase9.md)，D38–D45 见 [design/phase10.md](design/phase10.md)，D46–D52 见 [design/phase12.md](design/phase12.md) |
+| 设计决策 | D1–D52、D-A | D1–D8 见 [design/restore.md](history/design/restore.md) §6，D9–D14 见 [design/phase5.md](history/design/phase5.md)，D15–D20 见 [design/phase6.md](history/design/phase6.md)，D21–D27 见 [design/phase8.md](history/design/phase8.md)，D28–D37 见 [design/phase9.md](history/design/phase9.md)，D38–D45 见 [design/phase10.md](history/design/phase10.md)，D46–D52 见 [design/phase12.md](history/design/phase12.md) |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 → ct-ast | 用 CT 重写编译器 |
 | AST 版编译器（ct-ast） | `selfhost/ct-ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；纯 CT 的多单元树（`main.ct` 只做绑定与分派），自编并达到全量行为等价 |
 | 行为等价（behavioural equivalence） | D34 | 等价口径 = 退出码 + 产物零警告可编 + **程序输出一致**（不比对生成的 C 文本） |
@@ -179,7 +179,7 @@
 | 吃自己的狗粮（dogfooding） | — | 用 CT 写 CT 工具链 |
 | 非目标（non-goal） | — | 明确不做的事 |
 | 设计债（design debt） | architecture §7 | 已知取舍 |
-| 批次（batch） | 第三十二批、第三十六批… | 一个可独立收口的工作单元；**不是** Phase（Phase 对应版本号，批次可在一个 Phase 后继续累加）。设计档案在 `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
+| 批次（batch） | 第三十二批、第三十六批… | 一个可独立收口的工作单元；**不是** Phase（Phase 对应版本号，批次可在一个 Phase 后继续累加）。设计档案在 `docs/history/design/batchNN-*/{spec,tasks,checklist}.md` |
 | 切片（slice） | 12.1、2a.1、9.5a | 一个批次内的最小可验证步骤；每个切片完成后必须过全量关卡 |
 | 锚点（anchor） | `> 锚点：commit \`f75c32c\`` | 文档撰写时的源码快照；文中行号以该提交为准，代码变更后需复核 |
 | 能力补丁（capability patch） | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 / v0.16.1 / v0.16.2 / v0.16.3 | Phase 12 之后不新开 Phase、只补能力的版本；版本号仍遵循 `v0.MINOR.PATCH` |
@@ -222,7 +222,7 @@
 | mangling ↔ cname | mangling 是**规则**（加 `A_B_` 前缀）；cname 是**结果**（`A_B_S`） |
 | 正例 ↔ 负例 | 正例必须成功且输出匹配；负例必须非零退出且诊断匹配 |
 | golden ↔ oracle | golden 是具体期望产物；oracle 是产出这些期望的**参照实现**（L0 / L2 / `overreach-oracle` tag） |
-| 关卡 ↔ 测试层 | 关卡是 `check-all.sh` 的 9 个条目（整体判据）；层是 `test/run.sh` 内部的分组（build / unit / cases …） |
+| 关卡 ↔ 测试层 | 关卡是 `check-all.sh` 的 10 个条目（整体判据）；层是 `test/run.sh` 内部的分组（build / unit / cases …） |
 | Phase ↔ Batch | Phase 与版本一一对应（`v0.n.x`）；Batch 是可独立收口的工作单元，Phase 结束后仍可继续累加 |
 | 生成物 ↔ 源码 | 生成物（artefact）指 `ct` 输出的 `.c` / `.h` / JSON；banner 与输出例外声明必须保留 |
 | 透传 ↔ 行重写 | 透传：非构造行原样输出；行重写：构造行被替换为等价的 C |
@@ -235,7 +235,7 @@
 | --- | --- | --- |
 | issue 编号 | `SH-` selfhost · `DOC-` 文档 · `TEST-` 测试 · `CI-` 门禁 | 编号用于索引与条目标题，**文件名不带前缀**（如 `ct-ast-pub-global-dropped.md`）；文件放 `issues/<模块>/` |
 | 严重度 | `High` / `Medium` / `Low` / `Info` | High 指对外失真或影响正确性认知；Info 是设计观察 |
-| 设计决策编号 | `D-1` … `D-n` | 每批次一组，**全局不重复**；决策正文写在对应 `docs/design/**` |
+| 设计决策编号 | `D-1` … `D-n` | 每批次一组，**全局不重复**；决策正文写在对应设计记录（`docs/design/**` 为当前阶段，`docs/history/design/**` 为已关闭阶段） |
 | 出口条件（exit） | 关卡全绿 + 用例覆盖 + 文档对称 | 缺一不算收口 |
 | 收口（close） | 打 tag、勾完 checklist、更新 roadmap | tag 名与 `CTC_VERSION` 必须一致（未 bump 的里程碑用非版本 tag） |
 | 验收命令 | `bash selfhost/check-all.sh` | 唯一判定"能不能合"的命令 |
@@ -282,7 +282,7 @@
 | recipe | `-> memset(s, value, count)` | the C call template on the right of `->`; binding parameters are substituted per occurrence, `&p` uses a C99 compound literal, and an unevaluated parameter gets a `(void)(…)` prefix |
 | prologue | the `#include` / `#define` lines in a `.m.ct` | expanded, de-duplicated per whole line, at the top of the consumer `.c`; never in the consumer `.h` |
 | sibling C shim | `posix/socket.shim.h` (plus an optional `socket.shim.c`) | a C adaptation layer named after and sitting beside `<base>.m.ct`: its header is included by every consumer `.c` and its directory joins the `cc` line's `-I`, while its source joins the `cc` line; it carries macros / globals / casts / varargs / callbacks (batch 39, ct-ast only) |
-| dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](design/dialect.md)) |
+| dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](history/design/dialect.md)) |
 | dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
 | vtable | `struct <Trait>_vtbl` | a table of function pointers |
@@ -389,8 +389,8 @@
 | regeneration | `./ctc <case>.ct -o <case>.expected.c` | after an intended behaviour change, regenerate **and review the diff** |
 | grammar smoke test | `python3 editors/vscode/test/check-grammar.py` | checks the editor grammar, **stays out of** run.sh |
 | end-to-end | the examples layer | generate → build → run → compare |
-| hard gate | the 9 entries of `selfhost/check-all.sh` | any failure fails the run; today: `test/run.sh`, `check-goldens`, `check-archive`, `check-m2a`, `ct-tour`, the editor grammar, `test/pkg/run.sh`, `check-ast`, `check-warnings` |
-| aggregate entry | `bash selfhost/check-all.sh` | the only command that runs every gate at once; prints `check-all: OK (9 hard gates green)` |
+| hard gate | the 10 entries of `selfhost/check-all.sh` | any failure fails the run; today's 10 gates: `test/run.sh`, `check-goldens`, `check-archive`, `check-m2a`, `ct-tour`, the editor grammar, `test/pkg/run.sh`, `check-ast`, `check-warnings`, `test/docs/check-docs.py` |
+| aggregate entry | `bash selfhost/check-all.sh` | the only command that runs every gate at once; prints `check-all: OK (10 hard gates green)` |
 | ratchet | the four states of `check-archive.sh` | only PENDING → PASS is allowed, never PASS → PENDING |
 | differential oracle | L2 / the archived goldens | the baseline the new mainline is compared against, byte-for-byte or behaviourally |
 | archive oracle | `test/archive/**`, tag `overreach-oracle` | the historical compiler output from the Phase 2–4 restore, used as the comparison baseline |
@@ -404,7 +404,7 @@
 | phase | 0 / 0.1 / 0.2 / 0.3 (strip the over-reach) / 1 (self-hosting) / 2–5 (restore + add features) / 6 (ecosystem) / 7 (toolchain) / 8 (package management) / 9 (the AST mainline) / 10 (the mainline switch) / 11 (the `map` construct) / 12 (bindings + dialect deepening) | see [roadmap](roadmap.md); numbers map one-to-one onto versions (Phase *n* ↔ `v0.n.x`). Exception: `v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` / `v0.16.3` close patches after Phase 12 (the C-subset work / trait default methods / `.m.ct` static mapping / the static-mapping `sizeof` fix / `borrow` + `Handback` / the borrow review fixes / heap-allocated static tables plus the SHA-256 lock digest / return-order fix, clearer capacity diagnostic and doc drift) and do not start a new phase |
 | sub-phase | 1.0–1.7 + 1.9 (1.8 `map` moved to Phase 6) | the over-reach phase's landing order |
 | exit criteria | each phase's acceptance list | |
-| design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](design/restore.md) §6, D9–D14 in [design/phase5.md](design/phase5.md), D15–D20 in [design/phase6.md](design/phase6.md), D21–D27 in [design/phase8.md](design/phase8.md), D28–D37 in [design/phase9.md](design/phase9.md), D38–D45 in [design/phase10.md](design/phase10.md), D46–D52 in [design/phase12.md](design/phase12.md) |
+| design decisions | D1–D52, D-A | D1–D8 in [design/restore.md](history/design/restore.md) §6, D9–D14 in [design/phase5.md](history/design/phase5.md), D15–D20 in [design/phase6.md](history/design/phase6.md), D21–D27 in [design/phase8.md](history/design/phase8.md), D28–D37 in [design/phase9.md](history/design/phase9.md), D38–D45 in [design/phase10.md](history/design/phase10.md), D46–D52 in [design/phase12.md](history/design/phase12.md) |
 | bootstrap / self-hosting | L0 → L1 → L2 → ct-ast | rewriting the compiler in CT |
 | AST compiler (ct-ast) | `selfhost/ct-ast/main.ct` | the Phase 9 mainline: lexer → recursive descent → AST → emitter; a plain-CT multi-unit tree (`main.ct` only binds and dispatches) that self-compiles and is behaviourally equivalent |
 | behavioural equivalence | D34 | the equivalence rule = exit status + warning-free build + **identical program output** (the generated C text is not compared) |
@@ -413,7 +413,7 @@
 | dogfooding | — | using CT to build CT's own toolchain |
 | non-goal | — | something explicitly out of scope |
 | design debt | architecture §7 | a known trade-off |
-| batch | batch 32, batch 36, … | one unit of work that can close on its own; **not** a phase (a phase maps onto a version, while batches keep accumulating after it). Its design record lives in `docs/design/batchNN-*/{spec,tasks,checklist}.md` |
+| batch | batch 32, batch 36, … | one unit of work that can close on its own; **not** a phase (a phase maps onto a version, while batches keep accumulating after it). Its design record lives in `docs/history/design/batchNN-*/{spec,tasks,checklist}.md` |
 | slice | 12.1, 2a.1, 9.5a | the smallest verifiable step inside a batch; every slice must pass the full gate set before the next starts |
 | anchor | `> anchor: commit \`f75c32c\`` | the source snapshot a document was written against; its line numbers are relative to that commit and need re-checking after it moves |
 | capability patch | v0.13.0 / v0.14.0 / v0.15.0 / v0.15.1 / v0.16.0 / v0.16.1 / v0.16.2 / v0.16.3 | a post-Phase-12 version that adds capability without opening a new phase; the `v0.MINOR.PATCH` scheme still applies |
@@ -456,7 +456,7 @@
 | mangling ↔ cname | mangling is the **rule** (add the `A_B_` prefix); the cname is the **result** (`A_B_S`) |
 | positive ↔ negative case | a positive must succeed and match its output; a negative must exit non-zero and match its diagnostic |
 | golden ↔ oracle | a golden is a concrete expected artefact; an oracle is the **reference implementation** that produced it (L0 / L2 / the `overreach-oracle` tag) |
-| gate ↔ test layer | a gate is one of the 9 entries in `check-all.sh` (the overall verdict); a layer is a group inside `test/run.sh` (build / unit / cases …) |
+| gate ↔ test layer | a gate is one of the 10 entries in `check-all.sh` (the overall verdict); a layer is a group inside `test/run.sh` (build / unit / cases …) |
 | phase ↔ batch | a phase maps one-to-one onto a version (`v0.n.x`); a batch is a work unit that closes on its own and keeps accumulating after the phase ends |
 | artefact ↔ source | an artefact is what `ct` emits (`.c` / `.h` / JSON); the banner and the output-exception notice must stay in it |
 | pass-through ↔ line rewriting | pass-through copies a non-construct line verbatim; line rewriting replaces a construct with equivalent C |
@@ -469,7 +469,7 @@
 | --- | --- | --- |
 | issue id | `SH-` selfhost · `DOC-` docs · `TEST-` testing · `CI-` gates | the id appears in the index and the entry title, **not in the file name** (e.g. `ct-ast-pub-global-dropped.md`); files live under `issues/<module>/` |
 | severity | `High` / `Medium` / `Low` / `Info` | High means the outside world is misled or correctness perception is at stake; Info is a design observation |
-| design-decision id | `D-1` … `D-n` | one sequence per batch, **globally unique**; the text lives in the matching `docs/design/**` |
+| design-decision id | `D-1` … `D-n` | one sequence per batch, **globally unique**; the text lives in the matching record (`docs/design/**` for the current phase, `docs/history/design/**` for closed ones) |
 | exit criteria | every gate green + fixtures cover the change + docs symmetrical | missing one of the three is not a close |
 | close | tag it, tick the checklist, update the roadmap | the tag name must equal `CTC_VERSION` (a milestone that did not bump uses a non-version tag) |
 | acceptance command | `bash selfhost/check-all.sh` | the only command that answers "may this land?" |

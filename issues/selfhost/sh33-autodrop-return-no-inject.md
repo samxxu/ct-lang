@@ -99,5 +99,5 @@ int f(void) {
 
 - 同源形状：SH-28（无花括号分支的 `own` 静默泄漏）——第 1 条的「无花括号 return」与它同根，
   建议一并处理或至少共用同一段注入逻辑。
-- 该缺陷直接决定 [`borrow` / `Handback` 提案](../../docs/design/borrow.md) 能否
+- 该缺陷直接决定 [`borrow` / `Handback` 提案](../../docs/history/design/borrow.md) 能否
   「复用 `own` 的注入基础设施」：`borrow` 若照搬，泄漏的是池槽位（池耗尽是可见故障）。

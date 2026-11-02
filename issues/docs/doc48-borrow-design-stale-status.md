@@ -4,7 +4,7 @@
 | --- | --- |
 | 严重度 | Medium（设计文档现在被读者当作行为依据，矛盾处无法判断哪句算数） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
-| 文件 | [design/borrow.md:5-10](../../docs/design/borrow.md#L5-L10)、[:29-38](../../docs/design/borrow.md#L29-L38)、[:172-181](../../docs/design/borrow.md#L172-L181)、[:357-366](../../docs/design/borrow.md#L357-L366) |
+| 文件 | [design/borrow.md:5-10](../../docs/history/design/borrow.md#L5-L10)、[:29-38](../../docs/history/design/borrow.md#L29-L38)、[:172-181](../../docs/history/design/borrow.md#L172-L181)、[:357-366](../../docs/history/design/borrow.md#L357-L366) |
 | 状态 | 已修（2026-11-01）：`docs/design/borrow.md` 头部状态、§2 前提、§8、§11 决策表（加「状态」列）与 §7 已知限制已同步 |
 
 ## 现象

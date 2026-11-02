@@ -493,7 +493,7 @@ map trait Socket for namespace posix {
 - `examples/**` —— 8 个可运行示例；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知
-- 包管理：`ct get` / `ct install`，清单格式见 [design/phase8.md](design/phase8.md)
+- 包管理：`ct get` / `ct install`，清单格式见 [design/phase8.md](history/design/phase8.md)
 
 ---
 
@@ -988,4 +988,4 @@ comment continuations are all fine there (compare [language-spec §6.2](language
 - `examples/**` — eight runnable demos; `test/cases/**` — a minimal snapshot per feature
 - Editor support: `editors/vscode/` (declarative highlighting, zero dependencies)
 - Dialects: `examples/07_dialect/` turns comment-embedded DSLs into plain CT; the compiler stays unaware
-- Packages: `ct get` / `ct install`, manifest format in [design/phase8.md](design/phase8.md)
+- Packages: `ct get` / `ct install`, manifest format in [design/phase8.md](history/design/phase8.md)

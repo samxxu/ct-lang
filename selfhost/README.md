@@ -19,17 +19,59 @@
 
 **单元命名**：每个单元以它的主类型命名（`Parser.h.ct` ↔ `struct Parser`），一个单元一个主类型，附属记录类型可同文件；主类型过大可拆子对象单元（文件头注明所属主对象），入口 `main.ct` 例外。这条与其它命名约定同在 [AGENTS.md](../AGENTS.md) §3，并由 `check-ast.sh` 的 unit-name lint 校验。
 
-## 脚本（门禁）
+## 脚本（10 道硬门禁）
 
-`check-all.sh` 是聚合入口，依次跑本目录其余脚本；每个脚本的职责、步骤与用法见
-[README §5](../README.md#5-测试)。
+`check-all.sh` 是聚合入口，依次跑下面 10 道硬门禁，任一失败即整体非零：
 
-`check-goldens.sh` · `check-archive.sh` · `check-m2a.sh` · `ct-tour.sh` · `check-ast.sh` · `check-warnings.sh`
-（聚合入口另含 [test/pkg/run.sh](../test/pkg/run.sh) 与
-[editors/vscode/test/check-grammar.py](../editors/vscode/test/check-grammar.py)）。
+| # | 门禁 | 作用 |
+| --- | --- | --- |
+| 1 | `./test/run.sh` | L0 八层套件（见 [test/README.md](../test/README.md)） |
+| 2 | `check-goldens.sh` | L0 → L1 的 golden 逐字节比对、L1′ 自举闭环、L1 拆出 L2 后仍一致 |
+| 3 | `check-archive.sh` | `test/archive/**` 越位特性 fixture 的对差 ratchet |
+| 4 | `check-m2a.sh` | M2-a 单用例验收（L0 → L1 → 01_trait_basic 与 golden 逐字节一致） |
+| 5 | `ct-tour.sh` | 一条龙演示整条自举链 |
+| 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（33 项断言） |
+| 7 | `test/pkg/run.sh` | 包管理器 `ct get` / `ct install` |
+| 8 | `check-ast.sh` | ct-ast 行为、语料等价、不动点、负例、缓存与诊断 |
+| 9 | `check-warnings.sh` | 全部生成 C 在 `-Wall -Wextra` 下零告警 |
+| 10 | `test/docs/check-docs.py` | 文档链接、版本标记、门禁条数与阶段状态（见 [docs/README.md](../docs/README.md)） |
 
 规则：改动 `selfhost/**` 后必须跑 `bash selfhost/check-all.sh`；各层（L0 / L1 / L2 / ct-ast）的冻结
 约定与硬边界见 [AGENTS.md](../AGENTS.md) §2、§6。
+
+### 手工自举（`install.sh` 的等价步骤）
+
+```sh
+gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # L0 种子（唯一的 C 构建，名字是 ctc）
+./ctc selfhost/l1/ctc.ct -o /tmp/ctc-l1.c                       # L0 编出 L1 的 C
+gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1         # 得到 L1
+mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 编出 L2 源
+gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2        # 得到 L2（回归 oracle）
+mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast
+gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$HOME/.local/bin/ct"            # 单入口 ct（ct-ast）
+ln -s ct "$HOME/.local/bin/ctc"                                 # ctc 兼容别名
+```
+
+`install.sh` 做的事与这段相同，外加下载源码归档与路径自适应（`v0.12.0` 及更早的 tag 目录布局不同）。
+
+### 干净 clone 与容器复验
+
+发布前在空目录里重跑全部门禁，确认「仓库自洽」而不是「本机残留产物恰好能跑」：
+
+```bash
+git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
+bash selfhost/check-all.sh         # 期望末行：check-all: OK (10 hard gates green)
+```
+
+干净 clone 不需要预处理：`.gitignore` 只忽略按名字的生成物（`/ctc`、`*.o`、`a.out`、`examples/*/*.c|h`、
+`.ctcache/` 等），门禁自己从 `selfhost/l0/ctc.c` 构建到 `ct-ast`。Linux 容器只需 `gcc`、`git`、`python3`
+与常规 POSIX 工具（`sh`/`bash`、`diff`、`sed`、`awk`、`mktemp`）。两点平台差异属预期：
+
+- **GCC 的警告集更宽**：`-Wall -Wextra` 下 GCC ≥ 8 额外启用 `-Wformat-truncation`，会对冻结层的 `snprintf`
+  报疑似截断（误报）；`check-all.sh` 检测到 GCC 时自动包一层只追加 `-Wno-format-truncation`（与
+  `-Wno-implicit-fallthrough`）的 wrapper，两边语义一致。
+- **两个探针需要 BSD libc**：`cli/short-read` 与 `cli/tmpfile-cannot-create` 在 glibc 上以 `skip` 呈现、
+  不计失败，因此 Linux 下 `./test/run.sh` 的总项数比 macOS 少 2 项。
 
 ---
 
@@ -72,15 +114,59 @@ type per unit, attached record types may share the file, and an object too large
 off sub-object units whose header names the owning object. `main.ct` is the entry, not a unit. The rule
 lives in [AGENTS.md](../AGENTS.md) §3 and is pinned by the unit-name lint in `check-ast.sh`.
 
-### Scripts (the gates)
+### Scripts (10 hard gates)
 
-`check-all.sh` is the aggregate entry and runs the rest of this directory's scripts in order; each
-script's duties, steps and usage are documented in
-[README §5](../README.md#5-tests).
+`check-all.sh` is the aggregate entry and runs the ten hard gates below in order; any failure fails the run:
 
-`check-goldens.sh` · `check-archive.sh` · `check-m2a.sh` · `ct-tour.sh` · `check-ast.sh` · `check-warnings.sh`
-(the aggregate entry additionally runs [test/pkg/run.sh](../test/pkg/run.sh) and
-[editors/vscode/test/check-grammar.py](../editors/vscode/test/check-grammar.py)).
+| # | Gate | Duty |
+| --- | --- | --- |
+| 1 | `./test/run.sh` | the L0 eight-layer suite (see [test/README.md](../test/README.md)) |
+| 2 | `check-goldens.sh` | L0 → L1 golden byte comparison, the L1′ self-hosting loop, and L1's L2 split staying identical |
+| 3 | `check-archive.sh` | the diff ratchet over the `test/archive/**` over-reach fixtures |
+| 4 | `check-m2a.sh` | M2-a acceptance (L0 → L1 → 01_trait_basic byte-identical with the golden) |
+| 5 | `ct-tour.sh` | a single run through the whole bootstrap chain |
+| 6 | `editors/vscode/test/check-grammar.py` | editor highlight grammar (33 assertions) |
+| 7 | `test/pkg/run.sh` | the package manager `ct get` / `ct install` |
+| 8 | `check-ast.sh` | ct-ast behaviour, corpus equivalence, fixpoint, negatives, cache and diagnostics |
+| 9 | `check-warnings.sh` | every generated C compiles warning-free under `-Wall -Wextra` |
+| 10 | `test/docs/check-docs.py` | doc links, version markers, gate count and phase status (see [docs/README.md](../docs/README.md)) |
 
 Rule: after touching `selfhost/**`, run `bash selfhost/check-all.sh`; the per-level (L0 / L1 / L2 /
 ct-ast) freeze conventions and hard boundaries live in [AGENTS.md](../AGENTS.md) §2 and §6.
+
+### Manual bootstrap (the steps `install.sh` performs)
+
+```sh
+gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # L0 seed (the only C build; the binary is ctc)
+./ctc selfhost/l1/ctc.ct -o /tmp/ctc-l1.c                       # L0 writes L1's C
+gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1         # build L1
+mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 writes the L2 sources
+gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2        # build L2 (the regression oracle)
+mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast
+gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$HOME/.local/bin/ct"            # the single entry ct (ct-ast)
+ln -s ct "$HOME/.local/bin/ctc"                                 # the ctc compatibility alias
+```
+
+`install.sh` does the same plus the source download and layout detection (`v0.12.0` and earlier tags used a
+different directory layout).
+
+### Clean clone and container re-check
+
+Before a release, re-run every gate in an empty directory so "the repository is self-contained" is tested,
+not "this machine's leftovers happen to run":
+
+```bash
+git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
+bash selfhost/check-all.sh         # expected last line: check-all: OK (10 hard gates green)
+```
+
+A clean clone needs no preparation: `.gitignore` only drops generated artefacts by name (`/ctc`, `*.o`,
+`a.out`, `examples/*/*.c|h`, `.ctcache/`, …) and the gates build from `selfhost/l0/ctc.c` all the way to
+`ct-ast`. A Linux container needs only `gcc`, `git`, `python3` and the usual POSIX tools (`sh`/`bash`, `diff`,
+`sed`, `awk`, `mktemp`). Two platform differences are expected:
+
+- **GCC has a wider warning set**: under `-Wall -Wextra`, GCC ≥ 8 also enables `-Wformat-truncation` and fires
+  on `snprintf` calls in the frozen layers (false positives); `check-all.sh` detects GCC and wraps it with
+  `-Wno-format-truncation` (plus `-Wno-implicit-fallthrough`) so both platforms mean the same thing.
+- **Two probes need BSD libc**: `cli/short-read` and `cli/tmpfile-cannot-create` show as `skip` on glibc and
+  never fail, so `./test/run.sh` has two fewer items on Linux than on macOS.

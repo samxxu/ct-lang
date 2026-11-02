@@ -43,7 +43,7 @@ $ grep -n "8 hard gates\|九关" issues/README.md
 
 - [硬关卡口径](../README.md#L17) 改为 9 关，并写清九关清单的出处。
 - [状态行](../README.md#L15)、[第二轮汇总](../README.md#L104) 的「待修」改为「已关闭（见文末处置节）」。
-- 本轮审计追加新章节（见 [reports/audit-2026-10-31](../../reports/audit-2026-10-31/audit-2026-10-31.md)）。
+- 本轮审计追加新章节（见 [reports/audit-2026-10-31](../../docs/history/reports/audit-2026-10-31/audit-2026-10-31.md)）。
 
 ## 验证
 
