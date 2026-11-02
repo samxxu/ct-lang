@@ -14,7 +14,7 @@
 [reports/review-2026-11-01](../reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）——各文件行号以其自身锚点为准。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）——各文件行号以其自身锚点为准。
 - 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 8 条（SH-8…SH-12、DOC-19…DOC-21）**已于 2026-10-21 全部关闭**（见文末「处置」节），SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 2026-10-31 审计新增 **18 条**，已于同日处置：**13 条修复**、2 条部分处置（TEST-9 / CI-4）、
   2 条不采纳（TEST-7 / SH-24，理由见文末「处置」节）；DOC-28 复核确认已修复。
@@ -31,6 +31,20 @@
   1 条分发体积（arena 静态数组 → 88MB 二进制）、1 条工具缺口（`ct build` 不代为编译，Info / 待决）、
   1 条包摘要加固（FNV-1a → SHA-256）；**已于同日处置**：4 条修复 + SH-43 维持待决。报告其余条目复验后
   不立案，逐条理由见文末「第三方评估复核（2026-11-01）」一节。
+- 2026-11-02 第二轮第三方评估复核（`v0.16.2`，锚点 `dab1b71`）新增 **4 条**（**SH-45** High、
+  **SH-46** Medium、**DOC-53** Low、**SH-47** Low）：1 条上一轮修复引入的安全回归
+  （`return b->n;` 先释放后求值 → 运行期段错误）、1 条歧义诊断缺口（多 trait 同名方法静默取首个）、
+  1 条 spec 过期陈述（重名 trait/struct「不报错」）、1 条容量文案缺上下文。**已于 2026-11-02 处置**
+  （`v0.16.3`）：SH-45 / SH-47 / DOC-53 修复；SH-46 复核后**不采纳硬报错**，改为在 spec 写明
+  「按 `use` 顺序取第一个」的消解规则（理由见文末处置表）。报告其余条目
+  复验后不立案（签名检查属定位取舍、stdlib / CI / raw 透传 / 文档分层 / 包管理属新能力或治理决策），
+  逐条理由见文末「第三方评估复核（2026-11-02）」一节。
+- 2026-11-02 命名与 import 规则评估复核（`v0.16.2`，锚点 `dab1b71`）新增 **1 条**（**DOC-54** Medium）：
+  教程 §7 的 import 表述漏掉可导入的 `.m.ct`、spec §4.10 缺「单元种类」对照表、命名规则只写在
+  glossary 且未说明「约定 / 强制」；**已于 2026-11-02 修复**（`v0.16.3`，仅文档）。该意见建议的三条
+  import 门禁经实测**已存在**
+  （`check-ast.sh:1262` / `:1497` / `:631`），`ct lint` 与 build 期命名检查不采纳（属编译器行为变更），
+  另订正其「§9.1」引用（实为 §4.10），逐条见 [DOC-54](docs/doc54-unit-kinds-naming-import.md)。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 - 硬关卡计数随阶段演进：6 → 7 → 8 → **9**（`check-warnings.sh` 接入后为九关；构成见 [check-all.sh:72-80](../selfhost/check-all.sh#L72-L80)）。下文各**带日期的验证记录**里出现的「六道 / 七道 / 八道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「9 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
@@ -92,6 +106,8 @@
 | DOC-50 | Low | roadmap 没有 `borrow` / `Handback` 的阶段与版本归属 | [doc50-roadmap-borrow-missing.md](docs/doc50-roadmap-borrow-missing.md) |
 | DOC-51 | **High** | 教程 §7 的跨单元示例把普通 `.ct` 当可 import 单元，照抄必失败 | [doc51-tutorial-impl-unit-import.md](docs/doc51-tutorial-impl-unit-import.md) |
 | DOC-52 | Medium | 教程 §11 与 spec §6.2 的「跨行 / 单行函数体 / 注释续行不重写」在 ct-ast 上均不成立 | [doc52-line-pipeline-scope-stale.md](docs/doc52-line-pipeline-scope-stale.md) |
+| DOC-53 | Low | spec §6.1 仍写「trait / struct 重名不报错、取最先出现者」，ct-ast 实际已报 `duplicate` | [doc53-duplicate-name-claim-stale.md](docs/doc53-duplicate-name-claim-stale.md) |
+| DOC-54 | Medium | 教程 §7 漏写 `.m.ct` 可 import；spec §4.10 缺单元种类表；命名规则未进 spec/tutorial 且未说明是否强制 | [doc54-unit-kinds-naming-import.md](docs/doc54-unit-kinds-naming-import.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -165,8 +181,11 @@
 | SH-40 | Medium | 新增的置空让 `delete <非左值>` 生成非法 C（`get() = 0`） | [sh40-delete-non-lvalue-null.md](selfhost/sh40-delete-non-lvalue-null.md) |
 | SH-41 | Medium | 归还所有权的 `return p;` 被误报为泄漏（L2 不报） | [sh41-return-transfer-false-leak.md](selfhost/sh41-return-transfer-false-leak.md) |
 | SH-42 | Medium | arena 的 `nodes[131072]` / `strpool` 是静态数组，装出的 `ct` 有 88MB（`__DATA` 105MB） | [sh42-arena-static-footprint.md](selfhost/sh42-arena-static-footprint.md) |
-| SH-43 | Info | `ct build` 只发 `.c/.h` 并打印 `cc` 行，不代为编译（工具缺口，待决） | [sh43-build-no-cc.md](selfhost/sh43-build-no-cc.md) |
+| SH-43 | Info | `ct build` 只发 `.c/.h` 并打印 `cc` 行，不代为编译（工具缺口；**已决，纳入 Phase 17 的 17.6**） | [sh43-build-no-cc.md](selfhost/sh43-build-no-cc.md) |
 | SH-44 | Medium | `ct.lock` 的内容摘要用 FNV-1a + 加法折叠，非抗碰撞 | [sh44-pkg-digest-fnv.md](selfhost/sh44-pkg-digest-fnv.md) |
+| SH-45 | **High** | `return <读取 own/borrow 变量>` 在求值前释放并置空，生成物释放后使用（实测 `rc=139`） | [sh45-return-expression-uaf.md](selfhost/sh45-return-expression-uaf.md) |
+| SH-46 | Medium | 多个 `use` 的 trait 有同名方法时静默按 `use` 顺序取首个，无歧义诊断 | [sh46-trait-method-ambiguity.md](selfhost/sh46-trait-method-ambiguity.md) |
+| SH-47 | Low | 第 65 个字段报 `too many fields in a record`，不带 struct 名与上限值 | [sh47-capacity-message-no-struct-name.md](selfhost/sh47-capacity-message-no-struct-name.md) |
 
 ## 汇总
 
@@ -835,7 +854,7 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 | DOC-51 | 已修 | `docs/tutorial.md` §7 中英把 `impl_dog.ct` 改为 `impl_dog.h.ct`，并补「承载 `impl` 的单元要写成 `.h.ct` 才能被 import」；未照抄评估报告关于 `ct build` 拒绝 `.h.ct` 的错误提示 |
 | DOC-52 | 已修 | `docs/tutorial.md` §11 第 2–4 条与 `docs/language-spec.md` §6.2 三处标注「仅 L2」，删除「一行一句是硬要求」，补「ct-ast 不保留源码注释」；中英同改 |
 | SH-42 | 已修 | `Arena` 的 `nodes` / `strpool`、`Symbols` 四张大表、`Parser.g_maps`、`Module.g_units` 改为 `calloc`；`ls -lh ct` **637K**（验收 < 5MB）、`size -m ct` 的 `__DATA` **589824 B**（验收 < 1MB）；`test/ast/**` 生成物零字节变化 |
-| SH-43 | 待决（不实现） | 维持「`ct build` 只发 `.c/.h`、打印 `cc` 行」的现状；不新增 `--emit-build-plan` / `--cc`，能力变更留待维护者决定 |
+| SH-43 | 已决（2026-11-02，纳入 Phase 17 的 17.6） | 改为「默认一步到位」：`ct build` 发射 C 后直接调用 `cc`（`$CC` / `--cc`，可透传 `--cflags` / `--ldflags`）产出可执行文件；`--emit-c` 保留只发 C，仓库内 94 处调用点改用它；不采纳 `--emit-build-plan` |
 | SH-44 | 已修 | `Pkg.h.ct` 改 SHA-256（FIPS 180-4，单流：按路径排序后逐个喂 `相对路径\n` + 内容），lock 写 `sha256:<64 hex>`；旧 16 位 FNV 摘要显式报 `unsupported digest`；`test/pkg/run.sh` 夹具同步并新增「同尺寸篡改」与「旧格式」两个负例（37 断言全绿）。摘要与 Python `hashlib` 参考实现逐字节一致 |
 
 迁移影响：SH-44 使既有 `ct.lock` 失效（需重新 `ct get` 生成）；本轮未 bump `CTC_VERSION`，也未打新 tag。
@@ -845,7 +864,7 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 1. DOC-51 → DOC-52：同一页 §7 / §11，中英同改，改完用报告附录的探针自查；
 2. SH-42（arena 堆化）：唯一动运行时的一步，先量后改，验收以 `ls -lh ct` 与九关为准；
 3. SH-44（摘要换 SHA-256）：涉及 `ct.lock` 兼容（旧 lock 失效需授权），并重生成 `test/pkg` 夹具；
-4. SH-43（`ct build` 能力）：先定「加不加」，再加则同步 README / spec / usage 与门禁。
+4. SH-43（`ct build` 能力）：**已定（2026-11-02）**——默认一步到位产出可执行文件，`--emit-c` 保留只发 C，见 [design/phase17.md](../docs/design/phase17.md) 的 17.6 / D17-9。
 
 ### 不立案与偏差订正
 
@@ -854,3 +873,76 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 - 报告称「`ct build` 会拒绝 `.h.ct` 单元」，实测不成立（`ct build -I <dir> <unit>.h.ct -o <out>` 返回 0）；
   真正被拒的是 **compile 单文件模式**里的 `import`（`error: 'import' is not supported in compile mode`）；
 - 仓库根残留 `demo.o` / `impl_dog.o`（已被 `.gitignore` 挡住，未入库）属信息级整洁问题，不单独立项。
+
+## 第三方评估复核（2026-11-02，`v0.16.2`，锚点 `dab1b71`）
+
+被复核对象是仓库外的第二份独立评估（`ct-v0.16.2-maintainer-review.md`，9 类问题 + 12 条建议 issue）。
+本轮在 `dab1b71` 上复现四层自举并逐条实测；确认为真的按既有格式立项，不可复现、已修或属定位取舍的
+记入「不立案」。报告的环境数据基本吻合（`ct v0.16.2`、九关全绿口径、四层自举可复现）。
+
+### 复验结果
+
+| 报告条目 | 复验 | 处置 |
+| --- | --- | --- |
+| §3.1 P0 trait / impl 签名不校验 | 成立（`ct` exit 0，错配交给 C 编译器）；`language-spec` §6.1 与 `AGENTS.md` 已明写「不做类型检查」，L0 同样不查 | 不立案（定位取舍）；其中两个**子项**成立并立项：多 trait 同名方法无歧义诊断 → **SH-46**；重名 trait/struct「取最先出现」**失实**（见偏差订正 1） → **DOC-53** |
+| §3.2 P0 无标准库 | 成立（无 `ct-std`，示例直接用 libc） | 不立案：6 模块 + 导出面 + 验收小程序属新能力，需单独授权与设计 |
+| §3.3 P1 四条实现的维护税 | 事实成立（L0 种子 / L1 / L2 oracle / ct-ast 均在），文档代际限定确实持续增加 | 不立案：L0 是自举起点、L2 是回归基准，收口属治理决策；「能力矩阵由测试生成」可另议 |
+| §3.4 P1 `own` / `borrow` 健全性 | 报告引用的 3 条 High（SH-34/35/36）**已修**；但复验发现 SH-36 的修法只判「是否移交」，漏了求值顺序：`return b->n;` 先生成释放再读取，实测 `rc=139` | **SH-45**（High，新） |
+| §3.5 P1 验证与 CI 缺口 | 无 workflow = 在册 CI-4（已部分处置为 `make check`）；ct-ast 逐字节 golden = 2026-10-31 已不采纳的 TEST-7；ASAN/UBSAN 与 parser fuzz 确无 | 不立案（已在册 / 已不采纳）；sanitizer + fuzz 属新增验证能力 |
+| §3.6 P1/P2 C 子集重新发射 | 成立（注释整体丢弃已记入 DOC-52，长尾 C 形态持续存在） | 不立案；`//@ct-raw` 透传是语法级新能力，需先定契约与重写边界 |
+| §3.7 P2 模块系统摩擦 | `.h.ct` 后缀与限定调用是既有设计（spec §6.2 / §6.3）；跨命名空间类型位置 = 在册 SH-18 | 不立案（SH-18 已覆盖）；普通 `.ct` 可 `pub` import 属能力变更 |
+| §3.8 P2 文档信息架构 | 体量数据吻合，spec / 教程 / design / roadmap / 台账确有混合 | 不立案：README ≤ 10K、history 目录、doc lint 属重构决策 |
+| §3.9 P3 固定容量与包管理 | 容量触顶诊断成立：第 65 字段只报 `too many fields in a record`，无 struct 名、无上限值 | **SH-47**（Low）；registry / semver 不立案 |
+
+### 新增 4 条
+
+| 类别 | 条目 |
+| --- | --- |
+| 代码（3） | SH-45（**High**）、SH-46（Medium）、SH-47（Low） |
+| 文档（1） | DOC-53（Low） |
+
+### 建议处理顺序
+
+1. **SH-45**：唯一的安全回归。先补 `own_ret_field.ct` / `bw_ret_field.ct` 门禁钉住 `rc=139`，再改
+   `retire_before_return` 的求值顺序（推荐「先求值到临时变量，再释放，再 `return` 临时变量」）；
+2. **SH-46**：跨 trait 同名裸调用报歧义，提供限定调用 / 接口变量消歧，spec §4 / §6.1 同步，3 组门禁；
+3. **DOC-53**：spec §6.1 一句话订正为「ct-ast 报 `duplicate`」，并注明 L2 行为；
+4. **SH-47**：容量文案带上 struct 名与上限值，顺带核对其他「too many …」是否同样缺上下文。
+
+### 不立案与偏差订正
+
+- **签名检查（CT-SEM-01）不立项**：`language-spec` §6.1 与 `AGENTS.md` 明写「不做类型检查、不做签名
+  一致性检查」，L0 亦不查；增加检查会加深四管线分叉（L0/L1/L2 对齐成本），需维护者显式授权后再走
+  提案流程。
+- **新能力 / 治理项不立项**：stdlib（CT-STD-01）、CI 矩阵与 ASAN（CT-CI-01）、ct-ast 精选 golden
+  （CT-TEST-01）、`//@ct-raw`（CT-C-01）、文档分层与 doc lint（CT-DOC-01）、包管理 registry
+  （CT-PKG-01）。其中 CI 的部分由 CI-4 在册，golden 的部分对应已不采纳的 TEST-7。
+- **偏差订正 1（报告失实）**：§3.1 称「trait / struct 重名时取最先出现者，后来者不可达」不成立。
+  `v0.16.2` 实测：
+  ```
+  dup.ct:2:9: error: duplicate trait 'T'
+  dup2.ct:2:10: error: duplicate struct 'S'
+  ```
+  真正过期的是 `language-spec.md:1460-1461` 那句（**DOC-53**），报告照抄了它。
+- **偏差订正 2（新回归）**：§3.4 引用的 3 条 High 已在 v0.16.1 后修复，但 SH-36 的修法（`expr_returns`
+  只判是否移交）没有覆盖「返回表达式读取字段」的求值顺序，导致释放先于求值；**SH-45** 是这次修法的
+  副作用，不是未修。
+- **偏差订正 3（台账计数）**：报告称台账累计 DOC 102 / SH 100 / TEST 23 / CI 6，与仓库不符。
+  按文件计为 **DOC 51 / SH 46 / TEST 13 / CI 4**，最高 ID 在本轮为 **DOC-53 / SH-47**（含已修复与
+  历史条目；历史段落未逐条回填状态）。
+- **偏差订正 4（体积）**：报告 `ct` 637K，本机 `-O1` 构建为 `475K`；差异来自构建参数，不按错误处理。
+  SH-42 修复后两份数据都远低于 5MB 验收线。
+- **SH-43（偏差订正 5）**：报告 §4 把上一轮记的「待决（不实现）」读成「维护者已决事项」。台账维持
+  「待决」，本轮不改状态；若维护者确认「`ct build` 契约冻结」，再把状态回填为「已决」。报告建议的
+  `ct run` / `ct new` 属外围能力，未立项。
+
+## 处置记录（2026-11-02，`v0.16.3`）
+
+| 条目 | 结论 | 落地 |
+| --- | --- | --- |
+| SH-45（High） | 认可，已修 | `return` 表达式读取仍待 AutoDrop 变量时，先求值到 `__ct_retN`，再释放，再返回临时变量；新增 `test/ast/63_own_return_field` / `64_borrow_return_field` 两个正例（含 `return b;` 移交对照） |
+| SH-46（Medium） | **不采纳硬报错**，改为文档化 | 该 issue 的「现有语料里没有同名跨 trait 的裸调用」不成立：`test/cases/06_name_collision.ct` 正是该形态，并用 `expected.out` 钉住「`use Alpha, Beta` → 输出 `alpha n`」。改为在 `language-spec` §4.3 中英写明「按 `use` 顺序取第一个，顺序即语义，属已知限制」，并给出接口变量 / 改名两种消歧手段；硬报错属破坏性语言变更（AGENTS §2 需授权），留待能力批次 |
+| SH-47（Low） | 认可，已修 | 文案改为 `too many fields in struct '<name>' (limit 64)`（pending 无名记录保留 `too many fields in a record (limit 64)`）；行号维持当前字段行，`check-ast.sh` 断言同步。未采用「行号改到 struct 声明行」：`StructDef` 无声明行字段，为文案扩符号行属过度改动 |
+| DOC-53（Low） | 认可，已修 | `language-spec` §6.1 中英订正为「ct-ast 报 `duplicate trait/struct`；L0 / L2 仍取最先出现者」 |
+| DOC-54（Medium） | 认可三项文档缺口，已修；其余不采纳 | 教程 §7 中英改「`.h.ct` 或 `.m.ct`」；spec §4.10 中英加单元种类表 + import 搜索顺序 + 命名规则归属。不采纳 `ct lint` / build 期 basename 检查（编译器行为变更）；不新增 import 门禁（`check-ast.sh:1262` / `:1497` / `:631` 已覆盖） |
+
