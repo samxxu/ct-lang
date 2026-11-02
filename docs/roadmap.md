@@ -82,6 +82,7 @@
 | v0.16.3 | Phase 12 之后的修复补丁（2026-11-02 用户授权 bump，现已由 v0.17.0 接替） | 处置 2026-11-02 复核的 5 条：SH-45 让 `return` 表达式读取的 AutoDrop 对象先物化为临时变量（`<T> __ct_retN = …;`）再执行出口释放，并 `return __ct_retN;`（此前的逆序释放会先释放再读取，读到已释放的值），新增 `test/ast/63_own_return_field` / `64_borrow_return_field` 钉住「读取字段」与「移交指针」两种写法；SH-47 把字段上限诊断改为点名 struct 与上限（`too many fields in struct '<name>' (limit 64)`），`check-ast.sh` 同步断言（+2）；DOC-53 订正 language-spec §6.1 的重名陈述、§4.3 补「同名跨 trait 的裸调用按 `use` 顺序取第一个」（SH-46 不采纳硬报错，`test/cases/06_name_collision.ct` 已钉死该语义）；DOC-54 在 language-spec §4.10 补单元种类表与 import 搜索顺序，tutorial 同步。`CTC_VERSION` 五处同步，71 个 golden 仅版本 token 变化 |
 | v0.17.0 | Phase 17 工程质量与新能力（2026-11-02 用户授权 bump） | 17.1–17.6 全部落地：CI 平台矩阵 + ASAN/UBSAN + 确定性 fuzz（`.github/workflows/{ci,nightly}.yml`、`selfhost/check-sanitizers.sh`、`test/fuzz/run.sh`）；官方 `std`（str / vec / arena / fs / utf8 / test / map 七模块 + `test/std/run.sh`）；`#ct-raw` / `#ct-endraw` 原样透传；文档分层 + `test/docs/check-docs.py`（链接 / 版本 token / 门禁条数 / 阶段状态）；包管理补全（`ct update` / `ct verify`、比较器范围、显式纯文本索引 `CT_INDEX` / `--index`、`ct.pkg` 的 `cflags` / `ldflags` / `requires`，`ct install` 打印一条含 `-I` / `-D` / `-l` 的命令）；`ct build` 默认调用本地 C 编译器产出可执行文件，`--emit-c` 保留只发 C。`test/pkg/run.sh` 58 项、11 道硬门禁全绿；`CTC_VERSION` 五处同步，71 个 golden 仅版本 token 变化，**Phase 17 收口** |
 | v0.18.0 | Phase 18 生态建设（2026-11-02 用户授权 bump） | 18.0–18.6 全部落地：18.0 解除 L2 容量上限（`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`，四张定长表改 `calloc`；L2 二进制 13,403,192 B → 918,712 B、`__DATA` 13,107,200 B → 720,896 B）；18.1 包规范与作者指南 `docs/package-guide.md`；18.3 契约包 `ct-pkg/hal`（`Uart` / `Gpio` / `Clock` / `Log` 四个纯 trait）；18.4 平台包 `ct-pkg/hal-posix`（binding + 四个 `map`，一个 `posix_hal` 实例装箱成四个 trait，`cflags = -D_POSIX_C_SOURCE=200809L`）；18.5 C 映射包 `ct-pkg/clib`（string / stdio / math 的 `.m.ct` 静态映射，`ldflags = -lm`）；18.2 索引仓库 `ct-pkg/index`（五字段纯文本 + 夜间 `refresh-index.sh` 重算摘要并提交）；18.6 仓库内 `examples/wave1-demo` 与 `.github/workflows/packages.yml`（宿主 + Linux aarch64/QEMU 两 job 跑 `ct get` → `ct verify` → `ct install` 打印的命令 → 运行比对）。本地硬门禁仍为 11 道；`CTC_VERSION` 五处同步，`test/cases/**` 50 + `test/modules/**` 21 共 71 个 golden 仅版本 token 变化，**Phase 18 收口**（`v0.18.0` tag 在评审通过后打） |
+| v0.18.1 | Phase 18 之后的修复补丁（2026-11-03 用户授权 bump） | PKG-2：`ct get` 保留本次未重解的 `ct.lock` 行（二次 `ct get` 不再丢上一次的 pin，`ct update` 不再把 `hal-posix` 从 1.0.1 降回 1.0.0、wave1-demo 的 `clock` 不再恒为 0），`test/pkg/run.sh` 71 项；`packages.yml` 加锁断言（恰 3 行 + `hal-posix 1.0.1`）、索引下载 `--retry 3`、触发路径扩到 `selfhost/{l0,l1,l2,ct-ast}/**`；Linux 门禁清零（`39_builtin_types` 补 `<sys/types.h>`、`45_pre_incr` / `map_unit_shim` / `ns_globals` 不再依赖参数求值顺序、`sha_sort` 的 `-Wrestrict` 与 `map_unit_type` 的 `-Wunused-value` 消除）。`CTC_VERSION` 五处同步，71 个 golden 仅版本 token 变化 |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../AGENTS.md) 第 5 节）。
 
@@ -2604,6 +2605,16 @@ nightly by `tools/refresh-index.sh`); and `examples/wave1-demo` plus
 the command `ct install` prints → the demo). The local gate count stays at 11; `CTC_VERSION` moved in
 lockstep and all 71 goldens changed by the version token only — **Phase 18 closed** (the `v0.18.0`
 tag is cut after review).
+
+**v0.18.1 (2026-11-03, user-authorised)**: the follow-up patch after Phase 18. `ct get` now keeps the
+`ct.lock` rows this run did not re-resolve, so a second `ct get` can no longer drop the first
+package's pin (PKG-2: `ct update` fell back to `hal-posix` 1.0.0 and the demo's `clock` stayed 0);
+`test/pkg/run.sh` is at 71 assertions. `packages.yml` asserts the lock (exactly 3 rows plus
+`hal-posix 1.0.1`), retries the index fetch (`--retry 3`), and triggers on
+`selfhost/{l0,l1,l2,ct-ast}/**`. The Linux gates are clean: `39_builtin_types` includes
+`<sys/types.h>`, three fixtures (`45_pre_incr`, `map_unit_shim`, `ns_globals`) no longer rely on
+argument evaluation order, and `sha_sort`'s `-Wrestrict` plus `map_unit_type`'s `-Wunused-value`
+are gone. `CTC_VERSION` moved in lockstep and the 71 goldens changed by the version token only.
 
 ### Open decisions
 
