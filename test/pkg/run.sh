@@ -641,6 +641,12 @@ if ( cd "$work/cproj" && "$work/ct-ast" install >"$work/ci.out" 2>"$work/ci.err"
 else
     bad "conventions install" "non-zero exit: $(cat "$work/ci.err")"
 fi
+# Phase 18.3: a package that carries no `requires` is not a warning case.
+if [ -s "$work/ci.err" ]; then
+    bad "conventions install" "unexpected stderr for a package without requires: $(cat "$work/ci.err")"
+else
+    ok "a package without requires installs silently"
+fi
 # `name` and `version` are the only required keys, and an empty one counts as missing.
 mkdir -p "$work/pkgs/nover" "$work/pkgs/noname"
 printf 'name = nover\n' >"$work/pkgs/nover/ct.pkg"

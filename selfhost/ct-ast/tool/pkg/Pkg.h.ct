@@ -1555,7 +1555,8 @@ static int pkg_check_requires(const char *pkg, const char *req)
         p = p + 2;
     while (*p == ' ' || *p == '\t') p++;
     n = strlen(p);
-    if (n == 0 || n >= sizeof work) {
+    if (n == 0) return 0;
+    if (n >= sizeof work) {
         fprintf(stderr, "ctc: package '%s' has an unsupported requires '%s'\n", pkg, req);
         return 0;
     }
