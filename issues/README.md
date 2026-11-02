@@ -4,17 +4,18 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总八轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
+本目录汇总九轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../docs/history/reports/phase7-review/phase7-review.md)（Phase 7 复审）、
 [reports/phase9-review](../docs/history/reports/phase9-review/phase9-review.md)（Phase 9 复审）、
 [reports/review-2026-10-21](../docs/history/reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
 [reports/review-2026-10-21-round2](../docs/history/reports/review-2026-10-21-round2/review-2026-10-21-round2.md)（第二轮复审）、
 [reports/audit-2026-10-31](../docs/history/reports/audit-2026-10-31/audit-2026-10-31.md)（测试覆盖度与文档一致性审计）与
 [reports/review-2026-10-31](../docs/history/reports/review-2026-10-31/review-2026-10-31.md)（代码审查 + 文档一致性审查）、
-[reports/review-2026-11-01](../docs/history/reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）。
+[reports/review-2026-11-01](../docs/history/reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）、
+[reports/review-2026-11-02](../docs/history/reports/review-2026-11-02/review-2026-11-02.md)（Phase 18 生态建设与 `v0.18.0` 收口审查）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）——各文件行号以其自身锚点为准。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）；Phase 18 审查 `553d300`（2026-11-02，工作树含未提交的 `v0.18.0` bump）——各文件行号以其自身锚点为准。
 - 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 8 条（SH-8…SH-12、DOC-19…DOC-21）**已于 2026-10-21 全部关闭**（见文末「处置」节），SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 2026-10-31 审计新增 **18 条**，已于同日处置：**13 条修复**、2 条部分处置（TEST-9 / CI-4）、
   2 条不采纳（TEST-7 / SH-24，理由见文末「处置」节）；DOC-28 复核确认已修复。
@@ -45,8 +46,15 @@
   import 门禁经实测**已存在**
   （`check-ast.sh:1262` / `:1497` / `:631`），`ct lint` 与 build 期命名检查不采纳（属编译器行为变更），
   另订正其「§9.1」引用（实为 §4.10），逐条见 [DOC-54](docs/doc54-unit-kinds-naming-import.md)。
+- 2026-11-02 Phase 18 生态建设与 `v0.18.0` 收口审查（锚点 `553d300`，工作树含未提交的版本 bump）新增 **6 条**
+  （**DOC-55** Medium、**PKG-1** Medium、**DOC-56** Low、**DOC-57** Low、**CI-5** Low、**SH-48** Info）：
+  1 条作者指南失实（`ct verify` 的依赖覆盖、`ct get` 唯一子进程）、1 条已发布外部包缺陷
+  （`hal-posix` 的 `now_ms` 在开机 24.8 天后回绕为负）、1 条台账门禁计数过期、1 条 `LICENSE` 措辞自相矛盾、
+  1 条包门禁路径过滤缺口、1 条 L2 容量不对称观察。**已全部处置**：DOC-55 / DOC-56 / DOC-57 / CI-5
+  随本轮修复，SH-48 记为容量账本并在 18.0 进展注明，PKG-1 在 `ct-pkg/hal-posix` 内修好（`1.0.1`，
+  tag / 索引待发）；逐条见报告与各 issue 文件。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
-- 硬关卡计数随阶段演进：6 → 7 → 8 → **9**（`check-warnings.sh` 接入后为九关；构成见 [check-all.sh:72-80](../selfhost/check-all.sh#L72-L80)）。下文各**带日期的验证记录**里出现的「六道 / 七道 / 八道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「9 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
+- 硬关卡计数随阶段演进：6 → 7 → 8 → 9 → 10 → **11**（当前共 **11** 道：第 10 道是文档门禁 `test/docs/check-docs.py`，第 11 道是 `test/std/run.sh`；构成以 [check-all.sh](../selfhost/check-all.sh) 的 `run_gate` 行为准）。下文各**带日期的验证记录**里出现的「六道 / 七道 / 八道 / 九道硬关卡」是该记录当时的口径，非现状；现状一律以 `check-all.sh` 的「11 hard gates green」与 [roadmap](../docs/roadmap.md) 为准。
 
 ## 模块索引
 
@@ -108,6 +116,9 @@
 | DOC-52 | Medium | 教程 §11 与 spec §6.2 的「跨行 / 单行函数体 / 注释续行不重写」在 ct-ast 上均不成立 | [doc52-line-pipeline-scope-stale.md](docs/doc52-line-pipeline-scope-stale.md) |
 | DOC-53 | Low | spec §6.1 仍写「trait / struct 重名不报错、取最先出现者」，ct-ast 实际已报 `duplicate` | [doc53-duplicate-name-claim-stale.md](docs/doc53-duplicate-name-claim-stale.md) |
 | DOC-54 | Medium | 教程 §7 漏写 `.m.ct` 可 import；spec §4.10 缺单元种类表；命名规则未进 spec/tutorial 且未说明是否强制 | [doc54-unit-kinds-naming-import.md](docs/doc54-unit-kinds-naming-import.md) |
+| DOC-55 | Medium | 包指南称 `ct verify` 校验依赖覆盖、`ct get` 是唯一子进程调用点，两者均与实现不符 | [doc55-package-guide-verify-claims.md](docs/doc55-package-guide-verify-claims.md) |
+| DOC-56 | Low | `issues/README.md` 自报「现状以它为准」，仍写 `9 hard gates`（实际 11 道） | [doc56-issues-readme-gate-count.md](docs/doc56-issues-readme-gate-count.md) |
+| DOC-57 | Low | 包指南 §1 自相矛盾：`ct.pkg` 标「唯一必填」，`LICENSE` 又标「必填」 | [doc57-package-guide-license-required.md](docs/doc57-package-guide-license-required.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -135,6 +146,7 @@
 | CI-2 | High | 无聚合入口 / 无 CI：不存在一条命令能跑全部门禁 | [no-aggregate-gate-entry.md](ci/no-aggregate-gate-entry.md) |
 | CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
 | CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行 | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
+| CI-5 | Low | `packages.yml` 的 push / PR 路径过滤不覆盖 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**` | [ci-5-packages-workflow-path-filters.md](ci/ci-5-packages-workflow-path-filters.md) |
 
 ### `selfhost/` —— 代码结构与容量
 
@@ -186,6 +198,13 @@
 | SH-45 | **High** | `return <读取 own/borrow 变量>` 在求值前释放并置空，生成物释放后使用（实测 `rc=139`） | [sh45-return-expression-uaf.md](selfhost/sh45-return-expression-uaf.md) |
 | SH-46 | Medium | 多个 `use` 的 trait 有同名方法时静默按 `use` 顺序取首个，无歧义诊断 | [sh46-trait-method-ambiguity.md](selfhost/sh46-trait-method-ambiguity.md) |
 | SH-47 | Low | 第 65 个字段报 `too many fields in a record`，不带 struct 名与上限值 | [sh47-capacity-message-no-struct-name.md](selfhost/sh47-capacity-message-no-struct-name.md) |
+| SH-48 | Info | 18.0 只解除 `MAX_FUNCS` / `MAX_MAP_IMPLS`；L2 的 struct / 字段 / 变量上限仍低于 ct-ast，会先触顶 | [sh48-l2-cap-asymmetry.md](selfhost/sh48-l2-cap-asymmetry.md) |
+
+### `packages/` —— 外部包（`ct-pkg`）
+
+| ID | 严重度 | 标题 | 文件 |
+| --- | --- | --- | --- |
+| PKG-1 | Medium | `hal-posix` 的 `now_ms` 在开机约 24.8 天后回绕为负，违反 `hal` 的单调契约 | [pkg-1-hal-posix-now-ms-overflow.md](packages/pkg-1-hal-posix-now-ms-overflow.md) |
 
 ## 汇总
 
@@ -202,6 +221,9 @@
 
 **Batch 2（2026-10-22）新增 6 条：SH-13…SH-18；其中 5 条已修（SH-13…SH-17），SH-18 按需求规格仅文档化**（见文末一节）。
 **同日复核（锚点 `224c08f`）再新增 5 条：SH-19（High）、SH-20 / SH-21 / SH-22（Medium）、DOC-22（Low）；SH-18 由 Low 升 Medium**（见文末「Batch 2 落地复核」一节）。
+
+**Phase 18 生态建设与 `v0.18.0` 收口审查（2026-11-02，锚点 `553d300`）新增 6 条**：PKG-1 / DOC-55 为 Medium，
+DOC-56 / DOC-57 / CI-5 为 Low，SH-48 为 Info（详见报告与各 issue 文件）。
 
 **测试覆盖度与文档一致性审计（2026-10-31，锚点 `f4c77b1`）新增 18 条**：DOC-23 / DOC-24 / TEST-7 / SH-23 为 High，
 DOC-25…28 / TEST-8…11 / CI-4 为 Medium，DOC-29 / DOC-30 / TEST-12 / TEST-13 为 Low，SH-24 为 Info；

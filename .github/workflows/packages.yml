@@ -11,10 +11,14 @@ on:
   push:
     paths:
       - 'examples/wave1-demo/**'
+      - 'selfhost/ct-ast/tool/pkg/**'
+      - 'test/pkg/**'
       - '.github/workflows/packages.yml'
   pull_request:
     paths:
       - 'examples/wave1-demo/**'
+      - 'selfhost/ct-ast/tool/pkg/**'
+      - 'test/pkg/**'
       - '.github/workflows/packages.yml'
   schedule:
     - cron: '0 19 * * *'   # 03:00 Asia/Shanghai

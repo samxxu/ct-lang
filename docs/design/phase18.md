@@ -1,8 +1,8 @@
-# Phase 18 计划（已确认，实施中）：生态建设
+# Phase 18 计划（已确认，已收口）：生态建设
 
 > 中文 · [English](#english)
 >
-> **状态：实施中（2026-11-02 起；18.0–18.5 已落地；外部仓库 `ct-pkg/{hal,hal-posix,clib,index}` 的推送待组织建仓权限；18.6 收口待做）。**
+> **状态：完成（2026-11-02；18.0–18.6 全部落地，四个外部仓库已推送；`v0.18.0` tag 待评审通过后打）。**
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
 > （`hal` 契约 + 平台包 + C 库映射）、索引与 CI 产出**，为 `1.0.0` 做准备。
 > **D18-1…D18-11 已按建议值经用户确认**（2026-11-02）。本文件只记录计划，不描述现状；
@@ -123,11 +123,12 @@
 
 #### 进展（2026-11-02）
 
+- **18.0 `core.ct` 容量**：`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`，四张定长表改 `calloc`（L2 二进制 13,403,192 B → 918,712 B、`__DATA` 13,107,200 B → 720,896 B）。**只解除函数 / impl 两类上限**：`MAX_STRUCT 64`、`MAX_FIELDS 32`、`MAX_VARS 512` 仍低于 ct-ast（128 / 64 / 4096），按 SH-48 记入容量账本，等实际增长逼近时再抬。
 - **18.3 `hal`**：包内容已定稿——四个纯 `.h.ct` 单元、`ct.pkg`、MIT `LICENSE`、中英 README；本地已验证消费方可声明接口值并编译。
 - **18.4 `hal-posix`**：单单元实现 + 四个 `map`，一个 `posix_hal` 实例可装箱成四个 trait；宿主 macOS arm64 端到端通过（`ct get` → `ct install` → 执行打印的命令 → 固定输出）。glibc 在 `-std=c99` 下会隐藏 POSIX 声明，故 `ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`；目标机（Linux aarch64）由 CI 交叉 + QEMU 验证（本机无交叉工具链）。
 - **18.5 `clib`**：三个 `.m.ct` 单元（`clib::String` / `clib::Stdio` / `clib::Math`），调用点展开为普通 C 调用（生成物中零 `clib_` 符号）；`strlen` 保留 `size_t` 的 `unsigned long` 拼写以避免 `printf` 格式告警；`ldflags = -lm` 已进入 `ct install` 打印的命令。
 - **18.2 索引与 CI**：索引仓库骨架（`index`、`tools/gen-index.sh`、`tools/refresh-index.sh`、`packages.txt`、夜间刷新 workflow）已本地验证——`ct get --index` 可递归解析 `hal-posix → hal`，`ct update` / `ct verify` 绿；本仓库 `packages.yml`（宿主 job + aarch64/QEMU job）已加入，本地门禁仍为 11 道。
-- **待办**：`ct-pkg` 组织的建仓权限尚未就绪（当前 token 无法在该组织创建仓库），四个仓库与 `v1.0.0` tag 的推送因此暂缓；18.6 的收口（文档同步、`CTC_VERSION`、golden、`v0.18.0`）待推送完成后进行。
+- **待办**：`v0.18.0` tag 与推送在代码评审通过后进行（仓库内容已全部落地，评审前不打 tag）。
 
 ### 5. 依赖与顺序
 

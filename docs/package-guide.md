@@ -17,8 +17,8 @@
 
 ```
 hello/
-├── ct.pkg          # 清单（唯一必填文件）
-├── LICENSE         # 许可证（必填，见 §5）
+├── ct.pkg          # 清单（唯一由工具强制的文件）
+├── LICENSE         # 许可证（发布约定必备；工具不校验，见 §5）
 └── hello.h.ct      # 源码单元，可多个
 ```
 
@@ -73,13 +73,16 @@ hello/
 
    ```sh
    ct get <name>@<range>        # 裸名经索引解析；本地目录用 ./path 或 file://
-   ct verify                    # 离线：校验 vendor/ 与 ct.lock 的摘要与依赖覆盖
-   ct install                   # 离线：打印一条可直接执行的 ct build 命令
+   ct verify                    # 离线：校验 vendor/ 与 ct.lock 的摘要
+   ct install                   # 离线：校验摘要与依赖覆盖，打印一条可直接执行的 ct build 命令
    ct update                    # 离线：按 ct.pkg 重解并重写 ct.lock
    ```
 
-   `ct get` 可用 git（唯一的子进程调用点）；`ct update` / `ct verify` / `ct install` 零网络、
-   零子进程。编译器本身（`ct compile` / `ct build --emit-c`）零网络。
+   `ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
+   （缺依赖时报 `dependency '<spec>' is not satisfied by ct.lock`）。
+   `ct get` 可用 git——它是**包管理路径**里唯一的子进程调用点；`ct update` / `ct verify` / `ct install`
+   零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
+   的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
 
 ### 5. 许可证
 
@@ -109,8 +112,8 @@ with no nested subdirectory.
 
 ```
 hello/
-├── ct.pkg          # the manifest (the only required file)
-├── LICENSE         # the licence (required, see §5)
+├── ct.pkg          # the manifest (the only file the tool enforces)
+├── LICENSE         # the licence (required by convention; the tool does not check it, see §5)
 └── hello.h.ct      # a source unit; there may be several
 ```
 
@@ -170,14 +173,18 @@ checked when the index accepts a package and by CI.
 
    ```sh
    ct get <name>@<range>        # a bare name resolves through the index; a local dir is ./path or file://
-   ct verify                    # offline: check vendor/ against ct.lock digests and coverage
-   ct install                   # offline: print one ct build command you can run as is
+   ct verify                    # offline: check vendor/ against the ct.lock digests
+   ct install                   # offline: check digests and dependency coverage, print one ct build command
    ct update                    # offline: re-resolve ct.pkg and rewrite ct.lock
    ```
 
-   `ct get` may use git (the only subprocess call site); `ct update` / `ct verify` / `ct install` are
-   network-free and subprocess-free. The compiler itself (`ct compile` / `ct build --emit-c`) is
-   network-free.
+   `ct verify` checks digests only and **does not read `ct.pkg`**; whether every `dep` in the manifest
+   is covered by `ct.lock` is decided by `ct install` (a missing one reports
+   `dependency '<spec>' is not satisfied by ct.lock`).
+   `ct get` may use git — it is the only subprocess call site on the **package-management path**;
+   `ct update` / `ct verify` / `ct install` are network-free and subprocess-free. On the compiler side
+   `ct compile` / `ct build --emit-c` are network-free and subprocess-free, but the default form of
+   `ct build` spawns `$CC` to link (`--cc` > `$CC` > `cc`).
 
 ### 5. Licensing
 
