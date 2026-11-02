@@ -41,7 +41,7 @@ jobs:
 
       - name: bootstrap ct
         run: |
-          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/astsrc"
+          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/ct/l2src" "$RUNNER_TEMP/astsrc"
           gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$RUNNER_TEMP/ct/ctc"
           "$RUNNER_TEMP/ct/ctc" selfhost/l1/ctc.ct -o "$RUNNER_TEMP/ct/l1.c"
           gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l1.c" -o "$RUNNER_TEMP/ct/l1"
@@ -85,7 +85,7 @@ jobs:
 
       - name: bootstrap ct
         run: |
-          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/astsrc"
+          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/ct/l2src" "$RUNNER_TEMP/astsrc"
           gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$RUNNER_TEMP/ct/ctc"
           "$RUNNER_TEMP/ct/ctc" selfhost/l1/ctc.ct -o "$RUNNER_TEMP/ct/l1.c"
           gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l1.c" -o "$RUNNER_TEMP/ct/l1"
