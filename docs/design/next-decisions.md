@@ -75,6 +75,9 @@ H 的实施顺序建议：`_Atomic(type)`（最小、无新方法）→ `_Aligna
 ## 三、外部事项（不占批次）
 
 - `ct-pkg` 的 GitHub 组织名 / registry 命名空间建议尽早占位（2026-10-17 检索时仍可用，尚未注册）。
+  **2026-11-02 更新**：组织已创建（`github.com/ct-pkg`，与 `PkgOps` 的默认 registry 一致）；包的组织方式与
+  首批清单留在 **Phase 18**，本阶段只承接重叠的 `std` / index / CI / 构建元数据，见
+  [roadmap](../roadmap.md) 的 Phase 18 行。
 
 ## 四、需要你确认的两点
 
