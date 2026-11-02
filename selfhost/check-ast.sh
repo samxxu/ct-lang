@@ -342,7 +342,7 @@ do
     mdir="$work/mirror-$name"
     rm -rf "$mdir"
     mkdir -p "$mdir"
-    if ! "$work/ct-ast" build "$d/prog.ct" -o "$mdir" >"$work/mirror-$name.out" \
+    if ! "$work/ct-ast" build --emit-c "$d/prog.ct" -o "$mdir" >"$work/mirror-$name.out" \
             2>"$work/mirror-$name.err"; then
         bad "mirror/$name" "build failed: $(cat "$work/mirror-$name.err")"
         continue
@@ -372,7 +372,7 @@ echo "== bindings (Phase 12: the fake HAL demo) =="
 bd=bindings/mock-hal
 rm -rf "$work/bind"
 mkdir -p "$work/bind"
-if ! "$work/ct-ast" build "$bd/demo.ct" -o "$work/bind" >"$work/bind.out" 2>"$work/bind.err"; then
+if ! "$work/ct-ast" build --emit-c "$bd/demo.ct" -o "$work/bind" >"$work/bind.out" 2>"$work/bind.err"; then
     bad "bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
 elif ! grep -q "uart1_Controller_vtable" "$work/bind/uart.c"; then
     bad "bindings/mock-hal" "the map vtable was not emitted into the declaring unit"
@@ -460,7 +460,7 @@ echo "== module cases (build -> cc -> run -> compare) =="
 mod="$work/mod"
 rm -rf "$mod-split"
 mkdir -p "$mod-split"
-if "$work/ct-ast" build test/modules/split/main.ct -o "$mod-split" \
+if "$work/ct-ast" build --emit-c test/modules/split/main.ct -o "$mod-split" \
         >"$work/msplit.out" 2>"$work/msplit.err" \
    && [ -f "$mod-split/shapes.h" ] && [ -f "$mod-split/impl_dog.h" ] \
    && [ ! -f "$mod-split/main.h" ] \
@@ -474,7 +474,7 @@ fi
 
 rm -rf "$mod-ns"
 mkdir -p "$mod-ns"
-if "$work/ct-ast" build --ns-root test/modules/ns_dir/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_dir/src \
         test/modules/ns_dir/src/main.ct test/modules/ns_dir/src/plain/extra.h.ct \
         -o "$mod-ns" >"$work/mns.out" 2>"$work/mns.err" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-ns"/*.c -o "$work/mns.bin" 2>"$work/mns.cc" \
@@ -487,7 +487,7 @@ fi
 
 rm -rf "$mod-alias"
 mkdir -p "$mod-alias"
-if "$work/ct-ast" build --ns-root test/modules/alias/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/alias/src \
         test/modules/alias/src/main.ct -o "$mod-alias" \
         >"$work/malias.out" 2>"$work/malias.err" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-alias"/*.c -o "$work/malias.bin" 2>"$work/malias.cc" \
@@ -500,7 +500,7 @@ fi
 
 rm -rf "$work/mod-nsf"
 mkdir -p "$work/mod-nsf"
-if "$work/ct-ast" build --ns-root test/modules/ns_funcs/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_funcs/src \
         test/modules/ns_funcs/src/main.ct -o "$work/mod-nsf" \
         >"$work/mnsf.out" 2>"$work/mnsf.err" \
    && "$CC" -Wall -Wextra -std=c99 "$work/mod-nsf"/*.c -o "$work/mnsf.bin" 2>"$work/mnsf.cc" \
@@ -513,7 +513,7 @@ fi
 
 rm -rf "$work/mod-nsq"
 mkdir -p "$work/mod-nsq"
-if "$work/ct-ast" build --ns-root test/modules/ns_qual/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_qual/src \
         test/modules/ns_qual/src/main.ct -o "$work/mod-nsq" \
         >"$work/mnsq.out" 2>"$work/mnsq.err" \
    && "$CC" -Wall -Wextra -std=c99 "$work/mod-nsq"/*.c -o "$work/mnsq.bin" 2>"$work/mnsq.cc" \
@@ -526,7 +526,7 @@ fi
 
 rm -rf "$mod-inc"
 mkdir -p "$mod-inc"
-if "$work/ct-ast" build test/modules/inc/main.ct -I test/modules/inc/extra \
+if "$work/ct-ast" build --emit-c test/modules/inc/main.ct -I test/modules/inc/extra \
         -o "$mod-inc" >"$work/minc.out" 2>"$work/minc.err" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-inc"/*.c -o "$work/minc.bin" 2>"$work/minc.cc" \
    && "$work/minc.bin" >"$work/minc.stdout" 2>&1 \
@@ -538,7 +538,7 @@ fi
 
 rm -rf "$mod-hdr"
 mkdir -p "$mod-hdr"
-if "$work/ct-ast" build test/modules/hdr/main.h.ct -o "$mod-hdr" \
+if "$work/ct-ast" build --emit-c test/modules/hdr/main.h.ct -o "$mod-hdr" \
         >"$work/mhdr.out" 2>"$work/mhdr.err" \
    && grep -q '^#include <stdio.h>$' "$mod-hdr/main.h" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-hdr"/*.c -o "$work/mhdr.bin" 2>"$work/mhdr.cc" \
@@ -556,7 +556,7 @@ echo "== static map units (batch 38) =="
 # must therefore read like hand-written C -- no wrapper, no interface value.
 rm -rf "$mod-mu"
 mkdir -p "$mod-mu"
-if "$work/ct-ast" build test/modules/map_unit/main.ct -o "$mod-mu" \
+if "$work/ct-ast" build --emit-c test/modules/map_unit/main.ct -o "$mod-mu" \
         >"$work/mmu.out" 2>"$work/mmu.err" \
    && [ ! -f "$mod-mu/libc.c" ] && [ ! -f "$mod-mu/libc.h" ] \
    && grep -qF 'atoi((a))' "$mod-mu/main.c" \
@@ -575,7 +575,7 @@ fi
 
 rm -rf "$mod-mut"
 mkdir -p "$mod-mut"
-if "$work/ct-ast" build test/modules/map_unit_type/main.ct -o "$mod-mut" \
+if "$work/ct-ast" build --emit-c test/modules/map_unit_type/main.ct -o "$mod-mut" \
         >"$work/mmut.out" 2>"$work/mmut.err" \
    && grep -qF 'strtol((a), &(char *){0}, 10)' "$mod-mut/main.c" \
    && grep -qF '((void)(a), strlen(""));' "$mod-mut/main.c" \
@@ -591,7 +591,7 @@ fi
 # wrapper symbol, and the map JSON describes the static shape.
 rm -rf "$mod-muc"
 mkdir -p "$mod-muc"
-if "$work/ct-ast" build --emit-map "$work/mmuc.map" test/modules/map_unit_cross/main.ct \
+if "$work/ct-ast" build --emit-c --emit-map "$work/mmuc.map" test/modules/map_unit_cross/main.ct \
         -o "$mod-muc" >"$work/mmuc.out" 2>"$work/mmuc.err" \
    && [ -f "$mod-muc/main.c" ] && [ -f "$mod-muc/parse.c" ] && [ -f "$mod-muc/parse.h" ] \
    && [ ! -f "$mod-muc/text.c" ] && [ ! -f "$mod-muc/text.h" ] \
@@ -617,7 +617,7 @@ fi
 rm -rf "$work/mmch" "$work/mmchsrc"
 mkdir -p "$work/mmch"
 cp -r test/modules/map_unit_chain "$work/mmchsrc"
-if "$work/ct-ast" build "$work/mmchsrc/main.ct" -o "$work/mmch" \
+if "$work/ct-ast" build --emit-c "$work/mmchsrc/main.ct" -o "$work/mmch" \
         >"$work/mmch.out" 2>"$work/mmch.err" \
    && [ ! -f "$work/mmch/lib.c" ] && [ ! -f "$work/mmch/lib.h" ] \
    && [ ! -f "$work/mmch/base.c" ] && [ ! -f "$work/mmch/base.h" ] \
@@ -635,7 +635,7 @@ fi
 
 stamp() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
 t0=$(stamp "$work/mmch/main.c")
-"$work/ct-ast" build "$work/mmchsrc/main.ct" -o "$work/mmch" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$work/mmchsrc/main.ct" -o "$work/mmch" >/dev/null 2>&1
 if [ "$(stamp "$work/mmch/main.c")" = "$t0" ]; then
     ok "map_unit_chain cache: a warm build reuses the consumer"
 else
@@ -643,7 +643,7 @@ else
 fi
 sleep 1
 touch "$work/mmchsrc/lib/base.m.ct"
-"$work/ct-ast" build "$work/mmchsrc/main.ct" -o "$work/mmch" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$work/mmchsrc/main.ct" -o "$work/mmch" >/dev/null 2>&1
 if [ "$(stamp "$work/mmch/main.c")" != "$t0" ]; then
     ok "map_unit_chain cache: a transitive .m.ct change rebuilds the consumer"
 else
@@ -656,7 +656,7 @@ rm -rf "$work/mso"
 mkdir -p "$work/mso/lib" "$work/mso/out"
 printf '#include <stdlib.h>\nnamespace lib;\npub trait T { int sz(); }\nmap trait T for type char * { sz(s) -> pair(sizeof s, 0); }\npub trait U { int twice(); }\nmap trait U for type char * { twice(s) -> pair(sizeof s, sizeof s); }\n' >"$work/mso/lib/lib.m.ct"
 printf 'import lib::lib;\n#include <stdio.h>\nstatic int hits;\nint pair(int a, int b) { return a + b; }\nchar *side(void) { hits++; return "x"; }\nint main(void)\n{\n    int n = side().sz();\n    int m = side().twice();\n    (void)n;\n    (void)m;\n    printf("%%d\\n", hits);\n    return 0;\n}\n' >"$work/mso/main.ct"
-if "$work/ct-ast" build "$work/mso/main.ct" -o "$work/mso/out" \
+if "$work/ct-ast" build --emit-c "$work/mso/main.ct" -o "$work/mso/out" \
         >"$work/mso.out" 2>"$work/mso.err" \
    && grep -qF 'sizeof(char *)' "$work/mso/out/main.c" \
    && grep -qF 'sizeof(char *), sizeof(char *)' "$work/mso/out/main.c" \
@@ -676,7 +676,7 @@ fi
 rm -rf "$work/mmsh" "$work/mmshsrc"
 mkdir -p "$work/mmsh"
 cp -r test/modules/map_unit_shim "$work/mmshsrc"
-if "$work/ct-ast" build "$work/mmshsrc/main.ct" -o "$work/mmsh" \
+if "$work/ct-ast" build --emit-c "$work/mmshsrc/main.ct" -o "$work/mmsh" \
         >"$work/mmsh.out" 2>"$work/mmsh.err" \
    && [ ! -f "$work/mmsh/lib.c" ] && [ ! -f "$work/mmsh/lib.h" ] \
    && grep -qF '#include "lib.shim.h"' "$work/mmsh/main.c" \
@@ -692,7 +692,7 @@ else
 fi
 
 t0=$(stamp "$work/mmsh/main.c")
-"$work/ct-ast" build "$work/mmshsrc/main.ct" -o "$work/mmsh" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$work/mmshsrc/main.ct" -o "$work/mmsh" >/dev/null 2>&1
 if [ "$(stamp "$work/mmsh/main.c")" = "$t0" ]; then
     ok "map_unit_shim cache: a warm build reuses the consumer"
 else
@@ -700,7 +700,7 @@ else
 fi
 sleep 1
 touch "$work/mmshsrc/lib/lib.shim.h"
-"$work/ct-ast" build "$work/mmshsrc/main.ct" -o "$work/mmsh" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$work/mmshsrc/main.ct" -o "$work/mmsh" >/dev/null 2>&1
 if [ "$(stamp "$work/mmsh/main.c")" != "$t0" ]; then
     ok "map_unit_shim cache: a shim change rebuilds the consumer"
 else
@@ -711,11 +711,11 @@ fi
 # a packager) can carry the two C files; a map without one keeps the old shape.
 rm -rf "$work/mmshmap" "$work/mnumap"
 mkdir -p "$work/mmshmap" "$work/mnumap"
-if "$work/ct-ast" build --emit-map "$work/mmshmap/main.map" "$work/mmshsrc/main.ct" \
+if "$work/ct-ast" build --emit-c --emit-map "$work/mmshmap/main.map" "$work/mmshsrc/main.ct" \
         -o "$work/mmshmap" >"$work/mmshmap.out" 2>"$work/mmshmap.err" \
    && grep -qF "\"shim\":{\"header\":\"$work/mmshsrc/lib/lib.shim.h\"" "$work/mmshmap/main.map" \
    && grep -qF "\"source\":\"$work/mmshsrc/lib/lib.shim.c\"" "$work/mmshmap/main.map" \
-   && "$work/ct-ast" build --emit-map "$work/mnumap/main.map" test/modules/map_unit/main.ct \
+   && "$work/ct-ast" build --emit-c --emit-map "$work/mnumap/main.map" test/modules/map_unit/main.ct \
         -o "$work/mnumap" >/dev/null 2>&1 \
    && ! grep -qF '"shim"' "$work/mnumap/main.map"; then
     ok "map_unit_shim (--emit-map names the shim files; a plain map says nothing)"
@@ -731,7 +731,7 @@ printf 'namespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib 
     >"$work/mbsc/lib/lib.m.ct"
 printf 'int ct_x(void) { return 1; }\n' >"$work/mbsc/lib/lib.shim.c"
 printf 'import lib::lib;\n\nint main(void) { return lib::T.m(); }\n' >"$work/mbsc/main.ct"
-if "$work/ct-ast" build "$work/mbsc/main.ct" -o "$work/mbsc/out" \
+if "$work/ct-ast" build --emit-c "$work/mbsc/main.ct" -o "$work/mbsc/out" \
         >"$work/mbsc.out" 2>"$work/mbsc.err"; then
     bad "batch 39: shim_source_without_header" "expected a non-zero exit"
 elif grep -qF 'a shim source needs a matching .shim.h' "$work/mbsc.err" \
@@ -749,7 +749,7 @@ printf 'namespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib 
     >"$work/mbsd/lib/lib.m.ct"
 mkdir "$work/mbsd/lib/lib.shim.h"
 printf 'import lib::lib;\n\nint main(void) { return lib::T.m(); }\n' >"$work/mbsd/main.ct"
-if "$work/ct-ast" build "$work/mbsd/main.ct" -o "$work/mbsd/out" \
+if "$work/ct-ast" build --emit-c "$work/mbsd/main.ct" -o "$work/mbsd/out" \
         >/dev/null 2>"$work/mbsd.err"; then
     bad "batch 39: shim_header_not_a_file" "expected a non-zero exit"
 elif grep -qF 'a shim header is not a readable file' "$work/mbsd.err"; then
@@ -770,7 +770,7 @@ printf 'namespace b;\npub trait TB { int m(); }\nmap trait TB for namespace b { 
 printf 'static inline int ct_b_x(void) { return 2; }\n' >"$work/mdup/b/lib.shim.h"
 printf 'import a::lib;\nimport b::lib;\n\nint main(void) { return a::TA.m() + b::TB.m(); }\n' \
     >"$work/mdup/main.ct"
-if "$work/ct-ast" build "$work/mdup/main.ct" -o "$work/mdup/out" \
+if "$work/ct-ast" build --emit-c "$work/mdup/main.ct" -o "$work/mdup/out" \
         >/dev/null 2>"$work/mdup.err"; then
     bad "batch 39: shim_base_ambiguous" "expected a non-zero exit"
 elif grep -qF "shim base name 'lib' is ambiguous" "$work/mdup.err" \
@@ -785,7 +785,7 @@ fi
 # out-parameter and the `errno` accessor. Header-only, so no `.shim.c` is listed.
 rm -rf "$work/mpsock"
 mkdir -p "$work/mpsock"
-if "$work/ct-ast" build bindings/posix-socket/demo.ct -o "$work/mpsock" \
+if "$work/ct-ast" build --emit-c bindings/posix-socket/demo.ct -o "$work/mpsock" \
         >"$work/mpsock.out" 2>"$work/mpsock.err" \
    && grep -qF '#include "socket.shim.h"' "$work/mpsock/demo.c" \
    && grep -qF -- '-I bindings/posix-socket/posix' "$work/mpsock.out" \
@@ -803,7 +803,7 @@ echo
 echo "== header prologue (build mode copies the source's #include lines) =="
 rm -rf "$mod-pro"
 mkdir -p "$mod-pro"
-if "$work/ct-ast" build test/modules/hdr_prologue/main.h.ct -o "$mod-pro" \
+if "$work/ct-ast" build --emit-c test/modules/hdr_prologue/main.h.ct -o "$mod-pro" \
         >"$work/mpro.out" 2>"$work/mpro.err" \
    && grep -q '^#include <stdio.h>$' "$mod-pro/main.h" \
    && ! grep -q 'PROLOGUE_MACRO' "$mod-pro/main.h" \
@@ -821,7 +821,7 @@ echo "== cross-unit linking (Batch 2) =="
 # header, so an importing unit sees the same object instead of a private copy.
 rm -rf "$mod-pg"
 mkdir -p "$mod-pg"
-if "$work/ct-ast" build test/modules/pub_global/main.ct -o "$mod-pg" \
+if "$work/ct-ast" build --emit-c test/modules/pub_global/main.ct -o "$mod-pg" \
         >"$work/mpg.out" 2>"$work/mpg.err" \
    && grep -q '^extern int g_counter;$' "$mod-pg/count.h" \
    && grep -q '^int g_counter = 5;$' "$mod-pg/count.c" \
@@ -839,7 +839,7 @@ fi
 # still produce a single `#include`.
 rm -rf "$mod-xb"
 mkdir -p "$mod-xb"
-if "$work/ct-ast" build test/modules/xunit_box/main.ct -o "$mod-xb" \
+if "$work/ct-ast" build --emit-c test/modules/xunit_box/main.ct -o "$mod-xb" \
         >"$work/mxb.out" 2>"$work/mxb.err" \
    && grep -q '^extern struct Stream_vtbl Conn_Stream_vtable;$' "$mod-xb/net.h" \
    && grep -q '^struct Stream_vtbl Conn_Stream_vtable = {$' "$mod-xb/net.c" \
@@ -856,7 +856,7 @@ fi
 # header and defines nothing, so a hand-written C file can supply the object.
 rm -rf "$mod-ex"
 mkdir -p "$mod-ex"
-if "$work/ct-ast" build test/modules/extern_decl/main.ct -o "$mod-ex" \
+if "$work/ct-ast" build --emit-c test/modules/extern_decl/main.ct -o "$mod-ex" \
         >"$work/mex.out" 2>"$work/mex.err" \
    && grep -q '^extern int lib_flag;$' "$mod-ex/lib.h" \
    && ! grep -Eq '^int lib_flag[ ;=]' "$mod-ex/lib.c" \
@@ -876,7 +876,7 @@ fi
 # mangled together.
 rm -rf "$mod-mn"
 mkdir -p "$mod-mn"
-if "$work/ct-ast" build test/modules/map_ns/main.ct -o "$mod-mn" \
+if "$work/ct-ast" build --emit-c test/modules/map_ns/main.ct -o "$mod-mn" \
         >"$work/mmn.out" 2>"$work/mmn.err" \
    && grep -q 'hal_uart1_hal_Writer_vtable' "$mod-mn/uart.c" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-mn"/*.c -o "$work/mmn.bin" 2>"$work/mmn.cc" \
@@ -892,7 +892,7 @@ fi
 # NULL through `Trait::ns` (it declares no instance).
 rm -rf "$mod-nh"
 mkdir -p "$mod-nh"
-if "$work/ct-ast" build test/modules/ns_host/main.ct -o "$mod-nh" \
+if "$work/ct-ast" build --emit-c test/modules/ns_host/main.ct -o "$mod-nh" \
         >"$work/mnh4.out" 2>"$work/mnh4.err" \
    && grep -q '^extern struct hal_Writer_vtbl hal_Writer_vtable;$' "$mod-nh/writer.h" \
    && grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' "$mod-nh/writer.c" \
@@ -910,7 +910,7 @@ fi
 # The consumer reads and writes both through the qualified form.
 rm -rf "$mod-ng"
 mkdir -p "$mod-ng"
-if "$work/ct-ast" build test/modules/ns_globals/main.ct -o "$mod-ng" \
+if "$work/ct-ast" build --emit-c test/modules/ns_globals/main.ct -o "$mod-ng" \
         >"$work/mng.out" 2>"$work/mng.err" \
    && grep -q '^extern int a_h;$' "$mod-ng/one.h" \
    && grep -q '^extern int b_h;$' "$mod-ng/two.h" \
@@ -926,7 +926,7 @@ fi
 
 # Two imports exporting one source name: a bare reference is refused, and the
 # diagnostic asks for the qualified form.
-if "$work/ct-ast" build test/modules/ambig_global/main.ct -o "$work/mod-bad" \
+if "$work/ct-ast" build --emit-c test/modules/ambig_global/main.ct -o "$work/mod-bad" \
         >"$work/mag.out" 2>"$work/mag.err"; then
     bad "ambig_global" "expected a non-zero exit"
 elif grep -q "variable 'h' is exported by more than one namespace" "$work/mag.err"; then
@@ -940,7 +940,7 @@ fi
 # `Writer` becomes `struct hal_Writer_iface`.
 rm -rf "$mod-nt"
 mkdir -p "$mod-nt"
-if "$work/ct-ast" build test/modules/ns_types/main.ct -o "$mod-nt" \
+if "$work/ct-ast" build --emit-c test/modules/ns_types/main.ct -o "$mod-nt" \
         >"$work/mnt.out" 2>"$work/mnt.err" \
    && grep -q 'struct hal_Uart u' "$mod-nt/main.c" \
    && grep -q 'struct hal_Writer_iface w;' "$mod-nt/main.c" \
@@ -957,7 +957,7 @@ fi
 # `app::High` (qualified member), and the compiler emits the owner's C names.
 rm -rf "$mod-ne"
 mkdir -p "$mod-ne"
-if "$work/ct-ast" build test/modules/enum_export/main.ct -o "$mod-ne" \
+if "$work/ct-ast" build --emit-c test/modules/enum_export/main.ct -o "$mod-ne" \
         >"$work/mne.out" 2>"$work/mne.err" \
    && grep -q 'enum app_Level {' "$mod-ne/kinds.h" \
    && grep -q 'enum app_Level l' "$mod-ne/main.c" \
@@ -973,7 +973,7 @@ fi
 # under its namespace prefix and a consumer reaches it by its bare name.
 rm -rf "$mod-nu"
 mkdir -p "$mod-nu"
-if "$work/ct-ast" build test/modules/union_export/main.ct -o "$mod-nu" \
+if "$work/ct-ast" build --emit-c test/modules/union_export/main.ct -o "$mod-nu" \
         >"$work/mnu.out" 2>"$work/mnu.err" \
    && grep -q 'union app_Value {' "$mod-nu/kinds.h" \
    && grep -q 'union app_Value v' "$mod-nu/main.c" \
@@ -986,7 +986,7 @@ else
 fi
 
 # ... and two namespaces exporting one bare type name make it ambiguous.
-if "$work/ct-ast" build test/modules/ambig_type/main.ct -o "$work/mod-bad" \
+if "$work/ct-ast" build --emit-c test/modules/ambig_type/main.ct -o "$work/mod-bad" \
         >"$work/mat.out" 2>"$work/mat.err"; then
     bad "ambig_type" "expected a non-zero exit"
 elif grep -q "that type is exported by more than one namespace" "$work/mat.err"; then
@@ -1066,7 +1066,7 @@ fi
 
 rm -rf "$work/m11b"
 mkdir -p "$work/m11b"
-if "$work/ct-ast" build --emit-map "$work/m11b/prog.map" test/ast/11_map/prog.ct \
+if "$work/ct-ast" build --emit-c --emit-map "$work/m11b/prog.map" test/ast/11_map/prog.ct \
         -o "$work/m11b" >"$work/m11b.out" 2>"$work/m11b.err" \
    && grep -q '^#line 1 "test/ast/11_map/prog.ct"' "$work/m11b/prog.c" \
    && grep -q '"compiler": "ct v' "$work/m11b/prog.map"; then
@@ -1077,7 +1077,7 @@ fi
 
 rm -rf "$work/m11n"
 mkdir -p "$work/m11n"
-if "$work/ct-ast" build --no-line test/ast/11_map/prog.ct -o "$work/m11n" \
+if "$work/ct-ast" build --emit-c --no-line test/ast/11_map/prog.ct -o "$work/m11n" \
         >"$work/m11n.out" 2>"$work/m11n.err" \
    && ! grep -q '^#line ' "$work/m11n/prog.c"; then
     ok "build --no-line (directive suppressed)"
@@ -1233,7 +1233,7 @@ echo
 echo "== negative cases =="
 rm -rf "$work/mod-bad"
 mkdir -p "$work/mod-bad"
-if "$work/ct-ast" build --ns-root test/modules/ns_dir_mismatch \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_dir_mismatch \
         test/modules/ns_dir_mismatch/a/uart.ct -o "$work/mod-bad" \
         >"$work/mnbad.out" 2>"$work/mnbad.err"; then
     bad "ns_dir_mismatch" "expected a non-zero exit"
@@ -1242,7 +1242,7 @@ elif grep -q "^ctc: " "$work/mnbad.err"; then
 else
     bad "ns_dir_mismatch" "no diagnostic on stderr"
 fi
-if "$work/ct-ast" build test/modules/inc_missing/main.ct -o "$work/mod-bad" \
+if "$work/ct-ast" build --emit-c test/modules/inc_missing/main.ct -o "$work/mod-bad" \
         >"$work/mincm.out" 2>"$work/mincm.err"; then
     bad "inc_missing" "expected a non-zero exit"
 elif grep -q "^ctc: " "$work/mincm.err"; then
@@ -1256,7 +1256,7 @@ rm -rf "$work/impbad"
 mkdir -p "$work/impbad"
 printf 'pub int helper(void);\nint helper(void) { return 1; }\n' >"$work/impbad/helper.ct"
 printf 'import helper;\n\nint main(void) { return helper(); }\n' >"$work/impbad/main.ct"
-if "$work/ct-ast" build "$work/impbad/main.ct" -o "$work/mod-bad" \
+if "$work/ct-ast" build --emit-c "$work/impbad/main.ct" -o "$work/mod-bad" \
         >"$work/mimpb.out" 2>"$work/mimpb.err"; then
     bad "import_plain_ct" "expected a non-zero exit"
 elif grep -qF "only a .h.ct unit can be imported: rename 'helper.ct' to 'helper.h.ct'" "$work/mimpb.err"; then
@@ -1264,7 +1264,7 @@ elif grep -qF "only a .h.ct unit can be imported: rename 'helper.ct' to 'helper.
 else
     bad "import_plain_ct" "no diagnostic: $(cat "$work/mimpb.err")"
 fi
-if "$work/ct-ast" build --ns-root test/modules/alias_dup/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/alias_dup/src \
         test/modules/alias_dup/src/main.ct -o "$work/mod-bad" \
         >"$work/madup.out" 2>"$work/madup.err"; then
     bad "alias_dup" "expected a non-zero exit"
@@ -1273,7 +1273,7 @@ elif grep -q "one alias names two imports" "$work/madup.err"; then
 else
     bad "alias_dup" "no alias diagnostic: $(cat "$work/madup.err")"
 fi
-if "$work/ct-ast" build --ns-root test/modules/alias_missing/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/alias_missing/src \
         test/modules/alias_missing/src/main.ct -o "$work/mod-bad" \
         >"$work/mamiss.out" 2>"$work/mamiss.err"; then
     bad "alias_missing" "expected a non-zero exit"
@@ -1282,7 +1282,7 @@ elif grep -q "does not export that name" "$work/mamiss.err"; then
 else
     bad "alias_missing" "no alias diagnostic: $(cat "$work/mamiss.err")"
 fi
-if "$work/ct-ast" build --ns-root test/modules/ns_scoped_mismatch/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_scoped_mismatch/src \
         test/modules/ns_scoped_mismatch/src/app/unit.ct -o "$work/mod-bad" \
         >"$work/mnsm.out" 2>"$work/mnsm.err"; then
     bad "ns_scoped_mismatch" "expected a non-zero exit"
@@ -1291,7 +1291,7 @@ elif grep -q "does not match the directory" "$work/mnsm.err"; then
 else
     bad "ns_scoped_mismatch" "no namespace diagnostic: $(cat "$work/mnsm.err")"
 fi
-if "$work/ct-ast" build test/modules/ns_block/src/main.ct -o "$work/mod-bad" \
+if "$work/ct-ast" build --emit-c test/modules/ns_block/src/main.ct -o "$work/mod-bad" \
         >"$work/mnsb.out" 2>"$work/mnsb.err"; then
     bad "ns_block" "expected a non-zero exit"
 elif grep -q "a namespace is file-scoped" "$work/mnsb.err"; then
@@ -1299,7 +1299,7 @@ elif grep -q "a namespace is file-scoped" "$work/mnsb.err"; then
 else
     bad "ns_block" "no namespace diagnostic: $(cat "$work/mnsb.err")"
 fi
-if "$work/ct-ast" build --ns-root test/modules/ns_fn_ambiguous/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_fn_ambiguous/src \
         test/modules/ns_fn_ambiguous/src/main.ct -o "$work/mod-bad" \
         >"$work/mnfa.out" 2>"$work/mnfa.err"; then
     bad "ns_fn_ambiguous" "expected a non-zero exit"
@@ -1309,7 +1309,7 @@ else
     bad "ns_fn_ambiguous" "no ambiguity diagnostic: $(cat "$work/mnfa.err")"
 fi
 
-if "$work/ct-ast" build --ns-root test/modules/ns_qual_missing/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_qual_missing/src \
         test/modules/ns_qual_missing/src/main.ct -o "$work/mod-bad" \
         >"$work/mnqm.out" 2>"$work/mnqm.err"; then
     bad "ns_qual_missing" "expected a non-zero exit"
@@ -1319,7 +1319,7 @@ else
     bad "ns_qual_missing" "no qualified-call diagnostic: $(cat "$work/mnqm.err")"
 fi
 
-if "$work/ct-ast" build --ns-root test/modules/ns_bare_call/src \
+if "$work/ct-ast" build --emit-c --ns-root test/modules/ns_bare_call/src \
         test/modules/ns_bare_call/src/main.ct -o "$work/mod-bad" \
         >"$work/mnbc.out" 2>"$work/mnbc.err"; then
     bad "ns_bare_call" "expected a non-zero exit"
@@ -1331,7 +1331,7 @@ fi
 
 # 2a.4: a second impl of the same (struct, trait) would define the same externally
 # linked vtable twice, so it is refused and the first definition is named.
-if "$work/ct-ast" build test/modules/dup_impl/main.ct -o "$work/mod-bad" \
+if "$work/ct-ast" build --emit-c test/modules/dup_impl/main.ct -o "$work/mod-bad" \
         >"$work/mdup.out" 2>"$work/mdup.err"; then
     bad "dup_impl" "expected a non-zero exit"
 elif grep -q "duplicate impl of trait 'Speak' for struct 'Dog'" "$work/mdup.err" \
@@ -1354,7 +1354,7 @@ mapbad() {
     mkdir -p "$work/mb/lib" "$work/mb/out"
     printf '%b' "#include <stdlib.h>\nnamespace lib;\n$body" >"$work/mb/lib/lib.m.ct"
     printf '%b' "$mainbody" >"$work/mb/main.ct"
-    if "$work/ct-ast" build "$work/mb/main.ct" -o "$work/mb/out" \
+    if "$work/ct-ast" build --emit-c "$work/mb/main.ct" -o "$work/mb/out" \
             >"$work/mb/out.txt" 2>"$work/mb/err.txt"; then
         bad "batch 38: $label" "expected a non-zero exit"
     elif grep -qF "$want" "$work/mb/err.txt"; then
@@ -1437,7 +1437,7 @@ mkdir -p "$work/mbto/lib" "$work/mbto/out"
 printf '%b' '#include <stdlib.h>\nnamespace lib;\npub trait T { int m(); }\nmap trait T for type char * { m(s) -> atoi(s); }\n' \
     >"$work/mbto/lib/lib.h.ct"
 printf 'import lib::lib;\n\nint main(void) { return 0; }\n' >"$work/mbto/main.ct"
-if "$work/ct-ast" build "$work/mbto/main.ct" -o "$work/mbto/out" \
+if "$work/ct-ast" build --emit-c "$work/mbto/main.ct" -o "$work/mbto/out" \
         >"$work/mbto/out.txt" 2>"$work/mbto/err.txt"; then
     bad "batch 38: type_host_outside" "expected a non-zero exit"
 elif grep -qF 'a type host is only allowed in a .m.ct unit' "$work/mbto/err.txt"; then
@@ -1474,7 +1474,7 @@ printf 'pub int h(void);\nint h(void) { return 1; }\n' >"$work/mbimp/lib/x/plain
 printf '%b' 'import x::plain;\n#include <stdlib.h>\nnamespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
     >"$work/mbimp/lib/lib.m.ct"
 printf 'import lib::lib;\n\nint main(void) { return 0; }\n' >"$work/mbimp/main.ct"
-if "$work/ct-ast" build "$work/mbimp/main.ct" -o "$work/mbimp/out" \
+if "$work/ct-ast" build --emit-c "$work/mbimp/main.ct" -o "$work/mbimp/out" \
         >"$work/mbimp/out.txt" 2>"$work/mbimp/err.txt"; then
     bad "batch 38: map_imports_plain" "expected a non-zero exit"
 elif grep -qF 'a .m.ct unit can only import another .m.ct unit' "$work/mbimp/err.txt"; then
@@ -1491,7 +1491,7 @@ printf 'pub int helper(void);\n' >"$work/mbamb/foo/foo.h.ct"
 printf '%b' '#include <stdlib.h>\nnamespace foo;\npub trait T { int m(); }\nmap trait T for namespace foo { m() -> rand(); }\n' \
     >"$work/mbamb/foo/foo.m.ct"
 printf 'import foo::foo;\n\nint main(void) { return 0; }\n' >"$work/mbamb/main.ct"
-if "$work/ct-ast" build "$work/mbamb/main.ct" -o "$work/mbamb/out" \
+if "$work/ct-ast" build --emit-c "$work/mbamb/main.ct" -o "$work/mbamb/out" \
         >"$work/mbamb/out.txt" 2>"$work/mbamb/err.txt"; then
     bad "batch 38: import_ambiguous" "expected a non-zero exit"
 elif grep -qF "import 'foo/foo' is ambiguous: both" "$work/mbamb/err.txt"; then
@@ -2037,7 +2037,7 @@ fi
 
 rm -rf "$work/cli-b"
 mkdir -p "$work/cli-b"
-if "$work/ct-ast" build --std=gnu99 test/ast/11_map/prog.ct -o "$work/cli-b" \
+if "$work/ct-ast" build --emit-c --std=gnu99 test/ast/11_map/prog.ct -o "$work/cli-b" \
         >"$work/cli-b.out" 2>"$work/cli-b.err" \
    && grep -q '^cc -std=gnu99 .* -o a.out$' "$work/cli-b.out"; then
     ok "build suggests the target C standard"
@@ -2171,7 +2171,7 @@ elif grep -q -- "-I needs an argument" "$work/cli-iarg.err"; then
 else
     bad "-I needs an argument" "wrong diagnostic: $(cat "$work/cli-iarg.err")"
 fi
-if "$work/ct-ast" build test/ast/02_expr/prog.ct --ns-root \
+if "$work/ct-ast" build --emit-c test/ast/02_expr/prog.ct --ns-root \
         >"$work/cli-ns.out" 2>"$work/cli-ns.err"; then
     bad "--ns-root needs an argument" "expected a non-zero exit"
 elif grep -q -- "--ns-root needs an argument" "$work/cli-ns.err"; then
@@ -2211,7 +2211,7 @@ elif grep -q "not supported in compile mode" "$work/cli-im.err"; then
 else
     bad "import in compile mode" "wrong diagnostic: $(cat "$work/cli-im.err")"
 fi
-if "$work/ct-ast" build test/modules/split/main.ct \
+if "$work/ct-ast" build --emit-c test/modules/split/main.ct \
         >"$work/cli-bo.out" 2>"$work/cli-bo.err"; then
     bad "build without -o" "expected a non-zero exit"
 elif grep -q "build needs -o" "$work/cli-bo.err"; then
@@ -2219,21 +2219,21 @@ elif grep -q "build needs -o" "$work/cli-bo.err"; then
 else
     bad "build without -o" "wrong diagnostic: $(cat "$work/cli-bo.err")"
 fi
-if "$work/ct-ast" build -o >"$work/cli-boa.out" 2>"$work/cli-boa.err"; then
+if "$work/ct-ast" build --emit-c -o >"$work/cli-boa.out" 2>"$work/cli-boa.err"; then
     bad "build: -o needs an argument" "expected a non-zero exit"
 elif grep -q -- "-o needs an argument" "$work/cli-boa.err"; then
     ok "build: -o without an argument is rejected"
 else
     bad "build: -o needs an argument" "wrong diagnostic: $(cat "$work/cli-boa.err")"
 fi
-if "$work/ct-ast" build -I >"$work/cli-bia.out" 2>"$work/cli-bia.err"; then
+if "$work/ct-ast" build --emit-c -I >"$work/cli-bia.out" 2>"$work/cli-bia.err"; then
     bad "build: -I needs an argument" "expected a non-zero exit"
 elif grep -q -- "-I needs an argument" "$work/cli-bia.err"; then
     ok "build: -I without an argument is rejected"
 else
     bad "build: -I needs an argument" "wrong diagnostic: $(cat "$work/cli-bia.err")"
 fi
-if "$work/ct-ast" build --std=c11 test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+if "$work/ct-ast" build --emit-c --std=c11 test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
         >"$work/cli-bstd.out" 2>"$work/cli-bstd.err"; then
     bad "build: --std=c11" "expected a non-zero exit"
 elif grep -q "unknown C standard 'c11'" "$work/cli-bstd.err"; then
@@ -2241,7 +2241,7 @@ elif grep -q "unknown C standard 'c11'" "$work/cli-bstd.err"; then
 else
     bad "build: --std=c11" "wrong diagnostic: $(cat "$work/cli-bstd.err")"
 fi
-if "$work/ct-ast" build --bogus test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+if "$work/ct-ast" build --emit-c --bogus test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
         >"$work/cli-bu.out" 2>"$work/cli-bu.err"; then
     bad "build: unknown option" "expected a non-zero exit"
 elif grep -q "unknown option '--bogus'" "$work/cli-bu.err"; then
@@ -2250,7 +2250,7 @@ else
     bad "build: unknown option" "wrong diagnostic: $(cat "$work/cli-bu.err")"
 fi
 mkdir -p "$work/cli-bdir"
-if "$work/ct-ast" build -o "$work/cli-bdir" >"$work/cli-bnone.out" 2>"$work/cli-bnone.err"; then
+if "$work/ct-ast" build --emit-c -o "$work/cli-bdir" >"$work/cli-bnone.out" 2>"$work/cli-bnone.err"; then
     bad "build: no input" "expected a non-zero exit"
 elif grep -q "usage: .* build " "$work/cli-bnone.err"; then
     ok "build: no input prints usage"
@@ -2260,7 +2260,7 @@ fi
 bargs="-I /tmp"
 i=0
 while [ "$i" -lt 17 ]; do bargs="$bargs -I /tmp"; i=$((i + 1)); done
-if "$work/ct-ast" build $bargs test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+if "$work/ct-ast" build --emit-c $bargs test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
         >"$work/cli-binc.out" 2>"$work/cli-binc.err"; then
     bad "build: 17 -I roots" "expected a non-zero exit"
 elif grep -q "too many -I roots" "$work/cli-binc.err"; then
@@ -2271,13 +2271,88 @@ fi
 bargs=""
 i=0
 while [ "$i" -lt 65 ]; do bargs="$bargs test/ast/02_expr/prog.ct"; i=$((i + 1)); done
-if "$work/ct-ast" build $bargs -o "$work/cli-bdir" \
+if "$work/ct-ast" build --emit-c $bargs -o "$work/cli-bdir" \
         >"$work/cli-bin.out" 2>"$work/cli-bin.err"; then
     bad "build: 65 inputs" "expected a non-zero exit"
 elif grep -q "too many inputs" "$work/cli-bin.err"; then
     ok "build: too many inputs is rejected"
 else
     bad "build: 65 inputs" "wrong diagnostic: $(cat "$work/cli-bin.err")"
+fi
+
+echo
+echo "== one-step build (17.6) =="
+# The default form emits the C into .ctbuild/ (or --outdir) and then runs the
+# local cc; --emit-c keeps the old emit-only shape and must not spawn a compiler.
+rm -rf "$work/cli-one"
+mkdir -p "$work/cli-one"
+if ( cd "$work/cli-one" && "$work/ct-ast" build "$root/test/ast/02_expr/prog.ct" -o prog ) \
+        >"$work/cli-one.out" 2>"$work/cli-one.err" \
+   && [ -f "$work/cli-one/.ctbuild/prog.c" ] && [ -x "$work/cli-one/prog" ] \
+   && grep -q "prog.c" "$work/cli-one.out" \
+   && "$work/cli-one/prog" >"$work/cli-one.stdout" 2>&1 \
+   && cmp -s "$work/cli-one.stdout" test/ast/02_expr/prog.expected.out; then
+    ok "build: the default form emits C into .ctbuild/ and produces a runnable binary"
+else
+    bad "build one-step" "$(cat "$work/cli-one.err" "$work/cli-one.stdout" 2>/dev/null)"
+fi
+
+rm -rf "$work/cli-oneout"
+mkdir -p "$work/cli-oneout"
+if ( cd "$work/cli-oneout" && "$work/ct-ast" build "$root/test/ast/02_expr/prog.ct" \
+        --outdir gen -o prog ) >"$work/cli-oneout.out" 2>"$work/cli-oneout.err" \
+   && [ -f "$work/cli-oneout/gen/prog.c" ] && [ -x "$work/cli-oneout/prog" ] \
+   && "$work/cli-oneout/prog" >"$work/cli-oneout.stdout" 2>&1 \
+   && cmp -s "$work/cli-oneout.stdout" test/ast/02_expr/prog.expected.out; then
+    ok "build: --outdir keeps the C, -o names the binary"
+else
+    bad "build --outdir" "$(cat "$work/cli-oneout.err" "$work/cli-oneout.stdout" 2>/dev/null)"
+fi
+
+# CC pointing at a script that fails and leaves a marker: --emit-c must never
+# call it, so a marker means the old contract (zero subprocesses) broke.
+printf '#!/bin/sh\n: >"${FAKE_CC_MARK}"\nexit 1\n' >"$work/cli-fakecc"
+chmod +x "$work/cli-fakecc"
+rm -rf "$work/cli-emitc"
+mkdir -p "$work/cli-emitc"
+if CC="$work/cli-fakecc" FAKE_CC_MARK="$work/cli-emitc/mark" \
+   "$work/ct-ast" build --emit-c test/ast/02_expr/prog.ct -o "$work/cli-emitc" \
+        >"$work/cli-emitc.out" 2>"$work/cli-emitc.err" \
+   && [ ! -e "$work/cli-emitc/mark" ] && [ -f "$work/cli-emitc/prog.c" ] \
+   && grep -q '^cc -std=c99 .* -o a.out$' "$work/cli-emitc.out"; then
+    ok "--emit-c emits only C and never invokes the compiler"
+else
+    bad "--emit-c no cc" "$(cat "$work/cli-emitc.err" "$work/cli-emitc.out")"
+fi
+
+rm -rf "$work/cli-badcc"
+mkdir -p "$work/cli-badcc"
+if ( cd "$work/cli-badcc" && "$work/ct-ast" build "$root/test/ast/02_expr/prog.ct" \
+        -o prog --cc /nope/cc ) >"$work/cli-badcc.out" 2>"$work/cli-badcc.err"; then
+    bad "build --cc missing" "expected a non-zero exit"
+elif grep -q "cannot run '/nope/cc'" "$work/cli-badcc.err"; then
+    ok "build: an unusable --cc is reported as 'cannot run'"
+else
+    bad "build --cc missing" "wrong diagnostic: $(cat "$work/cli-badcc.err")"
+fi
+
+# --cflags / --ldflags are pass-through: they land on the composed line, and a
+# program that needs the math library still links.
+{
+    printf '#include <math.h>\n#include <stdio.h>\n\nint main(void)\n{\n'
+    printf '    printf("%%.0f\\n", sqrt(4.0));\n    return 0;\n}\n'
+} >"$work/cli-sqrt.ct"
+rm -rf "$work/cli-flags"
+mkdir -p "$work/cli-flags"
+if ( cd "$work/cli-flags" && "$work/ct-ast" build "$work/cli-sqrt.ct" -o prog \
+        --cflags "-O2 -Wall" --ldflags "-lm" ) >"$work/cli-flags.out" 2>"$work/cli-flags.err" \
+   && grep -q -- "-O2 -Wall" "$work/cli-flags.out" \
+   && grep -q -- "-lm" "$work/cli-flags.out" \
+   && "$work/cli-flags/prog" >"$work/cli-flags.stdout" 2>&1 \
+   && [ "$(cat "$work/cli-flags.stdout")" = "2" ]; then
+    ok "build: --cflags / --ldflags pass through to the compiler"
+else
+    bad "build --cflags/--ldflags" "$(cat "$work/cli-flags.err" "$work/cli-flags.stdout" 2>/dev/null)"
 fi
 
 echo
@@ -2421,7 +2496,7 @@ done
 # the recorded path is the one given on the command line.
 rm -rf "$mem-leak_build"
 mkdir -p "$mem-leak_build"
-if "$work/ct-ast" build --diagnostics=json test/modules/leak_build/prog.ct \
+if "$work/ct-ast" build --emit-c --diagnostics=json test/modules/leak_build/prog.ct \
         -o "$mem-leak_build" >"$mem-leak_build.out" 2>"$mem-leak_build.err" \
    && cmp -s "$mem-leak_build.err" test/modules/leak_build/expected.stderr \
    && "$CC" -Wall -Wextra -std=c99 "$mem-leak_build/prog.c" \
@@ -2847,7 +2922,7 @@ fi
 
 rm -rf "$rec-multi_err_build"
 mkdir -p "$rec-multi_err_build"
-if "$work/ct-ast" build test/modules/multi_err_build/prog.ct -o "$rec-multi_err_build" \
+if "$work/ct-ast" build --emit-c test/modules/multi_err_build/prog.ct -o "$rec-multi_err_build" \
         >"$rec-multi_err_build.out" 2>"$rec-multi_err_build.err"; then
     bad "multi_err_build" "expected a non-zero exit"
 elif ! cmp -s "$rec-multi_err_build.err" test/modules/multi_err_build/expected.stderr; then
@@ -2892,7 +2967,7 @@ mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
 rm -rf "$cac"
 mkdir -p "$cac/src" "$cac/ast" "$cac/l2"
 cp test/modules/split/*.ct "$cac/src/"
-if "$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>"$cac/ast.err" \
+if "$work/ct-ast" build --emit-c "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>"$cac/ast.err" \
    && [ -f "$cac/ast/.ctcache/main.c.key" ]; then
     ok "cache: a cold build stamps every unit"
 else
@@ -2908,14 +2983,14 @@ else
 fi
 touch -t 200001010000 "$cac/ast/main.c" "$cac/ast/shapes.c" "$cac/ast/impl_dog.c"
 cached=$(mtime "$cac/ast/main.c")
-"$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
 if [ "$(mtime "$cac/ast/main.c")" = "$cached" ]; then
     ok "cache: a warm build reuses unchanged units"
 else
     bad "cache warm" "main.c was regenerated although nothing changed"
 fi
 touch -t 201001010000 "$cac/src/shapes.h.ct"
-"$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
 if [ "$(mtime "$cac/ast/main.c")" != "$cached" ] \
    && [ "$(mtime "$cac/ast/impl_dog.c")" != "$cached" ]; then
     ok "cache: a dependency change invalidates downstream units"
@@ -2923,7 +2998,7 @@ else
     bad "cache dep" "main.c/impl_dog.c were not rebuilt after shapes changed"
 fi
 rm -f "$cac/ast/shapes.c"
-"$work/ct-ast" build "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
+"$work/ct-ast" build --emit-c "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>&1
 if [ -f "$cac/ast/shapes.c" ]; then
     ok "cache: a missing artefact is regenerated"
 else
@@ -2992,10 +3067,10 @@ echo "== self-hosting (9.6) =="
 # multi-unit tree now, so the build mode drives both halves and the whole output
 # directory is compared.
 mkdir -p "$work/self1" "$work/self2"
-if "$work/ct-ast" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self1" \
+if "$work/ct-ast" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self1" \
         >"$work/self1.out" 2>"$work/self1.err" \
    && "$CC" -Wall -Wextra -std=c99 "$work/self1"/*.c -o "$work/ct-ast2" 2>"$work/selfcc.log" \
-   && "$work/ct-ast2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self2" \
+   && "$work/ct-ast2" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self2" \
         >"$work/self2.out" 2>"$work/self2.err" \
    && diff -r -q -x .ctcache "$work/self1" "$work/self2" >/dev/null 2>&1; then
     ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"

@@ -1,0 +1,48 @@
+/*
+ * Sh.h.ct - shell quoting, one copy for every subprocess call site.
+ *
+ * Two units build command lines: the package manager (`ct get`'s git calls,
+ * Phase 8) and the build driver (`ct build`'s cc invocation, Phase 17.6). Both
+ * must escape a token the same way, so the rule lives here rather than twice --
+ * a spec, a path or an executable name can never break out of its argument.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+
+namespace tool::sh;
+/* A stateless unit: the type exists only because a unit file is named after its
+   main type. Nothing instantiates it. */
+pub struct Sh {
+    int unused;
+}
+/* Single-quote `s` for the shell. Returns 0 on success, -1 when `cap` is too
+   small; the caller reports the failure, this unit never prints. */
+pub int ct_sh_quote(const char *s, char *out, int cap);
+int ct_sh_quote(const char *s, char *out, int cap)
+{
+    int n, i;
+
+    n = 0;
+    if (cap < 4) return -1;
+    out[n] = '\'';
+    n++;
+    for (i = 0; s[i]; i++) {
+        if (s[i] == '\'') {
+            if (n + 5 >= cap) return -1;
+            out[n] = '\'';
+            out[n + 1] = '\\';
+            out[n + 2] = '\'';
+            out[n + 3] = '\'';
+            n += 4;
+        } else {
+            if (n + 2 >= cap) return -1;
+            out[n] = s[i];
+            n++;
+        }
+    }
+    out[n] = '\'';
+    n++;
+    out[n] = 0;
+    return 0;
+}

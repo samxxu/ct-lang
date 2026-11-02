@@ -137,7 +137,7 @@ binding **不是**编译器的构建步骤：`gcc selfhost/l0/ctc.c` 与 `test/r
 演示由 `selfhost/check-ast.sh` 的 bindings 小节驱动：
 
 ```
-ct-ast build bindings/mock-hal/demo.ct -o <out>
+ct-ast build --emit-c bindings/mock-hal/demo.ct -o <out>
 cc -Wall -Wextra -std=c99 -I bindings/mock-hal <out>/*.c bindings/mock-hal/mock_hal_impl.c -o demo
 ./demo   # 与 demo.expected.out 比对
 ```
@@ -145,7 +145,7 @@ cc -Wall -Wextra -std=c99 -I bindings/mock-hal <out>/*.c bindings/mock-hal/mock_
 手工复现：
 
 ```bash
-mkdir -p /tmp/bind && ./ct build bindings/mock-hal/demo.ct -o /tmp/bind
+mkdir -p /tmp/bind && ./ct build --emit-c bindings/mock-hal/demo.ct -o /tmp/bind
 gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
     bindings/mock-hal/mock_hal_impl.c -o /tmp/bind/demo && /tmp/bind/demo
 # 7
@@ -159,7 +159,7 @@ gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
 - [ ] `trait` 的每个方法都在 `map` 里**恰好绑定一次**（漏绑=空槽崩溃，重复=重定义）
 - [ ] 需要初始化时提供 `pub` 入口；trait 私有就只能在单元内装箱（标量入口）
 - [ ] `demo.ct` + `demo.expected.out`，期望值由**真实二进制**跑出来
-- [ ] 端到端跑通：`ct build` → `cc` 零警告 → 运行 → 比对
+- [ ] 端到端跑通：`ct build --emit-c` → `cc` 零警告 → 运行 → 比对
 - [ ] 不 vendored、不下载、不成为编译器构建步骤
 
 ---
@@ -280,7 +280,7 @@ A binding is **not** a compiler build step: neither `gcc selfhost/l0/ctc.c` nor 
 `selfhost/check-ast.sh` (build → `cc` → run → compare). Manual reproduction:
 
 ```bash
-mkdir -p /tmp/bind && ./ct build bindings/mock-hal/demo.ct -o /tmp/bind
+mkdir -p /tmp/bind && ./ct build --emit-c bindings/mock-hal/demo.ct -o /tmp/bind
 gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
     bindings/mock-hal/mock_hal_impl.c -o /tmp/bind/demo && /tmp/bind/demo
 # 7
@@ -296,5 +296,5 @@ gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
 - [ ] provide a `pub` entry point when initialisation is needed; mark the trait and the instance
       `pub` if consumers should box the instance themselves
 - [ ] `demo.ct` + `demo.expected.out`, with expectations produced by the **real binary**
-- [ ] end to end: `ct build` → warning-free `cc` → run → compare
+- [ ] end to end: `ct build --emit-c` → warning-free `cc` → run → compare
 - [ ] nothing vendored, nothing downloaded, never a compiler build step

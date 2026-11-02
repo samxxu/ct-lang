@@ -270,9 +270,9 @@ int main(void) { dog_get()->hi(); return 0; }
 ```
 
 ```sh
-mkdir -p build                      # 输出目录须预先存在
-ct build -I . main.ct -o build      # 每单元产出 .c/.h，并打印建议的 cc 命令
-cc build/*.c -o app && ./app        # woof 7（shapes.h.ct / impl_dog.h.ct / main.ct）
+ct build -I . main.ct -o app        # 默认：生成的 C 放进 .ctbuild/，一步产出可执行文件 app
+./app                               # woof 7（shapes.h.ct / impl_dog.h.ct / main.ct）
+ct build --emit-c -I . main.ct -o build   # 只发 C：每单元 .c/.h，并打印建议的 cc 行
 ```
 
 要点：
@@ -406,7 +406,7 @@ int main(void)
 }
 ```
 
-`ct build main.ct -o out/` 只产出 `main.c`（没有 `libc.c`），调用点被直接替换成 `getenv(("HOME"))`；
+`ct build --emit-c main.ct -o out/` 只产出 `main.c`（没有 `libc.c`），调用点被直接替换成 `getenv(("HOME"))`；
 prologue 的 `#include <stdlib.h>` 已展开进 `main.c`，没有 wrapper、没有 vtable。类型宿主同理：
 `map trait CStr for type char *` 让 `char a[] = "42"; a.toInt()` 直接变成 `atoi((a))`。
 可运行例子见 `test/modules/map_unit{,_type,_cross}`。
@@ -437,7 +437,7 @@ map trait Socket for namespace posix {
 }
 ```
 
-消费者的生成 `.c` 自动带上 `#include "socket.shim.h"`，`ct build` 的 `cc` 行自动加
+消费者的生成 `.c` 自动带上 `#include "socket.shim.h"`，`ct build` 组出的 `cc` 命令行自动加
 `-I <shim 目录>`（有 `.shim.c` 时同时把它列为源文件）。`posix::Socket.err()` 于是展开成
 `ct_sock_errno()`。完整例子见 `bindings/posix-socket/`；改了 shim 会让消费者重建。
 有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
@@ -448,13 +448,16 @@ map trait Socket for namespace posix {
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
-| `ct build <in.ct>… -o <dir>` | 多文件编译，每单元一份 `.c`/`.h`，带增量缓存 |
+| `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`，再调用 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`） |
+| `ct build --emit-c … -o <dir>` | 只发 C：每单元一份 `.c`/`.h`，`-o` 是输出目录，并打印建议的 `cc` 行；带增量缓存 |
+| `ct build … --outdir <dir>` | 默认形态下改中间产物目录（默认 `.ctbuild/`） |
+| `ct build … --cc <path>` / `--cflags <s>` / `--ldflags <s>` | 透传 C 编译器与编译/链接参数（可重复，也可空格分隔） |
 | `ct build … -I <dir>` | 追加导入搜索根（可重复） |
 | `ct build … --ns-root <dir>` | 目录 = namespace 的校验树根 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait/struct/函数/impl/map → 生成的 C 符号） |
 | `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr） |
 | `ct … --line` / `--no-line` | 覆盖 `#line` 默认（`build` 默认开、`compile` 默认关） |
-| `ct … --std=c99\|gnu99` | 写进建议的 `cc` 命令，产物暂无异 |
+| `ct … --std=c99\|gnu99` | 写进 C 编译器的命令行，产物暂无异 |
 | `ct get <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令） |
 | `ct install` | 离线校验 `ct.lock` 与 `vendor/`，打印建议的构建命令 |
 | `ct -v` / `ct -h` | 版本 / 用法 |
@@ -752,9 +755,9 @@ int main(void) { dog_get()->hi(); return 0; }
 ```
 
 ```sh
-mkdir -p build                      # the output directory must exist
-ct build -I . main.ct -o build      # one .c/.h per unit, plus a suggested cc command
-cc build/*.c -o app && ./app        # woof 7 (shapes.h.ct / impl_dog.h.ct / main.ct)
+ct build -I . main.ct -o app        # default: C into .ctbuild/, one step to the executable app
+./app                               # woof 7 (shapes.h.ct / impl_dog.h.ct / main.ct)
+ct build --emit-c -I . main.ct -o build   # C only: one .c/.h per unit, plus a suggested cc line
 ```
 
 - **Only `pub` is exported**; `impl` methods and vtables stay `static`.
@@ -892,7 +895,7 @@ int main(void)
 }
 ```
 
-`ct build main.ct -o out/` writes only `main.c` (no `libc.c`), and the call site is replaced by
+`ct build --emit-c main.ct -o out/` writes only `main.c` (no `libc.c`), and the call site is replaced by
 `getenv(("HOME"))`; the prologue's `#include <stdlib.h>` is expanded into `main.c`, with no wrapper
 and no vtable. A type host works the same way: `map trait CStr for type char *` turns
 `char a[] = "42"; a.toInt()` into `atoi((a))`. Runnable examples live under
@@ -925,8 +928,8 @@ map trait Socket for namespace posix {
 }
 ```
 
-The consumer's generated `.c` automatically carries `#include "socket.shim.h"`, and `ct build`'s `cc`
-line automatically gains `-I <shim directory>` (plus the `.shim.c` as a source when one exists). So
+The consumer's generated `.c` automatically carries `#include "socket.shim.h"`, and `ct build`'s composed
+`cc` command line automatically gains `-I <shim directory>` (plus the `.shim.c` as a source when one exists). So
 `posix::Socket.err()` expands into `ct_sock_errno()`. The full example is
 `bindings/posix-socket/`; touching the shim rebuilds the consumer. A `.shim.c` without its `.shim.h`
 is rejected with `a shim source needs a matching .shim.h`.
@@ -937,13 +940,16 @@ is rejected with `a shim source needs a matching .shim.h`.
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes only the `.c`, a `.h.ct` input also writes `<in>.h` |
 | `ct <in.ct> -o <out.c>` | explicit output path |
-| `ct build <in.ct>… -o <dir>` | multi-file compile, one `.c`/`.h` per unit, incremental cache |
+| `ct build <in.ct>… [-o <exe>]` | multi-file build: C into `.ctbuild/`, then the local C compiler produces an executable (`-o` names it, default `a.out`) |
+| `ct build --emit-c … -o <dir>` | C only: one `.c`/`.h` per unit, `-o` is the output directory, and a suggested `cc` line is printed; incremental cache |
+| `ct build … --outdir <dir>` | default form: where the generated C goes (default `.ctbuild/`) |
+| `ct build … --cc <path>` / `--cflags <s>` / `--ldflags <s>` | pass the C compiler and its flags through (repeatable, or space-separated) |
 | `ct build … -I <dir>` | extra import roots (repeatable) |
 | `ct build … --ns-root <dir>` | directory = namespace verification root |
 | `ct … --emit-map <file\|->` | reverse map JSON (trait/struct/function/impl/map → C symbols) |
 | `ct … --diagnostics=json\|text` | warning format (`text` on stderr by default) |
 | `ct … --line` / `--no-line` | override `#line` (on for `build`, off for `compile`) |
-| `ct … --std=c99\|gnu99` | written into the suggested `cc` line; output is unchanged so far |
+| `ct … --std=c99\|gnu99` | lands on the C compiler's command line; output is unchanged so far |
 | `ct get <spec>[@<range>]` | fetch packages into `vendor/`, write `ct.lock` (the only subcommand using system `git`) |
 | `ct install` | verify `ct.lock` against `vendor/` offline, print the suggested build command |
 | `ct -v` / `ct -h` | version / usage |

@@ -35,7 +35,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
-| `ct build <in.ct>… -o <dir>` | 多文件编译：每单元一份 `.c`（`.h.ct` 另写 `.h`），打印建议的 `cc` 行；带增量缓存 |
+| `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`（`--outdir` 可改），再调用本地 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`）；`--emit-c` 只发射 `.c`（`.h.ct` 另写 `.h`），此时 `-o` 是输出目录 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
 | `ct get <spec>[@<range>]` / `ct install` | 包管理：拉包到 `vendor/`、写 `ct.lock`；离线校验并打印建议命令 |
 | `ct -v` / `ct -h` | 版本 / 用法 |
@@ -112,7 +112,7 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes `.c`, a `.h.ct` also writes its sibling `.h` |
 | `ct <in.ct> -o <out.c>` | write to the given path |
-| `ct build <in.ct>… -o <dir>` | multi-file compile: one `.c` per unit (plus `.h` for `.h.ct`), prints the suggested `cc` line; incremental cache |
+| `ct build <in.ct>… [-o <exe>]` | multi-file build: the generated `.c` goes into `.ctbuild/` (or `--outdir`), then the local C compiler produces an executable (`-o` names it, default `a.out`); `--emit-c` only emits the `.c` (plus `.h` for `.h.ct`), and then `-o` is the output directory |
 | `ct … --emit-map <file\|->` | also write the reverse-mapping JSON (trait / struct / function / impl → generated C symbols) |
 | `ct get <spec>[@<range>]` / `ct install` | package management: fetch into `vendor/`, write `ct.lock`; verify offline and print the suggested command |
 | `ct -v` / `ct -h` | version / usage |

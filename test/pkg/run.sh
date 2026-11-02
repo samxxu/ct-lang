@@ -210,7 +210,7 @@ printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/
 echo
 echo "== ct build compiles against vendor/ =="
 mkdir -p "$work/proj/out"
-if ( cd "$work/proj" && "$work/ct-ast" build -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
+if ( cd "$work/proj" && "$work/ct-ast" build --emit-c -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
     if "$CC" "$work/proj/out"/*.c -o "$work/app" 2>"$work/bc.err" \
        && [ "$("$work/app")" = "42" ]; then
         ok "imports a vendored package and runs"

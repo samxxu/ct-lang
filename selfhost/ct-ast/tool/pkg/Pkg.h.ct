@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+import tool::sh::Sh;
+
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* MAX_PKG_PATH * 8, spelled out */
 #define MAX_PKG_DEPS   16
@@ -618,34 +620,12 @@ impl PkgOps for Pkg {
     }
 
     /* Single-quote `s` for the shell; every path and URL that reaches `git_run`
-       goes through here, so a spec can never break out of its argument. */
+       goes through here, so a spec can never break out of its argument. The rule
+       itself lives in `tool/sh/Sh.h.ct`, shared with `ct build`'s cc line. */
     int sh_quote(const char *s, char *out, size_t cap)
     {
-        size_t n, i;
         (void)self;
-
-        n = 0;
-        if (cap < 4) return -1;
-        out[n] = '\'';
-        n++;
-        for (i = 0; s[i]; i++) {
-            if (s[i] == '\'') {
-                if (n + 5 >= cap) return -1;
-                out[n] = '\'';
-                out[n + 1] = '\\';
-                out[n + 2] = '\'';
-                out[n + 3] = '\'';
-                n += 4;
-            } else {
-                if (n + 2 >= cap) return -1;
-                out[n] = s[i];
-                n++;
-            }
-        }
-        out[n] = '\'';
-        n++;
-        out[n] = 0;
-        return 0;
+        return tool::sh::ct_sh_quote(s, out, (int)cap);
     }
 
     /* The one subprocess call site. */

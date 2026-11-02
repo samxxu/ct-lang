@@ -331,8 +331,8 @@ say "'ct build' drives the multi-file mode under the ct identity:"
 ctbuild="$work/ct-id-build"
 rm -rf "$ctbuild"
 mkdir -p "$ctbuild"
-printf '\n+ %s build test/modules/split/main.ct -o %s\n' "$ct_bin" "$ctbuild"
-if "$ct_bin" build test/modules/split/main.ct -o "$ctbuild" >"$work/ct-build.out" 2>&1 &&
+printf '\n+ %s build --emit-c test/modules/split/main.ct -o %s\n' "$ct_bin" "$ctbuild"
+if "$ct_bin" build --emit-c test/modules/split/main.ct -o "$ctbuild" >"$work/ct-build.out" 2>&1 &&
    "$CC" "$ctbuild"/*.c -o "$work/ct-id.bin" 2>"$work/ct-id.cc" &&
    "$work/ct-id.bin" >"$work/ct-id.out" 2>&1 &&
    cmp -s "$work/ct-id.out" test/modules/split/expected.out; then
@@ -374,15 +374,15 @@ mtime() {
     stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"
 }
 
-printf '\n+ %s build %s -o %s   (cold cache)\n' "$ct_bin" "$cachesrc/main.ct" "$cacheout"
-"$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
+printf '\n+ %s build --emit-c %s -o %s   (cold cache)\n' "$ct_bin" "$cachesrc/main.ct" "$cacheout"
+"$ct_bin" build --emit-c "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
 if [ -f "$cacheout/main.c" ] && [ -f "$cacheout/shapes.h" ] && [ ! -f "$cacheout/main.h" ]; then
     # Back-date the artifacts: if a second build rewrites them, their mtime moves.
     touch -t 200001010000 "$cacheout/main.c" "$cacheout/shapes.c" "$cacheout/impl_dog.c"
     before="$(mtime "$cacheout/main.c")"
-    printf '\n+ %s build %s -o %s   (warm cache, sources untouched)\n' \
+    printf '\n+ %s build --emit-c %s -o %s   (warm cache, sources untouched)\n' \
         "$ct_bin" "$cachesrc/main.ct" "$cacheout"
-    "$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
+    "$ct_bin" build --emit-c "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
     if [ "$(mtime "$cacheout/main.c")" = "$before" ]; then
         note "reused: the artifacts were not regenerated (their mtime is unchanged)"
     else
@@ -392,9 +392,9 @@ if [ -f "$cacheout/main.c" ] && [ -f "$cacheout/shapes.h" ] && [ ! -f "$cacheout
 
     printf '\n+ touch -t 201001010000 %s/shapes.h.ct   (a dependency changes)\n' "$cachesrc"
     touch -t 201001010000 "$cachesrc/shapes.h.ct"
-    printf '\n+ %s build %s -o %s   (the key no longer matches)\n' \
+    printf '\n+ %s build --emit-c %s -o %s   (the key no longer matches)\n' \
         "$ct_bin" "$cachesrc/main.ct" "$cacheout"
-    "$ct_bin" build "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
+    "$ct_bin" build --emit-c "$cachesrc/main.ct" -o "$cacheout" >/dev/null || fail=1
     if [ "$(mtime "$cacheout/main.c")" != "$before" ]; then
         note "invalidated: the touched unit and its dependants were rebuilt"
     else

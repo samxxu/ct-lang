@@ -173,8 +173,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   `selfhost/check-archive.sh`（L2 对归档 oracle 的棘轮）、`selfhost/check-m2a.sh`、
   `selfhost/ct-tour.sh`、`editors/vscode/test/check-grammar.py`、`test/pkg/run.sh`（Phase 8.1–8.3
   包管理器：本地目录源、git 源与 `install` 校验）、`selfhost/check-ast.sh`（Phase 9.1–9.7 + 10.x
-  AST 编译器的行为用例、CLI 错误分支、自编不动点与全量语料等价）与 `selfhost/check-warnings.sh`
-  （生成物 `-Wall -Wextra` 零告警；任一失败即整体非零）；
+  AST 编译器的行为用例、CLI 错误分支、自编不动点与全量语料等价）、`selfhost/check-warnings.sh`
+  （生成物 `-Wall -Wextra` 零告警）与 `test/docs/check-docs.py`（文档链接、版本 token、门禁计数与
+  阶段状态；任一失败即整体非零）；
   `bash test/acceptance/run.sh` 单独报告（其 PENDING 属预期，不阻断）。改动 `selfhost/**` 后必须跑一遍。
 - **ct-ast 是分组多单元树**：各分组（`runtime/`、`frontend/`、`tool/`）按全路径互相 `import`，
   构建时必须带 `-I selfhost/ct-ast`（门禁脚本与 README 的安装命令已内置；手工构建同样要加）。
@@ -497,9 +498,10 @@ Also required:
   goldens, the L1′ bootstrap loop, and the L1/L2 fixpoint), `selfhost/check-archive.sh` (the L2
   ratchet against the archived oracle), `selfhost/check-m2a.sh`, `selfhost/ct-tour.sh`,
   `editors/vscode/test/check-grammar.py`, `test/pkg/run.sh` (the Phase 8.1–8.3 package manager:
-  local directory sources, git sources and `install` verification) and `selfhost/check-ast.sh`
+  local directory sources, git sources and `install` verification), `selfhost/check-ast.sh`
   (the Phase 9.1–9.7 + 10.x AST compiler's behavioural cases, CLI error branches, the self-compile
-  fixpoint and whole-corpus equivalence) — any
+  fixpoint and whole-corpus equivalence) and `test/docs/check-docs.py` (doc links, the version token,
+  the gate count and phase status) — any
   failure makes the whole run non-zero; `bash test/acceptance/run.sh` reports
   separately (its PENDING entries are expected and do not block). Run it after touching
   `selfhost/**`.

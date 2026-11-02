@@ -186,12 +186,12 @@ for d in test/modules/*/; do
     rm -rf "$work/mod-$name"
     mkdir -p "$work/mod-$name" || continue
     if [ -d "$d/extra" ]; then
-        if ! "$work/ct-ast" build "$main" -I "$d/extra" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
+        if ! "$work/ct-ast" build --emit-c "$main" -I "$d/extra" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
             bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
             continue
         fi
     else
-        if ! "$work/ct-ast" build "$main" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
+        if ! "$work/ct-ast" build --emit-c "$main" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
             bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
             continue
         fi
@@ -213,7 +213,7 @@ for bd in bindings/*/; do
     [ -f "$bd/demo.ct" ] || continue
     rm -rf "$work/bind"
     mkdir -p "$work/bind"
-    if ! "$work/ct-ast" build "$bd/demo.ct" -o "$work/bind" \
+    if ! "$work/ct-ast" build --emit-c "$bd/demo.ct" -o "$work/bind" \
             >"$work/bind.out" 2>"$work/bind.err"; then
         bad "bindings/$bname" "ct-ast failed: $(cat "$work/bind.err")"
         continue
