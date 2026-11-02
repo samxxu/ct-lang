@@ -15,5 +15,5 @@ map trait CStr for type char * {
     toInt(s)         -> atoi(s);
     scanInto(s, out) -> sscanf(s, "%d", out);
     toLong(s, end)   -> strtol(s, &end, 10);
-    probe(s)         -> strlen("");
+    probe(s)         -> ct_probe_void("");
 }

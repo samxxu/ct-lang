@@ -675,8 +675,9 @@ mkdir -p "$mod-mut"
 if "$work/ct-ast" build --emit-c test/modules/map_unit_type/main.ct -o "$mod-mut" \
         >"$work/mmut.out" 2>"$work/mmut.err" \
    && grep -qF 'strtol((a), &(char *){0}, 10)' "$mod-mut/main.c" \
-   && grep -qF '((void)(a), strlen(""));' "$mod-mut/main.c" \
-   && "$CC" -Wall -Wextra -std=c99 "$mod-mut"/*.c -o "$work/mmut.bin" 2>"$work/mmut.cc" \
+   && grep -qF '((void)(a), ct_probe_void(""))' "$mod-mut/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 -I test/modules/map_unit_type/ctypes \
+        "$mod-mut"/*.c -o "$work/mmut.bin" 2>"$work/mmut.cc" \
    && "$work/mmut.bin" >"$work/mmut.stdout" 2>&1 \
    && cmp -s "$work/mmut.stdout" test/modules/map_unit_type/expected.out; then
     ok "map_unit_type (array decay, pointer argument, compound literal, unused receiver)"
