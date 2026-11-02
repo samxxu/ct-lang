@@ -111,6 +111,7 @@ pub trait ExprOps {
     int  record_call(const char *callee, int line);
     int  arity_check(int line, const char *callee, int got, int want);
     int  argtype_check(int line, const char *callee, int args, int fi, int ti, int mi);
+    int  decl_type_compat(const char *formal, const char *actual);
 }
 
 pub struct Expr {
@@ -415,6 +416,23 @@ impl ExprOps for Expr {
             k++;
         }
         return 0;
+    }
+
+    /* 19.3: an impl's parameter spelling against the trait's -- two declared
+       types instead of an argument expression, the same coarse rules as 19.2
+       (`arg_class` plus this unit's struct table). The trait may live in an
+       imported unit, so only a confident mismatch (1) counts; every
+       undecidable pair passes (D19-3). */
+    int decl_type_compat(const char *formal, const char *actual)
+    {
+        char fb[MAX_TEXT], ab[MAX_TEXT];
+        int r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        if (r == 2) {
+            int fs = self->sym->find_struct(fb + 6);
+            int as = self->sym->find_struct(ab + 6);
+            r = (fs < 0 || as < 0) ? -1 : (fs != as);
+        }
+        return r;
     }
 
     /* The type keywords. L0 / L1 / L2 have always accepted the `stdint` /
@@ -1473,7 +1491,24 @@ impl ExprOps for Expr {
                                 snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
                             }
                         } else if (self->sup->method_trait(rtype, fname, trname, sizeof trname) == 0) {
+                            char tr2[MAX_TEXT];
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
+                            /* 19.3 (SH-46): a second trait of the same struct
+                               declaring the method means the bare call keeps
+                               the first match in `use` order silently (the spec
+                               pins that resolution) -- name both in a warning.
+                               A static type host and a `map` binding resolve
+                               below, outside `method_trait`, so they never
+                               reach this check. */
+                            if (self->sup->method_trait_amb(rtype, fname, trname,
+                                                            tr2, sizeof tr2) == 0) {
+                                char amsg[MAX_TEXT];
+                                snprintf(amsg, sizeof amsg,
+                                         "declared by '%s' and '%s'; '%s' is used",
+                                         trname, tr2, trname);
+                                if (self->sup->amb_warn(mline, fname, amsg) != 0)
+                                    return self->sup->fail("too many warnings");
+                            }
                         }
                         /* No trait answered: a function-pointer field called
                            directly is the callee itself, so `o.add(2, 3)` is

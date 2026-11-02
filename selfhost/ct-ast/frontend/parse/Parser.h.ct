@@ -2059,6 +2059,30 @@ impl ParseOps for Parser {
                         self->sup->pop_scope();
                         return -1;
                     }
+                } else {
+                    /* 19.3: the parameter types, one position at a time, the
+                       coarse rules of 19.2. This is where an imported unit's
+                       exported signature meets the local impl -- the check
+                       runs against the shared trait table, so the trait's home
+                       unit makes no difference. An array parameter decays and
+                       stays unknown; the first mismatching position is enough. */
+                    int pk = 0;
+                    for (k2 = params; k2 > 0; k2 = self->arena->nodes[k2].next) {
+                        const char *ft = self->sym->traits[ti].m[tm_i].ptype[pk];
+                        if (!strchr(ft, '[') && !self->arena->nodes[k2].text3[0]
+                            && self->ex->decl_type_compat(ft, self->arena->nodes[k2].text) == 1) {
+                            snprintf(wmsg, sizeof wmsg,
+                                     "parameter %d type '%s' does not match the trait's '%s'",
+                                     pk + 1, self->arena->nodes[k2].text, ft);
+                            if (tool::diag::ct_sig_warn(mline, mname, rtrait, rstruct,
+                                                        wmsg, self->mem->path) != 0) {
+                                self->sup->pop_scope();
+                                return -1;
+                            }
+                            break;
+                        }
+                        pk++;
+                    }
                 }
             }
             snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);

@@ -164,6 +164,8 @@ pub trait SymbolOps {
     int  find_trait(const char *name);
     int  add_trait(const char *name);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
+    int  method_trait_amb(const char *stype, const char *method, const char *first,
+                          char *other, int ocap);
     int  ns_decl_name(const char *name, char *out, int cap);
     int  resolve_type(const char *name, char *out, int cap);
     int  add_alias(const char *name, const char *full);
@@ -530,6 +532,47 @@ impl SymbolOps for Symbols {
                 if (strcmp(self->traits[t].m[mi].name, method) == 0) {
                     w = snprintf(tout, (size_t)tcap, "%s", self->traits[t].name);
                     if (w < 0 || w >= tcap) return -1;
+                    return 0;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /* SH-46 (19.3): `method_trait` answers with the first match in `use`
+       order, and a bare call keeps that resolution (the spec pins it). This
+       companion answers whether a *different* trait of the same struct also
+       declares `method` -- the call is then ambiguous and the caller names
+       both traits in a warning. `first` is the trait `method_trait` already
+       named; the same struct `use`ing one trait twice is not ambiguous. */
+    int method_trait_amb(const char *stype, const char *method, const char *first,
+                         char *other, int ocap)
+    {
+        char buf[MAX_TEXT];
+        char *base;
+        size_t n;
+        int s, ti, mi, w;
+        (void)self;
+
+        if (snprintf(buf, sizeof buf, "%s", stype) >= (int)sizeof buf) return -1;
+        base = buf;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        n = strlen(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
+            base[n - 1] = 0;
+            n--;
+        }
+        s = self->find_struct(base);
+        if (s < 0) return -1;
+        for (ti = 0; ti < self->structs[s].nuse; ti++) {
+            int t = self->find_trait(self->structs[s].use[ti]);
+            if (t < 0) continue;
+            if (strcmp(self->traits[t].name, first) == 0) continue;
+            for (mi = 0; mi < self->traits[t].nm; mi++) {
+                if (strcmp(self->traits[t].m[mi].name, method) == 0) {
+                    w = snprintf(other, (size_t)ocap, "%s", self->traits[t].name);
+                    if (w < 0 || w >= ocap) return -1;
                     return 0;
                 }
             }

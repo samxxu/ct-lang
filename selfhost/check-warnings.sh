@@ -249,5 +249,31 @@ else
 fi
 
 echo
+echo "== trait-method ambiguity: only the pinned collision case warns (Phase 19.3) =="
+# 06_name_collision.ct pins the first-in-`use`-order resolution (SH-46 stays a
+# warning, D19-4), so exactly one record -- from that file -- is expected. Any
+# other record is a false positive, and zero means the check went silent.
+amb=$(grep -h 'ambiguous method' "$work"/*.err 2>/dev/null || true)
+if [ -z "$amb" ]; then
+    bad "corpus ambiguity" "the pinned 06_name_collision case no longer warns"
+elif [ "$(printf '%s\n' "$amb" | grep -c 'ambiguous method')" -eq 1 ] \
+        && printf '%s\n' "$amb" | grep -q '06_name_collision'; then
+    ok "exactly one ambiguity warning across the corpus (06_name_collision)"
+else
+    bad "corpus ambiguity" "unexpected ambiguity warnings: $amb"
+fi
+
+echo
+echo "== impl parameter types stay quiet on the corpus (Phase 19.3) =="
+# The cross-unit half of 19.3 compares an impl's parameter types against the
+# trait's. Every fixture is valid code, so any record here is a false positive.
+pmm=$(grep -l "parameter [0-9]* type '" "$work"/*.err 2>/dev/null)
+if [ -n "$pmm" ]; then
+    bad "corpus impl params" "unexpected signature warnings in: $pmm"
+else
+    ok "no impl parameter-type warnings across the corpus"
+fi
+
+echo
 printf 'check-warnings: %d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

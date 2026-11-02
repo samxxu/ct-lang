@@ -3,8 +3,8 @@
  *
  * Warnings are recorded from four places (a signature mismatch while parsing
  * an impl, a potential leak while analysing memory, a call-site arity or
- * argument-type mismatch while parsing an expression) and printed once at the
- * end;
+ * argument-type mismatch while parsing an expression, and an ambiguous trait
+ * method) and printed once at the end;
  * the error counter also drives the "too many errors" stop and the driver's
  * summary line. Keeping the store here means both producers reach it through
  * primitive wrappers -- a generated header cannot carry the MAX_* macros or the
@@ -24,10 +24,10 @@
 
 namespace tool::diag;
 /* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity,
-   19.2 argument type). */
+   19.2 argument type, 19.3 ambiguity). */
 struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
-                           4 arity_mismatch, 5 type_mismatch */
+                           4 arity_mismatch, 5 type_mismatch, 6 ambiguous_method */
     int  line;
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
     char file[MAX_PATH];
@@ -45,6 +45,8 @@ trait DiagStore {
                            const char *path);
     int  record_type_warn(int line, const char *callee, const char *msg,
                           const char *path);
+    int  record_amb_warn(int line, const char *method, const char *msg,
+                         const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
     int  emit(int json, int to_stderr);
@@ -133,6 +135,29 @@ impl DiagStore for Diag {
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
         snprintf(w->var, sizeof w->var, "%s", callee);
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* A bare method call two traits of the receiver both declare (19.3,
+       SH-46). The first match in `use` order stays the resolution (the spec
+       pins it), so this is only ever a warning; `ct check` (19.4) raises it
+       to an error. */
+    int record_amb_warn(int line, const char *method, const char *msg,
+                        const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 6;
+        w->line = line;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        snprintf(w->var, sizeof w->var, "%s", method);
         w->tname[0] = 0;
         w->stype[0] = 0;
         snprintf(w->msg, sizeof w->msg, "%s", msg);
@@ -243,6 +268,14 @@ impl DiagStore for Diag {
                     fputs("\",\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 6) {
+                    fputs("{\"type\":\"ambiguous_method\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"method\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else {
                     fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -271,6 +304,9 @@ impl DiagStore for Diag {
                             w->file, w->line, w->var, w->msg);
                 else if (w->kind == 5)
                     fprintf(tf, "%s:%d: warning: type mismatch: '%s' %s\n",
+                            w->file, w->line, w->var, w->msg);
+                else if (w->kind == 6)
+                    fprintf(tf, "%s:%d: warning: ambiguous method: '%s' %s\n",
                             w->file, w->line, w->var, w->msg);
                 else
                     fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
@@ -323,6 +359,12 @@ pub int ct_type_warn(int line, const char *callee, const char *msg, const char *
 int ct_type_warn(int line, const char *callee, const char *msg, const char *path)
 {
     return g_diag.record_type_warn(line, callee, msg, path);
+}
+
+pub int ct_amb_warn(int line, const char *method, const char *msg, const char *path);
+int ct_amb_warn(int line, const char *method, const char *msg, const char *path)
+{
+    return g_diag.record_amb_warn(line, method, msg, path);
 }
 
 pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);

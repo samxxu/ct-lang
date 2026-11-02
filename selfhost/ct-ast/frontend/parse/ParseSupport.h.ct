@@ -50,8 +50,11 @@ pub trait SupportOps {
     int  add_struct(const char *name);
     int  add_trait(const char *name);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
+    int  method_trait_amb(const char *stype, const char *method, const char *first,
+                          char *other, int ocap);
     int  arity_warn(int line, const char *callee, const char *msg);
     int  type_warn(int line, const char *callee, const char *msg);
+    int  amb_warn(int line, const char *method, const char *msg);
     int  ns_decl_name(const char *name, char *out, int cap);
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
@@ -369,6 +372,21 @@ impl SupportOps for ParseSupport {
         return 0;
     }
 
+    /* SH-46 (19.3): whether a trait other than `first` also declares the
+       method; the symbol unit owns the tables, this only wraps the error. */
+    int method_trait_amb(const char *stype, const char *method, const char *first,
+                         char *other, int ocap)
+    {
+        const char *why;
+        self->sym->errmsg[0] = 0;
+        if (self->sym->method_trait_amb(stype, method, first, other, (int)ocap) != 0) {
+            why = self->sym->last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
     /* A call-site arity mismatch (19.1). The caller (the expression grammar)
        knows the position and the signature; this unit only supplies the path
        the driver re-points at each unit. */
@@ -381,6 +399,13 @@ impl SupportOps for ParseSupport {
     int type_warn(int line, const char *callee, const char *msg)
     {
         return tool::diag::ct_type_warn(line, callee, msg, self->mem->path);
+    }
+
+    /* A bare call two traits of the receiver both declare (19.3, SH-46);
+       same warning path as arity. */
+    int amb_warn(int line, const char *method, const char *msg)
+    {
+        return tool::diag::ct_amb_warn(line, method, msg, self->mem->path);
     }
 
     int ns_decl_name(const char *name, char *out, int cap)

@@ -2667,6 +2667,115 @@ else
 fi
 
 echo
+echo "== trait-method ambiguity and cross-unit signatures (19.3) =="
+# SH-46: a bare call two traits of the receiver both declare keeps the first
+# match in `use` order (the spec pins that resolution) and now names both
+# traits in a warning. A method only one trait declares and a call through an
+# interface variable are unambiguous and stay quiet. Warning severity (D19-4).
+cat > "$work/amb.ct" <<'AMBEOF'
+trait A { void f(); }
+trait B { void f(); }
+struct S { int n; } use A, B;
+impl A for S { void f() {} }
+impl B for S { void f() {} }
+
+int main(void)
+{
+    struct S s;
+    s.n = 1;
+    s.f();
+    return 0;
+}
+AMBEOF
+if "$work/ct-ast" "$work/amb.ct" -o "$work/amb.c" \
+        >"$work/amb.out" 2>"$work/amb.err" \
+   && grep -q "warning: ambiguous method: 'f' declared by 'A' and 'B'; 'A' is used" "$work/amb.err"; then
+    ok "ambiguity: a bare call two traits declare warns and names both"
+else
+    bad "ambiguity: two-trait bare call" "$(cat "$work/amb.err")"
+fi
+
+cat > "$work/amb_ok.ct" <<'AOEOF'
+trait A { void f(); void only_a(); }
+trait B { void f(); void only_b(); }
+struct S { int n; } use A, B;
+impl A for S { void f() {} void only_a() {} }
+impl B for S { void f() {} void only_b() {} }
+int show(struct A_iface *a) { a->f(); return 0; }
+
+int main(void)
+{
+    struct S s;
+    s.n = 1;
+    s.only_a();
+    s.only_b();
+    return show(&s);
+}
+AOEOF
+if "$work/ct-ast" "$work/amb_ok.ct" -o "$work/amb_ok.c" \
+        >"$work/amb_ok.out" 2>"$work/amb_ok.err" \
+   && [ ! -s "$work/amb_ok.err" ]; then
+    ok "ambiguity: single-trait methods and interface dispatch stay quiet"
+else
+    bad "ambiguity: known-good calls" "$(cat "$work/amb_ok.err")"
+fi
+
+# Cross-unit signature drift: an imported unit's exported trait signature is
+# checked against the local impl beyond the return type and the parameter
+# count -- the parameter types themselves, with the coarse 19.2 rules. The
+# mismatch here is one cc would reject on the vtable initialiser; the matching
+# impl stays quiet.
+mkdir -p "$work/xu"
+cat > "$work/xu/W.h.ct" <<'XWEOF'
+namespace xu;
+pub trait W { int put(int v); }
+XWEOF
+# the entry sits outside the namespace directory: the namespace check anchors
+# at the entry's root, and $work/xu must stay the namespace's own directory
+cat > "$work/xu_main.ct" <<'XMEOF'
+import xu::W;
+struct P { int n; } use W;
+impl W for P { int put(struct P *v) { (void)v; return 0; } }
+
+int main(void)
+{
+    struct P p;
+    p.n = 1;
+    return p.put(1);
+}
+XMEOF
+mkdir -p "$work/xu-out"
+if "$work/ct-ast" build --emit-c -I "$work" "$work/xu_main.ct" -o "$work/xu-out" \
+        >"$work/xu.out" 2>"$work/xu.err" \
+   && grep -q "warning: signature mismatch: 'put' in impl of 'xu_W' for 'P': parameter 1 type 'struct P \*' does not match the trait's 'int'" "$work/xu.err"; then
+    ok "cross-unit: a local impl drifting from an imported trait's parameter type warns"
+else
+    bad "cross-unit: impl drift" "$(cat "$work/xu.err")"
+fi
+
+cat > "$work/xu_main.ct" <<'XOEOF'
+import xu::W;
+struct P { int n; } use W;
+impl W for P { int put(int v) { return v + self->n; } }
+
+int main(void)
+{
+    struct P p;
+    p.n = 1;
+    return p.put(1);
+}
+XOEOF
+rm -rf "$work/xu-out"
+mkdir -p "$work/xu-out"
+if "$work/ct-ast" build --emit-c -I "$work" "$work/xu_main.ct" -o "$work/xu-out" \
+        >"$work/xu_ok.out" 2>"$work/xu_ok.err" \
+   && [ ! -s "$work/xu_ok.err" ]; then
+    ok "cross-unit: a matching impl of an imported trait stays quiet"
+else
+    bad "cross-unit: known-good impl" "$(cat "$work/xu_ok.err")"
+fi
+
+echo
 echo "== memory: auto-drop and leak warnings (10.3) =="
 # AutoDrop releases every `own` object at its scope exit, in reverse order; the
 # three negative fixtures pin the layout / Drop / scope diagnostics. Every

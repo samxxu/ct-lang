@@ -1,7 +1,7 @@
 # Phase 19 · 受限语义检查
 
 > 中文 · [English](#english)
-> **状态：实施中**（2026-11-03，19.0、19.1、19.2 已完成；19.3–19.4 待实施） · 版本：`v0.19.0`（收口时 bump）
+> **状态：实施中**（2026-11-03，19.0、19.1、19.2、19.3 已完成；19.4 待实施） · 版本：`v0.19.0`（收口时 bump）
 > 前置：[spike-semantic-check.md](spike-semantic-check.md)（GO）；Phase 17 / 18 不阻塞本阶段
 
 ---
@@ -48,6 +48,8 @@
 > **19.1 落地形态**：调用点 arity 在 `ct compile` / `ct build` 里以**警告**报告（`warning: arity mismatch: '<callee>' takes N argument(s), M given`），因此两处的产物与默认退出码不变；`ct check`（19.4）再把同一条记录提升为 error。只有解析到签名的被调者才比较：函数指针、未声明的 C 库名、`map` recipe、静态类型宿主一律视为未知并跳过；可变参函数只校验具名参数的下界。两个探针落点：`add(1)` 与 `s.area()`（trait 方法少参）。
 
 > **19.2 落地形态**：实参类型按位比对在 `ct compile` / `ct build` 里以**警告**报告（`warning: type mismatch: '<callee>' argument K: expected '<formal>', got '<actual>'`），与 19.1 同一严重度策略（D19-4）。粗粒度规则：去限定词 / 去空白后精确相等即过；数值类之间（含 `enum`）总是放行；指针层级必须一致，`void *` 双向放行；struct 指针只有在双方都能在本单元符号表中解析且解析到**不同** struct 时才报；typedef、union、函数指针拼写、iface 形参（boxing 已有硬错误）、数组双方（decay）、cast 实参、无法推导的实参一律按 unknown 跳过（D19-3）。每次调用至多报第一个错配位。探针：函数 `setp(&q)` 与 trait 方法 `s.put(&q)` 的 struct 指针错配。
+
+> **19.3 落地形态**：两条检查都以**警告**报告（D19-4），`ct compile` / `ct build` 的产物与退出码不变。**歧义（SH-46）**：裸调用解析到的 trait 之外，宿主 struct `use` 的另一个 trait 也声明同名方法时，报 `warning: ambiguous method: '<m>' declared by '<A>' and '<B>'; '<A>' is used`（`Symbols.method_trait_amb`）；消解仍按 `use` 顺序取首个——`test/cases/06_name_collision.ct` 已把该语义钉成回归，故语料断言是「恰好一条歧义警告、来自该文件」，而非零条。接口变量派发与静态类型宿主 / `map` 绑定不经过 `method_trait`，不参与判定。**跨单元签名漂移**：impl↔trait 的既有核对（返回类型、参数个数，措辞与 L2 逐字一致）之外，新增**参数类型**按位粗粒度比对，复用 19.2 的 `arg_class` 规则（`Expr.decl_type_compat`），报 `warning: signature mismatch: '<m>' in impl of '<T>' for '<S>': parameter K type '<impl>' does not match the trait's '<decl>'`；trait 在共享表中，导入单元与本单元走同一条路径，「导入导出一致性」由此统一覆盖。数组形参（decay）与不可判定拼写一律跳过（D19-3）；每个方法至多报第一个错配位。
 
 ### 6. 版本与发布
 
@@ -114,6 +116,8 @@ The spike proved that method existence, impl/trait signature mismatch (warning),
 > **How 19.1 lands**: a call-site arity mismatch is reported as a **warning** (`warning: arity mismatch: '<callee>' takes N argument(s), M given`) so `ct compile` / `ct build` keep their artifacts and default exit codes; `ct check` (19.4) raises the same record to an error. Only a callee whose signature resolved is compared — function pointers, undeclared C library names, `map` recipes and static type hosts stay unknown and pass; a variadic function checks only the lower bound of its named parameters. Probes: `add(1)` and `s.area()` (a trait method with a missing argument).
 
 > **How 19.2 lands**: an argument type is compared positionally against the resolved signature and reported as a **warning** (`warning: type mismatch: '<callee>' argument K: expected '<formal>', got '<actual>'`), same severity policy as 19.1 (D19-4). The coarse rules: qualifier- and whitespace-normalised equality passes; numerics (including `enum`) always pass; pointer depths must match, with `void *` accepted both ways; a struct pointer is reported only when both tags resolve in the unit's own table to *different* structs. Typedefs, unions, function-pointer spellings, interface formals (boxing already errors), arrays on either side (decay), cast arguments and underivable arguments stay unknown and pass (D19-3). At most the first mismatching position is reported per call. Probes: `setp(&q)` (function) and `s.put(&q)` (trait method), each handed the wrong struct pointer.
+
+> **How 19.3 lands**: both checks report **warnings** (D19-4), so `ct compile` / `ct build` keep their artifacts and default exit codes. **Ambiguity (SH-46)**: when a trait other than the resolved one also declares the method on the receiver's struct, the bare call warns `warning: ambiguous method: '<m>' declared by '<A>' and '<B>'; '<A>' is used` (`Symbols.method_trait_amb`); resolution still takes the first match in `use` order -- `test/cases/06_name_collision.ct` pins that behaviour, so the corpus gate asserts *exactly one* ambiguity warning, from that file, rather than zero. Interface-variable dispatch and static type hosts / `map` bindings never pass through `method_trait` and stay out of the check. **Cross-unit signature drift**: the existing impl/trait comparison (return type, parameter count; wording byte-identical to L2) now also compares **parameter types** positionally, reusing 19.2's `arg_class` rules (`Expr.decl_type_compat`), and reports `warning: signature mismatch: '<m>' in impl of '<T>' for '<S>': parameter K type '<impl>' does not match the trait's '<decl>'`. The trait lives in the shared table, so an imported unit and the local unit take the same path -- which is what "import/export consistency" means here. Array parameters (decay) and undecidable spellings pass as unknown (D19-3); at most the first mismatching position is reported per method.
 
 ### 6. Version
 
