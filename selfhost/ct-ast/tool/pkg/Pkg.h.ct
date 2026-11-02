@@ -326,8 +326,11 @@ static void sha_sort(char *list, int n)
         snprintf(tmp, sizeof tmp, "%s", list + (size_t)i * MAX_PKG_PATH);
         j = i - 1;
         while (j >= 0 && strcmp(list + (size_t)j * MAX_PKG_PATH, tmp) > 0) {
-            snprintf(list + (size_t)(j + 1) * MAX_PKG_PATH, MAX_PKG_PATH, "%s",
-                     list + (size_t)j * MAX_PKG_PATH);
+            /* A row copy, not a formatted print: gcc cannot see that the two
+               rows are disjoint and warns -Wrestrict on the overlapping-looking
+               `snprintf`, which the warning-free gate treats as a failure. */
+            memcpy(list + (size_t)(j + 1) * MAX_PKG_PATH,
+                   list + (size_t)j * MAX_PKG_PATH, MAX_PKG_PATH);
             j--;
         }
         snprintf(list + (size_t)(j + 1) * MAX_PKG_PATH, MAX_PKG_PATH, "%s", tmp);
