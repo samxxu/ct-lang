@@ -2578,6 +2578,95 @@ else
 fi
 
 echo
+echo "== argument types (19.2) =="
+# Coarse compatibility against the resolved signature: a struct pointer whose
+# tag provably differs is reported, while numeric conversions, qualifiers,
+# `void *`, arrays (decay), casts, string literals and interface formals all
+# stay unknown and pass. Warning severity like 19.1 (D19-4).
+cat > "$work/atype_fn.ct" <<'TFEOF'
+struct P { int x; }
+struct Q { int y; }
+void setp(struct P *p) { p->x = 1; }
+
+int main(void)
+{
+    struct Q q;
+    setp(&q);
+    return 0;
+}
+TFEOF
+if "$work/ct-ast" "$work/atype_fn.ct" -o "$work/atype_fn.c" \
+        >"$work/atype_fn.out" 2>"$work/atype_fn.err" \
+   && grep -q "warning: type mismatch: 'setp' argument 1: expected 'struct P \*', got 'struct Q \*'" "$work/atype_fn.err"; then
+    ok "argtype: a function call with a wrong struct pointer warns"
+else
+    bad "argtype: function call" "$(cat "$work/atype_fn.err")"
+fi
+
+cat > "$work/atype_m.ct" <<'TMEOF'
+struct P { int x; }
+struct Q { int y; }
+trait Sink { void put(struct P *p); }
+struct S { int v; } use Sink;
+impl Sink for S { void put(struct P *p) { p->x = self->v; } }
+
+int main(void)
+{
+    struct S s;
+    struct Q q;
+    s.put(&q);
+    return 0;
+}
+TMEOF
+if "$work/ct-ast" "$work/atype_m.ct" -o "$work/atype_m.c" \
+        >"$work/atype_m.out" 2>"$work/atype_m.err" \
+   && grep -q "warning: type mismatch: 'put' argument 1: expected 'struct P \*', got 'struct Q \*'" "$work/atype_m.err"; then
+    ok "argtype: a trait method call with a wrong struct pointer warns"
+else
+    bad "argtype: trait method" "$(cat "$work/atype_m.err")"
+fi
+
+cat > "$work/atype_ok.ct" <<'TOEOF'
+struct P { int x; }
+trait Shape { int area(int scale); }
+struct Sq { int side; } use Shape;
+impl Shape for Sq { int area(int scale) { return self->side * scale; } }
+void setp(struct P *p) { p->x = 1; }
+void setl(long n) { (void)n; }
+void setc(const char *s) { (void)s; }
+void setv(void *p) { (void)p; }
+int show(struct Shape_iface *s) { return s->area(2); }
+
+int main(void)
+{
+    struct P p;
+    struct Sq sq;
+    char buf[8];
+    char *s;
+    int i;
+    s = buf;
+    i = 2;
+    sq.side = 1;
+    setp(&p);
+    setl(i);
+    setc(s);
+    setc(buf);
+    setc("lit");
+    setv(s);
+    setv(&p);
+    setl((long)i);
+    return show(&sq);
+}
+TOEOF
+if "$work/ct-ast" "$work/atype_ok.ct" -o "$work/atype_ok.c" \
+        >"$work/atype_ok.out" 2>"$work/atype_ok.err" \
+   && [ ! -s "$work/atype_ok.err" ]; then
+    ok "argtype: conversions, void *, arrays, casts, literals and interface formals stay quiet"
+else
+    bad "argtype: known-good calls" "$(cat "$work/atype_ok.err")"
+fi
+
+echo
 echo "== memory: auto-drop and leak warnings (10.3) =="
 # AutoDrop releases every `own` object at its scope exit, in reverse order; the
 # three negative fixtures pin the layout / Drop / scope diagnostics. Every

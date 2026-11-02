@@ -238,5 +238,16 @@ else
 fi
 
 echo
+echo "== call-site argument types stay quiet on the corpus (Phase 19.2) =="
+# Same rule for the 19.2 type comparison: only confidently wrong arguments
+# may be reported, so any record here is a false positive.
+tmm=$(grep -l 'type mismatch' "$work"/*.err 2>/dev/null)
+if [ -n "$tmm" ]; then
+    bad "corpus argtype" "unexpected type warnings in: $tmm"
+else
+    ok "no type warnings across the corpus"
+fi
+
+echo
 printf 'check-warnings: %d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

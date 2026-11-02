@@ -46,6 +46,7 @@ pub trait TypeOps {
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
     int  concrete_struct(const char *type, char *sout, int scap, int *is_ptr);
     int  expr_type(int n, char *out, int cap);
+    int  expr_ctype(int n, char *out, int cap);
     int  maybe_box(int n, const char *trait, int addr);
     int  type_has_array_init(const char *type);
     int  init_item_text(const char *stype, const char *item, char *out, int cap);
@@ -291,6 +292,78 @@ impl TypeOps for TypeCheck {
             return 0;
         }
         return -1;
+    }
+
+    /* 19.2: the expression's type with its array dimensions kept (`char[64]`).
+       `expr_type` drops them (boxing only needs the class), but the coarse
+       argument-type check needs to see a decayed array so it can leave it
+       alone: an N_VAR with `is_array` gains `[]` (the count is not needed), an
+       N_MEMBER / N_ARROW appends the field's dims, an N_INDEX peels one dim
+       off its base (or one star off a pointer), `&x` appends one star, and the
+       implicit `self` -- recorded without its pointer star -- gains it back.
+       Everything else defers to `expr_type`. */
+    int expr_ctype(int n, char *out, int cap)
+    {
+        char rt[MAX_TEXT];
+        char sname[MAX_TEXT];
+        int k, is_ptr, si, fi, w;
+
+        k = self->arena->nodes[n].kind;
+        if (k == N_VAR) {
+            int vi = self->sym->find_var(self->arena->nodes[n].text2);
+            if (vi < 0) return -1;
+            w = snprintf(out, (size_t)cap, "%s%s%s", self->sym->vars[vi].type,
+                         (strcmp(self->arena->nodes[n].text2, "self") == 0
+                          && strncmp(self->sym->vars[vi].type, "struct ", 7) == 0
+                          && !strchr(self->sym->vars[vi].type, '*')) ? " *" : "",
+                         self->sym->vars[vi].is_array ? "[]" : "");
+            if (w < 0 || w >= cap) return -1;
+            return 0;
+        }
+        if (k == N_MEMBER || k == N_ARROW) {
+            if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
+            is_ptr = (k == N_ARROW);
+            if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
+            si = self->sym->find_struct(sname);
+            if (si < 0) return -1;
+            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+                if (strcmp(self->sym->structs[si].fields[fi].name,
+                           self->arena->nodes[n].text2) == 0) {
+                    w = snprintf(out, (size_t)cap, "%s%s",
+                                 self->sym->structs[si].fields[fi].type,
+                                 self->sym->structs[si].fields[fi].dims);
+                    if (w < 0 || w >= cap) return -1;
+                    return 0;
+                }
+            return -1;
+        }
+        if (k == N_INDEX) {
+            char *br, *close;
+            if (self->expr_ctype(self->arena->nodes[n].a, out, cap) != 0) return -1;
+            br = strchr(out, '[');
+            if (br) {
+                if (br[1] == ']') return 0;   /* a var's bare `[]` marker: the
+                    remaining dims are unknown, so the element stays an array */
+                close = strchr(br, ']');
+                if (close) memmove(br, close + 1, strlen(close + 1) + 1);
+                return 0;
+            }
+            br = strrchr(out, '*');
+            if (!br) return -1;
+            memmove(br, br + 1, strlen(br + 1) + 1);
+            return 0;
+        }
+        if (k == N_ADDR) {
+            int n2;
+            if (self->expr_ctype(self->arena->nodes[n].a, out, cap) != 0) return -1;
+            n2 = (int)strlen(out);
+            if (n2 + 3 >= cap) return -1;
+            out[n2] = ' ';
+            out[n2 + 1] = '*';
+            out[n2 + 2] = 0;
+            return 0;
+        }
+        return self->expr_type(n, out, cap);
     }
 
     /* Wrap `n` in a fat pointer when `trait` is expected; an expression that is

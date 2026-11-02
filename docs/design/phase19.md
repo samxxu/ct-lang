@@ -1,7 +1,7 @@
 # Phase 19 · 受限语义检查
 
 > 中文 · [English](#english)
-> **状态：实施中**（2026-11-03，19.0、19.1 已完成；19.2–19.4 待实施） · 版本：`v0.19.0`（收口时 bump）
+> **状态：实施中**（2026-11-03，19.0、19.1、19.2 已完成；19.3–19.4 待实施） · 版本：`v0.19.0`（收口时 bump）
 > 前置：[spike-semantic-check.md](spike-semantic-check.md)（GO）；Phase 17 / 18 不阻塞本阶段
 
 ---
@@ -46,6 +46,8 @@
 19.0 → 19.1 → 19.2 → 19.3 → 19.4。19.0 先清掉标准 C 的潜在红项（gcc 收紧时不再翻车），其余顺序不变；19.2 依赖 19.1 的调用点解析；19.3 依赖 19.1 的方法解析；19.4 最后接入门禁。每片独立可回退。
 
 > **19.1 落地形态**：调用点 arity 在 `ct compile` / `ct build` 里以**警告**报告（`warning: arity mismatch: '<callee>' takes N argument(s), M given`），因此两处的产物与默认退出码不变；`ct check`（19.4）再把同一条记录提升为 error。只有解析到签名的被调者才比较：函数指针、未声明的 C 库名、`map` recipe、静态类型宿主一律视为未知并跳过；可变参函数只校验具名参数的下界。两个探针落点：`add(1)` 与 `s.area()`（trait 方法少参）。
+
+> **19.2 落地形态**：实参类型按位比对在 `ct compile` / `ct build` 里以**警告**报告（`warning: type mismatch: '<callee>' argument K: expected '<formal>', got '<actual>'`），与 19.1 同一严重度策略（D19-4）。粗粒度规则：去限定词 / 去空白后精确相等即过；数值类之间（含 `enum`）总是放行；指针层级必须一致，`void *` 双向放行；struct 指针只有在双方都能在本单元符号表中解析且解析到**不同** struct 时才报；typedef、union、函数指针拼写、iface 形参（boxing 已有硬错误）、数组双方（decay）、cast 实参、无法推导的实参一律按 unknown 跳过（D19-3）。每次调用至多报第一个错配位。探针：函数 `setp(&q)` 与 trait 方法 `s.put(&q)` 的 struct 指针错配。
 
 ### 6. 版本与发布
 
@@ -110,6 +112,8 @@ The spike proved that method existence, impl/trait signature mismatch (warning),
 19.0 → 19.1 → 19.2 → 19.3 → 19.4. 19.0 first removes the standard-C hazard so a stricter gcc cannot trip it; each slice is independently revertible.
 
 > **How 19.1 lands**: a call-site arity mismatch is reported as a **warning** (`warning: arity mismatch: '<callee>' takes N argument(s), M given`) so `ct compile` / `ct build` keep their artifacts and default exit codes; `ct check` (19.4) raises the same record to an error. Only a callee whose signature resolved is compared — function pointers, undeclared C library names, `map` recipes and static type hosts stay unknown and pass; a variadic function checks only the lower bound of its named parameters. Probes: `add(1)` and `s.area()` (a trait method with a missing argument).
+
+> **How 19.2 lands**: an argument type is compared positionally against the resolved signature and reported as a **warning** (`warning: type mismatch: '<callee>' argument K: expected '<formal>', got '<actual>'`), same severity policy as 19.1 (D19-4). The coarse rules: qualifier- and whitespace-normalised equality passes; numerics (including `enum`) always pass; pointer depths must match, with `void *` accepted both ways; a struct pointer is reported only when both tags resolve in the unit's own table to *different* structs. Typedefs, unions, function-pointer spellings, interface formals (boxing already errors), arrays on either side (decay), cast arguments and underivable arguments stay unknown and pass (D19-3). At most the first mismatching position is reported per call. Probes: `setp(&q)` (function) and `s.put(&q)` (trait method), each handed the wrong struct pointer.
 
 ### 6. Version
 

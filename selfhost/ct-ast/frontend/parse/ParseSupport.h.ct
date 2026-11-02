@@ -51,11 +51,13 @@ pub trait SupportOps {
     int  add_trait(const char *name);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  arity_warn(int line, const char *callee, const char *msg);
+    int  type_warn(int line, const char *callee, const char *msg);
     int  ns_decl_name(const char *name, char *out, int cap);
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
     int  expr_type(int n, char *out, int cap);
+    int  expr_ctype(int n, char *out, int cap);
     int  maybe_box(int n, const char *trait, int addr);
     int  rewrite_init_text(const char *stype, const char *raw, char *out, int cap);
     int  mark_owned(int n, int line);
@@ -375,6 +377,12 @@ impl SupportOps for ParseSupport {
         return tool::diag::ct_arity_warn(line, callee, msg, self->mem->path);
     }
 
+    /* A call-site argument type mismatch (19.2); same warning path as arity. */
+    int type_warn(int line, const char *callee, const char *msg)
+    {
+        return tool::diag::ct_type_warn(line, callee, msg, self->mem->path);
+    }
+
     int ns_decl_name(const char *name, char *out, int cap)
     {
         if (self->sym->ns_decl_name(name, out, (int)cap) != 0)
@@ -402,6 +410,11 @@ impl SupportOps for ParseSupport {
     int expr_type(int n, char *out, int cap)
     {
         return self->ty->expr_type(n, out, (int)cap);
+    }
+
+    int expr_ctype(int n, char *out, int cap)
+    {
+        return self->ty->expr_ctype(n, out, cap);
     }
 
     int maybe_box(int n, const char *trait, int addr)

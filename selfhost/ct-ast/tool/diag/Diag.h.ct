@@ -1,9 +1,10 @@
 /*
  * Diag.h.ct - the warning store and the semantic-error counter, one unit of its own.
  *
- * Warnings are recorded from three places (a signature mismatch while parsing
- * an impl, a potential leak while analysing memory, a call-site arity
- * mismatch while parsing an expression) and printed once at the end;
+ * Warnings are recorded from four places (a signature mismatch while parsing
+ * an impl, a potential leak while analysing memory, a call-site arity or
+ * argument-type mismatch while parsing an expression) and printed once at the
+ * end;
  * the error counter also drives the "too many errors" stop and the driver's
  * summary line. Keeping the store here means both producers reach it through
  * primitive wrappers -- a generated header cannot carry the MAX_* macros or the
@@ -22,10 +23,11 @@
 #define MAX_WARNINGS 32
 
 namespace tool::diag;
-/* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity). */
+/* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity,
+   19.2 argument type). */
 struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
-                           4 arity_mismatch */
+                           4 arity_mismatch, 5 type_mismatch */
     int  line;
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
     char file[MAX_PATH];
@@ -41,6 +43,8 @@ trait DiagStore {
                          const char *stype, const char *msg, const char *path);
     int  record_arity_warn(int line, const char *callee, const char *msg,
                            const char *path);
+    int  record_type_warn(int line, const char *callee, const char *msg,
+                          const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
     int  emit(int json, int to_stderr);
@@ -103,6 +107,28 @@ impl DiagStore for Diag {
         if (self->nwarns >= MAX_WARNINGS) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 4;
+        w->line = line;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        snprintf(w->var, sizeof w->var, "%s", callee);
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* One argument whose type is confidently incompatible with the resolved
+       signature (19.2). Same severity policy as arity: a warning in compile
+       mode, an error under `ct check`. */
+    int record_type_warn(int line, const char *callee, const char *msg,
+                         const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 5;
         w->line = line;
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
@@ -209,6 +235,14 @@ impl DiagStore for Diag {
                     fputs("\",\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 5) {
+                    fputs("{\"type\":\"type_mismatch\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,\"callee\":\"", w->line);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else {
                     fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -234,6 +268,9 @@ impl DiagStore for Diag {
                             w->file, w->line);
                 else if (w->kind == 4)
                     fprintf(tf, "%s:%d: warning: arity mismatch: '%s' %s\n",
+                            w->file, w->line, w->var, w->msg);
+                else if (w->kind == 5)
+                    fprintf(tf, "%s:%d: warning: type mismatch: '%s' %s\n",
                             w->file, w->line, w->var, w->msg);
                 else
                     fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
@@ -280,6 +317,12 @@ pub int ct_arity_warn(int line, const char *callee, const char *msg, const char 
 int ct_arity_warn(int line, const char *callee, const char *msg, const char *path)
 {
     return g_diag.record_arity_warn(line, callee, msg, path);
+}
+
+pub int ct_type_warn(int line, const char *callee, const char *msg, const char *path);
+int ct_type_warn(int line, const char *callee, const char *msg, const char *path)
+{
+    return g_diag.record_type_warn(line, callee, msg, path);
 }
 
 pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);

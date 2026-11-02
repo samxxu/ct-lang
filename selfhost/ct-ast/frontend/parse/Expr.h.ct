@@ -110,6 +110,7 @@ pub trait ExprOps {
                          int *form);
     int  record_call(const char *callee, int line);
     int  arity_check(int line, const char *callee, int got, int want);
+    int  argtype_check(int line, const char *callee, int args, int fi, int ti, int mi);
 }
 
 pub struct Expr {
@@ -162,6 +163,186 @@ static int arg_count(struct Arena *a, int first)
     return c;
 }
 
+/* ---- 19.2 coarse argument types ------------------------------------------
+   The helpers below are pure string work: they classify a type spelling
+   without touching the symbol tables, so the caller decides what stays
+   unknown. Coarse on purpose -- numerics convert freely (the usual C
+   conversions), either side of a pointer may be `void`, and a struct tag
+   only counts when the caller can resolve it in this unit's own table. */
+
+static int id_char(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9') || c == '_';
+}
+
+/* The qualifier word at `p`, or 0. A qualifier is recognised only at a word
+   boundary, so a tag such as `constable` keeps its first five letters. */
+static int qual_at(const char *p, int prev_id)
+{
+    if (prev_id) return 0;
+    if (strncmp(p, "__restrict__", 12) == 0 && !id_char(p[12])) return 12;
+    if (strncmp(p, "__restrict", 10) == 0 && !id_char(p[10])) return 10;
+    if (strncmp(p, "volatile", 8) == 0 && !id_char(p[8])) return 8;
+    if (strncmp(p, "restrict", 8) == 0 && !id_char(p[8])) return 8;
+    if (strncmp(p, "const", 5) == 0 && !id_char(p[5])) return 5;
+    return 0;
+}
+
+/* Normalise a type spelling: drop the qualifier words and every whitespace
+   character. `const char *` and `char *` then compare equal, while
+   `const char *` and `char **` still differ. */
+static void tnorm(const char *in, char *out, int cap)
+{
+    int n, prev, q;
+    n = 0;
+    prev = 0;
+    while (*in) {
+        q = qual_at(in, prev);
+        if (q) {
+            in += q;
+            continue;                       /* the boundary stands */
+        }
+        if (*in != ' ' && *in != '\t' && *in != '\n' && *in != '\r') {
+            if (n + 2 >= cap) {
+                out[0] = 0;
+                return;
+            }
+            out[n] = *in;
+            n++;
+        }
+        prev = id_char((unsigned char)*in);
+        in++;
+    }
+    out[n] = 0;
+}
+
+static int tstars(const char *k)
+{
+    int n = 0;
+    while (*k) {
+        if (*k == '*') n++;
+        k++;
+    }
+    return n;
+}
+
+/* The normalised spelling without its stars: `struct S *` -> `struct S`. */
+static void tbase(const char *k, char *out, int cap)
+{
+    int n = 0;
+    while (*k) {
+        if (*k != '*') {
+            if (n + 2 >= cap) {
+                out[0] = 0;
+                return;
+            }
+            out[n] = *k;
+            n++;
+        }
+        k++;
+    }
+    out[n] = 0;
+}
+
+/* One word of the numeric class: a C scalar keyword or a qualifier (the
+   tokeniser sees the raw spelling, where qualifiers still appear). */
+static int tscalar(const char *w)
+{
+    return strcmp(w, "void") == 0 || strcmp(w, "char") == 0
+        || strcmp(w, "short") == 0 || strcmp(w, "int") == 0
+        || strcmp(w, "long") == 0 || strcmp(w, "float") == 0
+        || strcmp(w, "double") == 0 || strcmp(w, "signed") == 0
+        || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0
+        || strcmp(w, "bool") == 0 || strcmp(w, "size_t") == 0
+        || strcmp(w, "ssize_t") == 0 || strcmp(w, "ptrdiff_t") == 0
+        || strcmp(w, "wchar_t") == 0 || strcmp(w, "va_list") == 0
+        || strcmp(w, "int8_t") == 0 || strcmp(w, "int16_t") == 0
+        || strcmp(w, "int32_t") == 0 || strcmp(w, "int64_t") == 0
+        || strcmp(w, "uint8_t") == 0 || strcmp(w, "uint16_t") == 0
+        || strcmp(w, "uint32_t") == 0 || strcmp(w, "uint64_t") == 0
+        || strcmp(w, "FILE") == 0 || strcmp(w, "DIR") == 0
+        || strcmp(w, "const") == 0 || strcmp(w, "volatile") == 0
+        || strcmp(w, "restrict") == 0 || strcmp(w, "__restrict") == 0
+        || strcmp(w, "__restrict__") == 0;
+}
+
+/* Every whitespace-or-star separated word of the raw spelling is a scalar
+   keyword (`unsigned long`, `const char *`). */
+static int tnumeric(const char *in)
+{
+    char tok[MAX_TEXT];
+    int n, any;
+    n = 0;
+    any = 0;
+    for (;;) {
+        while (*in == ' ' || *in == '\t' || *in == '*') in++;
+        if (!*in) break;
+        n = 0;
+        while (*in && *in != ' ' && *in != '\t' && *in != '*') {
+            if (n + 2 >= MAX_TEXT) return 0;
+            tok[n] = *in;
+            n++;
+            in++;
+        }
+        tok[n] = 0;
+        if (!tscalar(tok)) return 0;
+        any = 1;
+    }
+    return any;
+}
+
+/* 0 numeric, 1 struct, 2 union, 3 void, -1 anything else (a typedef name
+   stays unknown). `base` is the normalised star-less spelling, `raw` the
+   spelling as written -- the tag prefix is read from `raw` so a typedef
+   called `structor` is not mistaken for a struct. */
+static int tclass(const char *raw, const char *base)
+{
+    if (strcmp(base, "void") == 0) return 3;
+    while (*raw == ' ') raw++;
+    if (strncmp(raw, "struct ", 7) == 0) return 1;
+    if (strncmp(raw, "union ", 6) == 0) return 2;
+    if (strncmp(raw, "enum ", 5) == 0) return 0;
+    if (tnumeric(raw)) return 0;
+    return -1;
+}
+
+/* Compare one formal against one actual: 0 compatible, 1 a confident
+   mismatch, -1 undecidable, 2 a struct-against-struct pair the caller must
+   resolve through its own struct table (the normalised bases are handed back
+   in `fb` / `ab`, tag included). */
+static int arg_class(const char *formal, const char *actual,
+                     char *fb, int fcap, char *ab, int acap)
+{
+    char fk[MAX_TEXT], ak[MAX_TEXT];
+    int fd, ad, cf, ca;
+
+    tnorm(formal, fk, sizeof fk);
+    tnorm(actual, ak, sizeof ak);
+    if (!fk[0] || !ak[0]) return -1;
+    if (strcmp(fk, ak) == 0) return 0;
+    if (strchr(fk, '(') || strchr(ak, '(')) return -1;    /* a function pointer */
+    tbase(fk, fb, fcap);
+    tbase(ak, ab, acap);
+    if (!fb[0] || !ab[0]) return -1;
+    cf = tclass(formal, fb);
+    ca = tclass(actual, ab);
+    if (cf < 0 || ca < 0) return -1;
+    if (cf == 2 || ca == 2) return -1;                    /* unions: no table */
+    fd = tstars(fk);
+    ad = tstars(ak);
+    if (fd != ad) {
+        /* `void *` converts to and from any object pointer */
+        if (cf == 3 && fd > 0 && ad > 0) return 0;
+        if (ca == 3 && ad > 0 && fd > 0) return 0;
+        return 1;
+    }
+    if (cf == 3 || ca == 3) return fd > 0 ? 0 : -1;
+    if (cf == 0 && ca == 0) return 0;
+    if (cf != ca) return 1;
+    return 2;
+}
+
 /* 19.1 call-site arity: only a callee whose signature is known is compared.
    A call through a function pointer, an undeclared C library name, a `map`
    recipe and a static type host all stay unknown and pass. The caller passes
@@ -178,6 +359,61 @@ impl ExprOps for Expr {
         snprintf(msg, sizeof msg, "takes %d argument(s), %d given", want, got);
         if (self->sup->arity_warn(line, callee, msg) != 0)
             return self->sup->fail("too many warnings");
+        return 0;
+    }
+
+    /* 19.2: the resolved signature beside the argument chain, one position at
+       a time. Only a position where both sides can name a type is compared;
+       an interface formal (boxing owns it), an array on either side (decay),
+       a cast argument and an argument without a derivable type all stay
+       unknown and pass (D19-3). One warning per call is enough. Warning
+       severity like 19.1 (D19-4): `ct check` (19.4) raises it to an error. */
+    int argtype_check(int line, const char *callee, int args, int fi, int ti, int mi)
+    {
+        char at[MAX_TEXT];
+        char fb[MAX_TEXT], ab[MAX_TEXT];
+        char msg[MAX_TEXT];
+        const char *ft;
+        int cur, k, np, skip, r;
+
+        if (fi >= 0) np = self->sym->funcs[fi].nparams;
+        else np = self->sym->traits[ti].m[mi].nparams;
+        cur = args;
+        k = 0;
+        while (cur > 0 && k < np) {
+            skip = 0;
+            if (fi >= 0) ft = self->sym->funcs[fi].ptype[k];
+            else ft = self->sym->traits[ti].m[mi].ptype[k];
+            /* an array parameter is a pointer in disguise: the dims sit in
+               `pdim` (a function) or ride in the spelling (a trait method) */
+            if (fi >= 0 && self->sym->funcs[fi].pdim[k][0]) skip = 1;
+            if (!skip && strchr(ft, '[')) skip = 1;
+            if (!skip) {
+                char itr[MAX_TEXT];
+                int iip = 0;
+                if (self->sup->iface_ref_type(ft, itr, sizeof itr, &iip)) skip = 1;
+            }
+            if (!skip && self->arena->nodes[cur].kind == N_CAST) skip = 1;
+            if (!skip && self->sup->expr_ctype(cur, at, sizeof at) != 0) skip = 1;
+            if (!skip && strchr(at, '[')) skip = 1;   /* a decayed array */
+            if (!skip) {
+                r = arg_class(ft, at, fb, sizeof fb, ab, sizeof ab);
+                if (r == 2) {
+                    int fs = self->sym->find_struct(fb + 6);
+                    int as = self->sym->find_struct(ab + 6);
+                    r = (fs < 0 || as < 0) ? -1 : (fs != as);
+                }
+                if (r == 1) {
+                    snprintf(msg, sizeof msg, "argument %d: expected '%s', got '%s'",
+                             k + 1, ft, at);
+                    if (self->sup->type_warn(line, callee, msg) != 0)
+                        return self->sup->fail("too many warnings");
+                    return 0;
+                }
+            }
+            cur = self->arena->nodes[cur].next;
+            k++;
+        }
         return 0;
     }
 
@@ -1300,6 +1536,11 @@ impl ExprOps for Expr {
                                                  arg_count(self->arena, args),
                                                  self->sym->traits[t].m[mi].nparams) != 0)
                             return -1;
+                        /* 19.2: the argument types against the resolved trait
+                           method, same rules as a function call. */
+                        if (mi < self->sym->traits[t].nm
+                            && self->argtype_check(mline, fname, args, -1, t, mi) != 0)
+                            return -1;
                     }
                 }
                 n = m;
@@ -1619,6 +1860,13 @@ impl ExprOps for Expr {
                                                       got, want) != 0)
                         return -1;
                 }
+                /* 19.2: the argument types against the same signature, before
+                   the boxing pass rewrites interface arguments (an interface
+                   formal is skipped here, boxing owns it). */
+                if (fi >= 0
+                    && self->argtype_check(id_line, self->arena->nodes[n].text2,
+                                           args, fi, -1, -1) != 0)
+                    return -1;
                 /* the emitted call must spell the definition's C name */
                 if (fi >= 0)
                     snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);
