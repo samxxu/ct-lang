@@ -460,6 +460,74 @@ else
     else
         bad "index digest" "wrong diagnostic: $(cat "$work/ib.err")"
     fi
+
+    echo
+    echo "== a second ct get keeps the rows the first one pinned =="
+    # PKG-2: one invocation resolves one spec; rewriting ct.lock from that run's
+    # rows alone unpins everything fetched earlier, and the next `ct update`
+    # re-picks the lowest tag, so an index tag such as v0.2.0 is lost.
+    mkdir -p "$work/pkgs/one" "$work/pinseed" "$work/pinhome" "$work/pinproj"
+    printf 'name = one\nversion = 1.0.0\n' >"$work/pkgs/one/ct.pkg"
+    printf 'int one_value(void) { return 1; }\n' >"$work/pkgs/one/one.c"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/pinseed/ct.pkg"
+    if ( cd "$work/pinseed" && HOME="$work/pinhome" CT_REGISTRY="file://$reg" \
+            "$work/ct-ast" get "gutil@>=0.2.0" >"$work/ps.out" 2>"$work/ps.err" ); then
+        pdig="$(awk '$1 == "gutil" { print $NF }' "$work/pinseed/ct.lock")"
+        printf 'gutil 0.2.0 file://%s/gutil v0.2.0 %s\n' "$reg" "$pdig" >"$work/index2"
+        ok "a seed lock supplies the 0.2.0 digest"
+    else
+        bad "pin seed" "non-zero exit: $(cat "$work/ps.err")"
+    fi
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/pinproj/ct.pkg"
+    if ( cd "$work/pinproj" && HOME="$work/pinhome" \
+            "$work/ct-ast" get --index "$work/index2" gutil >"$work/p1.out" 2>"$work/p1.err" ); then
+        ok "the index pins gutil at its tag"
+    else
+        bad "pin get" "non-zero exit: $(cat "$work/p1.err")"
+    fi
+    if ( cd "$work/pinproj" && HOME="$work/pinhome" \
+            "$work/ct-ast" get ../pkgs/one >"$work/p2.out" 2>"$work/p2.err" ); then
+        ok "a second get resolves its own spec"
+    else
+        bad "second get" "non-zero exit: $(cat "$work/p2.err")"
+    fi
+    if grep -Fq 'gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
+        ok "the second get leaves the first package pinned"
+    else
+        bad "lock merge" "the gutil row was dropped: $(cat "$work/pinproj/ct.lock")"
+    fi
+    if [ "$(grep -c '^one 1\.0\.0 ' "$work/pinproj/ct.lock")" = "1" ]; then
+        ok "the second get writes its own row once"
+    else
+        bad "lock merge" "unexpected one rows: $(cat "$work/pinproj/ct.lock")"
+    fi
+    if ( cd "$work/pinproj" && HOME="$work/pinhome" CT_REGISTRY="file://$reg" \
+            "$work/ct-ast" update >"$work/pu.out" 2>"$work/pu.err" ); then
+        if grep -Fq 'gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
+            ok "update keeps 0.2.0 instead of re-picking the lowest tag"
+        else
+            bad "update pin" "gutil moved: $(grep gutil "$work/pinproj/ct.lock")"
+        fi
+    else
+        bad "update pin" "non-zero exit: $(cat "$work/pu.err")"
+    fi
+    if ( cd "$work/pinproj" && "$work/ct-ast" verify >"$work/pv.out" 2>"$work/pv.err" ) \
+       && grep -Fq "verified 2 package(s)" "$work/pv.out"; then
+        ok "verify covers both merged packages"
+    else
+        bad "verify merge" "$(cat "$work/pv.out" "$work/pv.err")"
+    fi
+    if ( cd "$work/pinproj" && HOME="$work/pinhome" \
+            "$work/ct-ast" get --index "$work/index2" gutil >"$work/p3.out" 2>"$work/p3.err" ); then
+        if [ "$(grep -c '^gutil ' "$work/pinproj/ct.lock")" = "1" ] \
+           && [ "$(grep -c '^one ' "$work/pinproj/ct.lock")" = "1" ]; then
+            ok "re-getting a package replaces its row instead of duplicating it"
+        else
+            bad "lock replace" "unexpected rows: $(cat "$work/pinproj/ct.lock")"
+        fi
+    else
+        bad "re-get" "non-zero exit: $(cat "$work/p3.err")"
+    fi
 fi
 
 echo

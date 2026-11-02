@@ -80,6 +80,9 @@ hello/
 
    `ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
    （缺依赖时报 `dependency '<spec>' is not satisfied by ct.lock`）。
+   `ct get` 一次只解析一个 spec，但会保留 `ct.lock` 中本次没有重解的其它行；重复 get 同一个包只替换
+   该包的行，不会重复。这样再 get 一个新包不会把先前钉住的版本弄丢，随后的 `ct update` 仍按锁里的
+   commit 解析。
    `ct get` 可用 git——它是**包管理路径**里唯一的子进程调用点；`ct update` / `ct verify` / `ct install`
    零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
    的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
@@ -181,6 +184,9 @@ checked when the index accepts a package and by CI.
    `ct verify` checks digests only and **does not read `ct.pkg`**; whether every `dep` in the manifest
    is covered by `ct.lock` is decided by `ct install` (a missing one reports
    `dependency '<spec>' is not satisfied by ct.lock`).
+   `ct get` resolves one spec per run, but it keeps the `ct.lock` rows it did not resolve again;
+   re-getting the same package replaces its row instead of duplicating it. Getting a new package
+   therefore cannot unpin an older one, and a later `ct update` still resolves from the locked commit.
    `ct get` may use git — it is the only subprocess call site on the **package-management path**;
    `ct update` / `ct verify` / `ct install` are network-free and subprocess-free. On the compiler side
    `ct compile` / `ct build --emit-c` are network-free and subprocess-free, but the default form of

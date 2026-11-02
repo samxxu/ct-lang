@@ -77,6 +77,7 @@ static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[]
                            int *nlock);
 static int pkg_read_pins(void);
 static int pkg_pin_ref(const char *name, char *ref, size_t cap);
+static int pkg_lock_keep(char *dst, size_t cap);
 static int pkg_update(const char *prog);
 static int pkg_verify(const char *prog);
 
@@ -1180,6 +1181,8 @@ impl PkgOps for Pkg {
     int get(const char *spec, const char *root)
     {
         FILE *f;
+        char kept[MAX_LOCK];
+        size_t klen;
         (void)self;
 
         self->locklen = 0;
@@ -1192,6 +1195,16 @@ impl PkgOps for Pkg {
             return 1;
         }
         if (self->get_spec(spec, root, 0) != 0) return 1;
+        /* `ct get` names one spec; the rows it did not touch stay in the lock,
+           so a second get cannot unpin the first package (PKG-2). */
+        if (pkg_lock_keep(kept, sizeof kept) != 0) return 1;
+        klen = strlen(kept);
+        if (self->locklen + (int)klen >= (int)sizeof self->lock) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            return 1;
+        }
+        memcpy(self->lock + self->locklen, kept, klen + 1);
+        self->locklen += (int)klen;
 
         f = fopen("./ct.lock", "w");
         if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
@@ -1698,6 +1711,59 @@ static int pkg_pin_ref(const char *name, char *ref, size_t cap)
             return 0;
         }
     return -1;
+}
+
+/* Keep the ct.lock rows `ct get` did not resolve again. One invocation resolves
+   one spec, so rewriting the lock from the new rows alone would drop every
+   other package ct.pkg already pins; a later `ct update` then re-picks the
+   lowest cached tag and silently downgrades them (PKG-2). A row whose name this
+   run resolved is dropped instead, so re-getting a package replaces it rather
+   than duplicating it. A missing lock is not an error. */
+static int pkg_lock_keep(char *dst, size_t cap)
+{
+    FILE *f;
+    char line[MAX_PKG_LINE];
+    size_t len, ll, nl;
+    int i;
+
+    len = 0;
+    dst[0] = 0;
+    f = fopen("./ct.lock", "r");
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *p;
+
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        nl = 0;
+        while (p[nl] && p[nl] != ' ' && p[nl] != '\t'
+               && p[nl] != '\n' && p[nl] != '\r')
+            nl++;
+        if (nl == 0) continue;
+        for (i = 0; i < g_pkg.nseen; i++)
+            if (strlen(g_pkg.seen[i]) == nl && memcmp(g_pkg.seen[i], p, nl) == 0) break;
+        if (i < g_pkg.nseen) continue;
+        ll = strlen(line);
+        if (len + ll + 1 > cap) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            fclose(f);
+            return -1;
+        }
+        memcpy(dst + len, line, ll);
+        len += ll;
+        dst[len] = 0;
+    }
+    fclose(f);
+    /* a hand-edited lock may lack the final newline; keep the merged rows apart */
+    if (len > 0 && dst[len - 1] != '\n') {
+        if (len + 2 > cap) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            return -1;
+        }
+        dst[len] = '\n';
+        dst[len + 1] = 0;
+    }
+    return 0;
 }
 
 /* `ct update`: re-resolve ct.pkg, keeping the git commits ct.lock pins and
