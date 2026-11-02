@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：完成（2026-11-02；18.0–18.6 全部落地，四个外部仓库已推送；`v0.18.0` tag 待评审通过后打）。**
+> **状态：完成（2026-11-02；18.0–18.6 全部落地，四个外部仓库已推送（`hal-posix` 1.0.1），第九轮评审的 6 条已全部处置；`v0.18.0` tag 打在收口提交上）。**
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
 > （`hal` 契约 + 平台包 + C 库映射）、索引与 CI 产出**，为 `1.0.0` 做准备。
 > **D18-1…D18-11 已按建议值经用户确认**（2026-11-02）。本文件只记录计划，不描述现状；
@@ -128,7 +128,7 @@
 - **18.4 `hal-posix`**：单单元实现 + 四个 `map`，一个 `posix_hal` 实例可装箱成四个 trait；宿主 macOS arm64 端到端通过（`ct get` → `ct install` → 执行打印的命令 → 固定输出）。glibc 在 `-std=c99` 下会隐藏 POSIX 声明，故 `ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`；目标机（Linux aarch64）由 CI 交叉 + QEMU 验证（本机无交叉工具链）。
 - **18.5 `clib`**：三个 `.m.ct` 单元（`clib::String` / `clib::Stdio` / `clib::Math`），调用点展开为普通 C 调用（生成物中零 `clib_` 符号）；`strlen` 保留 `size_t` 的 `unsigned long` 拼写以避免 `printf` 格式告警；`ldflags = -lm` 已进入 `ct install` 打印的命令。
 - **18.2 索引与 CI**：索引仓库骨架（`index`、`tools/gen-index.sh`、`tools/refresh-index.sh`、`packages.txt`、夜间刷新 workflow）已本地验证——`ct get --index` 可递归解析 `hal-posix → hal`，`ct update` / `ct verify` 绿；本仓库 `packages.yml`（宿主 job + aarch64/QEMU job）已加入，本地门禁仍为 11 道。
-- **待办**：`v0.18.0` tag 与推送在代码评审通过后进行（仓库内容已全部落地，评审前不打 tag）。
+- **18.6 收口**：`examples/wave1-demo` 与 `packages.yml`（宿主 + aarch64/QEMU）已落地，首次 CI 运行待在推送后观察；第九轮评审（[review-2026-11-02](../history/reports/review-2026-11-02/review-2026-11-02.md)）的 6 条已全部处置；`hal-posix` 修复 PKG-1 后发布 `1.0.1`，索引重建为三行；五处 `CTC_VERSION` → `0.18.0`，71 个 golden 仅版本 token 变化。
 
 ### 5. 依赖与顺序
 
@@ -306,9 +306,10 @@
   `packages.txt`, the nightly refresh workflow) is verified locally — `ct get --index` resolves
   `hal-posix → hal` recursively and `ct update` / `ct verify` are green; this repository's `packages.yml`
   (host job + aarch64/QEMU job) is in place and the local gates stay at 11.
-- **Pending**: the `ct-pkg` organisation does not yet grant repository creation to the current token, so the four
-  repositories and their `v1.0.0` tags are not pushed; 18.6's close (doc sync, `CTC_VERSION`, goldens,
-  `v0.18.0`) waits for that push.
+- **18.6 close**: `examples/wave1-demo` and `packages.yml` (host + aarch64/QEMU) are in place, with the first CI
+  run to be watched after the push; all six findings of the ninth review are addressed; `hal-posix` ships `1.0.1`
+  after the PKG-1 fix and the index has been rebuilt to three lines; the five `CTC_VERSION` sites read `0.18.0`
+  and the 71 goldens differ by the version token only.
 
 ### 5. Order and dependencies
 
