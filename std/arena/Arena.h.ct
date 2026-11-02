@@ -1,0 +1,108 @@
+/*
+ * Arena.h.ct - a block bump allocator (std::arena).
+ *
+ * An arena hands out 8-byte aligned slices from blocks it owns, so many short
+ * lived values cost one `malloc` each only until a block fills up. There is no
+ * per-value free: `reset` returns every block after the first to the heap, and
+ * `free_all` releases the arena completely. `alloc` returns NULL when a new block
+ * cannot be obtained -- it never aborts.
+ *
+ * `Drop` is emitted `static` by the compiler, so a library unit cannot destroy
+ * a caller's value type; that is why every resource type in `std` exposes an
+ * explicit `*_free` and this one an explicit `*_reset` too.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdlib.h>
+
+namespace std::arena;
+
+pub struct Arena {
+    struct Arena *next;
+    char *mem;
+    int cap;
+    int used;
+}
+
+#define ARENA_ALIGN 8
+
+/* Give the arena its first block; `block` below 16 is raised to 16. */
+pub int init(Arena *a, int block);
+int init(Arena *a, int block)
+{
+    if (!a) return -1;
+    if (block < 16) block = 16;
+    a->next = 0;
+    a->used = 0;
+    a->cap = block;
+    a->mem = malloc((size_t)block);
+    if (!a->mem) {
+        a->cap = 0;
+        return -1;
+    }
+    return 0;
+}
+
+/* Hand out `n` bytes, or NULL when `n <= 0` or a block cannot be obtained. */
+pub void *alloc(Arena *a, int n);
+void *alloc(Arena *a, int n)
+{
+    int need;
+    int off;
+    struct Arena *b;
+
+    if (!a || n <= 0 || a->cap <= 0) return 0;
+    need = (n + (ARENA_ALIGN - 1)) & ~(ARENA_ALIGN - 1);
+    if (a->used + need <= a->cap) {
+        off = a->used;
+        a->used += need;
+        return a->mem + off;
+    }
+    /* The request does not fit the current block: start another one that is
+       at least as large as this request, and link it after the first block. */
+    b = malloc(sizeof(struct Arena));
+    if (!b) return 0;
+    b->cap = need > a->cap ? need : a->cap;
+    b->used = need;
+    b->mem = malloc((size_t)b->cap);
+    b->next = 0;
+    if (!b->mem) {
+        b->cap = 0;
+        b->used = 0;
+        free(b);
+        return 0;
+    }
+    b->next = a->next;
+    a->next = b;
+    return b->mem;
+}
+
+/* Recycle every block after the first and keep the first one empty. */
+pub void reset(Arena *a);
+void reset(Arena *a)
+{
+    struct Arena *b;
+    struct Arena *nx;
+
+    if (!a) return;
+    b = a->next;
+    while (b) {
+        nx = b->next;
+        free(b->mem);
+        free(b);
+        b = nx;
+    }
+    a->next = 0;
+    a->used = 0;
+}
+
+/* Release every block, including the first; the arena is reusable via init. */
+pub void free_all(Arena *a);
+void free_all(Arena *a)
+{
+    if (!a) return;
+    reset(a);
+    free(a->mem);
+    a->mem = 0;
+    a->cap = 0;
+}

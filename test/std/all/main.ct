@@ -1,0 +1,47 @@
+/* every std module in one program: the units must coexist in one build. */
+import std::arena::Arena;
+import std::fs::Fs;
+import std::map::Map;
+import std::str::Str;
+import std::test::Test;
+import std::utf8::Utf8;
+import std::vec::Vec;
+
+int main(void)
+{
+    Test t;
+    Arena a;
+    MapStrInt m;
+    VecInt v;
+    char *p;
+    char buf[16];
+    int cp;
+    int x;
+
+    std::test::init(&t);
+
+    std::test::check_eq_int(&t, std::str::len("std"), 3, "str");
+    std::vec::int_init(&v);
+    std::test::check_eq_int(&t, std::vec::int_push(&v, 4), 0, "vec push");
+    std::test::check_eq_int(&t, std::vec::int_at(&v, 0, &x), 0, "vec at");
+    std::test::check_eq_int(&t, x, 4, "vec at value");
+    std::vec::int_free(&v);
+
+    std::test::check_eq_int(&t, std::arena::init(&a, 16), 0, "arena init");
+    p = std::arena::alloc(&a, 8);
+    std::test::check_true(&t, p != 0, "arena alloc");
+    std::arena::free_all(&a);
+
+    std::test::check_eq_int(&t, std::fs::exists("."), 1, "fs exists");
+    std::test::check_eq_int(&t, std::utf8::decode("A", &cp), 1, "utf8 decode");
+    std::test::check_eq_int(&t, cp, 65, "utf8 value");
+    std::test::check_eq_int(&t, std::utf8::encode(233, buf, 16), 2, "utf8 encode");
+
+    std::test::check_eq_int(&t, std::map::str_int_init(&m, 4), 0, "map init");
+    std::test::check_eq_int(&t, std::map::str_int_put(&m, "one", 1), 0, "map put");
+    std::test::check_eq_int(&t, std::map::str_int_get(&m, "one", &x), 0, "map get");
+    std::test::check_eq_int(&t, x, 1, "map value");
+    std::map::str_int_free(&m);
+
+    return std::test::report(&t);
+}

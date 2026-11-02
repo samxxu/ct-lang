@@ -42,7 +42,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 退出码：成功 `0`，语法或 I/O 错误 `1`。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
 （二进制改名为 `ct` 也不变，以保持日志与断言稳定）。完整开关（`-I` / `--std` / `--line` / `--diagnostics` /
-`--ns-root`）见[教程 §10](docs/tutorial.md#10-命令行速查)。
+`--ns-root`）见[教程 §11](docs/tutorial.md#11-命令行速查)。
 
 ### 3. 能力一览
 
@@ -59,13 +59,13 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 4. 仓库结构
 
 `selfhost/` 是自举链：`l0/`（C 种子）→ `l1/`（冻结）→ `l2/`（回归 oracle）→ `ct-ast/`（主线，提供 `ct` 安装入口）；
-`test/` 是测试与 golden；`docs/` 是文档；`bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
+`test/` 是测试与 golden；`docs/` 是文档；`std/` 是官方标准库（源码库，经显式 `-I` 导入）；`bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
 目录级说明见 [selfhost/README.md](selfhost/README.md)、[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
 
 ### 5. 文档与测试
 
 - 文档导航：[docs/README.md](docs/README.md)
-- 测试：`bash selfhost/check-all.sh` 跑 10 道硬门禁；分层地图见 [test/README.md](test/README.md)
+- 测试：`bash selfhost/check-all.sh` 跑 11 道硬门禁；分层地图见 [test/README.md](test/README.md)
 - 改动代码前先读 [AGENTS.md](AGENTS.md)
 
 ### 6. 许可
@@ -120,7 +120,7 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 Exit code `0` on success, `1` on syntax or I/O errors. Source diagnostics use `file:line:col: error: message`;
 driver-level errors keep the `ctc:` prefix even when the binary is named `ct`, so logs and existing assertions
 stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `--ns-root`) is in the
-[tutorial §10](docs/tutorial.md#10-cli-cheat-sheet).
+[tutorial §11](docs/tutorial.md#11-cli-cheat-sheet).
 
 ### 3. Capabilities
 
@@ -138,14 +138,15 @@ The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idio
 
 `selfhost/` is the bootstrap chain: `l0/` (the C seed) → `l1/` (frozen) → `l2/` (regression oracle) → `ct-ast/`
 (the mainline that provides the installed `ct`); `test/` holds tests and goldens; `docs/` holds documentation;
-`bindings/` holds declarative C-library bindings; `issues/` is the review ledger; `AGENTS.md` is the change contract.
+`bindings/` holds declarative C-library bindings; `std/` holds the official standard library (a source
+library imported through an explicit `-I`); `issues/` is the review ledger; `AGENTS.md` is the change contract.
 Directory-level notes are in [selfhost/README.md](selfhost/README.md), [test/README.md](test/README.md) and
 [docs/architecture.md](docs/architecture.md).
 
 ### 5. Docs and tests
 
 - Documentation index: [docs/README.md](docs/README.md)
-- Tests: `bash selfhost/check-all.sh` runs 10 hard gates; the layer map is in [test/README.md](test/README.md)
+- Tests: `bash selfhost/check-all.sh` runs 11 hard gates; the layer map is in [test/README.md](test/README.md)
 - Read [AGENTS.md](AGENTS.md) before changing code
 
 ### 6. License

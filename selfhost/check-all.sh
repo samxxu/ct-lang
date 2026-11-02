@@ -20,6 +20,7 @@
 #                                                fixpoint, negatives)
 #   9. selfhost/check-warnings.sh                generated C compiles warning-free (-Wall -Wextra)
 #  10. test/docs/check-docs.py                   docs links, version, gate count and phase status
+#  11. test/std/run.sh                           std layer (Phase 17.2: seven modules)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning
@@ -81,6 +82,7 @@ run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
 run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x–12.x + batches 13–39)" bash selfhost/check-ast.sh
 run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warnings.sh
 run_gate "10) docs (links, version, gate count, phase status)" python3 test/docs/check-docs.py
+run_gate "11) std layer (Phase 17.2)" bash test/std/run.sh
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then

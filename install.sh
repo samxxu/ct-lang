@@ -165,6 +165,21 @@ fi
 version=$("$prefix/ct" -v 2>&1) || die "the installed binary does not run"
 say "installed $prefix/ct ($version) and $prefix/ctc"
 
+# --- 5. install std ------------------------------------------------------------
+# std is a source library, not part of the binary: `import std::str::Str` resolves
+# only through an explicit -I (D17-2), so the tree is installed under the prefix's
+# parent and the include root is printed. The include root is the directory that
+# contains `std/`, because the namespace is `std::<mod>`.
+stdinc="$(dirname "$prefix")/share/ct"
+if [ -d "$src/std" ]; then
+    mkdir -p "$stdinc/std" || die "cannot create '$stdinc/std'"
+    cp -R "$src/std/." "$stdinc/std/" || die "cannot install std into '$stdinc/std'"
+    say "installed std into $stdinc/std (pass -I \"$stdinc\")"
+else
+    warn "no std/ in this ref; the standard library is not installed"
+    stdinc=""
+fi
+
 case ":$PATH:" in
     *":$prefix:"*) ;;
     *) warn "'$prefix' is not on your PATH; add it with: export PATH=\"$prefix:\$PATH\"" ;;
@@ -174,8 +189,15 @@ cat <<EOF
 
 Next steps:
   ct -h                                  # usage
-  ct examples/01_greeter/greeter.ct -o /tmp/greeter.c
-  cc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
+  ct build examples/01_greeter/greeter.ct -o /tmp/greeter
+  /tmp/greeter
 
 Tutorial: https://github.com/$repo/blob/main/docs/tutorial.md
 EOF
+if [ -n "$stdinc" ]; then
+    cat <<EOF
+
+The standard library needs an include root:
+  ct build -I "$stdinc" main.ct -o main
+EOF
+fi

@@ -1,0 +1,167 @@
+/*
+ * Vec.h.ct - monomorphic growable arrays (std::vec).
+ *
+ * CT has no generics, so the two shapes a first version needs are spelled out:
+ * `VecInt` (int elements) and `VecStr` (`char *` elements). A future generic
+ * form can replace them; callers should not rely on the field layout.
+ *
+ * Growth is amortised doubling. A failed `realloc` returns -1 and leaves the
+ * vector untouched. The unit owns the element array, not the elements: `VecStr`
+ * stores the pointers it is given, so the caller keeps them alive until the
+ * vector is done with them. `int_free` / `str_free` release the arrays.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdlib.h>
+
+namespace std::vec;
+
+/* Stateless marker type; nothing instantiates it. */
+pub struct Vec {
+    int unused;
+}
+
+pub struct VecInt {
+    int *data;
+    int n;
+    int cap;
+}
+
+pub struct VecStr {
+    char **data;
+    int n;
+    int cap;
+}
+
+#define VEC_MIN_CAP 8
+
+/* Zero the vector; every other function assumes this ran (or a zeroed value). */
+pub void int_init(VecInt *v);
+void int_init(VecInt *v)
+{
+    if (!v) return;
+    v->data = 0;
+    v->n = 0;
+    v->cap = 0;
+}
+
+pub int int_len(VecInt *v);
+int int_len(VecInt *v)
+{
+    if (!v) return 0;
+    return v->n;
+}
+
+/* Append `x`; -1 when the element array cannot grow. */
+pub int int_push(VecInt *v, int x);
+int int_push(VecInt *v, int x)
+{
+    int cap;
+    int *p;
+
+    if (!v) return -1;
+    if (v->n >= v->cap) {
+        cap = v->cap ? v->cap * 2 : VEC_MIN_CAP;
+        p = realloc(v->data, (size_t)cap * sizeof(int));
+        if (!p) return -1;
+        v->data = p;
+        v->cap = cap;
+    }
+    v->data[v->n] = x;
+    v->n++;
+    return 0;
+}
+
+/* Read the last element into `out` and remove it; -1 when empty. */
+pub int int_pop(VecInt *v, int *out);
+int int_pop(VecInt *v, int *out)
+{
+    if (!v || v->n <= 0) return -1;
+    v->n--;
+    if (out) *out = v->data[v->n];
+    return 0;
+}
+
+/* Read `i` into `out`; -1 when `i` is out of range. */
+pub int int_at(VecInt *v, int i, int *out);
+int int_at(VecInt *v, int i, int *out)
+{
+    if (!v || i < 0 || i >= v->n) return -1;
+    if (out) *out = v->data[i];
+    return 0;
+}
+
+pub void int_free(VecInt *v);
+void int_free(VecInt *v)
+{
+    if (!v) return;
+    free(v->data);
+    v->data = 0;
+    v->n = 0;
+    v->cap = 0;
+}
+
+pub void str_init(VecStr *v);
+void str_init(VecStr *v)
+{
+    if (!v) return;
+    v->data = 0;
+    v->n = 0;
+    v->cap = 0;
+}
+
+pub int str_len(VecStr *v);
+int str_len(VecStr *v)
+{
+    if (!v) return 0;
+    return v->n;
+}
+
+/* Append the pointer `s` (not a copy); -1 when the element array cannot grow. */
+pub int str_push(VecStr *v, char *s);
+int str_push(VecStr *v, char *s)
+{
+    int cap;
+    char **p;
+
+    if (!v) return -1;
+    if (v->n >= v->cap) {
+        cap = v->cap ? v->cap * 2 : VEC_MIN_CAP;
+        p = realloc(v->data, (size_t)cap * sizeof(char *));
+        if (!p) return -1;
+        v->data = p;
+        v->cap = cap;
+    }
+    v->data[v->n] = s;
+    v->n++;
+    return 0;
+}
+
+/* Read the last pointer into `out` and remove it; -1 when empty. */
+pub int str_pop(VecStr *v, char **out);
+int str_pop(VecStr *v, char **out)
+{
+    if (!v || v->n <= 0) return -1;
+    v->n--;
+    if (out) *out = v->data[v->n];
+    return 0;
+}
+
+/* Read `i` into `out`; -1 when `i` is out of range. */
+pub int str_at(VecStr *v, int i, char **out);
+int str_at(VecStr *v, int i, char **out)
+{
+    if (!v || i < 0 || i >= v->n) return -1;
+    if (out) *out = v->data[i];
+    return 0;
+}
+
+pub void str_free(VecStr *v);
+void str_free(VecStr *v)
+{
+    if (!v) return;
+    free(v->data);
+    v->data = 0;
+    v->n = 0;
+    v->cap = 0;
+}

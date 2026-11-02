@@ -442,7 +442,48 @@ map trait Socket for namespace posix {
 `ct_sock_errno()`。完整例子见 `bindings/posix-socket/`；改了 shim 会让消费者重建。
 有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
 
-## 10. 命令行速查
+## 10. 标准库：`std`
+
+`std` 是随仓库发布的**源码库**，不在 `ct` 二进制里；导入要显式给 `-I`（没有默认搜索路径）：
+
+```sh
+ct build -I . main.ct -o main
+```
+
+单元是 `std/<mod>/<Mod>.h.ct`，namespace 固定为 `std::<mod>`；入口是 **`pub` 自由函数**，
+调用时写全限定名（跨单元的 trait 方法在生成的 C 里是 `static`，够不到）：
+
+```ct
+import std::str::Str;
+import std::test::Test;
+
+int main(void)
+{
+    Test t;
+    char buf[32];
+
+    std::test::init(&t);
+    std::test::check_eq_int(&t, std::str::len("ct"), 2, "len");
+    std::test::check_eq_int(&t, std::str::concat("a", "b", buf, 32), 0, "concat");
+    return std::test::report(&t);
+}
+```
+
+| 单元 | namespace | 入口 |
+| --- | --- | --- |
+| `str` | `std::str` | `len` / `find` / `starts_with` / `copy` / `slice` / `concat` / `lower` / `upper` / `compare` |
+| `vec` | `std::vec` | `VecInt` / `VecStr` 的 `*_init` / `*_push` / `*_pop` / `*_at` / `*_free` |
+| `arena` | `std::arena` | `init` / `alloc` / `reset` / `free_all` |
+| `fs` | `std::fs` | `exists` / `read_file` / `write_file` / `list` |
+| `utf8` | `std::utf8` | `decode` / `encode` / `length` |
+| `test` | `std::test` | `init` / `check_true` / `check_eq_int` / `check_eq_str` / `report` |
+| `map` | `std::map` | `MapStrInt` / `MapIntPtr` 的 `*_init` / `*_put` / `*_get` / `*_clear` / `*_free` |
+
+三条约定：缓冲区不够返回 `-1` / `NULL`，绝不静默截断；**不依赖 `delete`**，每个资源类型都有显式
+`*_free` / `*_reset` / `*_clear`；`Map` 固定容量、满载拒绝新键，不自动 rehash。详见
+[../std/README.md](../std/README.md)。
+
+## 11. 命令行速查
 
 | 命令 | 作用 |
 | --- | --- |
@@ -465,7 +506,7 @@ map trait Socket for namespace posix {
 退出码：成功 `0`，语法或 I/O 错误 `1`。**源码诊断**（解析期与语义期）格式为 `文件:行:列: error: 描述`；
 **驱动层**错误（输入打不开、参数不对、超过上限）以 `ctc: ` 开头，不假装指向某一行。
 
-## 11. 会踩的坑
+## 12. 会踩的坑
 
 按「最常遇到」排序。第 2–4 条是**冻结的 L2 行重写管线**的限制，ct-ast（主线）是 AST 管线，
 「跨行 / 单行函数体 / 注释续行」都不适用（对照见 [language-spec §6.2](language-spec.md)）：
@@ -487,7 +528,7 @@ map trait Socket for namespace posix {
 8. **上限是硬报错**：ct-ast 提高到 `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、
    `MAX_FUNCS` 256、`MAX_VARS` 4096…，越界直接报错，绝不静默截断。[§7](language-spec.md) 有全表。
 
-## 12. 下一步
+## 13. 下一步
 
 - [language-spec.md](language-spec.md) —— 每一条展开规则的权威定义
 - [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
@@ -934,7 +975,51 @@ The consumer's generated `.c` automatically carries `#include "socket.shim.h"`, 
 `bindings/posix-socket/`; touching the shim rebuilds the consumer. A `.shim.c` without its `.shim.h`
 is rejected with `a shim source needs a matching .shim.h`.
 
-### 10. CLI cheat sheet
+### 10. The standard library: `std`
+
+`std` is a **source library** shipped with the repository, not part of the `ct` binary; imports need
+an explicit `-I` (there is no default search path):
+
+```sh
+ct build -I . main.ct -o main
+```
+
+A unit is `std/<mod>/<Mod>.h.ct` with the fixed namespace `std::<mod>`, and its entry points are
+**`pub` free functions** called by their full name (a cross-unit trait method is emitted `static` and
+is unreachable):
+
+```ct
+import std::str::Str;
+import std::test::Test;
+
+int main(void)
+{
+    Test t;
+    char buf[32];
+
+    std::test::init(&t);
+    std::test::check_eq_int(&t, std::str::len("ct"), 2, "len");
+    std::test::check_eq_int(&t, std::str::concat("a", "b", buf, 32), 0, "concat");
+    return std::test::report(&t);
+}
+```
+
+| Unit | namespace | Entry points |
+| --- | --- | --- |
+| `str` | `std::str` | `len` / `find` / `starts_with` / `copy` / `slice` / `concat` / `lower` / `upper` / `compare` |
+| `vec` | `std::vec` | `VecInt` / `VecStr` with `*_init` / `*_push` / `*_pop` / `*_at` / `*_free` |
+| `arena` | `std::arena` | `init` / `alloc` / `reset` / `free_all` |
+| `fs` | `std::fs` | `exists` / `read_file` / `write_file` / `list` |
+| `utf8` | `std::utf8` | `decode` / `encode` / `length` |
+| `test` | `std::test` | `init` / `check_true` / `check_eq_int` / `check_eq_str` / `report` |
+| `map` | `std::map` | `MapStrInt` / `MapIntPtr` with `*_init` / `*_put` / `*_get` / `*_clear` / `*_free` |
+
+Three rules: a buffer that is too small yields `-1` / `NULL`, never a silent truncation; there is
+**no `delete`**, every resource type has an explicit `*_free` / `*_reset` / `*_clear`; `Map` is
+fixed-capacity, refuses new keys when full and never rehashes. Details in
+[../std/README.md](../std/README.md).
+
+### 11. CLI cheat sheet
 
 | Command | Purpose |
 | --- | --- |
@@ -958,7 +1043,7 @@ Exit codes: `0` on success, `1` on syntax or I/O errors. **Source diagnostics** 
 read `file:line:col: error: message`; **driver-level** failures (an input that cannot be opened, a bad
 option, a limit) start with `ctc: ` and do not pretend to point at a line.
 
-### 11. Traps
+### 12. Traps
 
 Ordered by how often they bite. Items 2–4 are limits of the **frozen L2 line-rewriting pipeline**;
 ct-ast (the main line) is an AST pipeline, so multi-line statements, single-line function bodies and
@@ -985,7 +1070,7 @@ comment continuations are all fine there (compare [language-spec §6.2](language
 8. **Limits fail hard**: ct-ast raises them to `MAX_TRAITS` 64, `MAX_STRUCTS` 128, `MAX_METHODS` 64,
    `MAX_FUNCS` 256, `MAX_VARS` 4096…, and overflow is an error, never a silent truncation (§7).
 
-### 12. Where to go next
+### 13. Where to go next
 
 - [language-spec.md](language-spec.md) — the authoritative expansion rules
 - [polymorphism.md](polymorphism.md) — why vtables and not something else

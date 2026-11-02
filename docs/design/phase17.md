@@ -56,7 +56,7 @@
 | 切片 | 内容 | 主要改动面 | 出口 |
 | --- | --- | --- | --- |
 | **17.1** | **CI 矩阵 + 消毒器 + 确定性 fuzz** | 新增 `.github/workflows/{ci,nightly}.yml`、`selfhost/check-sanitizers.sh`、`test/fuzz/run.sh` | 三个 CI job 全绿；ASAN/UBSAN 本地与 nightly 可跑；fuzz 固定 seed 可复现且零崩溃 |
-| **17.2** | **`std` 官方标准库** | 新增顶层 `std/{str,vec,arena,fs,utf8,test,map}.h.ct`；新增 `test/std/run.sh`；`install.sh` 安装路径（D17-2） | 七模块 `gcc` 端到端可跑；`test/std/run.sh` 成为第 10 道硬门禁 |
+| **17.2** | **`std` 官方标准库** | 新增顶层 `std/<mod>/<Mod>.h.ct`（str / vec / arena / fs / utf8 / test / map）；新增 `test/std/run.sh`；`install.sh` 安装路径（D17-2） | 七模块 `gcc` 端到端可跑；`test/std/run.sh` 成为第 11 道硬门禁 |
 | **17.3** | **raw 透传** | `Lexer.h.ct`（`#ct-raw` 特判）+ `Arena.h.ct`（新节点 `N_RAW_TEXT`）+ `Parser.h.ct`（块解析与未闭合诊断）+ `Emitter.h.ct`（原样输出） | 正例 / 负例全绿；ct-ast 源码禁用 raw 的护栏生效；spec / README / tutorial / editor grammar 同步 |
 | **17.4** | **文档分层 + 链接门禁** | 新增 `docs/README.md`、`test/docs/check-docs.py`；迁移 `reports/` → `docs/history/reports/`、已完成阶段的 `docs/design/*.md` → `docs/history/design/`；README 瘦身（D17-5） | 门禁零死链；README 体量达标；`issues/` 与 `AGENTS.md` 保留原位 |
 | **17.5** | **包管理补全** | `Pkg.h.ct`（比较器范围、`update`、`verify`、`cflags` / `ldflags` / `requires`）+ `Driver.h.ct`（命令分发）+ `test/pkg/run.sh` 扩展 + 索引格式文档 | `ct update` / `ct verify` 可用；比较器范围有正负例；`ct install` 能拼出**一条**含 `-I` / `-D` / `-l` 的命令；编译路径仍零网络 |
@@ -78,7 +78,9 @@
 
 #### 17.2 `std`
 
-- 目录与命名：`std/<mod>.h.ct`，namespace `std::<mod>`；只放**接口与实现都自包含**的单元。
+- 目录与命名：`std/<mod>/<Mod>.h.ct`，namespace `std::<mod>`。**每个命名空间段占一个目录**——编译器的
+  `--ns-root` 校验要求单元所在目录与 namespace 路径一致（`std/str/Str.h.ct` + `namespace std::str;`），
+  所以模块名既进 namespace 也进目录；文件名仍是单元的主类型名。只放**接口与实现都自包含**的单元。
 - 七个模块的 v1 范围：
   - `str`：切片 / 查找 / 前后缀 / 大小写 / 拼接（定长缓冲）；
   - `vec`：单态化 `VecInt` / `VecStr`（无泛型），`push` / `pop` / `at` / `len`；
@@ -101,7 +103,7 @@
 - 发现方式（D17-2）：用户显式 `ct ... -I <std>`；`install.sh` 安装到
   `$(dirname "$prefix")/share/ct/std` 并打印建议的 `-I` 行。**不新增编译器默认搜索路径**
   （那是行为变更，且会与用户的 `-I` 顺序产生歧义）。
-- 新门禁：`test/std/run.sh`（`check-all.sh` 第 10 道），每模块至少 1 正例 + 1 边界 / 负例，走
+- 新门禁：`test/std/run.sh`（`check-all.sh` 第 11 道），每模块至少 1 正例 + 1 边界 / 负例，走
   ct-ast → `.c` → `gcc` → 运行断言。
 - 出口：七模块全覆盖；`test/std/run.sh` 绿；`install.sh` 安装路径经用户确认后落地。
 
@@ -296,7 +298,7 @@ line-by-line implementation contract. Per D17-9 the **subprocess-free** contract
 | Slice | Content | Surface | Exit |
 | --- | --- | --- | --- |
 | **17.1** | **CI matrix + sanitizers + deterministic fuzz** | `.github/workflows/{ci,nightly}.yml`, `selfhost/check-sanitizers.sh`, `test/fuzz/run.sh` | three CI jobs green; ASAN/UBSAN green locally and nightly; fuzz reproducible with a fixed seed and no crash |
-| **17.2** | **`std`** | `std/{str,vec,arena,fs,utf8,test,map}.h.ct`, `test/std/run.sh`, install path (D17-2) | seven modules end-to-end under `gcc`; `test/std/run.sh` becomes the 10th hard gate |
+| **17.2** | **`std`** | `std/<mod>/<Mod>.h.ct`, `test/std/run.sh`, install path (D17-2) | seven modules end-to-end under `gcc`; `test/std/run.sh` becomes the 11th hard gate |
 | **17.3** | **raw passthrough** | `Lexer.h.ct`, `Arena.h.ct` (`N_RAW_TEXT`), `Parser.h.ct`, `Emitter.h.ct` | positive / negative cases green; the ct-ast self-hosting guard holds; spec / README / tutorial / editor grammar in sync |
 | **17.4** | **docs layering + link gate** | `docs/README.md`, `test/docs/check-docs.py`, moves into `docs/history/`, README slimming (D17-5) | zero dead links; README within target; `issues/` and `AGENTS.md` stay in place |
 | **17.5** | **package management** | `Pkg.h.ct` (comparator ranges, `update`, `verify`, `cflags` / `ldflags` / `requires`), `Driver.h.ct`, `test/pkg/run.sh` | `ct update` / `ct verify` work; comparator ranges covered; `ct install` prints **one** command with `-I` / `-D` / `-l`; compile path still network-free |

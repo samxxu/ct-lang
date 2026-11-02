@@ -1,0 +1,302 @@
+/*
+ * Map.h.ct - bounded open-addressing maps (std::map).
+ *
+ * Two monomorphic shapes ship in v1: `MapStrInt` (char * key -> int value) and
+ * `MapIntPtr` (int key -> void * value). A generic map would need generics; a
+ * `void *`-erased trait interface is possible but would lose compile-time key /
+ * value typing, so it is documented as the trade-off and not shipped yet.
+ *
+ * The table is fixed-capacity: `init` sizes it once (rounded up to a power of
+ * two), and `put` fails when it is full. It never rehashes or grows on its own,
+ * so memory use is predictable and no operation allocates behind the caller's
+ * back. Keys are stored by pointer, not copied: they must outlive the entry.
+ *
+ * There is no `delete`, because `Drop` is emitted `static` and a library unit
+ * cannot destroy a caller's value type. `*_clear` drops every entry; for
+ * `MapIntPtr` it calls the `free_fn` supplied at `init` (when non-NULL), so the
+ * caller chooses the ownership rule once.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdlib.h>
+#include <string.h>
+
+namespace std::map;
+
+/* Stateless marker type; nothing instantiates it. */
+pub struct Map {
+    int unused;
+}
+
+pub struct MapStrInt {
+    int cap;
+    int n;
+    char **keys;
+    int *vals;
+    unsigned char *used;
+}
+
+pub struct MapIntPtr {
+    int cap;
+    int n;
+    int *keys;
+    void **vals;
+    unsigned char *used;
+    void (*free_fn)(void *);
+}
+
+#define MAP_MIN_CAP 16
+
+/* A power of two at least `want`; probing uses `hash & (cap - 1)`. */
+static int cap_for(int want)
+{
+    int cap = MAP_MIN_CAP;
+
+    while (cap < want) cap = cap * 2;
+    return cap;
+}
+
+static unsigned int hash_str(const char *s)
+{
+    unsigned int h = 2166136261;
+    int i;
+
+    for (i = 0; s[i]; i++) {
+        h = h ^ (unsigned char)s[i];
+        h = h * 16777619;
+    }
+    return h;
+}
+
+static unsigned int hash_int(int key)
+{
+    unsigned int x = (unsigned int)key;
+
+    x = x ^ (x >> 16);
+    x = x * 33;
+    x = x ^ (x >> 13);
+    x = x * 33;
+    x = x ^ (x >> 16);
+    return x;
+}
+
+/* --- MapStrInt -------------------------------------------------------------- */
+
+pub int str_int_init(MapStrInt *m, int want);
+int str_int_init(MapStrInt *m, int want)
+{
+    int cap;
+
+    if (!m) return -1;
+    cap = cap_for(want);
+    m->keys = calloc((size_t)cap, sizeof(char *));
+    m->vals = calloc((size_t)cap, sizeof(int));
+    m->used = calloc((size_t)cap, sizeof(unsigned char));
+    m->cap = cap;
+    m->n = 0;
+    if (!m->keys || !m->vals || !m->used) {
+        free(m->keys);
+        free(m->vals);
+        free(m->used);
+        m->keys = 0;
+        m->vals = 0;
+        m->used = 0;
+        m->cap = 0;
+        return -1;
+    }
+    return 0;
+}
+
+/* Insert or overwrite; returns -1 when the table is full. */
+pub int str_int_put(MapStrInt *m, char *key, int value);
+int str_int_put(MapStrInt *m, char *key, int value)
+{
+    unsigned int i;
+    unsigned int slot;
+    int probes;
+
+    if (!m || !key || m->cap <= 0) return -1;
+    if (m->n >= m->cap) return -1;
+    slot = hash_str(key) & (unsigned int)(m->cap - 1);
+    for (probes = 0; probes < m->cap; probes++) {
+        i = slot;
+        if (!m->used[i]) {
+            m->used[i] = 1;
+            m->keys[i] = key;
+            m->vals[i] = value;
+            m->n++;
+            return 0;
+        }
+        if (strcmp(m->keys[i], key) == 0) {
+            m->vals[i] = value;
+            return 0;
+        }
+        slot = (slot + 1) & (unsigned int)(m->cap - 1);
+    }
+    return -1;
+}
+
+/* Look `key` up; returns 0 and stores the value, or -1 when absent. */
+pub int str_int_get(MapStrInt *m, const char *key, int *out);
+int str_int_get(MapStrInt *m, const char *key, int *out)
+{
+    unsigned int slot;
+    int probes;
+
+    if (!m || !key || m->cap <= 0) return -1;
+    slot = hash_str(key) & (unsigned int)(m->cap - 1);
+    for (probes = 0; probes < m->cap; probes++) {
+        if (!m->used[slot]) return -1;
+        if (strcmp(m->keys[slot], key) == 0) {
+            if (out) *out = m->vals[slot];
+            return 0;
+        }
+        slot = (slot + 1) & (unsigned int)(m->cap - 1);
+    }
+    return -1;
+}
+
+pub int str_int_len(MapStrInt *m);
+int str_int_len(MapStrInt *m)
+{
+    if (!m) return 0;
+    return m->n;
+}
+
+/* Drop every entry (keys and values are borrowed, so nothing is freed). */
+pub void str_int_clear(MapStrInt *m);
+void str_int_clear(MapStrInt *m)
+{
+    if (!m || !m->used) return;
+    memset(m->used, 0, (size_t)m->cap);
+    memset(m->keys, 0, (size_t)m->cap * sizeof(char *));
+    m->n = 0;
+}
+
+pub void str_int_free(MapStrInt *m);
+void str_int_free(MapStrInt *m)
+{
+    if (!m) return;
+    str_int_clear(m);
+    free(m->keys);
+    free(m->vals);
+    free(m->used);
+    m->keys = 0;
+    m->vals = 0;
+    m->used = 0;
+    m->cap = 0;
+    m->n = 0;
+}
+
+/* --- MapIntPtr -------------------------------------------------------------- */
+
+/* `free_fn` is remembered and called on every value by `int_ptr_clear`. */
+pub int int_ptr_init(MapIntPtr *m, int want, void (*free_fn)(void *));
+int int_ptr_init(MapIntPtr *m, int want, void (*free_fn)(void *))
+{
+    int cap;
+
+    if (!m) return -1;
+    cap = cap_for(want);
+    m->keys = calloc((size_t)cap, sizeof(int));
+    m->vals = calloc((size_t)cap, sizeof(void *));
+    m->used = calloc((size_t)cap, sizeof(unsigned char));
+    m->cap = cap;
+    m->n = 0;
+    m->free_fn = free_fn;
+    if (!m->keys || !m->vals || !m->used) {
+        free(m->keys);
+        free(m->vals);
+        free(m->used);
+        m->keys = 0;
+        m->vals = 0;
+        m->used = 0;
+        m->cap = 0;
+        return -1;
+    }
+    return 0;
+}
+
+pub int int_ptr_put(MapIntPtr *m, int key, void *value);
+int int_ptr_put(MapIntPtr *m, int key, void *value)
+{
+    unsigned int slot;
+    int probes;
+
+    if (!m || m->cap <= 0) return -1;
+    if (m->n >= m->cap) return -1;
+    slot = hash_int(key) & (unsigned int)(m->cap - 1);
+    for (probes = 0; probes < m->cap; probes++) {
+        if (!m->used[slot]) {
+            m->used[slot] = 1;
+            m->keys[slot] = key;
+            m->vals[slot] = value;
+            m->n++;
+            return 0;
+        }
+        if (m->keys[slot] == key) {
+            m->vals[slot] = value;
+            return 0;
+        }
+        slot = (slot + 1) & (unsigned int)(m->cap - 1);
+    }
+    return -1;
+}
+
+pub int int_ptr_get(MapIntPtr *m, int key, void **out);
+int int_ptr_get(MapIntPtr *m, int key, void **out)
+{
+    unsigned int slot;
+    int probes;
+
+    if (!m || m->cap <= 0) return -1;
+    slot = hash_int(key) & (unsigned int)(m->cap - 1);
+    for (probes = 0; probes < m->cap; probes++) {
+        if (!m->used[slot]) return -1;
+        if (m->keys[slot] == key) {
+            if (out) *out = m->vals[slot];
+            return 0;
+        }
+        slot = (slot + 1) & (unsigned int)(m->cap - 1);
+    }
+    return -1;
+}
+
+pub int int_ptr_len(MapIntPtr *m);
+int int_ptr_len(MapIntPtr *m)
+{
+    if (!m) return 0;
+    return m->n;
+}
+
+/* Free every value through `free_fn` (when one was supplied), then the table. */
+pub void int_ptr_clear(MapIntPtr *m);
+void int_ptr_clear(MapIntPtr *m)
+{
+    int i;
+
+    if (!m || !m->used) return;
+    if (m->free_fn) {
+        for (i = 0; i < m->cap; i++) {
+            if (m->used[i]) m->free_fn(m->vals[i]);
+        }
+    }
+    memset(m->used, 0, (size_t)m->cap);
+    memset(m->vals, 0, (size_t)m->cap * sizeof(void *));
+    m->n = 0;
+}
+
+pub void int_ptr_free(MapIntPtr *m);
+void int_ptr_free(MapIntPtr *m)
+{
+    if (!m) return;
+    int_ptr_clear(m);
+    free(m->keys);
+    free(m->vals);
+    free(m->used);
+    m->keys = 0;
+    m->vals = 0;
+    m->used = 0;
+    m->cap = 0;
+    m->n = 0;
+}

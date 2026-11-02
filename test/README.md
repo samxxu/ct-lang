@@ -19,6 +19,7 @@
 | `patterns/` | CT 线 | 设计模式用例：一目录一 `prog.ct` + `expected.out`（编译 → 零告警构建 → 运行 → 比对） | `selfhost/check-ast.sh` |
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
 | `pkg/` | 跨层 | 包管理器 `ct get` / `ct install` 用例 | `test/pkg/run.sh` |
+| `std/` | CT 线 | 官方标准库端到端：一模块一目录（`main.ct` → `--emit-c` → `cc -Wall -Wextra` → 运行断言） | `test/std/run.sh` |
 
 `run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；CT 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
 见 [selfhost/README.md](../selfhost/README.md) 的门禁表。
@@ -49,6 +50,7 @@ byte-for-byte diff, while `ast/errors/` holds bare `.ct` files that `check-ast.s
 | `patterns/` | CT line | design-pattern cases: one directory per pattern (`prog.ct` + `expected.out`; compile → warning-free build → run → compare) | `selfhost/check-ast.sh` |
 | `acceptance/` | cross-layer | the end-to-end acceptance checklist (`ast_spike.ct` / `ast_parse_spike.ct`); `PENDING` is expected and **non-blocking** | `test/acceptance/run.sh` |
 | `pkg/` | cross-layer | package-manager `ct get` / `ct install` cases | `test/pkg/run.sh` |
+| `std/` | CT line | standard-library end-to-end: one directory per module (`main.ct` → `--emit-c` → `cc -Wall -Wextra` → run the assertions) | `test/std/run.sh` |
 
 `run.sh` drives **L0** (`selfhost/l0/ctc.c`) only; the CT line's gates (`selfhost/**`) are aggregated by
 `selfhost/check-all.sh` — see the gate table in [selfhost/README.md](../selfhost/README.md).

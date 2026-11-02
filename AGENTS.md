@@ -34,6 +34,7 @@
 | `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
 | `selfhost/**` | 源码：自举编译器 —— **L0 C 种子** `selfhost/l0/ctc.c` ＋ 冻结种子 `selfhost/l1/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/ct-ast/**`（`main.ct` = 只做绑定与分派的驱动入口，`runtime/arena/` = 节点池 + 字面量池（`namespace runtime::arena`），`frontend/lex/` = 词法器（源码游标 + 当前 token，`namespace frontend::lex`），`frontend/module/` = 单元表与 `map` 记录的取值类型 ＋ build 驱动（`namespace frontend::module`），`frontend/parse/` = 解析器、其共享原语、表达式与类型文法及 `map` 构造的构建器（`namespace frontend::parse`），`frontend/sym/` = 符号表（函数/变量/作用域/类型/trait/struct，`namespace frontend::sym`），`frontend/type/` = 类型推断与装箱判定（`namespace frontend::type`），`tool/diag/` = 告警存储（`namespace tool::diag`），`tool/cache/` = 增量缓存（`namespace tool::cache`），`tool/pkg/` = 包管理器（`namespace tool::pkg`），`tool/driver/` = compile 模式驱动（`namespace tool::driver`），`backend/mem/` = AutoDrop 与泄漏分析（`namespace backend::mem`），`backend/emit/` = 代码发射器（`.c`/`.h`/map JSON，`namespace backend::emit`）；Phase 9 的 AST 版编译器，ct-ast）＋ **冻结归档** `selfhost/l2/**`（`core.ct` + `driver.ct`，Phase 3–8 的旧管线 L2；只修 bug，不再加能力） | ✅ Phase 1 起新增；放编译器源码（含 L0 C 种子）与门禁脚本，生成物不入库 |
 | `bindings/**` | 源码：C 库的**声明式 binding**（Phase 12 起）—— 直通 `#include "<lib>.h"` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`；仓库内假 HAL 自带其头与实现 | ✅ Phase 12 起新增；只放 binding 源与（假 HAL 的）最小 C 头 / 实现，**不 vendored、不下载**、不成为编译器构建步骤；生成物不入库 |
+| `std/**` | 源码：官方标准库（Phase 17.2 起）—— `std/<mod>/<Mod>.h.ct` ＋ `namespace std::<mod>`，入口为 `pub` 自由函数；`str` / `vec` / `arena` / `fs` / `utf8` / `test` / `map` | ✅ Phase 17 起新增；只放自包含的库单元（不依赖跨单元 trait 方法、不引入默认 include 根） |
 | `install.sh` | 源码：**唯一的安装脚本**——下载 GitHub 源码归档 → 本地四级自举 → 安装 `ct` 与 `ctc` 软链 | ✅ 可改；只准维护「下载 + 现有自举步骤 + 安装」三件事，不得演变成构建系统，不得进入编译路径 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
 | `README.md`、`AGENTS.md`、`docs/*` | 文档 | ✅ |
@@ -174,8 +175,8 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   `selfhost/ct-tour.sh`、`editors/vscode/test/check-grammar.py`、`test/pkg/run.sh`（Phase 8.1–8.3
   包管理器：本地目录源、git 源与 `install` 校验）、`selfhost/check-ast.sh`（Phase 9.1–9.7 + 10.x
   AST 编译器的行为用例、CLI 错误分支、自编不动点与全量语料等价）、`selfhost/check-warnings.sh`
-  （生成物 `-Wall -Wextra` 零告警）与 `test/docs/check-docs.py`（文档链接、版本 token、门禁计数与
-  阶段状态；任一失败即整体非零）；
+  （生成物 `-Wall -Wextra` 零告警）、`test/docs/check-docs.py`（文档链接、版本 token、门禁计数与
+  阶段状态）与 `test/std/run.sh`（Phase 17.2 标准库分层；任一失败即整体非零）；
   `bash test/acceptance/run.sh` 单独报告（其 PENDING 属预期，不阻断）。改动 `selfhost/**` 后必须跑一遍。
 - **ct-ast 是分组多单元树**：各分组（`runtime/`、`frontend/`、`tool/`）按全路径互相 `import`，
   构建时必须带 `-I selfhost/ct-ast`（门禁脚本与 README 的安装命令已内置；手工构建同样要加）。
@@ -257,6 +258,7 @@ user before changing code**.
 | `editors/**` | Editor extensions: `editors/vscode/` (VS Code, declarative JSON) | ✅ editable; see the hard boundaries below |
 | `selfhost/**` | Source: the self-hosted compiler — the **L0 C seed** `selfhost/l0/ctc.c` plus the frozen seed `selfhost/l1/ctc.ct` (L1, its capability stops at Phase 2), the **development mainline** `selfhost/ct-ast/**` (`main.ct` = the binding-and-dispatch entry only, `runtime/arena/` = the node and literal pool (`namespace runtime::arena`), `frontend/lex/` = the lexer (source cursor + current token, `namespace frontend::lex`), `frontend/module/` = the unit-table and `map` value types plus the build driver (`namespace frontend::module`), `frontend/parse/` = the parser, its shared primitives, the expression and type grammar and the `map` builder (`namespace frontend::parse`), `frontend/sym/` = the symbol tables (functions, variables, scopes, types, traits, structs, `namespace frontend::sym`), `frontend/type/` = type inference and the boxing decision (`namespace frontend::type`), `tool/diag/` = warning store (`namespace tool::diag`), `tool/cache/` = the incremental cache (`namespace tool::cache`), `tool/pkg/` = package manager (`namespace tool::pkg`), `tool/driver/` = the compile-mode driver (`namespace tool::driver`), `backend/mem/` = AutoDrop and the leak analysis (`namespace backend::mem`), `backend/emit/` = the C emitter (`.c`/`.h`/map JSON, `namespace backend::emit`); the Phase 9 AST compiler, ct-ast) and the **frozen archive** `selfhost/l2/**` (`core.ct` + `driver.ct`, the Phase 3–8 old pipeline L2; bug fixes only, no new capability) | ✅ new from Phase 1 on; compiler source (including the L0 C seed) and gate scripts, never generated files |
 | `bindings/**` | Source: declarative bindings to C libraries (from Phase 12) — pass-through `#include "<lib>.h"` + mirrored `trait` / `struct` + a declared global instance + `map`; an in-repo fake HAL ships its own header and implementation | ✅ new from Phase 12 on; binding sources plus (for the fake HAL) a minimal C header / implementation only, which **vendor nothing and download nothing** and never become a compiler build step; generated files are never committed |
+| `std/**` | Source: the official standard library (from Phase 17.2) — `std/<mod>/<Mod>.h.ct` with `namespace std::<mod>`, entry points are `pub` free functions; `str` / `vec` / `arena` / `fs` / `utf8` / `test` / `map` | ✅ new from Phase 17 on; self-contained library units only (no cross-unit trait methods, no default include root) |
 | `install.sh` | Source: the **only install script** — download the GitHub source archive → bootstrap the chain locally → install `ct` and the `ctc` symlink | ✅ editable; it must only do "download + the existing bootstrap steps + install", must never grow into a build system, and must stay out of the compile path |
 | `LICENSE`, `LICENSE.EXCEPTION` | License text and the output exception | ❌ only when the user explicitly asks |
 | `README.md`, `AGENTS.md`, `docs/*` | Documentation | ✅ |
@@ -500,8 +502,8 @@ Also required:
   `editors/vscode/test/check-grammar.py`, `test/pkg/run.sh` (the Phase 8.1–8.3 package manager:
   local directory sources, git sources and `install` verification), `selfhost/check-ast.sh`
   (the Phase 9.1–9.7 + 10.x AST compiler's behavioural cases, CLI error branches, the self-compile
-  fixpoint and whole-corpus equivalence) and `test/docs/check-docs.py` (doc links, the version token,
-  the gate count and phase status) — any
+  fixpoint and whole-corpus equivalence), `test/docs/check-docs.py` (doc links, the version token,
+  the gate count and phase status) and `test/std/run.sh` (the Phase 17.2 standard-library layer) — any
   failure makes the whole run non-zero; `bash test/acceptance/run.sh` reports
   separately (its PENDING entries are expected and do not block). Run it after touching
   `selfhost/**`.

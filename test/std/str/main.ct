@@ -1,0 +1,46 @@
+/* std::str - positive path and the bounded / missing cases. */
+import std::str::Str;
+import std::test::Test;
+
+int main(void)
+{
+    Test t;
+    char buf[32];
+
+    std::test::init(&t);
+
+    std::test::check_eq_int(&t, std::str::len("hello"), 5, "len");
+    std::test::check_eq_int(&t, std::str::find("hello", "ll"), 2, "find a hit");
+    std::test::check_eq_int(&t, std::str::find("hello", "z"), -1, "find a miss");
+    std::test::check_eq_int(&t, std::str::find_char("hello", 'l'), 2, "find_char a hit");
+    std::test::check_eq_int(&t, std::str::find_char("hello", 'z'), -1, "find_char a miss");
+    std::test::check_true(&t, std::str::starts_with("hello", "he"), "prefix hit");
+    std::test::check_true(&t, !std::str::starts_with("hello", "el"), "prefix miss");
+    std::test::check_true(&t, std::str::ends_with("hello", "lo"), "suffix hit");
+    std::test::check_true(&t, !std::str::ends_with("hello", "ol"), "suffix miss");
+    std::test::check_true(&t, !std::str::ends_with("hi", "hello"), "suffix longer than input");
+
+    std::test::check_eq_int(&t, std::str::copy("hello", buf, 32), 0, "copy fits");
+    std::test::check_eq_str(&t, buf, "hello", "copy value");
+    std::test::check_eq_int(&t, std::str::copy("hello", buf, 5), -1, "copy needs room for the NUL");
+
+    std::test::check_eq_int(&t, std::str::slice("hello", 1, 3, buf, 32), 0, "slice");
+    std::test::check_eq_str(&t, buf, "el", "slice value");
+    std::test::check_eq_int(&t, std::str::slice("hello", 4, 2, buf, 32), -1, "slice reversed range");
+    std::test::check_eq_int(&t, std::str::slice("hello", 0, 9, buf, 32), -1, "slice past the end");
+
+    std::test::check_eq_int(&t, std::str::concat("ab", "cd", buf, 32), 0, "concat fits");
+    std::test::check_eq_str(&t, buf, "abcd", "concat value");
+    std::test::check_eq_int(&t, std::str::concat("ab", "cd", buf, 5), 0, "concat fits exactly");
+    std::test::check_eq_int(&t, std::str::concat("ab", "cd", buf, 4), -1, "concat needs room for the NUL");
+
+    std::test::check_eq_int(&t, std::str::lower(buf), 0, "lower");
+    std::test::check_eq_str(&t, buf, "abcd", "lower value");
+    std::test::check_eq_int(&t, std::str::upper(buf), 0, "upper");
+    std::test::check_eq_str(&t, buf, "ABCD", "upper value");
+    std::test::check_eq_int(&t, std::str::compare("abc", "abd"), -1, "compare less");
+    std::test::check_eq_int(&t, std::str::compare("abc", "abc"), 0, "compare equal");
+    std::test::check_eq_int(&t, std::str::compare("abd", "abc"), 1, "compare greater");
+
+    return std::test::report(&t);
+}

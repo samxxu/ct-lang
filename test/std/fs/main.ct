@@ -1,0 +1,43 @@
+/* std::fs - write / read / exists / list, including the bounded cases.
+   argv[1] is a directory the runner created with exactly two entries, and
+   argv[2] is a file path outside it. */
+import std::fs::Fs;
+import std::str::Str;
+import std::test::Test;
+
+int main(int argc, char **argv)
+{
+    Test t;
+    char buf[64];
+    char listing[128];
+    int n;
+
+    std::test::init(&t);
+    std::test::check_eq_int(&t, argc, 3, "the runner passes a directory and a file");
+    if (argc < 3) return std::test::report(&t);
+
+    std::test::check_true(&t, std::fs::exists(argv[1]), "the directory exists");
+    std::test::check_true(&t, !std::fs::exists(argv[2]), "the file does not exist yet");
+    std::test::check_eq_int(&t, std::fs::exists("/no/such/path"), 0, "a missing path is 0");
+
+    std::test::check_eq_int(&t, std::fs::write_file(argv[2], "hello\nworld"), 0, "write the file");
+    std::test::check_true(&t, std::fs::exists(argv[2]), "the file exists now");
+    n = std::fs::read_file(argv[2], buf, 64);
+    std::test::check_eq_int(&t, n, 11, "read returns the byte count");
+    std::test::check_eq_str(&t, buf, "hello\nworld", "read value");
+    std::test::check_eq_int(&t, std::fs::read_file(argv[2], buf, 11), -1,
+                            "read refuses a buffer without room for the NUL");
+    std::test::check_eq_int(&t, std::fs::read_file("/no/such/file", buf, 64), -1,
+                            "read a missing file");
+
+    n = std::fs::list(argv[1], listing, 128);
+    std::test::check_eq_int(&t, n, 2, "list two entries");
+    std::test::check_true(&t, std::str::find(listing, "a.txt") >= 0, "the listing has a.txt");
+    std::test::check_true(&t, std::str::find(listing, "b.txt") >= 0, "the listing has b.txt");
+    std::test::check_eq_int(&t, std::fs::list(argv[1], listing, 4), -1,
+                            "list refuses a buffer that cannot hold the first name");
+    std::test::check_eq_int(&t, std::fs::list("/no/such/dir", listing, 128), -1,
+                            "list a missing directory");
+
+    return std::test::report(&t);
+}

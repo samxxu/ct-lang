@@ -1,0 +1,76 @@
+/* std::map - open addressing, overwrite, the fixed-capacity limit, clear and
+   the `free_fn` ownership rule. */
+import std::map::Map;
+import std::test::Test;
+
+#include <stdlib.h>
+
+/* 16 keys for a table `init(8)` rounds up to 16, plus one that must be refused. */
+static char *g_keys[17] = {
+    "k0", "k1", "k2", "k3", "k4", "k5", "k6", "k7",
+    "k8", "k9", "k10", "k11", "k12", "k13", "k14", "k15", "k16"
+};
+
+/* `free` is only a passthrough declaration, so it is not a value the unit can
+   name; the map wants a plain `void (*)(void *)`, which this wrapper is. */
+static void drop(void *p)
+{
+    free(p);
+}
+
+int main(void)
+{
+    Test t;
+    MapStrInt ms;
+    MapIntPtr mp;
+    int i;
+    int v;
+    void *out;
+    int *nums[4];
+
+    std::test::init(&t);
+
+    std::test::check_eq_int(&t, std::map::str_int_init(&ms, 8), 0, "init");
+    std::test::check_eq_int(&t, std::map::str_int_put(&ms, g_keys[0], 10), 0, "put k0");
+    std::test::check_eq_int(&t, std::map::str_int_put(&ms, g_keys[1], 20), 0, "put k1");
+    std::test::check_eq_int(&t, std::map::str_int_get(&ms, g_keys[0], &v), 0, "get k0");
+    std::test::check_eq_int(&t, v, 10, "get k0 value");
+    std::test::check_eq_int(&t, std::map::str_int_put(&ms, g_keys[0], 11), 0, "overwrite k0");
+    std::test::check_eq_int(&t, std::map::str_int_get(&ms, g_keys[0], &v), 0, "get k0 again");
+    std::test::check_eq_int(&t, v, 11, "the overwritten value");
+    std::test::check_eq_int(&t, std::map::str_int_len(&ms), 2, "an overwrite does not grow the table");
+    std::test::check_eq_int(&t, std::map::str_int_get(&ms, "missing", &v), -1, "get a missing key");
+
+    for (i = 0; i < 16; i++) {
+        std::test::check_eq_int(&t, std::map::str_int_put(&ms, g_keys[i], i), 0, "fill a slot");
+    }
+    std::test::check_eq_int(&t, std::map::str_int_len(&ms), 16, "the table is full");
+    std::test::check_eq_int(&t, std::map::str_int_put(&ms, g_keys[16], 16), -1,
+                            "a full table refuses a new key");
+    std::test::check_eq_int(&t, std::map::str_int_get(&ms, g_keys[15], &v), 0, "the last slot is found");
+    std::test::check_eq_int(&t, v, 15, "the last slot value");
+
+    std::map::str_int_clear(&ms);
+    std::test::check_eq_int(&t, std::map::str_int_len(&ms), 0, "clear empties the table");
+    std::test::check_eq_int(&t, std::map::str_int_get(&ms, g_keys[0], &v), -1, "get after clear");
+    std::test::check_eq_int(&t, std::map::str_int_put(&ms, g_keys[0], 1), 0, "put after clear");
+    std::map::str_int_free(&ms);
+
+    std::test::check_eq_int(&t, std::map::int_ptr_init(&mp, 4, drop), 0, "int_ptr init with free_fn");
+    for (i = 0; i < 4; i++) {
+        nums[i] = (int *)malloc(sizeof(int));
+        if (!nums[i]) return 1;
+        *nums[i] = i * 10;
+        std::test::check_eq_int(&t, std::map::int_ptr_put(&mp, i, nums[i]), 0, "int_ptr put");
+    }
+    std::test::check_eq_int(&t, std::map::int_ptr_len(&mp), 4, "int_ptr len");
+    std::test::check_eq_int(&t, std::map::int_ptr_get(&mp, 1, &out), 0, "int_ptr get");
+    std::test::check_eq_int(&t, *(int *)out, 10, "int_ptr value");
+    std::test::check_eq_int(&t, std::map::int_ptr_get(&mp, 99, &out), -1, "int_ptr missing key");
+    std::map::int_ptr_clear(&mp);
+    std::test::check_eq_int(&t, std::map::int_ptr_len(&mp), 0, "int_ptr clear");
+    std::test::check_eq_int(&t, std::map::int_ptr_get(&mp, 1, &out), -1, "int_ptr get after clear");
+    std::map::int_ptr_free(&mp);
+
+    return std::test::report(&t);
+}
