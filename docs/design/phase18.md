@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：实施中（2026-11-02 起；18.0 容量解除、18.1 包规范已完成，18.2–18.6 待落地）。**
+> **状态：实施中（2026-11-02 起；18.0–18.5 已落地；外部仓库 `ct-pkg/{hal,hal-posix,clib,index}` 的推送待组织建仓权限；18.6 收口待做）。**
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
 > （`hal` 契约 + 平台包 + C 库映射）、索引与 CI 产出**，为 `1.0.0` 做准备。
 > **D18-1…D18-11 已按建议值经用户确认**（2026-11-02）。本文件只记录计划，不描述现状；
@@ -120,6 +120,14 @@
 - 仓库内新增 `examples/wave1-demo/`：同时 `use hal` 与 `clib`，在宿主与目标机输出固定文本。
 - 收口：文档同步（本文件状态、roadmap 中英版本记录、README 的包管理段落、glossary 新词条、
   `bindings/README.md` 指向契约包）、五处 `CTC_VERSION`、71 个 golden、`v0.18.0` tag + push。
+
+#### 进展（2026-11-02）
+
+- **18.3 `hal`**：包内容已定稿——四个纯 `.h.ct` 单元、`ct.pkg`、MIT `LICENSE`、中英 README；本地已验证消费方可声明接口值并编译。
+- **18.4 `hal-posix`**：单单元实现 + 四个 `map`，一个 `posix_hal` 实例可装箱成四个 trait；宿主 macOS arm64 端到端通过（`ct get` → `ct install` → 执行打印的命令 → 固定输出）。glibc 在 `-std=c99` 下会隐藏 POSIX 声明，故 `ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`；目标机（Linux aarch64）由 CI 交叉 + QEMU 验证（本机无交叉工具链）。
+- **18.5 `clib`**：三个 `.m.ct` 单元（`clib::String` / `clib::Stdio` / `clib::Math`），调用点展开为普通 C 调用（生成物中零 `clib_` 符号）；`strlen` 保留 `size_t` 的 `unsigned long` 拼写以避免 `printf` 格式告警；`ldflags = -lm` 已进入 `ct install` 打印的命令。
+- **18.2 索引与 CI**：索引仓库骨架（`index`、`tools/gen-index.sh`、`tools/refresh-index.sh`、`packages.txt`、夜间刷新 workflow）已本地验证——`ct get --index` 可递归解析 `hal-posix → hal`，`ct update` / `ct verify` 绿；本仓库 `packages.yml`（宿主 job + aarch64/QEMU job）已加入，本地门禁仍为 11 道。
+- **待办**：`ct-pkg` 组织的建仓权限尚未就绪（当前 token 无法在该组织创建仓库），四个仓库与 `v1.0.0` tag 的推送因此暂缓；18.6 的收口（文档同步、`CTC_VERSION`、golden、`v0.18.0`）待推送完成后进行。
 
 ### 5. 依赖与顺序
 
@@ -280,6 +288,26 @@
 - Close: sync the docs (this file's status, the roadmap release notes in both languages, README's package section,
   the glossary's new terms, `bindings/README.md` pointing at the contract), the five `CTC_VERSION` sites, the 71
   goldens, and push the `v0.18.0` tag.
+
+#### Progress (2026-11-02)
+
+- **18.3 `hal`**: the package is final — four pure `.h.ct` units, `ct.pkg`, an MIT `LICENSE` and a bilingual
+  README; a consumer declaring interface values against it compiles locally.
+- **18.4 `hal-posix`**: one unit with the implementation and the four `map`s, so a single `posix_hal` instance
+  boxes into all four traits; the host leg (macOS arm64) runs end to end — `ct get` → `ct install` → the printed
+  command → the fixed output. glibc hides the POSIX declarations under `-std=c99`, so `ct.pkg` carries
+  `cflags = -D_POSIX_C_SOURCE=200809L`; the target leg (Linux aarch64) is covered by the CI cross + QEMU job
+  because this machine has no cross toolchain.
+- **18.5 `clib`**: three `.m.ct` units (`clib::String` / `clib::Stdio` / `clib::Math`); the call site expands to
+  the plain C call (zero `clib_` symbols in the generated C). `strlen` keeps `size_t` spelled `unsigned long`
+  so a `printf` format check agrees with the real type, and `ldflags = -lm` reaches the command `ct install` prints.
+- **18.2 index and CI**: the index repository skeleton (`index`, `tools/gen-index.sh`, `tools/refresh-index.sh`,
+  `packages.txt`, the nightly refresh workflow) is verified locally — `ct get --index` resolves
+  `hal-posix → hal` recursively and `ct update` / `ct verify` are green; this repository's `packages.yml`
+  (host job + aarch64/QEMU job) is in place and the local gates stay at 11.
+- **Pending**: the `ct-pkg` organisation does not yet grant repository creation to the current token, so the four
+  repositories and their `v1.0.0` tags are not pushed; 18.6's close (doc sync, `CTC_VERSION`, goldens,
+  `v0.18.0`) waits for that push.
 
 ### 5. Order and dependencies
 

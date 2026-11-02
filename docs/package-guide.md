@@ -25,7 +25,7 @@ hello/
 源码单元遵守 [AGENTS.md](../AGENTS.md) §2 的「一单元一主类型」：
 
 - `.h.ct`：`trait` / `struct` 声明与全局实例，`pub` 才跨单元可见；
-- `.c.ct`：普通实现（`pub` 函数）；
+- `.ct`：普通实现单元（`pub` 函数），不发布接口；
 - `.m.ct`：零成本静态映射，不产 `.c` / `.h`；
 - binding 形式（`#include` 直通 + `map`）按 [bindings/README.md](../bindings/README.md)。
 
@@ -117,7 +117,7 @@ hello/
 Source units follow "one unit, one primary type" from [AGENTS.md](../AGENTS.md) §2:
 
 - `.h.ct`: `trait` / `struct` declarations and global instances; only `pub` crosses a unit;
-- `.c.ct`: ordinary implementations (`pub` functions);
+- `.ct`: an ordinary implementation unit (`pub` functions), publishing no interface;
 - `.m.ct`: zero-cost static mappings, emitting no `.c` / `.h`;
 - binding form (`#include` passthrough + `map`) per [bindings/README.md](../bindings/README.md).
 
