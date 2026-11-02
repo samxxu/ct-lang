@@ -1,0 +1,119 @@
+name: packages
+
+# The Wave 1 package gate: resolve the published packages through the plain-text
+# index, re-pin them, verify the vendored tree and run the demo. It lives here
+# rather than in the local hard gates (D18-8): the network and the cross
+# toolchain belong to CI.
+#
+# `ct-pkg/index` is a separate, public repository. It is fetched as a raw file
+# so the workflow needs no token beyond its own checkout.
+on:
+  push:
+    paths:
+      - 'examples/wave1-demo/**'
+      - '.github/workflows/packages.yml'
+  pull_request:
+    paths:
+      - 'examples/wave1-demo/**'
+      - '.github/workflows/packages.yml'
+  schedule:
+    - cron: '0 19 * * *'   # 03:00 Asia/Shanghai
+  workflow_dispatch:
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CC: gcc
+
+jobs:
+  # Host half: bootstrap ct, fetch the index, resolve hal-posix + clib, then run
+  # the command `ct install` prints and compare the demo's output.
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bootstrap ct
+        run: |
+          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/astsrc"
+          gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$RUNNER_TEMP/ct/ctc"
+          "$RUNNER_TEMP/ct/ctc" selfhost/l1/ctc.ct -o "$RUNNER_TEMP/ct/l1.c"
+          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l1.c" -o "$RUNNER_TEMP/ct/l1"
+          "$RUNNER_TEMP/ct/l1" build selfhost/l2/driver.ct -o "$RUNNER_TEMP/ct/l2src"
+          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l2src"/*.c -o "$RUNNER_TEMP/ct/l2"
+          "$RUNNER_TEMP/ct/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$RUNNER_TEMP/astsrc"
+          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/astsrc"/*.c -o "$RUNNER_TEMP/ct/ct"
+          echo "$RUNNER_TEMP/ct" >> "$GITHUB_PATH"
+
+      - name: fetch the package index
+        run: curl -fsSL https://raw.githubusercontent.com/ct-pkg/index/main/index -o "$RUNNER_TEMP/index"
+
+      - name: resolve, verify and run the demo
+        env:
+          CT_INDEX: ${{ runner.temp }}/index
+        run: |
+          mkdir -p "$RUNNER_TEMP/wave1"
+          cd "$RUNNER_TEMP/wave1"
+          cp "$GITHUB_WORKSPACE/examples/wave1-demo/src/main.ct" .
+          printf 'name = wave1-demo\nversion = 0.1.0\n' > ct.pkg
+          ct get --index "$CT_INDEX" hal-posix
+          ct get --index "$CT_INDEX" clib
+          ct update
+          ct verify
+          ct install >install.txt
+          sh install.txt
+          ./build >out.txt 2>err.txt
+          diff -u "$GITHUB_WORKSPACE/examples/wave1-demo/demo.expected.out" out.txt
+
+  # Target half: the same sources under aarch64-linux-gnu-gcc, run under
+  # qemu-aarch64. This is the Linux aarch64 leg of the 18.4 exit.
+  target-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
+
+      - name: bootstrap ct
+        run: |
+          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/astsrc"
+          gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$RUNNER_TEMP/ct/ctc"
+          "$RUNNER_TEMP/ct/ctc" selfhost/l1/ctc.ct -o "$RUNNER_TEMP/ct/l1.c"
+          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l1.c" -o "$RUNNER_TEMP/ct/l1"
+          "$RUNNER_TEMP/ct/l1" build selfhost/l2/driver.ct -o "$RUNNER_TEMP/ct/l2src"
+          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l2src"/*.c -o "$RUNNER_TEMP/ct/l2"
+          "$RUNNER_TEMP/ct/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$RUNNER_TEMP/astsrc"
+          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/astsrc"/*.c -o "$RUNNER_TEMP/ct/ct"
+          echo "$RUNNER_TEMP/ct" >> "$GITHUB_PATH"
+
+      - name: fetch the package index
+        run: curl -fsSL https://raw.githubusercontent.com/ct-pkg/index/main/index -o "$RUNNER_TEMP/index"
+
+      - name: resolve and verify on the target
+        env:
+          CT_INDEX: ${{ runner.temp }}/index
+        run: |
+          mkdir -p "$RUNNER_TEMP/wave1"
+          cd "$RUNNER_TEMP/wave1"
+          cp "$GITHUB_WORKSPACE/examples/wave1-demo/src/main.ct" .
+          printf 'name = wave1-demo\nversion = 0.1.0\n' > ct.pkg
+          ct get --index "$CT_INDEX" hal-posix
+          ct get --index "$CT_INDEX" clib
+          ct update
+          ct verify
+
+      - name: build and run with the aarch64 compiler
+        env:
+          CC: aarch64-linux-gnu-gcc
+          CT_INDEX: ${{ runner.temp }}/index
+        run: |
+          cd "$RUNNER_TEMP/wave1"
+          ct install >install.txt
+          sh install.txt
+          qemu-aarch64 -L /usr/aarch64-linux-gnu ./build >out.txt 2>err.txt
+          diff -u "$GITHUB_WORKSPACE/examples/wave1-demo/demo.expected.out" out.txt

@@ -1,0 +1,43 @@
+import Uart;
+import Gpio;
+import Clock;
+import Log;
+import PosixHal;
+import clib::String;
+import clib::Stdio;
+import clib::Math;
+
+int main(void)
+{
+    Uart u;
+    Gpio g;
+    Clock c;
+    Log l;
+    int t1;
+    int t2;
+
+    /* Every map in PosixHal names the same instance, so one object boxes into
+       all four traits. */
+    u = posix_hal;
+    g = posix_hal;
+    c = posix_hal;
+    l = posix_hal;
+
+    /* The UART is the only stream with a bytes-in, bytes-out contract; its line
+       goes first so the output order does not depend on stdio buffering. */
+    u.send("hal\n", 4);
+
+    clib::Stdio.printf("strlen=%lu\n", clib::String.strlen("clib"));
+    clib::Stdio.printf("sqrt=%d\n", (int)clib::Math.sqrt(16.0));
+
+    g.write(3, 1);
+    clib::Stdio.printf("gpio3=%d\n", g.read(3));
+
+    t1 = c.now_ms();
+    t2 = c.now_ms();
+    clib::Stdio.printf("clock=%d\n", t2 >= t1);
+
+    clib::Stdio.printf("uart=%d\n", u.send("", 0));
+    clib::Stdio.printf("log=%d\n", l.write("", 0));
+    return 0;
+}
