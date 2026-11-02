@@ -1,0 +1,33 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 18 * * *'   # 02:00 Asia/Shanghai
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ASAN/UBSAN over the whole chain, test/run.sh and the test/ast fixtures. Not
+  # part of check-all.sh on purpose (D17-6): too slow for the local loop.
+  sanitizers:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASAN + UBSAN
+        run: bash selfhost/check-sanitizers.sh
+
+  # Deterministic fuzz with a fixed seed; a failure prints the seed so the same
+  # mutation sequence can be replayed locally.
+  fuzz:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: deterministic fuzz
+        run: bash test/fuzz/run.sh

@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The one full authority: every hard gate on Linux with GCC, which is also the
+  # compiler the project documents for the L0 build.
+  ubuntu-gcc:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: nine hard gates
+        run: bash selfhost/check-all.sh
+
+  # macOS carries the BSD-only probes test/run.sh skips elsewhere, so it runs
+  # the full suite too (Apple clang is the "zero warnings" baseline).
+  macos-clang:
+    runs-on: macos-latest
+    env:
+      CC: clang
+    steps:
+      - uses: actions/checkout@v4
+      - name: nine hard gates
+        run: bash selfhost/check-all.sh
+
+  # A second Linux compiler, smoke only: the two suites that are most sensitive
+  # to compiler differences, without paying for the whole matrix twice.
+  ubuntu-clang-smoke:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+    steps:
+      - uses: actions/checkout@v4
+      - name: L0 suite
+        run: bash test/run.sh
+      - name: AST compiler suite
+        run: bash selfhost/check-ast.sh
+      - name: generated C warning-free
+        run: bash selfhost/check-warnings.sh
