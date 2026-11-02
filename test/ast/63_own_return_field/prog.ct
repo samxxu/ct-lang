@@ -1,0 +1,41 @@
+/* SH-45: a return that reads a field of an owned object evaluates it first and
+   releases afterwards, so the value comes from live memory. `pass` pins the
+   transfer form: `return b;` still leaves the release to the caller. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop(void) {
+        printf("drop %d\n", self->n);
+    }
+}
+
+int take(int c)
+{
+    own Box *b = malloc(sizeof(Box));
+    b->n = c;
+    return b->n;
+}
+
+struct Box *pass(void)
+{
+    own Box *b = malloc(sizeof(Box));
+    b->n = 5;
+    return b;
+}
+
+int main(void)
+{
+    printf("take(7)=%d\n", take(7));
+    printf("take(2)=%d\n", take(2));
+    {
+        struct Box *p = pass();
+        printf("pass=%d\n", p->n);
+        delete p;
+    }
+    return 0;
+}

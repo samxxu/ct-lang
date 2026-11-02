@@ -191,6 +191,22 @@ static int retire_before_return(struct Stmt *self, int ret, int permanent)
     return ret;
 }
 
+/* SH-45: a release must not run before the returned value is read. When the
+   expression reads (but does not hand over) an object that is still
+   auto-dropped, the emitter materialises the value first and releases after. */
+static int return_reads_autodrop(struct Stmt *self, int e)
+{
+    int i;
+
+    for (i = 0; i < self->sym->nvar; i++) {
+        if (!self->sym->vars[i].autodrop) continue;
+        if (!self->mem->expr_mentions(e, self->sym->vars[i].name)) continue;
+        if (self->mem->expr_returns(e, self->sym->vars[i].name)) continue;
+        return 1;
+    }
+    return 0;
+}
+
 /* The scope a variable belongs to: the innermost scope whose opening boundary
    is at or before it. A parameter sits in the function's own scope and a local
    in the block's, so a shallower scope index is a longer-lived variable. */
@@ -612,6 +628,10 @@ impl StmtOps for Stmt {
                 return -1;
             if (self->mem->leak_active && self->sup->leak_return(e, cond, rline) != 0)
                 return -1;
+            if (self->mem->leak_active && return_reads_autodrop(self, e)) {
+                self->arena->nodes[s].aux = 1;
+                snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", self->sym->ret_type);
+            }
             if (self->sup->expect(";") != 0) return -1;
             /* SH-33: release what is still owned before the value leaves, so
                the release is on the taken path instead of after the `return` */

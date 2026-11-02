@@ -1,0 +1,6 @@
+drop 7
+take(7)=7
+drop 2
+take(2)=2
+pass=5
+drop 5

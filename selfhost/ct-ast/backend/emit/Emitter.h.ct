@@ -1914,9 +1914,23 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_RET) {
-            int r;
+            char tmp[MAX_TEXT];
+            int r, rtv;
+            rtv = -1;
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
+            /* SH-45: the expression reads a value the releases below would
+               free, so materialise it first and return the temporary */
+            if (self->arena->nodes[n].aux == 1 && self->arena->nodes[n].a >= 0
+                && self->arena->nodes[n].text[0]) {
+                rtv = self->ntmp;
+                self->ntmp++;
+                self->emit_indent(ind);
+                snprintf(tmp, sizeof tmp, "%s __ct_ret%d = ", self->arena->nodes[n].text, rtv);
+                fputs(tmp, self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(";\n", self->out);
+            }
             /* the parser hangs the scope's releases off `b`; they run at the
                return's own indentation, before the value leaves (SH-33) */
             for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
@@ -1924,6 +1938,11 @@ impl EmitOps for Emitter {
             self->emit_indent(ind);
             if (self->arena->nodes[n].a < 0) {
                 fputs("return;\n", self->out);
+                return 0;
+            }
+            if (rtv >= 0) {
+                snprintf(tmp, sizeof tmp, "return __ct_ret%d;\n", rtv);
+                fputs(tmp, self->out);
                 return 0;
             }
             fputs("return ", self->out);

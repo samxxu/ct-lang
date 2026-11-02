@@ -1,0 +1,43 @@
+/* SH-45 (borrow path): `return c->fd;` reads the lent object before the
+   handback runs; the handback still clears `in_use`. */
+#include <stdio.h>
+
+struct Conn {
+    int fd;
+    int in_use;
+} use Handback;
+
+impl Handback for Conn {
+    void handback(void) {
+        self->in_use = 0;
+        printf("handback %d\n", self->fd);
+    }
+}
+
+struct ConnPool {
+    struct Conn slots[2];
+};
+
+static struct ConnPool g_pool;
+
+static struct Conn *acquire(int fd)
+{
+    struct Conn *c = &g_pool.slots[fd];
+    c->fd = fd;
+    c->in_use = 1;
+    return c;
+}
+
+int peek(int fd)
+{
+    borrow struct Conn *c = acquire(fd);
+    return c->fd;
+}
+
+int main(void)
+{
+    printf("peek(0)=%d\n", peek(0));
+    printf("peek(1)=%d\n", peek(1));
+    printf("in_use=%d %d\n", g_pool.slots[0].in_use, g_pool.slots[1].in_use);
+    return 0;
+}
