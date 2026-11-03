@@ -1928,7 +1928,7 @@ impl ParseOps for Parser {
     int parse_impl(void)
     {
         int ti, si, node, mnode, params, body, tail, impl_line;
-        int mline, nimpl, tm_i, k2, brace_line, brace_col, found, dup_i;
+        int mline, mcol, nimpl, tm_i, k2, brace_line, brace_col, found, dup_i;
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
         char rtrait[MAX_TEXT];
@@ -2017,6 +2017,7 @@ impl ParseOps for Parser {
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
             snprintf(mname, sizeof mname, "%s", self->lex->toktext);
+            mcol = self->lex->tokstart - self->lex->lstart + 1;
             self->sup->lex_next();
             if (self->sup->push_scope() != 0) return -1;
             if (self->sup->declare_var("self", stype) != 0) {
@@ -2048,14 +2049,14 @@ impl ParseOps for Parser {
                 if (ret[0] && strcmp(ret, self->sym->traits[ti].m[tm_i].ret) != 0) {
                     snprintf(wmsg, sizeof wmsg, "return type '%s' does not match the trait's '%s'",
                              ret, self->sym->traits[ti].m[tm_i].ret);
-                    if (tool::diag::ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
+                    if (tool::diag::ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
                         self->sup->pop_scope();
                         return -1;
                     }
                 } else if (nimpl != self->sym->traits[ti].m[tm_i].nparams) {
                     snprintf(wmsg, sizeof wmsg, "takes %d parameter(s), the trait declares %d",
                              nimpl, self->sym->traits[ti].m[tm_i].nparams);
-                    if (tool::diag::ct_sig_warn(mline, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
+                    if (tool::diag::ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
                         self->sup->pop_scope();
                         return -1;
                     }
@@ -2074,7 +2075,7 @@ impl ParseOps for Parser {
                             snprintf(wmsg, sizeof wmsg,
                                      "parameter %d type '%s' does not match the trait's '%s'",
                                      pk + 1, self->arena->nodes[k2].text, ft);
-                            if (tool::diag::ct_sig_warn(mline, mname, rtrait, rstruct,
+                            if (tool::diag::ct_sig_warn(mline, mcol, mname, rtrait, rstruct,
                                                         wmsg, self->mem->path) != 0) {
                                 self->sup->pop_scope();
                                 return -1;

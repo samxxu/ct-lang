@@ -29,6 +29,8 @@ struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
                            4 arity_mismatch, 5 type_mismatch, 6 ambiguous_method */
     int  line;
+    int  col;           /* 1-based column of the token the finding is about (0: none);
+                           `ct check` reports it, compile-mode text stays `file:line:` */
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
     char file[MAX_PATH];
     char var[MAX_TEXT]; /* leak: variable; mismatch: method */
@@ -39,13 +41,13 @@ struct Warn {
 
 trait DiagStore {
     int  sem_error(int line, int col, const char *msg, const char *path);
-    int  record_sig_warn(int line, const char *method, const char *trait,
+    int  record_sig_warn(int line, int col, const char *method, const char *trait,
                          const char *stype, const char *msg, const char *path);
-    int  record_arity_warn(int line, const char *callee, const char *msg,
+    int  record_arity_warn(int line, int col, const char *callee, const char *msg,
                            const char *path);
-    int  record_type_warn(int line, const char *callee, const char *msg,
+    int  record_type_warn(int line, int col, const char *callee, const char *msg,
                           const char *path);
-    int  record_amb_warn(int line, const char *method, const char *msg,
+    int  record_amb_warn(int line, int col, const char *method, const char *msg,
                          const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
@@ -84,7 +86,7 @@ impl DiagStore for Diag {
         return -1;
     }
 
-    int record_sig_warn(int line, const char *method, const char *trait,
+    int record_sig_warn(int line, int col, const char *method, const char *trait,
                         const char *stype, const char *msg, const char *path)
     {
         struct Warn *w;
@@ -93,6 +95,7 @@ impl DiagStore for Diag {
         w = &self->warns[self->nwarns];
         w->kind = 1;
         w->line = line;
+        w->col = col;
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
         snprintf(w->var, sizeof w->var, "%s", method);
@@ -107,7 +110,7 @@ impl DiagStore for Diag {
        Compile mode keeps it a warning so `ct compile` / `ct build` keep their
        exit codes and artifacts (D19-4); `ct check` (19.4) raises the same
        record to an error. */
-    int record_arity_warn(int line, const char *callee, const char *msg,
+    int record_arity_warn(int line, int col, const char *callee, const char *msg,
                           const char *path)
     {
         struct Warn *w;
@@ -116,6 +119,7 @@ impl DiagStore for Diag {
         w = &self->warns[self->nwarns];
         w->kind = 4;
         w->line = line;
+        w->col = col;
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
         snprintf(w->var, sizeof w->var, "%s", callee);
@@ -129,7 +133,7 @@ impl DiagStore for Diag {
     /* One argument whose type is confidently incompatible with the resolved
        signature (19.2). Same severity policy as arity: a warning in compile
        mode, an error under `ct check`. */
-    int record_type_warn(int line, const char *callee, const char *msg,
+    int record_type_warn(int line, int col, const char *callee, const char *msg,
                          const char *path)
     {
         struct Warn *w;
@@ -138,6 +142,7 @@ impl DiagStore for Diag {
         w = &self->warns[self->nwarns];
         w->kind = 5;
         w->line = line;
+        w->col = col;
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
         snprintf(w->var, sizeof w->var, "%s", callee);
@@ -152,7 +157,7 @@ impl DiagStore for Diag {
        SH-46). The first match in `use` order stays the resolution (the spec
        pins it), so this is only ever a warning; `ct check` (19.4) raises it
        to an error. */
-    int record_amb_warn(int line, const char *method, const char *msg,
+    int record_amb_warn(int line, int col, const char *method, const char *msg,
                         const char *path)
     {
         struct Warn *w;
@@ -161,6 +166,7 @@ impl DiagStore for Diag {
         w = &self->warns[self->nwarns];
         w->kind = 6;
         w->line = line;
+        w->col = col;
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
         snprintf(w->var, sizeof w->var, "%s", method);
@@ -182,6 +188,7 @@ impl DiagStore for Diag {
         w = &self->warns[self->nwarns];
         w->kind = kind;
         w->line = line;
+        w->col = 0;
         w->path_line = path_line;
         snprintf(w->file, sizeof w->file, "%s", file);
         snprintf(w->var, sizeof w->var, "%s", var);
@@ -238,7 +245,9 @@ impl DiagStore for Diag {
                 if (w->kind == 1) {
                     fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"method\":\"", w->line);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"method\":\"", jf);
                     self->put_json(jf, w->var);
                     fputs("\",\"trait\":\"", jf);
                     self->put_json(jf, w->tname);
@@ -265,7 +274,9 @@ impl DiagStore for Diag {
                 } else if (w->kind == 4) {
                     fputs("\"type\":\"arity_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"callee\":\"", w->line);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"callee\":\"", jf);
                     self->put_json(jf, w->var);
                     fputs("\",\"message\":\"", jf);
                     self->put_json(jf, w->msg);
@@ -273,7 +284,9 @@ impl DiagStore for Diag {
                 } else if (w->kind == 5) {
                     fputs("\"type\":\"type_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"callee\":\"", w->line);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"callee\":\"", jf);
                     self->put_json(jf, w->var);
                     fputs("\",\"message\":\"", jf);
                     self->put_json(jf, w->msg);
@@ -281,7 +294,9 @@ impl DiagStore for Diag {
                 } else if (w->kind == 6) {
                     fputs("\"type\":\"ambiguous_method\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"method\":\"", w->line);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"method\":\"", jf);
                     self->put_json(jf, w->var);
                     fputs("\",\"message\":\"", jf);
                     self->put_json(jf, w->msg);
@@ -300,27 +315,35 @@ impl DiagStore for Diag {
         } else {
             for (i = 0; i < self->nwarns; i++) {
                 struct Warn *w = &self->warns[i];
-                if (w->kind == 1)
-                    fprintf(tf, "%s:%d: %s: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
-                            w->file, w->line, sev, w->var, w->tname, w->stype, w->msg);
-                else if (w->kind == 2)
-                    fprintf(tf, "%s:%d: %s: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
-                            w->file, w->line, sev, w->var, w->tname, w->path_line);
-                else if (w->kind == 3)
-                    fprintf(tf, "%s:%d: %s: a borrowed pointer escapes through 'return'\n",
-                            w->file, w->line, sev);
-                else if (w->kind == 4)
-                    fprintf(tf, "%s:%d: %s: arity mismatch: '%s' %s\n",
-                            w->file, w->line, sev, w->var, w->msg);
-                else if (w->kind == 5)
-                    fprintf(tf, "%s:%d: %s: type mismatch: '%s' %s\n",
-                            w->file, w->line, sev, w->var, w->msg);
-                else if (w->kind == 6)
-                    fprintf(tf, "%s:%d: %s: ambiguous method: '%s' %s\n",
-                            w->file, w->line, sev, w->var, w->msg);
+                /* `ct check` follows the source location contract
+                   (`file:line:col:`); compile and build stay `file:line:` so
+                   their bytes do not move (D19-4). */
+                char loc[MAX_PATH + 32];
+                if (self->strict && w->col > 0)
+                    snprintf(loc, sizeof loc, "%s:%d:%d:", w->file, w->line, w->col);
                 else
-                    fprintf(tf, "%s:%d: %s: potential leak: '%s' (%s*) allocated but never deleted\n",
-                            w->file, w->line, sev, w->var, w->tname);
+                    snprintf(loc, sizeof loc, "%s:%d:", w->file, w->line);
+                if (w->kind == 1)
+                    fprintf(tf, "%s %s: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
+                            loc, sev, w->var, w->tname, w->stype, w->msg);
+                else if (w->kind == 2)
+                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
+                            loc, sev, w->var, w->tname, w->path_line);
+                else if (w->kind == 3)
+                    fprintf(tf, "%s %s: a borrowed pointer escapes through 'return'\n",
+                            loc, sev);
+                else if (w->kind == 4)
+                    fprintf(tf, "%s %s: arity mismatch: '%s' %s\n",
+                            loc, sev, w->var, w->msg);
+                else if (w->kind == 5)
+                    fprintf(tf, "%s %s: type mismatch: '%s' %s\n",
+                            loc, sev, w->var, w->msg);
+                else if (w->kind == 6)
+                    fprintf(tf, "%s %s: ambiguous method: '%s' %s\n",
+                            loc, sev, w->var, w->msg);
+                else
+                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted\n",
+                            loc, sev, w->var, w->tname);
             }
         }
         return 0;
@@ -364,29 +387,29 @@ int ct_sem_error(int line, int col, const char *msg, const char *path)
     return g_diag.sem_error(line, col, msg, path);
 }
 
-pub int ct_sig_warn(int line, const char *method, const char *trait, const char *stype, const char *msg, const char *path);
-int ct_sig_warn(int line, const char *method, const char *trait,
+pub int ct_sig_warn(int line, int col, const char *method, const char *trait, const char *stype, const char *msg, const char *path);
+int ct_sig_warn(int line, int col, const char *method, const char *trait,
                 const char *stype, const char *msg, const char *path)
 {
-    return g_diag.record_sig_warn(line, method, trait, stype, msg, path);
+    return g_diag.record_sig_warn(line, col, method, trait, stype, msg, path);
 }
 
-pub int ct_arity_warn(int line, const char *callee, const char *msg, const char *path);
-int ct_arity_warn(int line, const char *callee, const char *msg, const char *path)
+pub int ct_arity_warn(int line, int col, const char *callee, const char *msg, const char *path);
+int ct_arity_warn(int line, int col, const char *callee, const char *msg, const char *path)
 {
-    return g_diag.record_arity_warn(line, callee, msg, path);
+    return g_diag.record_arity_warn(line, col, callee, msg, path);
 }
 
-pub int ct_type_warn(int line, const char *callee, const char *msg, const char *path);
-int ct_type_warn(int line, const char *callee, const char *msg, const char *path)
+pub int ct_type_warn(int line, int col, const char *callee, const char *msg, const char *path);
+int ct_type_warn(int line, int col, const char *callee, const char *msg, const char *path)
 {
-    return g_diag.record_type_warn(line, callee, msg, path);
+    return g_diag.record_type_warn(line, col, callee, msg, path);
 }
 
-pub int ct_amb_warn(int line, const char *method, const char *msg, const char *path);
-int ct_amb_warn(int line, const char *method, const char *msg, const char *path)
+pub int ct_amb_warn(int line, int col, const char *method, const char *msg, const char *path);
+int ct_amb_warn(int line, int col, const char *method, const char *msg, const char *path)
 {
-    return g_diag.record_amb_warn(line, method, msg, path);
+    return g_diag.record_amb_warn(line, col, method, msg, path);
 }
 
 pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);

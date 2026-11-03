@@ -52,9 +52,9 @@ pub trait SupportOps {
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
-    int  arity_warn(int line, const char *callee, const char *msg);
-    int  type_warn(int line, const char *callee, const char *msg);
-    int  amb_warn(int line, const char *method, const char *msg);
+    int  arity_warn(int line, int col, const char *callee, const char *msg);
+    int  type_warn(int line, int col, const char *callee, const char *msg);
+    int  amb_warn(int line, int col, const char *method, const char *msg);
     int  ns_decl_name(const char *name, char *out, int cap);
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
@@ -390,22 +390,22 @@ impl SupportOps for ParseSupport {
     /* A call-site arity mismatch (19.1). The caller (the expression grammar)
        knows the position and the signature; this unit only supplies the path
        the driver re-points at each unit. */
-    int arity_warn(int line, const char *callee, const char *msg)
+    int arity_warn(int line, int col, const char *callee, const char *msg)
     {
-        return tool::diag::ct_arity_warn(line, callee, msg, self->mem->path);
+        return tool::diag::ct_arity_warn(line, col, callee, msg, self->mem->path);
     }
 
     /* A call-site argument type mismatch (19.2); same warning path as arity. */
-    int type_warn(int line, const char *callee, const char *msg)
+    int type_warn(int line, int col, const char *callee, const char *msg)
     {
-        return tool::diag::ct_type_warn(line, callee, msg, self->mem->path);
+        return tool::diag::ct_type_warn(line, col, callee, msg, self->mem->path);
     }
 
     /* A bare call two traits of the receiver both declare (19.3, SH-46);
        same warning path as arity. */
-    int amb_warn(int line, const char *method, const char *msg)
+    int amb_warn(int line, int col, const char *method, const char *msg)
     {
-        return tool::diag::ct_amb_warn(line, method, msg, self->mem->path);
+        return tool::diag::ct_amb_warn(line, col, method, msg, self->mem->path);
     }
 
     int ns_decl_name(const char *name, char *out, int cap)

@@ -4,7 +4,7 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总十轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
+本目录汇总十一轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../docs/history/reports/phase7-review/phase7-review.md)（Phase 7 复审）、
 [reports/phase9-review](../docs/history/reports/phase9-review/phase9-review.md)（Phase 9 复审）、
 [reports/review-2026-10-21](../docs/history/reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
@@ -13,10 +13,11 @@
 [reports/review-2026-10-31](../docs/history/reports/review-2026-10-31/review-2026-10-31.md)（代码审查 + 文档一致性审查）、
 [reports/review-2026-11-01](../docs/history/reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）、
 [reports/review-2026-11-02](../docs/history/reports/review-2026-11-02/review-2026-11-02.md)（Phase 18 生态建设与 `v0.18.0` 收口审查）、
-[reports/review-2026-11-03](../docs/history/reports/review-2026-11-03/review-2026-11-03.md)（Phase 19 受限语义检查与 `v0.19.0` 审查）。
+[reports/review-2026-11-03](../docs/history/reports/review-2026-11-03/review-2026-11-03.md)（Phase 19 受限语义检查与 `v0.19.0` 审查）、仓库外第三方评估复核
+（`ct-markdown/docs/ct-v0.19.0-re-evaluation.md`，2026-11-03，`v0.19.0`）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）；Phase 18 审查 `553d300`（2026-11-02，工作树含未提交的 `v0.18.0` bump）、Phase 19 审查 `db4cae4`（2026-11-03，`v0.19.0`）——各文件行号以其自身锚点为准。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）；Phase 18 审查 `553d300`（2026-11-02，工作树含未提交的 `v0.18.0` bump）、Phase 19 审查 `db4cae4`（2026-11-03，`v0.19.0`）、第三方 v0.19.0 复验 `4b9946b`（2026-11-03，`v0.19.0` + 1 commit）——各文件行号以其自身锚点为准。
 - 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 8 条（SH-8…SH-12、DOC-19…DOC-21）**已于 2026-10-21 全部关闭**（见文末「处置」节），SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 2026-10-31 审计新增 **18 条**，已于同日处置：**13 条修复**、2 条部分处置（TEST-9 / CI-4）、
   2 条不采纳（TEST-7 / SH-24，理由见文末「处置」节）；DOC-28 复核确认已修复。
@@ -61,6 +62,16 @@
   **已全部处置**：DOC-58 修口径并给本文件加 `<!-- gates:N -->` 机器可读标记、由 docs 门禁校验（杜绝第三次漂移），DOC-59 补教程中英
   两张表，SH-49 让 check 跳过输出路径解析与 `.m.ct` 守卫，TEST-14 改为显式捕获退出码并按四类补 compile
   对照。`ct check` 的四类发现、退出码、JSON `severity`、不写 `.c` 均实测与 README 一致。
+- 2026-11-03 第三方评估复核（`v0.19.0`，锚点 `4b9946b`）新增 **10 条**
+  （**DOC-60** / **DOC-62** / **TEST-16** / **CI-7** / **SH-50** / **STD-1** 为 Medium，
+  **DOC-61** / **TEST-15** / **CI-6** 为 Low，**SH-51** 为 Info）：3 条文档漂移、1 条 docs 门禁盲区、
+  1 条 check 边界行为无回归、1 条 CI 文案残留、1 条版本未打 tag、1 条 check 诊断缺列号、
+  1 条 build flags 命令面（Info）、1 条 std 应用层能力缺口（待决策）。**已处置 8 条、待决策 2 条**：
+  DOC-60 / DOC-61 / DOC-62 修文档（README 定位句、英文 phase 行、check 的单文件边界），CI-6 去掉 job 名里的
+  数字，TEST-15 让 docs 门禁覆盖英文 phase 行与 `ci.yml` 文案，TEST-16 补 check 拒绝 import 的负例，
+  SH-50 给语义诊断补列号（check 侧 `file:line:col:` + JSON `col`，compile 侧字节不变），SH-51 采纳方案 B
+  在教程标注 flags 的 shell 语义；CI-7（打 tag）等明确指令，STD-1 等治理决策。
+  6 条断言的复验与 3 条报告偏差见文末「第三方评估复核（2026-11-03）」一节。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:12 -->
 - **硬关卡计数随阶段演进（当前 12 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -135,6 +146,9 @@
 | DOC-57 | Low | 包指南 §1 自相矛盾：`ct.pkg` 标「唯一必填」，`LICENSE` 又标「必填」 | [doc57-package-guide-license-required.md](docs/doc57-package-guide-license-required.md) |
 | DOC-58 | Low | Phase 19 加第 12 道门禁后，`issues/README.md` 仍写 11 道且第 10/11 道映射错位（DOC-56 回归） | [doc58-issues-readme-gate-count-regression.md](docs/doc58-issues-readme-gate-count-regression.md) |
 | DOC-59 | Low | 教程中英 CLI 速查表漏列 `ct check`，也未提 check 下 JSON 的 `severity` | [doc59-tutorial-check-missing.md](docs/doc59-tutorial-check-missing.md) |
+| DOC-60 | Medium | README 首句「不做类型检查」与 `ct check` 的存在矛盾 | [doc60-readme-no-type-check.md](docs/doc60-readme-no-type-check.md) |
+| DOC-61 | Low | roadmap 英文表 Phase 18 仍 `in progress`，中文表已完成 | [doc61-roadmap-phase18-english.md](docs/doc61-roadmap-phase18-english.md) |
+| DOC-62 | Medium | README / 教程未说明 `ct check` 拒绝 `import` | [doc62-check-import-undocumented.md](docs/doc62-check-import-undocumented.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -154,6 +168,8 @@
 | TEST-12 | Low | `check-warnings.sh` 未扫描 `test/patterns`（及 archive / acceptance） | [test12-check-warnings-patterns.md](testing/test12-check-warnings-patterns.md) |
 | TEST-13 | Low | `missing_method.ct` 在两个负例目录各一份，清点时易重复计数 | [test13-missing-method-duplicate.md](testing/test13-missing-method-duplicate.md) |
 | TEST-14 | Low | `check-semantics.sh` 的失败信息取 `$?` 于 `&&` 链之后（拿到的是 `[ -s ]` 的状态）；compile 不变性只探了歧义一类 | [test14-check-gate-exit-status-capture.md](testing/test14-check-gate-exit-status-capture.md) |
+| TEST-15 | Low | docs 门禁只覆盖中文 phase 表，且不扫 `ci.yml` | [test15-docs-gate-phase-english.md](testing/test15-docs-gate-phase-english.md) |
+| TEST-16 | Medium | `ct check` 的 `import` 拒绝无回归断言 | [test16-check-import-no-guard.md](testing/test16-check-import-no-guard.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -164,6 +180,8 @@
 | CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
 | CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行 | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
 | CI-5 | Low | `packages.yml` 的 push / PR 路径过滤不覆盖 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**` | [ci-5-packages-workflow-path-filters.md](ci/ci-5-packages-workflow-path-filters.md) |
+| CI-6 | Low | CI 两个 job 名仍写 `nine hard gates`（实际 12 道） | [ci-6-gate-label-nine.md](ci/ci-6-gate-label-nine.md) |
+| CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用 | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
 
 ### `selfhost/` —— 代码结构与容量
 
@@ -217,12 +235,20 @@
 | SH-47 | Low | 第 65 个字段报 `too many fields in a record`，不带 struct 名与上限值 | [sh47-capacity-message-no-struct-name.md](selfhost/sh47-capacity-message-no-struct-name.md) |
 | SH-48 | Info | 18.0 只解除 `MAX_FUNCS` / `MAX_MAP_IMPLS`；L2 的 struct / 字段 / 变量上限仍低于 ct-ast，会先触顶 | [sh48-l2-cap-asymmetry.md](selfhost/sh48-l2-cap-asymmetry.md) |
 | SH-49 | Low | `ct check` 早退块排在 `.m.ct` 守卫与输出路径解析之后，错误信息指向错误原因 | [sh49-check-entry-compile-guards.md](selfhost/sh49-check-entry-compile-guards.md) |
+| SH-50 | Medium | `ct check` 的语义诊断缺列号，与 `file:line:col: error:` 契约不符 | [sh50-check-diag-no-column.md](selfhost/sh50-check-diag-no-column.md) |
+| SH-51 | Info | `--cflags` / `--ldflags` 经 `system()` 原样执行，透传面大于参数面（待决策） | [sh51-build-flags-command-surface.md](selfhost/sh51-build-flags-command-surface.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |
 | PKG-1 | Medium | `hal-posix` 的 `now_ms` 在开机约 24.8 天后回绕为负，违反 `hal` 的单调契约 | [pkg-1-hal-posix-now-ms-overflow.md](packages/pkg-1-hal-posix-now-ms-overflow.md) |
+
+### `std/` —— 标准库
+
+| ID | 严重度 | 标题 | 文件 |
+| --- | --- | --- | --- |
+| STD-1 | Medium | std 面向应用层仍有 6 项能力缺口（StrBuf / 通用 Vec / 可增长 Map / UTF-8 宽度 / rename / 公开 stat） | [std1-markdown-readiness.md](std/std1-markdown-readiness.md) |
 
 ## 汇总
 
@@ -988,4 +1014,62 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 | SH-47（Low） | 认可，已修 | 文案改为 `too many fields in struct '<name>' (limit 64)`（pending 无名记录保留 `too many fields in a record (limit 64)`）；行号维持当前字段行，`check-ast.sh` 断言同步。未采用「行号改到 struct 声明行」：`StructDef` 无声明行字段，为文案扩符号行属过度改动 |
 | DOC-53（Low） | 认可，已修 | `language-spec` §6.1 中英订正为「ct-ast 报 `duplicate trait/struct`；L0 / L2 仍取最先出现者」 |
 | DOC-54（Medium） | 认可三项文档缺口，已修；其余不采纳 | 教程 §7 中英改「`.h.ct` 或 `.m.ct`」；spec §4.10 中英加单元种类表 + import 搜索顺序 + 命名规则归属。不采纳 `ct lint` / build 期 basename 检查（编译器行为变更）；不新增 import 门禁（`check-ast.sh:1262` / `:1497` / `:631` 已覆盖） |
+
+## 第三方评估复核（2026-11-03，`v0.19.0`，锚点 `4b9946b`）
+
+被复核对象是仓库外第三方报告 `ct-markdown/docs/ct-v0.19.0-re-evaluation.md`。本轮在 HEAD `4b9946b`
+（`v0.19.0` + 1 commit，工作树干净）上做**只读**复核：用 `git archive HEAD | tar -x` 在 `/tmp/ct-verify`
+解出副本，用 `selfhost/check-all.sh` 构建出的 ct-ast 执行探针，仓库本身零改动。
+
+### 复验结果
+
+| 报告断言 | 结论 | 实测要点 |
+| --- | --- | --- |
+| R-01 `ct check -I src src/main.ct` 因 `import` 被拒 | **成立** | `src/main.ct:1:1: error: 'import' is not supported in compile mode`，exit 1 |
+| R-02 `ct compile` 对 impl 签名漂移只 warning | **成立** | `ct compile drift.ct -o drift.c` → `drift.ct:3: warning: signature mismatch…`，exit 0；`ct check drift.ct` → 同文案 `error:`，exit 1，且 `-o none.c` 后文件不存在 |
+| 12 道硬门禁全部通过 | **成立** | `check-all: OK (12 hard gates green)`，EXIT=0（L0 118、goldens 25+25、archive 47、grammar 36、pkg 71、ast 464、warnings 173、std 10、semantics 14、docs 684 links / 156 files） |
+| std 的实际覆盖面 | **基本成立** | 7 模块共 1072 行；缺口逐项见 STD-1 |
+| 文档漂移三处 | **成立** | DOC-60（README 首句）、DOC-61（roadmap 英文 Phase 18）、DOC-62（`ct check` 未说明 import 限制） |
+| `v0.19.0` 无 git tag | **成立** | `git tag -l 'v0.19*'` 空；`ct -v` 为 `v0.16.2` |
+
+### 报告偏差订正
+
+1. **锚点写错**：报告自称复核于 `d2d1869`，实际该 commit 是 `v0.18.1`；本轮 HEAD 是 `4b9946b`
+   （`v0.19.0` + 1 commit），报告给出的 348/9764/1711 改集统计对应 HEAD，而非 `d2d1869`（342/9015/1691）。
+2. **「gate 11 无 import 用例」表述过宽**：`check-semantics.sh` 确无 import fixture（TEST-16），但
+   `check-ast.sh:2670` 已有跨单元签名用例——它以 `build --emit-c` + `cmp expected.out` 断言 warning
+   文本与产物，属于 warning 断言而非「可失败的 check 断言」，两者不是同一层覆盖。
+3. **真实 GCC「只 warning」无法确认**：本机 `/usr/bin/gcc` 是 Apple clang shim，
+   `ct build drift.ct -o gd --cc gcc` 实际由 clang 报 `incompatible function-pointer-types` 并 exit 1；
+   真实 GCC 未安装，该断言维持「无法确认」。
+
+### 新增 10 条
+
+| 类别 | 条目 |
+| --- | --- |
+| 文档（3） | DOC-60（Medium）、DOC-61（Low）、DOC-62（Medium） |
+| 测试（2） | TEST-15（Low）、TEST-16（Medium） |
+| CI（2） | CI-6（Low）、CI-7（Medium） |
+| 代码（2） | SH-50（Medium）、SH-51（Info，待决策） |
+| 标准库（1） | STD-1（Medium，待决策） |
+
+本轮**只立项、不修复**：无源码、golden、`CTC_VERSION` 或 tag 的改动。STD-1 与 SH-51 记
+「待决策」，理由分别是「stdlib 属新能力/治理决策（2026-11-02 先例）」与「raw 透传为既定契约」。
+
+### 建议处理顺序
+
+1. **DOC-60 / DOC-62**：同一批 README + 教程中英文案，一次改完；
+2. **SH-50**：check 诊断补列号，唯一涉及运行时代码的 Medium，改后 `check-semantics.sh` 同步；
+3. **TEST-16 / TEST-15**：先补 import 负例，再扩 docs 门禁覆盖英文行与 `ci.yml`；
+4. **CI-7**：补 `v0.19.0` tag 或改验收口径（需维护者决定发版与否）；
+5. **DOC-61 / CI-6**：纯文案，可随任一批次带上；
+6. **SH-51 / STD-1**：待决策项，不排期。
+
+### 验证范围
+
+- 已做：12 道门禁全量跑通；R-01 / R-02 / 无 tag / 文档漂移 / std 导出面均以命令实测；
+- 未做：真实 GCC 编译（本机无真 GCC）；Windows / Linux 宿主；`ct check` 之外的 20.x 能力；
+- 探针路径（不随仓库分发）：`/tmp/ct-verify`（源码副本）、`/tmp/ctv`（夹具）、
+  `ct-ast` 二进制取自门禁构建目录。
+
 

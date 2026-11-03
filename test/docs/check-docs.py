@@ -13,9 +13,11 @@ Standard library only. It asserts four invariants:
      docs/glossary.md equals the number of run_gate calls in
      selfhost/check-all.sh; issues/README.md carries the same count in a
      machine-readable `<!-- gates:N -->` marker (its dated records quote
-     historical counts, so prose scanning is not usable there);
+     historical counts, so prose scanning is not usable there); ci.yml job
+     step labels may not name a stale count;
   4. the status line of every docs/design/phase*.md matches the phase table
-     in docs/roadmap.md (done -> check, in progress -> half, planned -> white).
+     in docs/roadmap.md (done -> check, in progress -> half, planned -> white),
+     in both the Chinese and the English table.
 
 Exit code 0 when all four hold, 1 otherwise.
 """
@@ -135,6 +137,13 @@ def check_gate_count(errors):
             f"issues/README.md: marker says {marker.group(1)} hard gates, "
             f"check-all.sh runs {actual}"
         )
+    workflow = read(os.path.join(ROOT, ".github/workflows/ci.yml"))
+    spelled = {"nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+    for match in re.finditer(r"(\d+|nine|ten|eleven|twelve)\s+hard gates", workflow, re.I):
+        token = match.group(1).lower()
+        claim = int(token) if token.isdigit() else spelled[token]
+        if claim != actual:
+            errors.append(f".github/workflows/ci.yml: states {claim} hard gates, check-all.sh runs {actual}")
     return actual
 
 
@@ -170,6 +179,12 @@ def check_phase_status(errors):
             )
         if f"design/phase{number}.md" not in row.group(0):
             errors.append(f"docs/design/{name}: roadmap row does not link design/phase{number}.md")
+        english = re.search(r"^\|\s*" + number + r"\s*\|.*$", roadmap, re.M)
+        if english and emoji not in english.group(0):
+            errors.append(
+                f"docs/design/{name}: the English roadmap row disagrees with status "
+                f"'{status.group(1)}' (expected {emoji})"
+            )
     return phases
 
 

@@ -19,7 +19,7 @@ jobs:
       CC: gcc
     steps:
       - uses: actions/checkout@v4
-      - name: nine hard gates
+      - name: hard gates
         run: bash selfhost/check-all.sh
 
   # macOS carries the BSD-only probes test/run.sh skips elsewhere, so it runs
@@ -30,7 +30,7 @@ jobs:
       CC: clang
     steps:
       - uses: actions/checkout@v4
-      - name: nine hard gates
+      - name: hard gates
         run: bash selfhost/check-all.sh
 
   # A second Linux compiler, smoke only: the two suites that are most sensitive

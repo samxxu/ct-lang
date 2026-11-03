@@ -6,12 +6,15 @@
 # of `ct check` (D19-4):
 #
 #   - a clean unit exits 0 and prints nothing;
+#   - a `.m.ct` declaration unit is a valid input, an import-bearing unit is not;
 #   - each finding class (arity, argument type, ambiguous method, impl/trait
-#     parameter drift) exits 1 and reads `error:` in text mode;
+#     parameter drift) exits 1 and reads `error:` in text mode at
+#     `file:line:col:`;
 #   - `--diagnostics=json` is one parseable document whose records carry
-#     `"severity":"error"`;
-#   - the same units through `ct compile` still exit 0 with `warning:` lines
-#     and still write their `.c`, so the 19.1-19.3 policy is unchanged.
+#     `"severity":"error"` and `"col"`;
+#   - the same units through `ct compile` still exit 0 with `file:line:`
+#     `warning:` lines and still write their `.c`, so the 19.1-19.3 policy is
+#     unchanged.
 #
 # Exit code 0 means every assertion passed.
 
@@ -101,6 +104,22 @@ else
     bad "compile: .m.ct guard" "exit $rc; $(cat "$work/mapc.err")"
 fi
 
+# `ct check` is a single-unit entry (DOC-62): an import-bearing unit is
+# rejected by the compiler, and the docs say so. If check ever gains multi-unit
+# support this assertion and the two docs tables must change together.
+cat > "$work/import.ct" <<'EOF'
+import other::Thing;
+
+int main(void) { return 0; }
+EOF
+"$work/ct-ast" check "$work/import.ct" >"$work/import.out" 2>"$work/import.err"
+rc=$?
+if [ "$rc" -eq 1 ] && grep -Fq "'import' is not supported in compile mode" "$work/import.err"; then
+    ok "check: an import-bearing unit is rejected (single-unit entry)"
+else
+    bad "check: import guard" "exit $rc; $(cat "$work/import.err")"
+fi
+
 cat > "$work/arity.ct" <<'EOF'
 int add(int a, int b) { return a + b; }
 int main(void) { return add(1); }
@@ -158,6 +177,7 @@ rc=$?
 if [ "$rc" -eq 1 ] \
         && python3 -m json.tool "$work/amb.json" >/dev/null 2>&1 \
         && grep -Fq '"severity":"error"' "$work/amb.json" \
+        && grep -Fq '"col":' "$work/amb.json" \
         && grep -Fq '"type":"ambiguous_method"' "$work/amb.json"; then
     ok "check: --diagnostics=json is one document with severity and type"
 else
@@ -187,6 +207,16 @@ else
     bad "check: impl drift probe" "exit $rc; $(cat "$work/drift.err")"
 fi
 
+# SH-50: check findings carry the token's column, the location contract the
+# parser errors already follow.
+for name in arity atype amb drift; do
+    if grep -Eq "$name.ct:[0-9]+:[0-9]+: error:" "$work/$name.err"; then
+        ok "check: the $name finding carries file:line:col"
+    else
+        bad "check: $name location" "$(cat "$work/$name.err")"
+    fi
+done
+
 # -- compile is unchanged --------------------------------------------------
 
 # Every finding class stays a warning on the compile path (D19-4): exit 0,
@@ -198,7 +228,8 @@ for name in arity atype amb drift; do
     rc=$?
     if [ "$rc" -eq 0 ] && [ -s "$work/$name.c" ] \
             && grep -q 'warning:' "$work/$name.comp.err" \
-            && ! grep -q 'error:' "$work/$name.comp.err"; then
+            && ! grep -q 'error:' "$work/$name.comp.err" \
+            && ! grep -Eq "$name.ct:[0-9]+:[0-9]+: warning:" "$work/$name.comp.err"; then
         ok "compile: the $name finding stays a warning, exits 0 and writes its C"
     else
         bad "compile: $name policy" "exit $rc; $(cat "$work/$name.comp.err")"
