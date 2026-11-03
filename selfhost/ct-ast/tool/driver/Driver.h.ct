@@ -89,11 +89,19 @@ impl DriverOps for Driver {
 
         in = NULL;
         out = NULL;
+        self->m->check_mode = 0;
         if (argc > 1 && strcmp(argv[1], "build") == 0)
             return self->m->build_main(argc - 1, argv + 1);
         /* `ct compile <file>` is the documented spelling, so the keyword is
-           consumed here; otherwise the loop below would take it for the input */
-        if (argc > 1 && strcmp(argv[1], "compile") == 0) {
+           consumed here; otherwise the loop below would take it for the input.
+           `ct check` (19.4) walks the same path and stops before emission:
+           findings are errors (D19-4) and no `.c` is written. */
+        if (argc > 1 && (strcmp(argv[1], "compile") == 0
+                         || strcmp(argv[1], "check") == 0)) {
+            if (strcmp(argv[1], "check") == 0) {
+                self->m->check_mode = 1;
+                tool::diag::ct_diag_set_strict(1);
+            }
             argv++;
             argc--;
         }
@@ -105,6 +113,7 @@ impl DriverOps for Driver {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s <input.ct> [-o <output.c>] [-I <dir>] [--line|--no-line]\n"
                        "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99]\n"
+                       "       %s check <input.ct> [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
                        "                 [--emit-c] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
@@ -112,7 +121,7 @@ impl DriverOps for Driver {
                        "                 [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s get <spec>[@<range>]\n"
                        "       %s install\n",
-                       self->m->prog, self->m->prog, self->m->prog, self->m->prog);
+                       self->m->prog, self->m->prog, self->m->prog, self->m->prog, self->m->prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -291,6 +300,14 @@ impl DriverOps for Driver {
                 return 1;
             }
             return frontend::parse::ct_parse_report();
+        }
+        /* `ct check` (19.4): the semantic findings are this entry's output and
+           its exit code -- 1 when any was reported, 0 when clean. Nothing is
+           emitted, so compile and build artifacts cannot change. */
+        if (self->m->check_mode) {
+            if (tool::diag::ct_diag_emit(self->m->diag_json, 0) != 0) return 1;
+            if (tool::diag::ct_diag_nwarn() > 0) return 1;
+            return 0;
         }
         f = fopen(out, "w");
         if (!f) {

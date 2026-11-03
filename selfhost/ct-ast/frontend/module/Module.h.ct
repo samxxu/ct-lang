@@ -120,6 +120,9 @@ pub struct Module {
     int  have_map;
     const char *prog;
     int  diag_json;             /* --diagnostics=json */
+    /* `ct check` (19.4): parse and report the semantic findings, write no C.
+       The driver's compile path short-circuits on it after parsing. */
+    int  check_mode;
     const char *std_flag;       /* --std=c99 | --std=gnu99 */
     const char *version;        /* CTC_VERSION, bound by the driver */
     /* Phase 17.6: the one-step build. `emit_c` keeps the old emit-only shape

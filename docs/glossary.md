@@ -159,8 +159,8 @@
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
 | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
-| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 11 个条目 | 任一失败即整体失败；当前 11 关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、`test/docs/check-docs.py`、`test/std/run.sh` |
-| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (11 hard gates green)` |
+| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 12 个条目 | 任一失败即整体失败；当前 12 关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、`test/std/run.sh`、`check-semantics`、`test/docs/check-docs.py` |
+| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (12 hard gates green)` |
 | 棘轮（ratchet） | `check-archive.sh` 的 PASS / PENDING 四态 | 只允许 PENDING → PASS，不允许 PASS → PENDING |
 | 差分 oracle（differential oracle） | L2 / 归档 golden | 新主线与旧实现逐字节或逐行为对照的基准 |
 | 归档 oracle（archive oracle） | `test/archive/**`、tag `overreach-oracle` | Phase 2–4 恢复期的历史编译器产物，作为对差基准 |
@@ -230,7 +230,7 @@
 | mangling ↔ cname | mangling 是**规则**（加 `A_B_` 前缀）；cname 是**结果**（`A_B_S`） |
 | 正例 ↔ 负例 | 正例必须成功且输出匹配；负例必须非零退出且诊断匹配 |
 | golden ↔ oracle | golden 是具体期望产物；oracle 是产出这些期望的**参照实现**（L0 / L2 / `overreach-oracle` tag） |
-| 关卡 ↔ 测试层 | 关卡是 `check-all.sh` 的 11 个条目（整体判据）；层是 `test/run.sh` 内部的分组（build / unit / cases …） |
+| 关卡 ↔ 测试层 | 关卡是 `check-all.sh` 的 12 个条目（整体判据）；层是 `test/run.sh` 内部的分组（build / unit / cases …） |
 | Phase ↔ Batch | Phase 与版本一一对应（`v0.n.x`）；Batch 是可独立收口的工作单元，Phase 结束后仍可继续累加 |
 | 生成物 ↔ 源码 | 生成物（artefact）指 `ct` 输出的 `.c` / `.h` / JSON；banner 与输出例外声明必须保留 |
 | 透传 ↔ 行重写 | 透传：非构造行原样输出；行重写：构造行被替换为等价的 C |
@@ -401,8 +401,8 @@
 | regeneration | `./ctc <case>.ct -o <case>.expected.c` | after an intended behaviour change, regenerate **and review the diff** |
 | grammar smoke test | `python3 editors/vscode/test/check-grammar.py` | checks the editor grammar, **stays out of** run.sh |
 | end-to-end | the examples layer | generate → build → run → compare |
-| hard gate | the 11 entries of `selfhost/check-all.sh` | any failure fails the run; today's 11 gates: `test/run.sh`, `check-goldens`, `check-archive`, `check-m2a`, `ct-tour`, the editor grammar, `test/pkg/run.sh`, `check-ast`, `check-warnings`, `test/docs/check-docs.py`, `test/std/run.sh` |
-| aggregate entry | `bash selfhost/check-all.sh` | the only command that runs every gate at once; prints `check-all: OK (11 hard gates green)` |
+| hard gate | the 12 entries of `selfhost/check-all.sh` | any failure fails the run; today's 12 gates: `test/run.sh`, `check-goldens`, `check-archive`, `check-m2a`, `ct-tour`, the editor grammar, `test/pkg/run.sh`, `check-ast`, `check-warnings`, `test/std/run.sh`, `check-semantics`, `test/docs/check-docs.py` |
+| aggregate entry | `bash selfhost/check-all.sh` | the only command that runs every gate at once; prints `check-all: OK (12 hard gates green)` |
 | ratchet | the four states of `check-archive.sh` | only PENDING → PASS is allowed, never PASS → PENDING |
 | differential oracle | L2 / the archived goldens | the baseline the new mainline is compared against, byte-for-byte or behaviourally |
 | archive oracle | `test/archive/**`, tag `overreach-oracle` | the historical compiler output from the Phase 2–4 restore, used as the comparison baseline |

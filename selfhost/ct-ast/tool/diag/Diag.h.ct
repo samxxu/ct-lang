@@ -52,6 +52,8 @@ trait DiagStore {
     int  emit(int json, int to_stderr);
     void put_json(FILE *f, const char *s);
     int  nsem(void);
+    int  nwarn(void);
+    void set_strict(int on);
     void reset(void);
 }
 
@@ -59,6 +61,10 @@ struct Diag {
     struct Warn warns[MAX_WARNINGS];
     int  nwarns;
     int  nsem;
+    /* `ct check` (19.4, D19-4): the same records are the entry's findings, so
+       text lines read `error:` and JSON objects carry a severity. Compile and
+       build keep the default 0 and stay byte-identical. */
+    int  strict;
 } use DiagStore;
 
 impl DiagStore for Diag {
@@ -216,6 +222,8 @@ impl DiagStore for Diag {
         int i;
         FILE *jf;
         FILE *tf;
+        /* `ct check` turns these into findings; compile and build keep `warning` */
+        const char *sev = self->strict ? "error" : "warning";
         (void)self;
         jf = to_stderr ? stderr : stdout;
         tf = stderr;
@@ -225,8 +233,10 @@ impl DiagStore for Diag {
             for (i = 0; i < self->nwarns; i++) {
                 struct Warn *w = &self->warns[i];
                 if (i) fputc(',', jf);
+                fputc('{', jf);
+                if (self->strict) fputs("\"severity\":\"error\",", jf);
                 if (w->kind == 1) {
-                    fputs("{\"type\":\"signature_mismatch\",\"file\":\"", jf);
+                    fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"method\":\"", w->line);
                     self->put_json(jf, w->var);
@@ -238,7 +248,7 @@ impl DiagStore for Diag {
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
                 } else if (w->kind == 2) {
-                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
+                    fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
                     self->put_json(jf, w->var);
@@ -247,13 +257,13 @@ impl DiagStore for Diag {
                     fprintf(jf, "*\",\"message\":\"may leak on a return path\","
                                  "\"path_line\":%d}", w->path_line);
                 } else if (w->kind == 3) {
-                    fputs("{\"type\":\"borrow_escape\",\"file\":\"", jf);
+                    fputs("\"type\":\"borrow_escape\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
                     self->put_json(jf, w->var);
                     fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
                 } else if (w->kind == 4) {
-                    fputs("{\"type\":\"arity_mismatch\",\"file\":\"", jf);
+                    fputs("\"type\":\"arity_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"callee\":\"", w->line);
                     self->put_json(jf, w->var);
@@ -261,7 +271,7 @@ impl DiagStore for Diag {
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
                 } else if (w->kind == 5) {
-                    fputs("{\"type\":\"type_mismatch\",\"file\":\"", jf);
+                    fputs("\"type\":\"type_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"callee\":\"", w->line);
                     self->put_json(jf, w->var);
@@ -269,7 +279,7 @@ impl DiagStore for Diag {
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
                 } else if (w->kind == 6) {
-                    fputs("{\"type\":\"ambiguous_method\",\"file\":\"", jf);
+                    fputs("\"type\":\"ambiguous_method\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"method\":\"", w->line);
                     self->put_json(jf, w->var);
@@ -277,7 +287,7 @@ impl DiagStore for Diag {
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
                 } else {
-                    fputs("{\"type\":\"potential_leak\",\"file\":\"", jf);
+                    fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
                     fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
                     self->put_json(jf, w->var);
@@ -291,26 +301,26 @@ impl DiagStore for Diag {
             for (i = 0; i < self->nwarns; i++) {
                 struct Warn *w = &self->warns[i];
                 if (w->kind == 1)
-                    fprintf(tf, "%s:%d: warning: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
-                            w->file, w->line, w->var, w->tname, w->stype, w->msg);
+                    fprintf(tf, "%s:%d: %s: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
+                            w->file, w->line, sev, w->var, w->tname, w->stype, w->msg);
                 else if (w->kind == 2)
-                    fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
-                            w->file, w->line, w->var, w->tname, w->path_line);
+                    fprintf(tf, "%s:%d: %s: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
+                            w->file, w->line, sev, w->var, w->tname, w->path_line);
                 else if (w->kind == 3)
-                    fprintf(tf, "%s:%d: warning: a borrowed pointer escapes through 'return'\n",
-                            w->file, w->line);
+                    fprintf(tf, "%s:%d: %s: a borrowed pointer escapes through 'return'\n",
+                            w->file, w->line, sev);
                 else if (w->kind == 4)
-                    fprintf(tf, "%s:%d: warning: arity mismatch: '%s' %s\n",
-                            w->file, w->line, w->var, w->msg);
+                    fprintf(tf, "%s:%d: %s: arity mismatch: '%s' %s\n",
+                            w->file, w->line, sev, w->var, w->msg);
                 else if (w->kind == 5)
-                    fprintf(tf, "%s:%d: warning: type mismatch: '%s' %s\n",
-                            w->file, w->line, w->var, w->msg);
+                    fprintf(tf, "%s:%d: %s: type mismatch: '%s' %s\n",
+                            w->file, w->line, sev, w->var, w->msg);
                 else if (w->kind == 6)
-                    fprintf(tf, "%s:%d: warning: ambiguous method: '%s' %s\n",
-                            w->file, w->line, w->var, w->msg);
+                    fprintf(tf, "%s:%d: %s: ambiguous method: '%s' %s\n",
+                            w->file, w->line, sev, w->var, w->msg);
                 else
-                    fprintf(tf, "%s:%d: warning: potential leak: '%s' (%s*) allocated but never deleted\n",
-                            w->file, w->line, w->var, w->tname);
+                    fprintf(tf, "%s:%d: %s: potential leak: '%s' (%s*) allocated but never deleted\n",
+                            w->file, w->line, sev, w->var, w->tname);
             }
         }
         return 0;
@@ -320,6 +330,18 @@ impl DiagStore for Diag {
     {
         (void)self;
         return self->nsem;
+    }
+
+    int nwarn(void)
+    {
+        (void)self;
+        return self->nwarns;
+    }
+
+    void set_strict(int on)
+    {
+        (void)self;
+        self->strict = on;
     }
 
     void reset(void)
@@ -392,6 +414,20 @@ pub int ct_diag_nsem(void);
 int ct_diag_nsem(void)
 {
     return g_diag.nsem();
+}
+
+/* `ct check` (19.4): findings are errors, so the entry reports `error:` lines,
+   tags JSON objects with a severity and derives its exit code from this count. */
+pub int ct_diag_nwarn(void);
+int ct_diag_nwarn(void)
+{
+    return g_diag.nwarn();
+}
+
+pub void ct_diag_set_strict(int on);
+void ct_diag_set_strict(int on)
+{
+    g_diag.set_strict(on);
 }
 
 pub void ct_diag_reset(void);

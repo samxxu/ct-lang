@@ -1,6 +1,6 @@
 # ct — C with Traits 编译器
 
-> **v0.18.1** · 中文 · [English](#english)
+> **v0.19.0** · 中文 · [English](#english)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 它不做类型检查、不做优化；生成物是**可读的普通 C**，不依赖任何运行时库，vtable 与 `_self` 强转等样板代码都由编译器生成。
@@ -36,11 +36,12 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`（`--outdir` 可改），再调用本地 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`）；`--emit-c` 只发射 `.c`（`.h.ct` 另写 `.h`），此时 `-o` 是输出目录 |
+| `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`） |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
 | `ct get` / `ct update` / `ct install` / `ct verify` | 包管理：拉包到 `vendor/`、写 `ct.lock`；离线重解 / 校验并打印一条构建命令（裸名可经 `--index` / `CT_INDEX` 查显式索引；包作者见 [docs/package-guide.md](docs/package-guide.md)）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`clib`（C 映射） |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
-退出码：成功 `0`，语法或 I/O 错误 `1`。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
+退出码：成功 `0`，语法或 I/O 错误 `1`（`ct check` 有任何语义发现也是 `1`）。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
 （二进制改名为 `ct` 也不变，以保持日志与断言稳定）。完整开关（`-I` / `--std` / `--line` / `--diagnostics` /
 `--ns-root`）见[教程 §11](docs/tutorial.md#11-命令行速查)。
 
@@ -66,7 +67,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 5. 文档与测试
 
 - 文档导航：[docs/README.md](docs/README.md)
-- 测试：`bash selfhost/check-all.sh` 跑 11 道硬门禁；分层地图见 [test/README.md](test/README.md)
+- 测试：`bash selfhost/check-all.sh` 跑 12 道硬门禁；分层地图见 [test/README.md](test/README.md)
 - 改动代码前先读 [AGENTS.md](AGENTS.md)
 
 ### 6. 许可
@@ -114,11 +115,12 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 | `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes `.c`, a `.h.ct` also writes its sibling `.h` |
 | `ct <in.ct> -o <out.c>` | write to the given path |
 | `ct build <in.ct>… [-o <exe>]` | multi-file build: the generated `.c` goes into `.ctbuild/` (or `--outdir`), then the local C compiler produces an executable (`-o` names it, default `a.out`); `--emit-c` only emits the `.c` (plus `.h` for `.h.ct`), and then `-o` is the output directory |
+| `ct check <in.ct>` | run the bounded semantic checks only, writing no `.c`: call-site arity / argument types / trait-method ambiguity / impl signature drift are reported as `error:`, exit `1` on any finding and `0` when clean (`--diagnostics=json` tags each object with `"severity":"error"`) |
 | `ct … --emit-map <file\|->` | also write the reverse-mapping JSON (trait / struct / function / impl → generated C symbols) |
 | `ct get` / `ct update` / `ct install` / `ct verify` | package management: fetch into `vendor/`, write `ct.lock`; re-resolve or verify offline and print one build command (a bare name may resolve through `--index` / `CT_INDEX`; authors see [docs/package-guide.md](docs/package-guide.md)); the official packages live under [ct-pkg](https://github.com/ct-pkg): `hal` (contract), `hal-posix` (platform), `clib` (C mappings) |
 | `ct -v` / `ct -h` | version / usage |
 
-Exit code `0` on success, `1` on syntax or I/O errors. Source diagnostics use `file:line:col: error: message`;
+Exit code `0` on success, `1` on syntax or I/O errors (and on any `ct check` finding). Source diagnostics use `file:line:col: error: message`;
 driver-level errors keep the `ctc:` prefix even when the binary is named `ct`, so logs and existing assertions
 stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `--ns-root`) is in the
 [tutorial §11](docs/tutorial.md#11-cli-cheat-sheet).
@@ -148,7 +150,7 @@ Directory-level notes are in [selfhost/README.md](selfhost/README.md), [test/REA
 ### 5. Docs and tests
 
 - Documentation index: [docs/README.md](docs/README.md)
-- Tests: `bash selfhost/check-all.sh` runs 11 hard gates; the layer map is in [test/README.md](test/README.md)
+- Tests: `bash selfhost/check-all.sh` runs 12 hard gates; the layer map is in [test/README.md](test/README.md)
 - Read [AGENTS.md](AGENTS.md) before changing code
 
 ### 6. License

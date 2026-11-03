@@ -1,7 +1,7 @@
 # Phase 19 · 受限语义检查
 
 > 中文 · [English](#english)
-> **状态：实施中**（2026-11-03，19.0、19.1、19.2、19.3 已完成；19.4 待实施） · 版本：`v0.19.0`（收口时 bump）
+> **状态：完成**（2026-11-03，19.0–19.4 全部完成） · 版本：`v0.19.0`
 > 前置：[spike-semantic-check.md](spike-semantic-check.md)（GO）；Phase 17 / 18 不阻塞本阶段
 
 ---
@@ -51,6 +51,8 @@
 
 > **19.3 落地形态**：两条检查都以**警告**报告（D19-4），`ct compile` / `ct build` 的产物与退出码不变。**歧义（SH-46）**：裸调用解析到的 trait 之外，宿主 struct `use` 的另一个 trait 也声明同名方法时，报 `warning: ambiguous method: '<m>' declared by '<A>' and '<B>'; '<A>' is used`（`Symbols.method_trait_amb`）；消解仍按 `use` 顺序取首个——`test/cases/06_name_collision.ct` 已把该语义钉成回归，故语料断言是「恰好一条歧义警告、来自该文件」，而非零条。接口变量派发与静态类型宿主 / `map` 绑定不经过 `method_trait`，不参与判定。**跨单元签名漂移**：impl↔trait 的既有核对（返回类型、参数个数，措辞与 L2 逐字一致）之外，新增**参数类型**按位粗粒度比对，复用 19.2 的 `arg_class` 规则（`Expr.decl_type_compat`），报 `warning: signature mismatch: '<m>' in impl of '<T>' for '<S>': parameter K type '<impl>' does not match the trait's '<decl>'`；trait 在共享表中，导入单元与本单元走同一条路径，「导入导出一致性」由此统一覆盖。数组形参（decay）与不可判定拼写一律跳过（D19-3）；每个方法至多报第一个错配位。
 
+> **19.4 落地形态**：`ct check <file>` 走 compile 的解析路径，解析成功后**直接输出诊断并返回**，不写 `.c`（即便给了 `-o`）；退出码「有任何发现为 1，干净为 0」。D19-4 的严重度在此生效：`Diag.set_strict` 让同一批记录在文本模式读 `error:`、在 JSON 对象的首字段带 `"severity":"error"`；`ct compile` / `ct build` 不设 strict，文本仍是 `warning:`、JSON 逐字节不变。`--diagnostics=json` 沿用既有开关（compile 到 stdout、build 到 stderr，check 到 stdout）。第 12 道硬门禁 [check-semantics.sh](../../selfhost/check-semantics.sh) 构建自举链后断言 8 项：干净单元 0 且无输出、四类发现（arity / 实参类型 / 歧义 / impl 参数漂移）各 exit 1 且读 `error:`、JSON 可解析且含 severity/type、同一单元走 compile 仍 exit 0 且写 C 且读 `warning:`、check 不产生 C 产物。
+
 ### 6. 版本与发布
 
 - 阶段号 **Phase 19 ↔ `v0.19.0`**，收口时 bump；切片期间不 bump。
@@ -61,7 +63,7 @@
 - 383 个 `.ct` 文件 / 9,649 行语料**零误报**；
 - 4 个探针（缺方法、impl 签名、调用点 arity、函数 arity）全部有明确诊断；
 - `ct check` 退出码：有错为 1，干净为 0；`ct compile` / `ct build` 产物与默认退出码不变；
-- 11 道硬门禁 + 新语义门禁全绿；`check-ast` 行为等价不受影响；
+- 12 道硬门禁全绿；`check-ast` 行为等价不受影响；
 - 不改 L0 / L1 / L2；文档中英双语。
 
 ### 8. 决策
@@ -119,13 +121,15 @@ The spike proved that method existence, impl/trait signature mismatch (warning),
 
 > **How 19.3 lands**: both checks report **warnings** (D19-4), so `ct compile` / `ct build` keep their artifacts and default exit codes. **Ambiguity (SH-46)**: when a trait other than the resolved one also declares the method on the receiver's struct, the bare call warns `warning: ambiguous method: '<m>' declared by '<A>' and '<B>'; '<A>' is used` (`Symbols.method_trait_amb`); resolution still takes the first match in `use` order -- `test/cases/06_name_collision.ct` pins that behaviour, so the corpus gate asserts *exactly one* ambiguity warning, from that file, rather than zero. Interface-variable dispatch and static type hosts / `map` bindings never pass through `method_trait` and stay out of the check. **Cross-unit signature drift**: the existing impl/trait comparison (return type, parameter count; wording byte-identical to L2) now also compares **parameter types** positionally, reusing 19.2's `arg_class` rules (`Expr.decl_type_compat`), and reports `warning: signature mismatch: '<m>' in impl of '<T>' for '<S>': parameter K type '<impl>' does not match the trait's '<decl>'`. The trait lives in the shared table, so an imported unit and the local unit take the same path -- which is what "import/export consistency" means here. Array parameters (decay) and undecidable spellings pass as unknown (D19-3); at most the first mismatching position is reported per method.
 
+> **How 19.4 lands**: `ct check <file>` walks compile's parse path and **returns right after parsing**, reporting the findings and writing no `.c` (even when handed `-o`); the exit code is 1 on any finding and 0 when clean. D19-4's severity takes effect here: `Diag.set_strict` makes the same records read `error:` in text mode and carry `"severity":"error"` as each JSON object's first field, while `ct compile` / `ct build` never set strict -- their text stays `warning:` and their JSON is byte-identical. `--diagnostics=json` reuses the existing switch (compile to stdout, build to stderr, check to stdout). The 12th hard gate, [check-semantics.sh](../../selfhost/check-semantics.sh), builds the bootstrap chain and asserts 8 items: a clean unit exits 0 silently; each of the four finding classes (arity, argument type, ambiguity, impl parameter drift) exits 1 and reads `error:`; the JSON document parses and carries severity/type; the same unit through compile still exits 0, warns, and writes its C; and check produces no C artefact.
+
 ### 6. Version
 
 Phase 19 ↔ `v0.19.0`, bumped at close; patches use `v0.19.n`.
 
 ### 7. Global DoD
 
-Zero false positives on the 383-file / 9,649-line corpus; all four probes diagnosed; `ct check` exits 1 on errors and 0 when clean; `ct compile` / `ct build` artifacts and default exit codes unchanged; 11 hard gates plus the new semantic gate green; `check-ast` behavioral equivalence unaffected; no L0 / L1 / L2 changes; bilingual docs.
+zero false positives on the 383-file / 9,649-line corpus; all four probes diagnosed; `ct check` exits 1 on errors and 0 when clean; `ct compile` / `ct build` artifacts and default exit codes unchanged; 12 hard gates green; `check-ast` behavioral equivalence unaffected; no L0 / L1 / L2 changes; bilingual docs.
 
 ### 8. Decisions
 
