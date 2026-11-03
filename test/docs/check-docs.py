@@ -139,11 +139,13 @@ def check_gate_count(errors):
         )
     workflow = read(os.path.join(ROOT, ".github/workflows/ci.yml"))
     spelled = {"nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
-    for match in re.finditer(r"(\d+|nine|ten|eleven|twelve)\s+hard gates", workflow, re.I):
-        token = match.group(1).lower()
-        claim = int(token) if token.isdigit() else spelled[token]
-        if claim != actual:
-            errors.append(f".github/workflows/ci.yml: states {claim} hard gates, check-all.sh runs {actual}")
+    for source in (".github/workflows/ci.yml", "Makefile"):
+        text = workflow if source.endswith("ci.yml") else read(os.path.join(ROOT, source))
+        for match in re.finditer(r"(\d+|nine|ten|eleven|twelve)\s+hard gates", text, re.I):
+            token = match.group(1).lower()
+            claim = int(token) if token.isdigit() else spelled[token]
+            if claim != actual:
+                errors.append(f"{source}: states {claim} hard gates, check-all.sh runs {actual}")
     return actual
 
 

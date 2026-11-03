@@ -1,4 +1,4 @@
-# Convenience entry for the nine hard gates. No build logic lives here: the
+# Convenience entry for the hard gates. No build logic lives here: the
 # bootstrap and every test stay in selfhost/*.sh and test/run.sh.
 
 .PHONY: check
