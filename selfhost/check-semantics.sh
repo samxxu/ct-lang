@@ -10,8 +10,8 @@
 #     parameter drift) exits 1 and reads `error:` in text mode;
 #   - `--diagnostics=json` is one parseable document whose records carry
 #     `"severity":"error"`;
-#   - the same unit through `ct compile` still exits 0 with `warning:` lines
-#     and still writes its `.c`, so the 19.1-19.3 policy is unchanged.
+#   - the same units through `ct compile` still exit 0 with `warning:` lines
+#     and still write their `.c`, so the 19.1-19.3 policy is unchanged.
 #
 # Exit code 0 means every assertion passed.
 
@@ -73,11 +73,32 @@ int main(void)
     return s.f(2);
 }
 EOF
-if "$work/ct-ast" check "$work/clean.ct" >"$work/clean.out" 2>"$work/clean.err" \
-        && [ ! -s "$work/clean.out" ] && [ ! -s "$work/clean.err" ]; then
+"$work/ct-ast" check "$work/clean.ct" >"$work/clean.out" 2>"$work/clean.err"
+rc=$?
+if [ "$rc" -eq 0 ] && [ ! -s "$work/clean.out" ] && [ ! -s "$work/clean.err" ]; then
     ok "check: a clean unit exits 0 and prints nothing"
 else
-    bad "check: clean unit" "exit $?; $(cat "$work/clean.err")"
+    bad "check: clean unit" "exit $rc; $(cat "$work/clean.err")"
+fi
+
+cat > "$work/decl.m.ct" <<'EOF'
+namespace m;
+pub trait Shape { int area(int scale); }
+EOF
+"$work/ct-ast" check "$work/decl.m.ct" >"$work/map.out" 2>"$work/map.err"
+rc=$?
+if [ "$rc" -eq 0 ] && [ ! -s "$work/map.out" ] && [ ! -s "$work/map.err" ]; then
+    ok "check: a .m.ct declaration unit is a valid input (SH-49)"
+else
+    bad "check: .m.ct input" "exit $rc; $(cat "$work/map.err")"
+fi
+
+"$work/ct-ast" compile "$work/decl.m.ct" -o "$work/decl.c" >"$work/mapc.out" 2>"$work/mapc.err"
+rc=$?
+if [ "$rc" -eq 1 ] && grep -Fq 'a .m.ct unit produces no output' "$work/mapc.err"; then
+    ok "compile: .m.ct is still rejected as a build-only input"
+else
+    bad "compile: .m.ct guard" "exit $rc; $(cat "$work/mapc.err")"
 fi
 
 cat > "$work/arity.ct" <<'EOF'
@@ -168,14 +189,27 @@ fi
 
 # -- compile is unchanged --------------------------------------------------
 
-"$work/ct-ast" compile "$work/amb.ct" -o "$work/amb.c" >"$work/comp.out" 2>"$work/comp.err"
-rc=$?
-if [ "$rc" -eq 0 ] && [ -s "$work/amb.c" ] \
-        && grep -q "warning: ambiguous method: 'f' declared by 'A' and 'B'; 'A' is used" "$work/comp.err" \
-        && ! grep -q 'error: ambiguous method' "$work/comp.err"; then
-    ok "compile: same unit still exits 0, warns, and writes its C"
+# Every finding class stays a warning on the compile path (D19-4): exit 0,
+# a written `.c`, `warning:` lines and no `error:` line. The ambiguity case
+# additionally pins its exact wording.
+for name in arity atype amb drift; do
+    "$work/ct-ast" compile "$work/$name.ct" -o "$work/$name.c" \
+        >"$work/$name.comp.out" 2>"$work/$name.comp.err"
+    rc=$?
+    if [ "$rc" -eq 0 ] && [ -s "$work/$name.c" ] \
+            && grep -q 'warning:' "$work/$name.comp.err" \
+            && ! grep -q 'error:' "$work/$name.comp.err"; then
+        ok "compile: the $name finding stays a warning, exits 0 and writes its C"
+    else
+        bad "compile: $name policy" "exit $rc; $(cat "$work/$name.comp.err")"
+    fi
+done
+
+if grep -Fq "warning: ambiguous method: 'f' declared by 'A' and 'B'; 'A' is used" \
+        "$work/amb.comp.err"; then
+    ok "compile: the ambiguity wording is the pre-existing one"
 else
-    bad "compile: unchanged policy" "exit $rc; $(cat "$work/comp.err")"
+    bad "compile: ambiguity wording" "$(cat "$work/amb.comp.err")"
 fi
 
 # `ct check` writes no C even when handed an output path.

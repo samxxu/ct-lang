@@ -44,6 +44,7 @@
 | [review-2026-10-31/](reports/review-2026-10-31/review-2026-10-31.md) | 代码审查 + 文档一致性审查（`v0.15.1`） |
 | [review-2026-11-01/](reports/review-2026-11-01/review-2026-11-01.md) | `borrow` / `Handback` 实现审查（`v0.15.1`） |
 | [review-2026-11-02/](reports/review-2026-11-02/review-2026-11-02.md) | Phase 18 生态建设与 `v0.18.0` 收口审查 |
+| [review-2026-11-03/](reports/review-2026-11-03/review-2026-11-03.md) | Phase 19 受限语义检查与 `v0.19.0` 审查 |
 | [ct-language-features/](reports/ct-language-features/ct-language-features.html) | 语言特性全景（自包含 HTML） |
 | [ctc-ct-analysis/](reports/ctc-ct-analysis/ctc-ct-analysis.html) | `ctc.c` 与 CT 线的对照分析（自包含 HTML） |
 | [selfhost-readiness/](reports/selfhost-readiness/selfhost-readiness.html) | 自举就绪总结（自包含 HTML） |
@@ -95,6 +96,7 @@ documents win on conflict.
 | [review-2026-10-31/](reports/review-2026-10-31/review-2026-10-31.md) | code and documentation review (`v0.15.1`) |
 | [review-2026-11-01/](reports/review-2026-11-01/review-2026-11-01.md) | `borrow` / `Handback` implementation review (`v0.15.1`) |
 | [review-2026-11-02/](reports/review-2026-11-02/review-2026-11-02.md) | Phase 18 ecosystem build-out and the `v0.18.0` close review |
+| [review-2026-11-03/](reports/review-2026-11-03/review-2026-11-03.md) | Phase 19 restricted semantic check and the `v0.19.0` review |
 | [ct-language-features/](reports/ct-language-features/ct-language-features.html) | a language-feature survey (self-contained HTML) |
 | [ctc-ct-analysis/](reports/ctc-ct-analysis/ctc-ct-analysis.html) | `ctc.c` versus the CT line (self-contained HTML) |
 | [selfhost-readiness/](reports/selfhost-readiness/selfhost-readiness.html) | self-hosting readiness summary (self-contained HTML) |

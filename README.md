@@ -36,7 +36,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`（`--outdir` 可改），再调用本地 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`）；`--emit-c` 只发射 `.c`（`.h.ct` 另写 `.h`），此时 `-o` 是输出目录 |
-| `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`） |
+| `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（以及既有的 leak / 借用类发现）一律以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`） |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
 | `ct get` / `ct update` / `ct install` / `ct verify` | 包管理：拉包到 `vendor/`、写 `ct.lock`；离线重解 / 校验并打印一条构建命令（裸名可经 `--index` / `CT_INDEX` 查显式索引；包作者见 [docs/package-guide.md](docs/package-guide.md)）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`clib`（C 映射） |
 | `ct -v` / `ct -h` | 版本 / 用法 |
@@ -115,7 +115,7 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 | `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes `.c`, a `.h.ct` also writes its sibling `.h` |
 | `ct <in.ct> -o <out.c>` | write to the given path |
 | `ct build <in.ct>… [-o <exe>]` | multi-file build: the generated `.c` goes into `.ctbuild/` (or `--outdir`), then the local C compiler produces an executable (`-o` names it, default `a.out`); `--emit-c` only emits the `.c` (plus `.h` for `.h.ct`), and then `-o` is the output directory |
-| `ct check <in.ct>` | run the bounded semantic checks only, writing no `.c`: call-site arity / argument types / trait-method ambiguity / impl signature drift are reported as `error:`, exit `1` on any finding and `0` when clean (`--diagnostics=json` tags each object with `"severity":"error"`) |
+| `ct check <in.ct>` | run the bounded semantic checks only, writing no `.c`: call-site arity / argument types / trait-method ambiguity / impl signature drift (plus the existing leak / borrow findings) are all reported as `error:`, exit `1` on any finding and `0` when clean (`--diagnostics=json` tags each object with `"severity":"error"`) |
 | `ct … --emit-map <file\|->` | also write the reverse-mapping JSON (trait / struct / function / impl → generated C symbols) |
 | `ct get` / `ct update` / `ct install` / `ct verify` | package management: fetch into `vendor/`, write `ct.lock`; re-resolve or verify offline and print one build command (a bare name may resolve through `--index` / `CT_INDEX`; authors see [docs/package-guide.md](docs/package-guide.md)); the official packages live under [ct-pkg](https://github.com/ct-pkg): `hal` (contract), `hal-posix` (platform), `clib` (C mappings) |
 | `ct -v` / `ct -h` | version / usage |

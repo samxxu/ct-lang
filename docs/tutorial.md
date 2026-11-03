@@ -505,6 +505,7 @@ int main(void)
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
+| `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（及既有 leak / 借用类发现）以 `error:` 报告，有任何发现退出 `1`，干净退出 `0` |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`，再调用 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`） |
 | `ct build --emit-c … -o <dir>` | 只发 C：每单元一份 `.c`/`.h`，`-o` 是输出目录，并打印建议的 `cc` 行；带增量缓存 |
 | `ct build … --outdir <dir>` | 默认形态下改中间产物目录（默认 `.ctbuild/`） |
@@ -512,7 +513,7 @@ int main(void)
 | `ct build … -I <dir>` | 追加导入搜索根（可重复） |
 | `ct build … --ns-root <dir>` | 目录 = namespace 的校验树根 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait/struct/函数/impl/map → 生成的 C 符号） |
-| `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr） |
+| `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr）；`ct check` 下同一批记录按错误报告，JSON 对象带 `"severity":"error"` |
 | `ct … --line` / `--no-line` | 覆盖 `#line` 默认（`build` 默认开、`compile` 默认关） |
 | `ct … --std=c99\|gnu99` | 写进 C 编译器的命令行，产物暂无异 |
 | `ct get <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引 |
@@ -1062,6 +1063,7 @@ fixed-capacity, refuses new keys when full and never rehashes. Details in
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes only the `.c`, a `.h.ct` input also writes `<in>.h` |
 | `ct <in.ct> -o <out.c>` | explicit output path |
+| `ct check <in.ct>` | run the bounded semantic checks only, writing no `.c`: call-site arity / argument types / trait-method ambiguity / impl signature drift (plus existing leak / borrow findings) are reported as `error:`, exit `1` on any finding and `0` when clean |
 | `ct build <in.ct>… [-o <exe>]` | multi-file build: C into `.ctbuild/`, then the local C compiler produces an executable (`-o` names it, default `a.out`) |
 | `ct build --emit-c … -o <dir>` | C only: one `.c`/`.h` per unit, `-o` is the output directory, and a suggested `cc` line is printed; incremental cache |
 | `ct build … --outdir <dir>` | default form: where the generated C goes (default `.ctbuild/`) |
@@ -1069,7 +1071,7 @@ fixed-capacity, refuses new keys when full and never rehashes. Details in
 | `ct build … -I <dir>` | extra import roots (repeatable) |
 | `ct build … --ns-root <dir>` | directory = namespace verification root |
 | `ct … --emit-map <file\|->` | reverse map JSON (trait/struct/function/impl/map → C symbols) |
-| `ct … --diagnostics=json\|text` | warning format (`text` on stderr by default) |
+| `ct … --diagnostics=json\|text` | warning format (`text` on stderr by default); under `ct check` the same records are reported as errors and each JSON object carries `"severity":"error"` |
 | `ct … --line` / `--no-line` | override `#line` (on for `build`, off for `compile`) |
 | `ct … --std=c99\|gnu99` | lands on the C compiler's command line; output is unchanged so far |
 | `ct get <spec>[@<range>]` | fetch packages into `vendor/`, write `ct.lock` (the only subcommand using system `git`); a bare name may resolve through `--index <file>` / `CT_INDEX` |

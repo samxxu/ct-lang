@@ -245,15 +245,19 @@ impl DriverOps for Driver {
             return 1;
         }
         /* compile mode resolves no imports, so a mapping unit has no consumer
-           and no output; it is a `build`-only input. */
-        {
+           and no output; it is a `build`-only input. `ct check` (19.4) writes
+           nothing by design, so a `.m.ct` unit is a perfectly good input there
+           -- its declarations and default bodies are what gets checked. */
+        if (!self->m->check_mode) {
             size_t pl = strlen(in);
             if (pl > 5 && strcmp(in + pl - 5, ".m.ct") == 0) {
                 fprintf(stderr, "ctc: a .m.ct unit produces no output; import it from a .ct unit\n");
                 return 1;
             }
         }
-        if (!out) {
+        /* `ct check` resolves no output path at all: it never opens a file, so
+           asking for one could only fail on a path it does not need (SH-49). */
+        if (!out && !self->m->check_mode) {
             if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
                 fprintf(stderr, "ctc: output path too long\n");
                 return 1;

@@ -11,7 +11,9 @@ Standard library only. It asserts four invariants:
      CTC_VERSION in selfhost/l0/ctc.c (and all compiler layers agree);
   3. the hard-gate count stated in README.md, docs/README.md and
      docs/glossary.md equals the number of run_gate calls in
-     selfhost/check-all.sh;
+     selfhost/check-all.sh; issues/README.md carries the same count in a
+     machine-readable `<!-- gates:N -->` marker (its dated records quote
+     historical counts, so prose scanning is not usable there);
   4. the status line of every docs/design/phase*.md matches the phase table
      in docs/roadmap.md (done -> check, in progress -> half, planned -> white).
 
@@ -124,6 +126,15 @@ def check_gate_count(errors):
         for claim in claims:
             if claim != actual:
                 errors.append(f"{doc}: states {claim} hard gates, check-all.sh runs {actual}")
+    issue = read(os.path.join(ROOT, "issues/README.md"))
+    marker = re.search(r"<!--\s*gates:(\d+)\s*-->", issue)
+    if not marker:
+        errors.append("issues/README.md: no <!-- gates:N --> marker")
+    elif int(marker.group(1)) != actual:
+        errors.append(
+            f"issues/README.md: marker says {marker.group(1)} hard gates, "
+            f"check-all.sh runs {actual}"
+        )
     return actual
 
 
