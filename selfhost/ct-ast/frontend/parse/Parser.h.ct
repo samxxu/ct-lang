@@ -108,6 +108,7 @@ pub struct Parser {
     struct Symbols *sym;   /* the tables the direct lookups read */
     struct Memory *mem;     /* the current unit's path for diagnostics */
     int *build_mode;                    /* points at the driver's flag */
+    int *check_mode;                    /* likewise: `ct check` (single unit, SH-55) */
     /* The module tables the translation-unit passes fill: the import list the
        scanner and the parser share, and the call graph and `map` records the
        map JSON reports. The driver reads them back through this object. */
@@ -809,8 +810,16 @@ impl ParseOps for Parser {
                 continue;
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
-                if (!*self->build_mode)
-                    return self->sup->fail("'import' is not supported in compile mode");
+                if (!*self->build_mode) {
+                    /* Multi-file input is a build-mode feature (SH-55), so the
+                       message names the way out instead of the mode it is in;
+                       `ct check` is single-unit by design, which is why it
+                       gets its own reason (D19-4, DOC-62). */
+                    if (self->check_mode && *self->check_mode)
+                        return self->sup->fail("'import' requires multi-file mode: use 'ct build'"
+                                               " (ct check is single-unit)");
+                    return self->sup->fail("'import' requires multi-file mode: use 'ct build'");
+                }
                 if (self->skip_import() != 0) return -1;
                 continue;
             }
@@ -2174,14 +2183,15 @@ static struct Field   g_pend_fields[64];
 
 /* The parser's shared primitives live in support.h.ct; the driver reaches all
    of them through these wrappers, so no trait name crosses the unit line. */
-pub void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode);
-void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode)
+pub void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode, void *check_mode);
+void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode, void *check_mode)
 {
     g_parse.arena = (struct Arena *)arena;
     g_parse.lex = (struct Lexer *)lex;
     g_parse.sym = (struct Symbols *)sym;
     g_parse.mem = (struct Memory *)mem;
     g_parse.build_mode = (int *)build_mode;
+    g_parse.check_mode = (int *)check_mode;
     g_parse.sup = parse_support_get();
     g_parse.sup->arena = (struct Arena *)arena;
     g_parse.sup->lex = (struct Lexer *)lex;

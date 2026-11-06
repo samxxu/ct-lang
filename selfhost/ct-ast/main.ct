@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     /* the parser (frontend::parse) reads the same collaborators; bind it once
        they are all in place so its own support object is wired too */
     p = frontend::parse::parse_get();
-    frontend::parse::ct_parse_bind(arena, lex, sym, ty, mem, &m->build_mode);
+    frontend::parse::ct_parse_bind(arena, lex, sym, ty, mem, &m->build_mode, &m->check_mode);
     ty->maps = p->maps;
     ty->nmaps = &p->nmaps;
     /* the module driver draws on the same collaborators; wire it once they are

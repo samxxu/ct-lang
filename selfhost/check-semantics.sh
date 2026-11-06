@@ -105,8 +105,9 @@ else
 fi
 
 # `ct check` is a single-unit entry (DOC-62): an import-bearing unit is
-# rejected by the compiler, and the docs say so. If check ever gains multi-unit
-# support this assertion and the two docs tables must change together.
+# rejected by the compiler, and the message says why check cannot take it
+# (SH-55). If check ever gains multi-unit support this assertion and the two
+# docs tables must change together.
 cat > "$work/import.ct" <<'EOF'
 import other::Thing;
 
@@ -114,8 +115,10 @@ int main(void) { return 0; }
 EOF
 "$work/ct-ast" check "$work/import.ct" >"$work/import.out" 2>"$work/import.err"
 rc=$?
-if [ "$rc" -eq 1 ] && grep -Fq "'import' is not supported in compile mode" "$work/import.err"; then
-    ok "check: an import-bearing unit is rejected (single-unit entry)"
+if [ "$rc" -eq 1 ] \
+        && grep -Fq "'import' requires multi-file mode: use 'ct build' (ct check is single-unit)" \
+            "$work/import.err"; then
+    ok "check: an import-bearing unit is rejected with a check-specific reason (SH-55)"
 else
     bad "check: import guard" "exit $rc; $(cat "$work/import.err")"
 fi

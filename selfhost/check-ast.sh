@@ -2317,8 +2317,9 @@ fi
 if "$work/ct-ast" test/modules/inc/main.ct -o "$work/cli-im.c" \
         >"$work/cli-im.out" 2>"$work/cli-im.err"; then
     bad "import in compile mode" "expected a non-zero exit"
-elif grep -q "not supported in compile mode" "$work/cli-im.err"; then
-    ok "compile mode rejects 'import'"
+elif grep -Fq "'import' requires multi-file mode: use 'ct build'" "$work/cli-im.err" \
+        && ! grep -Fq "ct check is single-unit" "$work/cli-im.err"; then
+    ok "compile mode rejects 'import' and names the way out (SH-55)"
 else
     bad "import in compile mode" "wrong diagnostic: $(cat "$work/cli-im.err")"
 fi
