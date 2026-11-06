@@ -503,7 +503,7 @@ int main(void)
 
 | 命令 | 作用 |
 | --- | --- |
-| `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h` |
+| `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h`；只接受**单文件单元**，`import` 需改用 `ct build`（`-I` 同理只对 build 生效） |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（仅单文件单元，`import` 不被接受）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（及既有 leak / 借用类发现）以 `error:` 报告，有任何发现退出 `1`，干净退出 `0` |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`，再调用 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`） |
@@ -1061,7 +1061,7 @@ fixed-capacity, refuses new keys when full and never rehashes. Details in
 
 | Command | Purpose |
 | --- | --- |
-| `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes only the `.c`, a `.h.ct` input also writes `<in>.h` |
+| `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes only the `.c`, a `.h.ct` input also writes `<in>.h`; **single-file units only**, so `import` needs `ct build` (`-I` only applies to build) |
 | `ct <in.ct> -o <out.c>` | explicit output path |
 | `ct check <in.ct>` | run the bounded semantic checks only, writing no `.c` (single-file units only; `import` is not accepted): call-site arity / argument types / trait-method ambiguity / impl signature drift (plus existing leak / borrow findings) are reported as `error:`, exit `1` on any finding and `0` when clean |
 | `ct build <in.ct>… [-o <exe>]` | multi-file build: C into `.ctbuild/`, then the local C compiler produces an executable (`-o` names it, default `a.out`) |
