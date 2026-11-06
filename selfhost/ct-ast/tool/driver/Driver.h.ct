@@ -299,7 +299,12 @@ impl DriverOps for Driver {
         self->p->nparams = 0;
         self->p->ncalls = 0;
         self->p->cur_func[0] = 0;
-        self->p->unit_is_map = 0;
+        /* A `.m.ct` input is a mapping unit even when it is fed to `ct check`,
+           which skips the build path that normally marks it. */
+        {
+            size_t pl = strlen(in);
+            self->p->unit_is_map = (pl > 5 && strcmp(in + pl - 5, ".m.ct") == 0) ? 1 : 0;
+        }
         frontend::parse::ct_parse_clear_error();
         if (self->m->read_file(in) != 0) {
             return frontend::parse::ct_parse_report();

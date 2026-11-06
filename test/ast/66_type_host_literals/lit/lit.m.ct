@@ -1,0 +1,19 @@
+/* One trait, one method, one binding per type: `id()` reports which host the
+   receiver's static type reached, so the consumer's output pins the type table.
+   A recipe is a single call, so the constant rides in as an argument. */
+namespace lit;
+
+pub trait Tag {
+    int id();
+}
+
+map trait Tag for type int                { id(v) -> ct_tag(1); }
+map trait Tag for type unsigned           { id(v) -> ct_tag(2); }
+map trait Tag for type long               { id(v) -> ct_tag(3); }
+map trait Tag for type unsigned long      { id(v) -> ct_tag(4); }
+map trait Tag for type long long          { id(v) -> ct_tag(5); }
+map trait Tag for type unsigned long long { id(v) -> ct_tag(6); }
+map trait Tag for type float              { id(v) -> ct_tag(7); }
+map trait Tag for type double             { id(v) -> ct_tag(8); }
+map trait Tag for type long double        { id(v) -> ct_tag(9); }
+map trait Tag for type char *             { id(v) -> ct_tag(10); }

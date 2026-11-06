@@ -1,0 +1,28 @@
+/* A type host reached from a literal receiver, with the shim beside the unit
+   supplying what a recipe cannot spell. Two `toString()` calls in one
+   expression take two ring slots, so neither value is overwritten. */
+import lit::lit;
+
+#include <stdio.h>
+#include <string.h>
+
+struct Cmd {
+    char name[16];
+    int  code;
+};
+
+int main(void)
+{
+    struct Cmd c;
+    int n = 41;
+
+    strcpy(c.name, "status");
+    c.code = 7;
+
+    printf("%s %s %s %s\n", "lit".toString(), c.name.toString(),
+           (5).toString(), n.toString());
+    printf("%d %d %d\n", "abcd".len(), c.name.len(), (int)sizeof c.name);
+    printf("%s %s\n", (5).toString(), (6).toString());
+    printf("%s\n", c.code.toString());
+    return 0;
+}

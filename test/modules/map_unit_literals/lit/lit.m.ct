@@ -1,0 +1,21 @@
+/* Two hosts, one receiver spelling: `char *` and `int` both answer `toString`,
+   and `len` only exists on `char *`. The methods expand to the shim helpers. */
+namespace lit;
+
+pub trait Str {
+    char *toString();
+    int   len();
+}
+
+map trait Str for type char * {
+    toString(s) -> ct_lit_str(s);
+    len(s)      -> ct_lit_len(s);
+}
+
+pub trait Int {
+    char *toString();
+}
+
+map trait Int for type int {
+    toString(v) -> ct_lit_int(v);
+}

@@ -181,8 +181,9 @@
 # touching of the shim header; bindings/posix-socket is the real-library demo
 # (a header-only shim over socketpair / write / read / errno). A shim source
 # without its header is rejected by name, a shim header that is not a regular
-# file is rejected too, a static map's JSON carries the shim files, and two
-# mapping units that share a base name are an error rather than a silent pick.
+# file is rejected too, a shim header under any other base name is never
+# included (pinned negative), a static map's JSON carries the shim files, and
+# two mapping units that share a base name are an error rather than a silent pick.
 #
 # batch 40 adds raw pass-through (17.3): `#ct-raw` at column 1 opens a block
 # whose lines are copied verbatim into the generated C (never tokenised), and
@@ -282,6 +283,39 @@ for d in test/ast/*/; do
     out="$work/$name.c"
     exe="$work/$name.bin"
 
+    # A fixture that carries its own mapping unit cannot use compile mode
+    # (`import` is a build-mode feature), so it goes through `build`. A shim is
+    # found by base name, so every directory holding one is an include root.
+    if [ -n "$(find "$d" -name '*.m.ct' -print -quit)" ]; then
+        md="$work/$name.mod"
+        incs=""
+        rm -rf "$md"
+        mkdir -p "$md"
+        for h in $(find "$d" -name '*.shim.h'); do incs="$incs -I $(dirname "$h")"; done
+        if ! "$work/ct-ast" build --emit-c "$src" -o "$md" >"$work/$name.out" 2>"$work/$name.err"; then
+            bad "$name" "ct-ast build failed: $(cat "$work/$name.err")"
+            continue
+        fi
+        if [ -f "$md/prog.h" ]; then
+            bad "$name" "a plain .ct unit must not emit a header"
+            continue
+        fi
+        if ! "$CC" -Wall -Wextra -std=c99 $incs "$md"/*.c -o "$exe" 2>"$work/$name.cc"; then
+            bad "$name" "generated C did not build warning-free: $(cat "$work/$name.cc")"
+            continue
+        fi
+        if ! "$exe" >"$work/$name.stdout" 2>&1; then
+            bad "$name" "the program exited non-zero"
+            continue
+        fi
+        if ! cmp -s "$work/$name.stdout" "$d/prog.expected.out"; then
+            bad "$name" "program output differs: $(cat "$work/$name.stdout")"
+            continue
+        fi
+        ok "$name (build mode: literal, const, alias and decay type hosts)"
+        continue
+    fi
+
     if ! "$work/ct-ast" "$src" -o "$out" >"$work/$name.out" 2>"$work/$name.err"; then
         bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
         continue
@@ -308,6 +342,20 @@ for d in test/ast/*/; do
     fi
     ok "$name"
 done
+
+# The member decay stops at one dimension: `char names[2][8]` decays to
+# `char (*)[8]`, which no host spells, so the receiver type stays unknown
+# instead of silently becoming `char *` (which would print `strlen(names)`).
+rm -rf "$work/tdim"
+mkdir -p "$work/tdim"
+if "$work/ct-ast" build --emit-c test/ast/66_type_host_literals/two_dim.ct \
+        -o "$work/tdim" >"$work/tdim.out" 2>"$work/tdim.err"; then
+    bad "type host two-dimensional field" "expected a non-zero exit"
+elif grep -qF 'cannot resolve the method trait (unknown receiver type)' "$work/tdim.err"; then
+    ok "type host (a two-dimensional field decays to no host at all)"
+else
+    bad "type host two-dimensional field" "$(head -2 "$work/tdim.err")"
+fi
 
 echo
 echo "== design patterns (OO coverage) =="
@@ -854,6 +902,67 @@ elif grep -qF 'a shim header is not a readable file' "$work/mbsd.err"; then
     ok "batch 39 (shim_header_not_a_file)"
 else
     bad "batch 39: shim_header_not_a_file" "$(head -2 "$work/mbsd.err")"
+fi
+
+# Batch 40: a literal receiver reaches a type host, the shim beside the unit
+# supplies what a recipe cannot spell, and two `toString()` calls in one
+# expression take two ring slots -- a single static buffer would print `6 6`.
+rm -rf "$work/mmlit"
+mkdir -p "$work/mmlit"
+if "$work/ct-ast" build --emit-c test/modules/map_unit_literals/main.ct -o "$work/mmlit" \
+        >"$work/mmlit.out" 2>"$work/mmlit.err" \
+   && [ ! -f "$work/mmlit/lit.c" ] && [ ! -f "$work/mmlit/lit.h" ] \
+   && grep -qF '#include "lit.shim.h"' "$work/mmlit/main.c" \
+   && grep -qF 'ct_lit_int((5))' "$work/mmlit/main.c" \
+   && grep -qF 'ct_lit_str(("lit"))' "$work/mmlit/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 -I test/modules/map_unit_literals/lit "$work/mmlit"/*.c \
+        -o "$work/mmlit.bin" 2>"$work/mmlit.cc" \
+   && "$work/mmlit.bin" >"$work/mmlit.stdout" 2>&1 \
+   && cmp -s "$work/mmlit.stdout" test/modules/map_unit_literals/expected.out; then
+    ok "map_unit_literals (literal receivers, a sibling shim, two ring slots in one expression)"
+else
+    bad "map_unit_literals" "$(cat "$work/mmlit.err" "$work/mmlit.cc" "$work/mmlit.stdout" 2>/dev/null | head -5)"
+fi
+
+# `ct check` accepts a mapping unit (P0-3): a valid one exits 0, and a binding
+# whose parameter count drifts from the trait's method is still an error.
+if "$work/ct-ast" check test/modules/map_unit_literals/lit/lit.m.ct \
+        >"$work/mchk.out" 2>"$work/mchk.err"; then
+    ok "ct check (a valid .m.ct exits 0)"
+else
+    bad "ct check (valid .m.ct)" "$(head -2 "$work/mchk.err")"
+fi
+printf 'namespace drift;\npub trait T { int m(); }\nmap trait T for type char * { m(s, extra) -> strchr(s, extra); }\n' \
+    >"$work/drift.m.ct"
+if "$work/ct-ast" check "$work/drift.m.ct" >"$work/mchk2.out" 2>"$work/mchk2.err"; then
+    bad "ct check (signature drift)" "expected a non-zero exit"
+elif grep -qF "a type host binding has 2 parameters but method 'm' takes 0" "$work/mchk2.err"; then
+    ok "ct check (a drifted .m.ct signature exits non-zero)"
+else
+    bad "ct check (signature drift)" "$(head -2 "$work/mchk2.err")"
+fi
+
+# A shim is wired by its base name: the consumer includes `<base>.shim.h`, so a
+# header under any other name is silently never included and the recipe's C
+# helper stays undeclared. This is the negative for the naming rule the clib
+# units rely on (`Str.m.ct` needs `Str.shim.h`, not `StrUtil.shim.h`).
+rm -rf "$work/mbsn"
+mkdir -p "$work/mbsn/lib" "$work/mbsn/out"
+printf 'namespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> ct_x(); }\n' \
+    >"$work/mbsn/lib/lib.m.ct"
+printf 'static inline int ct_x(void) { return 1; }\n' >"$work/mbsn/lib/Wrong.shim.h"
+printf 'import lib::lib;\n\nint main(void) { return lib::T.m(); }\n' >"$work/mbsn/main.ct"
+"$work/ct-ast" build --emit-c "$work/mbsn/main.ct" -o "$work/mbsn/out" \
+    >"$work/mbsn.out" 2>"$work/mbsn.err"
+mbsn_ct=$?
+if [ "$mbsn_ct" -eq 0 ] \
+   && ! grep -qF 'Wrong.shim.h' "$work/mbsn/out/main.c" \
+   && ! "$CC" -std=c99 "$work/mbsn/out/main.c" -o "$work/mbsn/main.bin" \
+        >/dev/null 2>"$work/mbsn.cc"; then
+    ok "batch 39 (a shim header must share the .m.ct base name)"
+else
+    bad "batch 39: shim_base_name_mismatch" \
+        "$(cat "$work/mbsn.err" "$work/mbsn.cc" 2>/dev/null | head -2)"
 fi
 
 # Two mapping units in different directories may share a base name; both would

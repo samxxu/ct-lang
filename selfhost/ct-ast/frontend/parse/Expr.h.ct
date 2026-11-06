@@ -395,6 +395,11 @@ impl ExprOps for Expr {
                 if (self->sup->iface_ref_type(ft, itr, sizeof itr, &iip)) skip = 1;
             }
             if (!skip && self->arena->nodes[cur].kind == N_CAST) skip = 1;
+            /* `0` is a null pointer constant: C accepts it wherever a pointer
+               is expected, so a derived `int` is not a mismatch. */
+            if (!skip && self->arena->nodes[cur].kind == N_NUM
+                && self->arena->nodes[cur].num == 0
+                && strchr(ft, '*')) skip = 1;
             if (!skip && self->sup->expr_ctype(cur, at, sizeof at) != 0) skip = 1;
             if (!skip && strchr(at, '[')) skip = 1;   /* a decayed array */
             if (!skip) {

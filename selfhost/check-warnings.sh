@@ -104,6 +104,28 @@ for d in test/ast/*/; do
     d="${d%/}"
     name="$(basename "$d")"
     [ -f "$d/prog.ct" ] || continue
+
+    # A fixture that carries its own mapping unit cannot use compile mode
+    # (`import` is a build-mode feature), so it goes through `build`, exactly
+    # as check-ast.sh does. A shim is found by base name, so every directory
+    # holding one is an include root for the generated C.
+    if [ -n "$(find "$d" -name '*.m.ct' -print -quit)" ]; then
+        md="$work/ast-$name"
+        incs=""
+        rm -rf "$md"
+        mkdir -p "$md"
+        for h in $(find "$d" -name '*.shim.h'); do incs="$incs -I $(dirname "$h")"; done
+        if ! "$work/ct-ast" build --emit-c "$d/prog.ct" -o "$md" \
+                >"$work/$name.out" 2>"$work/$name.err"; then
+            bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
+            continue
+        fi
+        for f in "$md"/*.c; do
+            scan_one "$name/$(basename "$f")" "$f" $incs
+        done
+        continue
+    fi
+
     if ! "$work/ct-ast" "$d/prog.ct" -o "$work/$name.c" >"$work/$name.out" 2>"$work/$name.err"; then
         bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
         continue

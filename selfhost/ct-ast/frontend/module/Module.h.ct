@@ -1062,6 +1062,11 @@ impl ModuleOps for Module {
                         dupd = 1;
                 if (!dupd) printf(" -I %s", self->units[u].shim_dir);
             }
+            /* A shim source may include a generated type header, so the output
+               directory is an include root too. It goes after every shim root:
+               a generated `<Type>.h` must never shadow a same-named system
+               header that a shim directory carries. */
+            printf(" -I %s", self->outdir);
             for (u = 0; u < self->nunits; u++) {
                 if (self->units[u].is_map) continue;
                 printf(" %s/%s.c", self->outdir, self->units[u].base);
@@ -1099,6 +1104,11 @@ impl ModuleOps for Module {
                 || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->units[u].shim_dir) != 0)
                 goto cmd_too_long;
         }
+        /* Same root, same order as the printed line: the output directory last,
+           so a generated `<Type>.h` cannot shadow a system header. */
+        if (ct_cmd_raw(cmd, MAX_CMD, &ncmd, "-I") != 0
+            || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0)
+            goto cmd_too_long;
         for (u = 0; u < self->nunits; u++) {
             char src[MAX_PATH];
             if (self->units[u].is_map) continue;

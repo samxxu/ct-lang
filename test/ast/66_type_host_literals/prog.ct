@@ -1,0 +1,39 @@
+/* A type host is matched against the receiver's static type, so every integer
+   suffix, the float spellings, the literal-to-`int` / `char *` rules and the
+   const / alias normalisation are pinned here. The unit beside this file binds
+   one host per type; each `id()` reports the host it reached. */
+import lit::lit;
+
+#include <stdio.h>
+#include <string.h>
+
+struct Cmd {
+    char name[16];
+    char grid[2][8];
+};
+
+int main(void)
+{
+    struct Cmd c;
+    const char *cs = "const";
+    char *ms = "mutable";
+    unsigned u = 5;
+    unsigned int ui = 6;
+    long l = 7;
+    long int li = 8;
+
+    strcpy(c.name, "status");
+
+    printf("%d %d %d %d %d %d %d %d %d %d %d %d %d\n",
+           (5).id(), (5u).id(), (5U).id(), (5l).id(), (5L).id(),
+           (5ul).id(), (5UL).id(), (5lu).id(), (5LU).id(),
+           (5ll).id(), (5LL).id(), (5ull).id(), (5ULL).id());
+    printf("%d %d %d %d\n", (1.5).id(), (1.5f).id(), (1.5L).id(), (1e9).id());
+    printf("%d %d %d\n", 'a'.id(), "s".id(), cs.id());
+    printf("%d %d %d %d\n", ms.id(), u.id(), ui.id(), l.id());
+    printf("%d %d\n", li.id(), c.name.id());
+    /* `sizeof` does not go through the receiver path: a two-dimensional field
+       is still 16 bytes even though no host spells its decayed type. */
+    printf("%d\n", (int)sizeof c.grid);
+    return 0;
+}
