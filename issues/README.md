@@ -4,7 +4,7 @@
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
 > （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
 
-本目录汇总十一轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
+本目录汇总十二轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../docs/history/reports/phase7-review/phase7-review.md)（Phase 7 复审）、
 [reports/phase9-review](../docs/history/reports/phase9-review/phase9-review.md)（Phase 9 复审）、
 [reports/review-2026-10-21](../docs/history/reports/review-2026-10-21/review-2026-10-21.md)（Phase 12 复审）、
@@ -14,10 +14,12 @@
 [reports/review-2026-11-01](../docs/history/reports/review-2026-11-01/review-2026-11-01.md)（`borrow` / `Handback` 实现审查）、
 [reports/review-2026-11-02](../docs/history/reports/review-2026-11-02/review-2026-11-02.md)（Phase 18 生态建设与 `v0.18.0` 收口审查）、
 [reports/review-2026-11-03](../docs/history/reports/review-2026-11-03/review-2026-11-03.md)（Phase 19 受限语义检查与 `v0.19.0` 审查）、仓库外第三方评估复核
-（`ct-markdown/docs/ct-v0.19.0-re-evaluation.md`，2026-11-03，`v0.19.0`）。
+（`ct-markdown/docs/ct-v0.19.0-re-evaluation.md`，2026-11-03，`v0.19.0`）、仓库外第三方评估
+[evaluation-2026-11-03-v0181](../docs/history/reports/evaluation-2026-11-03-v0181/evaluation-2026-11-03-v0181.md)
+（`v0.18.1` + 附录 `v0.19.1`，2026-11-03；复核意见见同目录 `verdict.md`）。
 **每条 issue 一个 markdown 文件，按模块分目录存放**；Phase 9 复审的发现由下文「Phase 9 复审」一节承载，未另立文件。
 
-- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）；Phase 18 审查 `553d300`（2026-11-02，工作树含未提交的 `v0.18.0` bump）、Phase 19 审查 `db4cae4`（2026-11-03，`v0.19.0`）、第三方 v0.19.0 复验 `4b9946b`（2026-11-03，`v0.19.0` + 1 commit）——各文件行号以其自身锚点为准。
+- 源码锚点：首轮 `8aac450`；Phase 7 复审 `ec97f99`（2026-10-17）；Phase 9 复审 `8010875`（2026-10-19）；Phase 12 复审 `4ef8b68`（2026-10-21）；第二轮复审 `dde0dda`（2026-10-21）；审计 `f4c77b1`（2026-10-31，`v0.13.0`）；代码审查 `524ba99`（2026-10-31，`v0.15.1`）；`borrow` 实现审查 `8b047f5`（2026-11-01，工作树含在途改动）；第三方评估两轮 `61e35e4`（2026-11-01，`v0.16.1`）、`dab1b71`（2026-11-02，`v0.16.2`）；Phase 18 审查 `553d300`（2026-11-02，工作树含未提交的 `v0.18.0` bump）、Phase 19 审查 `db4cae4`（2026-11-03，`v0.19.0`）、第三方 v0.19.0 复验 `4b9946b`（2026-11-03，`v0.19.0` + 1 commit）、第三方 v0.18.1 评估（`528d7c5`）与 v0.19.1 附录（`4176c636`）复核（2026-11-03）——各文件行号以其自身锚点为准。
 - 状态：首轮 12 条**已全部修复**；Phase 7 复审新增 8 条**均已处理**（DOC-6–9 修复、TEST-4 修复、TEST-5/6 部分覆盖、SH-3 已决策）；Phase 9 复审 14 项发现**全部关闭**（逐项见下文「Phase 9 复审」一节，复核于 v0.10.0 `885d01b`）；Phase 12 复审新增 8 条**已于 2026-10-21 全部修复**（DOC-10–15、SH-5、SH-6）；第二轮复审新增 8 条（SH-8…SH-12、DOC-19…DOC-21）**已于 2026-10-21 全部关闭**（见文末「处置」节），SH-7 / DOC-18 复核后仍复现；复核中另订正 25 处「文档说未实现 / 指向旧主线、实际已落地」的陈述漂移（见其后一节）。
 - 2026-10-31 审计新增 **18 条**，已于同日处置：**13 条修复**、2 条部分处置（TEST-9 / CI-4）、
   2 条不采纳（TEST-7 / SH-24，理由见文末「处置」节）；DOC-28 复核确认已修复。
@@ -72,6 +74,20 @@
   SH-50 给语义诊断补列号（check 侧 `file:line:col:` + JSON `col`，compile 侧字节不变），SH-51 采纳方案 B
   在教程标注 flags 的 shell 语义；CI-7（打 tag）等明确指令，STD-1 等治理决策。
   6 条断言的复验与 3 条报告偏差见文末「第三方评估复核（2026-11-03）」一节。
+- 2026-11-03 第三方 `v0.18.1` 评估 + `v0.19.1` 附录复核（锚点 `528d7c5` / `4176c636`）新增 **4 条**
+  （**SH-52** **High**、**DOC-64** Medium、**DOC-63** / **SH-53** Low）：1 条生成器缺陷（命名空间静态
+  初始化器不重写被引用全局，`ct compile` 返回 0 但生成的 C 编译失败）、1 条 C 头 enum 常量的文档缺口、
+  1 条「适用版本」抬头过期、1 条容量诊断不点名上限/单元。评估原文与逐项复核意见已入库到
+  [docs/history/reports/evaluation-2026-11-03-v0181/](../docs/history/reports/evaluation-2026-11-03-v0181/)。
+  §4.5 / §4.6 的 SH-14、TEST-7 已在台账中，不重复立案；§4.1「impl 参数不检查」与 §4.4「宏对象不可见」
+  两处表述被本轮实测修正（见 `verdict.md`）。
+- 2026-11-06 单文件模式 `import` 边界复核（锚点 `c27da3d`，`v0.19.1`+1）新增 **3 条**
+  （**SH-54** / **DOC-65** Medium，**SH-55** Low）：compile 模式 `-I` 被静默丢弃且 `--help`
+  仍宣称可用、`import` 拒绝文案不给替代路径且 `ct check` 复用时身份错位、README / 教程的
+  `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」。本轮**只立项**；三条随后已由编码侧
+  修复并回填「处置」段与状态行（SH-54 `f612b11`、SH-55 `83f3776`、DOC-65 `82fab61`）。
+  「compile 不支持 import」本身经复核判定为**有意边界，不补齐解析器**，理由与证据见文末
+  「单文件模式 import 边界复核（2026-11-06）」。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:12 -->
 - **硬关卡计数随阶段演进（当前 12 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -149,6 +165,9 @@
 | DOC-60 | Medium | README 首句「不做类型检查」与 `ct check` 的存在矛盾 | [doc60-readme-no-type-check.md](docs/doc60-readme-no-type-check.md) |
 | DOC-61 | Low | roadmap 英文表 Phase 18 仍 `in progress`，中文表已完成 | [doc61-roadmap-phase18-english.md](docs/doc61-roadmap-phase18-english.md) |
 | DOC-62 | Medium | README / 教程未说明 `ct check` 拒绝 `import` | [doc62-check-import-undocumented.md](docs/doc62-check-import-undocumented.md) |
+| DOC-63 | Low | 教程与内存指南的「适用版本」仍写 `v0.16.0` | [doc63-tutorial-version-stale.md](docs/doc63-tutorial-version-stale.md) |
+| DOC-64 | Medium | C 头文件的 enum 常量在表达式里不可见，但文档没有写明 | [doc64-header-enum-constants.md](docs/doc64-header-enum-constants.md) |
+| DOC-65 | Medium | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 | [doc65-compile-import-boundary-undocumented.md](docs/doc65-compile-import-boundary-undocumented.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -237,6 +256,10 @@
 | SH-49 | Low | `ct check` 早退块排在 `.m.ct` 守卫与输出路径解析之后，错误信息指向错误原因 | [sh49-check-entry-compile-guards.md](selfhost/sh49-check-entry-compile-guards.md) |
 | SH-50 | Medium | `ct check` 的语义诊断缺列号，与 `file:line:col: error:` 契约不符 | [sh50-check-diag-no-column.md](selfhost/sh50-check-diag-no-column.md) |
 | SH-51 | Info | `--cflags` / `--ldflags` 经 `system()` 原样执行，透传面大于参数面（待决策） | [sh51-build-flags-command-surface.md](selfhost/sh51-build-flags-command-surface.md) |
+| SH-52 | **High** | 命名空间静态初始化器不重写被引用全局的名字，生成的 C 无法编译 | [sh52-namespace-static-initializer.md](selfhost/sh52-namespace-static-initializer.md) |
+| SH-53 | Low | 容量触顶诊断不点名上限值与单元 | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
+| SH-54 | Medium | compile 模式静默丢弃 `-I`，`--help` 仍宣称可用 | [sh54-compile-include-flag-silently-ignored.md](selfhost/sh54-compile-include-flag-silently-ignored.md) |
+| SH-55 | Low | `import` 拒绝文案不给替代路径，`ct check` 复用时报「compile mode」 | [sh55-import-reject-message-not-actionable.md](selfhost/sh55-import-reject-message-not-actionable.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -1015,6 +1038,54 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 | DOC-53（Low） | 认可，已修 | `language-spec` §6.1 中英订正为「ct-ast 报 `duplicate trait/struct`；L0 / L2 仍取最先出现者」 |
 | DOC-54（Medium） | 认可三项文档缺口，已修；其余不采纳 | 教程 §7 中英改「`.h.ct` 或 `.m.ct`」；spec §4.10 中英加单元种类表 + import 搜索顺序 + 命名规则归属。不采纳 `ct lint` / build 期 basename 检查（编译器行为变更）；不新增 import 门禁（`check-ast.sh:1262` / `:1497` / `:631` 已覆盖） |
 
+## 第三方评估复核（2026-11-03，`v0.18.1` + `v0.19.1` 附录，锚点 `528d7c5` / `4176c636`）
+
+外部评估原文已完整入库：[evaluation-2026-11-03-v0181.md](../docs/history/reports/evaluation-2026-11-03-v0181/evaluation-2026-11-03-v0181.md)；
+逐项复核意见：[verdict.md](../docs/history/reports/evaluation-2026-11-03-v0181/verdict.md)。
+本轮在本机 HEAD `c27da3d`（`v0.19.1` + 1 commit）与已安装 `ct v0.19.1` 上复核，未改源码。
+
+### 认可的部分
+
+- **总体定位与风险排序**：ct 适合「可读 C 的代码生成器 + 核心逻辑层」，不适合承担 UI 与生态；
+- **关键数字**：`L1+L2` 10864 行、`ct-ast` 17100 行、`std` 7 模块 1072 行、锚点上 `issues` 121 条——全部吻合；
+- **既有缺陷**：SH-14（vtable `static`）、TEST-7（无逐字节 oracle）、SH-46（同名方法取首个）、
+  SH-47（字段容量文案）、`tutorial` 标 `v0.16.0` ——均复现或已在台账；
+- **附录 C.4-1**：命名空间静态初始化器不重写被引用全局——独立复现，且升级为 High（SH-52）；
+- **附录 C.2**：`ct check` 列号、DOC-60 / DOC-62 已在 `v0.19.1` 修复——与本次核对一致。
+
+### 修正 / 不认可的部分
+
+1. **§4.1「impl 写错参数个数不会在 ct 阶段报错」过时**：`ct compile` 仍只 warning（exit 0），但
+   `v0.19.0` 起 `ct check` 对 arity / 实参 / 歧义 / impl 漂移报 `error:` 并 exit 1。附录 C 写「§4.1 不变」
+   不准确；准确说法是「默认编译路径不检查，`ct check` 做四类受限检查」。
+2. **§4.4「enum 常量 / 宏对象都不可见」过宽**：实测头文件 `enum { kFoo = 7 }` 在表达式里报
+   `use of an undeclared variable`，但 `#define K_BAR 9` **能**透传（大写宏被放行）。已立 DOC-64
+   记录 enum 侧的真实边界与 shim 写法。
+3. **「11 道硬门禁」是版本快照，不是现状**：`v0.18.1` 为 11 道，`v0.19.0` 起为 12 道；引用时应带版本。
+4. **「约 15 条待修」偏低**：锚点 `528d7c5` 上 `状态 | 待修` 为 **20** 条（`状态 | 待*` 共 21）。
+5. **「三平台 CI」措辞不准**：实为两个操作系统、三种编译器配置
+   （`ubuntu-gcc` / `macos-clang` / `ubuntu-clang-smoke`）。
+6. **评分 6.4 / 7.8 / 4.2** 仅作参考：风险排序可采信，加权分数是主观标度，不宜当作事实数据引用。
+
+### 本轮新增 4 条
+
+| ID | 严重度 | 内容 |
+| --- | --- | --- |
+| SH-52 | **High** | 命名空间静态初始化器不重写被引用全局，`ct compile` 返回 0 但生成的 C 编译失败 |
+| DOC-64 | Medium | C 头 enum 常量在表达式里不可见，文档未写明（并给出 shim 写法） |
+| DOC-63 | Low | `tutorial` / `memory-guide` 的「适用版本」仍写 `v0.16.0` |
+| SH-53 | Low | 容量触顶诊断不点名上限值与单元（SH-47 的同类扩展） |
+
+### 不重复立案
+
+SH-14（跨单元装箱，High，待修）、TEST-7（无逐字节 oracle，High，待修）、SH-46（已决策）、
+SH-47（已修，作为 SH-53 的文案范式）、STD-1（std 应用层缺口，待决策）。
+
+### 未验证范围
+
+自举 6.44s 未复跑；`ct-radio` 的行为 harness 属外部项目；`ct-pkg/hal` / `hal-posix` / `clib`
+不在本仓库；探针只覆盖 macOS + Apple clang。
+
 ## 第三方评估复核（2026-11-03，`v0.19.0`，锚点 `4b9946b`）
 
 被复核对象是仓库外第三方报告 `ct-markdown/docs/ct-v0.19.0-re-evaluation.md`。本轮在 HEAD `4b9946b`
@@ -1071,5 +1142,57 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 - 未做：真实 GCC 编译（本机无真 GCC）；Windows / Linux 宿主；`ct check` 之外的 20.x 能力；
 - 探针路径（不随仓库分发）：`/tmp/ct-verify`（源码副本）、`/tmp/ctv`（夹具）、
   `ct-ast` 二进制取自门禁构建目录。
+
+## 单文件模式 import 边界复核（2026-11-06，锚点 `c27da3d`）
+
+**问题**：`ct compile`（含 `ct check`）对任何带 `import` 的源文件报
+`'import' is not supported in compile mode`，与 `.ct` / `.h.ct` 无关；`ct build` 则支持
+`-I` 搜索根与 `.h.ct` 附加式命名。本轮只做只读复核并立项，不改源码、测试与 golden。
+
+### 复现（自建 `ct-ast`，l0 → l1 → l2 → ct-ast）
+
+```bash
+$ ct compile test/modules/inc/main.ct -o /tmp/x.c
+test/modules/inc/main.ct:1:1: error: 'import' is not supported in compile mode   # rc=1
+$ ct check test/modules/inc/main.ct
+test/modules/inc/main.ct:1:1: error: 'import' is not supported in compile mode   # rc=1
+$ ct compile /tmp/m.h.ct -I test/modules/inc/extra -o /tmp/m.c
+/tmp/m.h.ct:1:1: error: 'import' is not supported in compile mode                # rc=1
+$ ct build -I test/modules/inc/extra test/modules/inc/main.ct -o /tmp/a.out
+# 正常解析，产出 main.c / util.c / util.h
+```
+
+### 判断：有意的模式边界，不补 import 解析
+
+- 守卫是显式的、先于后缀分支：[Parser.h.ct:811-815](../selfhost/ct-ast/frontend/parse/Parser.h.ct#L811-L815)
+  只读 `*self->build_mode`；该标志在 compile/check 路径固定为 0
+  （[Driver.h.ct:108](../selfhost/ct-ast/tool/driver/Driver.h.ct#L108)），仅在 `build_main` 置 1。
+- 守卫与 build 模式由同一提交引入：`156a9a4`（2026-10-18，`feat(ast): add build mode and modules (9.5a)`），
+  不是 Phase 2 的遗留缺口。
+- 设计文档明确按 CLI 选择模式：[restore.md](../docs/history/design/restore.md#L50-L57)
+  把 compile 定义为「单文件 / `.c` 自包含」，并写「只有 `ct build` 进入多文件模式」；
+  [roadmap.md](../docs/roadmap.md#L265) 写明 Phase 0 不做 import；
+  [language-spec.md](../docs/language-spec.md#L544) 写「`ct compile` 不解析 import」。
+- 缺的三环都在 compile 路径：`-I` 被丢弃（[Driver.h.ct:193-199](../selfhost/ct-ast/tool/driver/Driver.h.ct#L193-L199)）、
+  没有 `load_unit` 导入闭包、没有 build 的 `.h` 映射
+  （compile 的头文件是 types-only 占位，[Emitter.h.ct:3157-3158](../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3157-L3158)）。
+  技术上可复用解析器，但输出契约会发生分叉：要么多 `.c` + 链接（即 build），要么多单元合并 TU
+  （`static` 重名、`#line`、vtable、shim、缓存都要重做）。收益是省一次 `ct build`，代价与漂移风险不划算。
+- 因此 **不为「compile 支持 import」立项**；只立三处真实缺陷/缺口：
+
+| ID | 严重度 | 状态 | 内容 |
+| --- | --- | --- | --- |
+| SH-54 | Medium | 已修（`f612b11`） | compile 模式静默丢弃 `-I`，`--help` 仍宣称可用 |
+| SH-55 | Low | 已修（`83f3776`） | `import` 拒绝文案不给替代路径；`ct check` 复用时自称 compile mode |
+| DOC-65 | Medium | 已修（`82fab61`） | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 |
+
+### 验证范围
+
+- 已做：完整自举链构建后的 compile / check / build / `-I` 探针；编译器守卫、CLI 解析与 help 文本静态核对；
+- 未做：本轮分析未改源码、测试或 golden；修复后的门禁结果与断言变更见三条各自的「处置」段；
+- 入库验证：`python3 test/docs/check-docs.py` 通过；
+- 测试现状：该报错原有两条逐字负例（[check-ast.sh:2341-2348](../selfhost/check-ast.sh#L2341-L2348)、
+  [check-semantics.sh:107-121](../selfhost/check-semantics.sh#L107-L121)），但没有 `.h.ct` 变体；
+  SH-54 / SH-55 的处置已补 compile / check 两个入口的 `-I` warning 负例。
 
 
