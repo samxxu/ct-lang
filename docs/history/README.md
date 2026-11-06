@@ -45,6 +45,7 @@
 | [review-2026-11-01/](reports/review-2026-11-01/review-2026-11-01.md) | `borrow` / `Handback` 实现审查（`v0.15.1`） |
 | [review-2026-11-02/](reports/review-2026-11-02/review-2026-11-02.md) | Phase 18 生态建设与 `v0.18.0` 收口审查 |
 | [review-2026-11-03/](reports/review-2026-11-03/review-2026-11-03.md) | Phase 19 受限语义检查与 `v0.19.0` 审查 |
+| [evaluation-2026-11-03-v0181/](reports/evaluation-2026-11-03-v0181/evaluation-2026-11-03-v0181.md) | 外部评估（`v0.18.1` + `v0.19.1` 附录）与复核意见 |
 | [ct-language-features/](reports/ct-language-features/ct-language-features.html) | 语言特性全景（自包含 HTML） |
 | [ctc-ct-analysis/](reports/ctc-ct-analysis/ctc-ct-analysis.html) | `ctc.c` 与 CT 线的对照分析（自包含 HTML） |
 | [selfhost-readiness/](reports/selfhost-readiness/selfhost-readiness.html) | 自举就绪总结（自包含 HTML） |
