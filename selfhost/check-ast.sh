@@ -2127,10 +2127,12 @@ else
 fi
 
 if "$work/ct-ast" -I /tmp test/ast/02_expr/prog.ct -o "$work/cli-i.c" \
-        >"$work/cli-i.out" 2>"$work/cli-i.err"; then
-    ok "compile accepts -I (no imports to resolve)"
+        >"$work/cli-i.out" 2>"$work/cli-i.err" \
+   && grep -Fq "ctc: warning: -I is ignored by compile mode; imports require 'ct build'" \
+        "$work/cli-i.err"; then
+    ok "compile accepts -I and says it is ignored (SH-54)"
 else
-    bad "compile -I" "$(cat "$work/cli-i.err")"
+    bad "compile -I" "exit/diagnostic: $(cat "$work/cli-i.err")"
 fi
 
 rm -rf "$work/cli-b"

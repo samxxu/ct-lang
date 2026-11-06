@@ -123,6 +123,18 @@ else
     bad "check: import guard" "exit $rc; $(cat "$work/import.err")"
 fi
 
+# SH-54: `-I` cannot affect a single-unit mode, so it is reported instead of
+# being dropped; the exit code is unchanged so scripts keep composing.
+"$work/ct-ast" check -I /tmp "$work/clean.ct" >"$work/ign.out" 2>"$work/ign.err"
+rc=$?
+if [ "$rc" -eq 0 ] \
+        && grep -Fq "ctc: warning: -I is ignored by check mode; imports require 'ct build'" \
+            "$work/ign.err"; then
+    ok "check: -I is reported as ignored and the exit code stays 0 (SH-54)"
+else
+    bad "check: -I warning" "exit $rc; $(cat "$work/ign.err")"
+fi
+
 cat > "$work/arity.ct" <<'EOF'
 int add(int a, int b) { return a + b; }
 int main(void) { return add(1); }

@@ -111,7 +111,7 @@ impl DriverOps for Driver {
         self->m->have_map = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: %s <input.ct> [-o <output.c>] [-I <dir>] [--line|--no-line]\n"
+                printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n"
                        "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s check <input.ct> [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
@@ -195,7 +195,14 @@ impl DriverOps for Driver {
                     fprintf(stderr, "ctc: -I needs an argument\n");
                     return 1;
                 }
-                i++;   /* accepted for CLI parity; compile mode resolves no imports */
+                /* Single-unit modes resolve no imports, so the flag cannot have
+                   an effect; say so rather than dropping it silently (SH-54).
+                   The exit code is unchanged: `-I` stays accepted for CLI
+                   parity with `build`. */
+                fprintf(stderr, "ctc: warning: -I is ignored by %s mode; "
+                                "imports require 'ct build'\n",
+                        self->m->check_mode ? "check" : "compile");
+                i++;
                 continue;
             }
             if (strcmp(argv[i], "--line") == 0) {
