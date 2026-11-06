@@ -88,13 +88,19 @@
   修复并回填「处置」段与状态行（SH-54 `f612b11`、SH-55 `83f3776`、DOC-65 `82fab61`）。
   「compile 不支持 import」本身经复核判定为**有意边界，不补齐解析器**，理由与证据见文末
   「单文件模式 import 边界复核（2026-11-06）」。
+- 2026-11-06 std 模块文档复核（`v0.19.1`）新增 **4 条**（**SH-56** / **SH-57** Medium、
+  **SH-58** / **SH-59** Info）：都是「编译退出码正常但语义与源码不符」或「形态成因」类——
+  映射方法（`.m.ct` 静态 trait / `map` 绑定）实参个数不校验、多余实参静默丢弃（SH-56）；
+  写在声明之后的 `import` 整条被丢弃（SH-57）；`.m.ct` 前导区禁 `#ct-raw`（SH-58，硬错误，
+  登记为 std 模块形态的成因）；早前报告的 `&f` 静默错译（SH-59，本轮两个探针**未复现**，待补
+  最小复现）。SH-56 / SH-57 由 std 教程写作期间的实测暴露，处理方式见各自文件。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
-<!-- gates:12 -->
-- **硬关卡计数随阶段演进（当前 12 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
-  `ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、`test/std/run.sh`、
+<!-- gates:11 -->
+- **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
+  `ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、
   `check-semantics`、`test/docs/check-docs.py`；构成以 [check-all.sh](../selfhost/check-all.sh) 的
-  `run_gate` 行为准。下文各**带日期的验证记录**里出现的旧关口数（六道 / 七道 / 八道 / 九道 / 十道）是该记录
-  当时的口径，非现状；现状以 `check-all.sh` 的「12 hard gates green」为准。本文件的现状计数由
+  `run_gate` 行为准。下文各**带日期的验证记录**里出现的旧关口数（六道 / 七道 / 八道 / 九道 / 十道 / 十二道）是该记录
+  当时的口径，非现状；现状以 `check-all.sh` 的「11 hard gates green」为准。本文件的现状计数由
   上方 `<!-- gates:N -->` 标记声明，`test/docs/check-docs.py` 只校验该标记（历史记录里的旧口径不参与）。
 
 ## 模块索引
@@ -260,6 +266,10 @@
 | SH-53 | Low | 容量触顶诊断不点名上限值与单元 | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
 | SH-54 | Medium | compile 模式静默丢弃 `-I`，`--help` 仍宣称可用 | [sh54-compile-include-flag-silently-ignored.md](selfhost/sh54-compile-include-flag-silently-ignored.md) |
 | SH-55 | Low | `import` 拒绝文案不给替代路径，`ct check` 复用时报「compile mode」 | [sh55-import-reject-message-not-actionable.md](selfhost/sh55-import-reject-message-not-actionable.md) |
+| SH-56 | Medium | 映射方法（`.m.ct` 静态 trait / `map`）不校验实参个数，多余实参静默丢弃 | [sh56-map-method-arity-unchecked.md](selfhost/sh56-map-method-arity-unchecked.md) |
+| SH-57 | Medium | 写在声明之后的 `import` 整条被静默丢弃，模块不存在也不报 | [sh57-import-after-decl-silently-dropped.md](selfhost/sh57-import-after-decl-silently-dropped.md) |
+| SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（硬错误） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
+| SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现，待补最小复现 | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -267,7 +277,7 @@
 | --- | --- | --- | --- |
 | PKG-1 | Medium | `hal-posix` 的 `now_ms` 在开机约 24.8 天后回绕为负，违反 `hal` 的单调契约 | [pkg-1-hal-posix-now-ms-overflow.md](packages/pkg-1-hal-posix-now-ms-overflow.md) |
 
-### `std/` —— 标准库
+### 标准库（ct-pkg 包 `std`）
 
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |

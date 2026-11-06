@@ -19,9 +19,9 @@
 
 **单元命名**：每个单元以它的主类型命名（`Parser.h.ct` ↔ `struct Parser`），一个单元一个主类型，附属记录类型可同文件；主类型过大可拆子对象单元（文件头注明所属主对象），入口 `main.ct` 例外。这条与其它命名约定同在 [AGENTS.md](../AGENTS.md) §3，并由 `check-ast.sh` 的 unit-name lint 校验。
 
-## 脚本（10 道硬门禁）
+## 脚本（11 道硬门禁）
 
-`check-all.sh` 是聚合入口，依次跑下面 10 道硬门禁，任一失败即整体非零：
+`check-all.sh` 是聚合入口，依次跑下面 11 道硬门禁，任一失败即整体非零：
 
 | # | 门禁 | 作用 |
 | --- | --- | --- |
@@ -34,7 +34,8 @@
 | 7 | `test/pkg/run.sh` | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify`（含比较器范围、显式索引、构建元数据） |
 | 8 | `check-ast.sh` | ct-ast 行为、语料等价、不动点、负例、缓存与诊断 |
 | 9 | `check-warnings.sh` | 全部生成 C 在 `-Wall -Wextra` 下零告警 |
-| 10 | `test/docs/check-docs.py` | 文档链接、版本标记、门禁条数与阶段状态（见 [docs/README.md](../docs/README.md)） |
+| 10 | `check-semantics.sh` | `ct check` 语义入口（D19-4：诊断按 error、不写产物） |
+| 11 | `test/docs/check-docs.py` | 文档链接、版本标记、门禁条数与阶段状态（见 [docs/README.md](../docs/README.md)） |
 
 规则：改动 `selfhost/**` 后必须跑 `bash selfhost/check-all.sh`；各层（L0 / L1 / L2 / ct-ast）的冻结
 约定与硬边界见 [AGENTS.md](../AGENTS.md) §2、§6。
@@ -114,9 +115,9 @@ type per unit, attached record types may share the file, and an object too large
 off sub-object units whose header names the owning object. `main.ct` is the entry, not a unit. The rule
 lives in [AGENTS.md](../AGENTS.md) §3 and is pinned by the unit-name lint in `check-ast.sh`.
 
-### Scripts (10 hard gates)
+### Scripts (11 hard gates)
 
-`check-all.sh` is the aggregate entry and runs the ten hard gates below in order; any failure fails the run:
+`check-all.sh` is the aggregate entry and runs the eleven hard gates below in order; any failure fails the run:
 
 | # | Gate | Duty |
 | --- | --- | --- |
@@ -129,7 +130,8 @@ lives in [AGENTS.md](../AGENTS.md) §3 and is pinned by the unit-name lint in `c
 | 7 | `test/pkg/run.sh` | the package manager `ct get` / `ct update` / `ct install` / `ct verify` (comparator ranges, the explicit index, build metadata) |
 | 8 | `check-ast.sh` | ct-ast behaviour, corpus equivalence, fixpoint, negatives, cache and diagnostics |
 | 9 | `check-warnings.sh` | every generated C compiles warning-free under `-Wall -Wextra` |
-| 10 | `test/docs/check-docs.py` | doc links, version markers, gate count and phase status (see [docs/README.md](../docs/README.md)) |
+| 10 | `check-semantics.sh` | the `ct check` semantic entry (D19-4: diagnostics as errors, no output written) |
+| 11 | `test/docs/check-docs.py` | doc links, version markers, gate count and phase status (see [docs/README.md](../docs/README.md)) |
 
 Rule: after touching `selfhost/**`, run `bash selfhost/check-all.sh`; the per-level (L0 / L1 / L2 /
 ct-ast) freeze conventions and hard boundaries live in [AGENTS.md](../AGENTS.md) §2 and §6.

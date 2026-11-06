@@ -44,7 +44,7 @@
 3. **版本标记**：`README.md` 与本文出现的 `vX.Y.Z` 必须是当前版本（取自 `selfhost/l0/ctc.c` 的 `CTC_VERSION`）。
    历史版本只出现在 [roadmap.md](roadmap.md) 的版本记录与 [history/](history/README.md)。
 4. **门禁条数**：`README.md`、本文与 [glossary.md](glossary.md) 写出的硬门禁条数必须等于
-   `selfhost/check-all.sh` 实际运行的条数（当前共 12 道硬门禁）。
+   `selfhost/check-all.sh` 实际运行的条数（当前共 11 道硬门禁）。
 5. **阶段状态**：`docs/design/phase*.md` 的状态行（完成 / 实施中 / 规划中）必须与 [roadmap.md](roadmap.md)
    的阶段表一致（✅ / 🟨 / ⬜）。
 
@@ -95,9 +95,9 @@ scripts), [../test/README.md](../test/README.md) (test layers) and
    `CTC_VERSION` in `selfhost/l0/ctc.c`). Historical versions appear only in [roadmap.md](roadmap.md)'s
    version record and under [history/](history/README.md).
 4. **Gate count**: the hard-gate count stated in `README.md`, this file and [glossary.md](glossary.md) must
-   equal the number of gates `selfhost/check-all.sh` actually runs (currently **12 hard gates**).
+   equal the number of gates `selfhost/check-all.sh` actually runs (currently **11 hard gates**).
 5. **Phase status**: the status line in `docs/design/phase*.md` (done / in progress / planned) must match the
    phase table in [roadmap.md](roadmap.md) (✅ / 🟨 / ⬜).
 
-The checker is [../test/docs/check-docs.py](../test/docs/check-docs.py), wired into `check-all.sh` as the 12th
+The checker is [../test/docs/check-docs.py](../test/docs/check-docs.py), wired into `check-all.sh` as the 11th
 hard gate.

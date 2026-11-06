@@ -5,8 +5,12 @@
 | 模块 | std |
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
-| 文件 | [std/str/Str.h.ct:20](../../std/str/Str.h.ct#L20)；[std/vec/Vec.h.ct:24](../../std/vec/Vec.h.ct#L24)；[std/map/Map.h.ct:4-11](../../std/map/Map.h.ct#L4-L11)；[std/utf8/Utf8.h.ct:20](../../std/utf8/Utf8.h.ct#L20)；[std/fs/Fs.h.ct:20](../../std/fs/Fs.h.ct#L20)；[std/README.md](../../std/README.md) |
+| 文件 | `std/str/String.m.ct`；`std/vec/Vec.h.ct`；`std/map/Map.h.ct`；`std/utf8/Utf8Ops.m.ct`；`std/fs/Fs.m.ct`；`std/README.md`（均为 ct-pkg 包 `std` 0.1.0 的包内路径） |
 | 状态 | 待决策（本轮维持不实现） |
+
+路径口径：下表与正文里的 `std/...` 行号按迁移前（`v0.19.0`）树内记录；std 现为 ct-pkg 包 `std` 0.1.0，
+包内布局同形但部分文件已改名（`Str.h.ct` → `String.m.ct`、`Utf8.h.ct` → `Utf8Ops.m.ct`、
+`Fs.h.ct` → `Fs.m.ct`）。`test/std/run.sh` 已随迁出删除，对应断言由包内 `tests/run.sh` 承担。
 
 ## 现象
 

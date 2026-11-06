@@ -62,13 +62,13 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 4. 仓库结构
 
 `selfhost/` 是自举链：`l0/`（C 种子）→ `l1/`（冻结）→ `l2/`（回归 oracle）→ `ct-ast/`（主线，提供 `ct` 安装入口）；
-`test/` 是测试与 golden；`docs/` 是文档；`std/` 是官方标准库（源码库，经显式 `-I` 导入）；`bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
+`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `std`（`ct get std` 获取，不随仓库发布）；`bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
 目录级说明见 [selfhost/README.md](selfhost/README.md)、[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
 
 ### 5. 文档与测试
 
 - 文档导航：[docs/README.md](docs/README.md)
-- 测试：`bash selfhost/check-all.sh` 跑 12 道硬门禁；分层地图见 [test/README.md](test/README.md)
+- 测试：`bash selfhost/check-all.sh` 跑 11 道硬门禁；分层地图见 [test/README.md](test/README.md)
 - 改动代码前先读 [AGENTS.md](AGENTS.md)
 
 ### 6. 许可
@@ -145,15 +145,16 @@ The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idio
 
 `selfhost/` is the bootstrap chain: `l0/` (the C seed) → `l1/` (frozen) → `l2/` (regression oracle) → `ct-ast/`
 (the mainline that provides the installed `ct`); `test/` holds tests and goldens; `docs/` holds documentation;
-`bindings/` holds declarative C-library bindings; `std/` holds the official standard library (a source
-library imported through an explicit `-I`); `issues/` is the review ledger; `AGENTS.md` is the change contract.
+`bindings/` holds declarative C-library bindings; the standard library is the separate ct-pkg package `std`
+(`ct get std`; it is no longer shipped with this repository); `issues/` is the review ledger; `AGENTS.md` is
+the change contract.
 Directory-level notes are in [selfhost/README.md](selfhost/README.md), [test/README.md](test/README.md) and
 [docs/architecture.md](docs/architecture.md).
 
 ### 5. Docs and tests
 
 - Documentation index: [docs/README.md](docs/README.md)
-- Tests: `bash selfhost/check-all.sh` runs 12 hard gates; the layer map is in [test/README.md](test/README.md)
+- Tests: `bash selfhost/check-all.sh` runs 11 hard gates; the layer map is in [test/README.md](test/README.md)
 - Read [AGENTS.md](AGENTS.md) before changing code
 
 ### 6. License

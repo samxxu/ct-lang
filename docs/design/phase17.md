@@ -224,13 +224,13 @@
 | 编号 | 议题 | 建议 | 状态 |
 | --- | --- | --- | --- |
 | **D17-1** | 阶段编号与版本 | 新开 **Phase 17 ↔ `v0.17.0`**；在 roadmap 说明 13–16 已被补丁占用 | ✅ 用户确认 |
-| **D17-2** | std 发现方式 | 显式 `-I`；`install.sh` 安装到 `$(dirname "$prefix")/share/ct/std` 并打印 `-I` 行；**不改**编译器默认搜索路径 | ✅ 用户确认 |
+| **D17-2** | std 发现方式 | 显式 `-I`；`install.sh` 安装到 `$(dirname "$prefix")/share/ct/std` 并打印 `-I` 行；**不改**编译器默认搜索路径 | ✅ 用户确认；**已被 std 迁出取代（2026-11-06）**：std 改为 ct-pkg 包 `std`，`install.sh` 不再拷贝，项目内用 `ct get std` + `ct install` 取 include root；「编译器无默认搜索路径」仍然成立 |
 | **D17-3** | raw 标记语法 | 行首 `#ct-raw` / `#ct-endraw`（走 `T_PP` 路径）；仅 ct-ast；`N_RAW_TEXT`；32 KiB/块上限；ct-ast 源码禁用 raw | ✅ 用户确认 |
 | **D17-4** | registry 形态 | git 托管的纯文本 index（`CT_INDEX` / `--index` 显式指定）；无 HTTP、无托管；新增 `ct update` / `ct verify`；范围只加比较器与空格 AND | ✅ 用户确认 |
 | **D17-5** | 文档分层目标 | `docs/README.md` + `test/docs/check-docs.py` 先行；`reports/` 与已完成阶段的 `design/` 移入 `docs/history/`；README 目标 **≤ 10K 字符**；`issues/` 与 `AGENTS.md` 留在原位 | ✅ 用户确认 |
 | **D17-6** | 消毒器 / fuzz 的门禁地位 | 不进 `check-all.sh`（保持本地时长），只做 CI nightly + 手动脚本；fuzz 固定 seed、确定性 | ✅ 用户确认 |
 | **D17-7** | 容器落位与形态 | 并入 17.2，新增 `std/map.h.ct`；单态类型为主（`MapStrInt` / `MapIntPtr`）+ 可选 `void *` 擦除接口；有界开放寻址；`*_clear` / `free_fn`，不用 `delete`；不做第三方 binding 与官方方言展开器 | ✅ 用户确认 |
-| **D17-8** | 标准库命名 | 顶层目录 **`std/`**、namespace `std::<mod>`、安装到 `$(dirname "$prefix")/share/ct/std`；`stdlib` 一词不再使用（用户：太啰嗦） | ✅ 用户确认（2026-11-02） |
+| **D17-8** | 标准库命名 | 顶层目录 **`std/`**、namespace `std::<mod>`、安装到 `$(dirname "$prefix")/share/ct/std`；`stdlib` 一词不再使用（用户：太啰嗦） | ✅ 用户确认（2026-11-02）；安装路径部分已被 std 迁出取代（2026-11-06） |
 | **D17-9** | `ct build` 默认形态 | **默认一步到位**：发射 C（默认 `.ctbuild/`，`--outdir` 可改）后调用 C 编译器（`$CC` / `--cc`，默认 `cc`）产出可执行文件；`--emit-c` 只发射；`--cflags` / `--ldflags` 透传；仓库内 94 处调用点全部改用 `--emit-c`；零子进程契约收窄为 `ct compile` / `ct build --emit-c` | ✅ 用户确认（2026-11-02） |
 
 ### 9. 风险

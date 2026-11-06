@@ -460,44 +460,120 @@ static int raw_helper(int n) { return n + 1; }
 
 ## 10. 标准库：`std`
 
-`std` 是随仓库发布的**源码库**，不在 `ct` 二进制里；导入要显式给 `-I`（没有默认搜索路径）：
+`std` 是独立的 **ct-pkg 包**（包名 `std`，namespace 仍是 `std::<mod>`），不随本仓库发布，也不在
+`ct` 二进制里；用 `ct get std` 拉进项目的 `vendor/`，再按 `ct install` 打印的 include root 构建
+（导入仍要显式给 `-I`，没有默认搜索路径）：
 
 ```sh
-ct build -I . main.ct -o main
+ct get std
+ct install                              # 打印 ct build -I vendor/std ...
+ct build -I vendor/std main.ct -o main
 ```
 
-单元是 `std/<mod>/<Mod>.h.ct`，namespace 固定为 `std::<mod>`；入口是 **`pub` 自由函数**，
-调用时写全限定名（跨单元的 trait 方法在生成的 C 里是 `static`，够不到）：
+namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是 C 已有类型的模块（`str` / `fs` /
+`utf8`）用 `<Trait>.m.ct` + 同基名 `<Trait>.shim.h` 的静态映射；CT 自有类型（`vec` / `map` /
+`arena` / `test`）在 `.h.ct` 里直接写 `pub trait` + `struct ... use Trait` + `impl`：
 
 ```ct
-import std::str::Str;
+import std::str::String;
 import std::test::Test;
 
 int main(void)
 {
     Test t;
+    Test *tp = &t;
     char buf[32];
 
-    std::test::init(&t);
-    std::test::check_eq_int(&t, std::str::len("ct"), 2, "len");
-    std::test::check_eq_int(&t, std::str::concat("a", "b", buf, 32), 0, "concat");
-    return std::test::report(&t);
+    tp->init();
+    tp->checkEqInt("ct".len(), 2, "len");          // 展开成 std_str_len("ct")
+    tp->checkEqInt("a".concat("b", buf, 32), 0, "concat");
+    return tp->report();
 }
 ```
 
-| 单元 | namespace | 入口 |
+下表路径相对包的 namespace 根（安装后是 `vendor/std/std/`）：
+
+| 单元 | namespace | 方法 |
 | --- | --- | --- |
-| `str` | `std::str` | `len` / `find` / `starts_with` / `copy` / `slice` / `concat` / `lower` / `upper` / `compare` |
-| `vec` | `std::vec` | `VecInt` / `VecStr` 的 `*_init` / `*_push` / `*_pop` / `*_at` / `*_free` |
-| `arena` | `std::arena` | `init` / `alloc` / `reset` / `free_all` |
-| `fs` | `std::fs` | `exists` / `read_file` / `write_file` / `list` |
-| `utf8` | `std::utf8` | `decode` / `encode` / `length` |
-| `test` | `std::test` | `init` / `check_true` / `check_eq_int` / `check_eq_str` / `report` |
-| `map` | `std::map` | `MapStrInt` / `MapIntPtr` 的 `*_init` / `*_put` / `*_get` / `*_clear` / `*_free` |
+| `std/str/String.m.ct` + `String.shim.h` | `std::str` | `len` / `find` / `findChar` / `startsWith` / `endsWith` / `copy` / `slice` / `concat` / `toLower` / `toUpper` / `compare` |
+| `std/fs/Fs.m.ct` + `Fs.shim.h` | `std::fs` | `exists` / `readFile` / `writeFile` / `list` |
+| `std/utf8/Utf8Ops.m.ct` + `Utf8Ops.shim.h` | `std::utf8` | `decode` / `codepointCount` / `encode` |
+| `std/vec/Vec.h.ct` | `std::vec` | `VecIntOps` / `VecStrOps`：`init` / `len` / `push` / `pop` / `at` / `free` |
+| `std/map/Map.h.ct` | `std::map` | `MapStrIntOps` / `MapIntPtrOps`：`init` / `put` / `get` / `len` / `clear` / `free` |
+| `std/arena/Arena.h.ct` | `std::arena` | `init` / `alloc` / `reset` / `freeAll` |
+| `std/test/Test.h.ct` | `std::test` | `init` / `checkTrue` / `checkEqInt` / `checkEqStr` / `report` |
+
+容器、arena、test 走原生 OO：每个 struct 带 `use ...Ops`，方法经 vtable 分派。库里统一写
+`p->method()`（栈上值和堆对象都成立）；声明出来的值也接受 `v.method()`，编译器会在声明处补上
+vptr 并传 `&v`，但 `malloc` 出来的对象在赋入初始化过的值之前不能直接调方法（vptr 是垃圾，实测
+段错误），所以下面一律先有值再取地址：
+
+```ct
+VecInt v;
+VecInt *p = &v;
+p->init();
+p->push(1);
+int n = p->len();
+
+MapStrInt m;
+MapStrInt *mp = &m;
+mp->init(8);
+mp->put("k", 1);
+
+Arena a;
+Arena *ap = &a;
+ap->init(32);
+
+Test t;
+Test *tp = &t;
+tp->checkEqInt(1, 1, "ok");
+```
+
+`str` / `fs` / `utf8` 的接收者是 `char *`，用 `.`；`utf8` 的 `encode` 接收者是输出缓冲区：
+
+```ct
+char *path = "a.txt";
+path.exists();
+path.readFile(buf, 64);
+
+char *s = "héllo";
+int cps = s.codepointCount();    // 码点；s.len() 数的是字节
+buf.encode(233, 16);
+```
+
+几个必须记住的点：
+
+- **`toLower()` / `toUpper()` 是原地修改**，返回状态码而不是新字符串，而类型键会丢掉 `const`：
+  `"abc".toLower()` 能编译通过，然后写只读内存。不要对字符串字面量或 `const char *` 调用，
+  编译器不会拦。
+- **`String.len()` 数字节，`Utf8Ops.codepointCount()` 数码点**：`"é"` 是 `len() == 2`、
+  `codepointCount() == 1`，两个名字不能互换。
+- **原生 OO 的 `use` 会给结构体追加 vptr**：`sizeof` +8，该成员出现在导出头里（`Vec.h` 里
+  能看到 `__vecintops_vptr`）；文件内顺序必须是 `trait → struct(use) → impl`；裸 `malloc`
+  出来的对象不能直接调方法（vptr 是垃圾，实测段错误 exit 139），先声明值再用。
+- **`use` 结构体的方法不能被内联**：`at()` / `len()` 这种访问器直接调用在 `-O2` 下会被折叠成 0，
+  走 vtable 固定约 1 ns/次；机制本身的间接调用开销 ≈0，失去的只是内联。
+- **`char *` 上的方法名全局共享**：两个可见 trait 声明同名方法，调用点报
+  `ambiguous type-host map for method 'x' on type 'char *'`，新增前先 grep。
+- **header-only shim 的实现按消费方复制一份**（`String.shim.h` 约 190 行 / 5.5K），断点要下在
+  消费者里；`.m.ct` 的 prologue 只允许 `#include` / `#define`，所以映射模块压不成单文件。
 
 三条约定：缓冲区不够返回 `-1` / `NULL`，绝不静默截断；**不依赖 `delete`**，每个资源类型都有显式
-`*_free` / `*_reset` / `*_clear`；`Map` 固定容量、满载拒绝新键，不自动 rehash。详见
-[../std/README.md](../std/README.md)。
+`free()` / `reset()` / `clear()`；`Map` 固定容量、满载拒绝新键，不自动 rehash。详见包内
+`std/README.md`（`ct get std` 后位于 `vendor/std/std/README.md`）。
+
+每个模块有一对文档：`README.md` 是参考（方法全集、参数、返回值、内存归属、本模块的坑），
+`tutorial.md` 是从零写到能用的过程。这里的总览不重复它们的内容；两文件都在包内同一目录
+（`vendor/std/std/<mod>/`）：
+
+| 模块 | 参考 | 教程 |
+| --- | --- | --- |
+| `std::str` / `std::vec` | `vendor/std/std/str/README.md` · `vendor/std/std/vec/README.md` | `vendor/std/std/str/tutorial.md` · `vendor/std/std/vec/tutorial.md` |
+| `std::fs` | `vendor/std/std/fs/README.md` | `vendor/std/std/fs/tutorial.md` |
+| `std::utf8` | `vendor/std/std/utf8/README.md` | `vendor/std/std/utf8/tutorial.md` |
+| `std::map` | `vendor/std/std/map/README.md` | `vendor/std/std/map/tutorial.md` |
+| `std::arena` | `vendor/std/std/arena/README.md` | `vendor/std/std/arena/tutorial.md` |
+| `std::test` | `vendor/std/std/test/README.md` | `vendor/std/std/test/tutorial.md` |
 
 ## 11. 命令行速查
 
@@ -1015,47 +1091,130 @@ are in [language-spec §4.41](language-spec.md#441-raw-passthrough-ct-rawphase-1
 
 ### 10. The standard library: `std`
 
-`std` is a **source library** shipped with the repository, not part of the `ct` binary; imports need
-an explicit `-I` (there is no default search path):
+`std` is the separate **ct-pkg package** `std` (the namespace stays `std::<mod>`): it is no longer
+shipped with this repository and is not part of the `ct` binary. Pull it into the project's `vendor/`
+with `ct get std`, then build with the include root `ct install` prints (imports still need an
+explicit `-I`; there is no default search path):
 
 ```sh
-ct build -I . main.ct -o main
+ct get std
+ct install                              # prints ct build -I vendor/std ...
+ct build -I vendor/std main.ct -o main
 ```
 
-A unit is `std/<mod>/<Mod>.h.ct` with the fixed namespace `std::<mod>`, and its entry points are
-**`pub` free functions** called by their full name (a cross-unit trait method is emitted `static` and
-is unreachable):
+The namespace is fixed at `std::<mod>`, and there is exactly one calling form: methods. Modules whose
+host already exists in C (`str` / `fs` / `utf8`) use a `<Trait>.m.ct` plus a same-base
+`<Trait>.shim.h`; CT-owned types (`vec` / `map` / `arena` / `test`) write `pub trait` +
+`struct ... use Trait` + `impl` in one `.h.ct`:
 
 ```ct
-import std::str::Str;
+import std::str::String;
 import std::test::Test;
 
 int main(void)
 {
     Test t;
+    Test *tp = &t;
     char buf[32];
 
-    std::test::init(&t);
-    std::test::check_eq_int(&t, std::str::len("ct"), 2, "len");
-    std::test::check_eq_int(&t, std::str::concat("a", "b", buf, 32), 0, "concat");
-    return std::test::report(&t);
+    tp->init();
+    tp->checkEqInt("ct".len(), 2, "len");          // expands to std_str_len("ct")
+    tp->checkEqInt("a".concat("b", buf, 32), 0, "concat");
+    return tp->report();
 }
 ```
 
-| Unit | namespace | Entry points |
+Paths below are relative to the package's namespace root (`vendor/std/std/` once installed):
+
+| Unit | namespace | Methods |
 | --- | --- | --- |
-| `str` | `std::str` | `len` / `find` / `starts_with` / `copy` / `slice` / `concat` / `lower` / `upper` / `compare` |
-| `vec` | `std::vec` | `VecInt` / `VecStr` with `*_init` / `*_push` / `*_pop` / `*_at` / `*_free` |
-| `arena` | `std::arena` | `init` / `alloc` / `reset` / `free_all` |
-| `fs` | `std::fs` | `exists` / `read_file` / `write_file` / `list` |
-| `utf8` | `std::utf8` | `decode` / `encode` / `length` |
-| `test` | `std::test` | `init` / `check_true` / `check_eq_int` / `check_eq_str` / `report` |
-| `map` | `std::map` | `MapStrInt` / `MapIntPtr` with `*_init` / `*_put` / `*_get` / `*_clear` / `*_free` |
+| `std/str/String.m.ct` + `String.shim.h` | `std::str` | `len` / `find` / `findChar` / `startsWith` / `endsWith` / `copy` / `slice` / `concat` / `toLower` / `toUpper` / `compare` |
+| `std/fs/Fs.m.ct` + `Fs.shim.h` | `std::fs` | `exists` / `readFile` / `writeFile` / `list` |
+| `std/utf8/Utf8Ops.m.ct` + `Utf8Ops.shim.h` | `std::utf8` | `decode` / `codepointCount` / `encode` |
+| `std/vec/Vec.h.ct` | `std::vec` | `VecIntOps` / `VecStrOps`: `init` / `len` / `push` / `pop` / `at` / `free` |
+| `std/map/Map.h.ct` | `std::map` | `MapStrIntOps` / `MapIntPtrOps`: `init` / `put` / `get` / `len` / `clear` / `free` |
+| `std/arena/Arena.h.ct` | `std::arena` | `init` / `alloc` / `reset` / `freeAll` |
+| `std/test/Test.h.ct` | `std::test` | `init` / `checkTrue` / `checkEqInt` / `checkEqStr` / `report` |
+
+Containers, the arena and `Test` are native OO: each struct carries `use ...Ops` and dispatch goes
+through the vtable. The library always spells calls `p->method()`, which works for a stack value and a
+heap object alike; a declared value also accepts `v.method()`, because the compiler appends the vptr
+to that declaration and passes `&v`. An object from `malloc` must not be dispatched through before an
+initialised value is assigned to it (its vptr is garbage; this segfaults), so the examples below take
+the address first:
+
+```ct
+VecInt v;
+VecInt *p = &v;
+p->init();
+p->push(1);
+int n = p->len();
+
+MapStrInt m;
+MapStrInt *mp = &m;
+mp->init(8);
+mp->put("k", 1);
+
+Arena a;
+Arena *ap = &a;
+ap->init(32);
+
+Test t;
+Test *tp = &t;
+tp->checkEqInt(1, 1, "ok");
+```
+
+`str` / `fs` / `utf8` take a `char *` receiver and use `.`; `utf8`'s `encode` receives the output
+buffer:
+
+```ct
+char *path = "a.txt";
+path.exists();
+path.readFile(buf, 64);
+
+char *s = "héllo";
+int cps = s.codepointCount();    // code points; s.len() counts bytes
+buf.encode(233, 16);
+```
+
+Things worth remembering:
+
+- **`toLower()` / `toUpper()` mutate in place** and return a status code, not a new string; the type
+  key drops `const`, so `"abc".toLower()` compiles and then writes read-only memory. Do not call
+  them on a literal or a `const char *` — the compiler will not stop you.
+- **`String.len()` counts bytes; `Utf8Ops.codepointCount()` counts code points**: `"é"` is
+  `len() == 2` and `codepointCount() == 1`, and the two names are not interchangeable.
+- **`use` appends a vptr to the struct**: `sizeof` grows by 8 and the member is published in the
+  exported header (`Vec.h` shows `__vecintops_vptr`); in-file order must be
+  `trait → struct(use) → impl`; a bare-`malloc`ed object must not be dispatched through (its vptr is
+  garbage — measured segfault, exit 139), so declare a value first.
+- **A method on a `use` struct cannot be inlined**: a tiny accessor such as `at()` / `len()` folds
+  away at `-O2` when called directly, but through the vtable costs the indirect jump (about 1 ns
+  here); the mechanism itself is free, inlining is what is lost.
+- **Method names on `char *` are globally shared**: two visible traits declaring the same name fail
+  the call site with `ambiguous type-host map for method 'x' on type 'char *'`, so grep first.
+- **A header-only shim is copied into every consumer** (`String.shim.h` is ~190 lines / 5.5K), so
+  set breakpoints in the consumer; and a `.m.ct` prologue allows only `#include` / `#define`, which
+  is why a mapping module cannot be a single file.
 
 Three rules: a buffer that is too small yields `-1` / `NULL`, never a silent truncation; there is
-**no `delete`**, every resource type has an explicit `*_free` / `*_reset` / `*_clear`; `Map` is
-fixed-capacity, refuses new keys when full and never rehashes. Details in
-[../std/README.md](../std/README.md).
+**no `delete`**, every resource type has an explicit `free()` / `reset()` / `clear()`; `Map` is
+fixed-capacity, refuses new keys when full and never rehashes. Details in the package's
+`std/README.md` (`vendor/std/std/README.md` after `ct get std`).
+
+Every module has a pair of documents: `README.md` is the reference (full method list, parameters,
+returns, memory ownership, that module's traps) and `tutorial.md` is the walk from an empty file to a
+working program. This overview does not repeat them; both files live in the package
+(`vendor/std/std/<mod>/`):
+
+| module | reference | tutorial |
+| --- | --- | --- |
+| `std::str` / `std::vec` | `vendor/std/std/str/README.md` · `vendor/std/std/vec/README.md` | `vendor/std/std/str/tutorial.md` · `vendor/std/std/vec/tutorial.md` |
+| `std::fs` | `vendor/std/std/fs/README.md` | `vendor/std/std/fs/tutorial.md` |
+| `std::utf8` | `vendor/std/std/utf8/README.md` | `vendor/std/std/utf8/tutorial.md` |
+| `std::map` | `vendor/std/std/map/README.md` | `vendor/std/std/map/tutorial.md` |
+| `std::arena` | `vendor/std/std/arena/README.md` | `vendor/std/std/arena/tutorial.md` |
+| `std::test` | `vendor/std/std/test/README.md` | `vendor/std/std/test/tutorial.md` |
 
 ### 11. CLI cheat sheet
 

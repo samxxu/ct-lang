@@ -19,9 +19,8 @@
 #                                                batches 13–40: probes, corpus equivalence,
 #                                                fixpoint, negatives, raw pass-through)
 #   9. selfhost/check-warnings.sh                generated C compiles warning-free (-Wall -Wextra)
-#  10. test/std/run.sh                           std layer (Phase 17.2: seven modules)
-#  11. selfhost/check-semantics.sh               semantic entry (Phase 19.4: `ct check`)
-#  12. test/docs/check-docs.py                   docs links, version, gate count and phase status
+#  10. selfhost/check-semantics.sh               semantic entry (Phase 19.4: `ct check`)
+#  11. test/docs/check-docs.py                   docs links, version, gate count and phase status
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning
@@ -82,9 +81,8 @@ run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
 run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x–12.x + batches 13–39)" bash selfhost/check-ast.sh
 run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warnings.sh
-run_gate "10) std layer (Phase 17.2)" bash test/std/run.sh
-run_gate "11) semantic entry (Phase 19.4)" bash selfhost/check-semantics.sh
-run_gate "12) docs (links, version, gate count, phase status)" python3 test/docs/check-docs.py
+run_gate "10) semantic entry (Phase 19.4)" bash selfhost/check-semantics.sh
+run_gate "11) docs (links, version, gate count, phase status)" python3 test/docs/check-docs.py
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then
