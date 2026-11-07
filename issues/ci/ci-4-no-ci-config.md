@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | 仓库根（无 `.github/`、无 `Makefile` / `justfile` / `.gitlab-ci.yml`） |
-| 状态 | 待修 |
+| 状态 | 已修（2026-11-02，commit `810e0fc` + `bc1fd52`） |
 
 ## 现象
 
@@ -52,3 +52,13 @@ CI 首次运行应九关全绿；故意引入一处小回归（本地实验）�
 ## 处理（2026-10-31）
 
 部分修复：新增 `Makefile` 的 `make check`（调用 `check-all.sh`，语义不变）。不加云端 workflow：仓库托管平台与凭据未定，且两条 BSD 探针在 Linux 需要跳过策略；先提供本地聚合入口。
+
+## 处置（2026-11-07 回填）
+
+已完成。GitHub Actions 于 2026-11-02 落地，「手工执行」的前提不再成立：
+
+- `810e0fc`：`ci.yml`（`ubuntu-gcc` / `macos-clang` 串行跑 `bash selfhost/check-all.sh`，
+  `ubuntu-clang-smoke` 跑 L0 / `check-ast` / `check-warnings`）与 `nightly.yml`；
+- `bc1fd52`：`packages.yml`，覆盖包门禁。
+
+`make check` 保留为本地聚合入口，与 CI 并存。

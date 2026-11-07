@@ -6,7 +6,7 @@
 | 严重度 | Info |
 | 锚点 | `v0.19.1`（2026-11-06） |
 | 文件 | [frontend/parse/Parser.h.ct:790-796](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L790-L796) |
-| 状态 | 保持（有意限制）；文案可改进 |
+| 状态 | 已关闭（有意限制；文案已改进，commit `64f27f3`） |
 
 ## 现象
 
@@ -15,7 +15,7 @@
 
 ```text
 $ ct build -I . --emit-c use_thing.ct -o out
-./probe/Thing.m.ct:1:1: error: a .m.ct unit allows only #include and #define in its prologue
+./probe/Thing.m.ct:1:1: error: a .m.ct unit allows only #include and #define in its prologue; put the C implementation in <base>.shim.h
 ctc: 1 error(s) generated
 ```
 
@@ -53,3 +53,14 @@ map trait Thing for type char * {
 
 保持硬错误。可选改进：报文补一句替代路径（`put the implementation in Thing.shim.h`），
 与 SH-55 的「拒绝文案要给替代路径」同一原则。
+
+## 处置（2026-11-07，评审建议关闭）
+
+关闭，行为不变：`.m.ct` 前导区禁 `#ct-raw` 是**有意限制**（std 的「`.m.ct` + `.shim.h`」形态成因），
+不是待修缺陷。评审建议的「报文给出替代路径」已由 `64f27f3` 落地：
+
+```text
+error: a .m.ct unit allows only #include and #define in its prologue; put the C implementation in <base>.shim.h
+```
+
+`check-ast.sh` 的负例断言同步收紧为整句。

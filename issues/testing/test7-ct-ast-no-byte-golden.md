@@ -6,7 +6,7 @@
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`）；基线 `check-all: OK (9 hard gates green)` |
 | 文件 | [selfhost/check-ast.sh](../../selfhost/check-ast.sh)、[test/cases](../../test/cases)、[test/ast](../../test/ast) |
-| 状态 | 待修 |
+| 状态 | 不采纳（已关闭，2026-10-31） |
 
 ## 现象
 
@@ -62,3 +62,5 @@ $ grep -n "diff " selfhost/check-ast.sh
 ## 处理（2026-10-31）
 
 不采纳完整方案。D34 已把 ct-ast 的判据定为「退出码 + 零告警构建 + 运行输出」；现有三层字节校验覆盖了绝大部分风险：`test/cases` 的 L0/L1/L2 逐字节 golden、ct-ast 自编不动点（对约 1.8 万行产物逐字节比对）、L0 种子关（ct-ast 编出的 C 编译器复现 25 个 golden）。为 27 节各建逐字节 golden 会冻结发射排版，每次改进都要重生成，维护成本高于残余风险；将来若出现「改写错但运行对」的回归，再针对那一节加 golden。
+
+状态行于 2026-11-07 回填为「不采纳」，条目关闭，文件保留。

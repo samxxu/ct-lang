@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | `v0.19.1`（2026-11-06） |
 | 文件 | [frontend/parse/Expr.h.ct:1562-1586](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1562-L1586) |
-| 状态 | 待修 |
+| 状态 | 已修（2026-11-07，commit `aae6c33` + `686211a`） |
 
 ## 现象
 
@@ -77,3 +77,11 @@ int main(void) {
 
 同时补一条回归：`ast` fixture 覆盖「静态映射多一个实参」，并断言 compile 侧输出（或至少
 `--emit-c` 里不出现被丢弃的实参）。
+
+## 处置（2026-11-07）
+
+已修：`.m.ct` 的静态 trait / `map` 绑定不再走「实参个数未知」的豁免分支，调用点按 trait 声明校验实参个数。
+
+- `aae6c33`：类型宿主映射（`map trait … for type char *`）调用校验实参个数；
+- `686211a`：限定调用 `Trait::method(recv, …)` 同样校验；
+- 回归：`test/modules/p20_type_host_arity`（`ok` / `few` / `more`）与 `test/modules/p20_qual_arity`。

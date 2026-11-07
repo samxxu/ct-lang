@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | `v0.19.1`（2026-11-06） |
 | 文件 | [frontend/module/Module.h.ct:239-266](../../selfhost/ct-ast/frontend/module/Module.h.ct#L239-L266)（`scan_imports`） |
-| 状态 | 待修 |
+| 状态 | 已修（2026-11-07，commit `0fd74c0`） |
 
 ## 现象
 
@@ -79,3 +79,8 @@ importlate2.ct:7:1: error: no method 'len' for type 'char *'
 - 或正文解析阶段也接受 `import`，与前置等价（代价是「前导区」这条规则消失，需要同步 spec §4.10）。
 
 补回归：`ast` fixture 一条「后置 import + 不存在的模块」，断言构建失败并给出与位置相关的报文。
+
+## 处置（2026-11-07）
+
+已修：正文中出现在声明之后的 `import` 在解析阶段直接报错，不再被静默丢弃。
+负例：`test/ast/errors/late_import_after_fn.ct`、`test/ast/errors/late_import_after_global.ct`。

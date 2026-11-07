@@ -172,7 +172,7 @@
 | DOC-61 | Low | roadmap 英文表 Phase 18 仍 `in progress`，中文表已完成 | [doc61-roadmap-phase18-english.md](docs/doc61-roadmap-phase18-english.md) |
 | DOC-62 | Medium | README / 教程未说明 `ct check` 拒绝 `import` | [doc62-check-import-undocumented.md](docs/doc62-check-import-undocumented.md) |
 | DOC-63 | Low | 教程与内存指南的「适用版本」仍写 `v0.16.0` | [doc63-tutorial-version-stale.md](docs/doc63-tutorial-version-stale.md) |
-| DOC-64 | Medium | C 头文件的 enum 常量在表达式里不可见，但文档没有写明 | [doc64-header-enum-constants.md](docs/doc64-header-enum-constants.md) |
+| DOC-64 | Medium | C 头文件的 enum 常量在表达式里不可见，但文档没有写明（已修，`a1c523a`） | [doc64-header-enum-constants.md](docs/doc64-header-enum-constants.md) |
 | DOC-65 | Medium | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 | [doc65-compile-import-boundary-undocumented.md](docs/doc65-compile-import-boundary-undocumented.md) |
 
 ### `testing/` —— 测试覆盖度
@@ -185,7 +185,7 @@
 | TEST-4 | Low | Phase 7 的 `ct` 身份只测了一半（`ct build` / `-h` / `ctc compile` 未测） | [phase7-ct-identity-coverage.md](testing/phase7-ct-identity-coverage.md) |
 | TEST-5 | Medium | L2 驱动的错误分支仍无负例（10+ 个站点） | [l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) |
 | TEST-6 | Medium | `--emit-map <file>` 成功路径没有用例 | [emit-map-file-path-untested.md](testing/emit-map-file-path-untested.md) |
-| TEST-7 | **High** | ct-ast 的生成 C 无逐字节 oracle；§4.12–4.38 共 27 节只有行为探针 | [test7-ct-ast-no-byte-golden.md](testing/test7-ct-ast-no-byte-golden.md) |
+| TEST-7 | **High** | ct-ast 的生成 C 无逐字节 oracle；§4.12–4.38 共 27 节只有行为探针（不采纳，已关闭 2026-10-31） | [test7-ct-ast-no-byte-golden.md](testing/test7-ct-ast-no-byte-golden.md) |
 | TEST-8 | Medium | 12 个负例只断言「有位置」，消息文本可静默漂移 | [test8-negative-messages-not-pinned.md](testing/test8-negative-messages-not-pinned.md) |
 | TEST-9 | Medium | 绝大多数容量上限可达但无用例（仅 MAX_MAPS / MAX_ERRORS 有夹具） | [test9-cap-limits-untested.md](testing/test9-cap-limits-untested.md) |
 | TEST-10 | Medium | build 模式的 CLI 错误分支几乎未测 | [test10-build-cli-errors-untested.md](testing/test10-build-cli-errors-untested.md) |
@@ -203,7 +203,7 @@
 | CI-1 | High | `./test/run.sh` 完全不覆盖 CT 线（L1/L2 ≈8k 行） | [run-sh-misses-ct-line.md](ci/run-sh-misses-ct-line.md) |
 | CI-2 | High | 无聚合入口 / 无 CI：不存在一条命令能跑全部门禁 | [no-aggregate-gate-entry.md](ci/no-aggregate-gate-entry.md) |
 | CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
-| CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行 | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
+| CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行（已修 2026-11-02，`810e0fc` + `bc1fd52`） | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
 | CI-5 | Low | `packages.yml` 的 push / PR 路径过滤不覆盖 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**` | [ci-5-packages-workflow-path-filters.md](ci/ci-5-packages-workflow-path-filters.md) |
 | CI-6 | Low | CI 两个 job 名仍写 `nine hard gates`（实际 12 道） | [ci-6-gate-label-nine.md](ci/ci-6-gate-label-nine.md) |
 | CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用 | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
@@ -234,7 +234,7 @@
 | SH-21 | Medium | 函数指针不能指向 C 库函数，只能指向 CT 声明的函数或 ALL_CAPS 宏 | [ct-ast-fnptr-cannot-name-libfn.md](selfhost/ct-ast-fnptr-cannot-name-libfn.md) |
 | SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
 | SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 | [ct-ast-identifier-truncation.md](selfhost/ct-ast-identifier-truncation.md) |
-| SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉 | [cli-parser-duplication.md](selfhost/cli-parser-duplication.md) |
+| SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉（不采纳，已关闭 2026-10-31） | [cli-parser-duplication.md](selfhost/cli-parser-duplication.md) |
 | SH-25 | **High** | 带 tag 的 `typedef` 别名漏拷 `dims`，数组字段生成编译不过的 C | [sh25-typedef-alias-drops-dims.md](selfhost/sh25-typedef-alias-drops-dims.md) |
 | SH-26 | Medium | `*p = v;` 的赋值路径读取未初始化的 `tt` | [sh26-assign-deref-uninit-type.md](selfhost/sh26-assign-deref-uninit-type.md) |
 | SH-27 | Medium | `struct_def_ahead` 不回滚行号状态，跨行前瞻后诊断行号永久偏移 | [sh27-struct-ahead-line-drift.md](selfhost/sh27-struct-ahead-line-drift.md) |
@@ -262,14 +262,14 @@
 | SH-49 | Low | `ct check` 早退块排在 `.m.ct` 守卫与输出路径解析之后，错误信息指向错误原因 | [sh49-check-entry-compile-guards.md](selfhost/sh49-check-entry-compile-guards.md) |
 | SH-50 | Medium | `ct check` 的语义诊断缺列号，与 `file:line:col: error:` 契约不符 | [sh50-check-diag-no-column.md](selfhost/sh50-check-diag-no-column.md) |
 | SH-51 | Info | `--cflags` / `--ldflags` 经 `system()` 原样执行，透传面大于参数面（待决策） | [sh51-build-flags-command-surface.md](selfhost/sh51-build-flags-command-surface.md) |
-| SH-52 | **High** | 命名空间静态初始化器不重写被引用全局的名字，生成的 C 无法编译 | [sh52-namespace-static-initializer.md](selfhost/sh52-namespace-static-initializer.md) |
+| SH-52 | **High** | 命名空间静态初始化器不重写被引用全局的名字，生成的 C 无法编译（已修，`2e3fe4a`） | [sh52-namespace-static-initializer.md](selfhost/sh52-namespace-static-initializer.md) |
 | SH-53 | Low | 容量触顶诊断不点名上限值与单元 | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
 | SH-54 | Medium | compile 模式静默丢弃 `-I`，`--help` 仍宣称可用 | [sh54-compile-include-flag-silently-ignored.md](selfhost/sh54-compile-include-flag-silently-ignored.md) |
 | SH-55 | Low | `import` 拒绝文案不给替代路径，`ct check` 复用时报「compile mode」 | [sh55-import-reject-message-not-actionable.md](selfhost/sh55-import-reject-message-not-actionable.md) |
-| SH-56 | Medium | 映射方法（`.m.ct` 静态 trait / `map`）不校验实参个数，多余实参静默丢弃 | [sh56-map-method-arity-unchecked.md](selfhost/sh56-map-method-arity-unchecked.md) |
-| SH-57 | Medium | 写在声明之后的 `import` 整条被静默丢弃，模块不存在也不报 | [sh57-import-after-decl-silently-dropped.md](selfhost/sh57-import-after-decl-silently-dropped.md) |
-| SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（硬错误） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
-| SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现，待补最小复现 | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
+| SH-56 | Medium | 映射方法（`.m.ct` 静态 trait / `map`）不校验实参个数，多余实参静默丢弃（已修，`aae6c33` + `686211a`） | [sh56-map-method-arity-unchecked.md](selfhost/sh56-map-method-arity-unchecked.md) |
+| SH-57 | Medium | 写在声明之后的 `import` 整条被静默丢弃，模块不存在也不报（已修，`0fd74c0`） | [sh57-import-after-decl-silently-dropped.md](selfhost/sh57-import-after-decl-silently-dropped.md) |
+| SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（已关闭：有意限制；文案已改进 `64f27f3`） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
+| SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -1204,5 +1204,32 @@ $ ct build -I test/modules/inc/extra test/modules/inc/main.ct -o /tmp/a.out
 - 测试现状：该报错原有两条逐字负例（[check-ast.sh:2341-2348](../selfhost/check-ast.sh#L2341-L2348)、
   [check-semantics.sh:107-121](../selfhost/check-semantics.sh#L107-L121)），但没有 `.h.ct` 变体；
   SH-54 / SH-55 的处置已补 compile / check 两个入口的 `-I` warning 负例。
+
+## 台账回填（2026-11-07）
+
+本轮只改 `issues/`（不动代码）：把已落地的修复与评审结论回填到各 issue 的状态行与本文件索引。
+
+| ID | 原状态 | 现状态 | 依据 |
+| --- | --- | --- | --- |
+| SH-52 | 待处理 | 已修 | `2e3fe4a`（命名空间静态初始化器重写被引用全局名）+ `test/ast/68_ns_static_init` |
+| SH-56 | 待修 | 已修 | `aae6c33`（类型宿主映射 arity）+ `686211a`（限定调用 arity） |
+| SH-57 | 待修 | 已修 | `0fd74c0`（声明之后的 `import` 直接报错） |
+| CI-4 | 部分处置 | 已修 | `810e0fc`（`ci.yml` / `nightly.yml`）+ `bc1fd52`（`packages.yml`） |
+| TEST-7 | 待修 | 不采纳（已关闭） | 2026-10-31 结论：D34 判据为行为，逐字节 golden 的维护成本高于残余风险 |
+| SH-24 | 待决策 | 不采纳（已关闭） | 2026-10-31 结论：Info 级设计观察，合并解析器属结构性改动 |
+| SH-58 | 保持（有意限制） | 已关闭 | 硬错误为有意边界；替代路径文案由 `64f27f3` 落地，行为不变 |
+| SH-59 | 待复现 | 已关闭（不采纳） | `v0.19.1` 两个探针均生成正确的 `(&f)`，无最小复现可跟 |
+| DOC-64 | 待处理 | 已修 | `a1c523a`（spec / 教程补 enum 常量与 shim 写法） |
+
+同批落地的评审建议项（此前未单独立 issue 文件，在此登记）：
+
+| 项 | 处置 | 提交 |
+| --- | --- | --- |
+| M1 文档措辞：调用点 arity 口径改为「编译期 `warning:`、`ct check` 升 `error:`」 | 已修 | `3f62940` |
+| M2 `ct get` 也校验 `requires`，失败不改动 `ct.lock` | 已修 | `91fe52f` |
+| DOC-64 C 头 enum 常量文档 | 已修 | `a1c523a` |
+
+其余 `状态 | 待修` 条目（TEST-8 / TEST-10…12、SH-53、DOC-27、CI-3、CI-7 与 SH-9 系列的 Batch 2 项）
+本轮复核后维持原状：没有对应修复提交，或仍按各自的「不采纳 / 待决策」结论保留。
 
 

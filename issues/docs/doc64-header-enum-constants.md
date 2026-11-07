@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [docs/language-spec.md:1191](../../docs/language-spec.md#L1191)（只写「不展开 `#include`」）；[L1193-1200](../../docs/language-spec.md#L1193-L1200)（大写宏的放行规则） |
-| 状态 | 待处理 |
+| 状态 | 已修（2026-11-07，commit `a1c523a`） |
 
 ## 现象
 
@@ -68,3 +68,8 @@ Medium：不是编译器缺陷，而是**未文档化的必然边界**。每个�
 - 文档新增段落覆盖「enum 常量」「大写宏」「shim 写法」三点；
 - 示例可被 `ct build` 编译通过；
 - `python3 test/docs/check-docs.py` 通过。
+
+## 处置（2026-11-07）
+
+已修：`docs/language-spec.md` 补「外部 C 符号的识别范围」——头文件里的 `enum` 常量在表达式里不可见、
+大写 `#define` 可透传，并给出 shim 写法；`docs/tutorial.md` 同步。文档门禁通过。

@@ -6,7 +6,7 @@
 | 严重度 | **High** |
 | 锚点 | commit `4176c63`（`v0.19.1`，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [Emitter.h.ct:1742-1744](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1742-L1744)（初始化器走 `emit_expr`）；[L1785-1790](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1785-L1790)（声明名才加前缀） |
-| 状态 | 待处理 |
+| 状态 | 已修（2026-11-07，commit `2e3fe4a`） |
 
 ## 现象
 
@@ -65,3 +65,11 @@ ns.c:14: ... error: use of undeclared identifier 'k_foo'
 - 上述探针的生成 C 含 `&ns_k_foo`，`cc -std=c99 -c` 成功；
 - `bash selfhost/check-ast.sh` 与新正例全绿；
 - `bash selfhost/check-all.sh` 仍为 `12 hard gates green`。
+
+## 处置（2026-11-07）
+
+已修：全局初始化器里引用的**本单元**全局名，现在按声明处的同一规则套用命名空间前缀，
+`&k_foo` 生成 `&ns_k_foo`；结构体字段、数组与嵌套初始化器同样覆盖。
+
+- 代码：`frontend/type/TypeCheck.h.ct`（初始化器全局名解析与重写）；
+- 回归：`test/ast/68_ns_static_init/`（`prog.ct` + `prog.expected.out`）。

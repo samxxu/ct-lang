@@ -6,7 +6,7 @@
 | 严重度 | Info |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 站点 | [Driver.h.ct:81-160](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L81-L160)（compile 的 `run`）与 [Module.h.ct:574-720](../../selfhost/ct-ast/frontend/module/Module.h.ct#L574-L720)（build 的 `build_main`） |
-| 状态 | 待决策 |
+| 状态 | 不采纳（已关闭，2026-10-31） |
 
 ## 现象
 
@@ -56,3 +56,5 @@ $ sed -n '139,146p' selfhost/ct-ast/tool/driver/Driver.h.ct
 ## 处理（2026-10-31）
 
 不采纳重构：Info 级设计观察，两种行为都能工作；合并两套解析器要同时改 `Driver.h.ct` 与 `Module.h.ct`，属于结构性改动，违背最小改动。`-I` 的差异已在 README 按模式写清（DOC-25）。
+
+状态行于 2026-11-07 回填为「不采纳」，条目关闭，两套解析器维持并存。
