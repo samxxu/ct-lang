@@ -1327,6 +1327,29 @@ elif grep -q "variable 'h' is exported by more than one namespace" "$work/mag.er
 else
     bad "ambig_global" "no ambiguity diagnostic: $(cat "$work/mag.err")"
 fi
+# M4: the same ambiguity inside a braced static initialiser, whose text is
+# rewritten by name. It used to be emitted verbatim for `cc` to reject.
+if "$work/ct-ast" build --emit-c test/modules/ambig_global/main_init.ct -o "$work/mod-bad" \
+        >"$work/magi.out" 2>"$work/magi.err"; then
+    bad "ambig_global_init" "expected a non-zero exit"
+elif grep -qF "global 'h' is declared by more than one import and cannot be named in a static initializer" \
+        "$work/magi.err"; then
+    ok "ambig_global_init (an ambiguous global is diagnosed in a static initialiser)"
+else
+    bad "ambig_global_init" "no ambiguity diagnostic: $(cat "$work/magi.err")"
+fi
+
+# M4: two namespaces export `size`; a static initialiser cannot pick a C
+# spelling, so the ambiguity is a diagnostic rather than a silent choice.
+if "$work/ct-ast" build --emit-c test/modules/ambig_func_init/main.ct -o "$work/mod-bad" \
+        >"$work/maf.out" 2>"$work/maf.err"; then
+    bad "ambig_func_init" "expected a non-zero exit"
+elif grep -qF "function 'size' is declared by more than one namespace and cannot be named in a static initializer" \
+        "$work/maf.err"; then
+    ok "ambig_func_init (an ambiguous function is diagnosed in a static initialiser)"
+else
+    bad "ambig_func_init" "no ambiguity diagnostic: $(cat "$work/maf.err")"
+fi
 
 # SH-18: an exported type in a namespace is reachable by its bare name, so a
 # consumer need not alias-import it. `Uart` becomes `struct hal_Uart` and

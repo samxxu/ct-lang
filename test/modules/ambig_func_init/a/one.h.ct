@@ -1,0 +1,7 @@
+/* M4: two namespaces export a function with the same bare name. A static
+   initialiser that names it has no single C spelling, so it must be a
+   diagnostic instead of a silent pick. */
+namespace a;
+
+pub int size(void);
+int size(void) { return 1; }

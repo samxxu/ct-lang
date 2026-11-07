@@ -1,0 +1,18 @@
+// 69 (M4): a static initialiser that names a namespace function must rewrite it
+// to the mangled C spelling, exactly as it does for a global (SH-52). Without
+// the rewrite `&twice` reaches `cc` while the declaration is `ns_twice`.
+#include <stdio.h>
+
+namespace ns;
+
+struct Hooks { int (*fn)(int); }
+
+pub int twice(int x);
+int twice(int x) { return 2 * x; }
+static Hooks g_hooks = { &twice };
+
+int main(void)
+{
+    printf("%d\n", g_hooks.fn(21));
+    return 0;
+}

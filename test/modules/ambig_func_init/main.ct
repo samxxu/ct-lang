@@ -1,0 +1,10 @@
+import a::one;
+import b::two;
+
+struct Hooks { int (*cb)(void); }
+static Hooks g_hooks = { &size };
+
+int main(void)
+{
+    return 0;
+}

@@ -1,0 +1,13 @@
+/* M4: the same two-way ambiguity, but inside a braced static initialiser, which
+   is copied as raw text and rewritten by name. It must be diagnosed here too,
+   not emitted verbatim for `cc` to reject later. */
+import a::one;
+import b::two;
+
+struct Box { int *p; }
+static Box g_box = { &h };
+
+int main(void)
+{
+    return 0;
+}

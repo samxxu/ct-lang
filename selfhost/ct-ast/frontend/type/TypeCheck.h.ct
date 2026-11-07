@@ -783,10 +783,11 @@ impl TypeOps for TypeCheck {
        globals and imported globals change. */
     int rewrite_init_names(const char *in, char *out, int cap)
     {
-        char cn[MAX_TEXT];
         char id[MAX_TEXT];
         char last[MAX_TEXT];
-        int i, n, w;
+        char fn_cn[MAX_TEXT];
+        char msg[MAX_TEXT];
+        int i, n, w, vi, fi, fn_hits, fn_bad;
         char c;
         (void)self;
 
@@ -848,10 +849,45 @@ impl TypeOps for TypeCheck {
                 snprintf(last, sizeof last, "%s", id);
                 continue;
             }
-            if (self->sym->var_cname(id, cn, sizeof cn) == 0
-                && strcmp(cn, id) != 0 && !self->sym->var_ambiguous(id)) {
-                snprintf(out + w, (size_t)(cap - w), "%s", cn);
-                w += (int)strlen(cn);
+            vi = self->sym->find_var(id);
+            /* M4: a bare name two imports spell differently has no single C
+               spelling, so emitting it verbatim only moves the failure to `cc`.
+               Diagnose it here instead. */
+            if (vi >= 0 && self->sym->vars[vi].ambiguous) {
+                snprintf(msg, sizeof msg,
+                         "global '%s' is declared by more than one import and"
+                         " cannot be named in a static initializer", id);
+                return self->fail(msg);
+            }
+            if (vi >= 0 && strcmp(self->sym->vars[vi].cname, id) != 0) {
+                snprintf(out + w, (size_t)(cap - w), "%s", self->sym->vars[vi].cname);
+                w += (int)strlen(self->sym->vars[vi].cname);
+                snprintf(last, sizeof last, "%s", id);
+                continue;
+            }
+            /* M4: a function used as a value (`&handler`) needs the mangling its
+               declaration gets. One C spelling replaces the name; two
+               namespaces exporting it is an ambiguity, not a silent pick. */
+            fn_hits = 0;
+            fn_bad = 0;
+            fn_cn[0] = 0;
+            for (fi = 0; fi < self->sym->nfunc; fi++) {
+                if (strcmp(self->sym->funcs[fi].name, id) != 0) continue;
+                if (fn_hits == 0)
+                    snprintf(fn_cn, sizeof fn_cn, "%s", self->sym->funcs[fi].cname);
+                else if (strcmp(fn_cn, self->sym->funcs[fi].cname) != 0)
+                    fn_bad = 1;
+                fn_hits++;
+            }
+            if (fn_bad) {
+                snprintf(msg, sizeof msg,
+                         "function '%s' is declared by more than one namespace and"
+                         " cannot be named in a static initializer", id);
+                return self->fail(msg);
+            }
+            if (fn_hits > 0 && strcmp(fn_cn, id) != 0) {
+                snprintf(out + w, (size_t)(cap - w), "%s", fn_cn);
+                w += (int)strlen(fn_cn);
             } else {
                 if (w + n >= cap) return -1;
                 snprintf(out + w, (size_t)(cap - w), "%s", id);
