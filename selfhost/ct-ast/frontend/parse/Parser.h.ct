@@ -984,6 +984,10 @@ impl ParseOps for Parser {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             self->sup->lex_next();
         }
+        /* `__ct_` names the compiler's own locals and closure products; a user
+           declaration could otherwise collide with them in the generated C. */
+        if (!strncmp(name, "__ct_", 5))
+            return self->sup->fail("identifier '__ct_' is reserved for the compiler");
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
             /* A namespaced global is emitted under a prefixed C name, the same

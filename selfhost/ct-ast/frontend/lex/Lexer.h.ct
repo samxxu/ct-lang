@@ -274,6 +274,17 @@ impl LexOps for Lexer {
             self->pos += 2;
             return;
         }
+        /* `=>` opens a closure body. It is lexed on its own, before the
+           two-character comparisons below, because those only take `=` as their
+           second character (`==`, `<=`, `>=`); `->` keeps the branch above. */
+        if (c == '=' && self->src[self->pos + 1] == '>') {
+            self->toktext[0] = '=';
+            self->toktext[1] = '>';
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
         /* shifts: `<<=` / `>>=` first, then `<<` / `>>`, then the comparisons
            `<=` / `>=` below must not swallow the first character */
         if ((c == '<' || c == '>') && self->src[self->pos + 1] == c) {

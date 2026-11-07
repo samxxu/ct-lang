@@ -23,8 +23,10 @@ import frontend::module::Map::Call as Call;
 import frontend::module::Map;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
+import frontend::sym::Symbols::Closure as Closure;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
 
 #define B_ADD 1
 #define B_AND 12
@@ -72,6 +74,7 @@ import runtime::arena::Arena;
 #define N_VAARG 53
 #define N_FNUM 54
 #define N_PRE 57
+#define N_CLOSURE 58
 #define P_DEC 2
 #define P_INC 1
 #define T_EOF 0
@@ -113,6 +116,11 @@ pub trait ExprOps {
     int  arity_check(int line, int col, const char *callee, int got, int want);
     int  argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi);
     int  decl_type_compat(const char *formal, const char *actual);
+    /* Phase 21 S2: `(params) => expr` is parsed and checked, never emitted.
+       `parse_closure` runs at the `(` that opens the literal; `closure_bind`
+       compares it with the function pointer type its declaration spells. */
+    int  parse_closure(void);
+    int  closure_bind(int ci, const char *host, const char *vname);
 }
 
 pub struct Expr {
@@ -350,6 +358,157 @@ static int arg_class(const char *formal, const char *actual,
     return 2;
 }
 
+/* Read the next comma-separated item of a function pointer's parameter text
+   (`parse_type` writes the list without parameter names) into `out`, trimming
+   its surrounding spaces. Returns 0 once the list is exhausted. */
+static int plist_next(const char *p, int *pos, char *out, int cap)
+{
+    int i, n;
+
+    i = *pos;
+    while (p[i] == ' ' || p[i] == '\t') i++;
+    if (!p[i]) return 0;
+    n = 0;
+    while (p[i] && p[i] != ',') {
+        if (n + 1 < cap) out[n++] = p[i];
+        i++;
+    }
+    out[n] = 0;
+    while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == '\t')) out[--n] = 0;
+    if (p[i] == ',') i++;
+    *pos = i;
+    return 1;
+}
+
+/* Does the `(` at the cursor open a closure literal? The token stream cannot be
+   rewound, so the answer comes from the raw source: scan to the matching `)`
+   (skipping strings, chars and comments) and look for `=>`. A parenthesised
+   expression is left untouched; the classifier never consumes anything. */
+static int closure_ahead(struct Expr *self)
+{
+    const char *s = self->lex->src;
+    int i = self->lex->tokstart;
+    int depth = 0;
+
+    if (s[i] != '(') return 0;
+    for (; s[i]; i++) {
+        char c = s[i];
+        if (c == '"' || c == '\'') {
+            char q = c;
+            i++;
+            while (s[i] && s[i] != q) {
+                if (s[i] == '\\' && s[i + 1]) i++;
+                i++;
+            }
+            if (!s[i]) return 0;
+            continue;
+        }
+        if (c == '/' && s[i + 1] == '/') {
+            while (s[i] && s[i] != '\n') i++;
+            if (!s[i]) return 0;
+            continue;
+        }
+        if (c == '/' && s[i + 1] == '*') {
+            i += 2;
+            while (s[i] && !(s[i] == '*' && s[i + 1] == '/')) i++;
+            if (!s[i]) return 0;
+            i++;
+            continue;
+        }
+        if (c == '(' || c == '[' || c == '{') depth++;
+        else if (c == ')' || c == ']' || c == '}') {
+            depth--;
+            if (depth == 0) {
+                i++;
+                break;
+            }
+        }
+    }
+    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') i++;
+    return s[i] == '=' && s[i + 1] == '>';
+}
+
+static int closure_capture_index(struct Closure *c, const char *name)
+{
+    int i;
+
+    for (i = 0; i < c->ncap; i++)
+        if (strcmp(c->cap_name[i], name) == 0) return i;
+    return -1;
+}
+
+static int closure_capture_add(struct Expr *self, int ci, const char *name, const char *type)
+{
+    struct Closure *c = &self->sym->closures[ci];
+
+    if (closure_capture_index(c, name) >= 0) return 0;
+    if (c->ncap >= 16)
+        return self->sup->fail("a closure takes too many captures (limit 16)");
+    snprintf(c->cap_name[c->ncap], MAX_TEXT, "%s", name);
+    snprintf(c->cap_type[c->ncap], MAX_TEXT, "%s", type);
+    c->ncap++;
+    return 0;
+}
+
+/* Collect the free names of a closure body. The parameter scope is still open,
+   so a name at or after `pstart` is the literal's own parameter -- a parameter
+   that shadows an outer variable keeps the outer one out of the capture set,
+   which is exactly the snapshot the rule needs. Globals are not captures. */
+static int closure_walk(struct Expr *self, int ci, int n, int pstart)
+{
+    struct Node *nd;
+    int vi;
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    /* a nested literal owns its own environment (S5) */
+    if (nd->kind == N_CLOSURE) return 0;
+    if (nd->kind == N_VAR) {
+        vi = self->sym->find_var(nd->text2);
+        if (vi < 0 || vi >= pstart) return 0;
+        if (self->sym->vars[vi].is_global) return 0;
+        return closure_capture_add(self, ci, nd->text2, self->sym->vars[vi].type);
+    }
+    if (closure_walk(self, ci, nd->a, pstart) != 0) return -1;
+    if (closure_walk(self, ci, nd->b, pstart) != 0) return -1;
+    if (closure_walk(self, ci, nd->c, pstart) != 0) return -1;
+    if (closure_walk(self, ci, nd->d, pstart) != 0) return -1;
+    return closure_walk(self, ci, nd->next, pstart);
+}
+
+/* A captured variable belongs to the enclosing frame; the closure may read it
+   but must not write the binding or take its address (D21-2). Writes through a
+   captured pointer (`p->x = 1`) are reads of the binding and stay legal. */
+static int closure_walk_mutate(struct Expr *self, int ci, int n)
+{
+    struct Node *nd;
+    struct Closure *c = &self->sym->closures[ci];
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    if (nd->kind == N_CLOSURE) return 0;
+    if (nd->kind == N_ASSIGN && nd->a >= 0
+        && self->arena->nodes[nd->a].kind == N_VAR
+        && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
+        return self->sup->fail_at(c->line,
+                                  "a captured variable cannot be reassigned inside a closure");
+    if ((nd->kind == N_PRE || nd->kind == N_POST) && nd->a >= 0
+        && self->arena->nodes[nd->a].kind == N_VAR
+        && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
+        return self->sup->fail_at(c->line,
+                                  "a captured variable cannot be reassigned inside a closure");
+    if (nd->kind == N_ADDR && nd->a >= 0
+        && self->arena->nodes[nd->a].kind == N_VAR
+        && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
+        return self->sup->fail_at(c->line,
+                                  "the address of a captured variable cannot be taken inside a closure");
+    if (closure_walk_mutate(self, ci, nd->a) != 0) return -1;
+    if (closure_walk_mutate(self, ci, nd->b) != 0) return -1;
+    if (closure_walk_mutate(self, ci, nd->c) != 0) return -1;
+    if (closure_walk_mutate(self, ci, nd->d) != 0) return -1;
+    return closure_walk_mutate(self, ci, nd->next);
+}
+
 /* 19.1 call-site arity: only a callee whose signature is known is compared.
    A call through a function pointer, an undeclared C library name, a `map`
    recipe and a static type host all stay unknown and pass. The caller passes
@@ -444,6 +603,78 @@ impl ExprOps for Expr {
             r = (fs < 0 || as < 0) ? -1 : (fs != as);
         }
         return r;
+    }
+
+    /* S2 binding: a closure literal on the right of a function-pointer
+       declaration. `host` is the declared type (`int (*)(int x)`); its return
+       type and parameter list are compared with the literal's. The parameter
+       comparison reuses `decl_type_compat`, the same normalisation 19.3 uses. */
+    int closure_bind(int ci, const char *host, const char *vname)
+    {
+        struct Closure *c = &self->sym->closures[ci];
+        char ret[MAX_TEXT];
+        char plist[MAX_TEXT];
+        char item[MAX_TEXT];
+        const char *p;
+        size_t n, hn;
+        int lp, rp, pos, want, i, vi, r;
+
+        p = strstr(host, "(*");
+        if (!p || p == host)
+            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
+        n = (size_t)(p - host);
+        while (n > 0 && (host[n - 1] == ' ' || host[n - 1] == '\t')) n--;
+        if (n == 0 || n >= MAX_TEXT)
+            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
+        snprintf(ret, sizeof ret, "%.*s", (int)n, host);
+        hn = strlen(host);
+        lp = -1;
+        rp = -1;
+        for (n = 0; n < hn; n++) {
+            if (host[n] == '(') lp = (int)n;
+            else if (host[n] == ')') rp = (int)n;
+        }
+        if (lp < 0 || rp <= lp + 1)
+            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
+        snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, host + lp + 1);
+        want = 0;
+        if (!(strcmp(plist, "void") == 0 || plist[0] == 0)) {
+            pos = 0;
+            while (plist_next(plist, &pos, item, sizeof item)) want++;
+        }
+        if (want != c->nparams) {
+            char msg[512];
+            snprintf(msg, sizeof msg,
+                     "this closure takes %d parameters, but the expected type takes %d",
+                     c->nparams, want);
+            return self->sup->fail(msg);
+        }
+        pos = 0;
+        i = 0;
+        while (plist_next(plist, &pos, item, sizeof item)) {
+            r = self->decl_type_compat(item, c->ptype[i]);
+            if (r == 1) {
+                char msg[512];
+                snprintf(msg, sizeof msg,
+                         "this closure's parameter %d is '%s', but the expected type is '%s'",
+                         i + 1, c->ptype[i], item);
+                return self->sup->fail(msg);
+            }
+            i++;
+        }
+        vi = self->sym->find_var(vname);
+        if (vi < 0)
+            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
+        if (self->sym->vars[vi].is_global || self->sym->vars[vi].is_static) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg,
+                     "a closure cannot be stored in '%s' (its scope outlives the closure)", vname);
+            return self->sup->fail(msg);
+        }
+        self->sym->vars[vi].is_closure = 1;
+        self->sym->vars[vi].closure_id = ci;
+        snprintf(c->ret, MAX_TEXT, "%s", ret);
+        return 0;
     }
 
     /* The type keywords. L0 / L1 / L2 have always accepted the `stdint` /
@@ -1349,6 +1580,12 @@ impl ExprOps for Expr {
             self->arena->nodes[n].a = e;
             return n;
         }
+        /* `(params) => expr` opens a closure literal. The check runs before
+           the cast branch: a typed parameter list starts with a type word, so
+           `next_is_type_name` would otherwise read `(int x)` as a cast. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
+            && closure_ahead(self))
+            return self->parse_closure();
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
             && self->next_is_type_name()) {
             char tbuf[MAX_TEXT];
@@ -1704,6 +1941,77 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             return m;
         }
+        return n;
+    }
+
+    /* A closure literal `(params) => expr` (Phase 21 S2). The cursor sits on
+       the `(`. The literal gets its own parameter scope; a name the body uses
+       that resolves below `pstart` is a capture, so a parameter that shadows an
+       outer variable keeps the outer one out (D21-2). Names and types are
+       copied into the closure table before the scope is popped, because the
+       symbol slots are reused. S2 parses and checks only: nothing is emitted. */
+    int parse_closure(void)
+    {
+        char typebuf[MAX_TEXT];
+        char name[MAX_TEXT];
+        char owner[MAX_TEXT];
+        int ci, pstart, body, n, line, col, save_assign;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        snprintf(owner, sizeof owner, "%s", self->cur_func ? self->cur_func : "");
+        ci = self->sym->closure_new(owner);
+        if (ci < 0) return self->sup->fail(self->sym->last_error());
+        self->sym->closures[ci].line = line;
+        self->sym->closures[ci].col = col;
+        self->sup->lex_next();                       /* the `(` */
+        pstart = self->sym->nvar;
+        if (self->sym->push_scope() != 0) return self->sup->fail(self->sym->last_error());
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+            for (;;) {
+                if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+                if (self->fnptr_state) {
+                    if (!self->fnptr_name[0])
+                        return self->sup->fail("expected a parameter name");
+                    snprintf(name, sizeof name, "%s", self->fnptr_name);
+                } else {
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a parameter name");
+                    snprintf(name, sizeof name, "%s", self->lex->toktext);
+                    self->sup->lex_next();
+                }
+                if (self->sym->declare_var(name, typebuf) != 0)
+                    return self->sup->fail(self->sym->last_error());
+                if (self->sym->closures[ci].nparams >= 16)
+                    return self->sup->fail("a closure takes too many parameters (limit 16)");
+                snprintf(self->sym->closures[ci].ptype[self->sym->closures[ci].nparams],
+                         MAX_TEXT, "%s", typebuf);
+                snprintf(self->sym->closures[ci].pname[self->sym->closures[ci].nparams],
+                         MAX_TEXT, "%s", name);
+                self->sym->closures[ci].nparams++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+        }
+        if (self->sup->expect(")") != 0) return -1;
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "=>") != 0)
+            return self->sup->fail("expected '=>' after a closure's parameter list");
+        self->sup->lex_next();
+        save_assign = self->assign_ok;
+        self->assign_ok = 1;
+        body = self->parse_expr();
+        self->assign_ok = save_assign;
+        if (body < 0) return -1;
+        if (closure_walk(self, ci, body, pstart) != 0) return -1;
+        if (closure_walk_mutate(self, ci, body) != 0) return -1;
+        if (self->sym->pop_scope() != 0) return self->sup->fail(self->sym->last_error());
+        n = self->sup->new_node(N_CLOSURE);
+        if (n < 0) return -1;
+        self->arena->nodes[n].num = ci;
+        self->arena->nodes[n].a = body;
         return n;
     }
 

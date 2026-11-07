@@ -35,6 +35,7 @@ import tool::diag::Diag;
 #define N_ASSIGN 13
 #define N_BIN 11
 #define N_BLOCK 4
+#define N_CLOSURE 58
 #define N_BREAK 38
 #define N_CASE 43
 #define N_CONT 39
@@ -1402,6 +1403,14 @@ impl StmtOps for Stmt {
                 }
                 self->arena->nodes[n].a = e;
             }
+            /* Phase 21 S2: a closure literal on the right of a function-pointer
+               declaration is bound to the declared type here; the literal is
+               checked, never emitted. */
+            if (self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_CLOSURE
+                && self->ex->closure_bind(self->arena->nodes[self->arena->nodes[n].a].num,
+                                          typebuf, name) != 0)
+                return -1;
             if (self->arena->nodes[n].a >= 0) {
                 char tr[MAX_TEXT];
                 int ip = 0;
