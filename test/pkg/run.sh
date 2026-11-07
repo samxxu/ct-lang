@@ -135,6 +135,39 @@ else
 fi
 
 echo
+echo "== ct install refuses a package that requires a newer compiler =="
+# P20-04: `requires` is a hard failure. The package is first vendored by `ct
+# get` (which does not compile anything), so the digest in ct.lock matches the
+# tree and the check under test is the requires one, not the lock one.
+mkdir -p "$work/hi" "$work/proj2"
+printf 'name = hi\nversion = 0.1.0\nrequires = ct >= 99.0.0\n' >"$work/hi/ct.pkg"
+printf 'pub int hi(void);\nint hi(void) { return 1; }\n' >"$work/hi/hi.h.ct"
+printf 'name = demo2\nversion = 0.1.0\ndep = ../hi@^0.1.0\n' >"$work/proj2/ct.pkg"
+printf 'int main(void) { return 0; }\n' >"$work/proj2/main.ct"
+if ( cd "$work/proj2" && "$work/ct-ast" get ../hi >"$work/hig.out" 2>"$work/hig.err" ); then
+    ok "ct get vendors the package without checking requires"
+else
+    bad "requires fixture" "ct get failed: $(cat "$work/hig.err")"
+fi
+if ( cd "$work/proj2" && "$work/ct-ast" install >"$work/hi.out" 2>"$work/hi.err" ); then
+    bad "requires hard fail" "expected a non-zero exit"
+elif grep -Fq "requires 'ct >= 99.0.0', but this is v" "$work/hi.err"; then
+    ok "ct install exits non-zero and names both versions"
+else
+    bad "requires hard fail" "wrong diagnostic: $(cat "$work/hi.err")"
+fi
+if ( cd "$work/proj2" && "$work/ct-ast" install --force >"$work/hif.out" 2>"$work/hif.err" ); then
+    if grep -Fq "continuing despite the requires mismatch (--force)" "$work/hif.err" \
+       && grep -Fq "build" "$work/hif.out"; then
+        ok "ct install --force warns and continues"
+    else
+        bad "requires --force" "no warning or build command"
+    fi
+else
+    bad "requires --force" "expected a zero exit: $(cat "$work/hif.err")"
+fi
+
+echo
 echo "== ct install rejects a tampered vendor tree =="
 printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.h.ct"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/it.out" 2>"$work/it.err" ); then
@@ -641,9 +674,9 @@ else
 fi
 
 echo
-echo "== ct install: one command carrying each package's flags =="
-if ( cd "$work/mproj" && "$work/ct-ast" install >"$work/mi.out" 2>"$work/mi.err" ); then
-    ok "install accepts a lock that update wrote"
+echo "== ct install --force: one command carrying each package's flags =="
+if ( cd "$work/mproj" && "$work/ct-ast" install --force >"$work/mi.out" 2>"$work/mi.err" ); then
+    ok "install --force accepts a lock that update wrote"
 else
     bad "install after update" "non-zero exit: $(cat "$work/mi.err")"
 fi
@@ -657,8 +690,9 @@ if grep -Fq -- "--ldflags '-lm'" "$work/mi.out"; then
 else
     bad "ldflags" "no --ldflags in: $(cat "$work/mi.out")"
 fi
-if grep -Fq "requires 'ct >= 9.0.0'" "$work/mi.err"; then
-    ok "an unsatisfied requires is a warning, not a refusal"
+if grep -Fq "requires 'ct >= 9.0.0'" "$work/mi.err" \
+   && grep -Fq "continuing despite the requires mismatch (--force)" "$work/mi.err"; then
+    ok "--force keeps an unsatisfied requires as a warning"
 else
     bad "requires" "no warning on stderr: $(cat "$work/mi.err")"
 fi

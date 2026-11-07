@@ -96,6 +96,9 @@ struct Pkg {
     char pinref[MAX_PKG_DEPS][64];
     int  npins;
     int  offline;
+    /* `ct install --force` downgrades a `requires` mismatch to a warning; the
+       default is to refuse, so an incompatible package cannot be wired in. */
+    int  force;
     /* The optional index: `--index <path>` wins over `CT_INDEX`. Nothing is
        built in -- a package name only resolves through an index the user named. */
     char index[MAX_PKG_PATH];
@@ -1279,7 +1282,13 @@ impl PkgOps for Pkg {
                 fprintf(stderr, "ctc: package '%s' has metadata that does not fit\n", lname[i]);
                 return 1;
             }
-            pkg_check_requires(lname[i], rq);
+            if (pkg_check_requires(lname[i], rq) != 0) {
+                if (!self->force) {
+                    fprintf(stderr, "ctc: use --force to install anyway\n");
+                    return 1;
+                }
+                fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
+            }
             if (pkg_append_words(allcf, sizeof allcf, cf) != 0
                 || pkg_append_words(alldf, sizeof alldf, lf) != 0) {
                 fprintf(stderr, "ctc: package flags are too long\n");
@@ -1369,9 +1378,14 @@ impl PkgOps for Pkg {
 
         for (ai = 0; ai < argc; ai++) {
             if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
-                printf("usage: %s install\n", self->prog);
+                printf("usage: %s install [--force]\n", self->prog);
                 printf("  verify vendor/ against ct.lock and print the suggested build command\n");
+                printf("  --force  install even when a package 'requires' this compiler version\n");
                 return 0;
+            }
+            if (strcmp(argv[ai], "--force") == 0) {
+                self->force = 1;
+                continue;
             }
             if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
                 printf("%s v%s\n", self->prog, self->version);
@@ -1558,7 +1572,8 @@ static int pkg_append_words(char *dst, size_t cap, const char *src)
     return 0;
 }
 
-/* `requires = ct >= x.y.z`: a mismatch is a warning, never a blocker. */
+/* `requires = ct >= x.y.z`: a mismatch blocks `ct install`, because an
+   incompatible package would only fail later inside the generated C. */
 static int pkg_check_requires(const char *pkg, const char *req)
 {
     char work[MAX_TEXT];
@@ -1577,9 +1592,11 @@ static int pkg_check_requires(const char *pkg, const char *req)
         return 0;
     }
     snprintf(work, sizeof work, "%s", p);
-    if (!g_pkg.range_match(work, g_pkg.version))
+    if (!g_pkg.range_match(work, g_pkg.version)) {
         fprintf(stderr, "ctc: package '%s' requires '%s', but this is v%s\n",
                 pkg, req, g_pkg.version);
+        return -1;
+    }
     return 0;
 }
 
