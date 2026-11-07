@@ -3,8 +3,9 @@
 > 中文 · [English](#english)
 >
 > **状态：规划中**（2026-11-06 立项；2026-11-08 按 HEAD `v0.20.2`（`0263cca`）实测勘误，补设计缺口 G1–G3
-> 与切片 S0–S7；D21-13–D21-16（第一批）与 D21-1 / D21-2 / D21-4 / D21-5（第二批）已于 2026-11-08 定稿；
-> D21-8 并入 D21-3、D21-17 并入 D21-14；其余 7 条待用户确认）。
+> 与切片 S0–S7；D21-13–D21-16（第一批）、D21-1 / D21-2 / D21-4 / D21-5（第二批）、
+> D21-3 / D21-6 / D21-7 / D21-9（第三批）与 D21-10 / D21-11 / D21-12（最后一批）已于 2026-11-08 定稿；
+> D21-8 并入 D21-3、D21-17 并入 D21-14；**D21-1–D21-17 全部有结论，无待确认**）。
 > **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.2`（`CTC_VERSION` 五处一致）。
 > 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无语义依赖）。
 > 关联：[borrow 设计](../history/design/borrow.md)、[language-spec](../language-spec.md)、
@@ -41,12 +42,13 @@ D17-1 已按此恢复编号）。据此：
 
 四点必须钉死：
 
-1. **Phase 21 不等于 `v0.21.1`。** 它指「第 21 相」，收口时一次性 bump 到 `v0.21.0`；阶段内只有需要重生成
-   golden 的修复才用 patch 位。
+1. **Phase 21 不等于 `v0.21.1`（D21-10，已定稿 2026-11-08）。** 它指「第 21 相」，收口时一次性 bump 到
+   `v0.21.0`；不并入 `v0.20.x`。阶段内只有需要重生成 golden 的修复才用 patch 位。
 2. **Phase 20 与本相相互独立。** Phase 20（包支持）独占 `v0.20.x`，本相占 `v0.21.x`；
    两相的改动面（包解析 / 发射器诊断 vs 闭包降级）不重叠，可并行，不存在「闭包要等 20 完结」的依赖。
-3. **Phase 21 的软冲突**：`issues/std/std1-markdown-readiness.md` 用「Phase 21+」指代泛型。本计划占用 21 之后，
-   该表述应改为「Phase 22+ / 1.0 之后」，否则读者会以为闭包内含泛型。
+3. **Phase 21 的软冲突（D21-12，已定稿 2026-11-08）**：`issues/std/std1-markdown-readiness.md` 用
+   「Phase 21+」指代泛型。本计划占用 21，且**不引入泛型**；该表述改为「Phase 22+ / 1.0 之后」，
+   `Callable` 按签名一族硬写。否则读者会以为闭包内含泛型。
 4. 门禁实数：`selfhost/check-all.sh` 当前 **11 道**硬门禁。Phase 19 roadmap 行里的「12 道」是笔误，
    不在本阶段修；Phase 21 只在既有门禁内加断言，不新增门禁。
 
@@ -196,8 +198,9 @@ int apply(int base) {
 }
 ```
 
-- **命名**：`__ct_cl_env_<N>`（结构体 tag）、`__ct_cl_tramp_<N>`（trampoline）、
-  `__ct_cl_env_v_<N>`（栈上实例），三者共用同一个 `N`。
+- **命名（已定稿 D21-3，2026-11-08）**：`__ct_cl_env_<N>`（结构体 tag）、`__ct_cl_tramp_<N>`（trampoline）、
+  `__ct_cl_env_v_<N>`（栈上实例），三者共用同一个 `N`。**不带函数名，也不带 namespace 前缀**；
+  生成物只为单元内部服务，函数名会把生成物绑到源级命名上，前缀则没有消费者（D21-8 已并入本条）。
 - **N 的来源**：单元内单调递增计数器，与现有 `Emitter.ntmp`（`__ct_ret%d`）同风格；
   分配后不复用。嵌套、多层作用域、同一函数内多个闭包都靠它天然去重。
 - **作用域**：env 结构与 trampoline 一律发在**本单元的 `.c` 文件作用域**，trampoline 为 `static`；
@@ -274,8 +277,9 @@ static int run(int (*fn)(void *, int), void *env, int v) { return fn(env, v); }
 #### 4.6 诊断与 hint
 
 CT 无错误码；契约是**稳定英文文案**，由 `check-ast.sh` 的负例断言钉住。
-新增一个 `note:` 通道（`ct_sem_note(line, col, msg, path)`，不增加 `nsem`、不触发 `MAX_ERRORS`），
-每条闭包错误的第二行是 hint：
+**已定稿（D21-6，2026-11-08）：固定英文文案 + 独立 `note:` 通道（`ct_sem_note`，不计 `nsem`、
+不占 `MAX_ERRORS 20`）；不把 hint 拼进 `ct_sem_error` 的同一条 message。**
+新增通道的形态是 `ct_sem_note(line, col, msg, path)`，每条闭包错误的第二行是 hint：
 
 ```text
 t.ct:4:9: error: a closure cannot escape through 'return'
@@ -303,6 +307,19 @@ identifier '__ct_' is reserved for the compiler
 
 hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / `impl Callable for …`），
 不能只写「不支持」。
+
+**`note:` 通道对既有诊断契约的影响（2026-11-08 核对，写入 S4 验收）**：
+
+- **计数**：`ct_sem_note` 只输出，不递增 `nsem`、不写入 `Warn` 数组，也不改变解析 / 恢复流程。
+  因此 `MAX_ERRORS 20` 的触发点、`ctc: N error(s) generated` 的 `N`、以及 `ct check` 基于
+  `ct_diag_nwarn()` 的退出码都不变；hint 不占错误恢复名额。
+- **`--diagnostics=json`**：现有文档形状只有 `{"warnings":[...]}`，`severity` 字段只在 `ct check`
+  （strict）的 warning 对象上出现。note 不进这个数组，所以 `severity`、数组形状与退出码不变。
+  语义错误本来就是 stderr 文本、不进 JSON；note 同样只作为 `file:line:col: note:` 文本行输出，
+  不作为 JSON 键。若将来要把 hint 放进 JSON，必须新增顶层键并另立契约，不在 D21-6 范围内。
+- **流**：compile / check 的 JSON 在 stdout、note 在 stderr；build 模式 JSON 与文本诊断都在 stderr
+  （现有语义错误已经如此），note 不新增流类别。既有 `multi_err`、`sig_mismatch_json`、`leak_build`
+  的逐字节对照不涉及闭包，不受影响；闭包负例若要钉 JSON 契约，在 S4 单独加断言。
 
 #### 4.7 与 borrow 的共用检查（修正原「假安全承诺」）
 
@@ -340,6 +357,9 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 - 不提供 `.call()` 方法语法：闭包只能 `c(args)` 直接调用；
 - 禁止对函数指针类型使用 `map trait … for type`；官方 `Callable` 只能是真实 struct 类型；
 - `Callable` 只作为 trait 名存在，不叠加同名类型宿主。
+- **`Callable` 形态（已定稿 D21-7，2026-11-08）**：按签名一族（`Callable0` / `Callable1i` / …），
+  每个签名一个 trait；**不做单个 `Callable` + `void *` 的擦除版本**。无泛型时「万能接口」只能靠
+  调用点强转，等于把类型检查让掉；按族实现才能让 S6 的档① / 档② 互通有可检查的签名。
 
 否则 `char *` 宿主映射会与闭包调用点共享候选集，每个闭包调用都可能变成歧义报告。
 
@@ -423,13 +443,15 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 | **S0** | 文档约定：ABI / 命名 / 诊断文案 / 已知未防护面 | 无 | `docs/**` | `python3 test/docs/check-docs.py` 绿；与 §4 一致 | 只回滚文档 |
 | **S1** | 抽 `outlives()`，borrow 行为不变 | 无（与 S0 并行） | `Stmt.h.ct` | borrow 正负例全绿；抽取前后生成 C **逐字节一致** | 函数级回滚，无生成物变化 |
 | **S2** | 前端：`=>` token、闭包字面量 AST、闭包变量两词表示、`Var.is_closure/closure_id`、闭包表、**owner 函数记录**；只接受函数指针声明（D21-1，不接受 `auto`） | S1 | `Lexer.h.ct`、`Parser.h.ct`、`Expr.h.ct`、`Stmt.h.ct`、`Symbols.h.ct` | 正例通过 `ct check`；`auto x = (int x) => …;` 报错；类型不符的负例给出 §4.6 文案；既有 25 组 golden 与 68 探针不受影响 | 移除 lexer/parser 分支与 `Var` 字段 |
-| **S3** | **最小端到端 + ABI 冻结**：单表达式闭包、env/trampoline、按 owner 预发（G3）、调用点改写；冻结 `(fn, env)` 顺序与命名 | S2 | `Emitter.h.ct`、`Diag` | 探针 70 的生成 C 过 `cc -std=c99`、运行结果正确、`grep -c malloc` = 0；**零闭包单元生成物逐字节不变**；冻结后任何 ABI 改动必须另开版本 | 移除 emitter 分支；S2 保持 |
-| **S4** | 逃逸检查 E1–E7（含 E7 绑定规则）、捕获规则的 4 个新检查（§4.2）、`note:` hint；E8/E9 写入文档 | S3 | `Stmt.h.ct`、`Memory.h.ct`、`Diag` | 探针 72–75、84 的负例文案被 `check-ast.sh` 钉住；`int (*d)(int) = c;`、`c = d;`、字段/元素搬运、写捕获名、`&n`、捕获 `own`/`borrow`/闭包都在**源码位置**报错；`*p = …` 不误报 | 移除 `check_closure_store` 与 4 个捕获检查 |
+| **S3** | **最小端到端 + ABI 冻结**：单表达式闭包、env/trampoline、按 owner 预发（G3）、调用点改写；冻结 `(fn, env)` 顺序与**单元级计数器命名**（D21-3、D21-4） | S2 | `Emitter.h.ct`、`Diag` | 探针 70 的生成 C 过 `cc -std=c99`、运行结果正确、`grep -c malloc` = 0；**零闭包单元生成物逐字节不变**；冻结后任何 ABI / 命名改动必须另开版本 | 移除 emitter 分支；S2 保持 |
+| **S4** | 逃逸检查 E1–E7（含 E7 绑定规则）、捕获规则的 4 个新检查（§4.2）、`note:` 通道（D21-6，不计 `nsem` / `MAX_ERRORS`，不改 JSON 契约）；负例进 `test/ast/errors/`（D21-9）；E8/E9 写入文档 | S3 | `Stmt.h.ct`、`Memory.h.ct`、`Diag` | 探针 72–75、84 的负例文案被 `check-ast.sh` 钉住；`int (*d)(int) = c;`、`c = d;`、字段/元素搬运、写捕获名、`&n`、捕获 `own`/`borrow`/闭包都在**源码位置**报错；`*p = …` 不误报；**note 只增加 `file:line:col: note:` 行**：`ctc: N error(s) generated` 的 N、`MAX_ERRORS` 上限、`ct check` 退出码、`--diagnostics=json` 的 `severity` 与 `warnings` 形状均不变 | 移除 `check_closure_store`、4 个捕获检查与 `ct_sem_note` |
 | **S5** | 多行体、嵌套闭包、参数对实参（G2）、两单元 | S4 | `Parser.h.ct`、`Expr.h.ct`、`Emitter.h.ct` | 探针 71、76、77、79；`ct build` 两单元各自 `static` 不冲突 | 逐个语法特性独立回滚 |
-| **S6** | 官方 `Callable`（按签名一族）+ 互通 | S3（可与 S4/S5 并行） | `ct-pkg/std`（需授权）、本仓 `docs/**` + `examples/**` | 探针 78：档① 与档② 交给同一个函数；ct-pkg 测试绿 | 撤回 ct-pkg 包，本仓文档保留 |
-| **S7** | 自举、文档、收口 | S4 / S5 / S6 | 全仓 | 11 道硬门禁 + CI 三 job + nightly + fixpoint；bump `v0.21.0` | 按版本回退 |
+| **S6** | 官方 `Callable` **按签名一族（D21-7，不做单个 `void *` 擦除版）** + 互通 | S3（可与 S4/S5 并行） | `ct-pkg/std`（需授权）、本仓 `docs/**` + `examples/**` | 探针 78：档① 与档② 交给同一个函数；ct-pkg 测试绿 | 撤回 ct-pkg 包，本仓文档保留 |
+| **S7** | 自举、文档、收口（D21-10：收口 bump `v0.21.0`，不并入 `v0.20.x`） | S4 / S5 / S6 | 全仓 | 11 道硬门禁 + CI 三 job + nightly + fixpoint；bump `v0.21.0` | 按版本回退 |
 
-#### 依赖顺序
+#### 依赖顺序（D21-11，已定稿 2026-11-08）
+
+S0 / S1 并行 → S2 → S3（ABI 冻结）→ S4 → S5 ∥ S6 → S7。S6 不得先于 S3：它会迫使 ABI 在冻结前再变一次。
 
 ```text
 S0 文档 ─────────────┐
@@ -542,6 +564,7 @@ S7 自举与收口（串行，最后）
 | M4 | Medium | `-Wall -Wextra` 下 trampoline 未使用告警（`ct check` 警告即退出 1） | 照 `Drop` 的先例加 `__attribute__((unused))`，或仅在确被引用时发射 |
 | M5 | Medium | 断点停在合成帧，生成物失去可读性对应 | `#line` 重锚定 + `/* closure at … */` + 源名；探针 80 |
 | M6 | Medium | 捕获规则的误报：把 `*p = …`（显式解引用写回）误判为写捕获名，或漏掉 `n++` / 复合赋值 | 判据绑在「基名 + 写操作」上，`N_DEREF` 里的基名不算写；探针 84 覆盖 `*p` 放行与 `n++` 报错 |
+| M7 | Medium | `note:` 通道被误计入 `nsem` / `nwarn`，或混进 `--diagnostics=json`，改变错误上限、`severity` 或退出码 | `ct_sem_note` 只输出、不写 `Warn`；S4 验收断言 N、`MAX_ERRORS`、`ct check` 退出码与 JSON 形状不变（§4.6） |
 | L1 | Low | `=>` 保留字破坏面 | 实测 0（§8） |
 | L2 | Low | **E9**：`goto` 跨过闭包声明静默失效 | 与 `own` / `borrow` 同现状；文档记录，不做检查（E9） |
 | L3 | Low | golden 变动面被高估 | 实际只有 `test/cases` 25 组 baseline + `test/ast` 68 探针；版本 token 之外不应有 diff |
@@ -554,25 +577,25 @@ S3 之后移除 lexer / parser / emitter 的闭包分支与 `Var.is_closure` 即
 
 ### 10. 决策清单（D21-1–D21-17）
 
-D21-13–D21-16（第一批）与 D21-1 / D21-2 / D21-4 / D21-5（第二批）已于 **2026-11-08 定稿**；
-D21-8 并入 D21-3、D21-17 并入 D21-14，不再单列；其余 7 条（D21-3、D21-6、D21-7、D21-9、D21-10、
-D21-11、D21-12）仍为 **待确认**。定稿的八条共享三条理由：**闭包是绑定不是值**；
-**错误尽量在源码位置报**；**不碰单遍发射主干**。
+D21-13–D21-16（第一批）、D21-1 / D21-2 / D21-4 / D21-5（第二批）、D21-3 / D21-6 / D21-7 / D21-9（第三批）
+与 D21-10 / D21-11 / D21-12（最后一批）已于 **2026-11-08 定稿**；D21-8 并入 D21-3、D21-17 并入 D21-14，
+不再单列。**D21-1–D21-17 全部有结论：15 条定稿、2 条并入，无「待确认」。** 定稿的十五条共享三条理由：
+**闭包是绑定不是值**；**错误尽量在源码位置报**；**不碰单遍发射主干**。
 
 | # | 问题 | 选项（互斥） | 代价 | 定稿 / 建议 |
 | --- | --- | --- | --- | --- |
 | D21-1 | 闭包语法 | **A** `ret (*name)(params) = (params) => expr`，不引入 `auto`；**B** 引入 `auto name = (params) => expr` | A：无新关键字，但表面类型是 fnptr，用户可能误用（E6 兜底）。B：要加类型推断，且 `auto` 在 C 里是存储类，语义冲突 | **已定稿（2026-11-08）：选 A。** 沿用函数指针声明，不引入 `auto`、不做类型推断；误用由 E6 拦 |
 | D21-2 | 捕获方式 | **A** 按值、创建点求值、捕获名只读；**B** 按引用捕获 | A：无生命周期，语义简单；大 struct 有拷贝成本，写回需显式指针。B：需要生命周期/逃逸分析，等于档③ | **已定稿（2026-11-08）：选 A。** 写捕获名报错；写回用指针显式解引用；S4 另加 4 个捕获检查（§4.2） |
-| D21-3 | 生成物命名 | **A** 单元级单调计数器 `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`；**B** 按 owner 函数命名 `<func>__ct_cl_<k>` | A：名字不可读，但与 `__ct_ret%d` 同风格、天然去重、不依赖函数名。B：生成物可读性好，但要处理 namespace / 超长函数名 / 同名与转义 | **A**。D21-8（namespace 前缀）已并入本条：闭包符号是 `static` 且从不按名跨单元引用，前缀没有消费者 |
+| D21-3 | 生成物命名 | **A** 单元级单调计数器 `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`；**B** 按 owner 函数命名 `<func>__ct_cl_<k>` | A：名字不可读，但与 `__ct_ret%d` 同风格、天然去重、不依赖函数名。B：生成物可读性好，但要处理 namespace / 超长函数名 / 同名与转义 | **已定稿（2026-11-08）：选 A。** 单元级计数器，不带函数名、不带 namespace 前缀；D21-8 并入本条 |
 | D21-4 | ABI | **A** 两词 `(fn, env)`，env 第一；**B** 打包 `struct { fn; env; }` 单指针 | A：与既有 fnptr / impl 包装同形，档① 零改动；调用点要展开成两个 C 实参。B：单参数好看，但档① 包装是单个 fn，必须再造 thunk，破坏互通 | **已定稿（2026-11-08）：选 A。** 与档① `(void *self, …)` 同形；**S3 是 ABI 冻结点，之后不可改** |
 | D21-5 | 逃逸检查范围 | **A** E1–E7 全量、一律硬错误；E8 为「传给不透明 C 函数拦不住但必须说明」的文档级诊断；E9 记录 `goto`；**B** 只做 E1–E3 | A：检查矩阵最大，但每条都有现成挂载点。B：与已定稿的绑定规则、D21-2 的只读捕获冲突（拷贝/重赋值/写捕获都会漏检） | **已定稿（2026-11-08）：选 A。** |
-| D21-6 | 诊断契约 | **A** 固定英文文案 + 独立 `note:` 通道（`ct_sem_note`，不计 `nsem`）；**B** 把 hint 拼进 `ct_sem_error` 的同一条 message | A：新增一个通道，Diag 与门禁要认 `note`。B：hint 会占 `MAX_ERRORS 20`，且文案与 hint 混在一条里不便逐条断言 | **A** |
-| D21-7 | `Callable` 形态 | **A** 按签名一族（`Callable0` / `Callable1i` …）；**B** 单个 `Callable` + `void *` 参数 | A：每个签名一个 trait，类型安全。B：把类型擦除带回来，调用点强转，等于放弃检查 | **A**。无泛型时不存在万能接口 |
+| D21-6 | 诊断契约 | **A** 固定英文文案 + 独立 `note:` 通道（`ct_sem_note`，不计 `nsem`）；**B** 把 hint 拼进 `ct_sem_error` 的同一条 message | A：新增一个通道，Diag 与门禁要认 `note`。B：hint 会占 `MAX_ERRORS 20`，且文案与 hint 混在一条里不便逐条断言 | **已定稿（2026-11-08）：选 A。** `ct_sem_note` 只输出、不写 `Warn`；`severity`、JSON 形状与退出码不变（§4.6、S4） |
+| D21-7 | `Callable` 形态 | **A** 按签名一族（`Callable0` / `Callable1i` …）；**B** 单个 `Callable` + `void *` 参数 | A：每个签名一个 trait，类型安全。B：把类型擦除带回来，调用点强转，等于放弃检查 | **已定稿（2026-11-08）：选 A。** 无泛型时不存在万能接口；不做单个 `void *` 擦除版 |
 | D21-8 | namespace 交互 | 原选项：**A** 不加前缀；**B** 加前缀 | A：`static` + 一单元一 `.c` 已保证不冲突。B：无收益 | **已并入 D21-3，无需单独决策。** D21-4 与 D21-15 定稿后，闭包符号不按名跨单元引用，前缀没有消费者 |
-| D21-9 | golden 形态 | **A** 在 `test/ast` 新增 70–84 编号探针（负例进 `test/ast/errors/`）；**B** 只加 `test/cases` 逐字节 golden | A：要维护期望输出，但能覆盖负例与诊断文案。B：只覆盖正向生成物，负例无处断言 | **A**。与现有 `check-ast.sh` 结构一致 |
-| D21-10 | 版本 | **A** Phase 21 ↔ `v0.21.x`，收口 `v0.21.0`；**B** 作为 patch 塞进 `v0.20.x` | A：与 roadmap 版本规则一致。B：闭包与包支持共用一个 minor，回滚边界模糊 | **A** |
-| D21-11 | 排期 | **A** S0/S1 并行 → S2 → S3（冻结）→ S4 → S5 ∥ S6 → S7；**B** 先做 S6、再回头补 S3 | A：先钉 ABI。B：与 D21-4 已定稿的「S3 之后不可改」冲突——S6 会迫使 ABI 在冻结前再变一次 | **A** |
-| D21-12 | 泛型口径 | **A** 不引入；STD-1 的「Phase 21+」改为「Phase 22+ / 1.0 之后」；**B** 本相顺带做最小泛型以支撑容器 | A：保持零成本模型。B：要同时改 L2、门禁、自举，远超一相 | **A** |
+| D21-9 | golden 形态 | **A** 在 `test/ast` 新增 70–84 编号探针（负例进 `test/ast/errors/`）；**B** 只加 `test/cases` 逐字节 golden | A：要维护期望输出，但能覆盖负例与诊断文案。B：只覆盖正向生成物，负例无处断言 | **已定稿（2026-11-08）：选 A。** 70–84 探针 + `errors/` 负例，不给 `test/cases` 增设闭包 golden |
+| D21-10 | 版本 | **A** Phase 21 ↔ `v0.21.x`，收口 `v0.21.0`；**B** 作为 patch 塞进 `v0.20.x` | A：与 roadmap 版本规则一致。B：闭包与包支持共用一个 minor，回滚边界模糊 | **已定稿（2026-11-08）：选 A。** Phase 21 ↔ `v0.21.x`，收口 `v0.21.0`，不并入 `v0.20.x` |
+| D21-11 | 排期 | **A** S0/S1 并行 → S2 → S3（冻结）→ S4 → S5 ∥ S6 → S7；**B** 先做 S6、再回头补 S3 | A：先钉 ABI。B：与 D21-4 已定稿的「S3 之后不可改」冲突——S6 会迫使 ABI 在冻结前再变一次 | **已定稿（2026-11-08）：选 A。** 按 §5「依赖顺序」执行，S6 不得先于 S3 |
+| D21-12 | 泛型口径 | **A** 不引入；STD-1 的「Phase 21+」改为「Phase 22+ / 1.0 之后」；**B** 本相顺带做最小泛型以支撑容器 | A：保持零成本模型。B：要同时改 L2、门禁、自举，远超一相 | **已定稿（2026-11-08）：选 A。** 不引入泛型，`Callable` 按签名一族硬写；STD-1 的「Phase 21+」改为「Phase 22+ / 1.0 之后」 |
 | D21-13 | **（G1）** 闭包变量拷贝 | **A** 禁止：闭包是绑定不是值，只在声明处可用，任何搬运都报错；**B** 两词表示 + 允许同/内层拷贝（fn 与 env 一起搬）+ 目标更浅报错；**C** 只允许声明时的直接初始化拷贝 | A：同作用域起别名要改写成内联或档①，实现最省且没有半套「值」语义。B：要定义声明/赋值/`&`/阴影/作用域比较，且仍需 E6 兜普通 fnptr。C：仍要两词赋值，边界难解释 | **已定稿（2026-11-08）：选 A。** 闭包是绑定不是值；E7 翻成错误；悬垂面整体消失 |
 | D21-14 | **（G2）** 闭包字面量直接作实参 | **A** 用宿主 `(fn, env)` 对的 fn 型作期望类型，比对 arity 与逐参类型，块体先合成返回类型再比；**B** 要求字面量写全类型；**C** 本相禁止，必须先赋给变量 | A：要在实参位置就地构造期望类型（复用 `argtype_check` 的形参信息）。B：语法噪音大。C：砍 ergonomics | **已定稿（2026-11-08）：选 A。** 错误尽量停在 `.ct` 源码位置；落 S5，S3 只走左侧声明路径 |
 | D21-15 | **（G3）** 闭包产物发射时机 | **A** 解析期记 owner 函数；每个函数体前按 owner 预扫，就地发 env/trampoline；**B** 单元级预扫，统一发在原型之后；**C** 缓冲函数体再回填 | A：每函数多一次只读遍历，单遍发射主干不动。B：一次遍历，但要新开插点。C：改动最大 | **已定稿（2026-11-08）：选 A。** 不碰单遍发射主干；零闭包单元生成物逐字节不变（S3 验收） |
@@ -597,12 +620,12 @@ D21-11、D21-12）仍为 **待确认**。定稿的八条共享三条理由：**�
 | 79 | `closure_two_units` | `ct build` 两单元各自 `static` 命名不冲突；地址作实参可跨单元调用 |
 | 80 | `closure_debug_line` | 开启 `#line` 时，trampoline 行映射回闭包源行；生成物含 `/* closure at … */` |
 | 81 | `closure_no_typehost` | 存在 `map trait … for type` 时，闭包调用仍直接解析，不产生歧义 |
+| 82 | `closure_copy_local` | 同作用域 `int (*d)(int) = c;` → **硬错误**，hint 指向内联或档① |
+| 83 | `closure_reassign` | `c = d;` → **硬错误**，报在源行列 |
+| 84 | `closure_capture_rules` | 写捕获名 `n = 1` / `n++` / `n += 1` 与取地址 `&n` → 硬错误；`*p = …` 显式解引用写回 → 放行 |
 
-另需三个专项探针（建议编入 82–84）：
-`closure_copy_local`（同作用域 `int (*d)(int) = c;` → **硬错误**，hint 指向内联或档①）、
-`closure_reassign`（`c = d;` → **硬错误**，报在源行列）、
-`closure_capture_rules`（写捕获名 `n = 1` / `n++` / `n += 1` 与取地址 `&n` → 硬错误；
-`*p = …` 显式解引用写回 → 放行）。
+82–84 的负例正文放 `test/ast/errors/`；只有正向用例才进 `test/ast` 编号目录（D21-9）。
+**不给 `test/cases` 增设闭包 golden。**
 
 ---
 
@@ -611,7 +634,8 @@ D21-11、D21-12）仍为 **待确认**。定稿的八条共享三条理由：**�
 Phase 21 完成需同时满足：
 
 1. 11 道硬门禁全绿；CI 三 job + nightly 全绿。
-2. 探针 70–79（以及 82–84）全部按上表行为；负例文案被 `check-ast.sh` 钉住。
+2. 探针 70–84 全部按上表行为；负例进 `test/ast/errors/` 且文案被 `check-ast.sh` 钉住；
+   不给 `test/cases` 增设闭包 golden（D21-9）。
 3. 既有 golden 口径：`test/cases` 25 组 baseline 逐字节不变（仅允许版本 token），
    `test/ast` 68 个编号探针的既有期望不变。
 4. 生成物：闭包探针无 `malloc` / `free` / 引用计数 / vtable；只有 env struct + `static` trampoline。
@@ -623,6 +647,17 @@ Phase 21 完成需同时满足：
 8. fixpoint 通过；编译器源码的 `=>` 使用在 M21-E2 之后。
 9. 文档：language-spec 增加闭包一节；tutorial 有「档② 还是档①」的判据表；glossary 加 `closure` /
    `trampoline` / `env`；roadmap 状态改为完成。
+10. D21-3 命名：生成物一律 `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`，单元级单调
+    计数器，不带函数名、不带 namespace 前缀；两个单元各自编译不冲突。
+11. D21-6 的 `note:` 通道：只增加 `file:line:col: note:` 文本行，`ctc: N error(s) generated` 的 `N`、
+    `MAX_ERRORS 20` 的触发点、`ct check` 退出码、`--diagnostics=json` 的 `severity` 与 `warnings`
+    形状全部不变（§4.6、S4）。
+12. D21-7 的 `Callable`：按签名一族落地（`Callable0` / `Callable1i` …），不存在单个 `void *` 擦除版；
+    探针 78 证明档① / 档② 能交给同一个函数。
+13. D21-10 的版本：收口一次性 bump 到 `v0.21.0`，`CTC_VERSION` 五处一致；不并入 `v0.20.x`。
+14. D21-11 的排期：按 S0/S1 并行 → S2 → S3（ABI 冻结）→ S4 → S5 ∥ S6 → S7 执行，S6 不先于 S3。
+15. D21-12 的泛型口径：本相不引入泛型；`STD-1` 的「Phase 21+」已改为「Phase 22+ / 1.0 之后」，
+    `Callable` 按签名一族硬写。
 
 ---
 
@@ -631,9 +666,10 @@ Phase 21 完成需同时满足：
 ### Summary
 
 **Status: planned** (opened 2026-11-06; revised 2026-11-08 against HEAD `v0.20.2` = `0263cca`, adding
-gaps G1–G3, slices S0–S7 and option-level decisions; **D21-13–D21-16 (first batch) and D21-1 / D21-2 /
-D21-4 / D21-5 (second batch) were finalised on 2026-11-08**; D21-8 is folded into D21-3 and D21-17 into
-D21-14; the other 7 decisions still await confirmation).
+gaps G1–G3, slices S0–S7 and option-level decisions; **D21-13–D21-16 (first batch), D21-1 / D21-2 /
+D21-4 / D21-5 (second batch), D21-3 / D21-6 / D21-7 / D21-9 (third batch) and D21-10 / D21-11 / D21-12
+(final batch) were finalised on 2026-11-08**; D21-8 is folded into D21-3 and D21-17 into D21-14; **all 17
+decisions are resolved** — 15 finalised, 2 folded, none pending).
 **Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at `v0.20.2`; Phases 17/18/19/20 are done,
 Phase 20 (package support, [phase20.md](phase20.md)) is closed and has no semantic dependency here. The gate
 count is **11**.
@@ -669,6 +705,26 @@ single-pass emitter's main path must not be disturbed.
    and the call-site expansion rule are frozen together).
 4. **D21-5 — escape checking is the full E1–E7 set**, plus E8 kept as the documented diagnosis ("cannot be
    caught when handed to an opaque C function, but must be stated"). E9 records the silent `goto` failure.
+
+**Third batch, decided 2026-11-08 (all option A):**
+
+1. **D21-3 — generated names use a per-unit monotonic counter**: `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` /
+   `__ct_cl_env_v_<N>`, with no function name and no namespace prefix (D21-8 folded in).
+2. **D21-6 — fixed English messages plus a separate `note:` channel** (`ct_sem_note`), which does not
+   increment `nsem` and does not consume a `MAX_ERRORS 20` slot. The counting and `--diagnostics=json`
+   impact is pinned in §4.6 and S4: `N` in `ctc: N error(s) generated`, the error cap, the `ct check` exit
+   code, the `severity` field and the `{"warnings":[...]}` shape all stay unchanged.
+3. **D21-7 — `Callable` is one trait per signature family** (`Callable0` / `Callable1i` / …); no single
+   `Callable` with `void *` erasure.
+4. **D21-9 — tests live in `test/ast` probes 70–84**, negatives under `test/ast/errors/`; no closure
+   golden is added to `test/cases`.
+
+**Final batch, decided 2026-11-08 (all option A):**
+
+1. **D21-10 — Phase 21 ↔ `v0.21.x`, closing at `v0.21.0`**, not folded into `v0.20.x`.
+2. **D21-11 — the order is S0/S1 in parallel → S2 → S3 (ABI freeze) → S4 → S5 ∥ S6 → S7.**
+3. **D21-12 — no generics.** `Callable` stays a hand-written per-signature family; STD-1's "Phase 21+"
+   becomes "Phase 22+ / after 1.0".
 
 ### Errata against the earlier draft (verified at HEAD)
 
@@ -732,8 +788,9 @@ closures must generate byte-identical C (verified in S3).
   (runs before AutoDrop/borrow registration), `check_closure_capture_closure` (capturing a closure variable
   is another AST path than E7). The existing `own`/`borrow`/`Drop`/`check_borrow_store` analyses are
   variable-centric and judge ownership transfer, not read-only capture, so they do not cover these.
-- Generated names: `__ct_cl_env_<N>`, `__ct_cl_tramp_<N>`, `__ct_cl_env_v_<N>`; a per-unit monotonic
-  counter (like `__ct_ret%d`); file-scope `static`, never in headers, no namespace prefix.
+- Generated names (**D21-3, finalised 2026-11-08**): `__ct_cl_env_<N>`, `__ct_cl_tramp_<N>`,
+  `__ct_cl_env_v_<N>`; a per-unit monotonic counter (like `__ct_ret%d`); file-scope `static`, never in
+  headers, **no function name and no namespace prefix** (D21-8 folded in).
 - ABI (**D21-4, finalised 2026-11-08**): two words, `env` first, the same shape as tier-①'s
   `(void *self, …)`; a closure argument fills an adjacent `(fn, env)` parameter pair; arity counts a
   closure as two C arguments. **S3 is the freeze point; after it the order, the naming and the call-site
@@ -744,6 +801,13 @@ closures must generate byte-identical C (verified in S3).
 - Escapes (**D21-5, finalised 2026-11-08**): E1–E7 are all hard errors with a hint; E8 is the documented,
   unchecked diagnosis for handing `env` to an opaque C function (or another CT function) that stores it;
   E9 records that `goto` across a closure declaration fails silently.
+- Diagnostics (**D21-6, finalised 2026-11-08**): fixed English messages plus a separate
+  `ct_sem_note(line, col, msg, path)` channel; it prints a `file:line:col: note:` line and does not
+  increment `nsem`, record a `Warn`, or consume a `MAX_ERRORS 20` slot. `ctc: N error(s) generated`, the
+  `ct check` exit code, `--diagnostics=json`'s `severity` and its `{"warnings":[...]}` shape are unchanged;
+  notes are text-only, like semantic errors, and are not JSON keys.
+- `Callable` (**D21-7, finalised 2026-11-08**): one trait per signature family (`Callable0` / `Callable1i` /
+  …), never a single `Callable` with `void *` erasure; a universal interface would need call-site casts.
 - Honest limits: env handed out as `void *` to an opaque C function **or to another CT function (including a
   future std `each`)** can be stored there; the compiler cannot see it.
 
@@ -756,14 +820,15 @@ S3 freezes the ABI: after it, the `(fn, env)` order, the naming rules and the ca
 | S0 | Docs: ABI, naming, diagnostics, known holes | — | `docs/**` | `check-docs.py` green |
 | S1 | Extract `outlives()` shared with `borrow` | — (parallel with S0) | `Stmt.h.ct` | borrow probes green; generated C byte-identical before/after |
 | S2 | Front end: `=>` token, literal AST, two-word closure variable, `Var.is_closure/closure_id`, closure table, **owner function recorded**; function-pointer declarations only (**D21-1**, no `auto`) | S1 | Lexer, Parser, Expr, Stmt, Symbols | positive probe type-checks; `auto x = (int x) => …;` errors; typed negatives produce the planned text; the 25 goldens + 68 probes unchanged |
-| S3 | **End-to-end + ABI freeze**: single-expression closures, env/trampoline, per-owner pre-scan (G3), call-site rewrite; freezes the `(fn, env)` order and naming (**D21-4**) | S2 | Emitter, Diag | probe 70 compiles with `cc -std=c99`, runs, `malloc` count 0; **zero-closure units byte-identical**; any ABI change after the freeze needs a new version |
-| S4 | Escapes E1–E7 (incl. the E7 binding rule) + the **four new capture checks** (§4.2) + `note:` hints; E8/E9 documented | S3 | Stmt, Memory, Diag | probes 72–75 and 84 pinned; `int (*d)(int) = c;`, `c = d;`, field/element moves, writing a captured name, `&n`, and capturing `own`/`borrow`/a closure all error at the **source position**; `*p = …` does not false-positive |
+| S3 | **End-to-end + ABI freeze**: single-expression closures, env/trampoline, per-owner pre-scan (G3), call-site rewrite; freezes the `(fn, env)` order and the **per-unit counter naming** (**D21-3**, **D21-4**) | S2 | Emitter, Diag | probe 70 compiles with `cc -std=c99`, runs, `malloc` count 0; **zero-closure units byte-identical**; any ABI or naming change after the freeze needs a new version |
+| S4 | Escapes E1–E7 (incl. the E7 binding rule) + the **four new capture checks** (§4.2) + the `note:` channel (**D21-6**; no `nsem`/`MAX_ERRORS`/JSON change); negatives under `test/ast/errors/` (**D21-9**); E8/E9 documented | S3 | Stmt, Memory, Diag | probes 72–75 and 84 pinned; `int (*d)(int) = c;`, `c = d;`, field/element moves, writing a captured name, `&n`, and capturing `own`/`borrow`/a closure all error at the **source position**; `*p = …` does not false-positive; **a note only adds a `file:line:col: note:` line** — `N`, the `MAX_ERRORS` cap, the `ct check` exit code, and JSON's `severity` / `warnings` shape stay unchanged |
 | S5 | Block bodies, nesting, parameter-pair arguments (G2), two units | S4 | Parser, Expr, Emitter | probes 71, 76, 77, 79; two-unit `static` names do not clash |
-| S6 | Official `Callable` family + interop | S3 (parallel with S4/S5) | `ct-pkg/std` (authorisation), docs, examples | probe 78: tier ① and tier ② handed to the same function |
-| S7 | Bootstrap, docs, `v0.21.0` close | S4/S5/S6 | whole tree | 11 gates, CI, nightly, fixpoint |
+| S6 | Official `Callable` **one trait per signature family** (**D21-7**, no single `void *` erasure) + interop | S3 (parallel with S4/S5) | `ct-pkg/std` (authorisation), docs, examples | probe 78: tier ① and tier ② handed to the same function |
+| S7 | Bootstrap, docs, `v0.21.0` close (**D21-10**: closing bump, never folded into `v0.20.x`) | S4/S5/S6 | whole tree | 11 gates, CI, nightly, fixpoint |
 
-Ordering: S0 ∥ S1 → S2 → S3 (freeze) → S4 → S5 ∥ S6 → S7. The old 21.0 becomes part of S0 (containers are
-not in this phase); 21.1 → S1; 21.2 → S2 + S3; 21.3 → S5; 21.4 → S6; 21.5 → S7.
+Ordering (**D21-11**, finalised 2026-11-08): S0 ∥ S1 → S2 → S3 (freeze) → S4 → S5 ∥ S6 → S7. S6 must not
+precede S3: it would force one more ABI change before the freeze. The old 21.0 becomes part of S0
+(containers are not in this phase); 21.1 → S1; 21.2 → S2 + S3; 21.3 → S5; 21.4 → S6; 21.5 → S7.
 
 Milestones: M21-A (S0+S1), **M21-B = S3, ABI freeze**, M21-C (S4+S5), M21-D (S6), M21-E (S7).
 
@@ -775,7 +840,7 @@ already done; what remains is a single extraction (S1). `Callable` must come las
 per-signature traits. Closures do help local loops and callback context today, but a `qsort`-style C callback
 with no env slot **cannot** take a closure.
 
-### Risks (4 High, 6 Medium, 3 Low)
+### Risks (4 High, 7 Medium, 3 Low)
 
 | # | Severity | Risk | Handling |
 | --- | --- | --- | --- |
@@ -789,32 +854,33 @@ with no env slot **cannot** take a closure.
 | M4 | Medium | `-Wall -Wextra` unused-trampoline warning (`ct check` exits 1 on warnings) | `__attribute__((unused))` as with `Drop` |
 | M5 | Medium | Debugger stops in a synthetic frame | `#line` re-anchoring + `/* closure at … */`; probe 80 |
 | M6 | Medium | Capture-rule false positives: `*p = …` (explicit dereference write-back) misread as writing a captured name, or `n++` / compound assignment missed | Judge on base name plus write op; a base name under `N_DEREF` is not a write; probe 84 covers `*p` allowed and `n++` rejected |
+| M7 | Medium | The `note:` channel counted in `nsem`/`nwarn`, or leaking into `--diagnostics=json`, changing the error cap, `severity` or the exit code | `ct_sem_note` prints only and never records a `Warn`; S4 asserts `N`, `MAX_ERRORS`, the `ct check` exit code and the JSON shape are unchanged (§4.6) |
 | L1 | Low | `=>` reserved-word breakage | 0 occurrences (§8) |
 | L2 | Low | **E9**: `goto` across a closure declaration fails silently | Same as `own`/`borrow`; documented (E9), no check |
 | L3 | Low | Golden churn overestimated | Only the 25-case baseline + 68 probes; no diff beyond the version token |
 
-### Decisions D21-1–D21-17 (D21-1/2/4/5 and D21-13–16 decided; D21-8/17 folded; the rest pending)
+### Decisions D21-1–D21-17 (all resolved: 15 decided, D21-8/17 folded, none pending)
 
-D21-1/2/4/5 (second batch) and D21-13–D21-16 (first batch) were **finalised on 2026-11-08**; D21-8 is
-folded into D21-3 and D21-17 into D21-14; the remaining 7 (D21-3, D21-6, D21-7, D21-9, D21-10, D21-11,
-D21-12) are still **pending**. The eight decided ones share three reasons: **a closure is a binding, not a
-value**; **errors should stop at the source position**; **the single-pass emitter's main path is not
-touched**.
+D21-1/2/4/5 (second batch), D21-3/6/7/9 (third batch), D21-10/11/12 (final batch) and D21-13–D21-16
+(first batch) were **finalised on 2026-11-08**; D21-8 is folded into D21-3 and D21-17 into D21-14;
+**all 17 decisions are resolved** — 15 finalised, 2 folded, none pending. The fifteen decided ones share
+three reasons: **a closure is a binding, not a value**; **errors should stop at the source position**;
+**the single-pass emitter's main path is not touched**.
 
 | # | Question | Mutually exclusive options | Recommendation |
 | --- | --- | --- | --- |
 | D21-1 | Closure syntax | **A** `ret (*name)(params) = (params) => expr`, no `auto`; **B** `auto name = (params) => expr` | **Decided 2026-11-08: A.** Keep the function-pointer declaration, no `auto`, no inference; E6 catches misuse |
 | D21-2 | Capture mode | **A** by value at the creation point, read-only; **B** by reference | **Decided 2026-11-08: A.** Writing a captured name errors; write-back captures a pointer and dereferences it; S4 adds the four capture checks (§4.2) |
-| D21-3 | Generated names | **A** per-unit monotonic counter `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`; **B** per-owner `<func>__ct_cl_<k>` | **A.** D21-8 (namespace prefix) is folded in: closure symbols are `static` and never referenced by name across units, so a prefix has no consumer |
+| D21-3 | Generated names | **A** per-unit monotonic counter `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`; **B** per-owner `<func>__ct_cl_<k>` | **Decided 2026-11-08: A.** Per-unit counter, no function name, no namespace prefix; D21-8 is folded in |
 | D21-4 | ABI | **A** two words `(fn, env)`, env first; **B** packed `struct { fn; env; }` | **Decided 2026-11-08: A.** Same shape as tier-①'s `(void *self, …)`; **S3 is the ABI freeze point, not changeable afterwards** |
 | D21-5 | Escape checks | **A** E1–E7 all hard errors; E8 documented as "cannot be caught when handed to an opaque C function, but must be stated"; E9 records `goto`; **B** E1–E3 only | **Decided 2026-11-08: A.** B contradicts the decided binding rule and D21-2's read-only capture |
-| D21-6 | Diagnostic contract | **A** fixed text + separate `note:` channel; **B** hint inside the error message | **A** |
-| D21-7 | `Callable` shape | **A** per-signature family; **B** one `Callable` + `void *` | **A** |
+| D21-6 | Diagnostic contract | **A** fixed text + separate `note:` channel; **B** hint inside the error message | **Decided 2026-11-08: A.** `ct_sem_note` prints only and records no `Warn`; `severity`, the JSON shape and the exit code are unchanged (§4.6, S4) |
+| D21-7 | `Callable` shape | **A** per-signature family; **B** one `Callable` + `void *` | **Decided 2026-11-08: A.** One trait per signature; no single `void *` erasure |
 | D21-8 | Namespace interaction | Old options: **A** no prefix; **B** prefix | **Folded into D21-3, no separate decision.** After D21-4/D21-15 closure symbols are not referenced by name across units, so a prefix has no consumer |
-| D21-9 | Golden form | **A** new numbered `test/ast` probes 70–84 (negatives under `test/ast/errors/`); **B** `test/cases` only | **A** |
-| D21-10 | Version | **A** `v0.21.x`; **B** patch inside `v0.20.x` | **A** |
-| D21-11 | Ordering | **A** S0/S1 → S2 → S3 → S4 → S5 ∥ S6 → S7; **B** S6 first, back-fill S3 afterwards | **A.** B conflicts with D21-4's "nothing changes after S3": S6 would force one more ABI change before the freeze |
-| D21-12 | Generics | **A** none; reword STD-1 to "Phase 22+ / after 1.0"; **B** minimal generics now | **A** |
+| D21-9 | Golden form | **A** new numbered `test/ast` probes 70–84 (negatives under `test/ast/errors/`); **B** `test/cases` only | **Decided 2026-11-08: A.** Probes 70–84 plus `errors/` negatives; no closure golden in `test/cases` |
+| D21-10 | Version | **A** `v0.21.x`; **B** patch inside `v0.20.x` | **Decided 2026-11-08: A.** Phase 21 ↔ `v0.21.x`, closing at `v0.21.0`; never folded into `v0.20.x` |
+| D21-11 | Ordering | **A** S0/S1 → S2 → S3 → S4 → S5 ∥ S6 → S7; **B** S6 first, back-fill S3 afterwards | **Decided 2026-11-08: A.** Follow §5; B conflicts with D21-4's "nothing changes after S3" |
+| D21-12 | Generics | **A** none; reword STD-1 to "Phase 22+ / after 1.0"; **B** minimal generics now | **Decided 2026-11-08: A.** No generics; `Callable` stays a hand-written per-signature family; STD-1's "Phase 21+" becomes "Phase 22+ / after 1.0" |
 | D21-13 | (G1) copying a closure variable | **A** forbid: a closure is a binding, usable only at its declaration; **B** two-word copy with a scope check; **C** initialisation-only copy | **Decided 2026-11-08: A** |
 | D21-14 | (G2) literal as a direct argument | **A** expected type from the host `(fn, env)` pair: arity + per-parameter, block-body return synthesised first; **B** fully typed literal; **C** forbid in this phase | **Decided 2026-11-08: A**, in S5 |
 | D21-15 | (G3) emission point | **A** owner recorded at parse time, per-owner pre-scan before each body; **B** unit-level pre-scan; **C** buffered bodies | **Decided 2026-11-08: A** |
@@ -830,12 +896,19 @@ own/borrow/closure capture — D21-2, 75 parameter pair, 76 opaque hole — **E8
 the source position), 84 `closure_capture_rules` (writing `n` via `=`, `++` or a compound assignment and
 `&n` are hard errors; `*p = …` is allowed).
 
-Exit: 11 gates + CI + nightly green; probes 70–79 and 82–84 behave as specified; the 25-case baseline and
+Exit: 11 gates + CI + nightly green; probes 70–84 behave as specified (negatives under
+`test/ast/errors/`, no closure golden added to `test/cases` — D21-9); the 25-case baseline and
 68 probes unchanged except the version token; no `malloc`/`free`/refcount/vtable in closure output; G1, G2
 and G3 each implemented and covered (moving a closure errors at the source position, literal arguments are
 compared for arity and per-parameter type with block-body return synthesised, closure artefacts are emitted
 before the owner function and zero-closure units stay byte-identical); D21-2's four capture checks are in
 force (writing a captured name incl. `++`/compound, and `&n`, error; `*p = …` allowed; capturing
 `own`/`borrow`/a closure all error at the source position); E8/E9 documented (with hints) and probes 76/77
-record the status quo; fixpoint passes; `=>` enters `selfhost/ct-ast/**` only after M21-E2;
-language-spec, tutorial, glossary and roadmap updated.
+record the status quo; generated names use the per-unit counter with no function name or namespace prefix
+(D21-3) and two units compile without collisions; the `note:` channel only adds a
+`file:line:col: note:` line — `N`, the `MAX_ERRORS` cap, the `ct check` exit code and JSON's `severity` /
+`warnings` shape stay unchanged (D21-6); `Callable` is one trait per signature family with no `void *`
+erasure (D21-7); the close bumps `CTC_VERSION` to `v0.21.0` in all five places and never folds into
+`v0.20.x` (D21-10); the slice order follows D21-11 with S6 never before S3; no generics are introduced and
+STD-1 says "Phase 22+ / after 1.0" (D21-12); fixpoint passes; `=>` enters `selfhost/ct-ast/**` only after
+M21-E2; language-spec, tutorial, glossary and roadmap updated.
