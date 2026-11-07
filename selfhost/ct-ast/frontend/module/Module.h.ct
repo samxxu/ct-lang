@@ -1396,15 +1396,17 @@ static int ct_root_find(const char *root, const char *rel, char *out, int cap,
 
 /* Two roots that both hold copies of one package (a checkout plus its vendored
    tree) are not a clash: the manifest name is the package's identity (R6). A
-   root without a manifest is identified by its path alone. */
+   root without a `name` is a plain include root, not a package, so it keeps the
+   established order: the importer's own directory first, then each `-I` in
+   turn (`test/modules/precedence` pins that). */
 static int ct_same_pkg(const char *a, const char *b)
 {
     char na[MAX_TEXT];
     char nb[MAX_TEXT];
 
     if (strcmp(a, b) == 0) return 1;
-    if (!ct_pkg_key(a, "name", na, sizeof na)) return 0;
-    if (!ct_pkg_key(b, "name", nb, sizeof nb)) return 0;
+    if (!ct_pkg_key(a, "name", na, sizeof na)) return 1;
+    if (!ct_pkg_key(b, "name", nb, sizeof nb)) return 1;
     return strcmp(na, nb) == 0;
 }
 
