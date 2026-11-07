@@ -68,7 +68,6 @@ static int ct_pkg_key(const char *root, const char *key, char *out, int cap);
 static int ct_rel_cands(const char *root, const char *rel, char *first, char *fallback);
 static int ct_root_find(const char *root, const char *rel, char *out, int cap,
                         int *is_hdr, int *is_map, char *err, int errcap);
-static int ct_same_pkg(const char *a, const char *b);
 pub trait ModuleOps {
     int  fail(const char *msg);
     int  fail_emit(const char *msg);
@@ -279,9 +278,14 @@ impl ModuleOps for Module {
     /* A unit's interface lives in its header, so a `.h.ct` or `.m.ct` unit can
        be imported. Every root is searched (the importer's own directory, then
        the `-I` roots in command-line order). A hit in a second root is a clash,
-       not a fallback: two packages shipping `Uart` must not let the command
-       line pick one silently. A root whose package declares the first import
-       segment (`namespace = app` in its ct.pkg) is searched for the flat layout
+       not a fallback: two `-I` roots that both ship `Uart` must not let the
+       command line pick one silently. Only three pairs are exempt, because in
+       each the second hit is the same unit seen twice rather than a competing
+       definition: the resolved paths are identical, the root strings are
+       identical (a duplicated `-I`), or the first hit came from the importer's
+       own directory (which outranks every `-I`, as `test/modules/precedence`
+       pins). A root whose package declares the first import segment
+       (`namespace = app` in its ct.pkg) is searched for the flat layout
        (`<root>/model/Item.h.ct`) first and the doubled one
        (`<root>/app/model/Item.h.ct`) second, so old trees keep resolving. The
        second pass names a plain `.ct` unit, which is the mistake worth
@@ -296,13 +300,14 @@ impl ModuleOps for Module {
         char msg[MAX_PATH * 2 + MAX_TEXT];
         const char *root;
         FILE *f;
-        int r, st, hit, cand_hdr, cand_map;
+        int r, st, hit, cand_hdr, cand_map, first_local;
         (void)self;
 
         if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
         *is_hdr = 0;
         *is_map = 0;
         hit = 0;
+        first_local = 0;
         first[0] = 0;
         firstroot[0] = 0;
         for (r = -1; r < self->ninc; r++) {
@@ -316,17 +321,19 @@ impl ModuleOps for Module {
             if (st == 0) continue;
             if (!hit) {
                 hit = 1;
+                first_local = (r < 0);
                 snprintf(first, sizeof first, "%s", cand);
                 snprintf(firstroot, sizeof firstroot, "%s", root);
                 *is_hdr = cand_hdr;
                 *is_map = cand_map;
                 continue;
             }
-            /* The same file reached through two roots (a duplicate `-I`, or the
-               importer's own directory also given as a root) and the same
-               package vendored twice are not clashes (R6). */
+            /* Same unit seen twice: identical path, duplicate `-I`, or the
+               importer's own directory already won. Anything else is two roots
+               competing for one name and must be reported. */
             if (strcmp(cand, first) == 0) continue;
-            if (ct_same_pkg(root, firstroot)) continue;
+            if (strcmp(root, firstroot) == 0) continue;
+            if (first_local) continue;
             snprintf(msg, sizeof msg,
                      "unit '%s' exists in two import roots: '%s' and '%s'",
                      rel, first, cand);
@@ -1392,22 +1399,6 @@ static int ct_root_find(const char *root, const char *rel, char *out, int cap,
         }
     }
     return 0;
-}
-
-/* Two roots that both hold copies of one package (a checkout plus its vendored
-   tree) are not a clash: the manifest name is the package's identity (R6). A
-   root without a `name` is a plain include root, not a package, so it keeps the
-   established order: the importer's own directory first, then each `-I` in
-   turn (`test/modules/precedence` pins that). */
-static int ct_same_pkg(const char *a, const char *b)
-{
-    char na[MAX_TEXT];
-    char nb[MAX_TEXT];
-
-    if (strcmp(a, b) == 0) return 1;
-    if (!ct_pkg_key(a, "name", na, sizeof na)) return 1;
-    if (!ct_pkg_key(b, "name", nb, sizeof nb)) return 1;
-    return strcmp(na, nb) == 0;
 }
 
 /* The same segment claimed by two `-I` roots: an error, never a silent pick.

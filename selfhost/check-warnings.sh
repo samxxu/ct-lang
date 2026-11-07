@@ -199,13 +199,14 @@ for d in test/modules/*/; do
     else
         continue
     fi
-    # dup_impl, ambig_global, ambig_type and p20_dup_unit are negative fixtures:
-    # the compiler must refuse them (check-ast.sh owns those assertions), so they
-    # have no generated C.
+    # dup_impl, ambig_global, ambig_type, p20_dup_unit and p20_dup_plain are
+    # negative fixtures: the compiler must refuse them (check-ast.sh owns those
+    # assertions), so they have no generated C.
     [ "$name" = "dup_impl" ] && continue
     [ "$name" = "ambig_global" ] && continue
     [ "$name" = "ambig_type" ] && continue
     [ "$name" = "p20_dup_unit" ] && continue
+    [ "$name" = "p20_dup_plain" ] && continue
     rm -rf "$work/mod-$name"
     mkdir -p "$work/mod-$name" || continue
     if [ -d "$d/extra" ]; then

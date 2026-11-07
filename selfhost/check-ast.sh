@@ -756,6 +756,23 @@ else
     bad "p20_dup_unit" "$(head -2 "$work/mpdu.err")"
 fi
 
+# Naming a package is not an exemption either: two plain `-I` roots (neither has
+# a ct.pkg) that both ship the unit are reported the same way. Only an identical
+# path, an identical root string, or a first hit in the importer's own directory
+# are exempt.
+rm -rf "$mod-pdp"
+mkdir -p "$mod-pdp"
+if "$work/ct-ast" build --emit-c -I test/modules/p20_dup_plain/a \
+        -I test/modules/p20_dup_plain/b test/modules/p20_dup_plain/main.ct \
+        -o "$mod-pdp" >"$work/mpdp.out" 2>"$work/mpdp.err"; then
+    bad "p20_dup_plain" "expected a non-zero exit"
+elif grep -qF "unit 'Uart' exists in two import roots: 'test/modules/p20_dup_plain/a/Uart.h.ct' and 'test/modules/p20_dup_plain/b/Uart.h.ct'" \
+        "$work/mpdp.err"; then
+    ok "p20_dup_plain (two plain -I roots, no ct.pkg, still a clash)"
+else
+    bad "p20_dup_plain" "$(head -2 "$work/mpdp.err")"
+fi
+
 rm -rf "$mod-hdr"
 mkdir -p "$mod-hdr"
 if "$work/ct-ast" build --emit-c test/modules/hdr/main.h.ct -o "$mod-hdr" \

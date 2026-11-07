@@ -1,0 +1,2 @@
+/* Same unit name as a/Uart.h.ct. */
+pub int uart_id(void);

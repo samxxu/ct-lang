@@ -1,0 +1,7 @@
+import Uart;
+
+/* Two plain `-I` roots both ship Uart.h.ct. Without a ct.pkg name on either
+   root there is nothing that makes them one package, so this must be reported
+   instead of letting the first root win. */
+pub int sprint_id(void);
+int sprint_id(void) { return 1; }
