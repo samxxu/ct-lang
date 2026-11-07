@@ -1201,6 +1201,52 @@ impl PkgOps for Pkg {
             return 1;
         }
         if (self->get_spec(spec, root, 0) != 0) return 1;
+        /* P20-04: a package whose `requires` this compiler does not satisfy is
+           refused here -- before `ct.lock` is merged or opened -- so a failed
+           `get` leaves the previous lock byte-identical instead of writing half
+           of a new one. `--force` downgrades the mismatch to a warning, exactly
+           as `ct install` does. */
+        {
+            char names[MAX_PKG_DEPS][MAX_TEXT];
+            char vdir[MAX_PKG_PATH], mreq[MAX_TEXT], mcf[MAX_TEXT], mlf[MAX_TEXT];
+            const char *p, *e;
+            size_t ln;
+            int nn, li;
+
+            nn = 0;
+            p = self->lock;
+            while (*p && nn < MAX_PKG_DEPS) {
+                while (*p == '\n' || *p == '\r') p = p + 1;
+                if (*p == 0) break;
+                e = p;
+                while (*e && *e != ' ' && *e != '\t' && *e != '\n') e = e + 1;
+                ln = (size_t)(e - p);
+                if (ln > 0 && ln < MAX_TEXT) {
+                    memcpy(names[nn], p, ln);
+                    names[nn][ln] = 0;
+                    nn++;
+                }
+                while (*e && *e != '\n') e = e + 1;
+                p = e;
+            }
+            for (li = 0; li < nn; li++) {
+                if (snprintf(vdir, sizeof vdir, "./vendor/%s", names[li]) >= (int)sizeof vdir) {
+                    fprintf(stderr, "ctc: package path too long for '%s'\n", names[li]);
+                    return 1;
+                }
+                if (pkg_read_meta(vdir, mcf, sizeof mcf, mlf, sizeof mlf, mreq, sizeof mreq) != 0) {
+                    fprintf(stderr, "ctc: package '%s' has metadata that does not fit\n", names[li]);
+                    return 1;
+                }
+                if (pkg_check_requires(names[li], mreq) != 0) {
+                    if (!self->force) {
+                        fprintf(stderr, "ctc: use --force to get anyway\n");
+                        return 1;
+                    }
+                    fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
+                }
+            }
+        }
         /* `ct get` names one spec; the rows it did not touch stay in the lock,
            so a second get cannot unpin the first package (PKG-2). */
         if (pkg_lock_keep(kept, sizeof kept) != 0) return 1;
@@ -1335,9 +1381,10 @@ impl PkgOps for Pkg {
         spec = NULL;
         for (i = 0; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: %s get [--index <path>] <spec>[@<range>]\n", self->prog);
+                printf("usage: %s get [--index <path>] [--force] <spec>[@<range>]\n", self->prog);
                 printf("  spec: a local directory (. or / or file://) or a git package\n"
                        "        (name resolved against CT_INDEX, else CT_REGISTRY, else an https URL)\n");
+                printf("  --force  get even when a package 'requires' this compiler version\n");
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -1357,6 +1404,10 @@ impl PkgOps for Pkg {
                 self->have_index = 1;
                 continue;
             }
+            if (strcmp(argv[i], "--force") == 0) {
+                self->force = 1;
+                continue;
+            }
             if (argv[i][0] == '-' && argv[i][1]) {
                 fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
                 return 1;
@@ -1364,7 +1415,7 @@ impl PkgOps for Pkg {
             spec = argv[i];
         }
         if (!spec) {
-            fprintf(stderr, "usage: %s get [--index <path>] <spec>[@<range>]\n", self->prog);
+            fprintf(stderr, "usage: %s get [--index <path>] [--force] <spec>[@<range>]\n", self->prog);
             return 1;
         }
         return self->get(spec, ".");

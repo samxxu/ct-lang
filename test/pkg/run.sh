@@ -17,6 +17,9 @@
 # Phase 17.5 adds the comparator ranges, `ct update` / `ct verify`, the explicit
 # plain-text index (`CT_INDEX` / `--index`) and the build metadata that `ct
 # install` folds into its single printed command.
+# Phase 20 (P20-04) makes an unsatisfied `requires` a hard failure in both `get`
+# and `install`; `--force` downgrades it to a warning, and a refused `get` must
+# leave an existing `ct.lock` byte-identical (the check precedes the write).
 #
 # Usage:  bash test/pkg/run.sh
 #         CC=gcc bash test/pkg/run.sh
@@ -135,19 +138,47 @@ else
 fi
 
 echo
-echo "== ct install refuses a package that requires a newer compiler =="
-# P20-04: `requires` is a hard failure. The package is first vendored by `ct
-# get` (which does not compile anything), so the digest in ct.lock matches the
-# tree and the check under test is the requires one, not the lock one.
+echo "== ct get refuses a package that requires a newer compiler =="
+# P20-04: `requires` is a hard failure in `get` too, and the check runs before
+# ct.lock is merged or written, so a refused package leaves the lock untouched.
 mkdir -p "$work/hi" "$work/proj2"
 printf 'name = hi\nversion = 0.1.0\nrequires = ct >= 99.0.0\n' >"$work/hi/ct.pkg"
 printf 'pub int hi(void);\nint hi(void) { return 1; }\n' >"$work/hi/hi.h.ct"
 printf 'name = demo2\nversion = 0.1.0\ndep = ../hi@^0.1.0\n' >"$work/proj2/ct.pkg"
 printf 'int main(void) { return 0; }\n' >"$work/proj2/main.ct"
 if ( cd "$work/proj2" && "$work/ct-ast" get ../hi >"$work/hig.out" 2>"$work/hig.err" ); then
-    ok "ct get vendors the package without checking requires"
+    bad "requires hard fail" "ct get should refuse the package"
+elif grep -Fq "requires 'ct >= 99.0.0', but this is v" "$work/hig.err" \
+     && grep -Fq -- "--force" "$work/hig.err"; then
+    ok "ct get exits non-zero, names both versions and points at --force"
 else
-    bad "requires fixture" "ct get failed: $(cat "$work/hig.err")"
+    bad "requires hard fail" "wrong diagnostic: $(cat "$work/hig.err")"
+fi
+if [ -e "$work/proj2/ct.lock" ]; then
+    bad "requires failure" "ct.lock was written by the failed get"
+else
+    ok "a failed get does not create ct.lock"
+fi
+# An existing lock must survive the failure byte-for-byte, not be half-merged.
+printf 'old 0.0.0 dir ./vendor/old sha256:%064d\n' 0 >"$work/proj2/ct.lock"
+cp "$work/proj2/ct.lock" "$work/proj2/ct.lock.before"
+if ( cd "$work/proj2" && "$work/ct-ast" get ../hi >/dev/null 2>&1 ); then
+    bad "requires failure" "ct get should still refuse the package"
+elif cmp -s "$work/proj2/ct.lock.before" "$work/proj2/ct.lock"; then
+    ok "a failed get leaves an existing ct.lock untouched"
+else
+    bad "requires failure" "ct.lock changed on the failure path"
+fi
+rm -f "$work/proj2/ct.lock" "$work/proj2/ct.lock.before"
+if ( cd "$work/proj2" && "$work/ct-ast" get --force ../hi >"$work/hifg.out" 2>"$work/hifg.err" ); then
+    if grep -Fq "continuing despite the requires mismatch (--force)" "$work/hifg.err" \
+       && [ -f "$work/proj2/ct.lock" ]; then
+        ok "ct get --force warns, continues and writes ct.lock"
+    else
+        bad "requires --force" "no warning or ct.lock"
+    fi
+else
+    bad "requires --force" "expected a zero exit: $(cat "$work/hifg.err")"
 fi
 if ( cd "$work/proj2" && "$work/ct-ast" install >"$work/hi.out" 2>"$work/hi.err" ); then
     bad "requires hard fail" "expected a non-zero exit"
@@ -165,6 +196,20 @@ if ( cd "$work/proj2" && "$work/ct-ast" install --force >"$work/hif.out" 2>"$wor
     fi
 else
     bad "requires --force" "expected a zero exit: $(cat "$work/hif.err")"
+fi
+echo
+echo "== ct get accepts a package whose requires is satisfied =="
+mkdir -p "$work/lo" "$work/proj3"
+printf 'name = lo\nversion = 0.1.0\nrequires = ct >= 0.1.0\n' >"$work/lo/ct.pkg"
+printf 'pub int lo(void);\nint lo(void) { return 1; }\n' >"$work/lo/lo.h.ct"
+if ( cd "$work/proj3" && "$work/ct-ast" get ../lo >"$work/log.out" 2>"$work/log.err" ); then
+    if grep -Fq "requires" "$work/log.err"; then
+        bad "requires satisfied" "unexpected diagnostic: $(cat "$work/log.err")"
+    else
+        ok "ct get accepts a satisfied requires"
+    fi
+else
+    bad "requires satisfied" "ct get failed: $(cat "$work/log.err")"
 fi
 
 echo

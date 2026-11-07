@@ -41,7 +41,7 @@ hello/
 | `dep` | 否，可重复 | 依赖，`name` 或 `name@range`；格式与 Phase 8 一致 |
 | `cflags` | 否 | 消费者编译该包时附加的编译选项，`ct install` 折进打印的命令 |
 | `ldflags` | 否 | 链接选项（如 C 映射包的 `-lm`），同上 |
-| `requires` | 否 | 对编译器版本的约束；**不满足时 `ct install` 失败**，`--force` 才降级为告警 |
+| `requires` | 否 | 对编译器版本的约束；**不满足时 `ct get` / `ct install` 失败**，`--force` 才降级为告警 |
 | `licence` | 否 | 许可证标识（SPDX 风格，如 `MIT`）。**仅约定，工具不解析** |
 
 约定而不是工具的强制项：工具只强制 `name` 与 `version` 非空；`name` / `version` 缺失或为空时
@@ -49,7 +49,8 @@ hello/
 
 `cflags` / `ldflags` / `requires` 由 `ct install` 读取；`install` 把每个包的 `cflags` / `ldflags`
 拼进**一条** `ct build` 命令，遇到不满足的 `requires` 直接失败（`ct install --force` 才继续，
-并把原因打到 stderr）。
+并把原因打到 stderr）。`requires` 也在 `ct get` 里检查，且**发生在写 `ct.lock` 之前**：不满足时本次
+`get` 失败、既有 `ct.lock` 一个字节都不改（`ct get --force` 才继续并告警）。
 
 ### 3. 命名、版本与 tag
 
@@ -103,7 +104,7 @@ hello/
 | `... does not satisfy '<range>'` | 版本不在范围内 | 改 `dep` 范围或发新版 |
 | `no tag of '<name>' satisfies '<range>'` | git 源没有匹配 tag | 打 `v<version>` tag |
 | `digest ... does not match ct.lock` | `vendor/` 被改动或锁过期 | 重新 `ct get` / `ct update` |
-| `requires 'ct >= …'` 报错 | 编译器版本偏旧 | 升级编译器；确需继续时用 `ct install --force` |
+| `requires 'ct >= …'` 报错 | 编译器版本偏旧 | 升级编译器；确需继续时用 `ct get --force` / `ct install --force` |
 | 索引读不到 | `--index` / `CT_INDEX` 路径错 | 检查路径；无索引时裸名无法解析 |
 
 ---
@@ -143,7 +144,7 @@ A line-oriented manifest: `key = value`, `#` starts a comment, `dep` may repeat,
 | `dep` | no, repeatable | a dependency, `name` or `name@range`; the Phase 8 format |
 | `cflags` | no | extra compiler flags for consumers; `ct install` folds them into the printed command |
 | `ldflags` | no | link flags (e.g. `-lm` for a C mapping package); same |
-| `requires` | no | a compiler-version constraint; **a mismatch fails `ct install`**; `--force` downgrades it to a warning |
+| `requires` | no | a compiler-version constraint; **a mismatch fails `ct get` and `ct install`**; `--force` downgrades it to a warning |
 | `licence` | no | the licence identifier (SPDX style, e.g. `MIT`). **A convention only; the tool does not parse it** |
 
 Conventions, not tool enforcement: the tool only requires a non-empty `name` and `version`; a missing or
@@ -152,7 +153,9 @@ checked when the index accepts a package and by CI.
 
 `cflags` / `ldflags` / `requires` are read by `ct install`, which folds every package's `cflags` /
 `ldflags` into **one** `ct build` command; an unsatisfied `requires` fails the install, and only
-`ct install --force` continues (printing the reason to stderr).
+`ct install --force` continues (printing the reason to stderr). `requires` is checked by `ct get` too,
+**before `ct.lock` is written**: a mismatch fails that `get` and leaves an existing `ct.lock`
+byte-identical (`ct get --force` continues with a warning).
 
 ### 3. Names, versions and tags
 
@@ -212,5 +215,5 @@ checked when the index accepts a package and by CI.
 | `... does not satisfy '<range>'` | the version is outside the range | widen the `dep` range or release a new version |
 | `no tag of '<name>' satisfies '<range>'` | no matching tag on the git source | tag `v<version>` |
 | `digest ... does not match ct.lock` | `vendor/` was edited or the lock is stale | re-run `ct get` / `ct update` |
-| a `requires 'ct >= …'` error | the compiler is older than the package wants | upgrade; use `ct install --force` if you must continue |
+| a `requires 'ct >= …'` error | the compiler is older than the package wants | upgrade; use `ct get --force` / `ct install --force` if you must continue |
 | the index cannot be read | a wrong `--index` / `CT_INDEX` path | fix the path; without an index a bare name cannot resolve |

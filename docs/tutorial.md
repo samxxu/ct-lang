@@ -592,7 +592,7 @@ buf.encode(233, 16);
 | `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr）；`ct check` 下同一批记录按错误报告（`file:line:col:`），JSON 对象带 `"severity":"error"` 与 `"col"` |
 | `ct … --line` / `--no-line` | 覆盖 `#line` 默认（`build` 默认开、`compile` 默认关） |
 | `ct … --std=c99\|gnu99` | 写进 C 编译器的命令行，产物暂无异 |
-| `ct get <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引 |
+| `ct get [--force] <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引；包的 `requires` 不满足则失败且不改动既有 `ct.lock`（`--force` 继续并告警） |
 | `ct update` | 离线按 `ct.pkg` 重解依赖，沿用 `ct.lock` 已钉住的提交并重写 `ct.lock` |
 | `ct install` | 离线校验 `ct.lock` 与 `vendor/`，把各包的 `cflags` / `ldflags` 与 `-I` 拼成**一条**构建命令 |
 | `ct verify` | 离线校验 `vendor/` 与 `ct.lock`，只报告，不写任何文件 |
@@ -1235,7 +1235,7 @@ working program. This overview does not repeat them; both files live in the pack
 | `ct … --diagnostics=json\|text` | warning format (`text` on stderr by default); under `ct check` the same records are reported as errors at `file:line:col:`, and each JSON object carries `"severity":"error"` and `"col"` |
 | `ct … --line` / `--no-line` | override `#line` (on for `build`, off for `compile`) |
 | `ct … --std=c99\|gnu99` | lands on the C compiler's command line; output is unchanged so far |
-| `ct get <spec>[@<range>]` | fetch packages into `vendor/`, write `ct.lock` (the only subcommand using system `git`); a bare name may resolve through `--index <file>` / `CT_INDEX` |
+| `ct get [--force] <spec>[@<range>]` | fetch packages into `vendor/`, write `ct.lock` (the only subcommand using system `git`); a bare name may resolve through `--index <file>` / `CT_INDEX`; an unsatisfied package `requires` fails the run without touching an existing `ct.lock` (`--force` continues with a warning) |
 | `ct update` | re-resolve `ct.pkg` offline, keep the commits `ct.lock` already pinned, and rewrite `ct.lock` |
 | `ct install` | verify `ct.lock` against `vendor/` offline and fold each package's `cflags` / `ldflags` and `-I` into **one** build command |
 | `ct verify` | verify `vendor/` against `ct.lock` offline and only report; it writes nothing |
