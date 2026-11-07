@@ -1,0 +1,10 @@
+import Uart;
+
+#include <stdio.h>
+
+/* The same `-I` root given twice, once as `a` and once as `./a`. Before the
+   paths were normalized this reported "exists in two import roots". */
+int main(void) {
+    printf("%d\n", uart_id());
+    return 0;
+}

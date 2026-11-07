@@ -1,0 +1,3 @@
+/* The second root claims the same `namespace = app`. */
+pub int uart_id(void);
+int uart_id(void) { return 2; }

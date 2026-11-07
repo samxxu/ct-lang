@@ -1,0 +1,4 @@
+/* One root reached through a second spelling (`-I a -I ./a`): the duplicate
+   names one file, not two packages. */
+pub int uart_id(void);
+int uart_id(void) { return 7; }

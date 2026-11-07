@@ -66,6 +66,7 @@ static int ct_cmd_token(char *cmd, int cap, int *n, const char *tok);
 static int ct_cmd_raw(char *cmd, int cap, int *n, const char *frag);
 static int ct_pkg_key(const char *root, const char *key, char *out, int cap);
 static int ct_rel_cands(const char *root, const char *rel, char *first, char *fallback);
+static void ct_norm_path(const char *in, char *out, int cap);
 static int ct_root_find(const char *root, const char *rel, char *out, int cap,
                         int *is_hdr, int *is_map, char *err, int errcap);
 pub trait ModuleOps {
@@ -298,6 +299,10 @@ impl ModuleOps for Module {
         char cand[MAX_PATH];
         char first[MAX_PATH];
         char firstroot[MAX_PATH];
+        char ncand[MAX_PATH];
+        char nfirst[MAX_PATH];
+        char nroot[MAX_PATH];
+        char nfirstroot[MAX_PATH];
         char msg[MAX_PATH * 2 + MAX_TEXT];
         const char *root;
         FILE *f;
@@ -329,11 +334,18 @@ impl ModuleOps for Module {
                 *is_map = cand_map;
                 continue;
             }
-            /* Same unit seen twice: identical path, duplicate `-I`, or the
+            /* Same unit seen twice: identical file, duplicate `-I`, or the
                importer's own directory already won. Anything else is two roots
-               competing for one name and must be reported. */
-            if (strcmp(cand, first) == 0) continue;
-            if (strcmp(root, firstroot) == 0) continue;
+               competing for one name and must be reported. The paths are
+               normalized first: `-I x` and `-I ./x`, `a/../b`, or a symlinked
+               root all name one directory, and comparing the spellings would
+               report a clash that is not there. */
+            ct_norm_path(cand, ncand, sizeof ncand);
+            ct_norm_path(first, nfirst, sizeof nfirst);
+            if (strcmp(ncand, nfirst) == 0) continue;
+            ct_norm_path(root, nroot, sizeof nroot);
+            ct_norm_path(firstroot, nfirstroot, sizeof nfirstroot);
+            if (strcmp(nroot, nfirstroot) == 0) continue;
             if (first_local) continue;
             snprintf(msg, sizeof msg,
                      "unit '%s' exists in two import roots: '%s' and '%s'",
@@ -1329,6 +1341,18 @@ static int ct_pkg_key(const char *root, const char *key, char *out, int cap)
     return found;
 }
 
+/* Normalize a path so two spellings of one directory compare equal: `-I x` vs
+   `-I ./x`, `a/../b`, or a symlinked root. `realpath` needs the path to exist,
+   which import roots and resolved units do; when it fails we keep the spelling
+   we were given rather than inventing one. */
+static void ct_norm_path(const char *in, char *out, int cap)
+{
+    char buf[MAX_PATH];
+
+    if (realpath(in, buf)) snprintf(out, (size_t)cap, "%s", buf);
+    else snprintf(out, (size_t)cap, "%s", in);
+}
+
 /* The relative paths one root offers for `rel`. A package that declares
    `namespace = app` owns the first import segment, so `app::model::Item` names
    `model/Item` under that root; the doubled layout the old convention forced
@@ -1409,14 +1433,21 @@ static int ct_root_find(const char *root, const char *rel, char *out, int cap,
 static int ct_pkg_ns_clash(struct Module *m, char *msg, int cap, char *file, int fcap)
 {
     char ns[MAX_TEXT];
+    char nroot[MAX_PATH];
+    char nother[MAX_PATH];
     int i, j;
 
     for (i = 0; i < m->ninc; i++) {
         if (!ct_pkg_key(m->incdirs[i], "namespace", ns, sizeof ns)) continue;
+        ct_norm_path(m->incdirs[i], nroot, sizeof nroot);
         for (j = 0; j < i; j++) {
             char other[MAX_TEXT];
             if (!ct_pkg_key(m->incdirs[j], "namespace", other, sizeof other)) continue;
             if (strcmp(ns, other) != 0) continue;
+            /* One directory spelled twice (`-I a -I ./a`) is one package, not a
+               clash with itself. */
+            ct_norm_path(m->incdirs[j], nother, sizeof nother);
+            if (strcmp(nroot, nother) == 0) continue;
             snprintf(msg, (size_t)cap,
                      "package namespace '%s' is declared by two import roots: '%s' and '%s'",
                      ns, m->incdirs[j], m->incdirs[i]);

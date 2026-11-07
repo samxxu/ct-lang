@@ -1,0 +1,10 @@
+import Uart;
+
+#include <stdio.h>
+
+/* Two roots both declare `namespace = app`: a clash. The same root spelled
+   twice (`a` and `./a`) is one package, so this builds either way. */
+int main(void) {
+    printf("%d\n", uart_id());
+    return 0;
+}

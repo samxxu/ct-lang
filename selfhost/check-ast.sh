@@ -773,6 +773,47 @@ else
     bad "p20_dup_plain" "$(head -2 "$work/mpdp.err")"
 fi
 
+# M1: one root spelled twice (`-I a -I ./a`) is one directory. The roots and the
+# resolved units are compared after realpath, so the duplicate names one file
+# instead of a phantom clash.
+rm -rf "$mod-m1s"
+mkdir -p "$mod-m1s"
+if "$work/ct-ast" build --emit-c -I test/modules/p20_dup_samepath/a \
+        -I ./test/modules/p20_dup_samepath/a \
+        test/modules/p20_dup_samepath/main.ct -o "$mod-m1s" \
+        >"$work/m1s.out" 2>"$work/m1s.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-m1s"/*.c -o "$work/m1s.bin" 2>"$work/m1s.cc" \
+   && "$work/m1s.bin" >"$work/m1s.stdout" 2>&1 \
+   && cmp -s "$work/m1s.stdout" test/modules/p20_dup_samepath/expected.out; then
+    ok "p20_dup_samepath (-I a -I ./a names one root)"
+else
+    bad "p20_dup_samepath" "$(cat "$work/m1s.err" "$work/m1s.cc" "$work/m1s.stdout")"
+fi
+
+# M1: the ct.pkg namespace check normalizes the same way -- one root spelled
+# twice is one package, while two different roots claiming one namespace clash.
+rm -rf "$mod-m1n"
+mkdir -p "$mod-m1n"
+if "$work/ct-ast" build --emit-c -I test/modules/p20_ns_clash/a \
+        -I ./test/modules/p20_ns_clash/a \
+        test/modules/p20_ns_clash/main.ct -o "$mod-m1n" \
+        >"$work/m1n.out" 2>"$work/m1n.err"; then
+    ok "p20_ns_samepath (one ct.pkg namespace, root spelled twice)"
+else
+    bad "p20_ns_samepath" "$(head -2 "$work/m1n.err")"
+fi
+if "$work/ct-ast" build --emit-c -I test/modules/p20_ns_clash/a \
+        -I test/modules/p20_ns_clash/b \
+        test/modules/p20_ns_clash/main.ct -o "$mod-m1n" \
+        >"$work/m1nb.out" 2>"$work/m1nb.err"; then
+    bad "p20_ns_clash" "expected a non-zero exit"
+elif grep -qF "package namespace 'app' is declared by two import roots: 'test/modules/p20_ns_clash/a' and 'test/modules/p20_ns_clash/b'" \
+        "$work/m1nb.err"; then
+    ok "p20_ns_clash (two roots claiming one namespace)"
+else
+    bad "p20_ns_clash" "$(head -2 "$work/m1nb.err")"
+fi
+
 rm -rf "$mod-hdr"
 mkdir -p "$mod-hdr"
 if "$work/ct-ast" build --emit-c test/modules/hdr/main.h.ct -o "$mod-hdr" \
