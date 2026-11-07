@@ -229,6 +229,16 @@ same_modulo_version() {
     cmp -s "$work/norm-a" "$work/norm-b"
 }
 
+# The `--emit-map` / `--diagnostics=json` documents record the same version token
+# in a "compiler" field, so a bump would otherwise turn every `expected.map` and
+# every JSON stdout fixture into a regression while the .c/.h beside them still
+# matches. Normalize that one field and nothing else.
+same_modulo_json_version() {
+    sed -E 's/"compiler": "ct v[0-9][0-9.]*"/"compiler": "ct vX"/' "$1" >"$work/norm-json-a"
+    sed -E 's/"compiler": "ct v[0-9][0-9.]*"/"compiler": "ct vX"/' "$2" >"$work/norm-json-b"
+    cmp -s "$work/norm-json-a" "$work/norm-json-b"
+}
+
 # ---------------------------------------------------------------- 1) L0
 banner "1) build L0 (selfhost/l0/ctc.c) warning-free"
 if ! run "build L0" "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$l0"; then
@@ -581,7 +591,7 @@ for fdir in test/modules/*/; do
         detail="(compiler stderr differs from expected.stderr)"
     fi
     if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.stdout" ] &&
-       ! cmp -s "$work/mod-$name.stdout" "$fdir/expected.stdout"; then
+       ! same_modulo_json_version "$work/mod-$name.stdout" "$fdir/expected.stdout"; then
         matched=0
         detail="(compiler stdout differs from expected.stdout)"
     fi
@@ -596,10 +606,11 @@ for fdir in test/modules/*/; do
         done <"$fdir/expected.stdout.contains"
     fi
     # `--emit-map <file>` writes a JSON beside the other outputs (compile mode
-    # keeps it in the staging copy); expected.map pins those bytes.
+    # keeps it in the staging copy); expected.map pins those bytes, modulo the
+    # "compiler" version token normalized the same way as the .c/.h banners.
     if [ "$matched" -eq 1 ] && [ -f "$fdir/expected.map" ]; then
         mapgot="$(ls "$runc"/*.map 2>/dev/null | head -n 1)"
-        if [ -z "$mapgot" ] || ! cmp -s "$mapgot" "$fdir/expected.map"; then
+        if [ -z "$mapgot" ] || ! same_modulo_json_version "$mapgot" "$fdir/expected.map"; then
             matched=0
             detail="(the emitted map JSON differs from expected.map)"
         fi
