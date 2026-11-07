@@ -2,9 +2,10 @@
 
 > 中文 · [English](#english)
 >
-> **状态：规划中**（2026-11-06；本文件是计划与实现依据，不是已确认的最终决策；D21-1–D21-12 待用户确认）。
+> **状态：规划中**（2026-11-06 立项；2026-11-08 按 HEAD `v0.20.2`（`0263cca`）实测勘误，补设计缺口 G1–G3
+> 与切片 S0–S7；D21-1–D21-17 仍待用户确认）。
 > **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.2`（`CTC_VERSION` 五处一致）。
-> 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无依赖）。
+> 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无语义依赖）。
 > 关联：[borrow 设计](../history/design/borrow.md)、[language-spec](../language-spec.md)、
 > [std 能力缺口](../../issues/std/std1-markdown-readiness.md)、[roadmap](../roadmap.md)。
 
@@ -17,9 +18,10 @@
 | # | 判断 | 结论 |
 | --- | --- | --- |
 | 1 | 提案的物理模型（`(fn, env)` 两词、档② = 档① 自动展开） | **成立**，且与今天的 `<Struct>_<Trait>_<method>(void *self, …)` 同形 |
-| 2 | 提案的「逃逸判定复用 `own`、扩展闭包为第三类右值，性价比最高」 | **不成立**。`own` 的判定是变量中心 + 取消析构 + 泄漏警告；闭包逃逸必须是硬错误，且闭包值没有可挂靠的 `Var.st`。可复用形态识别与寿命比较，不能复用数据结构 |
+| 2 | 提案的「逃逸判定复用 `own`、扩展闭包为第三类右值，性价比最高」 | **不成立**。`own` 的判定是变量中心 + 取消析构 + 泄漏警告；闭包逃逸必须是硬错误。闭包值是一对局部 `(fn, env)`，`Var` 里也没有可复用的槽：`Var.st` 是 **struct 下标**（类型为 `struct T *` 时指向结构体表），不是作用域下标；作用域深度来自 `sym->scope[]` / `nscope`，由 `Stmt.var_scope(sym, vi)` 推导。可复用形态识别与寿命比较，不能复用数据结构 |
 | 3 | 提案的「容器先行，因为闭包最大用途是 map/filter」 | **不成立**（无泛型）。容器上的闭包省掉的是每处 adapter struct，不是每元素类型的包装函数；且先冻结容器回调签名，会把错误的 ABI 固化下来 |
 | 4 | 提案的「borrow 阶段一尚未实现、需合并」 | **已实现**（v0.16.0 阶段一 + 阶段二，v0.16.1 加固）。Phase 21 只剩「抽出共用的寿命判定并由闭包侧接入」 |
+| 5 | 设计草案本身 | **整体可实现，但有 4 处需修、2 处过期、1 处事实错误**（§4.10）；另外有 3 个未覆盖的实现缺口 G1–G3（§4.11） |
 
 ---
 
@@ -36,7 +38,7 @@ D17-1 已按此恢复编号）。据此：
 | 20 | [phase20.md](phase20.md) | ✅ 完成 | `v0.20.0`（包支持；P20-05 移出、P20-07 延后，与本相无依赖） |
 | 21 | 本文件 | ⬜ 规划中 | 收口 `v0.21.0`，阶段内 patch 位可用 |
 
-三点必须钉死：
+四点必须钉死：
 
 1. **Phase 21 不等于 `v0.21.1`。** 它指「第 21 相」，收口时一次性 bump 到 `v0.21.0`；阶段内只有需要重生成
    golden 的修复才用 patch 位。
@@ -64,44 +66,48 @@ D17-1 已按此恢复编号）。据此：
 
 - 不做堆上闭包、引用计数、生命周期标注、跨过程逃逸分析。
 - 不做闭包的跨语言暴露；iOS / C 回调注册一律走档①（环境活不过栈帧）。
-- 不把 `Callable` 做成「万能可调用」：无泛型时它只能是**按签名一族**的约定，不是一个 trait 包打天下（§5.5）。
+- 不把 `Callable` 做成「万能可调用」：无泛型时它只能是**按签名一族**的约定，不是一个 trait 包打天下（§4.9 / S6）。
 - 不改 L0 / L1 / L2；新能力只落 `selfhost/ct-ast/**`、`docs/**`、`test/ast/**`、`examples/**`。
-- 不为闭包改 `CTC_VERSION` 之外的生成物形态；既有 71 个 golden 只允许版本 token 变化。
+- 不为闭包改 `CTC_VERSION` 之外的生成物形态；既有 golden 只允许版本 token 变化。口径是
+  **`test/cases` 25 组逐字节 golden**（`check-goldens.sh` 的 baseline ratchet；`test/cases` 目录共 98 个文件，
+  未进 baseline 的记为 PENDING，不参与失败判定）**+ `test/ast` 68 个编号探针**（HEAD 共 69 个目录 =
+  68 个编号 + `errors`，编号 67 缺位）。
 
 ---
 
-### 3. 核对：v0.12.0 提案 vs v0.19.1 实测（偏差单独成节）
+### 3. 核对：v0.12.0 提案 vs HEAD 实测（偏差单独成节）
 
 #### 3.1 逐项核对
 
-| # | 提案依赖的机制 | v0.19.1 实测 | 判定 |
+| # | 提案依赖的机制 | HEAD 实测 | 判定 |
 | --- | --- | --- | --- |
 | 1 | `own` / AutoDrop「两套逃逸形态：`q = p;`、`return p;`」 | 现有 **4 个入口**：声明初始化式 `leak_decl`、赋值 `leak_assign`（含 `s->f = p` 的基名）、`return` 的 `leak_return` + `expr_returns`（SH-36/41 区分「读字段」与「真移交」）、作用域出口 `leak_scope`（路径敏感 + `path_warned`）。另有 `ret_owned` 一级跨过程提示。形态只增不减 | **提案低估了形态数量** |
-| 2 | 「扩展闭包值为第三类右值」是性价比最高的切入点 | 判定是**变量中心**：`Var{owned, autodrop, borrowed, st, is_param, is_global, is_static}` + 名字 token 匹配；闭包值是「一对局部（fn, env）」，没有 `struct` 类型可挂 `st`；且 `own` 逃逸 = 取消析构/泄漏警告，闭包逃逸 = **硬错误** | **不成立**，见 §3.2 |
+| 2 | 「扩展闭包值为第三类右值」是性价比最高的切入点 | 判定是**变量中心**：`Var{owned, autodrop, borrowed, st, is_param, is_global, is_static}` + 名字 token 匹配。闭包值是「一对局部（fn, env）」，没有 struct 类型可挂，`Var.st` 也不承担作用域信息（它是 struct 下标）；且 `own` 逃逸 = 取消析构/泄漏警告，闭包逃逸 = **硬错误** | **不成立**，见 §3.2 |
 | 3 | trait / impl mangling：`Adder_Callable_call(&adder, x)` | 仍成立：`<Struct>_<Trait>_<method>(void *self, …)`，调用方传 `&obj`；vtable 为 `struct <Trait>_vtbl`，实例级为 `<inst>_<Trait>_vtable` | **成立**（有一处限制，见 §3.3） |
 | 4 | 官方 `Callable` | 全仓 **0 命中**；`Callable` 不存在，属绿地 | 提案 §9 不是「官方化」，是新建 |
 | 5 | 方言生成可作档①通路 | 编译器对 DSL **零感知**；方言只允许是 `examples/` 与 `test/ct-dialects/` 下的仓库外展开器（Phase 6.6 / D20） | 提案 §1 把「方言生成」列为档①基础机制 **不成立** |
 | 6 | `=>` 未被占用 | **确认**：398 个 `.ct` + 135 个 `.c/.h` 中 0 处；`ct-pkg` 55 个 `.ct` 中 0 处（详见 §8） | **成立** |
 | 7 | borrow 阶段一待做、建议与档②合并 | **已实现**：`borrow` 参数注解 + 变量声明 + 出口 `handback`（v0.16.0），SH-33/35/36/37/39/40/41 已修；探针 `test/ast/61_autodrop_return`、`62_borrow_handback`；[borrow.md](../history/design/borrow.md) §12 记录实现差异 | **前提已消失**，见 §3.2 |
 | 8 | 提案要求「错误码」 | CT **没有错误码体系**。硬错误统一走 `ct_sem_error(line, col, msg, path)` → `path:line:col: error: msg`；只有警告有 `Warn.kind` 分桶（0–6） | 需要换一种可钉住的契约（§4.6） |
+| 9 | 局部函数指针初始化式是否可用（原 R1） | **可用**：`Stmt.h.ct` 的声明路径对含 `(*` 的类型置 `fnval_ok`，`int (*p)(int) = strcmp;` 已被接受并发射 | **风险已消解**（§4.1 / §4.10） |
 
 #### 3.2 因核对而失效的提案结论
 
 1. **「复用 `own` 基础设施、把闭包当第三类右值」不可直接执行。**
    可复用的是**形态识别**（声明 / 赋值 / return / 作用域出口四个入口）与**寿命比较**
-   （`Stmt.var_scope`：scope 下标更浅 = 更长寿命）。数据结构和语义都要新建：
+   （`Stmt.var_scope(sym, vi)`：变量所属 scope 更浅 = 更长寿命；作用域边界在 `sym->scope[]` / `nscope`）。
+   数据结构和语义都要新建：
    - `Var` 增加 `is_closure` / `closure_id`（1 个 flag + 1 个 id），不复用 `owned` / `autodrop`；
-   - 新增闭包表（id → env 结构名、trampoline 名、捕获字段清单）；
+   - 新增闭包表（id → env 结构名、trampoline 名、捕获字段清单、owner 函数）；
    - 逃逸是硬错误（`ct_sem_error`），不是取消析构 + 泄漏警告。
    因此该项**不是「性价比最高」的小改动**，而是一个独立检查器；它仍比通用闭包轻得多。
 2. **「borrow 阶段一尚未实现，需要与档②合并」失效。** 阶段一 / 二已落地。Phase 21 只剩下
    「把 `check_borrow_store` 里的寿命比较抽成公共判定，并让闭包侧调用它」这一小步。
    「合并实现、不要两套语义」的目标仍可达成，但方式是抽公共函数，不是重做 borrow。
 3. **「方言生成」不能作为档①的官方通路。** 它只能作为仓库外实验；官方逃生门只有显式 `Callable`。
-4. **「两档可零改动互通」在跨单元时不成立。** trait impl 的包装函数一律发射为 `static`
+4. **「两档可零改动互通」在同单元成立，跨单元要加限定。** trait impl 的包装函数一律发射为 `static`
    （`Emitter.emit_impls` 的 `static %s`），只有「pub trait + pub struct」的 vtable 才导出。
-   所以 `Adder_Callable_call` **只在同一翻译单元内**可当 `fn` 传递；跨单元只能走 vtable / iface，
-   或由用户另写 `pub` 包装。Phase 21 必须把这条写进文档与 21.4 的交付物。
+   准确表述见 §4.4：**不能按符号名跨单元引用**，但把 trampoline / 包装函数的地址当实参传出去是合法 C。
 
 #### 3.3 仍然成立、可直接沿用的结论
 
@@ -112,11 +118,11 @@ D17-1 已按此恢复编号）。据此：
 
 ---
 
-### 4. 设计基线（21.2 / 21.3 的实现依据）
+### 4. 设计基线（S2 / S3 的实现依据）
 
 #### 4.1 语法
 
-不引入 `auto`（CT 无类型推断，`auto` 不是关键字）。闭包的**表面类型**复用现有函数指针声明，
+不引入 `auto`（CT 无类型推断，`auto` 是 C 的存储类）。闭包的**表面类型**复用现有函数指针声明，
 初始化式是闭包字面量：
 
 ```c
@@ -127,16 +133,16 @@ int apply(int base) {
 }
 ```
 
-- 字面量：`(参数列表) => 表达式`；多行体：`(参数列表) => { 语句… }`（21.3）。
+- 字面量：`(参数列表) => 表达式`；多行体：`(参数列表) => { 语句… }`（S5）。
 - 参数必须带类型（与 CT 的声明风格一致）；返回类型由左侧声明的函数指针给出，不推断。
 - 无参：`() => expr`；`void` 返回：`void (*f)(int) = (int x) => { … };`。
 - 表面类型是函数指针，但编译器把它标记为**闭包变量**；它不能被当作普通函数指针使用
   （§4.5 的 E6）。
 - `=>` 只在「`)` 之后、表达式起始位置」被识别为闭包运算符；`>=`、`==`、`->` 不受影响。
 
-**落地检查点**：现有 `parse_decl_node` 对函数指针的**局部初始化式**支持需要实测（
-language-spec §4.12 只举了文件作用域初始化器与局部逐元素赋值）。若不支持，21.2 内一并补上，
-这是本阶段最小的前端改动。
+**落地检查点（已由 HEAD 证实，2026-11-08，不再是待办）**：函数指针的**局部初始化式**已被接受——
+`Stmt.h.ct` 的声明路径在类型含 `(*` 时置 `fnval_ok`，`int (*p)(int) = strcmp;` 可解析并发射。
+因此前端不必先补声明解析，S2 只需在同一路径上识别 `=>` 字面量。
 
 #### 4.2 捕获语义
 
@@ -177,15 +183,16 @@ int apply(int base) {
 - **作用域**：env 结构与 trampoline 一律发在**本单元的 `.c` 文件作用域**，trampoline 为 `static`；
   绝不进 `.h`（闭包只可能出现在函数体里）。因此 **不加 namespace 前缀**：`static` + 一单元一 `.c`
   已经保证不冲突；`ct build` 两个单元各自有 `__ct_cl_tramp_1` 也合法。
-- **顺序**：每对 (env struct, trampoline) 发在包含它的函数定义之前，外层先于内层；
-  struct 先于其 trampoline。
+- **顺序**：每对 (env struct, trampoline) 发在**包含它的函数定义之前**，外层先于内层；
+  struct 先于其 trampoline。发射时机见 G3 / D21-15。
 - **调试映射**：`line_mode` 打开时，在 trampoline 前后重锚定 `#line`（复用 `Emitter` 现有机制）；
   无论开关，都在生成物前发 `/* closure at <file>:<line> */`；env 字段沿用源变量名；
   所有诊断只指向源位置，不出现 `__ct_cl_*`。
 - **保留前缀**：`__ct_` 为编译器保留。用户声明以 `__ct_` 开头的标识符 → 硬报错
   （否则可能与 `__ct_retN` / `__ct_cl_*` 撞名）。这是新检查，成本低。
 - **容量**：生成的 env 结构**不登记**进 `Symbols.Structs`（不占 `MAX_STRUCTS 128`）；
-  每个闭包只占 1 个 `Var` 槽（闭包变量本身）+ 1 个闭包表项。
+  每个闭包占 1 个 `Var` 槽（闭包变量本身）+ 1 个闭包表项（建议 `MAX_CLOSURES 64`，见 M3）。
+  闭包变量在 C 侧是两个局部（fn + env），但源级只算 1 个变量。
 
 #### 4.4 ABI
 
@@ -207,9 +214,13 @@ static int run(int (*fn)(void *, int), void *env, int v) { return fn(env, v); }
   例如 `each(v, add)` → `each(v, __ct_cl_tramp_1, &__ct_cl_env_v_1)`。
   识别规则（窄、可判）：被调方参数表中存在相邻的
   `ret (*P)(void *self, …)` + `void *E`，闭包实参必须落在这个对的起点。
-  参数个数检查（Phase 19 的 arity）把闭包记为 2 个实参。
-- **跨单元限制**：trampoline 与 impl 包装都是 `static`，闭包与档①的裸 `fn` 只能在**同一单元**内传递；
-  跨单元走 vtable / iface，或用户自写 `pub` 包装。21.4 评估是否给 `Callable` 增加 `pub` 转发。
+  参数个数检查（Phase 19 的 arity）把闭包记为 2 个实参。字面量直接作实参时的类型比对见 G2 / D21-14。
+- **跨单元限制（准确表述）**：
+  - **可以**：把 trampoline / impl 包装的**地址**作为实参传给另一个单元的函数，由对方在运行期调用
+    （地址只是函数指针，C 层面完全合法）。典型形态是「本单元创建闭包，调用别单元的 `each`」。
+  - **不可以**：按符号名在另一个单元引用 `__ct_cl_tramp_*` / `Adder_Callable_call`（都是 `static`）；
+    闭包类型出现在 `.h.ct`；把闭包作返回值；把闭包作字段或数组元素；在另一单元声明闭包变量。
+  - 公开给别单元时走 vtable / iface，或用户自写 `pub` 包装；21.4 / S6 评估是否给 `Callable` 增加 `pub` 转发。
 
 #### 4.5 逃逸判定
 
@@ -223,17 +234,17 @@ static int run(int (*fn)(void *, int), void *env, int v) { return fn(env, v); }
 | E4 | 捕获 `own` / `borrow` 变量 | 错误 |
 | E5 | 闭包体内给捕获名赋值 | 错误 |
 | E6 | 闭包变量赋给普通函数指针、或传给非 `(fn, env)` 参数对 | 错误 |
-| E7 | 同作用域或更内层的局部拷贝 `int (*d)(int) = c;` | **允许**（env 仍在同一栈帧内） |
+| E7 | 同作用域或更内层的局部拷贝 `int (*d)(int) = c;` | **允许**，但必须连 env 一起搬（G1 / D21-13）；只搬 fn 的实现是错的 |
 | E8 | `goto` 跨过闭包声明 | 已知静默失效（与 `own` / `borrow` 相同），文档记录，不做检查 |
 
 复用点（明确到函数）：
 
 - `Memory.expr_returns(e, name)`：判断「真移交」而不是「读字段」，E1 直接复用。
-- `Stmt.var_scope(sym, vi)`：寿命比较，E2 直接复用。
+- `Stmt.var_scope(sym, vi)`：寿命比较，E2 直接复用（作用域边界是 `sym->scope[]`，不是 `Var.st`）。
 - `Memory.leak_decl` / `leak_assign` / `leak_return` 的**调用位置**（`Stmt.h.ct` 的声明、赋值、return 三处）
   作为挂载点；不改变它们对 `own` 的行为。
 - `check_borrow_store` 只处理 borrow；闭包另写 `check_closure_store`，共用 `var_scope` 与
-  「全局 / static / 更浅作用域」的判定（21.1 抽公共函数）。
+  「全局 / static / 更浅作用域」的判定（S1 抽公共函数 `outlives()`）。
 
 #### 4.6 诊断与 hint
 
@@ -263,29 +274,36 @@ identifier '__ct_' is reserved for the compiler
 hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / `impl Callable for …`），
 不能只写「不支持」。
 
-#### 4.7 与 borrow 的共用检查
+#### 4.7 与 borrow 的共用检查（修正原「假安全承诺」）
 
 - borrow 阶段一 / 二已实现，Phase 21 **不重做**。
-- 21.1 把 `check_borrow_store` 中的「目标是否更长寿命」抽成
+- S1 把 `check_borrow_store` 中的「目标是否更长寿命」抽成
   `static int outlives(struct Symbols *sym, int target, int source)`（全局 / `static` / `var_scope` 比较），
   borrow 与闭包两侧都调用它。
-- 闭包作为参数传入时，「不持有」的语义由**参数对形状**表达（`fn` + `env` 相邻）；
-  接收方函数体按同一套闭包规则编译，因此「在接收方把 env 存进全局 / 字段」会被同一条检查拦住。
+- **原稿的这句话不成立，现删除**：「接收方函数体按同一套闭包规则编译，因此在接收方把 env 存进
+  全局 / 字段会被同一条检查拦住」。
+  实际情况：闭包传给一个 CT 函数时，接收方只看到 `void *env` 这个**普通参数**；它可以把 `env`
+  存进全局、字段或容器，编译器不会报——那条赋值表达式里没有闭包变量，`Var.is_closure` 不参与。
+  因此这是**已知未防护面**：包括 std 规划中的 `each(v, fn, env)`，接收方完全可以保存 `env`。
+  只能靠 API 约定与文档约束，不能靠编译器（§4.8 第 1 条、风险 H1）。
 - 这不扩展 `borrow` 的指针语义（`borrow` 仍只接受 struct 指针），也不引入第二个注解关键字。
 
 #### 4.8 必须对用户诚实标注的限制
 
-1. 逃逸判定拦得住 `g = c` / `s->f = c` / `return c`，**拦不住**把 `env` 以 `void *` 传给不透明 C 函数后
-   由对方保存；ct-ast 不做跨过程可达性分析。
+1. 逃逸判定拦得住 `g = c` / `s->f = c` / `return c`，**拦不住**两类「把 env 交出去」：
+   (a) 把 `env` 以 `void *` 传给不透明 C 函数后由对方保存；
+   (b) 传给另一个 CT 函数（**包括 std 的 `each`**）后由对方保存到全局 / 字段 / 容器。
+   ct-ast 不做跨过程可达性分析，接收方看到的是普通 `void *`。
 2. `goto` 跨过闭包声明静默失效（同 `own` / `borrow`）。
 3. 捕获按值；对捕获名的写入不生效（直接报错，不静默）。
-4. 闭包不能跨单元传递（`static`），也不能跨语言边界。
+4. 闭包**类型**不能出现在 `.h.ct`、不能作返回值、不能作字段或元素；trampoline 的地址可以作实参
+   传给别的单元（§4.4）。
 5. 环境在栈上，**闭包值本身不能被容器持有**；容器需要持有时走档①。
 
 #### 4.9 类型宿主隔离（防 std 的歧义坑）
 
-`map trait T for type <ctype>` 的候选集按类型全局聚合，std 已踩过 `ambiguous type-host map`。
-闭包**不得**进入这条派发通路：
+`map trait T for type <ctype>` 的候选集按类型全局聚合，std 已踩过 `ambiguous type-host map`
+（`Emitter.h.ct` 里仍有该诊断）。闭包**不得**进入这条派发通路：
 
 - 闭包调用、传参、逃逸检查一律以 `Var.is_closure` 为唯一依据，不查 trait / 类型宿主；
 - 不提供 `.call()` 方法语法：闭包只能 `c(args)` 直接调用；
@@ -294,84 +312,108 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 
 否则 `char *` 宿主映射会与闭包调用点共享候选集，每个闭包调用都可能变成歧义报告。
 
+#### 4.10 勘误清单（2026-11-08，对照 HEAD `0263cca`）
+
+| # | 原文 | 现状与依据 | 处理 |
+| --- | --- | --- | --- |
+| E-1 | 用 `Var.st` 指代作用域 / 说闭包值「没有 `st` 可挂」 | `Var.st` 是 struct 下标（`struct T *` 时指向结构体表，否则 -1）；作用域深度来自 `sym->scope[]` / `nscope`，由 `Stmt.var_scope(sym, vi)` 推导 | §0 第 2 行、§3.1 第 2 行、§3.2 第 1 条已改写 |
+| E-2 | 「既有 71 个 golden」 | `check-goldens.sh` 的 baseline 是 **25 组**逐字节比对（`test/cases` 共 98 个文件，其余记 PENDING）；`test/ast` 是 **68 个编号探针**（69 个目录 = 68 + `errors`，缺 67） | §2、§5、§12 已改为「25 组 + 68 探针」 |
+| E-3 | 把 `qsort` 列为闭包的即时收益 | `qsort` 的比较函数签名 `int (*)(const void *, const void *)` **没有 env 槽**，闭包与档① 的 `(fn, env)` 都塞不进去 | §6 删除 `qsort`，改为准确表述 |
+| E-4 | 「闭包不能跨单元传递」 | `static` 只挡「按符号名引用」，不挡「把地址当实参传出去」；真正不能跨单元的是闭包类型出现在 `.h.ct` / 返回值 / 字段 / 元素 | §4.4、§4.8 第 4 条已改写 |
+| E-5 | §4.7「接收方会被同一条检查拦住」 | 假安全承诺：接收方看到的是普通 `void *env`，保存它不会触发闭包检查（含 std 的 `each`） | §4.7 已改写并标为未防护面 |
+| E-6 | R1「函数指针局部初始化式可能不被接受」 | 已被 HEAD 证实支持（`Stmt.h.ct` 对含 `(*` 的类型置 `fnval_ok`） | §4.1 标为已证实；风险表删除 R1 |
+| E-7 | 「12 道硬门禁」等旧计数 | 实际 **11 道**（`check-all.sh` 的 `run_gate` 调用数） | 沿用 §1 第 4 点的既有更正 |
+
+#### 4.11 三个设计缺口（G1–G3）
+
+原设计只覆盖了「闭包变量怎么生成、怎么判逃逸」，没有覆盖下面三处；它们都会静默生成错误代码，
+必须在切片里显式解决。
+
+**G1 · 闭包值两词 vs 局部拷贝丢 env**
+
+- 触发：§4.5 的 E7 允许 `int (*d)(int) = c;`。但闭包在 C 侧是 `(fn, env)` 两词，源级声明却只有一个
+  函数指针类型——按现有声明/赋值路径，拷贝只会搬 `fn`。
+- 后果：`d(5)` 调用时没有 env 可传（trampoline 读 `self` 直接段错误），或者编译器擅自复用 `c` 的 env，
+  在 `c` 的作用域结束后变成悬垂指针。两者都不报错，属**静默内存错误**。
+- 可选修法：
+  - (a) 闭包变量在符号表 / AST 里就是两词（`closure_id` 指向闭包表），声明与拷贝由发射器生成两条 C 赋值
+    （`d_fn = c_fn; d_env = c_env;`），并要求目标作用域不浅于源；`d` 因此仍是闭包变量，不能当普通 fnptr（E6）。
+  - (b) 禁止拷贝，把 E7 改成硬错误：实现最省，但砍掉「同作用域起个别名」这一自然写法。
+  - (c) 只允许语法上的「直接初始化拷贝」(`T (*d)(…) = c;`)，禁止后续赋值；覆盖面窄，但规则好讲。
+- 建议：(a) 的窄版，进 S4（D21-13）。
+
+**G2 · 闭包字面量直接作实参时与宿主函数指针类型无比对**
+
+- 触发：`each(v, (int x) => x + 1)`。字面量本身没有左侧声明，返回类型与完整 fn 类型无处来；
+  现有实参检查（Phase 19 `argtype_check`）只比较「已声明变量」的粗类型，闭包字面量是新的实参形态。
+- 后果：参数个数 / 类型与宿主的 `(fn, env)` 对不符时不会在 `ct check` 报错，要到 `cc` 编译生成 C
+  才暴露（还可能是隐式转换后静默运行）。
+- 可选修法：
+  - (a) 用宿主 `(fn, env)` 对里 fn 的完整类型作为期望类型：逐参数比对，返回类型取 fn 的返回类型。
+  - (b) 要求字面量自带完整返回类型（`int (int x) => …`），语法噪音大。
+  - (c) 本相禁止字面量直接作实参，必须先赋给已声明的闭包变量；最省，但 ergonomics 砍掉。
+- 建议：(a)，放 S5；S3 只做「左侧声明」路径，避免在 ABI 冻结时把未验证的推断写死（D21-14 / D21-17）。
+
+**G3 · 发射器缺少「按函数预发文件作用域产物」的机制**
+
+- 触发：env struct 与 trampoline 必须发在**文件作用域**且先于使用它的函数。`emit_unit_body` 是单遍流式：
+  PP → struct 前向 → trait vtbl → 类型声明 → 全部原型 → 全局 → impl → maps → 函数体；
+  `hoist_*` 只处理语句内的 `__ct_tmpN`（`MAX_HOISTS 4`），没有「按函数回填文件作用域产物」的缓冲。
+- 后果：如果在发射函数体的途中才发现闭包，trampoline 只能发进函数体内部——C 不允许嵌套函数定义，
+  生成物直接不可编译；要避免就得重排整个单元，改动远超一相。
+- 可选修法：
+  - (a) 发每个函数体**之前**先只读遍历该函数 AST，收集闭包字面量，就地把 env struct + trampoline
+    发在函数定义之前（单遍流仍成立，只是多一次本函数预扫）。
+  - (b) 单元级预扫：在「全部原型之后」统一发所有闭包产物；遍历一次，但要在发射流程里新开一个插点。
+  - (c) 把函数体先渲染到缓冲区再回填：最灵活，也最重，破坏流式结构。
+- 建议：(a)，S3 实现；闭包表以 owner 函数为键，容量 `MAX_CLOSURES 64` 纳入风险 M3（D21-15）。
+
 ---
 
-### 5. 分段计划
+### 5. 切片计划（S0–S7，替换原 21.0–21.5）
 
-| 段 | 内容 | 前置 | 并行 | 里程碑 | 出口 |
+每片都必须能**独立验证、独立回滚**；S3 是 ABI 冻结点，冻结之后 `(fn, env)` 顺序、命名规则、
+调用点展开规则不再改。
+
+| 切片 | 内容 | 依赖 | 触碰层 | 独立验证 | 回滚边界 |
 | --- | --- | --- | --- | --- | --- |
-| 21.0 | **容器回调约定**（只写文档 + 示例，不改 std 包） | 无 | 与 21.2 / 21.3 并行 | M21-A | 示例在既有关卡下编译运行；签名与 §4.4 一致 |
-| 21.1 | **共用寿命判定抽取**（borrow 行为不变） | 无 | 与 21.0 并行 | M21-A | `check-ast` / `check-goldens` 全绿；borrow 生成物逐字节不变 |
-| 21.2 | **档② 核心**：单表达式闭包、逃逸硬错误、诊断与 hint | 21.1 | 与 21.0 并行 | **M21-B（ABI 冻结）** | 探针 70–75 + 78；`check-warnings` 绿；无 `malloc` |
-| 21.3 | **多行体 / 嵌套 / 参数对调用点 / 跨单元探针** | M21-B | 与 21.4 并行 | M21-C | 探针 71、76、77、79 |
-| 21.4 | **官方 `Callable` 约定**（std / ct-pkg，按签名一族） | M21-B + 跨仓库授权 | 与 21.3 并行 | M21-D | 档① 与档② 同函数互操作；跨单元限制成文 |
-| 21.5 | **自举 + 文档 + 收口** | 21.2–21.4 | 串行，最后 | M21-E | 11 门禁 + CI + nightly；bump `v0.21.0` |
+| **S0** | 文档约定：ABI / 命名 / 诊断文案 / 已知未防护面 | 无 | `docs/**` | `python3 test/docs/check-docs.py` 绿；与 §4 一致 | 只回滚文档 |
+| **S1** | 抽 `outlives()`，borrow 行为不变 | 无（与 S0 并行） | `Stmt.h.ct` | borrow 正负例全绿；抽取前后生成 C **逐字节一致** | 函数级回滚，无生成物变化 |
+| **S2** | 前端：`=>` token、闭包字面量 AST、闭包变量两词表示、`Var.is_closure/closure_id`、闭包表 | S1 | `Lexer.h.ct`、`Parser.h.ct`、`Expr.h.ct`、`Stmt.h.ct`、`Symbols.h.ct` | 正例通过 `ct check`；类型不符的负例给出 §4.6 文案；既有 25 组 golden 与 68 探针不受影响 | 移除 lexer/parser 分支与 `Var` 字段 |
+| **S3** | **最小端到端 + ABI 冻结**：单表达式闭包、env/trampoline、按函数预发（G3）、调用点改写 | S2 | `Emitter.h.ct`、`Diag` | 探针 70 的生成 C 过 `cc -std=c99`、运行结果正确、`grep -c malloc` = 0 | 移除 emitter 分支；S2 保持 |
+| **S4** | 逃逸检查 E1–E6 + G1 拷贝语义 + `note:` hint | S3 | `Stmt.h.ct`、`Memory.h.ct`、`Diag` | 探针 72–75 的负例文案被 `check-ast.sh` 钉住；E7/G1 拷贝探针正确 | 移除 `check_closure_store` |
+| **S5** | 多行体、嵌套闭包、参数对实参（G2）、两单元 | S4 | `Parser.h.ct`、`Expr.h.ct`、`Emitter.h.ct` | 探针 71、76、77、79；`ct build` 两单元各自 `static` 不冲突 | 逐个语法特性独立回滚 |
+| **S6** | 官方 `Callable`（按签名一族）+ 互通 | S3（可与 S4/S5 并行） | `ct-pkg/std`（需授权）、本仓 `docs/**` + `examples/**` | 探针 78：档① 与档② 交给同一个函数；ct-pkg 测试绿 | 撤回 ct-pkg 包，本仓文档保留 |
+| **S7** | 自举、文档、收口 | S4 / S5 / S6 | 全仓 | 11 道硬门禁 + CI 三 job + nightly + fixpoint；bump `v0.21.0` | 按版本回退 |
 
-#### 21.0 容器回调约定
+#### 依赖顺序
 
-- **目标**：把 `map` / `filter` / `each` 的回调签名定成 `(fn, env)`，供容器与闭包共用。
-- **交付**：本文件附录 A（签名表 + 两个示例）；`examples/` 一个只用档① 的容器遍历示例。
-- **验收**：示例编译运行；`grep -c malloc` 为 0；与 §4.4 的参数顺序一致。
-- **判断**：它是**约定**，不是容器实现，也不阻塞闭包。完整容器（`StringBuf`、`Map.grow`、`Vec` 泛型；
-  `StringBuf` 为规划名，ct-pkg 尚无此类型）
-  不在本阶段；`Vec` 泛型属「Phase 22+ / 1.0 之后」。
+```text
+S0 文档 ─────────────┐
+S1 outlives ─→ S2 前端 ─→ S3 端到端（ABI 冻结）─→ S4 逃逸/G1 ─→ S5 多行/嵌套/G2/两单元 ─┐
+                          └─→ S6 Callable（可与 S4/S5 并行，需 ct-pkg 授权）──────────┴─→ S7 收口
+```
 
-#### 21.1 共用寿命判定抽取
+#### 与旧编号的映射
 
-- **目标**：`outlives()` 成为 borrow 与闭包共用的唯一寿命判断。
-- **交付**：`frontend/parse/Stmt.h.ct` 重构；`check_borrow_store` 改调 `outlives()`。
-- **验收**：`62_borrow_handback` 与全部 borrow 负例仍通过；抽取前后生成 C 逐字节一致。
-
-#### 21.2 档② 核心（ABI 冻结点）
-
-- **目标**：单表达式闭包端到端可用；逃逸硬错误；hint 到位。
-- **交付**：
-  - lexer：`=>` token（仅在表达式位置）；
-  - parser：闭包字面量、`ret (*name)(params) = (params) => expr`、`Var.is_closure` / `closure_id`、
-    闭包表；
-  - 检查：E1–E6、`__ct_` 保留前缀、捕获只读；
-  - emitter：env struct + trampoline + 栈上实例 + 调用点改写；
-  - Diag：`ct_sem_note` 通道 + §4.6 文案。
-- **验收**：探针 70–75、78；`grep -c malloc` = 0；`check-warnings` 绿；71 个既有 golden 仅版本 token；
-  文档门禁绿。
-- **冻结**：M21-B 之后，`(fn, env)` 参数顺序、命名规则、调用点展开规则不再改。
-
-#### 21.3 多行体 / 嵌套 / 参数对
-
-- **目标**：`=> { … }`、嵌套闭包、闭包作为实参的配对展开、跨单元探针。
-- **交付**：block body 解析（复用 `parse_block` + 合成作用域）；嵌套 env；调用点两参展开；
-  arity 检查把闭包记为 2；`build` 两单元闭包探针。
-- **验收**：探针 71、76、77、79；`ct build` 两单元各自 `static` 不冲突；`goto` 限制成文。
-
-#### 21.4 官方 `Callable`（按签名一族）
-
-- **目标**：给档① 一个可抄的官方形态，并验证两档互通。
-- **关键判断**：无泛型 → **不存在万能 `Callable`**。一个 trait 只能有一个 `call` 签名。
-  因此交付的是「一份约定 + 少量按签名的具体 trait」，不是单个万能接口。
-- **交付**：约定文档（`use Callable`、`call` 的 `self` 位置、`(fn, env)` 分解规则）；
-  `ct-pkg/std` 中 2–3 个具体可调用 trait（建议 `Callable0`：`int call(void)`、
-  `Callable1i`：`int call(int)`），其余签名按同一形态手写；跨单元 `pub` 转发方案（若用户批准）。
-- **前置**：跨仓库改动需用户显式授权；本仓库只放示例与文档。
-- **验收**：探针 78（档① struct 的 `call` 与档② tramp 交给同一个 `(fn, env)` 函数）；
-  ct-pkg 包的测试绿；跨单元限制在文档与错误提示中都写明。
-
-#### 21.5 自举与收口
-
-- **目标**：编译器自己先支持、再使用；文档与版本收口。
-- **交付**：§7 的三步自举；language-spec / tutorial / glossary / roadmap 更新；
-  `CTC_VERSION` 五处 bump 到 `0.21.0`；71 个 golden 仅版本 token 变化。
-- **验收**：11 道硬门禁 + CI 三 job + nightly 全绿；fixpoint 通过；
-  编译器源码中 `=>` 的出现只允许在 `v0.21.0` 二进制可用之后。
+| 旧 | 新 |
+| --- | --- |
+| 21.0 容器回调约定 | 并入 S0 文档，不再单列（容器不在本相） |
+| 21.1 共用寿命判定 | S1 |
+| 21.2 档② 核心 | 拆成 S2（前端）+ S3（端到端与 ABI 冻结） |
+| 21.3 多行 / 嵌套 / 参数对 | S5 |
+| 21.4 官方 `Callable` | S6 |
+| 21.5 自举与收口 | S7 |
 
 #### 里程碑
 
 | 里程碑 | 含义 | 判据 |
 | --- | --- | --- |
-| M21-A | 地基就绪 | 21.0 文档 + 21.1 抽取完成，borrow 生成物逐字节不变 |
-| **M21-B** | **ABI 冻结** | 21.2 全部探针绿；`(fn, env)` / 命名 / 调用点规则不再改 |
-| M21-C | 能力完整 | 21.3 探针绿；多行体、嵌套、参数对、两单元 |
-| M21-D | 档① 官方化 | 21.4 互通探针 + ct-pkg 测试绿 |
-| M21-E | 收口 | 21.5 全部门禁 + fixpoint + `v0.21.0` |
+| M21-A | 地基就绪 | S0 + S1 完成；borrow 生成物逐字节不变 |
+| **M21-B** | **ABI 冻结（S3）** | 探针 70 绿；`(fn, env)` / 命名 / 调用点规则不再改 |
+| M21-C | 能力完整 | S4 + S5 探针绿；多行体、嵌套、参数对、两单元、G1 |
+| M21-D | 档① 官方化 | S6 互通探针 + ct-pkg 测试绿 |
+| M21-E | 收口 | S7 全部门禁 + fixpoint + `v0.21.0` |
 
 ---
 
@@ -382,22 +424,22 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 | 提案理由 | 判断 |
 | --- | --- |
 | 容器先落地，因为闭包最大用途是 `map/filter` | **不成立**。无泛型时 `VecInt.map` 与 `VecStr.map` 仍需各自的包装函数；闭包省掉的是每处 adapter struct，不是每元素类型的函数。且容器回调签名一旦先冻结，很可能把 `env` 顺序 / 是否打包定错。**应先定闭包 ABI，再定容器回调** |
-| borrow 阶段一必须先做，且与档② 合并 | **已完成**。只剩抽公共寿命判定（21.1），必须与闭包逃生检查同批，不能分两次做 |
+| borrow 阶段一必须先做，且与档② 合并 | **已完成**。只剩抽公共寿命判定（S1），必须与闭包逃逸检查同批，不能分两次做 |
 | 官方 Callable 最后 | **成立**，但要注意它只能是「按签名一族」，不是万能接口 |
-| 闭包最大用途是容器 | **部分成立**：容器是收益之一，但今天的即时收益还包括 C 回调（`qsort`、事件注册）与就地循环，这些不依赖容器 |
+| 闭包最大用途是容器 | **部分成立**：容器是收益之一；今天的即时收益是**就地循环与把上下文塞进回调**（省掉一个手写的 adapter struct）。注意 `qsort` 这类签名没有 env 槽的 C 回调**不能**接收闭包（档① 也不行），不要拿它当收益例子 |
 
 **建议顺序**（若用户采纳）：
 
 ```text
-21.1 共用判定（小，先行）
-21.2 档② 核心 + ABI 冻结   ← 与 21.0 文档并行
-21.3 多行 / 嵌套 / 参数对   ┐
-21.4 官方 Callable          ┘ 可并行（21.4 在 ct-pkg，需授权）
-21.5 自举与收口（串行，最后）
+S1 共用判定（小，先行）
+S2 前端闭包表示
+S3 端到端 + ABI 冻结   ← S0 文档与 S1 可并行
+S4 逃逸 + G1  ┐
+S5 多行/嵌套/G2 ┘ 串行；S6 Callable 可并行（需授权）
+S7 自举与收口（串行，最后）
 ```
 
-即：**把「容器规约」从阻塞项降为并行项，把「borrow 阶段一」从一整段降为 21.1 的一次抽取**。
-这是本计划与提案排期最大的两处不同。
+即：**把「容器规约」从阻塞项降为 S0 文档，把「borrow 阶段一」从一整段降为 S1 的一次抽取**。
 
 ---
 
@@ -442,40 +484,53 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 
 ### 9. 风险与回退
 
-| # | 风险 | 处置 |
-| --- | --- | --- |
-| R1 | 函数指针局部初始化式可能不被 `parse_decl_node` 接受 | 21.2 首个切片实测；不支持则在同一切片扩展声明解析 |
-| R2 | 捕获名解析与遮蔽歧义 | 禁止闭包体内声明同名局部；禁止给捕获名赋值 |
-| R3 | 生成物进 `.h` / 跨单元撞名 | 只发 `.c`；`static`；探针 79 两单元验证 |
-| R4 | 跨单元裸 `fn` 不可用 | 文档 + hint 写明；21.4 评估 `pub` 转发 |
-| R5 | `-Wall -Wextra` 下 trampoline 未使用告警 | 照 `Drop` 的先例加 `__attribute__((unused))` |
-| R6 | 新表 / 计数超出 `MAX_*` | env 结构不登记 `Structs`；每闭包仅 1 个 `Var` + 1 个闭包表项 |
-| R7 | hint 被计入 `MAX_ERRORS` | `ct_sem_note` 不增加 `nsem`、不触发上限 |
-| R8 | 闭包值被当作普通函数指针误用 | 新增 `E6` 检查；探针覆盖 |
-| R9 | 闭包误入类型宿主 `map` 派发，复制 std 的 `ambiguous` 坑 | §4.9 隔离规则；探针 81 |
-| R10 | 断点停在合成帧，生成物失去可读性对应 | `#line` 重锚定 + `/* closure at … */` + 源名；探针 80 |
+严重度按「是否静默生成错误代码」判：会静默错的为 High；需要新机制或新容量、但会在门禁里显形为 Medium；
+只影响可读性 / 文档的为 Low。
 
-**回退**：`=>` 是 opt-in，不写不检查；回退即移除 lexer / parser / emitter 的闭包分支与 `Var.is_closure`，
-其余能力（borrow、Phase 19 检查、包管理）不动；无数据格式与 ABI 兼容负担。
+| # | 严重度 | 风险 | 处置 |
+| --- | --- | --- | --- |
+| H1 | **High** | `env` 经 `void *` 逃逸：传给不透明 C 函数或**另一个 CT 函数（含 std 的 `each`）**后被保存，编译器不报 | §4.7 / §4.8 如实标注为未防护面；API 约定 + 文档；探针 76 记录现状，不伪装成已防护 |
+| H2 | **High** | G1：局部拷贝只搬 `fn` 丢 `env`，静默段错误 / 悬垂 | S4 按 D21-13 实现两词拷贝 + 作用域比较；E7 探针覆盖 |
+| H3 | **High** | G3：发射器单遍流式，闭包产物只能在函数体内生成 → 生成非法 C | S3 实现「每函数体前预扫」；探针 70 强制生成物过 `cc -std=c99` |
+| H4 | **High** | ABI 过早冻结：G2（字面量实参类型反推）未验证就把 `(fn, env)` 规则写死，后续改动要重生成全部闭包 golden | S3 只冻结「变量 + 调用点 + 命名」；G2 留到 S5，冻结条款明确排除「字面量实参」形态 |
+| M1 | Medium | 跨单元 `static`：不能按符号名引用；`pub` 转发方案未定 | §4.4 写清「地址可传、名字不可引」；S6 评估 `pub` 转发 |
+| M2 | Medium | 闭包误入类型宿主 `map` 派发，复制 std 的 `ambiguous` 坑 | §4.9 隔离规则；探针 81 |
+| M3 | Medium | 新表 / 计数超 `MAX_*`（`MAX_VARS 4096`、`MAX_HOISTS 4`、新增 `MAX_CLOSURES`） | env 结构不登记 `Structs`；每闭包 1 个 `Var` + 1 个闭包表项；S3 定容量并加断言 |
+| M4 | Medium | `-Wall -Wextra` 下 trampoline 未使用告警（`ct check` 警告即退出 1） | 照 `Drop` 的先例加 `__attribute__((unused))`，或仅在确被引用时发射 |
+| M5 | Medium | 断点停在合成帧，生成物失去可读性对应 | `#line` 重锚定 + `/* closure at … */` + 源名；探针 80 |
+| L1 | Low | `=>` 保留字破坏面 | 实测 0（§8） |
+| L2 | Low | `goto` 跨过闭包声明静默失效 | 与 `own` / `borrow` 同现状；文档记录，不做检查（E8） |
+| L3 | Low | golden 变动面被高估 | 实际只有 `test/cases` 25 组 baseline + `test/ast` 68 探针；版本 token 之外不应有 diff |
+
+**回退**：`=>` 是 opt-in，不写不检查；回退按切片进行——S3 之前的切片不产生任何生成物变化，
+S3 之后移除 lexer / parser / emitter 的闭包分支与 `Var.is_closure` 即可，其余能力（borrow、Phase 19 检查、
+包管理）不动；无数据格式与 ABI 兼容负担。
 
 ---
 
-### 10. 待确认决策
+### 10. 待确认决策（D21-1–D21-17）
 
-| # | 问题 | 建议值 | 状态 |
-| --- | --- | --- | --- |
-| D21-1 | 语法：是否用 `ret (*name)(params) = (params) => expr`，不引入 `auto` | 采用；多行体 `=> { … }` | 待确认 |
-| D21-2 | 捕获：按值 vs 按引用 | 按值、创建点求值、捕获名只读 | 待确认 |
-| D21-3 | 生成物命名 | `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`，单元内单调，无 namespace 前缀 | 待确认 |
-| D21-4 | ABI：两参数 vs 打包 struct | 两参数、`env` 第一；闭包实参在 `(fn, env)` 参数对上展开为两参 | 待确认 |
-| D21-5 | 逃逸判定扩展点 | E1–E6；同/内层局部拷贝允许；`goto` 记录为已知限制 | 待确认 |
-| D21-6 | 诊断契约 | 无错误码；固定英文文案 + `note:` hint；负例由 `check-ast.sh` 钉住 | 待确认 |
-| D21-7 | `Callable` 签名 | 按签名一族，不做万能 trait；`use Callable` 不强制 `use Drop` | 待确认 |
-| D21-8 | namespace 交互 | 不加前缀（`static` + 单元私有） | 待确认 |
-| D21-9 | golden 用例 | §11 的 70–79 | 待确认 |
-| D21-10 | 版本 | Phase 21 ↔ `v0.21.x`，收口 `v0.21.0` | 待确认 |
-| D21-11 | 排期 | 21.1 → 21.2（冻结 ABI）→ 21.3 ∥ 21.4 → 21.5；21.0 并行不阻塞 | 待确认 |
-| D21-12 | 泛型口径 | 不引入；STD-1 的「Phase 21+」改为「Phase 22+ / 1.0 之后」 | 待确认 |
+每条给至少两个互斥选项、代价与建议；状态一律 **待确认**。
+
+| # | 问题 | 选项（互斥） | 代价 | 建议与理由 |
+| --- | --- | --- | --- | --- |
+| D21-1 | 闭包语法 | **A** `ret (*name)(params) = (params) => expr`，不引入 `auto`；**B** 引入 `auto name = (params) => expr` | A：无新关键字，但表面类型是 fnptr，用户可能误用（E6 兜底）。B：要加类型推断，且 `auto` 在 C 里是存储类，语义冲突 | **A**。与 CT「无推断」一致，且局部 fnptr 初始化式已可用（§4.1） |
+| D21-2 | 捕获方式 | **A** 按值、创建点求值、捕获名只读；**B** 按引用捕获 | A：无生命周期，语义简单；大 struct 有拷贝成本，写回需显式指针。B：需要生命周期/逃逸分析，等于档③ | **A**。B 超出本相，且与零成本模型冲突 |
+| D21-3 | 生成物命名 | **A** `__ct_cl_env_<N>` / `__ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>`，单元内单调、无 namespace 前缀；**B** 带 namespace 前缀 | A：依赖 `static` + 不进 `.h`。B：闭包符号从不按名字跨单元引用，前缀收益为 0，只增加 mangling 面 | **A** |
+| D21-4 | ABI | **A** 两词 `(fn, env)`，env 第一；**B** 打包 `struct { fn; env; }` 单指针 | A：与既有 fnptr / impl 包装同形，档① 零改动；调用点要展开成两个 C 实参。B：单参数好看，但档① 包装是单个 fn，必须再造 thunk，破坏互通 | **A** |
+| D21-5 | 逃逸检查范围 | **A** E1–E6 + E7 允许同/内层拷贝 + E8 记录；**B** 只做 E1–E3 | A：多一个拷贝语义（G1）与 1 个 `Var` 字段。B：留一个明显悬垂口，且「同作用域起别名」不能用 | **A**，配合 D21-13 的窄版实现 |
+| D21-6 | 诊断契约 | **A** 固定英文文案 + 独立 `note:` 通道（`ct_sem_note`，不计 `nsem`）；**B** 把 hint 拼进 `ct_sem_error` 的同一条 message | A：新增一个通道，Diag 与门禁要认 `note`。B：hint 会占 `MAX_ERRORS 20`，且文案与 hint 混在一条里不便逐条断言 | **A** |
+| D21-7 | `Callable` 形态 | **A** 按签名一族（`Callable0` / `Callable1i` …）；**B** 单个 `Callable` + `void *` 参数 | A：每个签名一个 trait，类型安全。B：把类型擦除带回来，调用点强转，等于放弃检查 | **A**。无泛型时不存在万能接口 |
+| D21-8 | namespace 交互 | **A** 不加前缀；**B** 加前缀 | A：`static` + 一单元一 `.c` 已保证不冲突。B：无收益 | **A** |
+| D21-9 | golden 形态 | **A** 在 `test/ast` 新增 70–81 编号探针（负例进 `test/ast/errors/`）；**B** 只加 `test/cases` 逐字节 golden | A：要维护期望输出，但能覆盖负例与诊断文案。B：只覆盖正向生成物，负例无处断言 | **A**。与现有 `check-ast.sh` 结构一致 |
+| D21-10 | 版本 | **A** Phase 21 ↔ `v0.21.x`，收口 `v0.21.0`；**B** 作为 patch 塞进 `v0.20.x` | A：与 roadmap 版本规则一致。B：闭包与包支持共用一个 minor，回滚边界模糊 | **A** |
+| D21-11 | 排期 | **A** S0/S1 并行 → S2 → S3（冻结）→ S4 → S5 ∥ S6 → S7；**B** 先做 S6，再回来做闭包 | A：先钉 ABI，S6 的互通探针才有意义。B：在没有闭包时先冻结一组 trait 签名，容易定错参数形态 | **A** |
+| D21-12 | 泛型口径 | **A** 不引入；STD-1 的「Phase 21+」改为「Phase 22+ / 1.0 之后」；**B** 本相顺带做最小泛型以支撑容器 | A：保持零成本模型。B：要同时改 L2、门禁、自举，远超一相 | **A** |
+| D21-13 | **（G1）** 闭包变量拷贝 | **A** 两词表示 + 允许同/内层拷贝（fn 与 env 一起搬）+ 目标更浅即硬错误 + E6 挡普通 fnptr；**B** 禁止拷贝（E7 变硬错误）；**C** 只允许声明时的直接初始化拷贝 | A：`Var` 加 closure id、发射器多一条两词声明/赋值、`&closure` 语义要定义。B：实现最省，但拒掉自然写法。C：规则好讲，覆盖窄 | **A**（窄版）。保留 E7 的价值，同时把悬垂面关掉 |
+| D21-14 | **（G2）** 闭包字面量直接作实参 | **A** 用被调方 `(fn, env)` 对的 fn 型作为期望类型，逐参数比对；**B** 要求字面量写全类型；**C** 本相禁止，必须先赋给变量 | A：要在「实参是字面量」时就地构造期望类型，复用 `argtype_check` 的形参信息。B：语法噪音。C：砍 ergonomics | **A**，落 S5；S3 只做左侧声明路径 |
+| D21-15 | **（G3）** 闭包产物发射时机 | **A** 每函数体前预扫本函数，就地发 env/trampoline；**B** 单元级预扫，统一发在原型之后；**C** 缓冲函数体再回填 | A：每函数多一次只读遍历，单遍流保持。B：一次遍历，但要新开插点。C：改动最大 | **A**。S3 实现，`MAX_CLOSURES 64` 纳入 M3 |
+| D21-16 | 闭包变量能否重新赋值（`c = d`，两者都是闭包） | **A** 禁止，报错；**B** 允许，按 D21-13 的两词赋值规则处理，且目标作用域不得浅于源 | A：少一类悬垂面，实现简单。B：需要两词赋值 + 作用域比较，且 `c = 更内层闭包` 会让 `c` 的 env 先死 | **A**。重赋值不是常见需求，先关掉一个悬垂面；B 留 0.22 再评 |
+| D21-17 | 闭包字面量直接作实参时，返回类型如何反推 | **A** 取宿主 fn 的返回类型；**B** 由字面量 `return` 表达式推断；**C** 要求显式注解 | A：依赖宿主签名，C 函数与 CT 函数都可得。B：引入局部类型推断，与 D21-1 冲突。C：噪音 | **A**。与 D21-14 共用一套机制：一条规则同时给参数表与返回类型 |
 
 ---
 
@@ -483,18 +538,22 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 
 | 编号 | 用例 | 期望 |
 | --- | --- | --- |
-| 70 | `closure_basic` | env + tramp + 栈上实例；结果正确；生成 C 无 `malloc` |
+| 70 | `closure_basic` | env + tramp + 栈上实例；结果正确；生成 C 无 `malloc`；过 `cc -std=c99` |
 | 71 | `closure_nested_block` | 嵌套闭包 / 多行体；env 名不冲突；逐层正确 |
 | 72 | `closure_escape_return` | `return c;` 硬错误 + hint |
 | 73 | `closure_escape_store` | 全局 / 外层局部 / `static` / 字段 / 元素 硬错误 |
 | 74 | `closure_capture_own_borrow` | 捕获 `own` / `borrow` 硬错误 |
 | 75 | `closure_param_pair` | 传给 `(fn, env)` 参数对通过；传给普通函数指针报错 |
-| 76 | `closure_opaque_hole` | 经 `void *` 传给不透明函数并保存 → **记录为已知未防护**（不误报通过） |
+| 76 | `closure_opaque_hole` | 经 `void *` 传给不透明函数或 CT 函数并保存 → **记录为已知未防护**（不伪装成通过） |
 | 77 | `closure_goto` | 记录现状（静默失效），不崩 |
 | 78 | `callable_interop` | 手写档① 的 `call` 与档② tramp 交给同一个函数；零改动 |
-| 79 | `closure_two_units` | `ct build` 两单元各自 `static` 命名不冲突 |
+| 79 | `closure_two_units` | `ct build` 两单元各自 `static` 命名不冲突；地址作实参可跨单元调用 |
 | 80 | `closure_debug_line` | 开启 `#line` 时，trampoline 行映射回闭包源行；生成物含 `/* closure at … */` |
 | 81 | `closure_no_typehost` | 存在 `map trait … for type` 时，闭包调用仍直接解析，不产生歧义 |
+
+另需两个 G1 专项探针（建议编入 82 / 83，或并入 70 的子目录）：
+`closure_copy_local`（同作用域拷贝 `d = c` 生成两词赋值且运行正确）、
+`closure_copy_escape`（把 `c` 拷给更浅作用域的变量 → 硬错误）。
 
 ---
 
@@ -503,11 +562,13 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 Phase 21 完成需同时满足：
 
 1. 11 道硬门禁全绿；CI 三 job + nightly 全绿。
-2. 探针 70–79 全部按上表行为；负例文案被 `check-ast.sh` 钉住。
-3. 既有 71 个 golden 仅版本 token 变化（`v0.21.0`）。
+2. 探针 70–79（以及 82 / 83）全部按上表行为；负例文案被 `check-ast.sh` 钉住。
+3. 既有 golden 口径：`test/cases` 25 组 baseline 逐字节不变（仅允许版本 token），
+   `test/ast` 68 个编号探针的既有期望不变。
 4. 生成物：闭包探针无 `malloc` / `free` / 引用计数 / vtable；只有 env struct + `static` trampoline。
-5. fixpoint 通过；编译器源码的 `=>` 使用在 M21-E2 之后。
-6. 文档：language-spec 增加闭包一节；tutorial 有「档② 还是档①」的判据表；glossary 加 `closure` /
+5. G1 / G2 / G3 各自有探针与实现：拷贝搬两词、字面量实参类型被比对、闭包产物发在函数之前。
+6. fixpoint 通过；编译器源码的 `=>` 使用在 M21-E2 之后。
+7. 文档：language-spec 增加闭包一节；tutorial 有「档② 还是档①」的判据表；glossary 加 `closure` /
    `trampoline` / `env`；roadmap 状态改为完成。
 
 ---
@@ -516,59 +577,148 @@ Phase 21 完成需同时满足：
 
 ### Summary
 
-**Status: planned** (2026-11-06). **Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at
-`v0.20.0`; Phase 17/18/19/20 are done, Phase 20 (package support, [phase20.md](phase20.md)) is closed and
-independent of this phase. The gate count is **11** (the "12" in the
-Phase 19 roadmap row is a typo).
+**Status: planned** (opened 2026-11-06; revised 2026-11-08 against HEAD `v0.20.2` = `0263cca`, adding
+gaps G1–G3, slices S0–S7 and option-level decisions; D21-1–D21-17 still await confirmation).
+**Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at `v0.20.2`; Phases 17/18/19/20 are done,
+Phase 20 (package support, [phase20.md](phase20.md)) is closed and has no semantic dependency here. The gate
+count is **11**.
 
 This phase implements **tier ② non-escaping stack closures** (`=>`), lowered **as an expansion of tier ①**
 (`struct` + `trait`), sharing one `(fn, env)` ABI. Tier ③ (general escaping closures) is out of scope.
 
-### Corrections to the v0.12.0 proposal (verified against v0.19.1)
+### Errata against the earlier draft (verified at HEAD)
 
-1. `own`/AutoDrop escape detection is **not** "two shapes": it now has four entry points
-   (`leak_decl`, `leak_assign`, `leak_return` with SH-36/41 true-transfer semantics, and the
-   path-sensitive `leak_scope`). The suggested "third kind of rvalue" shortcut does not apply:
-   the machinery is variable-centric, while a closure is a `(fn, env)` pair of locals; and `own`
-   escapes *cancel* a destructor while a closure escape must be a **hard error**.
-2. `borrow` stage one/two **already shipped** in v0.16.0 (hardened in v0.16.1). Phase 21 only extracts
-   the shared lifetime test (`outlives`) and reuses it from the closure checker.
-3. The dialect system cannot serve as an official tier-① path: the compiler has zero DSL awareness;
-   dialect expanders live only outside the compiler (`examples/`, `test/ct-dialects/`).
-4. `Adder_Callable_call` is emitted `static`, so the `(fn, env)` interchange is **same-unit only**;
-   cross-unit callbacks go through the vtable/iface or a user-written `pub` wrapper.
-5. CT has **no error codes**; the diagnostic contract is stable English text plus a new `note:` hint line.
+| # | Earlier text | Reality at HEAD | Fix |
+| --- | --- | --- | --- |
+| E-1 | `Var.st` used as a scope index | `Var.st` is the **struct index** (set when the type is `struct T *`, else -1). Scope depth lives in `sym->scope[]` / `nscope`, derived by `Stmt.var_scope(sym, vi)` | §0, §3.1, §3.2 rewritten |
+| E-2 | "71 existing goldens" | `check-goldens.sh` compares a **25-case baseline** byte for byte (`test/cases` holds 98 files; the rest are PENDING). `test/ast` holds **68 numbered probes** (69 directories = 68 + `errors`; 67 is missing) | §2, §5, §12 now say "25 + 68" |
+| E-3 | `qsort` cited as an immediate benefit | `qsort`'s comparator is `int (*)(const void *, const void *)` — **no env slot**, so neither closures nor tier-① `(fn, env)` fits | `qsort` removed from §6 |
+| E-4 | "Closures cannot cross unit boundaries" | `static` blocks **name references**, not passing the address as an argument; what cannot cross is the closure **type** in `.h.ct`, a return value, a field or an element | §4.4, §4.8 rewritten |
+| E-5 | §4.7 claimed the callee would be caught by the same check | False safety: the callee sees a plain `void *env` and may store it; no closure check fires (this includes a future std `each`) | §4.7 rewritten and marked unprotected |
+| E-6 | R1: local function-pointer initializers may be unsupported | Supported: `Stmt.h.ct` sets `fnval_ok` for types containing `(*` | §4.1 marked confirmed; R1 removed |
+| E-7 | "12 hard gates" etc. | **11** (`run_gate` calls in `check-all.sh`) | kept from §1.4 |
 
-Still valid: the `(fn, env)` two-word model, stack-only environment, `struct + trait` mangling
-(`<Struct>_<Trait>_<method>(void *self, …)`), and the requirement to hard-fail with a `Callable` hint.
+Other corrections kept: the `own` machinery is variable-centric, so closures need a new checker;
+`borrow` stages one/two already shipped (only `outlives()` extraction remains); dialects cannot be an official
+tier-① path; CT has no error codes, so the contract is stable text plus a `note:` line.
+
+### Design gaps G1–G3
+
+**G1 — a closure is two words, but a local copy would keep only `fn`.**
+E7 allows `int (*d)(int) = c;`. The closure variable lowers to `(fn, env)`, while the source-level type is a
+single function pointer, so a naive copy drops `env`: `d(5)` either has no env (trampoline dereferences
+garbage) or reuses `c`'s env and dangles after `c`'s scope ends. Silent memory error.
+Options: (a) represent the closure variable as two words and emit two C assignments, rejecting targets
+whose scope is shallower (`var_scope`); (b) forbid copying (E7 becomes an error); (c) allow only direct
+initialisation copies. Recommended: (a), narrow form, in S4 (D21-13).
+
+**G2 — a closure literal passed directly as an argument is never checked against the host's function type.**
+`each(v, (int x) => x + 1)` has no left-hand declaration, so the literal has no return type and no full fn
+type; Phase 19 `argtype_check` only compares declared variables. A mismatch then surfaces at `cc`, not at
+`ct check`. Options: (a) use the host `(fn, env)` pair's fn type as the expected type and compare parameter
+by parameter, taking the return type from the fn; (b) require a fully typed literal; (c) forbid literals as
+direct arguments in this phase. Recommended: (a), in S5; S3 keeps only the declaration path (D21-14/D21-17).
+
+**G3 — the emitter has no way to emit file-scope artefacts before a function.**
+`emit_unit_body` is a single streaming pass (PP → struct forwards → trait vtables → type declarations →
+all prototypes → globals → impls → maps → bodies); `hoist_*` only handles statement-local `__ct_tmpN`
+(`MAX_HOISTS 4`). If a closure is discovered while emitting a body, the trampoline cannot be emitted
+(C has no nested functions), so the output would not compile. Options: (a) pre-scan each function's AST
+right before emitting its body and emit env struct + trampoline immediately before the function definition;
+(b) one unit-level pre-scan after the prototypes; (c) buffer bodies and back-patch. Recommended: (a), in S3,
+with `MAX_CLOSURES` capped (D21-15).
 
 ### Pinned design baseline
 
-- Syntax: `int (*add)(int x) = (int x) => x + n;` (no `auto`; multi-line body `=> { … }`).
+- Syntax: `int (*add)(int x) = (int x) => x + n;` (no `auto`; multi-line body `=> { … }` in S5).
+  Local function-pointer initialisers are already accepted at HEAD, so no front-end fix-up is needed first.
 - Capture: **by value** at creation, captured names are read-only; `own`/`borrow` captures are errors.
 - Generated names: `__ct_cl_env_<N>`, `__ct_cl_tramp_<N>`, `__ct_cl_env_v_<N>`; a per-unit monotonic
   counter (like `__ct_ret%d`); file-scope `static`, never in headers, no namespace prefix.
-- ABI: two words, `env` first; a closure argument fills an adjacent `(fn, env)` parameter pair.
-- Escapes: return / longer-lived store / field or element store / plain function pointer / mutable
-  capture — all hard errors with a three-line `Callable` hint. `goto` stays a documented silent failure.
+- ABI: two words, `env` first; a closure argument fills an adjacent `(fn, env)` parameter pair; arity counts
+  a closure as two C arguments.
+- Cross-unit: the **address** of a trampoline may be passed to another unit as an argument (legal C); what
+  cannot cross is the closure type (header, return value, field, element) or a by-name reference to the
+  `static` symbol.
+- Escapes: return / longer-lived store / field or element store / plain function pointer / mutable capture —
+  hard errors with a three-line `Callable` hint. `goto` stays a documented silent failure.
+- Honest limits: env handed out as `void *` to an opaque C function **or to another CT function (including a
+  future std `each`)** can be stored there; the compiler cannot see it.
 
-### Slices
+### Slices S0–S7
 
-| Slice | Content | Order |
-| --- | --- | --- |
-| 21.0 | Container callback convention (docs + example only) | parallel, non-blocking |
-| 21.1 | Extract `outlives()` shared with `borrow` | first, serial |
-| 21.2 | Tier-② core: single-expression closures, escape errors, hints | after 21.1; **freezes the ABI** |
-| 21.3 | Block bodies, nesting, parameter-pair call sites, two-unit probe | after the freeze; parallel with 21.4 |
-| 21.4 | Official `Callable` family (per signature; no universal trait without generics) | after the freeze; needs ct-pkg authorisation |
-| 21.5 | Bootstrap discipline, docs, `v0.21.0` close | last, serial |
+S3 freezes the ABI: after it, the `(fn, env)` order, the naming rules and the call-site expansion do not change.
 
-**Ordering judgement:** the proposal's "containers first" does not hold without generics — each element
-type still needs its own wrapper, and freezing container callbacks before the closure ABI risks freezing
-the wrong signature. Do the ABI first; keep the container convention parallel and non-blocking.
+| Slice | Content | Depends on | Layers | Independent verification |
+| --- | --- | --- | --- | --- |
+| S0 | Docs: ABI, naming, diagnostics, known holes | — | `docs/**` | `check-docs.py` green |
+| S1 | Extract `outlives()` shared with `borrow` | — (parallel with S0) | `Stmt.h.ct` | borrow probes green; generated C byte-identical before/after |
+| S2 | Front end: `=>` token, literal AST, two-word closure variable, `Var.is_closure/closure_id`, closure table | S1 | Lexer, Parser, Expr, Stmt, Symbols | positive probe type-checks; typed negatives produce the planned text; the 25 goldens + 68 probes unchanged |
+| S3 | **End-to-end + ABI freeze**: single-expression closures, env/trampoline, per-function pre-scan (G3), call-site rewrite | S2 | Emitter, Diag | probe 70 output compiles with `cc -std=c99`, runs, `malloc` count 0 |
+| S4 | Escapes E1–E6 + G1 copy semantics + `note:` hints | S3 | Stmt, Memory, Diag | probes 72–75 negatives pinned; E7/G1 probes correct |
+| S5 | Block bodies, nesting, parameter-pair arguments (G2), two units | S4 | Parser, Expr, Emitter | probes 71, 76, 77, 79; two-unit `static` names do not clash |
+| S6 | Official `Callable` family + interop | S3 (parallel with S4/S5) | `ct-pkg/std` (authorisation), docs, examples | probe 78: tier ① and tier ② handed to the same function |
+| S7 | Bootstrap, docs, `v0.21.0` close | S4/S5/S6 | whole tree | 11 gates, CI, nightly, fixpoint |
 
-**Bootstrap:** compiler sources must not use `=>` before M21-B; after the fixpoint and the `v0.21.0`
-install, `=>` may enter `selfhost/ct-ast/**` (M21-E2). A gate assertion keeps the order honest.
+Ordering: S0 ∥ S1 → S2 → S3 (freeze) → S4 → S5 ∥ S6 → S7. The old 21.0 becomes part of S0 (containers are
+not in this phase); 21.1 → S1; 21.2 → S2 + S3; 21.3 → S5; 21.4 → S6; 21.5 → S7.
 
-**`=>` breakage:** 0 occurrences in 398 `.ct` + 135 `.c/.h` sources here, and 0 in 55 `.ct` files under
-`ct-pkg`. Only JS arrow functions in the editor extension and vendored report assets match.
+Milestones: M21-A (S0+S1), **M21-B = S3, ABI freeze**, M21-C (S4+S5), M21-D (S6), M21-E (S7).
+
+### Ordering judgement
+
+"Containers first" does not hold without generics — each element type still needs its own wrapper, and
+freezing container callbacks before the closure ABI risks freezing the wrong signature. Borrow stage one is
+already done; what remains is a single extraction (S1). `Callable` must come last and can only be a family of
+per-signature traits. Closures do help local loops and callback context today, but a `qsort`-style C callback
+with no env slot **cannot** take a closure.
+
+### Risks (4 High)
+
+| # | Severity | Risk | Handling |
+| --- | --- | --- | --- |
+| H1 | **High** | `env` escapes as `void *` through an opaque C function or another CT function (incl. `each`); no diagnostic | Documented as unprotected (§4.7/§4.8); probe 76 records the hole instead of pretending otherwise |
+| H2 | **High** | G1: a local copy keeps only `fn`, drops `env` → silent segfault / dangling | S4: two-word copy plus scope comparison (D21-13); E7 probes |
+| H3 | **High** | G3: single-pass emitter cannot place closure artefacts before a function → invalid C | S3: per-function pre-scan; probe 70 must compile with `cc -std=c99` |
+| H4 | **High** | Freezing the ABI before G2 is validated forces a later regeneration of every closure golden | S3 freezes only variables, call sites and naming; literal-argument inference is excluded from the freeze and lands in S5 |
+| M1 | Medium | Cross-unit `static`: no by-name references; `pub` forwarding undecided | §4.4 wording; S6 evaluates `pub` forwarding |
+| M2 | Medium | Closures leaking into type-host `map` dispatch (`ambiguous type-host map`) | §4.9 isolation; probe 81 |
+| M3 | Medium | New tables exceed `MAX_*` (`MAX_VARS`, `MAX_HOISTS`, new `MAX_CLOSURES`) | env structs not registered in `Structs`; one `Var` + one closure entry per closure; capacity asserted in S3 |
+| M4 | Medium | `-Wall -Wextra` unused-trampoline warning (`ct check` exits 1 on warnings) | `__attribute__((unused))` as with `Drop` |
+| M5 | Medium | Debugger stops in a synthetic frame | `#line` re-anchoring + `/* closure at … */`; probe 80 |
+| L1 | Low | `=>` reserved-word breakage | 0 occurrences (§8) |
+| L2 | Low | `goto` across a closure declaration | Same as `own`/`borrow`; documented (E8) |
+| L3 | Low | Golden churn overestimated | Only the 25-case baseline + 68 probes; no diff beyond the version token |
+
+### Decisions D21-1–D21-17 (all pending)
+
+| # | Question | Mutually exclusive options | Recommended |
+| --- | --- | --- | --- |
+| D21-1 | Closure syntax | **A** `ret (*name)(params) = (params) => expr`; **B** `auto name = (params) => expr` | **A** (no inference; `auto` is a C storage class) |
+| D21-2 | Capture mode | **A** by value, read-only; **B** by reference | **A** (B needs lifetimes = tier ③) |
+| D21-3 | Generated names | **A** `__ct_cl_*<N>`, no namespace prefix; **B** prefixed | **A** (B has no consumer) |
+| D21-4 | ABI | **A** two words, env first; **B** packed struct | **A** (B needs thunks for tier ①) |
+| D21-5 | Escape checks | **A** E1–E6 + E7 copy + E8 documented; **B** E1–E3 only | **A** with D21-13 |
+| D21-6 | Diagnostic contract | **A** fixed text + separate `note:` channel; **B** hint inside the error message | **A** |
+| D21-7 | `Callable` shape | **A** per-signature family; **B** one `Callable` + `void *` | **A** |
+| D21-8 | Namespace | **A** no prefix; **B** prefix | **A** |
+| D21-9 | Golden form | **A** numbered `test/ast` probes 70–81 (+ `errors/`); **B** `test/cases` only | **A** |
+| D21-10 | Version | **A** `v0.21.x`; **B** patch inside `v0.20.x` | **A** |
+| D21-11 | Ordering | **A** S0/S1 → S2 → S3 → S4 → S5 ∥ S6 → S7; **B** `Callable` first | **A** |
+| D21-12 | Generics | **A** none; reword STD-1 to "Phase 22+ / after 1.0"; **B** minimal generics now | **A** |
+| D21-13 | (G1) copying a closure variable | **A** two-word copy, shallower target is an error; **B** forbid copying; **C** initialisation-only copy | **A** (narrow) |
+| D21-14 | (G2) literal as a direct argument | **A** expected type from the host `(fn, env)` pair; **B** fully typed literal; **C** forbid in this phase | **A**, in S5 |
+| D21-15 | (G3) emission point | **A** per-function pre-scan; **B** unit-level pre-scan; **C** buffered bodies | **A** |
+| D21-16 | Reassigning a closure variable (`c = d`) | **A** forbid; **B** allow with the two-word assignment and a scope check | **A** (B deferred to 0.22) |
+| D21-17 | Return type of a literal argument | **A** from the host fn; **B** inferred from `return`; **C** explicit annotation | **A** (same mechanism as D21-14) |
+
+### Probes and exit criteria
+
+Probes 70–81 keep their meanings (70 basic, 71 nested/block, 72 return escape, 73 store escape, 74
+own/borrow capture, 75 parameter pair, 76 opaque hole — documented, 77 `goto`, 78 interop, 79 two units,
+80 debug lines, 81 type-host isolation), plus 82/83 for G1 copy-local and copy-escape.
+
+Exit: 11 gates + CI + nightly green; probes 70–79 (and 82/83) behave as specified; the 25-case baseline and
+68 probes unchanged except the version token; no `malloc`/`free`/refcount/vtable in closure output; G1, G2
+and G3 each implemented and covered; fixpoint passes; `=>` enters `selfhost/ct-ast/**` only after M21-E2;
+language-spec, tutorial, glossary and roadmap updated.
