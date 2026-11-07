@@ -3,7 +3,7 @@
 > 中文 · [English](#english)
 >
 > **状态：规划中**（2026-11-06；本文件是计划与实现依据，不是已确认的最终决策；D21-1–D21-12 待用户确认）。
-> **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.1`（`CTC_VERSION` 五处一致）。
+> **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.2`（`CTC_VERSION` 五处一致）。
 > 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无依赖）。
 > 关联：[borrow 设计](../history/design/borrow.md)、[language-spec](../language-spec.md)、
 > [std 能力缺口](../../issues/std/std1-markdown-readiness.md)、[roadmap](../roadmap.md)。
