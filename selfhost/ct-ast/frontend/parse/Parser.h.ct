@@ -797,7 +797,8 @@ impl ParseOps for Parser {
                     && !(strncmp(self->lex->toktext, "#include", 8) == 0
                          || strncmp(self->lex->toktext, "#define", 7) == 0))
                     return tool::diag::ct_sem_error(self->lex->tokline, 1,
-                        "a .m.ct unit allows only #include and #define in its prologue",
+                        "a .m.ct unit allows only #include and #define in its prologue;"
+                        " put the C implementation in <base>.shim.h",
                         self->mem->path);
                 if (pp_is(self->lex->toktext, "#ct-raw")) {
                     n = raw_text_node(self);

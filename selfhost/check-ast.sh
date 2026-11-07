@@ -1617,7 +1617,7 @@ mapbad instance_host \
     'a .m.ct unit cannot bind a trait to an instance'
 mapbad prologue_line \
     '#pragma once\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
-    'a .m.ct unit allows only #include and #define in its prologue'
+    'a .m.ct unit allows only #include and #define in its prologue; put the C implementation in <base>.shim.h'
 mapbad nonpub \
     'trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
     "a trait in a .m.ct unit must be 'pub'"
