@@ -39,7 +39,11 @@ cd "$root" || exit 1
 # on a minimal image. Check the tools once, name the missing ones on one line and
 # stop before any gate runs.
 missing=
-for t in "${CC:-cc}" diff python3 git; do
+# `CC` may carry flags (`cc -O2`); only its first word is the executable to
+# look up. Testing the whole string reports a missing tool that is right there.
+ccfirst="${CC:-cc}"
+ccfirst="${ccfirst%% *}"
+for t in "$ccfirst" diff python3 git; do
     command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
 done
 if [ -n "$missing" ]; then
