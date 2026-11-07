@@ -698,6 +698,27 @@ else
 fi
 
 echo
+echo "== P20-08: an unsupported requires points at dep =="
+# `requires` only understands a compiler-version range. A package dependency
+# written there is not that, so the message must name the key that does it.
+mkdir -p "$work/pkgs/lng" "$work/lngproj"
+printf 'name = lng\nversion = 0.1.0\nrequires = utils >= 1.0\n' >"$work/pkgs/lng/ct.pkg"
+printf 'pub int lng(void);\nint lng(void) { return 1; }\n' >"$work/pkgs/lng/lng.h.ct"
+printf 'name = lngproj\nversion = 0.1.0\ndep = ../pkgs/lng@^0.1.0\n' >"$work/lngproj/ct.pkg"
+printf 'int main(void) { return 0; }\n' >"$work/lngproj/main.ct"
+( cd "$work/lngproj" && "$work/ct-ast" get ../pkgs/lng >"$work/lngg.out" 2>"$work/lngg.err" )
+if ( cd "$work/lngproj" && "$work/ct-ast" install >"$work/lngi.out" 2>"$work/lngi.err" ); then
+    if grep -Fq "unsupported requires" "$work/lngi.err" \
+       && grep -Fq "use dep = pkg@range for package dependencies" "$work/lngi.err"; then
+        ok "an unsupported requires names dep"
+    else
+        bad "unsupported requires" "no dep hint: $(cat "$work/lngi.err")"
+    fi
+else
+    bad "unsupported requires" "expected a zero exit: $(cat "$work/lngi.err")"
+fi
+
+echo
 echo "== ct verify: the lock against the vendored tree =="
 if ( cd "$work/mproj" && "$work/ct-ast" verify >"$work/v.out" 2>"$work/v.err" ); then
     if grep -Fq "verified 2 package(s)" "$work/v.out"; then

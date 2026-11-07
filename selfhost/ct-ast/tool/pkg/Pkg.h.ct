@@ -1582,13 +1582,21 @@ static int pkg_check_requires(const char *pkg, const char *req)
 
     p = req;
     while (*p == ' ' || *p == '\t') p++;
-    if (strncmp(p, "ct", 2) == 0 && (p[2] == 0 || p[2] == ' ' || p[2] == '\t'))
-        p = p + 2;
+    if (*p == 0) return 0;
+    if (!(strncmp(p, "ct", 2) == 0 && (p[2] == 0 || p[2] == ' ' || p[2] == '\t'))) {
+        /* Only the compiler version belongs here; a package spec written as a
+           `requires` is not a version range and would fail confusingly. */
+        fprintf(stderr, "ctc: package '%s' has an unsupported requires '%s';"
+                        " use dep = pkg@range for package dependencies\n", pkg, req);
+        return 0;
+    }
+    p = p + 2;
     while (*p == ' ' || *p == '\t') p++;
     n = strlen(p);
     if (n == 0) return 0;
     if (n >= sizeof work) {
-        fprintf(stderr, "ctc: package '%s' has an unsupported requires '%s'\n", pkg, req);
+        fprintf(stderr, "ctc: package '%s' has an unsupported requires '%s';"
+                        " use dep = pkg@range for package dependencies\n", pkg, req);
         return 0;
     }
     snprintf(work, sizeof work, "%s", p);
