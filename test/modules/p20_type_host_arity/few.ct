@@ -1,0 +1,11 @@
+import ctypes::ctypes;
+
+/* P20-03: a bare statement call is outside what the type pass reaches, and a
+   type-host binding still knows `toLong` takes one argument. */
+int main(void)
+{
+    char a[] = "42";
+
+    a.toLong();
+    return 0;
+}

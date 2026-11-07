@@ -23,6 +23,7 @@ import frontend::module::Map::Call as Call;
 import frontend::module::Map;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
+import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 
 #define B_ADD 1
@@ -1550,6 +1551,62 @@ impl ExprOps for Expr {
                                 }
                                 self->arena->nodes[m].aux = 6;
                                 snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", rt2);
+                                /* P20-03: the emitter picks the map, so the
+                                   arity check beside the resolved-method path
+                                   never sees this call. Every visible binding
+                                   records the method it expands to, so the
+                                   count is still knowable here: one accepting
+                                   candidate is enough, and a call no candidate
+                                   accepts is reported in the same words as a
+                                   resolved method. The map table belongs to the
+                                   parser but the type object already points at
+                                   it, so this unit needs no new plumbing. */
+                                {
+                                    struct Map *hm;
+                                    int hn, mi2, bi2, want = 0, seen = 0, fits = 0;
+                                    int got2 = arg_count(self->arena, args);
+                                    char rk[MAX_TEXT];
+                                    char tk[MAX_TEXT];
+                                    char msg[MAX_TEXT];
+                                    hm = self->sup->ty->maps;
+                                    hn = *self->sup->ty->nmaps;
+                                    tnorm(rt2, rk, sizeof rk);
+                                    for (mi2 = 0; mi2 < hn; mi2++) {
+                                        if (!hm[mi2].is_static
+                                            || !hm[mi2].type_host) continue;
+                                        tnorm(hm[mi2].host_type, tk, sizeof tk);
+                                        if (strcmp(tk, rk) != 0) continue;
+                                        for (bi2 = 0; bi2 < hm[mi2].nb; bi2++) {
+                                            int want2, tail2;
+                                            if (strcmp(hm[mi2].b[bi2].method,
+                                                       fname) != 0) continue;
+                                            /* a type-host binding names the
+                                               receiver first */
+                                            want2 = hm[mi2].b[bi2].nparams
+                                                    - hm[mi2].b[bi2].recv;
+                                            /* a recipe that forwards a tail
+                                               (`printf(fmt, ...)`) makes the
+                                               count a lower bound; the map
+                                               builder only accepts `...` when
+                                               the binding declares it, so the
+                                               recipe text is the marker */
+                                            tail2 = strstr(hm[mi2].b[bi2].call,
+                                                           "...") != 0;
+                                            if (!seen) want = want2;
+                                            seen = 1;
+                                            if (tail2 ? got2 >= want2 : got2 == want2)
+                                                fits = 1;
+                                        }
+                                    }
+                                    if (seen && !fits) {
+                                        snprintf(msg, sizeof msg,
+                                                 "takes %d argument(s), %d given",
+                                                 want, got2);
+                                        if (self->sup->arity_warn(mline, mcol, fname,
+                                                                  msg) != 0)
+                                            return self->sup->fail("too many warnings");
+                                    }
+                                }
                             }
                         }
                     }

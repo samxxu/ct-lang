@@ -681,6 +681,50 @@ else
     bad "inc" "$(cat "$work/minc.err" "$work/minc.cc" "$work/minc.stdout")"
 fi
 
+# P20-03: a type-host mapped call is checked against the binding it expands to,
+# in every position -- including a bare statement call, which never reaches the
+# type pass. `ok.ct` must stay warning-free; the negatives pin both counts.
+rm -rf "$mod-hta"
+mkdir -p "$mod-hta"
+if "$work/ct-ast" build --emit-c -I test/modules/map_unit_type \
+        test/modules/p20_type_host_arity/ok.ct -o "$mod-hta" \
+        >"$work/mhta.out" 2>"$work/mhta.err" \
+   && ! grep -qF "arity mismatch" "$work/mhta.err" \
+   && "$CC" -Wall -Wextra -std=c99 -I test/modules/map_unit_type/ctypes \
+        "$mod-hta"/*.c -o "$work/mhta.bin" 2>"$work/mhta.cc" \
+   && "$work/mhta.bin" >"$work/mhta.stdout" 2>&1 \
+   && cmp -s "$work/mhta.stdout" test/modules/p20_type_host_arity/ok.expected.out; then
+    ok "p20_type_host_arity_ok (statement, initialiser, condition, nested)"
+else
+    bad "p20_type_host_arity_ok" "$(cat "$work/mhta.err" "$work/mhta.cc" "$work/mhta.stdout" 2>/dev/null | head -5)"
+fi
+
+rm -rf "$mod-htf"
+mkdir -p "$mod-htf"
+# A shortage is already fatal when the recipe is expanded ("a map call has
+# fewer arguments than its binding"), and a failed build drops the recorded
+# warnings, so the build case pins that message rather than the warning.
+if "$work/ct-ast" build --emit-c -I test/modules/map_unit_type \
+        test/modules/p20_type_host_arity/few.ct -o "$mod-htf" \
+        >"$work/mhtf.out" 2>"$work/mhtf.err"; then
+    bad "p20_type_host_arity_few" "expected a non-zero exit"
+elif grep -qF "a map call has fewer arguments than its binding" "$work/mhtf.err"; then
+    ok "p20_type_host_arity_few (a bare statement call one argument short)"
+else
+    bad "p20_type_host_arity_few" "$(head -2 "$work/mhtf.err")"
+fi
+
+rm -rf "$mod-htm"
+mkdir -p "$mod-htm"
+if "$work/ct-ast" build --emit-c -I test/modules/map_unit_type \
+        test/modules/p20_type_host_arity/more.ct -o "$mod-htm" \
+        >"$work/mhtm.out" 2>"$work/mhtm.err" \
+   && grep -qF "warning: arity mismatch: 'toLong' takes 1 argument(s), 2 given" "$work/mhtm.err"; then
+    ok "p20_type_host_arity_more (one argument too many, nested in a call)"
+else
+    bad "p20_type_host_arity_more" "$(cat "$work/mhtm.err" 2>/dev/null | head -5)"
+fi
+
 # P20-06: `namespace = app` in a package's ct.pkg claims the first import
 # segment, so `import app::model::Item` names model/Item.h.ct at the root; the
 # doubled `app/legacy/Thing.h.ct` layout keeps resolving as the fallback.

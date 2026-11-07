@@ -1,0 +1,20 @@
+import ctypes::ctypes;
+#include <stdio.h>
+
+/* P20-03: every position a type-host mapped call can take names the right
+   count: a bare statement, an initialiser, a condition and a nested argument. */
+int main(void)
+{
+    char a[] = "42";
+    int scanned = 0;
+    int n = 0;
+
+    a.probe();
+    n = a.toInt();
+    int r = a.scanInto(&scanned);
+    long v = a.toLong(0);
+    if (a.toInt() > 0)
+        n = n + 1;
+    printf("%d %d %d %ld %d\n", a.toInt(), r, scanned, v, n);
+    return 0;
+}

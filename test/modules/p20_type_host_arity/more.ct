@@ -1,0 +1,12 @@
+import ctypes::ctypes;
+#include <stdio.h>
+
+/* P20-03: the surplus argument sits inside another call's argument list. */
+int main(void)
+{
+    char a[] = "42";
+    char b[] = "9";
+
+    printf("%ld\n", a.toLong(a, b));
+    return 0;
+}
