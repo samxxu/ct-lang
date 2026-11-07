@@ -199,26 +199,31 @@ for d in test/modules/*/; do
     else
         continue
     fi
-    # dup_impl, ambig_global, ambig_type, p20_dup_unit and p20_dup_plain are
-    # negative fixtures: the compiler must refuse them (check-ast.sh owns those
+    # dup_impl, ambig_global, ambig_type, p20_dup_unit, p20_dup_plain,
+    # p20_ns_clash, p20_pkg_layout_clash and ambig_func_init are negative
+    # fixtures: the compiler must refuse them (check-ast.sh owns those
     # assertions), so they have no generated C.
     [ "$name" = "dup_impl" ] && continue
     [ "$name" = "ambig_global" ] && continue
     [ "$name" = "ambig_type" ] && continue
     [ "$name" = "p20_dup_unit" ] && continue
     [ "$name" = "p20_dup_plain" ] && continue
+    [ "$name" = "p20_ns_clash" ] && continue
+    [ "$name" = "p20_pkg_layout_clash" ] && continue
+    [ "$name" = "ambig_func_init" ] && continue
+
+    incs=""
+    [ -d "$d/extra" ] && incs="-I $d/extra"
+    # p20_dup_samepath (M1) is positive but resolves `import Uart` only under
+    # `-I <fixture>/a`, so it is built with that root as well.
+    [ "$name" = "p20_dup_samepath" ] && incs="$incs -I $d/a"
+
     rm -rf "$work/mod-$name"
     mkdir -p "$work/mod-$name" || continue
-    if [ -d "$d/extra" ]; then
-        if ! "$work/ct-ast" build --emit-c "$main" -I "$d/extra" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
-            bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
-            continue
-        fi
-    else
-        if ! "$work/ct-ast" build --emit-c "$main" -o "$work/mod-$name" >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
-            bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
-            continue
-        fi
+    if ! "$work/ct-ast" build --emit-c $incs "$main" -o "$work/mod-$name" \
+            >"$work/mod-$name.out" 2>"$work/mod-$name.err"; then
+        bad "$name" "ct-ast failed: $(cat "$work/mod-$name.err")"
+        continue
     fi
     # A shim header is included by base name, so the build's suggested `cc`
     # line carries the include roots; reuse them (`-I <dir>` pairs).
