@@ -3,7 +3,10 @@
 > 中文 · [English](#english)
 > 状态：**已完成（P0 / P1 / P2 全部落地并验证）** · 2026-11-06
 > 锚点：工作树 `v0.19.1`（未 bump 版本、未打 tag）；P0 用现装 `ct v0.19.1` 自举并对拍
-> 关联：[ct-pkg/clib](../../../ct-pkg/clib)（落点）· `std` 包（`ct get std` 后为 `vendor/std/std/README.md`，对照约定）
+> 关联：同级仓库 `ct-pkg` 的 `std` 包（落点：`std::str` / `std::num`；仓库外路径，不在此仓库内链）· `std` 包（`ct get std` 后为 `vendor/std/std/README.md`，对照约定）
+>
+> **2026-11-06 更新**：`ct-pkg/clib` 已删除、版本线重置到 `0.1.0`，本文的落点改为 `ct-pkg/std`
+> （`std::str::String` / `std::num`）。下文出现的 `clib` 路径是当时的方案记录。
 
 ---
 
