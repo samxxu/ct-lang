@@ -19,6 +19,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Contract-tested caps (TEST-9): check-ast.sh generates one overflow fixture for
+   MAX_PARAMS, MAX_METHODS, MAX_FUNCS, MAX_SCOPE, MAX_VARS, MAX_FIELDS and
+   MAX_STRUCTS (MAX_MAPS and MAX_ERRORS are covered in its map and recovery
+   sections). The rest are reachable but stay unfixtured on purpose: each case
+   costs a generator plus a text contract, and the return has flattened. Pin one
+   only when that cap is about to change. */
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
 #define MAX_FUNCS   256

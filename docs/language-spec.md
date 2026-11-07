@@ -1612,6 +1612,11 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 > 实现细节（ct-ast）：`MAX_NODES` 是 `selfhost/ct-ast/runtime/arena/Arena.h.ct` 里的宏，只在 `alloc` 判界时使用；
 > 而节点数组会随 `pub struct Arena` 进入生成的 `Arena.h`，**宏不跨翻译单元**，所以该字段写的是字面量
 > `131072`。两者必须相等，改一处就要同步改另一处。
+>
+> 契约测试范围（TEST-9）：只对已有生成式夹具的上限把越界文案钉成契约——`MAX_PARAMS` / `MAX_METHODS` /
+> `MAX_FUNCS` / `MAX_SCOPE` / `MAX_VARS` / `MAX_FIELDS` / `MAX_STRUCTS`（`MAX_MAPS` 与 `MAX_ERRORS` 分别由
+> `check-ast.sh` 的 map 段与恢复段覆盖）。其余上限可达但**故意不补夹具**：每条都要一份生成器与一份文案契约，
+> 收益已递减；只在改动某个上限时，才顺带把它的文案钉住。
 
 | 常量 | 值 | 含义 | 超限行为 |
 | --- | --- | --- | --- |
@@ -3501,6 +3506,12 @@ pick the first occurrence and leave the later definition unreachable.
 > used only to bound `alloc`; the node array itself travels with `pub struct Arena` into the generated
 > `Arena.h`, where **macros do not cross a translation unit**, so the field is the literal `131072`. The
 > two values must stay equal: changing one means changing the other.
+>
+> Contract-test scope (TEST-9): only caps with a generative fixture pin their overflow text -- `MAX_PARAMS` /
+> `MAX_METHODS` / `MAX_FUNCS` / `MAX_SCOPE` / `MAX_VARS` / `MAX_FIELDS` / `MAX_STRUCTS` (`MAX_MAPS` and
+> `MAX_ERRORS` are covered by the map and recovery sections of `check-ast.sh`). The remaining caps are
+> reachable but **deliberately unfixtured**: each costs a generator plus a text contract, and the return has
+> flattened. Pin one only when that cap is about to change.
 
 | Constant | Value | Meaning | On overflow |
 | --- | --- | --- | --- |

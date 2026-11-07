@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [selfhost/ct-ast/frontend/sym/Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)、[selfhost/check-ast.sh:829](../../selfhost/check-ast.sh#L829)、[:1771](../../selfhost/check-ast.sh#L1771) |
-| 状态 | 待修 |
+| 状态 | 已修（2026-11-07，按「显式约定」处置）：覆盖范围与不补理由写进 `docs/language-spec.md` §7 与 `Symbols.h.ct` 的 `MAX_*` 定义处 |
 
 ## 现象
 
@@ -60,3 +60,16 @@ $ grep -n "MAX_MAPS cap\|MAX_ERRORS cap" selfhost/check-ast.sh
 ## 处理（2026-10-31）
 
 部分修复：新增 5 条生成式上限用例（params / methods / funcs / scopes / vars，覆盖 17 / 65 / 257 / 257 / 4097 个元素）。其余 `MAX_*` 按需再补——每条都要一份生成器与一个文案契约，收益递减。
+
+## 处理（2026-11-07，约定化）
+
+不追求「每个 `MAX_*` 一条用例」，而是把边界写成显式约定：
+
+- 契约测试**只覆盖** `MAX_PARAMS` / `MAX_METHODS` / `MAX_FUNCS` / `MAX_SCOPE` / `MAX_VARS` /
+  `MAX_FIELDS`（SH-29）/ `MAX_STRUCTS`（SH-53），外加 `check-ast.sh` 的 `MAX_MAPS` 与 `MAX_ERRORS` 两条；
+- 其余上限可达但**故意不补夹具**，理由（每条约需一份生成器 + 一份文案契约，收益已递减）写在
+  `docs/language-spec.md` §7（中英各一份）与 `selfhost/ct-ast/frontend/sym/Symbols.h.ct` 的
+  `MAX_*` 定义块上方；
+- 新增上限或调整现有上限时，才顺带把该条文案钉成断言，不再批量补历史夹具。
+
+`tests/` 侧不新增用例；本条到此收口。
