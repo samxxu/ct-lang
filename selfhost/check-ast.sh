@@ -1788,11 +1788,11 @@ mapbad() {
     printf '%b' "$mainbody" >"$work/mb/main.ct"
     if "$work/ct-ast" build --emit-c "$work/mb/main.ct" -o "$work/mb/out" \
             >"$work/mb/out.txt" 2>"$work/mb/err.txt"; then
-        bad "batch 38: $label" "expected a non-zero exit"
+        bad "${mapbad_batch:-batch 38}: $label" "expected a non-zero exit"
     elif grep -qF "$want" "$work/mb/err.txt"; then
-        ok "batch 38 ($label)"
+        ok "${mapbad_batch:-batch 38} ($label)"
     else
-        bad "batch 38: $label" "$(head -2 "$work/mb/err.txt")"
+        bad "${mapbad_batch:-batch 38}: $label" "$(head -2 "$work/mb/err.txt")"
     fi
 }
 
@@ -1863,6 +1863,26 @@ mapbad sizeof_paren \
     "map recipe takes 'sizeof s', not 'sizeof(s)'" \
     'import lib::lib;\n\nint main(void) { return 0; }\n'
 
+mapbad_batch='batch 42'
+# Type aliases in a `.m.ct` unit: `pub` is mandatory, and the declaration
+# shares the type-name space with traits and with itself.
+mapbad alias_nonpub \
+    'type X = int;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    "a type alias in a .m.ct unit must be 'pub'"
+mapbad alias_duplicate \
+    'pub type X = int;\npub type X = int;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    "duplicate type alias 'X'"
+mapbad alias_conflicts_trait \
+    'pub trait T { int m(); }\npub type T = int;\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    "type alias 'T' conflicts with an existing type"
+# The alias and the underlying spelling fold into one host key, so the two maps
+# coexist at declaration time and only the call site reports the ambiguity.
+mapbad alias_ambiguous \
+    'pub type S = char *;\npub trait T { int m(); }\nmap trait T for type S { m(s) -> atoi(s); }\nmap trait T for type char * { m(s) -> strlen(s); }\n' \
+    "ambiguous type-host map for method 'm' on type 'char *'" \
+    'import lib::lib;\n\nint main(void)\n{\n    S a = "1";\n    int x = a.m();\n    (void)x;\n    return 0;\n}\n'
+mapbad_batch='batch 38'
+
 # A type host needs the `.m.ct` whitelist: a normal unit maps instances only.
 rm -rf "$work/mbto"
 mkdir -p "$work/mbto/lib" "$work/mbto/out"
@@ -1876,6 +1896,24 @@ elif grep -qF 'a type host is only allowed in a .m.ct unit' "$work/mbto/err.txt"
     ok "batch 38 (type_host_outside)"
 else
     bad "batch 38: type_host_outside" "$(head -2 "$work/mbto/err.txt")"
+fi
+
+# An alias is only visible through the import closure. The declaring unit is in
+# the build (so the compiler knows the name), but `main` neither imports it nor
+# reaches it through another unit: the diagnostic must say so instead of
+# silently treating `Text` as an opaque C type.
+rm -rf "$work/mtani"
+mkdir -p "$work/mtani/lib" "$work/mtani/out"
+printf 'namespace lib;\n\npub type Text = char *;\n' >"$work/mtani/lib/lib.h.ct"
+printf 'Text g;\n\nint main(void) { return 0; }\n' >"$work/mtani/main.ct"
+if "$work/ct-ast" build --emit-c "$work/mtani/lib/lib.h.ct" "$work/mtani/main.ct" \
+        -o "$work/mtani/out" >"$work/mtani/out.txt" 2>"$work/mtani/err.txt"; then
+    bad "batch 42: alias_not_imported" "expected a non-zero exit"
+elif grep -qF "type alias 'Text' is declared in" "$work/mtani/err.txt" \
+        && grep -qF "but this unit does not import it" "$work/mtani/err.txt"; then
+    ok "batch 42 (alias_not_imported)"
+else
+    bad "batch 42: alias_not_imported" "$(head -2 "$work/mtani/err.txt")"
 fi
 
 # A static trait is bound by its `map`, never implemented / adopted / boxed.
@@ -1961,6 +1999,31 @@ for cf in late_import_after_global late_import_after_fn; do
         ok "p20-02 ($cf)"
     else
         bad "p20-02: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# Batch 42: type-alias diagnostics that need no build tree. The message is
+# pinned verbatim so a later refactor cannot drift it into a generic parse error.
+for pair in \
+    "ct|type_alias_plain|a type alias is only allowed in a .h.ct or .m.ct unit" \
+    "h|type_alias_cycle|type alias cycle: 'B' -> 'A' -> 'B'" \
+    "h|type_alias_use_before|type alias 'Text' must be declared before it is used" \
+    "h|type_alias_conflict|type alias 'Thing' conflicts with an existing type" \
+    "h|type_alias_duplicate|duplicate type alias 'Text'" \
+    "h|type_alias_trait|type alias 'G' cannot name a trait"
+do
+    kind="${pair%%|*}"
+    rest="${pair#*|}"
+    cf="${rest%%|*}"
+    cfmsg="${rest#*|}"
+    if [ "$kind" = h ]; then cf="$cf.h"; fi
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "batch 42: $cf" "expected a non-zero exit"
+    elif grep -qF "$cfmsg" "$work/$cf.err"; then
+        ok "batch 42 ($cf)"
+    else
+        bad "batch 42: $cf" "$(cat "$work/$cf.err")"
     fi
 done
 

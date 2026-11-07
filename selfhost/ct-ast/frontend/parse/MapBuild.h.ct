@@ -21,6 +21,7 @@ import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Map::MapBind as MapBind;
 import frontend::module::Map;
+import frontend::parse::Expr;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
 import tool::diag::Diag;
@@ -52,6 +53,7 @@ pub struct MapBuild {
     struct Lexer *lex;
     struct ParseSupport *sup;
     struct Symbols *sym;
+    struct Expr *ex;            /* the shared type reader (`for type` uses it) */
     struct Map *maps;
     int *nmaps;
     int *unit_is_map;           /* points at the parser's per-unit flag */
@@ -510,7 +512,7 @@ impl MapBuildOps for MapBuild {
         struct Map *m;
         struct MapBind *b;
         int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident, ns_host, hl, cl;
-        int is_static, type_host, ht, want;
+        int is_static, type_host, want;
         size_t wl;
         (void)self;
 
@@ -620,23 +622,15 @@ impl MapBuildOps for MapBuild {
             is_static = 1;
             ns_host = 0;
             self->sup->lex_next();
-            ht = 0;
-            host_type[0] = 0;
-            while (self->lex->tok != T_EOF
-                   && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)) {
-                const char *tt = self->lex->toktext;
-                if (ht > 0 && ht + 1 < (int)sizeof host_type) {
-                    host_type[ht] = ' ';
-                    ht++;
-                    host_type[ht] = 0;
-                }
-                if (ht + (int)strlen(tt) >= (int)sizeof host_type)
-                    return self->sup->fail("type host name is too long");
-                snprintf(host_type + ht, (size_t)sizeof host_type - (size_t)ht, "%s", tt);
-                ht += (int)strlen(tt);
-                self->sup->lex_next();
-            }
-            if (!host_type[0] || strchr(host_type, '[') != NULL)
+            if (self->lex->tok == T_EOF
+                || (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+                return self->sup->fail("expected a type after 'for type'");
+            /* The host spelling goes through the same reader as a trait
+               signature or a declaration, so a type alias expands and the key
+               is computed on the underlying spelling. */
+            if (self->ex->parse_type(host_type, sizeof host_type) != 0) return -1;
+            if (!host_type[0]
+                || (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0))
                 return self->sup->fail("expected a type after 'for type'");
             snprintf(inst, sizeof inst, "%s", host_type);
             snprintf(icn, sizeof icn, "%s", host_type);
@@ -853,6 +847,7 @@ void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps, i
 {
     g_mapbuild.lex = (struct Lexer *)lex;
     g_mapbuild.sup = (struct ParseSupport *)sup;
+    g_mapbuild.ex = frontend::parse::expr_get();
     g_mapbuild.sym = (struct Symbols *)sym;
     g_mapbuild.maps = (struct Map *)maps;
     g_mapbuild.nmaps = nmaps;

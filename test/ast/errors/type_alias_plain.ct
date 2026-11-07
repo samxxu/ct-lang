@@ -1,0 +1,6 @@
+type X = int;
+
+int main(void)
+{
+    return 0;
+}

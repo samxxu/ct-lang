@@ -1,0 +1,5 @@
+pub trait Greeter {
+    void greet();
+}
+
+pub type G = Greeter;

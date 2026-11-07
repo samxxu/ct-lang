@@ -96,6 +96,8 @@ pub trait ParseOps {
    #include, and naming the tag there trips -Wvisibility). */
 pub trait ParseDeclOps {
     int  struct_def_ahead(void);
+    int  type_alias_ahead(void);
+    int  parse_type_alias(int is_pub);
     int  append_node(int prog, int n);
     int  skip_import(void);
     int  top_decl(int is_pub);
@@ -130,6 +132,10 @@ pub struct Parser {
     /* Set while the unit being parsed is a `.m.ct` mapping unit: the content
        whitelist and the static-trait rules key off it. */
     int  unit_is_map;
+    /* Set while the unit being parsed is a `.h.ct` interface unit. A type
+       alias may live in a `.h.ct` (a public signature may use it) but not in
+       a plain `.ct`, which no unit can import. */
+    int  unit_is_hdr;
     /* Set once the unit has consumed a declaration. `import` is a leading
        declaration; one seen after this point is reported instead of being
        parsed, because a reader cannot tell it apart from a dropped import. */
@@ -390,6 +396,99 @@ impl ParseDeclOps for Parser {
         return is_def;
     }
 
+    /* `type IDENT =` starts a type alias; `type` is a contextual keyword, so
+       every other use of the identifier stays a type name or a declarator. */
+    int type_alias_ahead(void)
+    {
+        int pos, bol, tok, line, tokline, tokstart, lstart, is_alias;
+        long num;
+        char text[MAX_TEXT];
+        (void)self;
+
+        pos = self->lex->pos;
+        bol = self->lex->bol;
+        tok = self->lex->tok;
+        line = self->lex->line;
+        tokline = self->lex->tokline;
+        tokstart = self->lex->tokstart;
+        lstart = self->lex->lstart;
+        num = self->lex->toknum;
+        snprintf(text, sizeof text, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        is_alias = 0;
+        if (self->lex->tok == T_ID) {
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0)
+                is_alias = 1;
+        }
+        self->lex->pos = pos;
+        self->lex->bol = bol;
+        self->lex->tok = tok;
+        self->lex->line = line;
+        self->lex->tokline = tokline;
+        self->lex->tokstart = tokstart;
+        self->lex->lstart = lstart;
+        self->lex->toknum = num;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
+        return is_alias;
+    }
+
+    /* `[pub] type Name = <type>;`: a compile-time synonym, no node, no C. The
+       target goes through `parse_type`, so what the table stores is already
+       the canonical spelling an ordinary declaration would have produced. */
+    int parse_type_alias(int is_pub)
+    {
+        int line, col;
+        char name[MAX_TEXT];
+        char target[MAX_TEXT];
+        (void)self;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        if (!self->unit_is_hdr && !self->unit_is_map)
+            return tool::diag::ct_sem_error(line, col,
+                "a type alias is only allowed in a .h.ct or .m.ct unit", self->mem->path);
+        if (self->unit_is_map && !is_pub)
+            return tool::diag::ct_sem_error(line, col,
+                "a type alias in a .m.ct unit must be 'pub'", self->mem->path);
+        self->sup->lex_next();                       /* consume `type` */
+        if (self->lex->tok != T_ID) return self->sup->fail("expected a name after 'type'");
+        snprintf(name, sizeof name, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0))
+            return self->sup->fail("expected '=' in a type alias declaration");
+        if (self->sym->begin_type_alias(name, self->mem->path, line, is_pub,
+                                        self->cur_unit) != 0)
+            return self->sup->fail(self->sym->last_error());
+        self->sup->lex_next();                       /* consume `=` */
+        self->sym->alias_decl++;
+        if (self->ex->parse_type(target, sizeof target) != 0) {
+            self->sym->alias_decl--;
+            self->sym->abort_type_alias();
+            return -1;
+        }
+        self->sym->alias_decl--;
+        if (self->ex->saw_trait) {
+            self->sym->abort_type_alias();
+            {
+                char msg[512];
+                snprintf(msg, sizeof msg, "type alias '%s' cannot name a trait", name);
+                return self->sup->fail(msg);
+            }
+        }
+        if (!target[0]) {
+            self->sym->abort_type_alias();
+            return self->sup->fail("expected a type after '=' in a type alias declaration");
+        }
+        if (self->sup->expect(";") != 0) {
+            self->sym->abort_type_alias();
+            return -1;
+        }
+        if (self->sym->finish_type_alias(target) != 0)
+            return self->sup->fail(self->sym->last_error());
+        return NO_NODE;
+    }
+
     int append_node(int prog, int n)
     {
         int t;
@@ -521,6 +620,7 @@ impl ParseDeclOps for Parser {
         if (self->unit_is_map && !(self->lex->tok == T_ID
                 && (strcmp(self->lex->toktext, "trait") == 0
                     || strcmp(self->lex->toktext, "map") == 0
+                    || (strcmp(self->lex->toktext, "type") == 0 && self->type_alias_ahead())
                     || strcmp(self->lex->toktext, "_Static_assert") == 0
                     || strcmp(self->lex->toktext, "static_assert") == 0))) {
             int dline, dcol, dn, dk;
@@ -639,6 +739,9 @@ impl ParseDeclOps for Parser {
                 "'borrow' is only allowed inside a function body", self->mem->path);
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "typedef") == 0) {
             n = self->parse_typedef(is_pub);
+        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "type") == 0
+                   && self->type_alias_ahead()) {
+            n = self->parse_type_alias(is_pub);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0) {
             n = self->parse_trait(is_pub);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "impl") == 0) {

@@ -1,0 +1,5 @@
+pub struct Thing {
+    int v;
+};
+
+pub type Thing = int;

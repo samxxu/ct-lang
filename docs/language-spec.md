@@ -490,7 +490,8 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
 **静态映射（第三十八批，仅 ct-ast）**
 
 `.m.ct` 是**映射单元**：只允许 `namespace`、`import`、`#include` / `#define`（prologue）、`pub trait`
-（只写抽象方法）、`map` 与 `_Static_assert`；函数 / 全局 / 类型声明、`impl` 与对象宿主都报错。它
+（只写抽象方法）、`pub type`（类型别名，见 §4.42）、`map` 与 `_Static_assert`；函数 / 全局 / 类型声明、
+`impl` 与对象宿主都报错。它
 **不产生任何产物**（无 `.c` / `.h`、不进末尾 `cc` 行、不写缓存），只能在 `ct build` 里被 import；
 `ct compile` 直接拒绝 `.m.ct` 输入。同一 root 下同名 `foo.h.ct` 与 `foo.m.ct` 并存时报 import 歧义；
 映射单元只能 import 另一个映射单元。
@@ -521,7 +522,8 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
 - **类型宿主**：`map trait T for type <ctype> { m(recv, p…) -> callee(…); }`，首个绑定参数是接收者，
   trait 方法本身不声明它；绑定参数个数 = 方法参数个数 + 1。调用 `value.m(args)` 时按接收者的静态
   类型（数组先 decay 成元素指针）做规范化文本比较，命中后把 `recv` 换成接收者表达式；普通
-  struct / 接口方法优先，查找失败才回退到类型宿主，多个候选报歧义。
+  struct / 接口方法优先，查找失败才回退到类型宿主，多个候选报歧义。接收者与 `for type` 的主机
+  拼写都先按 §4.42 展开类型别名，再参与这里的文本比较，因此别名与底层拼写是**同一个宿主**。
 - **限定调用消解同类型多映射**（P20-01）：两个包把同名方法绑到同一宿主类型时（如都把 `len` 绑到
   `char *`），未限定的 `value.m(args)` 会因两个候选报歧义；写成 `a::ALen::len(value, args)` 只保留
   该 trait 的映射。限定名按符号名规则拼接（`a::ALen` → `a_ALen`），最后一段必须是该静态 trait 的
@@ -1497,6 +1499,76 @@ int main(void)
 - L0 / L1 按行透传，本来就会原样输出块内容；本规定只约束 ct-ast。编译器**自身源码**
   （`selfhost/ct-ast/**`）不得使用块，由 `selfhost/check-ast.sh` 的护栏检查。
 
+#### 4.42 类型别名 `type`（Phase 20，仅 ct-ast）
+
+映射单元常需要给自己映射的 C 类型起一个可读名字。过去这个只能在 `.shim.h` 里写 `typedef`
+（于是名字变成真实的 C 类型）；`type` 声明把它变成**纯编译期同义词**：
+
+```c
+namespace png;
+
+pub type PngReader = struct ct_png_reader *;
+
+pub trait Reader { int width(); }
+map trait Reader for type PngReader { width(r) -> ct_png_width(r); }
+```
+
+每次出现 `PngReader` 都展开成底层拼写（这里 `struct ct_png_reader *`），生成的 C 里只有底层
+类型，**不发射任何 typedef**。
+
+- **星号归属**：别名只替换源码中写的那个名字，名字后手写的 `*` 原样保留。因此
+  `pub type T = struct S;` 让 `T *` 与 `struct S *` 同键；`pub type T = struct S *;` 让裸 `T`
+  与 `struct S *` 同键。用别名替换 shim 里的 `typedef struct S S;`（源码到处写 `S *`）时必须用
+  前一种，否则每个使用点都会多出一层指针。
+- **允许的位置**：只有 `.h.ct` 与 `.m.ct`。普通 `.ct` 不可被 import，别名无法传播，故报
+  `a type alias is only allowed in a .h.ct or .m.ct unit`。`.m.ct` 里的别名必须是 `pub`，
+  否则报 `a type alias in a .m.ct unit must be 'pub'`（映射单元没有私有接口）。
+- **语法**：`[pub] type Name = <类型>;`。`type` 是上下文关键字，只有 `type IDENT =` 这一形状
+  进入别名分支，`type` 作类型名或变量名的旧写法不受影响。右侧走与普通声明相同的类型读取器，
+  因此 `struct` / `enum` / `union` 限定、指针与整型同义词规范化都会发生。
+- **目标可以是不透明的 C 类型**：右侧出现本单元没声明过的名字（`sqlite3_stmt`、`FILE`）时按
+  不透明 C 拼写保留。这是用别名替换 shim typedef 的地基。
+- **在 host key 之前展开**：接收者的静态类型与 `for type` 的主机拼写都先展开别名，再做 §4.10
+  的规范化文本比较。于是 `map ... for type SqliteStmt` 与 `map ... for type sqlite3_stmt` 是
+  **同一个宿主**，不会产生两条平行映射。两者与同一 trait 的同名方法同时存在时，声明期不报错，
+  调用点报 `ambiguous type-host map for method '<m>' on type '<key>': '<p1>' and '<p2>'`
+  （与现有 map 的懒失败行为一致）。
+- **可见性**：与 `map` 和 C 头文件一致，走 **import 传递闭包**——import 了 `a`，则 `a` import
+  的单元导出的别名都可见；只导出 `pub` 别名，私有别名不跨单元。
+  - 本单元使用但未 import：`type alias 'Text' is declared in <path>:<line> but this unit does not import it`。
+    只有 `pub` 别名会给出这条诊断；其它单元的私有别名按不透明 C 拼写处理。
+  - 两个可达单元导出同名不同目标：`type alias 'X' is exported by both <p1> and <p2>`；同名同目标
+    视为同一个同义词，不报错。
+- **声明顺序**：同一单元内先声明后使用。使用点早于声明：
+  `type alias 'Text' must be declared before it is used`。解析器在单元开头预扫描顶层
+  `type IDENT =`，因此这条诊断针对的是别名而不是“未知类型”。
+- **循环**：`pub type A = B; pub type B = A;` 报
+  `type alias cycle: 'B' -> 'A' -> 'B'`（在形成闭环的那条声明上报，链从该声明开始）。
+- **与已有名字冲突**：与 struct / trait / typedef 同名报
+  `type alias 'X' conflicts with an existing type`；同单元重复声明报
+  `duplicate type alias 'X'`；与 `import a::b::C as D;` 的 `D` 同名同样按冲突处理。
+- **目标不能是 trait**：类型宿主需要具体拼写，别名指向 trait 报
+  `type alias 'X' cannot name a trait`。
+- **与 `import ... as` 的分工**：`import a::b::C as D;` 给**已导出的类型名**换一个本地引用名；
+  `type D = C;` 给**任意类型拼写**（包括不透明 C 类型、指针）起同义词。前者只能指向被导入单元
+  导出的名字，后者不看导出表；两者同名时按上一条报冲突。
+- **不产生 C**：别名不发射 typedef、不进 `--emit-map`、不改变生成的 `.h`；消费者的 `.h` / `.c`
+  里看到的始终是底层拼写。单文件编译（不解析 import）只能看到同一单元内的别名。
+
+诊断一览：
+
+| 情形 | 消息 |
+| --- | --- |
+| 普通 `.ct` | `a type alias is only allowed in a .h.ct or .m.ct unit` |
+| `.m.ct` 非 `pub` | `a type alias in a .m.ct unit must be 'pub'` |
+| 使用早于声明 | `type alias 'X' must be declared before it is used` |
+| 未 import 的 `pub` 别名 | `type alias 'X' is declared in <path>:<line> but this unit does not import it` |
+| 两个单元导出同名异目标 | `type alias 'X' is exported by both <p1> and <p2>` |
+| 与已有类型 / 导入别名重名 | `type alias 'X' conflicts with an existing type` |
+| 同单元重复 | `duplicate type alias 'X'` |
+| 循环 | `type alias cycle: '<first>' -> … -> '<first>'` |
+| 目标为 trait | `type alias 'X' cannot name a trait` |
+
 #### 4.43 外部 C 符号：CT 认识哪些、不认识哪些（DOC-64）
 
 CT 没有预处理器：`#include` 只按整行透传到生成物，头文件内容不参与解析。因此一个来自 C 头文件的
@@ -2228,8 +2300,8 @@ Constraints and limits:
 **Static mapping (batch 38, ct-ast only)**
 
 A `.m.ct` file is a **mapping unit**: it admits only `namespace`, `import`, `#include` / `#define`
-(the prologue), `pub trait` (abstract methods only), `map` and `_Static_assert`. Functions, globals,
-type declarations, `impl` and object hosts are all errors. It **produces no artefact** (no `.c` /
+(the prologue), `pub trait` (abstract methods only), `pub type` (type aliases, see §4.42), `map`
+and `_Static_assert`. Functions, globals, type declarations, `impl` and object hosts are all errors. It **produces no artefact** (no `.c` /
 `.h`, absent from the trailing `cc` line, never stored in the cache) and can only be imported in a
 `ct build`; `ct compile` refuses a `.m.ct` input outright. A `foo.h.ct` and a `foo.m.ct` in the same
 root make an import ambiguous, and a mapping unit may only import another mapping unit.
@@ -2272,6 +2344,9 @@ Two host forms:
   namespace function of the same name is not hijacked. The first actual is the receiver, with the
   same rules as `value.len(args)` (arrays decay first). The ambiguity diagnostic leads with both
   spellings.
+  when that lookup fails, and several candidates are ambiguous. The receiver's spelling and the
+  `for type` host both expand type aliases (§4.42) *before* this comparison, so an alias and its
+  underlying spelling are one host.
 
 Recipe substitution (per occurrence):
 
@@ -3354,6 +3429,89 @@ Constraints and diagnostics:
 - L0 / L1 pass lines through as they stand, so the block already reaches their output; the rule binds
   ct-ast only. The compiler's **own sources** (`selfhost/ct-ast/**`) must not use a block, which
   `selfhost/check-ast.sh` enforces.
+
+#### 4.42 Type aliases (`type`, Phase 20, ct-ast only)
+
+A mapping unit often wants a readable name for the C type it maps on. That used to require a
+`typedef` in the `.shim.h` (which turned the name into a real C type); a `type` declaration makes it
+a **compile-time synonym**:
+
+```c
+namespace png;
+
+pub type PngReader = struct ct_png_reader *;
+
+pub trait Reader { int width(); }
+map trait Reader for type PngReader { width(r) -> ct_png_width(r); }
+```
+
+Every occurrence of `PngReader` expands to the underlying spelling (`struct ct_png_reader *` here);
+the generated C carries only that spelling and **no typedef**.
+
+- **Where the `*` lives**: an alias replaces exactly the name written in the source, so a `*` written
+  after it stays. `pub type T = struct S;` therefore makes `T *` the same host as `struct S *`,
+  while `pub type T = struct S *;` makes bare `T` the same host as `struct S *`. When replacing a
+  shim `typedef struct S S;` (whose users all write `S *`), the first form is the correct one — the
+  second adds an extra pointer at every use site.
+- **Where it is allowed**: `.h.ct` and `.m.ct` only. A plain `.ct` cannot be imported, so an alias
+  there could not propagate: `a type alias is only allowed in a .h.ct or .m.ct unit`. In a `.m.ct`
+  the alias must be `pub` — `a type alias in a .m.ct unit must be 'pub'` (a mapping unit has no
+  private interface).
+- **Syntax**: `[pub] type Name = <type>;`. `type` is a contextual keyword: only `type IDENT =`
+  enters the alias branch, so `type` used as a type or variable name keeps working. The right-hand
+  side goes through the same type reader as an ordinary declaration, so `struct` / `enum` / `union`
+  qualification, pointers and the integer-synonym normalisation all apply.
+- **The target may be an opaque C type**: a name the unit never declared (`sqlite3_stmt`, `FILE`) is
+  kept as an opaque C spelling. This is the foundation for replacing shim typedefs.
+- **Expanded before the host key**: the receiver's static spelling and the `for type` host both
+  expand aliases first, then take part in the §4.10 normalised text comparison. So
+  `map ... for type SqliteStmt` and `map ... for type sqlite3_stmt` are **one host** and never
+  create parallel maps. When both coexist with the same trait and method name, declaration is fine
+  and the call site reports
+  `ambiguous type-host map for method '<m>' on type '<key>': '<p1>' and '<p2>'` (the existing lazy
+  map failure, unchanged).
+- **Visibility**: the **transitive import closure**, matching `map` and the generated C headers —
+  importing `a` also sees the aliases exported by everything `a` imports. Only `pub` aliases are
+  exported; a private alias never crosses a unit boundary.
+  - Used here but not imported: `type alias 'Text' is declared in <path>:<line> but this unit does not import it`.
+    Only `pub` aliases produce this diagnostic; another unit's private alias stays an opaque C
+    spelling.
+  - Two reachable units exporting the same name with different targets:
+    `type alias 'X' is exported by both <p1> and <p2>`. The same name and target is one synonym and
+    is silently deduplicated.
+- **Declaration order**: declare before use within a unit. A use before the declaration reports
+  `type alias 'Text' must be declared before it is used`. The parser pre-scans top-level
+  `type IDENT =` at the start of the unit, so the diagnostic names the alias rather than treating
+  the spelling as an unknown type.
+- **Cycles**: `pub type A = B; pub type B = A;` reports
+  `type alias cycle: 'B' -> 'A' -> 'B'` (on the declaration that closes the loop, with the chain
+  starting there).
+- **Conflicts**: the same name as a struct / trait / typedef reports
+  `type alias 'X' conflicts with an existing type`; a second declaration in the same unit reports
+  `duplicate type alias 'X'`; a clash with `import a::b::C as D;`'s `D` is a conflict too.
+- **The target cannot be a trait**: a type host needs a concrete spelling, so
+  `type alias 'X' cannot name a trait`.
+- **Division with `import ... as`**: `import a::b::C as D;` renames an **exported type name** for
+  local reference; `type D = C;` synonyms **any type spelling** (including opaque C types and
+  pointers). The former only reaches the imported unit's export table; the latter never consults it.
+  A clash between the two is reported as above.
+- **No C output**: aliases emit no typedef, never appear in `--emit-map`, and do not change the
+  generated `.h`; consumers always see the underlying spelling. Single-file compilation (which does
+  not resolve imports) only sees aliases declared in that one unit.
+
+Diagnostics:
+
+| Situation | Message |
+| --- | --- |
+| plain `.ct` | `a type alias is only allowed in a .h.ct or .m.ct unit` |
+| non-`pub` in `.m.ct` | `a type alias in a .m.ct unit must be 'pub'` |
+| use before declaration | `type alias 'X' must be declared before it is used` |
+| `pub` alias not imported | `type alias 'X' is declared in <path>:<line> but this unit does not import it` |
+| two units export different targets | `type alias 'X' is exported by both <p1> and <p2>` |
+| clashes with a type / import alias | `type alias 'X' conflicts with an existing type` |
+| duplicate in one unit | `duplicate type alias 'X'` |
+| cycle | `type alias cycle: '<first>' -> … -> '<first>'` |
+| target is a trait | `type alias 'X' cannot name a trait` |
 
 #### 4.43 External C symbols: what CT knows and what it does not (DOC-64)
 

@@ -296,6 +296,10 @@ impl DriverOps for Driver {
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
         self->sym->ntb = 0;
+        self->sym->nalias = 0;
+        self->sym->ntalias = 0;
+        self->sym->ntachain = 0;
+        self->sym->alias_decl = 0;
         self->sym->self_mode = 0;
         self->p->nparams = 0;
         self->p->ncalls = 0;
@@ -305,11 +309,17 @@ impl DriverOps for Driver {
         {
             size_t pl = strlen(in);
             self->p->unit_is_map = (pl > 5 && strcmp(in + pl - 5, ".m.ct") == 0) ? 1 : 0;
+            self->p->unit_is_hdr = (pl > 5 && strcmp(in + pl - 5, ".h.ct") == 0) ? 1 : 0;
         }
         frontend::parse::ct_parse_clear_error();
         if (self->m->read_file(in) != 0) {
             return frontend::parse::ct_parse_report();
         }
+        /* The build path pre-scans top-level aliases before parsing; compile
+           mode has one unit and needs the same table so a use before the
+           declaration is reported instead of becoming an opaque C type. */
+        if (self->m->scan_forward_type_aliases(in, self->p->cur_unit) != 0)
+            return frontend::parse::ct_parse_report();
         prog = frontend::parse::ct_parse_program();
         if (prog < 0) {
             if (tool::diag::ct_diag_nsem()) {

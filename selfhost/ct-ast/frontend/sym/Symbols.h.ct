@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 /* Contract-tested caps (TEST-9): check-ast.sh generates one overflow fixture for
    MAX_PARAMS, MAX_METHODS, MAX_FUNCS, MAX_SCOPE, MAX_VARS, MAX_FIELDS and
@@ -35,8 +36,41 @@
 #define MAX_TRAITS  64
 #define MAX_STRUCTS 128
 #define MAX_FIELDS  64
+#define MAX_TYPE_ALIASES 64
+#define MAX_GLOBAL_TYPE_ALIASES 256
+#define MAX_ALIAS_CHAIN 32
 
 namespace frontend::sym;
+/* A compile-time synonym for a type spelling. It never reaches the generated C;
+   `target` is the canonical spelling the type parser would have emitted for the
+   alias. `forward` marks a declaration found by the pre-scan but not parsed yet;
+   `resolving` marks the one currently being parsed, so a self reference is a
+   cycle instead of an empty expansion. */
+pub struct TypeAlias {
+    char name[160];
+    char target[160];
+    char path[1024];
+    int  line;
+    int  is_pub;
+    int  owner;         /* unit index; -1 outside `build` */
+    int  forward;
+    int  resolving;
+}
+
+pub trait TypeAliasOps {
+    int find_type_alias(const char *name);
+    int begin_type_alias(const char *name, const char *path, int line, int is_pub, int owner);
+    int finish_type_alias(const char *target);
+    void abort_type_alias(void);
+    int add_forward_type_alias(const char *name, const char *path, int line, int owner);
+    int add_visible_type_alias(const char *name, const char *target, const char *path,
+                               int line, int owner);
+    int find_global_type_alias(const char *name, char *path, int cap, int *line);
+    int expand_type_alias(const char *name, char *out, int cap);
+    int expand_type_text(const char *text, char *out, int cap);
+    int resolve_exported_type_aliases(int owner);
+}
+
 pub struct Fn {
     char name[160];
     /* the C spelling: a `pub` function inside a namespace is mangled with its
@@ -221,6 +255,21 @@ pub struct Symbols {
     char alias_name[16][160];
     char alias_full[16][160];
     int  nalias;
+    /* Type aliases (`pub type X = T;`): a per-unit visible table plus a global
+       registry of every declaration loaded in this build. The global half is
+       what lets `parse_type` say "declared in ... but not imported" instead of
+       treating the name as an opaque C type. Both blocks are heap allocated. */
+    struct TypeAlias *taliases;
+    int  ntalias;
+    char tachain[32][160];      /* MAX_ALIAS_CHAIN, spelled out for the header */
+    int  ntachain;
+    struct TypeAlias *gtaliases;
+    int  ngtalias;
+    /* 1 while `parse_type` reads the right-hand side of a `type` declaration.
+       A forward reference there is deferred as raw text (so alias cycles and
+       legal forward targets stay one mechanism); outside it, a forward row is
+       a use before the declaration and is reported. */
+    int  alias_decl;
     int  self_mode;             /* inside an impl body: `self` -> `_self` */
     char ret_type[160];         /* return type of the function being parsed */
     /* Inside a trait method's default body: the trait `self->m(...)` dispatches
@@ -228,7 +277,7 @@ pub struct Symbols {
        time, so the receiver resolves to the enclosing trait by construction. */
     char trait_default[160];
     char errmsg[160];           /* the bare message `fail` recorded; Ast adds the position */
-} use SymbolOps;
+} use SymbolOps, TypeAliasOps;
 
 pub struct Symbols *symbols_get(void);
 
@@ -484,6 +533,20 @@ impl SymbolOps for Symbols {
             if (self->type_kind[i] == 0) self->type_kind[i] = kind;
             return 0;
         }
+        /* A finished alias already owns this spelling; the two would disagree
+           about what the name means, so the later declaration is the error. A
+           forward row is only the pre-scan's placeholder and does not clash. */
+        i = self->find_type_alias(name);
+        if (i < 0 && self->ns[0]) {
+            size_t nl = strlen(self->ns);
+            if (strncmp(name, self->ns, nl) == 0)
+                i = self->find_type_alias(name + nl);
+        }
+        if (i >= 0 && !self->taliases[i].forward) {
+            char msg[512];
+            snprintf(msg, sizeof msg, "type '%s' conflicts with an existing type alias", name);
+            return self->fail(msg);
+        }
         if (self->ntype >= MAX_TYPES) return self->fail("too many types");
         snprintf(self->types[self->ntype], MAX_TEXT, "%s", name);
         self->type_kind[self->ntype] = kind;
@@ -713,6 +776,317 @@ impl SymbolOps for Symbols {
     }
 }
 
+impl TypeAliasOps for Symbols {
+    int find_type_alias(const char *name)
+    {
+        int i;
+        for (i = 0; i < self->ntalias; i++)
+            if (strcmp(self->taliases[i].name, name) == 0) return i;
+        return -1;
+    }
+
+    /* Start a declaration: insert the row, then push its name on the expansion
+       chain so a self reference is reported as a cycle rather than reading an
+       empty target. A pre-scanned forward row is reused in place. */
+    int begin_type_alias(const char *name, const char *path, int line, int is_pub, int owner)
+    {
+        int i;
+        char msg[512];
+        /* The pre-scan runs before any declaration is parsed, so a type that
+           appears above the alias was not known then. Check it here, where the
+           declaration order is finally known. */
+        if (self->find_type(name) >= 0) {
+            snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
+            return self->fail(msg);
+        }
+        /* Declarations inside a namespace are stored under the mangled spelling
+           (`lib_Thing`), so a trait or typedef declared above is a conflict even
+           though the alias keeps its bare name. */
+        if (self->ns[0]) {
+            char qn[MAX_TEXT];
+            int w = snprintf(qn, sizeof qn, "%s%s", self->ns, name);
+            if (w >= 0 && w < (int)sizeof qn && self->find_type(qn) >= 0) {
+                snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
+                return self->fail(msg);
+            }
+        }
+        i = self->find_type_alias(name);
+        if (i >= 0) {
+            if (self->taliases[i].owner == owner) {
+                if (!self->taliases[i].forward) {
+                    snprintf(msg, sizeof msg,
+                             "duplicate type alias '%s' (first at %s:%d)",
+                             name, self->taliases[i].path, self->taliases[i].line);
+                    return self->fail(msg);
+                }
+                self->taliases[i].line = line;
+                self->taliases[i].is_pub = is_pub;
+                snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+                self->taliases[i].forward = 0;
+                self->taliases[i].resolving = 1;
+                if (self->ntachain >= MAX_ALIAS_CHAIN)
+                    return self->fail("type alias expansion is too deep");
+                snprintf(self->tachain[self->ntachain], 160, "%s", name);
+                self->ntachain++;
+                return 0;
+            }
+            /* An imported row is just a synonym registered for this unit. A
+               local declaration of the same name shadows it in place: the
+               local target is what the rest of this unit sees from here on. */
+            memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
+            snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+            snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+            self->taliases[i].line = line;
+            self->taliases[i].is_pub = is_pub;
+            self->taliases[i].owner = owner;
+            self->taliases[i].resolving = 1;
+            if (self->ntachain >= MAX_ALIAS_CHAIN)
+                return self->fail("type alias expansion is too deep");
+            snprintf(self->tachain[self->ntachain], 160, "%s", name);
+            self->ntachain++;
+            return 0;
+        }
+        if (self->find_type(name) >= 0) {
+            snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
+            return self->fail(msg);
+        }
+        for (i = 0; i < self->nalias; i++)
+            if (strcmp(self->alias_name[i], name) == 0) {
+                snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
+                return self->fail(msg);
+            }
+        if (self->ntalias >= MAX_TYPE_ALIASES)
+            return self->fail("too many type aliases in this unit");
+        i = self->ntalias;
+        self->ntalias++;
+        memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
+        snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+        snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+        self->taliases[i].line = line;
+        self->taliases[i].is_pub = is_pub;
+        self->taliases[i].owner = owner;
+        self->taliases[i].resolving = 1;
+        if (self->ntachain >= MAX_ALIAS_CHAIN)
+            return self->fail("type alias expansion is too deep");
+        snprintf(self->tachain[self->ntachain], 160, "%s", name);
+        self->ntachain++;
+        return 0;
+    }
+
+    int finish_type_alias(const char *target)
+    {
+        int i, g;
+        if (self->ntachain <= 0) return self->fail("internal: type alias declaration is not open");
+        i = self->find_type_alias(self->tachain[self->ntachain - 1]);
+        if (i < 0) return self->fail("internal: type alias declaration is not open");
+        snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", target);
+        self->taliases[i].forward = 0;
+        self->taliases[i].resolving = 0;
+        if (self->ngtalias >= MAX_GLOBAL_TYPE_ALIASES)
+            return self->fail("too many type aliases in this build");
+        g = self->ngtalias;
+        self->ngtalias++;
+        self->gtaliases[g] = self->taliases[i];
+        self->gtaliases[g].forward = 0;
+        self->gtaliases[g].resolving = 0;
+        self->ntachain--;
+        return 0;
+    }
+
+    void abort_type_alias(void)
+    {
+        if (self->ntachain > 0) self->ntachain--;
+    }
+
+    /* A name found by the module layer's top-level pre-scan. It only exists so a
+       use before the declaration can say why it is not a type; the real row is
+       filled by `begin_type_alias` when the parser reaches the declaration. */
+    int add_forward_type_alias(const char *name, const char *path, int line, int owner)
+    {
+        int i;
+        if (self->find_type_alias(name) >= 0) return 0;
+        if (self->find_type(name) >= 0) return 0;
+        if (self->ntalias >= MAX_TYPE_ALIASES)
+            return self->fail("too many type aliases in this unit");
+        i = self->ntalias;
+        self->ntalias++;
+        memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
+        snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+        snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+        self->taliases[i].line = line;
+        self->taliases[i].owner = owner;
+        self->taliases[i].forward = 1;
+        return 0;
+    }
+
+    /* Imported rows are already fully resolved in the declaring unit, so the
+       importing unit never needs that unit's private aliases. The same name and
+       target from two reachable units is one synonym; different targets are an
+       ambiguity. */
+    int add_visible_type_alias(const char *name, const char *target, const char *path,
+                               int line, int owner)
+    {
+        int i;
+        char msg[512];
+        for (i = 0; i < self->ntalias; i++) {
+            if (strcmp(self->taliases[i].name, name) != 0) continue;
+            if (strcmp(self->taliases[i].target, target) == 0) return 0;
+            snprintf(msg, sizeof msg,
+                     "type alias '%s' is exported by both %s and %s",
+                     name, self->taliases[i].path, path);
+            return self->fail(msg);
+        }
+        if (self->find_type(name) >= 0) {
+            snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
+            return self->fail(msg);
+        }
+        for (i = 0; i < self->nalias; i++)
+            if (strcmp(self->alias_name[i], name) == 0) {
+                snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
+                return self->fail(msg);
+            }
+        if (self->ntalias >= MAX_TYPE_ALIASES)
+            return self->fail("too many type aliases in this unit");
+        i = self->ntalias;
+        self->ntalias++;
+        memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
+        snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+        snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", target);
+        snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+        self->taliases[i].line = line;
+        self->taliases[i].owner = owner;
+        return 0;
+    }
+
+    int find_global_type_alias(const char *name, char *path, int cap, int *line)
+    {
+        int i;
+        for (i = 0; i < self->ngtalias; i++) {
+            if (strcmp(self->gtaliases[i].name, name) != 0) continue;
+            /* a private alias of another unit is not a name this unit could
+               ever import, so it stays an opaque C spelling */
+            if (!self->gtaliases[i].is_pub) continue;
+            snprintf(path, (size_t)cap, "%s", self->gtaliases[i].path);
+            *line = self->gtaliases[i].line;
+            return 0;
+        }
+        return -1;
+    }
+
+    /* Expand one bare name. A forward row outside a declaration is a use before
+       the declaration; inside a declaration it is deferred as text, so a legal
+       forward reference between aliases still resolves at the use site. */
+    int expand_type_alias(const char *name, char *out, int cap)
+    {
+        int i, k, w;
+        char msg[512];
+        i = self->find_type_alias(name);
+        if (i < 0) {
+            w = snprintf(out, (size_t)cap, "%s", name);
+            if (w < 0 || w >= cap) return self->fail("type alias is too long");
+            return 0;
+        }
+        if (self->taliases[i].forward) {
+            if (!self->alias_decl) {
+                snprintf(msg, sizeof msg,
+                         "type alias '%s' must be declared before it is used", name);
+                return self->fail(msg);
+            }
+            w = snprintf(out, (size_t)cap, "%s", name);
+            if (w < 0 || w >= cap) return self->fail("type alias is too long");
+            return 0;
+        }
+        for (k = 0; k < self->ntachain; k++) {
+            int m;
+            if (strcmp(self->tachain[k], name) != 0) continue;
+            m = snprintf(msg, sizeof msg, "type alias cycle: ");
+            for (; k < self->ntachain; k++)
+                m += snprintf(msg + m, sizeof msg - (size_t)m, "'%s' -> ", self->tachain[k]);
+            snprintf(msg + m, sizeof msg - (size_t)m, "'%s'", name);
+            return self->fail(msg);
+        }
+        if (self->ntachain >= MAX_ALIAS_CHAIN)
+            return self->fail("type alias expansion is too deep");
+        snprintf(self->tachain[self->ntachain], 160, "%s", name);
+        self->ntachain++;
+        if (!self->taliases[i].target[0]) {
+            self->ntachain--;
+            return self->fail("type alias has no target");
+        }
+        k = self->expand_type_text(self->taliases[i].target, out, cap);
+        self->ntachain--;
+        return k;
+    }
+
+    /* Replace every bare identifier that names a visible alias, except the tag
+       after `struct` / `enum` / `union` (`struct Alias` is a C tag, not the
+       synonym). Whitespace and punctuation are copied verbatim; the host-key
+       normaliser strips the former, and the type emitter re-spaces the latter. */
+    int expand_type_text(const char *text, char *out, int cap)
+    {
+        int i = 0, o = 0, n, after_tag = 0, w;
+        char id[160], eb[160];
+        while (text[i]) {
+            unsigned char c = (unsigned char)text[i];
+            if (isalpha(c) || c == '_') {
+                n = 0;
+                while (text[i] && (isalnum((unsigned char)text[i]) || text[i] == '_')) {
+                    if (n < (int)sizeof(id) - 1) id[n++] = text[i];
+                    i++;
+                }
+                id[n] = 0;
+                if (after_tag) {
+                    after_tag = 0;
+                    w = snprintf(out + o, (size_t)(cap - o), "%s", id);
+                    if (w < 0 || o + w >= cap) return self->fail("type alias is too long");
+                    o += w;
+                } else if (strcmp(id, "struct") == 0 || strcmp(id, "enum") == 0
+                           || strcmp(id, "union") == 0) {
+                    after_tag = 1;
+                    w = snprintf(out + o, (size_t)(cap - o), "%s", id);
+                    if (w < 0 || o + w >= cap) return self->fail("type alias is too long");
+                    o += w;
+                } else {
+                    if (self->expand_type_alias(id, eb, sizeof eb) != 0) return -1;
+                    w = snprintf(out + o, (size_t)(cap - o), "%s", eb);
+                    if (w < 0 || o + w >= cap) return self->fail("type alias is too long");
+                    o += w;
+                }
+                continue;
+            }
+            if (o + 1 >= cap) return self->fail("type alias is too long");
+            out[o++] = text[i++];
+            if (c != ' ' && c != '\t' && c != '\n' && c != '\r') after_tag = 0;
+        }
+        out[o] = 0;
+        return 0;
+    }
+
+    /* At the end of a unit every local alias exists, so its exported target can
+       be written out in terms of the underlying spelling. An importer then sees
+       a self-contained row and never depends on this unit's private names. */
+    int resolve_exported_type_aliases(int owner)
+    {
+        int i, k;
+        char out[160];
+        for (i = 0; i < self->ngtalias; i++) {
+            if (self->gtaliases[i].owner != owner) continue;
+            if (self->expand_type_text(self->gtaliases[i].target, out, sizeof out) != 0)
+                return -1;
+            snprintf(self->gtaliases[i].target, sizeof self->gtaliases[i].target, "%s", out);
+        }
+        for (i = 0; i < self->ntalias; i++) {
+            if (self->taliases[i].owner != owner) continue;
+            if (self->expand_type_text(self->taliases[i].target, out, sizeof out) != 0)
+                return -1;
+            k = snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", out);
+            if (k < 0 || k >= (int)sizeof self->taliases[i].target)
+                return self->fail("type alias is too long");
+        }
+        return 0;
+    }
+}
+
 /* The instance lives after the impl: its vptr initialiser needs the vtable
    forward declaration the emitter places with the impl. */
 static struct Symbols g_symbols;
@@ -737,6 +1111,14 @@ static int symbols_grow(struct Symbols *self)
     if (!self->structs) {
         self->structs = calloc(MAX_STRUCTS, sizeof(*self->structs));
         if (!self->structs) return -1;
+    }
+    if (!self->taliases) {
+        self->taliases = calloc(MAX_TYPE_ALIASES, sizeof(*self->taliases));
+        if (!self->taliases) return -1;
+    }
+    if (!self->gtaliases) {
+        self->gtaliases = calloc(MAX_GLOBAL_TYPE_ALIASES, sizeof(*self->gtaliases));
+        if (!self->gtaliases) return -1;
     }
     return 0;
 }

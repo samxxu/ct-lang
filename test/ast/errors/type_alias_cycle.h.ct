@@ -1,0 +1,7 @@
+pub type A = B;
+pub type B = A;
+
+int main(void)
+{
+    return 0;
+}

@@ -1,0 +1,17 @@
+#include <stdio.h>
+
+/* `lib` is only reachable through `app`: the alias is visible by the
+   transitive import closure, like a C header that includes another. */
+import app;
+
+int main(void)
+{
+    Text  t = "hello";
+    char *r = "hello";
+    Count n = 3;
+    Text  u = echo(t);
+
+    printf("%d %d %d %d %d %s\n",
+           t.size(), r.size(), t.same(u), n.twice(), n.plus(4), u);
+    return 0;
+}

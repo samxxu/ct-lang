@@ -133,6 +133,11 @@ pub struct Expr {
        declaration entries copy them into the node's `text3` (D-5). */
     char fnptr_dims[160];
     int  fnptr_state;
+    /* Set when the type just read named a trait. `parse_type` turns a trait
+       into its `struct T_iface`, which is right everywhere except a type
+       alias: a synonym must name a concrete spelling, so the alias parser
+       rejects the target with a message of its own. */
+    int  saw_trait;
     /* A specifier captured before the storage class (`_Alignas(16) static int
        g;`) arrives here; `parse_type` prepends it and clears the slot, so the
        declaration keeps its canonical spelling (`static _Alignas(16) int g`). */
@@ -502,6 +507,7 @@ impl ExprOps for Expr {
             self->decl_prefix[0] = 0;
         }
         self->fnptr_state = 0;
+        self->saw_trait = 0;
         self->fnptr_name[0] = 0;
         self->fnptr_dims[0] = 0;
         for (;;) {
@@ -584,9 +590,35 @@ impl ExprOps for Expr {
                 int ti;
                 char rname[MAX_TEXT];
                 char iface[MAX_TEXT];
+                /* A visible type alias expands before any name resolution: the
+                   alias is a compile-time synonym, so the type spelling (and
+                   therefore the host key) is the underlying one. */
+                if (self->sym->find_type_alias(self->lex->toktext) >= 0) {
+                    char etext[MAX_TEXT];
+                    if (self->sym->expand_type_alias(self->lex->toktext, etext, sizeof etext) != 0)
+                        return self->sup->fail(self->sym->last_error());
+                    if (self->type_append(out, cap, &n, etext) != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
                 if (self->sup->resolve_type(self->lex->toktext, rname, sizeof rname) != 0) return -1;
                 ti = self->sym->find_type(rname);
                 if (ti < 0) {
+                    /* A declared-but-not-imported alias must not fall through to
+                       the opaque C spelling: the name means something in this
+                       build, and silently emitting it would fail in `cc`. */
+                    {
+                        char apath[1024];
+                        int aline = 0;
+                        if (self->sym->find_global_type_alias(self->lex->toktext, apath,
+                                                              sizeof apath, &aline) == 0) {
+                            char amsg[1400];
+                            snprintf(amsg, sizeof amsg,
+                                     "type alias '%s' is declared in %s:%d but this unit does not import it",
+                                     self->lex->toktext, apath, aline);
+                            return self->sup->fail(amsg);
+                        }
+                    }
                     /* A type name the unit has never seen (a typedef from a
                        header, such as `time_t`). It can only stand where a type
                        is expected, so the spelling is kept as written; the
@@ -609,6 +641,7 @@ impl ExprOps for Expr {
                     if (self->type_append(out, cap, &n, "union") != 0) return -1;
                 } else if (self->sym->type_kind[ti] == 3) {
                     int sti = self->sym->find_trait(rname);
+                    self->saw_trait = 1;
                     if (sti >= 0 && self->sym->traits[sti].is_static)
                         return self->sup->fail("a static trait has no interface value");
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;

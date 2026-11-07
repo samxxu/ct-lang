@@ -1,0 +1,9 @@
+/* A `.h.ct` may use an imported alias in its public signature: the generated
+   C spells the underlying type. */
+import lib::lib;
+
+pub Text echo(Text t);
+Text echo(Text t)
+{
+    return t;
+}

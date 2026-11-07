@@ -1,0 +1,2 @@
+pub type Text = char *;
+pub type Text = int;

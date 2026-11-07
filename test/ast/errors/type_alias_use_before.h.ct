@@ -1,0 +1,3 @@
+pub Text echo(Text t);
+
+pub type Text = char *;

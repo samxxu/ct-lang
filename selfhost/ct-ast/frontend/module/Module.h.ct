@@ -46,6 +46,7 @@ import tool::sh::Sh;
 
 /* token kinds (the scanner only needs these two) */
 #define T_ID     1
+#define T_PUNCT  4
 #define T_PP     5
 /* node kinds: file-scope variables and the two type declarations, the same
    values `Arena.h.ct` assigns */
@@ -79,6 +80,9 @@ pub trait ModuleOps {
     int  resolve_import(const char *from, const char *rel, char *out, int cap,
                         int *is_hdr, int *is_map, int line);
     int  load_unit(const char *path);
+    int  unit_reaches(int from, int to);
+    int  register_visible_type_aliases(int u);
+    int  scan_forward_type_aliases(const char *path, int owner);
     int  check_ns_dir(int u);
     int  cache_order(int u, int *state, int *order, int *n);
     int  cache_key_of(int u, char *out, int cap);
@@ -512,6 +516,9 @@ impl ModuleOps for Module {
         self->mem->ret_owned = 0;
         self->sym->ns[0] = 0;
         self->sym->nalias = 0;
+        self->sym->ntalias = 0;
+        self->sym->ntachain = 0;
+        self->sym->alias_decl = 0;
         self->p->ns_decl[0] = 0;
         self->sym->self_mode = 0;
         self->sym->ret_type[0] = 0;
@@ -625,8 +632,19 @@ impl ModuleOps for Module {
         self->p->cur_unit = u;
         /* dependencies were parsed recursively and overwrote the flag */
         self->p->unit_is_map = self->units[u].is_map;
+        self->p->unit_is_hdr = self->units[u].is_hdr;
+        /* Type aliases visible here: every `pub` alias of a unit in this unit's
+           transitive import closure (the same reachability the map lookup and
+           the generated C headers use). Then the unit's own top-level aliases
+           are pre-scanned so a use before the declaration names the alias. */
+        if (self->register_visible_type_aliases(u) != 0) return -1;
+        if (self->scan_forward_type_aliases(self->units[u].path, u) != 0) return -1;
         self->units[u].prog = frontend::parse::ct_parse_program();
         if (self->units[u].prog < 0) return -1;
+        /* Every local alias now exists: rewrite the exported targets in terms of
+           the underlying spelling so an importer never depends on a private one. */
+        if (self->sym->resolve_exported_type_aliases(u) != 0)
+            return self->fail(self->sym->last_error());
         self->units[u].fn_end = self->sym->nfunc;
         self->units[u].tr_end = self->sym->ntraits;
         self->units[u].call_end = self->p->ncalls;
@@ -635,6 +653,163 @@ impl ModuleOps for Module {
            exported names; its globals need the same prefix here. */
         snprintf(self->units[u].nsprefix, MAX_TEXT, "%s", self->sym->ns);
         return u;
+    }
+
+    /* Is `to` in `from`'s transitive import closure? Mirrors the reachability
+       the emitter uses for `map_visible`, so a type alias and a map see the
+       same program shape. */
+    int unit_reaches(int from, int to)
+    {
+        char reach[MAX_UNITS];
+        int d, k, changed;
+        (void)self;
+
+        if (from == to) return 1;
+        if (to < 0 || to >= MAX_UNITS) return 0;
+        for (d = 0; d < MAX_UNITS; d++) reach[d] = 0;
+        reach[from] = 1;
+        changed = 1;
+        while (changed) {
+            changed = 0;
+            for (d = 0; d < self->nunits; d++) {
+                if (!reach[d]) continue;
+                for (k = 0; k < self->units[d].ndep; k++) {
+                    int dep = self->units[d].depu[k];
+                    if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                        reach[dep] = 1;
+                        changed = 1;
+                    }
+                }
+            }
+        }
+        return reach[to];
+    }
+
+    /* Register every `pub` alias of a reachable unit into this unit's visible
+       table. Dependencies were parsed first, so their exported targets are
+       already fully resolved. */
+    int register_visible_type_aliases(int u)
+    {
+        int i;
+        (void)self;
+
+        for (i = 0; i < self->sym->ngtalias; i++) {
+            int owner = self->sym->gtaliases[i].owner;
+            if (owner < 0 || owner == u) continue;
+            if (!self->sym->gtaliases[i].is_pub) continue;
+            if (!self->unit_reaches(u, owner)) continue;
+            if (self->sym->add_visible_type_alias(self->sym->gtaliases[i].name,
+                                                  self->sym->gtaliases[i].target,
+                                                  self->sym->gtaliases[i].path,
+                                                  self->sym->gtaliases[i].line,
+                                                  owner) != 0)
+                return self->fail(self->sym->last_error());
+        }
+        return 0;
+    }
+
+    /* Record every top-level `type IDENT =` before parsing, so a use that comes
+       earlier in the file can say the alias must be declared before it is used
+       instead of treating the name as an opaque C type. The scan only looks at
+       depth 0 and restores the cursor afterwards. */
+    int scan_forward_type_aliases(const char *path, int owner)
+    {
+        int pos, bol, line, tokline, tokstart, lstart, tok, tokfloat, toktrunc;
+        long num;
+        char text[MAX_TEXT];
+        char suffix[8];
+        char prev[MAX_TEXT];
+        char prev2[MAX_TEXT];
+        int prev_line, prev2_line, depth;
+        (void)self;
+
+        pos = self->lex->pos;
+        bol = self->lex->bol;
+        line = self->lex->line;
+        tokline = self->lex->tokline;
+        tokstart = self->lex->tokstart;
+        lstart = self->lex->lstart;
+        tok = self->lex->tok;
+        num = self->lex->toknum;
+        tokfloat = self->lex->tokfloat;
+        toktrunc = self->lex->toktrunc;
+        snprintf(text, sizeof text, "%s", self->lex->toktext);
+        snprintf(suffix, sizeof suffix, "%s", self->lex->toksuffix);
+
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->tokstart = 0;
+        self->lex->lstart = 0;
+        self->lex->tok = T_ID;
+        self->lex->toktext[0] = 0;
+        prev[0] = 0;
+        prev2[0] = 0;
+        prev_line = 0;
+        prev2_line = 0;
+        depth = 0;
+        /* The cursor is driven through the raw lexer, not ParseSupport: a
+           speculative scan must not turn a lexical complaint (an over-long
+           identifier, a bad raw block) into the parse's error before the parser
+           has reached it. The real parse re-reads everything. */
+        self->lex->next();
+        while (self->lex->tok != 0) {
+            if (self->lex->tok == T_PP
+                && strncmp(self->lex->toktext, "#ct-raw", 7) == 0) {
+                /* raw blocks hold arbitrary C: nothing in them is a CT alias */
+                while (self->lex->src[self->lex->pos]) {
+                    int atbol = (self->lex->pos == 0
+                                 || self->lex->src[self->lex->pos - 1] == '\n');
+                    if (atbol && strncmp(self->lex->src + self->lex->pos, "#ct-endraw", 10) == 0
+                        && (self->lex->src[self->lex->pos + 10] == 0
+                            || self->lex->src[self->lex->pos + 10] == '\n'
+                            || self->lex->src[self->lex->pos + 10] == '\r'
+                            || self->lex->src[self->lex->pos + 10] == ' ')) {
+                        while (self->lex->src[self->lex->pos]
+                               && self->lex->src[self->lex->pos] != '\n')
+                            self->lex->pos++;
+                        break;
+                    }
+                    if (self->lex->src[self->lex->pos] == '\n') self->lex->line++;
+                    self->lex->pos++;
+                }
+                self->lex->bol = 0;
+                self->lex->next();
+                continue;
+            }
+            if (self->lex->tok == T_PUNCT) {
+                if (strcmp(self->lex->toktext, "{") == 0) depth++;
+                else if (strcmp(self->lex->toktext, "}") == 0 && depth > 0) depth--;
+            }
+            if (depth == 0 && self->lex->tok == T_PUNCT
+                && strcmp(self->lex->toktext, "=") == 0
+                && strcmp(prev2, "type") == 0
+                && ((prev[0] >= 'a' && prev[0] <= 'z') || (prev[0] >= 'A' && prev[0] <= 'Z')
+                    || prev[0] == '_')) {
+                if (self->sym->add_forward_type_alias(prev, path, prev2_line, owner) != 0)
+                    return self->fail(self->sym->last_error());
+            }
+            snprintf(prev2, sizeof prev2, "%s", prev);
+            prev2_line = prev_line;
+            snprintf(prev, sizeof prev, "%s", self->lex->toktext);
+            prev_line = self->lex->tokline;
+            self->lex->next();
+        }
+
+        self->lex->pos = pos;
+        self->lex->bol = bol;
+        self->lex->line = line;
+        self->lex->tokline = tokline;
+        self->lex->tokstart = tokstart;
+        self->lex->lstart = lstart;
+        self->lex->tok = tok;
+        self->lex->toknum = num;
+        self->lex->tokfloat = tokfloat;
+        self->lex->toktrunc = toktrunc;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
+        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", suffix);
+        return 0;
     }
 
     /* A unit that declares a namespace must sit in the matching directory under
@@ -999,6 +1174,9 @@ impl ModuleOps for Module {
         self->sym->ret_type[0] = 0;
         self->sym->ns[0] = 0;
         self->sym->nalias = 0;
+        self->sym->ntalias = 0;
+        self->sym->ntachain = 0;
+        self->sym->alias_decl = 0;
         self->p->ns_decl[0] = 0;
         self->lex->line = 1;
         self->lex->tokline = 1;
