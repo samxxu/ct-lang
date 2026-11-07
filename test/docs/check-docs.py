@@ -17,9 +17,11 @@ Standard library only. It asserts four invariants:
      step labels may not name a stale count;
   4. the status line of every docs/design/phase*.md matches the phase table
      in docs/roadmap.md (done -> check, in progress -> half, planned -> white),
-     in both the Chinese and the English table.
+     in both the Chinese and the English table;
+  5. an "适用版本" header under docs/*.md names the compiler line, never a
+     fixed version: the number goes stale at the next bump (DOC-63).
 
-Exit code 0 when all four hold, 1 otherwise.
+Exit code 0 when all five hold, 1 otherwise.
 """
 
 import os
@@ -190,12 +192,37 @@ def check_phase_status(errors):
     return phases
 
 
+def check_applies_to(errors):
+    """The "适用版本" headers name the line, never a version number (DOC-63).
+
+    A pinned number is wrong the moment the version is bumped, and nobody
+    notices: the tutorial said v0.16.0 while the tree shipped v0.19.1. The
+    reader can always run `ct -v`, so the header points there instead.
+    """
+    checked = 0
+    for name in sorted(os.listdir(os.path.join(ROOT, "docs"))):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(ROOT, "docs", name)
+        for number, line in enumerate(read(path).splitlines(), 1):
+            if "适用版本" not in line:
+                continue
+            checked += 1
+            if re.search(r"\bv\d+\.\d+\.\d+", line):
+                errors.append(
+                    f"docs/{name}:{number}: the 适用版本 header pins a version "
+                    f"(use `ct -v` instead)"
+                )
+    return checked
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
     version = check_version(errors)
     gates = check_gate_count(errors)
     phases = check_phase_status(errors)
+    applies = check_applies_to(errors)
     for error in errors:
         print(f"FAIL: {error}")
     if errors:
@@ -203,7 +230,8 @@ def main():
         return 1
     print(
         f"check-docs: OK ({links} relative links in {scanned} files, "
-        f"v{version}, {gates} hard gates, {phases} phase status)"
+        f"v{version}, {gates} hard gates, {phases} phase status, "
+        f"{applies} 适用版本 header(s))"
     )
     return 0
 

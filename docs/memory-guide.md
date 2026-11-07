@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 
-> **适用版本**：v0.16.0，主线编译器 **ct-ast**（`selfhost/ct-ast/main.ct`）。冻结的 L2 只作回归对照；
+> **适用版本**：当前主线 **ct-ast**（`selfhost/ct-ast/main.ct`，版本号见 `ct -v`，不在此固定）。冻结的 L2 只作回归对照；
 > 凡两者行为不同的地方，下文单独标注。
 > **配套**：[language-spec](language-spec.md) §4.9（AutoDrop）与 §4.40（`borrow`）、[tutorial](tutorial.md) 第 8 节、
 > [design/borrow.md](history/design/borrow.md)（`borrow` / `Handback`，**已落地**）。
