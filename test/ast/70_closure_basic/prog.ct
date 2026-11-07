@@ -1,0 +1,24 @@
+// 70 (Phase 21 S3): a closure bound to a local function pointer is expanded to a
+// stack environment plus a `static` trampoline. Reading a captured name reads
+// the environment, a call through the binding passes that environment, and a
+// closure declared inside a block goes out of scope with it.
+#include <stdio.h>
+
+int apply(int base)
+{
+    int n = 3;
+    int (*add)(int x) = (int x) => x + n + base;
+    int (*dbl)(int x) = (int x) => x * 2;
+    {
+        int k = 4;
+        int (*addk)(int x) = (int x) => x + k;
+        n = addk(1);
+    }
+    return add(5) + dbl(n);
+}
+
+int main(void)
+{
+    printf("%d\n", apply(10));
+    return 0;
+}

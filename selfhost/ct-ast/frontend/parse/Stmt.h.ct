@@ -35,7 +35,7 @@ import tool::diag::Diag;
 #define N_ASSIGN 13
 #define N_BIN 11
 #define N_BLOCK 4
-#define N_CLOSURE 58
+#define N_CLOSURE 59
 #define N_BREAK 38
 #define N_CASE 43
 #define N_CONT 39

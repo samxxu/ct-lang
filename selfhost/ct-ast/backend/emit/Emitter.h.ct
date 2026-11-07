@@ -22,6 +22,7 @@ import frontend::module::Map;
 import frontend::module::Unit;
 import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols::MethodSig as MethodSig;
+import frontend::sym::Symbols::Closure as Closure;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
@@ -87,6 +88,9 @@ import runtime::arena::Arena;
 #define N_FIELDS  56
 #define N_PRE     57
 #define N_RAW_TEXT 58
+/* the parser's closure literal (Phase 21 S2); the emitter never prints a node
+   of this kind by itself -- S3 expands it at the declaration and at the call */
+#define N_CLOSURE 59
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -197,6 +201,13 @@ struct Emitter {
     struct Init *init;
     /* the unit being written: `-1` in compile mode, which has no map closure */
     int  cur_unit;
+    /* Phase 21 S3: the closure whose body is being written (`ci + 1`, 0 = none)
+       so a captured name prints `__ct_cl_e->name`, and the closure variables in
+       scope at the current statement (name -> id) for call-site expansion. */
+    int  closure_ci;
+    char clvar[64][160];
+    int  clid[64];
+    int  nclvar;
 } use EmitOps;
 
 /* Does the impl node `node` write `name`? */
@@ -857,6 +868,119 @@ static int emit_raw_text(struct Emitter *self, int n)
     return 0;
 }
 
+/* Does this closure belong to the function the emitter is writing? `owner` is
+   the parser's `cur_func` (the short name of a function, or
+   `<Struct>_<Trait>_<method>` for an impl method); the node carries the C
+   spelling, which is the mangled one inside a namespace. */
+static int closure_owned(struct Emitter *self, const char *owner, const char *cname)
+{
+    int fi;
+
+    if (strcmp(owner, cname) == 0) return 1;
+    fi = self->sym->find_func(owner);
+    return fi >= 0 && strcmp(self->sym->funcs[fi].cname, cname) == 0;
+}
+
+/* Is `name` one of the closure variables in scope right now? */
+static int closure_var_lookup(struct Emitter *self, const char *name)
+{
+    int i;
+
+    for (i = self->nclvar - 1; i >= 0; i--)
+        if (strcmp(self->clvar[i], name) == 0) return self->clid[i];
+    return -1;
+}
+
+/* Phase 21 S3: the per-function closure products. A bound literal becomes a
+   struct on the caller's stack plus a `static` trampoline; nothing is allocated
+   and nothing is freed. The struct and the trampoline are keyed by the closure
+   id, which is monotone across the unit, so the ABI carries no function or
+   namespace name. `restore_line` re-anchors `#line` on the definition that
+   follows (D21-15). */
+static int emit_closures(struct Emitter *self, const char *owner, int restore_line)
+{
+    int ci, k, wrote;
+
+    wrote = 0;
+    for (ci = 0; ci < self->sym->nclosure; ci++) {
+        struct Closure *c = &self->sym->closures[ci];
+        if (!c->ret[0]) continue;              /* not bound to a host type (S5) */
+        if (!closure_owned(self, c->owner, owner)) continue;
+        wrote = 1;
+        if ((*self->line_mode))
+            fprintf(self->out, "#line %d \"%s\"\n", c->line, self->path);
+        fprintf(self->out, "/* closure at %s:%d */\n", self->path, c->line);
+        fprintf(self->out, "struct __ct_cl_env_%d {\n", ci);
+        if (c->ncap == 0)
+            fputs("    char __ct_cl_pad;\n", self->out);
+        for (k = 0; k < c->ncap; k++)
+            fprintf(self->out, "    %s %s;\n", c->cap_type[k], c->cap_name[k]);
+        fputs("};\n", self->out);
+        fprintf(self->out, "static %s __attribute__((unused)) __ct_cl_tramp_%d(void *self",
+                c->ret, ci);
+        for (k = 0; k < c->nparams; k++)
+            fprintf(self->out, ", %s %s", c->ptype[k], c->pname[k]);
+        fputs(")\n{\n", self->out);
+        if (c->ncap > 0)
+            fprintf(self->out, "    struct __ct_cl_env_%d *__ct_cl_e = self;\n", ci);
+        else
+            fputs("    (void)self;\n", self->out);
+        /* an ignored parameter would trip -Wextra, the same way an impl casts
+           its unused parameters */
+        for (k = 0; k < c->nparams; k++)
+            if (!self->node_mentions(c->body, c->pname[k]))
+                fprintf(self->out, "    (void)%s;\n", c->pname[k]);
+        if (strcmp(c->ret, "void") == 0) {
+            fputs("    ", self->out);
+            self->closure_ci = ci + 1;
+            if (self->emit_expr(c->body) != 0) { self->closure_ci = 0; return -1; }
+            self->closure_ci = 0;
+            fputs(";\n", self->out);
+        } else {
+            fputs("    return ", self->out);
+            self->closure_ci = ci + 1;
+            if (self->emit_expr(c->body) != 0) { self->closure_ci = 0; return -1; }
+            self->closure_ci = 0;
+            fputs(";\n", self->out);
+        }
+        fputs("}\n", self->out);
+    }
+    /* only a unit that actually emitted products needs the line re-anchor */
+    if (wrote && (*self->line_mode))
+        fprintf(self->out, "#line %d \"%s\"\n", restore_line, self->path);
+    return 0;
+}
+
+/* A closure declaration is a binding, not a value: the declared name never
+   becomes a C variable. Its stack instance is the environment, and every call
+   through the name expands to the trampoline with that instance (D21-14). The
+   `unused` attribute keeps a never-called literal warning-free. */
+static int emit_closure_decl(struct Emitter *self, int n)
+{
+    int ci = self->arena->nodes[self->arena->nodes[n].a].num;
+    struct Closure *c = &self->sym->closures[ci];
+    int k;
+
+    fprintf(self->out, "struct __ct_cl_env_%d __attribute__((unused)) __ct_cl_env_v_%d = { ",
+            ci, ci);
+    if (c->ncap == 0) fputs("0", self->out);
+    for (k = 0; k < c->ncap; k++) {
+        if (k > 0) fputs(", ", self->out);
+        /* `self` has no C spelling of its own in an impl body */
+        if (self->sym->self_mode && strcmp(c->cap_name[k], "self") == 0)
+            fputs("_self", self->out);
+        else
+            fputs(c->cap_name[k], self->out);
+    }
+    fputs(" }", self->out);
+    if (self->nclvar < 64) {
+        snprintf(self->clvar[self->nclvar], MAX_TEXT, "%s", self->arena->nodes[n].text2);
+        self->clid[self->nclvar] = ci;
+        self->nclvar++;
+    }
+    return 0;
+}
+
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
@@ -929,7 +1053,12 @@ static int emit_unit_body(struct Emitter *self, int u)
     if (self->emit_maps(u) != 0) return -1;
 
     for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
-        if (self->arena->nodes[n].kind == N_FUNC && self->emit_node(n, 0) != 0) return -1;
+        if (self->arena->nodes[n].kind == N_FUNC) {
+            /* the closure products of this function land above its definition */
+            if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
+                return -1;
+            if (self->emit_node(n, 0) != 0) return -1;
+        }
 
     return 0;
 }
@@ -1136,6 +1265,9 @@ impl EmitOps for Emitter {
 
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             if (self->arena->nodes[n].kind == N_FUNC) {
+                /* the closure products of this function land above its definition */
+                if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
+                    return -1;
                 if (self->emit_node(n, 0) != 0) return -1;
             }
         }
@@ -1391,7 +1523,15 @@ impl EmitOps for Emitter {
                 return self->fail_from(n, "impl of an unknown trait");
             sname = self->arena->nodes[n].text;
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                char owner[MAX_TEXT];
                 mret = self->arena->nodes[m].text3[0] ? self->arena->nodes[m].text3 : self->arena->nodes[m].text;
+                /* the parser keys an impl closure by `<Struct>_<Trait>_<method>`,
+                   the same spelling the definition below takes */
+                snprintf(owner, sizeof owner, "%s_%s_%s", self->sym->structs[si].name, tname,
+                         self->arena->nodes[m].text2);
+                if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
+                self->nclvar = 0;
+                self->closure_ci = 0;
                 fprintf(self->out, "static %s ", mret);
                 /* A drop that nothing deletes is dead code; marking it keeps the
                    output clean under -Wall without changing what is emitted. The
@@ -1960,6 +2100,9 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (self->arena->nodes[n].kind == N_FUNC) {
+            /* a new body starts with no closure variable bound (Phase 21 S3) */
+            self->nclvar = 0;
+            self->closure_ci = 0;
             if (self->arena->nodes[n].aux) fputs("static ", self->out);
             /* `num` carries the `inline` specifier (0 = plain function) */
             if (self->arena->nodes[n].num) fputs("inline ", self->out);
@@ -1989,9 +2132,12 @@ impl EmitOps for Emitter {
             return self->emit_node(self->arena->nodes[n].b, ind);
         }
         if (self->arena->nodes[n].kind == N_BLOCK) {
+            int save_nclvar;
+            save_nclvar = self->nclvar;   /* a closure bound here dies with the block */
             fputs("{\n", self->out);
             for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
                 if (self->emit_node(c, ind + 1) != 0) return -1;
+            self->nclvar = save_nclvar;
             self->emit_indent(ind);
             fputs("}\n", self->out);
             return 0;
@@ -2387,6 +2533,12 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_FIELD) {
+            /* A closure binding declares no C variable: only its environment's
+               stack instance is written, and the name is recorded so a later
+               call expands to the trampoline (Phase 21 S3). */
+            if (self->arena->nodes[n].kind == N_DECL && self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_CLOSURE)
+                return emit_closure_decl(self, n);
             /* `aux == 1` marks a function-local with static storage duration */
             if (self->arena->nodes[n].kind == N_DECL && self->arena->nodes[n].aux == 1)
                 fputs("static ", self->out);
@@ -2496,6 +2648,18 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_VAR) {
+            int ci, k;
+            /* inside a trampoline body a captured name is a field of the
+               environment (Phase 21 S3) */
+            ci = self->closure_ci;
+            if (ci > 0) {
+                struct Closure *cc = &self->sym->closures[ci - 1];
+                for (k = 0; k < cc->ncap; k++)
+                    if (strcmp(cc->cap_name[k], self->arena->nodes[n].text2) == 0) {
+                        fprintf(self->out, "__ct_cl_e->%s", self->arena->nodes[n].text2);
+                        return 0;
+                    }
+            }
             if (self->sym->self_mode && strcmp(self->arena->nodes[n].text2, "self") == 0) {
                 fputs("_self", self->out);
             } else if (self->arena->nodes[n].text3[0]) {
@@ -2844,6 +3008,24 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_CALL) {
+            int cl;
+            /* A call through a closure variable expands to the trampoline with
+               that variable's environment: `f(a)` becomes
+               `__ct_cl_tramp_<ci>(&__ct_cl_env_v_<ci>, a)` (D21-14). */
+            cl = -1;
+            if (self->arena->nodes[n].aux != 2 && !self->arena->nodes[n].text3[0])
+                cl = closure_var_lookup(self, self->arena->nodes[n].text2);
+            if (cl >= 0) {
+                fprintf(self->out, "__ct_cl_tramp_%d(&__ct_cl_env_v_%d", cl, cl);
+                c = self->arena->nodes[n].a;
+                while (c >= 0) {
+                    fputs(", ", self->out);
+                    if (self->emit_expr(c) != 0) return -1;
+                    c = self->arena->nodes[c].next;
+                }
+                fputs(")", self->out);
+                return 0;
+            }
             if (self->arena->nodes[n].text3[0] && n != self->raw_call) {
                 fputs(self->arena->nodes[n].text3, self->out);
                 return 0;

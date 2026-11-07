@@ -74,7 +74,7 @@ import runtime::arena::Arena::Node as Node;
 #define N_VAARG 53
 #define N_FNUM 54
 #define N_PRE 57
-#define N_CLOSURE 58
+#define N_CLOSURE 59
 #define P_DEC 2
 #define P_INC 1
 #define T_EOF 0
@@ -2005,6 +2005,7 @@ impl ExprOps for Expr {
         body = self->parse_expr();
         self->assign_ok = save_assign;
         if (body < 0) return -1;
+        self->sym->closures[ci].body = body;
         if (closure_walk(self, ci, body, pstart) != 0) return -1;
         if (closure_walk_mutate(self, ci, body) != 0) return -1;
         if (self->sym->pop_scope() != 0) return self->sup->fail(self->sym->last_error());
