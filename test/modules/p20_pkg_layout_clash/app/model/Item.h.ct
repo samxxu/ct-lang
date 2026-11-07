@@ -1,0 +1,2 @@
+pub int item_value(void);
+int item_value(void) { return 9; }

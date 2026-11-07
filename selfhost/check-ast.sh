@@ -814,6 +814,22 @@ else
     bad "p20_ns_clash" "$(head -2 "$work/m1nb.err")"
 fi
 
+# M6: one import exists in the flat layout and in the doubled compatibility
+# layout. The resolver must report the pair instead of silently taking the flat
+# candidate.
+rm -rf "$work/mod-m6"
+mkdir -p "$work/mod-m6"
+if "$work/ct-ast" build --emit-c -I test/modules/p20_pkg_layout_clash \
+        test/modules/p20_pkg_layout_clash/main.ct -o "$work/mod-m6" \
+        >"$work/m6.out" 2>"$work/m6.err"; then
+    bad "p20_pkg_layout_clash" "expected a non-zero exit"
+elif grep -qF "import 'app/model/Item' is ambiguous: both test/modules/p20_pkg_layout_clash/model/Item.h.ct and test/modules/p20_pkg_layout_clash/app/model/Item.h.ct exist" \
+        "$work/m6.err"; then
+    ok "p20_pkg_layout_clash (the flat and doubled layouts both hit)"
+else
+    bad "p20_pkg_layout_clash" "$(head -2 "$work/m6.err")"
+fi
+
 rm -rf "$mod-hdr"
 mkdir -p "$mod-hdr"
 if "$work/ct-ast" build --emit-c test/modules/hdr/main.h.ct -o "$mod-hdr" \

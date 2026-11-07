@@ -1,0 +1,6 @@
+/* M6: the same import exists in the flat layout (`model/Item`) and in the
+   doubled compatibility layout (`app/model/Item`). Picking the flat one
+   silently would hide a second definition. */
+import app::model::Item;
+
+int main(void) { return item_value(); }
