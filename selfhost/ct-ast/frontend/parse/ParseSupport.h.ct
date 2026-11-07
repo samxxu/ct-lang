@@ -227,6 +227,7 @@ impl SupportOps for ParseSupport {
     int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
         char cname[MAX_TEXT];
+        char msg[MAX_TEXT];
         int i, k, p, pub_now, fresh;
 
         /* Rows are keyed by the C spelling, so the declaration has to find the
@@ -245,7 +246,11 @@ impl SupportOps for ParseSupport {
         if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
         fresh = 0;
         if (i < 0) {
-            if (self->sym->nfunc >= MAX_FUNCS) return self->fail("too many functions");
+            if (self->sym->nfunc >= MAX_FUNCS) {
+                snprintf(msg, sizeof msg, "too many functions in unit '%s' (limit %d)",
+                         self->sym->unit_name(), MAX_FUNCS);
+                return self->fail(msg);
+            }
             i = self->sym->nfunc;
             self->sym->nfunc++;
             snprintf(self->sym->funcs[i].name, MAX_TEXT, "%s", name);
@@ -283,7 +288,11 @@ impl SupportOps for ParseSupport {
             k++;
             p = self->arena->nodes[p].next;
         }
-        if (k >= MAX_PARAMS && p > 0) return self->fail("too many parameters");
+        if (k >= MAX_PARAMS && p > 0) {
+            snprintf(msg, sizeof msg, "too many parameters in unit '%s' (limit %d)",
+                     self->sym->unit_name(), MAX_PARAMS);
+            return self->fail(msg);
+        }
         self->sym->funcs[i].nparams = k;
         return i;
     }

@@ -274,6 +274,7 @@ impl DriverOps for Driver {
 
         self->m->path = in;
         self->mem->path = self->m->path;
+        self->sym->path = self->mem->path;
         backend::emit::ct_emit_set_path(self->m->path);
         self->lex->pos = 0;
         self->lex->bol = 1;

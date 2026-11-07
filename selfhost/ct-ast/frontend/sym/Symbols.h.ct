@@ -171,6 +171,9 @@ pub trait SymbolOps {
     int  add_alias(const char *name, const char *full);
     int  push_scope(void);
     int  pop_scope(void);
+    /* The unit a capacity message names: the basename of `path`, or
+       "this unit" before the driver binds one. */
+    const char *unit_name(void);
     int  fail(const char *msg);
     const char *last_error(void);
 }
@@ -202,6 +205,11 @@ pub struct Symbols {
     int  tbambig[128];
     int  ntb;
     char ns[160];               /* current namespace prefix, set by the module layer */
+    /* The input the table is filling, kept in step with `mem->path` by the
+       driver and the module layer. The capacity messages name it: a generated
+       file with hundreds of declarations otherwise leaves the reader hunting
+       for the unit that overflowed (SH-53). */
+    const char *path;
     /* `import a::b::C as D;` brings one exported name in under `D` for this unit
        only (the table resets per unit); `alias_full` is the mangled C name. */
     char alias_name[16][160];
@@ -234,6 +242,18 @@ impl SymbolOps for Symbols {
         return self->errmsg;
     }
 
+    /* Only the last path component: the diagnostic already prints the full
+       path as its prefix, and a basename keeps the message inside the 160-byte
+       buffer that carries it. */
+    const char *unit_name(void)
+    {
+        const char *slash;
+        (void)self;
+        if (!self->path || !self->path[0]) return "this unit";
+        slash = strrchr(self->path, '/');
+        return slash ? slash + 1 : self->path;
+    }
+
     int push_scope(void)
     {
         (void)self;
@@ -255,8 +275,13 @@ impl SymbolOps for Symbols {
     int declare_var(const char *name, const char *type)
     {
         int i;
+        char msg[MAX_TEXT];
         (void)self;
-        if (self->nvar >= MAX_VARS) return self->fail("too many variables");
+        if (self->nvar >= MAX_VARS) {
+            snprintf(msg, sizeof msg, "too many variables in unit '%s' (limit %d)",
+                     self->unit_name(), MAX_VARS);
+            return self->fail(msg);
+        }
         i = self->nvar;
         snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
         snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
@@ -288,8 +313,13 @@ impl SymbolOps for Symbols {
                        const char *ns, int imported)
     {
         int i, k;
+        char msg[MAX_TEXT];
         (void)self;
-        if (self->nvar >= MAX_VARS) return self->fail("too many variables");
+        if (self->nvar >= MAX_VARS) {
+            snprintf(msg, sizeof msg, "too many variables in unit '%s' (limit %d)",
+                     self->unit_name(), MAX_VARS);
+            return self->fail(msg);
+        }
         i = self->nvar;
         self->nvar++;
         snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
@@ -471,7 +501,12 @@ impl SymbolOps for Symbols {
         if (!name[0]) return -1;
         i = self->find_struct(name);
         if (i >= 0) return i;
-        if (self->nstructs >= MAX_STRUCTS) return self->fail("too many structs");
+        if (self->nstructs >= MAX_STRUCTS) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg, "too many structs in unit '%s' (limit %d)",
+                     self->unit_name(), MAX_STRUCTS);
+            return self->fail(msg);
+        }
         snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
         self->structs[self->nstructs].nuse = 0;
         self->structs[self->nstructs].uses_drop = 0;

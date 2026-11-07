@@ -2444,7 +2444,7 @@ cap_check() {
     while [ "$i" -lt 17 ]; do printf ', int a%d' "$i"; i=$((i + 1)); done
     printf ');\nint main(void) { return 0; }\n'
 } >"$work/cap_params.ct"
-cap_check params "too many parameters" "$work/cap_params.ct"
+cap_check params "too many parameters in unit 'cap_params.ct' (limit 16)" "$work/cap_params.ct"
 {
     printf 'trait T {\n'
     i=0
@@ -2457,7 +2457,7 @@ cap_check methods "too many trait methods" "$work/cap_methods.ct"
     while [ "$i" -lt 256 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_funcs.ct"
-cap_check funcs "too many functions" "$work/cap_funcs.ct"
+cap_check funcs "too many functions in unit 'cap_funcs.ct' (limit 256)" "$work/cap_funcs.ct"
 # The boundary itself: 255 helpers plus `main` is exactly the cap and must build,
 # while one more is refused above.
 {
@@ -2487,7 +2487,7 @@ cap_check scopes "too many nested scopes" "$work/cap_scopes.ct"
     while [ "$i" -lt 4097 ]; do printf '    int v%d = 0;\n' "$i"; i=$((i + 1)); done
     printf '    return 0;\n}\n'
 } >"$work/cap_vars.ct"
-cap_check vars "too many variables" "$work/cap_vars.ct"
+cap_check vars "too many variables in unit 'cap_vars.ct' (limit 4096)" "$work/cap_vars.ct"
 {
     printf 'struct Big {\n'
     i=0
@@ -2495,6 +2495,12 @@ cap_check vars "too many variables" "$work/cap_vars.ct"
     printf '};\nint main(void) { return 0; }\n'
 } >"$work/cap_fields.ct"
 cap_check fields "too many fields in struct 'Big' (limit 64)" "$work/cap_fields.ct"
+{
+    i=0
+    while [ "$i" -lt 129 ]; do printf 'struct S%d { int x; };\n' "$i"; i=$((i + 1)); done
+    printf 'int main(void) { return 0; }\n'
+} >"$work/cap_structs.ct"
+cap_check structs "too many structs in unit 'cap_structs.ct' (limit 128)" "$work/cap_structs.ct"
 
 # A struct whose body opens on the line after its name makes the parser look
 # ahead across a newline. The lookahead has to restore the lexer's line state

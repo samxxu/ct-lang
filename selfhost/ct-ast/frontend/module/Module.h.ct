@@ -253,6 +253,7 @@ impl ModuleOps for Module {
         self->p->scan_only = 1;
         self->path = from;
         self->mem->path = self->path;
+        self->sym->path = self->mem->path;
         backend::emit::ct_emit_set_path(self->path);
         self->lex->pos = 0;
         self->lex->bol = 1;
@@ -604,6 +605,7 @@ impl ModuleOps for Module {
         self->p->scan_only = 0;
         self->path = path;
         self->mem->path = self->path;
+        self->sym->path = self->mem->path;
         backend::emit::ct_emit_set_path(self->path);
         self->units[u].fn_start = self->sym->nfunc;
         self->units[u].tr_start = self->sym->ntraits;
@@ -1206,10 +1208,11 @@ cmd_too_long:
     int emit_unit(int u)
     {
         const char *why;
-        /* a diagnostic raised while emitting this unit must name this unit, and
-           the error store reads the path from the memory object */
+        /* a diagnostic raised while emitting this unit must name this unit: the
+           error store reads `mem->path`, the capacity messages `sym->path` */
         self->path = self->units[u].path;
         self->mem->path = self->path;
+        self->sym->path = self->mem->path;
         if (backend::emit::ct_emit_unit(u) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail_emit(why);
