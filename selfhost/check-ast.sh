@@ -1725,6 +1725,20 @@ for f in test/ast/errors/*.ct; do
     fi
 done
 
+# P20-02: an import after the first declaration is rejected at the import line,
+# with a message that names the fix. The generic loop above only checks for any
+# positioned diagnostic; pin this text so it cannot drift into a parse error.
+for cf in late_import_after_global late_import_after_fn; do
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "p20-02: $cf" "expected a non-zero exit"
+    elif grep -qF "imports must be at the top of the file; move this import above the first declaration" "$work/$cf.err"; then
+        ok "p20-02 ($cf)"
+    else
+        bad "p20-02: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
 # Batch 4: `switch` and `do-while` carry diagnostics of their own, so a mistake
 # never falls through to the expression path's "undeclared variable" report.
 # Each fixture is also swept by the loop above; the message is pinned here.

@@ -1,0 +1,11 @@
+int helper(void)
+{
+    return 1;
+}
+
+import a::A;
+
+int main(void)
+{
+    return helper();
+}

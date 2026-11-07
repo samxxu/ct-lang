@@ -130,6 +130,10 @@ pub struct Parser {
     /* Set while the unit being parsed is a `.m.ct` mapping unit: the content
        whitelist and the static-trait rules key off it. */
     int  unit_is_map;
+    /* Set once the unit has consumed a declaration. `import` is a leading
+       declaration; one seen after this point is reported instead of being
+       parsed, because a reader cannot tell it apart from a dropped import. */
+    int  seen_decl;
     /* The line of each import, recorded by `skip_import` so a `.m.ct` unit that
        imports a non-map unit is reported at the import line. */
     int  rel_line[32];
@@ -785,6 +789,7 @@ impl ParseOps for Parser {
         prog = self->sup->new_node(N_PROG);
         if (prog < 0) return -1;
         base = tool::diag::ct_diag_nsem();
+        self->seen_decl = 0;
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
@@ -810,6 +815,12 @@ impl ParseOps for Parser {
                 continue;
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
+                /* Imports are the unit's leading declarations. Accepting one
+                   here would drop it from `scan_imports` and leave a symbol
+                   that never resolves, so name the move instead (SH-57). */
+                if (self->seen_decl)
+                    return self->sup->fail("imports must be at the top of the file;"
+                                           " move this import above the first declaration");
                 if (!*self->build_mode) {
                     /* Multi-file input is a build-mode feature (SH-55), so the
                        message names the way out instead of the mode it is in;
@@ -825,6 +836,7 @@ impl ParseOps for Parser {
             }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "namespace") == 0) {
                 if (self->parse_namespace(prog) != 0) return -1;
+                self->seen_decl = 1;
                 continue;
             }
             n = self->top_decl(0);
@@ -838,6 +850,7 @@ impl ParseOps for Parser {
                 continue;
             }
             if (self->append_node(prog, n) != 0) return -1;
+            self->seen_decl = 1;
         }
         /* errors leave the unit (and its artifacts) behind */
         if (tool::diag::ct_diag_nsem() > base) return -1;

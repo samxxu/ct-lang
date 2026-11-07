@@ -1,0 +1,8 @@
+int g;
+
+import a::A;
+
+int main(void)
+{
+    return g;
+}
