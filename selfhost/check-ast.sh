@@ -1060,6 +1060,33 @@ else
     bad "p20_two_pkg_ambiguous" "$(head -3 "$work/p20amb.err")"
 fi
 
+# P20-01 builds the qualified-call node itself (`aux == 6`), so it must still run
+# the arity check the other static-recipe forms run; otherwise the recipe drops
+# an extra actual with no diagnostic (the receiver is not one of the method's
+# parameters).
+rm -rf "$work/p20qa"
+mkdir -p "$work/p20qa"
+if "$work/ct-ast" build --emit-c test/modules/p20_qual_arity/ok.ct -o "$work/p20qa" \
+        >"$work/p20qa.out" 2>"$work/p20qa.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/p20qa"/*.c -o "$work/p20qa.bin" 2>"$work/p20qa.cc" \
+   && "$work/p20qa.bin" >"$work/p20qa.stdout" 2>&1 \
+   && cmp -s "$work/p20qa.stdout" test/modules/p20_qual_arity/expected.out; then
+    ok "p20_qual_arity_ok (qualified call with exactly the method's parameters)"
+else
+    bad "p20_qual_arity_ok" \
+        "$(cat "$work/p20qa.err" "$work/p20qa.cc" "$work/p20qa.stdout" 2>/dev/null | head -5)"
+fi
+rm -rf "$work/p20qa2"
+mkdir -p "$work/p20qa2"
+if ! "$work/ct-ast" build --emit-c test/modules/p20_qual_arity/more.ct -o "$work/p20qa2" \
+        >"$work/p20qa2.out" 2>"$work/p20qa2.err"; then
+    bad "p20_qual_arity_more" "expected a build with an arity warning: $(head -2 "$work/p20qa2.err")"
+elif grep -qF "warning: arity mismatch: 'len' takes 0 argument(s), 1 given" "$work/p20qa2.err"; then
+    ok "p20_qual_arity_more (qualified call reports the extra actual)"
+else
+    bad "p20_qual_arity_more" "$(head -3 "$work/p20qa2.err")"
+fi
+
 # A shim is wired by its base name: the consumer includes `<base>.shim.h`, so a
 # header under any other name is silently never included and the recipe's C
 # helper stays undeclared. This is the negative for the naming rule the clib

@@ -1,0 +1,12 @@
+#include <stdio.h>
+
+import a::A;
+
+int main(void)
+{
+    char *s = "hello";
+
+    /* The receiver stands apart from the trait method's own parameters. */
+    printf("%lu\n", a::ALen::len(s));
+    return 0;
+}

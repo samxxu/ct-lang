@@ -1905,14 +1905,20 @@ impl ExprOps for Expr {
                    receiver, so the node is the same static-recipe call as a
                    type-host method (`aux == 6`), with the forced trait in
                    `text3`. That is what lets two packages bind `len` to
-                   `char *` and the caller pick one. */
+                   `char *` and the caller pick one. Writing the node directly
+                   must not skip the arity check the other static-recipe forms
+                   run, or an extra actual is dropped by the recipe with no
+                   diagnostic. */
                 if (qf == 5) {
                     char rtype[MAX_TEXT];
-                    int mn, rest;
+                    int mn, rest, got;
                     args = self->parse_args();
                     if (args < 0) return -1;
                     if (args == 0)
                         return self->sup->fail("a qualified method call needs a receiver argument");
+                    /* the receiver stands apart from the trait method's own
+                       parameters, exactly as in `Trait::ns.method(...)` */
+                    got = arg_count(self->arena, args) - 1;
                     if (self->sup->expr_type(args, rtype, sizeof rtype) != 0)
                         return self->sup->fail("cannot infer the receiver type of a qualified method call");
                     if (self->arena->nodes[args].kind == N_VAR) {
@@ -1932,6 +1938,20 @@ impl ExprOps for Expr {
                     snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
                     snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s",
                              self->arena->nodes[n].text2);
+                    /* The trait's own signature is the judge: `nparams` counts
+                       the method's parameters, never the receiver. */
+                    {
+                        int ti3, mi3;
+                        ti3 = self->sym->find_trait(self->arena->nodes[n].text2);
+                        if (ti3 >= 0) {
+                            for (mi3 = 0; mi3 < self->sym->traits[ti3].nm; mi3++)
+                                if (strcmp(self->sym->traits[ti3].m[mi3].name, qc) == 0) break;
+                            if (mi3 < self->sym->traits[ti3].nm
+                                && self->arity_check(id_line, id_col, qc, got,
+                                                     self->sym->traits[ti3].m[mi3].nparams) != 0)
+                                return -1;
+                        }
+                    }
                     return mn;
                 }
                 if (qf == 2) {
