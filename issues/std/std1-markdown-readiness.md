@@ -6,11 +6,18 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | `std/str/String.m.ct`；`std/vec/Vec.h.ct`；`std/map/Map.h.ct`；`std/utf8/Utf8Ops.m.ct`；`std/fs/Fs.m.ct`；`std/README.md`（均为 ct-pkg 包 `std` 0.1.0 的包内路径） |
-| 状态 | 待决策（本轮维持不实现） |
+| 状态 | 已决策（2026-11-07）：三项优先、Map 按需、Vec 泛化 / utf8 宽度 0.x 不做；实现归 ct-pkg |
 
 路径口径：下表与正文里的 `std/...` 行号按迁移前（`v0.19.0`）树内记录；std 现为 ct-pkg 包 `std` 0.1.0，
 包内布局同形但部分文件已改名（`Str.h.ct` → `String.m.ct`、`Utf8.h.ct` → `Utf8Ops.m.ct`、
 `Fs.h.ct` → `Fs.m.ct`）。`test/std/run.sh` 已随迁出删除，对应断言由包内 `tests/run.sh` 承担。
+
+> **名称时点**：std 于 2026-11-06 从 ct-lang 迁入 ct-pkg 时，`Str` 统一改名为 `String`
+> （ct-pkg/std 迁移提交 `1eddd4b`；同批还有 `Utf8.h.ct` → `Utf8Ops.m.ct`、`Fs.h.ct` → `Fs.m.ct`）。
+> `VecStr` / `VecStrOps` **没有**跟着改名。本文 2026-11-03 的段落保留当时名称作为历史记录；
+> ct 仓其余历史文档（`docs/design/phase17.md`、`primitive-methods.md`、`phase20-review.md`、
+> `docs/history/reports/…`）中的 `Str` / `Str.h.ct` / `Str.m.ct` 同属历史记录，保持原样，
+> 改名时点同上；新增的处置段落一律使用现行名称。
 
 ## 现象
 
@@ -76,3 +83,19 @@ Medium：std 的「可复用」价值被削弱。应用层每实现一个 Markdo
 
 建议按「`StrBuf` → `Map.grow` → `Fs.rename/stat` → `Utf8.width` → `Vec` 泛型」的顺序推进，
 每项单独提交并配 `test/std/run.sh` 用例。
+
+## 处置（2026-11-07 决策）
+
+**取舍已定。实现归 ct-pkg 仓的 `std` 包；ct 仓只记录决策与归属，不产生 ct 侧待办、不建 ct 侧任务单。**
+
+| 项 | 决定 | 边界与落点 |
+| --- | --- | --- |
+| `String` 增量能力 | **优先做** | ct-pkg 目前没有 `StringBuf` 类型，因此不按缓冲类型立项；在 `std/str` 的 `String` trait（宿主 `char *`）上增加 append / truncate / reserve 一类方法，具体方法名与签名由 ct-pkg 定。 |
+| fs 原子写 + `rename` | **优先做** | `std/fs` 的 `FsOps` 增 `rename`（同目录原子替换）与原子写（临时文件 + rename）；平台差异与断言由 ct-pkg 的 `tests/run.sh` 承担。 |
+| 公开 `stat` | **优先做** | `std/fs` 暴露 size / mtime / 文件类型，不再只在 `exists` 内部使用；字段形态与平台差异由 ct-pkg 定。 |
+| `Map` 增长 | **按需做** | 保留现有固定容量 API；确有调用方需要时再加 `grow`（容量翻倍 + 重新散列），不预先实现。 |
+| `Vec` 泛化 | **0.x 不做** | 泛型是语言能力，不能由 std 单方面决定；0.x 继续只保留 `VecInt` / `VecStr` 两个单态类型（`VecStr` 未随 `Str` → `String` 改名，现行名称仍是 `VecStr` / `VecStrOps`）。 |
+| utf8 显示宽度 | **0.x 不做** | East Asian Width 是随平台与 Unicode 版本变化的近似表，维护成本高且容易给出“看起来对”的错误列宽；需要宽度时由应用自带表。 |
+
+顺序：三项「优先做」可并行；`Map` 增长按调用方需求触发；两项「0.x 不做」在 1.0 前重新评估。
+每项由 ct-pkg 单独提交、单独补 `tests/run.sh` 断言。

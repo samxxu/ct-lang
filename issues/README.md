@@ -281,7 +281,7 @@
 
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |
-| STD-1 | Medium | std 面向应用层仍有 6 项能力缺口（StrBuf / 通用 Vec / 可增长 Map / UTF-8 宽度 / rename / 公开 stat） | [std1-markdown-readiness.md](std/std1-markdown-readiness.md) |
+| STD-1 | Medium | std 面向应用层能力缺口（String 增量 / fs 原子写+rename / 公开 stat 优先；Map 按需；Vec 泛化与 UTF-8 宽度 0.x 不做） | [std1-markdown-readiness.md](std/std1-markdown-readiness.md) |
 
 ## 汇总
 
