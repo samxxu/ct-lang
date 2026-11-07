@@ -441,6 +441,8 @@ map trait Socket for namespace posix {
 `-I <shim 目录>`（有 `.shim.c` 时同时把它列为源文件）。`posix::Socket.err()` 于是展开成
 `ct_sock_errno()`。完整例子见 `bindings/posix-socket/`；改了 shim 会让消费者重建。
 有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
+C 头文件里的 `enum` 常量 CT 也不认识（全大写拼写只是撞上宏启发式，不算解析），同样用这层 shim
+包成函数再绑定；判据与各类符号见 [language-spec §4.43](language-spec.md)。
 
 ### 9.3 原样块：`#ct-raw`
 
@@ -1071,7 +1073,9 @@ The consumer's generated `.c` automatically carries `#include "socket.shim.h"`, 
 `cc` command line automatically gains `-I <shim directory>` (plus the `.shim.c` as a source when one exists). So
 `posix::Socket.err()` expands into `ct_sock_errno()`. The full example is
 `bindings/posix-socket/`; touching the shim rebuilds the consumer. A `.shim.c` without its `.shim.h`
-is rejected with `a shim source needs a matching .shim.h`.
+is rejected with `a shim source needs a matching .shim.h`. `enum` constants from a C header are not
+known to CT either (an ALL_CAPS spelling only trips the macro heuristic, it is not parsed); wrap them
+in a function through this same shim layer — see [language-spec §4.43](language-spec.md).
 
 #### 9.3 Raw blocks: `#ct-raw`
 

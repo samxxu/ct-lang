@@ -1202,6 +1202,8 @@ int main(void)
   判据比声明位置更严——括号里的名字必须紧跟 `)`（可隔着若干 `*`），并且既不是
   已声明的变量 / 函数，也不是全大写宏常量。因此 `(f(x))` 仍是被括号包住的调用，
   `(MAX) + 1` 仍是表达式。
+- 头文件里的 `enum` 常量不走这两条判据：`enum` 的定义不解析，普通表达式里会被当作未声明变量
+  （全大写拼写除外），见 §4.43。
 
 #### 4.34 表达式里的赋值（ct-ast）
 
@@ -1494,6 +1496,50 @@ int main(void)
 - 只在普通 `.ct` / `.h.ct` 单元可用：`.m.ct` 的 prologue 白名单仍只放行 `#include` / `#define`。
 - L0 / L1 按行透传，本来就会原样输出块内容；本规定只约束 ct-ast。编译器**自身源码**
   （`selfhost/ct-ast/**`）不得使用块，由 `selfhost/check-ast.sh` 的护栏检查。
+
+#### 4.43 外部 C 符号：CT 认识哪些、不认识哪些（DOC-64）
+
+CT 没有预处理器：`#include` 只按整行透传到生成物，头文件内容不参与解析。因此一个来自 C 头文件的
+名字能否在 CT 源码里使用，取决于 CT 自己的判据，而不是头文件写了什么：
+
+| 头文件里的东西 | CT 的判据 | 典型用法 |
+| --- | --- | --- |
+| 全大写标识符（`MAX_SIZE`、`EOF`、`SEEK_SET`） | 按宏放行：不展开，原样发射 | `buf[MAX_SIZE]`、`x == EOF` |
+| `typedef` 类型名（`time_t`、`size_t`） | 按类型放行（§4.33） | `time_t now;`、`(time_t)raw` |
+| 函数声明（`getchar`、`strlen`） | 按普通函数调用 | `c = getchar();` |
+| `stdin` / `stdout` / `stderr` | 三个特例名字直接放行 | `fputs(s, stdout)` |
+| `errno` | **不放行**，需自己写 `extern int errno;` | 声明后 `return errno;` |
+| `struct` / `union` / `enum` 的**类型名** | 只认识 CT 自己定义或登记的标签（§4.33） | `struct tm *t;` |
+| **`enum` 常量**（`Fast`、`Severity_Warn`） | **不认识**（恰好全大写的除外，见下） | `x == Fast` → `error: use of an undeclared variable` |
+| 小写 `#define`（`#define limit 4`） | 不展开、不放行，同样是未声明变量 | 换成全大写名或走 shim |
+
+- 全大写是**纯拼写启发式**：`SEEK_SET` 能过，只是因为它长得像宏，被原样发射、交给 C 编译器求值——
+  这不代表 CT 解析了那个 `enum`。同一头文件里若有 `enum Mode { Fast, Slow };`，`x == Fast` 立刻报
+  `error: use of an undeclared variable`（解析期诊断，`ct build` / `ct check` 都失败）。
+- 数组长度是例外：`int a[Fast];` 里的单个裸名按常量放行并原样发射（§4.28）；**普通表达式与 `case`
+  标签不放行**——`case SEEK_SET:` 能过只因为它是全大写，`case Fast:` 会报未声明变量。
+- 想让 CT 侧直接调用 enum 常量，用映射单元 + 伴生 C shim 包一层（五行即可）：
+
+```c
+/* posix/seek.shim.h —— 与 seek.m.ct 同目录、同基名 */
+#include <fcntl.h>
+static inline int ct_seek_set(void) { return SEEK_SET; }
+```
+
+```c
+/* posix/seek.m.ct */
+namespace posix;
+
+pub trait Seek { int set(void); }
+
+map trait Seek for namespace posix {
+    set() -> ct_seek_set();
+}
+```
+
+消费者 `import posix::seek;` 之后写 `posix::Seek.set()`，生成物里展开为 `ct_seek_set()`；`ct build`
+会自动补 `-I posix/`（§4.10、tutorial §9.2）。把 `static const int` 直接放进 shim 头不够：声明在
+头文件里，CT 看不见；在 CT 源码里再声明一次又与定义重复。所以推荐函数包装（或全大写 `#define` 别名）。
 
 ### 5. 命名规则（稳定契约）
 
@@ -2982,6 +3028,8 @@ int main(void)
   stricter than in a declaration — the name must be followed by `)` (optionally behind stars), and
   it must be neither a declared variable / function nor an ALL_CAPS macro constant. So `(f(x))`
   is still a call in parentheses and `(MAX) + 1` is still an expression.
+- An `enum` constant from a header follows neither test: the `enum` definition is not parsed, so an
+  ordinary expression treats it as an undeclared variable (unless the spelling is ALL_CAPS); see §4.43.
 
 #### 4.34 An assignment used as a value (ct-ast)
 
@@ -3301,6 +3349,54 @@ Constraints and diagnostics:
 - L0 / L1 pass lines through as they stand, so the block already reaches their output; the rule binds
   ct-ast only. The compiler's **own sources** (`selfhost/ct-ast/**`) must not use a block, which
   `selfhost/check-ast.sh` enforces.
+
+#### 4.43 External C symbols: what CT knows and what it does not (DOC-64)
+
+CT has no preprocessor: `#include` is copied line-for-line into the generated C and the header's
+contents are never parsed. Whether a name from a C header can be used in CT source therefore depends
+on CT's own rules, not on what the header declares:
+
+| What the header has | CT's rule | Typical use |
+| --- | --- | --- |
+| An ALL_CAPS identifier (`MAX_SIZE`, `EOF`, `SEEK_SET`) | Treated as a macro: not expanded, emitted verbatim | `buf[MAX_SIZE]`, `x == EOF` |
+| A `typedef` type name (`time_t`, `size_t`) | Treated as a type (§4.33) | `time_t now;`, `(time_t)raw` |
+| A function declaration (`getchar`, `strlen`) | An ordinary call | `c = getchar();` |
+| `stdin` / `stdout` / `stderr` | Three special-cased names, allowed as-is | `fputs(s, stdout)` |
+| `errno` | **Not allowed**; declare `extern int errno;` yourself | `return errno;` after the declaration |
+| A `struct` / `union` / `enum` **type name** | Only labels CT declares or registers itself (§4.33) | `struct tm *t;` |
+| **`enum` constants** (`Fast`, `Severity_Warn`) | **Not known** (unless the spelling is ALL_CAPS, below) | `x == Fast` → `error: use of an undeclared variable` |
+| A lowercase `#define` (`#define limit 4`) | Not expanded, not allowed: same undeclared-variable error | Rename to ALL_CAPS or go through a shim |
+
+- ALL_CAPS is a **spelling heuristic only**: `SEEK_SET` works because it looks like a macro, is emitted
+  verbatim, and is evaluated by the C compiler — it does not mean CT parsed the `enum`. With
+  `enum Mode { Fast, Slow };` in the same header, `x == Fast` fails at once with
+  `error: use of an undeclared variable` (a parse-time diagnostic, so both `ct build` and `ct check` fail).
+- Array lengths are the exception: a lone bare name in `int a[Fast];` is accepted as a constant and
+  emitted verbatim (§4.28). **Ordinary expressions and `case` labels are not** — `case SEEK_SET:` works
+  only because it is ALL_CAPS, while `case Fast:` reports an undeclared variable.
+- To call an enum constant from CT, wrap it in a mapping unit plus a sibling C shim (five lines):
+
+```c
+/* posix/seek.shim.h -- same directory and basename as seek.m.ct */
+#include <fcntl.h>
+static inline int ct_seek_set(void) { return SEEK_SET; }
+```
+
+```c
+/* posix/seek.m.ct */
+namespace posix;
+
+pub trait Seek { int set(void); }
+
+map trait Seek for namespace posix {
+    set() -> ct_seek_set();
+}
+```
+
+After `import posix::seek;`, a consumer writes `posix::Seek.set()`, which becomes `ct_seek_set()` in the
+generated C; `ct build` adds `-I posix/` by itself (§4.10, tutorial §9.2). A bare `static const int` in
+the shim header is not enough: CT cannot see the header's declaration, and declaring it again in CT
+source would duplicate the definition. Prefer the function wrapper (or an ALL_CAPS `#define` alias).
 
 ### 5. Naming contract
 
