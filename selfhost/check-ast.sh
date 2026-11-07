@@ -1053,7 +1053,7 @@ fi
 if "$work/ct-ast" build --emit-c test/modules/p20_two_pkg_same_method/ambig.ct -o "$work/p20mm" \
         >"$work/p20amb.out" 2>"$work/p20amb.err"; then
     bad "p20_two_pkg_ambiguous" "expected a non-zero exit"
-elif grep -qF "use 'a::ALen::len' or 'b::BLen::len'" "$work/p20amb.err" \
+elif grep -qF "use 'a_ALen::len' or 'b_BLen::len'" "$work/p20amb.err" \
      && grep -qF "ambiguous type-host map for method 'len' on type 'char *'" "$work/p20amb.err"; then
     ok "p20_two_pkg_ambiguous (both qualified spellings in the hint)"
 else

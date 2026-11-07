@@ -484,42 +484,14 @@ static void map_clean_type(const char *in, char *out)
     out[n] = 0;
 }
 
-/* The source spelling of a trait qualifier (`a::ALen`) for diagnostics. The
-   recorded name is the C name (`a_ALen`); the namespace prefix is in `ns`. */
+/* The C spelling of a trait (`a_ALen`) for diagnostics. The source spelling
+   (`a::ALen`) cannot be rebuilt from the recorded name: a namespace segment may
+   itself contain `_`, so turning every `_` back into `::` invents segments
+   (`my_lib` would print as `my::lib`, which no source line can resolve). The C
+   name is what the generated file actually uses, and it stays unambiguous. */
 static void trait_qual_name(struct Symbols *sym, int ti, char *out, int cap)
 {
-    int w = 0, i;
-    const char *ns = sym->traits[ti].ns;
-    const char *nm = sym->traits[ti].name;
-    for (i = 0; ns[i]; i++) {
-        if (ns[i] == '_') {
-            if (w + 2 >= cap) break;
-            out[w] = ':';
-            w++;
-            out[w] = ':';
-            w++;
-        } else if (w + 1 < cap) {
-            out[w] = ns[i];
-            w++;
-        }
-    }
-    if (w >= cap) w = cap - 1;
-    if (ns[0]) {
-        if (w + 2 >= cap) {
-            out[w] = 0;
-            return;
-        }
-        out[w] = ':';
-        w++;
-        out[w] = ':';
-        w++;
-        /* `name` is the mangled C name, `ns` its prefix without the trailing
-           underscore: `a` + `ALen` -> `a::ALen`. */
-        if (strncmp(nm, ns, strlen(ns)) == 0 && nm[strlen(ns)] == '_')
-            nm += strlen(ns) + 1;
-    }
-    if (w >= cap) w = cap - 1;
-    snprintf(out + w, (size_t)(cap - w), "%s", nm);
+    snprintf(out, (size_t)cap, "%s", sym->traits[ti].name);
 }
 
 /* The actual node for binding parameter `idx`: a type host's parameter 0 is the
