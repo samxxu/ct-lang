@@ -219,6 +219,18 @@ static int var_scope(struct Symbols *sym, int vi)
     return -1;
 }
 
+/* Whether `target` outlives `source`: a global or a block-scope `static` lives
+   past every scope, and a shallower scope outlives a deeper one. A sibling in
+   the same scope dies with the source, so it does not. This is the one lifetime
+   comparison shared by the borrow store check and (Phase 21) the closure
+   escape check; keep both callers on it instead of open-coding the rule. */
+static int outlives(struct Symbols *sym, int target, int source)
+{
+    if (target < 0 || source < 0) return 0;
+    if (sym->vars[target].is_global || sym->vars[target].is_static) return 1;
+    return var_scope(sym, target) < var_scope(sym, source);
+}
+
 /* `delete r;` on a borrowed pointer frees an object the lender still owns: a
    pooled object stays live after the handback, and a stack object was never
    ours to free. Only the bare spelling is judged, as in the design. */
@@ -241,7 +253,7 @@ static int check_borrow_delete(struct Stmt *self, int e)
    that store stays legal. */
 static int check_borrow_store(struct Stmt *self, int n)
 {
-    int lhs, rhs, bv, lv, bs, ls;
+    int lhs, rhs, bv, lv;
     char msg[MAX_TEXT];
 
     if (n < 0) return 0;
@@ -268,10 +280,8 @@ static int check_borrow_store(struct Stmt *self, int n)
     if (lhs < 0 || self->arena->nodes[lhs].kind != N_VAR) return 0;
     lv = self->sym->find_var(self->arena->nodes[lhs].text2);
     if (lv < 0) return 0;
-    bs = var_scope(self->sym, bv);
-    ls = var_scope(self->sym, lv);
     /* a static local outlives the borrow just like a global (SH-37) */
-    if (!self->sym->vars[lv].is_global && !self->sym->vars[lv].is_static && ls >= bs) return 0;
+    if (!outlives(self->sym, lv, bv)) return 0;
     snprintf(msg, sizeof msg,
              "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
              self->sym->vars[lv].name);
