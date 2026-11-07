@@ -1,0 +1,26 @@
+// 68 (SH-52): a namespaced file-scope initialiser names its siblings the way the
+// source does, but their declarations are emitted under the unit prefix. The
+// captured `{ … }` text must be rewritten as well, or `cc` sees an undeclared
+// identifier while `ct compile` still returned 0.
+#include <stdio.h>
+
+namespace ns;
+
+struct Foo { int x; }
+struct Bar { int y; struct Foo *f; }
+struct Pair { struct Foo *a; struct Foo *b; }
+
+static Foo k_one = { 7 };
+static Foo k_two = { 41 };
+static Bar k_bar = { 9, &k_one };
+static Bar k_desig = { .y = 11, .f = &k_two };
+static Pair k_pair = { &k_one, &k_two };
+static Foo *k_refs[2] = { &k_one, &k_two };
+
+int main(void)
+{
+    printf("%d %d %d %d %d %d\n",
+           k_bar.f->x, k_desig.f->x, k_pair.a->x, k_pair.b->x,
+           k_refs[0]->x, k_refs[1]->x);
+    return 0;
+}

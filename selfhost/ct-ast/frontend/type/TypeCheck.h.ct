@@ -54,6 +54,7 @@ pub trait TypeOps {
     int  type_has_array_init(const char *type);
     int  init_item_text(const char *stype, const char *item, char *out, int cap);
     int  rewrite_init_text(const char *stype, const char *raw, char *out, int cap);
+    int  rewrite_init_names(const char *in, char *out, int cap);
     /* internals: the local node factory and the nested-value probe the array
        initialiser question needs */
     int  new_node(int kind);
@@ -761,6 +762,102 @@ impl TypeOps for TypeCheck {
         if (strlen(out) + strlen(fixed) + 2 >= (size_t)cap) return -1;
         strcat(out, fixed);
         strcat(out, "}");
+        /* The captured text still spells a namespaced global the way the source
+           did, while its declaration is emitted under the mangled name (SH-52).
+           Substituting here keeps the initialiser and the declaration in step. */
+        {
+            char named[MAX_INIT_TEXT];
+            if (self->rewrite_init_names(out, named, sizeof named) != 0) return -1;
+            if (snprintf(out, (size_t)cap, "%s", named) >= cap) return -1;
+        }
+        return 0;
+    }
+
+    /* Rewrite every identifier in captured C initialiser text that the variable
+       table knows under a different C spelling. Member names (`.x`, `->x`),
+       struct tags and string literals are copied verbatim: none of them can name
+       a file-scope variable. A local keeps its own name, so only namespaced
+       globals and imported globals change. */
+    int rewrite_init_names(const char *in, char *out, int cap)
+    {
+        char cn[MAX_TEXT];
+        char id[MAX_TEXT];
+        char last[MAX_TEXT];
+        int i, n, w;
+        char c;
+        (void)self;
+
+        i = 0;
+        w = 0;
+        last[0] = 0;
+        while (in[i]) {
+            c = in[i];
+            if (c == '"' || c == '\'') {
+                if (w + 1 >= cap) return -1;
+                out[w] = c;
+                w++;
+                i++;
+                while (in[i]) {
+                    if (in[i] == '\\' && in[i + 1]) {
+                        if (w + 2 >= cap) return -1;
+                        out[w] = in[i]; w++;
+                        i++;
+                        out[w] = in[i]; w++;
+                        i++;
+                        continue;
+                    }
+                    if (w + 1 >= cap) return -1;
+                    out[w] = in[i];
+                    w++;
+                    if (in[i] == c) { i++; break; }
+                    i++;
+                }
+                last[0] = 0;
+                continue;
+            }
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                  || (c >= '0' && c <= '9') || c == '_')) {
+                if (w + 1 >= cap) return -1;
+                out[w] = c;
+                w++;
+                i++;
+                if (c == '.' || c == '>') {
+                    last[0] = c;
+                    last[1] = 0;
+                } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+                    last[0] = 0;
+                }
+                continue;
+            }
+            n = 0;
+            while ((in[i] >= 'a' && in[i] <= 'z') || (in[i] >= 'A' && in[i] <= 'Z')
+                   || (in[i] >= '0' && in[i] <= '9') || in[i] == '_') {
+                if (n + 1 < (int)sizeof id) { id[n] = in[i]; n++; }
+                i++;
+            }
+            id[n] = 0;
+            /* a member name and a struct / enum / union tag are not variables */
+            if (last[0] == '.' || last[0] == '>' || strcmp(last, "struct") == 0
+                || strcmp(last, "enum") == 0 || strcmp(last, "union") == 0) {
+                if (w + n >= cap) return -1;
+                snprintf(out + w, (size_t)(cap - w), "%s", id);
+                w += n;
+                snprintf(last, sizeof last, "%s", id);
+                continue;
+            }
+            if (self->sym->var_cname(id, cn, sizeof cn) == 0
+                && strcmp(cn, id) != 0 && !self->sym->var_ambiguous(id)) {
+                snprintf(out + w, (size_t)(cap - w), "%s", cn);
+                w += (int)strlen(cn);
+            } else {
+                if (w + n >= cap) return -1;
+                snprintf(out + w, (size_t)(cap - w), "%s", id);
+                w += n;
+            }
+            snprintf(last, sizeof last, "%s", id);
+        }
+        if (w >= cap) return -1;
+        out[w] = 0;
         return 0;
     }
 }
