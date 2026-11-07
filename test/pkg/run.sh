@@ -213,6 +213,22 @@ else
 fi
 
 echo
+echo "== requires accepts a comparator glued to 'ct' =="
+# M3: `ct>=99.0.0` is a version range, not an unsupported clause -- the operator
+# after the name must not depend on a separating space.
+mkdir -p "$work/hi2" "$work/proj4"
+printf 'name = hi2\nversion = 0.1.0\nrequires = ct>=99.0.0\n' >"$work/hi2/ct.pkg"
+printf 'pub int hi2(void);\nint hi2(void) { return 1; }\n' >"$work/hi2/hi2.h.ct"
+printf 'name = demo4\nversion = 0.1.0\n' >"$work/proj4/ct.pkg"
+if ( cd "$work/proj4" && "$work/ct-ast" get ../hi2 >"$work/hig2.out" 2>"$work/hig2.err" ); then
+    bad "glued requires" "ct get should refuse 'ct>=99.0.0'"
+elif grep -Fq "requires 'ct>=99.0.0', but this is v" "$work/hig2.err"; then
+    ok "a comparator glued to 'ct' is read as a version range"
+else
+    bad "glued requires" "wrong diagnostic: $(cat "$work/hig2.err")"
+fi
+
+echo
 echo "== ct install rejects a tampered vendor tree =="
 printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.h.ct"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/it.out" 2>"$work/it.err" ); then

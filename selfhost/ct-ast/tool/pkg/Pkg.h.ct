@@ -1634,7 +1634,12 @@ static int pkg_check_requires(const char *pkg, const char *req)
     p = req;
     while (*p == ' ' || *p == '\t') p++;
     if (*p == 0) return 0;
-    if (!(strncmp(p, "ct", 2) == 0 && (p[2] == 0 || p[2] == ' ' || p[2] == '\t'))) {
+    /* `ct>=x.y.z` and `ct = x.y.z` are the same clause: the operator may follow
+       the name directly, so the separator is not what identifies the compiler. */
+    if (!(strncmp(p, "ct", 2) == 0
+          && (p[2] == 0 || p[2] == ' ' || p[2] == '\t' || p[2] == '>'
+              || p[2] == '<' || p[2] == '=' || p[2] == '^' || p[2] == '~'
+              || p[2] == '*'))) {
         /* Only the compiler version belongs here; a package spec written as a
            `requires` is not a version range and would fail confusingly. */
         fprintf(stderr, "ctc: package '%s' has an unsupported requires '%s';"
