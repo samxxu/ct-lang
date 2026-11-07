@@ -942,6 +942,32 @@ else
     bad "ct check (signature drift)" "$(head -2 "$work/mchk2.err")"
 fi
 
+# P20-01: two packages bind `len` to `char *`. A qualified call picks one map;
+# the unqualified call still fails and names both qualified spellings.
+rm -rf "$work/p20mm"
+mkdir -p "$work/p20mm"
+if "$work/ct-ast" build --emit-c test/modules/p20_two_pkg_same_method/main.ct -o "$work/p20mm" \
+        >"$work/p20mm.out" 2>"$work/p20mm.err" \
+   && grep -qF 'strlen((s))' "$work/p20mm/main.c" \
+   && grep -qF 'strlen((buf))' "$work/p20mm/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/p20mm"/*.c -o "$work/p20mm.bin" 2>"$work/p20mm.cc" \
+   && "$work/p20mm.bin" >"$work/p20mm.stdout" 2>&1 \
+   && cmp -s "$work/p20mm.stdout" test/modules/p20_two_pkg_same_method/expected.out; then
+    ok "p20_two_pkg_same_method (qualified call picks one of two char * len maps)"
+else
+    bad "p20_two_pkg_same_method" \
+        "$(cat "$work/p20mm.err" "$work/p20mm.cc" "$work/p20mm.stdout" 2>/dev/null | head -5)"
+fi
+if "$work/ct-ast" build --emit-c test/modules/p20_two_pkg_same_method/ambig.ct -o "$work/p20mm" \
+        >"$work/p20amb.out" 2>"$work/p20amb.err"; then
+    bad "p20_two_pkg_ambiguous" "expected a non-zero exit"
+elif grep -qF "use 'a::ALen::len' or 'b::BLen::len'" "$work/p20amb.err" \
+     && grep -qF "ambiguous type-host map for method 'len' on type 'char *'" "$work/p20amb.err"; then
+    ok "p20_two_pkg_ambiguous (both qualified spellings in the hint)"
+else
+    bad "p20_two_pkg_ambiguous" "$(head -3 "$work/p20amb.err")"
+fi
+
 # A shim is wired by its base name: the consumer includes `<base>.shim.h`, so a
 # header under any other name is silently never included and the recipe's C
 # helper stays undeclared. This is the negative for the naming rule the clib

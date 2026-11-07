@@ -1844,6 +1844,39 @@ impl ExprOps for Expr {
                     snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
                     return mn;
                 }
+                /* P20-01: `Trait::method(recv, ...)` — the first actual is the
+                   receiver, so the node is the same static-recipe call as a
+                   type-host method (`aux == 6`), with the forced trait in
+                   `text3`. That is what lets two packages bind `len` to
+                   `char *` and the caller pick one. */
+                if (qf == 5) {
+                    char rtype[MAX_TEXT];
+                    int mn, rest;
+                    args = self->parse_args();
+                    if (args < 0) return -1;
+                    if (args == 0)
+                        return self->sup->fail("a qualified method call needs a receiver argument");
+                    if (self->sup->expr_type(args, rtype, sizeof rtype) != 0)
+                        return self->sup->fail("cannot infer the receiver type of a qualified method call");
+                    if (self->arena->nodes[args].kind == N_VAR) {
+                        int vi = self->sym->find_var(self->arena->nodes[args].text2);
+                        if (vi >= 0 && self->sym->vars[vi].is_array
+                            && strlen(rtype) + 2 < sizeof rtype)
+                            strcat(rtype, " *");
+                    }
+                    rest = self->arena->nodes[args].next;
+                    self->arena->nodes[args].next = -1;
+                    mn = self->sup->new_node(N_MCALL);
+                    if (mn < 0) return -1;
+                    self->arena->nodes[mn].a = args;
+                    self->arena->nodes[mn].b = rest;
+                    self->arena->nodes[mn].aux = 6;
+                    snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s", rtype);
+                    snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
+                    snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s",
+                             self->arena->nodes[n].text2);
+                    return mn;
+                }
                 if (qf == 2) {
                     if (snprintf(tag, sizeof tag, "%s|%s", tsrc, qv) >= MAX_TEXT)
                         return self->sup->fail("qualified name is too long");
@@ -2126,7 +2159,52 @@ impl ExprOps for Expr {
                         fi = self->sym->find_func(cand);
                 }
             }
-            if (fi < 0) return self->sup->fail("no function of that name in that namespace");
+            if (fi < 0) {
+                /* P20-01: `Trait::method(recv, ...)` names a static trait
+                   explicitly, so two packages may bind the same method to one
+                   host type and the caller picks one. The qualifier is joined
+                   the way symbol names are (`a::ALen` -> `a_ALen`); the last
+                   segment must be a method of that trait, so a namespace
+                   function of a similar name is not hijacked. */
+                char tq[MAX_TEXT];
+                int st = -1;
+                if (nseg == 2) {
+                    if (self->sym->resolve_type(seg[0], tn, sizeof tn) == 0)
+                        st = self->sym->find_trait(tn);
+                    if (st < 0) st = self->sym->find_trait(seg[0]);
+                } else if (snprintf(tq, sizeof tq, "%s", qpath) < (int)sizeof tq) {
+                    st = self->sym->find_trait(tq);
+                }
+                if (st >= 0 && self->sym->traits[st].is_static) {
+                    int mi2, okm = 0;
+                    for (mi2 = 0; mi2 < self->sym->traits[st].nm; mi2++)
+                        if (strcmp(self->sym->traits[st].m[mi2].name, seg[nseg - 1]) == 0)
+                            okm = 1;
+                    if (okm) {
+                        int hw2 = 0;
+                        qpath[0] = 0;
+                        for (i = 0; i < nseg - 1; i++) {
+                            if (i > 0) {
+                                if (hw2 + 2 >= qcap)
+                                    return self->sup->fail("qualified name is too long");
+                                qpath[hw2] = ':';
+                                qpath[hw2 + 1] = ':';
+                                hw2 += 2;
+                                qpath[hw2] = 0;
+                            }
+                            if (hw2 + (int)strlen(seg[i]) >= qcap)
+                                return self->sup->fail("qualified name is too long");
+                            snprintf(qpath + hw2, (size_t)(qcap - hw2), "%s", seg[i]);
+                            hw2 += (int)strlen(seg[i]);
+                        }
+                        snprintf(name, (size_t)ncap, "%s", self->sym->traits[st].name);
+                        snprintf(cname, (size_t)ccap, "%s", seg[nseg - 1]);
+                        *form = 5;
+                        return 0;
+                    }
+                }
+                return self->sup->fail("no function of that name in that namespace");
+            }
             snprintf(cname, (size_t)ccap, "%s", self->sym->funcs[fi].cname);
             *form = 1;
             return 0;

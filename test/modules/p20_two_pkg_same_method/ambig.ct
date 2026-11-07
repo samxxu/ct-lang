@@ -1,0 +1,12 @@
+#include <stdio.h>
+
+import a::A;
+import b::B;
+
+int main(void)
+{
+    char *s = "hello";
+
+    /* No qualifier: both maps are visible, so the call must be rejected. */
+    return s.len();
+}

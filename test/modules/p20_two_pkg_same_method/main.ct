@@ -1,0 +1,14 @@
+#include <stdio.h>
+
+import a::A;
+import b::B;
+
+int main(void)
+{
+    char *s = "hello";
+    char buf[8] = "hey";
+
+    /* Two packages bind `len` to `char *`; the qualifier picks one of them. */
+    printf("%lu %lu %lu\n", a::ALen::len(s), b::BLen::len(s), b::BLen::len(buf));
+    return 0;
+}

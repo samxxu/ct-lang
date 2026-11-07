@@ -1,0 +1,11 @@
+#include <string.h>
+
+namespace b;
+
+pub trait BLen {
+    unsigned long len();
+}
+
+map trait BLen for type char * {
+    len(s) -> strlen(s);
+}

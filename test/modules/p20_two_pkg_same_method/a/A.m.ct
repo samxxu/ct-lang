@@ -1,0 +1,11 @@
+#include <string.h>
+
+namespace a;
+
+pub trait ALen {
+    unsigned long len();
+}
+
+map trait ALen for type char * {
+    len(s) -> strlen(s);
+}

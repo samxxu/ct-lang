@@ -484,6 +484,44 @@ static void map_clean_type(const char *in, char *out)
     out[n] = 0;
 }
 
+/* The source spelling of a trait qualifier (`a::ALen`) for diagnostics. The
+   recorded name is the C name (`a_ALen`); the namespace prefix is in `ns`. */
+static void trait_qual_name(struct Symbols *sym, int ti, char *out, int cap)
+{
+    int w = 0, i;
+    const char *ns = sym->traits[ti].ns;
+    const char *nm = sym->traits[ti].name;
+    for (i = 0; ns[i]; i++) {
+        if (ns[i] == '_') {
+            if (w + 2 >= cap) break;
+            out[w] = ':';
+            w++;
+            out[w] = ':';
+            w++;
+        } else if (w + 1 < cap) {
+            out[w] = ns[i];
+            w++;
+        }
+    }
+    if (w >= cap) w = cap - 1;
+    if (ns[0]) {
+        if (w + 2 >= cap) {
+            out[w] = 0;
+            return;
+        }
+        out[w] = ':';
+        w++;
+        out[w] = ':';
+        w++;
+        /* `name` is the mangled C name, `ns` its prefix without the trailing
+           underscore: `a` + `ALen` -> `a::ALen`. */
+        if (strncmp(nm, ns, strlen(ns)) == 0 && nm[strlen(ns)] == '_')
+            nm += strlen(ns) + 1;
+    }
+    if (w >= cap) w = cap - 1;
+    snprintf(out + w, (size_t)(cap - w), "%s", nm);
+}
+
 /* The actual node for binding parameter `idx`: a type host's parameter 0 is the
    receiver, the rest walk the call's argument chain. */
 static int map_actual_at(struct Arena *a, int recv, int args, int type_host, int idx)
@@ -2735,7 +2773,7 @@ impl EmitOps for Emitter {
                 char rk[MAX_TEXT];
                 char tk[MAX_TEXT];
                 char msg[512];
-                int r, mi, bj, cand = -1, cand2 = -1, bind = -1;
+                int r, mi, bj, cand = -1, cand2 = -1, bind = -1, bind2 = -1;
                 r = self->arena->nodes[n].a;
                 snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
                 if (r < 0 || !rt[0])
@@ -2744,6 +2782,11 @@ impl EmitOps for Emitter {
                 for (mi = 0; mi < (*self->nmaps); mi++) {
                     if (!self->maps[mi].is_static || !self->maps[mi].type_host) continue;
                     if (!map_visible(self, mi)) continue;
+                    /* P20-01: a qualified call names the trait, so only its map
+                       is a candidate even when the host type has others. */
+                    if (self->arena->nodes[n].text3[0]
+                        && strcmp(self->maps[mi].trait, self->arena->nodes[n].text3) != 0)
+                        continue;
                     map_type_key(self->maps[mi].host_type, tk);
                     if (strcmp(tk, rk) != 0) continue;
                     for (bj = 0; bj < self->maps[mi].nb; bj++)
@@ -2753,6 +2796,7 @@ impl EmitOps for Emitter {
                                 bind = bj;
                             } else if (cand2 < 0) {
                                 cand2 = mi;
+                                bind2 = bj;
                             }
                             break;
                         }
@@ -2763,9 +2807,22 @@ impl EmitOps for Emitter {
                     return self->fail_from(n, msg);
                 }
                 if (cand2 >= 0) {
+                    char q1[MAX_TEXT];
+                    char q2[MAX_TEXT];
+                    char m1[MAX_TEXT];
+                    char m2[MAX_TEXT];
+                    int t1 = self->maps[cand].b[bind].ti;
+                    int t2 = self->maps[cand2].b[bind2].ti;
+                    trait_qual_name(self->sym, t1, q1, sizeof q1);
+                    trait_qual_name(self->sym, t2, q2, sizeof q2);
+                    snprintf(m1, sizeof m1, "%s::%s", q1, self->arena->nodes[n].text2);
+                    snprintf(m2, sizeof m2, "%s::%s", q2, self->arena->nodes[n].text2);
+                    /* The hint leads: a diagnostic is capped at MAX_TEXT, and
+                       the two map paths are the part that may be cut. */
                     snprintf(msg, sizeof msg,
-                             "ambiguous type-host map for method '%s' on type '%s': '%s' and '%s'",
-                             self->arena->nodes[n].text2, rt,
+                             "use '%s' or '%s'; ambiguous type-host map for method '%s' on type '%s':"
+                             " '%s' and '%s'",
+                             m1, m2, self->arena->nodes[n].text2, rt,
                              self->maps[cand].path, self->maps[cand2].path);
                     return self->fail_from(n, msg);
                 }
