@@ -6,7 +6,7 @@
 | 严重度 | **Medium** |
 | 锚点 | `ct-pkg/hal-posix` tag `v1.0.0`（索引行 `sha256:b994b057117…`）；本仓库 `553d300`（`v0.18.0`） |
 | 文件 | [PosixHal.h.ct#L61-L67](https://github.com/ct-pkg/hal-posix/blob/v1.0.0/PosixHal.h.ct#L61-L67)；契约见 [Clock.h.ct#L1-L13](https://github.com/ct-pkg/hal/blob/v1.0.0/Clock.h.ct#L1-L13) |
-| 状态 | 已修（2026-11-02，`ct-pkg/hal-posix` commit `7a956ee`，`ct.pkg` 已改为 `1.0.1`；**tag / 索引尚未更新**，见「处置」） |
+| 状态 | 已修（2026-11-02，`ct-pkg/hal-posix` commit `7a956ee`，`ct.pkg` 曾改为 `1.0.1`）；**2026-11-07 起该版本线撤回、重启为 `0.1.0`，本轮无发布动作**，见「处置（2026-11-07，C 方案）」 |
 
 ## 现象
 
@@ -111,3 +111,17 @@ int hal_posix_now_ms(void)
 会在 `packages.yml` 的宿主与 aarch64 job 上直接失败。实测：同一份 demo 链接 `v1.0.0` 的
 `hal-posix` 输出 `clock=0`，链接 `1.0.1` 输出 `clock=1`。因此**先发包与索引、再推本仓库**，
 否则包门禁会在 `v1.0.0` 上红。
+
+## 处置（2026-11-07，C 方案：只记账，不发布）
+
+用户已决定本轮**不做任何包发布动作**，把 PKG-1 的发布面留给版本线重置：
+
+- `now_ms` 的回绕修复已经在 `ct-pkg/hal-posix` 的历史里（commit `7a956ee`，基线减法；`ct.pkg`
+  当时标 `1.0.1`）。**代码层面本 issue 已修**，缺的只是发布。
+- `1.0.0` / `1.0.1` 两个标签已于 **2026-11-06 撤回**，版本线重启为 `0.1.0`：远端
+  `ct-pkg/hal-posix` 当前**没有任何 tag**，`ct-pkg/index` 的对应行已清空，`packages.txt` 亦被
+  注释。上面的「发布待办」三步因此**全部作废**（它假设的是 1.x 版本线）。
+- 本轮**不打 `v1.0.1`、也不打 `v0.1.0`**，不刷新索引，不碰 `hal` / `hal-posix` / `index` 三个仓
+  的工作树——其中的 0.1.0 重置是他人尚未提交的在途工作。
+- 恢复条件：版本线重置落地后，PKG-1 随新版本线一并发布；届时仍按「先发包与索引、再推本仓库」
+  的顺序，才能恢复 `examples/wave1-demo` 对 `clock` 的断言。
