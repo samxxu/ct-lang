@@ -4,7 +4,7 @@
 >
 > **状态：规划中**（2026-11-06 立项；2026-11-08 按 HEAD `v0.20.2`（`0263cca`）实测勘误，补设计缺口 G1–G3
 > 与切片 S0–S7；D21-1–D21-17 仍待用户确认）。
-> **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.2`（`CTC_VERSION` 五处一致）。
+> **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.3`（`CTC_VERSION` 五处一致）。
 > 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无语义依赖）。
 > 关联：[borrow 设计](../history/design/borrow.md)、[language-spec](../language-spec.md)、
 > [std 能力缺口](../../issues/std/std1-markdown-readiness.md)、[roadmap](../roadmap.md)。
@@ -579,7 +579,7 @@ Phase 21 完成需同时满足：
 
 **Status: planned** (opened 2026-11-06; revised 2026-11-08 against HEAD `v0.20.2` = `0263cca`, adding
 gaps G1–G3, slices S0–S7 and option-level decisions; D21-1–D21-17 still await confirmation).
-**Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at `v0.20.2`; Phases 17/18/19/20 are done,
+**Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at `v0.20.3`; Phases 17/18/19/20 are done,
 Phase 20 (package support, [phase20.md](phase20.md)) is closed and has no semantic dependency here. The gate
 count is **11**.
 
