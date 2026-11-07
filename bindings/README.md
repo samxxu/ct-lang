@@ -41,6 +41,18 @@ map trait Controller for instance uart1 {          /* 5. 把方法绑到具体�
 }
 ```
 
+配方体是**一次顶层调用**：`callee(实参, ...)`。可以重排、丢弃、补常量或 `&` 取址，但不能写转型、
+逗号表达式、临时变量或第二条语句；这些形状放进同目录的 `<base>.shim.h`，配方只调 shim。违规报
+`a map recipe must be a single call`。
+
+三个正例（都来自本目录的绑定）：
+
+```c
+len(s) -> strlen(s);                             /* 接收者搬进实参 */
+send(buf, n) -> mock_uart_send(&uart1, buf, n);  /* 绑定目标补在实参前 */
+err() -> ct_sock_errno();                        /* 方法无参，接收者由宿主决定 */
+```
+
 ### 2.1 分层：`.m.ct`、C shim、`.h.ct`、不支持
 
 | 层 | 承载 | 成本 |
@@ -180,6 +192,19 @@ which binds a trait's methods to concrete calls on a **declared global instance*
 See [mock-hal/uart.h.ct](mock-hal/uart.h.ct): a pass-through `#include` so the library's declarations are
 visible, a mirrored `trait` whose signatures copy the library API, a mirrored `struct` matching the
 library's layout, one declared global instance, and a `map` that binds each method to a real call.
+
+A recipe body is **one top-level call**: `callee(args, ...)`. It may reorder or drop arguments, append
+constants and take addresses, but it cannot spell a cast, a comma expression, a temporary or a second
+statement; those shapes go into the sibling `<base>.shim.h` and the recipe calls the shim. A violation
+reports `a map recipe must be a single call`.
+
+Three positive examples (all from bindings in this directory):
+
+```c
+len(s) -> strlen(s);                             /* the receiver becomes an argument */
+send(buf, n) -> mock_uart_send(&uart1, buf, n);  /* the binding target leads */
+err() -> ct_sock_errno();                        /* no method arguments; the host decides */
+```
 
 ### 2.1 Layering: `.m.ct`, C shim, `.h.ct`, unsupported
 

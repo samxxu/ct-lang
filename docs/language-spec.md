@@ -522,6 +522,11 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
   trait 方法本身不声明它；绑定参数个数 = 方法参数个数 + 1。调用 `value.m(args)` 时按接收者的静态
   类型（数组先 decay 成元素指针）做规范化文本比较，命中后把 `recv` 换成接收者表达式；普通
   struct / 接口方法优先，查找失败才回退到类型宿主，多个候选报歧义。
+- **限定调用消解同类型多映射**（P20-01）：两个包把同名方法绑到同一宿主类型时（如都把 `len` 绑到
+  `char *`），未限定的 `value.m(args)` 会因两个候选报歧义；写成 `a::ALen::len(value, args)` 只保留
+  该 trait 的映射。限定名按符号名规则拼接（`a::ALen` → `a_ALen`），最后一段必须是该静态 trait 的
+  方法，因此不会劫持同名的命名空间函数；首实参是接收者，规则与 `value.len(args)` 相同（数组先
+  decay）。歧义诊断把两种限定写法前置在 hint 里。
 
 recipe 替换（逐出现点）：
 
@@ -2206,6 +2211,13 @@ Two host forms:
   normalized text (arrays decay to an element pointer first), and a hit substitutes `recv` with the
   receiver expression. Ordinary struct / interface methods win; the type host is only a fallback
   when that lookup fails, and several candidates are ambiguous.
+- **A qualified call disambiguates same-type mappings** (P20-01): when two packages bind the same
+  method to one host type (both bind `len` to `char *`), an unqualified `value.m(args)` reports the
+  ambiguity; `a::ALen::len(value, args)` keeps only that trait's map. The qualifier joins like symbol
+  names (`a::ALen` -> `a_ALen`) and its last segment must be a method of that static trait, so a
+  namespace function of the same name is not hijacked. The first actual is the receiver, with the
+  same rules as `value.len(args)` (arrays decay first). The ambiguity diagnostic leads with both
+  spellings.
 
 Recipe substitution (per occurrence):
 
