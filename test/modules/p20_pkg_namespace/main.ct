@@ -1,0 +1,9 @@
+import app::model::Item;
+import app::legacy::Thing;
+
+#include <stdio.h>
+
+int main(void) {
+    printf("%d %d\n", item_value(), thing_value());
+    return 0;
+}

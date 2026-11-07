@@ -64,6 +64,11 @@ pub int ct_append_flags(char *buf, int cap, const char *val);
 static int ct_ensure_dir(const char *path);
 static int ct_cmd_token(char *cmd, int cap, int *n, const char *tok);
 static int ct_cmd_raw(char *cmd, int cap, int *n, const char *frag);
+static int ct_pkg_key(const char *root, const char *key, char *out, int cap);
+static int ct_rel_cands(const char *root, const char *rel, char *first, char *fallback);
+static int ct_root_find(const char *root, const char *rel, char *out, int cap,
+                        int *is_hdr, int *is_map, char *err, int errcap);
+static int ct_same_pkg(const char *a, const char *b);
 pub trait ModuleOps {
     int  fail(const char *msg);
     int  fail_emit(const char *msg);
@@ -136,6 +141,9 @@ pub struct Module {
     char cflags[1024];          /* MAX_FLAGS: a literal, the header has no macros */
     char ldflags[1024];
 } use ModuleOps;
+
+/* Declared here, after the struct, so the parameter spells the mangled type. */
+static int ct_pkg_ns_clash(struct Module *m, char *msg, int cap, char *file, int fcap);
 
 impl ModuleOps for Module {
     /* Module failures are about the build itself -- an unreadable input, an
@@ -269,67 +277,88 @@ impl ModuleOps for Module {
     }
 
     /* A unit's interface lives in its header, so a `.h.ct` or `.m.ct` unit can
-       be imported. The search is two passes -- first every root for `a/b.h.ct`
-       and `a/b.m.ct` (the importer's own directory, then the `-I` roots, in
-       command-line order), then every root for `a/b.ct`: a plain unit there is
-       the mistake worth naming, because it is an implementation file. The two
-       importable suffixes in one root are an ambiguity. */
+       be imported. Every root is searched (the importer's own directory, then
+       the `-I` roots in command-line order). A hit in a second root is a clash,
+       not a fallback: two packages shipping `Uart` must not let the command
+       line pick one silently. A root whose package declares the first import
+       segment (`namespace = app` in its ct.pkg) is searched for the flat layout
+       (`<root>/model/Item.h.ct`) first and the doubled one
+       (`<root>/app/model/Item.h.ct`) second, so old trees keep resolving. The
+       second pass names a plain `.ct` unit, which is the mistake worth
+       reporting. */
     int resolve_import(const char *from, const char *rel, char *out, int cap,
                        int *is_hdr, int *is_map, int line)
     {
         char dir[MAX_PATH];
         char cand[MAX_PATH];
-        char hdr[MAX_PATH];
+        char first[MAX_PATH];
+        char firstroot[MAX_PATH];
+        char msg[MAX_PATH * 2 + MAX_TEXT];
         const char *root;
         FILE *f;
-        int r;
+        int r, st, hit, cand_hdr, cand_map;
         (void)self;
 
         if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
+        *is_hdr = 0;
         *is_map = 0;
+        hit = 0;
+        first[0] = 0;
+        firstroot[0] = 0;
         for (r = -1; r < self->ninc; r++) {
-            int has_h, has_m;
             root = (r < 0) ? dir : self->incdirs[r];
-            if (snprintf(hdr, sizeof hdr, "%s/%s.h.ct", root, rel) >= (int)sizeof hdr)
-                return self->fail("import path is too long");
-            f = fopen(hdr, "rb");
-            has_h = (f != NULL);
-            if (f) fclose(f);
-            if (snprintf(cand, sizeof cand, "%s/%s.m.ct", root, rel) >= (int)sizeof cand)
-                return self->fail("import path is too long");
-            f = fopen(cand, "rb");
-            has_m = (f != NULL);
-            if (f) fclose(f);
-            if (has_h && has_m) {
-                char msg[MAX_PATH + MAX_PATH];
-                snprintf(msg, sizeof msg,
-                         "import '%s' is ambiguous: both %s and %s exist", rel, hdr, cand);
+            st = ct_root_find(root, rel, cand, sizeof cand, &cand_hdr, &cand_map,
+                              msg, sizeof msg);
+            if (st < 0) {
                 if (line > 0) return tool::diag::ct_sem_error(line, 1, msg, from);
                 return self->fail(msg);
             }
-            if (has_h) {
-                *is_hdr = 1;
-                if (snprintf(out, (size_t)cap, "%s", hdr) >= cap) return self->fail("import path is too long");
-                return 0;
+            if (st == 0) continue;
+            if (!hit) {
+                hit = 1;
+                snprintf(first, sizeof first, "%s", cand);
+                snprintf(firstroot, sizeof firstroot, "%s", root);
+                *is_hdr = cand_hdr;
+                *is_map = cand_map;
+                continue;
             }
-            if (has_m) {
-                *is_map = 1;
-                if (snprintf(out, (size_t)cap, "%s", cand) >= cap) return self->fail("import path is too long");
-                return 0;
-            }
+            /* The same file reached through two roots (a duplicate `-I`, or the
+               importer's own directory also given as a root) and the same
+               package vendored twice are not clashes (R6). */
+            if (strcmp(cand, first) == 0) continue;
+            if (ct_same_pkg(root, firstroot)) continue;
+            snprintf(msg, sizeof msg,
+                     "unit '%s' exists in two import roots: '%s' and '%s'",
+                     rel, first, cand);
+            if (line > 0) return tool::diag::ct_sem_error(line, 1, msg, from);
+            return self->fail(msg);
+        }
+        if (hit) {
+            if (snprintf(out, (size_t)cap, "%s", first) >= cap)
+                return self->fail("import path is too long");
+            return 0;
         }
         for (r = -1; r < self->ninc; r++) {
+            char flat[MAX_TEXT];
+            char doubled[MAX_TEXT];
+            int nc, ci;
             root = (r < 0) ? dir : self->incdirs[r];
-            if (snprintf(cand, sizeof cand, "%s/%s.ct", root, rel) >= (int)sizeof cand)
-                return self->fail("import path is too long");
-            f = fopen(cand, "rb");
-            if (f) {
-                fclose(f);
-                if (snprintf(cand, sizeof cand,
-                             "only a .h.ct unit can be imported: rename '%s.ct' to '%s.h.ct'",
-                             rel, rel) >= (int)sizeof cand)
+            nc = ct_rel_cands(root, rel, flat, doubled);
+            for (ci = 0; ci < nc; ci++) {
+                const char *c;
+                if (ci == 0) c = flat;
+                else c = doubled;
+                if (snprintf(cand, sizeof cand, "%s/%s.ct", root, c) >= (int)sizeof cand)
                     return self->fail("import path is too long");
-                return self->fail(cand);
+                f = fopen(cand, "rb");
+                if (f) {
+                    fclose(f);
+                    if (snprintf(cand, sizeof cand,
+                                 "only a .h.ct unit can be imported: rename '%s.ct' to '%s.h.ct'",
+                                 rel, rel) >= (int)sizeof cand)
+                        return self->fail("import path is too long");
+                    return self->fail(cand);
+                }
             }
         }
         snprintf(cand, sizeof cand, "cannot resolve import '%s'", rel);
@@ -915,6 +944,18 @@ impl ModuleOps for Module {
             }
             self->nsroot = root;
         }
+        /* P20-06: a namespace segment names one package, so two roots claiming
+           the same segment make every `import <seg>::x` ambiguous regardless of
+           which files exist. */
+        {
+            char nmsg[MAX_PATH * 2 + MAX_TEXT];
+            char nfile[MAX_PATH];
+            if (ct_pkg_ns_clash(self, nmsg, sizeof nmsg, nfile, sizeof nfile)) {
+                tool::diag::ct_sem_error(1, 1, nmsg, nfile);
+                fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
+                return 1;
+            }
+        }
 
         self->nunits = 0;
         self->arena->reset();
@@ -1232,6 +1273,162 @@ static int ct_ensure_dir(const char *path)
 
     if (stat(path, &st) == 0) return S_ISDIR(st.st_mode) ? 0 : -1;
     return mkdir(path, 0755) == 0 ? 0 : -1;
+}
+
+/* One manifest key of the package rooted at `root`. `tool/pkg` owns the real
+   parser, but that layer sits above the frontend and the module resolver must
+   not depend on it (a build never reads a vendor manifest); only `namespace`
+   and `name` matter here. Returns 1 when the key carries a value, 0 for a
+   missing manifest, a missing key, or an empty value. */
+static int ct_pkg_key(const char *root, const char *key, char *out, int cap)
+{
+    char path[MAX_PATH];
+    char line[320];
+    FILE *f;
+    size_t kl;
+    int found;
+
+    out[0] = 0;
+    if (snprintf(path, sizeof path, "%s/ct.pkg", root) >= (int)sizeof path) return 0;
+    f = fopen(path, "rb");
+    if (!f) return 0;
+    kl = strlen(key);
+    found = 0;
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *p;
+        char *v;
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, key, kl) != 0) continue;
+        p += kl;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p != '=') continue;
+        p++;
+        while (*p == ' ' || *p == '\t') p++;
+        v = p;
+        while (*p && *p != '\n' && *p != '\r' && *p != ' '
+               && *p != '\t' && *p != '#') p++;
+        *p = 0;
+        if (v[0]) {
+            snprintf(out, (size_t)cap, "%s", v);
+            found = 1;
+        }
+        break;
+    }
+    fclose(f);
+    return found;
+}
+
+/* The relative paths one root offers for `rel`. A package that declares
+   `namespace = app` owns the first import segment, so `app::model::Item` names
+   `model/Item` under that root; the doubled layout the old convention forced
+   stays as the compatibility fallback. Returns the candidate count. */
+static int ct_rel_cands(const char *root, const char *rel, char *first, char *fallback)
+{
+    char ns[MAX_TEXT];
+    size_t nl;
+
+    snprintf(first, MAX_TEXT, "%s", rel);
+    if (!ct_pkg_key(root, "namespace", ns, sizeof ns)) return 1;
+    nl = strlen(ns);
+    if (nl == 0 || strncmp(rel, ns, nl) != 0 || rel[nl] != '/' || rel[nl + 1] == 0)
+        return 1;
+    snprintf(first, MAX_TEXT, "%s", rel + nl + 1);
+    snprintf(fallback, MAX_TEXT, "%s", rel);
+    return 2;
+}
+
+/* Resolve `rel` under one root: 1 found, 0 absent, -1 ambiguous or too long
+   (`err` carries the message). Both importable suffixes in one root are an
+   ambiguity, exactly as before; the namespace candidates are tried in order. */
+static int ct_root_find(const char *root, const char *rel, char *out, int cap,
+                        int *is_hdr, int *is_map, char *err, int errcap)
+{
+    char flat[MAX_TEXT];
+    char doubled[MAX_TEXT];
+    char hdr[MAX_PATH];
+    char map[MAX_PATH];
+    int nc, ci, has_h, has_m;
+    FILE *f;
+
+    *is_hdr = 0;
+    *is_map = 0;
+    nc = ct_rel_cands(root, rel, flat, doubled);
+    for (ci = 0; ci < nc; ci++) {
+        const char *c;
+        if (ci == 0) c = flat;
+        else c = doubled;
+        if (snprintf(hdr, sizeof hdr, "%s/%s.h.ct", root, c) >= (int)sizeof hdr
+            || snprintf(map, sizeof map, "%s/%s.m.ct", root, c) >= (int)sizeof map) {
+            snprintf(err, (size_t)errcap, "import path is too long");
+            return -1;
+        }
+        f = fopen(hdr, "rb");
+        has_h = (f != NULL);
+        if (f) fclose(f);
+        f = fopen(map, "rb");
+        has_m = (f != NULL);
+        if (f) fclose(f);
+        if (has_h && has_m) {
+            snprintf(err, (size_t)errcap,
+                     "import '%s' is ambiguous: both %s and %s exist", rel, hdr, map);
+            return -1;
+        }
+        if (has_h) {
+            *is_hdr = 1;
+            if (snprintf(out, (size_t)cap, "%s", hdr) >= cap) {
+                snprintf(err, (size_t)errcap, "import path is too long");
+                return -1;
+            }
+            return 1;
+        }
+        if (has_m) {
+            *is_map = 1;
+            if (snprintf(out, (size_t)cap, "%s", map) >= cap) {
+                snprintf(err, (size_t)errcap, "import path is too long");
+                return -1;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Two roots that both hold copies of one package (a checkout plus its vendored
+   tree) are not a clash: the manifest name is the package's identity (R6). A
+   root without a manifest is identified by its path alone. */
+static int ct_same_pkg(const char *a, const char *b)
+{
+    char na[MAX_TEXT];
+    char nb[MAX_TEXT];
+
+    if (strcmp(a, b) == 0) return 1;
+    if (!ct_pkg_key(a, "name", na, sizeof na)) return 0;
+    if (!ct_pkg_key(b, "name", nb, sizeof nb)) return 0;
+    return strcmp(na, nb) == 0;
+}
+
+/* The same segment claimed by two `-I` roots: an error, never a silent pick.
+   `file` names the later manifest, which is the one to change. */
+static int ct_pkg_ns_clash(struct Module *m, char *msg, int cap, char *file, int fcap)
+{
+    char ns[MAX_TEXT];
+    int i, j;
+
+    for (i = 0; i < m->ninc; i++) {
+        if (!ct_pkg_key(m->incdirs[i], "namespace", ns, sizeof ns)) continue;
+        for (j = 0; j < i; j++) {
+            char other[MAX_TEXT];
+            if (!ct_pkg_key(m->incdirs[j], "namespace", other, sizeof other)) continue;
+            if (strcmp(ns, other) != 0) continue;
+            snprintf(msg, (size_t)cap,
+                     "package namespace '%s' is declared by two import roots: '%s' and '%s'",
+                     ns, m->incdirs[j], m->incdirs[i]);
+            snprintf(file, (size_t)fcap, "%s/ct.pkg", m->incdirs[i]);
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /* One shell-quoted token on the growing cc line. */

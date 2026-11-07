@@ -1,0 +1,4 @@
+/* The package root is also the namespace root: `app::model::Item` names
+   model/Item.h.ct, without an extra `app/` directory level. */
+pub int item_value(void);
+int item_value(void) { return 7; }

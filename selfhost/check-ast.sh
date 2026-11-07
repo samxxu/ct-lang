@@ -681,6 +681,37 @@ else
     bad "inc" "$(cat "$work/minc.err" "$work/minc.cc" "$work/minc.stdout")"
 fi
 
+# P20-06: `namespace = app` in a package's ct.pkg claims the first import
+# segment, so `import app::model::Item` names model/Item.h.ct at the root; the
+# doubled `app/legacy/Thing.h.ct` layout keeps resolving as the fallback.
+rm -rf "$mod-pns"
+mkdir -p "$mod-pns"
+if "$work/ct-ast" build --emit-c -I test/modules/p20_pkg_namespace \
+        test/modules/p20_pkg_namespace/main.ct -o "$mod-pns" \
+        >"$work/mpns.out" 2>"$work/mpns.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-pns"/*.c -o "$work/mpns.bin" 2>"$work/mpns.cc" \
+   && "$work/mpns.bin" >"$work/mpns.stdout" 2>&1 \
+   && cmp -s "$work/mpns.stdout" test/modules/p20_pkg_namespace/expected.out; then
+    ok "p20_pkg_namespace (ct.pkg namespace = app; flat and doubled layouts)"
+else
+    bad "p20_pkg_namespace" "$(cat "$work/mpns.err" "$work/mpns.cc" "$work/mpns.stdout")"
+fi
+
+# One unit name in two `-I` roots is an error that names both, never a silent
+# first-root win.
+rm -rf "$mod-pdu"
+mkdir -p "$mod-pdu"
+if "$work/ct-ast" build --emit-c -I test/modules/p20_dup_unit/a \
+        -I test/modules/p20_dup_unit/b test/modules/p20_dup_unit/main.ct \
+        -o "$mod-pdu" >"$work/mpdu.out" 2>"$work/mpdu.err"; then
+    bad "p20_dup_unit" "expected a non-zero exit"
+elif grep -qF "unit 'Uart' exists in two import roots: 'test/modules/p20_dup_unit/a/Uart.h.ct' and 'test/modules/p20_dup_unit/b/Uart.h.ct'" \
+        "$work/mpdu.err"; then
+    ok "p20_dup_unit (one unit in two import roots names both)"
+else
+    bad "p20_dup_unit" "$(head -2 "$work/mpdu.err")"
+fi
+
 rm -rf "$mod-hdr"
 mkdir -p "$mod-hdr"
 if "$work/ct-ast" build --emit-c test/modules/hdr/main.h.ct -o "$mod-hdr" \

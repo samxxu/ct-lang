@@ -1,0 +1,4 @@
+/* Same unit name as b/Uart.h.ct: the two roots must not let the command
+   line pick one silently. */
+pub int uart_id(void);
+int uart_id(void) { return 1; }

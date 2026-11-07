@@ -1,0 +1,4 @@
+/* The doubled layout the old convention forced still resolves: the flat
+   candidate is absent, so the resolver falls back to `app/legacy/Thing`. */
+pub int thing_value(void);
+int thing_value(void) { return 5; }
