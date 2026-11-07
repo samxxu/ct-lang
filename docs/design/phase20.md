@@ -3,7 +3,8 @@
 > 中文 · [English](#english)
 >
 > **状态：完成**（2026-11-07；P20-01 / 02 / 03 / 04 / 06 / 08 落地，收口 `v0.20.0`；
-> P20-05 移出本轮，P20-07 延后）。
+> P20-05 只把 **ct-pkg 侧的索引生成器**移出本轮（ct 侧 `pkg_index_lookup` 仍是本仓欠账），
+> P20-07 延后）。
 > **版本口径：Phase 20 ↔ `v0.20.x`，已收口 bump 到 `v0.20.0`**（`CTC_VERSION` 五处一致）。
 > 主题不是「补功能」，而是：**凡是「包本该能做好、却被编译器或工具链挡住」的地方，都归本相。**
 > 关联：[package-guide](../package-guide.md)、[roadmap](../roadmap.md)、
@@ -32,7 +33,8 @@
 
 核对方式：读源码 + 用 `ct v0.19.1` 做最小复现。**「有 issue 记录」不等于「已修」**；
 只有提交、文档与门禁三样齐全才算完成。本相 **01–04、06、08 已完成**（收口 `v0.20.0`），
-**05 移出本轮**（索引保留全版本，另立阶段），**07 延后**（去虚拟化，P2 候选）。
+**05 只移出 ct-pkg 侧的索引生成器**（全版本索引由 ct-pkg 仓库另立阶段；**ct 侧
+`pkg_index_lookup` 仍是本仓欠账**，不随本轮移交），**07 延后**（去虚拟化，P2 候选）。
 下表的「判定」保留立项时的结论，不随本轮交付范围改写。
 
 #### 1.1 用户清单的逐条核实
@@ -47,7 +49,7 @@
 | B6 | 声明后的 `import` 静默丢弃（SH-57） | **成立**。[SH-57](../../issues/selfhost/sh57-import-after-decl-silently-dropped.md) 待修；`Module.h.ct:239-266` 遇到首个非预处理/非 import token 就停 | **进 P0** |
 | B7 | `use` 结构体方法永远走 vtable | **成立**。`Emitter.h.ct:2789-2800`：具体 struct 接收者仍发 `->__<trait>_vptr->method(...)`，无静态类型快路径 | **延后**（原 P2，接受 golden 重生成） |
 | C8 | `requires` 与 `dep` 两套语义易混 | **半成立**。写错 `requires` 会报 `has an unsupported requires`，不是全静默；但 `requires` 不满足**只告警**（`Pkg.h.ct:1562`，package-guide 也写明「不满足只告警」） | **进 P0**（改为硬失败）；文案并入 P2 |
-| C9 | 索引只收录每个仓库最高 tag | **成立**。`ct-pkg/index/tools/refresh-index.sh` 用 `sort -V \| tail -1`，每包只写一行；`ct-pkg/index/index` 即此形态 | **移出本轮**（原 P1） |
+| C9 | 索引只收录每个仓库最高 tag | **成立**。`ct-pkg/index/tools/refresh-index.sh` 用 `sort -V \| tail -1`，每包只写一行；`ct-pkg/index/index` 即此形态 | **ct-pkg 侧生成器移出本轮**（原 P1；ct 侧 `pkg_index_lookup` 仍欠） |
 | C10 | `ct install` 按包打印 `-I vendor/<pkg>`，命名空间根被迫等于包根 | **成立，但根源不是 `-I`**。`Pkg.h.ct:1291` 打印 `-I vendor/<pkg>`；导入路径按目录解析，所以想写 `import std::str::String` 就必须有 `std/std/str/String.m.ct`。std、zlib、sqlite、clib 四包都已中招；net-posix 靠改用 `namespace net` 绕开；png 把 `Png.m.ct` 放在包根，与其余包不一致 | **进 P1**（包命名空间身份） |
 
 #### 1.2 用户清单之外、实测发现的三条
@@ -67,7 +69,8 @@
 
 优先级：**P0 = 不做就会让包之间无法组合 / 静默出错；P1 = 包作者要改设计才能绕开；P2 = 有成本但可延后。**
 
-**本轮交付**：P20-01 / 02 / 03 / 04 / 06 / 08 已落地；**P20-05 移出本轮**、**P20-07 延后**，
+**本轮交付**：P20-01 / 02 / 03 / 04 / 06 / 08 已落地；**P20-05 只移出 ct-pkg 侧的索引
+生成器**（`ct` 侧 `pkg_index_lookup` 仍是本仓欠账）、**P20-07 延后**，
 两项的需求与验收判据保留在下面，作为后续独立阶段的输入，不再作为本相完成判据。
 
 #### P20-01（P0）类型宿主方法的冲突可解
@@ -110,7 +113,7 @@
   - `--force` 打印 warning 后继续；
   - `std` 在 `v0.19.1` 上安装失败（符合其 `requires >= 0.20.0`），在 `v0.20.0` 上成功。
 
-#### P20-05（P1，已移出本轮）索引保留版本历史，按区间解析
+#### P20-05（P1，ct-pkg 侧生成器移出本轮）索引保留版本历史，按区间解析
 
 - **目标**：旧编译器能拿到兼容旧版，而不是只能拿到最高 tag。
 - **做法**：`refresh-index.sh` 为每个 `v*` tag 写一行（含 `requires` 字段）；`pkg_index_lookup` 在满足请求区间与包 `requires` 的候选里取最高版本；索引格式保持向后兼容（旧 `ct` 仍能解析第一行/五字段行）。
@@ -119,7 +122,7 @@
   - `v0.19.1` 上 `ct get std@^0.1` 选中 0.1.x 并成功安装；
   - `v0.20.0` 上 `ct get std@^0.2` 选中 0.2.0；
   - `ct.lock` 固定被选中的 tag 与摘要。
-- **本轮状态**：**移出本轮**，不与 `v0.20.0` 一起交付；上面目标与验收保留，另立阶段时直接沿用。
+- **本轮状态**：只把 **ct-pkg 侧的索引生成器**（`refresh-index.sh` 为每个 tag 写一行）移出本轮，由 ct-pkg 仓库另立阶段；**ct 侧的 `pkg_index_lookup` 区间解析仍是本仓欠账**，不在本轮移交，也尚未实现。
 
 #### P20-06（P1）包命名空间身份 + 跨根重名检测
 
@@ -176,7 +179,7 @@
 | P20-02 late import | P0 | 无 | 同上 |
 | P20-03 映射 arity | P0 | 无 | 同上 |
 | P20-04 requires 硬失败 | P0 | 无 | 同上 |
-| P20-05 索引历史 | P1（移出本轮） | **P20-04**（失败语义先定） | 本轮不做；后续阶段与 06 并行 |
+| P20-05 索引历史 | P1（仅 ct-pkg 侧生成器移出） | **P20-04**（失败语义先定） | 本轮不做生成器；ct 侧 `pkg_index_lookup` 仍欠 |
 | P20-06 包命名空间 | P1 | 无（但是解析器改动，需单独窗口） | 与 01/03 不同文件可并行 |
 | P20-07 去虚拟化 | P2（延后） | 无 | 本轮不做；重启时**单独重生成 golden** |
 | P20-08 文案与文档 | P2 | 01/04 的文案定稿 | 最后统一 |
@@ -191,7 +194,7 @@
 | 里程碑 | 内容 | 判据 |
 | --- | --- | --- |
 | M20-A | P0 语义闭合 | 01–04 的探针全绿；全仓语料 + ct-pkg 七包零新增失败；除新增诊断外无生成物变化 |
-| M20-B | 生态可用 | **06 完成**：新布局与旧布局都能解析；跨根重名报错（**05 已移出本轮，不再作为判据**） |
+| M20-B | 生态可用 | **06 完成**：新布局与旧布局都能解析；跨根重名报错（**05 只移出 ct-pkg 侧生成器、ct 侧 `pkg_index_lookup` 仍欠，不再作为判据**） |
 | M20-C | 收口 | **08 文案与文档落地**；11 道硬门禁全绿（**07 已延后，去虚拟化与 golden 重生成不再作为判据**） |
 | M20-D | 发布 | 11 道硬门禁 + CI + nightly 全绿；`CTC_VERSION` bump `0.20.0`；带上 `915c12c` 并写入版本记录 |
 
@@ -218,7 +221,7 @@
 | D20-2 | 是否做 re-export | **不做** | 已确认 |
 | D20-3 | `.m.ct` 是否放开 `#ct-raw` | **不放开**，只改文案 | 已确认 |
 | D20-4 | `requires` 不满足 | **硬失败 + `--force`** | 已确认（P20-04 已落地） |
-| D20-5 | 索引是否保留全版本 | **保留**，行尾追加 `requires` 字段 | 移出本轮，随 P20-05 |
+| D20-5 | 索引是否保留全版本 | **保留**，行尾追加 `requires` 字段 | 仅 ct-pkg 侧生成器移出；ct 侧 `pkg_index_lookup` 仍欠 |
 | D20-6 | 包命名空间键名 | `namespace = <seg>`（可选，默认无） | 已确认（P20-06 已落地） |
 | D20-7 | 跨根同名单元 | **报错**，不静默先到先得 | 已确认（P20-06 已落地） |
 | D20-8 | 去虚拟化范围 | 仅具体 struct 接收者；iface 不动 | 延后，随 P20-07 |
@@ -232,7 +235,8 @@
 ### Summary
 
 **Status: done** (2026-11-07). **Phase 20 ↔ `v0.20.x`, closed at `v0.20.0`.** P20-01 / 02 / 03 / 04 /
-06 / 08 landed; P20-05 was moved out of this phase and P20-07 was deferred, so neither is an exit
+06 / 08 landed; for P20-05 only the **ct-pkg-side index generator** was moved out of this round (the
+ct-side `pkg_index_lookup` is still owed in this repo), and P20-07 was deferred — so neither is an exit
 criterion. The theme is package support: any place where a package author is forced into a second-class
 design by the compiler or the toolchain. A restriction counts only when it forces the package's *design*
 to change for reasons unrelated to its domain.
@@ -257,7 +261,7 @@ to change for reasons unrelated to its domain.
 | P20-02 | P0 | Reject `import` outside the prologue | landed |
 | P20-03 | P0 | Check map-method arity at the call site | landed |
 | P20-04 | P0 | Make an unsatisfied `requires` a hard failure (`--force` overrides) | landed |
-| P20-05 | P1 | Keep all tags in the index; resolve by range + `requires` | **moved out of this phase** |
+| P20-05 | P1 | Keep all tags in the index; resolve by range + `requires` | **ct-pkg-side generator moved out** (ct-side `pkg_index_lookup` still owed) |
 | P20-06 | P1 | Optional `namespace =` in `ct.pkg`; reject duplicate unit names across roots | landed |
 | P20-07 | P2 | Devirtualize `use` calls on concrete struct receivers (golden regeneration expected) | **deferred** |
 | P20-08 | P2 | Diagnostics and docs: shim path in the `.m.ct` error, `dep` hint, `.h.ct` clarification | landed |
@@ -270,4 +274,5 @@ declares `requires = ct >= 0.20.0` because of it.
 
 **Exit:** 11 hard gates plus the new probes green; all seven ct-pkg packages build with zero new failures;
 old layouts still resolve (the new `namespace =` layout coexists); `CTC_VERSION` bumped to `0.20.0`.
-P20-05 and P20-07 are explicitly not part of this exit.
+The ct-pkg-side P20-05 index generator and P20-07 are explicitly not part of this exit; the ct-side
+`pkg_index_lookup` range resolution remains owed in this repo.
