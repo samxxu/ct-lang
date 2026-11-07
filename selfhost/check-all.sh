@@ -34,6 +34,19 @@ set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
+# A missing host tool used to surface as one failed assertion per fixture (CI-3):
+# without `diff` every golden "differs", which reads as "the compiler is broken"
+# on a minimal image. Check the tools once, name the missing ones on one line and
+# stop before any gate runs.
+missing=
+for t in "${CC:-cc}" diff python3 git; do
+    command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
+done
+if [ -n "$missing" ]; then
+    printf 'missing prerequisite:%s\n' "$missing" >&2
+    exit 1
+fi
+
 # Under -Wall -Wextra, GCC >= 8 also enables -Wformat-truncation and fires on a
 # batch of snprintf calls in the frozen L0/L1/L2 sources; Apple clang, the
 # baseline compiler for "zero warnings", does not. Wrap GCC so the gates mean the
