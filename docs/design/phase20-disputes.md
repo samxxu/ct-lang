@@ -159,7 +159,7 @@ pub int add(int a, int b) { return a + b; }
   `!traits[t].is_static` 时执行；`.m.ct` 的静态 trait 被显式豁免。
 - `issues/selfhost/sh56-map-method-arity-unchecked.md` 记录复现，状态「待修」。
 
-**处置**：**进 P0**（P20-03）：静态映射按 trait 声明在调用点校验实参个数；多写、少写都报错。
+**处置**：**进 P0**（P20-03）：静态映射按 trait 声明在调用点校验实参个数；多写、少写都产生 arity 诊断——`ct build` / `ct compile` 下按 `warning:` 打印、退出 0（多余实参被配方丢弃），`ct check` 下同一记录升为 `error:` 并退出 1。
 
 **待裁决点**：无。
 

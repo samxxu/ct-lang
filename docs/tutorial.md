@@ -599,6 +599,8 @@ buf.encode(233, 16);
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
 退出码：成功 `0`，语法或 I/O 错误 `1`。**源码诊断**（解析期与语义期）格式为 `文件:行:列: error: 描述`；
+语义类记录（调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移）在 `ct build` / `ct compile` 下按
+`warning:` 打印、**不改变退出码**（编译期放行），只有 `ct check` 把同一批记录升为 `error:` 并退出 `1`；
 **驱动层**错误（输入打不开、参数不对、超过上限）以 `ctc: ` 开头，不假装指向某一行。
 
 ## 12. 会踩的坑
@@ -1240,7 +1242,10 @@ working program. This overview does not repeat them; both files live in the pack
 | `ct -v` / `ct -h` | version / usage |
 
 Exit codes: `0` on success, `1` on syntax or I/O errors. **Source diagnostics** (parse and semantic)
-read `file:line:col: error: message`; **driver-level** failures (an input that cannot be opened, a bad
+read `file:line:col: error: message`; semantic records (call-site arity / argument types /
+trait-method ambiguity / impl signature drift) are printed as `warning:` under `ct build` /
+`ct compile` and **do not change the exit code**, while `ct check` lifts the same records to
+`error:` and exits `1`; **driver-level** failures (an input that cannot be opened, a bad
 option, a limit) start with `ctc: ` and do not pretend to point at a line.
 
 ### 12. Traps
