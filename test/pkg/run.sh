@@ -229,6 +229,30 @@ else
 fi
 
 echo
+echo "== ct get refuses an upgrade without touching vendor/ =="
+# M2: the requires check runs before the tree is copied, so a refused upgrade
+# leaves the previously vendored copy byte-identical, not only ct.lock.
+mkdir -p "$work/up/proj" "$work/up/v1" "$work/up/v2"
+printf 'name = mix\nversion = 0.1.0\n' >"$work/up/v1/ct.pkg"
+printf 'pub int mix(void);\nint mix(void) { return 1; }\n' >"$work/up/v1/mix.h.ct"
+printf 'name = mix\nversion = 0.2.0\nrequires = ct >= 99.0.0\n' >"$work/up/v2/ct.pkg"
+printf 'pub int mix(void);\nint mix(void) { return 2; }\n' >"$work/up/v2/mix.h.ct"
+printf 'name = up\nversion = 0.1.0\n' >"$work/up/proj/ct.pkg"
+if ( cd "$work/up/proj" && "$work/ct-ast" get ../v1 >/dev/null 2>&1 ); then
+    ok "the baseline get vendors mix 0.1.0"
+else
+    bad "requires upgrade" "the baseline get failed"
+fi
+cp -R "$work/up/proj/vendor/mix" "$work/up/before"
+if ( cd "$work/up/proj" && "$work/ct-ast" get ../v2 >/dev/null 2>&1 ); then
+    bad "requires upgrade" "ct get should refuse the upgrade"
+elif diff -r "$work/up/before" "$work/up/proj/vendor/mix" >/dev/null 2>&1; then
+    ok "a refused upgrade leaves vendor/mix byte-identical"
+else
+    bad "requires upgrade" "vendor/mix changed on the failure path"
+fi
+
+echo
 echo "== ct install rejects a tampered vendor tree =="
 printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.h.ct"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/it.out" 2>"$work/it.err" ); then

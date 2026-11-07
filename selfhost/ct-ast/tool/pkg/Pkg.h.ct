@@ -99,6 +99,10 @@ struct Pkg {
     /* `ct install --force` downgrades a `requires` mismatch to a warning; the
        default is to refuse, so an incompatible package cannot be wired in. */
     int  force;
+    /* `ct get` enforces `requires` while it walks the spec (M2); `ct update`
+       re-resolves pins offline and deliberately does not, so this is a `get`
+       mode rather than a property of `get_one` itself. */
+    int  check_requires;
     /* The optional index: `--index <path>` wins over `CT_INDEX`. Nothing is
        built in -- a package name only resolves through an index the user named. */
     char index[MAX_PKG_PATH];
@@ -941,6 +945,24 @@ impl PkgOps for Pkg {
         snprintf(self->seen[self->nseen], MAX_TEXT, "%s", mname);
         self->nseen++;
 
+        /* M2: the same pre-copy check as `get_one`, so a git source whose
+           `requires` is unsatisfied never replaces `vendor/<name>`. */
+        if (self->check_requires) {
+            char mreq[MAX_TEXT], mcf[MAX_TEXT], mlf[MAX_TEXT];
+            if (pkg_read_meta(cache, mcf, sizeof mcf, mlf, sizeof mlf,
+                              mreq, sizeof mreq) != 0) {
+                fprintf(stderr, "ctc: package '%s' has metadata that does not fit\n", mname);
+                return -1;
+            }
+            if (pkg_check_requires(mname, mreq) != 0) {
+                if (!self->force) {
+                    fprintf(stderr, "ctc: use --force to get anyway\n");
+                    return -1;
+                }
+                fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
+            }
+        }
+
         for (i = 0; i < ndeps; i++)
             if (self->get_spec(deps[i], cache, depth + 1) != 0) return -1;
 
@@ -1045,6 +1067,26 @@ impl PkgOps for Pkg {
         }
         snprintf(self->seen[self->nseen], MAX_TEXT, "%s", name);
         self->nseen++;
+
+        /* M2: `requires` is checked before the tree reaches `vendor/`, so a
+           refused package leaves the previous copy byte-identical. `get()` used
+           to make this check after the copy, which is why a rejected upgrade
+           still replaced `vendor/<name>` while leaving `ct.lock` alone. */
+        if (self->check_requires) {
+            char mreq[MAX_TEXT], mcf[MAX_TEXT], mlf[MAX_TEXT];
+            if (pkg_read_meta(dir, mcf, sizeof mcf, mlf, sizeof mlf,
+                              mreq, sizeof mreq) != 0) {
+                fprintf(stderr, "ctc: package '%s' has metadata that does not fit\n", name);
+                return -1;
+            }
+            if (pkg_check_requires(name, mreq) != 0) {
+                if (!self->force) {
+                    fprintf(stderr, "ctc: use --force to get anyway\n");
+                    return -1;
+                }
+                fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
+            }
+        }
 
         for (i = 0; i < ndeps; i++)
             if (self->get_spec(deps[i], dir, depth + 1) != 0) return -1;
@@ -1194,6 +1236,7 @@ impl PkgOps for Pkg {
         self->locklen = 0;
         self->nseen = 0;
         self->nlocks = 0;
+        self->check_requires = 1;
         self->lock[0] = 0;
         /* `copy_tree` creates the package directory itself, not its parent */
         if (self->ensure_dir("./vendor") != 0) {
