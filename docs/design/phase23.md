@@ -4,7 +4,7 @@
 >
 > **状态：规划中**（2026-11-07；仅落规划，不含实现。2026-11-08 勘误：Phase 22 已随 `v0.22.0` 落地，
 > 本相可直接在 `parse_loop` / `N_LOOP` 的 `b` 槽上接双界，`loop_depth` 在 `struct Stmt`）。
-> **版本口径：Phase 23 ↔ `v0.23.x`，收口 bump 到 `v0.23.0`。** 前置 `v0.22.0` 已发布。
+> **版本口径：Phase 23 ↔ `v0.23.x`，收口 bump 到 `v0.23.0`。** 前置 `v0.22.0`。
 > 关联：[phase22.md](phase22.md)（`loop(n)`，本相前置）、[roadmap.md](../roadmap.md)、
 > [language-spec.md](../language-spec.md)。Phase 20（包支持）、Phase 21（闭包）见 `phase20.md` / `phase21.md`。
 > 本相只给 `loop` 增加「显式起点」形态：**不改已定稿语义、不新增类型、不新增运行时**。

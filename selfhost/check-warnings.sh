@@ -19,7 +19,11 @@
 #
 # The gate is strict on purpose. `_self` / vtable / Drop helpers used to warn
 # when unused (issue SH-10); the emitter now silences them at the source
-# (`(void)self;`, referenced helpers), so there is no allow-list to maintain.
+# (`(void)self;`, referenced helpers), so there is no general allow-list to
+# maintain. There is exactly one pinned exception: `loop_count_type` carries a
+# non-integer `loop` count on purpose (L22-5), and that record reuses the 19.2
+# `type mismatch` wording. It must fire exactly once -- zero would mean the
+# check went silent, so do not delete the pin when tidying this comment.
 # A fixture that legitimately cannot compile warning-free does not belong here:
 # fix the emitter or the fixture.
 #

@@ -31,10 +31,10 @@
 
 | 旧表述 | 实测 | 证据 | 处理 |
 | --- | --- | --- | --- |
-| `--line` 下「由既有语句路径重锚 `#line <loop 所在行>`」 | 发射器**没有逐语句** `#line`；只有单元级 `#line 1 "<path>"` 与 raw / 闭包产物的个别重锚 | `Emitter.h.ct:1104`（单元级）、`Emitter.h.ct:884`（raw）、`Emitter.h.ct:943/964/1002`（闭包） | 改为「不新增逐语句锚点」，见 §3.7 |
-| `__ct_loop_n_K` 的 `K`「每函数内单调递增」 | `ntmp` 挂在文件级单例 `g_emit` 上，**从不重置**，是进程级单调（跨单元也不重号） | `Emitter.h.ct:195`（字段）、`Emitter.h.ct:2250`（既有自增）、`Emitter.h.ct:3555`（单例） | 改为「进程级单调」，见 §3.9 |
+| `--line` 下「由既有语句路径重锚 `#line <loop 所在行>`」 | 发射器**没有逐语句** `#line`；只有单元级 `#line 1 "<path>"` 与 raw / 闭包产物的个别重锚 | `Emitter.h.ct:1090`（单元级）、`Emitter.h.ct:870`（raw）、`Emitter.h.ct:929/950/988`（闭包） | 改为「不新增逐语句锚点」，见 §3.7 |
+| `__ct_loop_n_K` 的 `K`「每函数内单调递增」 | `ntmp` 挂在文件级单例 `g_emit` 上，**从不重置**，是进程级单调（跨单元也不重号） | `Emitter.h.ct:195`（字段）、`Emitter.h.ct:2236`（既有自增）、`Emitter.h.ct:3541`（单例） | 改为「进程级单调」，见 §3.9 |
 | H22-1「未使用的隐式 `i` 可能触发告警」 | 编译器**没有**未使用局部变量的诊断；`unused` 只出现在生成物的 `__attribute__((unused))` 与 map 使用计数 | 全仓 `selfhost/ct-ast/**` 无「never read / never used」类检查 | **结案**：CT 侧零告警；C 侧 `-Wall -Wextra` 也不告警（`i` 参与条件与自增），见 §6.4 |
-| `Warn.kind = 7` 只需 `record_*` 一处 | `Diag.emit` 对 kind 1–6 有专门文本与 JSON 分支，其余**一律落进 `potential_leak` 默认分支** | `Diag.h.ct:269-337`（JSON 链）、`Diag.h.ct:358-378`（文本链） | S3 必须同时加文本分支与 JSON 分支，见 §4.3 |
+| `Warn.kind = 7` 只需 `record_*` 一处 | `Diag.emit` 对 kind 1–6 有专门文本与 JSON 分支，其余**一律落进 `potential_leak` 默认分支** | `Diag.h.ct:269-344`（JSON 链）、`Diag.h.ct:358-381`（文本链） | S3 必须同时加文本分支与 JSON 分支，见 §4.3 |
 
 ---
 
@@ -146,7 +146,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 ```
 
 - **展开点**：发射器的 `emit_node` 新增 `N_LOOP` 分支，紧挨 `N_FOR` 分支
-  （[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2476-L2512)）。
+  （[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2506-L2517)）。
   解析期**不**降级成 `N_FOR`：`i` 需要在解析期进入符号表（闭包捕获、名字解析），
   而计数临时量与 `#line` 属于发射器。
 - 展开只有一条语句，不引入辅助函数、结构体或回调。
@@ -221,7 +221,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 
 - 只展开为一行 `for`，不产生额外抽象层；生成物中不出现 `loop` 语句（临时量名含 `loop` 字样，
   但那是标识符，不是关键字）。
-- **不新增逐语句 `#line`**。现状是单元级 `#line 1 "<path>"`（`Emitter.h.ct:1101`），
+- **不新增逐语句 `#line`**。现状是单元级 `#line 1 "<path>"`（`Emitter.h.ct:1090`），
   所有语句都依赖它；只给 `loop` 单点加锚会造成「只有它准、其它都不准」的不一致，
   且锚点之后的生成行号整体偏移。已知限制：生成行号与源行号不保证逐行对齐，
   与其它语句相同；若将来引入全局逐语句锚点，`loop` 自动继承。
@@ -245,7 +245,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 - 临时量：`__ct_loop_n_<K>`，`K = self->ntmp++`。`ntmp` 是文件级单例 `g_emit` 上的
   **进程级单调计数器，从不重置**，与 `__ct_ret%d` / `__ct_tmp%d` 共用，故跨函数、跨单元不重号。
 - `__ct_` 前缀已由 `Symbols::reserved_name` 拒绝用户声明
-  （[Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L403-L406)），无需新增检查。
+  （[Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L401-L402)），无需新增检查。
 - 不新增全局表 / 容量常量；隐式 `i` 只占 1 个 `Var` 槽（`MAX_VARS 4096`）。
 - 生成物不登记进 `Symbols.Structs`，不占 `MAX_STRUCTS`。
 
@@ -287,7 +287,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 | 触发 | 计数类型静态可确定为非整数（`float` / `double` / 指针 / 结构体 / union） |
 | 文案（`msg` 字段） | `count must be an integer (got 'float'); the value is converted to int`（`'float'` 处填实际类型串） |
 | 渲染后的整行 | 编译：`<file>:<line>: warning: type mismatch: 'loop' <msg>`；`ct check`：`<file>:<line>:<col>: error: type mismatch: 'loop' <msg>` |
-| 通道 | 既有 `ct_type_warn(line, col, "loop", msg, path)`（kind 5，`Diag.h.ct:413-417`） |
+| 通道 | 既有 `ct_type_warn(line, col, "loop", msg, path)`（kind 5，`Diag.h.ct:447-451`） |
 | 不报的情况 | `expr_type` 返回 -1（未知类型）；整型 / 枚举 / `_Bool` / 别名解析后为整型 |
 | 生成物 | 不变；只告警，不改变展开 |
 
@@ -295,12 +295,12 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 
 - **`ct_sem_note` 在本相不使用**。Phase 21 的 `note:` 通道保持不变，不新增 `note:` 行。
 - 新增 `Warn.kind = 7` 要求 `Diag.emit` 同时加两个分支，否则会落到默认的
-  `potential_leak` 形状（实测 `Diag.h.ct:304-311`、`344-346`）：
+  `potential_leak` 形状（实测 `Diag.h.ct:336-343`、`378-380`）：
   - 文本：`else if (w->kind == 7) fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);`
   - JSON：`{"type":"loop_shadow","file":…,"line":…[, "col":…][, "severity":"error"],"message":…}`
 - 既有 kind 0–6 的文本、JSON 形状、`MAX_WARNINGS` 行为**不变**。
 - `ct check` 的升级机制不改：`Driver.h.ct:101-104` 置 strict，
-  `Diag.h.ct:233` 选 `error` 前缀，`Driver.h.ct:334-337` 以 `nwarn() > 0` 返回 1。
+  `Diag.h.ct:257` 选 `error` 前缀，`Driver.h.ct:334-337` 以 `nwarn() > 0` 返回 1。
 - 诊断只指向源位置，不出现 `__ct_loop_*`。
 
 ---
@@ -319,13 +319,13 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 | **S4 测试** | `test/ast/**`、`selfhost/check-ast.sh`、`selfhost/check-warnings.sh` | 新增 92–101 正例目录（`prog.ct` + `prog.expected.out`）、`loop_count_type`、`loop_own_drop`；新增 4 个 `errors/*.ct`；`check-ast.sh` 增加：三条语法错误的钉文案、闭包逃逸文案、97 与 float 计数的双模式断言、生成物 `for (int i = 0, __ct_loop_n_` 且不含 `i < (` 的形态断言；`check-warnings.sh` 允许且仅允许 `loop_count_type.err` 一条 `type mismatch` 记录 | 全部新探针绿；既有探针零变化（golden 由 L0-seed 段与 S0 基线记录覆盖，ct-ast 自身格式与 L0 golden 本就不同，不做逐字节比对）；`bash selfhost/check-ast.sh`、`bash selfhost/check-warnings.sh` 均绿 | 见 §6 |
 | **S5 文档** | `docs/language-spec.md`、`docs/tutorial.md`、（必要时）`docs/glossary.md` | 在 `for` 语句之后新增 `loop` 小节：形态、展开、计数求值一次、`i` 语义、遮蔽策略、边界；中英对称；教程给一个可运行例子 | `python3 test/docs/check-docs.py` OK；中英小节一一对应；链接有效 | check-docs |
 | **S6 自举与门禁** | 无代码（除非门禁红） | 跑 `bash selfhost/check-all.sh`（11 道）与 fixpoint；确认编译器源码仍不使用 `loop`（自举纪律，`v0.22.0` tag 前） | 11 道硬门禁 + fixpoint 全绿；生成物 `-Wall -Wextra` 零告警 | check-all / fixpoint / check-warnings |
-| **S7 收口** | `CTC_VERSION` 五处、`test/cases` 版本 token、`docs/roadmap.md` | bump `v0.22.0`；25 组 baseline 仅版本 token 变化；roadmap Phase 22 行改为已完成并写清 S0–S7 | 五处一致；golden 仅 token 变化；roadmap 与本文状态一致；tag 由用户确认后打 | 全门禁 |
+| **S7 收口** | `CTC_VERSION` 五处、`test/cases` 版本 token、`docs/roadmap.md`、`README.md` / `docs/README.md` 的版本行 | bump `v0.22.0`；25 组 baseline 仅版本 token 变化；roadmap Phase 22 行改为已完成并写清 S0–S7 | 五处一致；golden 仅 token 变化；roadmap 与本文状态一致；tag 由用户确认后打 | 全门禁 |
 
 **切片边界说明**
 
 - S1 不写发射、S2 不写诊断、S3 不改 AST 形状；任何跨片改动视为切片失败。
 - S1 必须验证「不改 `Expr` / `Memory`」：`closure_walk` / `closure_walk_mutate` 已按
-  `a/b/c/d` 泛化递归（[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L561-L591)），
+  `a/b/c/d` 泛化递归（[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L555-L584)），
   `N_LOOP` 的 body 天然在覆盖内；body 由 `parse_block` 解析，AutoDrop / `own` 作用域不变。
 - S2 的 `b != -1` 断言是给 Phase 23 留的边界，不是本相功能。
 
@@ -361,7 +361,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 | `loop_closure_escape.ct` | loop body 里的闭包存到外层变量 | Phase 21 既有文案：`a closure cannot be stored in '<name>' (its scope outlives the closure)` |
 
 前三个进 `check-ast.sh` 的钉文案列表（照 `raw_*` 的 `for pair in` 写法，
-[check-ast.sh](../../selfhost/check-ast.sh#L567-L585)）；第四个证明 loop 节点没有把 body
+[check-ast.sh](../../selfhost/check-ast.sh#L557-L573)）；第四个证明 loop 节点没有把 body
 从既有逃逸检查里藏起来。
 
 ### 6.3 `check-ast.sh` 新增断言
@@ -407,8 +407,8 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 
 | # | 文档 | 冲突 | 建议 |
 | --- | --- | --- | --- |
-| 1 | [roadmap.md](../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | ✅ 已改：S7 改为「D22-1–D22-12 已定稿、S1–S4 独立提交」，出口判据同步 |
-| 2 | [phase23.md](phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | Phase 23 细化时按本文 §3.7 更正 |
+| 1 | [roadmap.md](../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | ✅ 已改：记为「D22-1–D22-12」、S1–S4 各自独立提交、`v0.22.0`，出口判据同步 |
+| 2 | [phase23.md](phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | ✅ 已改：§3.6、23.3、D23-7 统一为「不新增逐语句 `#line`」（与本文 §3.7 同口径） |
 | 3 | [phase23.md](phase23.md) 头部 | 「当前 `v0.19.1`」过期 | ✅ 已改：S5 删掉版本快照并写明前置 `v0.22.0`（DOC-63） |
 | 4 | 本文件旧 §3.1 | 「`K` 每函数内单调」与 `ntmp` 的进程级语义不符 | ✅ 本文已更正（§3.9） |
 | 5 | [language-spec.md](../language-spec.md) | 尚无 `loop` 小节（不是冲突，是缺口） | ✅ S5 已补 §4.45（中英对称）与 tutorial §10.2 |
@@ -466,10 +466,10 @@ slices and corrects four claims against HEAD:
 
 | Old claim | Measured | Evidence |
 | --- | --- | --- |
-| `--line` re-anchors each `loop` statement | there is **no per-statement** `#line`; only the unit-level `#line 1` | `Emitter.h.ct:1104` |
-| `K` is per-function | `ntmp` lives on the `g_emit` singleton and **never resets** | `Emitter.h.ct:195`, `2250`, `3555` |
+| `--line` re-anchors each `loop` statement | there is **no per-statement** `#line`; only the unit-level `#line 1` | `Emitter.h.ct:1090` |
+| `K` is per-function | `ntmp` lives on the `g_emit` singleton and **never resets** | `Emitter.h.ct:195`, `2236`, `3541` |
 | H22-1 (unused `i` may warn) | the compiler has **no** unused-local diagnostic | no such check under `selfhost/ct-ast/**` |
-| `kind 7` needs only a recorder | `Diag.emit` sends unknown kinds to the `potential_leak` default | `Diag.h.ct:269-337`, `358-378` |
+| `kind 7` needs only a recorder | `Diag.emit` sends unknown kinds to the `potential_leak` default | `Diag.h.ct:269-344`, `358-381` |
 
 No code is changed by this document.
 
@@ -479,7 +479,7 @@ No code is changed by this document.
   with the top-level comma disabled (so `loop(a, b)` is L22-3, not a comma expression).
 - The **only** lowering is
   `for (int i = 0, __ct_loop_n_<K> = (<N>); i < __ct_loop_n_<K>; i++) <block>`, emitted by a new
-  `N_LOOP` branch next to `N_FOR` (`Emitter.h.ct:2476-2512`). The count is evaluated once by the
+  `N_LOOP` branch next to `N_FOR` (`Emitter.h.ct:2506-2517`). The count is evaluated once by the
   `for` init clause (C99 §6.8.5.3); the lowering does **not** rely on declarator-initializer order
   (§6.7.8) because `i = 0` has no side effect, so exactly-once holds regardless. `i < (N)` is
   forbidden.
@@ -509,7 +509,7 @@ No code is changed by this document.
   `loop shadows the outer 'i'; use a native for to name the inner counter`, at the inner `loop`
   keyword. A pre-existing local `i` or a native `for` counter is not diagnosed.
 - **Closures**: no new checks. `closure_walk*` already recurses over `a/b/c/d`
-  (`Expr.h.ct:561-591`), so a `loop` body is covered. Capturing `i` is legal and takes a
+  (`Expr.h.ct:555-584`), so a `loop` body is covered. Capturing `i` is legal and takes a
   per-iteration snapshot; writing `i`, `i++` or `&i` inside the closure hits the existing Phase 21
   E5 checks; a closure escaping the loop hits E1–E7. A `loop` inside a closure body is legal.
 - **Generated names**: `__ct_loop_n_<K>` with `K = ntmp++`; `ntmp` is process-global and never
@@ -574,8 +574,16 @@ Probes and negatives green; compile warning / `ct check` error split verified; J
 `CTC_VERSION` sites at `0.22.0`; bilingual docs; compiler sources still avoid `loop` before the
 `v0.22.0` tag.
 
-### Known conflicts (listed, not fixed here)
+### Known conflicts (all resolved)
 
-The roadmap still says D22-1–D22-8 are pending and H22-1 is untested; `phase23.md` repeats the
-incorrect per-statement `#line` claim and still carries a `v0.19.1` snapshot; `language-spec.md` has
-no `loop` section yet. These are follow-ups for S5/S7 and for the Phase 23 design pass.
+All five conflicts recorded at planning time were handled by S5/S7 and the 2026-11-08 correction
+pass, and the table in the Chinese §8 is the authoritative record:
+
+- `roadmap.md` no longer says D22-1–D22-8 are pending; the Phase 22 row reads D22-1–D22-12,
+  S1–S4 as separate commits and `v0.22.0`, and H22-1 is closed.
+- `phase23.md` no longer repeats the per-statement `#line` claim (§3.6, 23.3 and D23-7 now say
+  "no new per-statement `#line`") and the `v0.19.1` snapshot is gone.
+- `language-spec.md` §4.45 and `tutorial.md` §10.2 now document `loop(n)`, Chinese and English.
+- This file's own §3.1 / §3.9 claim is corrected for the process-wide `ntmp`.
+
+No follow-up is owed by this document; anything left belongs to Phase 23's design pass.
