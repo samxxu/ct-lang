@@ -1,0 +1,12 @@
+// 74 (Phase 21 S4): capturing an ordinary local by value is the supported
+// case. Capturing an `own` / `borrow` variable is E4 and is pinned under
+// test/ast/errors/closure_capture_own.ct and closure_capture_borrow.ct.
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 5;
+    int (*f)(int x) = (int x) => x + n;
+    printf("%d\n", f(2));
+    return 0;
+}

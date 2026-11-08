@@ -139,7 +139,9 @@ t.ct:4:9: note: use an explicit Callable struct + trait: ...
 
 - **E8（不检查）**：`env` 以 `void *` 交给不透明 C 函数，或交给**另一个 CT 函数**（包括 std 规划中的
   `each(v, fn, env)`）后由对方保存到全局 / 字段 / 容器，编译器**看不到**，不会报错。接收方只看到普通
-  `void *` 参数。只能靠 API 约定（容器不持 `env`）与文档约束。
+  `void *` 参数。只能靠 API 约定（容器不持 `env`）与文档约束。当编译器识别不出被调方的 `(fn, env)`
+  参数对时，错误之后会经 note 通道打印下面这句，明确说明剩余风险：
+  `note: the compiler cannot see whether the callee keeps the environment; the environment dies with this frame`。
 - **E9（不检查）**：`goto` 跨过闭包声明是静默失效，与 `own` / `borrow` 的现状相同。
 - **按设计禁止**（不是漏洞）：闭包类型出现在 `.h.ct`、作返回值、作字段或数组元素、在另一单元声明闭包变量。
 - **可以跨单元**：把 trampoline / impl 包装的**地址**当实参传给别单元的函数，由对方在运行期调用；

@@ -1,0 +1,9 @@
+struct S { int (*cb)(int x); };
+void *get(void) {
+    struct S s;
+    int n = 1;
+    int (*c)(int x) = (int x) => x + n;
+    s.cb = c;
+    return 0;
+}
+int main(void) { return 0; }

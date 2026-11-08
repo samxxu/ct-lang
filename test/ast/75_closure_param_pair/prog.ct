@@ -1,0 +1,28 @@
+// 75 (Phase 21 S4): the `(fn, env)` shape is still tier 1 (an explicit adapter),
+// because passing a closure binding as an argument is deferred until S5/S6
+// (D21-13: a closure is a binding, not a value). The closure here has two
+// parameters and is called with two arguments. Arity on a `(fn, env)` call
+// counts the environment slot as one more argument on each side, so a later
+// S5 expansion will not need a second message flavour; the rejection of a
+// closure actual is pinned in errors/closure_param_deferred.ct.
+#include <stdio.h>
+
+static int plus_env(void *env, int x)
+{
+    int *p = (int *)env;
+    return x + *p;
+}
+
+int ring_each(int (*fn)(void *env, int x), void *env)
+{
+    return fn(env, 3);
+}
+
+int main(void)
+{
+    int n = 2;
+    int k = 4;
+    int (*add)(int x, int y) = (int x, int y) => x + y + n;
+    printf("%d %d\n", add(1, 2), ring_each(plus_env, &k));
+    return 0;
+}

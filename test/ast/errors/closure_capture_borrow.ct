@@ -1,0 +1,6 @@
+struct Conn { int n; };
+void use(borrow struct Conn *c) {
+    int (*g)(int x) = (int x) => x + c->n;
+    g(1);
+}
+int main(void) { return 0; }

@@ -1,0 +1,6 @@
+int main(void) {
+    int n = 1;
+    int (*a)(int x) = (int x) => x + n;
+    int (*b)(int x) = (int x) => x + a(0);
+    return b(0) - 1;
+}

@@ -1,0 +1,6 @@
+int opaque(void *p, int x) { return x; }
+int main(void) {
+    int n = 2;
+    int (*add)(int x) = (int x) => x + n;
+    return opaque(add, 1);
+}

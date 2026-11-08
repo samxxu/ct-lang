@@ -1,0 +1,15 @@
+// 84 (Phase 21 S4): writing a captured variable by name is E5, but writing
+// through a captured pointer is the sanctioned way to write back (D21-2).
+// `*p = v` inside the closure must pass; `n = 1`, `n++` and `&n` are pinned
+// under test/ast/errors/closure_capture_*.ct.
+#include <stdio.h>
+
+int main(void)
+{
+    int x = 0;
+    int *p = &x;
+    int (*set)(int v) = (int v) => (*p = v);
+    set(9);
+    printf("%d\n", x);
+    return 0;
+}

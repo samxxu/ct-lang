@@ -148,6 +148,49 @@ else
     bad "check: arity probe" "exit $rc; $(cat "$work/arity.err")"
 fi
 
+# Phase 21 S4: closure escapes are hard errors on both entries, and the
+# independent `note:` line neither becomes a second error nor changes the
+# `ctc: N error(s) generated` count. `ct check` must keep its strict exit 1.
+cat > "$work/cl_escape.ct" <<'EOF'
+void *get(void)
+{
+    int n = 1;
+    int (*c)(int x) = (int x) => x + n;
+    return c;
+}
+int main(void) { return 0; }
+EOF
+"$work/ct-ast" check "$work/cl_escape.ct" >"$work/cl_escape.out" 2>"$work/cl_escape.err"
+rc=$?
+if [ "$rc" -eq 1 ] \
+        && grep -Fq "error: a closure cannot escape through 'return'" "$work/cl_escape.err" \
+        && grep -Fq "note: use an explicit Callable struct + trait:" "$work/cl_escape.err" \
+        && grep -Fq 'ctc: 1 error(s) generated' "$work/cl_escape.err"; then
+    ok "check: a closure escape is one hard error plus its note (exit 1)"
+else
+    bad "check: closure escape probe" "exit $rc; $(cat "$work/cl_escape.err")"
+fi
+
+"$work/ct-ast" compile "$work/cl_escape.ct" -o "$work/cl_escape.c" \
+    >"$work/cl_escape.comp.out" 2>"$work/cl_escape.comp.err"
+rc=$?
+if [ "$rc" -eq 1 ] && [ ! -e "$work/cl_escape.c" ] \
+        && grep -Fq "error: a closure cannot escape through 'return'" "$work/cl_escape.comp.err"; then
+    ok "compile: a closure escape is still a hard error and writes no C"
+else
+    bad "compile: closure escape probe" "exit $rc; $(cat "$work/cl_escape.comp.err")"
+fi
+
+"$work/ct-ast" check --diagnostics=json "$work/cl_escape.ct" \
+    >"$work/cl_escape.json" 2>"$work/cl_escape.json.err"
+rc=$?
+if [ "$rc" -eq 1 ] && [ ! -s "$work/cl_escape.json" ] \
+        && grep -Fq "note: use an explicit Callable struct + trait:" "$work/cl_escape.json.err"; then
+    ok "check: the closure note adds no JSON key (still no warnings document)"
+else
+    bad "check: closure JSON" "exit $rc; $(cat "$work/cl_escape.json" "$work/cl_escape.json.err")"
+fi
+
 cat > "$work/atype.ct" <<'EOF'
 struct P { int n; }
 struct Q { int n; }

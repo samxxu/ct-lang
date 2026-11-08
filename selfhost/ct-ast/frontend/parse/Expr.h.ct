@@ -21,12 +21,14 @@
 import frontend::lex::Lexer;
 import frontend::module::Map::Call as Call;
 import frontend::module::Map;
+import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::Closure as Closure;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
 
 #define B_ADD 1
 #define B_AND 12
@@ -115,6 +117,14 @@ pub trait ExprOps {
     int  record_call(const char *callee, int line);
     int  arity_check(int line, int col, const char *callee, int got, int want);
     int  argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi);
+    /* Phase 21 S4: closure actuals fill a `(fn, env)` pair and count as two
+       C arguments. */
+    int  type_is_fnptr(const char *t);
+    int  type_is_void_ptr(const char *t);
+    int  formal_is_env_fn(const char *t);
+    int  arg_is_closure(int a);
+    int  closure_arg_count(int args);
+    int  closure_arg_check(int line, int col, const char *callee, int args, int fi);
     int  decl_type_compat(const char *formal, const char *actual);
     /* Phase 21 S2: `(params) => expr` is parsed and checked, never emitted.
        `parse_closure` runs at the `(` that opens the literal; `closure_bind`
@@ -437,15 +447,39 @@ static int closure_capture_index(struct Closure *c, const char *name)
     return -1;
 }
 
-static int closure_capture_add(struct Expr *self, int ci, const char *name, const char *type)
+/* Phase 21 S4: the same tier-1 hint the other closure errors carry, printed
+   through the note channel so no counter, JSON document or exit code moves. */
+#define CT_EXPR_CLOSURE_HINT "use an explicit Callable struct + trait: an Adder struct with int n, use Callable, impl call(int x)"
+
+static int closure_capture_error(struct Expr *self, int line, const char *msg)
+{
+    tool::diag::ct_sem_error(line, 1, msg, self->sup->mem->path);
+    tool::diag::ct_sem_note(line, 1, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
+    return -1;
+}
+
+static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
 {
     struct Closure *c = &self->sym->closures[ci];
+    const char *name = self->sym->vars[vi].name;
+    char msg[512];
 
+    /* E4: an `own` handle would get a second owner and a `borrow` a second
+       handback, so neither can be copied into the environment. The check runs
+       while the capture is collected, before AutoDrop / borrow is registered. */
+    if (self->sym->vars[vi].autodrop || self->sym->vars[vi].borrowed) {
+        snprintf(msg, sizeof msg,
+                 "a closure cannot capture '%s' (it is 'own' or 'borrow')", name);
+        return closure_capture_error(self, line, msg);
+    }
+    /* a closure is a binding, not a value (E7 on the capture path) */
+    if (self->sym->vars[vi].is_closure)
+        return closure_capture_error(self, line, "a closure cannot capture another closure");
     if (closure_capture_index(c, name) >= 0) return 0;
     if (c->ncap >= 16)
         return self->sup->fail("a closure takes too many captures (limit 16)");
     snprintf(c->cap_name[c->ncap], MAX_TEXT, "%s", name);
-    snprintf(c->cap_type[c->ncap], MAX_TEXT, "%s", type);
+    snprintf(c->cap_type[c->ncap], MAX_TEXT, "%s", self->sym->vars[vi].type);
     c->ncap++;
     return 0;
 }
@@ -463,11 +497,21 @@ static int closure_walk(struct Expr *self, int ci, int n, int pstart)
     nd = &self->arena->nodes[n];
     /* a nested literal owns its own environment (S5) */
     if (nd->kind == N_CLOSURE) return 0;
+    /* calling another binding from inside a closure is the capture path the
+       call node spells in `text2`, not in a child: a closure cannot capture
+       another closure (E7). */
+    if (nd->kind == N_CALL) {
+        vi = self->sym->find_var(nd->text2);
+        if (vi >= 0 && vi < pstart && !self->sym->vars[vi].is_global
+            && self->sym->vars[vi].is_closure)
+            return closure_capture_error(self, nd->line,
+                                         "a closure cannot capture another closure");
+    }
     if (nd->kind == N_VAR) {
         vi = self->sym->find_var(nd->text2);
         if (vi < 0 || vi >= pstart) return 0;
         if (self->sym->vars[vi].is_global) return 0;
-        return closure_capture_add(self, ci, nd->text2, self->sym->vars[vi].type);
+        return closure_capture_add(self, ci, vi, nd->line);
     }
     if (closure_walk(self, ci, nd->a, pstart) != 0) return -1;
     if (closure_walk(self, ci, nd->b, pstart) != 0) return -1;
@@ -490,18 +534,18 @@ static int closure_walk_mutate(struct Expr *self, int ci, int n)
     if (nd->kind == N_ASSIGN && nd->a >= 0
         && self->arena->nodes[nd->a].kind == N_VAR
         && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
-        return self->sup->fail_at(c->line,
-                                  "a captured variable cannot be reassigned inside a closure");
+        return closure_capture_error(self, self->arena->nodes[nd->a].line,
+                                     "a captured variable cannot be reassigned inside a closure");
     if ((nd->kind == N_PRE || nd->kind == N_POST) && nd->a >= 0
         && self->arena->nodes[nd->a].kind == N_VAR
         && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
-        return self->sup->fail_at(c->line,
-                                  "a captured variable cannot be reassigned inside a closure");
+        return closure_capture_error(self, self->arena->nodes[nd->a].line,
+                                     "a captured variable cannot be reassigned inside a closure");
     if (nd->kind == N_ADDR && nd->a >= 0
         && self->arena->nodes[nd->a].kind == N_VAR
         && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
-        return self->sup->fail_at(c->line,
-                                  "the address of a captured variable cannot be taken inside a closure");
+        return closure_capture_error(self, self->arena->nodes[nd->a].line,
+                                     "the address of a captured variable cannot be taken inside a closure");
     if (closure_walk_mutate(self, ci, nd->a) != 0) return -1;
     if (closure_walk_mutate(self, ci, nd->b) != 0) return -1;
     if (closure_walk_mutate(self, ci, nd->c) != 0) return -1;
@@ -527,6 +571,112 @@ impl ExprOps for Expr {
             return self->sup->fail("too many warnings");
         return 0;
     }
+
+    /* Phase 21 S4: a closure actual is one source argument that occupies the
+       `(fn, env)` pair, two C arguments. The pair is adjacent and shaped
+       `ret (*P)(void *…, …)` followed by `void *E`; anything else is E6. */
+    int type_is_fnptr(const char *t)
+    {
+        (void)self;
+        return t != 0 && strstr(t, "(*") != 0;
+    }
+
+    int type_is_void_ptr(const char *t)
+    {
+        (void)self;
+        return t != 0 && strncmp(t, "void *", 6) == 0;
+    }
+
+    int formal_is_env_fn(const char *t)
+    {
+        return self->type_is_fnptr(t) && strstr(t, "void *") != 0;
+    }
+
+    int arg_is_closure(int a)
+    {
+        const char *name;
+        int vi;
+
+        if (a < 0) return 0;
+        if (self->arena->nodes[a].kind == N_CLOSURE) return 1;
+        if (self->arena->nodes[a].kind != N_VAR) return 0;
+        name = self->arena->nodes[a].text2;
+        vi = self->sym->find_var(name);
+        return vi >= 0 && self->sym->vars[vi].is_closure;
+    }
+
+    int closure_arg_count(int args)
+    {
+        int cur, n;
+
+        cur = args;
+        n = 0;
+        while (cur > 0) {
+            if (self->arg_is_closure(cur)) n++;
+            cur = self->arena->nodes[cur].next;
+        }
+        return n;
+    }
+
+    /* Returns 0 when every closure actual fills the start of a `(fn, env)`
+       pair. A plain function-pointer slot and a position that is not a pair
+       are distinct errors; the second also carries the E8 note, because the
+       compiler cannot see whether the callee keeps the environment. */
+    int closure_arg_check(int line, int col, const char *callee, int args, int fi)
+    {
+        const char *e8;
+        int cur, pos, ok, np;
+        const char *ft;
+
+        e8 = "the compiler cannot see whether the callee keeps the environment; the environment dies with this frame";
+        if (fi >= 0) np = self->sym->funcs[fi].nparams;
+        else np = 0;
+        cur = args;
+        pos = 0;
+        while (cur > 0) {
+            if (self->arg_is_closure(cur)) {
+                /* S4 accepts a named binding only; an inline literal is S5 */
+                if (self->arena->nodes[cur].kind == N_CLOSURE) {
+                    tool::diag::ct_sem_error(line, col,
+                        "a closure argument must fill a '(fn, env)' parameter pair",
+                        self->sup->mem->path);
+                    tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
+                    tool::diag::ct_sem_note(line, col, e8, self->sup->mem->path);
+                    return -1;
+                }
+                ok = 0;
+                if (fi >= 0 && pos + 1 < np)
+                    ok = self->formal_is_env_fn(self->sym->funcs[fi].ptype[pos])
+                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype[pos + 1]);
+                if (!ok) {
+                    if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype[pos];
+                    else ft = "";
+                    if (self->type_is_fnptr(ft) && !self->formal_is_env_fn(ft)) {
+                        tool::diag::ct_sem_error(line, col,
+                            "a closure cannot be used where a plain function pointer is expected",
+                            self->sup->mem->path);
+                        tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                                self->sup->mem->path);
+                    } else {
+                        tool::diag::ct_sem_error(line, col,
+                            "a closure argument must fill a '(fn, env)' parameter pair",
+                            self->sup->mem->path);
+                        tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                                self->sup->mem->path);
+                        tool::diag::ct_sem_note(line, col, e8, self->sup->mem->path);
+                    }
+                    return -1;
+                }
+                pos += 2;
+            } else {
+                pos++;
+            }
+            cur = self->arena->nodes[cur].next;
+        }
+        (void)callee;
+        return 0;
+    }
+
 
     /* 19.2: the resolved signature beside the argument chain, one position at
        a time. Only a position where both sides can name a type is compared;
@@ -2342,17 +2492,34 @@ impl ExprOps for Expr {
                 }
                 /* the call graph keeps the name the source wrote */
                 if (fi >= 0 && self->record_call(self->arena->nodes[n].text2, id_line) != 0) return -1;
+                /* Phase 21 S4: a closure actual must fill the callee's
+                   `(fn, env)` pair; an unresolved callee cannot be verified. */
+                if (args > 0
+                    && self->closure_arg_check(id_line, id_col, self->arena->nodes[n].text2,
+                                               args, fi) != 0)
+                    return -1;
                 /* 19.1: a resolved signature says how many arguments the callee
                    takes; a variadic tail accepts any surplus past its named
                    parameters. The message keeps the name the source wrote. */
                 if (fi >= 0) {
                     int got, want, tail_ok;
-                    got = arg_count(self->arena, args);
+                    got = arg_count(self->arena, args) + self->closure_arg_count(args);
                     want = self->sym->funcs[fi].nparams;
                     tail_ok = self->sym->funcs[fi].variadic && got > want;
                     if (!tail_ok && self->arity_check(id_line, id_col, self->arena->nodes[n].text2,
                                                       got, want) != 0)
                         return -1;
+                }
+                /* D21-13: a closure is a binding, not a value. S4 counts the
+                   `(fn, env)` pair as two arguments for arity, but passing the
+                   binding as an argument is deferred until S5/S6. */
+                if (args > 0 && self->closure_arg_count(args) > 0) {
+                    tool::diag::ct_sem_error(id_line, id_col,
+                        "this closure is a binding, not a value (inline it or use a struct + trait)",
+                        self->sup->mem->path);
+                    tool::diag::ct_sem_note(id_line, id_col, CT_EXPR_CLOSURE_HINT,
+                                            self->sup->mem->path);
+                    return -1;
                 }
                 /* 19.2: the argument types against the same signature, before
                    the boxing pass rewrites interface arguments (an interface

@@ -1,0 +1,19 @@
+// 73 (Phase 21 S4): a plain function pointer and a closure can be used side by
+// side in the same frame. A closure is refused only when it is moved out of the
+// frame that owns its environment (see the closure_store_* fixtures under
+// test/ast/errors/).
+#include <stdio.h>
+
+int twice(int x)
+{
+    return x + x;
+}
+
+int main(void)
+{
+    int n = 4;
+    int (*f)(int x) = twice;
+    int (*g)(int x) = (int x) => x + n;
+    printf("%d %d\n", f(3), g(3));
+    return 0;
+}

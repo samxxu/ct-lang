@@ -387,6 +387,16 @@ int ct_sem_error(int line, int col, const char *msg, const char *path)
     return g_diag.sem_error(line, col, msg, path);
 }
 
+/* The `note:` channel (Phase 21 S4, D21-6): a hint that follows an error but is
+   not one. It only prints, so it cannot move `nsem`, the `MAX_ERRORS` cap, the
+   warning array, the JSON document or any exit code. */
+pub int ct_sem_note(int line, int col, const char *msg, const char *path);
+int ct_sem_note(int line, int col, const char *msg, const char *path)
+{
+    fprintf(stderr, "%s:%d:%d: note: %s\n", path, line, col, msg);
+    return 0;
+}
+
 pub int ct_sig_warn(int line, int col, const char *method, const char *trait, const char *stype, const char *msg, const char *path);
 int ct_sig_warn(int line, int col, const char *method, const char *trait,
                 const char *stype, const char *msg, const char *path)

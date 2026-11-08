@@ -1,0 +1,10 @@
+void *get(void) {
+    int (*d)(int x);
+    {
+        int n = 1;
+        int (*c)(int x) = (int x) => x + n;
+        d = c;
+    }
+    return 0;
+}
+int main(void) { return 0; }

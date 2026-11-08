@@ -1988,6 +1988,95 @@ for f in test/ast/errors/*.ct; do
     fi
 done
 
+# Phase 21 S4: closure escape / capture / arity diagnostics are stable text,
+# and every one is followed by the tier-1 hint through the independent `note:`
+# channel. The generic sweep above only proves *a* positioned diagnostic; pin
+# the wording, position and note verbatim so a later refactor cannot drift it.
+for pair in \
+    "closure_escape_return|4:1|a closure cannot escape through 'return'" \
+    "closure_store_global|5:1|a closure cannot be stored in 'g' (its scope outlives the closure)" \
+    "closure_store_outer|6:1|a closure cannot be stored in 'd' (its scope outlives the closure)" \
+    "closure_store_static|5:1|a closure cannot be stored in 's' (its scope outlives the closure)" \
+    "closure_store_field|6:1|a closure cannot be stored in a field, an element or a container" \
+    "closure_store_element|5:1|a closure cannot be stored in a field, an element or a container" \
+    "closure_capture_own|8:1|a closure cannot capture 'b' (it is 'own' or 'borrow')" \
+    "closure_capture_borrow|3:1|a closure cannot capture 'c' (it is 'own' or 'borrow')" \
+    "closure_capture_closure|4:1|a closure cannot capture another closure" \
+    "closure_copy_local|4:1|this closure is a binding, not a value (inline it or use a struct + trait)" \
+    "closure_reassign|5:1|this closure is a binding, not a value (inline it or use a struct + trait)" \
+    "closure_capture_write|3:1|a captured variable cannot be reassigned inside a closure" \
+    "closure_capture_incr|3:1|a captured variable cannot be reassigned inside a closure" \
+    "closure_capture_addassign|3:1|a captured variable cannot be reassigned inside a closure" \
+    "closure_capture_addr|3:1|the address of a captured variable cannot be taken inside a closure" \
+    "closure_plain_fnptr|5:12|a closure cannot be used where a plain function pointer is expected" \
+    "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair" \
+    "closure_param_deferred|5:12|this closure is a binding, not a value (inline it or use a struct + trait)"
+do
+    cf="${pair%%|*}"
+    rest="${pair#*|}"
+    pos="${rest%%|*}"
+    cfmsg="${rest#*|}"
+    f="test/ast/errors/$cf.ct"
+    if "$work/ct-ast" "$f" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "p21-s4: $cf" "expected a non-zero exit"
+    elif ! grep -Fq "$f:$pos: error: $cfmsg" "$work/$cf.err"; then
+        bad "p21-s4: $cf" "missing pinned error: $(cat "$work/$cf.err")"
+    elif ! grep -Fq "$f:$pos: note: use an explicit Callable struct + trait:" "$work/$cf.err"; then
+        bad "p21-s4: $cf" "missing tier-1 note: $(cat "$work/$cf.err")"
+    elif [ "$(grep -c 'error: ' "$work/$cf.err")" -ne 1 ]; then
+        bad "p21-s4: $cf" "expected exactly one error: $(cat "$work/$cf.err")"
+    elif ! grep -Fq 'ctc: 1 error(s) generated' "$work/$cf.err"; then
+        bad "p21-s4: $cf" "the note changed the error count: $(cat "$work/$cf.err")"
+    else
+        ok "p21-s4 ($cf)"
+    fi
+done
+
+# The two boundaries that need more than one assertion:
+#  - E8 is a note, not a JSON key, and appears only when the callee is opaque;
+#  - a closure passed to a `(fn, env)` pair is refused as a binding (D21-13),
+#    but arity counts the env slot, so no "takes N argument(s)" line appears.
+if grep -Fq "note: the compiler cannot see whether the callee keeps the environment; the environment dies with this frame" \
+        "$work/closure_not_a_pair.err"; then
+    ok "p21-s4: E8 note wording"
+else
+    bad "p21-s4: E8 note" "$(cat "$work/closure_not_a_pair.err")"
+fi
+if grep -q "takes [0-9]* argument(s)" "$work/closure_param_deferred.err"; then
+    bad "p21-s4: arity counts env" "$(cat "$work/closure_param_deferred.err")"
+else
+    ok "p21-s4: a closure actual counts as two arguments for arity, without a second wording"
+fi
+
+# The note channel must not touch the JSON document, the severity field or the
+# exit code. `check` stays strict; `compile` stays byte-identical on units with
+# no closures.
+"$work/ct-ast" check --diagnostics=json "test/ast/errors/closure_escape_return.ct" \
+    >"$work/cl_json.out" 2>"$work/cl_json.err"
+clrc=$?
+if [ "$clrc" -eq 1 ] && [ ! -s "$work/cl_json.out" ] \
+        && ! grep -q 'note' "$work/cl_json.out" \
+        && grep -Fq 'note: use an explicit Callable struct + trait:' "$work/cl_json.err"; then
+    ok "p21-s4: a closure error is not in the JSON warnings and the note adds no key"
+else
+    bad "p21-s4: closure JSON" "exit $clrc; $(cat "$work/cl_json.out" "$work/cl_json.err")"
+fi
+cat > "$work/cl_arity.ct" <<'EOF'
+int add(int a, int b) { return a + b; }
+int main(void) { return add(1); }
+EOF
+"$work/ct-ast" check --diagnostics=json "$work/cl_arity.ct" \
+    >"$work/cl_arity.json" 2>"$work/cl_arity.err"
+clrc=$?
+if [ "$clrc" -eq 1 ] \
+        && grep -Fq '"severity":"error"' "$work/cl_arity.json" \
+        && grep -Fq '"type":"arity_mismatch"' "$work/cl_arity.json"; then
+    ok "p21-s4: the pre-existing severity field and top-level warnings key are unchanged"
+else
+    bad "p21-s4: JSON shape" "exit $clrc; $(cat "$work/cl_arity.json")"
+fi
+
 # P20-02: an import after the first declaration is rejected at the import line,
 # with a message that names the fix. The generic loop above only checks for any
 # positioned diagnostic; pin this text so it cannot drift into a parse error.

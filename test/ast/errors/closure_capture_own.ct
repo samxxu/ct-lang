@@ -1,0 +1,11 @@
+#include <stdlib.h>
+struct Box { int n; } use Drop;
+impl Drop for Box {
+    void drop(void) { }
+}
+int f(void) {
+    own struct Box *b = malloc(sizeof(struct Box));
+    int (*g)(int x) = (int x) => x + b->n;
+    return g(1);
+}
+int main(void) { return 0; }

@@ -1,0 +1,8 @@
+void *get(void) {
+    int (*arr[2])(int x);
+    int n = 1;
+    int (*c)(int x) = (int x) => x + n;
+    arr[0] = c;
+    return 0;
+}
+int main(void) { return 0; }
