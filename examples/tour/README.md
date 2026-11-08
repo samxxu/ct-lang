@@ -4,9 +4,13 @@
 > （避免与并发的门禁改动冲突），需要可用的 `ct-ast`——可以显式传 `CT=...`，
 > 也可以让脚本自行自举。`cases.tsv` 中 `l0=yes` 的样例可用冻结种子复编；
 > 目前 L0 可复编的簇是 **01、02、03、09（仅 tier-1 手工版）、11**，
-> 其余簇（04–08、10、12–15 以及 09 的 `=>` 样例）仅 ct-ast。
+> 其余簇（04–08、10、12–18 以及 09 的 `=>` 样例）仅 ct-ast。
 > 15（内存管理）里的悬垂样例只在 `ASAN=1` 时执行，普通跑会明确显示 `skip`，
 > 不会被当成通过。
+>
+> 新增 16（诊断）、17（CLI）、18（构造语义）三簇，共 35 个样例。
+> 17 的包管理样例全部走离线路径（`file://` 本地包、缺 `ct.pkg`/`ct.lock` 的错误面、
+> 无依赖的 `update`）；真正的远端拉取没有在 CI 里跑，见“已知边界”一节。
 
 这不是语言规范，而是一组**能真编真跑**的样例：每个特性至少两个角度，正面样例逐字节比对
 stdout，反例比对确切的 stderr 与退出码。规范以 `docs/language-spec.md` 为准；这里只负责
@@ -36,13 +40,22 @@ ASAN=1 bash examples/tour/run.sh
 - `compile`：`ct prog.ct -o x.c` → `cc -Wall -Wextra -std=c99` → 运行 → 比对 `expected.out`
 - `build`：`ct build --emit-c main.ct` → cc（含 `*.shim.c`）→ 运行 → 比对
 - `compile-warn`：编译退出 0，stderr 必须逐字节等于 `expected.warn`，随后运行并比对 `expected.out`
+- `compile-json`：编译退出 0，stdout 必须是一个可解析的 JSON 且逐字节等于 `expected.json`，
+  stderr 为空；随后编译、运行并比对 `expected.out`
+- `json-err`：带 `--diagnostics=json` 编译，退出码必须是 1，stdout 为空，
+  stderr 逐字节等于 `expected.err`（用来证明 error/note 不进入 JSON 通道）
 - `pair`：先编译（预期 0 退出、stderr=`expected.warn`），再 `ct check`（预期 1、stderr=`expected.err`）
 - `check` / `clean` / `check-json`：只跑 `ct check`，比对 stderr 或 JSON
+- `cli`：读 `args`（每行一个 argv 元素），用固定名为 `ct-ast` 的入口运行；
+  `@CASE@`/`@WORK@` 分别展开为样例目录与临时目录。有 `expected.out`/`expected.err`
+  就逐字节比对，没有 `expected.err` 时要求 stderr 为空；`expected.gen` 列出必须存在的产物
+- `pkg`：与 `cli` 相同，但先把样例目录复制到临时目录再运行，供会写
+  `vendor/`、`ct.lock` 的包管理命令使用；`expected.lock` 存在时逐字节比对 `ct.lock`
 - `asan`：`cc -fsanitize=address -g`，用 `ASAN_OPTIONS=detect_stack_use_after_return=1` 运行；
   要求非零退出、stdout 为空、stderr 含 `expected.asan` 里的固定片段（ASan 栈里有随机地址，
   只能断言片段）。**默认不跑**，只在 `ASAN=1` 时执行并计入 ok，否则计入 skip。
 
-末行汇总形如 `tour: 45 ok, 0 failed, 0 skipped`。
+末行汇总形如 `tour: 80 ok, 0 failed, 1 skipped`；`ASAN=1` 时为 `81 ok, 0 failed, 0 skipped`。
 
 标了 `l0=yes` 的样例还会用**冻结种子** `selfhost/l0/ctc.c` 再编译运行一遍，输出必须一致。
 这是“L0 可用”这一列的实测依据。L0 生成物偶尔带 `unused _self` 一类警告，脚本对 L0
@@ -67,6 +80,9 @@ ASAN=1 bash examples/tour/run.sh
 | 13 | `ct check` 诊断 | ct-ast | 3 | 干净单元 / 同一问题两级严重度 / JSON |
 | 14 | trait 默认方法 | ct-ast | 2 | 默认体按 struct 展开；覆盖；成环报错 |
 | 15 | 内存管理：AutoDrop / 级联释放 / 装箱借用 / 手动分配 / borrow + Handback | ct-ast | 12 | 正常释放、泄漏、悬垂与归还，含一个 ASan 反例 |
+| 16 | 诊断：签名 / 类型 / 二义 / 循环遮蔽 / 错误恢复 / 容量上限 | ct-ast | 15 | 同一发现的文本与 JSON 两个通道，含混合与 note |
+| 17 | CLI：`--emit-map` / `--ns-root` / `-I` 提示 / `-h` `-v` / 包管理 / 三种模式 | ct-ast | 18 | 标志与子命令的真实字节输出，包管理走离线路径 |
+| 18 | 接口值的构造点：局部量 / 字段 / 数组 / malloc 堆对象 | ct-ast | 2 | 四种位置的 vptr 初始化与派发证据 |
 
 “归属”只说明**当前实现**能不能被 L0 冻结种子吃下，不是设计上的分类。
 L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`/`Handback`
@@ -123,6 +139,41 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
 | 15_memory/borrow_delete | 反例：delete 借来的指针 | ct-ast | `15_memory/borrow_delete/prog.ct` | `expected.err`，退出 1 |
 | 15_memory/own_factory | 反例：own 接工厂返回值 | ct-ast | `15_memory/own_factory/prog.ct` | `expected.err`，退出 1 |
 | 15_memory/leak_warning | 静态诊断 potential leak：warning + 退出 0 | ct-ast | `15_memory/leak_warning/prog.ct` | `expected.warn` + `expected.out` |
+| 16_diagnostics/sig_text | 签名不符（参数个数），文本通道 | ct-ast | `16_diagnostics/sig_text/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/sig_json | 同一发现的 JSON：`type=signature_mismatch` | ct-ast | `16_diagnostics/sig_json/prog.ct` | `expected.json`，退出 1 |
+| 16_diagnostics/sig_return | 签名不符（返回类型），第二个触发面 | ct-ast | `16_diagnostics/sig_return/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/type_arg | 实参类型不符，文本通道 | ct-ast | `16_diagnostics/type_arg/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/type_loop | 循环计数非整数；JSON 且仍能跑 | ct-ast | `16_diagnostics/type_loop/prog.ct` | `expected.json` + `expected.out` |
+| 16_diagnostics/amb_text | 方法二义，文本；第一个 trait 胜出 | ct-ast | `16_diagnostics/amb_text/prog.ct` | `expected.warn` + `expected.out` |
+| 16_diagnostics/amb_json | 同一发现的 JSON：`type=ambiguous_method` | ct-ast | `16_diagnostics/amb_json/prog.ct` | `expected.json`，退出 1 |
+| 16_diagnostics/loop_shadow_text | 循环计数器遮蔽，文本且仍能跑 | ct-ast | `16_diagnostics/loop_shadow_text/prog.ct` | `expected.warn` + `expected.out` |
+| 16_diagnostics/loop_shadow_json | 同一发现的 JSON：`type=loop_shadow` | ct-ast | `16_diagnostics/loop_shadow_json/prog.ct` | `expected.json`，退出 1 |
+| 16_diagnostics/recover_multi | 一次运行报 3 个独立 error | ct-ast | `16_diagnostics/recover_multi/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/cap_fields | 容量上限：第 65 个字段 | ct-ast | `16_diagnostics/cap_fields/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/cap_errors | 容量上限：第 21 个错误停止恢复 | ct-ast | `16_diagnostics/cap_errors/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/note_text | error 之后的 note 通道 | ct-ast | `16_diagnostics/note_text/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/note_json | `--diagnostics=json` 不接管 error/note | ct-ast | `16_diagnostics/note_json/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/mixed_json | 混合：4 种 type、5 条记录 | ct-ast | `16_diagnostics/mixed_json/prog.ct` | `expected.json`，退出 1 |
+| 17_cli/help | `-h` 的完整用法（stdout） | ct-ast | `17_cli/help/args` | `expected.out` |
+| 17_cli/version | `-v` 的版本行 | ct-ast | `17_cli/version/args` | `expected.out` |
+| 17_cli/noargs | 无参数：一行 usage 到 stderr | ct-ast | `17_cli/noargs/args` | `expected.err`，退出 1 |
+| 17_cli/emit_map_instance | `--emit-map -`：实例宿主 | ct-ast | `17_cli/emit_map_instance/{args,prog.ct}` | `expected.out`（map JSON） |
+| 17_cli/emit_map_namespace | `--emit-map -`：命名空间宿主 | ct-ast | `17_cli/emit_map_namespace/{args,prog.ct}` | `expected.out`（map JSON） |
+| 17_cli/ignore_inc_compile | `-I` 在 compile 下被忽略的提示 | ct-ast | `17_cli/ignore_inc_compile/{args,prog.ct}` | `expected.err` |
+| 17_cli/ignore_inc_check | `-I` 在 check 下被忽略的提示 | ct-ast | `17_cli/ignore_inc_check/{args,prog.ct}` | `expected.err` |
+| 17_cli/pkg_get_local | `get file://localpkg`：vendor + ct.lock | ct-ast | `17_cli/pkg_get_local/{args,localpkg/*}` | `expected.out` + `expected.lock` |
+| 17_cli/pkg_get_missing | `get` 缺 spec：usage | ct-ast | `17_cli/pkg_get_missing/args` | `expected.err`，退出 1 |
+| 17_cli/pkg_install_missing | `install` 缺 `ct.pkg` | ct-ast | `17_cli/pkg_install_missing/args` | `expected.err`，退出 1 |
+| 17_cli/pkg_update_empty | `update` 离线、无依赖 | ct-ast | `17_cli/pkg_update_empty/{args,ct.pkg}` | `expected.out` |
+| 17_cli/pkg_verify_missing | `verify` 缺 `ct.lock` | ct-ast | `17_cli/pkg_verify_missing/args` | `expected.err`，退出 1 |
+| 17_cli/mode_compile_import | compile 拒绝 import | ct-ast | `17_cli/mode_compile_import/{args,main.ct,helper.h.ct}` | `expected.err`，退出 1 |
+| 17_cli/mode_check_import | check 拒绝 import（single-unit） | ct-ast | `17_cli/mode_check_import/{args,main.ct,helper.h.ct}` | `expected.err`，退出 1 |
+| 17_cli/mode_build_import | build 接受 import 并分单元生成 | ct-ast | `17_cli/mode_build_import/{args,main.ct,helper.h.ct}` | `expected.gen` |
+| 17_cli/ns_root_ok | `--ns-root` 与目录一致 | ct-ast | `17_cli/ns_root_ok/{args,tree/*}` | `expected.gen` |
+| 17_cli/ns_root_bad | `--ns-root` 与目录不符即报错 | ct-ast | `17_cli/ns_root_bad/{args,tree/*}` | `expected.err`，退出 1 |
+| 17_cli/ns_root_skip | 边界：路径不在 root 下时静默跳过 | ct-ast | `17_cli/ns_root_skip/{args,tree/*}` | `expected.gen` |
+| 18_ctor/four_positions | 局部量 / 字段 / 栈数组 / malloc 宿主 | ct-ast | `18_ctor/four_positions/prog.ct` | `expected.out` |
+| 18_ctor/heap_row | 堆上宿主数组，循环填充与派发 | ct-ast | `18_ctor/heap_row/prog.ct` | `expected.out` |
 
 ## 写样例时踩到的边界（都已固化成样例或注释）
 
@@ -167,6 +218,25 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
 17. **`potential leak` 是保守启发式**：只覆盖“裸指针 + 函数返回时仍未 delete”，
     warning 不阻断编译（退出 0），且把指针转手给别人后就不再提示——没有警告不等于
     没有泄漏（`15_memory/leak_warning`）。
+18. **规范 §6.1 关于“不比较方法签名”的描述已过时**：ct-ast 0.23 实测会对
+    `impl` 的参数个数、参数类型、返回类型逐项比较并报 `signature_mismatch`
+    （`16_diagnostics/sig_text` / `sig_return`）。此处以实测为准。
+19. **`--diagnostics=json` 只接管 warning 列表**：语义错误与 `note:` 仍走纯文本
+    stderr，stdout 为空；`16_diagnostics/note_json` 固化了这一点。另外 compile
+    模式的 JSON 记录没有 `severity` 字段，`ct check`（strict）才有。
+20. **`--ns-root` 只对“输入路径确实位于 root 之下”的单元生效**：路径不在 root 下
+    时校验被静默跳过，build 照常成功（`17_cli/ns_root_skip`）；传相对路径给
+    `--ns-root` 的绝对 root 也会命中这个跳过分支，容易误判成“校验通过”。
+21. **接口值不能直接 malloc 成裸数组**：`Shape *p = malloc(n * sizeof(Shape))`
+    会报 `cannot infer the type to box`；可行写法是栈数组 `Shape arr[n]`，或
+    malloc 一个“含接口字段的宿主结构体”数组（`18_ctor/heap_row`）。
+22. **包管理只有离线路径进了 tour**：`get <远端 spec>` 需要网络/远端索引，未在样例里
+    执行；本地等价复现是 `get file://localpkg`（`17_cli/pkg_get_local`），它走同一套
+    vendor + `ct.lock` 逻辑。`install` 的“有锁安装”也依赖已拉到本地的 vendor，
+    样例只固化缺 `ct.pkg` / 缺 `ct.lock` 的错误面。
+23. **错误恢复有硬上限**：`MAX_ERRORS = 20`，第 21 个错误会打印
+    `ctc: too many errors, stopping` 并立即退出（`16_diagnostics/cap_errors`）；
+    结构体字段上限是 64（`16_diagnostics/cap_fields`）。两者都是“容量错”，不是语法错。
 
 ## 与既有门禁的关系
 
