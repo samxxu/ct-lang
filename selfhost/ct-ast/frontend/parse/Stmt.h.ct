@@ -53,6 +53,7 @@ import tool::diag::Diag;
 #define N_LABEL 49
 #define N_LOOP 60
 #define N_MEMBER 24
+#define N_NUM 8
 #define N_POST 18
 #define N_RAW 31
 #define N_RET 5
@@ -1340,17 +1341,20 @@ impl StmtOps for Stmt {
         return r;
     }
 
-    /* `loop(<count>) { … }` -- a shorthand for
-       `for (int i = 0; i < <count>; i++) { … }`. The parser records the shape
-       only: `a` = count, `b` = -1 (the single-bound sentinel Phase 23 reads),
-       `d` = body. The implicit `i` enters the symbol table here so name
-       resolution, closure capture and shadowing all see it, but no `N_DECL` is
-       built: the emitter prints the declaration in the `for` head (D22-2,
-       D22-8). The count is parsed before `i` enters scope, so it can only name
-       an enclosing binding. */
+    /* `loop(<count>) { … }` and `loop(<start>..<stop>) { … }` -- a shorthand for
+       `for (int i = 0; i < <count>; i++) { … }` and for
+       `for (int i = <start>; i < <stop>; i++) { … }`. The parser records the
+       shape only: `a` = count (or the lower bound), `b` = -1 for the counted
+       form and the upper bound for the range form, `d` = body. `loop(0..n)` is
+       folded to the counted form here. The implicit `i` enters the symbol table
+       here so name resolution, closure capture and shadowing all see it, but no
+       `N_DECL` is built: the emitter prints the declaration in the `for` head
+       (D22-2, D22-8). Both bounds are parsed before `i` enters scope, so they
+       can only name an enclosing binding. */
     int parse_loop(void)
     {
-        int s, cnt, body, line, col, cls;
+        int s, cnt, hi, body, line, col, cls, bi, nb, vi;
+        int bounds[2];
         char msg[MAX_TEXT];
         char t[MAX_TEXT];
         char ex[MAX_TEXT];
@@ -1363,6 +1367,10 @@ impl StmtOps for Stmt {
         if (s < 0) return -1;
         self->sup->lex_next();
         if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "a loop range needs both bounds", self->mem->path);
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
@@ -1371,6 +1379,25 @@ impl StmtOps for Stmt {
         cnt = self->ex->parse_expr();
         self->ex->assign_ok = 0;
         if (cnt < 0) return -1;
+        hi = -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0) {
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                                                self->lex->tokstart - self->lex->lstart + 1,
+                                                "a loop range needs both bounds", self->mem->path);
+            self->ex->assign_ok = 1;
+            hi = self->ex->parse_expr();
+            self->ex->assign_ok = 0;
+            if (hi < 0) return -1;
+            /* `loop(0..b)` is `loop(b)` (D23-2). Only a literal zero is folded,
+               and the rule is purely syntactic: `-0` and `0+0` stay ranges, so
+               nothing here depends on constant folding. */
+            if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
+                cnt = hi;
+                hi = -1;
+            }
+        }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
@@ -1381,11 +1408,31 @@ impl StmtOps for Stmt {
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "loop body must be a block", self->mem->path);
-        /* L22-5: a statically known non-integer count still compiles -- the
-           value is converted to `int`, as C would do -- it is only reported.
-           An alias is expanded first; a spelling this layer cannot classify
-           (or an unresolved type) stays silent: a false positive is worse. */
-        if (self->sup->expr_type(cnt, t, sizeof t) == 0) {
+        /* Both bounds go through the same two checks. D23-3: a pointer, an
+           array, a struct/union value or a function pointer is a hard error --
+           comparing an address with the implicit `int i` is never intended, and
+           a bare `loop(arr)` slipped through silently in Phase 22. L22-5 keeps
+           the softer rule: a scalar that is statically known not to be an
+           integer (float/double/void) still compiles, converted to `int`, and
+           only warns. A spelling this layer cannot classify stays silent: a
+           false positive is worse than a miss. */
+        bounds[0] = cnt;
+        bounds[1] = hi;
+        nb = (hi == -1) ? 1 : 2;
+        for (bi = 0; bi < nb; bi++) {
+            int e = bounds[bi];
+            if (self->sup->expr_type(e, t, sizeof t) != 0) continue;
+            /* `int a[4]` and `int *p` spell the same type string, so only the
+               symbol table can tell an array bound apart. */
+            vi = -1;
+            if (self->arena->nodes[e].kind == N_VAR)
+                vi = self->sym->find_var(self->arena->nodes[e].text2);
+            if (vi >= 0 && self->sym->vars[vi].is_array) {
+                snprintf(msg, sizeof msg,
+                         "a loop bound must be an integer (got the array '%s')",
+                         self->sym->vars[vi].name);
+                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            }
             bare = 1;
             for (p = t; *p; p++)
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
@@ -1393,6 +1440,12 @@ impl StmtOps for Stmt {
                     bare = 0;
             if (bare && self->sym->expand_type_alias(t, ex, sizeof ex) == 0)
                 snprintf(t, sizeof t, "%s", ex);
+            if (strchr(t, '*') || strchr(t, '(')
+                || strncmp(t, "struct ", 7) == 0 || strncmp(t, "union ", 6) == 0) {
+                snprintf(msg, sizeof msg,
+                         "a loop bound must be an integer (got '%s')", t);
+                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            }
             cls = loop_count_class(t);
             if (cls == 0) {
                 snprintf(msg, sizeof msg,
@@ -1426,7 +1479,7 @@ impl StmtOps for Stmt {
         }
         self->sup->pop_scope();
         self->arena->nodes[s].a = cnt;
-        self->arena->nodes[s].b = -1;
+        self->arena->nodes[s].b = hi;
         self->arena->nodes[s].d = body;
         return s;
     }

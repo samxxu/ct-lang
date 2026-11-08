@@ -227,8 +227,21 @@ impl LexOps for Lexer {
             self->pos += 3;
             return;
         }
-        /* `.5` -- a floating literal that starts with the point. The `...` case
-           above already took the three-dot form, so this one is unambiguous. */
+        /* `..` (a half-open range bound in `loop(a..b)`) has to be one token,
+           and it must be tried after `...` and before `.5`: `...` already owns
+           the three-dot form, and a number scanner only treats a trailing `.`
+           as a float when the next character is not a `.`. */
+        if (c == '.' && self->src[self->pos + 1] == '.') {
+            self->toktext[0] = '.';
+            self->toktext[1] = '.';
+            self->toktext[2] = 0;
+            self->tok = T_PUNCT;
+            self->pos += 2;
+            return;
+        }
+        /* `.5` -- a floating literal that starts with the point. The `...` and
+           `..` cases above already took the multi-dot forms, so this one is
+           unambiguous. */
         if (c == '.' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '9') {
             int q = 0;
             self->tokfloat = 1;
