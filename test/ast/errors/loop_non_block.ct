@@ -1,0 +1,7 @@
+#include <stdio.h>
+
+int main(void)
+{
+    loop(3) printf("x");
+    return 0;
+}

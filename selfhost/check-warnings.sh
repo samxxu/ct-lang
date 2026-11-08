@@ -269,12 +269,19 @@ fi
 echo
 echo "== call-site argument types stay quiet on the corpus (Phase 19.2) =="
 # Same rule for the 19.2 type comparison: only confidently wrong arguments
-# may be reported, so any record here is a false positive.
-tmm=$(grep -l 'type mismatch' "$work"/*.err 2>/dev/null)
-if [ -n "$tmm" ]; then
-    bad "corpus argtype" "unexpected type warnings in: $tmm"
+# may be reported, so any record here is a false positive. Phase 22 pins one
+# deliberate record: `loop_count_type` has a non-integer count (L22-5), which
+# shares the 19.2 wording by design. It must fire exactly once; every other
+# fixture must stay quiet, and zero would mean the check went silent.
+tmm=$(grep -l 'type mismatch' "$work"/*.err 2>/dev/null || true)
+other=$(printf '%s\n' "$tmm" | grep -v 'loop_count_type\.err$' | grep -v '^$' || true)
+pinned=$(printf '%s\n' "$tmm" | grep -c 'loop_count_type\.err$' || true)
+if [ -n "$other" ]; then
+    bad "corpus argtype" "unexpected type warnings in: $other"
+elif [ "$pinned" -ne 1 ]; then
+    bad "corpus argtype" "the pinned loop count-type case no longer warns"
 else
-    ok "no type warnings across the corpus"
+    ok "only the pinned L22-5 loop count-type warning"
 fi
 
 echo

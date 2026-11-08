@@ -1,0 +1,23 @@
+/* 93 (Phase 22): the count is evaluated once, before the first test. `next`
+   counts its calls, so a per-iteration re-evaluation (`i < (next())`) would show
+   `calls 4` here. */
+#include <stdio.h>
+
+static int calls;
+
+static int next(void)
+{
+    calls = calls + 1;
+    return 3;
+}
+
+int main(void)
+{
+    int total = 0;
+
+    loop(next()) {
+        total = total + i;
+    }
+    printf("total %d calls %d\n", total, calls);
+    return 0;
+}

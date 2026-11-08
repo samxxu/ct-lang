@@ -1,0 +1,22 @@
+/* 101 (Phase 22): three `loop`s and a nested one in one function get distinct
+   private bounds (`__ct_loop_n_K`), so the sums never collide. */
+#include <stdio.h>
+
+int main(void)
+{
+    int total = 0;
+
+    loop(2) {
+        total = total + i;
+    }
+    loop(3) {
+        total = total + i;
+    }
+    loop(2) {
+        loop(2) {
+            total = total + i;
+        }
+    }
+    printf("%d\n", total);
+    return 0;
+}

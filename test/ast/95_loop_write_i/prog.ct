@@ -1,0 +1,18 @@
+/* 95 (Phase 22): the implicit `i` is writable. Writing it in the body moves the
+   next test, exactly as it does in the native `for` printed below. */
+#include <stdio.h>
+
+int main(void)
+{
+    int j;
+
+    loop(5) {
+        printf("loop %d\n", i);
+        i = i + 1;
+    }
+    for (j = 0; j < 5; j++) {
+        printf("for %d\n", j);
+        j = j + 1;
+    }
+    return 0;
+}

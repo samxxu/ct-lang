@@ -1,0 +1,79 @@
+/* 96 (Phase 22): break / continue / return / goto-out behave exactly as in the
+   native `for` beside them. `skip` leaves two rounds (0 + 1) in both spellings. */
+#include <stdio.h>
+
+static int loop_total(void)
+{
+    int total = 0;
+
+    loop(10) {
+        if (i == 1) continue;
+        if (i == 4) break;
+        total = total + i;
+    }
+    return total;
+}
+
+static int for_total(void)
+{
+    int i;
+    int total = 0;
+
+    for (i = 0; i < 10; i++) {
+        if (i == 1) continue;
+        if (i == 4) break;
+        total = total + i;
+    }
+    return total;
+}
+
+static int loop_early(void)
+{
+    loop(5) {
+        if (i == 2) return i * 10;
+    }
+    return -1;
+}
+
+static int for_early(void)
+{
+    int i;
+
+    for (i = 0; i < 5; i++) {
+        if (i == 2) return i * 10;
+    }
+    return -1;
+}
+
+static int loop_goto(void)
+{
+    int total = 0;
+
+    loop(5) {
+        if (i == 2) goto out;
+        total = total + i;
+    }
+out:
+    return total;
+}
+
+static int for_goto(void)
+{
+    int i;
+    int total = 0;
+
+    for (i = 0; i < 5; i++) {
+        if (i == 2) goto out;
+        total = total + i;
+    }
+out:
+    return total;
+}
+
+int main(void)
+{
+    printf("%d %d\n", loop_total(), for_total());
+    printf("%d %d\n", loop_early(), for_early());
+    printf("%d %d\n", loop_goto(), for_goto());
+    return 0;
+}

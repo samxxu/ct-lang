@@ -1,0 +1,14 @@
+/* 98 (Phase 22): a closure declared in the body captures the implicit `i` by
+   value at its declaration point, so each iteration's closure sees that round's
+   value. */
+#include <stdio.h>
+
+int main(void)
+{
+    loop(3) {
+        int (*snap)(void) = () => i;
+
+        printf("%d\n", snap());
+    }
+    return 0;
+}

@@ -4294,6 +4294,124 @@ if [ -x "$work/seed/ctc" ]; then
 fi
 
 echo
+echo "== Phase 22: loop(n), the countable shorthand =="
+# `loop(<count>) { … }` is pure sugar for the native `for` it prints. Every
+# probe prints both spellings, so "equivalent" is executable. `loop` is a
+# contextual keyword (D22-4): only `loop(` in statement position is special.
+
+# 1) The three header diagnostics are pinned verbatim; the generic errors sweep
+#    only checks the positioned shape.
+for pair in \
+    "loop_missing_count|loop needs a count expression" \
+    "loop_non_block|loop body must be a block" \
+    "loop_two_counts|loop takes exactly one count; use a native for to name the counter"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "loop: $cf" "expected a non-zero exit"
+    elif grep -Fq "$cfmsg" "$work/$cf.err"; then
+        ok "loop ($cf)"
+    else
+        bad "loop: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# 2) A closure cannot escape the body; the existing escape wording is reused.
+if "$work/ct-ast" test/ast/errors/loop_closure_escape.ct -o "$work/lce.c" \
+        >"$work/lce.out" 2>"$work/lce.err"; then
+    bad "loop: closure escape" "expected a non-zero exit"
+elif grep -Fq "a closure cannot be stored in 'f' (its scope outlives the closure)" "$work/lce.err"; then
+    ok "loop (a closure cannot escape the body)"
+else
+    bad "loop: closure escape" "$(cat "$work/lce.err")"
+fi
+
+# 3) L22-5: a statically known non-integer count compiles with one warning and
+#    still runs; `ct check` raises the same record to an error.
+if "$work/ct-ast" test/ast/loop_count_type/prog.ct -o "$work/lct.c" \
+        >"$work/lct.out" 2>"$work/lct.err"; then
+    if grep -Fq "warning: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int" "$work/lct.err" \
+       && grep -Fq '__ct_loop_n_' "$work/lct.c"; then
+        ok "loop (L22-5 warns in compile mode and still emits a for)"
+    else
+        bad "loop: L22-5 compile" "$(cat "$work/lct.err")"
+    fi
+else
+    bad "loop: L22-5 compile" "expected exit 0; $(cat "$work/lct.err")"
+fi
+"$work/ct-ast" check --diagnostics=json test/ast/loop_count_type/prog.ct \
+    >"$work/lct.json" 2>"$work/lct.json.err"
+lrc=$?
+if [ "$lrc" -eq 1 ] \
+        && grep -Fq '"severity":"error"' "$work/lct.json" \
+        && grep -Fq '"type":"type_mismatch"' "$work/lct.json" \
+        && grep -Fq 'count must be an integer' "$work/lct.json"; then
+    ok "loop (L22-5 is an error under ct check)"
+else
+    bad "loop: L22-5 check" "exit $lrc; $(cat "$work/lct.json")"
+fi
+
+# 4) L22-4: nested `loop` warns in compile mode and becomes a `loop_shadow`
+#    finding under `ct check`. Only loop-in-loop is reported.
+if "$work/ct-ast" test/ast/97_loop_nested_shadow/prog.ct -o "$work/lsh.c" \
+        >"$work/lsh.out" 2>"$work/lsh.err"; then
+    if grep -Fq "warning: loop shadows the outer 'i'; use a native for to name the inner counter" "$work/lsh.err"; then
+        ok "loop (nested loop warns in compile mode)"
+    else
+        bad "loop: nested warning" "$(cat "$work/lsh.err")"
+    fi
+else
+    bad "loop: nested warning" "expected exit 0; $(cat "$work/lsh.err")"
+fi
+"$work/ct-ast" check --diagnostics=json test/ast/97_loop_nested_shadow/prog.ct \
+    >"$work/lsh.json" 2>"$work/lsh.json.err"
+lrc=$?
+if [ "$lrc" -eq 1 ] \
+        && grep -Fq '"type":"loop_shadow"' "$work/lsh.json" \
+        && grep -Fq '"severity":"error"' "$work/lsh.json"; then
+    ok "loop (nested loop is loop_shadow, an error under ct check)"
+else
+    bad "loop: nested JSON" "exit $lrc; $(cat "$work/lsh.json")"
+fi
+
+# A hand-written `int i` in the body is ordinary C shadowing: no warning.
+cat > "$work/l_own_i.ct" <<'LIEOF'
+#include <stdio.h>
+
+int main(void)
+{
+    loop(2) {
+        int i = 7;
+
+        printf("%d\n", i);
+    }
+    return 0;
+}
+LIEOF
+"$work/ct-ast" "$work/l_own_i.ct" -o "$work/l_own_i.c" \
+    >"$work/l_own_i.out" 2>"$work/l_own_i.err"
+if [ -s "$work/l_own_i.err" ]; then
+    bad "loop: a hand-written int i" "$(cat "$work/l_own_i.err")"
+else
+    ok "loop (a hand-written int i in the body stays silent)"
+fi
+
+# 5) The lowering is exactly one native `for`: the count is bound once in a
+#    private temporary and the test reads that temporary, never the expression.
+#    (The byte-level golden check lives in the L0-seed section above; ct-ast's
+#    formatting is its own and is covered by the behavioural cases.)
+if "$work/ct-ast" test/ast/92_loop_basic/prog.ct -o "$work/l92c.c" \
+        >"$work/l92c.out" 2>"$work/l92c.err" \
+   && grep -Fq 'for (int i = 0, __ct_loop_n_' "$work/l92c.c" \
+   && ! grep -Fq 'i < (' "$work/l92c.c"; then
+    ok "loop (lowers to one for with a once-evaluated bound)"
+else
+    bad "loop: lowering shape" "$(cat "$work/l92c.err")"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

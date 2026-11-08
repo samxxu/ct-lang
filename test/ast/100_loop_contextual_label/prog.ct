@@ -1,0 +1,21 @@
+/* 100 (Phase 22): `loop` stays an ordinary identifier everywhere except a
+   statement that starts with `loop(` (D22-4): a variable named `loop`, a label
+   named `loop`, and `goto loop;` all keep their meaning. */
+#include <stdio.h>
+
+int main(void)
+{
+    int hits = 0;
+    int loop = 5;
+    int k = loop;
+
+    goto loop;
+    hits = 99;
+loop:
+    hits = hits + 1;
+    loop(2) {
+        hits = hits + k;
+    }
+    printf("%d\n", hits);
+    return 0;
+}

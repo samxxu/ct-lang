@@ -1,0 +1,21 @@
+/* 92 (Phase 22): the basic form prints `loop` next to the native `for` it
+   stands for, so "equivalent" is an executable claim, not prose. */
+#include <stdio.h>
+
+int main(void)
+{
+    int j;
+    int sum_loop = 0;
+    int sum_for = 0;
+
+    loop(3) {
+        printf("loop %d\n", i);
+        sum_loop = sum_loop + i;
+    }
+    for (j = 0; j < 3; j++) {
+        printf("for %d\n", j);
+        sum_for = sum_for + j;
+    }
+    printf("sum %d %d\n", sum_loop, sum_for);
+    return 0;
+}

@@ -1,0 +1,17 @@
+/* loop_count_type (Phase 22): a statically known non-integer count is legal --
+   C converts it to `int` -- but it is reported (L22-5). Compile mode warns and
+   exits 0; `ct check` turns the same record into an error. The directory is not
+   `errors/` because compile mode must succeed. */
+#include <stdio.h>
+
+int main(void)
+{
+    double n = 2.0;
+    int total = 0;
+
+    loop(n) {
+        total = total + i;
+    }
+    printf("%d\n", total);
+    return 0;
+}

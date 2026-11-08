@@ -1,0 +1,18 @@
+/* 94 (Phase 22): `loop(0)` and a negative count iterate zero times, without a
+   diagnostic. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a = 0;
+    int b = 0;
+
+    loop(0) {
+        a = a + 1;
+    }
+    loop(-2) {
+        b = b + 1;
+    }
+    printf("%d %d\n", a, b);
+    return 0;
+}

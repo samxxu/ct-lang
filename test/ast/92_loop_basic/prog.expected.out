@@ -1,0 +1,7 @@
+loop 0
+loop 1
+loop 2
+for 0
+for 1
+for 2
+sum 3 3

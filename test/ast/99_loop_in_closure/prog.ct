@@ -1,0 +1,19 @@
+/* 99 (Phase 22): `loop` inside a closure body. The count names a captured
+   variable; `i` is a fresh local of the closure, not of `main`. */
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 3;
+    int (*run)(void) = () => {
+        int total = 0;
+
+        loop(n) {
+            total = total + i;
+        }
+        return total;
+    };
+
+    printf("%d\n", run());
+    return 0;
+}

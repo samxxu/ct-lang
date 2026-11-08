@@ -1,0 +1,28 @@
+/* loop_own_drop (Phase 22): an `own` declared in a loop body must be released at
+   the end of every iteration. Parsing the body with `parse_branch` instead of
+   `parse_block` would silently leak three boxes here, with no diagnostic. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int n; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop\n");
+    }
+}
+
+int main(void)
+{
+    int rounds = 0;
+
+    loop(3) {
+        own Box *b = malloc(sizeof(Box));
+
+        b->n = i;
+        rounds = rounds + b->n;
+    }
+    printf("rounds %d\n", rounds);
+    return 0;
+}

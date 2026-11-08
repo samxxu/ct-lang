@@ -1,0 +1,29 @@
+/* 97 (Phase 22): a `loop` inside a `loop` shadows the outer implicit `i`. The
+   inner counter computes both totals; the shadowing itself is diagnosed
+   (warning in compile mode / error under `ct check`, D22-5). */
+#include <stdio.h>
+
+int main(void)
+{
+    int outer = 0;
+    int total = 0;
+    int o = 0;
+    int t = 0;
+    int a;
+    int b;
+
+    loop(2) {
+        loop(2) {
+            total = total + i;
+        }
+        outer = outer + 1;
+    }
+    for (a = 0; a < 2; a++) {
+        for (b = 0; b < 2; b++) {
+            t = t + b;
+        }
+        o = o + 1;
+    }
+    printf("%d %d %d %d\n", outer, total, o, t);
+    return 0;
+}
