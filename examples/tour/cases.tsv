@@ -34,7 +34,7 @@
 14_default_method|expand_and_override|compile|no|0|default body per struct, override
 14_default_method|neg_cycle|compile|no|1|default methods with no entry point
 15_memory|drop_paths|compile|no|0|own: fallthrough, nested block, early return
-15_memory|drop_loop_break|compile|no|0|known hole: break/continue skip the block's drop
+15_memory|drop_loop_break|compile|no|0|own released on break and continue, not just at the block end
 15_memory|field_cascade|compile|no|0|drop() deletes members, three-level chain
 15_memory|field_cascade_missed|compile|no|0|forgotten delete: the member's drop never runs
 15_memory|box_borrow|compile|no|0|boxing borrows: mutating the object is visible

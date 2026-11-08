@@ -632,7 +632,8 @@ int main(void)
 - **`own` only accepts a `malloc` / `calloc` initialiser** (see the factory caveat in §7).
 
 > **Current release behaviour** (since v0.16.0; [SH-33](../issues/selfhost/sh33-autodrop-return-no-inject.md)
-> is fixed): AutoDrop injects the release at the scope's closing `}` **and before every `return`**, and
+> is fixed): AutoDrop injects the release at the scope's closing `}` **and before every `return`,
+> `break` and `continue`** (`break` / `continue` release the loop body's objects only), and
 > **nulls** the pointer in the same statement:
 >
 > ```c

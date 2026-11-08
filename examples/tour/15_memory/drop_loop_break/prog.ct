@@ -1,11 +1,12 @@
 // 场景：循环体里每轮都拿一块临时对象，满足条件就 continue 跳过本轮，或者
 //   直接 break 结束循环。真实代码里这两种写法非常常见（过滤、提前收敛）。
-// 为什么写这个：这是 AutoDrop 的已知洞。释放语句只挂在块尾 `}` 和 `return`
-//   之前，`break` / `continue` 是普通跳转语句，注入点根本不会执行——本样例
-//   分配 3 次、只跑了 1 次 drop，另外 2 次静默泄漏，编译器不报错。
-// 角度：正确写法 vs 已知边界。要避免泄漏，就别在含 own 的循环体里提前跳转：
-//   把 own 提到循环外、每轮 delete 后重新分配，或者用 return 代替 break。
-//   对照 15_memory/drop_paths：那边三条正常出口都会释放。
+// 为什么写这个：AutoDrop 的注入点是块尾 `}`、`return` 前、`break` 前、`continue`
+//   前——四种出口都会释放当前作用域持有的 `own`。下面 3 轮各分配一次，三条出口
+//   （continue / break / 落到底）各 drop 一次，共 3 次，没有泄漏。
+// 角度：提前跳出也要释放。循环体的释放基线在建循环时入栈，所以 break / continue
+//   只释放循环体内（含嵌套块）的对象，不会误伤循环外；`goto` 跨层跳转仍是 v1 的
+//   已知边界。
+// 对照 15_memory/drop_paths：那边演示块尾 / 嵌套块 / 提前 return 三条出口。
 // 仅 ct-ast：own / Drop 是 CT 线能力（`loop(n)` 的块尾释放规则与此相同）。
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,8 +27,8 @@ int main(void)
     for (i = 0; i < 4; i++) {
         own Box *b = malloc(sizeof(Box));
         b->id = i;
-        if (i == 1) continue;   // 跳过块尾：i == 1 的对象泄漏
-        if (i == 2) break;      // 跳过块尾：i == 2 的对象泄漏
+        if (i == 1) continue;   // 释放本轮对象后跳过块尾
+        if (i == 2) break;      // 释放本轮对象后离开循环
         printf("body %d\n", i);
     }
     printf("done\n");

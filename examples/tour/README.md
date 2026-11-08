@@ -128,7 +128,7 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
 | 14_default_method/expand_and_override | 默认体按 struct 展开；显式覆盖 | ct-ast | `14_default_method/expand_and_override/prog.ct` | `expected.out` |
 | 14_default_method/neg_cycle | 反例：默认方法成环且无入口 | ct-ast | `14_default_method/neg_cycle/prog.ct` | `expected.err`，退出 1 |
 | 15_memory/drop_paths | 三条出口：落到底 / 嵌套块 / 提前 return | ct-ast | `15_memory/drop_paths/prog.ct` | `expected.out` |
-| 15_memory/drop_loop_break | 已知洞：break/continue 跳过块尾释放 | ct-ast | `15_memory/drop_loop_break/prog.ct` | `expected.out` |
+| 15_memory/drop_loop_break | break/continue 也释放：每条出口各 drop 一次 | ct-ast | `15_memory/drop_loop_break/prog.ct` | `expected.out` |
 | 15_memory/field_cascade | drop() 里 delete 成员，三层资源树 | ct-ast | `15_memory/field_cascade/prog.ct` | `expected.out` |
 | 15_memory/field_cascade_missed | 漏一行 delete：成员的 drop 从未执行 | ct-ast | `15_memory/field_cascade_missed/prog.ct` | `expected.out` |
 | 15_memory/box_borrow | 装箱只借用：改原对象，接口立刻可见 | ct-ast | `15_memory/box_borrow/prog.ct` | `expected.out` |
@@ -196,10 +196,11 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
    （见 `examples/14_scalar_host` 的说明；本目录未重复构造该反例）。
 10. **L0 的生成物可能带 `unused _self` 警告**：这是冻结种子的已知产物，不影响运行；
     样例脚本对 L0 只断言编译成功与输出一致。
-11. **AutoDrop 只在块尾 `}` 和 `return` 前注入**：`break` / `continue`（以及 `goto`）
-    直接跳走，块尾的释放不会执行，而且编译器不报错——`15_memory/drop_loop_break`
-    里分配 3 次只 drop 1 次，另外 2 次静默泄漏。规避方式是把 `own` 提到循环外、
-    每轮 `delete` 后重新分配，或用 `return` 代替提前跳转。
+11. **AutoDrop 在块尾 `}`、`return` 前、`break` / `continue` 前注入**：四种出口都会
+    释放当前作用域持有的 `own`；循环体的释放基线在建循环时入栈，`switch` 只登记
+    `break` 基线，所以 `case … break` 不会误释放循环外的对象。`goto` 仍是 v1 的已知
+    边界：跨层跳转会跳过释放，而且不报错（`15_memory/drop_loop_break` 演示块尾、
+    `break`、`continue` 三条出口，`15_memory/drop_paths` 演示块尾、嵌套块、`return`）。
 12. **结构体字段不会自动级联释放**：宿主被 `delete` 时只跑宿主自己的 `drop()`，
     成员要由 `drop()` 里显式 `delete self->member;`；漏写没有任何诊断
     （`15_memory/field_cascade_missed` 的 `leaf drops 0` 就是证据）。

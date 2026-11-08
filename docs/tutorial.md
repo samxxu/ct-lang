@@ -711,17 +711,17 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
 `ct check` 下记为 `loop_shadow` 错误。体内手写 `int i` 或原生 `for` 属于普通 C 遮蔽，不诊断。
 真需要两个计数器，就直接写原生 `for (i = 0, j = n; …)`。
 
-**`own` 与提前跳出（既有行为，如实说明）**：`own` 变量的释放挂在**块尾**，所以正常走完一轮会释放；
-`break` / `continue` 跳过块尾，也跳过释放，静默泄漏。这不是 `loop` 引入的：原生 `for` / `while`
-里同样如此。循环里可能提前跳出时，别把清理押在 `own` 上——要么在跳出前显式 `delete` / `free`，
-要么改回原生循环把清理写清楚。（回归测试 `test/ast/loop_own_drop` 只覆盖正常块尾。）
+**`own` 与提前跳出**：`own` 变量的释放在块尾、`break` 前、`continue` 前都会执行，所以正常走完
+一轮和提前跳出都会释放；原生 `for` / `while` 同样如此。（`goto` 跨层跳出仍是 v1 例外，见 §4.9。）
+回归测试里 `test/ast/loop_own_drop` 覆盖正常块尾，
+`examples/tour/15_memory/drop_loop_break` 覆盖 `break` / `continue`。
 
 **什么时候退回原生 `for`**
 
 - 循环结束后还要用计数器；
 - 需要步长、反向或两个计数器；
 - 需要非 `int` 的计数器（`size_t`）或超过 `INT_MAX` 的范围；
-- 体内可能提前跳出且持有 `own` 资源（见上）。
+- 体内有 `goto` 跨层跳出且持有 `own` 资源（见上；`break` / `continue` 已正常释放）。
 
 [examples/11_loop_semantics](../examples/11_loop_semantics/loop_semantics.ct) 用一个文件覆盖
 上面这些行为与 10.3 的区间形式（`main` 原文）：
@@ -1688,19 +1688,19 @@ becomes a `loop_shadow` error under `ct check`. A hand-written `int i` or a nati
 is ordinary C shadowing and stays silent. When you really need two counters, write the native
 `for (i = 0, j = n; …)`.
 
-**`own` and early exits (existing behaviour, stated honestly)**: an `own` variable is released at the
-**end of its block**, so a round that runs to the end releases; `break` / `continue` skip the block
-end and skip the release, leaking silently. `loop` did not introduce this — native `for` / `while`
-behave the same way. When a round may exit early, do not put the cleanup on `own`: either
-`delete` / `free` explicitly before the jump, or go back to a native loop and write the cleanup out.
-(The regression test `test/ast/loop_own_drop` only covers the normal block end.)
+**`own` and early exits**: an `own` variable is released at the end of its block and **before a
+`break` / `continue`**, so a round that runs to the end and one that jumps out both release — native
+`for` / `while` behave the same. (`goto` across a scope boundary is still the v1 exception, see §4.9.)
+`test/ast/loop_own_drop` covers the normal block end and
+`examples/tour/15_memory/drop_loop_break` covers `break` / `continue`.
 
 **When to go back to a native `for`**
 
 - the counter is needed after the loop;
 - you need a step, a reverse direction, or two counters;
 - you need a non-`int` counter (`size_t`) or a range beyond `INT_MAX`;
-- the body may exit early while holding an `own` resource (see above).
+- the body has a `goto` that jumps out across scopes while holding an `own` resource (see above;
+  `break` / `continue` release normally).
 
 [examples/11_loop_semantics](../examples/11_loop_semantics/loop_semantics.ct) covers all of this in
 one file, together with the range form of 10.3 (`main` verbatim):
@@ -1808,8 +1808,8 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   before `eval hi` in the 10.2 example, once each, is exactly this.
 - **`i` is the same `int` as in `loop(n)`**: scope, `break` / `continue` / `return`, `i--` / `++i` and
   capture by value in closures (one snapshot per round) all behave as before. `own` is released at
-  the **end of the block** too: a round that runs to the end releases, while `break` / `continue` skip
-  the block end and the release (see 10.2; native loops behave the same way).
+  the block end and **before a `break` / `continue`** too, so a round that runs to the end and one
+  that jumps out both release (see 10.2).
 - **`loop(0..b)` is `loop(b)`**: a literal zero lower bound folds at parse time and the output is
   byte-identical. The fold is purely syntactic: `0L..b` and `0x0..b` fold, `-0..b` and `0+0..b` do
   not (same meaning, but no constant folding is performed).

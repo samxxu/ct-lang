@@ -386,6 +386,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `own Person *p = malloc(sizeof(struct Person));` | 去掉 `own` 后照常声明；登记 autodrop |
 | 声明作用域的闭合 `}`（行首） | 在该行之前插入 `if (p) { Person_Drop_drop(p); free(p); p = 0; }` |
 | 每个 `return` 之前（L2 要求行首；ct-ast 无位置要求） | 同上，插入全部 autodrop 变量的释放（声明逆序） |
+| 每个 `break` / `continue` 之前（仅 ct-ast） | 同上，只释放该循环体（含嵌套块）自建立以来登记的 autodrop 变量；`switch` 只登记 `break` 基线，`case … break` 不会碰循环外的 `own` |
 | `delete p;` | 既有的 `free`/`drop` 照旧；同时取消 autodrop（不重复释放） |
 | `p = …;`（重新赋值） | 取消 autodrop（所有权已转移，不再兜底） |
 | `p` 以**独立值**形式出现在赋值右值（`q = p;`）或 `return` 的返回表达式中 | 取消 autodrop（逃逸）；读取字段 / 元素（`x = p->n;`、`x = p[0];`）**不**算逃逸 |
@@ -399,7 +400,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - L2 要求闭合 `}` 与 `return` 位于**行首**；行内形式（`b->n = 1; }`、`if (p) return 0;`）编译期报错，
   不静默跳过——逐行注入无法把释放语句安全地放进条件分支。**ct-ast 只对 `}` 有该要求**：`return`
   无位置要求，分支内与行内的 `return` 都会在它之前注入（v0.16.0 起，见 §4.40）。
-- `goto` 跳出声明作用域不会触发释放。
+- `goto` 跳出声明作用域不会触发释放；`break` / `continue` 不是这样：ct-ast 在它们之前释放循环体（含嵌套块）登记的 autodrop 变量，与 `return` 同一套机制（见 §4.45 的 `loop` 说明）。
 - `static` 局部变量不能是 `own`（`a static local cannot be 'own'`）：静态对象的生命期不归作用域管。
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
   优于错放（重复释放 / 释放借用对象）。
@@ -762,7 +763,7 @@ done:
   `a declaration cannot follow a label; wrap it in a block`，把声明包进块即可。
 - 标签不能直接碰 `}`（C99 要求标签后面必须有一条语句）：`again: }` 报 `a label needs a statement`。
   最省的写法是空语句 `again: ;`（见 §4.21）。
-- `goto` 可以跳入 / 跳出块与循环（C 允许）。`goto` 跳出 `own` 的声明作用域**不会**触发自动释放（§4.9）。
+- `goto` 可以跳入 / 跳出块与循环（C 允许）。`goto` 跳出 `own` 的声明作用域**不会**触发自动释放（§4.9）；释放只在块尾、`return`、`break` / `continue` 前注入。
 - 一个函数最多 64 个标签与 64 条 `goto`，超出报 `too many labels in one function` /
   `too many gotos in one function`。
 - 已知边界：`out:` 直接接 `case 2:` 不在子集内——标签链在 `case` / `default` 处终止，链空即按上面
@@ -1759,6 +1760,9 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
   接收者，包括方法调用结果（`s.trim().len()`）；动态派发（impl）当前拒绝接收者本身是方法调用的
   形态（`a.m().n()`），只接受变量 / 元素 / 调用 / 字段链。这是两条 lowering 的差异，不是设计意图；
   本轮只收紧类型宿主侧的误判，未放宽 impl 侧。
+- **AutoDrop 的 `break` / `continue` 出口（仅 ct-ast）**：ct-ast 在 `break` / `continue` 前释放
+  循环体（含嵌套块）登记的 `own`，`case … break` 只作用到 switch 基线；冻结的 L2 仍只在块尾与
+  `return` 前注入。同样的源码在 L2 下会漏释放，这是 ct-ast **比 L2 多释放**的能力差，不是行为回归。
 
 #### 4.45 `loop(n)` 计数循环（Phase 22，仅 ct-ast）
 
@@ -1774,8 +1778,8 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
   条件读该临时量，不会重复求值。`loop(0)` 与 `loop(-2)` 都零次迭代，不报错。
 - **隐式计数器是 `int i`**：`loop` 体自成一个作用域，`i` 在解析期进入符号表，所以名字解析、
   闭包按值捕获（每轮一个快照）与遮蔽判定都和手写 `for` 一致。体内可以 `break` / `continue`、
-  读或写 `i`、`i++`；体内声明的 `own` 变量挂在**块尾**释放——正常走完一轮会释放，`break` /
-  `continue` 跳过块尾、也跳过释放（静默泄漏，与原生 `for` / `while` 相同）。
+  读或写 `i`、`i++`；体内声明的 `own` 变量在块尾、`break` 与 `continue` 前释放——正常走完
+  一轮和提前跳出都会释放（与原生 `for` / `while` 相同）。
 - **边界是硬错误**：`loop()` 报 `loop needs a count expression`；`loop(3) printf("x");` 报
   `loop body must be a block`；`loop(3, x)` 报
   `loop takes exactly one count; use a native for to name the counter`。
@@ -1805,7 +1809,7 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   读的变量不影响本轮次数。这里**不依赖**同一声明内多个声明符初始化器的求值次序——C99 §6.7.8
   并未规定该次序。
 - **`i` 仍是单个可写 `int`**，作用域、`break` / `continue` / `return`、`i--` / `++i`、`own` 的
-  块尾释放（正常走完一轮释放，`break` / `continue` 跳过）全部与 `loop(n)` 相同。闭包在体内按值
+  释放（块尾、`break` / `continue` 前）全部与 `loop(n)` 相同。闭包在体内按值
   捕获 `i`，每轮一个快照。
 - **`loop(0..b)` 与 `loop(b)` 等价**（D23-2）：下界是字面量 `0` 时在解析期折成单界形态，
   生成物逐字节相同。折叠只看 `N_NUM == 0`，不看后缀：`0L..n`、`0x0..n` 也会折叠；
@@ -2325,6 +2329,7 @@ it: L2 (`selfhost/l2/**`, the frozen oracle) and ct-ast (the installed entry). T
 | `own Person *p = malloc(sizeof(struct Person));` | emit the declaration without `own`; register it as auto-dropped |
 | the declaring scope's closing `}` (line-initial) | insert `if (p) { Person_Drop_drop(p); free(p); p = 0; }` before it |
 | before every `return` (line-initial for L2; no position requirement for ct-ast) | the same, for every auto-dropped variable in reverse declaration order |
+| before every `break` / `continue` (ct-ast only) | the same, for the auto-dropped variables registered since the loop body opened (nested blocks included); a `switch` registers only a `break` baseline, so `case … break` never touches an `own` declared outside it |
 | `delete p;` | the usual `free`/`drop`; auto-drop is cancelled (no double release) |
 | `p = …;` (reassignment) | auto-drop is cancelled (ownership moved) |
 | `p` as a standalone value on the right-hand side of an assignment (`q = p;`) or in the returned expression | auto-drop is cancelled (escape); reading a field or an element (`x = p->n;`, `x = p[0];`) is **not** an escape |
@@ -2340,7 +2345,9 @@ Constraints and limits:
   cannot place the release inside a conditional. **ct-ast only requires that of the `}`**: a `return`
   has no position requirement, and branch-internal or inline `return`s get the injection before them
   (from v0.16.0 on, see §4.40).
-- `goto` out of the declaring scope does not release.
+- `goto` out of the declaring scope does not release. `break` / `continue` are not like that: ct-ast
+  releases the loop body's (nested blocks included) auto-dropped variables before them, by the same
+  mechanism as `return` (see the `loop` notes in §4.45).
 - A `static` local cannot be `own` (`a static local cannot be 'own'`): a static object's lifetime is
   not the scope's to end.
 - Escape detection is **conservative**: a standalone mention on the right-hand side of an assignment
@@ -2769,7 +2776,8 @@ done:
 - A label cannot run straight into `}` (C99 requires a statement after it): `again: }` reports
   `a label needs a statement`. The cheapest fix is the empty statement, `again: ;` (§4.21).
 - A `goto` may jump into or out of blocks and loops (C allows it). Jumping out of an `own`
-  declaration's scope does **not** release it (§4.9).
+  declaration's scope does **not** release it (§4.9); releases are injected only at the block end,
+  before a `return`, and before a `break` / `continue`.
 - One function holds at most 64 labels and 64 `goto`s; beyond that it reports
   `too many labels in one function` / `too many gotos in one function`.
 - Known edge: `out:` followed directly by `case 2:` is not part of the subset — the label chain stops
@@ -3904,6 +3912,11 @@ pick the first occurrence and leave the later definition unreachable.
   (`a.m().n()`) and accepts only a variable / element / call / field chain. This is a difference between
   the two lowerings, not a design intent; this round only removed the type-host side's false rejection
   and did not relax the impl side.
+- **The `break` / `continue` AutoDrop outlet (ct-ast only)**: ct-ast releases the loop body's
+  (nested blocks included) `own` variables before a `break` / `continue`, and `case … break` only
+  reaches the switch baseline; the frozen L2 still injects at the block end and before `return` only.
+  The same source leaks under L2, so this is a capability gap where ct-ast **releases more** than L2,
+  not a behaviour regression.
 
 #### 4.45 `loop(n)`, the counted loop (Phase 22, ct-ast only)
 
@@ -3922,9 +3935,9 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
 - **The implicit counter is `int i`**: the body is its own scope and `i` enters the symbol table
   at parse time, so name resolution, per-iteration closure capture and shadowing behave exactly as
   in a hand-written `for`. The body may `break` / `continue`, read or write `i`, `i++`; an `own`
-  declared in the body is released at the **end of its block** — a round that runs to the end
-  releases, while `break` / `continue` skip the block end and the release (a silent leak, the same as
-  in a native `for` / `while`).
+  declared in the body is released at the end of its block **and before a `break` / `continue`** —
+  a round that runs to the end and one that jumps out both release (the same as a native
+  `for` / `while`, see §4.9; the frozen L2 only injects at the block end and would leak here).
 - **The edges are hard errors**: `loop()` reports `loop needs a count expression`;
   `loop(3) printf("x");` reports `loop body must be a block`; `loop(3, x)` reports
   `loop takes exactly one count; use a native for to name the counter`.
@@ -3960,9 +3973,8 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   not change the trip count. The lowering does **not** rely on the order of declarator initializers
   inside one declaration — C99 §6.7.8 does not specify it.
 - **`i` is still a single writable `int`**: scope, `break` / `continue` / `return`, `i--` / `++i` and
-  the block-end release of `own` locals (a round that runs to the end releases; `break` / `continue`
-  skip it) are identical to `loop(n)`. A closure declared in the body captures `i` by value, one
-  snapshot per iteration.
+  the release of `own` locals (block end, and before `break` / `continue`) are identical to `loop(n)`.
+  A closure declared in the body captures `i` by value, one snapshot per iteration.
 - **`loop(0..b)` is `loop(b)`** (D23-2): a literal zero lower bound folds to the counted form at parse
   time and produces byte-identical output. The fold looks only at `N_NUM == 0`, not at the suffix, so
   `0L..n` and `0x0..n` fold too; `-0..n` and `0+0..n` deliberately do not (same meaning, but the rule
