@@ -577,6 +577,45 @@ buf.encode(233, 16);
 | `std::arena` | `vendor/std/std/arena/README.md` | `vendor/std/std/arena/tutorial.md` |
 | `std::test` | `vendor/std/std/test/README.md` | `vendor/std/std/test/tutorial.md` |
 
+### 10.1 闭包：把上下文带进回调
+
+Phase 21 起，ct-ast 支持 `=>` 就地闭包。表面类型仍是函数指针，返回类型由左侧声明给出；
+闭包的环境放在栈上，编译期禁止逃逸。
+
+```c
+/* closure.ct */
+#include <stdio.h>
+
+int run(int (*fn)(void *env, int x), void *env)
+{
+    return fn(env, 2) + fn(env, 3);
+}
+
+int main(void)
+{
+    int unit = 10;
+    int (*scale)(int x) = (int x) => x * unit;             /* 表达式体 */
+    int total = run((int x) => { return x + unit; });      /* 字面量填满 (fn, env) 对 */
+    printf("%d %d\n", scale(4), total);
+    return 0;
+}
+```
+
+```sh
+ct build closure.ct -o closure && ./closure
+# 40 25
+```
+
+- **捕获按值、创建点求值**：`scale` 拿到的是 `unit` 当时的副本；捕获名只读，写回要先捕获指针再写
+  `*p = …`。
+- **闭包变量是绑定，不是值**：只能调用（`scale(4)`），不能拷贝 / 重赋值 / 作返回值 / 作字段或
+  元素 / 作实参；需要别名就把字面量就地写进去。
+- **字面量作实参**：形参必须写成相邻的 `ret (*fn)(void *env, …)` + `void *env`；字面量一次填满
+  这两个槽，所以 `run(…)` 只写一个字面量，闭包自己的参数由 `run` 内部提供。
+- **没有 env 槽的 C API**（`qsort` 一类）接不了；上下文要活过当前栈帧就用档①：`struct` + `trait`
+  （ct-pkg 的 `Callable` 签名族）。
+- 更完整的语法、限制清单与 `(fn, env)` 约定见 [language-spec §4.44](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -1221,6 +1260,49 @@ working program. This overview does not repeat them; both files live in the pack
 | `std::map` | `vendor/std/std/map/README.md` | `vendor/std/std/map/tutorial.md` |
 | `std::arena` | `vendor/std/std/arena/README.md` | `vendor/std/std/arena/tutorial.md` |
 | `std::test` | `vendor/std/std/test/README.md` | `vendor/std/std/test/tutorial.md` |
+
+#### 10.1 Closures: carrying context into a callback
+
+Since Phase 21, ct-ast supports inline `=>` closures. The surface type is still a function pointer;
+the return type comes from the declaration on the left. The environment lives on the stack, and
+escaping it is rejected at compile time.
+
+```c
+/* closure.ct */
+#include <stdio.h>
+
+int run(int (*fn)(void *env, int x), void *env)
+{
+    return fn(env, 2) + fn(env, 3);
+}
+
+int main(void)
+{
+    int unit = 10;
+    int (*scale)(int x) = (int x) => x * unit;             /* expression body */
+    int total = run((int x) => { return x + unit; });      /* the literal fills the (fn, env) pair */
+    printf("%d %d\n", scale(4), total);
+    return 0;
+}
+```
+
+```sh
+ct build closure.ct -o closure && ./closure
+# 40 25
+```
+
+- **Capture by value, evaluated at the creation point**: `scale` holds the value `unit` had at that
+  moment. A captured name is read-only; to write back, capture a pointer and assign through `*p = …`.
+- **A closure variable is a binding, not a value**: it may be called (`scale(4)`) but not copied,
+  reassigned, returned, stored in a field / element, or passed as an argument. Inline the literal
+  when you need another name for it.
+- **A literal as an argument**: the host signature must be the adjacent
+  `ret (*fn)(void *env, …)` + `void *env`; one literal fills both slots, so `run(…)` takes a single
+  literal and the closure's own parameter is supplied inside `run`.
+- **C APIs with no env slot** (`qsort` and friends) cannot take one; when the context must outlive
+  the current frame, use tier 1: `struct` + `trait` (ct-pkg's `Callable` signature family).
+- Full syntax, the limitation list and the `(fn, env)` convention are in
+  [language-spec §4.44](language-spec.md).
 
 ### 11. CLI cheat sheet
 

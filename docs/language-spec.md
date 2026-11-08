@@ -1613,6 +1613,69 @@ map trait Seek for namespace posix {
 会自动补 `-I posix/`（§4.10、tutorial §9.2）。把 `static const int` 直接放进 shim 头不够：声明在
 头文件里，CT 看不见；在 CT 源码里再声明一次又与定义重复。所以推荐函数包装（或全大写 `#define` 别名）。
 
+#### 4.44 闭包（Phase 21，仅 ct-ast）
+
+**语法**：闭包字面量 = 带类型的参数列表 + 箭头 + 表达式或块体。
+
+```c
+int apply(int base) {
+    int n = 3;
+    int (*add)(int x) = (int x) => x + n + base;                    /* 表达式体 */
+    void (*dump)(int x) = (int x) => { printf("%d\n", x + n); };    /* 块体 */
+    return add(5);
+}
+```
+
+- **表面类型复用函数指针声明**：返回类型由左侧声明给出，不推断；不引入 `auto`（D21-1）。
+  参数必须带类型；无参写 `()`；`void` 返回就声明 `void (*f)(…) = …`。
+- 箭头只在「`)` 之后、表达式起始位置」被识别；`>=`、`==`、`->` 不受影响。
+- 字面量可直接作实参（D21-14）：它必须落在被调方相邻的 `ret (*fn)(void *env, …)` + `void *env`
+  参数对的起点；返回类型与逐参类型取宿主 `fn` 的签名，arity 按两项计。
+
+**捕获语义**（D21-2）：
+
+- 捕获集合 = 闭包体内自由出现的**外层函数 / 外层闭包的局部变量与参数**；全局变量、函数名、
+  枚举常量、类型名不捕获。
+- **按值捕获、创建点求值**：每个捕获在生成的 env 结构里占一个同名字段；创建时拷贝当前值。
+  指针按值拷贝是浅拷贝，通过 `*p = …` 写回是允许的。
+- **捕获名只读**：体内写捕获名（`=` / `++` / 复合赋值）报
+  `a captured variable cannot be reassigned inside a closure`；取地址 `&n` 报
+  `the address of a captured variable cannot be taken inside a closure`。
+- 捕获 `own` / `borrow` 变量报 `a closure cannot capture '<name>' (it is 'own' or 'borrow')`；
+  捕获另一个闭包变量报 `a closure cannot capture another closure`。
+- 嵌套闭包：内层从外层 env 字段读值再拷贝，不建立 env 之间的指针链。
+
+**闭包变量是绑定，不是值**（D21-13 / D21-16）：
+
+- 闭包变量在声明处创建，之后只能**调用**（`add(5)`）。
+- 拷贝 / 重赋值 / 作字段或数组元素报 `this closure is a binding, not a value (inline it or use a
+  struct + trait)`；作返回值报 `a closure cannot escape through 'return'`；作实参报
+  `a closure argument must fill a '(fn, env)' parameter pair`。
+- 闭包变量只能声明在函数体内；`.h.ct` 里的函数指针只是普通函数指针，不承载闭包绑定。
+
+**ABI 与生成物**：`(fn, env)` 两词，`env` 是第一个参数，与档① `impl` 的 `(void *self, …)` 同形
+（D21-4）。生成物 `__ct_cl_env_<N>` / `static __ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>` 发在本单元
+`.c` 的文件作用域、不进 `.h`；零闭包单元逐字节不变（D21-15）。命名、`#line` 重锚与诊断的完整约定见
+[closure-conventions.md](closure-conventions.md)。
+
+**限制清单**：
+
+| 限制 | 表现 |
+| --- | --- |
+| 不能进 `.h.ct` | 头文件里只有普通函数指针；闭包变量只在函数体内声明 |
+| 不能作返回值 | `a closure cannot escape through 'return'` |
+| 不能作字段或元素 | `a closure cannot be stored in a field, an element or a container` |
+| 闭包变量只在声明处可用 | 只能调用；不能拷贝 / 重赋值 / 作实参 / 交给别的变量 |
+| `qsort` 类 API 接不了 | 这类 C 回调没有 `void *` 环境槽，闭包无处放 env |
+
+**`(fn, env)` 回调约定**：容器 / 算法接受闭包时，回调只有一种形态——
+`ret (*fn)(void *env, …)` 且 `void *env` 紧跟其后；`env` 必须是第一个参数，容器不得保存它
+（env 活不过调用它的栈帧）。没有 env 槽的 C API（`qsort`）两档都接不了；需要持久化上下文就走档①
+（`struct` + `trait`，即 ct-pkg 的 `Callable` 签名族）。
+
+**未防护面**（诚实标注）：env 以 `void *` 交给不透明接收方后被保存（E8）、`goto` 跨过闭包声明
+（E9），编译器都不分析。
+
 ### 5. 命名规则（稳定契约）
 
 命名空间前缀属**已移出 L0 的特性**，已由 Phase 2 在 `selfhost/l2/**` 恢复（本文不描述它）。
@@ -1673,6 +1736,9 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
   （ct-ast 不做跨过程可达性分析）。这些符号一律带 `__attribute__((unused))`，因此 `cc -Wall -Wextra`
   不会因为它们告警；属性与既有的 `__ct_init` 的 `__attribute__((constructor))` 同源，需要
   GCC / clang。它们**不影响**语义与运行。
+- **闭包**（Phase 21，仅 ct-ast）的限制是语言规则，不是实现缺口：不能进 `.h.ct`、不能作返回值 /
+  字段 / 元素、闭包变量只能调用不能搬走、`qsort` 类无 env 槽的 C API 接不了；另有 E8 / E9
+  两个未防护面。见 §4.44 与 [closure-conventions.md](closure-conventions.md)。
 
 ### 7. 容量上限
 
@@ -3561,6 +3627,79 @@ generated C; `ct build` adds `-I posix/` by itself (§4.10, tutorial §9.2). A b
 the shim header is not enough: CT cannot see the header's declaration, and declaring it again in CT
 source would duplicate the definition. Prefer the function wrapper (or an ALL_CAPS `#define` alias).
 
+#### 4.44 Closures (Phase 21, ct-ast only)
+
+**Syntax**: a closure literal is a typed parameter list, an arrow, and an expression or a block body.
+
+```c
+int apply(int base) {
+    int n = 3;
+    int (*add)(int x) = (int x) => x + n + base;                    /* expression body */
+    void (*dump)(int x) = (int x) => { printf("%d\n", x + n); };    /* block body */
+    return add(5);
+}
+```
+
+- **The surface type reuses a function-pointer declaration**: the return type comes from the
+  declaration on the left; nothing is inferred and `auto` is not introduced (D21-1). Parameters must
+  be typed; write `()` for none; for a `void` return declare `void (*f)(…) = …`.
+- The arrow is recognised only after a `)` and at the start of an expression; `>=`, `==` and `->` are
+  unaffected.
+- A literal may be an actual argument (D21-14): it must fill the start of an adjacent
+  `ret (*fn)(void *env, …)` + `void *env` pair; the return type and each parameter type come from the
+  host `fn` signature, and arity counts the pair as two slots.
+
+**Capture semantics** (D21-2):
+
+- The capture set is every free **local variable or parameter of an enclosing function / enclosing
+  closure**; globals, function names, enum constants and type names are not captured.
+- **Capture by value, evaluated at the creation point**: each capture is a same-named field in the
+  generated env struct, copied when the closure is created. A captured pointer is a shallow copy;
+  writing back through `*p = …` is allowed.
+- **A captured name is read-only**: assigning to it inside the body (`=` / `++` / compound
+  assignment) reports `a captured variable cannot be reassigned inside a closure`; taking its address
+  (`&n`) reports `the address of a captured variable cannot be taken inside a closure`.
+- Capturing an `own` / `borrow` variable reports
+  `a closure cannot capture '<name>' (it is 'own' or 'borrow')`; capturing another closure reports
+  `a closure cannot capture another closure`.
+- A nested closure copies values out of the outer env fields; it does not chain one env to another.
+
+**A closure variable is a binding, not a value** (D21-13 / D21-16):
+
+- It is created at its declaration and may only be **called** afterwards (`add(5)`).
+- Copying / reassigning / storing it in a field or an array element reports
+  `this closure is a binding, not a value (inline it or use a struct + trait)`; returning it reports
+  `a closure cannot escape through 'return'`; passing it as an argument reports
+  `a closure argument must fill a '(fn, env)' parameter pair`.
+- A closure variable can only be declared inside a function body; a function pointer in a `.h.ct`
+  file is just a plain function pointer and cannot carry a closure binding.
+
+**ABI and generated code**: two words, `(fn, env)`, with `env` as the first parameter — the same
+shape as a tier-1 `impl`'s `(void *self, …)` (D21-4). `__ct_cl_env_<N>` / `static __ct_cl_tramp_<N>` /
+`__ct_cl_env_v_<N>` are emitted at the unit's `.c` file scope and never enter a `.h`; a unit with no
+closures is byte-identical to before (D21-15). See
+[closure-conventions.md](closure-conventions.md) for the complete naming, `#line` re-anchoring and
+diagnostic contract.
+
+**Limitations**:
+
+| Limitation | What happens |
+| --- | --- |
+| cannot enter a `.h.ct` | a header holds only plain function pointers; a closure variable is function-local |
+| cannot be a return value | `a closure cannot escape through 'return'` |
+| cannot be a field or an element | `a closure cannot be stored in a field, an element or a container` |
+| a closure variable is usable only at its declaration | it may be called; it cannot be copied / reassigned / passed as an argument / given another name |
+| `qsort`-style APIs cannot take one | those C callbacks have no `void *` environment slot, so there is nowhere to put the env |
+
+**The `(fn, env)` callback convention**: when a container or algorithm accepts a closure, the callback
+has exactly one shape — `ret (*fn)(void *env, …)` with `void *env` immediately after it. `env` must be
+the first parameter and the receiver must not keep it (the env does not outlive the calling frame).
+C APIs without an env slot (`qsort`) work with neither tier; for context that must persist, use tier 1
+(`struct` + `trait`, i.e. ct-pkg's `Callable` signature family).
+
+**Known holes** (stated honestly): an env handed to an opaque receiver as `void *` and then kept
+(E8), and a `goto` that jumps over a closure declaration (E9), are not analysed by the compiler.
+
 ### 5. Naming contract
 
 The namespace prefix is a **feature removed from L0**; Phase 2 restored it under `selfhost/l2/**`
@@ -3651,6 +3790,10 @@ pick the first occurrence and leave the later definition unreachable.
   carry `__attribute__((unused))`, so `cc -Wall -Wextra` stays quiet; the attribute comes from the same
   GCC / clang family as `__ct_init`'s `__attribute__((constructor))`. Semantics and behaviour are
   unaffected.
+- **Closures** (Phase 21, ct-ast only) are limited by language rules, not by implementation gaps:
+  they cannot enter a `.h.ct`, cannot be a return value / field / element, a closure variable can be
+  called but not moved, and `qsort`-style C APIs with no env slot cannot take one. The E8 / E9 holes
+  are also unguarded. See §4.44 and [closure-conventions.md](closure-conventions.md).
 
 ### 7. Capacity limits
 
