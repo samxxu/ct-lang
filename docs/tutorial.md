@@ -613,7 +613,7 @@ ct build closure.ct -o closure && ./closure
 - **字面量作实参**：形参必须写成相邻的 `ret (*fn)(void *env, …)` + `void *env`；字面量一次填满
   这两个槽，所以 `run(…)` 只写一个字面量，闭包自己的参数由 `run` 内部提供。
 - **没有 env 槽的 C API**（`qsort` 一类）接不了；上下文要活过当前栈帧就用档①：`struct` + `trait`
-  （ct-pkg 的 `Callable` 签名族）。
+  （ct-pkg 的 `Callable` 签名族随该仓发布，本仓未内置）。
 - 更完整的语法、限制清单与 `(fn, env)` 约定见 [language-spec §4.44](language-spec.md)。
 
 ## 11. 命令行速查
@@ -1300,7 +1300,8 @@ ct build closure.ct -o closure && ./closure
   `ret (*fn)(void *env, …)` + `void *env`; one literal fills both slots, so `run(…)` takes a single
   literal and the closure's own parameter is supplied inside `run`.
 - **C APIs with no env slot** (`qsort` and friends) cannot take one; when the context must outlive
-  the current frame, use tier 1: `struct` + `trait` (ct-pkg's `Callable` signature family).
+  the current frame, use tier 1: `struct` + `trait` (ct-pkg's `Callable` signature family ships with
+  that repository and is not built in here).
 - Full syntax, the limitation list and the `(fn, env)` convention are in
   [language-spec §4.44](language-spec.md).
 

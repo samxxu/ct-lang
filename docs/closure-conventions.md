@@ -130,7 +130,7 @@ S4 落地，这里先钉住契约）：
 
 ```text
 t.ct:4:9: error: a closure cannot escape through 'return'
-t.ct:4:9: note: use an explicit Callable struct + trait: ...
+t.ct:4:9: note: tier 1: trait Op { int call(int x); } ...
 ```
 
 `note:` 走独立通道：不递增错误计数、不占 `MAX_ERRORS`、不进 `--diagnostics=json` 的 `warnings`，

@@ -1671,7 +1671,7 @@ int apply(int base) {
 **`(fn, env)` 回调约定**：容器 / 算法接受闭包时，回调只有一种形态——
 `ret (*fn)(void *env, …)` 且 `void *env` 紧跟其后；`env` 必须是第一个参数，容器不得保存它
 （env 活不过调用它的栈帧）。没有 env 槽的 C API（`qsort`）两档都接不了；需要持久化上下文就走档①
-（`struct` + `trait`，即 ct-pkg 的 `Callable` 签名族）。
+（`struct` + `trait`；ct-pkg 的 `Callable` 签名族随该仓发布，本仓未内置）。
 
 **未防护面**（诚实标注）：env 以 `void *` 交给不透明接收方后被保存（E8）、`goto` 跨过闭包声明
 （E9），编译器都不分析。
@@ -3695,7 +3695,8 @@ diagnostic contract.
 has exactly one shape — `ret (*fn)(void *env, …)` with `void *env` immediately after it. `env` must be
 the first parameter and the receiver must not keep it (the env does not outlive the calling frame).
 C APIs without an env slot (`qsort`) work with neither tier; for context that must persist, use tier 1
-(`struct` + `trait`, i.e. ct-pkg's `Callable` signature family).
+(`struct` + `trait`; ct-pkg's `Callable` signature family ships with that repository and is not
+built in here).
 
 **Known holes** (stated honestly): an env handed to an opaque receiver as `void *` and then kept
 (E8), and a `goto` that jumps over a closure declaration (E9), are not analysed by the compiler.

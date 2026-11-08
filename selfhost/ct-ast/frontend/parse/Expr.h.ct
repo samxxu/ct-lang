@@ -461,8 +461,12 @@ static int closure_capture_index(struct Closure *c, const char *name)
 }
 
 /* Phase 21 S4: the same tier-1 hint the other closure errors carry, printed
-   through the note channel so no counter, JSON document or exit code moves. */
-#define CT_EXPR_CLOSURE_HINT "use an explicit Callable struct + trait: an Adder struct with int n, use Callable, impl call(int x)"
+   through the note channel so no counter, JSON document or exit code moves.
+   R02: the recipe is self-contained -- `Callable` lives in ct-pkg and nothing
+   in this repository defines it, so the hint cannot name it. It stays inside
+   the 160-byte preprocessor token: a longer `#define` line is truncated when
+   the compiler reads its own source. */
+#define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
 
 static int closure_capture_error(struct Expr *self, int line, const char *msg)
 {

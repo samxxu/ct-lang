@@ -234,8 +234,12 @@ static int outlives(struct Symbols *sym, int target, int source)
 
 /* Phase 21 S4: every closure error is followed by the same copy-pasteable
    tier-1 recipe. It goes through the note channel, which prints only: the
-   error cap, the warning array, the JSON document and exit codes do not move. */
-#define CT_CLOSURE_HINT "use an explicit Callable struct + trait: an Adder struct with int n, use Callable, impl call(int x)"
+   error cap, the warning array, the JSON document and exit codes do not move.
+   R02: `Callable` lives in ct-pkg and is not defined in this repository, so the
+   hint spells a self-contained trait + struct + impl instead. It stays inside
+   the 160-byte preprocessor token: a longer `#define` line is truncated when
+   the compiler reads its own source. */
+#define CT_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
 
 static int closure_error(struct Stmt *self, int line, int col, const char *msg)
 {

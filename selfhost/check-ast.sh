@@ -2087,7 +2087,7 @@ do
         bad "p21-s4: $cf" "expected a non-zero exit"
     elif ! grep -Fq "$f:$pos: error: $cfmsg" "$work/$cf.err"; then
         bad "p21-s4: $cf" "missing pinned error: $(cat "$work/$cf.err")"
-    elif ! grep -Fq "$f:$pos: note: use an explicit Callable struct + trait:" "$work/$cf.err"; then
+    elif ! grep -Fq "$f:$pos: note: tier 1:" "$work/$cf.err"; then
         bad "p21-s4: $cf" "missing tier-1 note: $(cat "$work/$cf.err")"
     elif [ "$(grep -c 'error: ' "$work/$cf.err")" -ne 1 ]; then
         bad "p21-s4: $cf" "expected exactly one error: $(cat "$work/$cf.err")"
@@ -2122,7 +2122,7 @@ fi
 clrc=$?
 if [ "$clrc" -eq 1 ] && [ ! -s "$work/cl_json.out" ] \
         && ! grep -q 'note' "$work/cl_json.out" \
-        && grep -Fq 'note: use an explicit Callable struct + trait:' "$work/cl_json.err"; then
+        && grep -Fq 'note: tier 1:' "$work/cl_json.err"; then
     ok "p21-s4: a closure error is not in the JSON warnings and the note adds no key"
 else
     bad "p21-s4: closure JSON" "exit $clrc; $(cat "$work/cl_json.out" "$work/cl_json.err")"
@@ -2149,7 +2149,7 @@ if "$work/ct-ast" test/ast/errors/closure_literal_plain_fnptr.ct -o "$work/cllpf
     bad "p21-s5: literal plain fnptr" "expected a non-zero exit"
 elif ! grep -Fq "test/ast/errors/closure_literal_plain_fnptr.ct:4:12: error: a closure cannot be used where a plain function pointer is expected" "$work/cllpf.err"; then
     bad "p21-s5: literal plain fnptr" "$(cat "$work/cllpf.err")"
-elif ! grep -Fq 'note: use an explicit Callable struct + trait:' "$work/cllpf.err"; then
+elif ! grep -Fq 'note: tier 1:' "$work/cllpf.err"; then
     bad "p21-s5: literal plain fnptr note" "$(cat "$work/cllpf.err")"
 else
     ok "p21-s5: a literal in a plain function-pointer slot keeps the S4 wording"
