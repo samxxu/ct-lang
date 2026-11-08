@@ -91,8 +91,10 @@ import runtime::arena::Arena;
 /* the parser's closure literal (Phase 21 S2); the emitter never prints a node
    of this kind by itself -- S3 expands it at the declaration and at the call */
 #define N_CLOSURE 59
-/* `loop(<count>) { … }` (Phase 22): parsed as its own node, printed as a native
-   `for` whose head declares the implicit counter and a private bound. */
+/* `loop(<count>) { … }` (Phase 22) and `loop(<start>..<stop>) { … }` (Phase 23):
+   parsed as their own node, printed as a native `for` whose head declares the
+   implicit counter and the private bound temporary (one for the counted form,
+   two for the range form). */
 #define N_LOOP    60
 
 /* binary operators (stored in `aux`) */
@@ -2499,13 +2501,23 @@ impl EmitOps for Emitter {
         /* `loop(<count>) { … }` and `loop(<start>..<stop>) { … }` print as a
            single-line `for` header:
              for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++)
-             for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
-           The counted form evaluates its bound once, before the first test; the
-           range form evaluates the two bounds once each, lower first, because
-           each initializer is a full expression. `i` is an ordinary `int`, so
-           break/continue/return and the `i--`/`++i` forms behave exactly as in
-           the desugared source. `K` is a monotonic per-emitter counter, so
-           nested loops get distinct names without a pre-scan. */
+             for (int __ct_loop_n_K, __ct_loop_hi_K,
+                      i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+                  i < __ct_loop_hi_K; i++)
+           The counted form evaluates its bound once, before the first test. The
+           range form evaluates each bound exactly once, lower first: both
+           assignments are operands of one comma expression -- `i`'s single
+           initializer -- and the comma operator sequences them left to right
+           (C99 §6.5.17), so the order does not depend on the unspecified
+           evaluation order of declarator initializers (§6.7.8). The two
+           declarators stay uninitialised on purpose: an `= 0` there would race
+           with the assignments inside `i`'s initializer. `i` is an ordinary
+           `int`, so break/continue/return and the `i--`/`++i` forms behave
+           exactly as in the desugared source. `K` is a monotonic per-emitter
+           counter, so nested loops get distinct names without a pre-scan; the
+           range form derives both names from the same `K`, so it consumes no
+           extra temporary and `loop(0..n)` (folded at parse time) still prints
+           the counted form byte for byte. */
         if (self->arena->nodes[n].kind == N_LOOP) {
             int k;
             k = self->ntmp;
@@ -2516,11 +2528,13 @@ impl EmitOps for Emitter {
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fprintf(self->out, "); i < __ct_loop_n_%d; i++) ", k);
             } else {
-                fprintf(self->out, "for (int i = (");
+                fprintf(self->out,
+                        "for (int __ct_loop_n_%d, __ct_loop_hi_%d, i = ((__ct_loop_n_%d = (",
+                        k, k, k);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out, "), __ct_loop_n_%d = (", k);
+                fprintf(self->out, ")), (__ct_loop_hi_%d = (", k);
                 if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
-                fprintf(self->out, "); i < __ct_loop_n_%d; i++) ", k);
+                fprintf(self->out, ")), __ct_loop_n_%d); i < __ct_loop_hi_%d; i++) ", k, k);
             }
             return self->emit_node(self->arena->nodes[n].d, ind);
         }
