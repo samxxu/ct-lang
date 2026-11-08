@@ -483,6 +483,19 @@ impl ModuleOps for Module {
             }
             d = self->load_unit(dep);
             if (d < 0) return -1;
+            /* A unit still on the depth-first stack has no program yet
+               (`prog == -1`), so reaching it again is a circular import:
+               `A` imports `B` and `B` imports `A` closes here with `A` still
+               being loaded. The dependency walk below reads `prog` as an arena
+               index, and `-1` is an out-of-bounds read; name the two units
+               instead of walking into the crash. */
+            if (self->units[d].prog < 0) {
+                char cmsg[MAX_PATH + 128];
+                snprintf(cmsg, sizeof cmsg,
+                         "circular import: '%s' imports '%s', which is still being loaded",
+                         self->units[u].path, self->units[d].path);
+                return tool::diag::ct_sem_error(lines[i], 1, cmsg, path);
+            }
             /* Two `import` lines may name the same unit; a dependency is listed
                once, so the generated `#include` is emitted once. */
             dup = 0;

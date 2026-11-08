@@ -2102,6 +2102,79 @@ else
     bad "batch 38: map_imports_plain" "$(head -2 "$work/mbimp/err.txt")"
 fi
 
+# A circular import must be a diagnostic, not a crash. A unit still on the
+# depth-first stack has `prog == -1`; the dependency walk used to read the arena
+# at that index and segfault (exit 139, empty stderr). The loader now names the
+# two units that close the cycle. A diamond (two parents, one shared child) is
+# not a cycle and must still build.
+rm -rf "$work/cyc2"
+mkdir -p "$work/cyc2/out"
+printf 'import a;\n#include <stdio.h>\nint main(void) { return 0; }\n' >"$work/cyc2/main.ct"
+printf 'import b;\nint a_v(void) { return 1; }\n' >"$work/cyc2/a.h.ct"
+printf 'import a;\nint b_v(void) { return 1; }\n' >"$work/cyc2/b.h.ct"
+"$work/ct-ast" build --emit-c -I "$work/cyc2" "$work/cyc2/main.ct" -o "$work/cyc2/out" \
+    >"$work/cyc2.out" 2>"$work/cyc2.err"
+circ_rc=$?
+if [ "$circ_rc" -eq 0 ]; then
+    bad "circular_import_2" "expected a non-zero exit"
+elif [ "$circ_rc" -eq 139 ]; then
+    bad "circular_import_2" "crashed with 139 instead of a diagnostic"
+elif grep -Eq "circular import: '[^']+' imports '[^']+'" "$work/cyc2.err"; then
+    ok "circular_import_2 (A<->B names the closing pair, exit $circ_rc)"
+else
+    bad "circular_import_2" "$(head -3 "$work/cyc2.err")"
+fi
+
+rm -rf "$work/cyc3"
+mkdir -p "$work/cyc3/out"
+printf 'import a;\n#include <stdio.h>\nint main(void) { return 0; }\n' >"$work/cyc3/main.ct"
+printf 'import b;\nint a_v(void) { return 1; }\n' >"$work/cyc3/a.h.ct"
+printf 'import c;\nint b_v(void) { return 1; }\n' >"$work/cyc3/b.h.ct"
+printf 'import a;\nint c_v(void) { return 1; }\n' >"$work/cyc3/c.h.ct"
+"$work/ct-ast" build --emit-c -I "$work/cyc3" "$work/cyc3/main.ct" -o "$work/cyc3/out" \
+    >"$work/cyc3.out" 2>"$work/cyc3.err"
+circ_rc=$?
+if [ "$circ_rc" -eq 0 ]; then
+    bad "circular_import_3" "expected a non-zero exit"
+elif [ "$circ_rc" -eq 139 ]; then
+    bad "circular_import_3" "crashed with 139 instead of a diagnostic"
+elif grep -Eq "circular import: '[^']+' imports '[^']+'" "$work/cyc3.err"; then
+    ok "circular_import_3 (A->B->C->A, exit $circ_rc)"
+else
+    bad "circular_import_3" "$(head -3 "$work/cyc3.err")"
+fi
+
+rm -rf "$work/cycs"
+mkdir -p "$work/cycs/out"
+printf 'import a;\n#include <stdio.h>\nint main(void) { return 0; }\n' >"$work/cycs/main.ct"
+printf 'import a;\nint a_v(void) { return 1; }\n' >"$work/cycs/a.h.ct"
+"$work/ct-ast" build --emit-c -I "$work/cycs" "$work/cycs/main.ct" -o "$work/cycs/out" \
+    >"$work/cycs.out" 2>"$work/cycs.err"
+circ_rc=$?
+if [ "$circ_rc" -eq 0 ]; then
+    bad "circular_import_self" "expected a non-zero exit"
+elif [ "$circ_rc" -eq 139 ]; then
+    bad "circular_import_self" "crashed with 139 instead of a diagnostic"
+elif grep -Eq "circular import: '[^']+' imports '[^']+'" "$work/cycs.err"; then
+    ok "circular_import_self (a unit importing itself, exit $circ_rc)"
+else
+    bad "circular_import_self" "$(head -3 "$work/cycs.err")"
+fi
+
+rm -rf "$work/dia"
+mkdir -p "$work/dia/out"
+printf 'import left;\nimport right;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", left_v() + right_v() + base_v()); return 0; }\n' >"$work/dia/main.ct"
+printf 'import base;\npub int left_v(void);\nint left_v(void) { return base_v(); }\n' >"$work/dia/left.h.ct"
+printf 'import base;\npub int right_v(void);\nint right_v(void) { return base_v() + 1; }\n' >"$work/dia/right.h.ct"
+printf 'pub int base_v(void);\nint base_v(void) { return 10; }\n' >"$work/dia/base.h.ct"
+if "$work/ct-ast" build -I "$work/dia" "$work/dia/main.ct" -o "$work/dia.bin" \
+        >"$work/dia.out" 2>"$work/dia.err" \
+   && [ "$("$work/dia.bin")" = "31" ]; then
+    ok "diamond_import (two parents, one shared child, no false cycle)"
+else
+    bad "diamond_import" "$(cat "$work/dia.err" 2>/dev/null | head -3)"
+fi
+
 # Both importable suffixes in one root is an ambiguity, and the message names
 # the two candidates.
 rm -rf "$work/mbamb"
