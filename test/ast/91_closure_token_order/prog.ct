@@ -1,0 +1,23 @@
+#include <stdio.h>
+
+struct Pair { int a; int b; };
+
+int pick(struct Pair *p)
+{
+    return p->a;
+}
+
+int main(void)
+{
+    int a = 5;
+    int b = 3;
+
+    /* `=>` must not swallow `>=`, `==` or `->`: the comparison inside the body
+       and the member access outside it keep their own tokens. */
+    int (*f)(int x) = (int x) => x >= 0 ? x : -x;
+    struct Pair p = {.a = 1, .b = 2};
+
+    if (a == b) return 1;
+    printf("%d %d\n", f(-4), pick(&p));
+    return 0;
+}

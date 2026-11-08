@@ -2075,7 +2075,10 @@ for pair in \
     "closure_capture_shadow|3:1|a local cannot shadow the captured 'n'" \
     "closure_plain_fnptr|5:12|a closure cannot be used where a plain function pointer is expected" \
     "closure_fnptr_void_ptr_tail|7:12|a closure cannot be used where a plain function pointer is expected" \
-    "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair"
+    "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair" \
+    "closure_capture_array|4:1|a closure cannot capture the array 'arr' (capture a pointer to it instead)" \
+    "closure_global_init|1:8|a closure cannot be stored in 'handler' (its scope outlives the closure)" \
+    "closure_hdr_export.h|3:5|a closure cannot be stored in 'handler' (its scope outlives the closure)"
 do
     cf="${pair%%|*}"
     rest="${pair#*|}"
@@ -2097,6 +2100,18 @@ do
         ok "p21-s4 ($cf)"
     fi
 done
+
+# D21-1: CT has no type inference, so `auto` is not a type name. Rejecting it
+# here keeps a closure's return type coming from the declaration on the left
+# instead of letting `cc` read `auto` as a C99 storage class.
+if "$work/ct-ast" test/ast/errors/auto_keyword.ct -o "$work/auto_keyword.c" \
+        >"$work/auto_keyword.out" 2>"$work/auto_keyword.err"; then
+    bad "p21-d21-1: auto_keyword" "expected a non-zero exit"
+elif ! grep -Fq "test/ast/errors/auto_keyword.ct:3:5: error: 'auto' is not a type in CT (write the type explicitly)" "$work/auto_keyword.err"; then
+    bad "p21-d21-1: auto_keyword" "$(cat "$work/auto_keyword.err")"
+else
+    ok "p21-d21-1 (auto_keyword)"
+fi
 
 # R10: `__ct_` is one predicate for every declaration category, so a function,
 # global, struct or field name is refused with the same positioned message.

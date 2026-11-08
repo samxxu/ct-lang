@@ -1,0 +1,13 @@
+#include <stdio.h>
+
+int seen;
+
+int main(void)
+{
+    int n = 7;
+    void (*show)(int x) = (int x) => { seen = x + n; };
+
+    show(5);
+    printf("%d\n", seen);
+    return 0;
+}

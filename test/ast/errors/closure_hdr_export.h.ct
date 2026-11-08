@@ -1,0 +1,8 @@
+// a `.h.ct` unit publishes every `pub` name in its header; a closure lives in
+// an environment allocated in the enclosing frame, so it cannot be one of them.
+pub int (*handler)(int x) = (int x) => x + 1;
+
+pub int call(int x)
+{
+    return handler(x);
+}

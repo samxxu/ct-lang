@@ -1,0 +1,15 @@
+#include <stdio.h>
+
+struct Pair { int a; int b; };
+
+int main(void)
+{
+    struct Pair p = {1, 2};
+    int (*f)(int x) = (int x) => x + p.a + p.b;
+
+    /* the env holds a copy: mutating `p` must not be visible to `f` */
+    p.a = 100;
+    p.b = 200;
+    printf("%d\n", f(0));
+    return 0;
+}

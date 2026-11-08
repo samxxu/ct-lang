@@ -1,0 +1,6 @@
+static int (*handler)(int x) = (int x) => x + 1;
+
+int main(void)
+{
+    return handler(1);
+}
