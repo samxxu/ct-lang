@@ -508,6 +508,15 @@ static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
     /* a closure is a binding, not a value (E7 on the capture path) */
     if (self->sym->vars[vi].is_closure)
         return closure_capture_error(self, line, "a closure cannot capture another closure");
+    /* An array is not a value in C: there is no assignment that would copy it
+       into the env struct, and an element-wise copy has no spelling on the
+       inline `(fn, env)` path. Refuse it instead of emitting an env field whose
+       type lost its dimensions. */
+    if (self->sym->vars[vi].is_array) {
+        snprintf(msg, sizeof msg,
+                 "a closure cannot capture the array '%s' (capture a pointer to it instead)", name);
+        return closure_capture_error(self, line, msg);
+    }
     if (closure_capture_index(c, name) >= 0) return 0;
     if (c->ncap >= 16)
         return self->sup->fail("a closure takes too many captures (limit 16)");
@@ -1150,6 +1159,12 @@ impl ExprOps for Expr {
                     self->sup->lex_next();
                     continue;
                 }
+                /* D21-1: a closure's return type comes from the declaration on
+                   the left, so CT never infers one. `auto` is not a type name
+                   here: refuse it instead of passing it through to `cc`, where
+                   C99 would accept it as a storage class. */
+                if (strcmp(self->lex->toktext, "auto") == 0)
+                    return self->sup->fail("'auto' is not a type in CT (write the type explicitly)");
                 if (self->sup->resolve_type(self->lex->toktext, rname, sizeof rname) != 0) return -1;
                 ti = self->sym->find_type(rname);
                 if (ti < 0) {

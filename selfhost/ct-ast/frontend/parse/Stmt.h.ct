@@ -79,6 +79,7 @@ pub trait StmtOps {
     int  label_find(const char *name);
     int  parse_named_label(void);
     int  parse_goto(void);
+    int  closure_global_init(int e, const char *name, int line, int col);
     int  func_begin(void);
     int  func_end(void);
 }
@@ -1654,6 +1655,21 @@ impl StmtOps for Stmt {
             n = w;
         }
         return n;
+    }
+
+    /* The file-scope initialiser path (`Parser.parse_func`): a global lives past
+       every frame, so its environment would dangle as soon as the enclosing
+       function returns. A `.h.ct` reaches the same rule through a `pub` global.
+       Rejecting here keeps the literal out of the emitter, which has no frame to
+       build an environment in and used to fall back to `unknown expression node`. */
+    int closure_global_init(int e, const char *name, int line, int col)
+    {
+        char msg[MAX_TEXT];
+
+        if (e < 0 || self->arena->nodes[e].kind != N_CLOSURE) return 0;
+        snprintf(msg, sizeof msg,
+                 "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
+        return closure_error(self, line, col, msg);
     }
 }
 

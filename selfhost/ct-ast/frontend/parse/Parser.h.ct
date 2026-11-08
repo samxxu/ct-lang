@@ -964,7 +964,7 @@ impl ParseOps for Parser {
     /* A function (prototype or definition) or a global variable. */
     int parse_func(int is_static, int is_pub, int is_extern)
     {
-        int f, b, params, fi, func_line, ar, attr, lead;
+        int f, b, params, fi, func_line, func_col, ar, attr, lead;
         char ret[MAX_TEXT];
         char name[MAX_TEXT];
         char cname[MAX_TEXT];
@@ -976,6 +976,7 @@ impl ParseOps for Parser {
         lead = self->pending_attr ? self->pending_attr - 1 : -1;
         self->pending_attr = 0;
         func_line = self->lex->tokline;
+        func_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
         if (self->ex->fnptr_state) {
             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
@@ -1053,6 +1054,14 @@ impl ParseOps for Parser {
                 }
                 self->arena->nodes[g].a = e;
             }
+            /* E2 at file scope: the environment would die with the call that
+               created it while the global outlives every frame. `.h.ct` units
+               reach the same rule through a `pub` global, so this also keeps a
+               closure out of the header. */
+            if (self->arena->nodes[g].a >= 0
+                && self->st->closure_global_init(self->arena->nodes[g].a, name,
+                                                 func_line, func_col) != 0)
+                return -1;
             if (self->sup->expect(";") != 0) return -1;
             return g;
         }
