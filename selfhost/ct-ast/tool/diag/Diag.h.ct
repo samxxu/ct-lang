@@ -24,10 +24,10 @@
 
 namespace tool::diag;
 /* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity,
-   19.2 argument type, 19.3 ambiguity). */
+   19.2 argument type, 19.3 ambiguity, 22 nested `loop` shadowing). */
 struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
-                           4 arity_mismatch, 5 type_mismatch, 6 ambiguous_method */
+                           4 arity_mismatch, 5 type_mismatch, 6 ambiguous_method, 7 loop_shadow */
     int  line;
     int  col;           /* 1-based column of the token the finding is about (0: none);
                            `ct check` reports it, compile-mode text stays `file:line:` */
@@ -49,6 +49,7 @@ trait DiagStore {
                           const char *path);
     int  record_amb_warn(int line, int col, const char *method, const char *msg,
                          const char *path);
+    int  record_loop_warn(int line, int col, const char *msg, const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
     int  emit(int json, int to_stderr);
@@ -170,6 +171,29 @@ impl DiagStore for Diag {
         w->path_line = 0;
         snprintf(w->file, sizeof w->file, "%s", path);
         snprintf(w->var, sizeof w->var, "%s", method);
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* An inner `loop` shadows the outer loop's implicit `i` (Phase 22, D22-5).
+       Same severity policy as the other diagnostics: a warning in compile mode,
+       an error under `ct check`. Only `loop`-in-`loop` gets here -- a
+       hand-written `int i` or a native `for` is ordinary C shadowing. */
+    int record_loop_warn(int line, int col, const char *msg, const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 7;
+        w->line = line;
+        w->col = col;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
         snprintf(w->msg, sizeof w->msg, "%s", msg);
@@ -301,6 +325,14 @@ impl DiagStore for Diag {
                     fputs("\",\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 7) {
+                    fputs("\"type\":\"loop_shadow\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else {
                     fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -341,6 +373,8 @@ impl DiagStore for Diag {
                 else if (w->kind == 6)
                     fprintf(tf, "%s %s: ambiguous method: '%s' %s\n",
                             loc, sev, w->var, w->msg);
+                else if (w->kind == 7)
+                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
                 else
                     fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted\n",
                             loc, sev, w->var, w->tname);
@@ -420,6 +454,13 @@ pub int ct_amb_warn(int line, int col, const char *method, const char *msg, cons
 int ct_amb_warn(int line, int col, const char *method, const char *msg, const char *path)
 {
     return g_diag.record_amb_warn(line, col, method, msg, path);
+}
+
+/* A nested `loop` shadows the outer `i` (Phase 22, D22-5). */
+pub int ct_loop_warn(int line, int col, const char *msg, const char *path);
+int ct_loop_warn(int line, int col, const char *msg, const char *path)
+{
+    return g_diag.record_loop_warn(line, col, msg, path);
 }
 
 pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);
