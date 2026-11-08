@@ -1,0 +1,28 @@
+/* own_shadow_return: an `own` may shadow an outer `own` of the same name. The
+   releases injected before a `return` must follow the symbol each declaration
+   resolved to, not the name: a name lookup here finds the inner binding twice,
+   which released the inner object twice and leaked the outer one. The alias
+   the compiler adds beside the shadowed declaration keeps both releases on
+   their own object (outer id = 1, inner id = 2; both drop, inner first). */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int id; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop %d\n", self->id);
+    }
+}
+
+int main(void)
+{
+    own Box *id = malloc(sizeof(Box));
+    id->id = 1;
+    {
+        own Box *id = malloc(sizeof(Box));
+        id->id = 2;
+        return 0;
+    }
+}

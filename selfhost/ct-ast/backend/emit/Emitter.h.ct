@@ -2632,6 +2632,11 @@ impl EmitOps for Emitter {
                             self->init->type_has_vptr(self->arena->nodes[n].text), 0) != 0) return -1;
                     fputs(" }", self->out);
                 }
+                /* `aux == 2`: an auto-dropped declaration whose name is shadowed
+                   where some release runs. The private alias addresses the object
+                   from the shadowing scope (see `autodrop_append`). */
+                if (self->arena->nodes[n].aux == 2)
+                    fprintf(self->out, ", *__ct_own_%d = %s", n, self->arena->nodes[n].text2);
             }
             return 0;
         }

@@ -140,18 +140,31 @@ static int autodrop_append(struct Stmt *self, int blk, int base, int *tail)
 
     for (d = self->mem->nowner - 1; d >= base; d--) {
         int del, v, vi;
-        const char *tp;
+        const char *name, *tp;
         size_t bl;
         /* a reassigned / returned / moved `own` variable is no longer ours to
-           release (L2 clears the same flag before its rewrite) */
-        vi = self->sym->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
+           release (L2 clears the same flag before its rewrite). The entry keeps
+           the symbol it was declared as: a nested `own` of the same name is the
+           innermost binding now, and asking by name would judge (and release)
+           that one instead. */
+        vi = self->mem->own_var[d];
         if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
         del = self->sup->new_node(N_DELETE);
         v = self->sup->new_node(N_VAR);
         if (del < 0 || v < 0) return -1;
         self->arena->nodes[del].aux = self->mem->own_kind[d];
         self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
-        snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", self->arena->nodes[self->mem->own_decl[d]].text2);
+        name = self->arena->nodes[self->mem->own_decl[d]].text2;
+        if (vi >= 0 && self->sym->find_var(name) != vi) {
+            /* the name is shadowed at this release site, so the deletion cannot
+               address the declared object through the source spelling. A private
+               alias declared beside it (`aux = 2` prints `, *__ct_own_N = name`)
+               keeps every release on the symbol this entry was declared as. */
+            self->arena->nodes[self->mem->own_decl[d]].aux = 2;
+            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "__ct_own_%d", self->mem->own_decl[d]);
+        } else {
+            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", name);
+        }
         self->arena->nodes[del].a = v;
         tp = self->arena->nodes[self->mem->own_decl[d]].text;
         if (strncmp(tp, "struct ", 7) == 0) tp += 7;
@@ -193,7 +206,7 @@ static int retire_before_return(struct Stmt *self, int ret, int permanent)
     if (tail < 0) return ret;
     self->arena->nodes[ret].b = self->arena->nodes[blk].a;
     for (d = 0; d < self->mem->nowner; d++) {
-        int vi = self->sym->find_var(self->arena->nodes[self->mem->own_decl[d]].text2);
+        int vi = self->mem->own_var[d];
         if (vi < 0 || !self->sym->vars[vi].autodrop) continue;
         self->sym->vars[vi].owned = 0;
         if (permanent) self->sym->vars[vi].autodrop = 0;
@@ -522,6 +535,7 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
         if (self->mem->nowner >= 4096) return self->mem->fail("too many owned variables");
         self->mem->own_decl[self->mem->nowner] = d;
         self->mem->own_kind[self->mem->nowner] = 1;
+        self->mem->own_var[self->mem->nowner] = vi;
         self->mem->nowner++;
         d = self->arena->nodes[d].next;
     }
