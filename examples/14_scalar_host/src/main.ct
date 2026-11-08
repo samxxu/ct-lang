@@ -1,0 +1,27 @@
+// 14_scalar_host — methods on built-in C types (the type host)
+//
+// `map trait ... for type <C spelling>` gives an `int`, a `char *` and a
+// `double` methods, with no wrapper, no vtable and no allocation: each call
+// expands into one plain C call. This is where ct differs most from C.
+//
+// The key is the spelling: `int` here means the C spelling `int`; `unsigned`
+// and `unsigned int` are distinct keys.
+//@ct-requires: ct-ast
+import host::host;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 21;
+    unsigned long bytes = 4096;
+    double x = 2.5;
+
+    printf("twice   %d\n", n.twice());
+    printf("chain   %d\n", n.twice().plus(1).plus(100));
+    printf("len     %d\n", "hello".len());
+    printf("square  %.2f\n", x.square());
+    printf("zero    %d\n", (0).twice());
+    printf("bytes   %lu\n", bytes.twice_wide());
+    return 0;
+}

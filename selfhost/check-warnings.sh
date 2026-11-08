@@ -15,6 +15,7 @@
 #   - test/cases/*.ct + examples/*/*.ct (compile mode; a dialect demo is
 #     expanded by its plugins first, as in check-ast.sh);
 #   - test/modules/*/main.ct or main.h.ct (build mode, all units);
+#   - examples/*/src/main.ct       (build mode; the two src-layout demos 13, 14);
 #   - bindings/*/demo.ct            (build mode, with the roots the build prints).
 #
 # The gate is strict on purpose. `_self` / vtable / Drop helpers used to warn
@@ -313,6 +314,54 @@ if [ -n "$pmm" ]; then
 else
     ok "no impl parameter-type warnings across the corpus"
 fi
+
+echo
+echo "== src-layout examples (build mode) =="
+# 13_builder_chain and 14_scalar_host carry a `.m.ct` mapping unit and `import`,
+# which only `build` mode understands, so their entry lives under
+# `examples/<dir>/src/` and the compile-mode corpus glob (`examples/*/*.ct`)
+# never sees it. check-ast.sh's corpus loop is compile-mode only and must stay
+# that way, so the run-and-compare for these two belongs here.
+for src in examples/*/src/main.ct; do
+    [ -f "$src" ] || continue
+    sd=$(dirname "$src")
+    ex=$(dirname "$sd")
+    [ -n "$(find "$ex" -name '*.m.ct' -print -quit)" ] || continue
+    name=$(basename "$ex")
+
+    # An import is resolved relative to the entry's directory, and a shim is
+    # included by base name, so every directory holding one is an include root
+    # for both the build and the generated C.
+    incs="-I $sd"
+    for h in $(find "$ex" -name '*.shim.h'); do incs="$incs -I $(dirname "$h")"; done
+
+    gd="$work/src-$name"
+    rm -rf "$gd"
+    mkdir -p "$gd" || continue
+    if ! "$work/ct-ast" build --emit-c $incs "$src" -o "$gd" \
+            >"$work/src-$name.out" 2>"$work/src-$name.err"; then
+        bad "examples/$name" "ct-ast failed: $(cat "$work/src-$name.err")"
+        continue
+    fi
+    if ! "$CC" -Wall -Wextra -std=c99 $incs "$gd"/*.c -o "$gd/prog" \
+            2>"$work/src-$name.cc"; then
+        bad "examples/$name" "generated C does not compile: $(cat "$work/src-$name.cc")"
+        continue
+    fi
+    if [ -s "$work/src-$name.cc" ]; then
+        bad "examples/$name" "generated C warns: $(cat "$work/src-$name.cc")"
+        continue
+    fi
+    if ! "$gd/prog" >"$work/src-$name.stdout" 2>&1; then
+        bad "examples/$name" "the program exited non-zero"
+        continue
+    fi
+    if ! cmp -s "$work/src-$name.stdout" "$sd/main.expected.out"; then
+        bad "examples/$name" "program output differs from $sd/main.expected.out"
+        continue
+    fi
+    ok "examples/$name"
+done
 
 echo
 printf 'check-warnings: %d ok, %d failed\n' "$pass" "$fail"

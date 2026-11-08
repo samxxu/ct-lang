@@ -1,0 +1,29 @@
+// 13_builder_chain — chained host methods over a C struct (zero-cost type host)
+//
+// `add()` returns the host itself, so one statement walks three hops:
+//
+//     b.add(1).add(2).add(3).value()
+//
+// Each hop expands at the call site into a bare C call; no wrapper, no vtable,
+// no interface value. This is the only shape in which ct currently supports a
+// real `a.f().g()` chain: a type-host map (see docs/language-spec.md, "static
+// mapping"). An `impl` method call cannot be a receiver.
+//@ct-requires: ct-ast
+import builder::builder;
+
+#include <stdio.h>
+
+int main(void)
+{
+    struct Builder b;
+    struct Builder b2;
+    int r;
+
+    b = builder_make(10);
+    r = b.add(1).add(2).add(3).value();
+    printf("chain  %d\n", r);
+
+    b2 = builder_make(100);
+    printf("second %d\n", b2.add(5).add(6).add(7).value());
+    return 0;
+}

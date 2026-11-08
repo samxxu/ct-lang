@@ -1,0 +1,18 @@
+namespace builder;
+
+#include "builder.shim.h"
+
+/* The C type the host is keyed on. `CBuilder` is a compile-time synonym for
+   `struct Builder`; no typedef is emitted. */
+pub type CBuilder = struct Builder;
+
+/* Every method returns the host, so a call site can keep chaining. */
+pub trait Steps {
+    CBuilder add(int by);
+    int value();
+}
+
+map trait Steps for type CBuilder {
+    add(b, by) -> builder_add(b, by);
+    value(b)   -> builder_value(b);
+}

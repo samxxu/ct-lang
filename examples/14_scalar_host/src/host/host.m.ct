@@ -1,0 +1,37 @@
+namespace host;
+
+#include "host.shim.h"
+
+pub trait IntOps {
+    int twice();
+    int plus(int by);
+}
+
+pub trait TextOps {
+    int len();
+}
+
+pub trait RealOps {
+    double square();
+}
+
+pub trait LongOps {
+    unsigned long twice_wide();
+}
+
+map trait IntOps for type int {
+    twice(n)    -> host_twice(n);
+    plus(n, by) -> host_plus(n, by);
+}
+
+map trait TextOps for type char * {
+    len(s) -> host_len(s);
+}
+
+map trait RealOps for type double {
+    square(x) -> host_square(x);
+}
+
+map trait LongOps for type unsigned long {
+    twice_wide(n) -> host_twice_wide(n);
+}
