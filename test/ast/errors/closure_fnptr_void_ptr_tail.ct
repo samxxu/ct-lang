@@ -1,0 +1,8 @@
+// R05: the `(fn, env)` shape is decided by the *first* formal. A type that
+// merely mentions `void *` later in its tail (`int (*f)(int x, void *ctx)`) is
+// still a plain function pointer, so the closure must be rejected there rather
+// than have `skip_env` drop a real parameter.
+int apply(int (*f)(int x, void *ctx)) { return f(1, 0); }
+int main(void) {
+    return apply((int x) => x);
+}

@@ -274,7 +274,9 @@ static int closure_is_returned(struct Stmt *self, int e)
 /* E2 / E3 / E7: moving a closure binding out of the frame that owns its
    environment loses the `env` half, so every store form that is not the
    declaration bind is refused at the source position. */
-static int check_closure_assign(struct Stmt *self, int n)
+/* R08: the column comes from the statement / declarator the check belongs to,
+   not a fixed 1, so an editor can jump to the line as written. */
+static int check_closure_assign(struct Stmt *self, int n, int col)
 {
     int lhs, rhs, bv, lv, kind;
     char msg[MAX_TEXT];
@@ -284,7 +286,7 @@ static int check_closure_assign(struct Stmt *self, int n)
     rhs = self->arena->nodes[n].b;
     lv = closure_var_index(self, lhs);
     /* a bound name is not assignable: it names the pair, not a slot */
-    if (lv >= 0) return closure_error(self, self->arena->nodes[n].line, 1,
+    if (lv >= 0) return closure_error(self, self->arena->nodes[n].line, col,
                                       "this closure is a binding, not a value (inline it or use a struct + trait)");
     if (rhs < 0) return 0;
     kind = self->arena->nodes[rhs].kind;
@@ -292,13 +294,13 @@ static int check_closure_assign(struct Stmt *self, int n)
     if (bv < 0 && kind != N_CLOSURE) return 0;
     if (kind == N_CLOSURE) {
         /* only a declaration binds a literal; storing it elsewhere is E7 */
-        return closure_error(self, self->arena->nodes[n].line, 1,
+        return closure_error(self, self->arena->nodes[n].line, col,
                              "this closure is a binding, not a value (inline it or use a struct + trait)");
     }
     if (lhs < 0) return 0;
     kind = self->arena->nodes[lhs].kind;
     if (kind == N_MEMBER || kind == N_ARROW || kind == N_INDEX)
-        return closure_error(self, self->arena->nodes[n].line, 1,
+        return closure_error(self, self->arena->nodes[n].line, col,
                              "a closure cannot be stored in a field, an element or a container");
     if (kind == N_VAR) {
         lv = self->sym->find_var(self->arena->nodes[lhs].text2);
@@ -306,16 +308,16 @@ static int check_closure_assign(struct Stmt *self, int n)
             snprintf(msg, sizeof msg,
                      "a closure cannot be stored in '%s' (its scope outlives the closure)",
                      self->sym->vars[lv].name);
-            return closure_error(self, self->arena->nodes[n].line, 1, msg);
+            return closure_error(self, self->arena->nodes[n].line, col, msg);
         }
     }
-    return closure_error(self, self->arena->nodes[n].line, 1,
+    return closure_error(self, self->arena->nodes[n].line, col,
                          "this closure is a binding, not a value (inline it or use a struct + trait)");
 }
 
 /* The declaration path: `int (*d)(int) = c;` copies a binding, while
    `int (*d)(int) = (int x) => …;` is the one form that creates one. */
-static int check_closure_decl_init(struct Stmt *self, int n, const char *name)
+static int check_closure_decl_init(struct Stmt *self, int n, const char *name, int col)
 {
     int rhs, bv, dv;
     char msg[MAX_TEXT];
@@ -328,9 +330,9 @@ static int check_closure_decl_init(struct Stmt *self, int n, const char *name)
     if (dv >= 0 && outlives(self->sym, dv, bv)) {
         snprintf(msg, sizeof msg,
                  "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
-        return closure_error(self, self->arena->nodes[n].line, 1, msg);
+        return closure_error(self, self->arena->nodes[n].line, col, msg);
     }
-    return closure_error(self, self->arena->nodes[n].line, 1,
+    return closure_error(self, self->arena->nodes[n].line, col,
                          "this closure is a binding, not a value (inline it or use a struct + trait)");
 }
 
@@ -704,7 +706,7 @@ impl StmtOps for Stmt {
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
-            int rline = self->lex->tokline, at_start = 1, rp, cond;
+            int rline = self->lex->tokline, rcol = self->lex->tokstart - self->lex->lstart + 1, at_start = 1, rp, cond;
             for (rp = self->lex->lstart; rp < self->lex->tokstart; rp++)
                 if (self->lex->src[rp] != ' ' && self->lex->src[rp] != '\t' && self->lex->src[rp] != '\r') at_start = 0;
             /* a return nested in a block (or written mid-line) may be skipped
@@ -732,7 +734,7 @@ impl StmtOps for Stmt {
                back loses it. Checked before the memory analysis so the closure
                diagnostic is the one the user sees. */
             if (closure_is_returned(self, e))
-                return closure_error(self, self->arena->nodes[e].line, 1,
+                return closure_error(self, self->arena->nodes[e].line, rcol,
                                      "a closure cannot escape through 'return'");
             {
                 char tr[MAX_TEXT];
@@ -1401,6 +1403,7 @@ impl StmtOps for Stmt {
     int parse_decl_node(void)
     {
         int n, e, head, tail, base_stars, first_decl, is_fnptr, ap;
+        int dcol;
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
@@ -1409,6 +1412,7 @@ impl StmtOps for Stmt {
            the line; clear the slot before parsing so it cannot leak */
         ap = self->decl_attr ? self->decl_attr - 1 : -1;
         self->decl_attr = 0;
+        dcol = self->lex->tokstart - self->lex->lstart + 1;
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
         head = -1;
         tail = -1;
@@ -1524,7 +1528,7 @@ impl StmtOps for Stmt {
                is the store-by-name error. */
             if (self->arena->nodes[n].a >= 0
                 && self->arena->nodes[self->arena->nodes[n].a].kind != N_CLOSURE
-                && check_closure_decl_init(self, n, name) != 0)
+                && check_closure_decl_init(self, n, name, dcol) != 0)
                 return -1;
             if (self->arena->nodes[n].a >= 0) {
                 char tr[MAX_TEXT];
@@ -1555,8 +1559,10 @@ impl StmtOps for Stmt {
     int parse_expr_stmt_node(void)
     {
         int e, rhs, n, w;
+        int scol;
         (void)self;
 
+        scol = self->lex->tokstart - self->lex->lstart + 1;
         e = self->ex->parse_expr();
         if (e < 0) return -1;
         if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
@@ -1587,7 +1593,7 @@ impl StmtOps for Stmt {
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
             self->arena->nodes[n].aux = op;
-            if (check_closure_assign(self, n) != 0) return -1;
+            if (check_closure_assign(self, n, scol) != 0) return -1;
             if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
         } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
@@ -1620,7 +1626,7 @@ impl StmtOps for Stmt {
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
-            if (check_closure_assign(self, n) != 0) return -1;
+            if (check_closure_assign(self, n, scol) != 0) return -1;
             if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
         } else if (self->arena->nodes[e].kind == N_POST) {

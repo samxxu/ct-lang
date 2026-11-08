@@ -2057,23 +2057,24 @@ done
 # channel. The generic sweep above only proves *a* positioned diagnostic; pin
 # the wording, position and note verbatim so a later refactor cannot drift it.
 for pair in \
-    "closure_escape_return|4:1|a closure cannot escape through 'return'" \
-    "closure_store_global|5:1|a closure cannot be stored in 'g' (its scope outlives the closure)" \
-    "closure_store_outer|6:1|a closure cannot be stored in 'd' (its scope outlives the closure)" \
-    "closure_store_static|5:1|a closure cannot be stored in 's' (its scope outlives the closure)" \
-    "closure_store_field|6:1|a closure cannot be stored in a field, an element or a container" \
-    "closure_store_element|5:1|a closure cannot be stored in a field, an element or a container" \
+    "closure_escape_return|4:5|a closure cannot escape through 'return'" \
+    "closure_store_global|5:5|a closure cannot be stored in 'g' (its scope outlives the closure)" \
+    "closure_store_outer|6:9|a closure cannot be stored in 'd' (its scope outlives the closure)" \
+    "closure_store_static|5:5|a closure cannot be stored in 's' (its scope outlives the closure)" \
+    "closure_store_field|6:5|a closure cannot be stored in a field, an element or a container" \
+    "closure_store_element|5:5|a closure cannot be stored in a field, an element or a container" \
     "closure_capture_own|8:1|a closure cannot capture 'b' (it is 'own' or 'borrow')" \
     "closure_capture_borrow|3:1|a closure cannot capture 'c' (it is 'own' or 'borrow')" \
     "closure_capture_closure|4:1|a closure cannot capture another closure" \
-    "closure_copy_local|4:1|this closure is a binding, not a value (inline it or use a struct + trait)" \
-    "closure_reassign|5:1|this closure is a binding, not a value (inline it or use a struct + trait)" \
+    "closure_copy_local|4:5|this closure is a binding, not a value (inline it or use a struct + trait)" \
+    "closure_reassign|5:5|this closure is a binding, not a value (inline it or use a struct + trait)" \
     "closure_capture_write|3:1|a captured variable cannot be reassigned inside a closure" \
     "closure_capture_incr|3:1|a captured variable cannot be reassigned inside a closure" \
     "closure_capture_addassign|3:1|a captured variable cannot be reassigned inside a closure" \
     "closure_capture_addr|3:1|the address of a captured variable cannot be taken inside a closure" \
     "closure_capture_shadow|3:1|a local cannot shadow the captured 'n'" \
     "closure_plain_fnptr|5:12|a closure cannot be used where a plain function pointer is expected" \
+    "closure_fnptr_void_ptr_tail|7:12|a closure cannot be used where a plain function pointer is expected" \
     "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair"
 do
     cf="${pair%%|*}"
@@ -2094,6 +2095,21 @@ do
         bad "p21-s4: $cf" "the note changed the error count: $(cat "$work/$cf.err")"
     else
         ok "p21-s4 ($cf)"
+    fi
+done
+
+# R10: `__ct_` is one predicate for every declaration category, so a function,
+# global, struct or field name is refused with the same positioned message.
+for cf in reserved_fn_name reserved_global_name reserved_type_name reserved_field_name; do
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "p21-r10: $cf" "expected a non-zero exit"
+    elif ! grep -Fq "identifier '__ct_' is reserved for the compiler" "$work/$cf.err"; then
+        bad "p21-r10: $cf" "$(cat "$work/$cf.err")"
+    elif ! grep -Eq '^[^:]+:[0-9]+:[0-9]+: error: ' "$work/$cf.err"; then
+        bad "p21-r10: $cf" "no positioned diagnostic: $(cat "$work/$cf.err")"
+    else
+        ok "p21-r10 ($cf)"
     fi
 done
 
@@ -2866,6 +2882,34 @@ cap_check fields "too many fields in struct 'Big' (limit 64)" "$work/cap_fields.
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_structs.ct"
 cap_check structs "too many structs in unit 'cap_structs.ct' (limit 128)" "$work/cap_structs.ct"
+# R09: the closure table and the nesting stack now fail hard instead of silently
+# dropping the binding or pretending the literal is a plain call.
+{
+    printf 'int main(void)\n{\n    int n = 1;\n'
+    i=0
+    while [ "$i" -lt 65 ]; do
+        printf '    int (*c%d)(int) = (int x) => x + n;\n' "$i"
+        i=$((i + 1))
+    done
+    printf '    return c0(0);\n}\n'
+} >"$work/cap_closures.ct"
+cap_check closures "too many closures in unit 'cap_closures.ct' (limit 64)" "$work/cap_closures.ct"
+{
+    printf 'int main(void)\n{\n    int n = 1;\n'
+    i=0
+    while [ "$i" -lt 16 ]; do
+        printf '    int (*c%d)(int) = (int x) => {\n' "$i"
+        i=$((i + 1))
+    done
+    printf '    int (*c16)(int) = (int x) => x + n;\n'
+    i=15
+    while [ "$i" -ge 0 ]; do
+        printf '    };\n'
+        i=$((i - 1))
+    done
+    printf '    return 0;\n}\n'
+} >"$work/cap_closure_nest.ct"
+cap_check closure_nest "a closure is nested too deeply (limit 16)" "$work/cap_closure_nest.ct"
 
 # A struct whose body opens on the line after its name makes the parser look
 # ahead across a newline. The lookahead has to restore the lexer's line state

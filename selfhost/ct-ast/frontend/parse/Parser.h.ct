@@ -1295,6 +1295,8 @@ impl ParseOps for Parser {
         }
         nm = self->arena->nodes[m].text2;
         if (!nm[0]) return 0;                       /* a nameless padding bit-field */
+        if (self->sym->reserved_name(nm))
+            return self->sup->fail("identifier '__ct_' is reserved for the compiler");
         if (self->cur_record[0]) {
             si = self->sym->find_struct(self->cur_record);
             if (si < 0) return 0;

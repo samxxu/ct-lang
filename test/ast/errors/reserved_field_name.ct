@@ -1,0 +1,3 @@
+// R10: the reserved prefix guards a field name as well as a local.
+struct S { int __ct_f; };
+int main(void) { struct S s; s.__ct_f = 1; return 0; }

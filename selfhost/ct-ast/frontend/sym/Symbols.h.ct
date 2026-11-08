@@ -240,6 +240,10 @@ pub trait SymbolOps {
     /* The unit a capacity message names: the basename of `path`, or
        "this unit" before the driver binds one. */
     const char *unit_name(void);
+    /* R10: `__ct_` names the compiler's own products. Every declaration category
+       (local / parameter / global / type / field / function) shares this one
+       predicate; the callers report the bare message. */
+    int  reserved_name(const char *name);
     int  fail(const char *msg);
     const char *last_error(void);
 }
@@ -325,6 +329,16 @@ impl SymbolOps for Symbols {
         return self->errmsg;
     }
 
+    /* R10: `__ct_` names the compiler's own products. The check used to guard
+       only locals and parameters; every declaration category shares this one
+       predicate now, so a global, function, type or field cannot collide with
+       the generated C either. */
+    int reserved_name(const char *name)
+    {
+        (void)self;
+        return name && !strncmp(name, "__ct_", 5);
+    }
+
     /* Only the last path component: the diagnostic already prints the full
        path as its prefix, and a basename keeps the message inside the 160-byte
        buffer that carries it. */
@@ -384,7 +398,7 @@ impl SymbolOps for Symbols {
         (void)self;
         /* `__ct_` names the compiler's own locals and closure products; a user
            declaration could otherwise collide with them in the generated C. */
-        if (!strncmp(name, "__ct_", 5))
+        if (self->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
         if (self->nvar >= MAX_VARS) {
             snprintf(msg, sizeof msg, "too many variables in unit '%s' (limit %d)",
@@ -426,6 +440,8 @@ impl SymbolOps for Symbols {
         int i, k;
         char msg[MAX_TEXT];
         (void)self;
+        if (self->reserved_name(name))
+            return self->fail("identifier '__ct_' is reserved for the compiler");
         if (self->nvar >= MAX_VARS) {
             snprintf(msg, sizeof msg, "too many variables in unit '%s' (limit %d)",
                      self->unit_name(), MAX_VARS);
@@ -583,6 +599,8 @@ impl SymbolOps for Symbols {
     {
         int i;
         (void)self;
+        if (self->reserved_name(name))
+            return self->fail("identifier '__ct_' is reserved for the compiler");
         i = self->find_type(name);
         if (i >= 0) {
             /* a struct tag discovered while parsing a type keeps its kind */

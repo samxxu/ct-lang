@@ -1,0 +1,3 @@
+// R10: the reserved prefix guards a struct name as well as a local.
+struct __ct_T { int x; };
+int main(void) { return 0; }

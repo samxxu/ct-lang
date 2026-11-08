@@ -1023,11 +1023,14 @@ static int emit_closure_decl(struct Emitter *self, int n)
             ci, ci);
     if (emit_closure_values(self, ci) != 0) return -1;
     fputs(" }", self->out);
-    if (self->nclvar < 64) {
-        snprintf(self->clvar[self->nclvar], MAX_TEXT, "%s", self->arena->nodes[n].text2);
-        self->clid[self->nclvar] = ci;
-        self->nclvar++;
-    }
+    /* R09: the scope table is how a later `add(x)` and a later pair actual find
+       this binding. Dropping the row would emit a plain call to a name that has
+       no C variable, so the cap is a hard error. */
+    if (self->nclvar >= 64)
+        return self->fail_from(n, "too many closure bindings in one frame (limit 64)");
+    snprintf(self->clvar[self->nclvar], MAX_TEXT, "%s", self->arena->nodes[n].text2);
+    self->clid[self->nclvar] = ci;
+    self->nclvar++;
     return 0;
 }
 

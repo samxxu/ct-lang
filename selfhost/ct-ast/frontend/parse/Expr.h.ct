@@ -475,6 +475,21 @@ static int closure_capture_error(struct Expr *self, int line, const char *msg)
     return -1;
 }
 
+/* R09: a captured name or type that does not fit is a hard error. Truncating it
+   would leave the environment field with a shorter type (or a name the emitter
+   cannot match) and surface later as a `cc` failure with no source position. */
+static int closure_copy(struct Expr *self, char *dst, const char *src, const char *what)
+{
+    char msg[512];
+
+    if (strlen(src) >= MAX_TEXT) {
+        snprintf(msg, sizeof msg, "%s is too long (limit %d)", what, MAX_TEXT - 1);
+        return self->sup->fail(msg);
+    }
+    snprintf(dst, MAX_TEXT, "%s", src);
+    return 0;
+}
+
 static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
 {
     struct Closure *c = &self->sym->closures[ci];
@@ -496,8 +511,9 @@ static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
     if (closure_capture_index(c, name) >= 0) return 0;
     if (c->ncap >= 16)
         return self->sup->fail("a closure takes too many captures (limit 16)");
-    snprintf(c->cap_name[c->ncap], MAX_TEXT, "%s", name);
-    snprintf(c->cap_type[c->ncap], MAX_TEXT, "%s", self->sym->vars[vi].type);
+    if (closure_copy(self, c->cap_name[c->ncap], name, "a captured name") != 0) return -1;
+    if (closure_copy(self, c->cap_type[c->ncap], self->sym->vars[vi].type,
+                     "a captured type") != 0) return -1;
     c->ncap++;
     /* An inner literal is built inside the enclosing trampoline, so a name that
        comes from outside the enclosing literal must also sit in its environment;
@@ -515,8 +531,9 @@ static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
         if (dup) continue;
         if (oc->ncap >= 16)
             return self->sup->fail("a closure takes too many captures (limit 16)");
-        snprintf(oc->cap_name[oc->ncap], MAX_TEXT, "%s", name);
-        snprintf(oc->cap_type[oc->ncap], MAX_TEXT, "%s", self->sym->vars[vi].type);
+        if (closure_copy(self, oc->cap_name[oc->ncap], name, "a captured name") != 0) return -1;
+        if (closure_copy(self, oc->cap_type[oc->ncap], self->sym->vars[vi].type,
+                         "a captured type") != 0) return -1;
         oc->ncap++;
     }
     return 0;
@@ -743,9 +760,33 @@ impl ExprOps for Expr {
         return t != 0 && strncmp(t, "void *", 6) == 0;
     }
 
+    /* R05: membership of a `(fn, env)` pair is decided by the first formal, not
+       by the mere presence of "void *" anywhere in the type. A plain
+       `int (*P)(int x, void *ctx)` also contains it, and `skip_env` would then
+       drop a real parameter and shift the whole tail. The list is split with
+       the same parser `closure_match` uses, and the first item must start with
+       `void *` (not `void **`). */
     int formal_is_env_fn(const char *t)
     {
-        return self->type_is_fnptr(t) && strstr(t, "void *") != 0;
+        char plist[MAX_TEXT];
+        char item[MAX_TEXT];
+        int lp, rp, pos;
+        size_t n, hn;
+
+        if (!self->type_is_fnptr(t)) return 0;
+        hn = strlen(t);
+        lp = -1;
+        rp = -1;
+        for (n = 0; n < hn; n++) {
+            if (t[n] == '(') lp = (int)n;
+            else if (t[n] == ')') rp = (int)n;
+        }
+        if (lp < 0 || rp <= lp + 1) return 0;
+        snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, t + lp + 1);
+        pos = 0;
+        if (!plist_next(plist, &pos, item, sizeof item)) return 0;
+        if (strncmp(item, "void *", 6) != 0) return 0;
+        return item[6] != '*';
     }
 
     int arg_is_closure(int a)
@@ -2261,10 +2302,12 @@ impl ExprOps for Expr {
                     return self->sup->fail(self->sym->last_error());
                 if (self->sym->closures[ci].nparams >= 16)
                     return self->sup->fail("a closure takes too many parameters (limit 16)");
-                snprintf(self->sym->closures[ci].ptype[self->sym->closures[ci].nparams],
-                         MAX_TEXT, "%s", typebuf);
-                snprintf(self->sym->closures[ci].pname[self->sym->closures[ci].nparams],
-                         MAX_TEXT, "%s", name);
+                if (closure_copy(self,
+                                 self->sym->closures[ci].ptype[self->sym->closures[ci].nparams],
+                                 typebuf, "a closure parameter type") != 0) return -1;
+                if (closure_copy(self,
+                                 self->sym->closures[ci].pname[self->sym->closures[ci].nparams],
+                                 name, "a closure parameter name") != 0) return -1;
                 self->sym->closures[ci].nparams++;
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->sup->lex_next();
@@ -2277,11 +2320,14 @@ impl ExprOps for Expr {
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "=>") != 0)
             return self->sup->fail("expected '=>' after a closure's parameter list");
         self->sup->lex_next();
-        if (self->ncl_stack < 16) {
-            self->cl_stack[self->ncl_stack] = ci;
-            self->cl_pstart[self->ncl_stack] = pstart;
-            self->ncl_stack++;
-        }
+        /* R09: the nesting stack is not optional. Dropping the push would leave
+           an inner literal without its parent's environment, so the emitter
+           would build it against the wrong frame; the cap is a hard error. */
+        if (self->ncl_stack >= 16)
+            return self->sup->fail("a closure is nested too deeply (limit 16)");
+        self->cl_stack[self->ncl_stack] = ci;
+        self->cl_pstart[self->ncl_stack] = pstart;
+        self->ncl_stack++;
         /* S5: `=> { … }` is a block body; the statement layer owns blocks and
            this object cannot import it, so the parser installed a hook. */
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
