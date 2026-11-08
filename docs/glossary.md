@@ -58,6 +58,9 @@
 | 接收者（receiver） | `p.m()` 中的 `p` | 方法调用的主体 |
 | 限定引用（qualified reference） | `A::B::S` | 跨命名空间按名引用类型 |
 | 顶层（top level） | 无 `namespace` 的代码 | 不加前缀，产物与 Phase 0 逐字节相同 |
+| 闭包（closure） | `int (*f)(int) = (int x) => x + n;` | 非逃逸栈闭包：`=>` 字面量按值捕获外层局部，表面类型是函数指针声明；只在声明作用域内存活，逃逸是硬错（Phase 21） |
+| 跳板（trampoline） | `__ct_cl_tramp_<N>(void *self, …)` | 每个闭包字面量生成一个 `static` 函数；先从环境结构体取回捕获值，再执行闭包体 |
+| 环境（env） | `struct __ct_cl_env_<N>`、`__ct_cl_env_v_<N>` | 栈上的捕获结构体，作为 `(fn, env)` 参数对的第一个实参传入；与跳板共用一个 `<N>`，**不分配堆内存、不进 vtable** |
 | 位置式初始化 | `Person p = { "Tom" };` | 按字段顺序 |
 | 指定初始化 | `Person p = { .name = "Tom" };` | 按字段名 |
 | 空初始化式 | `Person p = {};` | 只写 vptr |
@@ -300,6 +303,9 @@
 | receiver | the `p` in `p.m()` | the subject of a method call |
 | qualified reference | `A::B::S` | referring to a type by name across namespaces |
 | top level | code with no `namespace` | gets no prefix; output is byte-identical to Phase 0 |
+| closure | `int (*f)(int) = (int x) => x + n;` | a non-escaping stack closure: the `=>` literal captures outer locals by value and its surface type is a function-pointer declaration; it lives only in its declaration scope, and escaping is a hard error (Phase 21) |
+| trampoline | `__ct_cl_tramp_<N>(void *self, …)` | the `static` function generated per closure literal; it reads the captures back from the environment struct and runs the closure body |
+| env | `struct __ct_cl_env_<N>`, `__ct_cl_env_v_<N>` | the captured-values struct on the stack, passed as the first argument of a `(fn, env)` pair; it shares one `<N>` with the trampoline and is **never a heap allocation and never a vtable** |
 | positional initialiser | `Person p = { "Tom" };` | in field order |
 | designated initialiser | `Person p = { .name = "Tom" };` | by field name |
 | empty initialiser | `Person p = {};` | writes only the vptr |
