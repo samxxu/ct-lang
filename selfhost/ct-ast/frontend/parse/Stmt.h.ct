@@ -51,6 +51,7 @@ import tool::diag::Diag;
 #define N_GOTO 50
 #define N_IF 14
 #define N_LABEL 49
+#define N_LOOP 60
 #define N_MEMBER 24
 #define N_POST 18
 #define N_RAW 31
@@ -79,6 +80,8 @@ pub trait StmtOps {
     int  label_find(const char *name);
     int  parse_named_label(void);
     int  parse_goto(void);
+    int  loop_ahead(void);
+    int  parse_loop(void);
     int  closure_global_init(int e, const char *name, int line, int col);
     int  func_begin(void);
     int  func_end(void);
@@ -118,6 +121,10 @@ pub struct Stmt {
     int  ngotos;
     char goto_names[64][160];
     int  goto_lines[64];
+    /* How many `loop` bodies enclose the statement being parsed. Only an inner
+       `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
+       or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
+    int  loop_depth;
 } use StmtOps;
 
 /* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
@@ -538,6 +545,42 @@ static int borrow_escape(struct Stmt *self, int ret, int line)
         if (!self->sym->vars[i].is_param) self->sym->vars[i].autodrop = 0;
     }
     return 0;
+}
+
+/* Classify the static type of a `loop` count: 1 = an integer type, 0 = a type
+   that is confidently not one (L22-5), -1 = unknown, which is never diagnosed
+   (a false positive is worse than a miss). Pointers, arrays and function types
+   are not integers; `enum` and `_Bool` are. */
+static int loop_count_class(const char *t)
+{
+    char w[MAX_TEXT];
+    int n, words;
+
+    if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')) return 0;
+    if (strncmp(t, "struct ", 7) == 0 || strncmp(t, "union ", 6) == 0) return 0;
+    if (strncmp(t, "enum ", 5) == 0) return 1;
+    words = 0;
+    while (*t) {
+        while (*t == ' ' || *t == '\t') t++;
+        if (!*t) break;
+        n = 0;
+        while (*t && *t != ' ' && *t != '\t') {
+            if (n < MAX_TEXT - 1) w[n++] = *t;
+            t++;
+        }
+        w[n] = 0;
+        if (strcmp(w, "const") == 0 || strcmp(w, "volatile") == 0) continue;
+        words = 1;
+        if (strcmp(w, "char") == 0 || strcmp(w, "short") == 0 || strcmp(w, "int") == 0
+            || strcmp(w, "long") == 0 || strcmp(w, "signed") == 0
+            || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0)
+            continue;
+        if (strcmp(w, "float") == 0 || strcmp(w, "double") == 0 || strcmp(w, "void") == 0)
+            return 0;
+        /* an unresolved alias or a spelling this layer cannot classify */
+        return -1;
+    }
+    return words ? 1 : -1;
 }
 
 impl StmtOps for Stmt {
@@ -1083,6 +1126,11 @@ impl StmtOps for Stmt {
             if (self->sup->expect(";") != 0) return -1;
             return s;
         }
+        /* `loop(<count>) { … }` is a contextual keyword (D22-4): only in
+           statement position and only when `(` follows. The branch sits before
+           `label_ahead` / `is_decl_start` because `loop` is deliberately absent
+           from `kw[]`; in every other position it stays an ordinary identifier. */
+        if (self->loop_ahead()) return self->parse_loop();
         /* `name:` -- a label opens no scope and declares nothing, so this sits
            after every keyword branch and before the declaration test; the
            lookahead keeps a qualified `A::f()` on the expression path (D-2). */
@@ -1252,6 +1300,135 @@ impl StmtOps for Stmt {
             return self->sup->fail("a case label must be an integer constant");
         self->case_hi = hi;
         return e;
+    }
+
+    /* Is the current token `loop` immediately followed by `(`? `loop` is not in
+       `kw[]` (D22-4), so only this lookahead promotes it: a label named `loop`,
+       an expression reference or `goto loop;` keeps the ordinary identifier
+       meaning. The save/restore mirrors `label_ahead` because the lexer has no
+       peek. */
+    int loop_ahead(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
+        long snum;
+        char stext[MAX_TEXT];
+        (void)self;
+
+        if (self->lex->tok != T_ID) return 0;
+        if (strcmp(self->lex->toktext, "loop") != 0) return 0;
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        r = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) r = 1;
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        return r;
+    }
+
+    /* `loop(<count>) { … }` -- a shorthand for
+       `for (int i = 0; i < <count>; i++) { … }`. The parser records the shape
+       only: `a` = count, `b` = -1 (the single-bound sentinel Phase 23 reads),
+       `d` = body. The implicit `i` enters the symbol table here so name
+       resolution, closure capture and shadowing all see it, but no `N_DECL` is
+       built: the emitter prints the declaration in the `for` head (D22-2,
+       D22-8). The count is parsed before `i` enters scope, so it can only name
+       an enclosing binding. */
+    int parse_loop(void)
+    {
+        int s, cnt, body, line, col, cls;
+        char msg[MAX_TEXT];
+        char t[MAX_TEXT];
+        char ex[MAX_TEXT];
+        const char *p;
+        int bare;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        s = self->sup->new_node(N_LOOP);
+        if (s < 0) return -1;
+        self->sup->lex_next();
+        if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "loop needs a count expression", self->mem->path);
+        self->ex->assign_ok = 1;
+        cnt = self->ex->parse_expr();
+        self->ex->assign_ok = 0;
+        if (cnt < 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "loop takes exactly one count; use a native for to name the counter",
+                                            self->mem->path);
+        if (self->sup->expect(")") != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "loop body must be a block", self->mem->path);
+        /* L22-5: a statically known non-integer count still compiles -- the
+           value is converted to `int`, as C would do -- it is only reported.
+           An alias is expanded first; a spelling this layer cannot classify
+           (or an unresolved type) stays silent: a false positive is worse. */
+        if (self->sup->expr_type(cnt, t, sizeof t) == 0) {
+            bare = 1;
+            for (p = t; *p; p++)
+                if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                      || (*p >= '0' && *p <= '9') || *p == '_'))
+                    bare = 0;
+            if (bare && self->sym->expand_type_alias(t, ex, sizeof ex) == 0)
+                snprintf(t, sizeof t, "%s", ex);
+            cls = loop_count_class(t);
+            if (cls == 0) {
+                snprintf(msg, sizeof msg,
+                         "count must be an integer (got '%s'); the value is converted to int", t);
+                if (tool::diag::ct_type_warn(line, col, "loop", msg, self->mem->path) != 0)
+                    return -1;
+            }
+        }
+        if (self->sup->push_scope() != 0) return -1;
+        if (self->sup->declare_var("i", "int") != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* Only `loop` inside `loop` is reported (D22-5): the inner one shadows
+           the outer implicit `i`. A hand-written `int i` or a native `for` is
+           ordinary C shadowing and stays silent. */
+        if (self->loop_depth > 0) {
+            if (tool::diag::ct_loop_warn(line, col,
+                    "loop shadows the outer 'i'; use a native for to name the inner counter",
+                    self->mem->path) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+        }
+        self->loop_depth = self->loop_depth + 1;
+        body = self->parse_block();
+        self->loop_depth = self->loop_depth - 1;
+        if (body < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        self->sup->pop_scope();
+        self->arena->nodes[s].a = cnt;
+        self->arena->nodes[s].b = -1;
+        self->arena->nodes[s].d = body;
+        return s;
     }
 
     /* Is the current identifier the start of `name:`? The lexer has no peek,
