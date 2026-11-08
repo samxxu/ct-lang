@@ -1,0 +1,28 @@
+// 86 (Phase 21 R06): a closure inside an impl method body. The literal's owner
+// is the method, whose C spelling is `<Struct>_<method>`; the emitter has to
+// find that row and emit the trampoline, not fall back to the bare name.
+#include <stdio.h>
+
+trait Op {
+    int run(int x);
+}
+
+struct Adder {
+    int n;
+} use Op;
+
+impl Op for Adder {
+    int run(int x) {
+        int k = 2;
+        int (*f)(int y) = (int y) => y + k;
+        return f(x);
+    }
+}
+
+int main(void)
+{
+    struct Adder a;
+    a.n = 3;
+    printf("%d\n", a.run(4));
+    return 0;
+}

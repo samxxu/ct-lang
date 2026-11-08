@@ -1,0 +1,22 @@
+// 87 (Phase 21 R06): a closure inside a namespaced function. The parser records
+// the short owner name while the emitter writes the mangled C spelling, so the
+// ownership lookup must resolve through the namespace prefix; a miss drops the
+// environment struct and trampoline and leaves `cc` to reject the call.
+#include <stdio.h>
+
+namespace ns;
+
+pub int apply(int base);
+
+int apply(int base)
+{
+    int n = 3;
+    int (*add)(int x) = (int x) => x + n + base;
+    return add(5);
+}
+
+int main(void)
+{
+    printf("%d\n", ns::apply(10));
+    return 0;
+}

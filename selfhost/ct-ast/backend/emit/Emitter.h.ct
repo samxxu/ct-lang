@@ -875,10 +875,20 @@ static int emit_raw_text(struct Emitter *self, int n)
 static int closure_owned(struct Emitter *self, const char *owner, const char *cname)
 {
     int fi;
+    char mangled[MAX_TEXT];
 
     if (strcmp(owner, cname) == 0) return 1;
     fi = self->sym->find_func(owner);
-    return fi >= 0 && strcmp(self->sym->funcs[fi].cname, cname) == 0;
+    if (fi >= 0 && strcmp(self->sym->funcs[fi].cname, cname) == 0) return 1;
+    /* A closure inside a namespaced function records the short name, while the
+       function is written under its mangled C spelling (`ns_apply`). Without
+       this branch the lookup misses and the products are silently dropped,
+       leaving `cc` to report an incomplete environment (R06). */
+    if (self->gprefix && self->gprefix[0]
+        && snprintf(mangled, sizeof mangled, "%s%s", self->gprefix, owner) < (int)sizeof mangled
+        && strcmp(mangled, cname) == 0)
+        return 1;
+    return 0;
 }
 
 /* Is `name` one of the closure variables in scope right now? */
