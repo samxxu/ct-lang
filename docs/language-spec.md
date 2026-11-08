@@ -248,6 +248,11 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
 - 指针字段链按**每跳字段是否为指针**决定 `.` 或 `->`，末跳经指针则不补 `&`：
   `a.next->m()` → `a.next->__t_vptr->m(a.next)`；`a.next.m()`（`next` 是值字段）→ `a.next.__t_vptr->m(&a.next)`。
 - 参数内部的嵌套调用会被继续处理：`q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`。
+- **总则**：动态派发要求接收者的**静态类型已知**；lowering 需要重复接收者或取其地址时，先把它物化为
+  `__ct_tmp<N>`，且**只允许**在语句行首或赋值 / 声明初始化式的右值行首物化（位置与语义条件见下条）。
+  接收者本身是一次**方法调用**的形态（`a.m().n()`，AST 里是 `N_MCALL`）当前一律拒绝，不会静默产出坏 C；
+  L0 / L2 的行重写管线同样拒绝「方法结果再调方法」的链（`c.inc()->inc()`），因为没有临时量承载方法返回值。
+  类型宿主（§4.10）不走这条路径，不受此限。
 - **右值接收者**（条件 1′）：接收者先被提升为一个临时变量，求值**恰好一次**，再按上面同一规则派发。
   临时变量名为 `__ct_tmp<N>`（`N` 在单个文件内递增，从 0 开始）：
   - 值返回：`f().m(a)` → 前一行 `struct S __ct_tmp0 = f();`，本行 `__ct_tmp0.__t_vptr->m(&__ct_tmp0, a)`；
@@ -524,6 +529,8 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
   类型（数组先 decay 成元素指针）做规范化文本比较，命中后把 `recv` 换成接收者表达式；普通
   struct / 接口方法优先，查找失败才回退到类型宿主，多个候选报歧义。接收者与 `for type` 的主机
   拼写都先按 §4.42 展开类型别名，再参与这里的文本比较，因此别名与底层拼写是**同一个宿主**。
+  接收者可以是任意**静态类型已知**的表达式——字面量、字段链、调用结果都行；recipe 只把接收者替换
+  一次，因此 `s.trim().len()` 这类链式写法合法且可继续链（只有动态派发才需要 `__ct_tmpN`）。
 - **限定调用消解同类型多映射**（P20-01）：两个包把同名方法绑到同一宿主类型时（如都把 `len` 绑到
   `char *`），未限定的 `value.m(args)` 会因两个候选报歧义；写成 `a::ALen::len(value, args)` 只保留
   该 trait 的映射。限定名按符号名规则拼接（`a::ALen` → `a_ALen`），最后一段必须是该静态 trait 的
@@ -871,8 +878,9 @@ static struct Point make(int x, int y) {
   `(struct Pair){ 10, 20 , .__named_vptr = &Pair_Named_vtable}`。
 - 类型必须是**对象类型**：`(struct P *){ … }` 报 `a compound literal needs an object type`。
 - 范围外：数组类型 `(int[]){ … }`（类型文法不读 `[]`，报 `unexpected token`）；
-  对复合字面量直接调 trait 方法（`((struct Pair){ … }).val()`）不支持——方法接收者的允许形态仍是
-  变量 / 元素 / 调用 / 字段链，先赋给变量再调用。
+  对复合字面量直接调 trait 方法（`((struct Pair){ … }).val()`）不支持——**动态派发**的接收者允许形态
+  仍是变量 / 元素 / 调用 / 字段链，先赋给变量再调用；类型宿主（§4.10）不受这四种形态限制，recipe
+  直接把接收者替换一次。
 - 存储期由 C 决定：函数内是自动存储期，文件作用域是静态存储期，ct-ast 不做区分。
 
 #### 4.21 空语句与 `for` 首句的 `static`（ct-ast）
@@ -1747,6 +1755,10 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 - **闭包**（Phase 21，仅 ct-ast）的限制是语言规则，不是实现缺口：不能进 `.h.ct`、不能作返回值 /
   字段 / 元素、闭包变量只能调用不能搬走、`qsort` 类无 env 槽的 C API 接不了；另有 E8 / E9
   两个未防护面。见 §4.44 与 [closure-conventions.md](closure-conventions.md)。
+- **「方法调用当接收者」两侧不一致**（留待 Phase 24）：类型宿主（§4.10）接受任意静态类型已知的
+  接收者，包括方法调用结果（`s.trim().len()`）；动态派发（impl）当前拒绝接收者本身是方法调用的
+  形态（`a.m().n()`），只接受变量 / 元素 / 调用 / 字段链。这是两条 lowering 的差异，不是设计意图；
+  本轮只收紧类型宿主侧的误判，未放宽 impl 侧。
 
 #### 4.45 `loop(n)` 计数循环（Phase 22，仅 ct-ast）
 
@@ -2140,6 +2152,13 @@ Rewriting details:
   field) → `a.next.__t_vptr->m(&a.next)`;
 - nested calls inside arguments are processed recursively:
   `q.add(1, q.add(2, 3))` → `q.__greeter_vptr->add(&q, 1, q.__greeter_vptr->add(&q, 2, 3))`;
+- **general rule**: dynamic dispatch needs the receiver's **static type** to be known. When the lowering
+  has to repeat the receiver or take its address, it first materialises a `__ct_tmp<N>`, and only at the
+  start of a statement or of the right-hand side of an assignment / declaration initialiser (positions
+  and the semantic reason are in the next bullet). A receiver that is itself a **method call**
+  (`a.m().n()`, `N_MCALL` in the AST) is rejected outright rather than emitted as broken C; the L0 / L2
+  line pipeline likewise rejects a chain on a method result (`c.inc()->inc()`) because it has no
+  temporary to hold a method's return value. Type hosts (§4.10) do not take this path and are unaffected.
 - **rvalue receivers** (condition 1′): the receiver is first hoisted into a temporary variable so it is
   evaluated **exactly once**, then dispatched by the same rules above. The temporary is named
   `__ct_tmp<N>` (`N` increments within a single file, starting at 0):
@@ -2483,7 +2502,9 @@ Two host forms:
   spellings.
   when that lookup fails, and several candidates are ambiguous. The receiver's spelling and the
   `for type` host both expand type aliases (§4.42) *before* this comparison, so an alias and its
-  underlying spelling are one host.
+  underlying spelling are one host. The receiver may be any expression whose **static type is known** —
+  a literal, a field chain, a call result; the recipe substitutes it exactly once, so a chain such as
+  `s.trim().len()` is legal and can keep chaining (only dynamic dispatch needs `__ct_tmpN`).
 
 Recipe substitution (per occurrence):
 
@@ -2881,9 +2902,10 @@ static struct Point make(int x, int y) {
 - The type must be an **object type**: `(struct P *){ … }` reports
   `a compound literal needs an object type`.
 - Out of scope: an array type (`(int[]){ … }` — the type grammar does not read `[]`, so it reports
-  `unexpected token`), and calling a trait method straight on a compound literal
-  (`((struct Pair){ … }).val()`) — the allowed receiver shapes stay variable / element / call / field
-  chain, so assign it to a variable first.
+  `unexpected token`), and calling a **dynamically dispatched** trait method straight on a compound
+  literal (`((struct Pair){ … }).val()`) — the allowed receiver shapes stay variable / element / call /
+  field chain, so assign it to a variable first. Type hosts (§4.10) are not limited to those four
+  shapes: the recipe substitutes the receiver exactly once.
 - Storage duration is C's: automatic inside a function, static at file scope; ct-ast does not
   distinguish them.
 
@@ -3876,6 +3898,12 @@ pick the first occurrence and leave the later definition unreachable.
   they cannot enter a `.h.ct`, cannot be a return value / field / element, a closure variable can be
   called but not moved, and `qsort`-style C APIs with no env slot cannot take one. The E8 / E9 holes
   are also unguarded. See §4.44 and [closure-conventions.md](closure-conventions.md).
+- **The two lowerings disagree on a method call as receiver** (left to Phase 24): a type host (§4.10)
+  accepts any receiver whose static type is known, a method call's result included
+  (`s.trim().len()`); dynamic dispatch (impl) currently rejects a receiver that is itself a method call
+  (`a.m().n()`) and accepts only a variable / element / call / field chain. This is a difference between
+  the two lowerings, not a design intent; this round only removed the type-host side's false rejection
+  and did not relax the impl side.
 
 #### 4.45 `loop(n)`, the counted loop (Phase 22, ct-ast only)
 
