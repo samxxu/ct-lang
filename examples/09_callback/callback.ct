@@ -1,11 +1,15 @@
-// callback.ct - the container callback convention (Phase 21 S0).
+// callback.ct - the container callback convention (Phase 21 S0), tier 1.
 //
 // A container never takes a bare callback: it takes the `(fn, env)` pair that
-// the closure ABI freezes, with `env` as the callback's first parameter. Today
-// the pair is spelled by hand (tier 1: struct + trait, plus a two-line adapter
-// that has the `(void *self, ...)` shape); once `=>` lands (S3) a closure
-// argument expands into exactly this pair. The container must not retain
-// either word.
+// the closure ABI freezes, with `env` as the callback's first parameter. In
+// tier 1 the pair is spelled by hand: a struct + trait object, plus a two-line
+// adapter with the `(void *self, ...)` shape. This file runs on the L0 seed.
+//
+// Tier 2 is available since `v0.21.0`: a `=>` closure literal fills the same
+// pair directly (`ring_each(&r, (int x) => x + base)`). That needs ct-ast, so
+// it lives in callback_tier2.ct and this file stays L0-compatible.
+//
+// The container must not retain either word.
 //
 // License: MIT; see LICENSE.EXCEPTION
 #include <stdio.h>

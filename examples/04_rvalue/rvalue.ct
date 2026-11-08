@@ -1,6 +1,22 @@
 // rvalue.ct — an rvalue receiver (Phase 1.9b): the struct returned by a factory
 // call is used directly as the receiver, `make_person("Ann", 30).greet()`. The
 // receiver is evaluated exactly once (hoisted into a temp).
+//
+// Chain limit: one step. This is NOT a fluent example. A second call on the
+// result is rejected -- `bumps()` returns `int`, and an `impl` method call
+// cannot itself be a receiver:
+//
+//     p.bumps(1).bumps(2)
+//       error: method receiver must be a variable, an element, a call or a field chain
+//
+// On an rvalue the first hop is the limit for the same reason:
+//
+//     make_person("Ann", 30).bumps(1).bumps(2)
+//       error: a method call on a temporary is only allowed at the start of a
+//              statement or of an assignment
+//
+// Real `a.f().g()` chaining needs a type host whose methods return the host;
+// see 13_builder_chain.
 // License: MIT; see LICENSE.EXCEPTION
 #include <stdio.h>
 

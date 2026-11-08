@@ -1,0 +1,27 @@
+//@ct-requires: ct-ast
+// 08's third host: `map ... for type` over a pointer alias.
+//
+// The other two hosts in this directory are the instance host (`map ... for
+// instance`, still boxed into a trait value) and 13/14's type host over a
+// plain C spelling. Here the host is a pointer alias published by a `.m.ct`
+// subpackage:
+//
+//     pub type FileHandle = struct ct_file *;
+//     map trait FileOps for type FileHandle { ... }
+//
+// The consumer holds a `struct ct_file *` and writes `f.read()`; the call
+// expands in place into `ct_file_read(f, n)` -- no wrapper, no vtable, no box.
+import type_bridge::type_bridge;
+
+#include <stdio.h>
+
+int main(void) {
+    struct ct_file file = { .fd = 3, .pos = 0 };
+    struct ct_file *f = &file;
+
+    printf("read %d\n", f.read(5));
+    printf("write %d\n", f.write(2));
+    printf("tell %d\n", f.tell());
+    printf("pos %d\n", file.pos);
+    return 0;
+}

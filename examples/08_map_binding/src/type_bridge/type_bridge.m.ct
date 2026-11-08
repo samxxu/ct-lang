@@ -1,0 +1,24 @@
+namespace type_bridge;
+
+#include "type_bridge.shim.h"
+
+/* A compile-time synonym, not a C typedef: `FileHandle` *is*
+   `struct ct_file *`, and the generated C only ever shows the underlying
+   spelling. The alias is expanded before the host key is compared, so
+   `for type FileHandle` and `for type struct ct_file *` are one host. */
+pub type FileHandle = struct ct_file *;
+
+/* The methods the C handle does not have. */
+pub trait FileOps {
+    int read(int n);
+    int write(int n);
+    int tell();
+}
+
+/* The type host: every binding expands at the call site into a plain C call.
+   No wrapper, no vtable, no interface value. */
+map trait FileOps for type FileHandle {
+    read(f, n)  -> ct_file_read(f, n);
+    write(f, n) -> ct_file_write(f, n);
+    tell(f)     -> ct_file_tell(f);
+}

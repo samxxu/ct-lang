@@ -9,3 +9,5 @@ shop fruit receives 4
 trader alice: coins=6
 trader bob: coins=5
 shop fruit: units=2 price=4 coins=12
+trader alice: coins=6
+shop fruit: units=2 price=4 coins=12

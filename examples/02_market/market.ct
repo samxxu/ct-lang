@@ -1,4 +1,9 @@
+//@ct-requires: ct-ast
 // market.ct — 多个对象相互调用：钱包、货架、状态汇报
+//
+// 末尾用一个 `Reporter all[2]` 接口值数组把 Trader 与 Shop 装进同一个
+// trait 值再统一派发；接口值数组是 ct-ast 的能力，L0 种子不支持，故本文件
+// 声明 `//@ct-requires: ct-ast`（`test/run.sh` 跳过，其余门禁照跑）。
 //
 // 三个 trait 落在两个 struct 上：
 //   Trader 有 Purse（钱包）与 Reporter（汇报）能力
@@ -102,6 +107,11 @@ impl Reporter for Shop {
     }
 }
 
+/* 一个只认 Reporter 的函数：调用点看不到具体是 Trader 还是 Shop。 */
+static void broadcast(Reporter r) {
+    r.report();
+}
+
 int main() {
     Trader alice = { .name = "alice", .coins = 20 };
     Trader bob = { .name = "bob", .coins = 3 };
@@ -128,5 +138,14 @@ int main() {
     alice.report();
     bob.report();
     fruit.report();
+
+    // 同一个 Reporter 数组里同时装 Trader 与 Shop：赋值时各自装箱，
+    // broadcast 只经接口值派发，两个 impl 走同一条路径。
+    Reporter all[2];
+    all[0] = alice;
+    all[1] = fruit;
+    for (int i = 0; i < 2; i++) {
+        broadcast(all[i]);
+    }
     return 0;
 }

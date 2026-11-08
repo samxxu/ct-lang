@@ -15,7 +15,7 @@
 #   - test/cases/*.ct + examples/*/*.ct (compile mode; a dialect demo is
 #     expanded by its plugins first, as in check-ast.sh);
 #   - test/modules/*/main.ct or main.h.ct (build mode, all units);
-#   - examples/*/src/main.ct       (build mode; the two src-layout demos 13, 14);
+#   - examples/*/src/main.ct       (build mode; the src-layout demos 08, 13, 14);
 #   - bindings/*/demo.ct            (build mode, with the roots the build prints).
 #
 # The gate is strict on purpose. `_self` / vtable / Drop helpers used to warn
@@ -317,11 +317,12 @@ fi
 
 echo
 echo "== src-layout examples (build mode) =="
-# 13_builder_chain and 14_scalar_host carry a `.m.ct` mapping unit and `import`,
-# which only `build` mode understands, so their entry lives under
-# `examples/<dir>/src/` and the compile-mode corpus glob (`examples/*/*.ct`)
-# never sees it. check-ast.sh's corpus loop is compile-mode only and must stay
-# that way, so the run-and-compare for these two belongs here.
+# 08_map_binding/src (the type_bridge pointer-alias host), 13_builder_chain and
+# 14_scalar_host carry a `.m.ct` mapping unit and `import`, which only `build`
+# mode understands, so their entry lives under `examples/<dir>/src/` and the
+# compile-mode corpus glob (`examples/*/*.ct`) never sees it. check-ast.sh's
+# corpus loop is compile-mode only and must stay that way, so the run-and-compare
+# for these belongs here.
 for src in examples/*/src/main.ct; do
     [ -f "$src" ] || continue
     sd=$(dirname "$src")

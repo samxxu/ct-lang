@@ -13,6 +13,12 @@ struct Add {
     Node rhs;
 } use Node;
 
+// A pointer-to-interface field. `Node` is already the box (the fat pointer);
+// the field only stores its address, so assigning the field does not box again.
+struct Wrap {
+    Node *node;
+};
+
 impl Node for Lit {
     void show() {
         printf("%d", self->v);
@@ -43,6 +49,18 @@ int main(void) {
     outer.rhs = sum;         // a node boxes another node: (3 + (1 + 2))
 
     outer.show();
+    printf("\n");
+
+    // Value field vs pointer field, side by side:
+    //   - `outer.rhs = sum` boxes a value into the fat pointer (a new interface
+    //     value is built in the field);
+    //   - `w.node = &held` stores the address of an interface value that already
+    //     exists, so there is no second box.
+    Node held;
+    Wrap w;
+    held = sum;
+    w.node = &held;
+    w.node->show();
     printf("\n");
     return 0;
 }
