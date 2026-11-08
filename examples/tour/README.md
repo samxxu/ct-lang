@@ -4,7 +4,9 @@
 > （避免与并发的门禁改动冲突），需要可用的 `ct-ast`——可以显式传 `CT=...`，
 > 也可以让脚本自行自举。`cases.tsv` 中 `l0=yes` 的样例可用冻结种子复编；
 > 目前 L0 可复编的簇是 **01、02、03、09（仅 tier-1 手工版）、11**，
-> 其余簇（04–08、10、12–14 以及 09 的 `=>` 样例）仅 ct-ast。
+> 其余簇（04–08、10、12–15 以及 09 的 `=>` 样例）仅 ct-ast。
+> 15（内存管理）里的悬垂样例只在 `ASAN=1` 时执行，普通跑会明确显示 `skip`，
+> 不会被当成通过。
 
 这不是语言规范，而是一组**能真编真跑**的样例：每个特性至少两个角度，正面样例逐字节比对
 stdout，反例比对确切的 stderr 与退出码。规范以 `docs/language-spec.md` 为准；这里只负责
@@ -23,6 +25,9 @@ bash examples/tour/run.sh
 
 # 3) 只跑某一簇，参数是路径子串
 CT=/path/to/ct-ast bash examples/tour/run.sh 06_
+
+# 4) 连悬垂样例一起跑（需要 cc 支持 -fsanitize=address）
+ASAN=1 bash examples/tour/run.sh
 ```
 
 脚本不写仓库：编译产物都在 `$TMPDIR/ct-tour-examples.$$`，退出时清理。
@@ -30,8 +35,14 @@ CT=/path/to/ct-ast bash examples/tour/run.sh 06_
 
 - `compile`：`ct prog.ct -o x.c` → `cc -Wall -Wextra -std=c99` → 运行 → 比对 `expected.out`
 - `build`：`ct build --emit-c main.ct` → cc（含 `*.shim.c`）→ 运行 → 比对
+- `compile-warn`：编译退出 0，stderr 必须逐字节等于 `expected.warn`，随后运行并比对 `expected.out`
 - `pair`：先编译（预期 0 退出、stderr=`expected.warn`），再 `ct check`（预期 1、stderr=`expected.err`）
 - `check` / `clean` / `check-json`：只跑 `ct check`，比对 stderr 或 JSON
+- `asan`：`cc -fsanitize=address -g`，用 `ASAN_OPTIONS=detect_stack_use_after_return=1` 运行；
+  要求非零退出、stdout 为空、stderr 含 `expected.asan` 里的固定片段（ASan 栈里有随机地址，
+  只能断言片段）。**默认不跑**，只在 `ASAN=1` 时执行并计入 ok，否则计入 skip。
+
+末行汇总形如 `tour: 45 ok, 0 failed, 0 skipped`。
 
 标了 `l0=yes` 的样例还会用**冻结种子** `selfhost/l0/ctc.c` 再编译运行一遍，输出必须一致。
 这是“L0 可用”这一列的实测依据。L0 生成物偶尔带 `unused _self` 一类警告，脚本对 L0
@@ -55,9 +66,11 @@ CT=/path/to/ct-ast bash examples/tour/run.sh 06_
 | 12 | 多单元 `ct build` 与 `pub` 导出 | ct-ast | 2 | 跨单元 vtable、pub 全局与命名空间修饰 |
 | 13 | `ct check` 诊断 | ct-ast | 3 | 干净单元 / 同一问题两级严重度 / JSON |
 | 14 | trait 默认方法 | ct-ast | 2 | 默认体按 struct 展开；覆盖；成环报错 |
+| 15 | 内存管理：AutoDrop / 级联释放 / 装箱借用 / 手动分配 / borrow + Handback | ct-ast | 12 | 正常释放、泄漏、悬垂与归还，含一个 ASan 反例 |
 
 “归属”只说明**当前实现**能不能被 L0 冻结种子吃下，不是设计上的分类。
-L0 对 `map`、闭包字面量、`loop`、默认方法等要么拒绝、要么原样透传成非法 C。
+L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`/`Handback`
+要么拒绝、要么原样透传成非法 C。
 
 ## 样例索引
 
@@ -98,6 +111,18 @@ L0 对 `map`、闭包字面量、`loop`、默认方法等要么拒绝、要么�
 | 13_check/json | `--diagnostics=json` 的结构化诊断 | ct-ast | `13_check/json/prog.ct` | `expected.json` |
 | 14_default_method/expand_and_override | 默认体按 struct 展开；显式覆盖 | ct-ast | `14_default_method/expand_and_override/prog.ct` | `expected.out` |
 | 14_default_method/neg_cycle | 反例：默认方法成环且无入口 | ct-ast | `14_default_method/neg_cycle/prog.ct` | `expected.err`，退出 1 |
+| 15_memory/drop_paths | 三条出口：落到底 / 嵌套块 / 提前 return | ct-ast | `15_memory/drop_paths/prog.ct` | `expected.out` |
+| 15_memory/drop_loop_break | 已知洞：break/continue 跳过块尾释放 | ct-ast | `15_memory/drop_loop_break/prog.ct` | `expected.out` |
+| 15_memory/field_cascade | drop() 里 delete 成员，三层资源树 | ct-ast | `15_memory/field_cascade/prog.ct` | `expected.out` |
+| 15_memory/field_cascade_missed | 漏一行 delete：成员的 drop 从未执行 | ct-ast | `15_memory/field_cascade_missed/prog.ct` | `expected.out` |
+| 15_memory/box_borrow | 装箱只借用：改原对象，接口立刻可见 | ct-ast | `15_memory/box_borrow/prog.ct` | `expected.out` |
+| 15_memory/box_escape | 返回装箱的局部值：ASan stack-use-after-return | ct-ast | `15_memory/box_escape/prog.ct` | `expected.asan`（`ASAN=1`） |
+| 15_memory/manual_shim | `.shim.c` 拥有 malloc/free：owned vs borrowed | ct-ast | `15_memory/manual_shim/{main.ct,pkt/*}` | `expected.out` |
+| 15_memory/manual_shim_wrong | 直接 `free(p)`：payload 与 shim 记账丢失 | ct-ast | `15_memory/manual_shim_wrong/{main.ct,pkt/*}` | `expected.out` |
+| 15_memory/borrow_handback | borrow + Handback：逆序还池，不销毁 | ct-ast | `15_memory/borrow_handback/prog.ct` | `expected.out` |
+| 15_memory/borrow_delete | 反例：delete 借来的指针 | ct-ast | `15_memory/borrow_delete/prog.ct` | `expected.err`，退出 1 |
+| 15_memory/own_factory | 反例：own 接工厂返回值 | ct-ast | `15_memory/own_factory/prog.ct` | `expected.err`，退出 1 |
+| 15_memory/leak_warning | 静态诊断 potential leak：warning + 退出 0 | ct-ast | `15_memory/leak_warning/prog.ct` | `expected.warn` + `expected.out` |
 
 ## 写样例时踩到的边界（都已固化成样例或注释）
 
@@ -120,6 +145,28 @@ L0 对 `map`、闭包字面量、`loop`、默认方法等要么拒绝、要么�
    （见 `examples/14_scalar_host` 的说明；本目录未重复构造该反例）。
 10. **L0 的生成物可能带 `unused _self` 警告**：这是冻结种子的已知产物，不影响运行；
     样例脚本对 L0 只断言编译成功与输出一致。
+11. **AutoDrop 只在块尾 `}` 和 `return` 前注入**：`break` / `continue`（以及 `goto`）
+    直接跳走，块尾的释放不会执行，而且编译器不报错——`15_memory/drop_loop_break`
+    里分配 3 次只 drop 1 次，另外 2 次静默泄漏。规避方式是把 `own` 提到循环外、
+    每轮 `delete` 后重新分配，或用 `return` 代替提前跳转。
+12. **结构体字段不会自动级联释放**：宿主被 `delete` 时只跑宿主自己的 `drop()`，
+    成员要由 `drop()` 里显式 `delete self->member;`；漏写没有任何诊断
+    （`15_memory/field_cascade_missed` 的 `leaf drops 0` 就是证据）。
+13. **装箱只借用，不拥有**：`T t; Iface i = t;` 里 `i.self == &t`，不是拷贝；把接口值
+    带出 `t` 的作用域就悬垂（函数返回局部值的装箱尤其容易）。正确写法是让被装箱对象
+    活过接口值的使用期，或改为在堆上分配并返回指针。复现命令：
+    `cc -fsanitize=address -g <generated>.c -o x && ASAN_OPTIONS=detect_stack_use_after_return=1 ./x`
+    → `stack-use-after-return`，退出码 134（macOS）。样例：`15_memory/box_escape`。
+14. **`own` 只接受可见的 `malloc`/`calloc` 初始化式**：工厂或 shim 返回的指针不能直接
+    `own`（`15_memory/own_factory`，退出 1）；要按对方的契约 `delete` 或调用配套释放函数。
+15. **`borrow` / `Handback` 不是 `Drop`**：`Handback` 只把控制权还回池（对象还在），
+    `delete` 一个借来的指针会被编译器拒绝（`15_memory/borrow_delete`，退出 1）。
+    池对象的所有权在池，不在借用者。
+16. **没有引用计数，也没有 GC**；`Arena` 只存在于编译器内部
+    （`selfhost/ct-ast/runtime/arena/`），不是随语言发布的用户库，样例里不提供。
+17. **`potential leak` 是保守启发式**：只覆盖“裸指针 + 函数返回时仍未 delete”，
+    warning 不阻断编译（退出 0），且把指针转手给别人后就不再提示——没有警告不等于
+    没有泄漏（`15_memory/leak_warning`）。
 
 ## 与既有门禁的关系
 
