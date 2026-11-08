@@ -237,8 +237,8 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
    继续用作计数 / 下界，上界另加同族的 `__ct_loop_hi_<K>`，两者共用同一个 `K`、只消耗一个
    `ntmp`；**没有**引入 `__ct_loop_a_<K>`。
 
-Phase 22 的实现没有为 `b != -1` 保留任何防御性断言：S2 直接实现了双界分支，
-单界分支的生成物保持 Phase 22 原样。
+Phase 22 的 S2 当时为 `b != -1` 留了一条内部错误断言（`a two-bound count belongs to Phase 23`）；
+Phase 23 的 S2 把该分支换成真正的双界实现，断言随之删除。单界分支的生成物保持 Phase 22 原样。
 
 **当时不冻结**双界的展开形态、求值顺序实现（逗号运算符）与 `loop(0..n)` 的生成物字节。
 as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），并做到了 `loop(0..n)` 与
@@ -318,7 +318,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 | --- | --- | --- | --- | --- |
 | **S0 基线** | 无代码 | 重跑 §2.2 语料扫描；确认 `N_LOOP = 60` 未被占用；记录 `bash selfhost/check-all.sh` 与 `git diff --stat test/cases` 的基线；确认 `test/ast` 现有最大编号 91 | 扫描 0 处 `loop(` 语句调用（或先改调用方）；基线全绿；编号 92 起可用 | 无（记录进本文 §2.2） |
 | **S1 解析 / AST / 作用域** | `frontend/parse/Stmt.h.ct` | `#define N_LOOP 60`；`struct Stmt` 增 `int loop_depth`；`StmtOps` 声明 `int loop_ahead(void); int parse_loop(void);`；`parse_stmt` 在 `label_ahead()` 前分派；`parse_loop`：`expect("(")` → 空则 L22-1 → 解析计数（禁逗号）→ `,` 则 L22-3 → `expect(")")` → 非 `{` 则 L22-2 → `push_scope` → `declare_var("i", "int")` → 遮蔽判定（`loop_depth > 0`）→ `loop_depth++` → `parse_block` → 回退 | 92/94/95/96/97/100/101 编译并运行通过；`log:`/`loop:` 标签与表达式位置的 `loop` 行为不变；**不改** `Parser` / `Expr` / `Memory`（body 走 `parse_block`，闭包走泛化递归） | 92–101 的编译面；`test/ast/32_goto` 逐字节不变 |
-| **S2 发射** | `backend/emit/Emitter.h.ct` | `#define N_LOOP 60`；`emit_node` 增 `N_LOOP` 分支：`for (int i = 0, __ct_loop_n_%d = (` + `emit_expr(a)` + `); i < __ct_loop_n_%d; i++) ` + `emit_node(d)`，`K = self->ntmp++`；`b != -1` 视为内部错误。计数是裸表达式节点，必须走 `emit_expr`（`emit_inline` 只接受语句形状节点） | 生成物恰为一行 `for (int i = 0, __ct_loop_n_K = (N); i < K; i++) {…}`；92/93/94/95/96/97/101 输出与等价原生 `for` 逐字节一致；既有 golden 0 变化 | 92–97、101；生成物 grep 断言（§6.3） |
+| **S2 发射** | `backend/emit/Emitter.h.ct` | `#define N_LOOP 60`；`emit_node` 增 `N_LOOP` 分支：`for (int i = 0, __ct_loop_n_%d = (` + `emit_expr(a)` + `); i < __ct_loop_n_%d; i++) ` + `emit_node(d)`，`K = self->ntmp++`；`b != -1` 视为内部错误（Phase 23 的 S2 已把它换成双界分支并删除该断言）。计数是裸表达式节点，必须走 `emit_expr`（`emit_inline` 只接受语句形状节点） | 生成物恰为一行 `for (int i = 0, __ct_loop_n_K = (N); i < K; i++) {…}`；92/93/94/95/96/97/101 输出与等价原生 `for` 逐字节一致；既有 golden 0 变化 | 92–97、101；生成物 grep 断言（§6.3） |
 | **S3 诊断** | `tool/diag/Diag.h.ct`、`frontend/parse/Stmt.h.ct` | `record_loop_warn` + `pub ct_loop_warn(line, col, msg, path)`（kind 7）；`emit` 的文本分支与 JSON 分支；`parse_loop` 调 `ct_loop_warn`；L22-5 调 `ct_type_warn(..., "loop", ...)`；三条语法错误调 `ct_sem_error` | 编译模式：97 出 1 条 `warning:`、退出 0；`ct check`：97 出 `error:` 带列、退出 1；float 计数同形；JSON 里 `type:"loop_shadow"`、`severity` 仅 strict；kind 0–6 输出不变 | 97、`loop_count_type`；errors 三条语法负例 |
 | **S4 测试** | `test/ast/**`、`selfhost/check-ast.sh`、`selfhost/check-warnings.sh` | 新增 92–101 正例目录（`prog.ct` + `prog.expected.out`）、`loop_count_type`、`loop_own_drop`；新增 4 个 `errors/*.ct`；`check-ast.sh` 增加：三条语法错误的钉文案、闭包逃逸文案、97 与 float 计数的双模式断言、生成物 `for (int i = 0, __ct_loop_n_` 且不含 `i < (` 的形态断言；`check-warnings.sh` 允许且仅允许 `loop_count_type.err` 一条 `type mismatch` 记录 | 全部新探针绿；既有探针零变化（golden 由 L0-seed 段与 S0 基线记录覆盖，ct-ast 自身格式与 L0 golden 本就不同，不做逐字节比对）；`bash selfhost/check-ast.sh`、`bash selfhost/check-warnings.sh` 均绿 | 见 §6 |
 | **S5 文档** | `docs/language-spec.md`、`docs/tutorial.md`、（必要时）`docs/glossary.md` | 在 `for` 语句之后新增 `loop` 小节：形态、展开、计数求值一次、`i` 语义、遮蔽策略、边界；中英对称；教程给一个可运行例子 | `python3 test/docs/check-docs.py` OK；中英小节一一对应；链接有效 | check-docs |
@@ -331,7 +331,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 - S1 必须验证「不改 `Expr` / `Memory`」：`closure_walk` / `closure_walk_mutate` 已按
   `a/b/c/d` 泛化递归（[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L555-L584)），
   `N_LOOP` 的 body 天然在覆盖内；body 由 `parse_block` 解析，AutoDrop / `own` 作用域不变。
-- S2 的 `b != -1` 断言是给 Phase 23 留的边界，不是本相功能。
+- S2 的 `b != -1` 断言是给 Phase 23 留的边界，不是本相功能；它在 Phase 23 的 S2 已随双界分支删除。
 
 ---
 
@@ -432,7 +432,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 | R7 | `kind 7` 落进 `potential_leak` 默认分支 | S3 同时加文本与 JSON 分支；S4 用 JSON 断言钉住 `type:"loop_shadow"` |
 | R8 | `loop(a, b)` 被逗号表达式吞掉 | 计数按禁逗号解析；探针 `loop_two_counts.ct` |
 | R9 | `loop` 进了 `kw[]` 导致分派错位 | 明确不加 `kw[]`，分支前置于 `label_ahead()`；探针 100 与 `32_goto` 复跑 |
-| R10 | 双界实现提前渗进本相 | 本相只冻结 AST 布局；S2 落地时直接写双界分支，未保留 `b != -1` 的内部断言 |
+| R10 | 双界实现提前渗进本相 | 本相只冻结 AST 布局；Phase 22 的 S2 为 `b != -1` 留了内部断言，Phase 23 的 S2 换成双界分支后该断言删除 |
 
 ---
 
@@ -544,7 +544,7 @@ No code is changed by this document.
 | --- | --- | --- |
 | S0 baseline | none | corpus rescan is 0 call sites; `N_LOOP = 60` is free; gates recorded; probes start at 92 |
 | S1 parse / AST / scope | `Stmt.h.ct`, `Parser.h.ct` | probes 92/94/95/96/97/100/101 compile and run; `32_goto` byte-identical; no `Expr` / `Memory` change |
-| S2 lowering | `Emitter.h.ct` | one-line `for`; 92–97 and 101 match the native-`for` output; `b != -1` is an internal error |
+| S2 lowering | `Emitter.h.ct` | one-line `for`; 92–97 and 101 match the native-`for` output; `b != -1` was an internal error in Phase 22, replaced by Phase 23's S2 with the real two-bound branch (assertion removed) |
 | S3 diagnostics | `Diag.h.ct`, `Stmt.h.ct` | L22-1…L22-5 exact text and positions; kind 7 text + JSON; compile warning / check error verified |
 | S4 tests | `test/ast/**`, `check-ast.sh` | probes 92–101, 4 negatives, pinned text, lowering grep, zero golden drift |
 | S5 docs | `language-spec.md`, `tutorial.md` | bilingual `loop` section; `check-docs.py` OK |
@@ -568,8 +568,10 @@ zero drift in `test/cases` and the existing `test/ast` directories.
 ### Phase 23 boundary
 
 Phase 22 freezes only the AST layout (`a` = count, `b` = `-1` sentinel) and the temporary-name
-family. It does **not** freeze the two-bound lowering, its evaluation order or the
-`loop(0..n)` byte form; `loop(0..n) ≡ loop(n)` is a semantic equality, not byte identity.
+family. It did **not** freeze the two-bound lowering, its evaluation order or the
+`loop(0..n)` byte form; `loop(0..n) ≡ loop(n)` started as a semantic equality. As built,
+Phase 23 sequences the bounds with the comma operator and folds `loop(0..n)` at parse time, so
+the folded form prints the counted form byte for byte.
 
 ### Exit criteria
 
