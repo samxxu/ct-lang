@@ -579,114 +579,320 @@ buf.encode(233, 16);
 
 ### 10.1 闭包：把上下文带进回调
 
-Phase 21 起，ct-ast 支持 `=>` 就地闭包。表面类型仍是函数指针，返回类型由左侧声明给出；
-闭包的环境放在栈上，编译期禁止逃逸。
+C 回调的经典麻烦是上下文：函数指针只带得住代码，带不住 `unit`、`limit` 这类局部值，于是要么写成
+全局变量，要么手写一个 `struct` 加一层 `void *` 强转。Phase 21 的 `=>` 把这两步收进语言：字面量
+在声明处创建，捕获按值拷进一个栈上的环境结构体，调用时 `(fn, env)` 两个词一起走。
+
+表面类型仍然是函数指针，返回类型由左侧声明给出（不推断），参数必须带类型，无参写 `()`；表达式体
+与块体在下面的例子里各有一个（`mul` 与 `twice`）。
+
+闭包真正好用是在容器的回调位上。[examples/10_closure_pipeline/closure_pipeline.ct](../examples/10_closure_pipeline/closure_pipeline.ct)
+是一个完整、可编译可运行的例子（省掉文件头注释）：
 
 ```c
-/* closure.ct */
 #include <stdio.h>
 
-int run(int (*fn)(void *env, int x), void *env)
+static int fold(int (*fn)(void *env, int acc, int x), void *env, int n)
 {
-    return fn(env, 2) + fn(env, 3);
+    int acc = 0;
+
+    loop(n) {
+        acc = fn(env, acc, i + 1);
+    }
+    return acc;
 }
 
 int main(void)
 {
-    int unit = 10;
-    int (*scale)(int x) = (int x) => x * unit;             /* 表达式体 */
-    int total = run((int x) => { return x + unit; });      /* 字面量填满 (fn, env) 对 */
-    printf("%d %d\n", scale(4), total);
+    int factor = 3;
+    int limit = 1;
+    int (*mul)(int acc, int x) = (int acc, int x) => acc + x * factor;
+    int (*cap)(int acc, int x) = (int acc, int x) => acc + x + limit;
+    int (*twice)(int acc, int x) = (int acc, int x) => {
+        int t = acc;
+
+        loop(2) {
+            t = t + x;
+        }
+        return t;
+    };
+
+    limit = 100;
+    printf("mul %d\n", fold(mul, 3));
+    printf("cap %d\n", fold(cap, 3));
+    printf("twice %d\n", fold(twice, 3));
+    printf("lit %d\n", fold((int acc, int x) => acc + x, 3));
+
+    /* one closure per round: each snapshot keeps that round's `i` */
+    loop(3) {
+        int (*snap)(int x) = (int x) => x + i * 10;
+
+        printf("snap %d\n", snap(1));
+    }
     return 0;
 }
 ```
 
 ```sh
-ct build closure.ct -o closure && ./closure
-# 40 25
+ct build closure_pipeline.ct -o closure_pipeline && ./closure_pipeline
+# mul 18
+# cap 9
+# twice 12
+# lit 6
+# snap 1
+# snap 11
+# snap 21
 ```
 
-- **捕获按值、创建点求值**：`scale` 拿到的是 `unit` 当时的副本；捕获名只读，写回要先捕获指针再写
-  `*p = …`。
-- **闭包变量是绑定，不是值**：可以调用（`scale(4)`），也可以把绑定整对交给一个 `(fn, env)` 参数
-  （`run(scale)`，参数表要匹配宿主尾部）；不能拷贝 / 重赋值 / 作返回值 / 作字段或元素。需要别名就
-  把字面量就地写进去。
-- **字面量作实参**：形参必须写成相邻的 `ret (*fn)(void *env, …)` + `void *env`；字面量一次填满
-  这两个槽，所以 `run(…)` 只写一个字面量，闭包自己的参数由 `run` 内部提供。
-- **没有 env 槽的 C API**（`qsort` 一类）接不了；上下文要活过当前栈帧就用档①：`struct` + `trait`
-  （ct-pkg 的 `Callable` 签名族随该仓发布，本仓未内置）。
-- 更完整的语法、限制清单与 `(fn, env)` 约定见 [language-spec §4.44](language-spec.md)。
+- **捕获按值、创建点求值**：`cap` 捕获 `limit` 时它是 1，后面 `limit = 100` 改不到闭包里的副本，
+  所以 `cap` 那行是 9（`1+1`、`2+1`、`3+1` 的累加）。要共享可写状态就捕获指针，通过 `*p = …` 写回。
+- **捕获名只读**：体内写捕获名（`n = …`、`n++`、复合赋值）报
+  `a captured variable cannot be reassigned inside a closure`；取地址 `&n` 报
+  `the address of a captured variable cannot be taken inside a closure`。
+- **捕获不到的东西**：数组（`a closure cannot capture the array 'a' (capture a pointer to it instead)`）、
+  `own` / `borrow` 变量、另一个闭包。全局变量、函数名、类型名和枚举常量不进 env，直接按名字用。
+- **闭包变量是绑定，不是值**：可以调用（`mul(...)`、`snap(1)`），也可以把绑定整对交给 `(fn, env)`
+  参数（`fold(mul, 3)`）；不能拷贝、重赋值、作返回值、作字段或数组元素。需要另一个名字就把字面量
+  就地再写一遍（`fold((int acc, int x) => acc + x, 3)`）。
+- **两种实参写法**：内联字面量一次填满相邻的 `ret (*fn)(void *env, …)` + `void *env` 两个槽；
+  已声明的绑定同样按两项计。两者都要求闭包的参数表与宿主尾部逐参一致（个数与类型），否则报
+  `this closure's parameter N is '…', but the expected type is '…'`。
+- **env 活不过这次调用**：容器拿到 `(fn, env)` 后只能在本次调用里用，不能存进字段、全局或返回。
+  存了就是 E8（见下）。
+
+**档①：上下文要活过栈帧时**
+
+闭包的环境在声明作用域的栈上，出了作用域就没了，所以三类场景接不了：C API 没有 `void *` 环境槽
+（`qsort` 的比较函数只有两个 `const void *`）；回调要被保存下来稍后调用（事件表、定时器、容器
+字段）；回调要跨单元、进 `.h.ct`（头文件里只有普通函数指针）。
+
+这时退回档①：`struct` 持有状态、`trait` 描述回调外形、一个两行适配器满足 `(void *self, …)`。
+[examples/09_callback](../examples/09_callback/callback.ct) 就是模板——`Adder` 是状态，`IntOp`
+是回调形状，`adder_call` 是适配器，容器只认 `(fn, env)`。ct-pkg 把常用签名收成 `Callable` 系列，
+本仓未内置。
+
+**编译器看不见的面**
+
+- **E8**：`env` 以 `void *` 交给不透明接收方后被保存。编译器不追踪指针去向，不会拦。
+- **E9**：`goto` 跨过闭包声明跳进它的作用域，跳过去的路径上 env 没有初始化；编译器不做支配分析。
+
+**诊断速查**
+
+| 写法 | 报错 |
+| --- | --- |
+| 声明后 `f = g;` 或 `f2 = f;` | `this closure is a binding, not a value (inline it or use a struct + trait)` |
+| `return f;` | `a closure cannot escape through 'return'` |
+| 存字段 / 数组元素 | `a closure cannot be stored in a field, an element or a container` |
+| 传给不是 `(fn, env)` 的位置 | `a closure argument must fill a '(fn, env)' parameter pair` |
+| 全局 / `pub` 全局的初始化式 | `a closure cannot be stored in '<name>' (its scope outlives the closure)` |
+
+完整规则见 [language-spec §4.44](language-spec.md)。
 
 ### 10.2 `loop(n)`：只数次数
 
-只要「跑 n 次」时，不用再写 `for (int i = 0; i < n; i++)`：`loop(n) { … }` 展开成完全等价的原生
-`for`，隐式计数器就叫 `i`，从 0 数起。
+只要「跑 n 次」时，不用再写 `for (int i = 0; i < n; i++)`。`loop(n) { … }` 展开的正是这条原生
+`for`：
 
 ```c
-/* loop.ct */
-#include <stdio.h>
+for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
+```
 
+- **`i` 从 0 起、到 `n-1`，是一个普通可写 `int`**：体内可以读、可以改（`i++`、`i = i + 1`），
+  `break` / `continue` / `return` 与手写 `for` 完全一致。`loop(0)`、`loop(-2)` 都是零轮，不报错。
+- **循环之后 `i` 不可见**：`loop(3) { … }` 结束后再写 `i` 就是未声明标识符。要留下结果，累加到
+  循环外的变量里（下面例子里的 `calls`）。
+- **计数只求值一次**：表达式绑进私有临时量 `__ct_loop_n_K`，条件读临时量。`loop(count())` 无论
+  多少轮，`count` 只进一次。
+- **`loop` 是上下文关键字**：`int loop = 3;`、`loop:` 标签、`goto loop;`、`x = loop + 1;` 都还是
+  普通标识符；只有语句位置紧跟 `(` 时才当语法糖。
+
+**嵌套与遮蔽**：内层 `loop` 遮蔽外层的隐式 `i` 时，编译模式打印
+`warning: loop shadows the outer 'i'; use a native for to name the inner counter`；同一段代码在
+`ct check` 下记为 `loop_shadow` 错误。体内手写 `int i` 或原生 `for` 属于普通 C 遮蔽，不诊断。
+真需要两个计数器，就直接写原生 `for (i = 0, j = n; …)`。
+
+**`own` 与提前跳出（既有行为，如实说明）**：`own` 变量的释放挂在**块尾**，所以正常走完一轮会释放；
+`break` / `continue` 跳过块尾，也跳过释放，静默泄漏。这不是 `loop` 引入的：原生 `for` / `while`
+里同样如此。循环里可能提前跳出时，别把清理押在 `own` 上——要么在跳出前显式 `delete` / `free`，
+要么改回原生循环把清理写清楚。（回归测试 `test/ast/loop_own_drop` 只覆盖正常块尾。）
+
+**什么时候退回原生 `for`**
+
+- 循环结束后还要用计数器；
+- 需要步长、反向或两个计数器；
+- 需要非 `int` 的计数器（`size_t`）或超过 `INT_MAX` 的范围；
+- 体内可能提前跳出且持有 `own` 资源（见上）。
+
+[examples/11_loop_semantics](../examples/11_loop_semantics/loop_semantics.ct) 用一个文件覆盖
+上面这些行为与 10.3 的区间形式（`main` 原文）：
+
+```c
 int main(void)
 {
-    int sum = 0;
-
-    loop(4) {
-        sum = sum + i;
-        printf("%d\n", i);
+    /* the implicit counter starts at 0 and stops before the count */
+    loop(3) {
+        printf("count %d\n", i);
     }
+    /* zero rounds are not a diagnostic */
     loop(0) {
-        printf("never\n");      /* 0 次，不报错 */
+        printf("never\n");
     }
-    printf("sum %d\n", sum);
+    /* the count expression runs once, however many rounds follow */
+    loop(count()) {
+        printf("once %d\n", i);
+    }
+    printf("calls %d\n", calls);
+
+    /* half-open [2, 5): the lower bound is evaluated first, once each */
+    loop(lo()..hi()) {
+        printf("range %d\n", i);
+    }
+    /* an empty range is silent */
+    loop(4..2) {
+        printf("never\n");
+    }
+    /* `loop(0..b)` folds to `loop(b)` and prints the same thing */
+    loop(0..3) {
+        printf("zero %d\n", i);
+    }
+
+    /* break / continue / writing `i` work exactly as in a native for */
+    loop(5) {
+        if (i == 2) {
+            continue;
+        }
+        if (i == 4) {
+            break;
+        }
+        printf("skip %d\n", i);
+    }
+    loop(3) {
+        printf("write %d\n", i);
+        i = i + 1;
+    }
     return 0;
 }
 ```
 
 ```sh
-ct build loop.ct -o loop && ./loop
-# 0 1 2 3，最后一行 sum 6
+ct build loop_semantics.ct -o loop_semantics && ./loop_semantics
+# count 0
+# count 1
+# count 2
+# once 0
+# once 1
+# once 2
+# calls 1
+# eval lo
+# eval hi
+# range 2
+# range 3
+# range 4
+# zero 0
+# zero 1
+# zero 2
+# skip 0
+# skip 1
+# skip 3
+# write 0
+# write 2
 ```
 
-- **计数只求值一次**：`loop(n)` 把 `n` 存进私有临时量，条件读临时量；`loop(next())` 只调用一次 `next`。
-- **`i` 就是普通的 `int`**：体内可以读、可以改（`i = i + 1` / `i++`），`break` / `continue` / `return`
-  与手写 `for` 一致；体内声明的 `own` 变量在每轮出口释放。
-- **循环体必须是块**：`loop(3) printf("x");` 会被拒绝，写成 `loop(3) { printf("x"); }`。
-- **遮蔽只提醒 `loop` 套 `loop`**：内层 `loop` 的 `i` 会遮蔽外层时给一条 warning（`ct check` 下是
-  错误）；体内手写 `int i` 或原生 `for` 不报。
-- **`loop` 仍是普通标识符**：`int loop = 3;`、`loop:` 标签、`goto loop;` 都不受影响，只有语句位置
-  紧跟 `(` 时才当语法糖。
-- 细节与诊断文案见 [language-spec §4.45](language-spec.md)。
+（`calls 1` 证明 `count()` 只调了一次；`skip` 少了 2 和 4，是 `continue` 与 `break` 的结果；
+`write` 只打了 0 和 2，因为体内把 `i` 改大后跳过了下一轮。）
+
+**语法硬错误**：`loop()` → `loop needs a count expression`；`loop(3) printf("x");` →
+`loop body must be a block`；`loop(3, x)` →
+`loop takes exactly one count; use a native for to name the counter`。静态可判定的非整数计数
+（`double` 一类）在编译模式下是一条
+`warning: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int`，
+`ct check` 下同一句变 `error:`，运行时仍按 C 规则转成 `int`。细节见
+[language-spec §4.45](language-spec.md)。
 
 ### 10.3 `loop(a..b)`：从 a 数到 b-1
 
 起点不是 0 时，把区间写在括号里：`loop(2..5)` 就是 `for (int i = 2; i < 5; i++)`，左闭右开。
+展开恰好是：
 
 ```c
-/* loop_range.ct */
+for (int __ct_loop_n_K, __ct_loop_hi_K,
+         i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+     i < __ct_loop_hi_K; i++) { … }
+```
+
+- **半开区间 `[a, b)`**：`i` 从 `a` 起、取到 `b-1`。`b <= a` 零轮，不报错也不告警；没有反向、
+  没有步长、没有闭区间。
+- **两个边界各求值一次，先 `a` 后 `b`**：两个赋值写在 `i` 的**同一个**初始化器里，靠逗号运算符
+  定序（C99 §6.5.17），上界存进私有临时量 `__ct_loop_hi_K`。这里不依赖同一声明里多个声明符
+  初始化器的次序——C99 §6.7.8 没有规定该次序。10.2 例子的 `eval lo` 在 `eval hi` 之前、且各一次，
+  就是这条。
+- **`i` 与 `loop(n)` 完全相同**：作用域、`break` / `continue` / `return`、`i--` / `++i`、闭包按值
+  捕获（每轮一个快照）全部照旧。`own` 的释放同样挂在块尾：正常走完一轮会释放，`break` /
+  `continue` 跳过块尾也跳过释放（见 10.2 的说明，原生循环同样如此）。
+- **`loop(0..b)` 与 `loop(b)` 相同**：字面量 `0` 的下界在解析期折掉，生成物逐字节一致。折叠是纯
+  语法的：`0L..b`、`0x0..b` 也折，`-0..b`、`0+0..b` 不折（语义等价但不做常量折叠）。
+- **`..` 是单个 token**：`2..8` 不会被切成浮点 `2.` 与 `.8`，`...` 仍是三连点。
+- **边界必须是整数**：指针、数组、`struct` / `union` 值、函数指针是硬错误
+  `a loop bound must be an integer (got 'int *')`（数组变量是 `(got the array 'a')`）；
+  `loop(..b)` / `loop(a..)` 报 `a loop range needs both bounds`；`loop(1..2..3)` 是语法错误。
+  `float` / `double` / `void` 这类静态可判定的非整数标量仍只告警（两条边界各报一次），运行时按
+  C 规则转成 `int`。
+- **边界存进 `int`**：`i` 与临时量都是 `int`，`size_t` / `long` 超出 `INT_MAX` 的边界按 C 的转换
+  规则截断。需要大范围计数的场景写原生 `for`。
+
+**和闭包组合**：闭包在体内按值捕获 `i`，每轮一个快照。
+[examples/12_closure_in_loop](../examples/12_closure_in_loop/closure_in_loop.ct) 把三件事放在一起
+——容器用 `loop(from..to)` 遍历，`shift` 在 `bias = 1000` 之前创建（所以捕获的仍是 7），每轮新建
+的 `scale` 钉住当轮的 `i`（原文）：
+
+```c
 #include <stdio.h>
+
+static int map_sum(int *xs, int from, int to, int (*fn)(void *env, int x), void *env)
+{
+    int sum = 0;
+
+    loop(from..to) {
+        sum = sum + fn(env, xs[i]);
+    }
+    return sum;
+}
 
 int main(void)
 {
-    loop(2..5) {
-        printf("%d\n", i);      /* 2 3 4 */
+    int xs[5];
+    int bias = 7;
+    int (*shift)(int x) = (int x) => x + bias;
+
+    loop(5) {
+        xs[i] = i * i;
     }
-    loop(5..2) {
-        printf("never\n");      /* 空区间：0 次，不报错 */
-    }
-    loop(0..3) {
-        printf("same as loop(3): %d\n", i);
+    /* `shift` was built above: it still holds 7, not 1000 */
+    bias = 1000;
+
+    printf("shift %d\n", map_sum(xs, 1, 4, shift));
+
+    /* a fresh closure per round, each one pinning its own `i` */
+    loop(2..4) {
+        int (*scale)(int x) = (int x) => x * i;
+
+        printf("round %d %d\n", i, map_sum(xs, 0, 2, scale));
     }
     return 0;
 }
 ```
 
-- **两个边界各求值一次，先左后右**：`loop(lo()..hi())` 里 `lo()` 与 `hi()` 各调用一次；
-  循环体里改边界读的变量也不会改变本次次数。
-- **`i` 还是那个 `int`**：`break` / `continue` / `i++` / 闭包按值捕获 / `own` 每轮释放，全部照旧。
-- **`loop(0..b)` 与 `loop(b)` 相同**：字面量 0 的下界在解析期折掉，生成物逐字节一致。
-- **边界必须是整数**：指针、数组、结构体值、函数指针会被直接拒绝；`loop(..b)` / `loop(a..)` /
-  `loop(1..2..3)` 是语法错误。`double` 这类标量仍只告警（同 `loop(n)`）。
-- 细节见 [language-spec §4.46](language-spec.md)。
+```sh
+ct build closure_in_loop.ct -o closure_in_loop && ./closure_in_loop
+# shift 35
+# round 2 2
+# round 3 3
+```
+
+（`shift` 是 `xs[1..4)` 即 1、4、9 各加 7 的和；`round` 里的 `scale` 把 `xs[0..2)` 即 0、1 乘以
+当轮的 `i`。）
+
+细节与诊断见 [language-spec §4.46](language-spec.md)。
 
 ## 11. 命令行速查
 
@@ -1335,125 +1541,341 @@ working program. This overview does not repeat them; both files live in the pack
 
 #### 10.1 Closures: carrying context into a callback
 
-Since Phase 21, ct-ast supports inline `=>` closures. The surface type is still a function pointer;
-the return type comes from the declaration on the left. The environment lives on the stack, and
-escaping it is rejected at compile time.
+The classic pain of a C callback is context: a function pointer carries code but not the local values
+(`unit`, `limit`) it needs, so you either promote them to globals or hand-roll a `struct` plus a
+`void *` cast. Phase 21's `=>` folds both steps into the language: the literal is created where it is
+written, the captures are copied by value into an environment struct on the stack, and calls pass the
+`(fn, env)` pair together.
+
+The surface type is still a function pointer; the return type comes from the declaration on the left
+(never inferred), parameters must be typed, and a parameterless closure writes `()`. The example
+below has one expression body (`mul`) and one block body (`twice`).
+
+Closures pay off at a container's callback slot.
+[examples/10_closure_pipeline/closure_pipeline.ct](../examples/10_closure_pipeline/closure_pipeline.ct)
+is a complete, compiled-and-run example (file header comment omitted):
 
 ```c
-/* closure.ct */
 #include <stdio.h>
 
-int run(int (*fn)(void *env, int x), void *env)
+static int fold(int (*fn)(void *env, int acc, int x), void *env, int n)
 {
-    return fn(env, 2) + fn(env, 3);
+    int acc = 0;
+
+    loop(n) {
+        acc = fn(env, acc, i + 1);
+    }
+    return acc;
 }
 
 int main(void)
 {
-    int unit = 10;
-    int (*scale)(int x) = (int x) => x * unit;             /* expression body */
-    int total = run((int x) => { return x + unit; });      /* the literal fills the (fn, env) pair */
-    printf("%d %d\n", scale(4), total);
+    int factor = 3;
+    int limit = 1;
+    int (*mul)(int acc, int x) = (int acc, int x) => acc + x * factor;
+    int (*cap)(int acc, int x) = (int acc, int x) => acc + x + limit;
+    int (*twice)(int acc, int x) = (int acc, int x) => {
+        int t = acc;
+
+        loop(2) {
+            t = t + x;
+        }
+        return t;
+    };
+
+    limit = 100;
+    printf("mul %d\n", fold(mul, 3));
+    printf("cap %d\n", fold(cap, 3));
+    printf("twice %d\n", fold(twice, 3));
+    printf("lit %d\n", fold((int acc, int x) => acc + x, 3));
+
+    /* one closure per round: each snapshot keeps that round's `i` */
+    loop(3) {
+        int (*snap)(int x) = (int x) => x + i * 10;
+
+        printf("snap %d\n", snap(1));
+    }
     return 0;
 }
 ```
 
 ```sh
-ct build closure.ct -o closure && ./closure
-# 40 25
+ct build closure_pipeline.ct -o closure_pipeline && ./closure_pipeline
+# mul 18
+# cap 9
+# twice 12
+# lit 6
+# snap 1
+# snap 11
+# snap 21
 ```
 
-- **Capture by value, evaluated at the creation point**: `scale` holds the value `unit` had at that
-  moment. A captured name is read-only; to write back, capture a pointer and assign through `*p = …`.
-- **A closure variable is a binding, not a value**: it may be called (`scale(4)`), and the binding may
-  fill a `(fn, env)` parameter as a whole (`run(scale)`, with a parameter tail that matches the
-  host), but it cannot be copied, reassigned, returned, or stored in a field / element. Inline the
-  literal when you need another name for it.
-- **A literal as an argument**: the host signature must be the adjacent
-  `ret (*fn)(void *env, …)` + `void *env`; one literal fills both slots, so `run(…)` takes a single
-  literal and the closure's own parameter is supplied inside `run`.
-- **C APIs with no env slot** (`qsort` and friends) cannot take one; when the context must outlive
-  the current frame, use tier 1: `struct` + `trait` (ct-pkg's `Callable` signature family ships with
-  that repository and is not built in here).
-- Full syntax, the limitation list and the `(fn, env)` convention are in
-  [language-spec §4.44](language-spec.md).
+- **Capture by value, evaluated at the creation point**: `cap` captured `limit` while it was 1; the
+  later `limit = 100` never reaches the copy inside the closure, so that line prints 9 (the sum of
+  `1+1`, `2+1`, `3+1`). To share writable state, capture a pointer and assign through `*p = …`.
+- **A captured name is read-only**: assigning to it in the body (`n = …`, `n++`, compound assignment)
+  reports `a captured variable cannot be reassigned inside a closure`; taking its address (`&n`)
+  reports `the address of a captured variable cannot be taken inside a closure`.
+- **What cannot be captured**: arrays (`a closure cannot capture the array 'a' (capture a pointer to
+  it instead)`), `own` / `borrow` variables, and another closure. Globals, function names, type names
+  and enum constants never enter the env; refer to them by name.
+- **A closure variable is a binding, not a value**: it may be called (`mul(...)`, `snap(1)`), and the
+  binding may fill a `(fn, env)` parameter as a whole (`fold(mul, 3)`); it cannot be copied,
+  reassigned, returned, stored in a field or an array element. Need a second name? Inline the literal
+  again (`fold((int acc, int x) => acc + x, 3)`).
+- **Two ways to pass one**: an inline literal fills the adjacent `ret (*fn)(void *env, …)` +
+  `void *env` slots at once; a declared binding counts as the same two slots. Both require the
+  closure's parameter list to match the host tail parameter by parameter, or you get
+  `this closure's parameter N is '…', but the expected type is '…'`.
+- **The env does not outlive the call**: a container may use `(fn, env)` during that call only —
+  never store it in a field, a global, or a return value. Doing so is E8 (below).
+
+**Tier 1: when the context must outlive the frame**
+
+The closure environment sits on the declaring scope's stack, so three situations are out of reach: a C
+API with no `void *` env slot (the `qsort` comparator only gets two `const void *`); a callback that
+must be saved and called later (event tables, timers, container fields); a callback that crosses a
+unit or lives in a `.h.ct` (headers only hold plain function pointers).
+
+Fall back to tier 1 there: a `struct` holds the state, a `trait` describes the callback shape, and a
+two-line adapter matches `(void *self, …)`.
+[examples/09_callback](../examples/09_callback/callback.ct) is the template — `Adder` is the state,
+`IntOp` the callback shape, `adder_call` the adapter, and the container only knows `(fn, env)`.
+ct-pkg collects the common signatures into `Callable`; it is not built into this repository.
+
+**What the compiler does not see**
+
+- **E8**: the `env` is handed to an opaque receiver as `void *` and stored there. The compiler does not
+  track where the pointer goes and will not stop you.
+- **E9**: a `goto` jumps over a closure declaration into its scope; on that path the env was never
+  initialized, and the compiler does no dominance analysis.
+
+**Diagnostics at a glance**
+
+| Form | Message |
+| --- | --- |
+| `f = g;` or `f2 = f;` after the declaration | `this closure is a binding, not a value (inline it or use a struct + trait)` |
+| `return f;` | `a closure cannot escape through 'return'` |
+| field / array element | `a closure cannot be stored in a field, an element or a container` |
+| passed where no `(fn, env)` pair is expected | `a closure argument must fill a '(fn, env)' parameter pair` |
+| global / `pub` global initializer | `a closure cannot be stored in '<name>' (its scope outlives the closure)` |
+
+Full rules are in [language-spec §4.44](language-spec.md).
 
 ### 10.2 `loop(n)`: just the count
 
 When all you need is "run this n times", skip `for (int i = 0; i < n; i++)`: `loop(n) { … }` expands
-to exactly that native `for`, with an implicit counter named `i` starting at 0.
+to exactly that native `for`:
 
 ```c
-/* loop.ct */
-#include <stdio.h>
+for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
+```
 
+- **`i` starts at 0 and stops at `n-1`; it is a plain writable `int`**: the body may read and write it
+  (`i++`, `i = i + 1`), and `break` / `continue` / `return` behave exactly as in a hand-written `for`.
+  `loop(0)` and `loop(-2)` run zero rounds and report nothing.
+- **`i` is not visible after the loop**: writing `i` after `loop(3) { … }` is an undeclared
+  identifier. Keep results in a variable outside the loop (such as `calls` below).
+- **The count is evaluated once**: the expression is bound to the private temporary `__ct_loop_n_K`
+  and the test reads that temporary, so `loop(count())` enters `count` once no matter the trip count.
+- **`loop` is a contextual keyword**: `int loop = 3;`, a `loop:` label, `goto loop;` and
+  `x = loop + 1;` all keep the ordinary identifier meaning; only statement position followed by `(`
+  triggers the shorthand.
+
+**Nesting and shadowing**: an inner `loop` that hides the outer implicit `i` prints
+`warning: loop shadows the outer 'i'; use a native for to name the inner counter` in compile mode and
+becomes a `loop_shadow` error under `ct check`. A hand-written `int i` or a native `for` in the body
+is ordinary C shadowing and stays silent. When you really need two counters, write the native
+`for (i = 0, j = n; …)`.
+
+**`own` and early exits (existing behaviour, stated honestly)**: an `own` variable is released at the
+**end of its block**, so a round that runs to the end releases; `break` / `continue` skip the block
+end and skip the release, leaking silently. `loop` did not introduce this — native `for` / `while`
+behave the same way. When a round may exit early, do not put the cleanup on `own`: either
+`delete` / `free` explicitly before the jump, or go back to a native loop and write the cleanup out.
+(The regression test `test/ast/loop_own_drop` only covers the normal block end.)
+
+**When to go back to a native `for`**
+
+- the counter is needed after the loop;
+- you need a step, a reverse direction, or two counters;
+- you need a non-`int` counter (`size_t`) or a range beyond `INT_MAX`;
+- the body may exit early while holding an `own` resource (see above).
+
+[examples/11_loop_semantics](../examples/11_loop_semantics/loop_semantics.ct) covers all of this in
+one file, together with the range form of 10.3 (`main` verbatim):
+
+```c
 int main(void)
 {
-    int sum = 0;
-
-    loop(4) {
-        sum = sum + i;
-        printf("%d\n", i);
+    /* the implicit counter starts at 0 and stops before the count */
+    loop(3) {
+        printf("count %d\n", i);
     }
+    /* zero rounds are not a diagnostic */
     loop(0) {
-        printf("never\n");      /* zero rounds, no diagnostic */
+        printf("never\n");
     }
-    printf("sum %d\n", sum);
+    /* the count expression runs once, however many rounds follow */
+    loop(count()) {
+        printf("once %d\n", i);
+    }
+    printf("calls %d\n", calls);
+
+    /* half-open [2, 5): the lower bound is evaluated first, once each */
+    loop(lo()..hi()) {
+        printf("range %d\n", i);
+    }
+    /* an empty range is silent */
+    loop(4..2) {
+        printf("never\n");
+    }
+    /* `loop(0..b)` folds to `loop(b)` and prints the same thing */
+    loop(0..3) {
+        printf("zero %d\n", i);
+    }
+
+    /* break / continue / writing `i` work exactly as in a native for */
+    loop(5) {
+        if (i == 2) {
+            continue;
+        }
+        if (i == 4) {
+            break;
+        }
+        printf("skip %d\n", i);
+    }
+    loop(3) {
+        printf("write %d\n", i);
+        i = i + 1;
+    }
     return 0;
 }
 ```
 
 ```sh
-ct build loop.ct -o loop && ./loop
-# 0 1 2 3, then sum 6
+ct build loop_semantics.ct -o loop_semantics && ./loop_semantics
+# count 0
+# count 1
+# count 2
+# once 0
+# once 1
+# once 2
+# calls 1
+# eval lo
+# eval hi
+# range 2
+# range 3
+# range 4
+# zero 0
+# zero 1
+# zero 2
+# skip 0
+# skip 1
+# skip 3
+# write 0
+# write 2
 ```
 
-- **The count is evaluated once**: `loop(n)` stores `n` in a private temporary and the test reads it,
-  so `loop(next())` calls `next` a single time.
-- **`i` is a plain `int`**: the body may read and write it (`i = i + 1`, `i++`), and `break` /
-  `continue` / `return` behave as in a hand-written `for`; an `own` declared in the body is released
-  at each round's exit.
-- **The body must be a block**: `loop(3) printf("x");` is rejected; write `loop(3) { printf("x"); }`.
-- **Only loop-in-loop shadowing is flagged**: an inner `loop` that hides the outer `i` warns (an
-  error under `ct check`); a hand-written `int i` or a native `for` in the body stays silent.
-- **`loop` stays an ordinary identifier**: `int loop = 3;`, a `loop:` label and `goto loop;` are
-  unaffected; only statement position followed by `(` triggers the shorthand.
-- Details and the diagnostic texts are in [language-spec §4.45](language-spec.md).
+(`calls 1` proves `count()` ran once; `skip` misses 2 and 4 because of `continue` and `break`;
+`write` prints only 0 and 2 because raising `i` in the body skips the next round.)
+
+**Syntax errors**: `loop()` → `loop needs a count expression`; `loop(3) printf("x");` →
+`loop body must be a block`; `loop(3, x)` →
+`loop takes exactly one count; use a native for to name the counter`. A statically known
+non-integer count (`double` and friends) is one
+`warning: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int`
+in compile mode, the same line becomes `error:` under `ct check`, and the value still converts to
+`int` and runs. Details are in [language-spec §4.45](language-spec.md).
 
 ### 10.3 `loop(a..b)`: count from a to b-1
 
 When the start is not zero, put the range in the parentheses: `loop(2..5)` is
-`for (int i = 2; i < 5; i++)`, half-open.
+`for (int i = 2; i < 5; i++)`, half-open. The expansion is exactly:
 
 ```c
-/* loop_range.ct */
+for (int __ct_loop_n_K, __ct_loop_hi_K,
+         i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+     i < __ct_loop_hi_K; i++) { … }
+```
+
+- **Half-open `[a, b)`**: `i` starts at `a` and stops at `b-1`. `b <= a` runs zero rounds with no
+  diagnostic; there is no reverse direction, no step, no closed range.
+- **Each bound is evaluated once, lower bound first**: both assignments sit in `i`'s **single**
+  initializer and the comma operator sequences them left to right (C99 §6.5.17); the upper bound
+  lives in the private temporary `__ct_loop_hi_K`. The lowering does **not** rely on the order of
+  declarator initializers inside one declaration — C99 §6.7.8 does not specify it. The `eval lo`
+  before `eval hi` in the 10.2 example, once each, is exactly this.
+- **`i` is the same `int` as in `loop(n)`**: scope, `break` / `continue` / `return`, `i--` / `++i` and
+  capture by value in closures (one snapshot per round) all behave as before. `own` is released at
+  the **end of the block** too: a round that runs to the end releases, while `break` / `continue` skip
+  the block end and the release (see 10.2; native loops behave the same way).
+- **`loop(0..b)` is `loop(b)`**: a literal zero lower bound folds at parse time and the output is
+  byte-identical. The fold is purely syntactic: `0L..b` and `0x0..b` fold, `-0..b` and `0+0..b` do
+  not (same meaning, but no constant folding is performed).
+- **`..` is one token**: `2..8` is never split into the floats `2.` and `.8`, and `...` keeps its own
+  token.
+- **A bound must be an integer**: pointers, arrays, `struct` / `union` values and function pointers
+  are hard errors — `a loop bound must be an integer (got 'int *')`, and for an array variable
+  `(got the array 'a')`; `loop(..b)` / `loop(a..)` report `a loop range needs both bounds`;
+  `loop(1..2..3)` is a syntax error. A statically known non-integer scalar such as `float` / `double`
+  / `void` still only warns (once per bound), and the value is converted to `int` and runs.
+- **Bounds are stored in `int`**: `i` and both temporaries are `int`, so a `size_t` / `long` bound
+  beyond `INT_MAX` is truncated under C's conversion rules. Use a native `for` for large ranges.
+
+**With closures**: a closure declared in the body captures `i` by value, one snapshot per round.
+[examples/12_closure_in_loop](../examples/12_closure_in_loop/closure_in_loop.ct) puts three things
+together — the container walks with `loop(from..to)`, `shift` is built before `bias = 1000` (so it
+still captured 7), and the per-round `scale` pins that round's `i` (verbatim):
+
+```c
 #include <stdio.h>
+
+static int map_sum(int *xs, int from, int to, int (*fn)(void *env, int x), void *env)
+{
+    int sum = 0;
+
+    loop(from..to) {
+        sum = sum + fn(env, xs[i]);
+    }
+    return sum;
+}
 
 int main(void)
 {
-    loop(2..5) {
-        printf("%d\n", i);      /* 2 3 4 */
+    int xs[5];
+    int bias = 7;
+    int (*shift)(int x) = (int x) => x + bias;
+
+    loop(5) {
+        xs[i] = i * i;
     }
-    loop(5..2) {
-        printf("never\n");      /* empty range: zero rounds, no diagnostic */
-    }
-    loop(0..3) {
-        printf("same as loop(3): %d\n", i);
+    /* `shift` was built above: it still holds 7, not 1000 */
+    bias = 1000;
+
+    printf("shift %d\n", map_sum(xs, 1, 4, shift));
+
+    /* a fresh closure per round, each one pinning its own `i` */
+    loop(2..4) {
+        int (*scale)(int x) = (int x) => x * i;
+
+        printf("round %d %d\n", i, map_sum(xs, 0, 2, scale));
     }
     return 0;
 }
 ```
 
-- **Each bound is evaluated once, lower bound first**: `loop(lo()..hi())` calls `lo()` and `hi()`
-  once each, and writing a variable a bound read inside the body does not change the trip count.
-- **`i` is the same `int`**: `break` / `continue` / `i++`, capture by value in closures and the
-  per-round release of `own` locals all behave as before.
-- **`loop(0..b)` is `loop(b)`**: a literal zero lower bound folds at parse time and the output is
-  byte-identical.
-- **A bound must be an integer**: pointers, arrays, struct values and function pointers are rejected;
-  `loop(..b)` / `loop(a..)` / `loop(1..2..3)` are syntax errors. A scalar such as `double` still only
-  warns, exactly like `loop(n)`.
-- Details are in [language-spec §4.46](language-spec.md).
+```sh
+ct build closure_in_loop.ct -o closure_in_loop && ./closure_in_loop
+# shift 35
+# round 2 2
+# round 3 3
+```
+
+(`shift` sums `xs[1..4)` — 1, 4, 9 — with 7 added to each; `round`'s `scale` multiplies `xs[0..2)` —
+0 and 1 — by that round's `i`.)
+
+Details and diagnostics are in [language-spec §4.46](language-spec.md).
 
 ### 11. CLI cheat sheet
 

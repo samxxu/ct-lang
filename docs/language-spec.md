@@ -1762,7 +1762,8 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
   条件读该临时量，不会重复求值。`loop(0)` 与 `loop(-2)` 都零次迭代，不报错。
 - **隐式计数器是 `int i`**：`loop` 体自成一个作用域，`i` 在解析期进入符号表，所以名字解析、
   闭包按值捕获（每轮一个快照）与遮蔽判定都和手写 `for` 一致。体内可以 `break` / `continue`、
-  读或写 `i`、`i++`；体内声明的 `own` 变量在每轮出口释放。
+  读或写 `i`、`i++`；体内声明的 `own` 变量挂在**块尾**释放——正常走完一轮会释放，`break` /
+  `continue` 跳过块尾、也跳过释放（静默泄漏，与原生 `for` / `while` 相同）。
 - **边界是硬错误**：`loop()` 报 `loop needs a count expression`；`loop(3) printf("x");` 报
   `loop body must be a block`；`loop(3, x)` 报
   `loop takes exactly one count; use a native for to name the counter`。
@@ -1792,7 +1793,8 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   读的变量不影响本轮次数。这里**不依赖**同一声明内多个声明符初始化器的求值次序——C99 §6.7.8
   并未规定该次序。
 - **`i` 仍是单个可写 `int`**，作用域、`break` / `continue` / `return`、`i--` / `++i`、`own` 的
-  每轮释放，全部与 `loop(n)` 相同。闭包在体内按值捕获 `i`，每轮一个快照。
+  块尾释放（正常走完一轮释放，`break` / `continue` 跳过）全部与 `loop(n)` 相同。闭包在体内按值
+  捕获 `i`，每轮一个快照。
 - **`loop(0..b)` 与 `loop(b)` 等价**（D23-2）：下界是字面量 `0` 时在解析期折成单界形态，
   生成物逐字节相同。折叠只看 `N_NUM == 0`，不看后缀：`0L..n`、`0x0..n` 也会折叠；
   `-0..n` 与 `0+0..n` **不**折叠（等价于前者，但规则是纯语法的，不做常量折叠）。
@@ -3892,7 +3894,9 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
 - **The implicit counter is `int i`**: the body is its own scope and `i` enters the symbol table
   at parse time, so name resolution, per-iteration closure capture and shadowing behave exactly as
   in a hand-written `for`. The body may `break` / `continue`, read or write `i`, `i++`; an `own`
-  declared in the body is released at each round's exit.
+  declared in the body is released at the **end of its block** — a round that runs to the end
+  releases, while `break` / `continue` skip the block end and the release (a silent leak, the same as
+  in a native `for` / `while`).
 - **The edges are hard errors**: `loop()` reports `loop needs a count expression`;
   `loop(3) printf("x");` reports `loop body must be a block`; `loop(3, x)` reports
   `loop takes exactly one count; use a native for to name the counter`.
@@ -3928,8 +3932,9 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   not change the trip count. The lowering does **not** rely on the order of declarator initializers
   inside one declaration — C99 §6.7.8 does not specify it.
 - **`i` is still a single writable `int`**: scope, `break` / `continue` / `return`, `i--` / `++i` and
-  the per-iteration release of `own` locals are identical to `loop(n)`. A closure declared in the body
-  captures `i` by value, one snapshot per iteration.
+  the block-end release of `own` locals (a round that runs to the end releases; `break` / `continue`
+  skip it) are identical to `loop(n)`. A closure declared in the body captures `i` by value, one
+  snapshot per iteration.
 - **`loop(0..b)` is `loop(b)`** (D23-2): a literal zero lower bound folds to the counted form at parse
   time and produces byte-identical output. The fold looks only at `N_NUM == 0`, not at the suffix, so
   `0L..n` and `0x0..n` fold too; `-0..n` and `0+0..n` deliberately do not (same meaning, but the rule
