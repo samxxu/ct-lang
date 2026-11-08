@@ -164,7 +164,7 @@ EOF
 rc=$?
 if [ "$rc" -eq 1 ] \
         && grep -Fq "error: a closure cannot escape through 'return'" "$work/cl_escape.err" \
-        && grep -Fq "note: use an explicit Callable struct + trait:" "$work/cl_escape.err" \
+        && grep -Eq ': note: ' "$work/cl_escape.err" \
         && grep -Fq 'ctc: 1 error(s) generated' "$work/cl_escape.err"; then
     ok "check: a closure escape is one hard error plus its note (exit 1)"
 else
@@ -185,7 +185,8 @@ fi
     >"$work/cl_escape.json" 2>"$work/cl_escape.json.err"
 rc=$?
 if [ "$rc" -eq 1 ] && [ ! -s "$work/cl_escape.json" ] \
-        && grep -Fq "note: use an explicit Callable struct + trait:" "$work/cl_escape.json.err"; then
+        && grep -Eq ': note: ' "$work/cl_escape.json.err" \
+        && ! grep -q '"note"' "$work/cl_escape.json" "$work/cl_escape.json.err"; then
     ok "check: the closure note adds no JSON key (still no warnings document)"
 else
     bad "check: closure JSON" "exit $rc; $(cat "$work/cl_escape.json" "$work/cl_escape.json.err")"

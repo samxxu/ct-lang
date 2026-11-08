@@ -2135,6 +2135,14 @@ elif [ "$(grep -c 'error: ' "$work/cptm.err")" -ne 1 ]; then
 else
     ok "p21-r03: a declared binding's parameter tail must match the host pair"
 fi
+if "$work/ct-ast" test/ast/errors/closure_literal_arity.ct -o "$work/cla.c" \
+        >"$work/cla.out" 2>"$work/cla.err"; then
+    bad "p21-audit: literal arity" "expected a non-zero exit"
+elif ! grep -Fq "test/ast/errors/closure_literal_arity.ct:5:1: error: this closure takes 2 parameters, but the expected type takes 1" "$work/cla.err"; then
+    bad "p21-audit: literal arity" "$(cat "$work/cla.err")"
+else
+    ok "p21-audit: a literal's parameter count is compared with its hosting type"
+fi
 if "$work/ct-ast" test/ast/75_closure_param_pair/prog.ct -o "$work/clpair.c" \
         >"$work/clpair.out" 2>"$work/clpair.err" \
    && ! grep -q "takes [0-9]* argument(s)" "$work/clpair.err"; then
@@ -2204,6 +2212,89 @@ elif ! cmp -s "$work/cl79.stdout" test/ast/79_closure_two_units/expected.out; th
 else
     ok "p21-s5: two units (same static trampoline name; a literal crosses the boundary)"
 fi
+
+# Phase 21 exit criterion 4: the emitted shape itself, not just the behaviour.
+# A bound literal is a stack struct plus a `static` trampoline -- never a heap
+# allocation and never a vtable -- and the three spellings of one closure
+# (`env` / `tramp` / `env_v`) share one id. Within a unit the ids are unique and
+# ascending in allocation order (outer before inner), and a struct is complete
+# before the trampoline that builds an instance of it.
+cl_shape() {
+    clf="$1"
+    cltag="$2"
+    clwant="$3"
+    if grep -Eq 'malloc\(|free\(|vtable' "$clf"; then
+        bad "$cltag" "heap allocation or vtable in the generated C"
+        return
+    fi
+    env="$(grep -o '^struct __ct_cl_env_[0-9][0-9]* {' "$clf" | grep -o '[0-9][0-9]*' | sort -n | uniq | tr '\n' ' ')"
+    trm="$(grep -o '__ct_cl_tramp_[0-9][0-9]*' "$clf" | grep -o '[0-9][0-9]*' | sort -n | uniq | tr '\n' ' ')"
+    # an instance is either a named local (`__ct_cl_env_v_N`) or, for an inline
+    # actual, a compound literal (`&(struct __ct_cl_env_N){ … }`)
+    ins="$({
+        grep -o '__ct_cl_env_v_[0-9][0-9]*' "$clf" | grep -o '[0-9][0-9]*'
+        grep -o '&(struct __ct_cl_env_[0-9][0-9]*){' "$clf" | grep -o '[0-9][0-9]*'
+    } | sort -n | uniq | tr '\n' ' ')"
+    if [ -z "$env" ] || [ "$env" != "$trm" ] || [ "$env" != "$ins" ]; then
+        bad "$cltag" "env/tramp/instance ids differ: '$env' / '$trm' / '$ins'"
+        return
+    fi
+    if [ -n "$clwant" ] && [ "$(printf '%s\n' $env | wc -l | tr -d ' ')" -ne "$clwant" ]; then
+        bad "$cltag" "expected $clwant closures, saw '$env'"
+        return
+    fi
+    # Ascending envelope structs: the parser hands out ids depth-first, so this
+    # is also the outer-before-inner order.
+    if ! awk '
+        BEGIN { last = -1 }
+        /^struct __ct_cl_env_[0-9]+ \{/ {
+            s = $0; sub(/^struct __ct_cl_env_/, "", s); sub(/ .*/, "", s)
+            if (s + 0 <= last) { print "not ascending: " s; exit 1 }
+            last = s + 0
+        }' "$clf" >"$work/clorder.txt" 2>&1; then
+        bad "$cltag" "$(cat "$work/clorder.txt")"
+        return
+    fi
+    # Every instance and trampoline follows a complete struct, and each id is
+    # used exactly once (no reuse).
+    if ! awk '
+        /^struct __ct_cl_env_[0-9]+ \{/ {
+            s = $0; sub(/^struct __ct_cl_env_/, "", s); sub(/ .*/, "", s)
+            env[s] = NR; nenv++
+        }
+        /^static .*__ct_cl_tramp_[0-9]+\(void \*self/ && $0 !~ /\);/ {
+            s = $0; sub(/.*__ct_cl_tramp_/, "", s); sub(/\(.*/, "", s)
+            trm[s] = NR; ntrm++
+        }
+        /__ct_cl_env_v_[0-9]+ =/ {
+            s = $0; sub(/.*__ct_cl_env_v_/, "", s); sub(/[^0-9].*/, "", s)
+            ins[s] = NR; nins++
+        }
+        /&\(struct __ct_cl_env_[0-9]+\)\{/ {
+            s = $0; sub(/.*&\(struct __ct_cl_env_/, "", s); sub(/\).*/, "", s)
+            ins[s] = NR; nins++
+        }
+        END {
+            bad = 0
+            for (id in trm) {
+                if (!(id in env)) { print "no struct for " id; bad = 1 }
+                else if (env[id] > trm[id]) { print "struct after trampoline " id; bad = 1 }
+                if (!(id in ins)) { print "no instance for " id; bad = 1 }
+                else if (env[id] > ins[id]) { print "struct after instance " id; bad = 1 }
+            }
+            if (nenv != ntrm || nenv != nins) { print "counts differ"; bad = 1 }
+            exit bad
+        }' "$clf" >"$work/clorder.txt" 2>&1; then
+        bad "$cltag" "$(cat "$work/clorder.txt")"
+        return
+    fi
+    ok "$cltag (stack struct + static trampoline, one id per closure)"
+}
+cl_shape "$work/70_closure_basic.c" "p21-shape: 70" 3
+cl_shape "$work/71_closure_nested_block.c" "p21-shape: 71" 3
+cl_shape "$work/cl79/main.c" "p21-shape: 79 main" 1
+cl_shape "$work/cl79/dep.c" "p21-shape: 79 dep" 1
+
 
 # Phase 21 S5 probe 80: the debug mapping. `--line` anchors the struct and the
 # trampoline at the literal's line; the closure-at comment appears either way.

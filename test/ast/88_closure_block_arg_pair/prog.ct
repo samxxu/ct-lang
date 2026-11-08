@@ -1,0 +1,21 @@
+// 88 (Phase 21 audit): a block-bodied literal fills a `(fn, env)` argument pair
+// directly. Its return type is not written anywhere in the literal -- it is
+// inferred from the hosting function pointer's return type (D21-14), so the
+// emitted trampoline must return `int`.
+#include <stdio.h>
+
+int apply(int (*f)(void *env, int x), void *env);
+
+int apply(int (*f)(void *env, int x), void *env)
+{
+    return f(env, 4);
+}
+
+int main(void)
+{
+    int n = 3;
+    printf("%d\n", apply((int x) => {
+        return x + n;
+    }));
+    return 0;
+}

@@ -1,0 +1,7 @@
+// R05/audit: a literal's parameter count is compared with the hosting type;
+// this one declares two parameters where the declaration takes one.
+int main(void) {
+    int n = 1;
+    int (*f)(int x) = (int x, int y) => x + y + n;
+    return f(1);
+}
