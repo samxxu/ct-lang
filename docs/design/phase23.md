@@ -2,7 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：完成**（2026-11-08；S1–S4 落地，收口 `v0.23.0`；D23-1–D23-9 已定稿）。
+> **状态：完成**（2026-11-08；S1–S5 落地，收口 `v0.23.0`；D23-1–D23-9 已定稿）。
 > 本文是 **as-built** 记录：实现与最初的规划稿有几处偏离（词法、归一化、诊断严重度），
 > 文中均以实测结果为准；被推翻的规划假设保留在 §11。
 > 关联：[phase22.md](phase22.md)（`loop(n)`，本相前置）、[roadmap.md](../roadmap.md)、
@@ -111,9 +111,16 @@ if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
 ### 4.1 求值次数与顺序（D23-3）
 
 - 两个边界**各求值一次**，先 `a` 后 `b`。
-- 发射形态把两者放在同一条 `for` 声明的两个初始化器里：
-  `for (int i = (a), __ct_loop_n_K = (b); …)`。C 保证同一声明中的声明符按书写顺序初始化，
-  因此顺序由语法保证，不依赖未指定的求值次序。
+- 发射形态把两个赋值放进 `i` 的**同一个初始化器**，用逗号运算符串联：
+
+  ```c
+  i = ((__ct_loop_n_K = (a)), (__ct_loop_hi_K = (b)), __ct_loop_n_K)
+  ```
+
+  逗号运算符的左操作数严格先于右操作数求值（C99 §6.5.17p2），顺序由表达式结构保证。
+- **不依赖**同一声明中多个声明符初始化器的求值次序：C99 §6.7.8 并未规定该次序
+  （与 [phase22.md](phase22.md#L158-L160) 的结论一致）。两个临时量有意不写初始化器，
+  否则 `= 0` 可能与 `i` 初始化器里的赋值互为先后，反而破坏快照。
 - 循环体内修改 `a` / `b` 依赖的变量不影响本次迭代次数（边界已快照）。
 
 ### 4.2 `i` 的语义
@@ -133,7 +140,7 @@ if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
 
 ---
 
-## 5. 边界类型（D23-3 / D7 / D8）
+## 5. 边界类型（D23-7 / D23-8）
 
 两条边界走**同一套**判定；单界时只查一条。
 
@@ -154,11 +161,18 @@ if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
 | --- | --- |
 | 指针（类型串含 `*`） | `a loop bound must be an integer (got 'int *')` |
 | 结构体 / 联合体值 | `a loop bound must be an integer (got 'struct Pair')` |
-| 数组 | `a loop bound must be an integer (got the array 'a')` |
+| 数组变量 | `a loop bound must be an integer (got the array 'a')` |
+| 其他数组形式（字段等） | `a loop bound must be an integer (got 'int[2][3]')` |
 | 函数指针（类型串含 `(`） | `a loop bound must be an integer (got '<type>')` |
 
-数组单独判定：`int a[4]` 与 `int *p` 的类型串相同，只有符号表的 `is_array` 能区分；
-这是 Phase 22 的洞，`loop(arr)` 今天完全静默。
+数组要过两道判定：
+
+1. **数组变量**：`int a[4]` 与 `int *p` 的 `expr_type` 类型串相同，只有符号表的 `is_array`
+   能区分。这是 Phase 22 的洞，`loop(arr)` 当时完全静默。
+2. **非变量的数组表达式**（如字段 `m.cells`）：只有保留维度的 `expr_ctype` 才看得见 `[]`。
+   这条判定必须排在 `expr_type` 的 `continue` **之前**——一维字段会退化成指针（`expr_type`
+   有答案），二维字段没有单一元素类型（`expr_type` 直接失败），旧写法因此让
+   `loop(m.cells)` 完全静默。
 
 这是一处**有意的 breaking change**：既有代码若把地址当计数，会从「编译通过」变为硬错。
 判定放在 `loop_count_class` 之前，命中即 `return`。
@@ -179,11 +193,16 @@ if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
 ```c
 /* b == -1：单界，形态与 Phase 22 完全一致 */
 for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++)
-/* b != -1：双界 */
-for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
+/* b != -1：双界，逗号运算符定序 */
+for (int __ct_loop_n_K, __ct_loop_hi_K,
+         i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+     i < __ct_loop_hi_K; i++)
 ```
 
 - `K = self->ntmp++`，进程级单调分配；嵌套靠它拿到不同名字，**不预扫、不引入外层块**。
+- 双界的两个临时量由**同一个 `K`** 派生（`__ct_loop_n_K` 与 `__ct_loop_hi_K`），一支仍然只
+  消耗一个 `ntmp`；因此解析期归一后的 `loop(0..n)` 与 `loop(n)` 生成物逐字节相同。
+- 两个临时量声明**不带初始化器**：赋值发生在 `i` 的初始化器内部，逗号运算符保证左→右。
 - 生成物中不出现 `loop` 或 `..` 字样。
 - 不新增逐语句 `#line`（与 Phase 22 §3.7 同口径）：仍是单元级锚点。
 
@@ -221,7 +240,8 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
 ### 8.2 负例（`test/ast/errors/`）
 
 `loop_range_missing_low`、`loop_range_missing_high`、`loop_range_chained`、
-`loop_range_pointer`、`loop_range_struct`、`loop_range_array`。
+`loop_range_pointer`、`loop_range_struct`、`loop_range_array`（数组变量）、
+`loop_range_array_member`（二维数组字段，此前静默）。
 
 ### 8.3 硬断言（`check-ast.sh` 的 Phase 23 块）
 
@@ -229,7 +249,9 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
   （首行 banner 含输入路径，必须剔除）。
 - **词法回归**：列位 pin `loop_range_chained.ct:3:14: error: unexpected token`；
   既有 `41_case_range`（`case 1 ... 5`）继续 PASS。
-- **形态**：生成物含 `for (int i = (` 与 `), __ct_loop_n_`，不含 `i < (`。
+- **形态**：生成物含 `for (int __ct_loop_n_`、`, i = ((__ct_loop_n_`、`)), (__ct_loop_hi_`、
+  `)), __ct_loop_n_`、`; i < __ct_loop_hi_`，不含 `i < (`。这组 pin 同时钉住了
+  「先下界后上界」的逗号表达式形态，而不只是「没有每轮重算」。
 - **双模式**：嵌套 range loop 编译 warning + `ct check --diagnostics=json` 的
   `"type":"loop_shadow"` / `"severity":"error"`、退出码 1。
 
@@ -266,7 +288,7 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
 | --- | --- |
 | Phase 22 | **硬前置**：复用 `N_LOOP`、`loop_ahead()`、隐式 `i`、L22-4 |
 | Phase 20 / 21 | 无语义依赖；仅共用 parser / emitter 文件，注意合并次序 |
-| L0 / L1 / L2 | 不触碰；实现只落 `selfhost/ct-ast/**` |
+| L0 / L1 / L2 | 功能实现只落 `selfhost/ct-ast/**`；S5 版本收口改了五处 `CTC_VERSION`（`0.23.0`），L0 / L1 / L2 各一处 |
 | R1 `..` 与成员访问 | 已消解：`..` 只在 `loop` 参数内部被解析消费；参数外仍是单 `.` |
 | R2 每轮重算边界 | 已消解：上界快照进 `__ct_loop_n_K`，§8.3 的 `! grep 'i < ('` 守住 |
 | R3 `loop(1...5)` | 三连点仍是 `...`，`loop` 参数里报 `unexpected token`（不进 L23-1 之外的路径） |
@@ -281,7 +303,7 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
 | 原假设 | as-built |
 | --- | --- |
 | 「`..` 不是新 token，解析器识别 `.` 紧跟 `.` 即可」 | 错。旧词法把 `2..8` 切成 `NUM(2)` `.` `FNUM(.8)`，必须新增 token（§2） |
-| 展开形态用三个临时量与逗号运算符 | 改为两个初始化器：`int i = (a), __ct_loop_n_K = (b)`；C 保证声明符按序初始化，更短 |
+| 展开形态用三个临时量与逗号运算符 | 初版误以为 C 保证同一声明内声明符的初始化次序（§6.7.8 并不保证），改成了两个初始化器；复验指出该前提不成立，已回到逗号运算符方案：两个临时量、`i` 的单个初始化器 |
 | 非整数边界一律 warning | 拆成两档：`float`/`double`/`void` 仍 warning；指针/数组/结构体/函数指针升为硬错（D8） |
 | 「既有 golden 零变化」 | 功能层面成立；版本收口时 71 个 golden 仅版本 token 变化 |
 | `loop(0..n)` 恒等价 `loop(n)` | 仅字面量 0 归一；`-0`、`0+0` 不归一（语义仍等价，只是发射形态不同） |
@@ -294,7 +316,7 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
 | --- | --- |
 | D23-1 | 新增 `..` 单词 token；分支置于 `...` 之后、`.5` 之前 |
 | D23-2 | 解析期把字面量 0 下界归一为单界形态；判定只看 `N_NUM && num == 0`，不看后缀 |
-| D23-3 | 两个边界各求值一次，顺序为先 `a` 后 `b`，由 `for` 声明的初始化顺序保证 |
+| D23-3 | 两个边界各求值一次，顺序为先 `a` 后 `b`，由 `i` 初始化器里的逗号运算符保证（C99 §6.5.17） |
 | D23-4 | `i` 仍是单一 `int`，从 `a` 起；作用域与可写性沿用 Phase 22 |
 | D23-5 | 嵌套遮蔽沿用 L22-4（编译 warning、`ct check` error） |
 | D23-6 | `a >= b` 零次迭代，不诊断 |
@@ -308,7 +330,7 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
 
 ### Status
 
-**Done** (2026-11-08; S1–S4 landed, closed at `v0.23.0`; D23-1–D23-9 final). This is the
+**Done** (2026-11-08; S1–S5 landed, closed at `v0.23.0`; D23-1–D23-9 final). This is the
 **as-built** record: it differs from the planning draft on lexing, normalisation and diagnostic
 severity, and the discarded assumptions are listed in "Superseded planning assumptions".
 
@@ -351,8 +373,10 @@ Not folding is only a missed optimisation: `-0` and `0` behave identically at ru
 
 ### Semantics
 
-Both bounds are evaluated **exactly once**, `a` before `b`: they are the initialisers of one `for`
-declaration, and C initialises declarators in writing order. `i` is the same single writable `int`
+Both bounds are evaluated **exactly once**, `a` before `b`: both assignments are operands of one
+comma expression -- `i`'s single initializer -- and the comma operator sequences them left to right
+(C99 §6.5.17). The lowering does **not** rely on the order of declarator initializers inside one
+declaration, which §6.7.8 leaves unspecified. `i` is the same single writable `int`
 as Phase 22 (per-iteration snapshot when captured by a closure, no `own`, `break` / `continue` /
 `return` behave like a native loop). Nesting shadowing reuses L22-4: a compile warning and a
 `loop_shadow` (kind 7) error under `ct check`. `a >= b` iterates zero times without a diagnostic.
@@ -364,7 +388,12 @@ which is the published Phase 22 semantics and is not changed here.
 
 D23-8 is a deliberate **breaking change**: a pointer, array, struct/union value or function pointer
 bound is now `ct_sem_error` (`a loop bound must be an integer (got 'int *')` and variants), where
-Phase 22 compiled silently -- the array case (`loop(arr)`) in particular had no diagnostic at all.
+Phase 22 compiled silently -- the array variable (`loop(arr)`) in particular had no diagnostic at all.
+Arrays need two checks: the symbol table catches an array *variable* (`int a[4]` spells the same type
+as `int *p`), and the dimension-preserving `expr_ctype` catches any other array form, such as the
+field `m.cells`. That second check must run before the `expr_type` gate: a one-dimensional field
+decays to a pointer, but a two-dimensional one has no single element type, so `loop(m.cells)` used to
+stay completely silent.
 `float` / `double` / `void` keep the softer L22-5 rule (compile warning, `ct check` error) with the
 unchanged message, because `loop_count_type` pins it. Both bounds go through the same checks.
 
@@ -374,11 +403,16 @@ One line per loop:
 
 ```c
 for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++)
-for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
+for (int __ct_loop_n_K, __ct_loop_hi_K,
+         i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+     i < __ct_loop_hi_K; i++)
 ```
 
 `K` comes from the monotonic `ntmp`, so nested loops get distinct names without a pre-scan or an
-extra scope. The output contains neither `loop` nor `..`, and no per-statement `#line` is added.
+extra scope. The range form derives both names from the same `K` and therefore consumes one `ntmp`,
+so a folded `loop(0..n)` still prints the counted form byte for byte. The two declarators are left
+uninitialised on purpose: an `= 0` would race with the assignments inside `i`'s initializer. The
+output contains neither `loop` nor `..`, and no per-statement `#line` is added.
 
 ### Diagnostics
 
@@ -393,10 +427,13 @@ extra scope. The output contains neither `loop` nor `..`, and no per-statement `
 ### Acceptance
 
 Positive fixtures `test/ast/102`–`108` plus `loop_range_own_drop`; negative fixtures
-`loop_range_{missing_low,missing_high,chained,pointer,struct,array}`. `check-ast.sh` pins the
+`loop_range_{missing_low,missing_high,chained,pointer,struct,array}` plus
+`loop_range_array_member`. `check-ast.sh` pins the
 hard assertions: `loop(0..n)` and `loop(n)` produce identical output after `tail -n +2` (the first
-line names the input path); the column pin above; the lowering shape (`for (int i = (` and
-`), __ct_loop_n_`, never `i < (`); and both modes of the nested-shadowing diagnostic. `41_case_range`
+line names the input path); the column pin above; the lowering shape (`for (int __ct_loop_n_`,
+`, i = ((__ct_loop_n_`, `)), (__ct_loop_hi_`, `)), __ct_loop_n_`, `; i < __ct_loop_hi_`, never
+`i < (`), which pins the comma-operator ordering rather than just "no per-round re-evaluation"; and
+both modes of the nested-shadowing diagnostic. `41_case_range`
 still passes. The feature changes **no** existing golden; the `v0.23.0` bump moves 71 goldens by
 the version token only. H23-1 measured green: no warnings from `i` or the bound temporaries.
 
@@ -405,7 +442,7 @@ the version token only. H23-1 measured green: no warnings from `i` or the bound 
 | Planning claim | As built |
 | --- | --- |
 | "`..` is not a new token; the parser just sees two dots" | wrong: `2..8` used to lex as `NUM(2)` `.` `FNUM(.8)`, so a token was required |
-| three temporaries joined by the comma operator | two declarator initialisers, shorter and still ordered by C |
+| three temporaries joined by the comma operator | first shipped as two declarator initialisers on the wrong premise that C orders them; review found C99 §6.7.8 does not, so the comma operator is back -- two temporaries, one initializer |
 | every non-integer bound only warns | split: `float`/`double`/`void` warn; pointers / arrays / structs / function pointers are hard errors |
 | "existing goldens change by 0" | true for the feature; the release bump moves 71 goldens by the version token |
 | `loop(0..n)` always equals `loop(n)` | only a literal zero is folded; `-0` and `0+0` stay ranges (same semantics) |

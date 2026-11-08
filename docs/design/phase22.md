@@ -31,8 +31,8 @@
 
 | 旧表述 | 实测 | 证据 | 处理 |
 | --- | --- | --- | --- |
-| `--line` 下「由既有语句路径重锚 `#line <loop 所在行>`」 | 发射器**没有逐语句** `#line`；只有单元级 `#line 1 "<path>"` 与 raw / 闭包产物的个别重锚 | `Emitter.h.ct:1090`（单元级）、`Emitter.h.ct:870`（raw）、`Emitter.h.ct:929/950/988`（闭包） | 改为「不新增逐语句锚点」，见 §3.7 |
-| `__ct_loop_n_K` 的 `K`「每函数内单调递增」 | `ntmp` 挂在文件级单例 `g_emit` 上，**从不重置**，是进程级单调（跨单元也不重号） | `Emitter.h.ct:195`（字段）、`Emitter.h.ct:2236`（既有自增）、`Emitter.h.ct:3541`（单例） | 改为「进程级单调」，见 §3.9 |
+| `--line` 下「由既有语句路径重锚 `#line <loop 所在行>`」 | 发射器**没有逐语句** `#line`；只有单元级 `#line 1 "<path>"` 与 raw / 闭包产物的个别重锚 | `Emitter.h.ct:1092`（单元级）、`Emitter.h.ct:872`（raw）、`Emitter.h.ct:931/952/990`（闭包） | 改为「不新增逐语句锚点」，见 §3.7 |
+| `__ct_loop_n_K` 的 `K`「每函数内单调递增」 | `ntmp` 挂在文件级单例 `g_emit` 上，**从不重置**，是进程级单调（跨单元也不重号） | `Emitter.h.ct:197`（字段）、`Emitter.h.ct:2238`（既有自增）、`Emitter.h.ct:3564`（单例） | 改为「进程级单调」，见 §3.9 |
 | H22-1「未使用的隐式 `i` 可能触发告警」 | 编译器**没有**未使用局部变量的诊断；`unused` 只出现在生成物的 `__attribute__((unused))` 与 map 使用计数 | 全仓 `selfhost/ct-ast/**` 无「never read / never used」类检查 | **结案**：CT 侧零告警；C 侧 `-Wall -Wextra` 也不告警（`i` 参与条件与自增），见 §6.4 |
 | `Warn.kind = 7` 只需 `record_*` 一处 | `Diag.emit` 对 kind 1–6 有专门文本与 JSON 分支，其余**一律落进 `potential_leak` 默认分支** | `Diag.h.ct:269-344`（JSON 链）、`Diag.h.ct:358-381`（文本链） | S3 必须同时加文本分支与 JSON 分支，见 §4.3 |
 
@@ -99,12 +99,12 @@ loop-stmt  :=  "loop" "(" expr ")" block
 识别沿用仓库既有的「无 peek 则保存并回退」写法：
 `loop_ahead()` 在当前 token 是 `loop` 时保存词法器状态、读下一个 token、判断是否为 `(`、
 再完整回退。参考 `label_ahead()` 的现成写法
-（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1438-L1452)）。
+（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1507-L1536)）。
 
 **分派位置（必须照做）**：`parse_stmt` 里 `if (self->loop_ahead()) return self->parse_loop();`
 要放在 `label_ahead()` 与 `is_decl_start()` **之前**
-（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1133-L1136)）。
-原因：`loop` 不在 `kw[]` 表里（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L600-L605)），
+（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1130-L1138)）。
+原因：`loop` 不在 `kw[]` 表里（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L601-L606)），
 若落到 `is_decl_start()` 的未知类型兜底路径，会被当成声明报错，而不是进入表达式语句。
 **不要**把 `loop` 加进 `kw[]`：那会让 `is_decl_start()` 对它返回真，掩盖 `loop_ahead()` 的分派。
 
@@ -146,7 +146,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 ```
 
 - **展开点**：发射器的 `emit_node` 新增 `N_LOOP` 分支，紧挨 `N_FOR` 分支
-  （[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2506-L2517)）。
+  （[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2521-L2539)）。
   解析期**不**降级成 `N_FOR`：`i` 需要在解析期进入符号表（闭包捕获、名字解析），
   而计数临时量与 `#line` 属于发射器。
 - 展开只有一条语句，不引入辅助函数、结构体或回调。
@@ -221,7 +221,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 
 - 只展开为一行 `for`，不产生额外抽象层；生成物中不出现 `loop` 语句（临时量名含 `loop` 字样，
   但那是标识符，不是关键字）。
-- **不新增逐语句 `#line`**。现状是单元级 `#line 1 "<path>"`（`Emitter.h.ct:1090`），
+- **不新增逐语句 `#line`**。现状是单元级 `#line 1 "<path>"`（`Emitter.h.ct:1092`），
   所有语句都依赖它；只给 `loop` 单点加锚会造成「只有它准、其它都不准」的不一致，
   且锚点之后的生成行号整体偏移。已知限制：生成行号与源行号不保证逐行对齐，
   与其它语句相同；若将来引入全局逐语句锚点，`loop` 自动继承。
@@ -232,13 +232,17 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 本相**只冻结两件事**：
 
 1. **AST 布局**：`N_LOOP` 的 `a` = 计数表达式，`b` = **恒为 -1**（单界哨兵），`d` = body。
-   Phase 23 把 `a` 改作起点、`b` 改作上界；发射器在 `b != -1` 时属于 Phase 23 的路径，
-   Phase 22 的实现遇到 `b != -1` 应视为内部错误（防御性断言，不可静默半工作）。
-2. **临时量命名族**：`__ct_loop_n_<K>` 复用 `ntmp`；Phase 23 新增
-   `__ct_loop_a_<K>` / `__ct_loop_hi_<K>`，共用同一计数器。
+   Phase 23 把 `a` 改作起点、`b` 改作上界 —— 已按此落地。
+2. **临时量命名族**：`__ct_loop_n_<K>` 复用 `ntmp`。Phase 23 的 as-built 是：`__ct_loop_n_<K>`
+   继续用作计数 / 下界，上界另加同族的 `__ct_loop_hi_<K>`，两者共用同一个 `K`、只消耗一个
+   `ntmp`；**没有**引入 `__ct_loop_a_<K>`。
 
-**不冻结**双界的展开形态、求值顺序实现（逗号运算符）与 `loop(0..n)` 的生成物字节。
-`loop(0..n) ≡ loop(n)` 是**语义等式**，不是逐字节相等；Phase 23 自行决定是否做同形折叠。
+Phase 22 的实现没有为 `b != -1` 保留任何防御性断言：S2 直接实现了双界分支，
+单界分支的生成物保持 Phase 22 原样。
+
+**当时不冻结**双界的展开形态、求值顺序实现（逗号运算符）与 `loop(0..n)` 的生成物字节。
+as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），并做到了 `loop(0..n)` 与
+`loop(n)` 的**逐字节**相等。
 
 ### 3.9 命名与容量
 
@@ -428,7 +432,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 | R7 | `kind 7` 落进 `potential_leak` 默认分支 | S3 同时加文本与 JSON 分支；S4 用 JSON 断言钉住 `type:"loop_shadow"` |
 | R8 | `loop(a, b)` 被逗号表达式吞掉 | 计数按禁逗号解析；探针 `loop_two_counts.ct` |
 | R9 | `loop` 进了 `kw[]` 导致分派错位 | 明确不加 `kw[]`，分支前置于 `label_ahead()`；探针 100 与 `32_goto` 复跑 |
-| R10 | 双界实现提前渗进本相 | S2 对 `b != -1` 断言内部错误；§3.8 冻结边界 |
+| R10 | 双界实现提前渗进本相 | 本相只冻结 AST 布局；S2 落地时直接写双界分支，未保留 `b != -1` 的内部断言 |
 
 ---
 
@@ -466,8 +470,8 @@ slices and corrects four claims against HEAD:
 
 | Old claim | Measured | Evidence |
 | --- | --- | --- |
-| `--line` re-anchors each `loop` statement | there is **no per-statement** `#line`; only the unit-level `#line 1` | `Emitter.h.ct:1090` |
-| `K` is per-function | `ntmp` lives on the `g_emit` singleton and **never resets** | `Emitter.h.ct:195`, `2236`, `3541` |
+| `--line` re-anchors each `loop` statement | there is **no per-statement** `#line`; only the unit-level `#line 1` | `Emitter.h.ct:1092` |
+| `K` is per-function | `ntmp` lives on the `g_emit` singleton and **never resets** | `Emitter.h.ct:197`, `2238`, `3564` |
 | H22-1 (unused `i` may warn) | the compiler has **no** unused-local diagnostic | no such check under `selfhost/ct-ast/**` |
 | `kind 7` needs only a recorder | `Diag.emit` sends unknown kinds to the `potential_leak` default | `Diag.h.ct:269-344`, `358-381` |
 
@@ -479,14 +483,14 @@ No code is changed by this document.
   with the top-level comma disabled (so `loop(a, b)` is L22-3, not a comma expression).
 - The **only** lowering is
   `for (int i = 0, __ct_loop_n_<K> = (<N>); i < __ct_loop_n_<K>; i++) <block>`, emitted by a new
-  `N_LOOP` branch next to `N_FOR` (`Emitter.h.ct:2506-2517`). The count is evaluated once by the
+  `N_LOOP` branch next to `N_FOR` (`Emitter.h.ct:2521-2539`). The count is evaluated once by the
   `for` init clause (C99 §6.8.5.3); the lowering does **not** rely on declarator-initializer order
   (§6.7.8) because `i = 0` has no side effect, so exactly-once holds regardless. `i < (N)` is
   forbidden.
 - `loop` is a **contextual keyword**: only in statement position immediately followed by `(`.
   `loop_ahead()` saves and restores the lexer state; the branch goes **before** `label_ahead()` and
-  `is_decl_start()` (`Stmt.h.ct:1133-1136`) and `loop` is **not** added to `kw[]`
-  (`Stmt.h.ct:600-605`). Everywhere else `loop` remains an identifier.
+  `is_decl_start()` (`Stmt.h.ct:1130-1138`) and `loop` is **not** added to `kw[]`
+  (`Stmt.h.ct:601-606`). Everywhere else `loop` remains an identifier.
 - A 2026-11-07 scan found **0** `loop(` call sites; the only code use is the label `loop:` in
   `test/ast/32_goto/prog.ct`, which the rule does not touch. S0 re-runs the scan.
 

@@ -1780,13 +1780,17 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
 `loop(<start>..<stop>) { … }` 是显式起点的计数循环，展开恰好是：
 
 ```c
-for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++) { … }
+for (int __ct_loop_n_K, __ct_loop_hi_K,
+         i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+     i < __ct_loop_hi_K; i++) { … }
 ```
 
 - **区间左闭右开** `[a, b)`：`i` 从 `a` 起、取到 `b - 1`。`b <= a` 零次迭代，不报错、不告警。
   不做反向、不做步长、不做闭区间。
-- **两个边界各求值一次，先 `a` 后 `b`**。两个初始化器各自是完整表达式，C 保证它们按声明的
-  先后顺序求值；上界存放在同一个私有临时量里，循环中改 `a` / `b` 读的变量不影响本轮次数。
+- **两个边界各求值一次，先 `a` 后 `b`**。两个赋值写在 `i` 的**同一个**初始化器里，由逗号运算符
+  保证从左到右求值（C99 §6.5.17）；上界存进私有临时量 `__ct_loop_hi_K`，循环中改 `a` / `b`
+  读的变量不影响本轮次数。这里**不依赖**同一声明内多个声明符初始化器的求值次序——C99 §6.7.8
+  并未规定该次序。
 - **`i` 仍是单个可写 `int`**，作用域、`break` / `continue` / `return`、`i--` / `++i`、`own` 的
   每轮释放，全部与 `loop(n)` 相同。闭包在体内按值捕获 `i`，每轮一个快照。
 - **`loop(0..b)` 与 `loop(b)` 等价**（D23-2）：下界是字面量 `0` 时在解析期折成单界形态，
@@ -1796,7 +1800,8 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++) { … 
   `loop` 仍是上下文关键字，`int loop = 3;`、`loop:`、`goto loop;` 不受影响。
 - **边界必须是整数**：`loop(..b)` / `loop(a..)` 报 `a loop range needs both bounds`；
   `loop(1..2..3)` 报语法错误；指针、数组、`struct` / `union` 值、函数指针作为边界是硬错误
-  （`a loop bound must be an integer (got 'int *')`，数组为 `(got the array 'a')`）。
+  （`a loop bound must be an integer (got 'int *')`，数组变量为 `(got the array 'a')`，
+  数组字段等其他数组形式给出类型串，例如 `(got 'int[2][3]')`）。
   这条对 `loop(n)` 同样生效——Phase 22 里 `loop(arr)` 曾静默通过。
 - **静态可判定的非整数标量**（`float` / `double` / `void`）沿用 L22-5：编译模式一条
   `type mismatch` 警告、`ct check` 下为错误，仍按 C 规则转成 `int` 运行。两条边界各报一次。
@@ -3910,14 +3915,18 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
 `loop(<start>..<stop>) { … }` is the explicit-start counted loop; it expands to exactly:
 
 ```c
-for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++) { … }
+for (int __ct_loop_n_K, __ct_loop_hi_K,
+         i = ((__ct_loop_n_K = (<start>)), (__ct_loop_hi_K = (<stop>)), __ct_loop_n_K);
+     i < __ct_loop_hi_K; i++) { … }
 ```
 
 - The range is **half-open** `[a, b)`: `i` starts at `a` and stops before `b`. `b <= a` iterates zero
   times with no diagnostic. No reverse direction, no step, no closed ranges.
-- **Each bound is evaluated once, lower bound first.** Each initializer is a full expression, so C
-  sequences them in declaration order; the upper bound lives in one private temporary, so changing a
-  variable the bound read does not change the trip count.
+- **Each bound is evaluated once, lower bound first.** Both assignments sit in `i`'s **single**
+  initializer and the comma operator sequences its operands left to right (C99 §6.5.17); the upper
+  bound lives in the private temporary `__ct_loop_hi_K`, so changing a variable the bound read does
+  not change the trip count. The lowering does **not** rely on the order of declarator initializers
+  inside one declaration — C99 §6.7.8 does not specify it.
 - **`i` is still a single writable `int`**: scope, `break` / `continue` / `return`, `i--` / `++i` and
   the per-iteration release of `own` locals are identical to `loop(n)`. A closure declared in the body
   captures `i` by value, one snapshot per iteration.
@@ -3929,8 +3938,9 @@ for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++) { … 
   token. `loop` stays a contextual keyword, so `int loop = 3;`, `loop:` and `goto loop;` are unaffected.
 - **A bound must be an integer**: `loop(..b)` / `loop(a..)` report `a loop range needs both bounds`;
   `loop(1..2..3)` is a syntax error; a pointer, an array, a `struct` / `union` value or a function
-  pointer is a hard error (`a loop bound must be an integer (got 'int *')`, arrays read
-  `(got the array 'a')`). This applies to `loop(n)` as well -- Phase 22 silently accepted `loop(arr)`.
+  pointer is a hard error (`a loop bound must be an integer (got 'int *')`, an array variable reads
+  `(got the array 'a')`, and any other array form such as a field spells its type, e.g.
+  `(got 'int[2][3]')`). This applies to `loop(n)` as well -- Phase 22 silently accepted `loop(arr)`.
 - A **statically non-integral scalar** (`float` / `double` / `void`) keeps L22-5: one `type mismatch`
   warning in compile mode, an error under `ct check`, still converted to `int` at run time. Each of the
   two bounds reports its own finding.
