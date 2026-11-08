@@ -59,6 +59,7 @@ import tool::diag::Diag;
 #define N_BOX 34
 #define N_CALL 7
 #define N_CAST 35
+#define N_DECL 12
 #define N_DEREF 28
 #define N_INDEX 26
 #define N_MCALL 30
@@ -551,6 +552,39 @@ static int closure_walk(struct Expr *self, int ci, int n, int pstart)
     if (closure_walk(self, ci, nd->c, pstart) != 0) return -1;
     if (closure_walk(self, ci, nd->d, pstart) != 0) return -1;
     return closure_walk(self, ci, nd->next, pstart);
+}
+
+/* Phase 21 R01: a local declaration inside the body may not shadow a captured
+   name. The capture walk runs after the body's own scope has been popped, so a
+   shadowed name resolves to the enclosing variable and enters the capture set;
+   the emitter then rewrites every same-named N_VAR in the body to the env field
+   and a read of the local silently returns the snapshot. Rejecting the shadow
+   keeps the snapshot rule honest (design §4.2). A nested literal owns its own
+   environment and runs its own check. */
+static int closure_walk_shadow(struct Expr *self, int ci, int n)
+{
+    struct Node *nd;
+    struct Closure *c = &self->sym->closures[ci];
+    char msg[512];
+    int k;
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    if (nd->kind == N_CLOSURE) return 0;
+    if (nd->kind == N_DECL) {
+        for (k = 0; k < c->ncap; k++) {
+            if (strcmp(c->cap_name[k], nd->text2) == 0) {
+                snprintf(msg, sizeof msg,
+                         "a local cannot shadow the captured '%s'", nd->text2);
+                return closure_capture_error(self, nd->line, msg);
+            }
+        }
+    }
+    if (closure_walk_shadow(self, ci, nd->a) != 0) return -1;
+    if (closure_walk_shadow(self, ci, nd->b) != 0) return -1;
+    if (closure_walk_shadow(self, ci, nd->c) != 0) return -1;
+    if (closure_walk_shadow(self, ci, nd->d) != 0) return -1;
+    return closure_walk_shadow(self, ci, nd->next);
 }
 
 /* A captured variable belongs to the enclosing frame; the closure may read it
@@ -2259,6 +2293,7 @@ impl ExprOps for Expr {
         if (body < 0) return -1;
         self->sym->closures[ci].body = body;
         if (closure_walk(self, ci, body, pstart) != 0) return -1;
+        if (closure_walk_shadow(self, ci, body) != 0) return -1;
         if (closure_walk_mutate(self, ci, body) != 0) return -1;
         if (self->ncl_stack > 0 && self->cl_stack[self->ncl_stack - 1] == ci)
             self->ncl_stack--;

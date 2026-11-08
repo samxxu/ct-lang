@@ -2072,6 +2072,7 @@ for pair in \
     "closure_capture_incr|3:1|a captured variable cannot be reassigned inside a closure" \
     "closure_capture_addassign|3:1|a captured variable cannot be reassigned inside a closure" \
     "closure_capture_addr|3:1|the address of a captured variable cannot be taken inside a closure" \
+    "closure_capture_shadow|3:1|a local cannot shadow the captured 'n'" \
     "closure_plain_fnptr|5:12|a closure cannot be used where a plain function pointer is expected" \
     "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair" \
     "closure_param_deferred|5:12|this closure is a binding, not a value (inline it or use a struct + trait)"
