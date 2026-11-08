@@ -7,16 +7,18 @@
 //
 // The plugins that own these dialects live in the conventional `ct-dialects/`
 // directory, named after each dialect (`register/map` -> `register-map.sh`,
-// `fsm/state` -> `fsm-state.sh`), and may be written in any language. Expand
-// and compile with:
+// `fsm/state` -> `fsm-state.sh`), and may be written in any language: each one
+// is run directly, so its shebang line picks the interpreter. Expand and
+// compile with:
 //
-//     sh ct-dialects/register-map.sh registry.ct > registry.gen.ct
-//     sh ct-dialects/fsm-state.sh registry.gen.ct > registry.gen2.ct
+//     ./ct-dialects/register-map.sh registry.ct > registry.gen.ct
+//     ./ct-dialects/fsm-state.sh registry.gen.ct > registry.gen2.ct
 //     ../../ctc registry.gen2.ct -o registry.gen.c
 //
 // Only the dialect comment block is committed (the "lazy" mode of
-// docs/design/dialect.md §3); the generated region is materialised at build
-// time and never checked in. `test/run.sh`'s `dialect` layer drives this demo.
+// docs/history/design/dialect.md §3); the generated region is materialised at
+// build time and never checked in. `test/run.sh`'s `dialect` layer drives this
+// demo.
 //
 // License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
 //@ct-dialect: register/map

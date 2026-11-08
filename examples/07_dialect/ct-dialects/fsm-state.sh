@@ -4,10 +4,11 @@
 #
 # A second dialect in the SAME file as `register/map`: plugins only act on
 # their own marker and pass every foreign block through untouched, so the
-# driver applies them one after another (see bindings of docs/design/dialect.md
-# and the authoring guide there).
+# driver applies them one after another (see the bindings and authoring guide in
+# docs/history/design/dialect.md). Like every plugin, this file is run directly:
+# its shebang line picks the interpreter.
 #
-# Usage:  sh ct-dialects/fsm-state.sh <input.ct> > <expanded.ct>
+# Usage:  ./ct-dialects/fsm-state.sh <input.ct> > <expanded.ct>
 #
 # Input DSL, one transition per line:
 #   //@ct-dialect: fsm/state

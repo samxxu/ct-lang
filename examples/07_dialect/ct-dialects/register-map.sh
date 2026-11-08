@@ -2,14 +2,16 @@
 #
 # register-map.sh -- the `register/map` dialect plugin (Phase 6.6 demo).
 #
-# A dialect expander is a plugin script: it turns a block of human-written DSL
-# (the `//@` comment lines) into the plain CT that `ctc` needs. Plugins live in
-# a project's `ct-dialects/` directory, are named after the dialect they own
+# A dialect expander is a plugin: it turns a block of human-written DSL (the
+# `//@` comment lines) into the plain CT that `ctc` needs. Plugins live in a
+# project's `ct-dialects/` directory, are named after the dialect they own
 # (`register/map` -> `register-map.sh`) and may be written in any language the
-# author likes -- this one is POSIX sh + awk with no dependencies. The compiler
-# never runs it: `ctc` only ever reads plain CT.
+# author likes: the driver runs the file itself, so its shebang line picks the
+# interpreter (an executable file runs directly; with no shebang the driver
+# falls back to POSIX sh). This one is POSIX sh + awk with no dependencies. The
+# compiler never runs it: `ctc` only ever reads plain CT.
 #
-# Usage:  sh ct-dialects/register-map.sh <input.ct> > <expanded.ct>
+# Usage:  ./ct-dialects/register-map.sh <input.ct> > <expanded.ct>
 #
 # Input DSL, one register per line:
 #   //@ct-dialect: register/map
@@ -17,9 +19,9 @@
 #
 # The input is copied through unchanged and a generated region is spliced in
 # below the block, wrapped in `//@gen-begin` / `//@gen-end` -- those markers are
-# the expander's business, not the plugin's (docs/design/dialect.md §5.4). The
-# `//@` comment lines stay: they are the source of truth, the generated region
-# is derived and never hand-edited.
+# the expander's business, not the plugin's (docs/history/design/dialect.md
+# §5.4). The `//@` comment lines stay: they are the source of truth, the
+# generated region is derived and never hand-edited.
 #
 # License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
 set -u

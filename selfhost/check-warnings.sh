@@ -153,6 +153,28 @@ done
 
 echo
 echo "== corpus (test/cases + examples, compile mode) =="
+# A plugin is an ordinary executable, not necessarily a shell script: the
+# contract promises "any language", so the gate must not wrap it in `sh`. An
+# executable file is run directly (the kernel applies its shebang); otherwise
+# its shebang line names the interpreter; only a file with neither falls back
+# to POSIX sh.
+run_plugin() {
+    _plugin=$1
+    _input=$2
+    if [ -x "$_plugin" ]; then
+        "$_plugin" "$_input"
+        return
+    fi
+    _interp=$(sed -n '1s/^#![[:space:]]*//p' "$_plugin")
+    if [ -z "$_interp" ]; then
+        _interp=sh
+    fi
+    # A shebang names an interpreter plus optional arguments (`/usr/bin/env
+    # python3`), so splitting on whitespace is intended.
+    # shellcheck disable=SC2086
+    $_interp "$_plugin" "$_input"
+}
+
 ci=0
 for ct in test/cases/*.ct examples/*/*.ct; do
     dir=$(dirname "$ct")
@@ -167,13 +189,22 @@ for ct in test/cases/*.ct examples/*/*.ct; do
         src="$work/dia-$ci.ct"
         broken=0
         for dialect in $dialects; do
-            plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
+            base="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -)"
+            plugin="$base.sh"
+            if [ ! -f "$plugin" ]; then
+                # `<name>.sh` stays the convention; any other `<name>.*` is
+                # accepted so a plugin can carry its language's suffix.
+                for cand in "$base".*; do
+                    if [ -f "$cand" ]; then plugin=$cand; fi
+                    break
+                done
+            fi
             if [ -z "$dialect" ] || [ ! -f "$plugin" ]; then
-                bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+                bad "$label" "no plugin for dialect '$dialect' (expected $base.sh or $base.*)"
                 broken=1
                 break
             fi
-            if ! sh "$plugin" "$src" >"$work/dia-$ci.step.ct" 2>"$work/dia-$ci.err"; then
+            if ! run_plugin "$plugin" "$src" >"$work/dia-$ci.step.ct" 2>"$work/dia-$ci.err"; then
                 bad "$label" "the expander for '$dialect' failed: $(cat "$work/dia-$ci.err")"
                 broken=1
                 break

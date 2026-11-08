@@ -178,7 +178,30 @@ echo "== dialect demo =="
 # them: the compiler only ever reads plain CT, which is the whole point. A file
 # may mix several dialects; each plugin owns its own `//@ct-dialect:` block and
 # passes the others through, so the demo applies them in first-appearance order.
-# See AGENTS.md §2 (the Phase 6.6 exemption) and docs/design/dialect.md.
+# See AGENTS.md §2 (the Phase 6.6 exemption) and docs/history/design/dialect.md.
+#
+# A plugin is an ordinary executable, not necessarily a shell script: the
+# contract promises "any language", so the gate must not wrap it in `sh`. An
+# executable file is run directly (the kernel applies its shebang); otherwise
+# its shebang line names the interpreter; only a file with neither falls back
+# to POSIX sh.
+run_plugin() {
+    _plugin=$1
+    _input=$2
+    if [ -x "$_plugin" ]; then
+        "$_plugin" "$_input"
+        return
+    fi
+    _interp=$(sed -n '1s/^#![[:space:]]*//p' "$_plugin")
+    if [ -z "$_interp" ]; then
+        _interp=sh
+    fi
+    # A shebang names an interpreter plus optional arguments (`/usr/bin/env
+    # python3`), so splitting on whitespace is intended.
+    # shellcheck disable=SC2086
+    $_interp "$_plugin" "$_input"
+}
+
 for ct in examples/*/*.ct; do
     dir=$(dirname "$ct")
     if [ ! -d "$dir/ct-dialects" ]; then continue; fi
@@ -201,13 +224,22 @@ for ct in examples/*/*.ct; do
     expanded=""
     broken=0
     for dialect in $dialects; do
-        plugin="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -).sh"
+        base="$dir/ct-dialects/$(printf '%s' "$dialect" | tr / -)"
+        plugin="$base.sh"
         if [ ! -f "$plugin" ]; then
-            bad "$label" "no plugin for dialect '$dialect' (expected $plugin)"
+            # `<name>.sh` stays the convention; any other `<name>.*` is accepted
+            # so a plugin can carry its language's suffix (`<name>.py`).
+            for cand in "$base".*; do
+                if [ -f "$cand" ]; then plugin=$cand; fi
+                break
+            done
+        fi
+        if [ ! -f "$plugin" ]; then
+            bad "$label" "no plugin for dialect '$dialect' (expected $base.sh or $base.*)"
             broken=1
             break
         fi
-        if ! sh "$plugin" "$TMP/dial-$name.ct" >"$TMP/dial-$name.step.ct" 2>"$TMP/dial-$name.err"; then
+        if ! run_plugin "$plugin" "$TMP/dial-$name.ct" >"$TMP/dial-$name.step.ct" 2>"$TMP/dial-$name.err"; then
             bad "$label" "the expander for '$dialect' failed: $(cat "$TMP/dial-$name.err")"
             broken=1
             break

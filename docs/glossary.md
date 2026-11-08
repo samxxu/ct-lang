@@ -49,7 +49,7 @@
 | prologue | `.m.ct` 里的 `#include` / `#define` | 按整行去重展开进消费者 `.c` 顶部；消费者 `.h` 不含它 |
 | 伴随 C shim（sibling shim） | `posix/socket.shim.h`（+ 可选 `socket.shim.c`） | 与 `<base>.m.ct` 同目录同名的 C 适配层：shim 头自动被消费者 `.c` include、其目录进 `cc` 行的 `-I`，shim 源直接进 `cc` 行；承接宏 / 全局量 / 转换 / 变参 / 回调（第三十九批，仅 ct-ast） |
 | 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 CT 后再编译（Phase 6.6；见 [design/dialect.md](history/design/dialect.md)） |
-| 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
+| 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`；亦接受同名其他后缀，如 `.py`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；门禁按插件自身的 shebang 执行（有执行位直接执行，否则用 shebang 解释器，无 shebang 才退回 POSIX `sh`）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
 | 虚表指针（vptr） | `__<trait>_vptr` | struct 内字段，指向其 vtable |
@@ -296,7 +296,7 @@
 | prologue | the `#include` / `#define` lines in a `.m.ct` | expanded, de-duplicated per whole line, at the top of the consumer `.c`; never in the consumer `.h` |
 | sibling C shim | `posix/socket.shim.h` (plus an optional `socket.shim.c`) | a C adaptation layer named after and sitting beside `<base>.m.ct`: its header is included by every consumer `.c` and its directory joins the `cc` line's `-I`, while its source joins the `cc` line; it carries macros / globals / casts / varargs / callbacks (batch 39, ct-ast only) |
 | dialect | `//@ct-dialect: <name>` + `//@` DSL lines | domain-specific syntax written into comments; `ctc` stays **unaware** and an expander script **outside the repository** turns it into plain CT before compilation (Phase 6.6; see [design/dialect.md](history/design/dialect.md)) |
-| dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
+| dialect plugin | `ct-dialects/<name>.sh` (`/` → `-`; any other suffix such as `.py` is also accepted) | the expander's implementation script, in whatever language the author picks (bash / Python / awk / PHP …); the gates honour the plugin's own shebang (an executable file runs directly, otherwise its shebang names the interpreter, and only a file with neither falls back to POSIX `sh`); inside the repo it is allowed only as a **demo / test** (`examples/**`, `test/**`) and must not join the compiler build (AGENTS §2) |
 | interface value / iface | `struct <T>_iface`, `T x = p;` | a fat pointer: `void *self` + `struct <T>_vtbl *vt` |
 | vtable | `struct <Trait>_vtbl` | a table of function pointers |
 | vptr | `__<trait>_vptr` | the struct field pointing at its vtable |
