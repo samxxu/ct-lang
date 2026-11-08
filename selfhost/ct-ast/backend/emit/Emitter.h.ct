@@ -2275,11 +2275,19 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_BREAK) {
+            int r;
+            /* the releases `retire_before_jump` hung off `b` run before the
+               jump leaves the loop (same shape as `return`, SH-33) */
+            for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
+                if (self->emit_node(r, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("break;\n", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_CONT) {
+            int r;
+            for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
+                if (self->emit_node(r, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("continue;\n", self->out);
             return 0;

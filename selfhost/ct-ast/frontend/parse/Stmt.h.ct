@@ -126,6 +126,17 @@ pub struct Stmt {
        `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
        or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
     int  loop_depth;
+    /* AutoDrop across a jump. A `break` / `continue` leaves its construct, so
+       the `own` objects declared inside it have to be released first, exactly
+       like `return` (SH-33). Each enclosing construct pushes the boundary its
+       jump may release down to: a `switch` only offers a `break` (a `continue`
+       in it belongs to the enclosing loop), and a `for` keeps the initialiser's
+       object alive across `continue` but not across `break`. The length is a
+       literal because a `pub struct` lands in the generated header. */
+    int  break_base[256];
+    int  nbreak;
+    int  cont_base[256];
+    int  ncont;
 } use StmtOps;
 
 /* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
@@ -212,6 +223,49 @@ static int retire_before_return(struct Stmt *self, int ret, int permanent)
         if (permanent) self->sym->vars[vi].autodrop = 0;
     }
     return ret;
+}
+
+/* A `break` / `continue` leaves its construct, so every `own` declared since
+   the construct opened is released first, in reverse order: the releases hang
+   off the jump node's `b` slot and the emitter prints them before the keyword.
+   `base` is the construct's baseline (`retire_before_return` uses the same
+   shape), so a jump never touches an `own` declared outside the loop or
+   switch. */
+static int retire_before_jump(struct Stmt *self, int jump, int base)
+{
+    int blk, tail;
+
+    if (self->mem->nowner <= base) return jump;
+    /* the block is scratch; only its head is moved onto the jump */
+    blk = self->sup->new_node(N_BLOCK);
+    if (blk < 0) return -1;
+    tail = -1;
+    if (autodrop_append(self, blk, base, &tail) != 0) return -1;
+    if (tail >= 0) self->arena->nodes[jump].b = self->arena->nodes[blk].a;
+    return jump;
+}
+
+/* Push the baselines of one construct: a loop offers both a `break` and a
+   `continue`, a switch only a `break` (`cont < 0`), because a `continue` inside
+   it still belongs to the enclosing loop and must keep that loop's baseline.
+   `256` is the literal the `pub struct` carries; going deeper is an error, not
+   a silent overwrite. */
+static int jump_push(struct Stmt *self, int brk, int cont)
+{
+    if (self->nbreak >= 256 || (cont >= 0 && self->ncont >= 256))
+        return self->sup->fail("loops are nested too deeply");
+    self->break_base[self->nbreak] = brk;
+    self->nbreak = self->nbreak + 1;
+    if (cont < 0) return 0;
+    self->cont_base[self->ncont] = cont;
+    self->ncont = self->ncont + 1;
+    return 0;
+}
+
+static void jump_pop(struct Stmt *self, int with_cont)
+{
+    if (self->nbreak > 0) self->nbreak = self->nbreak - 1;
+    if (with_cont && self->ncont > 0) self->ncont = self->ncont - 1;
 }
 
 /* SH-45: a release must not run before the returned value is read. When the
@@ -862,6 +916,8 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect(";") != 0) return -1;
+            if (self->nbreak > 0
+                && retire_before_jump(self, s, self->break_base[self->nbreak - 1]) < 0) return -1;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
@@ -869,6 +925,8 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect(";") != 0) return -1;
+            if (self->ncont > 0
+                && retire_before_jump(self, s, self->cont_base[self->ncont - 1]) < 0) return -1;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "goto") == 0) return self->parse_goto();
@@ -905,17 +963,24 @@ impl StmtOps for Stmt {
             if (c < 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
             self->arena->nodes[s].a = c;
+            if (jump_push(self, self->mem->nowner, self->mem->nowner) != 0) return -1;
             e = self->parse_branch();
+            jump_pop(self, 1);
             if (e < 0) return -1;
             self->arena->nodes[s].b = e;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0) {
+            int for_base;
             s = self->sup->new_node(N_FOR);
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             if (self->sup->push_scope() != 0) return -1;
+            /* `break` leaves the loop, so the initialiser's object goes with it;
+               `continue` starts the next iteration, so only the body's objects
+               are released and the initialiser stays alive. */
+            for_base = self->mem->own_base[self->sym->nscope - 1];
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->arena->nodes[s].a = -1;
             } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
@@ -983,7 +1048,12 @@ impl StmtOps for Stmt {
                 self->sup->pop_scope();
                 return -1;
             }
+            if (jump_push(self, for_base, self->mem->nowner) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
             e = self->parse_branch();
+            jump_pop(self, 1);
             if (e < 0) {
                 self->sup->pop_scope();
                 return -1;
@@ -1014,7 +1084,9 @@ impl StmtOps for Stmt {
             s = self->sup->new_node(N_DOWHILE);
             if (s < 0) return -1;
             self->sup->lex_next();
+            if (jump_push(self, self->mem->nowner, self->mem->nowner) != 0) return -1;
             e = self->parse_branch();
+            jump_pop(self, 1);
             if (e < 0) return -1;
             self->arena->nodes[s].b = e;
             if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "while") == 0))
@@ -1213,6 +1285,13 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
+        /* `own` is refused inside a switch, so the only `own` a `break` can meet
+           are none: the baseline is the body's own scope, and this entry is what
+           stops a `case … break` from releasing an enclosing loop's object. */
+        if (jump_push(self, self->mem->own_base[self->sym->nscope - 1], -1) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         self->switch_depth = self->switch_depth + 1;
         tail = -1;
         while (self->lex->tok != T_EOF
@@ -1224,6 +1303,7 @@ impl StmtOps for Stmt {
                 s = self->parse_stmt();
             if (s < 0) {
                 self->switch_depth = self->switch_depth - 1;
+                jump_pop(self, 0);
                 self->sup->pop_scope();
                 return -1;
             }
@@ -1232,6 +1312,7 @@ impl StmtOps for Stmt {
             tail = s;
         }
         self->switch_depth = self->switch_depth - 1;
+        jump_pop(self, 0);
         if (self->sup->expect("}") != 0) {
             self->sup->pop_scope();
             return -1;
@@ -1500,7 +1581,13 @@ impl StmtOps for Stmt {
             }
         }
         self->loop_depth = self->loop_depth + 1;
+        if (jump_push(self, self->mem->nowner, self->mem->nowner) != 0) {
+            self->loop_depth = self->loop_depth - 1;
+            self->sup->pop_scope();
+            return -1;
+        }
         body = self->parse_block();
+        jump_pop(self, 1);
         self->loop_depth = self->loop_depth - 1;
         if (body < 0) {
             self->sup->pop_scope();
@@ -1637,6 +1724,8 @@ impl StmtOps for Stmt {
         (void)self;
         self->nlabels = 0;
         self->ngotos = 0;
+        self->nbreak = 0;
+        self->ncont = 0;
         return 0;
     }
 
