@@ -657,6 +657,37 @@ ct build loop.ct -o loop && ./loop
   紧跟 `(` 时才当语法糖。
 - 细节与诊断文案见 [language-spec §4.45](language-spec.md)。
 
+### 10.3 `loop(a..b)`：从 a 数到 b-1
+
+起点不是 0 时，把区间写在括号里：`loop(2..5)` 就是 `for (int i = 2; i < 5; i++)`，左闭右开。
+
+```c
+/* loop_range.ct */
+#include <stdio.h>
+
+int main(void)
+{
+    loop(2..5) {
+        printf("%d\n", i);      /* 2 3 4 */
+    }
+    loop(5..2) {
+        printf("never\n");      /* 空区间：0 次，不报错 */
+    }
+    loop(0..3) {
+        printf("same as loop(3): %d\n", i);
+    }
+    return 0;
+}
+```
+
+- **两个边界各求值一次，先左后右**：`loop(lo()..hi())` 里 `lo()` 与 `hi()` 各调用一次；
+  循环体里改边界读的变量也不会改变本次次数。
+- **`i` 还是那个 `int`**：`break` / `continue` / `i++` / 闭包按值捕获 / `own` 每轮释放，全部照旧。
+- **`loop(0..b)` 与 `loop(b)` 相同**：字面量 0 的下界在解析期折掉，生成物逐字节一致。
+- **边界必须是整数**：指针、数组、结构体值、函数指针会被直接拒绝；`loop(..b)` / `loop(a..)` /
+  `loop(1..2..3)` 是语法错误。`double` 这类标量仍只告警（同 `loop(n)`）。
+- 细节见 [language-spec §4.46](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -1388,6 +1419,41 @@ ct build loop.ct -o loop && ./loop
 - **`loop` stays an ordinary identifier**: `int loop = 3;`, a `loop:` label and `goto loop;` are
   unaffected; only statement position followed by `(` triggers the shorthand.
 - Details and the diagnostic texts are in [language-spec §4.45](language-spec.md).
+
+### 10.3 `loop(a..b)`: count from a to b-1
+
+When the start is not zero, put the range in the parentheses: `loop(2..5)` is
+`for (int i = 2; i < 5; i++)`, half-open.
+
+```c
+/* loop_range.ct */
+#include <stdio.h>
+
+int main(void)
+{
+    loop(2..5) {
+        printf("%d\n", i);      /* 2 3 4 */
+    }
+    loop(5..2) {
+        printf("never\n");      /* empty range: zero rounds, no diagnostic */
+    }
+    loop(0..3) {
+        printf("same as loop(3): %d\n", i);
+    }
+    return 0;
+}
+```
+
+- **Each bound is evaluated once, lower bound first**: `loop(lo()..hi())` calls `lo()` and `hi()`
+  once each, and writing a variable a bound read inside the body does not change the trip count.
+- **`i` is the same `int`**: `break` / `continue` / `i++`, capture by value in closures and the
+  per-round release of `own` locals all behave as before.
+- **`loop(0..b)` is `loop(b)`**: a literal zero lower bound folds at parse time and the output is
+  byte-identical.
+- **A bound must be an integer**: pointers, arrays, struct values and function pointers are rejected;
+  `loop(..b)` / `loop(a..)` / `loop(1..2..3)` are syntax errors. A scalar such as `double` still only
+  warns, exactly like `loop(n)`.
+- Details are in [language-spec §4.46](language-spec.md).
 
 ### 11. CLI cheat sheet
 

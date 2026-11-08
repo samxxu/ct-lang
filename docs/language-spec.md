@@ -1773,7 +1773,36 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
   `warning: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int`，
   `ct check` 下为错误；仍然按 C 规则转成 `int` 运行。类型判不准时保持沉默。
 - 生成物是**单行** `for`，不新增逐语句 `#line`，因此生成行号与源行号不保证逐行对齐。
-- 双界形式 `loop(a..b)` 属 Phase 23；本相只冻结 AST 布局（`b == -1` 是单界哨兵）。
+- 双界形式 `loop(a..b)` 见 §4.46（Phase 23）；AST 里 `b == -1` 是单界哨兵。
+
+#### 4.46 `loop(a..b)` 半开区间循环（Phase 23，仅 ct-ast）
+
+`loop(<start>..<stop>) { … }` 是显式起点的计数循环，展开恰好是：
+
+```c
+for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++) { … }
+```
+
+- **区间左闭右开** `[a, b)`：`i` 从 `a` 起、取到 `b - 1`。`b <= a` 零次迭代，不报错、不告警。
+  不做反向、不做步长、不做闭区间。
+- **两个边界各求值一次，先 `a` 后 `b`**。两个初始化器各自是完整表达式，C 保证它们按声明的
+  先后顺序求值；上界存放在同一个私有临时量里，循环中改 `a` / `b` 读的变量不影响本轮次数。
+- **`i` 仍是单个可写 `int`**，作用域、`break` / `continue` / `return`、`i--` / `++i`、`own` 的
+  每轮释放，全部与 `loop(n)` 相同。闭包在体内按值捕获 `i`，每轮一个快照。
+- **`loop(0..b)` 与 `loop(b)` 等价**（D23-2）：下界是字面量 `0` 时在解析期折成单界形态，
+  生成物逐字节相同。折叠只看 `N_NUM == 0`，不看后缀：`0L..n`、`0x0..n` 也会折叠；
+  `-0..n` 与 `0+0..n` **不**折叠（等价于前者，但规则是纯语法的，不做常量折叠）。
+- **`..` 是单个 token**：`2..8` 不会被切成浮点 `2.` + `.8`；`...` 仍是三连点 token。
+  `loop` 仍是上下文关键字，`int loop = 3;`、`loop:`、`goto loop;` 不受影响。
+- **边界必须是整数**：`loop(..b)` / `loop(a..)` 报 `a loop range needs both bounds`；
+  `loop(1..2..3)` 报语法错误；指针、数组、`struct` / `union` 值、函数指针作为边界是硬错误
+  （`a loop bound must be an integer (got 'int *')`，数组为 `(got the array 'a')`）。
+  这条对 `loop(n)` 同样生效——Phase 22 里 `loop(arr)` 曾静默通过。
+- **静态可判定的非整数标量**（`float` / `double` / `void`）沿用 L22-5：编译模式一条
+  `type mismatch` 警告、`ct check` 下为错误，仍按 C 规则转成 `int` 运行。两条边界各报一次。
+- **边界存进 `int`（D23-7）**：`i` 与临时量都是 `int`，`size_t` / `long` 超出 `INT_MAX` 的边界
+  按 C 的转换规则截断，属已发布语义，本相不改；需要大范围计数的场景请写原生 `for`。
+- 生成物是**单行** `for`，不新增逐语句 `#line`。
 
 ### 7. 容量上限
 
@@ -3874,8 +3903,41 @@ for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
   unclassifiable type stays silent.
 - The output is a **single-line** `for` with no per-statement `#line`, so generated lines are not
   guaranteed to line up with the source.
-- The two-bound form `loop(a..b)` belongs to Phase 23; this phase only freezes the AST layout
-  (`b == -1` is the single-bound sentinel).
+- The two-bound form `loop(a..b)` is §4.46 (Phase 23); `b == -1` is the single-bound sentinel in the AST.
+
+#### 4.46 `loop(a..b)`, the half-open range (Phase 23, ct-ast only)
+
+`loop(<start>..<stop>) { … }` is the explicit-start counted loop; it expands to exactly:
+
+```c
+for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++) { … }
+```
+
+- The range is **half-open** `[a, b)`: `i` starts at `a` and stops before `b`. `b <= a` iterates zero
+  times with no diagnostic. No reverse direction, no step, no closed ranges.
+- **Each bound is evaluated once, lower bound first.** Each initializer is a full expression, so C
+  sequences them in declaration order; the upper bound lives in one private temporary, so changing a
+  variable the bound read does not change the trip count.
+- **`i` is still a single writable `int`**: scope, `break` / `continue` / `return`, `i--` / `++i` and
+  the per-iteration release of `own` locals are identical to `loop(n)`. A closure declared in the body
+  captures `i` by value, one snapshot per iteration.
+- **`loop(0..b)` is `loop(b)`** (D23-2): a literal zero lower bound folds to the counted form at parse
+  time and produces byte-identical output. The fold looks only at `N_NUM == 0`, not at the suffix, so
+  `0L..n` and `0x0..n` fold too; `-0..n` and `0+0..n` deliberately do not (same meaning, but the rule
+  stays syntactic and never depends on constant folding).
+- **`..` is one token**: `2..8` is never split into the floats `2.` and `.8`, and `...` keeps its own
+  token. `loop` stays a contextual keyword, so `int loop = 3;`, `loop:` and `goto loop;` are unaffected.
+- **A bound must be an integer**: `loop(..b)` / `loop(a..)` report `a loop range needs both bounds`;
+  `loop(1..2..3)` is a syntax error; a pointer, an array, a `struct` / `union` value or a function
+  pointer is a hard error (`a loop bound must be an integer (got 'int *')`, arrays read
+  `(got the array 'a')`). This applies to `loop(n)` as well -- Phase 22 silently accepted `loop(arr)`.
+- A **statically non-integral scalar** (`float` / `double` / `void`) keeps L22-5: one `type mismatch`
+  warning in compile mode, an error under `ct check`, still converted to `int` at run time. Each of the
+  two bounds reports its own finding.
+- **Bounds are stored in `int`** (D23-7): `i` and the temporary are both `int`, so a `size_t` / `long`
+  bound above `INT_MAX` truncates under C's conversion rules. That is the shipped semantics and this
+  phase does not change it; use a native `for` for ranges that large.
+- The output is a **single-line** `for` with no per-statement `#line`.
 
 ### 7. Capacity limits
 

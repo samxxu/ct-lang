@@ -2,13 +2,11 @@
 
 > 中文 · [English](#english)
 >
-> **状态：规划中**（2026-11-07；仅落规划，不含实现。2026-11-08 勘误：Phase 22 已随 `v0.22.0` 落地，
-> 本相可直接在 `parse_loop` / `N_LOOP` 的 `b` 槽上接双界，`loop_depth` 在 `struct Stmt`）。
-> **版本口径：Phase 23 ↔ `v0.23.x`，收口 bump 到 `v0.23.0`。** 前置 `v0.22.0`。
+> **状态：完成**（2026-11-08；S1–S4 落地，收口 `v0.23.0`；D23-1–D23-9 已定稿）。
+> 本文是 **as-built** 记录：实现与最初的规划稿有几处偏离（词法、归一化、诊断严重度），
+> 文中均以实测结果为准；被推翻的规划假设保留在 §11。
 > 关联：[phase22.md](phase22.md)（`loop(n)`，本相前置）、[roadmap.md](../roadmap.md)、
-> [language-spec.md](../language-spec.md)。Phase 20（包支持）、Phase 21（闭包）见 `phase20.md` / `phase21.md`。
-> 本相只给 `loop` 增加「显式起点」形态：**不改已定稿语义、不新增类型、不新增运行时**。
-> **提案基线**：本相源自一份基于 v0.12.0 的外部提案；其中「lexer `..` 特判」「`borrow` 前置」「`ct check` 待建」「C89 前提」等已由后续版本解决，本相不再重复处理。
+> [language-spec.md](../language-spec.md)。
 
 ---
 
@@ -16,274 +14,398 @@
 
 `loop(a..b)` 是 `loop(n)` 的**显式起点**形态：把「从 `a` 数到 `b - 1`」写成一行。
 
-**定义级等式**：
-
 ```text
 loop(a..b)  ≡  for (int i = a; i < b; i++) { … }
-loop(0..n)  ≡  loop(n)
+loop(0..n)  ≡  loop(n)          （仅当 a 是字面量 0，见 §3.2）
 ```
 
-边界语义固定为**左闭右开** `[a, b)`：`i` 从 `a` 起，取到 `b - 1`；`b <= a` 时零次迭代。
+区间固定为**左闭右开** `[a, b)`：`i` 从 `a` 起，取到 `b - 1`；`a >= b` 时零次迭代。
 不做反向遍历，不做步长，不做闭区间。
 
 判断标准与 Phase 22 相同：**展开后的 C 与手写原生 `for` 等价，且更短。**
 
-### 1.1 本相不做（防止同一批提案被反复重提）
+### 1.1 本相不做
 
 | 不做的东西 | 一句话理由 |
 | --- | --- |
 | `r = 2..8` 独立区间表达式 | 无类型推断，`r` 的目标类型无处安放；落到 `Range` trait 还要装箱，与零成本冲突 |
-| `int a[] = 2..8` 编译期展开 | 需要魔法上限（如 256）与一批新诊断，收益最低，直接砍掉 |
-| 步长变体（`loop(a..b step s)` / 反向） | 需要步长就写原生 `for`，`loop` 只覆盖步长 1 |
-| `Range` trait + `each` | 硬依赖 Phase 21 闭包档②，且与「无泛型 / 零成本」冲突；留待闭包落地后再评 |
-| `loop(..b)` / `loop(a..)` 半开边界 | 两侧都必须有表达式；缺任一侧退回 `loop(n)` 或原生 `for` |
-
-本相只做上表之外的那一件事：`loop(a..b)`。
+| `int a[] = 2..8` 编译期展开 | 需要魔法上限与一批新诊断，收益最低 |
+| 步长变体（`step` / 反向） | 需要步长就写原生 `for`，`loop` 只覆盖步长 1 |
+| `Range` trait + `each` | 硬依赖 Phase 21 闭包档②，且与「无泛型 / 零成本」冲突 |
+| `loop(..b)` / `loop(a..)` 半开边界 | 两侧都必须有表达式（L23-1） |
+| 闭区间 `[a, b]` | 与 `for (i = a; i < b; …)` 的等式冲突，且多写一个 `<=` 并不省事 |
 
 ---
 
-## 2. 语法形态
+## 2. 词法（D23-1）
+
+`..` 是**新增的独立 token**，在 [Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) 中以
+`T_PUNCT` + 文本 `".."` 表示。分支必须放在 **`...` 之后、`.5` 之前**：
+
+```c
+if (c == '.' && self->src[self->pos + 1] == '.') {
+    self->toktext[0] = '.'; self->toktext[1] = '.'; self->toktext[2] = 0;
+    self->tok = T_PUNCT;
+    self->pos += 2;
+    return;
+}
+```
+
+- **在 `...` 之后**：三连点已经由更早的分支整体吃掉，`case 1 ... 5` 不受影响。
+- **在 `.5` 之前**：浮点分支会把 `.8` 当作 `N_FNUM`；若先走它，`2..8` 会切成
+  `NUM(2)` `.` `FNUM(.8)`，`..` 永远拼不出来。
+- 数字扫描**未改**：它原本就只在 `src[pos+1] != '.'` 时才把尾随小数点当浮点。
+
+> 实测订正：规划稿曾断言 `2..8` 在旧词法下是 `NUM(2) PUNCT(.) PUNCT(.) NUM(8)`，
+> 这是错的——旧词法实际产出 `NUM(2)` `.` `FNUM(.8)`。这正是本相必须新增 token 的原因，
+> 而不是「不需要改词法器」。
+
+`..` 出 token 之后，`1..2..3` 是 `NUM(1)` `..` `NUM(2)` `..` `NUM(3)`，解析器在第二个 `..`
+处报 `unexpected token`（列 14）。这条列位是词法回归的硬断言（§8）。
+
+---
+
+## 3. 解析与归一化（D23-2）
+
+### 3.1 语法
 
 ```text
 loop-stmt  :=  "loop" "(" ( expr | expr ".." expr ) ")" block
 ```
 
-- `a`、`b` 各是一个 `expr`；`..` 两侧不允许省略。
-- `loop(n)`（Phase 22）与 `loop(a..b)`（本相）共用同一个 `loop` 语句入口，按 `)` 前是否出现 `..` 分派。
-- `loop` 仍是上下文相关关键字（Phase 22 §2.1），本相不新增识别规则。
-- body 必须是块；不做单语句 body；不做命名变体。
+`loop` 仍是上下文相关关键字（Phase 22 §2.1），本相不新增识别规则；body 必须是块。
 
-### 2.1 `..` 的词法现状
+`N_LOOP` 节点沿用 Phase 22 的字段：`.a` = 计数或下界，`.b` = 上界（单界时 `-1`），`.d` = body。
+解析器在 `Loop` 单元内补了 `#define N_NUM 8`——该仓的宏是 **per-unit** 的，漏掉这行
+`l2 build` 会直接报 `use of undeclared identifier 'N_NUM'`。
 
-`..` **不是新 token**：词法器已保证 `2..8` 不会被切成浮点 `2.` + `.8`
-（[Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct#L148-L155) 只在小数点后不是 `.` 时才算浮点），
-`...` 也已单词化（[Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct#L219-L229)）。
-因此 `2..8` 在词法层是 `NUM(2)` `PUNCT(.)` `PUNCT(.)` `NUM(8)`；
-解析器在 `loop` 的参数位置识别「`.` 紧跟 `.`」即可，**不需要改词法器**。
+两个边界都在隐式 `i` 进入作用域**之前**解析，因此边界里只能引用外层绑定。
 
-> 提案里「`2..8` 的 lexer 浮点误切特判」这一项，在当前版本已经是既有机制，删除。
+### 3.2 字面量 0 的归一化
 
----
-
-## 3. 语义规则
-
-### 3.1 展开形式
+`hi` 初值 `-1`；解析完第一个表达式后若当前 token 是 `..`，消费它并解析第二个边界，然后：
 
 ```c
-for (int __ct_loop_a_K = 0, __ct_loop_hi_K = 0, i = ((__ct_loop_a_K = (a)), (__ct_loop_hi_K = (b)), __ct_loop_a_K); i < __ct_loop_hi_K; i++) { BODY }
+if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
+    cnt = hi;
+    hi = -1;                     /* 折回单界形态 */
+}
 ```
 
-- 只有一条 `for`，不引入辅助函数、结构体或回调。
-- `i` 的初值取 `a` 的快照；条件与自增与原生 `for` 完全相同。
-- 两个临时量与 `i` 同为 `int`，命名沿用发射器的临时计数器（与 Phase 22 的 `__ct_loop_n_K` 同一套）。
-- 两侧边界都先落到临时量，循环过程中修改 `a` / `b` 依赖的变量不影响本次迭代次数。
+判定**只看 `N_NUM && num == 0`，不看后缀**。实测边界（文档如实记录）：
 
-### 3.2 求值顺序与次数
+| 写法 | 是否归一为 `loop(n)` | 原因 |
+| --- | --- | --- |
+| `loop(0..n)`、`(0)..n`、`0L..n`、`0x0..n`、`0U..n` | 是 | 都是 `N_NUM` 且 `num == 0` |
+| `loop(-0..n)` | 否 | `-0` 是一元负号节点，不是 `N_NUM` |
+| `loop(0+0..n)` | 否 | 加法节点，不做常量折叠 |
+| `loop(0.0..n)` | 否 | 浮点是 `N_FNUM`，天然不误伤 |
 
-- **先 `a` 后 `b`，各求值一次。**
-- 实现方式：两个边界放在**同一个初始化表达式**里，用逗号运算符保证先 `a` 后 `b`；
-  不依赖多个声明符初始化器之间的求值次序（C 不对此作保证）。
-- 明确禁止展开成 `for (int i = (a); i < (b); i++)`——那会每轮重算 `b`，且 `a` 与 `b` 的求值次数不受控。
-
-### 3.3 `i` 的语义
-
-- 单一 `int`，从 `a` 起；作用域、可写性、不参与 `own` / AutoDrop，全部沿用 Phase 22 §3.3。
-- `loop(0..n)` 与 `loop(n)` **等价**：同一起点、同一上界、同一迭代次数、同一生成物语义。
-- `b <= a` 时零次迭代，不报错、不告警。
-
-### 3.4 嵌套与遮蔽
-
-沿用 Phase 22 D22-5，**不新增第二套规则**：
-
-- 嵌套 `loop` 遮蔽外层 `i`：语义允许（与原生 `for` 一致），编译 warning，`ct check` error（L22-4）。
-- 本相不引入 `i1` / 按深度改名的隐式变量；`loop` 的隐式变量永远叫 `i`。
-- 用户显式写 `int i` 仍不新增诊断，与 Phase 22 §3.4 相同。
-
-### 3.5 边界类型
-
-- 整型（`char` / `short` / `int` / `long` / 无符号各型 / `enum` / `_Bool` / `size_t`）接受。
-- 非整数在类型**静态可确定**时诊断：编译 warning、`ct check` error（沿用 L22-5 的严重度与 kind 5）。
-- 边界值存入 `int` 临时量，计数范围是 `int` 范围；超出范围属未定义场景，不在本相承诺内。
-
-### 3.6 生成物可读性
-
-- 仍是一条 `for`，不产生抽象层。
-- **不新增逐语句 `#line`**（与 Phase 22 §3.7 一致）：发射器只有单元级 `#line 1 "<path>"` 与
-  raw / 闭包产物的个别重锚，既有语句路径**不会**为单条语句重新锚定；`--line` 下双界 `loop`
-  与单界 `loop` 的可读性相同——生成行号与源行号不保证逐行对齐。
-- 生成物中不出现 `loop` 或 `..` 字样。
+`-0` / `0+0` 不归一只是少了一条优化，语义不变（`i = -0` 与 `i = 0` 等价，生成的 `for`
+仍然正确求值一次）。
 
 ---
 
-## 4. 诊断
+## 4. 语义
+
+### 4.1 求值次数与顺序（D23-3）
+
+- 两个边界**各求值一次**，先 `a` 后 `b`。
+- 发射形态把两者放在同一条 `for` 声明的两个初始化器里：
+  `for (int i = (a), __ct_loop_n_K = (b); …)`。C 保证同一声明中的声明符按书写顺序初始化，
+  因此顺序由语法保证，不依赖未指定的求值次序。
+- 循环体内修改 `a` / `b` 依赖的变量不影响本次迭代次数（边界已快照）。
+
+### 4.2 `i` 的语义
+
+- 单一 `int`，从 `a` 起；可写；作用域、`break` / `continue` / `return` 行为与原生 `for` 一致。
+- 不参与 `own` / AutoDrop；闭包捕获 `i` 是**每轮快照**（与 Phase 22 相同）。
+- `loop` 的隐式变量永远叫 `i`，本相不引入 `i1` / 按深度改名。
+
+### 4.3 嵌套与遮蔽
+
+沿用 Phase 22 D22-5，**不新增第二套规则**：嵌套 `loop` 遮蔽外层 `i` 时，编译模式 warning，
+`ct check` 报 `loop_shadow`（kind 7）并以退出码 1 结束。用户显式写 `int i` 仍不新增诊断。
+
+### 4.4 零次迭代
+
+`a >= b` 时零次迭代，不报错、不告警。
+
+---
+
+## 5. 边界类型（D23-3 / D7 / D8）
+
+两条边界走**同一套**判定；单界时只查一条。
+
+### 5.1 接受
+
+整型（`char` / `short` / `int` / `long` / 无符号各型 / `enum` / `_Bool` / `size_t`）接受。
+
+### 5.2 D7：仍是 `int`，截断是已发布语义
+
+边界值与 `i` 都存入 `int`。`size_t` / `long` 超过 `INT_MAX` 时**静默截断**，这是 Phase 22
+已发布的语义，本相不改；文档如实写明，修改变量类型属于后续阶段。
+
+### 5.3 D8：地址形 / 聚合类型改为硬错（breaking change）
+
+以下三类在 Phase 22 会静默编译（数组那条尤其危险），本相改为 `ct_sem_error`：
+
+| 边界 | 文案 |
+| --- | --- |
+| 指针（类型串含 `*`） | `a loop bound must be an integer (got 'int *')` |
+| 结构体 / 联合体值 | `a loop bound must be an integer (got 'struct Pair')` |
+| 数组 | `a loop bound must be an integer (got the array 'a')` |
+| 函数指针（类型串含 `(`） | `a loop bound must be an integer (got '<type>')` |
+
+数组单独判定：`int a[4]` 与 `int *p` 的类型串相同，只有符号表的 `is_array` 能区分；
+这是 Phase 22 的洞，`loop(arr)` 今天完全静默。
+
+这是一处**有意的 breaking change**：既有代码若把地址当计数，会从「编译通过」变为硬错。
+判定放在 `loop_count_class` 之前，命中即 `return`。
+
+### 5.4 保留 warning 的那一档
+
+`float` / `double` / `void` 等 `cls == 0` 的静态类型**仍只告警**（L22-5，kind 5），
+文案未改：`count must be an integer (got '<type>'); the value is converted to int`。
+编译模式 warning，`ct check` error。`loop_count_type` fixture 依赖这条文案，不能升为硬错。
+
+---
+
+## 6. 发射
+
+删除 Phase 22 留在 [Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct) 的
+`b != -1` 守卫，改为两支：
+
+```c
+/* b == -1：单界，形态与 Phase 22 完全一致 */
+for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++)
+/* b != -1：双界 */
+for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
+```
+
+- `K = self->ntmp++`，进程级单调分配；嵌套靠它拿到不同名字，**不预扫、不引入外层块**。
+- 生成物中不出现 `loop` 或 `..` 字样。
+- 不新增逐语句 `#line`（与 Phase 22 §3.7 同口径）：仍是单元级锚点。
+
+---
+
+## 7. 诊断
 
 | 编号 | 场景 | 文案 | 严重度 |
 | --- | --- | --- | --- |
 | L23-1 | `loop(..b)` / `loop(a..)` | `a loop range needs both bounds` | error（语法） |
-| L23-2 | 边界类型静态可确定为非整数 | 复用 L22-5 文案，callee 记为 `loop` | 编译 warning；`ct check` error |
+| L23-2 | 边界静态可确定为 `float` / `double` / `void` | 复用 L22-5 文案，callee 记为 `loop` | 编译 warning；`ct check` error |
+| L23-3 | 边界是指针 / 数组 / 结构体 / 联合体 / 函数指针（D8） | `a loop bound must be an integer (got …)` | error（硬错） |
 
-规则细节：
-
-- Phase 22 的 L22-1…L22-5 原样适用于 `loop(a..b)`；本相只新增 L23-1，L23-2 是 L22-5 对两个边界的覆盖。
-- `b <= a` **不诊断**：零次迭代是合法语义。
-- 嵌套遮蔽仍是 L22-4，不新增编号、不改严重度。
-- 所有诊断带 `file:line:col`。
+- L22-4（嵌套遮蔽）与 L22-5（静态非整数）原样适用，编号与严重度未改。
+- `a >= b` 不诊断。
+- 所有诊断带 `file:line:col`；`loop(1..2..3)` 在第二个 `..` 处报 `unexpected token`。
 
 ---
 
-## 5. 验收判据
+## 8. 验收与测试
 
-### 5.1 正例
+### 8.1 正例（`test/ast/`）
 
-| 编号 | 用例 | 判据 |
-| --- | --- | --- |
-| P23-1 | `loop(2..5) { print(i); }` | 输出 `2 3 4` |
-| P23-2 | `loop(0..n)` 与 `loop(n)` 对照 | 迭代序列与生成物语义一致（定义级等式） |
-| P23-3 | `loop(f()..g())`，`f` / `g` 各带副作用 | 各调用一次，且先 `f` 后 `g` |
-| P23-4 | body 内修改 `a` / `b` 依赖的变量 | 迭代次数不变 |
-| P23-5 | `loop(5..2)` / `loop(3..3)` | 0 轮，退出码 0，无诊断 |
-| P23-6 | `break` / `continue` / body 内写 `i` | 与等价原生 `for` 逐项一致（`continue` 后仍自增） |
-| P23-7 | 嵌套 `loop(0..2) { loop(1..3) { … } }` | 4 轮；编译有 L22-4 warning |
-| P23-8 | 表达式位置的 `loop` 标识符、`loop:` 标签 | 与改动前 byte-identical |
+| fixture | 覆盖 |
+| --- | --- |
+| `102_loop_range_basic` | `loop(2..5)` 半开语义，与原生 `for` 并排对照 |
+| `103_loop_range_eval_once` | 两边界各求值一次、顺序先 `a` 后 `b`；循环体内改上界变量不改迭代数 |
+| `104_loop_range_empty` | `loop(5..2)`、`loop(3..3)`、`loop(a..b)` 全零次 |
+| `105_loop_range_control` | `break` / `continue` / 循环体内写 `i` |
+| `106_loop_range_nested` | 嵌套遮蔽，编译 warning + `ct check` 的 `loop_shadow` error |
+| `107_loop_range_closure_capture` | 双界下闭包捕获 `i`，每轮快照 |
+| `108_loop_range_contextual` | `int loop = 5;`、`goto loop;`、`loop:` 标签不受影响 |
+| `loop_range_own_drop` | `own` 在循环体尾每轮释放 |
 
-### 5.2 负例
+### 8.2 负例（`test/ast/errors/`）
 
-| 编号 | 用例 | 判据 |
-| --- | --- | --- |
-| N23-1 | `loop(..3) { … }` / `loop(2..) { … }` | 语法错误 L23-1 |
-| N23-2 | `loop(2.5..5) { … }` / `loop(2..5.5) { … }` | `ct check` 报 L23-2；普通构建只告警 |
-| N23-3 | 嵌套 `loop(a..b)` | `ct check` 非零退出（L22-4 升为 error） |
+`loop_range_missing_low`、`loop_range_missing_high`、`loop_range_chained`、
+`loop_range_pointer`、`loop_range_struct`、`loop_range_array`。
 
-### 5.3 golden 影响
+### 8.3 硬断言（`check-ast.sh` 的 Phase 23 块）
 
-- **预期现有 golden 变化数：0。** `loop` 仍只在语句位置 + 紧跟 `(` 时生效；`..` 只在 `loop` 参数内部被识别，不改变任何既有表达式的解析。
-- 新增正负例只新增 `test/ast/` 文件，不改既有 expected。
+- **归一化逐字节**：`loop(0..n)` 与 `loop(n)` 两个临时输入的生成 C，`tail -n +2` 后 `cmp` 相等
+  （首行 banner 含输入路径，必须剔除）。
+- **词法回归**：列位 pin `loop_range_chained.ct:3:14: error: unexpected token`；
+  既有 `41_case_range`（`case 1 ... 5`）继续 PASS。
+- **形态**：生成物含 `for (int i = (` 与 `), __ct_loop_n_`，不含 `i < (`。
+- **双模式**：嵌套 range loop 编译 warning + `ct check --diagnostics=json` 的
+  `"type":"loop_shadow"` / `"severity":"error"`、退出码 1。
 
-### 5.4 待实测假设
+### 8.4 H23-1 实测
 
-**H23-1：`loop(a..b)` 的两个边界临时量与 `i` 都不触发未使用告警。**
+**通过**：隐式 `i` 与两个边界临时量均不触发 `-Wall -Wextra` 告警
+（`check-warnings.sh` 全绿，`type mismatch` 只允许 `loop_count_type` 一条 pin）。
 
-- 与 Phase 22 的 H22-1 同源；`i` 未使用、边界只写一次都必须零告警。
-- 在实测完成前按**待验证**记录；若现状会告警，修复方向是豁免隐式计数与临时量，而不是要求用户使用。
+### 8.5 golden 影响
 
----
-
-## 6. 与其它阶段的依赖关系
-
-| 阶段 | 关系 | 说明 |
-| --- | --- | --- |
-| Phase 22（`loop(n)`） | **硬前置** | 复用 `N_LOOP`、`loop_ahead()`、隐式 `i`、L22-4；本相只扩展参数形态 |
-| Phase 20（包支持） | **无语义依赖** | 不改包解析、映射、`requires`、索引或命名空间 |
-| Phase 21（闭包） | **无语义依赖** | 本相不涉及闭包、逃逸或 `(fn, env)` ABI |
-| Phase 17/18/19 | 只读依赖 | 复用 `ct check` 严格化与诊断严重度策略 |
-| L0/L1/L2 | 不触碰 | 三个冻结层不新增语法；实现只落 `selfhost/ct-ast/**` |
-
-**合并次序**：三相共用 `Stmt.h.ct` / `Emitter.h.ct` / `Diag.h.ct`，语义无依赖，冲突只来自合并次序。
-Phase 23 必须在 Phase 22 之后合入（它修改同一段 `loop` 解析）。
-
-**自举纪律**：本相不要求编译器源码使用 `loop(a..b)`；编译器自身源码在 `v0.23.0` 前保持原生 `for`。
+功能本身对既有 golden **零变化**：`loop` 仍只在语句位置 + 紧跟 `(` 时生效；`..` 只在
+`loop` 参数内部被识别。收口 bump 到 `v0.23.0` 时，71 个 golden 仅版本 token 变化。
 
 ---
 
-## 7. 实现切点
+## 9. 实现切点（as built）
 
 | 切点 | 文件 | 内容 |
 | --- | --- | --- |
-| 23.1 识别 | `frontend/parse/Stmt.h.ct` | 在 `loop` 参数位置识别「`.` 紧跟 `.`」；无 peek，沿用保存 / 回退词法器状态 |
-| 23.2 AST | `frontend/parse/Stmt.h.ct` | `N_LOOP` 增加「单界 / 双界」两种形态；隐式 `i` 照旧 |
-| 23.3 发射 | `backend/emit/Emitter.h.ct` | 三临时量单行 `for`；逗号运算符保证先 `a` 后 `b`；不新增逐语句 `#line` |
-| 23.4 诊断 | `tool/diag/Diag.h.ct` + 解析器 | L23-1；L23-2 复用 kind 5；`ct check` 严格化 |
-| 23.5 测试 | `test/ast/` | §5 正负例；golden 增量 |
-| 23.6 文档 | `docs/language-spec.md`、`docs/tutorial.md` | 区间语义、求值顺序、与 `loop(n)` 的等式 |
+| 23.1 词法 | `frontend/lex/Lexer.h.ct` | 新增 `..` token（`...` 之后、`.5` 之前） |
+| 23.2 解析 | `frontend/parse/Stmt.h.ct` | 双界解析、字面量 0 归一、`N_NUM` 宏、`.b` 写入 |
+| 23.3 发射 | `backend/emit/Emitter.h.ct` | 删守卫，改两支单行 `for`；`ntmp` 单调分配 |
+| 23.4 诊断 | `frontend/parse/Stmt.h.ct` | L23-1 / L23-3 用 `ct_sem_error`；L23-2 复用 kind 5；未改 `Diag.h.ct` |
+| 23.5 测试 | `test/ast/**`、`selfhost/check-ast.sh` | §8 正负例与硬断言 |
+| 23.6 文档 | `docs/**` | 本文件 + language-spec / tutorial / glossary / roadmap 中英 |
+
+提交切片：**S1** 词法+解析，**S2** 发射，**S3** 测试与门禁，**S4** 文档，**S5** `v0.23.0` 版本收口（语料级）。
 
 ---
 
-## 8. 里程碑
+## 10. 依赖与风险
 
-| 里程碑 | 内容 | 出口 |
-| --- | --- | --- |
-| M23-A | 23.1 + 23.2 + 23.3 | P23-1/2/3/5 通过；生成物为单行 `for` |
-| M23-B | 23.4 | N23-1…N23-3 按预期诊断；L22-4 无变化 |
-| M23-C | 23.5 + H23-1 实测 | 正负例全绿；既有 golden 零变化 |
-| M23-D | 23.6 + 全门禁 | 11 道硬门禁 + fixpoint 全绿；收口 `v0.23.0` |
-
----
-
-## 9. 风险
-
-| 编号 | 风险 | 应对 |
-| --- | --- | --- |
-| R1 | `..` 与成员访问 `.` 混淆 | 只在 `loop` 参数内部识别「`.` `.`」；参数外仍是单 `.`，`a.b.c` 不受影响 |
-| R2 | 边界每轮重算或求值顺序不定 | 两个边界放进同一初始化表达式，逗号运算符保证「先 `a` 后 `b`」；P23-3 回归 |
-| R3 | `loop(1...5)` 被当成 `...` | `...` 已是独立 token；`..` 要求恰好两个 `.`，三连点按语法错误处理 |
-| R4 | 与 Phase 22 的 `loop(n)` 分派打架 | 共用入口，按 `)` 前是否出现 `..` 分派；P23-2 守住等式 |
-| R5 | 隐式 `i` / 临时量触发未使用告警 | H23-1 待实测；若触发则修诊断豁免 |
-| R6 | 边界为 `long` / 无符号时截断 | 临时量与 `i` 同为 `int`；文档写明范围；`ct check` 对可判定的非整数报 L23-2 |
+| 项 | 结论 |
+| --- | --- |
+| Phase 22 | **硬前置**：复用 `N_LOOP`、`loop_ahead()`、隐式 `i`、L22-4 |
+| Phase 20 / 21 | 无语义依赖；仅共用 parser / emitter 文件，注意合并次序 |
+| L0 / L1 / L2 | 不触碰；实现只落 `selfhost/ct-ast/**` |
+| R1 `..` 与成员访问 | 已消解：`..` 只在 `loop` 参数内部被解析消费；参数外仍是单 `.` |
+| R2 每轮重算边界 | 已消解：上界快照进 `__ct_loop_n_K`，§8.3 的 `! grep 'i < ('` 守住 |
+| R3 `loop(1...5)` | 三连点仍是 `...`，`loop` 参数里报 `unexpected token`（不进 L23-1 之外的路径） |
+| R4 与 `loop(n)` 分派打架 | 已消解：同一入口，按 `..` 是否出现分派；归一化后逐字节相等 |
+| R5 未使用告警 | H23-1 实测通过 |
+| R6 边界截断 | 保留为已发布语义（D7），文档写明 |
 
 ---
 
-## 10. 已定决策
+## 11. 规划稿中被推翻的假设
+
+| 原假设 | as-built |
+| --- | --- |
+| 「`..` 不是新 token，解析器识别 `.` 紧跟 `.` 即可」 | 错。旧词法把 `2..8` 切成 `NUM(2)` `.` `FNUM(.8)`，必须新增 token（§2） |
+| 展开形态用三个临时量与逗号运算符 | 改为两个初始化器：`int i = (a), __ct_loop_n_K = (b)`；C 保证声明符按序初始化，更短 |
+| 非整数边界一律 warning | 拆成两档：`float`/`double`/`void` 仍 warning；指针/数组/结构体/函数指针升为硬错（D8） |
+| 「既有 golden 零变化」 | 功能层面成立；版本收口时 71 个 golden 仅版本 token 变化 |
+| `loop(0..n)` 恒等价 `loop(n)` | 仅字面量 0 归一；`-0`、`0+0` 不归一（语义仍等价，只是发射形态不同） |
+
+---
+
+## 12. 已定决策
 
 | 编号 | 决策 |
 | --- | --- |
-| D23-1 | 形态固定为 `loop(a..b) { … }`，半开区间 `[a, b)` |
-| D23-2 | `loop(0..n)` 与 `loop(n)` 等价，二者共用同一语句入口 |
-| D23-3 | 两个边界各求值一次，顺序为先 `a` 后 `b` |
+| D23-1 | 新增 `..` 单词 token；分支置于 `...` 之后、`.5` 之前 |
+| D23-2 | 解析期把字面量 0 下界归一为单界形态；判定只看 `N_NUM && num == 0`，不看后缀 |
+| D23-3 | 两个边界各求值一次，顺序为先 `a` 后 `b`，由 `for` 声明的初始化顺序保证 |
 | D23-4 | `i` 仍是单一 `int`，从 `a` 起；作用域与可写性沿用 Phase 22 |
-| D23-5 | 嵌套遮蔽沿用 L22-4（编译 warning、`ct check` error），不新增规则 |
-| D23-6 | `b <= a` 零次迭代，不报错、不告警；非整数边界归 L23-2 |
-| D23-7 | 生成物为单行 `for`，**不新增**逐语句 `#line`（与 D22-7 同口径） |
-| D23-8 | 本相只规划，不改源码 / 测试 / golden / 版本号 |
+| D23-5 | 嵌套遮蔽沿用 L22-4（编译 warning、`ct check` error） |
+| D23-6 | `a >= b` 零次迭代，不诊断 |
+| D23-7 | 边界类型仍为 `int`；`size_t` / `long` 超 `INT_MAX` 的截断是已发布语义，本相不改 |
+| D23-8 | 指针 / 数组 / 结构体 / 联合体 / 函数指针边界改为硬错（breaking change）；`float` / `double` / `void` 保留 L22-5 warning |
+| D23-9 | 生成物为单行 `for`，`K` 由 `ntmp` 单调分配；不新增逐语句 `#line` |
 
 ---
 
 ## English
 
+### Status
+
+**Done** (2026-11-08; S1–S4 landed, closed at `v0.23.0`; D23-1–D23-9 final). This is the
+**as-built** record: it differs from the planning draft on lexing, normalisation and diagnostic
+severity, and the discarded assumptions are listed in "Superseded planning assumptions".
+
 ### Positioning
 
-`loop(a..b)` is the explicit-start form of Phase 22's `loop(n)`: it counts from `a` up to `b - 1`.
+`loop(a..b)` is the explicit-start form of Phase 22's `loop(n)`:
 
 ```text
 loop(a..b)  ≡  for (int i = a; i < b; i++) { … }
-loop(0..n)  ≡  loop(n)
+loop(0..n)  ≡  loop(n)          (only when the lower bound is the literal 0)
 ```
 
-The range is **half-open** `[a, b)`; `b <= a` iterates zero times. No reverse iteration, no step,
-no closed ranges. The acceptance test is the same as Phase 22: the lowered C must be equivalent to
-the hand-written `for`, only shorter.
+The range is **half-open** `[a, b)`; `a >= b` iterates zero times. No reverse iteration, no step,
+no closed ranges.
 
-### Out of scope
+### Lexing
 
-| Not done | One-line reason |
+`..` is a **new token** (`T_PUNCT`, text `".."`), tried **after** `...` and **before** `.5`.
+The order matters twice: `...` already owns the three-dot form (`case 1 ... 5` is unaffected), and
+the float branch would otherwise turn `2..8` into `NUM(2)` `.` `FNUM(.8)`, so `..` could never form.
+The number scanner is unchanged.
+
+### Parsing and normalisation
+
+`loop` stays a contextual keyword; the parameter is `expr` or `expr ".." expr`, and the body must be
+a block. The `N_LOOP` node keeps `.a` = count / lower bound, `.b` = upper bound (`-1` for the counted
+form), `.d` = body; `Stmt.h.ct` adds its own `#define N_NUM 8` because macros are per-unit.
+
+After parsing the second bound, a lower bound that is a literal zero is folded back to the counted
+form. The test is purely syntactic (`kind == N_NUM && num == 0`) and ignores the suffix:
+
+| Form | Folded? | Why |
+| --- | --- | --- |
+| `0..n`, `(0)..n`, `0L..n`, `0x0..n`, `0U..n` | yes | all are `N_NUM` with `num == 0` |
+| `-0..n` | no | a unary-minus node, not `N_NUM` |
+| `0+0..n` | no | an addition node; no constant folding |
+| `0.0..n` | no | a float is `N_FNUM` |
+
+Not folding is only a missed optimisation: `-0` and `0` behave identically at run time.
+
+### Semantics
+
+Both bounds are evaluated **exactly once**, `a` before `b`: they are the initialisers of one `for`
+declaration, and C initialises declarators in writing order. `i` is the same single writable `int`
+as Phase 22 (per-iteration snapshot when captured by a closure, no `own`, `break` / `continue` /
+`return` behave like a native loop). Nesting shadowing reuses L22-4: a compile warning and a
+`loop_shadow` (kind 7) error under `ct check`. `a >= b` iterates zero times without a diagnostic.
+
+### Bound types
+
+D23-7: bounds and `i` stay `int`; a `size_t` / `long` bound above `INT_MAX` is silently truncated,
+which is the published Phase 22 semantics and is not changed here.
+
+D23-8 is a deliberate **breaking change**: a pointer, array, struct/union value or function pointer
+bound is now `ct_sem_error` (`a loop bound must be an integer (got 'int *')` and variants), where
+Phase 22 compiled silently -- the array case (`loop(arr)`) in particular had no diagnostic at all.
+`float` / `double` / `void` keep the softer L22-5 rule (compile warning, `ct check` error) with the
+unchanged message, because `loop_count_type` pins it. Both bounds go through the same checks.
+
+### Emission
+
+One line per loop:
+
+```c
+for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++)
+for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
+```
+
+`K` comes from the monotonic `ntmp`, so nested loops get distinct names without a pre-scan or an
+extra scope. The output contains neither `loop` nor `..`, and no per-statement `#line` is added.
+
+### Diagnostics
+
+- L23-1: `a loop range needs both bounds` (syntax error).
+- L23-2: a statically non-integral `float` / `double` / `void` bound reuses the L22-5 message
+  (compile warning, `ct check` error).
+- L23-3: an address-shaped or aggregate bound is a hard error (`a loop bound must be an integer
+  (got …)`).
+- L22-4 and L22-5 keep their numbers and severities; `1..2..3` reports `unexpected token` at the
+  second `..` (column 14), which is how the lexer change is pinned.
+
+### Acceptance
+
+Positive fixtures `test/ast/102`–`108` plus `loop_range_own_drop`; negative fixtures
+`loop_range_{missing_low,missing_high,chained,pointer,struct,array}`. `check-ast.sh` pins the
+hard assertions: `loop(0..n)` and `loop(n)` produce identical output after `tail -n +2` (the first
+line names the input path); the column pin above; the lowering shape (`for (int i = (` and
+`), __ct_loop_n_`, never `i < (`); and both modes of the nested-shadowing diagnostic. `41_case_range`
+still passes. The feature changes **no** existing golden; the `v0.23.0` bump moves 71 goldens by
+the version token only. H23-1 measured green: no warnings from `i` or the bound temporaries.
+
+### Superseded planning assumptions
+
+| Planning claim | As built |
 | --- | --- |
-| `r = 2..8` as a standalone expression | no type inference; a `Range` target would need boxing, contradicting zero cost |
-| `int a[] = 2..8` compile-time expansion | needs an arbitrary cap and new diagnostics for little value |
-| step / reverse variants | write a native `for` when you need a step |
-| `Range` trait + `each` | hard dependency on Phase 21 closures; conflicts with "no generics / zero cost" |
-| half-open `loop(..b)` / `loop(a..)` | both bounds are required |
-
-### Syntax and semantics
-
-- `loop` stays a contextual keyword; the parameter is either `expr` (Phase 22) or `expr ".." expr`.
-- `..` is not a new token: the lexer already keeps `2..8` from becoming a float, and `...` is a
-  single token. The parser only recognises `.` followed by `.` inside the `loop` parameter list.
-- Both bounds are evaluated **exactly once**, `a` before `b`. The emitter puts them in one initializer
-  expression so the comma operator, not declarator order, guarantees the sequence.
-- `i` is the same single writable `int` as Phase 22, now starting at `a`; scope, shadowing and the
-  warning / `ct check` error split are unchanged.
-- `b <= a` iterates zero times without a diagnostic; a statically non-integral bound is a compile
-  warning and a `ct check` error.
-
-### Diagnostics and acceptance
-
-- L23-1: a range with a missing bound is a syntax error.
-- L23-2: a non-integral bound reuses the L22-5 severity (warning in compile mode, error under `ct check`).
-- Existing goldens are expected to change by **0**; new fixtures add new files only.
-- Open hypothesis H23-1: the two bound temporaries and an unused `i` must produce zero warnings.
-
-### Dependencies
-
-Phase 22 is a **hard prerequisite** (same `N_LOOP`, `loop_ahead()`, implicit `i`, L22-4). Phase 20
-and Phase 21 have **no semantic dependency**; all share the parser / emitter / diagnostics files, so
-only merge order couples them. L0/L1/L2 stay frozen; the implementation lands in `selfhost/ct-ast/**`
-and closes at `v0.23.0`.
+| "`..` is not a new token; the parser just sees two dots" | wrong: `2..8` used to lex as `NUM(2)` `.` `FNUM(.8)`, so a token was required |
+| three temporaries joined by the comma operator | two declarator initialisers, shorter and still ordered by C |
+| every non-integer bound only warns | split: `float`/`double`/`void` warn; pointers / arrays / structs / function pointers are hard errors |
+| "existing goldens change by 0" | true for the feature; the release bump moves 71 goldens by the version token |
+| `loop(0..n)` always equals `loop(n)` | only a literal zero is folded; `-0` and `0+0` stay ranges (same semantics) |
