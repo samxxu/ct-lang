@@ -246,6 +246,70 @@ else
 fi
 
 echo
+echo "== the compiler's own sources use no closure literals (21.7) =="
+# Phase 21 S7 / M21-E2: until `v0.21.0` ships, `selfhost/**` source may *mention*
+# the arrow token in comments or string literals (the lexer and parser have to),
+# but it must not *use* it as a closure literal: L2 does not know the syntax and
+# the bootstrap chain would stop building. Comments and string / character
+# literals are stripped before counting, so a real use is the only thing that
+# trips this. The test fixtures under `selfhost/check-semantics.sh` are inputs,
+# not compiler source, and are not scanned here.
+if [ -n "$(git tag -l v0.21.0 2>/dev/null)" ]; then
+    ok "closure syntax in selfhost/** (allowed: v0.21.0 is tagged)"
+elif ! cl_bad="$(python3 - selfhost <<'PY'
+import os, sys
+
+def strip(src):
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            out.append(" ")
+        elif c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i + 2)
+            i = n if j < 0 else j
+            out.append(" ")
+        elif c in "\"'":
+            q = c
+            i += 1
+            while i < n:
+                if src[i] == "\\":
+                    i += 2
+                    continue
+                if src[i] == q:
+                    i += 1
+                    break
+                i += 1
+            out.append(" ")
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+hits = []
+for base, dirs, names in os.walk(sys.argv[1]):
+    dirs.sort()
+    for name in sorted(names):
+        if not name.endswith((".ct", ".c", ".h")):
+            continue
+        path = os.path.join(base, name)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            if "=>" in strip(fh.read()):
+                hits.append(path)
+print(" ".join(hits))
+PY
+)"; then
+    bad "self-host guard" "python3 could not scan selfhost/**"
+elif [ -z "$cl_bad" ]; then
+    ok "no closure literal in selfhost/** (the bootstrap uses pre-v0.21.0 syntax)"
+else
+    bad "self-host guard" "closure literal in: $cl_bad"
+fi
+
+echo
 echo "== build the bootstrap chain and the AST compiler =="
 if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
     echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
