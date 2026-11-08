@@ -617,6 +617,46 @@ ct build closure.ct -o closure && ./closure
   （ct-pkg 的 `Callable` 签名族随该仓发布，本仓未内置）。
 - 更完整的语法、限制清单与 `(fn, env)` 约定见 [language-spec §4.44](language-spec.md)。
 
+### 10.2 `loop(n)`：只数次数
+
+只要「跑 n 次」时，不用再写 `for (int i = 0; i < n; i++)`：`loop(n) { … }` 展开成完全等价的原生
+`for`，隐式计数器就叫 `i`，从 0 数起。
+
+```c
+/* loop.ct */
+#include <stdio.h>
+
+int main(void)
+{
+    int sum = 0;
+
+    loop(4) {
+        sum = sum + i;
+        printf("%d\n", i);
+    }
+    loop(0) {
+        printf("never\n");      /* 0 次，不报错 */
+    }
+    printf("sum %d\n", sum);
+    return 0;
+}
+```
+
+```sh
+ct build loop.ct -o loop && ./loop
+# 0 1 2 3，最后一行 sum 6
+```
+
+- **计数只求值一次**：`loop(n)` 把 `n` 存进私有临时量，条件读临时量；`loop(next())` 只调用一次 `next`。
+- **`i` 就是普通的 `int`**：体内可以读、可以改（`i = i + 1` / `i++`），`break` / `continue` / `return`
+  与手写 `for` 一致；体内声明的 `own` 变量在每轮出口释放。
+- **循环体必须是块**：`loop(3) printf("x");` 会被拒绝，写成 `loop(3) { printf("x"); }`。
+- **遮蔽只提醒 `loop` 套 `loop`**：内层 `loop` 的 `i` 会遮蔽外层时给一条 warning（`ct check` 下是
+  错误）；体内手写 `int i` 或原生 `for` 不报。
+- **`loop` 仍是普通标识符**：`int loop = 3;`、`loop:` 标签、`goto loop;` 都不受影响，只有语句位置
+  紧跟 `(` 时才当语法糖。
+- 细节与诊断文案见 [language-spec §4.45](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -1306,6 +1346,48 @@ ct build closure.ct -o closure && ./closure
   that repository and is not built in here).
 - Full syntax, the limitation list and the `(fn, env)` convention are in
   [language-spec §4.44](language-spec.md).
+
+### 10.2 `loop(n)`: just the count
+
+When all you need is "run this n times", skip `for (int i = 0; i < n; i++)`: `loop(n) { … }` expands
+to exactly that native `for`, with an implicit counter named `i` starting at 0.
+
+```c
+/* loop.ct */
+#include <stdio.h>
+
+int main(void)
+{
+    int sum = 0;
+
+    loop(4) {
+        sum = sum + i;
+        printf("%d\n", i);
+    }
+    loop(0) {
+        printf("never\n");      /* zero rounds, no diagnostic */
+    }
+    printf("sum %d\n", sum);
+    return 0;
+}
+```
+
+```sh
+ct build loop.ct -o loop && ./loop
+# 0 1 2 3, then sum 6
+```
+
+- **The count is evaluated once**: `loop(n)` stores `n` in a private temporary and the test reads it,
+  so `loop(next())` calls `next` a single time.
+- **`i` is a plain `int`**: the body may read and write it (`i = i + 1`, `i++`), and `break` /
+  `continue` / `return` behave as in a hand-written `for`; an `own` declared in the body is released
+  at each round's exit.
+- **The body must be a block**: `loop(3) printf("x");` is rejected; write `loop(3) { printf("x"); }`.
+- **Only loop-in-loop shadowing is flagged**: an inner `loop` that hides the outer `i` warns (an
+  error under `ct check`); a hand-written `int i` or a native `for` in the body stays silent.
+- **`loop` stays an ordinary identifier**: `int loop = 3;`, a `loop:` label and `goto loop;` are
+  unaffected; only statement position followed by `(` triggers the shorthand.
+- Details and the diagnostic texts are in [language-spec §4.45](language-spec.md).
 
 ### 11. CLI cheat sheet
 

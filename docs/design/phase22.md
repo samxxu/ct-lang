@@ -2,8 +2,10 @@
 
 > 中文 · [English](#english)
 >
-> **状态：规划中**（2026-11-08 推进到可执行粒度；只做设计与文档，不含实现）。语义口径沿用 2026-11-07 的定稿；
-> 本轮按 HEAD 实测修正 4 处事实错误、补齐 S0–S7 切片、探针编号与诊断契约。
+> **状态：完成**（`v0.22.0`；2026-11-08 实现 S0–S7，S1/S2/S3/S4 各自独立提交）。语义口径沿用 2026-11-07 的定稿；
+> 本轮按 HEAD 实测修正 4 处事实错误、补齐 S0–S7 切片、探针编号与诊断契约；
+> 落地时又按代码现实修正 3 处：`loop_depth` 挂 `struct Stmt`（不是 `Parser`）、计数走 `emit_expr`
+> （`emit_inline` 只吃语句形状节点）、`check-warnings.sh` 增加 `loop_count_type` 唯一固定例外。
 > **版本口径：Phase 22 ↔ `v0.22.x`，收口 bump 到 `v0.22.0`。** 本文不写「当前版本」快照
 > （DOC-63：钉死的版本号会在下一次 bump 后过期）。
 > 前置：Phase 21 已收口；本相与 Phase 20 / 21 **无语义依赖**，仅共用 parser / emitter / diag 文件。
@@ -199,8 +201,8 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 函数里已有 `int i`、或外层是原生 `for (int i = …)`，都**不报**——那与原生 `for` 行为一致，
 不属于本相要管的「隐式名字撞隐式名字」。
 
-实现：`Parser` 增加 `int loop_depth`；进入 `parse_loop` 的 body 前自增、退出后自减；
-遮蔽判定发生在自增**之前**。
+实现：`struct Stmt` 增加 `int loop_depth`（解析态由 `Stmt` 持有，`Parser` 不增字段）；进入
+`parse_loop` 的 body 前自增、退出后自减；遮蔽判定发生在自增**之前**。
 
 诊断只针对内层 loop 的 `loop` 关键字位置（行、列），文案与通道见 §4。
 
@@ -308,10 +310,10 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 | 切片 | 文件 | 改什么 | 完成判据 | 对应测试 |
 | --- | --- | --- | --- | --- |
 | **S0 基线** | 无代码 | 重跑 §2.2 语料扫描；确认 `N_LOOP = 60` 未被占用；记录 `bash selfhost/check-all.sh` 与 `git diff --stat test/cases` 的基线；确认 `test/ast` 现有最大编号 91 | 扫描 0 处 `loop(` 语句调用（或先改调用方）；基线全绿；编号 92 起可用 | 无（记录进本文 §2.2） |
-| **S1 解析 / AST / 作用域** | `frontend/parse/Stmt.h.ct`、`frontend/parse/Parser.h.ct` | `#define N_LOOP 60`；`Parser` 增 `int loop_depth`；`ParseOps` 声明 `int loop_ahead(void); int parse_loop(void);`；`parse_stmt` 在 `label_ahead()` 前分派；`parse_loop`：`expect("(")` → 空则 L22-1 → 解析计数（禁逗号）→ `,` 则 L22-3 → `expect(")")` → 非 `{` 则 L22-2 → `push_scope` → `declare_var("i", "int")` → 遮蔽判定（`loop_depth > 0`）→ `loop_depth++` → `parse_block` → 回退 | 92/94/95/96/97/100/101 编译并运行通过；`log:`/`loop:` 标签与表达式位置的 `loop` 行为不变；**不改** `Expr` / `Memory`（body 走 `parse_block`，闭包走泛化递归） | 92–101 的编译面；`test/ast/32_goto` 逐字节不变 |
-| **S2 发射** | `backend/emit/Emitter.h.ct` | `#define N_LOOP 60`；`emit_node` 增 `N_LOOP` 分支：`for (int i = 0, __ct_loop_n_%d = (` + `emit_inline(a)` + `); i < __ct_loop_n_%d; i++) ` + `emit_node(d)`，`K = self->ntmp++`；`b != -1` 视为内部错误 | 生成物恰为一行 `for (int i = 0, __ct_loop_n_K = (N); i < K; i++) {…}`；92/93/94/95/96/97/101 输出与等价原生 `for` 逐字节一致；既有 golden 0 变化 | 92–97、101；生成物 grep 断言（§6.3） |
+| **S1 解析 / AST / 作用域** | `frontend/parse/Stmt.h.ct` | `#define N_LOOP 60`；`struct Stmt` 增 `int loop_depth`；`StmtOps` 声明 `int loop_ahead(void); int parse_loop(void);`；`parse_stmt` 在 `label_ahead()` 前分派；`parse_loop`：`expect("(")` → 空则 L22-1 → 解析计数（禁逗号）→ `,` 则 L22-3 → `expect(")")` → 非 `{` 则 L22-2 → `push_scope` → `declare_var("i", "int")` → 遮蔽判定（`loop_depth > 0`）→ `loop_depth++` → `parse_block` → 回退 | 92/94/95/96/97/100/101 编译并运行通过；`log:`/`loop:` 标签与表达式位置的 `loop` 行为不变；**不改** `Parser` / `Expr` / `Memory`（body 走 `parse_block`，闭包走泛化递归） | 92–101 的编译面；`test/ast/32_goto` 逐字节不变 |
+| **S2 发射** | `backend/emit/Emitter.h.ct` | `#define N_LOOP 60`；`emit_node` 增 `N_LOOP` 分支：`for (int i = 0, __ct_loop_n_%d = (` + `emit_expr(a)` + `); i < __ct_loop_n_%d; i++) ` + `emit_node(d)`，`K = self->ntmp++`；`b != -1` 视为内部错误。计数是裸表达式节点，必须走 `emit_expr`（`emit_inline` 只接受语句形状节点） | 生成物恰为一行 `for (int i = 0, __ct_loop_n_K = (N); i < K; i++) {…}`；92/93/94/95/96/97/101 输出与等价原生 `for` 逐字节一致；既有 golden 0 变化 | 92–97、101；生成物 grep 断言（§6.3） |
 | **S3 诊断** | `tool/diag/Diag.h.ct`、`frontend/parse/Stmt.h.ct` | `record_loop_warn` + `pub ct_loop_warn(line, col, msg, path)`（kind 7）；`emit` 的文本分支与 JSON 分支；`parse_loop` 调 `ct_loop_warn`；L22-5 调 `ct_type_warn(..., "loop", ...)`；三条语法错误调 `ct_sem_error` | 编译模式：97 出 1 条 `warning:`、退出 0；`ct check`：97 出 `error:` 带列、退出 1；float 计数同形；JSON 里 `type:"loop_shadow"`、`severity` 仅 strict；kind 0–6 输出不变 | 97、`loop_count_type`；errors 三条语法负例 |
-| **S4 测试** | `test/ast/**`、`selfhost/check-ast.sh` | 新增 92–101 正例目录（`prog.ct` + `prog.expected.out`）；新增 4 个 `errors/*.ct`；`check-ast.sh` 增加：三条语法错误的钉文案、97 与 float 计数的双模式断言、生成物 `for (int i = 0, __ct_loop_n_` 断言、`test/cases` 零变化断言 | 全部新探针绿；既有探针与 25 组 baseline 零变化；`bash selfhost/check-ast.sh` 绿 | 见 §6 |
+| **S4 测试** | `test/ast/**`、`selfhost/check-ast.sh`、`selfhost/check-warnings.sh` | 新增 92–101 正例目录（`prog.ct` + `prog.expected.out`）、`loop_count_type`、`loop_own_drop`；新增 4 个 `errors/*.ct`；`check-ast.sh` 增加：三条语法错误的钉文案、闭包逃逸文案、97 与 float 计数的双模式断言、生成物 `for (int i = 0, __ct_loop_n_` 且不含 `i < (` 的形态断言；`check-warnings.sh` 允许且仅允许 `loop_count_type.err` 一条 `type mismatch` 记录 | 全部新探针绿；既有探针零变化（golden 由 L0-seed 段与 S0 基线记录覆盖，ct-ast 自身格式与 L0 golden 本就不同，不做逐字节比对）；`bash selfhost/check-ast.sh`、`bash selfhost/check-warnings.sh` 均绿 | 见 §6 |
 | **S5 文档** | `docs/language-spec.md`、`docs/tutorial.md`、（必要时）`docs/glossary.md` | 在 `for` 语句之后新增 `loop` 小节：形态、展开、计数求值一次、`i` 语义、遮蔽策略、边界；中英对称；教程给一个可运行例子 | `python3 test/docs/check-docs.py` OK；中英小节一一对应；链接有效 | check-docs |
 | **S6 自举与门禁** | 无代码（除非门禁红） | 跑 `bash selfhost/check-all.sh`（11 道）与 fixpoint；确认编译器源码仍不使用 `loop`（自举纪律，`v0.22.0` tag 前） | 11 道硬门禁 + fixpoint 全绿；生成物 `-Wall -Wextra` 零告警 | check-all / fixpoint / check-warnings |
 | **S7 收口** | `CTC_VERSION` 五处、`test/cases` 版本 token、`docs/roadmap.md` | bump `v0.22.0`；25 组 baseline 仅版本 token 变化；roadmap Phase 22 行改为已完成并写清 S0–S7 | 五处一致；golden 仅 token 变化；roadmap 与本文状态一致；tag 由用户确认后打 | 全门禁 |
@@ -398,15 +400,15 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 
 ---
 
-## 8. 与已发布文档的冲突（只列出，本相不改）
+## 8. 与已发布文档的冲突（规划时记录；S5/S7 已按下表处置）
 
 | # | 文档 | 冲突 | 建议 |
 | --- | --- | --- | --- |
-| 1 | [roadmap.md](../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | S7 收口时改为「D22-1–D22-12 已定稿；H22-1 已由现状结案」，并同步出口判据 |
+| 1 | [roadmap.md](../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | ✅ 已改：S7 改为「D22-1–D22-12 已定稿、S1–S4 独立提交」，出口判据同步 |
 | 2 | [phase23.md](phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | Phase 23 细化时按本文 §3.7 更正 |
-| 3 | [phase23.md](phase23.md) 头部 | 「当前 `v0.19.1`」过期 | Phase 23 细化时删掉版本快照（DOC-63） |
-| 4 | 本文件旧 §3.1 | 「`K` 每函数内单调」与 `ntmp` 的进程级语义不符 | 本文已更正（§3.9） |
-| 5 | [language-spec.md](../language-spec.md) | 尚无 `loop` 小节（不是冲突，是缺口） | S5 补 |
+| 3 | [phase23.md](phase23.md) 头部 | 「当前 `v0.19.1`」过期 | ✅ 已改：S5 删掉版本快照并写明前置 `v0.22.0`（DOC-63） |
+| 4 | 本文件旧 §3.1 | 「`K` 每函数内单调」与 `ntmp` 的进程级语义不符 | ✅ 本文已更正（§3.9） |
+| 5 | [language-spec.md](../language-spec.md) | 尚无 `loop` 小节（不是冲突，是缺口） | ✅ S5 已补 §4.45（中英对称）与 tutorial §10.2 |
 
 ---
 

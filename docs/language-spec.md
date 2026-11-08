@@ -1748,6 +1748,33 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
   字段 / 元素、闭包变量只能调用不能搬走、`qsort` 类无 env 槽的 C API 接不了；另有 E8 / E9
   两个未防护面。见 §4.44 与 [closure-conventions.md](closure-conventions.md)。
 
+#### 4.45 `loop(n)` 计数循环（Phase 22，仅 ct-ast）
+
+`loop(<count>) { … }` 是原生 `for` 的语法糖，展开恰好是：
+
+```c
+for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
+```
+
+- **`loop` 是上下文关键字**（D22-4）：它不进关键字表，只有语句位置、且紧跟 `(` 时才特殊。
+  `int loop = 3;`、`loop:` 标签、`goto loop;`、`x = loop + 1;` 仍是普通标识符。
+- **计数只求值一次**：表达式绑定到私有临时量 `__ct_loop_n_K`（`K` 是发射器进程级单调的计数器），
+  条件读该临时量，不会重复求值。`loop(0)` 与 `loop(-2)` 都零次迭代，不报错。
+- **隐式计数器是 `int i`**：`loop` 体自成一个作用域，`i` 在解析期进入符号表，所以名字解析、
+  闭包按值捕获（每轮一个快照）与遮蔽判定都和手写 `for` 一致。体内可以 `break` / `continue`、
+  读或写 `i`、`i++`；体内声明的 `own` 变量在每轮出口释放。
+- **边界是硬错误**：`loop()` 报 `loop needs a count expression`；`loop(3) printf("x");` 报
+  `loop body must be a block`；`loop(3, x)` 报
+  `loop takes exactly one count; use a native for to name the counter`。
+- **遮蔽只判 `loop` 套 `loop`**（D22-5）：内层 `loop` 遮蔽外层隐式 `i` 时，编译模式打印
+  `warning: loop shadows the outer 'i'; use a native for to name the inner counter`，
+  `ct check` 下记为 `loop_shadow` 错误。体内手写 `int i` 或原生 `for` 是普通 C 遮蔽，不诊断。
+- **静态可判定的非整数计数**按实参类型规则（kind 5）告警：编译模式
+  `warning: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int`，
+  `ct check` 下为错误；仍然按 C 规则转成 `int` 运行。类型判不准时保持沉默。
+- 生成物是**单行** `for`，不新增逐语句 `#line`，因此生成行号与源行号不保证逐行对齐。
+- 双界形式 `loop(a..b)` 属 Phase 23；本相只冻结 AST 布局（`b == -1` 是单界哨兵）。
+
 ### 7. 容量上限
 
 > 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 131072、
@@ -3813,6 +3840,42 @@ pick the first occurrence and leave the later definition unreachable.
   they cannot enter a `.h.ct`, cannot be a return value / field / element, a closure variable can be
   called but not moved, and `qsort`-style C APIs with no env slot cannot take one. The E8 / E9 holes
   are also unguarded. See §4.44 and [closure-conventions.md](closure-conventions.md).
+
+#### 4.45 `loop(n)`, the counted loop (Phase 22, ct-ast only)
+
+`loop(<count>) { … }` is sugar for a native `for`, expanded exactly as:
+
+```c
+for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++) { … }
+```
+
+- **`loop` is a contextual keyword** (D22-4): it is absent from the keyword table and is only
+  special in statement position when `(` follows. `int loop = 3;`, a `loop:` label, `goto loop;`
+  and `x = loop + 1;` all keep the ordinary identifier meaning.
+- **The count is evaluated once**: the expression is bound to the private temporary
+  `__ct_loop_n_K` (`K` is the emitter's process-global counter), and the test reads that temporary.
+  `loop(0)` and `loop(-2)` iterate zero times and report nothing.
+- **The implicit counter is `int i`**: the body is its own scope and `i` enters the symbol table
+  at parse time, so name resolution, per-iteration closure capture and shadowing behave exactly as
+  in a hand-written `for`. The body may `break` / `continue`, read or write `i`, `i++`; an `own`
+  declared in the body is released at each round's exit.
+- **The edges are hard errors**: `loop()` reports `loop needs a count expression`;
+  `loop(3) printf("x");` reports `loop body must be a block`; `loop(3, x)` reports
+  `loop takes exactly one count; use a native for to name the counter`.
+- **Only loop-in-loop shadowing is diagnosed** (D22-5): an inner `loop` shadowing the outer
+  implicit `i` prints
+  `warning: loop shadows the outer 'i'; use a native for to name the inner counter` in compile mode
+  and becomes a `loop_shadow` error under `ct check`. A hand-written `int i` or a native `for` in
+  the body is ordinary C shadowing and stays silent.
+- **A statically known non-integer count** warns under the argument-type rule (kind 5): compile mode
+  prints
+  `warning: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int`,
+  and `ct check` raises it to an error; the value is still converted to `int` and runs. An
+  unclassifiable type stays silent.
+- The output is a **single-line** `for` with no per-statement `#line`, so generated lines are not
+  guaranteed to line up with the source.
+- The two-bound form `loop(a..b)` belongs to Phase 23; this phase only freezes the AST layout
+  (`b == -1` is the single-bound sentinel).
 
 ### 7. Capacity limits
 
