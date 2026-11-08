@@ -2173,11 +2173,17 @@ impl ExprOps for Expr {
                                     char msg[MAX_TEXT];
                                     hm = self->sup->ty->maps;
                                     hn = *self->sup->ty->nmaps;
-                                    tnorm(rt2, rk, sizeof rk);
+                                    /* the same host key the emitter and the
+                                       type pass compare with: `tnorm` only
+                                       drops qualifiers, so `unsigned` and
+                                       `unsigned int` would miss each other
+                                       here while the recipe still expands,
+                                       dropping a surplus actual in silence */
+                                    frontend::type::type_key(rt2, rk, sizeof rk);
                                     for (mi2 = 0; mi2 < hn; mi2++) {
                                         if (!hm[mi2].is_static
                                             || !hm[mi2].type_host) continue;
-                                        tnorm(hm[mi2].host_type, tk, sizeof tk);
+                                        frontend::type::type_key(hm[mi2].host_type, tk, sizeof tk);
                                         if (strcmp(tk, rk) != 0) continue;
                                         for (bi2 = 0; bi2 < hm[mi2].nb; bi2++) {
                                             int want2, tail2;

@@ -789,6 +789,91 @@ else
     bad "p20_type_host_arity_more" "$(cat "$work/mhtm.err" 2>/dev/null | head -5)"
 fi
 
+# P20-03 regression: the arity pre-check must fold integer aliases exactly as
+# the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
+# spelling and the consumer's receiver spelling name the same integer type but
+# differ by an alias fold (`unsigned` / `unsigned int`, `long` / `long int`,
+# `signed long` / `long`, ...), or one side is a `pub type` synonym. `tnorm`
+# used to skip the fold, so the recipe still expanded while the pre-check saw
+# no host and a surplus actual was dropped with no diagnostic at all.
+ha_cases=(
+    'unsigned|unsigned int|'
+    'unsigned int|unsigned|'
+    'signed|int|'
+    'signed int|int|'
+    'long|long int|'
+    'long int|long|'
+    'unsigned long|unsigned long int|'
+    'unsigned long int|unsigned long|'
+    'long long|long long int|'
+    'long long int|long long|'
+    'unsigned long long|unsigned long long int|'
+    'unsigned long long int|unsigned long long|'
+    'short|short int|'
+    'short int|short|'
+    'unsigned short|unsigned short int|'
+    'unsigned short int|unsigned short|'
+    'signed short|short|'
+    'signed long|long|'
+    'signed long long|long long|'
+    'MyU|unsigned int|pub type MyU = unsigned;'
+    'unsigned|MyU|pub type MyU = unsigned;'
+    'MyL|long int|pub type MyL = long;'
+)
+ha_i=0
+for ha in "${ha_cases[@]}"; do
+    ha_i=$((ha_i + 1))
+    ha_host="${ha%%|*}"
+    ha_rest="${ha#*|}"
+    ha_recv="${ha_rest%%|*}"
+    ha_decl="${ha_rest#*|}"
+    ha="$work/ha$ha_i"
+    rm -rf "$ha"
+    mkdir -p "$ha/mout" "$ha/fout"
+    {
+        if [ -n "$ha_decl" ]; then printf '%s\n\n' "$ha_decl"; fi
+        printf 'pub trait Num {\n    long long plus(int d);\n}\n\n'
+        printf 'map trait Num for type %s {\n    plus(v, d) -> ct_add(v, d);\n}\n' "$ha_host"
+    } >"$ha/num.m.ct"
+    printf 'static inline long long ct_add(long long v, int d) { return v + d; }\n' >"$ha/num.shim.h"
+    printf 'import num;\nint main(void) { %s x = 1; return (int)x.plus(2, 3); }\n' \
+        "$ha_recv" >"$ha/more.ct"
+    printf 'import num;\nint main(void) { %s x = 1; return (int)x.plus(); }\n' \
+        "$ha_recv" >"$ha/few.ct"
+    if "$work/ct-ast" build --emit-c -I "$ha" "$ha/more.ct" -o "$ha/mout" \
+            >"$ha/more.out" 2>"$ha/more.err" \
+       && grep -qF "warning: arity mismatch: 'plus' takes 1 argument(s), 2 given" "$ha/more.err"; then
+        ok "p20_host_arity_int_more[$ha_i $ha_host/$ha_recv]"
+    else
+        bad "p20_host_arity_int_more[$ha_i $ha_host/$ha_recv]" "$(head -3 "$ha/more.err")"
+    fi
+    if "$work/ct-ast" build --emit-c -I "$ha" "$ha/few.ct" -o "$ha/fout" \
+            >"$ha/few.out" 2>"$ha/few.err"; then
+        bad "p20_host_arity_int_few[$ha_i $ha_host/$ha_recv]" "expected a non-zero exit"
+    elif grep -qF "a map call has fewer arguments than its binding" "$ha/few.err"; then
+        ok "p20_host_arity_int_few[$ha_i $ha_host/$ha_recv]"
+    else
+        bad "p20_host_arity_int_few[$ha_i $ha_host/$ha_recv]" "$(head -3 "$ha/few.err")"
+    fi
+done
+
+# The exact spelling still binds and runs, so the fold widened the pre-check
+# rather than breaking the recipe.
+rm -rf "$work/haok"
+mkdir -p "$work/haok/out"
+printf 'pub trait Num {\n    long long plus(int d);\n}\n\nmap trait Num for type unsigned {\n    plus(v, d) -> ct_add(v, d);\n}\n' >"$work/haok/num.m.ct"
+printf 'static inline long long ct_add(long long v, int d) { return v + d; }\n' >"$work/haok/num.shim.h"
+printf 'import num;\n#include <stdio.h>\nint main(void) { unsigned x = 1; printf("%%lld\\n", x.plus(2)); return 0; }\n' >"$work/haok/main.ct"
+if "$work/ct-ast" build --emit-c -I "$work/haok" "$work/haok/main.ct" -o "$work/haok/out" \
+        >"$work/haok.out" 2>"$work/haok.err" \
+   && ! grep -qF "arity mismatch" "$work/haok.err" \
+   && "$CC" -Wall -Wextra -std=c99 -I "$work/haok" "$work/haok/out"/*.c -o "$work/haok.bin" 2>"$work/haok.cc" \
+   && [ "$("$work/haok.bin")" = "3" ]; then
+    ok "p20_host_arity_int_exact (same spelling binds and runs)"
+else
+    bad "p20_host_arity_int_exact" "$(cat "$work/haok.err" "$work/haok.cc" 2>/dev/null | head -5)"
+fi
+
 # P20-06: `namespace = app` in a package's ct.pkg claims the first import
 # segment, so `import app::model::Item` names model/Item.h.ct at the root; the
 # doubled `app/legacy/Thing.h.ct` layout keeps resolving as the fallback.

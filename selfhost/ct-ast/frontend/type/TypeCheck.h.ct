@@ -76,10 +76,12 @@ pub struct TypeCheck {
    whitespace character dropped, the `const` / `volatile` keywords dropped, and
    the integer aliases folded (`unsigned` == `unsigned int`, `long` ==
    `long int`, ...). The key is lossy by design -- it is only ever compared,
-   never emitted, so `const char *` and `char *` are one host. The emitter
-   keeps the same table in `map_type_key`; the two files cannot share a
-   macro, so they must be changed together. */
-static void type_key(const char *in, char *out)
+   never emitted, so `const char *` and `char *` are one host.
+   This is `pub` because it is the one host key: the type pass here, the
+   parser's arity pre-check and the emitter all compare with it, so no spelling
+   can be matched for emission and missed for the arity diagnostic. */
+pub void type_key(const char *in, char *out, int cap);
+void type_key(const char *in, char *out, int cap)
 {
     char raw[MAX_TEXT];
     char w[MAX_TEXT];
@@ -125,7 +127,7 @@ static void type_key(const char *in, char *out)
             snprintf(raw, sizeof raw, "%s", "unsignedshort");
         }
     }
-    snprintf(out, MAX_TEXT, "%s", raw);
+    snprintf(out, (size_t)cap, "%s", raw);
 }
 
 pub struct TypeCheck *type_get(void);
@@ -280,13 +282,13 @@ impl TypeOps for TypeCheck {
                 int i, j;
                 snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
                 if (!rt[0]) return -1;
-                type_key(rt, rk);
+                type_key(rt, rk, MAX_TEXT);
                 for (i = 0; i < (*self->nmaps); i++) {
                     if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
                     if (self->arena->nodes[n].text3[0]
                         && strcmp(self->maps[i].trait, self->arena->nodes[n].text3) != 0)
                         continue;
-                    type_key(self->maps[i].host_type, tk);
+                    type_key(self->maps[i].host_type, tk, MAX_TEXT);
                     if (strcmp(tk, rk) != 0) continue;
                     for (j = 0; j < self->maps[i].nb; j++)
                         if (strcmp(self->maps[i].b[j].method, self->arena->nodes[n].text2) == 0) {
