@@ -1643,6 +1643,8 @@ int apply(int base) {
   `the address of a captured variable cannot be taken inside a closure`。
 - 捕获 `own` / `borrow` 变量报 `a closure cannot capture '<name>' (it is 'own' or 'borrow')`；
   捕获另一个闭包变量报 `a closure cannot capture another closure`。
+- 捕获数组报 `a closure cannot capture the array '<name>' (capture a pointer to it instead)`：
+  C 的数组没有值语义，env 里的一次赋值无法完成拷贝。
 - 嵌套闭包：内层从外层 env 字段读值再拷贝，不建立 env 之间的指针链。
 
 **闭包变量是绑定，不是值**（D21-13 / D21-16）：
@@ -1655,6 +1657,8 @@ int apply(int base) {
   位置报 `a closure argument must fill a '(fn, env)' parameter pair`，参数表不匹配报
   `this closure's parameter N is '…', but the expected type is '…'`。
 - 闭包变量只能声明在函数体内；`.h.ct` 里的函数指针只是普通函数指针，不承载闭包绑定。
+  全局（含 `.h.ct` 的 `pub` 全局）的初始值不能是闭包字面量，报
+  `a closure cannot be stored in '<name>' (its scope outlives the closure)`。
 
 **ABI 与生成物**：`(fn, env)` 两词，`env` 是第一个参数，与档① `impl` 的 `(void *self, …)` 同形
 （D21-4）。生成物 `__ct_cl_env_<N>` / `static __ct_cl_tramp_<N>` / `__ct_cl_env_v_<N>` 发在本单元
@@ -1665,7 +1669,8 @@ int apply(int base) {
 
 | 限制 | 表现 |
 | --- | --- |
-| 不能进 `.h.ct` | 头文件里只有普通函数指针；闭包变量只在函数体内声明 |
+| 不能进 `.h.ct` | 头文件里只有普通函数指针；闭包变量只在函数体内声明；全局 / `pub` 全局的初始值不能是闭包字面量 |
+| 不能捕获数组 | C 数组没有值语义：`a closure cannot capture the array '<name>' (capture a pointer to it instead)` |
 | 不能作返回值 | `a closure cannot escape through 'return'` |
 | 不能作字段或元素 | `a closure cannot be stored in a field, an element or a container` |
 | 闭包变量只在声明处可用 | 可以调用，或整对交给 `(fn, env)`；不能拷贝 / 重赋值 / 交给普通变量 |
@@ -3665,6 +3670,9 @@ int apply(int base) {
 - Capturing an `own` / `borrow` variable reports
   `a closure cannot capture '<name>' (it is 'own' or 'borrow')`; capturing another closure reports
   `a closure cannot capture another closure`.
+- Capturing an array reports
+  `a closure cannot capture the array '<name>' (capture a pointer to it instead)`: a C array has no
+  value semantics, so no single assignment can copy it into the env.
 - A nested closure copies values out of the outer env fields; it does not chain one env to another.
 
 **A closure variable is a binding, not a value** (D21-13 / D21-16):
@@ -3679,7 +3687,9 @@ int apply(int base) {
   reports `a closure argument must fill a '(fn, env)' parameter pair`, and a parameter tail that does
   not match reports `this closure's parameter N is '…', but the expected type is '…'`.
 - A closure variable can only be declared inside a function body; a function pointer in a `.h.ct`
-  file is just a plain function pointer and cannot carry a closure binding.
+  file is just a plain function pointer and cannot carry a closure binding. A global (including a
+  `pub` global in a `.h.ct`) cannot be initialised with a closure literal: it reports
+  `a closure cannot be stored in '<name>' (its scope outlives the closure)`.
 
 **ABI and generated code**: two words, `(fn, env)`, with `env` as the first parameter — the same
 shape as a tier-1 `impl`'s `(void *self, …)` (D21-4). `__ct_cl_env_<N>` / `static __ct_cl_tramp_<N>` /
@@ -3692,7 +3702,8 @@ diagnostic contract.
 
 | Limitation | What happens |
 | --- | --- |
-| cannot enter a `.h.ct` | a header holds only plain function pointers; a closure variable is function-local |
+| cannot enter a `.h.ct` | a header holds only plain function pointers; a closure variable is function-local; a global / `pub` global cannot be initialised with a closure literal |
+| cannot capture an array | C arrays have no value semantics: `a closure cannot capture the array '<name>' (capture a pointer to it instead)` |
 | cannot be a return value | `a closure cannot escape through 'return'` |
 | cannot be a field or an element | `a closure cannot be stored in a field, an element or a container` |
 | a closure variable is usable only at its declaration | it may be called, or fill a `(fn, env)` parameter as a whole; it cannot be copied / reassigned / given to a plain variable |
