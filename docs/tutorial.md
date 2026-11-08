@@ -608,8 +608,9 @@ ct build closure.ct -o closure && ./closure
 
 - **捕获按值、创建点求值**：`scale` 拿到的是 `unit` 当时的副本；捕获名只读，写回要先捕获指针再写
   `*p = …`。
-- **闭包变量是绑定，不是值**：只能调用（`scale(4)`），不能拷贝 / 重赋值 / 作返回值 / 作字段或
-  元素 / 作实参；需要别名就把字面量就地写进去。
+- **闭包变量是绑定，不是值**：可以调用（`scale(4)`），也可以把绑定整对交给一个 `(fn, env)` 参数
+  （`run(scale)`，参数表要匹配宿主尾部）；不能拷贝 / 重赋值 / 作返回值 / 作字段或元素。需要别名就
+  把字面量就地写进去。
 - **字面量作实参**：形参必须写成相邻的 `ret (*fn)(void *env, …)` + `void *env`；字面量一次填满
   这两个槽，所以 `run(…)` 只写一个字面量，闭包自己的参数由 `run` 内部提供。
 - **没有 env 槽的 C API**（`qsort` 一类）接不了；上下文要活过当前栈帧就用档①：`struct` + `trait`
@@ -1293,9 +1294,10 @@ ct build closure.ct -o closure && ./closure
 
 - **Capture by value, evaluated at the creation point**: `scale` holds the value `unit` had at that
   moment. A captured name is read-only; to write back, capture a pointer and assign through `*p = …`.
-- **A closure variable is a binding, not a value**: it may be called (`scale(4)`) but not copied,
-  reassigned, returned, stored in a field / element, or passed as an argument. Inline the literal
-  when you need another name for it.
+- **A closure variable is a binding, not a value**: it may be called (`scale(4)`), and the binding may
+  fill a `(fn, env)` parameter as a whole (`run(scale)`, with a parameter tail that matches the
+  host), but it cannot be copied, reassigned, returned, or stored in a field / element. Inline the
+  literal when you need another name for it.
 - **A literal as an argument**: the host signature must be the adjacent
   `ret (*fn)(void *env, …)` + `void *env`; one literal fills both slots, so `run(…)` takes a single
   literal and the closure's own parameter is supplied inside `run`.

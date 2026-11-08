@@ -1647,10 +1647,13 @@ int apply(int base) {
 
 **闭包变量是绑定，不是值**（D21-13 / D21-16）：
 
-- 闭包变量在声明处创建，之后只能**调用**（`add(5)`）。
+- 闭包变量在声明处创建，之后可以**调用**（`add(5)`），也可以把绑定本身整对交给一个 `(fn, env)`
+  参数（`ring_each(add)`）：填进去的是它的 trampoline 与环境地址，参数表必须与宿主尾部一致。
+  `(fn, env)` 是传输形态，不是值。
 - 拷贝 / 重赋值 / 作字段或数组元素报 `this closure is a binding, not a value (inline it or use a
-  struct + trait)`；作返回值报 `a closure cannot escape through 'return'`；作实参报
-  `a closure argument must fill a '(fn, env)' parameter pair`。
+  struct + trait)`；作返回值报 `a closure cannot escape through 'return'`；传给不是 `(fn, env)` 对的
+  位置报 `a closure argument must fill a '(fn, env)' parameter pair`，参数表不匹配报
+  `this closure's parameter N is '…', but the expected type is '…'`。
 - 闭包变量只能声明在函数体内；`.h.ct` 里的函数指针只是普通函数指针，不承载闭包绑定。
 
 **ABI 与生成物**：`(fn, env)` 两词，`env` 是第一个参数，与档① `impl` 的 `(void *self, …)` 同形
@@ -1665,7 +1668,7 @@ int apply(int base) {
 | 不能进 `.h.ct` | 头文件里只有普通函数指针；闭包变量只在函数体内声明 |
 | 不能作返回值 | `a closure cannot escape through 'return'` |
 | 不能作字段或元素 | `a closure cannot be stored in a field, an element or a container` |
-| 闭包变量只在声明处可用 | 只能调用；不能拷贝 / 重赋值 / 作实参 / 交给别的变量 |
+| 闭包变量只在声明处可用 | 可以调用，或整对交给 `(fn, env)`；不能拷贝 / 重赋值 / 交给普通变量 |
 | `qsort` 类 API 接不了 | 这类 C 回调没有 `void *` 环境槽，闭包无处放 env |
 
 **`(fn, env)` 回调约定**：容器 / 算法接受闭包时，回调只有一种形态——
@@ -3666,11 +3669,15 @@ int apply(int base) {
 
 **A closure variable is a binding, not a value** (D21-13 / D21-16):
 
-- It is created at its declaration and may only be **called** afterwards (`add(5)`).
+- It is created at its declaration and may be **called** afterwards (`add(5)`), and the binding
+  itself may fill a `(fn, env)` parameter (`ring_each(add)`): its trampoline and the address of its
+  environment go in, and its parameter tail must match the host. `(fn, env)` is a transport shape,
+  not a value.
 - Copying / reassigning / storing it in a field or an array element reports
   `this closure is a binding, not a value (inline it or use a struct + trait)`; returning it reports
-  `a closure cannot escape through 'return'`; passing it as an argument reports
-  `a closure argument must fill a '(fn, env)' parameter pair`.
+  `a closure cannot escape through 'return'`; passing it where no `(fn, env)` pair is expected
+  reports `a closure argument must fill a '(fn, env)' parameter pair`, and a parameter tail that does
+  not match reports `this closure's parameter N is '…', but the expected type is '…'`.
 - A closure variable can only be declared inside a function body; a function pointer in a `.h.ct`
   file is just a plain function pointer and cannot carry a closure binding.
 
@@ -3688,7 +3695,7 @@ diagnostic contract.
 | cannot enter a `.h.ct` | a header holds only plain function pointers; a closure variable is function-local |
 | cannot be a return value | `a closure cannot escape through 'return'` |
 | cannot be a field or an element | `a closure cannot be stored in a field, an element or a container` |
-| a closure variable is usable only at its declaration | it may be called; it cannot be copied / reassigned / passed as an argument / given another name |
+| a closure variable is usable only at its declaration | it may be called, or fill a `(fn, env)` parameter as a whole; it cannot be copied / reassigned / given to a plain variable |
 | `qsort`-style APIs cannot take one | those C callbacks have no `void *` environment slot, so there is nowhere to put the env |
 
 **The `(fn, env)` callback convention**: when a container or algorithm accepts a closure, the callback

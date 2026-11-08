@@ -2074,8 +2074,7 @@ for pair in \
     "closure_capture_addr|3:1|the address of a captured variable cannot be taken inside a closure" \
     "closure_capture_shadow|3:1|a local cannot shadow the captured 'n'" \
     "closure_plain_fnptr|5:12|a closure cannot be used where a plain function pointer is expected" \
-    "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair" \
-    "closure_param_deferred|5:12|this closure is a binding, not a value (inline it or use a struct + trait)"
+    "closure_not_a_pair|5:12|a closure argument must fill a '(fn, env)' parameter pair"
 do
     cf="${pair%%|*}"
     rest="${pair#*|}"
@@ -2098,20 +2097,34 @@ do
     fi
 done
 
-# The two boundaries that need more than one assertion:
+# The boundaries that need more than one assertion:
 #  - E8 is a note, not a JSON key, and appears only when the callee is opaque;
-#  - a closure passed to a `(fn, env)` pair is refused as a binding (D21-13),
-#    but arity counts the env slot, so no "takes N argument(s)" line appears.
+#  - R03 lets a declared binding fill the pair, so its parameter tail must match
+#    the host and the mismatch is a CT-level error, not a `cc` failure;
+#  - arity counts the env slot, so a pair actual produces no "takes N
+#    argument(s)" line.
 if grep -Fq "note: the compiler cannot see whether the callee keeps the environment; the environment dies with this frame" \
         "$work/closure_not_a_pair.err"; then
     ok "p21-s4: E8 note wording"
 else
     bad "p21-s4: E8 note" "$(cat "$work/closure_not_a_pair.err")"
 fi
-if grep -q "takes [0-9]* argument(s)" "$work/closure_param_deferred.err"; then
-    bad "p21-s4: arity counts env" "$(cat "$work/closure_param_deferred.err")"
+if "$work/ct-ast" test/ast/errors/closure_param_type_mismatch.ct -o "$work/cptm.c" \
+        >"$work/cptm.out" 2>"$work/cptm.err"; then
+    bad "p21-r03: binding pair type" "expected a non-zero exit"
+elif ! grep -Fq "test/ast/errors/closure_param_type_mismatch.ct:4:1: error: this closure's parameter 1 is 'char *', but the expected type is 'int'" "$work/cptm.err"; then
+    bad "p21-r03: binding pair type" "$(cat "$work/cptm.err")"
+elif [ "$(grep -c 'error: ' "$work/cptm.err")" -ne 1 ]; then
+    bad "p21-r03: binding pair type" "expected exactly one error: $(cat "$work/cptm.err")"
 else
+    ok "p21-r03: a declared binding's parameter tail must match the host pair"
+fi
+if "$work/ct-ast" test/ast/75_closure_param_pair/prog.ct -o "$work/clpair.c" \
+        >"$work/clpair.out" 2>"$work/clpair.err" \
+   && ! grep -q "takes [0-9]* argument(s)" "$work/clpair.err"; then
     ok "p21-s4: a closure actual counts as two arguments for arity, without a second wording"
+else
+    bad "p21-s4: arity counts env" "$(cat "$work/clpair.err")"
 fi
 
 # The note channel must not touch the JSON document, the severity field or the

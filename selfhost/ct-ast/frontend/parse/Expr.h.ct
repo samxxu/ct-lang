@@ -637,8 +637,11 @@ static int closure_walk_mutate(struct Expr *self, int ci, int n)
    drops the first host parameter: the formal of a `(fn, env)` pair spells the
    environment there. The parameter comparison reuses the same normalisation
    `arg_class` gives 19.3. A mismatch reports at the source position and
-   returns non-zero; on success `c->ret` is set. */
-static int closure_match(struct Expr *self, int ci, const char *host, int skip_env)
+   returns non-zero; on success `c->ret` is set when `set_ret` is non-zero.
+   R03: comparing a declared binding with a host tail must not write the return
+   type, or the binding's own trampoline would silently take the host's type
+   for every other call site. */
+static int closure_match(struct Expr *self, int ci, const char *host, int skip_env, int set_ret)
 {
     struct Closure *c = &self->sym->closures[ci];
     char ret[MAX_TEXT];
@@ -706,26 +709,13 @@ static int closure_match(struct Expr *self, int ci, const char *host, int skip_e
         }
         i++;
     }
-    snprintf(c->ret, MAX_TEXT, "%s", ret);
+    if (set_ret) snprintf(c->ret, MAX_TEXT, "%s", ret);
     return 0;
 }
 
-/* Does the argument chain pass a closure binding as a value? D21-13 keeps that
-   refused; an inline literal is the S5 form and is not in this set. */
-static int closure_var_args(struct Expr *self, int args)
-{
-    int cur, vi;
-
-    cur = args;
-    while (cur > 0) {
-        if (self->arena->nodes[cur].kind == N_VAR) {
-            vi = self->sym->find_var(self->arena->nodes[cur].text2);
-            if (vi >= 0 && self->sym->vars[vi].is_closure) return 1;
-        }
-        cur = self->arena->nodes[cur].next;
-    }
-    return 0;
-}
+/* R03: a declared binding fills a `(fn, env)` pair, but unlike an inline
+   literal its own trampoline already exists with the return type its
+   declaration took, so the comparison is read-only (`set_ret` 0). */
 
 impl ExprOps for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
@@ -785,11 +775,13 @@ impl ExprOps for Expr {
     }
 
     /* Returns 0 when every closure actual fills the start of a `(fn, env)`
-       pair. A named binding fills the pair but is still refused as a value at
-       the call site (D21-13); an inline literal is bound to the host fn type
-       right here (D21-14). A plain function-pointer slot and a position that
-       is not a pair are distinct errors; the second also carries the E8 note,
-       because the compiler cannot see whether the callee keeps the
+       pair. An inline literal is bound to the host fn type right here (D21-14),
+       and a declared binding fills the pair too (R03): its parameter tail is
+       compared, but its return type stays the one its declaration took. The
+       binding is still a binding -- it cannot be copied, renamed, stored in a
+       field or returned (D21-13). A plain function-pointer slot and a position
+       that is not a pair are distinct errors; the second also carries the E8
+       note, because the compiler cannot see whether the callee keeps the
        environment. */
     int closure_arg_check(int line, int col, const char *callee, int args, int fi)
     {
@@ -827,9 +819,18 @@ impl ExprOps for Expr {
                     }
                     return -1;
                 }
-                if (self->arena->nodes[cur].kind == N_CLOSURE
-                    && self->closure_arg_bind(self->arena->nodes[cur].num, ft) != 0)
-                    return -1;
+                if (self->arena->nodes[cur].kind == N_CLOSURE) {
+                    if (self->closure_arg_bind(self->arena->nodes[cur].num, ft) != 0)
+                        return -1;
+                } else {
+                    /* R03: a declared binding fills the pair as well. Its own
+                       trampoline keeps the return type its declaration took, so
+                       only the parameter tail is compared. */
+                    int vi = self->sym->find_var(self->arena->nodes[cur].text2);
+                    if (vi >= 0 && self->sym->vars[vi].is_closure
+                        && closure_match(self, self->sym->vars[vi].closure_id, ft, 1, 0) != 0)
+                        return -1;
+                }
                 pos += 2;
             } else {
                 pos++;
@@ -933,7 +934,7 @@ impl ExprOps for Expr {
     {
         int vi;
 
-        if (closure_match(self, ci, host, 0) != 0) return -1;
+        if (closure_match(self, ci, host, 0, 1) != 0) return -1;
         vi = self->sym->find_var(vname);
         if (vi < 0)
             return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
@@ -950,7 +951,7 @@ impl ExprOps for Expr {
 
     int closure_arg_bind(int ci, const char *ftype)
     {
-        return closure_match(self, ci, ftype, 1);
+        return closure_match(self, ci, ftype, 1, 1);
     }
 
     /* The type keywords. L0 / L1 / L2 have always accepted the `stdint` /
@@ -2652,17 +2653,6 @@ impl ExprOps for Expr {
                     if (!tail_ok && self->arity_check(id_line, id_col, self->arena->nodes[n].text2,
                                                       got, want) != 0)
                         return -1;
-                }
-                /* D21-13: a closure is a binding, not a value. A literal fills
-                   the `(fn, env)` pair in S5 (D21-14), but a named binding is
-                   still refused here. */
-                if (args > 0 && closure_var_args(self, args)) {
-                    tool::diag::ct_sem_error(id_line, id_col,
-                        "this closure is a binding, not a value (inline it or use a struct + trait)",
-                        self->sup->mem->path);
-                    tool::diag::ct_sem_note(id_line, id_col, CT_EXPR_CLOSURE_HINT,
-                                            self->sup->mem->path);
-                    return -1;
                 }
                 /* 19.2: the argument types against the same signature, before
                    the boxing pass rewrites interface arguments (an interface

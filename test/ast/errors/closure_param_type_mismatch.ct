@@ -1,6 +1,6 @@
 int ring_each(int (*fn)(void *env, int x), void *env) { return fn(env, 3); }
 int main(void) {
     int n = 2;
-    int (*add)(int x) = (int x) => x + n;
+    int (*add)(char *s) = (char *s) => n + 1;
     return ring_each(add);
 }

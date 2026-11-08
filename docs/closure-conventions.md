@@ -87,10 +87,13 @@ ring_each(&r, add);
 
 - 表面类型复用函数指针声明，不引入 `auto`，不做类型推断（D21-1）。
 - 捕获**按值**、创建点求值、捕获名只读；写捕获名或取捕获名地址一律报错，写回用指针显式解引用（D21-2）。
-- 闭包变量是**绑定不是值**：只在声明处可用，拷贝 / 重赋值 / 字段 / 元素 / 返回值都报错（D21-13 / D21-16）。
+- 闭包变量是**绑定不是值**：只在声明处创建；可以调用，也可以整对填进 `(fn, env)` 参数（R03），
+  但拷贝 / 重赋值 / 字段 / 元素 / 返回值都报错（D21-13 / D21-16）。
 - 环境在栈上，闭包值本身不能被容器持有（见 §0 第 3 条）。
 - 字面量直接作实参（`ring_each(&r, (int x) => x + 1)`）自 S5 起与宿主 `(fn, env)` 对逐参比对，
-  返回类型取宿主 `fn`（D21-14）；也可以先赋给已声明的闭包变量。
+  返回类型取宿主 `fn`（D21-14）；也可以先赋给已声明的闭包变量。已声明绑定同样可以整对作实参
+  （`ring_each(&r, add)`，R03）：填入它自己的 trampoline 与环境地址，参数表按宿主尾部比对，返回
+  类型沿用声明、不被宿主改写。
 - 块体写法 `(int x) => { … }` 与嵌套闭包自 S5 起可用；内层捕获按值从外层 env 字段拷出，不产生
   env 之间的指针链。
 
@@ -144,6 +147,8 @@ t.ct:4:9: note: tier 1: trait Op { int call(int x); } ...
   `void *` 参数。只能靠 API 约定（容器不持 `env`）与文档约束。当编译器识别不出被调方的 `(fn, env)`
   参数对时，错误之后会经 note 通道打印下面这句，明确说明剩余风险：
   `note: the compiler cannot see whether the callee keeps the environment; the environment dies with this frame`。
+  已声明绑定与内联字面量同样暴露于 E8：env 仍是栈上对象，交给会保存它的接收方同样会悬空（R03 只是
+  允许它整对传参，没有改变寿命）。
 - **E9（不检查）**：`goto` 跨过闭包声明是静默失效，与 `own` / `borrow` 的现状相同。
 - **按设计禁止**（不是漏洞）：闭包类型出现在 `.h.ct`、作返回值、作字段或数组元素、在另一单元声明闭包变量。
 - **可以跨单元**：把 trampoline / impl 包装的**地址**当实参传给别单元的函数，由对方在运行期调用；
@@ -207,10 +212,13 @@ or a cross-unit reference.
 
 `int (*add)(int x) = (int x) => x + n;` — the left-hand function pointer supplies the return type, with no
 `auto` and no inference (D21-1). Captures are by value, evaluated at creation, read-only (D21-2); a closure
-variable is a binding, not a value (D21-13 / D21-16); the environment lives on the stack and a closure value
-cannot be held by a container. A literal passed directly as an argument is compared against the host
-`(fn, env)` pair from S5 on, with the return type taken from the host `fn` (D21-14); block bodies and
-nested literals also land in S5, and an inner capture copies a value out of the outer environment field.
+variable is a binding, not a value — it may be called, and the binding as a whole may fill a `(fn, env)`
+parameter (R03), but it cannot be copied, reassigned, stored in a field / element or returned
+(D21-13 / D21-16); the environment lives on the stack and a closure value cannot be held by a container. A
+literal passed directly as an argument is compared against the host `(fn, env)` pair from S5 on, with the
+return type taken from the host `fn` (D21-14); a declared binding may fill the pair too (R03), with its
+parameter tail compared and its declared return type left alone. Block bodies and nested literals also land
+in S5, and an inner capture copies a value out of the outer environment field.
 
 ### 4. Generated names (frozen at S3)
 
@@ -235,6 +243,8 @@ The full message list lives in [design/phase21.md](design/phase21.md) §4.6.
 - **E8 (unchecked)**: `env` handed to an opaque C function, or to **another CT function** (including a
   future std `each(v, fn, env)`), and then stored in a global / field / container. The callee sees a plain
   `void *`; there is no cross-procedure analysis. Only the API convention and documentation guard this.
+  A declared binding is exposed to E8 exactly like an inline literal: the env is still a stack object, so
+  a receiver that keeps it dangles (R03 only allows the pair to be passed; it does not change lifetimes).
 - **E9 (unchecked)**: `goto` jumping over a closure declaration behaves like `own` / `borrow` today.
 - **Forbidden by design** (not holes): a closure type in `.h.ct`, as a return value, as a field or array
   element, or a closure variable in another unit.
