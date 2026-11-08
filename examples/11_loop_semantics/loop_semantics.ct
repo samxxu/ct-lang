@@ -1,0 +1,75 @@
+// loop_semantics.ct - the two `loop` forms and what they guarantee (Phase 22 / 23).
+//
+// `loop(n)` counts 0..n-1 and `loop(a..b)` counts a..b-1. The count is
+// evaluated once, both bounds are evaluated once (lower first), and `i` is a
+// plain writable int. `loop(0..3)` is the same program as `loop(3)`.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static int calls = 0;
+
+static int count(void)
+{
+    calls = calls + 1;
+    return 3;
+}
+
+static int lo(void)
+{
+    printf("eval lo\n");
+    return 2;
+}
+
+static int hi(void)
+{
+    printf("eval hi\n");
+    return 5;
+}
+
+int main(void)
+{
+    /* the implicit counter starts at 0 and stops before the count */
+    loop(3) {
+        printf("count %d\n", i);
+    }
+    /* zero rounds are not a diagnostic */
+    loop(0) {
+        printf("never\n");
+    }
+    /* the count expression runs once, however many rounds follow */
+    loop(count()) {
+        printf("once %d\n", i);
+    }
+    printf("calls %d\n", calls);
+
+    /* half-open [2, 5): the lower bound is evaluated first, once each */
+    loop(lo()..hi()) {
+        printf("range %d\n", i);
+    }
+    /* an empty range is silent */
+    loop(4..2) {
+        printf("never\n");
+    }
+    /* `loop(0..b)` folds to `loop(b)` and prints the same thing */
+    loop(0..3) {
+        printf("zero %d\n", i);
+    }
+
+    /* break / continue / writing `i` work exactly as in a native for */
+    loop(5) {
+        if (i == 2) {
+            continue;
+        }
+        if (i == 4) {
+            break;
+        }
+        printf("skip %d\n", i);
+    }
+    loop(3) {
+        printf("write %d\n", i);
+        i = i + 1;
+    }
+    return 0;
+}

@@ -1,0 +1,54 @@
+// closure_pipeline.ct - closures are `(fn, env)` pairs (Phase 21), and the
+// container counts its rounds with `loop(n)` (Phase 22).
+//
+// The host takes the conventional pair: `fn` first, `env` immediately after,
+// and the closure's own parameters continue the tail. A literal fills both
+// slots; a declared binding is handed over as the same pair. Neither word
+// outlives the call, so the container must not keep them.
+//
+// Capture happens at the creation point: `cap` is built while `limit` is 1,
+// and the later `limit = 100` does not reach inside it.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static int fold(int (*fn)(void *env, int acc, int x), void *env, int n)
+{
+    int acc = 0;
+
+    loop(n) {
+        acc = fn(env, acc, i + 1);
+    }
+    return acc;
+}
+
+int main(void)
+{
+    int factor = 3;
+    int limit = 1;
+    int (*mul)(int acc, int x) = (int acc, int x) => acc + x * factor;
+    int (*cap)(int acc, int x) = (int acc, int x) => acc + x + limit;
+    int (*twice)(int acc, int x) = (int acc, int x) => {
+        int t = acc;
+
+        loop(2) {
+            t = t + x;
+        }
+        return t;
+    };
+
+    limit = 100;
+    printf("mul %d\n", fold(mul, 3));
+    printf("cap %d\n", fold(cap, 3));
+    printf("twice %d\n", fold(twice, 3));
+    printf("lit %d\n", fold((int acc, int x) => acc + x, 3));
+
+    /* one closure per round: each snapshot keeps that round's `i` */
+    loop(3) {
+        int (*snap)(int x) = (int x) => x + i * 10;
+
+        printf("snap %d\n", snap(1));
+    }
+    return 0;
+}

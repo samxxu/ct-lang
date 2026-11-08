@@ -1,0 +1,42 @@
+// closure_in_loop.ct - closures created inside a loop (Phase 21 + Phase 23).
+//
+// A closure captures by value at its creation point, so one built inside a
+// `loop` body keeps that round's `i` and nothing later can change it. The
+// container walks its input with `loop(a..b)`, the half-open range form.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static int map_sum(int *xs, int from, int to, int (*fn)(void *env, int x), void *env)
+{
+    int sum = 0;
+
+    loop(from..to) {
+        sum = sum + fn(env, xs[i]);
+    }
+    return sum;
+}
+
+int main(void)
+{
+    int xs[5];
+    int bias = 7;
+    int (*shift)(int x) = (int x) => x + bias;
+
+    loop(5) {
+        xs[i] = i * i;
+    }
+    /* `shift` was built above: it still holds 7, not 1000 */
+    bias = 1000;
+
+    printf("shift %d\n", map_sum(xs, 1, 4, shift));
+
+    /* a fresh closure per round, each one pinning its own `i` */
+    loop(2..4) {
+        int (*scale)(int x) = (int x) => x * i;
+
+        printf("round %d %d\n", i, map_sum(xs, 0, 2, scale));
+    }
+    return 0;
+}
