@@ -1357,6 +1357,7 @@ impl StmtOps for Stmt {
         int bounds[2];
         char msg[MAX_TEXT];
         char t[MAX_TEXT];
+        char ct[MAX_TEXT];
         char ex[MAX_TEXT];
         const char *p;
         int bare;
@@ -1408,7 +1409,7 @@ impl StmtOps for Stmt {
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "loop body must be a block", self->mem->path);
-        /* Both bounds go through the same two checks. D23-3: a pointer, an
+        /* Both bounds go through the same two checks. D23-8: a pointer, an
            array, a struct/union value or a function pointer is a hard error --
            comparing an address with the implicit `int i` is never intended, and
            a bare `loop(arr)` slipped through silently in Phase 22. L22-5 keeps
@@ -1421,7 +1422,6 @@ impl StmtOps for Stmt {
         nb = (hi == -1) ? 1 : 2;
         for (bi = 0; bi < nb; bi++) {
             int e = bounds[bi];
-            if (self->sup->expr_type(e, t, sizeof t) != 0) continue;
             /* `int a[4]` and `int *p` spell the same type string, so only the
                symbol table can tell an array bound apart. */
             vi = -1;
@@ -1433,6 +1433,19 @@ impl StmtOps for Stmt {
                          self->sym->vars[vi].name);
                 return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
             }
+            /* An array that is not a plain variable -- `m.cells`, a field
+               declared with dimensions -- only shows its `[]` in the
+               dimension-preserving type, and it must be checked before the
+               `expr_type` gate below: a one-dimensional field decays to a
+               pointer (`expr_type` answers), but a two-dimensional one has no
+               single element type and `expr_type` gives up, which used to leave
+               `loop(m.cells)` completely silent. */
+            if (self->sup->expr_ctype(e, ct, sizeof ct) == 0 && strchr(ct, '[')) {
+                snprintf(msg, sizeof msg,
+                         "a loop bound must be an integer (got '%s')", ct);
+                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            }
+            if (self->sup->expr_type(e, t, sizeof t) != 0) continue;
             bare = 1;
             for (p = t; *p; p++)
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
@@ -1440,7 +1453,9 @@ impl StmtOps for Stmt {
                     bare = 0;
             if (bare && self->sym->expand_type_alias(t, ex, sizeof ex) == 0)
                 snprintf(t, sizeof t, "%s", ex);
-            if (strchr(t, '*') || strchr(t, '(')
+            /* `[` is a backstop here: the two checks above already reject
+               arrays, but an alias could still expand to a dimensioned type. */
+            if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')
                 || strncmp(t, "struct ", 7) == 0 || strncmp(t, "union ", 6) == 0) {
                 snprintf(msg, sizeof msg,
                          "a loop bound must be an integer (got '%s')", t);

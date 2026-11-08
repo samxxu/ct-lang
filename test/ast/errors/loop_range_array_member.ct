@@ -1,0 +1,16 @@
+/* A field declared with two dimensions is still an array, so the loop header
+   must reject it (D23-8). This form used to compile silently: a one-dimensional
+   field decays to a pointer and is caught by the `*` rule, but a two-dimensional
+   one has no single element type to decay to, so the old check gave up on it. */
+struct Grid { int cells[2][3]; };
+
+int main(void)
+{
+    struct Grid g;
+    int n = 0;
+
+    loop(g.cells) {
+        n = n + i;
+    }
+    return n;
+}
