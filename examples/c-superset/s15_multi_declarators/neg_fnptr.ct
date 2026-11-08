@@ -1,0 +1,12 @@
+/*
+ * 反例：函数指针仍然是一声明一个名字。`int (*a)(int), (*b)(int);` 在
+ * 普通字段里也不行，ct 直接拒绝这种容易读错的写法。
+ */
+struct Bad {
+    int (*a)(int), (*b)(int);
+};
+
+int main(void)
+{
+    return 0;
+}

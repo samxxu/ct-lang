@@ -1,0 +1,17 @@
+/*
+ * 反例：union 的成员共享同一块存储，trait 的 vptr 字段没有地方可放，
+ * 所以 ct 明确拒绝 `use`。struct 才允许 use。
+ */
+trait Greeter {
+    int hello(void);
+}
+
+union Value {
+    int i;
+    char c;
+} use Greeter;
+
+int main(void)
+{
+    return 0;
+}

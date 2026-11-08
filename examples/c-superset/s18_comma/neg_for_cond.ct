@@ -1,0 +1,22 @@
+/*
+ * 反例：for 条件里不带括号的逗号不做扩展。C 允许 `for (; a, b; )`，
+ * ct 只把逗号表达式放在括号里（初始化子句与步进子句不受影响），
+ * 条件位置会停在 `,` 上报 unexpected token。
+ */
+int main(void)
+{
+    int a;
+    int b;
+    int i;
+
+    a = 1;
+    b = 2;
+    i = 0;
+    for (; a, b; ) {
+        i = i + 1;
+        if (i > 3) {
+            break;
+        }
+    }
+    return i;
+}

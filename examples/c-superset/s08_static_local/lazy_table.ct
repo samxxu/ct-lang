@@ -1,0 +1,35 @@
+/*
+ * 场景：只建一次的表。static 局部数组只在第一次调用时填充，static 标记位
+ * 记录是否已经建好——这是 C 里没有 pthread_once 时的常见写法。
+ *
+ * CT 与 C 一致：static 声明跨调用保持；ct 不把 static 声明纳入泄漏分析
+ * （`static T *p = malloc(...)` 这种刻意的单例不会被报泄漏）。
+ */
+#include <stdio.h>
+
+static int table_sum(void)
+{
+    static int table[5];
+    static int built;
+    int i;
+    int total;
+
+    if (!built) {
+        for (i = 0; i < 5; i++) {
+            table[i] = i * i;
+        }
+        built = 1;
+    }
+
+    total = 0;
+    for (i = 0; i < 5; i++) {
+        total = total + table[i];
+    }
+    return total;
+}
+
+int main(void)
+{
+    printf("%d %d %d\n", table_sum(), table_sum(), table_sum());
+    return 0;
+}

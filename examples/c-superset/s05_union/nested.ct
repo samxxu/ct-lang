@@ -1,0 +1,60 @@
+/*
+ * 场景：一个「数值盒」，按 kind 以 int / long long / 指针三种视图复用
+ * 同一块存储。union 作为 struct 的成员，访问路径是 t.box.ll。
+ *
+ * CT 与 C 一致：union 可以嵌在 struct 里，也可以被 typedef 成别名；
+ * 裸名与 `union Name` 两种拼写等价。注意读取非当前写入的成员在 C 里是
+ * 实现定义行为，这里只读取刚写入的那个成员。
+ */
+#include <stdio.h>
+
+typedef union Box {
+    int i;
+    long long ll;
+    void *p;
+} Box;
+
+struct Slot {
+    int kind;
+    Box box;
+};
+
+static void set_int(struct Slot *s, int v)
+{
+    s->kind = 0;
+    s->box.i = v;
+}
+
+static int get_int(const struct Slot *s)
+{
+    if (s->kind != 0) {
+        return -1;
+    }
+    return s->box.i;
+}
+
+static void set_ll(struct Slot *s, long long v)
+{
+    s->kind = 1;
+    s->box.ll = v;
+}
+
+static long long get_ll(const struct Slot *s)
+{
+    if (s->kind != 1) {
+        return -1;
+    }
+    return s->box.ll;
+}
+
+int main(void)
+{
+    struct Slot a;
+    struct Slot b;
+
+    set_int(&a, 7);
+    set_ll(&b, 9000000000LL);
+    printf("%d %lld %d\n", get_int(&a), get_ll(&b), a.kind);
+    printf("%d\n", (int)sizeof(Box) >= (int)sizeof(long long));
+    return 0;
+}

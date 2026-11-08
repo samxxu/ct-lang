@@ -1,0 +1,63 @@
+/*
+ * 场景：手写一个紧凑二进制头，靠 offsetof 断言字段布局。
+ *
+ * offsetof 在 CT 里是内建（CT 没有预处理器，不能把它当宏）。第一个参数
+ * 接受 `struct S`、`union U` 与 typedef 别名；编译器校验结构体与字段存在。
+ * 生成物原样发射 offsetof(...)，因此源文件必须自己包含 <stddef.h>。
+ * 枚举成员还能出现在 case 标签与数组长度里——同样是整数常量表达式。
+ */
+#include <stddef.h>
+#include <stdio.h>
+
+typedef struct Header {
+    unsigned char magic;
+    unsigned short len;
+    unsigned int seq;
+} Header;
+
+typedef union Number {
+    int i;
+    long long ll;
+} Number;
+
+enum Limits {
+    LIMIT_START = 1,
+    LIMIT_END = LIMIT_START + 3
+};
+
+static int slot(int key)
+{
+    switch (key) {
+    case LIMIT_START:
+        return 1;
+    case LIMIT_START + 1:
+        return 2;
+    case LIMIT_END:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+int main(void)
+{
+    Header h;
+    Number n;
+    int table[LIMIT_END];
+
+    h.magic = 0x7f;
+    h.len = 8;
+    h.seq = 9;
+    n.ll = 123;
+
+    table[0] = 0;
+    table[1] = 1;
+    table[2] = 2;
+    table[3] = 4;
+
+    printf("%d %d %d\n", (int)offsetof(struct Header, magic),
+           (int)offsetof(Header, len), (int)offsetof(Header, seq));
+    printf("%d %d\n", (int)offsetof(union Number, ll), (int)sizeof(Number));
+    printf("%d %d %d\n", slot(LIMIT_START), table[2], slot(99));
+    return 0;
+}

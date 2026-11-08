@@ -1,0 +1,25 @@
+/*
+ * 场景：原子计数器与对齐修饰叠加。_Atomic(type) 与裸 _Atomic 两种拼写，
+ * 以及 `_Alignas(16) _Atomic(int)` 的组合。
+ *
+ * CT 与 C 一致：三种拼写都作为类型拼写原样保留，声明、块作用域、cast 与
+ * sizeof 都能识别；原子语义完全由 C 编译器负责。ct 只做语法接纳。
+ */
+#include <stdio.h>
+
+_Atomic(int) counter;
+_Atomic int flag;
+_Alignas(16) _Atomic(int) padded;
+
+int main(void)
+{
+    counter = 0;
+    flag = 1;
+    padded = 2;
+    counter = counter + 1;
+
+    printf("%d %d %d %d\n", (int)counter, (int)flag, (int)padded,
+           (int)sizeof(_Atomic(int)));
+    printf("%d\n", (int)((unsigned long)&padded % 16));
+    return 0;
+}

@@ -1,0 +1,20 @@
+/*
+ * 场景：单个列表项就是一条很长的消息（>160 字节）。旧实现会把整项截断，
+ * 这里验证长字符串作为初始化器元素时完整保留。
+ *
+ * CT 与 C 一致：字符串字面量原样发射；长度由 C 的 sizeof/strlen 计算。
+ */
+#include <stdio.h>
+#include <string.h>
+
+static const char *notes[] = {
+    "This single initializer item is deliberately much longer than the old one-hundred-and-sixty-byte text buffer, so a truncated rewrite would drop the tail and the length check below would disagree.",
+    "short"
+};
+
+int main(void)
+{
+    printf("%d %d\n", (int)strlen(notes[0]), (int)strlen(notes[1]));
+    printf("%c %c\n", notes[0][0], notes[0][strlen(notes[0]) - 1]);
+    return 0;
+}

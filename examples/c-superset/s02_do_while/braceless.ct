@@ -1,0 +1,51 @@
+/*
+ * 场景：读一个「命令流」，do-while 的体不带花括号，只写一条语句，
+ * 再用 break 提前结束。
+ *
+ * CT 与 C 一致：体可以是单条语句；continue 会跳到 while 的条件处，
+ * break 直接离开循环。这里把两种控制流放在一起，输出可以逐行核对。
+ */
+#include <stdio.h>
+
+static int consume(const int *cmds, int n)
+{
+    int i;
+    int total;
+
+    i = 0;
+    total = 0;
+    do
+        total = total + cmds[i++];
+    while (i < n);
+
+    return total;
+}
+
+static int stop_at_zero(const int *cmds, int n)
+{
+    int i;
+    int total;
+
+    i = 0;
+    total = 0;
+    do {
+        if (cmds[i] == 0) {
+            break;
+        }
+        i = i + 1;
+        total = total + cmds[i];
+    } while (i < n);
+    return total;
+}
+
+int main(void)
+{
+    int cmds[4];
+
+    cmds[0] = 1;
+    cmds[1] = 2;
+    cmds[2] = 0;
+    cmds[3] = 8;
+    printf("%d %d\n", consume(cmds, 4), stop_at_zero(cmds, 4));
+    return 0;
+}

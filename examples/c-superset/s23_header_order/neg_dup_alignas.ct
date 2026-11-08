@@ -1,0 +1,9 @@
+/*
+ * 反例：同一声明上写两次 _Alignas 是重复指定，ct 直接报错。
+ */
+_Alignas(8) _Alignas(16) int g;
+
+int main(void)
+{
+    return g;
+}

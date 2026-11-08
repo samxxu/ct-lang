@@ -1,0 +1,31 @@
+/*
+ * 场景：按运行期长度开一个临时数组（C99 VLA）。维度是变量 n，
+ * 不是常量表达式。
+ *
+ * CT 与 C 一致：运行期长度同样原样发射，由 C 判断是否支持；ct 不展开
+ * sizeof，`sizeof local / sizeof local[0]` 在 C 里是运行期表达式。
+ */
+#include <stdio.h>
+
+static int fill_sum(int n)
+{
+    int local[n];
+    int i;
+    int total;
+
+    total = 0;
+    for (i = 0; i < n; i++) {
+        local[i] = i + 1;
+        total = total + local[i];
+    }
+    return total;
+}
+
+int main(void)
+{
+    int n;
+
+    n = 5;
+    printf("%d %d\n", fill_sum(n), n);
+    return 0;
+}

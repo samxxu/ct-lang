@@ -1,0 +1,11 @@
+/*
+ * 反例：整数字面量后缀只能是 U / L / LL 的组合。`1UU` 里 U 出现两次，
+ * ct 在词法阶段拒绝。
+ */
+int main(void)
+{
+    unsigned long long x;
+
+    x = 1UU;
+    return (int)x;
+}

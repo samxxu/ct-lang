@@ -1,0 +1,10 @@
+/*
+ * 反例：inline 是函数说明符，不能用来声明对象。C 里这也是非法组合，
+ * ct 在解析期就报出来。
+ */
+inline int value = 1;
+
+int main(void)
+{
+    return value;
+}

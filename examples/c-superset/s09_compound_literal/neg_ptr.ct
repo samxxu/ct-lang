@@ -1,0 +1,16 @@
+/*
+ * 反例：复合字面量的类型必须是对象类型。`(struct Point *){ ... }` 是
+ * 「指针的初始化器」，不是临时对象，ct 直接拒绝。
+ */
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    struct Point *p;
+
+    p = (struct Point *){ 1, 2 };
+    return p->x;
+}

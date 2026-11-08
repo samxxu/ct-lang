@@ -1,0 +1,35 @@
+/*
+ * 场景：一个线格式包头：版本号之后是匿名 union，union 的一侧是
+ * 匿名 struct（带位域），另一侧是原始 32 位字。位域名逐层提升到外层。
+ *
+ * CT 与 C 一致：匿名成员里的位域同样提升，sizeof 由 C 计算；
+ * 带 use 的 struct，vptr 字段仍排在外层记录最后（本文件没有 use）。
+ */
+#include <stdio.h>
+
+struct Packet {
+    unsigned char version;
+    union {
+        struct {
+            unsigned kind : 2;
+            unsigned size : 6;
+            unsigned flags : 4;
+            unsigned : 4;
+        };
+        unsigned int raw;
+    };
+};
+
+int main(void)
+{
+    struct Packet p;
+
+    p.version = 1;
+    p.kind = 2;
+    p.size = 17;
+    p.flags = 5;
+
+    printf("%u %u %u %u\n", p.version, p.kind, p.size, p.flags);
+    printf("%d\n", (int)sizeof(struct Packet));
+    return 0;
+}

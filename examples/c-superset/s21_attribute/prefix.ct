@@ -1,0 +1,41 @@
+/*
+ * 场景：头文件风格的属性写法——属性写在声明符之前。函数原型、全局变量、
+ * 局部变量都支持；typedef 别名上的 aligned 会参与结构体字段布局。
+ *
+ * CT 与 C 的区别：无论源里写在哪一侧，ct 都把属性发射到声明尾部
+ * （局部变量放在 `=` 之前）；同一侧写两次报 duplicate，属性后面不是
+ * 声明报 `an attribute must prefix a declaration`。
+ */
+#include <stddef.h>
+#include <stdio.h>
+
+__attribute__((unused)) static int helper(int n);
+
+__attribute__((aligned(32))) static int g_tagged;
+
+typedef int word __attribute__((aligned(8)));
+
+struct WithWord {
+    char c;
+    word w;
+};
+
+int main(void)
+{
+    _Alignas(8) static int local;
+    __attribute__((unused)) int spare;
+    int trailing __attribute__((unused));
+
+    spare = 7;
+    local = 1;
+    g_tagged = 2;
+    printf("%d %d %d\n", helper(spare), local, g_tagged);
+    printf("%d %d\n", (int)((unsigned long)&g_tagged % 32),
+           (int)offsetof(struct WithWord, w));
+    return 0;
+}
+
+static int helper(int n)
+{
+    return n * 2;
+}

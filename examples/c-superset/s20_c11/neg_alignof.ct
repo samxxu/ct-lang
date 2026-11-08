@@ -1,0 +1,11 @@
+/*
+ * 反例：_Alignof 只接受类型形式。写成 `_Alignof x` 时 ct 直接报错，
+ * 与 C11 本身只允许类型的规定一致。
+ */
+int main(void)
+{
+    int x;
+
+    x = 1;
+    return (int)_Alignof x;
+}

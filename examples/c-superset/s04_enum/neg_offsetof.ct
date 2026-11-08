@@ -1,0 +1,15 @@
+/*
+ * 反例：offsetof 的字段校验是 CT 内建做的，拼错字段在 ct 阶段就报错，
+ * 不会把错误留到 C 编译器。
+ */
+#include <stddef.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    return (int)offsetof(struct Point, z);
+}

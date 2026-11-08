@@ -1,0 +1,33 @@
+/*
+ * 场景：赋值目标是下标、成员与变量本身，赋值结果继续参与算术或再赋值。
+ *
+ * CT 与 C 一致：`(arr[0] = 4) + 1`、`(p->n = 7)`、`(a += 2)` 都合法，
+ * 值就是赋进去的值；目标必须是变量、成员、下标或解引用。
+ */
+#include <stdio.h>
+
+struct Node {
+    int n;
+};
+
+int main(void)
+{
+    int arr[2];
+    struct Node node;
+    int a;
+    int x;
+    int y;
+    int z;
+
+    arr[0] = 0;
+    arr[1] = 0;
+    node.n = 0;
+    a = 1;
+
+    x = (arr[0] = 4) + 1;
+    y = (node.n = 7);
+    z = (a += 2);
+
+    printf("%d %d %d %d %d %d\n", x, arr[0], y, node.n, z, a);
+    return 0;
+}

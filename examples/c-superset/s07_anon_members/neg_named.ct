@@ -1,0 +1,15 @@
+/*
+ * 反例：匿名成员必须是「无名字的记录体」。`union { int i; } u;` 里
+ * 记录类型没有标签、字段却有名字，提升无从谈起，ct 要求改成带标签的
+ * 记录（`union U { int i; } u;`）。
+ */
+struct Bad {
+    union {
+        int i;
+    } u;
+};
+
+int main(void)
+{
+    return 0;
+}

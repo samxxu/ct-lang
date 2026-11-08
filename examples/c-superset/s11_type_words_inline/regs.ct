@@ -1,0 +1,50 @@
+/*
+ * 场景：模拟一段内存映射寄存器。volatile 修饰的指针让每次读写都不能被
+ * 优化掉；restrict 告诉编译器两个缓冲区不重叠。
+ *
+ * CT 与 C 一致：`volatile unsigned char *reg;` 在全局、局部、参数、
+ * 返回值上都成立；`_Bool` 与 `bool` 是同一个内置类型词。生成的 C 与手写
+ * C 完全相同。
+ */
+#include <stdbool.h>
+#include <stdio.h>
+
+static unsigned char fake_regs[4];
+static volatile unsigned char *reg;
+
+static void poke(unsigned char v)
+{
+    reg[0] = v;
+}
+
+static unsigned char peek(void)
+{
+    return reg[0];
+}
+
+static void copy4(unsigned char *restrict dst, const unsigned char *restrict src)
+{
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        dst[i] = src[i];
+    }
+}
+
+int main(void)
+{
+    unsigned char buf[4];
+    unsigned char out[4];
+    _Bool ok;
+    int i;
+
+    reg = fake_regs;
+    poke(0x5a);
+    for (i = 0; i < 4; i++) {
+        buf[i] = (unsigned char)(i + 1);
+    }
+    copy4(out, buf);
+    ok = peek() == 0x5a;
+    printf("%d %d %d %d\n", (int)peek(), (int)ok, out[0], out[3]);
+    return 0;
+}

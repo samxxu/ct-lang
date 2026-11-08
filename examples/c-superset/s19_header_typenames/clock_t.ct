@@ -1,0 +1,35 @@
+/*
+ * 场景：用时钟滴答与文件偏移两个头文件类型，验证「未知类型名」在数组、
+ * 指针、参数与 cast 上都能用。
+ *
+ * CT 与 C 一致：clock_t / off_t 都是头文件 typedef，ct 不解析头文件，
+ * 只把拼写保留下来交给 C。若名字已经登记为变量，`a * b;` 仍按乘法解析。
+ */
+#include <stdio.h>
+#include <sys/types.h>
+#include <time.h>
+
+static clock_t ticks[3];
+
+static off_t advance(off_t base, off_t delta)
+{
+    return base + delta;
+}
+
+int main(void)
+{
+    clock_t start;
+    clock_t stop;
+    off_t pos;
+    int i;
+
+    start = (clock_t)10;
+    stop = (clock_t)25;
+    for (i = 0; i < 3; i++) {
+        ticks[i] = (clock_t)(i + 1);
+    }
+    pos = advance((off_t)100, (off_t)23);
+    printf("%ld %ld %ld\n", (long)(stop - start), (long)ticks[2], (long)pos);
+    printf("%d %d\n", (int)sizeof(clock_t), (int)sizeof(off_t));
+    return 0;
+}

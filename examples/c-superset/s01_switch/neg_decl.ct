@@ -1,0 +1,23 @@
+/*
+ * 反例：C 的标签不构成作用域，`case 1:` 后面直接写声明会让变量的作用域
+ * 从标签开始、却可能被前面的 case 跳过。ct 不学 C 的这个坑，直接拒绝，
+ * 要求把声明包进块。这是 CT 比 C 更严格的地方（生成的 C 本来能编过）。
+ */
+#include <stdio.h>
+
+int main(void)
+{
+    int key;
+
+    key = 1;
+    switch (key) {
+    case 1:
+        int x;
+        x = 3;
+        printf("%d\n", x);
+        break;
+    default:
+        break;
+    }
+    return 0;
+}

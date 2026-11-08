@@ -1,0 +1,39 @@
+/*
+ * 场景：在类型定义旁边就把布局契约钉死。文件作用域的断言统一在「类型
+ * 之后、原型之前」发射，所以能引用上面定义的 struct / enum。
+ *
+ * CT 与 C 一致：判定最终由 C 编译器给出；ct 只校验条件必须是整数常量
+ * 表达式、消息必须是字符串字面量。`static_assert` 是 C23 / <assert.h>
+ * 下的同义拼写，生成物统一写 `_Static_assert`。
+ *
+ * L0 实测：`_Static_assert` 能过，但 L0 不映射 `static_assert`，会把它当
+ * 普通函数调用原样发射，随后 cc 报 "call to undeclared function"。因此本
+ * 文件在 cases.tsv 里标 l0=no，而 offsets.ct 只写 `_Static_assert`，可过 L0。
+ */
+#include <stddef.h>
+#include <stdio.h>
+
+struct Pair {
+    int a;
+    int b;
+};
+
+enum Sizes {
+    PAIR_BYTES = sizeof(struct Pair)
+};
+
+_Static_assert(sizeof(int) == 4, "int is four bytes");
+_Static_assert(sizeof(struct Pair) >= 8, "a pair holds two ints");
+static_assert(PAIR_BYTES == 8, "pair is two ints");
+
+static int check(int v)
+{
+    _Static_assert(sizeof(char) == 1, "char is one byte");
+    return v;
+}
+
+int main(void)
+{
+    printf("%d %d %d\n", (int)sizeof(int), (int)sizeof(struct Pair), check(7));
+    return 0;
+}

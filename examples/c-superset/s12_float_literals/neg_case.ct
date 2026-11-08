@@ -1,0 +1,20 @@
+/*
+ * 反例：case 的取值必须是整数常量表达式。浮点字面量即使值是整数，
+ * 也不能做标签。
+ */
+#include <stdio.h>
+
+static int pick(int key)
+{
+    switch (key) {
+    case 1.5:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+int main(void)
+{
+    return pick(1);
+}

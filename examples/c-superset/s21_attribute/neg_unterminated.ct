@@ -1,0 +1,10 @@
+/*
+ * 反例：__attribute__ 的属性列表必须闭合。少一个 `)` 时 ct 直接报
+ * unterminated，不会把半截属性交给 C。
+ */
+int g_value __attribute__((aligned(8));
+
+int main(void)
+{
+    return g_value;
+}

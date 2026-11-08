@@ -1,0 +1,36 @@
+/*
+ * 场景：逗号表达式出现在「取值位置」——括号里。`x = (i++, j * 2);`
+ * 取最后一项的值；实参与 while 条件同样可以包一层括号。
+ *
+ * CT 与 C 一致：生成物把列表写成 `(a, (b, c))`，右结合只是解析产物，
+ * 求值顺序仍是左到右。边界：for 条件里不带括号的逗号仍不做。
+ */
+#include <stdio.h>
+
+static int twice(int x)
+{
+    return x * 2;
+}
+
+int main(void)
+{
+    int i;
+    int j;
+    int x;
+    int sum;
+
+    i = 0;
+    j = 5;
+    x = (i++, j * 2);
+    printf("%d %d\n", i, x);
+
+    printf("%d\n", twice((i = 3, i + 1)));
+
+    sum = 0;
+    i = 0;
+    while ((i = i + 1, i < 3)) {
+        sum = sum + i;
+    }
+    printf("%d %d\n", i, sum);
+    return 0;
+}

@@ -1,0 +1,30 @@
+/*
+ * 场景：双向链表的节点，`struct Node *next, *prev;` 一条声明写两个同类型
+ * 指针。这是「星号属于声明符、不属于共享类型」的典型例子。
+ *
+ * CT 与 C 一致：每个声明符各自补星号；字段名逐个登记，链接关系与
+ * 成员访问都正常。
+ */
+#include <stdio.h>
+
+struct Node {
+    int value;
+    struct Node *next, *prev;
+};
+
+int main(void)
+{
+    struct Node a;
+    struct Node b;
+
+    a.value = 1;
+    b.value = 2;
+    a.next = &b;
+    a.prev = &a;
+    b.next = &a;
+    b.prev = &a;
+
+    printf("%d %d %d\n", a.value, a.next->value, b.prev->next->value);
+    printf("%d\n", (int)sizeof(a.next));
+    return 0;
+}

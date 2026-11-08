@@ -1,0 +1,49 @@
+/*
+ * 场景：一个处理器表，元素是变参函数指针；循环里按下标调用，局部指针
+ * 也能指向同一个函数。
+ *
+ * CT 与 C 一致：函数指针数组、局部指针、通过指针调用都是普通语法；
+ * ct 不检查实参类型（与 printf 一致），类型正确性由用户负责。
+ */
+#include <stdarg.h>
+#include <stdio.h>
+
+typedef int (*handler_fn)(const char *fmt, ...);
+
+static int sum2(const char *fmt, ...)
+{
+    va_list ap;
+    int a;
+    int b;
+
+    (void)fmt;
+    va_start(ap, fmt);
+    a = va_arg(ap, int);
+    b = va_arg(ap, int);
+    va_end(ap);
+    return a + b;
+}
+
+static int one(const char *fmt, ...)
+{
+    (void)fmt;
+    return 1;
+}
+
+static handler_fn handlers[2] = { sum2, one };
+
+int main(void)
+{
+    handler_fn p;
+    int i;
+    int total;
+
+    total = 0;
+    for (i = 0; i < 2; i++) {
+        total = total + handlers[i]("ignored", i, i + 1);
+    }
+
+    p = sum2;
+    printf("%d %d\n", total, p("ignored", 10, 20));
+    return 0;
+}

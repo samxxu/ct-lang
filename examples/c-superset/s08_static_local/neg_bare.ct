@@ -1,0 +1,9 @@
+/*
+ * 反例：`static` 后面必须跟声明。裸 `static;` 在 C 里也是语法错误，
+ * ct 给出更贴近上下文的诊断。
+ */
+int main(void)
+{
+    static;
+    return 0;
+}

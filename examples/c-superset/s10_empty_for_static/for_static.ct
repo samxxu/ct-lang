@@ -1,0 +1,32 @@
+/*
+ * 场景：for 的初始化子句里写 static，初始化只跑一次，变量跨调用保持。
+ *
+ * 标准 C 的 for 首句只允许存储类 register 或无存储类，static 是 GNU 扩展；
+ * ct 把它提到自带块里发射成 `{ static int i = 0; for (; i < 2; i++) ... }`，
+ * 生成的 C 是标准 C99。第二次调用 run() 时 i 已经是 2，循环体一次都不跑。
+ */
+#include <stdio.h>
+
+static int run(void)
+{
+    int total;
+
+    total = 0;
+    for (static int i = 0; i < 2; i++) {
+        total = total + 1;
+    }
+    return total;
+}
+
+int main(void)
+{
+    int first;
+    int second;
+    int third;
+
+    first = run();
+    second = run();
+    third = run();
+    printf("%d %d %d\n", first, second, third);
+    return 0;
+}

@@ -1,0 +1,1 @@
+error: a variadic function pointer needs a named parameter before '...'

@@ -1,0 +1,75 @@
+# examples/c-superset case manifest
+# feature|case|mode|l0|expect_exit|note
+s01_switch|dispatch|run|yes|0|enum-valued switch, fallthrough, default
+s01_switch|exprs|run|yes|0|case over macro/shift/char/sizeof, block after label
+s01_switch|neg_decl|neg|no|1|a declaration may not follow a case label
+s02_do_while|at_least_once|run|yes|0|body runs once even when the test is false
+s02_do_while|braceless|run|yes|0|single-statement body, break, continue-style flow
+s03_goto|find|run|yes|0|forward goto out of two loops
+s03_goto|rewrite|run|yes|0|backward goto hand-written loop, cleanup label
+s04_enum|states|run|yes|0|implicit/explicit enum values, typedef, switch
+s04_enum|offsetof|run|yes|0|offsetof on struct/union and typedef aliases
+s04_enum|neg_offsetof|neg|no|1|unknown field is diagnosed by ct, not C
+s05_union|tagged|run|yes|0|tagged union, sizeof and zero offsets
+s05_union|nested|run|yes|0|union as a struct member, typedef alias
+s05_union|neg_use|neg|no|1|a union cannot carry a trait vptr
+s06_bitfields|flags|run|yes|0|named and unnamed bit-fields, truncation on store
+s06_bitfields|wire|run|yes|0|multi-declarator bit-fields with enum widths
+s06_bitfields|neg_ptr|neg|no|1|a bit-field must be an integer type
+s07_anon_members|variant|run|yes|0|anonymous union/struct, promoted names
+s07_anon_members|packet|run|yes|0|nested anonymous record with bit-fields
+s07_anon_members|neg_named|neg|no|1|an anonymous record member cannot have a name
+s08_static_local|counter|run|yes|0|static counter, zero init, static string
+s08_static_local|lazy_table|run|yes|0|build a static table exactly once
+s08_static_local|neg_bare|neg|no|1|static must prefix a declaration
+s09_compound_literal|points|run|yes|0|compound literal as value, argument, return
+s09_compound_literal|designated|run|yes|0|designated init and direct .field suffix
+s09_compound_literal|neg_ptr|neg|no|1|a compound literal needs an object type
+s09_compound_literal|neg_array|neg|no|1|an array compound literal is not in the subset
+s10_empty_for_static|empty|run|yes|0|empty statement in for/while/if/switch/label
+s10_empty_for_static|for_static|run|yes|0|static in for-init runs its init once
+s11_type_words_inline|words|run|yes|0|volatile/restrict/bool/int32_t, inline both orders
+s11_type_words_inline|regs|run|yes|0|volatile MMIO register, restrict copy
+s11_type_words_inline|neg_inline|neg|no|1|inline can only declare a function
+s12_float_literals|formats|run|yes|0|.5, 1.5e3, f/F/L suffixes, truncation
+s12_float_literals|calc|run|yes|0|double/float arithmetic and fixed-point print
+s12_float_literals|neg_case|neg|no|1|a float literal is not an integer constant
+s13_case_ranges|grades|run|yes|0|score bands as case ranges
+s13_case_ranges|chars|run|yes|0|char ranges mixed with single labels
+s13_case_ranges|neg_missing_low|neg|no|1|a range label needs a lower bound
+s14_static_assert|sizes|run|no|0|file/function asserts, static_assert spelling (L0 passes it through)
+s14_static_assert|offsets|run|yes|0|offsetof and union size in asserts
+s14_static_assert|neg_nonconst|neg|no|1|assert condition must be constant
+s14_static_assert|ccfail_false|ccfail|no|1|the failing assert is the C compiler's verdict
+s15_multi_declarators|fields|run|yes|0|len/cap, *data/count, bit-field rows
+s15_multi_declarators|list|run|yes|0|struct Node *next, *prev
+s15_multi_declarators|neg_fnptr|neg|no|1|a function pointer declares one name
+s16_array_length|macro_dims|run|yes|0|macro/shift/parenthesised dimensions
+s16_array_length|vla|run|yes|0|run-time length (VLA) passes through
+s17_init_length|keywords|run|yes|0|initializer far beyond the old 160-byte text field
+s17_init_length|long_item|run|yes|0|one very long string as a list item
+s18_comma|for_clauses|run|yes|0|comma in for-init and for-step
+s18_comma|value|run|yes|0|comma in a parenthesised value position
+s18_comma|neg_for_cond|neg|no|1|for-condition comma must be parenthesised
+s19_header_typenames|time_t|run|yes|0|time_t in declarations, params, casts
+s19_header_typenames|clock_t|run|yes|0|clock_t/off_t in arrays, pointers, params
+s20_c11|align|run|yes|0|_Alignas/_Alignof/_Atomic declarations
+s20_c11|generic|run|yes|0|_Generic selection passed through to C
+s20_c11|neg_alignof|neg|no|1|_Alignof needs a type in parentheses
+s21_attribute|packed|run|no|0|packed struct, aligned global, format attribute (L0 drops the body attribute)
+s21_attribute|prefix|run|yes|0|attributes before the declarator
+s21_attribute|neg_unterminated|neg|no|1|unterminated __attribute__
+s22_int_suffixes|suffixes|run|yes|0|U/L/ULL spellings and normalisation
+s22_int_suffixes|spellings|run|no|0|_Noreturn, static_assert, __restrict (L0 does not map static_assert)
+s22_int_suffixes|neg_suffix|neg|no|1|an integer suffix may be U, L or LL
+s23_header_order|align_first|run|yes|0|_Alignas/attribute before the storage class
+s23_header_order|atomic_order|run|yes|0|_Atomic(type), bare _Atomic, _Alignas combo
+s23_header_order|neg_dup_alignas|neg|no|1|duplicate _Alignas on one declaration
+s24_prefix_incdec|array|run|yes|0|prefix ++/-- as a value and as a subscript
+s24_prefix_incdec|trim|run|yes|0|s[--n] trailing-zero trim loop
+s25_assignment_value|parse|run|yes|0|assignment in while/if conditions, chained
+s25_assignment_value|targets|run|yes|0|assignment to subscript/field, compound assign
+s25_assignment_value|neg_lvalue|neg|no|1|assignment needs an assignable target
+s26_variadic_fnptr|logger|run|yes|0|variadic function pointer in a field/global
+s26_variadic_fnptr|table|run|yes|0|array and local of variadic function pointers
+s26_variadic_fnptr|neg_bad|neg|no|1|... needs a named parameter before it

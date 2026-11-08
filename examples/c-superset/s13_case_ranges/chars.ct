@@ -1,0 +1,32 @@
+/*
+ * 场景：字符分类。字母与数字用范围标签，符号退回单值标签，展示两类标签
+ * 可以在同一个 switch 里混排。
+ *
+ * CT 与 C 一致：范围标签与单值标签共享同一套常量校验；区间重叠、上下界
+ * 颠倒不检查，交给 C 编译器。
+ */
+#include <stdio.h>
+
+static int kind(char c)
+{
+    switch (c) {
+    case 'a' ... 'z':
+        return 1;
+    case 'A' ... 'Z':
+        return 2;
+    case '0' ... '9':
+        return 3;
+    case '-':
+    case '+':
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+int main(void)
+{
+    printf("%d %d %d %d %d %d\n", kind('q'), kind('Q'), kind('7'),
+           kind('-'), kind('+'), kind('#'));
+    return 0;
+}

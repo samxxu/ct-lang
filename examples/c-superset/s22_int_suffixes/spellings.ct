@@ -1,0 +1,41 @@
+/*
+ * 场景：其余 C 拼写：_Noreturn 停机函数、C23 的 static_assert 同义拼写、
+ * __restrict / __restrict__ 参数。
+ *
+ * CT 与 C 一致：_Noreturn 以第一处声明为准，后面的定义不会抹掉它；
+ * static_assert 生成物统一写 _Static_assert；__restrict 与 restrict 同义，
+ * 原样保留在类型拼写里。
+ *
+ * L0 实测：L0 不识别 static_assert 同义拼写，会原样发射成函数调用，cc 报
+ * "call to undeclared function 'static_assert'"。所以本文件标 l0=no；
+ * _Noreturn 与 __restrict 本身 L0 能过。
+ */
+#include <stdio.h>
+
+_Noreturn void halt(void);
+
+static int total(const int *__restrict a, int *__restrict__ b)
+{
+    return *a + *b;
+}
+
+_Noreturn void halt(void)
+{
+    for (;;) {
+    }
+}
+
+int main(void)
+{
+    int a;
+    int b;
+
+    static_assert(1 + 1 == 2, "arithmetic works");
+    a = 1;
+    b = 2;
+    if (a > 100) {
+        halt();
+    }
+    printf("%d %d\n", total(&a, &b), (int)sizeof(unsigned long long));
+    return 0;
+}

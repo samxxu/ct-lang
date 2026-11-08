@@ -1,0 +1,13 @@
+/*
+ * 场景：故意写一个失败的断言，验证「最终判定由 C 编译器给出」。
+ * ct 编译这一步必须成功（它不折叠常量），错误来自后面的 cc。
+ */
+#include <stdio.h>
+
+_Static_assert(1 == 2, "deliberately false");
+
+int main(void)
+{
+    printf("unreachable\n");
+    return 0;
+}

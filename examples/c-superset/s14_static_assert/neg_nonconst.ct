@@ -1,0 +1,12 @@
+/*
+ * 反例：断言的条件必须是整数常量表达式。函数局部变量不是常量，
+ * ct 在解析期报错，不把它留给 C。
+ */
+int main(void)
+{
+    int n;
+
+    n = 1;
+    _Static_assert(n == 1, "n is one");
+    return n;
+}

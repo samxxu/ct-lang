@@ -1,0 +1,43 @@
+/*
+ * 场景：带指定初始化器的嵌套记录，以及直接对复合字面量取字段。
+ *
+ * CT 与 C 一致：`.y = 9, .x = 8` 顺序无关；嵌套花括号、字符串字面量都
+ * 原样发射。复合字面量后面可以紧接 `.field`，值就是该字段。CT 的边界：
+ * 不能对复合字面量直接调 trait 方法（先赋给变量），数组类型
+ * `(int[]){...}` 也不在子集内。
+ */
+#include <stdio.h>
+
+struct Inner {
+    int a;
+    int b;
+};
+
+struct Wrap {
+    int id;
+    struct Inner in;
+    const char *name;
+};
+
+int main(void)
+{
+    struct Wrap w;
+    struct Inner in;
+    int i;
+    int total;
+
+    w = (struct Wrap){ .id = 1, .in = { .b = 20, .a = 10 }, .name = "wrap" };
+    in = (struct Inner){ .b = 2, .a = 1 };
+    printf("%d %d %d %s\n", w.id, w.in.a, w.in.b, w.name);
+    printf("%d %d\n", in.a, in.b);
+    printf("%d\n", ((struct Inner){ .b = 9, .a = 8 }).b);
+
+    total = 0;
+    for (i = 0; i < 3; i++) {
+        struct Inner step;
+        step = (struct Inner){ i, i * 2 };
+        total = total + step.a + step.b;
+    }
+    printf("%d\n", total);
+    return 0;
+}

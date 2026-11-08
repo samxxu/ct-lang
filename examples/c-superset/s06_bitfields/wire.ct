@@ -1,0 +1,37 @@
+/*
+ * 场景：手写一个 32 位的线格式头。一条声明写多个位域，宽度来自枚举成员，
+ * 无名字段补齐到整 32 位。
+ *
+ * CT 与 C 一致：`unsigned kind : 2, size : 6;` 与普通字段的多声明符同一文法；
+ * 位宽可以来自宏或枚举成员（单名字放行，由 C 折叠）。ct 只校验「必须是
+ * 整数类型、不能是数组」，布局仍交给 C。
+ */
+#include <stdio.h>
+
+enum WireBits {
+    KIND_BITS = 2,
+    SIZE_BITS = 6,
+    FLAG_BITS = 4
+};
+
+typedef struct {
+    unsigned kind : KIND_BITS;
+    unsigned size : SIZE_BITS;
+    unsigned flags : FLAG_BITS;
+    unsigned : 4;
+    unsigned seq : 16;
+} Header;
+
+int main(void)
+{
+    Header h;
+
+    h.kind = 3;
+    h.size = 63;
+    h.flags = 9;
+    h.seq = 65535;
+
+    printf("%u %u %u %u\n", h.kind, h.size, h.flags, h.seq);
+    printf("%d\n", (int)sizeof(Header));
+    return 0;
+}

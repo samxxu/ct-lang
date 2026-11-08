@@ -1,0 +1,41 @@
+/*
+ * 场景：对全局、字段、局部三种对象做 16/8 字节对齐，并用 _Alignof
+ * 读回类型对齐；同时声明两个 _Atomic 计数器。
+ *
+ * CT 与 C 一致：_Alignas 是类型拼写的一部分，原样放在声明类型之前；
+ * _Alignof 与 sizeof 共用一个节点，只接受类型形式；_Atomic 与
+ * _Atomic(type) 都原样保留。原子语义完全由 C 编译器负责——这里只验证
+ * 声明、赋值与 sizeof 能过。
+ */
+#include <stdio.h>
+
+_Alignas(16) int g_a;
+static _Alignas(16) int g_b;
+
+struct Frame {
+    _Alignas(8) int kind;
+    int size;
+};
+
+_Atomic(int) counter;
+_Atomic int flag;
+
+int main(void)
+{
+    _Alignas(16) int local;
+
+    local = 1;
+    g_a = 2;
+    g_b = 3;
+    counter = 1;
+    counter = counter + 1;
+    flag = 0;
+
+    printf("%d %d %d\n", (int)_Alignof(double), (int)_Alignof(int),
+           (int)_Alignof(struct Frame));
+    printf("%d %d\n", (int)((unsigned long)&g_a % 16),
+           (int)((unsigned long)&local % 16));
+    printf("%d %d %d\n", (int)counter, (int)flag,
+           (int)sizeof(_Atomic(int)));
+    return 0;
+}

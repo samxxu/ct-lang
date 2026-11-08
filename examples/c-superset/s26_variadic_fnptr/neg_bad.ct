@@ -1,0 +1,13 @@
+/*
+ * 反例：变参函数指针的 `...` 前面必须有一个具名参数。`(...)` 无法确定
+ * va_start 的锚点，ct 直接拒绝。
+ */
+typedef int (*bad_fn)(...);
+
+int main(void)
+{
+    bad_fn f;
+
+    f = 0;
+    return f != 0;
+}

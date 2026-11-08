@@ -1,0 +1,1 @@
+error: a declaration cannot follow a case label; wrap it in a block
