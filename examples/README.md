@@ -10,14 +10,14 @@
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
 | `01_greeter` | 最小可用：一个 trait、一个 struct、一次 impl、两次调用 | 无 | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
-| `02_market` | 多个对象互调；同一 trait 在两个 struct 上给出不同实现 | 无 | 同上 |
+| `02_market` | 多个对象互调；同一 trait 在两个 struct 上给出不同实现；末尾 `Reporter all[2]` 接口值数组经 `broadcast()` 统一派发 | ct-ast（接口值数组） | `check-ast.sh` + `check-warnings.sh`（`test/run.sh` 跳过） |
 | `03_receivers` | receiver 可以是数组元素、指针数组元素、指针字段链 | 无 | 同上 |
-| `04_rvalue` | rvalue receiver（工厂返回值直接调用），receiver 只求值一次 | 无 | 同上 |
+| `04_rvalue` | rvalue receiver（工厂返回值直接调用），receiver 只求值一次；**链式上限一步，不是 fluent** | 无 | 同上 |
 | `05_body_dispatch` | `impl` 方法体内经 vtable 的递归分派（字段链 / 参数 / 局部变量） | 无 | 同上 |
-| `06_iface_field` | trait 值作为 struct 字段，跨对象组合 | 无 | 同上 |
+| `06_iface_field` | 接口值字段（自动装箱）与指向接口值的指针字段（`Node *node` + `w.node->show()`）并排对比 | 无 | 同上 |
 | `07_dialect` | 注释里的 DSL 经 `ct-dialects/` 插件展开成纯 CT，编译器零感知 | 插件（目录内自带） | 同上（`test/run.sh` 的 dialect 层） |
-| `08_map_binding` | `map trait ... for instance`：绑定一个改不动的全局实例并装箱 | ct-ast（`map`） | `check-ast.sh` + `check-warnings.sh`（`test/run.sh` 跳过） |
-| `09_callback` | 容器回调约定：手写 `(fn, env)` 对，`env` 作为回调首参 | 无 | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `08_map_binding` | `map trait ... for instance`：绑定一个改不动的全局实例并装箱；另带 `src/type_bridge/` 子包演示 `map ... for type` 的指针别名宿主 | ct-ast（`map`）；子包需 `ct build` 多单元 | `check-ast.sh` + `check-warnings.sh`（instance 单文件）+ `check-warnings.sh` 的 src-layout build 段 |
+| `09_callback` | 容器回调约定：档① 手写 `(fn, env)` 对；档② `=>` 闭包字面量在 `callback_tier2.ct` | 档① 无；档② ct-ast | `check-ast.sh` + `check-warnings.sh`；`callback.ct` 另跑 `test/run.sh` |
 | `json` | 纯 CT 的 JSON 读写：零分配只读视图 + 写出 | 无 | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `wave1-demo` | Wave 1 包（`hal` / `hal-posix` / `std`）合用 | 外部 ct-pkg 索引 | **仅 CI** |
 
@@ -27,16 +27,19 @@
 每个调用点在原地展开成一次普通 C 调用。键是**拼写**：`int`、`unsigned`、`unsigned int`
 是三个不同的键。
 
-`08_map_binding` 用的是 `map ... for instance`，绑定的是一个实例，仍需装箱进 trait 值；
-下表的两个示例用 `for type`，调用点是普通 C 值，不存在装箱。
+`08_map_binding` 主文件用的是 `map ... for instance`，绑定的是一个实例，仍需装箱进 trait 值；
+它的 `src/type_bridge/` 子包则改用 `for type FileHandle`，其中
+`pub type FileHandle = struct ct_file *;` 是纯编译期别名（不发射 typedef），
+消费端写 `f.read()`。下表的两个示例同样用 `for type`，调用点是普通 C 值，不存在装箱。
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
+| `08_map_binding/src/type_bridge` | `pub type FileHandle = struct ct_file *;` + `map ... for type FileHandle`，消费端 `f.read()` 原地展开 | ct-ast + `ct build` 多单元 | `check-warnings.sh` 的 src-layout build 段 |
 | `13_builder_chain` | 宿主方法返回宿主本身，形成真正的 `b.add(1).add(2).value()` 链 | ct-ast + `ct build` 多单元 | `check-warnings.sh`（本文件新增段） |
 | `14_scalar_host` | 给 `int` / `char *` / `double` / `unsigned long` 加方法，含链式调用 | ct-ast + `ct build` 多单元 | 同上 |
 
-`13`、`14` 需要 `.m.ct` 映射单元与 `import`，只能用 `ct build` 的多单元模式，
-因此源码放在 `examples/<dir>/src/main.ct`（三层），而不是会被单文件编译的
+`08_map_binding/src`、`13`、`14` 都带 `.m.ct` 映射单元与 `import`，只能用 `ct build`
+的多单元模式，因此入口放在 `examples/<dir>/src/main.ct`（三层），而不是会被单文件编译的
 `examples/<dir>/*.ct`。`wave1-demo` 采用同一种 `src/` 布局。
 
 ## 闭包
@@ -48,6 +51,10 @@
 | `10_closure_pipeline` | 闭包字面量 / 已声明的绑定的传参约定，配合 `loop(n)` | ct-ast | `check-ast.sh` + `check-warnings.sh` |
 | `12_closure_in_loop` | 循环体内创建闭包：按值捕获，只保留创建那一轮的变量 | ct-ast | 同上 |
 
+`09_callback` 的档②（`callback_tier2.ct`）同样属于这一组：`=>` 闭包字面量直接填满
+`(fn, env)` 两个槽，档① 的手写适配器不再需要。它单独成文件是为了让 `callback.ct`
+继续在 L0 上跑。
+
 ## loop 语义
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
@@ -56,7 +63,11 @@
 
 ## 门禁归属说明
 
-- `test/run.sh`：L0 种子驱动的端到端层；首行带 `//@ct-requires: ct-ast` 的示例会被跳过。
-- `check-ast.sh`：语料层以编译模式逐个编译 `examples/*/*.ct`，有 `expected.out` 的比较输出。
-- `check-warnings.sh`：同一语料的零警告门禁，另加 `examples/*/src/main.ct` 的 build 模式段。
+- `test/run.sh`：L0 种子驱动的端到端层，覆盖编译模式下的 `examples/*/*.ct`；首行带
+  `//@ct-requires: ct-ast` 的文件会被跳过（`02_market` 因接口值数组、`09_callback/callback_tier2.ct`
+  因 `=>`、`08_map_binding/map_binding.ct` 因 `map` 都在此列）。
+- `check-ast.sh`：语料层以编译模式逐个编译 `examples/*/*.ct`，有 `expected.out` 的比较输出；
+  `src/` 三层入口不在它的 glob 内（`check-ast.sh` 的语料层保持编译模式）。
+- `check-warnings.sh`：同一语料的零警告门禁；另有一段 `examples/*/src/main.ct` 的 build 模式，
+  覆盖 `08_map_binding/src`、`13_builder_chain`、`14_scalar_host`（目录内必须有 `.m.ct`）。
 - `wave1-demo` 依赖外部的 ct-pkg 索引，本地门禁不覆盖，只在 CI 里跑。
