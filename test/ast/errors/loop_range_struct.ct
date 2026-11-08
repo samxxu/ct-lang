@@ -1,4 +1,4 @@
-/* A struct value has no ordering the loop header could use (D23-3). */
+/* A struct value has no ordering the loop header could use (D23-8). */
 struct Pair { int a; int b; }
 
 int main(void)

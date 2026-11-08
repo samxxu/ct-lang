@@ -4447,13 +4447,14 @@ else
     bad "range: chained column" "$(cat "$work/lrc.err")"
 fi
 
-# 2) D23-3: an address-shaped or aggregate bound is a hard error. The array case
+# 2) D23-8: an address-shaped or aggregate bound is a hard error. The array case
 #    used to be silent -- its type string is indistinguishable from a pointer's,
 #    so only the symbol table can see it.
 for pair in \
     "loop_range_pointer|a loop bound must be an integer (got 'int *')" \
     "loop_range_struct|a loop bound must be an integer (got 'struct Pair')" \
-    "loop_range_array|a loop bound must be an integer (got the array 'a')"
+    "loop_range_array|a loop bound must be an integer (got the array 'a')" \
+    "loop_range_array_member|a loop bound must be an integer (got 'int[2][3]')"
 do
     cf="${pair%%|*}"
     cfmsg="${pair#*|}"
@@ -4504,15 +4505,20 @@ else
         "$(cat "$work/lr_count.err" "$work/lr_range.err"; diff -u "$work/lr_count.tail" "$work/lr_range.tail" 2>/dev/null | head -6)"
 fi
 
-# 4) The shape: one native `for`, `i` initialised from the lower bound, the upper
-#    bound snapshotted once in a private temporary. It must never print as
-#    `i < (<expr>)`, which would re-evaluate the bound every round.
+# 4) The shape: one native `for`, both bounds snapshotted once into private
+#    temporaries, and the lower one assigned before the upper one inside `i`'s
+#    single initializer -- the comma operator sequences them (C99 §6.5.17)
+#    instead of relying on declarator-initializer order (§6.7.8). It must never
+#    print as `i < (<expr>)`, which would re-evaluate the bound every round.
 if "$work/ct-ast" test/ast/102_loop_range_basic/prog.ct -o "$work/l102c.c" \
         >"$work/l102c.out" 2>"$work/l102c.err" \
-   && grep -Fq 'for (int i = (' "$work/l102c.c" \
-   && grep -Fq '), __ct_loop_n_' "$work/l102c.c" \
+   && grep -Fq 'for (int __ct_loop_n_' "$work/l102c.c" \
+   && grep -Fq ', i = ((__ct_loop_n_' "$work/l102c.c" \
+   && grep -Fq ')), (__ct_loop_hi_' "$work/l102c.c" \
+   && grep -Fq ')), __ct_loop_n_' "$work/l102c.c" \
+   && grep -Fq '; i < __ct_loop_hi_' "$work/l102c.c" \
    && ! grep -Fq 'i < (' "$work/l102c.c"; then
-    ok "range (lowers to one for that snapshots both bounds)"
+    ok "range (one for, both bounds assigned left to right by a comma expression)"
 else
     bad "range: lowering shape" "$(cat "$work/l102c.err")"
 fi

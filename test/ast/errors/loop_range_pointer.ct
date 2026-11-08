@@ -1,5 +1,5 @@
 /* The bound is an address, not a count: once a silent conversion, now a hard
-   error (Phase 23 D23-3). */
+   error (Phase 23 D23-8). */
 int main(void)
 {
     int n = 4;
