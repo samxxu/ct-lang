@@ -283,7 +283,7 @@ CT 无错误码；契约是**稳定英文文案**，由 `check-ast.sh` 的负例
 
 ```text
 t.ct:4:9: error: a closure cannot escape through 'return'
-t.ct:4:9: note: use an explicit Callable struct + trait: struct Adder { int n; } use Callable; impl Callable for Adder { int call(int x) { … } }
+t.ct:4:9: note: use an explicit trait struct: struct Adder { int n; } use Callable1i; impl Callable1i for Adder { int call(int x) { … } }  (import std::callable::Callable1i;)
 ```
 
 文案清单（小写、无句号、标识符单引号）：
@@ -305,8 +305,22 @@ a local cannot shadow the captured '<name>'
 identifier '__ct_' is reserved for the compiler
 ```
 
-hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / `impl Callable for …`），
-不能只写「不支持」。
+hint 必须给出**可抄的三行**档① 写法，不能只写「不支持」。`Callable` 是 ct-pkg 里的普通
+`pub trait`，所以 hint 必须写明**具体族名与 `import`**（族名按签名选），不能假设包已安装：
+
+```text
+import std::callable::Callable1i;
+struct Adder { int n; } use Callable1i;
+impl Callable1i for Adder { int call(int x) { … } }
+```
+
+同一段 hint 还要给一份**不依赖 std 的三行本地 trait**（同单元自建，零 import，包未安装时也可用）：
+
+```text
+trait Callable1i { int call(int x); }
+struct Adder { int n; } use Callable1i;
+impl Callable1i for Adder { int call(int x) { … } }
+```
 
 **`note:` 通道对既有诊断契约的影响（2026-11-08 核对，写入 S4 验收）**：
 
@@ -360,6 +374,16 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 - **`Callable` 形态（已定稿 D21-7，2026-11-08）**：按签名一族（`Callable0` / `Callable1i` / …），
   每个签名一个 trait；**不做单个 `Callable` + `void *` 的擦除版本**。无泛型时「万能接口」只能靠
   调用点强转，等于把类型检查让掉；按族实现才能让 S6 的档① / 档② 互通有可检查的签名。
+- **承载形式**：`Callable` 族是 ct-pkg 里普通的 `pub trait` + 普通 `struct`，必须放在包的
+  **`.h.ct`** 里，**不能是 `.m.ct`**。原因两条，都是编译器现状而非风格偏好：
+  `.m.ct` 的白名单只有 `pub trait` / `map` / `type` / `_Static_assert`，出现 `impl` 直接报
+  `a .m.ct unit cannot contain an impl`（`Parser.h.ct`），而消费者要在自己的单元里写
+  `impl Callable1i for Adder`；且 `.m.ct` 里声明的 trait 被置为 `is_static`（`Parser.h.ct` 的
+  `is_static = self->unit_is_map`），static trait 既不能 `use`（`a static trait cannot be adopted`）
+  也不能 `impl`（`a static trait cannot be implemented`），消费者根本无法实现它。
+- **为什么不内建**：`Drop` 内建是因为它有语义钩子——`delete` 要直接调用 `S_Drop_drop`、
+  无 impl 时要合成默认 drop、且不能有 vptr / vtable。`Callable` 没有这类钩子，它就是普通的
+  trait 派发；内建只会把 std 的命名约定硬编码进编译器，所以归属 ct-pkg。
 
 否则 `char *` 宿主映射会与闭包调用点共享候选集，每个闭包调用都可能变成歧义报告。
 
@@ -446,7 +470,7 @@ hint 必须给出**可抄的三行**档① 写法（`struct` / `use Callable` / 
 | **S3** | **最小端到端 + ABI 冻结**：单表达式闭包、env/trampoline、按 owner 预发（G3）、调用点改写；冻结 `(fn, env)` 顺序与**单元级计数器命名**（D21-3、D21-4） | S2 | `Emitter.h.ct`、`Diag` | 探针 70 的生成 C 过 `cc -std=c99`、运行结果正确、`grep -c malloc` = 0；**零闭包单元生成物逐字节不变**；冻结后任何 ABI / 命名改动必须另开版本 | 移除 emitter 分支；S2 保持 |
 | **S4** | 逃逸检查 E1–E7（含 E7 绑定规则）、捕获规则的 4 个新检查（§4.2）、`note:` 通道（D21-6，不计 `nsem` / `MAX_ERRORS`，不改 JSON 契约）；负例进 `test/ast/errors/`（D21-9）；E8/E9 写入文档 | S3 | `Stmt.h.ct`、`Memory.h.ct`、`Diag` | 探针 72–75、84 的负例文案被 `check-ast.sh` 钉住；`int (*d)(int) = c;`、`c = d;`、字段/元素搬运、写捕获名、`&n`、捕获 `own`/`borrow`/闭包都在**源码位置**报错；`*p = …` 不误报；**note 只增加 `file:line:col: note:` 行**：`ctc: N error(s) generated` 的 N、`MAX_ERRORS` 上限、`ct check` 退出码、`--diagnostics=json` 的 `severity` 与 `warnings` 形状均不变 | 移除 `check_closure_store`、4 个捕获检查与 `ct_sem_note` |
 | **S5** | 多行体、嵌套闭包、参数对实参（G2）、两单元 | S4 | `Parser.h.ct`、`Expr.h.ct`、`Emitter.h.ct` | 探针 71、76、77、79；`ct build` 两单元各自 `static` 不冲突 | 逐个语法特性独立回滚 |
-| **S6** | 官方 `Callable` **按签名一族（D21-7，不做单个 `void *` 擦除版）** + 互通 | S3（可与 S4/S5 并行） | `ct-pkg/std`（需授权）、本仓 `docs/**` + `examples/**` | 探针 78：档① 与档② 交给同一个函数；ct-pkg 测试绿 | 撤回 ct-pkg 包，本仓文档保留 |
+| **S6** | 官方 `Callable` **按签名一族（D21-7，不做单个 `void *` 擦除版）** + 互通；族以普通 `pub trait` + `struct` 落在 ct-pkg 的 `.h.ct`（不能是 `.m.ct`，§4.9）；保留「跨单元按名调用 `static` impl 不可用」的限制说明（§4.4，传给别单元只能用 trampoline 地址或 vtable） | S3（可与 S4/S5 并行） | `ct-pkg/std`（**需 ct-pkg 仓的改动授权**）、本仓 `docs/**` + `examples/**` | 探针 78：档① 与档② 交给同一个函数；ct-pkg 测试绿 | 撤回 ct-pkg 包，本仓文档保留 |
 | **S7** | 自举、文档、收口（D21-10：收口 bump `v0.21.0`，不并入 `v0.20.x`） | S4 / S5 / S6 | 全仓 | 11 道硬门禁 + CI 三 job + nightly + fixpoint；bump `v0.21.0` | 按版本回退 |
 
 #### 依赖顺序（D21-11，已定稿 2026-11-08）
@@ -456,7 +480,7 @@ S0 / S1 并行 → S2 → S3（ABI 冻结）→ S4 → S5 ∥ S6 → S7。S6 不
 ```text
 S0 文档 ─────────────┐
 S1 outlives ─→ S2 前端 ─→ S3 端到端（ABI 冻结）─→ S4 逃逸/G1 ─→ S5 多行/嵌套/G2/两单元 ─┐
-                          └─→ S6 Callable（可与 S4/S5 并行，需 ct-pkg 授权）──────────┴─→ S7 收口
+                          └─→ S6 Callable（可与 S4/S5 并行，需 ct-pkg 仓授权）──────────┴─→ S7 收口
 ```
 
 #### 与旧编号的映射
@@ -653,6 +677,7 @@ Phase 21 完成需同时满足：
     `MAX_ERRORS 20` 的触发点、`ct check` 退出码、`--diagnostics=json` 的 `severity` 与 `warnings`
     形状全部不变（§4.6、S4）。
 12. D21-7 的 `Callable`：按签名一族落地（`Callable0` / `Callable1i` …），不存在单个 `void *` 擦除版；
+    族是 ct-pkg 里普通 `pub trait` + `struct`，落在包的 `.h.ct`（不能是 `.m.ct`，§4.9），**不内建**；
     探针 78 证明档① / 档② 能交给同一个函数。
 13. D21-10 的版本：收口一次性 bump 到 `v0.21.0`，`CTC_VERSION` 五处一致；不并入 `v0.20.x`。
 14. D21-11 的排期：按 S0/S1 并行 → S2 → S3（ABI 冻结）→ S4 → S5 ∥ S6 → S7 执行，S6 不先于 S3。
@@ -805,9 +830,17 @@ closures must generate byte-identical C (verified in S3).
   `ct_sem_note(line, col, msg, path)` channel; it prints a `file:line:col: note:` line and does not
   increment `nsem`, record a `Warn`, or consume a `MAX_ERRORS 20` slot. `ctc: N error(s) generated`, the
   `ct check` exit code, `--diagnostics=json`'s `severity` and its `{"warnings":[...]}` shape are unchanged;
-  notes are text-only, like semantic errors, and are not JSON keys.
+  notes are text-only, like semantic errors, and are not JSON keys. The hint must be copyable: the
+  concrete family name plus its `import` (`import std::callable::Callable1i;`), never assuming the
+  package is installed, plus a three-line local trait form that needs no std.
 - `Callable` (**D21-7, finalised 2026-11-08**): one trait per signature family (`Callable0` / `Callable1i` /
   …), never a single `Callable` with `void *` erasure; a universal interface would need call-site casts.
+  The family lives in ct-pkg as ordinary `pub trait` + `struct` declarations in **`.h.ct`**, never
+  `.m.ct`: a `.m.ct` unit cannot contain an `impl`, and its traits are `static` (the parser refuses to
+  adopt or implement a static trait), so consumers could not implement the family. It is not built in
+  because, unlike `Drop` (which has semantic hooks — `delete` calls `S_Drop_drop`, a default drop is
+  synthesised, no vtable), `Callable` is plain trait dispatch; building it in would only hard-code
+  std's naming convention in the compiler.
 - Honest limits: env handed out as `void *` to an opaque C function **or to another CT function (including a
   future std `each`)** can be stored there; the compiler cannot see it.
 
@@ -823,7 +856,7 @@ S3 freezes the ABI: after it, the `(fn, env)` order, the naming rules and the ca
 | S3 | **End-to-end + ABI freeze**: single-expression closures, env/trampoline, per-owner pre-scan (G3), call-site rewrite; freezes the `(fn, env)` order and the **per-unit counter naming** (**D21-3**, **D21-4**) | S2 | Emitter, Diag | probe 70 compiles with `cc -std=c99`, runs, `malloc` count 0; **zero-closure units byte-identical**; any ABI or naming change after the freeze needs a new version |
 | S4 | Escapes E1–E7 (incl. the E7 binding rule) + the **four new capture checks** (§4.2) + the `note:` channel (**D21-6**; no `nsem`/`MAX_ERRORS`/JSON change); negatives under `test/ast/errors/` (**D21-9**); E8/E9 documented | S3 | Stmt, Memory, Diag | probes 72–75 and 84 pinned; `int (*d)(int) = c;`, `c = d;`, field/element moves, writing a captured name, `&n`, and capturing `own`/`borrow`/a closure all error at the **source position**; `*p = …` does not false-positive; **a note only adds a `file:line:col: note:` line** — `N`, the `MAX_ERRORS` cap, the `ct check` exit code, and JSON's `severity` / `warnings` shape stay unchanged |
 | S5 | Block bodies, nesting, parameter-pair arguments (G2), two units | S4 | Parser, Expr, Emitter | probes 71, 76, 77, 79; two-unit `static` names do not clash |
-| S6 | Official `Callable` **one trait per signature family** (**D21-7**, no single `void *` erasure) + interop | S3 (parallel with S4/S5) | `ct-pkg/std` (authorisation), docs, examples | probe 78: tier ① and tier ② handed to the same function |
+| S6 | Official `Callable` **one trait per signature family** (**D21-7**, no single `void *` erasure) + interop; the family is ordinary `pub trait` + `struct` in ct-pkg's **`.h.ct`** (never `.m.ct`, §4.9); the "no by-name call to a `static` impl across units" limit stays documented (§4.4) | S3 (parallel with S4/S5) | `ct-pkg/std` (**requires authorisation to change the ct-pkg repo**), docs, examples | probe 78: tier ① and tier ② handed to the same function |
 | S7 | Bootstrap, docs, `v0.21.0` close (**D21-10**: closing bump, never folded into `v0.20.x`) | S4/S5/S6 | whole tree | 11 gates, CI, nightly, fixpoint |
 
 Ordering (**D21-11**, finalised 2026-11-08): S0 ∥ S1 → S2 → S3 (freeze) → S4 → S5 ∥ S6 → S7. S6 must not
@@ -908,7 +941,8 @@ record the status quo; generated names use the per-unit counter with no function
 (D21-3) and two units compile without collisions; the `note:` channel only adds a
 `file:line:col: note:` line — `N`, the `MAX_ERRORS` cap, the `ct check` exit code and JSON's `severity` /
 `warnings` shape stay unchanged (D21-6); `Callable` is one trait per signature family with no `void *`
-erasure (D21-7); the close bumps `CTC_VERSION` to `v0.21.0` in all five places and never folds into
+erasure, carried as ordinary `pub trait` + `struct` in ct-pkg's `.h.ct` (never `.m.ct`) and not built in
+(D21-7, §4.9); the close bumps `CTC_VERSION` to `v0.21.0` in all five places and never folds into
 `v0.20.x` (D21-10); the slice order follows D21-11 with S6 never before S3; no generics are introduced and
 STD-1 says "Phase 22+ / after 1.0" (D21-12); fixpoint passes; `=>` enters `selfhost/ct-ast/**` only after
 M21-E2; language-spec, tutorial, glossary and roadmap updated.
