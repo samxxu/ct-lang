@@ -108,7 +108,9 @@ for (int __ct_loop_a_K = 0, __ct_loop_hi_K = 0, i = ((__ct_loop_a_K = (a)), (__c
 ### 3.6 生成物可读性
 
 - 仍是一条 `for`，不产生抽象层。
-- `--line` 模式下，该 `for` 前由既有语句路径重锚 `#line <loop 所在行> "<源文件>"`。
+- **不新增逐语句 `#line`**（与 Phase 22 §3.7 一致）：发射器只有单元级 `#line 1 "<path>"` 与
+  raw / 闭包产物的个别重锚，既有语句路径**不会**为单条语句重新锚定；`--line` 下双界 `loop`
+  与单界 `loop` 的可读性相同——生成行号与源行号不保证逐行对齐。
 - 生成物中不出现 `loop` 或 `..` 字样。
 
 ---
@@ -189,7 +191,7 @@ Phase 23 必须在 Phase 22 之后合入（它修改同一段 `loop` 解析）�
 | --- | --- | --- |
 | 23.1 识别 | `frontend/parse/Stmt.h.ct` | 在 `loop` 参数位置识别「`.` 紧跟 `.`」；无 peek，沿用保存 / 回退词法器状态 |
 | 23.2 AST | `frontend/parse/Stmt.h.ct` | `N_LOOP` 增加「单界 / 双界」两种形态；隐式 `i` 照旧 |
-| 23.3 发射 | `backend/emit/Emitter.h.ct` | 三临时量单行 `for`；逗号运算符保证先 `a` 后 `b`；沿用 `#line` |
+| 23.3 发射 | `backend/emit/Emitter.h.ct` | 三临时量单行 `for`；逗号运算符保证先 `a` 后 `b`；不新增逐语句 `#line` |
 | 23.4 诊断 | `tool/diag/Diag.h.ct` + 解析器 | L23-1；L23-2 复用 kind 5；`ct check` 严格化 |
 | 23.5 测试 | `test/ast/` | §5 正负例；golden 增量 |
 | 23.6 文档 | `docs/language-spec.md`、`docs/tutorial.md` | 区间语义、求值顺序、与 `loop(n)` 的等式 |
@@ -230,7 +232,7 @@ Phase 23 必须在 Phase 22 之后合入（它修改同一段 `loop` 解析）�
 | D23-4 | `i` 仍是单一 `int`，从 `a` 起；作用域与可写性沿用 Phase 22 |
 | D23-5 | 嵌套遮蔽沿用 L22-4（编译 warning、`ct check` error），不新增规则 |
 | D23-6 | `b <= a` 零次迭代，不报错、不告警；非整数边界归 L23-2 |
-| D23-7 | 生成物为单行 `for`，`--line` 模式下带 `#line` |
+| D23-7 | 生成物为单行 `for`，**不新增**逐语句 `#line`（与 D22-7 同口径） |
 | D23-8 | 本相只规划，不改源码 / 测试 / golden / 版本号 |
 
 ---
