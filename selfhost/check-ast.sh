@@ -789,6 +789,26 @@ else
     bad "p20_type_host_arity_more" "$(cat "$work/mhtm.err" 2>/dev/null | head -5)"
 fi
 
+# A type-host recipe expands as a straight textual substitution and names its
+# receiver once, so a call result in an argument position is legal and must not
+# be materialised into `__ct_tmpN`: `hoist_scan` used to reject it as a temporary
+# receiver, although only dynamic dispatch needs a temporary there.
+rm -rf "$mod-htc"
+mkdir -p "$mod-htc"
+if "$work/ct-ast" build --emit-c -I test/modules/map_unit_type \
+        test/modules/p20_type_host_call_arg/ok.ct -o "$mod-htc" \
+        >"$work/mhtc.out" 2>"$work/mhtc.err" \
+   && grep -qF "atoi((mkname()))" "$mod-htc"/*.c \
+   && ! grep -qF "__ct_tmp" "$mod-htc"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I test/modules/map_unit_type/ctypes \
+        "$mod-htc"/*.c -o "$work/mhtc.bin" 2>"$work/mhtc.cc" \
+   && "$work/mhtc.bin" >"$work/mhtc.stdout" 2>&1 \
+   && cmp -s "$work/mhtc.stdout" test/modules/p20_type_host_call_arg/ok.expected.out; then
+    ok "p20_type_host_call_arg (a call result as receiver, no __ct_tmp)"
+else
+    bad "p20_type_host_call_arg" "$(cat "$work/mhtc.err" "$work/mhtc.cc" "$work/mhtc.stdout" 2>/dev/null | head -5)"
+fi
+
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
 # spelling and the consumer's receiver spelling name the same integer type but

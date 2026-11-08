@@ -1,0 +1,16 @@
+import ctypes::ctypes;
+#include <stdio.h>
+
+char *mkname(void)
+{
+    return "42";
+}
+
+/* A type-host recipe is a straight textual substitution and names its receiver
+   once, so a call result is legal in an argument position and no `__ct_tmp` is
+   materialised. */
+int main(void)
+{
+    printf("%d\n", mkname().toInt());
+    return 0;
+}

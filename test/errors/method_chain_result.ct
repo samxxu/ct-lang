@@ -1,0 +1,24 @@
+// A method call on the result of a method call is a temporary receiver. L0 has
+// no temporary for a method-returned struct, so it must be rejected rather than
+// emitted half-rewritten (the generated C used to fail in `cc` while ctc said 0).
+// License: MIT; see LICENSE.EXCEPTION
+trait Inc {
+    Counter *inc();
+}
+
+struct Counter {
+    int n;
+} use Inc;
+
+impl Inc for Counter {
+    Counter *inc() {
+        self->n = self->n + 1;
+        return self;
+    }
+}
+
+int main(void) {
+    Counter c = { .n = 0 };
+    c.inc()->inc()->inc();
+    return c.n;
+}

@@ -1667,6 +1667,32 @@ static int walk_to_iface_field(const char *s, size_t n, size_t pos, int cur,
     }
 }
 
+/* After a rewritten method call whose '(' is at `open`, does the source go on
+   with `.m(` / `->m(` where `m` names a trait method? That is a method call on
+   the first call's result -- a temporary receiver. L0 has no temporary for a
+   method-returned struct, so the chain used to be left half-rewritten and `cc`
+   rejected the generated C; report it here instead. */
+static int chained_method_after(const char *s, size_t n, size_t open)
+{
+    size_t cp = line_match_paren(s, open, n), k, ms, ml;
+    char mem[MAX_NAME];
+
+    if (cp == (size_t)-1) return 0;
+    k = cp + 1;
+    while (k < n && isspace((unsigned char)s[k])) k++;
+    if (k + 1 < n && s[k] == '-' && s[k + 1] == '>') k += 2;
+    else if (k < n && s[k] == '.') k += 1;
+    else return 0;
+    ms = k;
+    while (k < n && is_ident_char((unsigned char)s[k])) k++;
+    ml = k - ms;
+    if (ml == 0 || ml >= sizeof mem) return 0;
+    if (!(k < n && s[k] == '(')) return 0;
+    memcpy(mem, s + ms, ml);
+    mem[ml] = 0;
+    return is_any_trait_method(mem);
+}
+
 static void transform_calls(const char *s, Buf *out)
 {
     size_t i = 0, n = strlen(s);
@@ -1716,6 +1742,8 @@ static void transform_calls(const char *s, Buf *out)
                     mem[ml] = 0;
                     if (ml && k < n && s[k] == '(' &&
                         trait_has_method(&g_traits[g_vars[vi].tr], mem)) {
+                        if (chained_method_after(s, n, k))
+                            die(g_line_off + i, "a method call on the result of a method call is not supported");
                         size_t z = k + 1;
                         int empty;
                         while (z < n && isspace((unsigned char)s[z])) z++;
@@ -1751,6 +1779,9 @@ static void transform_calls(const char *s, Buf *out)
                             size_t fs = 0, eq, saved_off;
                             char tmp[MAX_NAME], low[MAX_NAME], *recv;
                             Buf ini;
+
+                            if (chained_method_after(s, n, mp))
+                                die(g_line_off + i, "a method call on the result of a method call is not supported");
 
                             while (fs < n && (s[fs] == ' ' || s[fs] == '\t')) fs++;
                             eq = line_assign_eq(s);
@@ -1885,6 +1916,9 @@ static void transform_calls(const char *s, Buf *out)
                 if (hit) {
                     size_t z = mp + 1;
                     int empty;
+
+                    if (chained_method_after(s, n, mp))
+                        die(g_line_off + i, "a method call on the result of a method call is not supported");
                     while (z < n && isspace((unsigned char)s[z])) z++;
                     empty = (z < n && s[z] == ')');
 
@@ -1928,6 +1962,8 @@ static void transform_calls(const char *s, Buf *out)
                         if (!(k2 < n && s[k2] == '(' &&
                               trait_has_method(&g_traits[ftr], meth)))
                             goto no_iface_hit;
+                        if (chained_method_after(s, n, k2))
+                            die(g_line_off + i, "a method call on the result of a method call is not supported");
                         z = k2 + 1;
                         while (z < n && isspace((unsigned char)s[z])) z++;
                         empty = (z < n && s[z] == ')');

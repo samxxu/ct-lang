@@ -1186,7 +1186,12 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (n < 0) return 0;
-        if (self->arena->nodes[n].kind == N_MCALL) {
+        /* A type-host call (aux 6) expands as a straight textual recipe: the
+           receiver is substituted once and nothing takes its address, so a
+           call result in an argument position compiles as written and needs
+           no temporary. Only dynamic dispatch materialises its receiver. */
+        if (self->arena->nodes[n].kind == N_MCALL
+            && self->arena->nodes[n].aux != 6) {
             root = self->arena->nodes[n].a;
             while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
                                  || self->arena->nodes[root].kind == N_ARROW))
