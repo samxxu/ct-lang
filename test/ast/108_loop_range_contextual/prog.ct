@@ -1,0 +1,21 @@
+/* 108 (Phase 23): the `..` form does not change how `loop` is recognised -- it
+   is still an ordinary identifier except for a statement that starts with
+   `loop(`, so a variable named `loop` and a label named `loop` keep working. */
+#include <stdio.h>
+
+int main(void)
+{
+    int hits = 0;
+    int loop = 5;
+    int k = loop;
+
+    goto loop;
+    hits = 99;
+loop:
+    hits = hits + 1;
+    loop(1..3) {
+        hits = hits + k;
+    }
+    printf("%d %d\n", hits, k);
+    return 0;
+}

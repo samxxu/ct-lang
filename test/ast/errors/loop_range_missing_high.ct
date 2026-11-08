@@ -1,0 +1,6 @@
+int main(void)
+{
+    loop(2..) {
+    }
+    return 0;
+}

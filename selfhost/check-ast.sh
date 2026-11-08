@@ -4412,6 +4412,134 @@ else
 fi
 
 echo
+echo "== Phase 23: loop(a..b), the half-open range =="
+# `loop(<start>..<stop>) { … }` is sugar for
+# `for (int i = <start>; i < <stop>; i++) { … }`. `..` is now one token, so the
+# diagnostics below are pinned with columns: before the lexer change `1..2` split
+# into `1.` and `.2`, and every reported position moved.
+
+# 1) A one-sided range and a chained range are syntax errors.
+for pair in \
+    "loop_range_missing_low|a loop range needs both bounds" \
+    "loop_range_missing_high|a loop range needs both bounds" \
+    "loop_range_chained|unexpected token"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "range: $cf" "expected a non-zero exit"
+    elif grep -Fq "$cfmsg" "$work/$cf.err"; then
+        ok "range ($cf)"
+    else
+        bad "range: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# The column proves `..` is a single token: `1..2..3` reaches the second `..`
+# (column 14) instead of stopping at the dot that used to follow the number.
+if "$work/ct-ast" test/ast/errors/loop_range_chained.ct -o "$work/lrc.c" \
+        >"$work/lrc.out" 2>"$work/lrc.err"; then
+    bad "range: chained column" "expected a non-zero exit"
+elif grep -Fq "loop_range_chained.ct:3:14: error: unexpected token" "$work/lrc.err"; then
+    ok "range (a second '..' is one token, reported at column 14)"
+else
+    bad "range: chained column" "$(cat "$work/lrc.err")"
+fi
+
+# 2) D23-3: an address-shaped or aggregate bound is a hard error. The array case
+#    used to be silent -- its type string is indistinguishable from a pointer's,
+#    so only the symbol table can see it.
+for pair in \
+    "loop_range_pointer|a loop bound must be an integer (got 'int *')" \
+    "loop_range_struct|a loop bound must be an integer (got 'struct Pair')" \
+    "loop_range_array|a loop bound must be an integer (got the array 'a')"
+do
+    cf="${pair%%|*}"
+    cfmsg="${pair#*|}"
+    if "$work/ct-ast" "test/ast/errors/$cf.ct" -o "$work/$cf.c" \
+            >"$work/$cf.out" 2>"$work/$cf.err"; then
+        bad "range: $cf" "expected a non-zero exit"
+    elif grep -Fq "$cfmsg" "$work/$cf.err"; then
+        ok "range ($cf)"
+    else
+        bad "range: $cf" "$(cat "$work/$cf.err")"
+    fi
+done
+
+# 3) D23-2: `loop(0..b)` is `loop(b)`. The lowering must be identical, banner
+#    aside -- line 1 names the input file, so it cannot match.
+cat > "$work/lr_count.ct" <<'LREOF'
+int main(void)
+{
+    int n = 3;
+
+    loop(n) {
+        n = n + i;
+    }
+    return n;
+}
+LREOF
+cat > "$work/lr_range.ct" <<'LREOF'
+int main(void)
+{
+    int n = 3;
+
+    loop(0..n) {
+        n = n + i;
+    }
+    return n;
+}
+LREOF
+if "$work/ct-ast" "$work/lr_count.ct" -o "$work/lr_count.c" \
+        >"$work/lr_count.out" 2>"$work/lr_count.err" \
+   && "$work/ct-ast" "$work/lr_range.ct" -o "$work/lr_range.c" \
+        >"$work/lr_range.out" 2>"$work/lr_range.err" \
+   && tail -n +2 "$work/lr_count.c" > "$work/lr_count.tail" \
+   && tail -n +2 "$work/lr_range.c" > "$work/lr_range.tail" \
+   && cmp -s "$work/lr_count.tail" "$work/lr_range.tail"; then
+    ok "range (loop(0..n) lowers exactly like loop(n))"
+else
+    bad "range: 0..n normalisation" \
+        "$(cat "$work/lr_count.err" "$work/lr_range.err"; diff -u "$work/lr_count.tail" "$work/lr_range.tail" 2>/dev/null | head -6)"
+fi
+
+# 4) The shape: one native `for`, `i` initialised from the lower bound, the upper
+#    bound snapshotted once in a private temporary. It must never print as
+#    `i < (<expr>)`, which would re-evaluate the bound every round.
+if "$work/ct-ast" test/ast/102_loop_range_basic/prog.ct -o "$work/l102c.c" \
+        >"$work/l102c.out" 2>"$work/l102c.err" \
+   && grep -Fq 'for (int i = (' "$work/l102c.c" \
+   && grep -Fq '), __ct_loop_n_' "$work/l102c.c" \
+   && ! grep -Fq 'i < (' "$work/l102c.c"; then
+    ok "range (lowers to one for that snapshots both bounds)"
+else
+    bad "range: lowering shape" "$(cat "$work/l102c.err")"
+fi
+
+# 5) L22-4 is reused unchanged: a nested range loop shadows the outer `i`.
+if "$work/ct-ast" test/ast/106_loop_range_nested/prog.ct -o "$work/lrn.c" \
+        >"$work/lrn.out" 2>"$work/lrn.err"; then
+    if grep -Fq "warning: loop shadows the outer 'i'; use a native for to name the inner counter" "$work/lrn.err"; then
+        ok "range (nested range loop warns in compile mode)"
+    else
+        bad "range: nested warning" "$(cat "$work/lrn.err")"
+    fi
+else
+    bad "range: nested warning" "expected exit 0; $(cat "$work/lrn.err")"
+fi
+"$work/ct-ast" check --diagnostics=json test/ast/106_loop_range_nested/prog.ct \
+    >"$work/lrn.json" 2>"$work/lrn.json.err"
+lrc=$?
+if [ "$lrc" -eq 1 ] \
+        && grep -Fq '"type":"loop_shadow"' "$work/lrn.json" \
+        && grep -Fq '"severity":"error"' "$work/lrn.json"; then
+    ok "range (nested range loop is loop_shadow, an error under ct check)"
+else
+    bad "range: nested JSON" "exit $lrc; $(cat "$work/lrn.json")"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

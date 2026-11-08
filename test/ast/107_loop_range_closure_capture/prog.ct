@@ -1,0 +1,14 @@
+/* 107 (Phase 23): a closure declared in a range-loop body captures the implicit
+   `i` by value at its declaration point, so each round sees that round's value --
+   the same rule as the counted form. */
+#include <stdio.h>
+
+int main(void)
+{
+    loop(2..5) {
+        int (*snap)(void) = () => i;
+
+        printf("%d\n", snap());
+    }
+    return 0;
+}

@@ -1,0 +1,16 @@
+/* 105 (Phase 23): `i` in a range loop is the same ordinary `int` as in the
+   counted form. `continue` still runs the increment, `break` leaves, and an
+   assignment to `i` is visible to the increment and the next test. */
+#include <stdio.h>
+
+int main(void)
+{
+    loop(0..5) {
+        if (i == 1) continue;
+        if (i == 4) break;
+        if (i == 2) i = i + 1;
+        printf("%d\n", i);
+    }
+    printf("after\n");
+    return 0;
+}

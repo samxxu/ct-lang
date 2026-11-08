@@ -1,0 +1,29 @@
+/* loop_range_own_drop (Phase 23): an `own` declared in a range-loop body is
+   released at the end of every iteration, exactly as in the counted form. If
+   the body were parsed as a single branch rather than a block, the three boxes
+   would leak silently. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int n; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop\n");
+    }
+}
+
+int main(void)
+{
+    int rounds = 0;
+
+    loop(3..6) {
+        own Box *b = malloc(sizeof(Box));
+
+        b->n = i;
+        rounds = rounds + b->n;
+    }
+    printf("rounds %d\n", rounds);
+    return 0;
+}

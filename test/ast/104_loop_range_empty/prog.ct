@@ -1,0 +1,22 @@
+/* 104 (Phase 23): b <= a iterates zero times and is not a diagnostic -- an
+   empty range is a legal, and often the natural, result of arithmetic. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a = 5;
+    int b = 2;
+
+    printf("start\n");
+    loop(5..2) {
+        printf("never %d\n", i);
+    }
+    loop(3..3) {
+        printf("never %d\n", i);
+    }
+    loop(a..b) {
+        printf("never %d\n", i);
+    }
+    printf("done\n");
+    return 0;
+}

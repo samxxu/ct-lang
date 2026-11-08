@@ -1,0 +1,20 @@
+/* 106 (Phase 23): nesting reuses L22-4 unchanged -- the inner `i` shadows the
+   outer one (compile warning, `ct check` error) and the two `for` headers carry
+   distinct tempmoraries, so four rounds run. */
+#include <stdio.h>
+
+int main(void)
+{
+    int rounds = 0;
+
+    loop(0..2) {
+        int outer = i;
+
+        loop(1..3) {
+            rounds = rounds + 1;
+            printf("%d %d\n", outer, i);
+        }
+    }
+    printf("rounds %d\n", rounds);
+    return 0;
+}

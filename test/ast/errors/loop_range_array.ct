@@ -1,0 +1,13 @@
+/* An array's type string is indistinguishable from a pointer's, so this case
+   used to pass silently and compare an address with `i` (Phase 22's hole). It
+   is a hard error now (D23-3). */
+int main(void)
+{
+    int a[4];
+    int k;
+
+    for (k = 0; k < 4; k++) a[k] = k;
+    loop(a) {
+    }
+    return 0;
+}

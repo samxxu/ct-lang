@@ -1,0 +1,13 @@
+/* A struct value has no ordering the loop header could use (D23-3). */
+struct Pair { int a; int b; }
+
+int main(void)
+{
+    struct Pair p;
+
+    p.a = 2;
+    p.b = 4;
+    loop(p) {
+    }
+    return 0;
+}

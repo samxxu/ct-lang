@@ -1,0 +1,43 @@
+/* 103 (Phase 23): each bound is evaluated exactly once, lower bound first, and
+   writing a variable the bound reads inside the body cannot change the trip
+   count. `lo` / `hi` count their calls and record their order; the second loop
+   raises its own upper-bound variable to 99 and still runs twice. */
+#include <stdio.h>
+
+static int calls = 0;
+static int seq = 0;
+static int ord_lo = 0;
+static int ord_hi = 0;
+
+static int lo(void)
+{
+    calls = calls + 1;
+    seq = seq + 1;
+    ord_lo = seq;
+    return 2;
+}
+
+static int hi(void)
+{
+    calls = calls + 1;
+    seq = seq + 1;
+    ord_hi = seq;
+    return 4;
+}
+
+int main(void)
+{
+    int n = 0;
+    int stop = 4;
+
+    loop(lo()..hi()) {
+        n = n + 1;
+        printf("i %d\n", i);
+    }
+    printf("n %d calls %d order %d %d\n", n, calls, ord_lo, ord_hi);
+    loop(2..stop) {
+        stop = 99;
+        printf("still %d\n", i);
+    }
+    return 0;
+}
