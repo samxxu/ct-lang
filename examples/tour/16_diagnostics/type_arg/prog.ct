@@ -1,0 +1,13 @@
+// 场景：scale 要 int，调用点却传了字符串字面量。
+// 角度：单点触发 type_mismatch，文本通道；callee 字段是 'scale'。
+//   JSON 通道见 16_diagnostics/type_loop（那边同时验证“警告仍能跑”）。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+int scale(int n)
+{
+    return n;
+}
+
+int main(void)
+{
+    return scale("two") == 0;
+}

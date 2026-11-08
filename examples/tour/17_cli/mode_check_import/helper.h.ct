@@ -1,0 +1,4 @@
+// 被 import 的实现单元；check 不会解析它。
+pub int helper_add(int a, int b) {
+    return a + b;
+}

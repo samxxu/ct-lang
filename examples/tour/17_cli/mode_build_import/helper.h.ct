@@ -1,0 +1,4 @@
+// 被 import 的实现单元；build 会把它生成 helper.c 与 helper.h。
+pub int helper_add(int a, int b) {
+    return a + b;
+}

@@ -1,0 +1,61 @@
+// 场景：一次 malloc 出一排宿主对象（每个含一个接口字段），循环填充、循环派发。
+// 角度：four_positions 的“批量”版本——堆数组的每个元素都独立初始化 vptr，
+//   后续按运行期下标查表；同时验证 `delete` 释放整块堆内存不会破坏已派发的结果。
+//   这里故意让 row[0] 与 row[1] 装不同实现，循环里才能看出 vt 不是同一个。
+// 期望：stdout 与 expected.out 逐字节一致，退出码 0。
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Shape {
+    int area();
+    const char *name();
+}
+
+struct Sq {
+    int s;
+} use Shape;
+
+impl Shape for Sq {
+    int area() {
+        return self->s * self->s;
+    }
+    const char *name() {
+        return "sq";
+    }
+}
+
+struct Rect {
+    int w;
+    int h;
+} use Shape;
+
+impl Shape for Rect {
+    int area() {
+        return self->w * self->h;
+    }
+    const char *name() {
+        return "rect";
+    }
+}
+
+struct Holder {
+    Shape s;
+};
+
+int main(void)
+{
+    Sq sq;
+    Rect r;
+    sq.s = 3;
+    r.w = 2;
+    r.h = 5;
+
+    struct Holder *row = malloc(2 * sizeof(struct Holder));
+    row[0].s = sq;
+    row[1].s = r;
+    for (int k = 0; k < 2; k++) {
+        printf("row %d %s %d\n", k, row[k].s.name(), row[k].s.area());
+    }
+    delete row;
+    return 0;
+}

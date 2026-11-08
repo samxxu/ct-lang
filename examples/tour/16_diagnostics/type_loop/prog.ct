@@ -1,0 +1,18 @@
+// 场景：循环上界来自一个 double 变量，程序仍按 C 的规则截断成 int。
+// 角度：type_mismatch 的第二个触发面——callee 是 'loop'，不是函数调用；
+//   同时验证“警告只是警告”：退出 0、生成物可编译、运行结果与截断一致。
+//   本样例走 compile --diagnostics=json，expected.json 里比 type 与 callee。
+// 期望：编译退出 0、stderr 为空；stdout 与 expected.json 逐字节一致；
+//   随后的 C 程序输出与 expected.out 逐字节一致。
+#include <stdio.h>
+
+int main(void)
+{
+    int total = 0;
+    double bound = 2.9;
+    loop(bound) {
+        total = total + 1;
+    }
+    printf("%d\n", total);
+    return 0;
+}

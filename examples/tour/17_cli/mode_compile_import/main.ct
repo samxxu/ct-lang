@@ -1,0 +1,14 @@
+// 场景：想用单文件模式编译一个带 import 的多单元项目。
+// 角度：三个模式的第一格——compile 明确拒绝 import，并提示改用 `ct build`。
+//   对照 mode_check_import（提示里多了 "ct check is single-unit"）
+//   和 mode_build_import（同一条命令换成 build 就成功）。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+import helper;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d\n", helper_add(2, 3));
+    return 0;
+}

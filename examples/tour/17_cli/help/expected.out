@@ -1,0 +1,10 @@
+usage: ct-ast <input.ct> [-o <output.c>] [--line|--no-line]
+              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99]
+       ct-ast check <input.ct> [--diagnostics=text|json] [--std=c99|gnu99]
+       ct-ast build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]
+                 [--emit-c] [--outdir <dir>] [--cc <path>]
+                 [--cflags <s>] [--ldflags <s>]
+                 [--line|--no-line] [--emit-map <file|->]
+                 [--diagnostics=text|json] [--std=c99|gnu99]
+       ct-ast get <spec>[@<range>]
+       ct-ast install

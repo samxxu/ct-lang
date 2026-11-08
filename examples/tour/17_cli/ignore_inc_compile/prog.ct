@@ -1,0 +1,8 @@
+// 场景：从 C 的构建脚本里顺手把 -I 传给了单文件编译模式。
+// 角度：compile 模式下 -I 没有意义（import 要走 ct build），编译器不静默吞掉，
+//   而是在 stderr 打一条 warning 说明它被忽略；退出码仍是 0。
+// 期望：stderr 与 expected.err 逐字节一致（一条 warning），退出码 0。
+int main(void)
+{
+    return 0;
+}

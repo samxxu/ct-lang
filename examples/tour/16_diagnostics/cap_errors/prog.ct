@@ -1,0 +1,165 @@
+// 场景：22 个 impl 都漏写方法，错误数超过恢复上限（MAX_ERRORS = 20）。
+// 角度：容量上限的“错误数维度”——前 20 个照常报，第 21 个触发
+//   `ctc: too many errors, stopping` 并立即退出 1，不再继续恢复。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+trait T {
+    int f();
+}
+struct S0 {
+    int x;
+} use T;
+
+impl T for S0 {
+}
+
+struct S1 {
+    int x;
+} use T;
+
+impl T for S1 {
+}
+
+struct S2 {
+    int x;
+} use T;
+
+impl T for S2 {
+}
+
+struct S3 {
+    int x;
+} use T;
+
+impl T for S3 {
+}
+
+struct S4 {
+    int x;
+} use T;
+
+impl T for S4 {
+}
+
+struct S5 {
+    int x;
+} use T;
+
+impl T for S5 {
+}
+
+struct S6 {
+    int x;
+} use T;
+
+impl T for S6 {
+}
+
+struct S7 {
+    int x;
+} use T;
+
+impl T for S7 {
+}
+
+struct S8 {
+    int x;
+} use T;
+
+impl T for S8 {
+}
+
+struct S9 {
+    int x;
+} use T;
+
+impl T for S9 {
+}
+
+struct S10 {
+    int x;
+} use T;
+
+impl T for S10 {
+}
+
+struct S11 {
+    int x;
+} use T;
+
+impl T for S11 {
+}
+
+struct S12 {
+    int x;
+} use T;
+
+impl T for S12 {
+}
+
+struct S13 {
+    int x;
+} use T;
+
+impl T for S13 {
+}
+
+struct S14 {
+    int x;
+} use T;
+
+impl T for S14 {
+}
+
+struct S15 {
+    int x;
+} use T;
+
+impl T for S15 {
+}
+
+struct S16 {
+    int x;
+} use T;
+
+impl T for S16 {
+}
+
+struct S17 {
+    int x;
+} use T;
+
+impl T for S17 {
+}
+
+struct S18 {
+    int x;
+} use T;
+
+impl T for S18 {
+}
+
+struct S19 {
+    int x;
+} use T;
+
+impl T for S19 {
+}
+
+struct S20 {
+    int x;
+} use T;
+
+impl T for S20 {
+}
+
+struct S21 {
+    int x;
+} use T;
+
+impl T for S21 {
+}
+
+int main(void)
+{
+    return 0;
+}

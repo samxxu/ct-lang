@@ -1,0 +1,1 @@
+prog.ct:12: warning: loop shadows the outer 'i'; use a native for to name the inner counter

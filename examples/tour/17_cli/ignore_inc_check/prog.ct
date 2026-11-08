@@ -1,0 +1,8 @@
+// 场景：同一份源码改用 `ct check`，构建脚本仍带着 -I。
+// 角度：check 模式也忽略 -I，但提示文案明确写着 "check mode"，
+//   与 ignore_inc_compile 的文案只差一个词——这是两个模式各自的契约。
+// 期望：stderr 与 expected.err 逐字节一致（一条 warning），退出码 0。
+int main(void)
+{
+    return 0;
+}

@@ -1,0 +1,7 @@
+build
+@CASE@/tree/app/net/bad.ct
+--ns-root
+@CASE@/elsewhere
+--emit-c
+--outdir
+@WORK@/gen

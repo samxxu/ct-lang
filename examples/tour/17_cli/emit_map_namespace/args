@@ -1,0 +1,5 @@
+--emit-map
+-
+prog.ct
+-o
+/dev/null

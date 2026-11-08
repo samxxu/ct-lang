@@ -1,0 +1,79 @@
+// 场景：同一个 trait（Shape）的接口值要放进四种不同的容器位置，
+//   每种位置都必须把 {self, vt} 两个字段都初始化对，才能正确派发。
+// 角度：
+//   1) 局部量：`Shape local = sq;` 生成 `(iface){ &sq, &Sq_vt }`；
+//   2) 结构体字段：`h.s = r;` 在赋值语句里按字段的 trait 装箱；
+//   3) 数组元素：`arr[0] = sq;` 逐元素装箱，两个元素各自查表；
+//   4) malloc 堆对象：`heap->s = r;` 堆上的宿主字段同样拿到 vptr。
+//   每种都打印 name() 与 area()，两者都来自 vt->，能区分“值对但没派发”的假绿。
+// 期望：stdout 与 expected.out 逐字节一致，退出码 0。
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Shape {
+    int area();
+    const char *name();
+}
+
+struct Sq {
+    int s;
+} use Shape;
+
+impl Shape for Sq {
+    int area() {
+        return self->s * self->s;
+    }
+    const char *name() {
+        return "sq";
+    }
+}
+
+struct Rect {
+    int w;
+    int h;
+} use Shape;
+
+impl Shape for Rect {
+    int area() {
+        return self->w * self->h;
+    }
+    const char *name() {
+        return "rect";
+    }
+}
+
+struct Holder {
+    Shape s;
+};
+
+int main(void)
+{
+    Sq sq;
+    Rect r;
+    sq.s = 3;
+    r.w = 2;
+    r.h = 5;
+
+    // 1) 局部接口值
+    Shape local = sq;
+    printf("local %s %d\n", local.name(), local.area());
+
+    // 2) 结构体值字段
+    struct Holder h;
+    h.s = r;
+    printf("field %s %d\n", h.s.name(), h.s.area());
+
+    // 3) 栈上接口数组
+    Shape arr[2];
+    arr[0] = sq;
+    arr[1] = r;
+    printf("array %s %d %s %d\n",
+           arr[0].name(), arr[0].area(), arr[1].name(), arr[1].area());
+
+    // 4) malloc 出来的宿主对象
+    struct Holder *heap = malloc(sizeof(struct Holder));
+    heap->s = r;
+    printf("heap %s %d\n", heap->s.name(), heap->s.area());
+    delete heap;
+    return 0;
+}

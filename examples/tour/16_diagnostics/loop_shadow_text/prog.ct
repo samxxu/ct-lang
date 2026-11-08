@@ -1,0 +1,18 @@
+// 场景：两层 loop 都自带计数器 i，内层把外层的 i 遮住了。
+// 角度：单点触发 loop_shadow，文本通道；警告不阻断，程序仍能跑。
+//   这里外层 2 轮、内层 3 轮，内层每轮把 i 累加进 total：
+//   内层 i 为 0、1、2，两轮外层共 6。
+// 期望：stderr 与 expected.warn 逐字节一致，退出码 0；程序输出 6。
+#include <stdio.h>
+
+int main(void)
+{
+    int total = 0;
+    loop(2) {
+        loop(3) {
+            total = total + i;
+        }
+    }
+    printf("%d\n", total);
+    return 0;
+}

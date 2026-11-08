@@ -1,0 +1,25 @@
+// 场景：与 16_diagnostics/sig_text 同一处错误，改用 --diagnostics=json。
+// 角度：同一签名的 JSON 通道——比 type 字段（signature_mismatch）、method /
+//   trait / struct 字段，以及 strict 模式下才有的 col。
+// 注意：规范 §6.1 说“不比较签名”，实测会报；这里以 JSON 的 type 字段为准。
+// 期望：stdout 与 expected.json 逐字节一致，退出码 1。
+trait Calc {
+    int add(int a, int b);
+}
+
+struct Bad {
+    int x;
+} use Calc;
+
+impl Calc for Bad {
+    int add(int a) {
+        return a;
+    }
+}
+
+int main(void)
+{
+    Bad b;
+    b.x = 0;
+    return b.add(1, 2);
+}

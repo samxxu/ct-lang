@@ -1,0 +1,1 @@
+main.ct:5:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)

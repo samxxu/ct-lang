@@ -1,0 +1,25 @@
+// 场景：命名空间宿主，用 --emit-map 看编译器把“模块级表”记成什么。
+// 角度：--emit-map 的“命名空间宿主”形态——maps[].host 是 "namespace"，
+//   instance 字段是命名空间名；对照 emit_map_instance 的 "instance"。
+// 期望：stdout（map JSON）与 expected.out 逐字节一致，退出码 0。
+namespace hal;
+
+#include <stdio.h>
+
+trait Writer {
+    int write(char *buf, int n);
+}
+
+int hal_write(char *buf, int n) {
+    return n + buf[0];
+}
+
+map trait Writer for namespace hal {
+    write(buf, n) -> hal_write(buf, n);
+}
+
+int main(void) {
+    Writer w = Writer::hal;
+    printf("%d\n", w.write("A", 3));
+    return 0;
+}

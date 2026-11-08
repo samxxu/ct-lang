@@ -1,0 +1,1 @@
+prog.ct:15:9: error: signature mismatch: 'add' in impl of 'Calc' for 'Bad': takes 1 parameter(s), the trait declares 2

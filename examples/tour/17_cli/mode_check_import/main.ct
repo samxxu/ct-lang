@@ -1,0 +1,13 @@
+// 场景：同一份带 import 的源码用 `ct check` 检查。
+// 角度：三个模式的第二格——check 也是单单元，但提示文案比 compile 多一句
+//   "(ct check is single-unit)"，直接点出限制来源。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+import helper;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d\n", helper_add(2, 3));
+    return 0;
+}

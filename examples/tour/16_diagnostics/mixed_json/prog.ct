@@ -1,0 +1,49 @@
+// 场景：一个文件里同时踩到四种诊断：签名不符、方法二义、实参类型不符、
+//   循环计数非整数、内层循环遮蔽外层计数器。
+// 角度：混合场景 + JSON 通道——一次 check 应输出 5 条记录、覆盖 4 种 type，
+//   且记录顺序与解析顺序一致（签名在 impl 处，其余在 main 内）。
+//   单点样例见 sig_*/type_*/amb_*/loop_shadow_*。
+// 期望：stdout 与 expected.json 逐字节一致，退出码 1。
+trait Left {
+    int f(int a, int b);
+}
+
+trait Right {
+    int f(int a, int b);
+}
+
+struct S {
+    int v;
+} use Left, Right;
+
+impl Left for S {
+    int f(int a) {
+        return a;
+    }
+}
+
+impl Right for S {
+    int f(int a, int b) {
+        return a + b;
+    }
+}
+
+int scale(int n)
+{
+    return n;
+}
+
+int main(void)
+{
+    S s;
+    s.v = 1;
+    s.f(1, 2);
+    int x = scale("two");
+    double d = 2.5;
+    loop(d) {
+        loop(1) {
+            x = x + i;
+        }
+    }
+    return x;
+}

@@ -1,0 +1,13 @@
+// 场景：同一份带 import 的源码改用 `ct build`。
+// 角度：三个模式的第三格——build 成功，按单元基名生成 main.c / helper.c，
+//   一行 cc 建议命令打印到 stdout（路径含 $WORK，故 expected.gen 只断言产物存在）。
+// 期望：退出码 0、stderr 为空；$WORK/gen 下出现 main.c、helper.c、helper.h。
+import helper;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d\n", helper_add(2, 3));
+    return 0;
+}

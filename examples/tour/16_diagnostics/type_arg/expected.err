@@ -1,0 +1,1 @@
+prog.ct:12:12: error: type mismatch: 'scale' argument 1: expected 'int', got 'char *'

@@ -1,0 +1,34 @@
+// 场景：与 16_diagnostics/amb_text 同一处二义性，走 JSON 通道。
+// 角度：比 type 字段（ambiguous_method）、method 字段，以及文本里没有的
+//   “哪个 trait 被采用”只在 message 中出现。
+// 期望：stdout 与 expected.json 逐字节一致，退出码 1。
+trait Sizer {
+    int len();
+}
+
+trait Meter {
+    int len();
+}
+
+struct Box {
+    int v;
+} use Sizer, Meter;
+
+impl Sizer for Box {
+    int len() {
+        return self->v;
+    }
+}
+
+impl Meter for Box {
+    int len() {
+        return self->v * 10;
+    }
+}
+
+int main(void)
+{
+    Box b;
+    b.v = 7;
+    return b.len();
+}

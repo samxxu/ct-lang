@@ -10,6 +10,10 @@
 #
 #   mode        compile | build | check | clean | pair | check-json
 #               compile-warn (expects a byte-exact warning and still runs)
+#               compile-json (same, but --diagnostics=json on stdout)
+#               json-err     (compile with --diagnostics=json; errors stay text)
+#               cli          (run `args` verbatim; compare bytes; see below)
+#               pkg          (same, but in a throwaway copy of the case dir)
 #               asan         (dangling/leak cases: compiled with -fsanitize=address)
 #   l0          yes -> also compile+run the sample with the frozen L0 seed
 #   expect_exit exit status the compiler/checker must return; for `asan` it
@@ -18,6 +22,21 @@
 # The `asan` cases are skipped unless ASAN=1 is set, so a plain run never
 # reports them as green; with ASAN=1 they must reproduce the diagnostic named
 # in expected.asan (a fixed substring, since sanitizer stacks carry addresses).
+#
+# `cli` and `pkg` read `args` (one argv element per line; empty lines are
+# dropped) and run the compiler, so they can exercise flags and subcommands
+# without a new mode per flag. Two placeholders are substituted in each
+# argument: @CASE@ -> the absolute case directory, @WORK@ -> the runner's
+# scratch directory. After the run:
+#   expected.out   if present, stdout must match it byte for byte
+#   expected.err   if present, stderr must match it byte for byte
+#                  (if absent, stderr must be empty)
+#   expected.gen   if present, every listed path (relative to @WORK@) must exist
+#   expected.lock  (pkg only) if present, the generated ct.lock must match it
+# `pkg` first copies the case directory to a scratch copy, so package commands
+# that write vendor/ or ct.lock never touch the repository. stdout is not
+# asserted when expected.out is absent, because `ct build` prints a cc command
+# containing the scratch path.
 #
 # Usage:
 #   bash examples/tour/run.sh                 # everything except asan cases
@@ -97,8 +116,10 @@ while IFS='|' read -r feature name mode l0flag want note; do
 
     need=""
     case "$mode" in
-        compile|pair|compile-warn|check|clean|check-json|asan) need="prog.ct" ;;
+        compile|pair|compile-warn|compile-json|json-err|check|clean|check-json|asan)
+                        need="prog.ct" ;;
         build)          need="main.ct" ;;
+        cli|pkg)        need="args" ;;
         *) audit_err "$label: unknown mode '$mode'" ;;
     esac
     [ -z "$need" ] || [ -f "$dir/$need" ] || audit_err "$label: missing $need"
@@ -109,17 +130,23 @@ while IFS='|' read -r feature name mode l0flag want note; do
     elif [ "$want" = 0 ]; then
         case "$mode" in
             compile|build|compile-warn) need="expected.out" ;;
+            compile-json) need="" ;;   # checked together with expected.json below
             clean) need="" ;;
             pair) need="expected.warn" ;;
             *) need="" ;;
         esac
     else
         case "$mode" in
-            check|compile|build) need="expected.err" ;;
+            check|compile|build|cli|pkg|json-err) need="expected.err" ;;
             *) need="" ;;
         esac
     fi
     [ -z "$need" ] || [ -f "$dir/$need" ] || audit_err "$label: missing $need"
+
+    if [ "$mode" = compile-json ]; then
+        [ -f "$dir/expected.json" ] || audit_err "$label: missing expected.json"
+        [ -f "$dir/expected.out" ] || audit_err "$label: missing expected.out"
+    fi
 
     if [ "$mode" = compile-warn ] && [ ! -f "$dir/expected.warn" ]; then
         audit_err "$label: missing expected.warn"
@@ -188,6 +215,17 @@ else
     ct="$work/ct-ast"
 fi
 printf '  ct: %s (%s)\n' "$ct" "$("$ct" -v 2>&1)"
+
+# CLI samples (`-h`, `-v`, subcommand usage) echo argv[0] in their messages.
+# Pin that name to `ct-ast` with a symlink so expected files stay byte-stable
+# no matter how CT was supplied.
+case "$ct" in
+    /*) : ;;
+    *) ct="$(cd "$(dirname "$ct")" && pwd)/$(basename "$ct")" ;;
+esac
+mkdir -p "$work/bin"
+ln -sf "$ct" "$work/bin/ct-ast"
+ctl="$work/bin/ct-ast"
 
 echo
 echo "== address sanitizer =="
@@ -447,6 +485,136 @@ while IFS='|' read -r feature name mode l0flag want note; do
               { printf 'JSON: expected the bytes of expected.json, got different bytes\n'
                 diffout expected.json "$work/chk.out"; } >"$work/detail"
               printf 'BAD|JSON mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          printf 'GOOD|%s|\n' "$mode"
+          ;;
+
+        compile-json)
+          # warnings are JSON on stdout; the generated C must still build and run
+          "$ct" prog.ct -o "$work/case.c" --diagnostics=json >"$work/j.out" 2>"$work/j.err"
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+              printf 'BAD|compile exit status: expected 0 (warning only), got %s|%s\n' "$rc" "$(cat "$work/j.err")"; exit 0
+          fi
+          if [ -s "$work/j.err" ]; then
+              printf 'BAD|compiler stderr: expected empty (warnings are JSON), got output|%s\n' "$(cat "$work/j.err")"; exit 0
+          fi
+          if ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$work/j.out"; then
+              printf 'BAD|stdout: expected one JSON document, got unparsable output|%s\n' "$(cat "$work/j.out")"; exit 0
+          fi
+          if ! cmp -s "$work/j.out" expected.json; then
+              { printf 'JSON: expected the bytes of expected.json, got different bytes\n'
+                diffout expected.json "$work/j.out"; } >"$work/detail"
+              printf 'BAD|JSON mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          if ! "$CC" -Wall -Wextra -std=c99 "$work/case.c" -o "$work/prog" 2>"$work/cc.log"; then
+              printf 'BAD|cc: expected a binary, got a compile error|%s\n' "$(cat "$work/cc.log")"; exit 0
+          fi
+          if [ -s "$work/cc.log" ]; then
+              printf 'BAD|cc: expected zero warnings, got warnings|%s\n' "$(cat "$work/cc.log")"; exit 0
+          fi
+          if ! "$work/prog" >"$work/run.out" 2>"$work/run.err"; then
+              printf 'BAD|program: expected exit 0, got non-zero|%s\n' "$(cat "$work/run.err")"; exit 0
+          fi
+          if ! cmp -s "$work/run.out" expected.out; then
+              { printf 'stdout: expected the bytes of expected.out, got different bytes\n'
+                diffout expected.out "$work/run.out"; } >"$work/detail"
+              printf 'BAD|stdout mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          printf 'GOOD|%s|\n' "$mode"
+          ;;
+
+        json-err)
+          # --diagnostics=json only affects warnings; semantic errors and notes
+          # stay on stderr as text and stdout stays empty. Assert exactly that.
+          "$ct" prog.ct -o /dev/null --diagnostics=json >"$work/j.out" 2>"$work/j.err"
+          rc=$?
+          if [ "$rc" -ne "$want" ]; then
+              printf 'BAD|compile exit status: expected %s, got %s|%s\n' "$want" "$rc" "$(cat "$work/j.err")"; exit 0
+          fi
+          if [ -s "$work/j.out" ]; then
+              printf 'BAD|stdout: expected empty (errors are not JSON), got output|%s\n' "$(cat "$work/j.out")"; exit 0
+          fi
+          if ! cmp -s "$work/j.err" expected.err; then
+              { printf 'stderr: expected the bytes of expected.err, got different bytes\n'
+                diffout expected.err "$work/j.err"; } >"$work/detail"
+              printf 'BAD|stderr mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          printf 'GOOD|%s|\n' "$mode"
+          ;;
+
+        cli)
+          # argv comes from `args`, one element per line; @CASE@/@WORK@ expand
+          # to the absolute case directory and the scratch directory.
+          argv=()
+          while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              line="${line//@CASE@/$dir}"
+              line="${line//@WORK@/$work}"
+              argv+=("$line")
+          done <args
+          rm -rf "$work/gen"; mkdir -p "$work/gen"
+          "$ctl" ${argv[@]+"${argv[@]}"} >"$work/cli.out" 2>"$work/cli.err"
+          rc=$?
+          if [ "$rc" -ne "$want" ]; then
+              printf 'BAD|exit status: expected %s, got %s|%s\n' "$want" "$rc" "$(cat "$work/cli.err")"; exit 0
+          fi
+          if [ -f expected.out ] && ! cmp -s "$work/cli.out" expected.out; then
+              { printf 'stdout: expected the bytes of expected.out, got different bytes\n'
+                diffout expected.out "$work/cli.out"; } >"$work/detail"
+              printf 'BAD|stdout mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          if [ -f expected.err ]; then
+              if ! cmp -s "$work/cli.err" expected.err; then
+                  { printf 'stderr: expected the bytes of expected.err, got different bytes\n'
+                    diffout expected.err "$work/cli.err"; } >"$work/detail"
+                  printf 'BAD|stderr mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+              fi
+          elif [ -s "$work/cli.err" ]; then
+              printf 'BAD|stderr: expected empty, got output|%s\n' "$(cat "$work/cli.err")"; exit 0
+          fi
+          if [ -f expected.gen ]; then
+              while IFS= read -r rel; do
+                  [ -n "$rel" ] || continue
+                  if [ ! -e "$work/$rel" ]; then
+                      printf 'BAD|generated file missing: expected %s|%s\n' "$rel" "$(ls -R "$work/gen" 2>/dev/null)"; exit 0
+                  fi
+              done <expected.gen
+          fi
+          printf 'GOOD|%s|\n' "$mode"
+          ;;
+
+        pkg)
+          # run in a throwaway copy: package commands write vendor/ and ct.lock
+          rm -rf "$work/pkgcase"; mkdir -p "$work/pkgcase"
+          cp -R "$dir/." "$work/pkgcase/"
+          argv=()
+          while IFS= read -r line; do
+              [ -n "$line" ] && argv+=("$line")
+          done <args
+          ( cd "$work/pkgcase" && "$ctl" ${argv[@]+"${argv[@]}"} >"$work/pk.out" 2>"$work/pk.err" )
+          rc=$?
+          if [ "$rc" -ne "$want" ]; then
+              printf 'BAD|exit status: expected %s, got %s|%s\n' "$want" "$rc" "$(cat "$work/pk.err")"; exit 0
+          fi
+          if [ -f expected.out ] && ! cmp -s "$work/pk.out" expected.out; then
+              { printf 'stdout: expected the bytes of expected.out, got different bytes\n'
+                diffout expected.out "$work/pk.out"; } >"$work/detail"
+              printf 'BAD|stdout mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          if [ -f expected.err ]; then
+              if ! cmp -s "$work/pk.err" expected.err; then
+                  { printf 'stderr: expected the bytes of expected.err, got different bytes\n'
+                    diffout expected.err "$work/pk.err"; } >"$work/detail"
+                  printf 'BAD|stderr mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+              fi
+          elif [ -s "$work/pk.err" ]; then
+              printf 'BAD|stderr: expected empty, got output|%s\n' "$(cat "$work/pk.err")"; exit 0
+          fi
+          if [ -f expected.lock ] && ! cmp -s "$work/pkgcase/ct.lock" expected.lock; then
+              { printf 'ct.lock: expected the bytes of expected.lock, got different bytes\n'
+                diffout expected.lock "$work/pkgcase/ct.lock"; } >"$work/detail"
+              printf 'BAD|ct.lock mismatch|%s\n' "$(cat "$work/detail")"; exit 0
           fi
           printf 'GOOD|%s|\n' "$mode"
           ;;

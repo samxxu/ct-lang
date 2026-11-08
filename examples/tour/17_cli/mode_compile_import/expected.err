@@ -1,0 +1,1 @@
+main.ct:6:1: error: 'import' requires multi-file mode: use 'ct build'

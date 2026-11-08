@@ -1,0 +1,4 @@
+local sq 9
+field rect 10
+array sq 9 rect 10
+heap rect 10

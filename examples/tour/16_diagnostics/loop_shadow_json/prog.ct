@@ -1,0 +1,14 @@
+// 场景：与 16_diagnostics/loop_shadow_text 同一处遮蔽，走 JSON 通道。
+// 角度：比 type 字段（loop_shadow）与 line/col；JSON 里没有文本中的
+//   “use a native for ...”建议句，message 是唯一载体。
+// 期望：stdout 与 expected.json 逐字节一致，退出码 1。
+int main(void)
+{
+    int total = 0;
+    loop(2) {
+        loop(3) {
+            total = total + i;
+        }
+    }
+    return total;
+}

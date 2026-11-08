@@ -1,0 +1,9 @@
+// 场景：文件放在 tree/app/net/ 下，却声明了 namespace app::sys。
+// 角度：--ns-root 的反例——目录推导结果是 app/net，与 namespace 展开的
+//   app/sys 不一致，build 在写产物前失败。注意这是“配置错”，不是语法错。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+namespace app::sys;
+
+pub int wrong(void) {
+    return 3;
+}

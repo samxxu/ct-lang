@@ -1,0 +1,25 @@
+// 场景：trait 声明 add(int,int)，impl 只写了一个参数。
+// 角度：单点触发 signature_mismatch，只看文本通道（ct check 会把它提升为 error）。
+// 注意：docs/language-spec.md §6.1 写着“不比较方法签名”，但 ct-ast 0.23 实测
+//   会报 signature_mismatch（见 expected.err）；以实测为准，规范那句已经过时。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+trait Calc {
+    int add(int a, int b);
+}
+
+struct Bad {
+    int x;
+} use Calc;
+
+impl Calc for Bad {
+    int add(int a) {
+        return a;
+    }
+}
+
+int main(void)
+{
+    Bad b;
+    b.x = 0;
+    return b.add(1, 2);
+}

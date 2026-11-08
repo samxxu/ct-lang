@@ -1,0 +1,5 @@
+// get 只是把包目录拷进 vendor/ 并记进 ct.lock，不会编译它；
+// 这里放一个最小单元，证明 vendor/demo/src/demo.ct 也被完整拷过去了。
+pub int demo_value(void) {
+    return 42;
+}

@@ -45,3 +45,38 @@
 15_memory|borrow_delete|compile|no|1|negative: delete on a borrowed pointer
 15_memory|own_factory|compile|no|1|negative: own cannot take a factory result
 15_memory|leak_warning|compile-warn|no|0|static "potential leak" warning, exit 0
+16_diagnostics|sig_text|check|no|1|signature mismatch, text; spec §6.1 is outdated
+16_diagnostics|sig_json|check-json|no|1|same finding as JSON (type=signature_mismatch)
+16_diagnostics|sig_return|check|no|1|signature mismatch: wrong return type
+16_diagnostics|type_arg|check|no|1|type mismatch: call-site argument
+16_diagnostics|type_loop|compile-json|no|0|type mismatch: loop count; JSON + still runs
+16_diagnostics|amb_text|compile-warn|no|0|ambiguous method, text; first trait wins, runs
+16_diagnostics|amb_json|check-json|no|1|same finding as JSON (type=ambiguous_method)
+16_diagnostics|loop_shadow_text|compile-warn|no|0|nested loop shadow, text; still runs
+16_diagnostics|loop_shadow_json|check-json|no|1|same finding as JSON (type=loop_shadow)
+16_diagnostics|recover_multi|compile|no|1|error recovery: three impls, three errors
+16_diagnostics|cap_fields|compile|no|1|capacity cap: the 65th struct field
+16_diagnostics|cap_errors|compile|no|1|capacity cap: 21st error stops recovery
+16_diagnostics|note_text|compile|no|1|note channel after an error
+16_diagnostics|note_json|json-err|no|1|json switch does not swallow error/note
+16_diagnostics|mixed_json|check-json|no|1|mixed: 4 warning kinds, 5 records
+17_cli|help|cli|no|0|-h usage on stdout
+17_cli|version|cli|no|0|-v on stdout
+17_cli|noargs|cli|no|1|no args: one-line usage on stderr
+17_cli|emit_map_instance|cli|no|0|--emit-map -: instance hosts
+17_cli|emit_map_namespace|cli|no|0|--emit-map -: namespace host
+17_cli|ignore_inc_compile|cli|no|0|-I ignored by compile (warning)
+17_cli|ignore_inc_check|cli|no|0|-I ignored by check (warning)
+17_cli|pkg_get_local|pkg|no|0|get file://local, writes ct.lock
+17_cli|pkg_get_missing|pkg|no|1|get without a spec: usage
+17_cli|pkg_install_missing|pkg|no|1|install without ct.pkg
+17_cli|pkg_update_empty|pkg|no|0|update offline, no deps
+17_cli|pkg_verify_missing|pkg|no|1|verify without ct.lock
+17_cli|mode_compile_import|cli|no|1|compile rejects import
+17_cli|mode_check_import|cli|no|1|check rejects import (single-unit)
+17_cli|mode_build_import|cli|no|0|build accepts import, emits units
+17_cli|ns_root_ok|cli|no|0|--ns-root matches the directory
+17_cli|ns_root_bad|cli|no|1|--ns-root mismatch is an error
+17_cli|ns_root_skip|cli|no|0|gotcha: path outside root skips the check
+18_ctor|four_positions|compile|no|0|local/field/array/heap vptr init
+18_ctor|heap_row|compile|no|0|heap array of hosts, loop dispatch

@@ -1,0 +1,10 @@
+// 场景：与 ns_root_bad 同一个“错误”文件，但把 --ns-root 指到别处。
+// 角度：--ns-root 的边界——实现只在“输入路径确实位于 root 之下”时才比较；
+//   路径不在 root 下时检查被静默跳过，build 仍然成功。这是实测行为，
+//   很容易让人误以为 namespace 校验生效了。
+// 期望：退出码 0、stderr 为空、$WORK/gen/bad.c 存在。
+namespace app::sys;
+
+pub int wrong(void) {
+    return 3;
+}

@@ -1,0 +1,1 @@
+prog.ct:70:1: error: too many fields in struct 'Big' (limit 64)

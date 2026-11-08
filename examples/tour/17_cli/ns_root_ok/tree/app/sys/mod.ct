@@ -1,0 +1,9 @@
+// 场景：命名空间与目录层级一一对应：tree/app/sys/mod.ct 声明 namespace app::sys。
+// 角度：--ns-root 的正例——build 会按 root 推导相对目录，与 namespace 的
+//   `::` 展开逐段比较；一致时静默通过。
+// 期望：退出码 0、stderr 为空、$WORK/gen/mod.c 存在。
+namespace app::sys;
+
+pub int ping(void) {
+    return 1;
+}

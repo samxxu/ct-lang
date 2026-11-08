@@ -1,0 +1,1 @@
+prog.ct:15:11: error: signature mismatch: 'get' in impl of 'Ident' for 'S': return type 'char *' does not match the trait's 'int'

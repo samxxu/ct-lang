@@ -1,0 +1,1 @@
+{"warnings":[{"type":"type_mismatch","file":"prog.ct","line":13,"callee":"loop","message":"count must be an integer (got 'double'); the value is converted to int"}]}

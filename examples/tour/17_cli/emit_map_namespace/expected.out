@@ -1,0 +1,10 @@
+{
+  "compiler": "ct v0.23.0",
+  "file": "prog.ct",
+  "traits": [{"name":"hal_Writer","cname":"hal_Writer","file":"prog.ct","line":9,"methods":[{"name":"write","ret":"int","params":2}]}],
+  "structs": [],
+  "functions": [{"name":"hal_write","file":"prog.ct","line":13,"ret":"int","params":2},{"name":"main","file":"prog.ct","line":21,"ret":"int","params":0}],
+  "impls": [],
+  "calls": [],
+  "maps": [{"trait":"hal_Writer","instance":"hal","host":"namespace","file":"prog.ct","line":17,"bindings":[{"method":"write","symbol":"hal_Writer_write","wrapper":true}]}]
+}

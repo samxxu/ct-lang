@@ -1,0 +1,25 @@
+// 场景：参数个数对了，但 impl 的返回类型写成 char *。
+// 角度：signature_mismatch 的第二个触发面——参数个数之外的“返回类型不符”，
+//   证明这不是只比较 arity，而是真的比较了签名。
+// 注意：规范 §6.1 关于“不比较签名”的描述同样过时。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+trait Ident {
+    int get(int n);
+}
+
+struct S {
+    int v;
+} use Ident;
+
+impl Ident for S {
+    char *get(int n) {
+        return n ? "x" : "y";
+    }
+}
+
+int main(void)
+{
+    S s;
+    s.v = 0;
+    return s.get(0) == 0;
+}

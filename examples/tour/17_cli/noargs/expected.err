@@ -1,0 +1,1 @@
+usage: ct-ast <input.ct> [-o <output.c>]

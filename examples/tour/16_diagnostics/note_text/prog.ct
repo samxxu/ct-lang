@@ -1,0 +1,16 @@
+// 场景：想让闭包“累加”外部计数器，于是顺手在闭包里写 n = n + x。
+// 角度：note 通道——除了 error 行，编译器还追加一行 note 指向 tier-1 写法。
+//   这里只验证文本通道；note_json 验证 --diagnostics=json 不会吞掉 error/note。
+// 期望：stderr 与 expected.err 逐字节一致（error + note + 汇总），退出码 1。
+#include <stdio.h>
+
+int main(void) {
+    int n = 0;
+    int (*acc)(int x) = (int x) => {
+        n = n + x;
+        return n;
+    };
+
+    printf("%d\n", acc(1));
+    return 0;
+}

@@ -1,0 +1,34 @@
+// 场景：三个 impl 都漏写了 trait 要求的方法。
+// 角度：错误恢复——解析器报完第一个 impl 后跳到下一个顶层声明，
+//   于是一次运行报出 3 个 error，最后追加 `ctc: 3 error(s) generated`。
+//   对照 16_diagnostics/recover_many：错误数超过 20 时会触发“too many errors”。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+trait T {
+    int f();
+}
+
+struct A {
+    int x;
+} use T;
+
+impl T for A {
+}
+
+struct B {
+    int y;
+} use T;
+
+impl T for B {
+}
+
+struct C {
+    int z;
+} use T;
+
+impl T for C {
+}
+
+int main(void)
+{
+    return 0;
+}

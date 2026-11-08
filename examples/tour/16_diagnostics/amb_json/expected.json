@@ -1,0 +1,1 @@
+{"warnings":[{"severity":"error","type":"ambiguous_method","file":"prog.ct","line":33,"col":14,"method":"len","message":"declared by 'Sizer' and 'Meter'; 'Sizer' is used"}]}

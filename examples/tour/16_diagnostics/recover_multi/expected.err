@@ -1,0 +1,4 @@
+prog.ct:14:14: error: trait method 'f' is not implemented for struct 'A'
+prog.ct:21:14: error: trait method 'f' is not implemented for struct 'B'
+prog.ct:28:14: error: trait method 'f' is not implemented for struct 'C'
+ctc: 3 error(s) generated

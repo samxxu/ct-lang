@@ -1,0 +1,1 @@
+prog.ct:35: warning: ambiguous method: 'len' declared by 'Sizer' and 'Meter'; 'Sizer' is used

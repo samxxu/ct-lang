@@ -1,0 +1,10 @@
+{
+  "compiler": "ct v0.23.0",
+  "file": "prog.ct",
+  "traits": [{"name":"Lamp","cname":"Lamp","file":"prog.ct","line":7,"methods":[{"name":"set","ret":"int","params":1}]}],
+  "structs": [{"name":"Led","cname":"Led","file":"prog.ct","line":11,"uses":[]}],
+  "functions": [{"name":"led_drive","file":"prog.ct","line":19,"ret":"int","params":2},{"name":"main","file":"prog.ct","line":32,"ret":"int","params":0}],
+  "impls": [],
+  "calls": [],
+  "maps": [{"trait":"Lamp","instance":"led_a","host":"instance","file":"prog.ct","line":24,"bindings":[{"method":"set","symbol":"led_a_Lamp_set","wrapper":true}]},{"trait":"Lamp","instance":"led_b","host":"instance","file":"prog.ct","line":28,"bindings":[{"method":"set","symbol":"led_b_Lamp_set","wrapper":true}]}]
+}

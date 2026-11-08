@@ -1,0 +1,37 @@
+// 场景：一个 struct 同时实现两个都声明 len() 的 trait，调用点写 b.len()。
+// 角度：单点触发 ambiguous_method，文本通道；同时验证“警告不阻断”：
+//   编译器按第一个 trait 解析（Sizer），程序仍能编译运行，输出 7。
+// 期望：stderr 与 expected.warn 逐字节一致，退出码 0；程序输出与 expected.out 一致。
+#include <stdio.h>
+
+trait Sizer {
+    int len();
+}
+
+trait Meter {
+    int len();
+}
+
+struct Box {
+    int v;
+} use Sizer, Meter;
+
+impl Sizer for Box {
+    int len() {
+        return self->v;
+    }
+}
+
+impl Meter for Box {
+    int len() {
+        return self->v * 10;
+    }
+}
+
+int main(void)
+{
+    Box b;
+    b.v = 7;
+    printf("%d\n", b.len());
+    return 0;
+}

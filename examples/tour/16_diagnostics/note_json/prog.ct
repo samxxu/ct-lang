@@ -1,0 +1,16 @@
+// 场景：与 16_diagnostics/note_text 同一段源码，但显式加 --diagnostics=json。
+// 角度：通道边界——JSON 只接管“警告”列表；语义错误与 note 仍然走纯文本 stderr，
+//   stdout 保持为空。这是实测结论，和“JSON 打开后一切都变成 JSON”的直觉相反。
+// 期望：stdout 为空；stderr 与 expected.err 逐字节一致，退出码 1。
+#include <stdio.h>
+
+int main(void) {
+    int n = 0;
+    int (*acc)(int x) = (int x) => {
+        n = n + x;
+        return n;
+    };
+
+    printf("%d\n", acc(1));
+    return 0;
+}

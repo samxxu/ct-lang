@@ -1,0 +1,7 @@
+build
+@CASE@/tree/app/sys/mod.ct
+--ns-root
+@CASE@/tree
+--emit-c
+--outdir
+@WORK@/gen

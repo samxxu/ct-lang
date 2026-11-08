@@ -1,0 +1,3 @@
+prog.ct:10:1: error: a captured variable cannot be reassigned inside a closure
+prog.ct:10:1: note: tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }
+ctc: 1 error(s) generated
