@@ -23,10 +23,9 @@ struct WithWord {
 int main(void)
 {
     _Alignas(8) static int local;
-    __attribute__((unused)) int spare;
+    __attribute__((unused)) int spare = 7;
     int trailing __attribute__((unused));
 
-    spare = 7;
     local = 1;
     g_tagged = 2;
     printf("%d %d %d\n", helper(spare), local, g_tagged);

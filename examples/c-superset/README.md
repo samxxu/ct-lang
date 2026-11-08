@@ -87,28 +87,33 @@ CC=clang bash examples/c-superset/run.sh
 4. **`static_assert` 在 ct-ast 里不需要 `<assert.h>`**：生成物统一是
    `_Static_assert`。但同一份源文件直接交给 `cc -std=c99` 会失败，所以
    `s14_static_assert/sizes` 没有 `.orig.c` 零改写副本。
-5. **`_Generic` 整段透传。** 控制表达式与所有分支都不经过 ct 重写，分支里不能
+5. **断言消息可以省略，但 C99 下会告警。** ct 接受
+   `_Static_assert(cond);` 并发射不带消息的断言；clang 在 `-std=c99` 下报
+   `-Wc23-extensions`。本目录要求 cc 零警告，所以正例统一带消息。这是实测
+   行为，不是「规范写了就能用」。
+6. **`_Generic` 整段透传。** 控制表达式与所有分支都不经过 ct 重写，分支里不能
    放 trait 调用/装箱这类 CT 语法。
-6. **`_Atomic` 只验证语法。** 原子性、`atomic_*` 内建、内存序都不在本组样例里，
+7. **`_Atomic` 只验证语法。** 原子性、`atomic_*` 内建、内存序都不在本组样例里，
    语义完全由 cc 负责。
-7. **for 初始化子句里的 `static` 不是标准 C**（GNU 扩展）；ct 把它发射成
+8. **for 初始化子句里的 `static` 不是标准 C**（GNU 扩展）；ct 把它发射成
    `{ static int i = 0; for (; ...; ...) }`，生成的 C 是标准 C99。
-8. **case 范围是 GNU/C23 扩展**，需要 cc 接受；clang 与 gcc 在 `-std=c99` 下
+9. **case 范围是 GNU/C23 扩展**，需要 cc 接受；clang 与 gcc 在 `-std=c99` 下
    接受且不告警（本目录用零改写副本验证过）。
-9. **匿名成员是 C11 语法**；clang/gcc 在 `-std=c99` 下接受且不告警
-   （`s07_anon_members/variant.orig.c` 直接编过）。
-10. **VLA 不做 sizeof 折叠**：`s16_array_length/vla` 的维度是变量，长度在运行期
+10. **匿名成员是 C11 语法**；clang/gcc 在 `-std=c99` 下接受且不告警
+    （`s07_anon_members/variant.orig.c` 直接编过）。
+11. **VLA 不做 sizeof 折叠**：`s16_array_length/vla` 的维度是变量，长度在运行期
     才确定。
-11. **`offsetof` 需要源文件自己包含 `<stddef.h>`**：ct 没有预处理器，只把
+12. **`offsetof` 需要源文件自己包含 `<stddef.h>`**：ct 没有预处理器，只把
     `offsetof(...)` 原样发射；字段校验是 ct 内建做的。
-12. **union 不能 `use` trait**：vptr 字段无处安放，ct 直接拒绝
+13. **union 不能 `use` trait**：vptr 字段无处安放，ct 直接拒绝
     （来源：`s05_union/neg_use`）。
-13. **边界语法**：`_Alignof` 只接受类型形式；`_Alignas` 重复报错；指针位域、
+14. **边界语法**：`_Alignof` 只接受类型形式；`_Alignas` 重复报错；指针位域、
     多声明符函数指针、for 条件里的裸逗号、数组型复合字面量都被 ct 拒绝，
     对应 `neg_*` 文件。
-14. **`__attribute__` 的语义完全交给 cc**；ct 只检查括号闭合、去重并规范化
-    发射位置。属性能否用于某个对象由 cc 决定。
-15. **成功样例要求 cc 零警告。** 例如位域演示用变量（而不是字面量 300）赋值，
+15. **`__attribute__` 的语义完全交给 cc**；ct 只检查括号闭合、去重并规范化
+    发射位置。属性能否用于某个对象由 cc 决定。局部前缀属性带初始化器时，
+    生成物是 `int v __attribute__((unused)) = 5;`（见 `s21_attribute/prefix`）。
+16. **成功样例要求 cc 零警告。** 例如位域演示用变量（而不是字面量 300）赋值，
     避免 `-Wbitfield-constant-conversion`，同时仍能看到截断到 44 的结果。
 
 ## 目录约定

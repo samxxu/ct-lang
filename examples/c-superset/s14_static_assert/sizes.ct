@@ -9,6 +9,10 @@
  * L0 实测：`_Static_assert` 能过，但 L0 不映射 `static_assert`，会把它当
  * 普通函数调用原样发射，随后 cc 报 "call to undeclared function"。因此本
  * 文件在 cases.tsv 里标 l0=no，而 offsets.ct 只写 `_Static_assert`，可过 L0。
+ *
+ * 消息可省略（C23）：ct 接受 `_Static_assert(cond);` 并发射不带消息的断言；
+ * 但 clang 在 -std=c99 下会对它发 -Wc23-extensions 警告，与本目录「cc 零警告」
+ * 的判据冲突，所以正例统一带消息。行为已单独实测，不是「规范写了就能用」。
  */
 #include <stddef.h>
 #include <stdio.h>
