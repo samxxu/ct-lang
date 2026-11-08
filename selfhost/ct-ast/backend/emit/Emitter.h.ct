@@ -2496,23 +2496,32 @@ impl EmitOps for Emitter {
             fputs(") ", self->out);
             return self->emit_node(self->arena->nodes[n].d, ind);
         }
-        /* `loop(<count>) { … }` prints as a single-line `for` header:
+        /* `loop(<count>) { … }` and `loop(<start>..<stop>) { … }` print as a
+           single-line `for` header:
              for (int i = 0, __ct_loop_n_K = (<count>); i < __ct_loop_n_K; i++)
-           The bound is evaluated once (before the first test) and `i` is an
-           ordinary `int` inside the `for`, so break/continue/return and the
-           `i--`/`++i` forms behave exactly as in the desugared source. `K` is a
-           per-emitter counter, so nested loops get distinct names. `b` holds the
-           single-bound sentinel -1; a two-bound count is Phase 23's. */
+             for (int i = (<start>), __ct_loop_n_K = (<stop>); i < __ct_loop_n_K; i++)
+           The counted form evaluates its bound once, before the first test; the
+           range form evaluates the two bounds once each, lower first, because
+           each initializer is a full expression. `i` is an ordinary `int`, so
+           break/continue/return and the `i--`/`++i` forms behave exactly as in
+           the desugared source. `K` is a monotonic per-emitter counter, so
+           nested loops get distinct names without a pre-scan. */
         if (self->arena->nodes[n].kind == N_LOOP) {
             int k;
-            if (self->arena->nodes[n].b != -1)
-                return self->fail_from(n, "loop lowering: a two-bound count belongs to Phase 23");
             k = self->ntmp;
             self->ntmp++;
             self->emit_indent(ind);
-            fprintf(self->out, "for (int i = 0, __ct_loop_n_%d = (", k);
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fprintf(self->out, "); i < __ct_loop_n_%d; i++) ", k);
+            if (self->arena->nodes[n].b == -1) {
+                fprintf(self->out, "for (int i = 0, __ct_loop_n_%d = (", k);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, "); i < __ct_loop_n_%d; i++) ", k);
+            } else {
+                fprintf(self->out, "for (int i = (");
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, "), __ct_loop_n_%d = (", k);
+                if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+                fprintf(self->out, "); i < __ct_loop_n_%d; i++) ", k);
+            }
             return self->emit_node(self->arena->nodes[n].d, ind);
         }
         if (self->arena->nodes[n].kind == N_SWITCH) {
