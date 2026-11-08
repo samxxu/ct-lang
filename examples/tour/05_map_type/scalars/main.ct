@@ -1,0 +1,21 @@
+// 消费方：只 import 单元，不需要知道 shim 的存在。
+// 类型宿主调用点的静态类型必须已知——int 字面量、变量、char * 字面量都满足；
+// 如果写成 `void *p; p.fahrenheit()`，ct-ast 会报“宿主类型未知”，
+// 因为零成本展开要求编译期就能决定调用哪张表。
+import units::units;
+
+#include <stdio.h>
+
+int main(void) {
+    int c = 100;
+    int m = 1500;
+    char *line = "the quick brown fox";
+
+    printf("f    %d\n", c.fahrenheit());
+    printf("ft   %d\n", m.feet());
+    printf("word %d\n", line.words());
+
+    // 字面量也是合法接收者：编译期类型就是 int，直接展开。
+    printf("lit  %d\n", (32).fahrenheit());
+    return 0;
+}

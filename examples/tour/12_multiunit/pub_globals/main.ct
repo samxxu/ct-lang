@@ -1,0 +1,34 @@
+// 场景：两个模块各自维护“命中数”，名字都叫 hits，必须互不干扰。
+// 为什么用 namespace：C 没有命名空间，传统做法是手写 left_hits/right_hits；
+//   ct 的 namespace 在生成 C 时给全局符号加前缀，源码里仍然可以写短名。
+// 角度：pub 全局 + 命名空间修饰——同一个标识符在两个命名空间里是两个对象；
+//   `left::hits = 5` 改的只是 left 的那一份。对比 12_multiunit/cross_unit_iface：
+//   那边导出的是类型和对象，这边导出的是可变状态与函数。
+// 仅 ct-ast：多单元 build 与 pub 导出。
+#include <stdio.h>
+
+import left::lstate;
+import right::rstate;
+
+int main(void) {
+    int a;
+    int b;
+
+    // 两个命名空间各有一个 hits，初值不同。
+    printf("%d %d\n", left::hits, right::hits);
+
+    // 分别写入，互不影响。
+    left::hits = 5;
+    right::hits = 50;
+
+    // 先读出写入后的值：bump 会再自增，若在 bump 之后读就变成 6/51。
+    int ha = left::hits;
+    int hb = right::hits;
+
+    // bump 在各自单元内操作自己的 hits。
+    a = left::bump();
+    b = right::bump();
+
+    printf("%d %d %d %d\n", ha, hb, a, b);
+    return 0;
+}

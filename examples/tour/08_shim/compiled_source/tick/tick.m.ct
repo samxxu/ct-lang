@@ -1,0 +1,18 @@
+// 场景：一个进程级计数器，状态必须活在被 C 编译的那一侧（比如硬件寄存器
+//   的缓存、日志序号），ct 侧只负责给它挂上方法名。
+// 为什么用 .shim.c：static inline 放不进 .c 才能保存的全局状态；
+//   这里 shim.h 只声明函数，真正实现和 static 变量在 shim.c 里。
+// 角度：编译型 shim。build 会把这个 .shim.c 列进 cc 行（本目录 run.sh 也会
+//   显式收集），链接后两次调用能看见状态从 2 累加到 5；
+//   对照 08_shim/header_inline 的纯头文件版本，这里多了一个真实的链接单元。
+namespace tick;
+
+#include "tick.shim.h"
+
+pub trait Ticker {
+    int bump(int by);
+}
+
+map trait Ticker for namespace tick {
+    bump(by) -> tick_bump(by);
+}

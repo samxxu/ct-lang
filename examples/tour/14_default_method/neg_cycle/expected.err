@@ -1,0 +1,2 @@
+prog.ct:6:1: error: trait 'Loop' has no non-default method to break the cycle
+ctc: 1 error(s) generated

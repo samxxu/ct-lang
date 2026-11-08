@@ -1,0 +1,44 @@
+// 场景：一张表格的“当前单元格”指针——单元格可以为空，也可以换绑到任意求值节点。
+// 为什么用 trait：`Expr *cell` 在生成物里是 `struct Expr_iface *cell`，
+//   即“指向胖指针的指针”。这样表格可以换绑到不同节点，而派发仍然只查一次 vt。
+// 角度：接口作为“指针字段”。与值字段的区别在于取地址层级：
+//   值字段 `s.lhs.eval()` -> `s.lhs.vt->eval(s.lhs.self)`；
+//   指针字段 `row.cell->eval()` -> `row.cell->vt->eval(row.cell->self)`。
+//   L0 对指针接口字段只支持“派发”，赋值需要已有胖指针的地址
+//   （`row.cell = &slot;`），不接受直接写 `row.cell = a;`。
+// L0 可用。
+#include <stdio.h>
+
+trait Expr {
+    int eval();
+}
+
+struct Lit {
+    int v;
+} use Expr;
+
+impl Expr for Lit {
+    int eval() {
+        return self->v;
+    }
+}
+
+// cell 是指向接口值的指针；它不拥有被指对象。
+struct Row {
+    Expr *cell;
+};
+
+int main(void) {
+    Lit seven = { .v = 7 };
+    Expr slot = seven;          // 先得到一个胖指针（装箱）
+    struct Row row;
+
+    row.cell = &slot;           // 指向已有的接口值
+    printf("first  %d\n", row.cell->eval());
+
+    Lit two = { .v = 2 };
+    Expr other = two;
+    row.cell = &other;          // 换绑：同一个字段，另一个实现对象
+    printf("second %d\n", row.cell->eval());
+    return 0;
+}

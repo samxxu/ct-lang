@@ -1,0 +1,2 @@
+prog.ct:18:21: error: trait method 'name' is not implemented for struct 'Rect'
+ctc: 1 error(s) generated

@@ -1,0 +1,54 @@
+// 场景：一块板子上有两个 LED，驱动函数 led_drive 是早就写好的 C 代码，
+//   它只认识 `struct Led *`，既不认识 trait 也没有 vptr。
+// 为什么用 map：不想为了接上 Lamp 接口去改 struct Led 或驱动；
+//   `map trait ... for instance` 把“实例 -> 接口方法”的绑定写在外面，
+//   每个实例各有一张 vtable。两个实例的 id 不同，调同一个 l.set() 落到各自的表。
+// 角度：实例级 map 的核心是“同一个 struct 的不同实例可以有不同绑定”，
+//   这点和 impl（按类型绑定）相反；换成 impl，两个 LED 只能共用一套行为。
+// 仅 ct-ast：冻结种子不认 map（会把它当非法 C 透传）。
+#include <stdio.h>
+
+trait Lamp {
+    int set(int on);
+}
+
+struct Led {
+    int id;
+    int on;
+};
+
+struct Led led_a;
+struct Led led_b;
+
+// 既有驱动：签名是 (具体实例指针, 普通参数)，正好匹配 map 的 fallback 形式。
+static int led_drive(struct Led *l, int on) {
+    l->on = on;
+    return l->id * 10 + on;
+}
+
+// 两个实例各绑一次；recipe 里可以自由引用该实例（led_a）和参数（on）。
+map trait Lamp for instance led_a {
+    set(on) -> led_drive(&led_a, on);
+}
+
+map trait Lamp for instance led_b {
+    set(on) -> led_drive(&led_b, on);
+}
+
+int main(void) {
+    Lamp a;
+    Lamp b;
+
+    led_a.id = 1;
+    led_b.id = 2;
+
+    // 装箱时查的是“被装箱的实例”的表，而不是 Led 类型上有什么 impl。
+    a = led_a;
+    b = led_b;
+
+    printf("%d %d\n", a.set(1), b.set(0));
+
+    // 副作用确实落在各自的 struct 上。
+    printf("%d %d\n", led_a.on, led_b.on);
+    return 0;
+}

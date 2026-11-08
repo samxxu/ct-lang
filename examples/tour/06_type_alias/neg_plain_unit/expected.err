@@ -1,0 +1,2 @@
+prog.ct:9:1: error: a type alias is only allowed in a .h.ct or .m.ct unit
+ctc: 1 error(s) generated

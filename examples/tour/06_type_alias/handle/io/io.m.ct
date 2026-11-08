@@ -1,0 +1,22 @@
+// 场景：给一个 C 库的“不透明句柄”补上方法——这里用 struct ct_handle 模拟
+//   sqlite3_stmt、FILE 这类只能通过指针使用的对象。
+// 为什么用 pub type：宿主是 `struct ct_handle *`，写全拼很长，而且 C 库作者
+//   随时可能把 struct 改名；用 `Handle` 起一个稳定名字后，方法调用的宿主键
+//   仍然是同一个 C 类型，只是拼写更短。
+// 角度：`pub type Handle = struct ct_handle;` 的星号归属——
+//   裸 Handle 就是 struct ct_handle，`Handle *` 才是 `struct ct_handle *`。
+//   所以 map 写成 `for type Handle *`，消费方用 `Handle *` 或 `struct ct_handle *`
+//   都能命中同一张表（下面两行调用就是证据）。
+namespace io;
+
+#include "io.shim.h"
+
+pub type Handle = struct ct_handle;
+
+pub trait HandleFd {
+    int fd();
+}
+
+map trait HandleFd for type Handle * {
+    fd(h) -> io_fd(h);
+}

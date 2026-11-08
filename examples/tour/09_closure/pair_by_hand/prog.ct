@@ -1,0 +1,64 @@
+// 场景：一个重试循环，把“每次重试该等多久”交给调用方决定。
+//   容器只负责轮次，策略由回调提供；策略如果是对象，就带自己的状态。
+// 为什么不用裸函数指针：回调通常需要上下文（这里 base 或 step）。
+//   ct 的约定是 `(fn, env)` 一对，env 是 fn 的第一个参数，容器两样都收、
+//   两样都原样传回，且不长期保存。
+// 角度：tier-1 手工写法——对象自身当 env，再写一个 (void *, ...) 形状的
+//   adapter 去调它的 trait 方法。这正是 `=>` 闭包在 tier-2 自动生成的形状；
+//   先看手工版，再看 09_closure/literal_capture 的糖，能分清“糖”和 ABI。
+// L0 可用：整个文件只用 trait/impl/函数指针，冻结种子就能编。
+#include <stdio.h>
+
+trait Strategy {
+    int wait(int round);
+}
+
+struct Backoff {
+    int base;
+} use Strategy;
+
+impl Strategy for Backoff {
+    int wait(int round) {
+        return self->base * round;
+    }
+}
+
+// 容器约定：fn 在前、env 紧随其后，回调自己的参数接在尾部。
+// 返回所有轮次的和，让“回调真的被调用了”可观察。
+static int run(int rounds, int (*fn)(void *env, int round), void *env) {
+    int total = 0;
+    int k = 0;
+
+    while (k < rounds) {
+        total = total + fn(env, k);
+        k = k + 1;
+    }
+    return total;
+}
+
+// adapter：env 就是 Backoff 对象本身。生成的 impl wrapper 也是这个形状，
+// 只是它是 static 的、源码里叫不出名字，所以这里手写一份。
+static int backoff_call(void *env, int round) {
+    struct Backoff *b = (struct Backoff *)env;
+
+    return b->wait(round);
+}
+
+// 普通 C 回调：上下文放在调用方栈上，不需要 trait。
+static int fixed_call(void *env, int round) {
+    int *step = (int *)env;
+
+    return *step + round;
+}
+
+int main(void) {
+    struct Backoff b = { .base = 10 };
+    int step = 5;
+
+    // 10*0 + 10*1 + 10*2 = 30
+    printf("object %d\n", run(3, backoff_call, &b));
+
+    // (5+0) + (5+1) + (5+2) = 18
+    printf("plain  %d\n", run(3, fixed_call, &step));
+    return 0;
+}

@@ -1,0 +1,2 @@
+prog.ct:10:13: error: loop body must be a block
+ctc: 1 error(s) generated

@@ -1,0 +1,57 @@
+// 场景：报表要打印不同形状的面积，形状在运行期才决定（这里用两个具体对象模拟）。
+// 为什么用 trait：report 只依赖 Shape 的抽象接口，不 include 任何具体类型；
+//   换成 `if (kind == RECT) ... else ...`，每加一种形状都要改 report，违反开闭。
+// 角度：这是“真多态”——同一个 trait 有两份 impl，装箱发生在实参位置
+//   （report(r) 展开为 (struct Shape_iface){ &r, &Rect_Shape_vtable }）。
+//   如果只在单个 struct 上 impl，动态派发退化成一个固定跳转，看不出价值。
+// L0 可用：trait 作参数、实参自动装箱都是冻结种子就支持的能力。
+#include <stdio.h>
+
+trait Shape {
+    int area();
+    char *label();
+}
+
+struct Rect {
+    int w;
+    int h;
+} use Shape;
+
+struct Square {
+    int side;
+} use Shape;
+
+impl Shape for Rect {
+    int area() {
+        return self->w * self->h;
+    }
+
+    char *label() {
+        return "rect";
+    }
+}
+
+impl Shape for Square {
+    int area() {
+        return self->side * self->side;
+    }
+
+    char *label() {
+        return "square";
+    }
+}
+
+// 参数写成 Shape（不是 struct Rect *）：函数体里看不到任何具体类型，
+// 却能在同一次调用里落到不同的 area 实现上。
+static void report(Shape s) {
+    printf("%s %d\n", s.label(), s.area());
+}
+
+int main(void) {
+    Rect r = { .w = 3, .h = 4 };
+    Square q = { .side = 5 };
+
+    report(r);   // 装箱：self 指向栈上的 r，vt 指向 Rect_Shape_vtable
+    report(q);   // 同一个 report，另一个 vtable
+    return 0;
+}

@@ -1,0 +1,9 @@
+flush 0
+flush 1
+flush 2
+calls 1
+keep 0
+keep 2
+keep 3
+sum 0
+sum 2

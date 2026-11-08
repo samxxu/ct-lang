@@ -1,0 +1,27 @@
+// 场景：有人只写了 area() 就以为 Shape 实现完了。
+// 角度：反例——静态检查在 ct 里不是可选项：struct 声明了 use Shape，
+//   impl 就必须覆盖 trait 的每一个抽象方法。漏掉 name() 时编译器在
+//   impl 的结尾报错并退出 1，而不是生成一张 vtbl 里留着空函数指针的表
+//   （那张表直到调用 name() 才会在运行期崩溃，代价高得多）。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+#include <stdio.h>
+
+trait Shape {
+    int area();
+    char *name();
+}
+
+struct Rect {
+    int w;
+} use Shape;
+
+impl Shape for Rect {
+    int area() {
+        return self->w;
+    }
+}
+
+int main(void) {
+    Rect r = { .w = 2 };
+    return r.area();
+}

@@ -1,0 +1,31 @@
+// 场景：方法有 3 个参数，调用点只给了 1 个。
+// 为什么用 check：同一处不匹配，编译路径只发 warning 并继续生成 C
+//   （历史上为了不打断已有代码），而 check 把它当 error。
+//   这正是“先用 check 卡住 CI，再用 build 出二进制”的价值：
+//   两边的判据来自同一份分析，只是严重级别不同。
+// 角度：同一问题、两种严重级别——expected.warn 是 `ctc` 编译的 stderr，
+//   expected.err 是 `ct check` 的 stderr，退出码分别是 0 和 1。
+// 仅 ct-ast。
+#include <stdio.h>
+
+trait Op {
+    int add(int a, int b);
+}
+
+struct S {
+    int n;
+} use Op;
+
+impl Op for S {
+    int add(int a, int b) {
+        return a + b + self->n;
+    }
+}
+
+int main(void) {
+    S s = { .n = 1 };
+
+    // 少传一个参数：编译只警告，check 报错。
+    printf("%d\n", s.add(1));
+    return 0;
+}

@@ -1,0 +1,40 @@
+// 场景：按页码切片——只处理 [from, to) 这一段，越界或空段直接跳过。
+// 为什么用 loop(a..b)：半开区间与数组下标、C 的指针区间一致，
+//   `loop(from..to)` 不会误含 to，避免“分页多一条”的经典差一错误。
+// 角度：区间形式 + 边界求值顺序。两个边界各求值一次，先 lo 后 hi；
+//   空区间（lo >= hi）安静地跑 0 轮；`loop(0..b)` 与 `loop(b)` 等价。
+// 仅 ct-ast。
+#include <stdio.h>
+
+static int lo(void) {
+    printf("eval lo\n");
+    return 2;
+}
+
+static int hi(void) {
+    printf("eval hi\n");
+    return 5;
+}
+
+int main(void) {
+    // 先打印 eval lo、eval hi，再跑 2、3、4 三轮。
+    loop(lo()..hi()) {
+        printf("page %d\n", i);
+    }
+
+    // 反向区间是空集，不是错误。
+    loop(4..2) {
+        printf("never\n");
+    }
+
+    // 空集。
+    loop(2..2) {
+        printf("never\n");
+    }
+
+    // 下界为 0 时与 loop(3) 完全一致。
+    loop(0..3) {
+        printf("zero %d\n", i);
+    }
+    return 0;
+}

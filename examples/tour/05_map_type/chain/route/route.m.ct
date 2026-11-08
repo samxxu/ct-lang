@@ -1,0 +1,21 @@
+// 场景：路由路径的链式拼装——p.seg("home").seg("user").seg("docs")。
+// 为什么用 map for type：链式调用的每一步都需要“返回宿主类型”，
+//   而 impl 方法的 self 不能把临时值当接收者（ct 明确拒绝 rvalue 链），
+//   类型宿主没有 self，作者把宿主按值返回就能自然链下去。
+// 角度：链式展开。每个 .seg() 在 C 里都是一次普通函数调用，
+//   中间值是一个按值传递的 struct Path，没有堆分配、没有 iface；
+//   若把 host 改成 char *，同一套写法要换成显式指针运算，可读性立刻下降。
+namespace route;
+
+#include "route.shim.h"
+
+pub trait PathOps {
+    struct Path seg(char *name);
+    int hops();
+}
+
+// 宿主是 struct Path（不是 Path *）：方法按值收、按值还。
+map trait PathOps for type struct Path {
+    seg(p, name) -> route_seg(p, name);
+    hops(p) -> route_hops(p);
+}

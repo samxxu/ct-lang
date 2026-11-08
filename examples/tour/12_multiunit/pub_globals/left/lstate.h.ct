@@ -1,0 +1,11 @@
+// left 模块的状态：导出全局 hits 与 bump。
+// 文件基名 lstate 与 right 的 rstate 不同：生成的 C 文件按基名落盘，
+// 同名会在 build 输出目录里互相覆盖（这是多单元工程的命名约定）。
+namespace left;
+
+pub int hits = 1;
+
+pub int bump(void) {
+    hits = hits + 1;
+    return hits;
+}

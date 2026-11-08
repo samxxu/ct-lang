@@ -1,0 +1,44 @@
+// 场景：日志与格式化输出——上层想写 log("net", "%d/%d", 3, 4)，
+//   下层既可能直接打到 stdout，也可能写进固定缓冲区，供错误信息复用。
+// 为什么用变参：格式化是把“可变参数”封装起来的典型方式；调用方不用自己
+//   拆包，也不需要知道最终走 vprintf 还是 vsnprintf。
+// 角度：转发 va_list——`...` 收到的参数只能完整读一次，转发给 vprintf /
+//   vsnprintf 是标准做法；如果先 va_arg 消费一遍再转发，剩下的是空列表。
+//   这与 11_variadic/sums 的“逐个 va_arg”是两种不同的消费方式。
+// L0 可用。
+#include <stdio.h>
+#include <stdarg.h>
+
+// 转发到 vprintf：tag 是普通参数，fmt 之后的都是可变部分。
+static void log_line(char *tag, char *fmt, ...) {
+    va_list ap;
+
+    va_start(ap, fmt);
+    printf("[%s] ", tag);
+    vprintf(fmt, ap);
+    printf("\n");
+    va_end(ap);
+}
+
+// 转发到 vsnprintf：把同一批可变参数写进调用方提供的缓冲区。
+static int format_into(char *buf, int cap, char *fmt, ...) {
+    va_list ap;
+    int n;
+
+    va_start(ap, fmt);
+    n = vsnprintf(buf, (size_t)cap, fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+int main(void) {
+    char buf[32];
+
+    log_line("net", "%d/%d", 3, 4);
+    log_line("disk", "%s %.1f", "ok", 0.5);
+
+    // vsnprintf 返回“原本需要的长度”，不包含结尾的 '\0'。
+    int n = format_into(buf, 32, "%s-%d", "ok", 7);
+    printf("%s %d\n", buf, n);
+    return 0;
+}

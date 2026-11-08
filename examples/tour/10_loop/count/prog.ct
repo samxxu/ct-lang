@@ -1,0 +1,48 @@
+// 场景：日志攒够 3 条就刷盘；另外还要跳过坏行、提前结束一次批量。
+// 为什么用 loop(n)：计数循环在业务代码里最常见，而 ct 的 loop 明确规定
+//   “上界只求值一次”，避免了 `for (i = 0; i < expensive(); i++)` 的常见坑。
+// 角度：计数形式 + 控制流（break/continue/可写 i）。
+//   注意 loop 的 i 不是只读常量：写它等价于写原生 for 的计数器，
+//   适合“每次吃掉两条”的合并场景。
+// 仅 ct-ast：loop 是 Phase 22/23 才进的语言特性。
+#include <stdio.h>
+
+static int g_budget_calls = 0;
+
+// 上界表达式有副作用：它验证“只求值一次”。
+static int budget(void) {
+    g_budget_calls = g_budget_calls + 1;
+    return 3;
+}
+
+int main(void) {
+    // 3 轮，0..2。budget() 只在进入循环时调用一次。
+    loop(budget()) {
+        printf("flush %d\n", i);
+    }
+    printf("calls %d\n", g_budget_calls);
+
+    // 0 轮是合法输入，不是诊断。
+    loop(0) {
+        printf("never\n");
+    }
+
+    // continue 跳过 i==1；break 在 i==4 前结束。
+    loop(5) {
+        if (i == 1) {
+            continue;
+        }
+        if (i == 4) {
+            break;
+        }
+        printf("keep %d\n", i);
+    }
+
+    // i 可写：写完之后循环自身的 i++ 仍会执行，
+    // 所以这一轮从 0 跳到 2，只打印 0、2 两轮。
+    loop(3) {
+        printf("sum %d\n", i);
+        i = i + 1;
+    }
+    return 0;
+}

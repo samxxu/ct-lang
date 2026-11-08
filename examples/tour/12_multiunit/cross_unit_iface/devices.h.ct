@@ -1,0 +1,10 @@
+// 接口单元：只导出 trait 与对象布局，不定义任何对象。
+// 这里没有 impl，所以这个单元自己不能回答“Temp 怎么 read”；
+// 完整性由“入口单元 import 了 impl_temp”这一事实补全。
+pub trait Sample {
+    int read();
+}
+
+pub struct Temp {
+    int raw;
+} use Sample;

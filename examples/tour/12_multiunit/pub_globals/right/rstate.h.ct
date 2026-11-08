@@ -1,0 +1,9 @@
+// right 模块：与 left 同名，但命名空间不同，生成 C 时是另一个符号。
+namespace right;
+
+pub int hits = 10;
+
+pub int bump(void) {
+    hits = hits + 1;
+    return hits;
+}

@@ -1,0 +1,56 @@
+// 场景：一个“批次汇总”的小工具：求和、取最大值，参数个数由调用方决定。
+// 为什么用变参：C 侧早就有这种接口（printf、ioctl），ct 原生透传 `...`，
+//   不需要为了兼容去写十个重载函数。
+// 角度：数值型变参——调用方用第一个参数 n 说明个数，函数用 va_list/va_arg
+//   逐个取 int。ct 不检查可变部分的类型（和 C 一样），所以 n 与实际个数必须
+//   由调用约定保证；这正是后一个样例用“格式化”封装它的原因。
+// L0 可用：变参声明与 va_* 都是 C 形态，冻结种子直接透传。
+#include <stdio.h>
+#include <stdarg.h>
+
+static int sum(int n, ...) {
+    va_list ap;
+    int total = 0;
+    int k = 0;
+
+    va_start(ap, n);
+    while (k < n) {
+        total = total + va_arg(ap, int);
+        k = k + 1;
+    }
+    va_end(ap);
+    return total;
+}
+
+static int max_of(int n, ...) {
+    va_list ap;
+    int best;
+    int k = 1;
+
+    if (n <= 0) {
+        return 0;
+    }
+    va_start(ap, n);
+    best = va_arg(ap, int);
+    while (k < n) {
+        int v = va_arg(ap, int);
+
+        if (v > best) {
+            best = v;
+        }
+        k = k + 1;
+    }
+    va_end(ap);
+    return best;
+}
+
+int main(void) {
+    // sum 的 n 是 4，后面正好四个 int。
+    printf("sum %d\n", sum(4, 3, 5, 7, 9));
+
+    // n == 0 是合法的空批次；循环体一次也不进。
+    printf("zero %d\n", sum(0));
+
+    printf("max %d\n", max_of(3, 40, 12, 27));
+    return 0;
+}

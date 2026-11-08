@@ -1,0 +1,52 @@
+// 场景：一棵小表达式树：加法节点的两个操作数是“任何能求值的表达式”，
+//   不限定是字面量还是另一个节点。
+// 为什么用 trait：字段类型写成 Expr（接口值）而不是具体 struct，
+//   于是 Add 可以同时容纳字面量和嵌套的 Add；换成 union + tag，
+//   每加一种节点都要改 eval 的 switch。
+// 角度：接口作为“值字段”——字段布局是 struct Expr_iface { self, vt }；
+//   注意 L0 的已知边界：构造点（指定初始化式）不会替接口字段装箱，
+//   所以这里先声明对象、再用语句赋值 `sum.lhs = a;`（赋值位会装箱）。
+// L0 可用：接口值字段的派发与语句赋值装箱。
+#include <stdio.h>
+
+trait Expr {
+    int eval();
+}
+
+struct Lit {
+    int v;
+} use Expr;
+
+// lhs / rhs 的类型是 Expr，展开成两个 iface 值字段（各含 self + vt）。
+struct Add {
+    int base;
+    Expr lhs;
+    Expr rhs;
+} use Expr;
+
+impl Expr for Lit {
+    int eval() {
+        return self->v;
+    }
+}
+
+impl Expr for Add {
+    int eval() {
+        // 字段链上的接口派发：self->lhs.vt->eval(self->lhs.self)
+        return self->base + self->lhs.eval() + self->rhs.eval();
+    }
+}
+
+int main(void) {
+    Lit a = { .v = 10 };
+    Lit b = { .v = 32 };
+    Add sum = { .base = 1 };   // 只初始化 base，两个接口字段此时 vt == NULL
+
+    // 语句赋值：按字段声明时的 trait（Expr）装箱。
+    sum.lhs = a;
+    sum.rhs = b;
+
+    // 1 + 10 + 32：三个节点各自派发，调用点看不到 iface 的 self/vt。
+    printf("sum %d\n", sum.eval());
+    return 0;
+}

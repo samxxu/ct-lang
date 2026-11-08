@@ -1,0 +1,35 @@
+# examples/tour case manifest
+# feature|case|mode|l0|expect_exit|note
+01_vtable|minimal|compile|yes|0|minimal trait/struct/impl
+01_vtable|two_impls|compile|yes|0|one trait, two impls, parameter boxing
+01_vtable|neg_missing_method|compile|no|1|missing impl method
+02_iface_value|param|compile|yes|0|interface parameter
+02_iface_value|return_pick|compile|yes|0|interface return
+03_iface_field|value_field|compile|yes|0|interface value field
+03_iface_field|ptr_field|compile|yes|0|interface pointer field
+04_map_instance|two_instances|compile|no|0|two instances, two vtables
+04_map_instance|ns_qualified|compile|no|0|namespace-qualified instance host
+04_map_instance|neg_unbound|compile|no|1|incomplete map binding
+05_map_type|scalars|build|no|0|scalar hosts int/char*, two tables on int
+05_map_type|chain|build|no|0|struct host, chain of value returns
+06_type_alias|handle|build|no|0|alias and underlying spelling share the host key
+06_type_alias|neg_plain_unit|compile|no|1|type alias outside .h.ct/.m.ct
+07_map_namespace|dynamic|compile|no|0|namespace host, boxed Writer::hal
+07_map_namespace|static|build|no|0|namespace host, static zero-cost call
+08_shim|header_inline|build|no|0|header-only shim (static inline + macro)
+08_shim|compiled_source|build|no|0|shim.c with C-side state
+09_closure|pair_by_hand|compile|yes|0|tier-1 manual (fn, env) pair
+09_closure|literal_capture|compile|no|0|capture at creation point, per-round closures
+09_closure|neg_capture_write|compile|no|1|captured variable cannot be reassigned
+10_loop|count|compile|no|0|loop(n), once-evaluated bound, writable i
+10_loop|range|compile|no|0|loop(a..b), half-open, empty range
+10_loop|neg_braceless|compile|no|1|loop body must be a block
+11_variadic|sums|compile|yes|0|va_list va_arg over ints
+11_variadic|forward|compile|yes|0|forward va_list to vprintf/vsnprintf
+12_multiunit|cross_unit_iface|build|no|0|trait and vtable across units
+12_multiunit|pub_globals|build|no|0|pub globals, namespace mangling
+13_check|clean|clean|no|0|ct check on a clean unit
+13_check|arity|pair|no|0|same finding: warning in build, error in check
+13_check|json|check-json|no|1|machine-readable diagnostics
+14_default_method|expand_and_override|compile|no|0|default body per struct, override
+14_default_method|neg_cycle|compile|no|1|default methods with no entry point

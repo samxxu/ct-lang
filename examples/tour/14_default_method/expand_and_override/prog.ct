@@ -1,0 +1,51 @@
+// 场景：两种评分对象，默认规则是“基础分翻倍”，其中一种要硬编码成 100。
+// 为什么用默认方法：把公共公式写一次，省掉每个 impl 复制粘贴；
+//   这比“基类 + 虚函数”轻——没有继承、没有额外对象，默认体按 struct 展开。
+// 角度：默认体在每个采纳它的 struct 上各生成一份（Plain 用自己的 base），
+//   而显式实现 total 的 Fixed 直接覆盖默认槽；同一 trait 的调用点代码不变。
+// 仅 ct-ast：trait 方法体（默认实现）是后续阶段能力。
+#include <stdio.h>
+
+trait Score {
+    int base();
+
+    // 默认实现：调用同一 trait 的抽象方法。self 的具体类型由采纳者决定。
+    int total() {
+        return self->base() * 2;
+    }
+}
+
+struct Plain {
+    int v;
+} use Score;
+
+struct Fixed {
+    int v;
+} use Score;
+
+impl Score for Plain {
+    int base() {
+        return self->v;
+    }
+    // 不写 total：使用默认展开
+}
+
+impl Score for Fixed {
+    int base() {
+        return self->v;
+    }
+
+    // 显式覆盖：默认体不会出现在这份 vtable 里。
+    int total() {
+        return 100;
+    }
+}
+
+int main(void) {
+    Plain p = { .v = 7 };
+    Fixed f = { .v = 7 };
+
+    printf("plain %d\n", p.total());
+    printf("fixed %d\n", f.total());
+    return 0;
+}

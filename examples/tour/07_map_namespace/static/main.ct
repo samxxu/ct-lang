@@ -1,0 +1,10 @@
+import sys::sys;
+
+#include <stdio.h>
+
+int main(void) {
+    // 限定调用：Q.m(args) 形式只走静态表，不产生接口值。
+    printf("%d\n", sys::Clock.ticks(5));
+    printf("%d\n", sys::Clock.ticks(10));
+    return 0;
+}

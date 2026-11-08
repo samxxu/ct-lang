@@ -1,0 +1,33 @@
+// 场景：一个设备插件：接口单元只声明“能采样”和温度对象，
+//   具体实现放在单独的单元里（真实项目里可能是按驱动拆的 .c）。
+// 为什么拆单元：接口单元（.h.ct）会被很多消费方 import，它必须保持稳定；
+//   实现单元可以独立替换。消费方只需要看到 trait 和 struct 布局。
+// 角度：跨单元接口——vtable 由实现单元以外部链接定义，消费方装箱后
+//   通过对象里的 vptr 派发，完全不需要链接到实现函数的名字。
+//   `Sample s = p;` 说明接口值绑定指针时，self 与底层对象同一份。
+// 仅 ct-ast：多单元 build 与 pub 导出。
+import devices;
+import impl_temp;
+
+#include <stdio.h>
+
+// 接口作参数：这个函数在消费方单元里，仍然能派发到实现单元的 read()。
+static int offset_from(Sample s, int expect) {
+    return s.read() - expect;
+}
+
+int main(void) {
+    // 先把指针落到一个有静态类型的变量上，再装箱：
+    // `Sample s = temp_get();` 这种“调用结果直接装箱”目前推不出宿主类型。
+    struct Temp *p = temp_get();
+    Sample s = p;
+
+    printf("read %d\n", s.read());
+
+    // 同一个对象：改 raw 后再派发，读到的就是新值。
+    p->raw = 305;
+    printf("mut  %d\n", s.read());
+
+    printf("diff %d\n", offset_from(s, 20));
+    return 0;
+}

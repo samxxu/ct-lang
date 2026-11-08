@@ -1,0 +1,32 @@
+// 场景：整个 HAL 层是一个命名空间 hal，它对外提供 Writer 能力，
+//   但 hal 本身不是 struct，没有实例可以取地址。
+// 为什么用 map for namespace：库作者只想给“这个模块”挂一个接口，
+//   不想为了满足 ct 的装箱规则去伪造一个全局 struct；命名空间宿主让
+//   `Writer::hal` 直接成为一个可装箱的接口值。
+// 角度：动态路径——`Writer w = Writer::hal;` 装的是“模块级 vtable”，
+//   之后每次 w.write(...) 都查表；同一命名空间只生成一张表，所有调用共享。
+// 仅 ct-ast。
+namespace hal;
+
+#include <stdio.h>
+
+trait Writer {
+    int write(char *buf, int n);
+}
+
+// 真实实现：把首字节当校验和一起算，方便输出可区分。
+int hal_write(char *buf, int n) {
+    return n + buf[0];
+}
+
+map trait Writer for namespace hal {
+    write(buf, n) -> hal_write(buf, n);
+}
+
+int main(void) {
+    Writer w = Writer::hal;
+
+    printf("%d\n", w.write("A", 3));
+    printf("%d\n", w.write("B", 4));
+    return 0;
+}

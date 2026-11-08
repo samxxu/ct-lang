@@ -1,0 +1,1 @@
+prog.ct:31:1: error: trait method 'flush' is not bound by the map

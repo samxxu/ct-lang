@@ -1,0 +1,43 @@
+// 场景：一个“点击计数”小控件，每次 next() 把计数加上步长，reset() 归零。
+// 为什么用 trait：真实项目里“能计数”的东西不止一种（按钮、定时器、模拟输入），
+//   调用方只关心“下一步是多少”；换成每个 struct 各写一个函数，调用点就得自己
+//   判断类型，接口就散了。
+// 读法：struct 末尾的 `use Counter` 会给 Clicker 追加一个隐藏的 vptr 字段；
+//   下一行的 impl 生成静态函数和一张 vtable；c.next() 在生成物里是
+//   c.__counter_vptr->next(&c)，所以同一个调用点可以运行任何实现了 Counter 的对象。
+// 因为只用到 L0 就有的 trait/impl/方法调用，这个样例也能被冻结种子 ctc 编译。
+#include <stdio.h>
+
+trait Counter {
+    int next();
+    void reset();
+}
+
+struct Clicker {
+    int value;
+    int step;
+} use Counter;
+
+impl Counter for Clicker {
+    int next() {
+        self->value = self->value + self->step;
+        return self->value;
+    }
+
+    void reset() {
+        self->value = 0;
+    }
+}
+
+int main(void) {
+    Clicker c = { .value = 0, .step = 2 };
+
+    // 第一次调用走 vtable；这里看不出“动态”二字，因为只有一个实现。
+    printf("a %d\n", c.next());
+    printf("b %d\n", c.next());
+
+    // reset 是同一张 vtable 的另一槽，状态由接收者自己维护。
+    c.reset();
+    printf("c %d\n", c.next());
+    return 0;
+}

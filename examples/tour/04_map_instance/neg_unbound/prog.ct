@@ -1,0 +1,33 @@
+// 场景：接口有两个方法，map 只写了一个，另一个指望“默认行为”。
+// 角度：反例——map 必须把 trait 的每个方法都绑上；不存在隐式空实现。
+//   漏绑时编译器在 map 结束处报错并退出 1。设计上这是对的：
+//   实例级绑定本来就是“为这个对象显式接好每一根线”，漏一根就是漏一根，
+//   生成空函数指针只会在第一次调用时炸掉。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+#include <stdio.h>
+
+trait Channel {
+    int send(char *buf, int n);
+    int flush();
+}
+
+struct Uart {
+    int fd;
+};
+
+struct Uart u;
+
+static int uart_send(void *self, char *buf, int n) {
+    (void)self;
+    (void)buf;
+    return n;
+}
+
+// flush 没绑：这一条 map 是不完整的。
+map trait Channel for instance u {
+    send(buf, n) -> uart_send;
+}
+
+int main(void) {
+    return 0;
+}

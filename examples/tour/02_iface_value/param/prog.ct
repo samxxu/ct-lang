@@ -1,0 +1,60 @@
+// 场景：事件循环里有一个“播报器”，它只知道 Speaker 接口，不知道对面是狗还是收音机。
+// 为什么用 trait：play() 把“发声”和“音量”两个动作打包成一个接口值，
+//   换成传函数指针要同时传两个 fn + 两个 env，调用点会散成四份。
+// 角度：参数位装箱——接口值的 self 指向实参，vt 指向该 struct 的 vtable；
+//   play 内部每次 s.sound() 都是 s.vt->sound(s.self)，与具体类型无关。
+// L0 可用：接口作参数 + 实参自动装箱是冻结种子的能力。
+#include <stdio.h>
+
+trait Speaker {
+    char *sound();
+    int volume();
+}
+
+struct Dog {
+    char *name;
+} use Speaker;
+
+struct Radio {
+    int band;
+} use Speaker;
+
+impl Speaker for Dog {
+    char *sound() {
+        return "woof";
+    }
+
+    int volume() {
+        return 7;
+    }
+}
+
+impl Speaker for Radio {
+    char *sound() {
+        return "hiss";
+    }
+
+    int volume() {
+        return 3;
+    }
+}
+
+// 一个接口参数 + 普通参数：接口值在函数体内就是一个胖指针，
+// 调用两个方法各查一次 vt。
+static void play(Speaker s, int times) {
+    int k = 0;
+
+    while (k < times) {
+        printf("%s@%d\n", s.sound(), s.volume());
+        k = k + 1;
+    }
+}
+
+int main(void) {
+    Dog d = { .name = "rex" };
+    Radio r = { .band = 88 };
+
+    play(d, 2);   // (struct Speaker_iface){ &d, &Dog_Speaker_vtable }
+    play(r, 1);   // (struct Speaker_iface){ &r, &Radio_Speaker_vtable }
+    return 0;
+}

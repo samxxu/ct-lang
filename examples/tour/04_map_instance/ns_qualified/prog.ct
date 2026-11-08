@@ -1,0 +1,38 @@
+// 场景：同一个文件里既有命名空间里的全局对象，又有绑在它上面的接口。
+// 为什么用 map：命名空间里的实例在 C 侧会被改名（hal_led），
+//   而 map 允许用源码里的限定名 `hal::led` 指认宿主，读者不需要知道改名规则。
+// 角度：宿主键的“拼写自由度”——`hal::led` 与 `led` 指向同一个对象；
+//   如果宿主写错（比如另一个命名空间里的同名对象），编译期就会在不同单元
+//   各自生成绑定，最终因重复符号而失败，而不是悄悄绑错。
+// 仅 ct-ast。
+namespace hal;
+
+#include <stdio.h>
+
+trait Lamp {
+    int set(int on);
+}
+
+struct Led {
+    int id;
+};
+
+struct Led led;
+
+static int drive(struct Led *l, int on) {
+    return l->id + on;
+}
+
+// 限定名宿主：hal 是本单元刚声明的命名空间，led 是里面的全局对象。
+map trait Lamp for instance hal::led {
+    set(on) -> drive(&led, on);
+}
+
+int main(void) {
+    Lamp l;
+
+    led.id = 40;
+    l = led;
+    printf("%d\n", l.set(2));
+    return 0;
+}

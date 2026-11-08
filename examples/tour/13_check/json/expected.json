@@ -1,0 +1,1 @@
+{"warnings":[{"severity":"error","type":"arity_mismatch","file":"prog.ct","line":27,"col":22,"callee":"add","message":"takes 2 argument(s), 1 given"}]}

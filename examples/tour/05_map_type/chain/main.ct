@@ -1,0 +1,16 @@
+import route::route;
+
+#include <stdio.h>
+
+int main(void) {
+    struct Path p = { .hops = 0 };
+    struct Path again;
+
+    // 三次链式调用，中间值都是 Path；每一跳在编译期就知道落到 route_seg。
+    again = p.seg("home").seg("user").seg("docs");
+    printf("hops %d\n", again.hops());
+
+    // 也可以从字面量开始（host 类型已知即可）。
+    printf("lit  %d\n", p.seg("x").seg("y").hops());
+    return 0;
+}

@@ -1,0 +1,10 @@
+import tick::tick;
+
+#include <stdio.h>
+
+int main(void) {
+    // 第一次 0 + 2，第二次 2 + 3：状态留在 C 侧，跨调用保留。
+    printf("%d\n", tick::Ticker.bump(2));
+    printf("%d\n", tick::Ticker.bump(3));
+    return 0;
+}

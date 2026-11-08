@@ -1,0 +1,14 @@
+import csv::fields;
+
+#include <stdio.h>
+
+int main(void) {
+    char *field = "alpha";
+
+    printf("width %d\n", field.width());
+    printf("hash  %d\n", field.hash());
+
+    // 字面量接收者同样按 char * 展开。
+    printf("lit   %d\n", "beta".width());
+    return 0;
+}

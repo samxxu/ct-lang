@@ -1,0 +1,20 @@
+// 场景：解析一行 CSV 字段，需要“字段宽度”和“稳定哈希”两个小操作。
+//   真实项目里这是三次方库或手写 C 工具函数，头文件里全是 static inline。
+// 为什么用 shim.h：.m.ct 只负责“类型 -> 方法名 -> C 符号”的映射；
+//   具体实现留在 C 头里，ct 侧不复制逻辑。用 static inline + 宏的好处是
+//   没有链接期依赖，单元可以被任意多个 .ct 复用。
+// 角度：纯头文件 shim（无 .shim.c）。对照 08_shim/compiled_source：
+//   那边有真实 C 状态，必须把 .shim.c 交给 cc。
+namespace csv;
+
+#include "fields.shim.h"
+
+pub trait Field {
+    int width();
+    int hash();
+}
+
+map trait Field for type char * {
+    width(s) -> csv_width(s);
+    hash(s)  -> csv_hash(s);
+}

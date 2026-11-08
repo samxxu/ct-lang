@@ -1,0 +1,38 @@
+// 场景：温度、长度、文本计数——三个与业务无关的小换算，分别属于 int 和 char *。
+// 为什么用 map for type：这是“给 C 内置类型补方法”的零成本做法。
+//   调用 c.fahrenheit() 在生成物里就是 units_f(c)：没有 iface、没有 vtable、
+//   没有包装对象，连函数指针都没有。换成普通函数 units_f(c)，语义一样，
+//   但混在长表达式里可读性差，也没法把“同一宿主类型的不同能力”分组。
+// 角度：一个标量宿主（int）上可以挂多张表（Fahrenheit、Feet），
+//   方法名不同就不冲突；宿主键按 C 拼写精确匹配，unsigned 和 unsigned int
+//   是两张不同的表（见 README 的边界说明）。
+namespace units;
+
+#include "units.shim.h"
+
+pub trait Fahrenheit {
+    int fahrenheit();
+}
+
+pub trait Feet {
+    int feet();
+}
+
+pub trait Words {
+    int words();
+}
+
+// 宿主 int：摄氏度 -> 华氏度
+map trait Fahrenheit for type int {
+    fahrenheit(c) -> units_f(c);
+}
+
+// 同一个宿主 int 的第二张表：米 -> 英尺（整数近似）
+map trait Feet for type int {
+    feet(m) -> units_ft(m);
+}
+
+// 宿主 char *：空格分隔的单词数
+map trait Words for type char * {
+    words(s) -> units_words(s);
+}

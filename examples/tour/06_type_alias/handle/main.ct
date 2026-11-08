@@ -1,0 +1,20 @@
+import io::io;
+
+// 需要 struct ct_handle 的完整定义：这里显式包含 shim 头，
+// 说明“别名只是拼写，底层类型仍然来自 C 头文件”。
+#include "io/io.shim.h"
+#include <stdio.h>
+
+int main(void) {
+    struct ct_handle raw = { .fd = 9 };
+    Handle *h = &raw;
+
+    // 用别名拼写调用：命中 map for type Handle *
+    printf("alias %d\n", h.fd());
+
+    // 用底层拼写调用：`p` 的类型是 struct ct_handle *，
+    // 与 Handle * 折叠成同一个宿主键，生成完全相同的 C 调用。
+    struct ct_handle *p = &raw;
+    printf("raw   %d\n", p.fd());
+    return 0;
+}

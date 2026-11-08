@@ -1,0 +1,53 @@
+// 场景：按阈值筛选事件。阈值来自配置，筛选器在配置读完后才构造；
+//   还有一组“每个窗口一个”的筛选器，需要在创建时记住当时的窗口号。
+// 为什么用 `=>`：容器要的是 (fn, env) 一对，闭包字面量一次给出两样：
+//   fn 是生成的跳板，env 是按值捕获的快照。手写的话就是 09_closure/
+//   pair_by_hand 里的 struct + adapter，这里只写意图。
+// 角度：捕获发生在创建点（按值），之后修改外部变量不会回流；
+//   同一段源码里既可以有“捕获一次的命名闭包”，也可以有“每轮捕获 i 的新闭包”。
+// 仅 ct-ast：`=>` 与闭包捕获是 Phase 21 才进的语言特性。
+#include <stdio.h>
+
+// 容器：接受 (fn, env)，用元素逐个喂给回调，返回“通过”的个数。
+static int keep_if(int *xs, int n, int (*fn)(void *env, int x), void *env) {
+    int kept = 0;
+
+    loop(n) {
+        if (fn(env, xs[i]) != 0) {
+            kept = kept + 1;
+        }
+    }
+    return kept;
+}
+
+int main(void) {
+    int xs[4];
+    int threshold = 50;
+
+    xs[0] = 10;
+    xs[1] = 60;
+    xs[2] = 80;
+    xs[3] = 120;
+
+    // 创建点捕获 threshold == 50。
+    int (*above)(int x) = (int x) => x > threshold;
+
+    // 配置后来被改大，但 above 里的 50 已经是一份拷贝，不受影响。
+    threshold = 1000;
+    printf("snap %d\n", keep_if(xs, 4, above));
+
+    // 重新在“新配置”下创建，才会拿到 1000。
+    int (*above_late)(int x) = (int x) => x > threshold;
+    printf("late %d\n", keep_if(xs, 4, above_late));
+
+    // 每轮新建一个闭包：每个实例记住自己的窗口号 i。
+    loop(2..5) {
+        int (*divisible)(int x) = (int x) => x % i == 0;
+
+        printf("win %d %d\n", i, keep_if(xs, 4, divisible));
+    }
+
+    // 字面量直接作为实参：临时闭包的生命期覆盖这次调用。
+    printf("lit %d\n", keep_if(xs, 4, (int x) => x < 70));
+    return 0;
+}

@@ -1,0 +1,29 @@
+// 场景：把 `ct check` 放进 CI 的“快速门禁”：改完代码先跑 check，
+//   不生成 C、不链接，只回答“这个单元会不会把问题带进构建”。
+// 为什么值得单独跑：check 复用与编译相同的语义分析，但把可诊断的
+//   警告升级为错误；对不碰 C 生成物的改动，它比完整 build 快得多。
+// 角度：干净单元——check 退出 0，stdout/stderr 都必须为空；
+//   连续两次运行没有状态残留（run.sh 只跑一次，但契约是纯函数式的）。
+// 仅 ct-ast：`ct check` 子命令。
+#include <stdio.h>
+
+trait Level {
+    int weight();
+}
+
+struct Info {
+    int n;
+} use Level;
+
+impl Level for Info {
+    int weight() {
+        return self->n * 2;
+    }
+}
+
+int main(void) {
+    Info i = { .n = 3 };
+
+    printf("%d\n", i.weight());
+    return 0;
+}

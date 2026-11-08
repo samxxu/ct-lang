@@ -1,0 +1,20 @@
+// 实现单元：补上 Sample::read，并独占那个单例对象。
+// trait 与 struct 都是 pub，导出头里会声明 vtable 符号，
+// 本单元用外部链接定义它；消费方装箱时指向同一张表。
+import devices;
+
+impl Sample for Temp {
+    int read() {
+        return self->raw / 10;
+    }
+}
+
+// 对象只在实现单元里存在：接口单元不该知道有几个实例。
+static struct Temp g_temp = { .raw = 235 };
+
+// 访问器跨单元导出；调用方通过 vptr 派发，不需要 read 的函数符号。
+pub struct Temp *temp_get(void);
+
+struct Temp *temp_get(void) {
+    return &g_temp;
+}

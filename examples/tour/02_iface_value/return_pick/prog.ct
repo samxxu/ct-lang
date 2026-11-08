@@ -1,0 +1,76 @@
+// 场景：配置驱动的“后端选择”——运行期读一个 kind，返回不同的实现给上层。
+// 为什么用 trait：pick() 的返回类型是 Speaker，调用方拿到的是接口值本身，
+//   不需要知道背后是文件后端还是内存后端；换成返回 void * 再由调用方强转，
+//   类型信息就丢了，也没有统一的 vtable。
+// 角度：返回位装箱——`return 对象;` 由函数返回类型驱动装箱，
+//   与参数位装箱是两条独立的规则（一个看被调函数签名，一个看返回类型）。
+// L0 可用：返回接口值 + return 装箱是冻结种子的能力。
+#include <stdio.h>
+
+trait Sink {
+    void put(char *line);
+    int count();
+}
+
+struct Console {
+    int n;
+} use Sink;
+
+struct Memory {
+    int n;
+    int limit;
+} use Sink;
+
+impl Sink for Console {
+    void put(char *line) {
+        self->n = self->n + 1;
+        printf("console: %s\n", line);
+    }
+
+    int count() {
+        return self->n;
+    }
+}
+
+impl Sink for Memory {
+    void put(char *line) {
+        (void)line;
+        // 内存后端只记条数，模拟“容量有限的缓冲区”。
+        if (self->n < self->limit) {
+            self->n = self->n + 1;
+        }
+    }
+
+    int count() {
+        return self->n;
+    }
+}
+
+// 两个后端都是文件作用域对象：它们的生命期盖过调用方，
+// 返回接口值不会悬垂。
+static Console g_console;
+static Memory g_memory = { .n = 0, .limit = 2 };
+
+// 返回接口值：每个 return 按“当前函数返回类型 Sink”把实参装箱。
+static Sink pick(int kind) {
+    if (kind == 0) {
+        return g_console;
+    }
+    return g_memory;
+}
+
+int main(void) {
+    Sink out = pick(0);
+    Sink buf = pick(1);
+
+    out.put("hello");
+    out.put("world");
+
+    buf.put("a");
+    buf.put("b");
+    buf.put("c");   // 超过 limit，被内存后端静默丢弃
+
+    printf("console %d\n", out.count());
+    printf("memory  %d\n", buf.count());
+    return 0;
+}

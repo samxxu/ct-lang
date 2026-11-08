@@ -1,0 +1,29 @@
+// 场景：CI 里要把诊断喂给脚本（统计、去重、贴到 PR 评论），
+//   人读的 `file:line:col: error: ...` 不好解析。
+// 为什么用 --diagnostics=json：同一份诊断以结构化形式输出到 stdout，
+//   run.sh 会先用 python 解析一遍，再做逐字节比对，
+//   保证这个样例的 JSON 形状稳定。
+// 角度：机器可读的同一个错误（与 13_check/arity 是同一类 arity 不匹配）。
+// 仅 ct-ast。
+#include <stdio.h>
+
+trait Op {
+    int add(int a, int b);
+}
+
+struct S {
+    int n;
+} use Op;
+
+impl Op for S {
+    int add(int a, int b) {
+        return a + b + self->n;
+    }
+}
+
+int main(void) {
+    S s = { .n = 1 };
+
+    printf("%d\n", s.add(1));
+    return 0;
+}

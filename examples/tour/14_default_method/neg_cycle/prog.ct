@@ -1,0 +1,25 @@
+// 场景：两个默认方法互相调用，谁也没有真正的实现。
+// 角度：反例——默认方法体也会参与“谁调用谁”的展开，成环时没有终止点；
+//   编译器在 impl 处报错并给出完整环，而不是生成互相递归的 C
+//   （那会在第一次调用时栈溢出，且很难指回源码）。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+trait Loop {
+    int a() {
+        return self->b();
+    }
+
+    int b() {
+        return self->a();
+    }
+}
+
+struct S {
+    int n;
+} use Loop;
+
+impl Loop for S {
+}
+
+int main(void) {
+    return 0;
+}

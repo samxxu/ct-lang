@@ -1,0 +1,1 @@
+prog.ct:29:22: error: arity mismatch: 'add' takes 2 argument(s), 1 given
