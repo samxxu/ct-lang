@@ -1,0 +1,31 @@
+/* 71 (Phase 21 S5): block bodies and nested literals. `extra` is never read by
+   the outer body directly, but the inner environment is built inside the outer
+   trampoline, so the compiler must copy it into the outer environment as well.
+   `bump` is local to the outer body, so the inner literal reads it as a plain
+   local instead of an environment field. */
+#include <stdio.h>
+
+int apply(int base)
+{
+    int n = 3;
+    int extra = 10;
+    int (*outer)(int) = (int x) => {
+        int bump = 1;
+        int (*inner)(int) = (int y) => y + n + base + extra + bump;
+        int v = inner(x);
+        {
+            int (*deep)(void) = () => {
+                return n + extra;
+            };
+            v += deep();
+        }
+        return v;
+    };
+    return outer(5);
+}
+
+int main(void)
+{
+    printf("%d\n", apply(100));
+    return 0;
+}

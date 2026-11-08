@@ -89,8 +89,10 @@ ring_each(&r, add);
 - 捕获**按值**、创建点求值、捕获名只读；写捕获名或取捕获名地址一律报错，写回用指针显式解引用（D21-2）。
 - 闭包变量是**绑定不是值**：只在声明处可用，拷贝 / 重赋值 / 字段 / 元素 / 返回值都报错（D21-13 / D21-16）。
 - 环境在栈上，闭包值本身不能被容器持有（见 §0 第 3 条）。
-- 字面量直接作实参（`ring_each(&r, (int x) => x + 1)`）在 S5 落地时与宿主 `(fn, env)` 对逐参比对
-  （D21-14）；在那之前先赋给已声明的闭包变量。
+- 字面量直接作实参（`ring_each(&r, (int x) => x + 1)`）自 S5 起与宿主 `(fn, env)` 对逐参比对，
+  返回类型取宿主 `fn`（D21-14）；也可以先赋给已声明的闭包变量。
+- 块体写法 `(int x) => { … }` 与嵌套闭包自 S5 起可用；内层捕获按值从外层 env 字段拷出，不产生
+  env 之间的指针链。
 
 ### 4. 生成物与命名（S3 冻结的形态）
 
@@ -207,7 +209,8 @@ or a cross-unit reference.
 `auto` and no inference (D21-1). Captures are by value, evaluated at creation, read-only (D21-2); a closure
 variable is a binding, not a value (D21-13 / D21-16); the environment lives on the stack and a closure value
 cannot be held by a container. A literal passed directly as an argument is compared against the host
-`(fn, env)` pair in S5 (D21-14); until then, assign it to a declared closure variable first.
+`(fn, env)` pair from S5 on, with the return type taken from the host `fn` (D21-14); block bodies and
+nested literals also land in S5, and an inner capture copies a value out of the outer environment field.
 
 ### 4. Generated names (frozen at S3)
 

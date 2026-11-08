@@ -131,6 +131,7 @@ pub trait ExprOps {
        compares it with the function pointer type its declaration spells. */
     int  parse_closure(void);
     int  closure_bind(int ci, const char *host, const char *vname);
+    int  closure_arg_bind(int ci, const char *ftype);
 }
 
 pub struct Expr {
@@ -174,6 +175,17 @@ pub struct Expr {
        the seed instead of parsing another primary. -1 = none; `ct_expr_bind`
        sets that up, since the instance is static. */
     int  postfix_seed;
+    /* Phase 21 S5: a block body (`=> { … }`) is the statement layer's, and the
+       expression object may not import it (that would close a cycle), so the
+       parser installs a hook after both sub-objects are bound. */
+    int (*body_hook)(void);
+    /* Enclosing closures while a literal's body is being parsed. An inner
+       literal's captures are copied up into every enclosing environment whose
+       frame is outside this literal, so the inner environment can be built
+       from fields instead of names that do not exist there. */
+    int  cl_stack[16];
+    int  cl_pstart[16];
+    int  ncl_stack;
 } use ExprOps;
 
 /* Argument count of a call: `parse_args` hands back the first node of the
@@ -463,6 +475,7 @@ static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
     struct Closure *c = &self->sym->closures[ci];
     const char *name = self->sym->vars[vi].name;
     char msg[512];
+    int k;
 
     /* E4: an `own` handle would get a second owner and a `borrow` a second
        handback, so neither can be copied into the environment. The check runs
@@ -481,6 +494,26 @@ static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
     snprintf(c->cap_name[c->ncap], MAX_TEXT, "%s", name);
     snprintf(c->cap_type[c->ncap], MAX_TEXT, "%s", self->sym->vars[vi].type);
     c->ncap++;
+    /* An inner literal is built inside the enclosing trampoline, so a name that
+       comes from outside the enclosing literal must also sit in its environment;
+       otherwise the inner initialiser would name a variable the trampoline does
+       not have. A name local to the enclosing body (at or after its `pstart`)
+       stays a plain local and is not copied up. */
+    for (k = self->ncl_stack - 2; k >= 0; k--) {
+        int oi = self->cl_stack[k];
+        struct Closure *oc = &self->sym->closures[oi];
+        int j, dup = 0;
+
+        if (vi >= self->cl_pstart[k]) continue;
+        for (j = 0; j < oc->ncap; j++)
+            if (strcmp(oc->cap_name[j], name) == 0) dup = 1;
+        if (dup) continue;
+        if (oc->ncap >= 16)
+            return self->sup->fail("a closure takes too many captures (limit 16)");
+        snprintf(oc->cap_name[oc->ncap], MAX_TEXT, "%s", name);
+        snprintf(oc->cap_type[oc->ncap], MAX_TEXT, "%s", self->sym->vars[vi].type);
+        oc->ncap++;
+    }
     return 0;
 }
 
@@ -561,6 +594,101 @@ static int closure_walk_mutate(struct Expr *self, int ci, int n)
    exit codes and artifacts unchanged (D19-4), and `ct check` (19.4) raises the
    same record to an error. */
 
+/* Compare a closure literal's parameter list with a hosting function-pointer
+   type and take the literal's return type from that host (D21-14). `skip_env`
+   drops the first host parameter: the formal of a `(fn, env)` pair spells the
+   environment there. The parameter comparison reuses the same normalisation
+   `arg_class` gives 19.3. A mismatch reports at the source position and
+   returns non-zero; on success `c->ret` is set. */
+static int closure_match(struct Expr *self, int ci, const char *host, int skip_env)
+{
+    struct Closure *c = &self->sym->closures[ci];
+    char ret[MAX_TEXT];
+    char plist[MAX_TEXT];
+    char item[MAX_TEXT];
+    const char *p;
+    size_t n, hn;
+    int lp, rp, pos, want, i, r;
+
+    p = strstr(host, "(*");
+    if (!p || p == host)
+        return self->sup->fail_at(c->line,
+            "a closure cannot be used where a plain function pointer is expected");
+    n = (size_t)(p - host);
+    while (n > 0 && (host[n - 1] == ' ' || host[n - 1] == '\t')) n--;
+    if (n == 0 || n >= MAX_TEXT)
+        return self->sup->fail_at(c->line,
+            "a closure cannot be used where a plain function pointer is expected");
+    snprintf(ret, sizeof ret, "%.*s", (int)n, host);
+    hn = strlen(host);
+    lp = -1;
+    rp = -1;
+    for (n = 0; n < hn; n++) {
+        if (host[n] == '(') lp = (int)n;
+        else if (host[n] == ')') rp = (int)n;
+    }
+    if (lp < 0 || rp <= lp + 1)
+        return self->sup->fail_at(c->line,
+            "a closure cannot be used where a plain function pointer is expected");
+    snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, host + lp + 1);
+    if (skip_env) {
+        char *comma = strchr(plist, ',');
+        if (comma) snprintf(plist, sizeof plist, "%s", comma + 1);
+        else plist[0] = 0;
+    }
+    want = 0;
+    if (!(strcmp(plist, "void") == 0 || plist[0] == 0)) {
+        pos = 0;
+        while (plist_next(plist, &pos, item, sizeof item)) want++;
+    }
+    if (want != c->nparams) {
+        char msg[512];
+        snprintf(msg, sizeof msg,
+                 "this closure takes %d parameters, but the expected type takes %d",
+                 c->nparams, want);
+        return self->sup->fail_at(c->line, msg);
+    }
+    pos = 0;
+    i = 0;
+    while (plist_next(plist, &pos, item, sizeof item)) {
+        char fb[MAX_TEXT], ab[MAX_TEXT];
+        int fs, as;
+        r = arg_class(item, c->ptype[i], fb, sizeof fb, ab, sizeof ab);
+        if (r == 2) {
+            fs = self->sym->find_struct(fb + 6);
+            as = self->sym->find_struct(ab + 6);
+            r = (fs < 0 || as < 0) ? -1 : (fs != as);
+        }
+        if (r == 1) {
+            char msg[512];
+            snprintf(msg, sizeof msg,
+                     "this closure's parameter %d is '%s', but the expected type is '%s'",
+                     i + 1, c->ptype[i], item);
+            return self->sup->fail_at(c->line, msg);
+        }
+        i++;
+    }
+    snprintf(c->ret, MAX_TEXT, "%s", ret);
+    return 0;
+}
+
+/* Does the argument chain pass a closure binding as a value? D21-13 keeps that
+   refused; an inline literal is the S5 form and is not in this set. */
+static int closure_var_args(struct Expr *self, int args)
+{
+    int cur, vi;
+
+    cur = args;
+    while (cur > 0) {
+        if (self->arena->nodes[cur].kind == N_VAR) {
+            vi = self->sym->find_var(self->arena->nodes[cur].text2);
+            if (vi >= 0 && self->sym->vars[vi].is_closure) return 1;
+        }
+        cur = self->arena->nodes[cur].next;
+    }
+    return 0;
+}
+
 impl ExprOps for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
     {
@@ -619,9 +747,12 @@ impl ExprOps for Expr {
     }
 
     /* Returns 0 when every closure actual fills the start of a `(fn, env)`
-       pair. A plain function-pointer slot and a position that is not a pair
-       are distinct errors; the second also carries the E8 note, because the
-       compiler cannot see whether the callee keeps the environment. */
+       pair. A named binding fills the pair but is still refused as a value at
+       the call site (D21-13); an inline literal is bound to the host fn type
+       right here (D21-14). A plain function-pointer slot and a position that
+       is not a pair are distinct errors; the second also carries the E8 note,
+       because the compiler cannot see whether the callee keeps the
+       environment. */
     int closure_arg_check(int line, int col, const char *callee, int args, int fi)
     {
         const char *e8;
@@ -635,22 +766,13 @@ impl ExprOps for Expr {
         pos = 0;
         while (cur > 0) {
             if (self->arg_is_closure(cur)) {
-                /* S4 accepts a named binding only; an inline literal is S5 */
-                if (self->arena->nodes[cur].kind == N_CLOSURE) {
-                    tool::diag::ct_sem_error(line, col,
-                        "a closure argument must fill a '(fn, env)' parameter pair",
-                        self->sup->mem->path);
-                    tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
-                    tool::diag::ct_sem_note(line, col, e8, self->sup->mem->path);
-                    return -1;
-                }
                 ok = 0;
+                ft = "";
+                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype[pos];
                 if (fi >= 0 && pos + 1 < np)
-                    ok = self->formal_is_env_fn(self->sym->funcs[fi].ptype[pos])
+                    ok = self->formal_is_env_fn(ft)
                          && self->type_is_void_ptr(self->sym->funcs[fi].ptype[pos + 1]);
                 if (!ok) {
-                    if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype[pos];
-                    else ft = "";
                     if (self->type_is_fnptr(ft) && !self->formal_is_env_fn(ft)) {
                         tool::diag::ct_sem_error(line, col,
                             "a closure cannot be used where a plain function pointer is expected",
@@ -667,6 +789,9 @@ impl ExprOps for Expr {
                     }
                     return -1;
                 }
+                if (self->arena->nodes[cur].kind == N_CLOSURE
+                    && self->closure_arg_bind(self->arena->nodes[cur].num, ft) != 0)
+                    return -1;
                 pos += 2;
             } else {
                 pos++;
@@ -710,6 +835,9 @@ impl ExprOps for Expr {
                 if (self->sup->iface_ref_type(ft, itr, sizeof itr, &iip)) skip = 1;
             }
             if (!skip && self->arena->nodes[cur].kind == N_CAST) skip = 1;
+            /* a closure actual fills `(fn, env)`: its own type is not a value
+               type, and it consumes two formals (see the tail of the loop) */
+            if (!skip && self->arg_is_closure(cur)) skip = 1;
             /* `0` is a null pointer constant: C accepts it wherever a pointer
                is expected, so a derived `int` is not a mismatch. */
             if (!skip && self->arena->nodes[cur].kind == N_NUM
@@ -732,8 +860,9 @@ impl ExprOps for Expr {
                     return 0;
                 }
             }
+            if (self->arg_is_closure(cur)) k += 2;
+            else k++;
             cur = self->arena->nodes[cur].next;
-            k++;
         }
         return 0;
     }
@@ -758,60 +887,15 @@ impl ExprOps for Expr {
     /* S2 binding: a closure literal on the right of a function-pointer
        declaration. `host` is the declared type (`int (*)(int x)`); its return
        type and parameter list are compared with the literal's. The parameter
-       comparison reuses `decl_type_compat`, the same normalisation 19.3 uses. */
+       comparison reuses `decl_type_compat`, the same normalisation 19.3 uses.
+       S5 adds the argument form: the host is the callee's formal pair
+       (`int (*)(void *, int)`), whose first parameter is the environment and is
+       skipped, and the return type still comes from the host fn (D21-14). */
     int closure_bind(int ci, const char *host, const char *vname)
     {
-        struct Closure *c = &self->sym->closures[ci];
-        char ret[MAX_TEXT];
-        char plist[MAX_TEXT];
-        char item[MAX_TEXT];
-        const char *p;
-        size_t n, hn;
-        int lp, rp, pos, want, i, vi, r;
+        int vi;
 
-        p = strstr(host, "(*");
-        if (!p || p == host)
-            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
-        n = (size_t)(p - host);
-        while (n > 0 && (host[n - 1] == ' ' || host[n - 1] == '\t')) n--;
-        if (n == 0 || n >= MAX_TEXT)
-            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
-        snprintf(ret, sizeof ret, "%.*s", (int)n, host);
-        hn = strlen(host);
-        lp = -1;
-        rp = -1;
-        for (n = 0; n < hn; n++) {
-            if (host[n] == '(') lp = (int)n;
-            else if (host[n] == ')') rp = (int)n;
-        }
-        if (lp < 0 || rp <= lp + 1)
-            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
-        snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, host + lp + 1);
-        want = 0;
-        if (!(strcmp(plist, "void") == 0 || plist[0] == 0)) {
-            pos = 0;
-            while (plist_next(plist, &pos, item, sizeof item)) want++;
-        }
-        if (want != c->nparams) {
-            char msg[512];
-            snprintf(msg, sizeof msg,
-                     "this closure takes %d parameters, but the expected type takes %d",
-                     c->nparams, want);
-            return self->sup->fail(msg);
-        }
-        pos = 0;
-        i = 0;
-        while (plist_next(plist, &pos, item, sizeof item)) {
-            r = self->decl_type_compat(item, c->ptype[i]);
-            if (r == 1) {
-                char msg[512];
-                snprintf(msg, sizeof msg,
-                         "this closure's parameter %d is '%s', but the expected type is '%s'",
-                         i + 1, c->ptype[i], item);
-                return self->sup->fail(msg);
-            }
-            i++;
-        }
+        if (closure_match(self, ci, host, 0) != 0) return -1;
         vi = self->sym->find_var(vname);
         if (vi < 0)
             return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
@@ -823,8 +907,12 @@ impl ExprOps for Expr {
         }
         self->sym->vars[vi].is_closure = 1;
         self->sym->vars[vi].closure_id = ci;
-        snprintf(c->ret, MAX_TEXT, "%s", ret);
         return 0;
+    }
+
+    int closure_arg_bind(int ci, const char *ftype)
+    {
+        return closure_match(self, ci, ftype, 1);
     }
 
     /* The type keywords. L0 / L1 / L2 have always accepted the `stdint` /
@@ -2150,14 +2238,30 @@ impl ExprOps for Expr {
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "=>") != 0)
             return self->sup->fail("expected '=>' after a closure's parameter list");
         self->sup->lex_next();
-        save_assign = self->assign_ok;
-        self->assign_ok = 1;
-        body = self->parse_expr();
-        self->assign_ok = save_assign;
+        if (self->ncl_stack < 16) {
+            self->cl_stack[self->ncl_stack] = ci;
+            self->cl_pstart[self->ncl_stack] = pstart;
+            self->ncl_stack++;
+        }
+        /* S5: `=> { … }` is a block body; the statement layer owns blocks and
+           this object cannot import it, so the parser installed a hook. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+            if (!self->body_hook)
+                return self->sup->fail("a block-bodied closure needs the statement parser");
+            body = self->body_hook();
+            self->sym->closures[ci].is_block = 1;
+        } else {
+            save_assign = self->assign_ok;
+            self->assign_ok = 1;
+            body = self->parse_expr();
+            self->assign_ok = save_assign;
+        }
         if (body < 0) return -1;
         self->sym->closures[ci].body = body;
         if (closure_walk(self, ci, body, pstart) != 0) return -1;
         if (closure_walk_mutate(self, ci, body) != 0) return -1;
+        if (self->ncl_stack > 0 && self->cl_stack[self->ncl_stack - 1] == ci)
+            self->ncl_stack--;
         if (self->sym->pop_scope() != 0) return self->sup->fail(self->sym->last_error());
         n = self->sup->new_node(N_CLOSURE);
         if (n < 0) return -1;
@@ -2510,10 +2614,10 @@ impl ExprOps for Expr {
                                                       got, want) != 0)
                         return -1;
                 }
-                /* D21-13: a closure is a binding, not a value. S4 counts the
-                   `(fn, env)` pair as two arguments for arity, but passing the
-                   binding as an argument is deferred until S5/S6. */
-                if (args > 0 && self->closure_arg_count(args) > 0) {
+                /* D21-13: a closure is a binding, not a value. A literal fills
+                   the `(fn, env)` pair in S5 (D21-14), but a named binding is
+                   still refused here. */
+                if (args > 0 && closure_var_args(self, args)) {
                     tool::diag::ct_sem_error(id_line, id_col,
                         "this closure is a binding, not a value (inline it or use a struct + trait)",
                         self->sup->mem->path);

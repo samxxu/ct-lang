@@ -1,0 +1,15 @@
+/* The second unit: `call` runs a `(fn, env)` pair built in the importing unit,
+   and `local` builds a closure of its own, so each generated .c file carries a
+   `static` trampoline of its own. A header unit may carry the bodies; importers
+   see only the generated declarations. */
+pub int call(int (*fn)(void *env, int x), void *env, int x)
+{
+    return fn(env, x);
+}
+
+pub int local(int base)
+{
+    int m = 2;
+    int (*add)(int x) = (int x) => x + m;
+    return add(base);
+}

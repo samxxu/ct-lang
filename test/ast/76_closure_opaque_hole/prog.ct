@@ -1,0 +1,25 @@
+/* 76 (Phase 21 S5): E8, the known hole. A literal fills a `(fn, env)` pair, so
+   it can reach a CT function, and that function may keep both words. The
+   compiler cannot see the keep, and the environment is a frame local: calling
+   it after this frame returns would dangle. This fixture records the hole (the
+   call stays inside the frame); it does not pretend the compiler catches it. */
+#include <stdio.h>
+
+static int (*kept_fn)(void *, int);
+static void *kept_env;
+
+static int keep(int (*fn)(void *env, int x), void *env)
+{
+    kept_fn = fn;
+    kept_env = env;
+    return fn(env, 2);
+}
+
+int main(void)
+{
+    int n = 5;
+    int r = keep((int x) => x + n);
+    int again = kept_fn(kept_env, 3);
+    printf("%d %d\n", r, again);
+    return 0;
+}

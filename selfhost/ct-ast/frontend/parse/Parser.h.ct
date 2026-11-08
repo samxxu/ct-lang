@@ -2302,6 +2302,14 @@ static struct Call g_calls[1024];
 static struct Map  *g_maps;
 static struct Field   g_pend_fields[64];
 
+/* Phase 21 S5: a block-bodied closure needs `parse_block`, which lives in the
+   statement layer; the expression object cannot import that layer (the edge
+   would close a cycle), so it calls back through this hook. */
+static int parser_closure_block(void)
+{
+    return g_parse.st->parse_block();
+}
+
 /* The parser's shared primitives live in support.h.ct; the driver reaches all
    of them through these wrappers, so no trait name crosses the unit line. */
 pub void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *build_mode, void *check_mode);
@@ -2341,6 +2349,7 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
        through the same primitives */
     ct_stmt_bind(arena, lex, sym, g_parse.mem, g_parse.sup, g_parse.ex);
     g_parse.st = stmt_get();
+    g_parse.ex->body_hook = parser_closure_block;
 }
 
 pub struct Parser *parse_get(void);

@@ -1,0 +1,18 @@
+/* 77 (Phase 21 S5): E9, a `goto` that jumps over a closure declaration is not
+   diagnosed, so the environment is simply not built on that path. This fixture
+   records the current silent behaviour (the jump skips the whole block, so
+   nothing uninitialised is used); it does not pretend the compiler catches it. */
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 1;
+    if (n) goto skip;
+    {
+        int (*f)(int) = (int x) => x + n;
+        n = f(1);
+    }
+skip:
+    printf("%d\n", n);
+    return 0;
+}

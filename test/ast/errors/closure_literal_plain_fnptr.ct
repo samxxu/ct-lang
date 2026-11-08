@@ -1,0 +1,5 @@
+int apply(int (*f)(int), int x) { return f(x); }
+int main(void) {
+    int n = 2;
+    return apply((int x) => x + n, 1);
+}

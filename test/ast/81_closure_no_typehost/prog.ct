@@ -1,0 +1,15 @@
+/* 81 (Phase 21 S5): the unit beside this file maps a type host for `int`, so a
+   receiver call could be routed through it. A call through a closure binding
+   must not be: `add(2)` reaches the trampoline directly, while `(3).tag()`
+   reaches the host. */
+import host::host;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 7;
+    int (*add)(int x) = (int x) => x + n;
+    printf("%d %d\n", add(2), (3).tag());
+    return 0;
+}

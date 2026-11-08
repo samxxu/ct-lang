@@ -2077,6 +2077,61 @@ else
     bad "p21-s4: JSON shape" "exit $clrc; $(cat "$work/cl_arity.json")"
 fi
 
+# Phase 21 S5: the argument form (D21-14) is for inline literals only; a literal
+# in a plain function-pointer slot keeps the S4 wording and its tier-1 note.
+if "$work/ct-ast" test/ast/errors/closure_literal_plain_fnptr.ct -o "$work/cllpf.c" \
+        >"$work/cllpf.out" 2>"$work/cllpf.err"; then
+    bad "p21-s5: literal plain fnptr" "expected a non-zero exit"
+elif ! grep -Fq "test/ast/errors/closure_literal_plain_fnptr.ct:4:12: error: a closure cannot be used where a plain function pointer is expected" "$work/cllpf.err"; then
+    bad "p21-s5: literal plain fnptr" "$(cat "$work/cllpf.err")"
+elif ! grep -Fq 'note: use an explicit Callable struct + trait:' "$work/cllpf.err"; then
+    bad "p21-s5: literal plain fnptr note" "$(cat "$work/cllpf.err")"
+else
+    ok "p21-s5: a literal in a plain function-pointer slot keeps the S4 wording"
+fi
+
+# Phase 21 S5 probe 79: two implementation units, each with its own closure.
+# Both generated .c files carry a `static` trampoline numbered from zero, which
+# file scope keeps apart; a literal crosses the boundary as a `(fn, env)` pair.
+rm -rf "$work/cl79"
+mkdir -p "$work/cl79"
+if ! "$work/ct-ast" build --emit-c test/ast/79_closure_two_units/main.ct -o "$work/cl79" \
+        >"$work/cl79.out" 2>"$work/cl79.err"; then
+    bad "p21-s5: two units" "build failed: $(cat "$work/cl79.err")"
+elif ! grep -Fq '__ct_cl_tramp_' "$work/cl79/main.c" \
+        || ! grep -Fq '__ct_cl_tramp_' "$work/cl79/dep.c"; then
+    bad "p21-s5: two units" "a unit lost its static trampoline"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/cl79"/*.c -o "$work/cl79.bin" 2>"$work/cl79.cc"; then
+    bad "p21-s5: two units" "generated C did not build: $(cat "$work/cl79.cc")"
+elif ! "$work/cl79.bin" >"$work/cl79.stdout" 2>&1; then
+    bad "p21-s5: two units" "the program exited non-zero"
+elif ! cmp -s "$work/cl79.stdout" test/ast/79_closure_two_units/expected.out; then
+    bad "p21-s5: two units" "program output differs: $(cat "$work/cl79.stdout")"
+else
+    ok "p21-s5: two units (same static trampoline name; a literal crosses the boundary)"
+fi
+
+# Phase 21 S5 probe 80: the debug mapping. `--line` anchors the struct and the
+# trampoline at the literal's line; the closure-at comment appears either way.
+if "$work/ct-ast" --line test/ast/80_closure_debug_line/main.ct -o "$work/cl80.c" \
+        >"$work/cl80.out" 2>"$work/cl80.err" \
+   && grep -Fq '/* closure at test/ast/80_closure_debug_line/main.ct:7 */' "$work/cl80.c" \
+   && grep -Fq '#line 7 "test/ast/80_closure_debug_line/main.ct"' "$work/cl80.c"; then
+    ok "p21-s5: the closure product carries a source anchor"
+else
+    bad "p21-s5: closure anchor" "$(cat "$work/cl80.err"; head -5 "$work/cl80.c")"
+fi
+rm -rf "$work/cl80n"
+mkdir -p "$work/cl80n"
+if "$work/ct-ast" build --emit-c --no-line test/ast/80_closure_debug_line/main.ct \
+        -o "$work/cl80n" >"$work/cl80n.out" 2>"$work/cl80n.err" \
+   && grep -Fq '/* closure at test/ast/80_closure_debug_line/main.ct:7 */' "$work/cl80n/main.c" \
+   && ! grep -q '^#line ' "$work/cl80n/main.c"; then
+    ok "p21-s5: --no-line drops the anchor but keeps the closure-at comment"
+else
+    bad "p21-s5: no-line closure anchor" "$(cat "$work/cl80n.err")"
+fi
+
 # P20-02: an import after the first declaration is rejected at the import line,
 # with a message that names the fix. The generic loop above only checks for any
 # positioned diagnostic; pin this text so it cannot drift into a parse error.

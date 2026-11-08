@@ -145,7 +145,8 @@ pub struct Closure {
     char ptype[16][160];        /* the literal's parameter types, as written */
     char pname[16][160];        /* their names, for S3's trampoline */
     int  nparams;
-    int  body;                  /* expression node index */
+    int  body;                  /* expression node index, or an N_BLOCK */
+    int  is_block;              /* 1 when the body is `=> { … }` (S5) */
     int  ncap;
     char cap_name[16][160];
     char cap_type[16][160];
@@ -369,6 +370,7 @@ impl SymbolOps for Symbols {
         c->ret[0] = 0;
         c->nparams = 0;
         c->body = -1;
+        c->is_block = 0;
         c->ncap = 0;
         c->line = 0;
         c->col = 0;

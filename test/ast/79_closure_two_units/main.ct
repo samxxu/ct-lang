@@ -1,0 +1,14 @@
+/* 79 (Phase 21 S5): two implementation units, each with its own closure. Each
+   generated .c carries a `static` trampoline, so the two products never clash,
+   and a literal crosses the boundary as a `(fn, env)` pair. */
+import dep;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 4;
+    int r = call((int x) => x + n, 3);
+    printf("%d %d\n", r, local(5));
+    return 0;
+}

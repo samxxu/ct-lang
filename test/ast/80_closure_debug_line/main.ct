@@ -1,0 +1,14 @@
+/* 80 (Phase 21 S5): the debug mapping for a closure product. The literal sits
+   on line 7 here; check-ast asserts the closure-at comment and the #line anchor
+   before the generated struct and trampoline. */
+int apply(int base)
+{
+    int n = 3;
+    int (*add)(int x) = (int x) => x + n + base;
+    return add(5);
+}
+
+int main(void)
+{
+    return apply(1) - 9;
+}

@@ -1,0 +1,9 @@
+/* One type host for `int`: `tag()` reports that the host was reached, so the
+   consumer's output proves a closure call did not go through it. */
+namespace host;
+
+pub trait Tag {
+    int tag();
+}
+
+map trait Tag for type int { tag(v) -> ct_tag(6); }
