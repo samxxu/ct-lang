@@ -1,0 +1,54 @@
+// 场景：连接池里的连接被借出去渲染一帧，用完必须还池，而不是销毁；池对象
+//   本身在程序生命周期内一直存在。
+// 为什么用 borrow + Handback：借用声明让编译器拦住 delete（见
+//   15_memory/borrow_delete），Handback 则在块尾按声明的逆序把连接标记为空闲。
+//   这跟 Drop 的区别是：Drop 释放资源，Handback 只归还控制权，对象还在。
+// 角度：池化的真实场景——acquire 两次、块内 in_use 为 1 1，出块后逆序回收，
+//   in_use 回到 0 0。写错会怎样：用 own 接池对象，块尾会 delete 一块不归你的
+//   内存（双重释放 / 释放静态对象）。
+// 仅 ct-ast：borrow / Handback 是 CT 线能力。
+#include <stdio.h>
+
+struct Conn {
+    int fd;
+    int in_use;
+} use Handback;
+
+impl Handback for Conn {
+    void handback()
+    {
+        self->in_use = 0;
+        printf("handback %d\n", self->fd);
+    }
+}
+
+struct Pool {
+    struct Conn slots[2];
+};
+
+static struct Pool g_pool;
+
+static struct Conn *acquire(int fd)
+{
+    struct Conn *c = &g_pool.slots[fd];
+    c->fd = fd;
+    c->in_use = 1;
+    return c;
+}
+
+static void render(borrow struct Conn *c)
+{
+    printf("render %d\n", c->fd);
+}
+
+int main(void)
+{
+    {
+        borrow struct Conn *a = acquire(0);
+        borrow struct Conn *b = acquire(1);
+        render(a);
+        printf("in use %d %d\n", a->in_use, b->in_use);
+    }   // 逆序 handback：b 先、a 后
+    printf("returned %d %d\n", g_pool.slots[0].in_use, g_pool.slots[1].in_use);
+    return 0;
+}

@@ -1,0 +1,26 @@
+// 场景：一块临时缓冲只在 main 里用一次，顺手 malloc 之后忘了 delete。
+// 为什么写这个：这是编译器唯一会在静态阶段提示的泄漏——分配结果赋给裸指针
+//   且函数返回时仍未释放。它只是 warning（退出码 0），不阻断编译。
+// 角度：静态泄漏诊断。规整写法是 own（见 15_memory/drop_paths），既消除
+//   警告也真的释放；把 malloc 结果转手交给别的函数也会让这条分析闭嘴，
+//   所以“没有警告”不等于“没有泄漏”。
+// 仅 ct-ast：泄漏分析是 CT 线能力。
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int n; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        (void)self;
+    }
+}
+
+int main(void)
+{
+    Box *p = malloc(sizeof(Box));
+    p->n = 1;
+    printf("%d\n", p->n);
+    return 0;
+}

@@ -1,0 +1,42 @@
+// 场景：和 15_memory/field_cascade 同一棵树，但 Node 的 drop() 只打印、
+//   忘了 delete 自己的 leaf——真实项目里最常见的一行遗漏。
+// 为什么写这个：编译器不会替结构体字段做所有权分析，宿主被释放时成员不会
+//   自动跟着走。leaf 的 drop 一次都没跑（计数为 0），而且没有任何诊断。
+// 角度：会泄漏的写法。输出里的 “leaf drops 0” 就是证据；修法只有一行：
+//   impl Drop for Node 里补 `delete self->leaf;`。
+// 仅 ct-ast：Drop / delete 是 CT 线能力。
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Leaf { int id; } use Drop;
+struct Node { struct Leaf *leaf; int id; } use Drop;
+
+static int g_leaf_drops = 0;
+
+impl Drop for Leaf {
+    void drop(void)
+    {
+        g_leaf_drops = g_leaf_drops + 1;
+        printf("free leaf %d\n", self->id);
+    }
+}
+
+impl Drop for Node {
+    void drop(void)
+    {
+        // 这里少了 delete self->leaf; ——leaf 的 drop 永远不会执行。
+        printf("free node %d\n", self->id);
+    }
+}
+
+int main(void)
+{
+    {
+        own Node *n = malloc(sizeof(Node));
+        n->id = 1;
+        n->leaf = malloc(sizeof(Leaf));
+        n->leaf->id = 2;
+    }
+    printf("leaf drops %d\n", g_leaf_drops);
+    return 0;
+}

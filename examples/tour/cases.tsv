@@ -33,3 +33,15 @@
 13_check|json|check-json|no|1|machine-readable diagnostics
 14_default_method|expand_and_override|compile|no|0|default body per struct, override
 14_default_method|neg_cycle|compile|no|1|default methods with no entry point
+15_memory|drop_paths|compile|no|0|own: fallthrough, nested block, early return
+15_memory|drop_loop_break|compile|no|0|known hole: break/continue skip the block's drop
+15_memory|field_cascade|compile|no|0|drop() deletes members, three-level chain
+15_memory|field_cascade_missed|compile|no|0|forgotten delete: the member's drop never runs
+15_memory|box_borrow|compile|no|0|boxing borrows: mutating the object is visible
+15_memory|box_escape|asan|no|1|returning a boxed local: ASan stack-use-after-return
+15_memory|manual_shim|build|no|0|shim-owned malloc/free: owned vs borrowed
+15_memory|manual_shim_wrong|build|no|0|free(p) bypasses pkt_free: payload and counter lost
+15_memory|borrow_handback|compile|no|0|borrow + Handback returns to the pool
+15_memory|borrow_delete|compile|no|1|negative: delete on a borrowed pointer
+15_memory|own_factory|compile|no|1|negative: own cannot take a factory result
+15_memory|leak_warning|compile-warn|no|0|static "potential leak" warning, exit 0

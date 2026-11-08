@@ -1,0 +1,20 @@
+// 场景：ct 侧看到 pkt_open 返回 struct Packet *，就按“malloc 来的结构体”直接
+//   free(p) 收尾——C 程序员最容易犯的直觉错误。
+// 为什么写这个：结构体只是句柄，真正的资源是隐藏 payload 和 shim 的存活记账。
+//   free(p) 能通过编译、也能“跑完”，但 payload 泄漏、g_live 永远停在 1。
+// 角度：错误收尾 vs 正确收尾。输出里没有 “free ...” 这一行、最后 live 仍是 1，
+//   就是 shim 的 pkt_free 从未执行的证据；正确版本见 15_memory/manual_shim。
+// 仅 ct-ast：多单元 build 与 .shim.h/.shim.c 由 CT 线支持。
+#include <stdio.h>
+#include <stdlib.h>
+#include "pkt.shim.h"
+
+int main(void)
+{
+    struct Packet *p = pkt_open(7, 4);      // 所有权：应交给 pkt_free
+    printf("live %d\n", pkt_live());
+
+    free(p);                                // 只释放结构体：payload 与记账丢失
+    printf("live %d\n", pkt_live());
+    return 0;
+}

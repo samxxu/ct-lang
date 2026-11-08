@@ -1,0 +1,6 @@
+drop 1
+drop 4
+inner done
+drop 3
+drop 2
+early -> 2

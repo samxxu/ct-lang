@@ -1,0 +1,40 @@
+// 场景：一个值对象先落到栈上，再以接口（胖指针 {self, vt}）的形式传给
+//   通用绘制流程——只希望在当前作用域里动态派发，不打算把对象交出去。
+// 为什么这么写：装箱只借用地址&t，不拷贝、不拥有。对象活着的时候这样用是
+//   正确且零成本的：没有额外分配，改 t 的字段，接口立刻看到新值。
+// 角度：借用语义的最小证明——装箱后改 t.size（3 → 5），r.width() 打印 10，
+//   说明 self 指向同一个对象而不是快照。写错会怎样：把接口值带出 t 的作用域，
+//   self 就悬垂（见 15_memory/box_escape）。
+// 仅 ct-ast：trait / 接口值 / 自动装箱是 CT 线能力。
+#include <stdio.h>
+
+trait Renderer {
+    int width();
+    void draw(int n);
+}
+
+struct Text {
+    int size;
+} use Renderer;
+
+impl Renderer for Text {
+    int width()
+    {
+        return self->size * 2;
+    }
+    void draw(int n)
+    {
+        printf("text size=%d width=%d n=%d\n", self->size, self->size * 2, n);
+    }
+}
+
+int main(void)
+{
+    struct Text t;
+    t.size = 3;
+
+    Renderer r = t;        // 装箱：r.self == &t（借用，不是拷贝）
+    t.size = 5;            // 同一对象，接口看到的是 5
+    r.draw(r.width());     // 输出 size=5 width=10，n=10
+    return 0;
+}

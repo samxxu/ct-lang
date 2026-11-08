@@ -1,0 +1,48 @@
+// 场景：一次请求里临时拿到一块堆对象，函数有三条出口——落到底、嵌套块结束、
+//   提前 return。三条路都必须把对象还给分配器，不能靠“记得写 free”。
+// 为什么用 own：把释放点交给作用域，代码只关心“这块对象归我”；换成普通 malloc
+//   + 手写 free，早退路径最容易漏，而且漏了不报错，只是静默泄漏。
+// 角度：三条出口的最小对照。嵌套块先于外层释放；同一作用域的多个 own 按声明
+//   逆序释放；return 前先取值再释放，返回的值不会读到已释放内存（SH-45）。
+//   写错会怎样：把 own 改成裸 malloc，drop 2 / drop 3 / drop 4 都不会出现。
+// 仅 ct-ast：own / Drop 是 CT 线能力，冻结的 L0 只把它当普通标识符透传。
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int id; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop %d\n", self->id);
+    }
+}
+
+// 早退：先读字段，再把值交给调用者，最后释放。
+static int early(void)
+{
+    own Box *b = malloc(sizeof(Box));
+    b->id = 2;
+    return b->id;
+}
+
+int main(void)
+{
+    {
+        own Box *a = malloc(sizeof(Box));
+        a->id = 1;
+    }                                  // 落到底：drop 1
+
+    {
+        own Box *c = malloc(sizeof(Box));
+        c->id = 3;
+        {
+            own Box *d = malloc(sizeof(Box));
+            d->id = 4;
+        }                              // 内层先走：drop 4
+        printf("inner done\n");
+    }                                  // 外层再走：drop 3
+
+    printf("early -> %d\n", early());  // 返回前释放：drop 2
+    return 0;
+}

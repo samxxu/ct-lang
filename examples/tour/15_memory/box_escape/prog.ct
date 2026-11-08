@@ -1,0 +1,51 @@
+// 场景：想从工厂函数“返回一个接口值”，于是把函数里的局部 struct 直接
+//   return 出去——看起来最自然，实际把 this frame 的地址装进了胖指针。
+// 为什么写这个：装箱只借用 &local，不拥有、不拷贝。函数一返回，栈帧失效，
+//   调用方第一次读 self->size 就踩到已销毁的栈。
+// 角度：悬垂写法（反例）。普通运行读到的可能是随机值，也可能“看起来正常”，
+//   所以必须用 ASan 观测（detect_stack_use_after_return=1）：
+//
+//     cc -std=c99 -fsanitize=address -g  <generated>.c -o box_escape
+//     ASAN_OPTIONS=detect_stack_use_after_return=1 ./box_escape
+//
+//   会报 ERROR: AddressSanitizer: stack-use-after-return，退出码 134。
+//   正确写法见 15_memory/box_borrow：让被装箱的对象活过接口值的使用期；
+//   如果对象必须跨函数，就在堆上分配并返回指针（此时 self 是指针本身，
+//   不再取 &local），释放责任交给 delete / 调用方。
+// 仅 ct-ast：trait / 接口值 / 自动装箱是 CT 线能力。
+#include <stdio.h>
+
+trait Renderer {
+    int width();
+    void draw(int n);
+}
+
+struct Text {
+    int size;
+} use Renderer;
+
+impl Renderer for Text {
+    int width()
+    {
+        return self->size * 2;
+    }
+    void draw(int n)
+    {
+        printf("text size=%d width=%d n=%d\n", self->size, self->size * 2, n);
+    }
+}
+
+// BUG：返回的接口值里 self 指向本函数的栈帧，函数返回后即悬垂。
+static Renderer make(void)
+{
+    struct Text t;
+    t.size = 7;
+    return t;
+}
+
+int main(void)
+{
+    Renderer r = make();
+    r.draw(1);      // ASan：stack-use-after-return
+    return 0;
+}

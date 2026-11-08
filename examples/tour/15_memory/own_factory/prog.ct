@@ -1,0 +1,33 @@
+// 场景：工厂函数在 C 侧（或别的单元）里 malloc，把对象交给调用方；调用方
+//   想用 own 接住，让作用域负责释放。
+// 为什么写这个：own 只接受“看得见的 malloc/calloc 初始化式”，因为它要把
+//   释放点绑在声明处；工厂返回值可能是池、arena、引用计数或别的分配器，
+//   编译器无法假定 free 正确，所以直接拒绝。
+// 角度：反例，固化确切诊断与退出码（1）。正确写法：用普通指针接，再按工厂
+//   的契约 delete（或调用工厂配套的释放函数）；见 15_memory/manual_shim。
+// 仅 ct-ast：own 是 CT 线能力。
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int n; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop %d\n", self->n);
+    }
+}
+
+static struct Box *make(int n)
+{
+    struct Box *b = malloc(sizeof(Box));
+    b->n = n;
+    return b;
+}
+
+int main(void)
+{
+    own Box *b = make(1);
+    printf("%d\n", b->n);
+    return 0;
+}

@@ -1,0 +1,35 @@
+// 场景：循环体里每轮都拿一块临时对象，满足条件就 continue 跳过本轮，或者
+//   直接 break 结束循环。真实代码里这两种写法非常常见（过滤、提前收敛）。
+// 为什么写这个：这是 AutoDrop 的已知洞。释放语句只挂在块尾 `}` 和 `return`
+//   之前，`break` / `continue` 是普通跳转语句，注入点根本不会执行——本样例
+//   分配 3 次、只跑了 1 次 drop，另外 2 次静默泄漏，编译器不报错。
+// 角度：正确写法 vs 已知边界。要避免泄漏，就别在含 own 的循环体里提前跳转：
+//   把 own 提到循环外、每轮 delete 后重新分配，或者用 return 代替 break。
+//   对照 15_memory/drop_paths：那边三条正常出口都会释放。
+// 仅 ct-ast：own / Drop 是 CT 线能力（`loop(n)` 的块尾释放规则与此相同）。
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int id; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop %d\n", self->id);
+    }
+}
+
+int main(void)
+{
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        own Box *b = malloc(sizeof(Box));
+        b->id = i;
+        if (i == 1) continue;   // 跳过块尾：i == 1 的对象泄漏
+        if (i == 2) break;      // 跳过块尾：i == 2 的对象泄漏
+        printf("body %d\n", i);
+    }
+    printf("done\n");
+    return 0;
+}

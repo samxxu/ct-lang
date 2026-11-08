@@ -1,0 +1,54 @@
+// 场景：配置对象持有设备，设备持有缓冲区——典型的“三层资源树”。使用者
+//   只想管最外层，不想记得每一层怎么拆。
+// 为什么用 Drop：释放策略写在各自的 drop() 里，外层 drop() 用 delete 触发
+//   下一层，递归下钻。换成手写，就要写 free(cfg->dev->buf)、free(cfg->dev)、
+//   free(cfg)，少一层泄漏、多一层崩溃。
+// 角度：正确的级联释放。注意顺序是“外层先 drop、内层后 drop”（配置 → 设备 →
+//   缓冲区），因为每个 drop() 在释放自己之前先 delete 成员；drop() 里只释放
+//   自己持有的资源，绝不 free(self)——外层负责 free 自己。
+//   写错会怎样：少写一行 delete self->buf，缓冲区就永远不释放（见
+//   15_memory/field_cascade_missed）。
+// 仅 ct-ast：Drop / delete 是 CT 线能力。
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Buffer { int id; } use Drop;
+struct Device { struct Buffer *buf; int id; } use Drop;
+struct Config { struct Device *dev; int id; } use Drop;
+
+impl Drop for Buffer {
+    void drop(void)
+    {
+        printf("free buffer %d\n", self->id);
+    }
+}
+
+impl Drop for Device {
+    void drop(void)
+    {
+        printf("free device %d\n", self->id);
+        delete self->buf;          // 下一层：缓冲区
+    }
+}
+
+impl Drop for Config {
+    void drop(void)
+    {
+        printf("free config %d\n", self->id);
+        delete self->dev;          // 下一层：设备
+    }
+}
+
+int main(void)
+{
+    {
+        own Config *c = malloc(sizeof(Config));
+        c->id = 1;
+        c->dev = malloc(sizeof(Device));
+        c->dev->id = 2;
+        c->dev->buf = malloc(sizeof(Buffer));
+        c->dev->buf->id = 3;
+    }                              // 出口：Config → Device → Buffer
+    printf("after scope\n");
+    return 0;
+}

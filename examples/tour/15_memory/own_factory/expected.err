@@ -1,0 +1,2 @@
+prog.ct:30:1: error: 'own' requires a malloc or calloc initialiser
+ctc: 1 error(s) generated

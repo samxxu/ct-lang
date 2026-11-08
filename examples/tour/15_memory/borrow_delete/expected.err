@@ -1,0 +1,2 @@
+prog.ct:24:1: error: a borrowed pointer cannot be deleted
+ctc: 1 error(s) generated

@@ -9,11 +9,19 @@
 #     feature|case|mode|l0|expect_exit|note
 #
 #   mode        compile | build | check | clean | pair | check-json
+#               compile-warn (expects a byte-exact warning and still runs)
+#               asan         (dangling/leak cases: compiled with -fsanitize=address)
 #   l0          yes -> also compile+run the sample with the frozen L0 seed
-#   expect_exit exit status the compiler/checker must return
+#   expect_exit exit status the compiler/checker must return; for `asan` it
+#               means "must die under ASan" (any non-zero status)
+#
+# The `asan` cases are skipped unless ASAN=1 is set, so a plain run never
+# reports them as green; with ASAN=1 they must reproduce the diagnostic named
+# in expected.asan (a fixed substring, since sanitizer stacks carry addresses).
 #
 # Usage:
-#   bash examples/tour/run.sh                 # everything
+#   bash examples/tour/run.sh                 # everything except asan cases
+#   ASAN=1 bash examples/tour/run.sh          # everything, including asan cases
 #   bash examples/tour/run.sh 04_             # only cases whose path contains "04_"
 #   CT=/path/to/ct bash examples/tour/run.sh  # use an existing ct-ast binary
 #   CC=clang bash examples/tour/run.sh
@@ -37,9 +45,11 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 pass=0
 fail=0
+skipped=0
 failures=()
 
-ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
+ok()   { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
+skip() { skipped=$((skipped + 1)); printf '  skip  %s (%s)\n' "$1" "$2"; }
 
 # bad <feature/case> <expected-vs-actual one-liner> [detail file]
 bad() {
@@ -87,28 +97,33 @@ while IFS='|' read -r feature name mode l0flag want note; do
 
     need=""
     case "$mode" in
-        compile|pair)   need="prog.ct" ;;
+        compile|pair|compile-warn|check|clean|check-json|asan) need="prog.ct" ;;
         build)          need="main.ct" ;;
-        check|clean|check-json) need="prog.ct" ;;
         *) audit_err "$label: unknown mode '$mode'" ;;
     esac
     [ -z "$need" ] || [ -f "$dir/$need" ] || audit_err "$label: missing $need"
 
-    if [ "$want" = 0 ]; then
+    if [ "$mode" = asan ]; then
+        need="expected.asan"
+        [ "$want" = 1 ] || audit_err "$label: asan mode expects exit 1 (must die under ASan)"
+    elif [ "$want" = 0 ]; then
         case "$mode" in
-            compile|build) need="expected.out" ;;
+            compile|build|compile-warn) need="expected.out" ;;
             clean) need="" ;;
             pair) need="expected.warn" ;;
             *) need="" ;;
         esac
     else
         case "$mode" in
-            check) need="expected.err" ;;
-            compile|build) need="expected.err" ;;
+            check|compile|build) need="expected.err" ;;
             *) need="" ;;
         esac
     fi
     [ -z "$need" ] || [ -f "$dir/$need" ] || audit_err "$label: missing $need"
+
+    if [ "$mode" = compile-warn ] && [ ! -f "$dir/expected.warn" ]; then
+        audit_err "$label: missing expected.warn"
+    fi
 
     # negative cases must not be marked "run me on L0", and vice versa is fine
     if [ "$want" != 0 ] && [ "$l0flag" = yes ]; then
@@ -173,6 +188,21 @@ else
     ct="$work/ct-ast"
 fi
 printf '  ct: %s (%s)\n' "$ct" "$("$ct" -v 2>&1)"
+
+echo
+echo "== address sanitizer =="
+asan=""
+printf 'int main(void) { return 0; }\n' >"$work/asan_probe.c"
+if "$CC" -fsanitize=address "$work/asan_probe.c" -o "$work/asan_probe" 2>"$work/asan_probe.log"; then
+    asan=yes
+    if [ "${ASAN:-}" = 1 ]; then
+        echo "  available: crash cases will run (ASAN=1)"
+    else
+        echo "  available: crash cases are skipped; set ASAN=1 to run them"
+    fi
+else
+    echo "  unavailable: $CC -fsanitize=address failed; crash cases are skipped"
+fi
 
 last_feature=""
 while IFS='|' read -r feature name mode l0flag want note; do
@@ -239,6 +269,76 @@ while IFS='|' read -r feature name mode l0flag want note; do
               fi
           fi
           printf 'GOOD|%s|\n' "$mode"
+          ;;
+
+        compile-warn)
+          # the compiler must accept the source, but print exactly expected.warn
+          "$ct" prog.ct -o "$work/case.c" >"$work/c.out" 2>"$work/c.err"
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+              printf 'BAD|compile exit status: expected 0 (warning only), got %s|%s\n' "$rc" "$(cat "$work/c.err")"; exit 0
+          fi
+          if ! cmp -s "$work/c.err" expected.warn; then
+              { printf 'compiler stderr: expected the bytes of expected.warn, got different bytes\n'
+                diffout expected.warn "$work/c.err"; } >"$work/detail"
+              printf 'BAD|compiler warning mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          if ! "$CC" -Wall -Wextra -std=c99 "$work/case.c" -o "$work/prog" 2>"$work/cc.log"; then
+              printf 'BAD|cc: expected a binary, got a compile error|%s\n' "$(cat "$work/cc.log")"; exit 0
+          fi
+          if [ -s "$work/cc.log" ]; then
+              printf 'BAD|cc: expected zero warnings, got warnings|%s\n' "$(cat "$work/cc.log")"; exit 0
+          fi
+          if ! "$work/prog" >"$work/run.out" 2>"$work/run.err"; then
+              printf 'BAD|program: expected exit 0, got non-zero|%s\n' "$(cat "$work/run.err")"; exit 0
+          fi
+          if ! cmp -s "$work/run.out" expected.out; then
+              { printf 'stdout: expected the bytes of expected.out, got different bytes\n'
+                diffout expected.out "$work/run.out"; } >"$work/detail"
+              printf 'BAD|stdout mismatch|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          printf 'GOOD|%s|\n' "$mode"
+          ;;
+
+        asan)
+          # dangling pointers only show up under ASan: skip unless ASAN=1, so a
+          # plain run never reports this case as green.
+          if [ -z "$asan" ]; then
+              printf 'SKIP|ASan unavailable\n'; exit 0
+          fi
+          if [ "${ASAN:-}" != 1 ]; then
+              printf 'SKIP|set ASAN=1 to run the -fsanitize=address case\n'; exit 0
+          fi
+          "$ct" prog.ct -o "$work/case.c" >"$work/c.out" 2>"$work/c.err"
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+              printf 'BAD|compile: expected exit 0, got %s|%s\n' "$rc" "$(cat "$work/c.err")"; exit 0
+          fi
+          if ! "$CC" -Wall -Wextra -std=c99 -fsanitize=address -g "$work/case.c" -o "$work/prog" 2>"$work/cc.log"; then
+              printf 'BAD|cc -fsanitize=address: expected a binary, got a compile error|%s\n' "$(cat "$work/cc.log")"; exit 0
+          fi
+          if [ -s "$work/cc.log" ]; then
+              printf 'BAD|cc: expected zero warnings, got warnings|%s\n' "$(cat "$work/cc.log")"; exit 0
+          fi
+          # run under `sh -c` so the outer shell does not print its own
+          # "Abort trap" job notice into the verdict stream; the sanitizer's
+          # report still lands in run.err.
+          ASAN_OPTIONS=detect_stack_use_after_return=1 \
+              sh -c '"$0" >"$1" 2>"$2"; exit $?' \
+              "$work/prog" "$work/run.out" "$work/run.err" 2>/dev/null
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+              printf 'BAD|asan run: expected a non-zero exit (the bug), got 0\n'; exit 0
+          fi
+          if [ -s "$work/run.out" ]; then
+              printf 'BAD|asan stdout: expected empty, got output|%s\n' "$(cat "$work/run.out")"; exit 0
+          fi
+          if ! grep -qF "$(cat expected.asan)" "$work/run.err"; then
+              { printf 'asan stderr: expected to contain "%s", got:\n' "$(cat expected.asan)"
+                sed 's/^/  /' "$work/run.err"; } >"$work/detail"
+              printf 'BAD|asan diagnostic missing|%s\n' "$(cat "$work/detail")"; exit 0
+          fi
+          printf 'GOOD|%s (exit %s)|\n' "$mode" "$rc"
           ;;
 
         build)
@@ -360,6 +460,7 @@ while IFS='|' read -r feature name mode l0flag want note; do
     verdict="$(cat "$work/verdict")"
     case "$verdict" in
         GOOD*) ok "$label" ;;
+        SKIP*) skip "$label" "$(printf '%s' "$verdict" | cut -d'|' -f2)" ;;
         BAD*)
             msg="$(printf '%s' "$verdict" | cut -d'|' -f2)"
             detail="$(printf '%s' "$verdict" | cut -d'|' -f3-)"
@@ -380,5 +481,5 @@ if [ "$fail" -ne 0 ]; then
     done
     echo
 fi
-printf 'tour: %d ok, %d failed\n' "$pass" "$fail"
+printf 'tour: %d ok, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ]

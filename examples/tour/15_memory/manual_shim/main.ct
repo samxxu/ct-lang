@@ -1,0 +1,22 @@
+// 场景：数据包由 C 侧实现（.shim.c）分配——结构体外还有一块隐藏 payload，
+//   以及一个“当前存活数”的记账。ct 侧只拿到指针，看不到这些内部约定。
+// 为什么必须手动：所有权不在 ct 的作用域里。只有 pkt_open 知道 malloc 了几块、
+//   怎么拆；所以归还必须调用 pkt_free，不能用 own/delete 猜。
+// 角度：什么时候不该手动——pkt_peek 返回的是原数据包的借用视图，它不增加
+//   存活数，也绝不能被释放；释放了会让原数据包悬垂。
+//   写错会怎样：直接 free(p) 会跳过 payload 与记账，见
+//   15_memory/manual_shim_wrong。
+// 仅 ct-ast：多单元 build 与 .shim.h/.shim.c 由 CT 线支持。
+#include <stdio.h>
+#include "pkt.shim.h"
+
+int main(void)
+{
+    struct Packet *p = pkt_open(7, 4);      // 所有权：调用方负责 pkt_free
+    struct Packet *view = pkt_peek(p);      // 借用：不要释放 view
+
+    printf("view %d live %d\n", view->id, pkt_live());
+    pkt_free(p);                            // 唯一正确的归还方式
+    printf("live %d\n", pkt_live());
+    return 0;
+}
