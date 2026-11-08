@@ -96,7 +96,7 @@ static int mapb_param_index(struct MapBind *b, const char *name)
     return -1;
 }
 
-/* Validate one static recipe (spec §6.3): a single top-level call, every
+/* Validate one static recipe (spec §4.10): a single top-level call, every
    identifier is the callee / a binding parameter / a C type word / ALL_CAPS /
    a member name, no binding parameter is modified, and `uses` / `sizeofs`
    count the evaluation and `sizeof` occurrences for the emitter. */
@@ -214,7 +214,7 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
                    binding parameter is named directly (`sizeof s`); the
                    parenthesised form would emit `sizeof((actual))` -- the
                    value's size, not the declared type -- so reject it here
-                   (spec §6.3). A type operand may stay parenthesised. */
+                   (spec §4.10). A type operand may stay parenthesised. */
                 if (strcmp(tok, "sizeof") == 0) {
                     const char *r = p;
                     while (*r == ' ' || *r == '\t' || *r == '\n' || *r == '\r') r++;
@@ -247,7 +247,7 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
         }
         /* Whitespace never becomes `prev`: the context tests (`sizeof p`,
            `p.field`, `++p`) look at the previous *token*, and the canonical
-           form `sizeof s` has a space after `sizeof` (spec §6.3). */
+           form `sizeof s` has a space after `sizeof` (spec §4.10). */
         if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
             p++;
             continue;

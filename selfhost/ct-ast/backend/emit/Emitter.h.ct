@@ -554,7 +554,7 @@ static const char *map_copy_brackets(struct Emitter *e, const char *s)
 }
 
 /* Emit one recipe argument span, substituting the binding parameters (spec
-   §6.3): `p`, `&p`, `&p[…]`, `sizeof p`, `p.field` / `p->field` / `p[i]`. */
+   §4.10): `p`, `&p`, `&p[…]`, `sizeof p`, `p.field` / `p->field` / `p[i]`. */
 static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct MapBind *b, int *actual)
 {
     char tok[MAX_TEXT];
@@ -706,7 +706,7 @@ static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct
     return 0;
 }
 
-/* Expand one static recipe at the call site (spec §6.3 / §6.4): no wrapper,
+/* Expand one static recipe at the call site (spec §4.10): no wrapper,
    no vtable, the call is what a hand-written `.c` would say. */
 static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int recv, int args, int at)
 {

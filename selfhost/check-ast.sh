@@ -1114,7 +1114,7 @@ else
     bad "map_unit_chain cache" "main.c was not rebuilt after the transitive .m.ct changed"
 fi
 
-# `sizeof p` is not an evaluation (spec §6.3): a side-effecting actual is still
+# `sizeof p` is not an evaluation (spec §4.10): a side-effecting actual is still
 # wrapped in the `(void)(…)` prefix, and two occurrences are not a duplicate use.
 rm -rf "$work/mso"
 mkdir -p "$work/mso/lib" "$work/mso/out"
@@ -2026,7 +2026,7 @@ mapbad ambiguous_type_host \
     "ambiguous type-host map for method 'm' on type 'char *'" \
     'import lib::lib;\n\nint main(void)\n{\n    char *a = "1";\n    int x = a.m();\n    (void)x;\n    return 0;\n}\n'
 # `sizeof s` is the declared type's size, so a parenthesised form would silently
-# mean `sizeof((actual))`; the recipe must spell it without parentheses (§6.3).
+# mean `sizeof((actual))`; the recipe must spell it without parentheses (§4.10).
 mapbad sizeof_paren \
     'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> malloc(sizeof(s)); }\n' \
     "map recipe takes 'sizeof s', not 'sizeof(s)'" \
