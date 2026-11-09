@@ -2,7 +2,7 @@
   "name": "ct-vscode",
   "displayName": "CT — C with Traits",
   "description": "Syntax highlighting, snippets, go-to-definition and language configuration for CT (C with Traits), the trait-flavoured C compiled by ct (ctc is the compatibility alias).",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "main": "./extension.js",
   "activationEvents": [
     "onLanguage:ct"
@@ -23,7 +23,10 @@
     "vtable",
     "ctc",
     "ct-lang",
-    "c with traits"
+    "c with traits",
+    "generics",
+    "closures",
+    "loop"
   ],
   "galleryBanner": {
     "color": "#16222e",

@@ -33,7 +33,16 @@ impl Greeter for Person {
 | `map trait T for namespace A::B {` | `storage.type` + trait/host names |
 | `map trait T for type char * {` | `storage.type` + trait name, host type by the C grammar |
 | `trait T { m() { … } }` | `trait`, then the default body as C |
-| `own`, `delete`, `pub`, `namespace` | modifiers/keywords at line start |
+| `own`, `borrow`, `delete`, `pub`, `namespace` | modifiers/keywords at line start |
+| `T id<T>(T x)` / `id<int>(…)` | generic declaration / call (type parameter + type argument) |
+| `type Name = …;` / `pub type Name = …;` | `storage.type` + alias name |
+| `loop(n) {` / `loop(a..b) {` | `keyword.control` for `loop` |
+| `0..13($ * 2 + 1)` | `..` range operator + `$` range index |
+| `(int x) => expr` | closure arrow |
+| `_Static_assert(…)` / `static_assert(…)` | `keyword.control` |
+| `_Alignas`, `_Alignof T`, `_Atomic`, `_Generic`, `_Noreturn`, `_Thread_local`, `_Bool` | C11 keywords |
+| `__attribute__((…))` | `storage.modifier` |
+| `write(buf, len) -> uart_put;` | recipe method + `->` |
 
 `.m.ct` mapping units are plain `.ct` files to the editor (the suffix still
 ends in `.ct`), so they get the same highlighting; `#include` / `#define`
@@ -123,13 +132,15 @@ To get an F5 workflow, add a launch configuration at the repository root as
 ## Checks
 
 ```bash
-python3 test/check-grammar.py    # 40 assertions; exit code 0 means it passed
+python3 test/check-grammar.py    # 108 assertions; exit code 0 means it passed
 ```
 
 The script replays the grammar's patterns with Python's `re` over the demos in
-`examples/` and the cases in `test/cases/`, asserting both directions: the CT
-rules fire on `trait` / `use` / `impl` / `self`, and they stay silent inside
-comments, strings and look-alike identifiers (`use_it`, `selfish`).
+`examples/`, the cases in `test/cases/` and the Phase 20–26 fixtures in
+`test/ast/`, asserting both directions: the CT rules fire on `trait` / `use` /
+`impl` / `self` / `loop` / `..` / `=>` / generics, and they stay silent inside
+comments, strings and look-alike identifiers (`use_it`, `selfish`, `...`,
+`int loop = 5`, `p->x`).
 
 It is a smoke test, not a substitute for a human pass: Python's `re` is not
 Oniguruma, and the real engine also runs VS Code's built-in `source.c` grammar,
@@ -140,7 +151,7 @@ once before publishing.
 
 ```bash
 cd editors/vscode
-npx @vscode/vsce package        # produces ct-vscode-0.2.0.vsix
+npx @vscode/vsce package        # produces ct-vscode-0.5.0.vsix
 npx @vscode/vsce publish        # needs a Marketplace publisher + PAT
 ```
 
@@ -171,6 +182,12 @@ details.
 - **最新特性**：第三十六批的 trait 默认方法（方法体直接写在 trait 里），以及第三十八批的
   `.m.ct` 零成本静态映射（`map trait T for namespace A::B {`、`map trait T for type char * {`，
   `for type` 之后的 C 类型交给 C 语法）。`.m.ct` 映射单元与 `.ct` 用同一套高亮（文件名仍以 `.ct` 结尾）。
+- Phase 20–26 的语法同样覆盖：`type` / `pub type` 类型别名、闭包箭头 `=>`、
+  `loop(n)` / `loop(a..b)` 与 range 初值 `a..b($)`、泛型声明 `T id<T>(T x)` 与调用 `id<int>(…)`、
+  C11 `_Alignas` / `_Alignof` / `_Atomic` / `_Generic` / `_Noreturn` / `_Thread_local` / `_Bool`、
+  GNU `__attribute__((…))`，以及 `map` recipe 方法 `write(buf, len) -> uart_put;` 与限定宿主
+  `for instance hal::uart1`。这些关键字都是上下文相关的：`int loop = 5;`、`loop:`、`...`、
+  `a >= b`、`p->x`、`return id<int>(42);` 均不会被误判。
 - 字符串、字符、注释**先于** CT 规则被整体吃掉，因此编译器"字符串/注释内绝不改写"的保证在高亮层面同样成立。
 - **跳转定义**：`Ctrl+Click` / `F12` 可跳到 `impl` 方法、trait/struct 声明、顶层函数与 `map` 绑定；
   `p.greet()` 会按 `p` 的声明类型收窄到对应 `impl`，`self` 取当前 `impl`（默认方法体内则取当前 trait）。

@@ -1,5 +1,31 @@
 # Change Log
 
+## 0.5.0
+
+- Highlighting for the Phase 20–26 syntax, 17 rules in all: `type` / `pub type`
+  aliases (`ct-type-alias`), generic declarations and calls
+  (`ct-generic-decl`, `ct-generic-call`), `loop(n)` / `loop(a..b)`
+  (`ct-loop`), the `a..b($)` range operator (`ct-range-dots`), the closure
+  arrow `=>` (`ct-closure-arrow`), `_Static_assert` / `static_assert`
+  (`ct-static-assert`), the C11 surfaces `_Alignas` (`ct-alignas`),
+  `_Alignof T` / `_Alignof(T)` (`ct-alignof-type`, `ct-alignof`), `_Atomic`
+  (`ct-atomic`), `_Generic` (`ct-generic-select`), `_Noreturn`
+  (`ct-noreturn`), `_Thread_local` (`ct-thread-local`), `_Bool` / `_Complex` /
+  `_Imaginary` (`ct-c11-builtin-types`), GNU `__attribute__((…))`
+  (`ct-attribute`), and `map` recipes `name(args) -> callee(…)`
+  (`ct-recipe`).
+- `ct-map` accepts a qualified instance host (`for instance hal::uart1`) and
+  splits the `::` path from the host name.
+- Contextual keywords stay contextual: `int loop = 5;`, `loop:`, `...`,
+  `a >= b`, `p->x`, `dog_get()->hi();` and `return id<int>(42);` are all
+  pinned by negative assertions.
+- `test/check-grammar.py`: 108 assertions (40 before), with the Phase 20–26
+  fixtures under `test/ast/` and `test/modules/map_ns/`; every new assertion
+  was shown to fail by mutating its rule.
+- `extension.js` is unchanged. The go-to-definition index still does not
+  register generic function/method templates (`T id<T>(T x)`); the gap and its
+  fix criteria are recorded as DOC-68 in `issues/docs/`.
+
 ## 0.4.0
 
 - Highlighting for raw pass-through (Phase 17.3): `#ct-raw` / `#ct-endraw`

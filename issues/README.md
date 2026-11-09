@@ -214,6 +214,7 @@
 | DOC-65 | Medium | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 | [doc65-compile-import-boundary-undocumented.md](docs/doc65-compile-import-boundary-undocumented.md) |
 | DOC-66 | Medium | `docs/design/` 的「只放当前阶段」约定与 phase17–25 未归档并存 | [doc66-design-archive-policy.md](docs/doc66-design-archive-policy.md) |
 | DOC-67 | Medium | Phase 26 文档与实现不符：S4 四处替换承诺、L26-3/L26-4 文案、E1 断言作用域、AGENTS 版本登记（已修，docs 提交，`v0.26.1`；复核 `verified`） | [doc67-phase26-doc-impl-mismatch.md](docs/doc67-phase26-doc-impl-mismatch.md) |
+| DOC-68 | Medium | VS Code 跳转索引不识别泛型模板：`T id<T>(T x)` 与 `id<int>(…)` 都无定义（本轮只补高亮，`extension.js` 未动） | [doc68-vscode-generic-jump-index.md](docs/doc68-vscode-generic-jump-index.md) |
 
 ### `testing/` —— 测试覆盖度
 
