@@ -1,0 +1,24 @@
+import std::io::io;
+#include <stdio.h>
+
+int main(void)
+{
+    char buf[64];
+    char plain[32];
+
+    /* the receiver of a type host supplies the format string */
+    "type %d %d\n".printf(4, 5);
+
+    /* the trait segment is optional: `std::io::puts` is `std::io::Io.puts` */
+    std::io::puts("ns-puts");
+    std::io::printf("ns-zero\n");
+    std::io::printf("ns-one %d\n", 1);
+    std::io::printf("ns-three %d %d %d\n", 1, 2, 3);
+    std::io::printf("ns-six %d %d %d %d %d %d\n", 1, 2, 3, 4, 5, 6);
+
+    /* the format string sits behind the buffer and the capacity */
+    std::io::snformat(buf, sizeof buf, "%d/%d", 7, 9);
+    std::io::snformat(plain, sizeof plain, "one");
+    printf("%s %s\n", buf, plain);
+    return 0;
+}

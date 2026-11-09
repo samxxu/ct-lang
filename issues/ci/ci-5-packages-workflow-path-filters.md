@@ -28,7 +28,7 @@ on:
 
 ## 证据
 
-- 包与索引本体在外部仓库（`ct-pkg/{hal,hal-posix,clib,index}`），本仓库 push 天然触发不到；
+- 包与索引本体在外部仓库（`ct-pkg/{hal,hal-posix,std,index}`），本仓库 push 天然触发不到；
   这部分只能靠 nightly（`0 19 * * *`）覆盖，属已接受的限制。
 - 但**本仓库内的包工具**不在过滤里：`selfhost/ct-ast/tool/pkg/**`（`Pkg.h.ct` 的
   `get` / `update` / `verify` / `install`）改动不会触发包门禁；`test/pkg/**` 同理。

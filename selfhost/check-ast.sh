@@ -193,6 +193,16 @@
 # `#ct-endraw` and trailing text. The cap is 32768 bytes, and the compiler's
 # own sources must stay free of raw blocks.
 #
+# batch 41 adds two things a static map can do that a real trait cannot: a
+# method may end in `...` (the recipe forwards the actuals the named parameters
+# left over, so `printf` and a reordering `snprintf` fit), and a namespace-host
+# method may be called without its trait segment (`std::io::puts(...)` resolves
+# to the one recipe bound on that host). test/modules/map_unit_varargs covers
+# 0/1/3/6 forwarded actuals, the snprintf reorder and the bare call; the tail
+# rules (last position, marker/signature agreement) and the ambiguous bare name
+# are pinned negatives. A call with more actuals than a fixed recipe names is
+# now an arity diagnostic instead of a silent drop.
+#
 # The unit-name lint keeps `selfhost/ct-ast/**` on the layout rule: a unit file
 # is named after its main type, so every `.h.ct` declares a type or trait whose
 # name matches its own basename (`main.ct` is the entry, not a unit).
@@ -1357,6 +1367,32 @@ else
     bad "ct check (signature drift)" "$(head -2 "$work/mchk2.err")"
 fi
 
+# Batch 41: a static map is expanded at the call site, so a method may end in
+# `...` and the recipe forwards every actual the named parameters left over.
+# The same fixture drops the trait segment (`std::io::puts`), which resolves to
+# the one recipe bound on that namespace host.
+rm -rf "$mod-mmv"
+mkdir -p "$mod-mmv"
+if "$work/ct-ast" build --emit-c test/modules/map_unit_varargs/main.ct -o "$mod-mmv" \
+        >"$work/mmv.out" 2>"$work/mmv.err" \
+   && [ ! -f "$mod-mmv/io.c" ] && [ ! -f "$mod-mmv/io.h" ] \
+   && grep -qF 'puts(("ns-puts"))' "$mod-mmv/main.c" \
+   && grep -qF 'printf(("ns-zero\n"))' "$mod-mmv/main.c" \
+   && grep -qF 'printf(("ns-one %d\n"), (1))' "$mod-mmv/main.c" \
+   && grep -qF 'printf(("ns-six %d %d %d %d %d %d\n"), (1), (2), (3), (4), (5), (6))' \
+        "$mod-mmv/main.c" \
+   && grep -qF 'snprintf((buf), (sizeof(buf)), ("%d/%d"), (7), (9))' "$mod-mmv/main.c" \
+   && grep -qF 'printf(("type %d %d\n"), (4), (5))' "$mod-mmv/main.c" \
+   && ! grep -Eq '_iface|_vtbl|vtable|vt->' "$mod-mmv/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-mmv"/*.c -o "$work/mmv.bin" 2>"$work/mmv.cc" \
+   && "$work/mmv.bin" >"$work/mmv.stdout" 2>&1 \
+   && cmp -s "$work/mmv.stdout" test/modules/map_unit_varargs/expected.out; then
+    ok "map_unit_varargs (0/1/3/6 forwarded actuals, snprintf reorder, bare namespace call)"
+else
+    bad "map_unit_varargs" \
+        "$(cat "$work/mmv.err" "$work/mmv.cc" "$work/mmv.stdout" 2>/dev/null | head -5)"
+fi
+
 # P20-01: two packages bind `len` to `char *`. A qualified call picks one map;
 # the unqualified call still fails and names both qualified spellings.
 rm -rf "$work/p20mm"
@@ -1412,8 +1448,8 @@ fi
 
 # A shim is wired by its base name: the consumer includes `<base>.shim.h`, so a
 # header under any other name is silently never included and the recipe's C
-# helper stays undeclared. This is the negative for the naming rule the clib
-# units rely on (`Str.m.ct` needs `Str.shim.h`, not `StrUtil.shim.h`).
+# helper stays undeclared. This is the negative for the naming rule the std
+# mapping units rely on (`String.m.ct` needs `String.shim.h`, not `StrUtil.shim.h`).
 rm -rf "$work/mbsn"
 mkdir -p "$work/mbsn/lib" "$work/mbsn/out"
 printf 'namespace lib;\npub trait T { int m(); }\nmap trait T for namespace lib { m() -> ct_x(); }\n' \
@@ -1609,6 +1645,7 @@ elif grep -q "variable 'h' is exported by more than one namespace" "$work/mag.er
 else
     bad "ambig_global" "no ambiguity diagnostic: $(cat "$work/mag.err")"
 fi
+
 # M4: the same ambiguity inside a braced static initialiser, whose text is
 # rewritten by name. It used to be emitted verbatim for `cc` to reject.
 if "$work/ct-ast" build --emit-c test/modules/ambig_global/main_init.ct -o "$work/mod-bad" \
@@ -2128,6 +2165,37 @@ mapbad sizeof_paren \
     'pub trait T { int m(); }\nmap trait T for type char * { m(s) -> malloc(sizeof(s)); }\n' \
     "map recipe takes 'sizeof s', not 'sizeof(s)'" \
     'import lib::lib;\n\nint main(void) { return 0; }\n'
+
+# Batch 41: the forwarded tail is one marker, it must be last, and it has to
+# agree with the signature on both sides -- a binding that drops it would throw
+# the actuals away silently (the very bug the lower-bound check closes).
+mapbad_batch='batch 41'
+mapbad tail_not_last_param \
+    'pub trait T { int m(char *f, ...); }\nmap trait T for namespace lib { m(..., f) -> printf(f); }\n' \
+    "'...' must be the last binding parameter"
+mapbad tail_not_last_recipe \
+    'pub trait T { int m(char *f, ...); }\nmap trait T for namespace lib { m(f, ...) -> printf(..., f); }\n' \
+    "'...' must be the last recipe argument"
+mapbad tail_unbound \
+    'pub trait T { int m(char *f); }\nmap trait T for namespace lib { m(f) -> printf(f, ...); }\n' \
+    "a map recipe uses '...' but the binding has no variadic tail"
+mapbad tail_missing \
+    'pub trait T { int m(char *f, ...); }\nmap trait T for namespace lib { m(f) -> printf(f); }\n' \
+    "a variadic trait method must forward '...' in its binding"
+mapbad tail_undeclared \
+    'pub trait T { int m(char *f); }\nmap trait T for namespace lib { m(f, ...) -> printf(f, ...); }\n' \
+    "this binding forwards '...' but the trait method is not variadic"
+mapbad tail_nonstatic \
+    'pub trait T { int m(); }\nmap trait T for namespace lib { m() -> rand(); }\n' \
+    'a trait method cannot be variadic' \
+    'import lib::lib;\ntrait P { int m(int a, ...); }\nint main(void) { return 0; }\n'
+# Two traits bound to one namespace host may both answer `get`; a bare
+# `lib::get(...)` has no way to choose, so the message names both.
+mapbad bare_ambiguous \
+    'pub trait T { int get(char *n); }\npub trait U { int get(char *n); }\nmap trait T for namespace lib { get(n) -> atoi(n); }\nmap trait U for namespace lib { get(n) -> atoi(n); }\n' \
+    "'get' is ambiguous on 'lib': bound by lib_T and lib_U" \
+    'import lib::lib;\n\nint main(void) { return lib::get("1"); }\n'
+mapbad_batch='batch 38'
 
 mapbad_batch='batch 42'
 # Type aliases in a `.m.ct` unit: `pub` is mandatory, and the declaration

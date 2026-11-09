@@ -1,11 +1,11 @@
-import Uart;
-import Gpio;
-import Clock;
-import Log;
+import hal::Uart;
+import hal::Gpio;
+import hal::Clock;
+import hal::Log;
 import PosixHal;
-import clib::String;
-import clib::Stdio;
-import clib::Math;
+import std::io::Io;
+import std::str::String;
+import std::math::Math;
 
 int main(void)
 {
@@ -13,6 +13,7 @@ int main(void)
     Gpio g;
     Clock c;
     Log l;
+    char *s;
     int t1;
     int t2;
 
@@ -27,20 +28,21 @@ int main(void)
        goes first so the output order does not depend on stdio buffering. */
     u.send("hal\n", 4);
 
-    clib::Stdio.printf("strlen=%lu\n", clib::String.strlen("clib"));
-    clib::Stdio.printf("sqrt=%d\n", (int)clib::Math.sqrt(16.0));
+    s = "wave";
+    std::io::printf("strlen=%d\n", s.len());
+    std::io::printf("sqrt=%d\n", (int)std::math::Math.sqrt(16.0));
 
     g.write(3, 1);
-    clib::Stdio.printf("gpio3=%d\n", g.read(3));
+    std::io::printf("gpio3=%d\n", g.read(3));
 
     /* hal-posix anchors its clock at the first call, so t1 must be 0. Adding
        that to the monotonic check makes an "absolute uptime" regression (PKG-1)
        fail here: the same demo also runs in packages.yml on both targets. */
     t1 = c.now_ms();
     t2 = c.now_ms();
-    clib::Stdio.printf("clock=%d\n", t2 >= t1 && t1 == 0);
+    std::io::printf("clock=%d\n", t2 >= t1 && t1 == 0);
 
-    clib::Stdio.printf("uart=%d\n", u.send("", 0));
-    clib::Stdio.printf("log=%d\n", l.write("", 0));
+    std::io::printf("uart=%d\n", u.send("", 0));
+    std::io::printf("log=%d\n", l.write("", 0));
     return 0;
 }

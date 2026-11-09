@@ -30,6 +30,30 @@ hello/
 - `.m.ct`：零成本静态映射，不产 `.c` / `.h`；
 - binding 形式（`#include` 直通 + `map`）按 [bindings/README.md](../bindings/README.md)。
 
+#### 单元目录 = 命名空间
+
+单元声明了文件级命名空间，就必须坐在同名目录里：`namespace a::b;` 的单元位于 `<包根>/a/b/`。
+
+```
+acme/
+├── ct.pkg
+├── acme/
+│   ├── Uart.h.ct        # namespace acme;
+│   └── uart.m.ct        # namespace acme;
+└── examples/
+    └── main.ct          # import acme::Uart;  无 namespace，不受目录规则约束
+```
+
+- 这是编译器的既有语义（D13 方案 A：只校验、不推导）。传 `--ns-root <包根>` 时，`ct build` 对每个
+  声明了命名空间的入参单元检查目录，不符即报
+  `namespace 'a::b' does not match the directory '...'`。
+- 不带 `--ns-root` 时**不做**这项校验；`--ns-root` 只检查落在该根下的单元（根外文件静默跳过），
+  所以自检要传包根、并把包内单元都作为入参。
+- 没有 `namespace` 声明的单元不受目录规则约束（C 映射单元与 `.m.ct` shim 多属此类），它们的位置
+  只由 `import a::b::Unit` 的解析路径决定。向这类单元补命名空间会改变其导出符号，属于破坏性变更。
+- 本仓库（ct-pkg）另提供 `tools/check-layout.sh`，遍历全部包的 `*.ct`、读出命名空间并与相对目录
+  比对，可放进 CI：`tools/check-layout.sh`（或指定包根 `tools/check-layout.sh hal sqlite`）。
+
 ### 2. `ct.pkg` 的键
 
 行式清单：`key = value`，`#` 起注释，`dep` 可重复，未知键**忽略**（向前兼容）。
@@ -131,6 +155,34 @@ Source units follow "one unit, one primary type" from [AGENTS.md](../AGENTS.md) 
 - `.ct`: an ordinary implementation unit (`pub` functions), publishing no interface;
 - `.m.ct`: zero-cost static mappings, emitting no `.c` / `.h`;
 - binding form (`#include` passthrough + `map`) per [bindings/README.md](../bindings/README.md).
+
+#### Unit directory = namespace
+
+A unit that declares a file-scoped namespace must live in the matching directory: a unit with
+`namespace a::b;` sits in `<package-root>/a/b/`.
+
+```
+acme/
+├── ct.pkg
+├── acme/
+│   ├── Uart.h.ct        # namespace acme;
+│   └── uart.m.ct        # namespace acme;
+└── examples/
+    └── main.ct          # import acme::Uart;  no namespace, so no directory rule
+```
+
+- This is existing compiler semantics (D13 option A: validation, not derivation). With
+  `--ns-root <package-root>`, `ct build` checks every input unit that declares a namespace and reports
+  `namespace 'a::b' does not match the directory '...'` on a mismatch.
+- Without `--ns-root` the check does not run. `--ns-root` only inspects units that fall under the root
+  (files outside it are skipped silently), so a self-check must pass the package root and the package's
+  units as inputs.
+- Units without a `namespace` declaration are exempt (C mapping units and their `.m.ct` shims usually
+  are); their location is decided only by `import a::b::Unit` resolution. Adding a namespace to such a
+  unit would change its exported symbols, which is a breaking change.
+- This repository (ct-pkg) also ships `tools/check-layout.sh`, which walks every package's `*.ct`,
+  reads the namespace and compares it with the relative directory; it is CI-ready:
+  `tools/check-layout.sh` (or name package roots: `tools/check-layout.sh hal sqlite`).
 
 ### 2. The keys of `ct.pkg`
 

@@ -6,7 +6,7 @@
 > 与切片 S0–S7；D21-13–D21-16（第一批）、D21-1 / D21-2 / D21-4 / D21-5（第二批）、
 > D21-3 / D21-6 / D21-7 / D21-9（第三批）与 D21-10 / D21-11 / D21-12（最后一批）已于 2026-11-08 定稿；
 > D21-8 并入 D21-3、D21-17 并入 D21-14；**D21-1–D21-17 全部有结论，无待确认**）。
-> **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.2`（`CTC_VERSION` 五处一致）。
+> **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.3`（`CTC_VERSION` 五处一致）。
 > 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无语义依赖）。
 > 关联：[borrow 设计](../history/design/borrow.md)、[language-spec](../language-spec.md)、
 > [std 能力缺口](../../issues/std/std1-markdown-readiness.md)、[roadmap](../roadmap.md)。
@@ -696,7 +696,7 @@ gaps G1–G3, slices S0–S7 and option-level decisions; **D21-13–D21-16 (firs
 D21-4 / D21-5 (second batch), D21-3 / D21-6 / D21-7 / D21-9 (third batch) and D21-10 / D21-11 / D21-12
 (final batch) were finalised on 2026-11-08**; D21-8 is folded into D21-3 and D21-17 into D21-14; **all 17
 decisions are resolved** — 15 finalised, 2 folded, none pending).
-**Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at `v0.20.2`; Phases 17/18/19/20 are done,
+**Phase 21 ↔ `v0.21.x`, closing bump to `v0.21.0`.** The repo is at `v0.20.3`; Phases 17/18/19/20 are done,
 Phase 20 (package support, [phase20.md](phase20.md)) is closed and has no semantic dependency here. The gate
 count is **11**.
 

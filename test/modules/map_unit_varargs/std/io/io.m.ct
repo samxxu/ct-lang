@@ -1,0 +1,28 @@
+/* A static map is expanded at the call site, so its methods may end in `...`:
+   the recipe forwards the actuals the named parameters did not consume. The
+   namespace host keeps the format string first (`printf`), the second binding
+   shows a reordering recipe (`snprintf` wants the buffer ahead of the format),
+   and the type host lets the receiver itself be the format string. */
+#include <stdio.h>
+
+namespace std::io;
+
+pub trait Io {
+    int puts(char *s);
+    int printf(char *fmt, ...);
+    int snformat(char *buf, int cap, char *fmt, ...);
+}
+
+map trait Io for namespace std::io {
+    puts(s)                      -> puts(s);
+    printf(fmt, ...)             -> printf(fmt, ...);
+    snformat(buf, cap, fmt, ...) -> snprintf(buf, cap, fmt, ...);
+}
+
+pub trait Fmt {
+    int printf(...);
+}
+
+map trait Fmt for type char * {
+    printf(s, ...) -> printf(s, ...);
+}

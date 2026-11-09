@@ -1,6 +1,6 @@
-/* The same shape as clib's `Num.shim.h` / `Str.shim.h`: four static 32-byte
-   slots handed out round-robin, so two calls in one expression stay distinct
-   and only a fifth live result reuses the first slot. */
+/* The same shape as std::num's `Num.shim.h` / std::str's `String.shim.h`: four
+   static 32-byte slots handed out round-robin, so two calls in one expression
+   stay distinct and only a fifth live result reuses the first slot. */
 #include <stdio.h>
 #include <string.h>
 

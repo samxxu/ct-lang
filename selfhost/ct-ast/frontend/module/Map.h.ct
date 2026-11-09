@@ -32,6 +32,7 @@ pub struct MapBind {
     int  recv;                      /* 1 when the first parameter is a type-host receiver */
     int  uses[16];                  /* evaluation occurrences of each parameter in the recipe */
     int  sizeofs[16];               /* `sizeof p` occurrences (not evaluated) */
+    int  variadic;                  /* 1 when the binding list ends in `...` (static only) */
     int  line;
 }
 

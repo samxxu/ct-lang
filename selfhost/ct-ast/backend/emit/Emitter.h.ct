@@ -764,7 +764,6 @@ static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int 
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
         if (*p == ')') { p++; break; }
         if (*p == 0) return e->fail_from(at, "a map recipe must be a single call");
-        if (!first) fputs(", ", e->out);
         n = 0;
         depth = 0;
         while (*p) {
@@ -793,8 +792,23 @@ static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int 
         }
         while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\t')) n--;
         arg[n] = 0;
-        if (map_subst_arg(e, arg, m, b, actual) != 0) return -1;
-        first = 0;
+        /* `...` forwards every actual the binding parameters did not consume;
+           an empty tail emits nothing, not a dangling separator */
+        if (strcmp(arg, "...") == 0) {
+            int k, a;
+            for (k = b->nparams; (a = map_actual_at(e->arena, recv, args,
+                                                    m->type_host, k)) >= 0; k++) {
+                if (!first) fputs(", ", e->out);
+                fputc('(', e->out);
+                e->emit_expr(a);
+                fputc(')', e->out);
+                first = 0;
+            }
+        } else {
+            if (!first) fputs(", ", e->out);
+            if (map_subst_arg(e, arg, m, b, actual) != 0) return -1;
+            first = 0;
+        }
         if (*p == ',') { p++; continue; }
         if (*p == ')') { p++; break; }
         return e->fail_from(at, "a map recipe must be a single call");

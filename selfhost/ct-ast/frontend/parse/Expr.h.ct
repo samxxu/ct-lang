@@ -117,6 +117,7 @@ pub trait ExprOps {
                          int *form);
     int  record_call(const char *callee, int line);
     int  arity_check(int line, int col, const char *callee, int got, int want);
+    int  map_arity(int line, int col, const char *trait, const char *method, int got);
     int  argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi);
     /* Phase 21 S4: closure actuals fill a `(fn, env)` pair and count as two
        C arguments. */
@@ -193,6 +194,11 @@ pub struct Expr {
     int  cl_stack[16];
     int  cl_pstart[16];
     int  ncl_stack;
+    /* The map table the parser owns. A qualified call may name a namespace
+       host's method without the trait segment (`std::io::puts(...)`), and the
+       namespace/recipe pair is only known from this table. */
+    struct Map *maps;
+    int *nmaps;
 } use ExprOps;
 
 /* Argument count of a call: `parse_args` hands back the first node of the
@@ -906,6 +912,22 @@ impl ExprOps for Expr {
         return 0;
     }
 
+    /* A static map is expanded into its recipe at the call site, so an actual
+       the recipe does not name is simply dropped. A variadic method forwards
+       the tail (`...`), which turns the count into a lower bound; a fixed one
+       must match exactly. */
+    int map_arity(int line, int col, const char *trait, const char *method, int got)
+    {
+        int ti, mi, want;
+        ti = self->sym->find_trait(trait);
+        if (ti < 0) return 0;
+        for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
+            if (strcmp(self->sym->traits[ti].m[mi].name, method) == 0) break;
+        if (mi >= self->sym->traits[ti].nm) return 0;
+        want = self->sym->traits[ti].m[mi].nparams;
+        if (self->sym->traits[ti].m[mi].variadic && got >= want) return 0;
+        return self->arity_check(line, col, method, got, want);
+    }
 
     /* 19.2: the resolved signature beside the argument chain, one position at
        a time. Only a position where both sides can name a type is compared;
@@ -2253,18 +2275,20 @@ impl ExprOps for Expr {
                 if (self->arena->nodes[m].kind == N_MCALL
                     && self->arena->nodes[m].text[0]) {
                     int t = self->sym->find_trait(self->arena->nodes[m].text);
-                    if (t >= 0 && !self->sym->traits[t].is_static) {
+                    if (t >= 0) {
                         int mi;
                         for (mi = 0; mi < self->sym->traits[t].nm; mi++)
                             if (strcmp(self->sym->traits[t].m[mi].name, fname) == 0) break;
+                        /* a static recipe must still agree on the count: the
+                           surplus is only legal when the recipe forwards it */
                         if (mi < self->sym->traits[t].nm
-                            && self->arity_check(mline, mcol, fname,
-                                                 arg_count(self->arena, args),
-                                                 self->sym->traits[t].m[mi].nparams) != 0)
+                            && self->map_arity(mline, mcol, self->arena->nodes[m].text,
+                                               fname, arg_count(self->arena, args)) != 0)
                             return -1;
                         /* 19.2: the argument types against the resolved trait
                            method, same rules as a function call. */
-                        if (mi < self->sym->traits[t].nm
+                        if (!self->sym->traits[t].is_static
+                            && mi < self->sym->traits[t].nm
                             && self->argtype_check(mline, mcol, fname, args, -1, t, mi) != 0)
                             return -1;
                     }
@@ -2635,6 +2659,31 @@ impl ExprOps for Expr {
                              self->arena->nodes[n].text2);
                     snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", mname);
                     snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
+                    if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
+                                        mname, arg_count(self->arena, args)) != 0)
+                        return -1;
+                    return mn;
+                }
+                /* Q2-A: `ns::method(...)` with the trait segment elided. The
+                   qualifier is a static map's namespace host and the method name
+                   is unique (parse_qual_path checked both), so this is the same
+                   recipe call `ns::Trait.method(...)` builds above. */
+                if (qf == 4) {
+                    int mn;
+                    args = self->parse_args();
+                    if (args < 0) return -1;
+                    mn = self->sup->new_node(N_MCALL);
+                    if (mn < 0) return -1;
+                    self->arena->nodes[mn].a = -1;
+                    self->arena->nodes[mn].b = (args == 0) ? -1 : args;
+                    self->arena->nodes[mn].aux = 5;
+                    snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s",
+                             self->arena->nodes[n].text2);
+                    snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
+                    snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
+                    if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
+                                        qc, arg_count(self->arena, args)) != 0)
+                        return -1;
                     return mn;
                 }
                 /* P20-01: `Trait::method(recv, ...)` — the first actual is the
@@ -3022,6 +3071,53 @@ impl ExprOps for Expr {
                         return 0;
                     }
                 }
+                /* A static namespace-host map may be called without its trait
+                   segment: `std::io::puts(...)` names the host by namespace and
+                   the method directly. The recipe is the same one
+                   `std::io::Io.puts(...)` expands, so the emitter needs no new
+                   form; only an ambiguous method name is rejected. */
+                char host[MAX_TEXT];
+                char only[2][MAX_TEXT];
+                int hw = 0, mp, bi, hits = 0;
+                host[0] = 0;
+                for (i = 0; i < nseg - 1; i++) {
+                    if (i > 0) {
+                        if (hw + 2 >= (int)sizeof host)
+                            return self->sup->fail("qualified name is too long");
+                        host[hw] = ':';
+                        host[hw + 1] = ':';
+                        hw += 2;
+                        host[hw] = 0;
+                    }
+                    if (hw + (int)strlen(seg[i]) >= (int)sizeof host)
+                        return self->sup->fail("qualified name is too long");
+                    snprintf(host + hw, sizeof host - (size_t)hw, "%s", seg[i]);
+                    hw += (int)strlen(seg[i]);
+                }
+                for (mp = 0; mp < *self->nmaps; mp++) {
+                    if (!self->maps[mp].is_static || !self->maps[mp].ns_host)
+                        continue;
+                    if (strcmp(self->maps[mp].inst, host) != 0) continue;
+                    for (bi = 0; bi < self->maps[mp].nb; bi++) {
+                        if (strcmp(self->maps[mp].b[bi].method, seg[nseg - 1]) != 0) continue;
+                        if (hits < 2)
+                            snprintf(only[hits], MAX_TEXT, "%s", self->maps[mp].trait);
+                        hits++;
+                    }
+                }
+                if (hits > 1) {
+                    char m[MAX_TEXT * 2];
+                    snprintf(m, sizeof m, "'%s' is ambiguous on '%s': bound by %s and %s",
+                             seg[nseg - 1], host, only[0], only[1]);
+                    return self->sup->fail(m);
+                }
+                if (hits == 1) {
+                    snprintf(name, (size_t)ncap, "%s", only[0]);
+                    snprintf(cname, (size_t)ccap, "%s", seg[nseg - 1]);
+                    snprintf(qpath, (size_t)qcap, "%s", host);
+                    *form = 4;
+                    return 0;
+                }
                 return self->sup->fail("no function of that name in that namespace");
             }
             snprintf(cname, (size_t)ccap, "%s", self->sym->funcs[fi].cname);
@@ -3150,8 +3246,8 @@ static struct Expr g_expr;
 
 /* Only primitives cross the unit boundary (a generated header carries no
    #include, so the collaborators arrive as `void *` and are cast here). */
-pub void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls);
-void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls)
+pub void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls, void *maps, void *nmaps);
+void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls, void *maps, void *nmaps)
 {
     g_expr.arena = (struct Arena *)arena;
     g_expr.lex = (struct Lexer *)lex;
@@ -3160,6 +3256,8 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.cur_func = (char *)cur_func;
     g_expr.calls = (struct Call *)calls;
     g_expr.ncalls = (int *)ncalls;
+    g_expr.maps = (struct Map *)maps;
+    g_expr.nmaps = (int *)nmaps;
     g_expr.postfix_seed = -1;
 }
 

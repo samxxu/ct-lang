@@ -108,6 +108,7 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
     char msg[MAX_TEXT];
     const char *p;
     int depth, n, i, seen_callee, member, after_type, after_sizeof, after_inc, inc;
+    int seen_ellipsis;
 
     (void)m;
     p = b->call;
@@ -148,6 +149,7 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
     }
     prev[0] = 0;
     seen_callee = 0;
+    seen_ellipsis = 0;
     p = b->call;
     while (*p) {
         /* keep the last significant token for the context tests below */
@@ -161,6 +163,22 @@ static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBin
             if (*p) p++;
             prev[0] = '?';
             prev[1] = 0;
+            continue;
+        }
+        /* the forwarded tail: it must be the last argument, so no named
+           parameter (and no other expression) can follow it */
+        if (*p == '.' && *(p + 1) == '.' && *(p + 2) == '.') {
+            const char *r = p + 3;
+            if (!b->variadic)
+                return self->sup->fail("a map recipe uses '...' but the binding has no variadic tail");
+            if (seen_ellipsis)
+                return self->sup->fail("a map recipe forwards '...' once");
+            while (*r == ' ' || *r == '\t' || *r == '\n' || *r == '\r') r++;
+            if (*r != ')')
+                return self->sup->fail("'...' must be the last recipe argument");
+            seen_ellipsis = 1;
+            snprintf(prev, sizeof prev, "...");
+            p += 3;
             continue;
         }
         if (*p == '+' && *(p + 1) == '+') {
@@ -699,8 +717,19 @@ impl MapBuildOps for MapBuild {
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             np = 0;
+            b->variadic = 0;
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
                 for (;;) {
+                    /* a trailing `...` forwards the rest of the call verbatim:
+                       the recipe names it as `...` and the emitter splices the
+                       actuals the named parameters did not consume */
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0) {
+                        b->variadic = 1;
+                        self->sup->lex_next();
+                        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0))
+                            return self->sup->fail("'...' must be the last binding parameter");
+                        break;
+                    }
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
                     if (np >= MAX_PARAMS) return self->sup->fail("too many map parameters");
                     snprintf(b->params[np], MAX_TEXT, "%s", self->lex->toktext);
@@ -730,6 +759,13 @@ impl MapBuildOps for MapBuild {
                              b->method, np, self->sym->traits[ti].m[mi].nparams);
                 return self->sup->fail(msg);
             }
+            /* the tail marker and the signature must agree: without `...` the
+               recipe would drop the extra actuals silently, and a fixed method
+               has no slot to receive them */
+            if (b->variadic && !self->sym->traits[ti].m[mi].variadic)
+                return self->sup->fail("this binding forwards '...' but the trait method is not variadic");
+            if (!b->variadic && self->sym->traits[ti].m[mi].variadic)
+                return self->sup->fail("a variadic trait method must forward '...' in its binding");
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "->") == 0))
                 return self->sup->fail("expected '->'");
             /* Capture the RHS verbatim from self->lex->pos: no lex_next has run since the

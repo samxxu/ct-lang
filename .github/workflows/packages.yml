@@ -38,9 +38,16 @@ env:
   CC: gcc
 
 jobs:
-  # Host half: bootstrap ct, fetch the index, resolve hal-posix + clib, then run
+  # Host half: bootstrap ct, fetch the index, resolve hal-posix + std, then run
   # the command `ct install` prints and compare the demo's output.
+  #
+  # TODO(version-reset, 2026-11-06): the demo now imports `std` instead of the
+  # deleted `clib`, but `std` and `hal-posix` have no `v0.1.0` tag or index row
+  # yet -- the 1.x line was withdrawn and `ct-pkg/index` is empty. `ct get std`
+  # fails until both are re-tagged, so this job is paused with `if: false`.
+  # Remove that line (and this note) once the 0.1.0 releases are in the index.
   host:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,10 +76,10 @@ jobs:
           cp "$GITHUB_WORKSPACE/examples/wave1-demo/src/main.ct" .
           printf 'name = wave1-demo\nversion = 0.1.0\n' > ct.pkg
           ct get --index "$CT_INDEX" hal-posix
-          ct get --index "$CT_INDEX" clib
+          ct get --index "$CT_INDEX" std
           ct update
           test "$(wc -l <ct.lock)" -eq 3
-          grep -q '^hal-posix 1.0.1 ' ct.lock
+          grep -q '^hal-posix 0.1.0 ' ct.lock
           ct verify
           ct install >install.txt
           sh install.txt
@@ -81,7 +88,11 @@ jobs:
 
   # Target half: the same sources under aarch64-linux-gnu-gcc, run under
   # qemu-aarch64. This is the Linux aarch64 leg of the 18.4 exit.
+  #
+  # TODO(version-reset, 2026-11-06): paused for the same reason as `host` --
+  # `std` has no published v0.1.0 yet. Remove `if: false` with the releases.
   target-aarch64:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,10 +126,10 @@ jobs:
           cp "$GITHUB_WORKSPACE/examples/wave1-demo/src/main.ct" .
           printf 'name = wave1-demo\nversion = 0.1.0\n' > ct.pkg
           ct get --index "$CT_INDEX" hal-posix
-          ct get --index "$CT_INDEX" clib
+          ct get --index "$CT_INDEX" std
           ct update
           test "$(wc -l <ct.lock)" -eq 3
-          grep -q '^hal-posix 1.0.1 ' ct.lock
+          grep -q '^hal-posix 0.1.0 ' ct.lock
           ct verify
 
       - name: build and run with the aarch64 compiler

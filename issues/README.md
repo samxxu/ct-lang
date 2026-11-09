@@ -1094,7 +1094,7 @@ SH-47（已修，作为 SH-53 的文案范式）、STD-1（std 应用层缺口�
 
 ### 未验证范围
 
-自举 6.44s 未复跑；`ct-radio` 的行为 harness 属外部项目；`ct-pkg/hal` / `hal-posix` / `clib`
+自举 6.44s 未复跑；`ct-radio` 的行为 harness 属外部项目；`ct-pkg/hal` / `hal-posix` / `std`
 不在本仓库；探针只覆盖 macOS + Apple clang。
 
 ## 第三方评估复核（2026-11-03，`v0.19.0`，锚点 `4b9946b`）

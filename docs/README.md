@@ -29,7 +29,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 阶段总览、已定决策、版本记录与验收标准 |
-| [design/phase18.md](design/phase18.md) | 当前阶段的计划（生态建设：包规范 / 索引与 CI / `hal` 契约 / 平台包 / C 映射） |
+| [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) | 规划中的阶段计划：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围语法；已完成的 phase17–19 计划仍在 `design/` 下 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 
@@ -78,7 +78,7 @@
 | Document | Content |
 | --- | --- |
 | [roadmap.md](roadmap.md) | phase overview, decided questions, version record and exit criteria |
-| [design/phase18.md](design/phase18.md) | the current phase plan (ecosystem: package conventions / index and CI / the `hal` contract / platform package / C mappings) |
+| [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) | the planned phase plans (package support / non-escaping closures / `loop` sugar); the completed phase17–19 plans remain under `design/` |
 | [../issues/README.md](../issues/README.md) | the review ledger (one file per finding, with status and disposition) |
 | [history/README.md](history/README.md) | the history index: closed design records and review reports |
 

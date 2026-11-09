@@ -1,0 +1,7 @@
+type 4 5
+ns-puts
+ns-zero
+ns-one 1
+ns-three 1 2 3
+ns-six 1 2 3 4 5 6
+7/9 one

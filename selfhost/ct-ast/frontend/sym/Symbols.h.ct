@@ -159,6 +159,10 @@ pub struct MethodSig {
     char ret[160];
     char ptype[16][160];
     int  nparams;
+    /* A `.m.ct` trait has no vtable slot, so its signature may end in `...`:
+       the map recipe forwards the rest of the call verbatim. A real trait keeps
+       this 0 -- its vtable slot is a fixed function-pointer type (batch 13). */
+    int  variadic;
     /* A default body (`{ … }` after the signature): the N_BLOCK's index and
        the N_PARAM chain that names its parameters. Both are -1 for an abstract
        method, whose body the adopting impl must write. `line` is where the

@@ -1988,8 +1988,21 @@ impl ParseOps for Parser {
                 snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
             }
             np = 0;
+            self->sym->traits[ti].m[mi].variadic = 0;
             if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
                 for (;;) {
+                    /* a static map is expanded at the call site, so its
+                       signature may end in `...`; a real trait keeps the fixed
+                       vtable slot and stays non-variadic */
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0) {
+                        if (!self->unit_is_map)
+                            return self->sup->fail("a trait method cannot be variadic");
+                        self->sym->traits[ti].m[mi].variadic = 1;
+                        self->sup->lex_next();
+                        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0))
+                            return self->sup->fail("'...' must be the last parameter");
+                        break;
+                    }
                     /* a `borrow` annotation is not part of the vtable
                        signature: it only marks the parameter in `vars[]` when
                        the default body declares it (parse_trait_body) */
@@ -2368,7 +2381,8 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
                      &g_parse.unit_is_map);
     /* the expression chain: it reads the same cursor and primitives, and writes
        the call table and the current-function name this unit owns */
-    ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, g_parse.calls, &g_parse.ncalls);
+    ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, g_parse.calls, &g_parse.ncalls,
+                 g_parse.maps, &g_parse.nmaps);
     g_parse.ex = expr_get();
     /* the statement layer reads the same cursor and tables and writes nodes
        through the same primitives */

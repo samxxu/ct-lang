@@ -206,9 +206,9 @@
 | 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44） |
 | vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct build -I vendor/<name>` 使用它 |
 | 最小版本选择（MVS） | `ct get` | 每个依赖取满足所有范围的最低版本；无 tag 的 git 源回退默认分支 HEAD（D23） |
-| 契约包（contract package） | `ct-pkg/hal` | 只有 `pub trait` 声明的纯 `.h.ct` 包（`Uart` / `Gpio` / `Clock` / `Log`），不含实现；平台包按它提供实现（Phase 18.3，`hal 1.0.0` 冻结） |
+| 契约包（contract package） | `ct-pkg/hal` | 只有 `pub trait` 声明的纯 `.h.ct` 包（`Uart` / `Gpio` / `Clock` / `Log`），不含实现；平台包按它提供实现（Phase 18.3，`hal 0.1.0`） |
 | 平台包（platform package） | `ct-pkg/hal-posix` | binding 形式（`#include` 直通 + 镜像 trait/struct + 全局实例 + `map`）实现契约包；一份源码覆盖 macOS / Linux，`ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`（glibc 在 `-std=c99` 下隐藏 POSIX 声明；生成头先于源码 PP 行输出，故只能走 cc 命令行）。一个 `posix_hal` 实例可装箱成四个 trait（Phase 18.4） |
-| C 映射包（C-mapping package） | `ct-pkg/clib` | `.m.ct` 零成本静态映射到 libc（`clib::String` / `clib::Stdio` / `clib::Math`）：调用点展开为普通 C 调用，无 wrapper / `_iface` / vtable；`ldflags = -lm` 由 `ct install` 拼进命令（Phase 18.5） |
+| C 映射包（C-mapping package） | `ct-pkg/std` | `.m.ct` 零成本静态映射到 libc（`std::str` / `std::io` / `std::math`）：调用点展开为普通 C 调用，无 wrapper / `_iface` / vtable；变参 `printf` 走 `std::io::printf`（`.h.ct` 里用 `va_list` 转发），`ldflags = -lm` 由 `ct install` 拼进命令 |
 | 索引仓库（index repository） | `ct-pkg/index` | 托管五字段纯文本 `index`；`tools/gen-index.sh` 按 `ct` 的同一摘要算法计算 `sha256`，`tools/refresh-index.sh` 取各包最高 tag 后重建，夜间 workflow 提交差异（Phase 18.2） |
 
 ### 8. 许可

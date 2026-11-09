@@ -945,9 +945,12 @@ static int sum_all(int n, ...) {
   它的类型就是括号里写的类型，因此可以直接参与运算或赋给同类型变量。
 - `va_start` / `va_end` 是普通调用：ct 不声明它们，与 `printf` 一样按未知被调函数发射，
   由源文件的 `#include <stdarg.h>` 提供声明。
-- trait 方法不能变参：`impl` 里出现 `...` 报 `a trait method cannot be variadic`
+- 普通 trait 的方法不能变参：`impl` 里出现 `...` 报 `a trait method cannot be variadic`
   （vtable 槽位是固定的函数指针类型）；trait 声明本身也不接受 `...`，会在参数位置报
-  `expected a type`。
+  `expected a type`。**例外**是 `.m.ct` 里的静态 trait：它没有 vtable 槽位，方法签名可以以
+  `...` 结尾，对应 map recipe 也必须带 `...` 把其余实参原样转发（缺任一侧分别报
+  `a variadic trait method must forward '...' in its binding` /
+  `this binding forwards '...' but the trait method is not variadic`）。
 
 #### 4.23 内置类型词与 `inline`（ct-ast）
 
@@ -1756,7 +1759,8 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 - **闭包**（Phase 21，仅 ct-ast）的限制是语言规则，不是实现缺口：不能进 `.h.ct`、不能作返回值 /
   字段 / 元素、闭包变量只能调用不能搬走、`qsort` 类无 env 槽的 C API 接不了；另有 E8 / E9
   两个未防护面。见 §4.44 与 [closure-conventions.md](closure-conventions.md)。
-- **「方法调用当接收者」两侧不一致**（留待 Phase 24）：类型宿主（§4.10）接受任意静态类型已知的
+- **「方法调用当接收者」两侧不一致**（原记「留待 Phase 24」；Phase 24 已定为**数组 range 初值**，
+  本项改记「留待后续未编号阶段」）：类型宿主（§4.10）接受任意静态类型已知的
   接收者，包括方法调用结果（`s.trim().len()`）；动态派发（impl）当前拒绝接收者本身是方法调用的
   形态（`a.m().n()`），只接受变量 / 元素 / 调用 / 字段链。这是两条 lowering 的差异，不是设计意图；
   本轮只收紧类型宿主侧的误判，未放宽 impl 侧。
@@ -2536,14 +2540,6 @@ Two host forms:
   parameter more than the method. In `value.m(args)` the receiver's static type is compared as
   normalized text (arrays decay to an element pointer first), and a hit substitutes `recv` with the
   receiver expression. Ordinary struct / interface methods win; the type host is only a fallback
-  when that lookup fails, and several candidates are ambiguous.
-- **A qualified call disambiguates same-type mappings** (P20-01): when two packages bind the same
-  method to one host type (both bind `len` to `char *`), an unqualified `value.m(args)` reports the
-  ambiguity; `a::ALen::len(value, args)` keeps only that trait's map. The qualifier joins like symbol
-  names (`a::ALen` -> `a_ALen`) and its last segment must be a method of that static trait, so a
-  namespace function of the same name is not hijacked. The first actual is the receiver, with the
-  same rules as `value.len(args)` (arrays decay first). The ambiguity diagnostic leads with both
-  spellings.
   when that lookup fails, and several candidates are ambiguous. The receiver's spelling and the
   `for type` host both expand type aliases (§4.42) *before* this comparison, so an alias and its
   underlying spelling are one host. The receiver may be any expression whose **static type is known** —
@@ -3019,9 +3015,13 @@ static int sum_all(int n, ...) {
   can feed arithmetic or a variable of that type directly.
 - `va_start` / `va_end` are ordinary calls: ct does not declare them, so they are emitted like
   `printf` — as an unknown callee — and the source's `#include <stdarg.h>` supplies the declarations.
-- A trait method cannot be variadic: `...` inside an `impl` reports
+- An ordinary trait method cannot be variadic: `...` inside an `impl` reports
   `a trait method cannot be variadic` (a vtable slot is a fixed function-pointer type), and a trait
   declaration does not accept `...` either — it reports `expected a type` at the parameter position.
+  The exception is a `.m.ct` static trait: it has no vtable slot, so its signature may end in `...`,
+  and the matching map recipe must also carry `...` to forward the rest verbatim (a missing side
+  reports `a variadic trait method must forward '...' in its binding` or
+  `this binding forwards '...' but the trait method is not variadic`).
 
 #### 4.23 Built-in type words and `inline` (ct-ast)
 
@@ -3943,7 +3943,8 @@ pick the first occurrence and leave the later definition unreachable.
   they cannot enter a `.h.ct`, cannot be a return value / field / element, a closure variable can be
   called but not moved, and `qsort`-style C APIs with no env slot cannot take one. The E8 / E9 holes
   are also unguarded. See §4.44 and [closure-conventions.md](closure-conventions.md).
-- **The two lowerings disagree on a method call as receiver** (left to Phase 24): a type host (§4.10)
+- **The two lowerings disagree on a method call as receiver** (originally noted as 'left to Phase 24';
+  Phase 24 is now array range initializers, so this is left to a later, unnumbered phase): a type host (§4.10)
   accepts any receiver whose static type is known, a method call's result included
   (`s.trim().len()`); dynamic dispatch (impl) currently rejects a receiver that is itself a method call
   (`a.m().n()`) and accepts only a variable / element / call / field chain. This is a difference between
