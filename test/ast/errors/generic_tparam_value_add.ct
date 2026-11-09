@@ -1,0 +1,12 @@
+/* SH-64: the same for `+`: `sizeof T` is a type operand, the trailing `T` is a
+   value and must be a hard error rather than an undeclared emitted name. */
+int leak<T>(T x)
+{
+    (void)x;
+    return (int)(sizeof T + T);
+}
+
+int main(void)
+{
+    return leak<int>(0);
+}

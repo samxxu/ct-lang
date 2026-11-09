@@ -1,0 +1,17 @@
+/* SH-64: the same identifier fallback reaches an argument position. `h(T)`
+   passed the type parameter as a value and only `cc` saw the leak. */
+static int h(int v)
+{
+    return v;
+}
+
+int leak<T>(T x)
+{
+    (void)x;
+    return h(T);
+}
+
+int main(void)
+{
+    return leak<int>(0);
+}

@@ -411,18 +411,24 @@ if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/
 fi
 ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 
-# Phase 26 (SH-62, reopened): the systemic defence. A type parameter must be
-# gone from the emitted C -- an instance substitutes it -- so a residual `T` is
-# by definition an undeclared identifier that only `cc` would report. SH-62
-# slipped past twice exactly that way (exit 0, `sizeof(T)` in the artefact), so
-# the gate now scans the product itself. The only legal survivor is a tag
-# (`struct T` / `union T` / `enum T`), which names a user type. The fixtures'
-# own declarations feed the scan, so a new generic fixture is covered without
-# another line here.
+# Phase 26 (SH-62 / SH-64): the systemic defence. A type parameter must be gone
+# from an emitted instance -- an instance substitutes it -- so a residual `T`
+# there is by definition an undeclared identifier that only `cc` would report.
+# The scan is limited to the instance bodies (`<name>__ctN`), because a fixture
+# may legitimately declare its own value named `T` outside a template; scanning
+# the whole file would call that a leak (false positive). The only legal
+# survivor inside an instance is a tag (`struct T` / `union T` / `enum T`).
+# The fixtures' own declarations feed the scan, so a new generic fixture is
+# covered without another line here. Blind spots (not instance bodies): `.h`
+# products, `test/ast/errors/`, module build outputs and the corpus -- see
+# docs/design/phase26.md §2.7.
 tparam_residue() {
+    bodies=$(awk '/__ct[0-9]+\(.*\{/ { inb = 1 }
+                  inb { print }
+                  inb && /^\}/ { inb = 0 }' "$2")
     for tp in $(sed -n 's/^[A-Za-z_][A-Za-z0-9_ \t*]*<\([A-Za-z_][A-Za-z0-9_]*\)>[[:space:]]*(.*/\1/p' "$1" | sort -u); do
-        total=$(grep -oE "\b$tp\b" "$2" | wc -l | tr -d ' ')
-        tags=$(grep -oE "\b(struct|union|enum)[[:space:]]+$tp\b" "$2" | wc -l | tr -d ' ')
+        total=$(printf '%s\n' "$bodies" | grep -oE "\b$tp\b" | wc -l | tr -d ' ')
+        tags=$(printf '%s\n' "$bodies" | grep -oE "\b(struct|union|enum)[[:space:]]+$tp\b" | wc -l | tr -d ' ')
         if [ "$total" -gt "$tags" ]; then
             printf '%s(%s) ' "$tp" "$((total - tags))"
         fi
@@ -1313,6 +1319,14 @@ p26_diag generic_too_many 76:80 "too many generic instances in this unit"
 # `_Generic` is copied verbatim; a type parameter inside it would leak into the
 # emitted C. SH-62 requires a hard error, never an exit-0 bad product.
 p26_diag generic_generic_selector 7:24 "type parameter cannot be used inside _Generic"
+# SH-64: a type parameter is never a value. Each of the four identifier shapes
+# used to exit 0 and emit the bare `T`; the guard sits at the shared entry of
+# the identifier branch, so argument, return, `sizeof T * T` and
+# `sizeof T + T` all report the same diagnostic and position.
+p26_diag generic_tparam_value_return 6:13 "type parameter 'T' cannot be used as a value"
+p26_diag generic_tparam_value_arg 11:15 "type parameter 'T' cannot be used as a value"
+p26_diag generic_tparam_value_mul 6:30 "type parameter 'T' cannot be used as a value"
+p26_diag generic_tparam_value_add 6:30 "type parameter 'T' cannot be used as a value"
 
 # E8: `ct check` shares the parser diagnostics, so the same fixtures fail
 # in check mode with the same wording (no separate check channel).
@@ -1333,6 +1347,10 @@ p26_chk generic_void_arg "'void' cannot be a generic type argument"
 p26_chk generic_recursive "recursive generic calls are not supported"
 p26_chk generic_too_many "too many generic instances in this unit"
 p26_chk generic_generic_selector "type parameter cannot be used inside _Generic"
+p26_chk generic_tparam_value_return "type parameter 'T' cannot be used as a value"
+p26_chk generic_tparam_value_arg "type parameter 'T' cannot be used as a value"
+p26_chk generic_tparam_value_mul "type parameter 'T' cannot be used as a value"
+p26_chk generic_tparam_value_add "type parameter 'T' cannot be used as a value"
 
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host

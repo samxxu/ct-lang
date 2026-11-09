@@ -1,0 +1,12 @@
+/* SH-64: `sizeof T` now takes the type, but the right operand of `*` is a
+   value position: the trailing `T` must not reach the generated C. */
+int leak<T>(T x)
+{
+    (void)x;
+    return (int)(sizeof T * T);
+}
+
+int main(void)
+{
+    return leak<int>(0);
+}

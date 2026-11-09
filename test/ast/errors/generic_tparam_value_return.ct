@@ -1,0 +1,12 @@
+/* SH-64: a type parameter is a type, never a value. `return T;` used to exit 0
+   and emit the raw `T`, which only `cc` rejected as an undeclared name. */
+int leak<T>(T x)
+{
+    (void)x;
+    return T;
+}
+
+int main(void)
+{
+    return leak<int>(0);
+}
