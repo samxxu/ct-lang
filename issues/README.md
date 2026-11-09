@@ -120,7 +120,11 @@
   括号形式的六类类型位置已修，但无括号 `sizeof T` 仍退出 0 并发射未声明 `T`，门禁也无对应夹具；
   证据见各条「评审复核」段与 [review-phase26](../docs/history/reports/review-phase26.md) §11。
   同日第二轮修复（`v0.26.2`）：SH-62 / TEST-17 根因修复 + 产物层 `tparam_residue()` 防线 + `_Generic`
-  标签放行，两条均置 `fixed`，`verified` 留给评审。
+  标签放行。**评审核复（`v0.26.2` / `5b43fac`，2026-11-09）：SH-62 / TEST-17 均 `verified`**——
+  无括号 `sizeof T` / `_Alignof T` / `alignof T` / `sizeof T * 2` / `sizeof(T) + sizeof T` 全部真替换，
+  817 数字属实，128 与 `tparam_residue()` 均经旧基线/变异验证。同时发现**新 P1 [SH-64](selfhost/sh64-generic-tparam-value-position.md)**：
+  类型参数出现在**值**位置（`return T;` / `h(T)` / `sizeof T * T`）仍退出 0 发射裸 `T`，
+  故 Phase 26 **仍未收口**；详见 [review-phase26](../docs/history/reports/review-phase26.md) §12。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -224,7 +228,7 @@
 | TEST-14 | Low | `check-semantics.sh` 的失败信息取 `$?` 于 `&&` 链之后（拿到的是 `[ -s ]` 的状态）；compile 不变性只探了歧义一类 | [test14-check-gate-exit-status-capture.md](testing/test14-check-gate-exit-status-capture.md) |
 | TEST-15 | Low | docs 门禁只覆盖中文 phase 表，且不扫 `ci.yml` | [test15-docs-gate-phase-english.md](testing/test15-docs-gate-phase-english.md) |
 | TEST-16 | Medium | `ct check` 的 `import` 拒绝无回归断言 | [test16-check-import-no-guard.md](testing/test16-check-import-no-guard.md) |
-| TEST-17 | High | Phase 26 夹具只覆盖返回/形参替换；`(T)` / `sizeof(T)` / `offsetof` / 去重 / 容量 / 命名回退无断言（已修，`f5f1092`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 + 128 夹具 + `tparam_residue()` 防线，置 `fixed`） | [test17-phase26-generic-coverage-gap.md](testing/test17-phase26-generic-coverage-gap.md) |
+| TEST-17 | High | Phase 26 夹具只覆盖返回/形参替换；`(T)` / `sizeof(T)` / `offsetof` / 去重 / 容量 / 命名回退无断言（已修，`f5f1092`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 + 128 夹具 + `tparam_residue()` 防线；复核 `verified`，盲区见条目） | [test17-phase26-generic-coverage-gap.md](testing/test17-phase26-generic-coverage-gap.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -303,8 +307,9 @@
 | SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
 | SH-60 | **High** | 静态映射调用点缺少实参类型检查（**open**，并入 Phase 25 / 25.1；顶层 const 接收者待 D-60-1，声明点未知类型 deferred 待 D-60-2） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
 | SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
-| SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 `tok_is_type_name()` + 无括号形态，置 `fixed`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
+| SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 `tok_is_type_name()` + 无括号形态；复核 `verified`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
 | SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `verified`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |
+| SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam` | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 

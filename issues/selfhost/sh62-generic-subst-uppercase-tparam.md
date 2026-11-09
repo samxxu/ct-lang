@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）** |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1684-L1694)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2082-L2083)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2095)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2109-L2110)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2767)、[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2995-L3037) |
-| 状态 | **fixed**（2026-11-09，`v0.26.2`：无括号类型操作数统一走 `tok_is_type_name()`，`sizeof T` / `_Alignof T` / `alignof(T)` 全部真替换；见「修复（`v0.26.2`）」） |
+| 状态 | **verified**（2026-11-09 评审复核，`v0.26.2` / `5b43fac`：无括号 `sizeof T` / `_Alignof T` / `alignof T` / `sizeof T * 2` / `sizeof(T) + sizeof T` 全部真替换；值位置的同族漏洞另立 [SH-64](sh64-generic-tparam-value-position.md)） |
 
 ## 现象
 
@@ -220,3 +220,30 @@ cannot be used inside _Generic`）。这是安全方向的过度拒绝（标签�
 不新增 `ok` 条数）。分支矩阵与防线规则见 `docs/design/phase26.md` §2.6 / §6.3.1。
 
 `verified` 留给独立评审。
+
+## 评审复核（`v0.26.2` / `5b43fac`，2026-11-09）
+
+结论：**verified**（本条范围：无括号类型操作数）。
+
+```console
+$ /tmp/p262/b/ct-ast -v
+ct-ast v0.26.2
+$ /tmp/p262/b/ct-ast probe/operands.ct -o out/operands.c; echo ct=$?
+ct=0
+$ grep -nE 'sizeof|_Alignof' out/operands.c
+16:    return (int)(sizeof(int));
+20:    return (int)(_Alignof(int));
+24:    return ((int)(sizeof(int)) * 2);
+28:    return (int)((sizeof(int) + sizeof(int)));
+$ cc -Wall -Wextra -std=c99 out/operands.c -o out/operands && ./out/operands
+4 4 8 8
+```
+
+标签形式：`sizeof struct T` / `_Alignof(struct T)` → `sizeof(struct T)` / `_Alignof(struct T)`，运行 `4 4`；
+无括号 `alignof T` → `alignof(int)`。128 夹具在 `v0.26.1` 基线红
+（`16:26: error: _Alignof needs a type in parentheses`），在 `v0.26.2` 绿；把 `tok_is_type_name()`
+分支变异掉后同样红。126 的 `_Generic(..., struct T: …)` 在 `v0.26.1` 红、`v0.26.2` 绿。
+
+**同族残余另立 [SH-64](sh64-generic-tparam-value-position.md)**：类型参数出现在**值**位置
+（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 并发射裸 `T`；
+那是 `parse_primary` 的 ALL_CAPS 兜底，不属于本条接受的类型位，故不在本条重开。

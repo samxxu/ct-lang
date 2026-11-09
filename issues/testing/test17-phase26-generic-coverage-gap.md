@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）**（门禁全绿但放过了 SH-62 的静默坏产物） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [check-ast.sh](../../selfhost/check-ast.sh#L1159-L1222)、[123/prog.ct](../../test/ast/123_generic_identity/prog.ct)、[124/prog.ct](../../test/ast/124_generic_struct/prog.ct) |
-| 状态 | **fixed**（2026-11-09，`v0.26.2`：新增 128 覆盖无括号形态，并在门禁加产物层 `tparam_residue()` 系统性防线，见「修复（`v0.26.2`）」） |
+| 状态 | **verified**（2026-11-09 评审复核，`v0.26.2` / `5b43fac`：128 与产物层 `tparam_residue()` 均属实，817 数字核实；盲区见「评审复核」） |
 
 ## 现象
 
@@ -155,3 +155,30 @@ prog.ct:22:31: error: type parameter cannot be used inside _Generic   # 退出 1
 不新增 `ok` 条数）。`check-all.sh` 见同轮发布记录。
 
 `verified` 留给独立评审。
+
+## 评审复核（`v0.26.2` / `5b43fac`，2026-11-09）
+
+结论：**verified**（产物层防线已系统化；盲区如实记录，不阻断本条）。
+
+- 数字：评审方独立 `bash selfhost/check-ast.sh` → `== summary: 817 passed, 0 failed ==`（`EXIT=0`）；
+  `bash selfhost/check-all.sh` → `check-all: OK (11 hard gates green)`，同一日志内 check-ast 也是 817。
+- 红绿证明（旧基线 + 变异）：128 在 `v0.26.1` 红（`16:26: error: _Alignof needs a type in parentheses`）、
+  `v0.26.2` 绿；把 `tok_is_type_name()` 分支变异掉后重编，128 同样红。126 的
+  `_Generic(..., struct T: …)` 在 `v0.26.1` 红、`v0.26.2` 绿。
+- `tparam_residue()` 实测有效：`v0.26.1` 的 `sizeof(T)` 产物 → `T(1)`（门禁会红）；
+  `v0.26.2` 的 128 / 126 产物 → 空（放行）；126 的 7 处 `T` 全部是 `struct T`，
+  去掉标签豁免就会误红，说明豁免是载荷性的。
+- 可检出的值位置残留：`leak1`（`return T;`）、`leak2`（`sizeof T * T`）、`leak4`（`h(T)`）
+  的产物都被判 `T(1)`。
+
+**盲区（P2，记录在案）**：
+
+1. 非泛型夹具不扫描（源码没有 `<TP>` 声明，提取为空）；未声明标识符由门禁的 `cc` 编译兜底。
+2. 全文本计数会在“类型参数名与既有标识符/宏/字符串重名”时**误报**：`int T = 5;` + `f<T>` 的产物
+   判 `T(2)`，但 `cc` 0 且运行输出 `5 4`；`#define T 42`、`printf("T=…")` 同样会误红。
+3. 只扫 `test/ast/*/` 单文件夹具的 `.c`；`.h`、`test/ast/errors/*`、module/build 产物不扫；
+   imported `.h.ct` 里的泛型声明不在被扫源码内，提取不到参数名。
+4. 提取依赖单行出现 `<TP>(`；当前 `f<T>(` 行内形态可命中，跨行且函数名与 `<` 分离的变体需复核。
+
+**与 SH-64 的关系**：`tparam_residue` 能检出值位置残留，但只在夹具覆盖该形态时触发；
+编译器本身对 `return T;` 仍退出 0 的问题由 [SH-64](../selfhost/sh64-generic-tparam-value-position.md) 跟踪。

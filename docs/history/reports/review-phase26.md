@@ -2,13 +2,13 @@
 
 | 项 | 值 |
 | --- | --- |
-| 源码锚点 | 首轮 `ac1c7cd`（`chore(release): bump CTC_VERSION to 0.26.0`，tag `v0.26.0`）；复核 `d29de8f`（`chore(release): v0.26.1`，tag `v0.26.1`） |
-| 适用版本 | ct 主线 `ct-ast`（版本以 `ct -v` 为准）；首轮 `v0.26.0`，复核 `v0.26.1` |
-| 版本 | **`v0.26.0`（首轮）+ `v0.26.1`（复核）**；两轮五处 `CTC_VERSION` 均同步 |
-| 工作树 | 首轮干净；复核轮工作树仅评审产物（4 条 issue 状态回写 + 本报告），未改代码/测试 |
-| 审查对象 | `docs/design/phase26.md` 立项节 §1（六字段）与 E1–E8；实现提交 `f3be73e`、`c6b1220`、`7287044`、`ac1c7cd`；复核提交 `87b03ec`、`f5f1092`、`4995dff`、`5762f1e`、`d29de8f` |
-| 基线 | 首轮：`check-ast.sh` **803 passed**、`check-all.sh` **11 hard gates green**、`check-docs` OK；复核：**815 passed**、**11 hard gates green**、`check-docs` OK |
-| 结论 | 首轮**有条件放行**；`v0.26.1` 复核**未通过**：SH-63 / DOC-67 `verified`，SH-62 / TEST-17 `reopened`——括号形式六类已修，但无括号 `sizeof T` 仍退出 0 发射未声明 `T`（见 §11） |
+| 源码锚点 | 首轮 `ac1c7cd`（tag `v0.26.0`）；复核 `d29de8f`（tag `v0.26.1`）；收尾复核 `5b43fac`（annotated tag `v0.26.2`） |
+| 适用版本 | ct 主线 `ct-ast`（版本以 `ct -v` 为准）；首轮 `v0.26.0`，复核 `v0.26.1`，收尾复核 `v0.26.2` |
+| 版本 | **`v0.26.0`（首轮）+ `v0.26.1`（复核）+ `v0.26.2`（收尾）**；三轮五处 `CTC_VERSION` 均同步 |
+| 工作树 | 首轮干净；复核轮与收尾轮工作树仅评审产物（issue 状态回写 + 本报告），未改代码/测试 |
+| 审查对象 | `docs/design/phase26.md` 立项节 §1（六字段）与 E1–E8；实现提交 `f3be73e`、`c6b1220`、`7287044`、`ac1c7cd`；复核提交 `87b03ec`、`f5f1092`、`4995dff`、`5762f1e`、`d29de8f`；收尾提交 `5b43fac` |
+| 基线 | 首轮：`check-ast.sh` **803 passed**；复核：**815 passed**；收尾：**817 passed**；三轮均 **11 hard gates green**、`check-docs` OK |
+| 结论 | 首轮**有条件放行**；`v0.26.1` 复核**未通过**（见 §11）；`v0.26.2` 收尾：SH-62 / TEST-17 `verified`，但新立 **[SH-64](../../../issues/selfhost/sh64-generic-tparam-value-position.md)（P1）**——类型参数出现在值位置仍退出 0 发射裸 `T`，故 **Phase 26 仍未收口**（见 §12） |
 
 > 本轮只审不改。新增 issue：**[SH-62](../../../issues/selfhost/sh62-generic-subst-uppercase-tparam.md)（P1）**、
 > **[TEST-17](../../../issues/testing/test17-phase26-generic-coverage-gap.md)（P1）**、
@@ -432,3 +432,118 @@ static struct int getv__ct1(struct int *);                                    �
   （`7:31: error: type parameter cannot be used inside _Generic`）：方向安全，但把标签名也一并拒绝，
   损失表达力。修复 SH-62 时应只拒绝裸类型参数。
 - 复核轮未改任何代码/测试；所有探针与变异都在 `/tmp/p261/**`。
+
+---
+
+## 12. `v0.26.2` 收尾复核（2026-11-09，锚点 `5b43fac`）
+
+### 12.1 结论
+
+| Issue | 结论 | 判据 |
+| --- | --- | --- |
+| SH-62 | **verified** | 无括号 `sizeof T` / `_Alignof T` / `alignof T` / `sizeof T * 2` / `sizeof(T) + sizeof T` 全部真替换，运行 `4 4 8 8` |
+| TEST-17 | **verified** | 128 夹具与 `tparam_residue()` 属实；817 数字核实；旧基线与变异均能令其变红；盲区见 12.3 |
+| **SH-64（新）** | **open / P1** | 类型参数出现在**值**位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`，`cc` 报未声明 |
+
+**Phase 26 仍有阻断**：`ct compile` 仍存在“退出 0 发射未声明类型名”的路径，见 12.6。
+
+### 12.2 无括号类型操作数（SH-62）
+
+```console
+$ /tmp/p262/b/ct-ast -v
+ct-ast v0.26.2
+$ /tmp/p262/b/ct-ast probe/operands.ct -o out/operands.c; echo ct=$?
+ct=0
+$ grep -nE 'sizeof|_Alignof' out/operands.c
+16:    return (int)(sizeof(int));
+20:    return (int)(_Alignof(int));
+24:    return ((int)(sizeof(int)) * 2);
+28:    return (int)((sizeof(int) + sizeof(int)));
+$ cc -Wall -Wextra -std=c99 out/operands.c -o out/operands && ./out/operands
+4 4 8 8
+```
+
+标签形式 `sizeof struct T` / `_Alignof(struct T)` → `sizeof(struct T)` / `_Alignof(struct T)`，运行 `4 4`；
+无括号 `alignof T` → `alignof(int)`。`sizeof T * 2` 的优先级正确（`((int)sizeof(int)) * 2`）。
+
+### 12.3 `tparam_residue()` 的拦截、放行与盲区
+
+拦截与放行（用门禁同款 shell 函数复算）：
+
+```console
+# v0.26.1 坏产物
+tparam_residue(probe/sizeof_noparen.ct, p-sizeof_noparen.c) = T(1)      → RED
+# v0.26.2 新产物
+tparam_residue(probe/operands.ct, out/operands.c) = ""                  → GREEN
+tparam_residue(repo/test/ast/126_generic_struct_tag/prog.ct, out/126.c) = ""  → GREEN
+```
+
+126 的产物共有 7 处 `T`，全部形如 `struct T`；去掉 `\b(struct|union|enum)\s+T\b` 豁免后会误红，
+说明豁免是载荷性的（`_Generic(..., struct T: …)` 依赖它）。
+
+**盲区（P2，已记录）**：
+
+1. 非泛型夹具完全不扫（源码没有 `<TP>` 声明，提取为空）；该场景由门禁的 `cc` 编译兜底。
+2. 全文本计数会在“类型参数名与既有标识符/宏/字符串重名”时**误报**：`int T = 5;` + `f<T>` 的产物判
+   `T(2)`，但 `cc` 0 且运行输出 `5 4`；`#define T 42`、`printf("T=…")` 同样会误红。
+3. 只扫 `test/ast/*/` 单文件夹具的 `.c`；`.h`、`test/ast/errors/*`、module/build 产物不扫。
+   imported `.h.ct` 里的泛型声明不在被扫源码内，提取不到参数名。
+4. 提取依赖单行出现 `<TP>(`；当前 `f<T>(` 行内形态可命中，跨行且函数名与 `<` 分离的变体需复核。
+
+### 12.4 新增夹具的“会红”证明
+
+```console
+# 旧基线（v0.26.1 源码编出的 ct-ast）
+$ ct-ast-v0.26.1 test/ast/128_generic_type_operands/prog.ct
+test/ast/128_generic_type_operands/prog.ct:16:26: error: _Alignof needs a type in parentheses   （exit 1）
+$ ct-ast-v0.26.1 test/ast/126_generic_struct_tag/prog.ct
+test/ast/126_generic_struct_tag/prog.ct:22:31: error: type parameter cannot be used inside _Generic （exit 1）
+
+# 变异：把 parse_unary 的 `if (self->tok_is_type_name())` 置 0 后重编
+$ ./b/ct-ast test/ast/128_generic_type_operands/prog.ct -o out/128-mut.c
+ct=0；产物含 sizeof(T)，cc 报 ‘T’ undeclared（exit 1）
+```
+
+`v0.26.2` 下 128 与 126 均绿；817 = 815 + 128 用例 + `p26_generic_type_operands` 断言。
+
+### 12.5 门禁实跑
+
+```console
+$ bash selfhost/check-ast.sh | tail -1
+== summary: 817 passed, 0 failed ==
+$ bash selfhost/check-all.sh | tail -1
+check-all: OK (11 hard gates green)
+$ grep -nE '^== summary:|check-all: OK' /tmp/p262-all.log | tail -8
+== summary: 118 passed, 0 failed ==
+== summary: 82 passed, 0 failed ==
+== summary: 817 passed, 0 failed ==
+check-semantics: OK (23 assertions)
+check-docs: OK (863 relative links in 173 files, v0.26.2, 11 hard gates, 10 phase status, 3 适用版本 header(s))
+== summary: 20 pass, 0 new, 0 pending, 0 regression ==
+check-all: OK (11 hard gates green)
+```
+
+评审回写后复跑 `python3 test/docs/check-docs.py` → `866 relative links in 173 files`（新增 SH-64 与 §12 链接）。
+`817 passed` 属实。
+
+### 12.6 阻断项：值位置类型参数（SH-64）
+
+```console
+$ /tmp/p262/b/ct-ast probe/leak1.ct -o out/leak1.c; echo ct=$?
+ct=0
+$ grep -n 'return' out/leak1.c | tail -1
+10:    return T;
+$ cc -std=c99 out/leak1.c -o out/leak1.bin; echo cc=$?
+out/leak1.c:10:12: error: ‘T’ undeclared (first use in this function)
+cc=1
+```
+
+同族的 `return h(T);` → `return h(T);`、`sizeof T * T` → `(sizeof(int) * T)`、
+`sizeof T + T` → `(sizeof(int) + T)` 全部退出 0。对照：小写类型参数
+`g<elem>(elem x){ return elem; }` 与非泛型 `return Zzz;` 均硬错；非泛型 `return T;` 退出 0
+属 ALL_CAPS 宏常量设计，但泛型体内 `T` 已声明为类型参数，不应再走该兜底。
+
+根因在 [Expr.h.ct](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3258-L3275)：ALL_CAPS 兜底
+在发射 `N_RAW` 前没有检查 `self->in_generic && strcmp(nm, self->in_generic_tparam) == 0`。
+`tparam_residue()` 可检出该残留（`leak1/2/4` → `T(1)`），但只有夹具覆盖到该形态时才触发，
+不能替代编译期硬错。关闭条件与建议见 [SH-64](../../../issues/selfhost/sh64-generic-tparam-value-position.md)。
