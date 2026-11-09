@@ -125,6 +125,9 @@
   817 数字属实，128 与 `tparam_residue()` 均经旧基线/变异验证。同时发现**新 P1 [SH-64](selfhost/sh64-generic-tparam-value-position.md)**：
   类型参数出现在**值**位置（`return T;` / `h(T)` / `sizeof T * T`）仍退出 0 发射裸 `T`，
   故 Phase 26 **仍未收口**；详见 [review-phase26](../docs/history/reports/review-phase26.md) §12。
+  同日第三轮修复（`v0.26.3`）：SH-64 在 `parse_primary` 的 `T_ID` 入口统一守卫，值位置一律硬错；
+  `tparam_residue()` 改为只扫实例体以消假阳，覆盖范围与盲区登记为
+  [TEST-18](testing/test18-residue-scan-coverage.md)。SH-64 置 `fixed`，`verified` 留给评审。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -229,6 +232,7 @@
 | TEST-15 | Low | docs 门禁只覆盖中文 phase 表，且不扫 `ci.yml` | [test15-docs-gate-phase-english.md](testing/test15-docs-gate-phase-english.md) |
 | TEST-16 | Medium | `ct check` 的 `import` 拒绝无回归断言 | [test16-check-import-no-guard.md](testing/test16-check-import-no-guard.md) |
 | TEST-17 | High | Phase 26 夹具只覆盖返回/形参替换；`(T)` / `sizeof(T)` / `offsetof` / 去重 / 容量 / 命名回退无断言（已修，`f5f1092`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 + 128 夹具 + `tparam_residue()` 防线；复核 `verified`，盲区见条目） | [test17-phase26-generic-coverage-gap.md](testing/test17-phase26-generic-coverage-gap.md) |
+| TEST-18 | Medium | `tparam_residue()` 只覆盖编译模式夹具的实例体；`.h`、errors、module 构建产物、语料仍是盲区（已消假阳，覆盖与代价见条目） | [test18-residue-scan-coverage.md](testing/test18-residue-scan-coverage.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -309,7 +313,7 @@
 | SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
 | SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 `tok_is_type_name()` + 无括号形态；复核 `verified`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
 | SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `verified`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |
-| SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam` | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
+| SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam`（已修，`v0.26.3`：`T_ID` 入口统一守卫 + 4 条值位置负例） | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 

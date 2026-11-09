@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）** |
 | 锚点 | `v0.26.2` / `5b43fac` |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3258-L3275) |
-| 状态 | **open**（2026-11-09 `v0.26.2` 收尾复核发现） |
+| 状态 | **fixed**（2026-11-09，`v0.26.3`：`parse_primary` 的 `T_ID` 分支入口统一守卫，值位置一律硬错；见「修复（`v0.26.3`）」） |
 
 ## 现象
 
@@ -78,3 +78,30 @@ if (all_caps || strcmp(nm, "stderr") == 0 ...) {
 上述值位置写法在解析期硬错（退出 1 且给出 `file:line:col: error:`），不得退出 0 发射 `T`；
 门禁负例真实变红。当前 `tparam_residue` 能检出残留（实测 `leak1` → `T(1)`），
 但只有夹具覆盖到该形态时才会触发，不能替代编译期硬错。
+
+## 修复（`v0.26.3`，2026-11-09）
+
+**根因**：`parse_primary` 读到 `T_ID` 后先走泛型实例 / 限定名 / 调用 / 裸函数值 / ALL_CAPS 宏兜底 /
+`fnval_ok` 六条出口；`in_generic_tparam` 的判定原先只出现在 `_Generic` 分支，值位置从未问过它。
+
+**修法**（不在任何单出口打补丁）：在 `T_ID` 分支的**共同入口**、`lex_next()` 之后立刻守卫——
+当前标识符等于 `in_generic_tparam` 时 `fail("type parameter 'T' cannot be used as a value")`。
+这样后续六条出口（包括 `T(0)`、`T::x`、`p = T`、`p = &T`）全部被同一守卫覆盖。
+诊断走与未声明变量相同的 `file:line:col: error:` 通道。
+
+**全路径枚举**：`docs/design/phase26.md` §2.7 逐条列出 11 组标识符 / 类型名解析路径及类型参数行为，
+作为这条根因的收口证据。
+
+**负例与红证**（`v0.26.2` 基线 vs `v0.26.3`）：
+
+| 夹具 | v0.26.2 | v0.26.3 |
+| --- | --- | --- |
+| `generic_tparam_value_return.ct`（`return T;`） | 退出 0，发射 `return T;` | 退出 1，`6:13: error: type parameter 'T' cannot be used as a value` |
+| `generic_tparam_value_arg.ct`（`return h(T);`） | 退出 0 | 退出 1，`11:15: ...` |
+| `generic_tparam_value_mul.ct`（`sizeof T * T`） | 退出 0，发射 `(sizeof(int) * T)` | 退出 1，`6:30: ...` |
+| `generic_tparam_value_add.ct`（`sizeof T + T`） | 退出 0，发射 `(sizeof(int) + T)` | 退出 1，`6:30: ...` |
+
+四条负例各有一条 `p26_diag`（退出码 + 位置 + 文案）与一条 `p26_chk`（`ct check` 同文案）；
+在 `v0.26.2` 基线上 `p26_diag` 会因退出 0 而红。门禁数字见 `docs/design/phase26.md` §6.3.4。
+
+`verified` 留给独立评审。

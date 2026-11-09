@@ -1920,7 +1920,9 @@ int main(void) {
   硬报错，不静默降级；被替换的类型位置（上一条）若拼写不完整，同样在解析期报错而不是原样发射。
   `_Generic(...)` 的选择体是原样透传，因此模板体内 `_Generic` 出现裸类型参数会硬报错
   `type parameter cannot be used inside _Generic`，绝不把它发射成未声明的名字；紧邻 `struct` / `union` /
-  `enum` 的标签选择器（`_Generic(x, struct T: 1, default: 0)`）是合法标签，放行。
+  `enum` 的标签选择器（`_Generic(x, struct T: 1, default: 0)`）是合法标签，放行。类型参数是类型而非值：
+  `return T;`、`h(T)`、`sizeof T * T`、`sizeof T + T` 等值位置一律硬错
+  `type parameter 'T' cannot be used as a value`，不会退出 0 发射裸 `T`。
 
 ### 7. 容量上限
 
@@ -4196,7 +4198,9 @@ int main(void) {
   through verbatim, so a bare type parameter inside it is a hard error
   (`type parameter cannot be used inside _Generic`) and never becomes an undeclared name; a tag
   selector next to `struct` / `union` / `enum` (`_Generic(x, struct T: 1, default: 0)`) is legal and
-  accepted.
+  accepted. A type parameter is a type, not a value: `return T;`, `h(T)`, `sizeof T * T` and
+  `sizeof T + T` are hard errors (`type parameter 'T' cannot be used as a value`) and never emit a
+  bare `T` with exit 0.
 
 ### 7. Capacity limits
 
