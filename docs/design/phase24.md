@@ -2,8 +2,9 @@
 
 > 中文 · [English](#english)
 >
-> **状态：设计定稿**（2026-11-09），**待实现**。D24-1–D24-13 已定稿；
-> 本文是 **as-planned** 记录，实现落地后按 [phase23.md](phase23.md) 的先例改写为 as-built。
+> **状态：已实现（as-built，2026-11-09）**。**S1–S4 已落地**（S1 `692e5d9`、S2 `6578a5d`、
+> S3 `a736048`；S4 为本文与文档/守卫），**S5（`v0.24.0` 版本收口）未做**。
+> D24-1–D24-13 已定稿；实现与设计的偏差集中在 §12，正文已按 as-built 校正。
 > **2026-11-09 修订**：索引占位符从 `i` 改为 `$`（它不是标识符，不可能被遮蔽或撞名）；
 > D24-4 / L24-8 撤销，不引入 `range_shadow` kind；边界字面量的拼写与溢出改为显式校验。
 > 关联：[phase23.md](phase23.md)（`..` 词法与 `loop(a..b)`，本相前置）、
@@ -27,7 +28,7 @@ int shifted[] = 0..3($ + base);          /* 局部：元素表达式可读运行
 展开恰好是**花括号初始化列表**，不生成任何循环：
 
 ```c
-int odd[] = { ((int)0) * 2 + 1, ((int)1) * 2 + 1, …, ((int)12) * 2 + 1 };
+int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) + 1) };
 ```
 
 判断标准与 Phase 22 / 23 相同：**展开后的 C 与手写初始化列表等价，且更短**；并且比手写
@@ -145,9 +146,12 @@ CT 的符号表只记 `is_const` 标志、不记 enum 数值，也不展开宏�
 `$` 的四个约束：
 
 1. **不可赋值 / 取地址 / 自增**：`$ = 1`、`&$`、`$++`、`++$` 都是硬错。`$ = 1` 由表达式的
-   既有语法拒绝（`unexpected token`，`parse_expr` 本来就没有赋值）；其余三种在元素子树
-   解析完后由一个显式 walk 拒绝，文案 `the range index '$' is not a variable`（L24-11）。
-   这**不是**“未声明变量”类错误，`$` 根本没有名字。
+   既有语法拒绝（`unexpected token`，`parse_expr` 本来就没有赋值）；其余三种由**解析期的
+   三处定点检查**拒绝（`parse_unary` 的前缀 `++` / `--` 与 `&`、`parse_postfix` 的后缀
+   `++` / `--`），文案 `the range index '$' is not a variable`（L24-11）。
+   **as-built 偏差**：设计原写「元素子树解析完后显式 walk」，实现改为这三处定点检查——
+   更精确（错误位置就是运算符所在处）、不依赖 kind 枚举是否完整，也不会漏掉将来新增的
+   前缀 / 后缀形态。这**不是**“未声明变量”类错误，`$` 根本没有名字。
 2. **不可出现在维度里**：维度是 `text3` 的原样文本。声明符解析处统一 `strchr(text3, '$')`，
    命中即报 L24-10（`'$' cannot be used in an array dimension`）——这样
    `int a[$]`（无论是否带 range 初值，如 `int a[$] = 5;`）都不会原样漏进 C，
@@ -282,7 +286,7 @@ fputs(" }", out);
 
 ```c
 /* 输入 */  int odd[] = 0..13($ * 2 + 1);
-/* 输出 */  int odd[] = { ((int)0) * 2 + 1, ((int)1) * 2 + 1, …, ((int)12) * 2 + 1 };
+/* 输出 */  int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) + 1) };
 ```
 
 括号形态由既有 `emit_expr` 决定（每个二元 / 一元运算都加括号），本文不另行约定；
@@ -311,7 +315,7 @@ fputs(" }", out);
 - **不引入新的 warning kind**：`ct check` 的 kind 表、JSON `type` 与 `--diagnostics=json`
   的形状都不动（D24-4 撤销）。L24-8 编号空置，避免与历史引用冲突；
 - `$ = 1` 走表达式的既有语法错误（`unexpected token`），不进上表；`&$` / `$++` / `++$`
-  由元素子树的显式 walk 报 L24-11。
+  由解析期的三处定点检查报 L24-11（§3.3 约束 1）。
 
 ---
 
@@ -356,20 +360,25 @@ fputs(" }", out);
 
 ### 7.3 硬断言（`check-ast.sh` 的 Phase 24 块）
 
-- **形态**：`109` 的生成物含 `int odd[] = { `、含 `((int)1)`，**不含** `for (`、**不含** `$`；
+- **形态**：`109` 的**生成声明行**含 `int odd[] = { `、含 `((int)1)`，**不含** `for`、
+  **不含** `$`、**不含** `0..13`（`109` 自己还有一个手写 `for` 打印数组，所以断言按声明行取，
+  不按整份文件取）；
 - **元素个数**：把 `109` 的初始化器按 `,` 切分后元素数 == 13（`awk` / `tr` 计数）；
 - **等价（两层）**：
-  1. **逐字节层**：`109` 的初始化器与一份**手写同形**的显式列表
-     `{ ((int)0) * 2 + 1, ((int)1) * 2 + 1, …, ((int)12) * 2 + 1 }`（13 项）做 `cmp`；
-     这层钉的是"展开确实只是把 `$` 换成 `((int)k)`、别的什么都没动"，形态一变立刻红；
+  1. **逐字节层**：`109` 的初始化器与一份**手写同形**的显式列表（13 项）做 `cmp`。
+     手写文件用的是 ct 的**规范括号形态**（见 §5.3：每个二元 / 一元运算各加一层括号），
+     即 `{ ((((int)0) * 2) + 1), …, ((((int)12) * 2) + 1) }`，**不是**人类更习惯的
+     `{ ((int)0) * 2 + 1, … }`——后者在 `cmp` 前必须先归一，那就等于放弃了「形态一变即红」。
+     `{ … }` 走原文拷贝路径，所以这层钉的是：`$` 变成了且只变成了 `((int)k)`，别的什么都没动；
   2. **语义层**：另写一个普通字面量数组 `{1, 3, …, 25}`，两者分别运行、**输出逐字节相同**；
      这层钉的是值正确。
   两层比较前都按 Phase 23 §8.3 的先例剔除 banner；
 - **文件作用域**：`110` 生成物里是文件作用域的 `static const int sq[] = { … };`，且后续
   `main` 读它打印正确；
 - **`$` 负例**：`range_index_outside` / `range_index_in_dim` / `range_index_assigned` /
-  `range_index_address` 四个 fixture 各命中预期文案（`grep`），且**没有**任何一条落成
-  `undeclared` / `未声明`；
+  `range_index_address`（**as-built 拆成 `range_index_address`、`range_index_address_post`、
+  `range_index_address_pre` 三个文件**——编译器遇首个错误即停，一个文件只能命中一条）
+  各命中预期文案（`grep`），且**没有**任何一条落成 `undeclared` / `未声明`；
 - **边界负例**：`range_init_bad_hex` 的文案带 `got '0x'`；`range_init_overflow` 报
   `a range bound is out of range`；
 - **编辑器 grammar**：`editors/vscode/syntaxes/ct.tmLanguage.json` 把 `$` 纳入标点匹配，
@@ -392,7 +401,7 @@ fputs(" }", out);
 
 | 切点 | 文件 | 内容 |
 | --- | --- | --- |
-| 24.1 字面量求值 | `frontend/parse/ParseSupport.h.ct`（或 `Expr.h.ct`） | `int_literal_value()`：十进制 / 十六进制 / 八进制、`U`/`L`/`LL` 后缀、可选一元 `-`；**取回原始拼写校验位数与后缀**（L24-2）、按 `LONG_MAX` 判溢出（L24-9） |
+| 24.1 字面量求值 | `frontend/parse/Stmt.h.ct`（as-built：文件级静态辅助 `range_bound_value` / `range_bound`；`$` 的判等 `is_range_index` 在 `Expr.h.ct`） | `range_bound_value()`：十进制 / 十六进制 / 八进制、`U`/`L`/`LL` 后缀、可选一元 `-`；**取回原始拼写校验位数与后缀**（L24-2）、按 `LONG_MAX` 判溢出（L24-9） |
 | 24.2 解析 | `frontend/parse/Stmt.h.ct`、`frontend/parse/Parser.h.ct` | 块作用域 `parse_decl_node` 的 `=` 分支与文件作用域 `Parser::parse_func` 的全局分支：range 探测（§3.1）、边界求值、`dollar_ok` 置位、「`$` 作 primary」、`N_INIT_RANGE` 构造、维度校验（含 `$` → L24-10）、元素类型校验、cap |
 | 24.3 发射 | `backend/emit/Emitter.h.ct` | `N_INIT_RANGE 61`、`range_depth` / `range_k` 字段、`emit_range_init()`、`N_VAR` 的 `$` 替换、`emit_inline` 的 N_DECL / N_DECLS 与 `emit_node` 的 N_GLOBAL 三处分支 |
 | 24.4 诊断 | `frontend/parse/Stmt.h.ct` | L24-1–L24-7、L24-9–L24-11 全用 `ct_sem_error`；`$ = 1` 与 `$` 越界位置走既有 `unexpected token`；**不新增 warning kind、不动 `ct check`**（D24-4 撤销） |
@@ -477,14 +486,40 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 | D24-12 | 仅 ct-ast；L0/L1/L2 不改（`$` token 只在 ct-ast 的词法器里存在，冻结编译器仍把它当非法字符）；编译器自身源码不得使用该语法（自举守卫） |
 | D24-13 | 收口 bump `v0.24.0`；功能层既有 golden 零变化，71 个 golden 仅版本 token 变化 |
 
+## 12. 实现记录（as-built，2026-11-09）
+
+| # | 设计写法 | 实际做法 | 理由 |
+| --- | --- | --- | --- |
+| A1 | `&$` / `$++` / `++$` 在元素子树解析完后由**显式 walk** 拒绝 | `parse_unary` 的前缀 `++` / `--` 与 `&`、`parse_postfix` 的后缀 `++` / `--` 共**三处定点检查**（`is_range_index`），文案不变 | 错误位置就是运算符所在处；不依赖 kind 枚举是否完整，新增前缀 / 后缀形态时不会漏 |
+| A2 | 负例 `range_index_address.ct` 一个文件里三个函数，覆盖 `&$` / `$++` / `++$` | 拆成 `range_index_address.ct`、`range_index_address_post.ct`、`range_index_address_pre.ct` | 编译器遇首个错误即停，一个文件只能命中一条；三条都要被门禁看到 |
+| A3 | 逐字节层的手写期望写成 `{ ((int)0) * 2 + 1, … }` | 手写文件采用 ct 的规范形态 `{ ((((int)0) * 2) + 1), … }` | 生成物由既有 `emit_expr` 决定（每层运算各加括号）；先归一再 `cmp` 就等于放弃「形态一变即红」 |
+| A4 | 全局作用域与块作用域"语法完全一致" | 单声明符一致；**一行多个声明符只有块作用域支持**（`117` 因此落在块作用域） | 这是 ct-ast 全局声明的既有边界，Phase 24 未改动，也不在本相出口判据内 |
+| A5 | §7.3 形态断言「整份生成物不含 `for (`」 | 按**生成的声明行**断言 | 夹具自己要用 `for` 打印结果；整份文件断言会误杀 |
+
+其余与设计一致：`N_INIT_RANGE 61`、`range_depth` / `range_k`、三处声明站点、`dollar_ok`
+开关、维度里的 `$` 在声明符解析处统一 `strchr(text3, '$')`、边界读取器自校验拼写与
+`LONG_MAX` 溢出（共享词法器未改）。
+
+切片与提交：
+
+| 切片 | 提交 | 内容 |
+| --- | --- | --- |
+| S1 | `692e5d9` | 解析：`$` primary、`dollar_ok`、`range_init_ahead`（深度 0 扫 `,` / `;`）、边界拼写与溢出、L24-1–L24-7/9–11、`N_INIT_RANGE`、16 个负例 |
+| S2 | `6578a5d` | 发射：`emit_range_init`、`$` → `((int)k)`、三处声明站点、8 个正例（109–115、117） |
+| S3 | `a736048` | 门禁：`check-ast.sh` Phase 24 块（形态 / 13 元素 / 逐字节 `cmp` / 运行输出 `cmp` / 文件作用域 / 16 条负例）、编辑器 grammar 的 `$` 规则与断言 |
+| S4 | 本文 | language-spec §4.47、tutorial §10.4、roadmap、as-built 记录、`selfhost/**` 自举守卫 |
+| S5 | 未做 | `v0.24.0` 版本收口（`CTC_VERSION` 五处 + 71 个 golden） |
+
 ---
 
 ## English
 
 ### Status
 
-**Design frozen** (2026-11-09), **not implemented**. D24-1–D24-13 are final; this file will be
-rewritten as an as-built record once the slices land, following [phase23.md](phase23.md).
+**Implemented (as-built, 2026-11-09)**. **S1–S4 have landed** (S1 `692e5d9`, S2 `6578a5d`,
+S3 `a736048`; S4 is this record plus the docs and the bootstrap guard); **S5, the `v0.24.0` bump,
+is not done**. D24-1–D24-13 are final and the deviations from the plan are collected in §12
+(Chinese; the numbered rows A1–A5 are the authoritative list).
 **Revised 2026-11-09**: the index placeholder is `$` instead of `i` (it is not an identifier, so it
 can never be shadowed or collide); D24-4 / L24-8 are revoked and no `range_shadow` kind is
 introduced; bound literals get explicit spelling and overflow validation.
@@ -501,7 +536,7 @@ static const int sq[] = 0..11($ * $);    /* 0, 1, 4, …, 100 */
 It expands to a braced initializer list, never to a loop:
 
 ```c
-int odd[] = { ((int)0) * 2 + 1, ((int)1) * 2 + 1, …, ((int)12) * 2 + 1 };
+int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) + 1) };
 ```
 
 Because the output is an initializer and not a statement, file scope, `static` and `const` all

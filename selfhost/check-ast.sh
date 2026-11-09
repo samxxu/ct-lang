@@ -310,6 +310,71 @@ else
 fi
 
 echo
+echo "== the compiler's own sources use no range initialisers (24.6) =="
+# Phase 24: `int a[] = 0..n($ …)` is ct-ast syntax; L2, the driver that builds
+# ct-ast, does not know it, so a range initialiser here would stop the bootstrap
+# chain. Comments and string / character literals are stripped first, so the
+# `"$"` the lexer compares against never counts. A bound is a literal, so the
+# shape is anchored on `= <literal>..<literal>(` and `loop(0..n)` cannot match.
+if [ -n "$(git tag -l v0.24.0 2>/dev/null)" ]; then
+    ok "range initialisers in selfhost/** (allowed: v0.24.0 is tagged)"
+elif ! ri_bad="$(python3 - selfhost <<'PY'
+import os, re, sys
+
+def strip(src):
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            out.append(" ")
+        elif c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i + 2)
+            i = n if j < 0 else j
+            out.append(" ")
+        elif c in "\"'":
+            q = c
+            i += 1
+            while i < n:
+                if src[i] == "\\":
+                    i += 2
+                    continue
+                if src[i] == q:
+                    i += 1
+                    break
+                i += 1
+            out.append(" ")
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+BOUND = r"-?\s*(?:0[xX][0-9a-fA-F]+|\d+)[uUlL]*"
+PAT = re.compile(r"=" + BOUND + r"\s*\.\.\s*" + BOUND + r"\s*\(")
+
+hits = []
+for base, dirs, names in os.walk(sys.argv[1]):
+    dirs.sort()
+    for name in sorted(names):
+        if not name.endswith((".ct", ".c", ".h")):
+            continue
+        path = os.path.join(base, name)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            if PAT.search(strip(fh.read())):
+                hits.append(path)
+print(" ".join(hits))
+PY
+)"; then
+    bad "self-host guard" "python3 could not scan selfhost/**"
+elif [ -z "$ri_bad" ]; then
+    ok "no range initialiser in selfhost/** (the bootstrap predates Phase 24)"
+else
+    bad "self-host guard" "range initialiser in: $ri_bad"
+fi
+
+echo
 echo "== build the bootstrap chain and the AST compiler =="
 if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
     echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1

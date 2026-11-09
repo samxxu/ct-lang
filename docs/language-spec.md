@@ -1827,6 +1827,43 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   按 C 的转换规则截断，属已发布语义，本相不改；需要大范围计数的场景请写原生 `for`。
 - 生成物是**单行** `for`，不新增逐语句 `#line`。
 
+#### 4.47 数组 range 初值 `a..b($)`（Phase 24，仅 ct-ast）
+
+`int a[] = <start>..<stop>(<表达式>)` 把半开区间按元素表达式展开成花括号初始化列表，
+展开**恰好**是把 `$` 依次换成 `((int)k)`：
+
+```c
+/* 输入 */  int odd[] = 0..3($ * 2 + 1);
+/* 输出 */  int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), ((((int)2) * 2) + 1) };
+```
+
+括号形态由既有 `emit_expr` 决定（每个二元 / 一元运算各加一层括号），本相不另立规则。
+
+- **区间左闭右开** `[start, stop)`：元素个数 = `stop - start`。`stop <= start` 报
+  `an empty range has no elements`；个数超过 1024 报 `too many range elements (limit 1024)`。
+- **边界只收整数字面量**（可带一元 `-`，十进制 / `0x` / 八进制，后缀仅 `U` / `L`）：
+  `0..n($)` 报 `a range bound must be an integer literal (got 'n')`，`0..0x($)` 的文案带
+  `got '0x'`（不静默按 0 处理），超出 `long` 报 `a range bound is out of range`，
+  `..` 之后直接 `(` 报 `a range initializer needs both bounds`。因为边界是字面量，表达式解析器
+  根本不参与边界，`0..13(` 不会被读成函数调用。
+- **`$` 只在这个初值的元素表达式里合法**：它按元素展开成 `((int)k)`。出现在别处
+  （`int x = $;`、`$ = 1`）走既有的 `unexpected token`；出现在数组维度里（`int a[$];`）报
+  `'$' cannot be used in an array dimension`；被取地址或自增（`&$`、`$++`、`++$`）报
+  `the range index '$' is not a variable`。**这几条都不是「未声明变量」**：`$` 不是标识符，
+  既不进符号表，也不会与 `loop` 的隐式 `i` 撞名，更不存在遮蔽。
+- **声明必须带 `[]`**：`int x = 0..3($);` 报 `a range initializer declares an array`；
+  写了字面量维度就必须等于元素个数（`int a[4] = 0..3($);` 报
+  `the array size '4' does not match the range (3 elements)`）。
+- **元素限标量**：`struct` / `union` / 接口值 / 数组元素报
+  `a range initializer cannot initialize '<type>' elements`。数组元素、接口值的判定与既有
+  「可作初值」的规则一致，不走 boxing / vptr 分支。
+- **不求值、不循环、不留 `$`**：产物是初始化列表，没有 `for`、没有临时量、没有逐元素节点，
+  所以可以用在文件作用域的 `static const` 表上——这是本相的核心收益。
+- **元素表达式里不要写副作用**：C99 §6.7.8 不规定同一初始化列表内各初始化器的求值次序，
+  本相按元素顺序写出，但不保证运行时求值次序，编译器不诊断。
+- **只加这一种初值形态**：不是新类型、不是新表达式、不是新关键字；`ct check` 的 kind 表与
+  `--diagnostics=json` 的形状都不变（L24-8「内层 `$` 遮蔽」随 `$` 的引入而撤销，编号不复用）。
+
 ### 7. 容量上限
 
 > 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 131072、
@@ -3993,6 +4030,49 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   bound above `INT_MAX` truncates under C's conversion rules. That is the shipped semantics and this
   phase does not change it; use a native `for` for ranges that large.
 - The output is a **single-line** `for` with no per-statement `#line`.
+
+#### 4.47 Array range initialisers `a..b($)` (Phase 24, ct-ast only)
+
+`int a[] = <start>..<stop>(<expression>)` expands a half-open range into a brace initialiser.
+The expansion is **exactly** `$` replaced by `((int)k)` in turn:
+
+```c
+/* input  */  int odd[] = 0..3($ * 2 + 1);
+/* output */  int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), ((((int)2) * 2) + 1) };
+```
+
+The parentheses come from the existing `emit_expr` (every binary / unary operator adds one layer);
+this phase adds no new formatting rule.
+
+- The range is **half-open** `[start, stop)`: the element count is `stop - start`. `stop <= start`
+  reports `an empty range has no elements`; more than 1024 elements reports
+  `too many range elements (limit 1024)`.
+- **A bound must be an integer literal** (an optional unary `-`, decimal / `0x` / octal, a `U` or `L`
+  suffix): `0..n($)` reports `a range bound must be an integer literal (got 'n')`, `0..0x($)` spells
+  `got '0x'` (never a silent zero), a literal beyond `long` reports `a range bound is out of range`,
+  and `..` followed directly by `(` reports `a range initializer needs both bounds`. Because bounds are
+  literals, the expression parser never touches them, so `0..13(` is never read as a call.
+- **`$` is legal only inside this initialiser's element expression**, where it expands to `((int)k)`
+  per element. Anywhere else (`int x = $;`, `$ = 1`) it is the existing `unexpected token`; inside an
+  array dimension (`int a[$];`) it reports `'$' cannot be used in an array dimension`; taking its
+  address or incrementing it (`&$`, `$++`, `++$`) reports `the range index '$' is not a variable`.
+  **None of these degrade to "undeclared variable"**: `$` is not an identifier, never enters the
+  symbol table, cannot collide with `loop`'s implicit `i`, and has no shadowing to diagnose.
+- **The declaration must be an array**: `int x = 0..3($);` reports
+  `a range initializer declares an array`; an explicit size must equal the element count
+  (`int a[4] = 0..3($);` reports `the array size '4' does not match the range (3 elements)`).
+- **Elements must be scalars**: a `struct` / `union` / interface value / array element reports
+  `a range initializer cannot initialize '<type>' elements`. The array and interface tests reuse the
+  existing "can be an initialiser" rules, so boxing / vptr branches are never reached.
+- **Nothing is evaluated, no loop is emitted, no `$` survives**: the product is an initialiser list
+  with no `for`, no temporary and no per-element node, so it works for a file-scope `static const`
+  table -- the point of the phase.
+- **Do not put side effects in the element expression**: C99 §6.7.8 does not specify the evaluation
+  order of the initialisers inside one list. This phase writes them in element order but does not
+  promise a runtime order, and diagnoses nothing.
+- **This is one initialiser form only**: no new type, no new expression, no new keyword. The
+  `ct check` kind table and the `--diagnostics=json` shape are unchanged (L24-8, "the inner `$`
+  shadows the outer one", was withdrawn when `$` replaced the identifier `i`; its number is retired).
 
 ### 7. Capacity limits
 

@@ -894,6 +894,43 @@ ct build closure_in_loop.ct -o closure_in_loop && ./closure_in_loop
 
 细节与诊断见 [language-spec §4.46](language-spec.md)。
 
+### 10.4 `0..n($)`：把表直接写进源码
+
+有些表本来就是从下标算出来的。`0..n(<表达式>)` 让源码保持公式的样子，编译器替你展开：
+
+```c
+#include <stdio.h>
+
+static const int sq[] = 0..11($ * $);
+
+int main(void)
+{
+    printf("%d %d %d\n", sq[0], sq[3], sq[10]);
+    return 0;
+}
+```
+
+```sh
+ct build table.ct -o table && ./table
+# 0 9 100
+```
+
+`$` 是**下标**，不是变量：它从 `0` 走到 `10`（区间左闭右开），生成物是同长度的花括号列表，
+`$` 换成对应的常量：
+
+```c
+static const int sq[] = { (((int)0) * ((int)0)), (((int)1) * ((int)1)), …, (((int)10) * ((int)10)) };
+```
+
+- **没有循环、没有临时量**：产物就是初始化列表，所以能写在文件作用域的 `static const` 上（函数里也行）。
+- **边界只收字面量**：`0..n($)` 是编译错误（`a range bound must be an integer literal (got 'n')`）。
+  这样 `0..13(` 永远不会被读成函数调用。
+- **`$` 出了这个初值就不合法**：`int x = $;` 是语法错误，`int a[$];`、`&$`、`$++` 各有自己的
+  诊断，都不会落成「未声明变量」。
+- **元素表达式别写副作用**：列表里各初始化器的求值次序 C 不保证。
+
+细节与诊断见 [language-spec §4.47](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -1876,6 +1913,47 @@ ct build closure_in_loop.ct -o closure_in_loop && ./closure_in_loop
 0 and 1 — by that round's `i`.)
 
 Details and diagnostics are in [language-spec §4.46](language-spec.md).
+
+### 10.4 `0..n($)`: put the table in the source
+
+Some tables are just a formula over an index. `0..n(<expression>)` keeps the source in formula form
+and lets the compiler expand it:
+
+```c
+#include <stdio.h>
+
+static const int sq[] = 0..11($ * $);
+
+int main(void)
+{
+    printf("%d %d %d\n", sq[0], sq[3], sq[10]);
+    return 0;
+}
+```
+
+```sh
+ct build table.ct -o table && ./table
+# 0 9 100
+```
+
+`$` is the **index**, not a variable: it runs from `0` to `10` (the range is half-open), and the
+product is a brace list of that length with `$` replaced by the matching constant:
+
+```c
+static const int sq[] = { (((int)0) * ((int)0)), (((int)1) * ((int)1)), …, (((int)10) * ((int)10)) };
+```
+
+- **No loop, no temporary**: the product *is* the initialiser, so it works at file scope for a
+  `static const` table (and inside a function too).
+- **Bounds are literals only**: `0..n($)` is a compile error
+  (`a range bound must be an integer literal (got 'n')`). That is why `0..13(` can never be read as
+  a call.
+- **`$` is illegal outside this initialiser**: `int x = $;` is a syntax error, and `int a[$];`, `&$`
+  and `$++` each have their own diagnostic -- none of them degrades to "undeclared variable".
+- **Keep side effects out of the element expression**: C does not specify the evaluation order of the
+  initialisers in one list.
+
+Details and diagnostics are in [language-spec §4.47](language-spec.md).
 
 ### 11. CLI cheat sheet
 
