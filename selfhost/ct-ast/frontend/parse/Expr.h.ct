@@ -2931,6 +2931,22 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
             self->sup->lex_next();
+            /* Phase 26 fix (SH-64): an identifier that names the current
+               template's type parameter is never a value. Type operands were
+               already taken by parse_unary / parse_type before this point, so
+               every identifier-resolution path that starts here -- a generic
+               instance, a qualified name, a call, the ALL_CAPS macro fallback,
+               a bare function value, `fnval_ok` -- must reject it. One guard at
+               the shared entry covers them all instead of patching each exit;
+               without it `return T;` emitted the raw `T`. */
+            if (self->in_generic && self->in_generic_tparam[0]
+                && strcmp(self->arena->nodes[n].text2, self->in_generic_tparam) == 0) {
+                char vmsg[MAX_TEXT + 64];
+                snprintf(vmsg, sizeof vmsg,
+                         "type parameter '%s' cannot be used as a value",
+                         self->arena->nodes[n].text2);
+                return self->sup->fail(vmsg);
+            }
             /* Phase 26: `name<type>(...)` names a generic instance. Only a name
                the symbol table already holds as a template enters this branch,
                so `a < b` on a variable stays a comparison (D26-1/D26-3). */
