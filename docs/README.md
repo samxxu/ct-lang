@@ -2,8 +2,10 @@
 
 > 中文 · [English](#english)
 >
-> **当前版本 v0.26.3。** 本目录只放**当前有效**的文档；已关闭阶段的设计记录与评审报告在
-> [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动规约见 [../AGENTS.md](../AGENTS.md)。
+> **当前版本 v0.26.3。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
+> 阶段计入），更早的 `design/phase*.md` 必须退役到 [history/design/](history/design/)；评审报告
+> 与其余历史记录在 [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动
+> 规约见 [../AGENTS.md](../AGENTS.md)。
 
 ---
 
@@ -54,9 +56,11 @@
 
 ## English
 
-> **Current version v0.26.3.** This directory holds only **live** documentation; closed design records and
-> review reports live in [history/](history/README.md). Start at [../README.md](../README.md); the change
-> contract is [../AGENTS.md](../AGENTS.md).
+> **Current version v0.26.3.** `design/` keeps the **newest 12 completed phases** (the phase in
+> progress counts); older `design/phase*.md` files must be retired to
+> [history/design/](history/design/). Review reports and the rest of the archive live in
+> [history/](history/README.md). Start at [../README.md](../README.md); the change contract is
+> [../AGENTS.md](../AGENTS.md).
 
 ### Where to start
 

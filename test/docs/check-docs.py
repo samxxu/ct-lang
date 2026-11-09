@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts four invariants:
+Standard library only. It asserts seven invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -19,16 +19,24 @@ Standard library only. It asserts four invariants:
      in docs/roadmap.md (done -> check, in progress -> half, planned -> white),
      in both the Chinese and the English table;
   5. an "适用版本" header under docs/*.md names the compiler line, never a
-     fixed version: the number goes stale at the next bump (DOC-63).
+     fixed version: the number goes stale at the next bump (DOC-63);
+  6. G9: AGENTS.md pins the methodology's `spec-version` and `spec-sha256`
+     (CI-8); a missing spec file is an explicit skip, a mismatch is red;
+  7. docs/design/ keeps the newest DESIGN_WINDOW phases, older phase docs live
+     in docs/history/design/ and may not be duplicated (DOC-66).
 
-Exit code 0 when all five hold, 1 otherwise.
+Exit code 0 when all seven hold, 1 otherwise.
 """
 
+import hashlib
 import os
 import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+SPEC = os.path.expanduser("~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md")
+DESIGN_WINDOW = 12
 
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 FENCE = re.compile(r"```.*?```", re.S)
@@ -216,6 +224,78 @@ def check_applies_to(errors):
     return checked
 
 
+def version_tuple(text):
+    return tuple(int(part) for part in text.split(".") if part.isdigit())
+
+
+def check_spec_pin(errors):
+    """G9 (CI-8): AGENTS.md pins the methodology it was written against.
+
+    The spec lives outside this repository, so an absent file is a skip rather
+    than a failure (CI has no ~/trae-ws checkout); when it is present, both the
+    digest and the "not behind" version rule are enforced.
+    """
+    agents = read(os.path.join(ROOT, "AGENTS.md"))
+    version = re.search(r"^[\s>]*\|[ \t]*`?spec-version`?[ \t]*\|[ \t]*`?([0-9.]+)`?", agents, re.M)
+    digest = re.search(r"^[\s>]*\|[ \t]*`?spec-sha256`?[ \t]*\|[ \t]*`?([0-9a-f]{64})`?", agents, re.M)
+    if not version or not digest:
+        errors.append("AGENTS.md: the G9 pin needs both `spec-version` and `spec-sha256` rows")
+        return "missing"
+    if not os.path.exists(SPEC):
+        return "skipped (spec not found)"
+    status = "ok"
+    actual = hashlib.sha256(open(SPEC, "rb").read()).hexdigest()
+    if actual != digest.group(1):
+        status = "mismatch"
+        errors.append(
+            f"AGENTS.md: spec-sha256 {digest.group(1)[:12]}... != {actual[:12]}... ({SPEC})"
+        )
+    spec_head = read(SPEC)[:2000]
+    spec_version = re.search(r"^\|\s*spec-version\s*\|\s*`?([0-9.]+)`?", spec_head, re.M)
+    if spec_version and version_tuple(version.group(1)) < version_tuple(spec_version.group(1)):
+        status = "stale" if status == "ok" else status + ", stale"
+        errors.append(
+            f"AGENTS.md: spec-version {version.group(1)} is behind the methodology's "
+            f"{spec_version.group(1)}"
+        )
+    return f"{status} ({version.group(1)}, {digest.group(1)[:8]})"
+
+
+def check_design_window(errors):
+    """DOC-66: docs/design/ keeps the newest DESIGN_WINDOW phases.
+
+    Older designs are retired to docs/history/design/; the gate only checks the
+    upper bound and forbids duplicates, so a phase cannot appear twice.
+    """
+    design = os.path.join(ROOT, "docs/design")
+    retired = os.path.join(ROOT, "docs/history/design")
+    kept = {}
+    for name in sorted(os.listdir(design)):
+        match = re.fullmatch(r"phase(\d+)\.md", name)
+        if match:
+            kept[int(match.group(1))] = name
+    if not kept:
+        errors.append("docs/design: no phase*.md files found")
+        return 0, DESIGN_WINDOW
+    floor = max(kept) - DESIGN_WINDOW + 1
+    for number, name in sorted(kept.items()):
+        if number < floor:
+            errors.append(
+                f"docs/design/{name}: phase {number} is outside the {DESIGN_WINDOW}-phase "
+                f"window (oldest kept: {floor}); move it to docs/history/design/"
+            )
+    for name in sorted(os.listdir(retired)):
+        match = re.fullmatch(r"phase(\d+)\.md", name)
+        if match and int(match.group(1)) in kept:
+            errors.append(f"phase{match.group(1)}.md exists in both docs/design/ and docs/history/design/")
+    readme = read(os.path.join(ROOT, "docs/README.md"))
+    if f"最近 {DESIGN_WINDOW} 个" not in readme:
+        errors.append(
+            f"docs/README.md: the archive policy must state 最近 {DESIGN_WINDOW} 个已完成阶段"
+        )
+    return len(kept), DESIGN_WINDOW
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -223,8 +303,14 @@ def main():
     gates = check_gate_count(errors)
     phases = check_phase_status(errors)
     applies = check_applies_to(errors)
+    spec = check_spec_pin(errors)
+    design, window = check_design_window(errors)
     for error in errors:
         print(f"FAIL: {error}")
+    # The two status lines print on both paths: on a red run the first one names
+    # the actual pin state (`mismatch` / `stale`), so the last line is not a
+    # vague "FAIL" that hides which half of G9 broke.
+    print(f"spec pin: {spec}")
     if errors:
         print(f"check-docs: FAIL ({len(errors)} problem(s))")
         return 1
@@ -233,6 +319,7 @@ def main():
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s))"
     )
+    print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0
 
 

@@ -9,6 +9,11 @@
 
 ## 中文
 
+> **退役阈值（DOC-66 / D26-20）**：`../design/` 保留最近 12 个已完成阶段（当前在研阶段计入）。
+> 新阶段立项时，若序号低于 `max−11` 的 `design/phase*.md` 仍存在，必须在同一次改动里
+> `git mv` 到本目录的 `design/` 并在下表补一行；`test/docs/check-docs.py`（门禁 11）会拦截
+> 越界文件与同名重复归档。
+
 ### design/ —— 已关闭阶段的设计记录
 
 | 记录 | 内容 |
@@ -56,6 +61,11 @@
 ---
 
 ## English
+
+> **Retirement threshold (DOC-66 / D26-20)**: `../design/` keeps the newest 12 completed phases (the
+> phase in progress counts). When a new phase starts, any `design/phase*.md` below `max−11` must be
+> `git mv`-ed into `design/` here and added to the table below in the same change;
+> `test/docs/check-docs.py` (gate 11) rejects out-of-window files and duplicate archives.
 
 > Closed-phase design records and review reports; an index only, not a statement of the present.
 > Live documentation starts at [../README.md](../README.md); the phase overview is

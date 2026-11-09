@@ -13,6 +13,15 @@
 > `~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md` 为准；`.trae/skills` 下的技能
 > 已 self-superseded（标注「不要据此执行」），不得据其执行。本文件的代码规约不受影响。
 
+> **主规范锚定（G9）**：本仓库引用的主规范版本与摘要固定如下；`test/docs/check-docs.py`
+> （门禁 11）会比对 `~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md` 的版本与
+> SHA-256。规范文件不在场时显式 `skip`（不红）；在场且不一致时必须红。更新主规范时，必须在
+> 同一次改动里刷新这两个值。
+>
+> | 键 | 值 |
+> | --- | --- |
+> | `spec-version` | `1.0.0` |
+> | `spec-sha256` | `93a8e968f76cefd5151e60b3d3c476a023910fa92dc768731467d1fa66aa2b67` |
 ### 1. 项目画像
 
 | 项 | 值 |
