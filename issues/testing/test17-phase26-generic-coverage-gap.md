@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）**（门禁全绿但放过了 SH-62 的静默坏产物） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [check-ast.sh](../../selfhost/check-ast.sh#L1159-L1222)、[123/prog.ct](../../test/ast/123_generic_identity/prog.ct)、[124/prog.ct](../../test/ast/124_generic_struct/prog.ct) |
-| 状态 | **fixed**（2026-11-09，`f5f1092`，`v0.26.1`；`verified` 待评审回写） |
+| 状态 | **reopened**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`：新增夹具与断言属实且负例会红，但无括号 `sizeof T` 的静默坏产物仍无夹具，见「评审复核」） |
 
 ## 现象
 
@@ -71,3 +71,43 @@ $ bash selfhost/check-ast.sh
 ```
 
 断言条数由 803 变为 812（新增 5 个 Phase 26 用例 + 123 的 4 条收紧），如实记录，未套用旧数字。
+
+## 评审复核（`v0.26.1` / `d29de8f`，2026-11-09）
+
+结论：**reopened**。修复内容属实，但「静默坏产物仍能通过门禁」这一核心缺口只补了括号形式。
+
+**通过项**：
+
+1. 门禁数字属实：评审方独立实跑 `bash selfhost/check-ast.sh` → `== summary: 815 passed, 0 failed ==`（`EXIT=0`）；
+   `bash selfhost/check-all.sh` → `check-all: OK (11 hard gates green)`，同一日志内 check-ast 也是 `815 passed, 0 failed`。
+2. 新增夹具存在且断言有效：125 / 126 / 127 与两条负例在 `check-ast.sh` 中都有精确 `grep` / `p26_diag`，不是泛泛的“至少 N 条”。
+3. 负例确实会红（变异 + 修复前基线双重证明）：
+
+```console
+# A. 在 /tmp 副本删掉 _Generic 守卫后重编 ct-ast
+$ /tmp/p261/mut-sel/b/ct-ast test/ast/errors/generic_generic_selector.ct -o ...
+ct_exit=0
+$ grep -n '_Generic' ...
+11:    return _Generic ( x , T : 1 , default : 0 );
+$ # 用 check-ast.sh 的同一条 file:line:col: error: 文案判定
+RED
+
+# B. 在 /tmp 副本把 MAX_GENERIC_INSTS 64 改为 1000000 后重编 ct-ast
+$ /tmp/p261/mut-many/b/ct-ast test/ast/errors/generic_too_many.ct -o ...
+ct_exit=0
+RED
+
+# C. 修复前基线（v0.26.0 源码 + 冻结 L2 重编的 ct-ast-v0.26.0）
+$ ct-ast-v0.26.0 test/ast/125_generic_type_positions/prog.ct
+test/ast/125_generic_type_positions/prog.ct:21:12: error: unexpected token        （exit 1）
+$ ct-ast-v0.26.0 test/ast/126_generic_struct_tag/prog.ct ...; grep getv__ct1 ...
+static struct int getv__ct1(struct int *);                                       （exit 0，坏产物）
+```
+
+注：127 的 R6 回退在 v0.26.0 基线已工作（`id__ct1_1`），它不是修复项，只是既有行为固定。
+
+**未通过项**：门禁仍抓不到无括号 `sizeof T`（SH-62 的残余通道）。该形态退出 0、产物含 `T`，
+而 125 只覆盖 `sizeof(T)`；把 `sizeof T` 探针放进 `test/ast/` 后 `! grep -E '\bT\b'` 才会红。
+即本条的核心判断「门禁全绿但放过静默坏产物」在 v0.26.1 仍成立。
+
+**关闭条件**：补 `sizeof T`（及同族无括号形式）夹具并让生成物断言变红；与 SH-62 同步复核。

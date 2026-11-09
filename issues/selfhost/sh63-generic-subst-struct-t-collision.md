@@ -5,7 +5,7 @@
 | 严重度 | **P2（Medium）**（触发条件罕见，但结果同样是退出 0 的坏产物） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L343-L344)、[Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L1253-L1290) |
-| 状态 | **fixed**（2026-11-09，`87b03ec`，`v0.26.1`；`verified` 待评审回写） |
+| 状态 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；证据见「评审复核」） |
 
 ## 现象
 
@@ -76,3 +76,22 @@ $ cc -std=c99 /tmp/126.c -o /tmp/126 && /tmp/126
 ```
 
 修复前同一命令得到 `static struct int getv__ct1(struct int *);`，`cc` 报 `expected '{' before 'int'`。
+
+## 评审复核（`v0.26.1` / `d29de8f`，2026-11-09）
+
+结论：**verified**。
+
+```console
+$ /tmp/p261/b/ct-ast /tmp/p261/probe/structT.ct -o /tmp/p261/out/p-structT.c; echo ct=$?
+ct=0
+$ grep -n 'getv__ct1' /tmp/p261/out/p-structT.c
+9:static int getv__ct1(struct T *);
+17:static int getv__ct1(struct T * p) {
+$ cc -std=c99 /tmp/p261/out/p-structT.c -o /tmp/p261/out/run-structT && /tmp/p261/out/run-structT
+7
+```
+
+反证（修复前基线：用冻结 L2 重编 v0.26.0 源码）：126 夹具发射
+`static struct int getv__ct1(struct int *);`（退出 0，`cc` 拒绝），与 issue 现象一致。
+另外，显式写 `struct T` 的返回类型探针保持 `static struct T make__ct1(int);`，没有被
+`last_bare_tag` 回填误改成 `T`。未发现残余。

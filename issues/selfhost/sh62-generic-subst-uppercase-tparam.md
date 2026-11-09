@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）** |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1684-L1694)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2082-L2083)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2095)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2109-L2110)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2767)、[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2995-L3037) |
-| 状态 | **fixed**（2026-11-09，`87b03ec` + `4995dff`，`v0.26.1`；`verified` 待评审回写） |
+| 状态 | **reopened**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`：括号形式的六类位置已修，无括号 `sizeof T` 仍退出 0 发射未声明 `T`，见「评审复核」） |
 
 ## 现象
 
@@ -126,3 +126,57 @@ $ bash selfhost/check-ast.sh
 # 红证（v0.26.0 基线编出的 ct-ast）= 退出 0 且生成物残留 sizeof(T)，cc 报 'T' undeclared
 # 绿证（v0.26.1）：生成 sizeof(int)，运行输出 4；125 夹具输出 4 4 4 4 5
 ```
+
+## 评审复核（`v0.26.1` / `d29de8f`，2026-11-09）
+
+结论：**reopened**。用户点名的六类括号形式全部通过；仍有一条同根因的无括号形式退出 0 并发射未声明类型名。
+
+**通过项**（评审方自建 `ct-ast v0.26.1`，不采信实现方证据）：
+
+```console
+$ /tmp/p261/b/ct-ast -v
+ct-ast v0.26.1
+$ /tmp/p261/b/ct-ast /tmp/p261/probe/positions.ct -o /tmp/p261/out/p-positions.c; echo ct=$?
+ct=0
+$ cc -std=c99 /tmp/p261/out/p-positions.c -o /tmp/p261/out/run-positions && /tmp/p261/out/run-positions
+9 4 5
+$ grep -nE 'sizeof|_Alignof|offsetof|va_arg|\(int\)|int v;' /tmp/p261/out/p-positions.c
+24:    int v;
+25:    v = (int)(a);
+26:    if (sizeof(int) >= _Alignof(int)) {
+33:    return (int)(offsetof(struct Point, y));
+37:    int v;
+39:    v = va_arg(ap, int);
+```
+
+`struct T` 探针：发射 `static int getv__ct1(struct T *);`，运行输出 `7`；显式 `struct T` 返回类型保持
+`static struct T make__ct1(int);`；`T arr[3]` / `T *p` / `(T *)` / `_Atomic(T)` / `va_arg(ap, T *)` /
+`sizeof(struct T)` / `offsetof(struct T, v)` 均正确。`_Generic` 选择体用类型参数为硬错
+（`5:24` / `6:30` / `7:24`）。
+
+**未通过项**：无括号 `sizeof T`。
+
+```c
+int nogrow<T>(T x) { return (int)sizeof T; }
+```
+
+```console
+$ /tmp/p261/b/ct-ast /tmp/p261/probe/sizeof_noparen.ct -o /tmp/p261/out/p-sizeof_noparen.c; echo ct=$?
+ct=0
+$ grep -n 'sizeof' /tmp/p261/out/p-sizeof_noparen.c
+11:    return (int)(sizeof(T));
+$ cc -std=c99 /tmp/p261/out/p-sizeof_noparen.c -o /tmp/p261/out/p-snp; echo cc=$?
+/tmp/p261/out/p-sizeof_noparen.c:11:25: error: ‘T’ undeclared (first use in this function)
+cc=1
+```
+
+对照：非泛型 `sizeof Missing` 硬错 `error: use of an undeclared variable`（退出 1）；无括号
+`_Alignof T` 硬错 `_Alignof needs a type in parentheses`；`sizeof(T *)` 正确发射 `sizeof(int *)`。
+残余只落在「`sizeof` 无括号 + 类型参数」这一条解析分支：`next_is_type_name()` 只在 `(` 分支被查询，
+无括号路径把 `T` 当表达式原样交给发射器。
+
+**P2 观察（不阻断）**：`_Generic(x, struct T: 1, ...)` 在泛型体内被误拒（`7:31: error: type parameter
+cannot be used inside _Generic`）。这是安全方向的过度拒绝（标签名本不应替换），但损失表达力；修复时宜只拒绝裸 `T`。
+
+**关闭条件**：无括号 `sizeof` 的操作数为类型参数时，要么按类型解析并正确替换，要么在解析期硬错；
+不得退出 0 发射 `T`。同时补一条夹具（TEST-17 已随之重开）。

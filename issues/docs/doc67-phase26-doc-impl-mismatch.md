@@ -5,7 +5,7 @@
 | 严重度 | **P2（Medium）**（行为缺陷本体见 SH-62 / SH-63；本条只记文档侧） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [language-spec.md](../../docs/language-spec.md#L1900-L1914)、[language-spec.md](../../docs/language-spec.md#L4163-L4174)、[phase26.md](../../docs/design/phase26.md#L151-L158)、[phase26.md](../../docs/design/phase26.md#L181)、[phase26.md](../../docs/design/phase26.md#L265)、[roadmap.md](../../docs/roadmap.md#L105)、[check-ast.sh](../../selfhost/check-ast.sh#L1159-L1160)、[AGENTS.md](../../AGENTS.md#L92) |
-| 状态 | **fixed**（2026-11-09，docs 提交，`v0.26.1`；`verified` 待评审回写） |
+| 状态 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；四项逐条核对见「评审复核」） |
 
 ## 1. `language-spec` §4.48 的 S4 承诺不成立（中英同错）
 
@@ -66,3 +66,20 @@
 $ python3 test/docs/check-docs.py
 check-docs: OK (863 relative links in 173 files, v0.26.1, 11 hard gates, 10 phase status, 3 适用版本 header(s))
 ```
+
+## 评审复核（`v0.26.1` / `d29de8f`，2026-11-09）
+
+结论：**verified**（四项逐条）。
+
+1. §4.48 承诺：`positions.ct` 实测 `sizeof(int)` / `_Alignof(int)` / `offsetof(struct Point, y)` /
+   `va_arg(ap, int)` / `(int)` / 局部 `int v` 全部成立；`struct T` 保持标签。中英两份措辞一致。
+2. 诊断文案：`f<int (*)(int)>(p)` → `expected a name in the function-pointer declarator`；
+   声明式空列表 `int f<>(...)` → `expected a type parameter name`（与 §2.5 一致）。
+   调用处 `f<>(1)` 报 `expected a type (tok 4 '>')`，属类型实参解析的既有文案，不在本条声明式口径内。
+3. E1 作用域：`phase26` E1 已写明「整份生成 C」，`check-ast.sh` 用 `-eq 2` + `id__ct1` 定义恰 1 份，
+   与文字一致。
+4. AGENTS：版本 bump 清单已改为指向 roadmap 版本记录，当前版本同步 `v0.26.1`。
+5. 文档门禁：评审方实跑 `python3 test/docs/check-docs.py` → 同上 `863 links / 173 files / v0.26.1 / 11 gates`。
+
+残留说明：§4.48「不静默降级」在无括号 `sizeof T` 上仍被实现反证，但那是 SH-62 的实现缺陷
+（已重开），本条文档口径本身按已支持形式对齐，故不重复计为未修。
