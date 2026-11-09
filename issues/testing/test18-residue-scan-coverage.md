@@ -5,7 +5,7 @@
 | 严重度 | **Medium** |
 | 锚点 | `v0.26.3` |
 | 文件 | [check-ast.sh](../../selfhost/check-ast.sh) |
-| 状态 | **open**（2026-11-09 SH-64 修复轮登记；本轮只消假阳并记录覆盖，不扩面） |
+| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §3 与 §1 的 P1/P2） |
 
 ## 现状（已覆盖）
 
@@ -43,3 +43,28 @@
 
 `build` 与 `.h` 产物的实例体也被同一个机械扫描覆盖，或明确决定永久不覆盖并在
 `docs/design/phase26.md` §2.7 写明理由。
+
+## 处置（实现方，v0.26.4 补丁）
+
+关闭条件的前半已满足：
+
+- **`test(check-ast): scan build and header products for leaked type parameters`**：
+  build 分支对 `<outdir>` 下每个 `*.c` 逐份扫描、每个 `*.h` 断言无实例体；`.h.ct` 的 hdr /
+  prologue 块接同一断言；扫描器加红/绿自检。夹具 `test/ast/130_generic_build_mode/`。
+- **`fix(check-ast): read type parameters from every unit in a fixture`**：
+  类型参数名从夹具目录下**全部 `.ct`** 提取（`fixture_sources()`），修掉「泛型只声明在导入单元」
+  时的静默；夹具 `test/ast/131_generic_cross_unit/` 固定该形态（实例体在导入单元的产物 `lib.c`——
+  `-o` 目录扁平化——入口无泛型）。`check-warnings.sh` 的 build 触发条件同步扩到 `.h.ct`。
+
+残余盲区（`test/modules/**` 独立构建、`test/cases` / `examples` 语料）按关闭条件后半处理：
+理由与触发条件写在 [phase26.md §2.7](../../docs/design/phase26.md#L252) 的覆盖表里。
+
+验证：
+
+```console
+$ bash selfhost/check-ast.sh        # == summary: 834 passed, 0 failed ==
+$ bash selfhost/check-warnings.sh   # check-warnings: 253 ok, 0 failed
+```
+
+红证：把自检调用改回「只传入口 `src.ct`」→ `FAIL tparam_residue self-test: the scanner
+stayed silent on a leaked type parameter`（`833 passed, 1 failed`，退出 1）。

@@ -6,7 +6,7 @@
 | 严重度 | **Medium**（不影响编译器，但目录语义与索引声明互相矛盾） |
 | 锚点 | `v0.25.0`（2026-11-09） |
 | 文件 | [docs/README.md](../../docs/README.md)、[docs/design/](../../docs/design/)、[docs/history/README.md](../../docs/history/README.md)、[test/docs/check-docs.py](../../test/docs/check-docs.py) |
-| 状态 | open |
+| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置，路线 B，并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P5） |
 
 ## 现象
 
@@ -49,3 +49,24 @@
 ## 处置
 
 本轮（`v0.25.0` 文档漂移）只修索引事实，不改变归档策略；保持 `open`。
+
+## 处置（实现方，v0.26.4 补丁）
+
+选**路线 B**（`D26-20`）：路线 A 要迁 12 个文件并重写数十处相对链接，成本约为 B 的 6 倍，而 B 的
+机械断言同样能阻止漂移。
+
+- **`feat(gate): pin the methodology and bound the design archive window`**：
+  `docs/README.md`（中英）与 `docs/history/README.md` 写明「保留最近 12 个已完成阶段（当前在研
+  阶段计入）」；`test/docs/check-docs.py` 新增 `check_design_window()`：`docs/design/phaseN.md`
+  必须满足 `N ≥ max−11`，同一阶段号不得同时出现在 `design/` 与 `history/design/`，
+  `docs/README.md` 必须出现「最近 12 个」字样。
+
+验证：
+
+```console
+$ python3 test/docs/check-docs.py   # design window: ok (11/12)
+```
+
+红证：临时树加入 `design/phase99.md` + `design/phase80.md` + 重复归档 `history/design/phase99.md`
+→ 两条错误（phase 80 越界，oldest kept: 88；`phase99.md exists in both docs/design/ and
+docs/history/design/`）。

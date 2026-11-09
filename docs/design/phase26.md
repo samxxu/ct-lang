@@ -2,7 +2,7 @@
 
 > 中文。
 >
-> **状态：完成**（退出判据于 2026-11-09、首个实现提交前冻结；收口记录见 §6/§7）。
+> **状态：完成**（退出判据于 2026-11-09、首个实现提交前冻结；收口记录见 §6/§7；v0.26.4 补丁见 §9）。
 > **主题来源**：[phase25.md:65](phase25.md#L65) 与 [phase25.md:261](phase25.md#L261) 明确写「泛型是 Phase 26」；
 > 立项时 [roadmap.md](../roadmap.md) 尚无 Phase 26 行，本相同时补入；需求池中「类型检查 / 泛型」一项被本相拆出实现。
 > 关联：[phase25.md](phase25.md)（静态映射闭包实参）、[phase19.md](phase19.md)（受限语义检查）、
@@ -256,8 +256,11 @@ v0.26.1 的缺陷不是某个算子漏了拦截，而是**类型名判定只长�
 | `test/ast/*/prog.ct` 的编译产物，且文件内确有泛型声明 | ✅ 扫描（从夹具自身声明提取类型参数名，只读 `<name>__ctN` 函数体） |
 | 非模板函数里的同名局部变量（`int T = 5;`） | ✅ 不误报（v0.26.2 的整文件扫描返回 `T(2)`，现为空；129 正例固定该行为） |
 | 合法 `struct` / `union` / `enum T` 标签 | ✅ 扣掉（126） |
-| `.h.ct` 的产物、`test/ast/errors/**`（本就不产生产物）、`test/modules/**` 与 `examples/**` 的构建产物 | ❌ 不扫（登记 TEST-18，扩面需按单元解析泛型声明，代价见该 issue） |
-| 泛型声明与类型参数名不在同一文件（跨单元） | ❌ 本相不支持跨单元泛型，故不适用 |
+| `.h.ct` 的产物 | ✅ 断言不含任何 `<name>__ctN` 实例定义（v0.26.4 / TEST-18；`.h` 只携带类型，`pub` 泛型已被 L26-2 拒绝，实例体只可能出现在 `.c`） |
+| `test/ast/*/` 的 `build` 产物（目录含 `.m.ct` 或 `.h.ct`） | ✅ 每个 `*.c` 都过同一扫描，类型参数名从**目录下全部 `.ct`** 提取（v0.26.4 / TEST-18；`130_generic_build_mode` 固定单文件泛型，`131_generic_cross_unit` 固定「泛型只声明在导入单元」的形态） |
+| `test/ast/errors/**`（本就不产生产物）、`test/modules/**` 与 `examples/**` 的构建产物、语料 | ❌ 不扫（残余名目：这些位置目前没有泛型夹具。触发条件是其中新增泛型夹具，此时必须在同一改动里补扫描钩子；解析期守卫 D26-14 / D26-15 与实例体扫描互补，前者覆盖全部形态，后者兜住发射期回归） |
+| 泛型声明与实例调用分处两个单元（例如 `extra/lib.h.ct` 内 `static T twice<T>`，由同一单元内的 `pub` 函数实例化） | ✅ 扫描（实例体落在该单元的 `.c` 产物，`-o` 目录下扁平化为 `lib.c`；类型参数名从该 `.h.ct` 读出，入口 `prog.ct` 即使没有任何泛型声明也不影响）。`pub` 泛型本身仍被 L26-2 拒绝，因此不存在「实例由另一个单元触发」的形态 |
+| 扫描器的书写形态假设 | ⚠️ 已知限制：实例体提取要求 `__ctN(` 与 `{` 同行（K&R），类型参数声明要求 `<T>` 在行首；发射器当前恒为这两种形态，自检也只覆盖 K&R。**触发信号**：发射器改成分行花括号（Allman）或缩进声明时，扫描会静默失效——那时必须同时把 `tparam_residue` 的提取改成按花括号深度匹配，并给自检加一份 Allman 样本 |
 
 ---
 
@@ -612,5 +615,97 @@ B26-2 判决：两方案（真实现替换 / 改成硬错误）都能满足验�
 | --- | --- | --- | --- |
 | SH-64（根因） | `fix(parse): reject a type parameter in a value position at the identifier entry`（`Expr.h.ct` 的 `T_ID` 入口守卫） | 4 个 `generic_tparam_value_*` 负例的 `p26_diag` / `p26_chk`；基线对照见 §6.3.1 | v0.26.2 四个探针均退出 0 并发射裸 `T`；v0.26.3 分别报 `6:13` / `11:15` / `6:30` / `6:30` 的 `type parameter 'T' cannot be used as a value`，`ct check` 同文案 |
 | 防线假阳 | `test(gate): scope the residue scan to instance bodies`（`tparam_residue()` 只读 `<name>__ctN`；新增 129 正例） | 非模板函数含 `int T = 5;` 的探针：整文件扫描 `T(2)`、实例体扫描空；`bash selfhost/check-ast.sh` | 假阳消失；v0.26.1 坏产物仍 `T(1)`；123–129 产物为空 |
-| 防线盲区 | `docs(phase26): enumerate identifier paths and record the residue blind spots`（TEST-18） | `docs/design/phase26.md` §2.7；`issues/testing/test18-...` | `.h` / errors / module 构建产物 / 语料未扫，代价与方案已登记 |
+| 防线盲区 | `docs(phase26): enumerate identifier paths and record the residue blind spots`（TEST-18）→ v0.26.4 收口 | `docs/design/phase26.md` §2.7；`issues/testing/test18-...`；`bash selfhost/check-ast.sh` | v0.26.4 / TEST-18：`build` 的每个 `.c` 产物纳入扫描、`.h` 产物断言无 `<name>__ctN` 实例定义、新增夹具 `130_generic_build_mode` 与扫描器红/绿自检；`test/ast/errors/**`、`test/modules/**` / `examples/**` 与语料仍不扫，理由与触发条件见 §2.7 |
 | 发布 | `chore(release): v0.26.3`（五处 `CTC_VERSION` + 74 个 golden 的版本 token） | `grep -n 'CTC_VERSION'` 五处；`bash selfhost/check-all.sh` | 五处均 `0.26.3`；`check-all: OK (11 hard gates green)` |
+
+## 9. v0.26.4 补丁（工程可信度四项收口，2026-11-09）
+
+### 9.1 版本与定位
+
+本项是 Phase 26 之后的修复补丁，取 **`v0.26.4`**：五处 `CTC_VERSION` 同步、74 个 golden 仅版本 token 由 `0.26.3` 重生成到 `0.26.4`，编译器逻辑零改动。
+
+- 修复不构成阶段边界：`docs/design/` 不新增阶段文档，`docs/roadmap.md` 只记补丁记录。
+- S2（编辑器泛型跳转索引）**不计入编译器版本**：`editors/vscode` 按扩展自己的版本线发布 `0.5.1`，与本仓库的 `CTC_VERSION` 无关。
+- 发布形态：annotated tag `v0.26.4` 指向发布提交，远端 `main` 与 peeled tag 为同一提交。
+
+### 9.2 范围与判据
+
+四条工作合并为一个补丁，每条有独立判据；判据编号 `P1`–`P8`。
+
+| # | 工作 | 判据 |
+| --- | --- | --- |
+| S1 / TEST-18 | 把 `tparam_residue()` 防线扩到 `build` 的每个 `.c` 产物与 `.h` 产物，并让类型参数名从夹具的全部单元提取 | P1：`130` / `131` 跑通且产物含实例体；`.h` 无实例定义；P2：扫描器自检红/绿；P3：编译器逻辑零改动 |
+| S2 / DOC-68 | 编辑器索引识别 `T name<T>(...)` 声明，纯函数抽成可断言的 `indexer.js` | P4：`check-index.js` 26 断言；旧正则变异后 12 条红 |
+| S3 / CI-8 | `AGENTS.md` 锚定主规范 `spec-version` / `spec-sha256`，接入门禁 11 | P5：`spec pin: ok (1.0.0, 93a8e968)`；篡改 → `mismatch`；缺席 → `skipped` |
+| S4 / DOC-66 | `docs/design/` 保留最近 12 个已完成阶段并断言无重复归档 | P6：`design window: ok`；越界 / 双存变红 |
+| 收口 | 零回归、11 道硬门禁、版本串 | P7：`check-ast` 不低于基线 830 且 `0 failed`；P8：五处 `CTC_VERSION` = `0.26.4`、annotated tag、远端 hash 一致 |
+
+**不做**：不改编译器语义；不新增第 12 道门禁（G9 并入门禁 11）；不迁移 `docs/design/` 的既有文件（选窗口断言而非路线 A）；不碰 L0/L1/L2 的逻辑（只改版本串）。
+
+### 9.3 S1 根因与红证
+
+- **盲区一（产物形态）**：v0.26.3 的防线只扫 compile 模式的单个 `.c`，`build` 产物与 `.h` 从未进入扫描。补法：`build` 分支对输出目录下每个 `*.c` 逐份调用同一函数，对每个 `*.h` 断言不含 `<name>__ctN(` 后接 `{` 的实例体；`.h.ct` / prologue 块接同一断言。夹具 `test/ast/130_generic_build_mode/`（期望 `6 42`）。
+- **盲区二（跨单元）**：`tparam_residue()` 的类型参数名只从入口文件取。泛型若只声明在导入单元（`extra/lib.h.ct`），实例体落在该单元的 `.c`（`-o` 扁平化为 `lib.c`），扫描器没有名字可比，静默通过。补法：`fixture_sources()` 递归列出夹具目录下全部 `.ct`；夹具 `test/ast/131_generic_cross_unit/`（入口 `prog.ct` 无泛型，期望 `40`）固定该形态。`check-warnings.sh` 的 build 触发条件同步扩到 `.h.ct`。
+- **红证（先红后绿）**：
+
+| 变异 | 实测 |
+| --- | --- |
+| `tparam_residue()` 首行 `return 0;` | `FAIL tparam_residue self-test: the scanner stayed silent on a leaked type parameter` → `832 passed, 1 failed`，退出 1 |
+| 自检只传入口 `src.ct`（v0.26.3 口径，泛型只写在 `lib.h.ct`） | 同一条 FAIL → `833 passed, 1 failed`，退出 1；脏 `lib.c` + 入口锚 → `[]` |
+| `TPARAMS` 置空（旧正则） | `check-index: 26 assertions, 12 failed` |
+| 主规范副本追加 1 字节 | 状态 `mismatch (1.0.0, 93a8e968)` + 摘要不符错误；缺席 → `skipped (spec not found)`、0 错 |
+| 临时树加 `phase99` / `phase80` / 双存 `phase99` | `check-docs: FAIL (15 problem(s))`（越界 12 + 双存 1 + 缺状态行 2） |
+
+- **残余盲区**：`test/modules/**` 与语料不做全量扫描（§2.7 已写触发条件）；扫描器假定 `__ctN(` 与 `{` 同行、类型参数声明在列 1（发射器当前恒为此形态，触发信号同样记在 §2.7）。
+
+### 9.4 决策
+
+| 编号 | 决策 | 理由 |
+| --- | --- | --- |
+| D26-16 | 四条工作合并为一个补丁 | 共享「把文字承诺变成可执行门禁」主线；分开做会重复一次门禁收口 |
+| D26-17 | TEST-18 扩覆盖，不做永久豁免 | 扩覆盖只需在 `build` 分支加一次循环；豁免会让 Phase 26 的教训继续悬空 |
+| D26-18 | 抽取 `indexer.js` 而不是在 `extension.js` 里加分支 | 只有纯函数能被 Node 直接断言；`extension.js` 依赖 `vscode` 模块 |
+| D26-19 | G9 并入门禁 11 | 新门禁会连锁改动计数声明、`node` 前置与 CI 配置 |
+| D26-20 | DOC-66 选路线 B（窗口断言） | 路线 A 要迁移 10 个文件并重算相对链接，成本约为 B 的 6 倍 |
+
+各项取舍均无对立判据，由 EDITOR 代决（**用户已授权代决**）；未触发 §7 battle。
+
+### 9.5 交付物
+
+| 路径 | 作用 |
+| --- | --- |
+| `selfhost/check-ast.sh`、`selfhost/check-warnings.sh` | 产物扫描、`.h` 断言、自检、`.h.ct` 触发 |
+| `test/ast/130_generic_build_mode/`、`test/ast/131_generic_cross_unit/` | 两个新夹具 |
+| `editors/vscode/indexer.js`、`editors/vscode/extension.js` | 索引抽取（扩展线 `0.5.1`） |
+| `editors/vscode/test/check-index.js`、`editors/vscode/test/check-grammar.py` | 26 条断言与门禁挂载 |
+| `AGENTS.md`、`test/docs/check-docs.py` | G9 锚定、spec pin、12 阶段窗口 |
+| `docs/README.md`、`docs/history/README.md` | 归档政策的中英声明 |
+| `docs/history/reports/review-phase26-v0.26.4.md` | 独立评审报告 |
+| `issues/{testing/test18,docs/doc68,ci/ci-8,docs/doc66}-*.md` | 四条台账的处置与验证 |
+
+### 9.6 门禁实跑（`v0.26.4`，2026-11-09）
+
+| 命令 | 原始输出 |
+| --- | --- |
+| `bash selfhost/check-ast.sh` | `== summary: 834 passed, 0 failed ==`（基线父提交 `8c88211` 实跑 `830 passed, 0 failed`） |
+| `bash selfhost/check-all.sh` | `check-all: OK (11 hard gates green)` |
+| `bash selfhost/check-warnings.sh` | `check-warnings: 253 ok, 0 failed` |
+| `python3 test/docs/check-docs.py` | `spec pin: ok (1.0.0, 93a8e968)`；`check-docs: OK (875 relative links in 174 files, v0.26.4, 11 hard gates, 10 phase status, 3 适用版本 header(s))`；`design window: ok (10/12)` |
+| `python3 editors/vscode/test/check-grammar.py` | `== 109 checks, 0 failed ==` |
+
+74 个 golden 仅版本 token 由 `0.26.3` → `0.26.4` 变化；`check-goldens: OK (no regression, and the self-hosted rebuild agrees)`。
+
+### 9.7 独立评审
+
+[review-phase26-v0.26.4.md](../history/reports/review-phase26-v0.26.4.md)：P1–P7 全部 PASS、P8 判为 release-ready，最终 `release: GO`。评审自建自举链并独立复现跨单元盲区；5 条 minor 中 3 条放行前修复，2 条记录接受（扫描器的书写形态假设、提交顺序）。
+
+### 9.8 lessons
+
+- `gate:check-ast` — 断言的判别力必须先证：「全部单元」口径下绿、「只读入口」口径下红，才说明修复不是空转。
+- `gate:check-warnings` — 「夹具是否多单元」的判定存在两份（`check-ast.sh` / `check-warnings.sh`），改一处必须两处同改；夹具 `131` 正是在第二份里才暴露出漏改。
+- `gate:check-docs` — 门禁的状态行要与判决一致，且失败路径也必须打印，否则末行读起来像通过。
+- `spec:§6 证据门禁` — 基线数字必须现跑（815 是 v0.26.0 的旧值，父提交实跑 830）。
+- `spec:§7 battle` — 无判据取舍由 EDITOR 代决并注明「用户已授权代决」，不虚设 battle。
+- `rejected:把修复包装成新阶段并 bump minor` — 修复不是阶段边界；版本只 bump patch。
+- `rejected:迁移 12 个 design 文件（路线 A）` — 成本约为窗口断言的 6 倍，防漂移收益相同。
+- `rejected:新增第 12 道门禁承载 G9` — 连锁改动计数声明、`node` 前置与 CI 配置，收益不足。

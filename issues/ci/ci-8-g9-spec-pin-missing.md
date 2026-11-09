@@ -6,7 +6,7 @@
 | 严重度 | **Medium**（治理门禁不可执行；不影响编译产物，但「规范锚定」只能靠人工声明） |
 | 锚点 | `v0.25.0`（2026-11-09） |
 | 文件 | [AGENTS.md](../../AGENTS.md)、`~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md`、`tools/check.sh`（项目内不存在） |
-| 状态 | open |
+| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P4） |
 
 ## 现象
 
@@ -45,3 +45,23 @@
 ## 处置
 
 本轮（`v0.25.0` 文档漂移）不改变治理字段与门禁结构；保持 `open`，待单独排期。
+
+## 处置（实现方，v0.26.4 补丁）
+
+- **`feat(gate): pin the methodology and bound the design archive window`**：
+  `AGENTS.md` 增加唯一的两行登记（`spec-version` = `1.0.0`，`spec-sha256` = 主规范整份文件的
+  SHA-256）；`test/docs/check-docs.py`（门禁 11）新增 `check_spec_pin()`：两行缺失为红、规范文件
+  缺席打印 `skipped (spec not found)` 且不红、在场则比对摘要并做「登记版本不得低于规范版本」检查。
+  入口并入既有门禁 11，不新增第 12 道门禁（`D26-19`）。
+- **`fix(check-docs): report a spec-pin mismatch instead of a bare ok`**：
+  摘要不符 / 版本落后时，末行状态改打印 `mismatch` / `stale`，不再以 `ok (...)` 收尾。
+
+验证：
+
+```console
+$ python3 test/docs/check-docs.py   # spec pin: ok (1.0.0, 93a8e968)
+```
+
+红证：把规范副本追加 1 字节后指过去 → 状态 `mismatch (1.0.0, 93a8e968)` +
+`AGENTS.md: spec-sha256 93a8e968f76c... != d860f989a879...`；规范缺席 → `skipped (spec not found)`、
+错误数为 0。

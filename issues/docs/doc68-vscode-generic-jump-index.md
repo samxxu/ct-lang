@@ -5,7 +5,7 @@
 | 严重度 | Medium（新语法可用但 `Ctrl+Click` / `F12` 静默无结果，可察觉的缺口） |
 | 锚点 | `v0.26.3` / `02999c4`（HEAD = `main`）+ 本轮语法提交（`editors/vscode` 0.5.0） |
 | 文件 | [extension.js](../../editors/vscode/extension.js#L81-L98)、[extension.js](../../editors/vscode/extension.js#L192-L198)、[extension.js](../../editors/vscode/extension.js#L373-L390) |
-| 状态 | **open**（本轮只补高亮与语法断言，`extension.js` 未动） |
+| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P3） |
 
 ## 现象
 
@@ -57,3 +57,22 @@ $ node -e '… DEFINITION_RE / DEFINITION_EOL_RE / BARE_DEFINITION_RE …'
 
 本轮按用户要求不动 `extension.js`：泛型模板的高亮与语法门禁已在 0.5.0 落地，跳转缺口以本条
 登记。修复时按上述判据 1–4 写回归，并明确“只到声明行、不区分实例化”的口径后再动正则。
+
+## 处置（实现方，v0.26.4 补丁）
+
+- **`feat(editor): resolve generic declarations in go-to-definition`**：
+  `parseSource()` 等纯函数抽到 `editors/vscode/indexer.js`（CommonJS，可直接 `require`）；
+  `DEFINITION_RE` / `DEFINITION_EOL_RE` 在名字与方法名之间接受可选 `<…>`，内容限定为标识符 /
+  `,` / 空白 / `*`；`BARE_DEFINITION_RE` 不变。口径固定为「只到声明行、不区分实例化」。
+- 判据 1–4 落成 26 条断言：`editors/vscode/test/check-index.js`（K&R / Allman / `impl` 方法 /
+  trait 默认方法、`id<int>` / `id<char *>` 调用点、三条比较表达式负例、原型不算定义、既有形态回归）。
+- `check-grammar.py` 在 `node` 在场时调用该脚本，缺席显式 `skip`。
+
+验证：
+
+```console
+$ node editors/vscode/test/check-index.js   # check-index: 26 assertions, 0 failed
+$ python3 editors/vscode/test/check-grammar.py  # == 109 checks, 0 failed ==
+```
+
+红证：把 `TPARAMS` 置空（等价旧正则）→ `check-index: 26 assertions, 12 failed`。
