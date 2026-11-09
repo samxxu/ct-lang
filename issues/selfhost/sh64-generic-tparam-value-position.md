@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）** |
 | 锚点 | `v0.26.2` / `5b43fac` |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3258-L3275) |
-| 状态 | **fixed**（2026-11-09，`v0.26.3`：`parse_primary` 的 `T_ID` 分支入口统一守卫，值位置一律硬错；见「修复（`v0.26.3`）」） |
+| 状态 | **verified**（2026-11-09 评审复核，`v0.26.3` / `02999c4`：四类值位置全部硬错且有红/绿对照，守卫落在 `T_ID` 共同入口且未误伤同名全局/宏/标签；见「评审复核」） |
 
 ## 现象
 
@@ -105,3 +105,69 @@ if (all_caps || strcmp(nm, "stderr") == 0 ...) {
 在 `v0.26.2` 基线上 `p26_diag` 会因退出 0 而红。门禁数字见 `docs/design/phase26.md` §6.3.4。
 
 `verified` 留给独立评审。
+
+## 评审复核（`v0.26.3` / `02999c4`，2026-11-09）
+
+结论：**verified**。评审方在 `/tmp/p263/repo`（HEAD 副本）自建 `ct-ast v0.26.3`，全部结论用自跑命令核对。
+
+**1. 四类值位置：全部退出 1，无产物**
+
+```console
+$ /tmp/p263/b/ct-ast probe/leak1.ct -o out/leak1.c; echo exit=$?
+leak1.ct:1:34: error: type parameter 'T' cannot be used as a value
+exit=1
+$ /tmp/p263/b/ct-ast probe/leak4.ct -o out/leak4.c; echo exit=$?
+leak4.ct:2:27: error: type parameter 'T' cannot be used as a value
+exit=1
+# leak2（`sizeof T * T`）1:51、leak3（`sizeof T + T`）1:51 同文案；四次运行后 out/*.c 均未生成
+```
+
+旧基线对照（`/tmp/p262/b/ct-ast`，`ct-ast v0.26.2`）同一批探针：
+
+```console
+leak1 exit=0  ->  10:    return T;
+leak2 exit=0  ->  10:    return (int)((sizeof(int) * T));
+leak3 exit=0  ->  10:    return (int)((sizeof(int) + T));
+leak4 exit=0  ->  13:    return h(T);
+```
+
+`ct check` 侧四条负例同样退出 1、位置与文案一致（`6:13` / `11:15` / `6:30` / `6:30`），
+与门禁 `p26_diag` / `p26_chk` 逐字一致。
+
+**2. 守卫落点：`T_ID` 共同入口，位于六条出口之前**
+
+[Expr.h.ct:2927](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2927) 进入 `T_ID` 分支 → `lex_next()` →
+[L2934-L2953](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2934-L2953) 守卫 → 之后才是泛型实例、
+限定名、调用、`ALL_CAPS` 兜底、裸函数值、`fnval_ok`。不是单出口补丁。
+
+**3. 反例：合法的同名标识符未被误伤**
+
+| 反例 | 结果 |
+| --- | --- |
+| 全局 `int T = 5;` + `f<U>` 体内 `return T;` | 退出 0，`cc` 通过，运行 `5` |
+| `#define T 42` + `f<U>` 体内 `return T;` | 退出 0，产物保留宏调用，运行 `42` |
+| `#define T 42` + `f<T>` 的 `sizeof T` | 退出 0，产物为 `sizeof(int)`，运行 `4` |
+| `struct T` 标签 + `getv<T>(struct T *)` | 退出 0，产物保留 `struct T`，运行 `7`（SH-63 不回退） |
+| 全局 `int T` / 宏 `T` + `f<U>` 的 `sizeof U` | 退出 0，运行 `5 4` / `42 4` |
+| 非模板函数体内局部 `int T = 5; return T;`（夹具 129） | 退出 0，运行 `4 5` |
+
+边界（硬错而非误发射）：模板体内 `int T = 3;` 被拒（`4:11: error: expected a variable name`）；
+`f<T>` 体内把 `T` 当值（即使外层有同名宏 `#define T 42`）被守卫硬错——类型参数按设计遮蔽外层宏。
+两者都退出 1，不会产出坏 C。
+
+**4. `tparam_residue()` 假阳已消，红证仍在**
+
+```console
+$ bash rescheck.sh          # 同一函数体，取自 check-ast.sh
+v0.26.2 leak1 product -> [T(1) ]      # 旧基线的真残留：红
+v0.26.3 129 product   -> []           # 非模板函数的 `int T = 5;`：不再假阳
+v0.26.3 126 product   -> []           # 7 处 `T` 全为 struct T 标签，被豁免
+```
+
+盲区未缩水、如实登记在 [TEST-18](../testing/test18-residue-scan-coverage.md)（`open`）：
+`.h` 产物、`test/ast/errors/`、module `build` 产物、`test/cases` 与 `examples` 语料、`build` 模式夹具。
+本轮文档措辞已限定为「编译模式夹具的实例体」，未声称全产物覆盖。
+
+**5. 门禁**：`check-all.sh` 内 `830 passed`；评审方另跑 `check-ast.sh` 同为 `830`（详见
+[review-phase26](../docs/history/reports/review-phase26.md) §13 的构成拆分：129 夹具 1 + 负例总扫 4 +
+`p26_diag` 4 + `p26_chk` 4 = +13，自 817 起算）。

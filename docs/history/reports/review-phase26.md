@@ -2,13 +2,13 @@
 
 | 项 | 值 |
 | --- | --- |
-| 源码锚点 | 首轮 `ac1c7cd`（tag `v0.26.0`）；复核 `d29de8f`（tag `v0.26.1`）；收尾复核 `5b43fac`（annotated tag `v0.26.2`） |
-| 适用版本 | ct 主线 `ct-ast`（版本以 `ct -v` 为准）；首轮 `v0.26.0`，复核 `v0.26.1`，收尾复核 `v0.26.2` |
-| 版本 | **`v0.26.0`（首轮）+ `v0.26.1`（复核）+ `v0.26.2`（收尾）**；三轮五处 `CTC_VERSION` 均同步 |
-| 工作树 | 首轮干净；复核轮与收尾轮工作树仅评审产物（issue 状态回写 + 本报告），未改代码/测试 |
-| 审查对象 | `docs/design/phase26.md` 立项节 §1（六字段）与 E1–E8；实现提交 `f3be73e`、`c6b1220`、`7287044`、`ac1c7cd`；复核提交 `87b03ec`、`f5f1092`、`4995dff`、`5762f1e`、`d29de8f`；收尾提交 `5b43fac` |
-| 基线 | 首轮：`check-ast.sh` **803 passed**；复核：**815 passed**；收尾：**817 passed**；三轮均 **11 hard gates green**、`check-docs` OK |
-| 结论 | 首轮**有条件放行**；`v0.26.1` 复核**未通过**（见 §11）；`v0.26.2` 收尾：SH-62 / TEST-17 `verified`，但新立 **[SH-64](../../../issues/selfhost/sh64-generic-tparam-value-position.md)（P1）**——类型参数出现在值位置仍退出 0 发射裸 `T`，故 **Phase 26 仍未收口**（见 §12） |
+| 源码锚点 | 首轮 `ac1c7cd`（tag `v0.26.0`）；复核 `d29de8f`（tag `v0.26.1`）；收尾复核 `5b43fac`（annotated tag `v0.26.2`）；最终复核 `02999c4`（tag `v0.26.3`） |
+| 适用版本 | ct 主线 `ct-ast`（版本以 `ct -v` 为准）；首轮 `v0.26.0`，复核 `v0.26.1`，收尾复核 `v0.26.2`，最终复核 `v0.26.3` |
+| 版本 | **`v0.26.0`（首轮）+ `v0.26.1`（复核）+ `v0.26.2`（收尾）+ `v0.26.3`（最终复核）**；四轮五处 `CTC_VERSION` 均同步 |
+| 工作树 | 首轮干净；复核轮、收尾轮与最终复核轮工作树仅评审产物（issue 状态回写 + 本报告），未改代码/测试 |
+| 审查对象 | `docs/design/phase26.md` 立项节 §1（六字段）与 E1–E8；实现提交 `f3be73e`、`c6b1220`、`7287044`、`ac1c7cd`；复核提交 `87b03ec`、`f5f1092`、`4995dff`、`5762f1e`、`d29de8f`；收尾提交 `5b43fac`；最终复核提交 `a2600f9`、`14bbcb4`、`02999c4` |
+| 基线 | 首轮：`check-ast.sh` **803 passed**；复核：**815 passed**；收尾：**817 passed**；最终复核：**830 passed**；四轮均 **11 hard gates green**、`check-docs` OK |
+| 结论 | 首轮**有条件放行**；`v0.26.1` 复核**未通过**（见 §11）；`v0.26.2` 收尾：SH-62 / TEST-17 `verified`，但新立 **[SH-64](../../../issues/selfhost/sh64-generic-tparam-value-position.md)（P1）**（见 §12）；`v0.26.3` 最终复核：**SH-64 `verified`，Phase 26 可收口**（见 §13） |
 
 > 本轮只审不改。新增 issue：**[SH-62](../../../issues/selfhost/sh62-generic-subst-uppercase-tparam.md)（P1）**、
 > **[TEST-17](../../../issues/testing/test17-phase26-generic-coverage-gap.md)（P1）**、
@@ -547,3 +547,115 @@ cc=1
 在发射 `N_RAW` 前没有检查 `self->in_generic && strcmp(nm, self->in_generic_tparam) == 0`。
 `tparam_residue()` 可检出该残留（`leak1/2/4` → `T(1)`），但只有夹具覆盖到该形态时才触发，
 不能替代编译期硬错。关闭条件与建议见 [SH-64](../../../issues/selfhost/sh64-generic-tparam-value-position.md)。
+
+## 13. `v0.26.3` 最终复核（2026-11-09，锚点 `02999c4`）
+
+### 13.1 结论
+
+| Issue | 结论 | 判据 |
+| --- | --- | --- |
+| SH-64 | **verified** | 四类值位置全部 `file:line:col: error:` 退出 1、不写产物；守卫位于 `T_ID` 共同入口；同名全局 / 宏 / `struct T` 标签均无误伤 |
+| TEST-18 | 维持 `open`（Medium） | 盲区如实登记、措辞已限定为“编译模式夹具的实例体”，不声称全产物覆盖；不阻断 Phase 26 |
+
+**Phase 26 可以收口。** `v0.26.0`–`v0.26.3` 四轮复核发现的 3 条 P1（SH-62 / SH-64 / TEST-17）、
+2 条 P2（SH-63 / DOC-67）与 TEST-18 观察均已修复或如实登记，无“退出 0 发射未声明类型名”的已知路径。
+
+### 13.2 四类值位置：红/绿对照（评审方自建编译器）
+
+```console
+$ /tmp/p263/b/ct-ast -v
+ct-ast v0.26.3
+$ /tmp/p263/b/ct-ast probe/leak1.ct -o out/leak1.c; echo exit=$?
+leak1.ct:1:34: error: type parameter 'T' cannot be used as a value
+exit=1
+$ ls out/leak1.c
+ls: cannot access 'out/leak1.c': No such file or directory
+```
+
+四类形态在同一编译器下：
+
+| 探针 | 形态 | v0.26.3 | v0.26.2 基线 |
+| --- | --- | --- | --- |
+| `leak1` | `return T;` | 退出 1，`1:34` | 退出 0 → `10: return T;` |
+| `leak2` | `sizeof T * T` | 退出 1，`1:51` | 退出 0 → `10: return (int)((sizeof(int) * T));` |
+| `leak3` | `sizeof T + T` | 退出 1，`1:51` | 退出 0 → `10: return (int)((sizeof(int) + T));` |
+| `leak4` | `return h(T);` | 退出 1，`2:27` | 退出 0 → `13: return h(T);` |
+
+`ct check` 对四条负例同样退出 1，位置与文案和 `p26_diag` / `p26_chk` 逐字一致：
+`generic_tparam_value_return 6:13`、`arg 11:15`、`mul 6:30`、`add 6:30`。
+
+### 13.3 守卫落点（根因修法抽查）
+
+[Expr.h.ct:2927](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2927) 进入 `T_ID` 分支，`lex_next()`
+之后立即是 [L2934-L2953](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2934-L2953) 的守卫；
+泛型实例、限定名、调用、`ALL_CAPS` 兜底、裸函数值、`fnval_ok` 六条出口全部在其后。
+符合实现方“共同入口”的声明，不是逐出口补丁。
+
+### 13.4 反例：合法同名标识符未被误伤
+
+| 反例 | 实测 |
+| --- | --- |
+| 全局 `int T = 5;` + `f<U>` 体内 `return T;` | 退出 0，`cc` 通过，运行 `5` |
+| `#define T 42` + `f<U>` 体内 `return T;` | 退出 0，运行 `42` |
+| `#define T 42` + `f<T>` 的 `sizeof T` | 退出 0，产物 `sizeof(int)`，运行 `4` |
+| `struct T` 标签 + `getv<T>(struct T *)` | 退出 0，产物保留 `struct T`，运行 `7`（SH-63 不回退） |
+| 非模板函数内局部 `int T = 5; return T;`（夹具 129） | 退出 0，运行 `4 5` |
+
+两处硬错边界（保守但安全，不产生坏产物）：模板体内 `int T = 3;` → `4:11: error: expected a variable name`；
+`f<T>` 体内把 `T` 当值（即使外层存在同名宏）→ 被守卫判为类型参数，退出 1。
+即类型参数在模板作用域内遮蔽外层同名宏，属设计选择，未见误发射。
+
+### 13.5 `tparam_residue()`：假阳消除、红证保留、盲区登记
+
+```console
+$ bash /tmp/p263/rescheck2.sh      # 直接 source check-ast.sh 的同名函数
+v0.26.2 leak1 product -> [T(1) ]   # 旧基线真残留：RED
+v0.26.3 129 product   -> []        # 非模板函数的 `int T = 5;`：不再假阳
+v0.26.3 126 product   -> []        # 7 处 `T` 全为 `struct T` 标签，豁免仍载荷
+```
+
+盲区与 §12.3 一致，并已由 [TEST-18](../../../issues/testing/test18-residue-scan-coverage.md)（`open`，Medium）
+逐项登记：`.h` 产物、`test/ast/errors/`、module `build` 产物、`test/cases` 与 `examples` 语料、
+`build` 模式任意夹具。`check-ast.sh` 的注释与 `docs/design/phase26.md` §2.7 均限定为“编译模式夹具的实例体”，
+没有过度声称。
+
+### 13.6 门禁数字与 +13 构成
+
+```console
+$ bash selfhost/check-all.sh > /tmp/p263-all.log 2>&1; echo EXIT=$?
+EXIT=0
+$ grep -nE '== summary:|check-all:|check-docs:' /tmp/p263-all.log | tail -8
+151:== summary: 118 passed, 0 failed ==
+243:check-goldens: OK (no regression, and the self-hosted rebuild agrees)
+370:check-archive: OK (no regression)
+1144:== summary: 82 passed, 0 failed ==
+2055:== summary: 830 passed, 0 failed ==
+2368:check-semantics: OK (23 assertions)
+2373:check-docs: OK (866 relative links in 173 files, v0.26.3, 11 hard gates, 10 phase status, 3 适用版本 header(s))
+2408:== summary: 20 pass, 0 new, 0 pending, 0 regression ==
+2413:check-all: OK (11 hard gates green)
+
+$ bash selfhost/check-ast.sh | tail -1
+== summary: 830 passed, 0 failed ==      # 独立复跑，EXIT=0
+```
+
+`817 → 830` 的 **+13** 经日志逐条核对，全部由本轮新增用例构成：
+
+| 来源 | 条数 | 日志行 |
+| --- | --- | --- |
+| `test/ast/129_generic_tparam_value_false_positive`（主夹具循环） | +1 | `1204` |
+| 4 条新负例的通用负例总扫（`test/ast/errors/*.ct`） | +4 | `1671`–`1674` |
+| `p26_diag`（退出码 + 位置 + 文案） | +4 | `1405`–`1408` |
+| `p26_chk`（`ct check` 同文案） | +4 | `1416`–`1419` |
+
+无其他计分点变化；`check-docs` 的 850→866 链接、172→173 文件同样只来自本轮新增的
+`docs/design/phase26.md` §2.7、SH-64 / TEST-18 条目与 §12/§13 交叉引用。评审回写 §13 与 SH-64
+复核段后再跑 `python3 test/docs/check-docs.py` → `869 relative links in 173 files`（新增 3 条链接），
+仍为 OK。
+
+### 13.7 遗留
+
+- TEST-18 维持 `open`（Medium）：`build` / `.h` 产物未纳入机械扫描。它不改变“解析期已硬错”的结论，
+  但新泛型形态仍应同时补 `p26_diag` + `p26_chk`，不要只依赖产物层防线。
+- 模板体内 `int T = 3;` 的诊断文案是 `expected a variable name`，对“遮蔽类型参数”语义不够直白
+  （Info，不占 ID，无坏产物）。
