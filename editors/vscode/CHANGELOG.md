@@ -1,5 +1,18 @@
 # Change Log
 
+## 0.5.1
+
+- Go to definition now resolves a generic declaration `T id<T>(T x)` in
+  K&R and Allman bodies, as an `impl` method and as a trait default body. The
+  jump target is the declaration line only: `id<int>(42)` and `id<char *>(p)`
+  both resolve to `id`, never to an instantiation.
+- The indexer is now a plain CommonJS module (`indexer.js`) with executable
+  assertions (`test/check-index.js`, 26 cases, run by `check-grammar.py` when
+  `node` is present).
+
+This extension has its own version line; 0.5.1 does not affect the compiler's
+`CTC_VERSION`.
+
 ## 0.5.0
 
 - Highlighting for the Phase 20–26 syntax, 17 rules in all: `type` / `pub type`

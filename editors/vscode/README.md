@@ -65,6 +65,10 @@ No duplicated C grammar to maintain and nothing to drift.
 - Plain names → trait/struct declarations, `impl` methods, trait method
   declarations (abstract and default bodies), top-level functions (`pub` and
   Allman-style bodies included).
+- Generic declarations (Phase 26): `T id<T>(T x)` is indexed in both K&R and
+  Allman bodies, as an `impl` method or a trait default body. The jump target is
+  the declaration line only — `id<int>(42)` and `id<char *>(p)` both resolve to
+  the `id` declaration, never to an instantiation.
 - `c.send()` against a `map`-ed instance → the `map` binding when the receiver
   is the mapped global.
 - Trait default methods (batch 36): `c.write_all()` → the impl override when
@@ -92,10 +96,10 @@ pairs, brace-based indentation, block-comment continuation on Enter, and the
 snippets `trait`, `structuse`, `impl`, `method`, `call`.
 
 The grammar, snippets and language configuration are **declarative JSON — no
-build step**. Navigation lives in a single `extension.js` that uses only the
-`vscode` API and Node's `fs`, so there are still **no third-party
-dependencies**. The `.ct` sources are not compiled by this extension; use `ct`
-(or the `ctc` alias) for that.
+build step**. Navigation is split into `extension.js` (VS Code API only) and
+`indexer.js` (the pure line scanner), using only Node's `fs`, so there are still
+**no third-party dependencies**. The `.ct` sources are not compiled by this
+extension; use `ct` (or the `ctc` alias) for that.
 
 ## Install
 
@@ -132,7 +136,8 @@ To get an F5 workflow, add a launch configuration at the repository root as
 ## Checks
 
 ```bash
-python3 test/check-grammar.py    # 108 assertions; exit code 0 means it passed
+python3 test/check-grammar.py    # 109 assertions (including the index checks); exit code 0 means it passed
+node test/check-index.js         # the indexer's own 26 assertions, runnable without VS Code
 ```
 
 The script replays the grammar's patterns with Python's `re` over the demos in
@@ -151,7 +156,7 @@ once before publishing.
 
 ```bash
 cd editors/vscode
-npx @vscode/vsce package        # produces ct-vscode-0.5.0.vsix
+npx @vscode/vsce package        # produces ct-vscode-0.5.1.vsix
 npx @vscode/vsce publish        # needs a Marketplace publisher + PAT
 ```
 
@@ -192,8 +197,11 @@ details.
 - **跳转定义**：`Ctrl+Click` / `F12` 可跳到 `impl` 方法、trait/struct 声明、顶层函数与 `map` 绑定；
   `p.greet()` 会按 `p` 的声明类型收窄到对应 `impl`，`self` 取当前 `impl`（默认方法体内则取当前 trait）。
   新特性同样可跳：trait 默认方法（impl 覆盖优先）、静态映射的 `a.toInt()`（按接收者 C 类型 +
-  `for type` 宿主匹配）与命名空间调用 `libc::Env.get(…)`。
+  `for type` 宿主匹配）与命名空间调用 `libc::Env.get(…)`；Phase 26 的泛型声明
+  `T id<T>(T x)` 也可跳（K&R / Allman / `impl` 方法 / trait 默认体），口径是**只到声明行、
+  不区分实例化**。
   它是按行扫描的近似索引，不做完整类型推导：同名方法可能给出多个候选，字段不建索引，字符串/注释里的词也会被当作名字解析。
-- 语法与片段仍是纯声明式 JSON，跳转逻辑集中在单个 `extension.js`，只用 `vscode` API 与 Node 内置 `fs`，
-  **无构建、无第三方依赖**，可直接 `npx @vscode/vsce package` 打包。
+- 语法与片段仍是纯声明式 JSON，跳转逻辑拆成 `extension.js`（只用 `vscode` API）与
+  `indexer.js`（纯行扫描器，可被 Node 直接断言），**无构建、无第三方依赖**，可直接
+  `npx @vscode/vsce package` 打包。
 - 发布前需要补两样：`package.json` 里的 `publisher` 改成你真实的 Marketplace 发布者 ID，以及自备一张 128×128 的 `icon.png`。

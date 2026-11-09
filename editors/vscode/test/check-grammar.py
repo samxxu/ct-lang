@@ -17,6 +17,8 @@ which this script delegates to as the terminal pseudo-rule "C".
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -664,7 +666,23 @@ def main():
     check("new tokens inside a comment do not fire CT rules",
           not any(h[0] in NEW_RULES for h in by_line[2]), str(by_line[2]))
 
+    # v0.26.4 / DOC-68: the go-to-definition scanner lives in ../indexer.js and
+    # is asserted by a plain Node script. Node is not a prerequisite of the
+    # compiler gates, so a missing runtime is a reported skip (the same
+    # convention as the BSD-only probes in AGENTS.md), never a silent pass.
     print()
+    print("== index checks ==")
+    node = shutil.which("node")
+    if node:
+        index_test = os.path.join(HERE, "check-index.js")
+        proc = subprocess.run([node, index_test], capture_output=True, text=True)
+        out = (proc.stdout + proc.stderr).strip()
+        print("    " + out.replace("\n", "\n    "))
+        check("the indexer assertions pass", proc.returncode == 0,
+              "exit %d" % proc.returncode)
+    else:
+        print("    skip (node not found)")
+
     print("== %d checks, %d failed ==" % (checks, len(failures)))
     return 1 if failures else 0
 
