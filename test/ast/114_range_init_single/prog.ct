@@ -1,0 +1,11 @@
+/* 114 (Phase 24): the smallest range, `0..1`, is one element -- a single-item
+   brace list, not an empty one and not a scalar initialiser. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a[] = 0..1($ + 7);
+
+    printf("n %d v %d\n", (int)(sizeof a / sizeof a[0]), a[0]);
+    return 0;
+}

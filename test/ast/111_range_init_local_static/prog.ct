@@ -1,0 +1,10 @@
+/* 111 (Phase 24): a block-scope `static` table works the same way -- storage
+   class and scope do not change the expansion. */
+#include <stdio.h>
+
+int main(void)
+{
+    static int tbl[] = 1..4($ * 10);
+    printf("%d %d %d\n", tbl[0], tbl[1], tbl[2]);
+    return 0;
+}

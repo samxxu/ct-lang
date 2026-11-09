@@ -1,0 +1,12 @@
+/* 112 (Phase 24): inside a function the element expression may read a runtime
+   variable -- the expansion is a plain brace list, so each element sees `base`. */
+#include <stdio.h>
+
+int main(void)
+{
+    int base = 10;
+    int shifted[] = 0..3($ + base);
+
+    printf("%d %d %d\n", shifted[0], shifted[1], shifted[2]);
+    return 0;
+}

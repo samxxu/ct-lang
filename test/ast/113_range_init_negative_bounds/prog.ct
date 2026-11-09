@@ -1,0 +1,13 @@
+/* 113 (Phase 24): bounds may be negative -- `-2..3` is five elements and the
+   generated element keeps the sign, `((int)-2)`. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a[] = -2..3($);
+    int k;
+
+    printf("n %d\n", (int)(sizeof a / sizeof a[0]));
+    for (k = 0; k < 5; k++) printf("%d\n", a[k]);
+    return 0;
+}

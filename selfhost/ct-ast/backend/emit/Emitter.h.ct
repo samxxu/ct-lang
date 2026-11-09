@@ -96,6 +96,7 @@ import runtime::arena::Arena;
    implicit counter and the private bound temporary (one for the counted form,
    two for the range form). */
 #define N_LOOP    60
+#define N_INIT_RANGE 61
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -163,6 +164,7 @@ trait EmitOps {
     int  emit_maps(int u);
     int  emit_unit_init(int prog);
     int  emit_raw_init(int raw, const char *type, int assign);
+    int  emit_range_init(int n);
     int  write_header(const char *outc);
     int  fail(const char *msg);
     int  fail_from(int n, const char *msg);
@@ -213,6 +215,12 @@ struct Emitter {
     char clvar[64][160];
     int  clid[64];
     int  nclvar;
+    /* Phase 24: `> 0` while an `N_INIT_RANGE` initialiser is being written, and
+       the index of the element being written. `$` prints `((int)<range_k>)`, so
+       the placeholder never reaches C and the element subtree is emitted once
+       per element without being copied. */
+    int  range_depth;
+    int  range_k;
 } use EmitOps;
 
 /* Does the impl node `node` write `name`? */
@@ -1532,6 +1540,34 @@ impl EmitOps for Emitter {
         return 0;
     }
 
+    /* Phase 24: `int a[] = 0..n($ * 2 + 1)` as ` = { <elem>, <elem>, … }`.
+       The node keeps one element subtree, and every element re-emits it with
+       `range_k` set to the current index, so `$` prints as `((int)<k>)` and the
+       node count stays independent of how many elements the range has. Streaming
+       the list also keeps it out of the rewritten-initialiser text pool. */
+    int emit_range_init(int n)
+    {
+        long k, start;
+        int count, save_k, save_depth;
+        (void)self;
+
+        start = self->arena->nodes[n].num;
+        count = self->arena->nodes[n].aux;
+        fputs(" = { ", self->out);
+        save_k = self->range_k;
+        save_depth = self->range_depth;
+        for (k = start; k < start + count; k++) {
+            if (k != start) fputs(", ", self->out);
+            self->range_k = (int)k;
+            self->range_depth = save_depth + 1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+        }
+        self->range_k = save_k;
+        self->range_depth = save_depth;
+        fputs(" }", self->out);
+        return 0;
+    }
+
     /* Impl methods and their vtables, emitted before the ordinary functions so
        `main` can already dispatch through them. */
     int emit_impls(int prog)
@@ -1960,7 +1996,9 @@ impl EmitOps for Emitter {
             self->emit_indent(ind);
             if (self->arena->nodes[n].aux == 1) fputs("static ", self->out);
             if (self->emit_global_decl(n) != 0) return -1;
-            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
+            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_RANGE) {
+                if (self->emit_range_init(self->arena->nodes[n].a) != 0) return -1;
+            } else if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
                 if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text, 1) != 0) return -1;
             } else if (self->arena->nodes[n].a >= 0) {
                 fputs(" = ", self->out);
@@ -2587,7 +2625,9 @@ impl EmitOps for Emitter {
                     fputs(self->arena->nodes[c].text2, self->out);
                     if (self->arena->nodes[c].text3[0]) fputs(self->arena->nodes[c].text3, self->out);
                     if (self->arena->nodes[c].a >= 0) {
-                        if (self->arena->nodes[self->arena->nodes[c].a].kind == N_RAW) {
+                        if (self->arena->nodes[self->arena->nodes[c].a].kind == N_INIT_RANGE) {
+                            if (self->emit_range_init(self->arena->nodes[c].a) != 0) return -1;
+                        } else if (self->arena->nodes[self->arena->nodes[c].a].kind == N_RAW) {
                             if (self->emit_raw_init(self->arena->nodes[c].a, self->arena->nodes[c].text, 1) != 0) return -1;
                         } else {
                             fputs(" = ", self->out);
@@ -2626,7 +2666,9 @@ impl EmitOps for Emitter {
             if (self->arena->nodes[n].attr >= 0)
                 fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
             if (self->arena->nodes[n].kind == N_DECL) {
-                if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
+                if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_RANGE) {
+                    if (self->emit_range_init(self->arena->nodes[n].a) != 0) return -1;
+                } else if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW) {
                     if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text, 1) != 0) return -1;
                 } else if (self->arena->nodes[n].a >= 0) {
                     fputs(" = ", self->out);
@@ -2733,6 +2775,13 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_VAR) {
             int ci, k;
+            /* Phase 24: `$` is the index of the element being written. The cast
+               is deliberate -- `((int)k)` keeps a `char` or an unsigned element
+               printing exactly like a hand-written `(int)k` would. */
+            if (self->range_depth > 0 && strcmp(self->arena->nodes[n].text2, "$") == 0) {
+                fprintf(self->out, "((int)%d)", self->range_k);
+                return 0;
+            }
             /* inside a trampoline body a captured name is a field of the
                environment (Phase 21 S3) */
             ci = self->closure_ci;

@@ -1,0 +1,11 @@
+/* 110 (Phase 24): a file-scope `static const` table can be built from a range
+   -- the product is an initialiser, not a statement, so no `for` is needed. */
+#include <stdio.h>
+
+static const int sq[] = 0..11($ * $);
+
+int main(void)
+{
+    printf("%d %d %d\n", sq[0], sq[3], sq[10]);
+    return 0;
+}

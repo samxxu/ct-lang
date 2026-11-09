@@ -1,0 +1,9 @@
+/* 109 (Phase 24), byte layer: the expansion, written out by hand. The text in
+   braces is copied verbatim by the `{ … }` initialiser path, so `cmp` against
+   109's declaration pins that `$` became exactly `((int)k)` and nothing else
+   moved -- spacing and parentheses included. */
+int main(void)
+{
+    int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), ((((int)2) * 2) + 1), ((((int)3) * 2) + 1), ((((int)4) * 2) + 1), ((((int)5) * 2) + 1), ((((int)6) * 2) + 1), ((((int)7) * 2) + 1), ((((int)8) * 2) + 1), ((((int)9) * 2) + 1), ((((int)10) * 2) + 1), ((((int)11) * 2) + 1), ((((int)12) * 2) + 1) };
+    return odd[12];
+}

@@ -1,0 +1,11 @@
+/* 117 (Phase 24): two range declarators on one line -- the second one keeps the
+   shared type and prints its own initialiser. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a[] = 0..3($), b[] = 0..2($ * 2);
+
+    printf("%d %d %d %d\n", a[0], a[2], b[0], b[1]);
+    return 0;
+}
