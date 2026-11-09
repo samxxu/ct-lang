@@ -262,6 +262,7 @@ impl SupportOps for ParseSupport {
             self->sym->funcs[i].is_pub = 0;
             self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
             self->sym->funcs[i].attr = -1;       /* fresh row: no attribute yet */
+            self->sym->funcs[i].body = -1;       /* Phase 26: no definition node yet */
             fresh = 1;
         }
         if (pub_now) self->sym->funcs[i].is_pub = 1;

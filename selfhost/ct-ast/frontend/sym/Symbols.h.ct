@@ -40,6 +40,7 @@
 #define MAX_GLOBAL_TYPE_ALIASES 256
 #define MAX_ALIAS_CHAIN 32
 #define MAX_CLOSURES 64
+#define MAX_GENERIC_INSTS 64
 
 namespace frontend::sym;
 /* A compile-time synonym for a type spelling. It never reaches the generated C;
@@ -87,6 +88,14 @@ pub struct Fn {
     int  is_static;
     int  is_pub;
     int  variadic;      /* `int f(int n, ...)`: the prototype needs the `...` */
+    /* Phase 26: a generic function carries exactly one type parameter. The
+       template itself is never emitted; every call site that names a concrete
+       type argument gets a monomorphised instance in `ginsts`. */
+    int  ntparams;
+    char tparam[160];
+    /* Phase 26: the template's N_FUNC node, so the emitter can monomorphise it
+       once per instance without a second AST copy (-1 for a plain row). */
+    int  body;
     int  line;
     int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */
     /* A GNU `__attribute__((…))` on the declaration: -1 when it carried none,
@@ -252,12 +261,23 @@ pub trait SymbolOps {
     const char *last_error(void);
 }
 
+/* Phase 26: one monomorphised instance of a generic function. `func` indexes
+   the template row in `funcs`; `targ` is the concrete type spelling; `cname` is
+   the emitted C name (`<template>__ct<N>`). */
+pub struct GenericInst {
+    int  func;
+    char targ[160];
+    char cname[160];
+}
+
 pub struct Symbols {
     /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
        as inline arrays in the file-scope instance they put ~21 MB of zeroes
        into __DATA. Their caps stay literal, mirroring the MAX_* values above. */
     struct Fn   *funcs;
     int  nfunc;
+    struct GenericInst *ginsts;
+    int  nginsts;
     struct Var  *vars;
     int  nvar;
     int  scope[256];
@@ -316,6 +336,12 @@ pub struct Symbols {
 } use SymbolOps, TypeAliasOps;
 
 pub struct Symbols *symbols_get(void);
+
+/* Phase 26: replace the whole-word occurrences of `word` in a type spelling
+   with `repl` (`T` -> `int`, `T *` -> `int *`). Returns 0 and writes `out`,
+   -1 when `out` would not fit. A word is bounded by non-identifier characters,
+   so `T2` and `struct T` are left alone. */
+pub int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap);
 
 impl SymbolOps for Symbols {
     /* The tables report the bare reason; the position belongs to the parser
@@ -1182,6 +1208,10 @@ static int symbols_grow(struct Symbols *self)
         self->vars = calloc(MAX_VARS, sizeof(*self->vars));
         if (!self->vars) return -1;
     }
+    if (!self->ginsts) {
+        self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof(*self->ginsts));
+        if (!self->ginsts) return -1;
+    }
     if (!self->traits) {
         self->traits = calloc(MAX_TRAITS, sizeof(*self->traits));
         if (!self->traits) return -1;
@@ -1212,4 +1242,43 @@ struct Symbols *symbols_get(void)
         exit(1);
     }
     return &g_symbols;
+}
+
+static int generic_word_char(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9') || c == '_';
+}
+
+int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap)
+{
+    int n, wl, rl;
+    const char *p;
+
+    wl = (int)strlen(word);
+    rl = (int)strlen(repl);
+    n = 0;
+    p = in;
+    if (wl == 0) {
+        if ((int)strlen(in) + 1 > cap) return -1;
+        snprintf(out, (size_t)cap, "%s", in);
+        return 0;
+    }
+    while (*p) {
+        if ((p == in || !generic_word_char((unsigned char)p[-1]))
+            && strncmp(p, word, (size_t)wl) == 0
+            && !generic_word_char((unsigned char)p[wl])) {
+            if (n + rl + 1 > cap) return -1;
+            memcpy(out + n, repl, (size_t)rl);
+            n += rl;
+            p += wl;
+        } else {
+            if (n + 2 > cap) return -1;
+            out[n] = *p;
+            n++;
+            p++;
+        }
+    }
+    out[n] = 0;
+    return 0;
 }

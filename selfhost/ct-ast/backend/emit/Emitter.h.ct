@@ -221,6 +221,13 @@ struct Emitter {
        per element without being copied. */
     int  range_depth;
     int  range_k;
+    /* Phase 26: the template being written as a monomorphised instance. All
+       three are empty when no instance is active; the type-printing paths
+       substitute `gtparam` with `gtarg`, and `N_FUNC` prints `gtname` in place
+       of the template's own C name. No AST field is touched (D26-7). */
+    char gtparam[160];
+    char gtarg[160];
+    char gtname[160];
 } use EmitOps;
 
 /* Does the impl node `node` write `name`? */
@@ -243,6 +250,15 @@ static int impl_exists_anywhere(struct Arena *arena, int si, const char *tname)
         if (arena->nodes[n].kind == N_IMPL && arena->nodes[n].aux == si
             && strcmp(arena->nodes[n].text2, tname) == 0) return 1;
     return 0;
+}
+
+/* Phase 26: the type spelling with the active template's parameter replaced.
+   Returns 0 when `buf` holds the substituted spelling, -1 when no instance is
+   active or the result does not fit (the caller keeps the original). */
+static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap)
+{
+    if (!self->gtarg[0] || !self->gtparam[0]) return -1;
+    return frontend::sym::ct_generic_subst(type, self->gtparam, self->gtarg, buf, cap);
 }
 
 /* A (struct, trait) pair that needs no `impl` at all: every method has a
@@ -1109,6 +1125,37 @@ static int emit_closure_arg(struct Emitter *self, int n)
     return emit_closure_env(self, n);
 }
 
+/* Phase 26: write one definition per generic instance owned by unit `u`
+   (-1 = the single compile-mode unit). The template's own N_FUNC node is
+   reused with `gtparam`/`gtarg`/`gtname` set for the duration, so no AST copy
+   is made and the non-generic path is untouched (D26-7). */
+static int emit_generic_defs(struct Emitter *self, int u)
+{
+    int i, t;
+    for (i = 0; i < self->sym->nginsts; i++) {
+        if (u >= 0
+            && (self->sym->ginsts[i].func < self->units[u].fn_start
+                || self->sym->ginsts[i].func >= self->units[u].fn_end))
+            continue;
+        t = self->sym->funcs[self->sym->ginsts[i].func].body;
+        if (t < 0) continue;
+        snprintf(self->gtparam, sizeof self->gtparam, "%s",
+                 self->sym->funcs[self->sym->ginsts[i].func].tparam);
+        snprintf(self->gtarg, sizeof self->gtarg, "%s", self->sym->ginsts[i].targ);
+        snprintf(self->gtname, sizeof self->gtname, "%s", self->sym->ginsts[i].cname);
+        if (self->emit_node(t, 0) != 0) {
+            self->gtparam[0] = 0;
+            self->gtarg[0] = 0;
+            self->gtname[0] = 0;
+            return -1;
+        }
+        self->gtparam[0] = 0;
+        self->gtarg[0] = 0;
+        self->gtname[0] = 0;
+    }
+    return 0;
+}
+
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
@@ -1182,11 +1229,15 @@ static int emit_unit_body(struct Emitter *self, int u)
 
     for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
         if (self->arena->nodes[n].kind == N_FUNC) {
+            int cur = self->sym->find_func(self->arena->nodes[n].text2);
+            /* a generic template has no C body of its own (Phase 26) */
+            if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
             /* the closure products of this function land above its definition */
             if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
                 return -1;
             if (self->emit_node(n, 0) != 0) return -1;
         }
+    if (emit_generic_defs(self, u) != 0) return -1;
 
     return 0;
 }
@@ -1398,12 +1449,16 @@ impl EmitOps for Emitter {
 
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             if (self->arena->nodes[n].kind == N_FUNC) {
+                int cur = self->sym->find_func(self->arena->nodes[n].text2);
+                /* a generic template has no C body of its own (Phase 26) */
+                if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
                 /* the closure products of this function land above its definition */
                 if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
                     return -1;
                 if (self->emit_node(n, 0) != 0) return -1;
             }
         }
+        if (emit_generic_defs(self, -1) != 0) return -1;
         if (self->emit_unit_init(prog) != 0) return -1;
         return 0;
     }
@@ -1414,6 +1469,8 @@ impl EmitOps for Emitter {
         int k;
         (void)self;
 
+        /* a generic template is never a C symbol of its own (Phase 26) */
+        if (self->sym->funcs[i].ntparams > 0) return 0;
         if (self->sym->funcs[i].is_static) fputs("static ", self->out);
         fprintf(self->out, "%s %s(", self->sym->funcs[i].ret, self->sym->funcs[i].cname);
         if (self->sym->funcs[i].nparams == 0) {
@@ -2263,13 +2320,20 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (self->arena->nodes[n].kind == N_FUNC) {
+            char rbuf[160];
+            const char *rname;
             /* a new body starts with no closure variable bound (Phase 21 S3) */
             self->nclvar = 0;
             self->closure_ci = 0;
             if (self->arena->nodes[n].aux) fputs("static ", self->out);
             /* `num` carries the `inline` specifier (0 = plain function) */
             if (self->arena->nodes[n].num) fputs("inline ", self->out);
-            fprintf(self->out, "%s %s(", self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            /* Phase 26: an active instance substitutes the return type and
+               writes its own C name instead of the template's. */
+            rname = self->arena->nodes[n].text;
+            if (emit_gsub_type(self, rname, rbuf, sizeof rbuf) == 0) rname = rbuf;
+            fprintf(self->out, "%s %s(", rname,
+                    self->gtname[0] ? self->gtname : self->arena->nodes[n].text2);
             c = self->arena->nodes[n].a;
             if (c == 0) {
                 fputs("void) ", self->out);
@@ -2688,8 +2752,10 @@ impl EmitOps for Emitter {
     int emit_type_name_dims(const char *type, const char *name, const char *dims)
     {
         const char *star;
+        char tbuf[160];
         (void)self;
 
+        if (emit_gsub_type(self, type, tbuf, sizeof tbuf) == 0) type = tbuf;
         star = strstr(type, "(*)");
         if (!star) {
             fprintf(self->out, "%s %s%s", type, name, dims);
@@ -2927,7 +2993,10 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_CAST) {
-            fprintf(self->out, "(%s)(", self->arena->nodes[n].text);
+            char tbuf[160];
+            const char *ct = self->arena->nodes[n].text;
+            if (emit_gsub_type(self, ct, tbuf, sizeof tbuf) == 0) ct = tbuf;
+            fprintf(self->out, "(%s)(", ct);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;
@@ -2947,9 +3016,12 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_SIZEOF) {
             /* `aux` 1 is `sizeof(type)`, 2 is C11 `_Alignof(type)` */
             if (self->arena->nodes[n].aux) {
+                char tbuf[160];
+                const char *st = self->arena->nodes[n].text;
+                if (emit_gsub_type(self, st, tbuf, sizeof tbuf) == 0) st = tbuf;
                 fprintf(self->out, "%s(%s)",
                         self->arena->nodes[n].aux == 2 ? "_Alignof" : "sizeof",
-                        self->arena->nodes[n].text);
+                        st);
                 return 0;
             }
             fputs("sizeof(", self->out);
@@ -2960,8 +3032,10 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_OFFSETOF) {
             /* the source carried the call, so the generated `.c` keeps it; the
                source unit supplies `#include <stddef.h>` (D-8) */
-            fprintf(self->out, "offsetof(%s, %s)", self->arena->nodes[n].text,
-                    self->arena->nodes[n].text2);
+            char tbuf[160];
+            const char *ot = self->arena->nodes[n].text;
+            if (emit_gsub_type(self, ot, tbuf, sizeof tbuf) == 0) ot = tbuf;
+            fprintf(self->out, "offsetof(%s, %s)", ot, self->arena->nodes[n].text2);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_POST) {

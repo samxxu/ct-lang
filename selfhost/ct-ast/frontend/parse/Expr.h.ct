@@ -50,6 +50,8 @@ import tool::diag::Diag;
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 1024
+#define MAX_FUNCS 256
+#define MAX_GENERIC_INSTS 64
 #define MAX_RAW_INIT 4096
 #define MAX_TEXT 160
 #define N_ADDR 27
@@ -96,6 +98,9 @@ pub trait ExprOps {
     int  is_type_word(const char *w);
     int  type_append(char *out, int cap, int *n, const char *tok);
     int  parse_type(char *out, int cap);
+    /* Phase 26: register (or reuse) the instance of template `gfi` for the
+       concrete type spelling `targ`; returns its index in `sym->ginsts`. */
+    int  generic_instance(int gfi, const char *targ, int line, int col);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  offsetof_ahead(void);
@@ -174,6 +179,10 @@ pub struct Expr {
        (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
        emitted verbatim instead of being rejected. */
     int  fnval_ok;
+    /* Phase 26: set by the parser while a generic template's body is being
+       parsed. A generic call there would need an instance of a function whose
+       own instance set is not fixed yet, so it is refused (L26-5). */
+    int  in_generic;
     /* Set while a full expression may carry an assignment (`(c = f())` and a
        condition): the statement layer owns top-level assignments, so this stays
        0 there and `x = 1;` is unchanged. */
@@ -1160,6 +1169,68 @@ impl ExprOps for Expr {
         if (w < 0 || w >= cap - *n) return self->sup->fail("type is too long");
         *n += w;
         return 0;
+    }
+
+    /* Phase 26 (D26-5): monomorphise `gfi` for `targ` once. The instance is a
+       private `funcs` row with the template's signature substituted; its body
+       is the template's own N_FUNC node, which the emitter writes once per
+       instance under `gtparam`/`gtarg` (D26-7). The cache key is the pair
+       (template row, concrete spelling), so the source order fixes the
+       instance numbers and the generated unit stays deterministic. */
+    int generic_instance(int gfi, const char *targ, int line, int col)
+    {
+        char cname[MAX_TEXT];
+        char tmp[MAX_TEXT];
+        int i, k, ni, suffix, taken;
+
+        (void)line;
+        (void)col;
+        for (i = 0; i < self->sym->nginsts; i++)
+            if (self->sym->ginsts[i].func == gfi
+                && strcmp(self->sym->ginsts[i].targ, targ) == 0)
+                return i;
+        if (self->sym->nginsts >= MAX_GENERIC_INSTS)
+            return self->sup->fail("too many generic instances in this unit");
+        if (self->sym->nfunc >= MAX_FUNCS)
+            return self->sup->fail("too many functions in this unit");
+        /* `<name>__ct<N>`; a user function may already hold the spelling, so a
+           numeric suffix is retried a bounded number of times (R6). */
+        snprintf(cname, sizeof cname, "%s__ct%d", self->sym->funcs[gfi].cname,
+                 self->sym->nginsts + 1);
+        if (self->sym->find_func(cname) >= 0) {
+            taken = 1;
+            for (suffix = 1; suffix <= 8 && taken; suffix++) {
+                snprintf(cname, sizeof cname, "%s__ct%d_%d", self->sym->funcs[gfi].cname,
+                         self->sym->nginsts + 1, suffix);
+                taken = (self->sym->find_func(cname) >= 0);
+            }
+            if (taken) return self->sup->fail("cannot name a generic instance uniquely");
+        }
+        ni = self->sym->nfunc;
+        self->sym->nfunc++;
+        memcpy(&self->sym->funcs[ni], &self->sym->funcs[gfi], sizeof(*self->sym->funcs));
+        snprintf(self->sym->funcs[ni].cname, MAX_TEXT, "%s", cname);
+        snprintf(self->sym->funcs[ni].name, MAX_TEXT, "%s", cname);
+        self->sym->funcs[ni].is_static = 1;
+        self->sym->funcs[ni].is_pub = 0;
+        self->sym->funcs[ni].ntparams = 0;
+        self->sym->funcs[ni].tparam[0] = 0;
+        snprintf(self->sym->funcs[ni].ret, MAX_TEXT, "%s",
+                 frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ret,
+                                                 self->sym->funcs[gfi].tparam, targ,
+                                                 tmp, sizeof tmp) == 0
+                     ? tmp : self->sym->funcs[gfi].ret);
+        for (k = 0; k < self->sym->funcs[gfi].nparams; k++)
+            if (frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ptype[k],
+                                                self->sym->funcs[gfi].tparam, targ,
+                                                tmp, sizeof tmp) == 0)
+                snprintf(self->sym->funcs[ni].ptype[k], MAX_TEXT, "%s", tmp);
+        i = self->sym->nginsts;
+        self->sym->ginsts[i].func = gfi;
+        snprintf(self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
+        snprintf(self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);
+        self->sym->nginsts++;
+        return i;
     }
 
     /* Capture a parenthesized C11 specifier at the cursor: `_Alignas(…)` (the
@@ -2751,6 +2822,34 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
             self->sup->lex_next();
+            /* Phase 26: `name<type>(...)` names a generic instance. Only a name
+               the symbol table already holds as a template enters this branch,
+               so `a < b` on a variable stays a comparison (D26-1/D26-3). */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                int gfi = self->sym->find_func(self->arena->nodes[n].text2);
+                if (gfi >= 0 && self->sym->funcs[gfi].ntparams == 1) {
+                    char targ[MAX_TEXT];
+                    char gmsg[MAX_TEXT + 64];
+                    int gi;
+                    if (self->in_generic)
+                        return self->sup->fail("recursive generic calls are not supported");
+                    self->sup->lex_next();
+                    if (self->parse_type(targ, sizeof targ) != 0) return -1;
+                    if (self->fnptr_state || strcmp(targ, "void") == 0
+                        || strcmp(targ, self->sym->funcs[gfi].tparam) == 0) {
+                        snprintf(gmsg, sizeof gmsg,
+                                 "'%s' cannot be a generic type argument", targ);
+                        return self->sup->fail(gmsg);
+                    }
+                    if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">") == 0))
+                        return self->sup->fail("expected '>' after the generic type argument");
+                    self->sup->lex_next();
+                    gi = self->generic_instance(gfi, targ, id_line, id_col);
+                    if (gi < 0) return -1;
+                    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s",
+                             self->sym->ginsts[gi].cname);
+                }
+            }
             /* `Qual::fn(...)`: the qualifier names a namespace path or a type,
                and the callee lives in that namespace. Without the call it names
                a variable instead (`a::h`), whose C spelling is the mangled one. */
@@ -2944,6 +3043,18 @@ impl ExprOps for Expr {
             }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
                 int fi;
+                /* L26-1: a template cannot be called without naming a type
+                   argument; the instance does not exist before this point. */
+                {
+                    int gchk = self->sym->find_func(self->arena->nodes[n].text2);
+                    if (gchk >= 0 && self->sym->funcs[gchk].ntparams == 1) {
+                        char gmsg[MAX_TEXT + 64];
+                        snprintf(gmsg, sizeof gmsg,
+                                 "generic function '%s' needs a type argument",
+                                 self->arena->nodes[n].text2);
+                        return self->sup->fail(gmsg);
+                    }
+                }
                 args = self->parse_args();
                 if (args < 0) return -1;
                 self->sym->errmsg[0] = 0;

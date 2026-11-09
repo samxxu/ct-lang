@@ -969,6 +969,8 @@ impl ParseOps for Parser {
         char name[MAX_TEXT];
         char cname[MAX_TEXT];
         char gns[MAX_TEXT];
+        char tparam[MAX_TEXT];
+        int is_generic;
         (void)self;
 
         /* a leading attribute was captured by `top_decl`; it is this
@@ -989,6 +991,26 @@ impl ParseOps for Parser {
            declaration could otherwise collide with them in the generated C. */
         if (!strncmp(name, "__ct_", 5))
             return self->sup->fail("identifier '__ct_' is reserved for the compiler");
+        /* Phase 26: one optional type parameter, written C-style after the name:
+           `T id<T>(T x)`. The template is parsed in place; instances are
+           monomorphised at the call site (D26-1/D26-2). */
+        is_generic = 0;
+        tparam[0] = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+            if (is_pub)
+                return self->sup->fail("generic functions cannot be pub");
+            self->sup->lex_next();
+            if (self->lex->tok != T_ID)
+                return self->sup->fail("expected a type parameter name");
+            snprintf(tparam, sizeof tparam, "%s", self->lex->toktext);
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
+                return self->sup->fail("only one type parameter is supported");
+            if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
+                return self->sup->fail("expected '>' after the type parameter");
+            self->sup->lex_next();
+            is_generic = 1;
+        }
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
             /* A namespaced global is emitted under a prefixed C name, the same
@@ -1103,6 +1125,11 @@ impl ParseOps for Parser {
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             self->sup->lex_next();
+            /* A template without a body cannot be monomorphised in this unit. */
+            if (is_generic) {
+                self->sup->pop_scope();
+                return self->sup->fail("a generic function needs a definition in this unit");
+            }
             fi = self->sup->add_func(name, ret, is_static, is_extern ? 0 : is_pub, params);
             if (fi < 0) {
                 self->sup->pop_scope();
@@ -1126,7 +1153,12 @@ impl ParseOps for Parser {
         self->mem->leak_impl = 0;
         self->mem->ret_owned = 0;
         self->st->func_begin();
+        /* Phase 26: a generic call inside the template body has no instance
+           yet, so the body may not contain one (L26-5). The expression layer
+           reads this flag at the `<type>` call form. */
+        if (is_generic) self->ex->in_generic = 1;
         b = self->st->parse_block();
+        if (is_generic) self->ex->in_generic = 0;
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func[0] = 0;
@@ -1150,18 +1182,27 @@ impl ParseOps for Parser {
         self->sym->funcs[fi].ret_owned = self->mem->ret_owned;
         self->sym->funcs[fi].variadic = self->variadic;
         self->sym->funcs[fi].line = func_line;
+        if (is_generic) {
+            self->sym->funcs[fi].ntparams = 1;
+            self->sym->funcs[fi].is_static = 1;   /* D26-4: instances stay in this unit */
+            snprintf(self->sym->funcs[fi].tparam, sizeof self->sym->funcs[fi].tparam,
+                     "%s", tparam);
+        }
         f = self->sup->new_node(N_FUNC);
         if (f < 0) {
             self->sup->pop_scope();
             return -1;
         }
+        self->sym->funcs[fi].body = f;
         snprintf(self->arena->nodes[f].text, MAX_TEXT, "%s", ret);
         /* the C spelling only: `cur_func` and the map keep the short name */
         snprintf(self->arena->nodes[f].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);
-        self->arena->nodes[f].aux = is_static;
+        self->arena->nodes[f].aux = is_generic ? 1 : is_static;
         self->arena->nodes[f].d = is_pub;
         self->arena->nodes[f].line = func_line;
         self->arena->nodes[f].attr = attr;
+        if (is_generic)
+            snprintf(self->arena->nodes[f].text3, MAX_TEXT, "%s", tparam);
         self->arena->nodes[f].a = params;
         self->arena->nodes[f].b = b;
         self->arena->nodes[f].c = self->variadic;
