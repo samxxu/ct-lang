@@ -8,6 +8,9 @@
     { "include": "#ct-raw-end" },
     { "include": "#ct-import" },
     { "include": "#ct-namespace" },
+    { "include": "#ct-type-alias" },
+    { "include": "#ct-generic-decl" },
+    { "include": "#ct-generic-call" },
     { "include": "#ct-path" },
     { "include": "#ct-trait" },
     { "include": "#ct-trait-open" },
@@ -17,6 +20,7 @@
     { "include": "#ct-map-namespace" },
     { "include": "#ct-map-type" },
     { "include": "#ct-map-open" },
+    { "include": "#ct-recipe" },
     { "include": "#ct-use" },
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
@@ -25,7 +29,20 @@
     { "include": "#ct-borrow-param" },
     { "include": "#ct-trait-builtin" },
     { "include": "#ct-pub" },
+    { "include": "#ct-loop" },
+    { "include": "#ct-range-dots" },
     { "include": "#ct-range-index" },
+    { "include": "#ct-closure-arrow" },
+    { "include": "#ct-static-assert" },
+    { "include": "#ct-alignas" },
+    { "include": "#ct-alignof-type" },
+    { "include": "#ct-alignof" },
+    { "include": "#ct-atomic" },
+    { "include": "#ct-generic-select" },
+    { "include": "#ct-noreturn" },
+    { "include": "#ct-thread-local" },
+    { "include": "#ct-c11-builtin-types" },
+    { "include": "#ct-attribute" },
     { "include": "source.c" }
   ],
   "repository": {
@@ -102,6 +119,35 @@
         }
       }
     },
+    "ct-type-alias": {
+      "match": "^[ \\t]*(?:(pub)[ \\t]+)?(type)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(=)",
+      "captures": {
+        "1": { "name": "storage.modifier.pub.ct" },
+        "2": { "name": "storage.type.alias.ct" },
+        "3": { "name": "entity.name.type.alias.ct" },
+        "4": { "name": "keyword.operator.assignment.ct" }
+      }
+    },
+    "ct-generic-decl": {
+      "match": "^[ \\t]*(?!(?:return|goto|case|else|do|sizeof|typedef|switch|while|for|if|break|continue)\\b)([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(\\*+)?[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(<)[ \\t]*([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(>)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.type.generic.ct" },
+        "2": { "name": "keyword.operator.pointer.ct" },
+        "3": { "name": "entity.name.function.ct" },
+        "4": { "name": "punctuation.definition.generic.begin.ct" },
+        "5": { "name": "entity.name.type.parameter.ct" },
+        "6": { "name": "punctuation.definition.generic.end.ct" }
+      }
+    },
+    "ct-generic-call": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(<)[ \\t]*((?:(?:struct|union|enum|const|volatile|unsigned|signed)[ \\t]+)*[A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*\\*+)?)[ \\t]*(>)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.ct" },
+        "2": { "name": "punctuation.definition.generic.begin.ct" },
+        "3": { "name": "entity.name.type.generic.ct" },
+        "4": { "name": "punctuation.definition.generic.end.ct" }
+      }
+    },
     "ct-path": {
       "match": "\\b([A-Za-z_][A-Za-z0-9_]*)((?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)+)",
       "captures": {
@@ -158,14 +204,19 @@
       ]
     },
     "ct-map": {
-      "match": "^[ \\t]*(map)[ \\t]+(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]+(for)[ \\t]+(instance)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)",
+      "match": "^[ \\t]*(map)[ \\t]+(trait)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]+(for)[ \\t]+(instance)[ \\t]+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
       "captures": {
         "1": { "name": "storage.type.map.ct" },
         "2": { "name": "storage.type.trait.ct" },
         "3": { "name": "entity.name.type.trait.ct" },
         "4": { "name": "keyword.control.ct" },
         "5": { "name": "keyword.other.instance.ct" },
-        "6": { "name": "entity.name.type.struct.ct" }
+        "6": {
+          "patterns": [
+            { "match": "::", "name": "punctuation.separator.namespace.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.struct.ct" }
+          ]
+        }
       }
     },
     "ct-map-namespace": {
@@ -209,6 +260,13 @@
         { "match": "::", "name": "punctuation.separator.namespace.ct" },
         { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.ct" }
       ]
+    },
+    "ct-recipe": {
+      "match": "^[ \\t]*([A-Za-z_][A-Za-z0-9_]*)[ \\t]*\\([^()]*\\)[ \\t]+(->)[ \\t]+",
+      "captures": {
+        "1": { "name": "entity.name.function.ct" },
+        "2": { "name": "keyword.other.recipe.ct" }
+      }
     },
     "ct-use": {
       "match": "\\b(use)\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*)*)\\s*;",
@@ -261,9 +319,68 @@
         "1": { "name": "storage.modifier.pub.ct" }
       }
     },
+    "ct-loop": {
+      "match": "(?<![.>])\\b(loop)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.control.loop.ct" }
+      }
+    },
+    "ct-range-dots": {
+      "match": "(?<!\\.)\\.\\.(?!\\.)",
+      "name": "keyword.operator.range.ct"
+    },
     "ct-range-index": {
       "match": "\\$",
       "name": "variable.language.range-index.ct"
+    },
+    "ct-closure-arrow": {
+      "match": "=>",
+      "name": "keyword.operator.closure.ct"
+    },
+    "ct-static-assert": {
+      "match": "\\b(_Static_assert|static_assert)\\b",
+      "captures": {
+        "1": { "name": "keyword.control.static-assert.ct" }
+      }
+    },
+    "ct-alignas": {
+      "match": "\\b_Alignas\\b",
+      "name": "storage.modifier.alignas.ct"
+    },
+    "ct-alignof-type": {
+      "match": "\\b(_Alignof|alignof)[ \\t]+(?![(])([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*\\*+)?)",
+      "captures": {
+        "1": { "name": "keyword.operator.alignof.ct" },
+        "2": { "name": "entity.name.type.generic.ct" }
+      }
+    },
+    "ct-alignof": {
+      "match": "\\b(_Alignof|alignof)\\b",
+      "name": "keyword.operator.alignof.ct"
+    },
+    "ct-atomic": {
+      "match": "\\b_Atomic\\b",
+      "name": "storage.modifier.atomic.ct"
+    },
+    "ct-generic-select": {
+      "match": "\\b_Generic\\b",
+      "name": "keyword.control.generic.ct"
+    },
+    "ct-noreturn": {
+      "match": "\\b_Noreturn\\b",
+      "name": "storage.modifier.noreturn.ct"
+    },
+    "ct-thread-local": {
+      "match": "\\b_Thread_local\\b",
+      "name": "storage.modifier.thread-local.ct"
+    },
+    "ct-c11-builtin-types": {
+      "match": "\\b(_Bool|_Complex|_Imaginary)\\b",
+      "name": "storage.type.builtin.ct"
+    },
+    "ct-attribute": {
+      "match": "\\b__attribute__\\b",
+      "name": "storage.modifier.attribute.ct"
     }
   }
 }
