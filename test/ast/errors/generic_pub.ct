@@ -1,0 +1,10 @@
+/* L26-2: a generic cannot be exported; every instance is private to a unit. */
+pub T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    return id<int>(3);
+}

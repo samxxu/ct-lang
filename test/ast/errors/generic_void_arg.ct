@@ -1,0 +1,10 @@
+/* L26-4: `void` is not a value type, so it cannot name an instance. */
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    return id<void>(0);
+}

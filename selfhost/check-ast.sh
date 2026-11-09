@@ -1145,6 +1145,82 @@ else
     bad "p25_map_each_closure_121" "$(cat "$work/p25p121.err" 2>/dev/null | head -5)"
 fi
 
+# Phase 26 (26.4): one template, two instances. The template itself is never a
+# C symbol; each call site names a concrete instance, and both definitions are
+# the same body with the type parameter replaced.
+rm -rf "$work/p26g123"
+mkdir -p "$work/p26g123"
+if "$work/ct-ast" test/ast/123_generic_identity/prog.ct -o "$work/p26g123/prog.c" \
+        >"$work/p26g123.out" 2>"$work/p26g123.err" \
+   && cc -Wall -Wextra -std=c99 "$work/p26g123/prog.c" -o "$work/p26g123/prog" \
+        >"$work/p26g123.cc" 2>&1 \
+   && "$work/p26g123/prog" > "$work/p26g123.run" \
+   && cmp -s "$work/p26g123.run" test/ast/123_generic_identity/prog.expected.out \
+   && [ "$(grep -c '__ct[0-9]' "$work/p26g123/prog.c")" -ge 2 ] \
+   && ! grep -qE '\bT\b' "$work/p26g123/prog.c" \
+   && grep -qF 'static int id__ct1(int);' "$work/p26g123/prog.c" \
+   && grep -qF 'static char * id__ct2(char *);' "$work/p26g123/prog.c" \
+   && grep -qF 'a = id__ct1(42);' "$work/p26g123/prog.c" \
+   && grep -qF 'q = id__ct2(p);' "$work/p26g123/prog.c" \
+   && ! grep -qF 'id(' "$work/p26g123/prog.c"; then
+    ok "p26_generic_identity (two instances, no template symbol, no residual T)"
+else
+    bad "p26_generic_identity" "$(cat "$work/p26g123.err" "$work/p26g123.cc" 2>/dev/null | head -5)"
+fi
+
+# §2.3: a struct spelling survives substitution intact (`struct Point` is one
+# type word, not two).
+rm -rf "$work/p26g124"
+mkdir -p "$work/p26g124"
+if "$work/ct-ast" test/ast/124_generic_struct/prog.ct -o "$work/p26g124/prog.c" \
+        >"$work/p26g124.out" 2>"$work/p26g124.err" \
+   && cc -Wall -Wextra -std=c99 "$work/p26g124/prog.c" -o "$work/p26g124/prog" \
+        >"$work/p26g124.cc" 2>&1 \
+   && "$work/p26g124/prog" > "$work/p26g124.run" \
+   && cmp -s "$work/p26g124.run" test/ast/124_generic_struct/prog.expected.out \
+   && grep -qF 'static struct Point pass__ct1(struct Point);' "$work/p26g124/prog.c" \
+   && grep -qF 'b = pass__ct1(a);' "$work/p26g124/prog.c"; then
+    ok "p26_generic_struct (a struct type argument is substituted)"
+else
+    bad "p26_generic_struct" "$(cat "$work/p26g124.err" "$work/p26g124.cc" 2>/dev/null | head -5)"
+fi
+
+# L26-1..L26-5: each diagnostic is pinned to its own line and column, so a
+# message that drifts by one token is caught here rather than by prose.
+p26_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p26d.c" \
+            >"$work/p26d.out" 2>"$work/p26d.err"; then
+        bad "p26_diag_$1" "expected a non-zero exit"
+    elif grep -qF "test/ast/errors/$1.ct:$2: error: $3" "$work/p26d.err"; then
+        ok "p26_diag_$1"
+    else
+        bad "p26_diag_$1" "$(head -2 "$work/p26d.err")"
+    fi
+}
+p26_diag generic_missing_arg 10:14 "generic function 'id' needs a type argument"
+p26_diag generic_pub 2:9 "generic functions cannot be pub"
+p26_diag generic_two_params 2:9 "only one type parameter is supported"
+p26_diag generic_void_arg 9:19 "'void' cannot be a generic type argument"
+p26_diag generic_recursive 10:17 "recursive generic calls are not supported"
+
+# E8: `ct check` shares the parser diagnostics, so the same five fixtures fail
+# in check mode with the same wording (no separate check channel).
+p26_chk() {
+    if "$work/ct-ast" check "test/ast/errors/$1.ct" \
+            >"$work/p26c.out" 2>"$work/p26c.err"; then
+        bad "p26_check_$1" "expected a non-zero exit"
+    elif grep -qF "$2" "$work/p26c.err"; then
+        ok "p26_check_$1"
+    else
+        bad "p26_check_$1" "$(head -2 "$work/p26c.err")"
+    fi
+}
+p26_chk generic_missing_arg "generic function 'id' needs a type argument"
+p26_chk generic_pub "generic functions cannot be pub"
+p26_chk generic_two_params "only one type parameter is supported"
+p26_chk generic_void_arg "'void' cannot be a generic type argument"
+p26_chk generic_recursive "recursive generic calls are not supported"
+
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
 # spelling and the consumer's receiver spelling name the same integer type but

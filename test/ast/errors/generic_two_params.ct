@@ -1,0 +1,10 @@
+/* L26-3: exactly one type parameter is supported (26.1 / D26-2). */
+T pair<T, U>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    return pair<int>(3);
+}

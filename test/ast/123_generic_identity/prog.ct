@@ -1,0 +1,21 @@
+/* 123 (Phase 26): one template, two instances. `id<int>` and `id<char *>`
+   are separate monomorphised bodies, so the same source prints both values. */
+#include <stdio.h>
+
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    int a;
+    char *p;
+    char *q;
+
+    a = id<int>(42);
+    p = "hi";
+    q = id<char *>(p);
+    printf("%d %s\n", a, q);
+    return 0;
+}

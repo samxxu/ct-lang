@@ -1,0 +1,16 @@
+/* L26-5: the instance set is fixed while the template body is parsed, so a
+   generic body may not call another generic (26.5 / D26-8). */
+T inner<T>(T x)
+{
+    return x;
+}
+
+T outer<T>(T x)
+{
+    return inner<int>(x);
+}
+
+int main(void)
+{
+    return outer<int>(3);
+}

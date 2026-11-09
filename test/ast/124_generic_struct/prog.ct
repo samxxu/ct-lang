@@ -1,0 +1,25 @@
+/* 124 (Phase 26): a struct spelling is a valid type argument. The instance
+   passes the whole value through, and the caller reads the fields back. */
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+T pass<T>(T p)
+{
+    return p;
+}
+
+int main(void)
+{
+    struct Point a;
+    struct Point b;
+
+    a.x = 3;
+    a.y = 4;
+    b = pass<struct Point>(a);
+    printf("x=%d y=%d\n", b.x, b.y);
+    return 0;
+}

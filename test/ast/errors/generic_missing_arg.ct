@@ -1,0 +1,11 @@
+/* L26-1: a template has no C function of its own, so a call must name the
+   concrete type. */
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    return id(3);
+}
