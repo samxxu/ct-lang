@@ -58,6 +58,25 @@ CT_CASES = (
     # Phase 24 range initializer: the `$` index is a token of its own in the
     # expression, and `0..13` must not be mistaken for anything else.
     "test/ast/109_range_init_basic/prog.ct",
+    # Phase 20 type alias: `type` / `pub type` is contextual, not a C keyword.
+    "test/ast/67_type_alias/lib/lib.m.ct",
+    # Phase 21 closures: `=>` is the closure arrow.
+    "test/ast/70_closure_basic/prog.ct",
+    # Phase 22/23 `loop`: the keyword only exists in statement position.
+    "test/ast/100_loop_contextual_label/prog.ct",
+    "test/ast/102_loop_range_basic/prog.ct",
+    # Phase 26 generics: declaration, call and the type-argument spellings.
+    "test/ast/123_generic_identity/prog.ct",
+    "test/ast/124_generic_struct/prog.ct",
+    "test/ast/125_generic_type_positions/prog.ct",
+    "test/ast/128_generic_type_operands/prog.ct",
+    # C11 / GNU surfaces that the CT line accepts verbatim.
+    "test/ast/42_static_assert/prog.ct",
+    "test/ast/53_c11_align_generic/prog.ct",
+    "test/ast/55_c_compat/prog.ct",
+    "test/ast/56_header_compat/prog.ct",
+    # 2b.3 qualified map host (`hal::uart1`) and its recipe body.
+    "test/modules/map_ns/hal/uart.h.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -84,6 +103,85 @@ RANGE = "\n".join([
     'char *s = "$";',
     "// $ is not code here",
 ])
+# Phase 26 generics: the declaration header is line-anchored, the call needs a
+# closing `>` and an argument list, and `return` is not a return type.
+GENERIC = "\n".join([
+    "T id<T>(T x)",
+    "{",
+    "    return x;",
+    "}",
+    "int f(void)",
+    "{",
+    "    return id<int>(42);",
+    "}",
+    "int g(void)",
+    "{",
+    "    if (a < b) f();",
+    "    return 0;",
+    "}",
+])
+# Phase 22/23: `loop` is a keyword only as `loop(`; `..` excludes `...`.
+LOOP = "\n".join([
+    "    loop(2) {",
+    "    int loop = 5;",
+    "loop:",
+    "    goto loop;",
+    "    loop(2..5) {",
+    "    case 0 ... 59:",
+    "int f(int a, ...);",
+])
+# Phase 21: `=>` only, never `>=` or `->`.
+CLOSURE = "\n".join([
+    "    int (*add)(int x) = (int x) => x + 1;",
+    "    if (a >= b) {",
+    "    p->x = 1;",
+])
+# Phase 20: `type` is contextual and anchored at line start.
+ALIAS = "\n".join([
+    "pub type Text  = char *;",
+    "type Count = int;",
+    "map trait TextOps for type Text {",
+])
+# `_Static_assert` and its C11 alias.
+ASSERTS = "\n".join([
+    '_Static_assert(sizeof(int) == 4, "four");',
+    'static_assert(sizeof(char) == 1, "one");',
+])
+# C11 keywords accepted by the CT type parser.
+C11 = "\n".join([
+    "_Alignas(16) int g;",
+    "_Alignof(int)",
+    "_Alignof T",
+    "alignof(T)",
+    "_Atomic(int) c;",
+    "_Generic(i, int: 1, default: 0)",
+    "_Noreturn void stop(void);",
+    "_Thread_local int t;",
+    "_Bool b;",
+    "_Complex double z;",
+    "__attribute__((aligned(32))) int a;",
+])
+# 2b.3 qualified instance host plus a recipe body; a plain C member call must
+# not be read as a recipe.
+MAP = "\n".join([
+    "map trait Writer for instance hal::uart1 {",
+    "    write(buf, len) -> uart_put;",
+    "    dog_get()->hi();",
+])
+# New tokens inside a string / comment are not code, exactly like `$` above.
+QUOTED = "\n".join([
+    'char *s = "T id<T>(T x) loop(2..5) => _Static_assert '
+    '_Alignof T _Generic __attribute__ pub type Text =";',
+    "// T id<T>(T x) loop(2..5) => _Static_assert "
+    "_Alignof T _Generic __attribute__ type Text =",
+])
+NEW_RULES = {
+    "ct-type-alias", "ct-generic-decl", "ct-generic-call", "ct-loop",
+    "ct-range-dots", "ct-closure-arrow", "ct-static-assert", "ct-alignas",
+    "ct-alignof", "ct-alignof-type", "ct-atomic", "ct-generic-select",
+    "ct-noreturn", "ct-thread-local", "ct-c11-builtin-types", "ct-attribute",
+    "ct-recipe",
+}
 
 
 def resolve(patterns, repo, out):
@@ -266,6 +364,9 @@ def main():
             check("`map trait T for namespace n {` -> ct-map-namespace",
                   any(h[0] == "ct-map-namespace" for _, l, hs in rows
                       if l.strip().startswith("map ") and " for namespace " in l for h in hs))
+            check("recipe `toInt(s) -> ...` -> ct-recipe",
+                  any(h[0] == "ct-recipe" for _, l, hs in rows
+                      if "->" in l and l.strip().endswith(";") for h in hs))
         if "57_trait_default" in rel:
             check("trait with default bodies -> ct-trait",
                   any(h[0] == "ct-trait" for _, l, hs in rows
@@ -288,6 +389,115 @@ def main():
             check("`$` in the range initializer -> ct-range-index",
                   any(h[0] == "ct-range-index" for _, l, hs in rows
                       if "0..13(" in l for h in hs))
+            check("`0..13` -> ct-range-dots",
+                  any(h[0] == "ct-range-dots" for _, l, hs in rows
+                      if "0..13(" in l for h in hs))
+        if "67_type_alias" in rel:
+            check("`pub type Text` -> ct-type-alias",
+                  any(h[0] == "ct-type-alias" for _, l, hs in rows
+                      if "pub type Text" in l for h in hs))
+            check("`pub type Count` -> ct-type-alias",
+                  any(h[0] == "ct-type-alias" for _, l, hs in rows
+                      if "pub type Count" in l for h in hs))
+            check("`map ... for type Text` is not a type alias",
+                  not any(h[0] == "ct-type-alias" for _, l, hs in rows
+                          if "for type Text" in l for h in hs))
+        if "70_closure_basic" in rel:
+            check("`(int x) => ...` -> ct-closure-arrow",
+                  any(h[0] == "ct-closure-arrow" for _, l, hs in rows
+                      if "=>" in l for h in hs))
+        if "100_loop_contextual_label" in rel:
+            check("statement `loop(2)` -> ct-loop",
+                  any(h[0] == "ct-loop" for _, l, hs in rows
+                      if l.strip().startswith("loop(2)") for h in hs))
+            check("`int loop = 5;` is not ct-loop",
+                  not any(h[0] == "ct-loop" for _, l, hs in rows
+                          if "int loop = 5" in l for h in hs))
+            check("label `loop:` is not ct-loop",
+                  not any(h[0] == "ct-loop" for _, l, hs in rows
+                          if l.strip() == "loop:" for h in hs))
+            check("`goto loop;` is not ct-loop",
+                  not any(h[0] == "ct-loop" for _, l, hs in rows
+                          if "goto loop" in l for h in hs))
+        if "102_loop_range_basic" in rel:
+            check("`loop(2..5)` -> ct-loop + ct-range-dots",
+                  any(h[0] == "ct-loop" for _, l, hs in rows
+                      if "loop(2..5)" in l for h in hs)
+                  and any(h[0] == "ct-range-dots" for _, l, hs in rows
+                          if "loop(2..5)" in l for h in hs))
+        if "123_generic_identity" in rel:
+            check("`T id<T>(T x)` -> ct-generic-decl",
+                  any(h[0] == "ct-generic-decl" for _, l, hs in rows
+                      if l.strip().startswith("T id<T>") for h in hs))
+            check("`id<int>(42)` -> ct-generic-call",
+                  any(h[0] == "ct-generic-call" for _, l, hs in rows
+                      if "id<int>" in l for h in hs))
+            check("`id<char *>(p)` -> ct-generic-call",
+                  any(h[0] == "ct-generic-call" for _, l, hs in rows
+                      if "id<char *>" in l for h in hs))
+        if "124_generic_struct" in rel:
+            check("`pass<struct Point>(a)` -> ct-generic-call",
+                  any(h[0] == "ct-generic-call" for _, l, hs in rows
+                      if "pass<struct Point>" in l for h in hs))
+        if "125_generic_type_positions" in rel:
+            check("`pick<int>(...)` -> ct-generic-call",
+                  any(h[0] == "ct-generic-call" for _, l, hs in rows
+                      if "pick<int>" in l for h in hs))
+            check("`offY<struct Pair>(...)` -> ct-generic-call",
+                  any(h[0] == "ct-generic-call" for _, l, hs in rows
+                      if "offY<struct Pair>" in l for h in hs))
+            check("`_Alignof(T)` -> ct-alignof",
+                  any(h[0] == "ct-alignof" for _, l, hs in rows
+                      if "_Alignof(T)" in l for h in hs))
+        if "128_generic_type_operands" in rel:
+            check("`_Alignof T` (no parens) -> ct-alignof-type",
+                  any(h[0] == "ct-alignof-type" for _, l, hs in rows
+                      if "_Alignof T" in l for h in hs))
+            check("`alignof(T)` -> ct-alignof",
+                  any(h[0] == "ct-alignof" for _, l, hs in rows
+                      if "alignof(T)" in l for h in hs))
+            check("`alignof(T)` is not ct-alignof-type",
+                  not any(h[0] == "ct-alignof-type" for _, l, hs in rows
+                          if "alignof(T)" in l for h in hs))
+        if "42_static_assert" in rel:
+            check("`_Static_assert` -> ct-static-assert",
+                  any(h[0] == "ct-static-assert" for _, l, hs in rows
+                      if "_Static_assert" in l for h in hs))
+        if "53_c11_align_generic" in rel:
+            check("`_Alignas` -> ct-alignas",
+                  any(h[0] == "ct-alignas" for _, l, hs in rows
+                      if "_Alignas" in l for h in hs))
+            check("`_Alignof(int)` -> ct-alignof",
+                  any(h[0] == "ct-alignof" for _, l, hs in rows
+                      if "_Alignof(int)" in l for h in hs))
+            check("`_Alignof(int)` is not ct-alignof-type",
+                  not any(h[0] == "ct-alignof-type" for _, l, hs in rows
+                          if "_Alignof(int)" in l for h in hs))
+            check("`_Generic` -> ct-generic-select",
+                  any(h[0] == "ct-generic-select" for _, l, hs in rows
+                      if "_Generic" in l for h in hs))
+        if "55_c_compat" in rel:
+            check("`static_assert` -> ct-static-assert",
+                  any(h[0] == "ct-static-assert" for _, l, hs in rows
+                      if "static_assert" in l and "_Static_assert" not in l
+                      for h in hs))
+            check("`_Noreturn` -> ct-noreturn",
+                  any(h[0] == "ct-noreturn" for _, l, hs in rows
+                      if "_Noreturn" in l for h in hs))
+        if "56_header_compat" in rel:
+            check("`_Atomic` -> ct-atomic",
+                  any(h[0] == "ct-atomic" for _, l, hs in rows
+                      if "_Atomic" in l for h in hs))
+            check("`__attribute__` -> ct-attribute",
+                  any(h[0] == "ct-attribute" for _, l, hs in rows
+                      if "__attribute__" in l for h in hs))
+        if "map_ns/hal/uart.h.ct" in rel:
+            map_hits = [t for n2, t in all_hits if n2 == "ct-map"]
+            check("qualified map host `hal::uart1` -> ct-map",
+                  bool(map_hits) and "hal::uart1" in map_hits[0], str(map_hits))
+            check("recipe `write(buf, len) -> ...` -> ct-recipe",
+                  any(h[0] == "ct-recipe" for _, l, hs in rows
+                      if "write(buf, len)" in l for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")
@@ -336,6 +546,123 @@ def main():
           "ct-range-index" not in by_line[2], str(by_line[2]))
     check("`$` inside a comment stays a comment",
           "ct-range-index" not in by_line[3], str(by_line[3]))
+
+    print()
+    print("synthetic generics -- declaration header vs call:")
+    rows = scan(GENERIC, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`T id<T>(T x)` -> ct-generic-decl",
+          "ct-generic-decl" in by_line[1], str(by_line[1]))
+    check("`return id<int>(42);` -> ct-generic-call",
+          "ct-generic-call" in by_line[7], str(by_line[7]))
+    check("`return id<int>(42);` is not ct-generic-decl",
+          "ct-generic-decl" not in by_line[7], str(by_line[7]))
+    check("`if (a < b) f();` is not ct-generic-call",
+          "ct-generic-call" not in by_line[11], str(by_line[11]))
+
+    print()
+    print("synthetic loop / range -- statement position and `...` exclusion:")
+    rows = scan(LOOP, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("statement `loop(2)` -> ct-loop", "ct-loop" in by_line[1], str(by_line[1]))
+    check("`int loop = 5;` is not ct-loop", "ct-loop" not in by_line[2], str(by_line[2]))
+    check("label `loop:` is not ct-loop", "ct-loop" not in by_line[3], str(by_line[3]))
+    check("`goto loop;` is not ct-loop", "ct-loop" not in by_line[4], str(by_line[4]))
+    check("`loop(2..5)` -> ct-loop + ct-range-dots",
+          "ct-loop" in by_line[5] and "ct-range-dots" in by_line[5], str(by_line[5]))
+    check("`...` in a case range is not ct-range-dots",
+          "ct-range-dots" not in by_line[6], str(by_line[6]))
+    check("`...` in a prototype is not ct-range-dots",
+          "ct-range-dots" not in by_line[7], str(by_line[7]))
+
+    print()
+    print("synthetic closure arrow -- `=>` only:")
+    rows = scan(CLOSURE, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`=>` -> ct-closure-arrow", "ct-closure-arrow" in by_line[1], str(by_line[1]))
+    check("`>=` is not ct-closure-arrow", "ct-closure-arrow" not in by_line[2], str(by_line[2]))
+    check("`->` is not ct-closure-arrow", "ct-closure-arrow" not in by_line[3], str(by_line[3]))
+
+    print()
+    print("synthetic type alias -- contextual and line-anchored:")
+    rows = scan(ALIAS, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`pub type` -> ct-type-alias", "ct-type-alias" in by_line[1], str(by_line[1]))
+    check("`type` -> ct-type-alias", "ct-type-alias" in by_line[2], str(by_line[2]))
+    check("`map ... for type` is not ct-type-alias",
+          "ct-type-alias" not in by_line[3], str(by_line[3]))
+
+    print()
+    print("synthetic static assert -- `_Static_assert` and its alias:")
+    rows = scan(ASSERTS, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`_Static_assert` -> ct-static-assert",
+          "ct-static-assert" in by_line[1], str(by_line[1]))
+    check("`static_assert` -> ct-static-assert",
+          "ct-static-assert" in by_line[2], str(by_line[2]))
+
+    print()
+    print("synthetic C11 keywords:")
+    rows = scan(C11, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`_Alignas` -> ct-alignas", "ct-alignas" in by_line[1], str(by_line[1]))
+    check("`_Alignof(int)` -> ct-alignof", "ct-alignof" in by_line[2], str(by_line[2]))
+    check("`_Alignof(int)` is not ct-alignof-type",
+          "ct-alignof-type" not in by_line[2], str(by_line[2]))
+    check("`_Alignof T` -> ct-alignof-type",
+          "ct-alignof-type" in by_line[3], str(by_line[3]))
+    check("`alignof(T)` -> ct-alignof", "ct-alignof" in by_line[4], str(by_line[4]))
+    check("`alignof(T)` is not ct-alignof-type",
+          "ct-alignof-type" not in by_line[4], str(by_line[4]))
+    check("`_Atomic` -> ct-atomic", "ct-atomic" in by_line[5], str(by_line[5]))
+    check("`_Generic` -> ct-generic-select",
+          "ct-generic-select" in by_line[6], str(by_line[6]))
+    check("`_Noreturn` -> ct-noreturn", "ct-noreturn" in by_line[7], str(by_line[7]))
+    check("`_Thread_local` -> ct-thread-local",
+          "ct-thread-local" in by_line[8], str(by_line[8]))
+    check("`_Bool` / `_Complex` -> ct-c11-builtin-types",
+          "ct-c11-builtin-types" in by_line[9]
+          and "ct-c11-builtin-types" in by_line[10],
+          str([by_line[9], by_line[10]]))
+    check("`__attribute__` -> ct-attribute",
+          "ct-attribute" in by_line[11], str(by_line[11]))
+
+    print()
+    print("synthetic map host / recipe -- qualified path and `->` heuristic:")
+    rows = scan(MAP, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    map_hits = [t for _, _, hs in rows for n2, t in hs if n2 == "ct-map"]
+    check("qualified map host `hal::uart1` -> ct-map",
+          bool(map_hits) and "hal::uart1" in map_hits[0], str(map_hits))
+    check("recipe `write(buf, len) -> ...` -> ct-recipe",
+          "ct-recipe" in by_line[2], str(by_line[2]))
+    check("`dog_get()->hi();` is not ct-recipe",
+          "ct-recipe" not in by_line[3], str(by_line[3]))
+
+    print()
+    print("synthetic quoted new tokens -- strings and comments stay opaque:")
+    rows = scan(QUOTED, rules)
+    by_line = {n: hs for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("new tokens inside a string do not fire CT rules",
+          not any(h[0] in NEW_RULES for h in by_line[1]), str(by_line[1]))
+    check("new tokens inside a comment do not fire CT rules",
+          not any(h[0] in NEW_RULES for h in by_line[2]), str(by_line[2]))
 
     print()
     print("== %d checks, %d failed ==" % (checks, len(failures)))
