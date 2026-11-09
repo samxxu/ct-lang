@@ -512,6 +512,33 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 
 ---
 
+## 13. 收口核对（2026-11-09）
+
+逐条对本文件自己列的出口判据，证据取自 `selfhost/check-all.sh` 在 `v0.24.0` 上的整轮运行
+（11 道硬门禁全绿，`EXIT 0`）。
+
+| # | 判据 | 证据 | 结果 |
+| --- | --- | --- | --- |
+| 1 | §7.1 的 8 个正例（109–115、117）全绿 | `check-ast.sh` 757 passed / 0 failed，其中 Phase 24 块 21 条全 `ok` | ✔ |
+| 2 | §7.2 的 16 个负例各命中预期文案，且都不落成 `undeclared` | `rng_neg()` 逐条 `grep` 文案 + `! grep -Fiq 'undeclared'` | ✔ |
+| 3 | 逐字节层：`109` 与手写 13 项列表相同 | `grep 'int odd\[\] = {'` 后 `cmp -s`，`BYTE_EQUAL` | ✔ |
+| 4 | 语义层：`109` 与普通字面量数组的运行输出相同 | 两程序编译运行、剔除 banner 后 `cmp -s` | ✔ |
+| 5 | 文件作用域 `static const` 可用 | `110` 生成行 `static const int sq[] = { … };`，`main` 读数正确（`0 9 100`） | ✔ |
+| 6 | 生成物是列表：无 `for`、无 `$`、无 `0..13` | 对生成**声明行**的形态断言（夹具自带手写 `for`，故按行取） | ✔ |
+| 7 | 零 `-Wall -Wextra` 告警 | 门禁 9：`check-warnings: 239 ok, 0 failed`；行为循环同旗标编译 | ✔ |
+| 8 | 既有 golden 功能层零变化 | 门禁 2：`check-goldens: OK (no regression, and the self-hosted rebuild agrees)` | ✔ |
+| 9 | 编辑器 grammar 认 `$` | 门禁 6：`40 checks, 0 failed`（含 `$` 命中与字符串/注释内不命中） | ✔ |
+| 10 | 自举守卫在位 | 门禁 8：`ok range initialisers in selfhost/** (allowed: v0.24.0 is tagged)` | ✔ |
+| 11 | 版本收口 | `CTC_VERSION` 五处 `0.24.0`、74 个 golden 仅版本 token、tag `v0.24.0` → `9abb7ca` | ✔ |
+| 12 | 文档同步 | language-spec §4.47（中英）、tutorial §10.4（中英）、roadmap 两行、本文 as-built；门禁 11：`check-docs: OK (804 relative links in 169 files, v0.24.0, …)` | ✔ |
+| 13 | 不引入 kind 8 / `range_shadow`；共享词法器不改 | D24-4、L24-8 撤销；`0x` 与整数溢出由边界读取器重验；`selfhost/ct-ast/frontend/lex/**` 零改动 | ✔ |
+
+遗留项（**不属于**本相出口判据）：全局作用域一行多声明符仍不支持
+（A4，ct-ast 既有边界，`117` 因此落在块作用域）；`ct check` 的诊断种类表未变，range 初值的
+语义错误仍走编译路径。
+
+---
+
 ## English
 
 ### Status
