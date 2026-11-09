@@ -484,7 +484,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 | D24-10 | 新节点 `N_INIT_RANGE`（kind 61），元素表达式只存一棵 AST |
 | D24-11 | 不做运行时边界 / VLA / 容器 / `each` / 独立区间表达式 / 步长 / 闭区间 / 常量折叠 / `.m.ct`（`each` 的**方法形态**归 Phase 25，语句形态不排期） |
 | D24-12 | 仅 ct-ast；L0/L1/L2 不改（`$` token 只在 ct-ast 的词法器里存在，冻结编译器仍把它当非法字符）；编译器自身源码不得使用该语法（自举守卫） |
-| D24-13 | 收口 bump `v0.24.0`；功能层既有 golden 零变化，71 个 golden 仅版本 token 变化 |
+| D24-13 | 收口 bump `v0.24.0`；功能层既有 golden 零变化，带版本 token 的 74 个文件仅版本变化（`test/cases/**` 50 + `test/modules/**` 21 + `examples/tour/**` 3 = 74；roadmap 版本记录里的 71 是只统计测试 golden 的历史口径） |
 
 ## 12. 实现记录（as-built，2026-11-09）
 
@@ -529,7 +529,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 | 8 | 既有 golden 功能层零变化 | 门禁 2：`check-goldens: OK (no regression, and the self-hosted rebuild agrees)` | ✔ |
 | 9 | 编辑器 grammar 认 `$` | 门禁 6：`40 checks, 0 failed`（含 `$` 命中与字符串/注释内不命中） | ✔ |
 | 10 | 自举守卫在位 | 门禁 8：`ok range initialisers in selfhost/** (allowed: v0.24.0 is tagged)` | ✔ |
-| 11 | 版本收口 | `CTC_VERSION` 五处 `0.24.0`、74 个 golden 仅版本 token、tag `v0.24.0` → `9abb7ca` | ✔ |
+| 11 | 版本收口 | `CTC_VERSION` 五处 `0.24.0`、74 个 golden 仅版本 token、tag `v0.24.0` → `73915d9` | ✔ |
 | 12 | 文档同步 | language-spec §4.47（中英）、tutorial §10.4（中英）、roadmap 两行、本文 as-built；门禁 11：`check-docs: OK (804 relative links in 169 files, v0.24.0, …)` | ✔ |
 | 13 | 不引入 kind 8 / `range_shadow`；共享词法器不改 | D24-4、L24-8 撤销；`0x` 与整数溢出由边界读取器重验；`selfhost/ct-ast/frontend/lex/**` 零改动 | ✔ |
 
