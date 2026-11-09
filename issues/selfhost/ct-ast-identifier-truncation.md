@@ -1,4 +1,4 @@
-# SH-23 · ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义
+# SH-23 · ct-ast 静默截断超长标识符（160 字符），与 spec「>127 报错」相反且可致重定义
 
 | 项 | 值 |
 | --- | --- |
@@ -6,7 +6,7 @@
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 站点 | [Lexer.h.ct:97-108](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct#L97-L108)（`#define MAX_TEXT 160`，[:18](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct#L18)） |
-| 状态 | 待修 |
+| 状态 | 已修（`67da4c3`，2026-11-09 回填） |
 
 ## 现象
 
@@ -23,17 +23,23 @@ if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
 self->pos++;
 ```
 
-超过 158 字符的尾部被**丢弃**、扫描游标却继续前进，最终 `toktext` 只剩前 159 字符，
+`MAX_TEXT` 为 160，`toktext` 可容纳 159 字符 + NUL；第 160 个字符起的尾部被**丢弃**、
+扫描游标却继续前进，最终 `toktext` 只剩前 159 字符，
 **既无 `identifier too long`，也 `exit 0`**。符号表随后按截断名落库
 （`Symbols.h.ct` 的 `snprintf(..., MAX_TEXT, "%s", name)`）。
 
 ## 证据（探针）
 
+> **订正（2026-11-09）**：本节原始探针有误。原文用 `a = "a" * 159` 与 `b = "a" * 158 + "b"`
+> 构造「前 159 字符相同」的两个名字，但两者都是 159 字符，都能完整装入 `toktext`，
+> **不会发生截断，也不可能出现 `redefinition`**；原文第 44 行的报错不可复现。
+> 正确的触发输入是 160 字符：`a = "a" * 160`、`b = "a" * 159 + "b"`，两者都只剩前 159 字符而重名。
+
 ```bash
-# 两个标识符前 159 字符相同、仅末尾不同
+# 两个 160 字符标识符前 159 字符相同、仅末尾不同
 python3 - <<'PY' > /tmp/idc.ct
-a = "a" * 159
-b = "a" * 158 + "b"
+a = "a" * 160
+b = "a" * 159 + "b"
 print(f"int {a} = 1;")
 print(f"int {b} = 2;")
 print("int main(void) { return 0; }")
@@ -45,7 +51,8 @@ $ gcc -Wall /tmp/idc.c -o /tmp/idc
 ```
 
 同一输入在 L0（`selfhost/l0/ctc.c`）上也是 `exit 0`，说明截断行为并非 ct-ast 独有；但
-`language-spec` 的两处表述都以「已修」口吻写作，与两个实现均不符。
+`language-spec` 的两处表述都以「已修」口吻写作，与两个实现均不符（修复后 ct-ast 已改为报错，
+L0 仍按冻结层现状）。
 
 ## 影响
 
@@ -66,9 +73,15 @@ $ gcc -Wall /tmp/idc.c -o /tmp/idc
 
 ## 验证
 
-修复后两个探针分别得到 `identifier too long`（exit 1）与正常编译；新增负例在 `check-ast.sh` 中通过；
+修复后两个探针分别得到 `identifier is too long`（exit 1）与正常编译；新增负例在 `check-ast.sh` 中通过；
 `bash selfhost/check-all.sh` 九关全绿。
 
-## 处理（2026-10-31）
+## 处理（2026-10-31 修复，2026-11-09 回填）
 
-已修复（ct-ast）：标识符超过 159 字符报 `identifier is too long`，不再静默截断；新增负例 `test/ast/errors/identifier_too_long.ct`。L0 / L1 / L2 属冻结层未改，language-spec 已改为如实描述各层的上限。
+已修复（ct-ast）：标识符超过 159 字符报 `identifier is too long`，不再静默截断；新增负例
+`test/ast/errors/identifier_too_long.ct`。L0 / L1 / L2 属冻结层未改，language-spec 已改为如实描述各层的上限。
+
+- 修复提交：`67da4c3`。
+- 验证证据：`test/ast/errors/identifier_too_long.ct` 存在，由 `check-ast.sh` 断言非零退出并带位置诊断；
+  2026-11-09 在干净克隆（`6da3ce4`）上复跑 `bash selfhost/check-all.sh`，
+  `check-ast: 765 passed / 0 failed`，11 道门禁全绿。

@@ -5,8 +5,8 @@
 | 模块 | docs |
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
-| 文件 | [README.md](../../README.md#L57)（中文）、[README.md](../../README.md#L504)（英文） |
-| 状态 | 待修 |
+| 文件 | [README.md](../../README.md#L41)（中文）、[README.md](../../README.md#L122)（英文） |
+| 状态 | 已修（`94815d7`，2026-11-09 回填） |
 
 ## 现象
 
@@ -52,3 +52,8 @@ $ echo $?
 ## 处理（2026-10-31）
 
 已修复：README 中英 CLI 表改为「`compile` 与 `build` 都接受 `--emit-map -`」。
+
+- 修复提交：`94815d7`（`docs(spec): dispose of the 2026-10-31 audit findings`）。
+- 验证证据：README 中文 CLI 表（`README.md:41`）与英文表（`README.md:122`）均已改为两模式通用；
+  2026-11-09 在干净克隆上复跑 `bash selfhost/check-all.sh`，11 道门禁全绿
+  （`check-docs: OK (825 relative links in 171 files, v0.24.0, 11 hard gates …)`）。

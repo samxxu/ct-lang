@@ -6,7 +6,7 @@
 | 严重度 | **High** |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
 | 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`emit_vtable_fwd`、impl 的 vtable 定义、`emit_box` 所在的装箱发射、`write_unit_header`） |
-| 状态 | 待修（Batch 2 / 2a.1，前置 SH-13） |
+| 状态 | 已修（Batch 2 / 2a.1，`836c2e2` + `329016d`；证据见文末「处理（2026-11-09 回填）」） |
 
 ## 现象
 
@@ -81,3 +81,15 @@ main.ct:10:44: error: use of undeclared identifier 'Conn_Stream_vtable'
 - 新增 `test/modules/xunit_box/`（不带 `build.args`，避免污染 L2 归档 golden），
   `check-ast.sh` 断言 `net.h` 含 `extern struct Stream_vtbl Conn_Stream_vtable;` 并运行比对。
 - `bash selfhost/check-all.sh` 九关全绿。
+
+## 处理（2026-11-09 回填）
+
+已修复：`pub trait` ∧ `pub struct`（map 为 `pub trait` ∧ `pub` 实例）时，vtable 的前向声明与定义
+去掉 `static` 与 `__attribute__((unused))`，并在实现单元头文件里补
+`extern struct <Trait>_vtbl <Struct>_<Trait>_vtable;`。
+
+- 修复提交：`836c2e2`（`fix(codegen): export pub globals, dedupe imports, declare ignored impl parameters`）
+  与 `329016d`（`feat(codegen): cross-unit OO, map bindings and function pointers`）。
+- 验证证据：`test/modules/xunit_box/` 存在，`check-ast.sh` 的 `xunit_box` 断言 `net.h` 含
+  `extern struct Stream_vtbl Conn_Stream_vtable;` 并运行比对输出 `4`；2026-11-09 在干净克隆（`6da3ce4`）上
+  复跑 `bash selfhost/check-all.sh`，`check-ast: 765 passed / 0 failed`，11 道门禁全绿。

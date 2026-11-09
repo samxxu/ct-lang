@@ -6,7 +6,7 @@
 | 严重度 | **High** |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
 | 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`write_unit_c`、`write_unit_header`） |
-| 状态 | 待修（Batch 2 / 2a.2） |
+| 状态 | 已修（Batch 2 / 2a.2，`836c2e2` + `329016d`；证据见文末「处理（2026-11-09 回填）」） |
 
 ## 现象
 
@@ -76,4 +76,15 @@ compile 模式（单文件）不受影响：该路径对 `N_GLOBAL` 不做 `d` �
 - `count.h` 含 `extern int g_counter;`，`count.c` 含 `int g_counter = 5;`，两文件编译零告警。
 - 消费单元 `import count;` 后能读写 `g_counter`。
 - 新增 fixture `test/modules/pub_global/`，由 `check-ast.sh` 断言上述两条字符串并运行比对。
-- `bash selfhost/check-all.sh` 九关全绿。
+- `bash selfhost/check-all.sh` 全绿（现行口径 11 道门禁）。
+
+## 处理（2026-11-09 回填）
+
+已修复：`.c` 侧只对 `N_STRUCT / N_TYPEDEF` 过滤 `d == 1`，`N_GLOBAL` 一律发射；`.h` 侧新增
+`N_GLOBAL && d == 1` 分支，发射不带初始化器的 `extern` 声明。
+
+- 修复提交：`836c2e2`（`fix(codegen): export pub globals, dedupe imports, declare ignored impl parameters`）
+  与 `329016d`（`feat(codegen): cross-unit OO, map bindings and function pointers`）。
+- 验证证据：`test/modules/pub_global/` 存在，`check-ast.sh` 的 `pub_global` 断言
+  `count.h` 含 `extern int g_counter;`、`count.c` 含定义；2026-11-09 在干净克隆（`6da3ce4`）上复跑
+  `bash selfhost/check-all.sh`，`check-ast: 765 passed / 0 failed`，11 道门禁全绿。

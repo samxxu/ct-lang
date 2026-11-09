@@ -2,7 +2,9 @@
 
 > **历史快照（2026-10-21）**：下文早期段落引自 `selfhost/ast/**`（单文件主线）与 `selfhost/src/**` 时代，
 > 这些路径**已不存在**；等价路径为 `selfhost/ct-ast/**`（分组多单元主线）与 `selfhost/l2/**`
-> （冻结的回归 oracle）。历史段落保持原样，条目状态未逐条回填。
+> （冻结的回归 oracle）。历史段落保持原样；**模块索引表与条目文件的状态**已于 2026-11-09 回填本轮
+> 5 条（DOC-23 / DOC-24 / SH-13 / SH-14 / SH-23），SH-60 按裁决由「待评审」改为 `open`（并入 Phase 25）；
+> 其余历史段落的文字不动，状态以各条目文件为准。
 
 本目录汇总十二轮审查的发现：[reports/repo-review](../docs/history/reports/repo-review/repo-review.md)（首轮）、
 [reports/phase7-review](../docs/history/reports/phase7-review/phase7-review.md)（Phase 7 复审）、
@@ -99,6 +101,10 @@
   SIGBUS（类型键丢弃顶层 `const`），实参类型与不存在的类型名都不校验。建议 A 路线（trait 方法标注
   接收者可变性）打底，**另开排期**，不并入已随 `v0.20.0` 收口的 Phase 20；参数类型检查可先走
   `v0.20.x` 补丁。逐项见 [SH-60](selfhost/sh60-mct-signature-types-decorative.md)。
+- 2026-11-09 **SH-60 裁决**（本条原文的「签名仅装饰」与「建议 A 路线」两处结论被改写）：签名并非仅装饰
+  （声明类型决定 `sizeof`、返回类型参与 `expr_type` 推导），但签名也未约束调用者（四种静态调用形态均静默，
+  删掉 `!is_static` 豁免是空操作）。缺陷收窄为「**静态映射调用点缺少实参类型检查**」，状态 `open`、
+  并入 Phase 25（25.1）；顶层 `const` 接收者待 D-60-1；声明点未知类型 deferred，待 D-60-2。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -136,8 +142,8 @@
 | DOC-20 | Low | README 快速开始 1b 只构建 `ctc`，后续步骤却调用 `ct` | [readme-quickstart-branch.md](docs/readme-quickstart-branch.md) |
 | DOC-21 | Low | construction.md 自称「描述现状」却未标适用编译器，两处描述在 ct-ast 上不成立 | [construction-scope-unspecified.md](docs/construction-scope-unspecified.md) |
 | DOC-22 | Low | Batch 2 落地后仍残留 `unit-private` / `not mangled` 陈述，设计文档状态仍写「待实现」 | [doc22-batch2-stale-statements.md](docs/doc22-batch2-stale-statements.md) |
-| DOC-23 | **High** | README 把 `build --emit-map -` 写成不可用，实测可用 | [doc23-emit-map-build-stdout.md](docs/doc23-emit-map-build-stdout.md) |
-| DOC-24 | **High** | 教程称普通 `.ct` 会生成 `.h`，与 batch 30 规则和 README 相反 | [doc24-tutorial-h-output.md](docs/doc24-tutorial-h-output.md) |
+| DOC-23 | **High** | README 把 `build --emit-map -` 写成不可用，实测可用（已修，`94815d7`） | [doc23-emit-map-build-stdout.md](docs/doc23-emit-map-build-stdout.md) |
+| DOC-24 | **High** | 教程称普通 `.ct` 会生成 `.h`，与 batch 30 规则和 README 相反（已修，`94815d7`） | [doc24-tutorial-h-output.md](docs/doc24-tutorial-h-output.md) |
 | DOC-25 | Medium | README 称 `-I` 两模式均限 16，compile 实际无上限（且忽略该开关） | [doc25-include-roots-asymmetry.md](docs/doc25-include-roots-asymmetry.md) |
 | DOC-26 | Medium | 多处断言计数与 tag 布局过期（grammar 21→27、check-ast 105→317、v0.13.0 仍写旧布局） | [doc26-stale-counts-and-tag-layout.md](docs/doc26-stale-counts-and-tag-layout.md) |
 | DOC-27 | Medium | `test/README.md` 的层图与负例约定过期（01..18、缺 patterns、include 路径错误） | [doc27-test-readme-stale.md](docs/doc27-test-readme-stale.md) |
@@ -228,8 +234,8 @@
 | SH-10 | Medium | 生成物触发 `-Wall -Wextra` 告警家族：`_self` 未使用、未被引用的 vtable、未被引用的 Drop 函数 | [ct-ast-unused-self-warning.md](selfhost/ct-ast-unused-self-warning.md) |
 | SH-11 | Medium | ct-ast 在表达式中间静默提升右值接收者，改变求值顺序 | [ct-ast-rvalue-hoist-order.md](selfhost/ct-ast-rvalue-hoist-order.md) |
 | SH-12 | Medium | `map` 语法（`map trait T for instance x`）在 test/cases 与 examples 中无正例，新用户入口缺失 | [ct-ast-map-no-positive-example.md](selfhost/ct-ast-map-no-positive-example.md) |
-| SH-13 | **High** | `pub` 全局变量在 build 模式下被整个丢弃，连定义单元自身都无法编译 | [ct-ast-pub-global-dropped.md](selfhost/ct-ast-pub-global-dropped.md) |
-| SH-14 | **High** | vtable 为 `static`，接口值无法在消费单元装箱（跨单元 OO 的唯一阻塞） | [ct-ast-cross-unit-vtable-static.md](selfhost/ct-ast-cross-unit-vtable-static.md) |
+| SH-13 | **High** | `pub` 全局变量在 build 模式下被整个丢弃，连定义单元自身都无法编译（已修，`836c2e2` + `329016d`） | [ct-ast-pub-global-dropped.md](selfhost/ct-ast-pub-global-dropped.md) |
+| SH-14 | **High** | vtable 为 `static`，接口值无法在消费单元装箱（跨单元 OO 的唯一阻塞）（已修，`836c2e2` + `329016d`） | [ct-ast-cross-unit-vtable-static.md](selfhost/ct-ast-cross-unit-vtable-static.md) |
 | SH-15 | Medium | `map` 每条绑定无条件生成 wrapper，缺少直绑零生成路径 | [ct-ast-map-wrapper-per-binding.md](selfhost/ct-ast-map-wrapper-per-binding.md) |
 | SH-16 | Medium | impl 未用参数触发 `-Wunused-parameter`；`(void)_self;` 落在 `return` 之后 | [ct-ast-impl-unused-param-warning.md](selfhost/ct-ast-impl-unused-param-warning.md) |
 | SH-17 | Low | 同一单元被多次 import 时生成物重复 `#include` 其头文件 | [ct-ast-import-dep-duplicate.md](selfhost/ct-ast-import-dep-duplicate.md) |
@@ -238,7 +244,7 @@
 | SH-20 | Medium | `map` 曾强制要求已声明实例（命名空间级绑定曾不可用；2026-10-22 已修） | [ct-ast-map-requires-instance.md](selfhost/ct-ast-map-requires-instance.md) |
 | SH-21 | Medium | 函数指针不能指向 C 库函数，只能指向 CT 声明的函数或 ALL_CAPS 宏 | [ct-ast-fnptr-cannot-name-libfn.md](selfhost/ct-ast-fnptr-cannot-name-libfn.md) |
 | SH-22 | Medium | `extern` 只接受变量：函数原型被拒，且诊断位置漂移到后续行 | [ct-ast-extern-function-prototype.md](selfhost/ct-ast-extern-function-prototype.md) |
-| SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 | [ct-ast-identifier-truncation.md](selfhost/ct-ast-identifier-truncation.md) |
+| SH-23 | **High** | ct-ast 静默截断超长标识符（160 字符），与 spec「>127 报错」相反且可致重定义（已修，`67da4c3`） | [ct-ast-identifier-truncation.md](selfhost/ct-ast-identifier-truncation.md) |
 | SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉（不采纳，已关闭 2026-10-31） | [cli-parser-duplication.md](selfhost/cli-parser-duplication.md) |
 | SH-25 | **High** | 带 tag 的 `typedef` 别名漏拷 `dims`，数组字段生成编译不过的 C | [sh25-typedef-alias-drops-dims.md](selfhost/sh25-typedef-alias-drops-dims.md) |
 | SH-26 | Medium | `*p = v;` 的赋值路径读取未初始化的 `tt` | [sh26-assign-deref-uninit-type.md](selfhost/sh26-assign-deref-uninit-type.md) |
@@ -275,7 +281,7 @@
 | SH-57 | Medium | 写在声明之后的 `import` 整条被静默丢弃，模块不存在也不报（已修，`0fd74c0`） | [sh57-import-after-decl-silently-dropped.md](selfhost/sh57-import-after-decl-silently-dropped.md) |
 | SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（已关闭：有意限制；文案已改进 `64f27f3`） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
 | SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
-| SH-60 | **High** | `.m.ct` 方法签名的类型只作装饰：const 接收者被就地写、实参类型与未知类型都不校验（待评审） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
+| SH-60 | **High** | 静态映射调用点缺少实参类型检查（**open**，并入 Phase 25 / 25.1；顶层 const 接收者待 D-60-1，声明点未知类型 deferred 待 D-60-2） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
 | SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
@@ -656,7 +662,7 @@ leak 系列 test/modules 里的 `p` unused 是**源文件层面**的告警（`ma
 | TEST-12 | Low | `check-warnings.sh` 未扫描 `test/patterns`（及 archive / acceptance） |
 | TEST-13 | Low | `missing_method.ct` 在两个负例目录各一份，清点时易重复计数 |
 | CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行 |
-| SH-23 | **High** | ct-ast 静默截断超长标识符（159 字符），与 spec「>127 报错」相反且可致重定义 |
+| SH-23 | **High** | ct-ast 静默截断超长标识符（160 字符），与 spec「>127 报错」相反且可致重定义 |
 | SH-24 | Info | compile 与 build 两套 CLI 解析器并存，导致 `-I` 上限与文案分叉 |
 
 ### 关键探针（原始结果）

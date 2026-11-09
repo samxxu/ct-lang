@@ -5,8 +5,8 @@
 | 模块 | docs |
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
-| 文件 | [docs/tutorial.md](../../docs/tutorial.md#L78)（中文）、[docs/tutorial.md](../../docs/tutorial.md#L495)（英文） |
-| 状态 | 待修 |
+| 文件 | [docs/tutorial.md](../../docs/tutorial.md#L78)（中文）、[docs/tutorial.md](../../docs/tutorial.md#L1090)（英文） |
+| 状态 | 已修（`94815d7`，2026-11-09 回填） |
 
 ## 现象
 
@@ -49,3 +49,7 @@ batch 30 规则；中英各一份，保持对称。
 ## 处理（2026-10-31）
 
 已修复：教程中英两处改为「普通 `.ct` 只写 `.c`；只有 `.h.ct` 写 `.h`」。
+
+- 修复提交：`94815d7`（`docs(spec): dispose of the 2026-10-31 audit findings`）。
+- 验证证据：`docs/tutorial.md` 中文（`:78`）与英文（`:1090`）两处注释均已改为「仅 `.h.ct` 写 `.h`」；
+  2026-11-09 复跑 `bash selfhost/check-all.sh`，11 道门禁全绿。
