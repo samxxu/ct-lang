@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）**（门禁全绿但放过了 SH-62 的静默坏产物） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [check-ast.sh](../../selfhost/check-ast.sh#L1159-L1222)、[123/prog.ct](../../test/ast/123_generic_identity/prog.ct)、[124/prog.ct](../../test/ast/124_generic_struct/prog.ct) |
-| 状态 | **reopened**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`：新增夹具与断言属实且负例会红，但无括号 `sizeof T` 的静默坏产物仍无夹具，见「评审复核」） |
+| 状态 | **fixed**（2026-11-09，`v0.26.2`：新增 128 覆盖无括号形态，并在门禁加产物层 `tparam_residue()` 系统性防线，见「修复（`v0.26.2`）」） |
 
 ## 现象
 
@@ -111,3 +111,47 @@ static struct int getv__ct1(struct int *);                                      
 即本条的核心判断「门禁全绿但放过静默坏产物」在 v0.26.1 仍成立。
 
 **关闭条件**：补 `sizeof T`（及同族无括号形式）夹具并让生成物断言变红；与 SH-62 同步复核。
+
+## 修复（`v0.26.2`，2026-11-09）
+
+两件事：补齐无括号形态的夹具，以及把「生成物残留类型参数」变成门禁的机械判定，而不是靠某个夹具的
+`grep` 恰好写了 `<T>`。
+
+**新增 `test/ast/128_generic_type_operands`**：同一模板体覆盖五种形态，`main` 输出 `4 4 4 8 8`。
+
+| 函数 | 模板体 | 生成物断言 |
+| --- | --- | --- |
+| `sizeBare<int>` | `sizeof T` | `sizeof(int)` |
+| `alignBare<int>` | `_Alignof T` | `_Alignof(int)` |
+| `alignMacro<int>` | `alignof(T)` | `alignof(int)` |
+| `sizeTimes<int>` | `sizeof T * 2` | `sizeof(int)) * 2`（仍是乘法） |
+| `sizeSum<int>` | `sizeof(T) + sizeof T` | `sizeof(int) + sizeof(int)` |
+
+**系统性防线 `tparam_residue()`**（`check-ast.sh` 主夹具循环，编译成功点之后）：从每个夹具
+`prog.ct` 自身提取顶层泛型声明的类型参数名，扫描生成 C 中该名字的出现次数，减去合法的
+`struct|union|enum <T>` 标签出现次数；差额非零即 `bad` 并列出 `T(n)`。新夹具自动纳入，不需要再写
+一条 `<T>` 的 `grep`。
+
+**红证**（缺陷存在时必须红）：
+
+```console
+# v0.26.1 坏产物（真实 tag 源码树编出的 ct-ast）
+$ cat /tmp/p27/probe/sz261.c
+static int nogrow__ct1(int x) {
+    return (int)(sizeof(T));
+}
+$ tparam_residue /tmp/p27/probe/sz.ct /tmp/p27/probe/sz261.c
+[T(1) ]                                   # 门禁会红
+
+# v0.26.1 夹具本身也会红
+$ /tmp/p27/b261/ct-ast test/ast/128_generic_type_operands/prog.ct -o /tmp/red128.c
+prog.ct:16:26: error: _Alignof needs a type in parentheses      # 退出 1
+$ /tmp/p27/b261/ct-ast test/ast/126_generic_struct_tag/prog.ct -o /tmp/red126b.c
+prog.ct:22:31: error: type parameter cannot be used inside _Generic   # 退出 1（P2 过拒）
+```
+
+**绿证**：`bash selfhost/check-ast.sh` → `== summary: 817 passed, 0 failed ==`（v0.26.1 为 815；
++2 = 主夹具循环的 128 与专用 `p26_generic_type_operands` 块；`tparam_residue()` 只做红/绿判定，
+不新增 `ok` 条数）。`check-all.sh` 见同轮发布记录。
+
+`verified` 留给独立评审。

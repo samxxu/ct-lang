@@ -1905,8 +1905,10 @@ int main(void) {
 - 同一 `(模板, 具体类型)` 只登记一份实例，C 名为 `<name>__ct<N>`（`N` 从 1 起，按源码中首次出现的
   次序编号）。实例是 `static`，不进入生成的头文件，也不跨单元可见。
 - 模板本身**不生成任何 C 符号**：生成物只含实例。实例体内的返回类型、形参、局部声明、`(T)` 转型、
-  `sizeof(T)` / `_Alignof(T)`、`offsetof(T, ...)`、`va_arg(ap, T)` 都按实例的具体类型写出；
-  `struct T` / `union T` / `enum T` 里的 `T` 是标签名，不随类型参数替换。
+  `sizeof(T)` / `_Alignof(T)`、`sizeof T` / `_Alignof T` / `alignof(T)`、`offsetof(T, ...)`、
+  `va_arg(ap, T)` 都按实例的具体类型写出；无括号的类型操作数只吃一个类型名（`sizeof T * 2` 是
+  `(sizeof T) * 2`，不是 `sizeof(T *)`）。`struct T` / `union T` / `enum T` 里的 `T` 是标签名，
+  不随类型参数替换。
 - 只有名字已经是符号表里的模板时，`<` 才被当作类型实参的开头；变量的 `a < b` 仍是比较。
 - 诊断：`L26-1` 忘记类型实参 `generic function '<name>' needs a type argument`；`L26-2` `pub` 泛型
   `generic functions cannot be pub`；`L26-3` 多个类型参数 `only one type parameter is supported`
@@ -1916,8 +1918,9 @@ int main(void) {
 - 不支持：泛型结构体 / union / trait / impl、约束（trait bound）、类型推导（`id(42)` 不会推成 `int`）、
   多个类型参数、`pub` 泛型、递归或嵌套泛型调用、跨单元实例共享、类型参数用于数组维度。这些都在源码处
   硬报错，不静默降级；被替换的类型位置（上一条）若拼写不完整，同样在解析期报错而不是原样发射。
-  `_Generic(...)` 的选择体是原样透传，因此模板体内 `_Generic` 出现类型参数会硬报错
-  `type parameter cannot be used inside _Generic`，绝不把它发射成未声明的名字。
+  `_Generic(...)` 的选择体是原样透传，因此模板体内 `_Generic` 出现裸类型参数会硬报错
+  `type parameter cannot be used inside _Generic`，绝不把它发射成未声明的名字；紧邻 `struct` / `union` /
+  `enum` 的标签选择器（`_Generic(x, struct T: 1, default: 0)`）是合法标签，放行。
 
 ### 7. 容量上限
 
@@ -4173,8 +4176,10 @@ int main(void) {
   header and is not visible across units.
 - The template itself **produces no C symbol**; only instances are emitted. Inside an instance the
   return type, parameters, local declarations, `(T)` casts, `sizeof(T)` / `_Alignof(T)`,
-  `offsetof(T, ...)` and `va_arg(ap, T)` are written with the concrete type; a `T` next to
-  `struct` / `union` / `enum` is a tag name and stays untouched.
+  `sizeof T` / `_Alignof T` / `alignof(T)`, `offsetof(T, ...)` and `va_arg(ap, T)` are written with
+  the concrete type; an unparenthesised type operand takes exactly one type name (`sizeof T * 2` is
+  `(sizeof T) * 2`, not `sizeof(T *)`). A `T` next to `struct` / `union` / `enum` is a tag name and
+  stays untouched.
 - `<` opens a type argument only when the name is already a template in the symbol table, so
   `a < b` on a variable stays a comparison.
 - Diagnostics: `L26-1` missing type argument `generic function '<name>' needs a type argument`;
@@ -4188,8 +4193,10 @@ int main(void) {
   generic calls, cross-unit instance sharing, and a type parameter in an array dimension. Each is a
   hard source error, never a silent downgrade; an incomplete spelling in a substituted type position
   is also a parse error rather than being emitted verbatim. A `_Generic(...)` selection is passed
-  through verbatim, so a type parameter inside it is a hard error
-  (`type parameter cannot be used inside _Generic`) and never becomes an undeclared name.
+  through verbatim, so a bare type parameter inside it is a hard error
+  (`type parameter cannot be used inside _Generic`) and never becomes an undeclared name; a tag
+  selector next to `struct` / `union` / `enum` (`_Generic(x, struct T: 1, default: 0)`) is legal and
+  accepted.
 
 ### 7. Capacity limits
 

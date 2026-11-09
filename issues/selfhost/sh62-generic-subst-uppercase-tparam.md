@@ -5,7 +5,7 @@
 | 严重度 | **P1（High）** |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1684-L1694)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2082-L2083)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2095)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2109-L2110)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2767)、[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2995-L3037) |
-| 状态 | **reopened**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`：括号形式的六类位置已修，无括号 `sizeof T` 仍退出 0 发射未声明 `T`，见「评审复核」） |
+| 状态 | **fixed**（2026-11-09，`v0.26.2`：无括号类型操作数统一走 `tok_is_type_name()`，`sizeof T` / `_Alignof T` / `alignof(T)` 全部真替换；见「修复（`v0.26.2`）」） |
 
 ## 现象
 
@@ -180,3 +180,43 @@ cannot be used inside _Generic`）。这是安全方向的过度拒绝（标签�
 
 **关闭条件**：无括号 `sizeof` 的操作数为类型参数时，要么按类型解析并正确替换，要么在解析期硬错；
 不得退出 0 发射 `T`。同时补一条夹具（TEST-17 已随之重开）。
+
+## 修复（`v0.26.2`，2026-11-09）
+
+按「不要再按点打补丁」的要求做根因修复，而不是给 `sizeof` 再加一个特判。
+
+**根因**：类型操作数的类型名判定只长在括号分支。`parse_unary` 对 `sizeof` 只做
+`if (paren && next_is_type_name())`；无括号形态直接落回 `parse_unary() → parse_primary()`，`T` 成为
+`N_VAR` 并在发射期原样抄出。`next_is_type_name()` 是“下一 token 是否为类型名”的前瞻包装，只服务于
+`(type)` 分支，类型参数这条路径从未被问到。
+
+**修复**：
+
+- 从 `next_is_type_name()` 的主抽出 `tok_is_type_name()`（判**当前** token，规则完全一致，不前移游标），
+  `next_is_type_name()` 改为 save/restore + 调用它。
+- `sizeof` / `_Alignof` / `alignof` 三算子共用一条路径：先 `next_is_type_name()`（括号形态），再
+  `tok_is_type_name()`（无括号形态，`parse_type` 读取）；`type_no_ptr` 让无括号类型操作数只吃一个类型名，
+  `sizeof T * 2` 保持乘法。`_Alignof T` 不再落进“needs a type in parentheses”。
+- 发射器 `N_SIZEOF` 按 `aux` 发射 5 种形态：`sizeof(type)` / `sizeof(expr)` / `_Alignof(type)` /
+  `alignof(expr)` / `alignof(type)`，类型形态统一经 `emit_gsub_type`。
+- `_Atomic` / `offsetof` / cast / `va_arg` 原本已在自己的类型解析分支上（分别由 `parse_type`、
+  `offsetof_ahead()`、cast 的 `(` 分支、调用解析处理），本轮不改判定，只共享同一谓词。
+- P2 同轮处理：`_Generic(x, struct T: 1, …)` 的选择器里紧邻 `struct` / `union` / `enum` 的是标签，放行；
+  裸类型参数仍报 `type parameter cannot be used inside _Generic`。
+
+**证据**（同一源码分别喂真实 `v0.26.1` 基线与 `v0.26.2`）：
+
+| 形态 | v0.26.1 | v0.26.2 |
+| --- | --- | --- |
+| `(int)sizeof T` | **退出 0**，发射 `(int)(sizeof(T))`，`cc` 报 `'T' undeclared` | 发射 `(int)(sizeof(int))` |
+| `(int)_Alignof T` | 退出 1：`4:26: error: _Alignof needs a type in parentheses` | 发射 `_Alignof(int)` |
+| `(int)alignof(T)` | **退出 0**，发射 `alignof(T)`，`cc` 报 `'T' undeclared` | 发射 `alignof(int)` |
+| `(int)sizeof T * 2` | **退出 0**，发射 `((int)(sizeof(T)) * 2)` | 发射 `((int)(sizeof(int)) * 2)` |
+| `(int)(sizeof(T) + sizeof T)` | **退出 0**，发射 `(sizeof(int) + sizeof(T))` | 发射 `(sizeof(int) + sizeof(int))` |
+| `_Generic(x, struct T: 1, default: 0)` | 退出 1：`type parameter cannot be used inside _Generic`（P2 过拒） | 退出 0，发射 `_Generic ( x , struct T : 1 , default : 0 )` |
+
+门禁：`bash selfhost/check-ast.sh` → `== summary: 817 passed, 0 failed ==`（v0.26.1 为 815，+2 来自
+主夹具循环的 128 与专用 `p26_generic_type_operands` 块；产物层 `tparam_residue()` 是红/绿判定，
+不新增 `ok` 条数）。分支矩阵与防线规则见 `docs/design/phase26.md` §2.6 / §6.3.1。
+
+`verified` 留给独立评审。
