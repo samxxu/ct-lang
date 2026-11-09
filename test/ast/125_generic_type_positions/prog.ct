@@ -1,0 +1,60 @@
+/* 125 (Phase 26 fix, TEST-17): the template body carries every type position:
+   return type, parameter type, local declaration, `(T)` cast, `sizeof` /
+   `_Alignof`, `offsetof(T, …)`, `va_arg(ap, T)` and a call argument. */
+#include <stdio.h>
+#include <stddef.h>
+#include <stdarg.h>
+
+struct Pair {
+    int x;
+    int y;
+};
+
+static int absorb(int v)
+{
+    return v + 1;
+}
+
+T pick<T>(T a, T b)
+{
+    T v;
+    v = (T)a;
+    if (sizeof(T) > _Alignof(T)) {
+        v = b;
+    }
+    return (T)absorb((T)v);
+}
+
+int offY<T>(T p)
+{
+    (void)p;
+    return (int)offsetof(T, y);
+}
+
+T first<T>(int n, ...)
+{
+    va_list ap;
+    T v;
+
+    va_start(ap, n);
+    v = va_arg(ap, T);
+    va_end(ap);
+    (void)n;
+    return v;
+}
+
+int main(void)
+{
+    struct Pair p;
+    struct Pair q;
+    int a;
+
+    p.x = 3;
+    p.y = 4;
+    q.x = 7;
+    q.y = 8;
+    a = pick<int>(3, 9);
+    printf("%d %d %d %d %d\n", a, offY<struct Pair>(p), offY<struct Pair>(q),
+           (int)sizeof(int), first<int>(1, 5));
+    return 0;
+}

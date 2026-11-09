@@ -1156,14 +1156,16 @@ if "$work/ct-ast" test/ast/123_generic_identity/prog.ct -o "$work/p26g123/prog.c
         >"$work/p26g123.cc" 2>&1 \
    && "$work/p26g123/prog" > "$work/p26g123.run" \
    && cmp -s "$work/p26g123.run" test/ast/123_generic_identity/prog.expected.out \
-   && [ "$(grep -c '__ct[0-9]' "$work/p26g123/prog.c")" -ge 2 ] \
+   && [ "$(grep -cE '^static .*__ct[0-9]+\(.*\);$' "$work/p26g123/prog.c")" -eq 2 ] \
    && ! grep -qE '\bT\b' "$work/p26g123/prog.c" \
    && grep -qF 'static int id__ct1(int);' "$work/p26g123/prog.c" \
    && grep -qF 'static char * id__ct2(char *);' "$work/p26g123/prog.c" \
    && grep -qF 'a = id__ct1(42);' "$work/p26g123/prog.c" \
+   && grep -qF 'b = id__ct1(7);' "$work/p26g123/prog.c" \
+   && [ "$(grep -cE '^static int id__ct1\(int x\) \{' "$work/p26g123/prog.c")" -eq 1 ] \
    && grep -qF 'q = id__ct2(p);' "$work/p26g123/prog.c" \
    && ! grep -qF 'id(' "$work/p26g123/prog.c"; then
-    ok "p26_generic_identity (two instances, no template symbol, no residual T)"
+    ok "p26_generic_identity (two instances, dedup, no template symbol, no residual T)"
 else
     bad "p26_generic_identity" "$(cat "$work/p26g123.err" "$work/p26g123.cc" 2>/dev/null | head -5)"
 fi
@@ -1185,6 +1187,63 @@ else
     bad "p26_generic_struct" "$(cat "$work/p26g124.err" "$work/p26g124.cc" 2>/dev/null | head -5)"
 fi
 
+# TEST-17: every type position inside a template body must be substituted.
+# Before the SH-62 fix this fixture died at the cast; the emitted-C greps pin
+# each form so a partially-substituted body cannot pass on runtime output alone.
+rm -rf "$work/p26g125"
+mkdir -p "$work/p26g125"
+if "$work/ct-ast" test/ast/125_generic_type_positions/prog.ct -o "$work/p26g125/prog.c" \
+        >"$work/p26g125.out" 2>"$work/p26g125.err" \
+   && cc -Wall -Wextra -std=c99 "$work/p26g125/prog.c" -o "$work/p26g125/prog" \
+        >"$work/p26g125.cc" 2>&1 \
+   && "$work/p26g125/prog" > "$work/p26g125.run" \
+   && cmp -s "$work/p26g125.run" test/ast/125_generic_type_positions/prog.expected.out \
+   && grep -qF 'if (sizeof(int) > _Alignof(int)) {' "$work/p26g125/prog.c" \
+   && grep -qF 'offsetof(struct Pair, y)' "$work/p26g125/prog.c" \
+   && grep -qF 'va_arg(ap, int)' "$work/p26g125/prog.c" \
+   && grep -qF 'v = (int)(a);' "$work/p26g125/prog.c" \
+   && grep -qF 'int v;' "$work/p26g125/prog.c" \
+   && [ "$(grep -cE '^static .*__ct[0-9]+\(.*\);$' "$work/p26g125/prog.c")" -eq 3 ] \
+   && ! grep -qE '\bT\b' "$work/p26g125/prog.c"; then
+    ok "p26_generic_type_positions (sizeof/_Alignof/offsetof/va_arg/cast/local/call arg)"
+else
+    bad "p26_generic_type_positions" "$(cat "$work/p26g125.err" "$work/p26g125.cc" 2>/dev/null | head -5)"
+fi
+
+# SH-63: a tag named like the type parameter stays a tag. On v0.26.0 this file
+# exited 0 and emitted `static struct int getv__ct1(struct int *)`, which cc
+# rejects; the generated grep plus the compile below make that red.
+rm -rf "$work/p26g126"
+mkdir -p "$work/p26g126"
+if "$work/ct-ast" test/ast/126_generic_struct_tag/prog.ct -o "$work/p26g126/prog.c" \
+        >"$work/p26g126.out" 2>"$work/p26g126.err" \
+   && cc -Wall -Wextra -std=c99 "$work/p26g126/prog.c" -o "$work/p26g126/prog" \
+        >"$work/p26g126.cc" 2>&1 \
+   && "$work/p26g126/prog" > "$work/p26g126.run" \
+   && cmp -s "$work/p26g126.run" test/ast/126_generic_struct_tag/prog.expected.out \
+   && grep -qF 'static int getv__ct1(struct T *);' "$work/p26g126/prog.c" \
+   && ! grep -qF 'struct int' "$work/p26g126/prog.c"; then
+    ok "p26_generic_struct_tag (tag T survives, bare T is the parameter)"
+else
+    bad "p26_generic_struct_tag" "$(cat "$work/p26g126.err" "$work/p26g126.cc" 2>/dev/null | head -5)"
+fi
+
+# R6: `id__ct1` is taken by a user function, so the instance must retry.
+rm -rf "$work/p26g127"
+mkdir -p "$work/p26g127"
+if "$work/ct-ast" test/ast/127_generic_name_retry/prog.ct -o "$work/p26g127/prog.c" \
+        >"$work/p26g127.out" 2>"$work/p26g127.err" \
+   && cc -Wall -Wextra -std=c99 "$work/p26g127/prog.c" -o "$work/p26g127/prog" \
+        >"$work/p26g127.cc" 2>&1 \
+   && "$work/p26g127/prog" > "$work/p26g127.run" \
+   && cmp -s "$work/p26g127.run" test/ast/127_generic_name_retry/prog.expected.out \
+   && grep -qF 'static int id__ct1_1(int);' "$work/p26g127/prog.c" \
+   && grep -qF 'id__ct1_1(2)' "$work/p26g127/prog.c"; then
+    ok "p26_generic_name_retry (R6 collision falls back to id__ct1_1)"
+else
+    bad "p26_generic_name_retry" "$(cat "$work/p26g127.err" "$work/p26g127.cc" 2>/dev/null | head -5)"
+fi
+
 # L26-1..L26-5: each diagnostic is pinned to its own line and column, so a
 # message that drifts by one token is caught here rather than by prose.
 p26_diag() {
@@ -1202,8 +1261,12 @@ p26_diag generic_pub 2:9 "generic functions cannot be pub"
 p26_diag generic_two_params 2:9 "only one type parameter is supported"
 p26_diag generic_void_arg 9:19 "'void' cannot be a generic type argument"
 p26_diag generic_recursive 10:17 "recursive generic calls are not supported"
+# Capacity is not an L26 code, but it must fail loudly at the 65th instance
+# (R7). The position is the `(` of the 65th call, i.e. the token that found the
+# table full.
+p26_diag generic_too_many 76:80 "too many generic instances in this unit"
 
-# E8: `ct check` shares the parser diagnostics, so the same five fixtures fail
+# E8: `ct check` shares the parser diagnostics, so the same fixtures fail
 # in check mode with the same wording (no separate check channel).
 p26_chk() {
     if "$work/ct-ast" check "test/ast/errors/$1.ct" \
@@ -1220,6 +1283,7 @@ p26_chk generic_pub "generic functions cannot be pub"
 p26_chk generic_two_params "only one type parameter is supported"
 p26_chk generic_void_arg "'void' cannot be a generic type argument"
 p26_chk generic_recursive "recursive generic calls are not supported"
+p26_chk generic_too_many "too many generic instances in this unit"
 
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host

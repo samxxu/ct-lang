@@ -1,0 +1,19 @@
+/* 127 (Phase 26 fix, TEST-17): the instance name retries when a user symbol
+   already owns `id__ct1`, so R6 is pinned by a generated name, not by prose. */
+#include <stdio.h>
+
+int id__ct1(int x)
+{
+    return x + 1;
+}
+
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    printf("%d %d\n", id__ct1(1), id<int>(2));
+    return 0;
+}

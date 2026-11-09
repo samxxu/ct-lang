@@ -1,0 +1,26 @@
+/* 126 (Phase 26 fix, SH-63): a struct tag named `T` coexists with a type
+   parameter named `T`. `struct T` must stay a tag; bare `T` is the parameter. */
+#include <stdio.h>
+
+struct T {
+    int v;
+};
+
+T getv<T>(struct T *p)
+{
+    struct T *q;
+    T out;
+
+    q = p;
+    out = q->v;
+    return out;
+}
+
+int main(void)
+{
+    struct T t;
+
+    t.v = 7;
+    printf("%d\n", getv<int>(&t));
+    return 0;
+}
