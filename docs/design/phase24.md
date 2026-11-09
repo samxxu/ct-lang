@@ -2,8 +2,7 @@
 
 > 中文 · [English](#english)
 >
-> **状态：已实现（as-built，2026-11-09）**。**S1–S4 已落地**（S1 `692e5d9`、S2 `6578a5d`、
-> S3 `a736048`；S4 为本文与文档/守卫），**S5（`v0.24.0` 版本收口）未做**。
+> **状态：完成**（as-built，2026-11-09）。S1–S5 全部落地，收口到 **`v0.24.0`**。
 > D24-1–D24-13 已定稿；实现与设计的偏差集中在 §12，正文已按 as-built 校正。
 > **2026-11-09 修订**：索引占位符从 `i` 改为 `$`（它不是标识符，不可能被遮蔽或撞名）；
 > D24-4 / L24-8 撤销，不引入 `range_shadow` kind；边界字面量的拼写与溢出改为显式校验。
@@ -43,7 +42,7 @@ int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) 
 | `Vec<int>` / `own Vec<int>` / 自定义容器 | CT 没有泛型，std 只有 `VecInt`（§4.10 之外），`own` 只收结构体指针 + `malloc`/`calloc`，初值列表无处安放 |
 | 普通 `a..b` 区间表达式（`r = 2..8`） | 无类型推断，`r` 的目标类型无处安放；Phase 23 §1.1 已拒绝，本相不改 |
 | 步长 / 闭区间 / 反向 | 需要就写原生 `for`；range 初值只覆盖「步长 1、左闭右开」 |
-| `each (nums) { … item … }` 语句形态 | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已排入 Phase 25**，见 [phase25.md](phase25.md) |
+| `each (nums) { … item … }` 语句形态 | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已排入 Phase 25**，见 Phase 25（未立项） |
 | CT 侧常量折叠 | CT 从不折叠常量（`const_ok` 是结构判定）；`i` 的取值在**发射期**替换，表达式本身交给 C 折叠 |
 | 元素为 struct / union / 接口值 / 数组 | 初始化列表的元素类型限于标量；聚合元素需要逐元素 vptr / 装箱，收益与风险不成比例 |
 | 宏 / `enum` 边界 | 符号表只记 `is_const` 标志、不记数值（§3.2）；要支持就得先引入常量求值器 |
@@ -340,7 +339,8 @@ fputs(" }", out);
 
 字面量与形状：
 
-`range_init_missing_end`、`range_init_nonliteral_bound`（`n` 与 `BASE` 两条）、
+`range_init_missing_end`、`range_init_nonliteral_bound`（`n`）、
+`range_init_nonliteral_bound_base`（`BASE`，as-built 单独一个文件：前者在首个错误处即停）、
 `range_init_empty`、`range_init_too_many`、`range_init_scalar_decl`、
 `range_init_element_struct`、`range_init_dim_mismatch`。
 
@@ -449,7 +449,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 3. **闭包只在「已解析签名的普通函数调用」处展开**：`closure_arg_check` 唯一的调用点在
    `Expr.h.ct` 的普通调用解析里，且要求 `fi >= 0`
    （[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)）。方法调用（含静态映射的
-   `a.each(…)`）不经过这条路——这是 Phase 25 的四个缺口（[phase25.md](phase25.md) §2）。
+   `a.each(…)`）不经过这条路——这是 Phase 25 的四个缺口（Phase 25（未立项）§2）。
 4. **shim 收不了闭包的环境**：环境是栈上的 `__ct_cl_env_v_N`，源码里没有名字可以传给 shim；
    `.shim.h` 只能接普通函数指针 + `void *`（档①）。Phase 25 让 recipe 把闭包拆成
    `tramp` / `&env` 两半分别落位，正是绕开这一点。
@@ -458,7 +458,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 
 **归属结论**（2026-11-09，用户确认）：
 
-- **方法形态 `a.each(n, closure)`** → **Phase 25**（[phase25.md](phase25.md)，`v0.25.x`）；
+- **方法形态 `a.each(n, closure)`** → **Phase 25**（Phase 25（未立项），`v0.25.x`）；
 - **语句形态 `each (nums) { … item … }`** → 仍不做、不排期：需要隐式名字、块参数与
   `break`/`continue`，是语言级语法糖，成本远高于本相；
 - **档①（`a.each(4, cb, &ctx)`）** → 今天就能用，不需要任何编译器改动
@@ -516,9 +516,8 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 
 ### Status
 
-**Implemented (as-built, 2026-11-09)**. **S1–S4 have landed** (S1 `692e5d9`, S2 `6578a5d`,
-S3 `a736048`; S4 is this record plus the docs and the bootstrap guard); **S5, the `v0.24.0` bump,
-is not done**. D24-1–D24-13 are final and the deviations from the plan are collected in §12
+**Implemented (as-built, 2026-11-09)**. S1–S5 have landed and the phase is closed at
+**`v0.24.0`**. D24-1–D24-13 are final and the deviations from the plan are collected in §12
 (Chinese; the numbered rows A1–A5 are the authoritative list).
 **Revised 2026-11-09**: the index placeholder is `$` instead of `i` (it is not an identifier, so it
 can never be shadowed or collide); D24-4 / L24-8 are revoked and no `range_shadow` kind is
@@ -575,7 +574,7 @@ is not reused; no new warning kind is added and `ct check` is unchanged.
 
 Runtime bounds / VLAs, `Vec` / generics / custom containers, `each` in this phase, standalone
 `a..b` expressions, step / closed ranges, CT-side constant folding, and `.m.ct` involvement.
-§10 records where `each` went: the **method form** `a.each(n, closure)` is [Phase 25](phase25.md),
+§10 records where `each` went: the **method form** `a.each(n, closure)` is Phase 25,
 which extends the `(fn, env)` expansion to static mapping calls; the **statement form**
 `each (nums) { … }` is still unplanned, because C macros cannot take a block. Note that a decayed
 `int *` still cannot know its length and `int *p` matches the same type host as `int a[4]`, so the
