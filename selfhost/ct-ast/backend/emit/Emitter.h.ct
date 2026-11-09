@@ -3019,17 +3019,20 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_SIZEOF) {
-            /* `aux` 1 is `sizeof(type)`, 2 is C11 `_Alignof(type)` */
-            if (self->arena->nodes[n].aux) {
+            /* `aux` 1 is `sizeof(type)`, 2 is `_Alignof(type)`, 4 is
+               `alignof(type)` (stdalign.h); 3 is `alignof(expr)`, 0 is
+               `sizeof(expr)` */
+            if (self->arena->nodes[n].aux && self->arena->nodes[n].a < 0) {
+                static const char *const kw[5] = {"sizeof", "sizeof", "_Alignof",
+                                                  "alignof", "alignof"};
                 char tbuf[160];
                 const char *st = self->arena->nodes[n].text;
+                int a = self->arena->nodes[n].aux;
                 if (emit_gsub_type(self, st, tbuf, sizeof tbuf) == 0) st = tbuf;
-                fprintf(self->out, "%s(%s)",
-                        self->arena->nodes[n].aux == 2 ? "_Alignof" : "sizeof",
-                        st);
+                fprintf(self->out, "%s(%s)", kw[a < 0 || a > 4 ? 1 : a], st);
                 return 0;
             }
-            fputs("sizeof(", self->out);
+            fputs(self->arena->nodes[n].aux == 3 ? "alignof(" : "sizeof(", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
             return 0;

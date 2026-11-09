@@ -103,6 +103,7 @@ pub trait ExprOps {
     int  generic_instance(int gfi, const char *targ, int line, int col);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
+    int  tok_is_type_name(void);
     int  offsetof_ahead(void);
     int  fnptr_field(const char *stype, const char *field);
     int  const_ok(int n);
@@ -192,6 +193,10 @@ pub struct Expr {
        expanded into `struct <tag>`. A template whose return type was written
        bare `T` must become the type parameter, not the same-named tag. */
     char last_bare_tag[160];
+    /* Phase 26 fix (SH-62, reopened): a `sizeof` / `_Alignof` / `alignof` type
+       operand written without parentheses (`sizeof T`) takes one type name and
+       stops before `*`, which belongs to the surrounding multiplication. */
+    int  type_no_ptr;
     /* Set while a full expression may carry an assignment (`(c = f())` and a
        condition): the statement layer owns top-level assignments, so this stays
        0 there and `x = 1;` is unchanged. */
@@ -1427,7 +1432,8 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 continue;
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
+            if (!self->type_no_ptr && self->lex->tok == T_PUNCT
+                && strcmp(self->lex->toktext, "*") == 0) {
                 if (self->type_append(out, cap, &n, "*") != 0) return -1;
                 self->sup->lex_next();
                 continue;
@@ -1439,7 +1445,8 @@ impl ExprOps for Expr {
            level only -- a function pointer is not a return type and cannot nest
            (2b.4). A `(` that does not open `(*` is left alone: no other caller
            of `parse_type` can have one there. */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+        if (!self->type_no_ptr
+            && self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
             int save_tok, save_line, save_srcline, save_bol;
             long save_num;
             size_t save_pos;
@@ -1640,10 +1647,10 @@ impl ExprOps for Expr {
         return 0;
     }
 
-    /* One-token lookahead: with the current token at `(`, does the token after it
-       start a type? It tells a cast (`(char)c`) from a parenthesised expression
-       (`(a + b)`) without consuming anything, so postfix binding stays intact. */
-    int next_is_type_name(void)
+    /* Is the *current* token a type name? The rules are the cast lookahead's
+       (below), shared so that a bare type parameter is a type everywhere a
+       type name is expected. Nothing is consumed. */
+    int tok_is_type_name(void)
     {
         int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
         long save_num;
@@ -1659,7 +1666,6 @@ impl ExprOps for Expr {
         save_start = self->lex->tokstart;
         save_lstart = self->lex->lstart;
         snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
-        self->sup->lex_next();
         res = 0;
         if (self->lex->tok == T_ID) {
             char rn[MAX_TEXT];
@@ -1726,6 +1732,39 @@ impl ExprOps for Expr {
                 }
             }
         }
+        self->lex->tok = save_tok;
+        self->lex->toknum = save_num;
+        self->lex->tokline = save_line;
+        self->lex->pos = save_pos;
+        self->lex->line = save_srcline;
+        self->lex->bol = save_bol;
+        self->lex->tokstart = save_start;
+        self->lex->lstart = save_lstart;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        return res;
+    }
+
+    /* One-token lookahead: with the current token at `(`, does the token after it
+       start a type? It tells a cast (`(char)c`) from a parenthesised expression
+       (`(a + b)`) without consuming anything, so postfix binding stays intact. */
+    int next_is_type_name(void)
+    {
+        int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
+        long save_num;
+        size_t save_pos;
+        char save_text[MAX_TEXT];
+        (void)self;
+        save_tok = self->lex->tok;
+        save_num = self->lex->toknum;
+        save_line = self->lex->tokline;
+        save_pos = self->lex->pos;
+        save_srcline = self->lex->line;
+        save_bol = self->lex->bol;
+        save_start = self->lex->tokstart;
+        save_lstart = self->lex->lstart;
+        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        res = self->tok_is_type_name();
         self->lex->tok = save_tok;
         self->lex->toknum = save_num;
         self->lex->tokline = save_line;
@@ -2102,9 +2141,13 @@ impl ExprOps for Expr {
         (void)self;
 
         if (self->lex->tok == T_ID && (strcmp(self->lex->toktext, "sizeof") == 0
-                                       || strcmp(self->lex->toktext, "_Alignof") == 0)) {
+                                       || strcmp(self->lex->toktext, "_Alignof") == 0
+                                       || strcmp(self->lex->toktext, "alignof") == 0)) {
             char tbuf[MAX_TEXT];
-            int align = (self->lex->toktext[0] == '_');
+            int kind, rc;
+            /* 1 = sizeof, 2 = C11 `_Alignof`, 4 = `alignof` (stdalign.h) */
+            kind = strcmp(self->lex->toktext, "sizeof") == 0 ? 1
+                   : strcmp(self->lex->toktext, "_Alignof") == 0 ? 2 : 4;
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
                 && self->next_is_type_name()) {
@@ -2114,17 +2157,34 @@ impl ExprOps for Expr {
                 n = self->sup->new_node(N_SIZEOF);
                 if (n < 0) return -1;
                 snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
-                self->arena->nodes[n].aux = align ? 2 : 1;
+                self->arena->nodes[n].aux = kind;
                 return n;
             }
-            /* C11 spells the alignment query with a type name only, so the
-               operand form stays `sizeof`'s alone. */
-            if (align) return self->sup->fail("_Alignof needs a type in parentheses");
+            /* A type operand does not need parentheses in CT (`sizeof T`). The
+               active type parameter is a type name inside its template body, so
+               this branch is what keeps `sizeof T` out of the expression path.
+               `type_no_ptr` stops the type at the name: a following `*` belongs
+               to the surrounding multiplication. */
+            if (self->tok_is_type_name()) {
+                self->type_no_ptr = 1;
+                rc = self->parse_type(tbuf, sizeof tbuf);
+                self->type_no_ptr = 0;
+                if (rc != 0) return -1;
+                n = self->sup->new_node(N_SIZEOF);
+                if (n < 0) return -1;
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[n].aux = kind;
+                return n;
+            }
+            /* C11 spells the alignment query with a type name only; a bare
+               `alignof` expression keeps its macro spelling. */
+            if (kind == 2) return self->sup->fail("_Alignof needs a type in parentheses");
             e = self->parse_unary();
             if (e < 0) return -1;
             n = self->sup->new_node(N_SIZEOF);
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
+            self->arena->nodes[n].aux = kind == 4 ? 3 : 0;
             return n;
         }
         /* `(params) => expr` opens a closure literal. The check runs before
@@ -2664,7 +2724,7 @@ impl ExprOps for Expr {
            arms, so a trait call or a boxing inside one is not rewritten. */
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Generic") == 0) {
             char gname[MAX_TEXT];
-            int off, depth, k;
+            int off, depth, k, prev_tag;
             n = self->sup->new_node(N_RAW);
             if (n < 0) return -1;
             off = self->arena->str_begin();
@@ -2676,6 +2736,7 @@ impl ExprOps for Expr {
             if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0)
                 return self->sup->fail("expected '(' after _Generic");
             depth = 0;
+            prev_tag = 0;
             for (;;) {
                 char tbuf[MAX_TEXT];
                 int m;
@@ -2687,12 +2748,15 @@ impl ExprOps for Expr {
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
                     snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
-                /* the body is copied verbatim, so a type parameter here would
-                   reach the output as an undeclared name; refuse it instead of
-                   emitting bad C (SH-62) */
+                /* the body is copied verbatim, so a bare type parameter here
+                   would reach the output as an undeclared name; refuse it
+                   instead of emitting bad C (SH-62). `struct T` / `union T` /
+                   `enum T` is a tag, not the parameter, so it stays legal. */
                 if (self->in_generic && self->in_generic_tparam[0]
-                    && strcmp(tbuf, self->in_generic_tparam) == 0)
+                    && strcmp(tbuf, self->in_generic_tparam) == 0 && !prev_tag)
                     return self->sup->fail("type parameter cannot be used inside _Generic");
+                prev_tag = strcmp(tbuf, "struct") == 0 || strcmp(tbuf, "union") == 0
+                           || strcmp(tbuf, "enum") == 0;
                 for (m = 0; tbuf[m]; m++)
                     if (self->arena->str_put(tbuf[m]) != 0)
                         return self->sup->fail("string pool is full");
