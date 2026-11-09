@@ -953,6 +953,41 @@ static const int sq[] = { (((int)0) * ((int)0)), (((int)1) * ((int)1)), …, (((
 
 细节与诊断见 [language-spec §4.47](language-spec.md)。
 
+### 10.5 泛型函数：一份源码，多种类型
+
+`T id<T>(T x)` 声明一个只有一个类型参数的模板；调用时用 `id<int>(42)` 指定具体类型，编译器为每个
+具体类型生成一份 `static` C 函数：
+
+```c
+#include <stdio.h>
+
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    int a = id<int>(42);
+    char *p = id<char *>("hi");
+    printf("%d %s\n", a, p);
+    return 0;
+}
+```
+
+```sh
+ct build gen.ct -o gen && ./gen
+# 42 hi
+```
+
+- **显式实例化**：`id(42)` 是编译错误（`generic function 'id' needs a type argument`），不做类型推导。
+- **模板不落成 C 符号**：生成物里只有 `id__ct1`、`id__ct2` 两份 `static` 函数，模板本身不输出。
+- **只做函数**：泛型结构体、trait、约束、多类型参数、`pub` 泛型、递归 / 嵌套泛型调用都不支持，
+  各自在源码处报错。
+- **同一类型只生成一份**：同一 `(模板, 类型)` 在多个调用点复用同一个实例。
+
+细节与诊断见 [language-spec §4.48](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2000,6 +2035,43 @@ static const int sq[] = { (((int)0) * ((int)0)), (((int)1) * ((int)1)), …, (((
   initialisers in one list.
 
 Details and diagnostics are in [language-spec §4.47](language-spec.md).
+
+### 10.5 Generic functions: one source, many types
+
+`T id<T>(T x)` declares a template with a single type parameter; a call names the concrete type with
+`id<int>(42)`, and the compiler emits one `static` C function per concrete type:
+
+```c
+#include <stdio.h>
+
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    int a = id<int>(42);
+    char *p = id<char *>("hi");
+    printf("%d %s\n", a, p);
+    return 0;
+}
+```
+
+```sh
+ct build gen.ct -o gen && ./gen
+# 42 hi
+```
+
+- **Explicit instantiation**: `id(42)` is a compile error
+  (`generic function 'id' needs a type argument`); there is no inference.
+- **The template is not a C symbol**: only `id__ct1` and `id__ct2` are emitted, each a `static`
+  function; the template itself never appears.
+- **Functions only**: generic structs, traits, constraints, multiple type parameters, `pub` generics,
+  and recursive / nested generic calls are not supported and each is a hard error at the source.
+- **One instance per type**: the same `(template, type)` pair is reused at every call site.
+
+Details and diagnostics are in [language-spec §4.48](language-spec.md).
 
 ### 11. CLI cheat sheet
 

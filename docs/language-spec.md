@@ -1879,6 +1879,40 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
 - **只加这一种初值形态**：不是新类型、不是新表达式、不是新关键字；`ct check` 的 kind 表与
   `--diagnostics=json` 的形状都不变（L24-8「内层 `$` 遮蔽」随 `$` 的引入而撤销，编号不复用）。
 
+#### 4.48 泛型函数（Phase 26，仅 ct-ast）
+
+CT 的泛型只覆盖**函数**、**单个类型参数**、**显式实例化**、**编译期单态化**：
+
+```c
+T id<T>(T x) {
+    return x;
+}
+
+int main(void) {
+    int a = id<int>(42);
+    char *p;
+    p = id<char *>("hi");
+    printf("%d %s\n", a, p);
+    return 0;
+}
+```
+
+- 声明写作 `T name<T>(形参列表) { 体 }`：返回类型与形参里的 `T` 是占位符，不是注册过的类型名。
+- 调用必须在 `< >` 里给出具体类型：`name<int>(...)`。类型实参按 `parse_type` 读取；`void`、函数指针、
+  以及 `T` 自身被拒绝（`'<type>' cannot be a generic type argument`）。
+- 同一 `(模板, 具体类型)` 只登记一份实例，C 名为 `<name>__ct<N>`（`N` 从 1 起，按源码中首次出现的
+  次序编号）。实例是 `static`，不进入生成的头文件，也不跨单元可见。
+- 模板本身**不生成任何 C 符号**：生成物只含实例。实例体内的返回类型、形参、局部声明、`(T)` 转型、
+  `sizeof(T)` / `_Alignof(T)`、`offsetof(T, ...)` 都按实例的具体类型写出。
+- 只有名字已经是符号表里的模板时，`<` 才被当作类型实参的开头；变量的 `a < b` 仍是比较。
+- 诊断：`L26-1` 忘记类型实参 `generic function '<name>' needs a type argument`；`L26-2` `pub` 泛型
+  `generic functions cannot be pub`；`L26-3` 多个类型参数 `only one type parameter is supported`；
+  `L26-4` 非法类型实参 `'<type>' cannot be a generic type argument`；`L26-5` 泛型体内调用泛型
+  `recursive generic calls are not supported`。
+- 不支持：泛型结构体 / union / trait / impl、约束（trait bound）、类型推导（`id(42)` 不会推成 `int`）、
+  多个类型参数、`pub` 泛型、递归或嵌套泛型调用、跨单元实例共享、类型参数用于数组维度。这些都在源码处
+  硬报错，不静默降级。
+
 ### 7. 容量上限
 
 > 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 131072、
@@ -1911,7 +1945,8 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
 
 ### 8. 明确不支持
 
-可见性修饰符的完整集合（`pub readonly` / `setter`）、泛型、继承、类型检查、嵌套定义。
+可见性修饰符的完整集合（`pub readonly` / `setter`）、继承、类型检查、嵌套定义。泛型**函数**已在
+Phase 26 落地（§4.48）；泛型结构体 / trait / 约束 / 推导 / 多类型参数仍不在范围内。
 （错误恢复是 L0 的边界；CT 线会先收集多个错误再报告，见 §10。）
 
 ### 9. 诊断与退出码
@@ -4101,6 +4136,48 @@ this phase adds no new formatting rule.
   `ct check` kind table and the `--diagnostics=json` shape are unchanged (L24-8, "the inner `$`
   shadows the outer one", was withdrawn when `$` replaced the identifier `i`; its number is retired).
 
+#### 4.48 Generic functions (Phase 26, ct-ast only)
+
+CT generics cover **functions only**, with **one type parameter**, **explicit instantiation** and
+**compile-time monomorphisation**:
+
+```c
+T id<T>(T x) {
+    return x;
+}
+
+int main(void) {
+    int a = id<int>(42);
+    char *p;
+    p = id<char *>("hi");
+    printf("%d %s\n", a, p);
+    return 0;
+}
+```
+
+- The declaration is `T name<T>(params) { body }`: `T` in the return type and the parameters is a
+  placeholder, not a registered type name.
+- A call names the concrete type inside `< >`: `name<int>(...)`. The type argument is read by
+  `parse_type`; `void`, a function pointer and `T` itself are refused
+  (`'<type>' cannot be a generic type argument`).
+- One `(template, concrete type)` pair registers exactly one instance, named `<name>__ct<N>` (`N`
+  starts at 1 in first-appearance order). The instance is `static`: it never reaches the generated
+  header and is not visible across units.
+- The template itself **produces no C symbol**; only instances are emitted. Inside an instance the
+  return type, parameters, local declarations, `(T)` casts, `sizeof(T)` / `_Alignof(T)` and
+  `offsetof(T, ...)` are written with the concrete type.
+- `<` opens a type argument only when the name is already a template in the symbol table, so
+  `a < b` on a variable stays a comparison.
+- Diagnostics: `L26-1` missing type argument `generic function '<name>' needs a type argument`;
+  `L26-2` `pub` generic `generic functions cannot be pub`; `L26-3` multiple type parameters
+  `only one type parameter is supported`; `L26-4` illegal type argument
+  `'<type>' cannot be a generic type argument`; `L26-5` a generic call inside a template body
+  `recursive generic calls are not supported`.
+- Out of scope: generic structs / unions / traits / impls, constraints (trait bounds), inference
+  (`id(42)` does not infer `int`), multiple type parameters, `pub` generics, recursive or nested
+  generic calls, cross-unit instance sharing, and a type parameter in an array dimension. Each is a
+  hard error at the source, never a silent downgrade.
+
 ### 7. Capacity limits
 
 > The table below lists the **L0** (frozen seed) caps. **ct-ast** (the installed entry) raises the
@@ -4136,9 +4213,10 @@ this phase adds no new formatting rule.
 
 ### 8. Out of scope
 
-The full set of visibility modifiers (`pub readonly` / `setter`), generics, inheritance, type checking,
-nested definitions. (Error recovery is an L0 boundary; the CT line collects several errors before
-reporting, see §10.)
+The full set of visibility modifiers (`pub readonly` / `setter`), inheritance, type checking,
+nested definitions. Generic **functions** landed in Phase 26 (§4.48); generic structs / traits /
+constraints / inference / multiple type parameters remain out of scope. (Error recovery is an L0
+boundary; the CT line collects several errors before reporting, see §10.)
 
 ### 9. Diagnostics
 
