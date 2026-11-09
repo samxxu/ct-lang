@@ -1,0 +1,14 @@
+/* SH-62: `_Generic` bodies are copied verbatim, so a type parameter inside one
+   would reach the generated C as an undeclared name. It must be a hard error. */
+#include <stdio.h>
+
+int pick<T>(T x)
+{
+    return _Generic(x, T: 1, default: 0);
+}
+
+int main(void)
+{
+    printf("%d\n", pick<int>(0));
+    return 0;
+}

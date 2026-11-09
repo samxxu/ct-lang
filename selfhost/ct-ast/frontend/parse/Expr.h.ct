@@ -2687,6 +2687,12 @@ impl ExprOps for Expr {
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
                     snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                /* the body is copied verbatim, so a type parameter here would
+                   reach the output as an undeclared name; refuse it instead of
+                   emitting bad C (SH-62) */
+                if (self->in_generic && self->in_generic_tparam[0]
+                    && strcmp(tbuf, self->in_generic_tparam) == 0)
+                    return self->sup->fail("type parameter cannot be used inside _Generic");
                 for (m = 0; tbuf[m]; m++)
                     if (self->arena->str_put(tbuf[m]) != 0)
                         return self->sup->fail("string pool is full");

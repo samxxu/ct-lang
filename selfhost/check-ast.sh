@@ -1265,6 +1265,9 @@ p26_diag generic_recursive 10:17 "recursive generic calls are not supported"
 # (R7). The position is the `(` of the 65th call, i.e. the token that found the
 # table full.
 p26_diag generic_too_many 76:80 "too many generic instances in this unit"
+# `_Generic` is copied verbatim; a type parameter inside it would leak into the
+# emitted C. SH-62 requires a hard error, never an exit-0 bad product.
+p26_diag generic_generic_selector 7:24 "type parameter cannot be used inside _Generic"
 
 # E8: `ct check` shares the parser diagnostics, so the same fixtures fail
 # in check mode with the same wording (no separate check channel).
@@ -1284,6 +1287,7 @@ p26_chk generic_two_params "only one type parameter is supported"
 p26_chk generic_void_arg "'void' cannot be a generic type argument"
 p26_chk generic_recursive "recursive generic calls are not supported"
 p26_chk generic_too_many "too many generic instances in this unit"
+p26_chk generic_generic_selector "type parameter cannot be used inside _Generic"
 
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
