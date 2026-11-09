@@ -1,0 +1,9 @@
+/* L25-1: a closure actual may only fill a `(fn, env)` parameter pair; here it
+   lands on `char *needle`. */
+import probe::probe;
+
+int main(void)
+{
+    "abc".find((int x) => x);
+    return 0;
+}

@@ -1,0 +1,8 @@
+/* qf == 3: `ns::Trait.method(...)`; the trait segment is explicit. */
+import probe::probe;
+
+int main(void)
+{
+    probe::Q.g(42);
+    return 0;
+}

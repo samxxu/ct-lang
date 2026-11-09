@@ -1,0 +1,12 @@
+/* 25.2, aux == 6: a type-host dot call expands a closure literal into the
+   recipe's two slots -- `ct_probe_walk("abc", __ct_cl_tramp_N, &env)`. */
+import probe::probe;
+#include <stdio.h>
+
+int main(void)
+{
+    int base = 1;
+    int r = "abc".walk((int x) => x + base);
+    printf("%d\n", r);
+    return 0;
+}

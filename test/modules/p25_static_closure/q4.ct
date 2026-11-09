@@ -1,0 +1,11 @@
+/* 25.2, qf == 4: `ns::method(...)` with the trait segment elided -- the same
+   pair fills the same two slots through the shorthand form. */
+import probe::probe;
+#include <stdio.h>
+
+int main(void)
+{
+    int r = probe::apply(3, (int x) => x + 5);
+    printf("%d\n", r);
+    return 0;
+}

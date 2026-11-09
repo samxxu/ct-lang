@@ -1,0 +1,9 @@
+/* L25-2: the recipe binds `fn` twice, so the same trampoline would fill two
+   formals. */
+import probe::probe;
+
+int main(void)
+{
+    int a[4] = { 1, 2, 3, 4 };
+    return a.dup(4, (int x) => x);
+}

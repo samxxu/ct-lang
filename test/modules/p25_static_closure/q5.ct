@@ -1,0 +1,11 @@
+/* 25.2, qf == 5: `Trait::method(recv, ...)` -- the receiver is not part of the
+   argument tail, so the closure still fills the pair that follows it. */
+import probe::probe;
+#include <stdio.h>
+
+int main(void)
+{
+    int r = probe::P::walk("abc", (int x) => x);
+    printf("%d\n", r);
+    return 0;
+}

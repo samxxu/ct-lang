@@ -1,0 +1,9 @@
+/* L25-3: `v` is variadic and the recipe forwards `...`; a closure there has
+   no fixed slot pair for its two halves. */
+import probe::probe;
+
+int main(void)
+{
+    int a[4] = { 1, 2, 3, 4 };
+    return a.v(4, (int x) => x);
+}

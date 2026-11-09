@@ -1,0 +1,16 @@
+// 121 (Phase 25.4): a declared closure binding as the actual. Its own stack
+// instance is passed, so the second recipe slot is `&__ct_cl_env_v_N` instead
+// of a compound literal (Phase 25 §3.6).
+#include <stdio.h>
+
+import arr::arr;
+
+int main(void)
+{
+    int base = 7;
+    int (*f)(int x) = (int x) => x + base;
+    int a[4] = { 1, 2, 3, 4 };
+    int r = a.each(4, f);
+    printf("%d\n", r);
+    return 0;
+}

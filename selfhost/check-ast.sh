@@ -916,6 +916,235 @@ else
     bad "p20_type_host_call_arg" "$(cat "$work/mhtc.err" "$work/mhtc.cc" "$work/mhtc.stdout" 2>/dev/null | head -5)"
 fi
 
+# Phase 25.1 (SH-60 2a): a static map's method signature is enforced at the call
+# site in every form, not only by arity. `p25_static_argtype` binds one host per
+# form -- `P` is a type host (`aux == 6` and `Trait::method(recv, ...)`), `Q` a
+# namespace host (`ns::Trait.method` and `ns::method`). A compatible actual stays
+# silent; a confident 19.2 mismatch is a warning, so the build still exits 0.
+p25=test/modules/p25_static_argtype
+
+rm -rf "$work/p25ok"
+mkdir -p "$work/p25ok"
+if "$work/ct-ast" build --emit-c -I "$p25" "$p25/ok.ct" -o "$work/p25ok" \
+        >"$work/p25ok.out" 2>"$work/p25ok.err" \
+   && ! grep -qF "type mismatch" "$work/p25ok.err"; then
+    ok "p25_static_argtype_ok (all four forms, no false positive)"
+else
+    bad "p25_static_argtype_ok" "$(head -5 "$work/p25ok.err" 2>/dev/null)"
+fi
+
+# aux == 6: type-host dot call.
+rm -rf "$work/p25a6"
+mkdir -p "$work/p25a6"
+if "$work/ct-ast" build --emit-c -I "$p25" "$p25/aux6.ct" -o "$work/p25a6" \
+        >"$work/p25a6.out" 2>"$work/p25a6.err" \
+   && grep -qF "warning: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
+        "$work/p25a6.err"; then
+    ok "p25_static_argtype_aux6 (type-host dot call compares its actual)"
+else
+    bad "p25_static_argtype_aux6" "$(head -5 "$work/p25a6.err" 2>/dev/null)"
+fi
+
+# qf == 3: `ns::Trait.method(...)`.
+rm -rf "$work/p25q3"
+mkdir -p "$work/p25q3"
+if "$work/ct-ast" build --emit-c -I "$p25" "$p25/q3.ct" -o "$work/p25q3" \
+        >"$work/p25q3.out" 2>"$work/p25q3.err" \
+   && grep -qF "warning: type mismatch: 'g' argument 1: expected 'char *', got 'int'" \
+        "$work/p25q3.err"; then
+    ok "p25_static_argtype_q3 (ns::Trait.method compares its actual)"
+else
+    bad "p25_static_argtype_q3" "$(head -5 "$work/p25q3.err" 2>/dev/null)"
+fi
+
+# qf == 4: `ns::method(...)` with the trait segment elided.
+rm -rf "$work/p25q4"
+mkdir -p "$work/p25q4"
+if "$work/ct-ast" build --emit-c -I "$p25" "$p25/q4.ct" -o "$work/p25q4" \
+        >"$work/p25q4.out" 2>"$work/p25q4.err" \
+   && grep -qF "warning: type mismatch: 'f' argument 1: expected 'char *', got 'int'" \
+        "$work/p25q4.err"; then
+    ok "p25_static_argtype_q4 (ns::method compares its actual)"
+else
+    bad "p25_static_argtype_q4" "$(head -5 "$work/p25q4.err" 2>/dev/null)"
+fi
+
+# qf == 5: `Trait::method(recv, ...)`; the receiver stays out of the comparison.
+rm -rf "$work/p25q5"
+mkdir -p "$work/p25q5"
+if "$work/ct-ast" build --emit-c -I "$p25" "$p25/q5.ct" -o "$work/p25q5" \
+        >"$work/p25q5.out" 2>"$work/p25q5.err" \
+   && grep -qF "warning: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
+        "$work/p25q5.err"; then
+    ok "p25_static_argtype_q5 (Trait::method compares the tail, not the receiver)"
+else
+    bad "p25_static_argtype_q5" "$(head -5 "$work/p25q5.err" 2>/dev/null)"
+fi
+
+# L25-1: a closure actual may only fill a `(fn, env)` pair of the host method.
+rm -rf "$work/p25cl"
+mkdir -p "$work/p25cl"
+if "$work/ct-ast" build --emit-c -I "$p25" "$p25/closure_slot.ct" -o "$work/p25cl" \
+        >"$work/p25cl.out" 2>"$work/p25cl.err"; then
+    bad "p25_static_closure_slot" "expected a non-zero exit"
+elif grep -qF "a closure argument must fill a '(fn, env)' parameter pair (got 'char *')" \
+        "$work/p25cl.err"; then
+    ok "p25_static_closure_slot (L25-1 on a non-pair position)"
+else
+    bad "p25_static_closure_slot" "$(head -5 "$work/p25cl.err" 2>/dev/null)"
+fi
+
+# Phase 25.2 (SH-60 2b): a closure actual fills a static recipe's `(fn, env)`
+# pair. The emitter used to count one slot per actual and failed with "a map
+# call has fewer arguments than its binding"; now each form expands the pair in
+# two slots. One fixture per call form, so a fix that only covers one path
+# cannot pass: the generated call is asserted and then compiled and run.
+p25c=test/modules/p25_static_closure
+p25ci="$p25c/probe"
+
+rm -rf "$work/p25c_a6"
+mkdir -p "$work/p25c_a6"
+if "$work/ct-ast" build --emit-c -I "$p25c" "$p25c/aux6.ct" -o "$work/p25c_a6" \
+        >"$work/p25c_a6.out" 2>"$work/p25c_a6.err" \
+   && ! grep -qF "fewer arguments" "$work/p25c_a6.err" \
+   && grep -qF 'ct_probe_walk(("abc"), (__ct_cl_tramp_' "$work/p25c_a6"/*.c \
+   && grep -qF '&(struct __ct_cl_env_' "$work/p25c_a6"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I "$p25ci" "$work/p25c_a6"/*.c \
+        -o "$work/p25c_a6.bin" 2>"$work/p25c_a6.cc" \
+   && [ "$("$work/p25c_a6.bin")" = "297" ]; then
+    ok "p25_static_closure_aux6 (type-host dot call fills the pair)"
+else
+    bad "p25_static_closure_aux6" "$(cat "$work/p25c_a6.err" "$work/p25c_a6.cc" 2>/dev/null | head -5)"
+fi
+
+# qf == 5: `Trait::method(recv, ...)`; the receiver stays out of the tail.
+rm -rf "$work/p25c_q5"
+mkdir -p "$work/p25c_q5"
+if "$work/ct-ast" build --emit-c -I "$p25c" "$p25c/q5.ct" -o "$work/p25c_q5" \
+        >"$work/p25c_q5.out" 2>"$work/p25c_q5.err" \
+   && ! grep -qF "fewer arguments" "$work/p25c_q5.err" \
+   && grep -qF 'ct_probe_walk(("abc"), (__ct_cl_tramp_' "$work/p25c_q5"/*.c \
+   && grep -qF '&(struct __ct_cl_env_' "$work/p25c_q5"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I "$p25ci" "$work/p25c_q5"/*.c \
+        -o "$work/p25c_q5.bin" 2>"$work/p25c_q5.cc" \
+   && [ "$("$work/p25c_q5.bin")" = "294" ]; then
+    ok "p25_static_closure_q5 (Trait::method tail fills the pair)"
+else
+    bad "p25_static_closure_q5" "$(cat "$work/p25c_q5.err" "$work/p25c_q5.cc" 2>/dev/null | head -5)"
+fi
+
+# qf == 3: `ns::Trait.method(...)`.
+rm -rf "$work/p25c_q3"
+mkdir -p "$work/p25c_q3"
+if "$work/ct-ast" build --emit-c -I "$p25c" "$p25c/q3.ct" -o "$work/p25c_q3" \
+        >"$work/p25c_q3.out" 2>"$work/p25c_q3.err" \
+   && ! grep -qF "fewer arguments" "$work/p25c_q3.err" \
+   && grep -qF 'ct_probe_apply((3), (__ct_cl_tramp_' "$work/p25c_q3"/*.c \
+   && grep -qF '&(struct __ct_cl_env_' "$work/p25c_q3"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I "$p25ci" "$work/p25c_q3"/*.c \
+        -o "$work/p25c_q3.bin" 2>"$work/p25c_q3.cc" \
+   && [ "$("$work/p25c_q3.bin")" = "6" ]; then
+    ok "p25_static_closure_q3 (ns::Trait.method fills the pair)"
+else
+    bad "p25_static_closure_q3" "$(cat "$work/p25c_q3.err" "$work/p25c_q3.cc" 2>/dev/null | head -5)"
+fi
+
+# qf == 4: `ns::method(...)` with the trait segment elided.
+rm -rf "$work/p25c_q4"
+mkdir -p "$work/p25c_q4"
+if "$work/ct-ast" build --emit-c -I "$p25c" "$p25c/q4.ct" -o "$work/p25c_q4" \
+        >"$work/p25c_q4.out" 2>"$work/p25c_q4.err" \
+   && ! grep -qF "fewer arguments" "$work/p25c_q4.err" \
+   && grep -qF 'ct_probe_apply((3), (__ct_cl_tramp_' "$work/p25c_q4"/*.c \
+   && grep -qF '&(struct __ct_cl_env_' "$work/p25c_q4"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I "$p25ci" "$work/p25c_q4"/*.c \
+        -o "$work/p25c_q4.bin" 2>"$work/p25c_q4.cc" \
+   && [ "$("$work/p25c_q4.bin")" = "18" ]; then
+    ok "p25_static_closure_q4 (ns::method fills the pair)"
+else
+    bad "p25_static_closure_q4" "$(cat "$work/p25c_q4.err" "$work/p25c_q4.cc" 2>/dev/null | head -5)"
+fi
+
+# A declared binding: the second slot is the address of its own stack instance.
+rm -rf "$work/p25c_var"
+mkdir -p "$work/p25c_var"
+if "$work/ct-ast" build --emit-c -I "$p25c" "$p25c/var.ct" -o "$work/p25c_var" \
+        >"$work/p25c_var.out" 2>"$work/p25c_var.err" \
+   && ! grep -qF "fewer arguments" "$work/p25c_var.err" \
+   && grep -qF 'ct_probe_walk(("abc"), (__ct_cl_tramp_' "$work/p25c_var"/*.c \
+   && grep -qF '(&__ct_cl_env_v_' "$work/p25c_var"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I "$p25ci" "$work/p25c_var"/*.c \
+        -o "$work/p25c_var.bin" 2>"$work/p25c_var.cc" \
+   && [ "$("$work/p25c_var.bin")" = "300" ]; then
+    ok "p25_static_closure_var (a declared binding fills the pair)"
+else
+    bad "p25_static_closure_var" "$(cat "$work/p25c_var.err" "$work/p25c_var.cc" 2>/dev/null | head -5)"
+fi
+
+# Phase 25.4: the four diagnostics, each reached through its own recipe so one
+# fix cannot make another pass. L25-1 (non-pair position) is asserted above on
+# `p25_static_closure_slot`; the three below cover the repeat, the unpaired and
+# the `...` tail.
+p25neg=test/modules/p25_static_closure_neg
+
+rm -rf "$work/p25n_twice"
+mkdir -p "$work/p25n_twice"
+if "$work/ct-ast" build --emit-c -I "$p25neg" "$p25neg/twice.ct" -o "$work/p25n_twice" \
+        >"$work/p25n_twice.out" 2>"$work/p25n_twice.err"; then
+    bad "p25_closure_twice" "expected a non-zero exit"
+elif grep -qF "a map recipe must use a closure argument exactly once" "$work/p25n_twice.err"; then
+    ok "p25_closure_twice (L25-2: a closure half is named once)"
+else
+    bad "p25_closure_twice" "$(head -5 "$work/p25n_twice.err" 2>/dev/null)"
+fi
+
+rm -rf "$work/p25n_unused"
+mkdir -p "$work/p25n_unused"
+if "$work/ct-ast" build --emit-c -I "$p25neg" "$p25neg/unused.ct" -o "$work/p25n_unused" \
+        >"$work/p25n_unused.out" 2>"$work/p25n_unused.err"; then
+    bad "p25_closure_unused" "expected a non-zero exit"
+elif grep -qF "a map recipe must use both halves of a closure argument" "$work/p25n_unused.err"; then
+    ok "p25_closure_unused (L25-4: both halves are named)"
+else
+    bad "p25_closure_unused" "$(head -5 "$work/p25n_unused.err" 2>/dev/null)"
+fi
+
+rm -rf "$work/p25n_vararg"
+mkdir -p "$work/p25n_vararg"
+if "$work/ct-ast" build --emit-c -I "$p25neg" "$p25neg/vararg.ct" -o "$work/p25n_vararg" \
+        >"$work/p25n_vararg.out" 2>"$work/p25n_vararg.err"; then
+    bad "p25_closure_vararg" "expected a non-zero exit"
+elif grep -qF "a map recipe cannot pass a closure through '...'" "$work/p25n_vararg.err"; then
+    ok "p25_closure_vararg (L25-3: no pair in the '...' tail)"
+else
+    bad "p25_closure_vararg" "$(head -5 "$work/p25n_vararg.err" 2>/dev/null)"
+fi
+
+# §6.3: 120's emitted call is byte-for-byte the hand-written one (indentation
+# stripped), and 121 passes its declaration's instance rather than a literal.
+p25pos=test/ast/120_map_each_closure
+rm -rf "$work/p25p120"
+mkdir -p "$work/p25p120"
+if "$work/ct-ast" build --emit-c "$p25pos/prog.ct" -o "$work/p25p120" \
+        >"$work/p25p120.out" 2>"$work/p25p120.err" \
+   && [ "$(sed -n 's/^[[:space:]]*int r = \(.*\);$/\1/p' "$work/p25p120"/*.c)" \
+        = 'ct_each_int((a), (4), (__ct_cl_tramp_0), (&(struct __ct_cl_env_0){ base }))' ]; then
+    ok "p25_map_each_closure_120 (the pair is placed as if hand-written)"
+else
+    bad "p25_map_each_closure_120" "$(sed -n 's/^[[:space:]]*int r = \(.*\);$/\1/p' "$work/p25p120"/*.c 2>/dev/null | head -2)"
+fi
+
+rm -rf "$work/p25p121"
+mkdir -p "$work/p25p121"
+if "$work/ct-ast" build --emit-c "test/ast/121_map_each_closure_var/prog.ct" -o "$work/p25p121" \
+        >"$work/p25p121.out" 2>"$work/p25p121.err" \
+   && grep -qF '(&__ct_cl_env_v_' "$work/p25p121"/*.c \
+   && ! grep -qF '&(struct __ct_cl_env_' "$work/p25p121"/*.c; then
+    ok "p25_map_each_closure_121 (a declared binding passes its own instance)"
+else
+    bad "p25_map_each_closure_121" "$(cat "$work/p25p121.err" 2>/dev/null | head -5)"
+fi
+
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
 # spelling and the consumer's receiver spelling name the same integer type but

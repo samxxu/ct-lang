@@ -1,0 +1,14 @@
+/* 25.2: a declared closure binding as a static recipe actual. Its own stack
+   instance is passed, so the second slot is `&__ct_cl_env_v_N` rather than a
+   compound literal (D25-4 / §3.6). */
+import probe::probe;
+#include <stdio.h>
+
+int main(void)
+{
+    int base = 2;
+    int (*f)(int x) = (int x) => x + base;
+    int r = "abc".walk(f);
+    printf("%d\n", r);
+    return 0;
+}

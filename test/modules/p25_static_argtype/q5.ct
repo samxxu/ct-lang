@@ -1,0 +1,8 @@
+/* qf == 5: `Trait::method(recv, ...)`; the receiver is the first actual. */
+import probe::probe;
+
+int main(void)
+{
+    probe::P::find("abc", 42);
+    return 0;
+}

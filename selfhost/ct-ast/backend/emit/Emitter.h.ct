@@ -462,20 +462,68 @@ static void trait_qual_name(struct Symbols *sym, int ti, char *out, int cap)
     snprintf(out, (size_t)cap, "%s", sym->traits[ti].name);
 }
 
-/* The actual node for binding parameter `idx`: a type host's parameter 0 is the
-   receiver, the rest walk the call's argument chain. */
-static int map_actual_at(struct Arena *a, int recv, int args, int type_host, int idx)
+/* Phase 25.2: the two halves of a closure actual and the scope table that says
+   whether a name is one are written further down, but the recipe expansion
+   needs them here. */
+static int closure_var_lookup(struct Emitter *self, const char *name);
+static int emit_closure_fn(struct Emitter *self, int n);
+static int emit_closure_env(struct Emitter *self, int n);
+
+/* How many recipe slots an actual fills: a closure literal, or a variable bound
+   to one, is a `(fn, env)` pair and takes two (D25-4); everything else one. */
+static int map_actual_slots(struct Emitter *e, int n)
+{
+    if (n < 0) return 1;
+    if (e->arena->nodes[n].kind == N_CLOSURE) return 2;
+    if (e->arena->nodes[n].kind == N_VAR
+        && closure_var_lookup(e, e->arena->nodes[n].text2) >= 0) return 2;
+    return 1;
+}
+
+/* The actual for binding parameter `idx`: a type host's parameter 0 is the
+   receiver, the rest walk the call's argument chain counting a closure actual
+   as the two slots it fills. `*half` reports which slot of that actual `idx`
+   asks for: 0 a whole actual, 1 the `fn` half, 2 the `env` half. */
+static int map_actual_span(struct Emitter *e, int recv, int args, int type_host, int idx, int *half)
 {
     int n = args;
+    int slot = 0;
+    int span;
+
+    *half = 0;
     if (type_host) {
         if (idx == 0) return recv;
         idx--;
     }
-    while (idx > 0 && n >= 0) {
-        n = a->nodes[n].next;
-        idx--;
+    while (n >= 0) {
+        span = map_actual_slots(e, n);
+        if (idx < slot + span) {
+            if (span == 2) *half = (idx == slot) ? 1 : 2;
+            return n;
+        }
+        slot += span;
+        n = e->arena->nodes[n].next;
     }
-    return n;
+    return -1;
+}
+
+/* Emit one recipe slot: a closure half prints a single symbol of the pair, so
+   the recipe can place `fn` and `env` independently (D25-4 / D25-7). A closure
+   variable prints the same pair from its own stack instance. */
+static int map_emit_actual(struct Emitter *e, int n, int half)
+{
+    int cv;
+
+    if (half == 0) return e->emit_expr(n);
+    if (e->arena->nodes[n].kind == N_CLOSURE) {
+        if (half == 1) return emit_closure_fn(e, n);
+        return emit_closure_env(e, n);
+    }
+    cv = closure_var_lookup(e, e->arena->nodes[n].text2);
+    if (cv < 0) return e->fail_from(n, "cannot resolve a closure argument");
+    if (half == 1) fprintf(e->out, "__ct_cl_tramp_%d", cv);
+    else fprintf(e->out, "&__ct_cl_env_v_%d", cv);
+    return 0;
 }
 
 /* A repeated recipe occurrence may not evaluate a side effect twice. */
@@ -563,7 +611,7 @@ static const char *map_copy_brackets(struct Emitter *e, const char *s)
 
 /* Emit one recipe argument span, substituting the binding parameters (spec
    §4.10): `p`, `&p`, `&p[…]`, `sizeof p`, `p.field` / `p->field` / `p[i]`. */
-static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct MapBind *b, int *actual)
+static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct MapBind *b, int *actual, int *half)
 {
     char tok[MAX_TEXT];
     char tp[MAX_TEXT];
@@ -604,7 +652,7 @@ static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct
                 if (*r == '[') {
                     if (map_param_type(e, m, b, i, tp) != 0) return -1;
                     fputs("&((", e->out);
-                    e->emit_expr(actual[i]);
+                    if (map_emit_actual(e, actual[i], half[i]) != 0) return -1;
                     fputc(')', e->out);
                     s = map_copy_brackets(e, r);
                     fputc(')', e->out);
@@ -613,7 +661,7 @@ static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct
                 if (map_param_type(e, m, b, i, tp) != 0) return -1;
                 map_clean_type(tp, tok);
                 fprintf(e->out, "&(%s){", tok);
-                e->emit_expr(actual[i]);
+                if (map_emit_actual(e, actual[i], half[i]) != 0) return -1;
                 fputc('}', e->out);
                 s = r;
                 continue;
@@ -698,7 +746,7 @@ static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct
             suf[sl] = 0;
             if (sl > 0) fputs("((", e->out);
             else fputc('(', e->out);
-            e->emit_expr(actual[i]);
+            if (map_emit_actual(e, actual[i], half[i]) != 0) return -1;
             if (sl > 0) {
                 fputc(')', e->out);
                 fputs(suf, e->out);
@@ -722,13 +770,23 @@ static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int 
     char arg[MAX_TEXT];
     char msg[512];
     int actual[16];
-    int i, unused, first, depth, n, q;
+    int half[16];
+    int i, hk, unused, first, depth, n, q;
     const char *p;
 
     for (i = 0; i < b->nparams; i++) {
-        actual[i] = map_actual_at(e->arena, recv, args, m->type_host, i);
+        actual[i] = map_actual_span(e, recv, args, m->type_host, i, &half[i]);
         if (actual[i] < 0)
             return e->fail_from(at, "a map call has fewer arguments than its binding");
+        /* A closure half that the recipe never names would fall into the
+           `(void)(…)` branch, which has no C spelling for one half of the pair:
+           the whole pair must be used (D25-5). */
+        if (half[i] != 0 && b->uses[i] == 0)
+            return e->fail_from(at, "a map recipe must use both halves of a closure argument");
+        /* D25-5: a closure pair is referenced at most once per half; a second
+           mention would hand the same trampoline to two formals. */
+        if (half[i] != 0 && b->uses[i] >= 2)
+            return e->fail_from(at, "a map recipe must use a closure argument exactly once");
         if (b->uses[i] >= 2 && !map_repeatable(e->arena, actual[i])) {
             snprintf(msg, sizeof msg,
                      "map recipe uses '%s' more than once; bind the argument to a local first",
@@ -742,7 +800,7 @@ static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int 
     for (i = 0; i < b->nparams; i++)
         if (b->uses[i] == 0) {
             fputs("(void)(", e->out);
-            e->emit_expr(actual[i]);
+            if (map_emit_actual(e, actual[i], half[i]) != 0) return -1;
             fputs("), ", e->out);
         }
     p = b->call;
@@ -793,11 +851,15 @@ static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int 
         while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\t')) n--;
         arg[n] = 0;
         /* `...` forwards every actual the binding parameters did not consume;
-           an empty tail emits nothing, not a dangling separator */
+           an empty tail emits nothing, not a dangling separator. A closure
+           cannot be forwarded: the tail has no fixed slot for its two halves
+           (D25-5). */
         if (strcmp(arg, "...") == 0) {
             int k, a;
-            for (k = b->nparams; (a = map_actual_at(e->arena, recv, args,
-                                                    m->type_host, k)) >= 0; k++) {
+            for (k = b->nparams; (a = map_actual_span(e, recv, args,
+                                                      m->type_host, k, &hk)) >= 0; k++) {
+                if (hk != 0)
+                    return e->fail_from(at, "a map recipe cannot pass a closure through '...'");
                 if (!first) fputs(", ", e->out);
                 fputc('(', e->out);
                 e->emit_expr(a);
@@ -806,7 +868,7 @@ static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int 
             }
         } else {
             if (!first) fputs(", ", e->out);
-            if (map_subst_arg(e, arg, m, b, actual) != 0) return -1;
+            if (map_subst_arg(e, arg, m, b, actual, half) != 0) return -1;
             first = 0;
         }
         if (*p == ',') { p++; continue; }
@@ -1015,18 +1077,36 @@ static int emit_closure_decl(struct Emitter *self, int n)
     return 0;
 }
 
+/* One half of the `(fn, env)` pair. A static recipe places the two halves in
+   their own slots, so each is written on its own; the plain call path below
+   writes them back to back, byte for byte as before (D25-7). */
+static int emit_closure_fn(struct Emitter *self, int n)
+{
+    int ci = self->arena->nodes[n].num;
+
+    fprintf(self->out, "__ct_cl_tramp_%d", ci);
+    return 0;
+}
+
+static int emit_closure_env(struct Emitter *self, int n)
+{
+    int ci = self->arena->nodes[n].num;
+
+    fprintf(self->out, "&(struct __ct_cl_env_%d){ ", ci);
+    if (emit_closure_values(self, ci) != 0) return -1;
+    fputs(" }", self->out);
+    return 0;
+}
+
 /* An inline literal as an actual: the `(fn, env)` pair is two C arguments, and
    the environment is a compound literal whose address lives until the end of
    the enclosing block -- long enough for the call and nothing is allocated
    (D21-14). Nested literals read their captures from `__ct_cl_e`. */
 static int emit_closure_arg(struct Emitter *self, int n)
 {
-    int ci = self->arena->nodes[n].num;
-
-    fprintf(self->out, "__ct_cl_tramp_%d, &(struct __ct_cl_env_%d){ ", ci, ci);
-    if (emit_closure_values(self, ci) != 0) return -1;
-    fputs(" }", self->out);
-    return 0;
+    if (emit_closure_fn(self, n) != 0) return -1;
+    fputs(", ", self->out);
+    return emit_closure_env(self, n);
 }
 
 /* The per-unit emission proper: everything from the banner to the last

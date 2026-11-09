@@ -1,0 +1,11 @@
+/* Every static call form with a compatible actual must stay warning-free. */
+import probe::probe;
+
+int main(void)
+{
+    int a = "abc".find("bc");
+    int b = probe::Q.g("x");
+    int c = probe::f("x");
+    int d = probe::P::find("abc", "bc");
+    return a + b + c + d;
+}

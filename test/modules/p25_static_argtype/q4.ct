@@ -1,0 +1,8 @@
+/* qf == 4: `ns::method(...)`; the namespace host resolves a unique trait. */
+import probe::probe;
+
+int main(void)
+{
+    probe::f(42);
+    return 0;
+}

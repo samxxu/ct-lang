@@ -1,0 +1,9 @@
+/* L25-4: the recipe names `fn` but never `env`, so the shim's second formal
+   would arrive unset. */
+import probe::probe;
+
+int main(void)
+{
+    int a[4] = { 1, 2, 3, 4 };
+    return a.drop(4, (int x) => x);
+}

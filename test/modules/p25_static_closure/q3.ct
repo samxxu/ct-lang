@@ -1,0 +1,11 @@
+/* 25.2, qf == 3: `ns::Trait.method(...)` -- the closure fills the pair of a
+   namespace host's recipe. */
+import probe::probe;
+#include <stdio.h>
+
+int main(void)
+{
+    int r = probe::Q.apply(3, (int x) => x * 2);
+    printf("%d\n", r);
+    return 0;
+}

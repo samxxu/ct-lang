@@ -1,0 +1,24 @@
+/* Phase 25.1: one host per static call form. `P` is a type host (`aux == 6`
+   and the `Trait::method(recv, ...)` form), `Q` a namespace host (the
+   `ns::Trait.method` and `ns::method` forms). The recipe targets are undefined
+   on purpose: these fixtures exercise the parser's diagnostics, and the gate
+   only emits C. */
+namespace probe;
+
+pub trait P {
+    int find(char *needle);
+}
+
+map trait P for type char * {
+    find(s, needle) -> ct_probe_find(s, needle);
+}
+
+pub trait Q {
+    int f(char *s);
+    int g(char *s);
+}
+
+map trait Q for namespace probe {
+    f(s) -> ct_probe_f(s);
+    g(s) -> ct_probe_g(s);
+}

@@ -1,0 +1,8 @@
+/* aux == 6: type-host dot call; the needle is a pointer formal. */
+import probe::probe;
+
+int main(void)
+{
+    "abc".find(42);
+    return 0;
+}

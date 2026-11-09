@@ -1,0 +1,20 @@
+// 122 (Phase 25.4): tier ① -- a plain `(fn, env)` pair spelled out by hand.
+// This worked before Phase 25 and must keep working unchanged; it is the
+// regression guard for the closure slots added around it.
+#include <stdio.h>
+
+import arr::arr;
+
+int cb(void *env, int x)
+{
+    return x * *(int *)env;
+}
+
+int main(void)
+{
+    int ctx = 3;
+    int a[4] = { 1, 2, 3, 4 };
+    int r = a.each(4, cb, &ctx);
+    printf("%d\n", r);
+    return 0;
+}

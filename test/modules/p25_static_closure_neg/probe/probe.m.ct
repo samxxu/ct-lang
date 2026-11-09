@@ -1,0 +1,26 @@
+/* Phase 25.4: the negative hosts. Each recipe is deliberately wrong in one
+   way, so the diagnostic under test is not reached through a shared path:
+   `dup` names `fn` twice (L25-2), `drop` never names `env` (L25-4), and `v`
+   forwards the rest of a variadic call, where a closure has no slot pair
+   (L25-3). `each` is the well-formed host the slot case (L25-1) calls. */
+namespace probe;
+
+pub trait Seq {
+    int each(int n, int (*fn)(void *env, int x), void *env);
+    int dup(int n, int (*fn)(void *env, int x), void *env);
+    int drop(int n, int (*fn)(void *env, int x), void *env);
+}
+
+map trait Seq for type int * {
+    each(a, n, fn, env) -> ct_each(a, n, fn, env);
+    dup(a, n, fn, fn) -> ct_dup(a, n, fn, fn);
+    drop(a, n, fn, env) -> ct_drop(a, n, fn);
+}
+
+pub trait V {
+    int v(int n, ...);
+}
+
+map trait V for type int * {
+    v(a, n, ...) -> ct_v(a, n, ...);
+}

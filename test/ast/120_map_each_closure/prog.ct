@@ -1,0 +1,17 @@
+// 120 (Phase 25.4): a closure literal is an argument to a static map call.
+// `int a[4]` decays to the `int *` type host; the literal captures `base`, so
+// the generated call is `ct_each_int((a), (4), (__ct_cl_tramp_0),
+// (&(struct __ct_cl_env_0){ base }))` -- the same `(fn, env)` pair a plain call
+// passes.
+#include <stdio.h>
+
+import arr::arr;
+
+int main(void)
+{
+    int base = 10;
+    int a[4] = { 1, 2, 3, 4 };
+    int r = a.each(4, (int x) => x + base);
+    printf("%d\n", r);
+    return 0;
+}

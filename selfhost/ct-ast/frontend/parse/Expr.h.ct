@@ -119,6 +119,10 @@ pub trait ExprOps {
     int  arity_check(int line, int col, const char *callee, int got, int want);
     int  map_arity(int line, int col, const char *trait, const char *method, int got);
     int  argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi);
+    /* 25.1: the silent half of `argtype_check` -- 0 compatible / undecidable,
+       1 a confident mismatch written to `msg`. A type host with several
+       candidate maps asks every candidate before it warns. */
+    int  argtype_mismatch(int args, int fi, int ti, int mi, char *msg, int cap);
     /* Phase 21 S4: closure actuals fill a `(fn, env)` pair and count as two
        C arguments. */
     int  type_is_fnptr(const char *t);
@@ -127,6 +131,9 @@ pub trait ExprOps {
     int  arg_is_closure(int a);
     int  closure_arg_count(int args);
     int  closure_arg_check(int line, int col, const char *callee, int args, int fi);
+    /* 25.1: the static-recipe counterpart -- a closure actual may only fill a
+       `(fn, env)` pair of the host method (L25-1). */
+    int  map_closure_check(int line, int col, int args, int ti, int mi);
     int  decl_type_compat(const char *formal, const char *actual);
     /* Phase 21 S2: `(params) => expr` is parsed and checked, never emitted.
        `parse_closure` runs at the `(` that opens the literal; `closure_bind`
@@ -912,6 +919,69 @@ impl ExprOps for Expr {
         return 0;
     }
 
+    /* 25.1: the static-recipe counterpart of `closure_arg_check`. The method's
+       parameters are addressed positionally and a closure fills two slots, so
+       a closure anywhere else is L25-1: the recipe has no place to put the
+       `(fn, env)` pair and would silently hand the trampoline to one formal.
+       A pair that does line up binds exactly as a plain call does. */
+    int map_closure_check(int line, int col, int args, int ti, int mi)
+    {
+        char msg[MAX_TEXT];
+        const char *ft;
+        int cur, pos, ok, np;
+
+        np = self->sym->traits[ti].m[mi].nparams;
+        cur = args;
+        pos = 0;
+        while (cur > 0) {
+            if (self->arg_is_closure(cur)) {
+                ok = 0;
+                ft = "";
+                if (pos < np) ft = self->sym->traits[ti].m[mi].ptype[pos];
+                /* D25-5: the `...` tail has no fixed slot pair. When the
+                   method is variadic and the pair would run past its named
+                   parameters, that is L25-3 -- a case of its own, not the
+                   generic non-pair L25-1 (the wording would otherwise say
+                   got ''). */
+                if (self->sym->traits[ti].m[mi].variadic
+                    && (pos >= np || pos + 1 >= np)) {
+                    snprintf(msg, sizeof msg,
+                             "a map recipe cannot pass a closure through '...'");
+                    tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                            self->sup->mem->path);
+                    return -1;
+                }
+                if (pos + 1 < np)
+                    ok = self->formal_is_env_fn(ft)
+                         && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype[pos + 1]);
+                if (!ok) {
+                    snprintf(msg, sizeof msg,
+                             "a closure argument must fill a '(fn, env)' parameter pair (got '%s')",
+                             ft);
+                    tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                            self->sup->mem->path);
+                    return -1;
+                }
+                if (self->arena->nodes[cur].kind == N_CLOSURE) {
+                    if (self->closure_arg_bind(self->arena->nodes[cur].num, ft) != 0)
+                        return -1;
+                } else {
+                    int vi = self->sym->find_var(self->arena->nodes[cur].text2);
+                    if (vi >= 0 && self->sym->vars[vi].is_closure
+                        && closure_match(self, self->sym->vars[vi].closure_id, ft, 1, 0) != 0)
+                        return -1;
+                }
+                pos += 2;
+            } else {
+                pos++;
+            }
+            cur = self->arena->nodes[cur].next;
+        }
+        return 0;
+    }
+
     /* A static map is expanded into its recipe at the call site, so an actual
        the recipe does not name is simply dropped. A variadic method forwards
        the tail (`...`), which turns the count into a lower bound; a fixed one
@@ -933,13 +1003,13 @@ impl ExprOps for Expr {
        a time. Only a position where both sides can name a type is compared;
        an interface formal (boxing owns it), an array on either side (decay),
        a cast argument and an argument without a derivable type all stay
-       unknown and pass (D19-3). One warning per call is enough. Warning
-       severity like 19.1 (D19-4): `ct check` (19.4) raises it to an error. */
-    int argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi)
+       unknown and pass (D19-3). This half stays silent: it reports the first
+       confident mismatch so `argtype_check` can warn once and a type host can
+       try every candidate before it does (25.1). */
+    int argtype_mismatch(int args, int fi, int ti, int mi, char *msg, int cap)
     {
         char at[MAX_TEXT];
         char fb[MAX_TEXT], ab[MAX_TEXT];
-        char msg[MAX_TEXT];
         const char *ft;
         int cur, k, np, skip, r;
 
@@ -979,16 +1049,25 @@ impl ExprOps for Expr {
                     r = (fs < 0 || as < 0) ? -1 : (fs != as);
                 }
                 if (r == 1) {
-                    snprintf(msg, sizeof msg, "argument %d: expected '%s', got '%s'",
+                    snprintf(msg, cap, "argument %d: expected '%s', got '%s'",
                              k + 1, ft, at);
-                    if (self->sup->type_warn(line, col, callee, msg) != 0)
-                        return self->sup->fail("too many warnings");
-                    return 0;
+                    return 1;
                 }
             }
             if (self->arg_is_closure(cur)) k += 2;
             else k++;
             cur = self->arena->nodes[cur].next;
+        }
+        return 0;
+    }
+
+    int argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi)
+    {
+        char msg[MAX_TEXT];
+
+        if (self->argtype_mismatch(args, fi, ti, mi, msg, sizeof msg)) {
+            if (self->sup->type_warn(line, col, callee, msg) != 0)
+                return self->sup->fail("too many warnings");
         }
         return 0;
     }
@@ -2207,11 +2286,15 @@ impl ExprOps for Expr {
                                    it, so this unit needs no new plumbing. */
                                 {
                                     struct Map *hm;
-                                    int hn, mi2, bi2, want = 0, seen = 0, fits = 0;
-                                    int got2 = arg_count(self->arena, args);
+                                    int hn, mi2, bi2, want = 0, seen = 0, afits = 0, fits = 0;
+                                    int pt = -1, pm = -1;
+                                    int got2 = arg_count(self->arena, args)
+                                               + self->closure_arg_count(args);
                                     char rk[MAX_TEXT];
                                     char tk[MAX_TEXT];
                                     char msg[MAX_TEXT];
+                                    char tmsg[MAX_TEXT];
+                                    tmsg[0] = 0;
                                     hm = self->sup->ty->maps;
                                     hn = *self->sup->ty->nmaps;
                                     /* the same host key the emitter and the
@@ -2227,7 +2310,7 @@ impl ExprOps for Expr {
                                         frontend::type::type_key(hm[mi2].host_type, tk, sizeof tk);
                                         if (strcmp(tk, rk) != 0) continue;
                                         for (bi2 = 0; bi2 < hm[mi2].nb; bi2++) {
-                                            int want2, tail2;
+                                            int want2, tail2, tt, tm, arity_ok;
                                             if (strcmp(hm[mi2].b[bi2].method,
                                                        fname) != 0) continue;
                                             /* a type-host binding names the
@@ -2244,16 +2327,58 @@ impl ExprOps for Expr {
                                                            "...") != 0;
                                             if (!seen) want = want2;
                                             seen = 1;
-                                            if (tail2 ? got2 >= want2 : got2 == want2)
+                                            /* 25.1: the signature is needed
+                                               for the closure check even when
+                                               the closure itself makes the
+                                               count miss, so resolve it before
+                                               the arity gate. Two packages may
+                                               bind the same host and method with
+                                               different signatures, so every
+                                               arity-fitting candidate is asked;
+                                               one accepting is enough. */
+                                            tt = self->sym->find_trait(hm[mi2].trait);
+                                            tm = -1;
+                                            if (tt >= 0) {
+                                                for (tm = 0; tm < self->sym->traits[tt].nm; tm++)
+                                                    if (strcmp(self->sym->traits[tt].m[tm].name,
+                                                               fname) == 0) break;
+                                                if (tm >= self->sym->traits[tt].nm) tm = -1;
+                                            }
+                                            if (tt >= 0 && tm >= 0 && pt < 0) {
+                                                pt = tt;
+                                                pm = tm;
+                                            }
+                                            arity_ok = tail2 ? got2 >= want2
+                                                             : got2 == want2;
+                                            if (!arity_ok) continue;
+                                            afits = 1;
+                                            if (tt < 0 || tm < 0) {
+                                                fits = 1;
+                                                continue;
+                                            }
+                                            if (!self->argtype_mismatch(args, -1, tt, tm,
+                                                                        tmsg, sizeof tmsg))
                                                 fits = 1;
                                         }
                                     }
-                                    if (seen && !fits) {
+                                    /* A closure in a non-pair position is
+                                       L25-1 whatever the count says: the
+                                       generic "fewer arguments" wording would
+                                       hide the real fault. */
+                                    if (seen && pt >= 0 && pm >= 0
+                                        && self->map_closure_check(mline, mcol, args,
+                                                                   pt, pm) != 0)
+                                        return -1;
+                                    if (seen && !afits) {
                                         snprintf(msg, sizeof msg,
                                                  "takes %d argument(s), %d given",
                                                  want, got2);
                                         if (self->sup->arity_warn(mline, mcol, fname,
                                                                   msg) != 0)
+                                            return self->sup->fail("too many warnings");
+                                    } else if (seen && afits && !fits) {
+                                        if (self->sup->type_warn(mline, mcol, fname,
+                                                                 tmsg) != 0)
                                             return self->sup->fail("too many warnings");
                                     }
                                 }
@@ -2660,8 +2785,29 @@ impl ExprOps for Expr {
                     snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", mname);
                     snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
                     if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
-                                        mname, arg_count(self->arena, args)) != 0)
+                                        mname, arg_count(self->arena, args)
+                                        + self->closure_arg_count(args)) != 0)
                         return -1;
+                    /* 25.1: the trait segment is explicit, so the signature
+                       is this unit's to compare -- same 19.2 rules as a
+                       resolved trait method, and no receiver precedes the
+                       method's own parameters. */
+                    {
+                        int ti3, mi3;
+                        ti3 = self->sym->find_trait(self->arena->nodes[n].text2);
+                        if (ti3 >= 0) {
+                            for (mi3 = 0; mi3 < self->sym->traits[ti3].nm; mi3++)
+                                if (strcmp(self->sym->traits[ti3].m[mi3].name, mname) == 0) break;
+                            if (mi3 < self->sym->traits[ti3].nm) {
+                                if (self->map_closure_check(id_line, id_col, args,
+                                                            ti3, mi3) != 0)
+                                    return -1;
+                                if (self->argtype_check(id_line, id_col, mname, args,
+                                                        -1, ti3, mi3) != 0)
+                                    return -1;
+                            }
+                        }
+                    }
                     return mn;
                 }
                 /* Q2-A: `ns::method(...)` with the trait segment elided. The
@@ -2682,8 +2828,28 @@ impl ExprOps for Expr {
                     snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
                     snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
                     if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
-                                        qc, arg_count(self->arena, args)) != 0)
+                                        qc, arg_count(self->arena, args)
+                                        + self->closure_arg_count(args)) != 0)
                         return -1;
+                    /* 25.1: the namespace host resolved a unique trait, so its
+                       method signature is known here -- compare the actuals
+                       against it, receiver-free like the form above. */
+                    {
+                        int ti3, mi3;
+                        ti3 = self->sym->find_trait(self->arena->nodes[n].text2);
+                        if (ti3 >= 0) {
+                            for (mi3 = 0; mi3 < self->sym->traits[ti3].nm; mi3++)
+                                if (strcmp(self->sym->traits[ti3].m[mi3].name, qc) == 0) break;
+                            if (mi3 < self->sym->traits[ti3].nm) {
+                                if (self->map_closure_check(id_line, id_col, args,
+                                                            ti3, mi3) != 0)
+                                    return -1;
+                                if (self->argtype_check(id_line, id_col, qc, args,
+                                                        -1, ti3, mi3) != 0)
+                                    return -1;
+                            }
+                        }
+                    }
                     return mn;
                 }
                 /* P20-01: `Trait::method(recv, ...)` — the first actual is the
@@ -2714,6 +2880,10 @@ impl ExprOps for Expr {
                     }
                     rest = self->arena->nodes[args].next;
                     self->arena->nodes[args].next = -1;
+                    /* D25-3: a closure in the tail fills two recipe slots, so
+                       the count the method signature is compared with grows by
+                       one for each; the receiver is already out of `rest`. */
+                    got += self->closure_arg_count(rest);
                     mn = self->sup->new_node(N_MCALL);
                     if (mn < 0) return -1;
                     self->arena->nodes[mn].a = args;
@@ -2731,10 +2901,20 @@ impl ExprOps for Expr {
                         if (ti3 >= 0) {
                             for (mi3 = 0; mi3 < self->sym->traits[ti3].nm; mi3++)
                                 if (strcmp(self->sym->traits[ti3].m[mi3].name, qc) == 0) break;
-                            if (mi3 < self->sym->traits[ti3].nm
-                                && self->arity_check(id_line, id_col, qc, got,
-                                                     self->sym->traits[ti3].m[mi3].nparams) != 0)
-                                return -1;
+                            if (mi3 < self->sym->traits[ti3].nm) {
+                                if (self->arity_check(id_line, id_col, qc, got,
+                                                      self->sym->traits[ti3].m[mi3].nparams) != 0)
+                                    return -1;
+                                /* 25.1: the receiver stays apart, so the
+                                   remaining actuals are compared with the
+                                   method's own parameters as written. */
+                                if (self->map_closure_check(id_line, id_col, rest,
+                                                            ti3, mi3) != 0)
+                                    return -1;
+                                if (self->argtype_check(id_line, id_col, qc, rest,
+                                                        -1, ti3, mi3) != 0)
+                                    return -1;
+                            }
                         }
                     }
                     return mn;

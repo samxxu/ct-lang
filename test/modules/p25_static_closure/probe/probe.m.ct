@@ -1,0 +1,23 @@
+/* Phase 25.2: a static recipe that takes a `(fn, env)` pair. `P` is a type
+   host (`char *`) for the dot call and the `Trait::method(recv, ...)` form;
+   `Q` is a namespace host for `ns::Trait.method` and `ns::method`. The shim
+   consumes the callback synchronously (D25-6). */
+#include <string.h>
+
+namespace probe;
+
+pub trait P {
+    int walk(int (*fn)(void *env, int x), void *env);
+}
+
+map trait P for type char * {
+    walk(s, fn, env) -> ct_probe_walk(s, fn, env);
+}
+
+pub trait Q {
+    int apply(int n, int (*fn)(void *env, int x), void *env);
+}
+
+map trait Q for namespace probe {
+    apply(n, fn, env) -> ct_probe_apply(n, fn, env);
+}
