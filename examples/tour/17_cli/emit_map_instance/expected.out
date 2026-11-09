@@ -1,5 +1,5 @@
 {
-  "compiler": "ct v0.24.0",
+  "compiler": "ct v0.25.0",
   "file": "prog.ct",
   "traits": [{"name":"Lamp","cname":"Lamp","file":"prog.ct","line":7,"methods":[{"name":"set","ret":"int","params":1}]}],
   "structs": [{"name":"Led","cname":"Led","file":"prog.ct","line":11,"uses":[]}],

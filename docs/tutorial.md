@@ -660,6 +660,28 @@ ct build closure_pipeline.ct -o closure_pipeline && ./closure_pipeline
 - **env 活不过这次调用**：容器拿到 `(fn, env)` 后只能在本次调用里用，不能存进字段、全局或返回。
   存了就是 E8（见下）。
 
+**闭包进静态映射调用（Phase 25）**
+
+`.m.ct` 的静态映射（见 §9.1）与普通调用同口径接收闭包：只要宿主方法的形参对是
+`ret (*fn)(void *env, …)` + `void *env`，`a.each(...)` 就能直接吃闭包，arity 按两项计。
+
+```c
+int base = 10;
+int a[4] = { 1, 2, 3, 4 };
+
+a.each(4, (int x) => { printf("%d\n", x + base); });   /* 11 12 13 14 */
+```
+
+产物是裸 C 调用，闭包按同一条 `(fn, env)` ABI 落位：
+
+```c
+ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ .base = base });
+```
+
+recipe 必须把这个实参的 `fn` 与 `env` 各引用一次：重复引用、只引用一半或都不引用、把闭包放在 `...`
+尾部，都是编译期硬错。环境仍是栈上的复合字面量，shim 必须在本次调用里同步消费（同上面的「env 活不过
+这次调用」）。
+
 **档①：上下文要活过栈帧时**
 
 闭包的环境在声明作用域的栈上，出了作用域就没了，所以三类场景接不了：C API 没有 `void *` 环境槽
@@ -1666,6 +1688,30 @@ ct build closure_pipeline.ct -o closure_pipeline && ./closure_pipeline
   `this closure's parameter N is '…', but the expected type is '…'`.
 - **The env does not outlive the call**: a container may use `(fn, env)` during that call only —
   never store it in a field, a global, or a return value. Doing so is E8 (below).
+
+**Closures into static map calls (Phase 25)**
+
+A `.m.ct` static map (see §9.1) takes closures under the same rule as an ordinary call: whenever the
+host method's parameter pair is `ret (*fn)(void *env, …)` + `void *env`, `a.each(...)` accepts a
+closure directly and the arity counts it as two.
+
+```c
+int base = 10;
+int a[4] = { 1, 2, 3, 4 };
+
+a.each(4, (int x) => { printf("%d\n", x + base); });   /* 11 12 13 14 */
+```
+
+The output is a plain C call, with the closure placed by the same `(fn, env)` ABI:
+
+```c
+ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ .base = base });
+```
+
+The recipe must reference that argument's `fn` and `env` exactly once each: a repeated reference,
+only one half, neither half, or a closure behind `...` is a compile-time hard error. The environment
+is still a stack compound literal, so a shim must consume it synchronously within this call (same as
+"the env does not outlive the call" above).
 
 **Tier 1: when the context must outlive the frame**
 

@@ -537,6 +537,12 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
   该 trait 的映射。限定名按符号名规则拼接（`a::ALen` → `a_ALen`），最后一段必须是该静态 trait 的
   方法，因此不会劫持同名的命名空间函数；首实参是接收者，规则与 `value.len(args)` 相同（数组先
   decay）。歧义诊断把两种限定写法前置在 hint 里。
+- **闭包实参（Phase 25，仅 ct-ast）**：静态映射调用与普通函数调用同口径接收闭包——闭包实参必须落在
+  宿主方法相邻的 `ret (*fn)(void *env, …)` + `void *env` 形参对起点，arity 按两项计；recipe 必须把
+  这个实参的 `fn` 与 `env` 各引用一次。闭包落在非 `(fn, env)` 位报 L25-1，`fn` / `env` 重复引用报
+  L25-2、未成对引用报 L25-4，闭包跟在 `...` 尾部报 L25-3。合法的 `a.each(4, (int x) => …)` 展开为
+  `ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ … })`，无运行时对象、无 vtable；
+  落位细则见 §4.44。
 
 recipe 替换（逐出现点）：
 
@@ -1677,6 +1683,11 @@ int apply(int base) {
 `.c` 的文件作用域、不进 `.h`；零闭包单元逐字节不变（D21-15）。命名、`#line` 重锚与诊断的完整约定见
 [closure-conventions.md](closure-conventions.md)。
 
+**静态映射调用（Phase 25，仅 ct-ast）**：静态映射调用（类型宿主 / 命名空间宿主的静态 trait）与普通
+调用同口径接收闭包实参，展开形态与四条诊断（L25-1–L25-4）见 §4.10。区别只在落位：recipe 按 `fn` /
+`env` 两个槽位分别引用这个实参，必须各引用一次；环境仍是栈上的复合字面量，shim 必须在本次调用里
+同步消费（见 [closure-conventions.md](closure-conventions.md)）。
+
 **限制清单**：
 
 | 限制 | 表现 |
@@ -2545,6 +2556,14 @@ Two host forms:
   underlying spelling are one host. The receiver may be any expression whose **static type is known** —
   a literal, a field chain, a call result; the recipe substitutes it exactly once, so a chain such as
   `s.trim().len()` is legal and can keep chaining (only dynamic dispatch needs `__ct_tmpN`).
+- **Closure arguments (Phase 25, ct-ast only)**: a static map call takes closures under the same rule
+  as an ordinary call — a closure argument must sit at the start of an adjacent
+  `ret (*fn)(void *env, …)` + `void *env` parameter pair of the host method and counts as two
+  arguments; the recipe must reference that argument's `fn` and `env` exactly once each. A closure
+  outside a `(fn, env)` pair is L25-1, a repeated `fn` / `env` reference is L25-2, an unpaired one is
+  L25-4, and a closure behind `...` is L25-3. A legal `a.each(4, (int x) => …)` expands to
+  `ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ … })` — no runtime object, no vtable;
+  §4.44 gives the placement rules.
 
 Recipe substitution (per occurrence):
 
@@ -3827,6 +3846,13 @@ shape as a tier-1 `impl`'s `(void *self, …)` (D21-4). `__ct_cl_env_<N>` / `sta
 closures is byte-identical to before (D21-15). See
 [closure-conventions.md](closure-conventions.md) for the complete naming, `#line` re-anchoring and
 diagnostic contract.
+
+**Static map calls (Phase 25, ct-ast only)**: a static map call (a static trait of a type host or a
+namespace host) takes closure arguments under the same rule as an ordinary call; §4.10 gives the
+expansion and the four diagnostics (L25-1–L25-4). The only difference is placement: the recipe
+references the argument through its `fn` and `env` slots and must reference each exactly once. The
+environment is still a stack compound literal, so a shim must consume it synchronously within this
+call (see [closure-conventions.md](closure-conventions.md)).
 
 **Limitations**:
 

@@ -42,7 +42,7 @@ int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) 
 | `Vec<int>` / `own Vec<int>` / 自定义容器 | CT 没有泛型，std 只有 `VecInt`（§4.10 之外），`own` 只收结构体指针 + `malloc`/`calloc`，初值列表无处安放 |
 | 普通 `a..b` 区间表达式（`r = 2..8`） | 无类型推断，`r` 的目标类型无处安放；Phase 23 §1.1 已拒绝，本相不改 |
 | 步长 / 闭区间 / 反向 | 需要就写原生 `for`；range 初值只覆盖「步长 1、左闭右开」 |
-| `each (nums) { … item … }` 语句形态 | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已排入 Phase 25**，见 Phase 25（未立项） |
+| `each (nums) { … item … }` 语句形态 | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已由 Phase 25 落地**，见 [phase25.md](phase25.md) |
 | CT 侧常量折叠 | CT 从不折叠常量（`const_ok` 是结构判定）；`$` 的取值在**发射期**替换，表达式本身交给 C 折叠 |
 | 元素为 struct / union / 接口值 / 数组 | 初始化列表的元素类型限于标量；聚合元素需要逐元素 vptr / 装箱，收益与风险不成比例 |
 | 宏 / `enum` 边界 | 符号表只记 `is_const` 标志、不记数值（§3.2）；要支持就得先引入常量求值器 |
@@ -449,7 +449,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 3. **闭包只在「已解析签名的普通函数调用」处展开**：`closure_arg_check` 唯一的调用点在
    `Expr.h.ct` 的普通调用解析里，且要求 `fi >= 0`
    （[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)）。方法调用（含静态映射的
-   `a.each(…)`）不经过这条路——这是 Phase 25 的四个缺口（Phase 25（未立项）§2）。
+   `a.each(…)`）不经过这条路——这是 Phase 25 补上的四个缺口（[phase25.md](phase25.md) §2）。
 4. **shim 收不了闭包的环境**：环境是栈上的 `__ct_cl_env_v_N`，源码里没有名字可以传给 shim；
    `.shim.h` 只能接普通函数指针 + `void *`（档①）。Phase 25 让 recipe 把闭包拆成
    `tramp` / `&env` 两半分别落位，正是绕开这一点。
@@ -458,7 +458,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 
 **归属结论**（2026-11-09，用户确认）：
 
-- **方法形态 `a.each(n, closure)`** → **Phase 25**（Phase 25（未立项），`v0.25.x`）；
+- **方法形态 `a.each(n, closure)`** → **Phase 25**（已完成，`v0.25.0`，见 [phase25.md](phase25.md)）；
 - **语句形态 `each (nums) { … item … }`** → 仍不做、不排期：需要隐式名字、块参数与
   `break`/`continue`，是语言级语法糖，成本远高于本相；
 - **档①（`a.each(4, cb, &ctx)`）** → 今天就能用，不需要任何编译器改动
@@ -519,7 +519,7 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 
 | # | 判据 | 证据 | 结果 |
 | --- | --- | --- | --- |
-| 1 | §7.1 的 8 个正例（109–115、117）全绿 | `check-ast.sh` 757 passed / 0 failed，其中 Phase 24 块 21 条全 `ok` | ✔ |
+| 1 | §7.1 的 8 个正例（109–115、117）全绿 | `check-ast.sh` 765 passed / 0 failed，其中 Phase 24 块 21 条全 `ok` | ✔ |
 | 2 | §7.2 的 16 个负例各命中预期文案，且都不落成 `undeclared` | `rng_neg()` 逐条 `grep` 文案 + `! grep -Fiq 'undeclared'` | ✔ |
 | 3 | 逐字节层：`109` 与手写 13 项列表相同 | `grep 'int odd\[\] = {'` 后 `cmp -s`，`BYTE_EQUAL` | ✔ |
 | 4 | 语义层：`109` 与普通字面量数组的运行输出相同 | 两程序编译运行、剔除 banner 后 `cmp -s` | ✔ |

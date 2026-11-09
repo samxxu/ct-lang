@@ -2,8 +2,9 @@
 
 > 中文 · [English](#english)
 >
-> **状态：规划中**（2026-11-09），**待实现**。D25-1–D25-11 已定稿；
-> 本文是 **as-planned** 记录，落地后按 [phase23.md](phase23.md) 的先例改写为 as-built。
+> **状态：完成**（2026-11-09 收口，`v0.25.0`）。D25-1–D25-11 已定稿；§1–§9 是 as-planned 记录，
+> §10–§13 是 as-built 记录。25.1、25.2、25.4 与收口 25.5 已落地（25.3 的 `emit_closure_arg` 拆分
+> 并入 25.2），改动留在工作区，未提交。
 > 关联：[phase24.md](phase24.md)（数组 range 初值，本相前置但不依赖）、
 > [phase21.md](phase21.md)（非逃逸栈闭包）、
 > [batch38-map-unit/spec.md](../history/design/batch38-map-unit/spec.md)（`.m.ct` 静态映射）、
@@ -286,11 +287,219 @@ for (i = 0; i < b->nparams; i++) {
 
 ---
 
+## 10. 25.1 as-built（2026-11-09）
+
+> 只落地 **25.1 解析与诊断**；25.2–25.5 未开始。改动只在工作区，未提交。
+
+### 10.1 改动文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `selfhost/ct-ast/frontend/parse/Expr.h.ct` | 四个静态调用切点的 19.2 实参类型比对；`argtype_mismatch` 静默谓词；`map_closure_check`（L25-1）；arity 计入闭包实参 |
+| `selfhost/check-ast.sh` | Phase 25.1 门禁块（四种形态的正/负例 + L25-1） |
+| `test/modules/p25_static_argtype/` | 每个形态一个宿主：`P`（type host）、`Q`（namespace host） |
+
+### 10.2 四个切点的实际口径
+
+| 形态 | 位置 | 落法 |
+| --- | --- | --- |
+| `Trait::method(recv, ...)` | qf==5 | `got += closure_arg_count(rest)`；`map_closure_check(rest)`；`argtype_check(rest)`，接收者不参与比对 |
+| `ns::Trait.method(...)` | qf==3 | `map_arity` 的 `got` 加闭包数；用 `find_trait(nodes[n].text2)` + 方法名定位签名；同规则比对 |
+| `ns::method(...)` | qf==4 | 同 qf==3，方法名用 `qc` |
+| `recv.method(...)` | aux==6 | `got2` 加闭包数；每个 arity 命中候选各查一次签名，**任一候选类型兼容即不告警**；只有“arity 命中但没有候选类型命中”才出一条类型 warning |
+
+`argtype_check` 的内部比较抽成 `argtype_mismatch`（0 兼容/不可判、1 确信不匹配并回填报文）；
+`argtype_check` 仍是“每条调用至多一条 warning、返回 0”的薄包装，19.2 的严重度不变。
+aux==6 原有的 arity warning 文案、`want`/`seen` 逻辑保持不变。
+
+### 10.3 闭包实参
+
+- `map_arity` / 静态 `arity_check` 的 `got` 一律采用 `arg_count + closure_arg_count`
+  （qf==5 只对 `rest` 计数，接收者不重复计入）。
+- `map_closure_check` 按方法形参位计数（闭包占两格）；位置不构成
+  `formal_is_env_fn` + `void *` 对时报 L25-1 硬错；合法时走既有
+  `closure_arg_bind` / `closure_match`。
+- aux==6 中 L25-1 **先于** arity warning 判定：闭包本身会让计数变化，若先报
+  “参数不够”会掩盖真正的错位。该排序按“诊断指向真实故障”的既有口径确定，无对抗分歧。
+
+### 10.4 无判据取舍（自行决断）
+
+| 取舍 | 理由 |
+| --- | --- |
+| qf==3/qf==4/qf==5 先 arity warning 再 L25-1 | arity 只告警不中断，L25-1 仍会到达；保持既有告警顺序，改动最小 |
+| aux==6 多候选时以“首个可解析候选”做闭包位置检查 | 同一宿主+方法的多个绑定在实践中签名一致；逐个做“任一成对即通过”需要再引入静默配对谓词，超出 25.1 |
+| 类型 warning 的 callee 用方法名 | 与 qf==3/qf==4/qf==5 已解析的方法调用文案一致 |
+
+### 10.5 明确未做
+
+- 合法闭包对在 25.1 仍会在 emitter 报
+  `a map call has fewer arguments than its binding`（硬错）；25.2 接管实参映射后消失。
+  因此本切片不新增闭包正例夹具。
+- 不改 `type_key`（`"abc".len()` 回归面）、不做 `.m.ct` 声明点未知类型报错（D-60-2）、
+  不让 `ct check` 对 imported 静态调用报 error。
+- qf==3/qf==4 路径上那个 `!is_static` 守卫未动；SH-60 已证它对四种静态形态是死代码，
+  删或留都不改变行为，留给 25.2 统一清理。
+
+### 10.6 验证
+
+- `selfhost/check-ast.sh`：**771 passed, 0 failed**（含六个 Phase 25.1 新断言）。
+- `selfhost/check-all.sh`：**11 hard gates green**；`check-warnings` 240 ok / 0 failed
+  （语料上 19.2 无误报）；`check-semantics` 23 assertions。
+- 生成物零变化：用 `git archive HEAD` 构建基线编译器，与工作区编译器分别对
+  7 组既有/新增静态映射夹具 `build --emit-c`，全部 `.c`/`.h` 逐字节相同。
+
+---
+
+## 11. 25.2 as-built（2026-11-09）
+
+> 只落地 **25.2 绑定与发射**。原本 §7 把 `emit_closure_fn` / `emit_closure_env`
+> 的拆分排在 25.3，但 recipe 路径必须按半槽输出，拆分与槽位循环是同一次改动的
+> 两面，合并落地；25.3 余下的只有文档与收口。改动只在工作区，未提交。
+
+### 11.1 改动文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `selfhost/ct-ast/backend/emit/Emitter.h.ct` | `map_actual_span` + `half` 槽位游标；`map_emit_actual`；`emit_recipe` 槽位循环与两条闭包硬错；`emit_closure_arg` 拆为 `emit_closure_fn` / `emit_closure_env` |
+| `test/modules/p25_static_closure/` | 五种形态各一个可编译、可运行的夹具 + `probe/probe.m.ct` + `probe/probe.shim.h` |
+| `selfhost/check-ast.sh` | Phase 25.2 门禁块（逐形态构建、文本断言、编译运行） |
+
+### 11.2 实现口径
+
+| 位置 | 落法 |
+| --- | --- |
+| `map_actual_slots` | `N_CLOSURE` 或当前在作用域的闭包变量 = 2 格，其余 1 格 |
+| `map_actual_span` | type host 的 0 号位是接收者；其余按格走实参链，写回 `half`（0 整体 / 1 `fn` / 2 `env`） |
+| `map_emit_actual` | 字面量按 `emit_closure_fn` / `emit_closure_env` 输出半格；闭包变量输出 `__ct_cl_tramp_N` / `&__ct_cl_env_v_N`；其余走 `emit_expr` |
+| `map_subst_arg` | 增 `int *half`，三处实参输出统一走 `map_emit_actual` |
+| `emit_recipe` 槽位循环 | `map_actual_span` 定位；闭包半格 `uses == 0` → 硬错 `a map recipe must use both halves of a closure argument` |
+| `emit_recipe` 的 `...` | 按格走；闭包进尾部 → 硬错 `a map recipe cannot pass a closure through '...'` |
+| 普通调用路径 | 仍调 `emit_closure_arg`；它现在只是 `emit_closure_fn` + `", "` + `emit_closure_env` |
+
+产物（`aux6.ct`）：
+
+```c
+ct_probe_walk(("abc"), (__ct_cl_tramp_0), (&(struct __ct_cl_env_0){ base }))
+```
+
+recipe 的每个实参都带一层子表达式括号，与既有 recipe 产物形状一致
+（`atoi((mkname()))`），没有为闭包特例。
+
+### 11.3 无判据取舍（自行决断）
+
+| 取舍 | 理由 |
+| --- | --- |
+| 25.2 与 25.3 的拆分合并 | recipe 路径必须按半槽输出；先拆函数再改槽位是同一个改动，分开落地会有一个中间态不可运行 |
+| 闭包半格未成对引用在 emitter 前置硬错 | 否则会落进 `(void)(…)`，而 `emit_expr(N_CLOSURE)` 只会报 `unknown expression node`，掩盖真实原因 |
+| 半格未引用用 L25-4 文案、重复引用沿用既有 “more than once” 文案 | L25-2 的专属文案留给 25.4 统一收口；当前两条都是硬错，不产生非法 C |
+| `...` 尾部遇闭包立即报错 | 尾部没有固定槽位，无法定位 `fn` / `env`（D25-5） |
+| 夹具自行带 shim 并编译运行 | 只断言文本无法证明 ABI 落位正确；五形态各自独立运行可防“只修一条路径” |
+
+### 11.4 自举侧注意
+
+`selfhost` 编译器对**跨行函数签名**的第二行不做命名空间类型改写：
+`static int f(struct Emitter *e,` 换行后，参数里的 `struct Emitter` 会原样留在
+生成的 C 里（应为 `struct backend_emit_Emitter`），导致 C 侧类型不兼容。新增的
+两个辅助函数因此保持单行签名；这是既有编译器的边界，本切片不修。
+
+### 11.5 验证
+
+- `selfhost/check-ast.sh`：**776 passed, 0 failed**（新增 5 条 Phase 25.2 断言）。
+- `selfhost/check-all.sh`：退出 0，**11 hard gates green**；
+  `check-goldens` 无回归、`check-warnings` 240 ok / 0 failed、
+  `check-semantics` 23 assertions、`check-docs` OK。
+- 生成物零变化：基线（`git archive HEAD`）与工作区编译器对 7 组静态映射夹具的
+  `.c`/`.h` 逐字节相同；另对 `75_closure_param_pair`、`88_closure_block_arg_pair`、
+  `70_closure_basic`、`79_closure_two_units` 四组闭包夹具同样逐字节相同，
+  证明 `emit_closure_arg` 拆分未改变普通调用产物。
+- 五种形态的运行输出：`aux6` 297、`q5` 294、`q3` 6、`q4` 18、`var` 300。
+
+---
+
+## 12. 25.4 as-built（2026-11-09）
+
+> 只落地 **25.4 诊断与测试**。改动只在工作区，未提交。
+
+### 12.1 改动文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `selfhost/ct-ast/frontend/parse/Expr.h.ct` | `map_closure_check` 增加 L25-3：变参方法的 `...` 尾部收到闭包时单独报错 |
+| `selfhost/ct-ast/backend/emit/Emitter.h.ct` | `emit_recipe` 增加 L25-2：闭包半格被引用两次时用专属文案（闭包变量也拦） |
+| `selfhost/check-ast.sh` | Phase 25.4 门禁块：L25-2/L25-3/L25-4 各一条独立路径；120 的调用行逐字节断言；121 的 `&__ct_cl_env_v_` 断言 |
+| `test/ast/120_map_each_closure/` | 字面量闭包 + 捕获；`int a[4]` decay 到 `int *` 宿主 |
+| `test/ast/121_map_each_closure_var/` | 闭包变量实参（`&__ct_cl_env_v_N` 路径） |
+| `test/ast/122_map_each_tier1/` | 档① `a.each(4, cb, &ctx)` 回归保护 |
+| `test/modules/p25_static_closure_neg/` | 四条负例：`slot` / `twice` / `unused` / `vararg` |
+
+### 12.2 五条诊断的落点
+
+| 编号 | 落点 | 触发 |
+| --- | --- | --- |
+| L25-1 | `Expr.h.ct` 的 `map_closure_check`（25.1 已有） | 闭包落在固定形参的非 `(fn, env)` 位置 |
+| L25-2 | `Emitter.h.ct` 的 `emit_recipe` 槽位循环 | 闭包的 `fn` 或 `env` 半格被 recipe 引用两次（字面量与变量都拦） |
+| L25-3 | `Expr.h.ct` 的 `map_closure_check` | 方法变参且闭包的对会越过具名形参（`pos >= np` 或 `pos + 1 >= np`） |
+| L25-4 | `Emitter.h.ct` 的 `emit_recipe` 槽位循环 | 闭包半格 `uses == 0`（含两半都未使用、只用一半） |
+| L25-5 | 既有 `map call has fewer arguments than its binding` | 非闭包场景真少参数，不变 |
+
+### 12.3 无判据取舍（自行决断）
+
+| 取舍 | 理由 |
+| --- | --- |
+| L25-3 与 L25-1 的分界：变参尾部报 L25-3，固定形参报 L25-1 | §3.1 把「变参尾部」列进 L25-1 的兜底，§5 又给 L25-3 专属文案；以 §5 的专属文案为准，否则 `got ''` 的 L25-1 文案会把真实原因说反 |
+| L25-3 在解析期报，不在发射期 | 25.1 的四形态入口都调用 `map_closure_check`，在那里拦一次即可覆盖全部形态；发射期的同文案守卫保留为纵深防御 |
+| 负例放 `test/modules/` 而不是 §6.2 写的 `test/ast/errors/` | 类型宿主只允许出现在 `.m.ct` 单元（`a type host is only allowed in a .m.ct unit`），单文件负例无法自带宿主；按 25.1 的先例落到模块夹具，断言仍逐条独立 |
+| 122 用 `void *env` 的具名函数而不是闭包 | 档① 是既有能力，本相要求它零回归；这条同时是「闭包槽位没有挤掉普通三实参」的守护 |
+| L25-2 对闭包变量也生效 | D25-5 要求每半恰好一次；变量重复引用虽能编译，却与字面量语义分叉 |
+
+### 12.4 验证
+
+- `selfhost/check-ast.sh`：退出 0，**784 passed, 0 failed**
+  （776 + 5 条新门禁断言 + 3 个自动运行的 `test/ast` 正例）。
+- `selfhost/check-all.sh`：退出 0，`check-all: OK (11 hard gates green)`；
+  `check-warnings` **243 ok / 0 failed**；`check-docs: OK (824 relative links,
+  v0.24.0, 11 hard gates, 9 phase status)`。
+- 生成物零变化：基线（`git archive HEAD`）与工作区编译器对 7 组静态映射夹具的
+  `.c`/`.h` 逐字节相同（本轮改动只动错误路径）。
+- 新增正例运行输出：120 → 50、121 → 38、122 → 30；120 的调用行与手写
+  `ct_each_int((a), (4), (__ct_cl_tramp_0), (&(struct __ct_cl_env_0){ base }))` 相等。
+
+## 13. 25.5 收口 as-built（2026-11-09）
+
+### 13.1 文档
+
+| 文件 | 改动 |
+| --- | --- |
+| `docs/design/phase25.md` | 状态行 → 完成；新增本节；英文 Status → Closed |
+| `docs/language-spec.md` | §4.10（静态映射）与 §4.44（闭包）各补一段，中英文 |
+| `docs/tutorial.md` | §10.1 补「闭包进静态映射调用」一段与 `a.each` 示例，中英文 |
+| `docs/roadmap.md` | Phase 25 行 → ✅ 完成；版本记录加 `v0.25.0` |
+| `AGENTS.md` | 「当前阶段」补齐 Phase 19–25 的事实陈述与版本号 |
+
+### 13.2 版本收口（S5）
+
+- `CTC_VERSION` 五处同步到 `0.25.0`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、
+  `selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`。
+- 74 个 golden 仅版本 token 变化：`test/cases/**` 50 + `test/modules/**` 21 +
+  `examples/tour/**` 3。
+- `selfhost/**` 的 range 初值自举守卫仍以 `v0.24.0` tag 为准，不受本次 bump 影响。
+
+### 13.3 终局门禁
+
+- `selfhost/check-ast.sh`：退出 0，**784 passed, 0 failed**。
+- `selfhost/check-all.sh`：退出 0，11 道硬门禁全绿；`check-warnings` **243 ok / 0 failed**；
+  `check-docs: OK (826 relative links, v0.25.0, 11 hard gates, 9 phase status)`。
+- 25.1–25.4 的生成物基线保持：既有 7 组静态映射夹具与 4 组闭包夹具逐字节不变。
+
+---
+
 ## English
 
 ### Status
 
-**Design frozen** (2026-11-09), **not implemented**. D25-1–D25-11 are final.
+**Closed** (2026-11-09, `v0.25.0`). D25-1–D25-11 are final. 25.1, 25.2, 25.4 and the
+25.5 close-out are implemented in the working tree (§10–§13); the 25.3
+`emit_closure_arg` split folded into 25.2.
 
 ### Positioning
 
