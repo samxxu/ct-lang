@@ -94,6 +94,11 @@
   写在声明之后的 `import` 整条被丢弃（SH-57）；`.m.ct` 前导区禁 `#ct-raw`（SH-58，硬错误，
   登记为 std 模块形态的成因）；早前报告的 `&f` 静默错译（SH-59，本轮两个探针**未复现**，待补
   最小复现）。SH-56 / SH-57 由 std 教程写作期间的实测暴露，处理方式见各自文件。
+- 2026-11-07 编译器诊断需求新增 **1 条**（**SH-60** **High**）：`.m.ct` 的方法签名只作装饰——
+  字面量 / `const` 接收者调用会写接收者的方法（`toUpper` / `toLower` / `copyFrom`）编译通过、运行
+  SIGBUS（类型键丢弃顶层 `const`），实参类型与不存在的类型名都不校验。建议 A 路线（trait 方法标注
+  接收者可变性）打底，**另开排期**，不并入已随 `v0.20.0` 收口的 Phase 20；参数类型检查可先走
+  `v0.20.x` 补丁。逐项见 [SH-60](selfhost/sh60-mct-signature-types-decorative.md)。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -270,6 +275,7 @@
 | SH-57 | Medium | 写在声明之后的 `import` 整条被静默丢弃，模块不存在也不报（已修，`0fd74c0`） | [sh57-import-after-decl-silently-dropped.md](selfhost/sh57-import-after-decl-silently-dropped.md) |
 | SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（已关闭：有意限制；文案已改进 `64f27f3`） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
 | SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
+| SH-60 | **High** | `.m.ct` 方法签名的类型只作装饰：const 接收者被就地写、实参类型与未知类型都不校验（待评审） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
 | SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
