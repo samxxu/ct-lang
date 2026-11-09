@@ -3,9 +3,9 @@
 > 中文 · [English](#english)
 
 `test/` 下每个子目录的**归属层级**、**数据形状**与**驱动脚本**如下。两套负例约定**不同**：
-`errors/` 用 `<name>.ct` + `<name>.expected-err` 做逐字节比对；`ast/errors/` 是裸 `.ct`，
-由 `check-ast.sh` 断言「非零退出 + 带位置」，并**全部钉死消息文本**：63 个进 `"fixture|message"` 表，
-另 9 个（`fnptr_nested`、`map_no_instance`、`ns_host_*`、`null_vtable_slot` 等）各有独立的 `grep -q`。
+`errors/` 用 `<name>.ct` + `<name>.expected-err` 做逐字节比对；`ast/errors/` 是 141 个裸 `.ct`，
+由 `check-ast.sh` 全部逐个断言「非零退出 + 带位置诊断」，其中关键文案再用
+`"fixture|position|message"` 表或独立 `grep -Fq` 钉死（闭包逃逸 / 捕获、Phase 22–25 等）。
 
 | 目录 | 层级 | 形状 | 驱动脚本 |
 | --- | --- | --- | --- |
@@ -15,7 +15,7 @@
 | `errors/` | L0 | 负例：扁平文件对 `<name>.ct` + `<name>.expected-err` | `run.sh` 的 errors 层 |
 | `archive/` | L0（历史） | Phase 0.3 移出的越位特性 fixture，Phase 2–5 的对差基线，**不跑** | `selfhost/check-archive.sh` |
 | `modules/` | CT 线 | 特性/多单元探针：一目录一用例（输入 + `.expected.*` + 可选 `<mode>.args` 驱动提示，可含 `src/`） | `selfhost/check-ast.sh`、`selfhost/check-archive.sh` |
-| `ast/` | CT 线 | 行为探针 `01..65`（逐批增长，以目录数为准）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
+| `ast/` | CT 线 | 行为探针 `01..122`（编号有跳号，另有 `loop_*` / `own_shadow_return` 等具名用例；当前共 119 个目录，以目录数为准）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
 | `patterns/` | CT 线 | 设计模式用例：一目录一 `prog.ct` + `expected.out`（编译 → 零告警构建 → 运行 → 比对） | `selfhost/check-ast.sh` |
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
 | `pkg/` | 跨层 | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify` 用例（含比较器范围、显式索引、构建元数据） | `test/pkg/run.sh` |
@@ -32,10 +32,9 @@
 
 Below is each subdirectory under `test/` with its **layer**, its **data shape** and its **driver**.
 The two negative conventions **differ**: `errors/` pairs `<name>.ct` with `<name>.expected-err` for a
-byte-for-byte diff, while `ast/errors/` holds bare `.ct` files that `check-ast.sh` asserts on
-"non-zero exit + a source position", and **every one of them pins the message text**: 63 sit in a
-`"fixture|message"` table, the other 9 (`fnptr_nested`, `map_no_instance`, `ns_host_*`,
-`null_vtable_slot`, …) each have their own `grep -q`.
+byte-for-byte diff, while `ast/errors/` holds 141 bare `.ct` files that `check-ast.sh` asserts on,
+one by one, for "non-zero exit + a source position"; key messages are additionally pinned with a
+`"fixture|position|message"` table or stand-alone `grep -Fq` (closure escape/capture, Phases 22–25, …).
 
 | Directory | Layer | Shape | Driver |
 | --- | --- | --- | --- |
@@ -45,7 +44,7 @@ byte-for-byte diff, while `ast/errors/` holds bare `.ct` files that `check-ast.s
 | `errors/` | L0 | negatives: flat pairs `<name>.ct` + `<name>.expected-err` | `run.sh`'s errors layer |
 | `archive/` | L0 (historical) | Phase 0.3 over-reach fixtures, the Phases 2–5 diff baseline; **not run** | `selfhost/check-archive.sh` |
 | `modules/` | CT line | feature / multi-unit probes: one directory per case (input + `.expected.*` + an optional `<mode>.args` hint, may nest `src/`) | `selfhost/check-ast.sh`, `selfhost/check-archive.sh` |
-| `ast/` | CT line | behavioural probes `01..65` (growing per batch; count the directories): one directory per case (`prog.ct` + `prog.expected.out`); `ast/errors/` holds bare negatives | `selfhost/check-ast.sh` |
+| `ast/` | CT line | behavioural probes `01..122` (numbers have gaps; `loop_*` / `own_shadow_return` are named cases; 119 directories at present — count the directories): one directory per case (`prog.ct` + `prog.expected.out`); `ast/errors/` holds bare negatives | `selfhost/check-ast.sh` |
 | `patterns/` | CT line | design-pattern cases: one directory per pattern (`prog.ct` + `expected.out`; compile → warning-free build → run → compare) | `selfhost/check-ast.sh` |
 | `acceptance/` | cross-layer | the end-to-end acceptance checklist (`ast_spike.ct` / `ast_parse_spike.ct`); `PENDING` is expected and **non-blocking** | `test/acceptance/run.sh` |
 | `pkg/` | cross-layer | package-manager `ct get` / `ct update` / `ct install` / `ct verify` cases (comparator ranges, the explicit index, build metadata) | `test/pkg/run.sh` |
