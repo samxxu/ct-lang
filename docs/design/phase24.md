@@ -43,7 +43,7 @@ int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) 
 | 普通 `a..b` 区间表达式（`r = 2..8`） | 无类型推断，`r` 的目标类型无处安放；Phase 23 §1.1 已拒绝，本相不改 |
 | 步长 / 闭区间 / 反向 | 需要就写原生 `for`；range 初值只覆盖「步长 1、左闭右开」 |
 | `each (nums) { … item … }` 语句形态 | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已排入 Phase 25**，见 Phase 25（未立项） |
-| CT 侧常量折叠 | CT 从不折叠常量（`const_ok` 是结构判定）；`i` 的取值在**发射期**替换，表达式本身交给 C 折叠 |
+| CT 侧常量折叠 | CT 从不折叠常量（`const_ok` 是结构判定）；`$` 的取值在**发射期**替换，表达式本身交给 C 折叠 |
 | 元素为 struct / union / 接口值 / 数组 | 初始化列表的元素类型限于标量；聚合元素需要逐元素 vptr / 装箱，收益与风险不成比例 |
 | 宏 / `enum` 边界 | 符号表只记 `is_const` 标志、不记数值（§3.2）；要支持就得先引入常量求值器 |
 | `.m.ct` / shim 承载 | range 初值是语法，不是函数调用；映射层不参与 |
@@ -507,8 +507,8 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 | S1 | `692e5d9` | 解析：`$` primary、`dollar_ok`、`range_init_ahead`（深度 0 扫 `,` / `;`）、边界拼写与溢出、L24-1–L24-7/9–11、`N_INIT_RANGE`、16 个负例 |
 | S2 | `6578a5d` | 发射：`emit_range_init`、`$` → `((int)k)`、三处声明站点、8 个正例（109–115、117） |
 | S3 | `a736048` | 门禁：`check-ast.sh` Phase 24 块（形态 / 13 元素 / 逐字节 `cmp` / 运行输出 `cmp` / 文件作用域 / 16 条负例）、编辑器 grammar 的 `$` 规则与断言 |
-| S4 | 本文 | language-spec §4.47、tutorial §10.4、roadmap、as-built 记录、`selfhost/**` 自举守卫 |
-| S5 | 未做 | `v0.24.0` 版本收口（`CTC_VERSION` 五处 + 71 个 golden） |
+| S4 | `6d23fb4` | language-spec §4.47、tutorial §10.4、roadmap、as-built 记录、`selfhost/**` 自举守卫 |
+| S5 | `71c2a0b` | 收口：`CTC_VERSION` 五处同步到 `0.24.0`、74 个 golden 仅版本 token 变化、tag `v0.24.0`；整轮 `check-all.sh` 11 道硬门禁 `EXIT 0` |
 
 ---
 
