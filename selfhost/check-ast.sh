@@ -411,6 +411,24 @@ if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/
 fi
 ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 
+# Phase 26 (SH-62, reopened): the systemic defence. A type parameter must be
+# gone from the emitted C -- an instance substitutes it -- so a residual `T` is
+# by definition an undeclared identifier that only `cc` would report. SH-62
+# slipped past twice exactly that way (exit 0, `sizeof(T)` in the artefact), so
+# the gate now scans the product itself. The only legal survivor is a tag
+# (`struct T` / `union T` / `enum T`), which names a user type. The fixtures'
+# own declarations feed the scan, so a new generic fixture is covered without
+# another line here.
+tparam_residue() {
+    for tp in $(sed -n 's/^[A-Za-z_][A-Za-z0-9_ \t*]*<\([A-Za-z_][A-Za-z0-9_]*\)>[[:space:]]*(.*/\1/p' "$1" | sort -u); do
+        total=$(grep -oE "\b$tp\b" "$2" | wc -l | tr -d ' ')
+        tags=$(grep -oE "\b(struct|union|enum)[[:space:]]+$tp\b" "$2" | wc -l | tr -d ' ')
+        if [ "$total" -gt "$tags" ]; then
+            printf '%s(%s) ' "$tp" "$((total - tags))"
+        fi
+    done
+}
+
 echo
 echo "== behavioural cases (compile -> cc -> run -> compare) =="
 for d in test/ast/*/; do
@@ -457,6 +475,11 @@ for d in test/ast/*/; do
 
     if ! "$work/ct-ast" "$src" -o "$out" >"$work/$name.out" 2>"$work/$name.err"; then
         bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
+        continue
+    fi
+    tp_bad="$(tparam_residue "$src" "$out")"
+    if [ -n "$tp_bad" ]; then
+        bad "$name" "the generated C still names a declared type parameter: $tp_bad"
         continue
     fi
     if [ -f "$work/$name.h" ]; then
@@ -1222,6 +1245,7 @@ if "$work/ct-ast" test/ast/126_generic_struct_tag/prog.ct -o "$work/p26g126/prog
    && "$work/p26g126/prog" > "$work/p26g126.run" \
    && cmp -s "$work/p26g126.run" test/ast/126_generic_struct_tag/prog.expected.out \
    && grep -qF 'static int getv__ct1(struct T *);' "$work/p26g126/prog.c" \
+   && grep -qF '_Generic ( x , struct T : 1' "$work/p26g126/prog.c" \
    && ! grep -qF 'struct int' "$work/p26g126/prog.c"; then
     ok "p26_generic_struct_tag (tag T survives, bare T is the parameter)"
 else
@@ -1242,6 +1266,27 @@ if "$work/ct-ast" test/ast/127_generic_name_retry/prog.ct -o "$work/p26g127/prog
     ok "p26_generic_name_retry (R6 collision falls back to id__ct1_1)"
 else
     bad "p26_generic_name_retry" "$(cat "$work/p26g127.err" "$work/p26g127.cc" 2>/dev/null | head -5)"
+fi
+
+# SH-62 (reopened): a type operand needs no parentheses. v0.26.1 still parsed
+# `sizeof T` as `sizeof` of an identifier and emitted `sizeof(T)`; `_Alignof T`
+# failed outright. Each spelling is pinned in the generated C.
+rm -rf "$work/p26g128"
+mkdir -p "$work/p26g128"
+if "$work/ct-ast" test/ast/128_generic_type_operands/prog.ct -o "$work/p26g128/prog.c" \
+        >"$work/p26g128.out" 2>"$work/p26g128.err" \
+   && cc -Wall -Wextra -std=c99 "$work/p26g128/prog.c" -o "$work/p26g128/prog" \
+        >"$work/p26g128.cc" 2>&1 \
+   && "$work/p26g128/prog" > "$work/p26g128.run" \
+   && cmp -s "$work/p26g128.run" test/ast/128_generic_type_operands/prog.expected.out \
+   && grep -qF 'sizeof(int)' "$work/p26g128/prog.c" \
+   && grep -qF '_Alignof(int)' "$work/p26g128/prog.c" \
+   && grep -qF 'alignof(int)' "$work/p26g128/prog.c" \
+   && grep -qF 'sizeof(int)) * 2' "$work/p26g128/prog.c" \
+   && grep -qF 'sizeof(int) + sizeof(int)' "$work/p26g128/prog.c"; then
+    ok "p26_generic_type_operands (bare sizeof/_Alignof, alignof, sizeof T * 2)"
+else
+    bad "p26_generic_type_operands" "$(cat "$work/p26g128.err" "$work/p26g128.cc" 2>/dev/null | head -5)"
 fi
 
 # L26-1..L26-5: each diagnostic is pinned to its own line and column, so a

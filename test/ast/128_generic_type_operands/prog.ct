@@ -1,0 +1,43 @@
+/* 128 (Phase 26 fix, SH-62 reopened): a type operand does not need
+   parentheses. Every form must substitute the parameter instead of leaving
+   `T` in the generated C. */
+#include <stdio.h>
+#include <stdalign.h>
+
+int sizeBare<T>(T x)
+{
+    (void)x;
+    return (int)sizeof T;
+}
+
+int alignBare<T>(T x)
+{
+    (void)x;
+    return (int)_Alignof T;
+}
+
+int alignMacro<T>(T x)
+{
+    (void)x;
+    return (int)alignof(T);
+}
+
+int sizeTimes<T>(T x)
+{
+    (void)x;
+    return (int)sizeof T * 2;
+}
+
+int sizeSum<T>(T x)
+{
+    (void)x;
+    return (int)(sizeof(T) + sizeof T);
+}
+
+int main(void)
+{
+    printf("%d %d %d %d %d\n",
+           sizeBare<int>(0), alignBare<int>(0), alignMacro<int>(0),
+           sizeTimes<int>(0), sizeSum<int>(0));
+    return 0;
+}

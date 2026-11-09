@@ -1,5 +1,6 @@
 /* 126 (Phase 26 fix, SH-63): a struct tag named `T` coexists with a type
-   parameter named `T`. `struct T` must stay a tag; bare `T` is the parameter. */
+   parameter named `T`. `struct T` must stay a tag; bare `T` is the parameter.
+   The `_Generic` arm keeps the tag form legal (SH-62 P2). */
 #include <stdio.h>
 
 struct T {
@@ -16,11 +17,16 @@ T getv<T>(struct T *p)
     return out;
 }
 
+int selTag<T>(int x)
+{
+    return _Generic(x, struct T: 1, default: 0);
+}
+
 int main(void)
 {
     struct T t;
 
     t.v = 7;
-    printf("%d\n", getv<int>(&t));
+    printf("%d %d\n", getv<int>(&t), selTag<int>(0));
     return 0;
 }
