@@ -67,6 +67,10 @@ static int ct_cmd_token(char *cmd, int cap, int *n, const char *tok);
 static int ct_cmd_raw(char *cmd, int cap, int *n, const char *frag);
 static int ct_pkg_key(const char *root, const char *key, char *out, int cap);
 static int ct_rel_cands(const char *root, const char *rel, char *first, char *fallback);
+/* `realpath` is POSIX/XSI, and glibc hides its declaration under `-std=c99`
+   (strict ANSI) unless a feature-test macro asks for it. Declare the symbol
+   here so the build stays flag-free; this is the POSIX.1 prototype. */
+extern char *realpath(const char *path, char *resolved);
 static void ct_norm_path(const char *in, char *out, int cap);
 static int ct_root_find(const char *root, const char *rel, char *out, int cap,
                         int *is_hdr, int *is_map, char *err, int errcap);
