@@ -109,6 +109,14 @@
   `docs/design/` 的「只放当前阶段」约定与 phase17–25 未归档并存，1 条方法论 G9 的 spec pin 缺失。
   两条均属结构性/治理政策，本轮只登记、不搬文件、不新增门禁，状态 `open`；逐项见
   [DOC-66](docs/doc66-design-archive-policy.md)、[CI-8](ci/ci-8-g9-spec-pin-missing.md)。
+- 2026-11-09 Phase 26 发布评审（`v0.26.0` / `ac1c7cd`）新增 **4 条**（**SH-62** / **TEST-17** 为 P1，
+  **SH-63** / **DOC-67** 为 P2）：`T` 全大写导致 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)`
+  四处替换失效（`sizeof(T)` 静默产出非法 C），`struct T` 被误替换为 `struct int`，夹具只覆盖返回/形参替换，
+  以及文档对 S4 与 L26-3/L26-4 文案的失真。逐项见 [SH-62](selfhost/sh62-generic-subst-uppercase-tparam.md)、
+  [SH-63](selfhost/sh63-generic-subst-struct-t-collision.md)、[TEST-17](testing/test17-phase26-generic-coverage-gap.md)、
+  [DOC-67](docs/doc67-phase26-doc-impl-mismatch.md)。
+  四条**已于 2026-11-09 修复**（`v0.26.1`：SH-62 / SH-63 源码 `87b03ec`、TEST-17 `f5f1092`、DOC-67 docs 提交），
+  状态置 `fixed`，`verified` 待评审回写。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -190,6 +198,7 @@
 | DOC-64 | Medium | C 头文件的 enum 常量在表达式里不可见，但文档没有写明（已修，`a1c523a`） | [doc64-header-enum-constants.md](docs/doc64-header-enum-constants.md) |
 | DOC-65 | Medium | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 | [doc65-compile-import-boundary-undocumented.md](docs/doc65-compile-import-boundary-undocumented.md) |
 | DOC-66 | Medium | `docs/design/` 的「只放当前阶段」约定与 phase17–25 未归档并存 | [doc66-design-archive-policy.md](docs/doc66-design-archive-policy.md) |
+| DOC-67 | Medium | Phase 26 文档与实现不符：S4 四处替换承诺、L26-3/L26-4 文案、E1 断言作用域、AGENTS 版本登记（已修，docs 提交，`v0.26.1`） | [doc67-phase26-doc-impl-mismatch.md](docs/doc67-phase26-doc-impl-mismatch.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -211,6 +220,7 @@
 | TEST-14 | Low | `check-semantics.sh` 的失败信息取 `$?` 于 `&&` 链之后（拿到的是 `[ -s ]` 的状态）；compile 不变性只探了歧义一类 | [test14-check-gate-exit-status-capture.md](testing/test14-check-gate-exit-status-capture.md) |
 | TEST-15 | Low | docs 门禁只覆盖中文 phase 表，且不扫 `ci.yml` | [test15-docs-gate-phase-english.md](testing/test15-docs-gate-phase-english.md) |
 | TEST-16 | Medium | `ct check` 的 `import` 拒绝无回归断言 | [test16-check-import-no-guard.md](testing/test16-check-import-no-guard.md) |
+| TEST-17 | High | Phase 26 夹具只覆盖返回/形参替换；`(T)` / `sizeof(T)` / `offsetof` / 去重 / 容量 / 命名回退无断言（已修，`f5f1092`，`v0.26.1`） | [test17-phase26-generic-coverage-gap.md](testing/test17-phase26-generic-coverage-gap.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -289,6 +299,8 @@
 | SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
 | SH-60 | **High** | 静态映射调用点缺少实参类型检查（**open**，并入 Phase 25 / 25.1；顶层 const 接收者待 D-60-1，声明点未知类型 deferred 待 D-60-2） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
 | SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
+| SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
+| SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 

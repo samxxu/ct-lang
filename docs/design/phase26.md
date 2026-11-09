@@ -14,7 +14,7 @@
 
 ### 1.1 编号
 
-**Phase 26**，发布版本 **`v0.26.0`**（`CTC_VERSION` = `0.26.0`）。
+**Phase 26**，发布版本 **`v0.26.0`**（`CTC_VERSION` = `0.26.0`）；独立评审后的修复补丁为 **`v0.26.1`**（SH-62 / SH-63 / TEST-17 / DOC-67，见 §8）。
 
 ### 1.2 一句话目标
 
@@ -81,12 +81,12 @@
 
 | # | 判据 | 命令 / 锚点 |
 | --- | --- | --- |
-| E1 | 正例 `123_generic_identity` 构建、运行、输出逐字节匹配；生成 C 中每个类型实参一份函数，且签名/函数体内不残留类型参数 `T` | `bash selfhost/check-ast.sh` 的 Phase 26 块：`cmp -s` + `grep -c '__ct[0-9]'` + `! grep -E '\bT\b'` 作用于生成 C 的函数段 |
+| E1 | 正例 `123_generic_identity` 构建、运行、输出逐字节匹配；整份生成 C 中恰好 2 个实例原型，`id__ct1` 定义恰好 1 份（两次 `id<int>` 调用共用），且不残留类型参数 `T` | `bash selfhost/check-ast.sh` 的 Phase 26 块：`cmp -s` + `grep -cE '^static .*__ct[0-9]+\(.*\);$' = 2` + `grep -cE '^static int id__ct1\(int x\) \{' = 1` + `! grep -E '\bT\b'` 作用于整份生成 C |
 | E2 | 正例 `124_generic_struct` 以 `struct Point` 为类型实参，字段访问与返回正确 | 同上，运行输出 `x=3 y=4` |
 | E3 | 五条负例各自只产生一条 L26 错误，位置与文案精确匹配；v0.25.0 编译器对同一夹具给出不同结果（证明断言非空转） | `bash selfhost/check-ast.sh` 的 `"fixture|line:col|message"` 表；另用 `~/.local/bin/ct`（v0.25.0）复核旧行为并记录在 §6 |
 | E4 | 既有 784 条断言零回归；非泛型 golden 逐字节不变 | `bash selfhost/check-ast.sh` 汇总 `>= 792 passed, 0 failed`；`bash selfhost/check-goldens.sh` / `check-all` 的 `check-goldens: OK` |
 | E5 | 11 道硬门禁全绿 | `bash selfhost/check-all.sh` 末行 `check-all: OK (11 hard gates green)` |
-| E6 | 五处 `CTC_VERSION` 均为 `0.26.0`；安装后 `ct -v` 输出 `ct v0.26.0` | `grep -n 'CTC_VERSION'` 五处；`bash install.sh` 后 `ct -v` |
+| E6 | 五处 `CTC_VERSION` 均为 `0.26.1`；安装后 `ct -v` 输出 `ct v0.26.1` | `grep -n 'CTC_VERSION'` 五处；`bash install.sh` 后 `ct -v` |
 | E7 | 文档门禁绿，Phase 26 索引/状态与 roadmap 一致 | `python3 test/docs/check-docs.py` 退出 0；`docs/README.md` design 索引含 phase26 |
 | E8 | `ct check` 对五条负例给出同一 L26 文案（解析期诊断共用） | `ct check test/ast/errors/generic_*.ct` 各自非零退出并含对应文案 |
 
@@ -154,11 +154,13 @@ struct Point q = id<struct Point>(p0);
 | `N_PARAM` | `text` | 形参类型 |
 | `N_DECL` | `text` | 局部声明类型 |
 | `N_CAST` | `text` | `(T)x` |
-| `N_SIZEOF` | `text` | `sizeof(T)` |
+| `N_SIZEOF` | `text` | `sizeof(T)` / `_Alignof(T)`（同一节点，`aux` 区分） |
 | `N_OFFSETOF` | `text` | `offsetof(T, f)` |
+| `N_VAARG` | `text` | `va_arg(ap, T)` |
 
 不替换 `N_VAR.text2`、`N_ID.text`、`N_CALL.text` 等标识符位；`T` 作值使用会自然解析失败。
 不替换 `N_RAW` 内的原始文本；泛型体内出现原始初始化器时按 L26-5 拒绝。
+紧邻 `struct` / `union` / `enum` 的同名 token 是**标签**而不是类型参数，`ct_generic_subst` 以前瞻跳过（D26-13）。
 
 ### 2.4 发射（D26-7，B26-1 第二轮修订）
 
@@ -166,8 +168,8 @@ struct Point q = id<struct Point>(p0);
 - 定义循环：模板跳过；每个实例**复用模板的 `N_FUNC` 节点**，发射期间在发射器上打开「类型替换上下文」
   （`gtparam` / `gtarg` / `gtname`），类型打印点在上下文非空时替换，发射结束即关闭。**不改写任何 AST
   字段**，因此不存在「恢复不精确污染后续函数」的路径。
-- 替换点：`emit_type_name_dims`（形参 / 局部声明）、`N_FUNC` 返回类型与函数名、`N_CAST`、`N_SIZEOF`、
-  `N_OFFSETOF`。
+- 替换点：`emit_type_name_dims`（形参 / 局部声明）、`N_FUNC` 返回类型与函数名、`N_CAST`、`N_SIZEOF`
+  （含 `_Alignof`）、`N_OFFSETOF`、`N_VAARG`。
 - 头文件导出：本相不支持 `pub` 泛型，因此头文件不出现实例。
 - 非泛型代码的发射路径与 v0.25.0 完全一致（上下文为空时所有替换点原样输出），golden 零变化。
 
@@ -177,9 +179,17 @@ struct Point q = id<struct Point>(p0);
 | --- | --- | --- |
 | L26-1 | 调用已知泛型函数但缺 `<type>` | `generic function '<name>' needs a type argument` |
 | L26-2 | `pub` 泛型函数 | `generic functions cannot be pub` |
-| L26-3 | 类型参数多于 1 个 / 空列表 | `only one type parameter is supported` |
-| L26-4 | 类型实参为 `void` / 数组 / 函数指针 / 含 `T` | `'<type>' cannot be a generic type argument` |
+| L26-3 | 类型参数多于 1 个（`<T, U>`） | `only one type parameter is supported` |
+| L26-4 | 类型实参为 `void`，或在非泛型上下文把 `T` 当类型实参 | `'<type>' cannot be a generic type argument` |
 | L26-5 | 泛型体内递归或嵌套泛型调用 | `recursive generic calls are not supported` |
+
+补充（DOC-67 对齐实测）：
+
+- 空列表 `<>` 不由 L26-3 接管，类型参数解析先报 `expected a type parameter name`（§6.2 第 4 条）。
+- 函数指针类型实参（`id<int (*)(int)>`）由类型解析先拒绝，文案是 `expected a name in the function-pointer declarator`；
+  数组类型实参（`id<int[3]>`）报 `expected '>' after the generic type argument`。两者都不伪装成 L26-4。
+- `T` 作类型实参只在**非泛型上下文**得到 L26-4；模板体内再写 `id<T>(...)` 先命中 L26-5（D26-9）。
+- `_Generic(...)` 选择体原样透传，模板体内出现类型参数报 `type parameter cannot be used inside _Generic`（硬错，不发射）。
 
 所有诊断走 `ct_sem_error(line, col, msg, path)`，带 `file:line:col`；`ct check` 与编译路径一致。
 
@@ -215,6 +225,8 @@ struct Point q = id<struct Point>(p0);
 | D26-9 | 泛型体内禁止递归/嵌套泛型调用 | 避免实例化循环与缓存键递归 | 本相 |
 | D26-10 | L0/L1/L2 只改 `CTC_VERSION`，不改逻辑 | 用户要求冻结；版本串是发布必需 | 本相发布提交 |
 | D26-11 | 用户已授权代决 | 用户明确「不参与、自己裁决」，本表无待拍板项 | 本相 |
+| D26-12 | SH-62 的四处类型位置走**真实现替换**（不硬错误） | B26-2 两轮 `upheld`：复用既有替换点，兑现 S4；硬错误会让 `(T)` 与 `sizeof` 类用法失去意义 | 模板体内的 `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` / `(T)` |
+| D26-13 | `ct_generic_subst` 跳过紧邻 `struct` / `union` / `enum` 的同名 token | SH-63：`struct T` 是标签名，不是类型参数；不加前瞻会把 `struct T` 改成 `struct int` | 所有实例的签名与类型打印 |
 
 ---
 
@@ -242,6 +254,31 @@ struct Point q = id<struct Point>(p0);
 
 第二轮只有一次举证，反对席未能提出「上下文方案会改变非泛型发射路径」的反例；golden 零变化即为该反驳的否证。
 
+### B26-2 · SH-62 四处类型位置：真替换 vs 硬错误
+
+**案由**：SH-62 要求消除 `sizeof(T)`、`_Alignof(T)`、`offsetof(T, …)`、`(T)` 的静默坏产物。
+方案 A（真实现替换）与方案 B（四处改硬错误）都能过门禁，成本差 < 2 倍，按方法论 §7 / B-4 立案。
+
+#### 第一轮
+
+| 席 | 主张 |
+| --- | --- |
+| 主张席（SCRIBE，方案 A） | 在模板体内把这四处识别为**类型位**：`next_is_type_name` 认 `T`，`parse_type` 产出 `T`，`offsetof` 允许未解析的 `T`；发射期沿用既有替换点，产出 `sizeof(int)` / `_Alignof(int)` / `offsetof(struct Pair, y)` / `(int)` |
+| 反对席（ARCH，方案 B） | 四处一律编译期硬错误（新增 L26-6「type parameter cannot be used in this position」），彻底堵死静默坏产物，且不需要在发射器里新增任何路径 |
+| 证据席（VERIFY） | E1 复现（v0.26.0 基线）：`sizeof(T)` 退出 0 且生成物含 `sizeof(T)`，`cc` 报 `'T' undeclared`；`_Alignof(T)` 报 `_Alignof needs a type in parentheses`；`offsetof(T, y)` 报 `offsetof needs a struct type`；`(T)v` 报 `unexpected token`。E2 代码锚点：`Emitter.h.ct:3016-3039` 的 `N_SIZEOF`/`N_OFFSETOF` 与 `N_CAST` 已经在做 `emit_gsub_type`，缺的只是**解析期把 `T` 当类型**；`Expr.h.ct:182-185` 已有 `in_generic` 但没有类型参数拼写；`Expr.h.ct:1684-1694` 的 ALL_CAPS 兜底把 `T` 变成 `N_RAW`。E3 可证伪预测（方案 A）：四处分别产出 `sizeof(int)`、`_Alignof(int)`、`offsetof(struct Pair, y)`、`(int)`，函数段 `\bT\b` 计数为 0。E4 成本：A 改 2 个文件约 40 行（含 SH-63 的 `struct T` 前瞻）+ 2 个夹具；B 改 1 个文件约 25 行守卫 + 4 处文档删改，**比值 < 2**。E5（最强反方自检）：A 无法在解析期校验 `offsetof(T, field)` 的字段存在性；但 `ct` 对普通成员的 `p->field` 本来也不校验字段，字段错误留给 `cc`，与「类型名不得未声明」这一退出判据不冲突。 |
+| 裁判席（EDITOR） | **upheld（方案 A）**。理由：A 兑现 S4 的承诺且复用既有 6 个替换点，新增面仅在解析期识别 `T`；B 会把 `(T)` 这一泛型体里的规范窄化写法直接判死，并让 S4 的「`sizeof` 类用法」成为空话。生效范围：**仅模板体内**的这四处；非泛型代码路径零变化；若日后这四处再次出现「退出 0 但生成物含未声明类型名」，立即退回 B 并重开本 battle。 |
+
+#### 第二轮（新增证据）
+
+| 席 | 主张 |
+| --- | --- |
+| 主张席 | 补充预测：`(T)` 必须能用于函数实参（`absorb((T)v)`），否则 TEST-17 的「调用实参」类型位置无从落夹具 |
+| 反对席 | 仍主张 B：硬错误至少能保证「永不静默」，A 依赖夹具覆盖，覆盖不到就回归 |
+| 证据席 | E1：在 v0.26.0 基线上，`printf("%d", (int)sizeof(T))` 的生成物第 12 行为 `(int)(sizeof(T))`，`cc` 直接报 `'T' undeclared`——静默通道只有 `sizeof` 一条，其余三条已硬失败但文案与类型位置无关。E2：方案 A 的四处都落在既有 `emit_gsub_type` 调用上，不新增打印点；测试用 `test/ast/125_generic_type_positions` 一次覆盖四形态 + 局部声明 + 调用实参，`grep -E '\bT\b'` 作为总闸。E3：若 A 任一形态产出错拼写，125 的 `cmp` 或 `grep` 必红，且基线编译器在同一夹具上必红（红证先做）。E4：A 的总改动经实测为 3 个文件 40 行（`Expr.h.ct` 16、`Parser.h.ct` 2、`Symbols.h.ct` 22），B 为 25 行守卫 + 文档删改，仍在 2 倍内但 A 多出的 15 行买回了 S4 的完整性。E5（最强反方）：A 可能让 `T` 在**非泛型**位置被误认——由 `in_generic && strcmp(tok, tparam)` 双条件阻断，且 123/124 与全量 golden 作为否证。 |
+| 裁判席（EDITOR） | **upheld（方案 A），维持第一轮判决**。第二轮未出现推翻 A 的新证据；反对席的「覆盖不到就回归」由 125/126 与红证流程吸收。判决落 D26-12，范围不变。 |
+
+两轮共 10 条举证，反对席未能证明 B 在「零静默」上严格优于 A + 夹具（`_Alignof`/`offsetof`/cast 的静默通道本就不存在）。
+
 ---
 
 ## 6. as-built 记录
@@ -261,21 +298,42 @@ struct Point q = id<struct Point>(p0);
 1. D26-7 由「替换—发射—恢复」改为「发射期类型替换上下文」（B26-1 第二轮 `upheld`）：不写 AST，R1/R2 直接规避。
 2. D2 的 `add_generic_inst` 未单独成方法，逻辑内联在 `Expr::generic_instance`；`GenericInst` 表与路径不变。
 3. 泛型一律强制 `static`：即使用户未写 `static`，模板行 `is_static=1`、`N_FUNC.aux=1`，实例因此不导出（D26-4）。
-4. L26-3 的「空列表」与「多参数」共用一条文案；空列表由 `parse_params` 的既有空参数诊断先行处理。
+4. L26-3 只覆盖「多参数」；空列表 `<>` 由类型参数解析报 `expected a type parameter name`，不走 L26-3。
 5. 「数组作类型实参」不在解析期显式识别（`id<int[3]>` 会在 `[` 处报 `expected '>' after the generic type argument`）；L26-4 夹具覆盖 `void`。
 6. L26-5 只拦「解析模板体时遇到的泛型调用」；模板自递归（指向尚未 `add_func` 的自己）会落到普通未声明调用诊断。夹具用「嵌套调用」形态。
 7. `N_RAW` 原始初始化器内的 `T` 不替换（§2.3 已声明）；本相夹具不覆盖。
+8. **v0.26.1（SH-62）**：v0.26.0 的 §2.3/§2.4 把 `N_CAST` / `N_SIZEOF` / `N_OFFSETOF` 列为替换点，但解析器从不给 `T` 生成这三类节点——`sizeof(T)` 落成 `N_RAW`（退出 0 的坏产物），`(T)` / `_Alignof(T)` / `offsetof(T, …)` 在解析期硬失败。修复轮按 B26-2 判决采用**方案 A**（真实现替换）：模板体内把 `T` 识别为类型位，使 §2.3 的替换点从死代码变为活路径（D26-12）。同时补 `va_arg(ap, T)`——它是同一根因下的第五条类型位，v0.26.0 从未在文档里承诺，修复轮一并纳入以避免再留一条静默通道。`_Generic(...)` 的选择体是原样透传、无法在发射期安全替换，模板体内出现类型参数时改为解析期硬错 `type parameter cannot be used inside _Generic`——它仍属「本相不支持」，但不再是退出 0 的坏产物。
+9. **v0.26.1（SH-63）**：`ct_generic_subst` 以前只按词边界匹配，`struct T` 里的标签 `T` 被替换成 `struct int`。现对紧邻 `struct` / `union` / `enum` 的同名 token 前瞻跳过（D26-13）；裸返回类型 `T` 被同一标签解析吞掉时，`Parser` 在拿到 `<T>` 后按类型参数改写（`last_bare_tag`）。
+10. **v0.26.1（TEST-17）**：123 的模板体加入第二次 `id<int>` 调用以证明去重；新增 `125_generic_type_positions`（局部声明 / cast / `sizeof` / `_Alignof` / `offsetof` / 调用实参 / `va_arg`）、`126_generic_struct_tag`（`struct T` 标签）、`127_generic_name_retry`（R6 冲突回退）与 `generic_too_many`（第 65 个实例硬错）。新断言先在 v0.26.0 基线上变红，再在修复后的编译器上转绿。
+11. **v0.26.1（DOC-67）**：§2.5 的 L26-3 / L26-4 与函数指针 / 数组 / `T` 作实参的文案，按实测改写；E1 明确作用域是**整份生成 C**，实例计数改为精确 `-eq`；AGENTS 的版本 bump 清单改为指向 roadmap 版本记录。
 
-### 6.3 门禁实跑（2026-11-09）
+### 6.3 门禁实跑（2026-11-09，v0.26.1 修复轮）
 
-- `bash selfhost/check-ast.sh` → `== summary: 803 passed, 0 failed ==`，`EXIT=0`（基线 784 + 19 新增：2 正例 + 2 生成 C 断言 + 5 条 L26 定位 + 5 条 `ct check` 复用 + 5 个负例扫描）。
+- `bash selfhost/check-ast.sh` → `== summary: 815 passed, 0 failed ==`，`EXIT=0`。v0.26.0 收口时为 803；本轮 +12：`p26_generic_type_positions`、`p26_generic_struct_tag`、`p26_generic_name_retry`、`p26_diag_generic_too_many`、`p26_check_generic_too_many`、`p26_diag_generic_generic_selector`、`p26_check_generic_generic_selector` 共 7 条，123 的去重断言收紧 4 条（精确实例原型计数、`id__ct1` 定义恰 1 份、`b = id__ct1(7)` 等），负例总扫描对新增 `.ct` 计 1 条。
 - `bash selfhost/check-all.sh` → `check-all: OK (11 hard gates green)`，`EXIT=0`。同一日志内的分项原始行：
   `== summary: 118 passed, 0 failed ==`（bootstrap）、`check-goldens: OK (no regression, and the self-hosted rebuild agrees)`、
   `check-archive: OK (no regression)`、`== summary: 82 passed, 0 failed ==`（包管理）、
-  `== summary: 803 passed, 0 failed ==`（check-ast）、`check-warnings: 245 ok, 0 failed`、
-  `check-semantics: OK (23 assertions)`、`check-docs: OK (850 relative links in 172 files, v0.26.0, 11 hard gates, 10 phase status, 3 适用版本 header(s))`、
+  `== summary: 815 passed, 0 failed ==`（check-ast）、`check-warnings: 248 ok, 0 failed`、
+  `check-semantics: OK (23 assertions)`、`check-docs: OK (863 relative links in 173 files, v0.26.1, 11 hard gates, 10 phase status, 3 适用版本 header(s))`、
   `== summary: 20 pass, 0 new, 0 pending, 0 regression ==`（acceptance probes）。
-- E6 安装复核：`CT_SOURCE_DIR=. ./install.sh --prefix /tmp/p26install` → `EXIT=0`；`/tmp/p26install/ct -v` → `ct v0.26.0`，`ctc -v` → `ctc v0.26.0`；五处 `CTC_VERSION` 均为 `0.26.0`。
+
+### 6.3.1 红证（v0.26.0 基线编译器，修复前）
+
+用 tag `v0.26.0` 的源码树编出的 `ct-ast`（`ct-ast v0.26.0`）跑同一批夹具：
+
+| 命令 | v0.26.0 结果 | v0.26.1 结果 |
+| --- | --- | --- |
+| `ct-ast test/ast/125_generic_type_positions/prog.ct -o /tmp/red125.c` | `prog.ct:21:12: error: unexpected token`，退出 1 | 退出 0，生成 C 含 `sizeof(int)` / `_Alignof(int)` / `offsetof(struct Pair, y)` / `va_arg(ap, int)` / `(int)(a)`，运行输出 `4 4 4 4 5` |
+| `ct-ast test/ast/126_generic_struct_tag/prog.ct -o /tmp/red126.c` | **退出 0**，发射 `static struct int getv__ct1(struct int *);`，`cc` 拒绝 | 退出 0，发射 `static int getv__ct1(struct T *);`，运行输出 `7` |
+| `sizeof(T)` 探针（`return sizeof(T);`） | **退出 0**，生成物残留 `sizeof(T)`，`cc` 报 `'T' undeclared` | 生成 `return sizeof(int);`，运行输出 `4` |
+| `_Generic(x, T: 1, default: 0)` 探针 | **退出 0**，生成物残留 `_Generic ( x , T : 1 , default : 0 )`，`cc` 报 `unknown type name 'T'` | 解析期硬错 `type parameter cannot be used inside _Generic`，退出 1 |
+| `ct-ast test/ast/123_generic_identity/prog.ct` | 退出 0，`49 hi`，实例原型 2 条 | 同左（去重断言在两侧都绿，新增价值是把它钉死） |
+
+即：新增断言在缺陷存在时**确实变红**（125 解析失败、126 静默坏产物），修复后转绿。
+
+### 6.3.2 安装复核（v0.26.1）
+
+`grep -n 'CTC_VERSION'` 五处均为 `0.26.1`；`ct-tour` 的分项日志可见 `ct -v` 输出 `ct v0.26.1`。
 
 ### 6.4 E3 旧编译器对照（`~/.local/bin/ct`，v0.25.0）
 
@@ -301,20 +359,20 @@ struct Point q = id<struct Point>(p0);
 
 | 交付物 | 判据 | 证据 / 锚点 |
 | --- | --- | --- |
-| D1 `docs/design/phase26.md` | E1–E8 的规范来源；状态与 roadmap 一致 | `python3 test/docs/check-docs.py` → `v0.26.0, 10 phase status`；本文件 §1.5 冻结 |
+| D1 `docs/design/phase26.md` | E1–E8 的规范来源；状态与 roadmap 一致 | `python3 test/docs/check-docs.py` → `v0.26.1, 10 phase status`；本文件 §1.5 冻结 |
 | D2 `Symbols.h.ct` | E1 / E3 | `GenericInst`、`ginsts/nginsts`、`Fn.ntparams/tparam/body`、`ct_generic_subst` |
 | D3 `Parser.h.ct` | E1 / E3 | `T name<T>(...)` 解析；L26-2/L26-3；模板标记 `N_FUNC.text3` |
 | D4 `Expr.h.ct` | E1 / E3 / E8 | `name<type>(...)`；`generic_instance` 缓存与命名；L26-1/L26-4/L26-5 |
 | D5 `Emitter.h.ct` | E1 / E2 / E4 | `gtparam/gtarg/gtname` 上下文；`emit_gsub_type`；`emit_generic_defs`；模板跳过 |
-| D6 `test/ast/123_generic_identity/` | E1 | 生成 C 含 `id__ct1`/`id__ct2`、无 `\bT\b`、运行 `42 hi` |
+| D6 `test/ast/123_generic_identity/` | E1 | 生成 C 含 `id__ct1`/`id__ct2`、`id__ct1` 定义恰好 1 份、无 `\bT\b`、运行 `49 hi` |
 | D7 `test/ast/124_generic_struct/` | E2 | 实例签名 `static struct Point pass__ct1(struct Point);`、运行 `x=3 y=4` |
-| D8–D12 `test/ast/errors/generic_*.ct` | E3 / E8 | 五条 L26 各自 `file:line:col` + 文案；`ct check` 同文案 |
-| D13 `selfhost/check-ast.sh` | E1–E4 / E8 | Phase 26 块：`cmp -s`、`grep -c '__ct[0-9]'`、`! grep '\bT\b'`、5 条定位、5 条 check |
+| D8–D12 `test/ast/errors/generic_*.ct` | E3 / E8 | 五条 L26 各自 `file:line:col` + 文案；`ct check` 同文案；v0.26.1 增第 6 条 `generic_generic_selector`（`_Generic` 内的类型参数硬错） |
+| D13 `selfhost/check-ast.sh` | E1–E4 / E8 | Phase 26 块：`cmp -s`、实例原型精确计数、`! grep '\bT\b'`、6 条定位、6 条 check；v0.26.1 起加 125/126/127/容量夹具 |
 | D14 `docs/language-spec.md` | E7 | §4.48 中英文（语法/语义/非目标/诊断） |
 | D15 `docs/tutorial.md` | E7 | §10.5 中英文可运行示例 |
-| D16 `docs/roadmap.md` | E7 | Phase 26 行 `✅ 完成（v0.26.0）`、v0.26.0 版本记录、映射行 |
-| D17 `AGENTS.md` | E7 | 当前版本 v0.26.0；泛型限定说明 |
-| D18–D22 五处版本文件 | E6 | `grep -n 'CTC_VERSION'` 五处均 `0.26.0`；`CT_SOURCE_DIR=. ./install.sh --prefix /tmp/p26install` 后 `ct -v` → `ct v0.26.0`；`git diff -U0` 仅版本 token |
+| D16 `docs/roadmap.md` | E7 | Phase 26 行 `✅ 完成（v0.26.0；v0.26.1 修复）`、v0.26.0 / v0.26.1 版本记录、映射行 |
+| D17 `AGENTS.md` | E7 | 当前版本 v0.26.1；泛型限定说明；版本 bump 清单指向 roadmap |
+| D18–D22 五处版本文件 | E6 | `grep -n 'CTC_VERSION'` 五处均 `0.26.1`；`ct -v` → `ct v0.26.1`；`git diff -U0` 仅版本 token |
 
 ### 7.1 lessons（每条落 `gate:` / `spec:` / `rejected:`）
 
@@ -330,3 +388,20 @@ struct Point q = id<struct Point>(p0);
 | 8 | `pub` / 跨单元泛型需要头文件导出实例，半成品风险高 | `rejected:pub/跨单元泛型` |
 | 9 | L0/L1/L2 只允许版本串变化；11 道硬门禁同时校验冻结与五处版本一致 | `gate:check-all` |
 | 10 | 实现与立项的偏差必须逐条登记（§6.2），不得让文档停留在计划态 | `spec:§6.2` |
+| 11 | 文档列出的替换点必须有解析侧对应：只在发射器写分支、解析器不产该节点，就是死代码加静默坏产物 | `gate:check-ast` / `spec:§2.4` |
+| 12 | 「退出 0 但生成物含 `T`」是本相唯一不可接受的失败形态；断言须作用于整份生成 C，而非只看实例行 | `gate:check-ast` / `spec:E1` |
+
+---
+
+## 8. 修复轮记录（v0.26.1，2026-11-09）
+
+四条的 issue 文件均已置 `fixed` 并附证据命令；`verified` 留给独立评审回写。
+
+| issue | 修复提交 | 证明其成立的命令 | 实测 |
+| --- | --- | --- | --- |
+| SH-62 | `87b03ec` + `4995dff`（`fix(ct-ast): make the generic type parameter a type in every template position` / `fix(ct-ast): reject the type parameter inside a _Generic selection`） | `bash selfhost/check-ast.sh`；基线复现：`/tmp/p26fix/base/ct-ast /tmp/p26fix/sz.ct -o /tmp/red.c && grep sizeof /tmp/red.c && cc -std=c99 /tmp/red.c`；`_Generic` 硬错：`ct-ast test/ast/errors/generic_generic_selector.ct` | 修复前退出 0 + `sizeof(T)` + `cc: 'T' undeclared`；修复后 `sizeof(int)`，运行 `4`；125/126 由红转绿；`_Generic` 由退出 0 的坏产物变为解析期硬错 |
+| SH-63 | 同上 `87b03ec` | `ct-ast test/ast/126_generic_struct_tag/prog.ct -o /tmp/126.c && grep 'getv__ct1' /tmp/126.c && cc -std=c99 /tmp/126.c -o /tmp/126 && /tmp/126` | 修复前 `static struct int getv__ct1(struct int *);`（cc 拒绝）；修复后 `static int getv__ct1(struct T *);`，输出 `7` |
+| TEST-17 | `f5f1092` + `4995dff`（`test(ct-ast): cover every type position inside a generic template body` / `_Generic` 夹具随修复提交） | `bash selfhost/check-ast.sh`（Phase 26 块 `p26_generic_type_positions` / `p26_generic_struct_tag` / `p26_generic_name_retry` / `p26_diag_generic_too_many` / `p26_check_generic_too_many` / `p26_diag_generic_generic_selector` / `p26_check_generic_generic_selector`）；红证见 §6.3.1 | 815 passed, 0 failed；新断言在 v0.26.0 基线上失败（125 解析错误、126 静默 `struct int`、`_Generic` 静默 `T`） |
+| DOC-67 | 本文件所在提交（`docs(phase26): align the spec, roadmap and AGENTS ledger with v0.26.1`） | `python3 test/docs/check-docs.py`；`bash selfhost/check-all.sh` | `check-docs: OK (863 relative links in 173 files, v0.26.1, …)`；`check-all: OK (11 hard gates green)` |
+
+B26-2 判决：两方案（真实现替换 / 改成硬错误）都能满足验收，按 §7 立案；成本差 < 2×，判决采用**方案 A（真实现替换）**，理由与证据见 §5 B26-2，决策登记 D26-12 / D26-13。

@@ -985,6 +985,9 @@ ct build gen.ct -o gen && ./gen
 - **只做函数**：泛型结构体、trait、约束、多类型参数、`pub` 泛型、递归 / 嵌套泛型调用都不支持，
   各自在源码处报错。
 - **同一类型只生成一份**：同一 `(模板, 类型)` 在多个调用点复用同一个实例。
+- **类型参数在类型位置会真替换**：形参/返回/局部声明、`(T)`、`sizeof(T)`、`_Alignof(T)`、
+  `offsetof(T, 字段)`、`va_arg(ap, T)` 都替换成具体类型，生成物里不留 `T`；`_Generic` 的选择体
+  是原样透传，因此模板体内写 `_Generic(..., T: ...)` 会硬报错，而不是发射未声明的名字。
 
 细节与诊断见 [language-spec §4.48](language-spec.md)。
 
@@ -2070,6 +2073,11 @@ ct build gen.ct -o gen && ./gen
 - **Functions only**: generic structs, traits, constraints, multiple type parameters, `pub` generics,
   and recursive / nested generic calls are not supported and each is a hard error at the source.
 - **One instance per type**: the same `(template, type)` pair is reused at every call site.
+- **The type parameter is really substituted in type positions**: parameters, the return type,
+  local declarations, `(T)`, `sizeof(T)`, `_Alignof(T)`, `offsetof(T, field)` and `va_arg(ap, T)`
+  all become the concrete type, and no `T` is left in the output. A `_Generic` selection is copied
+  verbatim, so `_Generic(..., T: ...)` inside a template is a hard error rather than an undeclared
+  name in the generated C.
 
 Details and diagnostics are in [language-spec §4.48](language-spec.md).
 
