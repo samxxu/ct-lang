@@ -183,6 +183,15 @@ pub struct Expr {
        parsed. A generic call there would need an instance of a function whose
        own instance set is not fixed yet, so it is refused (L26-5). */
     int  in_generic;
+    /* Phase 26 fix (SH-62): the current template's type parameter spelling
+       while its body is parsed. `next_is_type_name` otherwise treats an
+       ALL_CAPS name as a C macro constant, which turned `sizeof(T)` into a
+       raw expression and let `ct compile` emit `sizeof(T)`. */
+    char in_generic_tparam[160];
+    /* Phase 26 fix (SH-63): the last bare struct/union/enum tag `parse_type`
+       expanded into `struct <tag>`. A template whose return type was written
+       bare `T` must become the type parameter, not the same-named tag. */
+    char last_bare_tag[160];
     /* Set while a full expression may carry an assignment (`(c = f())` and a
        condition): the statement layer owns top-level assignments, so this stays
        0 there and `x = 1;` is unchanged. */
@@ -1255,6 +1264,7 @@ impl ExprOps for Expr {
         self->saw_trait = 0;
         self->fnptr_name[0] = 0;
         self->fnptr_dims[0] = 0;
+        self->last_bare_tag[0] = 0;
         for (;;) {
             /* C11 `_Alignas(…)` and `_Atomic(…)`: the specifier is copied into
                the type spelling and handed to the C compiler as written (the
@@ -1335,6 +1345,14 @@ impl ExprOps for Expr {
                 int ti;
                 char rname[MAX_TEXT];
                 char iface[MAX_TEXT];
+                /* Phase 26 fix (SH-63): the declaration's type parameter wins
+                   over a same-named tag; it is kept as `T` for emission. */
+                if (self->in_generic_tparam[0]
+                    && strcmp(self->lex->toktext, self->in_generic_tparam) == 0) {
+                    if (self->type_append(out, cap, &n, self->in_generic_tparam) != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
                 /* A visible type alias expands before any name resolution: the
                    alias is a compile-time synonym, so the type spelling (and
                    therefore the host key) is the underlying one. */
@@ -1386,10 +1404,13 @@ impl ExprOps for Expr {
                    its iface */
                 if (self->sym->type_kind[ti] == 1) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", rname);
                 } else if (self->sym->type_kind[ti] == 5) {
                     if (self->type_append(out, cap, &n, "enum") != 0) return -1;
+                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "enum %s", rname);
                 } else if (self->sym->type_kind[ti] == 6) {
                     if (self->type_append(out, cap, &n, "union") != 0) return -1;
+                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "union %s", rname);
                 } else if (self->sym->type_kind[ti] == 3) {
                     int sti = self->sym->find_trait(rname);
                     self->saw_trait = 1;
@@ -1642,6 +1663,12 @@ impl ExprOps for Expr {
         res = 0;
         if (self->lex->tok == T_ID) {
             char rn[MAX_TEXT];
+            /* `T` inside its own template body is a type, even though the
+               ALL_CAPS rule below would read it as a macro constant. */
+            if (self->in_generic && self->in_generic_tparam[0]
+                && strcmp(self->lex->toktext, self->in_generic_tparam) == 0) {
+                res = 1;
+            } else
             /* `_Atomic(type)` is a type on its own: the word is a keyword, so
                the balanced list (and optional stars) is all that stands between
                it and the cast's closing parenthesis. */
@@ -2746,6 +2773,18 @@ impl ExprOps for Expr {
             if (self->sup->expect(",") != 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
             snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+            /* Phase 26 fix (SH-62): a type parameter has no field list here;
+               the instance emission substitutes `T` and C checks the field. */
+            if (self->in_generic && self->in_generic_tparam[0]
+                && strcmp(tbuf, self->in_generic_tparam) == 0) {
+                self->sup->lex_next();
+                if (self->sup->expect(")") != 0) return -1;
+                n = self->sup->new_node(N_OFFSETOF);
+                if (n < 0) return -1;
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+                snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", fname);
+                return n;
+            }
             /* Both checks run while the cursor is still on the field, so the
                diagnostic points at the argument the user has to fix. */
             snprintf(base, sizeof base, "%s", tbuf);

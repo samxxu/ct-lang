@@ -3008,9 +3008,14 @@ impl EmitOps for Emitter {
             return self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text, 0);
         }
         if (self->arena->nodes[n].kind == N_VAARG) {
+            char tbuf[160];
+            const char *vt = self->arena->nodes[n].text;
+            /* Phase 26 fix (SH-62): `va_arg(ap, T)` is a fifth type position;
+               it had the same silent `T` leak as `sizeof(T)`. */
+            if (emit_gsub_type(self, vt, tbuf, sizeof tbuf) == 0) vt = tbuf;
             fputs("va_arg(", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fprintf(self->out, ", %s)", self->arena->nodes[n].text);
+            fprintf(self->out, ", %s)", vt);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_SIZEOF) {

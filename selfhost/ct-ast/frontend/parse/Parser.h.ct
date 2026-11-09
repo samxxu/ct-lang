@@ -1010,6 +1010,19 @@ impl ParseOps for Parser {
                 return self->sup->fail("expected '>' after the type parameter");
             self->sup->lex_next();
             is_generic = 1;
+            /* A bare `T` return type was resolved as the same-named tag before
+               the type parameter was known; restore it now (SH-63). */
+            if (self->ex->last_bare_tag[0]) {
+                int ll = (int)strlen(self->ex->last_bare_tag);
+                int tl = (int)strlen(tparam);
+                if (ll > tl && self->ex->last_bare_tag[ll - tl - 1] == ' '
+                    && strcmp(self->ex->last_bare_tag + ll - tl, tparam) == 0
+                    && strncmp(ret, self->ex->last_bare_tag, (size_t)ll) == 0) {
+                    char fixed[MAX_TEXT];
+                    snprintf(fixed, sizeof fixed, "%s%s", tparam, ret + ll);
+                    snprintf(ret, sizeof ret, "%s", fixed);
+                }
+            }
         }
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
@@ -1102,7 +1115,12 @@ impl ParseOps for Parser {
             return g;
         }
         if (self->sup->push_scope() != 0) return -1;
+        /* Parameter types written bare `T` must read as the type parameter,
+           even when a struct/union/enum with that tag exists (SH-63). */
+        if (is_generic) snprintf(self->ex->in_generic_tparam, sizeof self->ex->in_generic_tparam,
+                                 "%s", tparam);
         params = self->parse_params();
+        if (is_generic) self->ex->in_generic_tparam[0] = 0;
         if (params < 0) {
             self->sup->pop_scope();
             return -1;
@@ -1157,8 +1175,11 @@ impl ParseOps for Parser {
            yet, so the body may not contain one (L26-5). The expression layer
            reads this flag at the `<type>` call form. */
         if (is_generic) self->ex->in_generic = 1;
+        if (is_generic) snprintf(self->ex->in_generic_tparam, sizeof self->ex->in_generic_tparam,
+                                 "%s", tparam);
         b = self->st->parse_block();
         if (is_generic) self->ex->in_generic = 0;
+        if (is_generic) self->ex->in_generic_tparam[0] = 0;
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func[0] = 0;
