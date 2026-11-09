@@ -25,6 +25,7 @@
     { "include": "#ct-borrow-param" },
     { "include": "#ct-trait-builtin" },
     { "include": "#ct-pub" },
+    { "include": "#ct-range-index" },
     { "include": "source.c" }
   ],
   "repository": {
@@ -259,6 +260,10 @@
       "captures": {
         "1": { "name": "storage.modifier.pub.ct" }
       }
+    },
+    "ct-range-index": {
+      "match": "\\$",
+      "name": "variable.language.range-index.ct"
     }
   }
 }

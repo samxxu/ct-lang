@@ -1,0 +1,14 @@
+/* 109 (Phase 24), semantic layer: the literal table the range must agree with.
+   Compiled and run on its own; its output has to be byte-identical to 109's. */
+#include <stdio.h>
+
+int main(void)
+{
+    int odd[] = { 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25 };
+    int lit[] = { 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25 };
+    int k;
+
+    printf("n %d\n", (int)(sizeof odd / sizeof odd[0]));
+    for (k = 0; k < 13; k++) printf("%d %d\n", odd[k], lit[k]);
+    return 0;
+}

@@ -55,6 +55,9 @@ CT_CASES = (
     "test/modules/map_unit/libc/libc.m.ct",
     "test/modules/map_unit/main.ct",
     "test/modules/map_unit_type/ctypes/ctypes.m.ct",
+    # Phase 24 range initializer: the `$` index is a token of its own in the
+    # expression, and `0..13` must not be mistaken for anything else.
+    "test/ast/109_range_init_basic/prog.ct",
 )
 TRICKY = "\n".join([
     "// use self here",
@@ -72,6 +75,14 @@ EXTRA = "\n".join([
     "pub int exported(void);",
     "impl Greeter /* note */ for Person {",
     "map trait Controller /* note */ for instance uart1 {",
+])
+# Phase 24: `$` is the range index. It must be highlighted in the initializer
+# and must stay invisible inside a string or a comment -- the same guarantee
+# that the compiler's lexer makes before the parser ever sees a `$`.
+RANGE = "\n".join([
+    "int odd[] = 0..13($ * 2 + 1);",
+    'char *s = "$";',
+    "// $ is not code here",
 ])
 
 
@@ -273,6 +284,10 @@ def main():
                                   "ct-own", "ct-borrow", "ct-pub")
                           for _, l, hs in rows if "TRIPLE" in l or "raw_helper" in l
                           for h in hs))
+        if "109_range_init" in rel:
+            check("`$` in the range initializer -> ct-range-index",
+                  any(h[0] == "ct-range-index" for _, l, hs in rows
+                      if "0..13(" in l for h in hs))
         print()
 
     print("synthetic -- these must stay comments / strings / plain identifiers:")
@@ -308,6 +323,19 @@ def main():
           "ct-impl-open" in by_line[3], str(by_line[3]))
     check("`map trait ... /* */ ...` -> ct-map-open",
           "ct-map-open" in by_line[4], str(by_line[4]))
+
+    print()
+    print("synthetic range index -- `$` is code only where the compiler says so:")
+    rows = scan(RANGE, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`0..13($ * 2 + 1)` -> ct-range-index",
+          "ct-range-index" in by_line[1], str(by_line[1]))
+    check("`$` inside a string stays a string",
+          "ct-range-index" not in by_line[2], str(by_line[2]))
+    check("`$` inside a comment stays a comment",
+          "ct-range-index" not in by_line[3], str(by_line[3]))
 
     print()
     print("== %d checks, %d failed ==" % (checks, len(failures)))

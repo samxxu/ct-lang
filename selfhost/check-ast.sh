@@ -4756,6 +4756,101 @@ else
 fi
 
 echo
+echo "== Phase 24: array range initialisers =="
+
+# 1) Shape: the expansion is a brace list on one line, with one `((int)k)` per
+#    element and neither the loop form nor the range source left in it. The
+#    fixture owns a hand-written `for` of its own, so the check is scoped to the
+#    emitted declaration instead of the whole file.
+if "$work/ct-ast" test/ast/109_range_init_basic/prog.ct -o "$work/r109.c" \
+        >"$work/r109.out" 2>"$work/r109.err" \
+   && grep 'int odd\[\] = {' "$work/r109.c" > "$work/r109.decl" \
+   && grep -Fq '((int)1)' "$work/r109.decl" \
+   && ! grep -Fq 'for' "$work/r109.decl" \
+   && ! grep -Fq '$' "$work/r109.decl" \
+   && ! grep -Fq '0..13' "$work/r109.decl"; then
+    ok "range (brace list, no loop, no '\$', no '0..13')"
+else
+    bad "range: expansion shape" "$(cat "$work/r109.err")"
+fi
+
+# 2) One element per slot: the initialiser splits into exactly 13 items.
+r109n=$(awk -F, '/int odd\[\] = \{/ { print NF }' "$work/r109.c")
+if [ "$r109n" = "13" ]; then
+    ok "range (13 elements: one per slot)"
+else
+    bad "range: element count" "counted '$r109n'"
+fi
+
+# 3) Byte layer: the expansion is the hand-written list and nothing else. The
+#    manual fixture is a plain `{ … }` initialiser, which is copied verbatim, so
+#    `cmp` on the declaration pins spacing, parentheses and all 13 `((int)k)`.
+if "$work/ct-ast" test/ast/109_range_init_basic/manual.ct -o "$work/r109m.c" \
+        >"$work/r109m.out" 2>"$work/r109m.err" \
+   && grep 'int odd\[\] = {' "$work/r109.c" > "$work/r109.a" \
+   && grep 'int odd\[\] = {' "$work/r109m.c" > "$work/r109.b" \
+   && cmp -s "$work/r109.a" "$work/r109.b"; then
+    ok "range (byte-identical to the hand-written 13-element list)"
+else
+    bad "range: byte equivalence" \
+        "$(cat "$work/r109m.err"; diff -u "$work/r109.a" "$work/r109.b" 2>/dev/null | head -6)"
+fi
+
+# 4) Semantic layer: 109 and its literal twin run separately and print the same
+#    bytes -- the values, not just the shape, are the claim.
+if "$CC" -std=c99 "$work/r109.c" -o "$work/r109.bin" 2>"$work/r109.cc" \
+   && "$work/ct-ast" test/ast/109_range_init_basic/literal.ct -o "$work/r109l.c" \
+        >"$work/r109l.out" 2>"$work/r109l.err" \
+   && "$CC" -std=c99 "$work/r109l.c" -o "$work/r109l.bin" 2>>"$work/r109.cc" \
+   && "$work/r109.bin" >"$work/r109.run" \
+   && "$work/r109l.bin" >"$work/r109l.run" \
+   && cmp -s "$work/r109.run" "$work/r109l.run"; then
+    ok "range (same output as the literal table, byte for byte)"
+else
+    bad "range: semantic equivalence" \
+        "$(cat "$work/r109.cc" "$work/r109l.err"; diff -u "$work/r109.run" "$work/r109l.run" 2>/dev/null | head -6)"
+fi
+
+# 5) The payoff: a file-scope `static const` table is an initialiser, not a
+#    statement, so it needs no function and no loop.
+if "$work/ct-ast" test/ast/110_range_init_static_const/prog.ct -o "$work/r110.c" \
+        >"$work/r110.out" 2>"$work/r110.err" \
+   && grep -Eq '^static const int sq\[\] = \{ ' "$work/r110.c"; then
+    ok "range (file-scope static const table)"
+else
+    bad "range: file scope" "$(cat "$work/r110.err")"
+fi
+
+# 6) `$` and the bound reader: every one of these must be a positioned
+#    diagnostic, and none of them may fall back to "undeclared variable".
+rng_neg() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/rneg.c" \
+            >"$work/rneg.out" 2>"$work/rneg.err"; then
+        bad "range: $1" "expected a diagnostic, got exit 0"
+    elif grep -Fq "$2" "$work/rneg.err" && ! grep -Fiq 'undeclared' "$work/rneg.err"; then
+        ok "range ($1: $2)"
+    else
+        bad "range: $1" "$(cat "$work/rneg.err")"
+    fi
+}
+rng_neg range_index_outside "unexpected token"
+rng_neg range_index_in_dim "'\$' cannot be used in an array dimension"
+rng_neg range_index_assigned "unexpected token"
+rng_neg range_index_address "the range index '\$' is not a variable"
+rng_neg range_index_address_post "the range index '\$' is not a variable"
+rng_neg range_index_address_pre "the range index '\$' is not a variable"
+rng_neg range_init_missing_end "a range initializer needs both bounds"
+rng_neg range_init_nonliteral_bound "a range bound must be an integer literal (got 'n')"
+rng_neg range_init_nonliteral_bound_base "a range bound must be an integer literal (got 'BASE')"
+rng_neg range_init_bad_hex "got '0x'"
+rng_neg range_init_overflow "a range bound is out of range"
+rng_neg range_init_empty "an empty range has no elements"
+rng_neg range_init_too_many "too many range elements (limit 1024)"
+rng_neg range_init_scalar_decl "a range initializer declares an array"
+rng_neg range_init_element_struct "a range initializer cannot initialize 'struct Pair' elements"
+rng_neg range_init_dim_mismatch "the array size '4' does not match the range (3 elements)"
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]
