@@ -105,6 +105,10 @@
   （声明类型决定 `sizeof`、返回类型参与 `expr_type` 推导），但签名也未约束调用者（四种静态调用形态均静默，
   删掉 `!is_static` 豁免是空操作）。缺陷收窄为「**静态映射调用点缺少实参类型检查**」，状态 `open`、
   并入 Phase 25（25.1）；顶层 `const` 接收者待 D-60-1；声明点未知类型 deferred，待 D-60-2。
+- 2026-11-09 文档漂移复核（`v0.25.0`）新增 **2 条**（**DOC-66** Medium、**CI-8** Medium）：1 条
+  `docs/design/` 的「只放当前阶段」约定与 phase17–25 未归档并存，1 条方法论 G9 的 spec pin 缺失。
+  两条均属结构性/治理政策，本轮只登记、不搬文件、不新增门禁，状态 `open`；逐项见
+  [DOC-66](docs/doc66-design-archive-policy.md)、[CI-8](ci/ci-8-g9-spec-pin-missing.md)。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -185,6 +189,7 @@
 | DOC-63 | Low | 教程与内存指南的「适用版本」仍写 `v0.16.0` | [doc63-tutorial-version-stale.md](docs/doc63-tutorial-version-stale.md) |
 | DOC-64 | Medium | C 头文件的 enum 常量在表达式里不可见，但文档没有写明（已修，`a1c523a`） | [doc64-header-enum-constants.md](docs/doc64-header-enum-constants.md) |
 | DOC-65 | Medium | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 | [doc65-compile-import-boundary-undocumented.md](docs/doc65-compile-import-boundary-undocumented.md) |
+| DOC-66 | Medium | `docs/design/` 的「只放当前阶段」约定与 phase17–25 未归档并存 | [doc66-design-archive-policy.md](docs/doc66-design-archive-policy.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -218,6 +223,7 @@
 | CI-5 | Low | `packages.yml` 的 push / PR 路径过滤不覆盖 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**` | [ci-5-packages-workflow-path-filters.md](ci/ci-5-packages-workflow-path-filters.md) |
 | CI-6 | Low | CI 两个 job 名仍写 `nine hard gates`（实际 12 道） | [ci-6-gate-label-nine.md](ci/ci-6-gate-label-nine.md) |
 | CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用 | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
+| CI-8 | Medium | 方法论 G9 的 spec pin 缺失，项目无法自证与主规范同版 | [ci-8-g9-spec-pin-missing.md](ci/ci-8-g9-spec-pin-missing.md) |
 
 ### `selfhost/` —— 代码结构与容量
 
