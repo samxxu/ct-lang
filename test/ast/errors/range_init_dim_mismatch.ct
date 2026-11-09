@@ -1,0 +1,7 @@
+/* A numeric dimension must agree with the range (L24-7): 4 slots cannot hold
+   the 3 elements `0..3` expands to. */
+int main(void)
+{
+    int a[4] = 0..3($);
+    return a[0];
+}

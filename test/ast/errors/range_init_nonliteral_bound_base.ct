@@ -1,0 +1,7 @@
+/* The first bound is read from the shape, so a name there reaches the bound
+   reader too: L24-2, never a silent symbol lookup. */
+int main(void)
+{
+    int a[] = BASE..3($);
+    return a[0];
+}

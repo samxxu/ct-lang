@@ -1,0 +1,8 @@
+/* A range bound must be an integer literal, not a variable: L24-2 with the
+   offending spelling in the message. */
+int main(void)
+{
+    int n = 4;
+    int a[] = 0..n($);
+    return a[0];
+}

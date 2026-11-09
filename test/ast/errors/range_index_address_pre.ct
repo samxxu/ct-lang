@@ -1,0 +1,6 @@
+/* `++$` has no storage to increment: L24-11, not "undeclared variable". */
+int main(void)
+{
+    int a[] = 0..3(++$);
+    return a[0];
+}

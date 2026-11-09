@@ -1,0 +1,7 @@
+/* A dimension is copied to C as written, and `$` has no C spelling: rejected
+   at the declarator (L24-10), whether or not a range initialiser follows. */
+int main(void)
+{
+    int a[$] = 5;
+    return a[0];
+}

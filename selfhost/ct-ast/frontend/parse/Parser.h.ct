@@ -1018,7 +1018,16 @@ impl ParseOps for Parser {
                 return self->sup->fail(self->sym->last_error());
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
                 snprintf(self->arena->nodes[g].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
-            if (self->ex->parse_array_dims(g) != 0) return -1;
+            {
+                int dim_line = self->lex->tokline;
+                int dim_col = self->lex->tokstart - self->lex->lstart + 1;
+                if (self->ex->parse_array_dims(g) != 0) return -1;
+                /* Phase 24 L24-10: same check as the block-scope declarator */
+                if (strchr(self->arena->nodes[g].text3, '$'))
+                    return tool::diag::ct_sem_error(dim_line, dim_col,
+                                                    "'$' cannot be used in an array dimension",
+                                                    self->mem->path);
+            }
             attr = -1;
             ar = self->sup->attr_pool(&attr);
             if (ar < 0) return -1;
@@ -1048,6 +1057,11 @@ impl ParseOps for Parser {
                     self->arena->str_end();
                     self->arena->nodes[e].num = off;
                     self->arena->nodes[e].aux = 1;
+                } else if (self->st->range_init_ahead()) {
+                    /* Phase 24: file-scope `= 0..n($…)` -- the global branch
+                       parses its own initialiser, so it needs its own entry. */
+                    e = self->st->parse_range_init(g, ret);
+                    if (e < 0) return -1;
                 } else {
                     e = self->ex->parse_expr();
                     if (e < 0) return -1;

@@ -1,0 +1,8 @@
+/* The shared lexer does not detect integer overflow; a bound must not wrap into
+   a negative or garbage value, so it is re-accumulated against `LONG_MAX`:
+   L24-9, not L24-3. */
+int main(void)
+{
+    int a[] = 0..99999999999999999999($);
+    return a[0];
+}

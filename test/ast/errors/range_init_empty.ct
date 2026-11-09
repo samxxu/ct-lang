@@ -1,0 +1,7 @@
+/* A zero-length range is a hard error (L24-3): an empty initialiser list has no
+   target meaning. `loop(a..b)` may run zero times, a declaration may not. */
+int main(void)
+{
+    int a[] = 0..0($);
+    return 0;
+}

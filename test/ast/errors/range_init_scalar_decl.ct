@@ -1,0 +1,7 @@
+/* A range initialiser declares an array (L24-5): the expansion is a brace
+   initialiser list, which a scalar declarator cannot hold. */
+int main(void)
+{
+    int x = 0..3($);
+    return x;
+}

@@ -1,0 +1,12 @@
+/* Elements must be scalars (L24-6): a struct element would need a per-element
+   initialiser, not a single value. */
+struct Pair {
+    int a;
+    int b;
+};
+
+int main(void)
+{
+    struct Pair xs[] = 0..3($);
+    return xs[0].a;
+}

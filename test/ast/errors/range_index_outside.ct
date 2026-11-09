@@ -1,0 +1,8 @@
+/* `$` only exists inside a range initialiser's element expression: anywhere
+   else it is an ordinary syntax error, never a name looked up in the symbol
+   table. */
+int main(void)
+{
+    int x = $;
+    return x;
+}

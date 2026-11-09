@@ -13,6 +13,7 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -50,6 +51,7 @@ import tool::diag::Diag;
 #define N_FOR 16
 #define N_GOTO 50
 #define N_IF 14
+#define N_INIT_RANGE 61
 #define N_LABEL 49
 #define N_LOOP 60
 #define N_MEMBER 24
@@ -83,6 +85,8 @@ pub trait StmtOps {
     int  parse_goto(void);
     int  loop_ahead(void);
     int  parse_loop(void);
+    int  range_init_ahead(void);
+    int  parse_range_init(int n, const char *type);
     int  closure_global_init(int e, const char *name, int line, int col);
     int  func_begin(void);
     int  func_end(void);
@@ -650,6 +654,179 @@ static int loop_count_class(const char *t)
         return -1;
     }
     return words ? 1 : -1;
+}
+
+/* ---- Phase 24: array range initialisers ---------------------------------- */
+
+/* The source spelling of the current token. An integer literal carries no
+   `toktext` (the lexer keeps its value in `toknum`), so the digits are taken
+   back from the source between the token's first byte and the cursor. */
+static void range_spelling(struct Lexer *lx, char *out, int cap)
+{
+    int i = 0;
+
+    if (lx->tok == T_NUM) {
+        int s = lx->tokstart;
+        while (s + i < lx->pos && i < cap - 1) {
+            out[i] = lx->src[s + i];
+            i++;
+        }
+    } else {
+        while (lx->toktext[i] && i < cap - 1) {
+            out[i] = lx->toktext[i];
+            i++;
+        }
+    }
+    out[i] = 0;
+    if (!out[0]) snprintf(out, (size_t)cap, "%s", "end of file");
+}
+
+static int range_digit(int c, int base)
+{
+    if (c >= '0' && c <= '9') return (c - '0' < base) ? c - '0' : -1;
+    if (base == 16) {
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    }
+    return -1;
+}
+
+/* Evaluate one range bound from its source spelling. The shared lexer neither
+   rejects a digit-less `0x` (it yields 0) nor detects overflow, so the spelling
+   is re-read here instead of trusting `toknum`: 0 = ok, 1 = not an integer
+   literal, 2 = out of `long`. Popping a value that does not fit is what keeps a
+   wrapped bound from turning into a bogus `count`. */
+static int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap)
+{
+    char text[MAX_TEXT];
+    const char *p;
+    long v = 0;
+    int base = 10, d, nd = 0;
+
+    range_spelling(lx, text, (int)sizeof text);
+    snprintf(spell, (size_t)cap, "%s", text);
+    if (lx->tok != T_NUM || lx->tokfloat) return 1;
+    p = text;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        base = 16;
+        p += 2;
+    } else if (p[0] == '0' && p[1] >= '0' && p[1] <= '7') {
+        base = 8;
+        p += 1;
+    }
+    while ((d = range_digit(*p, base)) >= 0) {
+        if (v > (LONG_MAX - d) / base) return 2;
+        v = v * base + d;
+        p++;
+        nd++;
+    }
+    if (!nd) return 1;
+    while (*p) {
+        if (*p != 'u' && *p != 'U' && *p != 'l' && *p != 'L') return 1;
+        p++;
+    }
+    *out = v;
+    return 0;
+}
+
+/* Parse one bound: an optional unary `-` and one integer literal. The cursor
+   ends past the literal. */
+static int range_bound(struct Stmt *self, long *out)
+{
+    char spell[MAX_TEXT];
+    char msg[256];
+    int neg = 0, rc, line, col;
+    long v = 0;
+
+    line = self->lex->tokline;
+    col = self->lex->tokstart - self->lex->lstart + 1;
+    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) {
+        neg = 1;
+        self->sup->lex_next();
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+    }
+    /* `..` followed straight by `(` is a missing bound, not a bad one */
+    if (!neg && self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0)
+        return tool::diag::ct_sem_error(line, col, "a range initializer needs both bounds", self->mem->path);
+    rc = range_bound_value(self->lex, &v, spell, (int)sizeof spell);
+    if (rc == 2)
+        return tool::diag::ct_sem_error(line, col, "a range bound is out of range", self->mem->path);
+    if (rc == 1) {
+        snprintf(msg, sizeof msg, "a range bound must be an integer literal (got '%s')", spell);
+        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+    }
+    self->sup->lex_next();
+    *out = neg ? -v : v;
+    return 0;
+}
+
+/* A numeric dimension as `parse_array_dims` normalises it: `[13]` -> 13.
+   Anything else (`[]`, `[N]`, `[BASE + 1]`) is left to C. */
+static int range_dim_value(const char *dims, long *out)
+{
+    long v = 0;
+    int i = 1, nd = 0;
+
+    if (dims[0] != '[') return 0;
+    while (dims[i] >= '0' && dims[i] <= '9') {
+        if (v > 1000000) return 0;
+        v = v * 10 + (dims[i] - '0');
+        i++;
+        nd++;
+    }
+    if (!nd || dims[i] != ']') return 0;
+    *out = v;
+    return 1;
+}
+
+/* The element spelling used in the L24-6 message, without the storage class. */
+static void range_element_spelling(const char *type, char *out, int cap)
+{
+    const char *p = type;
+    for (;;) {
+        if (strncmp(p, "static ", 7) == 0) p += 7;
+        else if (strncmp(p, "const ", 6) == 0) p += 6;
+        else if (strncmp(p, "extern ", 7) == 0) p += 7;
+        else if (strncmp(p, "volatile ", 9) == 0) p += 9;
+        else if (strncmp(p, "register ", 9) == 0) p += 9;
+        else break;
+    }
+    snprintf(out, (size_t)cap, "%s", p);
+}
+
+/* Phase 24 D24-5: the element type has to be a scalar. Aggregates would need a
+   per-element vptr or a boxed value, so a struct, a union, an interface value or
+   an array element is refused before any node is built. A pointer to one of
+   them is still a scalar. */
+static int range_element_bad(struct Stmt *self, const char *type, const char *dims, char *why, int cap)
+{
+    char tr[MAX_TEXT];
+    char tmp[MAX_TEXT];
+    const char *first;
+    int ip = 0;
+    size_t n;
+
+    first = strchr(dims, '[');
+    if (first && strchr(first + 1, '[')) {
+        range_element_spelling(type, why, cap);
+        n = strlen(why);
+        snprintf(why + n, (size_t)cap - n, "%s", first + 1);
+        return 1;
+    }
+    if (self->sup->iface_ref_type(type, tr, (int)sizeof tr, &ip) && !ip) {
+        range_element_spelling(type, why, cap);
+        return 1;
+    }
+    snprintf(tmp, sizeof tmp, "%s", type);
+    n = strlen(tmp);
+    while (n > 0 && (tmp[n - 1] == ' ' || tmp[n - 1] == '\t')) n--;
+    if (n > 0 && tmp[n - 1] == '*') return 0;
+    if (strstr(type, "struct ") || strstr(type, "union ")) {
+        range_element_spelling(type, why, cap);
+        return 1;
+    }
+    return 0;
 }
 
 impl StmtOps for Stmt {
@@ -1600,6 +1777,132 @@ impl StmtOps for Stmt {
         return s;
     }
 
+    /* Phase 24 D24-1: does this initialiser carry a range at all? The scan runs
+       to the end of the declarator (`,` / `;` at depth 0) and only a `..` at
+       depth 0 opens one, so a `..` inside a call, an index or a `{ … }`
+       initialiser keeps its ordinary (invalid) meaning. Scanning instead of
+       peeking two tokens is what lets `= BASE..3($)` reach L24-2: the shape is
+       recognised first, and the bound reader then rejects the name by spelling.
+       The parse of an initialiser cannot contain a `..` of its own, so the
+       fallback is `parse_expr` exactly as before. The lexer has no peek, so the
+       state is saved and put back. */
+    int range_init_ahead(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc, r;
+        int depth = 0;
+        long snum;
+        char stext[MAX_TEXT];
+        char ssuf[8];
+
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        sfloat = self->lex->tokfloat;
+        strunc = self->lex->toktrunc;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        r = 0;
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PUNCT) {
+                const char *t = self->lex->toktext;
+                if (strcmp(t, "(") == 0 || strcmp(t, "[") == 0 || strcmp(t, "{") == 0) {
+                    depth++;
+                } else if (strcmp(t, ")") == 0 || strcmp(t, "]") == 0 || strcmp(t, "}") == 0) {
+                    if (depth > 0) depth--;
+                } else if (strcmp(t, "..") == 0) {
+                    if (depth == 0) {
+                        r = 1;
+                        break;
+                    }
+                } else if ((strcmp(t, ",") == 0 || strcmp(t, ";") == 0) && depth == 0) {
+                    break;
+                }
+            }
+            self->sup->lex_next();
+        }
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        self->lex->tokfloat = sfloat;
+        self->lex->toktrunc = strunc;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        return r;
+    }
+
+    /* Phase 24 D24-2/D24-3/D24-6/D24-7/D24-10: `= <start>..<stop>($…)` on an
+       array declarator. `parse_range_init` owns everything between the `=` and
+       the closing `)` and returns the `N_INIT_RANGE` node; the caller stores it
+       as the declarator's initialiser. The `$` flag is raised only around the
+       element expression, so `$` anywhere else stays a syntax error. */
+    int parse_range_init(int n, const char *type)
+    {
+        long start, stop, dim;
+        unsigned long cnt;
+        int e, elem, line, col, save_dollar;
+        char why[MAX_TEXT];
+        char msg[256];
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        /* L24-5: the shape only means something on an array declarator */
+        if (!self->arena->nodes[n].text3[0])
+            return tool::diag::ct_sem_error(line, col,
+                                            "a range initializer declares an array", self->mem->path);
+        if (range_bound(self, &start) != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0))
+            return self->sup->fail("unexpected token");
+        self->sup->lex_next();
+        if (range_bound(self, &stop) != 0) return -1;
+        /* L24-3: an empty initialiser list has no target meaning. The bounds
+           fit `long`, so the difference is compared in unsigned arithmetic and
+           a huge span can never wrap into a plausible count. */
+        if (stop <= start)
+            return tool::diag::ct_sem_error(line, col, "an empty range has no elements", self->mem->path);
+        cnt = (unsigned long)stop - (unsigned long)start;
+        if (cnt > 1024)
+            return tool::diag::ct_sem_error(line, col, "too many range elements (limit 1024)", self->mem->path);
+        /* L24-7: a numeric dimension has to agree with the range. `[]` and any
+           spelling this layer cannot evaluate are left to C. */
+        if (range_dim_value(self->arena->nodes[n].text3, &dim) && dim != (long)cnt) {
+            snprintf(msg, sizeof msg,
+                     "the array size '%ld' does not match the range (%ld elements)",
+                     dim, (long)cnt);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* L24-6: scalar elements only */
+        if (range_element_bad(self, type, self->arena->nodes[n].text3, why, (int)sizeof why)) {
+            snprintf(msg, sizeof msg, "a range initializer cannot initialize '%s' elements", why);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        if (self->sup->expect("(") != 0) return -1;
+        save_dollar = self->ex->dollar_ok;
+        self->ex->dollar_ok = 1;
+        elem = self->ex->parse_expr();
+        self->ex->dollar_ok = save_dollar;
+        if (elem < 0) return -1;
+        if (self->sup->expect(")") != 0) return -1;
+        e = self->sup->new_node(N_INIT_RANGE);
+        if (e < 0) return -1;
+        /* One element subtree, however many elements: the node count does not
+           grow with `count`, which is what makes the 1024 cap safe (D24-10). */
+        self->arena->nodes[e].a = elem;
+        self->arena->nodes[e].num = start;
+        self->arena->nodes[e].aux = (int)cnt;
+        self->arena->nodes[e].line = line;
+        return e;
+    }
+
     /* Is the current identifier the start of `name:`? The lexer has no peek,
        so every state field is saved, the next token is read and the cursor is
        put back. `::` is one token, so a qualified name never looks like a label
@@ -1821,7 +2124,19 @@ impl StmtOps for Stmt {
                `parse_array_dims` only appends what follows the name (D-5) */
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
                 snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
-            if (self->ex->parse_array_dims(n) != 0) return -1;
+            {
+                int dim_line = self->lex->tokline;
+                int dim_col = self->lex->tokstart - self->lex->lstart + 1;
+                if (self->ex->parse_array_dims(n) != 0) return -1;
+                /* Phase 24 L24-10: `$` has no meaning in a dimension, with or
+                   without a range initialiser (`int a[$] = 5;` included). Every
+                   declarator's dimensions pass here, so the text can never slip
+                   through to C as an undeclared name. */
+                if (strchr(self->arena->nodes[n].text3, '$'))
+                    return tool::diag::ct_sem_error(dim_line, dim_col,
+                                                    "'$' cannot be used in an array dimension",
+                                                    self->mem->path);
+            }
             {
                 /* A trailing attribute on a local (`int x __attribute__((unused));`)
                    is accepted as well; a declaration may not carry both forms. */
@@ -1855,6 +2170,10 @@ impl StmtOps for Stmt {
                     self->arena->str_end();
                     self->arena->nodes[e].num = off;
                     self->arena->nodes[e].aux = 1;
+                } else if (self->range_init_ahead()) {
+                    /* Phase 24: `= 0..n($…)` on an array declarator */
+                    e = self->parse_range_init(n, typebuf);
+                    if (e < 0) return -1;
                 } else {
                     /* `int (*p)(int) = strcmp;` may name a C library function */
                     if (strstr(typebuf, "(*")) self->ex->fnval_ok = 1;

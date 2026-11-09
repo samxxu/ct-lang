@@ -1,0 +1,7 @@
+/* The shared lexer accepts `0x` without digits and quietly yields 0; a bound
+   must not inherit that, so the spelling is re-read: L24-2 with `got '0x'`. */
+int main(void)
+{
+    int a[] = 0..0x($);
+    return a[0];
+}

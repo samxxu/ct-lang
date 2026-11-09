@@ -1,0 +1,7 @@
+/* A range initialiser needs two bounds: `..` followed straight by `(` is
+   L24-1, not an empty upper bound. */
+int main(void)
+{
+    int a[] = 0..($);
+    return a[0];
+}

@@ -170,6 +170,12 @@ pub struct Expr {
        condition): the statement layer owns top-level assignments, so this stays
        0 there and `x = 1;` is unchanged. */
     int  assign_ok;
+    /* Phase 24: non-zero only while the element expression of a range
+       initialiser (`int a[] = 0..3($ * 2)`) is being parsed. `$` is not an
+       identifier -- it has no scope, no symbol and no C spelling -- so it is
+       accepted as a primary here and anywhere else reports the ordinary syntax
+       error instead of an undeclared name. */
+    int  dollar_ok;
     /* A compound literal is parsed where a cast would be (`(type){ … }`), but a
        postfix suffix still belongs to it (`(struct P){1,2}.y`). The cast branch
        leaves the finished node here and calls `parse_postfix`, which consumes
@@ -199,6 +205,15 @@ static int arg_count(struct Arena *a, int first)
         first = a->nodes[first].next;
     }
     return c;
+}
+
+/* Phase 24: is `n` the range index `$`? It is the only `N_VAR` whose `text2` is
+   the placeholder, and it is built only inside a range initialiser's element
+   expression. `&$`, `$++` and `++$` are rejected through this predicate: `$` is
+   not a variable, so none of them has an object to name. */
+static int is_range_index(struct Arena *a, int n)
+{
+    return n >= 0 && a->nodes[n].kind == N_VAR && strcmp(a->nodes[n].text2, "$") == 0;
 }
 
 /* ---- 19.2 coarse argument types ------------------------------------------
@@ -1973,6 +1988,8 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             e = self->parse_unary();
             if (e < 0) return -1;
+            if (is_range_index(self->arena, e))
+                return self->sup->fail("the range index '$' is not a variable");
             n = self->sup->new_node(N_PRE);
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
@@ -2000,6 +2017,8 @@ impl ExprOps for Expr {
             e = self->parse_unary();
             self->fnval_ok = save;
             if (e < 0) return -1;
+            if (is_range_index(self->arena, e))
+                return self->sup->fail("the range index '$' is not a variable");
             n = self->sup->new_node(N_ADDR);
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
@@ -2270,6 +2289,8 @@ impl ExprOps for Expr {
         }
         if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "++") == 0 || strcmp(self->lex->toktext, "--") == 0)) {
             int k;
+            if (is_range_index(self->arena, n))
+                return self->sup->fail("the range index '$' is not a variable");
             k = self->arena->nodes[n].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->sup->fail("'++' / '--' need an assignable target");
@@ -2560,6 +2581,18 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             self->arena->nodes[n].a = ap;
             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+            return n;
+        }
+        /* Phase 24: the range index. `$` has no C spelling of its own -- the
+           emitter renders it as `((int)<k>)` -- so it never reaches the symbol
+           table; outside the element expression of a range initialiser it is a
+           syntax error, never an undeclared name. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0) {
+            if (!self->dollar_ok) return self->sup->fail("unexpected token");
+            n = self->sup->new_node(N_VAR);
+            if (n < 0) return -1;
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", "$");
+            self->sup->lex_next();
             return n;
         }
         if (self->lex->tok == T_ID) {

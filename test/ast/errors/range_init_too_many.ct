@@ -1,0 +1,7 @@
+/* One element expression is emitted per slot, so the range is capped at 1024
+   elements (L24-4). */
+int main(void)
+{
+    int a[] = 0..2000($);
+    return a[0];
+}
