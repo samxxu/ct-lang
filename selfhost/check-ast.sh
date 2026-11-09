@@ -418,15 +418,24 @@ ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 # may legitimately declare its own value named `T` outside a template; scanning
 # the whole file would call that a leak (false positive). The only legal
 # survivor inside an instance is a tag (`struct T` / `union T` / `enum T`).
-# The fixtures' own declarations feed the scan, so a new generic fixture is
-# covered without another line here. Blind spots (not instance bodies): `.h`
-# products, `test/ast/errors/`, module build outputs and the corpus -- see
-# docs/design/phase26.md §2.7.
+# A build may pull generic declarations from imported `.h.ct` bodies, so every
+# `.ct` file under the fixture contributes names -- not just the entry file.
+# The scan also runs over every product of a build-mode fixture
+# and every `.h` product is checked for instance bodies. Remaining blind spots
+# (module fixtures under test/modules/**, `test/ast/errors/`, the corpus) are
+# argued in docs/design/phase26.md §2.7.
+fixture_sources() {
+    find "$1" -name '*.ct' -type f | sort
+}
+
+# Usage: tparam_residue <product.c> <source.ct>...
 tparam_residue() {
+    product="$1"
+    shift
     bodies=$(awk '/__ct[0-9]+\(.*\{/ { inb = 1 }
                   inb { print }
-                  inb && /^\}/ { inb = 0 }' "$2")
-    for tp in $(sed -n 's/^[A-Za-z_][A-Za-z0-9_ \t*]*<\([A-Za-z_][A-Za-z0-9_]*\)>[[:space:]]*(.*/\1/p' "$1" | sort -u); do
+                  inb && /^\}/ { inb = 0 }' "$product")
+    for tp in $(sed -n 's/^[A-Za-z_][A-Za-z0-9_ \t*]*<\([A-Za-z_][A-Za-z0-9_]*\)>[[:space:]]*(.*/\1/p' "$@" | sort -u); do
         total=$(printf '%s\n' "$bodies" | grep -oE "\b$tp\b" | wc -l | tr -d ' ')
         tags=$(printf '%s\n' "$bodies" | grep -oE "\b(struct|union|enum)[[:space:]]+$tp\b" | wc -l | tr -d ' ')
         if [ "$total" -gt "$tags" ]; then
@@ -434,6 +443,59 @@ tparam_residue() {
         fi
     done
 }
+
+# TEST-18: generic instances are `static` and belong to a `.c`
+# product. An `<name>__ctN(...) {` inside a header can only be an emitter bug;
+# a prototype (`...;`) is not an instance body and must not trip the check.
+hdr_instances() {
+    awk '/__ct[0-9]+\(/ { inb = 1 }
+         inb && /\{/ { print; exit }
+         inb && /;/ { inb = 0 }' "$1" 2>/dev/null
+}
+
+# TEST-18: a scanner that never fires is indistinguishable from a
+# clean product, so feed it one dirty and one clean synthetic instance body.
+# The generic lives in an imported unit, not in the entry file, so an
+# entry-only scan stays silent: the pair is the red proof for `fixture_sources`.
+selftest="$work/tparam-selftest"
+rm -rf "$selftest"
+mkdir -p "$selftest"
+cat >"$selftest/src.ct" <<'CT'
+int main(void)
+{
+    return 0;
+}
+CT
+cat >"$selftest/lib.h.ct" <<'CT'
+T twice<T>(T x)
+{
+    return x + x;
+}
+CT
+cat >"$selftest/dirty.c" <<'C'
+static int twice__ct1(int x) {
+    T y = x;
+    return y;
+}
+C
+cat >"$selftest/clean.c" <<'C'
+static int twice__ct1(int x) {
+    return x + x;
+}
+C
+
+echo
+echo "== tparam_residue self-test (TEST-18) =="
+if [ -n "$(tparam_residue "$selftest/dirty.c" "$selftest/src.ct" "$selftest/lib.h.ct")" ]; then
+    ok "the scanner reports a leaked type parameter declared in another unit"
+else
+    bad "tparam_residue self-test" "the scanner stayed silent on a leaked type parameter"
+fi
+if [ -z "$(tparam_residue "$selftest/clean.c" "$selftest/src.ct" "$selftest/lib.h.ct")" ]; then
+    ok "the scanner stays silent on a clean instance body"
+else
+    bad "tparam_residue self-test" "the scanner reported a clean instance body"
+fi
 
 echo
 echo "== behavioural cases (compile -> cc -> run -> compare) =="
@@ -446,10 +508,11 @@ for d in test/ast/*/; do
     out="$work/$name.c"
     exe="$work/$name.bin"
 
-    # A fixture that carries its own mapping unit cannot use compile mode
-    # (`import` is a build-mode feature), so it goes through `build`. A shim is
-    # found by base name, so every directory holding one is an include root.
-    if [ -n "$(find "$d" -name '*.m.ct' -print -quit)" ]; then
+    # A fixture with more than one unit cannot use compile mode (`import` is a
+    # build-mode feature), so a mapping unit or a header unit sends it through
+    # `build`. A shim is found by base name, so every directory holding one is
+    # an include root.
+    if [ -n "$(find "$d" \( -name '*.m.ct' -o -name '*.h.ct' \) -print -quit)" ]; then
         md="$work/$name.mod"
         incs=""
         rm -rf "$md"
@@ -461,6 +524,26 @@ for d in test/ast/*/; do
         fi
         if [ -f "$md/prog.h" ]; then
             bad "$name" "a plain .ct unit must not emit a header"
+            continue
+        fi
+        tp_bad=""
+        for pc in "$md"/*.c; do
+            [ -f "$pc" ] || continue
+            tp="$(tparam_residue "$pc" $(fixture_sources "$d"))"
+            [ -n "$tp" ] && tp_bad="$tp_bad $(basename "$pc"):$tp"
+        done
+        if [ -n "$tp_bad" ]; then
+            bad "$name" "a build product still names a declared type parameter:$tp_bad"
+            continue
+        fi
+        hdr_bad=""
+        for ph in "$md"/*.h; do
+            [ -f "$ph" ] || continue
+            hd="$(hdr_instances "$ph")"
+            [ -n "$hd" ] && hdr_bad="$hdr_bad $(basename "$ph"):$hd"
+        done
+        if [ -n "$hdr_bad" ]; then
+            bad "$name" "a header product carries an instance body:$hdr_bad"
             continue
         fi
         if ! "$CC" -Wall -Wextra -std=c99 $incs "$md"/*.c -o "$exe" 2>"$work/$name.cc"; then
@@ -475,7 +558,7 @@ for d in test/ast/*/; do
             bad "$name" "program output differs: $(cat "$work/$name.stdout")"
             continue
         fi
-        ok "$name (build mode: literal, const, alias and decay type hosts)"
+        ok "$name (build mode: every product scanned for leaked type parameters)"
         continue
     fi
 
@@ -483,7 +566,7 @@ for d in test/ast/*/; do
         bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
         continue
     fi
-    tp_bad="$(tparam_residue "$src" "$out")"
+    tp_bad="$(tparam_residue "$out" $(fixture_sources "$d"))"
     if [ -n "$tp_bad" ]; then
         bad "$name" "the generated C still names a declared type parameter: $tp_bad"
         continue
@@ -1547,6 +1630,7 @@ mkdir -p "$mod-hdr"
 if "$work/ct-ast" build --emit-c test/modules/hdr/main.h.ct -o "$mod-hdr" \
         >"$work/mhdr.out" 2>"$work/mhdr.err" \
    && grep -q '^#include <stdio.h>$' "$mod-hdr/main.h" \
+   && [ -z "$(hdr_instances "$mod-hdr/main.h")" ] \
    && "$CC" -Wall -Wextra -std=c99 "$mod-hdr"/*.c -o "$work/mhdr.bin" 2>"$work/mhdr.cc" \
    && "$work/mhdr.bin" >"$work/mhdr.stdout" 2>&1 \
    && cmp -s "$work/mhdr.stdout" test/modules/hdr/expected.out; then
@@ -1954,6 +2038,7 @@ if "$work/ct-ast" build --emit-c test/modules/hdr_prologue/main.h.ct -o "$mod-pr
         >"$work/mpro.out" 2>"$work/mpro.err" \
    && grep -q '^#include <stdio.h>$' "$mod-pro/main.h" \
    && ! grep -q 'PROLOGUE_MACRO' "$mod-pro/main.h" \
+   && [ -z "$(hdr_instances "$mod-pro/main.h")" ] \
    && "$CC" -Wall -Wextra -std=c99 "$mod-pro"/*.c -o "$work/mpro.bin" 2>"$work/mpro.cc" \
    && "$work/mpro.bin" >"$work/mpro.stdout" 2>&1 \
    && cmp -s "$work/mpro.stdout" test/modules/hdr_prologue/expected.out; then

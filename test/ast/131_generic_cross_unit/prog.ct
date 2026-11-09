@@ -1,0 +1,11 @@
+/* v0.26.4 / TEST-18: the entry unit has no generic at all; the instance body
+   it must be able to check lives in the imported unit's `.c` product. */
+import extra::lib;
+
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d\n", quad(10));
+    return 0;
+}

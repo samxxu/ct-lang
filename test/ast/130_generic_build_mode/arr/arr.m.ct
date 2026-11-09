@@ -1,0 +1,12 @@
+/* A mapping unit only exists so the fixture takes the `build` path; the recipe
+   keeps the consumer honest about the static host match too. The receiver is
+   the first binding parameter, so `total(s, n)` binds `a.total(3)`. */
+namespace arr;
+
+pub trait IntSeq {
+    int total(int n);
+}
+
+map trait IntSeq for type int * {
+    total(s, n) -> ct_total(s, n);
+}

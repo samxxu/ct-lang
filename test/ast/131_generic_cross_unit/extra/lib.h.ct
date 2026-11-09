@@ -1,0 +1,15 @@
+/* v0.26.4 / TEST-18: the generic is both declared and instantiated inside an
+   imported unit, so its instance body lands in `extra/lib.c`, never in
+   `prog.c`. A residue scan that reads only the entry file sees no type
+   parameter name here and would stay silent. */
+pub int quad(int n);
+
+static T twice<T>(T x)
+{
+    return x + x;
+}
+
+pub int quad(int n)
+{
+    return twice<int>(n) * 2;
+}

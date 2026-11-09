@@ -1,0 +1,18 @@
+/* v0.26.4 / TEST-18: this directory carries a `.m.ct`, so the fixture goes
+   through `ct-ast build` instead of compile mode. The generic instance body
+   must be scanned in every build product, just as it is in compile mode. */
+import arr::arr;
+
+#include <stdio.h>
+
+T twice<T>(T x)
+{
+    return x + x;
+}
+
+int main(void)
+{
+    int a[3] = { 1, 2, 3 };
+    printf("%d %d\n", a.total(3), twice<int>(21));
+    return 0;
+}
