@@ -1,0 +1,14 @@
+// Phase 25: the `array.each(closure)` type host - a C array decays to `int *`,
+// and the shim consumes the callback synchronously (a stack compound literal,
+// so the environment must not outlive the call).
+#include <stddef.h>
+
+namespace seq;
+
+pub trait IntSeq {
+    int each(int n, int (*fn)(void *env, int x), void *env);
+}
+
+map trait IntSeq for type int * {
+    each(a, n, fn, env) -> ct_each_int(a, n, fn, env);
+}

@@ -1,7 +1,7 @@
 # examples —— 示例索引
 
-每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力。分为四组：**impl / vtable**、
-**类型宿主（type host）**、**闭包**、**loop 语义**。
+每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力。分为五组：**impl / vtable**、
+**类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**。
 
 ## impl / vtable
 
@@ -50,6 +50,7 @@
 | --- | --- | --- | --- |
 | `10_closure_pipeline` | 闭包字面量 / 已声明的绑定的传参约定，配合 `loop(n)` | ct-ast | `check-ast.sh` + `check-warnings.sh` |
 | `12_closure_in_loop` | 循环体内创建闭包：按值捕获，只保留创建那一轮的变量 | ct-ast | 同上 |
+| `17_static_map_closure` | 闭包字面量作为 `.m.ct` 静态映射调用的实参（Phase 25）：数组衰减成 `int *`，recipe 把 `(fn, env)` 原样传给同步 C 消费者 | ct-ast + `ct build` 多单元 | `check-warnings.sh` 的 src-layout build 段 |
 
 `09_callback` 的档②（`callback_tier2.ct`）同样属于这一组：`=>` 闭包字面量直接填满
 `(fn, env)` 两个槽，档① 的手写适配器不再需要。它单独成文件是为了让 `callback.ct`
@@ -60,6 +61,13 @@
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
 | `11_loop_semantics` | `loop(n)`（0..n-1）与 `loop(a..b)`（a..b-1）：计数只求值一次，`i` 可写 | ct-ast | `check-ast.sh` + `check-warnings.sh` |
+
+## 数组初值与泛型
+
+| 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
+| --- | --- | --- | --- |
+| `15_range_init` | `0..n(<expr>)` 数组 range 初值（Phase 24）：文件作用域 `static const` 表与局部表，`$` 是下标，产物是花括号列表而非循环 | ct-ast | `check-ast.sh` + `check-warnings.sh`（`test/run.sh` 跳过） |
+| `16_generic_min` | 泛型函数（Phase 26）：`T larger<T>(T, T)` 以 `int` / `double` 实例化，每个实例是一份独立 `static` C 函数 | ct-ast | 同上 |
 
 ## 门禁归属说明
 

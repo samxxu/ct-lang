@@ -1,0 +1,42 @@
+// 16_generic_min - one template, several monomorphised instances (Phase 26)
+//
+// `T larger<T>(T a, T b)` is a template, not a runtime-polymorphic function.
+// Every distinct type argument (`larger<int>`, `larger<double>`) makes the
+// compiler emit its own `static` C function with `T` substituted, so the call
+// is a plain C call: no boxing, no vtable, no allocation.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+T larger<T>(T a, T b)
+{
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+T smallest<T>(T a, T b, T c)
+{
+    T m;
+
+    m = a;
+    if (b < m) {
+        m = b;
+    }
+    if (c < m) {
+        m = c;
+    }
+    return m;
+}
+
+int main(void)
+{
+    printf("larger  %d\n", larger<int>(3, 9));
+    printf("larger  %.2f\n", larger<double>(2.5, 1.75));
+
+    printf("small   %d\n", smallest<int>(7, 2, 5));
+    printf("small   %.2f\n", smallest<double>(0.5, -1.5, 3.0));
+    return 0;
+}

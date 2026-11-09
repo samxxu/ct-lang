@@ -1,0 +1,27 @@
+// 17_static_map_closure - a closure literal as a static map argument (Phase 25)
+//
+// A C array decays to `int *`, so the type host `IntSeq` hangs `each()` on it.
+// The recipe forwards its `(fn, env)` pair to a synchronous C consumer, and the
+// `=>` literal fills that pair exactly as a hand-written call would: the
+// capture is by value, and the pair never outlives the call.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+import seq::seq;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int base = 10;
+    int a[5] = { 1, 2, 3, 4, 5 };
+    int sum;
+    int twice;
+
+    sum = a.each(5, (int x) => x + base);
+    printf("sum    %d\n", sum);
+
+    twice = a.each(5, (int x) => x * 2);
+    printf("twice  %d\n", twice);
+    return 0;
+}

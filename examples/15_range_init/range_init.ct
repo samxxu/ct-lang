@@ -1,0 +1,42 @@
+// 15_range_init - array initialisers written as a range (Phase 24)
+//
+// `0..13($ * ($ + 1) / 2)` is not a loop. The compiler emits a plain brace
+// list whose k-th element is the expression with `$` replaced by k, so there is
+// no loop at run time, no temporary array and no allocation. The form is legal
+// at file scope, which is what makes it useful for static lookup tables.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+/* triangular numbers: 0, 1, 3, 6, ... computed once, at compile time */
+static const int triangular[] = 0..13($ * ($ + 1) / 2);
+
+/* a ramp whose step is part of the expression: 4, 7, 10, 13, 16, 19 */
+static const int ramp[] = 0..6(4 + $ * 3);
+
+int main(void)
+{
+    /* a local table: 1, 4, 9, 16, 25 */
+    int squares[] = 1..6($ * $);
+    int n = (int)(sizeof triangular / sizeof triangular[0]);
+    int i;
+
+    printf("triangular %d\n", n);
+    for (i = 0; i < n; i++) {
+        printf("  %d\n", triangular[i]);
+    }
+
+    printf("ramp");
+    for (i = 0; i < (int)(sizeof ramp / sizeof ramp[0]); i++) {
+        printf(" %d", ramp[i]);
+    }
+    printf("\n");
+
+    printf("squares");
+    for (i = 0; i < (int)(sizeof squares / sizeof squares[0]); i++) {
+        printf(" %d", squares[i]);
+    }
+    printf("\n");
+    return 0;
+}
