@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [README.md:5-6](../../README.md#L5-L6)；CLI 表 [L39](../../README.md#L39)（英文 [L118](../../README.md#L118)） |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | 已修复（本轮，2026-11-03）；v0.26.4 复检再修「泛型」口径，见文末「复检」 |
 
 ## 现象
 
@@ -68,3 +68,15 @@ README 顶部用「不做类型检查、不做优化」概括 ct 的定位（中
 - 顺带修掉同一矛盾的「not done by design」清单项：改为 `type checking beyond ct check's bounded
   checks`，见 [README.md:136](../../README.md#L136)。
 - 验证：`python3 test/docs/check-docs.py` 绿；12 道门禁全绿，compile/build 行为未动。
+
+## 复检（v0.26.4，2026-11-10）
+
+Phase 26 落地泛型**函数**后，同一处清单项又漂了：README 仍把「泛型」整体列为「明确不做」，
+与 [language-spec.md §8](../../docs/language-spec.md) 的口径（泛型函数已落地；泛型结构体 / trait /
+约束 / 推导 / 多类型参数仍不在范围）相反。
+
+按规范口径重写中英两条「明确不做」，并各补一条「泛型函数」能力项；同一份文档树里
+`docs/patterns.md`（§2 标题与替换规则）、`docs/polymorphism.md`（非目标）、`docs/roadmap.md`
+（Phase 5 待定项与 Batch 35 记录）里同样的「不做泛型」表述一并限定为「泛型结构体 / trait」。
+
+验证：`python3 test/docs/check-docs.py` 绿；`./test/run.sh` 与 `bash selfhost/check-all.sh` 全绿。

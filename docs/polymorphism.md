@@ -220,7 +220,7 @@ D6 = 确认 `<Trait>_iface`；D7 = 接口字段为普通字段。
 ### 10. 明确的非目标
 
 - 不做继承、虚基类、RTTI / `dynamic_cast`、反射。
-- 不做泛型（`List<Greeter>`）。
+- 不做泛型结构体 / 容器（`List<Greeter>`）；泛型**函数**已在 Phase 26 落地（language-spec §4.48）。
 - 不做引用计数 / GC；生命周期仍是调用方责任。
 - 不改变已发布的 vptr / vtable 命名与既有结构体布局。
 
@@ -373,6 +373,7 @@ boxing from the declaration target → `0.2c` (if D3 = B) a signature table with
 
 ### 10. Explicit non-goals
 
-No inheritance, virtual base classes, RTTI / `dynamic_cast` or reflection; no generics
-(`List<Greeter>`); no refcounting or GC (lifetimes stay the caller's responsibility); no change to the
+No inheritance, virtual base classes, RTTI / `dynamic_cast` or reflection; no generic structs or
+containers (`List<Greeter>`) — generic **functions** landed in Phase 26 (§4.48); no refcounting or GC
+(lifetimes stay the caller's responsibility); no change to the
 published vptr / vtable names or to existing struct layouts.

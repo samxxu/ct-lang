@@ -881,7 +881,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **进展（2026-10-17，切片 5.3：路径敏感泄漏分析）**：`SymTabOps::leak_check_return` 落地——行首且位于函数帧顶层的 `return` 视为**无条件**（只有**对象本身**作为返回表达式时才转移所有权，其余仍 owned，由闭合 `}` 报确定泄漏）；位于块内或行中的 `return` 视为**条件**，对每个仍 owned、非 autodrop 且未被返回的变量记一条 **kind = 2** 警告（每个对象只报一次，`path_warned` 去重，作用域闭合不再重复报）。文本：`warning: potential leak: '<var>' (<Type>*) may leak on a return path (line <n>)`；JSON：`"type":"potential_leak"` + `"message":"may leak on a return path"` + `"path_line":<n>`。旧的 `leak_observe` 不再在 `return` 行清标记（否则条件返回会掩盖泄漏），只保留赋值逃逸判定。新增 designed fixture **2 个**：`leak_path`（文本，含「无条件 `return r;` 转移所有权不告警」对照）与 `leak_path_json`（JSON 形状）。**验证**：designed **22 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` 117/117、`check-m2a` / `ct-tour` OK、acceptance 19 pass / 1 pending、grammar 20/20、手工三件套通过。
 - **进展（2026-10-17，切片 5.1/5.2：AutoDrop）**：`own` 已在 `selfhost/l2/**` 落地。`Var` 增 `autodrop`；`SymTabOps::autodrop_observe` 在重新赋值 / 逃逸 / 返回（只认 `return` 之后的表达式）时取消标记；`RewriteOps::emit_drops` + `autodrop_before` 经 **hoist** 在行首 `}` / `return` 前注入 `if (p) { T_Drop_drop(p); free(p); p = 0; }`（声明逆序、置空防重放），impl 方法体顶层在 `emit_body` 尾部补发（`Pipe` 增 `in_body` 区分文件作用域）。硬诊断：文件作用域、数组、非指针、无 `malloc`/`calloc` 初始化、无 `Drop` 类型、行内 `}` / `return` —— 全部编译期报错，**绝不静默跳过**。新增 4 个 designed fixture：`autodrop`（Drop 体打印，证明嵌套块、独立块与 impl 体尾部三处释放真的执行）与 `autodrop_nodrop` / `autodrop_layout` / `autodrop_scope`（三条硬诊断）。**验证**：designed **20 pass**、`check-goldens` 25/25 ×3 + 不动点 2/2、`check-archive` 0 退化、`./test/run.sh` **117/117**、`check-all` 六门全绿、acceptance 19 pass / 1 pending、grammar **20/20**、手工三件套通过。
 
-**需用户先定位、暂不排期**：是否引入**类型检查**（若引入，编译器性质改变，需要 AST 而非逐行扫描）；是否引入**泛型**（需在 `.c` 侧单态化展开）；是否要保证**生成物可读性**的硬指标（最大嵌套缩进、命名长度上限）。
+**需用户先定位、暂不排期**：是否引入**类型检查**（若引入，编译器性质改变，需要 AST 而非逐行扫描）；是否引入**泛型结构体 / trait**（泛型**函数**已在 Phase 26 落地，见 `v0.26.0` 行）；是否要保证**生成物可读性**的硬指标（最大嵌套缩进、命名长度上限）。
 
 ### Phase 6：生态与扩展（原 Phase 3）
 
@@ -965,7 +965,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | 容量上限策略 | ✅ 已定（2026-10-31）：A. 维持「固定上限 + 越界硬报错」；回访触发条件=真实项目 / 官方 binding 撞顶，或自举再次逼近 `MAX_NODES`。触发时先做定点抬高（B），只有「抬到多大都会撞」时才评估动态分配（C） | 见 [design/next-decisions.md](history/design/next-decisions.md) §1 |
 | 过渡期是否冻结一切新特性 | ✅ 已定：自举（Phase 1）启动起冻结一切新的 C 侧语言特性，`ctc.c` 只接受 bug 修复（2026-10-14 相位重排） | 防止 Phase 0 历史偏差复发 |
 | C 实现最终删除还是归档 | ✅ 已定（2026-10-14）：「**剥离在前**」——Phase 0.3 先把越位特性移出 `ctc.c` 并**归档为 oracle**（不销毁），Phase 2 起用 CT 逐项重做并向归档对差；`ctc.c` 剥回纯 OO 核心并**永不整体删除** | 见「Phase 0.3」「自举策略与单文件边界」 |
-| 类型检查 / 泛型 / 生成物可读性硬指标 | 仍待定；Phase 5 **明确不引入**（见 [design/phase5.md](history/design/phase5.md) §8 非目标） | 若引入类型检查，编译器性质改变，需要 AST |
+| 类型检查 / 泛型结构体 / 生成物可读性硬指标 | 仍待定；Phase 5 **明确不引入**（见 [design/phase5.md](history/design/phase5.md) §8 非目标）；泛型**函数**已在 Phase 26 落地（`v0.26.0`） | 若引入类型检查，编译器性质改变，需要 AST |
 
 ---
 
@@ -2212,8 +2212,9 @@ with the output byte-identical. See [issues/selfhost/unowned-state-sym-param.md]
 
 **Needs a user decision first, not scheduled yet**: whether to introduce **type checking** (if so the
 compiler changes nature and needs an AST rather than line-based scanning); whether to introduce
-**generics** (requires monomorphisation on the `.c` side); whether to guarantee a **hard readability
-budget** for the generated output (max nesting indent, name-length caps, …).
+**generic structs / traits** (generic **functions** landed in Phase 26, see the `v0.26.0` row);
+whether to guarantee a **hard readability budget** for the generated output (max nesting indent,
+name-length caps, …).
 
 ### Phase 6 — ecosystem and extension (was Phase 3)
 
@@ -2503,9 +2504,10 @@ The bootstrap target layout, layering rules (L0/L1/L2) and build flow live in
   arrays / fields, composition, `namespace` / `import`, `map` and `own` / `Drop`, and the new
   "design patterns" section of `check-ast.sh` compiles, builds warning-free, runs and compares
   them. [docs/patterns.md](patterns.md) maps each pattern to the mechanisms it uses, states the
-  three substitution rules for a language without inheritance or generics, and lists how the
-  remaining GoF patterns land. Inheritance, generics, type checking and the full visibility
-  modifiers stay explicitly unsupported (§8) — a design decision, not a backlog item.
+  three substitution rules for a language without inheritance or generic containers, and lists how
+  the remaining GoF patterns land. Inheritance, generic structs / traits, type checking and the
+  full visibility modifiers stay explicitly unsupported (§8) — a design decision, not a backlog
+  item; generic **functions** arrived later, in Phase 26 (§4.48).
   `check-ast.sh` 317 passed, `check-warnings.sh` 146 ok, `check-all.sh` nine gates green; the
   compiler, its output and `CTC_VERSION` are untouched.
 - **Batch 36 (2026-10-31, trait default methods)**: a trait method may now carry a default body
@@ -2667,6 +2669,7 @@ After the 2026-10-14 phase realignment two more are decided: **all new C-side la
 frozen from self-hosting (Phase 1) on** (`ctc.c` takes bug fixes only), and the **cleanup scope is the
 strict version** — `ctc.c` is peeled back to the pure-OO core, the rest of the features are deleted or
 archived once their CT versions pass differential verification, and `ctc.c` itself is never deleted
-outright (see "Bootstrap strategy and the single-file boundary"). Still open: type checking, generics,
-and hard readability budgets for the generated output — Phase 5 **explicitly did not introduce them**
-(see [design/phase5.md](history/design/phase5.md) §8 non-goals).
+outright (see "Bootstrap strategy and the single-file boundary"). Still open: type checking, generic
+structs / traits, and hard readability budgets for the generated output — Phase 5 **explicitly did not
+introduce them** (see [design/phase5.md](history/design/phase5.md) §8 non-goals); generic **functions**
+arrived later, in Phase 26 (§4.48).
