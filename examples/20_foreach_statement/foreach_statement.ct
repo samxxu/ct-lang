@@ -1,0 +1,114 @@
+// 20_foreach_statement - the statement form `foreach (array) { ... item ... }`
+// (Phase 27), set beside the library-level `each` of examples 17/18/19.
+//
+// `foreach` walks an array whose length the compiler already knows: `item` is
+// an implicit by-value binding of the current element, and `break` /
+// `continue` / `return` leave the block exactly as they leave a `for` (they are
+// one and the same loop). It expands to a single `for` over a length snapshot,
+// so there is no library, no callback and no runtime cost.
+//
+// `each` is the other direction: the container owns the traversal and calls a
+// `(fn, env)` callback once per element, so the caller can only fold a value
+// and cannot break out of the walk. Use `each` when the walk belongs to the
+// container (a table, a tree, a foreign iterator); use `foreach` over a plain
+// array in your own code, where `break`, `continue` and `return` must work.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+/* A file-scope array has a length the compiler can count, so it can be walked
+   from a helper that has no `n` parameter. */
+static const int marks[6] = { 5, 12, 7, 40, 9, 3 };
+
+/* `return` inside the block leaves the function, not just the loop. */
+static int first_over(int limit)
+{
+    foreach (marks) {
+        if (item > limit) {
+            return item;
+        }
+    }
+    return -1;
+}
+
+/* The library-level `each`: the container decides how it is walked. */
+trait SumEach {
+    int each(int (*visit)(void *env, int value), void *env);
+}
+
+struct Bucket {
+    int *items;
+    int n;
+} use SumEach;
+
+static int add(void *env, int value)
+{
+    int *acc;
+
+    acc = env;
+    *acc = *acc + value;
+    return 1;
+}
+
+impl SumEach for Bucket {
+    int each(int (*visit)(void *env, int value), void *env)
+    {
+        int i = 0;
+        int seen = 0;
+
+        while (i < self->n) {
+            seen = seen + visit(env, self->items[i]);
+            i = i + 1;
+        }
+        return seen;
+    }
+}
+
+int main(void)
+{
+    int scores[5];
+    int total = 0;
+    int kept = 0;
+    int bonus = 3;
+    int adjusted = 0;
+    struct Bucket b;
+    int acc = 0;
+
+    scores[0] = 4;
+    scores[1] = -7;
+    scores[2] = 91;
+    scores[3] = 12;
+    scores[4] = 8;
+
+    /* `continue` skips one element, `break` leaves the loop early */
+    foreach (scores) {
+        if (item < 0) {
+            continue;
+        }
+        if (item > 90) {
+            break;
+        }
+        total = total + item;
+        kept = kept + 1;
+    }
+    printf("kept %d total %d\n", kept, total);
+
+    /* a closure built in the block: `item` is an ordinary value there */
+    foreach (scores) {
+        int (*bump)(int x) = (int x) => x + bonus;
+
+        adjusted = adjusted + bump(item);
+    }
+    printf("adjusted %d\n", adjusted);
+
+    /* the same walk as a helper: `return` ends the function on the spot */
+    printf("first %d\n", first_over(10));
+
+    /* the library path: every element is visited, no early exit */
+    b.items = scores;
+    b.n = 5;
+    printf("each %d\n", b.each(add, &acc));
+    printf("acc %d\n", acc);
+    return 0;
+}

@@ -58,9 +58,16 @@
 
 ## loop 语义
 
+计数循环 `loop(n)` / `loop(a..b)`，以及数组的语句级迭代 `foreach (array) { … item … }`。
+
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
 | `11_loop_semantics` | `loop(n)`（0..n-1）与 `loop(a..b)`（a..b-1）：计数只求值一次，`i` 可写 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `20_foreach_statement` | 语句级 `foreach (array) { … item … }`（Phase 27）：隐式 `item` 按值绑定、`break` / `continue` / 块内 `return` 直通、块内闭包；与 19 的库层 `each` 对照 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+
+`foreach` 与 `each` 不是同一机制：`foreach` 只走**长度已知的数组**，遍历归调用方，`break` / `continue` /
+`return` 都可用；`each` 是容器自己的方法（trait 或泛型自由函数），遍历归容器，回调只能折叠值、不能提前退出。
+`20` 在同一个文件里两条路径并排写出，可对照。
 
 ## 数组初值与泛型
 
@@ -75,7 +82,7 @@
 
 - `test/run.sh`：端到端层，覆盖编译模式下的 `examples/*/*.ct`。带 `//@ct-requires: ct-ast`
   的文件（`02_market` 的接口值数组、`09_callback/callback_tier2.ct` 的 `=>`、
-  `08_map_binding/map_binding.ct` 的 `map`、`json` 的 `loop`、`10`/`11`/`12`/`15`/`16`/`18`/`19`）不再跳过：第一次遇到时
+  `08_map_binding/map_binding.ct` 的 `map`、`json` 的 `loop`、`10`/`11`/`12`/`15`/`16`/`18`/`19`/`20`）不再跳过：第一次遇到时
   在临时目录里按 L0 → L1 → L2 → ct-ast 建链，再用 ct-ast 编译、`cc` 构建、运行并比对
   `expected.out`。这条路径自带红证——把一份真实示例的 golden 换成程序不会输出的内容，必须
   在 diff 阶段被拒绝，否则该门禁项记为失败。
