@@ -284,6 +284,7 @@ for (i = 0; i < b->nparams; i++) {
 | D25-9 | 闭包作接收者的既有语义不变（`81_closure_no_typehost` 为守护用例） |
 | D25-10 | 仅 ct-ast；L0 / L1 / L2 不改 |
 | D25-11 | 收口 bump `v0.25.0`；功能层既有 golden 零变化 |
+| D25-12 | 命名预留（2026-11-10 battle）：库层方法/自由泛型函数保留 `each`；未来若排期语句形态，不复用该名，改用 `foreach`（或 `for … in`）。把 `each` 升为语句关键字会与 `each<T>(...)` 调用歧义并破坏既有代码；判据与探针见 [DOC-70](../../issues/docs/doc70-each-statement-form-unimplemented.md) |
 
 ---
 
