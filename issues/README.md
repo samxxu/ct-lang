@@ -314,7 +314,7 @@
 | SH-57 | Medium | 写在声明之后的 `import` 整条被静默丢弃，模块不存在也不报（已修，`0fd74c0`） | [sh57-import-after-decl-silently-dropped.md](selfhost/sh57-import-after-decl-silently-dropped.md) |
 | SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（已关闭：有意限制；文案已改进 `64f27f3`） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
 | SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
-| SH-60 | **High** | 静态映射调用点缺少实参类型检查（**open**，并入 Phase 25 / 25.1；顶层 const 接收者待 D-60-1，声明点未知类型 deferred 待 D-60-2） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
+| SH-60 | **High** | 静态映射调用点缺少实参类型检查（**2a 已修复**：四个静态形态按 trait 签名逐位比对，确信不匹配在 `ct build` 即硬错；顶层 const 接收者待 D-60-1，声明点未知类型 deferred 待 D-60-2） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
 | SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
 | SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 `tok_is_type_name()` + 无括号形态；复核 `verified`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
 | SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `verified`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |

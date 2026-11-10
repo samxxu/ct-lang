@@ -1028,11 +1028,13 @@ else
     bad "p20_type_host_call_arg" "$(cat "$work/mhtc.err" "$work/mhtc.cc" "$work/mhtc.stdout" 2>/dev/null | head -5)"
 fi
 
-# Phase 25.1 (SH-60 2a): a static map's method signature is enforced at the call
+# Phase 25.1 + SH-60: a static map's method signature is enforced at the call
 # site in every form, not only by arity. `p25_static_argtype` binds one host per
 # form -- `P` is a type host (`aux == 6` and `Trait::method(recv, ...)`), `Q` a
 # namespace host (`ns::Trait.method` and `ns::method`). A compatible actual stays
-# silent; a confident 19.2 mismatch is a warning, so the build still exits 0.
+# silent; a confident mismatch is a hard error (SH-60): the recipe splices the
+# actual into the emitted call and `ct check` never sees an imported mapping
+# unit, so a warning would let the bad call reach C or the runtime.
 p25=test/modules/p25_static_argtype
 
 rm -rf "$work/p25ok"
@@ -1048,9 +1050,9 @@ fi
 # aux == 6: type-host dot call.
 rm -rf "$work/p25a6"
 mkdir -p "$work/p25a6"
-if "$work/ct-ast" build --emit-c -I "$p25" "$p25/aux6.ct" -o "$work/p25a6" \
+if ! "$work/ct-ast" build --emit-c -I "$p25" "$p25/aux6.ct" -o "$work/p25a6" \
         >"$work/p25a6.out" 2>"$work/p25a6.err" \
-   && grep -qF "warning: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
+   && grep -qF "error: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
         "$work/p25a6.err"; then
     ok "p25_static_argtype_aux6 (type-host dot call compares its actual)"
 else
@@ -1060,9 +1062,9 @@ fi
 # qf == 3: `ns::Trait.method(...)`.
 rm -rf "$work/p25q3"
 mkdir -p "$work/p25q3"
-if "$work/ct-ast" build --emit-c -I "$p25" "$p25/q3.ct" -o "$work/p25q3" \
+if ! "$work/ct-ast" build --emit-c -I "$p25" "$p25/q3.ct" -o "$work/p25q3" \
         >"$work/p25q3.out" 2>"$work/p25q3.err" \
-   && grep -qF "warning: type mismatch: 'g' argument 1: expected 'char *', got 'int'" \
+   && grep -qF "error: type mismatch: 'g' argument 1: expected 'char *', got 'int'" \
         "$work/p25q3.err"; then
     ok "p25_static_argtype_q3 (ns::Trait.method compares its actual)"
 else
@@ -1072,9 +1074,9 @@ fi
 # qf == 4: `ns::method(...)` with the trait segment elided.
 rm -rf "$work/p25q4"
 mkdir -p "$work/p25q4"
-if "$work/ct-ast" build --emit-c -I "$p25" "$p25/q4.ct" -o "$work/p25q4" \
+if ! "$work/ct-ast" build --emit-c -I "$p25" "$p25/q4.ct" -o "$work/p25q4" \
         >"$work/p25q4.out" 2>"$work/p25q4.err" \
-   && grep -qF "warning: type mismatch: 'f' argument 1: expected 'char *', got 'int'" \
+   && grep -qF "error: type mismatch: 'f' argument 1: expected 'char *', got 'int'" \
         "$work/p25q4.err"; then
     ok "p25_static_argtype_q4 (ns::method compares its actual)"
 else
@@ -1084,9 +1086,9 @@ fi
 # qf == 5: `Trait::method(recv, ...)`; the receiver stays out of the comparison.
 rm -rf "$work/p25q5"
 mkdir -p "$work/p25q5"
-if "$work/ct-ast" build --emit-c -I "$p25" "$p25/q5.ct" -o "$work/p25q5" \
+if ! "$work/ct-ast" build --emit-c -I "$p25" "$p25/q5.ct" -o "$work/p25q5" \
         >"$work/p25q5.out" 2>"$work/p25q5.err" \
-   && grep -qF "warning: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
+   && grep -qF "error: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
         "$work/p25q5.err"; then
     ok "p25_static_argtype_q5 (Trait::method compares the tail, not the receiver)"
 else

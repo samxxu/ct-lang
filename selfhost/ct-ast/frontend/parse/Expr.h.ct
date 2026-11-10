@@ -125,6 +125,12 @@ pub trait ExprOps {
     int  arity_check(int line, int col, const char *callee, int got, int want);
     int  map_arity(int line, int col, const char *trait, const char *method, int got);
     int  argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi);
+    /* SH-60: a static map's actuals are compared with the host trait's
+       signature (same rules as 19.2) but a confident mismatch is a hard error,
+       not a warning: the recipe splices the actual into the generated call, so
+       nothing else can catch it, and `ct check` never sees an imported
+       mapping unit. */
+    int  argtype_check_static(int line, int col, const char *callee, int args, int ti, int mi);
     /* 25.1: the silent half of `argtype_check` -- 0 compatible / undecidable,
        1 a confident mismatch written to `msg`. A type host with several
        candidate maps asks every candidate before it warns. */
@@ -1093,6 +1099,23 @@ impl ExprOps for Expr {
                 return self->sup->fail("too many warnings");
         }
         return 0;
+    }
+
+    /* SH-60: the static-recipe form of 19.2. The call site is expanded into
+       the recipe against the host trait's signature, and the mapping unit is
+       usually imported, so `ct check` (single unit) can never look at this
+       call. A confident mismatch therefore fails the ct stage outright
+       instead of waiting for a C warning that the recipe may not even keep. */
+    int argtype_check_static(int line, int col, const char *callee, int args, int ti, int mi)
+    {
+        char msg[MAX_TEXT];
+        char full[MAX_TEXT];
+
+        if (!self->argtype_mismatch(args, -1, ti, mi, msg, sizeof msg))
+            return 0;
+        snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
+        tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
+        return -1;
     }
 
     /* 19.3: an impl's parameter spelling against the trait's -- two declared
@@ -2535,9 +2558,15 @@ impl ExprOps for Expr {
                                                                   msg) != 0)
                                             return self->sup->fail("too many warnings");
                                     } else if (seen && afits && !fits) {
-                                        if (self->sup->type_warn(mline, mcol, fname,
-                                                                 tmsg) != 0)
-                                            return self->sup->fail("too many warnings");
+                                        /* SH-60: every arity-fitting candidate
+                                           disagreed with an actual, so this is
+                                           a hard error -- see
+                                           `argtype_check_static`. */
+                                        snprintf(msg, sizeof msg,
+                                                 "type mismatch: '%s' %s", fname, tmsg);
+                                        tool::diag::ct_sem_error(mline, mcol, msg,
+                                                                 self->sup->mem->path);
+                                        return -1;
                                     }
                                 }
                             }
@@ -3026,8 +3055,8 @@ impl ExprOps for Expr {
                                 if (self->map_closure_check(id_line, id_col, args,
                                                             ti3, mi3) != 0)
                                     return -1;
-                                if (self->argtype_check(id_line, id_col, mname, args,
-                                                        -1, ti3, mi3) != 0)
+                                if (self->argtype_check_static(id_line, id_col, mname, args,
+                                                               ti3, mi3) != 0)
                                     return -1;
                             }
                         }
@@ -3068,8 +3097,8 @@ impl ExprOps for Expr {
                                 if (self->map_closure_check(id_line, id_col, args,
                                                             ti3, mi3) != 0)
                                     return -1;
-                                if (self->argtype_check(id_line, id_col, qc, args,
-                                                        -1, ti3, mi3) != 0)
+                                if (self->argtype_check_static(id_line, id_col, qc, args,
+                                                               ti3, mi3) != 0)
                                     return -1;
                             }
                         }
@@ -3135,8 +3164,8 @@ impl ExprOps for Expr {
                                 if (self->map_closure_check(id_line, id_col, rest,
                                                             ti3, mi3) != 0)
                                     return -1;
-                                if (self->argtype_check(id_line, id_col, qc, rest,
-                                                        -1, ti3, mi3) != 0)
+                                if (self->argtype_check_static(id_line, id_col, qc, rest,
+                                                               ti3, mi3) != 0)
                                     return -1;
                             }
                         }

@@ -5,8 +5,8 @@
 | 模块 | selfhost（`Expr` / `TypeCheck`）；std 为触发场景 |
 | 严重度 | **High** |
 | 锚点 | commit `a1c523a`（2026-11-07，`v0.20.0`）；裁决 2026-11-09 |
-| 文件 | [TypeCheck.h.ct:75-129](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L75-L129)（`type_key` 丢弃 `const` / `volatile`）；[Emitter.h.ct:424](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L424)（同一张表的副本 `map_type_key`）；[Expr.h.ct:205-231](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L205-L231)（实参比较前的 `tnorm`）；[Expr.h.ct:1694-1699](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1694-L1699)（静态 trait 跳过 19.2 实参类型检查） |
-| 状态 | **open**（2026-11-09 裁决改判；并入 Phase 25，25.1） |
+| 文件 | [TypeCheck.h.ct:75-129](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L75-L129)（`type_key` 丢弃 `const` / `volatile`）；[Emitter.h.ct:424](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L424)（同一张表的副本 `map_type_key`）；[Expr.h.ct:205-231](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L205-L231)（实参比较前的 `tnorm`）；[Expr.h.ct:1109-1122](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1109-L1122)（`argtype_check_static`，静态调用点的硬错）；[Expr.h.ct:2560-2569](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2560-L2569)（`aux == 6` 的多候选判定） |
+| 状态 | **2a 已修复**（2026-11-10，`v0.26.4`）；1a/1b 待 D-60-1，2b 仍 deferred（见「子项去向」） |
 
 ## 现象
 
@@ -160,9 +160,52 @@ CT 的 trait 方法**没有显式 `self`**（声明形如 `int len();`，`self` 
 
 | 子项 | 状态 | 去向 |
 | --- | --- | --- |
-| 静态映射调用点缺少实参类型检查 | **open** | 并入 Phase 25（25.1）：静态 trait 的实参进入与普通 trait 方法相同的 19.2 粗粒度比对 |
+| 静态映射调用点缺少实参类型检查 | **已修复**（2026-11-10） | 25.1 已接入 19.2 比对但只出 warning；本轮把四个静态形态的确信不匹配升为硬错，见「处置（2026-11-10）」 |
 | 顶层 `const` 接收者不区分 | 待 D-60-1 决策 | 依赖「接收者可变性」的语言表面拼写（`mut self` 方向），不在 Phase 25 范围内 |
 | 声明点未知类型不报错（`TotallyBogus *`） | **deferred** | 等 D-60-2；属「头文件 typedef 透传」设计的一部分 |
+
+## 处置（2026-11-10，`v0.26.4`）
+
+**现状核对。** Phase 25.1 已把四个静态调用形态接进 19.2 的逐位比对（`argtype_mismatch` +
+`tnorm`）：`aux == 6`（`recv.find(42)`）、`ns::Trait.method`、`ns::method`、`Trait::method(recv, …)`。
+但比对结果走 `type_warn`，`ct build` / `ct compile` 仍是 `warning:` + 退出 `0`，`"abc".find(42)` 照样
+「能编译过」；`ct check` 是单单元入口，看不到被 `import` 的映射单元，结构上无法兜底。
+
+**争点（battle）。**
+
+| 主张 | 判据 | 结果 |
+| --- | --- | --- |
+| A：维持 19.2 口径，静态调用点也按 warning | 严重级一致；§9 明文写「arity / 实参类型在 build 下放行」；避免误报打断构建 | 否 |
+| B：静态调用点的确信不匹配改为硬错 | `ct check` 覆盖不到 imported 映射单元；recipe 把实参直接拼进生成的 C 调用，ct 放行后没有第二道闸（`cc` 对 `strlen(42)` 只给 warning）；本轮用户要求「在 ct 阶段报错」 | **采纳** |
+
+判决范围只限**静态映射调用点的实参类型**；普通函数 / trait 方法的 19.2 仍是 warning，`ct check`
+照旧升 error。规范 §9 已补例外条款（中英各一处）。
+
+**改动。**
+
+- [Expr.h.ct:1109-1122](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1109-L1122)：新增
+  `argtype_check_static`，复用 `argtype_mismatch`（同一套 `tnorm` 逐位比较），确信不匹配时
+  `ct_sem_error` 并返回 `-1`。
+- [Expr.h.ct:3058](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3058)、
+  [:3100](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3100)、
+  [:3167](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3167)：`qf == 3/4/5` 三个形态改用强校验。
+- [Expr.h.ct:2560-2569](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2560-L2569)：`aux == 6`
+  在「所有 arity 合适的候选都对不上实参」时由 `type_warn` 改为硬错。
+- [check-ast.sh:1031-1096](../../selfhost/check-ast.sh#L1031-L1096)：四个负例从「退出 0 + warning」
+  改为「非零退出 + `error: type mismatch: …`」；正例 `ok.ct` 仍零诊断。删掉强校验会让这四条立刻变红。
+
+**验证（原始输出）。**
+
+```
+$ /tmp/cta-build/ct-ast build --emit-c -I test/modules/p25_static_argtype test/modules/p25_static_argtype/aux6.ct -o /tmp/p25t
+test/modules/p25_static_argtype/aux6.ct:6:11: error: type mismatch: 'find' argument 1: expected 'char *', got 'int'
+ctc: 1 error(s) generated
+rc=1
+```
+
+`q3` / `q4` / `q5` 分别报 `'g' argument 1`、`'f' argument 1`、`'find' argument 1`，均 `rc=1`；
+`ok.ct`（四种形态各传一次正确实参）`rc=0` 且无 `type mismatch`。完整断言在 `check-ast.sh`
+的 `p25_static_argtype_*` 段，`bash selfhost/check-all.sh` 全绿。
 
 ## 证据
 
@@ -191,8 +234,11 @@ CT 的 trait 方法**没有显式 `self`**（声明形如 `int len();`，`self` 
   错误一律推迟到运行期；签名里写错类型名也不会被发现，读者会误以为该参数有约束。
 - 现有门禁没有覆盖这两种组合：`check-ast` 的实参负例都走普通函数 / 已解析 trait 方法。
 
-## 验证（并入 Phase 25 / 25.1 后的判据）
+## 验证（现行判据，2026-11-10）
 
-- 2a 在 `ct check` 下报 `error:`、`ct build` 下 `warning:` 且退出 0；2b 维持现状（归子项三）；
+- 2a 在 `ct build` / `ct compile` 下报 `error: type mismatch: '<method>' argument N: …` 并退出 `1`；
+  `ct check` 是单单元入口，不覆盖 imported 映射单元（§9 例外条款）；
 - 正例：`"abc".len()`、`"abc".compare("x")`、`char buf[8]; buf.toUpper()` 零诊断；
-- `check-ast.sh` 增静态调用点的实参类型负例；`bash selfhost/check-all.sh` 保持 11 道全绿。
+  `test/modules/p25_static_argtype/ok.ct` 四种形态零诊断；
+- `check-ast.sh` 的 `p25_static_argtype_{aux6,q3,q4,q5}` 断言非零退出 + `error:`；删掉强校验即变红；
+  `bash selfhost/check-all.sh` 保持 11 道全绿。

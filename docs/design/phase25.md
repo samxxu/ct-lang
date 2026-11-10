@@ -336,7 +336,9 @@ aux==6 原有的 arity warning 文案、`want`/`seen` 逻辑保持不变。
   `a map call has fewer arguments than its binding`（硬错）；25.2 接管实参映射后消失。
   因此本切片不新增闭包正例夹具。
 - 不改 `type_key`（`"abc".len()` 回归面）、不做 `.m.ct` 声明点未知类型报错（D-60-2）、
-  不让 `ct check` 对 imported 静态调用报 error。
+  不让 `ct check` 对 imported 静态调用报 error。**后续（SH-60，2026-11-10）**：`ct check` 仍是
+  单单元入口、覆盖不到 imported 映射单元，于是把四个静态调用形态的确信实参失配在
+  `ct build` / `ct compile` 升为硬错（`argtype_check_static`），见 language-spec §9 例外条款。
 - qf==3/qf==4 路径上那个 `!is_static` 守卫未动；SH-60 已证它对四种静态形态是死代码，
   删或留都不改变行为，留给 25.2 统一清理。
 
