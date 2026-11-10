@@ -42,7 +42,7 @@ int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) 
 | `Vec<int>` / `own Vec<int>` / 自定义容器 | CT 没有泛型，std 只有 `VecInt`（§4.10 之外），`own` 只收结构体指针 + `malloc`/`calloc`，初值列表无处安放 |
 | 普通 `a..b` 区间表达式（`r = 2..8`） | 无类型推断，`r` 的目标类型无处安放；Phase 23 §1.1 已拒绝，本相不改 |
 | 步长 / 闭区间 / 反向 | 需要就写原生 `for`；range 初值只覆盖「步长 1、左闭右开」 |
-| `each (nums) { … item … }` 语句形态 | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已由 Phase 25 落地**，见 [phase25.md](phase25.md) |
+| `each (nums) { … item … }` 语句形态（旧名；D25-12 起定名 `foreach`） | 需要隐式名字与块参数，属语言级语法糖；SHIM / 宏做不到（§10）。**方法形态 `a.each(n, closure)` 已由 Phase 25 落地**，见 [phase25.md](phase25.md) |
 | CT 侧常量折叠 | CT 从不折叠常量（`const_ok` 是结构判定）；`$` 的取值在**发射期**替换，表达式本身交给 C 折叠 |
 | 元素为 struct / union / 接口值 / 数组 | 初始化列表的元素类型限于标量；聚合元素需要逐元素 vptr / 装箱，收益与风险不成比例 |
 | 宏 / `enum` 边界 | 符号表只记 `is_const` 标志、不记数值（§3.2）；要支持就得先引入常量求值器 |
@@ -436,6 +436,10 @@ fputs(" }", out);
 
 ## 10. `each` 的归属（与 Phase 25 的边界）
 
+> **命名更新（2026-11-10）**：本节成文时把语句形态暂记为 `each (…)`；[D25-12](phase25.md#L287)
+> 已作废该关键字名，语句形态现定名 **`foreach (…)`**，`each` 只保留为库层方法 / 泛型函数名。
+> 以下保留原文作为历史记录。
+
 用户提问：能否借 `.m.ct` + shim 给数组挂方法（例如 `each`），再用闭包处理元素。当时的
 结论是「静态映射可以挂方法，但闭包传不进去」——这条判断在 Phase 25 之前成立，也正是
 Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现）：
@@ -605,4 +609,5 @@ Runtime bounds / VLAs, `Vec` / generics / custom containers, `each` in this phas
 which extends the `(fn, env)` expansion to static mapping calls; the **statement form**
 `each (nums) { … }` is still unplanned, because C macros cannot take a block. Note that a decayed
 `int *` still cannot know its length and `int *p` matches the same type host as `int a[4]`, so the
-element count stays explicit in Phase 25 as well.
+element count stays explicit in Phase 25 as well. The old placeholder keyword `each` was voided by
+D25-12; the statement form is now named `foreach`.

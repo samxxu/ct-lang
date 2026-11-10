@@ -60,7 +60,7 @@ ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ .base = base });
 
 | 不做的东西 | 一句话理由 |
 | --- | --- |
-| `each (nums) { … item … }` 语句形态 | 需要隐式名字、块参数与 `break`/`continue`，是语言级语法糖，未排期 |
+| `each (nums) { … item … }` 语句形态（旧名；D25-12 起定名 `foreach`） | 需要隐式名字、块参数与 `break`/`continue`，是语言级语法糖，未排期 |
 | 自动取数组长度 | 类型宿主只看 decay 后的 `int *`，长度已丢；`int *p` 与 `int a[4]` 命中同一宿主，`sizeof` 宏方案会静默出错 |
 | `Vec` / 泛型 / 自定义容器 | 泛型是 Phase 26；本相只做「C 类型宿主 + 现有 trait」 |
 | 闭包作方法**接收者** | Phase 21 S5 已定：闭包调用不走类型宿主（`test/ast/81_closure_no_typehost`） |
@@ -280,11 +280,11 @@ for (i = 0; i < b->nparams; i++) {
 | D25-5 | recipe 必须成对引用 `fn` 与 `env` 各一次；重复、缺失、`...` 尾部都是硬错 |
 | D25-6 | 闭包环境仍为栈上复合字面量；shim 必须同步消费，编译器不诊断（文档规则） |
 | D25-7 | 拆分 `emit_closure_arg` 为 `emit_closure_fn` / `emit_closure_env`；普通调用产物不变 |
-| D25-8 | 不做语句形态 `each (…) { … }`、不做自动取长度、不做泛型容器 |
+| D25-8 | 不做语句形态 `each (…) { … }`（旧名；现名 `foreach`，见 D25-12）、不做自动取长度、不做泛型容器 |
 | D25-9 | 闭包作接收者的既有语义不变（`81_closure_no_typehost` 为守护用例） |
 | D25-10 | 仅 ct-ast；L0 / L1 / L2 不改 |
 | D25-11 | 收口 bump `v0.25.0`；功能层既有 golden 零变化 |
-| D25-12 | 命名预留（2026-11-10 battle）：库层方法/自由泛型函数保留 `each`；未来若排期语句形态，不复用该名，改用 `foreach`（或 `for … in`）。把 `each` 升为语句关键字会与 `each<T>(...)` 调用歧义并破坏既有代码；判据与探针见 [DOC-70](../../issues/docs/doc70-each-statement-form-unimplemented.md) |
+| D25-12 | 命名定案（2026-11-10 battle，后经用户确认）：**语句级迭代形态一律写 `foreach (map) { … item … }`**；旧规划中的 `each(map){…}` 关键字名**作废，不得再作为关键字使用**。`each` 这个标识符只保留给库层——trait / 静态映射的方法名（示例 17、19）与泛型自由函数名（示例 18）。把 `each` 升为语句关键字会与 `each<T>(...)` 调用歧义并破坏既有代码；判据与探针见 [DOC-70](../../issues/docs/doc70-each-statement-form-unimplemented.md) |
 
 ---
 
@@ -545,4 +545,5 @@ never silently.
 
 Statement-level `each (…) { … }`, automatic element counts (a decayed `int *` cannot know its
 length, and `int *p` matches the same host as `int a[4]`), `Vec` / generics (Phase 26), closures
-as method receivers, and closures through dynamic dispatch.
+as method receivers, and closures through dynamic dispatch. The old placeholder keyword `each`
+was voided by D25-12; the statement form is now named `foreach`.

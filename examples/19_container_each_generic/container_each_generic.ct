@@ -12,8 +12,9 @@
 //   - free-function path: `walk<char *>(items, n, (char *s) => ...)` - the
 //     literal fills both words and may capture (here `want`).
 //
-// The statement form `each (container) { ... item ... }` does not exist; see
-// phase24.md / phase25.md. This file deliberately does not pretend it does.
+// The statement form `foreach (container) { ... item ... }` does not exist yet
+// (old name `each`, voided by D25-12); see phase24.md / phase25.md / phase27.md.
+// This file deliberately does not pretend it does.
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
