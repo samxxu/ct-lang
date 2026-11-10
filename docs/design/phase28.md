@@ -92,6 +92,12 @@
 > in 176 files, v0.26.4, 11 hard gates, 12 phase status)`，`design window: ok (12/12)`）；
 > 中文行与英文行都含状态符号 `⬜` 并链接 `design/phase28.md`，与 `STATUS_MAP["规划中"]` 一致。
 
+> **归档触发（本轮不做，只记条件）**：`design window` 已满（12/12，`phase17.md`–`phase28.md`
+> 正好 12 份）。`check-docs` 的规则是 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../test/docs/check-docs.py#L264-L296)），
+> 所以窗口在**临界**：Phase 28 开工后一旦出现第 13 份编号阶段文档（Phase 29 立项卡），
+> `phase17.md` 立即越窗，必须先把最早阶段文档 `git mv docs/design/phase17.md docs/history/design/`
+> 并同步 `docs/README.md` 索引，否则文档门禁转红。本相不做归档。
+
 ### 1.5 退出判据草案（冻结于首个实现提交前）
 
 | # | 判据 | 命令 / 锚点 |
