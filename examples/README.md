@@ -68,12 +68,14 @@
 | --- | --- | --- | --- |
 | `15_range_init` | `0..n(<expr>)` 数组 range 初值（Phase 24）：文件作用域 `static const` 表与局部表，`$` 是下标，产物是花括号列表而非循环 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `16_generic_min` | 泛型函数（Phase 26）：`T larger<T>(T, T)` 以 `int` / `double` 实例化，每个实例是一份独立 `static` C 函数 | ct-ast | 同上 |
+| `18_generic_string_table` | 泛型函数以 `char *` 显式实例化，在字符串表上遍历、查找、变换；闭包只作为自由函数的 `(fn, env)` 实参参与 | ct-ast | 同上 |
+| `19_container_each_generic` | 容器 struct 提供 `each` 方法（trait + `impl`），方法体调用泛型 `walk<char *>`；方法路径写显式 `(fn, env)`，自由函数路径用闭包字面量并捕获 | ct-ast | 同上 |
 
 ## 门禁归属说明
 
 - `test/run.sh`：端到端层，覆盖编译模式下的 `examples/*/*.ct`。带 `//@ct-requires: ct-ast`
   的文件（`02_market` 的接口值数组、`09_callback/callback_tier2.ct` 的 `=>`、
-  `08_map_binding/map_binding.ct` 的 `map`、`json` 的 `loop`、`10`/`11`/`12`/`15`/`16`）不再跳过：第一次遇到时
+  `08_map_binding/map_binding.ct` 的 `map`、`json` 的 `loop`、`10`/`11`/`12`/`15`/`16`/`18`/`19`）不再跳过：第一次遇到时
   在临时目录里按 L0 → L1 → L2 → ct-ast 建链，再用 ct-ast 编译、`cc` 构建、运行并比对
   `expected.out`。这条路径自带红证——把一份真实示例的 golden 换成程序不会输出的内容，必须
   在 diff 阶段被拒绝，否则该门禁项记为失败。

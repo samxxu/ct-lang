@@ -209,12 +209,14 @@
 | DOC-60 | Medium | README 首句「不做类型检查」与 `ct check` 的存在矛盾 | [doc60-readme-no-type-check.md](docs/doc60-readme-no-type-check.md) |
 | DOC-61 | Low | roadmap 英文表 Phase 18 仍 `in progress`，中文表已完成 | [doc61-roadmap-phase18-english.md](docs/doc61-roadmap-phase18-english.md) |
 | DOC-62 | Medium | README / 教程未说明 `ct check` 拒绝 `import` | [doc62-check-import-undocumented.md](docs/doc62-check-import-undocumented.md) |
-| DOC-63 | Low | 教程与内存指南的「适用版本」仍写 `v0.16.0` | [doc63-tutorial-version-stale.md](docs/doc63-tutorial-version-stale.md) |
+| DOC-63 | Low | 教程与内存指南的「适用版本」仍写 `v0.16.0`（已修，2026-11-10 复核：两处改用「当前主线 ct-ast，不固定版本号」） | [doc63-tutorial-version-stale.md](docs/doc63-tutorial-version-stale.md) |
 | DOC-64 | Medium | C 头文件的 enum 常量在表达式里不可见，但文档没有写明（已修，`a1c523a`） | [doc64-header-enum-constants.md](docs/doc64-header-enum-constants.md) |
 | DOC-65 | Medium | README / 教程的 `ct compile` 行未说明「仅单文件、`import` 需 `ct build`」 | [doc65-compile-import-boundary-undocumented.md](docs/doc65-compile-import-boundary-undocumented.md) |
 | DOC-66 | Medium | `docs/design/` 的「只放当前阶段」约定与 phase17–25 未归档并存 | [doc66-design-archive-policy.md](docs/doc66-design-archive-policy.md) |
 | DOC-67 | Medium | Phase 26 文档与实现不符：S4 四处替换承诺、L26-3/L26-4 文案、E1 断言作用域、AGENTS 版本登记（已修，docs 提交，`v0.26.1`；复核 `verified`） | [doc67-phase26-doc-impl-mismatch.md](docs/doc67-phase26-doc-impl-mismatch.md) |
 | DOC-68 | Medium | VS Code 跳转索引不识别泛型模板：`T id<T>(T x)` 与 `id<int>(…)` 都无定义（本轮只补高亮，`extension.js` 未动） | [doc68-vscode-generic-jump-index.md](docs/doc68-vscode-generic-jump-index.md) |
+| DOC-69 | Low | Phase 26 出口判据 E1–E8 未覆盖 v0.26.4 补丁交付物（TEST-18 / CI-8 / DOC-66 / DOC-68） | [doc69-phase26-exit-criteria-patch-gap.md](docs/doc69-phase26-exit-criteria-patch-gap.md) |
+| DOC-70 | Low | 语句级 `each (container) { … item … }` 未实现、未排期；命名预留见 phase25 D25-12 | [doc70-each-statement-form-unimplemented.md](docs/doc70-each-statement-form-unimplemented.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -1308,9 +1310,16 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 | SH-61 | 待变参 trait WIP 落地 | `Parser.h.ct:2061/2266` 仍拒 `a trait method cannot be variadic` | **blocked**（未修） |
 | CI-7 | 待明确指令 | `git tag -l v0.19.0` 为空 | **blocked**（未修） |
 | STD-1 | 已决策 | 实现属 ct-pkg 的 `std` 包，本仓不跟 | 保持（越界不做） |
+| DOC-63 | 待处理 | `docs/tutorial.md:5` / `docs/memory-guide.md:5` 已改为「当前主线 ct-ast，不固定版本号」 | 已修复 |
 
 同一轮新增 [SH-65](selfhost/sh65-closure-as-method-arg.md)：trait / impl 方法收不了闭包实参
 （09/10/12 的 OO 化根因），按「现状 / 复现 / 影响 / 建议方向」落账，语言侧本轮不动。
+
+同轮登记判据缺口 [DOC-69](docs/doc69-phase26-exit-criteria-patch-gap.md)：Phase 26 的 E1–E8 冻结时
+未覆盖 v0.26.4 补丁交付物；映射写在 `docs/design/phase26.md` §9.9，冻结原文不动。
+
+同轮登记 [DOC-70](docs/doc70-each-statement-form-unimplemented.md)：语句级 `each (…) { … item … }`
+未实现、未排期；命名上不把库层 `each` 升为语句关键字，未来语句形态用 `foreach`（phase25 D25-12）。
 
 门禁：`./test/run.sh`、`bash selfhost/check-all.sh`、`python3 test/docs/check-docs.py` 全绿。
 
