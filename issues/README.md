@@ -322,6 +322,7 @@
 | SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `verified`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |
 | SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam`（已修，`v0.26.3`：`T_ID` 入口统一守卫 + 4 条值位置负例；复核 `verified`） | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
 | SH-65 | Medium | trait / impl 方法收不了闭包实参：常规 `.method(...)` 未计 `closure_arg_count` / 未走 `closure_arg_check`，pair 形报 arity、单函数指针形 check 静默而 compile 落 `unknown expression node`；L0 也不能解析带函数指针参数的 trait 方法（**open**，09/10/12 的 OO 化根因） | [sh65-closure-as-method-arg.md](selfhost/sh65-closure-as-method-arg.md) |
+| SH-66 | **High** | 泛型仍有两条退出 0 的静默坏产物：数组维度里的 `sizeof(T)` 与裸模板名作值都不替换、不诊断，`cc` 才报 `'T'` / `'id'` undeclared（**已修**，2026-11-10，`v0.26.4` + 补丁：`parse_array_dims` 的维度守卫 + `parse_primary` 未声明名字分支的模板检查，各 1 条负例并配 `p26_diag`/`p26_chk`；`verified` 留独立评审） | [sh66-generic-silent-bad-output.md](selfhost/sh66-generic-silent-bad-output.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -1321,6 +1322,10 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 同轮登记 [DOC-70](docs/doc70-each-statement-form-unimplemented.md)：语句级 `foreach (…) { … item … }`
 未实现、未排期；命名上不把库层 `each` 升为语句关键字，语句形态定名 `foreach`，旧名 `each(map){…}`
 作废（phase25 D25-12）。
+
+同轮登记并修复 [SH-66](selfhost/sh66-generic-silent-bad-output.md)：数组维度里的 `sizeof(T)` 与裸模板名
+作值（`int (*p)(int) = id;`）原先都退出 0、发射 `cc` 必拒的 C；现为两条解析期硬错，各带一条负例与
+`p26_diag` / `p26_chk` 断言，红/绿对照见条目「修复」段。
 
 门禁：`./test/run.sh`、`bash selfhost/check-all.sh`、`python3 test/docs/check-docs.py` 全绿。
 

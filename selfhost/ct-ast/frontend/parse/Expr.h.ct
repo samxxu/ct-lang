@@ -1607,6 +1607,60 @@ impl ExprOps for Expr {
             raw = 0;
             open = self->lex->tokstart;             /* the `[` itself */
             dim[0] = 0;
+            /* SH-66: a dimension is copied verbatim and is not one of the
+               seven positions `ct_generic_subst` rewrites, so a type parameter
+               inside it would reach the generated C as an undeclared name.
+               §4.48 promises a hard error here instead of a silent product;
+               the scan runs at the `[` so the diagnostic points at the
+               dimension rather than the token after it. */
+            if (self->in_generic_tparam[0]) {
+                int p = open + 1;
+                int depth = 0;
+                int tlen = (int)strlen(self->in_generic_tparam);
+                while (self->lex->src[p]) {
+                    char ch = self->lex->src[p];
+                    int id0 = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+                              || ch == '_';
+                    if (id0) {
+                        int q = p + 1;
+                        while (self->lex->src[q]) {
+                            char c2 = self->lex->src[q];
+                            if (!((c2 >= 'A' && c2 <= 'Z') || (c2 >= 'a' && c2 <= 'z')
+                                  || (c2 >= '0' && c2 <= '9') || c2 == '_'))
+                                break;
+                            q++;
+                        }
+                        if (q - p == tlen
+                            && strncmp(self->lex->src + p, self->in_generic_tparam,
+                                       (size_t)tlen) == 0) {
+                            char dmsg[MAX_TEXT + 96];
+                            snprintf(dmsg, sizeof dmsg,
+                                     "type parameter '%s' cannot be used in an array dimension",
+                                     self->in_generic_tparam);
+                            return self->sup->fail(dmsg);
+                        }
+                        p = q;
+                    } else if (ch == '/' && self->lex->src[p + 1] == '*') {
+                        /* a block comment is not code: a dimension may carry
+                           one, so skip it before tokenising the text */
+                        p += 2;
+                        while (self->lex->src[p]
+                               && !(self->lex->src[p] == '*'
+                                    && self->lex->src[p + 1] == '/'))
+                            p++;
+                        if (self->lex->src[p]) p += 2;
+                    } else if (ch == '[') {
+                        depth++;
+                        p++;
+                    } else if (ch == ']') {
+                        if (depth == 0) break;
+                        depth--;
+                        p++;
+                    } else {
+                        p++;
+                    }
+                }
+            }
             self->sup->lex_next();
             if (self->lex->tok == T_NUM) {
                 snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
@@ -3305,6 +3359,21 @@ impl ExprOps for Expr {
                    still has to be declared. */
                 int ci, all_caps, vf;
                 const char *nm = self->arena->nodes[n].text2;
+                /* SH-66: a template generates no C symbol of its own, so a
+                   bare template name is never a value -- only `name<type>`
+                   names an instance. Without this `int (*p)(int) = id;` exited
+                   0 and emitted `= id;`, which only `cc` rejected. The guard
+                   sits before the ALL_CAPS fallback so an upper-case template
+                   name cannot slip through as a macro either. */
+                {
+                    int gt = self->sym->find_func(nm);
+                    if (gt >= 0 && self->sym->funcs[gt].ntparams == 1) {
+                        char tmsg[MAX_TEXT + 64];
+                        snprintf(tmsg, sizeof tmsg,
+                                 "generic function '%s' needs a type argument", nm);
+                        return self->sup->fail(tmsg);
+                    }
+                }
                 all_caps = (nm[0] != 0);
                 for (ci = 0; nm[ci]; ci++) {
                     char cc = nm[ci];

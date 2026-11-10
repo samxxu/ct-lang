@@ -1,0 +1,14 @@
+/* SH-66: an array dimension is copied verbatim and is not one of the seven
+   positions the instance substitution rewrites, so `sizeof(T)` used to exit 0
+   and reach the generated C as an undeclared `T`. */
+T first<T>(T x)
+{
+    T a[sizeof(T)];
+    a[0] = x;
+    return a[0];
+}
+
+int main(void)
+{
+    return (int)first<int>(4);
+}

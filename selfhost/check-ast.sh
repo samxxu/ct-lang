@@ -1412,6 +1412,11 @@ p26_diag generic_tparam_value_return 6:13 "type parameter 'T' cannot be used as 
 p26_diag generic_tparam_value_arg 11:15 "type parameter 'T' cannot be used as a value"
 p26_diag generic_tparam_value_mul 6:30 "type parameter 'T' cannot be used as a value"
 p26_diag generic_tparam_value_add 6:30 "type parameter 'T' cannot be used as a value"
+# SH-66: the two silent paths SH-62 / SH-64 left open. An array dimension is
+# copied verbatim, so it is not a substitution point either; and a template has
+# no C symbol, so a bare template name is never a value.
+p26_diag generic_tparam_array_dim 6:8 "type parameter 'T' cannot be used in an array dimension"
+p26_diag generic_template_value 10:23 "generic function 'id' needs a type argument"
 
 # E8: `ct check` shares the parser diagnostics, so the same fixtures fail
 # in check mode with the same wording (no separate check channel).
@@ -1436,6 +1441,8 @@ p26_chk generic_tparam_value_return "type parameter 'T' cannot be used as a valu
 p26_chk generic_tparam_value_arg "type parameter 'T' cannot be used as a value"
 p26_chk generic_tparam_value_mul "type parameter 'T' cannot be used as a value"
 p26_chk generic_tparam_value_add "type parameter 'T' cannot be used as a value"
+p26_chk generic_tparam_array_dim "type parameter 'T' cannot be used in an array dimension"
+p26_chk generic_template_value "generic function 'id' needs a type argument"
 
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host

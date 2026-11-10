@@ -1,0 +1,12 @@
+/* SH-66: a template generates no C symbol of its own, so a bare template name
+   is not a value. `int (*p)(int) = id;` used to exit 0 and emit `= id;`. */
+T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    int (*p)(int) = id;
+    return p(1);
+}

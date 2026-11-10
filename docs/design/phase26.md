@@ -162,6 +162,9 @@ struct Point q = id<struct Point>(p0);
 
 不替换 `N_VAR.text2`、`N_ID.text`、`N_CALL.text` 等标识符位；`T` 作值使用会自然解析失败。
 不替换 `N_RAW` 内的原始文本；泛型体内出现原始初始化器时按 L26-5 拒绝。
+数组维度同样不是替换点：维度里出现类型参数在解析期硬错
+`type parameter 'T' cannot be used in an array dimension`（SH-66）；模板名离开 `<type>` 作值
+（`int (*p)(int) = id;`）报 L26-1，不发射没有 C 符号的名字。
 紧邻 `struct` / `union` / `enum` 的同名 token 是**标签**而不是类型参数，`ct_generic_subst` 以前瞻跳过（D26-13）。
 
 ### 2.4 发射（D26-7，B26-1 第二轮修订）

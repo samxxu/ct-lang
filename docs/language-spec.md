@@ -1922,7 +1922,10 @@ int main(void) {
   `type parameter cannot be used inside _Generic`，绝不把它发射成未声明的名字；紧邻 `struct` / `union` /
   `enum` 的标签选择器（`_Generic(x, struct T: 1, default: 0)`）是合法标签，放行。类型参数是类型而非值：
   `return T;`、`h(T)`、`sizeof T * T`、`sizeof T + T` 等值位置一律硬错
-  `type parameter 'T' cannot be used as a value`，不会退出 0 发射裸 `T`。
+  `type parameter 'T' cannot be used as a value`，不会退出 0 发射裸 `T`。数组维度不参与替换，
+  维度里出现类型参数一律硬错 `type parameter 'T' cannot be used in an array dimension`；
+  模板名离开 `<type>` 作值使用（`int (*p)(int) = id;`）报与 L26-1 相同的
+  `generic function '<name>' needs a type argument`，不发射没有 C 符号的名字。
 
 ### 7. 容量上限
 
@@ -4202,7 +4205,10 @@ int main(void) {
   selector next to `struct` / `union` / `enum` (`_Generic(x, struct T: 1, default: 0)`) is legal and
   accepted. A type parameter is a type, not a value: `return T;`, `h(T)`, `sizeof T * T` and
   `sizeof T + T` are hard errors (`type parameter 'T' cannot be used as a value`) and never emit a
-  bare `T` with exit 0.
+  bare `T` with exit 0. An array dimension is not a substitution position, so a type parameter
+  inside one is a hard error (`type parameter 'T' cannot be used in an array dimension`); a bare
+  template name used as a value (`int (*p)(int) = id;`) reports L26-1
+  (`generic function '<name>' needs a type argument`) instead of emitting a name with no C symbol.
 
 ### 7. Capacity limits
 
