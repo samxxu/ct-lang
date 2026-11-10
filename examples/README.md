@@ -18,7 +18,7 @@
 | `07_dialect` | 注释里的 DSL 经 `ct-dialects/` 插件展开成纯 CT，编译器零感知 | 插件（目录内自带） | 同上（`test/run.sh` 的 dialect 层） |
 | `08_map_binding` | `map trait ... for instance`：绑定一个改不动的全局实例并装箱；另带 `src/type_bridge/` 子包演示 `map ... for type` 的指针别名宿主 | ct-ast（`map`）；子包需 `ct build` 多单元 | `test/run.sh`（instance 单文件）+ `check-ast.sh` + `check-warnings.sh`（instance 单文件）+ `check-warnings.sh` 的 src-layout build 段 |
 | `09_callback` | 容器回调约定：档① 手写 `(fn, env)` 对；档② `=>` 闭包字面量在 `callback_tier2.ct` | 档① 无；档② ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
-| `json` | 纯 CT 的 JSON 读写：零分配只读视图 + 写出 | 无 | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `json` | 纯 CT 的 JSON 读写：零分配只读视图 + 写出；取值按 kind 经 `trait` ops 对象分派 | ct-ast（`loop`） | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `wave1-demo` | Wave 1 包（`hal` / `hal-posix` / `std`）合用 | 外部 ct-pkg 索引 | **仅 CI** |
 
 ## 类型宿主（type host）
@@ -73,7 +73,7 @@
 
 - `test/run.sh`：端到端层，覆盖编译模式下的 `examples/*/*.ct`。带 `//@ct-requires: ct-ast`
   的文件（`02_market` 的接口值数组、`09_callback/callback_tier2.ct` 的 `=>`、
-  `08_map_binding/map_binding.ct` 的 `map`、`10`/`11`/`12`/`15`/`16`）不再跳过：第一次遇到时
+  `08_map_binding/map_binding.ct` 的 `map`、`json` 的 `loop`、`10`/`11`/`12`/`15`/`16`）不再跳过：第一次遇到时
   在临时目录里按 L0 → L1 → L2 → ct-ast 建链，再用 ct-ast 编译、`cc` 构建、运行并比对
   `expected.out`。这条路径自带红证——把一份真实示例的 golden 换成程序不会输出的内容，必须
   在 diff 阶段被拒绝，否则该门禁项记为失败。
