@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03） |
 | 文件 | [docs/tutorial.md:5](../../docs/tutorial.md#L5)、[docs/memory-guide.md:5](../../docs/memory-guide.md#L5) |
-| 状态 | 待处理 |
+| 状态 | **已修复**（2026-11-10 复核；`docs/tutorial.md:5` 与 `docs/memory-guide.md:5` 已改为「当前主线 ct-ast，不固定版本号」，`check-docs` 通过） |
 
 ## 现象
 
@@ -44,3 +44,16 @@ Low：不影响语义，但读者按版本号判断文档时效，会误以为�
 
 - `grep -rn "适用版本" docs/*.md` 与 `CTC_VERSION` 一致（或不再写具体版本）；
 - `python3 test/docs/check-docs.py` 通过。
+
+## 处置（复核，2026-11-10）
+
+两处抬头已改为不绑定数字的「当前主线 `ct-ast`」，与修复建议第 1 条的第二种做法一致：
+
+```text
+$ sed -n '5p' docs/tutorial.md docs/memory-guide.md
+docs/tutorial.md:5:> **适用版本**：当前主线 **ct-ast**（不在此固定版本号，实际版本以 `ct -v` 为准）。…
+docs/memory-guide.md:5:> **适用版本**：当前主线 **ct-ast**（`selfhost/ct-ast/main.ct`，版本号见 `ct -v`，不在此固定）。…
+```
+
+`python3 test/docs/check-docs.py` 通过（`3 适用版本 header(s)`）。原状态行「待处理」属未回填；
+本轮只改状态与依据，不改条目正文。

@@ -548,7 +548,7 @@ TEST-18 ×2）；文件数仍 173，阶段状态仍 10，硬门禁仍 11。
 
 | 交付物 | 判据 | 证据 / 锚点 |
 | --- | --- | --- |
-| D1 `docs/design/phase26.md` | E1–E8 的规范来源；状态与 roadmap 一致 | `python3 test/docs/check-docs.py` → `v0.26.2, 10 phase status`；本文件 §1.5 冻结 |
+| D1 `docs/design/phase26.md` | E1–E8 的规范来源；状态与 roadmap 一致 | `python3 test/docs/check-docs.py` → `v0.26.4, 10 phase status`；本文件 §1.5 冻结 |
 | D2 `Symbols.h.ct` | E1 / E3 | `GenericInst`、`ginsts/nginsts`、`Fn.ntparams/tparam/body`、`ct_generic_subst` |
 | D3 `Parser.h.ct` | E1 / E3 | `T name<T>(...)` 解析；L26-2/L26-3；模板标记 `N_FUNC.text3` |
 | D4 `Expr.h.ct` | E1 / E3 / E8 | `name<type>(...)`；`generic_instance` 缓存与命名；L26-1/L26-4/L26-5 |
@@ -559,9 +559,9 @@ TEST-18 ×2）；文件数仍 173，阶段状态仍 10，硬门禁仍 11。
 | D13 `selfhost/check-ast.sh` | E1–E4 / E8 | Phase 26 块：`cmp -s`、实例原型精确计数、`! grep '\bT\b'`、6 条定位、6 条 check；v0.26.1 起加 125/126/127/容量夹具；v0.26.2 起加 128，以及主夹具循环的 `tparam_residue()` 产物层扫描（只读实例体，扣掉合法 `struct|union|enum T`）；v0.26.3 起加 129 正例与 4 条值位置负例（`p26_diag` + `p26_chk` 各 4） |
 | D14 `docs/language-spec.md` | E7 | §4.48 中英文（语法/语义/非目标/诊断） |
 | D15 `docs/tutorial.md` | E7 | §10.5 中英文可运行示例 |
-| D16 `docs/roadmap.md` | E7 | Phase 26 行 `✅ 完成（v0.26.0；v0.26.1 / v0.26.2 / v0.26.3 修复）`、v0.26.0 / v0.26.1 / v0.26.2 / v0.26.3 版本记录、映射行 |
-| D17 `AGENTS.md` | E7 | 当前版本 v0.26.3；泛型限定说明；版本 bump 清单指向 roadmap |
-| D18–D22 五处版本文件 | E6 | `grep -n 'CTC_VERSION'` 五处均 `0.26.3`；`ct -v` → `ct v0.26.3`；`git diff -U0` 仅版本 token |
+| D16 `docs/roadmap.md` | E7 | Phase 26 行 `✅ 完成（v0.26.0；v0.26.1 / v0.26.2 / v0.26.3 / v0.26.4 修复）`、v0.26.0–v0.26.4 版本记录、映射行 |
+| D17 `AGENTS.md` | E7 | 当前版本 v0.26.4；泛型限定说明；版本 bump 清单指向 roadmap |
+| D18–D22 五处版本文件 | E6 | `grep -n 'CTC_VERSION'` 五处均 `0.26.4`；`ct -v` → `ct v0.26.4`；`git diff -U0` 仅版本 token |
 
 ### 7.1 lessons（每条落 `gate:` / `spec:` / `rejected:`）
 
@@ -709,3 +709,20 @@ B26-2 判决：两方案（真实现替换 / 改成硬错误）都能满足验�
 - `rejected:把修复包装成新阶段并 bump minor` — 修复不是阶段边界；版本只 bump patch。
 - `rejected:迁移 12 个 design 文件（路线 A）` — 成本约为窗口断言的 6 倍，防漂移收益相同。
 - `rejected:新增第 12 道门禁承载 G9` — 连锁改动计数声明、`node` 前置与 CI 配置，收益不足。
+
+### 9.9 判据映射与冻结边界（2026-11-10 核对）
+
+本节只做映射与事实回写，不改 §1.5 的冻结原文。
+
+- **E6 的补丁口径**：§1.5 E6 冻结时写的是 `0.26.3`。v0.26.4 补丁把五处 `CTC_VERSION` 推进到 `0.26.4`，
+  按 §1.5 原文逐字判 E6 不再成立；现行判定以 §9.2 P8 为准（五处 `0.26.4`、`ct -v` → `ct v0.26.4`、
+  annotated tag `v0.26.4` 与远端一致）。「按原文判不满足、按补丁判满足」由此在唯一位置有可审计映射，
+  冻结原文保留不动。
+- **§7 的版本号**：§7 是收口对照表，不属于 §1.5 冻结块；D16 / D17 / D18–D22 的版本号按 v0.26.4 同步，
+  §1.5 E6 原文保持 `0.26.3`。
+- **P8 远端闭合（2026-11-10）**：`git push origin refs/tags/v0.26.0:…refs/tags/v0.26.4` 返回
+  `Everything up-to-date`；`git ls-remote origin 'refs/tags/v0.26.*'` 显示五个 annotated tag 均在远端，
+  tag 对象 hash 与本地逐一相同：`v0.26.0 f91ba25a`、`v0.26.1 d45269ac`、`v0.26.2 1be16400`、
+  `v0.26.3 3a894b6d`、`v0.26.4 76d18e05`。P8 的「远端 hash 一致」自此成立。
+- **判据覆盖缺口**：E1–E8 未覆盖 v0.26.4 的 TEST-18 / CI-8 / DOC-66 / DOC-68，已登记
+  [DOC-69](../../issues/docs/doc69-phase26-exit-criteria-patch-gap.md)；不为让结论好看而回溯扩写 E1–E8。
