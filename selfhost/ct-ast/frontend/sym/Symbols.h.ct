@@ -280,6 +280,12 @@ pub struct GenericInst {
     int  func;
     char targ[160];
     char cname[160];
+    /* Phase 28: where the instance was asked for, so a missing implementation
+       is reported at the call site rather than at the template; `checked`
+       keeps a multi-unit build from re-reporting the same row. */
+    int  line;
+    int  col;
+    int  checked;
 }
 
 pub struct Symbols {

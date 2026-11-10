@@ -3320,6 +3320,47 @@ impl EmitOps for Emitter {
                 return emit_recipe(self, &self->maps[cand], &self->maps[cand].b[bind],
                                    r, self->arena->nodes[n].b, n);
             }
+            /* Phase 28 (D28-3): a call on the type parameter inside a bounded
+               template body. The instance's type argument names the struct and
+               the recorded trait names the vtable, so the slot call is a plain
+               C call -- no vptr read, no boxing, no layout change. */
+            if (self->arena->nodes[n].aux == 7 || self->arena->nodes[n].aux == 8) {
+                char base[MAX_TEXT];
+                char tg[MAX_TEXT];
+                char msgb[MAX_TEXT];
+                size_t tl;
+                int si;
+                if (!self->gtarg[0])
+                    return self->fail_from(n, "a constrained call needs an instance");
+                snprintf(tg, sizeof tg, "%s", self->gtarg);
+                tl = strlen(tg);
+                while (tl > 0 && (tg[tl - 1] == ' ' || tg[tl - 1] == '*')) {
+                    tl--;
+                    tg[tl] = 0;
+                }
+                if (strncmp(tg, "struct ", 7) == 0) snprintf(base, sizeof base, "%s", tg + 7);
+                else if (strncmp(tg, "union ", 6) == 0) snprintf(base, sizeof base, "%s", tg + 6);
+                else snprintf(base, sizeof base, "%s", tg);
+                si = self->sym->find_struct(base);
+                if (si < 0) {
+                    snprintf(msgb, sizeof msgb,
+                             "type argument '%s' cannot satisfy trait '%s' (not a struct)",
+                             self->gtarg, self->arena->nodes[n].text);
+                    return self->fail_from(n, msgb);
+                }
+                fprintf(self->out, "%s_%s_vtable.%s(", self->sym->structs[si].name,
+                        self->arena->nodes[n].text, self->arena->nodes[n].text2);
+                if (self->arena->nodes[n].aux == 7) fputs("&", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                c2 = self->arena->nodes[n].b;
+                while (c2 >= 0) {
+                    fputs(", ", self->out);
+                    if (self->emit_expr(c2) != 0) return -1;
+                    c2 = self->arena->nodes[c2].next;
+                }
+                fputs(")", self->out);
+                return 0;
+            }
             if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");
             rk = self->arena->nodes[self->arena->nodes[n].a].kind;
             if (rk != N_VAR && rk != N_INDEX && rk != N_CALL

@@ -195,6 +195,10 @@ pub struct Expr {
        ALL_CAPS name as a C macro constant, which turned `sizeof(T)` into a
        raw expression and let `ct compile` emit `sizeof(T)`. */
     char in_generic_tparam[160];
+    /* Phase 28: the trait bound of the template whose body is being parsed.
+       A method call on the type parameter resolves against this trait instead
+       of failing to find a struct; empty for a plain template and outside one. */
+    char in_generic_bound[160];
     /* Phase 26 fix (SH-63): the last bare struct/union/enum tag `parse_type`
        expanded into `struct <tag>`. A template whose return type was written
        bare `T` must become the type parameter, not the same-named tag. */
@@ -1220,8 +1224,6 @@ impl ExprOps for Expr {
         char tmp[MAX_TEXT];
         int i, k, ni, suffix, taken;
 
-        (void)line;
-        (void)col;
         for (i = 0; i < self->sym->nginsts; i++)
             if (self->sym->ginsts[i].func == gfi
                 && strcmp(self->sym->ginsts[i].targ, targ) == 0)
@@ -1266,6 +1268,8 @@ impl ExprOps for Expr {
         self->sym->ginsts[i].func = gfi;
         snprintf(self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
         snprintf(self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);
+        self->sym->ginsts[i].line = line;
+        self->sym->ginsts[i].col = col;
         self->sym->nginsts++;
         return i;
     }
@@ -2444,7 +2448,40 @@ impl ExprOps for Expr {
                             il--;
                             ibase[il] = 0;
                         }
-                        if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
+                        /* Phase 28 (D28-2): inside a bounded template body the
+                           receiver is the type parameter itself. The constraint
+                           answers the method statically: record the trait and
+                           the receiver form, and check the call against the
+                           trait signature now, while the concrete type is still
+                           unknown. The emitter spells the vtable from the
+                           instance's type argument. */
+                        if (self->in_generic_tparam[0] && self->in_generic_bound[0]
+                            && strcmp(ibase, self->in_generic_tparam) == 0) {
+                            char msgb[MAX_TEXT];
+                            int bt, bmi = -1, bi2, bgot;
+                            bt = self->sym->find_trait(self->in_generic_bound);
+                            for (bi2 = 0; bt >= 0 && bi2 < self->sym->traits[bt].nm; bi2++)
+                                if (strcmp(self->sym->traits[bt].m[bi2].name, fname) == 0) {
+                                    bmi = bi2;
+                                    break;
+                                }
+                            if (bmi < 0) {
+                                snprintf(msgb, sizeof msgb,
+                                         "trait '%s' has no method '%s'",
+                                         self->in_generic_bound, fname);
+                                return tool::diag::ct_sem_error(mline, mcol, msgb,
+                                                                self->sup->mem->path);
+                            }
+                            bgot = arg_count(self->arena, args) + self->closure_arg_count(args);
+                            if (self->arity_check(mline, mcol, fname, bgot,
+                                                  self->sym->traits[bt].m[bmi].nparams) != 0)
+                                return -1;
+                            if (self->argtype_check(mline, mcol, fname, args, -1, bt, bmi) != 0)
+                                return -1;
+                            self->arena->nodes[m].aux = arrow ? 8 : 7;
+                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
+                                     self->in_generic_bound);
+                        } else if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
                             int t = self->sym->find_trait(trname);
                             int mi, ok = 0;
                             if (t >= 0) {

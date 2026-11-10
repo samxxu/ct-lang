@@ -890,6 +890,71 @@ impl ParseDeclOps for Parser {
 
 }
 
+/* Phase 28 (D28-3): an instance may only be built when its type argument
+   satisfies the template's bound. The check runs after the unit is parsed so
+   an `impl` written below the call still counts; without it the emitter would
+   spell a vtable nobody defines. `use` covers the adoption written on the
+   struct, the arena scan covers `impl Trait for S`. */
+static int impl_declares(struct Parser *self, int si, const char *trait)
+{
+    int i;
+
+    for (i = 0; i < self->arena->nnode; i++)
+        if (self->arena->nodes[i].kind == N_IMPL
+            && self->arena->nodes[i].aux == si
+            && strcmp(self->arena->nodes[i].text2, trait) == 0)
+            return 1;
+    return 0;
+}
+
+static int check_generic_bounds(struct Parser *self)
+{
+    int i, k, si, base;
+    char msg[512];
+
+    base = tool::diag::ct_diag_nsem();
+    for (i = 0; i < self->sym->nginsts; i++) {
+        int f = self->sym->ginsts[i].func;
+        char targ[MAX_TEXT];
+        char tbase[MAX_TEXT];
+        size_t tl;
+        int ok;
+        if (self->sym->ginsts[i].checked) continue;
+        self->sym->ginsts[i].checked = 1;
+        if (!self->sym->funcs[f].bound[0]) continue;
+        snprintf(targ, sizeof targ, "%s", self->sym->ginsts[i].targ);
+        tl = strlen(targ);
+        while (tl > 0 && (targ[tl - 1] == ' ' || targ[tl - 1] == '*')) {
+            tl--;
+            targ[tl] = 0;
+        }
+        if (strncmp(targ, "struct ", 7) == 0) snprintf(tbase, sizeof tbase, "%s", targ + 7);
+        else if (strncmp(targ, "union ", 6) == 0) snprintf(tbase, sizeof tbase, "%s", targ + 6);
+        else snprintf(tbase, sizeof tbase, "%s", targ);
+        si = self->sym->find_struct(tbase);
+        if (si < 0) {
+            snprintf(msg, sizeof msg,
+                     "type argument '%s' cannot satisfy trait '%s' (not a struct)",
+                     self->sym->ginsts[i].targ, self->sym->funcs[f].bound);
+            tool::diag::ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col,
+                                     msg, self->mem->path);
+            continue;
+        }
+        ok = impl_declares(self, si, self->sym->funcs[f].bound);
+        for (k = 0; !ok && k < self->sym->structs[si].nuse; k++)
+            if (strcmp(self->sym->structs[si].use[k], self->sym->funcs[f].bound) == 0)
+                ok = 1;
+        if (!ok) {
+            snprintf(msg, sizeof msg,
+                     "type argument '%s' does not implement trait '%s'",
+                     self->sym->structs[si].name, self->sym->funcs[f].bound);
+            tool::diag::ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col,
+                                     msg, self->mem->path);
+        }
+    }
+    return tool::diag::ct_diag_nsem() > base ? -1 : 0;
+}
+
 impl ParseOps for Parser {
 
     int parse_program(void)
@@ -965,6 +1030,7 @@ impl ParseOps for Parser {
             self->seen_decl = 1;
         }
         /* errors leave the unit (and its artifacts) behind */
+        if (check_generic_bounds(self) != 0) return -1;
         if (tool::diag::ct_diag_nsem() > base) return -1;
         return prog;
     }
@@ -1227,9 +1293,12 @@ impl ParseOps for Parser {
         if (is_generic) self->ex->in_generic = 1;
         if (is_generic) snprintf(self->ex->in_generic_tparam, sizeof self->ex->in_generic_tparam,
                                  "%s", tparam);
+        if (is_generic) snprintf(self->ex->in_generic_bound, sizeof self->ex->in_generic_bound,
+                                 "%s", bound);
         b = self->st->parse_block();
         if (is_generic) self->ex->in_generic = 0;
         if (is_generic) self->ex->in_generic_tparam[0] = 0;
+        if (is_generic) self->ex->in_generic_bound[0] = 0;
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func[0] = 0;
