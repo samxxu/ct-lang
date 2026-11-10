@@ -41,6 +41,10 @@
 #define MAX_ALIAS_CHAIN 32
 #define MAX_CLOSURES 64
 #define MAX_GENERIC_INSTS 64
+#define MAX_STRUCT_TPLS 64
+#define MAX_STRUCT_INSTS 128
+#define MAX_STRUCT_TPARAMS 2
+#define MAX_STRUCT_IMPLS 64
 
 namespace frontend::sym;
 /* A compile-time synonym for a type spelling. It never reaches the generated C;
@@ -226,6 +230,17 @@ pub struct StructDef {
     int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
     int  uses_handback;         /* built-in `Handback`: no vptr, no vtable, `borrow` calls it */
     int  has_handback_impl;     /* this unit parsed `impl Handback for S` */
+    /* Phase 29: a generic struct template (`struct Stack<T>`) emits no C of its
+       own; every `(template, type arguments)` pair gets one instance row whose
+       fields are the template's with `T`/`U` replaced. `is_inst` marks that row,
+       and `declared_here` says this unit's `.h` already carries the definition,
+       so the `.c` must not repeat it. */
+    int  ntparams;
+    char tparam[2][160];
+    int  is_template;
+    int  is_inst;
+    int  is_pub;
+    int  declared_here;
 }
 
 pub trait SymbolOps {
@@ -250,6 +265,9 @@ pub trait SymbolOps {
     int  add_bare_type(const char *name, const char *full);
     int  find_struct(const char *name);
     int  add_struct(const char *name);
+    /* Phase 29: a monomorphised generic struct. Its own cap does not eat the
+       MAX_STRUCTS budget the plain declarations rely on. */
+    int  add_struct_inst(const char *name);
     int  find_trait(const char *name);
     int  add_trait(const char *name);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
@@ -288,6 +306,80 @@ pub struct GenericInst {
     int  checked;
 }
 
+/* Phase 29: a generic struct template and its monomorphised instances. Both
+   registries cover the whole build, not one unit: the per-unit tables reset and
+   re-export only names, so a consumer that names `Stack<int>` needs the
+   template's field spellings and the instance's identity from somewhere that
+   outlives the reset. */
+pub struct StructTmpl {
+    char name[160];             /* the source name, `Stack` */
+    char full[160];             /* namespace-qualified C name */
+    int  ntparams;
+    char tparam[2][160];
+    struct Field fields[64];
+    int  nfields;
+    char use[64][160];
+    int  nuse;
+    int  is_pub;
+    int  owner;                 /* unit index; -1 outside `build` */
+    char path[1024];
+    int  line;
+}
+
+pub struct StructInst {
+    char name[160];             /* the encoded C tag, `Stack_int` */
+    char tmpl[160];             /* the template's source name */
+    /* The canonical type-argument spellings, in the form the encoder consumed
+       (`int`, `char*`, `Vec<int>`). They are the identity of the instance: the
+       encoded name is only a hash-like spelling of them (D29-6). */
+    char carg[2][160];
+    /* The same arguments in the C spelling (`struct Vec_int`), which is what a
+       method's `T` has to become when the block is monomorphised. */
+    char ctype[2][160];
+    int  nargs;
+    int  owner;                 /* the unit that first named the instance */
+    int  carried;               /* the template owner's `.h` already defines it */
+    int  emitted;               /* the writer already printed the definition */
+}
+
+pub struct StructTmpl *ct_tmpls(int *n);
+pub struct StructInst *ct_insts(int *n);
+/* Phase 29: an `impl` block written against a template rather than a concrete
+   struct (`impl<T> Pair<T, int>`). The block is monomorphised once per matching
+   instance, so it carries the argument *pattern* rather than an instance name. */
+pub struct StructImpl {
+    char tmpl[160];
+    int  ntparams;
+    char tparam[2][160];
+    int  nargs;
+    char pat[2][160];           /* a declared parameter name, or a canonical type */
+    char use[160];              /* trait name; empty for an inherent block */
+    int  node;                  /* arena index of the N_IMPL node */
+    int  owner;
+    int  line;
+}
+pub struct StructImpl *ct_impls(int *n);
+pub int ct_impl_find(const char *tmpl, int nargs, const char *p1, const char *p2, const char *use);
+pub int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2, int nargs, const char *p1, const char *p2, const char *use, int node, int owner, int line);
+/* 1 when the instance row `inst` is covered by the block `ii`. */
+pub int ct_impl_matches(int ii, int inst);
+pub int ct_tmpl_find(const char *name);
+pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, int is_pub, int owner, const char *path, int line);
+pub int ct_inst_find(const char *name);
+pub int ct_inst_add(const char *name, const char *tmpl, int nargs, const char *a1, const char *a2, const char *c1, const char *c2, int owner, int carried);
+/* Phase 29 §2.2: the canonical spelling of one type argument (trim, collapse
+   whitespace, glue `*` to the previous token) and the encoded instance name. */
+pub int ct_type_canon(const char *in, char *out, int cap);
+pub int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2, char *out, int cap);
+/* Phase 29: rewrite a spelling that still names an instance (`Vec<int>`,
+   optionally prefixed by `struct`) to `struct <encoded>`. -1 when it is not an
+   instance or the table has no such row yet. */
+pub int ct_inst_resolve(const char *in, char *out, int cap);
+/* Phase 29: split `[struct ]Name<a[, b]>` into its template name, canonicalized
+   arguments and the trailing suffix (stars / dims). 0 when the spelling is an
+   instance form, -1 otherwise. */
+pub int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap);
+
 pub struct Symbols {
     /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
        as inline arrays in the file-scope instance they put ~21 MB of zeroes
@@ -306,8 +398,9 @@ pub struct Symbols {
     int  ntype;
     struct Trait *traits;
     int  ntraits;
-    struct StructDef *structs;
+    struct StructDef *structs;      /* MAX_STRUCTS + MAX_STRUCT_INSTS rows */
     int  nstructs;
+    int  nstruct_inst;              /* the instance half of `structs` */
     struct Closure *closures;
     int  nclosure;
     /* An exported type declared in a namespace is also reachable by its bare
@@ -696,7 +789,7 @@ impl SymbolOps for Symbols {
         if (!name[0]) return -1;
         i = self->find_struct(name);
         if (i >= 0) return i;
-        if (self->nstructs >= MAX_STRUCTS) {
+        if (self->nstructs - self->nstruct_inst >= MAX_STRUCTS) {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "too many structs in unit '%s' (limit %d)",
                      self->unit_name(), MAX_STRUCTS);
@@ -704,11 +797,40 @@ impl SymbolOps for Symbols {
         }
         snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
         self->structs[self->nstructs].nuse = 0;
+        self->structs[self->nstructs].nfields = 0;
+        self->structs[self->nstructs].defined = 0;
         self->structs[self->nstructs].uses_drop = 0;
         self->structs[self->nstructs].uses_handback = 0;
         self->structs[self->nstructs].has_handback_impl = 0;
+        self->structs[self->nstructs].ntparams = 0;
+        self->structs[self->nstructs].tparam[0][0] = 0;
+        self->structs[self->nstructs].tparam[1][0] = 0;
+        self->structs[self->nstructs].is_template = 0;
+        self->structs[self->nstructs].is_inst = 0;
+        self->structs[self->nstructs].is_pub = 0;
+        self->structs[self->nstructs].declared_here = 0;
         self->nstructs++;
         return self->nstructs - 1;
+    }
+
+    int add_struct_inst(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_struct(name);
+        if (i >= 0) return i;
+        if (self->nstruct_inst >= MAX_STRUCT_INSTS) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg,
+                     "too many generic struct instances in unit '%s' (limit %d)",
+                     self->unit_name(), MAX_STRUCT_INSTS);
+            return self->fail(msg);
+        }
+        i = self->add_struct(name);
+        if (i < 0) return -1;
+        self->structs[i].is_inst = 1;
+        self->nstruct_inst++;
+        return i;
     }
 
     int find_trait(const char *name)
@@ -1239,7 +1361,7 @@ static int symbols_grow(struct Symbols *self)
         if (!self->traits) return -1;
     }
     if (!self->structs) {
-        self->structs = calloc(MAX_STRUCTS, sizeof(*self->structs));
+        self->structs = calloc(MAX_STRUCTS + MAX_STRUCT_INSTS, sizeof(*self->structs));
         if (!self->structs) return -1;
     }
     if (!self->closures) {
@@ -1320,5 +1442,408 @@ int ct_generic_subst(const char *in, const char *word, const char *repl, char *o
         }
     }
     out[n] = 0;
+    return 0;
+}
+
+/* ---- Phase 29: generic struct templates and instances, build-wide ---- */
+
+/* Allocated on first use and never reset: the per-unit symbol tables are reset
+   between units, while an instance's identity and layout must survive so a
+   later unit reuses the one the template's owner published (D29-10). */
+static struct StructTmpl *g_tmpls;
+static int g_ntmpls;
+static struct StructInst *g_insts;
+static int g_ninsts;
+
+struct StructTmpl *ct_tmpls(int *n)
+{
+    if (!g_tmpls) g_tmpls = calloc(MAX_STRUCT_TPLS, sizeof(*g_tmpls));
+    if (!g_tmpls) {
+        if (n) *n = 0;
+        return g_tmpls;
+    }
+    if (n) *n = g_ntmpls;
+    return g_tmpls;
+}
+
+struct StructInst *ct_insts(int *n)
+{
+    if (!g_insts) g_insts = calloc(MAX_STRUCT_INSTS, sizeof(*g_insts));
+    if (!g_insts) {
+        if (n) *n = 0;
+        return g_insts;
+    }
+    if (n) *n = g_ninsts;
+    return g_insts;
+}
+
+int ct_tmpl_find(const char *name)
+{
+    int i, n;
+    struct StructTmpl *t = ct_tmpls(&n);
+
+    for (i = 0; i < n; i++)
+        if (strcmp(t[i].name, name) == 0) return i;
+    return -1;
+}
+
+int ct_tmpl_add(const char *name, const char *full, int ntprm,
+                const char *t1, const char *t2, int is_pub, int owner,
+                const char *path, int line)
+{
+    int i, n;
+    struct StructTmpl *t = ct_tmpls(&n);
+
+    i = ct_tmpl_find(name);
+    if (i >= 0) return i;
+    if (!t || n >= MAX_STRUCT_TPLS) return -1;
+    snprintf(t[n].name, MAX_TEXT, "%s", name);
+    snprintf(t[n].full, MAX_TEXT, "%s", full);
+    t[n].ntparams = ntprm;
+    snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
+    snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
+    t[n].nfields = 0;
+    t[n].nuse = 0;
+    t[n].is_pub = is_pub;
+    t[n].owner = owner;
+    snprintf(t[n].path, 1024, "%s", path);
+    t[n].line = line;
+    g_ntmpls++;
+    return n;
+}
+
+int ct_inst_find(const char *name)
+{
+    int i, n;
+    struct StructInst *t = ct_insts(&n);
+
+    for (i = 0; i < n; i++)
+        if (strcmp(t[i].name, name) == 0) return i;
+    return -1;
+}
+
+int ct_inst_add(const char *name, const char *tmpl, int nargs,
+                const char *a1, const char *a2, const char *c1, const char *c2,
+                int owner, int carried)
+{
+    int i, n;
+    struct StructInst *t = ct_insts(&n);
+
+    i = ct_inst_find(name);
+    if (i >= 0) {
+        /* The same encoding must always mean the same argument list (L29-5). */
+        if (t[i].nargs != nargs) return -2;
+        if (strcmp(t[i].carg[0], a1) != 0) return -2;
+        if (nargs > 1 && strcmp(t[i].carg[1], a2) != 0) return -2;
+        if (carried && !t[i].carried) t[i].carried = 1;
+        return i;
+    }
+    if (!t || n >= MAX_STRUCT_INSTS) return -1;
+    snprintf(t[n].name, MAX_TEXT, "%s", name);
+    snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
+    t[n].nargs = nargs;
+    snprintf(t[n].carg[0], MAX_TEXT, "%s", a1);
+    snprintf(t[n].carg[1], MAX_TEXT, "%s", a2);
+    snprintf(t[n].ctype[0], MAX_TEXT, "%s", c1);
+    snprintf(t[n].ctype[1], MAX_TEXT, "%s", c2);
+    t[n].owner = owner;
+    t[n].carried = carried;
+    g_ninsts++;
+    return n;
+}
+
+/* ---- Phase 29: `impl` blocks written against a template ---- */
+
+static struct StructImpl *g_impls;
+static int g_nimpls;
+
+struct StructImpl *ct_impls(int *n)
+{
+    if (!g_impls) g_impls = calloc(MAX_STRUCT_IMPLS, sizeof(*g_impls));
+    if (!g_impls) {
+        if (n) *n = 0;
+        return g_impls;
+    }
+    if (n) *n = g_nimpls;
+    return g_impls;
+}
+
+int ct_impl_find(const char *tmpl, int nargs, const char *p1, const char *p2,
+                 const char *use)
+{
+    int i, n;
+    struct StructImpl *t = ct_impls(&n);
+
+    for (i = 0; i < n; i++) {
+        if (strcmp(t[i].tmpl, tmpl) != 0) continue;
+        if (t[i].nargs != nargs) continue;
+        if (strcmp(t[i].pat[0], p1) != 0) continue;
+        if (nargs > 1 && strcmp(t[i].pat[1], p2) != 0) continue;
+        if (strcmp(t[i].use, use) != 0) continue;
+        return i;
+    }
+    return -1;
+}
+
+int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2,
+                int nargs, const char *p1, const char *p2, const char *use,
+                int node, int owner, int line)
+{
+    int i, n;
+    struct StructImpl *t = ct_impls(&n);
+
+    i = ct_impl_find(tmpl, nargs, p1, p2, use);
+    if (i >= 0) return i;
+    if (!t || n >= MAX_STRUCT_IMPLS) return -1;
+    snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
+    t[n].ntparams = ntprm;
+    snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
+    snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
+    t[n].nargs = nargs;
+    snprintf(t[n].pat[0], MAX_TEXT, "%s", p1);
+    snprintf(t[n].pat[1], MAX_TEXT, "%s", p2);
+    snprintf(t[n].use, MAX_TEXT, "%s", use);
+    t[n].node = node;
+    t[n].owner = owner;
+    t[n].line = line;
+    g_nimpls++;
+    return n;
+}
+
+/* The pattern of a block is either one of its declared parameters (a wildcard,
+   bound to the instance's argument) or a concrete canonical spelling. A
+   parameter written twice must receive the same argument both times. */
+int ct_impl_matches(int ii, int inst)
+{
+    int i, k, n, nins;
+    struct StructImpl *t = ct_impls(&n);
+    struct StructInst *ins = ct_insts(&nins);
+    int bind_at[2];
+
+    if (!t || !ins || ii < 0 || ii >= n || inst < 0 || inst >= nins) return 0;
+    if (strcmp(t[ii].tmpl, ins[inst].tmpl) != 0) return 0;
+    if (t[ii].nargs != ins[inst].nargs) return 0;
+    bind_at[0] = -1;
+    bind_at[1] = -1;
+    for (k = 0; k < ins[inst].nargs; k++) {
+        int pi = -1;
+        if (t[ii].ntparams > 0 && strcmp(t[ii].pat[k], t[ii].tparam[0]) == 0) pi = 0;
+        else if (t[ii].ntparams > 1 && strcmp(t[ii].pat[k], t[ii].tparam[1]) == 0) pi = 1;
+        if (pi < 0) {
+            if (strcmp(t[ii].pat[k], ins[inst].carg[k]) != 0) return 0;
+            continue;
+        }
+        if (bind_at[pi] < 0) bind_at[pi] = k;
+        else if (strcmp(ins[inst].carg[bind_at[pi]], ins[inst].carg[k]) != 0) return 0;
+    }
+    /* a parameter named in the block but absent from the pattern is unbound;
+       that is a parse-time error, so no instance can match it */
+    for (i = 0; i < t[ii].ntparams; i++)
+        if (bind_at[i] < 0) return 0;
+    return 1;
+}
+
+/* `char *` -> `char*`, `unsigned   int` -> `unsigned int`, leading and trailing
+   blanks dropped. Nothing else is normalized, so the spelling stays readable
+   and two spellings that mean the same type still need the same spelling. */
+int ct_type_canon(const char *in, char *out, int cap)
+{
+    int n = 0, sp = 0;
+    const char *p = in;
+
+    while (*p == ' ' || *p == '\t') p++;
+    while (*p) {
+        if (*p == ' ' || *p == '\t') {
+            sp = 1;
+            p++;
+            continue;
+        }
+        if (*p == '*') {
+            sp = 0;
+            if (n + 2 > cap) return -1;
+            out[n] = '*';
+            n++;
+            p++;
+            continue;
+        }
+        if (sp && n > 0) {
+            if (n + 2 > cap) return -1;
+            out[n] = ' ';
+            n++;
+        }
+        sp = 0;
+        if (n + 2 > cap) return -1;
+        out[n] = *p;
+        n++;
+        p++;
+    }
+    out[n] = 0;
+    return 0;
+}
+
+/* One encoded type argument: `struct Point` -> `Point`, `char*` -> `char_p`,
+   `Vec<int>` -> `Vec_l_int_r` (§2.2 step 3). */
+static int inst_enc_one(const char *arg, char *out, int cap)
+{
+    int n = 0, rl;
+    const char *p = arg;
+    const char *rep;
+
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    } else if (strncmp(p, "union ", 6) == 0) {
+        if (n + 3 > cap) return -1;
+        out[n] = 'u';
+        out[n + 1] = '_';
+        n += 2;
+        p += 6;
+    } else if (strncmp(p, "enum ", 5) == 0) {
+        if (n + 3 > cap) return -1;
+        out[n] = 'e';
+        out[n + 1] = '_';
+        n += 2;
+        p += 5;
+    }
+    while (*p) {
+        rep = "";
+        if (*p == '*') rep = "_p";
+        else if (*p == ' ') rep = "_";
+        else if (*p == '_') rep = "__";
+        else if (*p == '<') rep = "_l";
+        else if (*p == '>') rep = "_r";
+        else if (*p == ',') rep = "_c";
+        rl = (int)strlen(rep);
+        if (rl > 0) {
+            if (n + rl + 1 > cap) return -1;
+            memcpy(out + n, rep, (size_t)rl);
+            n += rl;
+        } else {
+            if (n + 2 > cap) return -1;
+            out[n] = *p;
+            n++;
+        }
+        p++;
+    }
+    out[n] = 0;
+    return n;
+}
+
+int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2,
+                   char *out, int cap)
+{
+    char buf[MAX_TEXT * 2];
+    char enc[MAX_TEXT];
+    int n, i, r, k;
+    int h;
+
+    if (nargs > MAX_STRUCT_TPARAMS) return -1;
+    r = snprintf(buf, sizeof buf, "%s", tmpl);
+    if (r < 0 || r >= (int)sizeof buf) return -1;
+    n = r;
+    for (i = 0; i < nargs; i++) {
+        if (inst_enc_one(i == 0 ? a1 : a2, enc, MAX_TEXT) < 0) return -1;
+        r = snprintf(buf + n, sizeof buf - (size_t)n, "_%s", enc);
+        if (r < 0 || n + r >= (int)sizeof buf) return -1;
+        n += r;
+    }
+    /* Beyond 63 characters the spelling stops being readable in C, so keep a
+       prefix and a digest of the whole thing (§2.2 step 5). */
+    if (n >= 64) {
+        h = 0;
+        for (k = 0; k < n; k++) h = (h * 31 + (unsigned char)buf[k]) & 0x7fffffff;
+        r = snprintf(out, (size_t)cap, "%.40s_h%08x", buf, (unsigned int)h);
+        if (r < 0 || r >= cap) return -1;
+        return 0;
+    }
+    if (n + 1 > cap) return -1;
+    snprintf(out, (size_t)cap, "%s", buf);
+    return 0;
+}
+
+/* Split `[struct ]Name<a[, b]>` into the template name, the canonical argument
+   spellings and the suffix after `>` (stars, dims). The argument list honours
+   nesting (`Vec<Vec<int> >` has one argument) and either arity of the frozen
+   cap. Both the emitter (resolve) and the parser (register a nested instance)
+   read the same shape through this one scanner. */
+int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap)
+{
+    const char *p, *lt, *gt, *base;
+    int r, depth, i;
+
+    *nargs = 0;
+    a1[0] = 0;
+    a2[0] = 0;
+    tail[0] = 0;
+    p = in;
+    while (*p == ' ') p++;
+    if (strncmp(p, "struct ", 7) == 0) p += 7;
+    lt = strchr(p, '<');
+    if (!lt) return -1;
+    base = p;
+    r = (int)(lt - base);
+    while (r > 0 && base[r - 1] == ' ') r--;
+    if (r <= 0 || r >= cap) return -1;
+    memcpy(name, base, (size_t)r);
+    name[r] = 0;
+    gt = lt;
+    depth = 0;
+    for (; *gt; gt++) {
+        if (*gt == '<') depth++;
+        else if (*gt == '>') {
+            depth--;
+            if (depth == 0) break;
+        }
+    }
+    if (!*gt) return -1;
+    {
+        const char *a = lt + 1;
+        const char *b = a;
+        depth = 0;
+        for (;;) {
+            if (*b == 0 || (*b == ',' && depth == 0) || (b == gt)) {
+                int len = (int)(b - a);
+                char raw[MAX_TEXT];
+                char canon[MAX_TEXT];
+                if (*nargs >= MAX_STRUCT_TPARAMS || len <= 0 || len >= MAX_TEXT) return -1;
+                memcpy(raw, a, (size_t)len);
+                raw[len] = 0;
+                if (ct_type_canon(raw, canon, sizeof canon) != 0) return -1;
+                if (*nargs == 0) snprintf(a1, (size_t)cap, "%s", canon);
+                else snprintf(a2, (size_t)cap, "%s", canon);
+                *nargs = *nargs + 1;
+                if (b == gt) break;
+                a = b + 1;
+                b = a;
+                continue;
+            }
+            if (*b == '<') depth++;
+            else if (*b == '>') depth--;
+            b++;
+        }
+    }
+    i = snprintf(tail, (size_t)cap, "%s", gt + 1);
+    if (i < 0 || i >= cap) return -1;
+    return 0;
+}
+
+/* `Vec<int>` / `struct Vec<int> *` -> `struct Vec_int` plus the trailing
+   suffix. A miss means the instance was never created, so the caller keeps the
+   original spelling and reports its own diagnostic. */
+int ct_inst_resolve(const char *in, char *out, int cap)
+{
+    char name[MAX_TEXT];
+    char a1[MAX_TEXT];
+    char a2[MAX_TEXT];
+    char tail[MAX_TEXT];
+    char enc[MAX_TEXT];
+    int nargs, found, k;
+
+    if (ct_inst_split(in, name, &nargs, a1, a2, tail, sizeof tail) != 0) return -1;
+    if (nargs <= 0) return -1;
+    if (ct_inst_encode(name, nargs, a1, a2, enc, sizeof enc) != 0) return -1;
+    found = ct_inst_find(enc);
+    if (found < 0) return -1;
+    k = snprintf(out, (size_t)cap, "struct %s%s", enc, tail);
+    if (k < 0 || k >= cap) return -1;
     return 0;
 }

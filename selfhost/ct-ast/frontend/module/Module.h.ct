@@ -1183,6 +1183,7 @@ impl ModuleOps for Module {
         self->sym->ntype = 0;
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
+        self->sym->nstruct_inst = 0;
         self->sym->ntb = 0;
         self->p->nrels = 0;
         self->p->scan_only = 0;

@@ -38,7 +38,7 @@ pub struct MapBind {
 
 /* `map trait T for instance x { ... }` binds trait methods to a global instance;
    `map trait T for namespace ns { ... }` binds them to a namespace (SH-20). */
-pub struct Map {
+pub struct MapTable {
     char trait[160];
     char inst[160];                 /* the variable's source name, or the namespace path */
     char cname[160];                /* the variable's C spelling, or the namespace prefix */

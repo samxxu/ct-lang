@@ -295,6 +295,7 @@ impl DriverOps for Driver {
         self->sym->ntype = 0;
         self->sym->ntraits = 0;
         self->sym->nstructs = 0;
+        self->sym->nstruct_inst = 0;
         self->sym->ntb = 0;
         self->sym->nalias = 0;
         self->sym->ntalias = 0;

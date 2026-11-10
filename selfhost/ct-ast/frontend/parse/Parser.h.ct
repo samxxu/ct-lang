@@ -21,13 +21,16 @@
 
 import backend::mem::Memory;
 import frontend::lex::Lexer;
-import frontend::module::Map::Call as Call;
-import frontend::module::Map;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
 import frontend::parse::Expr;
 import frontend::parse::MapBuild;
 import frontend::parse::ParseSupport;
 import frontend::parse::Stmt;
 import frontend::sym::Symbols::Field as Field;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
@@ -40,6 +43,7 @@ import tool::diag::Diag;
 #define MAX_PARAMS 16
 #define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
+#define MAX_STRUCT_TPARAMS 2
 #define MAX_TEXT 160
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
@@ -85,6 +89,9 @@ pub trait ParseOps {
     int  register_field(int m);
     int  parse_trait(int is_pub);
     int  parse_impl(void);
+    /* Phase 29: `impl<T> Name<Args> [use Trait] { … }`, the template form.
+       `have_name` is 0 when the caller already read the template name. */
+    int  parse_impl_inst(const char *tmpl, int have_name);
     int  parse_use_list(int sindex);
 }
 
@@ -122,7 +129,7 @@ pub struct Parser {
        uses for the same tables). */
     struct Call *calls;
     int  ncalls;
-    struct Map *maps;
+    struct MapTable *maps;
     int  nmaps;
     int  cur_unit;                      /* index of the unit being parsed */
     /* The namespace path the current unit declared and the caller recorded for
@@ -165,6 +172,10 @@ pub struct Parser {
     /* The pre-pass only collects the import list: the dependencies are not
        parsed yet, so nothing can be resolved into an alias. */
     int  scan_only;
+    /* Phase 29: `pub` of the declaration `top_decl` is reading. A generic
+       struct template registers itself with the build-wide registry before the
+       caller sees the node, so it needs the flag here. */
+    int  decl_pub;
 } use ParseOps, ParseDeclOps;
 
 /* The struct a `borrow`-able type points to, or -1 when the type is not a
@@ -385,7 +396,27 @@ impl ParseDeclOps for Parser {
         snprintf(text, sizeof text, "%s", self->lex->toktext);
         self->sup->lex_next();
         is_def = 0;
-        if (self->lex->tok == T_ID) self->sup->lex_next();
+        if (self->lex->tok == T_ID) {
+            self->sup->lex_next();
+            /* Phase 29: skip `struct Name<T[, U]>`'s parameter list, so the
+               body below is still what decides the declaration kind. */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                int depth = 0;
+                while (self->lex->tok != T_EOF) {
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                        depth++;
+                    } else if (self->lex->tok == T_PUNCT
+                               && strcmp(self->lex->toktext, ">") == 0) {
+                        depth--;
+                        if (depth <= 0) {
+                            self->sup->lex_next();
+                            break;
+                        }
+                    }
+                    self->sup->lex_next();
+                }
+            }
+        }
         /* a body (`{`) or a forward declaration (`;`) both start a CT struct */
         if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "{") == 0 || strcmp(self->lex->toktext, ";") == 0))
             is_def = 1;
@@ -622,6 +653,7 @@ impl ParseDeclOps for Parser {
             self->sup->lex_next();
             return self->top_decl(1);
         }
+        self->decl_pub = is_pub;
         /* A `.m.ct` unit is a mapping-only unit: its whitelist is `pub trait`,
            `map` and `_Static_assert`; everything else is refused here so the
            message names what the unit is not allowed to carry. */
@@ -966,6 +998,7 @@ impl ParseOps for Parser {
         if (prog < 0) return -1;
         base = tool::diag::ct_diag_nsem();
         self->seen_decl = 0;
+        self->ex->cur_unit = self->cur_unit;
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
@@ -1720,10 +1753,16 @@ impl ParseOps for Parser {
     int parse_record_def(int is_union)
     {
         int s, struct_line, brace_line, brace_col, kind, ar, ao;
+        int nt, templ;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
+        char tparam[2][MAX_TEXT];
         (void)self;
 
+        nt = 0;
+        templ = 0;
+        tparam[0][0] = 0;
+        tparam[1][0] = 0;
         struct_line = self->lex->tokline;
         brace_line = 0;
         brace_col = 1;
@@ -1734,13 +1773,50 @@ impl ParseOps for Parser {
         if (self->lex->tok == T_ID) {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            /* Phase 29 §2.5: the three container names belong to the built-in
+               layer, so a user unit may not declare them again (L29-7). */
+            if (strstr(self->mem->path, "lib/std/") == 0
+                && (strcmp(name, "Vec") == 0 || strcmp(name, "Map") == 0
+                    || strcmp(name, "MapEntry") == 0)) {
+                char msg[MAX_TEXT * 2];
+                snprintf(msg, sizeof msg,
+                         "'%s' is a built-in type and cannot be redeclared", name);
+                return tool::diag::ct_sem_error(struct_line, 1, msg, self->mem->path);
+            }
             if (self->sup->add_type(qname, is_union ? 6 : 1) != 0) return -1;
             if (self->sup->add_struct(qname) < 0) return -1;
             self->sup->lex_next();
         }
+        /* Phase 29: `struct Name<T[, U]>` -- at most two type parameters, no
+           bounds (a struct parameter is never dispatched through a vtable). */
+        if (name[0] && !is_union && self->lex->tok == T_PUNCT
+            && strcmp(self->lex->toktext, "<") == 0) {
+            self->sup->lex_next();
+            for (;;) {
+                if (nt >= MAX_STRUCT_TPARAMS)
+                    return self->sup->fail("a generic struct takes at most 2 type parameters");
+                if (self->lex->tok != T_ID)
+                    return self->sup->fail("expected a type parameter name");
+                snprintf(tparam[nt], MAX_TEXT, "%s", self->lex->toktext);
+                nt++;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0)
+                    return self->sup->fail("a struct type parameter cannot carry a trait bound");
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+            if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
+                return self->sup->fail("expected '>' after the type parameters");
+            self->sup->lex_next();
+            templ = 1;
+        }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             /* `struct X;` -- a forward declaration: the tag is registered above,
                so `struct X *p` parses; the body may follow later */
+            if (templ) return self->sup->fail("a generic struct template needs a body");
             self->sup->lex_next();
             return NO_NODE;
         }
@@ -1765,11 +1841,21 @@ impl ParseOps for Parser {
         /* the fields of this body (and of any anonymous member inside it) are
            registered under `cur_record`; an untagged body leaves it empty */
         snprintf(self->cur_record, MAX_TEXT, "%s", qname);
+        /* Phase 29: inside a template body `T`/`U` are types, the same way a
+           generic function's parameter is handled (D26-4). */
+        if (templ) {
+            snprintf(self->ex->in_generic_tparam, MAX_TEXT, "%s", tparam[0]);
+            if (nt > 1) snprintf(self->ex->in_generic_tparam2, MAX_TEXT, "%s", tparam[1]);
+        }
         if (self->parse_record_body(s, 1) != 0) {
             self->cur_record[0] = 0;
+            self->ex->in_generic_tparam[0] = 0;
+            self->ex->in_generic_tparam2[0] = 0;
             return -1;
         }
         self->cur_record[0] = 0;
+        self->ex->in_generic_tparam[0] = 0;
+        self->ex->in_generic_tparam2[0] = 0;
         if (is_union && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0)
             return self->sup->fail("a union cannot use a trait");
         if (!is_union && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
@@ -1797,6 +1883,42 @@ impl ParseOps for Parser {
         if (qname[0]) {
             int di = self->sym->find_struct(qname);
             if (di >= 0) self->sym->structs[di].defined = 1;
+        }
+        /* Phase 29: publish the template build-wide, so a consumer unit that
+           names `Stack<int>` can substitute the field spellings without ever
+           parsing this body (the per-unit tables are reset between units). */
+        if (templ && qname[0]) {
+            int di, ti4, tn4, fi4, ui4;
+            struct StructTmpl *tps;
+
+            di = self->sym->find_struct(qname);
+            ti4 = frontend::sym::ct_tmpl_add(name, qname, nt, tparam[0], tparam[1],
+                              self->decl_pub, self->cur_unit, self->mem->path,
+                              struct_line);
+            if (ti4 < 0)
+                return self->sup->fail(
+                    "too many generic struct templates in this build (limit 64)");
+            tps = frontend::sym::ct_tmpls(&tn4);
+            if (di >= 0 && tps) {
+                tps[ti4].nfields = self->sym->structs[di].nfields;
+                for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
+                    snprintf(tps[ti4].fields[fi4].name, MAX_TEXT, "%s",
+                             self->sym->structs[di].fields[fi4].name);
+                    snprintf(tps[ti4].fields[fi4].type, MAX_TEXT, "%s",
+                             self->sym->structs[di].fields[fi4].type);
+                    snprintf(tps[ti4].fields[fi4].dims, MAX_TEXT, "%s",
+                             self->sym->structs[di].fields[fi4].dims);
+                }
+                tps[ti4].nuse = self->sym->structs[di].nuse;
+                for (ui4 = 0; ui4 < tps[ti4].nuse; ui4++)
+                    snprintf(tps[ti4].use[ui4], MAX_TEXT, "%s",
+                             self->sym->structs[di].use[ui4]);
+                self->sym->structs[di].is_template = 1;
+                self->sym->structs[di].ntparams = nt;
+                snprintf(self->sym->structs[di].tparam[0], MAX_TEXT, "%s", tparam[0]);
+                snprintf(self->sym->structs[di].tparam[1], MAX_TEXT, "%s", tparam[1]);
+                self->sym->structs[di].is_pub = self->decl_pub;
+            }
         }
         /* `struct S { … } __attribute__((packed));`: either after the body or,
            in the typedef form, between the body and the alias */
@@ -2300,8 +2422,17 @@ impl ParseOps for Parser {
 
         impl_line = self->lex->tokline;
         self->sup->lex_next();
+        /* Phase 29: `impl<T> Name<Args> [use Trait] { … }` writes against a
+           template, so it has no struct row of its own. The two dispatchers
+           below only take over when a `<` follows `impl` or the name; the older
+           `impl Trait for Struct` path keeps every token it had before. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
+            return self->parse_impl_inst("", 1);
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         snprintf(tname, sizeof tname, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
+            return self->parse_impl_inst(tname, 0);
         if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->sym->find_trait(rtrait);
         /* A static trait has no iface and no vtable: it is bound by a `map`,
@@ -2316,7 +2447,6 @@ impl ParseOps for Parser {
            `impl Drop for S` is legal and emits `S_Drop_drop` */
         if (ti < 0 && strcmp(rtrait, "Drop") != 0 && strcmp(rtrait, "Handback") != 0)
             return self->sup->fail("impl of an unknown trait");
-        self->sup->lex_next();
         if (self->lex->tok != T_ID || strcmp(self->lex->toktext, "for") != 0)
             return self->sup->fail("expected 'for' after the trait name");
         self->sup->lex_next();
@@ -2513,10 +2643,187 @@ impl ParseOps for Parser {
         return node;
     }
 
+    /* Phase 29: `impl<T> Name<Args> [ use Trait ] { methods }`. The block has no
+       struct row of its own -- it is registered build-wide against the template
+       together with its argument pattern, and the emitter monomorphises the
+       methods once per matching instance. A `use` clause fills the trait's
+       vtable slots for every instance; without one the methods are inherent and
+       the call site dispatches statically (no vtable, no dynamic dispatch). */
+    int parse_impl_inst(const char *tmpl_in, int have_name)
+    {
+        char tmpl[MAX_TEXT];
+        char tn[2][MAX_TEXT];
+        char pat[2][MAX_TEXT];
+        char use[MAX_TEXT];
+        char ruse[MAX_TEXT];
+        char ret[MAX_TEXT];
+        char mname[MAX_TEXT];
+        int nt, nargs, line, node, tail, mnode, params, body, ti, k, mline;
 
-
-
-
+        nt = 0;
+        nargs = 0;
+        tn[0][0] = 0;
+        tn[1][0] = 0;
+        pat[0][0] = 0;
+        pat[1][0] = 0;
+        use[0] = 0;
+        snprintf(tmpl, sizeof tmpl, "%s", tmpl_in);
+        line = self->lex->tokline;
+        if (have_name) {
+            /* the cursor sits on `<` */
+            self->sup->lex_next();
+            for (;;) {
+                if (nt >= MAX_STRUCT_TPARAMS)
+                    return self->sup->fail("a generic struct takes at most 2 type parameters");
+                if (self->lex->tok != T_ID)
+                    return self->sup->fail("expected a type parameter name");
+                snprintf(tn[nt], MAX_TEXT, "%s", self->lex->toktext);
+                nt++;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0)
+                    return self->sup->fail("a struct type parameter cannot carry a trait bound");
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">") == 0))
+                return self->sup->fail("expected '>' after the type parameters");
+            self->sup->lex_next();
+            if (self->lex->tok != T_ID)
+                return self->sup->fail("expected a struct name");
+            snprintf(tmpl, sizeof tmpl, "%s", self->lex->toktext);
+            self->sup->lex_next();
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+            self->sup->lex_next();
+            for (;;) {
+                int isparam = 0;
+                if (nargs >= MAX_STRUCT_TPARAMS)
+                    return self->sup->fail("a generic struct takes at most 2 type arguments");
+                if (self->lex->tok == T_ID)
+                    for (k = 0; k < nt; k++)
+                        if (strcmp(self->lex->toktext, tn[k]) == 0) isparam = 1;
+                if (isparam) {
+                    snprintf(pat[nargs], MAX_TEXT, "%s", self->lex->toktext);
+                    self->sup->lex_next();
+                } else {
+                    char tbuf[MAX_TEXT];
+                    tbuf[0] = 0;
+                    if (self->ex->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+                    frontend::sym::ct_type_canon(tbuf, pat[nargs], MAX_TEXT);
+                }
+                nargs++;
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">") == 0))
+                return self->sup->fail("expected '>' after the type arguments");
+            self->sup->lex_next();
+        }
+        ti = -1;
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
+            self->sup->lex_next();
+            if (self->lex->tok != T_ID)
+                return self->sup->fail("expected a trait name after 'use'");
+            snprintf(use, sizeof use, "%s", self->lex->toktext);
+            if (self->sup->resolve_type(use, ruse, sizeof ruse) != 0) return -1;
+            snprintf(use, sizeof use, "%s", ruse);
+            ti = self->sym->find_trait(use);
+            if (ti < 0) return self->sup->fail("impl of an unknown trait");
+            self->sup->lex_next();
+        }
+        if (self->sup->expect("{") != 0) return -1;
+        node = self->sup->new_node(N_IMPL);
+        if (node < 0) return -1;
+        self->arena->nodes[node].line = line;
+        snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", tmpl);
+        snprintf(self->arena->nodes[node].text2, MAX_TEXT, "%s", use);
+        snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
+        self->arena->nodes[node].aux = -1;   /* no struct row: this is a template */
+        self->arena->nodes[node].num = frontend::sym::ct_impl_add(tmpl, nt, tn[0], tn[1],
+                                                                 nargs, pat[0], pat[1], use,
+                                                                 node, self->cur_unit, line);
+        if (use[0] && self->arena->nodes[node].num >= 0) {
+            /* Instances that already exist adopt the trait now; the ones that
+               appear later adopt it in `parse_inst_type`. Both fill the use
+               list the vptr field, the initialiser and the dispatch read. */
+            int ii2, nins2;
+            struct StructInst *ins2 = frontend::sym::ct_insts(&nins2);
+            for (ii2 = 0; ii2 < nins2; ii2++)
+                if (frontend::sym::ct_impl_matches(self->arena->nodes[node].num, ii2))
+                    self->sup->adopt_use(ins2[ii2].name, use);
+        }
+        tail = -1;
+        snprintf(self->ex->in_generic_tparam, MAX_TEXT, "%s", tn[0]);
+        snprintf(self->ex->in_generic_tparam2, MAX_TEXT, "%s", tn[1]);
+        while (self->lex->tok != T_EOF
+               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            mline = self->lex->tokline;
+            ret[0] = 0;
+            if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->fnptr_state)
+                return self->sup->fail("an impl method cannot return a function pointer");
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
+            snprintf(mname, sizeof mname, "%s", self->lex->toktext);
+            self->sup->lex_next();
+            if (self->sup->push_scope() != 0) return -1;
+            if (self->sup->declare_var("self", "void *") != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            params = self->parse_params();
+            if (params < 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            if (self->variadic) {
+                self->sup->pop_scope();
+                return self->sup->fail("a struct method cannot be variadic");
+            }
+            snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+            snprintf(self->cur_func, sizeof self->cur_func, "%s_%s", tmpl, mname);
+            self->mem->leak_active = 1;
+            self->mem->leak_frame = self->sym->nscope + 1;
+            self->mem->leak_impl = 1;
+            self->st->func_begin();
+            body = self->st->parse_block();
+            self->mem->leak_active = 0;
+            self->mem->leak_frame = -1;
+            self->mem->leak_impl = 0;
+            self->cur_func[0] = 0;
+            self->sym->ret_type[0] = 0;
+            if (body < 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            if (self->st->func_end() != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            self->sup->pop_scope();
+            (void)mline;
+            mnode = self->sup->new_node(N_METHOD);
+            if (mnode < 0) return -1;
+            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
+            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            self->arena->nodes[mnode].a = params;
+            self->arena->nodes[mnode].b = body;
+            self->arena->nodes[mnode].num = ti;
+            self->arena->nodes[mnode].aux = -1;
+            if (tail < 0) self->arena->nodes[node].a = mnode;
+            else self->arena->nodes[tail].next = mnode;
+            tail = mnode;
+        }
+        self->ex->in_generic_tparam[0] = 0;
+        self->ex->in_generic_tparam2[0] = 0;
+        if (self->sup->expect("}") != 0) return -1;
+        return node;
+    }
 
 }
 
@@ -2525,10 +2832,10 @@ static struct Parser g_parse;
 /* Storage for the tables whose element types belong to other units (see the
    comment on the fields): a generated header carries no `#include`, so the
    arrays stay here and `g_parse` points at them. `g_maps` is a heap block
-   (SH-42): one `struct Map` carries 64 `MapBind` rows, so 64 of them inline
+   (SH-42): one `struct MapTable` carries 64 `MapBind` rows, so 64 of them inline
    put ~14 MB of zeroes into __DATA and shipped a 21 MB compiler. */
 static struct Call g_calls[1024];
-static struct Map  *g_maps;
+static struct MapTable  *g_maps;
 static struct Field   g_pend_fields[64];
 
 /* Phase 21 S5: a block-bodied closure needs `parse_block`, which lives in the

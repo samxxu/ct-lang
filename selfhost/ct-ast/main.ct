@@ -17,7 +17,7 @@
 import backend::emit::Emitter;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
-import frontend::module::Map;
+import frontend::module::MapTable;
 import frontend::module::Module;
 import frontend::module::Unit;
 import frontend::parse::Parser;

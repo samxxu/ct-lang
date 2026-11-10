@@ -15,7 +15,7 @@
 #include <string.h>
 
 import frontend::lex::Lexer;
-import frontend::module::Map;
+import frontend::module::MapTable;
 import frontend::sym::Symbols;
 import runtime::arena::Arena;
 
@@ -67,7 +67,7 @@ pub struct TypeCheck {
     struct Arena *arena;
     struct Symbols *sym;
     struct Lexer   *lex;   /* only for the line of a fresh node */
-    struct Map  *maps;  /* the map table itself */
+    struct MapTable  *maps;  /* the map table itself */
     int  *nmaps;                        /* points at the driver's count: the table grows while parsing */
     char errmsg[160];
 } use TypeOps;

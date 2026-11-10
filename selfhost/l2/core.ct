@@ -50,7 +50,7 @@
 #define MAX_WARNS  64                     /* collected leak warnings per run */
 #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
 #define MAX_MAP_IMPLS 512                 /* impl methods listed in `--emit-map` */
-#define MAX_CALLS  512                    /* direct call edges listed in `--emit-map` */
+#define MAX_CALLS  1024                   /* direct call edges listed in `--emit-map` */
 
 #define CTC_VERSION "0.26.4"
 

@@ -59,6 +59,8 @@ pub trait SupportOps {
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
+    /* Phase 29: adopt a trait for a struct row (an instance's `use` list). */
+    int  adopt_use(const char *name, const char *trait);
     int  expr_type(int n, char *out, int cap);
     int  expr_ctype(int n, char *out, int cap);
     int  maybe_box(int n, const char *trait, int addr);
@@ -450,6 +452,23 @@ impl SupportOps for ParseSupport {
     int iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr)
     {
         return self->ty->iface_ref_type(type, tout, (int)tcap, is_ptr);
+    }
+
+    /* Phase 29: adopt `trait` for the struct row `name` once. An instance's
+       `use` list is what its vptr field, its initialiser and its dispatch all
+       read, so a `use` clause on a template impl lands there. */
+    int adopt_use(const char *name, const char *trait)
+    {
+        int si, k;
+        if (!self->sym || !trait[0]) return 0;
+        si = self->sym->find_struct(name);
+        if (si < 0) return 0;
+        for (k = 0; k < self->sym->structs[si].nuse; k++)
+            if (strcmp(self->sym->structs[si].use[k], trait) == 0) return 0;
+        if (self->sym->structs[si].nuse >= 64) return 0;
+        snprintf(self->sym->structs[si].use[self->sym->structs[si].nuse], 160, "%s", trait);
+        self->sym->structs[si].nuse++;
+        return 0;
     }
 
     int expr_type(int n, char *out, int cap)

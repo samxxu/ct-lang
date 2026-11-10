@@ -19,8 +19,8 @@
 
 import backend::mem::Memory;
 import frontend::lex::Lexer;
-import frontend::module::Map::MapBind as MapBind;
-import frontend::module::Map;
+import frontend::module::MapTable::MapBind as MapBind;
+import frontend::module::MapTable;
 import frontend::parse::Expr;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
@@ -54,7 +54,7 @@ pub struct MapBuild {
     struct ParseSupport *sup;
     struct Symbols *sym;
     struct Expr *ex;            /* the shared type reader (`for type` uses it) */
-    struct Map *maps;
+    struct MapTable *maps;
     int *nmaps;
     int *unit_is_map;           /* points at the parser's per-unit flag */
 } use MapBuildOps;
@@ -100,7 +100,7 @@ static int mapb_param_index(struct MapBind *b, const char *name)
    identifier is the callee / a binding parameter / a C type word / ALL_CAPS /
    a member name, no binding parameter is modified, and `uses` / `sizeofs`
    count the evaluation and `sizeof` occurrences for the emitter. */
-static int check_static_call(struct MapBuild *self, struct Map *m, struct MapBind *b)
+static int check_static_call(struct MapBuild *self, struct MapTable *m, struct MapBind *b)
 {
     char tok[MAX_TEXT];
     char prev[MAX_TEXT];
@@ -527,7 +527,7 @@ impl MapBuildOps for MapBuild {
         char host_type[MAX_TEXT];
         char wname[MAX_TEXT];
         char msg[MAX_TEXT];
-        struct Map *m;
+        struct MapTable *m;
         struct MapBind *b;
         int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident, ns_host, hl, cl;
         int is_static, type_host, want;
@@ -885,7 +885,7 @@ void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps, i
     g_mapbuild.sup = (struct ParseSupport *)sup;
     g_mapbuild.ex = frontend::parse::expr_get();
     g_mapbuild.sym = (struct Symbols *)sym;
-    g_mapbuild.maps = (struct Map *)maps;
+    g_mapbuild.maps = (struct MapTable *)maps;
     g_mapbuild.nmaps = nmaps;
     g_mapbuild.unit_is_map = unit_is_map;
 }

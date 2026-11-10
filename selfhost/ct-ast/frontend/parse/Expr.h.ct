@@ -19,12 +19,15 @@
 #include <string.h>
 
 import frontend::lex::Lexer;
-import frontend::module::Map::Call as Call;
-import frontend::module::Map;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
 import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
@@ -52,6 +55,7 @@ import tool::diag::Diag;
 #define MAX_CALLS 1024
 #define MAX_FUNCS 256
 #define MAX_GENERIC_INSTS 64
+#define MAX_STRUCT_TPARAMS 2
 #define MAX_RAW_INIT 4096
 #define MAX_TEXT 160
 #define N_ADDR 27
@@ -98,9 +102,22 @@ pub trait ExprOps {
     int  is_type_word(const char *w);
     int  type_append(char *out, int cap, int *n, const char *tok);
     int  parse_type(char *out, int cap);
+    /* Phase 29: read `Name<arg[, arg]>` (the lexer sits on `Name`) and append
+       the encoded instance tag to `out`. */
+    int  parse_inst_type(char *out, int cap);
+    /* Phase 29: create (or reuse) the monomorphised row for `Name<c1, c2>` and
+       register its struct layout. `depth` bounds nested instantiation. */
+    int  inst_make(const char *tname, int nargs, const char *a1, const char *a2,
+                   const char *c1, const char *c2, char *enc, int enc_cap, int depth);
+    /* Phase 29: a substituted field spelling may itself name an instance
+       (`MapEntry<K, V>`); register it so the emitter can print its layout. */
+    int  inst_register_nested(const char *spell, int depth);
     /* Phase 26: register (or reuse) the instance of template `gfi` for the
        concrete type spelling `targ`; returns its index in `sym->ginsts`. */
     int  generic_instance(int gfi, const char *targ, int line, int col);
+    /* Phase 29: the method node `impl<T> Name<Args>` declares for the receiver
+       type `ibase` (a `struct <instance>` spelling), or -1. */
+    int  inst_inherent_method(const char *ibase, const char *fname);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  tok_is_type_name(void);
@@ -195,6 +212,20 @@ pub struct Expr {
        ALL_CAPS name as a C macro constant, which turned `sizeof(T)` into a
        raw expression and let `ct compile` emit `sizeof(T)`. */
     char in_generic_tparam[160];
+    /* Phase 29: the second type parameter of a generic struct template
+       (`struct Pair<T, U>`), empty when the template or the function has one. */
+    char in_generic_tparam2[160];
+    /* Phase 29: the canonical argument list of the last generic struct instance
+       `parse_type` read, in source form (`Vec<int>`). A surrounding instance
+       takes it as its own argument spelling, so an encoded name can be read
+       back (`Vec_Vec_l_int_r`). Empty when the last type was not an instance. */
+    char inst_canon[160];
+    /* Phase 29: nesting depth of `parse_type` while it reads type arguments;
+       deeper than four is refused (L29-4). */
+    int  type_depth;
+    /* Phase 29: the unit being parsed, copied from the parser when a unit
+       starts, so an instance records who created it. */
+    int  cur_unit;
     /* Phase 28: the trait bound of the template whose body is being parsed.
        A method call on the type parameter resolves against this trait instead
        of failing to find a struct; empty for a plain template and outside one. */
@@ -237,7 +268,7 @@ pub struct Expr {
     /* The map table the parser owns. A qualified call may name a namespace
        host's method without the trait segment (`std::io::puts(...)`), and the
        namespace/recipe pair is only known from this table. */
-    struct Map *maps;
+    struct MapTable *maps;
     int *nmaps;
 } use ExprOps;
 
@@ -1343,15 +1374,26 @@ impl ExprOps for Expr {
                 continue;
             }
             if (self->lex->tok == T_ID && self->is_type_word(self->lex->toktext)) {
-                if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
                 if (strcmp(self->lex->toktext, "struct") == 0) {
                     char sname[MAX_TEXT];
                     self->sup->lex_next();
+                    /* Phase 29: `struct Stack<int>` is the same type as
+                       `Stack<int>`; the instance reader owns the spelling. */
+                    if (self->lex->tok == T_ID && frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
+                        if (self->parse_inst_type(out, cap) != 0) return -1;
+                        n = (int)strlen(out);
+                        continue;
+                    }
+                    if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a struct name");
                     if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 1) != 0) return -1;
-                } else if (strcmp(self->lex->toktext, "enum") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
+                if (strcmp(self->lex->toktext, "enum") == 0) {
                     /* `enum Tag` keeps its keyword the way `struct Tag` does; the
                        tag joins the table under kind 5 (D-2) */
                     char sname[MAX_TEXT];
@@ -1383,6 +1425,19 @@ impl ExprOps for Expr {
                     && strcmp(self->lex->toktext, self->in_generic_tparam) == 0) {
                     if (self->type_append(out, cap, &n, self->in_generic_tparam) != 0) return -1;
                     self->sup->lex_next();
+                    continue;
+                }
+                if (self->in_generic_tparam2[0]
+                    && strcmp(self->lex->toktext, self->in_generic_tparam2) == 0) {
+                    if (self->type_append(out, cap, &n, self->in_generic_tparam2) != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
+                /* Phase 29: `Name<arg[, arg]>` names one monomorphised instance
+                   of a generic struct; the reader lives in `parse_inst_type`. */
+                if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
+                    if (self->parse_inst_type(out, cap) != 0) return -1;
+                    n = (int)strlen(out);
                     continue;
                 }
                 /* A visible type alias expands before any name resolution: the
@@ -1594,6 +1649,242 @@ impl ExprOps for Expr {
             return self->sup->fail(msg);
         }
         return 0;
+    }
+
+    /* Phase 29 §2.2: one generic struct instance in a type position. The lexer
+       sits on the template name; the arguments are ordinary types, each parsed
+       by `parse_type`, and the emitted spelling is the encoded C tag. The
+       instance row is registered in this unit's struct table (so field access,
+       `sizeof` and the vptr code see an ordinary struct) and, build-wide, in
+       `ct_insts` so a later unit reuses the same definition (D29-10). */
+    int parse_inst_type(char *out, int cap)
+    {
+        char tname[MAX_TEXT];
+        char enc[MAX_TEXT];
+        char carg[2][MAX_TEXT];
+        char ctype[2][MAX_TEXT];
+        char canon[MAX_TEXT];
+        char abuf[MAX_TEXT];
+        struct StructTmpl *tp;
+        int n, ti2, tn, nargs, nt2;
+
+        n = (int)strlen(out);
+        snprintf(tname, sizeof tname, "%s", self->lex->toktext);
+        ti2 = frontend::sym::ct_tmpl_find(tname);
+        tp = frontend::sym::ct_tmpls(&tn);
+        if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
+        nt2 = tp[ti2].ntparams;
+        self->sup->lex_next();
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "<") != 0) {
+            char msg[MAX_TEXT * 2];
+            snprintf(msg, sizeof msg,
+                     "generic struct '%s' needs type arguments in a type position", tname);
+            return self->sup->fail(msg);
+        }
+        self->sup->lex_next();
+        nargs = 0;
+        for (;;) {
+            if (nargs >= MAX_STRUCT_TPARAMS)
+                return self->sup->fail("a generic struct takes at most 2 type parameters");
+            self->inst_canon[0] = 0;
+            self->type_depth++;
+            if (self->type_depth > 4) {
+                self->type_depth--;
+                return self->sup->fail("generic type arguments nest deeper than 4");
+            }
+            if (self->parse_type(abuf, sizeof abuf) != 0) {
+                self->type_depth--;
+                return -1;
+            }
+            self->type_depth--;
+            if (!abuf[0] || strcmp(abuf, "void") == 0 || strchr(abuf, '[')
+                || strchr(abuf, '(') || strchr(abuf, ')')
+                || strncmp(abuf, "const ", 6) == 0
+                || strncmp(abuf, "volatile ", 9) == 0) {
+                char msg[MAX_TEXT * 2];
+                snprintf(msg, sizeof msg,
+                         "type argument '%s' cannot instantiate a generic struct", abuf);
+                return self->sup->fail(msg);
+            }
+            snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
+            if (self->inst_canon[0]) {
+                if (snprintf(carg[nargs], MAX_TEXT, "%s", self->inst_canon) >= MAX_TEXT)
+                    return self->sup->fail("type is too long");
+            } else if (frontend::sym::ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
+                return self->sup->fail("type is too long");
+            }
+            nargs++;
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                self->sup->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
+            return self->sup->fail("expected '>' after the type arguments");
+        self->sup->lex_next();
+        if (nargs != nt2) {
+            char msg[MAX_TEXT * 2];
+            snprintf(msg, sizeof msg,
+                     "generic struct '%s' takes %d type arguments, %d given",
+                     tname, nt2, nargs);
+            return self->sup->fail(msg);
+        }
+        /* A type parameter used as a type argument stays symbolic: the instance
+           is created when the surrounding template is itself instantiated, and
+           the emitter resolves the substituted spelling then (D29-3). */
+        if (self->in_generic_tparam[0]
+            && (strcmp(carg[0], self->in_generic_tparam) == 0
+                || (nargs > 1 && strcmp(carg[1], self->in_generic_tparam) == 0)
+                || (self->in_generic_tparam2[0]
+                    && (strcmp(carg[0], self->in_generic_tparam2) == 0
+                        || (nargs > 1 && strcmp(carg[1], self->in_generic_tparam2) == 0))))) {
+            char raw[MAX_TEXT];
+            if (nargs == 1)
+                snprintf(raw, sizeof raw, "%s<%s>", tname, carg[0]);
+            else
+                snprintf(raw, sizeof raw, "%s<%s,%s>", tname, carg[0], carg[1]);
+            snprintf(self->inst_canon, sizeof self->inst_canon, "%s", raw);
+            snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "%s", raw);
+            if (self->type_append(out, cap, &n, raw) != 0) return -1;
+            return 0;
+        }
+        if (frontend::sym::ct_inst_encode(tname, nargs, carg[0], carg[1], enc, MAX_TEXT) != 0)
+            return self->sup->fail(
+                "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        if (self->inst_make(tname, nargs, carg[0], carg[1], ctype[0], ctype[1],
+                            enc, MAX_TEXT, 0) != 0)
+            return -1;
+        snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", enc);
+        if (nargs == 1)
+            snprintf(canon, sizeof canon, "%s<%s>", tname, carg[0]);
+        else
+            snprintf(canon, sizeof canon, "%s<%s,%s>", tname, carg[0], carg[1]);
+        snprintf(self->inst_canon, sizeof self->inst_canon, "%s", canon);
+        if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+        if (self->type_append(out, cap, &n, enc) != 0) return -1;
+        return 0;
+    }
+
+    /* The single creation path for a concrete instance: encode, register the
+       identity row, copy the template's fields with both parameters substituted
+       and let every matching `use` block adopt its trait. The arity check lives
+       here so `Vec<int, int>` and `Stack<int, int, int>` hit the same message
+       (E29-12: the built-in containers get no private branch). */
+    int inst_make(const char *tname, int nargs, const char *a1, const char *a2,
+                  const char *c1, const char *c2, char *enc, int enc_cap, int depth)
+    {
+        struct StructTmpl *tp;
+        int tn, ti2, k, si2, fi2, nt2, carried2;
+        char sub1[MAX_TEXT];
+        char sub2[MAX_TEXT];
+
+        ti2 = frontend::sym::ct_tmpl_find(tname);
+        tp = frontend::sym::ct_tmpls(&tn);
+        if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
+        nt2 = tp[ti2].ntparams;
+        if (nargs != nt2) {
+            char msg[MAX_TEXT * 2];
+            snprintf(msg, sizeof msg,
+                     "generic struct '%s' takes %d type arguments, %d given",
+                     tname, nt2, nargs);
+            return self->sup->fail(msg);
+        }
+        if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
+            return self->sup->fail(
+                "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        carried2 = (tp[ti2].is_pub && tp[ti2].owner == self->cur_unit) ? 1 : 0;
+        k = frontend::sym::ct_inst_add(enc, tname, nargs, a1, a2, c1, c2,
+                                       self->cur_unit, carried2);
+        if (k == -2) {
+            char msg[MAX_TEXT * 2];
+            snprintf(msg, sizeof msg,
+                     "two type arguments encode to the same C name '%s'", enc);
+            return self->sup->fail(msg);
+        }
+        if (k < 0)
+            return self->sup->fail(
+                "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        si2 = self->sym->add_struct_inst(enc);
+        if (si2 < 0) return self->sup->fail(self->sym->last_error());
+        if (self->sym->structs[si2].nfields == 0) {
+            for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
+                snprintf(sub1, sizeof sub1, "%s", tp[ti2].fields[fi2].type);
+                if (nt2 > 0
+                    && frontend::sym::ct_generic_subst(sub1, tp[ti2].tparam[0], c1,
+                                        sub2, MAX_TEXT) != 0)
+                    return self->sup->fail("type is too long");
+                if (nt2 > 1) {
+                    snprintf(sub1, sizeof sub1, "%s", sub2);
+                    if (frontend::sym::ct_generic_subst(sub1, tp[ti2].tparam[1], c2,
+                                         sub2, MAX_TEXT) != 0)
+                        return self->sup->fail("type is too long");
+                }
+                snprintf(self->sym->structs[si2].fields[fi2].name, MAX_TEXT,
+                         "%s", tp[ti2].fields[fi2].name);
+                snprintf(self->sym->structs[si2].fields[fi2].type, MAX_TEXT,
+                         "%s", sub2);
+                snprintf(self->sym->structs[si2].fields[fi2].dims, MAX_TEXT,
+                         "%s", tp[ti2].fields[fi2].dims);
+                if (self->inst_register_nested(sub2, depth + 1) != 0) return -1;
+            }
+            self->sym->structs[si2].nfields = tp[ti2].nfields;
+            for (fi2 = 0; fi2 < tp[ti2].nuse; fi2++)
+                snprintf(self->sym->structs[si2].use[fi2], MAX_TEXT,
+                         "%s", tp[ti2].use[fi2]);
+            self->sym->structs[si2].nuse = tp[ti2].nuse;
+        }
+        self->sym->structs[si2].defined = 1;
+        self->sym->structs[si2].is_pub = tp[ti2].is_pub;
+        self->sym->structs[si2].declared_here = carried2;
+        /* a `use` clause on a template impl adopts the trait for every matching
+           instance, whichever was written first */
+        {
+            int ii3, nimpls3;
+            struct StructImpl *im3 = frontend::sym::ct_impls(&nimpls3);
+            for (ii3 = 0; im3 && ii3 < nimpls3; ii3++)
+                if (im3[ii3].use[0] && frontend::sym::ct_impl_matches(ii3, k))
+                    self->sup->adopt_use(enc, im3[ii3].use);
+        }
+        if (self->sup->add_type(enc, 1) != 0) return -1;
+        return 0;
+    }
+
+    int inst_register_nested(const char *spell, int depth)
+    {
+        char name[MAX_TEXT];
+        char a1[MAX_TEXT];
+        char a2[MAX_TEXT];
+        char tail[MAX_TEXT];
+        char c1[MAX_TEXT];
+        char c2[MAX_TEXT];
+        char enc[MAX_TEXT];
+        int nargs, ti2;
+
+        if (depth > 4) return 0;
+        if (frontend::sym::ct_inst_split(spell, name, &nargs, a1, a2, tail,
+                                         sizeof tail) != 0)
+            return 0;
+        if (nargs <= 0 || !a1[0]) return 0;
+        /* A parameter of the surrounding template stays symbolic; the emitter
+           resolves it once the outer instance binds. */
+        if (self->in_generic_tparam[0]
+            && (strcmp(a1, self->in_generic_tparam) == 0
+                || (nargs > 1 && strcmp(a2, self->in_generic_tparam) == 0)
+                || (self->in_generic_tparam2[0]
+                    && (strcmp(a1, self->in_generic_tparam2) == 0
+                        || (nargs > 1 && strcmp(a2, self->in_generic_tparam2) == 0)))))
+            return 0;
+        if (self->inst_register_nested(a1, depth + 1) != 0) return -1;
+        if (nargs > 1 && self->inst_register_nested(a2, depth + 1) != 0) return -1;
+        if (frontend::sym::ct_type_canon(a1, c1, sizeof c1) != 0) return 0;
+        if (frontend::sym::ct_type_canon(a2, c2, sizeof c2) != 0) return 0;
+        ti2 = frontend::sym::ct_tmpl_find(name);
+        if (ti2 < 0) return 0;
+        if (frontend::sym::ct_inst_encode(name, nargs, c1, c2, enc, sizeof enc) != 0)
+            return 0;
+        if (frontend::sym::ct_inst_find(enc) >= 0) return 0;
+        return self->inst_make(name, nargs, c1, c2, c1, c2, enc, sizeof enc, depth);
     }
 
     /* Zero or more `[<len>]` groups after a declared name. The whole suffix is
@@ -2376,6 +2667,31 @@ impl ExprOps for Expr {
         return self->parse_postfix();
     }
 
+    /* Phase 29: the method node `impl<T> Name<Args>` declares for the receiver
+       type `ibase` (a `struct <instance>` spelling), or -1. Only inherent
+       blocks answer here: a `use` block is a trait impl and keeps the vtable
+       path, which `method_trait` resolves through the instance's use list. */
+    int inst_inherent_method(const char *ibase, const char *fname)
+    {
+        int ii, nimpls, inst, m;
+        char base[MAX_TEXT];
+        struct StructImpl *im;
+
+        if (strncmp(ibase, "struct ", 7) != 0) return -1;
+        snprintf(base, sizeof base, "%s", ibase + 7);
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst < 0) return -1;
+        im = frontend::sym::ct_impls(&nimpls);
+        for (ii = 0; im && ii < nimpls; ii++) {
+            if (im[ii].use[0]) continue;
+            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                 m = self->arena->nodes[m].next)
+                if (strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+        }
+        return -1;
+    }
+
     int parse_postfix(void)
     {
         int n, m, idx, args, mline, mcol;
@@ -2439,6 +2755,7 @@ impl ExprOps for Expr {
                         char ibase[MAX_TEXT];
                         size_t il;
                         int piface = 0;
+                        int inm = -1;
                         /* a pointer to an interface value dispatches through
                            `->vt` instead of `.vt` */
                         snprintf(ibase, sizeof ibase, "%s", rtype);
@@ -2481,6 +2798,23 @@ impl ExprOps for Expr {
                             self->arena->nodes[m].aux = arrow ? 8 : 7;
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
                                      self->in_generic_bound);
+                        } else if ((inm = self->inst_inherent_method(ibase, fname)) >= 0) {
+                            /* Phase 29: an inherent method of an instantiated
+                               struct dispatches statically. The receiver's
+                               concrete type is already in `ibase`, so the
+                               emitter spells `<Inst>_<method>` and never reads
+                               a vtable (D29: `impl` is a new branch, the trait
+                               vptr paths are unchanged). */
+                            int want = 0, pk;
+                            for (pk = self->arena->nodes[inm].a; pk > 0;
+                                 pk = self->arena->nodes[pk].next)
+                                want++;
+                            if (self->arity_check(mline, mcol, fname,
+                                    arg_count(self->arena, args)
+                                        + self->closure_arg_count(args), want) != 0)
+                                return -1;
+                            self->arena->nodes[m].aux = arrow ? 10 : 9;
+                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", ibase);
                         } else if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
                             int t = self->sym->find_trait(trname);
                             int mi, ok = 0;
@@ -2557,7 +2891,7 @@ impl ExprOps for Expr {
                                    parser but the type object already points at
                                    it, so this unit needs no new plumbing. */
                                 {
-                                    struct Map *hm;
+                                    struct MapTable *hm;
                                     int hn, mi2, bi2, want = 0, seen = 0, afits = 0, fits = 0;
                                     int pt = -1, pm = -1;
                                     int got2 = arg_count(self->arena, args)
@@ -3807,7 +4141,7 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.cur_func = (char *)cur_func;
     g_expr.calls = (struct Call *)calls;
     g_expr.ncalls = (int *)ncalls;
-    g_expr.maps = (struct Map *)maps;
+    g_expr.maps = (struct MapTable *)maps;
     g_expr.nmaps = (int *)nmaps;
     g_expr.postfix_seed = -1;
 }

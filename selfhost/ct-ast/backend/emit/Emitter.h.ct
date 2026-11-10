@@ -16,13 +16,16 @@
 
 import backend::emit::Init;
 import frontend::lex::Lexer;
-import frontend::module::Map::Call as Call;
-import frontend::module::Map::MapBind as MapBind;
-import frontend::module::Map;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable::MapBind as MapBind;
+import frontend::module::MapTable;
 import frontend::module::Unit;
 import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols::MethodSig as MethodSig;
 import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
@@ -184,7 +187,7 @@ struct Emitter {
     const char *path;
     const char *version;
     struct Unit *units;  int *nunits;
-    struct Map  *maps;   int *nmaps;
+    struct MapTable  *maps;   int *nmaps;
     struct Call *calls;  int *ncalls;
     int  *build_mode;
     int  *line_mode;
@@ -229,6 +232,11 @@ struct Emitter {
     char gtparam[160];
     char gtarg[160];
     char gtname[160];
+    /* Phase 29: the second parameter of a generic struct template. A method of
+       `impl<T, U> Pair<T, U>` is monomorphised once per instance, and both
+       parameters are substituted in the same body. */
+    char gtparam2[160];
+    char gtarg2[160];
 } use EmitOps;
 
 /* Does the impl node `node` write `name`? */
@@ -258,8 +266,27 @@ static int impl_exists_anywhere(struct Arena *arena, int si, const char *tname)
    active or the result does not fit (the caller keeps the original). */
 static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap)
 {
+    char mid[160];
+    char fin[160];
+    char res[160];
     if (!self->gtarg[0] || !self->gtparam[0]) return -1;
-    return frontend::sym::ct_generic_subst(type, self->gtparam, self->gtarg, buf, cap);
+    if (frontend::sym::ct_generic_subst(type, self->gtparam, self->gtarg, mid, sizeof mid) != 0)
+        return -1;
+    if (self->gtarg2[0] && self->gtparam2[0]) {
+        if (frontend::sym::ct_generic_subst(mid, self->gtparam2, self->gtarg2, fin, sizeof fin) != 0)
+            return -1;
+    } else {
+        snprintf(fin, sizeof fin, "%s", mid);
+    }
+    /* A substituted spelling may still name an instance (`Vec<T>` -> `Vec<int>`).
+       The variable that made it concrete already registered the row, so print
+       its monomorphised C spelling instead of a template-shaped type. */
+    if (strchr(fin, '<') && frontend::sym::ct_inst_resolve(fin, res, sizeof res) == 0) {
+        snprintf(buf, (size_t)cap, "%s", res);
+        return 0;
+    }
+    snprintf(buf, (size_t)cap, "%s", fin);
+    return 0;
 }
 
 /* A (struct, trait) pair that needs no `impl` at all: every method has a
@@ -577,7 +604,7 @@ static void map_recipe_callee(const char *call, char *out)
     out[n] = 0;
 }
 
-static int map_param_type(struct Emitter *e, struct Map *m, struct MapBind *b, int i, char *out)
+static int map_param_type(struct Emitter *e, struct MapTable *m, struct MapBind *b, int i, char *out)
 {
     int k;
     if (m->type_host && i == 0) {
@@ -628,7 +655,7 @@ static const char *map_copy_brackets(struct Emitter *e, const char *s)
 
 /* Emit one recipe argument span, substituting the binding parameters (spec
    §4.10): `p`, `&p`, `&p[…]`, `sizeof p`, `p.field` / `p->field` / `p[i]`. */
-static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct MapBind *b, int *actual, int *half)
+static int map_subst_arg(struct Emitter *e, const char *s, struct MapTable *m, struct MapBind *b, int *actual, int *half)
 {
     char tok[MAX_TEXT];
     char tp[MAX_TEXT];
@@ -781,7 +808,7 @@ static int map_subst_arg(struct Emitter *e, const char *s, struct Map *m, struct
 
 /* Expand one static recipe at the call site (spec §4.10): no wrapper,
    no vtable, the call is what a hand-written `.c` would say. */
-static int emit_recipe(struct Emitter *e, struct Map *m, struct MapBind *b, int recv, int args, int at)
+static int emit_recipe(struct Emitter *e, struct MapTable *m, struct MapBind *b, int recv, int args, int at)
 {
     char tok[MAX_TEXT];
     char arg[MAX_TEXT];
@@ -1126,6 +1153,11 @@ static int emit_closure_arg(struct Emitter *self, int n)
     return emit_closure_env(self, n);
 }
 
+static int emit_struct_insts(struct Emitter *self, int u, int header);
+/* Phase 29: write the methods of the template impl blocks. `header` writes the
+   prototypes an exported template's consumer needs; otherwise the definitions. */
+static int emit_struct_impls(struct Emitter *self, int u, int header);
+
 /* Phase 26: write one definition per generic instance owned by unit `u`
    (-1 = the single compile-mode unit). The template's own N_FUNC node is
    reused with `gtparam`/`gtarg`/`gtname` set for the duration, so no AST copy
@@ -1208,6 +1240,11 @@ static int emit_unit_body(struct Emitter *self, int u)
         }
     }
 
+    /* Phase 29: the monomorphised structs this unit must define, after every
+       plain type and before the prototypes that name them. */
+    if (emit_struct_insts(self, u, 0) != 0) return -1;
+    if (emit_struct_impls(self, u, 0) != 0) return -1;
+
     for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
         if (self->emit_proto(i) != 0) return -1;
 
@@ -1286,12 +1323,292 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
         }
     }
 
+    /* Phase 29: a `pub` template publishes every instance of it here, so a
+       consumer only includes this header instead of repeating the layout. */
+    if (emit_struct_insts(self, u, 1) != 0) return -1;
+    if (emit_struct_impls(self, u, 1) != 0) return -1;
+
     for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++) {
         if (!self->sym->funcs[i].is_pub || self->sym->funcs[i].is_static) continue;
         if (self->emit_proto(i) != 0) return -1;
     }
 
     fputs("\n#endif\n", self->out);
+    return 0;
+}
+
+/* Phase 29 §2.3: one definition per monomorphised struct. The symbol table is
+   build-wide, so the filter decides which unit owns which definition:
+     - a `pub` template's instances live in its owner's header, and only there;
+     - a private template's instances live in the `.c` of the unit that first
+       named them (the dependency-first emit order puts an inner instance's
+       unit ahead of the outer one's).
+   Field spellings were substituted when the instance was created, so this
+   writer only prints; it never re-derives a layout. */
+static int inst_emit_one(struct Emitter *self, int ii)
+{
+    int ti, j, v, n;
+    struct StructInst *insts;
+
+    insts = frontend::sym::ct_insts(&n);
+    if (!insts || ii < 0 || ii >= n) return 0;
+    if (insts[ii].emitted) return 0;
+    ti = self->sym->find_struct(insts[ii].name);
+    if (ti < 0) return 0;
+    insts[ii].emitted = 1;
+    fprintf(self->out, "struct %s {\n", self->sym->structs[ti].name);
+    for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+        fputs("    ", self->out);
+        {
+            const char *ft = self->sym->structs[ti].fields[j].type;
+            char ibuf[160];
+            if (strchr(ft, '<') && frontend::sym::ct_inst_resolve(ft, ibuf, sizeof ibuf) == 0)
+                ft = ibuf;
+            fprintf(self->out, "%s %s%s;\n", ft,
+                    self->sym->structs[ti].fields[j].name,
+                    self->sym->structs[ti].fields[j].dims);
+        }
+    }
+    for (v = 0; v < self->sym->structs[ti].nuse; v++) {
+        char low[MAX_TEXT];
+        int k;
+        for (k = 0; self->sym->structs[ti].use[v][k] && k + 1 < MAX_TEXT; k++) {
+            char c = self->sym->structs[ti].use[v][k];
+            if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+            low[k] = c;
+        }
+        low[k] = 0;
+        fprintf(self->out, "    struct %s_vtbl *__%s_vptr;\n",
+                self->sym->structs[ti].use[v], low);
+    }
+    fputs("};\n\n", self->out);
+    return 0;
+}
+
+/* A plain struct whose field is an instance (`struct Bag { Vec<int> v; }`)
+   needs that definition before its own, while an instance whose field is a plain
+   struct by pointer only needs the forward declaration `emit_struct_fwd`
+   already wrote. Emitting on first mention keeps both cases legal without a
+   whole-type dependency sort. */
+static int preemit_insts_for(struct Emitter *self, const char *type)
+{
+    int i, n;
+    struct StructInst *insts;
+    char pat[MAX_TEXT + 16];
+
+    insts = frontend::sym::ct_insts(&n);
+    if (!insts) return 0;
+    for (i = 0; i < n; i++) {
+        if (insts[i].emitted) continue;
+        snprintf(pat, sizeof pat, "struct %s", insts[i].name);
+        if (strstr(type, pat)) {
+            if (inst_emit_one(self, i) != 0) return -1;
+        }
+    }
+    return 0;
+}
+
+static int emit_struct_insts(struct Emitter *self, int u, int header)
+{
+    int i, n, tn, tmpl;
+    struct StructInst *insts;
+    struct StructTmpl *tps;
+
+    insts = frontend::sym::ct_insts(&n);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (!insts || !tps) return 0;
+    for (i = 0; i < n; i++) {
+        int via_hdr;
+        if (insts[i].emitted) continue;
+        tmpl = frontend::sym::ct_tmpl_find(insts[i].tmpl);
+        if (tmpl < 0) continue;
+        via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
+                  && self->units[tps[tmpl].owner].is_hdr;
+        if (header) {
+            if (!via_hdr || tps[tmpl].owner != u) continue;
+        } else {
+            if (via_hdr) continue;
+            /* `u < 0` is compile mode: the one file owns every instance. */
+            if (u >= 0 && insts[i].owner != u) continue;
+        }
+        if (inst_emit_one(self, i) != 0) return -1;
+    }
+    return 0;
+}
+
+/* Bind the block's type parameters to the instance's arguments. The type
+   printing paths read these two pairs, so a method's signature and body are
+   written with `T`/`U` replaced by the concrete C spellings. */
+static void impl_inst_bind(struct Emitter *self, int ki, int ii)
+{
+    int k, n, nins, pi, bind_at[2];
+    struct StructImpl *im;
+    struct StructInst *ins;
+
+    im = frontend::sym::ct_impls(&n);
+    ins = frontend::sym::ct_insts(&nins);
+    self->gtparam[0] = 0;
+    self->gtarg[0] = 0;
+    self->gtparam2[0] = 0;
+    self->gtarg2[0] = 0;
+    if (!im || !ins || ki < 0 || ki >= n || ii < 0 || ii >= nins) return;
+    bind_at[0] = -1;
+    bind_at[1] = -1;
+    for (k = 0; k < ins[ii].nargs; k++) {
+        pi = -1;
+        if (im[ki].ntparams > 0 && strcmp(im[ki].pat[k], im[ki].tparam[0]) == 0) pi = 0;
+        else if (im[ki].ntparams > 1 && strcmp(im[ki].pat[k], im[ki].tparam[1]) == 0) pi = 1;
+        if (pi >= 0) bind_at[pi] = k;
+    }
+    if (bind_at[0] >= 0) {
+        snprintf(self->gtparam, MAX_TEXT, "%s", im[ki].tparam[0]);
+        snprintf(self->gtarg, MAX_TEXT, "%s", ins[ii].ctype[bind_at[0]]);
+    }
+    if (bind_at[1] >= 0) {
+        snprintf(self->gtparam2, MAX_TEXT, "%s", im[ki].tparam[1]);
+        snprintf(self->gtarg2, MAX_TEXT, "%s", ins[ii].ctype[bind_at[1]]);
+    }
+}
+
+/* One method of a template impl for one instance. An inherent method takes the
+   `<Inst>_<method>` symbol and is dispatched statically; a `use` block keeps the
+   `<Inst>_<Trait>_<method>` spelling plus its vtable, so the vptr path stays
+   exactly what a concrete impl already produces. */
+static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int header)
+{
+    int k, nimpls, ninsts, ntmpls, body, tmpl;
+    char iname[MAX_TEXT];
+    char cname[MAX_TEXT];
+    char mret[MAX_TEXT];
+    char one[MAX_TEXT];
+    const char *tname;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+    int exported;
+
+    ins = frontend::sym::ct_insts(&ninsts);
+    tps = frontend::sym::ct_tmpls(&ntmpls);
+    (void)nimpls;
+    (void)ntmpls;
+    snprintf(iname, sizeof iname, "%s", ins[ii].name);
+    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    exported = tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0
+               && self->units[tps[tmpl].owner].is_hdr;
+    tname = frontend::sym::ct_impls(&nimpls)[ki].use;
+    snprintf(mret, sizeof mret, "%s", self->arena->nodes[m].text[0]
+             ? self->arena->nodes[m].text : "void");
+    if (tname[0])
+        snprintf(cname, sizeof cname, "%s_%s_%s", iname, tname,
+                 self->arena->nodes[m].text2);
+    else
+        snprintf(cname, sizeof cname, "%s_%s", iname, self->arena->nodes[m].text2);
+    impl_inst_bind(self, ki, ii);
+    if (header) {
+        if (self->emit_type_name(mret, cname) != 0) return -1;
+        fputs("(void *self", self->out);
+        for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
+            fputs(", ", self->out);
+            if (self->emit_type_name_dims(self->arena->nodes[k].text,
+                                          self->arena->nodes[k].text2,
+                                          self->arena->nodes[k].text3) != 0) return -1;
+        }
+        fputs(");\n", self->out);
+        return 0;
+    }
+    if (!exported) fputs("static ", self->out);
+    /* A private method nothing calls is dead code; the attribute keeps the
+       output clean under -Wall, exactly like the Drop / Handback bodies. */
+    if (!exported) fputs("__attribute__((unused)) ", self->out);
+    if (self->emit_type_name(mret, cname) != 0) return -1;
+    fputs("(void *self", self->out);
+    for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
+        fputs(", ", self->out);
+        if (self->emit_type_name_dims(self->arena->nodes[k].text,
+                                      self->arena->nodes[k].text2,
+                                      self->arena->nodes[k].text3) != 0) return -1;
+    }
+    fputs(") {\n", self->out);
+    snprintf(one, sizeof one, "struct %s", iname);
+    fprintf(self->out, "    %s *_self = (%s *)self;\n", one, one);
+    self->sym->self_mode = 1;
+    body = self->arena->nodes[m].b;
+    for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
+        if (!self->node_mentions(body, self->arena->nodes[k].text2))
+            fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
+    if (!self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
+    for (k = self->arena->nodes[body].a; k >= 0; k = self->arena->nodes[k].next)
+        if (self->emit_node(k, 1) != 0) {
+            self->sym->self_mode = 0;
+            return -1;
+        }
+    self->sym->self_mode = 0;
+    fputs("}\n\n", self->out);
+    return 0;
+}
+
+static int impl_emit_one(struct Emitter *self, int ki, int ii)
+{
+    int m, nimpls, ninsts;
+    struct StructImpl *im;
+    struct StructInst *ins;
+
+    im = frontend::sym::ct_impls(&nimpls);
+    ins = frontend::sym::ct_insts(&ninsts);
+    if (!im || !ins || ki < 0 || ki >= nimpls || ii < 0 || ii >= ninsts) return 0;
+    for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next)
+        if (impl_emit_method(self, ki, ii, m, 0) != 0) return -1;
+    if (im[ki].use[0]) {
+        int first = 1;
+        fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+                im[ki].use, ins[ii].name, im[ki].use);
+        for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
+            if (!first) fputs(",\n", self->out);
+            fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
+                    ins[ii].name, im[ki].use, self->arena->nodes[m].text2);
+            first = 0;
+        }
+        fputs("\n};\n\n", self->out);
+    }
+    return 0;
+}
+
+static int emit_struct_impls(struct Emitter *self, int u, int header)
+{
+    int ki, nimpls, i, ninsts, ntmpls, tmpl, owned;
+    struct StructImpl *im;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+
+    im = frontend::sym::ct_impls(&nimpls);
+    ins = frontend::sym::ct_insts(&ninsts);
+    tps = frontend::sym::ct_tmpls(&ntmpls);
+    (void)ins;
+    (void)ntmpls;
+    if (!im || !tps) return 0;
+    for (ki = 0; ki < nimpls; ki++) {
+        tmpl = frontend::sym::ct_tmpl_find(im[ki].tmpl);
+        owned = (u < 0) || im[ki].owner == u;
+        if (!owned) continue;
+        if (header) {
+            int via_hdr;
+            if (tmpl < 0) continue;
+            via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
+                      && self->units[tps[tmpl].owner].is_hdr;
+            if (!via_hdr || tps[tmpl].owner != u) continue;
+            for (i = 0; i < ninsts; i++) {
+                int m;
+                if (!frontend::sym::ct_impl_matches(ki, i)) continue;
+                for (m = self->arena->nodes[im[ki].node].a; m >= 0;
+                     m = self->arena->nodes[m].next)
+                    if (impl_emit_method(self, ki, i, m, 1) != 0) return -1;
+            }
+            continue;
+        }
+        for (i = 0; i < ninsts; i++) {
+            if (!frontend::sym::ct_impl_matches(ki, i)) continue;
+            if (impl_emit_one(self, ki, i) != 0) return -1;
+        }
+    }
     return 0;
 }
 
@@ -1426,6 +1743,10 @@ impl EmitOps for Emitter {
             }
         }
 
+        /* Phase 29: compile mode is one unit, so every instance is its own. */
+        if (emit_struct_insts(self, -1, 0) != 0) return -1;
+        if (emit_struct_impls(self, -1, 0) != 0) return -1;
+
         /* Prototypes come before the impl bodies: an impl method may call a
            free function declared earlier in the unit, and C needs the prototype
            in scope at the call site. */
@@ -1503,6 +1824,7 @@ impl EmitOps for Emitter {
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             si = self->arena->nodes[n].aux;
+            if (si < 0) continue;   /* a template impl: no struct row to name */
             tname = self->arena->nodes[n].text2;
             if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
                 continue;   /* no vptr, no vtable */
@@ -1562,6 +1884,7 @@ impl EmitOps for Emitter {
         (void)self;
 
         for (i = 0; i < self->sym->nstructs; i++) {
+            if (self->sym->structs[i].is_template) continue;
             ti = self->sym->find_type(self->sym->structs[i].name);
             if (ti < 0) continue;
             if (self->sym->type_kind[ti] == 1) fprintf(self->out, "struct %s;\n", self->sym->structs[i].name);
@@ -1734,6 +2057,7 @@ impl EmitOps for Emitter {
             const char *mret;
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             si = self->arena->nodes[n].aux;
+            if (si < 0) continue;   /* template impls are written by emit_struct_impls */
             tname = self->arena->nodes[n].text2;
             ti = -1;
             for (k = 0; k < self->sym->ntraits; k++)
@@ -2029,6 +2353,17 @@ impl EmitOps for Emitter {
 
         if (self->arena->nodes[n].kind == N_STRUCT) {
             int si, u;
+            /* Phase 29: a template emits nothing; its instances have their own
+               rows and their own writer (`emit_struct_insts`). */
+            si = self->sym->find_struct(self->arena->nodes[n].text2);
+            if (si >= 0 && self->sym->structs[si].is_template) return 0;
+            /* Phase 29: a field of an instance type needs that instance's
+               definition first (`struct Bag { Vec<int> items; }`). */
+            for (u = self->arena->nodes[n].a; u >= 0; u = self->arena->nodes[u].next) {
+                if (self->arena->nodes[u].kind == N_FIELD) {
+                    if (preemit_insts_for(self, self->arena->nodes[u].text) != 0) return -1;
+                }
+            }
             if (self->arena->nodes[n].aux) {
                 /* `typedef struct Tag { ... } Name;` keeps the tag so a
                    `struct Tag` reference (or self-reference) stays valid */
@@ -2262,6 +2597,7 @@ impl EmitOps for Emitter {
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             si = self->arena->nodes[n].aux;
+            if (si < 0) continue;   /* a template impl exports no struct vtable */
             tname = self->arena->nodes[n].text2;
             if (!self->vtable_exported(si, tname)) continue;
             fprintf(self->out, "extern struct %s_vtbl %s_%s_vtable;\n",
@@ -2798,7 +3134,14 @@ impl EmitOps for Emitter {
         char tbuf[160];
         (void)self;
 
-        if (emit_gsub_type(self, type, tbuf, sizeof tbuf) == 0) type = tbuf;
+        if (emit_gsub_type(self, type, tbuf, sizeof tbuf) == 0) {
+            type = tbuf;
+        } else if (strchr(type, '<')) {
+            /* An instance spelling that reached the emitter without a template
+               substitution (a field of a monomorphised struct, say). */
+            char ibuf[160];
+            if (frontend::sym::ct_inst_resolve(type, ibuf, sizeof ibuf) == 0) type = ibuf;
+        }
         star = strstr(type, "(*)");
         if (!star) {
             fprintf(self->out, "%s %s%s", type, name, dims);
@@ -3361,6 +3704,36 @@ impl EmitOps for Emitter {
                 fputs(")", self->out);
                 return 0;
             }
+            /* Phase 29: an inherent method of an instantiated struct. There is
+               no vtable at all -- the receiver's concrete type names the
+               monomorphised function (`<Inst>_<method>`), so the call is a plain
+               C call. `.` passes the address, `->` passes the pointer. */
+            if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10) {
+                char base[MAX_TEXT];
+                char msg2[MAX_TEXT];
+                int si;
+                snprintf(base, sizeof base, "%s", self->arena->nodes[n].text);
+                if (strncmp(base, "struct ", 7) == 0)
+                    snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
+                si = self->sym->find_struct(base);
+                if (si < 0 || !self->sym->structs[si].is_inst) {
+                    snprintf(msg2, sizeof msg2, "no method '%s' for type '%s'",
+                             self->arena->nodes[n].text2, self->arena->nodes[n].text);
+                    return self->fail_from(n, msg2);
+                }
+                fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
+                        self->arena->nodes[n].text2);
+                if (self->arena->nodes[n].aux == 9) fputs("&", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                c2 = self->arena->nodes[n].b;
+                while (c2 >= 0) {
+                    fputs(", ", self->out);
+                    if (self->emit_expr(c2) != 0) return -1;
+                    c2 = self->arena->nodes[c2].next;
+                }
+                fputs(")", self->out);
+                return 0;
+            }
             if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");
             rk = self->arena->nodes[self->arena->nodes[n].a].kind;
             if (rk != N_VAR && rk != N_INDEX && rk != N_CALL
@@ -3672,6 +4045,7 @@ impl EmitOps for Emitter {
             const char *tname;
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             si = self->arena->nodes[n].aux;
+            if (si < 0) continue;   /* a template impl has no single struct symbol */
             tname = self->arena->nodes[n].text2;
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 if (!first) fputc(',', f);
@@ -3865,7 +4239,7 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
 {
     g_emit.units = (struct Unit *)units;
     g_emit.nunits = nunits;
-    g_emit.maps = (struct Map *)maps;
+    g_emit.maps = (struct MapTable *)maps;
     g_emit.nmaps = nmaps;
     g_emit.calls = (struct Call *)calls;
     g_emit.ncalls = ncalls;
