@@ -1,0 +1,30 @@
+/* A3 negative: the D21 escape rule still applies inside a bounded template.
+   A closure binding may not be returned just because the function is generic. */
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Point {
+    int x;
+} use Compare;
+
+impl Compare for Point {
+    int cmp(void *other)
+    {
+        struct Point *o = (struct Point *)other;
+        return self->x - o->x;
+    }
+}
+
+void *wrap<T: Compare>(T a)
+{
+    int n = a.cmp(&a);
+    int (*fn)(int x) = (int x) => x + n;
+
+    return fn;
+}
+
+int main(void)
+{
+    return 0;
+}

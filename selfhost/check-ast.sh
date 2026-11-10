@@ -1483,6 +1483,11 @@ p28_chk generic_bound_missing_impl "type argument 'Point' does not implement tra
 p28_chk generic_bound_nonstruct "type argument 'int' cannot satisfy trait 'Compare' (not a struct)"
 p28_chk generic_bound_no_method "trait 'Compare' has no method 'nope'"
 
+# A3's negative: the D21 closure rules are not relaxed inside a template. The
+# same "cannot escape through 'return'" wording and position apply.
+p28_diag generic_closure_escape 24:5 "a closure cannot escape through 'return'"
+p28_chk generic_closure_escape "a closure cannot escape through 'return'"
+
 # A `.m.ct` static trait has no vtable, so it cannot bound a type parameter;
 # only build mode can declare one, hence a module fixture.
 if "$work/ct-ast" build --emit-c test/modules/p28_bound_static/prog.ct \

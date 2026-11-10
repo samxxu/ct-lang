@@ -43,15 +43,20 @@ void sort<T: Compare>(T arr[], int n)
 {
     int i;
     int j;
+    int min;
 
-    for (i = 1; i < n; i++) {
-        j = i;
-        while (j > 0 && arr[j - 1].cmp(&arr[j]) > 0) {
-            T t = arr[j - 1];
+    for (i = 0; i < n - 1; i++) {
+        min = i;
+        for (j = i + 1; j < n; j++) {
+            if (arr[j].cmp(&arr[min]) < 0) {
+                min = j;
+            }
+        }
+        if (min != i) {
+            T t = arr[i];
 
-            arr[j - 1] = arr[j];
-            arr[j] = t;
-            j = j - 1;
+            arr[i] = arr[min];
+            arr[min] = t;
         }
     }
 }
