@@ -1,0 +1,78 @@
+// 25_wordcount - a real program on top of `Map` (Phase 29)
+//
+// A fixed word list is counted into `Map<char *, int>` -- a `char *` key and an
+// `int` value, the pair a word count actually needs. The first walk prints the
+// map in insertion order, the second copies the entries and sorts them by count
+// (ties alphabetical), which is what an ordered report looks like without any
+// iteration-order promise from the map itself.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+#include <string.h>
+
+int main(void)
+{
+    char *words[9] = {"the", "cat", "sat", "on", "the", "mat", "the", "dog", "sat"};
+    Map<char *, int> counts;
+    char *keys[9];
+    int values[9];
+    int n;
+    int a;
+    int b;
+
+    counts.h = 0;
+    counts.entries = 0;
+    foreach (words) {
+        int *slot;
+        slot = counts.get(item);
+        if (slot == 0) {
+            counts.put(item, 1);
+        } else {
+            *slot = *slot + 1;
+        }
+    }
+
+    printf("in insertion order:\n");
+    foreach (counts) {
+        printf("  %s %d\n", item.key, item.value);
+    }
+
+    n = 0;
+    foreach (counts) {
+        keys[n] = item.key;
+        values[n] = item.value;
+        n = n + 1;
+    }
+
+    for (a = 1; a < n; a++) {
+        b = a;
+        while (b > 0) {
+            int swap;
+            char *tk;
+            int tv;
+            swap = 0;
+            if (values[b - 1] < values[b]) {
+                swap = 1;
+            } else if (values[b - 1] == values[b] && strcmp(keys[b - 1], keys[b]) > 0) {
+                swap = 1;
+            }
+            if (swap == 0) break;
+            tk = keys[b - 1];
+            keys[b - 1] = keys[b];
+            keys[b] = tk;
+            tv = values[b - 1];
+            values[b - 1] = values[b];
+            values[b] = tv;
+            b = b - 1;
+        }
+    }
+
+    printf("by count:\n");
+    for (a = 0; a < n; a++) {
+        printf("  %s %d\n", keys[a], values[a]);
+    }
+
+    counts.release();
+    return 0;
+}

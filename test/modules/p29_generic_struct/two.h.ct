@@ -1,0 +1,9 @@
+import shapes;
+
+pub int twice()
+{
+    Pair<int, int> p;
+    p.a = 2;
+    p.b = 3;
+    return p.first() + p.b;
+}

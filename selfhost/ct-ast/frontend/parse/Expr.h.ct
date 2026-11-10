@@ -1720,6 +1720,16 @@ impl ExprOps for Expr {
             }
             break;
         }
+        /* D29-2: `Box<Box<int>>` closes two type argument lists with one
+           spelling. The lexer keeps `>>` as a single token; in a type position
+           the first `>` closes this list and the cursor steps back one source
+           character, so the closing `lex_next` re-reads the second `>` for the
+           caller. The lexer itself is untouched. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">>") == 0) {
+            snprintf(self->lex->toktext, MAX_TEXT, "%s", ">");
+            self->lex->pos = self->lex->pos - 1;
+            self->lex->tokstart = self->lex->tokstart + 1;
+        }
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
             return self->sup->fail("expected '>' after the type arguments");
         self->sup->lex_next();

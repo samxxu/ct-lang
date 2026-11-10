@@ -1,0 +1,12 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v;
+    v.h = 0;
+    v.data = 0;
+    foreach (v) {
+        i = 2;
+    }
+    return 0;
+}

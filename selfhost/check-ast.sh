@@ -5725,6 +5725,120 @@ else
     bad "foreach: nested JSON" "exit $p27rc; $(cat "$work/p27n.json")"
 fi
 
+# ---------------------------------------------------------------------------
+# Phase 29: generic structs, inherent impls and the built-in containers.
+# The diagnostics are the ones docs/design/phase29.md 2.6 freezes; the shape
+# assertions pin the C names (D29-7) and the container loop expansion (D29-13).
+# ---------------------------------------------------------------------------
+p29_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p29e.c" \
+            >"$work/p29e.out" 2>"$work/p29e.err"; then
+        bad "p29: $1" "expected a diagnostic, got exit 0"
+    elif grep -Fq "$2" "$work/p29e.err"; then
+        ok "p29 ($1)"
+    else
+        bad "p29: $1" "$(head -2 "$work/p29e.err")"
+    fi
+}
+p29_diag generic_struct_arity "a generic struct takes at most 2 type parameters"
+p29_diag generic_struct_void "type argument 'void' cannot instantiate a generic struct"
+p29_diag generic_struct_depth "generic type arguments nest deeper than 4"
+p29_diag builtin_type_redecl "'Vec' is a built-in type and cannot be redeclared"
+p29_diag foreach_container_element "foreach cannot iterate a container of 'struct Vec_int' (interface, vptr-bearing or container element)"
+p29_diag foreach_container_index_write "the foreach index 'i' is read-only"
+p29_diag foreach_container_redeclare "cannot redeclare the foreach binding 'item'"
+p29_diag foreach_container_map_i "'i' has no meaning in a Map foreach; use item.key / item.value"
+
+# 144: one C struct per instance, and an inherent method per instance.
+"$work/ct-ast" test/ast/144_generic_struct_user/prog.ct -o "$work/p29s.c" \
+    >"$work/p29s.out" 2>"$work/p29s.err"
+if [ $? -ne 0 ]; then
+    bad "p29: generic struct shape" "ct-ast failed: $(head -3 "$work/p29s.err")"
+elif ! grep -q 'struct Stack_int {' "$work/p29s.c"; then
+    bad "p29: generic struct shape" "no struct Stack_int"
+elif ! grep -q 'struct Stack_char_p {' "$work/p29s.c"; then
+    bad "p29: generic struct shape" "no struct Stack_char_p"
+elif ! grep -q 'Stack_int_top(' "$work/p29s.c"; then
+    bad "p29: generic struct shape" "inherent method is not <Instance>_<method>"
+else
+    ok "p29 (generic struct instances and inherent method names)"
+fi
+
+# 147: a pattern argument narrows the impl; `use` keeps the trait/vptr path.
+"$work/ct-ast" test/ast/147_generic_impl/prog.ct -o "$work/p29i.c" \
+    >"$work/p29i.out" 2>"$work/p29i.err"
+if [ $? -ne 0 ]; then
+    bad "p29: generic impl" "ct-ast failed: $(head -3 "$work/p29i.err")"
+elif ! grep -q 'Pair_int_int_second(' "$work/p29i.c"; then
+    bad "p29: generic impl" "no Pair_int_int_second"
+elif ! grep -q 'Stack_int_Show_show(' "$work/p29i.c"; then
+    bad "p29: generic impl" "no Stack_int_Show_show"
+elif ! grep -q 'Stack_int_Show_vtable' "$work/p29i.c"; then
+    bad "p29: generic impl" "the use block published no vtable"
+else
+    ok "p29 (impl pattern narrows, use keeps the vtable)"
+fi
+
+# 140/141: the container loop reads its length once and steps through the
+# inherent getter; only an array or a `Vec` prints the `i` binding.
+"$work/ct-ast" test/ast/140_foreach_vec/prog.ct -o "$work/p29v.c" \
+    >"$work/p29v.out" 2>"$work/p29v.err"
+if [ $? -ne 0 ]; then
+    bad "p29: foreach Vec" "ct-ast failed: $(head -3 "$work/p29v.err")"
+elif ! grep -q 'Vec_int_get(__ct_foreach_c_' "$work/p29v.c"; then
+    bad "p29: foreach Vec" "the loop does not call Vec_int_get"
+elif ! grep -q 'int i = __ct_foreach_i_' "$work/p29v.c"; then
+    bad "p29: foreach Vec" "no i binding"
+elif ! grep -q '(void)i;' "$work/p29v.c"; then
+    bad "p29: foreach Vec" "i is not voided"
+else
+    ok "p29 (foreach Vec walks get with an i binding)"
+fi
+"$work/ct-ast" test/ast/141_foreach_map/prog.ct -o "$work/p29m.c" \
+    >"$work/p29m.out" 2>"$work/p29m.err"
+if [ $? -ne 0 ]; then
+    bad "p29: foreach Map" "ct-ast failed: $(head -3 "$work/p29m.err")"
+elif ! grep -q 'Map_char_p_int_entry(__ct_foreach_c_' "$work/p29m.c"; then
+    bad "p29: foreach Map" "the loop does not call Map_char_p_int_entry"
+elif grep -q 'int i = __ct_foreach_i_' "$work/p29m.c"; then
+    bad "p29: foreach Map" "a Map body must not bind i"
+else
+    ok "p29 (foreach Map walks entry without an index)"
+fi
+
+# 139: `>>` closes two argument lists; the compressed name stays stable.
+"$work/ct-ast" test/ast/139_generic_struct_two/prog.ct -o "$work/p29n.c" \
+    >"$work/p29n.out" 2>"$work/p29n.err"
+if [ $? -ne 0 ]; then
+    bad "p29: nested arguments" "ct-ast failed: $(head -3 "$work/p29n.err")"
+elif ! grep -q 'struct Box_Box_lBox_lint_r_r {' "$work/p29n.c"; then
+    bad "p29: nested arguments" "no Box_Box_lBox_lint_r_r"
+else
+    ok "p29 (>> splits, nested instance name is stable)"
+fi
+
+# Cross-unit: the template's unit publishes the instance definitions, and a
+# second unit that names the same instance does not redefine it (D29-9).
+p29mod_src=test/modules/p29_generic_struct
+rm -rf "$work/p29mod"
+mkdir -p "$work/p29mod"
+if ! "$work/ct-ast" build --emit-c -I "$p29mod_src" "$p29mod_src/main.ct" -o "$work/p29mod" \
+        >"$work/p29mod.out" 2>"$work/p29mod.err"; then
+    bad "p29: cross-unit instances" "$(head -3 "$work/p29mod.err")"
+elif [ "$(grep -c 'struct Pair_int_int {' "$work/p29mod/shapes.h")" -ne 1 ]; then
+    bad "p29: cross-unit instances" "shapes.h does not publish the instance once"
+elif grep -q 'struct Pair_int_int {' "$work/p29mod/two.h"; then
+    bad "p29: cross-unit instances" "two.h redefines the instance"
+elif ! "$CC" -Wall -Wextra -std=c99 -I "$work/p29mod" "$work/p29mod"/*.c \
+        -o "$work/p29mod.bin" 2>"$work/p29mod.cc"; then
+    bad "p29: cross-unit instances" "$(head -3 "$work/p29mod.cc")"
+elif ! "$work/p29mod.bin" >"$work/p29mod.stdout" 2>&1 \
+        || ! cmp -s "$work/p29mod.stdout" "$p29mod_src/expected.out"; then
+    bad "p29: cross-unit instances" "$(cat "$work/p29mod.stdout")"
+else
+    ok "p29 (the template's unit publishes the instance; a second unit reuses it)"
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

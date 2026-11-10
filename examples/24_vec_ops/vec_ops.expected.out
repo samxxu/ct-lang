@@ -1,0 +1,13 @@
+push: 1 1 1
+len = 3, out of range = 0
+after set: 4 50 6
+pop = 6, len = 2
+[0] 4
+[1] 50
+sum = 54
+after clear: len = 0
+after push: 8
+shared: v.len = 2, w.get(1) = 9
+first release leaves 1
+still readable: 8
+last release leaves 0

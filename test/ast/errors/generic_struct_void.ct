@@ -1,0 +1,8 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<void> v;
+    v.h = 0;
+    return 0;
+}

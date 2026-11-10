@@ -1,0 +1,75 @@
+// 22_foreach_map - the container protocol of `foreach` (Phase 29)
+//
+// `foreach` walks the built-in `Vec` and `Map` directly: `item` is the element
+// (`Vec`) or the entry (`Map`), by value. An array and a `Vec` also bind the
+// read-only index `i`; a `Map` has no index at all, because insertion order is
+// not an ordinal the loop promises -- `item.key` / `item.value` are the way in.
+// The length is read once, before the first iteration.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    Vec<int> nums;
+    Vec<struct Point> path;
+    Map<char *, int> ages;
+    struct Point p;
+    int sum;
+    int n;
+
+    /* Vec<int>: `item` is the value, `i` the read-only position */
+    nums.h = 0;
+    nums.data = 0;
+    nums.push(10);
+    nums.push(20);
+    nums.push(30);
+    sum = 0;
+    foreach (nums) {
+        printf("nums[%d] = %d\n", i, item);
+        sum = sum + item;
+    }
+    printf("sum = %d\n", sum);
+
+    /* Vec of a struct: `item.field` reads the copy */
+    path.h = 0;
+    path.data = 0;
+    p.x = 1;
+    p.y = 2;
+    path.push(p);
+    p.x = 3;
+    p.y = 4;
+    path.push(p);
+    foreach (path) {
+        printf("path[%d] = (%d, %d)\n", i, item.x, item.y);
+    }
+
+    /* Map: insertion order, key and value through `item` */
+    ages.h = 0;
+    ages.entries = 0;
+    ages.put("bo", 31);
+    ages.put("amy", 24);
+    ages.put("cy", 45);
+    ages.put("amy", 25);            /* an existing key is rewritten in place */
+    foreach (ages) {
+        printf("%s is %d\n", item.key, item.value);
+    }
+
+    /* `item` is a copy: writing it never reaches the container */
+    foreach (nums) {
+        item = 0;
+    }
+    n = nums.get(0);
+    printf("first = %d\n", n);
+
+    nums.release();
+    path.release();
+    ages.release();
+    return 0;
+}

@@ -1,0 +1,21 @@
+#include <stdio.h>
+
+struct Pair<T, U> {
+    T a;
+    U b;
+}
+
+int main(void)
+{
+    Pair<int, char *> p;
+    Pair<int, int> q;
+
+    p.a = 7;
+    p.b = "seven";
+    q.a = 1;
+    q.b = 2;
+    printf("%d %s %d %d\n", p.a, p.b, q.a, q.b);
+    /* two type arguments mean two distinct monomorphised layouts */
+    printf("distinct: %d\n", (int)sizeof(p) != (int)sizeof(q));
+    return 0;
+}

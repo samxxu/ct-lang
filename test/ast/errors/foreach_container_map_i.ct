@@ -1,0 +1,14 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> m;
+    int total;
+    total = 0;
+    m.h = 0;
+    m.entries = 0;
+    foreach (m) {
+        total = total + i;
+    }
+    return 0;
+}

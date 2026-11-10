@@ -1,0 +1,60 @@
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    Vec<int> v;
+    Vec<struct Point> ps;
+    struct Point p;
+    int sum;
+    int seen;
+
+    v.h = 0;
+    v.data = 0;
+    v.push(5);
+    v.push(6);
+    v.push(7);
+    v.push(8);
+
+    /* `i` is the position, `item` the value */
+    sum = 0;
+    foreach (v) {
+        printf("[%d] %d\n", i, item);
+        if (i % 2 == 0) continue;
+        sum = sum + item;
+    }
+    printf("sum = %d\n", sum);
+
+    foreach (v) {
+        if (item == 7) break;
+        printf("walk %d\n", item);
+    }
+
+    /* the length is read once: a push inside the body does not extend it */
+    seen = 0;
+    foreach (v) {
+        seen = seen + 1;
+        if (item == 5) v.push(99);
+    }
+    printf("seen = %d, len = %d\n", seen, v.len());
+
+    ps.h = 0;
+    ps.data = 0;
+    p.x = 1;
+    p.y = 2;
+    ps.push(p);
+    p.x = 3;
+    p.y = 4;
+    ps.push(p);
+    foreach (ps) {
+        printf("p%d = (%d, %d)\n", i, item.x, item.y);
+    }
+
+    v.release();
+    ps.release();
+    return 0;
+}

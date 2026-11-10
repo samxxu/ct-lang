@@ -1,0 +1,61 @@
+#include <stdio.h>
+#include <string.h>
+
+struct Stack<T> {
+    T items[8];
+    int n;
+    T *slot;
+}
+
+impl<T> Stack<T> {
+    int push(T v)
+    {
+        if (self->n >= 8) return 0;
+        self->items[self->n] = v;
+        self->n = self->n + 1;
+        return 1;
+    }
+
+    T get(int i)
+    {
+        T z;
+        memset(&z, 0, sizeof(z));
+        if (i < 0 || i >= self->n) return z;
+        return self->items[i];
+    }
+
+    T *top()
+    {
+        if (self->n == 0) return 0;
+        self->slot = &self->items[self->n - 1];
+        return self->slot;
+    }
+}
+
+int main(void)
+{
+    Stack<int> a;
+    Stack<char *> names;
+    Stack<int> *pa;
+    int *ip;
+    char **sp;
+
+    a.n = 0;
+    a.slot = 0;
+    a.push(5);
+    a.push(9);
+    pa = &a;
+    pa->push(12);
+    ip = a.top();
+    printf("%d %d %d %d\n", a.get(0), a.get(1), a.get(2), *ip);
+    printf("out of range: %d\n", a.get(7));
+
+    names.n = 0;
+    names.slot = 0;
+    names.push("ada");
+    names.push("bob");
+    sp = names.top();
+    printf("%s %s %s\n", names.get(0), names.get(1), *sp);
+    printf("layouts differ: %d\n", (int)sizeof(a) != (int)sizeof(names));
+    return 0;
+}

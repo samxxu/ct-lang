@@ -1,0 +1,54 @@
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Pair<T, U> {
+    T a;
+    U b;
+}
+
+struct Stack<T> {
+    T items[4];
+    int n;
+}
+
+/* a pattern argument makes the impl apply to a subset of the instances */
+impl<T> Pair<T, int> {
+    int second()
+    {
+        return self->b;
+    }
+}
+
+/* `use` on a generic impl keeps the existing trait/vptr path */
+impl<T> Stack<T> use Show {
+    int show()
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Pair<int, int> p;
+    Pair<char *, int> q;
+    Stack<int> st;
+    Show s;
+
+    p.a = 1;
+    p.b = 2;
+    printf("%d\n", p.second());
+
+    q.a = "x";
+    q.b = 9;
+    printf("%d\n", q.second());
+
+    st.n = 3;
+    st.items[0] = 0;
+    printf("inherent %d\n", st.show());
+    s = st;
+    printf("vtable %d\n", s.show());
+    return 0;
+}

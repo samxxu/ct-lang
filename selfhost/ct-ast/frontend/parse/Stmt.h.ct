@@ -1883,7 +1883,8 @@ impl StmtOps for Stmt {
         }
         if (aux != 0) {
             /* L29-15: a container element would be a second owner of the same
-               buffer, and an interface value would lose its vptr on the copy. */
+               buffer, and an interface value would lose its vptr on the copy.
+               Both are the same "the element cannot be copied by value" rule. */
             int kk;
             {
                 struct StructInst *ins = frontend::sym::ct_insts(&nargs);
@@ -1895,15 +1896,15 @@ impl StmtOps for Stmt {
                         && (strcmp(bname, "Vec") == 0 || strcmp(bname, "Map") == 0
                             || strcmp(bname, "MapEntry") == 0)) {
                         snprintf(msg, sizeof msg,
-                                 "foreach cannot copy a container element ('%s')",
-                                 self->sym->vars[vi].name);
+                                 "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
+                                 ins[inst].ctype[kk]);
                         return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
                     }
                     if (self->sup->iface_ref_type(ins[inst].ctype[kk], tr,
                                                   sizeof tr, &ip)) {
                         snprintf(msg, sizeof msg,
-                                 "foreach cannot copy interface values ('%s')",
-                                 self->sym->vars[vi].name);
+                                 "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
+                                 ins[inst].ctype[kk]);
                         return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
                     }
                 }

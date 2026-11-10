@@ -1,0 +1,33 @@
+#include <stdio.h>
+
+struct Box<T> {
+    T v;
+}
+
+struct Pair<T, U> {
+    T a;
+    U b;
+}
+
+int main(void)
+{
+    Box<Box<int> > spaced;
+    Box<Box<int>> tight;
+    Box<Box<Box<int>>> deep;
+    Box<Box<Box<Box<int>>>> deeper;
+    Pair<char *, Box<int>> mixed;
+
+    /* `>>` closes two argument lists at once; four levels is the cap */
+    spaced.v.v = 1;
+    tight.v.v = 2;
+    deep.v.v.v = 3;
+    deeper.v.v.v.v = 4;
+    mixed.a = "k";
+    mixed.b.v = 9;
+    printf("%d %d %d %d %s %d\n", spaced.v.v, tight.v.v, deep.v.v.v,
+           deeper.v.v.v.v, mixed.a, mixed.b.v);
+
+    /* the encoded C name is stable for both spellings */
+    printf("same: %d\n", (int)sizeof(spaced) == (int)sizeof(tight));
+    return 0;
+}

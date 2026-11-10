@@ -1,0 +1,32 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> w;
+    int left;
+
+    v.h = 0;
+    v.data = 0;
+    printf("push %d %d %d\n", v.push(4), v.push(5), v.push(6));
+    printf("len %d, oob %d\n", v.len(), v.get(9) == 0);
+
+    v.set(1, 50);
+    printf("set %d %d %d\n", v.get(0), v.get(1), v.get(2));
+    printf("pop %d, len %d\n", v.pop(), v.len());
+
+    /* bounds: get answers a zero value, set is a no-op */
+    v.set(9, 1);
+    printf("bounds %d %d\n", v.get(9), v.len());
+
+    w = v.retain();
+    w.push(7);
+    printf("shared %d %d\n", v.len(), w.get(2));
+    left = v.release();
+    printf("release %d\n", left);
+    v.clear();
+    printf("cleared %d\n", w.len());
+    left = w.release();
+    printf("freed %d\n", left);
+    return 0;
+}

@@ -1,0 +1,16 @@
+#include <stdio.h>
+
+import shapes;
+import two;
+
+int main(void)
+{
+    Pair<int, int> p;
+    Pair<char *, int> q;
+    p.a = 7;
+    p.b = 8;
+    q.a = "k";
+    q.b = 9;
+    printf("%d %s %d %d\n", p.first(), q.a, q.b, twice());
+    return 0;
+}

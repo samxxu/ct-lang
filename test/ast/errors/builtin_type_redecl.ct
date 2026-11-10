@@ -1,0 +1,12 @@
+#include <stdio.h>
+
+struct Vec {
+    int len;
+}
+
+int main(void)
+{
+    struct Vec v;
+    v.len = 0;
+    return 0;
+}

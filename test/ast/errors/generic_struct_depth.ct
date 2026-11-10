@@ -1,0 +1,12 @@
+#include <stdio.h>
+
+struct Box<T> {
+    T v;
+}
+
+int main(void)
+{
+    Box<Box<Box<Box<Box<int>>>>> deep;
+    deep.v.v.v.v.v = 1;
+    return 0;
+}

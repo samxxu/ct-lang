@@ -1,0 +1,11 @@
+pub struct Pair<T, U> {
+    T a;
+    U b;
+}
+
+impl<T, U> Pair<T, U> {
+    T first()
+    {
+        return self->a;
+    }
+}

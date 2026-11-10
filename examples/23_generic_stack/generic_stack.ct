@@ -1,0 +1,73 @@
+// 23_generic_stack - a user generic struct with three field shapes (Phase 29)
+//
+// `struct Stack<T>` is an ordinary template: each instantiation gets its own C
+// struct with the parameter substituted everywhere -- a bare `T` field, a `T *`
+// field and a `T items[N]` array. `Stack<int>` and `Stack<char *>` therefore
+// share one source and two layouts, and `impl<T> Stack<T>` gives both the same
+// methods, statically dispatched (`Stack_int_push`, `Stack_char_p_push`).
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+#include <string.h>
+
+struct Stack<T> {
+    T items[8];
+    int n;
+    T *slot;
+}
+
+impl<T> Stack<T> {
+    int push(T v)
+    {
+        if (self->n >= 8) return 0;
+        self->items[self->n] = v;
+        self->n = self->n + 1;
+        return 1;
+    }
+
+    T get(int i)
+    {
+        T z;
+        memset(&z, 0, sizeof(z));
+        if (i < 0 || i >= self->n) return z;
+        return self->items[i];
+    }
+
+    /* `slot` is a `T *` field: it points into the stack's own storage. */
+    T *top()
+    {
+        if (self->n == 0) return 0;
+        self->slot = &self->items[self->n - 1];
+        return self->slot;
+    }
+}
+
+int main(void)
+{
+    Stack<int> a;
+    Stack<char *> names;
+    Stack<int> *pa;
+    int *ip;
+    char **sp;
+
+    a.n = 0;
+    a.slot = 0;
+    a.push(5);
+    a.push(9);
+    pa = &a;
+    pa->push(12);
+    ip = a.top();
+    printf("ints: %d %d %d top=%d\n", a.get(0), a.get(1), a.get(2), *ip);
+
+    names.n = 0;
+    names.slot = 0;
+    names.push("ada");
+    names.push("bob");
+    sp = names.top();
+    printf("names: %s %s top=%s\n", names.get(0), names.get(1), *sp);
+
+    /* The two instances are distinct C types with distinct layouts. */
+    printf("layouts differ: %d\n", (int)sizeof(a) != (int)sizeof(names));
+    return 0;
+}

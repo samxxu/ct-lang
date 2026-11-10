@@ -1,0 +1,51 @@
+// 24_vec_ops - the whole built-in `Vec` API (Phase 29)
+//
+// `push` grows by doubling, `get` / `set` are bounds-checked (`get` answers a
+// zero value, `set` is a no-op), `pop` shrinks, `clear` keeps the buffer, and
+// `retain` hands out a second handle on the same buffer. `release` returns the
+// remaining count and frees at zero; releasing the same handle twice is a hard
+// error rather than a silent no-op.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> w;
+    int left;
+    int sum;
+
+    v.h = 0;
+    v.data = 0;
+    printf("push: %d %d %d\n", v.push(4), v.push(5), v.push(6));
+    printf("len = %d, out of range = %d\n", v.len(), v.get(9));
+
+    v.set(1, 50);
+    printf("after set: %d %d %d\n", v.get(0), v.get(1), v.get(2));
+    printf("pop = %d, len = %d\n", v.pop(), v.len());
+
+    sum = 0;
+    foreach (v) {
+        printf("[%d] %d\n", i, item);
+        sum = sum + item;
+    }
+    printf("sum = %d\n", sum);
+
+    v.clear();
+    printf("after clear: len = %d\n", v.len());
+    v.push(8);
+    printf("after push: %d\n", v.get(0));
+
+    /* a second handle shares the buffer; the last release frees it */
+    w = v.retain();
+    w.push(9);
+    printf("shared: v.len = %d, w.get(1) = %d\n", v.len(), w.get(1));
+    left = v.release();
+    printf("first release leaves %d\n", left);
+    printf("still readable: %d\n", w.get(0));
+    left = w.release();
+    printf("last release leaves %d\n", left);
+    return 0;
+}
