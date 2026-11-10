@@ -4,32 +4,43 @@
 // evaluated once, both bounds are evaluated once (lower first), and `i` is a
 // plain writable int. `loop(0..3)` is the same program as `loop(3)`.
 //
+// The count and the bounds come from `Probes` methods here, so "evaluated once"
+// is proved through method calls, and the call counter is a field of the object
+// rather than a file-scope mutable.
+//
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
 #include <stdio.h>
 
-static int calls = 0;
-
-static int count(void)
-{
-    calls = calls + 1;
-    return 3;
+trait Counter {
+    int count();
+    int lo();
+    int hi();
 }
 
-static int lo(void)
-{
-    printf("eval lo\n");
-    return 2;
-}
+struct Probes {
+    int calls;
+} use Counter;
 
-static int hi(void)
-{
-    printf("eval hi\n");
-    return 5;
+impl Counter for Probes {
+    int count() {
+        self->calls = self->calls + 1;
+        return 3;
+    }
+    int lo() {
+        printf("eval lo\n");
+        return 2;
+    }
+    int hi() {
+        printf("eval hi\n");
+        return 5;
+    }
 }
 
 int main(void)
 {
+    struct Probes p = { .calls = 0 };
+
     /* the implicit counter starts at 0 and stops before the count */
     loop(3) {
         printf("count %d\n", i);
@@ -39,13 +50,15 @@ int main(void)
         printf("never\n");
     }
     /* the count expression runs once, however many rounds follow */
-    loop(count()) {
+    loop(p.count()) {
         printf("once %d\n", i);
     }
-    printf("calls %d\n", calls);
+    printf("calls %d\n", p.calls);
 
-    /* half-open [2, 5): the lower bound is evaluated first, once each */
-    loop(lo()..hi()) {
+    /* half-open [2, 5): the lower bound is evaluated first, once each.
+       The upper bound is a method call, which the parser requires to be
+       parenthesised inside a range today. */
+    loop(p.lo()..(p.hi())) {
         printf("range %d\n", i);
     }
     /* an empty range is silent */
