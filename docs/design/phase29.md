@@ -418,7 +418,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | 索引 | `ct-pkg/index` 的 `std` 条目**保留为在用**，只更新到「已移除 `Vec`/`Map`」的版本；**不标 superseded**（std 其余模块仍由它供） |
 | 版本对齐 | 内置 `Vec` / `Map` 的 API 版本 = 编译器版本（`v0.29.0`）；`ct-pkg/std` 其余模块继续走自己的包版本。`lib/std/README.md` 记录「编译器版本 → 内置容器 API」 |
 | 重复导入 | 内置层优先；`vendor/std` 存在时 L29-W1 告警并忽略其同名模块；不把两者同时编入 |
-| 跨仓动作 | **本轮不做**。需要 ct-pkg 仓授权后才能删除 `Vec`/`Map` 并发布新版本；本仓只记录对齐方案与验收口径 |
+| 跨仓动作 | **本轮不做**。需要 ct-pkg 仓授权后才能删除 `Vec`/`Map` 并发布新版本；本仓只记录对齐方案与验收口径，待删清单写在 [lib/std/README.md](../../lib/std/README.md) |
 | 迁入原则 | **只搬 `Vec` / `Map`（最小直接依赖随迁），不搬 `str` / `io` / `math`**；原处删除与版本发布在同一跨仓动作里完成，禁止两份实现并存 |
 
 ### 2.8 与闭包 / `Callable` 的边界
@@ -791,12 +791,12 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 
 ## 10. 门禁记录（本轮，实测）
 
-本轮只写文档，未改编译器 / 测试 / golden / 版本串；未 bump、未打 tag。
+实现与文档各自成提交；未 bump、未打 tag。收口时 `check-all.sh` **11 道硬门禁全绿**。
 
 ```text
 $ python3 test/docs/check-docs.py
 spec pin: ok (1.0.0, 93a8e968)
-check-docs: OK (951 relative links in 177 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+check-docs: OK (967 relative links in 178 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
 design window: ok (12/12)
 ```
 
@@ -818,6 +818,7 @@ design window: ok (12/12)
 | 29.1–29.2 | 符号层、`parse_type` 实例分支、`impl<T>` 解析与静态派发 | `check-ast.sh` 903 passed / 0 failed |
 | 29.3–29.4 | `lib/std/Vec.h.ct` 内置层与自动加载 | `check-ast.sh` 903 passed / 0 failed |
 | 29.6 | `foreach` 容器协议、样例 22–25、夹具 138–142/144/147、负例、跨单元夹具 | `check-ast.sh` **936 passed / 0 failed** |
+| 收口 | 文档同步、`lib/std/README.md`、未使用变量清理 | `check-all.sh` **11 hard gates green**（`check-ast.sh` 936 passed / 0 failed、`check-warnings.sh` 282 ok、`check-docs` 967 links） |
 
 ### 10.2 实现偏差与未落地项（如实记账）
 
