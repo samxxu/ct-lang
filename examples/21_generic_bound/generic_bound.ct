@@ -1,0 +1,105 @@
+// 21_generic_bound - a bounded generic drives a real sort (Phase 28)
+//
+// `T` is constrained: `sort<T: Compare>` and `largest<T: Compare>` may call
+// `cmp` on the parameter because every type argument must adopt the trait.
+// The compiler picks the implementation per instantiation and emits a plain
+// call through that struct's vtable object: no boxing, no runtime type tags,
+// no allocation. Two unrelated structs (a number and a word) share the code.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+#include <string.h>
+
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Num {
+    int v;
+} use Compare;
+
+impl Compare for Num {
+    int cmp(void *other)
+    {
+        struct Num *o = (struct Num *)other;
+        return self->v - o->v;
+    }
+}
+
+struct Word {
+    char *s;
+} use Compare;
+
+impl Compare for Word {
+    int cmp(void *other)
+    {
+        struct Word *o = (struct Word *)other;
+        return strcmp(self->s, o->s);
+    }
+}
+
+void sort<T: Compare>(T arr[], int n)
+{
+    int i;
+    int j;
+
+    for (i = 1; i < n; i++) {
+        j = i;
+        while (j > 0 && arr[j - 1].cmp(&arr[j]) > 0) {
+            T t = arr[j - 1];
+
+            arr[j - 1] = arr[j];
+            arr[j] = t;
+            j = j - 1;
+        }
+    }
+}
+
+T largest<T: Compare>(T a, T b, T c)
+{
+    T m = a;
+
+    if (b.cmp(&m) > 0) {
+        m = b;
+    }
+    if (c.cmp(&m) > 0) {
+        m = c;
+    }
+    return m;
+}
+
+int main(void)
+{
+    struct Num nums[4];
+    struct Word words[3];
+    int i;
+
+    nums[0].v = 5;
+    nums[1].v = 1;
+    nums[2].v = 4;
+    nums[3].v = 2;
+
+    words[0].s = "pear";
+    words[1].s = "apple";
+    words[2].s = "fig";
+
+    sort<struct Num>(nums, 4);
+    sort<struct Word>(words, 3);
+
+    printf("nums");
+    for (i = 0; i < 4; i++) {
+        printf(" %d", nums[i].v);
+    }
+    printf("\n");
+
+    printf("words");
+    for (i = 0; i < 3; i++) {
+        printf(" %s", words[i].s);
+    }
+    printf("\n");
+
+    printf("largest %d\n", largest<struct Num>(nums[0], nums[1], nums[3]).v);
+    printf("largest %s\n", largest<struct Word>(words[0], words[1], words[2]).s);
+    return 0;
+}

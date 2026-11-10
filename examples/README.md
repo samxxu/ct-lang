@@ -77,6 +77,7 @@
 | `16_generic_min` | 泛型函数（Phase 26）：`T larger<T>(T, T)` 以 `int` / `double` 实例化，每个实例是一份独立 `static` C 函数 | ct-ast | 同上 |
 | `18_generic_string_table` | 泛型函数以 `char *` 显式实例化，在字符串表上遍历、查找、变换；闭包只作为自由函数的 `(fn, env)` 实参参与 | ct-ast | 同上 |
 | `19_container_each_generic` | 容器 struct 提供 `each` 方法（trait + `impl`），方法体调用泛型 `walk<char *>`；方法路径写显式 `(fn, env)`，自由函数路径用闭包字面量并捕获 | ct-ast | 同上 |
+| `21_generic_bound` | 约束泛型（Phase 28）：`sort<T: Compare>` / `largest<T: Compare>` 在模板体内调用约束方法，`Num` 与 `Word` 两个无关 struct 各得一份实例，落成 `S_Compare_vtable.cmp` 裸调用 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
 ## 门禁归属说明
 
