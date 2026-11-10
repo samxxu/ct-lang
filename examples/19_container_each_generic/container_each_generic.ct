@@ -1,0 +1,99 @@
+// 19_container_each_generic - a container struct whose `each` method is
+// implemented by a monomorphised generic, plus the two callback entry points.
+//
+// `each` is not a keyword: it is a method name supplied by the `TableEach`
+// trait, reached through the struct's `use` clause. The body of `each` is a
+// single call to the generic free function `walk<char *>`, so the instance is
+// emitted once for `char *` and the container loop lives in that instance.
+//
+// Two callback paths are shown on purpose:
+//   - method path: `t.each(fn, env)` - the `(fn, env)` pair is written out,
+//     because a closure literal cannot fill an impl-method argument (SH-65);
+//   - free-function path: `walk<char *>(items, n, (char *s) => ...)` - the
+//     literal fills both words and may capture (here `want`).
+//
+// The statement form `each (container) { ... item ... }` does not exist; see
+// phase24.md / phase25.md. This file deliberately does not pretend it does.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+trait TableEach {
+    int each(int (*visit)(void *env, char *s), void *env);
+}
+
+struct StrTable {
+    char **items;
+    int n;
+} use TableEach;
+
+T nth<T>(T *items, int n, int i, T fallback)
+{
+    if (i < 0 || i >= n) {
+        return fallback;
+    }
+    return items[i];
+}
+
+int walk<T>(T *items, int n, int (*visit)(void *env, T item), void *env)
+{
+    int i;
+    int k = 0;
+
+    for (i = 0; i < n; i++) {
+        k = k + visit(env, items[i]);
+    }
+    return k;
+}
+
+static int has_a(void *env, char *s)
+{
+    int *extra;
+
+    extra = env;
+    return (s[0] == 'a') + *extra;
+}
+
+static int shorter_than(void *env, char *s)
+{
+    int *limit;
+    int j = 0;
+
+    limit = env;
+    while (s[j] != 0) {
+        j = j + 1;
+    }
+    return j < *limit;
+}
+
+impl TableEach for StrTable {
+    int each(int (*visit)(void *env, char *s), void *env)
+    {
+        return walk<char *>(self->items, self->n, visit, env);
+    }
+}
+
+int main(void)
+{
+    char *names[5];
+    struct StrTable t;
+    int extra = 0;
+    int limit = 4;
+    char want = 'a';
+
+    names[0] = "ada";
+    names[1] = "grace";
+    names[2] = "alan";
+    names[3] = "bob";
+    names[4] = "edsger";
+    t.items = names;
+    t.n = 5;
+
+    printf("nth      %s\n", nth<char *>(names, 5, 2, "?"));
+    printf("a-names  %d\n", t.each(has_a, &extra));
+    printf("short    %d\n", t.each(shorter_than, &limit));
+    printf("free-g   %d\n", walk<char *>(names, 5, (char *s) => s[0] == 'g'));
+    printf("free-cap %d\n", walk<char *>(names, 5, (char *s) => s[0] == want));
+    return 0;
+}

@@ -1,0 +1,111 @@
+// 18_generic_string_table - a `char *` table driven by monomorphised templates
+// (Phase 26) with closures as free-function arguments (Phase 21).
+//
+// Every operation below is a template with one type parameter `T`, and every
+// call site pins it to `char *` (`nth<char *>`, `count_if<char *>`, ...). The
+// compiler emits one `static` C function per pinned call with `T` substituted,
+// so walking the table is a plain C call: no boxing, no vtable, no allocation.
+//
+// A callback is never stored: it is the free function's explicit `(fn, env)`
+// parameter pair, and the `=>` literal fills both words at the call site. The
+// capture is by value, so `tag` below is fixed when the closure is created.
+// Closures cannot be impl-method arguments (SH-65), so every callback here
+// travels through a free function.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+T nth<T>(T *items, int n, int i, T fallback)
+{
+    if (i < 0 || i >= n) {
+        return fallback;
+    }
+    return items[i];
+}
+
+int count_if<T>(T *items, int n, int (*pred)(void *env, T item), void *env)
+{
+    int k = 0;
+    int i;
+
+    for (i = 0; i < n; i++) {
+        if (pred(env, items[i])) {
+            k = k + 1;
+        }
+    }
+    return k;
+}
+
+T find_if<T>(T *items, int n, T fallback, int (*pred)(void *env, T item), void *env)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        if (pred(env, items[i])) {
+            return items[i];
+        }
+    }
+    return fallback;
+}
+
+void each<T>(T *items, int n, int (*visit)(void *env, T item), void *env)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        visit(env, items[i]);
+    }
+}
+
+void map_into<T>(T *dst, T *src, int n, T (*fn)(void *env, T item), void *env)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        dst[i] = fn(env, src[i]);
+    }
+}
+
+int main(void)
+{
+    char *names[6];
+    char *shown[6];
+    char *tag = "<hot>";
+    int i;
+
+    names[0] = "ada";
+    names[1] = "grace";
+    names[2] = "alan";
+    names[3] = "bob";
+    names[4] = "edsger";
+    names[5] = "barbara";
+
+    printf("nth     %s\n", nth<char *>(names, 6, 2, "?"));
+    printf("nth-oob %s\n", nth<char *>(names, 6, 9, "?"));
+
+    printf("short   %d\n", count_if<char *>(names, 6, (char *s) => s[3] == 0));
+    printf("a-name  %d\n", count_if<char *>(names, 6, (char *s) => s[0] == 'a'));
+    printf("first-g %s\n", find_if<char *>(names, 6, "none", (char *s) => s[0] == 'g'));
+
+    each<char *>(names, 6, (char *s) => {
+        int j = 0;
+
+        while (s[j] != 0) {
+            j = j + 1;
+        }
+        printf("walk    %s %d\n", s, j);
+        return j;
+    });
+
+    map_into<char *>(shown, names, 6, (char *s) => {
+        if (s[0] == 'a') {
+            return tag;
+        }
+        return s;
+    });
+    for (i = 0; i < 6; i++) {
+        printf("shown   %s\n", shown[i]);
+    }
+    return 0;
+}

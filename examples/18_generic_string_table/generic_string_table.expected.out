@@ -1,0 +1,17 @@
+nth     alan
+nth-oob ?
+short   2
+a-name  2
+first-g grace
+walk    ada 3
+walk    grace 5
+walk    alan 4
+walk    bob 3
+walk    edsger 6
+walk    barbara 7
+shown   <hot>
+shown   grace
+shown   <hot>
+shown   bob
+shown   edsger
+shown   barbara
