@@ -1098,7 +1098,7 @@ ct build walk.ct -o walk && ./walk
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
-  17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](design/phase17.md)
+  17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](history/design/phase17.md)
 
 ---
 
@@ -2248,4 +2248,4 @@ comment continuations are all fine there (compare [language-spec §6.2](language
 - Dialects: `examples/07_dialect/` turns comment-embedded DSLs into plain CT; the compiler stays unaware
 - Packages: `ct get` / `ct update` / `ct install` / `ct verify`, manifest format in
   [design/phase8.md](history/design/phase8.md); the 17.5 additions (comparator ranges, offline
-  re-resolution, the explicit index, build metadata) are in [design/phase17.md](design/phase17.md)
+  re-resolution, the explicit index, build metadata) are in [design/phase17.md](history/design/phase17.md)

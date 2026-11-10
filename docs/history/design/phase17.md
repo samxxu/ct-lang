@@ -7,9 +7,9 @@
 > 转为下一阶段的实施计划，供编码 agent 按切片落地。**D17-1…D17-9 已按建议值经用户确认**（含 README
 > ≤ 10K 字符、标准库目录名 `std`、`ct build` 默认产出可执行文件）。
 > 实施前仍须按既有流程补写各切片的 `spec` / `tasks` / `checklist`；本文件不是逐行实现依据。
-> 本文件只记录计划，不描述现状；现状见 [README](../../README.md) 与 [language-spec](../language-spec.md)。
+> 本文件只记录计划，不描述现状；现状见 [README](../../../README.md) 与 [language-spec](../../language-spec.md)。
 >
-> 前置约束（见 [AGENTS.md](../../AGENTS.md) §2）：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、
+> 前置约束（见 [AGENTS.md](../../../AGENTS.md) §2）：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、
 > `selfhost/l2/**` 一律不动；新能力只落 **`selfhost/ct-ast/**`**（std / CI / 文档属新增顶层面，
 > 需同步修订 AGENTS 的文件所有权表）；不引入第三方库、构建系统或代码生成脚本；
 > **零网络**契约不变，**零子进程**契约按 D17-9 收窄为「`ct compile` 与 `ct build --emit-c` 零子进程，
@@ -43,13 +43,13 @@
 | --- | --- | --- |
 | CI | 仓库**无 `.github/`**；`Makefile` 仅 `check: bash selfhost/check-all.sh`；`check-all.sh` 九道硬门禁，支持 GCC wrapper（`-Wno-format-truncation` / `-Wno-implicit-fallthrough`） | 无平台矩阵、无 clang、无消毒器、无 fuzz；BSD-only 探针在 Linux 上 skip 后无人复核 |
 | std | **不存在 `std/`**；每个示例自带 `#include` 与手写工具函数 | 无可复用标准库；无命名空间 / 生命周期约定 |
-| raw 透传 | 词法器在 token 化前**丢弃** `//` 与 `/* */`（[Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) 第 72–84 行）；`#` 行首已捕获为 `T_PP`（第 90–100 行） | 无法把未识别的 C 片段原样带进产物；`N_RAW = 31` 已被「原始初始化式」占用 |
+| raw 透传 | 词法器在 token 化前**丢弃** `//` 与 `/* */`（[Lexer.h.ct](../../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) 第 72–84 行）；`#` 行首已捕获为 `T_PP`（第 90–100 行） | 无法把未识别的 C 片段原样带进产物；`N_RAW = 31` 已被「原始初始化式」占用 |
 | 文档 | `README.md` 约 89K 字节（`wc -c`）；`docs/` 与 `reports/` 边界模糊；无导航页、无链接门禁 | 无 `docs/README.md`；无死链 / 版本 token / 门禁计数检查 |
 | 包管理 | `Pkg.h.ct` 已有 manifest、MVS、git tag 选择、本地目录源、SHA-256、`sha256:` lock、vendor、`ct get` / `ct install` | **无 `ct update` / `ct verify` / index**；`range_match` 仅 `^` / `~` / 精确 / `*`，无比较器范围；**`ct.pkg` 无 `cflags` / `ldflags` / `requires`**，平台包与需要 `-l` 的库包无法一步交付 |
-| `ct build` CLI | 必须 `-o <dir>`，只写 `.c` / `.h` 并打印一条 `cc` 行（[Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct) 第 683–825 行）；无 `--cc` / `-D` / `-l` 入口；仓库内 **9 个脚本共 94 处** `build … -o <dir>` | 用户必须手工再跑一次 `cc`（每个示例与测试都自写 `build.sh`）；嵌入式所需的 `--cc` / `-mcpu` / `-l` 无处传递（SH-43 待决项） |
-| std 生命周期 | 内建 `Drop` / `Handback` 的发射函数是 `static`（[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct) 第 1445 行） | 跨单元无法 `delete` / `own`；std 必须暴露显式 `*_free` / `*_reset` |
-| 模块解析 | `resolve_import` 先找 importer 目录，再按 `-I` 顺序；**无默认 include 根**（[Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct) 第 248–304 行） | std 需要显式 `-I`，否则用户无从发现 |
-| 字符串池 | `calloc(262144, 1)`，`str_put` 到 262144 上限（[Arena.h.ct](../../selfhost/ct-ast/runtime/arena/Arena.h.ct) 第 76、117 行） | raw 块需块级上限与诊断，避免静默耗尽 |
+| `ct build` CLI | 必须 `-o <dir>`，只写 `.c` / `.h` 并打印一条 `cc` 行（[Module.h.ct](../../../selfhost/ct-ast/frontend/module/Module.h.ct) 第 683–825 行）；无 `--cc` / `-D` / `-l` 入口；仓库内 **9 个脚本共 94 处** `build … -o <dir>` | 用户必须手工再跑一次 `cc`（每个示例与测试都自写 `build.sh`）；嵌入式所需的 `--cc` / `-mcpu` / `-l` 无处传递（SH-43 待决项） |
+| std 生命周期 | 内建 `Drop` / `Handback` 的发射函数是 `static`（[Emitter.h.ct](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct) 第 1445 行） | 跨单元无法 `delete` / `own`；std 必须暴露显式 `*_free` / `*_reset` |
+| 模块解析 | `resolve_import` 先找 importer 目录，再按 `-I` 顺序；**无默认 include 根**（[Module.h.ct](../../../selfhost/ct-ast/frontend/module/Module.h.ct) 第 248–304 行） | std 需要显式 `-I`，否则用户无从发现 |
+| 字符串池 | `calloc(262144, 1)`，`str_put` 到 262144 上限（[Arena.h.ct](../../../selfhost/ct-ast/runtime/arena/Arena.h.ct) 第 76、117 行） | raw 块需块级上限与诊断，避免静默耗尽 |
 
 ### 4. 切片
 

@@ -39,7 +39,7 @@ README 已写明 `ctc install` 校验后「打印建议的 `ct build …`（不�
 ## 决定（2026-11-02，用户）
 
 **两者都不采纳原名，改为「默认一步到位 + 一个回退开关」**，落在 Phase 17 的 **17.6** 切片
-（[design/phase17.md](../../docs/design/phase17.md)，D17-9）：
+（[design/phase17.md](../../docs/history/design/phase17.md)，D17-9）：
 
 - 默认：`ct build <entry.ct>... [-o <exe>]` 发射 C（默认目录 `.ctbuild/`，`--outdir` 可改）后**直接调用**
   C 编译器，产出可执行文件（省略 `-o` 即 `a.out`）；

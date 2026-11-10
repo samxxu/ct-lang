@@ -1,11 +1,13 @@
-# Phase 28 · 泛型 × Trait（Trait 约束的泛型函数 + 静态派发）
+# Phase 28 · 约束泛型（泛型两阶段的第一相：trait 约束的泛型函数 + 静态派发）
 
 > 中文。
 >
-> **状态：规划中**（2026-11-10 立项评估完成，未开工）。本轮只产本文件并登记
-> roadmap/README 索引；不改编译器、不改 golden、不 bump、不 push、不打 tag。
+> **状态：规划中**（2026-11-10 立项评估完成，未开工；同日按用户新指令收敛为**两相**）。
+> 本轮只产本文件、[phase29.md](phase29.md) 与索引；不改编译器、不改 golden、不 bump、不 push、不打 tag。
 > **主题来源**：用户 2026-11-10「完善泛型，主要目标是让泛型能支持 Trait」；[phase26.md:39-51](phase26.md#L39-L51)
 > 把「泛型 trait / `impl` 方法 / 类型参数约束」一并列为非目标，本相收回其中**约束与派发**两项。
+> **路线位置**：Phase 28 约束泛型 → Phase 29 泛型 struct + 内置 `Vec`/`Map`（含 `foreach` 容器协议）。
+> `Callable` 内建按用户取舍**延后**，见 [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10)。
 > 关联：[phase26.md](phase26.md)（泛型函数）、[phase25.md](phase25.md)（静态映射与闭包实参）、
 > [phase21.md](phase21.md)（非逃逸闭包）、[phase27.md](phase27.md)（`foreach`，已完成）、
 > [language-spec.md](../language-spec.md)、[AGENTS.md](../../AGENTS.md)。
@@ -16,10 +18,12 @@
 
 | 问题 | 结论 |
 | --- | --- |
-| 现状到「泛型能用 trait」差多少 | 差**四段连续改动**（约束语法 → 绑定元数据 → 模板体内方法解析 → 实例满足性检查与派发），**不差类型表示**；代码量估算 200–350 行，与 Phase 25/26 同量级 |
+| 现状到「泛型能用 trait」差多少 | 差**四段连续改动**（约束语法 → 绑定元数据 → 模板体内方法解析 → 实例满足性检查与派发），**不差类型表示**；代码量估算 190–395 行，与 Phase 25/26 同量级 |
 | 推荐路线 | **窄版（路线 A）：trait 约束的泛型函数，静态派发，单类型参数、单约束、显式实例化** |
-| 为什么不直接做参数化 trait | 参数化 trait（`trait Seq<T>` / `impl Seq<int> for S`）要改已发布产物命名与 vptr 字段、要一套可注入的类型身份与 mangling、要重扫 32 处 `find_trait` 与 66 处 `*_vptr/_vtable` 引用；估算 800–1300 行，且其真正价值依赖泛型 struct（再 +1200–2000 行），单相收不了口 |
-| 与 Phase 27 的关系 | **无代码依赖**。`foreach` 当前只吃一维数组（D27-4 已裁决容器协议本相不做）；本相不定义容器协议，也不改 Phase 27 的文件 |
+| 在泛型路线中的位置 | **第一相**：为 Phase 29 的泛型 struct / 泛型 impl 提供 `<T: Trait>` 语法、模板体方法解析与实例满足性检查；Phase 29 再把「单参数、仅函数」扩到「双参数、struct + impl」 |
+| 为什么不直接做参数化 trait | 参数化 trait（`trait Seq<T>` / `impl Seq<int> for S`）要改已发布产物命名与 vptr 字段、要一套可注入的类型身份与 mangling、要重扫 32 处 `find_trait` 与 66 处 `*_vptr/_vtable` 引用；估算 800–1300 行，且其真正价值依赖泛型 struct（Phase 29 已排期），单相收不了口 |
+| 与 Phase 27 的关系 | **无代码依赖**。`foreach` 当前只吃一维数组（D27-4 本相不解冻）；容器协议由 Phase 29 连同内置 `Vec`/`Map` 一起解冻 |
+| 与 Phase 29 的关系 | 本相**不做**泛型 struct；但 29 的泛型 impl 复用本相的约束检查与模板体方法解析。29 **对用户开放**泛型 struct（`struct Stack<T>` 可写），内置 `Vec`/`Map` 与用户泛型 struct 走同一路径。两相共享 `Parser` / `Expr` / `Emitter`，改动段落不同 |
 | 本相不碰什么 | 类型表示（`MAX_TEXT 160` / `type_key` 有损归一）、既有产物命名（`<Trait>_vtbl`、`__<trait>_vptr`、`<Struct>_<Trait>_<method>`）、`.h` 只放类型、L0/L1/L2、跨单元实例导出规则 |
 
 ---
@@ -31,9 +35,9 @@
 | 项 | 值 |
 | --- | --- |
 | Phase | 28 |
-| 目标版本 | `v0.27.0`（Phase 27 在 `v0.26.4` 内收口、未 bump，`v0.27.0` 仍未被占用；收口是否 bump 需用户确认；规划期不计版本，版本仍为 `v0.26.4`） |
+| 目标版本 | `v0.28.0`（Phase 27 在 `v0.26.4` 内收口、未 bump；为保持 `Phase n ↔ v0.n.x` 的编号不变式，28 直接对齐 `v0.28.0`，不复用 `v0.27.0` 空位。仓库内有一个不在 `main` 祖先链上的 `v0.27.0` 标签，不作为已发布相位处理；本轮不动它；规划期版本仍为 `v0.26.4`） |
 | 改动边界 | 仅 `selfhost/ct-ast/**` + `test/**` + `examples/**` + `docs/**`；L0/L1/L2 只允许收口时改 `CTC_VERSION` |
-| 判据冻结 | E28-1…E28-8 与 L28-1…L28-7 在首个实现提交前冻结；此后只向判据靠拢 |
+| 判据冻结 | E28-1…E28-9 与 L28-1…L28-7 在首个实现提交前冻结；此后只向判据靠拢 |
 
 ### 1.2 一句话目标
 
@@ -54,14 +58,17 @@
 | S5 | 落码：约束调用发射为**经 vtable 对象的方法槽调用**（`Point_Ord_vtable.cmp(&a, …)`），同单元与跨单元一条路径；不访问 `__ord_vptr`，不改结构体布局 |
 | S6 | 正例/负例夹具与 `check-ast.sh` 断言（含红证：基线 `v0.26.4` 上同一夹具必须失败） |
 | S7 | 文档：语言规范一节、教程一段、样例 `examples/21_generic_bound/`；roadmap/README 索引已随本文件登记（2026-11-10） |
+| S8 | **样例覆盖矩阵**（§1.5.1 的 A1–A8）：每个角度至少一个可运行样例，带 `expected.out` 与 `//@ct-requires: ct-ast`，进 `test/run.sh` 或 `check-ast.sh`；每行配负例或产物断言 |
 
 **不做什么（与「做什么」同样具体）**
 
 | 不做 | 一句话理由 |
 | --- | --- |
 | 参数化 trait 声明（`trait Seq<T>`）、带类型实参的 `impl Trait<X> for S` | 要改已发布产物命名与 vptr 字段，见 §4.2；本相只做「用 trait」不做「给 trait 加参数」 |
-| 泛型 struct / union / enum（`Box<T>`） | 布局单态化是另一个量级（Phase 26 D26-2 维持） |
-| 多类型参数、类型推导、默认类型参数 | 沿用 D26-2/D26-3；推导需要双向类型检查 |
+| 泛型 struct / union / enum（`Box<T>`） | 本相不做；**泛型 struct 已排期到 Phase 29 并对用户开放**（`struct Stack<T>` 可写），union/enum 仍不做（D26-2 在 29 被部分取代，见 [phase29.md §5](phase29.md#5-取代台账可审计不静默改写)） |
+| 多类型参数、类型推导、默认类型参数 | 沿用 D26-2/D26-3；29 只把 **struct** 放宽到 2 个参数，函数仍单参数 |
+| 内置 `Vec` / `Map` / 容器协议 | 由 Phase 29 交付；本相不定义容器、不改 `foreach` |
+| 可存储闭包 / 内置 `Callable` | 用户 2026-11-10 取舍**延后**；本相与 29 都不推翻 D21-5 / D21-7 / D21-13，见 [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10) |
 | 多约束（`T: A + B`）、约束继承（`trait Ord: Eq`） | 组合爆炸与解析歧义；先让单约束端到端可证 |
 | `Self` 类型 / trait 方法签名里出现类型参数 | vtable 类型在 trait 维度共享，`Self` 会迫使 vtable 按 (trait, struct) 分裂，等同参数化 trait |
 | 把 `T` 装箱进接口（`Trait i = x;`）、`T` 作接口字段/数组元素 | 装箱要 vptr 初始化与布局约定；本相只做静态派发 |
@@ -87,16 +94,17 @@
 | D10 | `selfhost/check-ast.sh` | Phase 28 门禁块：红证、正例运行输出、生成 C 断言、七条负例文案与位置 |
 | D11 | `examples/21_generic_bound/` | 样例：约束泛型 + trait 方法 + `char *`/struct 两实例；`expected.out` 由编译器产物生成后人工核对 |
 | D12 | `docs/language-spec.md` / `docs/tutorial.md` / `AGENTS.md` / `docs/roadmap.md` / `docs/README.md` | 规范 §4.50、教程 §10.7、当前阶段；roadmap 与 design 索引已登记（2026-11-10），规范/教程/AGENTS 正文在实现切片写 |
+| D13 | `test/ast/145_generic_closure/`、`146_generic_ownership/` | 覆盖矩阵 A3（泛型 + 闭包回调）与 A4（泛型 + `Drop`/`own`/`borrow`） |
+| D14 | `test/modules/errors/generic_pub_fn.ct` | 覆盖矩阵 A5 的负例：泛型函数 `pub` 被拒（L26-2） |
 
-> **门禁现状（实测）**：索引登记后 `python3 test/docs/check-docs.py` 转绿（`OK (917 relative links
-> in 176 files, v0.26.4, 11 hard gates, 12 phase status)`，`design window: ok (12/12)`）；
-> 中文行与英文行都含状态符号 `⬜` 并链接 `design/phase28.md`，与 `STATUS_MAP["规划中"]` 一致。
+> **门禁现状（2026-11-10，Phase 29 立项后）**：`design window` 的 `floor = 29 - 12 + 1 = 18`，
+> `phase17.md` 已 `git mv` 到 `docs/history/design/`，保留阶段为 `phase18.md`–`phase29.md`（12 份）。
+> 中英 roadmap 行都含状态符号 `⬜` 并链接 `design/phase28.md`；`check-docs` 的原始输出贴在 §10。
 
-> **归档触发（本轮不做，只记条件）**：`design window` 已满（12/12，`phase17.md`–`phase28.md`
-> 正好 12 份）。`check-docs` 的规则是 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../test/docs/check-docs.py#L264-L296)），
-> 所以窗口在**临界**：Phase 28 开工后一旦出现第 13 份编号阶段文档（Phase 29 立项卡），
-> `phase17.md` 立即越窗，必须先把最早阶段文档 `git mv docs/design/phase17.md docs/history/design/`
-> 并同步 `docs/README.md` 索引，否则文档门禁转红。本相不做归档。
+> **归档记录（已执行）**：`design window` 原为 `phase17.md`–`phase28.md`（12/12）。Phase 29 立项卡
+> 使其成为第 13 份编号文档，按 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../test/docs/check-docs.py#L264-L296)），
+> `phase17.md` 越窗并被 `git mv docs/design/phase17.md docs/history/design/`；`phase18.md` 未越窗，
+> 保留在 `docs/design/`。索引与所有相对链接已同步，本相只记录该事实，不再重复执行。
 
 ### 1.5 退出判据草案（冻结于首个实现提交前）
 
@@ -110,8 +118,27 @@
 | E28-6 | 11 道硬门禁全绿，`check-warnings` 零新增告警 | `bash selfhost/check-all.sh` 末行 |
 | E28-7 | `ct check` 与 `ct build` 对七条负例同文案（解析期诊断共用） | `ct check test/ast/errors/generic_bound_*.ct` |
 | E28-8 | 文档门禁绿；样例 21 已经 `examples/README.md` 登记并进 `test/run.sh` 端到端 | `python3 test/docs/check-docs.py` + `./test/run.sh` |
+| E28-9 | **样例覆盖矩阵每行都有可运行样例**：`expected.out`、`//@ct-requires: ct-ast`、进 `test/run.sh` 或 `check-ast.sh` 语料；每行有对应负例或产物断言；不允许用 `/tmp` 探针替代 | §1.5.1 矩阵逐行核对 + `test/run.sh` / `check-ast.sh` 汇总 |
 
 > 版本判据（五处 `CTC_VERSION` + 全量 golden 重生）在收口切片单独执行；规划期不预支。
+
+### 1.5.1 样例覆盖矩阵（**硬性退出判据**，不是建议）
+
+> 用户 2026-11-10 明确要求：泛型复杂，样例必须多角度覆盖，不能只给一两个。
+> 每行都要有**可运行样例**（`expected.out` + `//@ct-requires: ct-ast`，进 `test/run.sh` 或
+> `check-ast.sh` 语料），并且有对应的**负例或产物断言**证明行为正确；`/tmp` 探针不算覆盖。
+> 空角度也必须写明「27 已覆盖」或「本相不做，理由 X」，不许留空。
+
+| 角度 | 样例 | 演示点 | 门禁归属 | 反向证明（负例 / 断言） |
+| --- | --- | --- | --- | --- |
+| A1 约束 + **用户自定义 trait** | `examples/21_generic_bound/`（扩写） | 自定义 `trait Compare { int cmp(void *a, void *b); }`，`T max2<T: Compare>` 用 `a.cmp(&b)`；不用内置 `Ord` | `test/run.sh` + `check-ast.sh` 的 Phase 28 块 | 负例 `generic_bound_missing_impl.ct`：`Point` 未 impl `Compare`，报 L28-4 |
+| A2 同模板在不同类型上实例化、行为差异可见 | `examples/21_generic_bound/` + `test/ast/136_generic_bound/` 与 `137_generic_bound_ptr/` | `max2<Point>`（值接收者）与 `max2<char *>`（指针接收者）各生成一份实例，输出分支不同；137 追加 `p->m()` / `arr[i].m()` / 默认方法 | `test/run.sh` + `check-ast.sh` | `grep -c 'max2__ct'` = 实例数；两份实例体逐字节不同；无 `__ord_vptr` |
+| A3 泛型 + **闭包回调**（`(fn, env)` 配对） | `test/ast/145_generic_closure/`（新） | 泛型函数接收闭包 `(fn, env)`，在约束方法之外再调用一次回调；回调捕获外层局部 | `check-ast.sh` 的 Phase 28 块 | 负例：把逃逸闭包传给泛型函数，命中 D21 的逃逸硬错；非逃逸路径输出逐字节匹配 |
+| A4 泛型 + `Drop` / `own` / `borrow` 所有权交互 | `test/ast/146_generic_ownership/`（新） | 泛型函数内创建 `own` 值、以 `borrow` 参数调用约束方法；出口释放顺序与 Phase 5/16 一致 | `check-ast.sh` + ASAN 门禁 | 负例：`own` 值跨越实例边界 / 存入静态位置，报既有所有权错误；ASAN 无泄漏 |
+| A5 泛型 + **模块边界** | `test/modules/p28_bound_cross_unit/`（已在 D8）+ `test/modules/errors/generic_pub_fn.ct`（新负例） | `pub trait` + `pub struct` 跨单元可实现并实例化；泛型**函数** `pub` 被拒 | `check-ast.sh` 的跨单元块 | L26-2 文案逐字匹配；`.h` 只新增 `extern struct <Trait>_vtbl` |
+| A6 **接近真实程序** | `examples/21_generic_bound/` 扩写为「泛型选择排序 + 自定义 `Compare`」 | 真实排序跑起来：`Point` 按字段、`char *` 按字典序，输出确定 | `test/run.sh` | `expected.out` 逐字节比对；同一输入两次运行一致 |
+| A7 负例族（不计入正例角度） | `test/ast/errors/generic_bound_*.ct`（7 条） | 未知约束、多约束、静态 trait 约束、内建 trait 约束、非 struct 实参、缺 impl、方法不在约束内 | `check-ast.sh` | 每条只报一条 L28，`file:line:col` 精确匹配；基线 `v0.26.4` 红证非空转 |
+| A8 泛型 + 泛型 struct 组合 | 本相**不做** | 泛型 struct 与泛型 impl 在 Phase 29；本相只做函数 | — | 由 [phase29.md](phase29.md) §1.5.1 的 B 矩阵覆盖 |
 
 ### 1.6 依赖
 
@@ -301,10 +328,10 @@ Point m = max2<Point>(p, q);
 | 场景 | 撞墙原因 | 现状替代 |
 | --- | --- | --- |
 | `max2(a, b)` 里希望 `cmp(T, T)` 签名 | trait 声明早于 struct，签名不能出现 `T` | 约束方法写 `cmp(void *)`，impl 内转型（样例 21 就是这样） |
-| 通用容器 `Vec<T>` 的 `push(T)` | 需要泛型 struct + 参数化 trait | 不做；挂到后续阶段（触发信号见 §9） |
+| 通用容器 `Vec<T>` 的 `push(T)` | 需要泛型 struct + 泛型 impl | Phase 29 用内置 `Vec<T>` + 泛型 impl 解决；**参数化 trait** 仍不做 |
 | `T: Ord + Show` | 本相单约束 | 拆成两个泛型函数，或等触发信号 |
 | 希望在泛型体里把 `T` 装箱成接口 | 装箱需要 vptr 与布局 | 用具体类型写非泛型封装，或等参数化 trait |
-| `HashMap<K, V>` | 多类型参数 + 泛型 struct | 不做 |
+| `HashMap<K, V>` | 多类型参数 + 泛型 struct | Phase 29 内置 `Map<K, V>` 解决；用户自定义 `HashMap` 仍不做（键白名单） |
 
 ### 4.2 路线 B（完整版）：参数化 trait（+ 泛型 impl）
 
@@ -362,7 +389,7 @@ Point m = max2<Point>(p, q);
 
 1. 出现至少两个真实消费者要求「同一 struct 对同一 trait 的多个类型实参分别实现」，且无法用
    两个具体 trait 名绕过；
-2. 或 `foreach` 容器协议（D27-4 遗留）被重新冻结，且其消费者要求 `Seq<T>` 形态；
+2. 或 Phase 29 的 `foreach` 容器协议落地后，出现「同一 struct 对 `Seq<T>` 多实参实现」的真实消费者；
 3. 或用户明确要求改 ABI 命名以支持参数化 trait。
 
 ### 4.4 为什么「trait 方法收 `T`」不在窄版里
@@ -399,11 +426,11 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 | D28-3 | 派发统一「经 vtable 对象的方法槽」调用，不读 `__<trait>_vptr` | 一条路径同时覆盖同单元（static）与跨单元（extern），不要求值已初始化 vptr，也不改布局 | 约束调用落码 |
 | D28-4 | 满足性判定取 `StructDef.use` ∪ 程序内对应 `N_IMPL` | 两种采纳写法都存在（`use` 与仅 `impl` 的历史夹具），只看其一都会误报 | 实例化检查 |
 | D28-5 | 约束方法签名不得出现 `T`/`Self`；需要时用 `void *` + impl 内转型 | `Self` 会迫使 vtable 类型按 struct 分裂，等同参数化 trait（§4.4） | 本相；文档写明 |
-| D28-6 | 参数化 trait、泛型 struct、多约束、`T` 装箱不做 | 见 §4.2/§4.3 判据；任一先做都要求 ABI 或类型表示变更 | 本相；触发信号见 §9 |
-| D28-7 | 不引入新的类型身份：实例去重仍按 `(模板, 类型拼写)` | `type_key` 有损，不能作 mangling 键；本相没有命名需求 | 本相 |
+| D28-6 | 参数化 trait、泛型 struct、多约束、`T` 装箱不做；泛型 struct 交由 Phase 29（**对用户开放**，非仅内置容器） | 见 §4.2/§4.3 判据；本相只做函数侧，struct 单独立相才有收口边界 | 本相；29 取代「泛型 struct 永久非目标」的措辞 |
+| D28-7 | 不引入新的类型身份：实例去重仍按 `(模板, 类型拼写)` | `type_key` 有损，不能作 mangling 键；本相没有命名需求（Phase 29 才需要，见 D29-6） | 本相 |
 | D28-8 | 跨单元要求 `vtable_exported()` 为真，否则编译期 L28-8 | 不把「未定义引用」留给链接器；不新增 `.h` 内容 | 跨单元实例 |
 | D28-9 | L0/L1/L2 只允许收口时改 `CTC_VERSION` | 冻结层规则；新能力只落 ct-ast | 发布切片 |
-| D28-10 | 不在本相定义容器协议，不改 Phase 27 文件 | `foreach` 已收口（Phase 27，`v0.26.4` 内、未 bump）；D27-4 已裁决协议本相不做 | 文档与索引 |
+| D28-10 | 不在本相定义容器协议，不改 Phase 27 文件；协议由 Phase 29 解冻 | `foreach` 已收口（Phase 27，`v0.26.4` 内、未 bump）；D27-4 的「本相不做」只约束 27/28，29 有真实容器后按新判据解冻 | 文档与索引 |
 | D28-11 | 新增夹具编号 136+，样例 21 | Phase 27 已占用夹具 132–135 与样例 20，本相从 136 / 21 起，避免编号冲突 | 夹具/样例 |
 
 ---
@@ -430,17 +457,19 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 
 ---
 
-## 8. 与 Phase 27（`foreach`）的关系
+## 8. 与 Phase 27 / 29 的关系
 
 | 项 | 结论 |
 | --- | --- |
-| 代码依赖 | **无**。Phase 27 改 `Stmt.h.ct` / `Emitter` 的发码段与 `Var.dims`；本相改 `Parser` 的类型参数、`Expr` 的方法解析与 `Emitter` 的调用落码段 |
-| 合并次序 | **Phase 27 先收口**（已完成，`main` = `bcd95c9`），本相基于其收口提交开工 |
-| 容器协议（D27-4 遗留） | 本相**不解冻**。`foreach` 当前只吃一维数组；即使有了约束泛型，`foreach` 也不是泛型语句，无法按容器类型实例化。协议留给「有真实容器实现」的阶段 |
-| `item` 与 trait 值 | Phase 27 的 L27-4 明确拒绝接口值（避免拷贝 vptr）；本相不产生接口值，规则不受影响 |
+| 与 Phase 27 的代码依赖 | **无**。Phase 27 改 `Stmt.h.ct` / `Emitter` 的发码段与 `Var.dims`；本相改 `Parser` 的类型参数、`Expr` 的方法解析与 `Emitter` 的调用落码段 |
+| 合并次序 | **Phase 27 已收口**（`main` = `bcd95c9`）；本相先于 Phase 29 收口（`v0.28.0`） |
+| 容器协议（D27-4 遗留） | 本相**不解冻**；**Phase 29 连同内置 `Vec`/`Map` 一起解冻**，并以 `Map` 真实样例作为硬退出判据。本相不定义协议、不改 Phase 27 文件 |
+| 与 Phase 29 的接口 | 29 复用本相的 `<T: Trait>` 解析、模板体方法解析与实例满足性检查；29 新增 `StructInst` 与布局单态化，不复制函数实例逻辑。两相共享 `aux` 编号空间：本相先冻结约束调用分支编号，29 不复用 |
+| 与 Phase 29 的命名边界 | 本相不新增产物命名；29 对泛型 struct 采用拼写编码，扩展 `<Struct>_<Trait>_<method>` 族（D29-6）。本相的函数实例仍是 `<name>__ctN` |
+| `item` 与 trait 值 | Phase 27 的 L27-4 明确拒绝接口值（避免拷贝 vptr）；本相不产生接口值，规则不受影响；29 的 `foreach` 元素限制见 L29-15 |
 | 命名 | `foreach`（语句）与库层 `each`（trait 方法 / 泛型自由函数）分工不变；本相不新增同名语法 |
-| 索引登记 | `examples/README.md` 与 `docs/README.md` 的 design 索引、`docs/roadmap.md` 的 Phase 28 行：roadmap/README 已随本文件一次性登记（2026-11-10）；`examples/README.md` 待样例 21 落地时登记（D28-10） |
-| Phase 27 收口后仍待定的设计 | ①容器协议形状；②`foreach` 是否接受 `item` 为 struct 值（当前是值拷贝）；③若未来引入泛型 struct，`foreach` 对含 vptr 字段的结构体的拷贝/迭代规则。本相不冻结其中任何一项 |
+| 索引登记 | `examples/README.md` 与 `docs/README.md` 的 design 索引、`docs/roadmap.md` 的 Phase 28 行：roadmap/README 已随本文件登记（2026-11-10）；`examples/README.md` 待样例 21 落地时登记（D28-11） |
+| Phase 27 收口后仍待定的设计 | ①容器协议形状 → **29 冻结**；②`foreach` 是否接受 `item` 为 struct 值（当前是值拷贝）→ **29 沿用值拷贝并写进 E29-4**；③含 vptr 字段的结构体拷贝/迭代规则 → **29 用 L29-15 拒绝**。本相不冻结其中任何一项 |
 
 ---
 
@@ -450,8 +479,8 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 | --- | --- | --- | --- |
 | O1 | 多约束 `T: A + B` | 本相拒绝（L28-2） | 出现至少两个真实算法需要「同一 T 同时满足两个 trait」，且拆函数会重复实现体 |
 | O2 | `Self` 类型 / trait 方法签名含 `T` | 本相拒绝（D28-5） | 同上；且需先把 vtable 类型按 (trait, struct) 分裂，即启动路线 B |
-| O3 | 参数化 trait / 泛型 impl | 本相不做（D28-6） | §4.3 的三条触发信号 |
-| O4 | 泛型 struct `Box<T>` | 本相不做 | 路线 B 落地后，或 ct-pkg 侧出现真实容器需求 |
+| O3 | 参数化 trait / 泛型 impl | 本相不做；泛型 impl 的**非参数化**形态由 Phase 29 交付 | 29 落地后仍有「同一 trait 多实参」需求，再按 §4.3 三条信号评估 |
+| O4 | 泛型 struct `Box<T>` | **已排期 Phase 29**，不再是本相开放项 | 29 收口后若仍有布局层面的新需求（union/enum），另立判据 |
 | O5 | 约束调用的直接调用优化 | 不做（B28-2） | 有可测的内联收益，且跨单元路径已有同等测试覆盖 |
 | O6 | 同一 trait 的跨单元满足性在 `.h.ct` 边界上的可见性 | 依赖共享的 `Symbols`/`Arena`（构建期全程序解析）；28.3 用跨单元正例固定 | 若未来改为逐单元独立进程编译，需把采纳信息写进 `.h` |
 | O7 | `Point` 与 `struct Point` 产生两份实例 | 沿用 D26-5 的拼写去重，文档写明 | 若同一程序两种写法都用且 golden 体积成为问题，再考虑归一化（会波及 Phase 25 宿主匹配） |
@@ -463,5 +492,14 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 - 未修改任何编译器源码、测试、golden、版本串；未改 `docs/design/phase27.md`；未 bump、未 push、未打 tag。
 - 本轮新增本文件，并只按约定在 `docs/roadmap.md`（中英各一行）与 `docs/README.md`（中英各一行）
   登记索引。§3.1 的探针放在 `/tmp/p28probe`，构建产物放在 `/tmp/p28build`，均不入仓。
-- `python3 test/docs/check-docs.py` 已转绿：`check-docs: OK (917 relative links in 176 files,
-  v0.26.4, 11 hard gates, 12 phase status)`，`design window: ok (12/12)`。
+- **2026-11-10（Phase 29 立项同批）**：补充 §1.5.1 样例覆盖矩阵（A1–A8）与 E28-9；把
+  `docs/design/phase17.md` 归档到 `docs/history/design/`（design window `floor = 18`），
+  并新增 `docs/design/phase29.md` 的索引。
+- 门禁原始输出（实测）：
+
+```text
+$ python3 test/docs/check-docs.py
+spec pin: ok (1.0.0, 93a8e968)
+check-docs: OK (951 relative links in 177 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+design window: ok (12/12)
+```

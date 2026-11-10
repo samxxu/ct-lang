@@ -81,7 +81,7 @@
 - **例外（Phase 17 `ct build` 一步到位）**：`ct build` **默认**在发射 `.c` / `.h` 之后调用**本地 C 编译器**
   （`$CC` / `--cc`，默认 `cc`）产出可执行文件——用户 2026-11-02 授权的受控子进程例外。**零网络**不变；
   `ct compile` 与 `ct build --emit-c` 仍**零子进程**；`ct build` 不解析 `cc` 的诊断、不做增量链接、
-  不内置构建系统，路径与参数一律按单引号规则转义。见 [design/phase17.md](docs/design/phase17.md)（D17-9）。
+  不内置构建系统，路径与参数一律按单引号规则转义。见 [design/phase17.md](docs/history/design/phase17.md)（D17-9）。
 - **例外（Phase 12 bindings）**：仓库内新增顶层 `bindings/**`，承载对既有 C 库的**声明式 binding**
   （`selfhost` 之外的第二类源码目录）。binding 只是 CT 源——直通 `#include` ＋ 镜像声明 ＋ `map`，
   **只声明外部符号，不 vendored、不下载、不链接**；仓库内假 HAL 的 C 头 / 实现仅作**演示与测试**，
@@ -321,7 +321,7 @@ Hard boundaries:
   subprocess exception authorised by the user on 2026-11-02. **Network-free** is unchanged;
   `ct compile` and `ct build --emit-c` stay **process-free**; `ct build` does not parse `cc`
   diagnostics, does no incremental linking and ships no build system, and every path and argument is
-  single-quoted. See [design/phase17.md](docs/design/phase17.md) (D17-9).
+  single-quoted. See [design/phase17.md](docs/history/design/phase17.md) (D17-9).
 - **Exception (Phase 12 bindings)**: a new top-level `bindings/**` carries **declarative bindings** to
   existing C libraries (a second source area beside `selfhost`). A binding is CT source only —
   pass-through `#include` + mirrored declarations + `map` — and **declares external symbols without
@@ -337,7 +337,7 @@ Hard boundaries:
 - Do not change published naming rules (`<Trait>_vtbl`, `__<trait>_vptr`, `<Struct>_<Trait>_<method>`,
   `<Struct>_<Trait>_vtable`) unless the user explicitly asks.
 - `docs/design/` holds the **current phase's plan and open drafts only** (e.g.
-  [phase17.md](docs/design/phase17.md)); closed-phase records live in `docs/history/design/` as a
+  [phase29.md](docs/design/phase29.md)); closed-phase records live in `docs/history/design/` as a
   historical index. Neither is a mandate to implement anything; never create directories or files from
   a draft.
 - **`ctc.c` freezes once self-hosting starts**: after Phase 0.3 strips it, **only bug fixes** are
