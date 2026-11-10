@@ -1,0 +1,25 @@
+/* 134 (Phase 27): nesting shadows the outer `item` (compile warning, `ct
+   check` error) and the two expansions keep distinct temporaries. An array of
+   pointers copies the pointer, not the pointee, so `item[0]` reads through it. */
+#include <stdio.h>
+
+int main(void)
+{
+    int nums[3] = {1, 2, 3};
+    char *names[3] = {"ann", "bob", "cid"};
+    int pairs = 0;
+    int initials = 0;
+
+    foreach (nums) {
+        foreach (nums) {
+            if (item > 1) break;
+            pairs = pairs + 1;
+        }
+        if (pairs > 2) break;
+    }
+    foreach (names) {
+        initials = initials + item[0];
+    }
+    printf("%d %d\n", pairs, initials);
+    return 0;
+}

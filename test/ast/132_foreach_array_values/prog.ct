@@ -1,0 +1,35 @@
+/* 132 (Phase 27): `foreach` walks a one-dimensional array and binds `item`
+   by value. Three element kinds share one lowering: an `int` array with an
+   explicit length, a local `int a[] = {…}` whose length only the initialiser
+   knows, and a struct array read through `item.field`. */
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    int nums[4] = {3, 1, 4, 1};
+    int inferred[] = {10, 20, 30, 40};
+    struct Point pts[3] = {{1, 2}, {3, 4}, {5, 6}};
+    int total = 0;
+    int count = 0;
+    int sx = 0;
+    int sy = 0;
+
+    foreach (nums) {
+        total = total + item;
+        count = count + 1;
+    }
+    foreach (inferred) {
+        total = total + item;
+    }
+    foreach (pts) {
+        sx = sx + item.x;
+        sy = sy + item.y;
+    }
+    printf("%d %d %d %d\n", total, count, sx, sy);
+    return 0;
+}

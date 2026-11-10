@@ -5513,6 +5513,112 @@ rng_neg range_init_scalar_decl "a range initializer declares an array"
 rng_neg range_init_element_struct "a range initializer cannot initialize 'struct Pair' elements"
 rng_neg range_init_dim_mismatch "the array size '4' does not match the range (3 elements)"
 
+# ---- Phase 27: `foreach` statement form ----
+# E27-2: every non-iterable shape is refused with its own wording, never with a
+# silent exit 0 and never as an `undeclared` fallback.
+p27_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p27.c" \
+            >"$work/p27.out" 2>"$work/p27.err"; then
+        bad "foreach: $1" "expected a diagnostic, got exit 0"
+    elif grep -Fq "$2" "$work/p27.err"; then
+        ok "foreach ($1: $2)"
+    else
+        bad "foreach: $1" "$(cat "$work/p27.err")"
+    fi
+}
+p27_diag foreach_pointer "foreach needs an array; 'p' is not iterable"
+p27_diag foreach_multidim "foreach does not support multidimensional arrays ('grid')"
+p27_diag foreach_param "foreach cannot iterate the array parameter 'a' (its length is lost)"
+p27_diag foreach_struct "foreach needs an array; 'p' is not iterable"
+p27_diag foreach_member "foreach needs a plain array variable"
+p27_diag foreach_unsized_global "foreach needs an array with a known length ('ext')"
+p27_diag foreach_scope "use of an undeclared variable"
+p27_diag foreach_empty "foreach needs a collection expression"
+p27_diag foreach_non_block "foreach body must be a block"
+p27_diag foreach_fnptr_array "its declarator is not a plain array"
+
+# E27-3: the product is one plain `for`, and the length is read once from
+# `sizeof`, so `T a[] = {…}` works without parsing the initialiser.
+if "$work/ct-ast" test/ast/132_foreach_array_values/prog.ct -o "$work/p27c.c" \
+        >"$work/p27c.out" 2>"$work/p27c.err"; then
+    if grep -Fq 'int __ct_foreach_n_0 = (int)(sizeof(nums) / sizeof((nums)[0]));' "$work/p27c.c" \
+       && grep -Fq 'for (int __ct_foreach_i_0 = 0; __ct_foreach_i_0 < __ct_foreach_n_0; __ct_foreach_i_0++) {' "$work/p27c.c" \
+       && grep -Fq 'int item = (nums)[__ct_foreach_i_0];' "$work/p27c.c"; then
+        ok "foreach (expands to one plain for over sizeof)"
+    else
+        bad "foreach: expansion" "$(grep -n '__ct_foreach' "$work/p27c.c" | head -4)"
+    fi
+else
+    bad "foreach: expansion" "expected exit 0; $(cat "$work/p27c.err")"
+fi
+
+# E27-3: the lowered program and a hand-written `for` agree byte for byte.
+cat > "$work/p27_twin.ct" <<'P27EOF'
+#include <stdio.h>
+
+int main(void)
+{
+    int nums[5] = {2, 4, 6, 8, 10};
+    int s = 0;
+
+    foreach (nums) {
+        s = s + item;
+    }
+    printf("%d\n", s);
+    return 0;
+}
+P27EOF
+cat > "$work/p27_hand.ct" <<'P27EOF'
+#include <stdio.h>
+
+int main(void)
+{
+    int nums[5] = {2, 4, 6, 8, 10};
+    int s = 0;
+
+    for (int i = 0; i < 5; i++) {
+        int item = nums[i];
+        s = s + item;
+    }
+    printf("%d\n", s);
+    return 0;
+}
+P27EOF
+if "$work/ct-ast" build "$work/p27_twin.ct" -o "$work/p27_twin" >"$work/p27t.out" 2>"$work/p27t.err" \
+   && "$work/ct-ast" build "$work/p27_hand.ct" -o "$work/p27_hand" >"$work/p27h.out" 2>"$work/p27h.err"; then
+    if "$work/p27_twin" >"$work/p27_twin.out" && "$work/p27_hand" >"$work/p27_hand.out" \
+       && cmp -s "$work/p27_twin.out" "$work/p27_hand.out"; then
+        ok "foreach (runtime output matches a hand-written for)"
+    else
+        bad "foreach: equivalence" "$(cat "$work/p27_twin.out") vs $(cat "$work/p27_hand.out")"
+    fi
+else
+    bad "foreach: equivalence" "$(cat "$work/p27t.err") $(cat "$work/p27h.err")"
+fi
+
+# E27-4: nested `foreach` warns in compile mode and becomes an error under
+# `ct check`; the wording names `item`, not the loop counter.
+if "$work/ct-ast" test/ast/134_foreach_nested_pointer/prog.ct -o "$work/p27n.c" \
+        >"$work/p27n.out" 2>"$work/p27n.err"; then
+    if grep -Fq "warning: foreach shadows the outer 'item'; use a native for to name the binding" "$work/p27n.err"; then
+        ok "foreach (nested item warns in compile mode)"
+    else
+        bad "foreach: nested warning" "$(cat "$work/p27n.err")"
+    fi
+else
+    bad "foreach: nested warning" "expected exit 0; $(cat "$work/p27n.err")"
+fi
+"$work/ct-ast" check --diagnostics=json test/ast/134_foreach_nested_pointer/prog.ct \
+    >"$work/p27n.json" 2>"$work/p27n.json.err"
+p27rc=$?
+if [ "$p27rc" -eq 1 ] \
+        && grep -Fq '"severity":"error"' "$work/p27n.json" \
+        && grep -Fq "foreach shadows the outer 'item'" "$work/p27n.json"; then
+    ok "foreach (nested item is an error under ct check)"
+else
+    bad "foreach: nested JSON" "exit $p27rc; $(cat "$work/p27n.json")"
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

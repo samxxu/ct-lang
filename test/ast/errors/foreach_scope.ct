@@ -1,0 +1,13 @@
+#include <stdio.h>
+
+int main(void)
+{
+    int nums[2] = {1, 2};
+
+    foreach (nums) {
+        printf("%d\n", item);
+    }
+    /* `item` is bound to the foreach block only (D27-2). */
+    printf("%d\n", item);
+    return 0;
+}

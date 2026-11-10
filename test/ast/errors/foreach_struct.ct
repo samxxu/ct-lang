@@ -1,0 +1,15 @@
+#include <stdio.h>
+
+struct Point {
+    int x;
+};
+
+int main(void)
+{
+    struct Point p = {1};
+
+    foreach (p) {
+        printf("%d\n", item.x);
+    }
+    return 0;
+}

@@ -1,0 +1,30 @@
+/* 133 (Phase 27): `break`, `continue` and `return` are ordinary C jumps inside
+   the expanded `for`. A file-scope `static const` table is iterable too: its
+   declared length is known, so the generated length folds to a constant. */
+#include <stdio.h>
+
+static const int table[5] = {2, 4, 6, 8, 10};
+
+static int first_over(int limit)
+{
+    foreach (table) {
+        if (item > limit) return item;
+    }
+    return -1;
+}
+
+int main(void)
+{
+    int nums[6] = {1, 2, 3, 4, 5, 6};
+    int sum = 0;
+    int hits = 0;
+
+    foreach (nums) {
+        if (item == 2) continue;
+        if (item > 4) break;
+        sum = sum + item;
+    }
+    hits = first_over(7);
+    printf("%d %d\n", sum, hits);
+    return 0;
+}

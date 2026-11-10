@@ -1,0 +1,19 @@
+#include <stdio.h>
+
+static int total(int a[3])
+{
+    int s = 0;
+
+    foreach (a) {
+        s = s + item;
+    }
+    return s;
+}
+
+int main(void)
+{
+    int nums[3] = {1, 2, 3};
+
+    printf("%d\n", total(nums));
+    return 0;
+}

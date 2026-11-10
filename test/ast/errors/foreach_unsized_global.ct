@@ -1,0 +1,11 @@
+#include <stdio.h>
+
+extern int ext[];
+
+int main(void)
+{
+    foreach (ext) {
+        printf("%d\n", item);
+    }
+    return 0;
+}
