@@ -96,6 +96,7 @@ import runtime::arena::Arena;
    implicit counter and the private bound temporary (one for the counted form,
    two for the range form). */
 #define N_LOOP    60
+#define N_FOREACH 62
 #define N_INIT_RANGE 61
 
 /* binary operators (stored in `aux`) */
@@ -2690,6 +2691,48 @@ impl EmitOps for Emitter {
                 fprintf(self->out, ")), __ct_loop_n_%d); i < __ct_loop_hi_%d; i++) ", k, k);
             }
             return self->emit_node(self->arena->nodes[n].d, ind);
+        }
+        /* Phase 27: `foreach` expands to one plain `for`. The length is
+           `sizeof(x) / sizeof((x)[0])`, read once into `__ct_foreach_n_K`
+           (D27-9/D27-7), so a VLA's length is snapshotted before the first
+           iteration and a normal array folds to a constant. `item` is a plain
+           by-value copy (D27-5); `break` / `continue` / `return` inside the body
+           are ordinary C jumps, and the per-emitter `K` keeps nested loops
+           distinct (D27-8). The outer block keeps both temporaries out of the
+           user's scope. */
+        if (self->arena->nodes[n].kind == N_FOREACH) {
+            int k;
+            k = self->ntmp;
+            self->ntmp++;
+            self->emit_indent(ind);
+            fputs("{\n", self->out);
+            self->emit_indent(ind + 1);
+            fprintf(self->out, "int __ct_foreach_n_%d = (int)(sizeof(", k);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(") / sizeof((", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(")[0]));\n", self->out);
+            self->emit_indent(ind + 1);
+            fprintf(self->out,
+                    "for (int __ct_foreach_i_%d = 0; __ct_foreach_i_%d < __ct_foreach_n_%d; __ct_foreach_i_%d++) {\n",
+                    k, k, k, k);
+            self->emit_indent(ind + 2);
+            fprintf(self->out, "%s item = (", self->arena->nodes[n].text);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fprintf(self->out, ")[__ct_foreach_i_%d];\n", k);
+            /* `item` may go unused (`foreach (xs) { puts("x"); }`, or an outer
+               binding hidden by a nested one). A plain `(void)item;` keeps the
+               generated C `-Wall -Wextra` clean without a GCC-only attribute. */
+            self->emit_indent(ind + 2);
+            fputs("(void)item;\n", self->out);
+            for (c = self->arena->nodes[self->arena->nodes[n].d].a; c >= 0;
+                 c = self->arena->nodes[c].next)
+                if (self->emit_node(c, ind + 2) != 0) return -1;
+            self->emit_indent(ind + 1);
+            fputs("}\n", self->out);
+            self->emit_indent(ind);
+            fputs("}\n", self->out);
+            return 0;
         }
         if (self->arena->nodes[n].kind == N_SWITCH) {
             self->emit_indent(ind);

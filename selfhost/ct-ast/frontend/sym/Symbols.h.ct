@@ -111,6 +111,10 @@ pub struct Var {
     /* an array's declared type carries no star of its own, but `T *a[N]` and
        `T *p` spell the same type; indexing tells them apart only through this */
     int  is_array;
+    /* The declared dimensions verbatim (`[5]`, `[]`, `[A][B]`), empty for a
+       plain value. `foreach` counts them to refuse a multidimensional array and
+       to tell an inferred-length local from an unsized file-scope one. */
+    char dims[160];
     /* leak tracking (10.3), mirroring L2's conservative rules */
     int  st;            /* struct index when the type is `struct T *`, else -1 */
     int  owned;         /* 1 when a heap object (malloc/calloc/owned callee) */
@@ -123,6 +127,10 @@ pub struct Var {
        declaration, which a `return` may hand back (D5). */
     int  borrowed;
     int  is_param;
+    /* A declared function or trait-method parameter, not only a `borrow` one.
+       C decays `int a[]` into `int *`, so `foreach` must refuse an array
+       parameter instead of asking `sizeof` for a length that no longer exists. */
+    int  is_fnparam;
     /* A namespaced global is emitted under a mangled C name, so `cname` carries
        that spelling (equal to `name` for a local or a root global). `ns` holds
        the declaring namespace in underscore form (`a_b`), which is what a
@@ -445,6 +453,7 @@ impl SymbolOps for Symbols {
         self->vars[i].imported = 0;
         self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;
+        self->vars[i].dims[0] = 0;
         self->vars[i].st = -1;
         self->vars[i].owned = 0;
         self->vars[i].own_line = 0;
@@ -452,6 +461,7 @@ impl SymbolOps for Symbols {
         self->vars[i].path_warned = 0;
         self->vars[i].borrowed = 0;
         self->vars[i].is_param = 0;
+        self->vars[i].is_fnparam = 0;
         self->vars[i].is_const = 0;
         self->vars[i].is_closure = 0;
         self->vars[i].closure_id = -1;
@@ -488,6 +498,7 @@ impl SymbolOps for Symbols {
         self->vars[i].imported = imported;
         self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;
+        self->vars[i].dims[0] = 0;
         self->vars[i].st = -1;
         self->vars[i].owned = 0;
         self->vars[i].own_line = 0;
@@ -495,6 +506,7 @@ impl SymbolOps for Symbols {
         self->vars[i].path_warned = 0;
         self->vars[i].borrowed = 0;
         self->vars[i].is_param = 0;
+        self->vars[i].is_fnparam = 0;
         self->vars[i].is_const = 0;
         if (imported)
             for (k = 0; k < i; k++)

@@ -54,6 +54,7 @@ import tool::diag::Diag;
 #define N_INIT_RANGE 61
 #define N_LABEL 49
 #define N_LOOP 60
+#define N_FOREACH 62
 #define N_MEMBER 24
 #define N_NUM 8
 #define N_POST 18
@@ -85,6 +86,8 @@ pub trait StmtOps {
     int  parse_goto(void);
     int  loop_ahead(void);
     int  parse_loop(void);
+    int  foreach_ahead(void);
+    int  parse_foreach(void);
     int  range_init_ahead(void);
     int  parse_range_init(int n, const char *type);
     int  closure_global_init(int e, const char *name, int line, int col);
@@ -130,6 +133,10 @@ pub struct Stmt {
        `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
        or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
     int  loop_depth;
+    /* How many `foreach` bodies enclose the statement being parsed. Only an
+       inner `foreach` inside an outer one is diagnosed (D27-10, mirroring
+       D22-5): a hand-written `item` stays ordinary C shadowing and is silent. */
+    int  foreach_depth;
     /* AutoDrop across a jump. A `break` / `continue` leaves its construct, so
        the `own` objects declared inside it have to be released first, exactly
        like `return` (SH-33). Each enclosing construct pushes the boundary its
@@ -829,6 +836,42 @@ static int range_element_bad(struct Stmt *self, const char *type, const char *di
     return 0;
 }
 
+/* `loop` and `foreach` are not in `kw[]` (D22-4, D27-1), so only a following
+   `(` promotes the spelling to a statement: a label, an expression reference or
+   `goto loop;` keeps the ordinary identifier meaning. The save/restore mirrors
+   `label_ahead` because the lexer has no peek. */
+static int kw_paren_ahead(struct Stmt *self, const char *kw)
+{
+    int sp, sbol, stok, sline, stokline, sstart, slstart, r;
+    long snum;
+    char stext[MAX_TEXT];
+
+    if (self->lex->tok != T_ID) return 0;
+    if (strcmp(self->lex->toktext, kw) != 0) return 0;
+    sp = self->lex->pos;
+    sbol = self->lex->bol;
+    stok = self->lex->tok;
+    snum = self->lex->toknum;
+    sline = self->lex->line;
+    stokline = self->lex->tokline;
+    sstart = self->lex->tokstart;
+    slstart = self->lex->lstart;
+    snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+    self->sup->lex_next();
+    r = 0;
+    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) r = 1;
+    self->lex->pos = sp;
+    self->lex->bol = sbol;
+    self->lex->tok = stok;
+    self->lex->toknum = snum;
+    self->lex->line = sline;
+    self->lex->tokline = stokline;
+    self->lex->tokstart = sstart;
+    self->lex->lstart = slstart;
+    snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+    return r;
+}
+
 impl StmtOps for Stmt {
     /* Does the current token start a declaration? A short name has to be
        resolved first: the type table only holds the mangled spelling, so
@@ -1395,6 +1438,7 @@ impl StmtOps for Stmt {
            `label_ahead` / `is_decl_start` because `loop` is deliberately absent
            from `kw[]`; in every other position it stays an ordinary identifier. */
         if (self->loop_ahead()) return self->parse_loop();
+        if (self->foreach_ahead()) return self->parse_foreach();
         /* `name:` -- a label opens no scope and declares nothing, so this sits
            after every keyword branch and before the declaration test; the
            lookahead keeps a qualified `A::f()` on the expression path (D-2). */
@@ -1575,42 +1619,16 @@ impl StmtOps for Stmt {
         return e;
     }
 
-    /* Is the current token `loop` immediately followed by `(`? `loop` is not in
-       `kw[]` (D22-4), so only this lookahead promotes it: a label named `loop`,
-       an expression reference or `goto loop;` keeps the ordinary identifier
-       meaning. The save/restore mirrors `label_ahead` because the lexer has no
-       peek. */
+    /* Is the current token `loop` immediately followed by `(`? */
     int loop_ahead(void)
     {
-        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
-        long snum;
-        char stext[MAX_TEXT];
-        (void)self;
+        return kw_paren_ahead(self, "loop");
+    }
 
-        if (self->lex->tok != T_ID) return 0;
-        if (strcmp(self->lex->toktext, "loop") != 0) return 0;
-        sp = self->lex->pos;
-        sbol = self->lex->bol;
-        stok = self->lex->tok;
-        snum = self->lex->toknum;
-        sline = self->lex->line;
-        stokline = self->lex->tokline;
-        sstart = self->lex->tokstart;
-        slstart = self->lex->lstart;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
-        self->sup->lex_next();
-        r = 0;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) r = 1;
-        self->lex->pos = sp;
-        self->lex->bol = sbol;
-        self->lex->tok = stok;
-        self->lex->toknum = snum;
-        self->lex->line = sline;
-        self->lex->tokline = stokline;
-        self->lex->tokstart = sstart;
-        self->lex->lstart = slstart;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
-        return r;
+    /* Phase 27: is the current token `foreach` immediately followed by `(`? */
+    int foreach_ahead(void)
+    {
+        return kw_paren_ahead(self, "foreach");
     }
 
     /* `loop(<count>) { … }` and `loop(<start>..<stop>) { … }` -- a shorthand for
@@ -1773,6 +1791,156 @@ impl StmtOps for Stmt {
         self->sup->pop_scope();
         self->arena->nodes[s].a = cnt;
         self->arena->nodes[s].b = hi;
+        self->arena->nodes[s].d = body;
+        return s;
+    }
+
+    /* Phase 27: `foreach (<array>) { … item … }` -- the implicit `item` binds
+       the current element by value (D27-5), the loop runs over the declared
+       length and the emitter prints one plain `for` (D27-6/D27-9). The parser
+       records the shape only: `a` = collection, `d` = body, `text` = element
+       type. `item` enters the symbol table here so name resolution, closure
+       capture and shadowing all see it, but no `N_DECL` is built. The
+       collection is parsed before `item` enters scope, so a nested
+       `foreach (item)` still names the outer binding.
+       Containers are out of scope this phase (D27-4), and every shape whose
+       length `sizeof` cannot answer is refused before any C is emitted
+       (D27-11). */
+    int parse_foreach(void)
+    {
+        int s, c, body, line, col, vi, nd, ip, bare;
+        char msg[MAX_TEXT];
+        char elem[MAX_TEXT];
+        char ex[MAX_TEXT];
+        char tr[MAX_TEXT];
+        const char *p;
+        const char *q;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        s = self->sup->new_node(N_FOREACH);
+        if (s < 0) return -1;
+        self->sup->lex_next();
+        if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "foreach needs a collection expression",
+                                            self->mem->path);
+        self->ex->assign_ok = 1;
+        c = self->ex->parse_expr();
+        self->ex->assign_ok = 0;
+        if (c < 0) return -1;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "foreach takes exactly one collection",
+                                            self->mem->path);
+        if (self->sup->expect(")") != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "foreach body must be a block",
+                                            self->mem->path);
+        if (self->arena->nodes[c].kind != N_VAR)
+            return tool::diag::ct_sem_error(line, col,
+                                            "foreach needs a plain array variable",
+                                            self->mem->path);
+        vi = self->sym->find_var(self->arena->nodes[c].text2);
+        if (vi < 0)
+            return tool::diag::ct_sem_error(line, col,
+                                            "foreach needs a declared array",
+                                            self->mem->path);
+        /* `int a[]` as a parameter is `int *a` in C; `sizeof` would answer the
+           pointer's size and silently iterate the wrong count. */
+        if (self->sym->vars[vi].is_param || self->sym->vars[vi].is_fnparam) {
+            snprintf(msg, sizeof msg,
+                     "foreach cannot iterate the array parameter '%s' (its length is lost)",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        if (!self->sym->vars[vi].dims[0]) {
+            snprintf(msg, sizeof msg,
+                     "foreach needs an array; '%s' is not iterable",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        snprintf(elem, sizeof elem, "%s", self->sym->vars[vi].type);
+        /* A function-pointer array stores its declarator in `text3` instead of
+           plain `[N]`; `int item = handlers[i];` would be illegal C. */
+        if (self->sym->vars[vi].dims[0] != '[' || strchr(elem, '(')) {
+            snprintf(msg, sizeof msg,
+                     "foreach cannot iterate '%s'; its declarator is not a plain array",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        nd = 0;
+        for (p = self->sym->vars[vi].dims; *p; p++)
+            if (*p == '[') nd++;
+        if (nd > 1) {
+            snprintf(msg, sizeof msg,
+                     "foreach does not support multidimensional arrays ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* A file-scope `int a[];` stays incomplete; the local `int a[] = {…}`
+           is completed by its initialiser, which only C sees. */
+        if (self->sym->vars[vi].is_global && strstr(self->sym->vars[vi].dims, "[]")) {
+            snprintf(msg, sizeof msg,
+                     "foreach needs an array with a known length ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* A typedef can hide an array element (`typedef int Row[4]; Row a[2];`);
+           `Row item = a[i];` is not C, so refuse it like a second dimension. */
+        bare = 1;
+        for (q = elem; *q; q++)
+            if (!((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+                  || (*q >= '0' && *q <= '9') || *q == '_')) bare = 0;
+        if (bare && self->sym->expand_type_alias(elem, ex, sizeof ex) == 0
+            && strchr(ex, '[')) {
+            snprintf(msg, sizeof msg,
+                     "foreach does not support multidimensional arrays ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* An interface value is a (vptr, data) pair; a by-value copy would
+           bypass the vptr discipline, and the element type gives no owner. */
+        if (self->sup->iface_ref_type(elem, tr, sizeof tr, &ip) && !ip) {
+            snprintf(msg, sizeof msg,
+                     "foreach cannot copy interface values ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        if (self->sup->push_scope() != 0) return -1;
+        if (self->sup->declare_var("item", elem) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        if (self->foreach_depth > 0) {
+            if (tool::diag::ct_loop_warn(line, col,
+                    "foreach shadows the outer 'item'; use a native for to name the binding",
+                    self->mem->path) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+        }
+        self->foreach_depth = self->foreach_depth + 1;
+        if (jump_push(self, self->mem->nowner, self->mem->nowner) != 0) {
+            self->foreach_depth = self->foreach_depth - 1;
+            self->sup->pop_scope();
+            return -1;
+        }
+        body = self->parse_block();
+        jump_pop(self, 1);
+        self->foreach_depth = self->foreach_depth - 1;
+        if (body < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        self->sup->pop_scope();
+        snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", elem);
+        self->arena->nodes[s].a = c;
         self->arena->nodes[s].d = body;
         return s;
     }
@@ -2149,7 +2317,11 @@ impl StmtOps for Stmt {
             }
             if (self->arena->nodes[n].text3[0]) {
                 int vi = self->sym->find_var(name);
-                if (vi >= 0) self->sym->vars[vi].is_array = 1;
+                if (vi >= 0) {
+                    self->sym->vars[vi].is_array = 1;
+                    snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s",
+                             self->arena->nodes[n].text3);
+                }
             }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
                 self->sup->lex_next();
