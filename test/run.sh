@@ -18,10 +18,12 @@
 #   limits    known limitations characterised: unrewritten one-liners     (no fixture dir)
 #   cli       argument handling: help/version/errors and `ct compile`    (no fixture dir)
 #
-# An example whose first line is `//@ct-requires: ct-ast` is skipped here: L0 is
-# what this script drives, and a construct L0 does not know (e.g. `map`) is
-# passed through verbatim. `selfhost/check-ast.sh`'s corpus layer builds those
-# examples with the AST compiler instead, so they stay covered.
+# An example that declares `//@ct-requires: ct-ast` uses a construct L0 does not
+# know (a `map`, a range initialiser, a generic), so it is driven by the AST
+# compiler instead. The bootstrap chain L0 -> L1 -> L2 -> ct-ast is built lazily
+# in $TMP the first time one is reached, and the example then goes through the
+# same generate/build/run/diff path as every other example. The chain is a
+# mirror of selfhost/check-ast.sh's, so a break in either is visible here too.
 #
 # test/archive/ holds the Phases 2–5 (CT-side) fixtures -- namespaces, multi-file
 # `ct build`, imports, Drop, `#line` and warning diagnostics -- that Phase 0.3
@@ -136,21 +138,84 @@ done
 # ------------------------------------------------------------------ examples
 echo
 echo "== examples =="
+
+# The AST compiler is built on demand: examples that L0 cannot compile are the
+# only consumers, and extending the chain unconditionally would slow every run.
+ast_state=""
+ensure_ast() {
+    if [ -n "$ast_state" ]; then return "$ast_state"; fi
+    ast_state=1
+    {
+        "$TMP/ctc" selfhost/l1/ctc.ct -o "$TMP/ast-l1.c" &&
+        $CC $CFLAGS "$TMP/ast-l1.c" -o "$TMP/ast-l1" &&
+        mkdir -p "$TMP/ast-l2src" &&
+        "$TMP/ast-l1" build selfhost/l2/driver.ct -o "$TMP/ast-l2src" &&
+        $CC $CFLAGS "$TMP"/ast-l2src/*.c -o "$TMP/ast-l2" &&
+        mkdir -p "$TMP/ast-src" &&
+        "$TMP/ast-l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$TMP/ast-src" &&
+        $CC $CFLAGS "$TMP"/ast-src/*.c -o "$TMP/ct-ast"
+    } >"$TMP/ast-build.log" 2>&1 || {
+        echo "  the AST compiler chain failed to build:"
+        sed 's/^/    /' "$TMP/ast-build.log"
+        return 1
+    }
+    ast_state=0
+    return 0
+}
+
+# ast_example_status <dir> <name> <expected-file> -- generate with ct-ast,
+# build, run and diff. Returns 0 only on an exact match; 2/3/4 name the stage
+# that failed so the caller can report it. Kept side-effect free so the red
+# proof below can reuse it against a deliberately wrong golden.
+ast_example_status() {
+    ast_dir=$1
+    ast_name=$2
+    ast_exp=$3
+    ast_base="$TMP/ast-$ast_name"
+    if ! "$TMP/ct-ast" "$ast_dir/$ast_name.ct" -o "$ast_base.c" 2>"$ast_base.err"; then
+        printf 'ct-ast rejected %s: %s\n' "$ast_dir/$ast_name.ct" "$(cat "$ast_base.err")"
+        return 2
+    fi
+    if ! $CC $CFLAGS "$ast_base.c" -o "$ast_base.bin" 2>"$ast_base.log"; then
+        printf 'generated C does not build:\n'
+        sed 's/^/    /' "$ast_base.log"
+        return 3
+    fi
+    "$ast_base.bin" >"$ast_base.stdout" 2>&1
+    if ! diff -u "$ast_exp" "$ast_base.stdout" >"$ast_base.diff"; then
+        printf 'program output differs from %s:\n' "$ast_exp"
+        sed -n '1,40p' "$ast_base.diff" | sed 's/^/    /'
+        return 4
+    fi
+    return 0
+}
+
 for ct in examples/*/*.ct; do
     dir=$(dirname "$ct")
     # A dialect demo cannot be compiled as-is: the DSL lives in comments and the
     # CT it describes does not exist until a plugin generates it, so this loop
     # skips it -- the dialect layer further down drives it instead.
     if [ -d "$dir/ct-dialects" ]; then continue; fi
-    # An example that needs a construct L0 does not know declares itself so; the
-    # AST compiler's corpus layer builds it instead (see the header comment).
-    if grep -q '^//@ct-requires: ct-ast' "$ct"; then
-        skip "$dir/$(basename "$ct")" "needs ct-ast (built by selfhost/check-ast.sh)"
-        continue
-    fi
     name=$(basename "$ct" .ct)
     label="$dir/$name.ct"
     exp_out="$dir/$name.expected.out"
+
+    if grep -q '^//@ct-requires: ct-ast' "$ct"; then
+        ensure_ast
+        ensure_st=$?
+        if [ "$ensure_st" -ne 0 ]; then
+            bad "$label" "the AST compiler chain did not build"
+            continue
+        fi
+        ast_example_status "$dir" "$name" "$exp_out"
+        ast_st=$?
+        if [ "$ast_st" -eq 0 ]; then
+            ok "$label (ct-ast)"
+        else
+            bad "$label" "ct-ast end-to-end check failed (stage $ast_st)"
+        fi
+        continue
+    fi
 
     if ! "$TMP/ctc" "$ct" -o "$TMP/ex-$name.c" 2>"$TMP/ex-$name.err"; then
         bad "$label" "ctc exited non-zero: $(cat "$TMP/ex-$name.err")"
@@ -169,6 +234,30 @@ for ct in examples/*/*.ct; do
     fi
     ok "$label"
 done
+
+# A comparison that cannot go red is not a gate. Take a real ct-ast example,
+# point the checker at a golden the program never prints, and require exactly
+# stage 4 (the diff) to reject it. If the expected file or the diff above were
+# wired up wrongly, every ct-ast example would pass silently; this probe is the
+# negative that makes that failure visible.
+ensure_ast
+if [ $? -ne 0 ]; then
+    bad "examples/ct-ast-red-proof" "the AST compiler chain did not build"
+else
+    mkdir -p "$TMP/redproof"
+    cp examples/15_range_init/range_init.ct "$TMP/redproof/range_init_wrong.ct"
+    printf 'not the program output\n' >"$TMP/redproof/wrong.expected.out"
+    ast_example_status "$TMP/redproof" range_init_wrong "$TMP/redproof/wrong.expected.out" \
+        >"$TMP/redproof.log" 2>&1
+    red_stage=$?
+    if [ "$red_stage" -eq 4 ]; then
+        ok "examples/ct-ast-red-proof (a wrong golden is rejected at the diff stage)"
+    elif [ "$red_stage" -eq 0 ]; then
+        bad "examples/ct-ast-red-proof" "a deliberately wrong golden was accepted"
+    else
+        bad "examples/ct-ast-red-proof" "expected the diff stage (4), got stage $red_stage"
+    fi
+fi
 
 # ------------------------------------------------------------------ dialect
 echo

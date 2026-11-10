@@ -10,14 +10,14 @@
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
 | `01_greeter` | 最小可用：一个 trait、一个 struct、一次 impl、两次调用 | 无 | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
-| `02_market` | 多个对象互调；同一 trait 在两个 struct 上给出不同实现；末尾 `Reporter all[2]` 接口值数组经 `broadcast()` 统一派发 | ct-ast（接口值数组） | `check-ast.sh` + `check-warnings.sh`（`test/run.sh` 跳过） |
+| `02_market` | 多个对象互调；同一 trait 在两个 struct 上给出不同实现；末尾 `Reporter all[2]` 接口值数组经 `broadcast()` 统一派发 | ct-ast（接口值数组） | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `03_receivers` | receiver 可以是数组元素、指针数组元素、指针字段链 | 无 | 同上 |
 | `04_rvalue` | rvalue receiver（工厂返回值直接调用），receiver 只求值一次；**链式上限一步，不是 fluent** | 无 | 同上 |
 | `05_body_dispatch` | `impl` 方法体内经 vtable 的递归分派（字段链 / 参数 / 局部变量） | 无 | 同上 |
 | `06_iface_field` | 接口值字段（自动装箱）与指向接口值的指针字段（`Node *node` + `w.node->show()`）并排对比 | 无 | 同上 |
 | `07_dialect` | 注释里的 DSL 经 `ct-dialects/` 插件展开成纯 CT，编译器零感知 | 插件（目录内自带） | 同上（`test/run.sh` 的 dialect 层） |
-| `08_map_binding` | `map trait ... for instance`：绑定一个改不动的全局实例并装箱；另带 `src/type_bridge/` 子包演示 `map ... for type` 的指针别名宿主 | ct-ast（`map`）；子包需 `ct build` 多单元 | `check-ast.sh` + `check-warnings.sh`（instance 单文件）+ `check-warnings.sh` 的 src-layout build 段 |
-| `09_callback` | 容器回调约定：档① 手写 `(fn, env)` 对；档② `=>` 闭包字面量在 `callback_tier2.ct` | 档① 无；档② ct-ast | `check-ast.sh` + `check-warnings.sh`；`callback.ct` 另跑 `test/run.sh` |
+| `08_map_binding` | `map trait ... for instance`：绑定一个改不动的全局实例并装箱；另带 `src/type_bridge/` 子包演示 `map ... for type` 的指针别名宿主 | ct-ast（`map`）；子包需 `ct build` 多单元 | `test/run.sh`（instance 单文件）+ `check-ast.sh` + `check-warnings.sh`（instance 单文件）+ `check-warnings.sh` 的 src-layout build 段 |
+| `09_callback` | 容器回调约定：档① 手写 `(fn, env)` 对；档② `=>` 闭包字面量在 `callback_tier2.ct` | 档① 无；档② ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `json` | 纯 CT 的 JSON 读写：零分配只读视图 + 写出 | 无 | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `wave1-demo` | Wave 1 包（`hal` / `hal-posix` / `std`）合用 | 外部 ct-pkg 索引 | **仅 CI** |
 
@@ -48,7 +48,7 @@
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
-| `10_closure_pipeline` | 闭包字面量 / 已声明的绑定的传参约定，配合 `loop(n)` | ct-ast | `check-ast.sh` + `check-warnings.sh` |
+| `10_closure_pipeline` | 闭包字面量 / 已声明的绑定的传参约定，配合 `loop(n)` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `12_closure_in_loop` | 循环体内创建闭包：按值捕获，只保留创建那一轮的变量 | ct-ast | 同上 |
 | `17_static_map_closure` | 闭包字面量作为 `.m.ct` 静态映射调用的实参（Phase 25）：数组衰减成 `int *`，recipe 把 `(fn, env)` 原样传给同步 C 消费者 | ct-ast + `ct build` 多单元 | `check-warnings.sh` 的 src-layout build 段 |
 
@@ -60,20 +60,23 @@
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
-| `11_loop_semantics` | `loop(n)`（0..n-1）与 `loop(a..b)`（a..b-1）：计数只求值一次，`i` 可写 | ct-ast | `check-ast.sh` + `check-warnings.sh` |
+| `11_loop_semantics` | `loop(n)`（0..n-1）与 `loop(a..b)`（a..b-1）：计数只求值一次，`i` 可写 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
 ## 数组初值与泛型
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
-| `15_range_init` | `0..n(<expr>)` 数组 range 初值（Phase 24）：文件作用域 `static const` 表与局部表，`$` 是下标，产物是花括号列表而非循环 | ct-ast | `check-ast.sh` + `check-warnings.sh`（`test/run.sh` 跳过） |
+| `15_range_init` | `0..n(<expr>)` 数组 range 初值（Phase 24）：文件作用域 `static const` 表与局部表，`$` 是下标，产物是花括号列表而非循环 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `16_generic_min` | 泛型函数（Phase 26）：`T larger<T>(T, T)` 以 `int` / `double` 实例化，每个实例是一份独立 `static` C 函数 | ct-ast | 同上 |
 
 ## 门禁归属说明
 
-- `test/run.sh`：L0 种子驱动的端到端层，覆盖编译模式下的 `examples/*/*.ct`；首行带
-  `//@ct-requires: ct-ast` 的文件会被跳过（`02_market` 因接口值数组、`09_callback/callback_tier2.ct`
-  因 `=>`、`08_map_binding/map_binding.ct` 因 `map` 都在此列）。
+- `test/run.sh`：端到端层，覆盖编译模式下的 `examples/*/*.ct`。带 `//@ct-requires: ct-ast`
+  的文件（`02_market` 的接口值数组、`09_callback/callback_tier2.ct` 的 `=>`、
+  `08_map_binding/map_binding.ct` 的 `map`、`10`/`11`/`12`/`15`/`16`）不再跳过：第一次遇到时
+  在临时目录里按 L0 → L1 → L2 → ct-ast 建链，再用 ct-ast 编译、`cc` 构建、运行并比对
+  `expected.out`。这条路径自带红证——把一份真实示例的 golden 换成程序不会输出的内容，必须
+  在 diff 阶段被拒绝，否则该门禁项记为失败。
 - `check-ast.sh`：语料层以编译模式逐个编译 `examples/*/*.ct`，有 `expected.out` 的比较输出；
   `src/` 三层入口不在它的 glob 内（`check-ast.sh` 的语料层保持编译模式）。
 - `check-warnings.sh`：同一语料的零警告门禁；另有一段 `examples/*/src/main.ct` 的 build 模式，
