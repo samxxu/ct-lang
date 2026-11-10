@@ -1820,7 +1820,6 @@ impl StmtOps for Stmt {
         char iname[MAX_TEXT];
         char targ[MAX_TEXT];
         char targ2[MAX_TEXT];
-        char tname[MAX_TEXT];
         char tail[MAX_TEXT];
         char enc[MAX_TEXT];
         const char *p;
