@@ -2,8 +2,10 @@
 
 > 中文。
 >
-> **状态：规划中**（2026-11-10 立项评估完成，未开工；同日按用户新指令收敛为**两相**）。
-> 本轮只产本文件、[phase29.md](phase29.md) 与索引；不改编译器、不改 golden、不 bump、不 push、不打 tag。
+> **状态：完成**（2026-11-11 收口）。实现提交 `a113bee`（约束语法与元数据）、`605f96a`（模板体内约束调用与
+> vtable 槽落码）、`9da0aad`（夹具与门禁断言）、`7e1014d`（样例 21）、`987d6e4`（矩阵补全）；
+> 逐条核对见 §11。**未 bump 版本、未打 tag**：版本号待用户批准后以独立 `chore(release)` 处理，
+> 需五处 `CTC_VERSION` 同步与全量 golden 重生成。
 > **主题来源**：用户 2026-11-10「完善泛型，主要目标是让泛型能支持 Trait」；[phase26.md:39-51](phase26.md#L39-L51)
 > 把「泛型 trait / `impl` 方法 / 类型参数约束」一并列为非目标，本相收回其中**约束与派发**两项。
 > **路线位置**：Phase 28 约束泛型 → Phase 29 泛型 struct + 内置 `Vec`/`Map`（含 `foreach` 容器协议）。
@@ -413,7 +415,9 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 | 28.6 | 文档与收口：spec §4.50、tutorial §10.7、AGENTS；roadmap/README 索引已登记 | `docs/**`、`AGENTS.md` | 文档门禁绿 |
 | 28.7 | 版本收口（可选、单列）：五处 `CTC_VERSION` + 全量 golden | 五处版本文件、`test/**` | 11 道硬门禁绿 |
 
-> 28.1–28.3 合并为一个功能提交（中间态不可运行）；28.4/28.5 可分开；28.6/28.7 各一项。
+> 实际落地：28.1 一个提交（`a113bee`：约束语法、`Fn.bound`、L28-1/2/3、满足性检查）；28.2 与 28.3
+> 合成一个提交（`605f96a`：模板体内约束调用 + vtable 槽落码；两者之间不可运行，§5 的前置说明成立）；
+> 28.4 / 28.5 各一个提交；28.6 一个文档提交；28.7 **未执行**（未 bump）。
 
 ---
 
@@ -503,3 +507,78 @@ spec pin: ok (1.0.0, 93a8e968)
 check-docs: OK (951 relative links in 177 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
 design window: ok (12/12)
 ```
+
+---
+
+## 11. 收口记录（2026-11-11）
+
+### 11.1 实现与提交
+
+| 提交 | 内容 | 主要文件 |
+| --- | --- | --- |
+| `a113bee` | 约束语法 `<T: Trait>`、`Fn.bound`、L28-1/2/3、解析期满足性检查（L28-5/6） | `Parser.h.ct`、`Symbols.h.ct`、`Expr.h.ct` |
+| `605f96a` | 模板体内 `T` 接收者解析（`aux=7/8`）、arity/实参检查、vtable 方法槽落码、跨单元 `extern` | `Expr.h.ct`、`Emitter.h.ct` |
+| `9da0aad` | 136/137/145/146 正例、6 条 `test/ast/errors/generic_bound_*.ct`、静态 trait 模块负例、跨单元模块正例、`check-ast.sh` Phase 28 块 | `test/**`、`check-ast.sh` |
+| `7e1014d` | 样例 21 与索引行 | `examples/21_generic_bound/`、`examples/README.md` |
+| `987d6e4` | 矩阵补全：21 改为选择排序（A6）、`generic_closure_escape.ct`（A3 负例） | `examples/**`、`test/ast/errors/**`、`check-ast.sh` |
+
+### 11.2 E28-1…E28-9 逐条核对
+
+| # | 结论 | 证据 |
+| --- | --- | --- |
+| E28-1 | ✅ | `p28_bound_value`：136 构建、运行、`cmp` 输出逐字节匹配；产物含 `max2__ct1` / `max2__ct2`，约束调用为 `Point_Compare_vtable.cmp(&a, (&b))`，实例体不含 `__*_vptr`。`p28_bound_ptr`：137 的 `cmp(a, b)`、`cmp(&xs[i], (&xs[j]))`、`label(&xs[i])` 与默认方法输出逐字节匹配 |
+| E28-2 | ✅ | `p28_bound_cross_unit`：`pub trait` + `pub struct`，impl 在依赖单元、模板与实例在消费单元；build 链接通过，运行输出 `7` 与 `expected.out` 一致；依赖单元 `.h` 只新增 `extern struct Compare_vtbl Point_Compare_vtable;`，无新增函数原型 |
+| E28-3 | ✅ | `p28_diag` / `p28_chk` 覆盖 7 个角度：`generic_bound_unknown`（6:11）、`generic_bound_multi`（10:19，`+` 位置）、`generic_bound_builtin`（7:11）、`generic_bound_missing_impl`（24:12）、`generic_bound_nonstruct`（16:12）、`generic_bound_no_method`（8:14）、`p28_bound_static`（6:11，静态 trait 只能在 build 模式声明）。基线 `v0.26.4` 红证见 §3.1：`expected '>' after the type parameter` 与 `no method 'cmp' for type 'T'`，均非空转 |
+| E28-4 | ✅ | `test/ast/136/137/145/146` 走既有 `tparam_residue()` 扫描；`p28_bound_value` 额外断言实例体无 `__[a-z]+_vptr`；约束调用发射的是 vtable 方法槽，不读 vptr、不改布局 |
+| E28-5 | ✅ | `check-goldens.sh` 绿；`check-ast.sh` **903 passed / 0 failed**（收口前 900，新增 3 条：A3 负例的 sweep 与两条定位断言），既有断言零回归 |
+| E28-6 | ✅ | `bash selfhost/check-all.sh` 末行 `check-all: OK (11 hard gates green)`；`check-warnings` 无新增告警 |
+| E28-7 | ✅ | 6 条 `test/ast/errors/generic_bound_*.ct` 与 `generic_closure_escape.ct` 各跑 `p28_diag`（compile）与 `p28_chk`（`ct check`），文案与位置逐字相同；静态 trait 负例只在 build 模式存在，单独断言 |
+| E28-8 | ✅ | `python3 test/docs/check-docs.py` OK；`test/run.sh` **133 passed / 0 failed**，含 `ok examples/21_generic_bound/generic_bound.ct (ct-ast)`；`examples/README.md` 已登记 `21_generic_bound` |
+| E28-9 | ✅ | §11.3 的 A1–A8 逐行核对；每行都有可运行样例、`expected.out`、`//@ct-requires: ct-ast`，并进 `test/run.sh` 或 `check-ast.sh`；无 `/tmp` 探针替代 |
+
+### 11.3 样例覆盖矩阵（A1–A8）逐行
+
+| 角度 | 落点 | 证据 |
+| --- | --- | --- |
+| A1 约束 + 用户自定义 trait | 样例 21（`trait Compare`，不依赖内置 `Ord`）+ 136 | `test/run.sh` 运行 21；`p28_bound_value` 跑 136；负例 `generic_bound_missing_impl` 报 L28-6 |
+| A2 同模板异构实例、行为差异可见 | 136（`Point`，值接收者）与 137（指针接收者 / 数组元素 / 默认方法） | 两实例体逐字节不同；`grep -c 'max2__ct'` 与实例数一致；无 `__*_vptr` |
+| A3 泛型 + 闭包回调 | 145（`(fn, env)` 与约束方法各用一次） | `check-ast.sh` 的 `145_generic_closure` 运行比对；负例 `generic_closure_escape`（24:5，D21 逃逸硬错） |
+| A4 泛型 + `Drop` / `own` / `borrow` | 146（模板体内 `own`、块尾释放、返回值参与约束调用） | `check-ast.sh` 运行比对 + ASAN 门禁（`check-all` 的 warn/ASAN 段） |
+| A5 泛型 + 模块边界 | `test/modules/p28_bound_cross_unit/`（D8）；泛型 `pub` 负例沿用 Phase 26 的 `test/ast/errors/generic_pub.ct`（L26-2） | 跨单元块 build + 运行；`p26_diag` / `p26_chk` 的 `generic_pub` 文案 `2:9` 逐字匹配 |
+| A6 接近真实程序 | 样例 21：`sort<T: Compare>` 选择排序，`Num` 按值、`Word` 按字典序 | `test/run.sh` 的 `expected.out` 逐字节比对；同一输入多次运行一致 |
+| A7 负例族 | 6 条 `test/ast/errors/generic_bound_*.ct` + 静态 trait 模块负例 + A3 闭包负例 | 见 E28-3；每条只报一条定位错误 |
+| A8 泛型 + 泛型 struct | **本相不做**（按卡） | 由 Phase 29 的 B 矩阵覆盖 |
+
+### 11.4 实现期 battle 记录
+
+#### B28-3 · A2 的 `max2<char *>`：类型实参必须能被 `impl` 采纳
+
+| 席 | 主张 |
+| --- | --- |
+| 卡面 | A2 写「`max2<char *>`（指针接收者）各生成一份实例」 |
+| 实现约束 | `impl Compare for char *` 在解析期要求 `char *` 是已定义 struct（`impl` 的宿主必须是 struct），而 L28-5 同时规定「类型实参不是 struct 即错」；两条判据不能在 `char *` 上同时成立 |
+| 裁判 | **upheld（实现侧判据优先）**：类型实参必须是 struct 或指向 struct 的指针；`char *` 用 `struct Word { char *s; }` 包装（样例 21），A2 的「异构实例」语义由 `Num` / `Word` / `Point` 三个 struct 兑现。该限制写进 `language-spec` §4.50 |
+
+#### B28-4 · A1 行的 L28-4 vs §2.4 的 L28-6
+
+| 席 | 主张 |
+| --- | --- |
+| A1 行 | 缺 impl 负例「报 L28-4」 |
+| §2.4 表 | 缺 impl 是 L28-6；L28-4 是「约束后缺函数体 / `pub` 等既有规则」 |
+| 裁判 | **upheld（§2.4 表）**：A1 行的编号按笔误处理，夹具与断言用 L28-6 文案 `type argument 'Point' does not implement trait 'Compare'` |
+
+#### B28-5 · 夹具路径与实际布局
+
+| 项 | 处理 |
+| --- | --- |
+| D9 写 `test/ast/errors/generic_bound_*.ct`（7 条） | 实际 6 条在该目录；第 7 个角度（静态 trait）必须在 `build` 模式声明 `.m.ct`，落在 `test/modules/p28_bound_static/` |
+| D14 写 `test/modules/errors/generic_pub_fn.ct` | 不新建重复夹具：L26-2 已由 Phase 26 的 `test/ast/errors/generic_pub.ct` 与 `p26_diag` / `p26_chk` 逐字钉住，`v0.26.x` 起就在门禁内 |
+| A3 负例 | 新增 `test/ast/errors/generic_closure_escape.ct`，证明 D21 的逃逸硬错在模板体内同文案、同位置生效 |
+| 28.1–28.3 的提交粒度 | §5 允许合并；实际为 28.1 一个提交、28.2+28.3 一个提交（中间态不可运行） |
+
+### 11.5 遗留与边界
+
+- `ct-pkg` 不在本机；本相不涉及跨仓迁移（`Vec` / `Map` 的迁出由 Phase 29 记录「ct-pkg 侧待删清单」）。
+- 本相没有新增审查发现，`issues/README.md` 无新增行；DOC-70 仍由 Phase 27 关闭，DOC-69 与 Phase 28 无关。
+- **版本未 bump、未打 tag**：五处 `CTC_VERSION` 与全量 golden 重生待用户批准后以独立 `chore(release)` 处理。
+- 开放项 O1–O7 的状态不变：多约束、`Self`、参数化 trait、`T` 装箱仍未做；泛型 struct 由 Phase 29 交付。

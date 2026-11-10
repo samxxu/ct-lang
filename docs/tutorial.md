@@ -1038,6 +1038,67 @@ ct build walk.ct -o walk && ./walk
 容器协议（`len()` + `get(int)`）与显式绑定名不在本相；细节与诊断见
 [language-spec §4.49](language-spec.md)。
 
+### 10.7 约束泛型：让泛型知道该调用谁
+
+泛型函数对 `T` 一无所知时，连 `a.cmp(&b)` 都调不了。给类型参数加一个 trait 约束，
+模板体就能调用该 trait 的方法；每个具体 struct 各得一份实例，落成裸 C 调用：
+
+```c
+#include <stdio.h>
+
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Num {
+    int v;
+} use Compare;
+
+impl Compare for Num {
+    int cmp(void *other)
+    {
+        struct Num *o = (struct Num *)other;
+        return self->v - o->v;
+    }
+}
+
+T max2<T: Compare>(T a, T b)
+{
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    struct Num p;
+    struct Num q;
+
+    p.v = 3;
+    q.v = 7;
+    printf("%d\n", max2<struct Num>(p, q).v);
+    return 0;
+}
+```
+
+```sh
+ct build max2.ct -o max2 && ./max2
+# 7
+```
+
+- **语法**：`T name<T: Trait>(…)`，单类型参数、单约束、显式实例化；`T: A + B` 直接报错。
+- **约束能回答什么**：模板体内的 `x.m(…)` / `p->m(…)` / `arr[i].m(…)`（含 trait 默认方法）
+  按约束的方法表解析，实参按该签名检查；约束里没有的方法在解析期报错，不会漏到 C。
+- **实例化要满足约束**：类型实参必须是 struct（或指向 struct 的指针），并且 `use Trait`
+  或 `impl Trait for S`；否则在调用点报 L28-5 / L28-6。`impl` 写在调用点之后也算数。
+- **落码是裸调用**：`Num_Compare_vtable.cmp(&a, (&b))`，不读 `__compare_vptr`、不装箱、
+  不改结构体布局；跨单元时依赖单元的生成头只多一行 `extern struct Compare_vtbl …`。
+- **`char *` 不能直接满足约束**（`impl` 只对 struct 生效）：需要字符串比较时用一个 struct
+  包住指针，完整例子见 `examples/21_generic_bound`。
+
+细节见 [language-spec §4.50](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2179,6 +2240,72 @@ ct build walk.ct -o walk && ./walk
 
 The container protocol (`len()` + `get(int)`) and explicit binding names are out of this phase;
 details and diagnostics are in [language-spec §4.49](language-spec.md).
+
+### 10.7 Bounded generics: telling the template which method to call
+
+A template that knows nothing about `T` cannot call `a.cmp(&b)` at all. One trait bound on the type
+parameter gives the body that method; each concrete struct gets its own instance, lowered to a
+plain C call:
+
+```c
+#include <stdio.h>
+
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Num {
+    int v;
+} use Compare;
+
+impl Compare for Num {
+    int cmp(void *other)
+    {
+        struct Num *o = (struct Num *)other;
+        return self->v - o->v;
+    }
+}
+
+T max2<T: Compare>(T a, T b)
+{
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    struct Num p;
+    struct Num q;
+
+    p.v = 3;
+    q.v = 7;
+    printf("%d\n", max2<struct Num>(p, q).v);
+    return 0;
+}
+```
+
+```sh
+ct build max2.ct -o max2 && ./max2
+# 7
+```
+
+- **Syntax**: `T name<T: Trait>(…)` — one type parameter, one bound, explicit instantiation; a
+  `T: A + B` bound is refused.
+- **What the bound answers**: `x.m(…)` / `p->m(…)` / `arr[i].m(…)` in the body (default methods
+  included) resolve against the bound's method table and the arguments are checked against that
+  signature. A method the bound lacks is a parse-time error, never a C-level surprise.
+- **Instances must satisfy the bound**: the type argument is a struct (or a pointer to one) with
+  either `use Trait` or `impl Trait for S`; otherwise L28-5 / L28-6 is reported at the call site.
+  An `impl` placed below the call still counts.
+- **The lowering is a plain call**: `Num_Compare_vtable.cmp(&a, (&b))` — no `__compare_vptr` read,
+  no boxing, no layout change. Across a unit boundary the dependency's header adds only one
+  `extern struct Compare_vtbl …` line.
+- **`char *` cannot satisfy a bound directly** (`impl` only applies to structs): wrap the pointer in
+  a struct; `examples/21_generic_bound` has the complete pattern.
+
+See [language-spec §4.50](language-spec.md) for details.
 
 ### 11. CLI cheat sheet
 

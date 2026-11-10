@@ -2027,6 +2027,43 @@ Phase 26 落地（§4.48）；泛型结构体 / trait / 约束 / 推导 / 多类
 - **不做**（D27-4）：`in` 形式、显式绑定名、迭代器、容器协议（`len()` + `get(int)`）——
   本仓没有 std 容器，协议留给有真实消费者的阶段；非数组容器按上面的 L27-2 拒绝。
 
+#### 4.50 约束泛型（Phase 28，仅 ct-ast）
+
+在 §4.48 的单类型参数上可以写**一个 trait 约束**，模板体内即可直接调用该 trait 的方法：
+
+```c
+trait Compare { int cmp(void *other); }
+
+T max2<T: Compare>(T a, T b) {
+    if (a.cmp(&b) > 0) { return a; }
+    return b;
+}
+
+struct Point { int x; } use Compare;
+/* impl Compare for Point … */
+max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
+```
+
+- 语法 `T name<T: Trait>(…)`：单类型参数、单约束、显式实例化；`T: A + B` 报
+  `only one trait bound is supported`。约束必须是真实的 `.ct` trait：未声明报
+  `unknown trait '<x>' in a generic bound`，`.m.ct` 静态 trait 与内建 `Drop` / `Handback` 报
+  `trait '<x>' cannot bound a type parameter`。
+- **模板体内派发**：接收者类型等于类型参数时（`x.m(…)`、`p->m(…)`、`arr[i].m(…)`，含 trait 默认方法），
+  按约束的方法表解析，arity / 实参按该方法签名检查；约束里没有该方法报
+  `trait '<t>' has no method '<m>'`。节点记为「约束调用」，发射期不复制 AST。
+- **实例化**：`T` 必须是 struct 或指向 struct 的指针（`struct Point` / `struct Point *`）；
+  `int`、`void`、接口等报 `type argument '<x>' cannot satisfy trait '<t>' (not a struct)`；
+  没有 `use Trait` 也没有 `impl Trait for S` 报
+  `type argument '<s>' does not implement trait '<t>'`。检查在单元解析完成后做，因此 `impl`
+  写在调用点之后也算数；`ct check` 与 `ct build` 同文案。
+- **落码**：约束调用发成 `<S>_<Trait>_vtable.<m>(&recv, …)`（值接收者）或
+  `<S>_<Trait>_vtable.<m>(recv, …)`（指针接收者）——裸 C 调用，不读 `__<trait>_vptr`、不装箱、
+  不改结构体布局。实例仍是 `static`，与 §4.48 的命名与可见性一致；跨单元时依赖单元的生成头只新增
+  `extern struct <Trait>_vtbl <S>_<Trait>_vtable;`。
+- 不支持：参数化 trait、多约束、`Self`、约束方法签名里出现类型参数、泛型 struct（Phase 29）、
+  泛型函数 `pub`、跨单元实例共享、装箱。**`char *` 不能直接满足约束**（`impl` 只对 struct 生效）；
+  需要字符串语义时用一个 `struct` 包住指针，见 `examples/21_generic_bound` 的 `Word`。
+
 ---
 
 ## English
@@ -4308,6 +4345,49 @@ int main(void) {
 - **Not implemented** (D27-4): the `in` form, explicit binding names, iterators and the container
   protocol (`len()` + `get(int)`) — there is no std container in this repository, so the protocol
   waits for a phase with a real consumer; a non-array container is refused as above.
+
+#### 4.50 Bounded generics (Phase 28, ct-ast only)
+
+A single trait bound may follow the type parameter of §4.48, and the template body may then call
+that trait's methods directly:
+
+```c
+trait Compare { int cmp(void *other); }
+
+T max2<T: Compare>(T a, T b) {
+    if (a.cmp(&b) > 0) { return a; }
+    return b;
+}
+
+struct Point { int x; } use Compare;
+/* impl Compare for Point … */
+max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
+```
+
+- Syntax `T name<T: Trait>(…)`: one type parameter, one bound, explicit instantiation. `T: A + B`
+  reports `only one trait bound is supported`. The bound must be a real `.ct` trait: an undeclared
+  name reports `unknown trait '<x>' in a generic bound`, while a `.m.ct` static trait and the
+  built-in `Drop` / `Handback` report `trait '<x>' cannot bound a type parameter`.
+- **Body resolution**: when the receiver's type is the type parameter (`x.m(…)`, `p->m(…)`,
+  `arr[i].m(…)`, default methods included), the method is resolved against the bound's method table
+  and its arity / argument types are checked from that signature. A method the bound does not
+  declare reports `trait '<t>' has no method '<m>'`. The node is a *constrained call*; the AST is
+  not copied.
+- **Instantiation**: `T` must be a struct or a pointer to one (`struct Point` / `struct Point *`).
+  `int`, `void`, an interface and the like report
+  `type argument '<x>' cannot satisfy trait '<t>' (not a struct)`; a type with neither `use Trait`
+  nor `impl Trait for S` reports `type argument '<s>' does not implement trait '<t>'`. The check
+  runs once the unit is parsed, so an `impl` written below the call also counts; `ct check` and
+  `ct build` print the same text.
+- **Lowering**: a constrained call becomes `<S>_<Trait>_vtable.<m>(&recv, …)` for a value receiver
+  and `<S>_<Trait>_vtable.<m>(recv, …)` for a pointer receiver — a plain C call. No
+  `__<trait>_vptr` read, no boxing, no layout change. Instances keep the §4.48 naming and
+  visibility; across a unit boundary the dependency's generated header adds only
+  `extern struct <Trait>_vtbl <S>_<Trait>_vtable;`.
+- Out of scope: parameterised traits, multiple bounds, `Self`, a type parameter inside a trait
+  method signature, generic structs (Phase 29), `pub` generic functions, cross-unit instance
+  sharing and boxing. **`char *` cannot satisfy a bound directly** (`impl` only applies to structs);
+  wrap the pointer in a struct — `Word` in `examples/21_generic_bound` shows the pattern.
 
 ### 7. Capacity limits
 
