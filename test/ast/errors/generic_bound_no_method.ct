@@ -1,0 +1,9 @@
+/* L28-7: the bound names the only methods the template body may call. */
+trait Compare {
+    int cmp(void *other);
+}
+
+T pick<T: Compare>(T a)
+{
+    return a.nope();
+}

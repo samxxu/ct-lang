@@ -1,0 +1,14 @@
+/* L28-3 (A7): a `.m.ct` static trait has no vtable slot, so it cannot bound a
+   type parameter. Build mode is required because only a mapping unit can
+   declare one. */
+import lib::lib;
+
+T pick<T: Fac>(T a)
+{
+    return a;
+}
+
+int main(void)
+{
+    return 0;
+}

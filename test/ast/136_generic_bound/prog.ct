@@ -1,0 +1,57 @@
+/* 136 (Phase 28 / A1+A2): one bounded template, two concrete structs. Each
+   instance calls its own `S_Compare_vtable.cmp` slot: no vptr read, no shared
+   instance body, no residual type parameter in the product. */
+#include <stdio.h>
+
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Point {
+    int x;
+} use Compare;
+
+impl Compare for Point {
+    int cmp(void *other)
+    {
+        struct Point *o = (struct Point *)other;
+        return self->x - o->x;
+    }
+}
+
+struct Range {
+    int lo;
+} use Compare;
+
+impl Compare for Range {
+    int cmp(void *other)
+    {
+        struct Range *o = (struct Range *)other;
+        return self->lo - o->lo;
+    }
+}
+
+T max2<T: Compare>(T a, T b)
+{
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    struct Point p;
+    struct Point q;
+    struct Range r;
+    struct Range s;
+
+    p.x = 3;
+    q.x = 7;
+    r.lo = 9;
+    s.lo = 2;
+
+    printf("point %d\n", max2<struct Point>(p, q).x);
+    printf("range %d\n", max2<struct Range>(r, s).lo);
+    return 0;
+}

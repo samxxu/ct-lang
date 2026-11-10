@@ -1,0 +1,53 @@
+/* 146 (Phase 28 / A4): ownership inside a bounded template. The `own` local is
+   released when the instance returns, and a pointer to it is the receiver the
+   vtable slot expects. Every allocation is freed (the ASAN gate runs this). */
+#include <stdio.h>
+#include <stdlib.h>
+
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Box {
+    int n;
+} use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop %d\n", self->n);
+    }
+}
+
+impl Compare for Box {
+    int cmp(void *other)
+    {
+        struct Box *o = (struct Box *)other;
+        return self->n - o->n;
+    }
+}
+
+T max2<T: Compare>(T a, T b)
+{
+    own Box *tmp = malloc(sizeof(struct Box));
+
+    tmp->n = 1;
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    struct Box other;
+
+    other.n = 1;
+    {
+        own Box *p = malloc(sizeof(struct Box));
+
+        p->n = 3;
+        printf("max %d\n", max2<struct Box>(*p, other).n);
+    }
+    return 0;
+}

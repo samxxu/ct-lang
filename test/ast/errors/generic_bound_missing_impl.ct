@@ -1,0 +1,25 @@
+/* L28-6: `Point` never adopts Compare, so the instance is refused at the call
+   site instead of emitting a vtable nobody defines. */
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Point {
+    int x;
+}
+
+T max2<T: Compare>(T a, T b)
+{
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    struct Point p = { 3 };
+    struct Point q = { 7 };
+
+    return max2<struct Point>(p, q).x;
+}

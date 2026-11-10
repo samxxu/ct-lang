@@ -1,0 +1,45 @@
+/* 145 (Phase 28 / A3): a bounded template that also takes the `(fn, env)`
+   closure pair. The bound answers the method call, the pair answers the
+   callback; both are plain C calls and neither is boxed. */
+#include <stdio.h>
+
+trait Compare {
+    int cmp(void *other);
+}
+
+struct Point {
+    int x;
+} use Compare;
+
+impl Compare for Point {
+    int cmp(void *other)
+    {
+        struct Point *o = (struct Point *)other;
+        return self->x - o->x;
+    }
+}
+
+T max2<T: Compare>(T a, T b, int (*fn)(void *env, int v), void *env)
+{
+    if (fn(env, 0) > 0) {
+        return b;
+    }
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    struct Point p;
+    struct Point q;
+    int high;
+
+    p.x = 3;
+    q.x = 7;
+    high = 1;
+
+    printf("%d\n", max2<struct Point>(p, q, (int v) => v + high).x);
+    return 0;
+}

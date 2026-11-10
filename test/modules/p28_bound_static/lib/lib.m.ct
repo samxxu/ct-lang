@@ -1,0 +1,11 @@
+#include <stdlib.h>
+
+namespace lib;
+
+pub trait Fac {
+    int m();
+}
+
+map trait Fac for namespace lib {
+    m() -> rand();
+}

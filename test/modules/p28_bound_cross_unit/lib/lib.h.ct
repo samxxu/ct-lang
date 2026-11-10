@@ -1,0 +1,19 @@
+/* A5: the trait, the struct and its implementation live in the dependency;
+   the template and the instance live in the entry unit. The impl's vtable is
+   exported through the generated header, so the entry unit's instance can
+   call the slot without seeing the implementation body. */
+pub trait Compare {
+    int cmp(void *other);
+}
+
+pub struct Point {
+    int x;
+} use Compare;
+
+impl Compare for Point {
+    int cmp(void *other)
+    {
+        struct Point *o = (struct Point *)other;
+        return self->x - o->x;
+    }
+}

@@ -1476,6 +1476,75 @@ p28_chk generic_bound_unknown "unknown trait 'Nope' in a generic bound"
 p28_chk generic_bound_multi "only one trait bound is supported"
 p28_chk generic_bound_builtin "trait 'Drop' cannot bound a type parameter"
 
+p28_diag generic_bound_missing_impl 24:12 "type argument 'Point' does not implement trait 'Compare'"
+p28_diag generic_bound_nonstruct 16:12 "type argument 'int' cannot satisfy trait 'Compare' (not a struct)"
+p28_diag generic_bound_no_method 8:14 "trait 'Compare' has no method 'nope'"
+p28_chk generic_bound_missing_impl "type argument 'Point' does not implement trait 'Compare'"
+p28_chk generic_bound_nonstruct "type argument 'int' cannot satisfy trait 'Compare' (not a struct)"
+p28_chk generic_bound_no_method "trait 'Compare' has no method 'nope'"
+
+# A `.m.ct` static trait has no vtable, so it cannot bound a type parameter;
+# only build mode can declare one, hence a module fixture.
+if "$work/ct-ast" build --emit-c test/modules/p28_bound_static/prog.ct \
+        -o "$work/p28bs" >"$work/p28bs.out" 2>"$work/p28bs.err"; then
+    bad "p28_static_trait_bound" "expected a non-zero exit"
+elif grep -qF "test/modules/p28_bound_static/prog.ct:6:11: error: trait 'Fac' cannot bound a type parameter" \
+        "$work/p28bs.err"; then
+    ok "p28_static_trait_bound"
+else
+    bad "p28_static_trait_bound" "$(head -2 "$work/p28bs.err")"
+fi
+
+# E28-1: the two value instances each call their own vtable object, and the
+# body carries no interface vptr read (D28/D28-3). E28-4: the instance body
+# names neither the type parameter nor `__<trait>_vptr`.
+rm -rf "$work/p28g136" "$work/p28g137"
+mkdir -p "$work/p28g136" "$work/p28g137"
+if "$work/ct-ast" test/ast/136_generic_bound/prog.ct -o "$work/p28g136/prog.c" \
+        >"$work/p28g136.out" 2>"$work/p28g136.err" \
+   && grep -qF 'static struct Point max2__ct1(struct Point, struct Point);' "$work/p28g136/prog.c" \
+   && grep -qF 'static struct Range max2__ct2(struct Range, struct Range);' "$work/p28g136/prog.c" \
+   && grep -qF 'Point_Compare_vtable.cmp(&a, (&b))' "$work/p28g136/prog.c" \
+   && grep -qF 'Range_Compare_vtable.cmp(&a, (&b))' "$work/p28g136/prog.c" \
+   && ! grep -qF '__ord_vptr' "$work/p28g136/prog.c" \
+   && ! sed -n '/^static struct Point max2__ct1(struct Point a/,/^}/p' "$work/p28g136/prog.c" \
+        | grep -qE '__[a-z]+_vptr'; then
+    ok "p28_bound_value (two structs, one vtable slot each, no vptr read)"
+else
+    bad "p28_bound_value" "$(cat "$work/p28g136.err" 2>/dev/null | head -3)"
+fi
+
+rm -rf "$work/p28g137"
+mkdir -p "$work/p28g137"
+if "$work/ct-ast" test/ast/137_generic_bound_ptr/prog.ct -o "$work/p28g137/prog.c" \
+        >"$work/p28g137.out" 2>"$work/p28g137.err" \
+   && grep -qF 'Point_Compare_vtable.cmp(a, b)' "$work/p28g137/prog.c" \
+   && grep -qF 'Point_Compare_vtable.cmp(&xs[i], (&xs[j]))' "$work/p28g137/prog.c" \
+   && grep -qF 'Point_Compare_vtable.label(&xs[i])' "$work/p28g137/prog.c" \
+   && ! sed -n '/^static struct Point \* maxp__ct1/,/^}/p' "$work/p28g137/prog.c" \
+        | grep -qE '__[a-z]+_vptr'; then
+    ok "p28_bound_ptr (pointer receiver, array element, default method)"
+else
+    bad "p28_bound_ptr" "$(cat "$work/p28g137.err" 2>/dev/null | head -3)"
+fi
+
+# A5: the impl lives in the dependency unit, the template and its instance in
+# the entry unit. The header exports the vtable object only (E28-2).
+rm -rf "$work/p28xu"
+mkdir -p "$work/p28xu"
+if "$work/ct-ast" build --emit-c test/modules/p28_bound_cross_unit/prog.ct \
+        -o "$work/p28xu" >"$work/p28xu.out" 2>"$work/p28xu.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/p28xu"/*.c -o "$work/p28xu/prog" \
+        >"$work/p28xu.cc" 2>&1 \
+   && "$work/p28xu/prog" > "$work/p28xu.run" \
+   && cmp -s "$work/p28xu.run" test/modules/p28_bound_cross_unit/expected.out \
+   && grep -qF 'extern struct Compare_vtbl Point_Compare_vtable;' "$work/p28xu/lib.h" \
+   && grep -qF 'Point_Compare_vtable.cmp(&a, (&b))' "$work/p28xu/prog.c"; then
+    ok "p28_bound_cross_unit (impl in the dependency, instance in the entry)"
+else
+    bad "p28_bound_cross_unit" "$(cat "$work/p28xu.err" "$work/p28xu.cc" 2>/dev/null | head -5)"
+fi
+
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
 # spelling and the consumer's receiver spelling name the same integer type but

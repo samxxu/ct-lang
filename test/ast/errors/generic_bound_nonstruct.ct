@@ -1,0 +1,17 @@
+/* L28-5: `int` is not a struct, so it cannot satisfy a trait bound. */
+trait Compare {
+    int cmp(void *other);
+}
+
+T max2<T: Compare>(T a, T b)
+{
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}
+
+int main(void)
+{
+    return max2<int>(1, 2);
+}
