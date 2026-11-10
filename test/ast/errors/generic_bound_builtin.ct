@@ -1,0 +1,10 @@
+/* L28-3: `Drop` is built in and has no vtable, so it cannot bound a type
+   parameter. */
+struct Box {
+    int v;
+}
+
+T pick<T: Drop>(T a)
+{
+    return a;
+}

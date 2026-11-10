@@ -93,6 +93,10 @@ pub struct Fn {
        type argument gets a monomorphised instance in `ginsts`. */
     int  ntparams;
     char tparam[160];
+    /* Phase 28: the one trait bound of a generic template (`T name<T: Trait>`),
+       empty when the parameter is unbounded. Instances inherit it through the
+       template row, so the satisfaction check reads it off `funcs[ginst.func]`. */
+    char bound[160];
     /* Phase 26: the template's N_FUNC node, so the emitter can monomorphise it
        once per instance without a second AST copy (-1 for a plain row). */
     int  body;

@@ -1444,6 +1444,38 @@ p26_chk generic_tparam_value_add "type parameter 'T' cannot be used as a value"
 p26_chk generic_tparam_array_dim "type parameter 'T' cannot be used in an array dimension"
 p26_chk generic_template_value "generic function 'id' needs a type argument"
 
+# Phase 28 (28.1): one optional trait bound on a type parameter. The bound is
+# resolved and validated while the declaration is parsed, before any instance
+# exists, so the negatives run in compile mode and again through `ct check`
+# (E28-3 / E28-7 share one wording).
+p28_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p28d.c" \
+            >"$work/p28d.out" 2>"$work/p28d.err"; then
+        bad "p28_diag_$1" "expected a non-zero exit"
+    elif grep -qF "test/ast/errors/$1.ct:$2: error: $3" "$work/p28d.err"; then
+        ok "p28_diag_$1"
+    else
+        bad "p28_diag_$1" "$(head -2 "$work/p28d.err")"
+    fi
+}
+p28_diag generic_bound_unknown 6:11 "unknown trait 'Nope' in a generic bound"
+p28_diag generic_bound_multi 10:19 "only one trait bound is supported"
+p28_diag generic_bound_builtin 7:11 "trait 'Drop' cannot bound a type parameter"
+
+p28_chk() {
+    if "$work/ct-ast" check "test/ast/errors/$1.ct" \
+            >"$work/p28c.out" 2>"$work/p28c.err"; then
+        bad "p28_check_$1" "expected a non-zero exit"
+    elif grep -qF "$2" "$work/p28c.err"; then
+        ok "p28_check_$1"
+    else
+        bad "p28_check_$1" "$(head -2 "$work/p28c.err")"
+    fi
+}
+p28_chk generic_bound_unknown "unknown trait 'Nope' in a generic bound"
+p28_chk generic_bound_multi "only one trait bound is supported"
+p28_chk generic_bound_builtin "trait 'Drop' cannot bound a type parameter"
+
 # P20-03 regression: the arity pre-check must fold integer aliases exactly as
 # the emitter does. Each row is `host|receiver|alias-decl`: the `.m.ct` host
 # spelling and the consumer's receiver spelling name the same integer type but

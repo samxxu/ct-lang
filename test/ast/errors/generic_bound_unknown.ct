@@ -1,0 +1,9 @@
+/* L28-1: a bound must name a declared trait. `Nope` is not one. */
+trait Compare {
+    int cmp(void *other);
+}
+
+T pick<T: Nope>(T a)
+{
+    return a;
+}

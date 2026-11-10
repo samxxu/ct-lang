@@ -978,6 +978,7 @@ impl ParseOps for Parser {
         char cname[MAX_TEXT];
         char gns[MAX_TEXT];
         char tparam[MAX_TEXT];
+        char bound[MAX_TEXT];
         int is_generic;
         (void)self;
 
@@ -1004,6 +1005,7 @@ impl ParseOps for Parser {
            monomorphised at the call site (D26-1/D26-2). */
         is_generic = 0;
         tparam[0] = 0;
+        bound[0] = 0;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
             if (is_pub)
                 return self->sup->fail("generic functions cannot be pub");
@@ -1012,6 +1014,40 @@ impl ParseOps for Parser {
                 return self->sup->fail("expected a type parameter name");
             snprintf(tparam, sizeof tparam, "%s", self->lex->toktext);
             self->sup->lex_next();
+            /* Phase 28 (D28-1): one optional trait bound, written C++-style
+               between the parameter and `>`: `T max2<T: Compare>(T a, T b)`.
+               The trait is resolved and validated here, so the template body
+               and every instance work from one checked spelling. */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
+                char raw[MAX_TEXT];
+                char msg[MAX_TEXT];
+                int bline, bcol, bi;
+                self->sup->lex_next();
+                if (self->lex->tok != T_ID)
+                    return self->sup->fail("expected a trait name after ':'");
+                bline = self->lex->tokline;
+                bcol = self->lex->tokstart - self->lex->lstart + 1;
+                snprintf(raw, sizeof raw, "%s", self->lex->toktext);
+                self->sup->lex_next();
+                if (self->sup->resolve_type(raw, bound, sizeof bound) != 0) return -1;
+                bi = self->sym->find_trait(bound);
+                if (bi < 0 && strcmp(bound, "Drop") != 0 && strcmp(bound, "Handback") != 0) {
+                    snprintf(msg, sizeof msg, "unknown trait '%s' in a generic bound", raw);
+                    return tool::diag::ct_sem_error(bline, bcol, msg, self->mem->path);
+                }
+                /* L28-3: a `.m.ct` static trait has no vtable slot, and the two
+                   built-in traits have no vtable at all; a bound would emit a
+                   symbol nobody defines. */
+                if ((bi >= 0 && self->sym->traits[bi].is_static)
+                    || strcmp(bound, "Drop") == 0 || strcmp(bound, "Handback") == 0) {
+                    snprintf(msg, sizeof msg, "trait '%s' cannot bound a type parameter", raw);
+                    return tool::diag::ct_sem_error(bline, bcol, msg, self->mem->path);
+                }
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "+") == 0)
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "only one trait bound is supported", self->mem->path);
+            }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
                 return self->sup->fail("only one type parameter is supported");
             if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
@@ -1222,6 +1258,8 @@ impl ParseOps for Parser {
             self->sym->funcs[fi].is_static = 1;   /* D26-4: instances stay in this unit */
             snprintf(self->sym->funcs[fi].tparam, sizeof self->sym->funcs[fi].tparam,
                      "%s", tparam);
+            snprintf(self->sym->funcs[fi].bound, sizeof self->sym->funcs[fi].bound,
+                     "%s", bound);
         }
         f = self->sup->new_node(N_FUNC);
         if (f < 0) {

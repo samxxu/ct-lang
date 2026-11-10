@@ -1,0 +1,13 @@
+/* L28-2: only one trait bound is supported; `+` is refused. */
+trait Compare {
+    int cmp(void *other);
+}
+
+trait Other {
+    int other();
+}
+
+T pick<T: Compare + Other>(T a)
+{
+    return a;
+}
