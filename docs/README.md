@@ -25,6 +25,7 @@
 | [patterns.md](patterns.md) | 设计模式在现有特性下的写法 | 判断「要不要新增语言特性」 |
 | [memory-guide.md](memory-guide.md) | 内存实践：`own` / `borrow` / 工厂 / 池 / arena | 写持有资源的代码 |
 | [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、命名 / 版本 / tag、索引收录、许可证、常见失败 | 发布或消费一个包 |
+| [modern-oo-gap.md](modern-oo-gap.md) | 需求侧评估：以现代化 OO 为参照的差距清单、battle 记录与三档结论 | 判断「还缺哪些语言特性」 |
 
 ### 计划与台账
 
@@ -79,6 +80,7 @@
 | [patterns.md](patterns.md) | design patterns under today's features | judging whether a new feature is needed |
 | [memory-guide.md](memory-guide.md) | memory practice: `own` / `borrow` / factories / pools / arena | writing resource-owning code |
 | [package-guide.md](package-guide.md) | package authoring: `ct.pkg` keys, names / versions / tags, the index, licensing, common failures | publishing or consuming a package |
+| [modern-oo-gap.md](modern-oo-gap.md) | requirements-side assessment: gaps against a modern-OO reference, battle records, and a three-tier verdict | deciding "which language features are still missing" |
 
 ### Plans and ledgers
 

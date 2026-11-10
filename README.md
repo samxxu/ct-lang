@@ -55,7 +55,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`）
 - **诊断与工具**：`#line` 溯源、`--diagnostics=json|text`、多错误恢复、增量缓存、`ct get` / `ct install`
 - **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26；泛型结构体 / trait / 约束仍不支持）
-- **明确不做**：继承、泛型结构体 / trait / 约束、默认编译路径的类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）
+- **明确不做**：继承、默认编译路径的类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）；泛型约束与泛型 struct 截至目前未实现，已排入 Phase 28（约束）与 Phase 29（泛型 struct）；泛型 trait 未实现，未排期
 
 每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准；写法范例见 [docs/patterns.md](docs/patterns.md)，
 内存约定见 [docs/memory-guide.md](docs/memory-guide.md)。
@@ -138,7 +138,7 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **passthrough**: `#ct-raw` / `#ct-endraw` raw blocks (macros and hand-written C land in the generated `.c` byte for byte)
 - **diagnostics and tooling**: `#line` traceability, `--diagnostics=json|text`, multi-error recovery, incremental cache, `ct get` / `ct install`
 - **generic functions**: `T name<T>(…)` + `name<int>(…)`, monomorphised at compile time (Phase 26; generic structs / traits / constraints are still out of scope)
-- **not done by design**: inheritance, generic structs / traits / constraints, type checking on the default compile path (`ct check` runs bounded checks only), optimisation (the language is not final until `1.0.0`)
+- **not done by design**: inheritance, type checking on the default compile path (`ct check` runs bounded checks only), optimisation (the language is not final until `1.0.0`); generic constraints and generic structs are not implemented yet and are scheduled for Phase 28 (constraints) and Phase 29 (generic structs); generic traits are not implemented and not scheduled
 
 The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idioms in
 [docs/patterns.md](docs/patterns.md); ownership conventions in [docs/memory-guide.md](docs/memory-guide.md).
