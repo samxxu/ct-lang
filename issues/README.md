@@ -319,6 +319,7 @@
 | SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 `tok_is_type_name()` + 无括号形态；复核 `verified`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
 | SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `verified`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |
 | SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam`（已修，`v0.26.3`：`T_ID` 入口统一守卫 + 4 条值位置负例；复核 `verified`） | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
+| SH-65 | Medium | trait / impl 方法收不了闭包实参：常规 `.method(...)` 未计 `closure_arg_count` / 未走 `closure_arg_check`，pair 形报 arity、单函数指针形 check 静默而 compile 落 `unknown expression node`；L0 也不能解析带函数指针参数的 trait 方法（**open**，09/10/12 的 OO 化根因） | [sh65-closure-as-method-arg.md](selfhost/sh65-closure-as-method-arg.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -1307,6 +1308,9 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 | SH-61 | 待变参 trait WIP 落地 | `Parser.h.ct:2061/2266` 仍拒 `a trait method cannot be variadic` | **blocked**（未修） |
 | CI-7 | 待明确指令 | `git tag -l v0.19.0` 为空 | **blocked**（未修） |
 | STD-1 | 已决策 | 实现属 ct-pkg 的 `std` 包，本仓不跟 | 保持（越界不做） |
+
+同一轮新增 [SH-65](selfhost/sh65-closure-as-method-arg.md)：trait / impl 方法收不了闭包实参
+（09/10/12 的 OO 化根因），按「现状 / 复现 / 影响 / 建议方向」落账，语言侧本轮不动。
 
 门禁：`./test/run.sh`、`bash selfhost/check-all.sh`、`python3 test/docs/check-docs.py` 全绿。
 
