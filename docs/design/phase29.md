@@ -29,9 +29,9 @@
 | `Map` 的键类型 | 白名单 `int` / `long` / `char *`；不做 `Hash` / `Eq` 约束（Phase 28 的约束方法签名装不下 `T`） |
 | 容器拷贝 | **移动语义 + 显式 `retain()`**：变量间直接拷贝硬错；从函数调用初始化/赋值视为移交；`release()` 递减引用计数 |
 | 自动析构 | 本相**不做**：容器不自动 `release`，`own` / `borrow` 值不得存入容器；自动析构留给后续阶段（触发信号见 §9） |
-| `std` 迁移 | `lib/std/` 成为唯一事实源；`ct-pkg/std` 冻结在 `v0.1.x` 供旧编译器使用，索引标为 superseded；跨仓动作单列（§2.7） |
+| `std` 迁移 | `Vec` / `Map` 从 `ct-pkg/std` **迁入** `lib/std/`（搬迁，不计净增）；`str` / `io` / `math` 等其余模块**留在 `ct-pkg/std` 不动**；ct-pkg 侧同版本删除 `Vec` / `Map`，避免两份实现并存（§2.7） |
 | 闭包与 `Callable` | **本相零依赖**：D21-5（非逃逸、栈上环境）与 D21-13（闭包是绑定）原样有效；`Callable` 内建**延后**，不在本相也不在下一相 |
-| 量级（估算） | 编译器 **900–1550 行**；内置 CT 库 **600–1000 行**；夹具/门禁 **400–700 行**；文档 **250–450 行**。校准见 §7 |
+| 量级（估算） | 编译器**新增 900–1550 行**；`Vec`/`Map` **迁入 400–700 行（搬迁，净增 0）**；夹具/门禁 **400–700 行**；文档 **250–450 行**。校准见 §3.3–3.4 |
 
 ---
 
@@ -43,7 +43,7 @@
 | --- | --- |
 | Phase | 29 |
 | 目标版本 | `v0.29.0`（Phase 28 收口 `v0.28.0` 后；本相不在 `v0.26.x` / `v0.28.x` 内夹带） |
-| 改动边界 | `selfhost/ct-ast/**`、新增 `lib/std/**`、`test/**`、`examples/**`、`docs/**`、`AGENTS.md`；L0/L1/L2 只允许收口时改 `CTC_VERSION` |
+| 改动边界 | `selfhost/ct-ast/**`、新增 `lib/std/**`（迁入 `Vec`/`Map`）、`test/**`、`examples/**`、`docs/**`、`AGENTS.md`；L0/L1/L2 只允许收口时改 `CTC_VERSION` |
 | 冻结层 | `selfhost/l0/ctc.c`、`selfhost/l1/**`、`selfhost/l2/**` 只读（版本串除外）；新能力只落 `selfhost/ct-ast/**` 与 `lib/std/**` |
 | 判据冻结 | E29-1…E29-13 与 L29-1…L29-18 在首个实现提交前冻结；此后只向判据靠拢 |
 
@@ -69,7 +69,7 @@
 | S7 | 容器 API：`Vec` 的 `len/get/set/push/pop/clear/retain/release`；`Map` 的 `len/put/get/remove/clear/entry/retain/release`；缓冲头引用计数见 §2.4 |
 | S8 | `foreach` 容器协议：`Vec` → `len()` + `get(int)`；`Map` → `len()` + `entry(int)`；`item` 为元素/条目值拷贝 |
 | S9 | `foreach` 绑定：统一 `item`（元素值 / `MapEntry`）；数组与 `Vec` **同时规定** `item` 与只读 `i`；`Map` 用 `item.key` / `item.value`，体内使用 `i` 硬错（L29-18）；`Map` 按插入序遍历 |
-| S10 | `std` 迁入：`str` / `io` / `math` / `mem` / 容器等从 `ct-pkg/std` 迁移到 `lib/std/`；内置路径优先于 `vendor/` |
+| S10 | `Vec` / `Map` 迁入：从 `ct-pkg/std` 搬入 `lib/std/`，原处同版本删除；`str` / `io` / `math` 等其余模块**不动**；内置路径优先于 `vendor/` |
 | S11 | 诊断 L29-1…L29-18（见 §2.6），编译路径与 `ct check` 共用 |
 | S12 | 正例/负例夹具、`check-ast.sh` 断言、样例 `examples/22_foreach_map/` 与 `examples/23_generic_stack/`，以及 spec / tutorial / AGENTS 更新 |
 | S13 | **无特例保证**：内置 `Vec`/`Map` 与用户自定义泛型 struct 走同一 `StructInst` 表、同一编码器、同一布局发射与 `.h` 导出；错误检查（参数个数、保留名、深度、命名碰撞）对两者是同一段代码（E29-12） |
@@ -92,10 +92,11 @@
 | 修改 `MAX_TEXT` / 引入 `type_key` 之外的类型身份 | `MAX_TEXT 160` 先按名长预算约束（L29-6）；扩容是独立迁移 |
 | 改 `ct-pkg` 仓库 | 本仓只记录边界与对齐方案；跨仓动作需单独授权（§2.7） |
 
-> **范围量级（估算，非实测）**：Phase 28 + Phase 29 合计新增约 **2,030–3,600 行**
-> （含内置库、夹具、文档）；其中 ct-ast 编译器代码 **1,100–1,920 行**、内置库 600–1,000 行。
-> 泛型累计（Phase 26 已落地的 +303 + 28 + 29）占 ct-ast 现有 22,798 行的
-> **6.2%–9.8%（仅编译器代码）** 或 **8.8%–14.1%（含 `lib/std`）**。
+> **范围量级（估算，非实测）**：Phase 28 + Phase 29 **新增**约 **2,030–3,600 行**
+> （编译器 + 夹具 + 文档，**不含迁入代码**）；其中 ct-ast 编译器代码 **1,100–1,920 行**。
+> `Vec` / `Map` 从 `ct-pkg/std` **迁入 400–700 行**，属**搬迁、不计入净增**；原处同版本删除，
+> 避免两份实现并存。泛型累计（Phase 26 的 +303 + 28 + 29）为 **1,403–2,223 行**，
+> 占 ct-ast 现有 22,798 行的 **6.2%–9.8%**（分母不变）。
 > 逐单元区间、`MAX_*` / `MAX_TEXT` 影响与校准误差见 **§3.4**。
 
 ### 1.4 交付物清单（每项一个路径）
@@ -110,14 +111,14 @@
 | D6 | `selfhost/ct-ast/frontend/parse/Stmt.h.ct` | `foreach` 接受内置容器、`Map` 的 `item.key`/`item.value` |
 | D7 | `lib/std/vec.ct` | 内置 `Vec<T>` 与实现 |
 | D8 | `lib/std/map.ct` | 内置 `Map<K, V>`、`MapEntry<K, V>` 与实现 |
-| D9 | `lib/std/mem.ct` | malloc / realloc / free 的 `.m.ct` 映射 |
-| D10 | `lib/std/str.ct`、`io.ct`、`math.ct` 等 | 从 `ct-pkg/std` 迁入的既有模块（逐文件搬运，不重写语义） |
+| D9 | `lib/std/mem.ct` | `Vec` / `Map` 直接依赖的 malloc / realloc / free `.m.ct` 映射；**不搬** `ct-pkg/std` 的公开 `mem` 模块 |
+| D10 | `ct-pkg/std` 删除 `Vec` / `Map`（**跨仓，需授权**） | 原处同版本移除，避免两份实现并存；`str` / `io` / `math` 等**不动** |
 | D11 | `lib/std/README.md` | 内置层边界、与 `ct-pkg/std` 的版本对齐、保留名清单 |
 | D12 | `test/ast/138_generic_struct/`、`139_generic_struct_two/`、`144_generic_struct_user/` | 正例：单/双类型参数、struct 实参、嵌套实参；**144 是用户自定义 `Stack<T>` / `Box<T>`**，与内置容器走同一路径（E29-12） |
 | D13 | `test/ast/140_foreach_vec/`、`141_foreach_map/` | 正例：`foreach` 遍历 `Vec` 与 `Map`（`item.key`/`item.value`） |
 | D14 | `test/ast/errors/generic_struct_*.ct`（10 条） | 负例：参数过多、禁用实参、深度超限、命名碰撞、保留名、键类型不支持、容器拷贝、`own`/`borrow` 入容器、**内置与用户泛型 struct 的参数个数检查走同一路径（2 条）** |
 | D15 | `test/ast/errors/foreach_container_*.ct`（5 条） | 负例：非容器、缺 `get`/`entry`、接口元素、嵌套容器元素、`Map` 体内用 `i` |
-| D16 | `test/modules/p29_builtin_std/` | 正例：不 `ct get` 即 `import std::str`；`vendor/std` 遮蔽告警 |
+| D16 | `test/modules/p29_builtin_std/` | 正例：不 `ct get` 即用 `Vec`/`Map`；`vendor/std` 遮蔽告警；`import std::str` 仍需 `ct get`（负例） |
 | D17 | `selfhost/check-ast.sh` | Phase 29 门禁块：红证、正例运行、生成 C 断言、负例文案 |
 | D18 | `examples/22_foreach_map/` | 样例：`Vec<int>`、`Vec<Point>`、`Map<char *, int>` 各遍历一遍；`Map` 打印 `item.key=item.value`，输出是插入序；`Vec` 同时演示只读 `i` |
 | D19 | `examples/23_generic_stack/` | 样例：**用户自定义** `struct Stack<T> { T items[8]; }` 与 `struct Pair<T, U>`，显式实例化 `Stack<int>` / `Stack<char *>`，证明泛型 struct 不是只对 `Vec`/`Map` 生效（E29-12） |
@@ -138,13 +139,13 @@
 | E29-2 | 跨单元：`.h` 携带单态化结构体定义；两个单元各自用 `Pair<int>` 时布局逐字段一致；不出现同名不同布局 | `test/modules/p29_generic_struct/` 构建 + 生成 `.h` 断言 + 布局比对脚本 |
 | E29-3 | **`foreach` 能遍历内置 `Map`**：夹具 141 与样例 22 编译、运行、输出逐字节匹配；`item.key` / `item.value` 各自取到正确类型；`Vec` 的 `item` 遍历同时覆盖；**`Map` 输出顺序为插入序**，重复运行与两次编译产物一致 | `bash selfhost/check-ast.sh` 的 Phase 29 块 + `./test/run.sh` 跑 `examples/22_foreach_map` + 两次构建 `cmp` |
 | E29-4 | `foreach` 容器语义：`item` 是值拷贝（块内改写不回写，与 Phase 27 数组一致）；数组 / `Vec` **同时**有 `item` 与只读 `i`，`i` 不可重声明（L29-16/17）；`Map` 体内使用 `i` 报 L29-18；长度在循环前快照一次（沿用 D27-7）；`break` / `continue` / `return` 与数组形态一致；非容器与缺方法的负例各只报一条 L29 | 夹具 140/141 + `foreach_container_*` 负例表 |
-| E29-5 | 内置层可用：不执行 `ct get std` 时 `import std::str;` / `import std::io;` 可编译；`Vec` / `Map` 无需 import；`vendor/std` 存在时给一条遮蔽告警且仍用内置实现 | `test/modules/p29_builtin_std/` + 告警文案断言 |
+| E29-5 | 内置层只覆盖容器：不执行 `ct get std` 时 `Vec` / `Map` 可直接使用（无需 import）；**`std::str` / `std::io` / `std::math` 仍需 `ct get std`**（本相不迁）；`vendor/std` 存在时给一条遮蔽告警且仍用内置 `Vec`/`Map` | `test/modules/p29_builtin_std/` + 告警文案断言；另断言 `import std::str;` 在无 vendor 时仍失败 |
 | E29-6 | 容器 API 正例：`push` / `get` / `set` / `pop` / `clear` / `retain` / `release` 与 `put` / `get` / `remove` / `entry` 的返回值和边界行为符合 §2.4；`retain` 后两个句柄都能读，`release` 到 0 后不重复释放 | `test/ast/142_vec_api/`、`143_map_api/` 运行输出 + ASAN 门禁 |
 | E29-7 | 十条泛型 struct 负例（含 2 条「内置 / 用户泛型 struct 无特例」）与五条 `foreach` 负例各自只产生一条 L29 错误，文案与 `file:line:col` 精确匹配；基线 `v0.28.0` 对同一夹具给出不同结果（红证非空转） | `check-ast.sh` 的 `"fixture\|line:col\|message"` 表 + §3.1 基线记录 |
 | E29-8 | 非泛型 golden 逐字节不变；既有 `check-ast` 断言零回归；`check-warnings` 零新增告警 | `check-goldens.sh` / `check-ast.sh` 汇总 `0 failed` |
 | E29-9 | 11 道硬门禁全绿；`ct check` 与 `ct build` 对负例同文案 | `bash selfhost/check-all.sh` 末行 |
 | E29-10 | 文档：spec / tutorial / AGENTS 已更新；样例 22–25 已进 `examples/README.md` 与 `test/run.sh`；文档门禁绿 | `python3 test/docs/check-docs.py` + `./test/run.sh` |
-| E29-11 | 跨仓边界：本仓不修改 `ct-pkg`；`lib/std/README.md` 写明内置层优先、旧包冻结、版本对齐规则 | 文件存在 + 文案断言（不联网） |
+| E29-11 | 跨仓边界：本仓不修改 `ct-pkg`；`lib/std/README.md` 写明**只迁 `Vec`/`Map`、其余模块不动**、旧包同版本删除、版本对齐规则 | 文件存在 + 文案断言（不联网） |
 | E29-12 | **无特例**：内置 `Vec`/`Map` 与用户自定义泛型 struct 共用同一 `StructInst` 表、同一编码器与同一 `.h` 导出；负例 `generic_builtin_arity.ct`（`Vec<int, int>`）与 `generic_struct_user_arity.ct`（`Stack<int, int, int>`）命中**同一** L29-2 文案与同一诊断函数；`Stack<int>` 的实例名遵循同一编码规则（`Stack_int`），`.h` 携带同一形态的单态化定义 | `check-ast.sh` 的 E29-12 块：两条负例文案逐字相同 + `grep` 生成名 + `.h` 定义比对 |
 | E29-13 | **样例覆盖矩阵每行都有可运行样例**：B1–B9 逐行有 `expected.out`、`//@ct-requires: ct-ast`，进 `test/run.sh` 或 `check-ast.sh` 语料；每行有对应负例或产物断言；B9 的「本相不做」必须写明理由，不能留空；不允许用 `/tmp` 探针替代 | §1.5.1 矩阵逐行核对 + `test/run.sh` / `check-ast.sh` 汇总 |
 
@@ -277,7 +278,7 @@ impl<T> Pair<T, int> {
 
 ### 2.3 内置层与 `Vec` / `Map` 的形态
 
-**内置层**：`lib/std/` 是本仓的新顶层目录，随编译器发行。加载顺序固定为
+**内置层**：`lib/std/` 是本仓的新顶层目录，但**只放**内置 `Vec` / `Map`（含 `MapEntry`）及其直接依赖（`mem.ct`）；`std` 的其余模块不在本仓。加载顺序固定为
 **内置层 → 用户 import → `vendor/`**；内置层里的 `Vec` / `Map` / `MapEntry` 无需 import 即可见。
 `lib/std/` 内的模块仍是普通 CT 源码，遵循 `.h.ct` 只放类型、`.m.ct` 只放映射的既有规则。
 
@@ -412,13 +413,13 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 
 | 项 | 结论 |
 | --- | --- |
-| 本仓角色 | `lib/std/` 成为标准库唯一事实源；随编译器 `v0.29.0` 发行；`Vec` / `Map` 无需 import |
-| `ct-pkg/std` 角色 | **冻结**在 `v0.1.x`，供 `< v0.29.0` 的编译器使用；不再新增模块、不再修语义 bug（只修安全问题需单独授权） |
-| 索引 | `ct-pkg/index` 的 `std` 条目保留并标为 `superseded by the compiler built-in std`；不删除，避免旧项目 `ct get` 失败 |
-| 版本对齐 | 内置层不单独发 semver；API 版本 = 编译器版本（`v0.29.0`）。`lib/std/README.md` 记录「编译器版本 → 模块清单」 |
+| 本仓角色 | `lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）及其直接依赖**，不是整个 `std` 的新家；`Vec` / `Map` 随编译器 `v0.29.0` 发行、无需 import |
+| `ct-pkg/std` 角色 | **只移除 `Vec` / `Map` 两个模块**；`str` / `io` / `math` 等其余模块原样保留、继续维护。移除后发一个包版本（major/minor 待跨仓授权） |
+| 索引 | `ct-pkg/index` 的 `std` 条目**保留为在用**，只更新到「已移除 `Vec`/`Map`」的版本；**不标 superseded**（std 其余模块仍由它供） |
+| 版本对齐 | 内置 `Vec` / `Map` 的 API 版本 = 编译器版本（`v0.29.0`）；`ct-pkg/std` 其余模块继续走自己的包版本。`lib/std/README.md` 记录「编译器版本 → 内置容器 API」 |
 | 重复导入 | 内置层优先；`vendor/std` 存在时 L29-W1 告警并忽略其同名模块；不把两者同时编入 |
-| 跨仓动作 | **本轮不做**。需要 ct-pkg 仓授权后才能改索引与冻结包；本仓只记录对齐方案与验收口径 |
-| 迁移顺序 | 先 `mem` / `str` / `io` / `math` 等无状态模块，再 `Vec` / `Map`；每迁一个模块，同一提交里把旧包的 `test/std` 对照夹具搬到 `test/builtin/` |
+| 跨仓动作 | **本轮不做**。需要 ct-pkg 仓授权后才能删除 `Vec`/`Map` 并发布新版本；本仓只记录对齐方案与验收口径 |
+| 迁入原则 | **只搬 `Vec` / `Map`（最小直接依赖随迁），不搬 `str` / `io` / `math`**；原处删除与版本发布在同一跨仓动作里完成，禁止两份实现并存 |
 
 ### 2.8 与闭包 / `Callable` 的边界
 
@@ -478,7 +479,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | `struct Box<T> { T v; }` | 解析泛型 struct | `expected ';' after the struct body` 一类硬错；无类型参数分支 |
 | `Box<int> b;` | 实例化 | `unknown type 'Box<int>'` |
 | `foreach (m)`（`m` 是 `std::map` 或 `Map`） | 容器遍历 | `foreach needs an array; 'm' is not iterable`（L27-4） |
-| `import std::str;` 但未 `ct get std` | 内置层 | 找不到单元（内置层不存在） |
+| `import std::str;` 但未 `ct get std` | 内置层 | 找不到单元（内置层只含 `Vec`/`Map`，不含 `std::str`） |
 
 红证在首个实现提交前用当时 HEAD 重新采集，写入 `check-ast.sh` 的 Phase 29 块。
 
@@ -495,9 +496,9 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | L6 | 容器移动语义检查（L29-9/10/11） | 80–150 |
 | L7 | 诊断 L29-1…L29-14 | 50–100 |
 | **编译器小计** |  | **900–1550** |
-| L8 | `lib/std/vec.ct` / `map.ct` / `mem.ct` | 400–700 |
-| L9 | `str` / `io` / `math` 等迁移（逐文件搬运，不计重写） | 200–300 |
-| **内置库小计** |  | **600–1000** |
+| L8 | `lib/std/vec.ct` / `map.ct`（**从 `ct-pkg/std` 迁入，非新增**） | 400–700（搬迁） |
+| L9 | `ct-pkg/std` 侧删除 `Vec` / `Map` | 跨仓动作，本仓不计 |
+| **内置库小计（净增）** |  | **0**（搬迁 400–700，不计入新增） |
 | G | 正例 6 + 跨单元 1 + 负例 11 + 门禁断言 | 400–700 |
 | D | spec / tutorial / AGENTS / `lib/std/README.md` | 250–450 |
 
@@ -509,10 +510,10 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | Phase 25（闭包进静态映射） | +304 / −44 | +431 / −74 | 改解析 + 落码，复用既有 ABI |
 | Phase 26（泛型函数） | +303 / −7 | +187 / −83 | 单类型参数 + 单态化，与本相 L0–L3 同源 |
 | Phase 27（`foreach`） | +391 / −36 | +238 / 0 | 语句展开 + 诊断，与本相 L5 同源 |
-| **Phase 29（本相）** | **900–1550（估算）** | **400–700（估算）** | 约为 Phase 26 的 3–5 倍：多了布局、命名、内置库、`foreach` 协议、跨单元 `.h` |
+| **Phase 29（本相）** | **900–1550（估算）** | **400–700（估算）** | 约为 Phase 26 的 3–5 倍：多了布局、命名、容器迁入、`foreach` 协议、跨单元 `.h` |
 
 结论：本相**不是单切片能收口**的相，必须按 §5 的 29.1–29.7 分片，每片独立可验证；
-编译器部分与内置库部分可以在同一相内并行，但门禁必须分块（泛型 struct / 内置层 / `foreach Map`）。
+编译器部分与容器迁入部分可以在同一相内并行，但门禁必须分块（泛型 struct / 内置层 / `foreach Map`）。
 
 ### 3.4 按单元拆分的总量估算（Phase 28 + Phase 29，相对 `v0.26.4`）
 
@@ -535,11 +536,16 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | `tool/pkg/Pkg.h.ct` | 改既有（2,021） | 0 | +0~20 | +0~20 | 仅路径与遮蔽检测（**低置信**；本仓不改 `ct-pkg`） |
 | `runtime/arena/Arena.h.ct` | 改既有（154） | 0 | +0~15 | +0~15 | 临时拼写缓冲（**低置信**） |
 | `main.ct` | 改既有（119） | 0 | +0~10 | +0~10 | 内置层根路径注入 |
-| `lib/std/**`（`vec.ct` / `map.ct` / `mem.ct` + 迁移） | **新增文件** | 0 | +600~1000 | +600~1000 | 内置 `Vec`/`Map`/`MapEntry` 与 `std` 迁移 |
+| `lib/std/**`（`vec.ct` / `map.ct`，**从 `ct-pkg/std` 迁入**） | **搬迁（非新增）** | 0 | 0（搬迁 400~700） | 0 | `Vec`/`Map`/`MapEntry`；原处同版本删除，禁止两份实现并存 |
 | **编译器小计（ct-ast 内）** |  | **190~395** | **910~1525** | **1,100~1,920** | 与 §3.2 的 900–1550 同量级 |
 | `test/ast/**`、`test/ast/errors/**`、`test/modules/**`、`check-ast.sh` 断言 | 改 / 新增 | +200~350 | +400~700 | +600~1,050 | 正例、负例、覆盖矩阵、跨单元、红证 |
 | `docs/**`、`AGENTS.md` | 改既有 | +80~180 | +250~450 | +330~630 | spec / tutorial / 本卡 / 索引 |
-| **总计（含库、夹具、文档）** |  | **470~925** | **1,560~2,675** | **2,030~3,600** | 不含版本收口的 golden 重生 |
+| **总计（编译器 + 夹具 + 文档；不含迁入代码）** |  | **470~925** | **1,560~2,675** | **2,030~3,600** | 不含版本收口的 golden 重生；`lib/std` 的 400~700 是搬迁，不计入 |
+
+> **口径说明（2026-11-10 更正）**：早先的「内置库 +600~1,000」把 `str`/`io`/`math` 的
+> 200~300 行也算进了迁移；用户裁定 **std 其余模块一律不动**，只剥离 `Vec`/`Map`，因此迁入量收敛为
+> **400~700 行**，且属**搬迁、不计净增**。`+600~1,000` 不是新写的编译器代码，不并入编译器增量；
+> 编译器侧只增加「内置层加载」（已计入 `Module.h.ct` 的 +60~100）。
 
 **累计泛型相关行数（相对 `v0.26.4`）**
 
@@ -548,11 +554,13 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | Phase 26 已落地（泛型函数，实测 +303） | 303 | 1.3% |
 | Phase 28（本表，估算） | 190~395 | 0.8%~1.7% |
 | Phase 29 编译器部分（本表，估算） | 910~1,525 | 4.0%~6.7% |
-| **泛型累计（仅编译器代码）** | **1,403~2,223** | **6.2%~9.8%** |
-| Phase 29 内置库 `lib/std/**` | 600~1,000 | 2.6%~4.4% |
-| **泛型累计（代码 + 内置库）** | **2,003~3,223** | **8.8%~14.1%** |
+| **泛型累计（编译器新增代码）** | **1,403~2,223** | **6.2%~9.8%** |
+| `Vec`/`Map` 迁入（来自 `ct-pkg/std`） | 搬迁 400~700（**净增 0**） | —（不计入占比） |
 | 夹具 / 门禁（不计入 ct-ast 占比） | 600~1,050 | — |
 | 文档（不计入 ct-ast 占比） | 330~630 | — |
+
+> 分母固定为 `selfhost/ct-ast` 的 **22,798 行**，不因迁入而改变；迁入代码在 ct-pkg 侧已有，
+> 不计入本仓净增，也不进分子。若未来把 `lib/std/` 计入编译器体量，需另立口径并重算。
 
 **`MAX_*` / `MAX_TEXT` 影响**
 
@@ -593,7 +601,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 2. 编码表双向校验，冲突即 L29-5；
 3. 长度上限 64 + 摘要后缀，组合名超限 L29-6。
 
-**授权记录**：用户 2026-11-10 明确要求 `Vec` / `Map` 内建并迁入 `std`，该改动必然触碰已发布命名族；
+**授权记录**：用户 2026-11-10 明确要求 `Vec` / `Map` 内建并迁入内置层，该改动必然触碰已发布命名族；
 按**用户已授权**记录，但改动面仍在 §2.2 与本节逐条列出，供审计。
 
 ### 4.2 B29-2 · `Map` 的键值绑定：字段 vs 双隐式绑定
@@ -612,7 +620,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | 候选 | 方案 | 判据 |
 | --- | --- | --- |
 | A | 发射器硬编码 `Vec` / `Map` 布局与方法 | 编译器能保证布局与性能；但把容器语义写进 C 生成器，后续改 API 要改编译器，违背「`.h.ct` 只放类型、库逻辑用 CT 写」的既有分层 |
-| B | `lib/std/` 用普通 CT 泛型 struct + 泛型 impl 实现，随编译器加载 | 复用本相的泛型 struct / impl 机制；容器逻辑可读、可测、可迁移；编译器只增加「内置层加载」与保留名 |
+| B | `lib/std/` 用普通 CT 泛型 struct + 泛型 impl 实现，随编译器加载 | 复用本相的泛型 struct / impl 机制；容器逻辑可读、可测、随编译器发行；迁入后 ct-pkg 侧删除，避免双份 |
 | C | 独立 `ct-pkg` 包，仅把默认路径内置 | 仍是跨仓依赖；用户明确要求迁入本仓，且 `ct get` 不应是使用 `Vec` 的前置 |
 
 **判决：选 B。** 编译器只负责：解析/单态化/加载内置层/保留名/`foreach` 识别；
@@ -706,7 +714,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | D26-9（范围收窄） | 泛型体内禁止递归/嵌套泛型调用 | 「避免实例化循环与缓存键递归」 | 对**函数调用**仍成立；对**类型实参**不成立——`Vec<Vec<int> >` 是有限的类型嵌套，不是调用递归 | D29-7：类型实参可嵌套，深度 ≤ 4；泛型函数体仍不得调用泛型函数 | 新增深度检查与 `>>` 拆分 |
 | D27-1 / D27-2（部分） | 数组 `foreach` 只绑定 `item` | 「单个隐式绑定足够；索引可自行计数」 | **不再成立**：用户 2026-11-10 要求数组 / `Vec` 同时提供 `i` 与 `item` | D29-14：数组与 `Vec` 都绑定 `item` + 只读 `i` | 数组 `foreach` 体里原先声明局部 `i` 的写法现在命中 L29-17；需在 spec/教程写迁移说明，既有夹具若声明 `i` 要改名 |
 | D27-4 | 容器协议 `len()+get(int)` / `len()+entry(int)` **本相不做** | 「本仓无 std 容器；无夹具即无红证；容器元素落码无既有夹具」 | **不再成立**：本相把 `Vec`/`Map` 变为内置并有真实样例，红证可写 | D29-8 / §2.5：协议解冻，只对内置 `Vec`/`Map` 生效 | `foreach` 解析/落码新增分支；Phase 27 的数组路径不变 |
-| D17-7 / [map-options.md](map-options.md) §2 | `std::map` 是有界、不可增长的唯一推荐容器，位于 ct-pkg | 「单态类型为主、有界开放寻址、不用 `delete`」 | 对**旧编译器**仍成立（旧包冻结）；对新编译器，内置 `Map` 提供增长与遍历，`std::map` 不再是唯一选择 | D29-9 / D29-10：内置 `Map<K,V>`；旧 `std::map` 保留在冻结包 | 文档口径变更；不得声称旧决策「错误」 |
+| D17-7 / [map-options.md](map-options.md) §2 | `std::map` 是有界、不可增长的唯一推荐容器，位于 ct-pkg | 「单态类型为主、有界开放寻址、不用 `delete`」 | 对**旧编译器**仍成立；`ct-pkg/std` 只移除 `Vec`/`Map`，其余模块不动。对新编译器，内置 `Map` 提供增长与遍历，`std::map` 不再是唯一选择 | D29-9 / D29-10：内置 `Map<K,V>`；旧 `std::map` 随 `ct-pkg/std` 的其余模块保留 | 文档口径变更；不得声称旧决策「错误」 |
 
 **明确不取代**：
 
@@ -724,13 +732,13 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | 29.1 | 泛型 struct 语法、参数、深度、`>>` 拆分、保留名（**用户可写**） | `Parser.h.ct`、`Symbols.h.ct` | `struct Pair<T, U>` / `struct Stack<T>` 可解析；L29-1/2/3/4 负例红 |
 | 29.2 | 实例表、规范拼写、编码器、碰撞检查、布局发射；**内置与用户泛型 struct 共用同一路径** | `Symbols.h.ct`、`Emitter.h.ct`、`TypeCheck.h.ct` | `Pair<int, char *>` / `Stack<int>` 生成独立 C 结构体；夹具 138/139/144、样例 23 绿；E29-1/E29-12 绿 |
 | 29.3 | 泛型 impl 与实例方法落码 | `Expr.h.ct`、`Emitter.h.ct` | 夹具 147 的实例方法可调用；命名组合正确 |
-| 29.4 | 内置层加载、`Vec`/`Map`/`MapEntry`、`mem.ct`、保留名与遮蔽 | `lib/std/**`、`Parser.h.ct` | 不 `ct get` 可用；夹具 142/143、样例 24/25 绿；E29-5/6 绿 |
+| 29.4 | 内置层加载、`Vec`/`Map` **迁入**、`mem.ct` 直接依赖、保留名与遮蔽 | `lib/std/**`、`Parser.h.ct` | `Vec`/`Map` 不 `ct get` 可用；夹具 142/143、样例 24/25 绿；E29-5/6 绿 |
 | 29.5 | 容器移动语义与诊断 L29-9/10/11/13 | `Expr.h.ct`、`TypeCheck.h.ct` | 拷贝/own/嵌套容器负例红（B8） |
 | 29.6 | `foreach` 容器协议与 `Map` 绑定 | `Stmt.h.ct`、`Emitter.h.ct` | 夹具 140/141 与样例 22 绿（**E29-3 硬判据**）；样例 25 的 `Map` 遍历绿 |
-| 29.7 | `std` 迁移、跨单元 `.h`、模块边界、文档与收口 | `lib/std/**`、`test/modules/**`、`docs/**` | 夹具 B6 跨单元绿；E29-2/5/8/9/10/11/13 绿 |
+| 29.7 | `Vec`/`Map` 迁入收口、跨单元 `.h`、模块边界、文档与收口 | `lib/std/**`、`test/modules/**`、`docs/**` | 夹具 B6 跨单元绿；E29-2/5/8/9/10/11/13 绿 |
 
 > 29.1–29.3 合并为一个功能提交（中间态不可运行）；29.4 可独立；29.5/29.6 各自独立；
-> 29.7 拆成「迁移」「文档」「版本收口」三个提交。每个提交都必须 `check-docs` 绿。
+> 29.7 拆成「迁入」「文档」「版本收口」三个提交。每个提交都必须 `check-docs` 绿。
 
 ---
 
