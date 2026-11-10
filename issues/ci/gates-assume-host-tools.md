@@ -6,7 +6,7 @@
 | 严重度 | **Low**（不影响编译器正确性，但会把「环境缺件」误报成「产品坏了」） |
 | 锚点 | commit `2ead601`（2026-10-21） |
 | 文件 | [selfhost/check-all.sh](../../selfhost/check-all.sh)、[test/run.sh](../../test/run.sh)、[selfhost/check-goldens.sh](../../selfhost/check-goldens.sh)、[selfhost/check-archive.sh](../../selfhost/check-archive.sh)、[selfhost/check-m2a.sh](../../selfhost/check-m2a.sh)、[selfhost/ct-tour.sh](../../selfhost/ct-tour.sh)、[test/pkg/run.sh](../../test/pkg/run.sh) |
-| 状态 | ⬜ 未修复 |
+| 状态 | 已修复（`check-all.sh:37-52` 统一预检 `cc` / `diff` / `python3` / `git`，缺谁一行报出后退出 1；2026-11-10 复核） |
 
 ## 现象
 

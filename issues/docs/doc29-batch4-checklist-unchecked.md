@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [docs/design/batch4-control/checklist.md](../../docs/history/design/batch4-control/checklist.md) |
-| 状态 | 待修 |
+| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：checklist 未勾项为 0） |
 
 ## 现象
 

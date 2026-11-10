@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [test/README.md:12](../../test/README.md#L12)、[:17](../../test/README.md#L17)、[:44](../../test/README.md#L44)、[:6](../../test/README.md#L6)、[:33](../../test/README.md#L33)、表格 [:9-19](../../test/README.md#L9-L19) |
-| 状态 | 待修 |
+| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：`test/README.md` 中英均含 `patterns/` 行与动态计数口径） |
 
 ## 现象
 

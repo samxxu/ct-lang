@@ -6,7 +6,7 @@
 | 严重度 | Medium（当前 HEAD 不可复现） |
 | 锚点 | `v0.20.1`（2026-11-07） |
 | 文件 | [frontend/parse/Expr.h.ct:1912-1956](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1912-L1956) |
-| 状态 | 待变参 trait WIP 落地 |
+| 状态 | blocked（前置「变参 trait」WIP 未落地；2026-11-10 复核仍不可复现） |
 
 ## 现象
 

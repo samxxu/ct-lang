@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
 | 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`emit_maps`）、[selfhost/ct-ast/frontend/parse/MapBuild.h.ct](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct) |
-| 状态 | 待修（Batch 2 / 2b.1、2b.5） |
+| 状态 | 已修复（Batch 2 / 2b.1、2b.5；2026-11-10 复核：`test/ast/22_map_direct` 仍断言直绑零 wrapper，`--emit-map` 标 `"inline":true`） |
 
 ## 现象
 

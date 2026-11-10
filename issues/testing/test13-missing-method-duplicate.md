@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [test/errors/missing_method.ct](../../test/errors/missing_method.ct)（L0）、[test/ast/errors/missing_method.ct](../../test/ast/errors/missing_method.ct)（ct-ast） |
-| 状态 | 待修 |
+| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：ct-ast 版仍名 `null_vtable_slot.ct`） |
 
 ## 现象
 

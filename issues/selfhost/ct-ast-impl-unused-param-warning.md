@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
 | 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（impl 方法体发射） |
-| 状态 | 待修（Batch 2 / 2c.1） |
+| 状态 | 已修复（Batch 2 / 2c.1；2026-11-10 复核：`test/ast/23_impl_unused` 仍在，`(void)` 语句前移到函数体开头） |
 
 ## 现象
 

@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [Symbols.h.ct:259](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L259)、[:292](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L292)、[:474](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L474)；[ParseSupport.h.ct:248](../../selfhost/ct-ast/frontend/parse/ParseSupport.h.ct#L248)、[:286](../../selfhost/ct-ast/frontend/parse/ParseSupport.h.ct#L286) |
-| 状态 | 待处理 |
+| 状态 | 已修复（2026-11-10 复核：四类容量诊断均点名单元与上限，`check-ast.sh` 的 cap 段有断言） |
 
 ## 现象
 
@@ -55,3 +55,15 @@ Low：不影响编译结果，但生成式源码（函数 / 结构体成批生�
 - 300 函数 / 140 struct / 17 参数 / 超量变量的探针均报 `limit N` 与单元名；
 - 未触顶用例不受影响；
 - `bash selfhost/check-ast.sh` 与 `bash selfhost/check-all.sh` 全绿。
+
+## 处置（2026-11-10 复核）
+
+本条修复已在后续轮次落地，只是状态行没有回填：
+
+- `ParseSupport.h.ct:255` 报 `too many functions in unit '<name>' (limit N)`；
+  `Symbols.h.ct:679` 报 `too many structs in unit '<name>' (limit N)`；
+  `Symbols.h.ct:434/476` 报 `too many variables in unit '<name>' (limit N)`；
+  `check-ast.sh:3800` 起报 `too many parameters in unit '<name>' (limit 16)`。
+- `check-ast.sh` 的 `capacity limits (generated)` 段（[3781-3810](../../selfhost/check-ast.sh#L3781-L3810)）
+  用 `cap_check` 同时断言非零退出与完整文案（含单元名与上限）。
+- 未做：「行号指向触顶声明行」仍按现状落在类别收尾处；固定上限改动态扩容属能力决策（SH-1 / SH-48）。

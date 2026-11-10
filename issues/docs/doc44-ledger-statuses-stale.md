@@ -45,3 +45,10 @@ sh33-autodrop-return-no-inject.md                      已修（2026-11-01）：
 ## 关联
 
 - [DOC-31](doc31-tutorial-c-forms-unsupported.md)…[DOC-43](doc43-max-nodes-not-a-macro.md)：同批 13 条文档修复，`状态` 字段同样需要回填
+
+## 复发与复查（2026-11-10，`v0.26.4`）
+
+同一类漂移又积累了 12 条（TEST-8 / TEST-10…13、SH-15 / SH-16 / SH-17 / SH-53、DOC-25 / DOC-26 /
+DOC-27 / DOC-29、CI-3）：修复早已落地，状态行仍是「待修」。本轮逐条对照代码与门禁后回填，
+并在 [issues/README.md](../README.md) 增加「台账卫生回写（2026-11-10）」表；SH-61、CI-7 核实为
+仍 blocked，保持未修状态，不做美化。

@@ -171,11 +171,11 @@
 | DOC-22 | Low | Batch 2 落地后仍残留 `unit-private` / `not mangled` 陈述，设计文档状态仍写「待实现」 | [doc22-batch2-stale-statements.md](docs/doc22-batch2-stale-statements.md) |
 | DOC-23 | **High** | README 把 `build --emit-map -` 写成不可用，实测可用（已修，`94815d7`） | [doc23-emit-map-build-stdout.md](docs/doc23-emit-map-build-stdout.md) |
 | DOC-24 | **High** | 教程称普通 `.ct` 会生成 `.h`，与 batch 30 规则和 README 相反（已修，`94815d7`） | [doc24-tutorial-h-output.md](docs/doc24-tutorial-h-output.md) |
-| DOC-25 | Medium | README 称 `-I` 两模式均限 16，compile 实际无上限（且忽略该开关） | [doc25-include-roots-asymmetry.md](docs/doc25-include-roots-asymmetry.md) |
-| DOC-26 | Medium | 多处断言计数与 tag 布局过期（grammar 21→27、check-ast 105→317、v0.13.0 仍写旧布局） | [doc26-stale-counts-and-tag-layout.md](docs/doc26-stale-counts-and-tag-layout.md) |
-| DOC-27 | Medium | `test/README.md` 的层图与负例约定过期（01..18、缺 patterns、include 路径错误） | [doc27-test-readme-stale.md](docs/doc27-test-readme-stale.md) |
+| DOC-25 | Medium | README 称 `-I` 两模式均限 16，compile 实际无上限（且忽略该开关）（已修，2026-10-31；2026-11-10 复核） | [doc25-include-roots-asymmetry.md](docs/doc25-include-roots-asymmetry.md) |
+| DOC-26 | Medium | 多处断言计数与 tag 布局过期（grammar 21→27、check-ast 105→317、v0.13.0 仍写旧布局）（已修，2026-10-31；2026-11-10 复核） | [doc26-stale-counts-and-tag-layout.md](docs/doc26-stale-counts-and-tag-layout.md) |
+| DOC-27 | Medium | `test/README.md` 的层图与负例约定过期（01..18、缺 patterns、include 路径错误）（已修，2026-10-31；2026-11-10 复核） | [doc27-test-readme-stale.md](docs/doc27-test-readme-stale.md) |
 | DOC-28 | Medium | `issues/README.md` 仍写 8 关、把已关闭的第二轮 8 条列为待修 | [doc28-issues-readme-gate-count.md](docs/doc28-issues-readme-gate-count.md) |
-| DOC-29 | Low | batch 4 的 checklist 27 项全未勾，与其他 32 份不一致 | [doc29-batch4-checklist-unchecked.md](docs/doc29-batch4-checklist-unchecked.md) |
+| DOC-29 | Low | batch 4 的 checklist 27 项全未勾，与其他 32 份不一致（已修，2026-10-31；2026-11-10 复核） | [doc29-batch4-checklist-unchecked.md](docs/doc29-batch4-checklist-unchecked.md) |
 | DOC-30 | Low | 版本登记漂移：glossary 暗示 Phase 13，AGENTS 中文版 bump 登记缺 v0.13.0 | [doc30-version-register-drift.md](docs/doc30-version-register-drift.md) |
 | DOC-31 | **High** | 教程称 `switch` / `do-while` / `goto` 不受 ct-ast 支持，实际早已支持 | [doc31-tutorial-c-forms-unsupported.md](docs/doc31-tutorial-c-forms-unsupported.md) |
 | DOC-32 | Medium | 教程命令表称普通 `.ct` 同时产出 `.h`，与同文 §1 和 README 相反 | [doc32-tutorial-cli-h-output.md](docs/doc32-tutorial-cli-h-output.md) |
@@ -227,12 +227,12 @@
 | TEST-5 | Medium | L2 驱动的错误分支仍无负例（10+ 个站点） | [l2-driver-errors-untested.md](testing/l2-driver-errors-untested.md) |
 | TEST-6 | Medium | `--emit-map <file>` 成功路径没有用例 | [emit-map-file-path-untested.md](testing/emit-map-file-path-untested.md) |
 | TEST-7 | **High** | ct-ast 的生成 C 无逐字节 oracle；§4.12–4.38 共 27 节只有行为探针（不采纳，已关闭 2026-10-31） | [test7-ct-ast-no-byte-golden.md](testing/test7-ct-ast-no-byte-golden.md) |
-| TEST-8 | Medium | 12 个负例只断言「有位置」，消息文本可静默漂移 | [test8-negative-messages-not-pinned.md](testing/test8-negative-messages-not-pinned.md) |
+| TEST-8 | Medium | 12 个负例只断言「有位置」，消息文本可静默漂移（已修，2026-10-31；2026-11-10 复核） | [test8-negative-messages-not-pinned.md](testing/test8-negative-messages-not-pinned.md) |
 | TEST-9 | Medium | 绝大多数容量上限可达但无用例（仅 MAX_MAPS / MAX_ERRORS 有夹具） | [test9-cap-limits-untested.md](testing/test9-cap-limits-untested.md) |
-| TEST-10 | Medium | build 模式的 CLI 错误分支几乎未测 | [test10-build-cli-errors-untested.md](testing/test10-build-cli-errors-untested.md) |
-| TEST-11 | Medium | compile 与 build 两模式没有同一特性的镜像用例 | [test11-mode-mirror-missing.md](testing/test11-mode-mirror-missing.md) |
-| TEST-12 | Low | `check-warnings.sh` 未扫描 `test/patterns`（及 archive / acceptance） | [test12-check-warnings-patterns.md](testing/test12-check-warnings-patterns.md) |
-| TEST-13 | Low | `missing_method.ct` 在两个负例目录各一份，清点时易重复计数 | [test13-missing-method-duplicate.md](testing/test13-missing-method-duplicate.md) |
+| TEST-10 | Medium | build 模式的 CLI 错误分支几乎未测（已修，2026-10-31；2026-11-10 复核） | [test10-build-cli-errors-untested.md](testing/test10-build-cli-errors-untested.md) |
+| TEST-11 | Medium | compile 与 build 两模式没有同一特性的镜像用例（已修，2026-10-31；2026-11-10 复核） | [test11-mode-mirror-missing.md](testing/test11-mode-mirror-missing.md) |
+| TEST-12 | Low | `check-warnings.sh` 未扫描 `test/patterns`（及 archive / acceptance）（已修，2026-10-31；2026-11-10 复核） | [test12-check-warnings-patterns.md](testing/test12-check-warnings-patterns.md) |
+| TEST-13 | Low | `missing_method.ct` 在两个负例目录各一份，清点时易重复计数（已修，2026-10-31；2026-11-10 复核） | [test13-missing-method-duplicate.md](testing/test13-missing-method-duplicate.md) |
 | TEST-14 | Low | `check-semantics.sh` 的失败信息取 `$?` 于 `&&` 链之后（拿到的是 `[ -s ]` 的状态）；compile 不变性只探了歧义一类 | [test14-check-gate-exit-status-capture.md](testing/test14-check-gate-exit-status-capture.md) |
 | TEST-15 | Low | docs 门禁只覆盖中文 phase 表，且不扫 `ci.yml` | [test15-docs-gate-phase-english.md](testing/test15-docs-gate-phase-english.md) |
 | TEST-16 | Medium | `ct check` 的 `import` 拒绝无回归断言 | [test16-check-import-no-guard.md](testing/test16-check-import-no-guard.md) |
@@ -245,11 +245,11 @@
 | --- | --- | --- | --- |
 | CI-1 | High | `./test/run.sh` 完全不覆盖 CT 线（L1/L2 ≈8k 行） | [run-sh-misses-ct-line.md](ci/run-sh-misses-ct-line.md) |
 | CI-2 | High | 无聚合入口 / 无 CI：不存在一条命令能跑全部门禁 | [no-aggregate-gate-entry.md](ci/no-aggregate-gate-entry.md) |
-| CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
+| CI-3 | Low | 门禁依赖 `diff` / `python3` / `git`，缺一个就产生成百条假 FAIL（已修：`check-all.sh` 统一预检；2026-11-10 复核） | [gates-assume-host-tools.md](ci/gates-assume-host-tools.md) |
 | CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行（已修 2026-11-02，`810e0fc` + `bc1fd52`） | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
 | CI-5 | Low | `packages.yml` 的 push / PR 路径过滤不覆盖 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**` | [ci-5-packages-workflow-path-filters.md](ci/ci-5-packages-workflow-path-filters.md) |
 | CI-6 | Low | CI 两个 job 名仍写 `nine hard gates`（实际 12 道） | [ci-6-gate-label-nine.md](ci/ci-6-gate-label-nine.md) |
-| CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用 | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
+| CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用（blocked：待明确指令，不擅自动 tag / bump；2026-11-10 复核仍无该 tag） | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
 | CI-8 | Medium | 方法论 G9 的 spec pin 缺失，项目无法自证与主规范同版 | [ci-8-g9-spec-pin-missing.md](ci/ci-8-g9-spec-pin-missing.md) |
 
 ### `selfhost/` —— 代码结构与容量
@@ -269,9 +269,9 @@
 | SH-12 | Medium | `map` 语法（`map trait T for instance x`）在 test/cases 与 examples 中无正例，新用户入口缺失 | [ct-ast-map-no-positive-example.md](selfhost/ct-ast-map-no-positive-example.md) |
 | SH-13 | **High** | `pub` 全局变量在 build 模式下被整个丢弃，连定义单元自身都无法编译（已修，`836c2e2` + `329016d`） | [ct-ast-pub-global-dropped.md](selfhost/ct-ast-pub-global-dropped.md) |
 | SH-14 | **High** | vtable 为 `static`，接口值无法在消费单元装箱（跨单元 OO 的唯一阻塞）（已修，`836c2e2` + `329016d`） | [ct-ast-cross-unit-vtable-static.md](selfhost/ct-ast-cross-unit-vtable-static.md) |
-| SH-15 | Medium | `map` 每条绑定无条件生成 wrapper，缺少直绑零生成路径 | [ct-ast-map-wrapper-per-binding.md](selfhost/ct-ast-map-wrapper-per-binding.md) |
-| SH-16 | Medium | impl 未用参数触发 `-Wunused-parameter`；`(void)_self;` 落在 `return` 之后 | [ct-ast-impl-unused-param-warning.md](selfhost/ct-ast-impl-unused-param-warning.md) |
-| SH-17 | Low | 同一单元被多次 import 时生成物重复 `#include` 其头文件 | [ct-ast-import-dep-duplicate.md](selfhost/ct-ast-import-dep-duplicate.md) |
+| SH-15 | Medium | `map` 每条绑定无条件生成 wrapper，缺少直绑零生成路径（已修，Batch 2 / 2b.1、2b.5；2026-11-10 复核） | [ct-ast-map-wrapper-per-binding.md](selfhost/ct-ast-map-wrapper-per-binding.md) |
+| SH-16 | Medium | impl 未用参数触发 `-Wunused-parameter`；`(void)_self;` 落在 `return` 之后（已修，Batch 2 / 2c.1；2026-11-10 复核） | [ct-ast-impl-unused-param-warning.md](selfhost/ct-ast-impl-unused-param-warning.md) |
+| SH-17 | Low | 同一单元被多次 import 时生成物重复 `#include` 其头文件（已修，Batch 2 / 2c.2；2026-11-10 复核） | [ct-ast-import-dep-duplicate.md](selfhost/ct-ast-import-dep-duplicate.md) |
 | SH-18 | Medium | 类型位置不接受命名空间限定名，诊断指向函数查找；trait 类型连裸名也不可用 | [ct-ast-qualified-type-name-rejected.md](selfhost/ct-ast-qualified-type-name-rejected.md) |
 | SH-19 | **High** | trait 方法的裸 `void *` 参数被当成空参数列表，直接报 `unexpected token` | [ct-ast-trait-void-pointer-param.md](selfhost/ct-ast-trait-void-pointer-param.md) |
 | SH-20 | Medium | `map` 曾强制要求已声明实例（命名空间级绑定曾不可用；2026-10-22 已修） | [ct-ast-map-requires-instance.md](selfhost/ct-ast-map-requires-instance.md) |
@@ -305,9 +305,9 @@
 | SH-48 | Info | 18.0 只解除 `MAX_FUNCS` / `MAX_MAP_IMPLS`；L2 的 struct / 字段 / 变量上限仍低于 ct-ast，会先触顶 | [sh48-l2-cap-asymmetry.md](selfhost/sh48-l2-cap-asymmetry.md) |
 | SH-49 | Low | `ct check` 早退块排在 `.m.ct` 守卫与输出路径解析之后，错误信息指向错误原因 | [sh49-check-entry-compile-guards.md](selfhost/sh49-check-entry-compile-guards.md) |
 | SH-50 | Medium | `ct check` 的语义诊断缺列号，与 `file:line:col: error:` 契约不符 | [sh50-check-diag-no-column.md](selfhost/sh50-check-diag-no-column.md) |
-| SH-51 | Info | `--cflags` / `--ldflags` 经 `system()` 原样执行，透传面大于参数面（待决策） | [sh51-build-flags-command-surface.md](selfhost/sh51-build-flags-command-surface.md) |
+| SH-51 | Info | `--cflags` / `--ldflags` 经 `system()` 原样执行，透传面大于参数面（已采纳方案 B：文档标注「shell 片段，勿传不可信内容」；方案 A 未实施） | [sh51-build-flags-command-surface.md](selfhost/sh51-build-flags-command-surface.md) |
 | SH-52 | **High** | 命名空间静态初始化器不重写被引用全局的名字，生成的 C 无法编译（已修，`2e3fe4a`） | [sh52-namespace-static-initializer.md](selfhost/sh52-namespace-static-initializer.md) |
-| SH-53 | Low | 容量触顶诊断不点名上限值与单元 | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
+| SH-53 | Low | 容量触顶诊断不点名上限值与单元（已修；2026-11-10 复核：四类文案含单元名 + limit，`check-ast.sh` cap 段断言） | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
 | SH-54 | Medium | compile 模式静默丢弃 `-I`，`--help` 仍宣称可用 | [sh54-compile-include-flag-silently-ignored.md](selfhost/sh54-compile-include-flag-silently-ignored.md) |
 | SH-55 | Low | `import` 拒绝文案不给替代路径，`ct check` 复用时报「compile mode」 | [sh55-import-reject-message-not-actionable.md](selfhost/sh55-import-reject-message-not-actionable.md) |
 | SH-56 | Medium | 映射方法（`.m.ct` 静态 trait / `map`）不校验实参个数，多余实参静默丢弃（已修，`aae6c33` + `686211a`） | [sh56-map-method-arity-unchecked.md](selfhost/sh56-map-method-arity-unchecked.md) |
@@ -315,7 +315,7 @@
 | SH-58 | Info | `.m.ct` 前导区只允许 `#include` / `#define`，实现必须落 shim（已关闭：有意限制；文案已改进 `64f27f3`） | [sh58-mct-prologue-raw-rejected.md](selfhost/sh58-mct-prologue-raw-rejected.md) |
 | SH-59 | Info | `&f` 疑似静默错译，`v0.19.1` 两探针未复现（已关闭：不采纳，无最小复现） | [sh59-address-of-function-suspected.md](selfhost/sh59-address-of-function-suspected.md) |
 | SH-60 | **High** | 静态映射调用点缺少实参类型检查（**2a 已修复**：四个静态形态按 trait 签名逐位比对，确信不匹配在 `ct build` 即硬错；顶层 const 接收者待 D-60-1，声明点未知类型 deferred 待 D-60-2） | [sh60-mct-signature-types-decorative.md](selfhost/sh60-mct-signature-types-decorative.md) |
-| SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（待变参 trait WIP 落地） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
+| SH-61 | Medium | form 5（`Trait::method(recv, …)`）的 arity 校验不认变参 trait 方法（blocked：前置「变参 trait」WIP 未落地，HEAD 不可复现；2026-11-10 复核） | [sh61-form5-arity-variadic-trait.md](selfhost/sh61-form5-arity-variadic-trait.md) |
 | SH-62 | **High** | `T` 全大写使 `(T)` / `sizeof(T)` / `_Alignof(T)` / `offsetof(T, …)` 替换失效；`sizeof(T)` 静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 `tok_is_type_name()` + 无括号形态；复核 `verified`） | [sh62-generic-subst-uppercase-tparam.md](selfhost/sh62-generic-subst-uppercase-tparam.md) |
 | SH-63 | Medium | `ct_generic_subst` 把 `struct T` 改写成 `struct int`，静默产出非法 C（已修，`87b03ec`，`v0.26.1`；复核 `verified`） | [sh63-generic-subst-struct-t-collision.md](selfhost/sh63-generic-subst-struct-t-collision.md) |
 | SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam`（已修，`v0.26.3`：`T_ID` 入口统一守卫 + 4 条值位置负例；复核 `verified`） | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
@@ -330,7 +330,7 @@
 
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |
-| STD-1 | Medium | std 面向应用层能力缺口（String 增量 / fs 原子写+rename / 公开 stat 优先；Map 按需；Vec 泛化与 UTF-8 宽度 0.x 不做） | [std1-markdown-readiness.md](std/std1-markdown-readiness.md) |
+| STD-1 | Medium | std 面向应用层能力缺口（String 增量 / fs 原子写+rename / 公开 stat 优先；Map 按需；Vec 泛化与 UTF-8 宽度 0.x 不做）（已决策；实现归 ct-pkg 的 `std` 包，本仓不跟） | [std1-markdown-readiness.md](std/std1-markdown-readiness.md) |
 
 ## 汇总
 
@@ -1279,6 +1279,35 @@ $ ct build -I test/modules/inc/extra test/modules/inc/main.ct -o /tmp/a.out
 | DOC-64 C 头 enum 常量文档 | 已修 | `a1c523a` |
 
 其余 `状态 | 待修` 条目（TEST-8 / TEST-10…12、SH-53、DOC-27、CI-3、CI-7 与 SH-9 系列的 Batch 2 项）
-本轮复核后维持原状：没有对应修复提交，或仍按各自的「不采纳 / 待决策」结论保留。
+在本轮（2026-11-07）复核时维持原状；**2026-11-10 已逐条重核**，其中绝大部分的修复其实早已落地、
+只是状态行没回填（见下节），CI-7 仍是 blocked。
+
+## 台账卫生回写（2026-11-10，`v0.26.4`）
+
+DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态行仍写「待修」。本轮逐条对照代码与门禁，
+只改写核实为真的状态，**没有把未修的标成已修**。
+
+| ID | 原状态行 | 复核依据 | 现状态 |
+| --- | --- | --- | --- |
+| TEST-8 | 待修 | `check-ast.sh` pair 表含 12 条消息逐字断言 | 已修复 |
+| TEST-10 | 待修 | `check-ast.sh` build 侧 8 条 CLI 错误断言 | 已修复 |
+| TEST-11 | 待修 | `check-ast.sh` 的 build-mode mirrors 段 | 已修复 |
+| TEST-12 | 待修 | `check-warnings.sh` 仍扫描 `test/patterns` | 已修复 |
+| TEST-13 | 待修 | 文件名已并入 ct-ast 版 `null_vtable_slot.ct` | 已修复 |
+| SH-15 | 待修 | `test/ast/22_map_direct` 直绑零 wrapper；`--emit-map` 标 `"inline":true` | 已修复 |
+| SH-16 | 待修 | `test/ast/23_impl_unused`；`(void)` 语句前移到函数体开头 | 已修复 |
+| SH-17 | 待修 | `Module.h.ct:507` 的 `depu` 去重；`test/modules/xunit_box` 生成物单次 `#include` | 已修复 |
+| SH-53 | 待处理 | `ParseSupport.h.ct:255`、`Symbols.h.ct:434/476/679` 均含单元名 + limit；`check-ast.sh` cap 段断言 | 已修复 |
+| DOC-25 | 待修 | README 中英写明 `-I` 只对 build 生效、compile 下提示被忽略 | 已修复 |
+| DOC-26 | 待修 | grammar 27 项、无 105 残留、tag 布局边界 `v0.12.0` | 已修复 |
+| DOC-27 | 待修 | `test/README.md` 含 `patterns/` 行与动态计数口径 | 已修复 |
+| DOC-29 | 待修 | batch 4 checklist 未勾项为 0 | 已修复 |
+| CI-3 | ⬜ 未修复 | `check-all.sh:37-52` 统一预检 `cc` / `diff` / `python3` / `git` | 已修复 |
+| SH-51 | 待决策（索引） | 方案 B 已落地：README 标注 `--cflags` / `--ldflags` 是 shell 片段 | 已采纳方案 B |
+| SH-61 | 待变参 trait WIP 落地 | `Parser.h.ct:2061/2266` 仍拒 `a trait method cannot be variadic` | **blocked**（未修） |
+| CI-7 | 待明确指令 | `git tag -l v0.19.0` 为空 | **blocked**（未修） |
+| STD-1 | 已决策 | 实现属 ct-pkg 的 `std` 包，本仓不跟 | 保持（越界不做） |
+
+门禁：`./test/run.sh`、`bash selfhost/check-all.sh`、`python3 test/docs/check-docs.py` 全绿。
 
 

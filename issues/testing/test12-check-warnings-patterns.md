@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [selfhost/check-warnings.sh:10-19](../../selfhost/check-warnings.sh#L10-L19)、[:96-199](../../selfhost/check-warnings.sh#L96-L199)、[selfhost/check-ast.sh:257-283](../../selfhost/check-ast.sh#L257-L283) |
-| 状态 | 待修 |
+| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：`check-warnings.sh` 仍扫描 `test/patterns`） |
 
 ## 现象
 

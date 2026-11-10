@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
 | 文件 | [selfhost/ct-ast/frontend/module/Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct)、[selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`write_unit_c` / `write_unit_header` 的 `dep` 循环） |
-| 状态 | 待修（Batch 2 / 2c.2） |
+| 状态 | 已修复（Batch 2 / 2c.2；2026-11-10 复核：`Module.h.ct` 的 `depu` 去重仍在，`xunit_box` 断言单次 `#include`） |
 
 ## 现象
 
