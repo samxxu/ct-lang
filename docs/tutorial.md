@@ -1099,6 +1099,77 @@ ct build max2.ct -o max2 && ./max2
 
 细节见 [language-spec §4.50](language-spec.md)。
 
+### 10.8 泛型 struct、`Vec` / `Map` 与容器 `foreach`
+
+`struct Name<T, U>` 定义模板：每个类型实参组合得到一份独立的 C 结构体，字段里的 `T`
+就地替换。`impl<T> Name<Args>` 给这些实例加方法，调用点静态派发，没有 vtable。
+`Vec` / `Map` 是内置层，不需要 `import`：
+
+```c
+#include <stdio.h>
+
+struct Stack<T> {
+    T items[8];
+    int n;
+}
+
+impl<T> Stack<T> {
+    int push(T v)
+    {
+        if (self->n >= 8) return 0;
+        self->items[self->n] = v;
+        self->n = self->n + 1;
+        return 1;
+    }
+}
+
+int main(void)
+{
+    Vec<int> v;
+    Map<char *, int> ages;
+    Stack<int> st;
+
+    v.h = 0;
+    v.data = 0;
+    v.push(10);
+    v.push(20);
+    foreach (v) {
+        printf("[%d] %d\n", i, item);
+    }
+
+    ages.h = 0;
+    ages.entries = 0;
+    ages.put("bo", 31);
+    ages.put("amy", 24);
+    foreach (ages) {
+        printf("%s=%d\n", item.key, item.value);
+    }
+
+    st.n = 0;
+    st.push(7);
+    printf("%d\n", st.items[0]);
+
+    v.release();
+    ages.release();
+    return 0;
+}
+```
+
+- **`foreach` 的绑定**：数组和 `Vec` 同时给 `item`（值拷贝）与只读 `i`；`Map` 只给 `item`，
+  它是条目，读 `item.key` / `item.value`。写 `i`、重声明 `item`/`i`、在 `Map` 体内用 `i`
+  都是硬错。
+- **`Map` 的次序**：插入序；重复键原位改值；`remove` 让后面的条目左移。
+- **引用计数**：`Vec` / `Map` 是共享 `ct_buf` 的句柄，`retain` 加一、`release` 减一并返回
+  剩余数，归零时释放；对已归零的句柄再 `release` 会 `abort`。
+- **类型位**：`>>` 自动拆开（`Box<Box<int>>` 合法），实例最多两层参数、嵌套最多四层。
+- 已知限制：固有方法只检查元数、不检查实参类型；`ct build` 尚未接入内置层自动加载。
+- 完整样例：[22_foreach_map](../examples/22_foreach_map/foreach_map.ct)、
+  [23_generic_stack](../examples/23_generic_stack/generic_stack.ct)、
+  [24_vec_ops](../examples/24_vec_ops/vec_ops.ct)、
+  [25_wordcount](../examples/25_wordcount/wordcount.ct)。
+
+细节见 [language-spec §4.51](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2306,6 +2377,81 @@ ct build max2.ct -o max2 && ./max2
   a struct; `examples/21_generic_bound` has the complete pattern.
 
 See [language-spec §4.50](language-spec.md) for details.
+
+### 10.8 Generic structs, `Vec` / `Map` and the container `foreach`
+
+`struct Name<T, U>` defines a template: every type argument combination becomes its own C struct
+with `T` substituted in the fields. `impl<T> Name<Args>` adds methods to those instances, called
+statically with no vtable. `Vec` / `Map` ship in the built-in layer, with no `import` at all:
+
+```c
+#include <stdio.h>
+
+struct Stack<T> {
+    T items[8];
+    int n;
+}
+
+impl<T> Stack<T> {
+    int push(T v)
+    {
+        if (self->n >= 8) return 0;
+        self->items[self->n] = v;
+        self->n = self->n + 1;
+        return 1;
+    }
+}
+
+int main(void)
+{
+    Vec<int> v;
+    Map<char *, int> ages;
+    Stack<int> st;
+
+    v.h = 0;
+    v.data = 0;
+    v.push(10);
+    v.push(20);
+    foreach (v) {
+        printf("[%d] %d\n", i, item);
+    }
+
+    ages.h = 0;
+    ages.entries = 0;
+    ages.put("bo", 31);
+    ages.put("amy", 24);
+    foreach (ages) {
+        printf("%s=%d\n", item.key, item.value);
+    }
+
+    st.n = 0;
+    st.push(7);
+    printf("%d\n", st.items[0]);
+
+    v.release();
+    ages.release();
+    return 0;
+}
+```
+
+- **What `foreach` binds**: an array and a `Vec` bind `item` (a copy of the value) plus the
+  read-only `i`; a `Map` binds only `item`, an entry read through `item.key` / `item.value`.
+  Writing `i`, redeclaring `item` / `i`, or naming `i` in a `Map` body is a hard error.
+- **`Map` order**: insertion order; a repeated key is rewritten in place; `remove` shifts the
+  following entries left.
+- **Reference counting**: a `Vec` / `Map` is a handle over a shared `ct_buf`; `retain` adds one,
+  `release` subtracts one and returns the remainder, freeing at zero. Releasing a zero handle
+  aborts.
+- **Type positions**: `>>` splits automatically (`Box<Box<int>>` is legal); an instance carries at
+  most two parameters and nests at most four deep.
+- Known limits: inherent methods check arity only, not argument types; `ct build` does not wire the
+  built-in layer yet.
+- Full samples: [22_foreach_map](../examples/22_foreach_map/foreach_map.ct),
+  [23_generic_stack](../examples/23_generic_stack/generic_stack.ct),
+  [24_vec_ops](../examples/24_vec_ops/vec_ops.ct),
+  [25_wordcount](../examples/25_wordcount/wordcount.ct).
+
+See [language-spec §4.51](language-spec.md) for details.
 
 ### 11. CLI cheat sheet
 

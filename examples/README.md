@@ -78,6 +78,10 @@
 | `18_generic_string_table` | 泛型函数以 `char *` 显式实例化，在字符串表上遍历、查找、变换；闭包只作为自由函数的 `(fn, env)` 实参参与 | ct-ast | 同上 |
 | `19_container_each_generic` | 容器 struct 提供 `each` 方法（trait + `impl`），方法体调用泛型 `walk<char *>`；方法路径写显式 `(fn, env)`，自由函数路径用闭包字面量并捕获 | ct-ast | 同上 |
 | `21_generic_bound` | 约束泛型（Phase 28）：`sort<T: Compare>` / `largest<T: Compare>` 在模板体内调用约束方法，`Num` 与 `Word` 两个无关 struct 各得一份实例，落成 `S_Compare_vtable.cmp` 裸调用 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `22_foreach_map` | `foreach` 容器协议（Phase 29）：`Vec<int>` / `Vec<Point>` 绑定只读 `i` 与值拷贝 `item`，`Map<char *, int>` 按插入序给出 `item.key` / `item.value` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `23_generic_stack` | 用户泛型 struct（Phase 29）：`struct Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段，`Stack<int>` 与 `Stack<char *>` 两份布局，`impl<T> Stack<T>` 静态派发 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `24_vec_ops` | 内置 `Vec` 全 API（Phase 29）：`push` / `pop` / `get` / `set` / `len` / `clear` 的边界语义，`retain` / `release` 的引用计数与归零释放 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `25_wordcount` | 真实程序（Phase 29）：`Map<char *, int>` 词频统计，先按插入序输出，再复制条目按计数排序出报告 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
 ## 门禁归属说明
 

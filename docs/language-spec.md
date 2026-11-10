@@ -2060,9 +2060,39 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `<S>_<Trait>_vtable.<m>(recv, …)`（指针接收者）——裸 C 调用，不读 `__<trait>_vptr`、不装箱、
   不改结构体布局。实例仍是 `static`，与 §4.48 的命名与可见性一致；跨单元时依赖单元的生成头只新增
   `extern struct <Trait>_vtbl <S>_<Trait>_vtable;`。
-- 不支持：参数化 trait、多约束、`Self`、约束方法签名里出现类型参数、泛型 struct（Phase 29）、
+- 不支持：参数化 trait、多约束、`Self`、约束方法签名里出现类型参数、
   泛型函数 `pub`、跨单元实例共享、装箱。**`char *` 不能直接满足约束**（`impl` 只对 struct 生效）；
   需要字符串语义时用一个 `struct` 包住指针，见 `examples/21_generic_bound` 的 `Word`。
+  泛型 struct 见 §4.51。
+
+### 4.51 泛型 struct、固有方法与内置容器（Phase 29）
+
+- **声明**：`struct Name<T, U> { … }`，最多两个类型参数。类型参数可以出现在字段类型的任意位置
+  （裸 `T`、`T *`、`T items[N]`）。
+- **实例化**：使用点写 `Name<Arg[, Arg]>`（`struct` 前缀可有可无）。每个 `(模板, 实参组合)`
+  生成一个独立的 C struct，标签是编码拼写 `<Name>_<arg1>[_<arg2>]`：`*`→`_p`、空格→`_`、
+  `_`→`__`、`<`→`_l`、`>`→`_r`、`,`→`_c`。类型位里的 `>>` 自动拆成两个闭合
+  （`Box<Box<int>>` 合法）。只发射**可达**实例：源文件里出现过的实例才落码；同一实例在整个
+  构建里只有一份定义，由**模板所在单元**发布到生成头，其他单元只引用。
+- **固有方法**：`impl<T> Name<Args> { … }` 给实例加方法，落码 `<Instance>_<method>`，调用点
+  **静态派发**（`v.push(3)` → `Vec_int_push(&v, 3)`），不生成 vtable、不装箱；同一实例可同时有
+  多个 `impl` 块。实参只检查元数、不检查类型，是已知限制（`docs/design/phase29.md` §10.2）。
+- **带 `use` 的泛型 impl**：`impl<T> Stack<T> use Show { … }` 落码 `<Instance>_<Trait>_<method>`
+  与 `<Instance>_<Trait>_vtable`，沿用既有 trait / vptr 路径；固有方法优先于 trait 方法。
+- **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/std/Vec.h.ct`，编译模式在输入前
+  自动预解析，**不需要 `import`、不需要 `-I`**（`ct build` 尚未接入）。三个拼写是保留名，
+  用户不能再声明同名 struct。
+- **容器语义**：`Vec` / `Map` 是引用计数的句柄（共享 `ct_buf`），`retain` 增加、`release` 减少并
+  返回剩余计数，归零时释放；对已归零句柄再次 `release` 是硬错（`abort`）。`Vec.get` / `Map.get`
+  越界或未命中返回零值 / 空指针，`set` 越界是 no-op。`Map` 按**插入序**遍历，重复键原位改值，
+  `remove` 让后继条目左移。
+- **`foreach` 容器协议**：数组与 `Vec` 同时绑定 `item`（元素的值拷贝）与只读 `i`；`Map` 只绑定
+  `item`，它是 `MapEntry`，用 `item.key` / `item.value` 读写。长度在循环开始前取一次。对 `i`
+  赋值 / 自增 / 取地址是硬错（L29-16），循环体内重声明 `item` 或 `i` 是硬错（L29-17），
+  在 `Map` 体内使用 `i` 是硬错（L29-18）；容器元素与接口值不能按值拷贝（L29-15）。
+- **不支持**：参数化 trait、约束、默认类型实参、显式实例列表、`Map` 键白名单、`ct build` 的
+  内置层自动加载。已知偏差（`long` 键与指针同宽时按字符串比较、`Map` 线性扫描）见
+  `docs/design/phase29.md` §10.2。
 
 ---
 
@@ -4385,9 +4415,46 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   visibility; across a unit boundary the dependency's generated header adds only
   `extern struct <Trait>_vtbl <S>_<Trait>_vtable;`.
 - Out of scope: parameterised traits, multiple bounds, `Self`, a type parameter inside a trait
-  method signature, generic structs (Phase 29), `pub` generic functions, cross-unit instance
+  method signature, `pub` generic functions, cross-unit instance
   sharing and boxing. **`char *` cannot satisfy a bound directly** (`impl` only applies to structs);
   wrap the pointer in a struct — `Word` in `examples/21_generic_bound` shows the pattern.
+  Generic structs are §4.51.
+
+### 4.51 Generic structs, inherent methods and the built-in containers (Phase 29)
+
+- **Declaration**: `struct Name<T, U> { … }` carries at most two type parameters, and a parameter
+  may appear anywhere in a field type (bare `T`, `T *`, `T items[N]`).
+- **Instantiation**: a use site writes `Name<Arg[, Arg]>` (the `struct` prefix is optional). Every
+  (template, argument) pair becomes one C struct tagged with the encoded spelling
+  `<Name>_<arg1>[_<arg2>]` (`*`→`_p`, space→`_`, `_`→`__`, `<`→`_l`, `>`→`_r`, `,`→`_c`). A `>>`
+  in a type position closes two lists (`Box<Box<int>>` is legal). Only **reachable** instances are
+  emitted; one instance has exactly one definition per build, published in the generated header by
+  the unit that holds the template.
+- **Inherent methods**: `impl<T> Name<Args> { … }` adds methods to the instances, lowered as
+  `<Instance>_<method>` and called **statically** (`v.push(3)` → `Vec_int_push(&v, 3)`); no vtable,
+  no boxing, and one instance may have several `impl` blocks. Arguments are checked for arity only,
+  not for type — a known limitation (`docs/design/phase29.md` §10.2).
+- **A generic impl with `use`**: `impl<T> Stack<T> use Show { … }` lowers to
+  `<Instance>_<Trait>_<method>` plus `<Instance>_<Trait>_vtable` and keeps the existing trait / vptr
+  path; an inherent method wins over a trait method of the same name.
+- **Built-in layer**: `Vec<T>`, `Map<K, V>` and `MapEntry<K, V>` live in `lib/std/Vec.h.ct` and are
+  pre-parsed before the input in compile mode, so they need **no `import` and no `-I`** (`ct build`
+  does not wire this yet). The three spellings are reserved.
+- **Container semantics**: a `Vec` / `Map` is a reference-counted handle over a shared `ct_buf`;
+  `retain` raises and `release` lowers the count and returns the remainder, freeing at zero.
+  Releasing an already-zero handle is a hard error (`abort`). `get` answers a zero value / null
+  pointer out of range or on a miss, `set` past the end is a no-op. `Map` iterates in **insertion
+  order**, rewrites a repeated key in place, and `remove` shifts the following entries left.
+- **`foreach` container protocol**: an array and a `Vec` bind `item` (a by-value copy of the element)
+  and the read-only `i`; a `Map` binds only `item`, which is a `MapEntry` read through `item.key` /
+  `item.value`. The length is taken once before the loop. Assigning to, incrementing or taking the
+  address of `i` is a hard error (L29-16), redeclaring `item` or `i` inside the body is a hard
+  error (L29-17), using `i` in a `Map` body is a hard error (L29-18), and a container element or an
+  interface value cannot be copied by value (L29-15).
+- **Out of scope**: parameterised traits, bounds, default type arguments, explicit instance lists,
+  a `Map` key whitelist and the built-in layer in `ct build`. The known deviations (a `long` key
+  compared as a string when it is pointer-width, and `Map`'s linear scan) are listed in
+  `docs/design/phase29.md` §10.2.
 
 ### 7. Capacity limits
 
