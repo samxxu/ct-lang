@@ -1,18 +1,18 @@
-# DOC-70 · 语句级 `foreach (container) { … item … }` 未实现、未排期（旧名 `each` 已作废）
+# DOC-70 · 语句级 `foreach (array) { … item … }`（旧名 `each` 已作废）
 
 | 项 | 值 |
 | --- | --- |
 | 模块 | docs / lang |
 | 严重度 | Low（需求登记；现有库层 `each` 已可用，缺的是另一套形态） |
-| 锚点 | `v0.26.4` / `7c58192`（HEAD = `main`） |
-| 文件 | [phase24.md:45](../../docs/design/phase24.md#L45)、[phase24.md:462](../../docs/design/phase24.md#L462)、[phase25.md:63](../../docs/design/phase25.md#L63)、[phase25.md:283](../../docs/design/phase25.md#L283) |
-| 状态 | **open**（已设计评估，明确不排期；本轮只登记，不实现语言特性） |
+| 锚点 | `v0.26.4`（Phase 27 实现，未 bump） |
+| 文件 | [phase24.md:45](../../docs/design/phase24.md#L45)、[phase24.md:462](../../docs/design/phase24.md#L462)、[phase25.md:63](../../docs/design/phase25.md#L63)、[phase25.md:283](../../docs/design/phase25.md#L283)、[phase27.md](../../docs/design/phase27.md) |
+| 状态 | **closed**（Phase 27 在 ct-ast 落地数组形态；容器协议经 D27-4 延后） |
 
 > **命名现状（2026-11-10 用户确认）**：语句级迭代形态一律写 **`foreach (map) { … item … }`**；
 > 老规划里的 `each(map){…}` **关键字名作废，不得再作为关键字使用**。`each` 这个标识符只保留为
-> 库层——trait / 静态映射的方法名（示例 17、19）与泛型自由函数名（示例 18）。当前
-> `foreach (…) { … }` 语法仍**不存在**，本文「未实现」的结论不变；下文探针 G/H/I 使用旧名
-> `each`，是定名前实测的原始记录，保留为历史证据。
+> 库层——trait / 静态映射的方法名（示例 17、19）与泛型自由函数名（示例 18）。文中
+> 「实测 / 结论」两节记录的是 Phase 27 之前的原始状态（当时 `foreach (…) { … }` 不存在），
+> 保留为历史证据；现状见文末「处置」。
 
 ## 触发场景
 
@@ -51,14 +51,15 @@ each (map) {
 
 以上引文均成文于 D25-12 之前，原文中的 `each` 指当时的暂定名；该名已作废，语句形态现为 `foreach`。
 
-## 结论
+## 结论（Phase 27 之前的原始结论）
 
-**未实现；设计过但明确未排期。** 它与 `for`、`loop(n)`、库层 `each` 的关系是：
+**当时未实现；设计过但明确未排期。** 它与 `for`、`loop(n)`、库层 `each` 的关系是：
 
 - `for` / `loop(n)`：语言语句构造，显式循环变量或计数；
 - 库层 `each`：trait 方法 / 静态映射的方法名约定（Phase 25），`a.each(closure)` 是普通方法调用，
   闭包按 `(fn, env)` 展开；
-- 语句级 `foreach (container) { … item … }`（旧名 `each`，已由 D25-12 作废）：从未实现，也未排期。
+- 语句级 `foreach (array) { … item … }`（旧名 `each`，已由 D25-12 作废）：Phase 27 前从未实现、
+  也未排期；Phase 27 已实现数组形态，容器协议仍延后。
 
 ## 命名决策（2026-11-10，battle 记录）
 
@@ -78,12 +79,23 @@ each (map) {
 
 ## 建议收口
 
-- 保持「未排期」；若未来排期，按 D25-12 使用 **`foreach`**，并以语句构造实现；
-- 文档中继续只承诺库层 `a.each(closure)`，不暗示语句形态存在；
-- 旧关键字名 `each(map){…}` 作废，不得在文档、样例或未来实现中复用。
+- ~~保持「未排期」~~ **已于 Phase 27 排期并实现**；按 D25-12 使用 **`foreach`**，以语句构造实现；
+- 旧关键字名 `each(map){…}` 作废，不得在文档、样例或未来实现中复用；
+- 库层 `a.each(closure)` 与语句形态 `foreach` 并存，两者互不替代。
+
+## 处置（2026-11-10，Phase 27）
+
+- 语法与语义：[language-spec §4.49](../../docs/language-spec.md)、[tutorial 10.6](../../docs/tutorial.md)、[phase27.md](../../docs/design/phase27.md)（D27-1–D27-11）。
+- 实现只在 `selfhost/ct-ast/**`：`foreach` 为上下文关键字；展开为单个 `for`，长度取
+  `sizeof(x) / sizeof((x)[0])`；`item` 按值拷贝、块内可见；`break` / `continue` / `return` 直通。
+- 容器协议（`len()` + `get(int)` / `entry(int)`）按 D27-4 **延后**：本仓没有 std 容器，
+  无消费者就无红证；非数组容器当前按 L27-2/L27-4 拒绝。
+- 红证：baseline `855 passed, 17 failed`（3 个正例 + 14 条 Phase 27 断言全红）；
+  实现后 `872 passed, 0 failed`。
 
 ## 验证
 
-- 探针退出码与诊断见上表；
-- `docs/design/phase25.md` D25-12 存在；
-- 不涉及代码、样例与门禁改动。
+- 正例 `test/ast/132`–`135`，负例 `test/ast/errors/foreach_*.ct`（10 条）；
+- `selfhost/check-ast.sh` 断言覆盖逐条文案、生成 C 形状、与手写 `for` 的逐字节一致、
+  `ct check` 下遮蔽升为 error；
+- `docs/design/phase25.md` D25-12 与本文的命名结论一致。

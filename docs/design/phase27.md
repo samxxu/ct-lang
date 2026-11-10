@@ -1,9 +1,9 @@
-# Phase 27 · `foreach` 语句形态（实施中）
+# Phase 27 · `foreach` 语句形态（完成）
 
 > 中文。
 >
-> **状态：实施中**（判据冻结于 2026-11-10、首个实现提交之前；版本仍为 `v0.26.4`，未 bump）。
-> **冻结口径**：D27-1–D27-11 全部裁决完毕（§4），E27-1–E27-6 与 L27-1–L27-5 的文案、夹具清单在本文件落定后不再为通过而改写；此后的实现、夹具与文档只能向判据靠拢。
+> **状态：完成**（判据冻结于 2026-11-10、首个实现提交之前；版本仍为 `v0.26.4`，未 bump）。
+> **冻结口径**：D27-1–D27-11 全部裁决完毕（§4），E27-1–E27-7 与 L27-1–L27-5 的文案、夹具清单在本文件落定后不再为通过而改写；此后的实现、夹具与文档只能向判据靠拢。
 > **主题来源**：[D25-12](phase25.md#L287) 保留库层 `each`、为语句形态预留 `foreach`；[DOC-70](../../issues/docs/doc70-each-statement-form-unimplemented.md) 记录了命名判据与探针。
 > Phase 22 / 24 / 25 曾把集合遍历列为非目标：[phase22.md:60](phase22.md#L60)（`for x in xs` 无泛型，另议）、[phase24.md:45](phase24.md#L45)（SHIM/宏做不到）、[phase25.md:61-64](phase25.md#L61-L64)（隐式名、块参数、`break`/`continue`，未排期）。
 > 关联：[phase21.md](phase21.md)（非逃逸闭包）、[phase25.md](phase25.md)（静态映射闭包实参）、[phase26.md](phase26.md)（泛型函数）、[language-spec.md](../language-spec.md)、[roadmap.md](../roadmap.md)。
@@ -133,6 +133,7 @@ foreach (nums) { total += item; }
     int __ct_foreach_n_0 = (int)(sizeof(nums) / sizeof((nums)[0]));
     for (int __ct_foreach_i_0 = 0; __ct_foreach_i_0 < __ct_foreach_n_0; __ct_foreach_i_0++) {
         int item = (nums)[__ct_foreach_i_0];
+        (void)item;   /* keeps -Wall -Wextra clean when the body ignores item */
         total += item;
     }
 }
@@ -203,7 +204,7 @@ foreach (nums) { total += item; }
 | 27.1 | 语法与诊断：上下文关键字、块解析、`item` 作用域、L27-1…L27-5 | `frontend/parse/Stmt.h.ct`、`frontend/sym/Symbols.h.ct`、`tool/diag/Diag.h.ct` |
 | 27.2 | 数组展开与夹具（正例 `132`–`135`、负例九条） | `runtime/arena/Arena.h.ct`、`backend/emit/Emitter.h.ct` |
 | 27.3 | ~~容器协议查找与 map 条目~~ **本相取消**（D27-4），对应判据并入 27.1 的 L27-4 负例 | — |
-| 27.4 | 文档：spec 新章节、tutorial、roadmap 状态、DOC-70 回链 | `docs/**` |
+| 27.4 | 文档与样例：spec 新章节、tutorial、roadmap 状态、DOC-70 回链；`examples/20_foreach_statement`（E27-7） | `docs/**`、`examples/**` |
 | 27.5 | 自举与全门禁：fixpoint、`check-warnings.sh`、`make check` | `selfhost/**` |
 
 ---
@@ -218,6 +219,10 @@ foreach (nums) { total += item; }
 | E27-4 | `ct check` 与 `ct build` 同口径：嵌套 `foreach` 的遮蔽在 build 下是 warning、在 `ct check` 下是 error；其余 L27 文案两模式一致 |
 | E27-5 | 全语料零新增 warning；`check-docs.sh` 通过 |
 | E27-6 | 自举 fixpoint 与 11 道硬门禁全绿；`selfhost/**` 改动后 `bash selfhost/check-all.sh` 通过 |
+| E27-7 | 样例 `examples/20_foreach_statement`：覆盖数组遍历、块内隐式 `item`、`break`、`continue`、块内 `return`、与闭包同用的组合场景；同一文件内与库层 `each`（trait 方法 + 回调）对照，能看出「什么时候用 `foreach`、什么时候用 `each`」。`expected.out` 由编译器产物生成后人工核对（禁手写），在 `examples/README.md` 登记，并靠 `//@ct-requires: ct-ast` 纳入 `test/run.sh` 的端到端路径（同时进 `check-ast` / `check-warnings` 语料） |
+
+> E27-7 为 2026-11-10 追加的交付要求（用户明确「`foreach` 必须有对应样例，不等到收口补」），
+> 在**首个实现提交之前**冻结；它只增加交付面，不放宽 E27-1–E27-6。
 
 ### 6.1 L27 诊断（冻结文案）
 
@@ -250,5 +255,76 @@ foreach (nums) { total += item; }
 | `loop(n)` / `loop(a..b)` | 同一类“隐式绑定 + 单行展开”语法糖；`i` 与 `item` 并列 |
 | `each`（库方法 / 自由泛型） | 语义重叠但实现不同：`each` 传回调、可跨单元；`foreach` 是语句、支持控制流。两者不互相降级 |
 | 闭包 `=>` | `foreach` 的块**不是闭包**，不能存储、不能传递、不能返回值 |
-| 泛型函数 | 无依赖；`item` 类型来自容器方法签名，不做类型推导或单态化 |
-| trait / impl | 容器方法按既有静态派发解析；动态派发（`impl` 对象）不参与 |
+| 泛型函数 | 无依赖；本轮 `item` 类型直接取数组声明，不做类型推导或单态化 |
+| trait / impl | 本轮不解析容器方法（D27-4）；trait 值作为元素时按 L27-4 拒绝，避免拷贝 vptr |
+| 静态映射 / 函数指针 | 函数指针数组可行但本轮拒绝（非朴素声明符），留给需要回调表的场景 |
+
+---
+
+## 9. 结果与收口（2026-11-10）
+
+### 9.1 交付物
+
+| 交付物 | 位置 |
+| --- | --- |
+| 解析：`N_FOREACH`、上下文关键字前瞻、作用域与诊断 | `selfhost/ct-ast/frontend/parse/Stmt.h.ct` |
+| 符号：`Var.dims`（声明维度原文）、`Var.is_fnparam` | `selfhost/ct-ast/frontend/sym/Symbols.h.ct`、`frontend/parse/Parser.h.ct` |
+| 发码：单个 `for` + `sizeof` 长度快照 | `selfhost/ct-ast/backend/emit/Emitter.h.ct` |
+| 正例 `132`–`135` | `test/ast/132_foreach_array_values`、`133_foreach_control_flow`、`134_foreach_nested_pointer`、`135_foreach_contextual` |
+| 负例 10 条 | `test/ast/errors/foreach_{pointer,multidim,param,struct,member,unsized_global,scope,empty,non_block,fnptr_array}.ct` |
+| 门禁断言 14 条 | `selfhost/check-ast.sh` 末尾 Phase 27 段（逐条文案、生成 C、等价性、`ct check` 升错） |
+| 样例 | `examples/20_foreach_statement`（`foreach_statement.ct` + `foreach_statement.expected.out`，E27-7） |
+| 文档 | spec §4.49（中英）、tutorial 10.6（中英）、glossary、roadmap、examples/README、DOC-70 关闭 |
+
+### 9.2 红证 → 绿证
+
+- 红证：在 `HEAD`（`f04f331`，未实现的 v0.26.4 编译器）上跑同一份 `check-ast.sh`
+  → `855 passed, 17 failed`，17 条恰好是 3 个正例 + 14 条 Phase 27 断言；失败原文统一是
+  `test/ast/...:N:C: error: unexpected token`（旧编译器在 `foreach` 处停下），正例与
+  “expected exit 0”类断言全红，`ct check` 的 JSON 断言也拿不到目标文案。
+- 绿证：实现后 `872 passed, 0 failed`（`+36` 条：3 正例 + 10 负例的通用判定 + 14 条专用断言 + 与手写 `for` 的等价性等）。
+- 期间修掉三处实现缺口：数组形参原被当成可迭代（C 里已衰减为指针），补 `Var.is_fnparam`；
+  `item` 块外引用沿用通用文案 `use of an undeclared variable`，L27-1 据此冻结；
+  体内不用 `item` 时生成物触发 `-Wunused-variable`（`check-warnings` 红），补一行 `(void)item;`。
+
+### 9.3 判据核对
+
+| 判据 | 结果 | 证据 |
+| --- | --- | --- |
+| E27-1 正例 | ✅ | `132`–`135` 全绿（含 `T a[] = {…}`、结构体字段、指针数组、文件作用域 `static const`、嵌套、`break`/`continue`/`return`） |
+| E27-2 负例 | ✅ | 10 条 `foreach_*` 各中自己的文案；`135` 证明 `foreach` 作变量/标签仍编译 |
+| E27-3 生成 C | ✅ | 断言 `int __ct_foreach_n_0 = (int)(sizeof(nums) / sizeof((nums)[0]));`、`for (int __ct_foreach_i_0 = 0; …)`、`int item = (nums)[__ct_foreach_i_0];`；与手写 `for` 输出 `cmp` 一致 |
+| E27-4 口径一致 | ✅ | 嵌套 `item` 在编译模式为 warning、`ct check --diagnostics=json` 为 `"severity":"error"` |
+| E27-5 零新增 warning | ✅ | `check-warnings.sh` 263 ok / 0 failed |
+| E27-6 自举 / 门禁 | ✅ | `check-all.sh` 11 道全绿；`test/run.sh` 132 passed |
+| E27-7 样例 | ✅ | `examples/20_foreach_statement`：数组遍历、隐式 `item`、`break`/`continue`、块内 `return`、块内闭包；同文件对照库层 `each`（trait 方法 + `(fn, env)` 回调）。`expected.out` 由 ct-ast 产物生成后逐行人工核对；`examples/README.md` 已登记；`//@ct-requires: ct-ast` 使其进 `test/run.sh` 端到端，并进 `check-ast` / `check-warnings` 语料 |
+
+### 9.4 门禁原始数字（2026-11-10 收口实跑）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `test/run.sh` | `132 passed, 0 failed` |
+| L1 自重建成 | `25 passed, 0 failed` |
+| L2（L1 构建的拆分树） | `25 passed, 0 failed` |
+| `check-ast.sh` | `873 passed, 0 failed` |
+| `check-warnings.sh` | `263 ok, 0 failed` |
+| acceptance | `20 pass, 0 new, 0 pending, 0 regression` |
+| `check-docs.py` | 11 phase status + 版本登记通过 |
+| `check-all.sh` | 11 道全绿 |
+
+### 9.5 版本与发布
+
+- 本轮**不 bump**、**不打 tag**，版本仍为 `v0.26.4`。
+- 若后续要 bump 到 `v0.27.0`，需五处同步（`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、
+  `selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`）并重生成全部
+  golden（`test/**/*.expected.*`、`docs/**` 中的版本号）；风险是冻结层 banner/版本改动
+  需同时通过 `check-version` 与 L0/L1/L2 全量回归，建议单独一个 `chore(release)` 提交。
+
+### 9.6 Lessons
+
+- 形状枚举要在解析期先落成硬错表：数组形参在 C 里已衰减，`sizeof` 会给出错误但合法的长度，
+  这是「不发射坏 C」之外的第二类陷阱——**静默算错**比编译失败更贵。
+- 上下文关键字的前瞻必须完整保存/恢复 lexer 状态（`pos/bol/tok/toknum/line/tokline/tokstart/lstart/toktext`），
+  否则 `foreach:` 标签会被误判。
+- 现有符号表只记 `is_array` 不记维度；补 `dims` 比在发码期反推声明文本更可靠，也让「多维 / 未定长」
+  两类拒绝都有单一事实来源。

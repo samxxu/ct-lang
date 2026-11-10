@@ -32,7 +32,7 @@
 | --- | --- |
 | [roadmap.md](roadmap.md) | 阶段总览、已定决策、版本记录与验收标准 |
 | [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) · [design/phase24.md](design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase17–19 的计划同样仍在 `design/` 下（归档策略见 [DOC-66](../issues/docs/doc66-design-archive-policy.md)） |
-| [design/phase27.md](design/phase27.md) | 进行中的阶段计划（Phase 27）：`foreach` 语句形态（判据已冻结；语法、展开规则与决策见正文） |
+| [design/phase27.md](design/phase27.md) | 已完成的阶段记录（Phase 27）：`foreach` 语句形态（数组形态已实现，容器协议按 D27-4 延后；语法、展开规则与决策见正文） |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 
@@ -84,7 +84,7 @@
 | --- | --- |
 | [roadmap.md](roadmap.md) | phase overview, decided questions, version record and exit criteria |
 | [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) · [design/phase24.md](design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | the completed phase plans (Phase 20–26: package support / non-escaping closures / `loop` sugar / `loop(a..b)` ranges / array range initialisers / closure arguments to static map calls / generic functions); the phase17–19 plans also remain under `design/` (archival policy: [DOC-66](../issues/docs/doc66-design-archive-policy.md)) |
-| [design/phase27.md](design/phase27.md) | in-progress phase record (Phase 27): the `foreach` statement form (criteria frozen; syntax, lowering rules and decisions inside) |
+| [design/phase27.md](design/phase27.md) | completed phase record (Phase 27): the `foreach` statement form (the array form is implemented; the container protocol is deferred by D27-4; syntax, lowering rules and decisions inside) |
 | [../issues/README.md](../issues/README.md) | the review ledger (one file per finding, with status and disposition) |
 | [history/README.md](history/README.md) | the history index: closed design records and review reports |
 

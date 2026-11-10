@@ -216,7 +216,7 @@
 | DOC-67 | Medium | Phase 26 文档与实现不符：S4 四处替换承诺、L26-3/L26-4 文案、E1 断言作用域、AGENTS 版本登记（已修，docs 提交，`v0.26.1`；复核 `verified`） | [doc67-phase26-doc-impl-mismatch.md](docs/doc67-phase26-doc-impl-mismatch.md) |
 | DOC-68 | Medium | VS Code 跳转索引不识别泛型模板：`T id<T>(T x)` 与 `id<int>(…)` 都无定义（本轮只补高亮，`extension.js` 未动） | [doc68-vscode-generic-jump-index.md](docs/doc68-vscode-generic-jump-index.md) |
 | DOC-69 | Low | Phase 26 出口判据 E1–E8 未覆盖 v0.26.4 补丁交付物（TEST-18 / CI-8 / DOC-66 / DOC-68） | [doc69-phase26-exit-criteria-patch-gap.md](docs/doc69-phase26-exit-criteria-patch-gap.md) |
-| DOC-70 | Low | 语句级 `foreach (container) { … item … }` 未实现、未排期；命名见 phase25 D25-12（旧名 `each` 已作废） | [doc70-each-statement-form-unimplemented.md](docs/doc70-each-statement-form-unimplemented.md) |
+| DOC-70 | Low | ~~语句级 `foreach (container) { … item … }` 未实现、未排期~~ **已关闭**：Phase 27 在 ct-ast 实现数组形态，容器协议按 D27-4 延后；命名见 phase25 D25-12（旧名 `each` 已作废） | [doc70-each-statement-form-unimplemented.md](docs/doc70-each-statement-form-unimplemented.md) |
 
 ### `testing/` —— 测试覆盖度
 

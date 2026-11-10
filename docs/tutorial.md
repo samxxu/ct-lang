@@ -991,6 +991,53 @@ ct build gen.ct -o gen && ./gen
 
 细节与诊断见 [language-spec §4.48](language-spec.md)。
 
+### 10.6 `foreach`：遍历数组，不用起下标
+
+遍历一维数组时，不用自己维护下标。`foreach (数组) { … item … }` 在块内直接给你当前元素 `item`：
+
+```c
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    int nums[] = {3, 1, 4, 1, 5};
+    struct Point pts[2] = {{1, 2}, {3, 4}};
+    int total = 0;
+    int sx = 0;
+
+    foreach (nums) {
+        if (item == 1) continue;
+        total = total + item;
+    }
+    foreach (pts) {
+        sx = sx + item.x;
+    }
+    printf("%d %d\n", total, sx);
+    return 0;
+}
+```
+
+```sh
+ct build walk.ct -o walk && ./walk
+# 12 4
+```
+
+- **展开就是一个普通 `for`**：长度 `sizeof(x) / sizeof((x)[0])` 在循环前只读一次，
+  `item` 是元素的值拷贝；生成物没有运行时对象，`break` / `continue` / `return` 与手写循环一致。
+- **只收一维数组变量**：裸指针、多维数组、数组形参、数组成员都硬报错（长度不可知就不猜），
+  接口值元素也不拷贝。
+- **`item` 只在块内可见**，块外引用是未声明标识符；嵌套 `foreach` 遮蔽外层 `item` 时编译模式给
+  warning，`ct check` 下是错误。
+- **`foreach` 是上下文关键字**：`int foreach = 3;`、`foreach:` 标签、`goto foreach;` 都照常。
+
+容器协议（`len()` + `get(int)`）与显式绑定名不在本相；细节与诊断见
+[language-spec §4.49](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2080,6 +2127,58 @@ ct build gen.ct -o gen && ./gen
   name in the generated C.
 
 Details and diagnostics are in [language-spec §4.48](language-spec.md).
+
+### 10.6 `foreach`: walk an array without an index
+
+For a one-dimensional array there is no need to carry an index. `foreach (array) { … item … }` binds
+`item` to the current element inside the block:
+
+```c
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    int nums[] = {3, 1, 4, 1, 5};
+    struct Point pts[2] = {{1, 2}, {3, 4}};
+    int total = 0;
+    int sx = 0;
+
+    foreach (nums) {
+        if (item == 1) continue;
+        total = total + item;
+    }
+    foreach (pts) {
+        sx = sx + item.x;
+    }
+    printf("%d %d\n", total, sx);
+    return 0;
+}
+```
+
+```sh
+ct build walk.ct -o walk && ./walk
+# 12 4
+```
+
+- **It lowers to a plain `for`**: the length `sizeof(x) / sizeof((x)[0])` is read once before the
+  loop and `item` is a by-value copy; there is no runtime object, and `break` / `continue` / `return`
+  behave exactly as in a hand-written loop.
+- **One-dimensional array variables only**: a bare pointer, a multidimensional array, an array
+  parameter and a member array are hard errors (the compiler refuses to guess an unknown length),
+  and an interface-valued element is not copied.
+- **`item` is visible inside the block only**; a later reference is an undeclared identifier. A
+  nested `foreach` that shadows the outer `item` warns in compile mode and is an error under
+  `ct check`.
+- **`foreach` is a contextual keyword**: `int foreach = 3;`, a `foreach:` label and `goto foreach;`
+  all keep working.
+
+The container protocol (`len()` + `get(int)`) and explicit binding names are out of this phase;
+details and diagnostics are in [language-spec §4.49](language-spec.md).
 
 ### 11. CLI cheat sheet
 

@@ -1982,6 +1982,51 @@ Phase 26 落地（§4.48）；泛型结构体 / trait / 约束 / 推导 / 多类
 这些语法的定义与实现记录见 [roadmap](roadmap.md) 的 Phase 2–5 与 [design/restore.md](history/design/restore.md)；
 归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见 git tag `overreach-oracle`。
 
+#### 4.49 `foreach` 语句形态（Phase 27，仅 ct-ast）
+
+`foreach (<数组>) { … item … }` 在一维数组上迭代，块内隐式绑定 `item` 为当前元素的**值拷贝**；
+展开恰好是一个普通 `for`，零运行时对象：
+
+```c
+/* 输入 */  foreach (nums) { total += item; }
+/* 输出 */
+{
+    int __ct_foreach_n_0 = (int)(sizeof(nums) / sizeof((nums)[0]));
+    for (int __ct_foreach_i_0 = 0; __ct_foreach_i_0 < __ct_foreach_n_0; __ct_foreach_i_0++) {
+        int item = (nums)[__ct_foreach_i_0];
+        (void)item;   /* keeps -Wall -Wextra clean when the body ignores item */
+        total += item;
+    }
+}
+```
+
+- **`foreach` 是上下文关键字**（D27-1）：不进关键字表；只有语句位置、且紧跟 `(` 时才特殊。
+  `int foreach = 3;`、`foreach:` 标签、`goto foreach;`、`x = foreach + 1;` 仍是普通标识符。
+- **集合只收一维数组变量**（D27-3 / D27-11）：元素类型取声明时的元素类型，`item` 按值初始化，
+  写 `item` 不回写容器（D27-5）。`item` 在解析期进入符号表，所以名字解析、闭包捕获、遮蔽都看得见它；
+  它在集合表达式求值之后才入作用域，`foreach (item)` 引用的是外层同名绑定。
+- **长度只求值一次**（D27-7 / D27-9）：`sizeof(x) / sizeof((x)[0])` 赋给私有临时量
+  `__ct_foreach_n_K`（`K` 是发射器进程级单调计数器，嵌套天然是 `_1`、`_2`），
+  `[5]`、`[]`（初值推导）、`[MAX]`、VLA 都成立；外层加块，两个临时量不泄漏。
+- **`break` / `continue` / `return`** 是普通 C 跳转；`break` / `continue` 前释放体内登记的
+  autodrop 变量，与 `loop` 同一套机制。
+- **遮蔽只判 `foreach` 套 `foreach`**（D27-10）：内层遮蔽外层 `item` 时编译模式打印
+  `warning: foreach shadows the outer 'item'; use a native for to name the binding`，
+  `ct check` 下升为错误。体内手写同名局部变量与原生 `for` 是普通 C 遮蔽，不诊断。
+- **不可迭代形态一律硬错，绝不发射坏 C**：裸指针 / 非数组值报
+  `foreach needs an array; '<name>' is not iterable`；多维数组（含 typedef 隐藏的数组元素）报
+  `foreach does not support multidimensional arrays ('<name>')`；数组形参在 C 里已是指针、
+  长度已丢失，报 `foreach cannot iterate the array parameter '<name>' (its length is lost)`；
+  未定长的文件作用域数组报 `foreach needs an array with a known length ('<name>')`；
+  数组成员与非标识符集合报 `foreach needs a plain array variable`；函数指针数组等非朴素声明符报
+  `foreach cannot iterate '<name>'; its declarator is not a plain array`；接口值元素报
+  `foreach cannot copy interface values ('<name>')`。
+- **边界**：`foreach ()` 报 `foreach needs a collection expression`；两个集合报
+  `foreach takes exactly one collection`；`foreach (a) printf(…);` 报 `foreach body must be a block`。
+  `item` 只在该块内可见，块外引用走普通的未声明标识符诊断。
+- **不做**（D27-4）：`in` 形式、显式绑定名、迭代器、容器协议（`len()` + `get(int)`）——
+  本仓没有 std 容器，协议留给有真实消费者的阶段；非数组容器按上面的 L27-2 拒绝。
+
 ---
 
 ## English
@@ -4209,6 +4254,60 @@ int main(void) {
   inside one is a hard error (`type parameter 'T' cannot be used in an array dimension`); a bare
   template name used as a value (`int (*p)(int) = id;`) reports L26-1
   (`generic function '<name>' needs a type argument`) instead of emitting a name with no C symbol.
+
+#### 4.49 The `foreach` statement form (Phase 27, ct-ast only)
+
+`foreach (<array>) { … item … }` iterates a one-dimensional array and binds the implicit `item` to a
+**copy** of the current element; it lowers to exactly one plain `for` with no runtime object:
+
+```c
+/* input */  foreach (nums) { total += item; }
+/* output */
+{
+    int __ct_foreach_n_0 = (int)(sizeof(nums) / sizeof((nums)[0]));
+    for (int __ct_foreach_i_0 = 0; __ct_foreach_i_0 < __ct_foreach_n_0; __ct_foreach_i_0++) {
+        int item = (nums)[__ct_foreach_i_0];
+        (void)item;   /* keeps -Wall -Wextra clean when the body ignores item */
+        total += item;
+    }
+}
+```
+
+- **`foreach` is a contextual keyword** (D27-1): it is absent from the keyword table and is only
+  special in statement position when `(` follows. `int foreach = 3;`, a `foreach:` label,
+  `goto foreach;` and `x = foreach + 1;` all keep the ordinary identifier meaning.
+- **The collection is a one-dimensional array variable** (D27-3 / D27-11). The element type comes
+  from the declaration, `item` is initialised by value and never writes back to the container
+  (D27-5). `item` enters the symbol table at parse time, so name resolution, closure capture and
+  shadowing see it; it enters scope after the collection is parsed, so `foreach (item)` names an
+  outer binding.
+- **The length is read once** (D27-7 / D27-9): `sizeof(x) / sizeof((x)[0])` goes into a private
+  temporary `__ct_foreach_n_K` (`K` is the emitter's process-global counter, so nesting yields
+  `_1`, `_2` naturally). `[5]`, `[]` (inferred from the initialiser), `[MAX]` and VLAs all work;
+  the outer block keeps both temporaries out of the user's scope.
+- **`break` / `continue` / `return`** are ordinary C jumps; `break` / `continue` release the body's
+  auto-dropped variables through the same mechanism as `loop`.
+- **Only foreach-in-foreach shadowing is diagnosed** (D27-10): an inner `item` shadowing the outer
+  one prints `warning: foreach shadows the outer 'item'; use a native for to name the binding` in
+  compile mode and becomes an error under `ct check`. A hand-written same-named local or a native
+  `for` stays ordinary C shadowing and is silent.
+- **Every non-iterable shape is a hard error, never illegal C**: a bare pointer or a non-array value
+  reports `foreach needs an array; '<name>' is not iterable`; a multidimensional array (including
+  one hidden behind a typedef) reports `foreach does not support multidimensional arrays
+  ('<name>')`; an array parameter is already a pointer in C and has lost its length, reporting
+  `foreach cannot iterate the array parameter '<name>' (its length is lost)`; an unsized file-scope
+  array reports `foreach needs an array with a known length ('<name>')`; a member array or any
+  non-identifier collection reports `foreach needs a plain array variable`; an array of function
+  pointers or another non-plain declarator reports `foreach cannot iterate '<name>'; its declarator
+  is not a plain array`; an interface-valued element reports
+  `foreach cannot copy interface values ('<name>')`.
+- **Edges**: `foreach ()` reports `foreach needs a collection expression`; two collections report
+  `foreach takes exactly one collection`; `foreach (a) printf(…);` reports
+  `foreach body must be a block`. `item` is visible inside the block only; a later reference goes
+  through the ordinary undeclared-identifier diagnostic.
+- **Not implemented** (D27-4): the `in` form, explicit binding names, iterators and the container
+  protocol (`len()` + `get(int)`) — there is no std container in this repository, so the protocol
+  waits for a phase with a real consumer; a non-array container is refused as above.
 
 ### 7. Capacity limits
 
