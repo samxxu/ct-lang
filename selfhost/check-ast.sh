@@ -5632,10 +5632,10 @@ p27_diag() {
         bad "foreach: $1" "$(cat "$work/p27.err")"
     fi
 }
-p27_diag foreach_pointer "foreach needs an array; 'p' is not iterable"
+p27_diag foreach_pointer "foreach needs an array or a Vec/Map; 'p' is not iterable"
 p27_diag foreach_multidim "foreach does not support multidimensional arrays ('grid')"
 p27_diag foreach_param "foreach cannot iterate the array parameter 'a' (its length is lost)"
-p27_diag foreach_struct "foreach needs an array; 'p' is not iterable"
+p27_diag foreach_struct "foreach needs an array or a Vec/Map; 'p' is not iterable"
 p27_diag foreach_member "foreach needs a plain array variable"
 p27_diag foreach_unsized_global "foreach needs an array with a known length ('ext')"
 p27_diag foreach_scope "use of an undeclared variable"

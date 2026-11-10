@@ -20,6 +20,7 @@
 import runtime::arena::Arena;
 import frontend::lex::Lexer;
 import frontend::sym::Symbols;
+import frontend::sym::Symbols::StructInst as StructInst;
 import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
@@ -58,6 +59,8 @@ import tool::diag::Diag;
 #define N_MEMBER 24
 #define N_NUM 8
 #define N_POST 18
+#define N_PRE 57
+#define N_ADDR 27
 #define N_RAW 31
 #define N_RET 5
 #define N_SWITCH 42
@@ -1809,10 +1812,17 @@ impl StmtOps for Stmt {
     int parse_foreach(void)
     {
         int s, c, body, line, col, vi, nd, ip, bare;
+        int aux, inst, nargs;
         char msg[MAX_TEXT];
         char elem[MAX_TEXT];
         char ex[MAX_TEXT];
         char tr[MAX_TEXT];
+        char iname[MAX_TEXT];
+        char targ[MAX_TEXT];
+        char targ2[MAX_TEXT];
+        char tname[MAX_TEXT];
+        char tail[MAX_TEXT];
+        char enc[MAX_TEXT];
         const char *p;
         const char *q;
 
@@ -1851,6 +1861,66 @@ impl StmtOps for Stmt {
             return tool::diag::ct_sem_error(line, col,
                                             "foreach needs a declared array",
                                             self->mem->path);
+        /* Phase 29 (D29-13): the built-in containers iterate through their own
+           protocol -- `Vec` by `len`/`get`, `Map` by `len`/`entry`. `item` is a
+           by-value copy either way; `i` is a read-only binding for `Vec` only,
+           and naming it in a `Map` body is the L29-18 hard error (a map has no
+           natural position, and offering one would read as an order promise). */
+        aux = 0;
+        iname[0] = 0;
+        snprintf(iname, sizeof iname, "%s", self->sym->vars[vi].type);
+        if (strncmp(iname, "struct ", 7) == 0)
+            memmove(iname, iname + 7, strlen(iname + 7) + 1);
+        inst = frontend::sym::ct_inst_find(iname);
+        if (inst >= 0) {
+            struct StructInst *ins = frontend::sym::ct_insts(&nargs);
+            if (strcmp(ins[inst].tmpl, "Vec") == 0) {
+                aux = 1;
+                snprintf(elem, sizeof elem, "%s", ins[inst].ctype[0]);
+            } else if (strcmp(ins[inst].tmpl, "Map") == 0) {
+                aux = 2;
+            }
+        }
+        if (aux != 0) {
+            /* L29-15: a container element would be a second owner of the same
+               buffer, and an interface value would lose its vptr on the copy. */
+            int kk;
+            {
+                struct StructInst *ins = frontend::sym::ct_insts(&nargs);
+                for (kk = 0; kk < (aux == 1 ? 1 : 2); kk++) {
+                    char bname[MAX_TEXT];
+                    bname[0] = 0;
+                    if (frontend::sym::ct_inst_split(ins[inst].carg[kk], bname, &nd,
+                                                     targ, targ2, tail, MAX_TEXT) == 0
+                        && (strcmp(bname, "Vec") == 0 || strcmp(bname, "Map") == 0
+                            || strcmp(bname, "MapEntry") == 0)) {
+                        snprintf(msg, sizeof msg,
+                                 "foreach cannot copy a container element ('%s')",
+                                 self->sym->vars[vi].name);
+                        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                    }
+                    if (self->sup->iface_ref_type(ins[inst].ctype[kk], tr,
+                                                  sizeof tr, &ip)) {
+                        snprintf(msg, sizeof msg,
+                                 "foreach cannot copy interface values ('%s')",
+                                 self->sym->vars[vi].name);
+                        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                    }
+                }
+                if (aux == 2) {
+                    /* The item type is the matching `MapEntry` instance; its
+                       layout is registered here so the C spelling exists even
+                       when the user never wrote `MapEntry<...>` themselves. */
+                    if (self->ex->inst_make("MapEntry", 2,
+                                            ins[inst].carg[0], ins[inst].carg[1],
+                                            ins[inst].ctype[0], ins[inst].ctype[1],
+                                            enc, MAX_TEXT, 0) != 0)
+                        return -1;
+                    snprintf(elem, sizeof elem, "struct %s", enc);
+                }
+            }
+        }
+        if (aux == 0) {
         /* `int a[]` as a parameter is `int *a` in C; `sizeof` would answer the
            pointer's size and silently iterate the wrong count. */
         if (self->sym->vars[vi].is_param || self->sym->vars[vi].is_fnparam) {
@@ -1861,7 +1931,7 @@ impl StmtOps for Stmt {
         }
         if (!self->sym->vars[vi].dims[0]) {
             snprintf(msg, sizeof msg,
-                     "foreach needs an array; '%s' is not iterable",
+                     "foreach needs an array or a Vec/Map; '%s' is not iterable",
                      self->sym->vars[vi].name);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
@@ -1912,8 +1982,16 @@ impl StmtOps for Stmt {
                      self->sym->vars[vi].name);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
+        }   /* aux == 0: the Phase 27 array path ends here */
         if (self->sup->push_scope() != 0) return -1;
         if (self->sup->declare_var("item", elem) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* D29-14: an array or `Vec` also binds the read-only index `i`. A `Map`
+           binds it too, so that naming it reports L29-18 instead of an
+           undeclared name; the emitter prints no `i` line for a `Map` body. */
+        if (self->sup->declare_var("i", "int") != 0) {
             self->sup->pop_scope();
             return -1;
         }
@@ -1938,8 +2016,44 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
+        /* D29-14: the bindings are fixed for the whole body. Redeclaring `item`
+           or `i` is L29-17; assigning / incrementing / taking the address of
+           the index is L29-16 (it stands for the position, not a variable); and
+           a `Map` body has no `i` at all (L29-18), because insertion order is
+           not an ordinal the loop promises. The scan only sees nodes the body
+           itself created: the arena grows monotonically while it is parsed. */
+        for (nd = body; nd < self->arena->nnode; nd++) {
+            int k0 = self->arena->nodes[nd].kind;
+            if (k0 == N_DECL
+                && (strcmp(self->arena->nodes[nd].text2, "item") == 0
+                    || strcmp(self->arena->nodes[nd].text2, "i") == 0)) {
+                snprintf(msg, sizeof msg, "cannot redeclare the foreach binding '%s'",
+                         self->arena->nodes[nd].text2);
+            } else if (aux == 2 && k0 == N_VAR
+                       && strcmp(self->arena->nodes[nd].text2, "i") == 0) {
+                snprintf(msg, sizeof msg,
+                         "'i' has no meaning in a Map foreach; use item.key / item.value");
+            } else if (aux != 2
+                       && (k0 == N_ASSIGN || k0 == N_POST || k0 == N_PRE
+                           || k0 == N_ADDR)
+                       && self->arena->nodes[nd].a >= 0
+                       && self->arena->nodes[self->arena->nodes[nd].a].kind == N_VAR
+                       && strcmp(self->arena->nodes[self->arena->nodes[nd].a].text2,
+                                 "i") == 0) {
+                snprintf(msg, sizeof msg, "the foreach index 'i' is read-only");
+            } else {
+                continue;
+            }
+            self->sup->pop_scope();
+            return tool::diag::ct_sem_error(self->arena->nodes[nd].line, 1, msg,
+                                            self->mem->path);
+        }
         self->sup->pop_scope();
         snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", elem);
+        /* aux: 0 = array, 1 = Vec, 2 = Map; text2 names the container instance
+           the emitter calls `len` / `get` / `entry` on. */
+        self->arena->nodes[s].aux = aux;
+        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", aux ? iname : "");
         self->arena->nodes[s].a = c;
         self->arena->nodes[s].d = body;
         return s;

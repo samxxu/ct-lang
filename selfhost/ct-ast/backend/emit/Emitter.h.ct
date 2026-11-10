@@ -3038,29 +3038,67 @@ impl EmitOps for Emitter {
            user's scope. */
         if (self->arena->nodes[n].kind == N_FOREACH) {
             int k;
+            int faux;
+            const char *fname;
+            faux = self->arena->nodes[n].aux;
+            fname = self->arena->nodes[n].text2;
             k = self->ntmp;
             self->ntmp++;
             self->emit_indent(ind);
             fputs("{\n", self->out);
-            self->emit_indent(ind + 1);
-            fprintf(self->out, "int __ct_foreach_n_%d = (int)(sizeof(", k);
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fputs(") / sizeof((", self->out);
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fputs(")[0]));\n", self->out);
+            if (faux == 1 || faux == 2) {
+                /* Phase 29 (D29-13): a built-in container snapshots its length
+                   once and reads each element through the inherent `get` /
+                   `entry`, so modifying the container in the body cannot run
+                   the loop past the snapshot. */
+                self->emit_indent(ind + 1);
+                fprintf(self->out, "struct %s *__ct_foreach_c_%d = &(", fname, k);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(");\n", self->out);
+                self->emit_indent(ind + 1);
+                fprintf(self->out, "int __ct_foreach_n_%d = %s_len(__ct_foreach_c_%d);\n",
+                        k, fname, k);
+            } else {
+                self->emit_indent(ind + 1);
+                fprintf(self->out, "int __ct_foreach_n_%d = (int)(sizeof(", k);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(") / sizeof((", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(")[0]));\n", self->out);
+            }
             self->emit_indent(ind + 1);
             fprintf(self->out,
                     "for (int __ct_foreach_i_%d = 0; __ct_foreach_i_%d < __ct_foreach_n_%d; __ct_foreach_i_%d++) {\n",
                     k, k, k, k);
+            /* An array and a `Vec` also bind the read-only index (D29-14); a
+               `Map` body has none, and the parser already refused any use. */
+            if (faux != 2) {
+                self->emit_indent(ind + 2);
+                fprintf(self->out, "int i = __ct_foreach_i_%d;\n", k);
+            }
             self->emit_indent(ind + 2);
-            fprintf(self->out, "%s item = (", self->arena->nodes[n].text);
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fprintf(self->out, ")[__ct_foreach_i_%d];\n", k);
-            /* `item` may go unused (`foreach (xs) { puts("x"); }`, or an outer
-               binding hidden by a nested one). A plain `(void)item;` keeps the
+            if (faux == 1)
+                fprintf(self->out,
+                        "%s item = %s_get(__ct_foreach_c_%d, __ct_foreach_i_%d);\n",
+                        self->arena->nodes[n].text, fname, k, k);
+            else if (faux == 2)
+                fprintf(self->out,
+                        "%s item = %s_entry(__ct_foreach_c_%d, __ct_foreach_i_%d);\n",
+                        self->arena->nodes[n].text, fname, k, k);
+            else {
+                fprintf(self->out, "%s item = (", self->arena->nodes[n].text);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, ")[__ct_foreach_i_%d];\n", k);
+            }
+            /* `item` and `i` may go unused (`foreach (xs) { puts("x"); }`, or a
+               binding hidden by a nested one). A plain `(void)x;` keeps the
                generated C `-Wall -Wextra` clean without a GCC-only attribute. */
             self->emit_indent(ind + 2);
             fputs("(void)item;\n", self->out);
+            if (faux != 2) {
+                self->emit_indent(ind + 2);
+                fputs("(void)i;\n", self->out);
+            }
             for (c = self->arena->nodes[self->arena->nodes[n].d].a; c >= 0;
                  c = self->arena->nodes[c].next)
                 if (self->emit_node(c, ind + 2) != 0) return -1;
