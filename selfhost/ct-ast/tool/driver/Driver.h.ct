@@ -28,6 +28,7 @@ import frontend::module::Module;
 import frontend::parse::Parser;
 import frontend::sym::Symbols;
 import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
 
 #define MAX_PATH 1024
@@ -38,6 +39,9 @@ namespace tool::driver;
 trait DriverOps {
     int  fail(const char *msg);
     int  default_output(const char *in, char *out, size_t cap);
+    /* Phase 29: parse the built-in `Vec` / `Map` unit before the input and
+       return its program node, or -1 when the layer is not installed. */
+    int  load_builtin(const char *in);
     int  run(int argc, char **argv);
 }
 
@@ -79,12 +83,80 @@ impl DriverOps for Driver {
         return 0;
     }
 
+    /* Phase 29: `Vec`, `Map` and `MapEntry` are always in scope -- no import
+       and no `-I`. The layer is one ordinary `.h.ct` unit; it is parsed before
+       the input so its templates are in the table when the input names them,
+       and its top-level nodes are spliced in front of the input's, so compile
+       mode still emits one C translation unit. An installation without the
+       layer is not an error: programs that never touch a container compile
+       exactly as before. */
+    int load_builtin(const char *in)
+    {
+        char cand[MAX_PATH];
+        char alt[MAX_PATH];
+        const char *env;
+        const char *slash;
+        const char *savepath;
+        int i, prog, n;
+        FILE *probe;
+
+        env = getenv("CT_STD_DIR");
+        for (i = 0; i < 3; i++) {
+            cand[0] = 0;
+            if (i == 0) {
+                if (!env || !env[0]) continue;
+                n = snprintf(cand, sizeof cand, "%s/Vec.h.ct", env);
+            } else if (i == 1) {
+                n = snprintf(cand, sizeof cand, "lib/std/Vec.h.ct");
+            } else {
+                slash = strrchr(in, '/');
+                if (!slash || (size_t)(slash - in) >= sizeof alt) continue;
+                memcpy(alt, in, (size_t)(slash - in));
+                alt[slash - in] = 0;
+                n = snprintf(cand, sizeof cand, "%s/../lib/std/Vec.h.ct", alt);
+            }
+            if (n < 0 || n >= (int)sizeof cand) continue;
+            if (strcmp(cand, in) == 0) return -1;
+            probe = fopen(cand, "r");
+            if (!probe) continue;
+            fclose(probe);
+            savepath = self->m->path;
+            self->m->path = cand;
+            self->mem->path = cand;
+            self->sym->path = cand;
+            if (self->m->read_file(cand) != 0) {
+                self->m->path = savepath;
+                self->mem->path = savepath;
+                self->sym->path = savepath;
+                return -1;
+            }
+            self->lex->pos = 0;
+            self->lex->bol = 1;
+            self->lex->line = 1;
+            self->lex->tokline = 1;
+            self->lex->lstart = 0;
+            self->lex->tokstart = 0;
+            self->p->unit_is_hdr = 1;
+            self->p->unit_is_map = 0;
+            prog = frontend::parse::ct_parse_program();
+            self->m->path = savepath;
+            self->mem->path = savepath;
+            self->sym->path = savepath;
+            if (prog < 0) {
+                fprintf(stderr, "ctc: the built-in layer failed to parse\n");
+                return -1;
+            }
+            return prog;
+        }
+        return -1;
+    }
+
     int run(int argc, char **argv)
     {
         const char *in;
         const char *out;
         char outbuf[MAX_PATH];
-        int i, prog;
+        int i, prog, stdprog;
         FILE *f;
 
         in = NULL;
@@ -305,6 +377,13 @@ impl DriverOps for Driver {
         self->p->nparams = 0;
         self->p->ncalls = 0;
         self->p->cur_func[0] = 0;
+        /* Phase 29: the built-in container layer is parsed first so `Vec` /
+           `Map` need neither an import nor an `-I`; its nodes are spliced in
+           front of the input's below. A missing layer is not an error. */
+        stdprog = self->load_builtin(in);
+        /* The layer opens a namespace; the input starts at the root again. */
+        self->sym->ns[0] = 0;
+        self->p->ns_decl[0] = 0;
         /* A `.m.ct` input is a mapping unit even when it is fed to `ct check`,
            which skips the build path that normally marks it. */
         {
@@ -313,6 +392,14 @@ impl DriverOps for Driver {
             self->p->unit_is_hdr = (pl > 5 && strcmp(in + pl - 5, ".h.ct") == 0) ? 1 : 0;
         }
         frontend::parse::ct_parse_clear_error();
+        /* The built-in layer left the cursor at its own EOF; the input starts
+           from byte zero again. */
+        self->lex->pos = 0;
+        self->lex->bol = 1;
+        self->lex->line = 1;
+        self->lex->tokline = 1;
+        self->lex->lstart = 0;
+        self->lex->tokstart = 0;
         if (self->m->read_file(in) != 0) {
             return frontend::parse::ct_parse_report();
         }
@@ -328,6 +415,21 @@ impl DriverOps for Driver {
                 return 1;
             }
             return frontend::parse::ct_parse_report();
+        }
+        /* Splice the layer's declaration nodes in front of the input's: one
+           program, one C translation unit, one set of emitted container
+           instances (D29-3). */
+        if (stdprog >= 0) {
+            int last;
+            last = self->arena->nodes[stdprog].a;
+            if (last > 0) {
+                while (self->arena->nodes[last].next > 0)
+                    last = self->arena->nodes[last].next;
+                self->arena->nodes[last].next = self->arena->nodes[prog].a;
+                prog = stdprog;
+            } else {
+                prog = stdprog;
+            }
         }
         /* `ct check` (19.4): the semantic findings are this entry's output and
            its exit code -- 1 when any was reported, 0 when clean. Nothing is
