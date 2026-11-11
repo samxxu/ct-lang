@@ -165,6 +165,11 @@ pub trait ExprOps {
     int  peel_ptr(const char *ty, char *out, int cap);
     int  container_init_check(const char *ctype);
     int  container_global_init_check(const char *ctype);
+    /* Phase 31 O3: the write forms a subscript has no lvalue for. The kind is
+       1 for a `Vec`, 2 for a `Map`, 0 when the chain holds no subscript. */
+    int  container_subscript_kind(int n);
+    int  container_write_check(int n);
+    int  container_addr_check(int n);
     /* Phase 31 S16b: one Map literal key or value against its slot, using the
        19.2 coarse kernel. 0 compatible, 1 a confident mismatch, -1 undecidable. */
     int  brace_arg_ok(const char *formal, const char *actual);
@@ -2587,6 +2592,9 @@ impl ExprOps for Expr {
             int aline = self->lex->tokline;
             int acol = self->lex->tokstart - self->lex->lstart + 1;
             k2 = self->arena->nodes[left].kind;
+            /* Phase 31 O3 (L31-3/L31-4): an assignment in a value position
+               writes the target just like the statement form. */
+            if (self->container_write_check(left) != 0) return -1;
             /* Phase 30 S11: inside an `into` block `$` is a writable lvalue
                (an `own` receiver never reaches here -- L30-4 refuses it). */
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
@@ -3089,6 +3097,8 @@ impl ExprOps for Expr {
             if (e < 0) return -1;
             if (is_range_index(self->arena, e))
                 return self->sup->fail("the range index '$' is not a variable");
+            /* Phase 31 O3 (L31-3/L31-4): `++v[i]` / `--v[i]` write the value. */
+            if (self->container_write_check(e) != 0) return -1;
             n = self->sup->new_node(N_PRE);
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
@@ -3118,6 +3128,8 @@ impl ExprOps for Expr {
             if (e < 0) return -1;
             if (is_range_index(self->arena, e))
                 return self->sup->fail("the range index '$' is not a variable");
+            /* Phase 31 O3 (L31-5): `&v[i]` has no object to name. */
+            if (self->container_addr_check(e) != 0) return -1;
             n = self->sup->new_node(N_ADDR);
             if (n < 0) return -1;
             self->arena->nodes[n].a = e;
@@ -3463,6 +3475,65 @@ impl ExprOps for Expr {
         return 0;
     }
 
+    /* Phase 31 O3 (L31-3/L31-4): the read-only rule for a write form. The
+       target is walked down its member / arrow chain, so `v[i].field = x` blames
+       the subscript; the walk stops at a deref, because `*m[k] = x` writes the
+       stored object and stays legal. 0 when the chain holds no subscript. */
+    int container_subscript_kind(int n)
+    {
+        while (n >= 0) {
+            int k = self->arena->nodes[n].kind;
+            if (k == N_MCALL
+                && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
+                && strcmp(self->arena->nodes[n].text2, "get") == 0) {
+                if (strncmp(self->arena->nodes[n].text, "struct Vec_", 11) == 0
+                    || strncmp(self->arena->nodes[n].text, "Vec_", 4) == 0)
+                    return 1;
+                if (strncmp(self->arena->nodes[n].text, "struct Map_", 11) == 0
+                    || strncmp(self->arena->nodes[n].text, "Map_", 4) == 0)
+                    return 2;
+                return 0;
+            }
+            if (k != N_MEMBER && k != N_ARROW) return 0;
+            n = self->arena->nodes[n].a;
+        }
+        return 0;
+    }
+
+    /* L31-3 / L31-4 at the subscript's own position. */
+    int container_write_check(int n)
+    {
+        int k = self->container_subscript_kind(n);
+        int at = n;
+        if (k == 0) return 0;
+        while (at >= 0 && (self->arena->nodes[at].kind == N_MEMBER
+                           || self->arena->nodes[at].kind == N_ARROW))
+            at = self->arena->nodes[at].a;
+        if (k == 1)
+            return tool::diag::ct_sem_error(self->arena->nodes[at].line,
+                                            self->arena->nodes[at].num,
+                                            "a Vec subscript is read-only; use set(i, v)",
+                                            self->sup->mem->path);
+        return tool::diag::ct_sem_error(self->arena->nodes[at].line,
+                                        self->arena->nodes[at].num,
+                                        "a Map subscript is read-only; use put(k, v)",
+                                        self->sup->mem->path);
+    }
+
+    /* Phase 31 O3 (L31-5): a subscript names a value, so it has no address. */
+    int container_addr_check(int n)
+    {
+        int at = n;
+        if (self->container_subscript_kind(n) == 0) return 0;
+        while (at >= 0 && (self->arena->nodes[at].kind == N_MEMBER
+                           || self->arena->nodes[at].kind == N_ARROW))
+            at = self->arena->nodes[at].a;
+        return tool::diag::ct_sem_error(self->arena->nodes[at].line,
+                                        self->arena->nodes[at].num,
+                                        "cannot take the address of a container subscript; bind it to a local first",
+                                        self->sup->mem->path);
+    }
+
     /* Phase 31 S16b: the 19.2 coarse comparison for a Map literal key or value.
        It reuses the same class kernel `push` / `put` arguments use, so a numeric
        literal stays compatible with any integer slot and a struct compares by
@@ -3606,6 +3677,8 @@ impl ExprOps for Expr {
                 }
                 if (sugar) {
                     int rt, rd2;
+                    int bl = self->lex->tokline;
+                    int bc = self->lex->tokstart - self->lex->lstart + 1;
                     char rty[MAX_TEXT];
                     self->sup->lex_next();
                     idx = self->parse_expr();
@@ -3614,6 +3687,9 @@ impl ExprOps for Expr {
                     m = self->sup->new_node(N_MCALL);
                     if (m < 0) return -1;
                     self->arena->nodes[m].aux = 9;
+                    /* L31-3/4: a write form points at the subscript itself */
+                    self->arena->nodes[m].line = bl;
+                    self->arena->nodes[m].num = bc;
                     snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", bty);
                     snprintf(self->arena->nodes[m].text2, MAX_TEXT, "get");
                     self->arena->nodes[m].a = n;
@@ -4053,6 +4129,8 @@ impl ExprOps for Expr {
             int k;
             if (is_range_index(self->arena, n))
                 return self->sup->fail("the range index '$' is not a variable");
+            /* Phase 31 O3 (L31-3/L31-4): `v[i]++` writes the value. */
+            if (self->container_write_check(n) != 0) return -1;
             k = self->arena->nodes[n].kind;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
                 return self->sup->fail("'++' / '--' need an assignable target");

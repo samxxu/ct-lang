@@ -1,0 +1,9 @@
+/* L31-4: `m["k"]` is `m.get("k")`; use `put(k, v)` to change the entry. */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> m = { "k": 1 };
+    m["k"] = 2;
+    return 0;
+}

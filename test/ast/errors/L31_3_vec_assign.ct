@@ -1,0 +1,10 @@
+/* L31-3: `v[0]` is `v.get(0)`, a value, so it cannot be assigned; use
+   `set(i, v)`. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v = {3};
+    v[0] = 4;
+    return 0;
+}

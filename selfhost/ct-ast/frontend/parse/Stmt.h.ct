@@ -3093,6 +3093,8 @@ impl StmtOps for Stmt {
             int op = 0, k2;
             char oc = self->lex->toktext[0];
             k2 = self->arena->nodes[e].kind;
+            /* Phase 31 O3 (L31-3/L31-4): `v[i] += 1` writes the value. */
+            if (self->ex->container_write_check(e) != 0) return -1;
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
                 && k2 != N_DEREF && k2 != N_INTO_SELF)
                 return self->sup->fail("assignment target is not assignable");
@@ -3128,6 +3130,8 @@ impl StmtOps for Stmt {
                an empty string is the "no type derived" case */
             tt[0] = 0;
             k = self->arena->nodes[e].kind;
+            /* Phase 31 O3 (L31-3/L31-4): `v[i] = x` / `m[k] = x`. */
+            if (self->ex->container_write_check(e) != 0) return -1;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
                 && k != N_DEREF && k != N_INTO_SELF)
                 return self->sup->fail("assignment target is not assignable");

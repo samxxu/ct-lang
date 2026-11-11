@@ -1,0 +1,18 @@
+/* L31-3: the write target is walked down the member chain, so `v[0].x = 2`
+   blames the subscript; bind the element to a local first. */
+#include <stdio.h>
+
+struct Point {
+    int x;
+}
+
+int main(void)
+{
+    Vec<Point> v;
+    v.h = 0;
+    Point p;
+    p.x = 1;
+    v.push(p);
+    v[0].x = 2;
+    return 0;
+}

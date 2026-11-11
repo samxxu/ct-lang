@@ -1,0 +1,9 @@
+/* L31-5: a container subscript names a value, not a slot. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v = {3};
+    int *p = &v[0];
+    return 0;
+}
