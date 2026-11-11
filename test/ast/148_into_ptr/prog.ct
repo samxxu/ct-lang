@@ -1,0 +1,24 @@
+/* Phase 30: a pointer receiver is promoted once and the block writes through
+   it; a suffix after the block still reads the promoted receiver. */
+#include <stdio.h>
+
+struct AppConfig {
+    char *host;
+    int port;
+};
+
+struct AppConfig cfg;
+
+int main(void)
+{
+    struct AppConfig *p = &cfg;
+    p into {
+        .host = "0.0.0.0";
+        .port = 8080;
+    };
+    int port = p into {
+        .port = 8081;
+    } ->port;
+    printf("%s %d %d\n", cfg.host, cfg.port, port);
+    return 0;
+}

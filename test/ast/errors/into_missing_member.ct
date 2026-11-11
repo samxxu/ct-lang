@@ -1,0 +1,11 @@
+/* L30-5: `.name` on a CT struct receiver must name a field. */
+struct Point {
+    int x;
+};
+
+int main(void)
+{
+    struct Point p;
+    p into { .nope = 1; };
+    return 0;
+}

@@ -1,0 +1,18 @@
+/* L30-6: a statement form writes into the receiver, so a right-value receiver
+   would silently lose the writes. */
+struct Box {
+    int n;
+};
+
+struct Box make(void)
+{
+    struct Box b;
+    b.n = 1;
+    return b;
+}
+
+int main(void)
+{
+    make() into { .n = 2; };
+    return 0;
+}

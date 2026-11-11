@@ -1,0 +1,52 @@
+//@ct-requires: ct-ast
+/* Phase 30 example: the receiver-context block (`expr into { … }`).
+   `into` is a contextual keyword, so `int into = 1;` below is still a plain
+   identifier; the block only starts where an expression is followed by
+   `into {`. */
+#include <stdio.h>
+
+struct ServerConfig {
+    char *host;
+    int port;
+    int backlog;
+};
+
+struct ServerConfig live;
+
+struct ServerConfig *config_new(void)
+{
+    live.host = "127.0.0.1";
+    live.port = 80;
+    live.backlog = 16;
+    return &live;
+}
+
+void report(struct ServerConfig *c)
+{
+    printf("report %s:%d/%d\n", c->host, c->port, c->backlog);
+}
+
+int main(void)
+{
+    int into = 1;
+    printf("identifier %d\n", into);
+
+    struct ServerConfig *cfg = config_new();
+    cfg into {
+        .host = "0.0.0.0";
+        .port = 8080;
+        report($);
+    };
+    printf("cfg %s:%d/%d\n", live.host, live.port, live.backlog);
+
+    struct ServerConfig copy = live into {
+        .port = 9090;
+    };
+    printf("live %d / copy %d\n", live.port, copy.port);
+
+    int port = cfg into {
+        .backlog = 64;
+    } ->port;
+    printf("suffix %d / backlog %d\n", port, live.backlog);
+    return 0;
+}

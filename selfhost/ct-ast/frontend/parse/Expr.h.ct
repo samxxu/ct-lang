@@ -84,6 +84,12 @@ import tool::diag::Diag;
 #define N_FNUM 54
 #define N_PRE 57
 #define N_CLOSURE 59
+/* Phase 30: the receiver-context block and the `$` / `.name` references
+   inside it. `N_INTO` keeps the receiver in `a`, the block's first statement
+   in `b`, the value category in `aux` and the receiver's static type in
+   `text`; the emitter names the promoted variable in `text3`. */
+#define N_INTO 63
+#define N_INTO_SELF 64
 #define P_DEC 2
 #define P_INC 1
 #define T_EOF 0
@@ -152,6 +158,12 @@ pub trait ExprOps {
     int  fnptr_field(const char *stype, const char *field);
     int  const_ok(int n);
     int  parse_expr(void);
+    /* Phase 30: consume `into { … }` (and any postfix suffix after it). The
+       caller sets `into_ok` for the positions the card allows; anywhere else a
+       block here is L30-1. */
+    int  into_tail(int left, int allow);
+    int  into_block(int recv, char *type, int line, int col);
+    int  into_member_check(int base, char *fname, int line, int col);
     int  parse_bitor(void);
     int  parse_bxor(void);
     int  parse_bitand(void);
@@ -275,6 +287,14 @@ pub struct Expr {
        accepted as a primary here and anywhere else reports the ordinary syntax
        error instead of an undeclared name. */
     int  dollar_ok;
+    /* Phase 30: `> 0` only while the expression at one of the allowed value
+       positions (a declaration initialiser, an assignment's right side, a
+       `return`, an expression statement) is parsed. A nested expression clears
+       it, so `f(x into { … })` is L30-1 instead of being accepted. */
+    int  into_ok;
+    /* The `N_INTO` whose block is being parsed, or -1. `$` and a leading
+       `.name` bind to it, and a second `into` inside the same block is L30-7. */
+    int  into_node;
     /* A compound literal is parsed where a cast would be (`(type){ … }`), but a
        postfix suffix still belongs to it (`(struct P){1,2}.y`). The cast branch
        leaves the finished node here and calls `parse_postfix`, which consumes
@@ -2343,7 +2363,13 @@ impl ExprOps for Expr {
     int parse_expr(void)
     {
         int left, right, inner, n, c;
+        int into_allow;
         (void)self;
+
+        /* Phase 30: only the outermost expression of an allowed position may
+           carry `into`; every recursive call starts with the flag cleared. */
+        into_allow = self->into_ok;
+        self->into_ok = 0;
 
         /* C precedence, loosest first: `||`, `&&`, then the bitwise levels
            (`|` `^` `&`) owned by parse_bitor. The loops live here so the
@@ -2436,7 +2462,11 @@ impl ExprOps for Expr {
             else if (oc == '<') op = 9;
             else if (oc == '>') op = 10;
             self->sup->lex_next();
+            /* the right side of an assignment is one of the value positions,
+               so it may carry an `into` block (Phase 30 S3) */
+            self->into_ok = into_allow;
             right = self->parse_expr();
+            self->into_ok = 0;
             if (right < 0) return -1;
             /* L29-9: assigning one container binding to another copies it,
                which the container protocol forbids. */
@@ -2457,9 +2487,163 @@ impl ExprOps for Expr {
             self->arena->nodes[n].a = left;
             self->arena->nodes[n].b = right;
             self->arena->nodes[n].aux = op;
-            return n;
+            return self->into_tail(n, into_allow);
         }
-        return left;
+        return self->into_tail(left, into_allow);
+    }
+
+    /* Phase 30 S1/S2/S12: `into` is contextual -- it is only a keyword when an
+       expression is directly followed by `into {`. The receiver is the whole
+       expression parsed so far, so `a + b into { … }` reaches L30-2 instead of
+       silently binding to `b`. */
+    int into_tail(int left, int allow)
+    {
+        int n, recv, line, col, kind;
+        char type[MAX_TEXT];
+
+        n = left;
+        for (;;) {
+            if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "into") == 0))
+                return n;
+            line = self->lex->tokline;
+            col = self->lex->tokstart - self->lex->lstart + 1;
+            if (!allow) {
+                tool::diag::ct_sem_error(line, col,
+                    "'into' block is not allowed here", self->sup->mem->path);
+                return -1;
+            }
+            if (self->into_node >= 0) {
+                tool::diag::ct_sem_error(line, col,
+                    "nested 'into' blocks are not supported", self->sup->mem->path);
+                return -1;
+            }
+            recv = n;
+            kind = self->arena->nodes[recv].kind;
+            if (!(kind == N_VAR || kind == N_MEMBER || kind == N_ARROW
+                  || kind == N_INDEX || kind == N_CALL || kind == N_MCALL
+                  || kind == N_DEREF || kind == N_INTO)) {
+                tool::diag::ct_sem_error(line, col,
+                    "'into' needs a variable, field or call on its left",
+                    self->sup->mem->path);
+                return -1;
+            }
+            type[0] = 0;
+            if (self->sup->expr_ctype(recv, type, sizeof type) != 0 || type[0] == 0) {
+                tool::diag::ct_sem_error(line, col,
+                    "cannot determine the receiver type of this 'into' block",
+                    self->sup->mem->path);
+                return -1;
+            }
+            /* L30-4: an interface value has no static member table, and an
+               `own` receiver would run the release path on every `$ = …`. */
+            {
+                char ifc[MAX_TEXT];
+                int vi;
+                ifc[0] = 0;
+                if (self->sup->is_iface_type(type, ifc, sizeof ifc)
+                    || (kind == N_VAR
+                        && (vi = self->sym->find_var(self->arena->nodes[recv].text2)) >= 0
+                        && self->sym->vars[vi].autodrop)) {
+                    tool::diag::ct_sem_error(line, col,
+                        "'into' cannot take an interface or 'own' receiver",
+                        self->sup->mem->path);
+                    return -1;
+                }
+            }
+            self->sup->lex_next();
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)) {
+                self->sup->fail("expected '{' after 'into'");
+                return -1;
+            }
+            n = self->into_block(recv, type, line, col);
+            if (n < 0) return -1;
+            /* a suffix after the block belongs to the whole expression:
+               `cfg into { … }.port` reads the promoted receiver's port */
+            if (self->lex->tok == T_PUNCT
+                && (strcmp(self->lex->toktext, ".") == 0
+                    || strcmp(self->lex->toktext, "->") == 0
+                    || strcmp(self->lex->toktext, "[") == 0
+                    || strcmp(self->lex->toktext, "(") == 0
+                    || strcmp(self->lex->toktext, "++") == 0
+                    || strcmp(self->lex->toktext, "--") == 0)) {
+                self->postfix_seed = n;
+                n = self->parse_postfix();
+                if (n < 0) return -1;
+            }
+        }
+    }
+
+    /* Build one `into` node and parse its block with `$` / `.name` bound to
+       it. The receiver has already been type-checked as `type`. */
+    int into_block(int recv, char *type, int line, int col)
+    {
+        int n, blk, save, selfn, kind, cat, len;
+
+        kind = self->arena->nodes[recv].kind;
+        cat = 1;                        /* pointer */
+        len = strlen(type);
+        while (len > 0 && (type[len - 1] == ' ' || type[len - 1] == '\t')) len--;
+        if (!(len > 0 && type[len - 1] == '*')) {
+            if (kind == N_VAR || kind == N_MEMBER || kind == N_ARROW
+                || kind == N_INDEX || kind == N_DEREF)
+                cat = 2;                /* lvalue value type */
+            else
+                cat = 3;                /* rvalue value type */
+        }
+        n = self->sup->new_node(N_INTO);
+        if (n < 0) return -1;
+        self->arena->nodes[n].a = recv;
+        self->arena->nodes[n].aux = cat;
+        self->arena->nodes[n].line = line;
+        self->arena->nodes[n].num = col;
+        snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", type);
+        selfn = self->sup->new_node(N_INTO_SELF);
+        if (selfn < 0) return -1;
+        self->arena->nodes[selfn].num = n;
+        snprintf(self->arena->nodes[selfn].text, MAX_TEXT, "%s", type);
+        save = self->into_node;
+        self->into_node = n;
+        blk = self->body_hook();
+        self->into_node = save;
+        if (blk < 0) return -1;
+        self->arena->nodes[n].b = self->arena->nodes[blk].a;
+        return n;
+    }
+
+    /* L30-5: `.name` on a CT struct receiver must name a field. An opaque C
+       host has no member table; a misspelling there surfaces from `cc` on the
+       generated line (R7), so only a defined CT struct is checked. */
+    int into_member_check(int base, char *fname, int line, int col)
+    {
+        int owner, si, fi, tlen;
+        char st[MAX_TEXT];
+        char msg[MAX_TEXT + 96];
+
+        (void)self;
+        if (self->arena->nodes[base].kind != N_INTO_SELF
+            || self->arena->nodes[base].aux != 1) return 0;
+        owner = self->arena->nodes[base].num;
+        if (owner < 0) return 0;
+        snprintf(st, sizeof st, "%s", self->arena->nodes[owner].text);
+        tlen = strlen(st);
+        while (tlen > 0 && st[tlen - 1] == '*') {
+            st[--tlen] = 0;
+            while (tlen > 0 && (st[tlen - 1] == ' ' || st[tlen - 1] == '\t'))
+                st[--tlen] = 0;
+        }
+        if (strncmp(st, "struct ", 7) == 0) {
+            int k;
+            for (k = 0; st[k + 7] != 0; k++) st[k] = st[k + 7];
+            st[k] = 0;
+        }
+        si = self->sym->find_struct(st);
+        if (si < 0 || !self->sym->structs[si].defined) return 0;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+            if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0)
+                return 0;
+        snprintf(msg, sizeof msg, "no member '%s' on the 'into' receiver", fname);
+        tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        return -1;
     }
 
     /* `|`, `^`, `&` are three separate levels in C, and `<<` / `>>` bind
@@ -3211,6 +3395,14 @@ impl ExprOps for Expr {
                                      || strcmp(self->lex->toktext, "->") == 0)) {
                 int arrow;
                 arrow = (self->lex->toktext[0] == '-') ? 1 : 0;
+                /* Phase 30: `.name` is the receiver sugar, so a pointer or a
+                   left-value value receiver goes through `->` (the promoted
+                   variable is a pointer in both cases). */
+                if (!arrow && self->arena->nodes[n].kind == N_INTO_SELF
+                    && self->arena->nodes[n].aux == 1) {
+                    int ow = self->arena->nodes[n].num;
+                    if (ow >= 0 && self->arena->nodes[ow].aux != 3) arrow = 1;
+                }
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field or method name");
                 snprintf(fname, sizeof fname, "%s", self->lex->toktext);
@@ -3512,6 +3704,8 @@ impl ExprOps for Expr {
                         }
                     }
                 } else {
+                    if (self->into_member_check(n, fname, mline, mcol) != 0)
+                        return -1;
                     m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
                     if (m < 0) return -1;
                     self->arena->nodes[m].a = n;
@@ -3885,6 +4079,16 @@ impl ExprOps for Expr {
            table; outside the element expression of a range initialiser it is a
            syntax error, never an undeclared name. */
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0) {
+            /* Phase 30: inside an `into` block `$` is the receiver itself. */
+            if (self->into_node >= 0) {
+                n = self->sup->new_node(N_INTO_SELF);
+                if (n < 0) return -1;
+                self->arena->nodes[n].num = self->into_node;
+                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s",
+                         self->arena->nodes[self->into_node].text);
+                self->sup->lex_next();
+                return n;
+            }
             if (!self->dollar_ok) return self->sup->fail("unexpected token");
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
@@ -4365,6 +4569,24 @@ impl ExprOps for Expr {
             if (self->sup->expect(")") != 0) return -1;
             return n;
         }
+        /* Phase 30 S4: a leading `.name` inside an `into` block is the
+           receiver's field or method. Return the receiver marker without
+           consuming the dot: `parse_postfix` then handles the rest with the
+           normal member/method resolution (including trait dispatch and the
+           type-host static maps), and the `N_INTO_SELF` marker's static type
+           makes that resolution see the receiver's type. */
+        if (self->into_node >= 0 && self->lex->tok == T_PUNCT
+            && strcmp(self->lex->toktext, ".") == 0) {
+            int owner, base;
+            owner = self->into_node;
+            base = self->sup->new_node(N_INTO_SELF);
+            if (base < 0) return -1;
+            self->arena->nodes[base].num = owner;
+            self->arena->nodes[base].aux = 1;   /* pointer form for `.name` */
+            snprintf(self->arena->nodes[base].text, MAX_TEXT, "%s",
+                     self->arena->nodes[owner].text);
+            return base;
+        }
         return self->sup->fail("expected an expression");
     }
 
@@ -4702,6 +4924,7 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.maps = (struct MapTable *)maps;
     g_expr.nmaps = (int *)nmaps;
     g_expr.postfix_seed = -1;
+    g_expr.into_node = -1;
 }
 
 pub struct Expr *expr_get(void);

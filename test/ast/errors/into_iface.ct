@@ -1,0 +1,15 @@
+/* L30-4: an interface value has no static member table. */
+trait Show {
+    int show();
+}
+
+struct Point {
+    int x;
+}
+
+int main(void)
+{
+    Show s;
+    s into { };
+    return 0;
+}

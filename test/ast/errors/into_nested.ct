@@ -1,0 +1,14 @@
+/* L30-7: `$` would be ambiguous between the two receivers, so nesting is
+   refused. */
+struct Point {
+    int x;
+};
+
+int main(void)
+{
+    struct Point p;
+    p into {
+        p into { .x = 1; };
+    };
+    return 0;
+}

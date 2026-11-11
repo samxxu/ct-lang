@@ -6145,6 +6145,77 @@ else
     fi
 fi
 
+# ---- Phase 30: the receiver-context block (`expr into { … }`) ----
+p30_neg() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p30neg.c" \
+            >"$work/p30neg.out" 2>"$work/p30neg.err"; then
+        bad "p30: $1" "expected a diagnostic, got exit 0"
+    elif ! grep -Fq "$2" "$work/p30neg.err"; then
+        bad "p30: $1" "$(cat "$work/p30neg.err")"
+    elif grep -Fiq 'undeclared' "$work/p30neg.err"; then
+        bad "p30: $1" "fell back to 'undeclared': $(cat "$work/p30neg.err")"
+    elif [ "$(grep -c 'error:' "$work/p30neg.err")" -ne 1 ]; then
+        bad "p30: $1" "expected exactly one diagnostic: $(cat "$work/p30neg.err")"
+    elif ! grep -Fq "test/ast/errors/$1.ct:$3: error:" "$work/p30neg.err"; then
+        bad "p30: $1" "expected the diagnostic at $3: $(cat "$work/p30neg.err")"
+    else
+        ok "p30 ($1: $2 at $3)"
+    fi
+}
+p30_neg into_not_allowed "'into' block is not allowed here" 12:12
+p30_neg into_bad_left "'into' needs a variable, field or call on its left" 11:11
+p30_neg into_unknown_type "cannot determine the receiver type of this 'into' block" 6:10
+p30_neg into_iface "'into' cannot take an interface or 'own' receiver" 13:7
+p30_neg into_own "'into' cannot take an interface or 'own' receiver" 15:7
+p30_neg into_missing_member "no member 'nope' on the 'into' receiver" 9:15
+p30_neg into_rvalue_stmt "an 'into' statement needs a writable receiver" 16:12
+p30_neg into_nested "nested 'into' blocks are not supported" 11:11
+
+# E30-2: the receiver is evaluated exactly once, and the product contains
+# neither `$` nor an `into {` block.
+cat >"$work/p30rc.ct" <<'EOF'
+#include <stdio.h>
+
+int calls = 0;
+
+struct Box { int n; };
+
+struct Box build_box(void)
+{
+    struct Box b;
+    b.n = 1;
+    calls = calls + 1;
+    return b;
+}
+
+int main(void)
+{
+    struct Box v = build_box() into {
+        .n = 4;
+    };
+    printf("%d %d\n", v.n, calls);
+    return 0;
+}
+EOF
+if ! "$work/ct-ast" "$work/p30rc.ct" -o "$work/p30rc.c" \
+        >"$work/p30rc.out" 2>"$work/p30rc.err"; then
+    bad "p30 E30-2" "ct-ast failed: $(head -3 "$work/p30rc.err")"
+elif [ "$(grep -c 'build_box()' "$work/p30rc.c")" -ne 1 ]; then
+    bad "p30 E30-2" "the receiver expression was emitted $(grep -c 'build_box()' "$work/p30rc.c") times"
+elif [ "$(grep -c '\$' "$work/p30rc.c")" -ne 0 ]; then
+    bad "p30 E30-2" "the generated C still contains '\$'"
+elif [ "$(grep -c 'into {' "$work/p30rc.c")" -ne 0 ]; then
+    bad "p30 E30-2" "the generated C still contains 'into {'"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p30rc.c" -o "$work/p30rc.bin" \
+        2>"$work/p30rc.cc" \
+      || ! "$work/p30rc.bin" >"$work/p30rc.run" 2>&1; then
+    bad "p30 E30-2" "$(head -4 "$work/p30rc.cc")"
+elif [ "$(cat "$work/p30rc.run")" != "4 1" ]; then
+    bad "p30 E30-2" "expected '4 1', got '$(cat "$work/p30rc.run")'"
+else
+    ok "p30 E30-2 (one evaluation, no '\$', no 'into {' in the product)"
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

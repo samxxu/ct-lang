@@ -2472,6 +2472,56 @@ int main(void)
 
 See [language-spec §4.51](language-spec.md) for details.
 
+### 10.9 Receiver-context blocks: `expr into { … }` (Phase 30)
+
+A configuration call that returns the object can be written once and then configured without
+repeating its name:
+
+```ct
+struct ServerConfig {
+    char *host;
+    int port;
+}
+
+struct ServerConfig *config_new(void)
+{
+    /* … */
+}
+
+int main(void)
+{
+    struct ServerConfig *cfg = config_new();
+    cfg into {
+        .host = "0.0.0.0";
+        .port = 8080;
+    };
+
+    struct ServerConfig copy = cfg into {
+        .port = 9090;
+    };
+    return 0;
+}
+```
+
+- **`into` is contextual**: `int into = 1;` still declares an ordinary `int`. The block only starts
+  where an expression is followed by `into {`.
+- **`.name` / `$`**: a leading dot reads a field or calls a method of the receiver; `$` is the
+  receiver itself (`show($);`, `$->port`). Outside a block, `$` keeps its range-index meaning.
+- **Three value positions**: a declaration initialiser, an assignment's right side and `return`;
+  the statement form writes through the receiver and needs a writable (pointer or left-value)
+  receiver.
+- **Evaluated once**: the receiver is promoted to `__ct_recvN` before the block runs, whatever its
+  value category, so a factory call happens exactly once.
+- **Result**: the value form yields the receiver itself, so `.m()`, `->field` and `[i]` may follow
+  the block: `int port = cfg into { .port = 81; } ->port;`.
+
+Negatives: an `into` block in an arbitrary sub-expression, a sum on the left, an unknown receiver
+type, an interface or `own` receiver, a missing field, a right-value receiver in statement form and
+nested blocks are all compile-time errors (L30-1 … L30-7).
+
+See [language-spec §4.52](language-spec.md) and
+[29_into](../examples/29_into/into.ct) for a runnable sample.
+
 ### 11. CLI cheat sheet
 
 | Command | Purpose |

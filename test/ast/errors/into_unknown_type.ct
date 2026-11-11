@@ -1,0 +1,8 @@
+/* L30-3: the receiver's static type must be known at compile time. A call
+   through a function pointer has no declared result type in this subset. */
+int main(void)
+{
+    int (*fp)(void);
+    fp() into { };
+    return 0;
+}

@@ -1,0 +1,13 @@
+/* L30-2: the receiver must be a primary/postfix expression, not a sum. */
+struct Point {
+    int x;
+};
+
+int main(void)
+{
+    struct Point p;
+    int a = 1;
+    int b = 2;
+    a + b into { .x = 1; };
+    return 0;
+}

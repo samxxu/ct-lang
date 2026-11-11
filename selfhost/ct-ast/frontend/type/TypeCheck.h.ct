@@ -42,6 +42,10 @@ import runtime::arena::Arena;
 #define N_OFFSETOF 47
 #define N_COMPOUND 51
 #define N_VAARG  53
+/* Phase 30: the receiver block and the `$` / `.name` reference inside it both
+   carry the receiver's static type in `text`. */
+#define N_INTO 63
+#define N_INTO_SELF 64
 
 namespace frontend::type;
 pub trait TypeOps {
@@ -386,6 +390,13 @@ impl TypeOps for TypeCheck {
             /* the corpus treats `sizeof` as `int`; `offsetof` is the same kind
                of integral value, so it shares the answer */
             if (snprintf(out, (size_t)cap, "%s", "int") >= cap) return -1;
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_INTO
+            || self->arena->nodes[n].kind == N_INTO_SELF) {
+            if (self->arena->nodes[n].text[0] == 0) return -1;
+            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text) >= cap)
+                return -1;
             return 0;
         }
         return -1;

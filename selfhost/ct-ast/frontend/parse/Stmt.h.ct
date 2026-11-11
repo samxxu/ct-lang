@@ -66,6 +66,7 @@ import tool::diag::Diag;
 #define N_SWITCH 42
 #define N_VAR 10
 #define N_WHILE 15
+#define N_INTO 63
 #define T_EOF 0
 #define T_ID 1
 #define T_NUM 2
@@ -1089,7 +1090,9 @@ impl StmtOps for Stmt {
                 }
                 return s;
             }
+            self->ex->into_ok = 1;
             e = self->ex->parse_expr();
+            self->ex->into_ok = 0;
             if (e < 0) return -1;
             /* E1: the environment lives in this frame, so handing the binding
                back loses it. Checked before the memory analysis so the closure
@@ -2532,7 +2535,9 @@ impl StmtOps for Stmt {
                 } else {
                     /* `int (*p)(int) = strcmp;` may name a C library function */
                     if (strstr(typebuf, "(*")) self->ex->fnval_ok = 1;
+                    self->ex->into_ok = 1;
                     e = self->ex->parse_expr();
+                    self->ex->into_ok = 0;
                     self->ex->fnval_ok = 0;
                     if (e < 0) return -1;
                 }
@@ -2600,8 +2605,22 @@ impl StmtOps for Stmt {
         (void)self;
 
         scol = self->lex->tokstart - self->lex->lstart + 1;
+        self->ex->into_ok = 1;
         e = self->ex->parse_expr();
+        self->ex->into_ok = 0;
         if (e < 0) return -1;
+        /* L30-6: a bare `expr into { … };` statement writes into the receiver,
+           so a right-value receiver would silently lose the writes. A suffix
+           turns it back into a value expression and the restriction lifts. */
+        if (self->arena->nodes[e].kind == N_INTO
+            && self->arena->nodes[e].aux == 3) {
+            int il = self->arena->nodes[e].line;
+            int ic = self->arena->nodes[e].num;
+            tool::diag::ct_sem_error(il, ic,
+                "an 'into' statement needs a writable receiver",
+                self->sup->mem->path);
+            return -1;
+        }
         if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
                                  || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
                                  || strcmp(self->lex->toktext, "%=") == 0 || strcmp(self->lex->toktext, "&=") == 0
@@ -2623,7 +2642,9 @@ impl StmtOps for Stmt {
             else if (oc == '<') op = 9;
             else op = 10;
             self->sup->lex_next();
+            self->ex->into_ok = 1;
             rhs = self->ex->parse_expr();
+            self->ex->into_ok = 0;
             if (rhs < 0) return -1;
             n = self->sup->new_node(N_ASSIGN);
             if (n < 0) return -1;
@@ -2652,7 +2673,9 @@ impl StmtOps for Stmt {
                      && self->sup->expr_type(e, tt, sizeof tt) == 0))
                 && strstr(tt, "(*"))
                 self->ex->fnval_ok = 1;
+            self->ex->into_ok = 1;
             rhs = self->ex->parse_expr();
+            self->ex->into_ok = 0;
             self->ex->fnval_ok = 0;
             if (rhs < 0) return -1;
             if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)) {

@@ -2189,6 +2189,29 @@ comment in its header); it is not part of the source content.
 - Identifiers are `[A-Za-z_][A-Za-z0-9_]*`; ct-ast reports `identifier is too long` above 159
   characters instead of silently truncating (the L0 seed's limit is 127).
 
+### 4.52 接收者语境块 `expr into { … }`（Phase 30）
+
+- **形态**：`<receiver> into { stmt… }`，`into` 是**上下文关键字**——词法上仍是标识符，只有
+  在「一个 primary/postfix 表达式之后、紧跟 `{`」时才是块的开头；因此 `int into = 1;` 与
+  `int y = into;` 的既有代码不受影响。
+- **两种用法**：语句形态 `p into { … };`（末尾 `;` 可省）与值形态——声明初始化器、
+  赋值右值、`return` 三处。其他位置（如 `f(x into { … })`）报 `'into' block is not allowed here`。
+- **接收者边界**：接收者必须是变量、字段、下标、调用或方法调用；`a + b into { … }` 报
+  `'into' needs a variable, field or call on its left`，不会静默绑定到 `b`。
+- **块内语法糖**：`.name` 是接收者的字段或方法（前导点优先绑定接收者，不与同名局部竞争）；
+  `$` 是接收者本身。两者都只在块内有意义，块外 `$` 仍是 Phase 24 range 的下标绑定。
+- **求值一次**：接收者只求值一次，按 value category 提升——指针 `T *__ct_recvN = expr;`、
+  左值值类型 `T *__ct_recvN = &expr;`、右值值类型（仅值形态）`T __ct_recvN = expr;`。
+  块内 `.field` 对前两种发射 `__ct_recvN->field`，对右值发射 `__ct_recvN.field`；
+  `$` 对左值值类型发射 `(*__ct_recvN)`。
+- **结果**：值形态的结果是**接收者本身**（不是块内最后一条语句的值）：指针接收者返回指针，
+  值接收者返回配置后的值（左值先原地修改，再复制给目标）。块后可继续接 `.m()` / `->f` / `[i]`。
+- **诊断**：L30-1 位置不允许、L30-2 接收者形态不对、L30-3 静态类型未知、L30-4 接口值或
+  `own` 接收者、L30-5 已知成员表里没有该字段、L30-6 语句形态用了右值接收者、
+  L30-7 嵌套 `into` 块。
+- **不引入运行时**：块、`.name` 与 `$` 在编译期完全脱糖为普通 C 语句与普通调用；
+  生成物里不出现 `into {`、`$`，接收者表达式只出现一次。
+
 ### 3. Grammar
 
 ```ebnf
@@ -4552,3 +4575,33 @@ definitions / signature mismatches) are **all supported by the CT line (L2 / ct-
 and implementation record live in [roadmap](roadmap.md) (Phases 2–5) and
 [design/restore.md](history/design/restore.md); archived test fixtures are in `test/archive/`, and the
 feature-complete old compiler is at git tag `overreach-oracle`.
+
+### 4.52 Receiver-context block `expr into { … }` (Phase 30)
+
+- **Form**: `<receiver> into { stmt… }`. `into` is a **contextual keyword**: lexically it stays an
+  identifier, and only an expression directly followed by `into {` opens a block. Existing code such
+  as `int into = 1;` or `int y = into;` keeps working.
+- **Two uses**: the statement form `p into { … };` (the trailing `;` is optional) and the value form,
+  allowed in exactly three positions — a declaration initialiser, an assignment's right side, and
+  `return`. Anywhere else (for example `f(x into { … })`) reports
+  `'into' block is not allowed here`.
+- **Receiver boundary**: the receiver must be a primary/postfix expression — a variable, a field, an
+  index, a call or a method call. `a + b into { … }` reports
+  `'into' needs a variable, field or call on its left` instead of silently binding to `b`.
+- **Sugar inside the block**: a leading `.name` is a field or method of the receiver (it binds to the
+  receiver even when a local of the same name exists), and `$` is the receiver itself. Both exist
+  only inside the block; outside it `$` keeps its Phase 24 range-index binding.
+- **Single evaluation**: the receiver is evaluated once and promoted by value category — a pointer
+  `T *__ct_recvN = expr;`, a left-value value type `T *__ct_recvN = &expr;`, a right-value value
+  type (value form only) `T __ct_recvN = expr;`. Inside the block `.field` emits
+  `__ct_recvN->field` for the first two and `__ct_recvN.field` for the last; `$` emits
+  `(*__ct_recvN)` for a left-value value receiver.
+- **Result**: the value form yields the **receiver itself**, not the value of the block's last
+  statement — a pointer receiver yields the pointer, a value receiver yields the configured value
+  (a left value is modified in place and then copied to the target). A suffix such as `.m()` /
+  `->f` / `[i]` may follow the block.
+- **Diagnostics**: L30-1 position not allowed, L30-2 wrong receiver shape, L30-3 unknown static
+  type, L30-4 interface or `own` receiver, L30-5 no such field in a known member table, L30-6 the
+  statement form with a right-value receiver, L30-7 nested `into` blocks.
+- **No runtime**: the block, `.name` and `$` are fully desugared into ordinary C statements and
+  calls; the product contains neither `into {` nor `$`, and the receiver expression appears once.

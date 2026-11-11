@@ -1,0 +1,30 @@
+/* Phase 30: a left-value value receiver is addressed in place, so the block
+   writes the original object; `$` is the receiver itself. */
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+void dump(struct Point p)
+{
+    printf("dump %d %d\n", p.x, p.y);
+}
+
+int main(void)
+{
+    struct Point q;
+    q into {
+        .x = 3;
+        .y = 4;
+        dump($);
+    };
+    printf("q %d %d\n", q.x, q.y);
+
+    struct Point r = q into {
+        .y = 9;
+    };
+    printf("q %d %d / r %d %d\n", q.x, q.y, r.x, r.y);
+    return 0;
+}

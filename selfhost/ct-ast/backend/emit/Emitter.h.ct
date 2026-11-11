@@ -33,6 +33,10 @@ import runtime::arena::Arena;
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_HOISTS 4
+/* Phase 30: the receiver block and its `$` / `.name` reference. */
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define MAX_INTOS 4
 #define MAX_PARAMS 16
 #define MAX_UNITS  64
 
@@ -204,6 +208,9 @@ struct Emitter {
     /* emission scratch */
     int  hoist_calls[4];
     int  nhoist;
+    /* Phase 30: receivers whose block is spliced at the statement head */
+    int  into_nodes[4];
+    int  ninto;
     int  ntmp;
     int  raw_call;
     int  failline;              /* the source line of the node that failed, 0 = none */
@@ -1703,6 +1710,20 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (n < 0) return 0;
+        /* Phase 30: an `into` receiver is materialised once, and its block is
+           spliced in front of the statement. Do not walk `b` here -- those are
+           statements, and they get their own hoists when they are emitted. */
+        if (self->arena->nodes[n].kind == N_INTO) {
+            if (self->ninto >= MAX_INTOS)
+                return self->fail_from(n, "too many 'into' receivers in one statement");
+            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_recv%d", self->ntmp);
+            self->ntmp++;
+            self->into_nodes[self->ninto] = n;
+            self->ninto++;
+            if (self->arena->nodes[n].a >= 0
+                && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
+            return 0;
+        }
         /* A type-host call (aux 6) expands as a straight textual recipe: the
            receiver is substituted once and nothing takes its address, so a
            call result in an argument position compiles as written and needs
@@ -1736,7 +1757,7 @@ impl EmitOps for Emitter {
 
     int emit_hoists(int ind)
     {
-        int i, f;
+        int i, f, k, cat, s;
         (void)self;
 
         for (i = 0; i < self->nhoist; i++) {
@@ -1752,7 +1773,34 @@ impl EmitOps for Emitter {
             self->raw_call = -1;
             fputs(";\n", self->out);
         }
+        /* Phase 30 §2.3: promote by value category. A pointer receiver is
+           copied; a left-value value receiver is addressed in place; a
+           right-value value receiver is moved into a fresh local. The block's
+           statements then splice in at the same indentation. */
+        for (i = 0; i < self->ninto; i++) {
+            int save;
+            k = self->into_nodes[i];
+            cat = self->arena->nodes[k].aux;
+            self->emit_indent(ind);
+            if (cat == 2)
+                fprintf(self->out, "%s *%s = &(", self->arena->nodes[k].text,
+                        self->arena->nodes[k].text3);
+            else
+                fprintf(self->out, "%s %s = ", self->arena->nodes[k].text,
+                        self->arena->nodes[k].text3);
+            if (self->emit_expr(self->arena->nodes[k].a) != 0) return -1;
+            if (cat == 2) fputs(")", self->out);
+            fputs(";\n", self->out);
+            /* the spliced statements run their own hoist pass; the receiver
+               list must not be re-emitted from inside the block */
+            save = self->ninto;
+            self->ninto = 0;
+            for (s = self->arena->nodes[k].b; s >= 0; s = self->arena->nodes[s].next)
+                if (self->emit_node(s, ind) != 0) return -1;
+            self->ninto = save;
+        }
         self->nhoist = 0;
+        self->ninto = 0;
         return 0;
     }
 
@@ -2984,6 +3032,11 @@ impl EmitOps for Emitter {
             || (self->arena->nodes[n].kind == N_BIN && self->arena->nodes[n].aux == B_COMMA)) {
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
+            /* a bare `expr into { … };` statement is the block alone: the
+               receiver expression has already been evaluated exactly once */
+            if (self->arena->nodes[n].kind == N_EXPR
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_INTO)
+                return 0;
             self->emit_indent(ind);
             if (self->emit_inline(n) != 0) return -1;
             fputs(";\n", self->out);
@@ -3445,6 +3498,33 @@ impl EmitOps for Emitter {
             }
             return 0;
         }
+        /* Phase 30: the promoted receiver, or the receiver itself in `$` /
+           `.name` position. For a left-value value receiver `__ct_recvN` is a
+           pointer, so the value form dereferences it while the member form
+           keeps the pointer. */
+        if (self->arena->nodes[n].kind == N_INTO) {
+            if (!self->arena->nodes[n].text3[0])
+                return self->fail_from(n, "an 'into' receiver was not promoted");
+            if (self->arena->nodes[n].aux == 2)
+                fprintf(self->out, "(*%s)", self->arena->nodes[n].text3);
+            else
+                fputs(self->arena->nodes[n].text3, self->out);
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_INTO_SELF) {
+            int owner = self->arena->nodes[n].num;
+            const char *nm;
+            if (owner < 0 || !self->arena->nodes[owner].text3[0])
+                return self->fail_from(n, "an 'into' receiver was not promoted");
+            nm = self->arena->nodes[owner].text3;
+            if (self->arena->nodes[n].aux == 1)
+                fputs(nm, self->out);
+            else if (self->arena->nodes[owner].aux == 2)
+                fprintf(self->out, "(*%s)", nm);
+            else
+                fputs(nm, self->out);
+            return 0;
+        }
         if (self->arena->nodes[n].kind == N_MEMBER) {
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fprintf(self->out, ".%s", self->arena->nodes[n].text2);
@@ -3860,7 +3940,8 @@ impl EmitOps for Emitter {
             if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");
             rk = self->arena->nodes[self->arena->nodes[n].a].kind;
             if (rk != N_VAR && rk != N_INDEX && rk != N_CALL
-                && rk != N_MEMBER && rk != N_ARROW)
+                && rk != N_MEMBER && rk != N_ARROW && rk != N_INTO_SELF
+                && rk != N_INTO)
                 return self->fail_from(n, "method receiver must be a variable, an element, a call or a field chain");
             if (!self->arena->nodes[n].text[0])
                 return self->fail_from(n, "cannot resolve the method trait (unknown receiver type)");

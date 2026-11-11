@@ -1,0 +1,28 @@
+/* Phase 30: a right-value value receiver is moved into a fresh local, the
+   block writes that local and the value form copies it out. */
+#include <stdio.h>
+
+struct Box {
+    int n;
+};
+
+struct Box make(void)
+{
+    struct Box b;
+    b.n = 1;
+    return b;
+}
+
+int main(void)
+{
+    struct Box v = make() into {
+        .n = 5;
+    };
+    printf("%d\n", v.n);
+
+    int k = make() into {
+        .n = 7;
+    } .n;
+    printf("%d\n", k);
+    return 0;
+}

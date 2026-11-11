@@ -1,0 +1,41 @@
+/* Phase 30 S4: inside the block `.m(...)` is resolved exactly like a call on
+   the receiver outside it, so trait dispatch reaches the same vtable. */
+#include <stdio.h>
+
+trait Counter {
+    int bump(int by);
+    int get();
+}
+
+struct CounterBox {
+    int n;
+} use Counter
+
+impl Counter for CounterBox {
+    int bump(int by)
+    {
+        self->n = self->n + by;
+        return self->n;
+    }
+    int get()
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    struct CounterBox c;
+    c.n = 0;
+    struct CounterBox *p = &c;
+    p into {
+        .bump(3);
+        .n = 10;
+        .bump(2);
+    };
+    int g = p into {
+        .bump(1);
+    } ->get();
+    printf("%d %d\n", c.n, g);
+    return 0;
+}
