@@ -6532,6 +6532,97 @@ else
     fi
 fi
 
+# Phase 31 S24 (E31-27): a capacity failure leaves before any element is
+# retained. Each emitted body runs to its closing brace, and the failure return
+# must come first, so a half-grown receiver never takes a reference.
+p31_order() {
+    fn=$1; ret=$2; tag=$3
+    sed -n "/^[^[:space:]].*${fn}(/,/^}/p" "$work/p31own.c" >"$work/p31fn.c"
+    r=$(grep -n "$ret" "$work/p31fn.c" | head -1 | cut -d: -f1)
+    t=$(grep -n '__elem_retain' "$work/p31fn.c" | head -1 | cut -d: -f1)
+    if [ -z "$r" ] || [ -z "$t" ]; then
+        bad "p31 E31-27 ($fn)" "missing '$ret' or a retain call in the body"
+    elif [ "$r" -ge "$t" ]; then
+        bad "p31 E31-27 ($fn)" "retain at $t is not after '$ret' at $r"
+    else
+        ok "p31 E31-27 ($tag: $fn leaves before retaining)"
+    fi
+}
+p31_from_order() {
+    fn=$1
+    sed -n "/^[^[:space:]].*${fn}(/,/^}/p" "$work/p31own.c" >"$work/p31fn.c"
+    rl=$(grep -n 'realloc(' "$work/p31fn.c" | head -1 | cut -d: -f1)
+    r=$(grep -n 'return m;' "$work/p31fn.c" | cut -d: -f1 | awk -v R="$rl" '$1 > R { print; exit }')
+    if [ -z "$rl" ] || [ -z "$r" ]; then
+        bad "p31 E31-27 ($fn)" "no realloc / failure return in the body"
+    elif sed -n "${rl},${r}p" "$work/p31fn.c" | grep -q '__elem_retain'; then
+        bad "p31 E31-27 ($fn)" "the failure branch retains before returning the partial map"
+    else
+        ok "p31 E31-27 (from capacity: $fn returns the partial map before retaining)"
+    fi
+}
+if ! "$work/ct-ast" test/ast/191_alloc_order/prog.ct -o "$work/p31own.c" \
+        >"$work/p31own.log" 2>&1; then
+    bad "p31 E31-27 (ownership product)" "ct-ast failed: $(head -3 "$work/p31own.log")"
+else
+    p31_order Vec_int_push 'return 0;' 'push capacity'
+    p31_order Map_char_p_int_put 'return 0;' 'put capacity'
+    p31_from_order Map_char_p_int_from
+fi
+
+# Phase 31 S24 (E31-29): the OOM contract. Every `malloc(` in a `from` body must
+# reach `abort()` within two lines, `from` never frees, and the header alloc of
+# `push` / `put` / `Map::from` aborts exactly once. The card's "3 aborts" count
+# predates S19's single header allocation; the real body has one header and one
+# data malloc, so the count asserted here is one abort per malloc.
+p31_oom() {
+    fn=$1; body="$work/p31oom.c"
+    sed -n "/^[^[:space:]].*${fn}(/,/^}/p" "$body" >"$work/p31fn.c"
+    m=$(grep -c 'malloc(' "$work/p31fn.c")
+    a=$(grep -c 'abort();' "$work/p31fn.c")
+    miss=""
+    for l in $(grep -n 'malloc(' "$work/p31fn.c" | cut -d: -f1); do
+        sed -n "${l},$((l + 2))p" "$work/p31fn.c" | grep -q 'abort();' || miss="$miss $l"
+    done
+    if [ -n "$miss" ]; then
+        bad "p31 E31-29 ($fn)" "malloc lines without abort: $miss"
+    elif [ "$m" -ne "$a" ]; then
+        bad "p31 E31-29 ($fn)" "$m mallocs but $a aborts"
+    elif grep -q 'free(' "$work/p31fn.c"; then
+        bad "p31 E31-29 ($fn)" "from still frees on the failure path"
+    else
+        ok "p31 E31-29 ($fn: every allocation aborts, no free)"
+    fi
+}
+p31_hdr() {
+    fn=$1; body="$work/p31oom.c"
+    sed -n "/^[^[:space:]].*${fn}(/,/^}/p" "$body" >"$work/p31fn.c"
+    l=$(grep -n 'malloc(sizeof(struct ct_buf))' "$work/p31fn.c" | head -1 | cut -d: -f1)
+    a=$(grep -c 'abort();' "$work/p31fn.c")
+    if [ -z "$l" ]; then
+        bad "p31 E31-29 ($fn)" "no header allocation in the body"
+    elif ! sed -n "${l},$((l + 2))p" "$work/p31fn.c" | grep -q 'abort();'; then
+        bad "p31 E31-29 ($fn)" "the header allocation does not abort"
+    elif [ "$a" -ne 1 ]; then
+        bad "p31 E31-29 ($fn)" "the body holds $a aborts, expected 1"
+    else
+        ok "p31 E31-29 ($fn: header allocation aborts once)"
+    fi
+}
+if ! "$work/ct-ast" test/ast/193_alloc_contract/prog.ct -o "$work/p31oom.c" \
+        >"$work/p31oom.log" 2>&1; then
+    bad "p31 E31-29 (OOM product)" "ct-ast failed: $(head -3 "$work/p31oom.log")"
+else
+    for f in $(grep -oE 'Vec_[A-Za-z0-9_]*_from\(' "$work/p31oom.c" | sed 's/($//' | sort -u); do
+        p31_oom "$f"
+    done
+    p31_hdr Vec_int_push
+    p31_hdr Map_char_p_int_put
+    p31_hdr Map_int_int_put
+    p31_hdr Map_char_p_int_from
+    p31_hdr Map_int_int_from
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

@@ -1,0 +1,18 @@
+/* Phase 31 S24 (E31-29): both `Map` key blocks and the `Vec` constructors are
+   emitted so their OOM branches can be inspected in the product. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v = {1};
+    v.push(2);
+    Map<char *, int> m = {"a": 1};
+    m.put("b", 2);
+    Map<int, int> n = {1: 2};
+    n.put(3, 4);
+    printf("%d %d %d\n", v.len(), m.len(), n.len());
+    v.release();
+    m.release();
+    n.release();
+    return 0;
+}

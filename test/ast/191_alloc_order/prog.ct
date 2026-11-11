@@ -1,0 +1,23 @@
+/* Phase 31 S24 (E31-27): the ownership protocol on owners, with a capacity
+   failure leaving before any element is retained. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v = {1, 2, 3};
+    v.push(4);
+    v.set(0, 9);
+    printf("%d %d\n", v.len(), v.get(0));
+    int p = v.pop();
+    printf("%d %d\n", p, v.len());
+    v.clear();
+    v.release();
+
+    Map<char *, int> m = {"a": 1};
+    m.put("b", 2);
+    printf("%d %d\n", m.len(), *m.get("b"));
+    m.remove("a");
+    m.clear();
+    m.release();
+    return 0;
+}
