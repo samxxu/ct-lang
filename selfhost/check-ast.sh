@@ -5731,27 +5731,77 @@ fi
 # assertions pin the C names (D29-7) and the container loop expansion (D29-13).
 # ---------------------------------------------------------------------------
 p29_diag() {
+    # $1 fixture, $2 line:column, $3 frozen message (E29-7). The position and
+    # the single-error rule are part of the criterion, so a message that drifts
+    # by one token or a second diagnostic is caught here.
     if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p29e.c" \
             >"$work/p29e.out" 2>"$work/p29e.err"; then
         bad "p29: $1" "expected a diagnostic, got exit 0"
-    elif grep -Fq "$2" "$work/p29e.err"; then
-        ok "p29 ($1)"
+    elif ! grep -qF "test/ast/errors/$1.ct:$2: error: $3" "$work/p29e.err"; then
+        bad "p29: $1" "missing pinned diagnostic: $(head -2 "$work/p29e.err")"
+    elif [ "$(grep -c 'error: ' "$work/p29e.err")" -ne 1 ]; then
+        bad "p29: $1" "expected exactly one error: $(cat "$work/p29e.err")"
     else
-        bad "p29: $1" "$(head -2 "$work/p29e.err")"
+        ok "p29 ($1)"
     fi
 }
-p29_diag generic_struct_arity "a generic struct takes at most 2 type parameters"
-p29_diag generic_struct_void "type argument 'void' cannot instantiate a generic struct"
-p29_diag generic_struct_depth "generic type arguments nest deeper than 4"
-p29_diag builtin_type_redecl "'Vec' is a built-in type and cannot be redeclared"
-p29_diag foreach_container_element "foreach cannot iterate a container of 'struct Speaker_iface' (interface, vptr-bearing or container element)"
-p29_diag foreach_container_index_write "the foreach index 'i' is read-only"
-p29_diag foreach_container_redeclare "cannot redeclare the foreach binding 'item'"
-p29_diag foreach_container_map_i "'i' has no meaning in a Map foreach; use item.key / item.value"
-p29_diag container_copy "a container is moved, not copied; use retain() or a function result"
-p29_diag container_own "a container cannot hold an 'own' or 'borrow' value"
-p29_diag container_element "a built-in container cannot be an element of another container"
-p29_diag container_element_map "a built-in container cannot be an element of another container"
+p29_diag generic_struct_arity 10:20 "a generic struct takes at most 2 type parameters"
+p29_diag generic_struct_void 5:13 "type argument 'void' cannot instantiate a generic struct"
+p29_diag generic_struct_depth 9:25 "generic type arguments nest deeper than 4"
+p29_diag builtin_type_redecl 3:1 "'Vec' is a built-in type and cannot be redeclared"
+p29_diag foreach_container_element 8:5 "foreach cannot iterate a container of 'struct Speaker_iface' (interface, vptr-bearing or container element)"
+p29_diag foreach_container_index_write 9:1 "the foreach index 'i' is read-only"
+p29_diag foreach_container_redeclare 9:1 "cannot redeclare the foreach binding 'item'"
+p29_diag foreach_container_map_i 11:1 "'i' has no meaning in a Map foreach; use item.key / item.value"
+p29_diag container_copy 4:5 "a container is moved, not copied; use retain() or a function result"
+p29_diag container_own 13:10 "a container cannot hold an 'own' or 'borrow' value"
+p29_diag container_element 3:20 "a built-in container cannot be an element of another container"
+p29_diag container_element_map 3:28 "a built-in container cannot be an element of another container"
+# E29-12: the user template and the built-in container hit the same over-arity
+# text; the built-in layer has no private branch.
+p29_diag generic_struct_user_arity 10:21 "a generic struct takes at most 2 type parameters"
+p29_diag generic_builtin_arity 5:19 "a generic struct takes at most 2 type parameters"
+"$work/ct-ast" test/ast/errors/generic_builtin_arity.ct -o "$work/p29a1.c" \
+    >"$work/p29a1.out" 2>"$work/p29a1.err"
+p29a1_rc=$?
+"$work/ct-ast" test/ast/errors/generic_struct_user_arity.ct -o "$work/p29a2.c" \
+    >"$work/p29a2.out" 2>"$work/p29a2.err"
+p29a2_rc=$?
+if [ "$p29a1_rc" -eq 0 ] || [ "$p29a2_rc" -eq 0 ]; then
+    bad "p29: E29-12 arity" "expected both fixtures to fail"
+else
+    sed 's/.*error: //' "$work/p29a1.err" | head -1 >"$work/p29a1.msg"
+    sed 's/.*error: //' "$work/p29a2.err" | head -1 >"$work/p29a2.msg"
+    if cmp -s "$work/p29a1.msg" "$work/p29a2.msg" \
+       && [ "$(cat "$work/p29a1.msg")" = "a generic struct takes at most 2 type parameters" ]; then
+        ok "p29 (E29-12 same arity text)"
+    else
+        bad "p29: E29-12 arity" "$(cat "$work/p29a1.msg" "$work/p29a2.msg" 2>/dev/null)"
+    fi
+fi
+
+# E29-9: `ct check` and `ct build` report the same frozen diagnostic as the
+# compile path. The three modes share the parser, so the first error line must
+# be byte-identical.
+for p29neg in container_copy container_own container_element container_element_map \
+             generic_builtin_arity generic_struct_user_arity; do
+    "$work/ct-ast" "test/ast/errors/$p29neg.ct" -o "$work/p29md.c" \
+        >"$work/p29md1.out" 2>"$work/p29md1.err"
+    "$work/ct-ast" check "test/ast/errors/$p29neg.ct" \
+        >"$work/p29md2.out" 2>"$work/p29md2.err"
+    "$work/ct-ast" build "test/ast/errors/$p29neg.ct" -o "$work/p29md" \
+        --outdir "$work/p29mdd" >"$work/p29md3.out" 2>"$work/p29md3.err"
+    grep 'error: ' "$work/p29md1.err" | head -1 >"$work/p29md1.msg"
+    grep 'error: ' "$work/p29md2.err" | head -1 >"$work/p29md2.msg"
+    grep 'error: ' "$work/p29md3.err" | head -1 >"$work/p29md3.msg"
+    if cmp -s "$work/p29md1.msg" "$work/p29md2.msg" \
+       && cmp -s "$work/p29md1.msg" "$work/p29md3.msg" \
+       && [ -s "$work/p29md1.msg" ]; then
+        ok "p29 (check/build agree on $p29neg)"
+    else
+        bad "p29: check/build $p29neg" "$(cat "$work/p29md1.msg" "$work/p29md2.msg" "$work/p29md3.msg" 2>/dev/null)"
+    fi
+done
 
 # E29-5 / L29-W1: a project-local `vendor/std` is shadowed by the built-in
 # layer, with one warning, and the decoy module inside it is never read.
@@ -5826,6 +5876,20 @@ else
     ok "p29 (generic struct instances and inherent method names)"
 fi
 
+# E29-1: two instances of the same user template become two distinct C tags,
+# each with its fields substituted (`Pair<int, char *>` and `Pair<int, int>`).
+"$work/ct-ast" test/ast/138_generic_struct/prog.ct -o "$work/p29g.c" \
+    >"$work/p29g.out" 2>"$work/p29g.err"
+if [ $? -ne 0 ]; then
+    bad "p29: pair tags" "ct-ast failed: $(head -3 "$work/p29g.err")"
+elif ! grep -q 'struct Pair_int_char_p {' "$work/p29g.c"; then
+    bad "p29: pair tags" "no struct Pair_int_char_p"
+elif ! grep -q 'struct Pair_int_int {' "$work/p29g.c"; then
+    bad "p29: pair tags" "no struct Pair_int_int"
+else
+    ok "p29 (two instances, two distinct tags)"
+fi
+
 # 147: a pattern argument narrows the impl; `use` keeps the trait/vptr path.
 "$work/ct-ast" test/ast/147_generic_impl/prog.ct -o "$work/p29i.c" \
     >"$work/p29i.out" 2>"$work/p29i.err"
@@ -5851,6 +5915,8 @@ elif ! grep -q 'Vec_int_get(__ct_foreach_c_' "$work/p29v.c"; then
     bad "p29: foreach Vec" "the loop does not call Vec_int_get"
 elif ! grep -q 'int i = __ct_foreach_i_' "$work/p29v.c"; then
     bad "p29: foreach Vec" "no i binding"
+elif ! grep -q '__ct_foreach_n_' "$work/p29v.c"; then
+    bad "p29: foreach Vec" "the length is not snapshotted before the loop"
 elif ! grep -q '(void)i;' "$work/p29v.c"; then
     bad "p29: foreach Vec" "i is not voided"
 else
@@ -5866,6 +5932,23 @@ elif grep -q 'int i = __ct_foreach_i_' "$work/p29m.c"; then
     bad "p29: foreach Map" "a Map body must not bind i"
 else
     ok "p29 (foreach Map walks entry without an index)"
+fi
+# E29-3: two compilations of the same input agree byte for byte, and two runs
+# of the linked program print the same bytes (the Map keeps insertion order).
+"$work/ct-ast" test/ast/141_foreach_map/prog.ct -o "$work/p29m2.c" \
+    >"$work/p29m2.out" 2>"$work/p29m2.err" \
+  && cc -Wall -Wextra -std=c99 "$work/p29m.c" -o "$work/p29m" \
+    >"$work/p29mcc.out" 2>"$work/p29mcc.err" \
+  && "$work/p29m" >"$work/p29mrun1.out" 2>&1 \
+  && "$work/p29m" >"$work/p29mrun2.out" 2>&1
+if [ $? -ne 0 ]; then
+    bad "p29: Map determinism" "$(head -2 "$work/p29m2.err" "$work/p29mcc.err")"
+elif ! cmp -s "$work/p29m.c" "$work/p29m2.c"; then
+    bad "p29: Map determinism" "two compilations differ"
+elif ! cmp -s "$work/p29mrun1.out" "$work/p29mrun2.out"; then
+    bad "p29: Map determinism" "two runs differ"
+else
+    ok "p29 (Map: two builds and two runs agree)"
 fi
 
 # 139: `>>` closes two argument lists; the compressed name stays stable.

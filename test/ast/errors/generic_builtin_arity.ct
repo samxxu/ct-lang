@@ -1,0 +1,9 @@
+/* E29-12 / L29-2: `Vec` declares one type parameter, so two arguments is the
+   same over-arity error a user template gets from a third parameter. */
+int main(void)
+{
+    Vec<int, int> v;
+    v.h = 0;
+    v.data = 0;
+    return 0;
+}

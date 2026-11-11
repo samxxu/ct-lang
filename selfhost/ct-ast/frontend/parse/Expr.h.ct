@@ -1735,6 +1735,13 @@ impl ExprOps for Expr {
         self->sup->lex_next();
         if (nargs != nt2) {
             char msg[MAX_TEXT * 2];
+            /* L29-2 (E29-12): over-arity is the same frozen text for a
+               built-in container and a user template, so `Vec<int, int>` and
+               `Stack<int, int, int>` stay byte-identical. A user template
+               with more than two parameters is already cut off by the loop
+               above; this branch is the one-parameter container case. */
+            if (nargs > nt2)
+                return self->sup->fail("a generic struct takes at most 2 type parameters");
             snprintf(msg, sizeof msg,
                      "generic struct '%s' takes %d type arguments, %d given",
                      tname, nt2, nargs);
@@ -1778,9 +1785,9 @@ impl ExprOps for Expr {
 
     /* The single creation path for a concrete instance: encode, register the
        identity row, copy the template's fields with both parameters substituted
-       and let every matching `use` block adopt its trait. The arity check lives
-       here so `Vec<int, int>` and `Stack<int, int, int>` hit the same message
-       (E29-12: the built-in containers get no private branch). */
+       and let every matching `use` block adopt its trait. The arity check is
+       shared with the type parser, so a built-in container gets no private
+       branch (E29-12). */
     int inst_make(const char *tname, int nargs, const char *a1, const char *a2,
                   const char *c1, const char *c2, char *enc, int enc_cap, int depth)
     {
@@ -1795,6 +1802,8 @@ impl ExprOps for Expr {
         nt2 = tp[ti2].ntparams;
         if (nargs != nt2) {
             char msg[MAX_TEXT * 2];
+            if (nargs > nt2)
+                return self->sup->fail("a generic struct takes at most 2 type parameters");
             snprintf(msg, sizeof msg,
                      "generic struct '%s' takes %d type arguments, %d given",
                      tname, nt2, nargs);
