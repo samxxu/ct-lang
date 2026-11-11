@@ -10,7 +10,7 @@
 
 ### 1.1 一句话目标
 
-`ct check` 从「只挡调用元数与既有粗粒度实参」扩展为一张**只覆盖三处位置**的类型安全网：声明初值/赋值、`return`、容器方法实参；`int x = "s";`、`return "s";`、`v.push("s")` 在 `ct check` 下给出 `.ct` 行列硬错，而 `ct build`/`ct compile` 的输出与 golden 保持逐字节不变。
+`ct check --types` 从「只挡调用元数与既有粗粒度实参」扩展为一张**只覆盖三处位置**的类型安全网：声明初值/赋值、`return`、容器方法实参；`int x = "s";`、`return "s";`、`v.push("s")` 在 `ct check --types` 下给出 `.ct` 行列硬错，而 `ct build`/`ct compile` 的输出与 golden 保持逐字节不变。**不带 `--types` 的 `ct check` 保持今日行为逐字节不变**。
 
 ### 1.2 范围（O1–O4）
 
@@ -19,7 +19,7 @@
 | O1 | 声明初值与赋值 | `T x = expr;`、`lhs = expr;`，含 Phase 30 `into` 块内的 `.field = expr`。左侧类型取声明类型或 `static_ctype(lhs)`；判不出即跳过 |
 | O2 | `return` | 返回值与当前函数返回类型比对；同时覆盖 `return;`（非 void 缺值）与 `return expr;`（void 多值） |
 | O3 | 容器方法实参 | `Vec::push/set`、`Map::put` 等**泛型 impl 方法**的实参；通过接收者的实例行绑定 impl 类型参数后替换形参，不按容器名分支 |
-| O4 | 判定内核与全量清账 | 以 19.2 的 `arg_class` 为唯一兼容内核；对全部单单元合法夹具跑 `ct check`，新增诊断必须为零 |
+| O4 | 判定内核与覆盖率下限 | 以 19.2 的 `arg_class` 为唯一兼容内核；对全部单单元合法夹具跑 `ct check --types`，新增诊断必须为零；并用「位置 × 类型类」矩阵锁定覆盖率下限（见 §3.6） |
 
 ### 1.3 非目标（本相明确不做）
 
@@ -34,6 +34,7 @@
 
 ### 1.4 与既有决策/相位的边界
 
+- **clap 形态**：`ct check` 新增 `--types` 开关；不带开关时 `check_mode` 只做既有检查，stderr 与退出码与基线逐字节一致。`--types` 只允许与 `check` 同用，其他子命令给可读硬错。
 - **Phase 19 的延续**：`ct check` 由 `Driver.h.ct:171-178` 打开 `check_mode` 并 `ct_diag_set_strict(1)`；`Diag.h.ct:276` 在 strict 下把 warning 升级为 `error`。本相复用这条通道，不新建诊断层。
 - **SH-60**：静态映射调用点的实参硬错保持现状（`Expr.h.ct:1191-1201`），本相不改。
 - **Phase 31**：`Vec<Show>`、`Vec<Vec<int>>`、`v[i]`、花括号初值由 Phase 31 交付；本相只消费其结果。若 31 尚未落地，O3 只对既有 `Vec`/`Map` 形态生效，S1–S5 照常推进（见 §6 依赖）。
@@ -66,6 +67,8 @@
 | `int f(){ return; } void g(){ return 1; }` | `… check /tmp/p32_ret_void.ct` | `rc=0` |
 | **正例**：`char *s="hi"; char *p=0; int x=1.5; void *v=s; Show sh=circle;` | `… check /tmp/p32_ok.ct` | `rc=0`（必须保持） |
 | **泛型跳过**：`T id<T>(T x){ return x; }` | `… check /tmp/p32_generic.ct` | `rc=0`（必须保持） |
+
+> 基线命令用 `ct check`（不带 `--types`）证明今日不查类型；实现后同一夹具改用 `ct check --types` 复跑并必须失败。`ct check --types` 在基线上应报未知选项（S0 记录原始退出码与文案），这是 `--types` 自身的红证。
 
 ### 2.3 可复用的既有内核
 
@@ -144,7 +147,8 @@ chk_assignable(formal, actual, struct_ctx):
 
 ### 3.5 诊断与开关
 
-- 新增调用点全部包在 `if (self->check_types)` 内；`check_types` 由 Driver 的 `check_mode` 透传。`ct build` / `ct compile` 完全不进入，**不产生 warning，不改 golden**。
+- `Driver.h.ct` 的 `check` 分支解析 `--types`，置 `types_mode=1`；解析器新增 `types_mode` 字段并在 `check` 路径透传。**不带 `--types` 时不进入本相任何新检查**；`ct build` / `ct compile` 也不进入，因此不产生 warning、不改 golden。
+- `--types` 只与 `check` 组合；其他子命令携带时报可读硬错（L32-8），不静默忽略。
 - 文案（统一 `file:line:col`，列指向表达式起点；缺值指向 `return` 关键字）：
 
 | 编号 | 文案 |
@@ -156,14 +160,24 @@ chk_assignable(formal, actual, struct_ctx):
 | L32-5 | `return: a value is not allowed in a void function` |
 | L32-6 | `argument <n>: expected '<T>', got '<U>'`（容器方法） |
 | L32-7 | `initializer: a struct value does not use the interface '<T>'`（仅在 `use` 缺失且接口形态明确时） |
+| L32-8 | `--types is only valid with 'ct check'` |
 
 L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 trait 时触发；若 `iface_ref_type` 判不出则跳过，避免与既有装箱诊断重复。
+
+### 3.6 覆盖率下限（可观测断言）
+
+覆盖率定义为 **3 个位置 × 8 个来源类型类** 的矩阵：位置 = 声明/赋值、`return`、容器实参；类型类 = 算术、指针、结构体、接口、数组、函数指针、`void`、不可判。共 24 格。
+
+- 落盘 `test/ast/check_coverage.tsv`，每行 `位置<TAB>类型类<TAB>diag:<夹具>` 或 `位置<TAB>类型类<TAB>skip:<理由>`。
+- 每个 `diag` 夹具必须在 `ct check --types` 下产出对应 L32-n；每个 `skip` 夹具必须保持退出 0 且理由可读。
+- **下限断言**：`diag` 格数 ≥ **18**（75%），`skip` 格数 ≤ **6**；24 格必须全部登记，缺格即失败；`skip` 不得用于「本该判却判不出」的类型类。
+- `check-ast.sh` 新增 `p32_coverage`，解析该 TSV 并逐行执行，最终打印 `coverage: <diag>/24 (skip=<n>)`；低于下限直接 `fail`。
 
 ## 4 决策表
 
 | 编号 | 决策 | 理由 |
 | --- | --- | --- |
-| D32-1 | 只作用于 `ct check`，编译/构建零诊断 | 安全网关定位；避免 golden 与既有 warning 计数漂移 |
+| D32-1 | `--types` opt-in；不带开关的 `ct check` 与今日逐字节一致 | 安全网关定位；避免既有 check 输出与 CI 断言漂移 |
 | D32-2 | `arg_class` 是唯一兼容内核 | 一条规则四处复用，防止 check 与 19.2 分叉 |
 | D32-3 | 声明初值并入赋值位置 | 用户给出的 `int x = "s"` 正是初值形态 |
 | D32-4 | 判不出 → 静默跳过 | opt-in 安全网，不做推测性报错 |
@@ -209,8 +223,8 @@ L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 t
 | S3 | 赋值挂点（含 `into` 块）+ L32-2 | `Expr.h.ct` / `Stmt.h.ct` | 50–90 |
 | S4 | `cur_ret` + `return` 三形态 + L32-3/4/5 | `Parser.h.ct` / `Stmt.h.ct` | 60–100 |
 | S5 | `ct_impl_bind` + 形参替换 + 固有方法挂点 + L32-6 | `Expr.h.ct` / `Symbols.h.ct` | 100–180 |
-| S6 | `check_types` 透传 + 诊断收口 + L32-7 | `Parser.h.ct` / `Diag.h.ct` | 40–80 |
-| S7 | 负例夹具 + `check-ast.sh` 新增 `p32_*` 断言块（逐字 grep + 恰一条 + 位置） | `test/ast/errors/**` / `selfhost/check-ast.sh` | 150–250 |
+| S6 | `--types` 解析 + `types_mode` 透传 + 诊断收口 + L32-7/8 | `Driver.h.ct` / `Parser.h.ct` / `Diag.h.ct` | 50–100 |
+| S7 | 负例夹具 + `check-ast.sh` 新增 `p32_*` 断言块（逐字 grep + 恰一条 + 位置）+ `p32_coverage` | `test/ast/errors/**` / `test/ast/check_coverage.tsv` / `selfhost/check-ast.sh` | 180–300 |
 | S8 | 单单元合法语料全量清账：对 S0 基线做 diff，新增诊断必须为 0 | 夹具/内核修正 | 80–200 |
 | S9 | 样例 `examples/35_type_safety` + `test/run.sh` | `examples/35_*` | 60–120 |
 | S10 | 文档（language-spec/glossary/tutorial/roadmap）+ 全量门禁 | `docs/**` | 140–260 |
@@ -219,7 +233,7 @@ L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 t
 
 ## 7 退出判据（E32-n）
 
-每条都必须给出夹具、门禁与红证；「判不出就跳过」不算通过，必须有正例锁定。
+每条都必须给出夹具、门禁与红证；「判不出就跳过」不算通过，必须有正例锁定。下表所有 `check` 均指 **`ct check --types`**；不带 `--types` 的基线行为由 E32-10 锁定。
 
 | ID | 断言 | 夹具 | 门禁 | 红证 |
 | --- | --- | --- | --- | --- |
@@ -232,11 +246,12 @@ L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 t
 | E32-7 | 泛型/闭包/函数指针/接口实际值不误报：`T id<T>(T x){return x;}`、`f(cb)`、`Show s=circle` 均退出 0 | `ast/210_valid_skip_forms` | `check-ast.sh` | 当前 `rc=0` |
 | E32-8 | 诊断格式 `file:line:col`，列指向表达式；同一夹具的 compile 路径无新增输出 | `errors/check_*.ct` + `p32_*` 断言块 | `check-ast.sh` | 编译 stderr 为空 |
 | E32-9 | 对 S0 的 `/tmp/p32_check_baseline.txt` 做 diff：单单元合法语料的新增诊断 = 0；既有错误夹具的期望消息仍存在且不新增无关诊断 | 全量语料 | `check-ast.sh` | 基线 1073 passed；diff 文件为 S0 原始输出 |
-| E32-10 | `ct build` / `ct compile` 的 `.c` 与 golden 逐字节不变；`check-warnings` 仍 353 ok | 全量 | `test/run.sh` + `check-warnings.sh` | 基线 141 / 353 |
+| E32-10 | `ct build` / `ct compile` 的 `.c` 与 golden 逐字节不变；不带 `--types` 的 `ct check` stderr/退出码与基线逐字节一致；`check-warnings` 仍 353 ok | 全量 | `test/run.sh` + `check-warnings.sh` | 基线 141 / 353 |
 | E32-11 | 用户泛型 struct `Pair<A,B>` 的 `set` 实参错同样被 L32-6 拦截，证明无 `Vec`/`Map` 特判 | `errors/check_generic_arg.ct` | `check-ast.sh` | 当前 `rc=0` |
 | E32-12 | 样例 `examples/35_type_safety` 进入 `test/run.sh`，golden 由编译器生成并人工核对 | `examples/35_type_safety` | `test/run.sh` | 样例当前不存在 |
 | E32-13 | language-spec/glossary/tutorial 写清「check 是 opt-in，只覆盖三处，指针基类型不查」；roadmap 行落地 | `docs/**` | `check-docs` | 文档当前无此表述 |
 | E32-14 | `check-all.sh` 11 道硬门禁全绿；`check-ast` / `test/run` / `goldens` / `warnings` 计数不回退 | 全量 | `check-all.sh` | 基线见 §2.1 |
+| E32-15 | 覆盖率下限：`check_coverage.tsv` 24 格全登记，`diag ≥ 18`、`skip ≤ 6`，`p32_coverage` 打印 `coverage: <n>/24` 且不失败 | `test/ast/check_coverage.tsv` | `check-ast.sh` | 当前无矩阵，`coverage` 行不存在 |
 
 ## 8 负例台账（L32-n）
 
@@ -249,6 +264,7 @@ L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 t
 | L32-5 | void 多返回值 | `return: a value is not allowed in a void function` |
 | L32-6 | 容器/泛型方法实参不兼容 | `argument 1: expected 'int', got 'char *'` |
 | L32-7 | 接口初值来自未 `use` 该 trait 的 struct | `initializer: a struct value does not use the interface 'Show'` |
+| L32-8 | `--types` 与错误子命令组合 | `--types is only valid with 'ct check'` |
 
 ## 9 样例计划
 
@@ -270,9 +286,9 @@ L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 t
 | 区 | 行数 | 文件数 |
 | --- | --- | --- |
 | 编译器（S1–S6） | **500–1,000**（用户口径） | 4–6 |
-| 夹具与门禁（S7–S8） | 260–480 | 14–24 |
+| 夹具与门禁（S7–S8） | 300–560 | 15–26 |
 | 文档与样例（S9–S10） | 140–260 + 60–120 | 5–7 |
-| **合计** | **960–1,860** | **23–37** |
+| **合计** | **1,000–1,940** | **24–39** |
 
 ## 11 风险与触发条件
 
@@ -299,7 +315,8 @@ L32-7 只在左侧是接口、右侧是具体 struct 且 `use` 列表不含该 t
 ## 12 交付物清单
 
 - `selfhost/ct-ast/**`：S1–S6 的实现与诊断。
-- `test/ast/errors/check_*.ct`：L32-1–L32-7 负例；`selfhost/check-ast.sh` 新增 `p32_*` 断言块（逐字文案 + 恰一条 + 位置）。
+- `test/ast/errors/check_*.ct`：L32-1–L32-8 负例；`selfhost/check-ast.sh` 新增 `p32_*` 断言块（逐字文案 + 恰一条 + 位置）。
+- `test/ast/check_coverage.tsv` + `p32_coverage`：24 格覆盖率矩阵与下限断言。
 - `test/ast/209_valid_assignments/`、`test/ast/210_valid_skip_forms/`：正例与跳过形态（`prog.ct` + `expected.out`）。
 - `examples/35_type_safety/` + golden：唯一可运行样例。
 - `docs/language-spec.md`、`docs/glossary.md`、`docs/tutorial.md`：opt-in 与三处边界。
