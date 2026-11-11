@@ -1,0 +1,12 @@
+/* V29-4: a function pointer returning a Vec still yields no subscript on `fp()`. */
+Vec<int> mk(void)
+{
+    Vec<int> v;
+    return v;
+}
+
+int main(void)
+{
+    Vec<int> (*fp)(void) = mk;
+    return fp()[0].h;
+}

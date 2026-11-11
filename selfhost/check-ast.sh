@@ -6044,6 +6044,13 @@ p29_neg vec_subscript_deref "a Vec is not subscriptable: use get(i) / set(i, v)"
 p29_neg vec_subscript_member "a Vec is not subscriptable: use get(i) / set(i, v)" 9:15
 p29_neg vec_subscript_call "a Vec is not subscriptable: use get(i) / set(i, v)" 14:18
 p29_neg map_subscript_deref "a Map is not subscriptable: use get(key)" 7:17
+# V29-4c: an indirect call through a function pointer now carries its return
+# type, and a second `[` on an array / pointer subscript is judged too.
+p29_neg vec_subscript_fnptr "a Vec is not subscriptable: use get(i) / set(i, v)" 11:16
+p29_neg vec_subscript_fnptr_member "a Vec is not subscriptable: use get(i) / set(i, v)" 15:18
+p29_neg vec_subscript_index_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 6:17
+p29_neg vec_subscript_index_array "a Vec is not subscriptable: use get(i) / set(i, v)" 5:18
+p29_neg vec_subscript_index_field "a Vec is not subscriptable: use get(i) / set(i, v)" 9:18
 
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it

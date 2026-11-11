@@ -1,0 +1,7 @@
+/* V29-4: `pv[0]` is a handle, so the second `[` has no C spelling. */
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> *pv = &v;
+    return pv[0][0].h;
+}

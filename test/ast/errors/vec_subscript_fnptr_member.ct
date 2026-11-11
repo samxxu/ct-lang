@@ -1,0 +1,16 @@
+/* V29-4: a function pointer returning a struct keeps the field's no-subscript. */
+struct Holder {
+    Vec<int> v;
+}
+
+Holder mk(void)
+{
+    Holder h;
+    return h;
+}
+
+int main(void)
+{
+    Holder (*fp)(void) = mk;
+    return fp().v[0].h;
+}
