@@ -18,6 +18,7 @@
 #include <string.h>
 
 import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
 import frontend::lex::Lexer;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::StructInst as StructInst;
@@ -32,6 +33,16 @@ import tool::diag::Diag;
 #define MAX_LABELS 64
 
 #define B_COMMA 19
+#define B_ADD 1
+#define B_SUB 2
+#define B_MUL 3
+#define B_DIV 4
+#define B_MOD 11
+#define B_SHL 17
+#define B_SHR 18
+#define B_BAND 15
+#define B_BOR 16
+#define B_XOR 14
 #define N_INDEX 26
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -69,6 +80,7 @@ import tool::diag::Diag;
 #define N_FOREACH 62
 #define N_MEMBER 24
 #define N_NUM 8
+#define N_UNARY 17
 #define N_POST 18
 #define N_PRE 57
 #define N_ADDR 27
@@ -996,7 +1008,80 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
     return e;
 }
 
-/* Phase 31 S14a: a `Map` brace initializer (`Map<char *, int> m = {"a": 1};`).
+/* Phase 31 S16a: fold an integer constant expression for duplicate-key
+   detection (D31-14). Only the operators the card lists are folded and only
+   while every intermediate value stays inside the guard range, so overflow
+   gives up instead of judging. */
+static int map_fold_num(struct Stmt *self, int n, long *out)
+{
+    struct Node *nd;
+    long a, b;
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    if (nd->kind == N_NUM) {
+        *out = nd->num;
+        return 1;
+    }
+    if (nd->kind == N_UNARY) {
+        if (!map_fold_num(self, nd->a, &a)) return 0;
+        if (nd->aux == 1) { *out = -a; return 1; }
+        if (nd->aux == 2) { *out = !a; return 1; }
+        if (nd->aux == 3) { *out = ~a; return 1; }
+        return 0;
+    }
+    if (nd->kind != N_BIN) return 0;
+    if (!map_fold_num(self, nd->a, &a) || !map_fold_num(self, nd->b, &b)) return 0;
+    if (a < -1099511627776L || a > 1099511627776L) return 0;   /* 2^40 */
+    if (b < -1099511627776L || b > 1099511627776L) return 0;
+    switch (nd->aux) {
+    case B_ADD: *out = a + b; break;
+    case B_SUB: *out = a - b; break;
+    case B_MUL:
+        if (a < -2147483647L || a > 2147483647L) return 0;
+        if (b < -2147483647L || b > 2147483647L) return 0;
+        *out = a * b;
+        break;
+    case B_DIV: if (b == 0) return 0; *out = a / b; break;
+    case B_MOD: if (b == 0) return 0; *out = a % b; break;
+    case B_SHL:
+        if (b < 0 || b > 20) return 0;
+        if (a < -524288L || a > 524288L) return 0;
+        *out = a << b;
+        break;
+    case B_SHR:
+        if (b < 0 || b > 40) return 0;
+        *out = a >> b;
+        break;
+    case B_BAND: *out = a & b; break;
+    case B_BOR: *out = a | b; break;
+    case B_XOR: *out = a ^ b; break;
+    default: return 0;
+    }
+    return 1;
+}
+
+/* Phase 31 S16a/S16b: 1 when key `n` repeats one of the first `count` keys by a
+   statically determinable value. `disp` receives the key's spelling (decimal
+   for an integer, decoded bytes for a string, the cname for an enum member) and
+   `*first` the line of the first occurrence. A key that cannot be folded is not
+   judged here; the constructor's inline insert overwrites it at runtime. */
+static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *disp, int *first)
+{
+    long nv = 0, pv;
+    int j;
+
+    if (!map_fold_num(self, n, &nv)) return 0;
+    snprintf(disp, (size_t)MAX_TEXT, "%ld", nv);
+    for (j = 0; j < count; j++)
+        if (map_fold_num(self, keys[j], &pv) && pv == nv) {
+            *first = self->arena->nodes[keys[j]].line;
+            return 1;
+        }
+    return 0;
+}
+
+/* Phase 31 S14a/S16a: a `Map` brace initializer (`Map<char *, int> m = {"a": 1};`).
    The cursor sits on `{`; `entry` is the nested `MapEntry` struct spelling and
    `iname` the encoded `Map` name. Each `key : value` is parsed from ordinary
    expressions into one node, so the emitter streams a composite literal and the
@@ -1006,6 +1091,7 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
 static int parse_map_brace_init(struct Stmt *self, const char *entry, const char *iname)
 {
     int e, head, tail, count, line;
+    int keys[1024];
 
     line = self->lex->tokline;
     head = -1;
@@ -1013,14 +1099,30 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
     count = 0;
     self->sup->lex_next();              /* `{` */
     while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-        int it, k, v;
+        int it, k, v, kline, kcol;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "a brace list cannot appear inside another brace initializer; build the inner container first",
                 self->mem->path);
+        kline = self->lex->tokline;
+        kcol = self->lex->tokstart - self->lex->lstart + 1;
         k = self->ex->parse_expr();
         if (k < 0) return -1;
+        /* S16a: a repeat the compiler can prove is a hard error at the second
+           key; a key it cannot fold is left to the runtime insert (D31-14). */
+        {
+            char dupdisp[MAX_TEXT];
+            int firstline = 0;
+            if (map_dup_key(self, keys, count, k, dupdisp, &firstline)) {
+                char msg[256];
+                snprintf(msg, sizeof msg,
+                         "duplicate key '%s' in a Map initializer (first at line %d)",
+                         dupdisp, firstline);
+                return tool::diag::ct_sem_error(kline, kcol, msg, self->mem->path);
+            }
+        }
+        if (count < 1024) keys[count] = k;
         if (self->sup->expect(":") != 0) return -1;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
