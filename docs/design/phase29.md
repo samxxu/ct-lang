@@ -2,9 +2,9 @@
 
 > 中文。
 >
-> **状态：实施中**（2026-11-11 复核后回退）。切片 29.1–29.4、29.6 与 29.7 的代码已落地、
-> 11 道硬门禁全绿，但 **E29-5 / E29-6 / E29-13 未满足**（见 §10.3），故不标记完成。
-> 29.5 的容器所有权诊断按 §10 的偏差表留待后续。剩余偏差与实现口径见 §10。
+> **状态：完成**（2026-11-11 补口后收口，未 bump）。切片 29.1–29.7 的代码已落地，
+> E29-5 / E29-6 / E29-13 的缺口已补齐（见 §10.3 的关闭证据），11 道硬门禁全绿。
+> 仍延后的只有 §10.2 偏差表里的 L29-13 / L29-14 等条目，均不在 E29-1…E29-13 的判据文本内。
 > **主题来源**：用户 2026-11-10「`Vec` 和 `Map` 应该作为内置的数据结构，从 ct-pkg 的 `std` 移到
 > 内置类型」「`foreach_statement.ct` 没有把 map 纳入进来」；同日的取舍「`Callable` 内建先不做」。
 > 关联：[phase28.md](phase28.md)（约束泛型函数）、[phase26.md](phase26.md)（泛型函数）、
@@ -818,7 +818,9 @@ design window: ok (12/12)
 | 29.1–29.2 | 符号层、`parse_type` 实例分支、`impl<T>` 解析与静态派发 | `check-ast.sh` 903 passed / 0 failed |
 | 29.3–29.4 | `lib/std/Vec.h.ct` 内置层与自动加载 | `check-ast.sh` 903 passed / 0 failed |
 | 29.6 | `foreach` 容器协议、样例 22–25、夹具 138–142/144/147、负例、跨单元夹具 | `check-ast.sh` **936 passed / 0 failed** |
-| 收口 | 文档同步、`lib/std/README.md`、未使用变量清理 | `check-all.sh` **11 hard gates green**（`check-ast.sh` 936 passed / 0 failed、`check-warnings.sh` 282 ok、`check-docs` 967 links）。**门禁绿不等于判据全满足**：复核发现 E29-5 / E29-6 / E29-13 未满足，状态回退为「实施中」，见 §10.3 |
+| 收口（首轮） | 文档同步、`lib/std/README.md`、未使用变量清理 | `check-all.sh` **11 hard gates green**（`check-ast.sh` 936 passed / 0 failed、`check-warnings.sh` 282 ok、`check-docs` 967 links）。复核发现 E29-5 / E29-6 / E29-13 未满足，状态回退为「实施中」，见 §10.3.1 |
+| 判据补口 | L29-9/10/11 三条硬错、L29-W1 遮蔽告警、`container_*` 负例 4 条、`143_map_api`、`p29_builtin_std`（含 `needs_std.ct`）、`generic_struct_pub_fn.ct` | `check-ast.sh` **948 passed / 0 failed**；`check-docs` **OK**（967 links、12 phase status）；`check-sanitizers.sh` 中 `143_map_api` **ok**（该脚本另有 10 项既有失败：8 个带 `import` 的夹具在 compile 模式被调用、`range_init_overflow` 崩溃，均与 Phase 29 无关） |
+| 最终收口 | 状态改回「完成」、§10.3 写关闭证据、roadmap / AGENTS 同步 | `check-all.sh` **OK（11 hard gates green）**：`check-ast.sh` 948 passed / 0 failed、`check-warnings.sh` 283 ok、`check-docs` OK（978 links）、`test/run.sh` 137 passed、`check-goldens` 82 passed、acceptance 20 pass / 0 regression |
 
 ### 10.2 实现偏差与未落地项（如实记账）
 
@@ -833,35 +835,51 @@ design window: ok (12/12)
 | L29-17 的范围 | 只覆盖循环体内的显式声明（`N_DECL`） | 嵌套 `foreach` 重绑 `item` 仍是 D27-10 的警告（`ct check` 下为错误），不叠加第二个诊断 |
 | L29-5 / L29-6 | 未实现 | 编码冲突与超长名目前分别报通用错误 / 走摘要压缩；需要独立的实例命名表才能给准确文案 |
 | L29-8 | 未实现 | 键白名单要等参数化 trait；当前按 §10.2 第二行的 `sizeof` 规则运行 |
-| L29-9 / L29-10 / L29-11 / L29-13 | 未实现 | 容器所有权 / 元素类型限制；`foreach` 侧有 L29-15 兜住「容器元素 / 接口值不可值拷贝」 |
+| L29-13 | 未实现 | 「容器元素是接口值 / 含 vptr 的 struct」；E29-1…E29-13 原文无此编号，属 B8 的延伸（见 §10.3 的重启信号） |
 | L29-14 | 未实现 | 跨单元布局一致性已由「模板所在单元发布 `.h` + 每实例一份定义」从结构上避免（`test/modules/p29_generic_struct`），暂无第二份定义可比对 |
-| L29-W1 | 未实现 | `vendor/std` 遮蔽警告属于包管理层，本仓 `lib/std/` 尚无 `vendor/std` 对端 |
-| `ct build` 的内置层 | **未接入**；只有 compile 模式（`ct file.ct -o file.c`）预解析 `lib/std/Vec.h.ct` | 多单元构建还没有「预解析单元 + splice」的接入点；使用容器的程序目前必须走 compile 模式 |
+| `ct build` 的内置层 | **未接入**；只有 compile 模式（`ct file.ct -o file.c`）预解析 `lib/std/Vec.h.ct`。`check-warnings.sh` 的模块段因此跳过 `p29_builtin_std`（该夹具由 `check-ast.sh` 在 compile 模式覆盖） | 多单元构建还没有「预解析单元 + splice」的接入点；使用容器的程序目前必须走 compile 模式 |
 | 固有方法实参检查 | 只检查元数，不检查实参类型 | 实例方法的形参在模板里是符号类型，`parse_type` 的实参检查需要实例上下文；已列为已知限制 |
 
-### 10.3 退出判据复核（2026-11-11，状态回退为「实施中」的依据）
+### 10.3 退出判据复核与关闭证据（2026-11-11）
+
+#### 10.3.1 第一次复核（状态回退的依据，保留）
 
 复核方法：逐条在 E29-1…E29-13 的**原文**里检索 `L29-9` / `L29-10` / `L29-11` / `L29-13` / `L29-W1`。
-结论是其中三条**落在退出判据内**，因此本相不能标记完成；§10.2 的偏差表不能替代判据。
+结论是其中三条**落在退出判据内**（经 B8 → E29-13），加上 E29-5 的遮蔽告警与两条判据自带的夹具
+缺失，本相当时不能标记完成；§10.2 的偏差表不能替代判据。当时回退为「实施中」。
 
-| 偏差项 | 是否出现在 E 判据原文 | 判据原文（摘录） | 结论 |
+| 偏差项 | 是否出现在 E 判据原文 | 判据原文（摘录） | 当时的结论 |
 | --- | --- | --- | --- |
-| L29-9 / L29-10 / L29-11 | **是**（经 B8 → E29-13） | B8：「`own` / `borrow` 值入容器（L29-10）；容器按值拷贝（L29-9）；容器元素为容器（L29-11）」；E29-13：「**样例覆盖矩阵每行都有可运行样例**：B1–B9 逐行有 `expected.out`…每行有对应负例或产物断言…不允许用 `/tmp` 探针替代」 | **未满足**：`test/ast/errors/container_own.ct`、`container_copy.ct` 不存在，L29-9/10/11 均未实现 |
-| L29-W1 | **是**（E29-5 正文） | E29-5：「`vendor/std` 存在时给一条遮蔽告警且仍用内置 `Vec`/`Map`」；锚点：「`test/modules/p29_builtin_std/` + 告警文案断言」 | **未满足**：夹具目录与告警实现都不存在 |
-| L29-13 | **否**：E29-1…E29-13 原文无此编号；B8 的反向证明只点名 L29-9/10/11 | B8 原文未列 L29-13；L29-13 是「容器元素是接口值 / 含 vptr 的 struct」，与 B8 同属 §2.9 N10 的所有权族 | **不在判据文本内**，按 B8 的延伸延后；它与参数化 trait / 装箱布局耦合，单相无法判定「元素所有权」 |
+| L29-9 / L29-10 / L29-11 | **是**（经 B8 → E29-13） | B8：「`own` / `borrow` 值入容器（L29-10）；容器按值拷贝（L29-9）；容器元素为容器（L29-11）」；E29-13：「**样例覆盖矩阵每行都有可运行样例**…每行有对应负例或产物断言」 | 未满足 |
+| L29-W1 | **是**（E29-5 正文） | E29-5：「`vendor/std` 存在时给一条遮蔽告警且仍用内置 `Vec`/`Map`」 | 未满足 |
+| L29-13 | **否**：E29-1…E29-13 原文无此编号；B8 的反向证明只点名 L29-9/10/11 | B8 原文未列 L29-13；它与参数化 trait / 装箱布局耦合 | 不在判据文本内，延后不改结论 |
 
-除上述偏差项外，复核还发现两条**判据自带的夹具缺失**（与 §10.2 的偏差项无关，属未完成判据）：
+#### 10.3.2 补口实现（本轮，逐条对应判据）
 
-| 判据 | 原文要求 | 现状 | 结论 |
+| 判据 | 补口内容 | 实现位置 | 夹具 / 断言 |
 | --- | --- | --- | --- |
-| E29-6 | 「`test/ast/142_vec_api/`、**`143_map_api/`** 运行输出 + ASAN 门禁」 | `142_vec_api` 存在，`143_map_api` 不存在 | **未满足** |
-| E29-13（B6 行） | 「`test/modules/errors/generic_struct_pub_fn.ct`（新）」+「L26-2 文案逐字匹配」 | 该负例不存在 | **未满足** |
+| E29-13（B8）L29-9 容器按值拷贝 | 变量初始化器与赋值右侧若为**同名容器类型**的裸标识符，报硬错 | `frontend/sym/Symbols.h.ct` 的 `ct_is_container_type`；`frontend/parse/Stmt.h.ct`（声明初始化器）、`frontend/parse/Expr.h.ct`（赋值） | `test/ast/errors/container_copy.ct`；`p29_diag` 断言文案「a container is moved, not copied; use retain() or a function result」 |
+| E29-13（B8）L29-10 `own` / `borrow` 入容器 | 容器 `push` / `set` / `put` 的实参若是 `own` 或 `borrow` 绑定，报硬错 | `frontend/parse/Expr.h.ct` 的固有方法调用分支（`inst_inherent_method`） | `test/ast/errors/container_own.ct`；断言「a container cannot hold an 'own' or 'borrow' value」 |
+| E29-13（B8）L29-11 容器元素为容器 | 类型实参中出现按值容器（`Vec<…>` / `Map<…>`，指针不算）报硬错；容器 `push` / `set` / `put` 收到按值容器实参同样报错 | `frontend/parse/Expr.h.ct` 的 `inst_make` 与固有方法调用分支 | `test/ast/errors/container_element.ct`、`container_element_map.ct`；断言「a built-in container cannot be an element of another container」 |
+| E29-5 / L29-W1 `vendor/std` 遮蔽告警 | 内置层加载成功且 cwd 存在 `vendor/std` 时记一条 `std_shadow` 告警，仍用内置 `Vec`/`Map` | `tool/driver/Driver.h.ct` 的 `load_builtin` 调用点；`tool/diag/Diag.h.ct` 的 `record_std_shadow`（JSON `"std_shadow"` / 文本 `warning`） | `test/modules/p29_builtin_std/`（含不可编译的 `vendor/std/vec.ct` 作诱饵）；断言告警文案「the built-in Vec/Map supersede a project-local 'vendor/std' (ignored)」+ `struct Vec_int` + 输出 `7 1` |
+| E29-5 内置层只覆盖容器 | 负例证明 `std::str` 仍需 `ct get std` | 模块解析既有行为（`Module.h.ct` 的 `resolve_import`） | `test/modules/p29_builtin_std/needs_std.ct`；断言「cannot resolve import 'std/str'」 |
+| E29-6 容器 API | 补 `test/ast/143_map_api/`：`put` 重复键原位改值、`len`、`get` 命中/未命中、`entry` 与越界、`remove` 左移、`retain` 共享、`release` 到 0 | `lib/std/Vec.h.ct`（既有实现，未改） | `test/ast/143_map_api/prog.ct` + `prog.expected.out`；`check-ast.sh` 逐字节 `cmp`、`check-sanitizers.sh` 自动遍历 `test/ast/*/prog.ct` 做 ASAN 门禁（实测 `143_map_api` ok；该脚本的其余既有失败见 §10.1） |
+| E29-13（B6）泛型函数 `pub` 负例 | 无代码改动（L26-2 既有诊断） | 既有 `pub` 检查 | `test/modules/errors/generic_struct_pub_fn.ct`；断言「generic functions cannot be pub」逐字匹配 |
 
-**关闭条件**（按判据原文，不裁剪）：
+补口后判据状态：
 
-1. 实现 L29-W1 并补 `test/modules/p29_builtin_std/` 与告警文案断言 → E29-5；
-2. 补 `test/ast/143_map_api/`（含 `put/get/remove/entry` 与 `release` 到 0 的 ASAN 断言）→ E29-6；
-3. 实现 L29-9 / L29-10 / L29-11 并补 `container_copy.ct` / `container_own.ct`（B8），补 `generic_struct_pub_fn.ct`（B6）→ E29-13。
+| 判据 | 状态 | 证据 |
+| --- | --- | --- |
+| E29-5 | **满足** | 遮蔽告警 + `builtin_std` 夹具 + `needs_std.ct` 负例，进 `check-ast.sh` |
+| E29-6 | **满足** | `142_vec_api` 与 `143_map_api` 均在 `check-ast.sh` 与 `check-sanitizers.sh` 的遍历范围内 |
+| E29-13 | **满足** | B1–B9 每行有夹具与断言；B6 的 `generic_struct_pub_fn.ct` 补齐；B8 的 L29-9/10/11 三条均已实现并进硬门禁 |
 
-**L29-13 的重启触发信号**：用户要求容器元素可以是接口值或含 vptr 的 struct，或需要容器与装箱打通；在此之前
-它不在任何 E 判据文本内，延后不改判据结论。
+计数与门禁原始输出见 §10.1 的「判据补口」与「最终收口」两行。
+
+#### 10.3.3 仍延后的项与重启信号
+
+`L29-13`（容器元素是接口值 / 含 vptr 的 struct）与 `L29-14`（跨单元布局比对）继续留在 §10.2：
+E29-1…E29-13 原文没有它们的编号，B8 的反向证明只点名 L29-9/10/11，因此延后不改判据结论。
+
+**L29-13 的重启触发信号**：用户要求容器元素可以是接口值或含 vptr 的 struct，或需要容器与装箱打通；
+在那之前它不进入任何 E 判据的判定。
