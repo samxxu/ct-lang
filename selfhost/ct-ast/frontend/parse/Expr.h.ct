@@ -1969,13 +1969,6 @@ impl ExprOps for Expr {
                      tname, nt2, nargs);
             return self->sup->fail(msg);
         }
-        /* L29-11: containers have value semantics but cannot be nested, so a
-           container as an element (or a Map key/value) is rejected here. */
-        if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
-            && (frontend::sym::ct_is_container_type(c1)
-                || (nargs > 1 && frontend::sym::ct_is_container_type(c2))))
-            return self->sup->fail(
-                "a built-in container cannot be an element of another container");
         /* L29-13 (Phase 31 O1 partial unfreeze): interface values
            (`struct X_iface`) are stored as a two-word non-owning copy, so only
            vptr-bearing concrete structs are refused here. */
@@ -3614,11 +3607,6 @@ impl ExprOps for Expr {
                                         || self->sym->vars[vi].borrowed)
                                         return tool::diag::ct_sem_error(mline, mcol,
                                             "a container cannot hold an 'own' or 'borrow' value",
-                                            self->sup->mem->path);
-                                    if (frontend::sym::ct_is_container_type(
-                                            self->sym->vars[vi].type))
-                                        return tool::diag::ct_sem_error(mline, mcol,
-                                            "a built-in container cannot be an element of another container",
                                             self->sup->mem->path);
                                 }
                             }

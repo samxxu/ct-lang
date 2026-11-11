@@ -1,0 +1,24 @@
+/* Phase 31 O2: a container can be an element of another container. This was the
+   negative `test/ast/errors/container_element.ct` (L29-11, asserted at 3:20);
+   the guard is gone, so the same declaration is a positive. No inner handle is
+   released here: before H-A (S27a/S27b) a copied handle aliases its sibling. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> nested;
+    Vec<int> row;
+    Vec<int> got;
+
+    nested.h = 0;
+    row.h = 0;
+    row.push(7);
+    nested.push(row);
+    got = nested.get(0);
+    printf("%d %d %d\n", nested.len(), got.len(), got.get(0));
+    got = nested.pop();
+    printf("%d\n", nested.len());
+    nested.release();
+    row.release();
+    return 0;
+}

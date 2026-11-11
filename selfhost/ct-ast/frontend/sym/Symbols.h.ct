@@ -1883,12 +1883,41 @@ int ct_inst_resolve(const char *in, char *out, int cap)
     char a2[MAX_TEXT];
     char tail[MAX_TEXT];
     char enc[MAX_TEXT];
-    int nargs, found, k;
+    char cc1[MAX_TEXT];
+    char cc2[MAX_TEXT];
+    int nargs, found, k, nins;
+    struct StructInst *ins;
 
     if (ct_inst_split(in, name, &nargs, a1, a2, tail, sizeof tail) != 0) return -1;
     if (nargs <= 0) return -1;
     if (ct_inst_encode(name, nargs, a1, a2, enc, sizeof enc) != 0) return -1;
     found = ct_inst_find(enc);
+    if (found < 0) {
+        /* Phase 31 O2: a nested spelling arrives with C arguments
+           (`Vec<struct Vec_int>`), while rows are encoded from the source
+           arguments that created them (`Vec<Vec<int>>`). Match the C arguments
+           against the rows and print the row's own name. Both sides are
+           canonicalized because `char*` and `char *` name the same argument. */
+        ins = ct_insts(&nins);
+        for (k = 0; ins && k < nins; k++) {
+            if (strcmp(ins[k].tmpl, name) != 0 || ins[k].nargs != nargs) continue;
+            if (nargs > 0) {
+                if (ct_type_canon(ins[k].ctype[0], cc1, sizeof cc1) != 0
+                    || strcmp(cc1, a1) != 0) continue;
+            }
+            if (nargs > 1) {
+                if (ct_type_canon(ins[k].ctype[1], cc2, sizeof cc2) != 0
+                    || strcmp(cc2, a2) != 0) continue;
+            }
+            found = k;
+            break;
+        }
+        if (found >= 0) {
+            k = snprintf(out, (size_t)cap, "struct %s%s", ins[found].name, tail);
+            if (k < 0 || k >= cap) return -1;
+            return 0;
+        }
+    }
     if (found < 0) return -1;
     k = snprintf(out, (size_t)cap, "struct %s%s", enc, tail);
     if (k < 0 || k >= cap) return -1;

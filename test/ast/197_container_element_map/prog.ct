@@ -1,0 +1,22 @@
+/* Phase 31 O2: a `Vec` can be a Map value. This was the negative
+   `test/ast/errors/container_element_map.ct` (L29-11, asserted at 3:28); the
+   guard is gone, so the same declaration is a positive. The inner handle is not
+   released through the map (H-A aliasing is S27a/S27b's story). */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, Vec<int>> grouped;
+    Vec<int> row;
+    Vec<int> *p;
+
+    grouped.h = 0;
+    row.h = 0;
+    row.push(3);
+    grouped.put("r", row);
+    p = grouped.get("r");
+    printf("%d %d\n", grouped.len(), p->len());
+    grouped.release();
+    row.release();
+    return 0;
+}

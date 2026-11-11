@@ -5756,8 +5756,6 @@ p29_diag foreach_container_redeclare 9:1 "cannot redeclare the foreach binding '
 p29_diag foreach_container_map_i 11:1 "'i' has no meaning in a Map foreach; use item.key / item.value"
 p29_diag container_copy 4:5 "a container is moved, not copied; use retain() or a function result"
 p29_diag container_own 13:10 "a container cannot hold an 'own' or 'borrow' value"
-p29_diag container_element 3:20 "a built-in container cannot be an element of another container"
-p29_diag container_element_map 3:28 "a built-in container cannot be an element of another container"
 # E29-12: the user template and the built-in container hit the same over-arity
 # text; the built-in layer has no private branch.
 p29_diag generic_struct_user_arity 10:21 "a generic struct takes at most 2 type parameters"
@@ -5784,7 +5782,7 @@ fi
 # E29-9: `ct check` and `ct build` report the same frozen diagnostic as the
 # compile path. The three modes share the parser, so the first error line must
 # be byte-identical.
-for p29neg in container_copy container_own container_element container_element_map \
+for p29neg in container_copy container_own \
              generic_builtin_arity generic_struct_user_arity; do
     "$work/ct-ast" "test/ast/errors/$p29neg.ct" -o "$work/p29md.c" \
         >"$work/p29md1.out" 2>"$work/p29md1.err"

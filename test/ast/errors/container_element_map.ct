@@ -1,5 +1,0 @@
-int main(void)
-{
-    Map<char *, Vec<int> > grouped;
-    return 0;
-}
