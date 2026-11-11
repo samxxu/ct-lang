@@ -4,7 +4,7 @@
 > **基线**：**Phase 31 收口提交**（S0 开工时记录实际 sha）。Phase 31 的容器形态与元素助手是本相 O3 的前置；`bd91bfe` 上这些能力尚不存在，不得作为基线。
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与基线清单随红证提交入库。
 > **文档形态**：`phase32-draft.md`。转正按「每次转正归档当时最老的一张」：32 转正时归档 `phase20`，33 转正时归档 `phase21`，依此类推；本卡不抢跑。
-> **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载判定内核、三处挂点、精确覆盖率集合与判据/负例台账，约 380 行。按自裁 **waiver** 保留单卡（判定内核、矩阵、判据、负例必须同卡才能互相对照），不再寻求需求提出方签字。
+> **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载判定内核、三处挂点、精确覆盖率集合与判据/负例台账，约 390 行。按自裁 **waiver** 保留单卡（判定内核、矩阵、判据、负例必须同卡才能互相对照），不再寻求需求提出方签字。
 > 关联：[phase31.md](phase31.md)（容器能力，O3 前置）、[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../modern-oo-gap.md) §6.1/§7
 
 ## 1 目标与范围
@@ -26,7 +26,7 @@
 
 - 不建完整表达式类型系统；不引入类型变量、约束求解或推断。
 - 不建模 C 的隐式转换等级、整型提升、位宽、符号性；算术类内部一律兼容（D32-5）。
-- 不检查四类位置以外：字段初值、下标、条件/循环条件、`switch`、`sizeof`、`_Generic`、宏、指针基类型（D32-6）。
+- 不检查四类位置以外：字段初值、下标、条件/循环条件、`switch`、`sizeof`、`_Generic`、宏、指针基类型与层数（D32-6）。
 - 不做流分析（定值到达、空指针、借用逃逸、生命周期）。
 - 不在 `ct build` / `ct compile` 下新增任何诊断；不产生 warning，不改 golden。
 - 不检查跨单元函数体；`ct check` 仍拒绝 `import`。
@@ -51,7 +51,7 @@
 | `bash selfhost/check-ast.sh` | **1073 passed / 0 failed** |
 | `./test/run.sh` | **141 passed / 0 failed** |
 | `bash selfhost/check-warnings.sh` | **353 ok / 0 failed** |
-| `python3 test/docs/check-docs.py` | **OK**（1070 relative links in 185 files，11 hard gates，12 phase status，design window 12/12；2026-11-11 本树实测） |
+| `python3 test/docs/check-docs.py` | **OK**（1069 relative links in 185 files，11 hard gates，12 phase status，design window 12/12；2026-11-11 本树实测） |
 | `examples/` 编号 | 最高 `29_into_block`；**30–34 由 Phase 31 预占**，本相用 **35** |
 
 > 这些数字只用于确认量级；Phase 31 落地会改变断言数与链接数，**S0 必须重测并把实际值写进红证提交**。
@@ -132,6 +132,7 @@ chk_assignable(formal, actual, diag):
 ```
 
 - **诊断由调用方传入**：`diag` ∈ `L32-1`（初值）/ `L32-2`（赋值）/ `L32-3`（`return`）/ `L32-6`（容器实参）。`r==2` 与 `r==1` 都走 `emit(diag, ...)`，不得在 `chk_assignable` 内硬编码 L32-2；否则 `return/struct` 会错报 `assignment:`。
+- **所有调用必须显式传诊断号**：§3.3 传 `L32-6`，§3.4 传 `L32-3`，赋值传 `L32-2`，初值传 `L32-1`；缺参数的调用点一律视为未接线。
 - **指针守卫放在 `r==2` 之前、`r==1` 之前**：`arg_class` 对 `struct A *` vs `char *` 返回 **1**，对 `struct A *` vs `struct B *` 返回 **2**；两者都必须在 `r != 0` 时跳过。守卫条件是“**两侧都是指针**”：`int x = "s"` 只有实际侧是 `char *`，必须继续走 `r==1` 报 L32-1，否则 E32-1 变成死判据（B32-8）。`void *` 双向转换由 `arg_class` 在 `r==0` 处先放行；`void **` vs `char *` 也返回 0，本相**不**再加层数条件，统一在 T32-1 登记“基类型与层数均不校验”。
 - **`r == 2` 的语义**：`arg_class` 对同名同基已返回 0；返回 2 只可能是**不同 struct**。因此 `struct A a; struct B b; a = b;` 必须报 L32-2，不能走「同一 struct 才通过」的死分支。
 - **算术类**：`arg_class` 把算术类型归为一类，`int x = 1.5`、`long n = 1` 不误报；不额外建模提升。
@@ -147,12 +148,20 @@ chk_assignable(formal, actual, diag):
 1. 取接收者的 `ibase`（如 `struct Vec_int`），在 `ct_insts[]` 找到实例行，读出 `tmpl` 与 `c1/c2`。
 2. 在 `ct_impls[]` 找到该方法 impl，按位置把 `tp[0..n)` 绑定到 `c1/c2`；**新增 `ct_method_bind`**（注意：Phase 33 的 `ct_impl_bind` 是 pattern 匹配器，两者语义不同，不得同名）。
 3. 形参做**受限替换**：仅裸 `T`/`U` 或 `T *`/`U *` 替换；其他结构标记不可判并跳过。本相只需覆盖 `push(T)`、`set(int, T)`、`put(K, V)`。
-4. 对替换后的形参调用 `chk_assignable`，文案沿用 `argument %d: expected '%s', got '%s'`，由 `ct_type_warn` 统一出。
+4. 对替换后的形参调用 `chk_assignable(patched_formal, actual, L32-6)`，文案沿用 `argument %d: expected '%s', got '%s'`，由 `ct_type_warn` 统一出。
 
 ### 3.4 O2 `return`
 
 - 新增 `Parser.cur_ret[MAX_TEXT]`，在 `parse_func` 入口保存、出口恢复；trait 默认方法与普通函数共用。
-- `parse_return`：无返回值 + `cur_ret` 非 `void` → L32-4；有返回值 + `cur_ret == void` → L32-5；有返回值 + 非 void → `chk_assignable(cur_ret, chk_type(expr))`；`cur_ret` 为空/含泛型参数/判不出 → 跳过。
+- `parse_return`：无返回值 + `cur_ret` 非 `void` → L32-4；有返回值 + `cur_ret == void` → L32-5；有返回值 + 非 void 时：
+
+  ```c
+  char out[MAX_TEXT];
+  if (chk_type(expr, out, sizeof out) == 0)
+      chk_assignable(cur_ret, out, L32-3);
+  ```
+
+  `chk_type` 是三参数状态返回（0 成功 / 非 0 判不出），不得当单参数字符串函数用；`cur_ret` 为空/含泛型参数/判不出 → 跳过。
 - **错误路径没有“恢复后继续解析”**：解析器遇到硬错走 `die` 直接终止，`cur_ret` 的保存/恢复只服务正常返回路径；不新增错误恢复状态机（与现有 `die` 语义一致）。
 
 ### 3.5 诊断与开关
@@ -214,7 +223,7 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 | D32-3 | 声明初值并入赋值位置 | 用户给出的 `int x = "s"` 正是初值形态 |
 | D32-4 | 判不出 → 静默跳过 | opt-in 安全网，不做推测性报错 |
 | D32-5 | 算术类内部互相兼容，不校验位宽 | 不碰隐式转换规则；避免 `int x = 1.5` 误报 |
-| D32-6 | 指针基类型不校验：**两侧都是指针且 `r != 0` 时跳过**；字面量 0 赋指针先放行 | `arg_class` 对指针基座可能返回 1 或 2，必须在 `r==2`/`r==1` 前守卫；单侧指针（如 `int x = "s"`）仍报错 |
+| D32-6 | 指针基类型与层数均不校验：**两侧都是指针且 `r != 0` 时跳过**；字面量 0 赋指针先放行 | `arg_class` 对指针基座可能返回 1 或 2，必须在 `r==2`/`r==1` 前守卫；单侧指针（如 `int x = "s"`）仍报错；不加层数比较（避免第二个兼容内核） |
 | D32-7 | `r==2` 且双方 struct 命中 → 报 L32-2 | 修正死分支；保证 `a = b` 可红 |
 | D32-8 | 容器实参走 `ct_method_bind` + 形参替换 | 满足 B29-3；与 Phase 33 的 `ct_impl_bind` 区分 |
 | D32-9 | 不改变普通调用与 trait 方法的既有结果 | 新检查只做加法 |
@@ -235,7 +244,7 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 包含。`int x = "s";` 是用户点名的第一形态。
 
 ### B32-4 是否校验不同基类型的指针
-不校验，但守卫条件是“**两侧都是指针**”。实测 `arg_class("struct A *","char *") == 1`、`("struct A *","struct B *") == 2`，所以必须在 `r==2` 和 `r==1` 之前显式跳过；否则 `struct A *p; char *s = p;` 会被误报。不能写成“任一侧含 `*`”：`int x = "s"` 只有实际侧是 `char *`，那样会跳过 `r==1`，让 E32-1 失效。登记 T32-1。
+不校验基类型与层数，但守卫条件是“**两侧都是指针**”。实测 `arg_class("struct A *","char *") == 1`、`("struct A *","struct B *") == 2`，所以必须在 `r==2` 和 `r==1` 之前显式跳过；否则 `struct A *p; char *s = p;` 会被误报。不能写成“任一侧含 `*`”：`int x = "s"` 只有实际侧是 `char *`，那样会跳过 `r==1`，让 E32-1 失效。层数同样不比较（`int **` vs `int *` 也跳过），这是有意的 false negative，E32-12/13 依赖它；加层数比较会引入第二个兼容内核。登记 T32-1。
 
 ### B32-5 容器实参：按方法名特判 vs 绑定替换
 采纳**绑定替换**（`ct_method_bind`）。按 `push`/`put` 名字分支违反 B29-3，且用户泛型 struct 无法受益。
@@ -266,9 +275,9 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 | S7 | 固有方法挂点 + 形参替换 + L32-6 | `Expr.h.ct` | 70–110 |
 | S8 | `--types` 解析 + `types_mode` + L32-7 | `Driver.h.ct` / `Parser.h.ct` | 50–80 |
 | S9 | 诊断收口（L32-1–L32-6 文案/位置） | `Parser.h.ct` / `Diag.h.ct` | 40–70 |
-| S10 | L32-1–L32-6 的 AST 独立夹具 + `p32_*` 断言（恰一条 + 位置） | `test/ast/errors/**` / `selfhost/check-ast.sh` | 100–150 |
-| S11 | 新建 `test/cli/` 目录 + CLI 夹具 `test/cli/types_wrong_subcommand` + `check-ast.sh` 的 CLI 断言块（文案 + 退出码），目录创建与接线计入本片 | `test/cli/**` / `selfhost/check-ast.sh` | 20–40 |
-| S12 | 24 行精确集合 `check_coverage.tsv` + `p32_coverage`；期望元组硬编码进 `check-ast.sh`（或独立 `check_coverage.expected.tsv`），本片文件清单必须包含期望源 | `test/ast/check_coverage.tsv` / `selfhost/check-ast.sh`（或 `test/ast/check_coverage.expected.tsv`） | 80–130 |
+| S10 | L32-1–L32-6 的 AST 独立夹具 + `p32_*` 断言（恰一条 + 位置）；**209/210 归本片**：`prog.ct` 只放可编译正例，`check_only/` 放 `ct check --types` 专属形态（`void z;`、`int y=f();`、`vv.push(f())`），由 bespoke 断言块直接跑 `check --types` | `test/ast/209_*`、`210_*`、`test/ast/errors/**` / `selfhost/check-ast.sh` | 100–150 |
+| S11 | CLI 夹具 `test/modules/cli_types_wrong_subcommand/{compile.args,expected.err}` + `check-archive.sh` 加一行（文案 + 退出码），复用既有 `test/modules/cli_*` 约定 | `test/modules/cli_types_wrong_subcommand/**` / `selfhost/check-archive.sh` | 5–10 |
+| S12 | 24 行精确集合 `check_coverage.tsv` + `p32_coverage`；**211 辅助夹具归本片**；期望元组硬编码进 `check-ast.sh`（或独立 `check_coverage.expected.tsv`），本片文件清单必须包含期望源 | `test/ast/check_coverage.tsv`、`211_coverage_aux/**` / `selfhost/check-ast.sh`（或 `test/ast/check_coverage.expected.tsv`） | 80–130 |
 | S13 | 合法语料显式清单 + 逐文件 diff（§7 E32-15）；**S13 独占** `p32_legal_manifest.tsv`，列 `path rc stderr`，S0 不再生成 | `test/probes/p32_legal_manifest.tsv` / 夹具/内核修正 | 80–130 |
 | S14 | 样例 `examples/35_type_safety` + `test/run.sh` | `examples/35_*` | 60–110 |
 | S15 | 文档（language-spec/glossary/tutorial/roadmap）+ 全量门禁 | `docs/**` | 80–140 |
@@ -291,14 +300,14 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 | E32-8 | `v.set(0,"s")` 恰一条 L32-6 | `errors/check_container_set.ct` | `check-ast.sh` | S0 基线 `rc=0` |
 | E32-9 | `Map<char *,int> m; m.put("a","b")` 恰一条 L32-6 | `errors/check_container_put.ct` | `check-ast.sh` | S0 基线 `rc=0` |
 | E32-10 | 既有诊断不重复：`Show sh = o;`（`Other` 未 `use Show`）在 `ct check` 与 `ct check --types` 下都**恰一条** `the struct does not use this trait`，rc=1，文案/位置逐字相同 | `errors/check_iface_use.ct` | `check-ast.sh` | S0 基线已是 `rc=1` 单条 |
-| E32-11 | `ct build --types x.ct` → 恰一条 L32-7，退出非 0；与源码诊断无关 | `test/cli/types_wrong_subcommand`（S11 建） | `check-ast.sh` | 夹具待建；S0 记录基线 |
-| E32-12 | 正例：`char *s="hi"; char *p=0; int x=1.5; long n=1; void *v=s; Show sh=circle; struct A *pa; char *pc = pa; void f(); int y=f(); Vec<int> vv; vv.push(f()); void z;` 退出 0 | `ast/209_valid_assignments`（夹具待建，S0 建） | `check-ast.sh` | 夹具待建；探针见 §2.2 `rc=0` |
-| E32-13 | 跳过形态：泛型/闭包/函数指针/接口实际值/**struct 指针互转**/**actual void** 不误报 | `ast/210_valid_skip_forms`（夹具待建，S0 建） | `check-ast.sh` | 夹具待建；探针见 §2.2 `rc=0` |
+| E32-11 | `ct build --types x.ct` → 恰一条 L32-7，退出非 0；与源码诊断无关 | `test/modules/cli_types_wrong_subcommand`（S11 建） | `check-archive.sh` | 夹具待建；S0 记录基线 |
+| E32-12 | 可编译正例：`ast/209_valid_assignments/prog.ct` 只含 `char *s="hi"; char *p=0; int x=1.5; long n=1; void *v=s; Show sh=circle; struct A *pa; char *pc=pa;`；`ct check --types` 专属形态（`void z;`、`int y=f();`、`vv.push(f())`）放 `check_only/`，由 S10 bespoke 断言块直接跑 `ct check --types` rc=0 | `ast/209_valid_assignments/{prog.ct,check_only/*}`（S10 建） | `check-ast.sh` | 夹具待建；探针见 §2.2 `rc=0` |
+| E32-13 | 跳过形态：泛型/闭包/函数指针/接口实际值/**struct 指针互转**/**actual void** 不误报；可编译形态进 `prog.ct`，`void actual` 进 `check_only/` | `ast/210_valid_skip_forms/{prog.ct,check_only/*}`（S10 建） | `check-ast.sh` | 夹具待建；探针见 §2.2 `rc=0` |
 | E32-14 | 所有源码 L 诊断（L32-1–L32-6）格式 `file:line:col`，列指向表达式；L32-6 指向**出错实参的起点**；每条恰一条且位置固定。**L32-7 是 CLI 诊断，显式排除** | 上述 L 夹具 | `check-ast.sh` | S0 基线无这些诊断 |
-| E32-15 | 合法语料**显式清单**（S13 独占 `test/probes/p32_legal_manifest.tsv`，列 `path rc stderr`；显式排除 `test/ast/errors/**`、`test/modules/**`、`test/probes/fixtures/**`、`test/cli/**`）；基线 `ct check`（无开关）vs 实现后 `ct check --types`，同一清单逐文件 diff 为空，新增诊断 = 0；禁止 glob | `test/probes/p32_legal_manifest.tsv` | `check-ast.sh` | S13 产出 |
+| E32-15 | 合法语料**显式清单**（S13 独占 `test/probes/p32_legal_manifest.tsv`，列 `path rc stderr`；显式排除 `test/ast/errors/**`、`test/modules/**`、`test/probes/fixtures/**`）；基线 `ct check`（无开关）vs 实现后 `ct check --types`，同一清单逐文件 diff 为空，新增诊断 = 0；禁止 glob | `test/probes/p32_legal_manifest.tsv` | `check-ast.sh` | S13 产出 |
 | E32-16 | `ct build`/`ct compile` 的 `.c` 与 golden 逐字节不变；不带 `--types` 的 `ct check` 逐字节一致；`check-warnings` **不低于 S0 实测值 N** | 全量 | `test/run.sh` + `check-warnings.sh` | 基线见 §2.1，N 由 S0 记录 |
 | E32-17 | 用户泛型 struct `Pair<A,B>` 的实参错同样被 L32-6 拦截，证明无 `Vec`/`Map` 特判 | `errors/check_generic_arg.ct` | `check-ast.sh` | S0 基线 `rc=0` |
-| E32-18 | 覆盖率：24 行精确集合（7 L32-n / 6 ok / 11 skip / 0 n/a）与**独立期望源**逐条相等；期望源硬编码在 `check-ast.sh` 或 `check_coverage.expected.tsv`；7 条 L32-n 逐行断言 expected 恰一次；打印 `coverage: 24 rows, 7 L32-n, 6 ok, 11 skip, 0 n/a` | `test/ast/check_coverage.tsv` + 独立期望源 | `check-ast.sh` | 当前无矩阵 |
+| E32-18 | 覆盖率：24 行精确集合（7 L32-n / 6 ok / 11 skip / 0 n/a）与**独立期望源**逐条相等；期望源硬编码在 `check-ast.sh` 或 `check_coverage.expected.tsv`；7 条 L32-n 逐行断言 expected 恰一次；打印 `coverage: 24 rows, 7 L32-n, 6 ok, 11 skip, 0 n/a`。**“7 L32-n”是 7 行携带 L 诊断，不是 7 个 L 码**：L32-4（缺值/多值）没有 formal/actual 对，由 E32-5 单独覆盖 | `test/ast/check_coverage.tsv` + 独立期望源 | `check-ast.sh` | 当前无矩阵 |
 | E32-19 | 样例 `examples/35_type_safety` 进入 `test/run.sh`，golden 编译生成并人工核对 | `examples/35_type_safety` | `test/run.sh` | 当前不存在 |
 | E32-20 | language-spec/glossary/tutorial 写清 `--types`、三处边界、指针基类型不查；roadmap 行落地 | `docs/**` | `check-docs` | 当前无表述 |
 | E32-21 | `check-all.sh` 11 道硬门禁全绿；各项计数**不低于 S0 实测值 N**；不 bump、不打 tag | 全量 | `check-all.sh` | 基线见 §2.1，N 由 S0 记录 |
@@ -315,7 +324,7 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 | L32-4 | 非 void 缺返回值 | `check_return_missing.ct` | E32-5 |
 | L32-5 | void 多返回值 | `check_return_in_void.ct` | E32-6 |
 | L32-6 | 容器/泛型方法实参不兼容 | `check_container_push/set/put.ct` / `check_container_struct.ct` | E32-7/E32-8/E32-9 |
-| L32-7 | `--types` 与错误子命令组合（CLI，非源码诊断） | `test/cli/types_wrong_subcommand`（S11 建） | E32-11 |
+| L32-7 | `--types` 与错误子命令组合（CLI，非源码诊断） | `test/modules/cli_types_wrong_subcommand`（S11 建） | E32-11 |
 
 > 原 L32-7（接口初值未 `use` trait）已删除；`Show sh = o;` 由既有诊断覆盖，见 E32-10。
 
@@ -330,10 +339,10 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 | 区 | 切片 | 行数 |
 | --- | --- | --- |
 | 编译器（S1–S9） | 90–130 + 40–80 + 40–70 + 50–80 + 60–100 + 70–110 + 70–110 + 50–80 + 40–70 | **510–830** |
-| 夹具/断言（S10–S14） | 100–150 + 20–40 + 80–130 + 80–130 + 60–110 | **340–560** |
+| 夹具/断言（S10–S14） | 100–150 + 5–10 + 80–130 + 80–130 + 60–110 | **325–530** |
 | 文档（S15） | 80–140 | **80–140** |
 | 红证（S0） | 30–60 | **30–60** |
-| **合计** | 全部切片 | **960–1,590** |
+| **合计** | 全部切片 | **945–1,560** |
 
 > 编译器预算上限仍为 1,000；切片和 510–830 留有余量。每片上限 ≤150 行。
 
@@ -364,15 +373,15 @@ assign    arithmetic    pointer       L32-1   errors/check_init_ptr.ct  initiali
 - `selfhost/ct-ast/**`：S1–S9 的实现与诊断。
 - `test/probes/p32_check_baseline.sh`、`.txt`：S0 交付的红证脚本与逐文件基线；`p32_legal_manifest.tsv` 由 **S13 独占**（列 `path rc stderr`）。
 - `test/ast/errors/check_*.ct`：L32-1–L32-6 独立夹具；`check-ast.sh` 的 `p32_*` 断言。
-- `test/cli/types_wrong_subcommand`：L32-7 的 CLI 夹具；`test/cli/` 为 S11 新建目录。
-- `test/ast/check_coverage.tsv` + **独立期望源**（`check-ast.sh` 硬编码或 `check_coverage.expected.tsv`）：24 行精确集合断言。
-- `test/ast/209_valid_assignments/`、`210_valid_skip_forms/`、`211_coverage_aux/`：正例、跳过形态与矩阵辅助夹具。
+- `test/modules/cli_types_wrong_subcommand/{compile.args,expected.err}`：L32-7 的 CLI 夹具，S11 在 `check-archive.sh` 加一行。
+- `test/ast/check_coverage.tsv` + **独立期望源**（`check-ast.sh` 硬编码或 `check_coverage.expected.tsv`）：24 行精确集合断言；`211_coverage_aux/` 由 S12 建。
+- `test/ast/209_valid_assignments/`、`210_valid_skip_forms/`：S10 建；`prog.ct` 只放可编译正例，`check_only/` 放 `ct check --types` 专属形态。
 - `examples/35_type_safety/` + golden。
 - `docs/language-spec.md`、`glossary.md`、`tutorial.md`、`roadmap.md`。
 
 ## 13 收口与纪律
 
-- **T-7**：S0 在 Phase 31 收口提交上重建二进制，提交 `test(check): P32 红证`（含脚本与基线清单）；该提交必须是第一个实现提交的父提交。实现提交随后转绿。
+- **T-7**：S0 在 Phase 31 收口提交上重建二进制，提交 `test(check): P32 红证`（含探针脚本与基线输出，不含 209/210/211 正式夹具）；该提交必须是第一个实现提交的父提交。实现提交随后转绿。
 - 每片 ≤150 行；发现超限就再拆。仓库任何时刻可构建。
 - 不改判据、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push。
 - 只暂存本相文件；`editors/vscode/**`、`docs/design/phase31.md` 与其他会话在改的文件一律不碰。

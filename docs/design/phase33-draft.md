@@ -67,7 +67,7 @@
 | `bash selfhost/check-ast.sh` | **1073 passed / 0 failed** |
 | `./test/run.sh` | **141 passed / 0 failed** |
 | `bash selfhost/check-warnings.sh` | **353 ok / 0 failed** |
-| `python3 test/docs/check-docs.py` | **OK**（1070 relative links in 185 files，11 hard gates，12 phase status，design window 12/12；2026-11-11 本树实测） |
+| `python3 test/docs/check-docs.py` | **OK**（1069 relative links in 185 files，11 hard gates，12 phase status，design window 12/12；2026-11-11 本树实测） |
 
 > Phase 31 落地会改变断言数与链接数；S0 必须重测并把实际值写进红证提交。
 
@@ -113,10 +113,10 @@
 
 #### 3.1.2 解析
 
-`parse_struct` 当前在 `:` 处直接报错；改为复用泛型函数的 bound 解析：
+`parse_struct` 当前在 `:` 处直接报错；改为复用泛型函数的 **token 读取与 `A + B` 拒绝形状**，但**不复用** `resolve_type`/`find_trait` 即时校验：
 
 - `:` 后读一个 trait 名并**以字符串存进 `StructTmpl.bound`**；声明期不要求本单元 `find_trait` 命中（跨单元 `.h.ct` 可能看不到 trait），`find_trait` 推迟到实例化单元。
-- 拒绝静态映射 trait、`Drop`、`Handback`（与函数 bound 同一份拒绝表）；
+- **仅在 `find_trait` 命中时**拒绝静态映射 trait、`Drop`、`Handback`（与函数 bound 同一份拒绝表）；未命中不报错、推迟到实例化单元。
 - 拒绝 `A + B`（L33-3）；
 - 写入 `StructTmpl.bound`（单 bound 字符串；多 bound 由 L33-3 拒绝）。
 
@@ -164,8 +164,8 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 2. `pat_match(pattern, actual, binds, depth)`：
    - `ident`：已声明 tparam → 绑定；同名重复必须同一实参；否则两侧过 `ct_type_canon` 后整串比较。
    - `ident '<' pat (',' pat)* '>'`：递归；按顶层逗号切分，嵌套 `<>` 不切。
-   - **深度 >4**：解析期直接报 L33-4（独立文案 `impl pattern nesting exceeds 4 levels`），不再“静默不匹配”。**计数基准**：impl 接收者外层模板之后的嵌套层数——`Box<T>`=0、`Box<Box<T>>`=1、`Box<Box<Box<Box<Box<T>>>>>`=4；夹具与文案共用这一计数，不能用 `type_depth` 的另一个基准。
-   - **不支持的 pattern 形态**（通配符 `_`、数组 `[...]`、函数指针 `(...)`、指针/数组尾缀等）：解析期直接报 L33-5（`unsupported impl pattern '<pat>'`），**替换**既有三条文案（`expected '>' after the type arguments`、`expected a name in the function-pointer declarator`，以及 `Box<_>` 的静默接受）；不再静默接受、不再落到无关解析错；与 §3.2.0 的 tparam 标记共用同一遍扫描。受影响的既有负例在 S6 一并更新。
+   - **深度 >4**：解析期直接报 L33-4（独立文案 `impl pattern nesting exceeds 4 levels`），不再“静默不匹配”。**计数基准**：impl 接收者外层模板之后的嵌套层数——`Box<T>`=0、`Box<Box<T>>`=1、5 层 `Box<...>`=4、6 层 `Box<...>`=5；depth=4 仍 rc=0，depth=5 才报 L33-4。夹具与文案共用这一计数，不能用 `type_depth` 的另一个基准。
+   - **不支持的 pattern 形态**（通配符 `_`、数组 `[...]`、函数指针 `(...)`、指针/数组尾缀等）：在 `parse_generic_impl` 的 pattern 分支解析期直接报 L33-5（`unsupported impl pattern '<pat>'`），**替换**该分支既有的 `expected '>' after the type arguments` / `expected a name in the function-pointer declarator`，并终止 `Box<_>` 的静默接受；不再静默接受、不再落到无关解析错。**当前无此类既有负例**（`test/ast/errors/` 与 `test/modules/` 里 grep 不到 impl-pattern 文案）；若实现中出现，列进 S6 文件清单。泛型函数实参路径（`Expr.h.ct`）与 `phase26.md` / `language-spec.md` 的相关文案**不变**。
    - 其他畸形（缺 `>`、空实参等）：保持既有解析错，不新增 L33 文案。
 3. 绑定表 `{name, canonical_value}`，最多 `MAX_STRUCT_TPARAMS` 项；`impl<T> Pair<T, Box<T>>` 的同名必须同值。
 4. `StructImpl.pat[]` 仍存整串，不新增表。
@@ -182,6 +182,8 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | `errors/nested_pattern_arr.ct` | `struct Box<T>`（无 bound） | `Box<T[2]>` → L33-5，替换既有 `expected '>' after the type arguments` |
 | `errors/nested_pattern_ptr.ct` | `struct Box<T>`（无 bound） | `Box<T *>` → L33-5，同上 |
 | `errors/nested_pattern_fnptr.ct` | `struct Box<T>`（无 bound） | `Box<int (*)(int)>` → L33-5，替换既有 `expected a name in the function-pointer declarator` |
+| `ast/208_bound_decl_only` | `struct Box<T: Nope>`（无 bound 实例化） | 声明期 rc=0；实例化后才 L33-6 |
+| `ast/209_depth4_boundary` | `struct Box<T>`（无 bound） | 5 层 `Box<...>`（depth=4）rc=0；6 层（depth=5）→ L33-4 |
 
 > 每个夹具必须在源码首行注释声明“有/无 bound”；有 bound 的只允许 203，且必须是 `struct Box<T: Show> use Show;` + `impl Show for Box`，叶类型为 `Circle`。禁止为绕开 bound 把 203 改成无约束 `Box`，也禁止写 `impl Show for Box<Circle>`（当前语言直接 `unexpected token`），否则 O1+O2 组合无人覆盖。
 
@@ -214,7 +216,7 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | D33-9 | T31-2 走消费方 `static` 方法副本，无条件 | 不改构建图；`.h` 仍只放类型；不设降级 |
 | D33-10 | T31-1/3–9 不做，保留触发条件 | 主题/依赖不符 |
 | D33-11 | 泛型 trait/参数化 trait/supertrait 全部移交 Phase 35 | 用户明确 B 块单独排 phase |
-| D33-12 | 不新增 `MAX_*`；pattern 串超过 `MAX_TEXT` 才硬错；不 bump、不打 tag | 不引入“名字太长”错误；`ct_inst_encode` 的 `%.40s_h%08x` 哈希保持不变 |
+| D33-12 | 不新增 `MAX_*`；pattern 串超过 `MAX_TEXT` 只在 `die` 前做防御性断言，不算新诊断、不进门禁 | 不引入“名字太长”错误；`ct_inst_encode` 的 `%.40s_h%08x` 哈希保持不变 |
 
 ## 5 Battle 记录
 
@@ -247,18 +249,19 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | S1 | `StructTmpl.bound` + 解析 + 拒绝表 | `Symbols.h.ct` / `Parser.h.ct` | 60–110 |
 | S2 | 实例化 bound 校验 + L33-1 | `Expr.h.ct` / `Parser.h.ct` | 50–90 |
 | S3 | impl 继承 bound + `in_generic_bound` + L33-2/3 | `Parser.h.ct` | 50–90 |
-| S4 | O1 夹具 + 样例 36 + `p33_novptr` 方法体断言（本片含接线与计行） | `test/ast/**` / `examples/36_*` / `check-ast.sh` | 80–140 |
+| S4a | O1 夹具 + `p33_novptr` 方法体断言（本片含接线与计行） | `test/ast/200–202_*` / `check-ast.sh` | 60–100 |
+| S4b | 样例 36 + golden | `examples/36_*` | 20–40 |
 | S5 | `ct_impl_bind` + 递归匹配 | `Symbols.h.ct` | 80–130 |
 | S6 | pattern 解析期标记 + 伪实例守卫 | `Symbols.h.ct` / `Parser.h.ct` | 50–90 |
-| S7 | O2 夹具 + 样例 37 | `test/ast/**` / `examples/37_*` | 40–90 |
+| S7 | O2 夹具（含 209 depth=4 边界）+ 样例 37 | `test/ast/203–206_*`、`209_depth4_boundary`、`examples/37_*` | 40–90 |
 | S8 | O3 消费方 helper 发射 | `Emitter.h.ct` | 80–150 |
 | S9 | O3 消费方方法副本 | `Emitter.h.ct` | 80–150 |
 | S10 | O3 跨单元夹具 + 运行输出 | `test/modules/**` | 60–110 |
-| S11 | O3 产物 grep / `nm` 断言 + `p33_cross_unit` 正负子断言接线 | `check-ast.sh` | 40–100 |
+| S11 | O3 产物 grep / `nm` 断言 + `p33_cross_unit` 正负子断言接线（含 208 声明期 rc=0） | `test/ast/208_bound_decl_only` / `check-ast.sh` | 40–100 |
 | S12 | 文档（language-spec/tutorial/glossary/roadmap） | `docs/**` | 80–140 |
 | S13 | 全量门禁 + 样例 golden 人工核对 | `test/run.sh` / `check-all.sh` | 70–140 |
 
-依赖：S1→S2→S3→S4；S5→S6→S7；S8→S9→S10→S11；S12/S13 最后。O1–O3 均为无条件，S8–S11 不得跳过。
+依赖：S1→S2→S3→S4a→S4b；S5→S6→S7；S8→S9→S10→S11；S12/S13 最后。O1–O3 均为无条件，S8–S11 不得跳过。
 
 ## 7 退出判据（E33-n）
 
@@ -268,20 +271,20 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | --- | --- | --- | --- | --- |
 | E33-1 | `struct Box<T: Show>` + `Box<Circle>` 编译运行，输出正确 | `ast/200_bounded_struct` | `check-ast` | S0 基线 `5:13` 解析错 |
 | E33-2 | `Box<int>` 不满足 bound → 恰一条 L33-1，位置在实例化处 | `errors/bound_unsatisfied.ct` | `check-ast` | S0 基线无法声明 bound |
-| E33-3 | `struct Box use Show` + `impl Show for Box` 后 `Box<Box<Circle>>` 通过；未实现 `Show` 时 L33-1 | `ast/201_bounded_nested` | `check-ast` | 同上 |
+| E33-3 | `struct Box<T: Show> use Show;` + `impl Show for Box` 后 `Box<Box<Circle>>` 通过；未实现 `Show` 时 L33-1 | `ast/201_bounded_nested` | `check-ast` | 同上 |
 | E33-4 | `impl<T> Box<T> { self.value.show() }` 在 `Box<Circle>` 上编译；提取生成的 `Box_Circle_show` 函数体后只排除 `.__show_vptr =` 赋值，其余任何 `__show_vptr` 出现即失败；同一方法体必须出现 `Circle_Show_vtable` | `ast/202_bound_inherit` + `p33_novptr` | `check-ast` | S0 基线 `cannot resolve the method trait` |
 | E33-5 | `impl<T: Show> Box<T>` → 恰一条 L33-2 | `errors/impl_bound_dup.ct` | `check-ast` | S0 基线统一报「struct type parameter cannot carry a trait bound」 |
 | E33-6 | `struct Box<T: A + B>` → 恰一条 L33-3 | `errors/multi_bound.ct` | `check-ast` | S0 基线无法声明 bound |
-| E33-7 | `impl<T> Box<Box<T>>` 匹配 `Box<Box<Circle>>`，`depth()` 派发正确（203 带 bound 与 `struct Box use Show` + `impl Show for Box`） | `ast/203_nested_pattern` | `check-ast` | S0 基线 `no method 'depth'` |
+| E33-7 | `impl<T> Box<Box<T>>` 匹配 `Box<Box<Circle>>`，`depth()` 派发正确（203 带 bound 与 `struct Box<T: Show> use Show;` + `impl Show for Box`） | `ast/203_nested_pattern` | `check-ast` | S0 基线 `no method 'depth'` |
 | E33-8 | `impl<T> Pair<int, Box<T>>` 只匹配 `Pair<int, Box<…>>`；`Pair<char *, Box<int>>` 不匹配（204 无 bound） | `ast/204_nested_pattern_mixed` + `errors/nested_pattern_mismatch.ct` | `check-ast` | S0 基线整串比较必不匹配 |
 | E33-9 | `impl<T> Pair<T, Box<T>>` 对 `Pair<int, Box<int>>` 匹配；`Pair<int, Box<long>>` 同名不同值不匹配、`Pair<int, char *>` 不匹配（205 无 bound） | `ast/205_nested_pattern_repeat` + `errors/nested_pattern_repeat_mismatch.ct` | `check-ast` | S0 基线整串比较 |
 | E33-10a | 伪实例负向：203/204/205/206 的生成 C 均 `! grep -F 'struct Box_T'`（第一/第二位置、重复、深度 3）；S0 用无约束 `impl<T> Box<Box<T>>` 证明基线产物含 `struct Box_T;` | `ast/203–206` 产物 | `check-ast` | 当前会登记伪实例（S0 记录） |
 | E33-10b | 伪实例正向：在**无 bound 的 206** 上断言 `Box<Box<int>>` → `Box_Box_lint_r`；负向统一只 grep `struct Box_T`，不再用 `Box_Box_int` 弱负向 | `ast/206` 产物 grep | `check-ast` | S0 记录当前编码 |
-| E33-11 | 嵌套 pattern 深度 5 → 恰一条 **L33-4**（`impl pattern nesting exceeds 4 levels`），位置在 pattern 内层 | `errors/nested_pattern_depth.ct` | `check-ast` | S0 基线通用解析/无匹配 |
+| E33-11 | 嵌套 pattern **depth=5（6 层 `Box<...>`）** → 恰一条 **L33-4**（`impl pattern nesting exceeds 4 levels`），位置在 pattern 内层；**depth=4（5 层）rc=0** 边界正例 | `errors/nested_pattern_depth.ct` + `ast/209_depth4_boundary` | `check-ast` | S0 基线通用解析/无匹配 |
 | E33-12 | 不支持的 pattern 形态各恰一条 **L33-5**：`_wild`（当前 rc=0）、`_arr`、`_ptr`、`_fnptr`（后三者替换既有解析错） | `errors/nested_pattern_{wild,arr,ptr,fnptr}.ct` | `check-ast` | S0 记录四条原始输出 |
 | E33-13 | 跨单元 `ct build`：元素在 `a.ct`、`Vec<Point>`/`Vec<Show>` 在 `b.ct`，生成 C 编译运行、输出与 `expected.out` 逐字节一致；断言块 `p33_cross_unit` 接入 `check-ast.sh` | `test/modules/cross_unit_elem` | `check-ast`（`p33_cross_unit`） | S0 在 31 收口提交上复跑 D31-5 原始硬错 |
 | E33-14 | `.h` 仅类型；`nm` 无重复 `Vec_Show_*` 全局；生成 `.c` 含本单元 `static` 方法副本 | 同上 + `p33_nm` | `check-ast` | 当前无此路径 |
-| E33-15 | 实例创建单元看不到 bound trait → 恰一条 L33-6；这是**独立的失败构建**，不复用 E33-13 的正向块 | `test/modules/errors/bound_trait_invisible` | `check-ast`（`p33_cross_unit` 负向子断言） | S0 基线无此文案 |
+| E33-15 | `struct Box<T: Nope>` **无实例化时 rc=0**；实例化后恰一条 L33-6。跨单元失败构建是**同一 `p33_cross_unit` 块内的第二个 `ct build`**，独立临时目录、不复用 E33-13 正向产物 | `ast/208_bound_decl_only` + `test/modules/errors/bound_trait_invisible` | `check-ast`（`p33_cross_unit` 负向子断言） | S0 基线无此文案 |
 | E33-16 | 非泛型 trait 产物与基线逐字节相同；嵌套 pattern 不改既有 `<Struct>_<Trait>_<method>` | `ast/203` 产物 grep + 全量 diff | `check-ast` | S0 基线无嵌套 pattern |
 | E33-17 | 既有断言数**不低于 S0 实测值 N**；`Vec<T>` 匹配 `Vec<Vec<int>>` 不回归 | 全量 | `check-ast` | 基线见 §2.1，N 由 S0 记录 |
 | E33-18 | 样例 `examples/36_bounded_struct`、`37_nested_pattern` 进入 `test/run.sh`，golden 人工核对 | `examples/36–37` | `test/run` | 当前不存在 |
@@ -289,7 +292,7 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | E33-20 | `ct check` 与编译共用**解析期**诊断：L33-1/2/3/4/5 同文案同位置；**不含 L33-6**（`ct check` 拒绝 `import`，跨单元不可达） | 上述解析期负例 | `check-ast` | S0 基线无这些文案 |
 | E33-21 | `check-all.sh` 11 道硬门禁全绿；各项计数**不低于 S0 实测值 N**；不 bump、不打 tag | 全量 | `check-all` | 基线见 §2.1，N 由 S0 记录 |
 
-> **夹具状态**：`ast/200–206_*`、`test/ast/errors/*`、`test/modules/**` 全部**待建**（S0 建探针、S4/S7/S10/S11 建正式夹具）；本表不把未建夹具写成当前可跑。`203` 是唯一带 bound 的嵌套 pattern 夹具，必须是 `struct Box<T: Show> use Show;` + `impl Show for Box`，叶类型 `Circle`；其余嵌套 pattern 夹具显式无 bound（§3.2.2）。
+> **夹具状态**：`ast/200–209_*`、`test/ast/errors/*`、`test/modules/**` 全部**待建**（S0 建探针、S4/S7/S10/S11 建正式夹具）；本表不把未建夹具写成当前可跑。`203` 是唯一带 bound 的嵌套 pattern 夹具，必须是 `struct Box<T: Show> use Show;` + `impl Show for Box`，叶类型 `Circle`；其余嵌套 pattern 夹具显式无 bound（§3.2.2）。
 
 ## 8 负例台账（L33-n）
 
@@ -325,7 +328,7 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 
 | 组 | 切片 | 行数 |
 | --- | --- | --- |
-| O1（含夹具/样例） | S1 60–110 + S2 50–90 + S3 50–90 + S4 80–140 | **240–430** |
+| O1（含夹具/样例） | S1 60–110 + S2 50–90 + S3 50–90 + S4a 60–100 + S4b 20–40 | **240–430** |
 | O2（含夹具/样例） | S5 80–130 + S6 50–90 + S7 40–90 | **170–310** |
 | O3（含夹具/断言） | S8 80–150 + S9 80–150 + S10 60–110 + S11 40–100 | **260–510** |
 | O1–O3 小计 | 上述三项 | **670–1,250** |
@@ -364,7 +367,7 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 
 - `selfhost/ct-ast/**`：S1–S11 的实现与诊断。
 - `test/probes/p33_check_baseline.sh` + 原始输出：S0 交付（含 D31-5 与 `struct Box_T` grep 基线）；不新增 `p33_insts` dump。
-- `test/ast/200–206_*`、`test/ast/errors/*`（全部待建）。
+- `test/ast/200–209_*`、`test/ast/errors/*`（全部待建）。
 - `test/modules/cross_unit_elem/**`、`test/modules/errors/*`。
 - `examples/36_bounded_struct/`、`37_nested_pattern/` + golden。
 - `docs/language-spec.md`、`tutorial.md`、`glossary.md`、`roadmap.md`。
