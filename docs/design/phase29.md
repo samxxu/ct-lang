@@ -2,9 +2,10 @@
 
 > 中文。
 >
-> **状态：实施中**（2026-11-11 二次复核后回退）。上一轮标完成时，E29-5 的 `ct build`
-> 路径仍不满足：内置层只在单文件 compile 模式加载。该缺口已在本轮补上（§10.3.4），
-> 按复核规矩先退回「实施中」，验收通过后再改回完成。其余判据的补口见 §10.3.2；
+> **状态：完成**（2026-11-11 最终验收，E29-1…E29-13 逐条见 §10.3.5）。
+> 二次复核补上了 E29-5 的 `ct build` 路径（§10.3.4）；本轮验收把 E29-7 的位置/单错断言、
+> E29-9 的 `check`/`build` 同文案、E29-12 的两条 arity 负例、E29-3 的两次构建一致补进真门禁，
+> `check-all.sh` 11 道硬门禁全绿（`check-ast` 962 passed / 0 failed）。
 > 仍在 §10.2 偏差表里的 L29-13 / L29-14 不在 E29-1…E29-13 的判据文本内。
 > **主题来源**：用户 2026-11-10「`Vec` 和 `Map` 应该作为内置的数据结构，从 ct-pkg 的 `std` 移到
 > 内置类型」「`foreach_statement.ct` 没有把 map 纳入进来」；同日的取舍「`Callable` 内建先不做」。
@@ -776,6 +777,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | O7 | 内置层与 `ct-pkg/std` 的双向迁移工具 | 只做一次性搬运 | 旧包仍有独立 bug 修复需求，或需要回滚到旧编译器 |
 | O8 | `foreach` 迭代中修改容器 | 长度快照 + 越界零值 | 出现真实的数据竞争/漏遍历报告，且可定义稳定语义 |
 | O9 | 泛型函数体内实例化泛型容器（如 `Vec<T>`） | 本相不做，沿用 D26-9 的「泛型体内禁止泛型调用/实例化」 | 用户明确要求「泛型函数返回 `Vec<T>`」；重启前需先解决实例化键的递归替换与去重（`Vec<T>` → `Vec_int`） |
+| O10 | `Vec` 的 range 初值 / 下标 / 字面量语法糖（`Vec<int> v = 4..8 { $ * $ }`、`v[i]`、`Map<char *, int> m = { "k": 1 }`、`m["k"]`） | 验收时均不支持：第 1 条是编译期硬错（`a range initializer declares an array`）；第 2/3/4 条静默通过但生成的 C 不可编译。**P29-1 补丁只补第 1 条**；2–4 仍列在「不支持」 | 出现第二个真实项目要求 `v[i]` / `m[k]`，且能接受「构造入口 + 纯降级」的语义；否则保持显式 `Vec_int_get` / `Map_*_get` |
 
 ---
 
@@ -823,6 +825,7 @@ design window: ok (12/12)
 | 判据补口 | L29-9/10/11 三条硬错、L29-W1 遮蔽告警、`container_*` 负例 4 条、`143_map_api`、`p29_builtin_std`（含 `needs_std.ct`）、`generic_struct_pub_fn.ct` | `check-ast.sh` **948 passed / 0 failed**；`check-docs` **OK**（967 links、12 phase status）；`check-sanitizers.sh` 中 `143_map_api` **ok**（该脚本另有 10 项既有失败：8 个带 `import` 的夹具在 compile 模式被调用、`range_init_overflow` 崩溃，均与 Phase 29 无关） |
 | 最终收口（首轮） | 状态改回「完成」、§10.3 写关闭证据、roadmap / AGENTS 同步 | `check-all.sh` **OK（11 hard gates green）**：`check-ast.sh` 948 passed / 0 failed、`check-warnings.sh` 283 ok、`check-docs` OK、`test/run.sh` 137 passed、`check-goldens` 82 passed、acceptance 20 pass / 0 regression。**随后复核发现 E29-5 的 `ct build` 路径未接入内置层，状态回退「实施中」**（§10.3.4） |
 | 复核补口（build 路径） | `Module.h.ct` 在 `ct build` 中加载 `lib/std/Vec.h.ct`（独立单元，不是 import 边），emitter 显式 `#include` 其头文件并每轮重发；`check-warnings.sh` 撤回 `p29_builtin_std` 的跳过；`check-ast.sh` 增加 build 路径断言 | `check-ast.sh` **949 passed / 0 failed**（含 D41 key 字节比对与热缓存）、`check-warnings.sh` **321 ok**（含 `p29_builtin_std`）、`check-all.sh` **OK（11 hard gates green）** |
+| 最终验收（E29-1…E29-13 逐条） | 本轮把判据原文的缺口补进真门禁：`p29_diag` 钉住 `file:line:col` 且断言恰一条错误；新增 `generic_builtin_arity.ct` / `generic_struct_user_arity.ct` 并断言两者 arity 文案逐字相同；6 条负例的 `ct check` / `ct build` 首条错误逐字比对；138 的两个实例标签；141 两次编译与两次运行一致 | `check-all.sh` **OK（11 hard gates green）**；`check-ast.sh` **962 passed / 0 failed**、`check-warnings.sh` **321 ok / 0 failed**、`check-docs` **OK（978 links / 179 files）**、`test/run.sh` 137 passed、`check-goldens` 82 passed、acceptance 20 pass / 0 regression。逐条证据见 §10.3.5；sanitizer 的既有 10 项失败见同节末段 |
 
 ### 10.2 实现偏差与未落地项（如实记账）
 
@@ -922,5 +925,53 @@ run_exit=0
 - **增量缓存**：先 build `Vec<int>`，再把同一文件改成 `Vec<char *>` 重建，第二次会重发
   `Vec.c` / `Vec.h` 并正确运行（退出码 1 = `s.len()`）。
 
-结论：E29-5 的 compile 与 `ct build` 两条路径都已满足。按复核规矩，状态仍退回「实施中」，
-待验收后再改回「完成」。
+结论：E29-5 的 compile 与 `ct build` 两条路径都已满足。本轮最终验收通过（§10.3.5），
+状态改回「完成」。
+
+#### 10.3.5 最终验收：E29-1…E29-13 逐条（2026-11-11）
+
+主卡验收先于 P29 补丁（§11）；本节只覆盖 §1 冻结的 E29 判据原文。
+
+| 判据 | 状态 | 证据（夹具 / 断言） | 实跑 |
+| --- | --- | --- | --- |
+| E29-1 | 满足 | `test/ast/138_generic_struct`、`139_generic_struct_two`、`144_generic_struct_user` 走 `check-ast.sh` 的 corpus 段（编译 → `cc -Wall -Wextra` → 运行 → `cmp` `prog.expected.out`）；新增 `p29 (two instances, two distinct tags)` 断言 138 产物同时含 `struct Pair_int_char_p {` 与 `struct Pair_int_int {`；`tparam_residue()` 扫描每份产物的 `<T>` 残留；`p29 (generic struct instances and inherent method names)` 断言 144 的 `struct Stack_int` / `struct Stack_char_p` / `Stack_int_top(` | `check-ast.sh` 962 / 0；138 输出 `distinct: 1` 等全部命中 |
+| E29-2 | 满足 | `test/modules/p29_generic_struct`：`main.ct` 与 `two.h.ct` 各自用 `Pair<int, int>`，`shapes.h.ct` 发布模板；断言 `shapes.h` 中 `struct Pair_int_int {` 恰一次、`two.h` 不再定义；`twice()` 跨单元按 `p.first()` / `p.b` 读同一布局 | `p29 (the template's unit publishes the instance; a second unit reuses it)`；运行输出 `7 k 9 5` |
+| E29-3 | 满足 | `test/ast/141_foreach_map`、`examples/22_foreach_map` 走 corpus；`p29 (foreach Map walks entry without an index)` 断言 `Map_char_p_int_entry` 且无 `i`；新增 `p29 (Map: two builds and two runs agree)` 对 141 连续两次编译 `cmp` 产物、两次运行 `cmp` 输出 | `141/prog.expected.out` 是插入序 `b=20 / a=1 / c=3`；两次构建与两次运行一致 |
+| E29-4 | 满足 | `140_foreach_vec`：断言 `Vec_int_get`、`int i = __ct_foreach_i_`、`(void)i;`，并新增 `__ct_foreach_n_`（长度循环前快照）；`141` 断言 Map 体内无 `i`；`140/prog.expected.out` 的 `seen = 4, len = 5` 证明循环中 `push` 不改本轮长度；负例见 `foreach_container_index_write` / `foreach_container_redeclare` / `foreach_container_map_i` 与 Phase 27 的 `foreach_struct`（非容器） | `check-ast.sh` 962 / 0；`item` 发射为值局部量（`int item = Vec_int_get(...)`），块内改写不回写 |
+| E29-5 | 满足 | compile：`p29 (builtin_std shadow warning)` + `p29 (builtin_std is containers only)` + `needs_std.ct`；`ct build`：`p29 (builtin_std in ct build)`（编译、链接、运行、`vendor/std` 告警、`Vec.h` 含 `struct Vec_int` 五件事一起断言）。`lib/std/README.md` 明确两条路径都免 `ct get` / 免 import | §10.3.4 的原始 `cc` 行、`7 1 2`、`run_exit=0`；本轮 `check-warnings.sh` 321 / 0 |
+| E29-6 | 满足 | `142_vec_api`（push/len/get/set/pop/clear/retain/release）与新增 `143_map_api`（put/len/get/entry/remove/retain/release）走 corpus，`prog.expected.out` 分别为 `142 OK` 系列与 `143 OK`；`check-sanitizers.sh` 逐一遍历 `test/ast/*/prog.ct`，`142` / `143` 均 `ok` | `check-sanitizers.sh` 中 `142` / `143` 无 ASAN/UBSAN 报告（该脚本另有 10 项既有失败，见下） |
+| E29-7 | 满足 | `p29_diag` 现在同时断言 `test/ast/errors/<f>.ct:<line>:<col>: error: <冻结文案>` 与**恰一条** `error: `；覆盖 4 条 generic-struct、2 条 arity（E29-12）、4 条 foreach、4 条 container 共 14 条；Phase 26/27 的 generic-function 与 foreach 负例由各自的钉住块覆盖（合计 ≥10 + 5）；基线红证记录在 §3.1（v0.26.4 对 `Box<int>` 报 `unknown type`，本仓库没有 v0.28.0 tag，Phase 28 也在 v0.26.4 内收口） | 14 条 `ok p29 (<fixture>)`，位置精确到 `line:col` |
+| E29-8 | 满足 | `check-goldens` 82 / 0；`check-ast` 962 / 0（较 949 只多本轮新增断言，无回归）；`check-warnings` 321 / 0 | 见下「门禁」 |
+| E29-9 | 满足 | `check-all.sh` 11 道硬门禁全绿；新增 6 条 `p29 (check/build agree on <fixture>)`：同一负例的 compile、`ct check`、`ct build` 首条 `error: ` 逐字相同 | 6 条 `ok`；`check-all: OK (11 hard gates green)` |
+| E29-10 | 满足 | `docs/language-spec.md` §4.51、`docs/tutorial.md` §10.8、`AGENTS.md` 中英文、`examples/README.md` 22–25、`test/run.sh` 的 examples 扫描路径；`check-docs` 通过 | `check-docs: OK (978 relative links in 179 files, ...)` |
+| E29-11 | 满足 | `lib/std/README.md`（两条路径自动预解析、免 `ct get`、`Vec` 源码引用）；未改 `ct-pkg`、未改 `.trae/mcp.json`；四种语法糖的实测结论见 §8 O10 | 见 O10 的原始命令与退出码 |
+| E29-12 | 满足 | 新增 `test/ast/errors/generic_builtin_arity.ct`（`Vec<int, int>`）与 `generic_struct_user_arity.ct`（`Stack<int, int, int>`）；`p29 (E29-12 same arity text)` 断言两者 `error: ` 后的文案逐字相同且等于 `a generic struct takes at most 2 type parameters`；`144` 断言 `Stack<int>` → `Stack_int`；`p29_generic_struct` 的 `.h` 断言同一形态 | `Expr.h.ct` 的实例实参检查把 over-arity 统一到冻结的 L29-2 文案（无内置特判）；两条负例均 exit 1 |
+| E29-13 | 满足 | B1–B9 的样品/产物断言：`examples/23` + `144`（B1）、`examples/24` + `142` + `140`（B2）、`examples/22` + `141`（B3）、`examples/25`（B4）、`147`（B5）、`p29_generic_struct` + `generic_struct_pub_fn.ct`（B6）、`138/139` + 负例（B7）、`container_own/copy` + `142/143`（B8）、B9 明确不做并给出原因；每行有负例或产物断言，未用 `/tmp` 探针替代 | `test/run.sh` 137 / 0；`check-ast.sh` 962 / 0 |
+
+本轮新增门禁断言（`949 + 13 = 962`）：`p29_diag` 钉住位置 + 单错（14 条，替代原先仅 grep 文案）、
+`p29 (E29-12 same arity text)`、6 条 `check/build agree`、`p29 (two instances, two distinct tags)`、
+`p29 (Map: two builds and two runs agree)`；另加 2 条负例进入 corpus 的通用负例扫描。
+
+```text
+$ bash selfhost/check-all.sh
+== summary: 137 passed, 0 failed ==      (test/run.sh)
+== summary: 82 passed, 0 failed ==       (goldens)
+== summary: 962 passed, 0 failed ==      (check-ast)
+check-warnings: 321 ok, 0 failed
+check-docs: OK (978 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+acceptance: 20 pass, 0 new, 0 pending, 0 regression
+check-all: OK (11 hard gates green)
+```
+
+`sanitizer` 单独跑，失败 10 项、通过 319 项；10 项全部为既有问题，与 Phase 29 无关：
+
+| 失败项 | 原因 | 与 29 的关系 |
+| --- | --- | --- |
+| `66_type_host_literals` / `67_type_alias` / `81_closure_no_typehost` / `120_map_each_closure` / `121_map_each_closure_var` / `122_map_each_tier1` / `130_generic_build_mode` / `131_generic_cross_unit`（8 项） | 夹具含 `import`，sanitizer 脚本用单文件 compile 模式调用，报 `'import' requires multi-file mode: use 'ct build'` | 脚本调用方式问题；这 8 个在 `check-ast.sh` 的 build 段全部通过 |
+| `examples/json/json.ct` | ASAN/UBSAN 下 end-to-end 第 2 阶段失败（示例本身，无 `Vec`/`Map`） | 与 29 无关；示例不含本相语法 |
+| `range_init_overflow` | ct-ast 崩溃（exit 134），Phase 24 的既有夹具 | 与 29 无关；`138`–`147` 的 range/容器夹具均通过 |
+
+```text
+$ bash selfhost/check-sanitizers.sh
+check-sanitizers: FAIL (10 failed, 319 passed)
+```

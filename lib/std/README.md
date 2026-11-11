@@ -7,8 +7,9 @@
 `lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）及其直接依赖**，不是整个 `std` 的新家。
 `str` / `io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像。
 
-`Vec.h.ct` 是编译模式下自动预解析的单元：`ct file.ct -o file.c` 会把它 splice 到用户程序之前，
-**不需要 import**，且产物仍是单个 C TU、根命名空间。`ct build` 尚未接入内置层。
+`Vec.h.ct` 是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
+把它 splice 到用户程序之前，`ct build` 则把它作为一个独立单元参与发射；两种形态都
+**不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU、根命名空间。
 
 ## 保留名
 
