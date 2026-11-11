@@ -276,10 +276,11 @@ pub struct Expr {
     /* Phase 29: the second type parameter of a generic struct template
        (`struct Pair<T, U>`), empty when the template or the function has one. */
     char in_generic_tparam2[160];
-    /* Phase 29: the canonical argument list of the last generic struct instance
-       `parse_type` read, in source form (`Vec<int>`). A surrounding instance
-       takes it as its own argument spelling, so an encoded name can be read
-       back (`Vec_Vec_l_int_r`). Empty when the last type was not an instance. */
+    /* Phase 29: set while `parse_type` reads a type argument that is itself an
+       instance. Since S20b the surrounding instance takes that argument by its
+       C spelling (`struct Vec_int`), so the encoder produces one name in every
+       path (`Vec_Vec__int`); this flag only tells the reader the argument was an
+       instance. Empty when the last type was not an instance. */
     char inst_canon[160];
     /* Phase 29: nesting depth of `parse_type` while it reads type arguments;
        deeper than four is refused (L29-4). */
@@ -2063,6 +2064,18 @@ impl ExprOps for Expr {
         if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        /* S20b follow-up: the encoded tag is a C struct name, so it may not
+           name a struct the user declared. Without this the two definitions
+           collide and only cc notices, after the layouts have been merged. */
+        {
+            int cx = self->sym->find_struct(enc);
+            if (cx >= 0 && !self->sym->structs[cx].is_inst) {
+                char cmsg[MAX_TEXT * 2];
+                snprintf(cmsg, sizeof cmsg,
+                         "the instance name '%s' collides with a declared struct", enc);
+                return self->sup->fail(cmsg);
+            }
+        }
         carried2 = (tp[ti2].is_pub && tp[ti2].owner == self->cur_unit) ? 1 : 0;
         k = frontend::sym::ct_inst_add(enc, tname, nargs, a1, a2, c1, c2,
                                        self->cur_unit, carried2);

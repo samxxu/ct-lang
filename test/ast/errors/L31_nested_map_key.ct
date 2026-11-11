@@ -1,0 +1,10 @@
+#include <stdio.h>
+
+/* S20b: a nested instance is carried by its C tag, so the key diagnostic names
+   `struct Vec_int`; keys stay limited to int / long / char *. */
+int main(void)
+{
+    Map<Vec<int>, int> m;
+    m.h = 0;
+    return 0;
+}

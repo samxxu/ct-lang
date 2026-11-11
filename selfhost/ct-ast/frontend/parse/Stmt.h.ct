@@ -2272,9 +2272,6 @@ impl StmtOps for Stmt {
         char ex[MAX_TEXT];
         char tr[MAX_TEXT];
         char iname[MAX_TEXT];
-        char targ[MAX_TEXT];
-        char targ2[MAX_TEXT];
-        char tail[MAX_TEXT];
         char enc[MAX_TEXT];
         const char *p;
         const char *q;
@@ -2342,11 +2339,20 @@ impl StmtOps for Stmt {
             {
                 struct StructInst *ins = frontend::sym::ct_insts(&nargs);
                 for (kk = 0; kk < (aux == 1 ? 1 : 2); kk++) {
-                    char bname[MAX_TEXT];
-                    bname[0] = 0;
-                    if (frontend::sym::ct_inst_split(ins[inst].carg[kk], bname, &nd,
-                                                     targ, targ2, tail, MAX_TEXT) == 0
-                        && (strcmp(bname, "MapEntry") == 0)) {
+                    /* Judged by the instance tag the argument resolved to, not
+                       by the source spelling: since S20b a nested argument is
+                       carried as its C tag (`struct MapEntry_char_p_int`), so a
+                       `ct_inst_split` on `carg` would never match. D31-4
+                       unfroze interface and container elements, not the entry
+                       type, so this branch stays. */
+                    const char *tag = ins[inst].ctype[kk];
+                    int mt = -1;
+                    if (strncmp(tag, "struct ", 7) == 0 && strchr(tag, '*') == 0) {
+                        tag += 7;
+                        mt = frontend::sym::ct_inst_find(tag);
+                    }
+                    if (mt >= 0
+                        && strcmp(frontend::sym::ct_insts(&nd)[mt].tmpl, "MapEntry") == 0) {
                         snprintf(msg, sizeof msg,
                                  "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
                                  ins[inst].ctype[kk]);

@@ -1,0 +1,14 @@
+#include <stdio.h>
+
+/* S20b: the instance tag is a C struct name. `Vec<int>` encodes to `Vec_int`,
+   which a user struct may already own; the two must not share one definition. */
+struct Vec_int {
+    int x;
+}
+
+int main(void)
+{
+    Vec<int> v;
+    v.h = 0;
+    return 0;
+}

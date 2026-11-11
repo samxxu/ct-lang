@@ -5780,6 +5780,7 @@ p29_diag generic_struct_arity 10:20 "a generic struct takes at most 2 type param
 p29_diag generic_struct_void 5:13 "type argument 'void' cannot instantiate a generic struct"
 p29_diag generic_struct_depth 9:25 "generic type arguments nest deeper than 4"
 p29_diag builtin_type_redecl 3:1 "'Vec' is a built-in type and cannot be redeclared"
+p29_diag foreach_container_element 7:5 "foreach cannot iterate a container of 'struct MapEntry_char_p_int' (interface, vptr-bearing or container element)"
 p29_diag foreach_container_index_write 9:1 "the foreach index 'i' is read-only"
 p29_diag foreach_container_redeclare 9:1 "cannot redeclare the foreach binding 'item'"
 p29_diag foreach_container_map_i 11:1 "'i' has no meaning in a Map foreach; use item.key / item.value"
@@ -6081,6 +6082,10 @@ p29_neg L31_3_vec_inc "a Vec subscript is read-only; use set(i, v)" 7:6
 p29_neg L31_3_vec_member_assign "a Vec subscript is read-only; use set(i, v)" 16:6
 p29_neg L31_4_map_assign "a Map subscript is read-only; use put(k, v)" 7:6
 p29_neg L31_5_vec_addr "cannot take the address of a container subscript; bind it to a local first" 7:16
+# S20b review: the instance tag is a C struct name, and a nested key is
+# reported by that tag.
+p29_neg L31_inst_tag_collision "the instance name 'Vec_int' collides with a declared struct" 11:14
+p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (use int, long or char *)" 7:24
 # 1025 elements: the cap refuses the list before any element is materialised.
 {
     printf 'int main(void)\n{\n    Vec<int> v = {'
