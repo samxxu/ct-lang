@@ -6172,6 +6172,50 @@ p30_neg into_missing_member "no member 'nope' on the 'into' receiver" 9:15
 p30_neg into_rvalue_stmt "an 'into' statement needs a writable receiver" 16:12
 p30_neg into_nested "nested 'into' blocks are not supported" 11:11
 
+# E30-6: `ct check` shares the parser diagnostics, so every negative fails in
+# check mode with the same wording and position.
+p30_chk() {
+    if "$work/ct-ast" check "test/ast/errors/$1.ct" \
+            >"$work/p30chk.out" 2>"$work/p30chk.err"; then
+        bad "p30 check: $1" "expected a non-zero exit"
+    elif ! grep -Fq "test/ast/errors/$1.ct:$2: error: $3" "$work/p30chk.err"; then
+        bad "p30 check: $1" "$(head -2 "$work/p30chk.err")"
+    else
+        ok "p30 check ($1: same wording under ct check)"
+    fi
+}
+p30_chk into_not_allowed 12:12 "'into' block is not allowed here"
+p30_chk into_bad_left 11:11 "'into' needs a variable, field or call on its left"
+p30_chk into_unknown_type 6:10 "cannot determine the receiver type of this 'into' block"
+p30_chk into_iface 13:7 "'into' cannot take an interface or 'own' receiver"
+p30_chk into_own 15:7 "'into' cannot take an interface or 'own' receiver"
+p30_chk into_missing_member 9:15 "no member 'nope' on the 'into' receiver"
+p30_chk into_rvalue_stmt 16:12 "an 'into' statement needs a writable receiver"
+p30_chk into_nested 11:11 "nested 'into' blocks are not supported"
+
+# E30-8: a static-map type host expands at the use site, so the program unit
+# names the recipe's C function and carries no wrapper, vtable or boxed value.
+p30_bare() {
+    d="test/ast/$1"
+    rm -rf "$work/p30bare"
+    mkdir -p "$work/p30bare"
+    incs=""
+    for h in $(find "$d" -name '*.shim.h'); do incs="$incs -I $(dirname "$h")"; done
+    if ! "$work/ct-ast" build --emit-c "$d/prog.ct" $incs -o "$work/p30bare" \
+            >"$work/p30bare.log" 2>&1; then
+        bad "p30 E30-8 ($1)" "build failed: $(head -3 "$work/p30bare.log")"
+    elif ! grep -Fq "$2" "$work/p30bare/prog.c"; then
+        bad "p30 E30-8 ($1)" "the product does not call $2 directly"
+    elif grep -Eq '_vtable|_iface|_vtbl' "$work/p30bare/prog.c"; then
+        bad "p30 E30-8 ($1)" "the product carries a wrapper or vtable: $(grep -E '_vtable|_iface|_vtbl' "$work/p30bare/prog.c" | head -2)"
+    else
+        ok "p30 E30-8 ($1: bare C call, no wrapper or vtable)"
+    fi
+}
+p30_bare 153_into_type_host ct_file_write
+p30_bare 155_into_value_host builder_add
+p30_bare 156_into_scalar ct_twice
+
 # E30-2: the receiver is evaluated exactly once, and the product contains
 # neither `$` nor an `into {` block.
 cat >"$work/p30rc.ct" <<'EOF'
