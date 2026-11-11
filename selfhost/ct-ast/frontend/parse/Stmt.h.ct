@@ -80,6 +80,7 @@ import tool::diag::Diag;
 #define N_FOREACH 62
 #define N_MEMBER 24
 #define N_NUM 8
+#define N_STR 9
 #define N_UNARY 17
 #define N_POST 18
 #define N_PRE 57
@@ -1061,6 +1062,74 @@ static int map_fold_num(struct Stmt *self, int n, long *out)
     return 1;
 }
 
+/* Phase 31 S16a: decode a string literal node into its bytes. Adjacent
+   literals are already joined in the row and each keeps its quotes, so the
+   scan walks every quoted segment and normalises escapes. The result stops at
+   the first NUL, matching the runtime `strcmp` the constructor uses. */
+static int map_decode_str(struct Stmt *self, int n, char *out, int cap)
+{
+    const char *s;
+    int i = 0, o = 0;
+
+    if (n < 0 || cap < 1) return 0;
+    if (self->arena->nodes[n].kind != N_STR) return 0;
+    s = self->arena->str_at(self->arena->nodes[n].num);
+    out[0] = 0;
+    while (s[i]) {
+        int c;
+        if (s[i] != '"') { i++; continue; }
+        i++;
+        while (s[i] && s[i] != '"') {
+            c = (unsigned char)s[i];
+            if (c == '\\') {
+                i++;
+                if (!s[i]) return 0;
+                c = (unsigned char)s[i];
+                if (c == 'n') c = '\n';
+                else if (c == 't') c = '\t';
+                else if (c == 'r') c = '\r';
+                else if (c == 'a') c = 7;
+                else if (c == 'b') c = 8;
+                else if (c == 'f') c = 12;
+                else if (c == 'v') c = 11;
+                else if (c == 'x') {
+                    int hv = 0, nd = 0;
+                    i++;
+                    while (1) {
+                        int d = (unsigned char)s[i];
+                        if (d >= '0' && d <= '9') d = d - '0';
+                        else if (d >= 'a' && d <= 'f') d = d - 'a' + 10;
+                        else if (d >= 'A' && d <= 'F') d = d - 'A' + 10;
+                        else break;
+                        hv = (hv * 16 + d) & 255;
+                        nd++;
+                        i++;
+                    }
+                    if (!nd) return 0;
+                    c = hv;
+                    i--;
+                } else if (c >= '0' && c <= '7') {
+                    int ov = 0, nd = 0;
+                    while (nd < 3 && s[i] >= '0' && s[i] <= '7') {
+                        ov = ov * 8 + (s[i] - '0');
+                        nd++;
+                        i++;
+                    }
+                    c = ov & 255;
+                    i--;
+                }
+                i++;
+            } else {
+                i++;
+            }
+            if (c == 0) return 1;          /* strcmp stops at the first NUL */
+            if (o < cap - 1) out[o++] = (char)c;
+        }
+    }
+    out[o] = 0;
+    return 1;
+}
+
 /* Phase 31 S16a/S16b: 1 when key `n` repeats one of the first `count` keys by a
    statically determinable value. `disp` receives the key's spelling (decimal
    for an integer, decoded bytes for a string, the cname for an enum member) and
@@ -1069,15 +1138,33 @@ static int map_fold_num(struct Stmt *self, int n, long *out)
 static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *disp, int *first)
 {
     long nv = 0, pv;
-    int j;
+    char sbuf[MAX_TEXT];
+    int j, kind = 0;
 
-    if (!map_fold_num(self, n, &nv)) return 0;
-    snprintf(disp, (size_t)MAX_TEXT, "%ld", nv);
-    for (j = 0; j < count; j++)
-        if (map_fold_num(self, keys[j], &pv) && pv == nv) {
-            *first = self->arena->nodes[keys[j]].line;
-            return 1;
+    if (self->arena->nodes[n].kind == N_STR) {
+        if (!map_decode_str(self, n, sbuf, (int)sizeof sbuf)) return 0;
+        kind = 2;
+    } else if (map_fold_num(self, n, &nv)) {
+        kind = 1;
+    }
+    if (kind == 0) return 0;
+    if (kind == 1) snprintf(disp, (size_t)MAX_TEXT, "%ld", nv);
+    else snprintf(disp, (size_t)MAX_TEXT, "%s", sbuf);
+    for (j = 0; j < count; j++) {
+        if (kind == 1) {
+            if (map_fold_num(self, keys[j], &pv) && pv == nv) {
+                *first = self->arena->nodes[keys[j]].line;
+                return 1;
+            }
+        } else {
+            char pb[MAX_TEXT];
+            if (map_decode_str(self, keys[j], pb, (int)sizeof pb)
+                && strcmp(pb, sbuf) == 0) {
+                *first = self->arena->nodes[keys[j]].line;
+                return 1;
+            }
         }
+    }
     return 0;
 }
 
