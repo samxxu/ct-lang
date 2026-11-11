@@ -1801,19 +1801,15 @@ impl EmitOps for Emitter {
             cat = self->arena->nodes[k].aux;
             self->emit_indent(ind);
             if (cat == 2) {
-                fprintf(self->out, "%s *%s = &(", self->arena->nodes[k].text,
+                /* addressed in place, spelled like a user declaration */
+                fprintf(self->out, "%s * %s = &(", self->arena->nodes[k].text,
                         self->arena->nodes[k].text3);
             } else {
-                /* a pointer spelling already ends with `*`, so the promoted
-                   name follows it directly (`struct ct_file *__ct_recv0`) --
-                   the hand-written side of E30-9 writes the same shape */
-                size_t tl = strlen(self->arena->nodes[k].text);
-                while (tl > 0 && (self->arena->nodes[k].text[tl - 1] == ' '
-                                  || self->arena->nodes[k].text[tl - 1] == '\t')) tl--;
-                fputs(self->arena->nodes[k].text, self->out);
-                if (!(tl > 0 && self->arena->nodes[k].text[tl - 1] == '*'))
-                    fputc(' ', self->out);
-                fprintf(self->out, "%s = ", self->arena->nodes[k].text3);
+                /* a promoted receiver is spelled exactly like a user
+                   declaration (`struct AppConfig * __ct_recv0`), so E30-9 can
+                   compare the two products after normalisation */
+                fprintf(self->out, "%s %s = ", self->arena->nodes[k].text,
+                        self->arena->nodes[k].text3);
             }
             if (self->emit_expr(self->arena->nodes[k].a) != 0) return -1;
             if (cat == 2) fputs(")", self->out);
