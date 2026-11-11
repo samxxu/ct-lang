@@ -126,6 +126,10 @@ pub trait ExprOps {
        There is no boxing path from a concrete value into an interface-pointer
        slot, so such an element is refused and pointed at the value form. */
     int  container_iface_ptr(const char *ctype);
+    /* Phase 31: replace the template's type parameters in `spell` with the
+       instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
+       that mentions no parameter passes through unchanged. */
+    int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
     /* Phase 26: register (or reuse) the instance of template `gfi` for the
        concrete type spelling `targ`; returns its index in `sym->ginsts`. */
     int  generic_instance(int gfi, const char *targ, int line, int col);
@@ -1903,12 +1907,48 @@ impl ExprOps for Expr {
         return 0;
     }
 
+    /* Phase 31: bind `spell` to the instance's concrete C arguments. The pair
+       `StructTmpl.tparam` / `StructInst.ctype` is what `inst_make` used to
+       substitute the fields, so the reverse direction here is the same data. */
+    int inst_subst_type(const char *ibase, const char *spell, char *out, int cap)
+    {
+        char base[MAX_TEXT];
+        char cur[MAX_TEXT];
+        char nxt[MAX_TEXT];
+        int inst, ti, tn, k;
+        struct StructInst *ins;
+        struct StructTmpl *tp;
+
+        (void)self;
+        snprintf(cur, sizeof cur, "%s", spell);
+        if (strncmp(ibase, "struct ", 7) == 0) {
+            snprintf(base, sizeof base, "%s", ibase + 7);
+            inst = frontend::sym::ct_inst_find(base);
+            if (inst >= 0) {
+                ins = frontend::sym::ct_insts(&k);
+                ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+                tp = frontend::sym::ct_tmpls(&tn);
+                if (ti >= 0 && tp) {
+                    if (tp[ti].ntparams > 0
+                        && frontend::sym::ct_generic_subst(cur, tp[ti].tparam[0],
+                                ins[inst].ctype[0], nxt, MAX_TEXT) == 0)
+                        snprintf(cur, sizeof cur, "%s", nxt);
+                    if (tp[ti].ntparams > 1
+                        && frontend::sym::ct_generic_subst(cur, tp[ti].tparam[1],
+                                ins[inst].ctype[1], nxt, MAX_TEXT) == 0)
+                        snprintf(cur, sizeof cur, "%s", nxt);
+                }
+            }
+        }
+        if (snprintf(out, (size_t)cap, "%s", cur) >= cap) return 0;
+        return 1;
+    }
+
     /* The single creation path for a concrete instance: encode, register the
        identity row, copy the template's fields with both parameters substituted
        and let every matching `use` block adopt its trait. The arity check is
        shared with the type parser, so a built-in container gets no private
-       branch (E29-12). */
-    int inst_make(const char *tname, int nargs, const char *a1, const char *a2,
+       branch (E29-12). */    int inst_make(const char *tname, int nargs, const char *a1, const char *a2,
                   const char *c1, const char *c2, char *enc, int enc_cap, int depth)
     {
         struct StructTmpl *tp;
@@ -3581,6 +3621,37 @@ impl ExprOps for Expr {
                                             "a built-in container cannot be an element of another container",
                                             self->sup->mem->path);
                                 }
+                            }
+                            /* Phase 31 S2: an interface formal boxes its
+                               actual, exactly like a free-function call, so
+                               `v.push(circle)` stores the fat pointer. The
+                               bind is read from the instance, not from the
+                               template spelling (`T` / `V`). */
+                            {
+                                int pi = self->arena->nodes[inm].a;
+                                int ai = args, prev = -1;
+                                while (pi >= 0 && ai > 0) {
+                                    char fty[MAX_TEXT];
+                                    char ftr[MAX_TEXT];
+                                    int fip = 0;
+                                    if (self->inst_subst_type(ibase,
+                                            self->arena->nodes[pi].text, fty, sizeof fty)
+                                        && self->sup->iface_ref_type(fty, ftr, sizeof ftr, &fip)) {
+                                        int boxed = self->sup->maybe_box(ai, ftr, fip);
+                                        if (boxed < 0) return -1;
+                                        if (boxed != ai) {
+                                            if (prev < 0) args = boxed;
+                                            else self->arena->nodes[prev].next = boxed;
+                                            self->arena->nodes[boxed].next =
+                                                self->arena->nodes[ai].next;
+                                            ai = boxed;
+                                        }
+                                    }
+                                    prev = ai;
+                                    ai = self->arena->nodes[ai].next;
+                                    pi = self->arena->nodes[pi].next;
+                                }
+                                self->arena->nodes[m].b = (args == 0) ? -1 : args;
                             }
                             self->arena->nodes[m].aux = arrow ? 10 : 9;
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", ibase);
