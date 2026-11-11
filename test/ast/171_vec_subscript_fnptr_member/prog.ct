@@ -1,0 +1,24 @@
+/* V29-4 turned positive in Phase 31 (was `vec_subscript_fnptr_member.ct`,
+   15:18): a function pointer returning a struct; the subscript reaches the
+   handle through its field, so the call result is materialised first. */
+#include <stdio.h>
+
+struct Holder {
+    Vec<int> v;
+}
+
+struct Holder mk(void)
+{
+    struct Holder h;
+    Vec<int> a = {7};
+    h.v = a;
+    return h;
+}
+
+int main(void)
+{
+    struct Holder (*fp)(void) = mk;
+    int got = fp().v[0];
+    printf("%d\n", got);
+    return 0;
+}

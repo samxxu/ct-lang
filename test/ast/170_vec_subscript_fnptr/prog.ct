@@ -1,0 +1,18 @@
+/* V29-4 turned positive in Phase 31 (was `vec_subscript_fnptr.ct`, 11:16):
+   a call through a function pointer returns the handle by value, so it is
+   materialised before the subscript reads it. */
+#include <stdio.h>
+
+Vec<int> mk(void)
+{
+    Vec<int> r = {6};
+    return r;
+}
+
+int main(void)
+{
+    Vec<int> (*fp)(void) = mk;
+    int got = fp()[0];
+    printf("%d\n", got);
+    return 0;
+}

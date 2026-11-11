@@ -1,0 +1,13 @@
+/* V29-4 turned positive in Phase 31 (was `vec_subscript_index_array.ct`,
+   5:18): an array element holds the handle. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> a = {9};
+    Vec<int> arr[2];
+    arr[0] = a;
+    int got = arr[0][0];
+    printf("%d\n", got);
+    return 0;
+}
