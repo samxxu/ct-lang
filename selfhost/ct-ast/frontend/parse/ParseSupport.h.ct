@@ -233,8 +233,9 @@ impl SupportOps for ParseSupport {
         int i, k, p, pub_now, fresh;
 
         /* `__ct_` names the compiler's own locals and closure products; a user
-           declaration could otherwise collide with them in the generated C. */
-        if (!strncmp(name, "__ct_", 5))
+           declaration could otherwise collide with them in the generated C.
+           `reserved_name` owns the one `__ct_recv<N>` exception (E30-9). */
+        if (self->sym->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
 
         /* Rows are keyed by the C spelling, so the declaration has to find the
@@ -360,7 +361,7 @@ impl SupportOps for ParseSupport {
     {
         const char *why;
         int i;
-        if (!strncmp(name, "__ct_", 5))
+        if (self->sym->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
         self->sym->errmsg[0] = 0;
         i = self->sym->add_struct(name);
@@ -375,7 +376,7 @@ impl SupportOps for ParseSupport {
     int add_trait(const char *name)
     {
         int i;
-        if (!strncmp(name, "__ct_", 5))
+        if (self->sym->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
         i = self->sym->add_trait(name);
         if (i < 0) return self->fail(self->sym->last_error());

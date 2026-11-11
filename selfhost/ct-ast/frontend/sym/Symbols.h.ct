@@ -487,8 +487,23 @@ impl SymbolOps for Symbols {
        the generated C either. */
     int reserved_name(const char *name)
     {
+        const char *p;
         (void)self;
-        return name && !strncmp(name, "__ct_", 5);
+        if (!name || strncmp(name, "__ct_", 5)) return 0;
+        /* E30-9 compares an `into` block against hand-written source that names
+           the promoted receiver `__ct_recv<N>`, so that one family stays
+           spellable. It is a deliberate one-name exception, not a prefix
+           carve-out: `__ct_recv` must be followed by digits only, and avoiding
+           a collision with a real promotion is the author's job (C reserves
+           such names in the same spirit). */
+        if (!strncmp(name, "__ct_recv", 9)) {
+            p = name + 9;
+            if (*p) {
+                while (*p >= '0' && *p <= '9') p++;
+                if (!*p) return 0;
+            }
+        }
+        return 1;
     }
 
     /* Only the last path component: the diagnostic already prints the full

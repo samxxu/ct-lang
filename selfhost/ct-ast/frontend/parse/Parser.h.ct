@@ -1096,8 +1096,9 @@ impl ParseOps for Parser {
             self->sup->lex_next();
         }
         /* `__ct_` names the compiler's own locals and closure products; a user
-           declaration could otherwise collide with them in the generated C. */
-        if (!strncmp(name, "__ct_", 5))
+           declaration could otherwise collide with them in the generated C.
+           `reserved_name` owns the one `__ct_recv<N>` exception (E30-9). */
+        if (self->sym->reserved_name(name))
             return self->sup->fail("identifier '__ct_' is reserved for the compiler");
         /* Phase 26: one optional type parameter, written C-style after the name:
            `T id<T>(T x)`. The template is parsed in place; instances are
