@@ -1719,6 +1719,45 @@ static int elem_has_life(struct Emitter *self, const char *elem)
     return 0;
 }
 
+/* Phase 31 O3: the unit that writes an instance's methods owns its helpers, so
+   the filter follows the impl owner, not the instance owner (a Vec instance is
+   created in the user's unit while `impl<T> Vec<T>` lives in the built-in
+   unit). */
+static int inst_touched_by_unit(struct Emitter *self, int u, int ii)
+{
+    int k, n;
+    struct StructImpl *im;
+
+    (void)self;
+    if (u < 0) return 1;
+    im = frontend::sym::ct_impls(&n);
+    for (k = 0; im && k < n; k++) {
+        if (im[k].owner != u) continue;
+        if (frontend::sym::ct_impl_matches(k, ii)) return 1;
+    }
+    return 0;
+}
+
+/* Phase 31 O3: the definitions live after the instance methods, so a prototype
+   pair must precede every body that calls them (compile mode has no header). */
+static int inst_emit_elem_protos(struct Emitter *self, int ii)
+{
+    int n;
+    struct StructInst *ins;
+    const char *elem;
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins || ii < 0 || ii >= n) return 0;
+    if (strcmp(ins[ii].tmpl, "Vec") == 0) elem = ins[ii].ctype[0];
+    else if (strcmp(ins[ii].tmpl, "Map") == 0) elem = ins[ii].ctype[1];
+    else return 0;
+    fprintf(self->out, "static void %s__elem_retain(%s *e);\n",
+            ins[ii].name, elem);
+    fprintf(self->out, "static void %s__elem_release(%s *e);\n",
+            ins[ii].name, elem);
+    return 0;
+}
+
 /* Phase 31 O3: one pair of element lifecycle helpers per container instance.
    `retain`/`release` on an element type that owns a resource copy the bumped
    handle and guard a release whose handle is already empty when the element is
@@ -1773,6 +1812,12 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     (void)ins;
     (void)ntmpls;
     if (!im || !tps) return 0;
+    if (!header) {
+        for (i = 0; i < ninsts; i++) {
+            if (!inst_touched_by_unit(self, u, i)) continue;
+            if (inst_emit_elem_protos(self, i) != 0) return -1;
+        }
+    }
     for (ki = 0; ki < nimpls; ki++) {
         tmpl = frontend::sym::ct_tmpl_find(im[ki].tmpl);
         owned = (u < 0) || im[ki].owner == u;
@@ -1799,7 +1844,7 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     }
     if (!header) {
         for (i = 0; i < ninsts; i++) {
-            if (u >= 0 && ins[i].owner != u) continue;
+            if (!inst_touched_by_unit(self, u, i)) continue;
             if (inst_emit_elem_helpers(self, i) != 0) return -1;
         }
     }
