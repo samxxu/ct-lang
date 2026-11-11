@@ -1,0 +1,53 @@
+/* Phase 30 E30-9 group C: the hand-written side. The handle is named on every
+   line; the block side names it once and keeps close_handle outside too. */
+#include <stdio.h>
+
+trait HandleOps {
+    int read(int n);
+    void write(int n);
+    int tell();
+}
+
+struct Handle {
+    int pos;
+    int wrote;
+} use HandleOps;
+
+struct Handle live;
+
+impl HandleOps for Handle {
+    int read(int n) {
+        self->pos = self->pos + n;
+        return n;
+    }
+    void write(int n) {
+        self->wrote = self->wrote + n;
+    }
+    int tell() {
+        return self->pos + self->wrote;
+    }
+}
+
+struct Handle *open_handle(void)
+{
+    live.pos = 0;
+    live.wrote = 0;
+    return &live;
+}
+
+void close_handle(struct Handle *h)
+{
+    h->pos = 0;
+}
+
+int main(void)
+{
+    struct Handle *__ct_recv0 = open_handle();
+    int n = __ct_recv0->read(5);
+    __ct_recv0->write(n);
+    printf("tell %d\n", __ct_recv0->tell());
+    struct Handle *f = __ct_recv0;
+    close_handle(f);
+    printf("f %d %d\n", f->pos, f->wrote);
+    return 0;
+}

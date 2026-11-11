@@ -1,0 +1,20 @@
+/* Phase 30 E30-9 group D: the hand-written side. Each subject is hoisted into
+   a temp so a field can be read after the actions; the builder chain then runs
+   on the temp. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+int main(void)
+{
+    struct Handle *__ct_recv0 = handle_open();
+    __ct_recv0->read(4);
+    int pos = __ct_recv0->pos;
+    printf("pos %d\n", pos);
+
+    struct Builder __ct_recv1 = builder_make(10);
+    __ct_recv1 = __ct_recv1.add(1);
+    struct Builder b = __ct_recv1.add(2).add(3);
+    printf("b %d %d\n", b.value(), b.steps);
+    return 0;
+}

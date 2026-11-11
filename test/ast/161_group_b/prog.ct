@@ -1,0 +1,15 @@
+/* Phase 30 E30-9 group B: a by-value chain. `$ =` catches the whole chain
+   inside the block, so the reader sees no temporary and no self-assignment:
+   the receiver is named once, the transforms follow in order. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+int main(void)
+{
+    struct Builder b = builder_make(10) into {
+        $ = .add(1).add(2).add(3);
+    };
+    printf("%d %d\n", b.value(), b.steps);
+    return 0;
+}

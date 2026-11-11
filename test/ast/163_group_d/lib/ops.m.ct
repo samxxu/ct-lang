@@ -1,0 +1,19 @@
+namespace lib;
+
+pub trait HandleOps {
+    int read(int n);
+}
+
+pub trait BuilderOps {
+    struct Builder add(int n);
+    int value();
+}
+
+map trait HandleOps for type struct Handle * {
+    read(h, n) -> handle_read(h, n);
+}
+
+map trait BuilderOps for type struct Builder {
+    add(b, n) -> builder_add(b, n);
+    value(b)  -> builder_value(b);
+}

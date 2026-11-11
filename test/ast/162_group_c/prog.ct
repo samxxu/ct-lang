@@ -1,0 +1,54 @@
+/* Phase 30 E30-9 group C: a handle with a lifecycle. The block only says what
+   to do with the handle; closing it stays outside, where the resource's
+   lifetime really ends. */
+#include <stdio.h>
+
+trait HandleOps {
+    int read(int n);
+    void write(int n);
+    int tell();
+}
+
+struct Handle {
+    int pos;
+    int wrote;
+} use HandleOps;
+
+struct Handle live;
+
+impl HandleOps for Handle {
+    int read(int n) {
+        self->pos = self->pos + n;
+        return n;
+    }
+    void write(int n) {
+        self->wrote = self->wrote + n;
+    }
+    int tell() {
+        return self->pos + self->wrote;
+    }
+}
+
+struct Handle *open_handle(void)
+{
+    live.pos = 0;
+    live.wrote = 0;
+    return &live;
+}
+
+void close_handle(struct Handle *h)
+{
+    h->pos = 0;
+}
+
+int main(void)
+{
+    struct Handle *f = open_handle() into {
+        int n = .read(5);
+        .write(n);
+        printf("tell %d\n", .tell());
+    };
+    close_handle(f);
+    printf("f %d %d\n", f->pos, f->wrote);
+    return 0;
+}

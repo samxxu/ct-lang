@@ -1,0 +1,20 @@
+/* Phase 30 E30-9 group D: the block is a postfix expression. What follows the
+   closing brace stays outside the block, so the same subject carries on along
+   the chain instead of forcing a temporary variable. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+int main(void)
+{
+    int pos = handle_open() into {
+        .read(4);
+    }->pos;
+    printf("pos %d\n", pos);
+
+    struct Builder b = builder_make(10) into {
+        $ = .add(1);
+    }.add(2).add(3);
+    printf("b %d %d\n", b.value(), b.steps);
+    return 0;
+}
