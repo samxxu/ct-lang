@@ -130,6 +130,10 @@ pub trait ExprOps {
        instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
        that mentions no parameter passes through unchanged. */
     int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
+    /* L31-2: 1 when a container element is declared in a unit other than the
+       container template's own unit. In `ct build` the instance methods are
+       emitted in the container's unit, which cannot see such a definition. */
+    int  container_elem_foreign(const char *ctype, int container_tmpl);
     /* Phase 26: register (or reuse) the instance of template `gfi` for the
        concrete type spelling `targ`; returns its index in `sym->ginsts`. */
     int  generic_instance(int gfi, const char *targ, int line, int col);
@@ -274,6 +278,10 @@ pub struct Expr {
     /* Phase 29: the unit being parsed, copied from the parser when a unit
        starts, so an instance records who created it. */
     int  cur_unit;
+    /* Phase 31 L31-2: points at the driver's `ct build` flag, copied from the
+       parser when a unit starts. A single-file compile sees every definition,
+       so the cross-unit element guard only applies when this is 1. */
+    int *build_mode;
     /* Phase 28: the trait bound of the template whose body is being parsed.
        A method call on the type parameter resolves against this trait instead
        of failing to find a struct; empty for a plain template and outside one. */
@@ -1944,6 +1952,46 @@ impl ExprOps for Expr {
         return 1;
     }
 
+    /* Phase 31 L31-2 (D31-5): an interface element belongs to the unit that
+       declares its trait; an instance element belongs to the unit that owns its
+       template. Both are compared with the container template's unit, because
+       that is the unit whose C emits the instance methods. A scalar or a
+       non-container struct element is unaffected: its definition reaches the
+       container unit through the ordinary header path. */
+    int container_elem_foreign(const char *ctype, int container_tmpl)
+    {
+        char base[MAX_TEXT];
+        char tr[MAX_TEXT];
+        int ip, ti, inst, k, ti2, tn, life;
+        struct StructInst *ins;
+        struct StructTmpl *tps;
+
+        tps = frontend::sym::ct_tmpls(&tn);
+        if (!tps || container_tmpl < 0) return 0;
+        if (self->sup->iface_ref_type(ctype, tr, sizeof tr, &ip)) {
+            ti = self->sym->find_trait(tr);
+            if (ti >= 0 && self->sym->traits[ti].path[0]
+                && strcmp(self->sym->traits[ti].path, tps[container_tmpl].path) != 0)
+                return 1;
+            return 0;
+        }
+        if (strncmp(ctype, "struct ", 7) != 0) return 0;
+        snprintf(base, sizeof base, "%s", ctype + 7);
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst < 0) return 0;
+        ins = frontend::sym::ct_insts(&k);
+        ti2 = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+        if (ti2 < 0 || tps[ti2].owner < 0) return 0;
+        if (tps[ti2].owner == tps[container_tmpl].owner) return 0;
+        /* A container element always needs the per-instance helpers; a plain
+           instance needs them only when it carries a lifecycle (`retain` and
+           `release`). Any other instance is copied by value and unaffected. */
+        if (frontend::sym::ct_is_container_type(ctype)) return 1;
+        life = self->inst_inherent_method(ctype, "retain") >= 0
+            && self->inst_inherent_method(ctype, "release") >= 0;
+        return life;
+    }
+
     /* The single creation path for a concrete instance: encode, register the
        identity row, copy the template's fields with both parameters substituted
        and let every matching `use` block adopt its trait. The arity check is
@@ -1984,6 +2032,19 @@ impl ExprOps for Expr {
                 || (nargs > 1 && self->container_iface_ptr(c2))))
             return self->sup->fail(
                 "a container of interface pointers is not supported; store the interface value itself");
+        /* L31-2 (D31-5): `ct build` emits the instance methods in the container
+           template's unit, which cannot see an element declared elsewhere. */
+        if (self->build_mode && *self->build_mode
+            && (strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
+            && (self->container_elem_foreign(c1, ti2)
+                || (nargs > 1 && self->container_elem_foreign(c2, ti2)))) {
+            char emsg[MAX_TEXT * 2];
+            snprintf(emsg, sizeof emsg,
+                     "container element type '%s' is declared in another unit; "
+                     "declare it in the same unit or use a pointer element",
+                     self->container_elem_foreign(c1, ti2) ? c1 : c2);
+            return self->sup->fail(emsg);
+        }
         if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");

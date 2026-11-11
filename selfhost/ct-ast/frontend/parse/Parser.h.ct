@@ -999,6 +999,7 @@ impl ParseOps for Parser {
         base = tool::diag::ct_diag_nsem();
         self->seen_decl = 0;
         self->ex->cur_unit = self->cur_unit;
+        self->ex->build_mode = self->build_mode;
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {

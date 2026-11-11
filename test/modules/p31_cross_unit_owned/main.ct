@@ -1,0 +1,11 @@
+// Phase 31 L31-2: an owning element declared in another unit is refused by
+// `ct build` for the same reason as an interface element -- the instance
+// methods are emitted in the container template's unit.
+import elem;
+
+int main(void)
+{
+    Vec<Box<int>> v;
+    v.h = 0;
+    return v.len();
+}

@@ -2357,6 +2357,36 @@ else
     bad "union_export" "$(cat "$work/mnu.err" "$work/mnu.cc" "$work/mnu.stdout" 2>/dev/null)"
 fi
 
+# ... and a container element that lives in another unit is refused: the
+# instance methods are emitted in the container template's unit, which cannot
+# see that definition (L31-2).
+rm -rf "$mod-fx"
+mkdir -p "$mod-fx"
+if "$work/ct-ast" build --emit-c test/modules/p31_cross_unit_elem/main.ct -o "$mod-fx" \
+        >"$work/mfx.out" 2>"$work/mfx.err"; then
+    bad "p31_cross_unit_elem" "the build was accepted"
+elif ! grep -q "is declared in another unit" "$work/mfx.err"; then
+    bad "p31_cross_unit_elem" "$(cat "$work/mfx.err")"
+elif [ "$(grep -c 'error:' "$work/mfx.err")" -ne 1 ]; then
+    bad "p31_cross_unit_elem" "expected exactly one diagnostic: $(cat "$work/mfx.err")"
+else
+    ok "p31_cross_unit_elem (an element declared in another unit is refused)"
+fi
+# ... the same boundary covers an owning element (one that carries `retain` /
+# `release`), because its per-element helpers are emitted with the container.
+rm -rf "$mod-fx"
+mkdir -p "$mod-fx"
+if "$work/ct-ast" build --emit-c test/modules/p31_cross_unit_owned/main.ct -o "$mod-fx" \
+        >"$work/mfo.out" 2>"$work/mfo.err"; then
+    bad "p31_cross_unit_owned" "the build was accepted"
+elif ! grep -q "is declared in another unit" "$work/mfo.err"; then
+    bad "p31_cross_unit_owned" "$(cat "$work/mfo.err")"
+elif [ "$(grep -c 'error:' "$work/mfo.err")" -ne 1 ]; then
+    bad "p31_cross_unit_owned" "expected exactly one diagnostic: $(cat "$work/mfo.err")"
+else
+    ok "p31_cross_unit_owned (an owning element from another unit is refused)"
+fi
+
 # ... and two namespaces exporting one bare type name make it ambiguous.
 if "$work/ct-ast" build --emit-c test/modules/ambig_type/main.ct -o "$work/mod-bad" \
         >"$work/mat.out" 2>"$work/mat.err"; then

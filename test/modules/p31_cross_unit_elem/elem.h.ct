@@ -1,0 +1,14 @@
+// Phase 31 L31-2: the element's trait is declared in this unit only.
+pub trait Show {
+    int show();
+}
+
+pub struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}

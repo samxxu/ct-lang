@@ -236,9 +236,10 @@ for d in test/modules/*/; do
         continue
     fi
     # dup_impl, ambig_global, ambig_type, p20_dup_unit, p20_dup_plain,
-    # p20_ns_clash, p20_pkg_layout_clash and ambig_func_init are negative
-    # fixtures: the compiler must refuse them (check-ast.sh owns those
-    # assertions), so they have no generated C.
+    # p20_ns_clash, p20_pkg_layout_clash, ambig_func_init and
+    # p31_cross_unit_elem / p31_cross_unit_owned are negative fixtures: the
+    # compiler must refuse them (check-ast.sh owns those assertions), so they
+    # have no generated C.
     [ "$name" = "dup_impl" ] && continue
     [ "$name" = "ambig_global" ] && continue
     [ "$name" = "ambig_type" ] && continue
@@ -247,6 +248,8 @@ for d in test/modules/*/; do
     [ "$name" = "p20_ns_clash" ] && continue
     [ "$name" = "p20_pkg_layout_clash" ] && continue
     [ "$name" = "ambig_func_init" ] && continue
+    [ "$name" = "p31_cross_unit_elem" ] && continue
+    [ "$name" = "p31_cross_unit_owned" ] && continue
 
     incs=""
     [ -d "$d/extra" ] && incs="-I $d/extra"

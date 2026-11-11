@@ -1,0 +1,13 @@
+// Phase 31 L31-2: `ct build` must refuse a container whose interface element
+// is declared in another unit; the instance methods are emitted where the
+// element's own definition is not visible.
+#include <stdio.h>
+
+import elem;
+
+int main(void)
+{
+    Vec<Show> v;
+    v.h = 0;
+    return v.len();
+}

@@ -1,0 +1,15 @@
+// Phase 31 L31-2: an element with a lifecycle, declared in this unit only.
+pub struct Box<T> {
+    T v;
+}
+
+impl<T> Box<T> {
+    Box<T> retain()
+    {
+        return *self;
+    }
+
+    void release()
+    {
+    }
+}
