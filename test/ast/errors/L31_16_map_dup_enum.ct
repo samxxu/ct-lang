@@ -1,0 +1,9 @@
+/* Phase 31 L31-16: the same enum member twice is a duplicate the compiler can
+   prove, because both keys resolve to the same cname (T31-8). */
+enum Color { RED, BLUE }
+
+int main(void)
+{
+    Map<int, int> m = {RED: 1, BLUE: 2, RED: 3};
+    return m.len();
+}

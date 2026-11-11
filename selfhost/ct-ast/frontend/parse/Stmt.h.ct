@@ -1145,6 +1145,13 @@ static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *dis
     if (self->arena->nodes[n].kind == N_STR) {
         if (!map_decode_str(self, n, sbuf, (int)sizeof sbuf)) return 0;
         kind = 2;
+    } else if (self->arena->nodes[n].kind == N_VAR
+               && self->sym->is_const_name(self->arena->nodes[n].text2)) {
+        char cn[MAX_TEXT];
+        if (self->sym->var_cname(self->arena->nodes[n].text2, cn, sizeof cn) != 0)
+            return 0;
+        snprintf(sbuf, (size_t)MAX_TEXT, "%s", cn);
+        kind = 3;
     } else if (map_fold_num(self, n, &nv)) {
         kind = 1;
     }
@@ -1157,9 +1164,17 @@ static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *dis
                 *first = self->arena->nodes[keys[j]].line;
                 return 1;
             }
-        } else {
+        } else if (kind == 2) {
             char pb[MAX_TEXT];
             if (map_decode_str(self, keys[j], pb, (int)sizeof pb)
+                && strcmp(pb, sbuf) == 0) {
+                *first = self->arena->nodes[keys[j]].line;
+                return 1;
+            }
+        } else {
+            char pb[MAX_TEXT];
+            if (self->arena->nodes[keys[j]].kind == N_VAR
+                && self->sym->var_cname(self->arena->nodes[keys[j]].text2, pb, sizeof pb) == 0
                 && strcmp(pb, sbuf) == 0) {
                 *first = self->arena->nodes[keys[j]].line;
                 return 1;
