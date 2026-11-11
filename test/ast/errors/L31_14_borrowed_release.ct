@@ -1,0 +1,13 @@
+/* L31-14: a view bound from `get` is borrowed; retain() before release. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> row = {1, 2};
+    g.push(row);
+    Vec<int> x = g.get(0);
+    x.release();
+    return 0;
+}

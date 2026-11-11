@@ -346,6 +346,13 @@ pub struct Expr {
     int *nmaps;
 } use ExprOps;
 
+/* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
+   a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
+   bit. An owning value (`from`, `{}`, `retain`, `pop`, a call result) answers 0.
+   The statement layer records the same bit on a declaration / assignment, so
+   the walk is a unit-level function instead of one more `ExprOps` method. */
+pub int expr_borrow_root(struct Expr *self, int n);
+
 /* Argument count of a call: `parse_args` hands back the first node of the
    chain, or 0 for an empty list, and a fresh node carries `next = -1`. */
 static int arg_count(struct Arena *a, int first)
@@ -3841,6 +3848,17 @@ impl ExprOps for Expr {
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
                                      self->in_generic_bound);
                         } else if ((inm = self->inst_inherent_method(ibase, fname)) >= 0) {
+                            /* Phase 31 S23a (L31-13 / L31-14): a borrow carries
+                               no ownership, so releasing it would free storage
+                               the container still owns -- whether the view is
+                               the receiver itself (`g.get(0).release()`,
+                               `item.release()`) or a local bound earlier
+                               (`x = g.get(0); x.release();`). */
+                            if (strcmp(fname, "release") == 0
+                                && expr_borrow_root(self, n))
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    "cannot release a borrowed container view; call retain() first",
+                                    self->sup->mem->path);
                             /* Phase 29: an inherent method of an instantiated
                                struct dispatches statically. The receiver's
                                concrete type is already in `ibase`, so the
@@ -5321,4 +5339,35 @@ pub struct Expr *expr_get(void);
 struct Expr *expr_get(void)
 {
     return &g_expr;
+}
+
+/* Phase 31 S23a: the borrowed-view provenance of an expression root. A chain
+   of fields / derefs is followed to the value underneath, because a view of a
+   view is still borrowed. */
+int expr_borrow_root(struct Expr *self, int n)
+{
+    while (n >= 0) {
+        int k = self->arena->nodes[n].kind;
+        if (k == N_MEMBER || k == N_ARROW || k == N_DEREF) {
+            n = self->arena->nodes[n].a;
+            continue;
+        }
+        if (k == N_VAR) {
+            int vi = self->sym->find_var(self->arena->nodes[n].text2);
+            return vi >= 0 && self->sym->vars[vi].cview;
+        }
+        if (k == N_MCALL
+            && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
+            && (strcmp(self->arena->nodes[n].text2, "get") == 0
+                || strcmp(self->arena->nodes[n].text2, "entry") == 0)) {
+            const char *ty = self->arena->nodes[n].text;
+            if (strncmp(ty, "struct Vec_", 11) == 0
+                || strncmp(ty, "Vec_", 4) == 0
+                || strncmp(ty, "struct Map_", 11) == 0
+                || strncmp(ty, "Map_", 4) == 0)
+                return 1;
+        }
+        return 0;
+    }
+    return 0;
 }

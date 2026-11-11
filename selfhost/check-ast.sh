@@ -6086,6 +6086,14 @@ p29_neg L31_5_vec_addr "cannot take the address of a container subscript; bind i
 # reported by that tag.
 p29_neg L31_inst_tag_collision "the instance name 'Vec_int' collides with a declared struct" 11:14
 p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (use int, long or char *)" 7:24
+# ---- Phase 31 S23a: a borrowed view carries no ownership ----
+# The bit lives on the local symbol and is set from `get` / `entry` / `foreach
+# item` (and propagated through an assignment), so every release form below is
+# refused at the method name rather than at a later C error.
+p29_neg L31_14_borrowed_release "cannot release a borrowed container view; call retain() first" 11:7
+p29_neg L31_14_copy_release "cannot release a borrowed container view; call retain() first" 14:7
+p29_neg L31_13_foreach_release "cannot release a borrowed container view; call retain() first" 11:14
+p29_neg L31_14_chain_release "cannot release a borrowed container view; call retain() first" 10:14
 # 1025 elements: the cap refuses the list before any element is materialised.
 {
     printf 'int main(void)\n{\n    Vec<int> v = {'

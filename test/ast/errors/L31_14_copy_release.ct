@@ -1,0 +1,16 @@
+/* L31-14: assignment carries the borrowed provenance, so the copy is not
+   an owner either. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> row = {1, 2};
+    g.push(row);
+    Vec<int> x = g.get(0);
+    Vec<int> y;
+    y = x;
+    y.release();
+    return 0;
+}

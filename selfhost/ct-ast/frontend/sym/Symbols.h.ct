@@ -134,6 +134,11 @@ pub struct Var {
        parameter (whose lifetime the caller owns) apart from a local
        declaration, which a `return` may hand back (D5). */
     int  borrowed;
+    /* Phase 31 S23a: 1 when a container local holds a borrowed view (`get` /
+       `entry` / `foreach item`, or a copy of one). The view does not own the
+       buffer, so `release` on it is refused (L31-13/L31-14). It is set and
+       cleared at parse time; `borrowed` above stays the `borrow` pointer flag. */
+    int  cview;
     int  is_param;
     /* A declared function or trait-method parameter, not only a `borrow` one.
        C decays `int a[]` into `int *`, so `foreach` must refuse an array
@@ -574,6 +579,7 @@ impl SymbolOps for Symbols {
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
         self->vars[i].borrowed = 0;
+        self->vars[i].cview = 0;
         self->vars[i].is_param = 0;
         self->vars[i].is_fnparam = 0;
         self->vars[i].is_const = 0;
@@ -619,6 +625,7 @@ impl SymbolOps for Symbols {
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
         self->vars[i].borrowed = 0;
+        self->vars[i].cview = 0;
         self->vars[i].is_param = 0;
         self->vars[i].is_fnparam = 0;
         self->vars[i].is_const = 0;

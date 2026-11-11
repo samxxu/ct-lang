@@ -1,0 +1,14 @@
+/* L31-13: `item` is a borrowed view of the stored element. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> row = {1, 2};
+    g.push(row);
+    foreach (g) {
+        item.release();
+    }
+    return 0;
+}

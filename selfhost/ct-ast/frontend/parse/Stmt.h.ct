@@ -2440,6 +2440,12 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
+        /* Phase 31 S23a (L31-13): inside a container loop `item` is a borrowed
+           view of the stored element, never an owner. */
+        if (aux != 0) {
+            int ivi = self->sym->find_var("item");
+            if (ivi >= 0) self->sym->vars[ivi].cview = 1;
+        }
         /* D29-14: an array or `Vec` also binds the read-only index `i`. A `Map`
            binds it too, so that naming it reports L29-18 instead of an
            undeclared name; the emitter prints no `i` line for a `Map` body. */
@@ -3022,6 +3028,17 @@ impl StmtOps for Stmt {
                         "a container is moved, not copied; use retain() or a function result",
                         self->sup->mem->path);
             }
+            /* Phase 31 S23a (L31-14): a local bound from a borrowed view keeps
+               that provenance, so its later `release` is refused. An owning
+               initialiser (`from`, `{}`, `retain`, `pop`, a call result) leaves
+               the bit clear. */
+            if (frontend::sym::ct_is_container_type(typebuf)) {
+                int vi = self->sym->find_var(name);
+                if (vi >= 0)
+                    self->sym->vars[vi].cview =
+                        frontend::parse::expr_borrow_root(self->ex,
+                                                          self->arena->nodes[n].a);
+            }
             /* Phase 21 S2: a closure literal on the right of a function-pointer
                declaration is bound to the declared type here; the literal is
                checked, never emitted. */
@@ -3178,6 +3195,16 @@ impl StmtOps for Stmt {
             if (check_closure_assign(self, n, scol) != 0) return -1;
             if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
+            /* Phase 31 S23a (L31-14): rebinding a container local takes the
+               provenance of the source -- a borrowed view stays borrowed, an
+               owning value (`from`, `retain`, `pop`, a call) clears the bit. */
+            if (k == N_VAR) {
+                int vi = self->sym->find_var(self->arena->nodes[e].text2);
+                if (vi >= 0
+                    && frontend::sym::ct_is_container_type(self->sym->vars[vi].type))
+                    self->sym->vars[vi].cview =
+                        frontend::parse::expr_borrow_root(self->ex, rhs);
+            }
         } else if (self->arena->nodes[e].kind == N_POST) {
             n = e;
         } else {
