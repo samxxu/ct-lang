@@ -1,0 +1,25 @@
+/* Phase 31 D31-21 (E31-28): `Vec::from(0, 0)` and `Map::from(0, 0)` answer a
+   non-zero header, so an empty literal is releasable; a named zero handle
+   inside a container is skipped by the cascade instead of aborting. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> e = {};
+    Vec<int> row = {1};
+    Vec<Vec<int>> g = {e, row};
+    Map<char *, int> m = {};
+    Vec<int> z;
+    z.h = 0;
+    Vec<Vec<int>> h = {z};
+    Vec<int> g0 = g.get(0);
+    Vec<int> g1 = g.get(1);
+
+    printf("%d %d %d %d %d\n", e.len(), g0.len(), g1.get(0), m.len(), h.len());
+    g.release();
+    h.release();
+    e.release();
+    m.release();
+    row.release();
+    return 0;
+}
