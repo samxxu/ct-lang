@@ -1,0 +1,8 @@
+/* E29-5: only `Vec` / `Map` ship with the compiler. The rest of `std` still
+   needs `ct get std`, so this import must not resolve here. */
+import std::str;
+
+int main(void)
+{
+    return 0;
+}

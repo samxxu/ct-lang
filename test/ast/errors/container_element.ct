@@ -1,0 +1,5 @@
+int main(void)
+{
+    Vec<Vec<int> > nested;
+    return 0;
+}

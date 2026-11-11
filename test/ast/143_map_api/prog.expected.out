@@ -1,0 +1,13 @@
+put 1 1 1
+len 3
+get 1 2
+miss 1
+dup 1, value 20
+entry amy 20
+oob 0
+remove 1 2
+shift amy 20
+shared 3 4
+release 1
+left 3
+freed 0

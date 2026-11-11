@@ -1,0 +1,11 @@
+/* B6 / L26-2: a generic function is never exported, even beside a `pub`
+   generic struct; its instances stay private to the unit. */
+pub struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+pub T id<T>(T x)
+{
+    return x;
+}

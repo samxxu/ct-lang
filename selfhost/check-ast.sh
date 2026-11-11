@@ -5744,10 +5744,56 @@ p29_diag generic_struct_arity "a generic struct takes at most 2 type parameters"
 p29_diag generic_struct_void "type argument 'void' cannot instantiate a generic struct"
 p29_diag generic_struct_depth "generic type arguments nest deeper than 4"
 p29_diag builtin_type_redecl "'Vec' is a built-in type and cannot be redeclared"
-p29_diag foreach_container_element "foreach cannot iterate a container of 'struct Vec_int' (interface, vptr-bearing or container element)"
+p29_diag foreach_container_element "foreach cannot iterate a container of 'struct Speaker_iface' (interface, vptr-bearing or container element)"
 p29_diag foreach_container_index_write "the foreach index 'i' is read-only"
 p29_diag foreach_container_redeclare "cannot redeclare the foreach binding 'item'"
 p29_diag foreach_container_map_i "'i' has no meaning in a Map foreach; use item.key / item.value"
+p29_diag container_copy "a container is moved, not copied; use retain() or a function result"
+p29_diag container_own "a container cannot hold an 'own' or 'borrow' value"
+p29_diag container_element "a built-in container cannot be an element of another container"
+p29_diag container_element_map "a built-in container cannot be an element of another container"
+
+# E29-5 / L29-W1: a project-local `vendor/std` is shadowed by the built-in
+# layer, with one warning, and the decoy module inside it is never read.
+repo_root=$(pwd)
+( cd test/modules/p29_builtin_std \
+  && CT_STD_DIR="$repo_root/lib/std" "$work/ct-ast" main.ct -o "$work/p29w1.c" ) \
+  >"$work/p29w1.out" 2>"$work/p29w1.err"
+if [ $? -eq 0 ] \
+   && grep -Fq "the built-in Vec/Map supersede a project-local 'vendor/std' (ignored)" "$work/p29w1.err" \
+   && grep -Fq "struct Vec_int" "$work/p29w1.c"; then
+    if cc -Wall -Wextra -std=c99 "$work/p29w1.c" -o "$work/p29w1" \
+            >"$work/p29w1.cc.out" 2>"$work/p29w1.cc.err" \
+       && "$work/p29w1" >"$work/p29w1.run" 2>&1 \
+       && cmp -s "$work/p29w1.run" test/modules/p29_builtin_std/expected.out; then
+        ok "p29 (builtin_std shadow warning)"
+    else
+        bad "p29: builtin_std" "$(head -2 "$work/p29w1.cc.err")"
+    fi
+else
+    bad "p29: builtin_std" "$(head -2 "$work/p29w1.err")"
+fi
+
+# E29-5: the built-in layer is containers only -- `std::str` still needs
+# `ct get std`, so an uninstalled module must not resolve.
+if "$work/ct-ast" build test/modules/p29_builtin_std/needs_std.ct -o "$work/p29e5" \
+        >"$work/p29e5.out" 2>"$work/p29e5.err"; then
+    bad "p29: builtin_std scope" "expected a resolve failure for std::str"
+elif grep -Fq "cannot resolve import 'std/str'" "$work/p29e5.err"; then
+    ok "p29 (builtin_std is containers only)"
+else
+    bad "p29: builtin_std scope" "$(head -2 "$work/p29e5.err")"
+fi
+
+# E29-13 / B6: a `pub` generic function stays rejected across units (L26-2).
+if "$work/ct-ast" build test/modules/errors/generic_struct_pub_fn.ct -o "$work/p29b6" \
+        >"$work/p29b6.out" 2>"$work/p29b6.err"; then
+    bad "p29: generic_struct_pub_fn" "expected L26-2, got exit 0"
+elif grep -Fq "generic functions cannot be pub" "$work/p29b6.err"; then
+    ok "p29 (generic_struct_pub_fn)"
+else
+    bad "p29: generic_struct_pub_fn" "$(head -2 "$work/p29b6.err")"
+fi
 
 # 144: one C struct per instance, and an inherent method per instance.
 "$work/ct-ast" test/ast/144_generic_struct_user/prog.ct -o "$work/p29s.c" \

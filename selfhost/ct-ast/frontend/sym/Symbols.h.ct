@@ -370,6 +370,10 @@ pub int ct_inst_add(const char *name, const char *tmpl, int nargs, const char *a
 /* Phase 29 §2.2: the canonical spelling of one type argument (trim, collapse
    whitespace, glue `*` to the previous token) and the encoded instance name. */
 pub int ct_type_canon(const char *in, char *out, int cap);
+/* Phase 29 L29-9/L29-11: 1 when `type` is a by-value built-in container
+   (`struct Vec_*` / `struct Map_*`). A pointer to one is not a container
+   value, so `Vec<int> *p` answers 0. */
+pub int ct_is_container_type(const char *type);
 pub int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2, char *out, int cap);
 /* Phase 29: rewrite a spelling that still names an instance (`Vec<int>`,
    optionally prefixed by `struct`) to `struct <encoded>`. -1 when it is not an
@@ -1641,6 +1645,21 @@ int ct_impl_matches(int ii, int inst)
     for (i = 0; i < t[ii].ntparams; i++)
         if (bind_at[i] < 0) return 0;
     return 1;
+}
+
+/* Phase 29: a by-value built-in container. Trailing blanks are ignored; a
+   trailing `*` means the value is a pointer and therefore not a container. */
+int ct_is_container_type(const char *type)
+{
+    size_t n;
+
+    if (type == 0) return 0;
+    n = strlen(type);
+    while (n > 0 && (type[n - 1] == ' ' || type[n - 1] == '\t')) n--;
+    if (n > 0 && type[n - 1] == '*') return 0;
+    if (strncmp(type, "struct Vec_", 11) == 0) return 1;
+    if (strncmp(type, "struct Map_", 11) == 0) return 1;
+    return 0;
 }
 
 /* `char *` -> `char*`, `unsigned   int` -> `unsigned int`, leading and trailing

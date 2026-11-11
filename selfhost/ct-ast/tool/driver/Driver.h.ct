@@ -381,6 +381,18 @@ impl DriverOps for Driver {
            `Map` need neither an import nor an `-I`; its nodes are spliced in
            front of the input's below. A missing layer is not an error. */
         stdprog = self->load_builtin(in);
+        /* L29-W1: a project-local `vendor/std` is never read; the built-in
+           layer wins, but the shadowing is not silent. */
+        if (stdprog >= 0) {
+            FILE *vs = fopen("vendor/std", "r");
+            if (vs) {
+                fclose(vs);
+                if (tool::diag::ct_std_shadow_warn(1, 1,
+                        "the built-in Vec/Map supersede a project-local 'vendor/std' (ignored)",
+                        "vendor/std") != 0)
+                    return self->fail("too many warnings");
+            }
+        }
         /* The layer opens a namespace; the input starts at the root again. */
         self->sym->ns[0] = 0;
         self->p->ns_decl[0] = 0;

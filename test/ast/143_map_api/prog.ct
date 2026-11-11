@@ -1,0 +1,42 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> m;
+    Map<char *, int> shared;
+    MapEntry<char *, int> e;
+    int *slot;
+    int left;
+
+    m.h = 0;
+    m.entries = 0;
+    printf("put %d %d %d\n", m.put("bo", 1), m.put("amy", 2), m.put("cy", 3));
+    printf("len %d\n", m.len());
+
+    slot = m.get("amy");
+    printf("get %d %d\n", slot != 0, *slot);
+    printf("miss %d\n", m.get("zz") == 0);
+
+    /* a duplicate key keeps its position and overwrites the value */
+    printf("dup %d, value %d\n", m.put("amy", 20), *m.get("amy"));
+
+    e = m.entry(1);
+    printf("entry %s %d\n", e.key, e.value);
+    e = m.entry(9);
+    printf("oob %d\n", e.value);
+
+    /* remove shifts the tail left, so the insertion order survives */
+    printf("remove %d %d\n", m.remove("bo"), m.len());
+    e = m.entry(0);
+    printf("shift %s %d\n", e.key, e.value);
+
+    shared = m.retain();
+    shared.put("dee", 4);
+    printf("shared %d %d\n", m.len(), *m.get("dee"));
+    left = m.release();
+    printf("release %d\n", left);
+    printf("left %d\n", shared.len());
+    left = shared.release();
+    printf("freed %d\n", left);
+    return 0;
+}

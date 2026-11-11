@@ -1,0 +1,15 @@
+#include <stdlib.h>
+
+struct Box { int n; } use Drop;
+
+impl Drop for Box {
+    void drop() { }
+}
+
+int main(void)
+{
+    own Box *b = malloc(sizeof(struct Box));
+    Vec<Box *> held;
+    held.push(b);
+    return 0;
+}

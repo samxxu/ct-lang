@@ -1,12 +1,12 @@
 #include <stdio.h>
 
+trait Speaker { void hi(); }
+
 int main(void)
 {
-    Vec<Vec<int> > nested;
-    nested.h = 0;
-    nested.data = 0;
-    foreach (nested) {
-        printf("x\n");
+    Vec<Speaker> edges;
+    foreach (edges) {
+        item.hi();
     }
     return 0;
 }

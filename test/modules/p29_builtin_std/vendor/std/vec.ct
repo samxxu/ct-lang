@@ -1,0 +1,3 @@
+// A decoy module: the compiler must never read this file. Its shape would not
+// even compile, which is how the fixture proves the built-in layer wins.
+struct Vec { int len; int *data; }

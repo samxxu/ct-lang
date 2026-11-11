@@ -50,6 +50,7 @@ trait DiagStore {
     int  record_amb_warn(int line, int col, const char *method, const char *msg,
                          const char *path);
     int  record_loop_warn(int line, int col, const char *msg, const char *path);
+    int  record_std_shadow(int line, int col, const char *msg, const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
     int  emit(int json, int to_stderr);
@@ -201,8 +202,26 @@ impl DiagStore for Diag {
         return 0;
     }
 
-    /* `path_line` 0 means a definite leak; otherwise it is the conditional
-       return that leaves the object behind. */
+    /* L29-W1: the built-in container layer wins over a project-local
+       `vendor/std`; the warning names the shadowed path. */
+    int record_std_shadow(int line, int col, const char *msg, const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 8;
+        w->line = line;
+        w->col = col;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        w->var[0] = 0;
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
     int record_leak(int kind, int line, int path_line, const char *file,
                     const char *var, const char *tname)
     {
@@ -333,6 +352,14 @@ impl DiagStore for Diag {
                     fputs("\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 8) {
+                    fputs("\"type\":\"std_shadow\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else {
                     fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -374,6 +401,8 @@ impl DiagStore for Diag {
                     fprintf(tf, "%s %s: ambiguous method: '%s' %s\n",
                             loc, sev, w->var, w->msg);
                 else if (w->kind == 7)
+                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                else if (w->kind == 8)
                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
                 else
                     fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted\n",
@@ -461,6 +490,12 @@ pub int ct_loop_warn(int line, int col, const char *msg, const char *path);
 int ct_loop_warn(int line, int col, const char *msg, const char *path)
 {
     return g_diag.record_loop_warn(line, col, msg, path);
+}
+
+pub int ct_std_shadow_warn(int line, int col, const char *msg, const char *path);
+int ct_std_shadow_warn(int line, int col, const char *msg, const char *path)
+{
+    return g_diag.record_std_shadow(line, col, msg, path);
 }
 
 pub int ct_leak_warn(int kind, int line, int path_line, const char *file, const char *var, const char *tname);

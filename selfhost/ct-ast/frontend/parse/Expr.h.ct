@@ -1800,6 +1800,13 @@ impl ExprOps for Expr {
                      tname, nt2, nargs);
             return self->sup->fail(msg);
         }
+        /* L29-11: containers have value semantics but cannot be nested, so a
+           container as an element (or a Map key/value) is rejected here. */
+        if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
+            && (frontend::sym::ct_is_container_type(c1)
+                || (nargs > 1 && frontend::sym::ct_is_container_type(c2))))
+            return self->sup->fail(
+                "a built-in container cannot be an element of another container");
         if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
@@ -2319,6 +2326,8 @@ impl ExprOps for Expr {
                 || strcmp(self->lex->toktext, "<<=") == 0 || strcmp(self->lex->toktext, ">>=") == 0)) {
             int op = 0, k2;
             char oc = self->lex->toktext[0];
+            int aline = self->lex->tokline;
+            int acol = self->lex->tokstart - self->lex->lstart + 1;
             k2 = self->arena->nodes[left].kind;
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
                 return self->sup->fail("assignment target is not assignable");
@@ -2343,6 +2352,20 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             right = self->parse_expr();
             if (right < 0) return -1;
+            /* L29-9: assigning one container binding to another copies it,
+               which the container protocol forbids. */
+            if (op == 0 && k2 == N_VAR
+                && self->arena->nodes[right].kind == N_VAR) {
+                int vi = self->sym->find_var(self->arena->nodes[left].text2);
+                int vj = self->sym->find_var(self->arena->nodes[right].text2);
+                if (vi >= 0 && vj >= 0
+                    && frontend::sym::ct_is_container_type(self->sym->vars[vi].type)
+                    && strcmp(self->sym->vars[vi].type,
+                              self->sym->vars[vj].type) == 0)
+                    return tool::diag::ct_sem_error(aline, acol,
+                        "a container is moved, not copied; use retain() or a function result",
+                        self->sup->mem->path);
+            }
             n = self->sup->new_node(N_ASSIGN);
             if (n < 0) return -1;
             self->arena->nodes[n].a = left;
@@ -2823,6 +2846,32 @@ impl ExprOps for Expr {
                                     arg_count(self->arena, args)
                                         + self->closure_arg_count(args), want) != 0)
                                 return -1;
+                            /* L29-10 / L29-11: a container never stores an
+                               `own` / `borrow` value, nor another container. */
+                            if (frontend::sym::ct_is_container_type(ibase)
+                                && (strcmp(fname, "push") == 0
+                                    || strcmp(fname, "set") == 0
+                                    || strcmp(fname, "put") == 0)) {
+                                int ai, vi;
+                                for (ai = args; ai > 0; ai = self->arena->nodes[ai].next) {
+                                    char anm[MAX_TEXT];
+                                    if (self->arena->nodes[ai].kind != N_VAR) continue;
+                                    snprintf(anm, sizeof anm, "%s",
+                                             self->arena->nodes[ai].text2);
+                                    vi = self->sym->find_var(anm);
+                                    if (vi < 0) continue;
+                                    if (self->sym->vars[vi].autodrop
+                                        || self->sym->vars[vi].borrowed)
+                                        return tool::diag::ct_sem_error(mline, mcol,
+                                            "a container cannot hold an 'own' or 'borrow' value",
+                                            self->sup->mem->path);
+                                    if (frontend::sym::ct_is_container_type(
+                                            self->sym->vars[vi].type))
+                                        return tool::diag::ct_sem_error(mline, mcol,
+                                            "a built-in container cannot be an element of another container",
+                                            self->sup->mem->path);
+                                }
+                            }
                             self->arena->nodes[m].aux = arrow ? 10 : 9;
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", ibase);
                         } else if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {

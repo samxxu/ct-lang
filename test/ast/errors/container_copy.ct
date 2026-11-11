@@ -1,0 +1,6 @@
+int main(void)
+{
+    Vec<int> nums;
+    Vec<int> copy = nums;
+    return 0;
+}
