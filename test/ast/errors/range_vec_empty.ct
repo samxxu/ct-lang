@@ -1,0 +1,8 @@
+/* P29: a `Vec<T>` target keeps Phase 24's bound rules verbatim (L24-3). An
+   empty range has no elements, and `from(arr, 0)` would hide the mistake behind
+   an empty container, so this stays a compile-time error. */
+int main(void)
+{
+    Vec<int> v = 8..4 { $ };
+    return v.len();
+}

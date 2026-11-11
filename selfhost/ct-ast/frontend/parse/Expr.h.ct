@@ -118,6 +118,10 @@ pub trait ExprOps {
     /* Phase 29: the method node `impl<T> Name<Args>` declares for the receiver
        type `ibase` (a `struct <instance>` spelling), or -1. */
     int  inst_inherent_method(const char *ibase, const char *fname);
+    /* P29-2: the receiverless (static) method of an instance, and the
+       lookahead that tells `Vec<int>::from(...)` from `Vec < 3`. */
+    int  inst_static_method(const char *ibase, const char *fname);
+    int  static_call_ahead(void);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  tok_is_type_name(void);
@@ -2734,6 +2738,124 @@ impl ExprOps for Expr {
         return -1;
     }
 
+    /* Phase 29 P29-2: the static (receiverless) method `ibase::fname`, or -1.
+       Same walk as `inst_inherent_method`, but only a method the impl block
+       marked `static` answers: `Vec<int>::from(items, n)` must never resolve to
+       an instance method, and an instance call must never resolve to `from`. */
+    int inst_static_method(const char *ibase, const char *fname)
+    {
+        int ii, nimpls, inst, m;
+        char base[MAX_TEXT];
+        struct StructImpl *im;
+
+        if (strncmp(ibase, "struct ", 7) != 0) return -1;
+        snprintf(base, sizeof base, "%s", ibase + 7);
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst < 0) return -1;
+        im = frontend::sym::ct_impls(&nimpls);
+        for (ii = 0; im && ii < nimpls; ii++) {
+            if (im[ii].use[0]) continue;
+            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                 m = self->arena->nodes[m].next)
+                if (self->arena->nodes[m].c
+                    && strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+        }
+        return -1;
+    }
+
+    /* P29-2 lookahead: the cursor is on a template name. 1 only when
+       `<type-args>:: <name> (` follows, so `Vec < 3` keeps its comparison
+       shape. The lexer has no peek, hence the save/restore. */
+    int static_call_ahead(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
+        int depth, r;
+        long snum;
+        char stext[MAX_TEXT];
+        char ssuf[8];
+
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        sfloat = self->lex->tokfloat;
+        strunc = self->lex->toktrunc;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        depth = 0;
+        r = 0;
+        self->sup->lex_next();          /* the template name */
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)) {
+            self->lex->pos = sp;
+            self->lex->bol = sbol;
+            self->lex->tok = stok;
+            self->lex->toknum = snum;
+            self->lex->line = sline;
+            self->lex->tokline = stokline;
+            self->lex->tokstart = sstart;
+            self->lex->lstart = slstart;
+            self->lex->tokfloat = sfloat;
+            self->lex->toktrunc = strunc;
+            snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+            snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+            return 0;
+        }
+        self->sup->lex_next();          /* the `<` */
+        depth = 1;
+        while (self->lex->tok != T_EOF) {
+            const char *t = self->lex->toktext;
+            if (self->lex->tok == T_PUNCT) {
+                if (t[0] == '<' && t[1] == 0) {
+                    depth++;
+                } else if (t[0] == '>' && t[1] == 0 && depth > 0) {
+                    depth--;
+                    if (depth == 0) {
+                        self->sup->lex_next();
+                        break;
+                    }
+                } else if (strcmp(t, ">>") == 0 && depth > 1) {
+                    depth -= 2;
+                    if (depth == 0) {
+                        self->sup->lex_next();
+                        break;
+                    }
+                } else if (strcmp(t, ";") == 0 || strcmp(t, "{") == 0
+                           || strcmp(t, "}") == 0 || strcmp(t, "(") == 0
+                           || strcmp(t, ")") == 0 || strcmp(t, "=") == 0) {
+                    break;
+                }
+            }
+            self->sup->lex_next();
+        }
+        if (depth == 0 && self->lex->tok == T_PUNCT
+            && strcmp(self->lex->toktext, "::") == 0) {
+            self->sup->lex_next();
+            if (self->lex->tok == T_ID) {
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT
+                    && strcmp(self->lex->toktext, "(") == 0) r = 1;
+            }
+        }
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        self->lex->tokfloat = sfloat;
+        self->lex->toktrunc = strunc;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        return r;
+    }
+
     int parse_postfix(void)
     {
         int n, m, idx, args, mline, mcol;
@@ -3449,6 +3571,50 @@ impl ExprOps for Expr {
         if (self->lex->tok == T_ID) {
             id_line = self->lex->tokline;
             id_col = self->lex->tokstart - self->lex->lstart + 1;
+            /* P29-2: `Vec<int>::from(items, n)` -- the static (receiverless)
+               method of an instantiated struct. Only a name the template table
+               already holds enters here, and the lookahead insists on `:: name
+               (` after the closing `>`, so `a < b` on a variable keeps its
+               comparison meaning (D26-3). The node carries the instance
+               spelling, so the emitter writes `<Inst>_<method>(...)`. The
+               cursor is still on the template name, so `parse_inst_type` reads
+               `Vec<int>` exactly as a type position would. */
+            if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0
+                && self->static_call_ahead()) {
+                char ibase[MAX_TEXT];
+                char sm[MAX_TEXT];
+                char smsg[MAX_TEXT + 64];
+                int mn;
+                ibase[0] = 0;
+                if (self->parse_inst_type(ibase, sizeof ibase) != 0) return -1;
+                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0))
+                    return self->sup->fail("expected '::' after the instance type");
+                self->sup->lex_next();
+                if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
+                snprintf(sm, sizeof sm, "%s", self->lex->toktext);
+                self->sup->lex_next();
+                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0))
+                    return self->sup->fail("a static method call needs an argument list");
+                args = self->parse_args();
+                if (args < 0) return -1;
+                if (self->inst_static_method(ibase, sm) < 0) {
+                    snprintf(smsg, sizeof smsg, "'%s' has no static method '%s'",
+                             ibase, sm);
+                    return self->sup->fail(smsg);
+                }
+                if (self->map_arity(id_line, id_col, ibase, sm,
+                                    arg_count(self->arena, args)
+                                    + self->closure_arg_count(args)) != 0)
+                    return -1;
+                mn = self->sup->new_node(N_MCALL);
+                if (mn < 0) return -1;
+                self->arena->nodes[mn].a = -1;
+                self->arena->nodes[mn].b = (args == 0) ? -1 : args;
+                self->arena->nodes[mn].aux = 11;
+                snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s", ibase);
+                snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", sm);
+                return mn;
+            }
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);

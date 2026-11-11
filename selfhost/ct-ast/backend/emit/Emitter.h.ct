@@ -1498,6 +1498,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     struct StructInst *ins;
     struct StructTmpl *tps;
     int exported;
+    int statik;
 
     ins = frontend::sym::ct_insts(&ninsts);
     tps = frontend::sym::ct_tmpls(&ntmpls);
@@ -1516,11 +1517,15 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     else
         snprintf(cname, sizeof cname, "%s_%s", iname, self->arena->nodes[m].text2);
     impl_inst_bind(self, ki, ii);
+    /* P29-2: `c` marks a static (receiverless) method -- `Vec_int_from` takes
+       only its own parameters and gets no `_self` local. */
+    statik = self->arena->nodes[m].c;
     if (header) {
         if (self->emit_type_name(mret, cname) != 0) return -1;
-        fputs("(void *self", self->out);
+        if (statik) fputs("(", self->out);
+        else fputs("(void *self", self->out);
         for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
-            fputs(", ", self->out);
+            fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
             if (self->emit_type_name_dims(self->arena->nodes[k].text,
                                           self->arena->nodes[k].text2,
                                           self->arena->nodes[k].text3) != 0) return -1;
@@ -1533,22 +1538,25 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
        output clean under -Wall, exactly like the Drop / Handback bodies. */
     if (!exported) fputs("__attribute__((unused)) ", self->out);
     if (self->emit_type_name(mret, cname) != 0) return -1;
-    fputs("(void *self", self->out);
+    if (statik) fputs("(", self->out);
+    else fputs("(void *self", self->out);
     for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
-        fputs(", ", self->out);
+        fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
         if (self->emit_type_name_dims(self->arena->nodes[k].text,
                                       self->arena->nodes[k].text2,
                                       self->arena->nodes[k].text3) != 0) return -1;
     }
     fputs(") {\n", self->out);
-    snprintf(one, sizeof one, "struct %s", iname);
-    fprintf(self->out, "    %s *_self = (%s *)self;\n", one, one);
-    self->sym->self_mode = 1;
+    if (!statik) {
+        snprintf(one, sizeof one, "struct %s", iname);
+        fprintf(self->out, "    %s *_self = (%s *)self;\n", one, one);
+    }
+    self->sym->self_mode = statik ? 0 : 1;
     body = self->arena->nodes[m].b;
     for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
         if (!self->node_mentions(body, self->arena->nodes[k].text2))
             fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
-    if (!self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
+    if (!statik && !self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
     for (k = self->arena->nodes[body].a; k >= 0; k = self->arena->nodes[k].next)
         if (self->emit_node(k, 1) != 0) {
             self->sym->self_mode = 0;
@@ -2032,16 +2040,27 @@ impl EmitOps for Emitter {
        The node keeps one element subtree, and every element re-emits it with
        `range_k` set to the current index, so `$` prints as `((int)<k>)` and the
        node count stays independent of how many elements the range has. Streaming
-       the list also keeps it out of the rewritten-initialiser text pool. */
+       the list also keeps it out of the rewritten-initialiser text pool.
+
+       Phase 29 P29-1: a `Vec<T>` target carries the element's C type and the
+       instance name, so the same list becomes a composite literal handed to the
+       built-in constructor: `Vec_int_from((int[4]){ … }, 4)`. The compiler knows
+       only the entry's name and the type argument, never `Vec`'s fields. */
     int emit_range_init(int n)
     {
         long k, start;
         int count, save_k, save_depth;
+        const char *elem, *iname;
         (void)self;
 
         start = self->arena->nodes[n].num;
         count = self->arena->nodes[n].aux;
-        fputs(" = { ", self->out);
+        elem = self->arena->nodes[n].text;
+        iname = self->arena->nodes[n].text2;
+        if (iname[0])
+            fprintf(self->out, " = %s_from((%s[%d]){ ", iname, elem, count);
+        else
+            fputs(" = { ", self->out);
         save_k = self->range_k;
         save_depth = self->range_depth;
         for (k = start; k < start + count; k++) {
@@ -2052,7 +2071,8 @@ impl EmitOps for Emitter {
         }
         self->range_k = save_k;
         self->range_depth = save_depth;
-        fputs(" }", self->out);
+        if (iname[0]) fprintf(self->out, " }, %d)", count);
+        else fputs(" }", self->out);
         return 0;
     }
 
@@ -3779,6 +3799,33 @@ impl EmitOps for Emitter {
                 c2 = self->arena->nodes[n].b;
                 while (c2 >= 0) {
                     fputs(", ", self->out);
+                    if (self->emit_expr(c2) != 0) return -1;
+                    c2 = self->arena->nodes[c2].next;
+                }
+                fputs(")", self->out);
+                return 0;
+            }
+            /* P29-2: a static inherent method (`Vec<int>::from(...)`) -- no
+               receiver, so the call is `<Inst>_<method>(<args>)` and the first
+               argument is an ordinary one, not `self`. */
+            if (self->arena->nodes[n].aux == 11) {
+                char base[MAX_TEXT];
+                char msg2[MAX_TEXT];
+                int si;
+                snprintf(base, sizeof base, "%s", self->arena->nodes[n].text);
+                if (strncmp(base, "struct ", 7) == 0)
+                    snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
+                si = self->sym->find_struct(base);
+                if (si < 0 || !self->sym->structs[si].is_inst) {
+                    snprintf(msg2, sizeof msg2, "no static method '%s' for type '%s'",
+                             self->arena->nodes[n].text2, self->arena->nodes[n].text);
+                    return self->fail_from(n, msg2);
+                }
+                fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
+                        self->arena->nodes[n].text2);
+                c2 = self->arena->nodes[n].b;
+                while (c2 >= 0) {
+                    if (c2 != self->arena->nodes[n].b) fputs(", ", self->out);
                     if (self->emit_expr(c2) != 0) return -1;
                     c2 = self->arena->nodes[c2].next;
                 }

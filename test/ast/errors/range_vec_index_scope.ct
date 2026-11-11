@@ -1,0 +1,10 @@
+/* P29: `$` belongs to the element expression of a range initialiser and to
+   nothing else (Phase 24 L24-10). The `Vec` target does not widen that scope:
+   the declaration below is fine, and the assignment after it is a hard error. */
+int main(void)
+{
+    Vec<int> v = 4..8 { $ };
+    int x;
+    x = $;
+    return x + v.len();
+}

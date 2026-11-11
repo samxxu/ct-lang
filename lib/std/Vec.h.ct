@@ -53,6 +53,36 @@ pub struct Map<K, V> {
 }
 
 impl<T> Vec<T> {
+    /* P29-3: the constructor the range lowering calls. The compiler builds the
+       composite literal and passes its length, so this is the only place that
+       knows how a `Vec` is laid out (B29-3). `items` NULL or `n <= 0` answers an
+       empty handle; a failed allocation answers the same, so the caller always
+       owns a handle it may `release()`. */
+    static Vec<T> from(T *items, int n)
+    {
+        Vec<T> v;
+        void *raw;
+        T *nd;
+        v.h = 0;
+        v.data = 0;
+        if (items == 0 || n <= 0) return v;
+        v.h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
+        if (v.h == 0) return v;
+        raw = malloc((size_t)(n * (int)sizeof(v.data[0])));
+        if (raw == 0) {
+            free(v.h);
+            v.h = 0;
+            return v;
+        }
+        nd = raw;
+        v.data = nd;
+        memcpy(v.data, items, (size_t)(n * (int)sizeof(v.data[0])));
+        v.h->refs = 1;
+        v.h->len = n;
+        v.h->cap = n;
+        return v;
+    }
+
     int len()
     {
         if (self->h == 0) return 0;

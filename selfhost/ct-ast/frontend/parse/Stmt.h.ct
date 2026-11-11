@@ -839,6 +839,31 @@ static int range_element_bad(struct Stmt *self, const char *type, const char *di
     return 0;
 }
 
+/* Phase 29 P29-1: `Vec<T>` as a declaration type. `type` is the C spelling the
+   type parser produced (`struct Vec_int`), so the instance row already holds the
+   element's C type and the encoded name. 0 when the spelling is not a by-value
+   `Vec` instance: a pointer (`struct Vec_int *`) or a `Map` stays on the array
+   path, and the caller keeps the frozen L24-5 text. The compiler reads the
+   row's *type arguments*, never the container's layout (B29-3). */
+static int range_vec_target(const char *type, char *elem, int ecap,
+                            char *iname, int icap)
+{
+    const char *base;
+    int ii;
+    struct StructInst *ins;
+
+    if (strncmp(type, "struct ", 7) != 0) return 0;
+    base = type + 7;
+    if (strpbrk(base, " *[(")) return 0;
+    ins = frontend::sym::ct_insts(0);
+    ii = frontend::sym::ct_inst_find(base);
+    if (!ins || ii < 0) return 0;
+    if (strcmp(ins[ii].tmpl, "Vec") != 0 || ins[ii].nargs != 1) return 0;
+    snprintf(elem, (size_t)ecap, "%s", ins[ii].ctype[0]);
+    snprintf(iname, (size_t)icap, "%s", ins[ii].name);
+    return 1;
+}
+
 /* `loop` and `foreach` are not in `kw[]` (D22-4, D27-1), so only a following
    `(` promotes the spelling to a statement: a label, an expression reference or
    `goto loop;` keeps the ordinary identifier meaning. The save/restore mirrors
@@ -2126,21 +2151,38 @@ impl StmtOps for Stmt {
        array declarator. `parse_range_init` owns everything between the `=` and
        the closing `)` and returns the `N_INIT_RANGE` node; the caller stores it
        as the declarator's initialiser. The `$` flag is raised only around the
-       element expression, so `$` anywhere else stays a syntax error. */
+       element expression, so `$` anywhere else stays a syntax error.
+
+       Phase 29 P29-1: the same shape also builds a `Vec<T>`. The range is still
+       one element subtree, and the node names the element's C type and the
+       instance, so the emitter writes a composite literal and hands it to the
+       built-in constructor (`Vec_<enc>_from`). Nothing here looks at the
+       container's fields (B29-3): the instance row answers both. */
     int parse_range_init(int n, const char *type)
     {
         long start, stop, dim;
         unsigned long cnt;
         int e, elem, line, col, save_dollar;
+        int is_vec;
+        char elemtype[MAX_TEXT];
+        char iname[MAX_TEXT];
         char why[MAX_TEXT];
         char msg[256];
+        const char *close;
 
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
-        /* L24-5: the shape only means something on an array declarator */
-        if (!self->arena->nodes[n].text3[0])
-            return tool::diag::ct_sem_error(line, col,
-                                            "a range initializer declares an array", self->mem->path);
+        elemtype[0] = 0;
+        iname[0] = 0;
+        is_vec = 0;
+        /* L24-5: an array declarator, or (P29-1) a by-value `Vec<T>` */
+        if (!self->arena->nodes[n].text3[0]) {
+            is_vec = range_vec_target(type, elemtype, (int)sizeof elemtype,
+                                      iname, (int)sizeof iname);
+            if (!is_vec)
+                return tool::diag::ct_sem_error(line, col,
+                                                "a range initializer declares an array", self->mem->path);
+        }
         if (range_bound(self, &start) != 0) return -1;
         if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0))
             return self->sup->fail("unexpected token");
@@ -2155,25 +2197,42 @@ impl StmtOps for Stmt {
         if (cnt > 1024)
             return tool::diag::ct_sem_error(line, col, "too many range elements (limit 1024)", self->mem->path);
         /* L24-7: a numeric dimension has to agree with the range. `[]` and any
-           spelling this layer cannot evaluate are left to C. */
-        if (range_dim_value(self->arena->nodes[n].text3, &dim) && dim != (long)cnt) {
+           spelling this layer cannot evaluate are left to C. A `Vec` declares
+           no dimension, so the count is the only size. */
+        if (!is_vec
+            && range_dim_value(self->arena->nodes[n].text3, &dim) && dim != (long)cnt) {
             snprintf(msg, sizeof msg,
                      "the array size '%ld' does not match the range (%ld elements)",
                      dim, (long)cnt);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
-        /* L24-6: scalar elements only */
-        if (range_element_bad(self, type, self->arena->nodes[n].text3, why, (int)sizeof why)) {
+        /* L24-6: scalar elements only -- for a `Vec` the element type is the
+           instance's type argument, not the container struct */
+        if (range_element_bad(self, is_vec ? elemtype : type,
+                              is_vec ? "" : self->arena->nodes[n].text3,
+                              why, (int)sizeof why)) {
             snprintf(msg, sizeof msg, "a range initializer cannot initialize '%s' elements", why);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
-        if (self->sup->expect("(") != 0) return -1;
+        /* P29-1: the element list accepts the parenthesised form Phase 24
+           froze (`0..3($)`) and the brace form the request writes
+           (`4..8 { $ * $ }`); the two mean the same thing, and neither can be
+           confused with a declaration's brace list because `..` was already
+           consumed. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+            close = ")";
+        } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+            close = "}";
+        } else {
+            return self->sup->fail("expected '(' or '{' after the range bound");
+        }
+        self->sup->lex_next();
         save_dollar = self->ex->dollar_ok;
         self->ex->dollar_ok = 1;
         elem = self->ex->parse_expr();
         self->ex->dollar_ok = save_dollar;
         if (elem < 0) return -1;
-        if (self->sup->expect(")") != 0) return -1;
+        if (self->sup->expect(close) != 0) return -1;
         e = self->sup->new_node(N_INIT_RANGE);
         if (e < 0) return -1;
         /* One element subtree, however many elements: the node count does not
@@ -2182,6 +2241,12 @@ impl StmtOps for Stmt {
         self->arena->nodes[e].num = start;
         self->arena->nodes[e].aux = (int)cnt;
         self->arena->nodes[e].line = line;
+        if (is_vec) {
+            /* non-empty `text2` is the emitter's marker for the literal +
+               constructor form */
+            snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", elemtype);
+            snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+        }
         return e;
     }
 

@@ -5984,6 +5984,45 @@ else
     ok "p29 (the template's unit publishes the instance; a second unit reuses it)"
 fi
 
+# ---- Phase 29 P29: the range initialiser builds a `Vec<T>` ----
+# P29-1/P29-3: `4..8 { $ * $ }` is pure lowering -- the emitter writes a
+# composite literal and hands it to `Vec_<enc>_from`, and the container's fields
+# never enter the compiler (the generated `.c` has no `->h` / `->data` here).
+"$work/ct-ast" examples/26_range_vec/range_vec.ct -o "$work/p29rv.c" \
+    >"$work/p29rv.out" 2>"$work/p29rv.err"
+if [ $? -ne 0 ]; then
+    bad "p29 P29-1: range Vec" "ct-ast failed: $(head -3 "$work/p29rv.err")"
+elif ! grep -Fq 'Vec_int_from((int[4]){ ' "$work/p29rv.c"; then
+    bad "p29 P29-1: range Vec" "no composite literal handed to Vec_int_from"
+elif ! grep -Fq 'Vec_char_p_from(' "$work/p29rv.c"; then
+    bad "p29 P29-1: range Vec" "the static entry is not callable from source"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p29rv.c" -o "$work/p29rv.bin" \
+        2>"$work/p29rv.cc" \
+      || ! "$work/p29rv.bin" >"$work/p29rv.run" 2>&1; then
+    bad "p29 P29-1: range Vec" "$(head -4 "$work/p29rv.cc")"
+elif ! diff -u examples/26_range_vec/range_vec.expected.out "$work/p29rv.run" \
+        >"$work/p29rv.diff"; then
+    bad "p29 P29-1: range Vec" "$(head -6 "$work/p29rv.diff")"
+else
+    ok "p29 P29-1 (range initialiser builds a Vec through the entry)"
+fi
+# P29-2: `$` scope, empty range, the 1024 cap and a `Map` target each keep a
+# single positioned diagnostic -- never an `undeclared` fallback.
+p29_neg() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p29neg.c" \
+            >"$work/p29neg.out" 2>"$work/p29neg.err"; then
+        bad "p29: $1" "expected a diagnostic, got exit 0"
+    elif grep -Fq "$2" "$work/p29neg.err" && ! grep -Fiq 'undeclared' "$work/p29neg.err"; then
+        ok "p29 ($1: $2)"
+    else
+        bad "p29: $1" "$(cat "$work/p29neg.err")"
+    fi
+}
+p29_neg range_vec_index_scope "unexpected token"
+p29_neg range_vec_empty "an empty range has no elements"
+p29_neg range_vec_too_many "too many range elements (limit 1024)"
+p29_neg range_vec_map_target "a range initializer declares an array"
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

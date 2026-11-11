@@ -1,0 +1,8 @@
+/* P29: the 1024-element cap follows the range into the constructor path. The
+   composite literal would otherwise be a 2000-element initialiser inside one
+   expression, which is exactly what the cap exists to refuse (D24-10). */
+int main(void)
+{
+    Vec<int> v = 0..2000 { $ };
+    return v.len();
+}

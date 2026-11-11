@@ -2658,7 +2658,7 @@ impl ParseOps for Parser {
         char ruse[MAX_TEXT];
         char ret[MAX_TEXT];
         char mname[MAX_TEXT];
-        int nt, nargs, line, node, tail, mnode, params, body, ti, k, mline;
+        int nt, nargs, line, node, tail, mnode, params, body, ti, k, mline, is_static;
 
         nt = 0;
         nargs = 0;
@@ -2765,6 +2765,19 @@ impl ParseOps for Parser {
                && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             mline = self->lex->tokline;
             ret[0] = 0;
+            /* P29-2: `static Vec<T> from(T *items, int n)` -- an inherent
+               method with no receiver. It is emitted as `<Inst>_<method>` with
+               no `self` parameter, so a container can be built from an array
+               without the compiler knowing the container's fields (B29-3). A
+               trait block fills vtable slots, which a receiverless function
+               cannot do, so `use` rejects it. */
+            is_static = 0;
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
+                if (use[0])
+                    return self->sup->fail("a static method cannot implement a trait");
+                is_static = 1;
+                self->sup->lex_next();
+            }
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
@@ -2772,7 +2785,7 @@ impl ParseOps for Parser {
             snprintf(mname, sizeof mname, "%s", self->lex->toktext);
             self->sup->lex_next();
             if (self->sup->push_scope() != 0) return -1;
-            if (self->sup->declare_var("self", "void *") != 0) {
+            if (!is_static && self->sup->declare_var("self", "void *") != 0) {
                 self->sup->pop_scope();
                 return -1;
             }
@@ -2815,6 +2828,9 @@ impl ParseOps for Parser {
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = ti;
             self->arena->nodes[mnode].aux = -1;
+            /* P29-2: `c` marks a receiverless method; the emitter drops the
+               `void *self` parameter and the `_self` local. */
+            self->arena->nodes[mnode].c = is_static;
             if (tail < 0) self->arena->nodes[node].a = mnode;
             else self->arena->nodes[tail].next = mnode;
             tail = mnode;

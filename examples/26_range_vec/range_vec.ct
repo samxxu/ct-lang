@@ -1,0 +1,38 @@
+// 26_range_vec - a range initialiser that builds a `Vec<T>` (Phase 29 P29)
+//
+// `4..8 { $ * $ }` used to be array-only. The range is now an expression whose
+// product is a static array (a composite literal), and the declaration hands it
+// to the built-in constructor `Vec<T>::from`, so the sugar is pure lowering:
+// the compiler knows the entry's name and the element type, never `Vec`'s
+// fields. The same constructor is callable directly.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> sq = 4..8 { $ * $ };
+    Vec<char *> words;
+    char *names[3];
+    int i;
+
+    /* `i` is the read-only index, `item` the value copy (D27-7) */
+    foreach (sq) {
+        printf("[%d] %d\n", i, item);
+    }
+    printf("len = %d, last = %d\n", sq.len(), sq.get(3));
+
+    /* the entry behind the sugar, called directly */
+    names[0] = "a";
+    names[1] = "b";
+    names[2] = "c";
+    words = Vec<char *>::from(names, 3);
+    for (i = 0; i < words.len(); i++) {
+        printf("%s%s", words.get(i), i + 1 == words.len() ? "\n" : " ");
+    }
+
+    printf("release sq = %d\n", sq.release());
+    printf("release words = %d\n", words.release());
+    return 0;
+}

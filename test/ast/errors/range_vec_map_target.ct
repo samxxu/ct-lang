@@ -1,0 +1,8 @@
+/* P29: only `Vec<T>` gains the range form. `Map` is a generic struct with no
+   array-shaped constructor, so it keeps Phase 24's wording rather than getting
+   a second, silently different path. */
+int main(void)
+{
+    Map<char *, int> m = 0..3 { $ };
+    return m.len();
+}
