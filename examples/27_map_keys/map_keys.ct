@@ -19,7 +19,6 @@ int main(void)
     int *slot;
 
     calls.h = 0;
-    calls.entries = 0;
     big = 9000000000L;
     calls.put(big, 1);
     calls.put(big + 1, 2);
@@ -33,14 +32,12 @@ int main(void)
     printf("remove: %d, len = %d\n", calls.remove(big + 1), calls.len());
 
     names.h = 0;
-    names.entries = 0;
     names.put(7, "seven");
     names.put(8, "eight");
     printf("names: %s %s\n", *names.get(7), *names.get(8));
     printf("names missing: %d\n", names.get(9) == 0);
 
     ages.h = 0;
-    ages.entries = 0;
     ages.put("ada", 36);
     ages.put("bob", 41);
     printf("ages: %d %d\n", *ages.get("ada"), *ages.get("bob"));

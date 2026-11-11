@@ -4,6 +4,6 @@ int main(void)
 {
     Vec<int, int> v;
     v.h = 0;
-    v.data = 0;
+
     return 0;
 }

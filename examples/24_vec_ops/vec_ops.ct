@@ -18,7 +18,6 @@ int main(void)
     int sum;
 
     v.h = 0;
-    v.data = 0;
     printf("push: %d %d %d\n", v.push(4), v.push(5), v.push(6));
     printf("len = %d, out of range = %d\n", v.len(), v.get(9));
 

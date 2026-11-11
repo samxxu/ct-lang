@@ -6067,7 +6067,6 @@ int main(void)
 {
     Map<long, int> m;
     m.h = 0;
-    m.entries = 0;
     return m.put(1L, 2) - 1;
 }
 EOF
@@ -6114,7 +6113,6 @@ int main(void)
     Vec<int> v;
     Vec<int> w;
     v.h = 0;
-    v.data = 0;
     v.push(41);
     w = v.retain();
     v.release();

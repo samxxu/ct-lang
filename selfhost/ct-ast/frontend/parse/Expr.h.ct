@@ -2041,6 +2041,16 @@ impl ExprOps for Expr {
                     self->sup->adopt_use(enc, im3[ii3].use);
         }
         if (self->sup->add_type(enc, 1) != 0) return -1;
+        /* H-A (Phase 31): `Map` keeps its entries behind `h->data`, so the
+           `MapEntry<K, V>` instance is no longer implied by an `entries`
+           field. Both Map impl blocks spell `MapEntry<K, V>` in their method
+           signatures, so register the companion row with the same C arguments
+           the field used to carry. */
+        if (strcmp(tname, "Map") == 0 && nt2 > 1) {
+            char esub[MAX_TEXT * 2];
+            snprintf(esub, sizeof esub, "struct MapEntry<%s, %s> *", c1, c2);
+            if (self->inst_register_nested(esub, depth + 1) != 0) return -1;
+        }
         return 0;
     }
 

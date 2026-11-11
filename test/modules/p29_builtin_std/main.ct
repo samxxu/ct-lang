@@ -4,7 +4,6 @@ int main(void)
 {
     Vec<int> v;
     v.h = 0;
-    v.data = 0;
     v.push(7);
     printf("%d %d\n", v.get(0), v.len());
     return 0;

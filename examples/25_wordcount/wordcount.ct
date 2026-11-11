@@ -22,7 +22,6 @@ int main(void)
     int b;
 
     counts.h = 0;
-    counts.entries = 0;
     foreach (words) {
         int *slot;
         slot = counts.get(item);

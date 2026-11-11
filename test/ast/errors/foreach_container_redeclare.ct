@@ -4,7 +4,7 @@ int main(void)
 {
     Vec<int> v;
     v.h = 0;
-    v.data = 0;
+
     foreach (v) {
         int item = 1;
         printf("%d\n", item);

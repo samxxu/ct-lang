@@ -6,7 +6,6 @@ int main(void)
     Map<int, char *> rev;
 
     m.h = 0;
-    m.entries = 0;
     m.put("b", 2);
     m.put("a", 1);
     m.put("b", 20);             /* rewrites in place, keeps the position */
@@ -24,7 +23,6 @@ int main(void)
     }
 
     rev.h = 0;
-    rev.entries = 0;
     rev.put(2, "two");
     rev.put(1, "one");
     foreach (rev) {

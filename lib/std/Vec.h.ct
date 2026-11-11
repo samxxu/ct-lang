@@ -22,18 +22,20 @@
    `Map` have to be spelled exactly as the user writes them (D29-3). */
 
 /* The buffer header shared by both containers: a reference count, the number of
-   live elements and the allocated capacity. `release` frees the data and the
-   header once the count reaches zero; a second release on the same handle is a
-   hard error, not a silent no-op (D29-12). */
+   live elements, the allocated capacity and the element storage. The header
+   owns the storage (H-A): a handle is only the `h` pointer, so copying a handle
+   never duplicates a stale data pointer when a sibling grows the buffer.
+   `release` frees the data and the header once the count reaches zero; a second
+   release on the same handle is a hard error, not a silent no-op (D29-12). */
 pub struct ct_buf {
     int refs;
     int len;
     int cap;
+    void *data;
 }
 
 pub struct Vec<T> {
     struct ct_buf *h;
-    T *data;
 }
 
 /* `Map` stores its entries in insertion order and answers lookups by scanning
@@ -49,7 +51,6 @@ pub struct MapEntry<K, V> {
 
 pub struct Map<K, V> {
     struct ct_buf *h;
-    struct MapEntry<K, V> *entries;
 }
 
 impl<T> Vec<T> {
@@ -64,19 +65,18 @@ impl<T> Vec<T> {
         void *raw;
         T *nd;
         v.h = 0;
-        v.data = 0;
         if (items == 0 || n <= 0) return v;
         v.h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
         if (v.h == 0) return v;
-        raw = malloc((size_t)(n * (int)sizeof(v.data[0])));
+        raw = malloc((size_t)(n * (int)sizeof(items[0])));
         if (raw == 0) {
             free(v.h);
             v.h = 0;
             return v;
         }
         nd = raw;
-        v.data = nd;
-        memcpy(v.data, items, (size_t)(n * (int)sizeof(v.data[0])));
+        v.h->data = nd;
+        memcpy(v.h->data, items, (size_t)(n * (int)sizeof(items[0])));
         v.h->refs = 1;
         v.h->len = n;
         v.h->cap = n;
@@ -93,41 +93,45 @@ impl<T> Vec<T> {
     T get(int i)
     {
         T z;
+        T *d;
         memset(&z, 0, sizeof(z));
         if (self->h == 0 || i < 0 || i >= self->h->len) return z;
-        return self->data[i];
+        d = self->h->data;
+        return d[i];
     }
 
     /* Out of range is a no-op. */
     void set(int i, T v)
     {
+        T *d;
         if (self->h == 0 || i < 0 || i >= self->h->len) return;
-        self->data[i] = v;
+        d = self->h->data;
+        d[i] = v;
     }
 
     /* Grows by doubling; 0 when the allocation fails, 1 on success. */
     int push(T v)
     {
+        T *d;
         if (self->h == 0) {
             self->h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
             if (self->h == 0) return 0;
             self->h->refs = 1;
             self->h->len = 0;
             self->h->cap = 0;
-            self->data = 0;
+            self->h->data = 0;
         }
         if (self->h->len == self->h->cap) {
             int nc;
-            T *nd;
             void *raw;
             nc = self->h->cap == 0 ? 4 : self->h->cap * 2;
-            raw = realloc(self->data, (size_t)(nc * (int)sizeof(self->data[0])));
+            raw = realloc(self->h->data, (size_t)(nc * (int)sizeof(v)));
             if (raw == 0) return 0;
-            nd = raw;
-            self->data = nd;
+            self->h->data = raw;
             self->h->cap = nc;
         }
-        self->data[self->h->len] = v;
+        d = self->h->data;
+        d[self->h->len] = v;
         self->h->len = self->h->len + 1;
         return 1;
     }
@@ -136,10 +140,12 @@ impl<T> Vec<T> {
     T pop()
     {
         T z;
+        T *d;
         memset(&z, 0, sizeof(z));
         if (self->h == 0 || self->h->len == 0) return z;
         self->h->len = self->h->len - 1;
-        return self->data[self->h->len];
+        d = self->h->data;
+        return d[self->h->len];
     }
 
     /* Drops the elements, keeps the buffer for reuse. */
@@ -153,7 +159,6 @@ impl<T> Vec<T> {
     {
         Vec<T> r;
         r.h = self->h;
-        r.data = self->data;
         if (r.h != 0) r.h->refs = r.h->refs + 1;
         return r;
     }
@@ -171,10 +176,9 @@ impl<T> Vec<T> {
         self->h->refs = self->h->refs - 1;
         left = self->h->refs;
         if (left <= 0) {
-            free(self->data);
+            free(self->h->data);
             free(self->h);
         }
-        self->data = 0;
         self->h = 0;
         return left < 0 ? 0 : left;
     }
@@ -192,6 +196,7 @@ impl<V> Map<char *, V> {
     int put(char *k, V v)
     {
         int i;
+        struct MapEntry<char *, V> *es;
         if (k == 0) return 0;
         if (self->h == 0) {
             self->h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
@@ -199,11 +204,12 @@ impl<V> Map<char *, V> {
             self->h->refs = 1;
             self->h->len = 0;
             self->h->cap = 0;
-            self->entries = 0;
+            self->h->data = 0;
         }
+        es = (struct MapEntry<char *, V> *)self->h->data;
         for (i = 0; i < self->h->len; i++)
-            if (strcmp(self->entries[i].key, k) == 0) {
-                self->entries[i].value = v;
+            if (strcmp(es[i].key, k) == 0) {
+                es[i].value = v;
                 return 1;
             }
         if (self->h->len == self->h->cap) {
@@ -211,15 +217,16 @@ impl<V> Map<char *, V> {
             struct MapEntry<char *, V> *ne;
             void *raw;
             nc = self->h->cap == 0 ? 4 : self->h->cap * 2;
-            raw = realloc(self->entries,
-                    (size_t)(nc * (int)sizeof(self->entries[0])));
+            raw = realloc(self->h->data,
+                    (size_t)(nc * (int)sizeof(ne[0])));
             if (raw == 0) return 0;
             ne = raw;
-            self->entries = ne;
+            self->h->data = ne;
             self->h->cap = nc;
+            es = ne;
         }
-        self->entries[self->h->len].key = k;
-        self->entries[self->h->len].value = v;
+        es[self->h->len].key = k;
+        es[self->h->len].value = v;
         self->h->len = self->h->len + 1;
         return 1;
     }
@@ -227,21 +234,25 @@ impl<V> Map<char *, V> {
     V *get(char *k)
     {
         int i;
+        struct MapEntry<char *, V> *es;
         if (self->h == 0 || k == 0) return 0;
+        es = (struct MapEntry<char *, V> *)self->h->data;
         for (i = 0; i < self->h->len; i++)
-            if (strcmp(self->entries[i].key, k) == 0) return &self->entries[i].value;
+            if (strcmp(es[i].key, k) == 0) return &es[i].value;
         return 0;
     }
 
     int remove(char *k)
     {
         int i;
+        struct MapEntry<char *, V> *es;
         if (self->h == 0 || k == 0) return 0;
+        es = (struct MapEntry<char *, V> *)self->h->data;
         for (i = 0; i < self->h->len; i++)
-            if (strcmp(self->entries[i].key, k) == 0) {
+            if (strcmp(es[i].key, k) == 0) {
                 int j;
                 for (j = i; j + 1 < self->h->len; j++)
-                    self->entries[j] = self->entries[j + 1];
+                    es[j] = es[j + 1];
                 self->h->len = self->h->len - 1;
                 return 1;
             }
@@ -263,17 +274,19 @@ impl<K, V> Map<K, V> {
     int put(K k, V v)
     {
         int i;
+        struct MapEntry<K, V> *es;
         if (self->h == 0) {
             self->h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
             if (self->h == 0) return 0;
             self->h->refs = 1;
             self->h->len = 0;
             self->h->cap = 0;
-            self->entries = 0;
+            self->h->data = 0;
         }
+        es = (struct MapEntry<K, V> *)self->h->data;
         for (i = 0; i < self->h->len; i++)
-            if (memcmp(&self->entries[i].key, &k, sizeof(k)) == 0) {
-                self->entries[i].value = v;
+            if (memcmp(&es[i].key, &k, sizeof(k)) == 0) {
+                es[i].value = v;
                 return 1;
             }
         if (self->h->len == self->h->cap) {
@@ -281,15 +294,16 @@ impl<K, V> Map<K, V> {
             struct MapEntry<K, V> *ne;
             void *raw;
             nc = self->h->cap == 0 ? 4 : self->h->cap * 2;
-            raw = realloc(self->entries,
-                    (size_t)(nc * (int)sizeof(self->entries[0])));
+            raw = realloc(self->h->data,
+                    (size_t)(nc * (int)sizeof(ne[0])));
             if (raw == 0) return 0;
             ne = raw;
-            self->entries = ne;
+            self->h->data = ne;
             self->h->cap = nc;
+            es = ne;
         }
-        self->entries[self->h->len].key = k;
-        self->entries[self->h->len].value = v;
+        es[self->h->len].key = k;
+        es[self->h->len].value = v;
         self->h->len = self->h->len + 1;
         return 1;
     }
@@ -299,10 +313,12 @@ impl<K, V> Map<K, V> {
     V *get(K k)
     {
         int i;
+        struct MapEntry<K, V> *es;
         if (self->h == 0) return 0;
+        es = (struct MapEntry<K, V> *)self->h->data;
         for (i = 0; i < self->h->len; i++)
-            if (memcmp(&self->entries[i].key, &k, sizeof(k)) == 0)
-                return &self->entries[i].value;
+            if (memcmp(&es[i].key, &k, sizeof(k)) == 0)
+                return &es[i].value;
         return 0;
     }
 
@@ -311,12 +327,14 @@ impl<K, V> Map<K, V> {
     int remove(K k)
     {
         int i;
+        struct MapEntry<K, V> *es;
         if (self->h == 0) return 0;
+        es = (struct MapEntry<K, V> *)self->h->data;
         for (i = 0; i < self->h->len; i++) {
-            if (memcmp(&self->entries[i].key, &k, sizeof(k)) == 0) {
+            if (memcmp(&es[i].key, &k, sizeof(k)) == 0) {
                 int j;
                 for (j = i; j + 1 < self->h->len; j++)
-                    self->entries[j] = self->entries[j + 1];
+                    es[j] = es[j + 1];
                 self->h->len = self->h->len - 1;
                 return 1;
             }
@@ -333,16 +351,17 @@ impl<K, V> Map<K, V> {
     MapEntry<K, V> entry(int i)
     {
         MapEntry<K, V> z;
+        struct MapEntry<K, V> *es;
         memset(&z, 0, sizeof(z));
         if (self->h == 0 || i < 0 || i >= self->h->len) return z;
-        return self->entries[i];
+        es = (struct MapEntry<K, V> *)self->h->data;
+        return es[i];
     }
 
     Map<K, V> retain()
     {
         Map<K, V> r;
         r.h = self->h;
-        r.entries = self->entries;
         if (r.h != 0) r.h->refs = r.h->refs + 1;
         return r;
     }
@@ -357,10 +376,9 @@ impl<K, V> Map<K, V> {
         self->h->refs = self->h->refs - 1;
         left = self->h->refs;
         if (left <= 0) {
-            free(self->entries);
+            free(self->h->data);
             free(self->h);
         }
-        self->entries = 0;
         self->h = 0;
         return left < 0 ? 0 : left;
     }

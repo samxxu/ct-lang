@@ -9,7 +9,6 @@ int main(void)
     int left;
 
     m.h = 0;
-    m.entries = 0;
     printf("put %d %d %d\n", m.put("bo", 1), m.put("amy", 2), m.put("cy", 3));
     printf("len %d\n", m.len());
 

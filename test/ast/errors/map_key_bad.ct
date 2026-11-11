@@ -5,6 +5,6 @@ int main(void)
 {
     Map<char, int> m;
     m.h = 0;
-    m.entries = 0;
+
     return m.len();
 }

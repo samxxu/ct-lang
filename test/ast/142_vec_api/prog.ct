@@ -7,7 +7,6 @@ int main(void)
     int left;
 
     v.h = 0;
-    v.data = 0;
     printf("push %d %d %d\n", v.push(4), v.push(5), v.push(6));
     printf("len %d, oob %d\n", v.len(), v.get(9) == 0);
 

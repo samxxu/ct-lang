@@ -14,7 +14,6 @@ int main(void)
     int seen;
 
     v.h = 0;
-    v.data = 0;
     v.push(5);
     v.push(6);
     v.push(7);
@@ -43,7 +42,6 @@ int main(void)
     printf("seen = %d, len = %d\n", seen, v.len());
 
     ps.h = 0;
-    ps.data = 0;
     p.x = 1;
     p.y = 2;
     ps.push(p);
