@@ -28,6 +28,7 @@
 | [phase12.md](design/phase12.md) | 官方 bindings 与方言深化（D46–D52） |
 | [phase17.md](design/phase17.md) | 工程质量与新能力：CI 矩阵、官方 `std`、raw 透传、文档分层、包管理补全、`ct build` 一步到位（D17-1–D17-9；2026-11-10 因 design window 归档） |
 | [phase18.md](design/phase18.md) | 生态建设：ct-pkg 组织、包规范与首批包、索引 / CI 复用（D18-1–D18-11；2026-11-11 因 design window 归档） |
+| [phase19.md](design/phase19.md) | 受限语义检查：调用点 arity、实参类型粗粒度兼容、trait 方法歧义、跨单元签名、`ct check`（D19-1–D19-5；2026-11-11 因 design window 归档） |
 | [borrow.md](design/borrow.md) | `borrow` + `Handback` 的设计与实现记录（D-A…D-D） |
 | [dialect.md](design/dialect.md) | 方言系统与作者指南 |
 | [next-decisions.md](design/next-decisions.md) | 容量上限策略与第三十三批方向（已定案并落地） |
@@ -87,6 +88,7 @@
 | [phase12.md](design/phase12.md) | official bindings and dialect deepening (D46–D52) |
 | [phase17.md](design/phase17.md) | engineering quality and new capabilities: CI matrix, official `std`, raw passthrough, documentation layering, package-manager completion and one-step `ct build` (D17-1–D17-9; archived on 2026-11-10 under the design window) |
 | [phase18.md](design/phase18.md) | ecosystem build-out: the ct-pkg organisation, package conventions, the first package wave and index / CI reuse (D18-1–D18-11; archived on 2026-11-11 under the design window) |
+| [phase19.md](design/phase19.md) | bounded semantic checks: call-site arity, coarse argument-type compatibility, trait-method ambiguity, cross-unit signatures and `ct check` (D19-1–D19-5; archived on 2026-11-11 under the design window) |
 | [borrow.md](design/borrow.md) | `borrow` + `Handback` design and landing record (D-A…D-D) |
 | [dialect.md](design/dialect.md) | the dialect system and the authoring guide |
 | [next-decisions.md](design/next-decisions.md) | capacity-limit policy and the batch-33 direction (decided and landed) |

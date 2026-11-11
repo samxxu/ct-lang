@@ -5,7 +5,7 @@
 > **状态：完成**（退出判据于 2026-11-09、首个实现提交前冻结；收口记录见 §6/§7；v0.26.4 补丁见 §9）。
 > **主题来源**：[phase25.md:65](phase25.md#L65) 与 [phase25.md:261](phase25.md#L261) 明确写「泛型是 Phase 26」；
 > 立项时 [roadmap.md](../roadmap.md) 尚无 Phase 26 行，本相同时补入；需求池中「类型检查 / 泛型」一项被本相拆出实现。
-> 关联：[phase25.md](phase25.md)（静态映射闭包实参）、[phase19.md](phase19.md)（受限语义检查）、
+> 关联：[phase25.md](phase25.md)（静态映射闭包实参）、[phase19.md](../history/design/phase19.md)（受限语义检查）、
 > [language-spec.md](../language-spec.md)、[roadmap.md](../roadmap.md)、[AGENTS.md](../../AGENTS.md)。
 
 ---

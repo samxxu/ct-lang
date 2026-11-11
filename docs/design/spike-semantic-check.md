@@ -3,7 +3,7 @@
 > 中文 · [English](#english)
 > 状态：**spike 完成，结论 GO（限定范围）** · 2026-11-02
 > 锚点：工作树 `v0.16.3`；行为探针用已安装的 `ct v0.16.2`
-> 落点：[design/phase19.md](phase19.md)
+> 落点：[history/design/phase19.md](../history/design/phase19.md)
 
 ---
 
@@ -57,7 +57,7 @@ CLI 探针：`ct --help` 只有 `compile` 形态，**没有 `check` 模式**。
 
 **GO，但限定范围。** 不是从零加一层，而是把已有的 `Parser` / `Emitter` / `Diag` 检查补齐成「调用点 + 类型 + 歧义 + 跨单元」四块：
 
-- 代码增量约 **+700–1,300 行（4–8%）**，4 个切片（见 [phase19.md](phase19.md)）。
+- 代码增量约 **+700–1,300 行（4–8%）**，4 个切片（见 [phase19.md](../history/design/phase19.md)）。
 - 不做完整类型系统，不做泛型，不改变 `ct compile` / `ct build` 的产物与默认退出码。
 
 ### 7. 出口（spike 验收）
@@ -101,7 +101,7 @@ Pass-through C, macros, `.m.ct` recipes and raw blocks must be treated as `unkno
 
 ### 6. Verdict
 
-**GO, bounded.** Roughly **+700–1,300 lines (4–8%)** across four slices. No full type system, no generics, no change to `ct compile` / `ct build` output or default exit codes. Plan: [phase19.md](phase19.md).
+**GO, bounded.** Roughly **+700–1,300 lines (4–8%)** across four slices. No full type system, no generics, no change to `ct compile` / `ct build` output or default exit codes. Plan: [phase19.md](../history/design/phase19.md).
 
 ### 7. Exit
 
