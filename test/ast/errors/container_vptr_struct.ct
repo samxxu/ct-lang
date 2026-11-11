@@ -1,0 +1,15 @@
+/* L29-13: a struct that adopts a trait carries one vptr per trait; a container
+   copy would duplicate it. */
+trait Show {
+    int base();
+}
+
+struct Num {
+    int v;
+} use Show;
+
+int main(void)
+{
+    Vec<Num> v;
+    return v.len();
+}

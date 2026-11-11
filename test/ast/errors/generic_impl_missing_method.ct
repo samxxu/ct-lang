@@ -1,0 +1,21 @@
+/* B5: a generic impl only adds the methods it declares; an unknown name on an
+   instance is the existing hard error (the arity check stays a warning). */
+struct Pair<T, U> {
+    T a;
+    U b;
+}
+
+impl<T> Pair<T, int> {
+    int second()
+    {
+        return self->b;
+    }
+}
+
+int main(void)
+{
+    Pair<int, int> p;
+    p.a = 1;
+    p.b = 2;
+    return p.nope();
+}

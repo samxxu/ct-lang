@@ -1,12 +1,11 @@
 #include <stdio.h>
 
-trait Speaker { void hi(); }
-
+/* L29-15: interfaces/containers are caught at the declaration (L29-13 / L29-11). */
 int main(void)
 {
-    Vec<Speaker> edges;
+    Vec<MapEntry<char *, int> > edges;
     foreach (edges) {
-        item.hi();
+        printf("%d\n", item.value);
     }
     return 0;
 }

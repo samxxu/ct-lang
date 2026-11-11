@@ -112,6 +112,9 @@ pub trait ExprOps {
     /* Phase 29: a substituted field spelling may itself name an instance
        (`MapEntry<K, V>`); register it so the emitter can print its layout. */
     int  inst_register_nested(const char *spell, int depth);
+    /* L29-13: 1 when this C type is an interface value or a struct that carries
+       a vptr (directly or through a value field). */
+    int  container_vptr_type(const char *ctype, int depth);
     /* Phase 26: register (or reuse) the instance of template `gfi` for the
        concrete type spelling `targ`; returns its index in `sym->ginsts`. */
     int  generic_instance(int gfi, const char *targ, int line, int col);
@@ -122,6 +125,12 @@ pub trait ExprOps {
        lookahead that tells `Vec<int>::from(...)` from `Vec < 3`. */
     int  inst_static_method(const char *ibase, const char *fname);
     int  static_call_ahead(void);
+    /* Phase 29 V29-4: a `Vec` / `Map` handle is a two-field struct in C, so the
+       subscript and brace-initializer spellings C would reject (`struct Vec_int`
+       is not an array, `{ "k": 1 }` is not an aggregate) are refused here with a
+       position instead of being emitted. */
+    int  container_index_check(int base);
+    int  container_init_check(const char *ctype);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  tok_is_type_name(void);
@@ -1770,6 +1779,20 @@ impl ExprOps for Expr {
             if (self->type_append(out, cap, &n, raw) != 0) return -1;
             return 0;
         }
+        /* L29-8 (D29-9): the built-in `Map` compares keys by content and has no
+           `Hash` / `Eq` bound to widen that, so the key whitelist is enforced
+           here, before an instance is registered or any C is emitted. A key
+           outside it would otherwise be compared by whatever the generic block
+           happens to do, which is how `long` used to reach `strcmp`. */
+        if (strcmp(tname, "Map") == 0 && nargs >= 1
+            && strcmp(carg[0], "int") != 0 && strcmp(carg[0], "long") != 0
+            && strcmp(carg[0], "char*") != 0) {
+            char kmsg[MAX_TEXT * 2];
+            snprintf(kmsg, sizeof kmsg,
+                     "Map does not support key type '%s' (use int, long or char *)",
+                     carg[0]);
+            return self->sup->fail(kmsg);
+        }
         if (frontend::sym::ct_inst_encode(tname, nargs, carg[0], carg[1], enc, MAX_TEXT) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
@@ -1784,6 +1807,35 @@ impl ExprOps for Expr {
         snprintf(self->inst_canon, sizeof self->inst_canon, "%s", canon);
         if (self->type_append(out, cap, &n, "struct") != 0) return -1;
         if (self->type_append(out, cap, &n, enc) != 0) return -1;
+        return 0;
+    }
+
+    /* L29-13: a container copies its elements (`memcpy` on growth, plain
+       assignment on `set`), so an interface value or a struct that carries a
+       vptr has no defensible copy story. `use Drop` / `use Handback` add no
+       vptr and never join `use`, so they do not trip this. */
+    int container_vptr_type(const char *ctype, int depth)
+    {
+        char base[MAX_TEXT];
+        const char *p;
+        int si, fi, n;
+
+        if (depth > 8) return 0;
+        p = ctype;
+        while (*p == ' ') p++;
+        if (strncmp(p, "struct ", 7) == 0) p += 7;
+        snprintf(base, sizeof base, "%s", p);
+        n = strlen(base);
+        if (n > 6 && strcmp(base + n - 6, "_iface") == 0) return 1;
+        if (strchr(base, '*') != 0) return 0;
+        si = self->sym->find_struct(base);
+        if (si < 0) return 0;
+        if (self->sym->structs[si].is_template) return 0;
+        if (self->sym->structs[si].nuse > 0) return 1;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+            if (self->container_vptr_type(self->sym->structs[si].fields[fi].type,
+                                          depth + 1))
+                return 1;
         return 0;
     }
 
@@ -1820,6 +1872,13 @@ impl ExprOps for Expr {
                 || (nargs > 1 && frontend::sym::ct_is_container_type(c2))))
             return self->sup->fail(
                 "a built-in container cannot be an element of another container");
+        /* L29-13: an interface value or a vptr-bearing struct has no copy story
+           that the container's `memcpy` / assignment can honour. */
+        if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
+            && (self->container_vptr_type(c1, 0)
+                || (nargs > 1 && self->container_vptr_type(c2, 0))))
+            return self->sup->fail(
+                "interface and vptr-bearing values cannot be stored in a container");
         if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
@@ -2630,6 +2689,7 @@ impl ExprOps for Expr {
                 size_t tl = strlen(tbuf);
                 if (tl > 0 && tbuf[tl - 1] == '*')
                     return self->sup->fail("a compound literal needs an object type");
+                if (self->container_init_check(tbuf) != 0) return -1;
                 rn = self->sup->new_node(N_RAW);
                 if (rn < 0) return -1;
                 if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
@@ -2764,6 +2824,40 @@ impl ExprOps for Expr {
         return -1;
     }
 
+    /* V29-4: `v[i]` / `m[k]` on a container handle. Only a plain variable is
+       judged: an array of containers, a pointer to one and any expression whose
+       type this pass does not resolve keep the C meaning. */
+    int container_index_check(int base)
+    {
+        int vi;
+        const char *ty;
+
+        if (self->arena->nodes[base].kind != N_VAR) return 0;
+        vi = self->sym->find_var(self->arena->nodes[base].text2);
+        if (vi < 0) return 0;
+        ty = self->sym->vars[vi].type;
+        if (strchr(ty, '*') != 0) return 0;
+        if (self->sym->vars[vi].is_array) return 0;
+        if (strncmp(ty, "struct Vec_", 11) == 0)
+            return self->sup->fail("a Vec is not subscriptable: use get(i) / set(i, v)");
+        if (strncmp(ty, "struct Map_", 11) == 0)
+            return self->sup->fail("a Map is not subscriptable: use get(key)");
+        return 0;
+    }
+
+    /* V29-4: a brace initializer for a container. `MapEntry` is an ordinary
+       struct and keeps its aggregate form. */
+    int container_init_check(const char *ctype)
+    {
+        if (strncmp(ctype, "struct Vec_", 11) == 0 || strncmp(ctype, "Vec_", 4) == 0)
+            return self->sup->fail(
+                "a Vec cannot be initialized from a brace list: use a range initializer or Vec<T>::from");
+        if (strncmp(ctype, "struct Map_", 11) == 0 || strncmp(ctype, "Map_", 4) == 0)
+            return self->sup->fail(
+                "a Map cannot be initialized from a brace list: use put(key, value)");
+        return 0;
+    }
+
     /* P29-2 lookahead: the cursor is on a template name. 1 only when
        `<type-args>:: <name> (` follows, so `Vec < 3` keeps its comparison
        shape. The lexer has no peek, hence the save/restore. */
@@ -2872,6 +2966,10 @@ impl ExprOps for Expr {
         }
         for (;;) {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+                /* V29-4: `v[3]` / `m["key"]` would be emitted as a subscript of
+                   a C struct; refuse before the `[` is consumed so the error
+                   carries its position. */
+                if (self->container_index_check(n) != 0) return -1;
                 self->sup->lex_next();
                 idx = self->parse_expr();
                 if (idx < 0) return -1;

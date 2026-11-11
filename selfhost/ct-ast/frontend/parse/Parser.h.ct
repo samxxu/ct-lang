@@ -1230,6 +1230,8 @@ impl ParseOps for Parser {
                     char raw[MAX_RAW_INIT];
                     char fixed[MAX_INIT_TEXT];
                     int off, k;
+                    /* V29-4: a Vec / Map has no C aggregate initializer. */
+                    if (self->ex->container_init_check(ret) != 0) return -1;
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
                     if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
@@ -2501,6 +2503,14 @@ impl ParseOps for Parser {
         tail = -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             mline = self->lex->tokline;
+            /* V29-3: a vtable slot is a function pointer without a receiver, so
+               `static` cannot fill it. Reading it as a return-type qualifier used
+               to only warn about the signature and still ship the method in the
+               vtable (docs/language-spec.md L29-3 promises a hard error). */
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0)
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "a static method cannot implement a trait", self->mem->path);
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");

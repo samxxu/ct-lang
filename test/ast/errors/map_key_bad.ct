@@ -1,0 +1,10 @@
+/* P29 L29-8: the built-in `Map` compares keys by content (int / long by bytes,
+   `char *` by strcmp) and has no `Hash` / `Eq` bound to widen that, so any other
+   key type is rejected at the type argument, before any C is emitted. */
+int main(void)
+{
+    Map<char, int> m;
+    m.h = 0;
+    m.entries = 0;
+    return m.len();
+}

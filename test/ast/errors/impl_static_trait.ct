@@ -1,0 +1,21 @@
+/* V29-3: a trait method fills a vtable slot, and a slot is a function pointer
+   without a receiver. `static` used to be read as a return-type qualifier: the
+   signature check only warned and the method still went into the vtable. */
+trait Calc {
+    int base();
+}
+
+struct Num {
+    int v;
+} use Calc;
+
+impl Calc for Num {
+    static int base() {
+        return 1;
+    }
+}
+
+int main(void)
+{
+    return 0;
+}
