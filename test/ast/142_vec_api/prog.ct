@@ -22,11 +22,14 @@ int main(void)
     w = v.retain();
     w.push(7);
     printf("shared %d %d\n", v.len(), w.get(2));
-    left = v.release();
+    /* V29-2: `release` ends the handle, so the sibling is released first and
+       `clear` runs through the handle that is still live; the buffer is shared,
+       so the cleared length is what remains. */
+    left = w.release();
     printf("release %d\n", left);
     v.clear();
-    printf("cleared %d\n", w.len());
-    left = w.release();
+    printf("cleared %d\n", v.len());
+    left = v.release();
     printf("freed %d\n", left);
     return 0;
 }

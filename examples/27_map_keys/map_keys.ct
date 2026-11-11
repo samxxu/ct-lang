@@ -1,0 +1,55 @@
+// 27_map_keys - the three key types of the built-in `Map` (Phase 29, V29-1)
+//
+// A key is compared by content: `int` and `long` by their bytes, `char *` by
+// `strcmp`. The two paths are separate `impl` blocks, so a 64-bit `long` can
+// never fall into the string comparison just because it is as wide as a
+// pointer. A key outside the whitelist (`int`, `long`, `char *`) is rejected at
+// compile time (L29-8).
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+int main(void)
+{
+    Map<long, int> calls;
+    Map<int, char *> names;
+    Map<char *, int> ages;
+    long big;
+    int *slot;
+
+    calls.h = 0;
+    calls.entries = 0;
+    big = 9000000000L;
+    calls.put(big, 1);
+    calls.put(big + 1, 2);
+    calls.put(-5L, 3);
+    printf("len = %d\n", calls.len());
+    slot = calls.get(big);
+    printf("get long: %d\n", slot == 0 ? -1 : *slot);
+    printf("overwrite: %d, len = %d\n", calls.put(big, 9), calls.len());
+    printf("get long: %d\n", *calls.get(big));
+    printf("missing: %d\n", calls.get(big + 2) == 0);
+    printf("remove: %d, len = %d\n", calls.remove(big + 1), calls.len());
+
+    names.h = 0;
+    names.entries = 0;
+    names.put(7, "seven");
+    names.put(8, "eight");
+    printf("names: %s %s\n", *names.get(7), *names.get(8));
+    printf("names missing: %d\n", names.get(9) == 0);
+
+    ages.h = 0;
+    ages.entries = 0;
+    ages.put("ada", 36);
+    ages.put("bob", 41);
+    printf("ages: %d %d\n", *ages.get("ada"), *ages.get("bob"));
+    printf("ages missing: %d\n", ages.get("cid") == 0);
+    printf("ages remove: %d\n", ages.remove("ada"));
+    printf("ages len = %d\n", ages.len());
+
+    printf("release calls = %d\n", calls.release());
+    printf("release names = %d\n", names.release());
+    printf("release ages = %d\n", ages.release());
+    return 0;
+}
