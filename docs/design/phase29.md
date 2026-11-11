@@ -6,7 +6,7 @@
 > Phase 29 完成」的声明不成立。评审列出的 5 项 High、6 项 Medium、2 项 Low 已逐条修复，修复块记在
 > §11.2 的 V29-1…V29-5 与 §3.1 的基线红证；当前状态等复评裁决，不再自称完成）。
 > 已修复的关键项：`Map<long,V>` 的 `strcmp` 误判与键白名单（V29-1）、`retain` 后二次 `release`
-> 的 UAF（V29-2）、经典 `impl` 里的 `static`（V29-3）、容器下标/花括号初值的非法 C（V29-4）、
+> 的 UAF（V29-2）、经典 `impl` 里的 `static`（V29-3）、容器下标（含 `(*p)` / 成员 / 调用基座）与花括号初值的非法 C（V29-4）、
 > 容器元素为接口/带 vptr struct（V29-5）；E29-10 的 `ct build` 过期说法、E29-7 的基线红证、
 > P29-4 的证据行、`std::vec::Vec` 别名、`import std::vec` 升级说明、`Vec<Vec<int>>` 的 S2/B7 描述、
 > L29-5/6/13/14 的状态词、roadmap/§10.3.5 的计数、§2.3 的实现偏差均已按事实更正。
@@ -965,7 +965,7 @@ run_exit=0
 | E29-4 | 满足 | `140_foreach_vec`：断言 `Vec_int_get`、`int i = __ct_foreach_i_`、`(void)i;`，并新增 `__ct_foreach_n_`（长度循环前快照）；`141` 断言 Map 体内无 `i`；`140/prog.expected.out` 的 `seen = 4, len = 5` 证明循环中 `push` 不改本轮长度；负例见 `foreach_container_index_write` / `foreach_container_redeclare` / `foreach_container_map_i` 与 Phase 27 的 `foreach_struct`（非容器） | `check-ast.sh` 962 / 0；`item` 发射为值局部量（`int item = Vec_int_get(...)`），块内改写不回写 |
 | E29-5 | 满足 | compile：`p29 (builtin_std shadow warning)` + `p29 (builtin_std is containers only)` + `needs_std.ct`；`ct build`：`p29 (builtin_std in ct build)`（编译、链接、运行、`vendor/std` 告警、`Vec.h` 含 `struct Vec_int` 五件事一起断言）。`lib/std/README.md` 明确两条路径都免 `ct get` / 免 import | §10.3.4 的原始 `cc` 行、`7 1 2`、`run_exit=0`；本轮 `check-warnings.sh` 321 / 0 |
 | E29-6 | 满足 | `142_vec_api`（push/len/get/set/pop/clear/retain/release）与新增 `143_map_api`（put/len/get/entry/remove/retain/release）走 corpus，`prog.expected.out` 分别为 `142 OK` 系列与 `143 OK`；`check-sanitizers.sh` 逐一遍历 `test/ast/*/prog.ct`，`142` / `143` 均 `ok` | `check-sanitizers.sh` 中 `142` / `143` 无 ASAN/UBSAN 报告（该脚本另有 10 项既有失败，见下） |
-| E29-7 | 满足 | `p29_diag` 现在同时断言 `test/ast/errors/<f>.ct:<line>:<col>: error: <冻结文案>` 与**恰一条** `error: `；覆盖 4 条 generic-struct、2 条 arity（E29-12）、4 条 foreach、4 条 container 共 14 条；Phase 26/27 的 generic-function 与 foreach 负例由各自的钉住块覆盖（合计 ≥10 + 5）；基线红证记录在 §3.1（v0.26.4 对 `Box<int>` 报 `unknown type`，本仓库没有 v0.28.0 tag，Phase 28 也在 v0.26.4 内收口） | 14 条 `ok p29 (<fixture>)`，位置精确到 `line:col` |
+| E29-7 | 满足 | `p29_diag` 现在同时断言 `test/ast/errors/<f>.ct:<line>:<col>: error: <冻结文案>` 与**恰一条** `error: `；覆盖 4 条 generic-struct、2 条 arity（E29-12）、4 条 foreach、4 条 container 共 14 条；Phase 26/27 的 generic-function 与 foreach 负例由各自的钉住块覆盖（合计 ≥10 + 5）；基线红证记录在 §3.1（基线 `1c87fab` 对 `Box<int>` 报 `3:8: use of an undeclared variable`，本仓库没有 v0.28.0 tag，Phase 28 也在 v0.26.4 内收口） | 14 条 `ok p29 (<fixture>)`，位置精确到 `line:col` |
 | E29-8 | 满足 | `check-goldens` 82 / 0；`check-ast` 962 / 0（较 949 只多本轮新增断言，无回归）；`check-warnings` 321 / 0 | 见下「门禁」 |
 | E29-9 | 满足 | `check-all.sh` 11 道硬门禁全绿；新增 6 条 `p29 (check/build agree on <fixture>)`：同一负例的 compile、`ct check`、`ct build` 首条 `error: ` 逐字相同 | 6 条 `ok`；`check-all: OK (11 hard gates green)` |
 | E29-10 | 满足 | `docs/language-spec.md` §4.51、`docs/tutorial.md` §10.8、`AGENTS.md` 中英文、`examples/README.md` 22–25、`test/run.sh` 的 examples 扫描路径；`check-docs` 通过 | `check-docs: OK (978 relative links in 179 files, ...)` |
@@ -989,7 +989,8 @@ check-all: OK (11 hard gates green)
 ```
 
 > 上表是 Phase 29 收口轮的数字。NO-GO 修复块（V29-1…V29-5、`p29_neg` 的四重断言、`142` 的
-> 句柄语义调整）落地后再跑一轮，实测为 `check-ast.sh` **992 passed / 0 failed**、
+> 句柄语义调整）落地后再跑一轮，实测为 `check-ast.sh` **992 passed / 0 failed**；
+> V29-4b（下标基座按表达式类型判定，新增 4 条夹具）后再跑一轮为 **1000 passed / 0 failed**，
 > `check-warnings.sh` **323 ok**、`check-docs` **OK（984 links / 179 files）**、
 > `test/run.sh` **139 passed / 0 failed**、goldens 82、acceptance 20/0，完整转录见 §11.3。
 
@@ -1044,9 +1045,9 @@ check-sanitizers: FAIL (10 failed, 319 passed)
 | V29-1 | **`Map` 的键按类型分派，白名单外的键硬错**：`int` / `long` 比字节、`char *` 比 `strcmp`，不以 `sizeof` 判断键类别；`Map` 的第一个类型实参不在白名单时报 L29-8，位置化且不落任何 C；两个匹配同一实例的固有 impl 不重复发射同名方法 | `lib/std/Vec.h.ct` 的 `impl<V> Map<char *, V>`（声明在泛型块之前）与纯 `memcmp` 的 `impl<K, V> Map<K, V>`；`Emitter.h.ct` 的 `impl_method_shadowed`；`Expr.h.ct` 的 L29-8 检查 | `test/ast/errors/map_key_bad.ct`（`6:20` + 逐字文案）；`examples/27_map_keys/` 三种键端到端；`check-ast.sh` 的 `p29 V29-1` 断言（`Map<long,int>` 产物无 `strcmp`；`Map_char_p_int_put/get` 各一份定义） |
 | V29-2 | **释放后的句柄不能二次 `release`**：`release()` 无论计数是否归零都清空该句柄；`retain` 出的兄弟句柄仍可读，对同一句柄二次 `release` 是 `abort`，不会把兄弟句柄的缓冲再减一次 | `lib/std/Vec.h.ct` 的 `Vec::release` / `Map::release`；`examples/24_vec_ops` 的共享句柄段 | `check-ast.sh` 的 `p29 V29-2` 断言（程序非零退出、`Vec: release on a released handle`、释放后 `sibling 1` 仍可读） |
 | V29-3 | **经典 `impl Trait for Struct` 里的 `static` 是硬错**：vtable 槽位没有接收者，`static` 不能被当成返回类型限定符后只告警、仍装进 vtable | `Parser.h.ct` 的经典 impl 方法循环（在 `parse_type` 之前拦 `static`） | `test/ast/errors/impl_static_trait.ct`（`13:5` + 逐字文案）；`check-ast.sh` 的 `p29_neg` 断言（文案 + 位置 + 单条） |
-| V29-4 | **容器下标与花括号初值给出可读诊断**：`v[i]`、`m[k]`、`Map<...> x = {…}` 一律编译期报错并指出位置，不再把 `subscripted value is not an array` / `expected expression` 甩给 `cc` | `Expr.h.ct` 的 `container_index_check` / `container_init_check`（`parse_postfix` 的 `[`、局部/全局声明初值、复合字面量三处调用） | `test/ast/errors/vec_subscript.ct`（`9:13`）、`map_subscript.ct`（`8:13`）、`map_brace_init.ct`（`5:26`）；`check-ast.sh` 的 `p29_neg` 断言 |
+| V29-4 | **容器下标与花括号初值给出可读诊断**：`v[i]`、`m[k]`、`Map<...> x = {…}` 一律编译期报错并指出位置，不再把 `subscripted value is not an array` / `expected expression` 甩给 `cc`；**下标基座按表达式类型判定**，不是只认裸变量 | `Expr.h.ct` 的 `container_base_type`（解析 `N_VAR` / `N_DEREF` / `N_MEMBER` / `N_ARROW` / `N_CALL` 的 C 类型）→ `container_index_check` / `container_init_check`（`parse_postfix` 的 `[`、局部/全局声明初值、复合字面量三处调用） | `test/ast/errors/vec_subscript.ct`（`9:13`）、`map_subscript.ct`（`8:13`）、`map_brace_init.ct`（`5:26`），以及 `vec_subscript_deref.ct`（`(*pv)[0]`，`7:17`）、`vec_subscript_member.ct`（`h.v[0]`，`9:15`）、`vec_subscript_call.ct`（`mk().v[0]`，`14:18`）、`map_subscript_deref.ct`（`(*pm)["k"]`，`7:17`）；`check-ast.sh` 的 `p29_neg` 断言 |
 | V29-5 | **L29-13 的容器元素检查落地**：接口值与带 vptr 的 struct（含值字段递归）不能进 `Vec` / `Map`；`use Drop` / `use Handback` 不误伤 | `Expr.h.ct` 的 `container_vptr_type` + `inst_make` | `test/ast/errors/container_iface.ct`（`19:15`）、`container_vptr_struct.ct`（`13:14`）；`check-ast.sh` 的 `p29_neg` 断言 |
-| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 323 ok`、`check-docs: OK (984 links / 179 files)`、`check-ast: 992 / 0` |
+| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 323 ok`、`check-docs: OK (984 links / 179 files)`、`check-ast: 1000 / 0` |
 
 ### 11.3 补丁后的产物与门禁
 
@@ -1062,7 +1063,7 @@ static __attribute__((unused)) struct Vec_int Vec_int_from(int * items, int n) {
 $ bash selfhost/check-all.sh
 == summary: 139 passed, 0 failed ==      (test/run.sh, 补丁前 137)
 == summary: 82 passed, 0 failed ==       (goldens)
-== summary: 992 passed, 0 failed ==      (check-ast, 补丁前 962)
+== summary: 1000 passed, 0 failed ==     (check-ast, 补丁前 962；V29-4b 前 992)
 check-warnings: 323 ok, 0 failed         (补丁前 321)
 check-docs: OK (984 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
 acceptance: 20 pass, 0 new, 0 pending, 0 regression
@@ -1089,5 +1090,6 @@ check-sanitizers: FAIL (10 failed, 323 passed)
 
 `v[3]`、`m["key"]` 与 `Map<char *, int> m = { "key": 32, "key2": 869 };` **仍不支持**：两条下标形态
 指向的 `struct Vec_int` / `struct Map_char_p_int` 不能下标，字面量形态的 `:` 不在 C 聚合初值语法里。
-V29-4 之后它们不再静默通过：三条都在编译期给出位置化诊断（见 §11.2 V29-4），不放行、不发射 C。
+V29-4 之后它们不再静默通过：三条都在编译期给出位置化诊断（见 §11.2 V29-4），不放行、不发射 C；
+下标基座按表达式类型判定，`(*pv)[0]`、`h.v[0]`、`mk().v[0]`、`(*pm)["k"]` 与裸变量同一处文案。
 新增语法不在本补丁范围内。
