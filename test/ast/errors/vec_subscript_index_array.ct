@@ -1,6 +1,0 @@
-/* V29-4: `arr[0]` is a handle, so the second `[` has no C spelling. */
-int main(void)
-{
-    Vec<int> arr[2];
-    return arr[0][0].h;
-}

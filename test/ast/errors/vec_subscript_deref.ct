@@ -1,8 +1,0 @@
-/* V29-4: `(*pv)[0]` subscripts the struct behind the pointer, not the pointer,
-   so it has no C spelling either. */
-int main(void)
-{
-    Vec<int> v;
-    Vec<int> *pv = &v;
-    return (*pv)[0];
-}

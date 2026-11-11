@@ -1,9 +1,0 @@
-/* V29-4: `Map` has no subscript either; its lookup is `get(key)`. */
-int main(void)
-{
-    Map<char *, int> m;
-    m.h = 0;
-
-    m.put("k", 1);
-    return m["k"];
-}

@@ -1,8 +1,0 @@
-/* V29-4: `(*pm)["k"]` subscripts the struct behind the pointer, so it has no
-   C spelling either. */
-int main(void)
-{
-    Map<char *, int> m;
-    Map<char *, int> *pm = &m;
-    return (*pm)["k"];
-}

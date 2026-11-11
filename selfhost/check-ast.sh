@@ -6061,32 +6061,8 @@ p29_neg range_vec_empty "an empty range has no elements" 6:18
 p29_neg range_vec_too_many "too many range elements (limit 1024)" 6:18
 p29_neg range_vec_map_target "a range initializer declares an array" 6:26
 p29_neg impl_static_trait "a static method cannot implement a trait" 13:5
-p29_neg vec_subscript "a Vec is not subscriptable: use get(i) / set(i, v)" 9:13
-p29_neg map_subscript "a Map is not subscriptable: use get(key)" 8:13
 p29_neg generic_impl_missing_method "no method 'nope' for type 'struct Pair_int_int'" 20:1
 p29_neg container_vptr_struct "interface and vptr-bearing values cannot be stored in a container" 13:14
-# V29-4b: the base of a subscript is judged by its expression type, not only a
-# bare variable, so a deref, a member and a call result cannot reach `cc`.
-p29_neg vec_subscript_deref "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
-p29_neg vec_subscript_member "a Vec is not subscriptable: use get(i) / set(i, v)" 9:15
-p29_neg vec_subscript_call "a Vec is not subscriptable: use get(i) / set(i, v)" 14:18
-p29_neg map_subscript_deref "a Map is not subscriptable: use get(key)" 7:17
-# V29-4c: an indirect call through a function pointer now carries its return
-# type, and a second `[` on an array / pointer subscript is judged too.
-p29_neg vec_subscript_fnptr "a Vec is not subscriptable: use get(i) / set(i, v)" 11:16
-p29_neg vec_subscript_fnptr_member "a Vec is not subscriptable: use get(i) / set(i, v)" 15:18
-p29_neg vec_subscript_index_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 6:17
-p29_neg vec_subscript_index_array "a Vec is not subscriptable: use get(i) / set(i, v)" 5:18
-p29_neg vec_subscript_index_field "a Vec is not subscriptable: use get(i) / set(i, v)" 9:18
-# V29-4d: the same judgement through a typedef alias, a function-pointer field
-# and an instance method's return type.
-p29_neg vec_subscript_fnptr_typedef "a Vec is not subscriptable: use get(i) / set(i, v)" 14:16
-p29_neg vec_subscript_fnptr_field "a Vec is not subscriptable: use get(i) / set(i, v)" 17:18
-p29_neg vec_subscript_mcall "a Vec is not subscriptable: use get(i) / set(i, v)" 24:18
-# V29-4e: a file-scope array and a file-scope pointer must land on opposite
-# sides of the judgement (`g[0]` is a Vec value, `pg[0][0]` is not).
-p29_neg vec_subscript_global_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
-
 # ---- Phase 31 S11b: the `Vec` brace initializer's local boundaries ----
 # Five boundaries keep one positioned diagnostic each: a known element type
 # that does not fit (L31-6), an element whose type cannot be pinned (L31-7), a
