@@ -1,0 +1,31 @@
+// 34_map_literal - brace initializers for `Map` (Phase 31 O4)
+//
+// A local `Map<K, V>` declaration may initialize from `{key: value, …}`. The
+// list is parsed as expressions and lowered to the built-in constructor,
+// `Map_<enc>_from((struct MapEntry_<enc>[]){ … }, n)`; an empty list passes
+// `(0, 0)` and still owns a releasable header. The constructor inserts in item
+// order and rewrites a repeated key in place, exactly like `put`, so `"a"` keeps
+// its first position and takes its last value.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> letters = {"a": 1, "b": 2, "a": 9};
+    Map<char *, int> empty = {};
+    Map<int, char *> names = {1: "one", 2: "two"};
+
+    printf("letters: len = %d, first = %s, a = %d, b = %d\n",
+           letters.len(), letters.entry(0).key,
+           *letters.get("a"), *letters.get("b"));
+    printf("empty: len = %d\n", empty.len());
+    printf("names: len = %d, %s %s\n", names.len(),
+           *names.get(1), *names.get(2));
+
+    letters.release();
+    empty.release();
+    names.release();
+    return 0;
+}
