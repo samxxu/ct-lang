@@ -9,3 +9,14 @@ impl<T, U> Pair<T, U> {
         return self->a;
     }
 }
+
+/* V29-4e: a pub container array keeps its dimensions across the unit boundary,
+   so `table[0]` in main.ct is one element, not a subscript on a Vec value. */
+pub Vec<int> table[2];
+
+pub void fill_table(void)
+{
+    Vec<int> v = 3..7 {$ * 2};
+    table[0] = v;
+}
+

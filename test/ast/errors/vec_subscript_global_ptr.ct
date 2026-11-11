@@ -1,0 +1,8 @@
+/* V29-4e: a file-scope container pointer is not an array.
+   `pg[0][0]` still indexes the Vec value, which has no C spelling. */
+Vec<int> *pg;
+
+int main(void)
+{
+    return pg[0][0].h;
+}

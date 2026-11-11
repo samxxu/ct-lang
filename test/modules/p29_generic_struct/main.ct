@@ -12,5 +12,7 @@ int main(void)
     q.a = "k";
     q.b = 9;
     printf("%d %s %d %d\n", p.first(), q.a, q.b, twice());
+    fill_table();
+    printf("%d\n", table[0].len());
     return 0;
 }

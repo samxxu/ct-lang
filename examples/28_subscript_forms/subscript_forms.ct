@@ -27,6 +27,10 @@ impl<T> Box<T> {
 
 int g = 42;
 
+/* V29-4e: a file-scope container array. `garr[0]` is the Vec value, so it is
+   as legal as `arr[0]` for a block-scope array. */
+Vec<int> garr[2];
+
 int *slot(void)
 {
     return &g;
@@ -44,6 +48,8 @@ int main(void)
     int a[3] = 1..4 {$ + 10};
     Vec<int> arr[2];
     arr[0] = mk();
+    garr[0] = mk();
+    garr[1] = mk();
     Vec<int> *pv = &arr[0];
     Vec<int> **ppv = &pv;
     Vec<int> ***pppv = &ppv;
@@ -62,5 +68,6 @@ int main(void)
            arr[0].len(), pv[0].len());
     printf("%d %d %d\n", ppv[0][0].len(), pppv[0][0][0].len(), q->len());
     printf("%d %d %d\n", slot()[0], get_pp()[0][0], b.p()[0]);
+    printf("%d %d\n", garr[0].len(), garr[1].len());
     return 0;
 }

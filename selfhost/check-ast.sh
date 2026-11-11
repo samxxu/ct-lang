@@ -6056,6 +6056,9 @@ p29_neg vec_subscript_index_field "a Vec is not subscriptable: use get(i) / set(
 p29_neg vec_subscript_fnptr_typedef "a Vec is not subscriptable: use get(i) / set(i, v)" 14:16
 p29_neg vec_subscript_fnptr_field "a Vec is not subscriptable: use get(i) / set(i, v)" 17:18
 p29_neg vec_subscript_mcall "a Vec is not subscriptable: use get(i) / set(i, v)" 24:18
+# V29-4e: a file-scope array and a file-scope pointer must land on opposite
+# sides of the judgement (`g[0]` is a Vec value, `pg[0][0]` is not).
+p29_neg vec_subscript_global_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
 
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it

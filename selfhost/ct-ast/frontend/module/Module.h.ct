@@ -620,6 +620,16 @@ impl ModuleOps for Module {
                 if (self->sym->declare_global(gname, self->arena->nodes[gn].text,
                                               gcn, gns, 1) < 0)
                     return self->fail(self->sym->last_error());
+                /* V29-4e: an imported pub array keeps its dimensions, so the
+                   subscript checker still sees `table[0]` as one element. */
+                if (self->arena->nodes[gn].text3[0]) {
+                    int vi = self->sym->find_var(gname);
+                    if (vi >= 0) {
+                        self->sym->vars[vi].is_array = 1;
+                        snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s",
+                                 self->arena->nodes[gn].text3);
+                    }
+                }
             }
             /* An exported enum's members are file-scope constants (D-3). The
                var table was reset for this unit, so they are registered here
