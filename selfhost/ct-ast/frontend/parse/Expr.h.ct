@@ -1781,7 +1781,13 @@ impl ExprOps for Expr {
             }
             snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
             if (self->inst_canon[0]) {
-                if (snprintf(carg[nargs], MAX_TEXT, "%s", self->inst_canon) >= MAX_TEXT)
+                /* S20b: the argument is itself an instance (`Vec<int>` inside
+                   `Map<char *, Vec<int>>`). Its identity is the C spelling the
+                   nested instance was just given (`struct Vec_int`), so the
+                   encoder sees one form here and in the nested `MapEntry`
+                   registration -- encoding the source spelling would spell the
+                   same type two ways (`Vec_lint_r` vs `Vec__int`). */
+                if (snprintf(carg[nargs], MAX_TEXT, "%s", abuf) >= MAX_TEXT)
                     return self->sup->fail("type is too long");
             } else if (frontend::sym::ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
                 return self->sup->fail("type is too long");

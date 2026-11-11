@@ -1,0 +1,23 @@
+/* Phase 31 S20b: a `Map` literal whose value is itself a container. The value
+   spelling the encoder sees is the nested instance's C name, so the literal and
+   the nested `MapEntry` registration agree on one spelling. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> row = {1, 2};
+    Map<char *, Vec<int>> m = { "a": row };
+    Vec<int> *got = m.get("a");
+
+    Map<char *, int> inner = { "k": 7 };
+    Map<char *, Map<char *, int>> nested = { "a": inner };
+    Map<char *, int> *nested_got = nested.get("a");
+    int *v = nested_got->get("k");
+
+    printf("%d %d %d %d\n", got->len(), got->get(1), nested_got->len(), *v);
+    nested.release();
+    m.release();
+    row.release();
+    inner.release();
+    return 0;
+}

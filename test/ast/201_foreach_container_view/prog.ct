@@ -1,0 +1,22 @@
+/* Phase 31 D31-4 (L29-15 unfrozen): `foreach` may iterate container elements;
+   `item` is a borrowed view, so reading it is enough. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> a = {1, 2};
+    Vec<int> b = {3};
+    g.push(a);
+    g.push(b);
+    int total = 0;
+    foreach (g) {
+        total = total + item.len();
+    }
+    printf("%d %d\n", g.len(), total);
+    g.release();
+    a.release();
+    b.release();
+    return 0;
+}

@@ -5780,7 +5780,6 @@ p29_diag generic_struct_arity 10:20 "a generic struct takes at most 2 type param
 p29_diag generic_struct_void 5:13 "type argument 'void' cannot instantiate a generic struct"
 p29_diag generic_struct_depth 9:25 "generic type arguments nest deeper than 4"
 p29_diag builtin_type_redecl 3:1 "'Vec' is a built-in type and cannot be redeclared"
-p29_diag foreach_container_element 7:5 "foreach cannot iterate a container of 'struct MapEntry_char_p_int' (interface, vptr-bearing or container element)"
 p29_diag foreach_container_index_write 9:1 "the foreach index 'i' is read-only"
 p29_diag foreach_container_redeclare 9:1 "cannot redeclare the foreach binding 'item'"
 p29_diag foreach_container_map_i 11:1 "'i' has no meaning in a Map foreach; use item.key / item.value"
@@ -5985,8 +5984,8 @@ fi
     >"$work/p29n.out" 2>"$work/p29n.err"
 if [ $? -ne 0 ]; then
     bad "p29: nested arguments" "ct-ast failed: $(head -3 "$work/p29n.err")"
-elif ! grep -q 'struct Box_Box_lBox_lint_r_r {' "$work/p29n.c"; then
-    bad "p29: nested arguments" "no Box_Box_lBox_lint_r_r"
+elif ! grep -q 'struct Box_Box__Box____int {' "$work/p29n.c"; then
+    bad "p29: nested arguments" "no Box_Box__Box____int"
 else
     ok "p29 (>> splits, nested instance name is stable)"
 fi
@@ -6486,6 +6485,26 @@ elif ! grep -q "__ct_tmp" "$work/p31chain.c"; then
     bad "p31 E31-24 (chain product)" "no receiver temporary appears in the product"
 else
     ok "p31 E31-24 (chain product: receivers named, no address of a call)"
+fi
+
+# Phase 31 S20b: a nested container value in a Map literal has one spelling.
+# Every `MapEntry_*` the product names must be defined, and no argument may
+# still be encoded from a source spelling (`Vec_lint_r` was that bug).
+if ! "$work/ct-ast" test/ast/200_map_container_value/prog.ct -o "$work/p31map.c" \
+        >"$work/p31map.log" 2>&1; then
+    bad "p31 S20b (nested Map value product)" "ct-ast failed: $(head -3 "$work/p31map.log")"
+else
+    missing=""
+    for n in $(grep -o 'MapEntry_[A-Za-z0-9_]*' "$work/p31map.c" | sort -u); do
+        grep -q "struct $n {" "$work/p31map.c" || missing="$missing $n"
+    done
+    if [ -n "$missing" ]; then
+        bad "p31 S20b (nested Map value product)" "entry names without a definition:$missing"
+    elif grep -q '_lint_r' "$work/p31map.c"; then
+        bad "p31 S20b (nested Map value product)" "an argument is still encoded from its source spelling"
+    else
+        ok "p31 S20b (nested Map value: one spelling, every entry defined)"
+    fi
 fi
 
 echo
