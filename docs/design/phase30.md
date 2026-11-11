@@ -8,7 +8,7 @@
 > 提升与发射、L30-1…L30-7 诊断、`.m.ct` 静态映射宿主（指针别名 / C 值结构体 / 标量 / 不透明
 > 句柄）、`$ =` 重绑、块后后缀链与连续多段 `into` 全部落地；夹具 148–164、八个负例与样例
 > `examples/29_into_block/` 均进真门禁；`check-ast.sh` 1073 passed / 0 failed、`test/run.sh`
-> 141 passed、`check-warnings.sh` 353 ok / 0 failed、`check-docs` OK（988 links / 179 files）、
+> 141 passed、`check-warnings.sh` 353 ok / 0 failed、`check-docs` OK（984 links / 179 files）、
 > `check-all.sh` 11 道硬门禁全绿（版本仍 `v0.26.4`，未 bump）。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载语义表、脱糖矩阵、battle 与
 > 覆盖矩阵，修订后约 670 行，经需求提出方 2026-11-11 签字保留单卡、不拆分。
