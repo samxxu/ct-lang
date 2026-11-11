@@ -6149,6 +6149,10 @@ fi
 # each keep one positioned diagnostic. The 1024 cap (L31-18) is generated below
 # so the fixture stays compact, and 1024 items stay a positive case.
 p29_neg L31_17_map_key_type "initializer item 1 has key type 'int', expected 'char *'" 5:27
+p29_neg L31_16_map_dup_enum "duplicate key 'RED' in a Map initializer (first at line 7)" 7:41
+p29_neg L31_16_map_dup_int_fold "duplicate key '2' in a Map initializer (first at line 5)" 5:34
+p29_neg L31_16_map_dup_str_escape "duplicate key 'a' in a Map initializer (first at line 5)" 5:38
+p29_neg L31_16_map_dup_str_concat "duplicate key 'ab' in a Map initializer (first at line 5)" 5:39
 p29_neg L31_19_map_global_brace "a Map brace initializer is only supported in a local declaration" 3:22
 p29_neg L31_20_map_brace_assign "a brace list is not an expression; use Map<K, V>::from or put" 6:9
 {

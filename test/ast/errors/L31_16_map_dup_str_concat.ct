@@ -1,0 +1,7 @@
+/* Phase 31 L31-16: adjacent string literals concatenate, so `"a" "b"` and
+   `"ab"` are the same key. */
+int main(void)
+{
+    Map<char *, int> m = {"a" "b": 1, "ab": 2};
+    return m.len();
+}

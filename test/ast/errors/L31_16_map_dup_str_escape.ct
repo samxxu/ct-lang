@@ -1,0 +1,7 @@
+/* Phase 31 L31-16: `"\x61"` decodes to `"a"`, so the two string keys compare
+   equal by bytes, the way the runtime `strcmp` compares them. */
+int main(void)
+{
+    Map<char *, int> m = {"\x61": 1, "a": 2};
+    return m.len();
+}
