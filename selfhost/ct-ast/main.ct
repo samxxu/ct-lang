@@ -33,7 +33,7 @@ import tool::pkg::Pkg;
 #include <stdlib.h>
 #include <string.h>
 
-#define CTC_VERSION "0.26.4"
+#define CTC_VERSION "0.30.0"
 
 /* Caps, node kinds and token/operator codes are declared by the unit that uses
    them: a macro spans one translation unit only, and every unit here compiles
