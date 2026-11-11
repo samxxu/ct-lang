@@ -2520,7 +2520,7 @@ type, an interface or `own` receiver, a missing field, a right-value receiver in
 nested blocks are all compile-time errors (L30-1 … L30-7).
 
 See [language-spec §4.52](language-spec.md) and
-[29_into](../examples/29_into/into.ct) for a runnable sample.
+[29_into_block](../examples/29_into_block/into.ct) for a runnable sample.
 
 ### 11. CLI cheat sheet
 
