@@ -1,0 +1,9 @@
+empty: len = 0
+one: len = 1, get(0) = 7
+many: len = 3, 1 2 3
+via from: 1 2 3
+brace == from: 1
+points: 2 1 4
+grid: len = 2, 4 5 6
+shows: len = 2, 8
+released

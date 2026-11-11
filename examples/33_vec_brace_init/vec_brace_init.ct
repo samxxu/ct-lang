@@ -1,0 +1,97 @@
+// 33_vec_brace_init - brace initializers for `Vec` (Phase 31 O4)
+//
+// A local `Vec<T>` declaration may initialize from a brace list. The list is
+// parsed as expressions (never as raw text) and lowered to the built-in
+// constructor, `Vec_<enc>_from((T[]){ … }, n)`; an empty list passes `(0, 0)`.
+// Elements follow `push`'s rules: an interface slot boxes a concrete struct, an
+// owning slot retains the element, and a trailing comma is allowed.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+struct Square {
+    int s;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+impl Show for Square {
+    int show() {
+        return self->s;
+    }
+}
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main(void)
+{
+    struct Point p1;
+    struct Point p2;
+    struct Circle ci;
+    struct Square sq;
+    int src[3];
+
+    p1.x = 1;
+    p1.y = 2;
+    p2.x = 3;
+    p2.y = 4;
+    ci.r = 8;
+    sq.s = 9;
+    src[0] = 1;
+    src[1] = 2;
+    src[2] = 3;
+
+    Vec<int> empty = {};
+    Vec<int> one = {7};
+    Vec<int> many = {1, 2, 3,};
+    Vec<int> via = Vec<int>::from(src, 3);
+    Vec<struct Point> pts = {p1, p2};
+    Vec<Show> shows = {ci, sq};
+    Vec<int> row1 = {4, 5};
+    Vec<int> row2 = {6};
+    Vec<Vec<int>> grid = {row1, row2};
+    Vec<int> g0;
+    Vec<int> g1;
+    Show first;
+
+    printf("empty: len = %d\n", empty.len());
+    printf("one: len = %d, get(0) = %d\n", one.len(), one.get(0));
+    printf("many: len = %d, %d %d %d\n", many.len(), many.get(0), many.get(1), many.get(2));
+    printf("via from: %d %d %d\n", via.get(0), via.get(1), via.get(2));
+    printf("brace == from: %d\n", many.get(0) == via.get(0)
+           && many.get(2) == via.get(2));
+    printf("points: %d %d %d\n", pts.len(), pts.get(0).x, pts.get(1).y);
+    g0 = grid.get(0);
+    g1 = grid.get(1);
+    printf("grid: len = %d, %d %d %d\n", grid.len(),
+           g0.get(0), g0.get(1), g1.get(0));
+    first = shows.get(0);
+    printf("shows: len = %d, %d\n", shows.len(), first.show());
+
+    many.release();
+    via.release();
+    pts.release();
+    shows.release();
+    grid.release();
+    row2.release();
+    row1.release();
+    one.release();
+    printf("released\n");
+    return 0;
+}
