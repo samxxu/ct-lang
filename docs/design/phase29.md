@@ -2,15 +2,20 @@
 
 > 中文。
 >
-> **状态：实施中**（2026-11-11 独立收口评审结论 **NO-GO**：上一版「E29-1…13、P29-1…5 全满足、
-> Phase 29 完成」的声明不成立。评审列出的 5 项 High、6 项 Medium、2 项 Low 已逐条修复，修复块记在
-> §11.2 的 V29-1…V29-5 与 §3.1 的基线红证；当前状态等复评裁决，不再自称完成）。
+> **状态：完成**（2026-11-11 第五轮复评 **GO**：1 High + 2 Medium + 1 Low 全部关闭。
+> 上一轮独立收口评审的 5 项 High、6 项 Medium、2 项 Low 已逐条修复，修复块记在
+> §11.2 的 V29-1…V29-5 与 §3.1 的基线红证；本轮追加的 V29-4e（文件作用域容器数组的回归）
+> 修复后，`check-all.sh` 11 道硬门禁全绿，状态由「实施中」改为「完成」）。
 > 复评追加的三轮也已修：下标基座从裸变量扩到 `(*p)` / 成员 / 调用（第二轮）、函数指针调用与二层
 > `[` 基座（第三轮）；第四轮换掉按拼写猜测的做法，改为一个统一的静态 C 类型求值入口（typedef 表
 > 按名解析、每次解引用/下标只剥一层、判不出类型时按既定口径不判并交 `cc` 兜底），见 §11.2 V29-4
 > 的 15 条拒绝夹具与 `examples/28_subscript_forms` 的放行形态。
+> 第五轮复评给出 **GO**（1 High + 2 Medium + 1 Low 全部关闭），并要求先确认评审的一处
+> 「pre-existing」判断：文件作用域的容器数组被误拒。基线比对（§11.4）证明它是 Phase 29 的
+> **回归**，已按 V29-4e 修复（全局声明补 `is_array`），拒绝/放行两侧都有夹具；三元与逗号
+> 基座按复评要求只登记（§8 O11），不在本相修。
 > 已修复的关键项：`Map<long,V>` 的 `strcmp` 误判与键白名单（V29-1）、`retain` 后二次 `release`
-> 的 UAF（V29-2）、经典 `impl` 里的 `static`（V29-3）、容器下标（含 `(*p)` / 成员 / 调用 / 函数指针调用 / typedef 别名 / 实例方法返回 / 二层下标基座 / 指针链）与花括号初值的非法 C（V29-4）、
+> 的 UAF（V29-2）、经典 `impl` 里的 `static`（V29-3）、容器下标（含 `(*p)` / 成员 / 调用 / 函数指针调用 / typedef 别名 / 实例方法返回 / 二层下标基座 / 指针链 / 文件作用域容器数组）与花括号初值的非法 C（V29-4 / V29-4e）、
 > 容器元素为接口/带 vptr struct（V29-5）；E29-10 的 `ct build` 过期说法、E29-7 的基线红证、
 > P29-4 的证据行、`std::vec::Vec` 别名、`import std::vec` 升级说明、`Vec<Vec<int>>` 的 S2/B7 描述、
 > L29-5/6/13/14 的状态词、roadmap/§10.3.5 的计数、§2.3 的实现偏差均已按事实更正。
@@ -809,6 +814,7 @@ Phase 28 收口提交 `1c87fab733e0a02955bfcdeff668d10aec2017f3`。复现方式�
 | O7 | 内置层与 `ct-pkg/std` 的双向迁移工具 | 只做一次性搬运 | 旧包仍有独立 bug 修复需求，或需要回滚到旧编译器 |
 | O8 | `foreach` 迭代中修改容器 | 长度快照 + 越界零值 | 出现真实的数据竞争/漏遍历报告，且可定义稳定语义 |
 | O9 | 泛型函数体内实例化泛型容器（如 `Vec<T>`） | 本相不做，沿用 D26-9 的「泛型体内禁止泛型调用/实例化」 | 用户明确要求「泛型函数返回 `Vec<T>`」；重启前需先解决实例化键的递归替换与去重（`Vec<T>` → `Vec_int`） |
+| O11 | 三元与逗号表达式作下标基座（`(cond ? a : b)[0]`、`(a, b)[0]`） | **登记不修**（第五轮复评确认非本轮引入）：`static_ctype` 不建模 `N_COND` / 逗号，基座判不出类型时按既定口径不判并交 `cc`，可能把非法 C 交给下游 | 出现真实代码这么写；届时按 `N_COND` 两分支类型一致 / 逗号取右操作数的规则接进 `static_ctype`，并补双向夹具 |
 | O10 | `Vec` 的 range 初值 / 下标 / 字面量语法糖（`Vec<int> v = 4..8 { $ * $ }`、`v[i]`、`Map<char *, int> m = { "k": 1 }`、`m["k"]`） | 第 1 条由 P29-1 补成合法语法（range 初值 + `Vec<T>::from` 入口，见 §11）。第 2–4 条**仍不支持**：`v[i]` / `m["k"]` 指向的是 C 结构体，`{ "k": 1 }` 的 `:` 不在 C 聚合初值语法里。它们不再是「静默放行、把非法 C 交给 cc」：V29-4 在编译期给出位置化诊断（`a Vec is not subscriptable…` / `a Map is not subscriptable…` / `a Map cannot be initialized from a brace list…`），因此没有新增语法，但守住了「绝不发射非法 C」 | 出现第二个真实项目要求 `v[i]` / `m[k]`，且能接受「构造入口 + 纯降级」的语义；否则保持显式 `Vec_int_get` / `Map_*_get` |
 
 ---
@@ -997,7 +1003,9 @@ check-all: OK (11 hard gates green)
 > V29-4b（下标基座按表达式类型判定，新增 4 条夹具）后再跑一轮为 **1000 passed / 0 failed**；
 > V29-4c（函数指针调用与二层 `[` 基座，新增 5 条夹具）后为 **1010 passed / 0 failed**；
 > V29-4d（统一静态 C 类型求值：typedef 表、`N_MCALL`、每次只剥一层，新增 3 条拒绝夹具与
-> `examples/28_subscript_forms` 的放行样例）后为 **1017 passed / 0 failed**，
+> `examples/28_subscript_forms` 的放行样例）后为 **1017 passed / 0 failed**；
+> V29-4e（文件作用域容器数组的回归修复，新增 1 条拒绝夹具、放行形态并入同一个样例）后为
+> **1019 passed / 0 failed**，
 > `check-warnings.sh` **324 ok**、`check-docs` **OK（984 links / 179 files）**、
 > `test/run.sh` **140 passed / 0 failed**、goldens 82、acceptance 20/0，完整转录见 §11.3。
 
@@ -1053,8 +1061,9 @@ check-sanitizers: FAIL (10 failed, 319 passed)
 | V29-2 | **释放后的句柄不能二次 `release`**：`release()` 无论计数是否归零都清空该句柄；`retain` 出的兄弟句柄仍可读，对同一句柄二次 `release` 是 `abort`，不会把兄弟句柄的缓冲再减一次 | `lib/std/Vec.h.ct` 的 `Vec::release` / `Map::release`；`examples/24_vec_ops` 的共享句柄段 | `check-ast.sh` 的 `p29 V29-2` 断言（程序非零退出、`Vec: release on a released handle`、释放后 `sibling 1` 仍可读） |
 | V29-3 | **经典 `impl Trait for Struct` 里的 `static` 是硬错**：vtable 槽位没有接收者，`static` 不能被当成返回类型限定符后只告警、仍装进 vtable | `Parser.h.ct` 的经典 impl 方法循环（在 `parse_type` 之前拦 `static`） | `test/ast/errors/impl_static_trait.ct`（`13:5` + 逐字文案）；`check-ast.sh` 的 `p29_neg` 断言（文案 + 位置 + 单条） |
 | V29-4 | **容器下标与花括号初值给出可读诊断**：`v[i]`、`m[k]`、`Map<...> x = {…}` 一律编译期报错并指出位置，不再把 `subscripted value is not an array` / `expected expression` 甩给 `cc`；**下标基座按统一的表达式静态 C 类型判定**：`static_ctype` 一个入口覆盖 `N_VAR` / `N_MEMBER` / `N_ARROW` / `N_DEREF` / `N_CALL`（直接调用与函数指针）/ `N_MCALL`（实例固有方法与 trait 方法）/ `N_INDEX`；声明类型来源统一走变量、字段、函数/方法返回、函数指针与 typedef 表（`set_type_target` / `type_target_of`，按名解析，不靠拼写前缀）；每次 `*` 或 `[` 只剥一层；判不出类型时按既定口径**不判**、交 `cc` 兜底（容器拼写一旦解析出来必拒，不能借“未知”放行） | `Expr.h.ct` 的 `static_ctype` / `ctype_expand` / `fnptr_ret` / `peel_ptr` → `container_index_check` / `container_init_check`（`parse_postfix` 的 `[`、局部/全局声明初值、复合字面量三处调用）；`Symbols.h.ct` 的 `type_target` 表与 `Parser.h.ct` 的 typedef 登记 | 拒绝：`vec_subscript.ct`（`9:13`）、`map_subscript.ct`（`8:13`）、`map_brace_init.ct`（`5:26`）、`vec_subscript_deref.ct`（`7:17`）、`vec_subscript_member.ct`（`9:15`）、`vec_subscript_call.ct`（`14:18`）、`map_subscript_deref.ct`（`7:17`）、`vec_subscript_fnptr.ct`（`11:16`）、`vec_subscript_fnptr_member.ct`（`15:18`）、`vec_subscript_fnptr_typedef.ct`（`14:16`）、`vec_subscript_fnptr_field.ct`（`17:18`）、`vec_subscript_mcall.ct`（`24:18`）、`vec_subscript_index_ptr.ct`（`6:17`）、`vec_subscript_index_array.ct`（`5:18`）、`vec_subscript_index_field.ct`（`9:18`）；放行：`examples/28_subscript_forms`（`a[0]`、`h.ints[0]`、`ph[0].ints[1]`、`arr[0].len()`、`pv[0].len()`、`ppv[0][0]`、`pppv[0][0][0]`、`(*ppv)[0]`、`slot()[0]`、`b.p()[0]`、`get_pp()[0][0]`）；`check-ast.sh` 的 `p29_neg` 断言 |
+| V29-4e | **文件作用域的容器数组不是容器值**：`Vec<int> g[2]; g[0].len()` 放行，`Vec<int> *pg; pg[0][0]` 仍硬错。根因是全局声明只写了 `dims`、没置 `is_array`，而 `static_ctype` 的 `N_VAR` 分支按 `is_array` 记数组层数，于是 `g[0]` 被当成「下标一个容器值」。这是 Phase 29 的**回归**（`container_index_check` 引入前可编译，基线比对见 §11.4） | `Parser.h.ct` 的全局声明分支（`parse_array_dims` 成功后同时置 `is_array = 1`，与块作用域声明同构）；`Expr.h.ct` 的 `static_ctype`（不改） | 拒绝：`vec_subscript_global_ptr.ct`（`7:17`）；放行：`examples/28_subscript_forms` 的 `Vec<int> garr[2]; garr[0].len()` / `garr[1].len()`（输出第四行 `4 4`）；`check-ast.sh` 的 `p29_neg` 断言 |
 | V29-5 | **L29-13 的容器元素检查落地**：接口值与带 vptr 的 struct（含值字段递归）不能进 `Vec` / `Map`；`use Drop` / `use Handback` 不误伤 | `Expr.h.ct` 的 `container_vptr_type` + `inst_make` | `test/ast/errors/container_iface.ct`（`19:15`）、`container_vptr_struct.ct`（`13:14`）；`check-ast.sh` 的 `p29_neg` 断言 |
-| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 324 ok`、`check-docs: OK (984 links / 179 files)`、`check-ast: 1017 / 0` |
+| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 324 ok`、`check-docs: OK (984 links / 179 files)`、`check-ast: 1019 / 0` |
 
 ### 11.3 补丁后的产物与门禁
 
@@ -1070,7 +1079,7 @@ static __attribute__((unused)) struct Vec_int Vec_int_from(int * items, int n) {
 $ bash selfhost/check-all.sh
 == summary: 140 passed, 0 failed ==      (test/run.sh, 补丁前 137；新增样例后 140)
 == summary: 82 passed, 0 failed ==       (goldens)
-== summary: 1017 passed, 0 failed ==     (check-ast, 补丁前 962；V29-4b 前 992；V29-4c 前 1000；V29-4d 前 1010)
+== summary: 1019 passed, 0 failed ==     (check-ast, 补丁前 962；V29-4b 前 992；V29-4c 前 1000；V29-4d 前 1010；V29-4e 前 1017)
 check-warnings: 324 ok, 0 failed         (补丁前 321)
 check-docs: OK (984 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
 acceptance: 20 pass, 0 new, 0 pending, 0 regression
@@ -1094,7 +1103,43 @@ check-sanitizers: FAIL (10 failed, 323 passed)
 | `examples/json/json.ct` | ASAN/UBSAN 下示例端到端第 2 阶段失败；示例不含 range / `Vec` 构造 |
 | `range_init_overflow` | Phase 24 既有夹具，sanitizer 下 exit 134；非 sanitizer 构建仍正确报 `a range bound is out of range`（本轮已复核） |
 
-### 11.4 仍未支持（与 §8 O10 对齐）
+### 11.4 V29-4e 的回归基线比对
+
+复评要求先确认「文件作用域容器数组被拒」是不是 Phase 29 的回归。三段实测用同一份探针
+（`Vec<int> g[2]; g[0].len()`，`git archive <commit> | tar -x -C /tmp/...` 后按 §10 的
+L0 → L1 → L2 → ct-ast 链重建）：
+
+```text
+# 1) Phase 28 收口 1c87fab（评审建议的基线）
+$ w/ct-ast compile probe.ct -o probe.c; echo rc=$?
+probe.ct:3:4: error: expected a name
+rc=1
+```
+
+`1c87fab` 里 `Vec` 还不存在（`lib/std/` 与泛型 struct 都是 Phase 29 才加的），报的是泛型
+返回类型未支持。它**早于 Phase 29**，无法用来判定本项；真正能回答「检查引入前是否可编译」的
+是下面这个提交。
+
+```text
+# 2) container_index_check 引入前的 Phase 29 提交（6a90b88^ = 8111b24）
+$ w/ct-ast compile probe.ct -o probe.c; echo rc=$?
+rc=0
+$ grep 'g\[0\]' probe.c
+    g[0] = mk();
+```
+
+```text
+# 3) 修复前的 HEAD（4f10c8d）
+$ w/ct-ast compile probe.ct -o probe.c; echo rc=$?
+probe.ct:13:6: error: a Vec is not subscriptable: use get(i) / set(i, v)
+rc=1
+```
+
+结论：**是回归**——`8111b24` 可编译并生成 `struct Vec_int g[2];`，引入者是 `container_index_check`
+（V29-4 的检查），根因是全局声明只写 `dims` 不置 `is_array`。修复后同一探针 `rc=0`、运行输出
+`4 4`；`Vec<int> *pg; pg[0][0].h` 仍在 `7:17` 硬错（`vec_subscript_global_ptr.ct`）。
+
+### 11.5 仍未支持（与 §8 O10 对齐）
 
 `v[3]`、`m["key"]` 与 `Map<char *, int> m = { "key": 32, "key2": 869 };` **仍不支持**：两条下标形态
 指向的 `struct Vec_int` / `struct Map_char_p_int` 不能下标，字面量形态的 `:` 不在 C 聚合初值语法里。
