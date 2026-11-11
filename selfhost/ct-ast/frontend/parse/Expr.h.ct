@@ -130,6 +130,10 @@ pub trait ExprOps {
        is not an array, `{ "k": 1 }` is not an aggregate) are refused here with a
        position instead of being emitted. */
     int  container_index_check(int base);
+    /* V29-4: the C type of a subscript base (a plain variable, a deref, a
+       member / arrow field or a call's return), so `(*pv)[0]`, `h.v[0]` and
+       `mk().v[0]` are refused too; 0 when this pass cannot pin the type. */
+    int  container_base_type(int base, char *out, int cap, int depth);
     int  container_init_check(const char *ctype);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
@@ -2824,20 +2828,80 @@ impl ExprOps for Expr {
         return -1;
     }
 
-    /* V29-4: `v[i]` / `m[k]` on a container handle. Only a plain variable is
-       judged: an array of containers, a pointer to one and any expression whose
-       type this pass does not resolve keep the C meaning. */
+    /* V29-4: the C type a subscript base expression evaluates to, or 0 when this
+       pass cannot pin it. It reads the same tables the checker does: a variable's
+       declared type, a pointer deref (strip the `*`), a member / arrow field
+       (look the field up on the base struct) and a call (the callee's return
+       type). An array, a pointer kept as the base and a call through a function
+       pointer are deliberately unresolved: C spells those subscripts fine. */
+    int container_base_type(int base, char *out, int cap, int depth)
+    {
+        char tmp[MAX_TEXT];
+        const char *ty;
+        int i, len, si, fi;
+
+        if (base < 0 || depth > 3) return 0;
+        switch (self->arena->nodes[base].kind) {
+        case N_VAR:
+            i = self->sym->find_var(self->arena->nodes[base].text2);
+            if (i < 0 || self->sym->vars[i].is_array) return 0;
+            snprintf(out, cap, "%s", self->sym->vars[i].type);
+            return 1;
+        case N_DEREF:
+            if (!self->container_base_type(self->arena->nodes[base].a, tmp, sizeof tmp, depth + 1))
+                return 0;
+            if (!strchr(tmp, '*')) return 0;
+            len = (int)strlen(tmp);
+            while (len > 0 && (tmp[len - 1] == ' ' || tmp[len - 1] == '*')) len--;
+            tmp[len] = 0;
+            snprintf(out, cap, "%s", tmp);
+            return 1;
+        case N_MEMBER:
+        case N_ARROW:
+            if (!self->container_base_type(self->arena->nodes[base].a, tmp, sizeof tmp, depth + 1))
+                return 0;
+            ty = tmp;
+            if (self->arena->nodes[base].kind == N_ARROW) {
+                if (!strchr(ty, '*')) return 0;
+                len = (int)strlen(ty);
+                while (len > 0 && (ty[len - 1] == ' ' || ty[len - 1] == '*')) len--;
+                tmp[len] = 0;
+                ty = tmp;
+            }
+            if (strncmp(ty, "struct ", 7) == 0) ty += 7;
+            si = self->sym->find_struct(ty);
+            if (si < 0) return 0;
+            for (i = 0; i < self->sym->structs[si].nfields; i++) {
+                if (strcmp(self->sym->structs[si].fields[i].name,
+                           self->arena->nodes[base].text2) != 0) continue;
+                /* an array field keeps its C spelling (`h.v[0]` is an element) */
+                if (self->sym->structs[si].fields[i].dims[0]) return 0;
+                snprintf(out, cap, "%s", self->sym->structs[si].fields[i].type);
+                return 1;
+            }
+            return 0;
+        case N_CALL:
+            if (self->arena->nodes[base].aux == 2) return 0;
+            fi = self->sym->resolve_func(self->arena->nodes[base].text2);
+            if (fi < 0) return 0;
+            if (!self->sym->funcs[fi].ret[0] || strcmp(self->sym->funcs[fi].ret, "void") == 0)
+                return 0;
+            snprintf(out, cap, "%s", self->sym->funcs[fi].ret);
+            return 1;
+        default:
+            return 0;
+        }
+    }
+
+    /* V29-4: `v[i]` / `m[k]` on a container handle. A pointer kept as the base
+       (`p[0]`) or an array of handles keeps the C meaning; every other base
+       whose type this pass resolves is refused before the `[` is consumed. */
     int container_index_check(int base)
     {
-        int vi;
-        const char *ty;
+        char ty[MAX_TEXT];
 
-        if (self->arena->nodes[base].kind != N_VAR) return 0;
-        vi = self->sym->find_var(self->arena->nodes[base].text2);
-        if (vi < 0) return 0;
-        ty = self->sym->vars[vi].type;
+        if (!self->container_base_type(base, ty, sizeof ty, 0)) return 0;
         if (strchr(ty, '*') != 0) return 0;
-        if (self->sym->vars[vi].is_array) return 0;
         if (strncmp(ty, "struct Vec_", 11) == 0)
             return self->sup->fail("a Vec is not subscriptable: use get(i) / set(i, v)");
         if (strncmp(ty, "struct Map_", 11) == 0)

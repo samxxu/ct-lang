@@ -6038,6 +6038,12 @@ p29_neg map_brace_init "a Map cannot be initialized from a brace list: use put(k
 p29_neg generic_impl_missing_method "no method 'nope' for type 'struct Pair_int_int'" 20:1
 p29_neg container_iface "interface and vptr-bearing values cannot be stored in a container" 19:15
 p29_neg container_vptr_struct "interface and vptr-bearing values cannot be stored in a container" 13:14
+# V29-4b: the base of a subscript is judged by its expression type, not only a
+# bare variable, so a deref, a member and a call result cannot reach `cc`.
+p29_neg vec_subscript_deref "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
+p29_neg vec_subscript_member "a Vec is not subscriptable: use get(i) / set(i, v)" 9:15
+p29_neg vec_subscript_call "a Vec is not subscriptable: use get(i) / set(i, v)" 14:18
+p29_neg map_subscript_deref "a Map is not subscriptable: use get(key)" 7:17
 
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it
