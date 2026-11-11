@@ -17,7 +17,7 @@
 | 编号 | 范围 | 交付 |
 | --- | --- | --- |
 | O1 | 泛型 `Drop` | `impl<T> Drop for Box<T>`；无显式 impl 时按**声明顺序**递归字段 glue；有显式 impl 时编译器**不生成**字段 glue；复用 Phase 31 的 `__ct_elem_retain`/`__ct_elem_release` |
-| O2 | 带长度字符串 | `lib/std/Str.h.ct`：`struct Str { char *data; int len; } use Drop`；`str_from`/`str_from_len`/`str_len`/`str_slice`/`str_concat`/`str_compare`/`str_c_str`/`str_release`；不依赖 NUL，保留内嵌 `\0` |
+| O2 | 带长度字符串 | `lib/std/Str.h.ct`：`struct Str { char *data; int len; } use Drop`；固有方法 `retain`/`release`（元素协议只认固有方法）+ 自由函数 `str_from`/`str_from_len`/`str_len`/`str_slice`/`str_concat`/`str_compare`/`str_c_str`；不依赖 NUL，保留内嵌 `\0` |
 
 ### 1.3 非目标（本相明确不做）
 
@@ -35,7 +35,7 @@
 `Phase 31（元素协议）→ Phase 33（泛型 struct）→ Phase 34（Option/Result）→ Phase 36`。
 
 - `Vec<Str>` 的元素释放走 Phase 31 的**结构性协议**：元素类型同时声明 `retain` 与 `release`（`retain` 返回自身类型），`Vec::release` 逐元素调用；不依赖泛型 `Drop`。
-- `Option<Str>` 的 payload 在本相**不自动释放**：`Option<T>` 的方法体不能泛型地调用 `T` 的 `release`。要自动释放，用 `own Option<Str> *` + `delete`（触发泛型 Drop glue），或由调用方显式释放。
+- `Option<T>` 的方法体不能泛型地调用 `T` 的 `release`；本相改为在 `Option<T>`/`Result<T,E>` 上加 `use Drop`，由字段递归 glue 负责 payload，`own Option<T> *` + `delete` 触发。块尾自动释放不做（T36-6）。
 - 若 P31 的元素协议未落地，`Vec<Str>` 推迟，本相不开工。
 
 ## 2 现状与基线
@@ -81,13 +81,15 @@
 #### 3.1.2 释放顺序与双重释放
 
 - 泛型与泛型的无 impl 路径统一为**声明顺序**；容器元素按既有正序释放。**不引入逆序**，避免与非泛型路径分叉。
-- `drop` 方法体内对同一字段出现两次 `delete self->f` → L36-1（同一方法体、同一字段的语法级重复检测；不做流分析）。
+- **编译器没有运行时计数器/释放钩子**：只有静态 `leak_*` 分析。所有"释放发生了几次"的可观测性来自**夹具里自定义的 `Probe`**（`struct Probe { int id; } use Drop;` + 夹具全局计数 + `retain`/`release` 打印），不是编译器或库新增的设施。
+- `drop` 方法体内对同一字段调用两次 `release()` → L36-1（同一方法体、同一字段的语法级重复检测；不做流分析）。`delete` 会把指针置 0，重复 `delete` 是生成代码里的 no-op，不在检测范围。
 - 没有显式 impl 时的自动 glue 只负责"字段递归"，不负责容器的 `release`。
 
 #### 3.1.3 与容器/接口
 
-- `Vec<T>` 的 `release()` 对每个元素调用 `__ct_elem_release`；`T` 同时声明 `retain`/`release` 时该助手非空，否则为空（Phase 31 既有协议）。
-- `Option<T>` 自身在本相**不声明**自动 payload 释放；`Option<Str>` 若要自动释放，用 `own Option<Str> *` + `delete`。
+- `Vec<T>` 的 `release()` 对每个元素调用 `__ct_elem_release`；`T` 的**固有方法集**同时声明 `retain` 与 `release`（且 `retain` 返回自身类型）时该助手非空，否则为空（Phase 31 既有协议）。
+- `Option<T>` 在 P34 没有 `use Drop`。本相在 `lib/std/Option.h.ct` 与 `Result.h.ct` 的声明上加 `use Drop`（库改动，计入 S4c），实例因此获得字段递归 glue；`none()`/`ok()`/`err()` 必须**零初始化未使用的 payload**（`{0}`），否则 `has == 0` / `ok == 0` 时 `delete` 会 drop 未初始化的 payload。
+- `Option<Str>` 的 glue 路径与 `Option<Probe>` 相同；E36-4 用 `Option<Probe>` 计数观测，`Option<Str>` 只做产物 grep。
 - 接口 payload（`Show`）没有泛型 Drop 特化；本相不做。
 
 ### 3.2 O2 带长度字符串 `Str`
@@ -99,12 +101,17 @@ struct Str {
     char *data;
     int len;
 } use Drop;
+
+impl Str {
+    Str retain(void);      /* 固有方法：深拷贝，返回独立 Str */
+    void release(void);    /* 固有方法：释放 data，置 data=0、len=-1 */
+}
 ```
 
 - `Str` 拥有 `data`（堆分配），`len` 为字节数；不要求 NUL 结尾，允许内嵌 `\0`。
 - **拥有式分配沿用既有 `own` 规则**：`own Str *p = malloc(sizeof(struct Str));` 然后 `str_init(p, ...)`；`delete p` 先跑 `Str_Drop_drop` 再 `free` 并把指针置 0。
-- 栈上的 `Str` 值不自动释放；用 `str_release(s)` 或放进容器后 `release()`。
-- `retain` 为深拷贝（返回独立 `Str`），`release` 释放数据并把 `data` 置 0、`len` 置 -1；两者满足 Phase 31 的元素协议，`Vec<Str>` 因此可用。
+- 栈上的 `Str` 值不自动释放；用 `s.release()` 或放进容器后 `v.release()`。
+- `retain`/`release` **必须是固有方法**（`impl Str { … }`），不能只写成自由函数 `str_retain(Str)`/`str_release(Str)`：Phase 31 的元素协议判定要求固有方法集同时有二者且 `retain` 返回自身类型，否则 `__ct_elem_release` 发射为空，`Vec<Str>` 不会逐元素释放。自由函数可保留为薄包装，但协议只认固有方法。
 - `slice(start, len)` 返回**拥有值**（深拷贝），避免借用逃逸分析（T31-5）；零拷贝视图见 T36-3。
 
 #### 3.2.2 API（最小集）
@@ -118,8 +125,10 @@ struct Str {
 | `str_concat(Str a, Str b)` | 拼接，返回新 `Str` |
 | `str_compare(Str a, Str b)` | 按字节字典序，返回 -1/0/1 |
 | `str_c_str(Str s)` | 返回临时 NUL 结尾副本（调用方负责释放；文档写明） |
-| `str_release(Str s)` | 释放并置 `data=0, len=-1`；`Drop` 与容器元素释放共用同一内部函数 |
+| `s.retain()`（固有方法） | 深拷贝，返回独立 `Str`；满足元素协议的 `retain` 形态 |
+| `s.release()`（固有方法） | 释放并置 `data=0, len=-1`；`Drop` 与容器元素释放共用同一内部函数 |
 
+- 元素协议只认固有方法 `retain`/`release`；自由函数 `str_retain`/`str_release` 可作为包装，但**不能让协议生效**。
 - 全部为 `pub` 函数或 `Str` 的固有方法，复用 P34 的跨单元能力；库代码不占编译器预算。
 - 与 `char *` 不隐式互转；`printf("%s")` 需显式 `str_c_str`。
 
@@ -162,7 +171,7 @@ struct Str {
 本相不做。`Vec<Str>` 显式 `release()`；`Option<Str>` 用 `own Option<Str> *` + `delete` 或调用方显式释放。块尾自动释放列为 T36-6。
 
 ### B36-6 泄漏判据
-11 道硬门禁不含 ASAN，`check-sanitizers.sh` 不跑 `test/modules/**` 且 `detect_leaks=0`。因此泄漏/双重释放**不作门禁判据**；门禁改为可观测的计数器输出 + 产物 grep，ASAN 只作人工证据，单列记录。
+11 道硬门禁不含 ASAN，`check-sanitizers.sh` 不跑 `test/modules/**` 且 `detect_leaks=0`。编译器也没有运行时计数器，只有静态 `leak_*` 分析。因此泄漏/双重释放**不作门禁判据**；门禁改为"夹具内 `Probe` 的计数输出 + 产物 grep"，ASAN 只作人工证据、单列记录。
 
 ## 6 实现切片（每片 ≤150 行）
 
@@ -173,25 +182,28 @@ struct Str {
 | S1b | `drop` 体内同字段重复释放检测（L36-1） | `Parser.h.ct` / `Stmt.h.ct` | 40–80 |
 | S2a | 泛型 drop glue 发射（声明顺序、递归 `use Drop` 字段） | `Emitter.h.ct` / `Init.h.ct` | 90–140 |
 | S2b | 容器元素协议接入与实例归属核对 | `Emitter.h.ct` / `lib/std/**` | 60–100 |
-| S3 | 泛型 Drop 夹具（计数器可观测） | `test/ast/**` | 90–140 |
-| S4 | `Str.h.ct` 库（**不计编译器预算**） | `lib/std/Str.h.ct` | 200–400 |
+| S3 | 泛型 Drop 夹具（夹具内 `Probe` 计数可观测） | `test/ast/**` | 90–140 |
+| S4a | 库片：`Str` 核心（from/from_len/len/retain/release/drop 内部函数），**不计编译器预算** | `lib/std/Str.h.ct` | 90–150 |
+| S4b | 库片：`slice`/`concat`/`compare`/`c_str`/内嵌 `\0`，**不计编译器预算** | `lib/std/Str.h.ct` | 90–150 |
+| S4c | 库片：`Option.h.ct`/`Result.h.ct` 加 `use Drop` + `none()`/`ok()`/`err()` 零初始化未使用 payload | `lib/std/Option.h.ct` / `Result.h.ct` | 20–40 |
 | S5 | `Str` 夹具：长度/切片/拼接/比较/内嵌 `\0` | `test/ast/**` | 90–140 |
 | S6 | `own Str *` + 双重释放负例 | `test/ast/**` | 60–100 |
 | S7 | 样例 `examples/40_str_ownership` | `examples/40_*` | 80–130 |
-| S8 | 文档 + 全量门禁 | `docs/**` | 100–160 |
+| S8a | 收口片：文档（不产编译器代码） | `docs/**` | 60–100 |
+| S8b | 收口片：全量门禁与收口记录（不产编译器代码） | 无源码改动 | 40–60 |
 
 ## 7 退出判据（E36-n）
 
 | ID | 断言 | 夹具 | 门禁 | 红证 |
 | --- | --- | --- | --- | --- |
 | E36-1 | `struct Box<T> use Drop` + `impl<T> Drop for Box<T>` 编译；`Box<int>`/`Box<Str>` 各生成 `Box_*_Drop_drop` | `ast/221_generic_drop` + 产物 grep | `check-ast` | 当前 `5:14: unexpected token` |
-| E36-2 | 无显式 impl 时字段按声明顺序递归；有显式 impl 时不生成字段 glue；运行时计数器输出逐字节正确 | `ast/222_drop_order` | `check-ast` | 当前无泛型 Drop |
-| E36-3 | `Vec<Str>` 显式 `release()` 逐元素调用 `Str_release`；`Vec<Probe>` 的计数器打印 3 次 | `ast/223_vec_str_release` + 产物 grep | `check-ast` | 当前无 `Str` |
-| E36-4 | `own Option<Str> *` + `delete` 触发 `Option_Str_Drop_drop` → `Str_Drop_drop`；计数器可观测 | `ast/224_option_str_drop` + 产物 grep | `check-ast` | 当前无 `Str` |
-| E36-5 | `drop` 方法体内重复释放同一字段 → L36-1 | `errors/double_drop.ct` | `check-ast` | 当前无泛型 Drop |
+| E36-2 | 无显式 impl 时字段按声明顺序递归；有显式 impl 时不生成字段 glue；夹具内 `Probe` 的全局计数输出逐字节正确（`Probe` 是夹具代码，不是编译器/库设施） | `ast/222_drop_order` | `check-ast` | 当前无泛型 Drop |
+| E36-3 | `Vec<Probe>` 的 `release()` 逐元素调用 `Probe_release`（容器调 `T_release`，不会调 `T_Drop_drop`），计数打印 3 次；`Vec<Str>` 产物 grep 到 `Str_release(` 调用 | `ast/223_vec_element_release` + 产物 grep | `check-ast` | 当前无 `Str` |
+| E36-4 | P36 给 `Option<T>` 加 `use Drop` 后：`own Option<Probe> *` + `delete` 触发 `Option_Probe_Drop_drop` → `Probe_Drop_drop`，计数可观测；`none()`/`ok()`/`err()` 零初始化未使用 payload；`Option<Str>` 产物 grep `Str_Drop_drop(&_self->value)` | `ast/224_option_probe_drop` + 产物 grep | `check-ast` | 当前无 `Str`/`Option` Drop |
+| E36-5 | `drop` 方法体内对同一字段调用两次 `release()` → L36-1 | `errors/double_drop.ct` | `check-ast` | 当前无泛型 Drop |
 | E36-6 | `str_from_len` 保留内嵌 `\0`；`str_len` 返回字节数 | `ast/225_str_embedded_nul` | `check-ast` | 当前无 `Str` |
 | E36-7 | `str_slice`/`str_concat`/`str_compare` 输出正确（含空串、全 `\0`、UTF-8 多字节） | `ast/226_str_ops` | `check-ast` | 当前无 `Str` |
-| E36-8 | `own Str *p = malloc(...)` + `delete p` 编译运行；`delete` 后指针被置 0（产物 grep `p = 0`） | `ast/227_str_own_pointer` + 产物 grep | `check-ast` | 当前无 `Str` |
+| E36-8 | **既有行为回归**：`own Str *p = malloc(...)` + `delete p` 编译运行；`delete` 后指针被置 0（产物 grep `p = 0`） | `ast/227_str_own_pointer` + 产物 grep | `check-ast` | 当前无 `Str` |
 | E36-9 | 非泛型 `Drop` 产物与基线逐字节相同；既有 Drop 夹具零回退 | 全量 | `check-ast` | S0 实测 |
 | E36-10 | 跨单元 `Str`（P34）在同一版本内工作；生成 `.h` 仅类型 | `test/modules/p36_str` | `check-ast` modules 段 | 当前无 `Str` |
 | E36-11 | 样例 `examples/40_str_ownership` 进入 `test/run.sh`，golden 人工核对 | `examples/40_*` | `test/run` | 当前不存在 |
@@ -203,7 +215,7 @@ struct Str {
 
 | 编号 | 触发 | 夹具 | 文案要点 |
 | --- | --- | --- | --- |
-| L36-1 | `drop` 方法体内重复释放同一字段 | `errors/double_drop.ct` | `field '<name>' is released twice in drop` |
+| L36-1 | `drop` 方法体内对同一字段调用 `release()` 两次（`delete` 已置 0，重复 `delete` 是 no-op，不在范围） | `errors/double_drop.ct` | `field '<name>' is released twice in drop` |
 
 只保留有夹具、有断言的一条；`own` 误用、`char *` 混用等既有/不存在的诊断不入台账。
 
@@ -220,11 +232,11 @@ struct Str {
 | 编译器 | S1a+S1b+S2a+S2b | **250–420** | 4–6 |
 | 夹具 | S3+S5+S6 | 240–380 | 9–16 |
 | 样例 | S7 | 80–130 | 1–2 |
-| 文档 | S8 | 100–160 | 4–6 |
+| 文档 | S8a+S8b | 100–160 | 4–6 |
 | **编译器外合计** | 夹具 + 样例 + 文档 | **420–670** | 14–24 |
-| 库代码（S4，**不计编译器预算**） | `lib/std/Str.h.ct` | 200–400 | 1–3 |
+| 库代码（S4a+S4b+S4c，**不计编译器预算**） | `lib/std/Str.h.ct`、`Option.h.ct`、`Result.h.ct` | 200–340 | 2–4 |
 
-编译器 250–420 = 60+40+90+60 与 100+80+140+100，与 §6 逐片一致。
+编译器 250–420 = 60+40+90+60 与 100+80+140+100，与 §6 逐片一致；S4a–S4c 是库片、S8a–S8b 是收口片，均不冒充编译器代码。
 
 ## 11 风险与触发条件
 
@@ -235,7 +247,7 @@ struct Str {
 | R36-3 | `Str` 内嵌 `\0` 与 `str_c_str` 截断 | E36-6 + 文档警告 |
 | R36-4 | `own Str` 值移动被误当作既有能力 | D36-8 + §2.2 探针；T36-5 |
 | R36-5 | 跨单元 `Str` ABI 漂移 | 只保证同一编译器版本；E36-10 |
-| R36-6 | 泄漏/双重释放不可门禁 | B36-6；计数器 + 产物 grep；ASAN 人工证据 |
+| R36-6 | 泄漏/双重释放不可门禁 | B36-6；夹具 `Probe` 计数 + 产物 grep；ASAN 人工证据 |
 | R36-7 | `Option<Str>` 自动释放被误承诺 | D36-7；E36-4 只走 `own` + `delete` |
 
 ### 开放项 / 触发条件

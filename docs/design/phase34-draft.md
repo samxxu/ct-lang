@@ -1,7 +1,7 @@
 # Phase 34 — 生态可用性：`pub` 泛型函数、非泛型固有方法、`Option`/`Result`
 
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
-> **基线**：**依赖落地后的提交**（Phase 31 收口并推送后确定），不预钉 `v0.30.0` 或 `bd91bfe`；S0 在**实现提交的父提交**上重建二进制并复跑 §2.2 探针，红证必须记录 `baseline: <sha>`，复跑结果与父提交不一致时不得开工。
+> **基线**：**Phase 33 落地并推送后确定**（P33 是硬前置；不预钉 `v0.30.0` 或 `bd91bfe`）；S0 在**实现提交的父提交**上重建二进制并复跑 §2.2 探针，红证必须记录 `baseline: <sha>`，复跑结果与父提交不一致时不得开工。
 > **文档形态**：`phase34-draft.md`；design window 12/12，**每次转正归档当时最老的一张**（32 → phase20，33 → phase21，34 → phase22，35 → phase23，36 → phase24）。
 > **前置**：[phase31.md](phase31.md)（容器）、[phase33.md](phase33-draft.md)（泛型 struct 与跨单元实例归属）、[phase26.md](phase26.md)（L26-2 的来源）。**P33 是硬前置**：P33 未落地则本相暂停，不提供降级分支。
 > **排序理由**：没有 `pub` 泛型函数与非泛型固有方法，`Option`/`Result` 只能停留在模板所属单元，Phase 31/33 的成果无法被包复用。
@@ -37,39 +37,43 @@
 
 变更内容：允许 `pub T name<T>(...)`；模板体必须写在 `.h.ct`（源码头）中；消费方为每个 `(模板, 具体类型)` 发 `static` 实例，实例名沿用 `<name>__ct<N>`；生成 `.h` 仍只放类型；定义单元与消费方各发同名 `static` 副本不产生重复全局符号；其他 L26 规则不变。
 
-**影响面清单（回滚必须逐项恢复）**：
+**影响面清单：代码 1 + 可执行断言 3 + 夹具 2 + 规范文档 6**：
 
-| 类别 | 位置 | 现状 |
+| 类别 | 位置 | 现状 / 处置 |
 | --- | --- | --- |
 | 代码 | `frontend/parse/Parser.h.ct:1110` | `return fail("generic functions cannot be pub")` |
-| 断言 | `selfhost/check-ast.sh:1397` | `p26_diag generic_pub 2:9 "…"` |
-| 断言 | `selfhost/check-ast.sh:1435` | `p26_chk generic_pub "…"` |
-| 断言 | `selfhost/check-ast.sh:5859` | E29-13/B6 期望 `generic functions cannot be pub` |
-| 夹具 | `test/ast/errors/generic_pub.ct` | 位于 `errors/`，要求非零退出 |
-| 夹具 | `test/modules/errors/generic_struct_pub_fn.ct` | 位于 `errors/`，要求非零退出 |
-| 文档 | `docs/design/phase26.md:537` | §6.3 的 `generic_pub` 输出行 |
-| 文档 | `docs/language-spec.md:1914`、`:4350` | L26-2 文案与「不支持 pub」 |
-| 文档 | `docs/modern-oo-gap.md:90` | 差距表条目 |
-| 文档 | `docs/design/phase29.md:912` | E29-13/B6 行 |
+| 可执行断言 | `selfhost/check-ast.sh:1397` | `p26_diag generic_pub 2:9 "…"` |
+| 可执行断言 | `selfhost/check-ast.sh:1435` | `p26_chk generic_pub "…"` |
+| 可执行断言 | `selfhost/check-ast.sh:5859` | E29-13/B6 期望旧文案 |
+| 夹具 | `test/ast/errors/generic_pub.ct` | 位于 `errors/`，必须转正 |
+| 夹具 | `test/modules/errors/generic_struct_pub_fn.ct` | 位于 `errors/`，必须转正 |
+| 规范文档 | `docs/design/phase26.md:186` | L26-2 的**规范定义行**：加 superseding 说明，不改原文 |
+| 规范文档 | `docs/design/phase26.md:262-265` | TEST-18 的「`pub` 泛型已被 L26-2 拒绝」理由已假，须改写理由 |
+| 规范文档 | `docs/design/phase26.md:537` | v0.25.0 vs v0.26.0 历史对照表：**只加脚注，不改写** |
+| 规范文档 | `docs/language-spec.md:1913-1914`、`:4349-4350` | 两处 L26-2 码行与文案 |
+| 规范文档 | `docs/design/phase29.md:912` | E29-13/B6 行：保留原文，另加「P34 覆盖」条目 |
+| 规范文档 | `docs/modern-oo-gap.md:90` | 差距表条目 |
 
 `docs/history/reports/review-phase26.md:96` 是冻结的历史报告，**不参与回滚**。
 
-**两个 `errors/` 夹具必须移出**：`test/ast/errors/` 的判据是「非零退出」，放开后退出 0 会挂门禁。`generic_pub.ct` 转正为 `test/ast/2xx_pub_generic_fn/prog.ct` 正例；`generic_struct_pub_fn.ct` 转正为 `test/modules/p34_pub_generic_export/` 正例，`check-ast.sh:5859` 改为断言其**编译运行成功**。E29-13/B6 的判据变更随本相独立提交记录，视为已批准变更。
+**两个 `errors/` 夹具必须移出**：`test/ast/errors/` 的判据是「非零退出」，放开后退出 0 会挂门禁。`generic_pub.ct` 转正为 `test/ast/228_pub_generic_fn/prog.ct` 正例；`generic_struct_pub_fn.ct` 转正为 `test/modules/p34_pub_generic_export/` 正例，`check-ast.sh:5859` 改为断言其**编译运行成功**。
 
-回滚方式：恢复 `Parser.h.ct:1110`，同时恢复上表 **6 处断言/期望**（3 处 `check-ast.sh` + 2 个夹具的失败期望 + `phase26.md:537`）与 4 份文档表述，缺一不可。
+**E29-13/B6 不由本卡自行批准**：Phase 29 是已收口阶段。保留 `phase29.md:912` 原文，另加一行「P34 覆盖：L26-2 已解禁，B6 转正为 `p34_pub_generic_export`，批准记录见用户 2026-11-11 的 Phase 34 指令」；该行与 L26-2 代码改动**分两个提交**（E34-2a / E34-2b）。
+
+回滚方式：恢复 `Parser.h.ct:1110`，恢复 **3 处可执行断言 + 2 个夹具的失败期望**；规范文档按上表逐项还原（`phase26.md:186` 去 superseding、`262-265` 恢复旧理由、`537` 去脚注、language-spec 两处、`phase29.md:912` 去覆盖条目、`modern-oo-gap.md:90`）。`phase26.md:537` 只是脚注，不属于「必须恢复的断言」。
 
 ### 1.5 依赖链
 
 `Phase 31（容器）→ Phase 33（泛型 struct + 跨单元实例归属）→ Phase 34 → Phase 35 → Phase 36`。
 
 - O1/O2 的跨单元实例化依赖 P33。
-- O3 的 `Option<Point>`（Point 在消费方单元）依赖 P33；**P33 未落地时本相不开工**，不设 `L34-4` 之类的降级路径。
+- O3 的 `Option<Point>`（Point 在消费方单元）依赖 P33；**P33 未落地时本相不开工**，不设降级分支。
 
 ## 2 现状与基线
 
 ### 2.1 门禁基线
 
-参考值（最近一次全绿，Phase 31 开工前）：`check-ast` 1073/0、`test/run` 141/0、`check-warnings` 353/0、`check-docs` OK（1070 links / 185 files，v0.30.0，11 hard gates）、`design window 12/12`。Phase 31 已在其上追加断言，**S0 必须重测并回填本节**，不得引用历史数字。
+参考值（v0.30.0 发版实测，S0 必须重测）：`check-ast` 1073/0、`test/run` 141/0、`check-warnings` 353/0、`check-docs` OK（1070 links / 185 files，v0.30.0，11 hard gates）、`design window 12/12`。基线是 **Phase 33 收口提交**，不是 Phase 31；不得引用历史数字。
 
 ### 2.2 红证探针（2026-11-11 实测）
 
@@ -109,7 +113,7 @@
 
 1. **语法**：`parse_impl` 在名字后既不是 `<`、也不是 `for` 时，按固有 impl 解析（需要与「trait 名后必须有 `for`」的既有错误区分）。
 2. **派发**：`inst_inherent_method` / `inst_static_method` 今天要求 `ct_inst_find(base) >= 0`；非泛型 struct 没有实例行，查找必须回落到 struct 行与本地 impl 表。
-3. **跨单元**：`pub struct` 的 `impl` 写在 `.h.ct` 中，方法以 `<Struct>_<method>` 发一个全局符号，消费方直接调用；生成 `.h` 仍只放类型。
+3. **跨单元**：`pub struct` 的 `impl` 写在 `.h.ct` 中，方法以 `<Struct>_<method>` 发一个全局符号。生成 `.h` 仍只放类型，因此**消费方必须为自己的调用合成原型**：`c.get()` 展开为 `Counter_get(&c)` 后，消费方 `.c` 要在首次调用前写出 `int Counter_get(struct Counter *);`；否则 C99 隐式声明在 `-Werror` 下直接失败（`check-ast.sh` 的所有产物都按 `-Wall -Wextra` 编译）。定义只由属主单元发一次，消费方只发原型。
 
 - 冲突：同单元同名方法沿用既有重复定义诊断；**跨单元重复定义不作解析期检测**（impl 表按单元隔离），落到链接期重复符号，登记为 R34-4 的已知限制，不承诺硬错。
 - 不做方法级类型参数；`impl<T> Box<T>` 的泛型方法仍是 P33 范围。
@@ -138,7 +142,7 @@
 | D34-10 | 不改 L26-1/L26-3–L26-5 | 只放开 `pub` |
 | D34-11 | 不新增 `MAX_*` | 控制结构体膨胀 |
 | D34-12 | 不 bump、不打 tag | 与 31–33 纪律一致 |
-| D34-13 | E29-13/B6 随 L26-2 改为正例 | 已批准变更，与 L26-2 同一独立提交 |
+| D34-13 | E29-13/B6：保留 phase29 原文 + 加「P34 覆盖」条目，并附用户 2026-11-11 批准记录；与 L26-2 主体分两个提交 | 已收口判据不能由本卡自行宣告批准 |
 
 ## 5 Battle 记录
 
@@ -158,7 +162,7 @@
 放 `lib/std`；ct-pkg 侧镜像由用户在其仓库决定，`lib/std/README.md` 记录去重清单。
 
 ### B34-6 L26-2 的影响面与回滚
-见 §1.4。评审要求"旧判据 / 新判据 / 影响面 / 回滚方式"四件套；回滚必须覆盖代码 + 6 处断言/期望 + 4 份文档，只恢复代码视为未回滚。
+见 §1.4。评审要求"旧判据 / 新判据 / 影响面 / 回滚方式"四件套；回滚必须覆盖代码 1 处、可执行断言 3 处、夹具 2 个、规范文档 6 处（其中 `phase26.md:537` 只是脚注，不属于必须恢复的断言），只恢复代码视为未回滚。
 
 ### B34-7 `Option<Show>` 是否算 P34 新能力
 不算。实测今天已生成 `struct Option_Show__iface`；本相只锁 API 与产物形状，不重复计入 P31/P34 的能力清单。
@@ -175,7 +179,7 @@
 | S3 | L26-2 判据变更：断言改向、两个 `errors/` 夹具转正 | `check-ast.sh` / `test/**` | 40–80 |
 | S4 | `impl Name { … }` 固有 impl 解析 | `Parser.h.ct` | 70–110 |
 | S5a | 非泛型固有方法查找与静态派发 | `Expr.h.ct` | 60–100 |
-| S5b | 跨单元 `<Struct>_<method>` 符号与 `.h.ct` 可见 | `Emitter.h.ct` / `Module.h.ct` | 60–110 |
+| S5b | 跨单元 `<Struct>_<method>` 符号、消费方原型合成与 `.h.ct` 可见 | `Emitter.h.ct` / `Module.h.ct` | 80–140 |
 | S6 | 编译器回归：`.h` 类型-only + `nm` 无重复实例 | `check-ast.sh` | 60–110 |
 | S7 | `Option`/`Result` 基本夹具 | `test/ast/**` | 100–150 |
 | S8 | 跨单元夹具：`Option<Point>`、`Option<Show>`、固有方法 | `test/**` | 80–130 |
@@ -190,31 +194,31 @@
 | ID | 断言 | 夹具 | 门禁 | 红证 |
 | --- | --- | --- | --- | --- |
 | E34-1 | `.h.ct` 的 `pub T id<T>(T)` 在消费方 `id<int>(3)` 编译运行；实例为消费方 `static` | `test/modules/p34_pub_generic` | `check-ast` modules 段 | 当前 `generic functions cannot be pub` |
-| E34-2 | L26-2 单独提交：`check-ast.sh` 三处断言改向、两个 `errors/` 夹具转为正例、6 处断言/期望全部更新 | 上述夹具 + 提交记录 | `check-ast` | 当前三处断言逐字匹配旧文案 |
-| E34-3 | `pub` 泛型带 bound `T: Show` 跨单元实例化；消费方看不到 `Show` 时给既有 `unknown trait '<x>' in a generic bound`（L34-4） | `test/modules/p34_pub_bound` + `errors/p34_bound_hidden.ct` | `check-ast` | 当前无法声明 `pub` |
-| E34-4 | `pub struct Counter` 的非泛型固有方法从另一单元调用并运行 | `test/modules/p34_inherent` | `check-ast` modules 段 | 当前 `impl of an unknown trait` |
+| E34-2a | L26-2 主提交：`check-ast.sh` 三处断言改向、两个 `errors/` 夹具转正、`phase26.md:186` 加 superseding、`262-265` 改写理由、`537` 只加脚注、language-spec 两处与 gap 更新 | 上述夹具 + 提交记录 | `check-ast` | 当前三处断言逐字匹配旧文案 |
+| E34-2b | Phase 29 覆盖记录单独提交：保留 `phase29.md:912` 原文，另加「P34 覆盖」行与用户 2026-11-11 批准记录 | `docs/design/phase29.md` | `check-docs` | 当前无覆盖条目 |
+| E34-3 | `pub` 泛型带 bound `T: Show` 跨单元实例化；`test/modules/errors/p34_bound_hidden/`（`main.ct` + `dep.h.ct`）触发既有 `unknown trait '<x>' in a generic bound` | `test/modules/p34_pub_bound` + `test/modules/errors/p34_bound_hidden/` | `check-ast` modules 段（正例与错误段） | 当前无法声明 `pub` |
+| E34-4 | `pub struct Counter` 的非泛型固有方法从另一单元调用并运行；消费方 `.c` 含 `int Counter_get(struct Counter *);` 原型，定义只在属主 `.c` 出现一次 | `test/modules/p34_inherent` + 产物 grep + `nm` | `check-ast` modules 段 | 当前 `impl of an unknown trait` |
 | E34-5 | `Option<int>` 的 some/none/is_some/unwrap_or/release 输出逐字节正确 | `ast/211_option_basic` | `check-ast` | 当前无 `Option` |
 | E34-6 | `Result<int, char *>` 的 ok/err/is_ok/unwrap_or/release 输出正确 | `ast/212_result_basic` | `check-ast` | 当前无 `Result` |
 | E34-7 | `Option<Point>`（Point 在消费方单元）跨单元编译运行；产物含 `struct Option_Point` | `test/modules/p34_option_point` | `check-ast` modules 段 | 当前无 `Option` |
 | E34-8 | `Option<Show>` 的 `is_some`/`unwrap_or` 正确；产物为 `struct Option_Show__iface { int has; struct Show_iface value; }` | `ast/213_option_iface` + 产物 grep | `check-ast` | 今天可编译，仅缺 API |
 | E34-9 | `Option<Option<int>>` 可构造/查询/释放 | `ast/214_option_nested` | `check-ast` | 当前无 `Option` |
 | E34-10 | `enum Option<T>` 给 `generic enums are not supported`（L34-3） | `errors/generic_enum.ct` | `check-ast` | 当前 `1:12: unexpected token` |
-| E34-11 | 生成 `.h` 仅类型；`nm` 无重复 `<name>__ctN`；缓存键稳定 | 全部跨单元夹具 + 产物检查 | `check-ast` | 当前无此路径 |
+| E34-11 | 生成 `.h` 仅类型；`nm` 无重复 `<name>__ctN`；连续构建两次后逐字节比较 `.ctcache/*.key` 一致 | 全部跨单元夹具 + 产物检查 | `check-ast` | 当前无此路径 |
 | E34-12 | 既有断言零回退；非泛型函数/结构体产物逐字节不变 | 全量 | `check-ast` | S0 实测计数 |
 | E34-13 | 样例 `examples/38_ecosystem_reuse` 进入 `test/run.sh`，golden 人工核对 | `examples/38_*` | `test/run` | 当前不存在 |
 | E34-14 | language-spec/tutorial/glossary/roadmap 写清 `pub` 泛型、跨单元固有方法、`Option`/`Result` 边界与 L26-2 变更 | `docs/**` | `check-docs` | 当前无表述 |
-| E34-15 | `pub` 泛型缺类型实参 → 既有 L26-1；两个类型参数 → 既有 L26-3（L34-1/L34-2） | `errors/p34_pub_arity.ct` | `check-ast` | 当前先被 L26-2 拦截 |
+| E34-15 | `pub` 泛型缺类型实参 → L26-1；两个类型参数 → L26-3；两个夹具各自恰一条断言并钉住位置 | `errors/p34_pub_missing_arg.ct`、`errors/p34_pub_two_params.ct` | `check-ast` | 当前先被 L26-2 拦截 |
 
 ## 8 负例台账（L34-n）
 
 | 编号 | 触发 | 夹具 | 文案要点 |
 | --- | --- | --- | --- |
-| L34-1 | `pub` 泛型缺类型实参 | `errors/p34_pub_arity.ct` | 沿用 L26-1 |
-| L34-2 | `pub` 泛型两个类型参数 | `errors/p34_pub_arity.ct` | 沿用 L26-3 |
+| L34-1 | `pub` 泛型缺类型实参 | `errors/p34_pub_missing_arg.ct` | 沿用 L26-1，恰一条 |
+| L34-2 | `pub` 泛型两个类型参数 | `errors/p34_pub_two_params.ct` | 沿用 L26-3，恰一条 |
 | L34-3 | 泛型 enum | `errors/generic_enum.ct` | `generic enums are not supported` |
-| L34-4 | `pub` 泛型 bound trait 在消费方不可见 | `errors/p34_bound_hidden.ct` | 沿用 `unknown trait '<x>' in a generic bound` |
 
-四条负例均有夹具与 `check-ast` 断言；无夹具的条目一律删除，不留在台账里。
+三条负例均有夹具与 `check-ast` 断言。原先的「bound trait 在消费方不可见」不是新 L：它是 E34-3 的模块回归断言（`test/modules/errors/p34_bound_hidden/`），用的是既有诊断，故不列入 L 台账。
 
 ## 9 样例计划
 
@@ -226,13 +230,13 @@
 
 | 区 | 组成 | 行数 | 文件数 |
 | --- | --- | --- | --- |
-| 编译器 | S1a+S1b+S2a+S2b+S4+S5a+S5b | **395–690** | 4–6 |
+| 编译器 | S1a+S1b+S2a+S2b+S4+S5a+S5b | **415–720** | 4–6 |
 | 夹具与断言 | S3+S6+S7+S8 | 280–470 | 12–20 |
 | 文档 + 样例 | S10+S11 | 180–310 | 5–8 |
 | **编译器外合计** | 夹具/断言 + 文档/样例 | **460–780** | 17–28 |
 | 库代码（S9，**不计编译器预算**） | `lib/std/Option.h.ct`、`Result.h.ct` | 250–500 | 2–4 |
 
-编译器 395–690 = 45+50+60+50+70+60+60（下限）与 80+90+110+90+110+100+110（上限），与 §6 逐片一致；S6 是 `check-ast.sh` 断言，归入夹具/断言区，不冒充编译器代码。
+编译器 415–720 = 45+50+60+50+70+60+80（下限）与 80+90+110+90+110+100+140（上限），与 §6 逐片一致；S6 是 `check-ast.sh` 断言，归入夹具/断言区，不冒充编译器代码。
 
 ## 11 风险与触发条件
 
@@ -243,7 +247,7 @@
 | R34-3 | 非泛型固有 impl 与 trait impl 语法歧义 | S4 用「名字后是否为 `<` / `for`」区分；E34-4 双夹具 |
 | R34-4 | 跨单元重复方法定义 | impl 表按单元隔离，落到链接期；文档登记为已知限制 |
 | R34-5 | `Option<Show>` 的 `__iface` 形状被误当作新能力 | B34-7 明确；E34-8 只锁形状 |
-| R34-6 | L26-2 变更被夹带进其他切片 | D34-3 独立提交；E34-2 是硬条件 |
+| R34-6 | L26-2 变更被夹带进其他切片 | D34-3 独立提交；E34-2a/E34-2b 是硬条件 |
 
 ### 开放项 / 触发条件
 
