@@ -6037,8 +6037,11 @@ p29_neg vec_subscript "a Vec is not subscriptable: use get(i) / set(i, v)" 9:13
 p29_neg map_subscript "a Map is not subscriptable: use get(key)" 8:13
 p29_neg map_brace_init "a Map cannot be initialized from a brace list: use put(key, value)" 5:26
 p29_neg generic_impl_missing_method "no method 'nope' for type 'struct Pair_int_int'" 20:1
-p29_neg container_iface "interface and vptr-bearing values cannot be stored in a container" 19:15
+# Phase 31 O1: interface *values* (`Vec<Show>`) are now allowed; only
+# vptr-bearing concrete structs (L29-13) and interface pointers (L31-1) stay
+# rejected.  The old `container_iface` negative is replaced by a positive below.
 p29_neg container_vptr_struct "interface and vptr-bearing values cannot be stored in a container" 13:14
+p29_neg container_iface_ptr "a container of interface pointers is not supported; store the interface value itself" 11:15
 # V29-4b: the base of a subscript is judged by its expression type, not only a
 # bare variable, so a deref, a member and a call result cannot reach `cc`.
 p29_neg vec_subscript_deref "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
@@ -6060,6 +6063,48 @@ p29_neg vec_subscript_mcall "a Vec is not subscriptable: use get(i) / set(i, v)"
 # V29-4e: a file-scope array and a file-scope pointer must land on opposite
 # sides of the judgement (`g[0]` is a Vec value, `pg[0][0]` is not).
 p29_neg vec_subscript_global_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
+
+# ---- Phase 31 S1: interface values in a container (O1) ----
+# `Vec<Show>` stores a `struct Show_iface` value (self + vtbl).  No boxing is
+# needed for declaration / len / release on an empty vector, so this slice only
+# opens the type guard; push/get/set boxing lands in S2.
+cat >"$work/p31s1.ct" <<'EOF'
+trait Show {
+    int base();
+}
+
+struct Num {
+    int v;
+}
+
+impl Show for Num {
+    int base() {
+        return self->v;
+    }
+}
+
+int main(void)
+{
+    Vec<Show> v;
+    v.h = 0;
+    v.data = 0;
+    int n = v.len();
+    v.release();
+    return n;
+}
+EOF
+"$work/ct-ast" "$work/p31s1.ct" -o "$work/p31s1.c" >"$work/p31s1.out" 2>"$work/p31s1.err"
+if [ $? -ne 0 ]; then
+    bad "p31 S1: Vec<Show>" "ct-ast failed: $(head -3 "$work/p31s1.err")"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p31s1.c" -o "$work/p31s1.bin" 2>"$work/p31s1.cc"; then
+    bad "p31 S1: Vec<Show>" "cc failed: $(head -4 "$work/p31s1.cc")"
+elif ! "$work/p31s1.bin" >"$work/p31s1.run" 2>&1; then
+    bad "p31 S1: Vec<Show>" "run failed: $(cat "$work/p31s1.run")"
+elif [ "$(cat "$work/p31s1.run")" != "0" ]; then
+    bad "p31 S1: Vec<Show>" "expected 0, got $(cat "$work/p31s1.run")"
+else
+    ok "p31 S1 (Vec<Show> declaration / len / release compiles and runs)"
+fi
 
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it
