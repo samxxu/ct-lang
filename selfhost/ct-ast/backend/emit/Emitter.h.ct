@@ -20,6 +20,7 @@ import frontend::module::MapTable::Call as Call;
 import frontend::module::MapTable::MapBind as MapBind;
 import frontend::module::MapTable;
 import frontend::module::Unit;
+import frontend::parse::Expr;
 import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols::MethodSig as MethodSig;
 import frontend::sym::Symbols::Closure as Closure;
@@ -1862,6 +1863,16 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     return 0;
 }
 
+/* Phase 31 O3: the shared static type reader, reached through its singleton.
+   A trait method is dispatched through a named receiver only, so the pointer is
+   held in a local. */
+static int hoist_ctype(int n, char *out, int cap, int *depth)
+{
+    struct Expr *ex;
+    ex = frontend::parse::expr_get();
+    return ex->static_ctype(n, out, cap, depth, 0);
+}
+
 impl EmitOps for Emitter {
     int emit_indent(int n)
     {
@@ -1929,13 +1940,35 @@ impl EmitOps for Emitter {
            no temporary. Only dynamic dispatch materialises its receiver. */
         if (self->arena->nodes[n].kind == N_MCALL
             && self->arena->nodes[n].aux != 6) {
+            int ok = 0;
+            char bt[MAX_TEXT];
             root = self->arena->nodes[n].a;
             while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
                                  || self->arena->nodes[root].kind == N_ARROW))
                 root = self->arena->nodes[root].a;
-            if (root >= 0 && self->arena->nodes[root].kind == N_CALL
-                && !self->arena->nodes[root].text3[0]
-                && self->sym->find_func(self->arena->nodes[root].text2) >= 0) {
+            bt[0] = 0;
+            if (root >= 0 && !self->arena->nodes[root].text3[0]) {
+                if (self->arena->nodes[root].kind == N_CALL) {
+                    ok = self->sym->find_func(self->arena->nodes[root].text2) >= 0;
+                    /* a call through a function pointer: the parser left the
+                       result type on the node, so it can be named */
+                    if (!ok && self->arena->nodes[root].text[0]
+                        && (self->arena->nodes[n].aux == 9
+                            || self->arena->nodes[n].aux == 10)) ok = 1;
+                }
+                /* Phase 31 O3: a chained subscript (`g[i][j]`, `b.mv()[0]`)
+                   puts the inner call in receiver position; its result is an
+                   rvalue, so it must be named before its address is taken.
+                   aux 5/6 reuse `text3` for their own spelling and never
+                   materialise. */
+                if (!ok && self->arena->nodes[root].kind == N_MCALL
+                    && self->arena->nodes[root].aux != 5
+                    && self->arena->nodes[root].aux != 6) {
+                    int rd = 0;
+                    if (hoist_ctype(root, bt, sizeof bt, &rd) && rd == 0) ok = 1;
+                }
+            }
+            if (ok) {
                 if (!top)
                     return self->fail_from(n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
                 if (self->nhoist >= MAX_HOISTS)
@@ -1957,13 +1990,26 @@ impl EmitOps for Emitter {
     int emit_hoists(int ind)
     {
         int i, f, k, cat, s;
+        char hty[MAX_TEXT];
+        int hd;
         (void)self;
 
         for (i = 0; i < self->nhoist; i++) {
-            f = self->sym->find_func(self->arena->nodes[self->hoist_calls[i]].text2);
-            if (f < 0) return self->fail_from(self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
+            hd = 0;
+            hty[0] = 0;
+            f = (self->arena->nodes[self->hoist_calls[i]].kind == N_CALL)
+                    ? self->sym->find_func(self->arena->nodes[self->hoist_calls[i]].text2)
+                    : -1;
+            if (f >= 0) snprintf(hty, sizeof hty, "%s", self->sym->funcs[f].ret);
+            else if (self->arena->nodes[self->hoist_calls[i]].kind == N_CALL
+                     && self->arena->nodes[self->hoist_calls[i]].text[0])
+                snprintf(hty, sizeof hty, "%s",
+                         self->arena->nodes[self->hoist_calls[i]].text);
+            else if (!hoist_ctype(self->hoist_calls[i], hty, sizeof hty, &hd)
+                     || hd != 0)
+                return self->fail_from(self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
             self->emit_indent(ind);
-            fprintf(self->out, "%s %s = ", self->sym->funcs[f].ret, self->arena->nodes[self->hoist_calls[i]].text3);
+            fprintf(self->out, "%s %s = ", hty, self->arena->nodes[self->hoist_calls[i]].text3);
             self->raw_call = self->hoist_calls[i];
             if (self->emit_expr(self->hoist_calls[i]) != 0) {
                 self->raw_call = -1;
@@ -4159,6 +4205,13 @@ impl EmitOps for Emitter {
                 char base[MAX_TEXT];
                 char msg2[MAX_TEXT];
                 int si;
+                /* Phase 31 O3: a chained subscript's inner `get` was named by
+                   `emit_hoists`, so every later emission prints the temporary
+                   instead of the call. */
+                if (self->arena->nodes[n].text3[0] && n != self->raw_call) {
+                    fputs(self->arena->nodes[n].text3, self->out);
+                    return 0;
+                }
                 snprintf(base, sizeof base, "%s", self->arena->nodes[n].text);
                 if (strncmp(base, "struct ", 7) == 0)
                     snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
@@ -4206,6 +4259,12 @@ impl EmitOps for Emitter {
                     c2 = self->arena->nodes[c2].next;
                 }
                 fputs(")", self->out);
+                return 0;
+            }
+            /* Phase 31 O3: a materialised method receiver (trait dispatch)
+               prints its temporary instead of the call. */
+            if (self->arena->nodes[n].text3[0] && n != self->raw_call) {
+                fputs(self->arena->nodes[n].text3, self->out);
                 return 0;
             }
             if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");

@@ -3383,7 +3383,23 @@ impl ExprOps for Expr {
             else
                 i = -1;
             if (i >= 0) {
+                char ib[MAX_TEXT];
+                char rs[MAX_TEXT];
                 if (!self->arena->nodes[i].text[0]) return 0;
+                /* Phase 31 O3: the declared return type mentions the
+                   template's parameter (`T get(int i)`), so a chained subscript
+                   (`g[i][j]`) only sees `struct Vec_int` when the parameter is
+                   replaced by this instance's concrete argument. */
+                snprintf(ib, sizeof ib, "%s", self->arena->nodes[n].text);
+                if (ib[0] && strncmp(ib, "struct ", 7) != 0) {
+                    snprintf(tmp2, sizeof tmp2, "struct %s", ib);
+                    snprintf(ib, sizeof ib, "%s", tmp2);
+                }
+                if (self->inst_subst_type(ib, self->arena->nodes[i].text,
+                                          rs, sizeof rs)) {
+                    if (snprintf(out, (size_t)cap, "%s", rs) >= cap) return 0;
+                    return 1;
+                }
                 return self->ctype_expand(self->arena->nodes[i].text, out, cap, 0);
             }
             si = self->sym->find_trait(self->arena->nodes[n].text);
@@ -3574,6 +3590,52 @@ impl ExprOps for Expr {
         }
         for (;;) {
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+                /* Phase 31 O3: `v[i]` is `v.get(i)` and `m[k]` is `m.get(k)`.
+                   The base's static type names the container instance, so the
+                   node is built exactly as an inherent method call would be
+                   (aux 9: value receiver, emitted with `&`). A base this pass
+                   cannot pin keeps C's subscript meaning. */
+                char bty[MAX_TEXT];
+                int bd = 0;
+                int known = self->static_ctype(n, bty, sizeof bty, &bd, 0);
+                int sugar = 0;
+                if (known && bd == 0 && strchr(bty, '*') == 0) {
+                    if (strncmp(bty, "struct Vec_", 11) == 0
+                        || strncmp(bty, "struct Map_", 11) == 0)
+                        sugar = 1;
+                }
+                if (sugar) {
+                    int rt, rd2;
+                    char rty[MAX_TEXT];
+                    self->sup->lex_next();
+                    idx = self->parse_expr();
+                    if (idx < 0) return -1;
+                    if (self->sup->expect("]") != 0) return -1;
+                    m = self->sup->new_node(N_MCALL);
+                    if (m < 0) return -1;
+                    self->arena->nodes[m].aux = 9;
+                    snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", bty);
+                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "get");
+                    self->arena->nodes[m].a = n;
+                    self->arena->nodes[m].b = idx;
+                    /* A call receiver is an rvalue: the emitter names it in a
+                       temporary before taking its address. The result type is
+                       read here, while local names still resolve (`fp()`), and
+                       left on the call node for that materialisation. */
+                    rt = n;
+                    while (rt >= 0 && (self->arena->nodes[rt].kind == N_MEMBER
+                                       || self->arena->nodes[rt].kind == N_ARROW))
+                        rt = self->arena->nodes[rt].a;
+                    if (rt >= 0 && self->arena->nodes[rt].kind == N_CALL
+                        && !self->arena->nodes[rt].text[0]) {
+                        rd2 = 0;
+                        if (self->static_ctype(rt, rty, sizeof rty, &rd2, 0)
+                            && rd2 == 0)
+                            snprintf(self->arena->nodes[rt].text, MAX_TEXT, "%s", rty);
+                    }
+                    n = m;
+                    continue;
+                }
                 /* V29-4: `v[3]` / `m["key"]` would be emitted as a subscript of
                    a C struct; refuse before the `[` is consumed so the error
                    carries its position. */
