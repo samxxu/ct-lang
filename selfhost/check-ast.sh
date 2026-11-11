@@ -6216,6 +6216,22 @@ else
     ok "p30 E30-2 (one evaluation, no '\$', no 'into {' in the product)"
 fi
 
+# E30-2 (fixture 159): each statement's receiver expression is emitted exactly
+# once -- two statements, so exactly two `make_box()` calls in the product --
+# and the product contains neither `$` nor an `into {` block.
+if ! "$work/ct-ast" test/ast/159_into_once/prog.ct -o "$work/p159.c" \
+        >"$work/p159.out" 2>"$work/p159.err"; then
+    bad "p30 E30-2 (159)" "ct-ast failed: $(head -3 "$work/p159.err")"
+elif [ "$(grep -c 'make_box()' "$work/p159.c")" -ne 2 ]; then
+    bad "p30 E30-2 (159)" "the receiver was emitted $(grep -c 'make_box()' "$work/p159.c") times, expected 2"
+elif [ "$(grep -c '\$' "$work/p159.c")" -ne 0 ]; then
+    bad "p30 E30-2 (159)" "the generated C still contains '\$'"
+elif [ "$(grep -c 'into {' "$work/p159.c")" -ne 0 ]; then
+    bad "p30 E30-2 (159)" "the generated C still contains 'into {'"
+else
+    ok "p30 E30-2 (159: one evaluation per statement, no '\$', no 'into {')"
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

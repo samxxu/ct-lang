@@ -1,0 +1,38 @@
+/* Phase 30 D30-12: the block is a statement sequence, not a closure, so
+   `break` / `continue` / `return` act on the host loop and host function. */
+#include <stdio.h>
+
+struct Item {
+    int v;
+};
+
+static struct Item pick(struct Item *xs, int n)
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        xs[i] into {
+            if (.v > 20) return $;
+        };
+    }
+    return xs[0];
+}
+
+int main(void)
+{
+    struct Item items[4];
+    int i;
+    for (i = 0; i < 4; i++)
+        items[i].v = i * 10;
+    for (i = 0; i < 4; i++) {
+        items[i] into {
+            .v = .v + 5;
+            if (.v == 15) continue;
+            if (.v > 30) break;
+            printf("%d\n", .v);
+        };
+    }
+    printf("done %d\n", i);
+    struct Item f = pick(items, 4);
+    printf("pick %d\n", f.v);
+    return 0;
+}

@@ -1,0 +1,37 @@
+/* Phase 30 §2.8: consecutive `into` segments re-enter the same object, and a
+   suffix after the last block belongs to the whole expression. A left-value
+   value receiver stays an lvalue, so every segment writes the original. */
+#include <stdio.h>
+
+struct Config {
+    int a;
+    int b;
+    int c;
+};
+
+int main(void)
+{
+    struct Config cfg;
+    cfg into {
+        .a = 1;
+    } into {
+        .b = .a + 1;
+    } into {
+        .c = .b + 1;
+    };
+    printf("%d %d %d\n", cfg.a, cfg.b, cfg.c);
+
+    struct Config *p = &cfg;
+    int c = p into {
+        .a = 5;
+    } into {
+        .b = .a + 2;
+    } ->c;
+    printf("%d %d %d / %d\n", cfg.a, cfg.b, cfg.c, c);
+
+    struct Config v = cfg into {
+        .a = 7;
+    };
+    printf("%d %d\n", cfg.a, v.a);
+    return 0;
+}

@@ -1,0 +1,28 @@
+/* Phase 30 S4: `.m(...)` inside the block resolves to the same trait impl as
+   the call outside it, so a pointer receiver dispatches through its vtable. */
+#include <stdio.h>
+
+trait Greeter {
+    void hello(char *who);
+}
+
+struct Person {
+    char *name;
+} use Greeter
+
+impl Greeter for Person {
+    void hello(char *who)
+    {
+        printf("%s says hi to %s\n", self->name, who);
+    }
+}
+
+int main(void)
+{
+    struct Person p = { .name = "Tom" };
+    struct Person *pp = &p;
+    pp into {
+        .hello("Ann");
+    };
+    return 0;
+}

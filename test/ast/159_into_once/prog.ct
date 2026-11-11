@@ -1,0 +1,29 @@
+/* Phase 30 E30-2 / §2.8: the receiver is evaluated exactly once, and a suffix
+   after the block keeps reading the same promoted receiver. */
+#include <stdio.h>
+
+struct Box {
+    int n;
+};
+
+static int calls = 0;
+static struct Box boxes[2];
+
+static struct Box *make_box(void)
+{
+    calls = calls + 1;
+    boxes[calls - 1].n = 0;
+    return &boxes[calls - 1];
+}
+
+int main(void)
+{
+    struct Box *p = make_box() into {
+        .n = 7;
+    };
+    int n = make_box() into {
+        .n = 9;
+    } ->n;
+    printf("%d %d %d %d\n", p->n, calls, n, boxes[1].n);
+    return 0;
+}

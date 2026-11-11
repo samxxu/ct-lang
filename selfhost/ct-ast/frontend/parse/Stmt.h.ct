@@ -67,6 +67,7 @@ import tool::diag::Diag;
 #define N_VAR 10
 #define N_WHILE 15
 #define N_INTO 63
+#define N_INTO_SELF 64
 #define T_EOF 0
 #define T_ID 1
 #define T_NUM 2
@@ -2629,7 +2630,8 @@ impl StmtOps for Stmt {
             int op = 0, k2;
             char oc = self->lex->toktext[0];
             k2 = self->arena->nodes[e].kind;
-            if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX && k2 != N_DEREF)
+            if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
+                && k2 != N_DEREF && k2 != N_INTO_SELF)
                 return self->sup->fail("assignment target is not assignable");
             if (oc == '+') op = 1;
             else if (oc == '-') op = 2;
@@ -2663,7 +2665,8 @@ impl StmtOps for Stmt {
                an empty string is the "no type derived" case */
             tt[0] = 0;
             k = self->arena->nodes[e].kind;
-            if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX && k != N_DEREF)
+            if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
+                && k != N_DEREF && k != N_INTO_SELF)
                 return self->sup->fail("assignment target is not assignable");
             self->sup->lex_next();
             /* `p = strcmp;`: when the target is a function pointer, an unknown

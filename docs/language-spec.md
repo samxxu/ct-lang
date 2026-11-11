@@ -2200,6 +2200,9 @@ comment in its header); it is not part of the source content.
   `'into' needs a variable, field or call on its left`，不会静默绑定到 `b`。
 - **块内语法糖**：`.name` 是接收者的字段或方法（前导点优先绑定接收者，不与同名局部竞争）；
   `$` 是接收者本身。两者都只在块内有意义，块外 `$` 仍是 Phase 24 range 的下标绑定。
+  `$ = expr;` 重新绑定接收者（`own` 接收者被 L30-4 拒绝），块内其后的 `.field` 都指向新对象。
+- **连续多段**：`a into { … } into { … }` 从左到右依次执行，每段重新绑定**同一个对象**——左值
+  接收者保持左值（后段写回原对象），只有右值接收者保持副本语义。段与段之间不是嵌套，不触发 L30-7。
 - **求值一次**：接收者只求值一次，按 value category 提升——指针 `T *__ct_recvN = expr;`、
   左值值类型 `T *__ct_recvN = &expr;`、右值值类型（仅值形态）`T __ct_recvN = expr;`。
   块内 `.field` 对前两种发射 `__ct_recvN->field`，对右值发射 `__ct_recvN.field`；
@@ -4590,7 +4593,13 @@ feature-complete old compiler is at git tag `overreach-oracle`.
   `'into' needs a variable, field or call on its left` instead of silently binding to `b`.
 - **Sugar inside the block**: a leading `.name` is a field or method of the receiver (it binds to the
   receiver even when a local of the same name exists), and `$` is the receiver itself. Both exist
-  only inside the block; outside it `$` keeps its Phase 24 range-index binding.
+  only inside the block; outside it `$` keeps its Phase 24 range-index binding. `$ = expr;` rebinds
+  the receiver (an `own` receiver is refused by L30-4); later `.field` uses in the block follow the
+  new object.
+- **Chained segments**: `a into { … } into { … }` runs left to right, each segment rebinding the
+  **same object** — a left-value receiver stays a left value (later segments write the original),
+  and only a right-value receiver keeps copy semantics. Adjacent segments are not nesting and do not
+  trigger L30-7.
 - **Single evaluation**: the receiver is evaluated once and promoted by value category — a pointer
   `T *__ct_recvN = expr;`, a left-value value type `T *__ct_recvN = &expr;`, a right-value value
   type (value form only) `T __ct_recvN = expr;`. Inside the block `.field` emits

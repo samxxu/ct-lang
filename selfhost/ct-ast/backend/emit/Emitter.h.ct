@@ -588,6 +588,9 @@ static int map_repeatable(struct Arena *a, int n)
     if (n < 0) return 0;
     k = a->nodes[n].kind;
     if (k == N_VAR || k == N_NUM || k == N_STR) return 1;
+    /* Phase 30: the receiver is a promoted local by the time a recipe runs, so
+       repeating it is pure (§2.7 rule 3; a category-2 receiver is `(*recv)`). */
+    if (k == N_INTO || k == N_INTO_SELF) return 1;
     if (k == N_MEMBER || k == N_ARROW || k == N_ADDR) return map_repeatable(a, a->nodes[n].a);
     if (k == N_INDEX) return map_repeatable(a, a->nodes[n].a) && map_repeatable(a, a->nodes[n].b);
     return 0;
@@ -1716,12 +1719,14 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_INTO) {
             if (self->ninto >= MAX_INTOS)
                 return self->fail_from(n, "too many 'into' receivers in one statement");
+            /* §2.8: a chained segment's receiver is the inner segment, so the
+               inner promotion is recorded (and numbered) first. */
+            if (self->arena->nodes[n].a >= 0
+                && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
             snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_recv%d", self->ntmp);
             self->ntmp++;
             self->into_nodes[self->ninto] = n;
             self->ninto++;
-            if (self->arena->nodes[n].a >= 0
-                && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
             return 0;
         }
         /* A type-host call (aux 6) expands as a straight textual recipe: the
@@ -1782,12 +1787,21 @@ impl EmitOps for Emitter {
             k = self->into_nodes[i];
             cat = self->arena->nodes[k].aux;
             self->emit_indent(ind);
-            if (cat == 2)
+            if (cat == 2) {
                 fprintf(self->out, "%s *%s = &(", self->arena->nodes[k].text,
                         self->arena->nodes[k].text3);
-            else
-                fprintf(self->out, "%s %s = ", self->arena->nodes[k].text,
-                        self->arena->nodes[k].text3);
+            } else {
+                /* a pointer spelling already ends with `*`, so the promoted
+                   name follows it directly (`struct ct_file *__ct_recv0`) --
+                   the hand-written side of E30-9 writes the same shape */
+                size_t tl = strlen(self->arena->nodes[k].text);
+                while (tl > 0 && (self->arena->nodes[k].text[tl - 1] == ' '
+                                  || self->arena->nodes[k].text[tl - 1] == '\t')) tl--;
+                fputs(self->arena->nodes[k].text, self->out);
+                if (!(tl > 0 && self->arena->nodes[k].text[tl - 1] == '*'))
+                    fputc(' ', self->out);
+                fprintf(self->out, "%s = ", self->arena->nodes[k].text3);
+            }
             if (self->emit_expr(self->arena->nodes[k].a) != 0) return -1;
             if (cat == 2) fputs(")", self->out);
             fputs(";\n", self->out);
