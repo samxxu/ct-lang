@@ -6051,6 +6051,11 @@ p29_neg vec_subscript_fnptr_member "a Vec is not subscriptable: use get(i) / set
 p29_neg vec_subscript_index_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 6:17
 p29_neg vec_subscript_index_array "a Vec is not subscriptable: use get(i) / set(i, v)" 5:18
 p29_neg vec_subscript_index_field "a Vec is not subscriptable: use get(i) / set(i, v)" 9:18
+# V29-4d: the same judgement through a typedef alias, a function-pointer field
+# and an instance method's return type.
+p29_neg vec_subscript_fnptr_typedef "a Vec is not subscriptable: use get(i) / set(i, v)" 14:16
+p29_neg vec_subscript_fnptr_field "a Vec is not subscriptable: use get(i) / set(i, v)" 17:18
+p29_neg vec_subscript_mcall "a Vec is not subscriptable: use get(i) / set(i, v)" 24:18
 
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it

@@ -1,0 +1,66 @@
+/* Subscript forms that must keep their C meaning: arrays, array / pointer
+   struct fields, one dimension at a time through pointer chains, and calls /
+   methods returning `int *` or `int **`. None of these is a container value,
+   so the V29-4 checker has to let all of them through. */
+//@ct-requires: ct-ast
+Vec<int> mk(void)
+{
+    Vec<int> v = 4..8 {$ + 10};
+    return v;
+}
+
+struct Ints {
+    int ints[3];
+}
+
+struct Box<T> {
+    T v;
+}
+
+impl<T> Box<T> {
+    int *p()
+    {
+        static int x = 5;
+        return &x;
+    }
+}
+
+int g = 42;
+
+int *slot(void)
+{
+    return &g;
+}
+
+int **get_pp(void)
+{
+    static int x = 7;
+    static int *px = &x;
+    return &px;
+}
+
+int main(void)
+{
+    int a[3] = 1..4 {$ + 10};
+    Vec<int> arr[2];
+    arr[0] = mk();
+    Vec<int> *pv = &arr[0];
+    Vec<int> **ppv = &pv;
+    Vec<int> ***pppv = &ppv;
+    Ints h;
+    Ints hs[1];
+    Ints *ph = hs;
+    Box<int> b;
+    Vec<int> *q = &(*ppv)[0];
+
+    h.ints[0] = 7;
+    h.ints[1] = 8;
+    h.ints[2] = 9;
+    hs[0] = h;
+    b.v = 3;
+    printf("%d %d %d %d %d\n", a[0], h.ints[0], ph[0].ints[1],
+           arr[0].len(), pv[0].len());
+    printf("%d %d %d\n", ppv[0][0].len(), pppv[0][0][0].len(), q->len());
+    printf("%d %d %d\n", slot()[0], get_pp()[0][0], b.p()[0]);
+    return 0;
+}

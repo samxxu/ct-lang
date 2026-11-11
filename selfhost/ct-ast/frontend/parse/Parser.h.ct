@@ -2147,6 +2147,9 @@ impl ParseOps for Parser {
            abstract declarator `int (*)(int, int)`, so a field of that alias
            would otherwise look like an opaque typedef (D-2) */
         if (self->sup->add_type(qname, strstr(typebuf, "(*") ? 4 : 2) != 0) return -1;
+        /* V29-4: keep the spelling so an alias used as a subscript base or a
+           callee resolves to its real type, not to the alias name. */
+        self->sym->set_type_target(qname, typebuf);
         return t;
     }
 

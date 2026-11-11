@@ -130,13 +130,20 @@ pub trait ExprOps {
        is not an array, `{ "k": 1 }` is not an aggregate) are refused here with a
        position instead of being emitted. */
     int  container_index_check(int base);
-    /* V29-4: the C type of a subscript base (a plain variable, a deref, a
-       member / arrow field or a call's return), so `(*pv)[0]`, `h.v[0]` and
-       `mk().v[0]` are refused too; 0 when this pass cannot pin the type. */
-    int  container_base_type(int base, char *out, int cap, int depth);
-    /* V29-4: the type one array / pointer subscript yields, so `pv[0][0]` and
-       `h.v[0][0]` are judged on the second `[`; 0 when the base is neither. */
-    int  container_elem_type(int base, char *out, int cap, int depth);
+    /* V29-4: one static C type for an expression, so every subscript base is
+       judged by the same rules. It covers a variable, a member / arrow field,
+       a deref, a call (direct or through a function pointer), a method call and
+       one array / pointer subscript. Each deref or subscript peels exactly one
+       layer. A base whose type the tables cannot pin is left unresolved and is
+       not judged (cc stays the last word); a resolved container spelling is
+       always refused. */
+    int  static_ctype(int n, char *out, int cap, int *array_depth, int depth);
+    /* `typedef` alias -> the spelling it was declared with (name lookup). */
+    int  ctype_expand(const char *in, char *out, int cap, int depth);
+    /* `RET (*)(params)` -> RET, the abstract declarator the emitter splices. */
+    int  fnptr_ret(const char *ftype, char *out, int cap);
+    /* one pointer layer only: `T **` -> `T *`, never `T`. */
+    int  peel_ptr(const char *ty, char *out, int cap);
     int  container_init_check(const char *ctype);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
@@ -2831,160 +2838,214 @@ impl ExprOps for Expr {
         return -1;
     }
 
-    /* V29-4: the C type a subscript base expression evaluates to, or 0 when this
-       pass cannot pin it. It reads the same tables the checker does: a variable's
-       declared type, a pointer deref (strip the `*`), a member / arrow field
-       (look the field up on the base struct), one array / pointer subscript and
-       a call (the callee's return type, including an indirect call through a
-       function pointer). An array, a pointer kept as the base and a function
-       pointer whose declaring type this pass cannot read stay unresolved. */
-    int container_base_type(int base, char *out, int cap, int depth)
+    /* V29-4: resolve a C typedef by name to the spelling it was declared with.
+       An opaque alias (a header type this unit never declares) keeps its name,
+       so the caller can still decide it is not a container. */
+    int ctype_expand(const char *in, char *out, int cap, int depth)
     {
-        char tmp[MAX_TEXT];
-        const char *ty;
-        int i, len, si, fi;
+        char name[MAX_TEXT];
+        char target[MAX_TEXT];
+        int i, len, bare;
 
-        if (base < 0 || depth > 3) return 0;
-        switch (self->arena->nodes[base].kind) {
-        case N_VAR:
-            i = self->sym->find_var(self->arena->nodes[base].text2);
-            if (i < 0 || self->sym->vars[i].is_array) return 0;
-            snprintf(out, cap, "%s", self->sym->vars[i].type);
-            return 1;
-        case N_DEREF:
-            if (!self->container_base_type(self->arena->nodes[base].a, tmp, sizeof tmp, depth + 1))
-                return 0;
-            if (!strchr(tmp, '*')) return 0;
-            len = (int)strlen(tmp);
-            while (len > 0 && (tmp[len - 1] == ' ' || tmp[len - 1] == '*')) len--;
-            tmp[len] = 0;
-            snprintf(out, cap, "%s", tmp);
-            return 1;
-        case N_MEMBER:
-        case N_ARROW:
-            if (!self->container_base_type(self->arena->nodes[base].a, tmp, sizeof tmp, depth + 1))
-                return 0;
-            ty = tmp;
-            if (self->arena->nodes[base].kind == N_ARROW) {
-                if (!strchr(ty, '*')) return 0;
-                len = (int)strlen(ty);
-                while (len > 0 && (ty[len - 1] == ' ' || ty[len - 1] == '*')) len--;
-                tmp[len] = 0;
-                ty = tmp;
-            }
-            if (strncmp(ty, "struct ", 7) == 0) ty += 7;
-            si = self->sym->find_struct(ty);
-            if (si < 0) return 0;
-            for (i = 0; i < self->sym->structs[si].nfields; i++) {
-                if (strcmp(self->sym->structs[si].fields[i].name,
-                           self->arena->nodes[base].text2) != 0) continue;
-                /* an array field keeps its C spelling (`h.v[0]` is an element) */
-                if (self->sym->structs[si].fields[i].dims[0]) return 0;
-                snprintf(out, cap, "%s", self->sym->structs[si].fields[i].type);
-                return 1;
-            }
-            return 0;
-        case N_INDEX:
-            if (!self->container_elem_type(self->arena->nodes[base].a, tmp, sizeof tmp, depth + 1))
-                return 0;
-            snprintf(out, cap, "%s", tmp);
-            return 1;
-        case N_CALL:
-            if (self->arena->nodes[base].aux == 2) {
-                /* `fp(...)`: the callee is an expression, so read its declared
-                   type (`struct Vec_int (*)(void)`) and keep what precedes the
-                   `(*` declarator. An unreadable one stays unresolved. */
-                if (!self->container_base_type(self->arena->nodes[base].b, tmp, sizeof tmp,
-                                               depth + 1))
-                    return 0;
-                ty = strstr(tmp, "(*");
-                if (!ty) return 0;
-                len = (int)(ty - tmp);
-                while (len > 0 && tmp[len - 1] == ' ') len--;
-                if (len <= 0) return 0;
-                tmp[len] = 0;
-                snprintf(out, cap, "%s", tmp);
-                return 1;
-            }
-            fi = self->sym->resolve_func(self->arena->nodes[base].text2);
-            if (fi >= 0) {
-                if (!self->sym->funcs[fi].ret[0] || strcmp(self->sym->funcs[fi].ret, "void") == 0)
-                    return 0;
-                snprintf(out, cap, "%s", self->sym->funcs[fi].ret);
-                return 1;
-            }
-            /* `fp(...)` on a function-pointer variable keeps the variable's
-               declared type (`struct Vec_int (*)(void)`); the return type is
-               what precedes the `(*` declarator. */
-            i = self->sym->find_var(self->arena->nodes[base].text2);
-            if (i < 0) return 0;
-            ty = self->sym->vars[i].type;
-            ty = strstr(ty, "(*");
-            if (!ty) return 0;
-            len = (int)(ty - self->sym->vars[i].type);
-            while (len > 0 && self->sym->vars[i].type[len - 1] == ' ') len--;
-            if (len <= 0) return 0;
-            snprintf(out, cap, "%.*s", len, self->sym->vars[i].type);
-            return 1;
-        default:
-            return 0;
-        }
-    }
-
-    /* V29-4: the type one array / pointer subscript yields (`pv[0]`, `arr[0]`,
-       `h.v[0]`), so a second `[` is judged on the element type. 0 when the base
-       is neither an array nor a pointer. */
-    int container_elem_type(int base, char *out, int cap, int depth)
-    {
-        char tmp[MAX_TEXT];
-        const char *ty;
-        int i, len, si;
-
-        if (base < 0 || depth > 3) return 0;
-        switch (self->arena->nodes[base].kind) {
-        case N_VAR:
-            i = self->sym->find_var(self->arena->nodes[base].text2);
-            if (i < 0) return 0;
-            ty = self->sym->vars[i].type;
-            if (self->sym->vars[i].is_array) {
-                /* the spelling excludes the dims, so it is the element type */
-                snprintf(out, cap, "%s", ty);
-                return 1;
-            }
-            if (!strchr(ty, '*')) return 0;
-            len = (int)strlen(ty);
-            while (len > 0 && (ty[len - 1] == ' ' || ty[len - 1] == '*')) len--;
-            snprintf(out, cap, "%.*s", len, ty);
-            return 1;
-        case N_MEMBER:
-        case N_ARROW:
-            if (!self->container_base_type(self->arena->nodes[base].a, tmp, sizeof tmp, depth + 1))
-                return 0;
-            ty = tmp;
-            if (self->arena->nodes[base].kind == N_ARROW) {
-                if (!strchr(ty, '*')) return 0;
-                len = (int)strlen(ty);
-                while (len > 0 && (ty[len - 1] == ' ' || ty[len - 1] == '*')) len--;
-                tmp[len] = 0;
-                ty = tmp;
-            }
-            if (strncmp(ty, "struct ", 7) == 0) ty += 7;
-            si = self->sym->find_struct(ty);
-            if (si < 0) return 0;
-            for (i = 0; i < self->sym->structs[si].nfields; i++) {
-                const char *fty;
-                if (strcmp(self->sym->structs[si].fields[i].name,
-                           self->arena->nodes[base].text2) != 0) continue;
-                fty = self->sym->structs[si].fields[i].type;
-                if (self->sym->structs[si].fields[i].dims[0]) {
-                    snprintf(out, cap, "%s", fty);
-                    return 1;
+        if (depth > 8) return 0;
+        len = (int)strlen(in);
+        while (len > 0 && in[len - 1] == ' ') len--;
+        i = 0;
+        while (i < len && in[i] == ' ') i++;
+        if (i >= len || len - i >= (int)sizeof name) return 0;
+        snprintf(name, sizeof name, "%.*s", len - i, in + i);
+        bare = 1;
+        for (i = 0; name[i]; i++) {
+            int c = (unsigned char)name[i];
+            if (i == 0) {
+                if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_')) {
+                    bare = 0;
+                    break;
                 }
-                if (!strchr(fty, '*')) return 0;
-                len = (int)strlen(fty);
-                while (len > 0 && (fty[len - 1] == ' ' || fty[len - 1] == '*')) len--;
-                snprintf(out, cap, "%.*s", len, fty);
+            } else if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                         || (c >= '0' && c <= '9') || c == '_')) {
+                bare = 0;
+                break;
+            }
+        }
+        if (bare && self->sym->type_target_of(name, target, sizeof target))
+            return self->ctype_expand(target, out, cap, depth + 1);
+        if (snprintf(out, cap, "%s", name) >= cap) return 0;
+        return 1;
+    }
+
+    /* V29-4: the return type of the abstract function-pointer declarator this
+       compiler stores (`RET (*)(params)` -- the same `(*)` the emitter splices
+       a name into). Anything else resolves to 0. */
+    int fnptr_ret(const char *ftype, char *out, int cap)
+    {
+        const char *p, *q;
+        int len, depth;
+
+        (void)self;
+        p = strstr(ftype, "(*)");
+        if (!p || p == ftype) return 0;
+        q = p + 3;
+        while (*q == ' ') q++;
+        if (*q != '(') return 0;
+        depth = 0;
+        for (; *q; q++) {
+            if (*q == '(') depth++;
+            else if (*q == ')') {
+                depth--;
+                if (depth == 0) break;
+            }
+        }
+        if (depth != 0) return 0;
+        len = (int)(p - ftype);
+        while (len > 0 && ftype[len - 1] == ' ') len--;
+        if (len <= 0) return 0;
+        if (snprintf(out, cap, "%.*s", len, ftype) >= cap) return 0;
+        return 1;
+    }
+
+    /* V29-4: strip exactly one pointer layer. A function-pointer spelling keeps
+       its star inside `(*)`, so it is not peeled here. */
+    int peel_ptr(const char *ty, char *out, int cap)
+    {
+        int len;
+
+        (void)self;
+        len = (int)strlen(ty);
+        while (len > 0 && ty[len - 1] == ' ') len--;
+        if (len <= 0 || ty[len - 1] != '*') return 0;
+        len--;
+        while (len > 0 && ty[len - 1] == ' ') len--;
+        if (len <= 0) return 0;
+        if (snprintf(out, cap, "%.*s", len, ty) >= cap) return 0;
+        return 1;
+    }
+
+    /* V29-4: the static C type of an expression. `array_depth` counts the dims
+       still attached to the value (0 for a scalar / pointer). One `[` peels one
+       dimension or one `*`; one `*` peels one `*`. A shape the tables cannot
+       pin returns 0 and is not judged. */
+    int static_ctype(int n, char *out, int cap, int *array_depth, int depth)
+    {
+        char tmp[MAX_TEXT];
+        char tmp2[MAX_TEXT];
+        const char *ty;
+        int i, si, ad;
+
+        *array_depth = 0;
+        if (n < 0 || depth > 8) return 0;
+        switch (self->arena->nodes[n].kind) {
+        case N_VAR:
+            i = self->sym->find_var(self->arena->nodes[n].text2);
+            if (i < 0) return 0;
+            if (!self->ctype_expand(self->sym->vars[i].type, out, cap, 0)) return 0;
+            if (self->sym->vars[i].is_array) {
+                for (ty = self->sym->vars[i].dims; *ty; ty++)
+                    if (*ty == '[') (*array_depth)++;
+            }
+            return 1;
+        case N_INDEX:
+            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
+                return 0;
+            if (ad > 0) {
+                /* one array dimension: the spelling is already the element */
+                if (snprintf(out, cap, "%s", tmp) >= cap) return 0;
+                *array_depth = ad - 1;
                 return 1;
+            }
+            return self->peel_ptr(tmp, out, cap);
+        case N_DEREF:
+            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
+                return 0;
+            if (ad > 0) {
+                if (snprintf(out, cap, "%s", tmp) >= cap) return 0;
+                *array_depth = ad - 1;
+                return 1;
+            }
+            return self->peel_ptr(tmp, out, cap);
+        case N_ADDR:
+            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
+                return 0;
+            if (ad != 0) return 0;
+            if (!tmp[0] || snprintf(out, cap, "%s%s*", tmp,
+                                    tmp[strlen(tmp) - 1] == '*' ? "" : " ") >= cap)
+                return 0;
+            return 1;
+        case N_MEMBER:
+        case N_ARROW:
+            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
+                return 0;
+            if (ad != 0) return 0;
+            if (self->arena->nodes[n].kind == N_ARROW) {
+                /* `->` walks through exactly one pointer */
+                if (!self->peel_ptr(tmp, tmp2, sizeof tmp2)) return 0;
+                snprintf(tmp, sizeof tmp, "%s", tmp2);
+            }
+            ty = tmp;
+            if (strncmp(ty, "struct ", 7) == 0) ty += 7;
+            si = self->sym->find_struct(ty);
+            if (si < 0) return 0;
+            for (i = 0; i < self->sym->structs[si].nfields; i++) {
+                if (strcmp(self->sym->structs[si].fields[i].name,
+                           self->arena->nodes[n].text2) != 0) continue;
+                if (!self->ctype_expand(self->sym->structs[si].fields[i].type,
+                                        out, cap, 0)) return 0;
+                for (ty = self->sym->structs[si].fields[i].dims; *ty; ty++)
+                    if (*ty == '[') (*array_depth)++;
+                return 1;
+            }
+            return 0;
+        case N_CALL:
+            if (self->arena->nodes[n].aux == 2) {
+                /* `(*fp)()` / `o.f()`: the callee is an expression whose
+                   declared type is the function pointer. */
+                int ci = self->arena->nodes[n].b;
+                if (ci >= 0 && self->arena->nodes[ci].kind == N_DEREF) {
+                    int ad2;
+                    if (!self->static_ctype(self->arena->nodes[ci].a, tmp, sizeof tmp,
+                                            &ad2, depth + 1))
+                        return 0;
+                    if (ad2 != 0) return 0;
+                    if (self->fnptr_ret(tmp, out, cap)) return 1;
+                    if (!self->peel_ptr(tmp, tmp2, sizeof tmp2)) return 0;
+                    return self->fnptr_ret(tmp2, out, cap);
+                }
+                if (!self->static_ctype(ci, tmp, sizeof tmp, &ad, depth + 1)) return 0;
+                if (ad != 0) return 0;
+                return self->fnptr_ret(tmp, out, cap);
+            }
+            i = self->sym->resolve_func(self->arena->nodes[n].text2);
+            if (i >= 0) {
+                if (!self->sym->funcs[i].ret[0] || strcmp(self->sym->funcs[i].ret, "void") == 0)
+                    return 0;
+                return self->ctype_expand(self->sym->funcs[i].ret, out, cap, 0);
+            }
+            /* `fp()` on a function-pointer variable (a plain name). */
+            i = self->sym->find_var(self->arena->nodes[n].text2);
+            if (i < 0) return 0;
+            if (!self->ctype_expand(self->sym->vars[i].type, tmp, sizeof tmp, 0)) return 0;
+            return self->fnptr_ret(tmp, out, cap);
+        case N_MCALL:
+            /* An inherent method of an instantiated struct keeps its AST node
+               (`text` is the declared return type); a trait method reads the
+               signature. */
+            if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
+                i = self->inst_inherent_method(self->arena->nodes[n].text,
+                                               self->arena->nodes[n].text2);
+            else
+                i = -1;
+            if (i >= 0) {
+                if (!self->arena->nodes[i].text[0]) return 0;
+                return self->ctype_expand(self->arena->nodes[i].text, out, cap, 0);
+            }
+            si = self->sym->find_trait(self->arena->nodes[n].text);
+            if (si < 0) return 0;
+            for (i = 0; i < self->sym->traits[si].nm; i++) {
+                if (strcmp(self->sym->traits[si].m[i].name,
+                           self->arena->nodes[n].text2) != 0) continue;
+                if (!self->sym->traits[si].m[i].ret[0]
+                    || strcmp(self->sym->traits[si].m[i].ret, "void") == 0) return 0;
+                return self->ctype_expand(self->sym->traits[si].m[i].ret, out, cap, 0);
             }
             return 0;
         default:
@@ -2992,14 +3053,16 @@ impl ExprOps for Expr {
         }
     }
 
-    /* V29-4: `v[i]` / `m[k]` on a container handle. A pointer kept as the base
-       (`p[0]`) or an array of handles keeps the C meaning; every other base
-       whose type this pass resolves is refused before the `[` is consumed. */
+    /* V29-4: `v[i]` / `m[k]` on a container handle. An array (any remaining
+       dims) and a pointer keep the C meaning, so only a resolved container
+       value is refused. A base this pass cannot pin is not judged. */
     int container_index_check(int base)
     {
         char ty[MAX_TEXT];
+        int ad;
 
-        if (!self->container_base_type(base, ty, sizeof ty, 0)) return 0;
+        if (!self->static_ctype(base, ty, sizeof ty, &ad, 0)) return 0;
+        if (ad > 0) return 0;
         if (strchr(ty, '*') != 0) return 0;
         if (strncmp(ty, "struct Vec_", 11) == 0)
             return self->sup->fail("a Vec is not subscriptable: use get(i) / set(i, v)");
