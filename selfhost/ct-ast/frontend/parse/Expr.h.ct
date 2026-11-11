@@ -164,6 +164,7 @@ pub trait ExprOps {
     /* one pointer layer only: `T **` -> `T *`, never `T`. */
     int  peel_ptr(const char *ty, char *out, int cap);
     int  container_init_check(const char *ctype);
+    int  container_global_init_check(const char *ctype);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  tok_is_type_name(void);
@@ -3426,6 +3427,18 @@ impl ExprOps for Expr {
             return self->sup->fail(
                 "a Map cannot be initialized from a brace list: use put(key, value)");
         return 0;
+    }
+
+    /* Phase 31 S11b: a file-scope brace initializer. C static initialization
+       cannot call the constructor, so a `Vec` is refused with its own text
+       (L31-10) before the generic container refusal; a `Map` keeps that
+       refusal until its literal path lands. */
+    int container_global_init_check(const char *ctype)
+    {
+        if (strncmp(ctype, "struct Vec_", 11) == 0 || strncmp(ctype, "Vec_", 4) == 0)
+            return self->sup->fail(
+                "a Vec brace initializer is only supported in a local declaration");
+        return self->container_init_check(ctype);
     }
 
     /* P29-2 lookahead: the cursor is on a template name. 1 only when

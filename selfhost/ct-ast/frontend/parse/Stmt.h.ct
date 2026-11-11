@@ -870,27 +870,84 @@ static int range_vec_target(const char *type, char *elem, int ecap,
     return 1;
 }
 
-/* Phase 31 S11a: a `Vec<T>` brace initializer (`Vec<int> v = {1, 2, 3};`). The
-   cursor sits on `{` and the caller already resolved the instance, so `elem` is
-   the element's C type and `iname` the encoded instance name -- the same pair
-   the range form carries. Elements are ordinary expressions separated by
-   commas (a trailing comma is allowed) and are chained through `next`, which
-   keeps the node count proportional to the source and lets the emitter stream
-   one composite literal into `Vec_<enc>_from`. Nothing is flattened into raw
-   text, so MAX_TEXT cannot truncate the list. An empty list has no elements
-   and lowers to `from(0, 0)`. */
+/* Phase 31 S11b: two C type spellings name the same type when they only differ
+   in blanks. The instance row and the expression tables spell a pointer as
+   `int *` in one place and `int*` in the other, so the comparison normalises
+   whitespace instead of requiring one spelling. */
+static int vbrace_type_same(const char *a, const char *b)
+{
+    char x[MAX_TEXT];
+    char y[MAX_TEXT];
+    int i = 0, j = 0;
+
+    for (; *a && i < MAX_TEXT - 1; a++)
+        if (*a != ' ' && *a != '\t') x[i++] = *a;
+    x[i] = 0;
+    for (; *b && j < MAX_TEXT - 1; b++)
+        if (*b != ' ' && *b != '\t') y[j++] = *b;
+    y[j] = 0;
+    return strcmp(x, y) == 0;
+}
+
+/* Phase 31 S11a/S11b: a `Vec<T>` brace initializer (`Vec<int> v = {1, 2, 3};`).
+   The cursor sits on `{` and the caller already resolved the instance, so `elem`
+   is the element's C type and `iname` the encoded instance name -- the same pair
+   the range form carries. Elements are ordinary expressions separated by commas
+   (a trailing comma is allowed) and are chained through `next`, which keeps the
+   node count proportional to the source and lets the emitter stream one
+   composite literal into `Vec_<enc>_from`. Nothing is flattened into raw text,
+   so MAX_TEXT cannot truncate the list. An empty list has no elements and
+   lowers to `from(0, 0)`.
+
+   S11b adds the four local boundaries: a nested brace list (L31-9), the 1024
+   cap (L31-8), an element whose type cannot be pinned (L31-7) and an element
+   that does not match the slot (L31-6). Each element is boxed first when the
+   slot is an interface value, exactly like a `push` argument (S2), so owned and
+   interface elements reach the same constructor. */
 static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char *iname)
 {
-    int e, head, tail, count, line;
+    int e, head, tail, count, line, col;
 
     line = self->lex->tokline;
+    col = self->lex->tokstart - self->lex->lstart + 1;
     head = -1;
     tail = -1;
     count = 0;
     self->sup->lex_next();              /* `{` */
     while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-        int el = self->ex->parse_expr();
+        int el, eline, ecol;
+        char ety[MAX_TEXT];
+        char tr[MAX_TEXT];
+        int ip = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1,
+                "a brace list cannot appear inside another brace initializer; build the inner container first",
+                self->mem->path);
+        if (count >= 1024)
+            return tool::diag::ct_sem_error(line, col,
+                "too many initializer elements (limit 1024)", self->mem->path);
+        eline = self->lex->tokline;
+        ecol = self->lex->tokstart - self->lex->lstart + 1;
+        el = self->ex->parse_expr();
         if (el < 0) return -1;
+        if (self->sup->iface_ref_type(elem, tr, sizeof tr, &ip)) {
+            el = self->sup->maybe_box(el, tr, ip);
+            if (el < 0) return -1;
+        }
+        if (self->sup->expr_ctype(el, ety, sizeof ety) != 0) {
+            char msg[256];
+            snprintf(msg, sizeof msg,
+                     "cannot determine the type of initializer element %d", count + 1);
+            return tool::diag::ct_sem_error(eline, ecol, msg, self->mem->path);
+        }
+        if (!vbrace_type_same(ety, elem)) {
+            char msg[512];
+            snprintf(msg, sizeof msg,
+                     "initializer element %d has type '%s', expected '%s'",
+                     count + 1, ety, elem);
+            return tool::diag::ct_sem_error(eline, ecol, msg, self->mem->path);
+        }
         if (head < 0) head = el;
         else self->arena->nodes[tail].next = el;
         tail = el;
@@ -2557,7 +2614,15 @@ impl StmtOps for Stmt {
                                          iname, (int)sizeof iname)) {
                         /* Phase 31 S11a: `Vec<T> v = {…}` lowers to `from(…, n)`.
                            Handled before the raw capture so the element list
-                           stays a structured expression chain. */
+                           stays a structured expression chain. A `static`
+                           local cannot call the constructor during C static
+                           initialization, so it is refused with the global
+                           text (L31-10). */
+                        if (self->static_decl)
+                            return tool::diag::ct_sem_error(self->lex->tokline,
+                                self->lex->tokstart - self->lex->lstart + 1,
+                                "a Vec brace initializer is only supported in a local declaration",
+                                self->mem->path);
                         e = parse_vec_brace_init(self, elemtype, iname);
                         if (e < 0) return -1;
                     } else {
@@ -2623,7 +2688,12 @@ impl StmtOps for Stmt {
             if (self->arena->nodes[n].a >= 0) {
                 char tr[MAX_TEXT];
                 int ip = 0;
-                if (self->sup->iface_ref_type(typebuf, tr, sizeof tr, &ip)) {
+                /* A container instance whose type argument is an interface
+                   value is spelled `struct Vec_Show__iface`: the `_iface` tail
+                   alone must not turn the declaration into an interface slot,
+                   so the name has to be a declared trait. */
+                if (self->sup->iface_ref_type(typebuf, tr, sizeof tr, &ip)
+                    && self->sym->find_trait(tr) >= 0) {
                     e = self->sup->maybe_box(self->arena->nodes[n].a, tr, ip);
                     if (e < 0) return -1;
                     self->arena->nodes[n].a = e;
@@ -2723,12 +2793,21 @@ impl StmtOps for Stmt {
                      && self->sup->expr_type(e, tt, sizeof tt) == 0))
                 && strstr(tt, "(*"))
                 self->ex->fnval_ok = 1;
+            /* Phase 31 S11b: a brace list is not an expression, so an
+               assignment to a `Vec` gets the dedicated text (L31-11) instead of
+               the generic "expected an expression" the primary parser gives.
+               `tt` is filled by the query above, so the target type is known. */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0
+                && (strncmp(tt, "struct Vec_", 11) == 0 || strncmp(tt, "Vec_", 4) == 0))
+                return self->sup->fail(
+                    "a brace list is not an expression; use Vec<T>::from or push");
             self->ex->into_ok = 1;
             rhs = self->ex->parse_expr();
             self->ex->into_ok = 0;
             self->ex->fnval_ok = 0;
             if (rhs < 0) return -1;
-            if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)) {
+            if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)
+                && self->sym->find_trait(tr) >= 0) {
                 rhs = self->sup->maybe_box(rhs, tr, ip);
                 if (rhs < 0) return -1;
             }

@@ -1238,7 +1238,7 @@ impl ParseOps for Parser {
                     char fixed[MAX_INIT_TEXT];
                     int off, k;
                     /* V29-4: a Vec / Map has no C aggregate initializer. */
-                    if (self->ex->container_init_check(ret) != 0) return -1;
+                    if (self->ex->container_global_init_check(ret) != 0) return -1;
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
                     if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
