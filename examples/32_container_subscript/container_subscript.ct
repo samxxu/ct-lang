@@ -1,0 +1,97 @@
+// 32_container_subscript - subscript sugar and chained access (Phase 31 O3)
+//
+// `v[i]` is sugar for `v.get(i)` and `m[k]` is sugar for `m.get(k)`. The sugar
+// is read-only: `v[i] = x` and `&v[i]` are hard errors (use `set` / bind to a
+// local). Chained receivers (`g[i][j]`, `g.get(0).len()`, `b.mv()[0]`) are
+// materialised into a temporary before the next call takes their address, so
+// the generated C never takes `&Vec_*_get(...)`.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+trait VecSource {
+    Vec<int> mv();
+}
+
+struct Builder {
+    Vec<int> row;
+} use VecSource;
+
+impl VecSource for Builder {
+    Vec<int> mv() {
+        return self->row;
+    }
+}
+
+struct Holder {
+    Vec<int> v;
+}
+
+Vec<int> mk(void)
+{
+    Vec<int> r = {5};
+    return r;
+}
+
+int main(void)
+{
+    Vec<int> v = {3, 1, 4};
+    Vec<int> *pv = &v;
+    Vec<int> arr[2];
+    struct Holder h;
+    struct Builder b;
+    Vec<int> brow = {9};
+    Vec<Vec<int>> g;
+    Vec<int> row0 = {1, 2};
+    Vec<int> row1 = {3};
+    Map<char *, int> m = {"k": 7};
+
+    arr[0] = v;
+    h.v = v;
+    b.row = brow;
+    g.h = 0;
+    g.push(row0);
+    g.push(row1);
+
+    /* A chained receiver is materialised only at the start of a statement,
+       an assignment, a declaration initialiser or a return expression --
+       never as a call argument. Bind each chain to a local first. */
+    int a0 = v[0];
+    int a1 = (*pv)[1];
+    int a2 = arr[0][2];
+    int a3 = h.v[0];
+    int a4 = mk()[0];
+    int a5 = g[1][0];
+    int a6 = g.get(0).len();
+    int a7 = b.mv()[0];
+
+    printf("v[0] = %d\n", a0);
+    printf("(*pv)[1] = %d\n", a1);
+    printf("arr[0][2] = %d\n", a2);
+    printf("h.v[0] = %d\n", a3);
+    printf("mk()[0] = %d\n", a4);
+    printf("g[1][0] = %d\n", a5);
+    printf("g.get(0).len() = %d\n", a6);
+    printf("b.mv()[0] = %d\n", a7);
+
+    /* out-of-bounds and missing key answer zero / null, never abort. */
+    int oob = v[9];
+    int mkval = *m["k"];
+    void *missing = m["missing"];
+    printf("v[9] = %d\n", oob);
+    printf("*m[\"k\"] = %d\n", mkval);
+    printf("m[\"missing\"] = %p\n", missing);
+
+    /* writing through the Map get pointer is the existing get() semantics. */
+    *m["k"] = 42;
+    printf("after *m[k] = 42: %d\n", *m["k"]);
+
+    g.release();
+    row1.release();
+    row0.release();
+    brow.release();
+    v.release();
+    m.release();
+    return 0;
+}
