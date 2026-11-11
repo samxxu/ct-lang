@@ -5749,7 +5749,7 @@ p29_diag generic_struct_arity 10:20 "a generic struct takes at most 2 type param
 p29_diag generic_struct_void 5:13 "type argument 'void' cannot instantiate a generic struct"
 p29_diag generic_struct_depth 9:25 "generic type arguments nest deeper than 4"
 p29_diag builtin_type_redecl 3:1 "'Vec' is a built-in type and cannot be redeclared"
-p29_diag foreach_container_element 8:5 "foreach cannot iterate a container of 'struct Speaker_iface' (interface, vptr-bearing or container element)"
+p29_diag foreach_container_element 7:5 "foreach cannot iterate a container of 'struct MapEntry_char_p_int' (interface, vptr-bearing or container element)"
 p29_diag foreach_container_index_write 9:1 "the foreach index 'i' is read-only"
 p29_diag foreach_container_redeclare 9:1 "cannot redeclare the foreach binding 'item'"
 p29_diag foreach_container_map_i 11:1 "'i' has no meaning in a Map foreach; use item.key / item.value"
@@ -6008,20 +6008,121 @@ else
 fi
 # P29-2: `$` scope, empty range, the 1024 cap and a `Map` target each keep a
 # single positioned diagnostic -- never an `undeclared` fallback.
+# $1 fixture name, $2 expected wording, $3 its `line:col`. A negative fixture is
+# only evidence when the diagnostic is the promised one, positioned, and the
+# single error -- not an `undeclared` fallback or a cascade.
 p29_neg() {
     if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p29neg.c" \
             >"$work/p29neg.out" 2>"$work/p29neg.err"; then
         bad "p29: $1" "expected a diagnostic, got exit 0"
-    elif grep -Fq "$2" "$work/p29neg.err" && ! grep -Fiq 'undeclared' "$work/p29neg.err"; then
-        ok "p29 ($1: $2)"
-    else
+    elif ! grep -Fq "$2" "$work/p29neg.err"; then
         bad "p29: $1" "$(cat "$work/p29neg.err")"
+    elif grep -Fiq 'undeclared' "$work/p29neg.err"; then
+        bad "p29: $1" "fell back to 'undeclared': $(cat "$work/p29neg.err")"
+    elif [ "$(grep -c 'error:' "$work/p29neg.err")" -ne 1 ]; then
+        bad "p29: $1" "expected exactly one diagnostic: $(cat "$work/p29neg.err")"
+    elif ! grep -Fq "test/ast/errors/$1.ct:$3: error:" "$work/p29neg.err"; then
+        bad "p29: $1" "expected the diagnostic at $3: $(cat "$work/p29neg.err")"
+    else
+        ok "p29 ($1: $2 at $3)"
     fi
 }
-p29_neg range_vec_index_scope "unexpected token"
-p29_neg range_vec_empty "an empty range has no elements"
-p29_neg range_vec_too_many "too many range elements (limit 1024)"
-p29_neg range_vec_map_target "a range initializer declares an array"
+p29_neg range_vec_index_scope "unexpected token" 8:9
+p29_neg range_vec_empty "an empty range has no elements" 6:18
+p29_neg range_vec_too_many "too many range elements (limit 1024)" 6:18
+p29_neg range_vec_map_target "a range initializer declares an array" 6:26
+p29_neg impl_static_trait "a static method cannot implement a trait" 13:5
+p29_neg vec_subscript "a Vec is not subscriptable: use get(i) / set(i, v)" 9:13
+p29_neg map_subscript "a Map is not subscriptable: use get(key)" 8:13
+p29_neg map_brace_init "a Map cannot be initialized from a brace list: use put(key, value)" 5:26
+p29_neg generic_impl_missing_method "no method 'nope' for type 'struct Pair_int_int'" 20:1
+p29_neg container_iface "interface and vptr-bearing values cannot be stored in a container" 19:15
+p29_neg container_vptr_struct "interface and vptr-bearing values cannot be stored in a container" 13:14
+
+# ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
+# A `long` key is as wide as a pointer on LP64, so the generic block compares it
+# by bytes; the `char *` block declared first owns `put` / `get` / `remove` for
+# string keys and the emitter skips the shadowed duplicates.
+cat >"$work/p29ml.ct" <<'EOF'
+int main(void)
+{
+    Map<long, int> m;
+    m.h = 0;
+    m.entries = 0;
+    return m.put(1L, 2) - 1;
+}
+EOF
+"$work/ct-ast" "$work/p29ml.ct" -o "$work/p29ml.c" >"$work/p29ml.out" 2>"$work/p29ml.err"
+if [ $? -ne 0 ]; then
+    bad "p29 V29-1: Map<long>" "ct-ast failed: $(head -3 "$work/p29ml.err")"
+elif [ "$(grep -c 'Map_long_int_put(void \*self' "$work/p29ml.c")" -ne 1 ]; then
+    bad "p29 V29-1: Map<long>" "expected exactly one definition of Map_long_int_put"
+elif grep -q 'strcmp' "$work/p29ml.c"; then
+    bad "p29 V29-1: Map<long>" "the generated C still compares a long key with strcmp"
+elif ! grep -q 'memcmp' "$work/p29ml.c"; then
+    bad "p29 V29-1: Map<long>" "the generated C does not compare the long key by bytes"
+else
+    ok "p29 V29-1 (a long key takes the byte comparison; no strcmp in the product)"
+fi
+"$work/ct-ast" examples/27_map_keys/map_keys.ct -o "$work/p29mk.c" \
+    >"$work/p29mk.out" 2>"$work/p29mk.err"
+if [ $? -ne 0 ]; then
+    bad "p29 V29-1: Map keys" "ct-ast failed: $(head -3 "$work/p29mk.err")"
+elif [ "$(grep -c 'Map_char_p_int_put(void \*self' "$work/p29mk.c")" -ne 1 ]; then
+    bad "p29 V29-1: Map keys" "the string and the generic block both emitted Map_char_p_int_put"
+elif [ "$(grep -c 'Map_char_p_int_get(void \*self' "$work/p29mk.c")" -ne 1 ]; then
+    bad "p29 V29-1: Map keys" "the string and the generic block both emitted Map_char_p_int_get"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p29mk.c" -o "$work/p29mk.bin" \
+        2>"$work/p29mk.cc" \
+      || ! "$work/p29mk.bin" >"$work/p29mk.run" 2>&1; then
+    bad "p29 V29-1: Map keys" "$(head -4 "$work/p29mk.cc")"
+elif ! diff -u examples/27_map_keys/map_keys.expected.out "$work/p29mk.run" \
+        >"$work/p29mk.diff"; then
+    bad "p29 V29-1: Map keys" "$(head -6 "$work/p29mk.diff")"
+else
+    ok "p29 V29-1 (int / long / char * keys: one definition each, expected output)"
+fi
+p29_neg map_key_bad "Map does not support key type 'char' (use int, long or char *)" 6:20
+
+# ---- Phase 29 V29-2: a released handle cannot be released twice ----
+# `v.retain()` makes a second handle; releasing `v` twice must not decrement the
+# count the sibling still owns (that freed the buffer while `w` was live).
+cat >"$work/p29dr.ct" <<'EOF'
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> w;
+    v.h = 0;
+    v.data = 0;
+    v.push(41);
+    w = v.retain();
+    v.release();
+    printf("sibling %d\n", w.len());
+    fflush(stdout);
+    v.release();
+    printf("unreachable\n");
+    return 0;
+}
+EOF
+if ! "$work/ct-ast" "$work/p29dr.ct" -o "$work/p29dr.c" >"$work/p29dr.out" 2>"$work/p29dr.err"; then
+    bad "p29 V29-2: double release" "ct-ast failed: $(head -3 "$work/p29dr.err")"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p29dr.c" -o "$work/p29dr.bin" \
+        2>"$work/p29dr.cc"; then
+    bad "p29 V29-2: double release" "$(head -4 "$work/p29dr.cc")"
+else
+    { "$work/p29dr.bin" >"$work/p29dr.run" 2>"$work/p29dr.stderr"; p29dr_rc=$?; } 2>/dev/null
+    if [ "$p29dr_rc" -eq 0 ]; then
+        bad "p29 V29-2: double release" "a second release on a released handle exited 0"
+    elif ! grep -Fq 'sibling 1' "$work/p29dr.run"; then
+        bad "p29 V29-2: double release" "the retained sibling was not readable: $(cat "$work/p29dr.run")"
+    elif ! grep -Fq 'Vec: release on a released handle' "$work/p29dr.stderr"; then
+        bad "p29 V29-2: double release" "$(cat "$work/p29dr.stderr")"
+    else
+        ok "p29 V29-2 (a second release aborts; the retained sibling stays readable)"
+    fi
+fi
 
 echo
 echo "== summary: $pass passed, $fail failed =="
