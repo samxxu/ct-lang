@@ -9,8 +9,12 @@
     { "include": "#ct-import" },
     { "include": "#ct-namespace" },
     { "include": "#ct-type-alias" },
+    { "include": "#ct-generic-struct" },
+    { "include": "#ct-generic-impl" },
     { "include": "#ct-generic-decl" },
     { "include": "#ct-generic-call" },
+    { "include": "#ct-generic-static-call" },
+    { "include": "#ct-generic-type" },
     { "include": "#ct-path" },
     { "include": "#ct-trait" },
     { "include": "#ct-trait-open" },
@@ -30,6 +34,14 @@
     { "include": "#ct-trait-builtin" },
     { "include": "#ct-pub" },
     { "include": "#ct-loop" },
+    { "include": "#ct-foreach" },
+    { "include": "#ct-into-inline-method" },
+    { "include": "#ct-into-inline-field" },
+    { "include": "#ct-into" },
+    { "include": "#ct-into-method" },
+    { "include": "#ct-into-field" },
+    { "include": "#ct-foreach-entry" },
+    { "include": "#ct-container-method" },
     { "include": "#ct-range-dots" },
     { "include": "#ct-range-index" },
     { "include": "#ct-closure-arrow" },
@@ -128,15 +140,32 @@
         "4": { "name": "keyword.operator.assignment.ct" }
       }
     },
+    "ct-generic-struct": {
+      "match": "^[ \\t]*(?:(pub)[ \\t]+)?(struct)[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(<)[ \\t]*([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*,[ \\t]*[A-Za-z_][A-Za-z0-9_]*)?)[ \\t]*(>)",
+      "captures": {
+        "1": { "name": "storage.modifier.pub.ct" },
+        "2": { "name": "storage.type.struct.ct" },
+        "3": { "name": "entity.name.type.struct.ct" },
+        "4": { "name": "punctuation.definition.generic.begin.ct" },
+        "5": {
+          "patterns": [
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.parameter.ct" }
+          ]
+        },
+        "6": { "name": "punctuation.definition.generic.end.ct" }
+      }
+    },
     "ct-generic-decl": {
-      "match": "^[ \\t]*(?!(?:return|goto|case|else|do|sizeof|typedef|switch|while|for|if|break|continue)\\b)([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(\\*+)?[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(<)[ \\t]*([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(>)[ \\t]*(?=\\()",
+      "match": "^[ \\t]*(?!(?:return|goto|case|else|do|sizeof|typedef|switch|while|for|if|break|continue)\\b)([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(\\*+)?[ \\t]+([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(<)[ \\t]*([A-Za-z_][A-Za-z0-9_]*)(?:[ \\t]*(:)[ \\t]*([A-Za-z_][A-Za-z0-9_]*))?[ \\t]*(>)[ \\t]*(?=\\()",
       "captures": {
         "1": { "name": "entity.name.type.generic.ct" },
         "2": { "name": "keyword.operator.pointer.ct" },
         "3": { "name": "entity.name.function.ct" },
         "4": { "name": "punctuation.definition.generic.begin.ct" },
         "5": { "name": "entity.name.type.parameter.ct" },
-        "6": { "name": "punctuation.definition.generic.end.ct" }
+        "6": { "name": "keyword.operator.constraint.ct" },
+        "7": { "name": "entity.name.type.trait.ct" },
+        "8": { "name": "punctuation.definition.generic.end.ct" }
       }
     },
     "ct-generic-call": {
@@ -145,6 +174,40 @@
         "1": { "name": "entity.name.function.ct" },
         "2": { "name": "punctuation.definition.generic.begin.ct" },
         "3": { "name": "entity.name.type.generic.ct" },
+        "4": { "name": "punctuation.definition.generic.end.ct" }
+      }
+    },
+    "ct-generic-static-call": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(<)([^;{}()=\\n]*?)[ \\t]*(>)([ \\t]*::[ \\t]*)([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.type.generic.ct" },
+        "2": { "name": "punctuation.definition.generic.begin.ct" },
+        "3": {
+          "patterns": [
+            { "match": "\\b(?:struct|union|enum|const|volatile|unsigned|signed)\\b", "name": "storage.type.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.generic.ct" },
+            { "match": "\\*", "name": "keyword.operator.pointer.ct" },
+            { "match": ",", "name": "punctuation.separator.comma.ct" }
+          ]
+        },
+        "4": { "name": "punctuation.definition.generic.end.ct" },
+        "5": { "name": "punctuation.separator.namespace.ct" },
+        "6": { "name": "entity.name.function.ct" }
+      }
+    },
+    "ct-generic-type": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(<)([^;{}()=\\n]*?)[ \\t]*(>)(?=[ \\t]*[A-Za-z_*&])",
+      "captures": {
+        "1": { "name": "entity.name.type.generic.ct" },
+        "2": { "name": "punctuation.definition.generic.begin.ct" },
+        "3": {
+          "patterns": [
+            { "match": "\\b(?:struct|union|enum|const|volatile|unsigned|signed)\\b", "name": "storage.type.ct" },
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.generic.ct" },
+            { "match": "\\*", "name": "keyword.operator.pointer.ct" },
+            { "match": ",", "name": "punctuation.separator.comma.ct" }
+          ]
+        },
         "4": { "name": "punctuation.definition.generic.end.ct" }
       }
     },
@@ -188,6 +251,30 @@
         "2": { "name": "entity.name.type.trait.ct" },
         "3": { "name": "keyword.control.ct" },
         "4": { "name": "entity.name.type.struct.ct" }
+      }
+    },
+    "ct-generic-impl": {
+      "match": "^[ \\t]*(impl)[ \\t]*(<)[ \\t]*([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*,[ \\t]*[A-Za-z_][A-Za-z0-9_]*)?)[ \\t]*(>)[ \\t]*([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(<)[ \\t]*([^<>{}]*?)[ \\t]*(>)[ \\t]*(?:(use)[ \\t]+([A-Za-z_][A-Za-z0-9_]*))?[ \\t]*(?=\\{)",
+      "captures": {
+        "1": { "name": "storage.type.impl.ct" },
+        "2": { "name": "punctuation.definition.generic.begin.ct" },
+        "3": {
+          "patterns": [
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.parameter.ct" }
+          ]
+        },
+        "4": { "name": "punctuation.definition.generic.end.ct" },
+        "5": { "name": "entity.name.type.struct.ct" },
+        "6": { "name": "punctuation.definition.generic.begin.ct" },
+        "7": {
+          "patterns": [
+            { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "entity.name.type.generic.ct" },
+            { "match": ",", "name": "punctuation.separator.comma.ct" }
+          ]
+        },
+        "8": { "name": "punctuation.definition.generic.end.ct" },
+        "9": { "name": "keyword.other.use.ct" },
+        "10": { "name": "entity.name.type.trait.ct" }
       }
     },
     "ct-impl-open": {
@@ -323,6 +410,65 @@
       "match": "(?<![.>])\\b(loop)[ \\t]*(?=\\()",
       "captures": {
         "1": { "name": "keyword.control.loop.ct" }
+      }
+    },
+    "ct-foreach": {
+      "match": "(?<![.>])\\b(foreach)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.control.foreach.ct" }
+      }
+    },
+    "ct-into-inline-method": {
+      "match": "\\b(into)([ \\t]*)(\\{)([ \\t]*)(\\.)([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.control.into.ct" },
+        "3": { "name": "punctuation.definition.block.ct" },
+        "5": { "name": "punctuation.accessor.ct" },
+        "6": { "name": "entity.name.function.ct" }
+      }
+    },
+    "ct-into-inline-field": {
+      "match": "\\b(into)([ \\t]*)(\\{)([ \\t]*)(\\.)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.control.into.ct" },
+        "3": { "name": "punctuation.definition.block.ct" },
+        "5": { "name": "punctuation.accessor.ct" },
+        "6": { "name": "variable.other.property.ct" }
+      }
+    },
+    "ct-into": {
+      "match": "\\b(into)\\b[ \\t]*(\\{)",
+      "captures": {
+        "1": { "name": "keyword.control.into.ct" },
+        "2": { "name": "punctuation.definition.block.ct" }
+      }
+    },
+    "ct-into-method": {
+      "match": "(?:^|(?<=[;]))[ \\t]*(\\.)([A-Za-z_][A-Za-z0-9_]*)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "punctuation.accessor.ct" },
+        "2": { "name": "entity.name.function.ct" }
+      }
+    },
+    "ct-into-field": {
+      "match": "(?:^|(?<=[;]))[ \\t]*(\\.)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "punctuation.accessor.ct" },
+        "2": { "name": "variable.other.property.ct" }
+      }
+    },
+    "ct-foreach-entry": {
+      "match": "\\b(item)([ \\t]*)(\\.)([ \\t]*)(key|value)\\b",
+      "captures": {
+        "1": { "name": "variable.other.foreach-item.ct" },
+        "3": { "name": "punctuation.accessor.ct" },
+        "5": { "name": "variable.other.property.ct" }
+      }
+    },
+    "ct-container-method": {
+      "match": "(?:\\.|->)(len|get|set|push|pop|clear|retain|release|put|remove|entry|from)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "support.function.container.ct" }
       }
     },
     "ct-range-dots": {

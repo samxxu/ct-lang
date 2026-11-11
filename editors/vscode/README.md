@@ -43,6 +43,16 @@ impl Greeter for Person {
 | `_Alignas`, `_Alignof T`, `_Atomic`, `_Generic`, `_Noreturn`, `_Thread_local`, `_Bool` | C11 keywords |
 | `__attribute__((…))` | `storage.modifier` |
 | `write(buf, len) -> uart_put;` | recipe method + `->` |
+| `foreach (xs) { … }` | `keyword.control`, plus `item.key` / `item.value` for a `Map` entry |
+| `struct Stack<T> {` / `pub struct Pair<T, U> {` | `storage.type` + struct name + type parameters |
+| `impl<T> Stack<T> {` / `impl<T> Stack<T> use Show {` | `storage.type` + type parameters + target + `use` trait |
+| `T max2<T: Ord>(T a, T b)` | generic declaration with its trait constraint |
+| `Vec<int> nums;` / `Map<char *, int> ages;` | built-in container instantiation (`Box<Box<int>>` nests) |
+| `Vec<char *>::from(…)` | static call path: type arguments + `::` + method |
+| `.push(…)`, `.get(…)`, `.put(…)`, `.entry(…)`, `.len()`, `.from(…)` | `support.function` for the `Vec` / `Map` protocol (`->` included) |
+| `cfg into {` + member lines | `keyword.control` + `variable.other.property` for the leading `.field` / `.method` |
+| `cfg into { .backlog = 64; }` | the inline spelling gets the same scopes (`ct-into-inline-field` / `ct-into-inline-method`) |
+| `p into { … }.add(2)` / `}->port` / `}[1]` | suffixes stay ordinary C after the block |
 
 `.m.ct` mapping units are plain `.ct` files to the editor (the suffix still
 ends in `.ct`), so they get the same highlighting; `#include` / `#define`
@@ -93,7 +103,16 @@ plain string.
 
 Also included: comment and bracket configuration, auto-closing and surrounding
 pairs, brace-based indentation, block-comment continuation on Enter, and the
-snippets `trait`, `structuse`, `impl`, `method`, `call`.
+snippets `trait`, `structuse`, `impl`, `method`, `call`, `foreach`,
+`foreachmap`, `vec`, `mapvar`, `generic`, `genericbound`, `structg`, `implg`,
+`into`, `rangeinit` and `vecrange`.
+
+Two bindings of `$` cannot be told apart by a line-oriented grammar: the range
+initializer (`0..n($)`) and the `into` block (`report($)`) share
+`variable.language.range-index.ct`. Likewise `item` and `i` are ordinary
+identifiers outside the tokens the grammar can prove (`item.key`,
+`item.value`); they are never coloured globally, so a user variable named
+`item` is not mis-highlighted.
 
 The grammar, snippets and language configuration are **declarative JSON — no
 build step**. Navigation is split into `extension.js` (VS Code API only) and
@@ -136,7 +155,7 @@ To get an F5 workflow, add a launch configuration at the repository root as
 ## Checks
 
 ```bash
-python3 test/check-grammar.py    # 109 assertions (including the index checks); exit code 0 means it passed
+python3 test/check-grammar.py    # 168 assertions (including the 26 index checks); exit code 0 means it passed
 node test/check-index.js         # the indexer's own 26 assertions, runnable without VS Code
 ```
 

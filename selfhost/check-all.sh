@@ -13,7 +13,8 @@
 #   3. selfhost/check-archive.sh                 L2 against the archived oracle (ratchet)
 #   4. selfhost/check-m2a.sh                     L1 output byte-identical with L0
 #   5. selfhost/ct-tour.sh                       end-to-end tour
-#   6. editors/vscode/test/check-grammar.py      editor grammar (108 assertions)
+#   6. editors/vscode/test/check-grammar.py      editor grammar (167 assertions,
+#                                                168 when node is on PATH)
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
 #   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7 + 10.x–12.x +
 #                                                batches 13–40: probes, corpus equivalence,

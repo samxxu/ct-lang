@@ -72,6 +72,19 @@ CT_CASES = (
     "test/ast/124_generic_struct/prog.ct",
     "test/ast/125_generic_type_positions/prog.ct",
     "test/ast/128_generic_type_operands/prog.ct",
+    # Phase 29: `foreach`, the built-in `Vec` / `Map` protocol, generic
+    # structs with their `impl<T>` blocks, trait-constrained generics and the
+    # range initializer on a `Vec` as well as on an array.
+    "examples/21_generic_bound/generic_bound.ct",
+    "examples/22_foreach_map/foreach_map.ct",
+    "examples/23_generic_stack/generic_stack.ct",
+    "examples/24_vec_ops/vec_ops.ct",
+    "examples/26_range_vec/range_vec.ct",
+    "test/ast/138_generic_struct/prog.ct",
+    "test/ast/147_generic_impl/prog.ct",
+    # Phase 30: the receiver-context block (`expr into { ... }`), including the
+    # `->field` / `[i]` suffixes and the `int into = 1;` look-alike.
+    "examples/29_into_block/into.ct",
     # C11 / GNU surfaces that the CT line accepts verbatim.
     "test/ast/42_static_assert/prog.ct",
     "test/ast/53_c11_align_generic/prog.ct",
@@ -138,6 +151,55 @@ CLOSURE = "\n".join([
     "    if (a >= b) {",
     "    p->x = 1;",
 ])
+# Phase 29: `foreach` is a keyword only as `foreach(`; the entry pair
+# `item.key` / `item.value` is the Map protocol and nothing else is special.
+FOREACH = "\n".join([
+    "    foreach (nums) {",
+    "        sum = sum + item;",
+    "    }",
+    "    int foreach = 3;",
+    "foreach:",
+    "    goto foreach;",
+    "    foreach (ages) {",
+    "        printf(\"%s is %d\", item.key, item.value);",
+    "    }",
+    "    p.item = 2;",
+])
+# Phase 30: `into` only when a `{` follows; a leading `.member` starts the
+# block body and the inline spelling is the same construct.
+INTO = "\n".join([
+    "    cfg into {",
+    "        .host = \"0.0.0.0\";",
+    "        .port = 8080;",
+    "        report($);",
+    "    };",
+    "    int into = 1;",
+    "    if (into) {",
+    "    int p2 = cfg into { .backlog = 64; } ->port;",
+    "    x = mk() into { .x = 1; }.add(2);",
+    "    Stage s = p into { .flag = 1; }[1];",
+    "    p.host = 1;",
+])
+# Phase 29 generics: the type-instantiation position (a declarator, not a
+# call), the static `Vec<T>::from` path, and the `impl<T>` header.
+GENERIC29 = "\n".join([
+    "    Vec<int> nums;",
+    "    Map<char *, int> ages;",
+    "    Vec<char *>::from(names, 3);",
+    "    sq.len();",
+    "    v.push(4);",
+    "    Box<Box<int>> tight;",
+    "    Pair<char *, Box<int>> mixed;",
+    "    T max2<T: Ord>(T a, T b)",
+    "    max2<int>(a, b);",
+    "    struct Stack<T> {",
+    "    pub struct Pair<T, U> {",
+    "    impl<T> Stack<T> {",
+    "    impl<T> Stack<T> use Show {",
+    "    if (a < b) f();",
+    "    return a < b;",
+    "    t.each(fn, env);",
+])
 # Phase 20: `type` is contextual and anchored at line start.
 ALIAS = "\n".join([
     "pub type Text  = char *;",
@@ -173,16 +235,23 @@ MAP = "\n".join([
 # New tokens inside a string / comment are not code, exactly like `$` above.
 QUOTED = "\n".join([
     'char *s = "T id<T>(T x) loop(2..5) => _Static_assert '
-    '_Alignof T _Generic __attribute__ pub type Text =";',
+    '_Alignof T _Generic __attribute__ pub type Text = '
+    'foreach (x) { into { .host = 1; } } Vec<int> Box<int> '
+    'impl<T> item.key v.push()";',
     "// T id<T>(T x) loop(2..5) => _Static_assert "
-    "_Alignof T _Generic __attribute__ type Text =",
+    "_Alignof T _Generic __attribute__ type Text = "
+    "foreach (x) { into { .host = 1; } } Vec<int> Box<int> "
+    "impl<T> item.key v.push()",
 ])
 NEW_RULES = {
     "ct-type-alias", "ct-generic-decl", "ct-generic-call", "ct-loop",
     "ct-range-dots", "ct-closure-arrow", "ct-static-assert", "ct-alignas",
     "ct-alignof", "ct-alignof-type", "ct-atomic", "ct-generic-select",
     "ct-noreturn", "ct-thread-local", "ct-c11-builtin-types", "ct-attribute",
-    "ct-recipe",
+    "ct-recipe", "ct-generic-struct", "ct-generic-impl", "ct-generic-type",
+    "ct-generic-static-call", "ct-foreach", "ct-into", "ct-into-field",
+    "ct-into-method", "ct-into-inline-field", "ct-into-inline-method",
+    "ct-foreach-entry", "ct-container-method",
 }
 
 
@@ -461,6 +530,89 @@ def main():
             check("`alignof(T)` is not ct-alignof-type",
                   not any(h[0] == "ct-alignof-type" for _, l, hs in rows
                           if "alignof(T)" in l for h in hs))
+        if "21_generic_bound" in rel:
+            check("`void sort<T: Compare>(...)` -> ct-generic-decl",
+                  any(h[0] == "ct-generic-decl" for _, l, hs in rows
+                      if "sort<T: Compare>" in l for h in hs))
+            check("`sort<struct Num>(...)` -> ct-generic-call",
+                  any(h[0] == "ct-generic-call" for _, l, hs in rows
+                      if "sort<struct Num>" in l for h in hs))
+        if "22_foreach_map" in rel:
+            check("`foreach (nums) {` -> ct-foreach",
+                  any(h[0] == "ct-foreach" for _, l, hs in rows
+                      if l.strip().startswith("foreach (nums)") for h in hs))
+            check("`item.key` / `item.value` -> ct-foreach-entry",
+                  any(h[0] == "ct-foreach-entry" for _, l, hs in rows
+                      if "item.key" in l for h in hs))
+            check("`nums.push(...)` -> ct-container-method",
+                  any(h[0] == "ct-container-method" for _, l, hs in rows
+                      if "nums.push(" in l for h in hs))
+            check("`nums.get(0)` -> ct-container-method",
+                  any(h[0] == "ct-container-method" for _, l, hs in rows
+                      if "nums.get(0)" in l for h in hs))
+        if "23_generic_stack" in rel:
+            check("`struct Stack<T> {` -> ct-generic-struct",
+                  any(h[0] == "ct-generic-struct" for _, l, hs in rows
+                      if l.strip().startswith("struct Stack<T>") for h in hs))
+            check("`impl<T> Stack<T> {` -> ct-generic-impl",
+                  any(h[0] == "ct-generic-impl" for _, l, hs in rows
+                      if l.strip().startswith("impl<T> Stack<T>") for h in hs))
+            check("`Stack<int> a;` -> ct-generic-type",
+                  any(h[0] == "ct-generic-type" for _, l, hs in rows
+                      if l.strip().startswith("Stack<int>") for h in hs))
+            check("`pa->push(12)` -> ct-container-method",
+                  any(h[0] == "ct-container-method" for _, l, hs in rows
+                      if "pa->push(" in l for h in hs))
+        if "24_vec_ops" in rel:
+            check("`v.push(...)` -> ct-container-method",
+                  any(h[0] == "ct-container-method" for _, l, hs in rows
+                      if "v.push(" in l for h in hs))
+            check("`v.len()` -> ct-container-method",
+                  any(h[0] == "ct-container-method" for _, l, hs in rows
+                      if "v.len()" in l for h in hs))
+            check("`foreach (v) {` -> ct-foreach",
+                  any(h[0] == "ct-foreach" for _, l, hs in rows
+                      if l.strip().startswith("foreach (v)") for h in hs))
+        if "26_range_vec" in rel:
+            check("`Vec<int> sq = 4..8 {` -> ct-generic-type",
+                  any(h[0] == "ct-generic-type" for _, l, hs in rows
+                      if "Vec<int> sq" in l for h in hs))
+            check("`4..8` -> ct-range-dots",
+                  any(h[0] == "ct-range-dots" for _, l, hs in rows
+                      if "4..8" in l for h in hs))
+            check("`$ * $` -> ct-range-index",
+                  any(h[0] == "ct-range-index" for _, l, hs in rows
+                      if "4..8" in l for h in hs))
+        if "138_generic_struct" in rel:
+            check("`struct Pair<T, U> {` -> ct-generic-struct",
+                  any(h[0] == "ct-generic-struct" for _, l, hs in rows
+                      if l.strip().startswith("struct Pair<T, U>") for h in hs))
+            check("`Pair<int, char *> p;` -> ct-generic-type",
+                  any(h[0] == "ct-generic-type" for _, l, hs in rows
+                      if l.strip().startswith("Pair<int, char *>") for h in hs))
+        if "147_generic_impl" in rel:
+            check("`impl<T> Pair<T, int> {` -> ct-generic-impl",
+                  any(h[0] == "ct-generic-impl" for _, l, hs in rows
+                      if l.strip().startswith("impl<T> Pair<T, int>") for h in hs))
+            check("`impl<T> Stack<T> use Show {` -> ct-generic-impl",
+                  any(h[0] == "ct-generic-impl" for _, l, hs in rows
+                      if l.strip().startswith("impl<T> Stack<T> use Show") for h in hs))
+        if "29_into_block" in rel:
+            check("`cfg into {` -> ct-into",
+                  any(h[0] == "ct-into" for _, l, hs in rows
+                      if "cfg into {" in l for h in hs))
+            check("leading `.host = ...` -> ct-into-field",
+                  any(h[0] == "ct-into-field" for _, l, hs in rows
+                      if l.strip().startswith(".host") for h in hs))
+            check("`report($)` -> ct-range-index",
+                  any(h[0] == "ct-range-index" for _, l, hs in rows
+                      if "report($)" in l for h in hs))
+            check("`int into = 1;` is not ct-into",
+                  not any(h[0] == "ct-into" for _, l, hs in rows
+                          if "int into = 1" in l for h in hs))
+            check("`live.host` is not ct-into-field",
+                  not any(h[0] == "ct-into-field" for _, l, hs in rows
+                          if "live.host" in l for h in hs))
         if "42_static_assert" in rel:
             check("`_Static_assert` -> ct-static-assert",
                   any(h[0] == "ct-static-assert" for _, l, hs in rows
@@ -563,6 +715,87 @@ def main():
           "ct-generic-decl" not in by_line[7], str(by_line[7]))
     check("`if (a < b) f();` is not ct-generic-call",
           "ct-generic-call" not in by_line[11], str(by_line[11]))
+
+    print()
+    print("synthetic foreach -- statement form and the Map entry protocol:")
+    rows = scan(FOREACH, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`foreach (nums) {` -> ct-foreach", "ct-foreach" in by_line[1], str(by_line[1]))
+    check("bare `item` in the body is a plain identifier",
+          "ct-foreach-entry" not in by_line[2] and "ct-foreach" not in by_line[2],
+          str(by_line[2]))
+    check("`int foreach = 3;` is not ct-foreach", "ct-foreach" not in by_line[4], str(by_line[4]))
+    check("label `foreach:` is not ct-foreach", "ct-foreach" not in by_line[5], str(by_line[5]))
+    check("`goto foreach;` is not ct-foreach", "ct-foreach" not in by_line[6], str(by_line[6]))
+    check("`foreach (ages) {` -> ct-foreach", "ct-foreach" in by_line[7], str(by_line[7]))
+    check("`item.key` / `item.value` -> ct-foreach-entry",
+          "ct-foreach-entry" in by_line[8], str(by_line[8]))
+    check("`p.item` is not ct-foreach-entry",
+          "ct-foreach-entry" not in by_line[10], str(by_line[10]))
+
+    print()
+    print("synthetic into -- contextual keyword, block body and suffixes:")
+    rows = scan(INTO, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`cfg into {` -> ct-into", "ct-into" in by_line[1], str(by_line[1]))
+    check("leading `.host = ...` -> ct-into-field", "ct-into-field" in by_line[2], str(by_line[2]))
+    check("leading `.port = ...` -> ct-into-field", "ct-into-field" in by_line[3], str(by_line[3]))
+    check("`report($)` -> ct-range-index", "ct-range-index" in by_line[4], str(by_line[4]))
+    check("`int into = 1;` is not ct-into", "ct-into" not in by_line[6], str(by_line[6]))
+    check("`if (into) {` is not ct-into", "ct-into" not in by_line[7], str(by_line[7]))
+    check("inline `{ .backlog = 64; }` -> ct-into-inline-field",
+          "ct-into-inline-field" in by_line[8], str(by_line[8]))
+    check("suffix `}.add(2);` stays outside the block",
+          "ct-into-method" not in by_line[9] and "ct-into-inline-method" not in by_line[9],
+          str(by_line[9]))
+    check("suffix `}[1];` keeps the block highlights",
+          "ct-into-inline-field" in by_line[10], str(by_line[10]))
+    check("plain `p.host` is not ct-into-field",
+          "ct-into-field" not in by_line[11], str(by_line[11]))
+
+    print()
+    print("synthetic generics 29 -- instantiation, static path and impl header:")
+    rows = scan(GENERIC29, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`Vec<int> nums;` -> ct-generic-type",
+          "ct-generic-type" in by_line[1], str(by_line[1]))
+    check("`Map<char *, int> ages;` -> ct-generic-type",
+          "ct-generic-type" in by_line[2], str(by_line[2]))
+    check("`Vec<char *>::from(...)` -> ct-generic-static-call",
+          "ct-generic-static-call" in by_line[3], str(by_line[3]))
+    check("`sq.len()` -> ct-container-method",
+          "ct-container-method" in by_line[4], str(by_line[4]))
+    check("`v.push(4)` -> ct-container-method",
+          "ct-container-method" in by_line[5], str(by_line[5]))
+    check("`Box<Box<int>> tight;` -> ct-generic-type",
+          "ct-generic-type" in by_line[6], str(by_line[6]))
+    check("`Pair<char *, Box<int>> mixed;` -> ct-generic-type",
+          "ct-generic-type" in by_line[7], str(by_line[7]))
+    check("`T max2<T: Ord>(...)` -> ct-generic-decl",
+          "ct-generic-decl" in by_line[8], str(by_line[8]))
+    check("`max2<int>(...)` -> ct-generic-call",
+          "ct-generic-call" in by_line[9], str(by_line[9]))
+    check("`struct Stack<T> {` -> ct-generic-struct",
+          "ct-generic-struct" in by_line[10], str(by_line[10]))
+    check("`pub struct Pair<T, U> {` -> ct-generic-struct",
+          "ct-generic-struct" in by_line[11], str(by_line[11]))
+    check("`impl<T> Stack<T> {` -> ct-generic-impl",
+          "ct-generic-impl" in by_line[12], str(by_line[12]))
+    check("`impl<T> Stack<T> use Show {` -> ct-generic-impl",
+          "ct-generic-impl" in by_line[13], str(by_line[13]))
+    check("`if (a < b) f();` is not ct-generic-type",
+          "ct-generic-type" not in by_line[14], str(by_line[14]))
+    check("`return a < b;` is not ct-generic-type",
+          "ct-generic-type" not in by_line[15], str(by_line[15]))
+    check("`t.each(fn, env)` leaves `each` an ordinary method",
+          "ct-foreach" not in by_line[16] and "ct-container-method" not in by_line[16],
+          str(by_line[16]))
 
     print()
     print("synthetic loop / range -- statement position and `...` exclusion:")

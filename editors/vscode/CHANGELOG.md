@@ -1,5 +1,42 @@
 # Change Log
 
+## 0.6.0
+
+- Phase 29 syntax, 12 new rules: `foreach (xs)` (`ct-foreach`), the built-in
+  container protocol `Vec<T>` / `Map<K,V>` after `.` or `->`
+  (`ct-container-method`: `push`, `get`, `set`, `pop`, `clear`, `retain`,
+  `release`, `put`, `remove`, `entry`, `len`, `from`), the type-instantiation
+  position `Vec<int> nums;` / `Map<char *, int> ages;` / `Box<Box<int>>`
+  (`ct-generic-type`), the static path `Vec<char *>::from(…)`
+  (`ct-generic-static-call`), `struct Stack<T> {` and `pub struct Pair<T, U> {`
+  (`ct-generic-struct`), `impl<T> Stack<T> {` / `impl<T> Stack<T> use Show {`
+  (`ct-generic-impl`), and `item.key` / `item.value` as the `Map` entry pair
+  (`ct-foreach-entry`). `ct-generic-decl` now accepts a trait constraint
+  (`T max2<T: Ord>(T a, T b)`).
+- Phase 30 receiver blocks: `into` as a contextual keyword (`ct-into`, only when
+  a `{` follows, so `int into = 1;` stays an identifier), the leading-dot body
+  members `.field = v;` / `.method(args);` (`ct-into-field`, `ct-into-method`),
+  and the inline spelling `into { .field = v; }`
+  (`ct-into-inline-field`, `ct-into-inline-method`). Suffix chains
+  (`}.add(2)`, `}->field`, `}[1]`) stay outside the block and are left to C.
+- A line that starts with `.name` is scoped as a property/method, which is also
+  the correct reading of a multi-line designated initializer; the grammar never
+  takes a `{` on its own as the start of an `into` block, so
+  `Person p = { .name = … }` is not treated as a receiver block.
+- `$` keeps one scope, `variable.language.range-index.ct`: the range
+  initializer and the `into` receiver are both `$`, and a line-oriented grammar
+  cannot tell them apart. `item` / `i` are not coloured globally — only
+  `item.key` / `item.value` are provable without block scope — so a user
+  variable named `item` is never mis-highlighted.
+- Snippets: `foreach`, `foreachmap`, `vec`, `mapvar`, `generic`,
+  `genericbound`, `structg`, `implg`, `into`, `rangeinit`, `vecrange`.
+- `test/check-grammar.py`: 168 assertions (167 without node), up from 109, with the Phase 29/30
+  fixtures (`examples/21`, `22`, `23`, `24`, `26`, `29`, `test/ast/138`,
+  `test/ast/147`) scanned by the gate.
+
+This extension has its own version line; 0.6.0 does not affect the compiler's
+`CTC_VERSION`.
+
 ## 0.5.1
 
 - Go to definition now resolves a generic declaration `T id<T>(T x)` in

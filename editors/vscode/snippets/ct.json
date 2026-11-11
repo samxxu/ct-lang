@@ -41,5 +41,106 @@
     "prefix": "call",
     "body": "${1:obj}.${2:method}(${3})",
     "description": "Trait method call (ct turns it into vptr dispatch with &obj)"
+  },
+  "foreach loop": {
+    "prefix": "foreach",
+    "body": [
+      "foreach (${1:items}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "foreach over an array or Vec (implicit `item`, plus a read-only `i`); Map yields `item.key` / `item.value`"
+  },
+  "foreach over a Map": {
+    "prefix": "foreachmap",
+    "body": [
+      "foreach (${1:map}) {",
+      "\t${2:printf(\"%s\\n\", item.key);}",
+      "\t$0",
+      "}"
+    ],
+    "description": "foreach over Map<K,V>: `item` is the entry with `key` and `value`"
+  },
+  "Vec declaration": {
+    "prefix": "vec",
+    "body": [
+      "Vec<${1:int}> ${2:v};",
+      "$0"
+    ],
+    "description": "Declare a built-in Vec<T> (push/get/set/pop/clear/retain/release/len/from)"
+  },
+  "Map declaration": {
+    "prefix": "mapvar",
+    "body": [
+      "Map<${1:char *}, ${2:int}> ${3:m};",
+      "$0"
+    ],
+    "description": "Declare a built-in Map<K,V> (put/get/remove/entry/len/clear/release)"
+  },
+  "generic function": {
+    "prefix": "generic",
+    "body": [
+      "T ${1:id}<T>(${2:T x}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Generic function with one type parameter, instantiated as id<int>(...)"
+  },
+  "bounded generic function": {
+    "prefix": "genericbound",
+    "body": [
+      "T ${1:max2}<T: ${2:Ord}>(${3:T a}, ${4:T b}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Generic function constrained by a trait; call as max2<int>(a, b)"
+  },
+  "generic struct": {
+    "prefix": "structg",
+    "body": [
+      "struct ${1:Stack}<T> {",
+      "\t${2:T items[8];}",
+      "\t$0",
+      "}"
+    ],
+    "description": "Generic struct with up to two type parameters"
+  },
+  "generic impl": {
+    "prefix": "implg",
+    "body": [
+      "impl<T> ${1:Stack}<T> {",
+      "\t${2:int push(T v)}",
+      "\t{",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Inherent methods for every instantiation of a generic struct"
+  },
+  "into receiver block": {
+    "prefix": "into",
+    "body": [
+      "${1:receiver} into {",
+      "\t.${2:field} = ${3:value};",
+      "\t$0",
+      "};"
+    ],
+    "description": "Receiver-context block: `$` is the receiver and the first leading dot binds it"
+  },
+  "range initializer": {
+    "prefix": "rangeinit",
+    "body": [
+      "${1:int} ${2:a}[${3:n}] = 0..${3:n}(\\$ * (\\$ + 1) / 2);",
+      "$0"
+    ],
+    "description": "Range initializer for an array; `$` is the current index"
+  },
+  "Vec range initializer": {
+    "prefix": "vecrange",
+    "body": [
+      "Vec<${1:int}> ${2:v} = ${3:4}..${4:8} { \\$ * \\$ };",
+      "$0"
+    ],
+    "description": "Range initializer that builds a Vec<T>; `$` is the current index"
   }
 }

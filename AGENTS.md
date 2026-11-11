@@ -203,7 +203,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
 - **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
-  `python3 editors/vscode/test/check-grammar.py`（40 项断言，必须全绿）。它校验插件而不是编译器，
+  `python3 editors/vscode/test/check-grammar.py`（168 项断言，无 node 时 167 项并跳过 index 检查；必须全绿）。它校验插件而不是编译器，
   因此**不进** `./test/run.sh`；反过来它也不能替代手工三件套。
 - **诚实报告**：验证失败就如实说失败并贴原始输出，不允许把「没跑」说成「通过」；
   更不允许靠改 golden 基线或 `.expected.out` 来「修」失败——只有在确认编译器行为变更是有意为之之后，才重新生成它们。
