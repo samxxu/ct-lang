@@ -6,9 +6,9 @@
 > E30-1–E30-10 全部满足。按本轮实施约束不 bump、不打 tag，§1.1 的 `v0.30.0` 留待发布动作）。
 > **实施进展**：`into` 的解析边界（上下文关键字、语句/值形态、`.name` 与 `$`）、三类接收者的
 > 提升与发射、L30-1…L30-7 诊断、`.m.ct` 静态映射宿主（指针别名 / C 值结构体 / 标量 / 不透明
-> 句柄）、`$ =` 重绑、块后后缀链与连续多段 `into` 全部落地；夹具 148–163、八个负例与样例
-> `examples/29_into_block/` 均进真门禁；`check-ast.sh` 1069 passed / 0 failed、`test/run.sh`
-> 141 passed、`check-warnings.sh` 352 ok / 0 failed、`check-docs` OK（988 links / 179 files）、
+> 句柄）、`$ =` 重绑、块后后缀链与连续多段 `into` 全部落地；夹具 148–164、八个负例与样例
+> `examples/29_into_block/` 均进真门禁；`check-ast.sh` 1072 passed / 0 failed、`test/run.sh`
+> 141 passed、`check-warnings.sh` 353 ok / 0 failed、`check-docs` OK（988 links / 179 files）、
 > `check-all.sh` 11 道硬门禁全绿（版本仍 `v0.26.4`，未 bump）。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载语义表、脱糖矩阵、battle 与
 > 覆盖矩阵，修订后约 670 行，经需求提出方 2026-11-11 签字保留单卡、不拆分。
@@ -87,7 +87,7 @@
 | E30-1 | 三类接收者（指针、左值值类型、右值值类型，含 C 宿主）与两种形态的正例构建、运行、输出逐字节匹配 | `bash selfhost/check-ast.sh` 的 Phase 30 块 `cmp -s` |
 | E30-2 | 生成 C 中接收者表达式恰好出现 **1 次**；产物不含 `$`、不出现 `into {`（`int into = 1;` 的标识符用法不计入） | `grep -c` 计数断言 + `[ "$(grep -c 'into {' gen.c)" = 0 ]`（显式比较，避免 0 计数退出码为 1） |
 | E30-3 | 七个 L30 诊断、八个负例夹具（L30-4 覆盖 interface / `own` 两例）各只有一条错误，位置与文案精确匹配 | `check-ast.sh` 的 `fixture|line:col|message` 表 |
-| E30-4 | 既有 **1019** 条断言零回归；非本相 golden 逐字节不变 | `check-ast.sh` 汇总（分母 = 末行 `passed` 计数）；`check-goldens.sh`。1019 = Phase 29 收口实测；本相新增 50 条后为 1069，High-1 负例后 1071 |
+| E30-4 | 既有 **1019** 条断言零回归；非本相 golden 逐字节不变 | `check-ast.sh` 汇总（分母 = 末行 `passed` 计数）；`check-goldens.sh`。1019 = Phase 29 收口实测；本相新增 50 条后为 1069，High-1 负例后 1071，Medium-2 正例后 1072 |
 | E30-5 | 11 道硬门禁全绿 | `bash selfhost/check-all.sh` 末行 |
 | E30-6 | `ct check` 对八个负例夹具给出同一 L30 文案 | `ct check test/ast/errors/into_*.ct` |
 | E30-7 | 文档门禁绿，Phase 30 状态与 roadmap 一致 | `python3 test/docs/check-docs.py` |
@@ -719,7 +719,7 @@ struct Builder b = builder_make(10) into {
 - 事实：`948` / `962` / `972` 三个数字在卡片里互相打架，真正的 Phase 29 收口实测是
   **1019**（`check-ast.sh` 末行 passed）。
 - 修法：E30-4 与变更记录统一写 **1019**；本相新增 50 条后为 **1069**，High-1 新增
-  `into_recv_reserved` 负例后为 **1071**。
+  `into_recv_reserved` 负例后为 **1071**，Medium-2 的 164 正例后为 **1072**。
 - 判据语义未变，仍是「既有断言零回归、非本相 golden 不变」；这次只是把分母改对。
 
 ### 10.4 Medium-2：补「块后接 `[]`」正例
