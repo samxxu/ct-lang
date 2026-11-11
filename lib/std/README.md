@@ -30,6 +30,10 @@
 - **`Map` 插入序**：紧凑 entries + 删除左移；扩容不改顺序，golden 稳定。
 - **`Map` 键**：当前实现按 `sizeof(k) == sizeof(char *)` 选 `strcmp` / `memcmp`（见 phase29 §10.2
   的偏差），键白名单（L29-8）待参数化 trait。
+- **构造入口**：`impl<T> Vec<T>` 里的 `static Vec<T> from(T *items, int n)` 是唯一会读取
+  `Vec` 布局的构造路径；编译器的 range 初值语法糖只降级成
+  `Vec_<enc>_from((T[n]){ … }, n)`，不知道 `ct_buf` 与字段（phase29 §11）。源码里也可以直接写
+  `Vec<int>::from(arr, n)`。
 - **`foreach`**：`Vec` / `Map` 走 `len` + `get` / `entry`；`item` 是值拷贝，`i` 只读且仅对
   `Vec` / 数组有意义，`Map` 体内用 `i` 是硬错（L29-18）。
 

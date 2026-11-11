@@ -2079,6 +2079,14 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   多个 `impl` 块。实参只检查元数、不检查类型，是已知限制（`docs/design/phase29.md` §10.2）。
 - **带 `use` 的泛型 impl**：`impl<T> Stack<T> use Show { … }` 落码 `<Instance>_<Trait>_<method>`
   与 `<Instance>_<Trait>_vtable`，沿用既有 trait / vptr 路径；固有方法优先于 trait 方法。
+- **静态固有方法与 range 初值构造（Phase 29 P29 补丁）**：`impl` 体内可写
+  `static Ret name(params)`，落码 `<Instance>_<name>` 且**没有** `self` 参数，调用面是
+  `Type<Args>::name(args)`；`static` 只能进固有 impl，带 `use` 的 impl 里是硬错。
+  `Vec<T>` 因此有 `Vec<T>::from(T *items, int n)`（复制 `n` 个元素）。声明初值
+  `a..b { expr }` 与 Phase 24 的 `a..b(expr)` 同义；当声明类型是 `Vec<T>` 时，range 是
+  「产物为静态数组」的表达式，降级为 `Vec_<enc>_from((T[n]){ … }, n)`，因此
+  `Vec<int> v = 4..8 { $ * $ };` 合法。编译器只知道入口名与元素 C 类型，**不认识 `Vec` 的字段**
+  （`docs/design/phase29.md` §11）。`v[i]`、`m["k"]` 与 `Map` 的 `{ "k": 1 }` 仍不支持。
 - **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/std/Vec.h.ct`，编译模式在输入前
   自动预解析，**不需要 `import`、不需要 `-I`**（`ct build` 尚未接入）。三个拼写是保留名，
   用户不能再声明同名 struct。
@@ -4437,6 +4445,15 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **A generic impl with `use`**: `impl<T> Stack<T> use Show { … }` lowers to
   `<Instance>_<Trait>_<method>` plus `<Instance>_<Trait>_vtable` and keeps the existing trait / vptr
   path; an inherent method wins over a trait method of the same name.
+- **Static inherent methods and the range initialiser (Phase 29 P29 patch)**: an `impl` body may
+  declare `static Ret name(params)`, lowered as `<Instance>_<name>` with **no** `self` parameter and
+  called as `Type<Args>::name(args)`; `static` is refused in a `use` impl. `Vec<T>` therefore has
+  `Vec<T>::from(T *items, int n)` (copies `n` elements). A declaration initialiser `a..b { expr }`
+  means the same as Phase 24's `a..b(expr)`; when the declared type is `Vec<T>` the range is an
+  expression whose product is a static array, lowered to `Vec_<enc>_from((T[n]){ … }, n)`, so
+  `Vec<int> v = 4..8 { $ * $ };` is legal. The compiler knows only the entry's name and the element's
+  C type — it does **not** know `Vec`'s fields (`docs/design/phase29.md` §11). `v[i]`, `m["k"]` and
+  `Map`'s `{ "k": 1 }` are still unsupported.
 - **Built-in layer**: `Vec<T>`, `Map<K, V>` and `MapEntry<K, V>` live in `lib/std/Vec.h.ct` and are
   pre-parsed before the input in compile mode, so they need **no `import` and no `-I`** (`ct build`
   does not wire this yet). The three spellings are reserved.

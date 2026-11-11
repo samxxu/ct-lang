@@ -82,6 +82,7 @@
 | `23_generic_stack` | 用户泛型 struct（Phase 29）：`struct Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段，`Stack<int>` 与 `Stack<char *>` 两份布局，`impl<T> Stack<T>` 静态派发 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `24_vec_ops` | 内置 `Vec` 全 API（Phase 29）：`push` / `pop` / `get` / `set` / `len` / `clear` 的边界语义，`retain` / `release` 的引用计数与归零释放 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `25_wordcount` | 真实程序（Phase 29）：`Map<char *, int>` 词频统计，先按插入序输出，再复制条目按计数排序出报告 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `26_range_vec` | range 初值构造 `Vec<T>`（Phase 29 P29）：`Vec<int> sq = 4..8 { $ * $ }` 经复合字面量 + `Vec<T>::from` 纯降级，`foreach` 绑定 `i` / `item`，并直接调用 `Vec<char *>::from(arr, n)` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
 ## 门禁归属说明
 

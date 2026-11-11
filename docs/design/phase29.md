@@ -2,7 +2,9 @@
 
 > 中文。
 >
-> **状态：完成**（2026-11-11 最终验收，E29-1…E29-13 逐条见 §10.3.5）。
+> **状态：完成**（2026-11-11 最终验收，E29-1…E29-13 逐条见 §10.3.5；同日用户授权的 P29 补丁
+> ——`Vec<int> v = 4..8 { $ * $ }` 经复合字面量 + `Vec<T>::from` 纯降级——逐条见 §11，
+> 补丁后 `check-all.sh` 11 道硬门禁仍全绿）。
 > 二次复核补上了 E29-5 的 `ct build` 路径（§10.3.4）；本轮验收把 E29-7 的位置/单错断言、
 > E29-9 的 `check`/`build` 同文案、E29-12 的两条 arity 负例、E29-3 的两次构建一致补进真门禁，
 > `check-all.sh` 11 道硬门禁全绿（`check-ast` 962 passed / 0 failed）。
@@ -777,7 +779,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | O7 | 内置层与 `ct-pkg/std` 的双向迁移工具 | 只做一次性搬运 | 旧包仍有独立 bug 修复需求，或需要回滚到旧编译器 |
 | O8 | `foreach` 迭代中修改容器 | 长度快照 + 越界零值 | 出现真实的数据竞争/漏遍历报告，且可定义稳定语义 |
 | O9 | 泛型函数体内实例化泛型容器（如 `Vec<T>`） | 本相不做，沿用 D26-9 的「泛型体内禁止泛型调用/实例化」 | 用户明确要求「泛型函数返回 `Vec<T>`」；重启前需先解决实例化键的递归替换与去重（`Vec<T>` → `Vec_int`） |
-| O10 | `Vec` 的 range 初值 / 下标 / 字面量语法糖（`Vec<int> v = 4..8 { $ * $ }`、`v[i]`、`Map<char *, int> m = { "k": 1 }`、`m["k"]`） | 验收时均不支持：第 1 条是编译期硬错（`a range initializer declares an array`）；第 2/3/4 条静默通过但生成的 C 不可编译。**P29-1 补丁只补第 1 条**；2–4 仍列在「不支持」 | 出现第二个真实项目要求 `v[i]` / `m[k]`，且能接受「构造入口 + 纯降级」的语义；否则保持显式 `Vec_int_get` / `Map_*_get` |
+| O10 | `Vec` 的 range 初值 / 下标 / 字面量语法糖（`Vec<int> v = 4..8 { $ * $ }`、`v[i]`、`Map<char *, int> m = { "k": 1 }`、`m["k"]`） | 验收时四条均不支持：第 1 条是编译期硬错（`a range initializer declares an array`）；第 2/3/4 条静默通过但生成的 C 不可编译（`v[3]` → `struct Vec_int` 不能下标、`m["key"]` → `struct Map_char_p_int` 不能下标、`{ "k": 1 }` 的 `:` 不在 C 聚合初值语法里）。**P29-1 补丁已补第 1 条**（range 初值 + `Vec<T>::from` 入口，见 §11）；**2–4 仍是「不支持」，且仍无判据** | 出现第二个真实项目要求 `v[i]` / `m[k]`，且能接受「构造入口 + 纯降级」的语义；否则保持显式 `Vec_int_get` / `Map_*_get` |
 
 ---
 
@@ -975,3 +977,77 @@ check-all: OK (11 hard gates green)
 $ bash selfhost/check-sanitizers.sh
 check-sanitizers: FAIL (10 failed, 319 passed)
 ```
+
+---
+
+## 11. 补丁判据 P29（用户授权，2026-11-11）
+
+### 11.1 授权、范围与冻结关系
+
+用户 2026-11-11 裁定：`Vec<int> v = 4..8 { $ * $ }` 方向**不立 Phase 30，放进 Phase 29 作为补丁**，
+并按「§1 冻结的 E29 判据原文不动、仿 phase26 §9 追加补丁判据」的口径执行。
+
+- **为什么不是改写判据**：§1.1 的判据冻结约束的是「E29-1…E29-13 与 L29-1…L29-18 在首个实现提交前
+  冻结，此后只向判据靠拢」。本节**没有修改、放宽或重排任何一条已冻结判据的文本**，也没有新增 L29；
+  它是同一相内追加的一段判据（P29-x），与 [phase26.md §9](phase26.md) 的补丁做法一致。因此本相的
+  验收状态 = 「E29-1…E29-13 全满足（§10.3.5）」∧「P29-1…P29-5 全满足（§11.2）」。
+- **补丁范围**：`selfhost/ct-ast/frontend/parse/Stmt.h.ct`（`range_vec_target` / `parse_range_init`）、
+  `frontend/parse/Expr.h.ct`（`inst_static_method` / `static_call_ahead` / `parse_primary`）、
+  `frontend/parse/Parser.h.ct`（`impl` 体的 `static` 标记）、`backend/emit/Emitter.h.ct`
+  （`emit_range_init` 的构造形态、静态方法发射、`N_MCALL aux 11`）、`lib/std/Vec.h.ct`
+  （`static Vec<T> from`）、`examples/26_range_vec/`、`test/ast/errors/range_vec_*.ct`（4 条）、
+  `selfhost/check-ast.sh`（P29 块）、`examples/README.md`、本文件。L0/L1/L2 未动。
+- **B29-3 仍然有效**：编译器只读实例行里的 `tmpl` / `nargs` / `ctype[0]` / `name`，即
+  「这是不是 `Vec`、元素 C 类型是什么、入口叫什么」；`Vec` 的字段、引用计数与分配策略只在
+  `lib/std/Vec.h.ct` 的 `from` 里。语法糖产出的 C 里没有任何由编译器生成的 `->h` / `->data`。
+
+### 11.2 判据与逐条证据
+
+| # | 判据 | 证据锚点 | 实跑 |
+| --- | --- | --- | --- |
+| P29-1 | **range 初值可以构造 `Vec<T>`**：`Vec<int> v = 4..8 { $ * $ };` 编译、运行、输出逐字节匹配；产物是「复合字面量 + 构造入口」，即 `Vec_int_from((int[4]){ … }, 4)`；同时 `$` 仍只属于元素表达式 | `examples/26_range_vec/range_vec.ct` + `range_vec.expected.out`；`check-ast.sh` 的 `p29 P29-1` 断言（生成 C 含 `Vec_int_from((int[4]){ `、`cc -Wall -Wextra` 零告警、`diff` 期望输出）；`test/run.sh` 的 examples 扫描把该目录纳入真门禁 | `ok p29 P29-1`；`test/run.sh` 138 / 0；生成行见 §11.3 |
+| P29-2 | **内置 `Vec` 有「从数组构造」的入口，且可从源码调用**：`impl<T> Vec<T>` 内的 `static Vec<T> from(T *items, int n)` 落成 `Vec_<enc>_from`（无 `self` 参数）；调用面 `Vec<int>::from(arr, n)` 可用；`static` 方法不参与实例方法解析，实例方法也不被 `::` 解析；`static` 出现在 `use Trait` 块内硬错（vtable 槽位需要接收者） | `lib/std/Vec.h.ct` 的 `from`；`Parser.h.ct` 的 `static` 分支与 `a static method cannot implement a trait`；`Expr.h.ct` 的 `inst_static_method`（只认 `c == 1`）；`Emitter.h.ct` 的 `N_MCALL aux 11` | 样例第 3 段直接调用 `Vec<char *>::from(names, 3)`，输出 `a b c`；生成 `Vec_char_p_from(names, 3)` |
+| P29-3 | **编译器不认识 `Vec` 的布局**：`range_vec_target` 只看实例行的类型实参与名字；`from` 的实现全在 `lib/std/Vec.h.ct`；把 `Vec` 的字段改掉不需要改编译器 | `Stmt.h.ct` 的 `range_vec_target`（`strpbrk(base, " *[(")` 排除指针/数组，`tmpl == "Vec"`、`nargs == 1`）；`Vec.h.ct` 的 `from` 内部 `malloc` / `memcpy` / `refs/len/cap` 赋值 | 生成 C 的构造点只有 `Vec_int_from((int[4]){ … }, 4)`，语法糖不展开任何字段 |
+| P29-4 | **边界与作用域各一条负例**，均位置化、单条、无 `undeclared` 回落：`$` 只能在元素表达式内；空 range 硬错；超过 1024 个元素硬错；`Map` 目标保持 Phase 24 文案 | `test/ast/errors/range_vec_index_scope.ct` / `range_vec_empty.ct` / `range_vec_too_many.ct` / `range_vec_map_target.ct`；`check-ast.sh` 的 `p29_neg` 四条断言（文案 + 位置 + 不出现 `undeclared`） | 4 条 `ok`：`unexpected token`、`an empty range has no elements`、`too many range elements (limit 1024)`、`a range initializer declares an array` |
+| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 322 ok`、`check-docs: OK (981 links / 179 files)`、`check-ast: 972 / 0` |
+
+### 11.3 补丁后的产物与门禁
+
+`examples/26_range_vec/range_vec.ct` 的两行生成 C（单文件模式，`Vec.h` 内联）：
+
+```c
+static __attribute__((unused)) struct Vec_int Vec_int_from(int * items, int n) { … }
+    struct Vec_int sq = Vec_int_from((int[4]){ (((int)4) * ((int)4)), (((int)5) * ((int)5)), (((int)6) * ((int)6)), (((int)7) * ((int)7)) }, 4);
+    words = Vec_char_p_from(names, 3);
+```
+
+```text
+$ bash selfhost/check-all.sh
+== summary: 138 passed, 0 failed ==      (test/run.sh, 补丁前 137)
+== summary: 82 passed, 0 failed ==       (goldens)
+== summary: 972 passed, 0 failed ==      (check-ast, 补丁前 962)
+check-warnings: 322 ok, 0 failed         (补丁前 321)
+check-docs: OK (981 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+acceptance: 20 pass, 0 new, 0 pending, 0 regression
+check-all: OK (11 hard gates green)
+```
+
+`sanitizer` 单跑仍是同样的 10 项既有失败，`passed` 从 319 升到 323（新增 4 条负例全部 `ok`）：
+
+```text
+$ bash selfhost/check-sanitizers.sh
+check-sanitizers: FAIL (10 failed, 323 passed)
+```
+
+| 失败项 | 与 P29 的关系 |
+| --- | --- |
+| `66` / `67` / `81` / `120` / `121` / `122` / `130` / `131`（8 项） | 脚本用单文件模式调用含 `import` 的夹具，报 `'import' requires multi-file mode`；与补丁无关 |
+| `examples/json/json.ct` | ASAN/UBSAN 下示例端到端第 2 阶段失败；示例不含 range / `Vec` 构造 |
+| `range_init_overflow` | Phase 24 既有夹具，sanitizer 下 exit 134；非 sanitizer 构建仍正确报 `a range bound is out of range`（本轮已复核） |
+
+### 11.4 仍未支持（与 §8 O10 对齐）
+
+补丁只补 O10 的第 1 条。`v[3]`、`m["key"]` 与 `Map<char *, int> m = { "key": 32, "key2": 869 };`
+**仍不支持**：两条下标形态在语法上静默通过但生成的 C 不可编译（`struct Vec_int` /
+`struct Map_char_p_int` 不能下标），字面量形态的 `:` 不在 C 聚合初值语法里。它们**没有新增判据**，
+也不在本补丁范围内。
