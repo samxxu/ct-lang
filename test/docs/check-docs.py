@@ -31,6 +31,7 @@ Exit code 0 when all seven hold, 1 otherwise.
 import hashlib
 import os
 import re
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -228,6 +229,25 @@ def version_tuple(text):
     return tuple(int(part) for part in text.split(".") if part.isdigit())
 
 
+def published_spec():
+    """Return the spec bytes of the external repo's published revision.
+
+    The checkout may carry uncommitted edits, so hashing the worktree would
+    only prove that the pin agrees with a dirty tree. Read the committed HEAD
+    instead and fall back to the worktree only when the external repo or git
+    is unavailable.
+    """
+    repo = os.path.dirname(os.path.dirname(SPEC))
+    try:
+        relative = os.path.relpath(SPEC, repo)
+        return subprocess.check_output(
+            ["git", "-C", repo, "show", f"HEAD:{relative}"],
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return open(SPEC, "rb").read()
+
+
 def check_spec_pin(errors):
     """G9 (CI-8): AGENTS.md pins the methodology it was written against.
 
@@ -244,13 +264,13 @@ def check_spec_pin(errors):
     if not os.path.exists(SPEC):
         return "skipped (spec not found)"
     status = "ok"
-    actual = hashlib.sha256(open(SPEC, "rb").read()).hexdigest()
+    actual = hashlib.sha256(published_spec()).hexdigest()
     if actual != digest.group(1):
         status = "mismatch"
         errors.append(
             f"AGENTS.md: spec-sha256 {digest.group(1)[:12]}... != {actual[:12]}... ({SPEC})"
         )
-    spec_head = read(SPEC)[:2000]
+    spec_head = published_spec().decode(errors="replace")[:2000]
     spec_version = re.search(r"^\|\s*spec-version\s*\|\s*`?([0-9.]+)`?", spec_head, re.M)
     if spec_version and version_tuple(version.group(1)) < version_tuple(spec_version.group(1)):
         status = "stale" if status == "ok" else status + ", stale"

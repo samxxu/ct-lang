@@ -702,3 +702,14 @@ struct Builder b = builder_make(10) into {
   标识符与归一化命令的两条替换，属夹具层勘误，不是判据放宽。
 - 新增负例 `test/ast/errors/into_recv_reserved.ct`：`int __ct_recv0 = 7;` 必须报
   `identifier '__ct_' is reserved for the compiler`，并由 `check-ast.sh` 主门禁看住。
+
+### 10.2 High-2：规范锚点退回已发布版本
+
+- 事实：`2fa1b4e`、`5f82fae` 两条“机械刷新”把 `AGENTS.md` 的 spec pin 先后追到
+  1.1.0 / 1.3.0 / 1.4.0，但这些版本只存在于 `~/trae-ws/.ai-engineering` 的**工作树**，
+  外部仓 HEAD 仍是 1.0.0。`check-docs.py` 对工作树做哈希，`spec pin: ok` 只证明与脏树一致。
+- 修法：pin 退回已发布版本
+  `1.0.0` / `93a8e968f76cefd5151e60b3d3c476a023910fa92dc768731467d1fa66aa2b67`；
+  `check-docs.py` 改为读取外部仓 `HEAD` 的规范内容做摘要（git 不可用才回退工作树），
+  让 `spec pin: ok` 重新表示“与已发布版本一致”。
+- 记录：上面两条机械刷新均视为已回退的错误中间态，不作为有效变更保留。
