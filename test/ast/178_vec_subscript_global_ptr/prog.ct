@@ -1,0 +1,15 @@
+/* V29-4 turned positive in Phase 31 (was `vec_subscript_global_ptr.ct`,
+   7:17): a file-scope container pointer is not an array; the first subscript
+   is C's pointer subscript and the second is the handle's. */
+#include <stdio.h>
+
+Vec<int> *pg;
+
+int main(void)
+{
+    Vec<int> v = {14};
+    pg = &v;
+    int got = pg[0][0];
+    printf("%d\n", got);
+    return 0;
+}

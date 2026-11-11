@@ -1,0 +1,20 @@
+/* V29-4 turned positive in Phase 31 (was `vec_subscript_fnptr_typedef.ct`,
+   14:16): the typedef alias resolves to the function pointer, and the call
+   result is the subscripted handle. */
+#include <stdio.h>
+
+Vec<int> mk(void)
+{
+    Vec<int> v = {11};
+    return v;
+}
+
+typedef Vec<int> (*VecFn)(void);
+
+int main(void)
+{
+    VecFn fp = mk;
+    int got = fp()[0];
+    printf("%d\n", got);
+    return 0;
+}

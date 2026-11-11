@@ -1,0 +1,32 @@
+/* V29-4 turned positive in Phase 31 (was `vec_subscript_mcall.ct`, 24:18):
+   an instance method of a generic struct returns a `Vec`; both the assigned
+   form and the direct chain read it. */
+#include <stdio.h>
+
+Vec<int> mk(void)
+{
+    Vec<int> v = {13};
+    return v;
+}
+
+struct Box<T> {
+    T v;
+}
+
+impl<T> Box<T> {
+    Vec<int> mv()
+    {
+        Vec<int> r = {13};
+        return r;
+    }
+}
+
+int main(void)
+{
+    Box<int> b;
+    b.v = 1;
+    Vec<int> row = b.mv();
+    int direct = b.mv()[0];
+    printf("%d %d\n", row[0], direct);
+    return 0;
+}
