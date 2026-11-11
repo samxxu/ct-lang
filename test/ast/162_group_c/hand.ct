@@ -42,11 +42,11 @@ void close_handle(struct Handle *h)
 
 int main(void)
 {
-    struct Handle *__ct_recv0 = open_handle();
-    int n = __ct_recv0->read(5);
-    __ct_recv0->write(n);
-    printf("tell %d\n", __ct_recv0->tell());
-    struct Handle *f = __ct_recv0;
+    struct Handle *recv_demo0 = open_handle();
+    int n = recv_demo0->read(5);
+    recv_demo0->write(n);
+    printf("tell %d\n", recv_demo0->tell());
+    struct Handle *f = recv_demo0;
     close_handle(f);
     printf("f %d %d\n", f->pos, f->wrote);
     return 0;

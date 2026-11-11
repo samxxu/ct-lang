@@ -28,12 +28,12 @@ static void register_shutdown(struct AppConfig *c, int port)
 
 int main(void)
 {
-    struct AppConfig *__ct_recv0 = config_instance();
-    __ct_recv0->host = "0.0.0.0";
-    __ct_recv0->port = 8080;
-    validate_config(__ct_recv0);
-    register_shutdown(__ct_recv0, __ct_recv0->port);
-    struct AppConfig *cfg = __ct_recv0;
+    struct AppConfig *recv_demo0 = config_instance();
+    recv_demo0->host = "0.0.0.0";
+    recv_demo0->port = 8080;
+    validate_config(recv_demo0);
+    register_shutdown(recv_demo0, recv_demo0->port);
+    struct AppConfig *cfg = recv_demo0;
     printf("cfg %s %d %d\n", cfg->host, cfg->port, cfg->registered);
     return 0;
 }

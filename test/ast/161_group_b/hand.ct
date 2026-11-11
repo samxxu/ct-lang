@@ -1,15 +1,15 @@
 /* Phase 30 E30-9 group B: the hand-written side of the by-value chain. The
    receiver temp keeps the same name as the `into` side so the two products
-   match after `__ct_recv<N>` is folded. */
+   match after `recv_demo<N>` is folded with the promoted receiver. */
 import lib::types;
 import lib::ops;
 #include <stdio.h>
 
 int main(void)
 {
-    struct Builder __ct_recv0 = builder_make(10);
-    __ct_recv0 = __ct_recv0.add(1).add(2).add(3);
-    struct Builder b = __ct_recv0;
+    struct Builder recv_demo0 = builder_make(10);
+    recv_demo0 = recv_demo0.add(1).add(2).add(3);
+    struct Builder b = recv_demo0;
     printf("%d %d\n", b.value(), b.steps);
     return 0;
 }

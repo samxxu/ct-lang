@@ -7,14 +7,14 @@ import lib::ops;
 
 int main(void)
 {
-    struct Handle *__ct_recv0 = handle_open();
-    __ct_recv0->read(4);
-    int pos = __ct_recv0->pos;
+    struct Handle *recv_demo0 = handle_open();
+    recv_demo0->read(4);
+    int pos = recv_demo0->pos;
     printf("pos %d\n", pos);
 
-    struct Builder __ct_recv1 = builder_make(10);
-    __ct_recv1 = __ct_recv1.add(1);
-    struct Builder b = __ct_recv1.add(2).add(3);
+    struct Builder recv_demo1 = builder_make(10);
+    recv_demo1 = recv_demo1.add(1);
+    struct Builder b = recv_demo1.add(2).add(3);
     printf("b %d %d\n", b.value(), b.steps);
     return 0;
 }

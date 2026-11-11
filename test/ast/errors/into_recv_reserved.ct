@@ -1,0 +1,9 @@
+/* Phase 30 High-1: the promoted receiver's namespace is the compiler's own,
+   like every other `__ct_` name. A user declaration must not spell it, even
+   when the digits look exactly like a promotion. */
+int __ct_recv0 = 7;
+
+int main(void)
+{
+    return 0;
+}
