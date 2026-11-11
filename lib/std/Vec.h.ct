@@ -285,6 +285,62 @@ impl<V> Map<char *, V> {
             }
         return 0;
     }
+
+    /* Phase 31 S13a: the brace-literal constructor for `Map<char *, V>`. The
+       generic block below declares the same name for every key and the shadow
+       rule keeps this copy for string keys, exactly like `put` / `get` /
+       `remove` (P24). The loop reproduces `put` inline: a generic impl body
+       cannot call its sibling methods (`self` is `void *` there, P15), so an
+       inline copy is the only shape that works. Insertion order is the item
+       order, and a repeated key overwrites in place (D29-11); an empty list
+       still allocates the header so the handle can be released (D31-21). */
+    static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
+    {
+        Map<char *, V> m;
+        int i;
+        m.h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
+        if (m.h == 0) return m;
+        m.h->refs = 1;
+        m.h->len = 0;
+        m.h->cap = 0;
+        m.h->data = 0;
+        for (i = 0; i < n && items != 0; i++) {
+            struct MapEntry<char *, V> *e;
+            char *k;
+            int j, hit;
+            k = items[i].key;
+            if (k == 0) continue;
+            e = (struct MapEntry<char *, V> *)m.h->data;
+            hit = -1;
+            for (j = 0; j < m.h->len; j++)
+                if (strcmp(e[j].key, k) == 0) {
+                    hit = j;
+                    break;
+                }
+            if (hit >= 0) {
+                V old;
+                old = e[hit].value;
+                __ct_elem_retain(&items[i].value);
+                __ct_elem_release(&old);
+                e[hit].value = items[i].value;
+                continue;
+            }
+            if (m.h->len == m.h->cap) {
+                int nc;
+                void *raw;
+                nc = m.h->cap == 0 ? 4 : m.h->cap * 2;
+                raw = realloc(m.h->data, (size_t)(nc * (int)sizeof(e[0])));
+                if (raw == 0) return m;
+                m.h->data = raw;
+                m.h->cap = nc;
+                e = (struct MapEntry<char *, V> *)m.h->data;
+            }
+            __ct_elem_retain(&items[i].value);
+            e[m.h->len] = items[i];
+            m.h->len = m.h->len + 1;
+        }
+        return m;
+    }
 }
 
 impl<K, V> Map<K, V> {
