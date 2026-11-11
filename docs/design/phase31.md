@@ -1036,3 +1036,10 @@ Vec<int> v = {a + b};   /* L31-7: cannot determine the type of initializer eleme
 6. **`Map` 字面量的两条规则不得混写**：实现、测试与文档都必须分开陈述“运行期 = 按序内联插入（覆盖、保序、不 abort）”与“编译期 = 只拒可静态判定的同源重复”。任何把两者合成一句“重复键报错/覆盖”的表述都算文档缺陷（R31-14）。
 7. **空句柄与 OOM 契约**：`from(0,0)` 必须返回 `h != 0` 的可释放句柄；header 与 data 任一分配失败都 abort，不返回 `h == 0`；`release(h==0)` 仍 abort（V29-2 不动）；`__ct_elem_release` 只对级联路径的零句柄 no-op。任何把 `release` 改成全局 no-op 的改动都超出本卡授权。
 8. **句柄拷贝契约**：`Vec` / `Map` 句柄只持 `h`，数据指针在共享 `ct_buf` 内；`retain` / 值拷贝不得复制数据指针；`push` / `put` 扩容写回 `h->data`。E31-30 的确定性产物 grep（句柄只有 `h`、`get` 经 `h->data`）是硬回归；两个 ASAN 夹具是人工证据。任何回到“句柄各存 data”的实现都算未完成 D31-24。
+
+## 14 实施期变更记录（只增不改正文判据）
+
+1. **S9b 并入 S21a / S21b / S21c**（`c92be33`）。S9 的下标糖一旦落地，165–179 夹具里的链式形态（`g[i][j]`、`g.get(0).get(1)`、`b.mv()[0]`）就必须同时具备“接收者材料化 + 静态类型按实例绑定”，否则夹具无法变绿。故 S9b 一并实现：`static_ctype` 的 `N_MCALL` 分支按实例替换 `T`/`V`、`hoist_scan` 对 `N_MCALL` 接收者（aux ≠ 5/6）与 `N_CALL` 接收者发材料化、`emit_expr` 在内置实例与 trait 值派发两处复用 `text3` 短路。S21a/S21b/S21c 不再单列提交。
+2. **函数指针调用的材料化改在解析期取类型**（`c92be33`）。`fp()[i]` 的接收者类型在发射期查不到（局部名已出作用域，`find_var` 为空），而 `N_CALL` 的 `text` 字段对调用节点原本空闲。解析期在构造糖节点时把该调用的结果类型写入 `N_CALL.text`，发射期直接取用；`find_func(text2) >= 0` 的直接调用仍走 `funcs[i].ret`。
+3. **链式夹具写成初值形态**（`9b43a94`–`4d846ee`）。卡 §3.3.4 写的 `return mk().v[0] == 5 ? 0 : 1;` 在基线就会被既有 hoist 位置规则拒绝（接收者不在语句/初值/裸 `return` 根上，报 `a method call on a temporary is only allowed at the start of a statement or of an assignment`）。夹具按卡既有的“语句 / 初值 / `return`”三种形态改写为 `int got = mk().v[0];` 等，判据与期望值不变。
+4. **新增 S20b：实例参数编码规范化**（本片）。`Map<char *, Vec<int>> m = { "a": row };` 的字面量路径与嵌套 `MapEntry` 注册路径对同一嵌套类型给出两种拼写（`Vec_lint_r` 由源拼写 `Vec<int>` 编码，`Vec__int` 由已编码名再编码），产物里出现前向声明而无定义。根治点在编码输入：嵌套实参一律以嵌套实例刚得到的 C 拼写（`struct Vec_int`）作为身份参与编码，两条路径得到同一名字。`Map<Vec<int>, int>` 仍按 L29-8 的键白名单硬错；`Map<char *, Map<char *, int>>` 一并转正。`put`/`get` 路径行为不变。
