@@ -6193,6 +6193,7 @@ p30_chk into_own 15:7 "'into' cannot take an interface or 'own' receiver"
 p30_chk into_missing_member 9:15 "no member 'nope' on the 'into' receiver"
 p30_chk into_rvalue_stmt 16:12 "an 'into' statement needs a writable receiver"
 p30_chk into_nested 11:11 "nested 'into' blocks are not supported"
+p30_chk into_recv_reserved 4:16 "identifier '__ct_' is reserved for the compiler"
 
 # E30-8: a static-map type host expands at the use site, so the program unit
 # names the recipe's C function and carries no wrapper, vtable or boxed value.

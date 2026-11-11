@@ -245,6 +245,7 @@ def published_spec():
             stderr=subprocess.DEVNULL,
         )
     except (OSError, subprocess.CalledProcessError):
+        print("spec pin: git unavailable, hashing the worktree instead", file=sys.stderr)
         return open(SPEC, "rb").read()
 
 
