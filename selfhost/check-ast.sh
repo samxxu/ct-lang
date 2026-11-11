@@ -5785,6 +5785,22 @@ else
     bad "p29: builtin_std scope" "$(head -2 "$work/p29e5.err")"
 fi
 
+# E29-5 on the `ct build` path: the same fixture (no import, no `ct get`) must
+# compile as a multi-unit build, link, run and warn about `vendor/std`.
+( cd test/modules/p29_builtin_std \
+  && CT_STD_DIR="$repo_root/lib/std" "$work/ct-ast" build main.ct \
+       -o "$work/p29w1b" --outdir "$work/p29w1bd" ) \
+  >"$work/p29w1b.out" 2>"$work/p29w1b.err"
+if [ $? -eq 0 ] \
+   && grep -Fq "the built-in Vec/Map supersede a project-local 'vendor/std' (ignored)" "$work/p29w1b.err" \
+   && grep -Fq "struct Vec_int" "$work/p29w1bd/Vec.h" \
+   && "$work/p29w1b" >"$work/p29w1b.run" 2>&1 \
+   && cmp -s "$work/p29w1b.run" test/modules/p29_builtin_std/expected.out; then
+    ok "p29 (builtin_std in ct build)"
+else
+    bad "p29: builtin_std build" "$(head -3 "$work/p29w1b.err")"
+fi
+
 # E29-13 / B6: a `pub` generic function stays rejected across units (L26-2).
 if "$work/ct-ast" build test/modules/errors/generic_struct_pub_fn.ct -o "$work/p29b6" \
         >"$work/p29b6.out" 2>"$work/p29b6.err"; then

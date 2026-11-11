@@ -84,6 +84,9 @@ pub trait ModuleOps {
     int  resolve_import(const char *from, const char *rel, char *out, int cap,
                         int *is_hdr, int *is_map, int line);
     int  load_unit(const char *path);
+    /* Phase 29 E29-5: locate the built-in container layer for `ct build`, with
+       the same three probes the compile-mode driver uses. */
+    int  find_builtin(const char *in, char *out, int cap);
     int  unit_reaches(int from, int to);
     int  register_visible_type_aliases(int u);
     int  scan_forward_type_aliases(const char *path, int owner);
@@ -128,6 +131,11 @@ pub struct Module {
        alias, `ct-ast` for the development binary. Driver diagnostics keep the
        published `ctc:` prefix (SH-3 / phase10 non-goal). */
     int  line_mode;             /* emit `#line`: 0 off, 1 on */
+    /* Phase 29 E29-5: the built-in layer is an implicit dependency of every
+       unit, so `Vec` / `Map` work in a multi-unit `ct build` without an import.
+       `builtin_unit` is -1 when this installation has no layer. */
+    int  builtin_unit;
+    char builtin_path[1024];    /* MAX_PATH; the layer's own unit skips the dep */
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
     char map_path[1024];
     int  have_map;
@@ -391,6 +399,47 @@ impl ModuleOps for Module {
         }
         snprintf(cand, sizeof cand, "cannot resolve import '%s'", rel);
         return self->fail(cand);
+    }
+
+    /* Phase 29 E29-5: the built-in `Vec` / `Map` layer ships with the compiler
+       and is found the same way compile mode finds it -- `CT_STD_DIR`, then the
+       working tree, then the input's sibling `lib/std`. 0 when found, -1 when
+       this installation has none; a program that never uses a container still
+       builds without it. */
+    int find_builtin(const char *in, char *out, int cap)
+    {
+        char cand[MAX_PATH];
+        char alt[MAX_PATH];
+        const char *env;
+        const char *slash;
+        int i, n;
+        FILE *probe;
+
+        (void)self;
+        env = getenv("CT_STD_DIR");
+        for (i = 0; i < 3; i++) {
+            cand[0] = 0;
+            if (i == 0) {
+                if (!env || !env[0]) continue;
+                n = snprintf(cand, sizeof cand, "%s/Vec.h.ct", env);
+            } else if (i == 1) {
+                n = snprintf(cand, sizeof cand, "lib/std/Vec.h.ct");
+            } else {
+                slash = strrchr(in, '/');
+                if (!slash || (size_t)(slash - in) >= sizeof alt) continue;
+                memcpy(alt, in, (size_t)(slash - in));
+                alt[slash - in] = 0;
+                n = snprintf(cand, sizeof cand, "%s/../lib/std/Vec.h.ct", alt);
+            }
+            if (n < 0 || n >= (int)sizeof cand) continue;
+            if (strcmp(cand, in) == 0) continue;
+            probe = fopen(cand, "r");
+            if (!probe) continue;
+            fclose(probe);
+            if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+            return 0;
+        }
+        return -1;
     }
 
     /* Parse the import closure depth first, so a unit's declarations are in the
@@ -1206,6 +1255,39 @@ impl ModuleOps for Module {
         frontend::parse::ct_parse_clear_error();
         self->build_mode = 1;
 
+        /* Phase 29 E29-5: the built-in `Vec` / `Map` layer is loaded as a unit
+           of every build, so a program needs neither an `import` nor
+           `ct get std`. It is a `pub` header unit, so instances and their impl
+           definitions land in its own `.h` / `.c` exactly like a user template.
+           A missing layer is not an error (an installation may not carry it). */
+        self->builtin_unit = -1;
+        self->builtin_path[0] = 0;
+        backend::emit::ct_emit_set_builtin(-1);
+        {
+            char bpath[MAX_PATH];
+            if (self->find_builtin(inputs[0], bpath, sizeof bpath) == 0) {
+                int bu;
+                bu = self->load_unit(bpath);
+                if (bu < 0) return frontend::parse::ct_parse_report();
+                self->builtin_unit = bu;
+                snprintf(self->builtin_path, sizeof self->builtin_path, "%s", bpath);
+                backend::emit::ct_emit_set_builtin(bu);
+                /* L29-W1: the shadow warning is the same on both paths. */
+                {
+                    FILE *vs = fopen("vendor/std", "r");
+                    if (vs) {
+                        fclose(vs);
+                        if (tool::diag::ct_std_shadow_warn(1, 1,
+                                "the built-in Vec/Map supersede a project-local 'vendor/std' (ignored)",
+                                "vendor/std") != 0) {
+                            self->fail("too many warnings");
+                            return frontend::parse::ct_parse_report();
+                        }
+                    }
+                }
+            }
+        }
+
         for (i = 0; i < ninput; i++) {
             if (self->load_unit(inputs[i]) < 0) {
                 if (tool::diag::ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
@@ -1270,6 +1352,12 @@ impl ModuleOps for Module {
                 dirty[u] = 0;
             for (k = 0; k < self->units[u].ndep; k++)
                 if (dirty[self->units[u].depu[k]]) dirty[u] = 1;
+            /* Phase 29: the built-in layer's `.h` carries one definition per
+               instance the whole build asks for, so its content depends on the
+               consumers, not only on its own source. Its key cannot see that
+               set, so it is re-emitted every run: a new `Vec<char *>` in an
+               unrelated unit must not meet a cached header. */
+            if (u == self->builtin_unit) dirty[u] = 1;
         }
         for (o = 0; o < cn; o++) {
             char outc[MAX_PATH];

@@ -187,6 +187,10 @@ struct Emitter {
     const char *path;
     const char *version;
     struct Unit *units;  int *nunits;
+    /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
+       not an import edge of any unit (it must not key the cache), so the
+       emitter includes its header explicitly. -1 when the layer is absent. */
+    int  builtin;
     struct MapTable  *maps;   int *nmaps;
     struct Call *calls;  int *ncalls;
     int  *build_mode;
@@ -1214,6 +1218,10 @@ static int emit_unit_body(struct Emitter *self, int u)
         if (self->units[self->units[u].depu[i]].is_map) continue;
         fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
     }
+    /* Phase 29 E29-5: instances of the built-in templates are defined in the
+       layer's header; the unit sees it although there is no import edge. */
+    if (self->builtin >= 0 && self->builtin < *self->nunits && u != self->builtin)
+        fprintf(self->out, "#include \"%s.h\"\n", self->units[self->builtin].base);
     fputs("\n", self->out);
     if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
@@ -1307,6 +1315,11 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
         fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
     }
     if (self->units[u].ndep > 0) fputs("\n", self->out);
+    /* Phase 29 E29-5: a `pub` signature may name an instance defined in the
+       built-in layer's header. */
+    if (self->builtin >= 0 && self->builtin < *self->nunits && u != self->builtin) {
+        fprintf(self->out, "#include \"%s.h\"\n\n", self->units[self->builtin].base);
+    }
 
     if (self->emit_struct_fwd() != 0) return -1;
     if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
@@ -4297,6 +4310,13 @@ pub void ct_emit_set_out(void *out);
 void ct_emit_set_out(void *out)
 {
     g_emit.out = (FILE *)out;
+}
+
+/* Phase 29 E29-5: the built-in unit index, or -1 when the layer is absent. */
+pub void ct_emit_set_builtin(int u);
+void ct_emit_set_builtin(int u)
+{
+    g_emit.builtin = u;
 }
 
 pub void ct_emit_set_path(const char *path);

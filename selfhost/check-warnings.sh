@@ -247,10 +247,6 @@ for d in test/modules/*/; do
     [ "$name" = "p20_ns_clash" ] && continue
     [ "$name" = "p20_pkg_layout_clash" ] && continue
     [ "$name" = "ambig_func_init" ] && continue
-    # p29_builtin_std is a compile-mode fixture: the built-in `Vec`/`Map` layer
-    # is not pre-parsed in build mode yet (phase29 §10.2). check-ast.sh runs it
-    # in compile mode (shadow warning + `-Wall -Wextra` product) instead.
-    [ "$name" = "p29_builtin_std" ] && continue
 
     incs=""
     [ -d "$d/extra" ] && incs="-I $d/extra"
