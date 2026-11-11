@@ -3027,7 +3027,8 @@ impl StmtOps for Stmt {
                 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
                 int vi = self->sym->find_var(
                     self->arena->nodes[self->arena->nodes[n].a].text2);
-                if (vi >= 0 && strcmp(self->sym->vars[vi].type, typebuf) == 0)
+                if (vi >= 0 && !self->sym->vars[vi].cview
+                    && strcmp(self->sym->vars[vi].type, typebuf) == 0)
                     return tool::diag::ct_sem_error(dline, dcol,
                         "a container is moved, not copied; use retain() or a function result",
                         self->sup->mem->path);

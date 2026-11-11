@@ -2778,7 +2778,7 @@ impl ExprOps for Expr {
                 && self->arena->nodes[right].kind == N_VAR) {
                 int vi = self->sym->find_var(self->arena->nodes[left].text2);
                 int vj = self->sym->find_var(self->arena->nodes[right].text2);
-                if (vi >= 0 && vj >= 0
+                if (vi >= 0 && vj >= 0 && !self->sym->vars[vj].cview
                     && frontend::sym::ct_is_container_type(self->sym->vars[vi].type)
                     && strcmp(self->sym->vars[vi].type,
                               self->sym->vars[vj].type) == 0)

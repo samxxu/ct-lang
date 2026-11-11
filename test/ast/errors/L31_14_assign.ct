@@ -1,0 +1,14 @@
+/* L31-14: assigning a borrowed view to a local carries the provenance. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> row = {1, 2};
+    g.push(row);
+    Vec<int> y;
+    y = g.get(0);
+    y.release();
+    return 0;
+}

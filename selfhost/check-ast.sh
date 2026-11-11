@@ -6092,6 +6092,8 @@ p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (use 
 # refused at the method name rather than at a later C error.
 p29_neg L31_14_borrowed_release "cannot release a borrowed container view; call retain() first" 11:7
 p29_neg L31_14_copy_release "cannot release a borrowed container view; call retain() first" 14:7
+p29_neg L31_14_copy_init "cannot release a borrowed container view; call retain() first" 12:7
+p29_neg L31_14_assign "cannot release a borrowed container view; call retain() first" 12:7
 p29_neg L31_13_foreach_release "cannot release a borrowed container view; call retain() first" 11:14
 p29_neg L31_14_chain_release "cannot release a borrowed container view; call retain() first" 10:14
 # ---- Phase 31 S23b: no mutation while iterating, no stale view ----

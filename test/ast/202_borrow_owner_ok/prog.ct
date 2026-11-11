@@ -1,0 +1,23 @@
+/* Phase 31 S23a (E31-25): `pop` hands ownership out, so releasing its result
+   is legal -- directly and through a local. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g = {};
+    Vec<int> row = {1, 2};
+    g.push(row);
+    Vec<int> y = g.pop();
+    y.release();
+    row.release();
+    g.release();
+
+    Vec<Vec<int>> h = {};
+    Vec<int> row2 = {3};
+    h.push(row2);
+    h.pop().release();
+    row2.release();
+    h.release();
+    printf("ok\n");
+    return 0;
+}
