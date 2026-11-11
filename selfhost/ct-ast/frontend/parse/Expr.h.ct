@@ -344,7 +344,18 @@ pub struct Expr {
        namespace/recipe pair is only known from this table. */
     struct MapTable *maps;
     int *nmaps;
+    /* Phase 31 S23b (L31-22): the iterated variable of each enclosing
+       `foreach`, so a mutation call on it inside the body is refused. The
+       length is a literal because a `pub struct` lands in the generated
+       header. */
+    int  niter;
+    char iter[8][160];
 } use ExprOps;
+
+/* Phase 31 S23b (L31-22): the statement layer pushes each `foreach` iterated
+   variable here, and a mutation call on that name inside the body is refused. */
+pub void expr_iter_push(struct Expr *self, const char *name);
+pub void expr_iter_pop(struct Expr *self);
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -915,6 +926,27 @@ static int closure_match(struct Expr *self, int ci, const char *host, int skip_e
 /* R03: a declared binding fills a `(fn, env)` pair, but unlike an inline
    literal its own trampoline already exists with the return type its
    declaration took, so the comparison is read-only (`set_ret` 0). */
+
+void expr_iter_push(struct Expr *self, const char *name)
+{
+    if (self->niter >= 8) return;
+    snprintf(self->iter[self->niter], MAX_TEXT, "%s", name);
+    self->niter = self->niter + 1;
+}
+
+void expr_iter_pop(struct Expr *self)
+{
+    if (self->niter > 0) self->niter = self->niter - 1;
+}
+
+static int iter_hit(struct Expr *self, const char *name)
+{
+    int i;
+
+    for (i = 0; i < self->niter; i++)
+        if (strcmp(self->iter[i], name) == 0) return 1;
+    return 0;
+}
 
 impl ExprOps for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
@@ -3848,6 +3880,18 @@ impl ExprOps for Expr {
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
                                      self->in_generic_bound);
                         } else if ((inm = self->inst_inherent_method(ibase, fname)) >= 0) {
+                            /* Phase 31 S23b (L31-22): the loop reads the very
+                               container the body would mutate. */
+                            if ((strcmp(fname, "clear") == 0
+                                 || strcmp(fname, "remove") == 0
+                                 || strcmp(fname, "set") == 0
+                                 || strcmp(fname, "put") == 0
+                                 || strcmp(fname, "push") == 0)
+                                && self->arena->nodes[n].kind == N_VAR
+                                && iter_hit(self, self->arena->nodes[n].text2))
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    "cannot mutate the container being iterated; take a copy or collect the indices first",
+                                    self->sup->mem->path);
                             /* Phase 31 S23a (L31-13 / L31-14): a borrow carries
                                no ownership, so releasing it would free storage
                                the container still owns -- whether the view is

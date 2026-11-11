@@ -1,0 +1,11 @@
+/* L31-22: the loop reads the container the body would clear. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> xs = {1, 2};
+    foreach (xs) {
+        xs.clear();
+    }
+    return 0;
+}

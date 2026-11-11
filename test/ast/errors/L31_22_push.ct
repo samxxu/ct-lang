@@ -1,0 +1,11 @@
+/* L31-22: the loop reads the container the body would grow with `push`. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> xs = {1, 2};
+    foreach (xs) {
+        xs.push(3);
+    }
+    return 0;
+}

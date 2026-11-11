@@ -33,11 +33,11 @@ int main(void)
         printf("walk %d\n", item);
     }
 
-    /* the length is read once: a push inside the body does not extend it */
+    /* Phase 31 L31-22: the body may not grow the container it is reading, so
+       the loop counts the elements present when it started. */
     seen = 0;
     foreach (v) {
         seen = seen + 1;
-        if (item == 5) v.push(99);
     }
     printf("seen = %d, len = %d\n", seen, v.len());
 

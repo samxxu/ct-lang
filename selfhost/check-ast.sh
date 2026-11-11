@@ -6094,6 +6094,14 @@ p29_neg L31_14_borrowed_release "cannot release a borrowed container view; call 
 p29_neg L31_14_copy_release "cannot release a borrowed container view; call retain() first" 14:7
 p29_neg L31_13_foreach_release "cannot release a borrowed container view; call retain() first" 11:14
 p29_neg L31_14_chain_release "cannot release a borrowed container view; call retain() first" 10:14
+# ---- Phase 31 S23b: no mutation while iterating ----
+# Each fixture carries exactly one item, so the automatic sweep above and the
+# pinned text below both see a single positioned diagnostic.
+p29_neg L31_22_clear "cannot mutate the container being iterated; take a copy or collect the indices first" 8:12
+p29_neg L31_22_remove "cannot mutate the container being iterated; take a copy or collect the indices first" 8:11
+p29_neg L31_22_set "cannot mutate the container being iterated; take a copy or collect the indices first" 8:12
+p29_neg L31_22_put "cannot mutate the container being iterated; take a copy or collect the indices first" 8:11
+p29_neg L31_22_push "cannot mutate the container being iterated; take a copy or collect the indices first" 8:12
 # 1025 elements: the cap refuses the list before any element is materialised.
 {
     printf 'int main(void)\n{\n    Vec<int> v = {'

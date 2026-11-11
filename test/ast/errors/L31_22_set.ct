@@ -1,0 +1,11 @@
+/* L31-22: the loop reads the container the body would write through `set`. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> xs = {1, 2};
+    foreach (xs) {
+        xs.set(0, 2);
+    }
+    return 0;
+}

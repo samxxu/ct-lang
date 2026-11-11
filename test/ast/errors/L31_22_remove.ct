@@ -1,0 +1,11 @@
+/* L31-22: the loop reads the map the body would remove from. */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> m = {"a": 1};
+    foreach (m) {
+        m.remove("a");
+    }
+    return 0;
+}

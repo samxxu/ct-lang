@@ -2467,7 +2467,11 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
+        /* Phase 31 S23b (L31-22): the body may not mutate the container it is
+           iterating; the expression layer compares the receiver with this name. */
+        frontend::parse::expr_iter_push(self->ex, self->arena->nodes[c].text2);
         body = self->parse_block();
+        frontend::parse::expr_iter_pop(self->ex);
         jump_pop(self, 1);
         self->foreach_depth = self->foreach_depth - 1;
         if (body < 0) {
