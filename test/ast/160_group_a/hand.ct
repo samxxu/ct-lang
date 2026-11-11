@@ -1,0 +1,39 @@
+/* Phase 30 E30-9 group A: field configuration plus external calls. The
+   receiver (a pointer returned by a call) is named once, the verbs line up. */
+#include <stdio.h>
+#include <string.h>
+
+struct AppConfig {
+    char *host;
+    int port;
+    int registered;
+};
+
+static struct AppConfig g_cfg;
+
+static struct AppConfig *config_instance(void)
+{
+    return &g_cfg;
+}
+
+static void validate_config(struct AppConfig *c)
+{
+    printf("validate %s %d\n", c->host, c->port);
+}
+
+static void register_shutdown(struct AppConfig *c, int port)
+{
+    c->registered = port;
+}
+
+int main(void)
+{
+    struct AppConfig *__ct_recv0 = config_instance();
+    __ct_recv0->host = "0.0.0.0";
+    __ct_recv0->port = 8080;
+    validate_config(__ct_recv0);
+    register_shutdown(__ct_recv0, __ct_recv0->port);
+    struct AppConfig *cfg = __ct_recv0;
+    printf("cfg %s %d %d\n", cfg->host, cfg->port, cfg->registered);
+    return 0;
+}
