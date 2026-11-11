@@ -1,0 +1,14 @@
+/* Phase 30 E30-10 / §2.8: the block is an expression, so an index suffix
+   continues on the receiver itself. `$ = "world"` rebinds the promoted
+   receiver, then `[1]` reads through the block result. */
+#include <stdio.h>
+
+int main(void)
+{
+    char *s = "hello";
+    char c = s into {
+        $ = "world";
+    }[1];
+    printf("%c\n", c);
+    return 0;
+}
