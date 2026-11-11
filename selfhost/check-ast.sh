@@ -6474,6 +6474,20 @@ p30_cmp() {
 }
 for g in 160_group_a 161_group_b 162_group_c 163_group_d; do p30_cmp "$g"; done
 
+# Phase 31 O3 (E31-24): a chained receiver is an rvalue, so the product must
+# name it in a temporary instead of taking the address of the call. The fixture
+# output check above already proves the chain runs; this one inspects the C.
+if ! "$work/ct-ast" test/ast/190_chain_access/prog.ct -o "$work/p31chain.c" \
+        >"$work/p31chain.log" 2>&1; then
+    bad "p31 E31-24 (chain product)" "ct-ast failed: $(head -3 "$work/p31chain.log")"
+elif grep -Eq '&(Vec|Map)_[A-Za-z0-9_]*_get\(' "$work/p31chain.c"; then
+    bad "p31 E31-24 (chain product)" "a product still takes the address of a get call"
+elif ! grep -q "__ct_tmp" "$work/p31chain.c"; then
+    bad "p31 E31-24 (chain product)" "no receiver temporary appears in the product"
+else
+    ok "p31 E31-24 (chain product: receivers named, no address of a call)"
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

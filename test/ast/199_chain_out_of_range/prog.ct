@@ -1,0 +1,21 @@
+/* Phase 31 O3 (E31-24): an out-of-range subscript answers a zero handle, and
+   the next level of the chain reads that zero value without a crash. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> row = {1};
+    g.push(row);
+
+    int oob = g[5][0];
+    int oob_chain = g.get(5).get(0);
+    Vec<int> z = g.get(5);
+    int zlen = z.len();
+
+    printf("%d %d %d\n", oob, oob_chain, zlen);
+    g.release();
+    row.release();
+    return 0;
+}

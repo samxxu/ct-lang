@@ -1,0 +1,63 @@
+/* Phase 31 O3 (E31-24): every chained receiver is named before its address is
+   taken -- a nested subscript, an explicit `get` chain, a call result, a
+   function-pointer call and a method of an instance. */
+#include <stdio.h>
+
+trait VecSource {
+    Vec<int> mv();
+}
+
+struct Holder {
+    Vec<int> v;
+}
+
+struct Builder {
+    Vec<int> row;
+} use VecSource;
+
+impl VecSource for Builder {
+    Vec<int> mv() {
+        return self->row;
+    }
+}
+
+Vec<int> mk(void)
+{
+    Vec<int> r = {5};
+    return r;
+}
+
+struct Holder mkh(void)
+{
+    struct Holder h;
+    Vec<int> r = {6};
+    h.v = r;
+    return h;
+}
+
+int main(void)
+{
+    Vec<Vec<int>> g;
+    g.h = 0;
+    Vec<int> row = {1, 2};
+    g.push(row);
+
+    int nested = g[0][1];
+    int chained = g.get(0).get(1);
+    Vec<int> first = g.get(0);
+    int len = first.len();
+
+    Builder b;
+    Vec<int> brow = {9};
+    b.row = brow;
+    int method = b.mv()[0];
+
+    struct Holder h = mkh();
+    int member = h.v[0];
+
+    Vec<int> call = mk();
+    int from_call = call[0];
+
+    printf("%d %d %d %d %d %d\n", nested, chained, len, method, member, from_call);
+    return 0;
+}
