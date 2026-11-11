@@ -1,7 +1,0 @@
-/* V29-4: `{ "k": 1 }` is not a C aggregate initializer for the handle struct
-   (`expected expression` from cc). The entries are built with `put`. */
-int main(void)
-{
-    Map<char *, int> m = { "k": 1 };
-    return m.len();
-}

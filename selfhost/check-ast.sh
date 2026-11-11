@@ -6063,7 +6063,6 @@ p29_neg range_vec_map_target "a range initializer declares an array" 6:26
 p29_neg impl_static_trait "a static method cannot implement a trait" 13:5
 p29_neg vec_subscript "a Vec is not subscriptable: use get(i) / set(i, v)" 9:13
 p29_neg map_subscript "a Map is not subscriptable: use get(key)" 8:13
-p29_neg map_brace_init "a Map cannot be initialized from a brace list: use put(key, value)" 5:26
 p29_neg generic_impl_missing_method "no method 'nope' for type 'struct Pair_int_int'" 20:1
 p29_neg container_vptr_struct "interface and vptr-bearing values cannot be stored in a container" 13:14
 # V29-4b: the base of a subscript is judged by its expression type, not only a

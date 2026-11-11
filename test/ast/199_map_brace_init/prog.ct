@@ -1,0 +1,14 @@
+/* V29-4 turned positive in Phase 31: a local `Map` declaration may initialize
+   from a brace list, and the empty and single-entry forms both own a releasable
+   header. */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> m = { "k": 1 };
+    Map<char *, int> z = {};
+    printf("%d %d %d\n", m.len(), *m.get("k"), z.len());
+    m.release();
+    z.release();
+    return 0;
+}
