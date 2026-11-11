@@ -1,0 +1,7 @@
+/* Phase 31 L31-6: a `Vec` brace element whose type is known but does not name
+   the element slot is refused before any C is emitted. */
+int main(void)
+{
+    Vec<int> v = {"s"};
+    return v.len();
+}

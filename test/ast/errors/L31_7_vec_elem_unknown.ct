@@ -1,0 +1,9 @@
+/* Phase 31 L31-7: the element's type cannot be pinned (a binary `+` has no
+   static type here), so the initialiser is refused instead of emitting C the
+   C compiler would have to judge. */
+int main(void)
+{
+    int a = 1, b = 2;
+    Vec<int> v = {a + b};
+    return v.len();
+}

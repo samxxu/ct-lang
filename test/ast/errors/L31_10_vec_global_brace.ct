@@ -1,0 +1,8 @@
+/* Phase 31 L31-10: a file-scope brace initializer would have to call the
+   constructor during C static initialization, which is not allowed. */
+Vec<int> g = {1, 2};
+
+int main(void)
+{
+    return g.len();
+}

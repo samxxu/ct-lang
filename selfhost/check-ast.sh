@@ -6088,6 +6088,63 @@ p29_neg vec_subscript_mcall "a Vec is not subscriptable: use get(i) / set(i, v)"
 # sides of the judgement (`g[0]` is a Vec value, `pg[0][0]` is not).
 p29_neg vec_subscript_global_ptr "a Vec is not subscriptable: use get(i) / set(i, v)" 7:17
 
+# ---- Phase 31 S11b: the `Vec` brace initializer's local boundaries ----
+# Five boundaries keep one positioned diagnostic each: a known element type
+# that does not fit (L31-6), an element whose type cannot be pinned (L31-7), a
+# nested brace list (L31-9), a file-scope list (L31-10) and an assignment
+# (L31-11). The 1024 cap (L31-8) is generated below so the fixture stays
+# compact, and 1024 elements stay a positive case.
+p29_neg L31_6_vec_elem_type "initializer element 1 has type 'char *', expected 'int'" 5:19
+p29_neg L31_7_vec_elem_unknown "cannot determine the type of initializer element 1" 7:19
+p29_neg L31_9_vec_nested_brace "a brace list cannot appear inside another brace initializer; build the inner container first" 5:24
+p29_neg L31_10_vec_global_brace "a Vec brace initializer is only supported in a local declaration" 3:14
+p29_neg L31_11_vec_brace_assign "a brace list is not an expression; use Vec<T>::from or push" 6:9
+# 1025 elements: the cap refuses the list before any element is materialised.
+{
+    printf 'int main(void)\n{\n    Vec<int> v = {'
+    i=1
+    while [ "$i" -le 1025 ]; do
+        if [ "$i" -gt 1 ]; then printf ', '; fi
+        printf '1'
+        i=$((i + 1))
+    done
+    printf '};\n    return v.len();\n}\n'
+} >"$work/p31b1025.ct"
+if "$work/ct-ast" "$work/p31b1025.ct" -o "$work/p31b1025.c" \
+        >"$work/p31b1025.out" 2>"$work/p31b1025.err"; then
+    bad "p31 L31-8: 1025 elements" "expected a diagnostic, got exit 0"
+elif ! grep -Fq 'too many initializer elements (limit 1024)' "$work/p31b1025.err"; then
+    bad "p31 L31-8: 1025 elements" "$(cat "$work/p31b1025.err")"
+elif [ "$(grep -c 'error:' "$work/p31b1025.err")" -ne 1 ]; then
+    bad "p31 L31-8: 1025 elements" "expected exactly one diagnostic: $(cat "$work/p31b1025.err")"
+else
+    ok "p31 (L31-8: a 1025-element list is refused at the cap)"
+fi
+# 1024 elements remain a positive case and run.
+{
+    printf '#include <stdio.h>\n\nint main(void)\n{\n    Vec<int> v = {'
+    i=1
+    while [ "$i" -le 1024 ]; do
+        if [ "$i" -gt 1 ]; then printf ', '; fi
+        printf '1'
+        i=$((i + 1))
+    done
+    printf '};\n    printf("%%d\\n", v.len());\n    v.release();\n    return 0;\n}\n'
+} >"$work/p31b1024.ct"
+"$work/ct-ast" "$work/p31b1024.ct" -o "$work/p31b1024.c" \
+    >"$work/p31b1024.out" 2>"$work/p31b1024.err"
+if [ $? -ne 0 ]; then
+    bad "p31 1024 elements" "ct-ast failed: $(head -3 "$work/p31b1024.err")"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p31b1024.c" -o "$work/p31b1024.bin" \
+        2>"$work/p31b1024.cc" \
+      || ! "$work/p31b1024.bin" >"$work/p31b1024.run" 2>&1; then
+    bad "p31 1024 elements" "$(head -4 "$work/p31b1024.cc")"
+elif ! grep -qx '1024' "$work/p31b1024.run"; then
+    bad "p31 1024 elements" "$(cat "$work/p31b1024.run")"
+else
+    ok "p31 (a 1024-element list builds and reports its length)"
+fi
+
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it
 # by bytes; the `char *` block declared first owns `put` / `get` / `remove` for

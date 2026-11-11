@@ -1,0 +1,7 @@
+/* Phase 31 L31-9: a brace list is not an element expression; the inner
+   container has to be built first. */
+int main(void)
+{
+    Vec<Vec<int>> g = {{1, 2}};
+    return g.len();
+}

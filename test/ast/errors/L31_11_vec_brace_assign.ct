@@ -1,0 +1,8 @@
+/* Phase 31 L31-11: a brace list is not an expression, so it cannot appear on
+   the right side of an assignment. */
+int main(void)
+{
+    Vec<int> v;
+    v = {1, 2};
+    return v.len();
+}
