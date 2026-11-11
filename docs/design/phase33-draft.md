@@ -185,12 +185,12 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | `errors/nested_pattern_ptr.ct` | `struct Box<T>`（无 bound） | `Box<T *>` → L33-5，同上 |
 | `errors/nested_pattern_fnptr.ct` | `struct Box<T>`（无 bound） | `Box<int (*)(int)>` → L33-5，替换既有 `expected a name in the function-pointer declarator` |
 | `ast/208_bound_decl_only` | `struct Box<T: Nope>`（无 bound 实例化） | 声明期 rc=0；实例化后才 L33-6 |
-| `ast/207_depth4_boundary` | `struct Box<T>`（无 bound） | **pattern-only**：depth=4（**5 个 `Box`**）= `impl<T> Box<Box<Box<Box<Box<T>>>>>`（6 个 `<` / 6 个 `>`）解析/匹配不报 L33-4；depth=5（**6 个 `Box`**）= `impl<T> Box<Box<Box<Box<Box<Box<T>>>>>>`（7 个 `<` / 7 个 `>`）→ L33-4。换算：depth = `Box` 个数 − 1。不得把它写成可实例化的具体类型 |
+| `ast/207_depth4_boundary` | `struct Box<T>`（无 bound） | **pattern-only**：depth=4（**5 个 `Box`**）= `impl<T> Box<Box<Box<Box<Box<T>>>>>`（6 个 `<` / 6 个 `>`）解析/匹配不报 L33-4；depth=5（**6 个 `Box`**）= `impl<T> Box<Box<Box<Box<Box<Box<T>>>>>>`（7 个 `<` / 7 个 `>`）→ L33-4。换算：depth = `Box` 个数 − 1。目录含 `prog.ct` 与**空** `prog.expected.out`。不得把它写成可实例化的具体类型 |
 
 > 每个夹具必须在源码首行注释声明“有/无 bound”；有 bound 的只允许 203，且必须是 `struct Box<T: Show> use Show;` + `impl Show for Box`，叶类型为 `Circle`。禁止为绕开 bound 把 203 改成无约束 `Box`，也禁止写 `impl Show for Box<Circle>`（当前语言直接 `unexpected token`），否则 O1+O2 组合无人覆盖。
 
 > **depth 夹具的固定正文**（`<`/`>` 与列号据此计算，不得改排版；`n` 个 `Box` 对应 depth `n-1`）：
-> - `ast/207_depth4_boundary/prog.ct`：第 1 行注释、第 2 行 `struct Box<T> { T v; }`、第 3 行 `impl<T> Box<Box<Box<Box<Box<T>>>>> { int depth() { return 4; } }`（5 个 `Box`，rc=0）、第 4 行 `int main() { return 0; }`。
+> - `ast/207_depth4_boundary/prog.ct`：第 1 行注释、第 2 行 `struct Box<T> { T v; }`、第 3 行 `impl<T> Box<Box<Box<Box<Box<T>>>>> { int depth() { return 4; } }`（5 个 `Box`，rc=0）、第 4 行 `int main() { return 0; }`。目录另含**空的** `prog.expected.out`（0 字节）：行为循环 `check-ast.sh:591` 强制 `cmp`，缺文件直接失败；该程序 `rc=0`、无输出，空文件即正确期望。
 > - `test/ast/errors/nested_pattern_depth.ct`：第 1 行注释、第 2 行 `struct Box<T> { T v; }`、第 3 行 `impl<T> Box<Box<Box<Box<Box<Box<T>>>>>> { int depth() { return 5; } }`（6 个 `Box`，L33-4 列 **32**）；不写 `main`。
 > 两行 pattern 的 `Box` 个数分别为 5 与 6，`<`/`>` 各为 6/6 与 7/7（含 `impl<T>`）。
 
@@ -260,7 +260,7 @@ bound **不引入 vptr、不装箱**：`Box<Circle>` 内联存 `Circle`，方法
 | S4b | 样例 36 + golden | `examples/36_*` | 20–40 |
 | S5 | `ct_impl_bind` + 递归匹配 | `Symbols.h.ct` | 80–130 |
 | S6 | pattern 解析期标记 + 伪实例守卫 + L33-4/5 文案 | `Symbols.h.ct` / `Parser.h.ct` | 50–90 |
-| S7 | O2 夹具（含 **207** depth=4 pattern 边界）+ 样例 37 | `test/ast/203–207_*`、`test/ast/errors/{nested_pattern_depth,nested_pattern_mismatch,nested_pattern_repeat_mismatch,nested_pattern_wild,nested_pattern_arr,nested_pattern_ptr,nested_pattern_fnptr}.ct`、`examples/37_*` | 40–90 |
+| S7 | O2 夹具（含 **207** depth=4 pattern 边界，目录含空 `prog.expected.out`）+ 样例 37 | `test/ast/203–207_*`、`test/ast/errors/{nested_pattern_depth,nested_pattern_mismatch,nested_pattern_repeat_mismatch,nested_pattern_wild,nested_pattern_arr,nested_pattern_ptr,nested_pattern_fnptr}.ct`、`examples/37_*` | 40–90 |
 | S8 | O3 消费方 helper 发射 | `Emitter.h.ct` | 80–150 |
 | S9 | O3 消费方方法副本 | `Emitter.h.ct` | 80–150 |
 | S10 | O3 跨单元夹具 + 运行输出 | `test/modules/**` | 60–110 |

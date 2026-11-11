@@ -4,7 +4,7 @@
 > **基线**：**Phase 31 收口提交**（S0 开工时记录实际 sha）。Phase 31 的容器形态与元素助手是本相 O3 的前置；`bd91bfe` 上这些能力尚不存在，不得作为基线。
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与基线清单随红证提交入库。
 > **文档形态**：`phase32-draft.md`。转正按「每次转正归档当时最老的一张」：32 转正时归档 `phase20`，33 转正时归档 `phase21`，依此类推；本卡不抢跑。
-> **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载判定内核、三处挂点、精确覆盖率集合与判据/负例台账，约 445 行。按自裁 **waiver** 保留单卡（判定内核、矩阵、判据、负例必须同卡才能互相对照），不再寻求需求提出方签字。
+> **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载判定内核、三处挂点、精确覆盖率集合与判据/负例台账，约 446 行。按自裁 **waiver** 保留单卡（判定内核、矩阵、判据、负例必须同卡才能互相对照），不再寻求需求提出方签字。
 > 关联：[phase31.md](phase31.md)（容器能力，O3 前置）、[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../modern-oo-gap.md) §6.1/§7
 
 ## 1 目标与范围
@@ -247,10 +247,11 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
   - `check_only/closure_actual.ct`：assign/arithmetic←closure、return/arithmetic←closure、container/arithmetic←closure；
   - `check_only/fnptr_actual.ct`：assign/arithmetic←fnptr、return/arithmetic←fnptr、container/arithmetic←fnptr。
 - **0 条 `n/a`**：`void x;` 实测 `rc=0`，`Vec<void>` 报的是“元素类型不能实例化泛型 struct”，两者都不能证明“assign/container 的 actual-void 语法不存在”；统一改为 `skip:void actual`。
-- **`p32_types` 块的接线（段锚点 / 命令 / 期望 stderr）**：一段独立块，块首 `echo "== p32 types (L32) =="`，插在 `selfhost/check-ast.sh` 行为循环（`for d in test/ast/*/`，`:502`）结束之后、`== negative cases (test/ast/errors/*.ct) ==`（`:3018`）之前；块内三部分，全部用主线二进制 `"$work/ct-ast"`（`:409` 构建的那个），失败计数并入脚本既有 `fail` 与 `:6358` 汇总：
+- **`p32_types` 块的接线（段锚点 / 命令 / 期望 stderr）**：一段独立块，块首 `echo "== p32 types (L32) =="`，插在 `selfhost/check-ast.sh` 行为循环（`for d in test/ast/*/`，`:502`）结束之后、`== negative cases (test/ast/errors/*.ct) ==`（`:3018`）之前；块内四部分，全部用主线二进制 `"$work/ct-ast"`（`:409` 构建的那个），失败计数并入脚本既有 `fail` 与 `:6358` 汇总：
   - `p32_errors`：12 个 `test/ast/check_errors/*.ct`，**逐文件独立 `if`**（禁止一条 `for` 只看退出码）。每条执行 `out=$("$work/ct-ast" check --types "$f" 2>&1); rc=$?`，断言：`rc == 1`；`printf '%s\n' "$out" | grep -cF "<expected>"` == 1；`printf '%s\n' "$out" | grep -cE 'initializer:|assignment:|return:|argument [0-9]+:'` == 1（无第二条 L32）；首行匹配 `"$f:<line>:<col>: error: "`。
   - `p32_coverage`：24 行逐行断言；L 行同上，`ok`/`skip` 断言 `rc == 0` 且 `out` 为空；逐条打印 6 个 ok 形态名（`assign/interface<-struct`、`assign/arithmetic<-arithmetic`、`return/interface<-struct`、`return/arithmetic<-arithmetic`、`container/interface<-struct`、`container/arithmetic<-arithmetic`）并与硬编码名逐条相等（6 条 ok 共用 `prog.ct`，靠形态名定位到行）；最后打印 `coverage: 24 rows, 7 L32-n, 6 ok, 11 skip, 0 n/a`。
-  - `p32_cli`：见 E32-11，唯一调用行 `"$work/ct-ast" build --types "$work/p32_cli_x.ct"`。
+  - `p32_cli`：见 E32-11，两条拒绝调用行 + 一条 `check --types` 放行行。
+  - `p32_iface`：`test/ast/errors/check_iface_use.ct`（待建，S10）分别跑 `"$work/ct-ast" check "$f"` 与 `"$work/ct-ast" check --types "$f"`，两遍都断言 `rc == 1` 且 `grep -cF "the struct does not use this trait"` == 1、两遍 `file:line:col` 相同（E32-10）。
 - **12 个负例夹具的逐文件断言**（7 条同时进矩阵；其余 5 条只在 `p32_errors` 中断言，不占矩阵行）。每个夹具首行为 `// p32:` 注释，其余是最小骨架（`struct A`/`struct B` 声明、函数外壳、`main`）；下表“出错行”给出该行行号与原文，列号即由此行直接数出：
 
   | fixture | L | 出错行（行号：原文） | expected 完整子串 | rc | 位置 |
@@ -330,9 +331,9 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
 | S5 | `cur_ret` + `return` 三形态 + L32-3/4/5 | `Parser.h.ct` / `Stmt.h.ct` | 60–100 |
 | S6 | `ct_method_bind` 绑定表 | `Symbols.h.ct` / `Expr.h.ct` | 70–110 |
 | S7 | 固有方法挂点 + 形参替换 + L32-6 | `Expr.h.ct` | 70–110 |
-| S8 | `--types` 解析 + `types_mode` + L32-7 + `p32_cli` 断言块（调用行 `"$work/ct-ast" build --types "$work/p32_cli_x.ct"`，断言 `ctc:` 文案与退出码） | `Driver.h.ct` / `Parser.h.ct` / `selfhost/check-ast.sh` | 55–90 |
+| S8 | `--types` 解析 + `types_mode` + L32-7 + `p32_cli` 断言块。**落点 (a) 写死**：`Driver.h.ct` 的 `run()` 在 `argv[1]=="build"` 分派（`:165`）**之前**预扫 `argv` 中的 `--types`，非 `check` 即打印 L32-7 并 `return 1`，**不进入 `build_main`**；`Module.h.ct` **不改**；`Parser.h.ct` 只加 `types_mode` 字段 | `Driver.h.ct`（`run()` 预扫）/ `Parser.h.ct`（`types_mode`）/ `selfhost/check-ast.sh` | 55–90 |
 | S9 | 诊断收口（L32-1–L32-6 文案/位置） | `Parser.h.ct` / `Diag.h.ct` | 35–60 |
-| S10 | L32-1–L32-6 的 `check_errors/*.ct` 专属负例 + `p32_*` 断言（恰一条 + 位置 + 首行标识）；**209/210 归本片**：`prog.ct` 只放可编译正例，`check_only/` 放 `ct check --types` 专属形态；三命令均断言 rc=0 且 stderr 为空 | `test/ast/check_errors/**`、`test/ast/209_*`、`210_*` / `selfhost/check-ast.sh` | 100–150 |
+| S10 | L32-1–L32-6 的 `check_errors/*.ct` 专属负例 + `p32_*` 断言（恰一条 + 位置 + 首行标识）；**209/210 归本片**：`prog.ct` 只放可编译正例，`check_only/` 放 `ct check --types` 专属形态；三命令均断言 rc=0 且 stderr 为空。**另建 `test/ast/errors/check_iface_use.ct`（E32-10 的 `p32_iface` 用；当前不存在）** | `test/ast/check_errors/**`、`test/ast/209_*`、`210_*`、`test/ast/errors/check_iface_use.ct` / `selfhost/check-ast.sh` | 100–150 |
 | S12 | 24 行精确集合 `check_coverage.tsv` + `p32_coverage`；**211 辅助夹具归本片**（`prog.ct` 只放 6 条 ok；11 条 skip 放 `check_only/`）；期望元组硬编码进 `check-ast.sh`（或独立 `check_coverage.expected.tsv`） | `test/ast/check_coverage.tsv`、`211_coverage_aux/**` / `selfhost/check-ast.sh`（或 `test/ast/check_coverage.expected.tsv`） | 85–140 |
 | S13 | 合法语料显式清单 + 逐文件 diff（§7 E32-15）；**S13 独占** `p32_legal_manifest.tsv`，列 `path rc stderr`，S0 不再生成；包含规则见 E32-15 | `test/probes/p32_legal_manifest.tsv` / 夹具/内核修正 | 80–130 |
 | S14 | 样例 `examples/35_type_safety` + `test/run.sh` | `examples/35_*` | 60–110 |
@@ -355,8 +356,8 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
 | E32-7 | `Vec<int> v; v.push("s");` 与 `v.push(someStruct)` 各恰一条 L32-6 | `check_errors/check_container_push.ct` / `check_errors/check_container_struct.ct` | `check-ast.sh`（`p32_*`） | S0 基线 `rc=0` |
 | E32-8 | `v.set(0,"s")` 恰一条 L32-6 | `check_errors/check_container_set.ct` | `check-ast.sh`（`p32_*`） | S0 基线 `rc=0` |
 | E32-9 | `Map<char *,int> m; m.put("a","b")` 恰一条 L32-6 | `check_errors/check_container_put.ct` | `check-ast.sh`（`p32_*`） | S0 基线 `rc=0` |
-| E32-10 | 既有诊断不重复：`Show sh = o;`（`Other` 未 `use Show`）在 `ct check` 与 `ct check --types` 下都**恰一条** `the struct does not use this trait`，rc=1，文案/位置逐字相同 | `errors/check_iface_use.ct`（既有编译期负例） | `check-ast.sh`（既有扫描 + `--types` 复跑） | S0 基线已是 `rc=1` 单条 |
-| E32-11 | `p32_cli` 块：先 `printf 'int main() { return 0; }\n' > "$work/p32_cli_x.ct"`，再执行 `"$work/ct-ast" build --types "$work/p32_cli_x.ct"`（**不带 `-o`**）。驱动必须在 `build` 分支参数校验的**最前面**判 `--types`（先于缺 `-o`/输出目录校验），否则会先报别的错。断言 `rc != 0`、`printf '%s\n' "$out" | grep -cF "ctc: --types is only valid with"` == 1、输出不含 `: error:` | S8 内 `p32_cli` 子块（临时 `$work/p32_cli_x.ct`，无独立夹具） | `check-ast.sh` | 基线无 `--types` |
+| E32-10 | 既有诊断不重复：`Show sh = o;`（`Other` 未 `use Show`）在 `ct check` 与 `ct check --types` 下都**恰一条** `the struct does not use this trait`，rc=1，文案/位置逐字相同 | `errors/check_iface_use.ct`（**待建**，S10 建；当前 `test/ast/errors/` 无此文件） | `check-ast.sh`（既有负向扫描 + `p32_iface` 复跑） | 基线 `rc=1` 单条（实测 `7:16`） |
+| E32-11 | `p32_cli` 块：先 `printf 'int main() { return 0; }\n' > "$work/p32_cli_x.ct"`，再执行两条 `"$work/ct-ast" build --types "$work/p32_cli_x.ct"` 与 `"$work/ct-ast" --types "$work/p32_cli_x.ct"`。落点是 `Driver.h.ct` 的 `run()`：在 `argv[1]=="build"` 分派**之前**预扫 `--types`，非 `check` 即打印 L32-7 并退出，**不进入 `build_main`**（`build` 的 `-o` 可选，卡片不再引用“缺 `-o`”这个不存在的前置）。断言：两条都 `rc == 1`、各 `grep -cF "ctc: --types is only valid with 'ct check'"` == 1、输出不含 `: error:`；另跑 `"$work/ct-ast" check --types "$work/p32_cli_x.ct"`，必须 `rc == 0` 且不出现该文案 | S8 内 `p32_cli` 子块（临时 `$work/p32_cli_x.ct`，无独立夹具） | `check-ast.sh` | 基线 `ct build --types` 报 `ctc: unknown option '--types'`（rc=1） |
 | E32-12 | **零告警可编译正例**：`ast/209_valid_assignments/prog.ct` 只含 `char *s="hi"; char *p=0; int x=1; long n=1; void *v=p; Show sh=circle;`，全部经 `printf` 消费，`cc`/`check-warnings` 零告警，`prog.expected.out` 确定；`int x=1.5;`、`struct A *pa; char *pc=pa;`、`void z;`、`int y=f();`、`vv.push(f())` 放 `check_only/`，由 S10 bespoke 块跑 `ct check --types` rc=0 且 stderr 空 | `ast/209_valid_assignments/{prog.ct,prog.expected.out,check_only/*}`（S10 建） | `check-ast.sh` + `check-warnings.sh` | 夹具待建；探针见 §2.2 `rc=0` |
 | E32-13 | 跳过形态：**可编译**的 array actual 进 `prog.ct`；struct 指针互转（`cc -Wall` 下是 `incompatible pointer types`）、闭包/fnptr/void actual 一律进 `check_only/`（`int x = f;` 在 `cc` 下是 `incompatible pointer to integer conversion`） | `ast/210_valid_skip_forms/{prog.ct,check_only/*}`（S10 建） | `check-ast.sh` + `check-warnings.sh` | 夹具待建；探针见 §2.2 `rc=0` |
 | E32-14 | 所有源码 L 诊断（L32-1–L32-6）格式 `file:line:col`，列指向表达式；L32-6 指向**出错实参的起点**；每条恰一条且位置固定。**L32-7 是 CLI 诊断，显式排除** | 上述 L 夹具 | `check-ast.sh` | S0 基线无这些诊断 |
@@ -382,7 +383,7 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
 | L32-6 | 容器/泛型方法实参不兼容 | `check_errors/check_container_{push,set,put,struct}.ct` | E32-7/E32-8/E32-9 |
 | L32-7 | `--types` 与错误子命令组合（CLI，非源码诊断） | S8 `p32_cli` 块（`"$work/ct-ast" build --types "$work/p32_cli_x.ct"`） | E32-11 |
 
-> 旧接口初值诊断（原编号，已回收）；`Show sh = o;` 由既有诊断覆盖，见 E32-10。
+> 旧接口初值诊断（原编号，已回收）；`Show sh = o;` 由既有诊断覆盖，见 E32-10（夹具 `errors/check_iface_use.ct` 待建，S10 建）。
 
 ## 9 样例计划
 
@@ -429,6 +430,7 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
 - `selfhost/ct-ast/**`：S1–S9 的实现与诊断。
 - `test/probes/p32_check_baseline.sh`、`.txt`：S0 交付的红证脚本与逐文件基线；`p32_legal_manifest.tsv` 由 **S13 独占**（列 `path rc stderr`）。
 - `test/ast/check_errors/check_*.ct`：L32-1–L32-6 专属负例（不叫 `prog.ct`、不放 `errors/`），由 `check-ast.sh` 的 `p32_*` 块跑 `ct check --types`。
+- `test/ast/errors/check_iface_use.ct`：E32-10 的既有诊断夹具，**待建**（S10），由 `p32_iface` 在 `check` 与 `check --types` 下各跑一遍。
 - `selfhost/check-ast.sh` 内 `p32_cli` 块：L32-7，调用行 `"$work/ct-ast" build --types "$work/p32_cli_x.ct"`，断言 `ctc:` 文案与退出码。
 - `test/ast/check_coverage.tsv` + **独立期望源**（`check-ast.sh` 硬编码或 `check_coverage.expected.tsv`）：24 行精确集合断言；`211_coverage_aux/prog.ct`（6 条 ok）与 `211_coverage_aux/check_only/*.ct`（11 条 skip）由 S12 建。
 - `test/ast/209_valid_assignments/`、`210_valid_skip_forms/`：S10 建；`prog.ct` 零告警、`prog.expected.out` 确定，`check_only/` 放 `ct check --types` 专属形态。
