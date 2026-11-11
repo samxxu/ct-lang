@@ -132,6 +132,11 @@
   全部退出 1 且不写产物，守卫在 `T_ID` 共同入口，同名全局 / 宏 / `struct T` 标签均不误伤，
   830 数字属实（+13 构成经日志逐条核对），Phase 26 收口；详见
   [review-phase26](../docs/history/reports/review-phase26.md) §13。
+- 2026-11-11 `docs/modern-oo-gap.md` §6.2 复核新增 **1 条**（**SH-67** **High**）：闭包先绑到函数指针变量、
+  再传给 trait / impl 方法时，`ct check` 与 `ct compile` 都退出 0，生成的 C 只发射 trampoline / env
+  而不声明该变量，`cc` 报 `use of undeclared identifier 'f'`——违反「生成物必须可编译」的产物契约。
+  与 SH-65 同入口族，但 SH-65 是字面量传入的响亮失败，本条是退出 0 的静默坏产物；建议先硬错，
+  codegen 修复并入 SH-65 / F3。见 [SH-67](selfhost/sh67-closure-method-arg-silent-invalid-c.md)。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
 <!-- gates:11 -->
 - **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
@@ -324,6 +329,7 @@
 | SH-64 | **High** | 泛型体内类型参数出现在值位置（`return T;` / `h(T)` / `sizeof T * T` / `sizeof T + T`）仍退出 0 发射裸 `T`；`parse_primary` 的 ALL_CAPS 兜底未先查 `in_generic_tparam`（已修，`v0.26.3`：`T_ID` 入口统一守卫 + 4 条值位置负例；复核 `verified`） | [sh64-generic-tparam-value-position.md](selfhost/sh64-generic-tparam-value-position.md) |
 | SH-65 | Medium | trait / impl 方法收不了闭包实参：常规 `.method(...)` 未计 `closure_arg_count` / 未走 `closure_arg_check`，pair 形报 arity、单函数指针形 check 静默而 compile 落 `unknown expression node`；L0 也不能解析带函数指针参数的 trait 方法（**open**，09/10/12 的 OO 化根因） | [sh65-closure-as-method-arg.md](selfhost/sh65-closure-as-method-arg.md) |
 | SH-66 | **High** | 泛型仍有两条退出 0 的静默坏产物：数组维度里的 `sizeof(T)` 与裸模板名作值都不替换、不诊断，`cc` 才报 `'T'` / `'id'` undeclared（**已修**，2026-11-10，`v0.26.4` + 补丁：`parse_array_dims` 的维度守卫 + `parse_primary` 未声明名字分支的模板检查，各 1 条负例并配 `p26_diag`/`p26_chk`；`verified` 留独立评审） | [sh66-generic-silent-bad-output.md](selfhost/sh66-generic-silent-bad-output.md) |
+| SH-67 | **High** | 闭包先绑变量再传 trait 方法：`check` / `compile` 都退出 0，生成的 C 只发射 trampoline / env、不声明该函数指针，`cc` 才报 `use of undeclared identifier 'f'`（**open**；与 SH-65 同入口族，建议先硬错、codegen 并入 F3） | [sh67-closure-method-arg-silent-invalid-c.md](selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
