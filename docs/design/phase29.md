@@ -1027,10 +1027,13 @@ $ bash selfhost/check-all.sh
 == summary: 82 passed, 0 failed ==       (goldens)
 == summary: 972 passed, 0 failed ==      (check-ast, 补丁前 962)
 check-warnings: 322 ok, 0 failed         (补丁前 321)
-check-docs: OK (981 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+check-docs: OK (978 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
 acceptance: 20 pass, 0 new, 0 pending, 0 regression
 check-all: OK (11 hard gates green)
 ```
+
+本节写完后文档又多了 3 条相对链接，单独复跑 `python3 test/docs/check-docs.py` 报
+`OK (981 relative links in 179 files, …)`，仍为 OK。
 
 `sanitizer` 单跑仍是同样的 10 项既有失败，`passed` 从 319 升到 323（新增 4 条负例全部 `ok`）：
 
