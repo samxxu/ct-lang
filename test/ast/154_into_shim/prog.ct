@@ -1,0 +1,16 @@
+/* Phase 30 S10 / E30-8: the recipe's definitions live in `ops.shim.c`, which
+   joins the same `cc` line; the block sees them through the promoted receiver. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+int main(void)
+{
+    Slot s = ct_slot_new() into {
+        .bump(2);
+        .bump(3);
+        printf("inside %d\n", .total());
+    };
+    printf("outside %d\n", s.total());
+    return 0;
+}

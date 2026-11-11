@@ -546,7 +546,8 @@ for d in test/ast/*/; do
             bad "$name" "a header product carries an instance body:$hdr_bad"
             continue
         fi
-        if ! "$CC" -Wall -Wextra -std=c99 $incs "$md"/*.c -o "$exe" 2>"$work/$name.cc"; then
+        if ! "$CC" -Wall -Wextra -std=c99 $incs -I "$md" "$md"/*.c \
+                $(find "$d" -name '*.shim.c') -o "$exe" 2>"$work/$name.cc"; then
             bad "$name" "generated C did not build warning-free: $(cat "$work/$name.cc")"
             continue
         fi

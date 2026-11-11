@@ -1,0 +1,8 @@
+namespace lib;
+
+pub struct ct_file {
+    int pos;
+    int wrote;
+};
+
+pub type FileHandle = struct ct_file *;

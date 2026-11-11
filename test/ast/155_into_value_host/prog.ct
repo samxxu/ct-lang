@@ -1,0 +1,21 @@
+/* Phase 30 S10 + S11 / E30-8: a value type host. `$ = ...` rebinds the
+   promoted copy, `.value()` after the block reads the same result, and the
+   chain `.add(1).add(2)` forwards the recipe's by-value return each step. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+int main(void)
+{
+    struct Builder b = builder_make(10) into {
+        $ = .add(1).add(2).add(3);
+        printf("mid %d\n", .value());
+    };
+    printf("done %d %d\n", b.value(), b.steps);
+
+    int v = builder_make(1) into {
+        $ = .add(5);
+    }.value();
+    printf("v %d\n", v);
+    return 0;
+}

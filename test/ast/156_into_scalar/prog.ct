@@ -1,0 +1,21 @@
+/* Phase 30 S10 / E30-8: a built-in or C spelling is a type host too. The
+   receiver is promoted by category and the recipe's first binding parameter is
+   replaced by its value form -- `ct_twice((*__ct_recv0))`, not `&n`. */
+import lib::lib;
+#include <stdio.h>
+
+int main(void)
+{
+    int n = 21;
+    n into {
+        printf("twice %d\n", .twice());
+        printf("plus %d\n", .plus(4));
+    };
+
+    char *s = "hello";
+    char *t = s into {
+        printf("size %d\n", .size());
+    };
+    printf("%d %d %d\n", n, t == s, t.size());
+    return 0;
+}

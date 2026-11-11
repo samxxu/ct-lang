@@ -569,7 +569,20 @@ static int map_emit_actual(struct Emitter *e, int n, int half)
 {
     int cv;
 
-    if (half == 0) return e->emit_expr(n);
+    if (half == 0) {
+        int k = e->arena->nodes[n].kind;
+        if (k == N_INTO || k == N_INTO_SELF) {
+            /* A type host's first binding parameter is by value, so the
+               receiver prints its value form even when the block spelled it
+               with a leading `.` (aux==1, the pointer role). */
+            int ow = (k == N_INTO) ? n : e->arena->nodes[n].num;
+            const char *nm = e->arena->nodes[ow].text3;
+            if (e->arena->nodes[ow].aux == 2) fprintf(e->out, "(*%s)", nm);
+            else fputs(nm, e->out);
+            return 0;
+        }
+        return e->emit_expr(n);
+    }
     if (e->arena->nodes[n].kind == N_CLOSURE) {
         if (half == 1) return emit_closure_fn(e, n);
         return emit_closure_env(e, n);

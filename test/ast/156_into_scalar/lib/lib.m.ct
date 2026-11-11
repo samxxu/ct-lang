@@ -1,0 +1,22 @@
+#include <stdlib.h>
+#include <string.h>
+
+namespace lib;
+
+pub trait IntOps {
+    int twice();
+    int plus(int other);
+}
+
+map trait IntOps for type int {
+    twice(n)       -> ct_twice(n);
+    plus(n, other) -> ct_plus(n, other);
+}
+
+pub trait TextOps {
+    int size();
+}
+
+map trait TextOps for type char * {
+    size(s) -> ct_text_size(s);
+}

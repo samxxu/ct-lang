@@ -1,0 +1,28 @@
+pub struct Builder {
+    int total;
+    int steps;
+};
+
+pub struct Builder builder_make(int total);
+pub struct Builder builder_add(struct Builder b, int n);
+pub int builder_value(struct Builder b);
+
+struct Builder builder_make(int total)
+{
+    struct Builder b;
+    b.total = total;
+    b.steps = 0;
+    return b;
+}
+
+struct Builder builder_add(struct Builder b, int n)
+{
+    b.total = b.total + n;
+    b.steps = b.steps + 1;
+    return b;
+}
+
+int builder_value(struct Builder b)
+{
+    return b.total;
+}

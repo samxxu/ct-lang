@@ -1,0 +1,11 @@
+namespace lib;
+
+pub trait BuilderOps {
+    struct Builder add(int n);
+    int value();
+}
+
+map trait BuilderOps for type struct Builder {
+    add(b, n) -> builder_add(b, n);
+    value(b)  -> builder_value(b);
+}

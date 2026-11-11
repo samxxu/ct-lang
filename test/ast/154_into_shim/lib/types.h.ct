@@ -1,0 +1,17 @@
+pub struct ct_slot {
+    int n;
+    int hits;
+};
+
+pub type Slot = struct ct_slot *;
+
+pub struct ct_slot *ct_slot_new(void);
+
+static struct ct_slot g_slot;
+
+struct ct_slot *ct_slot_new(void)
+{
+    g_slot.n = 0;
+    g_slot.hits = 0;
+    return &g_slot;
+}

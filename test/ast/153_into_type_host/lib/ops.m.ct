@@ -1,0 +1,13 @@
+namespace lib;
+
+pub trait FileOps {
+    int  read(int n);
+    void write(int n);
+    int  tell();
+}
+
+map trait FileOps for type struct ct_file * {
+    read(s, n)  -> ct_file_read(s, n);
+    write(s, n) -> ct_file_write(s, n);
+    tell(s)     -> ct_file_tell(s);
+}

@@ -1,0 +1,19 @@
+/* Phase 30 S10 / E30-8: a `.m.ct` type host over an opaque-ish handle. The
+   block's `.write(...)` / `.tell()` expand the recipe with the promoted
+   pointer as the by-value first argument. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+int main(void)
+{
+    struct ct_file f = { 0, 0 };
+    FileHandle h = &f;
+    h into {
+        .write(3);
+        .write(4);
+        printf("tell %d\n", .tell());
+    };
+    printf("pos %d wrote %d\n", f.pos, f.wrote);
+    return 0;
+}

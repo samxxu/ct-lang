@@ -2209,6 +2209,9 @@ comment in its header); it is not part of the source content.
   `$` 对左值值类型发射 `(*__ct_recvN)`。
 - **结果**：值形态的结果是**接收者本身**（不是块内最后一条语句的值）：指针接收者返回指针，
   值接收者返回配置后的值（左值先原地修改，再复制给目标）。块后可继续接 `.m()` / `->f` / `[i]`。
+- **类型宿主**：接收者的静态类型可命中 `map trait … for type …` 的类型宿主（§4.10），块内
+  `.m(...)` 走同一份 recipe，首个绑定形参换成接收者的**值形态**（左值值类型是 `(*__ct_recvN)`，
+  指针与右值是 `__ct_recvN`）；接收者已提升为变量，recipe 里重复引用满足可重复约束。
 - **诊断**：L30-1 位置不允许、L30-2 接收者形态不对、L30-3 静态类型未知、L30-4 接口值或
   `own` 接收者、L30-5 已知成员表里没有该字段、L30-6 语句形态用了右值接收者、
   L30-7 嵌套 `into` 块。
@@ -4609,6 +4612,10 @@ feature-complete old compiler is at git tag `overreach-oracle`.
   statement — a pointer receiver yields the pointer, a value receiver yields the configured value
   (a left value is modified in place and then copied to the target). A suffix such as `.m()` /
   `->f` / `[i]` may follow the block.
+- **Type hosts**: the receiver's static type may match a `map trait … for type …` host (§4.10);
+  `.m(...)` inside the block expands the same recipe with its first binding parameter replaced by
+  the receiver's **value form** — `(*__ct_recvN)` for a left-value value type, `__ct_recvN` for a
+  pointer or a right value. The receiver is already a promoted local, so a recipe may repeat it.
 - **Diagnostics**: L30-1 position not allowed, L30-2 wrong receiver shape, L30-3 unknown static
   type, L30-4 interface or `own` receiver, L30-5 no such field in a known member table, L30-6 the
   statement form with a right-value receiver, L30-7 nested `into` blocks.

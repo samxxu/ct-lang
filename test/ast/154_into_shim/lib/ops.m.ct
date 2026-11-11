@@ -1,0 +1,11 @@
+namespace lib;
+
+pub trait SlotOps {
+    int bump(int by);
+    int total();
+}
+
+map trait SlotOps for type struct ct_slot * {
+    bump(s, by) -> ct_slot_bump(s, by);
+    total(s)    -> ct_slot_total(s);
+}
