@@ -2081,26 +2081,34 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   与 `<Instance>_<Trait>_vtable`，沿用既有 trait / vptr 路径；固有方法优先于 trait 方法。
 - **静态固有方法与 range 初值构造（Phase 29 P29 补丁）**：`impl` 体内可写
   `static Ret name(params)`，落码 `<Instance>_<name>` 且**没有** `self` 参数，调用面是
-  `Type<Args>::name(args)`；`static` 只能进固有 impl，带 `use` 的 impl 里是硬错。
+  `Type<Args>::name(args)`；`static` 只能进固有 impl，带 `use` 的泛型 impl 与经典
+  `impl Trait for Struct` 里都是硬错（vtable 槽位没有接收者）。
   `Vec<T>` 因此有 `Vec<T>::from(T *items, int n)`（复制 `n` 个元素）。声明初值
   `a..b { expr }` 与 Phase 24 的 `a..b(expr)` 同义；当声明类型是 `Vec<T>` 时，range 是
   「产物为静态数组」的表达式，降级为 `Vec_<enc>_from((T[n]){ … }, n)`，因此
   `Vec<int> v = 4..8 { $ * $ };` 合法。编译器只知道入口名与元素 C 类型，**不认识 `Vec` 的字段**
-  （`docs/design/phase29.md` §11）。`v[i]`、`m["k"]` 与 `Map` 的 `{ "k": 1 }` 仍不支持。
+  （`docs/design/phase29.md` §11）。`v[i]`、`m["k"]` 与 `Map` 的 `{ "k": 1 }` **仍不支持**，但不再是
+  静默放行：三条都在编译期报可读错误（`a Vec is not subscriptable: use get(i) / set(i, v)`、
+  `a Map is not subscriptable: use get(key)`、`a Map cannot be initialized from a brace list: use
+  put(key, value)`），不会把非法 C 交给 `cc`。
 - **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/std/Vec.h.ct`，编译模式在输入前
-  自动预解析，**不需要 `import`、不需要 `-I`**（`ct build` 尚未接入）。三个拼写是保留名，
-  用户不能再声明同名 struct。
+  自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
+  三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
+  内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），须升级 `std` 包或删掉该 import。
+- **`Map` 的键**：只接受 `int` / `long` / `char *`，其他类型在类型实参处硬错（L29-8）。`int` / `long`
+  按键的字节比较，`char *` 走 `strcmp`；两条路径是 `lib/std/Vec.h.ct` 里两个 `impl` 块，不靠
+  `sizeof` 猜测键的类别。
 - **容器语义**：`Vec` / `Map` 是引用计数的句柄（共享 `ct_buf`），`retain` 增加、`release` 减少并
-  返回剩余计数，归零时释放；对已归零句柄再次 `release` 是硬错（`abort`）。`Vec.get` / `Map.get`
+  返回剩余计数，归零时释放。`release` 之后该句柄即失效：对同一句柄再次 `release` 是硬错（`abort`），
+  即使共享缓冲还被 `retain` 出的兄弟句柄持有，也不会把计数再减一次。`Vec.get` / `Map.get`
   越界或未命中返回零值 / 空指针，`set` 越界是 no-op。`Map` 按**插入序**遍历，重复键原位改值，
   `remove` 让后继条目左移。
 - **`foreach` 容器协议**：数组与 `Vec` 同时绑定 `item`（元素的值拷贝）与只读 `i`；`Map` 只绑定
   `item`，它是 `MapEntry`，用 `item.key` / `item.value` 读写。长度在循环开始前取一次。对 `i`
   赋值 / 自增 / 取地址是硬错（L29-16），循环体内重声明 `item` 或 `i` 是硬错（L29-17），
   在 `Map` 体内使用 `i` 是硬错（L29-18）；容器元素与接口值不能按值拷贝（L29-15）。
-- **不支持**：参数化 trait、约束、默认类型实参、显式实例列表、`Map` 键白名单、`ct build` 的
-  内置层自动加载。已知偏差（`long` 键与指针同宽时按字符串比较、`Map` 线性扫描）见
-  `docs/design/phase29.md` §10.2。
+- **不支持**：参数化 trait、约束、默认类型实参、显式实例列表。已知偏差（`Map` 线性扫描、无哈希
+  索引）见 `docs/design/phase29.md` §10.2。
 
 ---
 
@@ -4447,30 +4455,40 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   path; an inherent method wins over a trait method of the same name.
 - **Static inherent methods and the range initialiser (Phase 29 P29 patch)**: an `impl` body may
   declare `static Ret name(params)`, lowered as `<Instance>_<name>` with **no** `self` parameter and
-  called as `Type<Args>::name(args)`; `static` is refused in a `use` impl. `Vec<T>` therefore has
+  called as `Type<Args>::name(args)`; `static` is refused in a `use` impl and in a classic
+  `impl Trait for Struct` block (a vtable slot has no receiver). `Vec<T>` therefore has
   `Vec<T>::from(T *items, int n)` (copies `n` elements). A declaration initialiser `a..b { expr }`
   means the same as Phase 24's `a..b(expr)`; when the declared type is `Vec<T>` the range is an
   expression whose product is a static array, lowered to `Vec_<enc>_from((T[n]){ … }, n)`, so
   `Vec<int> v = 4..8 { $ * $ };` is legal. The compiler knows only the entry's name and the element's
   C type — it does **not** know `Vec`'s fields (`docs/design/phase29.md` §11). `v[i]`, `m["k"]` and
-  `Map`'s `{ "k": 1 }` are still unsupported.
-- **Built-in layer**: `Vec<T>`, `Map<K, V>` and `MapEntry<K, V>` live in `lib/std/Vec.h.ct` and are
-  pre-parsed before the input in compile mode, so they need **no `import` and no `-I`** (`ct build`
-  does not wire this yet). The three spellings are reserved.
+  `Map`'s `{ "k": 1 }` are **still unsupported**, but no longer pass silently: all three are
+  compile-time errors (`a Vec is not subscriptable: use get(i) / set(i, v)`, `a Map is not
+  subscriptable: use get(key)`, `a Map cannot be initialized from a brace list: use put(key,
+  value)`), so no illegal C reaches `cc`.
+- **Built-in layer**: `Vec<T>`, `Map<K, V>` and `MapEntry<K, V>` live in `lib/std/Vec.h.ct`; compile
+  mode pre-parses it before the input and `ct build` loads it as one more unit, so **neither needs an
+  `import` or an `-I`**. The three spellings are reserved; a legacy `import std::vec` that still
+  declares `Vec` now collides with the built-in name (`'Vec' is a built-in type and cannot be
+  redeclared`), so the project must upgrade `std` or drop that import.
+- **`Map` keys**: only `int`, `long` and `char *` are accepted; any other key is a hard error at the
+  type argument (L29-8). `int` / `long` keys compare by their bytes and `char *` keys by `strcmp`;
+  the two paths are two `impl` blocks in `lib/std/Vec.h.ct`, not a `sizeof` guess.
 - **Container semantics**: a `Vec` / `Map` is a reference-counted handle over a shared `ct_buf`;
-  `retain` raises and `release` lowers the count and returns the remainder, freeing at zero.
-  Releasing an already-zero handle is a hard error (`abort`). `get` answers a zero value / null
-  pointer out of range or on a miss, `set` past the end is a no-op. `Map` iterates in **insertion
-  order**, rewrites a repeated key in place, and `remove` shifts the following entries left.
+  `retain` raises and `release` lowers the count and returns the remainder, freeing at zero. A
+  released handle is dead: releasing the same handle again is a hard error (`abort`) even while a
+  sibling handle from `retain` still owns the buffer, so the count is never lowered twice. `get`
+  answers a zero value / null pointer out of range or on a miss, `set` past the end is a no-op. `Map`
+  iterates in **insertion order**, rewrites a repeated key in place, and `remove` shifts the
+  following entries left.
 - **`foreach` container protocol**: an array and a `Vec` bind `item` (a by-value copy of the element)
   and the read-only `i`; a `Map` binds only `item`, which is a `MapEntry` read through `item.key` /
   `item.value`. The length is taken once before the loop. Assigning to, incrementing or taking the
   address of `i` is a hard error (L29-16), redeclaring `item` or `i` inside the body is a hard
   error (L29-17), using `i` in a `Map` body is a hard error (L29-18), and a container element or an
   interface value cannot be copied by value (L29-15).
-- **Out of scope**: parameterised traits, bounds, default type arguments, explicit instance lists,
-  a `Map` key whitelist and the built-in layer in `ct build`. The known deviations (a `long` key
-  compared as a string when it is pointer-width, and `Map`'s linear scan) are listed in
+- **Out of scope**: parameterised traits, bounds, default type arguments and explicit instance
+  lists. The known deviations (`Map`'s linear scan, no hash index) are listed in
   `docs/design/phase29.md` §10.2.
 
 ### 7. Capacity limits

@@ -83,6 +83,7 @@
 | `24_vec_ops` | 内置 `Vec` 全 API（Phase 29）：`push` / `pop` / `get` / `set` / `len` / `clear` 的边界语义，`retain` / `release` 的引用计数与归零释放 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `25_wordcount` | 真实程序（Phase 29）：`Map<char *, int>` 词频统计，先按插入序输出，再复制条目按计数排序出报告 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `26_range_vec` | range 初值构造 `Vec<T>`（Phase 29 P29）：`Vec<int> sq = 4..8 { $ * $ }` 经复合字面量 + `Vec<T>::from` 纯降级，`foreach` 绑定 `i` / `item`，并直接调用 `Vec<char *>::from(arr, n)` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `27_map_keys` | `Map` 的三种键（Phase 29 V29-1）：`Map<long, int>` / `Map<int, char *>` / `Map<char *, int>` 的 `put` / `get` / `remove` / `len`，证明 `long` 键不走 `strcmp`、白名单外的键编译期硬错 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
 ## 门禁归属说明
 

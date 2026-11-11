@@ -20,16 +20,24 @@
 | `MapEntry` | `MapEntry<K, V>`，`foreach` 的 `item` 类型（`key` / `value` 字段） |
 
 这三个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
-（`frontend/module/MapTable.h.ct`）。显式路径 `std::vec::Vec` / `std::map::Map` 指向同一类型。
+（`frontend/module/MapTable.h.ct`）。它们没有 `std::vec::Vec` / `std::map::Map` 这样的模块路径别名：
+内置层是预解析的一个单元，不是 `std` 包的一部分。
+
+**从旧 `std` 包升级**：Phase 29 之前 `Vec` / `Map` 由 `ct-pkg/std` 的 `vec.ct` / `map.ct` 提供，
+项目里通常写着 `import std::vec` / `import std::map`。内置层生效后这些拼写成了保留名，旧包的声明
+会撞上 `'Vec' is a built-in type and cannot be redeclared`。处理方式：升级 `std` 包到删除容器章节的
+版本，或删掉项目里的 `import std::vec` / `import std::map` 与本地副本；容器 API 与旧包一致。
 
 ## 语义口径
 
 - **移动语义 + 显式 `retain()`**：变量间直接拷贝是硬错；从函数调用初始化/赋值视为移交；
-  `release()` 递减引用计数，**归零后再 `release` 是硬错**，不是静默 no-op。
+  `release()` 递减引用计数并让该句柄失效，**同一句柄第二次 `release` 是硬错**（`abort`），
+  即使 `retain` 出的兄弟句柄还持有共享缓冲，也不是静默 no-op / 二次递减。
 - **不自动析构**：容器没有 `Drop` 级联；`own` / `borrow` 不能进容器。
 - **`Map` 插入序**：紧凑 entries + 删除左移；扩容不改顺序，golden 稳定。
-- **`Map` 键**：当前实现按 `sizeof(k) == sizeof(char *)` 选 `strcmp` / `memcmp`（见 phase29 §10.2
-  的偏差），键白名单（L29-8）待参数化 trait。
+- **`Map` 键**：白名单 `int` / `long` / `char *`，由编译器在类型实参处强制（L29-8）。`int` / `long`
+  按键的字节比较，`char *` 走 `strcmp`；两条路径分别是 `impl<K, V> Map<K, V>` 与
+  `impl<V> Map<char *, V>`，不以 `sizeof` 判断键类别（64 位下 `long` 与指针同宽）。
 - **构造入口**：`impl<T> Vec<T>` 里的 `static Vec<T> from(T *items, int n)` 是唯一会读取
   `Vec` 布局的构造路径；编译器的 range 初值语法糖只降级成
   `Vec_<enc>_from((T[n]){ … }, n)`，不知道 `ct_buf` 与字段（phase29 §11）。源码里也可以直接写

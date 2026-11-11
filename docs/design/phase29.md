@@ -2,13 +2,16 @@
 
 > 中文。
 >
-> **状态：完成**（2026-11-11 最终验收，E29-1…E29-13 逐条见 §10.3.5；同日用户授权的 P29 补丁
-> ——`Vec<int> v = 4..8 { $ * $ }` 经复合字面量 + `Vec<T>::from` 纯降级——逐条见 §11，
-> 补丁后 `check-all.sh` 11 道硬门禁仍全绿）。
-> 二次复核补上了 E29-5 的 `ct build` 路径（§10.3.4）；本轮验收把 E29-7 的位置/单错断言、
-> E29-9 的 `check`/`build` 同文案、E29-12 的两条 arity 负例、E29-3 的两次构建一致补进真门禁，
-> `check-all.sh` 11 道硬门禁全绿（`check-ast` 962 passed / 0 failed；962 为 Phase 29 收口时基线，29 的 range 补丁后为 972，见 §10.3.5）。
-> 仍在 §10.2 偏差表里的 L29-13 / L29-14 不在 E29-1…E29-13 的判据文本内。
+> **状态：实施中**（2026-11-11 独立收口评审结论 **NO-GO**：上一版「E29-1…13、P29-1…5 全满足、
+> Phase 29 完成」的声明不成立。评审列出的 5 项 High、6 项 Medium、2 项 Low 已逐条修复，修复块记在
+> §11.2 的 V29-1…V29-5 与 §3.1 的基线红证；当前状态等复评裁决，不再自称完成）。
+> 已修复的关键项：`Map<long,V>` 的 `strcmp` 误判与键白名单（V29-1）、`retain` 后二次 `release`
+> 的 UAF（V29-2）、经典 `impl` 里的 `static`（V29-3）、容器下标/花括号初值的非法 C（V29-4）、
+> 容器元素为接口/带 vptr struct（V29-5）；E29-10 的 `ct build` 过期说法、E29-7 的基线红证、
+> P29-4 的证据行、`std::vec::Vec` 别名、`import std::vec` 升级说明、`Vec<Vec<int>>` 的 S2/B7 描述、
+> L29-5/6/13/14 的状态词、roadmap/§10.3.5 的计数、§2.3 的实现偏差均已按事实更正。
+> 另：`selfhost/l2/core.ct` 的 `MAX_CALLS 512→1024` 在 `AGENTS.md` 第 93 行有例外记录，故不回退，
+> §1.1 的冻结层条款已同步。
 > **主题来源**：用户 2026-11-10「`Vec` 和 `Map` 应该作为内置的数据结构，从 ct-pkg 的 `std` 移到
 > 内置类型」「`foreach_statement.ct` 没有把 map 纳入进来」；同日的取舍「`Callable` 内建先不做」。
 > 关联：[phase28.md](phase28.md)（约束泛型函数）、[phase26.md](phase26.md)（泛型函数）、
@@ -47,8 +50,8 @@
 | --- | --- |
 | Phase | 29 |
 | 目标版本 | `v0.29.0`（Phase 28 收口 `v0.28.0` 后；本相不在 `v0.26.x` / `v0.28.x` 内夹带） |
-| 改动边界 | `selfhost/ct-ast/**`、新增 `lib/std/**`（迁入 `Vec`/`Map`）、`test/**`、`examples/**`、`docs/**`、`AGENTS.md`；L0/L1/L2 只允许收口时改 `CTC_VERSION` |
-| 冻结层 | `selfhost/l0/ctc.c`、`selfhost/l1/**`、`selfhost/l2/**` 只读（版本串除外）；新能力只落 `selfhost/ct-ast/**` 与 `lib/std/**` |
+| 改动边界 | `selfhost/ct-ast/**`、新增 `lib/std/**`（迁入 `Vec`/`Map`）、`test/**`、`examples/**`、`docs/**`、`AGENTS.md`；L0/L1/L2 只允许收口时改 `CTC_VERSION`，外加 AGENTS 已登记的 L2 `MAX_CALLS 512→1024` 例外（不改变任何产物） |
+| 冻结层 | `selfhost/l0/ctc.c`、`selfhost/l1/**`、`selfhost/l2/**` 只读（版本串与 AGENTS「例外（Phase 29 自举容量）」登记的 `MAX_CALLS` 除外，见 `AGENTS.md` 第 93 行）；新能力只落 `selfhost/ct-ast/**` 与 `lib/std/**` |
 | 判据冻结 | E29-1…E29-13 与 L29-1…L29-18 在首个实现提交前冻结；此后只向判据靠拢 |
 
 ### 1.2 一句话目标
@@ -65,7 +68,7 @@
 | # | 内容 |
 | --- | --- |
 | S1 | 泛型 struct 声明（**对用户开放**）：`struct Name<T>` / `struct Name<T, U>`，最多 2 个类型参数；字段类型可引用类型参数；用户自定义与内置容器无语法差异 |
-| S2 | 显式实例化：`Name<int>`、`Map<char *, int>`、`Vec<Vec<int> >`；嵌套类型实参深度 ≤ 4 |
+| S2 | 显式实例化：`Name<int>`、`Map<char *, int>`、`Box<Box<int> >`（嵌套）；**容器不能作容器元素**（L29-11，`Vec<Vec<int>>` 是负例）；嵌套类型实参深度 ≤ 4 |
 | S3 | 布局单态化：每个 `(模板, 实参拼写)` 生成一份独立 C 结构体，字段按替换后的类型发射；不写 AST、不改类型表示 |
 | S4 | 实例命名：`<Template>_<encoded-args>`，编码规则、溢出摘要与碰撞检查见 §2.2 与 D29-6 |
 | S5 | 泛型 impl：`impl<T> Pair<T, int> { … }` 形态的方法按实例化落成 `<MonoStruct>_<Trait>_<method>`；既有 vtable 命名族只做**组合扩展**，不改既有规则 |
@@ -145,7 +148,7 @@
 | E29-4 | `foreach` 容器语义：`item` 是值拷贝（块内改写不回写，与 Phase 27 数组一致）；数组 / `Vec` **同时**有 `item` 与只读 `i`，`i` 不可重声明（L29-16/17）；`Map` 体内使用 `i` 报 L29-18；长度在循环前快照一次（沿用 D27-7）；`break` / `continue` / `return` 与数组形态一致；非容器与缺方法的负例各只报一条 L29 | 夹具 140/141 + `foreach_container_*` 负例表 |
 | E29-5 | 内置层只覆盖容器：不执行 `ct get std` 时 `Vec` / `Map` 可直接使用（无需 import）；**`std::str` / `std::io` / `std::math` 仍需 `ct get std`**（本相不迁）；`vendor/std` 存在时给一条遮蔽告警且仍用内置 `Vec`/`Map` | `test/modules/p29_builtin_std/` + 告警文案断言；另断言 `import std::str;` 在无 vendor 时仍失败 |
 | E29-6 | 容器 API 正例：`push` / `get` / `set` / `pop` / `clear` / `retain` / `release` 与 `put` / `get` / `remove` / `entry` 的返回值和边界行为符合 §2.4；`retain` 后两个句柄都能读，`release` 到 0 后不重复释放 | `test/ast/142_vec_api/`、`143_map_api/` 运行输出 + ASAN 门禁 |
-| E29-7 | 十条泛型 struct 负例（含 2 条「内置 / 用户泛型 struct 无特例」）与五条 `foreach` 负例各自只产生一条 L29 错误，文案与 `file:line:col` 精确匹配；基线 `v0.28.0` 对同一夹具给出不同结果（红证非空转） | `check-ast.sh` 的 `"fixture\|line:col\|message"` 表 + §3.1 基线记录 |
+| E29-7 | 十条泛型 struct 负例（含 2 条「内置 / 用户泛型 struct 无特例」）与五条 `foreach` 负例各自只产生一条 L29 错误，文案与 `file:line:col` 精确匹配（`p29_neg` 校验文案 + 位置 + 单条）；基线 `1c87fab` 对同一夹具给出不同结果（红证非空转，§3.1） | `check-ast.sh` 的 `p29_neg` 表 + §3.1 基线原始输出与 SHA |
 | E29-8 | 非泛型 golden 逐字节不变；既有 `check-ast` 断言零回归；`check-warnings` 零新增告警 | `check-goldens.sh` / `check-ast.sh` 汇总 `0 failed` |
 | E29-9 | 11 道硬门禁全绿；`ct check` 与 `ct build` 对负例同文案 | `bash selfhost/check-all.sh` 末行 |
 | E29-10 | 文档：spec / tutorial / AGENTS 已更新；样例 22–25 已进 `examples/README.md` 与 `test/run.sh`；文档门禁绿 | `python3 test/docs/check-docs.py` + `./test/run.sh` |
@@ -168,9 +171,9 @@
 | B2 **内置 `Vec`：增删查改 + `foreach`** | `examples/24_vec_ops/` + `test/ast/142_vec_api/`、`140_foreach_vec/` | `push/get/set/pop/clear/retain/release` 全走一遍；`foreach (v)` 同时用 `item` 与只读 `i` | `test/run.sh` + `check-ast.sh` + ASAN | 负例：写 `i`（L29-16）、重声明 `item`/`i`（L29-17）；越界 `get` 返回零值断言 |
 | B3 **内置 `Map`：`foreach` 键值 + 顺序** | `examples/22_foreach_map/` + `test/ast/141_foreach_map/` | `item.key` / `item.value`；插入序输出；`remove` 后左移补位顺序不变；`put` 已有键原位改值 | `test/run.sh` + 两次构建 `cmp` | 负例 `foreach_container_map_i.ct`：`Map` 体内用 `i` 报 L29-18；重复运行与两次编译产物逐字节一致 |
 | B4 **接近真实程序**：`Map` 词频统计 | `examples/25_wordcount/`（新） | 读固定词表 → `Map<char *, int>` 计数 → `foreach` 输出 → 按计数排序后输出；`char *` 键 + 整数值的真实组合 | `test/run.sh` + ASAN | `expected.out` 逐字节比对；同一输入两次运行一致；无泄漏 |
-| B5 **泛型 impl** | `test/ast/147_generic_impl/`（新） | `impl<T> Pair<T, int> { … }`、`impl<T> Stack<T> use Show`；方法按实例落成 `<MonoStruct>_<Trait>_<method>` | `check-ast.sh` | `grep` 两份实例方法名；负例：方法名/arity 不匹配命中既有诊断 |
+| B5 **泛型 impl** | `test/ast/147_generic_impl/`（新） | `impl<T> Pair<T, int> { … }`、`impl<T> Stack<T> use Show`；方法按实例落成 `<MonoStruct>_<Trait>_<method>` | `check-ast.sh` | `grep` 两份实例方法名；负例 `test/ast/errors/generic_impl_missing_method.ct`：方法名不匹配报既有硬错 `no method 'nope' for type 'struct Pair_int_int'`；arity 不匹配沿用既有**警告**（`arity mismatch: 'second' takes 1 argument(s), 0 given`），不是硬错 |
 | B6 **泛型 + 模块边界** | `test/modules/p29_generic_struct/` + `test/modules/errors/generic_struct_pub_fn.ct`（新） | `pub` 泛型 struct 跨单元共享布局；泛型**函数** `pub` 仍被拒（L26-2） | `check-ast.sh` 的跨单元块 | `.h` 携带单态化定义断言；L26-2 文案逐字匹配；两单元布局逐字段比对 |
-| B7 **双参数 / 嵌套实参** | `test/ast/138_generic_struct/`、`139_generic_struct_two/` | `Pair<int, char *>`；`Vec<Vec<int> >`（`>>` 拆分）；深度 4 上限 | `check-ast.sh` | 负例：深度 5 报 L29-4；3 参数报 L29-2；禁用实参报 L29-3 |
+| B7 **双参数 / 嵌套实参** | `test/ast/138_generic_struct/`、`139_generic_struct_two/` | `Pair<int, char *>`；`Box<Box<int> >`（`>>` 拆分，非容器）；深度 4 上限；**`Vec<Vec<int> >` 不在此列**，它是 L29-11 的负例（`container_element.ct`） | `check-ast.sh` | 负例：深度 5 报 L29-4；3 参数报 L29-2；禁用实参报 L29-3；容器作元素报 L29-11 |
 | B8 **所有权 / 容器语义负例** | `test/ast/errors/container_own.ct`、`container_copy.ct` | `own` / `borrow` 值入容器（L29-10）；容器按值拷贝（L29-9）；容器元素为容器（L29-11） | `check-ast.sh` + `142/143` 的 ASAN | 三类负例各自只报一条 L29；`retain` / `release` 到 0 不重复释放（ASAN） |
 | B9 泛型 + 闭包回调 / 泛型体内实例化容器 | 本相**不做** | 闭包非逃逸且容器不可持有闭包；泛型函数体内实例化 `Vec<T>` 属 D26-9 禁止的「泛型体内泛型调用/实例化」 | — | 闭包角度由 [phase28.md](phase28.md) §1.5.1 的 A3 覆盖；泛型体内实例化登记为 §8 O9 的触发信号 |
 
@@ -192,7 +195,7 @@
 | R1 | 实例名编码碰撞：`char *` 与 `char*`、`struct P` 与 `P` 归一后同名 | 编译期编码表报告「同一编码对应两个规范拼写」 | 规范拼写由 `parse_type` 产出；编码表做双向校验，冲突即 L29-5，不静默合并 |
 | R2 | `MAX_TEXT 160` 装不下「模板名 + 实参 + trait + 方法」 | 组合名长度 ≥ 160 | 实例名编码上限 64，超出截断 + 8 位摘要；组合名在发射前预检，超限 L29-6 |
 | R3 | 跨单元布局漂移（同一实例在两个单元字段不同） | `.h` 两份定义的字段序列不一致 | 由同一模板 + 同一实参在同一 `Symbols`/`Arena` 上生成；E29-2 做逐字段比对 |
-| R4 | `>>` 词法把嵌套实参的收尾吞成右移 | `Vec<Vec<int>>` 解析失败 | 类型实参上下文允许拆 `>>`；词法器不改，解析器在类型位分流（D29-2） |
+| R4 | `>>` 词法把嵌套实参的收尾吞成右移 | `Box<Box<int>>` 解析失败 | 类型实参上下文允许拆 `>>`；词法器不改，解析器在类型位分流（D29-2） |
 | R5 | 泛型 impl 方法名与结构体自有字段/方法重名 | 方法解析选错 | 实例方法按「结构体自有 > trait 方法」既有优先级；新增夹具覆盖 |
 | R6 | 容器在 `foreach` 中被修改导致越界 | 循环体 `push` / `remove` 后读到零值 | 长度快照 + `get` / `entry` 边界返回零值，不越界；文档写明「迭代中修改不扩展循环」 |
 | R7 | 引用计数漏释放 | ASAN 报 leak 或释放后使用 | `retain`/`release` 逐次断言；`own` 值禁止入容器；样例在 ASAN 门禁下运行 |
@@ -246,8 +249,9 @@ impl<T> Pair<T, int> {
   出现在值位置一律硬错（沿用 Phase 26 的 `tparam` 值位置守卫，D26-15）。
 - 类型实参的合法形态：内置标量、`struct` / `union` / `enum` 类型、指针、其他泛型 struct 实例。
   **禁止**：`void`、数组类型、函数指针类型、带 `const` / `volatile` 限定的类型（L29-3）。
-- 嵌套实参深度 ≤ 4（`Vec<Vec<Vec<Vec<int> > > >` 是上限）；`>>` 在类型实参上下文由解析器拆分。
-- `Vec` / `Map` / `MapEntry` 是保留名；用户声明同名类型即 L29-7。`std::vec::Vec` 等限定名指向同一内置类型。
+- 嵌套实参深度 ≤ 4（`Box<Box<Box<Box<int> > > >` 是上限；容器不能作容器元素，见 L29-11）；`>>` 在类型实参上下文由解析器拆分。
+- `Vec` / `Map` / `MapEntry` 是保留名；用户声明同名类型即 L29-7。内置层没有 `std::vec::Vec` 这类
+  模块路径别名：它是预解析的一个单元，不在 `std` 包里（V29 评审后修正）。
 
 ### 2.2 实例化、布局与命名
 
@@ -286,21 +290,31 @@ impl<T> Pair<T, int> {
 **内置层 → 用户 import → `vendor/`**；内置层里的 `Vec` / `Map` / `MapEntry` 无需 import 即可见。
 `lib/std/` 内的模块仍是普通 CT 源码，遵循 `.h.ct` 只放类型、`.m.ct` 只放映射的既有规则。
 
-| 类型 | 布局 | 说明 |
+| 类型 | 布局（实现现状） | 说明 |
 | --- | --- | --- |
-| `Vec<T>` | `{ struct __ct_buf *h; T *data; }`，`h = { int refs; int len; int cap; }` | 动态数组；容量 2 倍增长；`data` 由 `mem.ct` 的 `malloc` / `realloc` 管理 |
-| `Map<K, V>` | `{ struct __ct_buf *h; struct MapEntry_K_V *entries; int *index; }` | 紧凑 entries + 开放寻址索引；`len` 是 entries 的有效条数 |
+| `Vec<T>` | `{ struct ct_buf *h; T *data; }`，`ct_buf = { int refs; int len; int cap; }` | 动态数组；容量 2 倍增长；`data` 由 libc `malloc` / `realloc` 直接管理 |
+| `Map<K, V>` | `{ struct ct_buf *h; struct MapEntry<K, V> *entries; }` | 紧凑 entries，**线性扫描**；`len` 是 entries 的有效条数 |
 | `MapEntry<K, V>` | `{ K key; V value; }` | `foreach` 的 `item` 类型；也是 `entry(int)` 的返回类型 |
 
-**`Map` 的键白名单**（D29-9）：`int`、`long`、`char *`。理由：Phase 28 的约束方法签名不允许出现
-类型参数，写不出 `trait Hash { int hash(K); }`；为 `Map` 单独引入参数化 trait 会把 Phase 29 拖进
-Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数做混合，`char *` 用 FNV-1a + `strcmp`。
+> **实现偏差（V29-1 后按事实记录）**：本节初稿写的是 `__ct_buf`、`Map` 带 `int *index` 的开放寻址
+> 索引、白名单键用内置哈希（整数混合 / FNV-1a）。落地的是 `ct_buf`（无下划线前缀）、**无索引**的
+> 线性扫描、以及按类型分的两个 `impl` 块：`int` / `long` 比字节，`char *` 比 `strcmp`。没有哈希，
+> 因为没有 `Hash` / `Eq` 约束可用（D29-9 的原始理由）；`get` / `put` / `remove` 是 O(n)，`len` 仍是
+> O(1)。§10.2 只保留与实现相关的剩余偏差，本节不再重复承诺未落地的形态。
+
+**`Map` 的键白名单**（D29-9，已由 L29-8 强制）：`int`、`long`、`char *`。理由：Phase 28 的约束方法
+签名不允许出现类型参数，写不出 `trait Hash { int hash(K); }`；为 `Map` 单独引入参数化 trait 会把
+Phase 29 拖进 Phase 28 §4.2 的 750–1350 行路线。白名单在 `parse_inst_type` 里对 `Map` 的第一个类型
+实参检查，白名单外的键给出 `Map does not support key type '<type>' (use int, long or char *)`，
+**不发射任何 C**。键的比较按类型分派：`int` / `long` 用 `memcmp` 比字节，`char *` 用 `strcmp`。
 
 **容器语义**（D29-10）：
 
 - 容器是**移动语义**的：`Vec<int> b = a;`、`b = a;`、把 `a` 作为实参或返回另一个容器，全部 L29-9。
 - 允许的两类「移交」：从函数调用初始化/赋值（`Vec<int> v = vec_new<int>();`）、以及显式
-  `a.retain()` 得到共享句柄。`release()` 递减 `refs`，到 0 释放 `data` 与 `h`。
+  `a.retain()` 得到共享句柄。`release()` 递减 `refs`，到 0 释放 `data` 与 `h`；**无论是否归零，
+  该句柄都被清空**，所以同一句柄第二次 `release` 是 `abort`（V29-2），不会把兄弟句柄还持有的缓冲
+  再减一次。
 - 容器不自动 `release`；`own` / `borrow` 值不得 `push` / `put`（L29-10），避免所有权与引用计数冲突。
 - `get` / `entry` 越界返回零值（元素/条目清零），不越界访问；迭代中修改不会扩展循环（长度快照）。
 
@@ -370,7 +384,8 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
   避免把「条目序号」误读成顺序保证；需要位置时用 `item.key` 或自行计数。
 - 集合表达式仍必须是**普通变量**（D27-3 / L27-4 的既有约束），这样取地址与长度快照都成立。
 - `K` / `V` 不能是接口值、含 vptr 的 struct、内置容器（L29-15）；这些值在 `foreach` 的 `item` 值拷贝里
-  会丢 vptr 或制造二次所有权。
+  会丢 vptr 或制造二次所有权。V29-5 之后这三类在**容器声明点**就由 L29-13 / L29-11 硬错，
+  `foreach` 侧只保留对内置 `MapEntry` 元素的兜底（夹具 `foreach_container_element.ct`）。
 - **`Map` 遍历顺序钉死为插入序**：`put` 新键追加到 entries 末尾；`put` 已有键原位改值；
   `remove` 左移补位保持相对顺序；扩容/重哈希只动索引，不动 entries。因此样例输出与 golden 稳定。
 - 长度快照沿用 D27-7：循环体内 `push` / `put` 不扩展本轮；`remove` 造成的缩短由 `get` / `entry`
@@ -444,7 +459,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | C2 | 内置 `Vec<T>` / `Map<K, V>` | 随编译器发行，无需 `ct get`；与 C1 同路径 | S6 / D29-8；E29-5、E29-12 |
 | C3 | 泛型 impl（非参数化 trait） | `impl<T> Pair<T, int> { … }`，方法按实例落成 `<MonoStruct>_<Trait>_<method>` | S5 / D29-6 |
 | C4 | `pub` 泛型 struct / 跨单元实例共享 | `.h` 携带单态化结构体定义，消费单元可直接声明变量 | D29-5；E29-2 |
-| C5 | 类型实参嵌套 | `Vec<Vec<int> >`，深度 ≤ 4；`>>` 由解析器拆分 | S2 / D29-2、D29-7 |
+| C5 | 类型实参嵌套 | `Box<Box<int> >`，深度 ≤ 4；`>>` 由解析器拆分；容器作元素是 L29-11 的负例（`Vec<Vec<int> >`） | S2 / D29-2、D29-7 |
 | C6 | 约束泛型函数（**Phase 28 已交付**） | `T max2<T: Ord>(T a, T b)`；单类型参数、单约束、显式实例化、静态派发 | [phase28.md](phase28.md) §1.3；本相不扩展约束语法 |
 | C7 | `foreach` 遍历数组 / `Vec` / `Map` | 统一 `item`；数组与 `Vec` 另有只读 `i`；`Map` 用 `item.key` / `item.value` | S8/S9 / D29-13、D29-14；E29-3、E29-4 |
 
@@ -476,16 +491,27 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 
 ## 3. 差距评估与估算校准
 
-### 3.1 现状红证（`v0.26.4` / `v0.28.0` 预期）
+### 3.1 现状红证（基线 = 提交 `1c87fab`，Phase 29 之前）
 
-| 探针 | 期望能力 | 现状（`v0.26.4` 实测） |
-| --- | --- | --- |
-| `struct Box<T> { T v; }` | 解析泛型 struct | `expected ';' after the struct body` 一类硬错；无类型参数分支 |
-| `Box<int> b;` | 实例化 | `unknown type 'Box<int>'` |
-| `foreach (m)`（`m` 是 `std::map` 或 `Map`） | 容器遍历 | `foreach needs an array; 'm' is not iterable`（L27-4） |
-| `import std::str;` 但未 `ct get std` | 内置层 | 找不到单元（内置层只含 `Vec`/`Map`，不含 `std::str`） |
+**基线口径（按事实）**：仓库没有 `v0.28.0` tag（`git tag` 最新为 `v0.27.0`）。本文件的基线是
+Phase 28 收口提交 `1c87fab733e0a02955bfcdeff668d10aec2017f3`。复现方式：`git archive 1c87fab`
+解到 `/tmp` 副本，用该树自己的 `l0 → l1 → l2 → ct-ast` 链重建编译器，再把下表夹具原样拷进去跑。
 
-红证在首个实现提交前用当时 HEAD 重新采集，写入 `check-ast.sh` 的 Phase 29 块。
+| 探针（当前夹具） | 期望能力 | 基线 `1c87fab` 原始输出 | 退出码 |
+| --- | --- | --- | --- |
+| `struct Box<T> { T v; }` | 解析泛型 struct | `fx/probe_generic_struct.ct:1:11: error: expected a name` | 1 |
+| `Box<int> b;` | 实例化 | `fx/probe_generic_inst.ct:3:8: error: use of an undeclared variable` | 1 |
+| `foreach (m)`（`m` 是容器） | 容器遍历 | `fx/probe_foreach.ct:3:15: error: use of an undeclared variable` | 1 |
+| `Vec<int>` / `Map<…>` 夹具（`container_*`、`foreach_container_*`、`generic_builtin_arity`） | 内置层 | 一律 `…:3:8: error: use of an undeclared variable`（基线没有 `lib/std`，`Vec`/`Map` 尚未内置） | 1 |
+| `generic_struct_arity` / `_depth` / `_user_arity` | L29-2 / L29-4 诊断 | `…:3:11–13: error: expected a name`（解析在 `struct X<T` 处就停，走不到判据） | 1 |
+| `impl Calc for Num { static int base() }` | V29-3 硬错 | `fx/impl_static_trait.ct:13: warning: signature mismatch: 'base' in impl of 'Calc' for 'Num': return type 'static int' does not match the trait's 'int'` | **0** |
+| `foreach_empty` | L27-4 文案 | `fx/e/foreach_empty.ct:3:14: error: foreach needs a collection expression` | 1 |
+
+结论：这批夹具在基线上要么走不到判据、要么只告警退出 0，红证非空转。
+
+**记录位置（按事实更正）**：上述红证是收口后补做的一次性采集，**没有**写进 `check-ast.sh`——门禁只跑
+当前编译器，跑不了 `1c87fab` 的产物。`check-ast.sh` 里只有各夹具的「文案 + `line:col` + 单条」预期
+表（`p29_neg`）。红证原文与 SHA 以本节为准。
 
 ### 3.2 分层估算（**估算**，非实测）
 
@@ -779,7 +805,7 @@ Phase 28 §4.2 的 750–1350 行路线。白名单内用内置哈希：整数�
 | O7 | 内置层与 `ct-pkg/std` 的双向迁移工具 | 只做一次性搬运 | 旧包仍有独立 bug 修复需求，或需要回滚到旧编译器 |
 | O8 | `foreach` 迭代中修改容器 | 长度快照 + 越界零值 | 出现真实的数据竞争/漏遍历报告，且可定义稳定语义 |
 | O9 | 泛型函数体内实例化泛型容器（如 `Vec<T>`） | 本相不做，沿用 D26-9 的「泛型体内禁止泛型调用/实例化」 | 用户明确要求「泛型函数返回 `Vec<T>`」；重启前需先解决实例化键的递归替换与去重（`Vec<T>` → `Vec_int`） |
-| O10 | `Vec` 的 range 初值 / 下标 / 字面量语法糖（`Vec<int> v = 4..8 { $ * $ }`、`v[i]`、`Map<char *, int> m = { "k": 1 }`、`m["k"]`） | 验收时四条均不支持：第 1 条是编译期硬错（`a range initializer declares an array`）；第 2/3/4 条静默通过但生成的 C 不可编译（`v[3]` → `struct Vec_int` 不能下标、`m["key"]` → `struct Map_char_p_int` 不能下标、`{ "k": 1 }` 的 `:` 不在 C 聚合初值语法里）。**P29-1 补丁已补第 1 条**（range 初值 + `Vec<T>::from` 入口，见 §11）；**2–4 仍是「不支持」，且仍无判据** | 出现第二个真实项目要求 `v[i]` / `m[k]`，且能接受「构造入口 + 纯降级」的语义；否则保持显式 `Vec_int_get` / `Map_*_get` |
+| O10 | `Vec` 的 range 初值 / 下标 / 字面量语法糖（`Vec<int> v = 4..8 { $ * $ }`、`v[i]`、`Map<char *, int> m = { "k": 1 }`、`m["k"]`） | 第 1 条由 P29-1 补成合法语法（range 初值 + `Vec<T>::from` 入口，见 §11）。第 2–4 条**仍不支持**：`v[i]` / `m["k"]` 指向的是 C 结构体，`{ "k": 1 }` 的 `:` 不在 C 聚合初值语法里。它们不再是「静默放行、把非法 C 交给 cc」：V29-4 在编译期给出位置化诊断（`a Vec is not subscriptable…` / `a Map is not subscriptable…` / `a Map cannot be initialized from a brace list…`），因此没有新增语法，但守住了「绝不发射非法 C」 | 出现第二个真实项目要求 `v[i]` / `m[k]`，且能接受「构造入口 + 纯降级」的语义；否则保持显式 `Vec_int_get` / `Map_*_get` |
 
 ---
 
@@ -834,16 +860,15 @@ design window: ok (12/12)
 | 项 | 实际口径 | 原因 / 后续 |
 | --- | --- | --- |
 | `Map` 索引 | 线性扫描 `entries[]`，无开放寻址 / 哈希索引 | 没有参数化 trait，无法对 `K` 做类型分派；`len` 仍 O(1)（`ct_buf` 计数），`get` / `put` / `remove` O(n) |
-| `Map` 键分派 | 运行时 `sizeof(k) == sizeof(char *)` 选 `strcmp` / `memcmp` | 已知偏差：64 位下 `long` 键与指针同宽，会被当字符串比较；需要参数化 trait 或键白名单（L29-8）才能真正收口 |
 | `mem.ct` | 未单独建；`Vec.h.ct` 直接调 libc `malloc` / `free` / `realloc` | 内置层只有四个类型，单独建单元反而要跨单元共享 `ct_buf` |
 | `MAX_CALLS` | `selfhost/l2/core.ct` 512 → **1024** | L2 是冻结 oracle，只放大接受能力以容纳变大的 ct-ast 源；行为不变，记为容量例外 |
 | `frontend/module/Map.h.ct` | 改名 `MapTable.h.ct`，类型 `Map` → `MapTable` | L29-7 把 `Map` 列为保留名；编译器自己的模块表不能占这个拼写 |
 | `i` 的绑定范围 | 数组与 `Vec` 都绑定只读 `i`（D29-14）；`Map` 也绑定但任何使用都是 L29-18 | 数组原先只绑 `item`，本相统一；既有夹具中在 `foreach` 体内声明 `int i` 的写法现在命中 L29-17 |
 | L29-17 的范围 | 只覆盖循环体内的显式声明（`N_DECL`） | 嵌套 `foreach` 重绑 `item` 仍是 D27-10 的警告（`ct check` 下为错误），不叠加第二个诊断 |
-| L29-5 / L29-6 | 未实现 | 编码冲突与超长名目前分别报通用错误 / 走摘要压缩；需要独立的实例命名表才能给准确文案 |
-| L29-8 | 未实现 | 键白名单要等参数化 trait；当前按 §10.2 第二行的 `sizeof` 规则运行 |
-| L29-13 | 未实现 | 「容器元素是接口值 / 含 vptr 的 struct」；E29-1…E29-13 原文无此编号，属 B8 的延伸（见 §10.3 的重启信号） |
-| L29-14 | 未实现 | 跨单元布局一致性已由「模板所在单元发布 `.h` + 每实例一份定义」从结构上避免（`test/modules/p29_generic_struct`），暂无第二份定义可比对 |
+| L29-5 | **已实现** | `ct_inst_add` 在编码已存在但规范拼写不同时返回 -2，`inst_make` 报 `two type arguments encode to the same C name '<name>'`（`Expr.h.ct`，§2.2 第 6 步）。夹具无法在不扩编码表的前提下构造碰撞，故只留代码路径与逐字文案 |
+| L29-6 | **已实现** | `ct_inst_encode` 超长失败 / `ct_inst_add` 返回负值时，`inst_make` 报 `the instantiated name exceeds 159 characters; shorten the template or its arguments`（`Expr.h.ct`），不截断、不静默压缩 |
+| L29-13 | **已实现（V29-5）** | `inst_make` 对 `Vec` / `Map` 的每个类型实参跑 `container_vptr_type`：接口值（`struct X_iface`）或带 vptr 的 struct（自身 `use`，或值字段递归）一律硬错 `interface and vptr-bearing values cannot be stored in a container`；`use Drop` / `use Handback` 无 vptr，不误伤。夹具 `container_iface.ct` / `container_vptr_struct.ct` |
+| L29-14 | **结构上不可达（不是未实现）** | 实例布局来自模板行，而一个 build 的所有单元共享同一个 `Symbols`：模板同名即重复定义错误，不存在「两份模板」可产生两份布局；实例的定义也只由模板所在单元发布一次（`test/modules/p29_generic_struct`）。要「比对两份定义」需要一个能产生它们的编译路径，本编译器没有这条路径，故该诊断没有可达输入 |
 | `ct build` 的内置层 | **已接入**（2026-11-11 二次复核后补）：`Module.h.ct` 在加载输入前解析 `lib/std/Vec.h.ct`，作为独立单元参与发射；它**不是**任何单元的 import 边（避免破坏 D41 的 cache key 拼写与热缓存），由 emitter 在消费者的 `.c` / `.h` 里显式 `#include`，层单元每轮强制重发（实例集合进不了它的 cache key）。`check-warnings.sh` 已撤回对 `p29_builtin_std` 的跳过 | 首轮曾以「未接入」记账并跳过门禁，属于判据缺口；现由 `check-ast.sh` 的 build 路径断言与 `check-warnings.sh` 的模块扫描双重覆盖（§10.3.4） |
 | 固有方法实参检查 | 只检查元数，不检查实参类型 | 实例方法的形参在模板里是符号类型，`parse_type` 的实参检查需要实例上下文；已列为已知限制 |
 
@@ -885,11 +910,9 @@ design window: ok (12/12)
 
 #### 10.3.3 仍延后的项与重启信号
 
-`L29-13`（容器元素是接口值 / 含 vptr 的 struct）与 `L29-14`（跨单元布局比对）继续留在 §10.2：
-E29-1…E29-13 原文没有它们的编号，B8 的反向证明只点名 L29-9/10/11，因此延后不改判据结论。
-
-**L29-13 的重启触发信号**：用户要求容器元素可以是接口值或含 vptr 的 struct，或需要容器与装箱打通；
-在那之前它不进入任何 E 判据的判定。
+`L29-13`（容器元素是接口值 / 含 vptr 的 struct）在 V29-5 后**已实现**并进真门禁；`L29-14`（跨单元
+布局比对）不是延后而是**结构上不可达**（理由见 §10.2 该行）：布局只有一个来源，没有第二份定义可比。
+两者都不再以「未实现」记账。
 
 #### 10.3.4 二次复核：`ct build` 路径（2026-11-11）
 
@@ -965,6 +988,11 @@ acceptance: 20 pass, 0 new, 0 pending, 0 regression
 check-all: OK (11 hard gates green)
 ```
 
+> 上表是 Phase 29 收口轮的数字。NO-GO 修复块（V29-1…V29-5、`p29_neg` 的四重断言、`142` 的
+> 句柄语义调整）落地后再跑一轮，实测为 `check-ast.sh` **992 passed / 0 failed**、
+> `check-warnings.sh` **323 ok**、`check-docs` **OK（984 links / 179 files）**、
+> `test/run.sh` **139 passed / 0 failed**、goldens 82、acceptance 20/0，完整转录见 §11.3。
+
 `sanitizer` 单独跑，失败 10 项、通过 319 项；10 项全部为既有问题，与 Phase 29 无关：
 
 | 失败项 | 原因 | 与 29 的关系 |
@@ -997,6 +1025,10 @@ check-sanitizers: FAIL (10 failed, 319 passed)
   （`emit_range_init` 的构造形态、静态方法发射、`N_MCALL aux 11`）、`lib/std/Vec.h.ct`
   （`static Vec<T> from`）、`examples/26_range_vec/`、`test/ast/errors/range_vec_*.ct`（4 条）、
   `selfhost/check-ast.sh`（P29 块）、`examples/README.md`、本文件。L0/L1/L2 未动。
+- **收口评审后的补丁块（V29-1 / V29-2）**：`lib/std/Vec.h.ct`（字符串键 impl 块、`release` 清空
+  句柄）、`backend/emit/Emitter.h.ct`（`impl_method_shadowed`）、`frontend/parse/Expr.h.ct`
+  （L29-8 白名单检查）、`examples/27_map_keys/`、`test/ast/errors/map_key_bad.ct`、`selfhost/check-ast.sh`
+  （`p29 V29-1` / `p29 V29-2` 块）。
 - **B29-3 仍然有效**：编译器只读实例行里的 `tmpl` / `nargs` / `ctype[0]` / `name`，即
   「这是不是 `Vec`、元素 C 类型是什么、入口叫什么」；`Vec` 的字段、引用计数与分配策略只在
   `lib/std/Vec.h.ct` 的 `from` 里。语法糖产出的 C 里没有任何由编译器生成的 `->h` / `->data`。
@@ -1008,8 +1040,13 @@ check-sanitizers: FAIL (10 failed, 319 passed)
 | P29-1 | **range 初值可以构造 `Vec<T>`**：`Vec<int> v = 4..8 { $ * $ };` 编译、运行、输出逐字节匹配；产物是「复合字面量 + 构造入口」，即 `Vec_int_from((int[4]){ … }, 4)`；同时 `$` 仍只属于元素表达式 | `examples/26_range_vec/range_vec.ct` + `range_vec.expected.out`；`check-ast.sh` 的 `p29 P29-1` 断言（生成 C 含 `Vec_int_from((int[4]){ `、`cc -Wall -Wextra` 零告警、`diff` 期望输出）；`test/run.sh` 的 examples 扫描把该目录纳入真门禁 | `ok p29 P29-1`；`test/run.sh` 138 / 0；生成行见 §11.3 |
 | P29-2 | **内置 `Vec` 有「从数组构造」的入口，且可从源码调用**：`impl<T> Vec<T>` 内的 `static Vec<T> from(T *items, int n)` 落成 `Vec_<enc>_from`（无 `self` 参数）；调用面 `Vec<int>::from(arr, n)` 可用；`static` 方法不参与实例方法解析，实例方法也不被 `::` 解析；`static` 出现在 `use Trait` 块内硬错（vtable 槽位需要接收者） | `lib/std/Vec.h.ct` 的 `from`；`Parser.h.ct` 的 `static` 分支与 `a static method cannot implement a trait`；`Expr.h.ct` 的 `inst_static_method`（只认 `c == 1`）；`Emitter.h.ct` 的 `N_MCALL aux 11` | 样例第 3 段直接调用 `Vec<char *>::from(names, 3)`，输出 `a b c`；生成 `Vec_char_p_from(names, 3)` |
 | P29-3 | **编译器不认识 `Vec` 的布局**：`range_vec_target` 只看实例行的类型实参与名字；`from` 的实现全在 `lib/std/Vec.h.ct`；把 `Vec` 的字段改掉不需要改编译器 | `Stmt.h.ct` 的 `range_vec_target`（`strpbrk(base, " *[(")` 排除指针/数组，`tmpl == "Vec"`、`nargs == 1`）；`Vec.h.ct` 的 `from` 内部 `malloc` / `memcpy` / `refs/len/cap` 赋值 | 生成 C 的构造点只有 `Vec_int_from((int[4]){ … }, 4)`，语法糖不展开任何字段 |
-| P29-4 | **边界与作用域各一条负例**，均位置化、单条、无 `undeclared` 回落：`$` 只能在元素表达式内；空 range 硬错；超过 1024 个元素硬错；`Map` 目标保持 Phase 24 文案 | `test/ast/errors/range_vec_index_scope.ct` / `range_vec_empty.ct` / `range_vec_too_many.ct` / `range_vec_map_target.ct`；`check-ast.sh` 的 `p29_neg` 四条断言（文案 + 位置 + 不出现 `undeclared`） | 4 条 `ok`：`unexpected token`、`an empty range has no elements`、`too many range elements (limit 1024)`、`a range initializer declares an array` |
-| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 322 ok`、`check-docs: OK (981 links / 179 files)`、`check-ast: 972 / 0` |
+| P29-4 | **边界与作用域各一条负例**，均位置化、单条、无 `undeclared` 回落：`$` 只能在元素表达式内；空 range 硬错；超过 1024 个元素硬错；`Map` 目标保持 Phase 24 文案 | `test/ast/errors/range_vec_index_scope.ct` / `range_vec_empty.ct` / `range_vec_too_many.ct` / `range_vec_map_target.ct`；`check-ast.sh` 的 `p29_neg` 四条断言（逐字文案 + `line:col` + 只允许一条 `error:` + 不出现 `undeclared`） | 4 条 `ok`：`unexpected token`、`an empty range has no elements`、`too many range elements (limit 1024)`、`a range initializer declares an array` |
+| V29-1 | **`Map` 的键按类型分派，白名单外的键硬错**：`int` / `long` 比字节、`char *` 比 `strcmp`，不以 `sizeof` 判断键类别；`Map` 的第一个类型实参不在白名单时报 L29-8，位置化且不落任何 C；两个匹配同一实例的固有 impl 不重复发射同名方法 | `lib/std/Vec.h.ct` 的 `impl<V> Map<char *, V>`（声明在泛型块之前）与纯 `memcmp` 的 `impl<K, V> Map<K, V>`；`Emitter.h.ct` 的 `impl_method_shadowed`；`Expr.h.ct` 的 L29-8 检查 | `test/ast/errors/map_key_bad.ct`（`6:20` + 逐字文案）；`examples/27_map_keys/` 三种键端到端；`check-ast.sh` 的 `p29 V29-1` 断言（`Map<long,int>` 产物无 `strcmp`；`Map_char_p_int_put/get` 各一份定义） |
+| V29-2 | **释放后的句柄不能二次 `release`**：`release()` 无论计数是否归零都清空该句柄；`retain` 出的兄弟句柄仍可读，对同一句柄二次 `release` 是 `abort`，不会把兄弟句柄的缓冲再减一次 | `lib/std/Vec.h.ct` 的 `Vec::release` / `Map::release`；`examples/24_vec_ops` 的共享句柄段 | `check-ast.sh` 的 `p29 V29-2` 断言（程序非零退出、`Vec: release on a released handle`、释放后 `sibling 1` 仍可读） |
+| V29-3 | **经典 `impl Trait for Struct` 里的 `static` 是硬错**：vtable 槽位没有接收者，`static` 不能被当成返回类型限定符后只告警、仍装进 vtable | `Parser.h.ct` 的经典 impl 方法循环（在 `parse_type` 之前拦 `static`） | `test/ast/errors/impl_static_trait.ct`（`13:5` + 逐字文案）；`check-ast.sh` 的 `p29_neg` 断言（文案 + 位置 + 单条） |
+| V29-4 | **容器下标与花括号初值给出可读诊断**：`v[i]`、`m[k]`、`Map<...> x = {…}` 一律编译期报错并指出位置，不再把 `subscripted value is not an array` / `expected expression` 甩给 `cc` | `Expr.h.ct` 的 `container_index_check` / `container_init_check`（`parse_postfix` 的 `[`、局部/全局声明初值、复合字面量三处调用） | `test/ast/errors/vec_subscript.ct`（`9:13`）、`map_subscript.ct`（`8:13`）、`map_brace_init.ct`（`5:26`）；`check-ast.sh` 的 `p29_neg` 断言 |
+| V29-5 | **L29-13 的容器元素检查落地**：接口值与带 vptr 的 struct（含值字段递归）不能进 `Vec` / `Map`；`use Drop` / `use Handback` 不误伤 | `Expr.h.ct` 的 `container_vptr_type` + `inst_make` | `test/ast/errors/container_iface.ct`（`19:15`）、`container_vptr_struct.ct`（`13:14`）；`check-ast.sh` 的 `p29_neg` 断言 |
+| P29-5 | **既有行为不回归**：Phase 24 的 `0..3($)` 数组形态、`check-goldens`、`check-warnings`、`check-docs` 与 E29 的 13 条证据全部维持 | `test/ast/errors/range_init_*` 与 `test/ast/1xx` 的 range 夹具照旧；`range_init_overflow` 仍报 `a range bound is out of range`（本轮手动复核） | `check-goldens: OK`、`check-warnings: 323 ok`、`check-docs: OK (984 links / 179 files)`、`check-ast: 992 / 0` |
 
 ### 11.3 补丁后的产物与门禁
 
@@ -1023,17 +1060,17 @@ static __attribute__((unused)) struct Vec_int Vec_int_from(int * items, int n) {
 
 ```text
 $ bash selfhost/check-all.sh
-== summary: 138 passed, 0 failed ==      (test/run.sh, 补丁前 137)
+== summary: 139 passed, 0 failed ==      (test/run.sh, 补丁前 137)
 == summary: 82 passed, 0 failed ==       (goldens)
-== summary: 972 passed, 0 failed ==      (check-ast, 补丁前 962)
-check-warnings: 322 ok, 0 failed         (补丁前 321)
-check-docs: OK (978 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+== summary: 992 passed, 0 failed ==      (check-ast, 补丁前 962)
+check-warnings: 323 ok, 0 failed         (补丁前 321)
+check-docs: OK (984 relative links in 179 files, v0.26.4, 11 hard gates, 12 phase status, 3 适用版本 header(s))
 acceptance: 20 pass, 0 new, 0 pending, 0 regression
 check-all: OK (11 hard gates green)
 ```
 
-本节写完后文档又多了 3 条相对链接，单独复跑 `python3 test/docs/check-docs.py` 报
-`OK (981 relative links in 179 files, …)`，仍为 OK。
+上面是 2026-11-11 修复块的最终实跑（与 §10.3.5 末尾的说明一致）；链接数随之从补丁前的 978
+升到 **984**，`check-docs` 仍为 OK。
 
 `sanitizer` 单跑仍是同样的 10 项既有失败，`passed` 从 319 升到 323（新增 4 条负例全部 `ok`）：
 
@@ -1050,7 +1087,7 @@ check-sanitizers: FAIL (10 failed, 323 passed)
 
 ### 11.4 仍未支持（与 §8 O10 对齐）
 
-补丁只补 O10 的第 1 条。`v[3]`、`m["key"]` 与 `Map<char *, int> m = { "key": 32, "key2": 869 };`
-**仍不支持**：两条下标形态在语法上静默通过但生成的 C 不可编译（`struct Vec_int` /
-`struct Map_char_p_int` 不能下标），字面量形态的 `:` 不在 C 聚合初值语法里。它们**没有新增判据**，
-也不在本补丁范围内。
+`v[3]`、`m["key"]` 与 `Map<char *, int> m = { "key": 32, "key2": 869 };` **仍不支持**：两条下标形态
+指向的 `struct Vec_int` / `struct Map_char_p_int` 不能下标，字面量形态的 `:` 不在 C 聚合初值语法里。
+V29-4 之后它们不再静默通过：三条都在编译期给出位置化诊断（见 §11.2 V29-4），不放行、不发射 C。
+新增语法不在本补丁范围内。

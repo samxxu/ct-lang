@@ -1160,19 +1160,26 @@ int main(void)
   都是硬错。
 - **`Map` 的次序**：插入序；重复键原位改值；`remove` 让后面的条目左移。
 - **引用计数**：`Vec` / `Map` 是共享 `ct_buf` 的句柄，`retain` 加一、`release` 减一并返回
-  剩余数，归零时释放；对已归零的句柄再 `release` 会 `abort`。
+  剩余数，归零时释放；`release` 之后该句柄即失效，对同一句柄再 `release` 会 `abort`
+  （即使 `retain` 出的兄弟句柄还持有共享缓冲）。
 - **range 初值构造 `Vec`**：`Vec<int> v = 4..8 { $ * $ };` 与数组的 `0..3($)` 同一套写法，
   `$` 仍是元素下标。产物是复合字面量交给 `Vec<T>::from`，所以语义等价于
   `Vec<int> v = Vec<int>::from((int[4]){ 16, 25, 36, 49 }, 4);`——静态入口可以自己调，
   `impl` 里的 `static Ret name(params)` 就是这种无 `self` 的方法。
 - **类型位**：`>>` 自动拆开（`Box<Box<int>>` 合法），实例最多两层参数、嵌套最多四层。
-- 已知限制：固有方法只检查元数、不检查实参类型；`ct build` 尚未接入内置层自动加载；
-  `v[i]` / `m["k"]` 与 `Map` 的 `{ "k": 1 }` 字面量尚不支持。
+- 已知限制：固有方法只检查元数、不检查实参类型；`v[i]` / `m["k"]` 与 `Map` 的 `{ "k": 1 }`
+  字面量尚不支持（但都会在编译期报错：`a Vec is not subscriptable: use get(i) / set(i, v)`、
+  `a Map is not subscriptable: use get(key)`、`a Map cannot be initialized from a brace list`）。
+  内置层在 `ct compile` 与 `ct build` 两条路径都自动加载，不需要 `import` / `-I`；旧项目若还
+  `import std::vec`，会与内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），
+  须升级 `std` 包或删掉该 import。
+- `Map` 的键只接受 `int` / `long` / `char *`；其余类型在类型实参处硬错（L29-8）。
 - 完整样例：[22_foreach_map](../examples/22_foreach_map/foreach_map.ct)、
   [23_generic_stack](../examples/23_generic_stack/generic_stack.ct)、
   [24_vec_ops](../examples/24_vec_ops/vec_ops.ct)、
   [25_wordcount](../examples/25_wordcount/wordcount.ct)、
-  [26_range_vec](../examples/26_range_vec/range_vec.ct)。
+  [26_range_vec](../examples/26_range_vec/range_vec.ct)、
+  [27_map_keys](../examples/27_map_keys/map_keys.ct)。
 
 细节见 [language-spec §4.51](language-spec.md)。
 
