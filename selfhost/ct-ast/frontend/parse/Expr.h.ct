@@ -165,6 +165,9 @@ pub trait ExprOps {
     int  peel_ptr(const char *ty, char *out, int cap);
     int  container_init_check(const char *ctype);
     int  container_global_init_check(const char *ctype);
+    /* Phase 31 S16b: one Map literal key or value against its slot, using the
+       19.2 coarse kernel. 0 compatible, 1 a confident mismatch, -1 undecidable. */
+    int  brace_arg_ok(const char *formal, const char *actual);
     int  parse_array_dims(int n);
     int  next_is_type_name(void);
     int  tok_is_type_name(void);
@@ -3438,7 +3441,29 @@ impl ExprOps for Expr {
         if (strncmp(ctype, "struct Vec_", 11) == 0 || strncmp(ctype, "Vec_", 4) == 0)
             return self->sup->fail(
                 "a Vec brace initializer is only supported in a local declaration");
-        return self->container_init_check(ctype);
+        if (strncmp(ctype, "struct Map_", 11) == 0 || strncmp(ctype, "Map_", 4) == 0)
+            return self->sup->fail(
+                "a Map brace initializer is only supported in a local declaration");
+        return 0;
+    }
+
+    /* Phase 31 S16b: the 19.2 coarse comparison for a Map literal key or value.
+       It reuses the same class kernel `push` / `put` arguments use, so a numeric
+       literal stays compatible with any integer slot and a struct compares by
+       its declared row (not by spelling). */
+    int brace_arg_ok(const char *formal, const char *actual)
+    {
+        char fb[MAX_TEXT];
+        char ab[MAX_TEXT];
+        int r, fs, as;
+
+        r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        if (r != 2) return r;
+        if (strncmp(fb, "struct", 6) != 0 || strncmp(ab, "struct", 6) != 0) return 2;
+        fs = self->sym->find_struct(fb + 6);
+        as = self->sym->find_struct(ab + 6);
+        if (fs < 0 || as < 0) return -1;
+        return fs == as ? 0 : 1;
     }
 
     /* P29-2 lookahead: the cursor is on a template name. 1 only when

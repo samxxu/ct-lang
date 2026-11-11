@@ -6144,6 +6144,57 @@ else
     ok "p31 (a 1024-element list builds and reports its length)"
 fi
 
+# ---- Phase 31 S16b: the `Map` literal's boundaries ----
+# The key slot (L31-17), a file-scope list (L31-19) and an assignment (L31-20)
+# each keep one positioned diagnostic. The 1024 cap (L31-18) is generated below
+# so the fixture stays compact, and 1024 items stay a positive case.
+p29_neg L31_17_map_key_type "initializer item 1 has key type 'int', expected 'char *'" 5:27
+p29_neg L31_19_map_global_brace "a Map brace initializer is only supported in a local declaration" 3:22
+p29_neg L31_20_map_brace_assign "a brace list is not an expression; use Map<K, V>::from or put" 6:9
+{
+    printf 'int main(void)\n{\n    Map<int, int> m = {'
+    i=1
+    while [ "$i" -le 1025 ]; do
+        if [ "$i" -gt 1 ]; then printf ', '; fi
+        printf '%d: 1' "$i"
+        i=$((i + 1))
+    done
+    printf '};\n    return m.len();\n}\n'
+} >"$work/p31m1025.ct"
+if "$work/ct-ast" "$work/p31m1025.ct" -o "$work/p31m1025.c" \
+        >"$work/p31m1025.out" 2>"$work/p31m1025.err"; then
+    bad "p31 L31-18: 1025 items" "expected a diagnostic, got exit 0"
+elif ! grep -Fq 'too many initializer items (limit 1024)' "$work/p31m1025.err"; then
+    bad "p31 L31-18: 1025 items" "$(cat "$work/p31m1025.err")"
+elif [ "$(grep -c 'error:' "$work/p31m1025.err")" -ne 1 ]; then
+    bad "p31 L31-18: 1025 items" "expected exactly one diagnostic: $(cat "$work/p31m1025.err")"
+else
+    ok "p31 (L31-18: a 1025-item map is refused at the cap)"
+fi
+{
+    printf '#include <stdio.h>\n\nint main(void)\n{\n    Map<int, int> m = {'
+    i=1
+    while [ "$i" -le 1024 ]; do
+        if [ "$i" -gt 1 ]; then printf ', '; fi
+        printf '%d: 1' "$i"
+        i=$((i + 1))
+    done
+    printf '};\n    printf("%%d\\n", m.len());\n    m.release();\n    return 0;\n}\n'
+} >"$work/p31m1024.ct"
+"$work/ct-ast" "$work/p31m1024.ct" -o "$work/p31m1024.c" \
+    >"$work/p31m1024.out" 2>"$work/p31m1024.err"
+if [ $? -ne 0 ]; then
+    bad "p31 1024 map items" "ct-ast failed: $(head -3 "$work/p31m1024.err")"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p31m1024.c" -o "$work/p31m1024.bin" \
+        2>"$work/p31m1024.cc" \
+      || ! "$work/p31m1024.bin" >"$work/p31m1024.run" 2>&1; then
+    bad "p31 1024 map items" "$(head -4 "$work/p31m1024.cc")"
+elif ! grep -qx '1024' "$work/p31m1024.run"; then
+    bad "p31 1024 map items" "$(cat "$work/p31m1024.run")"
+else
+    ok "p31 (a 1024-item map builds and reports its length)"
+fi
+
 # ---- Phase 29 V29-1: separate key blocks, no `sizeof` guess ----
 # A `long` key is as wide as a pointer on LP64, so the generic block compares it
 # by bytes; the `char *` block declared first owns `put` / `get` / `remove` for

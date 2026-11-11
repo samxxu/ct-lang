@@ -892,8 +892,7 @@ static int range_vec_target(const char *type, char *elem, int ecap,
 
 /* Phase 31 S14a: the row lookup for a by-value `Map`. Its constructor takes the
    nested `MapEntry` instance: `MapEntry_` plus the `Map_` suffix (P14). */
-static int map_brace_target(const char *type, char *entry, int ecap,
-                            char *iname, int icap)
+static int map_brace_target(const char *type, char *entry, int ecap, char *iname, int icap, char *ktype, int kcap, char *vtype, int vcap)
 {
     const char *base;
     int ii;
@@ -909,6 +908,8 @@ static int map_brace_target(const char *type, char *entry, int ecap,
     if (strncmp(ins[ii].name, "Map_", 4) != 0) return 0;
     snprintf(entry, (size_t)ecap, "struct MapEntry_%s", ins[ii].name + 4);
     snprintf(iname, (size_t)icap, "%s", ins[ii].name);
+    snprintf(ktype, (size_t)kcap, "%s", ins[ii].ctype[0]);
+    snprintf(vtype, (size_t)vcap, "%s", ins[ii].ctype[1]);
     return 1;
 }
 
@@ -1175,27 +1176,42 @@ static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *dis
    node count follows the source. Trailing comma allowed; empty is `(0, 0)`.
    A nested brace list in either position is the shared L31-9 refusal; type
    checks, the cap and duplicate detection are layered on later slices. */
-static int parse_map_brace_init(struct Stmt *self, const char *entry, const char *iname)
+static int parse_map_brace_init(struct Stmt *self, const char *entry, const char *iname, const char *ktype, const char *vtype)
 {
-    int e, head, tail, count, line;
+    int e, head, tail, count, line, col;
     int keys[1024];
 
     line = self->lex->tokline;
+    col = self->lex->tokstart - self->lex->lstart + 1;
     head = -1;
     tail = -1;
     count = 0;
     self->sup->lex_next();              /* `{` */
     while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-        int it, k, v, kline, kcol;
+        int it, k, v, kline, kcol, vline, vcol;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "a brace list cannot appear inside another brace initializer; build the inner container first",
                 self->mem->path);
+        if (count >= 1024)
+            return tool::diag::ct_sem_error(line, col,
+                "too many initializer items (limit 1024)", self->mem->path);
         kline = self->lex->tokline;
         kcol = self->lex->tokstart - self->lex->lstart + 1;
         k = self->ex->parse_expr();
         if (k < 0) return -1;
+        {
+            char kty[MAX_TEXT];
+            if (self->sup->expr_ctype(k, kty, sizeof kty) == 0
+                && self->ex->brace_arg_ok(ktype, kty) == 1) {
+                char msg[512];
+                snprintf(msg, sizeof msg,
+                         "initializer item %d has key type '%s', expected '%s'",
+                         count + 1, kty, ktype);
+                return tool::diag::ct_sem_error(kline, kcol, msg, self->mem->path);
+            }
+        }
         /* S16a: a repeat the compiler can prove is a hard error at the second
            key; a key it cannot fold is left to the runtime insert (D31-14). */
         {
@@ -1216,8 +1232,27 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
                 self->lex->tokstart - self->lex->lstart + 1,
                 "a brace list cannot appear inside another brace initializer; build the inner container first",
                 self->mem->path);
+        vline = self->lex->tokline;
+        vcol = self->lex->tokstart - self->lex->lstart + 1;
         v = self->ex->parse_expr();
         if (v < 0) return -1;
+        {
+            char tr[MAX_TEXT];
+            char vty[MAX_TEXT];
+            int ip = 0;
+            if (self->sup->iface_ref_type(vtype, tr, sizeof tr, &ip)) {
+                v = self->sup->maybe_box(v, tr, ip);
+                if (v < 0) return -1;
+            }
+            if (self->sup->expr_ctype(v, vty, sizeof vty) == 0
+                && self->ex->brace_arg_ok(vtype, vty) == 1) {
+                char msg[512];
+                snprintf(msg, sizeof msg,
+                         "initializer item %d has value type '%s', expected '%s'",
+                         count + 1, vty, vtype);
+                return tool::diag::ct_sem_error(vline, vcol, msg, self->mem->path);
+            }
+        }
         it = self->sup->new_node(N_INIT_ITEM);
         if (it < 0) return -1;
         self->arena->nodes[it].a = k;
@@ -2883,6 +2918,8 @@ impl StmtOps for Stmt {
                     char iname[MAX_TEXT];
                     char entrytype[MAX_TEXT];
                     char mapname[MAX_TEXT];
+                    char ktype[MAX_TEXT];
+                    char vtype[MAX_TEXT];
                     char raw[MAX_RAW_INIT];
                     char fixed[MAX_INIT_TEXT];
                     int off, k;
@@ -2903,7 +2940,9 @@ impl StmtOps for Stmt {
                         if (e < 0) return -1;
                     } else if (map_brace_target(typebuf, entrytype,
                                                (int)sizeof entrytype, mapname,
-                                               (int)sizeof mapname)) {
+                                               (int)sizeof mapname, ktype,
+                                               (int)sizeof ktype, vtype,
+                                               (int)sizeof vtype)) {
                         /* Phase 31 S14a: `Map<K, V> m = {k: v, …}` lowers to
                            `Map_<enc>_from((MapEntry_<enc>[]){ … }, n)`. A
                            `static` local cannot call the constructor during C
@@ -2914,7 +2953,8 @@ impl StmtOps for Stmt {
                                 self->lex->tokstart - self->lex->lstart + 1,
                                 "a Map brace initializer is only supported in a local declaration",
                                 self->mem->path);
-                        e = parse_map_brace_init(self, entrytype, mapname);
+                        e = parse_map_brace_init(self, entrytype, mapname,
+                                                 ktype, vtype);
                         if (e < 0) return -1;
                     } else {
                     /* V29-4: a Map has no C aggregate initializer; the cursor
@@ -3092,6 +3132,10 @@ impl StmtOps for Stmt {
                 && (strncmp(tt, "struct Vec_", 11) == 0 || strncmp(tt, "Vec_", 4) == 0))
                 return self->sup->fail(
                     "a brace list is not an expression; use Vec<T>::from or push");
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0
+                && (strncmp(tt, "struct Map_", 11) == 0 || strncmp(tt, "Map_", 4) == 0))
+                return self->sup->fail(
+                    "a brace list is not an expression; use Map<K, V>::from or put");
             self->ex->into_ok = 1;
             rhs = self->ex->parse_expr();
             self->ex->into_ok = 0;

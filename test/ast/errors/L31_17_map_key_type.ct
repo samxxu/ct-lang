@@ -1,0 +1,7 @@
+/* Phase 31 L31-17: a key whose type is known but does not fit the `Map` key
+   slot is refused at the key, before any C is emitted. */
+int main(void)
+{
+    Map<char *, int> m = {1: 2};
+    return m.len();
+}

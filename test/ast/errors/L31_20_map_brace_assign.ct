@@ -1,0 +1,8 @@
+/* Phase 31 L31-20: a brace list is not an expression, so it cannot appear on
+   the right side of a Map assignment. */
+int main(void)
+{
+    Map<char *, int> m;
+    m = {"k": 1};
+    return m.len();
+}

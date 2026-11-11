@@ -1,0 +1,8 @@
+/* Phase 31 L31-19: a file-scope Map brace initializer would have to call the
+   constructor during C static initialization, which is not allowed. */
+Map<char *, int> g = {"k": 1};
+
+int main(void)
+{
+    return g.len();
+}
