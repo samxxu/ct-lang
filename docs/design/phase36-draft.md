@@ -73,10 +73,11 @@
 
 #### 3.1.1 声明与实例化
 
-- 允许 `struct Box<T> { … } use Drop;` + `impl<T> Drop for Box<T> { void drop(void) { … } }`。
+- 允许 `struct Box<T> { … } use Drop;` + `impl<T> Drop for Box<T> { void drop() { … } }`。
 - **① 实例化复制 `uses_drop`**：模板行在 `Parser.h.ct:2179-2180` 置 `uses_drop=1`，而 `Expr.h.ct:1931-1962` 的 `add_struct_inst` 只复制字段与 `use` 列表；不补这一步，无显式 impl 的 `Box<int>` 实例行 `uses_drop=0`，自动字段 glue 根本不会生成。
 - **② glue 循环跳过模板**：`Emitter.h.ct:2333-2339` 只查 `uses_drop` 与 `N_IMPL.aux == si`，不看 `is_template`；模板行 `uses_drop=1`，会发射无效的 `Box_Drop_drop`。加 `if (is_template) continue;`。
-- **③ 泛型 Drop impl 按实例登记**：`impl<T> Drop for Box<T>` 的 `N_IMPL.aux` 指向模板行，而 `Box_int` 是另一行（`Symbols.h.ct:861-864`，`is_inst=1`）。实例行置 `has_drop_impl=1`（或把 `N_IMPL.aux` 改指实例行），`Emitter.h.ct:2336-2339` 的 `has` 检查读实例标志；否则有显式 impl 时实例行 `has` 为假，自动 glue 与显式 `Box_int_Drop_drop` 同时生成 → 重复符号/双重释放。
+- **③ 泛型 Drop impl 按实例登记（与解析顺序无关）**：在 `Symbols.h.ct` 的 `StructDef` 里、`int uses_drop;` 之后加 `int has_drop_impl;`。**不能**在 `add_struct_inst` 或 `ct_impl_add` 单侧登记：前者在 impl 之前解析且实例只建一次，后者在实例之前解析，两向回填仍会漏。改为在 `Emitter.h.ct` 的 `emit_impls` 生成 glue **之前**做一次 post-scan：遍历 `N_IMPL` 中 `text2 == "Drop"` 的节点，取其 `StructImpl` 行 `ii`，对每个 `StructInst` 行 `k`（`ct_insts()`）用 `ct_impl_matches(ii, k)` 判真后，经 `find_struct(ct_insts()[k].name)` 找到 `structs` 行并置 `has_drop_impl = 1`。
+- glue 循环条件改为 `if (structs[si].is_template || structs[si].has_drop_impl) continue;`；非泛型仍由既有 `N_IMPL.aux == si` 覆盖。E36-2 增加“`impl<T> Drop for Box<T>` 写在 `Box<int>` 首次使用之后仍生效”的顺序夹具。
 - 无显式 impl 时，glue 递归字段中所有 `use Drop` 的字段；**顺序为声明顺序**（与 `Emitter.h.ct:2344` 的既有路径一致）。
 - 有显式 impl 时，编译器**完全不生成**字段递归 glue；该结论对泛型 struct 成立的前提是 ③。方法体自行负责全部释放；非泛型 Drop 路径不变。
 
@@ -84,8 +85,7 @@
 
 - 泛型与泛型的无 impl 路径统一为**声明顺序**；容器元素按既有正序释放。**不引入逆序**，避免与非泛型路径分叉。
 - **编译器没有运行时计数器/释放钩子**：只有静态 `leak_*` 分析。所有"释放发生了几次"的可观测性来自**夹具里自定义的 `Probe`**（`struct Probe { int id; } use Drop;` + 夹具全局计数 + `retain`/`release` 打印），不是编译器或库新增的设施。
-- `drop` 方法体内对同一字段调用两次 `release()` → L36-1（同一方法体、同一字段的语法级重复检测；不做流分析）。`delete` 会把指针置 0，重复 `delete` 是生成代码里的 no-op，不在检测范围。
-- 没有显式 impl 时的自动 glue 只负责"字段递归"，不负责容器的 `release`。
+- `drop` 方法体内对同一字段调用两次 `release()` → L36-1（同一方法体、同一字段的语法级重复检测；不做流分析）。`delete` 会把指针置 0，重复 `delete` 是生成代码里的 no-op，不在检测范围；自动 glue 只负责字段递归，不负责容器 `release`。
 
 #### 3.1.3 与容器/接口
 
@@ -108,24 +108,23 @@
 
 #### 3.2.1 表示与所有权
 
-```
-struct Str {
-    char *data;
-    int len;
-} use Drop;
+`.ct` 源码（接收者写 `self`，与仓库既有 `void drop()` 风格一致）：
 
+```
+struct Str { char *data; int len; } use Drop;
 impl Drop for Str {
-    void drop(void);       /* 与 release 共用内部释放：free(_self->data); _self->data=0; _self->len=-1 */
+    void drop() { free(self->data); self->data = 0; self->len = -1; }
 }
-
 impl Str {
-    Str retain(void);      /* 固有方法：深拷贝，返回独立 Str */
-    void release(void);    /* 固有方法：调用同一内部释放 */
+    Str retain();
+    void release() { free(self->data); self->data = 0; self->len = -1; }
 }
 ```
+
+生成 C 中接收者是 `_self`：`Str_Drop_drop(void *self)` 体内 `free(_self->data); _self->data = 0; _self->len = -1;`。
 
 - `Str` 拥有 `data`（堆分配），`len` 为字节数；不要求 NUL 结尾，允许内嵌 `\0`。
-- **必须写显式 `impl Drop for Str`**：`use Drop` 的自动 glue 只递归 `use Drop` 的 struct 字段；`char *`/`int` 都没有 Drop，自动 `Str_Drop_drop` 会是空函数，`delete p` 只 `free(p)` 不释放 `data`，`Option<Str>` 的字段 glue 同样泄漏。显式 `drop` 与 `release` 共用同一个内部释放函数。
+- **必须写显式 `impl Drop for Str`**：`use Drop` 的自动 glue 只递归 `use Drop` 的 struct 字段；`char *`/`int` 都没有 Drop，自动 `Str_Drop_drop` 会是空函数，`delete p` 只 `free(p)` 不释放 `data`，`Option<Str>` 的字段 glue 同样泄漏。显式 `drop` 与 `release` **各自内联**同一套释放语句（源码 `free(self->data); self->data = 0; self->len = -1;`，生成 C 中为 `_self`）。
 - **拥有式分配沿用既有 `own` 规则**：`own Str *p = malloc(sizeof(struct Str));` 然后 `str_init(p, ...)`；`delete p` 先跑 `Str_Drop_drop` 再 `free` 并把指针置 0。
 - 栈上的 `Str` 值不自动释放；用 `s.release()` 或放进容器后 `v.release()`。
 - `retain`/`release` **必须是固有方法**（`impl Str { … }`），不能只写成自由函数 `str_retain(Str)`/`str_release(Str)`：Phase 31 的元素协议判定要求固有方法集同时有二者且 `retain` 返回自身类型，否则 `__ct_elem_release` 发射为空，`Vec<Str>` 不会逐元素释放。自由函数可保留为薄包装，但协议只认固有方法。
@@ -143,7 +142,7 @@ impl Str {
 | `str_compare(Str a, Str b)` | 按字节字典序，返回 -1/0/1 |
 | `str_c_str(Str s)` | 返回临时 NUL 结尾副本（调用方负责释放；文档写明） |
 | `s.retain()`（固有方法） | 深拷贝，返回独立 `Str`；满足元素协议的 `retain` 形态 |
-| `s.release()`（固有方法） | 释放并置 `data=0, len=-1`；`Drop` 与容器元素释放共用同一内部函数 |
+| `s.release()`（固有方法） | 释放并置 `data=0, len=-1`；与 `Drop` 各自内联同一套释放语句 |
 
 - 元素协议只认固有方法 `retain`/`release`；自由函数 `str_retain`/`str_release` 可作为包装，但**不能让协议生效**。
 - 全部为 `pub` 函数或 `Str` 的固有方法，复用 P34 的跨单元能力；库代码不占编译器预算。
@@ -198,11 +197,11 @@ impl Str {
 | S1a | `impl<T> Drop for Box<T>` 解析 + 实例注册 | `Parser.h.ct` / `Symbols.h.ct` | 60–100 |
 | S1b | `drop` 体内同字段重复释放检测（L36-1） | `Parser.h.ct` / `Stmt.h.ct` | 40–80 |
 | S2a1 | 实例化复制 `uses_drop` + glue 循环跳过 `is_template`（§3.1.1 ①②） | `Expr.h.ct` / `Parser.h.ct` / `Emitter.h.ct` | 60–100 |
-| S2a2 | 泛型 drop glue 发射（声明顺序、递归 `use Drop`）+ Drop impl 按实例登记与 `has` 检查（§3.1.1 ③） | `Symbols.h.ct` / `Emitter.h.ct` / `Init.h.ct` | 50–90 |
+| S2a2 | 泛型 drop glue 发射（声明顺序、递归 `use Drop`）+ `StructDef.has_drop_impl` 字段 + `emit_impls` glue 前 post-scan（`N_IMPL` 中 `Drop` × `ct_impl_matches`）与 `has` 检查读实例标志（§3.1.1 ③） | `Symbols.h.ct` / `Emitter.h.ct` / `Init.h.ct` | 50–90 |
 | S2b1 | 编译器侧实例归属核对（`nm`/产物：每实例恰一份 glue、无模板行） | `Emitter.h.ct` | 30–60 |
 | S2b2 | 库侧元素协议接入（`Vec`/`Option`/`Result` 与 `retain`/`release`），**不计编译器预算** | `lib/std/**` | 20–40 |
 | S3 | 泛型 Drop 夹具（夹具内 `Probe` 计数可观测） | `test/ast/**` | 90–140 |
-| S4a1 | 库片：`Str` 类型 + 显式 `impl Drop for Str`（共用内部释放），**不计编译器预算** | `lib/std/Str.h.ct` | 50–80 |
+| S4a1 | 库片：`Str` 类型 + 显式 `impl Drop for Str`（内联释放），**不计编译器预算** | `lib/std/Str.h.ct` | 50–80 |
 | S4a2 | 库片：`retain`/`release` 固有方法与 `from`/`from_len`/`len`，**不计编译器预算** | `lib/std/Str.h.ct` | 40–70 |
 | S4b | 库片：`slice`/`concat`/`compare`/`c_str`/内嵌 `\0`，**不计编译器预算** | `lib/std/Str.h.ct` | 90–150 |
 | S4c1 | 库片：`Option.h.ct` 加 `use Drop` + `none()` 零初始化 payload | `lib/std/Option.h.ct` | 20–40 |
@@ -217,8 +216,8 @@ impl Str {
 
 | ID | 断言 | 夹具 | 门禁 | 红证 |
 | --- | --- | --- | --- | --- |
-| E36-1 | `struct Box<T> use Drop` + `impl<T> Drop for Box<T>` 编译；`Box<int>`/`Box<Str>` 各**恰一份** `Box_int_Drop_drop`/`Box_Str_Drop_drop`（grep 与 `nm -g --defined-only` 各恰 1 条）；模板 `Box_Drop_drop` 不存在 | `ast/225_generic_drop` + 产物 grep/`nm` | `check-ast` | 当前 `5:14: unexpected token` |
-| E36-2 | 无显式 impl 时字段按声明顺序递归；有显式 impl 时自动字段 glue 为零（`nm` 无第二份 `Box_*_Drop_drop`、链接无重复符号）；夹具内 `Probe` 的全局计数输出逐字节正确（`Probe` 是夹具代码，不是编译器/库设施） | `ast/226_drop_order` | `check-ast` | 当前无泛型 Drop |
+| E36-1 | `struct Box<T> use Drop` + `impl<T> Drop for Box<T>` 编译；夹具对 `Box<int>`/`Box<Str>` 各 `delete` 一次（保证 glue 被发射、不被优化掉）。**断言**：`nm --defined-only`（不加 `-g`；macOS 符号带 `_` 前缀）匹配 ` [tT] _?Box_int_Drop_drop$` 与 ` [tT] _?Box_Str_Drop_drop$` 各恰 1 条；生成 C 只数定义行 `grep -cE '^static void (__attribute__\(\(unused\)\) )?Box_int_Drop_drop\(void \*self\) \{' == 1`（原型以 `);` 结尾，不混入），`Box_Str` 同理；模板 `Box_Drop_drop` 在 `nm` 中 0 条 | `ast/225_generic_drop` + 产物 grep/`nm` | `check-ast` | 当前 `5:14: unexpected token` |
+| E36-2 | 无显式 impl 时字段按声明顺序递归；有显式 impl 时自动字段 glue 为零（`nm --defined-only` 中 `Box_int_Drop_drop`/`Box_Str_Drop_drop` 无第二份、链接无重复符号）；**顺序夹具**：`impl<T> Drop for Box<T>` 写在 `Box<int>` 首次使用之后仍生效；夹具内 `Probe` 的全局计数输出逐字节正确（`Probe` 是夹具代码，不是编译器/库设施） | `ast/226_drop_order` | `check-ast` | 当前无泛型 Drop |
 | E36-3 | `Vec<Probe>` 的 `release()` 逐元素调用 `Probe_release`（容器调 `T_release`，不会调 `T_Drop_drop`），计数打印 3 次；`Vec<Str>` 产物 grep 到 `Str_release(` 调用 | `ast/227_vec_element_release` + 产物 grep | `check-ast` | 当前无 `Str` |
 | E36-4 | P36 给 `Option<T>` 加 `use Drop` 后：`own Option<Probe> *` + `delete` 触发 `Option_Probe_Drop_drop` → `Probe_Drop_drop`；**期望计数：1 个 `id!=0` 的 payload 计 1，`none<Probe>()` 计 0**；`none()`/`ok()`/`err()` 零初始化未使用 payload；`Option<Str>` 产物 grep `Str_Drop_drop(&_self->value)` | `ast/229_option_probe_drop` + 产物 grep | `check-ast` | 当前无 `Str`/`Option` Drop |
 | E36-5 | `drop` 方法体内对同一字段调用两次 `release()` → L36-1 | `errors/double_drop.ct` | `check-ast` | 当前无泛型 Drop |
@@ -257,7 +256,7 @@ impl Str {
 | **编译器外合计** | 夹具 + 样例 + 文档 | **420–670** | 14–24 |
 | 库代码（S2b2+S4a1+S4a2+S4b+S4c1+S4c2，**不计编译器预算**） | `lib/std/Str.h.ct`、`Option.h.ct`、`Result.h.ct` | 240–420 | 2–4 |
 
-编译器 240–430 = 60+40+60+50+30 与 100+80+100+90+60，与 §6 逐片一致；库 240–420 = 20+50+40+90+20+20 与 40+80+70+150+40+40，不占编译器预算；S8a–S8b 是收口片。
+编译器 240–430 = 60+40+60+50+30 与 100+80+100+90+60，与 §6 逐片一致；库 240–420 = 20+50+40+90+20+20 与 40+80+70+150+40+40，不占编译器预算；相对第四轮 250–420/220–380：S2b 的 20–40 行库侧工作移入库预算，S2a 拆成 60–100+50–90，240–430/240–420 是同一批工作的重新分类，不是新增行；S8a–S8b 是收口片。
 
 ## 11 风险与触发条件
 

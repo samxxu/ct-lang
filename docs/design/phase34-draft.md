@@ -176,7 +176,7 @@
 | S1b | 模板体归属 `.h.ct` + 消费方可见性 | `Parser.h.ct` / `Emitter.h.ct` | 50–90 |
 | S2a | 消费方 `static` 实例发射 | `Expr.h.ct` / `Emitter.h.ct` | 60–110 |
 | S2b | 实例去重与 `<name>__ct<N>` 命名 | `Emitter.h.ct` | 50–90 |
-| S3a | L26-2 判据变更：断言改向、两个 `errors/` 夹具转正、TEST-18 加 `test/modules/p34_*` 钩子 + `p34_residue_dirty` 受控脏夹具（断言 `tparam_residue` 必失败） | `check-ast.sh` / `test/**` | 30–60 |
+| S3a | L26-2 判据变更：断言改向、两个 `errors/` 夹具转正、TEST-18 在 modules 段为 `p34_pub_generic`/`p34_pub_bound` 的产物加**显式** `tparam_residue` 调用（断言输出为空）、新增手写 C 脏产物 `test/probes/p34_residue_dirty.c` 并断言 `tparam_residue` 输出**非空**（证明钩子不是空操作） | `check-ast.sh` / `test/**` | 30–60 |
 | S3b | 规范文档影响面：phase26 superseding 块、262-265、537 脚注、language-spec 两处、gap | `docs/**` | 20–50 |
 | S4 | `impl Name { … }` 固有 impl 解析 | `Parser.h.ct` | 70–110 |
 | S5a | 非泛型固有方法查找与静态派发 | `Expr.h.ct` | 60–100 |
@@ -199,7 +199,7 @@
 | ID | 断言 | 夹具 | 门禁 | 红证 |
 | --- | --- | --- | --- | --- |
 | E34-1 | `.h.ct` 的 `pub T id<T>(T)` 在消费方 `id<int>(3)` 编译运行；实例为消费方 `static` | `test/modules/p34_pub_generic` | `check-ast` modules 段 | 当前 `generic functions cannot be pub` |
-| E34-2a | L26-2 主提交：`check-ast.sh` 三处断言改向、两个 `errors/` 夹具转正、**`test/modules/p34_residue_dirty/` 受控脏夹具（产物故意留一个 `T`，断言 `tparam_residue` 必失败，证明钩子不是空操作）**、`phase26.md` 的 `262-265` 改写理由并接 `test/modules/p34_*` 钩子、`537` 只加脚注、language-spec 两处与 gap 更新 | 上述夹具 + `check-ast.sh` + 提交记录 | `check-ast` | 当前三处断言逐字匹配旧文案；TEST-18 不扫 modules |
+| E34-2a | L26-2 主提交：`check-ast.sh` 三处断言改向、两个 `errors/` 夹具转正、**TEST-18 接线**：modules 段 `p34_pub_generic`/`p34_pub_bound` 构建成功后 `tp="$(for f in "$mod-p34"/*.c; do tparam_residue "$f" $(fixture_sources test/modules/p34_pub_generic); done)"`，断言 `[ -z "$tp" ]`（期望空输出）；**脏例**：手写 `test/probes/p34_residue_dirty.c`（`__ct1` 体内故意残留 `T`），`tp="$(tparam_residue test/probes/p34_residue_dirty.c $(fixture_sources test/modules/p34_pub_generic))"`，断言 `[ -n "$tp" ]` 且输出含 `T(`（期望 `T(1)`）。反向保证：脏产物被清理成干净文件则 `[ -n ]` 失败；正常产物若残留则 `[ -z ]` 失败。`phase26.md` 的 `262-265` 改写理由并接上述钩子、`537` 只加脚注；language-spec 两处与 gap 更新（文档部分见 S3b/E34-14，`check-ast` 不验文档） | 上述夹具 + `check-ast.sh` + 提交记录 | `check-ast` | 当前三处断言逐字匹配旧文案；TEST-18 不扫 modules |
 | E34-2b | Phase 29 纯增量说明（**人工审查项，非门禁**）：Phase 34 卡内含且仅含一条 `P34 覆盖`；`phase29.md:912`/`:920`/`:987` 一字不动；若必须改 phase29 则标 blocked 并删除该改动 | `docs/design/phase34-draft.md` | 人工审查 | 当前无覆盖说明 |
 | E34-3 | `pub` 泛型带 bound `T: Show` 跨单元实例化；`test/modules/errors/p34_bound_hidden/`（`main.ct` + `dep.h.ct`）触发既有 `unknown trait '<x>' in a generic bound` | `test/modules/p34_pub_bound` + `test/modules/errors/p34_bound_hidden/` | `check-ast` modules 段（正例与错误段） | 当前无法声明 `pub` |
 | E34-4 | `pub struct Counter` 的非泛型固有方法从另一单元调用并运行。**主判据**：`nm -g --defined-only` 在属主 `.c` 恰 1 个 `T Counter_get`，`nm -g --undefined-only` 在消费方 `.c` 恰 1 个 `U Counter_get`；**辅助**：消费方原型 `grep -c '^int Counter_get(struct Counter \*);$' == 1`、属主定义 `grep -c '^int Counter_get(struct Counter \*.*) {' == 1`（重复定义先链接失败） | `test/modules/p34_inherent` + `nm` + 产物 grep | `check-ast` modules 段 | 当前 `impl of an unknown trait` |
@@ -267,7 +267,7 @@
 
 - `selfhost/ct-ast/**`：S1–S6 的实现与诊断。
 - `lib/std/Option.h.ct`、`Result.h.ct`、`lib/std/README.md` 去重说明。
-- `test/modules/p34_*`、`test/ast/errors/*`、`test/ast/215–218_*`。
+- `test/modules/p34_*`、`test/probes/p34_residue_dirty.c`、`test/ast/errors/*`、`test/ast/215–218_*`。
 - `examples/38_ecosystem_reuse/` + golden。
 - `docs/language-spec.md`、`tutorial.md`、`glossary.md`、`roadmap.md`。
 - L26-2 变更评审记录（单独提交，附 §1.4 影响面）。
