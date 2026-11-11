@@ -1,0 +1,36 @@
+/* Phase 31 O1: an interface value is a two-word non-owning fat pointer
+   (`self` + vtable), so a container can store it by value.
+
+   This fixture was the negative `test/ast/errors/container_iface.ct`
+   (L29-13, asserted at 19:15); the guard is now split, so the same shape is a
+   positive. `v.h = 0` keeps the fresh handle releasable until O4's `{}`. */
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+int main(void)
+{
+    Vec<Show> v;
+    v.h = 0;
+    Show c;
+    struct Circle ci;
+    ci.r = 7;
+    c = ci;
+    v.push(c);
+    Show g = v.get(0);
+    printf("%d %d\n", v.len(), g.show());
+    v.release();
+    return 0;
+}

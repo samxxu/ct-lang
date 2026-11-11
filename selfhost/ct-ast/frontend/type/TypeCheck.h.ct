@@ -17,6 +17,9 @@
 import frontend::lex::Lexer;
 import frontend::module::MapTable;
 import frontend::sym::Symbols;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
 import runtime::arena::Arena;
 
 #define MAX_TEXT 160
@@ -55,6 +58,10 @@ pub trait TypeOps {
     int  expr_type(int n, char *out, int cap);
     int  expr_ctype(int n, char *out, int cap);
     int  maybe_box(int n, const char *trait, int addr);
+    /* Phase 31: the C return type of an inherent method of an instantiated
+       struct, with the template's type parameters bound to the instance's
+       concrete C arguments. 0 when the method or its return type is unknown. */
+    int  inst_method_ret(const char *ibase, const char *fname, char *out, int cap);
     int  type_has_array_init(const char *type);
     int  init_item_text(const char *stype, const char *item, char *out, int cap);
     int  rewrite_init_text(const char *stype, const char *raw, char *out, int cap);
@@ -137,6 +144,65 @@ void type_key(const char *in, char *out, int cap)
 pub struct TypeCheck *type_get(void);
 
 impl TypeOps for TypeCheck {
+    /* Phase 31: the C return type of an inherent method of an instantiated
+       struct, with the template's type parameters replaced by the instance's
+       concrete C arguments. `Map<char *, Show>::get` answers
+       `struct Show_iface *`; without the substitution the caller only sees the
+       template spelling (`V *`), which no use site can match against a declared
+       type. 0 when the method or its return type is unknown. */
+    int inst_method_ret(const char *ibase, const char *fname, char *out, int cap)
+    {
+        char base[MAX_TEXT];
+        char ret[MAX_TEXT];
+        char tmp[MAX_TEXT];
+        int m, inst, ti, tn, ii, nimpls, k, ni, hit;
+        struct StructImpl *im;
+        struct StructInst *ins;
+        struct StructTmpl *tp;
+
+        if (strncmp(ibase, "struct ", 7) != 0) return 0;
+        snprintf(base, sizeof base, "%s", ibase + 7);
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst < 0) return 0;
+        m = -1;
+        im = frontend::sym::ct_impls(&nimpls);
+        for (ii = 0; im && ii < nimpls && m < 0; ii++) {
+            if (im[ii].use[0]) continue;
+            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+            for (ni = self->arena->nodes[im[ii].node].a; ni >= 0;
+                 ni = self->arena->nodes[ni].next)
+                if (strcmp(self->arena->nodes[ni].text2, fname) == 0) {
+                    m = ni;
+                    break;
+                }
+        }
+        if (m < 0) return 0;
+        if (!self->arena->nodes[m].text[0]) return 0;
+        snprintf(ret, sizeof ret, "%s", self->arena->nodes[m].text);
+        ins = frontend::sym::ct_insts(&k);
+        ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+        tp = frontend::sym::ct_tmpls(&tn);
+        hit = 1;
+        if (ti >= 0 && tp) {
+            if (tp[ti].ntparams > 0) {
+                if (frontend::sym::ct_generic_subst(ret, tp[ti].tparam[0],
+                                                    ins[inst].ctype[0], tmp, MAX_TEXT) != 0)
+                    hit = 0;
+                else snprintf(ret, sizeof ret, "%s", tmp);
+            }
+            if (hit && tp[ti].ntparams > 1) {
+                if (frontend::sym::ct_generic_subst(ret, tp[ti].tparam[1],
+                                                    ins[inst].ctype[1], tmp, MAX_TEXT) != 0)
+                    hit = 0;
+                else snprintf(ret, sizeof ret, "%s", tmp);
+            }
+        }
+        if (!hit) return 0;
+        if (strcmp(ret, "void") == 0) return 0;
+        if (snprintf(out, (size_t)cap, "%s", ret) >= cap) return 0;
+        return 1;
+    }
+
     /* The pool owns the storage and the reset of a fresh node; the line comes
        from the lexer and the overflow diagnostic from this object. */
     int new_node(int kind)
@@ -302,6 +368,15 @@ impl TypeOps for TypeCheck {
                             return 0;
                         }
                 }
+                return -1;
+            }
+            /* Phase 31: an inherent method of an instantiated struct (aux 9/10).
+               The template's type parameters are bound to the instance's C
+               arguments so an interface element read types correctly. */
+            if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10) {
+                if (self->inst_method_ret(self->arena->nodes[n].text,
+                                          self->arena->nodes[n].text2, out, cap))
+                    return 0;
                 return -1;
             }
             return -1;

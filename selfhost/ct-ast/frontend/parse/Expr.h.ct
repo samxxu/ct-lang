@@ -118,9 +118,14 @@ pub trait ExprOps {
     /* Phase 29: a substituted field spelling may itself name an instance
        (`MapEntry<K, V>`); register it so the emitter can print its layout. */
     int  inst_register_nested(const char *spell, int depth);
-    /* L29-13: 1 when this C type is an interface value or a struct that carries
-       a vptr (directly or through a value field). */
+    /* L29-13: 1 when this C type is a struct that carries a vptr (directly or
+       through a value field). Interface values (`struct X_iface`) are not
+       flagged: Phase 31 O1 stores them as a plain two-word copy. */
     int  container_vptr_type(const char *ctype, int depth);
+    /* L31-1: 1 when this C type is an interface pointer (`struct X_iface *`).
+       There is no boxing path from a concrete value into an interface-pointer
+       slot, so such an element is refused and pointed at the value form. */
+    int  container_iface_ptr(const char *ctype);
     /* Phase 26: register (or reuse) the instance of template `gfi` for the
        concrete type spelling `targ`; returns its index in `sym->ginsts`. */
     int  generic_instance(int gfi, const char *targ, int line, int col);
@@ -1845,22 +1850,22 @@ impl ExprOps for Expr {
     }
 
     /* L29-13: a container copies its elements (`memcpy` on growth, plain
-       assignment on `set`), so an interface value or a struct that carries a
-       vptr has no defensible copy story. `use Drop` / `use Handback` add no
-       vptr and never join `use`, so they do not trip this. */
+       assignment on `set`), so a struct that carries a vptr has no defensible
+       copy story. `use Drop` / `use Handback` add no vptr and never join `use`,
+       so they do not trip this. Phase 31 O1 unfreezes the interface-value half:
+       a `struct X_iface` is two machine words (a non-owning fat pointer) and is
+       stored by value, so only vptr-bearing concrete structs are refused. */
     int container_vptr_type(const char *ctype, int depth)
     {
         char base[MAX_TEXT];
         const char *p;
-        int si, fi, n;
+        int si, fi;
 
         if (depth > 8) return 0;
         p = ctype;
         while (*p == ' ') p++;
         if (strncmp(p, "struct ", 7) == 0) p += 7;
         snprintf(base, sizeof base, "%s", p);
-        n = strlen(base);
-        if (n > 6 && strcmp(base + n - 6, "_iface") == 0) return 1;
         if (strchr(base, '*') != 0) return 0;
         si = self->sym->find_struct(base);
         if (si < 0) return 0;
@@ -1870,6 +1875,31 @@ impl ExprOps for Expr {
             if (self->container_vptr_type(self->sym->structs[si].fields[fi].type,
                                           depth + 1))
                 return 1;
+        return 0;
+    }
+
+    /* L31-1: `struct X_iface *` cannot be a container element. Strip the
+       `struct ` prefix and the trailing `*` handle; a star plus an `_iface`
+       base is the shape. `Vec<struct A *>` (a concrete pointer) is untouched. */
+    int container_iface_ptr(const char *ctype)
+    {
+        char base[MAX_TEXT];
+        const char *p;
+        int n, has_ptr;
+
+        (void)self;
+        p = ctype;
+        while (*p == ' ') p++;
+        if (strncmp(p, "struct ", 7) == 0) p += 7;
+        snprintf(base, sizeof base, "%s", p);
+        n = strlen(base);
+        has_ptr = 0;
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
+            if (base[n - 1] == '*') has_ptr = 1;
+            base[--n] = 0;
+        }
+        if (!has_ptr) return 0;
+        if (n > 6 && strcmp(base + n - 6, "_iface") == 0) return 1;
         return 0;
     }
 
@@ -1906,13 +1936,21 @@ impl ExprOps for Expr {
                 || (nargs > 1 && frontend::sym::ct_is_container_type(c2))))
             return self->sup->fail(
                 "a built-in container cannot be an element of another container");
-        /* L29-13: an interface value or a vptr-bearing struct has no copy story
-           that the container's `memcpy` / assignment can honour. */
+        /* L29-13 (Phase 31 O1 partial unfreeze): interface values
+           (`struct X_iface`) are stored as a two-word non-owning copy, so only
+           vptr-bearing concrete structs are refused here. */
         if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
             && (self->container_vptr_type(c1, 0)
                 || (nargs > 1 && self->container_vptr_type(c2, 0))))
             return self->sup->fail(
                 "interface and vptr-bearing values cannot be stored in a container");
+        /* L31-1: an interface pointer has no boxing path into the slot; the
+           value form (`Vec<Show>`) is what the user wants. */
+        if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
+            && (self->container_iface_ptr(c1)
+                || (nargs > 1 && self->container_iface_ptr(c2))))
+            return self->sup->fail(
+                "a container of interface pointers is not supported; store the interface value itself");
         if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
