@@ -344,18 +344,18 @@ pub struct Expr {
        namespace/recipe pair is only known from this table. */
     struct MapTable *maps;
     int *nmaps;
+    /* Phase 31 S23b (L31-23): the live borrowed views of this function, keyed
+       by the view variable and the container, so a shadowed name cannot alias
+       either. `view_bad` refuses the next use after a mutation. */
+    int  nview;
+    int  view_vi[64];
+    int  view_cvi[64];
+    int  view_bad[64];
     /* Phase 31 S23b (L31-22): the iterated variable of each enclosing
-       `foreach`, so a mutation call on it inside the body is refused. The
-       length is a literal because a `pub struct` lands in the generated
-       header. */
+       `foreach`, so a mutation call on it inside the body is refused. */
     int  niter;
     char iter[8][160];
 } use ExprOps;
-
-/* Phase 31 S23b (L31-22): the statement layer pushes each `foreach` iterated
-   variable here, and a mutation call on that name inside the body is refused. */
-pub void expr_iter_push(struct Expr *self, const char *name);
-pub void expr_iter_pop(struct Expr *self);
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -363,6 +363,12 @@ pub void expr_iter_pop(struct Expr *self);
    The statement layer records the same bit on a declaration / assignment, so
    the walk is a unit-level function instead of one more `ExprOps` method. */
 pub int expr_borrow_root(struct Expr *self, int n);
+/* Phase 31 S23b: record that `name` is bound from the borrowed expression
+   `init` (L31-23 invalidation), and track the enclosing `foreach` variable
+   (L31-22). The statement layer drives both. */
+pub void expr_view_bind(struct Expr *self, const char *name, int init);
+pub void expr_iter_push(struct Expr *self, const char *name);
+pub void expr_iter_pop(struct Expr *self);
 
 /* Argument count of a call: `parse_args` hands back the first node of the
    chain, or 0 for an empty list, and a fresh node carries `next = -1`. */
@@ -927,6 +933,64 @@ static int closure_match(struct Expr *self, int ci, const char *host, int skip_e
    literal its own trampoline already exists with the return type its
    declaration took, so the comparison is read-only (`set_ret` 0). */
 
+/* Phase 31 S23b (L31-23): the container a borrowed initialiser came from.
+   Answers its variable index in `*cvi`; 0 when `init` is not a view. */
+static int view_source(struct Expr *self, int init, int *cvi)
+{
+    int n = init, j;
+
+    while (n >= 0 && (self->arena->nodes[n].kind == N_MEMBER || self->arena->nodes[n].kind == N_ARROW || self->arena->nodes[n].kind == N_DEREF))
+        n = self->arena->nodes[n].a;
+    if (n < 0) return 0;
+    if (self->arena->nodes[n].kind == N_MCALL
+        && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
+        && (strcmp(self->arena->nodes[n].text2, "get") == 0
+            || strcmp(self->arena->nodes[n].text2, "entry") == 0)) {
+        const char *ty = self->arena->nodes[n].text;
+        if (!(strncmp(ty, "struct Vec_", 11) == 0 || strncmp(ty, "Vec_", 4) == 0
+              || strncmp(ty, "struct Map_", 11) == 0 || strncmp(ty, "Map_", 4) == 0))
+            return 0;
+        n = self->arena->nodes[n].a;
+        while (n >= 0 && (self->arena->nodes[n].kind == N_MEMBER || self->arena->nodes[n].kind == N_ARROW || self->arena->nodes[n].kind == N_DEREF))
+            n = self->arena->nodes[n].a;
+        if (n < 0 || self->arena->nodes[n].kind != N_VAR) return 0;
+        *cvi = self->sym->find_var(self->arena->nodes[n].text2);
+        return *cvi >= 0;
+    }
+    if (self->arena->nodes[n].kind == N_VAR) {
+        int src = self->sym->find_var(self->arena->nodes[n].text2);
+        for (j = 0; src >= 0 && j < self->nview; j++)
+            if (self->view_vi[j] == src) {
+                *cvi = self->view_cvi[j];
+                return 1;
+            }
+    }
+    return 0;
+}
+
+void expr_view_bind(struct Expr *self, const char *name, int init)
+{
+    int vi = self->sym->find_var(name);
+    int idx = -1, i, cvi = -1, ok;
+
+    if (vi < 0) return;
+    for (i = 0; i < self->nview; i++)
+        if (self->view_vi[i] == vi) { idx = i; break; }
+    ok = view_source(self, init, &cvi);
+    if (!ok) {
+        if (idx >= 0) self->view_vi[idx] = -1;
+        return;
+    }
+    if (idx < 0) {
+        if (self->nview >= 64) return;
+        idx = self->nview;
+        self->nview = self->nview + 1;
+    }
+    self->view_vi[idx] = vi;
+    self->view_cvi[idx] = cvi;
+    self->view_bad[idx] = 0;
+}
+
 void expr_iter_push(struct Expr *self, const char *name)
 {
     if (self->niter >= 8) return;
@@ -937,6 +1001,31 @@ void expr_iter_push(struct Expr *self, const char *name)
 void expr_iter_pop(struct Expr *self)
 {
     if (self->niter > 0) self->niter = self->niter - 1;
+}
+
+/* L31-23: a mutation of `cont` invalidates every live view of it, and the next
+   use of one is refused. */
+static void view_mark(struct Expr *self, const char *cont)
+{
+    int cvi = self->sym->find_var(cont), j;
+
+    if (cvi < 0) return;
+    for (j = 0; j < self->nview; j++)
+        if (self->view_vi[j] >= 0 && self->view_cvi[j] == cvi)
+            self->view_bad[j] = 1;
+}
+
+static int view_use(struct Expr *self, const char *name, int line, int col)
+{
+    int vi = self->sym->find_var(name), j;
+
+    if (vi < 0) return 0;
+    for (j = 0; j < self->nview; j++)
+        if (self->view_vi[j] == vi && self->view_bad[j])
+            return tool::diag::ct_sem_error(line, col,
+                "a borrowed view is invalidated by a later mutation of its container; copy it with retain() first",
+                self->sup->mem->path);
+    return 0;
 }
 
 static int iter_hit(struct Expr *self, const char *name)
@@ -3892,6 +3981,14 @@ impl ExprOps for Expr {
                                 return tool::diag::ct_sem_error(mline, mcol,
                                     "cannot mutate the container being iterated; take a copy or collect the indices first",
                                     self->sup->mem->path);
+            /* Phase 31 S23b (L31-23): the mutation moves the stored values, so
+               every view of this container taken earlier is stale from here. */
+            if ((strcmp(fname, "put") == 0
+                 || strcmp(fname, "remove") == 0
+                 || strcmp(fname, "clear") == 0
+                 || strcmp(fname, "release") == 0)
+                && self->arena->nodes[n].kind == N_VAR)
+                view_mark(self, self->arena->nodes[n].text2);
                             /* Phase 31 S23a (L31-13 / L31-14): a borrow carries
                                no ownership, so releasing it would free storage
                                the container still owns -- whether the view is
@@ -4599,6 +4696,12 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
             self->sup->lex_next();
+            /* Phase 31 S23b (L31-23): a view whose container was mutated after
+               it was taken is stale. A name followed by `=` is being rebound,
+               not read, so it is not a use of the old view. */
+            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0)
+                && view_use(self, self->arena->nodes[n].text2, id_line, id_col) != 0)
+                return -1;
             /* Phase 26 fix (SH-64): an identifier that names the current
                template's type parameter is never a value. Type operands were
                already taken by parse_unary / parse_type before this point, so

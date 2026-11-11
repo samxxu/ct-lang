@@ -25,13 +25,12 @@ int main(void)
     foreach (words) {
         int *slot;
         slot = counts.get(item);
-        if (slot == 0) {
-            counts.put(item, 1);
-        } else {
+        if (slot != 0) {
             *slot = *slot + 1;
+        } else {
+            counts.put(item, 1);
         }
     }
-
     printf("in insertion order:\n");
     foreach (counts) {
         printf("  %s %d\n", item.key, item.value);

@@ -1,0 +1,14 @@
+/* L31-23: `clear` releases the entries a `MapEntry` copy points into. */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, Vec<int>> m = {};
+    Vec<int> v = {1, 2};
+    m.put("a", v);
+    MapEntry<char *, Vec<int>> e = m.entry(0);
+    m.clear();
+    int n = e.value.len();
+    printf("%d\n", n);
+    return 0;
+}

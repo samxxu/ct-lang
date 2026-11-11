@@ -3043,6 +3043,10 @@ impl StmtOps for Stmt {
                         frontend::parse::expr_borrow_root(self->ex,
                                                           self->arena->nodes[n].a);
             }
+            /* Phase 31 S23b (L31-23): a view binding (a container, a `V *` or a
+               `MapEntry` copy) is invalidated by a later mutation of its
+               container; the table lives in the expression layer. */
+            frontend::parse::expr_view_bind(self->ex, name, self->arena->nodes[n].a);
             /* Phase 21 S2: a closure literal on the right of a function-pointer
                declaration is bound to the declared type here; the literal is
                checked, never emitted. */
@@ -3208,6 +3212,9 @@ impl StmtOps for Stmt {
                     && frontend::sym::ct_is_container_type(self->sym->vars[vi].type))
                     self->sym->vars[vi].cview =
                         frontend::parse::expr_borrow_root(self->ex, rhs);
+                /* Phase 31 S23b (L31-23): rebinding a view follows the source. */
+                frontend::parse::expr_view_bind(self->ex,
+                                                self->arena->nodes[e].text2, rhs);
             }
         } else if (self->arena->nodes[e].kind == N_POST) {
             n = e;
