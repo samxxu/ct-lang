@@ -1,9 +1,9 @@
 # Phase 31 — 容器能力收口：接口值、嵌套容器、下标糖与花括号初值
 
-> **状态：规划中**（2026-11-11 立项；第 4 轮修订：按 R3 的 5 High / 5 Medium / 8 Low 逐条收口，待复评）。
+> **状态：规划中**（2026-11-11 立项；第 5 轮修订：按 R4 的 2 High / 2 Medium / 4 Low 逐条收口，待复评）。
 > **基线**：`v0.30.0` @ `bd91bfe`（`test(release): regenerate the goldens for v0.30.0`；`1564938` 只改版本常量，50 个 golden 到 `bd91bfe` 才重生成），不 bump 版本、不打 tag。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载范围裁决、语义表、battle、
-> 判据/负例台账、样例矩阵与估算，约 1,010 行，需需求提出方签字保留单卡、不拆分。
+> 判据/负例台账、样例矩阵与估算，约 1,040 行，需需求提出方签字保留单卡、不拆分。
 > 关联：[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（接收者语境块）、[modern-oo-gap.md](../modern-oo-gap.md)（需求侧缺口评估）
 
 ## 1 目标与范围
@@ -53,14 +53,14 @@
 
 ### 1.5 design window
 
-`docs/design/` 现有 12 份编号阶段文档（phase20–phase31），实测 `check-docs.py` 输出 `design window: ok (12/12)`。phase19 已在 `44a674f` 归档到 `docs/history/design/phase19.md`，索引链接已改；roadmap 中英 Phase 31 行已存在（[roadmap.md:46](../roadmap.md#L46) 与 [roadmap.md:1024](../roadmap.md#L1024)）。**本卡不再重复这两步**；§2.1 的 docs 基线是绿的，上一版“落地会红两条”的说法作废。
+`docs/design/` 现有 12 份编号阶段文档（phase20–phase31），实测 `check-docs.py` 输出 `design window: ok (12/12)`。phase19 已在 `44a674f` 归档到 `docs/history/design/phase19.md`，索引链接已改；roadmap 中英 Phase 31 行已存在（[roadmap.md:46](../roadmap.md#L46) 与 [roadmap.md:1025](../roadmap.md#L1025)），但三个范围仍是旧值，落地时同步（见下条）。§2.1 的 docs 基线是绿的，上一版“落地会红两条”的说法作废。
 
 落地提交仍需完成以下接线（不是归档动作）：
 
 - `docs/language-spec.md` 写入 `Vec` / `Map` 花括号语义（含“运行期按序 `put`”与“编译期只拒可静态判定的同源重复键”两条规则）、空句柄可释放规则、借用视图寿命规则。
 - 新增 `examples/34_map_literal`；`test/run.sh` 用 `examples/*/*.ct` glob 自动纳入，样例计数从 141 增到 142。
 - `check-ast.sh` 登记 §7/§8 的新增/改写夹具：19 条旧断言转正（15 下标 + `map_brace_init` + 3 条容器元素/接口断言）、L31 新负例、生成式 1024/1025 夹具。
-- roadmap 两行把“落地时归档 phase19”改为“phase19 已归档”，并把三个范围同步到本卡最终编号：`D31-17→24`、`E31-23→30`、`L31-21→23`；收口时贴 `grep -n "Phase 31 |" docs/roadmap.md` 原始输出。
+- **roadmap 待改（本卡不擅自改）**：[roadmap.md:46](../roadmap.md#L46) 与 [roadmap.md:1025](../roadmap.md#L1025) 当前仍是旧范围 `D31-1–D31-17` / `E31-1–E31-23` / `L31-1–L31-21`；落地时必须同步为 `D31-1–D31-24` / `E31-1–E31-30` / `L31-1–L31-23`。**归档措辞不动**：两行现文已是“落地时窗口不扩张、无需归档”，不存在“落地时归档 phase19”这句。收口时贴 `grep -n "Phase 31" docs/roadmap.md` 原始输出。
 
 ---
 
@@ -68,7 +68,7 @@
 
 ### 2.1 门禁基线
 
-在 `bd91bfe`（`test(release): regenerate the goldens for v0.30.0`）的干净工作树上实测；`git status --short` 为空。**不钉 `1564938`**：它只改了五处版本常量，50 个 `test/cases` golden 仍是 `v0.26.4`，而 `test/run.sh:107` 与 `check-ast.sh:389-412` 都是裸 diff；独立 `git worktree` 副本实测 `test/run.sh` 26 failed、`check-ast.sh` 1072 passed / 1 failed、`check-goldens.sh` 25 failed，不能作为 T-7 红证基线。
+在 `bd91bfe`（`test(release): regenerate the goldens for v0.30.0`）的干净工作树上实测；`git status --short` 为空。**不钉 `1564938`**：它只改了五处版本常量，50 个 `test/cases` golden 仍是 `v0.26.4`，而 `test/run.sh:107` 与 `check-ast.sh:5230-5262`（L0 seed goldens 的裸 `diff -q`，比对行在 5254）都是裸 diff；独立 `git worktree` 副本实测 `test/run.sh` 26 failed、`check-ast.sh` 1072 passed / 1 failed、`check-goldens.sh` 25 failed，不能作为 T-7 红证基线。
 
 ```
 bash selfhost/check-ast.sh          → 1073 passed / 0 failed
@@ -78,7 +78,7 @@ bash selfhost/check-warnings.sh     → 353 ok / 0 failed
 python3 test/docs/check-docs.py     → 1021 links / 180 files, v0.30.0, 11 hard gates, 12 phase status, 3 适用版本 header(s)
 ```
 
-> 上述计数是**干净基线 `bd91bfe`** 的实测值（独立 `git worktree`，未污染主工作区）；docs 已是全绿 12/12，本卡落盘不会让 `check-docs` 变红（roadmap 行与 phase19 归档都已完成）。本卡自身新增的相对链接在落地后计入；其他会话的并行草稿不在本卡基线内，也不作为本卡判据（评审曾看到的 `check-docs` 瞬时红是并行草稿先后落盘的窗口，与本卡无关）。落卡后仍跑 `check-all` 作为回归，末行见收口报告。
+> 上述计数是**干净基线 `bd91bfe`** 的实测值（独立 `git worktree`，未污染主工作区）；docs 已是全绿 12/12，本卡落盘不会让 `check-docs` 变红（phase19 已于 `44a674f` 归档；roadmap 的 Phase 31 两行仍是旧范围，落地时同步，见 §1.5）。本卡自身新增的相对链接在落地后计入；其他会话的并行草稿不在本卡基线内，也不作为本卡判据（评审曾看到的 `check-docs` 瞬时红是并行草稿先后落盘的窗口，与本卡无关）。落卡后仍跑 `check-all` 作为回归，末行见收口报告。
 
 ### 2.2 红证探针（基线 `bd91bfe` 的二进制 `/tmp/ct-ast`，cwd=仓库根）
 
@@ -242,7 +242,7 @@ static void Vec_Vec_int__elem_release(struct Vec_int *e) {
 | `release` | [Vec.h.ct:164](../../lib/std/Vec.h.ct#L164) | **仅 `refs` 归零分支**逐元素 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（D29-12/V29-2 不变）；空句柄由 `from` 分配非零 header 保证可释放 |
 | range 初值 | `Stmt.h.ct:2180-2250` | 元素有生命周期 → 硬错 L31-12（临时数组的元素引用无处释放）；`from` 本身仍允许 |
 
-> 表内行号基于基线 `bd91bfe`；S27a/S27b 把数据指针移进 `ct_buf` 后方法体整体下移，锚点以落地前的基线为准，不在本卡追写。`Vec` + `Map` 两个 impl 块合计 **41 处** `self->data` / `self->entries` 访问点（`grep -c` 实测），S27b 逐方法替换；表内“不改”仅指生命周期语义不变，数据访问仍统一改经 `h->data`。
+> 表内行号基于基线 `bd91bfe`；S27a/S27b 把数据指针移进 `ct_buf` 后方法体整体下移，锚点以落地前的基线为准，不在本卡追写。访问点分两笔：`grep -c "self->data\|self->entries" lib/std/Vec.h.ct` 实测 **37 处**（`self->data` 10 + `self->entries` 27），加 `Vec::from` 里 4 行 `v.data`（67 `v.data = 0`、71 data 分配、78 `v.data = nd`、79 `memcpy`）才是 **41 行**；S27b 逐方法替换，`from` 的这 4 行单独处理（67/78 删除或改 `v.h->data`，71/79 的 `sizeof(v.data[0])` 改 `sizeof(items[0])`，`memcpy` 目标改 `v.h->data`）。表内“不改”仅指生命周期语义不变，数据访问仍统一改经 `h->data`。
 
 #### 3.2.3 `Map<K, V>` 的落点
 
@@ -324,14 +324,29 @@ Vec<Box<int>> v;              // 与 Vec<Vec<int>> 走同一套助手
 - 为 `struct Map_*` → 同上，`get(key)`，结果类型是 `V *`。
 - 其它类型 → 保持 C 数组下标。
 - **链式结果**：`static_ctype` 已有 `N_MCALL` 分支（[Expr.h.ct:3230-3252](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3230-L3252)，P22），但固有方法只 `ctype_expand` 模板声明的返回类型；`Vec<T>::get` 的 `T` 必须先按实例绑定替换成 `int` / `struct Vec_int` 等具体 C 类型，`g[i][j]` 的第一层才能得到 `struct Vec_int`，第二层 `[j]` 再走同一重写。
-- **临时接收者（修正）**：固有方法 `aux == 9` 在发射时**无条件写 `&`**（[Emitter.h.ct:3925](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925)），trait 值派发也写 `&`（[Emitter.h.ct:3994](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994)）；而材料化只认自由函数调用根（[Emitter.h.ct:1755](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755) `root->kind == N_CALL`），`N_MCALL` 不在其中。因此 `N_MCALL` 结果作接收者时**必须先落临时再取址**：`hoist_scan` 的根判定扩到 `N_CALL` 或 `N_MCALL`（aux 9/10），`emit_hoists` 的类型来源改用 `static_ctype`（不再 `find_func`）。产物是
+- **临时接收者（修正）**：固有方法 `aux == 9` 在发射时**无条件写 `&`**（[Emitter.h.ct:3925](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925)），trait 值派发也写 `&`（[Emitter.h.ct:3994](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994)）；而材料化只认自由函数调用根（[Emitter.h.ct:1755](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755) `root->kind == N_CALL`），`N_MCALL` 不在其中。因此 `N_MCALL` 结果作接收者时**必须先落临时再取址**，且 hoist 之后**不得再发射一次原调用**。两个落点缺一不可（S21a）：
+
+  **(a) 让方法调用进得了 hoist——入口判定与类型来源都按节点 kind 分支**：
+
+  - `hoist_scan`（[Emitter.h.ct:1749-1767](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1767)）现在用 `root->kind == N_CALL && !text3[0] && find_func(text2) >= 0` 判根；`N_MCALL` 的 `text2` 是方法名（`get`/`len`），`find_func` 必然返回 < 0。改为**按 kind 分支**（两种 kind 都保留 `!text3[0]`）：`N_CALL` 仍走 `find_func(text2) >= 0`；`N_MCALL` 走 `(aux == 9 || aux == 10) && find_struct(<text 去掉 "struct " 前缀>) >= 0 && structs[si].is_inst`（与发射分支 [Emitter.h.ct:3917-3921](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3917-L3921) 同一判定），**不再调用 `find_func`**。两处判定必须同步改：只改 `emit_hoists` 不会报错，而是 `hoist_scan` 根本不记录，调用照旧原样发射。
+  - **分片边界**：S21a 落 `N_MCALL` 固有方法（aux 9/10）的入口与类型；trait 值派发（aux 4/3/2/else）的同一入口与类型判定归 S21c（同样不得调 `find_func`，用 `static_ctype` 判接收者结果类型），S21c 复用 (b) 的 `text3` 短路。
+  - `emit_hoists`（[Emitter.h.ct:1781-1792](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1781-L1792)）现在无条件 `find_func(hoist_calls[i]->text2)` 取 `funcs[f].ret`，取不到就 `fail_from("cannot infer the type of a hoisted receiver")`。改为**按 kind 取类型**：`N_CALL` 维持 `funcs[f].ret`；`N_MCALL` 用 `frontend::parse::expr_get()->static_ctype(hoist_calls[i], buf, sizeof buf, &depth, 0)` 取该调用的结果 C 类型。`static_ctype` 是 `struct Expr` 的方法，`struct Emitter` 没有 `Expr` 字段，必须经单例 `frontend::parse::expr_get()` 调用（[Expr.h.ct:4956](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4956)；现成用法 [MapBuild.h.ct:886](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct#L886)）。
+  - **查不到就硬错，不退化成原样发射**：`static_ctype` 返回 0 时仍报 `cannot infer the type of a hoisted receiver`。退化成原样发射会重新产生 `&Vec_*_(` 的非法 C，违反本卡红线，也会让 E31-24 的产物断言变红；这是编译器内部不变量，不是用户可恢复错误。
+
+  **(b) hoist 之后不得重复发射——`N_MCALL` 分支加与 `N_CALL` 同构的短路**：
+
+  - 字段复用 `text3`，不新增字段。写入者与读取者：`hoist_scan` 在记入 `hoist_calls` 的同一节点上写 `text3 = "__ct_tmp<N>"` 并 `ntmp++`；`emit_hoists` 在写声明右值期间置 `raw_call = hoist_calls[i]`、发完复位 `-1`；`emit_expr` 读 `text3`。
+  - 在**两个接收者分支的入口**分别插入与 [Emitter.h.ct:4025-4028](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4025-L4028) 同构的短路：`if (nodes[n].text3[0] && n != raw_call) { fputs(nodes[n].text3); return 0; }`。落点是 (i) `aux == 9/10` 固有方法分支入口（[Emitter.h.ct:3910](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3910)，S21a）；(ii) trait 值派发链入口（[Emitter.h.ct:3963](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3963) 的接收者检查之前、静态分支之后，S21c）。**不能放在 `case N_MCALL:` 首行**：`aux == 5` 的静态映射调用把 `text3` 复用为映射实例名（[Emitter.h.ct:3784](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3784)），无条件短路会把实例名当成调用打印。`n == raw_call` 的那一次是 `emit_hoists` 写声明右值，必须打印真实调用；此后所有对同一节点的发射都只打印临时名。
+  - **先后关系**：语句发射固定为 `hoist_rvalue`/`hoist_scan` → `emit_hoists(ind)`（写临时声明）→ `emit_expr(语句)`（用临时名），见 [Emitter.h.ct:2838-2843](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2838-L2843) 与 [Emitter.h.ct:3057](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3057)；`emit_hoists` 对每个根先置 `raw_call` 再 `emit_expr`，保证声明行只发真实调用一次。
+
+  产物是
 
   ```c
   struct Vec_int __ct_tmp0 = Vec_int_get(&g, 0);
   Vec_int_len(&__ct_tmp0);
   ```
 
-  `g[i][j]` 同形：`struct Vec_int __ct_tmp0 = Vec_int_get(&g, 0); Vec_int_get(&__ct_tmp0, j);`。`b.mv()[0]`、`v.get(0).show()` 同样先材料化；同一接收者一次表达式只求值一次。
+  `g[i][j]` 同形：`struct Vec_int __ct_tmp0 = Vec_int_get(&g, 0); Vec_int_get(&__ct_tmp0, j);`。`b.mv()[0]`、`v.get(0).show()` 同样先材料化；“同一接收者一次表达式只求值一次”由 (b) 的 `text3` 短路保证，不是只靠 `hoist_scan` 记录。
 - **合法 C 的边界**：`f()[i]`、`(*pv)[i]`、`arr_of_vec[i][j]`、`h.v[i]` 不需要 `N_MCALL` 临时；`g.get(0).len()`、`g[i][j]`、`b.mv()[0]` 必须走上面的材料化。E31-24 的产物断言禁止出现紧贴调用的 `&Vec_*_(` / `&Map_*_(`，并要求出现 `__ct_tmp`。
 - 因为构造的就是 `.get(...)` / `.len(...)` 的节点形态，**解析与发射共用同一套节点**；`ct check` 与编译共用解析器，诊断自动一致。链式访问不是“发射器特例”，但确实要动 `hoist_scan` / `emit_hoists`，成本按 D31-18 拆成 S21a–S21c 计入。
 
@@ -600,7 +615,7 @@ static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
 | **D31-15** | 有生命周期元素的 `Vec` / `Map` 字面量表项是**拥有型临时**（`mk()`、`{}`、`from`、`retain`、`pop`）时必须具名（L31-21）；借用型临时（`get`/`entry`/`foreach item`）允许，`from` retain 后源容器仍持有原引用 | 拥有型临时那份引用无人释放；借用型没有这个问题 |
 | **D31-16** | `Map` 字面量的键/值表达式在类型可判定时静态校验（L31-17）；键白名单沿用 L29-8，不另立文案 | 绝不发射非法 C；不给同一条规则两种说法 |
 | **D31-17** | `Map` 字面量条目 ≤ 1024；仅限局部声明（全局 L31-19、赋值 L31-20）；嵌套花括号统一 L31-9 | 与 `Vec` 初值、range 的上限和位置规则对齐；嵌套字面量需要隐藏句柄生命周期，另立 T31-3 |
-| **D31-18** | **链式访问必须实现**：`g.get(0).len()`、`g[i][j]`（只读）、`b.mv()[0]` 都要能跑；做 `static_ctype` 的 `N_MCALL` 返回类型**实例绑定替换**（现有分支只 expand 模板声明，P22）；把 `hoist_scan` 的根从 `N_CALL` 扩到 `N_CALL || N_MCALL(aux 9/10)`，`emit_hoists` 用 `static_ctype(接收者)` 取临时类型（固有方法与 trait 值派发都无条件写 `&`，`Emitter.h.ct:3925/3994`）；再补二级下标重写；成本拆为 S21a（材料化+白名单）、S21b（实例绑定+二级下标）、S21c（trait 值派发与回归），各自 ≤150 行 | 用户裁定不做硬错；`g[i][j]` 是嵌套容器的自然读法，硬错会让 O2 的可用性打折 |
+| **D31-18** | **链式访问必须实现**：`g.get(0).len()`、`g[i][j]`（只读）、`b.mv()[0]` 都要能跑；做 `static_ctype` 的 `N_MCALL` 返回类型**实例绑定替换**（现有分支只 expand 模板声明，P22）；把 `hoist_scan` 的入口按 kind 分支（`N_CALL`→`find_func`；`N_MCALL(aux 9/10)`→`find_struct(...).is_inst`，不再对方法名调 `find_func`），`emit_hoists` 按 kind 取类型（`N_CALL`→`funcs[f].ret`，`N_MCALL`→`frontend::parse::expr_get()->static_ctype(...)`，取不到硬错），并在 `aux 9/10` 与 trait 值派发两个接收者分支入口分别加与 `N_CALL` 同构的 `text3 && n != raw_call` 短路（**不得放 `case N_MCALL` 首行**：`aux 5` 的 `text3` 是映射实例名），保证 hoist 后同一调用只发射一次（固有方法与 trait 值派发都无条件写 `&`，`Emitter.h.ct:3925/3994`）；再补二级下标重写；成本拆为 S21a（材料化+白名单）、S21b（实例绑定+二级下标）、S21c（trait 值派发与回归），各自 ≤150 行 | 用户裁定不做硬错；`g[i][j]` 是嵌套容器的自然读法，硬错会让 O2 的可用性打折 |
 | **D31-19** | 借用视图不可 `release`：`get` / `entry` / `foreach item` 的结果（含先绑局部）→ L31-14；`pop()` 是拥有型，`v.pop().release()` 合法 | 选择数据流硬错而不是 retain-on-get：`get` 保持只读直觉，不把每个读取点变成引用计数操作 |
 | **D31-20** | `foreach` 体内对迭代变量 `clear`/`remove`/`set`/`put`/`push` → L31-22；`get`/`entry` 借用视图在随后同容器变更后使用 → L31-23 | 语法/线性扫描可判定；别名逃逸不做（T31-5） |
 | **D31-21** | header 与 data **任一**分配失败都不得返回 `h == 0`：`Vec::from` / `Map::from` 的 header 失败、`Vec::from` 的 data 失败、`Vec::push` / `Map::put` 的 header 失败一律 `abort()`；只有**扩容 realloc 失败**在 `h` 有效时返回 0/部分表；`release(h==0)` 仍 abort（V29-2 不动）；`__ct_elem_release` 对零句柄 no-op | 保住 Phase 29 已收口的二次 release 契约；调用方不会拿到不可释放句柄，`release()` 不再因 OOM 分支 abort |
@@ -730,7 +745,7 @@ static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
 | S3 | `foreach` 放开接口元素；`Map<char *, Show>` 两个 `put` 块；样例 30 | 夹具 | 80–140 |
 | S4 | 拆 L29-11 两处守卫；`Vec<Vec<int>>` 声明/push/get/pop | 实现 | 30–60 |
 | S27a | **H-A 布局**：`ct_buf` 增 `void *data`；`Vec`/`Map` 句柄去掉数据指针；`retain` 只复制 `h`；`release` free `h->data` | 实现 | 60–120 |
-| S27b | **H-A 迁移**：41 处访问点逐方法迁到 `h->data`（from/get/set/push/pop/clear/len/put/remove/entry）；重跑 Phase 29 容器夹具 | 实现 | 40–80 |
+| S27b | **H-A 迁移**：37 处 `self->data` / `self->entries` 访问点逐方法迁到 `h->data`（from/get/set/push/pop/clear/len/put/remove/entry），加 `Vec::from` 内 4 行 `v.data`（67/71/78/79）共 41 行；**3 处数据元素尺寸写法同步换源**：`from` 的 71/79 `sizeof(v.data[0])` → `sizeof(items[0])`，`push` 的 124 `sizeof(self->data[0])` → `sizeof(v)`（`Map` 两块 215/285 的 `sizeof(self->entries[0])` → 类型化局部 `ne[0]`）；重跑 Phase 29 容器夹具 | 实现 | 40–80 |
 | S5a | `__ct_elem_*` 保留内置 + 每实例零句柄守卫助手 | 实现 | 100–140 |
 | S5b | 每实例生命周期助手发射，并接线 S27b 后的方法体 | 实现 | 40–80 |
 | S6 | `Vec` 生命周期落点（from 逐元素 retain / set / push / clear / release） | 实现 | 60–100 |
@@ -752,9 +767,9 @@ static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
 | S18 | Vec/Map 花括号与接口装箱、拥有元素 retain 的联调夹具（O1/O2 落地后） | 夹具 | 50–90 |
 | S19 | **只含**空表/OOM 分支助手：`Vec::from` / `Map::from` / `Vec::push` / `Map::put` 的 header/data 失败 `abort`，扩容失败返回 0/部分表 | 实现 | 15–30 |
 | S20 | 空句柄四夹具（`Vec={}`、`Vec<Vec<int>>={empty_row}`、`Map={}`、具名零句柄入容器） | 夹具 | 40–70 |
-| S21a | `N_MCALL` 材料化：`hoist_scan` 根扩到 `N_MCALL`，`emit_hoists` 用 `static_ctype` 取类型 | 实现 | 100–140 |
+| S21a | `N_MCALL` 材料化（两条落点同片）：①`hoist_scan` 入口按 kind 分支（`N_CALL`→`find_func`；`N_MCALL(aux 9/10)`→`find_struct(...).is_inst`），`emit_hoists` 按 kind 取类型（`N_MCALL`→`frontend::parse::expr_get()->static_ctype(...)`）；②`aux 9/10` 分支入口加 `text3 && n != raw_call` 短路（trait 值派发的同一短路归 S21c；**不得放 `case N_MCALL` 首行**，`aux 5` 的 `text3` 是映射实例名） | 实现 | 100–140 |
 | S21b | `static_ctype` 的 `N_MCALL` 实例绑定 + 二级下标重写 | 实现 | 60–140 |
-| S21c | trait 值派发接收者材料化 + 一次求值回归 | 实现 | 40–120 |
+| S21c | trait 值派发接收者材料化（aux 4/3/2/else 的 hoist 入口与类型判定，同样不走 `find_func`）+ 复用 `text3` 短路 + 一次求值回归 | 实现 | 40–120 |
 | S22 | 链式访问夹具（`g.get(0).len()`、`g[i][j]`、`b.mv()[0]`、越界零值） | 夹具 | 40–80 |
 | S23a | 借用 provenance：拷贝初始化/赋值传播（L31-14） | 实现 | 90–130 |
 | S23b | foreach 变异（L31-22）+ 借用失效（L31-23）+ 分配失败顺序挂点 | 实现 | 50–90 |
@@ -793,7 +808,7 @@ static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
 | **E31-12** | 花括号六类边界各恰好一条错误：类型不匹配 L31-6、不可判定 L31-7、1025 项 L31-8、嵌套花括号 L31-9、全局 L31-10、赋值 L31-11 | `ast/errors/L31_6*`–`L31_11*` | check-ast | P7/P9 |
 | **E31-13** | 协议不完整（有 `release` 无 `retain`、`retain` 返回类型不对）硬错 L31-15；`foreach item.release()` 硬错 L31-13；`g.get(0).release()`（`g` 为 `Vec<Vec<int>>`）硬错 L31-14 | `ast/errors/L31_13*`–`L31_15*` | check-ast | 新诊断，baseline 无此断言 |
 | **E31-14** | 跨单元接口/拥有元素在 `ct build` 下恰好一条 L31-2，不落 cc；同工程 `Vec<Vec<int>>` 仍可构建 | `test/modules/p31_cross_unit_*` 新夹具 | check-ast（module 段） | P11（cc `incomplete type`） |
-| **E31-15** | **先红后绿**：把 §7/§8 的新断言与翻正夹具先以 T-7 提交，baseline `bd91bfe` 下逐条红（§3.3.4 的 19 条翻正 + L31 新负例 + 新正例，原始输出贴收口记录）；落地后 `check-ast.sh` 计数按 **`1073 − 19（显式断言） − 19（test/ast/errors 自动扫描） + 19（新正例目录） + 新增负例` = `1054 + 新增负例`** 核对（`test/ast/errors` 基线 219 个 `.ct`，每个一条自动扫描；新增负例数 = §8 `p31_neg` 行数，收口记录分别给显式断言数 / errors 文件数 / 正例目录数），0 failed，`check-all.sh` 末行 OK | 全部新增/改写夹具 | check-ast + check-all | 新断言在 baseline 不存在；T-7 红证由新增夹具本身提供 |
+| **E31-15** | **先红后绿**：把 §7/§8 的新断言与翻正夹具先以 T-7 提交，baseline `bd91bfe` 下逐条红（§3.3.4 的 19 条翻正 + L31 新负例 + 新正例，原始输出贴收口记录）；落地后 `check-ast.sh` 计数按 **`1073 − 19（显式断言） − 19（errors 自动扫描） + 19（迁入的正例目录） + 15（本相新增正例目录） + N_neg（新增负例） + N_mod（新增 module 夹具） = 1069 + N_neg + N_mod`** 核对，0 failed，`check-all.sh` 末行 OK | 全部新增/改写夹具 | check-ast + check-all | 新断言在 baseline 不存在；T-7 红证由新增夹具本身提供 |
 | **E31-16** | 每个新样例都有编译器生成的 golden 后人工核对；无手写 golden；`examples/*/*.ct` 由 `test/run.sh` 的 glob 自动纳入 | `examples/30–34` | test/run | `examples/34` 在 baseline 不存在（`test -d` 为假） |
 | **E31-17** | `Map` 标量字面量正例：`{}`、`{"a":1}`、`{"a":1,"b":2}`、尾逗号、`{1:"one",2:"two"}`；`len`/`get`/`entry` 顺序与期望逐字节一致；运行期重复键 `{k:1,k:9}` 覆盖为 9、len 不变、不 abort | `examples/34`、`ast/188–189` | test/run + check-ast | P9（`a Map cannot be initialized from a brace list`） |
 | **E31-18** | 键白名单回归：`Map<char,int>`、`Map<double,int>` 的字面量声明各恰好一条既有 L29-8 文案，位置在类型处；正向的 `Map<char *,int>` 字面量同组通过 | `ast/errors/L29_8_map_literal*` + 正例 | check-ast | 正例在 baseline 红（P9）；负例是回归护栏（baseline 已绿） |
@@ -807,9 +822,23 @@ static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
 | **E31-26** | `foreach` 体内对迭代变量 `clear`/`remove`/`set`/`put` 各恰好一条 L31-22；`p = m.get("a"); m.remove("a"); *p` 与 `e = m.entry(0); m.clear(); e.value.len()` 各恰好一条 L31-23 | `ast/errors/L31_22*`、`L31_23*` | check-ast | 新诊断，baseline 无此断言 |
 | **E31-27** | 分配失败顺序：`Map_*_put` / `Vec_*_push` 的容量失败分支 `return 0` **先于**任何 `__ct_elem_retain` 调用；`Map_*_from` 的容量失败分支在 retain 之前 `return m`（保留已插入部分）；不注入运行时故障（T31-7） | `ast/191` 产物 grep | check-ast | baseline 无拥有元素路径 |
 | **E31-28** | 空句柄四夹具全部 rc=0、无 abort：`Vec<int> v = {}; v.release()`；`Vec<int> empty_row = {}; Vec<Vec<int>> g = {empty_row}; g.release(); empty_row.release()`（内层 header 非 0）；`Map<char*,int> m = {}; m.release()`；第 4 例改为**具名局部**（满足 L31-21，不能再写 `{outer.get(0), outer.pop()}`）：`Vec<Vec<int>> outer = {}; Vec<int> z1 = outer.get(0); Vec<int> z2 = outer.pop(); Vec<Vec<int>> g2 = {z1, z2}; g2.release(); outer.release();`（`z2` 是零句柄，不单独 release；级联守卫跳过） | `ast/192`；人工 ASAN 日志 `/tmp/p31_asan_empty.log` | check-ast + 人工 ASAN | P18（`release on a released handle`，rc=134） |
-| **E31-29** | OOM 契约：`Vec::from` / `Map::from` 的 header 失败、`Vec::from` 的 data 失败、`Vec::push` / `Map::put` 的 header 失败一律 `abort()`；产物断言 `Vec_*_from` 中每个 `malloc(sizeof(struct ct_buf))` 后紧跟 `if (... == 0) abort();`，且 `from` 体内不存在 `free(`；`Vec_*_push` / `Map_*_put` 的 header 分支同形；不返回 `h == 0`；扩容 realloc 失败在 `h` 有效时返回 0/部分表，句柄仍可 `release`；`from(0,0)` 返回 `h != 0`，`release` 后 rc=0；`Vec<T> v; v.h=0; v.release()` 仍 abort（V29-2 不动） | `ast/193` 产物断言 + 运行 | check-ast | P18 |
+| **E31-29** | OOM 契约：`Vec::from` / `Map::from` 的 header 失败、`Vec::from` 的 data 失败、`Vec::push` / `Map::put` 的 header 失败一律 `abort()`；**产物断言按发射器真实排版取窗口**（`malloc` 行 → `if (…) {` → `abort();`，见 `probe_alias.c:27-30`）：①`Vec_*_from` 体内每条 `malloc(` 行的 `grep -A2` 窗口都必须出现 `abort()`，且该函数体内 `abort();` **恰 3 处**（空表 header / 非空 header / data）；②**data 失败分支独立断言**：`Vec_*_from` 内第三条 `malloc(`（唯一不以 `sizeof(struct ct_buf)` 为参数的分配）的 `-A2` 窗口含 `abort()`，且其窗口内不得出现 `free(`；③`Vec_*_push` / `Map_*_put` 的 `malloc(sizeof(struct ct_buf))` 行 `-A2` 窗口含 `abort()`，各恰 1 处；④`from` 体内不存在 `free(`（data 失败不再 `free(h); h=0`）；不返回 `h == 0`；扩容 realloc 失败在 `h` 有效时返回 0/部分表，句柄仍可 `release`；`from(0,0)` 返回 `h != 0`，`release` 后 rc=0；`Vec<T> v; v.h=0; v.release()` 仍 abort（V29-2 不动） | `ast/193` 产物断言 + 运行 | check-ast | P18 |
 | **E31-30** | 句柄拷贝不因兄弟扩容变陈旧：`Vec<int> a = 4..5 { $ }; Vec<int> b = a.retain(); a.push(2); return b.get(0) == 4 ? 0 : 1;`（range 初值，baseline 可直接复现 UAF）；`Vec<int> row = 1..2 { $ }; Vec<Vec<int>> g = {}; g.push(row); row.push(2); return g.get(0).get(0) == 1 ? 0 : 1;`；`Map<char *, Vec<int>> m = {}; Vec<int> v = 1..2 { $ }; m.put("k", v); v.push(2); return m.get("k")->get(0) == 1 ? 0 : 1;` 全部 rc=0；**确定性产物断言**：`Vec_*` / `Map_*` 实例结构体只有 `struct ct_buf *h;`，`Vec_*_get` 体内访问 `h->data` | `ast/194`、`ast/195`；人工 ASAN 日志 `/tmp/p31_asan_alias.log` | check-ast 产物 grep（硬回归）+ 人工 ASAN | baseline 仅 retain 夹具可用 range 初值复现 heap-use-after-free；嵌套/Map 夹具在 O2 前不可编译，靠产物 grep 覆盖 |
 
+> **E31-15 计数对账**（每个数都有可核对的来源；`N_neg` / `N_mod` 收口时实测填入）：
+>
+> | 项 | 值 | 来源 |
+> | --- | --- | --- |
+> | 基线总数 | `1073` | `bd91bfe` 上 `bash selfhost/check-ast.sh` 末行 `1073 passed, 0 failed`（§2.1） |
+> | 迁出负例的显式断言 | `−19` | §3.3.4 的 19 行：15 条下标（6036/6037/6044–6047/6050–6054/6057–6059/6062）+ 6038 + 6040 + 5759 + 5760 |
+> | 迁出负例的自动扫描 | `−19` | `test/ast/errors/*.ct` 基线实测 219 个，`check-ast.sh:3022-3030` 每文件一条 `ok`；这 19 个 `.ct` 迁到正例目录后，219 → 200，自动扫描少 19 条 |
+> | 迁入后的正例目录 | `+19` | `test/ast/165–180`（16 个：15 下标 + `map_brace_init`）+ `196–198`（3 个：`container_element` / `container_element_map` / `container_iface`）；`check-ast.sh:502-598` 每个正例目录恰一条 `ok "$name"` |
+> | 本相新增正例目录 | `+15` | §7 引用 `181`、`182`、`183`、`184`、`185`、`187`、`188`、`189`、`190`、`191`、`192`、`193`、`194`、`195`、`199`，共 15 个目录；`186` 不建目录（§12 夹具清单），故此项固定 `+15`，不设条件分支 |
+> | 本相新增负例 | `+N_neg` | 新增的 `test/ast/errors/*.ct` 文件数（每个一条自动扫描）：§8 的 23 条 `L31-*` 规则（一条规则至少一个文件，多形态可拆多文件）+ E31-18 的 `L29_8_map_literal*` 护栏；不含基线已有的 `L29_*`，也不含迁出的 19 个文件 |
+> | 本相新增 module 夹具 | `+N_mod` | `test/modules/p31_*` 新增目录数：E31-14 的 `p31_cross_unit_*` + E31-20 的 `p31_mapentry_param`，至少 2，每个在 module 段贡献一条 `ok` |
+>
+> **为什么是 `1069` 而不是 `1073`**：`−19`（显式断言）与 `−19`（自动扫描）是**同一批 19 个夹具的两种计数**，文件迁出 `errors/` 后各自消失一次，两项不能合并成 `−19`；`+19` 是这批夹具迁入正例目录后新增的计数，三项净额 `−19`，所以迁正部分是 `1073 − 19 = 1054`。本相新增的 15 个正例目录各贡献一条 `ok`，`1054 + 15 = 1069`。`N_neg` 与 `N_mod` 是**全新的文件**（基线不存在），不与任何减项重叠。收口记录必须分列五项实测：显式断言数 / `errors` 文件数 / 正例目录数 / module 夹具数 / 新增负例数。
+>
 > 判据自查：E31-1–E31-30 中，除显式标注“人工 ASAN / 人工证据”的条目外，每条都能在真门禁里观察到（编译/运行输出、产物 grep、诊断文案与位置、门禁计数）。ASAN 与文档 grep 作为**人工证据**附在收口记录，明确不进入 11 道硬门禁；`check-sanitizers.sh` 本身不提供过滤参数，“过滤到新夹具”指**用同一组 sanitizer 标志手工只编译运行新夹具**，不修改门禁脚本。`check-sanitizers.sh` 的既有失败不预写数量，收口记录附 `bash selfhost/check-sanitizers.sh` 原始输出并单列，不混入本相证据。
 
 ---
@@ -951,7 +980,7 @@ Vec<int> v = {a + b};   /* L31-7: cannot determine the type of initializer eleme
 | R31-12 | 常量重复检测漏判（`01`、`1L`、`-1`、`1+1`、`\x61`、相邻拼接、同枚举成员） | 整数求值器 + 字符串解码 + cname 比较；L31-16 七类夹具逐条断言 | 负例没红 |
 | R31-13 | 复合字面量临时数组在 1024 条时栈/帧过大 | 上限 1024 与 `Vec`/range 一致；1025 负例；1024/1025 用 check-ast 临时生成夹具，不手写进 examples | 生成 C 编译失败或栈溢出 |
 | R31-14 | 用户把 L31-16 理解成“字面量不能有重复键”，与 `put` 的覆盖语义冲突 | 文档写明“运行期只有按序插入一条规则；编译期只拒可静态判定的同源重复”，E31-19 正负例并排 | 评审提出两种规则 |
-| R31-15 | 链式访问发射出非法 C（`N_MCALL` 接收者嵌套调用、二级下标临时值） | S21a 把 `N_MCALL` 根纳入 `hoist_scan` 并用 `static_ctype` 取临时类型，S21b 补实例绑定与二级下标；E31-24 用产物 grep 禁止 `&Vec_*_(` / `&Map_*_(` 并强制 `__ct_tmp`，再编译运行 | 产物出现紧贴调用的 `&Vec_*_(`，或缺 `__ct_tmp` |
+| R31-15 | 链式访问发射出非法 C（`N_MCALL` 接收者嵌套调用、二级下标临时值、hoist 后同一调用被重复发射） | S21a 按 kind 扩 `hoist_scan` 入口（`N_MCALL` 走 `find_struct(...).is_inst`）、`emit_hoists` 经 `expr_get()->static_ctype` 取临时类型，并在 `aux 9/10` 与 trait 值派发两个接收者分支入口分别加 `text3 && n != raw_call` 短路（避开 `aux 5` 的 `text3` 语义），S21b 补实例绑定与二级下标；E31-24 用产物 grep 禁止 `&Vec_*_(` / `&Map_*_(` 并强制 `__ct_tmp`，再编译运行 | 产物出现紧贴调用的 `&Vec_*_(`（含 hoist 后二次发射的形态），或缺 `__ct_tmp` |
 | R31-16 | 借用 provenance 误报（把 `pop()` 或 `retain()` 当借用） | 只对 `get`/`entry`/`foreach item` 及其字段/解引用置 `borrowed`；`pop`/`retain`/`from`/`{}` 一律拥有；拷贝初始化/赋值按 §3.2.4 传播与清除；E31-25 正反例并排 | 合法 `pop().release()` 被拒 |
 | R31-17 | OOM 分支返回不可释放句柄（`h == 0` 或 `free(h); h = 0`） | `Vec::from` / `Map::from` 的 header/data 失败、`Vec::push` / `Map::put` 的 header 失败一律 abort；只有扩容失败返回 0/部分表；E31-29 断言 `from(0,0)` 的 `h != 0` 且产物无 `h = 0` 失败分支 | OOM 路径返回 0 或留下 `h == 0` |
 | R31-18 | ASAN 判据被误挂门禁导致永远绿 | D31-22 明确人工证据；E31-3/5/6/22/30 的门禁列写“人工 ASAN”，收口记录附命令与日志 | 判据列出现 `check-ast` + ASAN |
@@ -978,17 +1007,17 @@ Vec<int> v = {a + b};   /* L31-7: cannot determine the type of initializer eleme
 **代码**
 - `selfhost/ct-ast/frontend/parse/Expr.h.ct`：守卫拆分、接口元素、嵌套元素、下标糖、写形态诊断、实参装箱、`__ct_elem_*` 解析、二级下标重写、借用 provenance
 - `selfhost/ct-ast/frontend/parse/Stmt.h.ct`：`foreach` 放开与变异检查、`Vec` / `Map` 花括号初值结构化解析、常量重复检测（整数求值/字符串解码/枚举 cname）、range 拥有元素拒绝
-- `selfhost/ct-ast/backend/emit/Emitter.h.ct`：每实例生命周期助手发射、`Vec` / `Map` 花括号降级、`N_MCALL` 接收者材料化与白名单
+- `selfhost/ct-ast/backend/emit/Emitter.h.ct`：每实例生命周期助手发射、`Vec` / `Map` 花括号降级、`N_MCALL` 接收者材料化与白名单（`hoist_scan` 按 kind 分支 + `emit_hoists` 经 `expr_get()->static_ctype` 取类型 + `aux 9/10` 与 trait 接收者分支入口的 `text3` 短路，避开 `aux 5`）
 - `lib/std/Vec.h.ct`：**`ct_buf` 增 `void *data`，`Vec`/`Map` 句柄只留 `h`**（D31-24）；`Vec`/`Map` 的 retain/release 落点、`Vec<T>::from` 的逐元素 retain 与可释放空 header、OOM 分支、`Map<K,V>::from` 两个 impl 块的内联构造器
 
 **夹具**
-- `test/ast/165–180`（15 下标 + `map_brace_init` 转正）、`196–198`（3 条容器/接口断言转正）、`181–195`、`199`（本相新增正例，含 E31-30 的句柄别名与 E31-24 的链式产物用例）与 `test/ast/errors/L31_*` 负例；`Map` 字面量边界、常量重复七类、键白名单回归各一组
+- `test/ast/165–180`（15 下标 + `map_brace_init` 转正）、`196–198`（3 条容器/接口断言转正）、`181–185`、`187–195`、`199`（15 个本相新增正例；`186` 不建目录，E31-15 的 `+15` 即此清单；含 E31-30 的句柄别名与 E31-24 的链式产物用例）与 `test/ast/errors/L31_*` 负例；`Map` 字面量边界、常量重复七类、键白名单回归各一组
 - `selfhost/check-ast.sh` 新增断言；**19 条**旧断言改写为正例（15 下标 + `map_brace_init` + `container_element` / `container_element_map` / `container_iface`，§3.3.4）
 - `examples/30_iface_container`、`31_nested_container`、`32_container_subscript`、`33_vec_brace_init`、`34_map_literal` 及 golden，全部由 `test/run.sh` 的 glob 纳入
 
 **文档**
 - `docs/language-spec.md`：接口元素寿命、嵌套元素所有权、下标糖与链式访问、`Vec` / `Map` 花括号初值（含“运行期按序插入一条规则 + 编译期只拒可静态判定的同源重复”）、空句柄可释放、借用视图寿命、跨单元边界
-- `docs/tutorial.md`、`docs/glossary.md`、`docs/roadmap.md`（中英两行已有，落地时把“落地时归档 phase19”改为“phase19 已归档”并同步 `D31-17→24`、`E31-23→30`、`L31-21→23` 三个范围）、`docs/README.md`
+- `docs/tutorial.md`、`docs/glossary.md`、`docs/roadmap.md`（中英两行已存在；**当前仍是旧范围 `D31-1–D31-17` / `E31-1–E31-23` / `L31-1–L31-21`（[roadmap.md:46](../roadmap.md#L46)、[roadmap.md:1025](../roadmap.md#L1025)），落地时必须同步为 `D31-1–D31-24` / `E31-1–E31-30` / `L31-1–L31-23`**；两行现文已是“落地时窗口不扩张、无需归档”，归档措辞保持现状，不再改写）、`docs/README.md`
 
 **不做**
 - 不改 `editors/vscode/**`、`docs/modern-oo-gap.md`（其他会话）
