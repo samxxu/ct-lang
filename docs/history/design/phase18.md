@@ -6,11 +6,11 @@
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
 > （`hal` 契约 + 平台包 + C 库映射）、索引与 CI 产出**，为 `1.0.0` 做准备。
 > **D18-1…D18-11 已按建议值经用户确认**（2026-11-02）。本文件只记录计划，不描述现状；
-> 现状见 [README](../../README.md) 与 [language-spec](../language-spec.md)。
+> 现状见 [README](../../../README.md) 与 [language-spec](../../language-spec.md)。
 >
 > 前置约束：除 **18.0** 外，一律只改 `selfhost/ct-ast/**`、顶层新增目录、`.github/workflows/**`
 > 与 `docs/**`；**18.0 是本阶段唯一获授权的冻结层例外**——只动
-> [`selfhost/l2/core.ct`](../../selfhost/l2/core.ct) 的容量常量与表分配方式（D18-11），
+> [`selfhost/l2/core.ct`](../../../selfhost/l2/core.ct) 的容量常量与表分配方式（D18-11），
 > L0 / L1 保持不动。不引入第三方库、构建系统或代码生成脚本；编译器侧**零网络**与
 > **零子进程**契约不变（`ct get` 仍允许 git，`ct update` / `ct verify` 仍离线）。
 
@@ -41,8 +41,8 @@
 | 面 | 现状 | 缺口 |
 | --- | --- | --- |
 | 包工具 | `ct get` / `ct install` / `ct update` / `ct verify`、比较器范围、显式索引、`cflags` / `ldflags` / `requires` 均已落地（Phase 17.5） | 无组织化的包、无包规范、无首批包 |
-| 组织 | GitHub org `ct-pkg` 已创建，且是 `ct get` 的默认 registry（[Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) 第 658 行） | 无仓库命名约定、无索引仓库 |
-| binding | [`bindings/mock-hal/`](../../bindings/mock-hal/) 是示例；binding 规约见 [`bindings/README.md`](../../bindings/README.md) | 无 `hal` 契约包、无平台实现包、无 C 库映射包 |
+| 组织 | GitHub org `ct-pkg` 已创建，且是 `ct get` 的默认 registry（[Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) 第 658 行） | 无仓库命名约定、无索引仓库 |
+| binding | [`bindings/mock-hal/`](../../../bindings/mock-hal/) 是示例；binding 规约见 [`bindings/README.md`](../../../bindings/README.md) | 无 `hal` 契约包、无平台实现包、无 C 库映射包 |
 | 索引 | 五字段纯文本格式（`name version git-url tag sha256:<hex>`）已定，`CT_INDEX` / `--index` 可用 | 无索引生成脚本、无托管、无 CI 产出与校验 |
 | CI | `.github/workflows/{ci,nightly}.yml` 三个 job；11 道本地硬门禁 | 无包门禁 job、无目标机 job |
 | 容量 | L2 建 ct-ast：`MAX_FUNCS 128`（111 已用）、`MAX_MAP_IMPLS 256`（253 已用）；17.5 靠 static 助手绕开 | 再加一个 impl 方法即失败；下一次功能开发就会被卡住 |
@@ -52,7 +52,7 @@
 
 | 切片 | 内容 | 主要改动面 | 出口 |
 | --- | --- | --- | --- |
-| **18.0** | **容量解除** | [`core.ct`](../../selfhost/l2/core.ct)：`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`；函数 / trait / struct / 反向映射四张定长表改 `calloc` 堆分配；必要的常量注释同步 | L2 能编 256 函数的 ct-ast；257 仍在 ct-ast 自己的上限处失败；BSS / 二进制增量有实测记录；`check-archive.sh` 与 11 道门禁全绿 |
+| **18.0** | **容量解除** | [`core.ct`](../../../selfhost/l2/core.ct)：`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`；函数 / trait / struct / 反向映射四张定长表改 `calloc` 堆分配；必要的常量注释同步 | L2 能编 256 函数的 ct-ast；257 仍在 ct-ast 自己的上限处失败；BSS / 二进制增量有实测记录；`check-archive.sh` 与 11 道门禁全绿 |
 | **18.1** | **包规范与作者指南** | 新增 `docs/package-guide.md`（中英）；约定 `ct.pkg` 键、命名 / 版本 / tag / 目录 / licence / 依赖规则 | 规范可被 CI 与人工同时校验；`test/pkg/run.sh` 增加 manifest 约定的正负例 |
 | **18.2** | **索引与 CI** | `ct-pkg/index` 仓库（外部）的 `index` 文件与生成脚本；本仓库新增 `.github/workflows/packages.yml` 与夜间目标机 job | 包通过索引可解析；`ct verify` 绿；索引由 CI 生成并提交；本地门禁仍为 11 道 |
 | **18.3** | **`hal` 契约包** | `ct-pkg/hal`：`Uart` / `Gpio` / `Clock` / `Log` 四个 trait，纯 `.h.ct`，无 impl | 契约可被平台包 `use`；与 `bindings/mock-hal` 的命名对齐（D18-6） |
@@ -62,8 +62,8 @@
 
 #### 18.0 容量解除
 
-- 只改 [`selfhost/l2/core.ct`](../../selfhost/l2/core.ct)：`MAX_FUNCS` 128 → **256**（与 ct-ast 的
-  [`Symbols.h.ct`](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct) 对齐），`MAX_MAP_IMPLS` 256 → **512**。
+- 只改 [`selfhost/l2/core.ct`](../../../selfhost/l2/core.ct)：`MAX_FUNCS` 128 → **256**（与 ct-ast 的
+  [`Symbols.h.ct`](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct) 对齐），`MAX_MAP_IMPLS` 256 → **512**。
 - 四张定长表（函数签名、trait、struct、反向映射）改为 `calloc` 堆分配，避免上限翻倍带来 BSS 膨胀；
   分配失败按既有约定 `exit(1)`。
 - 不改 L0 / L1；不改任何解析或发射语义——**在既有语料上产物逐字节不变**，golden 只在收口时因版本 token 变化。
@@ -81,7 +81,7 @@
 - 目录：包仓库根即包根（`ct.pkg`、`LICENSE`、源码单元）；单元命名遵守 `AGENTS.md` §2 的「一单元一主类型」。
 - licence：官方 `.ct` 包 MIT；C 映射包沿用上游 licence；包内必须有 `LICENSE`（D18-9）。
 - 依赖：`dep` 的行格式与 Phase 8 一致（`name` 或 `name@range`）；本阶段不做传递更新策略研究。
-- 作者指南 [docs/package-guide.md](../package-guide.md)：发布步骤、索引收录、`ct get` / `ct verify` / `ct install` 的正确用法、
+- 作者指南 [docs/package-guide.md](../../package-guide.md)：发布步骤、索引收录、`ct get` / `ct verify` / `ct install` 的正确用法、
   常见失败（摘要不符、tag 不存在、`requires` 不符仅告警）。
 
 #### 18.2 索引与 CI
@@ -97,7 +97,7 @@
 
 - `ct-pkg/hal`：纯 `.h.ct`，namespace `hal`，四个 trait：`Uart`（`send` / `recv`）、`Gpio`（`read` / `write`）、
   `Clock`（`now_ms`）、`Log`（`write`）；不含 impl、不发 `.c`。
-- 与 [`bindings/mock-hal/`](../../bindings/mock-hal/) 对齐：`Controller` 的 `send` 语义保留为 `Uart.send`；
+- 与 [`bindings/mock-hal/`](../../../bindings/mock-hal/) 对齐：`Controller` 的 `send` 语义保留为 `Uart.send`；
   mock-hal 继续作为示例，不要求同步改名（D18-6）。
 - 版本：`hal 1.0.0` 冻结；破坏性变更走 `2.0.0`。
 
@@ -128,7 +128,7 @@
 - **18.4 `hal-posix`**：单单元实现 + 四个 `map`，一个 `posix_hal` 实例可装箱成四个 trait；宿主 macOS arm64 端到端通过（`ct get` → `ct install` → 执行打印的命令 → 固定输出）。glibc 在 `-std=c99` 下会隐藏 POSIX 声明，故 `ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`；目标机（Linux aarch64）由 CI 交叉 + QEMU 验证（本机无交叉工具链）。
 - **18.5 `clib`**：三个 `.m.ct` 单元（`clib::String` / `clib::Stdio` / `clib::Math`），调用点展开为普通 C 调用（生成物中零 `clib_` 符号）；`strlen` 保留 `size_t` 的 `unsigned long` 拼写以避免 `printf` 格式告警；`ldflags = -lm` 已进入 `ct install` 打印的命令。
 - **18.2 索引与 CI**：索引仓库骨架（`index`、`tools/gen-index.sh`、`tools/refresh-index.sh`、`packages.txt`、夜间刷新 workflow）已本地验证——`ct get --index` 可递归解析 `hal-posix → hal`，`ct update` / `ct verify` 绿；本仓库 `packages.yml`（宿主 job + aarch64/QEMU job）已加入，本地门禁仍为 11 道。
-- **18.6 收口**：`examples/wave1-demo` 与 `packages.yml`（宿主 + aarch64/QEMU）已落地，首次 CI 运行待在推送后观察；第九轮评审（[review-2026-11-02](../history/reports/review-2026-11-02/review-2026-11-02.md)）的 6 条已全部处置；`hal-posix` 修复 PKG-1 后发布 `1.0.1`，索引重建为三行；五处 `CTC_VERSION` → `0.18.0`，71 个 golden 仅版本 token 变化。
+- **18.6 收口**：`examples/wave1-demo` 与 `packages.yml`（宿主 + aarch64/QEMU）已落地，首次 CI 运行待在推送后观察；第九轮评审（[review-2026-11-02](../reports/review-2026-11-02/review-2026-11-02.md)）的 6 条已全部处置；`hal-posix` 修复 PKG-1 后发布 `1.0.1`，索引重建为三行；五处 `CTC_VERSION` → `0.18.0`，71 个 golden 仅版本 token 变化。
 
 ### 5. 依赖与顺序
 
@@ -202,8 +202,8 @@
 | Area | State | Gap |
 | --- | --- | --- |
 | Package tool | `ct get` / `ct install` / `ct update` / `ct verify`, comparator ranges, an explicit index and `cflags` / `ldflags` / `requires` all landed (Phase 17.5) | No organised packages, no conventions, no first wave |
-| Organisation | The GitHub org `ct-pkg` exists and is `ct get`'s default registry ([Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) line 658) | No repository naming rule, no index repository |
-| Bindings | [`bindings/mock-hal/`](../../bindings/mock-hal/) is a sample; the rules live in [`bindings/README.md`](../../bindings/README.md) | No `hal` contract, no platform package, no C-library mapping package |
+| Organisation | The GitHub org `ct-pkg` exists and is `ct get`'s default registry ([Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) line 658) | No repository naming rule, no index repository |
+| Bindings | [`bindings/mock-hal/`](../../../bindings/mock-hal/) is a sample; the rules live in [`bindings/README.md`](../../../bindings/README.md) | No `hal` contract, no platform package, no C-library mapping package |
 | Index | The five-field plain-text format (`name version git-url tag sha256:<hex>`) is defined and `CT_INDEX` / `--index` work | No generator, no hosting, no CI output or verification |
 | CI | `.github/workflows/{ci,nightly}.yml` with three jobs; 11 local hard gates | No package job, no target-machine job |
 | Capacity | L2 builds ct-ast with `MAX_FUNCS 128` (111 used) and `MAX_MAP_IMPLS 256` (253 used); 17.5 worked around it with static helpers | One more impl method fails; the next feature is blocked |
@@ -213,7 +213,7 @@
 
 | Slice | Content | Main surface | Exit |
 | --- | --- | --- | --- |
-| **18.0** | **Capacity release** | [`core.ct`](../../selfhost/l2/core.ct): `MAX_FUNCS 128→256`, `MAX_MAP_IMPLS 256→512`; the four fixed tables (functions / traits / structs / reverse map) move to `calloc` | L2 builds a 256-function ct-ast; 257 still fails at ct-ast's own cap; BSS / binary deltas recorded; `check-archive.sh` and all 11 gates green |
+| **18.0** | **Capacity release** | [`core.ct`](../../../selfhost/l2/core.ct): `MAX_FUNCS 128→256`, `MAX_MAP_IMPLS 256→512`; the four fixed tables (functions / traits / structs / reverse map) move to `calloc` | L2 builds a 256-function ct-ast; 257 still fails at ct-ast's own cap; BSS / binary deltas recorded; `check-archive.sh` and all 11 gates green |
 | **18.1** | **Package conventions and author guide** | New `docs/package-guide.md` (bilingual); `ct.pkg` keys, naming / version / tag / layout / licence / dependency rules | The rules are checkable by CI and by hand; `test/pkg/run.sh` gains positive and negative manifest assertions |
 | **18.2** | **Index and CI** | The external `ct-pkg/index` repository (its `index` file and generator); a new `.github/workflows/packages.yml` with a nightly target job | Packages resolve through the index; `ct verify` green; the index is produced and committed by CI; the local gates stay at 11 |
 | **18.3** | **`hal` contract** | `ct-pkg/hal`: four traits `Uart` / `Gpio` / `Clock` / `Log`, pure `.h.ct`, no impl | Platform packages can `use` the contract; naming aligned with `bindings/mock-hal` (D18-6) |
@@ -223,8 +223,8 @@
 
 #### 18.0 capacity release
 
-- Only [`selfhost/l2/core.ct`](../../selfhost/l2/core.ct) changes: `MAX_FUNCS` 128 → **256** (aligned with
-  ct-ast's [`Symbols.h.ct`](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)), `MAX_MAP_IMPLS` 256 → **512**.
+- Only [`selfhost/l2/core.ct`](../../../selfhost/l2/core.ct) changes: `MAX_FUNCS` 128 → **256** (aligned with
+  ct-ast's [`Symbols.h.ct`](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)), `MAX_MAP_IMPLS` 256 → **512**.
 - The four fixed tables (function signatures, traits, structs, the reverse map) move to `calloc` so the doubled
   caps do not inflate BSS; allocation failure follows the existing `exit(1)` convention.
 - L0 / L1 are untouched and no parse or emit semantics change: **artefacts stay byte-identical on the existing
@@ -247,7 +247,7 @@
 - Licence: official `.ct` packages are MIT; C mapping packages inherit the upstream licence; every package ships a
   `LICENSE` (D18-9).
 - Dependencies: `dep` keeps the Phase-8 line format (`name` or `name@range`); no transitive-update research here.
-- The author guide [docs/package-guide.md](../package-guide.md) covers publishing, index inclusion, the correct `ct get` / `ct verify` /
+- The author guide [docs/package-guide.md](../../package-guide.md) covers publishing, index inclusion, the correct `ct get` / `ct verify` /
   `ct install` usage and common failures (digest mismatch, missing tag, `requires` mismatch warns only).
 
 #### 18.2 index and CI
@@ -264,7 +264,7 @@
 
 - `ct-pkg/hal`: pure `.h.ct`, namespace `hal`, four traits: `Uart` (`send` / `recv`), `Gpio` (`read` / `write`),
   `Clock` (`now_ms`) and `Log` (`write`); no impl, no `.c` output.
-- Aligned with [`bindings/mock-hal/`](../../bindings/mock-hal/): `Controller.send` keeps its semantics as
+- Aligned with [`bindings/mock-hal/`](../../../bindings/mock-hal/): `Controller.send` keeps its semantics as
   `Uart.send`; mock-hal stays a sample and is not forced to rename (D18-6).
 - Version: `hal 1.0.0` is frozen; a breaking change goes to `2.0.0`.
 

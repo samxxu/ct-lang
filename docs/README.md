@@ -32,10 +32,11 @@
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 阶段总览、已定决策、版本记录与验收标准 |
-| [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) · [design/phase24.md](design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase18–19 的计划仍在 `design/` 下，phase17 已按 DOC-66 归档到 [history/design/](history/design/) |
+| [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) · [design/phase24.md](design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase19 的计划仍在 `design/` 下，phase17 与 phase18 已按 DOC-66 归档到 [history/design/](history/design/) |
 | [design/phase27.md](design/phase27.md) | 已完成的阶段记录（Phase 27）：`foreach` 语句形态（数组形态已实现，容器协议由 Phase 29 解冻；语法、展开规则与决策见正文） |
 | [design/phase28.md](design/phase28.md) | 已完成的阶段记录（Phase 28，泛型两阶段第一相）：trait 约束的泛型函数与静态派发（语法、落码、E28-1–E28-9 收口核对与 D28-1–D28-11 见正文；未 bump） |
 | [design/phase29.md](design/phase29.md) | 规划中的阶段计划（Phase 29，泛型两阶段第二相）：泛型 struct + 内置 `Vec`/`Map`，解冻 `foreach` 容器协议（`Map` 遍历为硬判据）、`Vec`/`Map` 从 `ct-pkg/std` 迁入 `lib/std/`（std 其余模块不动）（D29-1–D29-16 见正文） |
+| [design/phase30.md](design/phase30.md) | 规划中的阶段计划（Phase 30）：接收者语境块 `<receiver> into { … }`——块内 `.name` 访问接收者成员/方法、`$` 指代自身；`into` 为后置上下文关键字，块结束后仍返回接收者、可继续接后缀链或连续多段 `into`；语句形态与值形态（初始化器 / 赋值 / `return`，结果为接收者本身）；接收者只求值一次并按 value category 提升；`.m.ct` 类型宿主（含 shim）可作接收者、`$ =` 可接链（D30-1–D30-19 见正文） |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 
@@ -87,10 +88,11 @@
 | Document | Content |
 | --- | --- |
 | [roadmap.md](roadmap.md) | phase overview, decided questions, version record and exit criteria |
-| [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) · [design/phase24.md](design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | the completed phase plans (Phase 20–26: package support / non-escaping closures / `loop` sugar / `loop(a..b)` ranges / array range initialisers / closure arguments to static map calls / generic functions); the phase18–19 plans remain under `design/`; phase17 is archived to [history/design/](history/design/) per DOC-66 |
+| [design/phase20.md](design/phase20.md) · [design/phase21.md](design/phase21.md) · [design/phase22.md](design/phase22.md) · [design/phase23.md](design/phase23.md) · [design/phase24.md](design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | the completed phase plans (Phase 20–26: package support / non-escaping closures / `loop` sugar / `loop(a..b)` ranges / array range initialisers / closure arguments to static map calls / generic functions); the phase19 plan remains under `design/`; phase17 and phase18 are archived to [history/design/](history/design/) per DOC-66 |
 | [design/phase27.md](design/phase27.md) | completed phase record (Phase 27): the `foreach` statement form (the array form is implemented; the container protocol is unfrozen by Phase 29; syntax, lowering rules and decisions inside) |
 | [design/phase28.md](design/phase28.md) | completed phase record (Phase 28, the first of two generics phases): trait-bounded generic functions with static dispatch (syntax, lowering, the E28-1–E28-9 close-out checks and D28-1–D28-11 inside; no bump) |
 | [design/phase29.md](design/phase29.md) | planned phase plan (Phase 29, the second of two generics phases): generic structs + built-in `Vec`/`Map`, unfreezing the `foreach` container protocol (`Map` iteration is a hard criterion) and moving `Vec`/`Map` from `ct-pkg/std` into `lib/std/` (the rest of `std` stays put) (D29-1–D29-16 inside) |
+| [design/phase30.md](design/phase30.md) | planned phase plan (Phase 30): receiver-context block `<receiver> into { … }` — `.name` reaches the receiver's members/methods and `$` denotes the receiver itself; `into` is a postfix context keyword and the block still yields the receiver, so a postfix chain or further `into` blocks may follow the closing brace; statement and value forms (initialiser / assignment / `return`, yielding the receiver itself); the receiver is evaluated once and hoisted by value category; `.m.ct` type hosts (including shims) are accepted as receivers and `$ =` can rebind a by-value chain (D30-1–D30-19 inside) |
 | [../issues/README.md](../issues/README.md) | the review ledger (one file per finding, with status and disposition) |
 | [history/README.md](history/README.md) | the history index: closed design records and review reports |
 

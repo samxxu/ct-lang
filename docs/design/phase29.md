@@ -7,7 +7,7 @@
 > 补丁后 `check-all.sh` 11 道硬门禁仍全绿）。
 > 二次复核补上了 E29-5 的 `ct build` 路径（§10.3.4）；本轮验收把 E29-7 的位置/单错断言、
 > E29-9 的 `check`/`build` 同文案、E29-12 的两条 arity 负例、E29-3 的两次构建一致补进真门禁，
-> `check-all.sh` 11 道硬门禁全绿（`check-ast` 962 passed / 0 failed）。
+> `check-all.sh` 11 道硬门禁全绿（`check-ast` 962 passed / 0 failed；962 为 Phase 29 收口时基线，29 的 range 补丁后为 972，见 §10.3.5）。
 > 仍在 §10.2 偏差表里的 L29-13 / L29-14 不在 E29-1…E29-13 的判据文本内。
 > **主题来源**：用户 2026-11-10「`Vec` 和 `Map` 应该作为内置的数据结构，从 ct-pkg 的 `std` 移到
 > 内置类型」「`foreach_statement.ct` 没有把 map 纳入进来」；同日的取舍「`Callable` 内建先不做」。

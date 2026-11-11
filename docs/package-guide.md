@@ -5,7 +5,7 @@
 > 状态：v1（Phase 18.1，2026-11-02）。工具实现见
 > [`selfhost/ct-ast/tool/pkg/`](../selfhost/ct-ast/tool/pkg/)；binding 写法见
 > [bindings/README.md](../bindings/README.md)；首批官方包见
-> [design/phase18.md](design/phase18.md) 的 18.3–18.5。
+> [phase18.md](history/design/phase18.md) 的 18.3–18.5。
 
 ---
 
