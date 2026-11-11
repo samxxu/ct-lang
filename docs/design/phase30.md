@@ -78,7 +78,7 @@
 | D8 | `selfhost/check-ast.sh` | 产物断言与负例文案/位置断言 |
 | D9 | `docs/language-spec.md` / `docs/tutorial.md` / `docs/glossary.md` | 中英条目与 `$` 语义分列 |
 | D10 | `docs/roadmap.md` | Phase 30 行与本卡索引 |
-| D11 | `examples/27_into/` | 可运行样例：`into` 配置 + 后缀链 + `int into = 1;` 标识符兼容，带 `.expected.out` |
+| D11 | `examples/29_into_block/` | 可运行样例：`into` 配置 + 后缀链 + `int into = 1;` 标识符兼容，带 `.expected.out` |
 
 ### 1.6 退出判据
 
@@ -138,7 +138,7 @@
 | 发射 | `backend/emit/Emitter.h.ct` | 120–200 | Phase 28 编译器层 198 的整量级；本相有提升与 `$` 改写 |
 | 诊断 | `tool/diag/Diag.h.ct` + parser | 50–80 | 七条 L30 文案与位置 |
 | **编译器小计** | | **390–660** | 介于 Phase 28 编译器层 198 与 Phase 19 编译器层 838 之间 |
-| 夹具与样例 | `test/ast/148–163`、`test/ast/errors/`、`examples/27_into/` | 120–250 | Phase 29 夹具与样例 1407（56 文件） |
+| 夹具与样例 | `test/ast/148–164`、`test/ast/errors/`、`examples/29_into_block/` | 120–250 | Phase 29 夹具与样例 1407（56 文件） |
 | 文档 | spec / tutorial / glossary / roadmap / 本卡 | 100–180 | Phase 25 文档 296、Phase 26 文档 496 |
 | **合计** | | **610–1,090** | 低于 Phase 25 全量 1457、Phase 19 全量 1625；高于 Phase 28 编译器层 198 |
 
@@ -537,9 +537,9 @@ struct Builder b = builder_make(10) into {
 | 裸语句右值接收者 | — | `into_rvalue_statement` | 同上 |
 | 嵌套块 | — | `into_nested` | 同上 |
 | 块外 `$` | — | 既有 `range_index_outside` | `check-ast`（零改动，沿用 `unexpected token`） |
-| `into` 作标识符 | `examples/27_into` 的 `int into = 1;` | — | `ct build` + 运行 |
+| `into` 作标识符 | `examples/29_into_block` 的 `int into = 1;` | — | `ct build` + 运行 |
 
-八个负例夹具对应七条 L30 文案（L30-4 覆盖 interface / `own` 两例）；`examples/27_into` 同时
+八个负例夹具对应七条 L30 文案（L30-4 覆盖 interface / `own` 两例）；`examples/29_into_block` 同时
 承担 D11 的可运行样例。
 
 ---
@@ -682,7 +682,7 @@ struct Builder b = builder_make(10) into {
 | 2026-11-11 | `into` 升为后缀表达式：结果返回接收者，块后可继续接 `.m()` / `->f` / `.f` / `[i]`；新增 §2.8、D30-17、E10、V8，§3.1 增 D 组对比 |
 | 2026-11-11 | 撤销「一条链最多一个 `into`」：允许连续多段 `into`，删除 L30-9；嵌套仍禁（后重编号为 L30-7） |
 | 2026-11-11 | 登记 Medium：L24-11 只约束 range 语境，`into` 块内 `&$` / `$ = expr` 合法，属部分取代（§2.2） |
-| 2026-11-11 | 按独立评审修订：E 编号统一为 `E30-n`；E30-2 限定为「无 `into {` 关键字序列」；L30-1 去掉「后不是 `{`」触发；L30-7（块外 `$`）作废、沿用既有 `unexpected token`；E30-4 基线统一为 1019；类型检查档 1 改为本相自建接收者子集；`own` 接收者显式排除（L30-4 / D30-18）；E30-3 去掉旧编译器红证判据；E30-9 补归一化命令；`$` 两种绑定分列；`.name` 多候选沿用块外规则（D30-19）；新增 §1.9 代价估算与 §3.2 覆盖矩阵（夹具 148+、`examples/27_into/`）；补 G4 deviation |
+| 2026-11-11 | 按独立评审修订：E 编号统一为 `E30-n`；E30-2 限定为「无 `into {` 关键字序列」；L30-1 去掉「后不是 `{`」触发；L30-7（块外 `$`）作废、沿用既有 `unexpected token`；E30-4 基线统一为 1019；类型检查档 1 改为本相自建接收者子集；`own` 接收者显式排除（L30-4 / D30-18）；E30-3 去掉旧编译器红证判据；E30-9 补归一化命令；`$` 两种绑定分列；`.name` 多候选沿用块外规则（D30-19）；新增 §1.9 代价估算与 §3.2 覆盖矩阵（夹具 148+、`examples/29_into_block/`）；补 G4 deviation |
 | 2026-11-11 | 二次复核：E30-4 基线统一为 **1019**（Phase 29 收口实测）；D30-18 与 §2.7 规则 5 对齐（值宿主 / 指针接收者均可 `$ =`，仅 `own` 拒绝），S11 / §2.2 / D30-15 加「非 `own`」限定；E30-9 夹具手写侧固定 `__ct_recv0…`（§3.1 名字仅为示意）；§2.1 补 `{` 限定；E30-2 删「关键字节点」半句并写明 `[ "$(grep -c …)" = 0 ]`；E30-3 删失效的 §9 括注；§1.9 改为可复现区间（P28 198 / P26 1181 / P29 4726）并把「三段分母」改为「三段构成」 |
 | 2026-11-11 | 收口评审 NO-GO 勘误：见 §10（High-1 撤 `__ct_recv` 白名单、High-2 锚点回退 1.0.0、Medium-1 基线统一 1019、Medium-2 补块后 `[i]` 正例、Low 路径归一） |
 
@@ -729,3 +729,9 @@ struct Builder b = builder_make(10) into {
 - 修法：新增 `test/ast/164_into_index`（`char *s` 接收者，块内 `$ = "world"`，
   块后 `[1]` 读到 `o`），进 `check-ast.sh` 主夹具循环，完成 build + run + `cmp -s`。
 - 不新增判据，E30-10 原文仍是「后缀链与连续多段 `into` 正例」。
+
+### 10.5 Low：样例路径归一
+
+- 事实：D11、§3.2 与变更记录里残留旧样例路径，与实际样例目录不一致。
+- 修法：全部改为 `examples/29_into_block/`；夹具范围同步为 `test/ast/148–164`。
+- 样例本身未改，仍在 `test/run.sh` 真门禁里。
