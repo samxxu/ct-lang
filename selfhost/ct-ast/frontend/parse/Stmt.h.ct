@@ -1921,15 +1921,7 @@ impl StmtOps for Stmt {
                     bname[0] = 0;
                     if (frontend::sym::ct_inst_split(ins[inst].carg[kk], bname, &nd,
                                                      targ, targ2, tail, MAX_TEXT) == 0
-                        && (strcmp(bname, "Vec") == 0 || strcmp(bname, "Map") == 0
-                            || strcmp(bname, "MapEntry") == 0)) {
-                        snprintf(msg, sizeof msg,
-                                 "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
-                                 ins[inst].ctype[kk]);
-                        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
-                    }
-                    if (self->sup->iface_ref_type(ins[inst].ctype[kk], tr,
-                                                  sizeof tr, &ip)) {
+                        && (strcmp(bname, "MapEntry") == 0)) {
                         snprintf(msg, sizeof msg,
                                  "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
                                  ins[inst].ctype[kk]);

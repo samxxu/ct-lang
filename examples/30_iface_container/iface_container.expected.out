@@ -1,0 +1,12 @@
+vec: len = 2, first = 3, second = 4
+after set: first = 8
+item.show() = 8
+item.show() = 4
+map: len = 2, circle = 3
+circle -> 3
+square -> 4
+missing key is a null view: 1
+after remove: len = 1
+int keys: len = 2, one = 3, two = 4
+after clear: len = 0
+objects still alive: 3 4

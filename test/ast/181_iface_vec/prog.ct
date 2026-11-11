@@ -1,0 +1,53 @@
+/* E31-1: `Vec<Show>` stores interface values by value; a concrete struct boxes
+   into `push` / `set`, and `get` answers a borrowed copy. */
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+struct Square {
+    int s;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+impl Show for Square {
+    int show() {
+        return self->s;
+    }
+}
+
+int main(void)
+{
+    Vec<Show> v;
+    Show g;
+    struct Circle ci;
+    struct Square sq;
+
+    ci.r = 5;
+    sq.s = 6;
+
+    v.h = 0;
+    v.push(ci);
+    v.push(sq);
+    printf("%d\n", v.len());
+    g = v.get(0);
+    printf("%d\n", g.show());
+    sq.s = 7;
+    v.set(0, sq);
+    g = v.get(0);
+    printf("%d\n", g.show());
+    v.clear();
+    printf("%d\n", v.len());
+    v.release();
+    return 0;
+}

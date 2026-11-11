@@ -1,0 +1,102 @@
+// 30_iface_container - interface values in containers (Phase 31 O1)
+//
+// A `Show` value is a two-word non-owning copy (the object plus its vtable), so
+// `Vec<Show>` and `Map<char *, Show>` store it directly. A concrete struct boxes
+// on the way into `push` / `put`; the container never retains or releases the
+// object it points at. Reads are borrowed views: `get` answers a copy and
+// `foreach item` is a view, so the objects must outlive the containers.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+struct Square {
+    int s;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+impl Show for Square {
+    int show() {
+        return self->s;
+    }
+}
+
+int main(void)
+{
+    Vec<Show> v;
+    Map<char *, Show> m;
+    struct Circle ci;
+    struct Circle other;
+    struct Square sq;
+    Show first;
+    Show second;
+    Show *picked;
+
+    ci.r = 3;
+    other.r = 8;
+    sq.s = 4;
+
+    v.h = 0;
+    v.push(ci);
+    v.push(sq);
+    first = v.get(0);
+    second = v.get(1);
+    printf("vec: len = %d, first = %d, second = %d\n",
+           v.len(), first.show(), second.show());
+
+    v.set(0, other);
+    first = v.get(0);
+    printf("after set: first = %d\n", first.show());
+
+    foreach (v) {
+        printf("item.show() = %d\n", item.show());
+    }
+
+    m.h = 0;
+    m.put("circle", ci);
+    m.put("square", sq);
+    picked = m.get("circle");
+    printf("map: len = %d, circle = %d\n", m.len(), picked->show());
+    foreach (m) {
+        printf("%s -> %d\n", item.key, item.value.show());
+    }
+    printf("missing key is a null view: %d\n", m.get("nope") == 0);
+    m.remove("square");
+    printf("after remove: len = %d\n", m.len());
+
+    /* the generic key block serves the same interface values */
+    {
+        Map<int, Show> byid;
+        Show *one;
+        Show *two;
+        byid.h = 0;
+        byid.put(1, ci);
+        byid.put(2, sq);
+        one = byid.get(1);
+        two = byid.get(2);
+        printf("int keys: len = %d, one = %d, two = %d\n",
+               byid.len(), one->show(), two->show());
+        byid.release();
+    }
+
+    /* non-owning copies: the containers go first, the objects outlive them */
+    v.clear();
+    printf("after clear: len = %d\n", v.len());
+    v.release();
+    m.release();
+    printf("objects still alive: %d %d\n", ci.r, sq.s);
+    return 0;
+}
