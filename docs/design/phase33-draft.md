@@ -2,7 +2,7 @@
 
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：`v0.30.0` @ `bd91bfe`；不 bump 版本、不打 tag。
-> **文档形态**：本卡以 `phase33-draft.md` 落盘，原因同 [phase32-draft.md](phase32-draft.md)：design window 12/12（phase20–31），新增编号卡需先归档 phase20/phase21。评审通过后与 Phase 32/34/35/36 一并执行重命名与归档。
+> **文档形态**：本卡以 `phase33-draft.md` 落盘，原因同 [phase32-draft.md](phase32-draft.md)：design window 12/12（phase20–31）。32–36 共 5 张全部转正时按最老顺序归档 phase20–24；评审通过后与其余四张一并执行重命名与归档。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载两块语义、T31 逐条处置、判据/负例台账与估算，约 340 行，需需求提出方签字保留单卡。
 > 关联：[phase31.md](phase31.md)（T31 来源）、[phase28.md](phase28.md)（泛型函数 bound）、[phase29.md](phase29.md)（泛型 struct / 容器）、[phase35-draft.md](phase35-draft.md)（泛型 trait，B 块已拆出）、[phase32-draft.md](phase32-draft.md)、[modern-oo-gap.md](../modern-oo-gap.md) §6.1
 

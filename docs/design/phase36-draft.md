@@ -2,7 +2,7 @@
 
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：`v0.30.0` @ `bd91bfe`；不 bump 版本、不打 tag。
-> **文档形态**：`phase36-draft.md`；design window 12/12，评审通过后与 32–35 一并重命名并归档 phase20/phase21。
+> **文档形态**：`phase36-draft.md`；design window 12/12（phase20–31），32–36 共 5 张全部转正时按最老顺序归档 phase20–24。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡约 270 行，需需求提出方签字保留单卡。
 > **前置**：[phase31.md](phase31.md)（元素 `retain`/`release` 助手）、[phase33.md](phase33-draft.md)（泛型 struct / 消费方发射）、[phase34.md](phase34-draft.md)（`Option`/`Result`、跨单元方法）。
 > **定位**：两项能力共用 Phase 31 的元素寿命地基；泛型 `Drop` 是所有权轴的收口，带长度字符串是它的第一个真实消费者。

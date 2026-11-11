@@ -2,7 +2,7 @@
 
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：`v0.30.0` @ `bd91bfe`；不 bump 版本、不打 tag。
-> **文档形态**：`phase34-draft.md`；design window 12/12，评审通过后与 32/33/35/36 一并重命名并归档 phase20/phase21。
+> **文档形态**：`phase34-draft.md`；design window 12/12（phase20–31），32–36 共 5 张全部转正时按最老顺序归档 phase20–24。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡约 300 行，需需求提出方签字保留单卡。
 > **前置**：[phase31.md](phase31.md)（容器）、[phase33.md](phase33-draft.md)（泛型 struct / T31-2 消费方发射）、[phase26.md](phase26.md)（L26-2 的来源）。
 > **排序理由**：它决定 Phase 31/33 的成果能否被包复用——没有 `pub` 泛型函数与跨单元固有方法，`Option`/`Result` 只能停留在模板所属单元。

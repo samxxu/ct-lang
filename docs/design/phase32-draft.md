@@ -2,7 +2,7 @@
 
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：`v0.30.0` @ `bd91bfe`（`test(release): regenerate the goldens for v0.30.0`）；不 bump 版本、不打 tag。
-> **文档形态**：本卡以 `phase32-draft.md` 落盘。`docs/design/` 现有 phase20–31 共 12 份编号卡，design window 已满 12/12；按规则新增 `phase32.md` 需同时把 phase20、phase21 归档到 `docs/history/design/`，而 phase21 内含数十条相对链接，属独立收口工作。评审通过后执行「重命名 + 归档 phase20/phase21 + 同步 README/roadmap 链接」，本次草案不抢跑。
+> **文档形态**：本卡以 `phase32-draft.md` 落盘。`docs/design/` 现有 phase20–31 共 12 份编号卡，design window 已满 12/12；转正采用「每转正 k 张编号卡，按最老顺序归档 k 张」：本组 32–36 共 5 张全部转正时，需把 phase20–24 归档到 `docs/history/design/`（phase21 内含数十条相对链接，属独立收口工作）。评审通过后执行「重命名 + 归档 + 同步 README/roadmap 链接」，本次草案不抢跑。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载范围、判定内核、三处挂点、判据/负例台账与估算，约 330 行，需需求提出方签字保留单卡。
 > 关联：[phase31.md](phase31.md)（容器能力，P32 的前置）、[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../modern-oo-gap.md) §6.1/§7（B 档与依赖关系）
 

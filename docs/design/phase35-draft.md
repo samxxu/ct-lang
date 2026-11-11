@@ -2,7 +2,7 @@
 
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：`v0.30.0` @ `bd91bfe`；不 bump 版本、不打 tag。
-> **文档形态**：`phase35-draft.md`；design window 12/12，评审通过后与 32/33/34/36 一并重命名并归档 phase20/phase21。
+> **文档形态**：`phase35-draft.md`；design window 12/12（phase20–31），32–36 共 5 张全部转正时按最老顺序归档 phase20–24。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡约 310 行，需需求提出方签字保留单卡。
 > **前置**：[phase33.md](phase33-draft.md)（bound 机制）、[phase34.md](phase34-draft.md)（跨单元导出）、[phase29.md](phase29.md)（泛型 struct/容器）、[phase21.md](phase21.md)（Callable 延后，间接相关）。
 > **定位**：唯一需要新增**一条单态化轴**（trait 实例）的大活，独占一个 phase；不与 33/34/36 混做。
