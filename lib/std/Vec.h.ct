@@ -429,6 +429,61 @@ impl<K, V> Map<K, V> {
         return 0;
     }
 
+    /* Phase 31 S13b: the brace-literal constructor for an integer key. The
+       `impl<V> Map<char *, V>` block above declares the same name and serves
+       string keys; this copy is kept for every other key (P24). The loop
+       reproduces `put` inline because a generic impl body cannot call a sibling
+       method (`self` is `void *` there, P15), and keys compare by bytes, which
+       is the roster's integer-key rule (V29-1). Insertion order is the item
+       order and a repeated key overwrites in place (D29-11); an empty list still
+       allocates the header so the handle can be released (D31-21). */
+    static Map<K, V> from(struct MapEntry<K, V> *items, int n)
+    {
+        Map<K, V> m;
+        int i;
+        m.h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
+        if (m.h == 0) return m;
+        m.h->refs = 1;
+        m.h->len = 0;
+        m.h->cap = 0;
+        m.h->data = 0;
+        for (i = 0; i < n && items != 0; i++) {
+            struct MapEntry<K, V> *e;
+            K k;
+            int j, hit;
+            k = items[i].key;
+            e = (struct MapEntry<K, V> *)m.h->data;
+            hit = -1;
+            for (j = 0; j < m.h->len; j++)
+                if (memcmp(&e[j].key, &k, sizeof(k)) == 0) {
+                    hit = j;
+                    break;
+                }
+            if (hit >= 0) {
+                V old;
+                old = e[hit].value;
+                __ct_elem_retain(&items[i].value);
+                __ct_elem_release(&old);
+                e[hit].value = items[i].value;
+                continue;
+            }
+            if (m.h->len == m.h->cap) {
+                int nc;
+                void *raw;
+                nc = m.h->cap == 0 ? 4 : m.h->cap * 2;
+                raw = realloc(m.h->data, (size_t)(nc * (int)sizeof(e[0])));
+                if (raw == 0) return m;
+                m.h->data = raw;
+                m.h->cap = nc;
+                e = (struct MapEntry<K, V> *)m.h->data;
+            }
+            __ct_elem_retain(&items[i].value);
+            e[m.h->len] = items[i];
+            m.h->len = m.h->len + 1;
+        }
+        return m;
+    }
+
     void clear()
     {
         int i;
