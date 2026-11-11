@@ -207,6 +207,12 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   因此**不进** `./test/run.sh`；反过来它也不能替代手工三件套。
 - **诚实报告**：验证失败就如实说失败并贴原始输出，不允许把「没跑」说成「通过」；
   更不允许靠改 golden 基线或 `.expected.out` 来「修」失败——只有在确认编译器行为变更是有意为之之后，才重新生成它们。
+- **逐片红证**：每个新增断言或夹具，必须先在本地跑出失败并记录退出码与失败文案，
+  不允许「先写实现、事后补红证」；失败状态不提交，实现与夹具在**同一次提交**里转绿，
+  主干在每个提交上都必须是绿的。提交正文必须带一行红证记录 `red: rc=<N>, "<失败文案>"`，
+  确属免红证时写 `red: n/a (<理由>)`。免红证只有三类：纯重构（行为不变且既有断言已覆盖）、
+  纯文档、以及与该断言无关的实现改动，除此之外不许免。**不许用一次全局回放代替逐片红证**：
+  Phase 31 那种「实现全绿后再统一回放旧失败提交」的做法不再是默认口径，只在补历史遗留时才允许。
 
 ### 7. 禁止事项
 
@@ -230,6 +236,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - `type`：`feat` | `fix` | `docs` | `refactor` | `test` | `chore`
 - `scope`：`parser` | `codegen` | `rewrite` | `cli` | `selfhost` | `docs` | `example`
 - 正文用中文说明「为什么这么改」以及验证方式；一次提交只做一件事。
+- 正文的 `red:` 行按第 6 节「逐片红证」记录；免红证只限那三类。
 
 ### 9. 新增语法特性检查清单
 
@@ -548,6 +555,16 @@ Also required:
 - **Report honestly**: never claim an unrun check passed, and never "fix" a failure by editing a
   golden baseline or an `.expected.out`. Regenerate them only after confirming the behaviour change
   was intended.
+- **Per-slice red evidence**: every new assertion or fixture must first fail locally, with its exit
+  status and failure text recorded; writing the implementation first and adding the red evidence
+  afterwards is not allowed. A failing state is never committed: the fixture and the implementation
+  go green in the **same commit**, so every commit on the main line stays green. The commit body
+  carries one line, `red: rc=<N>, "<failure text>"`, or `red: n/a (<reason>)` when exempt. Only
+  three exemptions exist: a pure refactor (behaviour unchanged and already covered by existing
+  assertions), a docs-only change, and an implementation change unrelated to the assertion. **A
+  single global replay never substitutes for per-slice red evidence**: replaying old failing commits
+  after everything is green (as Phase 31 did) is no longer the default, and is allowed only when
+  backfilling inherited history.
 
 ### 7. Prohibited
 
@@ -583,7 +600,8 @@ Also required:
 
 `<type>(<scope>): <subject>` with an English imperative subject ≤ 50 chars; `type` ∈
 `feat|fix|docs|refactor|test|chore`; `scope` ∈ `parser|codegen|rewrite|cli|selfhost|docs|example`. Explain the
-*why* and the verification steps in the body (Chinese is fine). One concern per commit.
+*why* and the verification steps in the body (Chinese is fine). One concern per commit. The body's
+`red:` line follows "Per-slice red evidence" in §6; only the three listed exemptions apply.
 
 ### 9. Checklist for new syntax features
 
