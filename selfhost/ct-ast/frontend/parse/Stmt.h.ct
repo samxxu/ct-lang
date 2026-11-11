@@ -53,6 +53,10 @@ import tool::diag::Diag;
 #define N_GOTO 50
 #define N_IF 14
 #define N_INIT_RANGE 61
+/* Phase 31 S11a: `Vec<T> v = {…}` on a local declaration. `text` is the
+   element's C type, `text2` the encoded instance name, `aux` the element count
+   and `a` the first element expression (the rest hang off `next`). */
+#define N_INIT_BRACE 65
 #define N_LABEL 49
 #define N_LOOP 60
 #define N_FOREACH 62
@@ -864,6 +868,46 @@ static int range_vec_target(const char *type, char *elem, int ecap,
     snprintf(elem, (size_t)ecap, "%s", ins[ii].ctype[0]);
     snprintf(iname, (size_t)icap, "%s", ins[ii].name);
     return 1;
+}
+
+/* Phase 31 S11a: a `Vec<T>` brace initializer (`Vec<int> v = {1, 2, 3};`). The
+   cursor sits on `{` and the caller already resolved the instance, so `elem` is
+   the element's C type and `iname` the encoded instance name -- the same pair
+   the range form carries. Elements are ordinary expressions separated by
+   commas (a trailing comma is allowed) and are chained through `next`, which
+   keeps the node count proportional to the source and lets the emitter stream
+   one composite literal into `Vec_<enc>_from`. Nothing is flattened into raw
+   text, so MAX_TEXT cannot truncate the list. An empty list has no elements
+   and lowers to `from(0, 0)`. */
+static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char *iname)
+{
+    int e, head, tail, count, line;
+
+    line = self->lex->tokline;
+    head = -1;
+    tail = -1;
+    count = 0;
+    self->sup->lex_next();              /* `{` */
+    while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+        int el = self->ex->parse_expr();
+        if (el < 0) return -1;
+        if (head < 0) head = el;
+        else self->arena->nodes[tail].next = el;
+        tail = el;
+        count++;
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0))
+            break;
+        self->sup->lex_next();
+    }
+    if (self->sup->expect("}") != 0) return -1;
+    e = self->sup->new_node(N_INIT_BRACE);
+    if (e < 0) return -1;
+    self->arena->nodes[e].a = head;
+    self->arena->nodes[e].aux = count;
+    self->arena->nodes[e].line = line;
+    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", elem);
+    snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+    return e;
 }
 
 /* `loop` and `foreach` are not in `kw[]` (D22-4, D27-1), so only a following
@@ -2504,11 +2548,21 @@ impl StmtOps for Stmt {
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
                     /* local `static` tables can be long, so the text goes to the
                        arena string pool (`aux = 1`, `num` = offset) */
+                    char elemtype[MAX_TEXT];
+                    char iname[MAX_TEXT];
                     char raw[MAX_RAW_INIT];
                     char fixed[MAX_INIT_TEXT];
                     int off, k;
-                    /* V29-4: a Vec / Map has no C aggregate initializer; the
-                       cursor still sits on `{`, so the refusal is positioned. */
+                    if (range_vec_target(typebuf, elemtype, (int)sizeof elemtype,
+                                         iname, (int)sizeof iname)) {
+                        /* Phase 31 S11a: `Vec<T> v = {…}` lowers to `from(…, n)`.
+                           Handled before the raw capture so the element list
+                           stays a structured expression chain. */
+                        e = parse_vec_brace_init(self, elemtype, iname);
+                        if (e < 0) return -1;
+                    } else {
+                    /* V29-4: a Map has no C aggregate initializer; the cursor
+                       still sits on `{`, so the refusal is positioned. */
                     if (self->ex->container_init_check(typebuf) != 0) return -1;
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
@@ -2521,6 +2575,7 @@ impl StmtOps for Stmt {
                     self->arena->str_end();
                     self->arena->nodes[e].num = off;
                     self->arena->nodes[e].aux = 1;
+                    }
                 } else if (self->range_init_ahead()) {
                     /* Phase 24: `= 0..n($…)` on an array declarator */
                     e = self->parse_range_init(n, typebuf);
