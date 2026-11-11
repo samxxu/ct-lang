@@ -59,7 +59,7 @@
 | impl trait 注册与签名检查 | `Parser.h.ct:2546-2594`；`ct_impl_add` `Symbols.h.ct:1620-1643` |
 | 实例编码 | `Symbols.h.ct:1778-1808`：`<`→`_l`、`>`→`_r`、`*`→`_p`，≥64 字符退化为 `%.40s_h%08x` |
 | trait 容量 | `Symbols.h.ct:36` `MAX_TRAITS 64`；`:883` `too many traits` |
-| 赋值/初值发射 | `Expr.h.ct` 赋值分支、`Emitter.h.ct` 初值发射（无 `chk_assignable` 函数） |
+| 赋值/初值发射 | `Expr.h.ct` 承载赋值 AST、`Emitter.h.ct` 的 `N_ASSIGN`/`N_DECL` 发射分支；`chk_assignable` 只服务 `ct check --types`（opt-in），`ct build` 路径不调用 |
 
 ## 3 语义设计
 
@@ -123,7 +123,7 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 #### 3.2.3 源级写法与编译器改造
 
 - 源级只有**隐式 upcast**：`Iter<int> it = seq;`、传参、`return`；不引入 `(Iter<int>)` 强制转换语法。
-- **不依赖 `chk_assignable`**（全仓不存在；P32 的 `ct check --types` 也是 opt-in，不在 `ct build` 路径）。在 `ct build` 的赋值/初值发射路径新增 `iface_upcast_ok(from, to)` 与 `emit_upcast(...)`（`Expr.h.ct` / `Emitter.h.ct`）：仅当 `from` 的 trait 的 supertrait 是 `to` 时通过，发射 §3.2.2 的结构体字面量；其余 iface 互赋硬错。计入 S5c。
+- **不复用 P32 的检查器**：P32 落地后 `chk_assignable` 存在，但只服务 `ct check --types`（opt-in），`ct build` 路径不调用。P35 在 `ct build` 自行实现 `iface_upcast_ok(from, to)`/`emit_upcast(...)`：**在 `Emitter.h.ct` 的 `N_ASSIGN` 与 `N_DECL` 发射分支调用**；`Expr.h.ct` 只承载赋值 AST，`Stmt.h.ct` 不改，不加解析期检查。仅当 `from` 的 trait 的 supertrait 是 `to` 时通过；其余 iface 互赋归 L35-5 的非法 upcast（`only a supertrait upcast is allowed`），由 E35-7/E35-16 覆盖。计入 S5c。
 
 #### 3.2.4 四处可执行改造点
 
@@ -194,14 +194,14 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 | S5b2b | 实例 vtable 初始化逐槽重发 `.__iter_int = { Circle_Iter_int_next }` | `Emitter.h.ct` | 30–60 |
 | S5b3 | super 拓扑排序（不使用前向声明替代） | `Emitter.h.ct` | 30–60 |
 | S5b4 | `emit_vtable_fwd` tentative definition 顺序 | `Emitter.h.ct` | 20–40 |
-| S5c | `iface_upcast_ok` + `emit_upcast`（赋值/初值路径） | `Expr.h.ct` / `Emitter.h.ct` | 50–90 |
+| S5c | `iface_upcast_ok` + `emit_upcast`（`Emitter.h.ct` 的 `N_ASSIGN`/`N_DECL` 发射分支；`Expr.h.ct`/`Stmt.h.ct` 不改） | `Emitter.h.ct` | 50–90 |
 | S6a | 泛型 trait × 泛型 struct 匹配 | `Symbols.h.ct` | 60–120 |
 | S6b | 一一对应校验 + L35-8 | `Parser.h.ct` | 60–120 |
 | S7 | 跨单元守卫 + `p35_cross_unit/` 模块错误夹具接线 | `Parser.h.ct` / `Module.h.ct` / `test/**` | 50–90 |
 | S8 | 实例名冲突 + 容量守卫 L35-7/9 | `Symbols.h.ct` / `Parser.h.ct` | 40–90 |
-| S9a | 正例夹具 215–218 | `test/ast/**` | 90–140 |
-| S9b | 正例夹具 219–220 + `errors/*` 负例 | `test/ast/**` | 90–140 |
-| S9c | `test/probes/p35_capacity.sh`：生成 63 模板 + 1 实例 + 第 2 实例，断言第 65 行 `too many traits` | `test/probes/p35_capacity.sh` | 30–60 |
+| S9a | 正例夹具 219–222 | `test/ast/**` | 90–140 |
+| S9b | 正例夹具 223–224 + `errors/*` 负例 | `test/ast/**` | 90–140 |
+| S9c | `test/probes/p35_capacity.sh`：生成 63 模板 + 1 实例 + 第 2 实例，脚本先打印实际 trait 条数，断言第 65 条 trait 行报 `too many traits` | `test/probes/p35_capacity.sh` | 30–60 |
 | S10 | 样例 `examples/39_generic_trait_supertrait` | `examples/39_*` | 80–150 |
 | S11a | 文档 | `docs/**` | 80–120 |
 | S11b | 全量门禁与收口记录 | 无源码改动 | 20–40 |
@@ -210,24 +210,24 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 
 | ID | 断言 | 夹具 | 门禁 | 红证 |
 | --- | --- | --- | --- | --- |
-| E35-1 | `trait Iter<T>` + `impl Iter<int> for Circle` + 接口值 + `it.next()` 运行正确 | `ast/215_generic_trait` | `check-ast` | 当前 `1:11: unexpected token` |
-| E35-2 | `Iter<int>`/`Iter<char *>` 两实例并存，命名不冲突 | `ast/216_generic_trait_two` | `check-ast` | 当前无法声明 |
-| E35-3 | `T f<T: Iter<int>>(T)` 编译并静态派发；实参不满足 bound → L35-1 | `ast/217_bound_generic_trait` + `errors/trait_bound_unsatisfied.ct` | `check-ast` | 当前 `1:32: expected a type` |
+| E35-1 | `trait Iter<T>` + `impl Iter<int> for Circle` + 接口值 + `it.next()` 运行正确 | `ast/219_generic_trait` | `check-ast` | 当前 `1:11: unexpected token` |
+| E35-2 | `Iter<int>`/`Iter<char *>` 两实例并存，命名不冲突 | `ast/220_generic_trait_two` | `check-ast` | 当前无法声明 |
+| E35-3 | `T f<T: Iter<int>>(T)` 编译并静态派发；实参不满足 bound → L35-1 | `ast/221_bound_generic_trait` + `errors/trait_bound_unsatisfied.ct` | `check-ast` | 当前 `1:32: expected a type` |
 | E35-4 | 泛型 trait 默认方法体 → L35-4 | `errors/generic_trait_default.ct` | `check-ast` | 当前解析错 |
-| E35-5 | `trait Seq<T>: Iter<T>` 声明、impl、`Seq` 值调用自身方法 | `ast/218_supertrait` | `check-ast` | 当前 `3:2: expected a type` |
-| E35-6 | `Seq` 值 upcast 后**运行期派发到 `Circle_Iter_int_next`**（主判据）；产物含强转与 `offsetof == 0` 静态断言；宽松 grep 父初始化块内出现 `Circle_Iter_int_next` | `ast/219_supertrait_upcast` + 产物 grep | `check-ast` | 当前无 supertrait |
+| E35-5 | `trait Seq<T>: Iter<T>` 声明、impl、`Seq` 值调用自身方法 | `ast/222_supertrait` | `check-ast` | 当前 `3:2: expected a type` |
+| E35-6 | `Seq` 值 upcast 后**运行期派发到 `Circle_Iter_int_next`**（主判据）；产物含强转与 `offsetof == 0` 静态断言；宽松 grep 父初始化块内出现 `Circle_Iter_int_next` | `ast/223_supertrait_upcast` + 产物 grep | `check-ast` | 当前无 supertrait |
 | E35-7 | 实现 `Seq` 未实现 `Iter` → L35-5；非法 upcast → L35-5；`trait C: A, B` → L35-3 | `errors/supertrait_missing.ct` / `errors/supertrait_bad_upcast.ct` / `errors/supertrait_multi.ct` | `check-ast` | 当前无此语法 |
 | E35-8 | `T: A + B` → L35-2 | `errors/trait_bound_multi.ct` | `check-ast` | 当前无此语法 |
-| E35-9 | `impl<T> Iter<T> for MyVec<T>` 对 `MyVec<int>` 工作；`impl<T,U> Iter<T> for Pair<T,U>` → L35-8 | `ast/220_generic_trait_generic_struct` + `errors/generic_trait_pair.ct` | `check-ast` | 当前无法声明 |
-| E35-10 | 产物命名 `Iter_int_vtbl`、`Iter_char_p_vtbl`、`__iter_int_vptr`、`Circle_Iter_int_next`、`Iter_Vec_lint_r`、长名 `_h%08x` | `ast/215`/`216` 产物 grep | `check-ast` | 基线无泛型 trait |
+| E35-9 | `impl<T> Iter<T> for MyVec<T>` 对 `MyVec<int>` 工作；`impl<T,U> Iter<T> for Pair<T,U>` → L35-8 | `ast/224_generic_trait_generic_struct` + `errors/generic_trait_pair.ct` | `check-ast` | 当前无法声明 |
+| E35-10 | 产物命名 `Iter_int_vtbl`、`Iter_char_p_vtbl`、`__iter_int_vptr`、`Circle_Iter_int_next`、`Iter_Vec_lint_r`、长名 `_h%08x` | `ast/219`/`220` 产物 grep | `check-ast` | 基线无泛型 trait |
 | E35-11 | 非泛型 trait 产物与基线逐字节相同 | 全量 diff | `check-ast` | S0 实测 |
 | E35-12 | 跨单元使用泛型 trait 实例 → L35-6 硬错 | `test/modules/errors/p35_cross_unit/`（`main.ct` + `dep.h.ct`） | `check-ast` modules 错误段（S7） | 当前无法声明 |
 | E35-13 | 既有断言零回退 | 全量 | `check-ast` | S0 实测计数 |
 | E35-14 | 样例 `examples/39_generic_trait_supertrait` 进入 `test/run.sh`，golden 人工核对 | `examples/39_*` | `test/run` | 当前不存在 |
 | E35-15 | language-spec/tutorial/glossary/roadmap 写清命名、supertrait 布局、upcast、跨单元边界 | `docs/**` | `check-docs` | 当前无表述 |
-| E35-16 | `ct check` 与编译共用诊断：L35-1/3/4/5/8 同文案同位置 | 上述负例 | `check-ast` | 当前无这些文案 |
+| E35-16 | `ct check` 与编译共用诊断：L35-1/3/4/8 同文案同位置；L35-5 的两个子例各自同文案同位置 | 上述负例 | `check-ast` | 当前无这些文案 |
 | E35-17 | `check-all.sh` 11 道硬门禁全绿；计数不回退；不 bump、不打 tag | 全量 | `check-all` | 基线见 §2.1 |
-| E35-18 | 生成标识符冲突 → L35-7；`test/probes/p35_capacity.sh` 生成 63 模板 + 1 实例 + 第 2 实例，断言第 65 行 `too many traits` | `errors/trait_instance_collision.ct` + `test/probes/p35_capacity.sh` | `check-ast` | 当前无实例行 |
+| E35-18 | 生成标识符冲突 → L35-7；`test/probes/p35_capacity.sh` 生成 63 模板 + 1 实例 + 第 2 实例，脚本打印实际条数后断言第 65 条 trait 行报 `too many traits` | `errors/trait_instance_collision.ct` + `test/probes/p35_capacity.sh` | `check-ast` | 当前无实例行 |
 
 ## 8 负例台账（L35-n）
 
@@ -265,11 +265,11 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 | --- | --- | --- |
 | R35-1 | trait 实例膨胀 | 共用 `MAX_TRAITS=64`；E35-18 |
 | R35-2 | 命名冲突 | E35-10 产物 grep；L35-7 |
-| R35-3 | supertrait 布局/初始化错配 | `ast/218` + `ast/219` 双夹具；E35-6 运行期派发 + 静态断言 |
+| R35-3 | supertrait 布局/初始化错配 | `ast/222` + `ast/223` 双夹具；E35-6 运行期派发 + 静态断言 |
 | R35-4 | 泛型 × 泛型笛卡尔积 | 只允许一一对应；L35-8 |
 | R35-5 | 非泛型产物漂移 | E35-11 全量 diff |
 | R35-6 | 跨单元落到链接错误 | L35-6 硬错；E35-12 |
-| R35-7 | 依赖 P32 的检查器 | 明确不依赖 `chk_assignable`；S5c 在 `ct build` 路径自实现 |
+| R35-7 | 依赖 P32 的检查器 | P32 的 `chk_assignable` 只服务 `ct check --types`，`ct build` 不调用；S5c 在 `Emitter.h.ct` 的 `N_ASSIGN`/`N_DECL` 分支自实现 `iface_upcast_ok`/`emit_upcast`。非法 iface 互赋即 L35-5 的非法 upcast，由 E35-7/E35-16 覆盖 |
 
 | 编号 | 开放项 | 触发条件 |
 | --- | --- | --- |
@@ -282,6 +282,6 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 
 ## 11 交付物与纪律
 
-- 交付：`selfhost/ct-ast/**`、`test/ast/215–220_*`、`test/ast/errors/*`、`test/modules/errors/p35_cross_unit/`、`test/probes/p35_capacity.sh`、`examples/39_generic_trait_supertrait/` + golden、`docs/language-spec.md`/`tutorial.md`/`glossary.md`/`roadmap.md`。
+- 交付：`selfhost/ct-ast/**`、`test/ast/219–224_*`、`test/ast/errors/*`、`test/modules/errors/p35_cross_unit/`、`test/probes/p35_capacity.sh`、`examples/39_generic_trait_supertrait/` + golden、`docs/language-spec.md`/`tutorial.md`/`glossary.md`/`roadmap.md`。
 - **T-7 先红后绿**：S0 在实现提交的父提交上复跑探针并提交 `test(generics): P35 红`（含 `baseline: <sha>` 与原始输出）。
 - 每片 ≤3 文件、净增 ≤150 行；仓库任何时刻可构建。不改判据宽度、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push；只暂存本相文件。
