@@ -1,0 +1,18 @@
+/* Phase 31 O2/O4 (E31-11): a brace list of owning elements retains each one,
+   so the source rows can be released and the container still reads them. */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> row1 = {1, 2};
+    Vec<int> row2 = {3};
+    Vec<Vec<int>> g = {row1, row2};
+    Vec<int> a = g.get(0);
+    Vec<int> b = g.get(1);
+
+    row1.release();
+    row2.release();
+    printf("%d %d %d %d\n", g.len(), a.len(), a.get(1), b.get(0));
+    g.release();
+    return 0;
+}

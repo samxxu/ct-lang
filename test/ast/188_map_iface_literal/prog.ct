@@ -1,0 +1,41 @@
+/* Phase 31 O1/O4 (E31-11): a Map literal boxes a concrete struct into an
+   interface value, exactly like `put`, and `get` hands back the stored value. */
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+struct Square {
+    int s;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+impl Show for Square {
+    int show() {
+        return self->s;
+    }
+}
+
+int main(void)
+{
+    Circle c;
+    Square q;
+    c.r = 6;
+    q.s = 7;
+    Map<char *, Show> m = { "c": c, "q": q };
+    Show *pc = m.get("c");
+    Show *pq = m.get("q");
+    printf("%d %d %d\n", m.len(), pc.show(), pq.show());
+    m.release();
+    return 0;
+}
