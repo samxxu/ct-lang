@@ -1,0 +1,57 @@
+// 36_bounded_struct - a generic struct whose parameter carries a trait bound
+//
+// `struct Box<T: Show>` says every `Box` instance is only legal for a `T` that
+// adopts `Show`. `impl<T> Box<T>` inherits that bound, so `self->value->show()`
+// is a static dispatch through `Circle_Show_vtable` -- no vptr is added by the
+// bound, and `Box<Circle>` holds one pointer, which keeps it small enough to be
+// a `Vec` element (a vptr-bearing value may not be one).
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T: Show> {
+    T *value;
+}
+
+impl<T> Box<T> {
+    int show()
+    {
+        return self->value->show();
+    }
+}
+
+int main(void)
+{
+    Vec<Box<Circle>> v;
+    Box<Circle> b;
+    Circle a;
+    Circle d;
+    Box<Circle> t;
+    int i;
+    int sum;
+
+    a.r = 5;
+    b.value = &a;
+    v.h = 0;
+    v.push(b);
+    d.r = 6;
+    b.value = &d;
+    v.push(b);
+    sum = 0;
+    for (i = 0; i < v.len(); i++) {
+        t = v[i];
+        sum = sum + t.show();
+    }
+    printf("%d %d\n", v.len(), sum);
+    return 0;
+}
