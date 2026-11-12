@@ -1,0 +1,23 @@
+// Phase 34 S8: `Point` lives in the consumer unit, so the `Option<Point>`
+// instance and its methods are emitted here, next to the type they mention.
+#include <stdio.h>
+
+import lib;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main(void)
+{
+    struct Point p;
+    p.x = 3;
+    p.y = 4;
+    Option<Point> o = { 1, p };
+    struct Point q = o.unwrap_or(p);
+    int bumped = offset(q.x);
+    printf("%d %d %d %d\n", o.is_some(), q.x, q.y, bumped);
+    o.release();
+    return 0;
+}

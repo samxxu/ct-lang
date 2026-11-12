@@ -1,0 +1,6 @@
+// Phase 34 S8: a plain `pub` function, so the module is genuinely two units
+// while the `Option<Point>` instance stays in the consumer that owns `Point`.
+pub int offset(int x)
+{
+    return x + 1;
+}

@@ -1493,10 +1493,23 @@ static int emit_struct_insts(struct Emitter *self, int u, int header)
                   && self->units[tps[tmpl].owner].is_hdr;
         if (header) {
             if (!via_hdr || tps[tmpl].owner != u) continue;
+            /* P34 S8: an `Option` / `Result` instance whose element lives in the
+               consumer cannot be defined in the layer's header (the field is
+               incomplete there); the consumer writes it after the element. */
+            if (inst_elem_foreign(self, i)) continue;
         } else {
-            if (via_hdr) continue;
-            /* `u < 0` is compile mode: the one file owns every instance. */
-            if (u >= 0 && insts[i].owner != u) continue;
+            /* P34 S8: a foreign-element instance is written by the unit that
+               named it -- the only one that can print the element. The
+               container layout is handle-only, so moving it costs the layer
+               nothing; `Option` / `Result` need it or the field is
+               incomplete. */
+            if (inst_elem_foreign(self, i)) {
+                if (u >= 0 && insts[i].owner != u) continue;
+            } else {
+                if (via_hdr) continue;
+                /* `u < 0` is compile mode: the one file owns every instance. */
+                if (u >= 0 && insts[i].owner != u) continue;
+            }
         }
         if (inst_emit_one(self, i) != 0) return -1;
     }
@@ -1798,7 +1811,12 @@ static int inst_elem_foreign(struct Emitter *self, int ii)
     ins = frontend::sym::ct_insts(&n);
     tps = frontend::sym::ct_tmpls(&tn);
     if (!ins || !tps || ii < 0 || ii >= n) return 0;
-    if (strcmp(ins[ii].tmpl, "Vec") != 0 && strcmp(ins[ii].tmpl, "Map") != 0)
+    /* The containers keep the element behind a buffer handle, so their layout
+       is printable anywhere; `Option` / `Result` store it by value (P34 S8),
+       which makes a foreign element just as unprintable. Every other template
+       keeps the Phase 33 rule. */
+    if (strcmp(ins[ii].tmpl, "Vec") != 0 && strcmp(ins[ii].tmpl, "Map") != 0
+        && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0)
         return 0;
     tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
     if (tmpl < 0 || tps[tmpl].owner < 0) return 0;

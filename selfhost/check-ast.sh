@@ -595,6 +595,7 @@ for d in test/ast/*/; do
     ok "$name"
 done
 
+
 # The member decay stops at one dimension: `char names[2][8]` decays to
 # `char (*)[8]`, which no host spells, so the receiver type stays unknown
 # instead of silently becoming `char *` (which would print `strlen(names)`).
@@ -929,6 +930,28 @@ if "$CC" -std=c99 -I "$mod-inh" -c "$mod-inh/lib.c" -o "$work/minh-lib.o" 2>"$wo
 else
     bad "p34_inherent_objects" "$(head -3 "$work/minh-lib.cc")"
 fi
+
+# E34-7 (P34 S8): `Point` lives in the consumer unit, so the `Option<Point>`
+# layout and its methods move there too; the layer's header keeps a forward
+# declaration only (the field would be incomplete there).
+rm -rf "$mod-optp"
+mkdir -p "$mod-optp"
+if "$work/ct-ast" build --emit-c test/modules/p34_option_point/main.ct -o "$mod-optp" \
+        >"$work/moptp.out" 2>"$work/moptp.err" \
+   && "$CC" -Wall -Wextra -std=c99 -I "$mod-optp" "$mod-optp"/*.c -o "$work/moptp.bin" \
+        2>"$work/moptp.cc" \
+   && "$work/moptp.bin" >"$work/moptp.stdout" 2>&1 \
+   && cmp -s "$work/moptp.stdout" test/modules/p34_option_point/expected.out; then
+    ok "p34_option_point (Option<Point> cross-unit run)"
+else
+    bad "p34_option_point" "$(cat "$work/moptp.err" "$work/moptp.cc" "$work/moptp.stdout" 2>/dev/null)"
+fi
+n="$(grep -c '^struct Option_Point {$' "$mod-optp/main.c" 2>/dev/null)"
+[ "$n" = 1 ] && ok "p34_option_point_product (struct Option_Point in the consumer)" \
+    || bad "p34_option_point_product" "$(grep 'Option_Point' "$mod-optp"/*.c "$mod-optp"/*.h 2>/dev/null | head -3)"
+n="$(grep -c '^struct Option_Point {$' "$mod-optp/Option.h" 2>/dev/null)"
+[ "$n" = 0 ] && ok "p34_option_point_layer (the layer header keeps only the forward declaration)" \
+    || bad "p34_option_point_layer" "the layer header defines the instance layout"
 
 # E34-11 (P34 S6): the generated header carries types and declarations only, a
 # generic instance is defined once per object, and the cache key is
