@@ -2438,6 +2438,8 @@ impl ParseOps for Parser {
     {
         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
         int seen_borrow, bline;
+        int ntp, pi;
+        char tparam[2][MAX_TEXT];
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char ret[MAX_TEXT];
@@ -2454,12 +2456,37 @@ impl ParseOps for Parser {
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         snprintf(name, sizeof name, "%s", self->lex->toktext);
         if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+        /* Phase 35: `trait Iter<T[, U]> { … }` declares a template. The row keeps
+           the bare name and the parameters; `T` in a signature is substituted
+           when an instance row is created (S2). A bound (`T: Show`) is parsed in
+           S1b; the capacity guard lives here because the field is two wide.
+           Stepping past the name first is what lets the `<` be seen; the cursor
+           then sits on the `{` the duplicate diagnostic points at. */
+        self->sup->lex_next();
+        ntp = 0;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+            self->sup->lex_next();
+            for (;;) {
+                if (self->lex->tok != T_ID)
+                    return self->sup->fail("expected a type parameter name");
+                if (ntp >= 2)
+                    return self->sup->fail("a trait supports at most two type parameters");
+                snprintf(tparam[ntp], MAX_TEXT, "%s", self->lex->toktext);
+                ntp++;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+            if (self->sup->expect(">") != 0) return -1;
+        }
         /* A second body for the same trait is a hard error. L2 reports it at the
-           opening '{', so step there first and use its line/column. */
+           opening '{', which is where the cursor sits now. */
         if (self->sym->find_trait(qname) >= 0) {
             char msg[MAX_TEXT];
             snprintf(msg, sizeof msg, "duplicate trait '%s'", name);
-            self->sup->lex_next();
             return tool::diag::ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
         }
         ti = self->sup->add_trait(qname);
@@ -2474,8 +2501,12 @@ impl ParseOps for Parser {
             if (nl > 0 && self->sym->traits[ti].ns[nl - 1] == '_')
                 self->sym->traits[ti].ns[nl - 1] = 0;
         }
+        self->sym->traits[ti].ntparams = ntp;
+        for (pi = 0; pi < ntp; pi++)
+            snprintf(self->sym->traits[ti].tparam[pi], MAX_TEXT, "%s", tparam[pi]);
+        self->sym->traits[ti].tmpl = -1;
+        self->sym->traits[ti].owner = self->cur_unit;
         if (self->sup->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
-        self->sup->lex_next();
         if (self->sup->expect("{") != 0) return -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             mline = self->lex->tokline;

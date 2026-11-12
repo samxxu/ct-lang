@@ -213,6 +213,20 @@ pub struct Trait {
     char path[160];
     /* the declaring namespace in underscore form, for a static namespace host */
     char ns[160];
+    /* Phase 35: a parameterised trait (`trait Iter<T>`) is a template row.
+       `ntparams > 0` marks it and `tparam[]`/`bound[]` hold the declaration;
+       every `Iter<int>` use copies `m[]` into an instance row whose signatures
+       carry the argument instead of `T`. `tmpl` is the template row's index on
+       an instance (-1 on a template or a plain trait), `nargs`/`carg[]` hold
+       the normalised arguments of an instance, and `owner` is the declaring
+       unit (the cross-unit guard names it). */
+    int  ntparams;
+    char tparam[2][160];
+    char bound[2][160];
+    int  tmpl;
+    int  nargs;
+    char carg[2][160];
+    int  owner;
 }
 
 pub struct Field {
