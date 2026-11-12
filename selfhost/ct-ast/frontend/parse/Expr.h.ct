@@ -70,6 +70,8 @@ import tool::diag::Diag;
 #define N_CAST 35
 #define N_DECL 12
 #define N_DEREF 28
+#define N_FUNC 3
+#define N_IMPL 33
 #define N_INDEX 26
 #define N_MCALL 30
 #define N_MEMBER 24
@@ -3384,19 +3386,33 @@ impl ExprOps for Expr {
        path, which `method_trait` resolves through the instance's use list. */
     int inst_inherent_method(const char *ibase, const char *fname)
     {
-        int ii, nimpls, inst, m;
+        int ii, nimpls, inst, m, ni;
         char base[MAX_TEXT];
         struct StructImpl *im;
 
         if (strncmp(ibase, "struct ", 7) != 0) return -1;
         snprintf(base, sizeof base, "%s", ibase + 7);
         inst = frontend::sym::ct_inst_find(base);
-        if (inst < 0) return -1;
-        im = frontend::sym::ct_impls(&nimpls);
-        for (ii = 0; im && ii < nimpls; ii++) {
-            if (im[ii].use[0]) continue;
-            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
-            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+        if (inst >= 0) {
+            im = frontend::sym::ct_impls(&nimpls);
+            for (ii = 0; im && ii < nimpls; ii++) {
+                if (im[ii].use[0]) continue;
+                if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+                for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                     m = self->arena->nodes[m].next)
+                    if (strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+            }
+        }
+        /* P34 S5a: a non-generic inherent impl `impl Name { … }` (S4) is an
+           N_IMPL node whose trait name is empty and whose receiver type is
+           `ibase`. A non-generic struct has no `ct_inst` row, so the lookup
+           falls back to scanning the arena for that block. */
+        for (ni = 0; ni < self->arena->nnode; ni++) {
+            if (self->arena->nodes[ni].kind != N_IMPL) continue;
+            if (self->arena->nodes[ni].text2[0]) continue;
+            if (self->arena->nodes[ni].aux < 0) continue;
+            if (strcmp(self->arena->nodes[ni].text, ibase) != 0) continue;
+            for (m = self->arena->nodes[ni].a; m >= 0;
                  m = self->arena->nodes[m].next)
                 if (strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
         }
@@ -3409,19 +3425,33 @@ impl ExprOps for Expr {
        an instance method, and an instance call must never resolve to `from`. */
     int inst_static_method(const char *ibase, const char *fname)
     {
-        int ii, nimpls, inst, m;
+        int ii, nimpls, inst, m, ni;
         char base[MAX_TEXT];
         struct StructImpl *im;
 
         if (strncmp(ibase, "struct ", 7) != 0) return -1;
         snprintf(base, sizeof base, "%s", ibase + 7);
         inst = frontend::sym::ct_inst_find(base);
-        if (inst < 0) return -1;
-        im = frontend::sym::ct_impls(&nimpls);
-        for (ii = 0; im && ii < nimpls; ii++) {
-            if (im[ii].use[0]) continue;
-            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
-            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+        if (inst >= 0) {
+            im = frontend::sym::ct_impls(&nimpls);
+            for (ii = 0; im && ii < nimpls; ii++) {
+                if (im[ii].use[0]) continue;
+                if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+                for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                     m = self->arena->nodes[m].next)
+                    if (self->arena->nodes[m].c
+                        && strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+            }
+        }
+        /* P34 S5a: non-generic inherent static method (S4 `static` marker in
+           `c`). Same arena scan as `inst_inherent_method`, but a `static`
+           method answers only here and never to an instance call. */
+        for (ni = 0; ni < self->arena->nnode; ni++) {
+            if (self->arena->nodes[ni].kind != N_IMPL) continue;
+            if (self->arena->nodes[ni].text2[0]) continue;
+            if (self->arena->nodes[ni].aux < 0) continue;
+            if (strcmp(self->arena->nodes[ni].text, ibase) != 0) continue;
+            for (m = self->arena->nodes[ni].a; m >= 0;
                  m = self->arena->nodes[m].next)
                 if (self->arena->nodes[m].c
                     && strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
@@ -4780,6 +4810,66 @@ impl ExprOps for Expr {
                 snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s", ibase);
                 snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", sm);
                 return mn;
+            }
+            /* P34 S5a: a non-generic inherent static call `Counter.make(5)`.
+               The name is a struct (not a template), followed by `.method(`.
+               A bare struct name that is not a static call falls through to
+               the ordinary variable path below, where it is reported as an
+               undeclared variable. */
+            if (self->sym->find_struct(self->lex->toktext) >= 0) {
+                int sp2, sbol2, stok2, sline2, stokline2, sstart2, slstart2;
+                long snum2;
+                int sfloat2, strunc2;
+                char stext2[MAX_TEXT], ssuf2[8];
+                sp2 = self->lex->pos; sbol2 = self->lex->bol;
+                stok2 = self->lex->tok; snum2 = self->lex->toknum;
+                sline2 = self->lex->line; stokline2 = self->lex->tokline;
+                sstart2 = self->lex->tokstart; slstart2 = self->lex->lstart;
+                sfloat2 = self->lex->tokfloat; strunc2 = self->lex->toktrunc;
+                snprintf(stext2, sizeof stext2, "%s", self->lex->toktext);
+                snprintf(ssuf2, sizeof ssuf2, "%s", self->lex->toksuffix);
+                self->sup->lex_next();   /* the struct name */
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0) {
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_ID) {
+                        char sibase[MAX_TEXT];
+                        char sm2[MAX_TEXT];
+                        char smsg2[MAX_TEXT + 64];
+                        int mn2;
+                        snprintf(sm2, sizeof sm2, "%s", self->lex->toktext);
+                        self->sup->lex_next();
+                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                            snprintf(sibase, sizeof sibase, "struct %s", stext2);
+                            args = self->parse_args();
+                            if (args < 0) return -1;
+                            if (self->inst_static_method(sibase, sm2) < 0) {
+                                snprintf(smsg2, sizeof smsg2, "'%s' has no static method '%s'",
+                                         stext2, sm2);
+                                return self->sup->fail(smsg2);
+                            }
+                            if (self->map_arity(id_line, id_col, sibase, sm2,
+                                                arg_count(self->arena, args)
+                                                    + self->closure_arg_count(args)) != 0)
+                                return -1;
+                            mn2 = self->sup->new_node(N_MCALL);
+                            if (mn2 < 0) return -1;
+                            self->arena->nodes[mn2].a = -1;
+                            self->arena->nodes[mn2].b = (args == 0) ? -1 : args;
+                            self->arena->nodes[mn2].aux = 11;
+                            snprintf(self->arena->nodes[mn2].text, MAX_TEXT, "%s", sibase);
+                            snprintf(self->arena->nodes[mn2].text2, MAX_TEXT, "%s", sm2);
+                            return mn2;
+                        }
+                    }
+                }
+                /* not a static call: rewind so the variable path handles it */
+                self->lex->pos = sp2; self->lex->bol = sbol2;
+                self->lex->tok = stok2; self->lex->toknum = snum2;
+                self->lex->line = sline2; self->lex->tokline = stokline2;
+                self->lex->tokstart = sstart2; self->lex->lstart = slstart2;
+                self->lex->tokfloat = sfloat2; self->lex->toktrunc = strunc2;
+                snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", stext2);
+                snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf2);
             }
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;

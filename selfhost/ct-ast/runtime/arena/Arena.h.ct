@@ -11,7 +11,7 @@
  * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
 #include <stdlib.h>
-#define MAX_NODES 131072
+#define MAX_NODES 262144
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
    documented where the nodes are built (frontend/parse/Parser.h.ct, Expr.h.ct
