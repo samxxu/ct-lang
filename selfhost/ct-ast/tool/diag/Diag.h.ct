@@ -394,9 +394,16 @@ impl DiagStore for Diag {
                 else if (w->kind == 4)
                     fprintf(tf, "%s %s: arity mismatch: '%s' %s\n",
                             loc, sev, w->var, w->msg);
-                else if (w->kind == 5)
-                    fprintf(tf, "%s %s: type mismatch: '%s' %s\n",
-                            loc, sev, w->var, w->msg);
+                else if (w->kind == 5) {
+                    /* Phase 32: an empty callee means the message already
+                       carries its own label (`initializer: …`), so nothing
+                       is prefixed. */
+                    if (w->var[0])
+                        fprintf(tf, "%s %s: type mismatch: '%s' %s\n",
+                                loc, sev, w->var, w->msg);
+                    else
+                        fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                }
                 else if (w->kind == 6)
                     fprintf(tf, "%s %s: ambiguous method: '%s' %s\n",
                             loc, sev, w->var, w->msg);

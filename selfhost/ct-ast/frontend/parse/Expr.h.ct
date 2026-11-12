@@ -242,6 +242,12 @@ pub trait ExprTypes {
        silent). `is_zero` is optional and marks the bare literal `0`, a null
        pointer constant wherever a pointer is expected. */
     int  chk_type(int n, char *out, int cap, int *is_zero);
+    /* One compatibility judgement through the shared `arg_class` kernel
+       (D32-2). `diag` picks the wording: 1 initializer, 2 assignment,
+       3 return, 6 a container argument (the index comes from `chk_arg`).
+       The position is read from `chk_line` / `chk_col`; the caller sets both
+       before the call, because an AST node only records its line. */
+    int  chk_assignable(const char *formal, const char *actual, int is_zero, int diag);
 }
 
 pub struct Expr {
@@ -307,6 +313,12 @@ pub struct Expr {
        --types`. Every phase-32 judgement reads this flag and stays silent
        when it is 0. */
     int *types_mode;
+    /* Phase 32: the source position of the expression under judgement and the
+       argument index L32-6 names. The caller sets them just before calling
+       `chk_assignable`; an AST node carries only its line. */
+    int  chk_line;
+    int  chk_col;
+    int  chk_arg;
     /* Phase 28: the trait bound of the template whose body is being parsed.
        A method call on the type parameter resolves against this trait instead
        of failing to find a struct; empty for a plain template and outside one. */
@@ -5523,6 +5535,46 @@ impl ExprTypes for Expr {
         if (!self->static_ctype(n, out, cap, &ad, 0)) return -1;
         if (ad != 0) return -1;
         return 0;
+    }
+
+    /* Phase 32 S3: one formal against one actual through the same kernel
+       `argtype_mismatch` uses (D32-2). Every skip below is a deliberate
+       false negative: an interface slot boxes on its own path, a null
+       pointer constant fills any pointer slot (B32-6), and two pointers are
+       never compared beyond the fact that both are pointers (D32-6/T32-1).
+       The base-type and depth guard has to run before `r == 1`, or a single
+       sided pointer such as `int x = "s"` would be skipped (B32-8). */
+    int chk_assignable(const char *formal, const char *actual, int is_zero, int diag)
+    {
+        char fb[MAX_TEXT], ab[MAX_TEXT], tr[MAX_TEXT];
+        char msg[2 * MAX_TEXT + 64];
+        const char *label;
+        int r;
+
+        if (!formal || !formal[0] || !actual || !actual[0]) return 0;
+        if (self->sup->is_iface_type(formal, tr, sizeof tr)) return 0;
+        if (is_zero && strchr(formal, '*')) return 0;
+        r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        if (r == -1) return 0;
+        if (strchr(formal, '*') && strchr(actual, '*')) return 0;
+        if (r == 2) {
+            /* different struct spellings; the same row passes like `r == 0` */
+            int fs = self->sym->find_struct(fb + 6);
+            int as = self->sym->find_struct(ab + 6);
+            if (fs < 0 || as < 0 || fs == as) return 0;
+        } else if (r != 1) {
+            return 0;
+        }
+        if (diag == 6) {
+            snprintf(msg, sizeof msg, "argument %d: expected '%s', got '%s'",
+                     self->chk_arg, formal, actual);
+        } else {
+            label = diag == 2 ? "assignment" : (diag == 3 ? "return" : "initializer");
+            snprintf(msg, sizeof msg, "%s: expected '%s', got '%s'",
+                     label, formal, actual);
+        }
+        return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
+                                        self->sup->mem->path);
     }
 }
 

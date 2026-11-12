@@ -3008,13 +3008,30 @@ impl StmtOps for Stmt {
                     e = self->parse_range_init(n, typebuf);
                     if (e < 0) return -1;
                 } else {
+                    int eline, ecol;
                     /* `int (*p)(int) = strcmp;` may name a C library function */
                     if (strstr(typebuf, "(*")) self->ex->fnval_ok = 1;
                     self->ex->into_ok = 1;
+                    eline = self->lex->tokline;
+                    ecol = self->lex->tokstart - self->lex->lstart + 1;
                     e = self->ex->parse_expr();
                     self->ex->into_ok = 0;
                     self->ex->fnval_ok = 0;
                     if (e < 0) return -1;
+                    /* Phase 32 S3 (L32-1): the declared type against the
+                       initialiser. The position is the initialiser's own
+                       start, and the whole check stays behind `--types`. */
+                    if (self->ex->types_mode && *self->ex->types_mode) {
+                        char out[MAX_TEXT];
+                        int is_zero = 0;
+                        if (self->ex->chk_type(e, out, sizeof out, &is_zero) == 0) {
+                            self->ex->chk_line = eline;
+                            self->ex->chk_col = ecol;
+                            self->ex->chk_arg = 0;
+                            if (self->ex->chk_assignable(typebuf, out, is_zero, 1) != 0)
+                                return -1;
+                        }
+                    }
                 }
                 self->arena->nodes[n].a = e;
             }
