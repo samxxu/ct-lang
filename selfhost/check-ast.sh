@@ -3125,6 +3125,39 @@ else
     ok "p32 iface (existing diagnostic unchanged under --types)"
 fi
 
+# E32-12/E32-13: the legal corpus. `prog.ct` is judged twice (with and without
+# `--types`); the `check_only/` forms only with the gate, since cc rejects or
+# warns on them. Every one must stay silent.
+p32_legal() {
+    p32_f="$1"
+    p32_out=$("$work/ct-ast" check "$p32_f" 2>&1)
+    p32_rc=$?
+    if [ "$p32_rc" -ne 0 ] || [ -n "$p32_out" ]; then
+        bad "p32 legal $p32_f (check)" "expected rc=0 and no output: $p32_out"
+        return
+    fi
+    p32_out=$("$work/ct-ast" check --types "$p32_f" 2>&1)
+    p32_rc=$?
+    if [ "$p32_rc" -ne 0 ] || [ -n "$p32_out" ]; then
+        bad "p32 legal $p32_f (--types)" "expected rc=0 and no output: $p32_out"
+        return
+    fi
+    ok "p32 legal $p32_f (silent with and without --types)"
+}
+p32_legal test/ast/209_valid_assignments/prog.ct
+p32_legal test/ast/210_valid_skip_forms/prog.ct
+for p32_f in test/ast/209_valid_assignments/check_only/*.ct \
+             test/ast/210_valid_skip_forms/check_only/*.ct; do
+    [ -f "$p32_f" ] || continue
+    p32_out=$("$work/ct-ast" check --types "$p32_f" 2>&1)
+    p32_rc=$?
+    if [ "$p32_rc" -ne 0 ] || [ -n "$p32_out" ]; then
+        bad "p32 skip $p32_f" "expected rc=0 and no output: $p32_out"
+    else
+        ok "p32 skip $p32_f"
+    fi
+done
+
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 # Every source diagnostic now carries the full position (`file:line:col: error:`);

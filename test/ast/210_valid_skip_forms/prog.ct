@@ -1,0 +1,14 @@
+/* E32-13: an array actual decays to a pointer on both sides, which the gate
+   skips (D32-6); the program still builds and runs. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a[3] = {1, 2, 3};
+    int *p = a;
+    char buf[4] = {'h', 'i', 0, 0};
+    char *q = buf;
+
+    printf("%d %d %s\n", p[0] + p[2], (int)q[0], q);
+    return 0;
+}

@@ -1,0 +1,8 @@
+// p32: a void actual is a skip, not a refused conversion.
+void f(void) {
+    return;
+}
+int main(void) {
+    int x = f();
+    return x;
+}

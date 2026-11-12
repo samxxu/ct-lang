@@ -1,0 +1,5 @@
+// p32: arithmetic widening is compatible (D32-5).
+int main(void) {
+    int x = 1.5;
+    return x;
+}

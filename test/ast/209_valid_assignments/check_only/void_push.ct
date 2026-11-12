@@ -1,0 +1,9 @@
+// p32: a void actual into a container argument is skipped, not refused.
+void f(void) {
+    return;
+}
+int main(void) {
+    Vec<int> v = {1};
+    v.push(f());
+    return v.len();
+}

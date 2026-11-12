@@ -1,0 +1,7 @@
+// p32: two pointers are never compared by base type or depth (D32-6).
+struct A { int x; };
+int main(void) {
+    struct A *pa = 0;
+    char *pc = pa;
+    return pc == 0;
+}

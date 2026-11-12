@@ -1,0 +1,5 @@
+// p32: `void` parses as a declaration type and the gate stays silent.
+int main(void) {
+    void z;
+    return 0;
+}

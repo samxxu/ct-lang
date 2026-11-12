@@ -1,0 +1,35 @@
+/* E32-12: the phase-32 gate must stay silent on every legal initialiser.
+   `char *` from a string, a null constant into a pointer, arithmetic widths,
+   `void *` from a pointer and an interface slot boxed from a struct. */
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+int main(void)
+{
+    char *s = "hi";
+    char *p = 0;
+    int x = 1;
+    long n = 1;
+    void *v = p;
+    struct Circle circle;
+
+    circle.r = 7;
+    {
+        Show sh = circle;
+        printf("%s %d %ld %d %d\n", s, x, n, v == 0, sh.show());
+    }
+    return 0;
+}

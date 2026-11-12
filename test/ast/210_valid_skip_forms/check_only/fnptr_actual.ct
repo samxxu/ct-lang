@@ -1,0 +1,8 @@
+// p32: a function name into an int is undecidable here and skipped (D32-4).
+int f(void) {
+    return 0;
+}
+int main(void) {
+    int x = f;
+    return x;
+}
