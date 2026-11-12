@@ -54,6 +54,9 @@ import tool::diag::Diag;
 #define B_XOR 14
 #define MAX_CALLS 1024
 #define MAX_FUNCS 256
+/* Phase 32 S7: the argument start positions of the call being parsed. The
+   array is a stack: a nested call appends after its parent's frame. */
+#define MAX_ARG_POS 32
 #define MAX_GENERIC_INSTS 64
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_RAW_INIT 4096
@@ -248,6 +251,11 @@ pub trait ExprTypes {
        The position is read from `chk_line` / `chk_col`; the caller sets both
        before the call, because an AST node only records its line. */
     int  chk_assignable(const char *formal, const char *actual, int is_zero, int diag);
+    /* Phase 32 S7: the arguments of one inherent method call on an instance.
+       The impl's type parameters are bound to the instance's concrete C
+       arguments, each formal is substituted, and each actual is judged with
+       L32-6 at its own start position. */
+    int  chk_mcall_args(const char *ibase, const char *fname, int args);
 }
 
 pub struct Expr {
@@ -319,6 +327,13 @@ pub struct Expr {
     int  chk_line;
     int  chk_col;
     int  chk_arg;
+    /* Phase 32 S7: each argument's own start position, captured while the
+       argument list is parsed. A nested call grows the frame past the
+       parent's slots; the frame is popped when the list closes. */
+    int  arg_line[32];
+    int  arg_col[32];
+    int  narg_pos;
+    int  arg_base;
     /* Phase 28: the trait bound of the template whose body is being parsed.
        A method call on the type parameter resolves against this trait instead
        of failing to find a struct; empty for a plain template and outside one. */
@@ -596,6 +611,37 @@ static int arg_class(const char *formal, const char *actual,
     if (cf == 0 && ca == 0) return 0;
     if (cf != ca) return 1;
     return 2;
+}
+
+/* Phase 32 S7: a formal spelled exactly `T` / `U` (or `T *` / `U *`) takes
+   the instance's concrete spelling. Any other shape that mentions a type
+   parameter is undecidable here, so the caller skips it (the card's
+   restricted substitution); a formal that mentions no parameter passes
+   through unchanged. */
+static int subst_tparam(const char *spell, const char *n1, const char *v1,
+                        const char *n2, const char *v2, char *out, int cap)
+{
+    char k[MAX_TEXT];
+    char p[MAX_TEXT];
+    int i, j = 0;
+
+    for (i = 0; spell[i] && j + 1 < (int)sizeof k; i++)
+        if (spell[i] != ' ' && spell[i] != '\t') k[j++] = spell[i];
+    k[j] = 0;
+    if (n1 && n1[0]) {
+        if (strcmp(k, n1) == 0) { snprintf(out, (size_t)cap, "%s", v1); return 0; }
+        snprintf(p, sizeof p, "%s*", n1);
+        if (strcmp(k, p) == 0) { snprintf(out, (size_t)cap, "%s *", v1); return 0; }
+    }
+    if (n2 && n2[0]) {
+        if (strcmp(k, n2) == 0) { snprintf(out, (size_t)cap, "%s", v2); return 0; }
+        snprintf(p, sizeof p, "%s*", n2);
+        if (strcmp(k, p) == 0) { snprintf(out, (size_t)cap, "%s *", v2); return 0; }
+    }
+    if ((n1 && n1[0] && strstr(k, n1)) || (n2 && n2[0] && strstr(k, n2)))
+        return -1;
+    snprintf(out, (size_t)cap, "%s", spell);
+    return 0;
 }
 
 /* Read the next comma-separated item of a function pointer's parameter text
@@ -4041,6 +4087,11 @@ impl ExprOps for Expr {
                                     arg_count(self->arena, args)
                                         + self->closure_arg_count(args), want) != 0)
                                 return -1;
+                            /* Phase 32 S7 (L32-6): bind, substitute, judge. */
+                            if (self->types_mode && *self->types_mode) {
+                                if (self->chk_mcall_args(ibase, fname, args) != 0)
+                                    return -1;
+                            }
                             /* L29-10 / L29-11: a container never stores an
                                `own` / `borrow` value, nor another container. */
                             if (frontend::sym::ct_is_container_type(ibase)
@@ -5448,19 +5499,32 @@ impl ExprOps for Expr {
 
     int parse_args(void)
     {
-        int first, tail, e;
+        int first, tail, e, base, k;
         (void)self;
 
         if (self->sup->expect("(") != 0) return -1;
+        base = self->narg_pos;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
             self->sup->lex_next();
+            self->arg_base = base;
             return 0;
         }
         first = -1;
         tail = -1;
+        k = 0;
         for (;;) {
+            int aline = self->lex->tokline;
+            int acol = self->lex->tokstart - self->lex->lstart + 1;
+            /* the frame grows before the argument is parsed, so a nested
+               call appends after this slot instead of over the earlier ones */
+            self->narg_pos = base + k;
             e = self->parse_expr();
             if (e < 0) return -1;
+            if (base + k < MAX_ARG_POS) {
+                self->arg_line[base + k] = aline;
+                self->arg_col[base + k] = acol;
+            }
+            k++;
             if (tail < 0) first = e;
             else self->arena->nodes[tail].next = e;
             tail = e;
@@ -5471,6 +5535,8 @@ impl ExprOps for Expr {
             break;
         }
         if (self->sup->expect(")") != 0) return -1;
+        self->arg_base = base;
+        self->narg_pos = base;   /* pop: siblings reuse the same slots */
         return first;
     }
 
@@ -5575,6 +5641,62 @@ impl ExprTypes for Expr {
         }
         return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
                                         self->sup->mem->path);
+    }
+
+    /* Phase 32 S7: bind, substitute, judge. The impl block is found the same
+       way `inst_inherent_method` finds the method, but here the block index
+       is needed because `ct_method_bind` reads its type parameters. */
+    int chk_mcall_args(const char *ibase, const char *fname, int args)
+    {
+        char base[MAX_TEXT], n1[MAX_TEXT], v1[MAX_TEXT], n2[MAX_TEXT], v2[MAX_TEXT];
+        char fty[MAX_TEXT], out[MAX_TEXT];
+        int ii, nimpls, inst, m, found, foundm, ai, k;
+        struct StructImpl *im;
+
+        if (strncmp(ibase, "struct ", 7) != 0) return 0;
+        snprintf(base, sizeof base, "%s", ibase + 7);
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst < 0) return 0;
+        im = frontend::sym::ct_impls(&nimpls);
+        found = -1;
+        foundm = -1;
+        for (ii = 0; im && ii < nimpls && found < 0; ii++) {
+            if (im[ii].use[0]) continue;
+            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                 m = self->arena->nodes[m].next)
+                if (strcmp(self->arena->nodes[m].text2, fname) == 0) {
+                    found = ii;
+                    foundm = m;
+                    break;
+                }
+        }
+        if (found < 0) return 0;
+        if (frontend::sym::ct_method_bind(found, inst, n1, v1, n2, v2,
+                                          MAX_TEXT) < 0)
+            return 0;
+        ai = args;
+        k = 0;
+        {
+            int pi = self->arena->nodes[foundm].a;
+            while (pi >= 0 && ai > 0) {
+                int is_zero = 0;
+                if (subst_tparam(self->arena->nodes[pi].text, n1, v1, n2, v2,
+                                 fty, sizeof fty) == 0
+                    && self->chk_type(ai, out, sizeof out, &is_zero) == 0) {
+                    if (self->arg_base + k < MAX_ARG_POS) {
+                        self->chk_line = self->arg_line[self->arg_base + k];
+                        self->chk_col = self->arg_col[self->arg_base + k];
+                    }
+                    self->chk_arg = k + 1;
+                    if (self->chk_assignable(fty, out, is_zero, 6) != 0) return -1;
+                }
+                ai = self->arena->nodes[ai].next;
+                pi = self->arena->nodes[pi].next;
+                k++;
+            }
+        }
+        return 0;
     }
 }
 

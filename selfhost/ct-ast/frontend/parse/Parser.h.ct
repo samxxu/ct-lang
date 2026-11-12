@@ -1005,6 +1005,8 @@ impl ParseOps for Parser {
         self->ex->cur_unit = self->cur_unit;
         self->ex->build_mode = self->build_mode;
         self->ex->types_mode = &self->types_mode;
+        self->ex->narg_pos = 0;
+        self->ex->arg_base = 0;
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {

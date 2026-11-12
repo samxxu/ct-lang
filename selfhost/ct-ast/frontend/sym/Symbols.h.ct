@@ -375,8 +375,7 @@ pub int ct_impl_matches(int ii, int inst);
    arguments (`T` -> `struct Vec_int`). Each pair receives a parameter name and
    its value; returns how many were bound (0..2), or -1 when the block does not
    cover the instance. */
-pub int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
-                       int cap);
+pub int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2, int cap);
 pub int ct_tmpl_find(const char *name);
 pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, int is_pub, int owner, const char *path, int line);
 pub int ct_inst_find(const char *name);
