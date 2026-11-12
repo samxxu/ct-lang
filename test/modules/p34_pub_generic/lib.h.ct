@@ -1,7 +1,11 @@
-// Phase 34 S1b: a `pub` generic function whose template body lives in a
-// `.h.ct` header and is consumable across units. L26-2 currently rejects
-// `pub T id<T>(T x)` at parse time; S1b lifts that restriction.
+// Phase 34 S2b: the template owner and its consumer each number their own
+// static instances from one. This wrapper forces an instance in the owner.
 pub T id<T>(T x)
 {
     return x;
+}
+
+pub long from_lib(long x)
+{
+    return id<long>(x);
 }

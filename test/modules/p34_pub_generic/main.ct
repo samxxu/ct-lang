@@ -1,13 +1,14 @@
-// Phase 34 S1b: consumer unit that imports a header-declared `pub` generic
-// function and instantiates it at `int`. The call `id<int>(3)` must resolve
-// to a static instance emitted in this unit.
+// Phase 34 S2b: repeated `id<int>` calls share one consumer-owned instance;
+// the owner's `id<long>` does not consume a consumer instance number.
 #include <stdio.h>
 
 import lib;
 
 int main(void)
 {
-    int n = id<int>(3);
-    printf("%d\n", n);
+    int a = id<int>(3);
+    int b = id<int>(3);
+    long c = from_lib(4);
+    printf("%d %d %ld\n", a, b, c);
     return 0;
 }

@@ -1522,40 +1522,49 @@ impl ExprOps for Expr {
         return 0;
     }
 
-    /* Phase 26 (D26-5): monomorphise `gfi` for `targ` once. The instance is a
-       private `funcs` row with the template's signature substituted; its body
-       is the template's own N_FUNC node, which the emitter writes once per
-       instance under `gtparam`/`gtarg` (D26-7). The cache key is the pair
-       (template row, concrete spelling), so the source order fixes the
-       instance numbers and the generated unit stays deterministic. */
+    /* Phase 26 (D26-5): monomorphise `gfi` for `targ` once per asking unit.
+       The instance is a private `funcs` row with the template's signature
+       substituted; its body is the template's own N_FUNC node, which the
+       emitter writes under `gtparam`/`gtarg` (D26-7). The key is the triple
+       (template row, owner, concrete spelling), and each owner numbers its
+       static copies from one, independently of every other unit. */
     int generic_instance(int gfi, const char *targ, int line, int col)
     {
         char cname[MAX_TEXT];
         char tmp[MAX_TEXT];
-        int i, k, ni, suffix, taken;
+        int i, k, ni, fi, suffix, taken, seq;
 
-        for (i = 0; i < self->sym->nginsts; i++)
+        seq = 1;
+        for (i = 0; i < self->sym->nginsts; i++) {
+            if (self->sym->ginsts[i].owner != self->cur_unit) continue;
             if (self->sym->ginsts[i].func == gfi
-                && self->sym->ginsts[i].owner == self->cur_unit
                 && strcmp(self->sym->ginsts[i].targ, targ) == 0)
                 return i;
+            seq++;
+        }
         if (self->sym->nginsts >= MAX_GENERIC_INSTS)
             return self->sup->fail("too many generic instances in this unit");
         if (self->sym->nfunc >= MAX_FUNCS)
             return self->sup->fail("too many functions in this unit");
         /* `<name>__ct<N>`; a user function may already hold the spelling, so a
-           numeric suffix is retried a bounded number of times (R6). */
-        snprintf(cname, sizeof cname, "%s__ct%d", self->sym->funcs[gfi].cname,
-                 self->sym->nginsts + 1);
-        if (self->sym->find_func(cname) >= 0) {
-            taken = 1;
-            for (suffix = 1; suffix <= 8 && taken; suffix++) {
-                snprintf(cname, sizeof cname, "%s__ct%d_%d", self->sym->funcs[gfi].cname,
-                         self->sym->nginsts + 1, suffix);
-                taken = (self->sym->find_func(cname) >= 0);
-            }
-            if (taken) return self->sup->fail("cannot name a generic instance uniquely");
+           numeric suffix is retried a bounded number of times (R6). Another
+           unit's static instance is not a collision in this unit's C file. */
+        taken = 1;
+        for (suffix = 0; suffix <= 8 && taken; suffix++) {
+            if (suffix == 0)
+                snprintf(cname, sizeof cname, "%s__ct%d",
+                         self->sym->funcs[gfi].cname, seq);
+            else
+                snprintf(cname, sizeof cname, "%s__ct%d_%d",
+                         self->sym->funcs[gfi].cname, seq, suffix);
+            fi = self->sym->find_func(cname);
+            taken = (fi >= 0);
+            for (i = 0; taken && i < self->sym->nginsts; i++)
+                if (self->sym->ginsts[i].row == fi
+                    && self->sym->ginsts[i].owner != self->cur_unit)
+                    taken = 0;
         }
+        if (taken) return self->sup->fail("cannot name a generic instance uniquely");
         ni = self->sym->nfunc;
         self->sym->nfunc++;
         memcpy(&self->sym->funcs[ni], &self->sym->funcs[gfi], sizeof(*self->sym->funcs));
@@ -1577,6 +1586,7 @@ impl ExprOps for Expr {
                 snprintf(self->sym->funcs[ni].ptype[k], MAX_TEXT, "%s", tmp);
         i = self->sym->nginsts;
         self->sym->ginsts[i].func = gfi;
+        self->sym->ginsts[i].row = ni;
         self->sym->ginsts[i].owner = self->cur_unit;
         snprintf(self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
         snprintf(self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);

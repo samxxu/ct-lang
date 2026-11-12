@@ -305,10 +305,11 @@ pub trait SymbolOps {
 }
 
 /* Phase 26: one monomorphised instance of a generic function. `func` indexes
-   the template row in `funcs`; `targ` is the concrete type spelling; `cname` is
-   the emitted C name (`<template>__ct<N>`). */
+   the template row in `funcs`; `row` indexes its own static copy there; `targ`
+   is the concrete type spelling; `cname` is `<template>__ct<N>`. */
 pub struct GenericInst {
     int  func;
+    int  row;
     char targ[160];
     char cname[160];
     /* Phase 34 (D34-1): the unit that asked for the instance. A `pub` template

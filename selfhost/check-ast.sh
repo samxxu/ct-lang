@@ -6363,6 +6363,22 @@ else
     bad "p29→p34 pub generic" "$(cat "$work/p34g.err" "$work/p34g.stdout" 2>/dev/null)"
 fi
 
+# P34 S2b: each unit numbers its own static instances from one. The owner
+# (lib.h.ct) instantiates id<long> and the consumer (main.ct) id<int>; both
+# must spell their copy id__ct1. Before S2b the consumer leaked the global
+# counter and got id__ct2.
+rm -rf "$work/p34g-emit"
+mkdir -p "$work/p34g-emit"
+if "$work/ct-ast" build --emit-c test/modules/p34_pub_generic/main.ct \
+        -o "$work/p34g-emit" >"$work/p34ge.out" 2>"$work/p34ge.err" \
+   && grep -q 'id__ct1' "$work/p34g-emit/main.c" \
+   && ! grep -q 'id__ct2' "$work/p34g-emit/main.c"; then
+    ok "p34 S2b (consumer instance is id__ct1, per-owner numbering)"
+else
+    bad "p34 S2b per-owner numbering" \
+        "$(cat "$work/p34ge.err" 2>/dev/null | head -2) :: $(grep -oE 'id__ct[0-9_]+' "$work/p34g-emit/main.c" 2>/dev/null | sort -u | tr '\n' ' ')"
+fi
+
 # 144: one C struct per instance, and an inherent method per instance.
 "$work/ct-ast" test/ast/144_generic_struct_user/prog.ct -o "$work/p29s.c" \
     >"$work/p29s.out" 2>"$work/p29s.err"
