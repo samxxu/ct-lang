@@ -1,0 +1,20 @@
+/* E34-6 (P34 S9c): the built-in `Result<T, E>`. Success is `{ 1, v, err }`,
+   failure `{ 0, v, err }`; the methods are ordinary impl members, so no
+   compiler branch is involved. */
+#include <stdio.h>
+
+int main(void)
+{
+    Result<int, char *> ok = { 1, 42, 0 };
+    Result<int, char *> bad = { 0, 0, "boom" };
+    int good = ok.is_ok();
+    int not_bad = ok.is_err();
+    int failed = bad.is_err();
+    int v = ok.unwrap_or(-1);
+    int d = bad.unwrap_or(-1);
+    char *msg = bad.unwrap_err_or("none");
+    printf("%d %d %d %d %d %s\n", good, not_bad, failed, v, d, msg);
+    ok.release();
+    bad.release();
+    return 0;
+}

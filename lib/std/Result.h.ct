@@ -1,0 +1,52 @@
+/*
+ * Result.h.ct - the built-in `Result<T, E>` (Phase 34 S9c).
+ *
+ * `Result` is an ordinary generic struct with two parameters, not a compiler
+ * branch: success is `{ 1, v, err }` and failure is `{ 0, v, err }`, with `ok`
+ * as the discriminant. A brace initialiser may leave the unused payload zero,
+ * so `Result<int, char *> r = { 1, 42, 0 };` and `{ 0, 0, "boom" }` are the
+ * two canonical spellings. The methods are plain statically dispatched impl
+ * members, exactly like `Option`'s.
+ *
+ * `release` mirrors `Option.release`: the payloads are values, so there is
+ * nothing to free and the method is a no-op (D34-8).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+
+pub struct Result<T, E> {
+    int ok;
+    T value;
+    E err;
+}
+
+impl<T, E> Result<T, E> {
+    int is_ok() {
+        return self.ok;
+    }
+
+    int is_err() {
+        return !self.ok;
+    }
+
+    /* The success payload when present, the caller's fallback otherwise. */
+    T unwrap_or(T dflt) {
+        if (self.ok) {
+            return self.value;
+        }
+        return dflt;
+    }
+
+    /* The error payload when the result failed, the caller's fallback
+       otherwise. */
+    E unwrap_err_or(E dflt) {
+        if (!self.ok) {
+            return self.err;
+        }
+        return dflt;
+    }
+
+    void release() {
+    }
+}
