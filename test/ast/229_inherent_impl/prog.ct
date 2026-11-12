@@ -1,8 +1,9 @@
-// Phase 34 S4: a non-generic inherent impl `impl Name { … }`. Before S4 the
-// parser read `Counter` as a trait name and failed with "impl of an unknown
-// trait"; S4 recognises a struct name followed by `{` and parses the block as
-// inherent methods. Methods are emitted and dispatched in S5a; here we only
-// assert the syntax is accepted (the block parses, build is warning-free).
+// Phase 34 S5a: non-generic inherent methods on a struct. S4 accepted the
+// `impl Counter { … }` syntax; S5a wires lookup, static dispatch and the
+// `<Struct>_<method>` emission. Instance methods take `&self`, static methods
+// take no receiver; `self.field` in the body spells `_self->field`.
+#include <stdio.h>
+
 struct Counter {
     int n;
 }
@@ -15,5 +16,8 @@ impl Counter {
 
 int main(void)
 {
+    Counter c = Counter.make(5);
+    c.inc();
+    printf("%d\n", c.get());
     return 0;
 }

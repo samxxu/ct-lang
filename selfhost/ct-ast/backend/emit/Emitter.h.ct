@@ -2648,6 +2648,64 @@ impl EmitOps for Emitter {
                 fputs("\n};\n\n", self->out);
             }
         }
+        /* P34 S5a: non-generic inherent impl `impl Name { … }` (S4). The block
+           has no trait and no vtable; its methods are plain C functions named
+           `<Struct>_<method>`. Instance methods take `void *self` and cast it
+           to the struct pointer; static methods take no receiver. The body's
+           `self.field` (N_MEMBER) is rewritten to `_self->field` by the
+           self_mode-aware member emitter below. */
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            int si;
+            const char *sname;
+            const char *mret;
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            if (self->arena->nodes[n].text2[0]) continue;   /* trait impl: above */
+            si = self->arena->nodes[n].aux;
+            if (si < 0) continue;   /* template impl: emit_struct_impls */
+            sname = self->arena->nodes[n].text;
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                char owner[MAX_TEXT];
+                int is_static;
+                mret = self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void";
+                is_static = self->arena->nodes[m].c;
+                snprintf(owner, sizeof owner, "%s_%s", self->sym->structs[si].name,
+                         self->arena->nodes[m].text2);
+                if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
+                self->nclvar = 0;
+                self->closure_ci = 0;
+                fputs("static __attribute__((unused)) ", self->out);
+                fprintf(self->out, "%s %s_%s(", mret, self->sym->structs[si].name,
+                        self->arena->nodes[m].text2);
+                if (!is_static) fputs("void *self", self->out);
+                k = self->arena->nodes[m].a;
+                while (k > 0) {
+                    if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
+                    if (self->emit_type_name_dims(self->arena->nodes[k].text,
+                                                  self->arena->nodes[k].text2,
+                                                  self->arena->nodes[k].text3) != 0) return -1;
+                    k = self->arena->nodes[k].next;
+                }
+                fputs(") {\n", self->out);
+                if (!is_static)
+                    fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
+                self->sym->self_mode = is_static ? 0 : 1;
+                body = self->arena->nodes[m].b;
+                for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
+                    if (!self->node_mentions(body, self->arena->nodes[k].text2))
+                        fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
+                if (!is_static && !self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
+                k = self->arena->nodes[body].a;
+                while (k >= 0) {
+                    if (self->emit_node(k, 1) != 0) {
+                        self->sym->self_mode = 0;
+                        return -1;
+                    }
+                    k = self->arena->nodes[k].next;
+                }
+                self->sym->self_mode = 0;
+                fputs("}\n\n", self->out);
+            }
+        }
         /* D-3: a struct that only `use`s an all-default trait needs no `impl`.
            The slot bodies are expanded here, once per struct, and the `use`
            clause is the sole adoption. A trait with an abstract method in this
@@ -3926,8 +3984,16 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_MEMBER) {
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fprintf(self->out, ".%s", self->arena->nodes[n].text2);
+            int a = self->arena->nodes[n].a;
+            /* P34 S5a: inside an inherent impl method `self` is a struct value
+               in the source but a pointer (`_self`) in the emitted C, so the
+               first member access on `self` spells `->`; deeper links keep `.`. */
+            int self_arrow = self->sym->self_mode && a >= 0
+                             && self->arena->nodes[a].kind == N_VAR
+                             && strcmp(self->arena->nodes[a].text2, "self") == 0;
+            if (self->emit_expr(a) != 0) return -1;
+            fprintf(self->out, "%s%s", self_arrow ? "->" : ".",
+                    self->arena->nodes[n].text2);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_ARROW) {
@@ -4299,7 +4365,7 @@ impl EmitOps for Emitter {
                 if (strncmp(base, "struct ", 7) == 0)
                     snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
                 si = self->sym->find_struct(base);
-                if (si < 0 || !self->sym->structs[si].is_inst) {
+                if (si < 0) {
                     snprintf(msg2, sizeof msg2, "no method '%s' for type '%s'",
                              self->arena->nodes[n].text2, self->arena->nodes[n].text);
                     return self->fail_from(n, msg2);
@@ -4328,7 +4394,7 @@ impl EmitOps for Emitter {
                 if (strncmp(base, "struct ", 7) == 0)
                     snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
                 si = self->sym->find_struct(base);
-                if (si < 0 || !self->sym->structs[si].is_inst) {
+                if (si < 0) {
                     snprintf(msg2, sizeof msg2, "no static method '%s' for type '%s'",
                              self->arena->nodes[n].text2, self->arena->nodes[n].text);
                     return self->fail_from(n, msg2);
