@@ -1017,7 +1017,7 @@ check-all: OK (11 hard gates green)
 | 失败项 | 原因 | 与 29 的关系 |
 | --- | --- | --- |
 | `66_type_host_literals` / `67_type_alias` / `81_closure_no_typehost` / `120_map_each_closure` / `121_map_each_closure_var` / `122_map_each_tier1` / `130_generic_build_mode` / `131_generic_cross_unit`（8 项） | 夹具含 `import`，sanitizer 脚本用单文件 compile 模式调用，报 `'import' requires multi-file mode: use 'ct build'` | 脚本调用方式问题；这 8 个在 `check-ast.sh` 的 build 段全部通过 |
-| `examples/json/json.ct` | ASAN/UBSAN 下 end-to-end 第 2 阶段失败（示例本身，无 `Vec`/`Map`） | 与 29 无关；示例不含本相语法 |
+| `packages/json/json.ct`（Phase 29 时位于 `examples/json/`） | ASAN/UBSAN 下 end-to-end 第 2 阶段失败（示例本身，无 `Vec`/`Map`） | 与 29 无关；示例不含本相语法 |
 | `range_init_overflow` | ct-ast 崩溃（exit 134），Phase 24 的既有夹具 | 与 29 无关；`138`–`147` 的 range/容器夹具均通过 |
 
 ```text
@@ -1103,7 +1103,7 @@ check-sanitizers: FAIL (10 failed, 323 passed)
 | 失败项 | 与 P29 的关系 |
 | --- | --- |
 | `66` / `67` / `81` / `120` / `121` / `122` / `130` / `131`（8 项） | 脚本用单文件模式调用含 `import` 的夹具，报 `'import' requires multi-file mode`；与补丁无关 |
-| `examples/json/json.ct` | ASAN/UBSAN 下示例端到端第 2 阶段失败；示例不含 range / `Vec` 构造 |
+| `packages/json/json.ct`（Phase 29 时位于 `examples/json/`） | ASAN/UBSAN 下示例端到端第 2 阶段失败；示例不含 range / `Vec` 构造 |
 | `range_init_overflow` | Phase 24 既有夹具，sanitizer 下 exit 134；非 sanitizer 构建仍正确报 `a range bound is out of range`（本轮已复核） |
 
 ### 11.4 V29-4e 的回归基线比对
