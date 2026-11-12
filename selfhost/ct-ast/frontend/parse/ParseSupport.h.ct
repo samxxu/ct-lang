@@ -253,7 +253,7 @@ impl SupportOps for ParseSupport {
         if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
         fresh = 0;
         if (i < 0) {
-            if (self->sym->nfunc >= MAX_FUNCS) {
+            if (self->sym->nfunc >= self->sym->nfunc_base + MAX_FUNCS) {
                 snprintf(msg, sizeof msg, "too many functions in unit '%s' (limit %d)",
                          self->sym->unit_name(), MAX_FUNCS);
                 return self->fail(msg);

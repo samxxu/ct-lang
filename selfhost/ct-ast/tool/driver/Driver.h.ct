@@ -426,6 +426,9 @@ impl DriverOps for Driver {
            `Map` need neither an import nor an `-I`; its nodes are spliced in
            front of the input's below. A missing layer is not an error. */
         stdprog = self->load_builtin(in);
+        /* P36 S4a2: the built-in layer's functions do not count against the
+           user program's `MAX_FUNCS` budget. */
+        self->sym->nfunc_base = self->sym->nfunc;
         /* L29-W1: a project-local `vendor/std` is never read; the built-in
            layer wins, but the shadowing is not silent. */
         if (stdprog >= 0) {

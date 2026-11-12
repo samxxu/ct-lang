@@ -452,6 +452,11 @@ pub struct Symbols {
        into __DATA. Their caps stay literal, mirroring the MAX_* values above. */
     struct Fn   *funcs;
     int  nfunc;
+    /* P36 S4a2: functions registered by the built-in layer before the user
+       program starts. `MAX_FUNCS` bounds the user's budget, so the check is
+       `nfunc >= nfunc_base + MAX_FUNCS`; the table itself is allocated with
+       headroom (`MAX_FUNCS + 64`). */
+    int  nfunc_base;
     struct GenericInst *ginsts;
     int  nginsts;
     struct Var  *vars;
@@ -1567,7 +1572,7 @@ static struct Symbols g_symbols;
 static int symbols_grow(struct Symbols *self)
 {
     if (!self->funcs) {
-        self->funcs = calloc(MAX_FUNCS, sizeof(*self->funcs));
+        self->funcs = calloc(MAX_FUNCS + 64, sizeof(*self->funcs));
         if (!self->funcs) return -1;
     }
     if (!self->vars) {

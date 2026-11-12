@@ -27,3 +27,56 @@ impl Drop for Str {
         self->len = -1;
     }
 }
+
+/* Copy `n` bytes (plus a trailing NUL, which is not part of `len`). An
+   embedded `\0` inside the first `n` bytes is kept: `len` is the contract. */
+pub Str str_from_len(const char *p, int n)
+{
+    Str r;
+    int i;
+
+    if (n < 0) n = 0;
+    r.data = (char *)malloc((size_t)n + 1);
+    if (!r.data) {
+        r.len = -1;
+        return r;
+    }
+    for (i = 0; i < n; i++) r.data[i] = p ? p[i] : 0;
+    r.data[n] = 0;
+    r.len = n;
+    return r;
+}
+
+/* Copy a NUL-terminated C string. */
+pub Str str_from(const char *s)
+{
+    int n;
+
+    n = 0;
+    if (s) {
+        while (s[n]) n++;
+    }
+    return str_from_len(s, n);
+}
+
+/* The byte count; an embedded `\0` counts like any other byte. */
+pub int str_len(Str s)
+{
+    return s.len;
+}
+
+impl Str {
+    /* A new handle over an independent copy of the buffer; this is the shape
+       Phase 31's element protocol needs (`retain` returning the element). */
+    Str retain() {
+        return str_from_len(self->data, self->len);
+    }
+
+    /* Free the buffer and mark the handle released; `Drop` inlines the same
+       pair, so `release` followed by `delete` is harmless (`free(0)`). */
+    void release() {
+        free(self->data);
+        self->data = 0;
+        self->len = -1;
+    }
+}

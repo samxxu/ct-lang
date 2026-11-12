@@ -1,0 +1,14 @@
+// E36-6 (P36): `str_from_len` copies exactly `n` bytes, so an embedded `\0`
+// survives; `str_len` answers the byte count, never `strlen`.
+#include <stdio.h>
+
+int main(void)
+{
+    Str a = str_from_len("a\0b", 3);
+    Str b = str_from_len("", 0);
+
+    printf("%d %d %d\n", str_len(a), a.data[1], str_len(b));
+    a.release();
+    b.release();
+    return 0;
+}

@@ -1552,7 +1552,7 @@ impl ExprOps for Expr {
         }
         if (self->sym->nginsts >= MAX_GENERIC_INSTS)
             return self->sup->fail("too many generic instances in this unit");
-        if (self->sym->nfunc >= MAX_FUNCS)
+        if (self->sym->nfunc >= self->sym->nfunc_base + MAX_FUNCS)
             return self->sup->fail("too many functions in this unit");
         /* `<name>__ct<N>`; a user function may already hold the spelling, so a
            numeric suffix is retried a bounded number of times (R6). Another

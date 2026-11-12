@@ -1324,6 +1324,10 @@ impl ModuleOps for Module {
             }
         }
 
+        /* P36 S4a2: the built-in layer's functions do not count against the
+           user program's `MAX_FUNCS` budget. */
+        self->sym->nfunc_base = self->sym->nfunc;
+
         for (i = 0; i < ninput; i++) {
             if (self->load_unit(inputs[i]) < 0) {
                 if (tool::diag::ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
