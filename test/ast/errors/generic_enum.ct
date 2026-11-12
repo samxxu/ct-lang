@@ -1,0 +1,7 @@
+/* L34-3: an enum has no monomorphisation axis; the parser names it. */
+enum Option<T> {
+    int has;
+    T value;
+}
+
+int main(void) { return 0; }

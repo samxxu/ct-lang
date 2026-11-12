@@ -1398,6 +1398,20 @@ p26_diag generic_pub 2:9 "generic functions cannot be pub"
 p26_diag generic_two_params 2:9 "only one type parameter is supported"
 p26_diag generic_void_arg 9:19 "'void' cannot be a generic type argument"
 p26_diag generic_recursive 10:17 "recursive generic calls are not supported"
+
+# L34-3 (E34-10): an enum has no monomorphisation axis; the parser names it
+# instead of stopping at the `<` with an unexpected token.
+p34_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p34d.c" \
+            >"$work/p34d.out" 2>"$work/p34d.err"; then
+        bad "p34_diag_$1" "expected a non-zero exit"
+    elif grep -qF "test/ast/errors/$1.ct:$2: error: $3" "$work/p34d.err"; then
+        ok "p34_diag_$1"
+    else
+        bad "p34_diag_$1" "$(head -2 "$work/p34d.err")"
+    fi
+}
+p34_diag generic_enum 2:12 "generic enums are not supported"
 # Capacity is not an L26 code, but it must fail loudly at the 65th instance
 # (R7). The position is the `(` of the 65th call, i.e. the token that found the
 # table full.

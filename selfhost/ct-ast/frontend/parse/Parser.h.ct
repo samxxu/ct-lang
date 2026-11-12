@@ -2183,6 +2183,9 @@ impl ParseOps for Parser {
         } else if (tag_required) {
             return self->sup->fail("expected an enum name");
         }
+        /* Phase 34 (L34-3): enums have no monomorphisation axis. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
+            return self->sup->fail("generic enums are not supported");
         if (self->sup->expect("{") != 0) return -1;
         s = self->sup->new_node(N_ENUM);
         if (s < 0) return -1;
