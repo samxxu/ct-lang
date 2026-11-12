@@ -1,0 +1,25 @@
+// Phase 33 O2/E33-9: a parameter written twice must see the same C spelling.
+#include <stdio.h>
+
+struct Box<T> {
+    T value;
+}
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+impl<T> Pair<T, Box<T>> {
+    int same()
+    {
+        return self->second.value;
+    }
+}
+
+int main(void)
+{
+    Pair<int, Box<int>> p;
+
+    p.second.value = 6;
+    printf("%d\n", p.same());
+    return 0;
+}

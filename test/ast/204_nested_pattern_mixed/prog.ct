@@ -1,0 +1,26 @@
+// Phase 33 O2/E33-8: `impl<T> Pair<int, Box<T>>` only matches the first slot.
+#include <stdio.h>
+
+struct Box<T> {
+    T value;
+}
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+impl<T> Pair<int, Box<T>> {
+    int pick()
+    {
+        return self->second.value;
+    }
+}
+
+int main(void)
+{
+    Pair<int, Box<int>> p;
+
+    p.first = 4;
+    p.second.value = 9;
+    printf("%d %d\n", p.first, p.pick());
+    return 0;
+}

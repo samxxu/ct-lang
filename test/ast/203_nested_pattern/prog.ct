@@ -1,0 +1,35 @@
+// Phase 33 O2/E33-7: `impl<T> Box<Box<T>>` dispatches on `Box<Box<Circle>>`.
+// `Box` carries the O1 bound `T: Show`; `impl Show for Box` satisfies it for
+// the inner instance (no `use Show`, card section 14 item 12).
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T: Show> {
+    T value;
+}
+impl Show for Box {
+    int show() { return 1; }
+}
+impl<T> Box<Box<T>> {
+    int depth()
+    {
+        return 2;
+    }
+}
+
+int main(void)
+{
+    Box<Box<Circle>> n;
+
+    n.value.value.r = 7;
+    printf("%d %d\n", n.depth(), n.value.value.r);
+    return 0;
+}
