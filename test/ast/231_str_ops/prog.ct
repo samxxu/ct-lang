@@ -1,0 +1,29 @@
+// E36-7 (P36): slice / concat / compare work on byte lengths: the empty
+// string, an all-`\0` buffer and UTF-8 multi-byte text. `str_c_str` is a
+// NUL-terminated copy the caller frees; `len` stays the contract.
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void)
+{
+    Str a = str_from("hello");
+    Str b = str_from("世界");
+    Str s = str_slice(a, 1, 3);
+    Str c = str_concat(a, b);
+    Str e = str_from("");
+    Str z = str_from_len("\0\0", 2);
+    char *cs = str_c_str(s);
+
+    printf("%d %d %d\n", str_len(s), str_len(b), str_len(c));
+    printf("%s %d %d\n", cs, str_len(e), str_len(z));
+    printf("%d %d %d %d\n", str_compare(a, b), str_compare(b, a),
+           str_compare(a, a), str_compare(e, e));
+    free(cs);
+    a.release();
+    b.release();
+    s.release();
+    c.release();
+    e.release();
+    z.release();
+    return 0;
+}

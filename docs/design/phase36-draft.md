@@ -363,3 +363,5 @@ S0 的 5 项核对按两级处置，**不需要再请示**：
 2. **切片顺序（2026-11-13）**：回退后 `Str` 不依赖泛型 Drop（显式非泛型 `impl Drop for Str` 已可用），故先落 `Str` 库与 230/231/232 夹具，再做泛型 Drop（225/226/227）与 `Option`/`Result` 的 `use Drop`（229）；判据编号与门禁不变。
 
 3. **`p21-shape` 扫描范围（2026-11-13，S4a1）**：`Str` 是具体内置单元（不是模板），编译模式会把它的 `free`-bearing drop 拼进每个程序，`cl_shape` 原来对整份产物 grep `malloc(|free(|vtable` 因此把夹具 70/71 误报为闭包降级引入堆分配。判定：谓词不变，扫描起点改为闭包降级产物（首个 `struct __ct_cl_env_<n> {`）；断言意图（闭包降级不引入堆分配/vtable）不变，只是不再把前置的内置库代码计入。
+
+4. **并发写入事故（2026-11-13，S4a2/S4b）**：另有一个误开的 Phase 36 会话与本会话同时写仓库，产生了 `Str.h.ct` 的 `str_from_len`/`retain`/`release` 与 `nfunc_base` 容量记账（提交 `1b4d82f`），以及 `test/ast/231_str_ops`。该会话已停用，本会话自 S4b 起为唯一写入者。核对结果：`Str.h.ct` 中 `str_from_len`/`str_from`/`str_len`/`str_slice`/`str_concat`/`str_compare`/`str_c_str` 与 `retain`/`release` 各恰一份、无重复或签名冲突；`Symbols.h.ct` 的 `nfunc_base` 字段恰一处（合并时曾短暂出现两处，已删去重复声明）。`1b4d82f` 与其红证、门禁记录按事实保留，不重写历史；`231_str_ops` 与 `Str.h.ct` 的 S4b 部分由本会话复核后一并提交。
