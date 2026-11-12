@@ -1,0 +1,12 @@
+// p32 coverage: pointer<-array at assign, return and container.
+int a[3] = {1, 2, 3};
+char *ret_array(void) {
+    char *p = a;
+    return p;
+}
+int main(void) {
+    char *q = a;
+    Vec<char *> v = {q};
+    v.push(a);
+    return ret_array() == 0;
+}

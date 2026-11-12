@@ -1,0 +1,13 @@
+// p32 coverage: arithmetic<-fnptr at assign, return and container.
+int f(void) {
+    return 0;
+}
+int ret_fn(void) {
+    return f;
+}
+int main(void) {
+    int x = f;
+    Vec<int> v = {1};
+    v.push(f);
+    return x + ret_fn() + v.len();
+}

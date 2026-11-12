@@ -1,0 +1,42 @@
+/* E32-18: the six compatible shapes the gate must accept. All locals and
+   globals are consumed so the behaviour loop builds warning-free; `gc` is a
+   global so the interface return does not escape a stack frame, and the
+   containers use Phase 31 brace initialisers. */
+#include <stdio.h>
+
+trait Show {
+    void show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    void show() {
+    }
+}
+
+Circle gc;
+int gi = 1;
+
+Show ret_iface() {
+    return gc;
+}
+
+int ret_arith() {
+    return 1;
+}
+
+int main(void)
+{
+    Show sh = gc;
+    int x = 1;
+    Vec<Show> vv = {gc};
+    Vec<int> v = {1};
+
+    sh.show();
+    ret_iface();
+    printf("%d %d %d %d %d\n", x, gi, ret_arith(), v.len(), vv.len());
+    return 0;
+}

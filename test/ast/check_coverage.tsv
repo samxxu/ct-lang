@@ -1,0 +1,22 @@
+position	formal_class	actual_class	result	fixture	expected
+assign	arithmetic	pointer	L32-1	check_errors/check_init_ptr.ct	initializer: expected 'int', got 'char *'
+assign	struct A	struct B	L32-2	check_errors/check_struct_assign.ct	assignment: expected 'struct A', got 'struct B'
+return	arithmetic	pointer	L32-3	check_errors/check_return_ptr.ct	return: expected 'int', got 'char *'
+return	struct A	struct B	L32-3	check_errors/check_return_struct.ct	return: expected 'struct A', got 'struct B'
+return	void	arithmetic	L32-5	check_errors/check_return_in_void.ct	return: a value is not allowed in a void function
+container	arithmetic	pointer	L32-6	check_errors/check_container_push.ct	argument 1: expected 'int', got 'char *'
+container	arithmetic	struct A	L32-6	check_errors/check_container_struct.ct	argument 1: expected 'int', got 'struct A'
+assign	interface	struct	ok	211_coverage_aux/prog.ct	-
+assign	arithmetic	arithmetic	ok	211_coverage_aux/prog.ct	-
+return	interface	struct	ok	211_coverage_aux/prog.ct	-
+return	arithmetic	arithmetic	ok	211_coverage_aux/prog.ct	-
+container	interface	struct	ok	211_coverage_aux/prog.ct	-
+container	arithmetic	arithmetic	ok	211_coverage_aux/prog.ct	-
+assign	arithmetic	void	skip	211_coverage_aux/check_only/void_actual.ct	-
+container	arithmetic	void	skip	211_coverage_aux/check_only/void_actual.ct	-
+assign	pointer	array	skip	211_coverage_aux/check_only/array_actual.ct	-
+return	pointer	array	skip	211_coverage_aux/check_only/array_actual.ct	-
+container	pointer	array	skip	211_coverage_aux/check_only/array_actual.ct	-
+assign	arithmetic	fnptr	skip	211_coverage_aux/check_only/fnptr_actual.ct	-
+return	arithmetic	fnptr	skip	211_coverage_aux/check_only/fnptr_actual.ct	-
+container	arithmetic	fnptr	skip	211_coverage_aux/check_only/fnptr_actual.ct	-

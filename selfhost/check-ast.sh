@@ -3158,6 +3158,95 @@ for p32_f in test/ast/209_valid_assignments/check_only/*.ct \
     fi
 done
 
+# E32-18: the coverage matrix. The expectation below is the source of truth;
+# `check_coverage.tsv` must equal it byte for byte, and each row is then
+# executed. Closure actuals have no row: phase 21 refuses a closure
+# expression at assign/return/container before L32 can run (deviation, §14).
+cat >"$work/p32_coverage.expected.tsv" <<'P32COV'
+position	formal_class	actual_class	result	fixture	expected
+assign	arithmetic	pointer	L32-1	check_errors/check_init_ptr.ct	initializer: expected 'int', got 'char *'
+assign	struct A	struct B	L32-2	check_errors/check_struct_assign.ct	assignment: expected 'struct A', got 'struct B'
+return	arithmetic	pointer	L32-3	check_errors/check_return_ptr.ct	return: expected 'int', got 'char *'
+return	struct A	struct B	L32-3	check_errors/check_return_struct.ct	return: expected 'struct A', got 'struct B'
+return	void	arithmetic	L32-5	check_errors/check_return_in_void.ct	return: a value is not allowed in a void function
+container	arithmetic	pointer	L32-6	check_errors/check_container_push.ct	argument 1: expected 'int', got 'char *'
+container	arithmetic	struct A	L32-6	check_errors/check_container_struct.ct	argument 1: expected 'int', got 'struct A'
+assign	interface	struct	ok	211_coverage_aux/prog.ct	-
+assign	arithmetic	arithmetic	ok	211_coverage_aux/prog.ct	-
+return	interface	struct	ok	211_coverage_aux/prog.ct	-
+return	arithmetic	arithmetic	ok	211_coverage_aux/prog.ct	-
+container	interface	struct	ok	211_coverage_aux/prog.ct	-
+container	arithmetic	arithmetic	ok	211_coverage_aux/prog.ct	-
+assign	arithmetic	void	skip	211_coverage_aux/check_only/void_actual.ct	-
+container	arithmetic	void	skip	211_coverage_aux/check_only/void_actual.ct	-
+assign	pointer	array	skip	211_coverage_aux/check_only/array_actual.ct	-
+return	pointer	array	skip	211_coverage_aux/check_only/array_actual.ct	-
+container	pointer	array	skip	211_coverage_aux/check_only/array_actual.ct	-
+assign	arithmetic	fnptr	skip	211_coverage_aux/check_only/fnptr_actual.ct	-
+return	arithmetic	fnptr	skip	211_coverage_aux/check_only/fnptr_actual.ct	-
+container	arithmetic	fnptr	skip	211_coverage_aux/check_only/fnptr_actual.ct	-
+P32COV
+if ! cmp -s "$work/p32_coverage.expected.tsv" test/ast/check_coverage.tsv; then
+    bad "p32 coverage (matrix)" "check_coverage.tsv differs from the hardcoded expectation"
+else
+    ok "p32 coverage (matrix matches its expected source)"
+fi
+p32_legal test/ast/211_coverage_aux/prog.ct
+p32_cov_l=0
+p32_cov_ok=0
+p32_cov_skip=0
+p32_cov_names=""
+p32_tab="$(printf '\t')"
+while IFS="$p32_tab" read -r p32_pos p32_fc p32_ac p32_res p32_fx p32_exp; do
+    [ "$p32_pos" = "position" ] && continue
+    [ -n "$p32_pos" ] || continue
+    case "$p32_res" in
+    L32-*)
+        p32_cov_l=$((p32_cov_l + 1))
+        case "$p32_fx" in
+        check_errors/check_init_ptr.ct) p32_at=3:13 ;;
+        check_errors/check_struct_assign.ct) p32_at=7:9 ;;
+        check_errors/check_return_ptr.ct) p32_at=3:12 ;;
+        check_errors/check_return_struct.ct) p32_at=6:12 ;;
+        check_errors/check_return_in_void.ct) p32_at=3:12 ;;
+        check_errors/check_container_push.ct) p32_at=4:12 ;;
+        check_errors/check_container_struct.ct) p32_at=6:12 ;;
+        *) p32_at="" ;;
+        esac
+        p32_out=$("$work/ct-ast" check --types "test/ast/$p32_fx" 2>&1)
+        p32_rc=$?
+        if [ "$p32_rc" -ne 1 ] || [ "$(printf '%s\n' "$p32_out" | grep -cF "$p32_exp")" -ne 1 ]; then
+            bad "p32 coverage ($p32_pos/$p32_fc<-$p32_ac)" "expected one '$p32_exp': $p32_out"
+        elif [ -n "$p32_at" ] && ! printf '%s\n' "$p32_out" | head -1 | grep -qF "test/ast/$p32_fx:$p32_at: error: "; then
+            bad "p32 coverage ($p32_pos/$p32_fc<-$p32_ac)" "wrong position: $(printf '%s\n' "$p32_out" | head -1)"
+        else
+            ok "p32 coverage ($p32_pos $p32_fc <- $p32_ac, $p32_res)"
+        fi
+        ;;
+    ok)
+        p32_cov_ok=$((p32_cov_ok + 1))
+        p32_cov_names="$p32_cov_names $p32_pos/$p32_fc<-$p32_ac"
+        ;;
+    skip)
+        p32_cov_skip=$((p32_cov_skip + 1))
+        p32_out=$("$work/ct-ast" check --types "test/ast/$p32_fx" 2>&1)
+        p32_rc=$?
+        if [ "$p32_rc" -ne 0 ] || [ -n "$p32_out" ]; then
+            bad "p32 coverage (skip $p32_pos/$p32_fc<-$p32_ac)" "$p32_out"
+        else
+            ok "p32 coverage (skip $p32_pos $p32_fc <- $p32_ac)"
+        fi
+        ;;
+    esac
+done <"$work/p32_coverage.expected.tsv"
+p32_want_names=" assign/interface<-struct assign/arithmetic<-arithmetic return/interface<-struct return/arithmetic<-arithmetic container/interface<-struct container/arithmetic<-arithmetic"
+if [ "$p32_cov_l" -ne 7 ] || [ "$p32_cov_ok" -ne 6 ] || [ "$p32_cov_skip" -ne 8 ] \
+    || [ "$p32_cov_names" != "$p32_want_names" ]; then
+    bad "p32 coverage (counts)" "got L=$p32_cov_l ok=$p32_cov_ok skip=$p32_cov_skip names=[$p32_cov_names]"
+else
+    ok "coverage: 21 rows, 7 L32-n, 6 ok, 8 skip, 0 n/a"
+fi
+
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 # Every source diagnostic now carries the full position (`file:line:col: error:`);

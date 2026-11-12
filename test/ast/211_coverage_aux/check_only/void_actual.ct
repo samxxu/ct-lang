@@ -1,0 +1,10 @@
+// p32 coverage: assign/arithmetic<-void and container/arithmetic<-void.
+void f(void) {
+    return;
+}
+int main(void) {
+    int x = f();
+    Vec<int> v = {1};
+    v.push(f());
+    return x + v.len();
+}
