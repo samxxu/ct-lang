@@ -97,58 +97,80 @@ impl DriverOps for Driver {
         const char *env;
         const char *slash;
         const char *savepath;
-        int i, prog, n;
+        int bi, i, prog, n, head;
         FILE *probe;
 
         env = getenv("CT_STD_DIR");
-        for (i = 0; i < 3; i++) {
-            cand[0] = 0;
-            if (i == 0) {
-                if (!env || !env[0]) continue;
-                n = snprintf(cand, sizeof cand, "%s/Vec.h.ct", env);
-            } else if (i == 1) {
-                n = snprintf(cand, sizeof cand, "lib/std/Vec.h.ct");
-            } else {
-                slash = strrchr(in, '/');
-                if (!slash || (size_t)(slash - in) >= sizeof alt) continue;
-                memcpy(alt, in, (size_t)(slash - in));
-                alt[slash - in] = 0;
-                n = snprintf(cand, sizeof cand, "%s/../lib/std/Vec.h.ct", alt);
-            }
-            if (n < 0 || n >= (int)sizeof cand) continue;
-            if (strcmp(cand, in) == 0) return -1;
-            probe = fopen(cand, "r");
-            if (!probe) continue;
-            fclose(probe);
-            savepath = self->m->path;
-            self->m->path = cand;
-            self->mem->path = cand;
-            self->sym->path = cand;
-            if (self->m->read_file(cand) != 0) {
+        head = -1;
+        /* P34 S9a: the layer spans `Vec.h.ct`, `Option.h.ct` and
+           `Result.h.ct`. Compile mode is one C translation unit, so the parsed
+           declaration chains are spliced into one program. */
+        for (bi = 0; bi < 3; bi++) {
+            const char *base;
+            base = bi == 0 ? "Vec.h.ct" : (bi == 1 ? "Option.h.ct" : "Result.h.ct");
+            prog = -1;
+            for (i = 0; i < 3; i++) {
+                cand[0] = 0;
+                if (i == 0) {
+                    if (!env || !env[0]) continue;
+                    n = snprintf(cand, sizeof cand, "%s/%s", env, base);
+                } else if (i == 1) {
+                    n = snprintf(cand, sizeof cand, "lib/std/%s", base);
+                } else {
+                    slash = strrchr(in, '/');
+                    if (!slash || (size_t)(slash - in) >= sizeof alt) continue;
+                    memcpy(alt, in, (size_t)(slash - in));
+                    alt[slash - in] = 0;
+                    n = snprintf(cand, sizeof cand, "%s/../lib/std/%s", alt, base);
+                }
+                if (n < 0 || n >= (int)sizeof cand) continue;
+                if (strcmp(cand, in) == 0) continue;
+                probe = fopen(cand, "r");
+                if (!probe) continue;
+                fclose(probe);
+                savepath = self->m->path;
+                self->m->path = cand;
+                self->mem->path = cand;
+                self->sym->path = cand;
+                if (self->m->read_file(cand) != 0) {
+                    self->m->path = savepath;
+                    self->mem->path = savepath;
+                    self->sym->path = savepath;
+                    return -1;
+                }
+                self->lex->pos = 0;
+                self->lex->bol = 1;
+                self->lex->line = 1;
+                self->lex->tokline = 1;
+                self->lex->lstart = 0;
+                self->lex->tokstart = 0;
+                self->p->unit_is_hdr = 1;
+                self->p->unit_is_map = 0;
+                prog = frontend::parse::ct_parse_program();
                 self->m->path = savepath;
                 self->mem->path = savepath;
                 self->sym->path = savepath;
-                return -1;
+                if (prog < 0) {
+                    fprintf(stderr, "ctc: the built-in layer failed to parse\n");
+                    return -1;
+                }
+                break;
             }
-            self->lex->pos = 0;
-            self->lex->bol = 1;
-            self->lex->line = 1;
-            self->lex->tokline = 1;
-            self->lex->lstart = 0;
-            self->lex->tokstart = 0;
-            self->p->unit_is_hdr = 1;
-            self->p->unit_is_map = 0;
-            prog = frontend::parse::ct_parse_program();
-            self->m->path = savepath;
-            self->mem->path = savepath;
-            self->sym->path = savepath;
-            if (prog < 0) {
-                fprintf(stderr, "ctc: the built-in layer failed to parse\n");
-                return -1;
+            if (prog < 0) continue;
+            if (head < 0) {
+                head = prog;
+            } else {
+                int last = self->arena->nodes[head].a;
+                if (last < 0) {
+                    self->arena->nodes[head].a = self->arena->nodes[prog].a;
+                } else {
+                    while (self->arena->nodes[last].next > 0)
+                        last = self->arena->nodes[last].next;
+                    self->arena->nodes[last].next = self->arena->nodes[prog].a;
+                }
             }
-            return prog;
         }
-        return -1;
+        return head;
     }
 
     int run(int argc, char **argv)

@@ -1,0 +1,42 @@
+/*
+ * Option.h.ct - the built-in `Option<T>` (Phase 34 S9a).
+ *
+ * `Option` is an ordinary generic struct, not a compiler branch: a present
+ * value is `{ 1, v }` and an absent one is `{ 0 }` (the trailing field stays
+ * zero-initialised). `has` is the discriminant; it comes first so a brace
+ * initialiser can omit the payload. The methods are plain statically
+ * dispatched impl members, so `Option<Point>` and `Option<Show>` instantiate
+ * exactly like any other generic struct.
+ *
+ * `release` exists so a caller can spell the lifecycle explicitly; the payload
+ * is a value, so there is nothing to free and the method is a no-op.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+
+pub struct Option<T> {
+    int has;
+    T value;
+}
+
+impl<T> Option<T> {
+    int is_some() {
+        return self.has;
+    }
+
+    int is_none() {
+        return !self.has;
+    }
+
+    /* The payload when present, the caller's fallback otherwise. */
+    T unwrap_or(T dflt) {
+        if (self.has) {
+            return self.value;
+        }
+        return dflt;
+    }
+
+    void release() {
+    }
+}

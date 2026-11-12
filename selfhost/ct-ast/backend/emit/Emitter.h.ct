@@ -207,7 +207,8 @@ struct Emitter {
     /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
        not an import edge of any unit (it must not key the cache), so the
        emitter includes its header explicitly. -1 when the layer is absent. */
-    int  builtin;
+    int  builtins[4];   /* P34 S9a: Vec / Option / Result layer units */
+    int  nbuiltin;
     struct MapTable  *maps;   int *nmaps;
     struct Call *calls;  int *ncalls;
     int  *build_mode;
@@ -1262,9 +1263,14 @@ static int emit_unit_body(struct Emitter *self, int u)
         fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
     }
     /* Phase 29 E29-5: instances of the built-in templates are defined in the
-       layer's header; the unit sees it although there is no import edge. */
-    if (self->builtin >= 0 && self->builtin < *self->nunits && u != self->builtin)
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[self->builtin].base);
+       layer's headers; the unit sees them although there is no import edge.
+       P34 S9a: the layer may span several files, so every layer header the
+       unit does not own is included. */
+    for (i = 0; i < self->nbuiltin; i++) {
+        int bu = self->builtins[i];
+        if (bu < 0 || bu >= *self->nunits || bu == u) continue;
+        fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
+    }
     fputs("\n", self->out);
     if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
@@ -1359,10 +1365,14 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
     }
     if (self->units[u].ndep > 0) fputs("\n", self->out);
     /* Phase 29 E29-5: a `pub` signature may name an instance defined in the
-       built-in layer's header. */
-    if (self->builtin >= 0 && self->builtin < *self->nunits && u != self->builtin) {
-        fprintf(self->out, "#include \"%s.h\"\n\n", self->units[self->builtin].base);
+       built-in layer's header. P34 S9a: include every layer header the unit
+       does not own. */
+    for (i = 0; i < self->nbuiltin; i++) {
+        int bu = self->builtins[i];
+        if (bu < 0 || bu >= *self->nunits || bu == u) continue;
+        fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
     }
+    if (self->nbuiltin > 0) fputs("\n", self->out);
 
     if (self->emit_struct_fwd() != 0) return -1;
     if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
@@ -4993,11 +5003,21 @@ void ct_emit_set_out(void *out)
     g_emit.out = (FILE *)out;
 }
 
-/* Phase 29 E29-5: the built-in unit index, or -1 when the layer is absent. */
-pub void ct_emit_set_builtin(int u);
-void ct_emit_set_builtin(int u)
+/* Phase 29 E29-5 / P34 S9a: the built-in layer units. The module layer clears
+   the set when a run starts and adds one index per layer file it loaded. */
+pub void ct_emit_clear_builtins(void);
+void ct_emit_clear_builtins(void)
 {
-    g_emit.builtin = u;
+    g_emit.nbuiltin = 0;
+}
+
+pub void ct_emit_add_builtin(int u);
+void ct_emit_add_builtin(int u)
+{
+    if (g_emit.nbuiltin < 4) {
+        g_emit.builtins[g_emit.nbuiltin] = u;
+        g_emit.nbuiltin += 1;
+    }
 }
 
 pub void ct_emit_set_path(const char *path);
