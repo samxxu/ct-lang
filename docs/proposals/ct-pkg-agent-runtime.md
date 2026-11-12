@@ -16,7 +16,7 @@
 | `std/arena` | 会话级 bump 分配器，统一释放 | **今天**（纯库） |
 | `std/sync` | mutex / cond / atomic / thread 的薄封装 | **今天**（C 头直接可用） |
 | `std/result` | `Option` / `Result` 的再导出与 helper | 依赖 ct Phase 34 |
-| `std/string` | 带长度字符串与可变 builder | 依赖 ct Phase 36（`Str`） |
+| `std/string` | shim 的 CT 句柄 `Str` 与可变 builder | 依赖 ct Phase 34（固有方法）+ 36（Drop/元素协议） |
 | `std/callback` | C 回调边界的所有权契约（文档 + 透传 helper） | **今天**（文档先落地） |
 
 理由：Agent 内核的 70% 代码在拼 JSON/SSE、处理工具失败、跨回调保数据。ct 已经给了 `Vec`/`Map` 与显式引用计数，但**会话级生命周期**和**回调边界**没有标准答案；这两件事最适合放在 ct-pkg，而不是继续加语言特性。
@@ -84,17 +84,37 @@ ct Phase 34 会在 `lib/std` 提供 `Option<T>` / `Result<T,E>`（泛型 struct�
 
 ### 2.4 `std/string`
 
-ct Phase 36 会在 `lib/std` 提供 `Str`（带长度、保留内嵌 `\0`、`own Str *` 指针形态）。本包建议：
+`Str` 的规范位置就在本包，不在 `lib/std`。它是对既有 shim 的不透明句柄，buffer 由 shim 拥有；CT 层只加方法与所有权：
 
-- `Str` 直接再导出，不复制实现。
-- 新增 `StrBuilder`（可变拼接），内部 `Vec<char>` + 末尾 NUL：
-  ```c
-  pub struct StrBuilder { Vec<char> buf; }
-  pub void sb_init(StrBuilder *b);
-  pub void sb_append(StrBuilder *b, const char *s, int n);
-  pub Str *sb_finish(StrBuilder *b);   /* 转移缓冲，builder 置空 */
-  ```
-- 不做隐式拼接运算符、不做 GC 字符串；所有增长都显式 `retain`/`release`。
+```c
+pub struct Str { CStr *h; } use Drop;
+
+impl Str {
+    Str retain();          /* 新句柄，独立 release；适配层决定 refcount 或深拷贝 */
+    int release();         /* 返回剩余引用数 */
+    int len();
+    Str slice(int start, int n);
+    Str concat(Str other);
+    int compare(Str other);
+    const char *c_str();   /* 有效到 release */
+}
+```
+
+**适配层契约**（`.shim.h` 必须提供）：
+
+| 函数 | 语义 |
+| --- | --- |
+| `cstr_retain(CStr *)` | 返回可独立 `release` 的句柄；引用计数或深拷贝由实现决定 |
+| `cstr_release(CStr *)` | 释放一个句柄，返回剩余引用数 |
+| `cstr_len` / `cstr_data` / `cstr_slice` / `cstr_concat` / `cstr_compare` | 只读操作；`slice` 可复制或共享 |
+| `cstr_c_str` | NUL 结尾，有效到 release；内嵌 `\0` 截断 |
+
+- `retain`/`release` 必须是**固有方法**，否则 P31 元素协议不生效；这需要 P34 的非泛型固有方法。
+- `Vec<Str>` 的 push/release 走 `retain`/`release`；是否 O(1) 取决于 shim 是否有引用计数。
+- **按值拷贝不自动 `retain`**：`Str b = a;` 只复制句柄，要独立句柄必须 `a.retain()`；否则双重 `release`。
+- 工厂函数返回的 `Str *` 不直接 `own`（`own` 只认 `malloc`/`calloc`），用显式 `release`，P38 后用 `defer`。
+- `StrBuilder`（可变拼接）在 `Str` 稳定后加，内部复用 shim buffer，不引入第二套实现。
+- 不做隐式转换、不做 GC 字符串；`Str::from("...")` 是显式复制。
 - JSON/SSE 的拼接先用 `StrBuilder`；解析仍建议走 cJSON 这类成熟 C 库，不在 std 里重写。
 
 ### 2.5 `std/callback`
@@ -122,7 +142,7 @@ pub char *callback_copy(Arena *a, const char *data, int n);
 | `sync` | 无 | 今天可做（`pthread.h` / `_Atomic`） |
 | `callback` | 无（仅受 SH-65/67 影响） | 今天可写文档 |
 | `result` | Phase 34（`Option`/`Result`） | 先放 `vendor/` 兼容实现，不导出同名类型 |
-| `string` | Phase 36（`Str`） | 先用 `StrBuilder` 自有实现，P36 后切换 |
+| `string` | Phase 34（非泛型固有方法）+ Phase 36（Drop / 元素协议） | 今天可先用 shim 函数 + 显式 `free`；P34 后挂方法，P36 后接 `Drop` |
 | ABI 导出 | Phase 39（`ct build --lib`） | 今天用 `cc -c` + `ar` 手工打包 |
 
 ## 4 版本与兼容
@@ -145,12 +165,12 @@ pub char *callback_copy(Arena *a, const char *data, int n);
 2. `std/sync`（今天，纯库）
 3. `std/callback`（今天，文档 + 一个 copy helper）
 4. `std/result`（等 Phase 34）
-5. `std/string`（等 Phase 36）
+5. `std/string`（等 Phase 34 + 36）
 6. ABI 打包（等 Phase 39）
 
 ## 7 需要 ct-pkg 决定的三件事
 
-1. `result`/`string` 是**再导出** `lib/std` 的类型，还是包内自带实现？再导出能避免同名冲突，但会把包的最低 ct 版本抬到 P34/P36。
+1. `result` 是**再导出** `lib/std` 的类型，还是包内自带实现？`string` 已决定由本包定义（`Str` 是 shim 句柄，见 §2.4），不再走再导出。
 2. `arena` 是否提供 `ArenaVec`（arena 上分配的动态数组）？提供会更顺手，但要自己实现扩容与释放规则。
 3. `sync` 的线程 API 用 `pthread` 还是 C11 `thrd_*`？前者成熟，后者更标准；ct 两条都能 `#include`。
 
@@ -163,8 +183,8 @@ A proposal for ct-pkg `std` to add four runtime modules plus one callback contra
 - `arena`: a session-scoped bump allocator with `alloc / reset / release`; pointers never outlive the arena (a documented rule, not a compiler check).
 - `sync`: thin wrappers over `pthread` and C11 `_Atomic`; shared state goes through an explicit `Mutex`; no `Send`/`Sync` compile-time checking.
 - `result`: re-export the `Option` / `Result` types from ct Phase 34 and add helpers; no `?` or `try` syntax.
-- `string`: re-export the length-carrying `Str` from ct Phase 36 and add a `StrBuilder`; no implicit concatenation.
+- `string`: define the length-carrying `Str` in this package as an opaque shim handle; ct Phase 34 adds inherent methods and Phase 36 adds `Drop` / element protocol. No buffer rewrite, no implicit concatenation.
 - `callback`: a five-rule ownership contract for C callbacks (arguments are borrowed until return; copy into an arena to retain; use `(fn, env)` pairs rather than closure literals at trait-method boundaries).
 
-The proposal deliberately does **not** ask for a borrow checker, a GC, exceptions or hidden allocation. It documents lifetime rules and relies on ct's explicit `retain` / `release`. Delivery order: `arena`, `sync`, `callback` today; `result` after Phase 34; `string` after Phase 36; ABI packaging after Phase 39.
+The proposal deliberately does **not** ask for a borrow checker, a GC, exceptions or hidden allocation. It documents lifetime rules and relies on ct's explicit `retain` / `release`. Delivery order: `arena`, `sync`, `callback` today; `result` after Phase 34; `string` after Phase 34 + 36; ABI packaging after Phase 39.
 
