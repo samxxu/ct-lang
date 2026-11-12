@@ -1,0 +1,12 @@
+// p32: L32-6 a user generic struct, proof that no container name is special.
+struct A { int x; };
+struct Pair<A, B> { A first; B second; }
+impl<A, B> Pair<A, B> {
+    void set_second(B v) { self.second = v; }
+}
+int main(void) {
+    Pair<int, int> p;
+    struct A a;
+    p.set_second(a);
+    return 0;
+}

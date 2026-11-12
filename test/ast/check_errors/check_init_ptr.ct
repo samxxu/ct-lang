@@ -1,0 +1,5 @@
+// p32: L32-1 declaration initialiser, arithmetic <- pointer.
+int main(void) {
+    int x = "s";
+    return x;
+}

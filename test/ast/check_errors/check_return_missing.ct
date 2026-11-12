@@ -1,0 +1,5 @@
+// p32: L32-4 a value-returning function returns nothing.
+int f(void) {
+    return;
+}
+int main(void) { return 0; }

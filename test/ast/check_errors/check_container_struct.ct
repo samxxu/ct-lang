@@ -1,0 +1,8 @@
+// p32: L32-6 Vec<int>::push, arithmetic <- struct.
+struct A { int x; };
+int main(void) {
+    Vec<int> v = {1};
+    struct A a;
+    v.push(a);
+    return v.len();
+}

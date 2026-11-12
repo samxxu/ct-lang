@@ -1,0 +1,6 @@
+// p32: L32-6 Map<char *, int>::put, int <- pointer.
+int main(void) {
+    Map<char *, int> m = {"a": 1};
+    m.put("a", "b");
+    return m.len();
+}

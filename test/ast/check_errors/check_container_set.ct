@@ -1,0 +1,6 @@
+// p32: L32-6 Vec<int>::set, arithmetic <- pointer.
+int main(void) {
+    Vec<int> v = {1};
+    v.set(0, "s");
+    return v.len();
+}

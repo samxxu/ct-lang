@@ -1,0 +1,6 @@
+// p32: L32-2 assignment, arithmetic <- pointer.
+int main(void) {
+    int x = 1;
+    x = "s";
+    return x;
+}

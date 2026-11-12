@@ -1,0 +1,5 @@
+// p32: L32-5 a void function returns a value.
+void g(void) {
+    return 1;
+}
+int main(void) { g(); return 0; }

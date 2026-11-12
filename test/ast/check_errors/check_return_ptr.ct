@@ -1,0 +1,5 @@
+// p32: L32-3 return value, arithmetic <- pointer.
+int f(void) {
+    return "s";
+}
+int main(void) { return 0; }
