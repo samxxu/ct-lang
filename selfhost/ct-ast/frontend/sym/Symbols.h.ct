@@ -1669,68 +1669,174 @@ int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2,
     return n;
 }
 
+/* Phase 33 S5: patterns nest (`Box<T>`, `Pair<int, Box<T>>`). The matcher walks
+   the pattern spelling and the instance's argument spellings together; a
+   parameter binds the *C spelling* of whatever it matched, however deep, which
+   is what a method body's `T` has to become. */
+/* `Name<a, b>` -> name plus the two top-level argument spellings. 0 when the
+   spelling is not a template application. */
+static int impl_pat_split(const char *pat, char *name, char *a1, char *a2, int *na)
+{
+    const char *lt = strchr(pat, '<');
+    const char *end, *p, *seg;
+    int depth = 0, n = 0, len;
+
+    if (!lt) return 0;
+    len = (int)strlen(pat);
+    if (len == 0 || pat[len - 1] != '>') return 0;
+    if ((int)(lt - pat) >= MAX_TEXT) return 0;
+    memcpy(name, pat, (size_t)(lt - pat));
+    name[(size_t)(lt - pat)] = 0;
+    end = pat + len - 1;
+    a1[0] = 0;
+    a2[0] = 0;
+    seg = lt + 1;
+    for (p = lt + 1; p <= end; p++) {
+        if (p == end || (*p == ',' && depth == 0)) {
+            char *dst = n == 0 ? a1 : a2;
+            int sl = (int)(p - seg), i = 0;
+            while (sl > 0 && (*seg == ' ' || *seg == '\t')) {
+                seg++;
+                sl--;
+            }
+            while (sl > 0 && (seg[sl - 1] == ' ' || seg[sl - 1] == '\t')) sl--;
+            if (sl >= MAX_TEXT) sl = MAX_TEXT - 1;
+            for (i = 0; i < sl; i++) dst[i] = seg[i];
+            dst[sl] = 0;
+            n++;
+            seg = p + 1;
+            continue;
+        }
+        if (*p == '<') depth++;
+        else if (*p == '>') depth--;
+    }
+    *na = n;
+    return n > 0;
+}
+
+/* Strip the C `struct ` prefix and every blank, so `struct Box_int`, `Box_int`
+   and the pattern's `Box_int` compare equal. */
+static void impl_arg_canon(const char *arg, char *out, int cap)
+{
+    const char *s = arg;
+    int n = 0;
+
+    if (strncmp(s, "struct ", 7) == 0) s += 7;
+    while (*s && n < cap - 1) {
+        if (*s != ' ' && *s != '\t') out[n++] = *s;
+        s++;
+    }
+    out[n] = 0;
+}
+
+static int impl_tparam(struct StructImpl *t, const char *pat)
+{
+    if (t->ntparams > 0 && strcmp(pat, t->tparam[0]) == 0) return 0;
+    if (t->ntparams > 1 && strcmp(pat, t->tparam[1]) == 0) return 1;
+    return -1;
+}
+
+static int impl_match(int ii, int ti, const char *pat, const char *arg,
+                      const char *cspell, char *v1, char *v2, int *s1, int *s2,
+                      int depth)
+{
+    char name[MAX_TEXT], a1[MAX_TEXT], a2[MAX_TEXT];
+    char base[MAX_TEXT], cbase[MAX_TEXT];
+    int na, pi, k, n, ai;
+    struct StructImpl *t = ct_impls(&n);
+
+    if (!t || ii < 0 || ii >= n || depth > 8) return 0;
+    pi = impl_tparam(&t[ii], pat);
+    if (pi >= 0) {
+        char *dst = pi == 0 ? v1 : v2;
+        int *set = pi == 0 ? s1 : s2;
+        if (*set) return strcmp(dst, cspell) == 0;
+        *set = 1;
+        snprintf(dst, MAX_TEXT, "%s", cspell);
+        return 1;
+    }
+    if (!impl_pat_split(pat, name, a1, a2, &na)) {
+        impl_arg_canon(pat, base, sizeof base);
+        impl_arg_canon(arg, cbase, sizeof cbase);
+        return strcmp(base, cbase) == 0;
+    }
+    impl_arg_canon(arg, cbase, sizeof cbase);
+    ai = ct_inst_find(cbase);
+    if (ai < 0) return 0;
+    {
+        struct StructInst *ins = ct_insts(&k);
+        if (!ins || k <= ai) return 0;
+        if (strcmp(ins[ai].tmpl, name) != 0 || ins[ai].nargs != na) return 0;
+        if (!impl_match(ii, ti, a1, ins[ai].carg[0], ins[ai].ctype[0], v1, v2, s1, s2,
+                        depth + 1))
+            return 0;
+        if (na > 1
+            && !impl_match(ii, ti, a2, ins[ai].carg[1], ins[ai].ctype[1], v1, v2,
+                           s1, s2, depth + 1))
+            return 0;
+    }
+    return 1;
+}
+
 /* The pattern of a block is either one of its declared parameters (a wildcard,
-   bound to the instance's argument) or a concrete canonical spelling. A
-   parameter written twice must receive the same argument both times. */
+   bound to the instance's argument) or a concrete spelling; patterns nest, and
+   a parameter written twice must receive the same argument both times. */
 int ct_impl_matches(int ii, int inst)
 {
-    int i, k, n, nins;
+    int k, n, nins, s1, s2;
     struct StructImpl *t = ct_impls(&n);
     struct StructInst *ins = ct_insts(&nins);
-    int bind_at[2];
+    char v1[MAX_TEXT], v2[MAX_TEXT];
 
     if (!t || !ins || ii < 0 || ii >= n || inst < 0 || inst >= nins) return 0;
     if (strcmp(t[ii].tmpl, ins[inst].tmpl) != 0) return 0;
     if (t[ii].nargs != ins[inst].nargs) return 0;
-    bind_at[0] = -1;
-    bind_at[1] = -1;
-    for (k = 0; k < ins[inst].nargs; k++) {
-        int pi = -1;
-        if (t[ii].ntparams > 0 && strcmp(t[ii].pat[k], t[ii].tparam[0]) == 0) pi = 0;
-        else if (t[ii].ntparams > 1 && strcmp(t[ii].pat[k], t[ii].tparam[1]) == 0) pi = 1;
-        if (pi < 0) {
-            if (strcmp(t[ii].pat[k], ins[inst].carg[k]) != 0) return 0;
-            continue;
-        }
-        if (bind_at[pi] < 0) bind_at[pi] = k;
-        else if (strcmp(ins[inst].carg[bind_at[pi]], ins[inst].carg[k]) != 0) return 0;
-    }
-    /* a parameter named in the block but absent from the pattern is unbound;
-       that is a parse-time error, so no instance can match it */
-    for (i = 0; i < t[ii].ntparams; i++)
-        if (bind_at[i] < 0) return 0;
+    v1[0] = 0;
+    v2[0] = 0;
+    s1 = 0;
+    s2 = 0;
+    for (k = 0; k < ins[inst].nargs; k++)
+        if (!impl_match(ii, ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k],
+                        v1, v2, &s1, &s2, 0))
+            return 0;
+    if (s1 == 0 && t[ii].ntparams > 0) return 0;
+    if (s2 == 0 && t[ii].ntparams > 1) return 0;
     return 1;
 }
 
-/* Phase 32 S6: the same pattern walk as `ct_impl_matches`, but it also hands
-   back what each parameter binds to. The value is the instance's C spelling
-   (`ctype`), which is what a method body's `T` has to become. */
+/* Phase 32 S6 / 33 S5: the same pattern walk as `ct_impl_matches`, but it also
+   hands back what each parameter binds to -- the C spelling of the matched
+   argument, however deep in the pattern it sat. */
 int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
                    int cap)
 {
-    int k, nins, n, bound;
-
-    struct StructInst *ins = ct_insts(&nins);
+    int k, n, nins, s1, s2, bound;
     struct StructImpl *t = ct_impls(&n);
+    struct StructInst *ins = ct_insts(&nins);
+    char v1b[MAX_TEXT], v2b[MAX_TEXT];
 
     if (n1 && cap > 0) n1[0] = 0;
     if (n2 && cap > 0) n2[0] = 0;
-    if (!ct_impl_matches(ii, inst)) return -1;
     if (v1 && cap > 0) v1[0] = 0;
     if (v2 && cap > 0) v2[0] = 0;
+    if (!t || !ins || ii < 0 || ii >= n || inst < 0 || inst >= nins) return -1;
+    if (!ct_impl_matches(ii, inst)) return -1;
+    v1b[0] = 0;
+    v2b[0] = 0;
+    s1 = 0;
+    s2 = 0;
+    for (k = 0; k < ins[inst].nargs; k++)
+        impl_match(ii, ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k],
+                   v1b, v2b, &s1, &s2, 0);
     bound = 0;
-    for (k = 0; k < ins[inst].nargs; k++) {
-        int pi = -1;
-        if (t[ii].ntparams > 0 && strcmp(t[ii].pat[k], t[ii].tparam[0]) == 0) pi = 0;
-        else if (t[ii].ntparams > 1 && strcmp(t[ii].pat[k], t[ii].tparam[1]) == 0) pi = 1;
-        if (pi < 0) continue;
-        if (pi == 0) {
-            snprintf(n1, (size_t)cap, "%s", t[ii].tparam[0]);
-            snprintf(v1, (size_t)cap, "%s", ins[inst].ctype[k]);
-        } else {
-            snprintf(n2, (size_t)cap, "%s", t[ii].tparam[1]);
-            snprintf(v2, (size_t)cap, "%s", ins[inst].ctype[k]);
-        }
+    if (s1 && n1 && v1) {
+        snprintf(n1, (size_t)cap, "%s", t[ii].tparam[0]);
+        snprintf(v1, (size_t)cap, "%s", v1b);
+        bound++;
+    }
+    if (s2 && n2 && v2) {
+        snprintf(n2, (size_t)cap, "%s", t[ii].tparam[1]);
+        snprintf(v2, (size_t)cap, "%s", v2b);
         bound++;
     }
     return bound;
