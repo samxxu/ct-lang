@@ -1,0 +1,32 @@
+/* E34-9 (P34 S7): `Option<Option<int>>` nests like any other generic struct:
+   the inner option is an ordinary payload value, and each level is read with
+   its own `unwrap_or` (a method call on a temporary is not legal, so the inner
+   option lands in a variable first). */
+#include <stdio.h>
+
+int main(void)
+{
+    Option<int> fallback = { 0, 0 };
+    Option<Option<int>> some = { 1, { 1, 7 } };
+    Option<Option<int>> none = { 0, { 0, 0 } };
+    Option<int> inner;
+    Option<int> empty;
+    int outer_has;
+    int inner_has;
+    int value;
+    int empty_none;
+
+    outer_has = some.is_some();
+    inner = some.unwrap_or(fallback);
+    inner_has = inner.is_some();
+    value = inner.unwrap();
+    empty = none.unwrap_or(fallback);
+    empty_none = empty.is_none();
+    printf("%d %d %d %d\n", outer_has, inner_has, value, empty_none);
+    some.release();
+    none.release();
+    inner.release();
+    empty.release();
+    fallback.release();
+    return 0;
+}

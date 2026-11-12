@@ -1,0 +1,34 @@
+/* E34-8 (P34 S7): `Option<Show>` stores the interface value by value. A
+   concrete struct boxes into a `Show` variable, which then fills the option's
+   payload (a brace literal is an initialiser, not an assignment); `unwrap_or`
+   answers a `Show` copy that dispatches through the vtable. */
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+int main(void)
+{
+    struct Circle c;
+    c.r = 5;
+    Show boxed = c;
+    Option<Show> some = { 1, boxed };
+    Option<Show> none = { 0, boxed };
+    Show fallback = none.unwrap_or(boxed);
+    Show out = some.unwrap_or(fallback);
+    printf("%d %d %d\n", some.is_some(), none.is_none(), out.show());
+    some.release();
+    none.release();
+    return 0;
+}

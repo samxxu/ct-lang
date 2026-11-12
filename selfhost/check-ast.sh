@@ -595,6 +595,20 @@ for d in test/ast/*/; do
     ok "$name"
 done
 
+# E34-8 (P34 S7): a boxed interface payload keeps the layer's product shape.
+cat >"$work/p34_opt_iface.expected" <<'P34IFACE'
+struct Option_Show__iface {
+    int has;
+    struct Show_iface value;
+};
+P34IFACE
+sed -n '/^struct Option_Show__iface {$/,/^};$/p' "$work/217_option_iface.c" \
+    >"$work/p34_opt_iface.actual" 2>/dev/null
+if cmp -s "$work/p34_opt_iface.expected" "$work/p34_opt_iface.actual"; then
+    ok "p34_option_iface_shape (struct Option_Show__iface carries the interface by value)"
+else
+    bad "p34_option_iface_shape" "$(head -5 "$work/p34_opt_iface.actual" 2>/dev/null)"
+fi
 
 # The member decay stops at one dimension: `char names[2][8]` decays to
 # `char (*)[8]`, which no host spells, so the receiver type stays unknown
