@@ -1,0 +1,28 @@
+// Phase 33 O3: `ct build` with the element declared in another unit. The
+// container copies its element lifecycle helpers and its instance methods into
+// this unit as private statics, so the element's definition is in scope.
+#include <stdio.h>
+
+import elem;
+
+int main(void)
+{
+    Vec<Point> ps;
+    Vec<Show> ss;
+    struct Point p;
+    struct Circle c;
+    Show g;
+
+    p.x = 1;
+    p.y = 2;
+    ps.h = 0;
+    ps.push(p);
+
+    c.r = 7;
+    ss.h = 0;
+    ss.push(c);
+
+    g = ss.get(0);
+    printf("%d %d %d\n", ps.get(0).x, ps.get(0).y, g.show());
+    return 0;
+}

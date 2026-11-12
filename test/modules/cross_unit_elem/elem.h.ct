@@ -1,0 +1,20 @@
+// Phase 33 O3: the element side of the cross-unit fixture. The trait and both
+// element types live here; the consumer names `Vec<Show>` and `Vec<Point>`.
+pub trait Show {
+    int show();
+}
+
+pub struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show() {
+        return self->r;
+    }
+}
+
+pub struct Point {
+    int x;
+    int y;
+}
