@@ -1,0 +1,17 @@
+// Phase 34 S3a: the consumer of a bounded `pub` generic. `max2<struct Num>`
+// resolves through the header's template body and emits a static instance in
+// this unit; `id<int>` keeps the boundless path covered.
+#include <stdio.h>
+
+import lib;
+
+int main(void)
+{
+    struct Num a;
+    struct Num b;
+
+    a.v = 3;
+    b.v = 7;
+    printf("%d %d\n", id<int>(4), max2<struct Num>(a, b).v);
+    return 0;
+}

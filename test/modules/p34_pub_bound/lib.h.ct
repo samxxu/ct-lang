@@ -1,0 +1,32 @@
+// Phase 34 S3a (E34-2a/E34-3): a `pub` generic function bounded by a trait the
+// same header declares. The boundless `id<T>` sits next to it because TEST-18
+// extracts type parameter names from `...<T>(` declarations only; a bounded
+// declaration (`<T: Compare>`) yields no name and the scan would inspect nothing.
+pub trait Compare {
+    int cmp(void *other);
+}
+
+pub struct Num {
+    int v;
+} use Compare;
+
+impl Compare for Num {
+    int cmp(void *other)
+    {
+        struct Num *o = (struct Num *)other;
+        return self->v - o->v;
+    }
+}
+
+pub T id<T>(T x)
+{
+    return x;
+}
+
+pub T max2<T: Compare>(T a, T b)
+{
+    if (a.cmp(&b) > 0) {
+        return a;
+    }
+    return b;
+}

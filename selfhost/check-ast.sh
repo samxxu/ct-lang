@@ -421,9 +421,9 @@ ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 # A build may pull generic declarations from imported `.h.ct` bodies, so every
 # `.ct` file under the fixture contributes names -- not just the entry file.
 # The scan also runs over every product of a build-mode fixture
-# and every `.h` product is checked for instance bodies. Remaining blind spots
-# (module fixtures under test/modules/**, `test/ast/errors/`, the corpus) are
-# argued in docs/design/phase26.md §2.7.
+# and every `.h` product is checked for instance bodies. `test/modules/p34_pub_*`
+# products are scanned in the module section (P34 S3a); the remaining blind spots
+# (`test/ast/errors/`, the corpus) are argued in docs/design/phase26.md §2.7.
 fixture_sources() {
     find "$1" -name '*.ct' -type f | sort
 }
@@ -899,6 +899,49 @@ if "$work/ct-ast" build --emit-c test/modules/split/main.ct -o "$mod-split" \
     ok "split (import + pub routing + cross-unit dispatch; only .h.ct units write a header)"
 else
     bad "split" "$(cat "$work/msplit.err" "$work/msplit.cc" "$work/msplit.stdout")"
+fi
+
+# E34-2a / TEST-18 (P34 S3a): the `pub` generic templates now live in `.h.ct`
+# headers and are instantiated by a consumer, so a leaked type parameter would
+# land in a module product -- a blind spot before this slice. Each fixture gets
+# its own output directory; an empty directory fails as loudly as a leak,
+# otherwise the scan would pass over nothing.
+rm -rf "$mod-p34g" "$mod-p34b"
+mkdir -p "$mod-p34g" "$mod-p34b"
+if "$work/ct-ast" build --emit-c test/modules/p34_pub_generic/main.ct -o "$mod-p34g" \
+        >"$work/mp34g.out" 2>"$work/mp34g.err" \
+   && "$work/ct-ast" build --emit-c test/modules/p34_pub_bound/main.ct -o "$mod-p34b" \
+        >"$work/mp34b.out" 2>"$work/mp34b.err"; then
+    d="$mod-p34g"
+    if ( set -- "$d"/*.c && [ -f "$1" ] ); then
+        tp="$(for f in "$d"/*.c; do tparam_residue "$f" $(fixture_sources test/modules/p34_pub_generic); done)"
+        [ -z "$tp" ] || bad p34_pub_generic "$tp"
+    else
+        bad p34_pub_generic "no product"
+    fi
+    d="$mod-p34b"
+    if ( set -- "$d"/*.c && [ -f "$1" ] ); then
+        tp="$(for f in "$d"/*.c; do tparam_residue "$f" $(fixture_sources test/modules/p34_pub_bound); done)"
+        [ -z "$tp" ] || bad p34_pub_bound "$tp"
+    else
+        bad p34_pub_bound "no product"
+    fi
+else
+    bad p34_pub_generic "$(cat "$work/mp34g.err" "$work/mp34b.err" 2>/dev/null | head -2)"
+fi
+
+# The positive pair only fires when the scanner works; a silent scanner looks
+# exactly like clean products. A hand-written dirty instance body keeps that
+# failure mode red (E34-2a): the scan must report the leaked `T`, and the
+# `*)` branch keeps an empty or unexpected string from passing by accident.
+tp="$(tparam_residue test/probes/p34_residue_dirty.c $(fixture_sources test/modules/p34_pub_generic))"
+if [ -z "$tp" ]; then
+    bad p34_residue_dirty "the scanner stayed silent on a hand-written leak"
+else
+    case "$tp" in
+        *"T(1)"*) ok "p34_residue_dirty (a hand-written module leak is reported)" ;;
+        *) bad p34_residue_dirty "$tp" ;;
+    esac
 fi
 
 rm -rf "$mod-ns"
