@@ -303,6 +303,10 @@ pub struct Expr {
        parser when a unit starts. A single-file compile sees every definition,
        so the cross-unit element guard only applies when this is 1. */
     int *build_mode;
+    /* Phase 32: points at the parser's `types_mode`, set only by `ct check
+       --types`. Every phase-32 judgement reads this flag and stays silent
+       when it is 0. */
+    int *types_mode;
     /* Phase 28: the trait bound of the template whose body is being parsed.
        A method call on the type parameter resolves against this trait instead
        of failing to find a struct; empty for a plain template and outside one. */

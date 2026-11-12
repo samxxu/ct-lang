@@ -162,6 +162,20 @@ impl DriverOps for Driver {
         in = NULL;
         out = NULL;
         self->m->check_mode = 0;
+        self->p->types_mode = 0;
+        /* Phase 32: `--types` is an opt-in gate on `ct check` only. The scan
+           runs before the `build` dispatch so `ct build --types` names the
+           rule instead of failing as an unknown option deeper in. */
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--types") == 0) {
+                if (!(argc > 1 && strcmp(argv[1], "check") == 0)) {
+                    fprintf(stderr, "ctc: --types is only valid with 'ct check'\n");
+                    return 1;
+                }
+                self->p->types_mode = 1;
+                break;
+            }
+        }
         if (argc > 1 && strcmp(argv[1], "build") == 0)
             return self->m->build_main(argc - 1, argv + 1);
         /* `ct compile <file>` is the documented spelling, so the keyword is
@@ -185,7 +199,7 @@ impl DriverOps for Driver {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n"
                        "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99]\n"
-                       "       %s check <input.ct> [--diagnostics=text|json] [--std=c99|gnu99]\n"
+                       "       %s check <input.ct> [--types] [--diagnostics=text|json] [--std=c99|gnu99]\n"
                        "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
                        "                 [--emit-c] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
@@ -228,6 +242,12 @@ impl DriverOps for Driver {
             }
             if (strcmp(argv[i], "--emit-c") == 0) {
                 self->m->emit_c = 1;   /* compile mode already emits only C */
+                continue;
+            }
+            /* Phase 32: consumed here so the pre-scan's gate is not an
+               unknown option in the loop; the flag itself is already set. */
+            if (strcmp(argv[i], "--types") == 0) {
+                self->p->types_mode = 1;
                 continue;
             }
             if (strcmp(argv[i], "--outdir") == 0) {

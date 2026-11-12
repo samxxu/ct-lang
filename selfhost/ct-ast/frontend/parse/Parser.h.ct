@@ -118,6 +118,10 @@ pub struct Parser {
     struct Memory *mem;     /* the current unit's path for diagnostics */
     int *build_mode;                    /* points at the driver's flag */
     int *check_mode;                    /* likewise: `ct check` (single unit, SH-55) */
+    /* Phase 32: the opt-in `--types` gate, set by the driver's `check` branch
+       and handed to the expression object while a unit is parsed. It stays 0
+       under `ct build` / `ct compile` and without the flag. */
+    int  types_mode;
     /* The module tables the translation-unit passes fill: the import list the
        scanner and the parser share, and the call graph and `map` records the
        map JSON reports. The driver reads them back through this object. */
@@ -1000,6 +1004,7 @@ impl ParseOps for Parser {
         self->seen_decl = 0;
         self->ex->cur_unit = self->cur_unit;
         self->ex->build_mode = self->build_mode;
+        self->ex->types_mode = &self->types_mode;
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {

@@ -3044,6 +3044,33 @@ else
     bad "batch 38: import_ambiguous" "$(head -2 "$work/mbamb/err.txt")"
 fi
 
+# Phase 32 S8 (L32-7): `--types` is an opt-in gate on `ct check` only. A
+# non-check invocation names the rule instead of failing as an unknown option,
+# and `check --types` stays silent on a legal program.
+p32_cli_x="$work/p32_cli_x.ct"
+printf 'int main(void) { return 0; }\n' >"$p32_cli_x"
+p32_cli_reject() {
+    if "$work/ct-ast" "$@" >"$work/p32cli.out" 2>"$work/p32cli.err"; then
+        bad "p32 CLI ($*)" "expected a non-zero exit"
+    elif [ "$(grep -cF "ctc: --types is only valid with 'ct check'" "$work/p32cli.err")" -ne 1 ]; then
+        bad "p32 CLI ($*)" "$(head -2 "$work/p32cli.err")"
+    elif grep -q ': error:' "$work/p32cli.err"; then
+        bad "p32 CLI ($*)" "a source diagnostic leaked: $(head -2 "$work/p32cli.err")"
+    else
+        ok "p32 CLI ($*: refused by name)"
+    fi
+}
+p32_cli_reject build --types "$p32_cli_x"
+p32_cli_reject --types "$p32_cli_x"
+if ! "$work/ct-ast" check --types "$p32_cli_x" \
+        >"$work/p32cli.out" 2>"$work/p32cli.err"; then
+    bad "p32 CLI (check --types)" "expected a zero exit: $(head -2 "$work/p32cli.err")"
+elif [ -s "$work/p32cli.err" ]; then
+    bad "p32 CLI (check --types)" "a legal program drew a diagnostic: $(head -2 "$work/p32cli.err")"
+else
+    ok "p32 CLI (check --types accepts a legal program)"
+fi
+
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 # Every source diagnostic now carries the full position (`file:line:col: error:`);
