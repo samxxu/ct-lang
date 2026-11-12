@@ -1060,6 +1060,79 @@ static int check_struct_bounds(struct Parser *self)
     return tool::diag::ct_diag_nsem() > base ? -1 : 0;
 }
 
+/* Phase 35 S3b: read the concrete arguments after a generic trait name. The
+   encoded identity keeps the source spelling of a nested instance (`Vec<int>`),
+   while method signatures need its C spelling (`struct Vec_int`). */
+static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
+{
+    char arg[2][MAX_TEXT];
+    char ctype[2][MAX_TEXT];
+    char abuf[MAX_TEXT];
+    char tmp[MAX_TEXT];
+    int nargs = 0, tmpl, ti, mi, pi, pk;
+
+    tmpl = self->sym->find_trait(tname);
+    arg[0][0] = 0;
+    arg[1][0] = 0;
+    ctype[0][0] = 0;
+    ctype[1][0] = 0;
+    if (self->sup->expect("<") != 0) return -1;
+    for (;;) {
+        if (nargs >= MAX_STRUCT_TPARAMS)
+            return self->sup->fail("a generic trait takes at most 2 type arguments");
+        self->ex->inst_canon[0] = 0;
+        if (self->ex->parse_type(abuf, sizeof abuf) != 0) return -1;
+        if (frontend::sym::ct_type_canon(self->ex->inst_canon[0]
+                                             ? self->ex->inst_canon : abuf,
+                                         arg[nargs], MAX_TEXT) != 0)
+            return self->sup->fail("type is too long");
+        snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
+        nargs++;
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+            self->sup->lex_next();
+            continue;
+        }
+        break;
+    }
+    /* As in parse_inst_type, let the first half of `>>` close this list and
+       leave the second half for the enclosing type argument list. */
+    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">>") == 0) {
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", ">");
+        self->lex->pos = self->lex->pos - 1;
+        self->lex->tokstart = self->lex->tokstart + 1;
+    }
+    if (self->sup->expect(">") != 0) return -1;
+    /* trait_inst encodes c1/c2. Pass the canonical source arguments to get
+       Iter_Vec_lint_r, then refresh the copied signatures with the C types. */
+    ti = self->sym->trait_inst(tname, nargs, arg[0], arg[1],
+                               arg[0], arg[1], self->cur_unit);
+    if (ti < 0) return -1;
+    for (mi = 0; mi < self->sym->traits[tmpl].nm; mi++) {
+        self->sym->traits[ti].m[mi] = self->sym->traits[tmpl].m[mi];
+        snprintf(tmp, sizeof tmp, "%s", self->sym->traits[tmpl].m[mi].ret);
+        for (pi = 0; pi < nargs; pi++) {
+            if (frontend::sym::ct_generic_subst(tmp,
+                    self->sym->traits[tmpl].tparam[pi], ctype[pi],
+                    self->sym->traits[ti].m[mi].ret, MAX_TEXT) != 0)
+                return self->sup->fail("type is too long");
+            snprintf(tmp, sizeof tmp, "%s", self->sym->traits[ti].m[mi].ret);
+        }
+        for (pk = 0; pk < self->sym->traits[tmpl].m[mi].nparams; pk++) {
+            snprintf(tmp, sizeof tmp, "%s", self->sym->traits[tmpl].m[mi].ptype[pk]);
+            for (pi = 0; pi < nargs; pi++) {
+                if (frontend::sym::ct_generic_subst(tmp,
+                        self->sym->traits[tmpl].tparam[pi], ctype[pi],
+                        self->sym->traits[ti].m[mi].ptype[pk], MAX_TEXT) != 0)
+                    return self->sup->fail("type is too long");
+                snprintf(tmp, sizeof tmp, "%s", self->sym->traits[ti].m[mi].ptype[pk]);
+            }
+        }
+    }
+    if (snprintf(tname, (size_t)cap, "%s", self->sym->traits[ti].name) >= cap)
+        return self->sup->fail("type name is too long");
+    return ti;
+}
+
 impl ParseOps for Parser {
 
     /* Phase 33 S6: read one impl-pattern argument without `parse_type`. A bare
@@ -2395,33 +2468,26 @@ impl ParseOps for Parser {
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
                     "a static trait cannot be adopted", self->mem->path);
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                if (parse_trait_inst_args(self, tname, sizeof tname) < 0) return -1;
+            }
             /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
                never joins the `use` list -- only the flag matters */
             if (strcmp(tname, "Drop") == 0) {
                 self->sym->structs[sindex].uses_drop = 1;
-                self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
-                    self->sup->lex_next();
-                    continue;
-                }
-                break;
-            }
             /* `Handback` is built in as well: a borrowed object is handed back
                to its pool, so it carries no vptr or vtable and never joins the
                `use` list -- only the flag matters */
-            if (strcmp(tname, "Handback") == 0) {
+            } else if (strcmp(tname, "Handback") == 0) {
                 self->sym->structs[sindex].uses_handback = 1;
-                self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
-                    self->sup->lex_next();
-                    continue;
-                }
-                break;
+            } else {
+                if (self->sym->structs[sindex].nuse >= MAX_TRAITS)
+                    return self->sup->fail("too many used traits");
+                snprintf(self->sym->structs[sindex].use[self->sym->structs[sindex].nuse],
+                         MAX_TEXT, "%s", tname);
+                self->sym->structs[sindex].nuse++;
             }
-            if (self->sym->structs[sindex].nuse >= MAX_TRAITS) return self->sup->fail("too many used traits");
-            snprintf(self->sym->structs[sindex].use[self->sym->structs[sindex].nuse], MAX_TEXT, "%s", tname);
-            self->sym->structs[sindex].nuse++;
-            self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                 self->sup->lex_next();
                 continue;
@@ -2716,16 +2782,25 @@ impl ParseOps for Parser {
         impl_line = self->lex->tokline;
         self->sup->lex_next();
         /* Phase 29: `impl<T> Name<Args> [use Trait] { … }` writes against a
-           template, so it has no struct row of its own. The two dispatchers
-           below only take over when a `<` follows `impl` or the name; the older
-           `impl Trait for Struct` path keeps every token it had before. */
+           template, so it has no struct row of its own. A `<` after a generic
+           trait name instead creates its concrete row and rejoins the ordinary
+           impl path below; every other template keeps the struct dispatcher. */
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
             return self->parse_impl_inst("", 1);
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         snprintf(tname, sizeof tname, "%s", self->lex->toktext);
         self->sup->lex_next();
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
-            return self->parse_impl_inst(tname, 0);
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+            if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+            ti = self->sym->find_trait(rtrait);
+            if (ti < 0 || self->sym->traits[ti].ntparams == 0)
+                return self->parse_impl_inst(tname, 0);
+            ti = parse_trait_inst_args(self, rtrait, sizeof rtrait);
+            if (ti < 0) return -1;
+        } else {
+            if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+            ti = self->sym->find_trait(rtrait);
+        }
         /* Phase 34 S4: `impl Counter { … }` writes inherent methods on a
            non-generic struct. Only a `{` that follows a known struct takes
            this path; anything else keeps the trait-impl wording below. */
@@ -2737,8 +2812,6 @@ impl ParseOps for Parser {
             si_inh = self->sym->find_struct(rinh);
             if (si_inh >= 0) return self->parse_impl_inherent(rinh, si_inh, impl_line);
         }
-        if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
-        ti = self->sym->find_trait(rtrait);
         /* A static trait has no iface and no vtable: it is bound by a `map`,
            never implemented. */
         if (ti >= 0 && self->sym->traits[ti].is_static) {
