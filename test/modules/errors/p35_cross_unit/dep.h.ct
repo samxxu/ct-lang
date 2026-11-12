@@ -1,0 +1,5 @@
+// E35-8: the generic trait lives here; a consumer may name it but must not
+// create an instance row of it (L35-4).
+pub trait Iter<T> {
+    T next(void);
+}

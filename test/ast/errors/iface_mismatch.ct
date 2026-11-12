@@ -1,0 +1,30 @@
+/* Phase 35 L35-5: two different trait instances cannot be assigned into one
+   another; the existing interface-mismatch diagnostic carries it. */
+trait Left<T> {
+    int get(void);
+}
+
+trait Right<T> {
+    int get(void);
+}
+
+struct Cell {
+    int v;
+} use Left<int>, Right<int>;
+
+impl Left<int> for Cell {
+    int get(void) { return self->v; }
+}
+
+impl Right<int> for Cell {
+    int get(void) { return self->v; }
+}
+
+int main(void)
+{
+    Cell c = { .v = 1 };
+    Left<int> l = c;
+    Right<int> r = c;
+    l = r;
+    return 0;
+}

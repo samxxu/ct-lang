@@ -1060,6 +1060,59 @@ static int check_struct_bounds(struct Parser *self)
     return tool::diag::ct_diag_nsem() > base ? -1 : 0;
 }
 
+/* Phase 35 S4 (L35-1): a trait instance may only be built when every type
+   argument satisfies its parameter's bound. Like the struct-template check it
+   runs after the unit is parsed, so an `impl` written below the use still
+   counts; the instance row names the template it came from. */
+static int check_trait_bounds(struct Parser *self)
+{
+    int i, k, k2, base, si, ti, ok;
+    char msg[512];
+    char tbase[MAX_TEXT];
+    size_t tl;
+
+    base = tool::diag::ct_diag_nsem();
+    for (i = 0; i < self->sym->ntraits; i++) {
+        if (self->sym->traits[i].tmpl < 0) continue;
+        if (self->sym->traits[i].owner != self->cur_unit) continue;
+        ti = self->sym->traits[i].tmpl;
+        for (k = 0; k < self->sym->traits[i].nargs; k++) {
+            const char *arg;
+            if (!self->sym->traits[ti].bound[k][0]) continue;
+            arg = self->sym->traits[i].carg[k];
+            if (self->sym->find_trait(self->sym->traits[ti].bound[k]) < 0) {
+                snprintf(msg, sizeof msg, "unknown trait '%s' in a generic bound",
+                         self->sym->traits[ti].bound[k]);
+                tool::diag::ct_sem_error(self->sym->traits[i].line, 1, msg, self->mem->path);
+                continue;
+            }
+            snprintf(tbase, sizeof tbase, "%s", arg);
+            tl = strlen(tbase);
+            while (tl > 0 && (tbase[tl - 1] == ' ' || tbase[tl - 1] == '*'))
+                tbase[--tl] = 0;
+            if (strncmp(tbase, "struct ", 7) == 0)
+                memmove(tbase, tbase + 7, strlen(tbase + 7) + 1);
+            si = self->sym->find_struct(tbase);
+            ok = 0;
+            if (si >= 0) {
+                ok = impl_declares(self, si, self->sym->traits[ti].bound[k]);
+                for (k2 = 0; !ok && k2 < self->sym->structs[si].nuse; k2++)
+                    if (strcmp(self->sym->structs[si].use[k2],
+                               self->sym->traits[ti].bound[k]) == 0)
+                        ok = 1;
+            }
+            if (!ok) {
+                snprintf(msg, sizeof msg,
+                         "'%s' does not satisfy the bound '%s' of '%s'",
+                         tbase, self->sym->traits[ti].bound[k],
+                         self->sym->traits[ti].name);
+                tool::diag::ct_sem_error(self->sym->traits[i].line, 1, msg, self->mem->path);
+            }
+        }
+    }
+    return tool::diag::ct_diag_nsem() > base ? -1 : 0;
+}
+
 /* Phase 35 S3b: read the concrete arguments after a generic trait name. The
    encoded identity keeps the source spelling of a nested instance (`Vec<int>`),
    while method signatures need its C spelling (`struct Vec_int`). */
@@ -1068,10 +1121,8 @@ static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
     char arg[2][MAX_TEXT];
     char ctype[2][MAX_TEXT];
     char abuf[MAX_TEXT];
-    char tmp[MAX_TEXT];
-    int nargs = 0, tmpl, ti, mi, pi, pk;
+    int nargs = 0, ti;
 
-    tmpl = self->sym->find_trait(tname);
     arg[0][0] = 0;
     arg[1][0] = 0;
     ctype[0][0] = 0;
@@ -1102,32 +1153,9 @@ static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
         self->lex->tokstart = self->lex->tokstart + 1;
     }
     if (self->sup->expect(">") != 0) return -1;
-    /* trait_inst encodes c1/c2. Pass the canonical source arguments to get
-       Iter_Vec_lint_r, then refresh the copied signatures with the C types. */
     ti = self->sym->trait_inst(tname, nargs, arg[0], arg[1],
-                               arg[0], arg[1], self->cur_unit);
-    if (ti < 0) return -1;
-    for (mi = 0; mi < self->sym->traits[tmpl].nm; mi++) {
-        self->sym->traits[ti].m[mi] = self->sym->traits[tmpl].m[mi];
-        snprintf(tmp, sizeof tmp, "%s", self->sym->traits[tmpl].m[mi].ret);
-        for (pi = 0; pi < nargs; pi++) {
-            if (frontend::sym::ct_generic_subst(tmp,
-                    self->sym->traits[tmpl].tparam[pi], ctype[pi],
-                    self->sym->traits[ti].m[mi].ret, MAX_TEXT) != 0)
-                return self->sup->fail("type is too long");
-            snprintf(tmp, sizeof tmp, "%s", self->sym->traits[ti].m[mi].ret);
-        }
-        for (pk = 0; pk < self->sym->traits[tmpl].m[mi].nparams; pk++) {
-            snprintf(tmp, sizeof tmp, "%s", self->sym->traits[tmpl].m[mi].ptype[pk]);
-            for (pi = 0; pi < nargs; pi++) {
-                if (frontend::sym::ct_generic_subst(tmp,
-                        self->sym->traits[tmpl].tparam[pi], ctype[pi],
-                        self->sym->traits[ti].m[mi].ptype[pk], MAX_TEXT) != 0)
-                    return self->sup->fail("type is too long");
-                snprintf(tmp, sizeof tmp, "%s", self->sym->traits[ti].m[mi].ptype[pk]);
-            }
-        }
-    }
+                               ctype[0], ctype[1], self->cur_unit);
+    if (ti < 0) return self->sup->fail(self->sym->last_error());
     if (snprintf(tname, (size_t)cap, "%s", self->sym->traits[ti].name) >= cap)
         return self->sup->fail("type name is too long");
     return ti;
@@ -1315,6 +1343,7 @@ impl ParseOps for Parser {
         /* errors leave the unit (and its artifacts) behind */
         if (check_generic_bounds(self) != 0) return -1;
         if (check_struct_bounds(self) != 0) return -1;
+        if (check_trait_bounds(self) != 0) return -1;
         if (tool::diag::ct_diag_nsem() > base) return -1;
         return prog;
     }
@@ -1399,6 +1428,14 @@ impl ParseOps for Parser {
                     return tool::diag::ct_sem_error(self->lex->tokline,
                         self->lex->tokstart - self->lex->lstart + 1,
                         "only one trait bound is supported", self->mem->path);
+                /* Phase 35 S4 (D35-4): `T: Iter<int>` names an instance. The
+                   bound is stored under its encoded name, so the dispatch in a
+                   bounded body finds the very row the impl filled. */
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                    if (bi < 0)
+                        return self->sup->fail("unknown trait in a generic bound");
+                    if (parse_trait_inst_args(self, bound, sizeof bound) < 0) return -1;
+                }
             }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
                 return self->sup->fail("only one type parameter is supported");
@@ -2563,9 +2600,10 @@ impl ParseOps for Parser {
                         return tool::diag::ct_sem_error(self->lex->tokline,
                             self->lex->tokstart - self->lex->lstart + 1,
                             "a type parameter supports one trait bound", self->mem->path);
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
-                        return self->sup->fail(
-                            "a trait parameter bound names a trait, not an instance");
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                        if (parse_trait_inst_args(self, tbound[ntp], MAX_TEXT) < 0)
+                            return -1;
+                    }
                 }
                 ntp++;
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
@@ -2644,6 +2682,9 @@ impl ParseOps for Parser {
                         if (self->unit_is_map)
                             return tool::diag::ct_sem_error(mline, 1,
                                 "a .m.ct trait cannot carry a default body", self->mem->path);
+                        if (ntp > 0)
+                            return tool::diag::ct_sem_error(mline, 1,
+                                "a generic trait cannot carry a default method body", self->mem->path);
                         if (parse_trait_body(self, ti, mi, ret) != 0) return -1;
                     } else if (self->sup->expect(";") != 0) {
                         return -1;
@@ -2731,6 +2772,12 @@ impl ParseOps for Parser {
                 if (self->unit_is_map)
                     return tool::diag::ct_sem_error(mline, 1,
                         "a .m.ct trait cannot carry a default body", self->mem->path);
+                /* L35-3: a default body is expanded once per adopting struct,
+                   so its `T` would need per-impl monomorphisation -- out of
+                   scope for a parameterised trait. */
+                if (ntp > 0)
+                    return tool::diag::ct_sem_error(mline, 1,
+                        "a generic trait cannot carry a default method body", self->mem->path);
                 if (parse_trait_body(self, ti, mi, ret) != 0) return -1;
             } else if (self->sup->expect(";") != 0) {
                 return -1;
@@ -3269,6 +3316,43 @@ impl ParseOps for Parser {
             ti = self->sym->find_trait(use);
             if (ti < 0) return self->sup->fail("impl of an unknown trait");
             self->sup->lex_next();
+            /* Phase 35 S5b (D35-6): a template impl may adopt a generic trait
+               only in the one-to-one shape `impl<T> MyVec<T> use Iter<T>`. The
+               row is created per instance (S5a), so the impl keeps the symbolic
+               spelling and the emitter binds it when the struct instance binds. */
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+                char targs[2][MAX_TEXT];
+                char full[MAX_TEXT];
+                int na = 0, ai, bad = 0;
+
+                self->sup->lex_next();
+                for (;;) {
+                    if (na >= MAX_STRUCT_TPARAMS)
+                        return self->sup->fail("a generic trait takes at most 2 type arguments");
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a type argument");
+                    snprintf(targs[na], MAX_TEXT, "%s", self->lex->toktext);
+                    na++;
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                        self->sup->lex_next();
+                        continue;
+                    }
+                    break;
+                }
+                if (self->sup->expect(">") != 0) return -1;
+                if (na != nt) bad = 1;
+                for (ai = 0; !bad && ai < na; ai++)
+                    if (strcmp(targs[ai], tn[ai]) != 0) bad = 1;
+                if (bad)
+                    return tool::diag::ct_sem_error(line, 1,
+                        "unsupported generic trait implementation shape", self->mem->path);
+                if (na == 1)
+                    snprintf(full, sizeof full, "%s<%s>", ruse, targs[0]);
+                else
+                    snprintf(full, sizeof full, "%s<%s,%s>", ruse, targs[0], targs[1]);
+                snprintf(use, sizeof use, "%s", full);
+            }
         }
         if (self->sup->expect("{") != 0) return -1;
         node = self->sup->new_node(N_IMPL);

@@ -1582,6 +1582,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     int k, nimpls, ninsts, ntmpls, body, tmpl;
     char iname[MAX_TEXT];
     char cname[MAX_TEXT];
+    char cuse[MAX_TEXT];
     char mret[MAX_TEXT];
     char one[MAX_TEXT];
     const char *tname;
@@ -1603,6 +1604,13 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
        one copy per consumer unit links fine, two globals would not. */
     if (inst_elem_foreign(self, ii)) exported = 0;
     tname = frontend::sym::ct_impls(&nimpls)[ki].use;
+    /* Phase 35 S5a: a template impl's `use Iter<T>` is spelled per instance. */
+    if (self->sym->impl_use_concrete(tname, ins[ii].nargs,
+                             ins[ii].carg[0], ins[ii].carg[1],
+                             ins[ii].ctype[0], ins[ii].ctype[1], -1,
+                             cuse, sizeof cuse) != 0)
+        return -1;
+    tname = cuse;
     /* An inherent name a more specific block already owns for this instance is
        not emitted twice (V29-1); a trait method keeps its own symbol. */
     if (!tname[0] && impl_method_shadowed(self, ki, ii, self->arena->nodes[m].text2))
@@ -1668,6 +1676,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
 static int impl_emit_one(struct Emitter *self, int ki, int ii)
 {
     int m, nimpls, ninsts;
+    char cuse[MAX_TEXT];
     struct StructImpl *im;
     struct StructInst *ins;
 
@@ -1678,12 +1687,17 @@ static int impl_emit_one(struct Emitter *self, int ki, int ii)
         if (impl_emit_method(self, ki, ii, m, 0) != 0) return -1;
     if (im[ki].use[0]) {
         int first = 1;
+        if (self->sym->impl_use_concrete(im[ki].use, ins[ii].nargs,
+                                 ins[ii].carg[0], ins[ii].carg[1],
+                                 ins[ii].ctype[0], ins[ii].ctype[1], -1,
+                                 cuse, sizeof cuse) != 0)
+            return -1;
         fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
-                im[ki].use, ins[ii].name, im[ki].use);
+                cuse, ins[ii].name, cuse);
         for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
             if (!first) fputs(",\n", self->out);
             fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
-                    ins[ii].name, im[ki].use, self->arena->nodes[m].text2);
+                    ins[ii].name, cuse, self->arena->nodes[m].text2);
             first = 0;
         }
         fputs("\n};\n\n", self->out);

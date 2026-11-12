@@ -1,0 +1,27 @@
+/* 221 (Phase 35): `T: Iter<int>` stores the instance row as the bound, so a
+   bounded body dispatches through the same vtable slot. */
+#include <stdio.h>
+
+trait Iter<T> {
+    T next(void);
+}
+
+struct Circle {
+    int r;
+} use Iter<int>;
+
+impl Iter<int> for Circle {
+    int next(void) { return self->r; }
+}
+
+int step<T: Iter<int>>(T x)
+{
+    return x.next();
+}
+
+int main(void)
+{
+    Circle c = { .r = 9 };
+    printf("%d\n", step<Circle>(c));
+    return 0;
+}

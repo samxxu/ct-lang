@@ -1,0 +1,15 @@
+/* Phase 35 L35-7: only the positional one-to-one shape is supported. */
+trait Iter<T> {
+    T next(void);
+}
+
+struct Pair<A, B> {
+    A a;
+    B b;
+}
+
+impl<A, B> Pair<A, B> use Iter<A> {
+    A next(void) { return self->a; }
+}
+
+int main(void) { return 0; }

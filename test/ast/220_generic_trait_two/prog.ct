@@ -1,0 +1,31 @@
+/* 220 (Phase 35): two instances of one template -- `Iter_int` and
+   `Iter_char_p` -- coexist, each with its own vtable and vptr field. */
+#include <stdio.h>
+
+trait Iter<T> {
+    T next(void);
+}
+
+struct Num {
+    int v;
+} use Iter<int>;
+
+impl Iter<int> for Num {
+    int next(void) { return self->v; }
+}
+
+struct Word {
+    char *s;
+} use Iter<char *>;
+
+impl Iter<char *> for Word {
+    char *next(void) { return self->s; }
+}
+
+int main(void)
+{
+    Num n = { .v = 4 };
+    Word w = { .s = "hi" };
+    printf("%d %s\n", n.next(), w.next());
+    return 0;
+}

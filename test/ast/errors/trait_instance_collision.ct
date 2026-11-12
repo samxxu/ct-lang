@@ -1,0 +1,11 @@
+/* Phase 35 L35-6: the generated vtable struct name is already taken, so the
+   instance row would redefine it. */
+trait Iter<T> {
+    T next(void);
+}
+
+struct Iter_int_vtbl {
+    int x;
+} use Iter<int>;
+
+int main(void) { return 0; }

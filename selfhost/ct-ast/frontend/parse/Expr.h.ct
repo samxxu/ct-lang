@@ -2350,8 +2350,16 @@ impl ExprOps for Expr {
             int ii3, nimpls3;
             struct StructImpl *im3 = frontend::sym::ct_impls(&nimpls3);
             for (ii3 = 0; im3 && ii3 < nimpls3; ii3++)
-                if (im3[ii3].use[0] && frontend::sym::ct_impl_matches(ii3, k))
-                    self->sup->adopt_use(enc, im3[ii3].use);
+                if (im3[ii3].use[0] && frontend::sym::ct_impl_matches(ii3, k)) {
+                    /* Phase 35 S5a: `use Iter<T>` becomes the instance row this
+                       struct's argument names (`Iter_int`). */
+                    char cuse[MAX_TEXT];
+                    if (self->sym->impl_use_concrete(im3[ii3].use,
+                            nargs, a1, a2, c1, c2, self->cur_unit,
+                            cuse, sizeof cuse) != 0)
+                        return self->sup->fail("type is too long");
+                    self->sup->adopt_use(enc, cuse);
+                }
         }
         if (self->sup->add_type(enc, 1) != 0) return -1;
         /* H-A (Phase 31): `Map` keeps its entries behind `h->data`, so the

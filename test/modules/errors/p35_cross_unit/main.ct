@@ -1,0 +1,8 @@
+// E35-8: `Iter<int>` is created in a unit that does not own the template.
+import dep;
+
+int main(void)
+{
+    Iter<int> it;
+    return 0;
+}

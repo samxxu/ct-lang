@@ -2623,6 +2623,20 @@ elif [ "$(grep -c 'error:' "$work/cub.err")" -ne 1 ]; then
 else
     ok "p33_cross_unit (an invisible bound trait is one L33-6)"
 fi
+# E35-8: a generic trait instance must be created in the unit that owns the
+# template; a consumer naming `Iter<int>` is one L35-4, never a silent pass.
+rm -rf "$work/cu-p35"
+mkdir -p "$work/cu-p35"
+if "$work/ct-ast" build --emit-c test/modules/errors/p35_cross_unit/main.ct \
+        -o "$work/cu-p35" >"$work/cu35.out" 2>"$work/cu35.err"; then
+    bad "p35_cross_unit" "the build was accepted"
+elif ! grep -q "a generic trait instance must be created in its owner unit" "$work/cu35.err"; then
+    bad "p35_cross_unit" "$(cat "$work/cu35.err")"
+elif [ "$(grep -c 'error:' "$work/cu35.err")" -ne 1 ]; then
+    bad "p35_cross_unit" "expected exactly one diagnostic: $(cat "$work/cu35.err")"
+else
+    ok "p35_cross_unit (a foreign generic trait instance is one L35-4)"
+fi
 # ... and a bounded declaration with no instantiation is accepted. 208 has no
 # `prog.ct` on purpose: it is driven here, not by the behavioural loop.
 rm -rf "$work/cu-208"

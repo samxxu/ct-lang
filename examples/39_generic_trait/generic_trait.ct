@@ -1,0 +1,58 @@
+//@ct-requires: ct-ast
+// Phase 35 S9: a parameterised trait covers the three axes the phase ships.
+// `Iter<T>` monomorphises per argument, so `Iter<int>` and `Iter<char *>` are
+// two ordinary traits with their own vtables; `T: Iter<int>` names the int
+// instance as a bound, and the bounded body dispatches through that same slot.
+#include <stdio.h>
+
+trait Iter<T> {
+    T next(void);
+}
+
+struct Countdown {
+    int cur;
+} use Iter<int>;
+
+impl Iter<int> for Countdown {
+    int next(void)
+    {
+        int v = self->cur;
+        self->cur = self->cur - 1;
+        return v;
+    }
+}
+
+struct Word {
+    char *s;
+} use Iter<char *>;
+
+impl Iter<char *> for Word {
+    char *next(void) { return self->s; }
+}
+
+struct Pair<T> {
+    T v;
+}
+
+impl<T> Pair<T> use Iter<T> {
+    T next(void) { return self->v; }
+}
+
+int step<T: Iter<int>>(T x)
+{
+    return x.next();
+}
+
+int main(void)
+{
+    Countdown c = { .cur = 2 };
+    Word w = { .s = "hi" };
+    Pair<int> p;
+    p.v = 7;
+
+    printf("%d\n", step<Countdown>(c));
+    printf("%d\n", c.next());
+    printf("%s\n", w.next());
+    printf("%d\n", p.next());
+    return 0;
+}

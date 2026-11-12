@@ -1,0 +1,23 @@
+/* 219 (Phase 35): `trait Iter<T>` monomorphises to `Iter_int`; the concrete
+   impl fills its vtable and the interface value dispatches through it. */
+#include <stdio.h>
+
+trait Iter<T> {
+    T next(void);
+}
+
+struct Range {
+    int cur;
+} use Iter<int>;
+
+impl Iter<int> for Range {
+    int next(void) { return self->cur; }
+}
+
+int main(void)
+{
+    Range r = { .cur = 3 };
+    Iter<int> it = r;
+    printf("%d %d\n", r.next(), it.next());
+    return 0;
+}

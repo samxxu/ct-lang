@@ -1,0 +1,8 @@
+/* Phase 35 L35-3: a default body would have to be expanded per adopting
+   struct, which needs per-impl monomorphisation of `T`. */
+trait Iter<T> {
+    T next(void);
+    int count(void) { return 1; }
+}
+
+int main(void) { return 0; }

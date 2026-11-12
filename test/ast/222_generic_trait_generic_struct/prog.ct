@@ -1,0 +1,23 @@
+/* 222 (Phase 35): the one-to-one shape `impl<T> MyVec<T> use Iter<T>` creates
+   the trait instance per struct instance. */
+#include <stdio.h>
+
+trait Iter<T> {
+    T next(void);
+}
+
+struct MyVec<T> {
+    T v;
+}
+
+impl<T> MyVec<T> use Iter<T> {
+    T next(void) { return self->v; }
+}
+
+int main(void)
+{
+    MyVec<int> m;
+    m.v = 11;
+    printf("%d\n", m.next());
+    return 0;
+}

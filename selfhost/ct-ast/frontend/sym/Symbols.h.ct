@@ -303,6 +303,13 @@ pub trait SymbolOps {
        The row is registered as an iface type too. -1 sets last_error. */
     int  trait_inst(const char *tname, int nargs, const char *a1, const char *a2,
                     const char *c1, const char *c2, int owner);
+    /* Phase 35 S5a: the concrete trait row a template impl's `use` names for
+       one instance. A plain name passes through; the symbolic `Iter<T>` binds
+       positionally to the instance's arguments. `owner` is the unit allowed to
+       create the row (-1 in the emitter, where the parser already made it). */
+    int  impl_use_concrete(const char *use, int nargs, const char *a1, const char *a2,
+                           const char *c1, const char *c2, int owner,
+                           char *out, int cap);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
@@ -965,13 +972,44 @@ impl SymbolOps for Symbols {
                      tname, self->traits[ti].ntparams, nargs);
             return self->fail(msg);
         }
+        /* Phase 35 S6 (L35-4): the template's owner is the only unit that may
+           create an instance row. A consumer naming one would split the vtable
+           and the interface layout across two units. */
+        if (owner >= 0 && self->traits[ti].owner >= 0 && self->traits[ti].owner != owner)
+            return self->fail("a generic trait instance must be created in its owner unit");
         /* `Iter<char *>` and `Iter<char*>` must land on the same row. Nested
            instances keep their source-canonical spelling (`Vec<int>`). */
         if (ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0)
             return self->fail(
                 "the instantiated trait name exceeds 159 characters; shorten the trait or its arguments");
         ni = self->find_trait(enc);
-        if (ni >= 0) return ni;
+        if (ni >= 0) {
+            /* S7 (L35-6): a user-declared trait that happens to carry the
+               encoded name is a collision, not a reusable instance row. */
+            if (self->traits[ni].tmpl < 0) {
+                snprintf(msg, sizeof msg,
+                         "trait instance name '%s' collides with a declared type", enc);
+                return self->fail(msg);
+            }
+            return ni;
+        }
+        {
+            /* The generated products are the vtable and iface structs; a user
+               declaration of either leaves no room for the instance. */
+            char gname[MAX_TEXT + 8];
+            snprintf(gname, sizeof gname, "%s_vtbl", enc);
+            if (self->find_struct(gname) >= 0) {
+                snprintf(msg, sizeof msg,
+                         "trait instance name '%s' collides with a declared type", enc);
+                return self->fail(msg);
+            }
+            snprintf(gname, sizeof gname, "%s_iface", enc);
+            if (self->find_struct(gname) >= 0) {
+                snprintf(msg, sizeof msg,
+                         "trait instance name '%s' collides with a declared type", enc);
+                return self->fail(msg);
+            }
+        }
         ni = self->add_trait(enc);
         if (ni < 0) return -1;
         self->traits[ni].tmpl = ti;
@@ -1008,6 +1046,35 @@ impl SymbolOps for Symbols {
         self->traits[ni].owner = owner;
         if (self->add_type(enc, 3) != 0) return -1;
         return ni;
+    }
+
+    int impl_use_concrete(const char *use, int nargs, const char *a1, const char *a2,
+                          const char *c1, const char *c2, int owner,
+                          char *out, int cap)
+    {
+        char tname[MAX_TEXT];
+        char enc[MAX_TEXT];
+        const char *lt;
+        size_t nl;
+        int ni;
+
+        lt = strchr(use, '<');
+        if (!lt) {
+            if (snprintf(out, (size_t)cap, "%s", use) >= cap) return -1;
+            return 0;
+        }
+        nl = (size_t)(lt - use);
+        if (nl == 0 || nl >= sizeof tname) return -1;
+        memcpy(tname, use, nl);
+        tname[nl] = 0;
+        if (nargs < 1) return -1;
+        if (ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0) return -1;
+        ni = self->find_trait(enc);
+        if (ni < 0 && owner >= 0)
+            ni = self->trait_inst(tname, nargs, a1, a2, c1, c2, owner);
+        if (ni < 0) return -1;
+        if (snprintf(out, (size_t)cap, "%s", self->traits[ni].name) >= cap) return -1;
+        return 0;
     }
 
     /* Which trait of `stype` declares `method`: the vtable field name and the

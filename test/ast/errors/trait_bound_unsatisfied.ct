@@ -1,0 +1,19 @@
+/* Phase 35 L35-1: `Seq<int>` is refused because `int` does not satisfy the
+   template parameter's `Show` bound. */
+trait Show {
+    void show();
+}
+
+trait Seq<T: Show> {
+    int first(void);
+}
+
+struct Holder {
+    int n;
+} use Seq<int>;
+
+impl Seq<int> for Holder {
+    int first(void) { return self->n; }
+}
+
+int main(void) { return 0; }
