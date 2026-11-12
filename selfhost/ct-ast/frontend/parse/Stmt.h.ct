@@ -1495,6 +1495,7 @@ impl StmtOps for Stmt {
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
             int rline = self->lex->tokline, rcol = self->lex->tokstart - self->lex->lstart + 1, at_start = 1, rp, cond;
+            int eline = 0, ecol = 0;
             for (rp = self->lex->lstart; rp < self->lex->tokstart; rp++)
                 if (self->lex->src[rp] != ' ' && self->lex->src[rp] != '\t' && self->lex->src[rp] != '\r') at_start = 0;
             /* a return nested in a block (or written mid-line) may be skipped
@@ -1505,6 +1506,19 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
                 self->sup->lex_next();
+                /* Phase 32 S5 (L32-4): a value-returning function may not
+                   `return;`. The position is the `return` keyword. */
+                if (self->ex->types_mode && *self->ex->types_mode
+                    && self->sym->ret_type[0]
+                    && strcmp(self->sym->ret_type, "void") != 0) {
+                    char msg[MAX_TEXT];
+                    snprintf(msg, sizeof msg,
+                             "return: missing a value (function returns '%s')",
+                             self->sym->ret_type);
+                    if (tool::diag::ct_type_warn(rline, rcol, "", msg,
+                                                 self->sup->mem->path) != 0)
+                        return -1;
+                }
                 /* a bare `return;` leaves every owned object behind */
                 if (self->mem->leak_active && borrow_escape(self, -1, rline) != 0)
                     return -1;
@@ -1517,9 +1531,36 @@ impl StmtOps for Stmt {
                 return s;
             }
             self->ex->into_ok = 1;
+            eline = self->lex->tokline;
+            ecol = self->lex->tokstart - self->lex->lstart + 1;
             e = self->ex->parse_expr();
             self->ex->into_ok = 0;
             if (e < 0) return -1;
+            /* Phase 32 S5 (L32-3/L32-5): the returned expression against the
+               function's return type. A void function may not return a value,
+               and the judged value is compared through the shared kernel. */
+            if (self->ex->types_mode && *self->ex->types_mode
+                && self->sym->ret_type[0]) {
+                if (strcmp(self->sym->ret_type, "void") == 0) {
+                    char msg[MAX_TEXT];
+                    snprintf(msg, sizeof msg,
+                             "return: a value is not allowed in a void function");
+                    if (tool::diag::ct_type_warn(eline, ecol, "", msg,
+                                                 self->sup->mem->path) != 0)
+                        return -1;
+                } else {
+                    char out[MAX_TEXT];
+                    int is_zero = 0;
+                    if (self->ex->chk_type(e, out, sizeof out, &is_zero) == 0) {
+                        self->ex->chk_line = eline;
+                        self->ex->chk_col = ecol;
+                        self->ex->chk_arg = 0;
+                        if (self->ex->chk_assignable(self->sym->ret_type, out,
+                                                     is_zero, 3) != 0)
+                            return -1;
+                    }
+                }
+            }
             /* E1: the environment lives in this frame, so handing the binding
                back loses it. Checked before the memory analysis so the closure
                diagnostic is the one the user sees. */
