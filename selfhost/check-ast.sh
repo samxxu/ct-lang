@@ -6623,6 +6623,39 @@ else
     p31_hdr Map_int_int_from
 fi
 
+# Phase 31 S28 (E31-30): the H-A layout. Every `Vec_*` / `Map_*` instance is a
+# bare `ct_buf *` handle (no data pointer beside `h`), and `Vec_*_get` reads
+# through `h->data`, so a sibling's growth cannot leave a stale pointer behind.
+p31_ha() {
+    f=$1; badv=""
+    for s in $(grep -oE '^struct (Vec|Map)_[A-Za-z0-9_]* \{' "$f" | sed 's/^struct //; s/ {$//'); do
+        body="$(sed -n "/^struct $s {/,/^};/{/^struct /d;/^};/d;p;}" "$f")"
+        if [ "$(printf '%s\n' "$body" | grep -c ';')" -ne 1 ] \
+           || [ "$body" != "    struct ct_buf * h;" ]; then
+            badv="$badv $s"
+        fi
+    done
+    if [ -n "$badv" ]; then
+        bad "p31 E31-30 (H-A layout)" "handles that are not a bare ct_buf pointer:$badv"
+    else
+        ok "p31 E31-30 (H-A layout: every container handle is one h pointer)"
+    fi
+}
+if ! "$work/ct-ast" test/ast/194_handle_alias/prog.ct -o "$work/p31ha.c" \
+        >"$work/p31ha.log" 2>&1 \
+   || ! "$work/ct-ast" test/ast/195_map_value_alias/prog.ct -o "$work/p31ha2.c" \
+        >>"$work/p31ha.log" 2>&1; then
+    bad "p31 E31-30 (H-A product)" "ct-ast failed: $(head -3 "$work/p31ha.log")"
+else
+    p31_ha "$work/p31ha.c"
+    p31_ha "$work/p31ha2.c"
+    if ! sed -n '/^[^[:space:]].*Vec_int_get(/,/^}/p' "$work/p31ha.c" | grep -q -- '->h->data'; then
+        bad "p31 E31-30 (H-A get)" "Vec_int_get does not read through h->data"
+    else
+        ok "p31 E31-30 (H-A get: Vec_int_get reads through h->data)"
+    fi
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

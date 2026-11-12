@@ -1,0 +1,25 @@
+/* Phase 31 S28 (E31-30): a retained sibling and a nested element keep their
+   own buffer across growth (H-A: the handle is only the `h` pointer). */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> a = {4};
+    Vec<int> b = a.retain();
+    a.push(2);
+    if (b.get(0) != 4) return 1;
+
+    Vec<int> row = {1};
+    Vec<Vec<int>> g = {};
+    g.push(row);
+    row.push(2);
+    int got = g.get(0).get(0);
+    if (got != 1) return 1;
+
+    b.release();
+    a.release();
+    row.release();
+    g.release();
+    printf("ok\n");
+    return 0;
+}

@@ -1,0 +1,16 @@
+/* Phase 31 S28 (E31-30): a Map value keeps its own buffer across growth. */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, Vec<int>> m = {};
+    Vec<int> v = {1};
+    m.put("k", v);
+    v.push(2);
+    int got = m.get("k")->get(0);
+    if (got != 1) return 1;
+    v.release();
+    m.release();
+    printf("ok\n");
+    return 0;
+}
