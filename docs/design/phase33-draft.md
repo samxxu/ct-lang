@@ -410,3 +410,11 @@ L 编号是卡片标签，不是源码前缀；每行的 `error:` 之后必须�
 - 不改判据、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push。
 - 只暂存本相文件；`editors/vscode/**`、`docs/design/phase31.md` 与其他会话在改的文件一律不碰。
 - 收口跑 `bash selfhost/check-all.sh`，贴末行 VERDICT 与关键计数；未满足的判据必须回退状态。
+
+## 14 实施期变更记录
+
+1. **基线提交（S0）**：§13 T-7 写「S0 在 Phase 31 收口提交上重建二进制」，但 Phase 32 已在 31 收口后落地，33 的第一个实现提交只能接在 32 收口之后。S0 在 `69f2396`（Phase 32 收口，`ct-ast v0.30.0`）重建并以其为红证基线；此后 HEAD 又前进过仅动文档的外部提交（`a72e4ff`、`c735ff6`、`8a65096`），编译器源码未变。原始输出见 `test/probes/p33_check_baseline.txt`，门禁计数见 `test/probes/p33_gate_baseline.txt`。
+2. **E33-10b 的实例编码（S0 记录）**：卡片写 `Box<Box<int>>` → `Box_Box_lint_r`，实测为 `Box_Box__int`——S20b 之后嵌套实参以 C 拼写 `struct Box_int` 进入编码器（`_` → `__`）。S7 的正向断言按实测编码写，负向仍只用 `struct Box_T` 的 grep。
+3. **D33-1「StructInst 布局不变」（S2 偏差）**：L33-1 的位置必须指向实例化处的实参（E33-2 的 `Box<int>` 的 `int`），而 `StructInst` 原本没有位置。S2 给这行内部表加 `line` / `col`（`ct_inst_add` 增两个参数）；位置不进任何产物，`inst_make` 之外的嵌套注册（`MapEntry`）传 0/0，不参与报错。
+4. **L33-6 提前到 S2**：卡片把 L33-6 的夹具放在 S7/S11，但「实例化单元看不到 bound trait」与 L33-1 是同一次后置扫描最自然的分支；S2 一并实现文案，夹具按卡留在 S11 的 `test/modules/errors/bound_trait_invisible`。
+5. **S3 的 `self` 类型（实现细节）**：`impl<T> Box<T>` 的方法体里 `self` 原本按 `void *` 登记，`self->value` 推不出类型，约束派发不可达。S3 只对「继承到 bound 的 impl」把 `self` 登记为 `struct <模板名>`（发射器仍写 `void *self` 并自行 cast，生成的 C 不变）；无 bound 的 impl 保持原样，既有产物零漂移。

@@ -2776,10 +2776,12 @@ impl ParseOps for Parser {
         char ruse[MAX_TEXT];
         char ret[MAX_TEXT];
         char mname[MAX_TEXT];
+        char htype[MAX_TEXT];
         int nt, nargs, line, node, tail, mnode, params, body, ti, k, mline, is_static;
 
         nt = 0;
         nargs = 0;
+        snprintf(htype, sizeof htype, "%s", "void *");
         tn[0][0] = 0;
         tn[1][0] = 0;
         pat[0][0] = 0;
@@ -2798,8 +2800,25 @@ impl ParseOps for Parser {
                 snprintf(tn[nt], MAX_TEXT, "%s", self->lex->toktext);
                 nt++;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0)
-                    return self->sup->fail("a struct type parameter cannot carry a trait bound");
+                /* Phase 33 O1 (L33-2): the bound belongs to the struct
+                   declaration; repeating it here would create a second source
+                   of truth (D33-3). The message names both what was repeated
+                   and where the repeat sits. */
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
+                    char braw[MAX_TEXT];
+                    char msg[MAX_TEXT];
+                    int bl, bc;
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a trait name after ':'");
+                    bl = self->lex->tokline;
+                    bc = self->lex->tokstart - self->lex->lstart + 1;
+                    snprintf(braw, sizeof braw, "%s", self->lex->toktext);
+                    snprintf(msg, sizeof msg,
+                             "impl type parameter '%s' cannot repeat the bound '%s'",
+                             tn[nt - 1], braw);
+                    return tool::diag::ct_sem_error(bl, bc, msg, self->mem->path);
+                }
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->sup->lex_next();
                     continue;
@@ -2879,6 +2898,33 @@ impl ParseOps for Parser {
         tail = -1;
         snprintf(self->ex->in_generic_tparam, MAX_TEXT, "%s", tn[0]);
         snprintf(self->ex->in_generic_tparam2, MAX_TEXT, "%s", tn[1]);
+        /* Phase 33 O1 (D33-3): the method bodies inherit the struct's bound by
+           the parameter's *position* in the pattern (`impl<U> Box<U>` maps
+           through `pat`, not through the name), so `self->value.show()`
+           dispatches exactly like inside a bounded generic function. A bound
+           that lands on the second parameter is not wired: the dispatch check
+           reads one bound, the same limit a generic function has. */
+        self->ex->in_generic_bound[0] = 0;
+        {
+            int tbi = frontend::sym::ct_tmpl_find(tmpl);
+            int tbn, kb;
+            struct StructTmpl *tps = frontend::sym::ct_tmpls(&tbn);
+            (void)tbn;
+            if (tbi >= 0 && tps && tps[tbi].ntparams > 0 && tn[0][0]) {
+                for (kb = 0; kb < nargs && kb < MAX_STRUCT_TPARAMS; kb++)
+                    if (strcmp(pat[kb], tn[0]) == 0) {
+                        snprintf(self->ex->in_generic_bound, MAX_TEXT, "%s",
+                                 tps[tbi].bound[kb]);
+                        /* A bounded body types `self` as the template's tag,
+                           so `self->value` resolves to the parameter and the
+                           dispatch above can see it; the emitter keeps its own
+                           `void *self` and casts, so the C is unchanged. */
+                        if (self->ex->in_generic_bound[0])
+                            snprintf(htype, sizeof htype, "struct %s", tmpl);
+                        break;
+                    }
+            }
+        }
         while (self->lex->tok != T_EOF
                && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             mline = self->lex->tokline;
@@ -2903,7 +2949,7 @@ impl ParseOps for Parser {
             snprintf(mname, sizeof mname, "%s", self->lex->toktext);
             self->sup->lex_next();
             if (self->sup->push_scope() != 0) return -1;
-            if (!is_static && self->sup->declare_var("self", "void *") != 0) {
+            if (!is_static && self->sup->declare_var("self", htype) != 0) {
                 self->sup->pop_scope();
                 return -1;
             }
@@ -2955,6 +3001,7 @@ impl ParseOps for Parser {
         }
         self->ex->in_generic_tparam[0] = 0;
         self->ex->in_generic_tparam2[0] = 0;
+        self->ex->in_generic_bound[0] = 0;
         if (self->sup->expect("}") != 0) return -1;
         return node;
     }
