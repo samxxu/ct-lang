@@ -5487,6 +5487,23 @@ impl ExprTypes for Expr {
         if (n < 0 || !out || cap < 2) return -1;
         out[0] = 0;
         switch (self->arena->nodes[n].kind) {
+        case N_NUM:
+            /* D32-5: every arithmetic spelling is one class, so the literal
+               stays `int` whatever its suffix. `is_zero` is the null pointer
+               constant flag the caller hands to `chk_assignable`. */
+            if (is_zero) *is_zero = (self->arena->nodes[n].num == 0);
+            snprintf(out, (size_t)cap, "%s", "int");
+            return 0;
+        case N_FNUM:
+            snprintf(out, (size_t)cap, "%s", "double");
+            return 0;
+        case N_STR:
+            /* a string literal is `char *` in a value context; a character
+               literal stays the arithmetic class (`int`) */
+            snprintf(out, (size_t)cap, "%s",
+                     self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
+                     ? "int" : "char *");
+            return 0;
         case N_VAR:
         case N_MEMBER:
         case N_ARROW:
