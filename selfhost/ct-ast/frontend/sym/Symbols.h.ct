@@ -371,6 +371,12 @@ pub int ct_impl_find(const char *tmpl, int nargs, const char *p1, const char *p2
 pub int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2, int nargs, const char *p1, const char *p2, const char *use, int node, int owner, int line);
 /* 1 when the instance row `inst` is covered by the block `ii`. */
 pub int ct_impl_matches(int ii, int inst);
+/* Phase 32 S6: bind the block's type parameters to the instance's concrete C
+   arguments (`T` -> `struct Vec_int`). Each pair receives a parameter name and
+   its value; returns how many were bound (0..2), or -1 when the block does not
+   cover the instance. */
+pub int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
+                       int cap);
 pub int ct_tmpl_find(const char *name);
 pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, int is_pub, int owner, const char *path, int line);
 pub int ct_inst_find(const char *name);
@@ -1680,6 +1686,40 @@ int ct_impl_matches(int ii, int inst)
     for (i = 0; i < t[ii].ntparams; i++)
         if (bind_at[i] < 0) return 0;
     return 1;
+}
+
+/* Phase 32 S6: the same pattern walk as `ct_impl_matches`, but it also hands
+   back what each parameter binds to. The value is the instance's C spelling
+   (`ctype`), which is what a method body's `T` has to become. */
+int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
+                   int cap)
+{
+    int k, nins, n, bound;
+
+    struct StructInst *ins = ct_insts(&nins);
+    struct StructImpl *t = ct_impls(&n);
+
+    if (n1 && cap > 0) n1[0] = 0;
+    if (n2 && cap > 0) n2[0] = 0;
+    if (!ct_impl_matches(ii, inst)) return -1;
+    if (v1 && cap > 0) v1[0] = 0;
+    if (v2 && cap > 0) v2[0] = 0;
+    bound = 0;
+    for (k = 0; k < ins[inst].nargs; k++) {
+        int pi = -1;
+        if (t[ii].ntparams > 0 && strcmp(t[ii].pat[k], t[ii].tparam[0]) == 0) pi = 0;
+        else if (t[ii].ntparams > 1 && strcmp(t[ii].pat[k], t[ii].tparam[1]) == 0) pi = 1;
+        if (pi < 0) continue;
+        if (pi == 0) {
+            snprintf(n1, (size_t)cap, "%s", t[ii].tparam[0]);
+            snprintf(v1, (size_t)cap, "%s", ins[inst].ctype[k]);
+        } else {
+            snprintf(n2, (size_t)cap, "%s", t[ii].tparam[1]);
+            snprintf(v2, (size_t)cap, "%s", ins[inst].ctype[k]);
+        }
+        bound++;
+    }
+    return bound;
 }
 
 /* Phase 29: a by-value built-in container. Trailing blanks are ignored; a
