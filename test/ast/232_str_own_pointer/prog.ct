@@ -1,0 +1,19 @@
+// E36-8 (P36): `own Str *` reuses the existing AutoDrop path. `delete` runs
+// the explicit `impl Drop for Str` (which frees `data`), frees the struct and
+// nulls the pointer. The built-in `Str` is `lib/std/Str.h.ct`.
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void)
+{
+    own Str *p = malloc(sizeof(struct Str));
+
+    p->data = malloc(2);
+    p->data[0] = 'h';
+    p->data[1] = 0;
+    p->len = 1;
+    printf("%s %d\n", p->data, p->len);
+    delete p;
+    printf("%d\n", p == 0);
+    return 0;
+}

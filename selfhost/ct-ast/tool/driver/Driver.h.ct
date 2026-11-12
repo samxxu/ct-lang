@@ -103,11 +103,14 @@ impl DriverOps for Driver {
         env = getenv("CT_STD_DIR");
         head = -1;
         /* P34 S9a: the layer spans `Vec.h.ct`, `Option.h.ct` and
-           `Result.h.ct`. Compile mode is one C translation unit, so the parsed
-           declaration chains are spliced into one program. */
-        for (bi = 0; bi < 3; bi++) {
+           `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
+           translation unit, so the parsed declaration chains are spliced into
+           one program. */
+        for (bi = 0; bi < 4; bi++) {
             const char *base;
-            base = bi == 0 ? "Vec.h.ct" : (bi == 1 ? "Option.h.ct" : "Result.h.ct");
+            base = bi == 0 ? "Vec.h.ct"
+                 : (bi == 1 ? "Option.h.ct"
+                 : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
             prog = -1;
             for (i = 0; i < 3; i++) {
                 cand[0] = 0;

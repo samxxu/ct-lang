@@ -3737,7 +3737,11 @@ cl_shape() {
     clf="$1"
     cltag="$2"
     clwant="$3"
-    if grep -Eq 'malloc\(|free\(|vtable' "$clf"; then
+    # P36 S4a1: `Str` is a concrete built-in unit, so compile mode splices its
+    # `free`-bearing drop in front of every program. The predicate is unchanged;
+    # the scan starts at the closure lowering output (`__ct_cl_env_*`), which is
+    # what "no heap allocation, no vtable" is about.
+    if sed -n '/^struct __ct_cl_env_[0-9][0-9]* {/,$p' "$clf" | grep -Eq 'malloc\(|free\(|vtable'; then
         bad "$cltag" "heap allocation or vtable in the generated C"
         return
     fi
@@ -7291,6 +7295,29 @@ else
         bad "p31 E31-30 (H-A get)" "Vec_int_get does not read through h->data"
     else
         ok "p31 E31-30 (H-A get: Vec_int_get reads through h->data)"
+    fi
+fi
+
+# Phase 36 S4a1 (E36-8): `own Str *` + `delete` reuses the existing AutoDrop
+# path. The explicit `impl Drop for Str` frees the buffer; `delete` frees the
+# struct and nulls the pointer. The drop must not free the struct handle itself.
+if ! "$work/ct-ast" test/ast/232_str_own_pointer/prog.ct -o "$work/p36s4a1.c" \
+        >"$work/p36s4a1.log" 2>&1; then
+    bad "p36 E36-8 (own Str product)" "ct-ast failed: $(head -3 "$work/p36s4a1.log")"
+else
+    body="$(sed -n '/^static .*Str_Drop_drop(void \*self) {/,/^}/p' "$work/p36s4a1.c")"
+    if printf '%s\n' "$body" | grep -q 'free(_self->data);' \
+       && printf '%s\n' "$body" | grep -q '_self->data = 0;' \
+       && printf '%s\n' "$body" | grep -q '_self->len = (-1);' \
+       && ! printf '%s\n' "$body" | grep -q 'free(_self);'; then
+        ok "p36 E36-8 (Str_Drop_drop frees data, not the struct)"
+    else
+        bad "p36 E36-8 (Str_Drop_drop body)" "$(printf '%s\n' "$body" | head -6)"
+    fi
+    if grep -q 'Str_Drop_drop(p); free(p); p = 0;' "$work/p36s4a1.c"; then
+        ok "p36 E36-8 (delete runs the drop, frees the struct, nulls the pointer)"
+    else
+        bad "p36 E36-8 (delete shape)" "$(grep 'Str_Drop_drop' "$work/p36s4a1.c" | head -3)"
     fi
 fi
 

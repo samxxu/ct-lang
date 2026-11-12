@@ -1,0 +1,29 @@
+/*
+ * Str.h.ct - the built-in length-carrying string (Phase 36 S4a1).
+ *
+ * `Str` owns a heap buffer and its byte length. It is not NUL-terminated and
+ * may carry embedded `\0` bytes; `len` is the whole contract. The explicit
+ * `impl Drop for Str` frees the buffer: the automatic field glue cannot,
+ * because a `char *` carries no Drop, so without this impl `delete` would free
+ * only the struct and leak `data`.
+ *
+ * The released state is `data == 0`, `len == -1`; the drop is safe on it
+ * because `free(0)` is a no-op. `release()` (S4a2) inlines the same pair, the
+ * shape the fallback plan fixes (Phase 36 card §15).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdlib.h>
+
+pub struct Str {
+    char *data;
+    int len;
+} use Drop;
+
+impl Drop for Str {
+    void drop() {
+        free(self->data);
+        self->data = 0;
+        self->len = -1;
+    }
+}

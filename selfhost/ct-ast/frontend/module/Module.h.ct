@@ -1287,15 +1287,18 @@ impl ModuleOps for Module {
            land in its own `.h` / `.c` exactly like a user template. A missing
            file is not an error (an installation may not carry it).
            P34 S9a: the layer may span several files (`Vec.h.ct`, `Option.h.ct`,
-           `Result.h.ct`); each found file joins the layer. */
+           `Result.h.ct`); P36 S4a1 adds `Str.h.ct`. Each found file joins the
+           layer. */
         self->nbuiltin = 0;
         backend::emit::ct_emit_clear_builtins();
         {
             char bpath[MAX_PATH];
             int bi;
-            for (bi = 0; bi < 3; bi++) {
+            for (bi = 0; bi < 4; bi++) {
                 const char *base;
-                base = bi == 0 ? "Vec.h.ct" : (bi == 1 ? "Option.h.ct" : "Result.h.ct");
+                base = bi == 0 ? "Vec.h.ct"
+                     : (bi == 1 ? "Option.h.ct"
+                     : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
                 if (self->find_builtin(inputs[0], base, bpath, sizeof bpath) != 0) continue;
                 {
                     int bu;
