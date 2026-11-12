@@ -20,8 +20,8 @@
 >
 > | 键 | 值 |
 > | --- | --- |
-> | `spec-version` | `1.0.0` |
-> | `spec-sha256` | `93a8e968f76cefd5151e60b3d3c476a023910fa92dc768731467d1fa66aa2b67` |
+> | `spec-version` | `1.7.0` |
+> | `spec-sha256` | `91d4acb1b6c20f74c6716ebe070cb83d49a5fd9ceb69bb6023286a3e577d8fbf` |
 
 ### 1. 项目画像
 
