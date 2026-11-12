@@ -4621,3 +4621,54 @@ feature-complete old compiler is at git tag `overreach-oracle`.
   statement form with a right-value receiver, L30-7 nested `into` blocks.
 - **No runtime**: the block, `.name` and `$` are fully desugared into ordinary C statements and
   calls; the product contains neither `into {` nor `$`, and the receiver expression appears once.
+
+#### 4.53 Containers in the type system (Phase 31, ct-ast only)
+
+Phase 29 shipped `Vec` / `Map` as reference-counted handles; Phase 31 makes them ordinary element
+and value types and defines the ownership protocol around them.
+
+- **Element types**: any concrete value type may be an element, including an interface value
+  (`Vec<Show>`, `Map<char *, Show>`) and another container (`Vec<Vec<int>>`,
+  `Map<char *, Vec<int>>`). An interface element is a **non-owning** copy: its generated
+  `__ct_elem_retain` / `__ct_elem_release` helpers are empty, so the container never owns an object
+  behind a vptr. An interface *pointer* (`Vec<Show *>`) is refused (L31-1): there is no boxing path
+  into a pointer slot.
+- **Handle layout (H-A)**: a handle is exactly `struct ct_buf *h;`. The header owns `refs`, `len`,
+  `cap` and `data`; copying a handle copies one pointer, so a sibling that grows the buffer cannot
+  leave another handle pointing at stale storage. `Vec_int` and `Map_char_p_int` therefore have no
+  field besides `h`.
+- **Element protocol**: inserting (`push`, `put`, `from`, a brace initialiser) calls
+  `__ct_elem_retain` on the value after the capacity is known good; `set` retains the new value
+  before releasing the old one; `pop` transfers the element out without releasing it; `remove`,
+  `clear` and the last `release` release every element once.
+- **Ownership of a handle**: `retain` answers a second owning handle, `release` lowers the count
+  and returns the remainder, and releasing an already-released handle is a hard error. A borrowed
+  view (`get`, `entry`, a `foreach item`) carries no ownership: `release` on it is refused with
+  `cannot release a borrowed container view; call retain() first` (L31-13 / L31-14). A view bound to
+  a local keeps that provenance through copy-initialisation and assignment; `pop` hands ownership
+  out, so releasing its result is legal.
+- **Views and mutation**: a view points into the container's storage, so it is invalidated by a
+  later mutation of the same container in the same block. Using it afterwards reports
+  `a borrowed view is invalidated by a later mutation of its container; copy it with retain()
+  first` (L31-23); mutating a container from inside its own `foreach` body reports `cannot mutate
+  the container being iterated; take a copy or collect the indices first` (L31-22). Mutation
+  through a retained alias is outside this check.
+- **Subscript sugar**: `v[i]` and `m[k]` are read-only sugar for `get`; they name a value, not a
+  storage location. Assigning, compound-assigning, incrementing, taking the address of, or
+  assigning through a member of a subscript is a hard error (L31-3 / L31-4 / L31-5) pointing at the
+  subscript. Write through `set` / `put` instead.
+- **Brace initialisers**: `Vec<T> v = {a, b}` and `Map<K, V> m = {k: v, …}` are local declaration
+  forms, lowered to the `from` constructor (an empty `{}` answers a non-null header). A duplicated
+  compile-time key (`{1: "a", 1: "b"}`, `{"a": 1, "a": 2}`) is a hard error carrying the
+  `duplicate key` wording and the line of the first occurrence (L31-16); a runtime duplicate from
+  `put` overwrites in place and keeps the insertion order. `Vec` elements must share one static
+  type (L31-6), an undecidable element type is L31-7, a nested `{…}` inside a `Map` literal is
+  L31-9, and an initialiser at file scope or on assignment is L31-10 / L31-11.
+- **Allocation order**: a failed header allocation aborts, because a handle the caller cannot
+  release must never escape; a failed growth leaves the handle valid and returns `0` (or the
+  partially built map from `from`) **before** any element is retained. `from` never frees on a
+  failure path.
+- **`Map` literals**: a literal lowers to `Map_<enc>_from((struct MapEntry_<enc>[]){…}, n)`; the
+  product does not call `put` from `from`, and a null key is skipped.
+- **Diagnostics**: L31-1 … L31-23, all positioned; see the phase card for the exact wording.
+
