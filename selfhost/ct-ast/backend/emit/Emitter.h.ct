@@ -2356,7 +2356,7 @@ impl EmitOps for Emitter {
         (void)self;
 
         for (t = start; t < end; t++) {
-            if (self->sym->traits[t].is_static) continue;
+            if (self->sym->traits[t].is_static || self->sym->traits[t].ntparams > 0) continue;
             if (mode == 1 && !self->sym->traits[t].is_pub) continue;
             if (mode == 2 && self->sym->traits[t].is_pub) continue;
             fprintf(self->out, "struct %s_vtbl {\n", self->sym->traits[t].name);

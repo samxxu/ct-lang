@@ -242,6 +242,12 @@ pub trait ExprOps {
     int  closure_arg_bind(int ci, const char *ftype);
 }
 
+/* Phase 35: `ExprOps` is at MAX_METHODS; trait-instance type reading gets the
+   same small-trait treatment as the optional type gate below. */
+trait ExprTraitInst {
+    int  parse_trait_inst_type(char *out, int cap);
+}
+
 /* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
    sits at MAX_METHODS, and both grammars that need the gate -- the expression
    layer and the statement layer -- hold this object. */
@@ -403,7 +409,7 @@ pub struct Expr {
        `foreach`, so a mutation call on it inside the body is refused. */
     int  niter;
     char iter[8][160];
-} use ExprOps, ExprTypes;
+} use ExprOps, ExprTypes, ExprTraitInst;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -1796,6 +1802,11 @@ impl ExprOps for Expr {
                     self->saw_trait = 1;
                     if (sti >= 0 && self->sym->traits[sti].is_static)
                         return self->sup->fail("a static trait has no interface value");
+                    if (sti >= 0 && self->sym->traits[sti].ntparams > 0) {
+                        if (self->parse_trait_inst_type(out, cap) != 0) return -1;
+                        n = (int)strlen(out);
+                        continue;
+                    }
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                     if (snprintf(iface, sizeof iface, "%s_iface", rname) >= (int)sizeof iface)
                         return self->sup->fail("type name is too long");
@@ -5650,6 +5661,124 @@ impl ExprOps for Expr {
         snprintf(self->calls[*self->ncalls].callee, MAX_TEXT, "%s", callee);
         self->calls[*self->ncalls].line = line;
         (*self->ncalls)++;
+        return 0;
+    }
+}
+
+impl ExprTraitInst for Expr {
+    /* Phase 35 S3a: one trait instance in a type position. Source-canonical
+       arguments identify the row; their C spellings substitute the method
+       signatures. Symbolic arguments belong to the later generic-impl slice. */
+    int parse_trait_inst_type(char *out, int cap)
+    {
+        char tname[MAX_TEXT];
+        char carg[2][MAX_TEXT];
+        char ctype[2][MAX_TEXT];
+        char canon[MAX_TEXT];
+        char abuf[MAX_TEXT];
+        char tail[MAX_TEXT];
+        char symbolic[MAX_TEXT];
+        char iface[MAX_TEXT];
+        char msg[MAX_TEXT * 2];
+        size_t base_len;
+        int n, sti, ni, nargs;
+
+        n = (int)strlen(out);
+        if (self->sup->resolve_type(self->lex->toktext, tname, sizeof tname) != 0) return -1;
+        sti = self->sym->find_trait(tname);
+        if (sti < 0 || self->sym->traits[sti].ntparams == 0)
+            return self->sup->fail("internal: generic trait row vanished");
+        self->sup->lex_next();
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "<") != 0) {
+            snprintf(msg, sizeof msg,
+                     "generic trait '%s' needs type arguments in a type position", tname);
+            return self->sup->fail(msg);
+        }
+        self->sup->lex_next();
+        nargs = 0;
+        for (;;) {
+            if (nargs >= 2)
+                return self->sup->fail("a generic trait takes at most 2 type arguments");
+            self->inst_canon[0] = 0;
+            self->type_depth++;
+            if (self->type_depth > 4) {
+                self->type_depth--;
+                return self->sup->fail("generic type arguments nest deeper than 4");
+            }
+            if (self->parse_type(abuf, sizeof abuf) != 0) {
+                self->type_depth--;
+                return -1;
+            }
+            self->type_depth--;
+            if (!abuf[0] || strcmp(abuf, "void") == 0 || strchr(abuf, '[')
+                || strchr(abuf, '(') || strchr(abuf, ')')
+                || strncmp(abuf, "const ", 6) == 0
+                || strncmp(abuf, "volatile ", 9) == 0) {
+                snprintf(msg, sizeof msg,
+                         "type argument '%s' cannot instantiate a generic trait", abuf);
+                return self->sup->fail(msg);
+            }
+            if (self->in_generic_tparam[0]) {
+                if (frontend::sym::ct_generic_subst(abuf, self->in_generic_tparam, "",
+                                                    symbolic, sizeof symbolic) != 0)
+                    return self->sup->fail("type is too long");
+                if (strcmp(symbolic, abuf) != 0)
+                    return self->sup->fail("symbolic trait type arguments are not supported yet");
+            }
+            if (self->in_generic_tparam2[0]) {
+                if (frontend::sym::ct_generic_subst(abuf, self->in_generic_tparam2, "",
+                                                    symbolic, sizeof symbolic) != 0)
+                    return self->sup->fail("type is too long");
+                if (strcmp(symbolic, abuf) != 0)
+                    return self->sup->fail("symbolic trait type arguments are not supported yet");
+            }
+            snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
+            tail[0] = 0;
+            if (self->inst_canon[0]) {
+                /* Keep `Vec<int>` rather than its C tag; a pointer suffix still
+                   belongs to the argument's canonical spelling. */
+                base_len = strlen(self->last_bare_tag);
+                if (base_len > 0 && strncmp(abuf, self->last_bare_tag, base_len) == 0
+                    && frontend::sym::ct_type_canon(abuf + base_len, tail, sizeof tail) != 0)
+                    return self->sup->fail("type is too long");
+                if (snprintf(carg[nargs], MAX_TEXT, "%s%s", self->inst_canon, tail) >= MAX_TEXT)
+                    return self->sup->fail("type is too long");
+            } else if (frontend::sym::ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
+                return self->sup->fail("type is too long");
+            }
+            nargs++;
+            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                self->sup->lex_next();
+                continue;
+            }
+            break;
+        }
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">>") == 0) {
+            snprintf(self->lex->toktext, MAX_TEXT, "%s", ">");
+            self->lex->pos = self->lex->pos - 1;
+            self->lex->tokstart = self->lex->tokstart + 1;
+        }
+        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
+            return self->sup->fail("expected '>' after the type arguments");
+        self->sup->lex_next();
+        ni = self->sym->trait_inst(tname, nargs, carg[0], carg[1],
+                                   ctype[0], ctype[1], self->cur_unit);
+        if (ni < 0) return self->sup->fail(self->sym->last_error());
+        if (nargs == 1) {
+            if (snprintf(canon, sizeof canon, "%s<%s>", tname, carg[0]) >= (int)sizeof canon)
+                return self->sup->fail("type is too long");
+        } else if (snprintf(canon, sizeof canon, "%s<%s,%s>", tname, carg[0], carg[1])
+                   >= (int)sizeof canon) {
+            return self->sup->fail("type is too long");
+        }
+        if (snprintf(iface, sizeof iface, "%s_iface", self->sym->traits[ni].name)
+            >= (int)sizeof iface)
+            return self->sup->fail("type name is too long");
+        snprintf(self->inst_canon, sizeof self->inst_canon, "%s", canon);
+        snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", iface);
+        self->saw_trait = 1;
+        if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+        if (self->type_append(out, cap, &n, iface) != 0) return -1;
         return 0;
     }
 }
