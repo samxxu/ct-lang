@@ -91,7 +91,7 @@ pub struct Str { CStr *h; } use Drop;
 
 impl Str {
     Str retain();          /* 新句柄，独立 release；适配层决定 refcount 或深拷贝 */
-    int release();         /* 返回剩余引用数 */
+    int release();         /* 释放本句柄并返回所属 buffer 剩余计数（0 已释放；深拷贝只有 1→0）；p == 0 为 no-op */
     int len();
     Str slice(int start, int n);
     Str concat(Str other);
@@ -105,9 +105,11 @@ impl Str {
 | 函数 | 语义 |
 | --- | --- |
 | `cstr_retain(CStr *)` | 返回可独立 `release` 的句柄；引用计数或深拷贝由实现决定 |
-| `cstr_release(CStr *)` | 释放一个句柄，返回剩余引用数 |
+| `cstr_release(CStr *)` | 释放一个句柄并返回所属 buffer 剩余计数（0 已释放；深拷贝只有 1→0）；`p == 0` 为 no-op 并返回 0 |
 | `cstr_len` / `cstr_data` / `cstr_slice` / `cstr_concat` / `cstr_compare` | 只读操作；`slice` 可复制或共享 |
 | `cstr_c_str` | NUL 结尾，有效到 release；内嵌 `\0` 截断 |
+
+- **`cstr_release(0)` 必须无害**：`Option<Str>::none()` 的零状态 `h == 0` 经 `delete` 会走到这里，必须 no-op 并返回 0；`Str_Drop_drop` 因此可以无条件调用 `cstr_release(_self->h)`。
 
 - `retain`/`release` 必须是**固有方法**，否则 P31 元素协议不生效；这需要 P34 的非泛型固有方法。
 - `Vec<Str>` 的 push/release 走 `retain`/`release`；是否 O(1) 取决于 shim 是否有引用计数。
