@@ -3247,6 +3247,28 @@ else
     ok "coverage: 21 rows, 7 L32-n, 6 ok, 8 skip, 0 n/a"
 fi
 
+# E32-15: the legal corpus is an explicit list. Each row records what the
+# baseline `ct check` produced; `--types` must reproduce it exactly, so a new
+# diagnostic on any listed file fails here. Error tours and import-only units
+# keep their baseline exit code and text instead of being forced to rc=0.
+p32_manifest_bad=0
+p32_manifest_n=0
+while IFS="$p32_tab" read -r p32_mp p32_mr p32_me; do
+    [ "$p32_mp" = "path" ] && continue
+    [ -n "$p32_mp" ] || continue
+    p32_manifest_n=$((p32_manifest_n + 1))
+    p32_out=$("$work/ct-ast" check --types "$p32_mp" 2>&1)
+    p32_rc=$?
+    p32_enc=${p32_out//$'\n'/\\n}
+    if [ "$p32_rc" != "$p32_mr" ] || [ "$p32_enc" != "$p32_me" ]; then
+        p32_manifest_bad=$((p32_manifest_bad + 1))
+        bad "p32 legal manifest ($p32_mp)" "rc=$p32_rc expected $p32_mr; output [$p32_enc]"
+    fi
+done < test/probes/p32_legal_manifest.tsv
+if [ "$p32_manifest_bad" -eq 0 ]; then
+    ok "p32 legal manifest ($p32_manifest_n rows: --types reproduces the baseline)"
+fi
+
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 # Every source diagnostic now carries the full position (`file:line:col: error:`);
