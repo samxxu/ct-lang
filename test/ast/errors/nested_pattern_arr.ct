@@ -1,0 +1,7 @@
+// Phase 33 E33-12: an array suffix on a type parameter is L33-5.
+struct Box<T> {
+    T value;
+}
+impl<T> Box<T[2]> {
+    int depth() { return 1; }
+}

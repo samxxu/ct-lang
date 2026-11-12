@@ -1,0 +1,7 @@
+// Phase 33 E33-12: a function-pointer argument is not a supported pattern.
+struct Box<T> {
+    T value;
+}
+impl<T> Box<int (*)(int)> {
+    int depth() { return 1; }
+}

@@ -1,0 +1,3 @@
+// Phase 33 E33-11: depth 5 (six `Box`) is one past the pattern boundary.
+struct Box<T> { T v; }
+impl<T> Box<Box<Box<Box<Box<Box<T>>>>>> { int depth() { return 5; } }

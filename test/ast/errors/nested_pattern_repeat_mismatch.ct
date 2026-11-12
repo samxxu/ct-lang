@@ -1,0 +1,18 @@
+// Phase 33 E33-9: a parameter written twice must not match two different
+// arguments, so `impl<T> Pair<T, Box<T>>` rejects `Pair<int, Box<long>>`.
+struct Box<T> {
+    T value;
+}
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+impl<T> Pair<T, Box<T>> {
+    int same() { return 1; }
+}
+int main(void)
+{
+    Pair<int, Box<long>> p;
+
+    return p.same();
+}

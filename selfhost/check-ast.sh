@@ -6099,6 +6099,72 @@ for p33neg in bound_unsatisfied impl_bound_dup multi_bound; do
     fi
 done
 
+# E33-7..E33-12 (O2): the positive fixtures run in the behavioural loop above;
+# here the negative texts are frozen, `ct check`/`build` must agree on each
+# (E33-20), and the generated C must carry no pseudo instance (E33-10a) while
+# keeping the measured nested encoding (E33-10b).
+p33_diag nested_pattern_depth 3:32 "impl pattern nesting exceeds 4 levels"
+p33_diag nested_pattern_wild 5:13 "unsupported impl pattern '_'"
+p33_diag nested_pattern_arr 5:13 "unsupported impl pattern 'T[2]'"
+p33_diag nested_pattern_ptr 5:13 "unsupported impl pattern 'T*'"
+p33_diag nested_pattern_fnptr 5:13 "unsupported impl pattern 'int(*)(int)'"
+p33_diag nested_pattern_mismatch 16:1 "no method 'pick' for type 'struct Pair_char_p_Box__int'"
+p33_diag nested_pattern_repeat_mismatch 17:1 "no method 'same' for type 'struct Pair_int_Box__long'"
+
+for p33o2 in nested_pattern_depth nested_pattern_wild nested_pattern_arr \
+             nested_pattern_ptr nested_pattern_fnptr; do
+    "$work/ct-ast" "test/ast/errors/$p33o2.ct" -o "$work/p33o2m.c" \
+        >"$work/p33o2m1.out" 2>"$work/p33o2m1.err"
+    "$work/ct-ast" check "test/ast/errors/$p33o2.ct" \
+        >"$work/p33o2m2.out" 2>"$work/p33o2m2.err"
+    "$work/ct-ast" build "test/ast/errors/$p33o2.ct" -o "$work/p33o2md" \
+        --outdir "$work/p33o2mb" >"$work/p33o2m3.out" 2>"$work/p33o2m3.err"
+    grep 'error: ' "$work/p33o2m1.err" | head -1 >"$work/p33o2m1.msg"
+    grep 'error: ' "$work/p33o2m2.err" | head -1 >"$work/p33o2m2.msg"
+    grep 'error: ' "$work/p33o2m3.err" | head -1 >"$work/p33o2m3.msg"
+    if cmp -s "$work/p33o2m1.msg" "$work/p33o2m2.msg" \
+       && cmp -s "$work/p33o2m1.msg" "$work/p33o2m3.msg" \
+       && [ -s "$work/p33o2m1.msg" ]; then
+        ok "p33 (check/build agree on $p33o2)"
+    else
+        bad "p33: check/build $p33o2" \
+            "$(cat "$work/p33o2m1.msg" "$work/p33o2m2.msg" "$work/p33o2m3.msg" 2>/dev/null)"
+    fi
+done
+
+rm -rf "$work/p33o2"
+mkdir -p "$work/p33o2"
+p33o2_bad=""
+for p33o2n in 203_nested_pattern 204_nested_pattern_mixed 205_nested_pattern_repeat \
+              206_nested_pattern_depth3; do
+    if ! "$work/ct-ast" "test/ast/$p33o2n/prog.ct" -o "$work/p33o2/$p33o2n.c" \
+            >"$work/p33o2/$p33o2n.out" 2>"$work/p33o2/$p33o2n.err"; then
+        p33o2_bad="$p33o2_bad $p33o2n:compile"
+    elif grep -qF 'struct Box_T' "$work/p33o2/$p33o2n.c"; then
+        p33o2_bad="$p33o2_bad $p33o2n:pseudo"
+    fi
+done
+if [ -n "$p33o2_bad" ]; then
+    bad "p33: E33-10a" "pseudo instance or build failure:$p33o2_bad"
+else
+    ok "p33 (E33-10a no pseudo instance)"
+fi
+
+if grep -qF 'Box_Box__int' "$work/p33o2/206_nested_pattern_depth3.c" \
+   && ! grep -qF 'Box_Box_int' "$work/p33o2/206_nested_pattern_depth3.c"; then
+    ok "p33 (E33-10b nested encoding)"
+else
+    bad "p33: E33-10b" \
+        "$(grep -o 'Box_Box[A-Za-z_]*int' "$work/p33o2/206_nested_pattern_depth3.c" | sort -u | tr '\n' ' ')"
+fi
+
+if grep -qF 'Box_Box__Circle_depth' "$work/p33o2/203_nested_pattern.c"; then
+    ok "p33 (E33-7 nested dispatch keeps the instance prefix)"
+else
+    bad "p33: E33-7" \
+        "$(grep -o 'Box_Box_[A-Za-z_]*' "$work/p33o2/203_nested_pattern.c" | sort -u | tr '\n' ' ')"
+fi
+
 # E33-3: the literal `Box<Box<Circle>>` lives in ast/201_bounded_nested, whose
 # runnable path also proves no vptr is needed; the same shape under `int` is
 # L33-1 through `errors/bound_unsatisfied`'s single-argument form.

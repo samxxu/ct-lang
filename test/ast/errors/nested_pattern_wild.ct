@@ -1,0 +1,7 @@
+// Phase 33 E33-12: a wildcard is not a supported impl pattern (L33-5).
+struct Box<T> {
+    T value;
+}
+impl<T> Box<_> {
+    int depth() { return 1; }
+}

@@ -1,0 +1,17 @@
+// Phase 33 E33-8: `impl<T> Pair<int, Box<T>>` must not match `Pair<char *, ...>`.
+struct Box<T> {
+    T value;
+}
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+impl<T> Pair<int, Box<T>> {
+    int pick() { return 1; }
+}
+int main(void)
+{
+    Pair<char *, Box<int>> p;
+
+    return p.pick();
+}
