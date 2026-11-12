@@ -1,6 +1,6 @@
 # Phase 31 — 容器能力收口：接口值、嵌套容器、下标糖与花括号初值
 
-> **状态：规划中（已冻结）**（2026-11-11 立项；第 6 轮修订：按 R5 的 2 Medium / 5 Low 收口后冻结；实施期发现卡片错误走变更记录，不再直接改卡）。
+> **状态：完成**（2026-11-11 立项；第 6 轮修订：按 R5 的 2 Medium / 5 Low 收口后冻结；实施期发现卡片错误走变更记录，不再直接改卡；2026-11-12 收口：E31-1–E31-30 全绿，`check-all.sh` 11 道门禁绿，S20b 独立复核的 High/Medium/Low 与 S23a–S23d / S24 / S28 均已落地）。
 > **基线**：`v0.30.0` @ `bd91bfe`（`test(release): regenerate the goldens for v0.30.0`；`1564938` 只改版本常量，50 个 golden 到 `bd91bfe` 才重生成），不 bump 版本、不打 tag。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载范围裁决、语义表、battle、
 > 判据/负例台账、样例矩阵与估算，约 1,040 行，需需求提出方签字保留单卡、不拆分。
@@ -1045,3 +1045,8 @@ Vec<int> v = {a + b};   /* L31-7: cannot determine the type of initializer eleme
 4. **新增 S20b：实例参数编码规范化**（本片）。`Map<char *, Vec<int>> m = { "a": row };` 的字面量路径与嵌套 `MapEntry` 注册路径对同一嵌套类型给出两种拼写（`Vec_lint_r` 由源拼写 `Vec<int>` 编码，`Vec__int` 由已编码名再编码），产物里出现前向声明而无定义。根治点在编码输入：嵌套实参一律以嵌套实例刚得到的 C 拼写（`struct Vec_int`）作为身份参与编码，两条路径得到同一名字。`Map<Vec<int>, int>` 仍按 L29-8 的键白名单硬错；`Map<char *, Map<char *, int>>` 一并转正。`put`/`get` 路径行为不变。
 5. **复核裁定：`foreach_container_element` 恢复（S20b 复核 High）**。D31-4 解冻的只是“接口 / 容器元素”这一支；被删夹具是 `Vec<MapEntry<char *, int>>`，属 phase29 的“条目类型”分支，不在解冻范围内，故恢复夹具（`ast/errors/foreach_container_element.ct`）与 `p29_diag` 断言（7:5、冻结文案、恰好一条）。同时把守卫从“`carg` 含 `<`”改为按 `ctype[k]` 解析出的实例 tag 判 `tmpl == "MapEntry"`：S20b 之后嵌套实参以 C tag 形式落在 `carg`，旧判定已是死代码。
 6. **实例 tag 碰撞检测（S20b 复核 Medium）**。实例名就是 C struct 名；`struct Vec_int` 与 `Vec<int>` 会让两份定义撞名、仅由 cc 报 `redefinition` 兜底。`inst_make` 在编码后检查“该 tag 已由用户声明为 struct”，命中即报 `the instance name '<enc>' collides with a declared struct` 并定位；负例 `ast/errors/L31_inst_tag_collision.ct`。同片用 `L31_nested_map_key.ct` 钉住嵌套键诊断的现文案 `'struct Vec_int'`。
+7. **S23a / S23b / S23c / S23d 拆分**（`faa7b27`、`111d3ae`、`de30a3b`、S23d）。S23 的实际改动（两套借用表 + 判据 + 夹具）超过单片 150 行，按“L31-22 / L31-23 / E31-25 的拷贝初始化与 `pop` 正例”拆成四片：S23a 记 provenance 并拒绝借用 `release`；S23b 拒绝遍历中变更；S23c 视图失效；S23d 补 E31-25 的拷贝初始化/赋值负例与 `pop` 正例（并给 L29-9 的“容器被移动”加“源是借用视图”豁免，否则 `Vec<int> y = x;` 在到达 L31-14 前就被拒）。S23d 另带样例 `25_wordcount` 的分支重排：原写法在 `put` 之后才用 `slot`，按 L31-23 是硬错，改成先读后用、输出不变。
+8. **`ast/140_foreach_vec` 的 push 用例移除（S23b）**。该片给 `foreach` 内变更加了 L31-22，原夹具“循环体里 `v.push(99)`、长度只读一次”正好是新规禁止的写法；删掉 push、计数与长度都变 4，`prog.expected.out` 的 `len` 由 5 改 4。这是判据带来的夹具改写，非放宽断言。
+9. **S24 覆盖 E31-27 + E31-29；`Vec::from` 的 abort 计数按现实现**（S24）。卡 §8 E31-29 写“`Vec_*_from` 内 `abort();` 恰 3 处（空表 header / 非空 header / data）”，但 S19 已把 header 分配统一成一处，实际产物是“header + data”两处 malloc、两处 abort；断言改为“每个 malloc 窗口内都有 abort、malloc 与 abort 数量相等、`from` 不 free”，并单独钉 `push` / `put` / `Map::from` 的 header 只 abort 一次。
+10. **E31-30 夹具用花括号初值、链式读放初值**（S28）。卡写的 `4..5 { $ }` 是 range 初值写法，但 ct-ast 的链式材料化与既有约定仍要求“语句 / 初值 / 裸 `return`”根（同第 3 条），故夹具改用 `{4}` / `{1}` 与 `int got = g.get(0).get(0);`，语义与期望不变。人工 ASAN 证据：`/tmp/p31_asan_alias.log`（194/195，rc=0，无报告）。
+11. **红证执行口径（`4bc6396` 之后）**。工程规范新增“逐片红证”后，S24 / S28 的提交正文各带 `red: rc=…` 行（分别用临时把 retain 提前、把 `from` 的 abort 改成 return、给 `struct Vec<T>` 加字段制造失败）；S25a / S25b 为纯文档，写 `red: n/a (pure docs)`。S23a–S23d 在规范落定前提交，没有红证行，收口报告按“规范前”口径单列。
