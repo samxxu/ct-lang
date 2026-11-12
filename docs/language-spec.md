@@ -1910,8 +1910,9 @@ int main(void) {
   `(sizeof T) * 2`，不是 `sizeof(T *)`）。`struct T` / `union T` / `enum T` 里的 `T` 是标签名，
   不随类型参数替换。
 - 只有名字已经是符号表里的模板时，`<` 才被当作类型实参的开头；变量的 `a < b` 仍是比较。
-- 诊断：`L26-1` 忘记类型实参 `generic function '<name>' needs a type argument`；`L26-2` `pub` 泛型
-  `generic functions cannot be pub`；`L26-3` 多个类型参数 `only one type parameter is supported`
+- 诊断：`L26-1` 忘记类型实参 `generic function '<name>' needs a type argument`；`L26-2` 已于 Phase 34
+  解禁（`pub T f<T>(T)` 合法，模板体须写在 `.h.ct` 中；旧文案 `generic functions cannot be pub` 仅作历史）；
+  `L26-3` 多个类型参数 `only one type parameter is supported`
   （空列表 `<>` 由类型参数解析报 `expected a type parameter name`）；`L26-4` 非法类型实参
   `'<type>' cannot be a generic type argument`；`L26-5` 泛型体内调用泛型
   `recursive generic calls are not supported`。
@@ -4404,7 +4405,8 @@ int main(void) {
 - `<` opens a type argument only when the name is already a template in the symbol table, so
   `a < b` on a variable stays a comparison.
 - Diagnostics: `L26-1` missing type argument `generic function '<name>' needs a type argument`;
-  `L26-2` `pub` generic `generic functions cannot be pub`; `L26-3` multiple type parameters
+  `L26-2` (lifted in Phase 34: a `pub` generic function is legal when its template body lives in a
+  `.h.ct` header, so `generic functions cannot be pub` is history only); `L26-3` multiple type parameters
   `only one type parameter is supported` (an empty `<>` is reported earlier as
   `expected a type parameter name`); `L26-4` illegal type argument
   `'<type>' cannot be a generic type argument`; `L26-5` a generic call inside a template body

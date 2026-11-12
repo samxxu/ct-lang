@@ -198,6 +198,11 @@ struct Point q = id<struct Point>(p0);
 
 所有诊断走 `ct_sem_error(line, col, msg, path)`，带 `file:line:col`；`ct check` 与编译路径一致。
 
+> **P34 覆盖（Phase 34，未发版）**：L26-2 已解禁——`pub T name<T>(...)` 合法，模板体必须写在 `.h.ct` 中，
+> 消费方为每个 `(模板, 具体类型)` 发 `static` 实例（实例名沿用 `<name>__ct<N>`，按 owner 各自从 1 编号）。
+> §2.5 的表格行保留 P26 当时的状态作为历史；L26-1 / L26-3–L26-5 不变。变更面与回滚方式见
+> [phase34-draft.md](phase34-draft.md) §1.4；`generic_pub` 夹具已转正为 `test/ast/228_pub_generic_fn/`。
+
 ### 2.6 类型操作数的解析分支（v0.26.2 根因修复，D26-14）
 
 v0.26.1 的缺陷不是某个算子漏了拦截，而是**类型名判定只长在括号分支**：`parse_unary` 里
@@ -259,10 +264,10 @@ v0.26.1 的缺陷不是某个算子漏了拦截，而是**类型名判定只长�
 | `test/ast/*/prog.ct` 的编译产物，且文件内确有泛型声明 | ✅ 扫描（从夹具自身声明提取类型参数名，只读 `<name>__ctN` 函数体） |
 | 非模板函数里的同名局部变量（`int T = 5;`） | ✅ 不误报（v0.26.2 的整文件扫描返回 `T(2)`，现为空；129 正例固定该行为） |
 | 合法 `struct` / `union` / `enum T` 标签 | ✅ 扣掉（126） |
-| `.h.ct` 的产物 | ✅ 断言不含任何 `<name>__ctN` 实例定义（v0.26.4 / TEST-18；`.h` 只携带类型，`pub` 泛型已被 L26-2 拒绝，实例体只可能出现在 `.c`） |
+| `.h.ct` 的产物 | ✅ 断言不含任何 `<name>__ctN` 实例定义（v0.26.4 / TEST-18；`.h` 只携带类型。P34 起 `pub` 泛型模板体在 `.h.ct`，实例只由消费方 `.c` 发） |
 | `test/ast/*/` 的 `build` 产物（目录含 `.m.ct` 或 `.h.ct`） | ✅ 每个 `*.c` 都过同一扫描，类型参数名从**目录下全部 `.ct`** 提取（v0.26.4 / TEST-18；`130_generic_build_mode` 固定单文件泛型，`131_generic_cross_unit` 固定「泛型只声明在导入单元」的形态） |
-| `test/ast/errors/**`（本就不产生产物）、`test/modules/**` 与 `examples/**` 的构建产物、语料 | ❌ 不扫（残余名目：这些位置目前没有泛型夹具。触发条件是其中新增泛型夹具，此时必须在同一改动里补扫描钩子；解析期守卫 D26-14 / D26-15 与实例体扫描互补，前者覆盖全部形态，后者兜住发射期回归） |
-| 泛型声明与实例调用分处两个单元（例如 `extra/lib.h.ct` 内 `static T twice<T>`，由同一单元内的 `pub` 函数实例化） | ✅ 扫描（实例体落在该单元的 `.c` 产物，`-o` 目录下扁平化为 `lib.c`；类型参数名从该 `.h.ct` 读出，入口 `prog.ct` 即使没有任何泛型声明也不影响）。`pub` 泛型本身仍被 L26-2 拒绝，因此不存在「实例由另一个单元触发」的形态 |
+| `test/ast/errors/**`（本就不产生产物）、`test/modules/**`（`p34_pub_generic` / `p34_pub_bound` 之外的夹具）与 `examples/**` 的构建产物、语料 | ❌ 不扫（残余名目：这些位置目前没有泛型夹具。触发条件是其中新增泛型夹具，此时必须在同一改动里补扫描钩子；P34 S3a 已按此规则把两个 `pub` 泛型模块夹具接入 modules 段。解析期守卫 D26-14 / D26-15 与实例体扫描互补，前者覆盖全部形态，后者兜住发射期回归） |
+| 泛型声明与实例调用分处两个单元（例如 `extra/lib.h.ct` 内 `static T twice<T>`，由同一单元内的 `pub` 函数实例化） | ✅ 扫描（实例体落在该单元的 `.c` 产物，`-o` 目录下扁平化为 `lib.c`；类型参数名从该 `.h.ct` 读出，入口 `prog.ct` 即使没有任何泛型声明也不影响）。P34 起 `pub` 泛型模板体写在 `.h.ct`，实例由消费方触发；这条路径由 modules 段的 `p34_pub_generic` / `p34_pub_bound` 钩子覆盖（TEST-18） |
 | 扫描器的书写形态假设 | ⚠️ 已知限制：实例体提取要求 `__ctN(` 与 `{` 同行（K&R），类型参数声明要求 `<T>` 在行首；发射器当前恒为这两种形态，自检也只覆盖 K&R。**触发信号**：发射器改成分行花括号（Allman）或缩进声明时，扫描会静默失效——那时必须同时把 `tparam_residue` 的提取改成按花括号深度匹配，并给自检加一份 Allman 样本 |
 
 ---
@@ -534,10 +539,12 @@ TEST-18 ×2）；文件数仍 173，阶段状态仍 10，硬门禁仍 11。
 | `123_generic_identity` | `prog.ct:5:5: error: unexpected token` | 构建并运行，输出 `42 hi` |
 | `124_generic_struct` | `prog.ct:10:7: error: unexpected token` | 构建并运行，输出 `x=3 y=4` |
 | `generic_missing_arg` | `3:5: error: unexpected token` | `10:14: error: generic function 'id' needs a type argument` |
-| `generic_pub` | `2:9: error: unexpected token` | `2:9: error: generic functions cannot be pub` |
+| `generic_pub` | `2:9: error: unexpected token` | `2:9: error: generic functions cannot be pub`[^p34-l26-2] |
 | `generic_two_params` | `2:7: error: unexpected token` | `2:9: error: only one type parameter is supported` |
 | `generic_void_arg` | `2:5: error: unexpected token` | `9:19: error: 'void' cannot be a generic type argument` |
 | `generic_recursive` | `3:8: error: unexpected token` | `10:17: error: recursive generic calls are not supported` |
+
+[^p34-l26-2]: 该行是 v0.26.0 的历史对照。Phase 34 已解禁 L26-2（`pub` 泛型函数），见 §2.5 的「P34 覆盖」与 [phase34-draft.md](phase34-draft.md) §1.4。
 
 旧编译器在**声明处**就失败，新断言要求的行、列与文案全部不同，说明断言不是空转。
 

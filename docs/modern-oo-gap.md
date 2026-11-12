@@ -87,7 +87,7 @@ Phase 30 收口后，CT 的 OO 骨架已经闭合：trait 动态派发 + 默认�
 | `trait B: A`（supertrait） | `error: unexpected token` |
 | 泛型 `Drop`（`impl Drop for Box<T>`） | `error: unexpected token` |
 | 泛型 typedef（`typedef void (*CB<T>)(T *)`） | `error: unexpected token` |
-| `pub` 泛型函数（跨单元） | `error: generic functions cannot be pub` |
+| `pub` 泛型函数（跨单元） | 已在 P34 关闭（模板体写在 `.h.ct`，消费方发 `static` 实例；跨单元固有方法见 P34 O2） |
 | 函数返回函数指针 | `error: unexpected token` |
 | 闭包作普通函数指针实参 | `error: a closure cannot be used where a plain function pointer is expected` |
 | 闭包作 trait 方法实参（SH-65） | `error: unknown expression node` |
