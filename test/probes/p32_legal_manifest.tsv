@@ -1,0 +1,140 @@
+path	rc	stderr
+examples/tour/01_vtable/minimal/prog.ct	0	
+examples/tour/01_vtable/neg_missing_method/prog.ct	1	examples/tour/01_vtable/neg_missing_method/prog.ct:18:21: error: trait method 'name' is not implemented for struct 'Rect'\nctc: 1 error(s) generated
+examples/tour/01_vtable/two_impls/prog.ct	0	
+examples/tour/02_iface_value/param/prog.ct	0	
+examples/tour/02_iface_value/return_pick/prog.ct	0	
+examples/tour/03_iface_field/ptr_field/prog.ct	0	
+examples/tour/03_iface_field/value_field/prog.ct	0	
+examples/tour/04_map_instance/neg_unbound/prog.ct	1	examples/tour/04_map_instance/neg_unbound/prog.ct:31:1: error: trait method 'flush' is not bound by the map
+examples/tour/04_map_instance/ns_qualified/prog.ct	0	
+examples/tour/04_map_instance/two_instances/prog.ct	0	
+examples/tour/06_type_alias/neg_plain_unit/prog.ct	1	examples/tour/06_type_alias/neg_plain_unit/prog.ct:9:1: error: a type alias is only allowed in a .h.ct or .m.ct unit\nctc: 1 error(s) generated
+examples/tour/07_map_namespace/dynamic/prog.ct	0	
+examples/tour/09_closure/literal_capture/prog.ct	0	
+examples/tour/09_closure/neg_capture_write/prog.ct	1	examples/tour/09_closure/neg_capture_write/prog.ct:11:1: error: a captured variable cannot be reassigned inside a closure\nexamples/tour/09_closure/neg_capture_write/prog.ct:11:1: note: tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }\nctc: 1 error(s) generated
+examples/tour/09_closure/pair_by_hand/prog.ct	0	
+examples/tour/10_loop/count/prog.ct	0	
+examples/tour/10_loop/neg_braceless/prog.ct	1	examples/tour/10_loop/neg_braceless/prog.ct:10:13: error: loop body must be a block\nctc: 1 error(s) generated
+examples/tour/10_loop/range/prog.ct	0	
+examples/tour/11_variadic/forward/prog.ct	0	
+examples/tour/11_variadic/sums/prog.ct	0	
+examples/tour/13_check/arity/prog.ct	1	examples/tour/13_check/arity/prog.ct:29:22: error: arity mismatch: 'add' takes 2 argument(s), 1 given
+examples/tour/13_check/clean/prog.ct	0	
+examples/tour/13_check/json/prog.ct	1	examples/tour/13_check/json/prog.ct:27:22: error: arity mismatch: 'add' takes 2 argument(s), 1 given
+examples/tour/14_default_method/expand_and_override/prog.ct	0	
+examples/tour/14_default_method/neg_cycle/prog.ct	1	examples/tour/14_default_method/neg_cycle/prog.ct:6:1: error: trait 'Loop' has no non-default method to break the cycle\nctc: 1 error(s) generated
+examples/tour/15_memory/borrow_delete/prog.ct	1	examples/tour/15_memory/borrow_delete/prog.ct:24:1: error: a borrowed pointer cannot be deleted\nctc: 1 error(s) generated
+examples/tour/15_memory/borrow_handback/prog.ct	0	
+examples/tour/15_memory/box_borrow/prog.ct	0	
+examples/tour/15_memory/box_escape/prog.ct	0	
+examples/tour/15_memory/drop_loop_break/prog.ct	0	
+examples/tour/15_memory/drop_paths/prog.ct	0	
+examples/tour/15_memory/field_cascade_missed/prog.ct	0	
+examples/tour/15_memory/field_cascade/prog.ct	0	
+examples/tour/15_memory/leak_warning/prog.ct	1	examples/tour/15_memory/leak_warning/prog.ct:22: error: potential leak: 'p' (Box*) allocated but never deleted
+examples/tour/15_memory/own_factory/prog.ct	1	examples/tour/15_memory/own_factory/prog.ct:30:1: error: 'own' requires a malloc or calloc initialiser\nctc: 1 error(s) generated
+examples/tour/16_diagnostics/amb_json/prog.ct	1	examples/tour/16_diagnostics/amb_json/prog.ct:33:14: error: ambiguous method: 'len' declared by 'Sizer' and 'Meter'; 'Sizer' is used
+examples/tour/16_diagnostics/amb_text/prog.ct	1	examples/tour/16_diagnostics/amb_text/prog.ct:35:22: error: ambiguous method: 'len' declared by 'Sizer' and 'Meter'; 'Sizer' is used
+examples/tour/16_diagnostics/cap_errors/prog.ct	1	examples/tour/16_diagnostics/cap_errors/prog.ct:12:15: error: trait method 'f' is not implemented for struct 'S0'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:19:15: error: trait method 'f' is not implemented for struct 'S1'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:26:15: error: trait method 'f' is not implemented for struct 'S2'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:33:15: error: trait method 'f' is not implemented for struct 'S3'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:40:15: error: trait method 'f' is not implemented for struct 'S4'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:47:15: error: trait method 'f' is not implemented for struct 'S5'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:54:15: error: trait method 'f' is not implemented for struct 'S6'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:61:15: error: trait method 'f' is not implemented for struct 'S7'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:68:15: error: trait method 'f' is not implemented for struct 'S8'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:75:15: error: trait method 'f' is not implemented for struct 'S9'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:82:16: error: trait method 'f' is not implemented for struct 'S10'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:89:16: error: trait method 'f' is not implemented for struct 'S11'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:96:16: error: trait method 'f' is not implemented for struct 'S12'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:103:16: error: trait method 'f' is not implemented for struct 'S13'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:110:16: error: trait method 'f' is not implemented for struct 'S14'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:117:16: error: trait method 'f' is not implemented for struct 'S15'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:124:16: error: trait method 'f' is not implemented for struct 'S16'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:131:16: error: trait method 'f' is not implemented for struct 'S17'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:138:16: error: trait method 'f' is not implemented for struct 'S18'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:145:16: error: trait method 'f' is not implemented for struct 'S19'\nexamples/tour/16_diagnostics/cap_errors/prog.ct:152:16: error: trait method 'f' is not implemented for struct 'S20'\nctc: too many errors, stopping
+examples/tour/16_diagnostics/cap_fields/prog.ct	1	examples/tour/16_diagnostics/cap_fields/prog.ct:70:1: error: too many fields in struct 'Big' (limit 64)
+examples/tour/16_diagnostics/loop_shadow_json/prog.ct	1	examples/tour/16_diagnostics/loop_shadow_json/prog.ct:9:9: error: loop shadows the outer 'i'; use a native for to name the inner counter
+examples/tour/16_diagnostics/loop_shadow_text/prog.ct	1	examples/tour/16_diagnostics/loop_shadow_text/prog.ct:12:9: error: loop shadows the outer 'i'; use a native for to name the inner counter
+examples/tour/16_diagnostics/mixed_json/prog.ct	1	examples/tour/16_diagnostics/mixed_json/prog.ct:20:9: error: signature mismatch: 'f' in impl of 'Left' for 'S': takes 1 parameter(s), the trait declares 2\nexamples/tour/16_diagnostics/mixed_json/prog.ct:40:7: error: ambiguous method: 'f' declared by 'Left' and 'Right'; 'Left' is used\nexamples/tour/16_diagnostics/mixed_json/prog.ct:41:13: error: type mismatch: 'scale' argument 1: expected 'int', got 'char *'\nexamples/tour/16_diagnostics/mixed_json/prog.ct:43:5: error: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int\nexamples/tour/16_diagnostics/mixed_json/prog.ct:44:9: error: loop shadows the outer 'i'; use a native for to name the inner counter
+examples/tour/16_diagnostics/note_json/prog.ct	1	examples/tour/16_diagnostics/note_json/prog.ct:10:1: error: a captured variable cannot be reassigned inside a closure\nexamples/tour/16_diagnostics/note_json/prog.ct:10:1: note: tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }\nctc: 1 error(s) generated
+examples/tour/16_diagnostics/note_text/prog.ct	1	examples/tour/16_diagnostics/note_text/prog.ct:10:1: error: a captured variable cannot be reassigned inside a closure\nexamples/tour/16_diagnostics/note_text/prog.ct:10:1: note: tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }\nctc: 1 error(s) generated
+examples/tour/16_diagnostics/recover_multi/prog.ct	1	examples/tour/16_diagnostics/recover_multi/prog.ct:14:14: error: trait method 'f' is not implemented for struct 'A'\nexamples/tour/16_diagnostics/recover_multi/prog.ct:21:14: error: trait method 'f' is not implemented for struct 'B'\nexamples/tour/16_diagnostics/recover_multi/prog.ct:28:14: error: trait method 'f' is not implemented for struct 'C'\nctc: 3 error(s) generated
+examples/tour/16_diagnostics/sig_json/prog.ct	1	examples/tour/16_diagnostics/sig_json/prog.ct:15:9: error: signature mismatch: 'add' in impl of 'Calc' for 'Bad': takes 1 parameter(s), the trait declares 2
+examples/tour/16_diagnostics/sig_return/prog.ct	1	examples/tour/16_diagnostics/sig_return/prog.ct:15:11: error: signature mismatch: 'get' in impl of 'Ident' for 'S': return type 'char *' does not match the trait's 'int'
+examples/tour/16_diagnostics/sig_text/prog.ct	1	examples/tour/16_diagnostics/sig_text/prog.ct:15:9: error: signature mismatch: 'add' in impl of 'Calc' for 'Bad': takes 1 parameter(s), the trait declares 2
+examples/tour/16_diagnostics/type_arg/prog.ct	1	examples/tour/16_diagnostics/type_arg/prog.ct:12:12: error: type mismatch: 'scale' argument 1: expected 'int', got 'char *'
+examples/tour/16_diagnostics/type_loop/prog.ct	1	examples/tour/16_diagnostics/type_loop/prog.ct:13:5: error: type mismatch: 'loop' count must be an integer (got 'double'); the value is converted to int
+examples/tour/17_cli/emit_map_instance/prog.ct	0	
+examples/tour/17_cli/emit_map_namespace/prog.ct	0	
+examples/tour/17_cli/ignore_inc_check/prog.ct	0	
+examples/tour/17_cli/ignore_inc_compile/prog.ct	0	
+examples/tour/18_ctor/four_positions/prog.ct	0	
+examples/tour/18_ctor/heap_row/prog.ct	0	
+test/ast/01_hello/prog.ct	0	
+test/ast/02_expr/prog.ct	0	
+test/ast/03_control/prog.ct	0	
+test/ast/04_void/prog.ct	0	
+test/ast/05_struct/prog.ct	0	
+test/ast/06_arrays/prog.ct	0	
+test/ast/07_typedef/prog.ct	0	
+test/ast/08_static/prog.ct	0	
+test/ast/09_methods/prog.ct	0	
+test/ast/10_iface_array/prog.ct	0	
+test/ast/100_loop_contextual_label/prog.ct	0	
+test/ast/101_loop_two_counters/prog.ct	1	test/ast/101_loop_two_counters/prog.ct:16:9: error: loop shadows the outer 'i'; use a native for to name the inner counter
+test/ast/102_loop_range_basic/prog.ct	0	
+test/ast/103_loop_range_eval_once/prog.ct	0	
+test/ast/104_loop_range_empty/prog.ct	0	
+test/ast/105_loop_range_control/prog.ct	0	
+test/ast/106_loop_range_nested/prog.ct	1	test/ast/106_loop_range_nested/prog.ct:13:9: error: loop shadows the outer 'i'; use a native for to name the inner counter
+test/ast/107_loop_range_closure_capture/prog.ct	0	
+test/ast/108_loop_range_contextual/prog.ct	0	
+test/ast/109_range_init_basic/prog.ct	0	
+test/ast/11_map/prog.ct	0	
+test/ast/110_range_init_static_const/prog.ct	0	
+test/ast/111_range_init_local_static/prog.ct	0	
+test/ast/112_range_init_reads_outer/prog.ct	0	
+test/ast/113_range_init_negative_bounds/prog.ct	0	
+test/ast/114_range_init_single/prog.ct	0	
+test/ast/115_range_init_explicit_dim/prog.ct	0	
+test/ast/117_range_init_multi_declarator/prog.ct	0	
+test/ast/12_rvalue_iface/prog.ct	0	
+test/ast/120_map_each_closure/prog.ct	1	test/ast/120_map_each_closure/prog.ct:8:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/121_map_each_closure_var/prog.ct	1	test/ast/121_map_each_closure_var/prog.ct:6:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/122_map_each_tier1/prog.ct	1	test/ast/122_map_each_tier1/prog.ct:6:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/123_generic_identity/prog.ct	0	
+test/ast/124_generic_struct/prog.ct	0	
+test/ast/125_generic_type_positions/prog.ct	0	
+test/ast/126_generic_struct_tag/prog.ct	0	
+test/ast/127_generic_name_retry/prog.ct	0	
+test/ast/128_generic_type_operands/prog.ct	0	
+test/ast/129_generic_tparam_value_false_positive/prog.ct	0	
+test/ast/13_map_instance/prog.ct	0	
+test/ast/130_generic_build_mode/prog.ct	1	test/ast/130_generic_build_mode/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/131_generic_cross_unit/prog.ct	1	test/ast/131_generic_cross_unit/prog.ct:3:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/132_foreach_array_values/prog.ct	0	
+test/ast/133_foreach_control_flow/prog.ct	0	
+test/ast/134_foreach_nested_pointer/prog.ct	1	test/ast/134_foreach_nested_pointer/prog.ct:14:9: error: foreach shadows the outer 'item'; use a native for to name the binding
+test/ast/135_foreach_contextual/prog.ct	0	
+test/ast/136_generic_bound/prog.ct	0	
+test/ast/137_generic_bound_ptr/prog.ct	0	
+test/ast/138_generic_struct/prog.ct	0	
+test/ast/139_generic_struct_two/prog.ct	0	
+test/ast/14_map_dispatch/prog.ct	0	
+test/ast/140_foreach_vec/prog.ct	0	
+test/ast/141_foreach_map/prog.ct	0	
+test/ast/142_vec_api/prog.ct	0	
+test/ast/143_map_api/prog.ct	0	
+test/ast/144_generic_struct_user/prog.ct	0	
+test/ast/145_generic_closure/prog.ct	0	
+test/ast/146_generic_ownership/prog.ct	0	
+test/ast/147_generic_impl/prog.ct	0	
+test/ast/148_into_ptr/prog.ct	0	
+test/ast/149_into_lvalue/prog.ct	0	
+test/ast/15_map_args/prog.ct	0	
+test/ast/150_into_rvalue/prog.ct	0	
+test/ast/151_into_methods/prog.ct	0	
+test/ast/152_into_trait_method/prog.ct	0	
+test/ast/153_into_type_host/prog.ct	1	test/ast/153_into_type_host/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/154_into_shim/prog.ct	1	test/ast/154_into_shim/prog.ct:3:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/155_into_value_host/prog.ct	1	test/ast/155_into_value_host/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/156_into_scalar/prog.ct	1	test/ast/156_into_scalar/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/157_into_chain/prog.ct	0	
+test/ast/158_into_control/prog.ct	0	
+test/ast/159_into_once/prog.ct	0	
+test/ast/16_iface_field_box/prog.ct	0	
+test/ast/160_group_a/prog.ct	0	
+test/ast/161_group_b/prog.ct	1	test/ast/161_group_b/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/162_group_c/prog.ct	0	
+test/ast/163_group_d/prog.ct	1	test/ast/163_group_d/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/164_into_index/prog.ct	0	
+test/ast/165_vec_subscript/prog.ct	0	
+test/ast/166_map_subscript/prog.ct	0	
+test/ast/167_vec_subscript_deref/prog.ct	0	
+test/ast/168_vec_subscript_member/prog.ct	0	
+test/ast/169_vec_subscript_call/prog.ct	0	
