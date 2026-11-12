@@ -1214,9 +1214,7 @@ static int emit_generic_defs(struct Emitter *self, int u)
 {
     int i, t;
     for (i = 0; i < self->sym->nginsts; i++) {
-        if (u >= 0
-            && (self->sym->ginsts[i].func < self->units[u].fn_start
-                || self->sym->ginsts[i].func >= self->units[u].fn_end))
+        if (u >= 0 && self->sym->ginsts[i].owner != u)
             continue;
         t = self->sym->funcs[self->sym->ginsts[i].func].body;
         if (t < 0) continue;

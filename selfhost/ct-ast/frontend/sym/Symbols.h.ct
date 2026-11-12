@@ -311,6 +311,11 @@ pub struct GenericInst {
     int  func;
     char targ[160];
     char cname[160];
+    /* Phase 34 (D34-1): the unit that asked for the instance. A `pub` template
+       lives in a `.h.ct` header, so `func` points at the template owner's row;
+       only the asking unit may emit the `static` copy, otherwise the header
+       unit writes an unused one and the consumer calls an undefined symbol. */
+    int  owner;
     /* Phase 28: where the instance was asked for, so a missing implementation
        is reported at the call site rather than at the template; `checked`
        keeps a multi-unit build from re-reporting the same row. */

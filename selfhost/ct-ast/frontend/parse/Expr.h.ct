@@ -1536,6 +1536,7 @@ impl ExprOps for Expr {
 
         for (i = 0; i < self->sym->nginsts; i++)
             if (self->sym->ginsts[i].func == gfi
+                && self->sym->ginsts[i].owner == self->cur_unit
                 && strcmp(self->sym->ginsts[i].targ, targ) == 0)
                 return i;
         if (self->sym->nginsts >= MAX_GENERIC_INSTS)
@@ -1576,6 +1577,7 @@ impl ExprOps for Expr {
                 snprintf(self->sym->funcs[ni].ptype[k], MAX_TEXT, "%s", tmp);
         i = self->sym->nginsts;
         self->sym->ginsts[i].func = gfi;
+        self->sym->ginsts[i].owner = self->cur_unit;
         snprintf(self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
         snprintf(self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);
         self->sym->ginsts[i].line = line;

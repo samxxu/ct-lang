@@ -1394,7 +1394,8 @@ p26_diag() {
     fi
 }
 p26_diag generic_missing_arg 10:14 "generic function 'id' needs a type argument"
-p26_diag generic_pub 2:9 "generic functions cannot be pub"
+# P34 S1b: L26-2 lifted — `pub T id<T>(T x)` is now legal. The old generic_pub
+# error fixture lives at test/ast/228_pub_generic_fn/prog.ct as a positive case.
 p26_diag generic_two_params 2:9 "only one type parameter is supported"
 p26_diag generic_void_arg 9:19 "'void' cannot be a generic type argument"
 p26_diag generic_recursive 10:17 "recursive generic calls are not supported"
@@ -1446,7 +1447,7 @@ p26_chk() {
     fi
 }
 p26_chk generic_missing_arg "generic function 'id' needs a type argument"
-p26_chk generic_pub "generic functions cannot be pub"
+# P34 S1b: L26-2 lifted — `pub T id<T>(T x)` is now legal.
 p26_chk generic_two_params "only one type parameter is supported"
 p26_chk generic_void_arg "'void' cannot be a generic type argument"
 p26_chk generic_recursive "recursive generic calls are not supported"
@@ -6305,14 +6306,18 @@ else
     bad "p29: builtin_std build" "$(head -3 "$work/p29w1b.err")"
 fi
 
-# E29-13 / B6: a `pub` generic function stays rejected across units (L26-2).
-if "$work/ct-ast" build test/modules/errors/generic_struct_pub_fn.ct -o "$work/p29b6" \
-        >"$work/p29b6.out" 2>"$work/p29b6.err"; then
-    bad "p29: generic_struct_pub_fn" "expected L26-2, got exit 0"
-elif grep -Fq "generic functions cannot be pub" "$work/p29b6.err"; then
-    ok "p29 (generic_struct_pub_fn)"
+# E29-13 / B6: P34 S1b — L26-2 is lifted. A `pub` generic function in a `.h.ct`
+# header now compiles, links and runs: the consumer emits its own `static`
+# instance while the header unit writes none. The old negative fixture is gone
+# and this positive case replaces it (E34-1).
+rm -rf "$work/p34g"
+if "$work/ct-ast" build test/modules/p34_pub_generic/main.ct -o "$work/p34g" \
+        >"$work/p34g.out" 2>"$work/p34g.err" \
+   && "$work/p34g" >"$work/p34g.stdout" 2>&1 \
+   && cmp -s "$work/p34g.stdout" test/modules/p34_pub_generic/expected.out; then
+    ok "p29→p34 (a pub generic function runs across units)"
 else
-    bad "p29: generic_struct_pub_fn" "$(head -2 "$work/p29b6.err")"
+    bad "p29→p34 pub generic" "$(cat "$work/p34g.err" "$work/p34g.stdout" 2>/dev/null)"
 fi
 
 # 144: one C struct per instance, and an inherent method per instance.

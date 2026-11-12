@@ -1,0 +1,18 @@
+// Phase 34 S1b / L34-2: a `pub` generic free function (L26-2 lifted).
+// Before S1b this was test/ast/errors/generic_pub.ct — the parser rejected
+// `pub` on a generic free function. It is now legal; the template body is
+// parsed in place (same-unit consumption) and emitted as a static instance.
+#include <stdio.h>
+
+pub T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    int a = id<int>(7);
+    long b = id<long>(1234567890123L);
+    printf("%d %ld\n", a, b);
+    return 0;
+}

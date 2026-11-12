@@ -1,0 +1,13 @@
+// Phase 34 S1b: consumer unit that imports a header-declared `pub` generic
+// function and instantiates it at `int`. The call `id<int>(3)` must resolve
+// to a static instance emitted in this unit.
+#include <stdio.h>
+
+import lib;
+
+int main(void)
+{
+    int n = id<int>(3);
+    printf("%d\n", n);
+    return 0;
+}

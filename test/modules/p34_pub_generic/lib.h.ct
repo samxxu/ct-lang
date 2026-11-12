@@ -1,0 +1,7 @@
+// Phase 34 S1b: a `pub` generic function whose template body lives in a
+// `.h.ct` header and is consumable across units. L26-2 currently rejects
+// `pub T id<T>(T x)` at parse time; S1b lifts that restriction.
+pub T id<T>(T x)
+{
+    return x;
+}

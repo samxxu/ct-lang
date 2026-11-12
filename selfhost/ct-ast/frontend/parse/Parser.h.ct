@@ -1281,8 +1281,10 @@ impl ParseOps for Parser {
         tparam[0] = 0;
         bound[0] = 0;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
-            if (is_pub)
-                return self->sup->fail("generic functions cannot be pub");
+            /* Phase 34 (O1): L26-2 lifted — `pub T id<T>(T x)` is legal.
+               Template body must live in a `.h.ct` header; the `.ct` import
+               rule (only a .h.ct unit can be imported) already enforces the
+               visibility contract, so no new diagnostic is needed. */
             self->sup->lex_next();
             if (self->lex->tok != T_ID)
                 return self->sup->fail("expected a type parameter name");
