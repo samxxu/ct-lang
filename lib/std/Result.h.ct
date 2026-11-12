@@ -11,9 +11,15 @@
  * `release` mirrors `Option.release`: the payloads are values, so there is
  * nothing to free and the method is a no-op (D34-8).
  *
+ * `unwrap` / `unwrap_err` are the checked reads: they abort like `Option.unwrap`
+ * when the result is on the other side, so a missing payload is never silently
+ * mistaken for a real one. `set_ok` / `set_err` are the mutators that flip the
+ * discriminant; the payload of the other side is left untouched but gated.
+ *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 #include <stdio.h>
+#include <stdlib.h>
 
 pub struct Result<T, E> {
     int ok;
@@ -45,6 +51,36 @@ impl<T, E> Result<T, E> {
             return self.err;
         }
         return dflt;
+    }
+
+    /* The success payload, or a hard error: a failure has nothing to answer. */
+    T unwrap() {
+        if (!self.ok) {
+            fprintf(stderr, "Result: unwrap on an error value\n");
+            abort();
+        }
+        return self.value;
+    }
+
+    /* The error payload, or a hard error: a success carries no error. */
+    E unwrap_err() {
+        if (self.ok) {
+            fprintf(stderr, "Result: unwrap_err on an ok value\n");
+            abort();
+        }
+        return self.err;
+    }
+
+    /* Makes the result a success with the given payload. */
+    void set_ok(T v) {
+        self.value = v;
+        self.ok = 1;
+    }
+
+    /* Makes the result a failure with the given error. */
+    void set_err(E e) {
+        self.err = e;
+        self.ok = 0;
     }
 
     void release() {

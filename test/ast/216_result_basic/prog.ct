@@ -1,6 +1,7 @@
-/* E34-6 (P34 S9c): the built-in `Result<T, E>`. Success is `{ 1, v, err }`,
+/* E34-6 (P34 S9c/S9d): the built-in `Result<T, E>`. Success is `{ 1, v, err }`,
    failure `{ 0, v, err }`; the methods are ordinary impl members, so no
-   compiler branch is involved. */
+   compiler branch is involved. `unwrap` / `unwrap_err` are the checked reads,
+   `set_ok` / `set_err` the mutators. */
 #include <stdio.h>
 
 int main(void)
@@ -13,8 +14,17 @@ int main(void)
     int v = ok.unwrap_or(-1);
     int d = bad.unwrap_or(-1);
     char *msg = bad.unwrap_err_or("none");
+    int strict = ok.unwrap();
+    Result<int, char *> shifted = { 0, 0, "bad" };
+    shifted.set_ok(5);
+    int shifted_ok = shifted.is_ok();
+    shifted.set_err("oops");
+    int shifted_err = shifted.is_err();
+    char *detail = shifted.unwrap_err();
     printf("%d %d %d %d %d %s\n", good, not_bad, failed, v, d, msg);
+    printf("%d %d %d %s\n", strict, shifted_ok, shifted_err, detail);
     ok.release();
     bad.release();
+    shifted.release();
     return 0;
 }
