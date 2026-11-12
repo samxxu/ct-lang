@@ -1,0 +1,10 @@
+// E33-15: `Box<T: Show>` comes from another unit and `Show` is invisible here,
+// so instantiating it is exactly one L33-6.
+import elem;
+
+int main(void)
+{
+    Box<int> b;
+    b.v = 1;
+    return b.v;
+}

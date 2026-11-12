@@ -2383,6 +2383,64 @@ else
     bad "p31_cross_unit_owned" "$(cat "$work/mfo.err" "$work/mfo.cc" "$work/mfo.stdout" 2>/dev/null)"
 fi
 
+# Phase 33 O3 (E33-13/E33-14): the consumer's generated C carries private static
+# copies of a foreign element's instance methods, the container header keeps the
+# type only, and the program runs to its recorded output.
+rm -rf "$work/cu-out"
+mkdir -p "$work/cu-out"
+if "$work/ct-ast" build --emit-c test/modules/cross_unit_elem/main.ct -o "$work/cu-out" \
+        >"$work/cu.out" 2>"$work/cu.err" \
+   && ! grep -q 'Vec_Point_push\|Vec_Show__iface_push\|__elem_retain' "$work/cu-out/Vec.h" \
+   && grep -q 'static .*Vec_Point_push' "$work/cu-out/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 "$work/cu-out"/*.c -o "$work/cu.bin" 2>"$work/cu.cc" \
+   && "$work/cu.bin" >"$work/cu.stdout" 2>&1 \
+   && cmp -s "$work/cu.stdout" test/modules/cross_unit_elem/expected.out; then
+    ok "p33_cross_unit (a foreign element runs; the header keeps the type only)"
+else
+    bad "p33_cross_unit" "$(cat "$work/cu.err" "$work/cu.cc" "$work/cu.stdout" 2>/dev/null)"
+fi
+# ... and every copied method stays a local symbol: no `Vec_<element>_*` method
+# is a duplicate global, so two consumers never collide at link time.
+rm -rf "$work/cu-obj"
+mkdir -p "$work/cu-obj"
+cu_obj_ok=1
+for cu_c in "$work/cu-out"/*.c; do
+    if [ ! -f "$cu_c" ]; then cu_obj_ok=0; break; fi
+    "$CC" -Wall -Wextra -std=c99 -c "$cu_c" \
+        -o "$work/cu-obj/$(basename "$cu_c" .c).o" 2>/dev/null || cu_obj_ok=0
+done
+if [ "$cu_obj_ok" -eq 1 ] \
+   && ! nm "$work/cu-obj"/*.o 2>/dev/null | grep -Eq '^[0-9a-fA-F]+ T _?Vec_(Point|Show__iface)_' \
+   && nm "$work/cu-obj/main.o" 2>/dev/null | grep -Eq ' t _?Vec_Point_push$'; then
+    ok "p33_nm (the consumer copies are local symbols, no duplicate global)"
+else
+    bad "p33_nm" "a copied method is not a local symbol, or a global duplicate appeared"
+fi
+# E33-15: the same block's second build, in its own directory: a bound trait the
+# instantiating unit cannot see is one L33-6, never a silent pass.
+rm -rf "$work/cu-bad"
+mkdir -p "$work/cu-bad"
+if "$work/ct-ast" build --emit-c test/modules/errors/bound_trait_invisible/main.ct \
+        -o "$work/cu-bad" >"$work/cub.out" 2>"$work/cub.err"; then
+    bad "p33_cross_unit (bound visibility)" "the build was accepted"
+elif ! grep -q "unknown trait 'Show' in a generic bound" "$work/cub.err"; then
+    bad "p33_cross_unit (bound visibility)" "$(cat "$work/cub.err")"
+elif [ "$(grep -c 'error:' "$work/cub.err")" -ne 1 ]; then
+    bad "p33_cross_unit (bound visibility)" "expected exactly one diagnostic: $(cat "$work/cub.err")"
+else
+    ok "p33_cross_unit (an invisible bound trait is one L33-6)"
+fi
+# ... and a bounded declaration with no instantiation is accepted. 208 has no
+# `prog.ct` on purpose: it is driven here, not by the behavioural loop.
+rm -rf "$work/cu-208"
+mkdir -p "$work/cu-208"
+if "$work/ct-ast" build --emit-c test/ast/208_bound_decl_only/decl.ct \
+        -o "$work/cu-208" >"$work/cu208.out" 2>"$work/cu208.err"; then
+    ok "p33_cross_unit (a bounded declaration alone is accepted)"
+else
+    bad "p33_cross_unit (declaration only)" "$(cat "$work/cu208.err")"
+fi
+
 # ... and two namespaces exporting one bare type name make it ambiguous.
 if "$work/ct-ast" build --emit-c test/modules/ambig_type/main.ct -o "$work/mod-bad" \
         >"$work/mat.out" 2>"$work/mat.err"; then

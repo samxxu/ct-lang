@@ -1,0 +1,11 @@
+// E33-15: a bounded generic struct declaration with no instantiation is
+// accepted. The bound name is a spelling until a unit creates an instance, so
+// the trait may be declared in a unit this program does not see.
+struct Box<T: Nope> {
+    T v;
+}
+
+int main(void)
+{
+    return 0;
+}

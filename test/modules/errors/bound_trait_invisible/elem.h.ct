@@ -1,0 +1,5 @@
+// E33-15: the bound names a trait this unit does not declare and the consumer
+// cannot see, so an instance created here is L33-6 rather than a silent pass.
+pub struct Box<T: Show> {
+    T v;
+}
