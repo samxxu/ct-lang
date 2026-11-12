@@ -336,3 +336,28 @@ S0 的 5 项核对按两级处置，**不需要再请示**：
 - **第 2/3 项**（`cstr_*` 签名不符、`CStr` 声明进不来）不成立 → **自动回退**到 `b7f384e` 的 Phase 36 方案：恢复 `lib/std/Str.h.ct`（显式 `impl Drop for Str` + 内联释放）、S4a1/S4a2/S4b 三片与库预算 240–420，并同步 `docs/roadmap.md` 的中英文两行。
 - **第 1/4/5 项**（取不到 ct-pkg 包、基线不绿、跨包 import 不可用）不成立 → **阻塞相位、不自动回退**，等依赖落地后重跑 S0；E36-6/E36-7/E36-10 保持未完成（与 S4b 一致）。
 - 两种处置都只在变更记录里写明原因；不直接用 `git checkout` 掩盖历史。
+
+## 15 实施期变更记录（只增不改正文判据）
+
+1. **S0 实测与自动回退（2026-11-13，baseline `b461a06`）**
+
+   在本环境实测（`ct get std` 取到 `std 0.2.0`，`ct.lock` 记 `git b04b7d629956b3c25aacb04bdaffbf80058f5b90`、摘要 `cee740b3…`）：
+
+   - **第 1 项不成立**：包内模块是 `std/{arena,fs,io,map,math,num,str,test,utf8,vec}`，**没有 `std/string`**；`std/str` 是 `char *` 的 `.m.ct` 映射层（`std_str_*`），不含 `Str`，也不含 `CStr`。
+   - **第 2 项不成立**：无 `std/string/*.shim.h`；全包无 `CStr` typedef、无任一 `cstr_*` 声明。
+   - **第 3 项不成立（实测）**：`Str.h.ct` 内的 `#include "str.shim.h"` 会进产物，但 `ct build --emit-c` 打印的 cc 行只有 `-I <outdir>`，没有 shim 目录；代码侧 `Module.h.ct:1437/1476` 的 `-I` 仅对 `is_map && has_shim` 生效。
+   - **第 4 项通过**：`bash selfhost/check-ast.sh` 在 `b461a06` 上 **1283 passed / 0 failed**。
+   - **第 5 项不成立**：没有可 import 的真实 `Str`。
+
+   判定：按 §14「第 **2/3** 项不成立 → 自动回退」，采用 `b7f384e` 的 Phase 36 方案。第 1/4/5 项的阻塞条款不适用：包可取、基线绿，缺的是 `std/string` 与 shim 契约本身，正是第 2/3 项的触发条件。
+
+   生效差异（正文判据的宽度不变，只是 O2 的实现位置与红证口径回退）：
+
+   - **O2** 改为 `lib/std/Str.h.ct`：`struct Str { char *data; int len; } use Drop;` + 显式 `impl Drop for Str`（`free(self->data)` 内联，`data=0; len=-1`）；固有 `retain`/`release`；自由函数 `str_from`/`str_from_len`/`str_len`/`str_slice`/`str_concat`/`str_compare`/`str_c_str`。`slice`/`concat` 深拷贝；`c_str` 返回临时 NUL 结尾副本（调用方释放）；不依赖 NUL，保留内嵌 `\0`。
+   - **§6** 的 S4a/S4b 两行替换为 S4a1（`Str` 类型 + 显式 `Drop`，50–80）/ S4a2（`retain`/`release` + `from`/`from_len`/`len`，40–70）/ S4b（`slice`/`concat`/`compare`/`c_str`/内嵌 `\0`，90–150）三片；内置层加载器由 3 单元扩到 4 单元（`Driver.h.ct` / `Module.h.ct`），随 S4a1 落地。
+   - **§7** 的 E36-3 / E36-6 / E36-7 / E36-8 / E36-10 红证由「机制/库回归，父提交上已绿」改回**真实红证**：`Str` 当前不存在，父提交上对应夹具必红。
+   - **§10** 预算按 `b7f384e`：夹具 240–380、库 240–420；编译器仍 240–430。
+   - **§12** 的 `test/modules/p36_str_shim` 改为 `test/modules/p36_str`（本地 `Str` 跨单元）；`lib/std/README.md` 增加 `Str` 条目并说明回退原因。
+   - **D36-12 / D36-13 / D36-14** 的 ct-pkg 句柄表述作废，按 `b7f384e` 版执行（`lib/std` 内联 buffer；`own Str *` 指针形态；工厂返回的 `Str *` 用显式 `release`）。
+
+2. **切片顺序（2026-11-13）**：回退后 `Str` 不依赖泛型 Drop（显式非泛型 `impl Drop for Str` 已可用），故先落 `Str` 库与 230/231/232 夹具，再做泛型 Drop（225/226/227）与 `Option`/`Result` 的 `use Drop`（229）；判据编号与门禁不变。
