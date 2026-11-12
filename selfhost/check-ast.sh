@@ -3071,6 +3071,60 @@ else
     ok "p32 CLI (check --types accepts a legal program)"
 fi
 
+# Phase 32 S10 (L32-1..L32-6): one fixture per shape, each judged on its own.
+# A file's exit code alone would hide a second or a missing L32 line, so the
+# first line's position and the exact wording are both pinned here.
+p32_error() {
+    p32_f="$1"
+    p32_pos="$2"
+    p32_want="$3"
+    p32_out=$("$work/ct-ast" check --types "$p32_f" 2>&1)
+    p32_rc=$?
+    if [ "$p32_rc" -ne 1 ]; then
+        bad "p32 $p32_f" "expected rc=1, got $p32_rc: $(printf '%s\n' "$p32_out" | head -1)"
+    elif [ "$(printf '%s\n' "$p32_out" | grep -cF "$p32_want")" -ne 1 ]; then
+        bad "p32 $p32_f" "expected exactly one '$p32_want': $p32_out"
+    elif [ "$(printf '%s\n' "$p32_out" | grep -cE 'initializer:|assignment:|return:|argument [0-9]+:')" -ne 1 ]; then
+        bad "p32 $p32_f" "expected exactly one L32 line: $p32_out"
+    elif ! printf '%s\n' "$p32_out" | head -1 | grep -qF "$p32_f:$p32_pos: error: "; then
+        bad "p32 $p32_f" "expected first line '$p32_f:$p32_pos: error: ...', got: $p32_out"
+    else
+        ok "p32 $p32_f ($p32_pos, one L32 line)"
+    fi
+}
+p32_error test/ast/check_errors/check_init_ptr.ct 3:13 "initializer: expected 'int', got 'char *'"
+p32_error test/ast/check_errors/check_assign_ptr.ct 4:9 "assignment: expected 'int', got 'char *'"
+p32_error test/ast/check_errors/check_struct_assign.ct 7:9 "assignment: expected 'struct A', got 'struct B'"
+p32_error test/ast/check_errors/check_return_ptr.ct 3:12 "return: expected 'int', got 'char *'"
+p32_error test/ast/check_errors/check_return_struct.ct 6:12 "return: expected 'struct A', got 'struct B'"
+p32_error test/ast/check_errors/check_return_missing.ct 3:5 "return: missing a value (function returns 'int')"
+p32_error test/ast/check_errors/check_return_in_void.ct 3:12 "return: a value is not allowed in a void function"
+p32_error test/ast/check_errors/check_container_push.ct 4:12 "argument 1: expected 'int', got 'char *'"
+p32_error test/ast/check_errors/check_container_set.ct 4:14 "argument 2: expected 'int', got 'char *'"
+p32_error test/ast/check_errors/check_container_put.ct 4:16 "argument 2: expected 'int', got 'char *'"
+p32_error test/ast/check_errors/check_container_struct.ct 6:12 "argument 1: expected 'int', got 'struct A'"
+p32_error test/ast/check_errors/check_generic_arg.ct 10:18 "argument 1: expected 'int', got 'struct A'"
+
+# E32-10: the existing boxing diagnostic stays exactly one line, at the same
+# position, with or without `--types`; the new gate must not add a second one.
+p32_iface="test/ast/errors/check_iface_use.ct"
+p32_iface_plain=$("$work/ct-ast" check "$p32_iface" 2>&1)
+p32_iface_plain_rc=$?
+p32_iface_typed=$("$work/ct-ast" check --types "$p32_iface" 2>&1)
+p32_iface_typed_rc=$?
+if [ "$p32_iface_plain_rc" -ne 1 ] || [ "$p32_iface_typed_rc" -ne 1 ]; then
+    bad "p32 iface" "expected rc=1 in both modes ($p32_iface_plain_rc/$p32_iface_typed_rc)"
+elif [ "$(printf '%s\n' "$p32_iface_plain" | grep -cF 'the struct does not use this trait')" -ne 1 ] \
+    || [ "$(printf '%s\n' "$p32_iface_typed" | grep -cF 'the struct does not use this trait')" -ne 1 ]; then
+    bad "p32 iface" "expected exactly one existing diagnostic in both modes"
+elif ! printf '%s\n' "$p32_iface_typed" | head -1 | grep -qF "$p32_iface:7:16: error: the struct does not use this trait"; then
+    bad "p32 iface" "expected the baseline position, got: $(printf '%s\n' "$p32_iface_typed" | head -1)"
+elif [ "$(printf '%s\n' "$p32_iface_plain" | head -1)" != "$(printf '%s\n' "$p32_iface_typed" | head -1)" ]; then
+    bad "p32 iface" "--types changed the positioned line"
+else
+    ok "p32 iface (existing diagnostic unchanged under --types)"
+fi
+
 echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 # Every source diagnostic now carries the full position (`file:line:col: error:`);
