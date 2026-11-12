@@ -930,6 +930,74 @@ else
     bad "p34_inherent_objects" "$(head -3 "$work/minh-lib.cc")"
 fi
 
+# E34-11 (P34 S6): the generated header carries types and declarations only, a
+# generic instance is defined once per object, and the cache key is
+# directional -- two clean builds of the same source agree byte for byte, while
+# touching an imported header changes the consumer's key.
+rm -rf "$work/cache-src" "$mod-cache-a" "$mod-cache-b"
+mkdir -p "$work/cache-src" "$mod-cache-a" "$mod-cache-b"
+cp test/modules/p34_inherent/main.ct test/modules/p34_inherent/lib.h.ct \
+   test/modules/p34_inherent/expected.out "$work/cache-src/"
+if "$work/ct-ast" build --emit-c "$work/cache-src/main.ct" -o "$mod-cache-a" \
+        >"$work/mcache-a.out" 2>"$work/mcache-a.err" \
+   && "$work/ct-ast" build --emit-c "$work/cache-src/main.ct" -o "$mod-cache-b" \
+        >"$work/mcache-b.out" 2>"$work/mcache-b.err"; then
+    if cmp -s "$mod-cache-a/.ctcache/main.c.key" "$mod-cache-b/.ctcache/main.c.key" \
+       && cmp -s "$mod-cache-a/.ctcache/lib.c.key" "$mod-cache-b/.ctcache/lib.c.key"; then
+        ok "p34_cache_same (two clean builds share every key)"
+    else
+        bad "p34_cache_same" "keys differ: $(diff "$mod-cache-a/.ctcache/main.c.key" "$mod-cache-b/.ctcache/main.c.key" 2>/dev/null | head -2)"
+    fi
+    hdr_bad="$(grep -nE '^[a-z][a-z ]*[a-z0-9_]+\(.*\) \{$' "$mod-cache-a/lib.h" 2>/dev/null | head -2)"
+    if grep -q '^struct Counter {$' "$mod-cache-a/lib.h" 2>/dev/null && [ -z "$hdr_bad" ]; then
+        ok "p34_cache_header (the header carries types and declarations only)"
+    else
+        bad "p34_cache_header" "$hdr_bad"
+    fi
+    before="$(stat -f %m "$work/cache-src/lib.h.ct")"
+    touch -m -t 203001010000 "$work/cache-src/lib.h.ct"
+    after="$(stat -f %m "$work/cache-src/lib.h.ct")"
+    if [ "$before" != "$after" ]; then
+        ok "p34_cache_mtime (touch moved the source stamp)"
+    else
+        bad "p34_cache_mtime" "$before"
+    fi
+    if "$work/ct-ast" build --emit-c "$work/cache-src/main.ct" -o "$mod-cache-b" \
+            >"$work/mcache-b2.out" 2>"$work/mcache-b2.err"; then
+        if ! cmp -s "$mod-cache-a/.ctcache/main.c.key" "$mod-cache-b/.ctcache/main.c.key"; then
+            ok "p34_cache_dep (touching an imported header changes the consumer key)"
+        else
+            bad "p34_cache_dep" "$(cat "$mod-cache-a/.ctcache/main.c.key")"
+        fi
+        if cmp -s "$mod-cache-a/lib.c" "$mod-cache-b/lib.c"; then
+            ok "p34_cache_stable (a re-keyed rebuild keeps the product bytes)"
+        else
+            bad "p34_cache_stable" "$(diff "$mod-cache-a/lib.c" "$mod-cache-b/lib.c" 2>/dev/null | head -3)"
+        fi
+    else
+        bad "p34_cache_dep" "$(head -2 "$work/mcache-b2.err")"
+    fi
+else
+    bad "p34_cache_same" "$(cat "$work/mcache-a.err" "$work/mcache-b.err" 2>/dev/null | head -2)"
+fi
+rm -rf "$mod-p34i-obj"
+mkdir -p "$mod-p34i-obj"
+if "$work/ct-ast" build --emit-c test/modules/p34_pub_generic/main.ct -o "$mod-p34i-obj" \
+        >"$work/mp34i.out" 2>"$work/mp34i.err" \
+   && "$CC" -std=c99 -I "$mod-p34i-obj" -c "$mod-p34i-obj/lib.c" -o "$work/mp34i-lib.o" \
+        >"$work/mp34i.cc" 2>&1 \
+   && "$CC" -std=c99 -I "$mod-p34i-obj" -c "$mod-p34i-obj/main.c" -o "$work/mp34i-main.o" \
+        >>"$work/mp34i.cc" 2>&1; then
+    n="$(nm "$work/mp34i-lib.o" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ t _?id__ct[0-9]+$/ { c++ } END { print c + 0 }')"
+    [ "$n" = 1 ] && ok "p34_inst_once_lib (the owner defines one id instance)" \
+        || bad "p34_inst_once_lib" "$(nm "$work/mp34i-lib.o" 2>/dev/null | grep 'id__ct' | head -3)"
+    n="$(nm "$work/mp34i-main.o" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ t _?id__ct[0-9]+$/ { c++ } END { print c + 0 }')"
+    [ "$n" = 1 ] && ok "p34_inst_once_main (the consumer defines one id instance)" \
+        || bad "p34_inst_once_main" "$(nm "$work/mp34i-main.o" 2>/dev/null | grep 'id__ct' | head -3)"
+else
+    bad "p34_inst_once" "$(cat "$work/mp34i.err" "$work/mp34i.cc" 2>/dev/null | head -3)"
+fi
+
 
 # E34-2a / TEST-18 (P34 S3a): the `pub` generic templates now live in `.h.ct`
 # headers and are instantiated by a consumer, so a leaked type parameter would
