@@ -2096,6 +2096,23 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
   三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
   内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），须升级 `std` 包或删掉该 import。
+- **`pub` 泛型函数（Phase 34）**：`pub T f<T>(T x)` 合法（L26-2 已解禁），模板体必须写在 `.h.ct`
+  头单元里；消费方的每个 `f<int>(…)` 在本单元发一个 `static` 实例（`f__ct<N>`），生成 `.h`
+  只放类型、不放函数原型。`.ct` 单元里的 `pub` 声明仍不可被 import（`only a .h.ct unit can be
+  imported`）。
+- **非泛型固有 `impl Name { … }`（Phase 34）**：`impl` 后面既没有类型参数、也没有 `for`，就是给
+  非泛型 struct 加固有方法；方法落码 `<Struct>_<method>`、调用点静态派发。属主单元发一次定义
+  （外部链接），消费方从生成的 `.h` 取 `int Counter_get(struct Counter *);` 原型，自己不重复定义。
+  跨单元重复定义不在解析期检测，落到链接期的重复符号（R34-4）。
+- **`Option` / `Result`（Phase 34）**：`lib/std/Option.h.ct` 提供 `Option<T>`（`int has; T value;`），
+  `lib/std/Result.h.ct` 提供 `Result<T, E>`（`int ok; T value; E err;`）；两者都是普通泛型 struct，
+  编译器没有专门分支。构造用字面量：`{ 1, v }` / `{ 0 }`（`Result` 是 `{ 1, v, 0 }` / `{ 0, 0, e }`）。
+  `Option` 的方法是 `is_some` / `is_none` / `unwrap_or` / `unwrap` / `set` / `clear` / `release`；
+  `Result` 是 `is_ok` / `is_err` / `unwrap_or` / `unwrap_err_or` / `unwrap` / `unwrap_err` /
+  `set_ok` / `set_err` / `release`。`unwrap` / `unwrap_err` 在错误一侧 `abort`，不返回零值。
+  当实参是消费方单元里的 struct 时，`Option<X>` / `Result<X, …>` 的布局与方法都在消费方发射
+  （层头文件里字段不完整，只留前向声明）；标量实参的实例仍定义在层头文件里。payload 按值拷贝，
+  `release` 是 no-op；自动释放与 pattern matching 属后续阶段（D34-8 / T34-1）。
 - **`Map` 的键**：只接受 `int` / `long` / `char *`，其他类型在类型实参处硬错（L29-8）。`int` / `long`
   按键的字节比较，`char *` 走 `strcmp`；两条路径是 `lib/std/Vec.h.ct` 里两个 `impl` 块，不靠
   `sizeof` 猜测键的类别。
@@ -4559,6 +4576,29 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `import` or an `-I`**. The three spellings are reserved; a legacy `import std::vec` that still
   declares `Vec` now collides with the built-in name (`'Vec' is a built-in type and cannot be
   redeclared`), so the project must upgrade `std` or drop that import.
+- **`pub` generic functions (Phase 34)**: `pub T f<T>(T x)` is legal (L26-2 is lifted) and the
+  template body must live in a `.h.ct` header unit; every consumer `f<int>(…)` emits one `static`
+  instance in its own unit (`f__ct<N>`), and the generated `.h` still carries types only, never the
+  function prototype. A `pub` declaration in a `.ct` unit is still not importable (`only a .h.ct
+  unit can be imported`).
+- **Non-generic inherent `impl Name { … }` (Phase 34)**: an `impl` with neither type parameters nor
+  `for` adds inherent methods to a non-generic struct; a method lowers to `<Struct>_<method>` and is
+  dispatched statically. The owner unit defines it once with external linkage and the consumer takes
+  `int Counter_get(struct Counter *);` from the generated `.h` instead of defining a copy. A
+  cross-unit duplicate is not detected at parse time; it surfaces as a duplicate symbol at link time
+  (R34-4).
+- **`Option` / `Result` (Phase 34)**: `lib/std/Option.h.ct` carries `Option<T>` (`int has; T value;`)
+  and `lib/std/Result.h.ct` carries `Result<T, E>` (`int ok; T value; E err;`); both are ordinary
+  generic structs with no compiler branch. They are built from literals: `{ 1, v }` / `{ 0 }` for
+  `Option`, `{ 1, v, 0 }` / `{ 0, 0, e }` for `Result`. The methods are `is_some` / `is_none` /
+  `unwrap_or` / `unwrap` / `set` / `clear` / `release` for `Option` and `is_ok` / `is_err` /
+  `unwrap_or` / `unwrap_err_or` / `unwrap` / `unwrap_err` / `set_ok` / `set_err` / `release` for
+  `Result`. `unwrap` / `unwrap_err` abort on the wrong side rather than answering a zero value. When
+  the argument is a struct from the consumer unit, the `Option<X>` / `Result<X, …>` layout and its
+  methods are emitted in that unit (the field is incomplete in the layer's header, which keeps a
+  forward declaration only); scalar instances stay in the layer's header. Payloads are copied by
+  value and `release` is a no-op; automatic release and pattern matching are later phases
+  (D34-8 / T34-1).
 - **`Map` keys**: only `int`, `long` and `char *` are accepted; any other key is a hard error at the
   type argument (L29-8). `int` / `long` keys compare by their bytes and `char *` keys by `strcmp`;
   the two paths are two `impl` blocks in `lib/std/Vec.h.ct`, not a `sizeof` guess.

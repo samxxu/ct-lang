@@ -79,6 +79,9 @@
 | 有界泛型 struct（bounded generic struct） | `struct Box<T: Show> { … }` | 类型参数带一个 trait 约束；实例在创建它的单元校验（`use` / `impl` / 模板 tag 上的 `impl` 都算满足），impl 方法体按位置继承该约束并静态派发，不加 vptr（Phase 33，见 [language-spec](language-spec.md) §4.54） |
 | 嵌套 impl pattern（nested impl pattern） | `impl<T> Box<Box<T>> { … }`、`impl<T> Pair<T, Box<T>> { … }` | 按结构递归匹配、自内向外绑定；pattern 里的裸类型参数不登记伪实例；depth = `Box` 个数 − 1，>4 报 L33-4，不支持的形态报 L33-5（Phase 33） |
 | 跨单元元素副本（cross-unit static copy） | 消费方 `.c` 里的 `static <instance>_<method>` | 元素 owner ≠ 容器模板 owner 时，由创建实例的单元发射私有的元素 helper 与实例方法副本；`.h` 只留类型，vtable / 实例数据留在 owner 单元（Phase 33 / T31-2） |
+| `pub` 泛型函数（pub generic function） | `pub T f<T>(T x)` | 模板体须写在 `.h.ct`；消费方每个 `(f, 实参)` 在本单元发一个 `static <f>__ct<N>`，`.h` 只放类型（Phase 34；L26-2 已解禁） |
+| 非泛型固有方法（non-generic inherent method） | `impl Counter { int get() { … } }` | 非泛型 struct 的固有 impl；落码 `<Struct>_<method>`，属主单元定义一次、消费方从 `.h` 取原型（Phase 34） |
+| `Option` / `Result` | `Option<T>`（`has` + `value`）、`Result<T, E>`（`ok` + `value` + `err`） | `lib/std` 的普通泛型 struct；字面量构造，`unwrap` 在错侧 `abort`，`release` 是 no-op；`?` / pattern / 自动释放属后续阶段（Phase 34） |
 
 ### 2. 命名 / 修饰规则（已发布契约）
 
@@ -334,6 +337,9 @@
 | bounded generic struct | `struct Box<T: Show> { … }` | one trait bound on a type parameter; instances are checked in the unit that creates them (`use`, `impl`, or an `impl` against the template tag all satisfy it), and an impl body inherits the bound by position and dispatches statically with no vptr (Phase 33, see [language-spec](language-spec.md) §4.54) |
 | nested impl pattern | `impl<T> Box<Box<T>> { … }`, `impl<T> Pair<T, Box<T>> { … }` | matches structurally and binds from the inside out; a bare type parameter in a pattern registers no pseudo-instance; depth = the number of `Box`es − 1, above 4 reports L33-4, and unsupported shapes report L33-5 (Phase 33) |
 | cross-unit static copy | `static <instance>_<method>` in the consumer's `.c` | when the element's owner differs from the container template's, the unit that creates the instance emits private element helpers and instance-method copies; the `.h` keeps the type only and vtable / instance data stay in the owner unit (Phase 33 / T31-2) |
+| pub generic function | `pub T f<T>(T x)` | the template body must live in a `.h.ct`; each consumer emits one `static <f>__ct<N>` instance in its own unit, and the `.h` keeps types only (Phase 34; L26-2 is lifted) |
+| non-generic inherent method | `impl Counter { int get() { … } }` | an inherent impl on a non-generic struct; lowers to `<Struct>_<method>`, defined once by the owner and taken as a prototype by the consumer from the `.h` (Phase 34) |
+| `Option` / `Result` | `Option<T>` (`has` + `value`), `Result<T, E>` (`ok` + `value` + `err`) | ordinary generic structs in `lib/std`; built from literals, `unwrap` aborts on the wrong side, `release` is a no-op; `?` / patterns / automatic release are later phases (Phase 34) |
 
 ### 2. Naming / mangling rules (a published contract)
 

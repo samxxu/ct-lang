@@ -1258,6 +1258,54 @@ int main(void)
 
 细节见 [language-spec §4.54](language-spec.md)。
 
+### 10.11 生态复用：`pub` 泛型、跨单元固有方法与 `Option`/`Result`（Phase 34）
+
+库单元的 `pub` 泛型函数把模板体留在 `.h.ct` 里，消费方按需在本单元发 `static` 实例；非泛型
+struct 也可以用 `impl Name { … }` 加固有方法，属主发一次定义，消费方只取原型：
+
+```ct
+/* eco.h.ct */
+pub struct Counter { int n; }
+
+impl Counter {
+    static Counter make(int n) { Counter c; c.n = n; return c; }
+    void bump() { self.n = self.n + 1; }
+    int get() { return self.n; }
+}
+
+pub T twice<T>(T x) { return x + x; }
+```
+
+```ct
+/* main.ct */
+#include <stdio.h>
+import eco;
+
+int main(void)
+{
+    Counter c = Counter.make(3);
+    c.bump();
+    Option<int> some = { 1, c.get() };
+    Result<int, char *> ok = { 1, twice<int>(2), 0 };
+    printf("%d %d\n", some.unwrap(), ok.unwrap());
+    some.release();
+    ok.release();
+    return 0;
+}
+```
+
+- **`Option` / `Result` 是库代码**：`lib/std/Option.h.ct` 与 `Result.h.ct` 都是普通泛型 struct，
+  不需要 `import`；`{ 1, v }` 表示有值、`{ 0 }` 表示空，`Result` 是 `{ 1, v, 0 }` / `{ 0, 0, e }`。
+- **取值**：`unwrap_or` 给默认值，`unwrap` 在空 / 错误一侧 `abort`；`set` / `clear`（`Result` 是
+  `set_ok` / `set_err`）就地改标签。
+- **实例归属**：`Point` 在消费方单元时，`Option<Point>` 的布局与方法都在消费方发射，库的头文件
+  只留前向声明。
+- **边界**：payload 按值拷贝、`release` 是 no-op；`?`、pattern matching 与 payload 自动释放属于
+  后续阶段。
+
+完整样例：[38_ecosystem_reuse](../examples/38_ecosystem_reuse)。细节见
+[language-spec §4.51](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2708,6 +2756,57 @@ int main(void)
   [36_bounded_struct](../examples/36_bounded_struct), [37_nested_pattern](../examples/37_nested_pattern).
 
 See [language-spec §4.54](language-spec.md).
+
+### 10.12 Ecosystem reuse: `pub` generics, cross-unit inherent methods and `Option` / `Result` (Phase 34)
+
+A library unit's `pub` generic function keeps its template body in the `.h.ct`, and every consumer
+emits a `static` instance in its own unit on demand; a non-generic struct can also take inherent
+methods through `impl Name { … }`, with the owner defining them once and the consumer reading only
+the prototypes:
+
+```ct
+/* eco.h.ct */
+pub struct Counter { int n; }
+
+impl Counter {
+    static Counter make(int n) { Counter c; c.n = n; return c; }
+    void bump() { self.n = self.n + 1; }
+    int get() { return self.n; }
+}
+
+pub T twice<T>(T x) { return x + x; }
+```
+
+```ct
+/* main.ct */
+#include <stdio.h>
+import eco;
+
+int main(void)
+{
+    Counter c = Counter.make(3);
+    c.bump();
+    Option<int> some = { 1, c.get() };
+    Result<int, char *> ok = { 1, twice<int>(2), 0 };
+    printf("%d %d\n", some.unwrap(), ok.unwrap());
+    some.release();
+    ok.release();
+    return 0;
+}
+```
+
+- **`Option` / `Result` are library code**: `lib/std/Option.h.ct` and `Result.h.ct` are ordinary
+  generic structs and need no `import`; `{ 1, v }` is a value and `{ 0 }` is empty, while `Result`
+  spells `{ 1, v, 0 }` / `{ 0, 0, e }`.
+- **Reading**: `unwrap_or` answers a default, `unwrap` aborts on the empty / error side, and `set` /
+  `clear` (`set_ok` / `set_err` on `Result`) flip the tag in place.
+- **Instance ownership**: when `Point` lives in the consumer unit, the `Option<Point>` layout and its
+  methods are emitted there; the library's header keeps a forward declaration only.
+- **Boundaries**: payloads are copied by value and `release` is a no-op; `?`, pattern matching and
+  automatic payload release belong to later phases.
+
+Runnable sample: [38_ecosystem_reuse](../examples/38_ecosystem_reuse). See
+[language-spec §4.51](language-spec.md).
 
 ### 11. CLI cheat sheet
 
