@@ -2440,6 +2440,7 @@ impl ParseOps for Parser {
         int seen_borrow, bline;
         int ntp, pi;
         char tparam[2][MAX_TEXT];
+        char tbound[2][MAX_TEXT];
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char ret[MAX_TEXT];
@@ -2471,9 +2472,36 @@ impl ParseOps for Parser {
                     return self->sup->fail("expected a type parameter name");
                 if (ntp >= 2)
                     return self->sup->fail("a trait supports at most two type parameters");
+                for (pi = 0; pi < ntp; pi++) {
+                    if (strcmp(tparam[pi], self->lex->toktext) == 0) {
+                        char dmsg[MAX_TEXT];
+                        snprintf(dmsg, sizeof dmsg,
+                                 "duplicate type parameter '%s'", self->lex->toktext);
+                        return tool::diag::ct_sem_error(self->lex->tokline,
+                            self->lex->tokstart - self->lex->lstart + 1, dmsg, self->mem->path);
+                    }
+                }
                 snprintf(tparam[ntp], MAX_TEXT, "%s", self->lex->toktext);
-                ntp++;
+                tbound[ntp][0] = 0;
                 self->sup->lex_next();
+                /* `T: Show` names one trait. Multi-bounds are out of scope
+                   (L35-2); the trait is resolved when an instance is created
+                   (S4), so a later declaration is still fine here. */
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a trait name in the bound");
+                    snprintf(tbound[ntp], MAX_TEXT, "%s", self->lex->toktext);
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "+") == 0)
+                        return tool::diag::ct_sem_error(self->lex->tokline,
+                            self->lex->tokstart - self->lex->lstart + 1,
+                            "a type parameter supports one trait bound", self->mem->path);
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
+                        return self->sup->fail(
+                            "a trait parameter bound names a trait, not an instance");
+                }
+                ntp++;
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->sup->lex_next();
                     continue;
@@ -2502,8 +2530,10 @@ impl ParseOps for Parser {
                 self->sym->traits[ti].ns[nl - 1] = 0;
         }
         self->sym->traits[ti].ntparams = ntp;
-        for (pi = 0; pi < ntp; pi++)
+        for (pi = 0; pi < ntp; pi++) {
             snprintf(self->sym->traits[ti].tparam[pi], MAX_TEXT, "%s", tparam[pi]);
+            snprintf(self->sym->traits[ti].bound[pi], MAX_TEXT, "%s", tbound[pi]);
+        }
         self->sym->traits[ti].tmpl = -1;
         self->sym->traits[ti].owner = self->cur_unit;
         if (self->sup->add_type(qname, 3) != 0) return -1;   /* trait = iface type */
