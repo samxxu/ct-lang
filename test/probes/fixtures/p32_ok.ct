@@ -1,0 +1,15 @@
+trait Show { int show(); }
+struct Circle { int r; } use Show;
+struct A { int x; }
+impl Show for Circle { int show() { return self->r; } }
+int main(void) {
+    char *s = "hi";
+    char *p = 0;
+    int x = 1.5;
+    void *v = s;
+    struct Circle c;
+    Show sh = c;
+    struct A *pa;
+    char *pc = pa;
+    return 0;
+}

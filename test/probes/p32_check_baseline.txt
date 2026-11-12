@@ -1,0 +1,27 @@
+# Phase 32 S0 baseline (ct-ast v0.26.4 at the Phase 31 close-out commit)
+# binary: /tmp/ctb/ct-ast
+# fields: probe  mode  rc  first stderr line
+p32_assign.ct          check         rc=0  
+p32_assign.ct          check --types rc=1  ctc: unknown option '--types'
+p32_return.ct          check         rc=0  
+p32_return.ct          check --types rc=1  ctc: unknown option '--types'
+p32_push.ct            check         rc=0  
+p32_push.ct            check --types rc=1  ctc: unknown option '--types'
+p32_container.ct       check         rc=0  
+p32_container.ct       check --types rc=1  ctc: unknown option '--types'
+p32_struct.ct          check         rc=0  
+p32_struct.ct          check --types rc=1  ctc: unknown option '--types'
+p32_ret_void.ct        check         rc=0  
+p32_ret_void.ct        check --types rc=1  ctc: unknown option '--types'
+p32_ok.ct              check         rc=0  
+p32_ok.ct              check --types rc=1  ctc: unknown option '--types'
+p32_iface.ct           check         rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p32_iface.ct:7:16: error: the struct does not use this trait
+p32_iface.ct           check --types rc=1  ctc: unknown option '--types'
+p32_void_actual.ct     check         rc=0  
+p32_void_actual.ct     check --types rc=1  ctc: unknown option '--types'
+p32_void_var.ct        check         rc=0  
+p32_void_var.ct        check --types rc=1  ctc: unknown option '--types'
+p32_vec_void.ct        check         rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p32_vec_void.ct:2:13: error: type argument 'void' cannot instantiate a generic struct
+p32_vec_void.ct        check --types rc=1  ctc: unknown option '--types'
+p32_generic.ct         check         rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p32_generic.ct:3:15: error: generic function 'id' needs a type argument
+p32_generic.ct         check --types rc=1  ctc: unknown option '--types'

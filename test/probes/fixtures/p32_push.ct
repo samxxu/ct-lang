@@ -1,0 +1,5 @@
+int main(void) {
+    Vec<int> v;
+    v.push("s");
+    return 0;
+}

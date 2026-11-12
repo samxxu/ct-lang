@@ -1,0 +1,4 @@
+int main(void) {
+    Vec<void> v;
+    return 0;
+}

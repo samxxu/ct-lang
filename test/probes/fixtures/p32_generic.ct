@@ -1,0 +1,5 @@
+T id<T>(T x) { return x; }
+int main(void) {
+    int n = id(1);
+    return n == 1 ? 0 : 1;
+}

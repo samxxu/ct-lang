@@ -1,0 +1,7 @@
+int main(void) {
+    Vec<int> v;
+    Map<char *, int> m;
+    v.set(0, "s");
+    m.put("a", "b");
+    return 0;
+}

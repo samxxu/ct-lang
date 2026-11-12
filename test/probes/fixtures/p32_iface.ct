@@ -1,0 +1,9 @@
+trait Show { int show(); }
+struct Other { int x; }
+struct Circ { int r; } use Show;
+impl Show for Circ { int show() { return self->r; } }
+int main(void) {
+    struct Other o;
+    Show sh = o;
+    return 0;
+}
