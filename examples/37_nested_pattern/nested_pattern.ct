@@ -1,0 +1,40 @@
+// 37_nested_pattern - an impl pattern whose type argument is itself a template
+//
+// `impl<T> Box<Box<T>>` applies only to a `Box` whose value is another `Box`,
+// and `impl<T> Pair<int, Box<T>>` pins the first slot. Both dispatch on the
+// instance's concrete spelling, so no vtable or vptr is involved.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+struct Box<T> {
+    T value;
+}
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+impl<T> Box<Box<T>> {
+    int depth()
+    {
+        return 2;
+    }
+}
+impl<T> Pair<int, Box<T>> {
+    int pick()
+    {
+        return self->second.value;
+    }
+}
+
+int main(void)
+{
+    Box<Box<int>> n;
+    Pair<int, Box<int>> p;
+
+    n.value.value = 7;
+    p.second.value = 9;
+    printf("%d %d %d\n", n.depth(), p.pick(), n.value.value);
+    return 0;
+}

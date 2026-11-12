@@ -1,0 +1,30 @@
+// Phase 33 O2/E33-10: depth 2 and 3 patterns. The depth-3 instance also keeps
+// the nested `Box_Box__int` spelling honest (E33-10b).
+#include <stdio.h>
+
+struct Box<T> {
+    T value;
+}
+impl<T> Box<Box<T>> {
+    int two()
+    {
+        return 2;
+    }
+}
+impl<T> Box<Box<Box<T>>> {
+    int three()
+    {
+        return 3;
+    }
+}
+
+int main(void)
+{
+    Box<Box<int>> a;
+    Box<Box<Box<int>>> b;
+
+    a.value.value = 1;
+    b.value.value.value = 1;
+    printf("%d %d\n", a.two(), b.three());
+    return 0;
+}

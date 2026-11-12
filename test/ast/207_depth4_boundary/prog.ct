@@ -1,0 +1,4 @@
+// Phase 33 E33-11: depth 4 (five `Box`) is the pattern boundary that stays legal.
+struct Box<T> { T v; }
+impl<T> Box<Box<Box<Box<Box<T>>>>> { int depth() { return 4; } }
+int main() { return 0; }
