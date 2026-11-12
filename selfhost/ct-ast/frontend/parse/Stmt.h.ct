@@ -3172,6 +3172,7 @@ impl StmtOps for Stmt {
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
         } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
             int k, ip;
+            int rline, rcol;
             char tt[MAX_TEXT];
             char tr[MAX_TEXT];
             ip = 0;
@@ -3205,10 +3206,26 @@ impl StmtOps for Stmt {
                 return self->sup->fail(
                     "a brace list is not an expression; use Map<K, V>::from or put");
             self->ex->into_ok = 1;
+            rline = self->lex->tokline;
+            rcol = self->lex->tokstart - self->lex->lstart + 1;
             rhs = self->ex->parse_expr();
             self->ex->into_ok = 0;
             self->ex->fnval_ok = 0;
             if (rhs < 0) return -1;
+            /* Phase 32 S4 (L32-2): the target's declared type against the
+               right-hand side, before an interface slot boxes it. This same
+               branch carries an `into` block's `.field = expr`, whose type
+               `expr_type` derives from the receiver record. */
+            if (self->ex->types_mode && *self->ex->types_mode && tt[0]) {
+                char out[MAX_TEXT];
+                int is_zero = 0;
+                if (self->ex->chk_type(rhs, out, sizeof out, &is_zero) == 0) {
+                    self->ex->chk_line = rline;
+                    self->ex->chk_col = rcol;
+                    self->ex->chk_arg = 0;
+                    if (self->ex->chk_assignable(tt, out, is_zero, 2) != 0) return -1;
+                }
+            }
             if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)
                 && self->sym->find_trait(tr) >= 0) {
                 rhs = self->sup->maybe_box(rhs, tr, ip);
