@@ -4,11 +4,13 @@
 
 ## 这是什么
 
-`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）及其直接依赖**，不是整个 `std` 的新家。
+`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）与 `Option` / `Result` 及其直接依赖**，
+不是整个 `std` 的新家。
 `str` / `io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像。
 
-`Vec.h.ct` 是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
-把它 splice 到用户程序之前，`ct build` 则把它作为一个独立单元参与发射；两种形态都
+内置层由三个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）。
+三者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
+把它们 splice 到用户程序之前，`ct build` 则把它们作为独立单元参与发射；两种形态都
 **不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU、根命名空间。
 
 ## 保留名
@@ -18,10 +20,12 @@
 | `Vec` | `Vec<T>`，动态数组 |
 | `Map` | `Map<K, V>`，按插入序遍历的映射 |
 | `MapEntry` | `MapEntry<K, V>`，`foreach` 的 `item` 类型（`key` / `value` 字段） |
+| `Option` | `Option<T>`，`has` + `value` 标签结构（Phase 34） |
+| `Result` | `Result<T, E>`，`ok` + `value` + `err` 标签结构（Phase 34） |
 
-这三个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
+这五个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
 （`frontend/module/MapTable.h.ct`）。它们没有 `std::vec::Vec` / `std::map::Map` 这样的模块路径别名：
-内置层是预解析的一个单元，不是 `std` 包的一部分。
+内置层是预解析的单元集合，不是 `std` 包的一部分。
 
 **从旧 `std` 包升级**：Phase 29 之前 `Vec` / `Map` 由 `ct-pkg/std` 的 `vec.ct` / `map.ct` 提供，
 项目里通常写着 `import std::vec` / `import std::map`。内置层生效后这些拼写成了保留名，旧包的声明
@@ -44,6 +48,13 @@
   `Vec<int>::from(arr, n)`。
 - **`foreach`**：`Vec` / `Map` 走 `len` + `get` / `entry`；`item` 是值拷贝，`i` 只读且仅对
   `Vec` / 数组有意义，`Map` 体内用 `i` 是硬错（L29-18）。
+- **`Option` / `Result`（Phase 34）**：都是普通泛型 struct，不是编译器分支。构造用字面量
+  `{ 1, v }` / `{ 0 }`（`Result` 是 `{ 1, v, 0 }` / `{ 0, 0, e }`）；查询与取值是固有方法
+  （`is_some` / `is_none` / `unwrap_or` / `unwrap` / `set` / `clear`；`Result` 是 `is_ok` /
+  `is_err` / `unwrap_or` / `unwrap_err_or` / `unwrap` / `unwrap_err` / `set_ok` / `set_err`）。
+  `unwrap` / `unwrap_err` 在错误一侧 `abort`，不返回零值。payload 按值拷贝，`release` 是 no-op；
+  `?` / pattern matching / payload 自动释放属后续阶段（D34-8）。当实参是消费方单元的 struct 时，
+  布局与方法在消费方发射，本目录的头文件只留前向声明。
 
 ## 版本对齐
 

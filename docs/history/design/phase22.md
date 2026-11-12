@@ -9,8 +9,8 @@
 > **版本口径：Phase 22 ↔ `v0.22.x`，收口 bump 到 `v0.22.0`。** 本文不写「当前版本」快照
 > （DOC-63：钉死的版本号会在下一次 bump 后过期）。
 > 前置：Phase 21 已收口；本相与 Phase 20 / 21 **无语义依赖**，仅共用 parser / emitter / diag 文件。
-> 关联：[phase21.md](phase21.md)、[phase23.md](phase23.md)、[roadmap.md](../roadmap.md)、
-> [language-spec.md](../language-spec.md)。
+> 关联：[phase21.md](../../design/phase21.md)、[phase23.md](../../design/phase23.md)、[roadmap.md](../../roadmap.md)、
+> [language-spec.md](../../language-spec.md)。
 > 本相只新增一条语句级语法糖，**不改动现有语义、不新增运行时、不引入抽象类型**。
 
 ---
@@ -99,12 +99,12 @@ loop-stmt  :=  "loop" "(" expr ")" block
 识别沿用仓库既有的「无 peek 则保存并回退」写法：
 `loop_ahead()` 在当前 token 是 `loop` 时保存词法器状态、读下一个 token、判断是否为 `(`、
 再完整回退。参考 `label_ahead()` 的现成写法
-（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1507-L1536)）。
+（[Stmt.h.ct](../../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1507-L1536)）。
 
 **分派位置（必须照做）**：`parse_stmt` 里 `if (self->loop_ahead()) return self->parse_loop();`
 要放在 `label_ahead()` 与 `is_decl_start()` **之前**
-（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1130-L1138)）。
-原因：`loop` 不在 `kw[]` 表里（[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L601-L606)），
+（[Stmt.h.ct](../../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1130-L1138)）。
+原因：`loop` 不在 `kw[]` 表里（[Stmt.h.ct](../../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L601-L606)），
 若落到 `is_decl_start()` 的未知类型兜底路径，会被当成声明报错，而不是进入表达式语句。
 **不要**把 `loop` 加进 `kw[]`：那会让 `is_decl_start()` 对它返回真，掩盖 `loop_ahead()` 的分派。
 
@@ -146,7 +146,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 ```
 
 - **展开点**：发射器的 `emit_node` 新增 `N_LOOP` 分支，紧挨 `N_FOR` 分支
-  （[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2521-L2539)）。
+  （[Emitter.h.ct](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2521-L2539)）。
   解析期**不**降级成 `N_FOR`：`i` 需要在解析期进入符号表（闭包捕获、名字解析），
   而计数临时量与 `#line` 属于发射器。
 - 展开只有一条语句，不引入辅助函数、结构体或回调。
@@ -165,7 +165,7 @@ for (int i = 0, __ct_loop_n_K = (N); i < __ct_loop_n_K; i++) { BODY }
 | 项 | 定论 |
 | --- | --- |
 | 接受的类型 | 所有整型：`char` / `short` / `int` / `long` / `long long`、`signed` / `unsigned` 各型、`_Bool`、`enum`、以及解析后落到这些类型的别名（含 `size_t`） |
-| 判定方式 | `Expr.expr_type` 取类型串（[TypeCheck.h.ct](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L218)）；别名先 `expand_type_alias`；**未知（返回 -1）不报**（宁漏不误报） |
+| 判定方式 | `Expr.expr_type` 取类型串（[TypeCheck.h.ct](../../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L218)）；别名先 `expand_type_alias`；**未知（返回 -1）不报**（宁漏不误报） |
 | 非整数 | 静态可判定为 `float` / `double` / 指针 / 结构体 → L22-5；仍照常编译，按 C 赋值规则转成 `int` |
 | 0 / 负数 | 条件 `0 < K` 为假，**零次迭代**，不报错、不告警 |
 | 无符号 / `long` 越界 | 存入 `int` 是 C 的赋值转换：整型越界为**实现定义**（C99 §6.3.1.3p3），浮点越界未定义。本相只承诺 `int` 范围内的计数；越界不承诺，文档写明 |
@@ -249,7 +249,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 - 临时量：`__ct_loop_n_<K>`，`K = self->ntmp++`。`ntmp` 是文件级单例 `g_emit` 上的
   **进程级单调计数器，从不重置**，与 `__ct_ret%d` / `__ct_tmp%d` 共用，故跨函数、跨单元不重号。
 - `__ct_` 前缀已由 `Symbols::reserved_name` 拒绝用户声明
-  （[Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L401-L402)），无需新增检查。
+  （[Symbols.h.ct](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L401-L402)），无需新增检查。
 - 不新增全局表 / 容量常量；隐式 `i` 只占 1 个 `Var` 槽（`MAX_VARS 4096`）。
 - 生成物不登记进 `Symbols.Structs`，不占 `MAX_STRUCTS`。
 
@@ -329,7 +329,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 
 - S1 不写发射、S2 不写诊断、S3 不改 AST 形状；任何跨片改动视为切片失败。
 - S1 必须验证「不改 `Expr` / `Memory`」：`closure_walk` / `closure_walk_mutate` 已按
-  `a/b/c/d` 泛化递归（[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L555-L584)），
+  `a/b/c/d` 泛化递归（[Expr.h.ct](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L555-L584)），
   `N_LOOP` 的 body 天然在覆盖内；body 由 `parse_block` 解析，AutoDrop / `own` 作用域不变。
 - S2 的 `b != -1` 断言是给 Phase 23 留的边界，不是本相功能；它在 Phase 23 的 S2 已随双界分支删除。
 
@@ -365,7 +365,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 | `loop_closure_escape.ct` | loop body 里的闭包存到外层变量 | Phase 21 既有文案：`a closure cannot be stored in '<name>' (its scope outlives the closure)` |
 
 前三个进 `check-ast.sh` 的钉文案列表（照 `raw_*` 的 `for pair in` 写法，
-[check-ast.sh](../../selfhost/check-ast.sh#L557-L573)）；第四个证明 loop 节点没有把 body
+[check-ast.sh](../../../selfhost/check-ast.sh#L557-L573)）；第四个证明 loop 节点没有把 body
 从既有逃逸检查里藏起来。
 
 ### 6.3 `check-ast.sh` 新增断言
@@ -411,11 +411,11 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 
 | # | 文档 | 冲突 | 建议 |
 | --- | --- | --- | --- |
-| 1 | [roadmap.md](../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | ✅ 已改：记为「D22-1–D22-12」、S1–S4 各自独立提交、`v0.22.0`，出口判据同步 |
-| 2 | [phase23.md](phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | ✅ 已改：§3.6、23.3、D23-7 统一为「不新增逐语句 `#line`」（与本文 §3.7 同口径） |
-| 3 | [phase23.md](phase23.md) 头部 | 「当前 `v0.19.1`」过期 | ✅ 已改：S5 删掉版本快照并写明前置 `v0.22.0`（DOC-63） |
+| 1 | [roadmap.md](../../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | ✅ 已改：记为「D22-1–D22-12」、S1–S4 各自独立提交、`v0.22.0`，出口判据同步 |
+| 2 | [phase23.md](../../design/phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | ✅ 已改：§3.6、23.3、D23-7 统一为「不新增逐语句 `#line`」（与本文 §3.7 同口径） |
+| 3 | [phase23.md](../../design/phase23.md) 头部 | 「当前 `v0.19.1`」过期 | ✅ 已改：S5 删掉版本快照并写明前置 `v0.22.0`（DOC-63） |
 | 4 | 本文件旧 §3.1 | 「`K` 每函数内单调」与 `ntmp` 的进程级语义不符 | ✅ 本文已更正（§3.9） |
-| 5 | [language-spec.md](../language-spec.md) | 尚无 `loop` 小节（不是冲突，是缺口） | ✅ S5 已补 §4.45（中英对称）与 tutorial §10.2 |
+| 5 | [language-spec.md](../../language-spec.md) | 尚无 `loop` 小节（不是冲突，是缺口） | ✅ S5 已补 §4.45（中英对称）与 tutorial §10.2 |
 
 ---
 

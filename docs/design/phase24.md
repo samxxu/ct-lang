@@ -7,7 +7,7 @@
 > **2026-11-09 修订**：索引占位符从 `i` 改为 `$`（它不是标识符，不可能被遮蔽或撞名）；
 > D24-4 / L24-8 撤销，不引入 `range_shadow` kind；边界字面量的拼写与溢出改为显式校验。
 > 关联：[phase23.md](phase23.md)（`..` 词法与 `loop(a..b)`，本相前置）、
-> [phase22.md](phase22.md)、[roadmap.md](../roadmap.md)、[language-spec.md](../language-spec.md)、
+> [phase22.md](../history/design/phase22.md)、[roadmap.md](../roadmap.md)、[language-spec.md](../language-spec.md)、
 > [closure-conventions.md](../closure-conventions.md)。
 
 ---
