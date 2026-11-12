@@ -1,0 +1,14 @@
+// Phase 34 S5b: the consumer only sees `Counter` through `lib.h`; the
+// methods are plain C calls (`Counter_make` / `Counter_inc` / `Counter_get`),
+// never a vtable lookup.
+import lib;
+
+#include <stdio.h>
+
+int main(void)
+{
+    Counter c = Counter.make(5);
+    c.inc();
+    printf("%d\n", c.get());
+    return 0;
+}

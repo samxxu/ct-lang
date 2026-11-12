@@ -901,6 +901,36 @@ else
     bad "split" "$(cat "$work/msplit.err" "$work/msplit.cc" "$work/msplit.stdout")"
 fi
 
+# E34-4 (P34 S5b): a `pub struct` with a non-generic inherent impl. The owner
+# defines `Counter_get` once with external linkage; the consumer carries only
+# an undefined reference and takes the prototype from the owner's header.
+rm -rf "$mod-inh"
+mkdir -p "$mod-inh"
+if "$work/ct-ast" build --emit-c test/modules/p34_inherent/main.ct -o "$mod-inh" \
+        >"$work/minh.out" 2>"$work/minh.err" \
+   && "$CC" -Wall -Wextra -std=c99 "$mod-inh"/*.c -o "$work/minh.bin" 2>"$work/minh.cc" \
+   && "$work/minh.bin" >"$work/minh.stdout" 2>&1 \
+   && cmp -s "$work/minh.stdout" test/modules/p34_inherent/expected.out; then
+    ok "p34_inherent (cross-unit inherent methods run)"
+else
+    bad "p34_inherent" "$(cat "$work/minh.err" "$work/minh.cc" "$work/minh.stdout" 2>/dev/null)"
+fi
+if "$CC" -std=c99 -I "$mod-inh" -c "$mod-inh/lib.c" -o "$work/minh-lib.o" 2>"$work/minh-lib.cc" \
+   && "$CC" -std=c99 -I "$mod-inh" -c "$mod-inh/main.c" -o "$work/minh-main.o" 2>>"$work/minh-lib.cc"; then
+    n="$(nm "$work/minh-lib.o" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ T _?Counter_get$/ { c++ } END { print c + 0 }')"
+    [ "$n" = 1 ] && ok "p34_inherent_nm_owner (Counter_get defined once, external)" \
+        || bad "p34_inherent_nm_owner" "$(nm "$work/minh-lib.o" 2>/dev/null | grep -i counter | head -3)"
+    n="$(nm "$work/minh-main.o" 2>/dev/null | awk '$0 ~ /^[[:space:]]+U _?Counter_get$/ { c++ } END { print c + 0 }')"
+    [ "$n" = 1 ] && ok "p34_inherent_nm_consumer (the consumer calls by symbol)" \
+        || bad "p34_inherent_nm_consumer" "$(nm "$work/minh-main.o" 2>/dev/null | grep -i counter | head -3)"
+    n="$(grep -c '^int Counter_get(struct Counter \*);$' "$mod-inh/lib.h" 2>/dev/null)"
+    [ "$n" = 1 ] && ok "p34_inherent_proto (the header spells struct Counter *)" \
+        || bad "p34_inherent_proto" "$(grep 'Counter_get' "$mod-inh/lib.h" 2>/dev/null | head -2)"
+else
+    bad "p34_inherent_objects" "$(head -3 "$work/minh-lib.cc")"
+fi
+
+
 # E34-2a / TEST-18 (P34 S3a): the `pub` generic templates now live in `.h.ct`
 # headers and are instantiated by a consumer, so a leaked type parameter would
 # land in a module product -- a blind spot before this slice. Each fixture gets

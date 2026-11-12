@@ -1,0 +1,23 @@
+// Phase 34 S5b: a `pub` struct whose methods live in a non-generic inherent
+// impl. `lib.h` publishes the layout and the method prototypes; `lib.c`
+// defines them with external linkage, so the consumer links `Counter_get`
+// by symbol instead of dispatching through a vtable.
+pub struct Counter {
+    int n;
+}
+
+impl Counter {
+    static Counter make(int n) {
+        Counter c;
+        c.n = n;
+        return c;
+    }
+
+    void inc() {
+        self.n = self.n + 1;
+    }
+
+    int get() {
+        return self.n;
+    }
+}

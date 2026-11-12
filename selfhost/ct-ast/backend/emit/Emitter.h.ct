@@ -176,6 +176,7 @@ trait EmitOps {
     int  vtable_exported(int si, const char *tname);
     int  map_vtable_exported(int i);
     int  emit_link_externs(int prog, int u);
+    int  emit_inherent_protos(int prog);
     int  node_mentions(int n, const char *name);
     int  emit_trait_decls(void);
     int  emit_impls(int prog);
@@ -1387,6 +1388,7 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
         if (!self->sym->funcs[i].is_pub || self->sym->funcs[i].is_static) continue;
         if (self->emit_proto(i) != 0) return -1;
     }
+    if (self->emit_inherent_protos(self->units[u].prog) != 0) return -1;
 
     fputs("\n#endif\n", self->out);
     return 0;
@@ -2176,6 +2178,7 @@ impl EmitOps for Emitter {
            in scope at the call site. */
         for (i = 0; i < self->sym->nfunc; i++)
             if (self->emit_proto(i) != 0) return -1;
+        if (self->emit_inherent_protos(prog) != 0) return -1;
 
         /* A file-scope `_Static_assert` lands here: after every type, so an
            assertion about a struct or enum declared above it still resolves. */
@@ -2673,10 +2676,14 @@ impl EmitOps for Emitter {
                 if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
                 self->nclvar = 0;
                 self->closure_ci = 0;
-                fputs("static __attribute__((unused)) ", self->out);
+                /* P34 S5b: a `pub` struct publishes its methods, so they carry
+                   external linkage for importers; a private one stays static. */
+                if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name))
+                    fputs("static __attribute__((unused)) ", self->out);
                 fprintf(self->out, "%s %s_%s(", mret, self->sym->structs[si].name,
                         self->arena->nodes[m].text2);
-                if (!is_static) fputs("void *self", self->out);
+                if (!is_static)
+                    fprintf(self->out, "struct %s *self", self->sym->structs[si].name);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
                     if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
@@ -3185,6 +3192,41 @@ impl EmitOps for Emitter {
                 any = 1;
             }
         if (any) fputs("\n", self->out);
+        return 0;
+    }
+
+    /* P34 S5b: one prototype per inherent method of a `pub` struct. A consumer
+       unit may not carry the owner's impl node, so the header exports these
+       declarations and every importer links `<Struct>_<method>` by symbol. The
+       receiver is spelled `struct <Struct> *` -- the same pointer the definition
+       binds `self` to. Private structs keep their methods `static` and get no
+       prototype here. */
+    int emit_inherent_protos(int prog)
+    {
+        int n, m, k, si, is_static;
+
+        (void)self;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            if (self->arena->nodes[n].text2[0]) continue;   /* trait impl */
+            si = self->arena->nodes[n].aux;
+            if (si < 0) continue;   /* template impl */
+            if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name)) continue;
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                is_static = self->arena->nodes[m].c;
+                fprintf(self->out, "%s %s_%s(",
+                        self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void",
+                        self->sym->structs[si].name, self->arena->nodes[m].text2);
+                if (!is_static) fprintf(self->out, "struct %s *", self->sym->structs[si].name);
+                for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
+                    if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
+                    if (self->emit_type_name_dims(self->arena->nodes[k].text,
+                                                  self->arena->nodes[k].text2,
+                                                  self->arena->nodes[k].text3) != 0) return -1;
+                }
+                fputs(");\n", self->out);
+            }
+        }
         return 0;
     }
 
