@@ -1219,6 +1219,45 @@ int first = counts["a"];
 
 细节见 [language-spec §4.53](language-spec.md)。
 
+### 10.10 有界泛型 struct 与嵌套 impl pattern（Phase 33）
+
+`struct` 的类型参数可以带一个 trait 约束，模板实例在创建它的单元里接受校验；`impl` 的方法体
+按位置继承这个约束，模板体内可以直接调用约束方法，派发仍是编译期静态的：
+
+```ct
+trait Show { int show(); }
+struct Circle { int r; } use Show;
+
+struct Box<T: Show> { T value; }
+
+impl<T> Box<T> {
+    int reveal() { return self->value.show(); }
+}
+
+int main(void)
+{
+    Box<Circle> b;
+    b.value.r = 7;
+    printf("%d\n", b.reveal());   /* Box_Circle_reveal → Circle_Show_vtable.show */
+    return 0;
+}
+```
+
+- **约束不是装箱**：`Box<Circle>` 内联存 `Circle`，`show()` 落成 `Circle_Show_vtable.show(&b.value)`，
+  不加 vptr、不改布局；实例化时若实参没有 `use Show` 也没有 `impl Show for <实参>`，在实例处报
+  `instance argument '…' does not satisfy the bound 'Show'`。
+- **一个参数一个约束**：`T: A + B` 与在 impl 上重复写约束都是硬错（L33-3 / L33-2）。
+- **约束可见性**：消费方单元看不到约束 trait 时报 L33-6，不会拖到链接期；只声明不实例化仍可编译。
+- **嵌套 pattern**：`impl<T> Box<Box<T>>`、`impl<T> Pair<int, Box<T>>` 按结构匹配，`Box<Box<Circle>>`
+  会派发到外层方法；pattern 里的裸 `T` 不登记成伪实例。depth 超过 4（即 6 个 `Box`）报 L33-4，
+  `_` / `T[2]` / `T *` / 函数指针等形态报 L33-5。
+- **跨单元**：元素与容器模板不在同一单元时，消费方单元自行发射私有的 `static` 元素 helper 与实例
+  方法副本，`.h` 只有类型——`Vec<Point>` / `Vec<Show>` 无需把元素挪进同一单元。
+- 泛型 trait 与 supertrait 由 Phase 35 提供。完整样例：
+  [36_bounded_struct](../examples/36_bounded_struct)、[37_nested_pattern](../examples/37_nested_pattern)。
+
+细节见 [language-spec §4.54](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2624,6 +2663,51 @@ int first = counts["a"];
   [34_map_literal](../examples/34_map_literal).
 
 See [language-spec §4.53](language-spec.md).
+
+### 10.11 Bounded generic structs and nested impl patterns (Phase 33)
+
+A `struct` type parameter may carry one trait bound. Instances are checked in the unit that creates
+them, and an `impl` body inherits the bound by position, so it can call the bound method directly;
+dispatch stays static:
+
+```ct
+trait Show { int show(); }
+struct Circle { int r; } use Show;
+
+struct Box<T: Show> { T value; }
+
+impl<T> Box<T> {
+    int reveal() { return self->value.show(); }
+}
+
+int main(void)
+{
+    Box<Circle> b;
+    b.value.r = 7;
+    printf("%d\n", b.reveal());   /* Box_Circle_reveal → Circle_Show_vtable.show */
+    return 0;
+}
+```
+
+- **A bound is not boxing**: `Box<Circle>` stores `Circle` inline and `show()` lands as
+  `Circle_Show_vtable.show(&b.value)` — no vptr and no layout change. If the argument has neither
+  `use Show` nor `impl Show for <arg>`, the instance reports
+  `instance argument '…' does not satisfy the bound 'Show'`.
+- **One bound per parameter**: `T: A + B` and repeating the bound on the impl are hard errors
+  (L33-3 / L33-2).
+- **Visibility**: a consumer that cannot see the bound trait gets L33-6 instead of a link error; a
+  declaration with no instance still compiles.
+- **Nested patterns**: `impl<T> Box<Box<T>>` and `impl<T> Pair<int, Box<T>>` match structurally, so
+  `Box<Box<Circle>>` reaches the outer method; a bare `T` in a pattern registers no pseudo-instance.
+  A depth above 4 (six `Box`es) reports L33-4, while `_` / `T[2]` / `T *` / function pointers report
+  L33-5.
+- **Across units**: when the element and the container template live in different units, the consumer
+  unit emits its own private `static` element helpers and method copies while the `.h` keeps the type
+  only — `Vec<Point>` / `Vec<Show>` no longer need the element in the same unit.
+- Generic traits and supertraits arrive in Phase 35. Runnable samples:
+  [36_bounded_struct](../examples/36_bounded_struct), [37_nested_pattern](../examples/37_nested_pattern).
+
+See [language-spec §4.54](language-spec.md).
 
 ### 11. CLI cheat sheet
 

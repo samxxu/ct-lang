@@ -2138,6 +2138,35 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **严格模式**：新诊断经 `ct_type_warn` 记录，`ct check` 的 strict 模式把 warning 升级为
   `error` 并让退出码非 0；`ct build` / `ct compile` 不进入这些判定。
 
+### 4.54 有界泛型 struct 与嵌套 impl pattern（Phase 33）
+
+- **声明**：`struct Box<T: Show> { … }` 给类型参数一个 trait 约束，约束与参数按位置对齐；每个参数
+  最多一个，`T: A + B` 报 `a struct type parameter cannot carry more than one bound`。约束名在声明期
+  只是拼写，不要求本单元可见；`Drop` / `Handback` 与 `.m.ct` 静态 trait 按名拒绝（沿用
+  `trait '<x>' cannot bound a type parameter`）。
+- **实例化校验**：写出实例的单元在解析完整单元后逐实例校验。实参要么在 `use` 列表里，要么有
+  `impl Trait for <实参>`（`impl` 写在实例之后也算数）；实参本身是模板实例时，其模板 tag 上的
+  `impl` 同样算数。不满足报一条 `instance argument '<arg>' does not satisfy the bound '<trait>'`，
+  位置指向实例化处的实参。
+- **约束可见性**：实例创建单元看不到约束 trait 时报 `unknown trait '<trait>' in a generic bound`，
+  不静默通过、不落到链接错；只声明不实例化的 `struct Box<T: Nope>` 仍退出 0。
+- **impl 继承约束**：`impl<T> Box<T>` 的方法体按位置继承 struct 的约束，`self->v.show()` 在编译期
+  静态派发为 `<实参>_<Trait>_vtable.show(…)`；约束不引入 vptr、不装箱、不改结构体布局。impl 上
+  再写 `impl<T: Show> Box<T>` 报 `impl type parameter 'T' cannot repeat the bound 'Show'`。
+- **嵌套 impl pattern**：`impl<T> Box<Box<T>>`、`impl<T> Pair<int, Box<T>>`、
+  `impl<T> Pair<T, Box<T>>` 按结构递归匹配，自内向外绑定；同名类型参数在 pattern 里出现两次必须
+  绑到同一实参（`Pair<int, Box<long>>` 不匹配）。pattern 里的裸类型参数不经过 `parse_type`、不登记
+  伪实例：`Box<Box<T>>` 不会产生 `struct Box_T`。
+- **深度与形态**：depth = pattern 里 `Box` 的个数 − 1；`depth > 4` 报
+  `impl pattern nesting exceeds 4 levels`，位置指向最内层 `<`。通配 `_`、数组 `T[2]`、指针尾缀
+  `T *`、函数指针与 `&` 实参报 `unsupported impl pattern '<pat>'`；具体指针实参（既有的
+  `impl<V> Map<char *, V>`）不受影响。`depth ≤ 4` 的 pattern 只在 impl 语法里成立，不是可实例化的
+  具体类型（`type_depth > 4` 仍拒绝）。
+- **跨单元单态化（Phase 31 T31-2）**：消费方单元实例化 `Vec<T>` / `Map<K, V>` 且元素 owner 与容器
+  模板 owner 不同时，该单元的 `.c` 发射私有的 `static` 元素 helper 与实例方法副本；`.h` 只保留类型，
+  vtable 与实例数据留在 owner 单元，所以两个消费方不会在链接期撞名。
+- 泛型 trait、参数化 trait 与 supertrait 由 Phase 35 承接；本相只支持非泛型 trait 作约束。
+
 ---
 
 ## English
@@ -4726,4 +4755,41 @@ and value types and defines the ownership protocol around them.
   takes the same path.
 - **Strict mode**: new diagnostics go through `ct_type_warn`, so `ct check`'s strict mode raises them
   to `error` and the exit code is non-zero; `ct build` / `ct compile` never enter these judgements.
+
+### 4.54 Bounded generic structs and nested impl patterns (Phase 33)
+
+- **Declaration**: `struct Box<T: Show> { … }` attaches one trait bound to a type parameter; bounds and
+  parameters align by position. A parameter carries at most one bound, so `T: A + B` reports
+  `a struct type parameter cannot carry more than one bound`. The bound name is only a spelling at
+  declaration time and need not be visible in that unit; `Drop` / `Handback` and `.m.ct` static traits
+  are refused by name (`trait '<x>' cannot bound a type parameter`).
+- **Instantiation check**: after a unit is fully parsed, every instance created in it is checked. The
+  argument must appear in a `use` list or have an `impl Trait for <arg>` (an `impl` written below the
+  instance still counts); when the argument is itself a template instance, an `impl` against its
+  template tag counts too. A miss reports one
+  `instance argument '<arg>' does not satisfy the bound '<trait>'` at the argument.
+- **Bound visibility**: when the instantiating unit cannot see the bound trait it reports
+  `unknown trait '<trait>' in a generic bound` rather than passing silently or failing at link time;
+  a declaration with no instance (`struct Box<T: Nope>`) still exits 0.
+- **impl inherits the bound**: a method body in `impl<T> Box<T>` inherits the struct's bound by
+  position, so `self->v.show()` dispatches statically as `<arg>_<Trait>_vtable.show(…)`; the bound
+  adds no vptr, no boxing and no layout change. Repeating it as `impl<T: Show> Box<T>` reports
+  `impl type parameter 'T' cannot repeat the bound 'Show'`.
+- **Nested impl patterns**: `impl<T> Box<Box<T>>`, `impl<T> Pair<int, Box<T>>` and
+  `impl<T> Pair<T, Box<T>>` match structurally and bind from the inside out; a parameter that appears
+  twice in one pattern must bind to the same argument (`Pair<int, Box<long>>` does not match). A bare
+  type parameter inside a pattern never goes through `parse_type` and registers no pseudo-instance:
+  `Box<Box<T>>` produces no `struct Box_T`.
+- **Depth and shapes**: depth = the number of `Box`es in the pattern − 1; `depth > 4` reports
+  `impl pattern nesting exceeds 4 levels` at the innermost `<`. A wildcard `_`, an array `T[2]`, a
+  pointer suffix `T *`, a function pointer or an `&` argument reports `unsupported impl pattern
+  '<pat>'`; concrete pointer arguments (the existing `impl<V> Map<char *, V>`) are unaffected. A
+  pattern with `depth ≤ 4` exists only in impl syntax, not as an instantiable concrete type (the
+  `type_depth > 4` limit still refuses those).
+- **Cross-unit monomorphisation (Phase 31 T31-2)**: when a consumer unit instantiates `Vec<T>` /
+  `Map<K, V>` and the element's owner differs from the container template's, that unit's `.c` emits
+  private `static` element helpers and instance-method copies; the `.h` keeps the type only and the
+  vtable and instance data stay in the owner unit, so two consumers never collide at link time.
+- Generic traits, parameterised traits and supertraits are Phase 35's; this phase accepts only
+  non-generic traits as bounds.
 

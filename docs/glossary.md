@@ -76,6 +76,9 @@
 | 函数指针（function pointer） | `int (*p)(int)`、`p(x)`、`(*p)(x)` | 可作参数 / 字段 / 全局 / 局部；赋值可写 `p = f` 或 `p = &f`；不支持 typedef、不支持返回函数指针 |
 | 外部声明（extern） | `extern int lib_flag;` | **只声明不定义**：进 `.h`，`.c` 不发射定义；不能带初始化式、不能是函数 |
 | 导出全局（pub global） | `pub int g_counter = 5;` | `.h` 出 `extern`，定义单元 `.c` 出定义；跨单元可读写 |
+| 有界泛型 struct（bounded generic struct） | `struct Box<T: Show> { … }` | 类型参数带一个 trait 约束；实例在创建它的单元校验（`use` / `impl` / 模板 tag 上的 `impl` 都算满足），impl 方法体按位置继承该约束并静态派发，不加 vptr（Phase 33，见 [language-spec](language-spec.md) §4.54） |
+| 嵌套 impl pattern（nested impl pattern） | `impl<T> Box<Box<T>> { … }`、`impl<T> Pair<T, Box<T>> { … }` | 按结构递归匹配、自内向外绑定；pattern 里的裸类型参数不登记伪实例；depth = `Box` 个数 − 1，>4 报 L33-4，不支持的形态报 L33-5（Phase 33） |
+| 跨单元元素副本（cross-unit static copy） | 消费方 `.c` 里的 `static <instance>_<method>` | 元素 owner ≠ 容器模板 owner 时，由创建实例的单元发射私有的元素 helper 与实例方法副本；`.h` 只留类型，vtable / 实例数据留在 owner 单元（Phase 33 / T31-2） |
 
 ### 2. 命名 / 修饰规则（已发布契约）
 
@@ -328,6 +331,9 @@
 | function pointer | `int (*p)(int)`, `p(x)`, `(*p)(x)` | allowed as a parameter / field / global / local; assign with `p = f` or `p = &f`; no typedef, no returning one |
 | extern | `extern int lib_flag;` | **declaration only**: lands in the `.h`, the `.c` emits no definition; no initialiser, not a function |
 | pub global | `pub int g_counter = 5;` | the `.h` gets `extern` and the defining unit's `.c` gets the definition; readable and writable across units |
+| bounded generic struct | `struct Box<T: Show> { … }` | one trait bound on a type parameter; instances are checked in the unit that creates them (`use`, `impl`, or an `impl` against the template tag all satisfy it), and an impl body inherits the bound by position and dispatches statically with no vptr (Phase 33, see [language-spec](language-spec.md) §4.54) |
+| nested impl pattern | `impl<T> Box<Box<T>> { … }`, `impl<T> Pair<T, Box<T>> { … }` | matches structurally and binds from the inside out; a bare type parameter in a pattern registers no pseudo-instance; depth = the number of `Box`es − 1, above 4 reports L33-4, and unsupported shapes report L33-5 (Phase 33) |
+| cross-unit static copy | `static <instance>_<method>` in the consumer's `.c` | when the element's owner differs from the container template's, the unit that creates the instance emits private element helpers and instance-method copies; the `.h` keeps the type only and vtable / instance data stay in the owner unit (Phase 33 / T31-2) |
 
 ### 2. Naming / mangling rules (a published contract)
 
