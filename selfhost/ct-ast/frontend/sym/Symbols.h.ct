@@ -324,6 +324,12 @@ pub struct StructTmpl {
     char full[160];             /* namespace-qualified C name */
     int  ntparams;
     char tparam[2][160];
+    /* Phase 33 O1: the trait bound written after a parameter
+       (`struct Box<T: Show>`), position-aligned with `tparam`; empty when the
+       parameter is unbounded. It is a spelling, not a resolved row: a consumer
+       unit may not see the trait's declaration, so `find_trait` waits for the
+       unit that creates an instance (D33-5, L33-6). */
+    char bound[2][160];
     struct Field fields[64];
     int  nfields;
     char use[64][160];
@@ -377,7 +383,7 @@ pub int ct_impl_matches(int ii, int inst);
    cover the instance. */
 pub int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2, int cap);
 pub int ct_tmpl_find(const char *name);
-pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, int is_pub, int owner, const char *path, int line);
+pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, const char *b1, const char *b2, int is_pub, int owner, const char *path, int line);
 pub int ct_inst_find(const char *name);
 pub int ct_inst_add(const char *name, const char *tmpl, int nargs, const char *a1, const char *a2, const char *c1, const char *c2, int owner, int carried);
 /* Phase 29 §2.2: the canonical spelling of one type argument (trim, collapse
@@ -1532,8 +1538,8 @@ int ct_tmpl_find(const char *name)
 }
 
 int ct_tmpl_add(const char *name, const char *full, int ntprm,
-                const char *t1, const char *t2, int is_pub, int owner,
-                const char *path, int line)
+                const char *t1, const char *t2, const char *b1, const char *b2,
+                int is_pub, int owner, const char *path, int line)
 {
     int i, n;
     struct StructTmpl *t = ct_tmpls(&n);
@@ -1546,6 +1552,8 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
     t[n].ntparams = ntprm;
     snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
     snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
+    snprintf(t[n].bound[0], MAX_TEXT, "%s", b1);
+    snprintf(t[n].bound[1], MAX_TEXT, "%s", b2);
     t[n].nfields = 0;
     t[n].nuse = 0;
     t[n].is_pub = is_pub;

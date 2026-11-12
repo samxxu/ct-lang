@@ -1773,12 +1773,15 @@ impl ParseOps for Parser {
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char tparam[2][MAX_TEXT];
+        char bound[2][MAX_TEXT];
         (void)self;
 
         nt = 0;
         templ = 0;
         tparam[0][0] = 0;
         tparam[1][0] = 0;
+        bound[0][0] = 0;
+        bound[1][0] = 0;
         struct_line = self->lex->tokline;
         brace_line = 0;
         brace_col = 1;
@@ -1803,8 +1806,10 @@ impl ParseOps for Parser {
             if (self->sup->add_struct(qname) < 0) return -1;
             self->sup->lex_next();
         }
-        /* Phase 29: `struct Name<T[, U]>` -- at most two type parameters, no
-           bounds (a struct parameter is never dispatched through a vtable). */
+        /* Phase 29/33: `struct Name<T[, U]>` -- at most two type parameters,
+           each with one optional trait bound (`T: Show`). The bound is kept as
+           written: a consumer unit may not see the trait's declaration, so the
+           satisfaction check waits for the unit that instantiates (L33-6). */
         if (name[0] && !is_union && self->lex->tok == T_PUNCT
             && strcmp(self->lex->toktext, "<") == 0) {
             self->sup->lex_next();
@@ -1816,8 +1821,36 @@ impl ParseOps for Parser {
                 snprintf(tparam[nt], MAX_TEXT, "%s", self->lex->toktext);
                 nt++;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0)
-                    return self->sup->fail("a struct type parameter cannot carry a trait bound");
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) {
+                    char raw[MAX_TEXT];
+                    char msg[MAX_TEXT];
+                    int bline, bcol, bi;
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a trait name after ':'");
+                    bline = self->lex->tokline;
+                    bcol = self->lex->tokstart - self->lex->lstart + 1;
+                    snprintf(raw, sizeof raw, "%s", self->lex->toktext);
+                    self->sup->lex_next();
+                    /* L28-3 (unchanged text): the two built-in traits carry no
+                       vtable at all and a `.m.ct` static trait has no slot, so
+                       a bound would name a symbol nobody defines. The check is
+                       by name for the built-ins, whether or not the user has
+                       declared a same-named trait. */
+                    bi = self->sym->find_trait(raw);
+                    if ((bi >= 0 && self->sym->traits[bi].is_static)
+                        || strcmp(raw, "Drop") == 0 || strcmp(raw, "Handback") == 0) {
+                        snprintf(msg, sizeof msg,
+                                 "trait '%s' cannot bound a type parameter", raw);
+                        return tool::diag::ct_sem_error(bline, bcol, msg, self->mem->path);
+                    }
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "+") == 0)
+                        return tool::diag::ct_sem_error(self->lex->tokline,
+                            self->lex->tokstart - self->lex->lstart + 1,
+                            "a struct type parameter cannot carry more than one bound",
+                            self->mem->path);
+                    snprintf(bound[nt - 1], MAX_TEXT, "%s", raw);
+                }
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
                     self->sup->lex_next();
                     continue;
@@ -1909,6 +1942,7 @@ impl ParseOps for Parser {
 
             di = self->sym->find_struct(qname);
             ti4 = frontend::sym::ct_tmpl_add(name, qname, nt, tparam[0], tparam[1],
+                              bound[0], bound[1],
                               self->decl_pub, self->cur_unit, self->mem->path,
                               struct_line);
             if (ti4 < 0)
