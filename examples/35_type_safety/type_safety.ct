@@ -1,0 +1,66 @@
+//@ct-requires: ct-ast
+// 35_type_safety - the `ct check --types` gate (Phase 32)
+//
+// Every shape the gate judges is here: a declaration, an assignment, an
+// `into` field, a value and a void return, and a `Vec`/`Map` argument. The
+// values are chosen so the program is legal under `ct check --types` and
+// still builds and runs; the output names each shape's result.
+#include <stdio.h>
+
+trait Shape {
+    int area();
+}
+
+struct Square {
+    int side;
+} use Shape;
+
+impl Shape for Square {
+    int area() {
+        return self->side * self->side;
+    }
+}
+
+struct Pair {
+    int a;
+    int b;
+}
+
+int add(int x, int y) {
+    return x + y;
+}
+
+void noop(void) {
+    return;
+}
+
+int main(void)
+{
+    int n = 3;
+    int m;
+    double d = 1.5;
+    char *s = "ok";
+    char *p = 0;
+    int *np = &n;
+    Square sq;
+    Pair pr;
+    Vec<int> v = {1, 2};
+    Map<char *, int> tab = {"a": 1};
+
+    m = n;
+    *np = 5;
+    sq.side = 4;
+    pr into {
+        .a = 1;
+        .b = 2;
+    };
+    {
+        Shape sh = sq;
+        v.push(3);
+        tab.put("b", 2);
+        noop();
+        printf("%d %d %d %d %s %d %d %d %d %d\n", n, m, add(n, m), (int)d, s,
+               v.len(), tab.len(), pr.a + pr.b, sh.area(), p == 0);
+    }
+    return 0;
+}
