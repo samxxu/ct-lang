@@ -1,0 +1,12 @@
+/* P35 baseline only: a supertrait declaration. */
+/* Phase 35 does not do inheritance (D35-5); this file records what today's */
+/* parser says, so T35-4 has a starting point and nothing else. */
+trait Iter {
+    int next(void);
+}
+
+trait Seq: Iter {
+    int len(void);
+}
+
+int main(void) { return 0; }

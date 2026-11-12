@@ -1,0 +1,10 @@
+/* P35 probe: a bound naming a trait instance. */
+/* Today the bound parser wants '>' right after the parameter name. */
+/* E35-3: `T: Iter<int>` must store the normalised bound `Iter_int`. */
+trait Iter {
+    int next(void);
+}
+
+int f<T: Iter<int>>(T x) { return 0; }
+
+int main(void) { return 0; }

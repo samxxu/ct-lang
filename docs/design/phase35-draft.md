@@ -36,16 +36,19 @@
 
 ### 2.1 门禁基线
 
-**历史量级参考**（v0.30.0 发版，不是判据）：`check-ast` 1073/0、`test/run` 141/0、`check-warnings` 353/0、`check-docs` 1070 links / 185 files、`design window 12/12`。S0 必须在 **P34 收口提交**上实测并替换本节。
+**S0 实测（abdc93b，P34 收口，一次串行 `bash selfhost/check-all.sh`，11 道硬门禁全绿）**：`test/run` 148/0、`check-ast` 1272/0、`check-warnings` 529/0、`check-semantics` OK（23 断言）、`check-goldens` 无回归（L1' 25、L2 25）、`check-archive` 无回归、`check-m2a` 字节一致、`ct-tour` OK、grammar 167 断言、`test/pkg` 82/0、`check-docs` 1137 links / 190 files（v0.34.0，11 phase status）。原始计数存 `test/probes/p35_gate_baseline.txt`。
 
-### 2.2 红证探针（2026-11-11 实测）
+### 2.2 红证探针（2026-11-13 在 abdc93b 复跑）
 
 | 探针 | 基线输出 |
 | --- | --- |
-| `trait Iter<T> { T next(void); }` | `1:11: error: unexpected token` |
-| `impl Iter<int> for Circle` | `3:2: error: expected a type (tok 4 ';')` |
-| `T f<T: Show<int>>(T)` | `1:32: error: expected a type (tok 4 ';')` |
-| `trait Seq: Iter { … }`（**本相不做**，只作 §10.3 T35-4 的基线记录） | `3:2: error: expected a type (tok 4 ';')` |
+| `trait Iter<T> { T next(void); }` | `4:11: error: unexpected token`（`fixtures/p35_trait_tparam.ct`） |
+| `impl Iter<int> for Circle` | `12:16: error: unexpected token`（`fixtures/p35_impl_instance.ct`） |
+| `T f<T: Show<int>>(T)` | `8:14: error: expected '>' after the type parameter`（`fixtures/p35_bound_instance.ct`） |
+| `trait Seq: Iter { … }`（**本相不做**，只作 §10.3 T35-4 的基线记录） | `8:10: error: unexpected token`（`fixtures/p35_supertrait.ct`） |
+| iface 互赋（L35-5，既有诊断） | ct-ast `15:17: error: interface type mismatch`；l1/l2 `ct check` `1:1: error: 'sh' is an interface value of a different trait`（`fixtures/p35_iface_mismatch.ct`） |
+
+2026-11-11 的首轮探针在 trait 体后多写了一个 `;`（`trait Iter { … };`），当时记到的 `expected a type (tok 4 ';')` 是那个分号的错误，不是被测构造的错误；S0 复跑时去掉它，上表是构造本身的停止位置。`p35_check_baseline.sh` 可重跑，输出存 `p35_check_baseline.txt`；L35-5 的两套文案与源码锚点存 `p35_l35_5_old.txt`。
 
 ### 2.3 关键代码锚点
 
@@ -179,7 +182,7 @@
 | E35-9 | 既有断言零回退 | 全量 | `check-ast` | S0 实测计数 |
 | E35-10 | 样例 `examples/39_generic_trait` 进入 `test/run.sh`，golden 人工核对 | `examples/39_*` | `test/run` | 当前不存在 |
 | E35-11 | language-spec/tutorial/glossary/roadmap 写清命名与跨单元边界；supertrait 只写"本相不做 + 见 §10.2/§10.3" | `docs/**` | `check-docs` | 当前无表述 |
-| E35-12 | `ct check` 与编译共用诊断：L35-1/2/3/6 同文案同位置；L35-5 沿用既有 iface 诊断（实测 `'sh' is an interface value of a different trait`，位置 `1:1`，S0 在父提交上复核后钉死） | 上述负例 | `check-ast` | 当前无这些文案 |
+| E35-12 | `ct check` 与编译共用诊断：L35-1/2/3/6 同文案同位置；L35-5 沿用既有 iface 诊断——ct-ast（`check-ast` 的二进制）在编译与 `check` 两种模式下都报 `error: interface type mismatch` 于赋值表达式位置（夹具实测 `15:17`），l1/l2 的 `ct check` 报 `'sh' is an interface value of a different trait`（`1:1`），两套实测存 `test/probes/p35_l35_5_old.txt` | 上述负例 | `check-ast` | 当前无这些文案 |
 | E35-13 | `check-all.sh` 11 道硬门禁全绿；计数不回退；不 bump、不打 tag | 全量 | `check-all` | 基线见 §2.1 |
 | E35-14 | 生成标识符冲突 → L35-6；`test/probes/p35_capacity.sh` 生成 63 模板 + 1 实例 + 第 2 实例，脚本打印实际条数后断言第 65 条 trait 行报 `too many traits` → L35-8 | `errors/trait_instance_collision.ct` + `test/probes/p35_capacity.sh` | `check-ast` | 当前无实例行 |
 
@@ -191,7 +194,7 @@
 | L35-2 | 多 bound | `errors/trait_bound_multi.ct` | `a type parameter supports one trait bound` |
 | L35-3 | 泛型 trait 默认方法体 | `errors/generic_trait_default.ct` | `a generic trait cannot carry a default method body` |
 | L35-4 | 跨单元使用泛型 trait 实例 | `test/modules/errors/p35_cross_unit/` | `a generic trait instance must be created in its owner unit` |
-| L35-5 | **不同类型的 iface 互赋**（本相不支持任何 upcast；沿用既有诊断，不新增） | `errors/iface_mismatch.ct` | `'<v>' is an interface value of a different trait`（实测 `1:1`；S0 在父提交上复核位置后钉死） |
+| L35-5 | **不同类型的 iface 互赋**（本相不支持任何 upcast；沿用既有诊断，不新增） | `errors/iface_mismatch.ct` | ct-ast：`interface type mismatch`（赋值表达式位置，S0 实测 `15:17`）；l1/l2 `ct check`：`'<v>' is an interface value of a different trait`（`1:1`）；文案与锚点存 `test/probes/p35_l35_5_old.txt` |
 | L35-6 | 生成标识符冲突（trait 同名、`struct <I>_vtbl`/`_iface`、`<I>_vtable`、`<T>_<I>_<m>`） | `errors/trait_instance_collision.ct` | `trait instance name '<name>' collides with a declared type` |
 | L35-7 | 泛型 trait × 泛型 struct 参数不一一对应 | `errors/generic_trait_pair.ct` | `unsupported generic trait implementation shape` |
 | L35-8 | trait 模板 + 实例超过 `MAX_TRAITS` | `test/probes/p35_capacity.sh` | `too many traits` |
@@ -270,3 +273,4 @@
 | --- | --- | --- |
 | 2026-11-11 | 立项草案 | 范围含参数化 trait + supertrait + 约束组合 + 受控泛型 impl；估算 1,290–2,340（E35-1–E35-18 / L35-1–L35-9 / D35-1–D35-11） |
 | 2026-11-12 | **supertrait 移出本相** | 用户裁定"不做继承"；A/B 三形态评估见 §10.2，降级为开放项 T35-4（触发条件：出现必须把已装箱子 trait 值传给父 trait 参数的真实消费者，届时先上 B）。同步移除只服务 supertrait 的 E/L/D/S 条目与 5 个夹具，`L35-5` 改写为"iface 互赋"并保留编号；重算为 940–1,730，roadmap 中英两行同步。旧版全文可在 git 历史中查（`7fe298a` 及其之前的 `phase35-draft.md`） |
+| 2026-11-13 | S0 红证 | 在 abdc93b 重建并复跑 §2.2：11-11 探针的 `expected a type (tok 4 ';')` 是 trait 体后多写分号的假象，改为构造本身的停止位置；§2.1 换成实测门禁计数（`p35_gate_baseline.txt`）；钉死 L35-5 在 ct-ast 与 l1/l2 两套既有文案（`p35_l35_5_old.txt`）；判据宽度未改 |

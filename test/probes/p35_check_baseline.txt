@@ -1,0 +1,11 @@
+# Phase 35 S0 probe baseline
+# baseline: abdc93b
+# ct-ast:   /tmp/p35base/ct-ast
+#
+# probe                                  rc  output
+A parameterised trait                  1   p35_trait_tparam.ct:4:11: error: unexpected token
+B impl over a trait instance           1   p35_impl_instance.ct:12:16: error: unexpected token
+C bound naming a trait instance        1   p35_bound_instance.ct:8:14: error: expected '>' after the type parameter
+D supertrait (T35-4, not this phase)   1   p35_supertrait.ct:8:10: error: unexpected token
+E iface value of another trait (build) 1   p35_iface_mismatch.ct:15:17: error: interface type mismatch
+E iface value of another trait (check) 1   p35_iface_mismatch.ct:15:17: error: interface type mismatch

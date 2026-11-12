@@ -1,0 +1,16 @@
+/* P35 probe: an impl over a trait instance. */
+/* Today the parser stops at the '<' of the trait argument list. */
+/* E35-1: the impl must register as Circle_Iter_int_next. */
+trait Iter {
+    int next(void);
+}
+
+struct Circle {
+    int r;
+}
+
+impl Iter<int> for Circle {
+    int next(void) { return 1; }
+}
+
+int main(void) { return 0; }

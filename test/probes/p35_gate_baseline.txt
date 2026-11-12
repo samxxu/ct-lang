@@ -1,0 +1,15 @@
+# Phase 35 S0 gate counts (abdc93b, ct-ast v0.34.0; one serial `bash selfhost/check-all.sh`)
+#
+# gate                                    baseline
+test/run.sh                                148 passed, 0 failed
+check-goldens.sh                           OK (no regression; L1' 25 passed, L2 25 passed)
+check-archive.sh                           OK (no regression)
+check-m2a.sh                               PASS (byte-identical on test/cases/01_trait_basic.ct)
+ct-tour.sh                                 OK - compiled CT with C, then CT with CT; outputs matched
+editors/vscode/test/check-grammar.py       167 checks, 0 failed
+test/pkg/run.sh                            82 passed, 0 failed
+check-ast.sh                               1272 passed, 0 failed
+check-warnings.sh                          529 ok, 0 failed
+check-semantics.sh                         OK (23 assertions)
+check-docs.py                              OK (1137 relative links in 190 files, v0.34.0, 11 hard gates, 11 phase status)
+check-all.sh                               check-all: OK (11 hard gates green)

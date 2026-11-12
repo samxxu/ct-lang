@@ -1,0 +1,24 @@
+# L35-5 criteria running before Phase 35, archived by S0 at baseline abdc93b
+#
+# The card recorded the l1/l2 `ct check` wording. The fixture under
+# test/ast/errors/ is run by ct-ast, which owns a different front end and
+# a different wording for the same refusal; both are pinned here so the
+# fixture asserts the one its gate actually prints.
+#
+# ct-ast (the binary check-ast gates; compile mode, then check mode):
+#   $ ct-ast test/probes/fixtures/p35_iface_mismatch.ct
+#   test/probes/fixtures/p35_iface_mismatch.ct:15:17: error: interface type mismatch
+#   $ ct-ast check test/probes/fixtures/p35_iface_mismatch.ct
+#   test/probes/fixtures/p35_iface_mismatch.ct:15:17: error: interface type mismatch
+#
+# l1/l2 `ct check` (frozen layer, same fixture; not what the L35-5
+# fixture asserts, kept so the card wording has a home):
+#   $ ct check test/probes/fixtures/p35_iface_mismatch.ct
+#   test/probes/fixtures/p35_iface_mismatch.ct:1:1: error: 'sh' is an interface value of a different trait
+#
+# source anchors:
+577:                return self->fail("interface type mismatch");
+623:            return self->fail("interface type mismatch");
+selfhost/l1/ctc.ct:2224:                die(pos, "'%s' is an interface value of a different trait", id);
+selfhost/l2/core.ct:3508:                die(pos, "'%s' is an interface value of a different trait", id);
+selfhost/l2/core.ct:3577:                die(pos, "'%s' is an interface value of a different trait", id);

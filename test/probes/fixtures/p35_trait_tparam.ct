@@ -1,0 +1,8 @@
+/* P35 probe: a parameterised trait. */
+/* Today the parser stops at the '<' after the trait name. */
+/* E35-1: `trait Iter<T>` must become the instance `Iter_int`. */
+trait Iter<T> {
+    T next(void);
+}
+
+int main(void) { return 0; }

@@ -1,0 +1,17 @@
+/* P35 baseline: two interface values of different traits. */
+/* Phase 35 adds no upcast, so the existing diagnostic stays (L35-5). */
+trait Show { void show(void); }
+trait Iter { int next(void); }
+
+struct Circle { int r; } use Show;
+struct Sq { int n; } use Iter;
+
+impl Show for Circle { void show() { } }
+impl Iter for Sq { int next() { return 1; } }
+
+int main() {
+    Circle c;
+    Show sh = c;
+    Iter it = sh;
+    return 0;
+}
