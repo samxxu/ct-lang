@@ -1,0 +1,40 @@
+// Phase 34 S10: the consumer side. Everything the example shows is ordinary
+// library use: a `pub` generic instantiated here, a `pub` struct whose methods
+// stay in the library, and `Option` / `Result` over both scalars and a type
+// that lives in this unit. A brace initialiser takes plain values, so the
+// generic call and the method calls land in locals first.
+#include <stdio.h>
+
+import eco;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main(void)
+{
+    Counter c = Counter.make(3);
+    c.bump();
+    int base = c.get();
+    int doubled_in = twice<int>(2);
+    Option<int> some = { 1, base };
+    Result<int, char *> ok = { 1, doubled_in, 0 };
+    Result<int, char *> bad = { 0, 0, "cold" };
+    struct Point p;
+    p.x = twice<int>(5);
+    p.y = c.get();
+    Option<Point> op = { 1, p };
+    struct Point q = op.unwrap_or(p);
+    int got = c.get();
+    int untouched = some.unwrap();
+    int doubled = ok.unwrap();
+    char *why = bad.unwrap_err();
+    int present = op.is_some();
+    printf("%d %d %d %s %d %d %d\n", got, untouched, doubled, why, q.x, q.y, present);
+    some.release();
+    ok.release();
+    bad.release();
+    op.release();
+    return 0;
+}

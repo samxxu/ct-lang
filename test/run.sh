@@ -235,6 +235,27 @@ for ct in examples/*/*.ct; do
     ok "$label"
 done
 
+# E34-13 (P34 S10): a two-unit example cannot go through compile mode, so it is
+# driven by `ct-ast build` and diffed against its golden like every other demo.
+if ensure_ast; then
+    rm -rf "$TMP/ex38"
+    mkdir -p "$TMP/ex38"
+    if "$TMP/ct-ast" build --emit-c examples/38_ecosystem_reuse/src/main.ct \
+            -o "$TMP/ex38" >"$TMP/ex38.out" 2>"$TMP/ex38.err" \
+       && $CC $CFLAGS -I "$TMP/ex38" "$TMP/ex38"/*.c -o "$TMP/ex38.bin" \
+            2>"$TMP/ex38.cc" \
+       && "$TMP/ex38.bin" >"$TMP/ex38.stdout" 2>&1 \
+       && diff -u examples/38_ecosystem_reuse/src/main.expected.out "$TMP/ex38.stdout" \
+            >"$TMP/ex38.diff"; then
+        ok "examples/38_ecosystem_reuse/src/main.ct (ct-ast build)"
+    else
+        bad "examples/38_ecosystem_reuse/src/main.ct" \
+            "$(cat "$TMP/ex38.err" "$TMP/ex38.cc" "$TMP/ex38.diff" 2>/dev/null | head -10)"
+    fi
+else
+    bad "examples/38_ecosystem_reuse/src/main.ct" "the AST compiler chain did not build"
+fi
+
 # A comparison that cannot go red is not a gate. Take a real ct-ast example,
 # point the checker at a golden the program never prints, and require exactly
 # stage 4 (the diff) to reject it. If the expected file or the diff above were

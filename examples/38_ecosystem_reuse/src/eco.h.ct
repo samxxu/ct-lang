@@ -1,0 +1,26 @@
+// Phase 34 S10: the reusable side of the example. A `pub` generic function, a
+// `pub` struct with a non-generic inherent impl, all reachable from another
+// unit through the generated header.
+pub struct Counter {
+    int n;
+}
+
+impl Counter {
+    static Counter make(int n) {
+        Counter c;
+        c.n = n;
+        return c;
+    }
+
+    void bump() {
+        self.n = self.n + 1;
+    }
+
+    int get() {
+        return self.n;
+    }
+}
+
+pub T twice<T>(T x) {
+    return x + x;
+}
