@@ -261,6 +261,8 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 
 ## 10 风险与开放项
 
+### 10.1 风险
+
 | 编号 | 风险 | 处置 |
 | --- | --- | --- |
 | R35-1 | trait 实例膨胀 | 共用 `MAX_TRAITS=64`；E35-18 |
@@ -270,6 +272,28 @@ struct Seq_int_iface { void *self; struct Seq_int_vtbl *vt; };
 | R35-5 | 非泛型产物漂移 | E35-11 全量 diff |
 | R35-6 | 跨单元落到链接错误 | L35-6 硬错；E35-12 |
 | R35-7 | 依赖 P32 的检查器 | P32 的 `chk_assignable` 只服务 `ct check --types`，`ct build` 不调用；S5c 在 `Emitter.h.ct` 的 `N_ASSIGN`/`N_DECL` 分支自实现 `iface_upcast_ok`/`emit_upcast`。非法 iface 互赋即 L35-5 的非法 upcast，由 E35-7/E35-16 覆盖 |
+
+### 10.2 supertrait 形态再评估（2026-11-12）
+
+结论先行：**建议 Phase 35 只做 C（不做继承形态），A/B 降为带触发条件的开放项**；本节只记评估，范围在本轮不动（supertrait 章节仍在 §3.2，待结论确认后统一删改）。
+
+| 形态 | 语义 | 实现落点 | 估算（行） | 风险 |
+| --- | --- | --- | --- | --- |
+| **A 完整 supertrait** | `trait Seq<T>: Iter<T>`；`Seq` 的 impl 必须同时实现 `Iter`；`Seq` 值可隐式当 `Iter` 用 | 现有 7 片：`Parser.h.ct` supertrait 解析与 impl 完整性（S5a）；`Emitter.h.ct:2023-2031` 子 vtable 父表作首成员（S5b1）；按 `(Type, 父 trait 实例)` 另查父 impl（S5b2a）；实例 vtable 逐槽重发（S5b2b，`:1632-1646`）；父表拓扑序（S5b3）；`emit_vtable_fwd` 前向声明顺序（S5b4，`:1937-1955`）；`iface_upcast_ok`/`emit_upcast` 落在 `N_ASSIGN`/`N_DECL`（S5c） | 编译器 **260–480**（S5a70–110 + S5b1 30–60 + S5b2a 30–60 + S5b2b 30–60 + S5b3 30–60 + S5b4 20–40 + S5c 50–90）；现卡总量 **1,290–2,340** | 布局耦合：父 vtable 作首成员后，父表任何形态变化（加字段、换 iface 形状）都会连坐子表；upcast 需额外 5 个夹具与 3 条新诊断；与用户"不要为继承而继承"的取向相反 |
+| **B 接口组合（Go 式）** | `trait Seq<T> { Iter<T>; … }`：只把父 trait 的方法**并入**本 trait 的方法集，**不做隐式 upcast、不改父 vtable 布局**；`Seq` 值当 `Iter` 用仍报类型错 | ① 语法：`parse_trait` 方法循环里接受 `Iter<T>;` 成员并记 `Trait.parent`（`Parser.h.ct:2437` 起、方法循环 `:2486-2611`；字段加在 `Symbols.h.ct:205-216`）；② 合并：整程序解析后的 post-pass（`parse_program` @`Parser.h.ct:1165` 尾部）按 `find_trait`（`Symbols.h.ct:903`）解析父名、查环、把 `m[]`/`nm` 追加进子（`MAX_METHODS` 守卫 `Parser.h.ct:42`/`:2486`）；③ 发射器零改动 | 编译器 **105–170**（B1 语法 35–55 + B2 post-pass 45–70 + B3 `ct check` 同步与诊断接线 25–45）；总量约 **1,065–1,920**（编译器 745–1,380 + 夹具 150–260 + 样例 70–130 + 文档 100–150） | 用户仍要重写父方法（除非再做 auto-adopt，`ct_impl_find` @`Symbols.h.ct:1642`，+30–50 行）；仍不能把子当父传参；新增一条成员语法与 4 条诊断，收益只有"少写一个 trait 声明" |
+| **C 不做** | 各 trait 各自声明所需方法，靠 `use`/`impl` 组合 | 零改动 | 编译器 0；总量 **940–1,730**（编译器 640–1,210 + 夹具 140–250 + 样例 70–130 + 文档 90–140） | 样板方法声明重复；但今天 `lib/std` 无任何消费者需要子 trait 值当父 trait 用 |
+
+**B 的代码核查结论（先查后估）**：
+
+- **方法集只来自一张表**：`Trait.m[64]` + `nm`（`Symbols.h.ct:205-216`）。impl 侧按名字线性查找该表做签名比对（`Parser.h.ct:2785-2787`），缺方法在 impl 的 `{` 处硬错 `trait method '<m>' is not implemented for struct '<S>'`（`:2878-2892`），分发按名字查同一张表（`Expr.h.ct:4071`）。
+- **发射器真的不用动**：vtable 结构按 `nm`/`m[]` 展开（`Emitter.h.ct:2332-2341`），实例 vtable 用**指定初始化器**按 impl 的方法名赋值（`Emitter.h.ct:2632-2635`），因此合并后的方法与顺序无关地自动获得槽位。
+- **容量**：B 不新建 trait 行 → `MAX_TRAITS`（`Symbols.h.ct:36`，守卫 `:918`）与容量夹具（63 模板 + 实例）**不受影响**；但单个 trait 的 `m[64]` 会被合并撑大，必须在合并点复用 `too many trait methods` 守卫。
+- **顺序**：父 trait 可以声明在子之后，`parse_trait` 内即时合并会漏；合并必须放在整程序解析之后（post-pass）。
+- **B 不依赖 P32**：`chk_assignable` 只服务 `ct check --types`，与 B 无关。
+
+**裁定建议**：本轮 35 走 **C**，理由是 ct 侧没有真实消费者——`lib/std` 现有容器只有 `Vec<T>`，`Option`/`Result` 是 Phase 34 的单轴类型，trait 的生产性用户全在 `test/` 夹具里；A 的 260–480 行换来的"子当父用"没有任何一处调用点，且把子/父 vtable 布局永久绑死；B 只要 105–170 行，但它既不解决"子当父传参"（用户真正会写的那句），又要求父方法重写一遍，属于**成本低但收益更接近零**。若将来出现真实消费者（某个 trait 值确需当父 trait 传递），**先上 B**，并把 A 留到"确有需要零拷贝 upcast"时再评估。
+
+### 10.3 开放项与触发条件
 
 | 编号 | 开放项 | 触发条件 |
 | --- | --- | --- |
