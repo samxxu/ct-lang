@@ -6060,6 +6060,69 @@ for p29neg in container_copy container_own \
     fi
 done
 
+# ---------------------------------------------------------------------------
+# Phase 33 O1 (A block): bounded generic structs. The three diagnostics are the
+# ones docs/design/phase33-draft.md 4 freezes (L33-1/2/3); the compile, check
+# and build paths share the parser, so the first error line must agree (E33-20).
+# ---------------------------------------------------------------------------
+p33_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p33e.c" \
+            >"$work/p33e.out" 2>"$work/p33e.err"; then
+        bad "p33: $1" "expected a diagnostic, got exit 0"
+    elif ! grep -qF "test/ast/errors/$1.ct:$2: error: $3" "$work/p33e.err"; then
+        bad "p33: $1" "missing pinned diagnostic: $(head -2 "$work/p33e.err")"
+    elif [ "$(grep -c 'error: ' "$work/p33e.err")" -ne 1 ]; then
+        bad "p33: $1" "expected exactly one error: $(cat "$work/p33e.err")"
+    else
+        ok "p33 ($1)"
+    fi
+}
+p33_diag bound_unsatisfied 11:9 "instance argument 'int' does not satisfy the bound 'Show'"
+p33_diag impl_bound_dup 9:9 "impl type parameter 'T' cannot repeat the bound 'Show'"
+p33_diag multi_bound 8:17 "a struct type parameter cannot carry more than one bound"
+for p33neg in bound_unsatisfied impl_bound_dup multi_bound; do
+    "$work/ct-ast" "test/ast/errors/$p33neg.ct" -o "$work/p33md.c" \
+        >"$work/p33md1.out" 2>"$work/p33md1.err"
+    "$work/ct-ast" check "test/ast/errors/$p33neg.ct" \
+        >"$work/p33md2.out" 2>"$work/p33md2.err"
+    "$work/ct-ast" build "test/ast/errors/$p33neg.ct" -o "$work/p33mdd" \
+        --outdir "$work/p33mdb" >"$work/p33md3.out" 2>"$work/p33md3.err"
+    grep 'error: ' "$work/p33md1.err" | head -1 >"$work/p33md1.msg"
+    grep 'error: ' "$work/p33md2.err" | head -1 >"$work/p33md2.msg"
+    grep 'error: ' "$work/p33md3.err" | head -1 >"$work/p33md3.msg"
+    if cmp -s "$work/p33md1.msg" "$work/p33md2.msg" \
+       && cmp -s "$work/p33md1.msg" "$work/p33md3.msg" \
+       && [ -s "$work/p33md1.msg" ]; then
+        ok "p33 (check/build agree on $p33neg)"
+    else
+        bad "p33: check/build $p33neg" "$(cat "$work/p33md1.msg" "$work/p33md2.msg" "$work/p33md3.msg" 2>/dev/null)"
+    fi
+done
+
+# E33-3: the literal `Box<Box<Circle>>` lives in ast/201_bounded_nested, whose
+# runnable path also proves no vptr is needed; the same shape under `int` is
+# L33-1 through `errors/bound_unsatisfied`'s single-argument form.
+
+# E33-4: an inherited bound body names the vtable and never reads a vptr; the
+# only allowed occurrence is an interface assignment, which this body has none
+# of. Everything else in the extracted function fails the slice.
+rm -rf "$work/p33o4"
+mkdir -p "$work/p33o4"
+if ! "$work/ct-ast" test/ast/202_bound_inherit/prog.ct -o "$work/p33o4/prog.c" \
+        >"$work/p33o4/out" 2>"$work/p33o4/err"; then
+    bad "p33: E33-4 body" "$(head -2 "$work/p33o4/err")"
+else
+    awk '/Box_Circle_show\(void \*self\)/ { inb = 1 } inb { print } inb && /^\}/ { exit }' \
+        "$work/p33o4/prog.c" >"$work/p33o4/body"
+    if ! grep -qF "Circle_Show_vtable" "$work/p33o4/body"; then
+        bad "p33: E33-4 body" "no static dispatch in: $(cat "$work/p33o4/body")"
+    elif grep -v '\.__show_vptr =' "$work/p33o4/body" | grep -q '__show_vptr'; then
+        bad "p33: E33-4 body" "a vptr is read: $(cat "$work/p33o4/body")"
+    else
+        ok "p33 (E33-4 static dispatch, no vptr)"
+    fi
+fi
+
 # E29-5 / L29-W1: a project-local `vendor/std` is shadowed by the built-in
 # layer, with one warning, and the decoy module inside it is never read.
 repo_root=$(pwd)

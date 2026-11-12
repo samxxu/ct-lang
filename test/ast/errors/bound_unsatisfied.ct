@@ -1,0 +1,15 @@
+// Phase 33 O1 (L33-1): `int` does not satisfy the bound `Show`.
+trait Show {
+    int show();
+}
+struct Box<T: Show> {
+    T value;
+}
+
+int main(void)
+{
+    Box<int> b;
+
+    b.value = 1;
+    return b.value;
+}

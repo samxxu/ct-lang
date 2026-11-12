@@ -1,0 +1,12 @@
+// Phase 33 O1 (L33-3): one bound per type parameter.
+trait A {
+    int a();
+}
+trait B {
+    int b();
+}
+struct Box<T: A + B> {
+    T value;
+}
+
+int main(void) { return 0; }

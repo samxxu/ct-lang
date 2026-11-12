@@ -1035,6 +1035,15 @@ static int check_struct_bounds(struct Parser *self)
                 for (k2 = 0; !ok && k2 < self->sym->structs[si].nuse; k2++)
                     if (strcmp(self->sym->structs[si].use[k2], tp[ti].bound[k]) == 0)
                         ok = 1;
+                /* An `impl Trait for Box` written against the template tag
+                   covers every `Box<…>` instance for the type system; the
+                   emitter only misses the per-instance vtable, which this
+                   check never needs. */
+                if (!ok) {
+                    int ii = frontend::sym::ct_inst_find(tbase);
+                    int sj = ii >= 0 ? self->sym->find_struct(ins[ii].tmpl) : -1;
+                    if (sj >= 0) ok = impl_declares(self, sj, tp[ti].bound[k]);
+                }
             }
             if (!ok) {
                 snprintf(msg, sizeof msg,

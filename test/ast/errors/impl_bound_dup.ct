@@ -1,0 +1,13 @@
+// Phase 33 O1 (L33-2): the bound belongs to the struct declaration.
+trait Show {
+    int show();
+}
+struct Box<T: Show> {
+    T value;
+}
+
+impl<T: Show> Box<T> {
+    int show() { return 0; }
+}
+
+int main(void) { return 0; }
