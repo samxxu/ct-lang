@@ -4,12 +4,15 @@
 
 ## 这是什么
 
-`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）与 `Option` / `Result` 及其直接依赖**，
+`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）、`Option` / `Result` 与 `Str` 及其直接依赖**，
 不是整个 `std` 的新家。
-`str` / `io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像。
+`io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像；`Str` 的
+`char *` 映射层 `std::str::String` 仍在 ct-pkg `std`（Phase 36 的 S0 实测该包没有
+`std/string` / `CStr`，故按 `docs/design/phase36-draft.md` §14/§15 把 `Str` 值类型放回内建层）。
 
-内置层由三个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）。
-三者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
+内置层由四个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
+`Str.h.ct`（Phase 36）。
+四者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
 把它们 splice 到用户程序之前，`ct build` 则把它们作为独立单元参与发射；两种形态都
 **不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU、根命名空间。
 
@@ -22,8 +25,9 @@
 | `MapEntry` | `MapEntry<K, V>`，`foreach` 的 `item` 类型（`key` / `value` 字段） |
 | `Option` | `Option<T>`，`has` + `value` 标签结构（Phase 34） |
 | `Result` | `Result<T, E>`，`ok` + `value` + `err` 标签结构（Phase 34） |
+| `Str` | `Str`，`char *data` + `int len` 的带长度字符串（Phase 36） |
 
-这五个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
+这六个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
 （`frontend/module/MapTable.h.ct`）。它们没有 `std::vec::Vec` / `std::map::Map` 这样的模块路径别名：
 内置层是预解析的单元集合，不是 `std` 包的一部分。
 
@@ -55,6 +59,10 @@
   `unwrap` / `unwrap_err` 在错误一侧 `abort`，不返回零值。payload 按值拷贝，`release` 是 no-op；
   `?` / pattern matching / payload 自动释放属后续阶段（D34-8）。当实参是消费方单元的 struct 时，
   布局与方法在消费方发射，本目录的头文件只留前向声明。
+- **`Str`（Phase 36）**：拥有 `char *data` 与字节数 `len`；不要求 NUL 结尾，保留内嵌 `\0`。
+  显式 `impl Drop for Str` 释放 `data`（`data == 0` / `len == -1` 为已释放态，`free(0)` 无害）；
+  固有方法 `retain` / `release` 满足 Phase 31 元素协议，`Vec<Str>` 显式 `release()` 时逐元素释放。
+  `own Str *` 走既有 AutoDrop；按值拷贝只复制句柄，要独立句柄必须 `retain()`。
 
 ## 版本对齐
 
