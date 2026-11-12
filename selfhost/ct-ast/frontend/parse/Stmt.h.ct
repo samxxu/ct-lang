@@ -2407,7 +2407,7 @@ impl StmtOps for Stmt {
                     if (self->ex->inst_make("MapEntry", 2,
                                             ins[inst].carg[0], ins[inst].carg[1],
                                             ins[inst].ctype[0], ins[inst].ctype[1],
-                                            enc, MAX_TEXT, 0) != 0)
+                                            enc, MAX_TEXT, 0, 0, 0) != 0)
                         return -1;
                     snprintf(elem, sizeof elem, "struct %s", enc);
                 }

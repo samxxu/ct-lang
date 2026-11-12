@@ -115,9 +115,12 @@ pub trait ExprOps {
        the encoded instance tag to `out`. */
     int  parse_inst_type(char *out, int cap);
     /* Phase 29: create (or reuse) the monomorphised row for `Name<c1, c2>` and
-       register its struct layout. `depth` bounds nested instantiation. */
+       register its struct layout. `depth` bounds nested instantiation; `line` /
+       `col` are the first type argument's source position (0 when a nested
+       registration has no argument list of its own). */
     int  inst_make(const char *tname, int nargs, const char *a1, const char *a2,
-                   const char *c1, const char *c2, char *enc, int enc_cap, int depth);
+                   const char *c1, const char *c2, char *enc, int enc_cap,
+                   int depth, int line, int col);
     /* Phase 29: a substituted field spelling may itself name an instance
        (`MapEntry<K, V>`); register it so the emitter can print its layout. */
     int  inst_register_nested(const char *spell, int depth);
@@ -1941,7 +1944,7 @@ impl ExprOps for Expr {
         char canon[MAX_TEXT];
         char abuf[MAX_TEXT];
         struct StructTmpl *tp;
-        int n, ti2, tn, nargs, nt2;
+        int n, ti2, tn, nargs, nt2, pline, pcol;
 
         n = (int)strlen(out);
         snprintf(tname, sizeof tname, "%s", self->lex->toktext);
@@ -1958,9 +1961,15 @@ impl ExprOps for Expr {
         }
         self->sup->lex_next();
         nargs = 0;
+        pline = 0;
+        pcol = 1;
         for (;;) {
             if (nargs >= MAX_STRUCT_TPARAMS)
                 return self->sup->fail("a generic struct takes at most 2 type parameters");
+            if (nargs == 0) {
+                pline = self->lex->tokline;
+                pcol = self->lex->tokstart - self->lex->lstart + 1;
+            }
             self->inst_canon[0] = 0;
             self->type_depth++;
             if (self->type_depth > 4) {
@@ -2065,7 +2074,7 @@ impl ExprOps for Expr {
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
         if (self->inst_make(tname, nargs, carg[0], carg[1], ctype[0], ctype[1],
-                            enc, MAX_TEXT, 0) != 0)
+                            enc, MAX_TEXT, 0, pline, pcol) != 0)
             return -1;
         snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", enc);
         if (nargs == 1)
@@ -2214,7 +2223,8 @@ impl ExprOps for Expr {
        and let every matching `use` block adopt its trait. The arity check is
        shared with the type parser, so a built-in container gets no private
        branch (E29-12). */    int inst_make(const char *tname, int nargs, const char *a1, const char *a2,
-                  const char *c1, const char *c2, char *enc, int enc_cap, int depth)
+                  const char *c1, const char *c2, char *enc, int enc_cap, int depth,
+                  int line, int col)
     {
         struct StructTmpl *tp;
         int tn, ti2, k, si2, fi2, nt2, carried2;
@@ -2279,7 +2289,7 @@ impl ExprOps for Expr {
         }
         carried2 = (tp[ti2].is_pub && tp[ti2].owner == self->cur_unit) ? 1 : 0;
         k = frontend::sym::ct_inst_add(enc, tname, nargs, a1, a2, c1, c2,
-                                       self->cur_unit, carried2);
+                                       self->cur_unit, carried2, line, col);
         if (k == -2) {
             char msg[MAX_TEXT * 2];
             snprintf(msg, sizeof msg,
@@ -2378,7 +2388,8 @@ impl ExprOps for Expr {
         if (frontend::sym::ct_inst_encode(name, nargs, c1, c2, enc, sizeof enc) != 0)
             return 0;
         if (frontend::sym::ct_inst_find(enc) >= 0) return 0;
-        return self->inst_make(name, nargs, c1, c2, c1, c2, enc, sizeof enc, depth);
+        return self->inst_make(name, nargs, c1, c2, c1, c2, enc, sizeof enc, depth,
+                               0, 0);
     }
 
     /* Zero or more `[<len>]` groups after a declared name. The whole suffix is

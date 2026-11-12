@@ -352,6 +352,11 @@ pub struct StructInst {
     char ctype[2][160];
     int  nargs;
     int  owner;                 /* the unit that first named the instance */
+    /* Phase 33 O1: where the first type argument was written, so the bound
+       check can blame the instantiation (`Box<int>`'s `int`). 0 outside a
+       source position (a nested registration with no argument list). */
+    int  line;
+    int  col;
     int  carried;               /* the template owner's `.h` already defines it */
     int  emitted;               /* the writer already printed the definition */
 }
@@ -385,7 +390,7 @@ pub int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
 pub int ct_tmpl_find(const char *name);
 pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, const char *b1, const char *b2, int is_pub, int owner, const char *path, int line);
 pub int ct_inst_find(const char *name);
-pub int ct_inst_add(const char *name, const char *tmpl, int nargs, const char *a1, const char *a2, const char *c1, const char *c2, int owner, int carried);
+pub int ct_inst_add(const char *name, const char *tmpl, int nargs, const char *a1, const char *a2, const char *c1, const char *c2, int owner, int carried, int line, int col);
 /* Phase 29 §2.2: the canonical spelling of one type argument (trim, collapse
    whitespace, glue `*` to the previous token) and the encoded instance name. */
 pub int ct_type_canon(const char *in, char *out, int cap);
@@ -1576,7 +1581,7 @@ int ct_inst_find(const char *name)
 
 int ct_inst_add(const char *name, const char *tmpl, int nargs,
                 const char *a1, const char *a2, const char *c1, const char *c2,
-                int owner, int carried)
+                int owner, int carried, int line, int col)
 {
     int i, n;
     struct StructInst *t = ct_insts(&n);
@@ -1600,6 +1605,8 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
     snprintf(t[n].ctype[1], MAX_TEXT, "%s", c2);
     t[n].owner = owner;
     t[n].carried = carried;
+    t[n].line = line;
+    t[n].col = col;
     g_ninsts++;
     return n;
 }
