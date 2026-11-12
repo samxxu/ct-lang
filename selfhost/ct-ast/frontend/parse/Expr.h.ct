@@ -233,6 +233,17 @@ pub trait ExprOps {
     int  closure_arg_bind(int ci, const char *ftype);
 }
 
+/* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
+   sits at MAX_METHODS, and both grammars that need the gate -- the expression
+   layer and the statement layer -- hold this object. */
+pub trait ExprTypes {
+    /* The judged type of one expression. 0 when `out` names a value type,
+       non-zero when the tables cannot pin it (D32-4: the caller then stays
+       silent). `is_zero` is optional and marks the bare literal `0`, a null
+       pointer constant wherever a pointer is expected. */
+    int  chk_type(int n, char *out, int cap, int *is_zero);
+}
+
 pub struct Expr {
     struct Arena *arena;
     struct Lexer *lex;
@@ -355,7 +366,7 @@ pub struct Expr {
        `foreach`, so a mutation call on it inside the body is refused. */
     int  niter;
     char iter[8][160];
-} use ExprOps;
+} use ExprOps, ExprTypes;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -5456,6 +5467,40 @@ impl ExprOps for Expr {
         snprintf(self->calls[*self->ncalls].callee, MAX_TEXT, "%s", callee);
         self->calls[*self->ncalls].line = line;
         (*self->ncalls)++;
+        return 0;
+    }
+}
+
+impl ExprTypes for Expr {
+    /* Phase 32 S1: the type the optional `--types` pass judges. The core covers
+       the shapes `static_ctype` already pins -- a variable, a member / arrow
+       field, a deref, an address, a call and one subscript -- and reports
+       "undecidable" for everything else, so a shape the tables cannot resolve
+       is skipped rather than guessed (D32-4). A value that still carries array
+       dimensions is not a value type either: array actuals decay in C, and the
+       skip list owns that case. */
+    int chk_type(int n, char *out, int cap, int *is_zero)
+    {
+        int ad;
+
+        if (is_zero) *is_zero = 0;
+        if (n < 0 || !out || cap < 2) return -1;
+        out[0] = 0;
+        switch (self->arena->nodes[n].kind) {
+        case N_VAR:
+        case N_MEMBER:
+        case N_ARROW:
+        case N_DEREF:
+        case N_ADDR:
+        case N_INDEX:
+        case N_CALL:
+        case N_MCALL:
+            break;
+        default:
+            return -1;                 /* S2 adds the literal and wrapper shapes */
+        }
+        if (!self->static_ctype(n, out, cap, &ad, 0)) return -1;
+        if (ad != 0) return -1;
         return 0;
     }
 }
