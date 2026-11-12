@@ -1750,6 +1750,73 @@ static int inst_touched_by_unit(struct Emitter *self, int u, int ii)
     return 0;
 }
 
+/* Phase 33 O3: an instance whose element belongs to a unit other than the
+   container template's own. The template's unit cannot print the element's
+   definition, so the per-instance helpers and methods move to the unit that
+   named the instance (the only one that sees the element). */
+/* The unit that declares a plain `struct` element, or -1 when the spelling is
+   not one (a scalar, an interface value, an instance row, an unknown tag). */
+static int elem_plain_owner(struct Emitter *self, const char *ctype)
+{
+    char base[MAX_TEXT];
+    int si;
+
+    if (strncmp(ctype, "struct ", 7) != 0) return -1;
+    snprintf(base, sizeof base, "%s", ctype + 7);
+    if (frontend::sym::ct_inst_find(base) >= 0) return -1;
+    si = self->sym->find_struct(base);
+    if (si < 0) return -1;
+    return self->sym->structs[si].owner;
+}
+
+static int inst_elem_foreign(struct Emitter *self, int ii)
+{
+    int n, tn, tmpl, o1, o2;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+    struct Expr *ex;
+    const char *e1;
+    const char *e2;
+
+    ins = frontend::sym::ct_insts(&n);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (!ins || !tps || ii < 0 || ii >= n) return 0;
+    if (strcmp(ins[ii].tmpl, "Vec") != 0 && strcmp(ins[ii].tmpl, "Map") != 0)
+        return 0;
+    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    if (tmpl < 0 || tps[tmpl].owner < 0) return 0;
+    e1 = ins[ii].ctype[0];
+    e2 = (strcmp(ins[ii].tmpl, "Map") == 0 && ins[ii].nargs > 1)
+         ? ins[ii].ctype[1] : 0;
+    /* An interface value (its trait's unit) or an owning instance (its
+       template's unit) is judged by the Phase 31 reader. */
+    ex = frontend::parse::expr_get();
+    if (ex->container_elem_foreign(e1, tmpl)) return 1;
+    if (e2 != 0 && ex->container_elem_foreign(e2, tmpl)) return 1;
+    /* A plain struct carries its declaring unit directly (Phase 33): its
+       definition travels only through that unit's header, which the container's
+       unit does not include unless it is the same unit. */
+    o1 = elem_plain_owner(self, e1);
+    if (o1 >= 0 && o1 != tps[tmpl].owner) return 1;
+    o2 = (e2 != 0) ? elem_plain_owner(self, e2) : -1;
+    return o2 >= 0 && o2 != tps[tmpl].owner;
+}
+
+/* Phase 33 O3: which unit writes the element-lifecycle helper pair. A foreign
+   element moves the pair to the unit that named the instance; every other case
+   keeps the Phase 31 rule (the impl owner writes it). */
+static int inst_writes_helpers(struct Emitter *self, int u, int ii)
+{
+    int n;
+    struct StructInst *ins;
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins || ii < 0 || ii >= n) return 0;
+    if (!inst_elem_foreign(self, ii)) return inst_touched_by_unit(self, u, ii);
+    if (u < 0) return 1;
+    return ins[ii].owner == u;
+}
+
 /* Phase 31 O3: the definitions live after the instance methods, so a prototype
    pair must precede every body that calls them (compile mode has no header). */
 static int inst_emit_elem_protos(struct Emitter *self, int ii)
@@ -1826,7 +1893,7 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     if (!im || !tps) return 0;
     if (!header) {
         for (i = 0; i < ninsts; i++) {
-            if (!inst_touched_by_unit(self, u, i)) continue;
+            if (!inst_writes_helpers(self, u, i)) continue;
             if (inst_emit_elem_protos(self, i) != 0) return -1;
         }
     }
@@ -1856,7 +1923,7 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     }
     if (!header) {
         for (i = 0; i < ninsts; i++) {
-            if (!inst_touched_by_unit(self, u, i)) continue;
+            if (!inst_writes_helpers(self, u, i)) continue;
             if (inst_emit_elem_helpers(self, i) != 0) return -1;
         }
     }

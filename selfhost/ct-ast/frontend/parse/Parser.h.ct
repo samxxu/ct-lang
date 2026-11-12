@@ -2099,6 +2099,10 @@ impl ParseOps for Parser {
         if (qname[0]) {
             int di = self->sym->find_struct(qname);
             if (di >= 0) self->sym->structs[di].defined = 1;
+            /* Phase 33 O3: remember the declaring unit, so a container named by
+               another unit can tell whether the element's definition is visible
+               in the container template's own unit. */
+            if (di >= 0) self->sym->structs[di].owner = self->cur_unit;
         }
         /* Phase 29: publish the template build-wide, so a consumer unit that
            names `Stack<int>` can substitute the field spellings without ever

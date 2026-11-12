@@ -246,6 +246,11 @@ pub struct StructDef {
     int  is_inst;
     int  is_pub;
     int  declared_here;
+    /* Phase 33 O3: the unit that declared this type (-1 outside `build` and on
+       an instance row). A container instantiated elsewhere compares it with the
+       template owner's unit to decide whether the element's definition reaches
+       the unit that would otherwise write the instance methods. */
+    int  owner;
 }
 
 pub trait SymbolOps {
@@ -864,6 +869,7 @@ impl SymbolOps for Symbols {
         self->structs[self->nstructs].is_inst = 0;
         self->structs[self->nstructs].is_pub = 0;
         self->structs[self->nstructs].declared_here = 0;
+        self->structs[self->nstructs].owner = -1;
         self->nstructs++;
         return self->nstructs - 1;
     }
