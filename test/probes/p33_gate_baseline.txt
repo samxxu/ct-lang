@@ -1,0 +1,15 @@
+# Phase 33 S0 gate counts (69f2396, ct-ast v0.30.0; one serial `bash selfhost/check-all.sh`)
+#
+# gate                                    baseline
+test/run.sh                                146 passed, 0 failed
+check-goldens.sh                           OK (25 goldens)
+check-archive.sh                           OK
+check-m2a.sh                               OK
+ct-tour.sh                                 OK
+editors/vscode/test/check-grammar.py       OK
+test/pkg/run.sh                            82 passed, 0 failed
+check-ast.sh                               1205 passed, 0 failed
+check-warnings.sh                          393 ok, 0 failed
+check-semantics.sh                         OK
+check-docs.py                              1123 relative links in 189 files, v0.30.0, 11 hard gates, 12 phase status, design window 12/12
+check-all.sh                               check-all: OK (11 hard gates green)

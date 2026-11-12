@@ -1,0 +1,22 @@
+/* P33 probe: the `use Show` alternative on the struct itself. */
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T> {
+    T value;
+} use Show;
+impl Show for Box {
+    int show() { return 0; }
+}
+int main(void)
+{
+    Box<Circle> b;
+    Box<Box<Circle>> n;
+    return b.show() + n.show();
+}

@@ -1,0 +1,8 @@
+/* P33 probe: a bounded generic struct. */
+/* Today the struct parser rejects the bound at the ':' (5:13). */
+/* A: struct Box<T: Show> */
+/* B: Box<Circle> must satisfy Show after Phase 33 O1. */
+struct Box<T: Show> {
+    T value;
+}
+int main(void) { return 0; }

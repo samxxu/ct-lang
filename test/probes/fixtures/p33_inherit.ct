@@ -1,0 +1,25 @@
+/* P33 probe: a struct bound must reach the impl<T> Box<T> body. */
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T> {
+    T value;
+}
+
+impl<T> Box<T> {
+    int show()
+    {
+        return self->value.show();
+    }
+}
+int main(void)
+{
+    Box<Circle> b;
+    return b.show();
+}

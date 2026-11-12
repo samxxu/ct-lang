@@ -1,0 +1,12 @@
+/* P33 probe: a bound on the impl itself is not a thing (L33-2). */
+struct Box<T> {
+    T value;
+}
+
+/* today: the impl pattern parser rejects the bound at the ':' */
+/* A: impl<T: Show> Box<T> */
+/* B: after Phase 33 S3 this is L33-2. */
+impl<T: Show> Box<T> {
+    int depth() { return 1; }
+}
+int main(void) { return 0; }

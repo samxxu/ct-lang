@@ -1,0 +1,8 @@
+/* P33 probe: a function-pointer pattern. */
+struct Box<T> {
+    T value;
+}
+impl<T> Box<int (*)(int)> {
+    int depth() { return 1; }
+}
+int main(void) { return 0; }

@@ -1,0 +1,8 @@
+/* P33 probe: a pointer suffix in a pattern. */
+struct Box<T> {
+    T value;
+}
+impl<T> Box<T *> {
+    int depth() { return 1; }
+}
+int main(void) { return 0; }

@@ -1,0 +1,5 @@
+/* P33 probe: a generic trait (Phase 35, not this phase). */
+trait Show<T> {
+    int show();
+}
+int main(void) { return 0; }

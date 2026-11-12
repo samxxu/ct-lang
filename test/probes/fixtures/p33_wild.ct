@@ -1,0 +1,8 @@
+/* P33 probe: a wildcard pattern is silently accepted today. */
+struct Box<T> {
+    T value;
+}
+impl<T> Box<_> {
+    int depth() { return 1; }
+}
+int main(void) { return 0; }

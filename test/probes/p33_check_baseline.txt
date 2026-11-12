@@ -1,0 +1,28 @@
+# Phase 33 S0 baseline (ct-ast v0.30.0 at 69f2396, the Phase 32 close-out)
+# binary: /tmp/ctb/ct-ast
+# fields: probe  mode  rc  first stderr line
+p33_bound.ct           check     rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_bound.ct:5:13: error: a struct type parameter cannot carry a trait bound
+p33_nested.ct          check     rc=0  
+p33_nested.ct          compile   rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_nested.ct:12:1: error: no method 'depth' for type 'struct Box_Box__int'
+p33_nested.ct          grep      tags: 
+p33_implbound.ct       check     rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_implbound.ct:9:7: error: a struct type parameter cannot carry a trait bound
+p33_inherit.ct         check     rc=0  
+p33_inherit.ct         compile   rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_inherit.ct:18:1: error: cannot resolve the method trait (unknown receiver type)
+p33_inherit.ct         grep      tags: 
+p33_enc.ct             compile   rc=0  
+p33_enc.ct             grep      tags: struct Box_int 
+p33_enc.ct             grep      vtable: 
+p33_boundalt.ct        check     rc=0  
+p33_boundalt.ct        compile   rc=0  
+p33_boundalt.ct        grep      tags: struct Box_Box__Circle struct Box_Circle 
+p33_boundalt.ct        grep      vtable: Box_Box__Circle_Show_vtable Box_Circle_Show_vtable 
+p33_pseudo.ct          compile   rc=0  
+p33_pseudo.ct          grep      tags: struct Box_Box__int struct Box_int struct Box_T 
+p33_pseudo.ct          grep      vtable: 
+p33_wild.ct            check     rc=0  
+p33_suffix.ct          check     rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_suffix.ct:5:15: error: expected '>' after the type arguments
+p33_fnptrpat.ct        check     rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_fnptrpat.ct:5:19: error: expected a name in the function-pointer declarator
+p33_gtrait.ct          check     rc=1  /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p33_gtrait.ct:2:11: error: unexpected token
+p33_drop.ct            build     rc=0  
+p33_drop.ct            grep      symbols: A_Drop_drop 
+p31_cross_unit_owned   build     rc=1  test/modules/p31_cross_unit_owned/main.ct:8:19: error: container element type 'struct Box_int' is declared in another unit; declare it in the same unit or use a pointer element

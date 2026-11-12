@@ -1,0 +1,14 @@
+/* P33 probe: nested impl pattern. */
+struct Box<T> {
+    T value;
+}
+
+impl<T> Box<Box<T>> {
+    int depth() { return 1; }
+}
+
+int main(void) {
+    Box<Box<int>> b;
+    b.depth();
+    return 0;
+}

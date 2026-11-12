@@ -1,0 +1,10 @@
+/* P33 probe: the encoded instance tag of Box<int>. */
+struct Box<T> {
+    T value;
+}
+int main(void)
+{
+    Box<int> b;
+    b.value = 1;
+    return b.value;
+}

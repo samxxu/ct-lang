@@ -1,0 +1,13 @@
+/* P33 probe: the built-in Drop carries no vtable. */
+struct A {
+    int v;
+} use Drop;
+impl Drop for A {
+    void drop() { }
+}
+int main(void)
+{
+    A a;
+    a.v = 1;
+    return 0;
+}
