@@ -1199,6 +1199,9 @@ static int emit_closure_arg(struct Emitter *self, int n)
 }
 
 static int emit_struct_insts(struct Emitter *self, int u, int header);
+/* Phase 33 O3: 1 when an instance's element belongs to a unit other than the
+   container template's own, so its helpers and methods move to the consumer. */
+static int inst_elem_foreign(struct Emitter *self, int ii);
 /* Phase 29: write the methods of the template impl blocks. `header` writes the
    prototypes an exported template's consumer needs; otherwise the definitions. */
 static int emit_struct_impls(struct Emitter *self, int u, int header);
@@ -1572,6 +1575,10 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
     exported = tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0
                && self->units[tps[tmpl].owner].is_hdr;
+    /* Phase 33 O3: a consumer copy is private to the unit that writes it, so it
+       stays `static` even when the template's header normally exports the name;
+       one copy per consumer unit links fine, two globals would not. */
+    if (inst_elem_foreign(self, ii)) exported = 0;
     tname = frontend::sym::ct_impls(&nimpls)[ki].use;
     /* An inherent name a more specific block already owns for this instance is
        not emitted twice (V29-1); a trait method keeps its own symbol. */
@@ -1880,7 +1887,7 @@ static int inst_emit_elem_helpers(struct Emitter *self, int ii)
 
 static int emit_struct_impls(struct Emitter *self, int u, int header)
 {
-    int ki, nimpls, i, ninsts, ntmpls, tmpl, owned;
+    int ki, nimpls, i, ninsts, ntmpls, tmpl;
     struct StructImpl *im;
     struct StructInst *ins;
     struct StructTmpl *tps;
@@ -1888,7 +1895,6 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     im = frontend::sym::ct_impls(&nimpls);
     ins = frontend::sym::ct_insts(&ninsts);
     tps = frontend::sym::ct_tmpls(&ntmpls);
-    (void)ins;
     (void)ntmpls;
     if (!im || !tps) return 0;
     if (!header) {
@@ -1899,17 +1905,18 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     }
     for (ki = 0; ki < nimpls; ki++) {
         tmpl = frontend::sym::ct_tmpl_find(im[ki].tmpl);
-        owned = (u < 0) || im[ki].owner == u;
-        if (!owned) continue;
         if (header) {
             int via_hdr;
-            if (tmpl < 0) continue;
+            if (tmpl < 0 || (u >= 0 && im[ki].owner != u)) continue;
             via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
                       && self->units[tps[tmpl].owner].is_hdr;
             if (!via_hdr || tps[tmpl].owner != u) continue;
             for (i = 0; i < ninsts; i++) {
                 int m;
                 if (!frontend::sym::ct_impl_matches(ki, i)) continue;
+                /* Phase 33 O3: a foreign-element instance's methods are a
+                   private copy in the consumer, so the header declares none. */
+                if (inst_elem_foreign(self, i)) continue;
                 for (m = self->arena->nodes[im[ki].node].a; m >= 0;
                      m = self->arena->nodes[m].next)
                     if (impl_emit_method(self, ki, i, m, 1) != 0) return -1;
@@ -1918,6 +1925,14 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
         }
         for (i = 0; i < ninsts; i++) {
             if (!frontend::sym::ct_impl_matches(ki, i)) continue;
+            /* Phase 33 O3: the unit that named a foreign-element instance
+               writes its methods; every other instance belongs to the impl
+               owner (Phase 29/31). */
+            if (inst_elem_foreign(self, i)) {
+                if (u >= 0 && ins[i].owner != u) continue;
+            } else if (u >= 0 && im[ki].owner != u) {
+                continue;
+            }
             if (impl_emit_one(self, ki, i) != 0) return -1;
         }
     }

@@ -136,9 +136,10 @@ pub trait ExprOps {
        instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
        that mentions no parameter passes through unchanged. */
     int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
-    /* L31-2: 1 when a container element is declared in a unit other than the
-       container template's own unit. In `ct build` the instance methods are
-       emitted in the container's unit, which cannot see such a definition. */
+    /* L31-2 / Phase 33 O3: 1 when a container element (an interface value or an
+       owning instance) is declared in a unit other than the container template's
+       own. The emitter uses it to move the instance's helpers and methods to the
+       unit that named it. */
     int  container_elem_foreign(const char *ctype, int container_tmpl);
     /* Phase 26: register (or reuse) the instance of template `gfi` for the
        concrete type spelling `targ`; returns its index in `sym->ginsts`. */
@@ -2178,12 +2179,12 @@ impl ExprOps for Expr {
         return 1;
     }
 
-    /* Phase 31 L31-2 (D31-5): an interface element belongs to the unit that
-       declares its trait; an instance element belongs to the unit that owns its
-       template. Both are compared with the container template's unit, because
-       that is the unit whose C emits the instance methods. A scalar or a
-       non-container struct element is unaffected: its definition reaches the
-       container unit through the ordinary header path. */
+    /* Phase 31 L31-2 / Phase 33 O3: an interface element belongs to the unit
+       that declares its trait; an owning instance element belongs to the unit
+       that owns its template. Both are compared with the container template's
+       unit, which is the unit that would otherwise write the instance methods.
+       A scalar or a non-container struct element is left to the emitter's
+       declaring-unit test (`StructDef.owner`). */
     int container_elem_foreign(const char *ctype, int container_tmpl)
     {
         char base[MAX_TEXT];
@@ -2259,19 +2260,6 @@ impl ExprOps for Expr {
                 || (nargs > 1 && self->container_iface_ptr(c2))))
             return self->sup->fail(
                 "a container of interface pointers is not supported; store the interface value itself");
-        /* L31-2 (D31-5): `ct build` emits the instance methods in the container
-           template's unit, which cannot see an element declared elsewhere. */
-        if (self->build_mode && *self->build_mode
-            && (strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
-            && (self->container_elem_foreign(c1, ti2)
-                || (nargs > 1 && self->container_elem_foreign(c2, ti2)))) {
-            char emsg[MAX_TEXT * 2];
-            snprintf(emsg, sizeof emsg,
-                     "container element type '%s' is declared in another unit; "
-                     "declare it in the same unit or use a pointer element",
-                     self->container_elem_foreign(c1, ti2) ? c1 : c2);
-            return self->sup->fail(emsg);
-        }
         if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
