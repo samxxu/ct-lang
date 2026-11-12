@@ -2110,6 +2110,34 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **不支持**：参数化 trait、约束、默认类型实参、显式实例列表。已知偏差（`Map` 线性扫描、无哈希
   索引）见 `docs/design/phase29.md` §10.2。
 
+### 4.53 可选类型检查 `ct check --types`（Phase 32）
+
+- **开关**：`ct check --types` 只在三处做粗粒度类型校验——声明初值 / 赋值（含 `into` 块里的
+  `.field = expr`）、`return`、容器与泛型固有方法的实参。不带 `--types` 的 `ct check`、以及
+  `ct build` / `ct compile` 的输出、诊断和 golden 逐字节不变。`--types` 与别的子命令组合报
+  `ctc: --types is only valid with 'ct check'` 并退出 1；这是 CLI 诊断（L32-7），不是源码诊断。
+- **判定内核**：复用 19.2 的 `arg_class`。两侧都是指针时不比较基类型与层数；算术类内部一律
+  兼容（`int x = 1.5`、`long n = 1` 不报）；接口槽仍走既有装箱路径，本开关不新增接口诊断；
+  裸 `0` 可以填任何指针槽。不同 struct 之间、算术类与实际为指针之间是硬错。
+- **判不出就跳过**：数组、闭包、函数指针、`void` 实际值，以及 `sizeof` / `_Generic` / 宏等
+  静态类型判不出的位置一律静默，交给 `cc`；跨单元函数体与 `import` 单元不检查。
+- **文案**（统一 `file:line:col`，列指向表达式起点；L32-6 指向出错实参的起点）：
+
+  | 编号 | 文案 |
+  | --- | --- |
+  | L32-1 | `initializer: expected '<T>', got '<U>'` |
+  | L32-2 | `assignment: expected '<T>', got '<U>'` |
+  | L32-3 | `return: expected '<T>', got '<U>'` |
+  | L32-4 | `return: missing a value (function returns '<T>')` |
+  | L32-5 | `return: a value is not allowed in a void function` |
+  | L32-6 | `argument <n>: expected '<T>', got '<U>'` |
+
+- **容器实参**：固有方法调用先按接收者实例行把 impl 的类型参数绑定到具体 C 实参，再对形参做
+  受限替换（裸 `T` / `U` 与 `T *` / `U *`），不按 `Vec` / `Map` 名字分支；用户泛型
+  `Pair<A, B>` 走同一条路径。
+- **严格模式**：新诊断经 `ct_type_warn` 记录，`ct check` 的 strict 模式把 warning 升级为
+  `error` 并让退出码非 0；`ct build` / `ct compile` 不进入这些判定。
+
 ---
 
 ## English
@@ -4671,4 +4699,31 @@ and value types and defines the ownership protocol around them.
 - **`Map` literals**: a literal lowers to `Map_<enc>_from((struct MapEntry_<enc>[]){…}, n)`; the
   product does not call `put` from `from`, and a null key is skipped.
 - **Diagnostics**: L31-1 … L31-23, all positioned; see the phase card for the exact wording.
+
+### 4.53 Optional type checking: `ct check --types` (Phase 32)
+
+- **Switch**: `ct check --types` judges three positions only — declaration initialisers and
+  assignments (including `.field = expr` inside an `into` block), `return`, and the arguments of
+  container / generic inherent methods. Without the flag, `ct check` and the output, diagnostics and
+  goldens of `ct build` / `ct compile` stay byte-for-byte identical. Combining the flag with another
+  subcommand prints `ctc: --types is only valid with 'ct check'` and exits 1; that is a CLI
+  diagnostic (L32-7), not a source diagnostic.
+- **Kernel**: the same `arg_class` used by 19.2. Two pointers are never compared by base type or
+  level; arithmetic types are compatible with each other (`int x = 1.5`, `long n = 1` are silent);
+  an interface slot keeps its existing boxing path and gains no new diagnostic; a bare `0` fills any
+  pointer slot. Different structs, or an arithmetic slot against a pointer actual, are hard errors.
+- **Undecidable means silent**: arrays, closures, function pointers, `void` actuals, and anything
+  whose static type the tables cannot pin (`sizeof` / `_Generic` / macros) are skipped and left to
+  `cc`; a cross-unit body or an `import`ed unit is not checked.
+- **Wording** (always `file:line:col`, the column points at the expression; L32-6 points at the
+  offending argument): `initializer: expected '<T>', got '<U>'` (L32-1), `assignment: …` (L32-2),
+  `return: expected '<T>', got '<U>'` (L32-3), `return: missing a value (function returns '<T>')`
+  (L32-4), `return: a value is not allowed in a void function` (L32-5),
+  `argument <n>: expected '<T>', got '<U>'` (L32-6).
+- **Container arguments**: an inherent call binds the impl's type parameters to the receiver
+  instance's concrete C arguments, then substitutes the formal in a restricted way (bare `T` / `U`
+  and `T *` / `U *`). There is no branch on the names `Vec` / `Map`; a user generic `Pair<A, B>`
+  takes the same path.
+- **Strict mode**: new diagnostics go through `ct_type_warn`, so `ct check`'s strict mode raises them
+  to `error` and the exit code is non-zero; `ct build` / `ct compile` never enter these judgements.
 

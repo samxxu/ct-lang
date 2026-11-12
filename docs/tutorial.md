@@ -1281,6 +1281,30 @@ int first = counts["a"];
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
   17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](history/design/phase17.md)
 
+### 13.1 可选的类型检查：`ct check --types`
+
+默认的 `ct check` 只做语法与既有语义检查；想让它顺手拦下明显的类型错，加 `--types`：
+
+```sh
+ct check --types app.ct
+```
+
+它只盯三处：声明初值与赋值（含 `into` 块里的 `.field = expr`）、`return`、以及
+`Vec` / `Map` 和用户泛型的固有方法实参。
+
+```ct
+int x = "s";            // initializer: expected 'int', got 'char *'
+x = "s";                // assignment: expected 'int', got 'char *'
+int f() { return "s"; } // return: expected 'int', got 'char *'
+int g() { return; }     // return: missing a value (function returns 'int')
+Vec<int> v = {1};
+v.push("s");            // argument 1: expected 'int', got 'char *'
+```
+
+判定是粗粒度的：两侧都是指针时不比较基类型与层数，算术类之间一律放行，裸 `0` 可填任何指针；
+数组、闭包、函数指针、`void` 实际值等判不出的位置保持沉默。不带 `--types` 的 `ct check` 与
+`ct build` / `ct compile` 的输出完全不变。
+
 ---
 
 ## English
@@ -2670,3 +2694,30 @@ comment continuations are all fine there (compare [language-spec §6.2](language
 - Packages: `ct get` / `ct update` / `ct install` / `ct verify`, manifest format in
   [design/phase8.md](history/design/phase8.md); the 17.5 additions (comparator ranges, offline
   re-resolution, the explicit index, build metadata) are in [design/phase17.md](history/design/phase17.md)
+
+### 13.1 Optional type checking: `ct check --types`
+
+Plain `ct check` does syntax and the existing semantic checks; add `--types` to have it catch
+obvious type mistakes too:
+
+```sh
+ct check --types app.ct
+```
+
+It looks at three positions only: declaration initialisers and assignments (including
+`.field = expr` inside an `into` block), `return`, and the arguments of `Vec` / `Map` and user
+generic inherent methods.
+
+```ct
+int x = "s";            // initializer: expected 'int', got 'char *'
+x = "s";                // assignment: expected 'int', got 'char *'
+int f() { return "s"; } // return: expected 'int', got 'char *'
+int g() { return; }     // return: missing a value (function returns 'int')
+Vec<int> v = {1};
+v.push("s");            // argument 1: expected 'int', got 'char *'
+```
+
+The judgement is coarse: two pointers are never compared by base type or level, arithmetic types
+are compatible with each other, and a bare `0` fills any pointer. Arrays, closures, function
+pointers and `void` actuals stay silent. Without the flag, `ct check` and the `ct build` /
+`ct compile` output are unchanged.

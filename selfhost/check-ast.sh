@@ -3044,6 +3044,9 @@ else
     bad "batch 38: import_ambiguous" "$(head -2 "$work/mbamb/err.txt")"
 fi
 
+echo
+echo "== p32 types (L32) =="
+
 # Phase 32 S8 (L32-7): `--types` is an opt-in gate on `ct check` only. A
 # non-check invocation names the rule instead of failing as an unknown option,
 # and `check --types` stays silent on a legal program.

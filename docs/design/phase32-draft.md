@@ -1,6 +1,6 @@
 # Phase 32 — 类型安全检查网：赋值、`return`、容器实参
 
-> **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
+> **状态：完成**（2026-11-11 立项草案；2026-11-12 收口：E32-1–E32-19 全绿，`bash selfhost/check-all.sh` 11/11；S9 无独立代码改动，逐片红证与偏差见 §14）。
 > **基线**：**Phase 31 收口提交**（S0 开工时记录实际 sha）。Phase 31 的容器形态与元素助手是本相 O3 的前置；`bd91bfe` 上这些能力尚不存在，不得作为基线。
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与基线清单随红证提交入库。
 > **文档形态**：`phase32-draft.md`。转正按「每次转正归档当时最老的一张」：32 转正时归档 `phase20`，33 转正时归档 `phase21`，依此类推；本卡不抢跑。
@@ -444,3 +444,16 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
 - 不改判据、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push。
 - 只暂存本相文件；`editors/vscode/**`、`docs/design/phase31.md` 与其他会话在改的文件一律不碰。
 - 收口跑 `bash selfhost/check-all.sh`，贴末行 VERDICT 与关键计数；未满足的判据必须回退状态。
+
+## 14 实施期变更记录
+
+1. **S9 并入 S3/S5/S7**：L32-1–L32-6 的文案与位置在各自挂点落地的同一次提交里就已是最终形态（空 callee 走裸文案的分支随 S3 改 `Diag.h.ct`），因此没有独立的 S9 代码提交；S9 的验收由 S10/S12 的逐条断言覆盖。
+2. **不加 `Parser.cur_ret`，改用既有 `Symbols.ret_type`**：`parse_func` 与 trait 默认方法已在入口保存、出口恢复 `ret_type`，再加一份 `cur_ret` 会造成两套状态。D32-11 的字段清单因此少一项，行为不变（R32-6 的嵌套泄漏风险由既有机制承担）。
+3. **实参位置需要列号**：AST 节点只记行号，S7 在 `Expr` 上加了栈式帧（`arg_line/arg_col/narg_pos/arg_base`）：进入参数表时记录，每解析一个实参前把帧顶推过本槽，出参表后弹出，因此嵌套调用不会覆盖外层的实参列。
+4. **S6 的 `pub` 原型必须单行**：跨行声明没有导出到 `Symbols.h`，生成的分片里只有未限定的前向声明；S7 顺手改成单行并重新导出。
+5. **S12 矩阵从 24 行改为 21 行**：闭包的三行（assign/return/container←closure）不可产出——Phase 21 在赋值、`return` 与容器实参处已把闭包表达式（及其绑定变量）判为硬错，L32 看不到它。矩阵保留 7 L32-n / 6 ok / 8 skip / 0 n/a，打印随之调整；`check_only/` 仍覆盖 void、array、fnptr 三类。
+6. **S10c 不建 `closure_actual.ct`**：同上，闭包实参无法成为 rc=0 的合法程序；E32-13 的闭包一项以“Phase 21 已拦截”登记，不再造夹具。
+7. **S13 清单的比较口径**：278 个 `prog.ct` 逐行记录基线 `ct check` 的 rc 与单行化 stderr；错误 tour 与 import-only 单元本来就非 0，因此门禁断言“`--types` 复现基线字节”，而不是强求每个文件 rc=0。非 `prog.ct` 的其余 `.ct` 按卡片“只记录、不断言”处理，未入清单。
+8. **S15 不碰 `docs/roadmap.md`**：该文件有另一会话的未提交改动，按用户指令不改、不提交、不 revert；Phase 32 的 roadmap 行仍显示“规划中”，由该会话落定后自行更新（本卡状态与门禁已收口）。
+9. **S8 落点**：`Module.h.ct` 未改；`Parser.h.ct` 只加 `int types_mode`，驱动在 `run()` 的 `build` 分派前预扫并写 `p->types_mode`，非 `check` 打印 L32-7 后返回 1，与卡片 §334 的落点 (a) 一致。
+10. **样例 35 的 golden**：`examples/35_type_safety/type_safety.ct` 输出 `5 3 8 1 ok 3 2 3 16 1`，人工核对后由 `test/run.sh` 的 `examples/*/*.ct` 自动纳入（146 passed）。

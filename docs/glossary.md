@@ -494,6 +494,7 @@
 | borrowed view ↔ owning handle | a view (`get` / `entry` / `foreach item`) points into the container's storage, cannot be released and goes stale after a mutation; an owning handle comes from `retain` / `pop` / `from` / a brace initialiser |
 | container handle ↔ `ct_buf` header | the handle is one `h` pointer (H-A); `refs` / `len` / `cap` / `data` live in the shared header, so growth never leaves a sibling handle dangling |
 | subscript ↔ write | `v[i]` / `m[k]` is read-only sugar for `get`; assignment, compound assignment, increment and address-of are hard errors, so write through `set` / `put` |
+| type gate ↔ baseline silence | the gate is `ct check --types`; its contract is "silent on everything the baseline `ct check` accepts", so the shared `arg_class` kernel is reused and an undecidable type is a skip, never a warning |
 
 ### 10. Collaboration and process terms
 
