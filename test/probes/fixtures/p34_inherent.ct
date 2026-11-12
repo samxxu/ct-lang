@@ -1,0 +1,11 @@
+/* P34 probe: a non-generic inherent impl. */
+/* Today `impl Counter { ... }` is read as a trait impl of an unknown trait. */
+pub struct Counter {
+    int n;
+}
+
+impl Counter {
+    int get() { return self->n; }
+}
+
+int main(void) { return 0; }

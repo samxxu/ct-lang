@@ -1,0 +1,10 @@
+# Phase 34 S0 probe baseline
+# baseline: 66b8d00f14aebb3d7b2e015a1ac39f9fbc7dd54d
+# ct-ast:   /tmp/p34base/ct-ast
+#
+# probe                         rc  output
+A pub generic function         1   /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p34_pub.ct:5:9: error: generic functions cannot be pub
+B non-generic inherent impl    1   /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p34_inherent.ct:7:14: error: impl of an unknown trait
+C generic enum                 1   /Users/samxx/trae-ws/ct-lang/test/probes/fixtures/p34_enum.ct:3:12: error: unexpected token
+D lib/std Option type          1   <no match>
+E Option<Show>                 0   <compiled> (struct Option_Show__iface x1)

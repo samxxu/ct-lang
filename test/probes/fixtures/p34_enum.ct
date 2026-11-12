@@ -1,0 +1,8 @@
+/* P34 probe: a generic enum (L34-3 must name it). */
+/* Today the parser stops at the `<` as an unexpected token. */
+enum Option<T> {
+    int has;
+    T value;
+}
+
+int main(void) { return 0; }

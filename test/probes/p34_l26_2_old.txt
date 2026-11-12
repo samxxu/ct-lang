@@ -1,0 +1,20 @@
+# L26-2 old criteria, archived by Phase 34 S0 at baseline 66b8d00f14aebb3d7b2e015a1ac39f9fbc7dd54d
+#
+# code (the refusal):
+1285:                return self->sup->fail("generic functions cannot be pub");
+#
+# executable assertions:
+1397:p26_diag generic_pub 2:9 "generic functions cannot be pub"
+1435:p26_chk generic_pub "generic functions cannot be pub"
+6294:# E29-13 / B6: a `pub` generic function stays rejected across units (L26-2).
+6296:        >"$work/p29b6.out" 2>"$work/p29b6.err"; then
+6298:elif grep -Fq "generic functions cannot be pub" "$work/p29b6.err"; then
+6301:    bad "p29: generic_struct_pub_fn" "$(head -2 "$work/p29b6.err")"
+#
+# fixtures that must be promoted:
+test/ast/errors/generic_pub.ct:2:pub T id<T>(T x)
+test/modules/errors/generic_struct_pub_fn.ct:8:pub T id<T>(T x)
+#
+# superseded wording (language-spec):
+1914:  `generic functions cannot be pub`；`L26-3` 多个类型参数 `only one type parameter is supported`
+4407:  `L26-2` `pub` generic `generic functions cannot be pub`; `L26-3` multiple type parameters

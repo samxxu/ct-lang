@@ -1,0 +1,13 @@
+/* P34 probe: a pub generic function. */
+/* Today the parser rejects it at the name (L26-2). */
+/* A: `pub T id<T>(T x)` must export the template body. */
+/* B: a consumer unit calls id<int>(3). */
+pub T id<T>(T x)
+{
+    return x;
+}
+
+int main(void)
+{
+    return id<int>(3);
+}

@@ -1,0 +1,25 @@
+/* P34 probe: Option<Show> already monomorphises today. */
+/* This is not a new P34 capability; the phase only pins the API and shape. */
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show() { return self->r; }
+}
+
+struct Option<T> {
+    int has;
+    T value;
+}
+
+int main(void)
+{
+    Option<Show> o;
+    o.has = 1;
+    return o.has;
+}
