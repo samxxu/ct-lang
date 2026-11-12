@@ -947,11 +947,9 @@ impl SymbolOps for Symbols {
     {
         char enc[MAX_TEXT];
         char msg[MAX_TEXT * 2];
-        int ti, ni, mi;
+        char tmp[MAX_TEXT];
+        int ti, ni, mi, pi, pk;
 
-        /* S2b consumes the C spellings when it substitutes the signatures. */
-        (void)c1;
-        (void)c2;
         ti = self->find_trait(tname);
         if (ti < 0) {
             snprintf(msg, sizeof msg, "unknown trait '%s'", tname);
@@ -982,8 +980,26 @@ impl SymbolOps for Symbols {
         snprintf(self->traits[ni].carg[0], MAX_TEXT, "%s", a1);
         if (nargs > 1) snprintf(self->traits[ni].carg[1], MAX_TEXT, "%s", a2);
         self->traits[ni].nm = self->traits[ti].nm;
-        for (mi = 0; mi < self->traits[ti].nm; mi++)
+        for (mi = 0; mi < self->traits[ti].nm; mi++) {
             self->traits[ni].m[mi] = self->traits[ti].m[mi];
+            /* D35-3: the instance owns concrete signatures. The impl parser can
+               then run its ordinary return/parameter compatibility checks
+               against this row instead of learning about trait parameters. */
+            for (pi = 0; pi < nargs; pi++) {
+                if (ct_generic_subst(self->traits[ni].m[mi].ret,
+                        self->traits[ti].tparam[pi], pi == 0 ? c1 : c2,
+                        tmp, MAX_TEXT) != 0)
+                    return self->fail("type is too long");
+                snprintf(self->traits[ni].m[mi].ret, MAX_TEXT, "%s", tmp);
+                for (pk = 0; pk < self->traits[ni].m[mi].nparams; pk++) {
+                    if (ct_generic_subst(self->traits[ni].m[mi].ptype[pk],
+                            self->traits[ti].tparam[pi], pi == 0 ? c1 : c2,
+                            tmp, MAX_TEXT) != 0)
+                        return self->fail("type is too long");
+                    snprintf(self->traits[ni].m[mi].ptype[pk], MAX_TEXT, "%s", tmp);
+                }
+            }
+        }
         self->traits[ni].is_pub = self->traits[ti].is_pub;
         self->traits[ni].is_static = self->traits[ti].is_static;
         self->traits[ni].line = self->traits[ti].line;
