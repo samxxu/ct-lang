@@ -92,6 +92,7 @@ pub trait ParseOps {
     /* Phase 29: `impl<T> Name<Args> [use Trait] { … }`, the template form.
        `have_name` is 0 when the caller already read the template name. */
     int  parse_impl_inst(const char *tmpl, int have_name);
+    int  parse_pat_arg(char *out, int cap, int base, int *l4line, int *l4col, int *deep, int *bad);
     int  parse_use_list(int sindex);
 }
 
@@ -1057,6 +1058,106 @@ static int check_struct_bounds(struct Parser *self)
 }
 
 impl ParseOps for Parser {
+
+    /* Phase 33 S6: read one impl-pattern argument without `parse_type`. A bare
+       parameter stays its own spelling (a wildcard); a nested `Name<...>` keeps
+       the whole spelling and is walked by bracket depth, so no pseudo instance
+       is registered. A suffix (`*`, `[`) or a declarator (`(`) is not a pattern
+       shape and leaves `bad` set for the caller's L33-5; the depth cap counts
+       openings, so the sixth `Box` is the first that trips L33-4 (E33-11). */
+    int parse_pat_arg(char *out, int cap, int base,
+                      int *l4line, int *l4col, int *deep, int *bad)
+    {
+        int n = 0, depth = 0;
+
+        out[0] = 0;
+        for (;;) {
+            const char *tx = self->lex->toktext;
+            int tl = self->lex->tokline;
+            int tc = self->lex->tokstart - self->lex->lstart + 1;
+
+            if (self->lex->tok == T_ID) {
+                if (strcmp(tx, "_") == 0) *bad = 1;
+                if (n + (int)strlen(tx) + 1 >= cap)
+                    return self->sup->fail("an impl pattern is too long");
+                n += snprintf(out + n, (size_t)(cap - n), "%s", tx);
+                self->sup->lex_next();
+            } else if (self->lex->tok == T_PUNCT && strcmp(tx, "<") == 0) {
+                depth++;
+                /* depth counts the `Box` layers below the impl's own template:
+                   depth 4 (five `Box`) stays legal, depth 5 (six) reports
+                   L33-4 at the innermost `<`. */
+                if (base + depth > 4) {
+                    *deep = 1;
+                    *l4line = tl;
+                    *l4col = tc;
+                }
+                if (n + 2 >= cap)
+                    return self->sup->fail("an impl pattern is too long");
+                n += snprintf(out + n, (size_t)(cap - n), "<");
+                self->sup->lex_next();
+            } else if (self->lex->tok == T_PUNCT && strcmp(tx, ">>") == 0) {
+                /* D29-2: the lexer keeps `>>` as one token. Two open layers
+                   spend both characters; one open layer spends the first and
+                   leaves the rewritten `>` for the caller's own list. */
+                if (depth >= 2) {
+                    depth -= 2;
+                    if (n + 3 >= cap)
+                        return self->sup->fail("an impl pattern is too long");
+                    n += snprintf(out + n, (size_t)(cap - n), ">>");
+                    self->sup->lex_next();
+                    if (depth == 0) break;
+                } else if (depth == 1) {
+                    depth = 0;
+                    if (n + 2 >= cap)
+                        return self->sup->fail("an impl pattern is too long");
+                    n += snprintf(out + n, (size_t)(cap - n), ">");
+                    snprintf(self->lex->toktext, 4, "%s", ">");
+                    self->lex->tokstart = self->lex->tokstart + 1;
+                    break;
+                } else {
+                    break;
+                }
+            } else if (self->lex->tok == T_PUNCT && strcmp(tx, ">") == 0) {
+                if (depth == 0) break;
+                depth--;
+                n += snprintf(out + n, (size_t)(cap - n), ">");
+                self->sup->lex_next();
+                if (depth == 0) break;
+            } else if (self->lex->tok == T_PUNCT && strcmp(tx, ",") == 0 && depth == 0) {
+                break;
+            } else if (self->lex->tok == T_PUNCT && strcmp(tx, "*") == 0) {
+                /* A concrete pointer argument (`Map<char *, V>`) stays legal;
+                   the unsupported *suffix on a type parameter* is detected by
+                   the caller once the whole spelling is known (L33-5). */
+                if (n + 2 >= cap)
+                    return self->sup->fail("an impl pattern is too long");
+                n += snprintf(out + n, (size_t)(cap - n), "*");
+                self->sup->lex_next();
+            } else if (self->lex->tok == T_PUNCT
+                       && (strcmp(tx, "[") == 0
+                           || strcmp(tx, "]") == 0 || strcmp(tx, "(") == 0
+                           || strcmp(tx, ")") == 0 || strcmp(tx, "&") == 0)) {
+                *bad = 1;
+                if (n + (int)strlen(tx) + 1 >= cap)
+                    return self->sup->fail("an impl pattern is too long");
+                n += snprintf(out + n, (size_t)(cap - n), "%s", tx);
+                self->sup->lex_next();
+            } else if (self->lex->tok == T_NUM) {
+                /* An integer literal leaves `toktext` stale, so the spelling is
+                   rebuilt from the value and the suffix. */
+                *bad = 1;
+                if (n + 32 >= cap)
+                    return self->sup->fail("an impl pattern is too long");
+                n += snprintf(out + n, (size_t)(cap - n), "%ld%s",
+                              self->lex->toknum, self->lex->toksuffix);
+                self->sup->lex_next();
+            } else {
+                return self->sup->fail("expected a type in the impl pattern");
+            }
+        }
+        return 0;
+    }
 
     int parse_program(void)
     {
@@ -2786,7 +2887,7 @@ impl ParseOps for Parser {
         char ret[MAX_TEXT];
         char mname[MAX_TEXT];
         char htype[MAX_TEXT];
-        int nt, nargs, line, node, tail, mnode, params, body, ti, k, mline, is_static;
+        int nt, nargs, line, node, tail, mnode, params, body, ti, mline, is_static;
 
         nt = 0;
         nargs = 0;
@@ -2845,20 +2946,53 @@ impl ParseOps for Parser {
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
             self->sup->lex_next();
             for (;;) {
-                int isparam = 0;
                 if (nargs >= MAX_STRUCT_TPARAMS)
                     return self->sup->fail("a generic struct takes at most 2 type arguments");
-                if (self->lex->tok == T_ID)
-                    for (k = 0; k < nt; k++)
-                        if (strcmp(self->lex->toktext, tn[k]) == 0) isparam = 1;
-                if (isparam) {
-                    snprintf(pat[nargs], MAX_TEXT, "%s", self->lex->toktext);
-                    self->sup->lex_next();
-                } else {
-                    char tbuf[MAX_TEXT];
-                    tbuf[0] = 0;
-                    if (self->ex->parse_type(tbuf, sizeof tbuf) != 0) return -1;
-                    frontend::sym::ct_type_canon(tbuf, pat[nargs], MAX_TEXT);
+                {
+                    int aline = self->lex->tokline;
+                    int acol = self->lex->tokstart - self->lex->lstart + 1;
+                    int l4line = 0, l4col = 0, deep = 0, badp = 0;
+                    char pmsg[MAX_TEXT + 32];
+
+                    if (self->parse_pat_arg(pat[nargs], MAX_TEXT, 0,
+                                            &l4line, &l4col, &deep, &badp) != 0)
+                        return -1;
+                    if (deep)
+                        return tool::diag::ct_sem_error(l4line, l4col,
+                            "impl pattern nesting exceeds 4 levels", self->mem->path);
+                    if (!badp) {
+                        /* L33-5: a pointer suffix on a type parameter (`T *`)
+                           has no concrete spelling to bind; a concrete pointer
+                           (`char *`) keeps the old support. */
+                        char cs[MAX_TEXT];
+                        int cn = 0, bi;
+                        const char *cs0 = pat[nargs];
+
+                        while (*cs0 && cn < MAX_TEXT - 1) {
+                            if (*cs0 != ' ' && *cs0 != '\t') cs[cn++] = *cs0;
+                            cs0++;
+                        }
+                        cs[cn] = 0;
+                        for (bi = 0; bi < nt && !badp; bi++) {
+                            const char *q = cs;
+                            int tl = (int)strlen(tn[bi]);
+                            while ((q = strstr(q, tn[bi])) != 0) {
+                                int pre = q == cs
+                                    || !((q[-1] >= 'a' && q[-1] <= 'z')
+                                         || (q[-1] >= 'A' && q[-1] <= 'Z')
+                                         || (q[-1] >= '0' && q[-1] <= '9')
+                                         || q[-1] == '_');
+                                if (pre && q[tl] == '*') badp = 1;
+                                q += tl;
+                            }
+                        }
+                    }
+                    if (badp) {
+                        snprintf(pmsg, sizeof pmsg, "unsupported impl pattern '%s'",
+                                 pat[nargs]);
+                        return tool::diag::ct_sem_error(aline, acol, pmsg,
+                                                        self->mem->path);
+                    }
                 }
                 nargs++;
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
