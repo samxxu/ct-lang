@@ -297,6 +297,12 @@ pub trait SymbolOps {
     int  add_struct_inst(const char *name);
     int  find_trait(const char *name);
     int  add_trait(const char *name);
+    /* Phase 35: find or create the instance row of a parameterised trait.
+       `a1`/`a2` are the source-canonical arguments the encoded name and `carg[]`
+       use; `c1`/`c2` are the C spellings substituted into method signatures.
+       The row is registered as an iface type too. -1 sets last_error. */
+    int  trait_inst(const char *tname, int nargs, const char *a1, const char *a2,
+                    const char *c1, const char *c2, int owner);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
@@ -934,6 +940,58 @@ impl SymbolOps for Symbols {
         self->traits[self->ntraits].nm = 0;
         self->ntraits++;
         return self->ntraits - 1;
+    }
+
+    int trait_inst(const char *tname, int nargs, const char *a1, const char *a2,
+                   const char *c1, const char *c2, int owner)
+    {
+        char enc[MAX_TEXT];
+        char msg[MAX_TEXT * 2];
+        int ti, ni, mi;
+
+        /* S2b consumes the C spellings when it substitutes the signatures. */
+        (void)c1;
+        (void)c2;
+        ti = self->find_trait(tname);
+        if (ti < 0) {
+            snprintf(msg, sizeof msg, "unknown trait '%s'", tname);
+            return self->fail(msg);
+        }
+        if (self->traits[ti].ntparams == 0) {
+            snprintf(msg, sizeof msg, "trait '%s' is not generic", tname);
+            return self->fail(msg);
+        }
+        if (self->traits[ti].ntparams != nargs) {
+            snprintf(msg, sizeof msg,
+                     "generic trait '%s' takes %d type arguments, %d given",
+                     tname, self->traits[ti].ntparams, nargs);
+            return self->fail(msg);
+        }
+        /* `Iter<char *>` and `Iter<char*>` must land on the same row. Nested
+           instances keep their source-canonical spelling (`Vec<int>`). */
+        if (ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0)
+            return self->fail(
+                "the instantiated trait name exceeds 159 characters; shorten the trait or its arguments");
+        ni = self->find_trait(enc);
+        if (ni >= 0) return ni;
+        ni = self->add_trait(enc);
+        if (ni < 0) return -1;
+        self->traits[ni].tmpl = ti;
+        self->traits[ni].ntparams = 0;
+        self->traits[ni].nargs = nargs;
+        snprintf(self->traits[ni].carg[0], MAX_TEXT, "%s", a1);
+        if (nargs > 1) snprintf(self->traits[ni].carg[1], MAX_TEXT, "%s", a2);
+        self->traits[ni].nm = self->traits[ti].nm;
+        for (mi = 0; mi < self->traits[ti].nm; mi++)
+            self->traits[ni].m[mi] = self->traits[ti].m[mi];
+        self->traits[ni].is_pub = self->traits[ti].is_pub;
+        self->traits[ni].is_static = self->traits[ti].is_static;
+        self->traits[ni].line = self->traits[ti].line;
+        snprintf(self->traits[ni].path, MAX_TEXT, "%s", self->traits[ti].path);
+        snprintf(self->traits[ni].ns, MAX_TEXT, "%s", self->traits[ti].ns);
+        self->traits[ni].owner = owner;
+        if (self->add_type(enc, 3) != 0) return -1;
+        return ni;
     }
 
     /* Which trait of `stype` declares `method`: the vtable field name and the
