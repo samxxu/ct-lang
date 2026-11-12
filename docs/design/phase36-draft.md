@@ -10,14 +10,14 @@
 
 ### 1.1 一句话目标
 
-让泛型 struct 能递归释放字段，并交付一个不依赖 NUL 结尾的带长度字符串 `Str`：`impl<T> Drop for Box<T>` 可用，`Vec<Str>` 在**显式 `release()`** 时逐元素释放，`own Str *` 走既有 AutoDrop；编译器侧按 §10 的切片求和计，字符串库代码单列。
+让泛型 struct 能递归释放字段，并交付一个不依赖 NUL 结尾的带长度字符串 `Str`：`impl<T> Drop for Box<T>` 可用，`Vec<Str>` 在**显式 `release()`** 时逐元素释放，`own Str *` 走既有 AutoDrop；编译器侧按 §10 的切片求和计，库代码（`Vec`/`Option`/`Result` 接入）单列。
 
 ### 1.2 范围（O1–O2）
 
 | 编号 | 范围 | 交付 |
 | --- | --- | --- |
 | O1 | 泛型 `Drop` | `impl<T> Drop for Box<T>`；无显式 impl 时按**声明顺序**递归字段 glue；有显式 impl 时编译器**不生成**字段 glue（泛型需先按实例登记，§3.1.1 ③）；复用 Phase 31 的 `__ct_elem_retain`/`__ct_elem_release` |
-| O2 | 带长度字符串的**编译器契约** | `Str` 由 ct-pkg `std/string` 提供，是 shim 的不透明句柄（`pub struct Str { CStr *h; }`）；本相只交付它依赖的编译器机制（泛型 `Drop`、`own Str *`、`Vec<Str>` 元素协议）与一个本地夹具 `Str`（伪 `CStr`）验证协议；**不在 `lib/std` 重写 buffer** |
+| O2 | 带长度字符串的**编译器契约** | `Str` 的**目标位置**是 ct-pkg `std/string`（拟由该包提供的 shim 不透明句柄，`pub struct Str { CStr *h; }`）；本相只冻结它与适配层的**契约**，不假定该包已存在；只交付它依赖的编译器机制（泛型 `Drop`、`own Str *`、`Vec<Str>` 元素协议）与一个本地夹具 `Str`（伪 `CStr`）验证协议；**不在 `lib/std` 重写 buffer** |
 
 ### 1.3 非目标（本相明确不做）
 
@@ -44,14 +44,15 @@
 
 参考值（**历史量级参考**，Phase 31 开工前）：`check-ast` 1073/0、`test/run` 141/0、`check-warnings` 353/0、`check-docs` OK（1070 links / 185 files，v0.30.0，11 hard gates）、`design window 12/12`。这些数字**不是判据**；S0 必须重测并替换本节。
 
-### 2.2 红证探针（2026-11-11 实测）
+### 2.2 基线探针与事实（2026-11-11/12 实测）
 
 | 探针 | 命令 | 基线输出 |
 | --- | --- | --- |
-| `impl<T> Drop for Box<T>` | `ct-ast /tmp/p36_drop2.ct` | `5:14: error: unexpected token` |
-| `impl<T> Box<T> use Drop` | `ct-ast /tmp/p36_drop.ct` | `5:20: error: impl of an unknown trait` |
-| `own Str s`（结构体值） | `ct-ast /tmp/p36_own.ct` | `5:1: error: 'own' requires a malloc or calloc initialiser` |
-| `struct Str` | `grep -r "struct Str" lib/std` | 无此类型 |
+| `impl<T> Drop for Box<T>` | `ct-ast /tmp/p36_drop2.ct` | `5:14: error: unexpected token`（红证） |
+| `impl<T> Box<T> use Drop` | `ct-ast /tmp/p36_drop.ct` | `5:20: error: impl of an unknown trait`（红证） |
+| `own Str s`（结构体值） | `ct-ast /tmp/p36_own.ct` | `5:1: error: 'own' requires a malloc or calloc initialiser`（**基线事实/非目标确认**：D36-8 不做值移动，本相不期待转绿） |
+| `struct Str` | `grep -r "struct Str" lib/std` | 无此类型（**基线事实/非目标确认**：D36-12 不在 `lib/std` 定义，本相不期待转绿） |
+| ct-pkg `std/string` 是否已存在 | `ls -d ~/*ct-pkg* ~/trae-ws/*ct-pkg*`；`grep -rn 'cstr_release' . --include='*.h' --include='*.ct'`；若配置了 ct-pkg remote，再 `git ls-remote "$(git remote -v \| awk '/ct-pkg/{print $2; exit}')" HEAD` | 无检出、无 ct-pkg remote；`cstr_*` 签名来自提案契约，**非观测结果** |
 
 ### 2.3 关键代码锚点
 
@@ -91,7 +92,7 @@
 
 - `Vec<T>` 的 `release()` 对每个元素调用 `__ct_elem_release`；`T` 的**固有方法集**同时声明 `retain` 与 `release`（且 `retain` 返回自身类型）时该助手非空，否则为空（Phase 31 既有协议）。
 - `Option<T>` 在 P34 没有 `use Drop`。本相在 `lib/std/Option.h.ct` 与 `Result.h.ct` 的声明上加 `use Drop`（库改动，计入 S4c1/S4c2），实例因此获得字段递归 glue；`none()`/`ok()`/`err()` 必须**零初始化未使用的 payload**（`{0}`）。
-- **glue 无条件 drop payload**（既有发射器行为，不做条件 drop）：`has == 0` 时仍会调一次 `T_Drop_drop`。因此空 payload 必须是"可安全 drop 的零状态"：`Str` 零状态为 `data=0, len=0`（drop 只 `free(NULL)` 并置 `len=-1`）；`Probe` 以 `id=0` 表示 empty，`Probe_Drop_drop` 遇到 `id==0` 直接返回、不计数。若要求"empty 不调用 drop"，必须给 `Option` 写显式条件 Drop，本相不做（T36-8）。
+- **glue 无条件 drop payload**（既有发射器行为，不做条件 drop）：`has == 0` 时仍会调一次 `T_Drop_drop`，因此空 payload 必须是“可安全 drop 的零状态”（通用规则）：`Str` 零状态为 `h = 0`，`Str_Drop_drop` 对 `h == 0` 调 `cstr_release(0)`，**契约规定 `cstr_release(0)` 是 no-op**（否则 `Option<Str>::none()` 后 `delete` 是未定义行为）；`Probe` 以 `id=0` 表示 empty，`Probe_Drop_drop` 遇到 `id==0` 直接返回、不计数。若要求“empty 不调用 drop”，必须给 `Option` 写显式条件 Drop，本相不做（T36-8）。
 - 各实例的 glue 行为必须逐个说清：
 
 | 实例 | payload 字段 | glue 行为 | 释放方式 |
@@ -108,14 +109,14 @@
 
 #### 3.2.1 表示与所有权
 
-`Str` 的规范位置是 ct-pkg `std/string`（shim 所在包），**不是 `lib/std`**。它是对 shim 的不透明句柄，只负责语言侧的方法与所有权，buffer 由 shim 拥有：
+`Str` 的**目标位置**是 ct-pkg `std/string`（拟由该包提供，见 `docs/proposals/ct-pkg-agent-runtime.md` §2.4），**不是 `lib/std`**。本相只冻结下面的契约，不假定该包已存在；buffer 由 shim 拥有：
 
 ```c
 pub struct Str { CStr *h; } use Drop;
 
 impl Str {
     Str retain();          /* 返回可独立 release 的新句柄 */
-    int release();         /* 返回剩余引用数；0 表示已释放 */
+    int release();         /* 释放本句柄并返回所属 buffer 的剩余计数；深拷贝适配层只会 1→0，0 表示已释放 */
     int len();
     Str slice(int start, int n);
     Str concat(Str other);
@@ -124,29 +125,30 @@ impl Str {
 }
 ```
 
-- `CStr` 是 shim 的不透明类型；`cstr_retain` / `cstr_release` / `cstr_len` / `cstr_slice` / `cstr_concat` / `cstr_compare` / `cstr_c_str` 由 `std/string` 的 `.shim.h` 提供。
+- `CStr` 是拟由 ct-pkg shim 提供的不透明类型；`cstr_retain` / `cstr_release` / `cstr_len` / `cstr_slice` / `cstr_concat` / `cstr_compare` / `cstr_c_str` **拟由** `std/string` 的 `.shim.h` 提供（本环境未检出该包，签名来自提案契约，见 §2.2）。
 - `retain` 的契约是“返回一个可独立 `release` 的句柄”，**不规定实现**：shim 自带引用计数就是 O(1)；没有就由适配层深拷贝。CT 层不假设哪一种。
-- `release` 返回剩余引用数，与 `Vec.release()` 的形态一致；`Drop` 只做 `cstr_release(self->h)`，不直接 `free`。
+- `release` 释放本句柄并返回**该句柄所属 buffer** 的剩余计数；形态与 `Vec.release()` 一致，但**形态一致 ≠ 计数语义一致**：refcount 适配层给出真实共享计数，深拷贝适配层只会返回 0（释放前为 1）。门禁只断言 **0/非 0**，不断言 `> 1`。`Drop` 只做 `cstr_release(self->h)`，不直接 `free`。
+- **`cstr_release(0)` 是 no-op**（返回 0）：`Option<Str>::none()` 的零状态 `h == 0` 经 `delete` 必须无害；提案 §2.4 的契约表需同步补这一条（本轮只改本卡）。
 - `len` 是字节数；不要求 NUL 结尾，允许内嵌 `\0`；`c_str` 由适配层保证 NUL 结尾，遇到内嵌 `\0` 会截断，文档警告。
-- `slice` v1 返回独立 `Str`（复制或引用计数视图由适配层决定），不做借用逃逸分析（T31-5）。
-- **按值拷贝不自动 `retain`**：`Str b = a;` 与 `Vec` 一样只是复制句柄；要两个独立句柄必须写 `Str b = a.retain();`，否则两次 `release` 是双重释放。文档与样例必须按这个写法示范。
+- `slice` v1 返回**可独立 `release` 的独立句柄**；深拷贝或 refcount 视图由适配层决定，CT 不假设（与 D36-13 一致），不做借用逃逸分析（T31-5）。
+- **按值拷贝不自动 `retain`**：`Str b = a;` 与 `Vec` 一样只是复制句柄；要两个独立句柄必须写 `Str b = a.retain();`，否则两次 `release` 是双重释放。`b` 是别名而非所有权副本，`a.release()` 后不得再用 `b`（S5 只做运行期文档警告，不进判据）。文档与样例必须按这个写法示范。
 - `retain` / `release` 必须是**固有方法**（`impl Str { … }`），否则 Phase 31 的元素协议不生效；这要求 P34 的非泛型固有方法先落地。
 - `own` 边界不变：`own Str *p = malloc(sizeof(Str));` 然后 `p->h = …;`；工厂函数返回的 `Str *` 不能直接 `own`（`'own' requires a malloc or calloc initialiser`），用显式 `release`，P38 后用 `defer`。
 - **`lib/std` 不定义 `Str`**：内建层保持零外部依赖；本相夹具用一个本地 `struct Str { int *h; }` + 伪 `CStr` 验证 `Vec<Str>` 的 retain/release 与 `own`。
 
-#### 3.2.2 API（最小集，由 ct-pkg `std/string` 提供）
+#### 3.2.2 API（最小集，**拟由** ct-pkg `std/string` 提供）
 
 | 函数/方法 | 语义 |
 | --- | --- |
 | `str_from(const char *s)` | 从 NUL 结尾 C 串构造（复制进 shim） |
 | `str_from_len(const char *p, int n)` | 从指针 + 长度构造（复制，保留内嵌 `\0`） |
 | `str_len(Str s)` | 返回字节数 |
-| `str_slice(Str s, int start, int n)` | 返回新 `Str`（复制或引用计数视图，由适配层定） |
+| `str_slice(Str s, int start, int n)` | 返回可独立 `release` 的新 `Str`（深拷贝或 refcount 视图，由适配层定） |
 | `str_concat(Str a, Str b)` | 拼接，返回新 `Str` |
 | `str_compare(Str a, Str b)` | 按字节字典序，返回 -1/0/1 |
 | `str_c_str(Str s)` | 返回 NUL 结尾指针，**有效期到 `s.release()`**，调用方不释放 |
 | `s.retain()`（固有方法） | 返回可独立 `release` 的新句柄；满足元素协议的 `retain` 形态 |
-| `s.release()`（固有方法） | 释放本句柄，返回剩余引用数；与 `Drop` 走同一个 `cstr_release` |
+| `s.release()`（固有方法） | 释放本句柄，返回该 buffer 剩余计数（门禁只断言 0/非 0）；与 `Drop` 走同一个 `cstr_release` |
 
 - 元素协议只认固有方法 `retain`/`release`；自由函数 `str_retain`/`str_release` 可作为包装，但**不能让协议生效**。
 - 全部为 `pub` 函数或 `Str` 的固有方法，复用 P34 的跨单元能力；**正式库代码在 ct-pkg，不占本相编译器预算**。
@@ -166,14 +168,14 @@ impl Str {
 | D36-3 | 有显式 impl 时不生成字段 glue，方法体自负全责 | 既有实现事实；注入会自动双重释放 |
 | D36-4 | `Str` 不要求 NUL 结尾，保留内嵌 `\0` | 带长度字符串的核心价值 |
 | D36-5 | `Str` 按 UTF-8 字节处理，不做 Unicode 规范化 | 控制范围；后续可加 |
-| D36-6 | `slice` 返回深拷贝 | 不引入借用逃逸分析（T31-5） |
+| D36-6 | `slice` 返回可独立 `release` 的独立句柄；深拷贝或 refcount 视图由适配层决定 | 不做借用逃逸分析（T31-5）；与 D36-13 一致，CT 不假设实现 |
 | D36-7 | 容器一律显式 `release()`，无块尾自动释放 | 自动释放是新轴（T36-6），不在本相偷跑 |
 | D36-8 | `own Str *` 走既有 AutoDrop；不做结构体值移动 | `own` 只接受 malloc/calloc 指针；值移动是新特性（T36-5） |
 | D36-9 | 不给 `char *` ↔ `Str` 新增诊断 | 无类型检查；误用由 cc 报错，归 P32 |
 | D36-10 | 跨单元 `Str` 只保证同一编译器版本内 | 依赖 P34；不做 ABI 承诺 |
 | D36-11 | 不新增 `MAX_*`；不 bump、不打 tag | 与 31–35 纪律一致 |
-| D36-12 | `Str` 归 ct-pkg `std/string`，`lib/std` 不定义；本相只交付 Drop/元素协议/`own` 机制 + 本地夹具 | 内建层零外部依赖；避免与已存在的 shim 实现重复 |
-| D36-13 | `Str` 是 shim 的不透明句柄 `{ CStr *h }`；`retain` 契约是“可独立 release 的新句柄”，引用计数或深拷贝由适配层决定 | CT 层不假设 shim 是否 refcount；两种实现都成立 |
+| D36-12 | `Str` 归 ct-pkg `std/string`（拟由该包提供），`lib/std` 不定义；本相只交付 Drop/元素协议/`own` 机制 + 本地夹具 | 内建层零外部依赖；避免与规划中的 shim 实现重复 |
+| D36-13 | `Str` 拟为 ct-pkg shim 的不透明句柄 `{ CStr *h }`；`retain` 契约是“可独立 release 的新句柄”，引用计数或深拷贝由适配层决定；`release` 只承诺 0/非 0 | CT 层不假设 shim 是否 refcount；两种实现都成立，计数语义不跨适配层承诺 |
 | D36-14 | 工厂函数返回的 `Str *` 不走 `own`；用显式 `release`，P38 后用 `defer` | `own` 只接受 malloc/calloc 初始化，不为 `Str` 单独放宽 |
 
 ## 5 Battle 记录
@@ -185,7 +187,7 @@ impl Str {
 保持"显式 impl 自行负责全部释放"。非泛型路径实测 `Emitter.h.ct:2336-2339`：有显式 impl 时编译器直接 `continue`，不生成字段 glue；"先跑 drop 体再自动释放字段"与实现矛盾，且会双重释放。泛型路径必须先完成 §3.1.1 的 ③（按实例登记），否则实例行 `has` 为假，自动 glue 与显式 `Box_int_Drop_drop` 并存。
 
 ### B36-3 `slice` 深拷贝 vs 借用视图
-深拷贝。借用视图需要逃逸/别名分析（T31-5），会把本相拖入流分析；T36-3 保留零拷贝视图。
+接受**深拷贝或 refcount 视图**，两者都由适配层决定（D36-13）；拒绝借用逃逸分析（T31-5），那会把本相拖入流分析。T36-3 保留零拷贝借用视图。
 
 ### B36-4 `Str` 的所有权形态
 采纳 `own Str *`（指针 + malloc），不采纳 `own Str`（值移动）。实测 `own Str s` 报 `'own' requires a malloc or calloc initialiser`；值移动需要新的所有权语义，列为 T36-5。
@@ -200,13 +202,25 @@ impl Str {
 
 三个方案：
 
-1. **`lib/std` 内联值** `{char *data; int len}` + `retain` 深拷贝（原草案）。**否决**：与已存在的 shim 重复实现，且每次 `Vec<Str>` push 都复制整串，长会话消息历史会退化成 O(n²) 字节。
+1. **`lib/std` 内联值** `{char *data; int len}` + `retain` 深拷贝（原草案）。**否决**：与规划中的 shim 重复实现，且每次 `Vec<Str>` push 都复制整串，长会话消息历史会退化成 O(n²) 字节。
 2. **`lib/std` 句柄包 shim**。**否决**：内建层要 `#include` 外部 shim 并链接它的 `.c`，破坏 `lib/std` 的零外部依赖（Z2）。
-3. **ct-pkg `std/string` 不透明句柄** `{ CStr *h }`，`retain` 委托 shim。**采纳**：一个类型、零重复 buffer、内建层不依赖外部包；shim 有引用计数则 `retain` 是 O(1)，没有则由适配层深拷贝。
+3. **ct-pkg `std/string` 不透明句柄** `{ CStr *h }`（拟由该包提供），`retain` 委托 shim。**采纳**：一个类型、零重复 buffer、内建层不依赖外部包；shim 有引用计数则 `retain` 是 O(1)，没有则由适配层深拷贝。
 
 边界：多一层指针与一次句柄分配；`c_str` 依赖适配层保证 NUL；工厂句柄不能直接 `own`（D36-14）；正式库不在本相，本相只用夹具验证协议。
 
 ## 6 实现切片（每片 ≤150 行）
+
+### 6.0 S0 前置核对（五项事实，任一不成立按 §14 回退）
+
+| # | 事实 | 验证命令 | 判定标准 |
+| --- | --- | --- | --- |
+| 1 | ct-pkg `std` 含 `string` 且本环境可取 | 临时目录 `ct get std`；`find vendor -path '*string*'`；读 `ct.lock` | 取到模块；记录版本与 git commit sha |
+| 2 | shim 契约逐项可核对 | 读 `std/string/*.shim.h`：`CStr` typedef 与 7 个 `cstr_*` 声明 | 签名齐全；`cstr_release` 返回 int 且 `0` 为 no-op |
+| 3 | `Str` 单元能看见 `CStr` 声明 | 看包内 `.h.ct` 的 raw `#include`；`ct build` 产物检查 `#include`/`-I`（参照 `check-ast.sh:1879-1884`） | 产物含 `#include` 且 `-I` 指向 shim |
+| 4 | 依赖机制已在父提交落地 | 父提交跑 `check-ast`：P31 元素协议、P34 跨单元固有方法、既有 `own`/`delete` 夹具 | 全绿；记录 `baseline: <sha>` |
+| 5 | 真实 `Str` 能被本仓库夹具消费 | 最小程序 `import std::string;` + 构造 + `retain`/`release` | 跑通；跨包 import 不可用则 O2 不能验收 |
+
+S0 同时为 §7 每个 E 记录**父提交上的红证命令与原文**；E36-6/E36-7 若在父提交上已绿，按 §13 标为“库回归，非红证”。
 
 | 片 | 内容 | 主要文件 | 预估行 |
 | --- | --- | --- | --- |
@@ -219,8 +233,8 @@ impl Str {
 | S2b1 | 编译器侧实例归属核对（`nm --defined-only` 每实例恰一份；模板行用生成 C 定义行 grep == 0，不用 `nm`） | `Emitter.h.ct` | 30–60 |
 | S2b2 | 库侧元素协议接入（`Vec`/`Option`/`Result` 与 `retain`/`release`），**不计编译器预算** | `lib/std/**` | 20–40 |
 | S3 | 泛型 Drop 夹具（夹具内 `Probe` 计数可观测） | `test/ast/**` | 90–140 |
-| S4a | 夹具：本地 `Str` 句柄 + 伪 `CStr`（`.shim.h`/`.shim.c`），验证 `retain`/`release`、`Vec<Str>` 释放与 `own` 边界，**不计编译器预算** | `test/modules/p36_str_shim/**` | 80–130 |
-| S4b | ct-pkg `std/string` 正式实现：**不在本相**，只登记依赖（P34 固有方法 + P36 Drop/元素协议） | ct-pkg | 0 |
+| S4a | 夹具（红证并入 S4c1/E36-4）：本地 `Str` 句柄 + 伪 `CStr`（`.shim.h`/`.shim.c`）；`own Option<Str> *` + `delete` 触发 shim 释放（`Option` 加 `use Drop` 前必红），并含 `Option<Str>::none()` + `delete` 零状态用例；本地 `Str` 的 len/slice/concat/compare 只作库回归（E36-6/E36-7，非红证）。**不计编译器预算** | `test/modules/p36_str_shim/**` | 80–130 |
+| S4b | **外部依赖（非本相交付）**：ct-pkg `std/string` ≥ 某 commit/版本；验收 = S0 的 `ct get std` + 最小 `import std::string` 程序跑通；未落地则 E36-6/E36-7/E36-10 不得标记完成 | ct-pkg | 0 |
 | S4c1 | 库片：`Option.h.ct` 加 `use Drop` + `none()` 零初始化 payload | `lib/std/Option.h.ct` | 20–40 |
 | S4c2 | 库片：`Result.h.ct` 加 `use Drop` + `ok()`/`err()` 零初始化未使用 payload | `lib/std/Result.h.ct` | 20–40 |
 | S5 | `Str` 夹具：长度/切片/拼接/比较/内嵌 `\0` | `test/ast/**` | 90–140 |
@@ -236,13 +250,13 @@ impl Str {
 | E36-1 | `struct Box<T> use Drop` + `impl<T> Drop for Box<T>` 编译；夹具对 `Box<int>`/`Box<Str>` 各 `delete` 一次（保证 glue 被发射、不被优化掉）。**断言**：`nm --defined-only`（不加 `-g`；macOS 符号带 `_` 前缀）匹配 ` [tT] _?Box_int_Drop_drop$` 与 ` [tT] _?Box_Str_Drop_drop$` 各恰 1 条；生成 C 的定义行（**同时接受 `static void` 与 `static __attribute__((unused)) void` 两种拼写**；文件内声明+定义共 2 行，此处只数定义行，期望 1）`grep -cE '^static .*Box_int_Drop_drop\(void \*self\) \{' == 1`，`Box_Str` 同理；模板 `Box_Drop_drop` 用**生成 C 定义行** `grep -cE '^static .*Box_Drop_drop\(void \*self\) \{' == 0`（未引用的 static 在 `nm` 里恒为 0，不能用 `nm`） | `ast/225_generic_drop` + 产物 grep/`nm` | `check-ast` | 当前 `5:14: unexpected token`；`Box_Str` 半条须 P36 落地后 |
 | E36-2 | 无显式 impl 时字段按声明顺序递归；有显式 impl 时自动字段 glue 为零（`nm --defined-only` 中 `Box_int_Drop_drop`/`Box_Str_Drop_drop` 无第二份、链接无重复符号）；**顺序夹具（同单元）**：`impl<T> Drop for Box<T>` 写在 `Box<int>` 首次使用之后仍生效（`ct_impl_matches` 在发射期对全局 `ct_impls()` 求值）；夹具内 `Probe` 的全局计数输出逐字节正确（`Probe` 是夹具代码，不是编译器/库设施） | `ast/226_drop_order` | `check-ast` | 当前无泛型 Drop |
 | E36-3 | `Vec<Probe>` 的 `release()` 逐元素调用 `Probe_release`（容器调 `T_release`，不会调 `T_Drop_drop`），计数打印 3 次；`Vec<Str>` 产物 grep 到 `Str_release(` 调用 | `ast/227_vec_element_release` + 产物 grep | `check-ast` | 当前无 `Str` |
-| E36-4 | P36 给 `Option<T>` 加 `use Drop` 后：`own Option<Probe> *` + `delete` 触发 `Option_Probe_Drop_drop` → `Probe_Drop_drop`；**期望计数：1 个 `id!=0` 的 payload 计 1，`none<Probe>()` 计 0**；`none()`/`ok()`/`err()` 零初始化未使用 payload；`Option<Str>` 产物 grep `Str_Drop_drop(&_self->value)` | `ast/229_option_probe_drop` + 产物 grep | `check-ast` | 当前无 `Str`/`Option` Drop |
+| E36-4 | P36 给 `Option<T>` 加 `use Drop` 后：`own Option<Probe> *` + `delete` 触发 `Option_Probe_Drop_drop` → `Probe_Drop_drop`；**期望计数：1 个 `id!=0` 的 payload 计 1，`none<Probe>()` 计 0**；`none()`/`ok()`/`err()` 零初始化未使用 payload；另含 `Option<Str>::none()` + `delete`（`h == 0` 走 `cstr_release(0)` no-op）；`Option<Str>` 产物 grep `Str_Drop_drop(&_self->value)` | `ast/229_option_probe_drop` + 产物 grep | `check-ast` | 当前无 `Str`/`Option` Drop |
 | E36-5 | `drop` 方法体内对同一字段调用两次 `release()` → L36-1 | `errors/double_drop.ct` | `check-ast` | 当前无泛型 Drop |
-| E36-6 | `str_from_len` 保留内嵌 `\0`；`str_len` 返回字节数 | `ast/230_str_embedded_nul` | `check-ast` | 当前无 `Str` |
-| E36-7 | `str_slice`/`str_concat`/`str_compare` 输出正确（含空串、全 `\0`、UTF-8 多字节） | `ast/231_str_ops` | `check-ast` | 当前无 `Str` |
-| E36-8 | **复用既有 `own`/`delete` 机制的回归（`Str` 是新类型）**：`own Str *p = malloc(...)` + `delete p` 编译运行；`delete` 后指针被置 0（产物 grep `p = 0`）；`Str_Drop_drop` 体内含 `free(_self->data)`、`_self->data = 0` 与 `_self->len = -1`（glue 参数名是 `_self`，或夹具分配计数归零） | `ast/232_str_own_pointer` + 产物 grep | `check-ast` | 当前无 `Str` |
+| E36-6 | `str_from_len` 保留内嵌 `\0`；`str_len` 返回字节数（库行为回归，**非红证**；父提交上已绿） | `ast/230_str_embedded_nul` | `check-ast` | 当前无 `Str` |
+| E36-7 | `str_slice`/`str_concat`/`str_compare` 输出正确（含空串、全 `\0`、UTF-8 多字节；库行为回归，**非红证**；父提交上已绿） | `ast/231_str_ops` | `check-ast` | 当前无 `Str` |
+| E36-8 | **复用既有 `own`/`delete` 机制的回归（`Str` 是新类型）**：`own Str *p = malloc(...)` + `delete p` 编译运行；`delete` 后指针被置 0（产物 grep `p = 0`）；`Str_Drop_drop` 体内含 `cstr_release(_self->h)` 且**不含 `free(`**（glue 参数名 `_self`）；夹具 `Probe` 分配计数 1→0 | `ast/232_str_own_pointer` + 产物 grep | `check-ast` | 当前无 `Str` |
 | E36-9 | 非泛型 `Drop` 产物与基线逐字节相同；既有 Drop 夹具零回退 | 全量 | `check-ast` | S0 实测 |
-| E36-10 | 跨单元 `Str`（P34）在同一版本内工作；生成 `.h` 仅类型 | `test/modules/p36_str` | `check-ast` modules 段 | 当前无 `Str` |
+| E36-10 | 跨单元 `Str`（P34）在同一版本内工作；生成 `.h` 仅类型 | `test/modules/p36_str_shim` | `check-ast` modules 段 | 当前无 `Str` |
 | E36-11 | 样例 `examples/40_str_ownership` 进入 `test/run.sh`，golden 人工核对 | `examples/40_*` | `test/run` | 当前不存在 |
 | E36-12 | language-spec/tutorial/glossary/roadmap 写清泛型 Drop、声明顺序、显式 impl 自负全责、`Str` 无 NUL/内嵌 `\0`/UTF-8 字节语义 | `docs/**` | `check-docs` | 当前无表述 |
 | E36-13 | `check-all.sh` 11 道硬门禁全绿；计数不回退；不 bump、不打 tag | 全量 | `check-all` | 基线见 §2.1 |
@@ -273,7 +287,7 @@ impl Str {
 | **编译器外合计** | 夹具 + 样例 + 文档 | **500–800** | 15–26 |
 | 库代码（S2b2+S4c1+S4c2，**不计编译器预算**） | `lib/std/Vec.h.ct`、`Option.h.ct`、`Result.h.ct` | 60–120 | 2–4 |
 
-编译器 240–430 = 60+40+60+25+25+30 与 100+80+100+45+45+60，与 §6 逐片一致；库 60–120 = 20+20+20 与 40+40+40，不占编译器预算；S4a 的夹具 80–130 归入夹具预算；**S4b 正式 `Str` 库在 ct-pkg `std/string`，本相计 0 行**。相对第四轮 250–420/220–380，本相把 `Str` 的 buffer 实现整体移出仓库，只保留协议夹具，因此库预算从 240–420 降到 60–120。
+编译器 240–430 = 60+40+60+25+25+30 与 100+80+100+45+45+60，与 §6 逐片一致；库 60–120 = 20+20+20 与 40+40+40，不占编译器预算；S4a 的夹具 80–130 归入夹具预算；**S4b 正式 `Str` 库在 ct-pkg `std/string`，本相计 0 行；60–120 不含 ct-pkg 侧 180–300 行，那部分由 ct-pkg 的验收承担，不在本仓库计数**。相对第四轮 250–420/220–380，本相把 `Str` 的 buffer 实现整体移出仓库，只保留协议夹具，因此库预算从 240–420 降到 60–120。
 
 ## 11 风险与触发条件
 
@@ -303,14 +317,18 @@ impl Str {
 ## 12 交付物清单
 
 - `selfhost/ct-ast/**`：S1–S2 的实现与诊断。
-- `test/modules/p36_str_shim/**`（伪 `CStr` 适配层与本地 `Str` 夹具）；`lib/std/README.md` 增加“`Str` 在 ct-pkg `std/string`，不在内建层”的说明。
+- `test/modules/p36_str_shim/**`（伪 `CStr` 适配层与本地 `Str` 夹具）；`lib/std/README.md` 增加“`Str` 拟在 ct-pkg `std/string`，不在内建层”的说明。
 - `test/ast/225–232_*`（228 归 Phase 34 的 `228_pub_generic_fn`，本相跳过）、`test/ast/errors/*`、`test/modules/p36_str_shim`。
 - `examples/40_str_ownership/` + golden（用本地最小 `Str` 演示协议，不导入 ct-pkg）。
 - `docs/language-spec.md`、`tutorial.md`、`glossary.md`、`roadmap.md`。
 
 ## 13 收口与纪律
 
-- **T-7 先红后绿**：S0 在实现提交的父提交上复跑探针并提交 `test(ownership): P36 红`（含 `baseline: <sha>` 与原始输出）。
+- **T-7 先红后绿**：S0 在实现提交的父提交上复跑探针并提交 `test(ownership): P36 红`（含 `baseline: <sha>` 与原始输出）；**逐个 E 记录红证命令与原文**，E36-6/E36-7 标为“库回归、无红证”，不得冒充红证。
 - 每片 ≤3 文件、净增 ≤150 行；仓库任何时刻可构建。
 - 不改判据宽度、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push。
 - 只暂存本相文件；不碰其他会话文件。
+
+## 14 回退规则
+
+S0 的 5 项核对**任一不成立**，本相**自动回退**到 `b7f384e` 的 Phase 36 方案：恢复 `lib/std/Str.h.ct`（显式 `impl Drop for Str` + 内联释放）、S4a1/S4a2/S4b 三片与库预算 240–420，并同步 `docs/roadmap.md` 的中英文两行。该回退**不需要再请示**，照本节执行；只在变更记录里写明“2026-11-12 的 shim 方案在 S0 核对失败，回退到 b7f384e 版本”，不直接用 `git checkout` 掩盖历史。
