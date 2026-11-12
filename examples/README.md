@@ -86,6 +86,9 @@
 | `27_map_keys` | `Map` 的三种键（Phase 29 V29-1）：`Map<long, int>` / `Map<int, char *>` / `Map<char *, int>` 的 `put` / `get` / `remove` / `len`，证明 `long` 键不走 `strcmp`、白名单外的键编译期硬错 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `28_subscript_forms` | 容器下标判定的放行面（Phase 29 V29-4d）：数组、数组/指针字段、逐层剥星的指针链 `ppv[0][0]` / `pppv[0][0][0]` / `(*ppv)[0]`，以及返回 `int *` 的函数与方法、返回 `int **` 的函数 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `29_into_block` | 接收者语境块（Phase 30）：指针 / 左值 / 右值三种接收者的语句与值形态、块内 `.name` 与 `$`、块后后缀链 `->field`，以及 `int into = 1;` 的标识符兼容 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `32_container_subscript` | 下标糖（Phase 31）：`v[i]` / `m[k]` 读写分离、链式 `g[i][j]` 与越界返回空句柄 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `33_vec_brace_init` | `Vec` 花括号初值（Phase 31）：拥有型元素、空 `{}` 的非空 header、与 `from` 等价 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `34_map_literal` | `Map` 字面量（Phase 31）：插入序、重复键原位覆盖、编译期重复键报 `duplicate key` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
 ## 门禁归属说明
 

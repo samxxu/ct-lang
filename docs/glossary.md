@@ -243,6 +243,9 @@
 | 透传 ↔ 行重写 | 透传：非构造行原样输出；行重写：构造行被替换为等价的 C |
 | 命名空间路径 ↔ 限定引用 | `A::B` 是**写法**；"限定引用"是按该写法跨命名空间取符号的**行为** |
 | 导出（`pub`） ↔ 私有（`static`） | `pub` 的符号进 `.h`；`static` 只留在本 `.c` |
+| 借用视图 ↔ 拥有句柄 | 借用（`get` / `entry` / `foreach item`）指向容器存储，不能 `release`，容器变更后失效；拥有句柄来自 `retain` / `pop` / `from` / 花括号初值 |
+| 容器句柄 ↔ `ct_buf` 头 | 句柄只有一个 `h` 指针（H-A）；`refs` / `len` / `cap` / `data` 都在共享头里，扩容不会让兄弟句柄悬空 |
+| 下标 ↔ 写入 | `v[i]` / `m[k]` 是只读糖（等价 `get`）；赋值、复合赋值、自增、取址都是硬错，写用 `set` / `put` |
 
 ### 10. 协作与流程术语
 
@@ -488,6 +491,9 @@
 | pass-through ↔ line rewriting | pass-through copies a non-construct line verbatim; line rewriting replaces a construct with equivalent C |
 | namespace path ↔ qualified reference | `A::B` is the **spelling**; "qualified reference" is the **behaviour** of naming a symbol across namespaces with it |
 | exported (`pub`) ↔ private (`static`) | a `pub` symbol crosses into the `.h`; a `static` one stays in its `.c` |
+| borrowed view ↔ owning handle | a view (`get` / `entry` / `foreach item`) points into the container's storage, cannot be released and goes stale after a mutation; an owning handle comes from `retain` / `pop` / `from` / a brace initialiser |
+| container handle ↔ `ct_buf` header | the handle is one `h` pointer (H-A); `refs` / `len` / `cap` / `data` live in the shared header, so growth never leaves a sibling handle dangling |
+| subscript ↔ write | `v[i]` / `m[k]` is read-only sugar for `get`; assignment, compound assignment, increment and address-of are hard errors, so write through `set` / `put` |
 
 ### 10. Collaboration and process terms
 

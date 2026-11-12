@@ -1183,6 +1183,42 @@ int main(void)
 
 细节见 [language-spec §4.51](language-spec.md)。
 
+### 10.9 容器表达力：接口值、嵌套、字面量与借用（Phase 31）
+
+Phase 31 让容器成为普通的元素/值类型，并定义了围绕句柄的所有权协议：
+
+```ct
+Vec<Vec<int>> rows = {};
+Vec<int> row = {1, 2};
+rows.push(row);
+
+Map<char *, int> counts = {"a": 1, "b": 2};
+counts.put("c", 3);
+int n = rows[0].len();      /* v[i] / m[k] 只读，等价于 get */
+int first = counts["a"];
+```
+
+- **元素**：接口值（`Vec<Show>`）与容器（`Vec<Vec<int>>`）都能作元素；接口元素是**非拥有**
+  拷贝，容器不会替对象收尾；接口指针（`Vec<Show *>`）硬错 L31-1。
+- **句柄布局（H-A）**：句柄只有一个 `h` 指针，`ct_buf` 持有 `refs` / `len` / `cap` / `data`，
+  所以 `retain` 出的兄弟句柄不会因对方扩容而指到旧存储。
+- **借用视图**：`get` / `entry` / `foreach item` 都是借用，不拥有；对借用 `release` 会报
+  `cannot release a borrowed container view; call retain() first`。借用经拷贝初始化/赋值
+  传播；`pop` 交出所有权，释放它的结果合法。
+- **失效**：同一 block 内对容器做 `put` / `remove` / `clear` / `release` 之后再用旧视图，
+  报 `a borrowed view is invalidated by a later mutation…`；在 `foreach` 体内改正在遍历的
+  容器报 `cannot mutate the container being iterated…`。
+- **下标糖**：`v[i]` / `m[k]` 只读；赋值、复合赋值、自增、取址、成员赋值都是 L31-3/4/5，
+  写请用 `set` / `put`。
+- **花括号初值**：`Vec<T> v = {…}`、`Map<K, V> m = {k: v, …}` 只在局部声明可用，空 `{}`
+  给出非空 header；编译期重复键 `duplicate key` 硬错（L31-16），运行期重复键原位覆盖。
+- **分配顺序**：header 失败一律 `abort`（不可释放的句柄绝不外流）；扩容失败在 retain 之前
+  `return 0` / 返回部分表；`from` 失败路径不 `free`。
+- 完整样例：[33_vec_brace_init](../examples/33_vec_brace_init)、
+  [34_map_literal](../examples/34_map_literal)。
+
+细节见 [language-spec §4.53](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2521,6 +2557,49 @@ nested blocks are all compile-time errors (L30-1 … L30-7).
 
 See [language-spec §4.52](language-spec.md) and
 [29_into_block](../examples/29_into_block/into.ct) for a runnable sample.
+
+### 10.10 Containers as ordinary types: interfaces, nesting, literals and views (Phase 31)
+
+Phase 31 turns `Vec` / `Map` into ordinary element and value types and defines the ownership
+protocol around the handle:
+
+```ct
+Vec<Vec<int>> rows = {};
+Vec<int> row = {1, 2};
+rows.push(row);
+
+Map<char *, int> counts = {"a": 1, "b": 2};
+counts.put("c", 3);
+int n = rows[0].len();      /* v[i] / m[k] is read-only sugar for get */
+int first = counts["a"];
+```
+
+- **Elements**: an interface value (`Vec<Show>`) and another container (`Vec<Vec<int>>`) are both
+  legal; an interface element is a **non-owning** copy, so the container never releases the object
+  behind the vptr. An interface pointer (`Vec<Show *>`) is refused (L31-1).
+- **Handle layout (H-A)**: a handle is one `h` pointer; the `ct_buf` header owns `refs` / `len` /
+  `cap` / `data`, so a handle from `retain` cannot be left pointing at stale storage by a sibling
+  that grows the buffer.
+- **Borrowed views**: `get`, `entry` and `foreach item` are non-owning. Releasing one reports
+  `cannot release a borrowed container view; call retain() first`. The provenance survives
+  copy-initialisation and assignment; `pop` hands ownership out, so releasing its result is legal.
+- **Invalidation**: using a view after a later `put` / `remove` / `clear` / `release` of the same
+  container in the same block reports `a borrowed view is invalidated by a later mutation…`;
+  mutating the container inside its own `foreach` body reports `cannot mutate the container being
+  iterated…`.
+- **Subscript sugar**: `v[i]` and `m[k]` are read-only; assigning, compound-assigning,
+  incrementing, taking the address of or assigning through a member is L31-3 / L31-4 / L31-5. Write
+  through `set` / `put`.
+- **Brace initialisers**: `Vec<T> v = {…}` and `Map<K, V> m = {k: v, …}` are local declaration
+  forms; an empty `{}` still answers a non-null header. A compile-time `duplicate key` is a hard
+  error (L31-16); a runtime duplicate overwrites in place.
+- **Allocation order**: a failed header allocation aborts (a handle the caller cannot release must
+  never escape); a failed growth returns `0` / the partial map before retaining anything, and
+  `from` never frees on the failure path.
+- Runnable samples: [33_vec_brace_init](../examples/33_vec_brace_init),
+  [34_map_literal](../examples/34_map_literal).
+
+See [language-spec §4.53](language-spec.md).
 
 ### 11. CLI cheat sheet
 
