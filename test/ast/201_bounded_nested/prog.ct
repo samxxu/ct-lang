@@ -1,0 +1,30 @@
+// Phase 33 O1/E33-3: `Box<Box<Circle>>` is legal. `impl Show for Box` is
+// written against the template tag and covers every `Box<...>` instance for
+// the bound check; no `use Show` is written on `Box`, so the generated C
+// stores no vptr for it.
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T: Show> {
+    T value;
+}
+impl Show for Box {
+    int show() { return 1; }
+}
+
+int main(void)
+{
+    Box<Box<Circle>> n;
+
+    n.value.value.r = 3;
+    printf("%d\n", n.value.value.r);
+    return 0;
+}

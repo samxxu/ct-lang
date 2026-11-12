@@ -1,0 +1,34 @@
+// Phase 33 O1: `struct Box<T: Show>` and `impl<T> Box<T>`.
+// The bound is satisfied by Circle, and `get` returns the parameter's type.
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T: Show> {
+    T value;
+}
+
+impl<T> Box<T> {
+    T get()
+    {
+        return self->value;
+    }
+}
+
+int main(void)
+{
+    Box<Circle> b;
+    Circle c;
+
+    b.value.r = 4;
+    c = b.get();
+    printf("%d\n", c.r + b.value.show());
+    return 0;
+}

@@ -1,0 +1,32 @@
+// Phase 33 O1/E33-4: a bounded `impl<T> Box<T>` body dispatches statically --
+// `self->value.show()` names Circle_Show_vtable and reads no vptr.
+#include <stdio.h>
+
+trait Show {
+    int show();
+}
+struct Circle {
+    int r;
+} use Show;
+impl Show for Circle {
+    int show() { return self->r; }
+}
+struct Box<T: Show> {
+    T value;
+}
+
+impl<T> Box<T> {
+    int show()
+    {
+        return self->value.show();
+    }
+}
+
+int main(void)
+{
+    Box<Circle> b;
+
+    b.value.r = 9;
+    printf("%d\n", b.show());
+    return 0;
+}
