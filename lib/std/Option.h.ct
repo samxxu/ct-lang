@@ -11,9 +11,17 @@
  * `release` exists so a caller can spell the lifecycle explicitly; the payload
  * is a value, so there is nothing to free and the method is a no-op.
  *
+ * `set` / `clear` are the mutators: `set` fills the payload and raises the
+ * discriminant, `clear` lowers it and leaves the payload alone (it is gated by
+ * `has`, and a value payload has nothing to release -- D34-8). `unwrap` is the
+ * checked read: it aborts like `Vec.release` on a released handle rather than
+ * answering a zero payload (D29-12), so a missing value is never silently
+ * mistaken for a real one.
+ *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 #include <stdio.h>
+#include <stdlib.h>
 
 pub struct Option<T> {
     int has;
@@ -35,6 +43,27 @@ impl<T> Option<T> {
             return self.value;
         }
         return dflt;
+    }
+
+    /* The payload, or a hard error: a none value has nothing to answer. */
+    T unwrap() {
+        if (!self.has) {
+            fprintf(stderr, "Option: unwrap on a none value\n");
+            abort();
+        }
+        return self.value;
+    }
+
+    /* Fills the payload and makes the option present. */
+    void set(T v) {
+        self.value = v;
+        self.has = 1;
+    }
+
+    /* Makes the option absent; the payload is left untouched but unreachable
+       through `unwrap` / `unwrap_or` until the next `set`. */
+    void clear() {
+        self.has = 0;
     }
 
     void release() {

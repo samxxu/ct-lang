@@ -1,6 +1,7 @@
-/* E34-5 (P34 S9a): the built-in `Option<T>`. A present value is the `{ 1, v }`
-   literal, an absent one is `{ 0 }`; the methods are ordinary impl members, so
-   no compiler branch is involved. */
+/* E34-5 (P34 S9a/S9b): the built-in `Option<T>`. A present value is the
+   `{ 1, v }` literal, an absent one is `{ 0 }`; the methods are ordinary impl
+   members, so no compiler branch is involved. `unwrap` is the checked read,
+   `set` / `clear` the mutators. */
 #include <stdio.h>
 
 int main(void)
@@ -11,7 +12,14 @@ int main(void)
     int none = b.is_none();
     int got = a.unwrap_or(9);
     int dflt = b.unwrap_or(9);
+    int raw = a.unwrap();
+    a.clear();
+    int emptied = a.is_none();
+    a.set(7);
+    int again = a.unwrap();
+    int untouched = b.is_some();
     printf("%d %d %d %d\n", some, none, got, dflt);
+    printf("%d %d %d %d\n", raw, emptied, again, untouched);
     a.release();
     b.release();
     return 0;
