@@ -5,8 +5,8 @@
 > **状态：完成**（2026-11-08；S1–S5 落地，收口 `v0.23.0`；D23-1–D23-9 已定稿）。
 > 本文是 **as-built** 记录：实现与最初的规划稿有几处偏离（词法、归一化、诊断严重度），
 > 文中均以实测结果为准；被推翻的规划假设保留在 §11。
-> 关联：[phase22.md](../history/design/phase22.md)（`loop(n)`，本相前置）、[roadmap.md](../roadmap.md)、
-> [language-spec.md](../language-spec.md)。
+> 关联：[phase22.md](phase22.md)（`loop(n)`，本相前置）、[roadmap.md](../../roadmap.md)、
+> [language-spec.md](../../language-spec.md)。
 
 ---
 
@@ -39,7 +39,7 @@ loop(0..n)  ≡  loop(n)          （仅当 a 是字面量 0，见 §3.2）
 
 ## 2. 词法（D23-1）
 
-`..` 是**新增的独立 token**，在 [Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) 中以
+`..` 是**新增的独立 token**，在 [Lexer.h.ct](../../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) 中以
 `T_PUNCT` + 文本 `".."` 表示。分支必须放在 **`...` 之后、`.5` 之前**：
 
 ```c
@@ -119,7 +119,7 @@ if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
 
   逗号运算符的左操作数严格先于右操作数求值（C99 §6.5.17p2），顺序由表达式结构保证。
 - **不依赖**同一声明中多个声明符初始化器的求值次序：C99 §6.7.8 并未规定该次序
-  （与 [phase22.md](../history/design/phase22.md#L158-L160) 的结论一致）。两个临时量有意不写初始化器，
+  （与 [phase22.md](phase22.md#L158-L160) 的结论一致）。两个临时量有意不写初始化器，
   否则 `= 0` 可能与 `i` 初始化器里的赋值互为先后，反而破坏快照。
 - 循环体内修改 `a` / `b` 依赖的变量不影响本次迭代次数（边界已快照）。
 
@@ -187,7 +187,7 @@ if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
 
 ## 6. 发射
 
-删除 Phase 22 留在 [Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct) 的
+删除 Phase 22 留在 [Emitter.h.ct](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct) 的
 `b != -1` 守卫，改为两支：
 
 ```c

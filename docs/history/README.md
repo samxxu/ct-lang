@@ -30,6 +30,7 @@
 | [phase18.md](design/phase18.md) | 生态建设：ct-pkg 组织、包规范与首批包、索引 / CI 复用（D18-1–D18-11；2026-11-11 因 design window 归档） |
 | [phase19.md](design/phase19.md) | 受限语义检查：调用点 arity、实参类型粗粒度兼容、trait 方法歧义、跨单元签名、`ct check`（D19-1–D19-5；2026-11-11 因 design window 归档） |
 | [phase22.md](design/phase22.md) | `loop` 语法糖：`loop(<次数>)` 展开为单行 `for`，上下文相关关键字与嵌套遮蔽告警（D22-1–D22-12；2026-11-13 因 design window 归档） |
+| [phase23.md](design/phase23.md) | `loop(a..b)` 范围语法：半开区间展开为单行 `for`，两个边界各求值一次、先 `a` 后 `b`（D23-1–D23-9；2026-11-13 因 design window 归档） |
 | [borrow.md](design/borrow.md) | `borrow` + `Handback` 的设计与实现记录（D-A…D-D） |
 | [dialect.md](design/dialect.md) | 方言系统与作者指南 |
 | [next-decisions.md](design/next-decisions.md) | 容量上限策略与第三十三批方向（已定案并落地） |
@@ -91,6 +92,7 @@
 | [phase18.md](design/phase18.md) | ecosystem build-out: the ct-pkg organisation, package conventions, the first package wave and index / CI reuse (D18-1–D18-11; archived on 2026-11-11 under the design window) |
 | [phase19.md](design/phase19.md) | bounded semantic checks: call-site arity, coarse argument-type compatibility, trait-method ambiguity, cross-unit signatures and `ct check` (D19-1–D19-5; archived on 2026-11-11 under the design window) |
 | [phase22.md](design/phase22.md) | `loop` sugar: `loop(<count>)` lowers to one `for` line, with a contextual keyword and a nested-shadowing warning (D22-1–D22-12; archived on 2026-11-13 under the design window) |
+| [phase23.md](design/phase23.md) | `loop(a..b)` ranges: a half-open range lowers to one `for` line, with each bound evaluated once, `a` before `b` (D23-1–D23-9; archived on 2026-11-13 under the design window) |
 | [borrow.md](design/borrow.md) | `borrow` + `Handback` design and landing record (D-A…D-D) |
 | [dialect.md](design/dialect.md) | the dialect system and the authoring guide |
 | [next-decisions.md](design/next-decisions.md) | capacity-limit policy and the batch-33 direction (decided and landed) |

@@ -2183,7 +2183,18 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **跨单元单态化（Phase 31 T31-2）**：消费方单元实例化 `Vec<T>` / `Map<K, V>` 且元素 owner 与容器
   模板 owner 不同时，该单元的 `.c` 发射私有的 `static` 元素 helper 与实例方法副本；`.h` 只保留类型，
   vtable 与实例数据留在 owner 单元，所以两个消费方不会在链接期撞名。
-- 泛型 trait、参数化 trait 与 supertrait 由 Phase 35 承接；本相只支持非泛型 trait 作约束。
+- 泛型 trait 由 §4.55 承接；本相只支持非泛型 trait 作约束。
+
+### 4.55 泛型 trait（Phase 35，仅 ct-ast）
+
+- **声明**：`trait Iter<T> { T next(void); }` 最多两个类型参数，参数可各带一个 bound（`trait Seq<T: Show>`）；一个参数写多个 bound 报 `a type parameter supports one trait bound`。泛型 trait 不支持默认方法体，报 `a generic trait cannot carry a default method body`。
+- **单态化命名**：实例名一律 `<Trait>_<ct_inst_encode 输出>`，产物随之变成 `Iter<int>` → `Iter_int_vtbl` / `Iter_int_iface` / `__iter_int_vptr` / `Circle_Iter_int_next` / `Circle_Iter_int_vtable`；`Iter<char *>` → `Iter_char_p_*`；嵌套实参按转义（`Iter<Vec<int>>` → `Iter_Vec_lint_r_*`）；编码达到 64 字符时退化为 40 字符前缀 + 8 位哈希。非泛型 trait 的产物命名与布局逐字节不变。
+- **impl 与使用**：`impl Iter<int> for Circle { … }`；接口值、字段、形参与 `T: Iter<int>` 约束都按实例行处理，实例的方法签名在创建实例时把 `T` 换成实参的 C 拼写，派发仍走既有 vtable 槽。
+- **约束**：`trait Seq<T: Show>` 在实例创建单元校验实参的 `use` / `impl`（与 §4.54 同一套判据），不满足报 `'int' does not satisfy the bound 'Show' of 'Seq'`。
+- **泛型 trait × 泛型 struct**：只支持参数一一对应的 `impl<T> MyVec<T> use Iter<T>`，其它形态报 `unsupported generic trait implementation shape`。
+- **跨单元边界**：泛型 trait 实例只能在模板属主单元创建；消费方可以命名该类型，但创建实例即报 `a generic trait instance must be created in its owner unit`（L35-4）。
+- **冲突与容量**：编码名与已声明的 trait、`struct <I>_vtbl` 或 `struct <I>_iface` 撞名时报 `trait instance name '<I>' collides with a declared type`；模板行与实例行共用 `MAX_TRAITS = 64`，第 65 条报 `too many traits`。
+- **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](design/phase35-draft.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
 
 ---
 
@@ -4832,6 +4843,35 @@ and value types and defines the ownership protocol around them.
   `Map<K, V>` and the element's owner differs from the container template's, that unit's `.c` emits
   private `static` element helpers and instance-method copies; the `.h` keeps the type only and the
   vtable and instance data stay in the owner unit, so two consumers never collide at link time.
-- Generic traits, parameterised traits and supertraits are Phase 35's; this phase accepts only
-  non-generic traits as bounds.
+- Generic traits are §4.55; this phase accepts only non-generic traits as bounds.
+
+### 4.55 Generic traits (Phase 35, ct-ast only)
+
+- **Declaration**: `trait Iter<T> { T next(void); }` takes at most two type parameters, each with at
+  most one bound (`trait Seq<T: Show>`); a second bound reports `a type parameter supports one trait
+  bound`. A parameterised trait cannot carry a default method body — that reports `a generic trait
+  cannot carry a default method body`.
+- **Monomorphised naming**: the instance name is always `<Trait>_<ct_inst_encode output>` and the
+  products follow it: `Iter<int>` becomes `Iter_int_vtbl` / `Iter_int_iface` / `__iter_int_vptr` /
+  `Circle_Iter_int_next` / `Circle_Iter_int_vtable`, `Iter<char *>` becomes `Iter_char_p_*`, and a
+  nested argument is escaped (`Iter<Vec<int>>` → `Iter_Vec_lint_r_*`); an encoding of 64 characters
+  or more falls back to a 40-character prefix plus an 8-digit hash. Non-generic trait products keep
+  their names and layout byte for byte.
+- **impl and use**: `impl Iter<int> for Circle { … }`; interface values, fields, parameters and a
+  `T: Iter<int>` bound all resolve to the instance row, whose method signatures substitute each
+  argument's C spelling for `T` when the row is created, while dispatch keeps the existing vtable
+  slot.
+- **Bounds**: `trait Seq<T: Show>` checks the argument's `use` / `impl` in the unit that creates the
+  instance (the same test as §4.54) and reports `'int' does not satisfy the bound 'Show' of 'Seq'`.
+- **Generic trait × generic struct**: only the one-to-one `impl<T> MyVec<T> use Iter<T>` is
+  supported; any other shape reports `unsupported generic trait implementation shape`.
+- **Cross-unit boundary**: an instance row may only be created in the unit that owns the template; a
+  consumer may name the type, but creating an instance reports `a generic trait instance must be
+  created in its owner unit` (L35-4).
+- **Collisions and capacity**: an encoded name already taken by a declared trait, `struct <I>_vtbl`
+  or `struct <I>_iface` reports `trait instance name '<I>' collides with a declared type`; template
+  and instance rows share `MAX_TRAITS = 64`, and the 65th row reports `too many traits`.
+- **Not in this phase**: supertraits / interface composition (open item and trigger conditions in the
+  [phase 35 card](design/phase35-draft.md) §10.2 / §10.3), default bodies, multiple bounds,
+  associated types, `Self`, method-level generics and generic enums.
 

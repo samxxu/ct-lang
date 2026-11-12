@@ -1306,6 +1306,48 @@ int main(void)
 完整样例：[38_ecosystem_reuse](../examples/38_ecosystem_reuse)。细节见
 [language-spec §4.51](language-spec.md)。
 
+### 10.12 泛型 trait：`trait Iter<T>` 与 `Iter<int>`（Phase 35）
+
+trait 也能带类型参数：声明 `trait Iter<T>` 后，`Iter<int>` 是一个独立的 trait 实例，有自己的
+vtable 与 iface 结构；`impl Iter<int> for Range` 填它的方法槽，接口值照常派发：
+
+```ct
+trait Iter<T> {
+    T next(void);
+}
+
+struct Range {
+    int cur;
+} use Iter<int>;
+
+impl Iter<int> for Range {
+    int next(void) { return self->cur; }
+}
+
+int main(void)
+{
+    Range r = { .cur = 3 };
+    Iter<int> it = r;
+    printf("%d %d\n", r.next(), it.next());   /* 3 3 */
+    return 0;
+}
+```
+
+- **命名**：实例名是 `Iter_int`，产物跟着走——`Iter_int_vtbl` / `Iter_int_iface` /
+  `__iter_int_vptr` / `Range_Iter_int_next`；`Iter<char *>` 是 `Iter_char_p_*`，嵌套实参按转义
+  （`Iter<Vec<int>>` → `Iter_Vec_lint_r_*`）。非泛型 trait 的产物命名不变。
+- **约束**：`trait Seq<T: Show>` 在实例创建单元校验实参，`int` 没有 `Show` 时报
+  `'int' does not satisfy the bound 'Show' of 'Seq'`；`T: Iter<int>` 作泛型函数的约束时同样按实例行派发。
+- **泛型 trait × 泛型 struct**：只支持一一对应的 `impl<T> MyVec<T> use Iter<T>`，其它形态报
+  `unsupported generic trait implementation shape`。
+- **跨单元边界**：实例只能在模板属主单元创建；消费方可以命名 `Iter<int>`，但一经创建就报
+  `a generic trait instance must be created in its owner unit`。
+- **不做的**：默认方法体（报 `a generic trait cannot carry a default method body`）、supertrait
+  与接口组合、多 bound。
+
+完整样例：[39_generic_trait](../examples/39_generic_trait)。细节见
+[language-spec §4.55](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2807,6 +2849,52 @@ int main(void)
 
 Runnable sample: [38_ecosystem_reuse](../examples/38_ecosystem_reuse). See
 [language-spec §4.51](language-spec.md).
+
+### 10.13 Generic traits: `trait Iter<T>` and `Iter<int>` (Phase 35)
+
+A trait may take type parameters: after `trait Iter<T>`, the type `Iter<int>` is a trait instance of
+its own, with its own vtable and iface struct; `impl Iter<int> for Range` fills its slots and
+interface values dispatch as usual:
+
+```ct
+trait Iter<T> {
+    T next(void);
+}
+
+struct Range {
+    int cur;
+} use Iter<int>;
+
+impl Iter<int> for Range {
+    int next(void) { return self->cur; }
+}
+
+int main(void)
+{
+    Range r = { .cur = 3 };
+    Iter<int> it = r;
+    printf("%d %d\n", r.next(), it.next());   /* 3 3 */
+    return 0;
+}
+```
+
+- **Naming**: the instance is `Iter_int`, and the products follow it — `Iter_int_vtbl` /
+  `Iter_int_iface` / `__iter_int_vptr` / `Range_Iter_int_next`; `Iter<char *>` is `Iter_char_p_*`,
+  and a nested argument is escaped (`Iter<Vec<int>>` → `Iter_Vec_lint_r_*`). Non-generic trait
+  products keep their names.
+- **Bounds**: `trait Seq<T: Show>` checks the argument where the instance is created; with no `Show`
+  for `int`, `Seq<int>` reports `'int' does not satisfy the bound 'Show' of 'Seq'`, and a
+  `T: Iter<int>` function bound dispatches through the same instance row.
+- **Generic trait × generic struct**: only the one-to-one `impl<T> MyVec<T> use Iter<T>` is
+  supported; any other shape reports `unsupported generic trait implementation shape`.
+- **Cross-unit boundary**: an instance is created in the unit that owns the template; a consumer may
+  name `Iter<int>`, but creating one reports `a generic trait instance must be created in its owner
+  unit`.
+- **Not supported**: default method bodies (`a generic trait cannot carry a default method body`),
+  supertraits / interface composition and multiple bounds.
+
+Runnable sample: [39_generic_trait](../examples/39_generic_trait). See
+[language-spec §4.55](language-spec.md).
 
 ### 11. CLI cheat sheet
 

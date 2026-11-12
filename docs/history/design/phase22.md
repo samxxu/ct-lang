@@ -9,7 +9,7 @@
 > **版本口径：Phase 22 ↔ `v0.22.x`，收口 bump 到 `v0.22.0`。** 本文不写「当前版本」快照
 > （DOC-63：钉死的版本号会在下一次 bump 后过期）。
 > 前置：Phase 21 已收口；本相与 Phase 20 / 21 **无语义依赖**，仅共用 parser / emitter / diag 文件。
-> 关联：[phase21.md](../../design/phase21.md)、[phase23.md](../../design/phase23.md)、[roadmap.md](../../roadmap.md)、
+> 关联：[phase21.md](../../design/phase21.md)、[phase23.md](phase23.md)、[roadmap.md](../../roadmap.md)、
 > [language-spec.md](../../language-spec.md)。
 > 本相只新增一条语句级语法糖，**不改动现有语义、不新增运行时、不引入抽象类型**。
 
@@ -412,8 +412,8 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 | # | 文档 | 冲突 | 建议 |
 | --- | --- | --- | --- |
 | 1 | [roadmap.md](../../roadmap.md) Phase 22 行 | 仍写「D22-1–D22-8 待确认」与「含 H22-1 实测」 | ✅ 已改：记为「D22-1–D22-12」、S1–S4 各自独立提交、`v0.22.0`，出口判据同步 |
-| 2 | [phase23.md](../../design/phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | ✅ 已改：§3.6、23.3、D23-7 统一为「不新增逐语句 `#line`」（与本文 §3.7 同口径） |
-| 3 | [phase23.md](../../design/phase23.md) 头部 | 「当前 `v0.19.1`」过期 | ✅ 已改：S5 删掉版本快照并写明前置 `v0.22.0`（DOC-63） |
+| 2 | [phase23.md](phase23.md) §3.6 / §5 | 与旧 §3.5 相同的「既有语句路径重锚 `#line`」表述 | ✅ 已改：§3.6、23.3、D23-7 统一为「不新增逐语句 `#line`」（与本文 §3.7 同口径） |
+| 3 | [phase23.md](phase23.md) 头部 | 「当前 `v0.19.1`」过期 | ✅ 已改：S5 删掉版本快照并写明前置 `v0.22.0`（DOC-63） |
 | 4 | 本文件旧 §3.1 | 「`K` 每函数内单调」与 `ntmp` 的进程级语义不符 | ✅ 本文已更正（§3.9） |
 | 5 | [language-spec.md](../../language-spec.md) | 尚无 `loop` 小节（不是冲突，是缺口） | ✅ S5 已补 §4.45（中英对称）与 tutorial §10.2 |
 

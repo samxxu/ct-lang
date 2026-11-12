@@ -82,6 +82,7 @@
 | `pub` 泛型函数（pub generic function） | `pub T f<T>(T x)` | 模板体须写在 `.h.ct`；消费方每个 `(f, 实参)` 在本单元发一个 `static <f>__ct<N>`，`.h` 只放类型（Phase 34；L26-2 已解禁） |
 | 非泛型固有方法（non-generic inherent method） | `impl Counter { int get() { … } }` | 非泛型 struct 的固有 impl；落码 `<Struct>_<method>`，属主单元定义一次、消费方从 `.h` 取原型（Phase 34） |
 | `Option` / `Result` | `Option<T>`（`has` + `value`）、`Result<T, E>`（`ok` + `value` + `err`） | `lib/std` 的普通泛型 struct；字面量构造，`unwrap` 在错侧 `abort`，`release` 是 no-op；`?` / pattern / 自动释放属后续阶段（Phase 34） |
+| 泛型 trait（generic trait） | `trait Iter<T> { T next(void); }` | 按实参单态化为实例行（`Iter<int>` → `Iter_int`），产物 `<Trait>_<ct_inst_encode 输出>_*`（`Iter_int_vtbl` / `__iter_int_vptr` / `Circle_Iter_int_next`，嵌套实参按转义、≥64 字符走哈希回退）；实例只能在模板属主单元创建（跨单元 L35-4），不支持默认方法体（Phase 35，见 [language-spec](language-spec.md) §4.55） |
 
 ### 2. 命名 / 修饰规则（已发布契约）
 
@@ -340,6 +341,7 @@
 | pub generic function | `pub T f<T>(T x)` | the template body must live in a `.h.ct`; each consumer emits one `static <f>__ct<N>` instance in its own unit, and the `.h` keeps types only (Phase 34; L26-2 is lifted) |
 | non-generic inherent method | `impl Counter { int get() { … } }` | an inherent impl on a non-generic struct; lowers to `<Struct>_<method>`, defined once by the owner and taken as a prototype by the consumer from the `.h` (Phase 34) |
 | `Option` / `Result` | `Option<T>` (`has` + `value`), `Result<T, E>` (`ok` + `value` + `err`) | ordinary generic structs in `lib/std`; built from literals, `unwrap` aborts on the wrong side, `release` is a no-op; `?` / patterns / automatic release are later phases (Phase 34) |
+| generic trait | `trait Iter<T> { T next(void); }` | monomorphised into an instance row per argument list (`Iter<int>` → `Iter_int`); products are `<Trait>_<ct_inst_encode output>_*` (`Iter_int_vtbl` / `__iter_int_vptr` / `Circle_Iter_int_next`, nested arguments escaped, encodings of 64+ characters hashed); an instance may only be created in the unit that owns the template (cross-unit L35-4) and default bodies are refused (Phase 35, see [language-spec](language-spec.md) §4.55) |
 
 ### 2. Naming / mangling rules (a published contract)
 
