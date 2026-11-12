@@ -92,6 +92,9 @@ pub trait ParseOps {
     /* Phase 29: `impl<T> Name<Args> [use Trait] { … }`, the template form.
        `have_name` is 0 when the caller already read the template name. */
     int  parse_impl_inst(const char *tmpl, int have_name);
+    /* Phase 34 S4: `impl Name { … }` -- a non-generic inherent impl. The
+       cursor sits on the `{`; `rname` is the struct's resolved name. */
+    int  parse_impl_inherent(const char *rname, int si, int impl_line);
     int  parse_pat_arg(char *out, int cap, int base, int *l4line, int *l4col, int *deep, int *bad);
     int  parse_use_list(int sindex);
 }
@@ -2662,6 +2665,17 @@ impl ParseOps for Parser {
         self->sup->lex_next();
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
             return self->parse_impl_inst(tname, 0);
+        /* Phase 34 S4: `impl Counter { … }` writes inherent methods on a
+           non-generic struct. Only a `{` that follows a known struct takes
+           this path; anything else keeps the trait-impl wording below. */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+            char rinh[MAX_TEXT];
+            int si_inh;
+
+            if (self->sup->resolve_type(tname, rinh, sizeof rinh) != 0) return -1;
+            si_inh = self->sym->find_struct(rinh);
+            if (si_inh >= 0) return self->parse_impl_inherent(rinh, si_inh, impl_line);
+        }
         if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->sym->find_trait(rtrait);
         /* A static trait has no iface and no vtable: it is bound by a `map`,
@@ -2877,6 +2891,102 @@ impl ParseOps for Parser {
                 }
             }
         }
+        return node;
+    }
+
+    /* Phase 34 S4 (D34-4): `impl Counter { … }` -- inherent methods on a
+       non-generic struct. The block is an N_IMPL node whose trait name (`text2`)
+       is empty; the emitter's trait paths skip it, and S5 wires the lookup,
+       the static dispatch and the cross-unit prototype. The method symbols are
+       `<Struct>_<method>`, the same shape a template impl emits, so nothing
+       about the trait machinery (`ti`, vtable slots) applies here. */
+    int parse_impl_inherent(const char *rname, int si, int impl_line)
+    {
+        int node, mnode, params, body, tail, mline, is_static;
+        char ret[MAX_TEXT];
+        char mname[MAX_TEXT];
+        char stype[MAX_TEXT];
+        int type_index;
+
+        type_index = self->sym->find_type(rname);
+        if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
+            snprintf(stype, sizeof stype, "struct %s", rname);
+        else
+            snprintf(stype, sizeof stype, "%s", rname);
+        if (self->sup->expect("{") != 0) return -1;
+        node = self->sup->new_node(N_IMPL);
+        if (node < 0) return -1;
+        self->arena->nodes[node].line = impl_line;
+        snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", stype);
+        self->arena->nodes[node].text2[0] = 0;   /* inherent: no trait */
+        self->arena->nodes[node].aux = si;
+        snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
+        tail = -1;
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            mline = self->lex->tokline;
+            /* P29-2: a receiverless method (`static Counter make()`) is written
+               as `<Struct>_<method>` and takes no `self`. */
+            is_static = 0;
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
+                is_static = 1;
+                self->sup->lex_next();
+            }
+            if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->fnptr_state)
+                return self->sup->fail("an impl method cannot return a function pointer");
+            if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
+            snprintf(mname, sizeof mname, "%s", self->lex->toktext);
+            self->sup->lex_next();
+            if (self->sup->push_scope() != 0) return -1;
+            if (!is_static && self->sup->declare_var("self", stype) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            params = self->parse_params();
+            if (params < 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            if (self->variadic) {
+                self->sup->pop_scope();
+                return self->sup->fail("a struct method cannot be variadic");
+            }
+            snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+            snprintf(self->cur_func, sizeof self->cur_func, "%s_%s", rname, mname);
+            self->mem->leak_active = 1;
+            self->mem->leak_frame = self->sym->nscope + 1;
+            self->mem->leak_impl = 1;
+            self->st->func_begin();
+            body = self->st->parse_block();
+            self->mem->leak_active = 0;
+            self->mem->leak_frame = -1;
+            self->mem->leak_impl = 0;
+            self->cur_func[0] = 0;
+            self->sym->ret_type[0] = 0;
+            if (body < 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            if (self->st->func_end() != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            self->sup->pop_scope();
+            (void)mline;
+            mnode = self->sup->new_node(N_METHOD);
+            if (mnode < 0) return -1;
+            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
+            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            self->arena->nodes[mnode].a = params;
+            self->arena->nodes[mnode].b = body;
+            self->arena->nodes[mnode].num = -1;   /* no trait */
+            self->arena->nodes[mnode].aux = si;
+            self->arena->nodes[mnode].c = is_static;
+            if (tail < 0) self->arena->nodes[node].a = mnode;
+            else self->arena->nodes[tail].next = mnode;
+            tail = mnode;
+        }
+        if (self->sup->expect("}") != 0) return -1;
         return node;
     }
 

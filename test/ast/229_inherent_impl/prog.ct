@@ -1,0 +1,19 @@
+// Phase 34 S4: a non-generic inherent impl `impl Name { … }`. Before S4 the
+// parser read `Counter` as a trait name and failed with "impl of an unknown
+// trait"; S4 recognises a struct name followed by `{` and parses the block as
+// inherent methods. Methods are emitted and dispatched in S5a; here we only
+// assert the syntax is accepted (the block parses, build is warning-free).
+struct Counter {
+    int n;
+}
+
+impl Counter {
+    int get() { return self.n; }
+    void inc() { self.n = self.n + 1; }
+    static Counter make(int v) { Counter c; c.n = v; return c; }
+}
+
+int main(void)
+{
+    return 0;
+}
