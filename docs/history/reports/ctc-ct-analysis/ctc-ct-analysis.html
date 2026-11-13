@@ -6,11 +6,11 @@
 <title>ctc.ct 代码分析报告 — L1 自举编译器 · v0.0.1</title>
 
 <style>
-  @font-face { font-family: 'Instrument Sans'; src: url('./_shared/fonts/InstrumentSans-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
-  @font-face { font-family: 'Instrument Sans'; src: url('./_shared/fonts/InstrumentSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
-  @font-face { font-family: 'Instrument Sans'; src: url('./_shared/fonts/InstrumentSans-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
-  @font-face { font-family: 'JetBrains Mono'; src: url('./_shared/fonts/JetBrainsMono-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
-  @font-face { font-family: 'JetBrains Mono'; src: url('./_shared/fonts/JetBrainsMono-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Instrument Sans'; src: url('../_shared/fonts/InstrumentSans-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Instrument Sans'; src: url('../_shared/fonts/InstrumentSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Instrument Sans'; src: url('../_shared/fonts/InstrumentSans-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('../_shared/fonts/JetBrainsMono-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('../_shared/fonts/JetBrainsMono-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
 </style>
 
 <style>
@@ -659,7 +659,7 @@ flowchart LR
 <hr class="soft">
 <p class="sub">
   报告范围：<code>selfhost/ctc.ct</code>（3209 行，含头注释与 <code>main</code>）的全部结构、数据流与错误路径。
-  生成方式：静态分析 + 分层并行通读；所有行号可直接在源码中定位。图表由 mermaid 在本地渲染（<code>_shared/js/mermaid.min.js</code>），无外部依赖。
+  生成方式：静态分析 + 分层并行通读；所有行号可直接在源码中定位。图表由 mermaid 在本地渲染（<code>../_shared/js/mermaid.min.js</code>），无外部依赖。
 </p>
 
 <footer>
@@ -668,7 +668,7 @@ flowchart LR
 
 </article>
 
-<script src="./_shared/js/mermaid.min.js"></script>
+<script src="../_shared/js/mermaid.min.js"></script>
 <script>
   mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose',
     flowchart: { curve: 'basis', htmlLabels: true, useMaxWidth: true } });
