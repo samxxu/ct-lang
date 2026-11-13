@@ -20,7 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: hard gates
-        run: bash selfhost/check-all.sh
+        run: |
+          set -o pipefail
+          bash selfhost/check-all.sh 2>&1 | tee /tmp/check-all.log
+      - name: failure summary
+        if: failure()
+        run: |
+          echo "::error::$(grep -m1 -E 'FAIL|error:' /tmp/check-all.log || echo 'check-all failed')"
+          tail -100 /tmp/check-all.log
 
   # macOS carries the BSD-only probes test/run.sh skips elsewhere, so it runs
   # the full suite too (Apple clang is the "zero warnings" baseline).
@@ -31,7 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: hard gates
-        run: bash selfhost/check-all.sh
+        run: |
+          set -o pipefail
+          bash selfhost/check-all.sh 2>&1 | tee /tmp/check-all.log
+      - name: failure summary
+        if: failure()
+        run: |
+          echo "::error::$(grep -m1 -E 'FAIL|error:' /tmp/check-all.log || echo 'check-all failed')"
+          tail -100 /tmp/check-all.log
 
   # A second Linux compiler, smoke only: the two suites that are most sensitive
   # to compiler differences, without paying for the whole matrix twice.
