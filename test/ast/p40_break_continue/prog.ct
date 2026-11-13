@@ -1,0 +1,70 @@
+#include <stdio.h>
+
+int err_break(void)
+{
+    errdefer { printf("eb_fn_e\n"); }
+    for (int i = 0; i < 3; i++) {
+        errdefer { printf("eb_loop_e%d\n", i); }
+        defer { printf("eb_loop_d%d\n", i); }
+        {
+            errdefer { printf("eb_inner_e%d\n", i); }
+            defer { printf("eb_inner_d%d\n", i); }
+            if (i == 0) break err:;
+        }
+        printf("eb_body%d\n", i);
+    }
+    printf("eb_done\n");
+    return 0;
+}
+
+int err_continue(void)
+{
+    errdefer { printf("ec_fn_e\n"); }
+    for (int i = 0; i < 3; i++) {
+        errdefer { printf("ec_loop_e%d\n", i); }
+        defer { printf("ec_loop_d%d\n", i); }
+        {
+            errdefer { printf("ec_inner_e%d\n", i); }
+            defer { printf("ec_inner_d%d\n", i); }
+            if (i == 0) continue err:;
+        }
+        printf("ec_body%d\n", i);
+    }
+    printf("ec_done\n");
+    return 0;
+}
+
+int normal_break(void)
+{
+    errdefer { printf("nb_fn_e\n"); }
+    for (int i = 0; i < 2; i++) {
+        errdefer { printf("nb_loop_e%d\n", i); }
+        defer { printf("nb_loop_d%d\n", i); }
+        if (i == 0) break;
+        printf("nb_body%d\n", i);
+    }
+    printf("nb_done\n");
+    return 0;
+}
+
+int normal_continue(void)
+{
+    errdefer { printf("nc_fn_e\n"); }
+    for (int i = 0; i < 3; i++) {
+        errdefer { printf("nc_loop_e%d\n", i); }
+        defer { printf("nc_loop_d%d\n", i); }
+        if (i == 0) continue;
+        printf("nc_body%d\n", i);
+    }
+    printf("nc_done\n");
+    return 0;
+}
+
+int main(void)
+{
+    err_break();
+    err_continue();
+    normal_break();
+    normal_continue();
+    return 0;
+}
