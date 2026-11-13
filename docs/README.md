@@ -26,12 +26,14 @@
 | [memory-guide.md](memory-guide.md) | 内存实践：`own` / `borrow` / 工厂 / 池 / arena | 写持有资源的代码 |
 | [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、命名 / 版本 / tag、索引收录、许可证、常见失败 | 发布或消费一个包 |
 | [modern-oo-gap.md](modern-oo-gap.md) | 需求侧评估：以现代化 OO 为参照的差距清单、battle 记录与三档结论 | 判断「还缺哪些语言特性」 |
+| [bindings-and-patterns.md](bindings-and-patterns.md) | Bindings 与 C 互操作配方：异构值、变参 shim、函数指针跨模块、`foreach` 语义、`own` 工厂句柄、可空取值 | 写 binding 或容器封装 |
 
 ### 计划与台账
 
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 阶段总览、已定决策、版本记录与验收标准 |
+| [planning/requirements-pool.md](planning/requirements-pool.md) | 需求池：`REQ-*` 条目的 `what` / `why` / `priority` / `status` 与带命令的验收判据（`AGENTS.md` §6.1） |
 | [history/design/phase20.md](history/design/phase20.md) · [history/design/phase21.md](history/design/phase21.md) · [history/design/phase24.md](history/design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase17、phase18、phase19、phase22 与 phase23 已按 DOC-66 归档到 [history/design/](history/design/) |
 | [design/phase27.md](design/phase27.md) | 已完成的阶段记录（Phase 27）：`foreach` 语句形态（数组形态已实现，容器协议由 Phase 29 解冻；语法、展开规则与决策见正文） |
 | [design/phase28.md](design/phase28.md) | 已完成的阶段记录（Phase 28，泛型两阶段第一相）：trait 约束的泛型函数与静态派发（语法、落码、E28-1–E28-9 收口核对与 D28-1–D28-11 见正文；未 bump） |
@@ -85,12 +87,14 @@
 | [memory-guide.md](memory-guide.md) | memory practice: `own` / `borrow` / factories / pools / arena | writing resource-owning code |
 | [package-guide.md](package-guide.md) | package authoring: `ct.pkg` keys, names / versions / tags, the index, licensing, common failures | publishing or consuming a package |
 | [modern-oo-gap.md](modern-oo-gap.md) | requirements-side assessment: gaps against a modern-OO reference, battle records, and a three-tier verdict | deciding "which language features are still missing" |
+| [bindings-and-patterns.md](bindings-and-patterns.md) | bindings and C-interop recipes: tagged unions, variadic shims, cross-unit function pointers, `foreach` semantics, `own` factory handles, nullable lookup | writing a binding or a container wrapper |
 
 ### Plans and ledgers
 
 | Document | Content |
 | --- | --- |
 | [roadmap.md](roadmap.md) | phase overview, decided questions, version record and exit criteria |
+| [planning/requirements-pool.md](planning/requirements-pool.md) | requirements pool: `REQ-*` entries with `what` / `why` / `priority` / `status` and command-backed acceptance criteria (`AGENTS.md` §6.1) |
 | [history/design/phase20.md](history/design/phase20.md) · [history/design/phase21.md](history/design/phase21.md) · [history/design/phase24.md](history/design/phase24.md) · [design/phase25.md](design/phase25.md) · [design/phase26.md](design/phase26.md) | the completed phase plans (Phase 20–26: package support / non-escaping closures / `loop` sugar / `loop(a..b)` ranges / array range initialisers / closure arguments to static map calls / generic functions); phase17, phase18, phase19, phase22 and phase23 are archived to [history/design/](history/design/) per DOC-66 |
 | [design/phase27.md](design/phase27.md) | completed phase record (Phase 27): the `foreach` statement form (the array form is implemented; the container protocol is unfrozen by Phase 29; syntax, lowering rules and decisions inside) |
 | [design/phase28.md](design/phase28.md) | completed phase record (Phase 28, the first of two generics phases): trait-bounded generic functions with static dispatch (syntax, lowering, the E28-1–E28-9 close-out checks and D28-1–D28-11 inside; no bump) |

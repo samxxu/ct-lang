@@ -59,6 +59,23 @@
 | [ct-language-features/](reports/ct-language-features/ct-language-features.html) | 语言特性全景（自包含 HTML） |
 | [ctc-ct-analysis/](reports/ctc-ct-analysis/ctc-ct-analysis.html) | `ctc.c` 与 CT 线的对照分析（自包含 HTML） |
 | [selfhost-readiness/](reports/selfhost-readiness/selfhost-readiness.html) | 自举就绪总结（自包含 HTML） |
+| [phase31-review-r3/](reports/phase31-review-r3/phase31-review-r3.md) | Phase 31 立项卡第三轮独立评审（NO-GO：5 High / 5 Medium / 8 Low；2026-11-11） |
+| [phase31-review-r4/](reports/phase31-review-r4/phase31-review-r4.md) | Phase 31 立项卡第四轮复核（NO-GO：2 High / 2 Medium / 4 Low；2026-11-11） |
+| [phase31-review-r5/](reports/phase31-review-r5/phase31-review-r5.md) | Phase 31 立项卡第五轮窄范围复核（GO：0 High / 2 Medium / 5 Low；2026-11-11） |
+| [phase31-s20b-review/](reports/phase31-s20b-review/phase31-s20b-review.md) | Phase 31 S20b 独立复核（`35f63fd`：Map 嵌套容器值实例编码规范化；2026-11-11） |
+| [phase32-33-review-r5/](reports/phase32-33-review-r5/phase32-33-review-r5.md) | Phase 32 / 33 立项卡第五轮评审（Phase 32 NO-GO：6 High / 5 Medium / 2 Low；2026-11-11） |
+| [phase32-33-review-r6/](reports/phase32-33-review-r6/phase32-33-review-r6.md) | Phase 32 / 33 第六轮评审（逐条核对上轮 High / Medium 是否闭合；2026-11-11） |
+| [phase32-33-review-r7/](reports/phase32-33-review-r7/phase32-33-review-r7.md) | Phase 32 / 33 第七轮窄范围复核（`aa78952`；2026-11-11） |
+| [phase34-36-review-r6/](reports/phase34-36-review-r6/phase34-36-review-r6.md) | Phase 34–36 第五轮复核（`56268e2`：P34 GO 附条件 / P35 GO / P36 NO-GO；2026-11-11） |
+| [phase35-anchor-addendum.md](reports/phase34-36-review-r6/phase35-anchor-addendum.md) | Phase 35 锚点勘误补充（`emit_defs` 符号不存在，实为 `emit_trait_range`；Medium 1 + Low；2026-11-11） |
+| [phase34-36-review-r7/](reports/phase34-36-review-r7/phase34-36-review-r7.md) | Phase 34 / 36 第六轮（r7）窄范围复核（`bd1df0a`；2026-11-11） |
+| [phase34-36-review-r8/](reports/phase34-36-review-r8/phase34-36-review-r8.md) | Phase 34 / 36 第七轮（r8）窄范围复核（`fa10455`；2026-11-11） |
+| [phase34-36-review-r9/](reports/phase34-36-review-r9/phase34-36-review-r9.md) | Phase 34 / 36 最终签核（r9，`d9fb14c`；2026-11-11） |
+| [json-production-readiness/](reports/json-production-readiness/json-readiness.md) | CT JSON 实现的生产可用性评估（`examples/json/` 只读实测；2026-11-12） |
+| [json-rewrite-estimate/](reports/json-rewrite-estimate/rewrite-estimate.md) | 用最新 CT 重写 `examples/json` 的代码量核算（2026-11-12） |
+| [phase36-delta-review/](reports/phase36-delta-review/phase36-delta-review.md) | Phase 36 `c735ff6` delta 独立复核（NO-GO：2 High / 4 Medium；2026-11-12） |
+| [phase36-delta-rereview/](reports/phase36-delta-rereview/phase36-delta-rereview.md) | Phase 36 `4e02f31` 复核（NO-GO：1 High / 3 Medium / 2 Low；2026-11-12） |
+| [phase36-delta-rereview-2/](reports/phase36-delta-rereview-2/phase36-delta-rereview-2.md) | Phase 36 `8a65096` 窄范围复核（GO：七项闭合，留 1 Low；2026-11-12） |
 
 报告正文里的行号与路径是**当时 commit 的快照**；指向已删除的 `selfhost/ast/**`、`selfhost/src/**` 的链接
 按历史保留，不再改写（这是文档链接门禁唯一的豁免）。
@@ -121,6 +138,23 @@ documents win on conflict.
 | [ct-language-features/](reports/ct-language-features/ct-language-features.html) | a language-feature survey (self-contained HTML) |
 | [ctc-ct-analysis/](reports/ctc-ct-analysis/ctc-ct-analysis.html) | `ctc.c` versus the CT line (self-contained HTML) |
 | [selfhost-readiness/](reports/selfhost-readiness/selfhost-readiness.html) | self-hosting readiness summary (self-contained HTML) |
+| [phase31-review-r3/](reports/phase31-review-r3/phase31-review-r3.md) | Phase 31 card, third independent review (NO-GO: 5 High / 5 Medium / 8 Low; 2026-11-11) |
+| [phase31-review-r4/](reports/phase31-review-r4/phase31-review-r4.md) | Phase 31 card, fourth review (NO-GO: 2 High / 2 Medium / 4 Low; 2026-11-11) |
+| [phase31-review-r5/](reports/phase31-review-r5/phase31-review-r5.md) | Phase 31 card, fifth narrow review (GO: 0 High / 2 Medium / 5 Low; 2026-11-11) |
+| [phase31-s20b-review/](reports/phase31-s20b-review/phase31-s20b-review.md) | Phase 31 S20b independent review (`35f63fd`, Map nested-container instance encoding; 2026-11-11) |
+| [phase32-33-review-r5/](reports/phase32-33-review-r5/phase32-33-review-r5.md) | Phase 32 / 33 cards, fifth review (Phase 32 NO-GO: 6 High / 5 Medium / 2 Low; 2026-11-11) |
+| [phase32-33-review-r6/](reports/phase32-33-review-r6/phase32-33-review-r6.md) | Phase 32 / 33, sixth review (closes out the previous High / Medium items; 2026-11-11) |
+| [phase32-33-review-r7/](reports/phase32-33-review-r7/phase32-33-review-r7.md) | Phase 32 / 33, seventh narrow review (`aa78952`; 2026-11-11) |
+| [phase34-36-review-r6/](reports/phase34-36-review-r6/phase34-36-review-r6.md) | Phase 34–36, fifth review (`56268e2`: P34 GO with condition / P35 GO / P36 NO-GO; 2026-11-11) |
+| [phase35-anchor-addendum.md](reports/phase34-36-review-r6/phase35-anchor-addendum.md) | Phase 35 anchor addendum (`emit_defs` does not exist; it is `emit_trait_range`; 1 Medium + 1 Low; 2026-11-11) |
+| [phase34-36-review-r7/](reports/phase34-36-review-r7/phase34-36-review-r7.md) | Phase 34 / 36, sixth (r7) narrow review (`bd1df0a`; 2026-11-11) |
+| [phase34-36-review-r8/](reports/phase34-36-review-r8/phase34-36-review-r8.md) | Phase 34 / 36, seventh (r8) narrow review (`fa10455`; 2026-11-11) |
+| [phase34-36-review-r9/](reports/phase34-36-review-r9/phase34-36-review-r9.md) | Phase 34 / 36 final sign-off (r9, `d9fb14c`; 2026-11-11) |
+| [json-production-readiness/](reports/json-production-readiness/json-readiness.md) | production-readiness assessment of the CT JSON implementation (read-only probe of `examples/json/`; 2026-11-12) |
+| [json-rewrite-estimate/](reports/json-rewrite-estimate/rewrite-estimate.md) | code-size estimate for rewriting `examples/json` with current CT (2026-11-12) |
+| [phase36-delta-review/](reports/phase36-delta-review/phase36-delta-review.md) | Phase 36 `c735ff6` delta review (NO-GO: 2 High / 4 Medium; 2026-11-12) |
+| [phase36-delta-rereview/](reports/phase36-delta-rereview/phase36-delta-rereview.md) | Phase 36 `4e02f31` re-review (NO-GO: 1 High / 3 Medium / 2 Low; 2026-11-12) |
+| [phase36-delta-rereview-2/](reports/phase36-delta-rereview-2/phase36-delta-rereview-2.md) | Phase 36 `8a65096` narrow re-review (GO: seven items closed, one Low left; 2026-11-12) |
 
 Line numbers and paths inside the reports are **snapshots of the commit under review**; links into the deleted
 `selfhost/ast/**` and `selfhost/src/**` are kept as history (the only exemption of the documentation link gate).
