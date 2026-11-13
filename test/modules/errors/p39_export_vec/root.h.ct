@@ -1,0 +1,1 @@
+pub Vec<int> empty_vec(void) { Vec<int> v; return v; }

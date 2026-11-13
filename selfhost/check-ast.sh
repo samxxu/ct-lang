@@ -3590,6 +3590,13 @@ else
     bad "p39 r1" "$(cat "$work/p39r1.out" "$work/p39r1.err")"
 fi
 
+# Phase 39 R2: root export classification.
+if bash test/modules/p39_lib/r2_probe.sh "$work/ct-ast" >"$work/p39r2.out" 2>"$work/p39r2.err"; then
+    ok "p39 r2"
+else
+    bad "p39 r2" "$(cat "$work/p39r2.out" "$work/p39r2.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

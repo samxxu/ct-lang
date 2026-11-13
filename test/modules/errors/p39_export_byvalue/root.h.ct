@@ -1,0 +1,2 @@
+struct P { int n; }
+pub P identity(P p) { return p; }

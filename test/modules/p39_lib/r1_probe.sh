@@ -3,7 +3,7 @@
 # exports reports L39-2 and leaves no executable, archive or ABI header.
 set -u
 CT=${1:?usage: r1_probe.sh <ct-ast>}
-root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+root=$(cd -- "$(dirname -- "$0")/../../.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/p39-r1.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 fail=0
