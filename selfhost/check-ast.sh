@@ -3653,6 +3653,13 @@ else
     bad "p40 r1" "$(cat "$work/p40r1.out" "$work/p40r1.err")"
 fi
 
+# Phase 40 R2: errdefer scope/control/own/goto.
+if bash test/ast/p40_errdefer_scope.sh "$work/ct-ast" >"$work/p40r2.out" 2>"$work/p40r2.err"; then
+    ok "p40 r2"
+else
+    bad "p40 r2" "$(cat "$work/p40r2.out" "$work/p40r2.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

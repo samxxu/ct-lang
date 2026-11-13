@@ -1,0 +1,4 @@
+int f(void) {
+    errdefer { return 1; }
+    return 0;
+}
