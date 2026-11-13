@@ -167,6 +167,7 @@ trait EmitOps {
     int  emit_type_name(const char *type, const char *name);
     int  emit_type_name_dims(const char *type, const char *name, const char *dims);
     int  emit_expr(int n);
+    int  expr_unstable(int n);
     int  hoist_rvalue(int n);
     int  hoist_scan(int n, int top);
     int  emit_hoists(int ind);
@@ -2090,27 +2091,28 @@ static int hoist_ctype(int n, char *out, int cap, int *depth)
     return ex->static_ctype(n, out, cap, depth, 0);
 }
 
-/* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
-   can observe a different value. Calls are stable once the hoist pass has
-   materialised them (text3); post/pre/assignment and calls buried inside a
-   subscript/member base are not. */
-static int expr_unstable(struct Emitter *self, int n)
-{
-    int k;
-    if (n < 0) return 0;
-    k = self->arena->nodes[n].kind;
-    if (k == N_CALL) return self->arena->nodes[n].text3[0] ? 0 : 1;
-    if (k == N_POST || k == N_PRE || k == N_ASSIGN) return 1;
-    if (k == N_INDEX || k == N_BIN)
-        return expr_unstable(self, self->arena->nodes[n].a)
-            || expr_unstable(self, self->arena->nodes[n].b);
-    if (k == N_MEMBER || k == N_ARROW || k == N_UNARY
-        || k == N_ADDR || k == N_DEREF)
-        return expr_unstable(self, self->arena->nodes[n].a);
-    return 0;
-}
-
 impl EmitOps for Emitter {
+    /* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
+       can observe a different value. Calls are stable once the hoist pass has
+       materialised them (text3); post/pre/assignment and calls buried inside a
+       subscript/member base are not. */
+    int expr_unstable(int n)
+    {
+        int k;
+        (void)self;
+        if (n < 0) return 0;
+        k = self->arena->nodes[n].kind;
+        if (k == N_CALL) return self->arena->nodes[n].text3[0] ? 0 : 1;
+        if (k == N_POST || k == N_PRE || k == N_ASSIGN) return 1;
+        if (k == N_INDEX || k == N_BIN)
+            return self->expr_unstable(self->arena->nodes[n].a)
+                || self->expr_unstable(self->arena->nodes[n].b);
+        if (k == N_MEMBER || k == N_ARROW || k == N_UNARY
+            || k == N_ADDR || k == N_DEREF)
+            return self->expr_unstable(self->arena->nodes[n].a);
+        return 0;
+    }
+
     int emit_indent(int n)
     {
         int i;
@@ -4630,7 +4632,7 @@ impl EmitOps for Emitter {
             /* battle p38-1 B′: a runtime guard needs a stable receiver; a
                side-effectful receiver would guard one value and call another. */
             if (self->runtime_checks && *self->runtime_checks
-                && expr_unstable(self, self->arena->nodes[n].a))
+                && self->expr_unstable(self->arena->nodes[n].a))
                 return self->fail_from(n,
                     "runtime checks need a stable receiver; bind it to a local first");
             if (!self->arena->nodes[n].text[0])
