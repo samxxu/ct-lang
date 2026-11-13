@@ -32,21 +32,21 @@ impl<T> Option<T> {
     /* A none Option with a zero-initialised payload: the Drop glue drops every
        `uses_drop` field unconditionally, so the unused payload must be in a
        safe-to-drop state (e.g. a Str with data == 0). */
-    static Option<T> none() {
+    pub static Option<T> none() {
         Option<T> o = { 0 };
         return o;
     }
 
-    int is_some() {
+    pub int is_some() {
         return self.has;
     }
 
-    int is_none() {
+    pub int is_none() {
         return !self.has;
     }
 
     /* The payload when present, the caller's fallback otherwise. */
-    T unwrap_or(T dflt) {
+    pub T unwrap_or(T dflt) {
         if (self.has) {
             return self.value;
         }
@@ -54,7 +54,7 @@ impl<T> Option<T> {
     }
 
     /* The payload, or a hard error: a none value has nothing to answer. */
-    T unwrap() {
+    pub T unwrap() {
         if (!self.has) {
             fprintf(stderr, "Option: unwrap on a none value\n");
             abort();
@@ -63,17 +63,17 @@ impl<T> Option<T> {
     }
 
     /* Fills the payload and makes the option present. */
-    void set(T v) {
+    pub void set(T v) {
         self.value = v;
         self.has = 1;
     }
 
     /* Makes the option absent; the payload is left untouched but unreachable
        through `unwrap` / `unwrap_or` until the next `set`. */
-    void clear() {
+    pub void clear() {
         self.has = 0;
     }
 
-    void release() {
+    pub void release() {
     }
 }

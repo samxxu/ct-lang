@@ -3686,6 +3686,11 @@ if bash test/ast/p42_pub.sh "$work/ct-ast"; then
 else
     bad "p42/pub-syntax" "pub syntax diagnostics failed"
 fi
+if bash test/ast/p42_private.sh "$work/ct-ast"; then
+    ok "p42/private"
+else
+    bad "p42/private" "private method emission failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

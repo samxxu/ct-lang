@@ -4,12 +4,12 @@ pub struct Box<T> {
 }
 
 impl<T> Box<T> {
-    Box<T> retain()
+    pub Box<T> retain()
     {
         return *self;
     }
 
-    void release()
+    pub void release()
     {
     }
 }

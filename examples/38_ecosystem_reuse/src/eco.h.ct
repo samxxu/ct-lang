@@ -6,17 +6,17 @@ pub struct Counter {
 }
 
 impl Counter {
-    static Counter make(int n) {
+    pub static Counter make(int n) {
         Counter c;
         c.n = n;
         return c;
     }
 
-    void bump() {
+    pub void bump() {
         self.n = self.n + 1;
     }
 
-    int get() {
+    pub int get() {
         return self.n;
     }
 }

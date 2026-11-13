@@ -129,13 +129,13 @@ pub char *str_c_str(Str s)
 impl Str {
     /* A new handle over an independent copy of the buffer; this is the shape
        Phase 31's element protocol needs (`retain` returning the element). */
-    Str retain() {
+    pub Str retain() {
         return str_from_len(self->data, self->len);
     }
 
     /* Free the buffer and mark the handle released; `Drop` inlines the same
        pair, so `release` followed by `delete` is harmless (`free(0)`). */
-    void release() {
+    pub void release() {
         free(self->data);
         self->data = 0;
         self->len = -1;

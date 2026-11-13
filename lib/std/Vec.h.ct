@@ -59,7 +59,7 @@ impl<T> Vec<T> {
        knows how a `Vec` is laid out (B29-3). An empty source still answers a
        non-zero header (D31-21) so the caller always owns a handle it may
        `release()`; a failed allocation aborts instead of answering `h == 0`. */
-    static Vec<T> from(T *items, int n)
+    pub static Vec<T> from(T *items, int n)
     {
         Vec<T> v;
         void *raw;
@@ -84,14 +84,14 @@ impl<T> Vec<T> {
         return v;
     }
 
-    int len()
+    pub int len()
     {
         if (self->h == 0) return 0;
         return self->h->len;
     }
 
     /* Out of range answers a zero value, never a read past the buffer. */
-    T get(int i)
+    pub T get(int i)
     {
         T z;
         T *d;
@@ -104,7 +104,7 @@ impl<T> Vec<T> {
     /* Out of range is a no-op. The new value is retained before the old slot is
        released, so `v.set(i, v.get(i))` stays safe when the slot is the only
        owner. */
-    void set(int i, T v)
+    pub void set(int i, T v)
     {
         T *d;
         if (self->h == 0 || i < 0 || i >= self->h->len) return;
@@ -117,7 +117,7 @@ impl<T> Vec<T> {
     /* Grows by doubling; 0 when the allocation fails, 1 on success. A failed
        header allocation aborts: a handle the caller cannot `release` must never
        leave this function (D31-21). */
-    int push(T v)
+    pub int push(T v)
     {
         T *d;
         if (self->h == 0) {
@@ -146,7 +146,7 @@ impl<T> Vec<T> {
 
     /* Empty answers a zero value. The returned copy carries the reference the
        container had on the slot, so the caller owns it after the pop. */
-    T pop()
+    pub T pop()
     {
         T z;
         T *d;
@@ -161,7 +161,7 @@ impl<T> Vec<T> {
     }
 
     /* Drops the elements, keeps the buffer for reuse. */
-    void clear()
+    pub void clear()
     {
         int i;
         T *d;
@@ -173,7 +173,7 @@ impl<T> Vec<T> {
     }
 
     /* A second handle on the same buffer; both stay readable (D29-12). */
-    Vec<T> retain()
+    pub Vec<T> retain()
     {
         Vec<T> r;
         r.h = self->h;
@@ -184,7 +184,7 @@ impl<T> Vec<T> {
     /* Returns the remaining count. A released handle is cleared either way, so
        releasing it a second time aborts instead of decrementing the count a
        sibling handle still owns (D29-12, V29-2). */
-    int release()
+    pub int release()
     {
         int left;
         int i;
@@ -216,7 +216,7 @@ impl<T> Vec<T> {
 impl<V> Map<char *, V> {
     /* 1 when overwritten, 1 when appended, 0 on allocation failure or a NULL
        key (a NULL key has no content to compare). */
-    int put(char *k, V v)
+    pub int put(char *k, V v)
     {
         int i;
         struct MapEntry<char *, V> *es;
@@ -257,7 +257,7 @@ impl<V> Map<char *, V> {
         return 1;
     }
 
-    V *get(char *k)
+    pub V *get(char *k)
     {
         int i;
         struct MapEntry<char *, V> *es;
@@ -268,7 +268,7 @@ impl<V> Map<char *, V> {
         return 0;
     }
 
-    int remove(char *k)
+    pub int remove(char *k)
     {
         int i;
         struct MapEntry<char *, V> *es;
@@ -294,7 +294,7 @@ impl<V> Map<char *, V> {
        inline copy is the only shape that works. Insertion order is the item
        order, and a repeated key overwrites in place (D29-11); an empty list
        still allocates the header so the handle can be released (D31-21). */
-    static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
+    pub static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
     {
         Map<char *, V> m;
         int i;
@@ -344,7 +344,7 @@ impl<V> Map<char *, V> {
 }
 
 impl<K, V> Map<K, V> {
-    int len()
+    pub int len()
     {
         if (self->h == 0) return 0;
         return self->h->len;
@@ -354,7 +354,7 @@ impl<K, V> Map<K, V> {
        appended, 0 when the allocation failed. Keys are compared by their bytes,
        which is what the roster's integer types need; `char *` keys are served
        by the block above (V29-1). */
-    int put(K k, V v)
+    pub int put(K k, V v)
     {
         int i;
         struct MapEntry<K, V> *es;
@@ -396,7 +396,7 @@ impl<K, V> Map<K, V> {
 
     /* NULL when absent; otherwise an interior pointer that stays valid until
        the next modification. */
-    V *get(K k)
+    pub V *get(K k)
     {
         int i;
         struct MapEntry<K, V> *es;
@@ -410,7 +410,7 @@ impl<K, V> Map<K, V> {
 
     /* 1 when the key was found and removed; the tail shifts left so the
        remaining entries keep their insertion order. */
-    int remove(K k)
+    pub int remove(K k)
     {
         int i;
         struct MapEntry<K, V> *es;
@@ -437,7 +437,7 @@ impl<K, V> Map<K, V> {
        is the roster's integer-key rule (V29-1). Insertion order is the item
        order and a repeated key overwrites in place (D29-11); an empty list still
        allocates the header so the handle can be released (D31-21). */
-    static Map<K, V> from(struct MapEntry<K, V> *items, int n)
+    pub static Map<K, V> from(struct MapEntry<K, V> *items, int n)
     {
         Map<K, V> m;
         int i;
@@ -484,7 +484,7 @@ impl<K, V> Map<K, V> {
         return m;
     }
 
-    void clear()
+    pub void clear()
     {
         int i;
         struct MapEntry<K, V> *es;
@@ -496,7 +496,7 @@ impl<K, V> Map<K, V> {
     }
 
     /* The i-th entry in insertion order; a zero entry when out of range. */
-    MapEntry<K, V> entry(int i)
+    pub MapEntry<K, V> entry(int i)
     {
         MapEntry<K, V> z;
         struct MapEntry<K, V> *es;
@@ -506,7 +506,7 @@ impl<K, V> Map<K, V> {
         return es[i];
     }
 
-    Map<K, V> retain()
+    pub Map<K, V> retain()
     {
         Map<K, V> r;
         r.h = self->h;
@@ -514,7 +514,7 @@ impl<K, V> Map<K, V> {
         return r;
     }
 
-    int release()
+    pub int release()
     {
         int left;
         int i;

@@ -30,7 +30,7 @@ pub struct Result<T, E> {
 impl<T, E> Result<T, E> {
     /* A success Result: the error payload is zero-initialised so the Drop glue
        (which drops every `uses_drop` field unconditionally) can drop it safely. */
-    static Result<T, E> ok(T v) {
+    pub static Result<T, E> ok(T v) {
         Result<T, E> r = { 0 };
         r.ok = 1;
         r.value = v;
@@ -39,23 +39,23 @@ impl<T, E> Result<T, E> {
 
     /* A failure Result: the value payload is zero-initialised for the same
        reason as `ok`. */
-    static Result<T, E> err(E e) {
+    pub static Result<T, E> err(E e) {
         Result<T, E> r = { 0 };
         r.ok = 0;
         r.err = e;
         return r;
     }
 
-    int is_ok() {
+    pub int is_ok() {
         return self.ok;
     }
 
-    int is_err() {
+    pub int is_err() {
         return !self.ok;
     }
 
     /* The success payload when present, the caller's fallback otherwise. */
-    T unwrap_or(T dflt) {
+    pub T unwrap_or(T dflt) {
         if (self.ok) {
             return self.value;
         }
@@ -64,7 +64,7 @@ impl<T, E> Result<T, E> {
 
     /* The error payload when the result failed, the caller's fallback
        otherwise. */
-    E unwrap_err_or(E dflt) {
+    pub E unwrap_err_or(E dflt) {
         if (!self.ok) {
             return self.err;
         }
@@ -72,7 +72,7 @@ impl<T, E> Result<T, E> {
     }
 
     /* The success payload, or a hard error: a failure has nothing to answer. */
-    T unwrap() {
+    pub T unwrap() {
         if (!self.ok) {
             fprintf(stderr, "Result: unwrap on an error value\n");
             abort();
@@ -81,7 +81,7 @@ impl<T, E> Result<T, E> {
     }
 
     /* The error payload, or a hard error: a success carries no error. */
-    E unwrap_err() {
+    pub E unwrap_err() {
         if (self.ok) {
             fprintf(stderr, "Result: unwrap_err on an ok value\n");
             abort();
@@ -90,17 +90,17 @@ impl<T, E> Result<T, E> {
     }
 
     /* Makes the result a success with the given payload. */
-    void set_ok(T v) {
+    pub void set_ok(T v) {
         self.value = v;
         self.ok = 1;
     }
 
     /* Makes the result a failure with the given error. */
-    void set_err(E e) {
+    pub void set_err(E e) {
         self.err = e;
         self.ok = 0;
     }
 
-    void release() {
+    pub void release() {
     }
 }
