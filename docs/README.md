@@ -41,6 +41,7 @@
 | [design/phase30.md](design/phase30.md) | 规划中的阶段计划（Phase 30）：接收者语境块 `<receiver> into { … }`——块内 `.name` 访问接收者成员/方法、`$` 指代自身；`into` 为后置上下文关键字，块结束后仍返回接收者、可继续接后缀链或连续多段 `into`；语句形态与值形态（初始化器 / 赋值 / `return`，结果为接收者本身）；接收者只求值一次并按 value category 提升；`.m.ct` 类型宿主（含 shim）可作接收者、`$ =` 可接链（D30-1–D30-19 见正文） |
 | [design/phase31.md](design/phase31.md) | 规划中的阶段计划（Phase 31）：接口值进容器（`Vec<Show>` / `Map<char *, Show>`）与嵌套容器的元素寿命与所有权、`v[i]` / `m[k]` 仅展开为 `get`、`Vec` / `Map` 花括号初值（E31-1–E31-23、L31-1–L31-21、D31-1–D31-17 见正文） |
 | [design/phase32-draft.md](design/phase32-draft.md) – [design/phase39-draft.md](design/phase39-draft.md) | 规划中的阶段草案（Phase 32–39）：类型安全网 / 有界泛型 struct / 生态可用性 / 泛型 trait / 泛型 Drop 与 `Str` / trait 签名硬错与运行期契约 / `defer` / C ABI 与库制品；状态以 [roadmap.md](roadmap.md) 为准 |
+| [design/phase40-draft.md](design/phase40-draft.md) | **草案 / 未立项 / 未过分析，不作数**：自定义类型下标协议——`impl` 声明 `get` / `set` 后 `obj[k]` 展开为方法调用；源自需求池 `REQ-L1`，无 roadmap 行 |
 | [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md) | ct-pkg `std` 的 Agent 内核运行库提案：`arena` / `sync` / `result` / `string` / `callback` 契约与交付顺序 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
@@ -101,6 +102,7 @@
 | [design/phase29.md](design/phase29.md) | planned phase plan (Phase 29, the second of two generics phases): generic structs + built-in `Vec`/`Map`, unfreezing the `foreach` container protocol (`Map` iteration is a hard criterion) and moving `Vec`/`Map` from `ct-pkg/std` into `lib/std/` (the rest of `std` stays put) (D29-1–D29-16 inside) |
 | [design/phase30.md](design/phase30.md) | planned phase plan (Phase 30): receiver-context block `<receiver> into { … }` — `.name` reaches the receiver's members/methods and `$` denotes the receiver itself; `into` is a postfix context keyword and the block still yields the receiver, so a postfix chain or further `into` blocks may follow the closing brace; statement and value forms (initialiser / assignment / `return`, yielding the receiver itself); the receiver is evaluated once and hoisted by value category; `.m.ct` type hosts (including shims) are accepted as receivers and `$ =` can rebind a by-value chain (D30-1–D30-19 inside) |
 | [design/phase31.md](design/phase31.md) | planned phase plan (Phase 31): element lifetimes and ownership for interface values in containers (`Vec<Show>` / `Map<char *, Show>`) and for nested containers; `v[i]` / `m[k]` lower only to `get`; brace initialisers for `Vec` / `Map` (E31-1–E31-23, L31-1–L31-21, D31-1–D31-17 inside) |
+| [design/phase40-draft.md](design/phase40-draft.md) | **draft / not approved / not analysed, not in force**: a subscript protocol for user types — `obj[k]` lowers to a method call once `impl` declares `get` / `set`; derived from pool entry `REQ-L1`, no roadmap row |
 | [../issues/README.md](../issues/README.md) | the review ledger (one file per finding, with status and disposition) |
 | [history/README.md](history/README.md) | the history index: closed design records and review reports |
 
