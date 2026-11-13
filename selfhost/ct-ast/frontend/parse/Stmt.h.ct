@@ -109,6 +109,7 @@ pub trait StmtOps {
     int  defer_ahead(void);
     int  defer_add(int node);
     int  defer_active_depth(void);
+    int  defer_top_id(void);
     int  defer_run_node(int body, int line);
     int  defer_prepend(int node, int base);
     int  defer_flush_block(int blk, int *tail);
@@ -194,6 +195,8 @@ pub struct Stmt {
     int  ndefer_blocks;
     int  defer_head[256];
     int  defer_tail[256];
+    int  defer_ids[256];
+    int  ndefer_next_id;
     int  defer_break_base[256];
     int  defer_cont_base[256];
     /* The defer depth at each label/goto, so `func_end` can reject a jump
@@ -1376,6 +1379,15 @@ impl StmtOps for Stmt {
         return n;
     }
 
+    int defer_top_id(void)
+    {
+        int i;
+        (void)self;
+        for (i = self->ndefer_blocks - 1; i >= 0; i--)
+            if (self->defer_head[i] >= 0) return self->defer_ids[i];
+        return 0;
+    }
+
     int defer_add(int node)
     {
         int b, t;
@@ -1530,6 +1542,8 @@ impl StmtOps for Stmt {
         }
         self->defer_head[self->ndefer_blocks] = -1;
         self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_next_id = self->ndefer_next_id + 1;
+        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
         self->ndefer_blocks = self->ndefer_blocks + 1;
         base = self->mem->own_base[self->sym->nscope - 1];
         blk = self->sup->new_node(N_BLOCK);
@@ -1633,6 +1647,9 @@ impl StmtOps for Stmt {
             if (self->in_defer)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "a defer block cannot transfer control", self->mem->path);
+            if (self->switch_depth > 0)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "defer is not allowed inside a switch", self->mem->path);
             if (self->ndefer_blocks == 0)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "defer is only allowed inside a function", self->mem->path);
@@ -2161,6 +2178,8 @@ impl StmtOps for Stmt {
         }
         self->defer_head[self->ndefer_blocks] = -1;
         self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_next_id = self->ndefer_next_id + 1;
+        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
         self->ndefer_blocks = self->ndefer_blocks + 1;
         base = self->mem->own_base[self->sym->nscope - 1];
         s = self->parse_stmt();
@@ -2226,6 +2245,8 @@ impl StmtOps for Stmt {
         }
         self->defer_head[self->ndefer_blocks] = -1;
         self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_next_id = self->ndefer_next_id + 1;
+        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
         self->ndefer_blocks = self->ndefer_blocks + 1;
         self->switch_depth = self->switch_depth + 1;
         tail = -1;
@@ -2275,6 +2296,8 @@ impl StmtOps for Stmt {
         int s, c, head, tail, is_def, val;
         (void)self;
 
+        if (self->in_defer)
+            return self->sup->fail("a defer block cannot declare a label");
         s = self->sup->new_node(N_CASE);
         if (s < 0) return -1;
         is_def = strcmp(self->lex->toktext, "default") == 0;
@@ -3011,6 +3034,8 @@ impl StmtOps for Stmt {
         char msg[MAX_TEXT];
         (void)self;
 
+        if (self->in_defer)
+            return self->sup->fail("a defer block cannot declare a label");
         line = self->lex->tokline;
         snprintf(name, sizeof name, "%s", self->lex->toktext);
         if (self->nlabels >= MAX_LABELS) return self->sup->fail("too many labels in one function");
@@ -3022,7 +3047,7 @@ impl StmtOps for Stmt {
         if (s < 0) return -1;
         snprintf(self->label_names[self->nlabels], MAX_TEXT, "%s", name);
         self->label_lines[self->nlabels] = line;
-        self->label_defer_depth[self->nlabels] = self->defer_active_depth();
+        self->label_defer_depth[self->nlabels] = self->defer_top_id();
         self->nlabels = self->nlabels + 1;
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         self->sup->lex_next();
@@ -3069,7 +3094,7 @@ impl StmtOps for Stmt {
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         snprintf(self->goto_names[self->ngotos], MAX_TEXT, "%s", name);
         self->goto_lines[self->ngotos] = self->arena->nodes[s].line;
-        self->goto_defer_depth[self->ngotos] = self->defer_active_depth();
+        self->goto_defer_depth[self->ngotos] = self->defer_top_id();
         self->ngotos = self->ngotos + 1;
         self->sup->lex_next();
         if (self->sup->expect(";") != 0) return -1;
@@ -3084,6 +3109,7 @@ impl StmtOps for Stmt {
         self->nbreak = 0;
         self->ncont = 0;
         self->ndefer_blocks = 0;
+        self->ndefer_next_id = 0;
         self->in_defer = 0;
         return 0;
     }
