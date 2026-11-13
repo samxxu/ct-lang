@@ -1,0 +1,64 @@
+{
+  "battle": "p41-1",
+  "head": "bd8b74f3",
+  "environment": {
+    "os": "Darwin arm64 / macOS",
+    "cc": "Apple clang 21.0.0",
+    "date": "2026-11-13"
+  },
+  "rounds": 1,
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "counter",
+      "command": "cc -std=c99 -pedantic-errors -c /tmp/atomic-c99.c",
+      "exit": 1,
+      "output": "error: '_Atomic' is a C11 extension [-Werror,-Wc11-extensions]",
+      "reproduced": true,
+      "note": "A 的 _Atomic 生成物不满足严格 C99；B 改为显式 C11。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "command": "grep -n 'atomic_int\\|atomic_load\\|atomic_store' docs/bindings-and-patterns.md",
+      "exit": 0,
+      "output": "§7 正例使用 atomic_int + atomic_load/store",
+      "reproduced": true,
+      "note": "A 的保留名会改变现有文档正例的解析路径。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "command": "grep -n 'pthread' selfhost/check-ast.sh test/run.sh",
+      "exit": 1,
+      "output": "no pthread in generic check-ast/test/run link lines",
+      "reproduced": true,
+      "note": "A 的 R41-8 只覆盖 check-sanitizers/tsan，未覆盖通用门禁。"
+    },
+    {
+      "id": "V4",
+      "side": "both",
+      "command": "find battle docs/decisions -iname '*41*' -o -iname '*atomic*'",
+      "exit": 0,
+      "output": "no p41 battle/ADR before this file",
+      "reproduced": true,
+      "note": "A 的 breaking change 缺可审计决策；本庭以 B′ 补记录。"
+    },
+    {
+      "id": "V5",
+      "side": "both",
+      "command": "grep -n 'atomic' editors/vscode/syntaxes/ct.tmLanguage.json editors/vscode/test/check-grammar.py",
+      "exit": 1,
+      "output": "no atomic grammar/test",
+      "reproduced": true,
+      "note": "E41-9 的编辑器覆盖缺口；B′ 要求补。"
+    }
+  ],
+  "checks": [
+    {"id": "J-1", "result": "A red; B' green", "v": ["V1", "V2"]},
+    {"id": "J-2", "result": "B' keeps diagnostics", "v": ["V3"]},
+    {"id": "J-3", "result": "B' auditable; C fallback not", "v": ["V3"]},
+    {"id": "J-4", "result": "A red; B' explicit C11", "v": ["V1"]},
+    {"id": "J-5", "result": "gaps; B' adds", "v": ["V3", "V5"]}
+  ]
+}
