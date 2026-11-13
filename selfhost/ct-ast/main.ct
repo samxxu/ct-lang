@@ -100,7 +100,7 @@ int main(int argc, char **argv)
        setters as the driver re-points them. Bind after the entry-name branch
        because `prog` is part of the wired state. */
     backend::emit::ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
-    backend::emit::ct_emit_bind_tables(m->units, &m->nunits, p->maps, &p->nmaps, p->calls, &p->ncalls, &m->build_mode, &m->line_mode, &m->runtime_checks);
+    backend::emit::ct_emit_bind_tables(m->units, &m->nunits, p->maps, &p->nmaps, p->calls, &p->ncalls, &m->build_mode, &m->line_mode, &m->runtime_checks, &m->abi_mode, &m->lib_root, m->abi_exports, &m->abi_n);
     backend::emit::ct_emit_bind_parse(&p->nparams, p->pend_fields, &p->npend);
     /* the compile-mode driver (tool::driver) holds the output sink and the
        collaborators of one run; bind it once they are all in place. */

@@ -158,6 +158,10 @@ pub struct Module {
        pass-through: composed into the line, never parsed or validated. */
     int  emit_c;
     int  lib_mode;              /* Phase 39: ct build --lib */
+    int  lib_root;              /* root unit index for --lib */
+    int  abi_mode;              /* 1 while Emitter writes the ABI header */
+    int  abi_exports[256];      /* root function indices in the export set */
+    int  abi_n;
     int  runtime_checks;        /* --runtime-checks: guard null vtables in build */
     const char *exe;
     const char *outdir_opt;
@@ -1039,6 +1043,8 @@ impl ModuleOps for Module {
             return 1;
         }
         root_path = self->units[root_u].path;
+        self->lib_root = root_u;
+        self->abi_n = 0;
         if (!self->units[root_u].is_hdr) {
             fprintf(stderr, "%s: no exported functions in '%s'\n", self->prog, root_path);
             return 1;
@@ -1134,6 +1140,7 @@ impl ModuleOps for Module {
                 }
                 if (bad)
                     return tool::diag::ct_sem_error(self->sym->funcs[fi].line, 1, msg, root_path);
+                if (self->abi_n < 256) self->abi_exports[self->abi_n++] = fi;
             }
         }
         if (count == 0) {
@@ -1177,6 +1184,9 @@ impl ModuleOps for Module {
         self->have_map = 0;
         self->emit_c = 0;
         self->lib_mode = 0;
+        self->lib_root = -1;
+        self->abi_mode = 0;
+        self->abi_n = 0;
         self->runtime_checks = 0;
         self->exe = NULL;
         self->outdir_opt = NULL;
@@ -1487,7 +1497,26 @@ impl ModuleOps for Module {
                 }
             }
             if (self->lib_mode) {
-                return self->lib_scan(root_u);
+                const char *od = self->outdir_opt ? self->outdir_opt : ".ctbuild";
+                char hp[MAX_PATH];
+                if (self->lib_scan(root_u) != 0) return 1;
+                if (snprintf(self->outdir, sizeof self->outdir, "%s", od)
+                    >= (int)sizeof self->outdir) {
+                    fprintf(stderr, "ctc: output directory is too long\n");
+                    return 1;
+                }
+                if (ct_ensure_dir(self->outdir) != 0) {
+                    fprintf(stderr, "ctc: cannot create '%s'\n", self->outdir);
+                    return 1;
+                }
+                if (snprintf(hp, sizeof hp, "%s/%s.abi.h", self->outdir,
+                             self->units[root_u].base) >= (int)sizeof hp) {
+                    fprintf(stderr, "ctc: ABI header path is too long\n");
+                    return 1;
+                }
+                self->abi_mode = 1;
+                if (backend::emit::ct_emit_header(hp) != 0) return 1;
+                return 0;
             }
         }
         for (u = 0; u < self->nunits; u++) {
