@@ -26,7 +26,8 @@ jobs:
       - name: failure summary
         if: failure()
         run: |
-          echo "::error::$(grep -m1 -E 'FAIL|error:' /tmp/check-all.log || echo 'check-all failed')"
+          msg=$(grep -A12 -m1 -E '^ *FAIL|error:' /tmp/check-all.log | tr '\n' '|')
+          echo "::error::${msg:-check-all failed}"
           tail -100 /tmp/check-all.log
 
   # macOS carries the BSD-only probes test/run.sh skips elsewhere, so it runs
@@ -44,7 +45,8 @@ jobs:
       - name: failure summary
         if: failure()
         run: |
-          echo "::error::$(grep -m1 -E 'FAIL|error:' /tmp/check-all.log || echo 'check-all failed')"
+          msg=$(grep -A12 -m1 -E '^ *FAIL|error:' /tmp/check-all.log | tr '\n' '|')
+          echo "::error::${msg:-check-all failed}"
           tail -100 /tmp/check-all.log
 
   # A second Linux compiler, smoke only: the two suites that are most sensitive

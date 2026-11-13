@@ -9,7 +9,12 @@ int main(void)
     int left;
 
     m.h = 0;
-    printf("put %d %d %d\n", m.put("bo", 1), m.put("amy", 2), m.put("cy", 3));
+    {
+        int p1 = m.put("bo", 1);
+        int p2 = m.put("amy", 2);
+        int p3 = m.put("cy", 3);
+        printf("put %d %d %d\n", p1, p2, p3);
+    }
     printf("len %d\n", m.len());
 
     slot = m.get("amy");
