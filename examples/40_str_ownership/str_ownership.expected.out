@@ -1,0 +1,5 @@
+s len=5
+s after release: len=-1
+u len=5 (source released)
+deleted p is null: 1
+done

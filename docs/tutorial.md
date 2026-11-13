@@ -1348,6 +1348,36 @@ int main(void)
 完整样例：[39_generic_trait](../examples/39_generic_trait)。细节见
 [language-spec §4.55](language-spec.md)。
 
+### 10.13 泛型 `Drop` 与长度前缀字符串 `Str`（Phase 36）
+
+`Drop` 也能像 trait 一样写泛型实现：`impl<T> Drop for Box<T>` 会按每个实参单态化出一个
+`Box_int_Drop_drop` / `Box_Str_Drop_drop`，不会留下模板态的 `Box_Drop_drop`。注意两点：
+
+- **声明顺序、自负全责**：没有显式 `impl Drop` 时，编译器按字段声明顺序为每个带 `use Drop`
+  的字段递归生成释放胶水；一旦写了 `impl Drop`（含泛型形态），就**不再**生成字段胶水，释放
+  资源是你自己的事。
+- **`drop()` 里不能重复释放同一字段**：`self->buf.release()` 写两次会报
+  `field 'buf' is released more than once in drop()`。
+
+字符串用内建的 `Str`（`lib/std/Str.h.ct`），布局是 `{ char *data; int len; }`，`len` 是契约
+（内嵌 `\0` 也保留，不靠结尾 NUL）：
+
+```ct
+Str s = str_from("hello");
+Str t = s.retain();          /* 深拷贝，t 有独立 buffer */
+s.release();                 /* 释放 s，t 不受影响 */
+
+own Str *p = malloc(sizeof(struct Str));
+*p = str_from("heap");
+delete p;                    /* Drop 释放 buffer，再 free 结构体并置空 */
+```
+
+`Str` 按值传递只浅拷贝指针，要独立副本必须显式 `retain()`。`Option<T>` / `Result<T,E>` 已带
+`use Drop`，它们的 `none()` / `ok()` / `err()` 会零初始化未用的 payload，使胶水安全释放。
+
+完整样例：[40_str_ownership](../examples/40_str_ownership)。细节见
+[language-spec §4.56](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -2895,6 +2925,37 @@ int main(void)
 
 Runnable sample: [39_generic_trait](../examples/39_generic_trait). See
 [language-spec §4.55](language-spec.md).
+
+### 10.14 Generic `Drop` and the length-prefixed `Str` (Phase 36)
+
+`Drop` accepts generic impls just like a trait: `impl<T> Drop for Box<T>` monomorphises to one
+`Box_int_Drop_drop` / `Box_Str_Drop_drop` per argument, never a template `Box_Drop_drop`. Two rules:
+
+- **Declaration order, full responsibility**: without an explicit `impl Drop`, the compiler emits
+  recursive release glue for every `use Drop` field in declaration order. Once you write `impl Drop`
+  (generic or not), the field glue is **not** generated — releasing resources is your job.
+- **No double release of one field**: calling `self->buf.release()` twice in `drop()` reports
+  `field 'buf' is released more than once in drop()`.
+
+Strings use the built-in `Str` (`lib/std/Str.h.ct`), laid out as `{ char *data; int len; }` where
+`len` is the contract (embedded `\0` is kept; no trailing-NUL reliance):
+
+```ct
+Str s = str_from("hello");
+Str t = s.retain();          /* deep copy: t owns its own buffer */
+s.release();                 /* frees s; t is unaffected */
+
+own Str *p = malloc(sizeof(struct Str));
+*p = str_from("heap");
+delete p;                    /* Drop frees the buffer, then the struct, then nulls p */
+```
+
+Passing a `Str` by value shallow-copies the pointer, so call `retain()` for an independent copy.
+`Option<T>` / `Result<T,E>` carry `use Drop`; their `none()` / `ok()` / `err()` factories
+zero-initialise the unused payload so the unconditional glue drops it safely.
+
+Runnable sample: [40_str_ownership](../examples/40_str_ownership). See
+[language-spec §4.56](language-spec.md).
 
 ### 11. CLI cheat sheet
 

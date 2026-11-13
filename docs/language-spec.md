@@ -2196,6 +2196,15 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **冲突与容量**：编码名与已声明的 trait、`struct <I>_vtbl` 或 `struct <I>_iface` 撞名时报 `trait instance name '<I>' collides with a declared type`；模板行与实例行共用 `MAX_TRAITS = 64`，第 65 条报 `too many traits`。
 - **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](design/phase35-draft.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
 
+### 4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）
+
+- **`Drop` trait**：`use Drop` 只置位、不进 `use[]` 列表；`delete p` 调用 `<S>_Drop_drop(p)`，无 vtable/vptr。无显式 `impl Drop` 时，编译器按字段**声明顺序**为每个 `uses_drop` 字段递归生成释放胶水；写了显式 `impl Drop for S`（或 `impl<T> Drop for Box<T>`）即**自负全责**，不再生成字段胶水，需在体里手动释放资源。
+- **泛型 Drop**：`impl<T> Drop for Box<T>` 每实例单态化出一个 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不产生模板态 `Box_Drop_drop`；声明在首次使用之后仍生效（impl 在 emit 阶段解析）。容器元素协议（Phase 31）对普通 struct 同样生效：`Vec<Str>` / `Vec<Probe>` 的 `release()` 会调用元素的 `release()`。
+- **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
+- **`Str`**：内建于 `lib/std/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
+- **所有权形态**：`Str` 是值句柄，按值传递浅拷贝指针（不自动深拷贝，需显式 `retain()`）；`own Str *p = malloc(sizeof(struct Str)); ...; delete p;` 由 `Drop` 释放 buffer 再 free 结构体并置空指针。`Option<T>` / `Result<T,E>` 已加 `use Drop`，其 `none()` / `ok()` / `err()` 工厂零初始化未使用的 payload，使无条件胶水安全释放。
+- **字符串契约归属**：ct-pkg 的 `std/string`（外部包）提供高层次字符串契约；本仓内建 `Str` 是长度前缀的低层句柄，二者不重复。
+
 ---
 
 ## English
@@ -4874,4 +4883,31 @@ and value types and defines the ownership protocol around them.
 - **Not in this phase**: supertraits / interface composition (open item and trigger conditions in the
   [phase 35 card](design/phase35-draft.md) §10.2 / §10.3), default bodies, multiple bounds,
   associated types, `Self`, method-level generics and generic enums.
+
+### 4.56 `Drop` and the length-prefixed `Str` (Phase 36, ct-ast only)
+
+- **The `Drop` trait**: `use Drop` only sets a flag and does not enter the `use[]` list; `delete p`
+  calls `<S>_Drop_drop(p)` with no vtable or vptr. Without an explicit `impl Drop`, the compiler
+  emits recursive release glue for every `uses_drop` field in **declaration order**. An explicit
+  `impl Drop for S` (or `impl<T> Drop for Box<T>`) takes **full responsibility**: no field glue is
+  generated, so the body must release resources by hand.
+- **Generic `Drop`**: `impl<T> Drop for Box<T>` monomorphises to one `Box_int_Drop_drop` /
+  `Box_Str_Drop_drop` per instance and never a template `Box_Drop_drop`; a declaration placed after
+  the first use still binds (impls are resolved at emit time). The Phase 31 element protocol also
+  covers plain structs: `Vec<Str>` / `Vec<Probe>` `release()` calls each element's `release()`.
+- **Double-release diagnostic**: a `drop()` body may not `release()` the same `self` field twice;
+  that reports `field 'X' is released more than once in drop()`.
+- **`Str`**: built into `lib/std/Str.h.ct`, layout `{ char *data; int len; }`, where `len` is the
+  contract (embedded `\0` is preserved; no reliance on a trailing NUL). API: `str_from(s)` /
+  `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` /
+  `str_compare(a, b)` / `str_c_str(s)`; methods `retain()` (deep copy) and `release()` (free and set
+  `data=0,len=-1`). `impl Drop for Str` frees the buffer; `free(0)` is a no-op, so a zero `Str` is
+  safe to drop.
+- **Ownership shapes**: `Str` is a value handle; pass-by-value shallow-copies the pointer (no
+  implicit deep copy — call `retain()` explicitly). `own Str *p = malloc(sizeof(struct Str)); ...;
+  delete p;` lets `Drop` free the buffer, then frees the struct and nulls the pointer. `Option<T>` /
+  `Result<T,E>` carry `use Drop`; their `none()` / `ok()` / `err()` factories zero-initialise the
+  unused payload so the unconditional glue drops it safely.
+- **String-contract ownership**: ct-pkg's external `std/string` provides the high-level string
+  contract; the built-in `Str` is the low-level length-prefixed handle. The two do not overlap.
 

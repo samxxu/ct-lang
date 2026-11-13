@@ -1,0 +1,48 @@
+//@ct-requires: ct-ast
+// Phase 36 S7: `Str` ownership -- the handle owns a heap buffer, `release`
+// hands it back, `retain` deep-copies, and `delete` on an `own Str *` runs the
+// drop. `Option<Str>` and `Vec<Str>` propagate the lifecycle to their payload.
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void)
+{
+    // 1. A `Str` owns its buffer; `release` frees it and marks the handle.
+    Str s = str_from("hello");
+    printf("s len=%d\n", s.len);
+    s.release();
+    printf("s after release: len=%d\n", s.len);
+
+    // 2. `retain` returns an independent copy: freeing the source leaves the
+    //    copy usable.
+    Str t = str_from("world");
+    Str u = t.retain();
+    t.release();
+    printf("u len=%d (source released)\n", u.len);
+    u.release();
+
+    // 3. `own Str *` + `delete`: Drop frees the buffer, then the struct, then
+    //    nulls the pointer.
+    own Str *p = malloc(sizeof(struct Str));
+    *p = str_from("heap");
+    delete p;
+    printf("deleted p is null: %d\n", p == 0);
+
+    // 4. `Option<Str>`: a present value drops the Str buffer; `none` carries a
+    //    zero Str whose drop is a safe `free(0)`.
+    own Option<Str> *o = malloc(sizeof(struct Option_Str));
+    o->has = 1;
+    o->value = str_from("opt");
+    delete o;
+
+    own Option<Str> *n = malloc(sizeof(struct Option_Str));
+    *n = Option<Str>::none();
+    delete n;
+
+    // 5. `Vec<Str>` releases every element on `release()`.
+    Vec<Str> v = { str_from("a"), str_from("b") };
+    v.release();
+
+    printf("done\n");
+    return 0;
+}
