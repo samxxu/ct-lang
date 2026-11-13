@@ -1333,6 +1333,16 @@ impl ParseOps for Parser {
                 self->seen_decl = 1;
                 continue;
             }
+            /* Phase 38: a defer block has no file-scope meaning; diagnose it
+               here instead of letting `top_decl` report a missing type. */
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "defer") == 0) {
+                const char *p = self->lex->src + self->lex->tokstart + 5;
+                while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+                if (*p == '{')
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "defer is only allowed inside a function", self->mem->path);
+            }
             n = self->top_decl(0);
             if (n == NO_NODE) continue;
             if (n < 0) {

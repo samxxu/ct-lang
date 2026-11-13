@@ -115,6 +115,9 @@ import runtime::arena::Arena;
    first `N_INIT_ITEM` (`a` = key expression, `b` = value expression, items
    chain through `next`). */
 #define N_INIT_MBRACE 67
+/* Phase 38: a materialised `defer` body at a block exit (`a` = N_BLOCK). */
+#define N_DEFER_RUN 70
+#define N_DEFER 69
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -3428,6 +3431,9 @@ impl EmitOps for Emitter {
                 fprintf(self->out, "%s ", self->arena->str_at(self->arena->nodes[n].attr));
             return self->emit_node(self->arena->nodes[n].b, ind);
         }
+        if (self->arena->nodes[n].kind == N_DEFER_RUN)
+            return self->emit_node(self->arena->nodes[n].a, ind);
+        if (self->arena->nodes[n].kind == N_DEFER) return 0;
         if (self->arena->nodes[n].kind == N_BLOCK) {
             int save_nclvar;
             save_nclvar = self->nclvar;   /* a closure bound here dies with the block */
