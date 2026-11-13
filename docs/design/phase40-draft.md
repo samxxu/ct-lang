@@ -240,4 +240,4 @@ R1–R5 每项先提 `test(cleanup): <task-id> 红`，实现提交随后转绿�
 | E40-1–E40-9 | `p40 r1` / `r2` / `r4` / `r5` / `docs` + `p40_return_err` / `p40_break_continue` / `p40_order_own` / `p40_trailing` |
 | 全量门禁 | `check-all: OK (11 hard gates green)`；check-ast 1348/0、check-warnings 605/0、test/run 153、goldens 82、docs 962 links / 217 files、acceptance 20 |
 | 样例 | `examples/43_errdefer`（成功跳过 errdefer；错误路径 LIFO） |
-| tag/push | 本地 annotated tag `v0.40.0`；push 按 0.3 等用户批准 |
+| tag/push | annotated tag `v0.40.0`，分支与 tag 已 push 到 origin（2026-11-13 用户授权自动 push） |
