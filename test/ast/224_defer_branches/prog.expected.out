@@ -11,4 +11,8 @@ goto-defer
 goto-n=1
 nested-label
 nested-defer
+future-label
+future-defer
+future-label2
+future-defer2
 defer=1

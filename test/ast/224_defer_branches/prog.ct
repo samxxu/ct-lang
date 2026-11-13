@@ -47,6 +47,26 @@ N:
     printf("nested-label\n");
 }
 
+static void future_ancestor(void)
+{
+    goto FA;
+    {
+    FA:
+        printf("future-label\n");
+    }
+    defer { printf("future-defer\n"); }
+}
+
+static void future_label(void)
+{
+    {
+        goto FL;
+    }
+FL:
+    defer { printf("future-defer2\n"); }
+    printf("future-label2\n");
+}
+
 int main(void)
 {
     int defer = 1;
@@ -55,6 +75,8 @@ int main(void)
     nested();
     gotosame();
     gotonested();
+    future_ancestor();
+    future_label();
     printf("defer=%d\n", defer);
     return 0;
 }

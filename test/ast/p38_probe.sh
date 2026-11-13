@@ -26,6 +26,7 @@ check_neg() {
 check_neg p38_goto_cross "a goto cannot cross a block with defer"
 check_neg p38_goto_sibling "a goto cannot cross a block with defer"
 check_neg p38_goto_in "a goto cannot cross a block with defer"
+check_neg p38_goto_active "a goto cannot cross a block with defer"
 check_neg p38_defer_control "a defer block cannot transfer control"
 check_neg p38_defer_break "a defer block cannot transfer control"
 check_neg p38_defer_continue "a defer block cannot transfer control"
