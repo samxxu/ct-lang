@@ -110,6 +110,7 @@ pub trait StmtOps {
     int  defer_add(int node);
     int  defer_active_depth(void);
     int  defer_top_id(void);
+    int  defer_block_id(void);
     int  defer_run_node(int body, int line);
     int  defer_prepend(int node, int base);
     int  defer_flush_block(int blk, int *tail);
@@ -195,7 +196,8 @@ pub struct Stmt {
     int  ndefer_blocks;
     int  defer_head[256];
     int  defer_tail[256];
-    int  defer_ids[256];
+    int  defer_ids[257];
+    int  defer_id_has[257];
     int  ndefer_next_id;
     int  defer_break_base[256];
     int  defer_cont_base[256];
@@ -203,6 +205,8 @@ pub struct Stmt {
        across a block that owns a defer while allowing a same-block jump. */
     int  label_defer_depth[64];
     int  goto_defer_depth[64];
+    int  label_block_id[64];
+    int  goto_block_id[64];
 } use StmtOps;
 
 /* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
@@ -1388,12 +1392,20 @@ impl StmtOps for Stmt {
         return 0;
     }
 
+    int defer_block_id(void)
+    {
+        (void)self;
+        if (self->ndefer_blocks <= 0) return 0;
+        return self->defer_ids[self->ndefer_blocks - 1];
+    }
+
     int defer_add(int node)
     {
         int b, t;
         (void)self;
         b = self->ndefer_blocks - 1;
         if (b < 0) return -1;
+        self->defer_id_has[self->defer_ids[b]] = 1;
         t = self->defer_tail[b];
         if (t < 0) self->defer_head[b] = node;
         else self->arena->nodes[t].next = node;
@@ -1650,6 +1662,12 @@ impl StmtOps for Stmt {
             if (self->switch_depth > 0)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "defer is not allowed inside a switch", self->mem->path);
+            {
+                size_t pl = strlen(self->mem->path);
+                if (pl > 5 && strcmp(self->mem->path + pl - 5, ".h.ct") == 0)
+                    return tool::diag::ct_sem_error(dline, dcol,
+                        "defer is not allowed in a .h.ct unit", self->mem->path);
+            }
             if (self->ndefer_blocks == 0)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "defer is only allowed inside a function", self->mem->path);
@@ -3048,6 +3066,7 @@ impl StmtOps for Stmt {
         snprintf(self->label_names[self->nlabels], MAX_TEXT, "%s", name);
         self->label_lines[self->nlabels] = line;
         self->label_defer_depth[self->nlabels] = self->defer_top_id();
+        self->label_block_id[self->nlabels] = self->defer_block_id();
         self->nlabels = self->nlabels + 1;
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         self->sup->lex_next();
@@ -3095,6 +3114,7 @@ impl StmtOps for Stmt {
         snprintf(self->goto_names[self->ngotos], MAX_TEXT, "%s", name);
         self->goto_lines[self->ngotos] = self->arena->nodes[s].line;
         self->goto_defer_depth[self->ngotos] = self->defer_top_id();
+        self->goto_block_id[self->ngotos] = self->defer_block_id();
         self->ngotos = self->ngotos + 1;
         self->sup->lex_next();
         if (self->sup->expect(";") != 0) return -1;
@@ -3103,7 +3123,9 @@ impl StmtOps for Stmt {
 
     int func_begin(void)
     {
+        int i;
         (void)self;
+        for (i = 0; i < 257; i++) self->defer_id_has[i] = 0;
         self->nlabels = 0;
         self->ngotos = 0;
         self->nbreak = 0;
@@ -3129,6 +3151,14 @@ impl StmtOps for Stmt {
                 return self->sup->fail_at(self->goto_lines[i], msg);
             }
             if (self->goto_defer_depth[i] != self->label_defer_depth[li])
+                return self->sup->fail_at(self->goto_lines[i],
+                    "a goto cannot cross a block with defer");
+            /* A label can precede the block's defer declaration, so the top-id
+               check above cannot see it. Compare the owning block ids and ask
+               whether either block owns a defer (finalised at block close). */
+            if (self->goto_block_id[i] != self->label_block_id[li]
+                && (self->defer_id_has[self->goto_block_id[i]]
+                    || self->defer_id_has[self->label_block_id[li]]))
                 return self->sup->fail_at(self->goto_lines[i],
                     "a goto cannot cross a block with defer");
         }
