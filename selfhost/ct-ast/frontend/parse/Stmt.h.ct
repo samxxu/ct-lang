@@ -113,7 +113,7 @@ pub trait StmtOps {
     int  defer_active_depth(void);
     int  defer_mark_block(void);
     int  defer_run_node(int body, int line);
-    int  defer_prepend(int node, int base);
+    int  defer_prepend(int node, int base, int on_error);
     int  defer_flush_block(int blk, int *tail);
     int  parse_stmt(void);
     int  parse_branch(void);
@@ -1457,7 +1457,7 @@ impl StmtOps for Stmt {
         return r;
     }
 
-    int defer_prepend(int node, int base)
+    int defer_prepend(int node, int base, int on_error)
     {
         int i, k, n, head, tail, ids[256];
         (void)self;
@@ -1466,6 +1466,7 @@ impl StmtOps for Stmt {
         for (i = self->ndefer_blocks - 1; i >= base; i--) {
             n = 0;
             for (k = self->defer_head[i]; k >= 0; k = self->arena->nodes[k].next) {
+                if (!on_error && self->arena->nodes[k].aux == 1) continue;
                 if (n >= 256) return -1;
                 ids[n] = k;
                 n++;
@@ -1494,6 +1495,7 @@ impl StmtOps for Stmt {
         if (i < 0) return 0;
         n = 0;
         for (k = self->defer_head[i]; k >= 0; k = self->arena->nodes[k].next) {
+            if (self->arena->nodes[k].aux == 1) continue;
             if (n >= 256) return -1;
             ids[n] = k;
             n++;
@@ -1823,7 +1825,7 @@ impl StmtOps for Stmt {
                     if (s < 0) return -1;
                 }
                 if (self->defer_active_depth() > 0
-                    && self->defer_prepend(s, 0) != 0) return -1;
+                    && self->defer_prepend(s, 0, is_err) != 0) return -1;
                 if (is_err) snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
                 return s;
             }
@@ -1901,7 +1903,7 @@ impl StmtOps for Stmt {
                     snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s",
                              self->sym->ret_type);
                 }
-                if (self->defer_prepend(s, 0) != 0) return -1;
+                if (self->defer_prepend(s, 0, is_err) != 0) return -1;
             }
             if (is_err) snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
             return s;
@@ -1943,7 +1945,7 @@ impl StmtOps for Stmt {
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "break") == 0) {
-            int bcol = self->lex->tokstart - self->lex->lstart + 1;
+            int bcol = self->lex->tokstart - self->lex->lstart + 1, is_err = 0;
             if (self->in_errdefer)
                 return tool::diag::ct_sem_error(self->lex->tokline, bcol,
                     "an errdefer block cannot transfer control", self->mem->path);
@@ -1954,6 +1956,7 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->err_ahead()) {
+                is_err = 1;
                 snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
                 self->sup->lex_next();
                 if (self->sup->expect(":")) return -1;
@@ -1968,11 +1971,11 @@ impl StmtOps for Stmt {
             if (self->nbreak > 0
                 && retire_before_jump(self, s, self->break_base[self->nbreak - 1]) < 0) return -1;
             if (self->nbreak > 0
-                && self->defer_prepend(s, self->defer_break_base[self->nbreak - 1]) != 0) return -1;
+                && self->defer_prepend(s, self->defer_break_base[self->nbreak - 1], is_err) != 0) return -1;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
-            int ccol = self->lex->tokstart - self->lex->lstart + 1;
+            int ccol = self->lex->tokstart - self->lex->lstart + 1, is_err = 0;
             if (self->in_errdefer)
                 return tool::diag::ct_sem_error(self->lex->tokline, ccol,
                     "an errdefer block cannot transfer control", self->mem->path);
@@ -1983,6 +1986,7 @@ impl StmtOps for Stmt {
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->err_ahead()) {
+                is_err = 1;
                 snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
                 self->sup->lex_next();
                 if (self->sup->expect(":")) return -1;
@@ -1994,7 +1998,7 @@ impl StmtOps for Stmt {
             if (self->ncont > 0
                 && retire_before_jump(self, s, self->cont_base[self->ncont - 1]) < 0) return -1;
             if (self->ncont > 0
-                && self->defer_prepend(s, self->defer_cont_base[self->ncont - 1]) != 0) return -1;
+                && self->defer_prepend(s, self->defer_cont_base[self->ncont - 1], is_err) != 0) return -1;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "goto") == 0) return self->parse_goto();
