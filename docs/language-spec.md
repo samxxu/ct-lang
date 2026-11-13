@@ -633,6 +633,18 @@ recipe 替换（逐出现点）：
   头文件声明 `extern struct T_vtbl S_T_vtable;`，实现单元给出定义（不再是 `static`）；否则保持单元私有。
   同一 `struct` 的同一 trait 只能有一个 `impl`，重复定义在编译期报错并指出首个定义所在位置。
 
+#### 4.11.1 可见性：`pub` 只作用在顶层声明（ct-ast）
+
+- `pub` 决定**顶层声明**是否跨单元可见：顶层函数、`typedef`、`struct` / `trait` 与全局变量。未标
+  `pub` 的顶层函数和全局只属于本单元；未标 `pub` 的类型只出现在本单元的生成物里。
+- 跨单元导出的顶层函数必须写在 `.h.ct` 里并标 `pub`；`.ct` 单元里的 `pub` 声明仍不能被 `import`
+  （§4.51 的 `only a .h.ct unit can be imported`）。
+- `pub struct` 的 `impl` 块中，**所有方法当前一律自动对外**：固有 `impl Name { … }` 的方法随
+  `pub struct` 取外部链接，trait `impl T for S` 的方法随导出的 vtable 可达。没有任何语法能把单个
+  方法标成私有；`impl` 方法的方法级可见性目前不受 `pub` 控制，这是现状而非承诺。
+- 单元内私有 helper 的现实写法是 `.ct` 文件里的 `static` 自由函数；不要指望在 `impl` 里写一个
+  "私有方法"。
+
 #### 4.12 函数指针（ct-ast）
 
 声明位置支持 `ret (*name)(params)`：参数、struct 字段、全局与局部。生成 C 与源码同形，名字留在类型内部。

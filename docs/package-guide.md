@@ -25,10 +25,17 @@ hello/
 源码单元遵守 [AGENTS.md](../AGENTS.md) §2 的「一单元一主类型」：
 
 - `.h.ct`：`trait` / `struct` 声明、全局实例，以及 `pub fn` 函数——**`.h.ct` 可以导出函数**；
-  std 把实现放在 `.ct` 只是风格选择。`pub` 才跨单元可见；
-- `.ct`：普通实现单元（`pub` 函数），不发布接口；
+  std 把实现放在 `.ct` 只是风格选择；
+- `.ct`：普通实现单元，不发布接口；需要跨单元导出的顶层函数仍要写在 `.h.ct` 里并标 `pub`；
 - `.m.ct`：零成本静态映射，不产 `.c` / `.h`；
 - binding 形式（`#include` 直通 + `map`）按 [test/bindings/README.md](../test/bindings/README.md)。
+
+`pub` 的作用范围只到**顶层声明**：顶层函数、`typedef`、`struct` / `trait` 与全局变量由 `pub` 决定是否
+跨单元可见；未标 `pub` 的顶层函数和全局只属于本单元。`impl` 块里的方法不按顶层规则判可见性：
+`pub struct` 的 `impl` 中**所有方法当前一律自动对外**（固有方法随结构体取外部链接，trait 方法随导出的
+vtable 可达），没有任何语法能把单个方法标成私有；`impl` 方法的方法级可见性目前不受 `pub` 控制，这是
+现状而非承诺。需要单元内私有 helper 时，写成 `.ct` 文件里的 `static` 自由函数，而不是在 `impl` 里加一个
+"私有方法"。
 
 #### 单元目录 = 命名空间
 

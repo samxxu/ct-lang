@@ -466,3 +466,85 @@ zsh: segmentation fault
 ```
 
 编译期不报错，运行期 SIGSEGV——这正是必须手写判空的原因。
+
+## 7 C11 原子类型与操作：`_Atomic` 直通
+
+**适用场景**：多线程共享计数器、一次性发布指针、无锁标志位。CT 不实现原子语义，只把类型拼写与
+函数调用原样转发给 C 编译器；原子 typedef 与操作由 `<stdatomic.h>` 提供。
+
+```c
+#include <stdatomic.h>
+#include <stdio.h>
+
+int main(void)
+{
+    _Atomic(int) hits = 0;          /* 函数式拼写：原样转发 */
+    atomic_int total = 0;           /* typedef：来自 <stdatomic.h> */
+    atomic_bool ready = 0;
+    _Atomic(void *) slot = 0;
+
+    atomic_store(&hits, 1);
+    atomic_store(&total, atomic_load(&hits));
+    atomic_store(&ready, 1);
+    atomic_store(&slot, (void *)&hits);
+
+    printf("%d %d %d %p\n",
+           atomic_load(&hits), atomic_load(&total),
+           (int)atomic_load(&ready), atomic_load(&slot));
+    return 0;
+}
+```
+
+- 四种写法都能编译运行：`_Atomic(int)`、`_Atomic(void *)` 是类型修饰拼写；`atomic_int`、`atomic_bool`
+  是 `<stdatomic.h>` 里的 typedef。生成的 C 与源码同形，语义全部由 C 编译器承担。
+- 三个操作照常调用：`atomic_load(&x)`、`atomic_store(&x, v)`、
+  `atomic_compare_exchange_strong(&x, &expected, desired)`。
+- 必须 `#include <stdatomic.h>`；CT 不做任何原子相关检查，也不会替你补头文件。
+- 不带 `_explicit` 的 `atomic_load` / `atomic_store` 默认是 **seq_cst**。这只是写法约定：语言没有
+  强制检查，绕开它的办法见下面的禁区第 3 条。
+
+**CAS：`expected` 必须按地址传入**
+
+```c
+int expected = 0;
+if (atomic_compare_exchange_strong(&x, &expected, 1)) {
+    /* 成功：x 从 0 变成 1 */
+} else {
+    /* 失败：expected 已被写成 x 的实际值 */
+}
+```
+
+- 第二个参数是 `T *expected` 出入参：失败时 C 侧把当前值写回它。按值传 `expected` 只能拿到
+  "成功 / 失败"，拿不到失败时实际读到的值——重试循环也就没法续下去。
+- 失败后 `expected` 已经是当前值，可以直接进入下一轮比较，或据此退回普通加锁。
+- 不要自己定义 `int atomic_load(int *)` 这类同名函数：语言没有函数重载，它会与 `<stdatomic.h>` 的
+  宏冲突，生成 C 直接报 `expected parameter declarator`。
+
+**三条禁区**
+
+1. `atomic int x;`（把 `atomic` 当关键字前缀）不会被当作原子类型。`parse_type` 只认 `_Atomic(...)`
+   拼写与已知 typedef；`atomic int` 走未知类型兜底，`ct compile` / `ct build` 仍返回 0，但原样产出的
+   C 会在 `cc` 阶段报 `unknown type name 'atomic'`。请写 `_Atomic(int)` 或 `atomic_int`。
+2. `atomic own` 组合不成立：`own` 只接受 `struct` 指针加 `use Drop`（见
+   [language-spec.md](language-spec.md) §4.9），`_Atomic(T)` 不是这样的 struct，`own _Atomic(int) *p`
+   会在编译期被拒。需要原子句柄时用普通指针 + `atomic_*` 操作。
+3. 内存序字面量可绕过 seq_cst 约定：`atomic_store_explicit(&x, 1, 0)`、
+   `__atomic_store_n(&plain, 1, 5)` 的最后一个实参只是普通整数，CT 原样转发、不校验取值。想守住
+   seq_cst 就只用 `atomic_load` / `atomic_store`，不要手写显式内存序；一旦写了，顺序正确性完全由
+   调用方负责。
+
+**门禁现状**：现有 11 道硬门禁没有并发检查，`check-sanitizers.sh` 只跑 ASAN / UBSAN，**没有 TSan**。
+原子代码的竞态与顺序错误不会被现有 CI 捕获；需要验证时自己用 `-fsanitize=thread` 单独跑。
+
+**负例（预期红）**
+
+```c
+atomic int x = 0;      /* 不是 _Atomic(int) */
+```
+
+```text
+$ cc generated.c
+error: unknown type name 'atomic'
+```
+
+`ct compile` 本身返回 0（未知类型兜底），红在 C 编译阶段——这正是禁区第 1 条的来源。
