@@ -1,0 +1,410 @@
+{
+  "battle": "p39-1",
+  "head": "ac040d1",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "nm": "llvm-nm, compatible with GNU nm",
+    "binary": "/tmp/p39head/ct (ct v0.37.0, sha256 080650f62e4fa894efc672c10a14a615bdaa531bdef5f24470e99fb37e59dd10)",
+    "date": "2026-11-13T14:14:43+08:00 (Asia/Shanghai)"
+  },
+  "rounds": 2,
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1-1 / counter.md#E1-e",
+      "command": "cd /tmp/p39head/src && /tmp/p39head/ct build --lib test/modules/p34_pub_generic/lib.h.ct 2>&1; echo \"exit=$?\"",
+      "exit": 1,
+      "output": "ctc: unknown option '--lib'\nexit=1",
+      "reproduced": true,
+      "note": "HARD-1：`--lib` 在 HEAD 完全不存在。stderr 原文为 `ctc: unknown option '--lib'`，退出码 1；没有写任何产物。两侧（claim E1-1 / counter E1-e）一致，复现成功。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "ref": "claim.md#E1-2",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v/v2 && mkdir -p /tmp/p39v/v2 && /tmp/p39head/ct build --emit-c test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v/v2 2>&1; echo \"exit=$?\"; echo \"--- /tmp/p39v/v2/lib.h (declaration part) ---\"; sed -n '/^struct ct_buf/,$p' /tmp/p39v/v2/lib.h; echo \"lines containing 'id' in lib.h = $(grep -c 'id' /tmp/p39v/v2/lib.h)\"",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/p39v/v2 /tmp/p39v/v2/Vec.c /tmp/p39v/v2/Option.c /tmp/p39v/v2/Result.c /tmp/p39v/v2/Str.c /tmp/p39v/v2/lib.c -o a.out\nexit=0\n--- /tmp/p39v/v2/lib.h (declaration part) ---\nstruct ct_buf;\nstruct Str;\nlong from_lib(long);\n\n#endif\nlines containing 'id' in lib.h = 0",
+      "reproduced": true,
+      "note": "HARD-2：`--emit-c` 退出 0；生成头只声明 `from_lib`，`pub T id<T>`（lib.h.ct:3）一个字符都没有，且 stderr 无任何诊断。两侧描述一致（claim E1-2 / counter E1-b 前半），复现成功。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "ref": "counter.md#E1-b / claim-r2.md#E1-r2-a",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v/v3 && mkdir -p /tmp/p39v/v3 && /tmp/p39head/ct build --emit-c test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v/v3 >/dev/null 2>&1; cd /tmp/p39v/v3 && cc -c -I . lib.c -o lib.o && nm lib.o | grep -E 'id__ct1|from_lib'; echo \"exit=$?\"",
+      "exit": 0,
+      "output": "0000000000000000 T _from_lib\n0000000000000024 t _id__ct1\nexit=0",
+      "reproduced": true,
+      "note": "HARD-2 续：`id` 的实例在生成 .c 里是 `static long id__ct1(long)`，nm 类别小写 `t`（local）；`from_lib` 是 `T`（external）。即泛型 pub 今天不产生外部符号。两侧 nm 结论一致，复现成功。"
+    },
+    {
+      "id": "V4",
+      "side": "counter",
+      "ref": "counter-r2.md#2（E1-r2 新证据）",
+      "command": "cat > /tmp/p39v/consumer.c <<'EOF'\n#include <stdio.h>\n#include \"lib.h\"\nint main(void) { printf(\"from_lib(4)=%ld\\n\", from_lib(4)); return 0; }\nEOF\ncd /tmp/p39head/src && rm -rf /tmp/p39v/v4 && mkdir -p /tmp/p39v/v4 && /tmp/p39head/ct build --emit-c test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v/v4 >/dev/null 2>&1; cd /tmp/p39v/v4 && cc -Wall -Wextra -I . /tmp/p39v/consumer.c lib.c -o /tmp/p39v/consumer; echo \"cc_exit=$?\"; /tmp/p39v/consumer; echo \"run_exit=$?\"",
+      "exit": 0,
+      "output": "cc_exit=0\nfrom_lib(4)=4\nrun_exit=0",
+      "reproduced": true,
+      "note": "纯 C 消费者用 `#include \"lib.h\"` 链接生成 .c：cc 退出 0，运行输出 `from_lib(4)=4`，退出 0。即在 HEAD 上该单元今天确实能被 C 消费。counter-r2 的 E1-r2 复现成功（主张席未否认）。"
+    },
+    {
+      "id": "V5",
+      "side": "both",
+      "ref": "claim.md#E1-3",
+      "command": "cd /tmp/p39head/src && grep -rnE '^\\s*pub .*\\(' --include='*.h.ct' lib/std test/modules | grep -vE '^[^:]+:[0-9]+:pub (struct|trait|enum|union|extern)\\b' > /tmp/p39v/pubfns.txt; echo \"pub function declarations = $(wc -l < /tmp/p39v/pubfns.txt)\"; echo \"non-C-compatible (Str|generic|Writer/Stream) = $(grep -cE '\\bStr\\b|<[A-Za-z_][^>]*>\\(|:pub (Writer|Stream) ' /tmp/p39v/pubfns.txt)\"; echo \"Point by-value prototypes = $(grep -cE '\\(Point p\\)' /tmp/p39v/pubfns.txt)\"; echo \"h.ct files = $(find lib/std test/modules -name '*.h.ct' | wc -l)\"; grep -E '\\bStr\\b|<[A-Za-z_][^>]*>\\(|:pub (Writer|Stream) ' /tmp/p39v/pubfns.txt",
+      "exit": 0,
+      "output": "pub function declarations =       53\nnon-C-compatible (Str|generic|Writer/Stream) = 12\nPoint by-value prototypes = 3\nh.ct files =       69\nlib/std/Str.h.ct:33:pub Str str_from_len(const char *p, int n)\nlib/std/Str.h.ct:51:pub Str str_from(const char *s)\nlib/std/Str.h.ct:63:pub int str_len(Str s)\nlib/std/Str.h.ct:70:pub Str str_slice(Str s, int start, int n)\nlib/std/Str.h.ct:80:pub Str str_concat(Str a, Str b)\nlib/std/Str.h.ct:99:pub int str_compare(Str a, Str b)\nlib/std/Str.h.ct:117:pub char *str_c_str(Str s)\ntest/modules/ns_types/hal/uart.h.ct:22:pub Writer open_uart(void) {\ntest/modules/p34_pub_bound/lib.h.ct:21:pub T id<T>(T x)\ntest/modules/p34_pub_bound/lib.h.ct:26:pub T max2<T: Compare>(T a, T b)\ntest/modules/xunit_box/net.h.ct:22:pub Stream stream_open(void) {\ntest/modules/p34_pub_generic/lib.h.ct:3:pub T id<T>(T x)",
+      "reproduced": true,
+      "note": "主张席的 grep 口径逐字复跑：53 个顶层 pub 函数声明、12 个非 C 兼容、3 个 Point 按值原型（`pub` 只在声明行、定义行非 pub）、69 个 .h.ct。53 = 38（纯 C 兼容）+ 12 + 3 待定。主张席数字复现成功。"
+    },
+    {
+      "id": "V6",
+      "side": "claim",
+      "ref": "battle 任务书 #3（本席独立复算）",
+      "command": "cd /tmp/p39head/src && python3 - <<'PY'\nimport re,os\nroots=[\"lib/std\",\"test/modules\"]\nfiles=[os.path.join(d,f) for r in roots for d,_,fs in os.walk(r) for f in fs if f.endswith(\".h.ct\")]\nfiles.sort(); rows=[]\nfor p in files:\n    L=open(p,encoding=\"utf-8\").read().split(\"\\n\")\n    for i,ln in enumerate(L,1):\n        if not ln.startswith(\"pub \") or re.match(r'pub (struct|trait|enum|union|extern)\\b',ln): continue\n        s=ln.rstrip(); j=i\n        while not re.search(r'[;{]',s) and j-i<5 and j<len(L): s+=\" \"+L[j].strip(); j+=1\n        h=re.split(r'[;{]',s)[0]\n        if \"(\" in h: rows.append((p,i,h))\ntr=set()\nfor p in files:\n    for ln in open(p,encoding=\"utf-8\"):\n        m=re.match(r'^pub trait (\\w+)',ln)\n        if m: tr.add(m.group(1))\ndef bad(h):\n    c=[]\n    if re.search(r'<[A-Za-z_]\\w*\\s*[:,>]',h): c.append(\"generic\")\n    if re.search(r'\\bStr\\b',h): c.append(\"std:Str\")\n    for t in sorted(tr):\n        if re.search(r'\\b'+t+r'\\b\\s+\\w+\\s*\\(',h): c.append(\"trait:\"+t)\n    return c\nprint(\"files =\",len(files),\"| pub functions =\",len(rows))\nfor p,i,h in rows:\n    if bad(h): print(f\"{p}:{i}: [{','.join(bad(h))}] {h}\")\nprint(\"flagged =\",sum(1 for r in rows if bad(r[2])),\"| remainder =\",sum(1 for r in rows if not bad(r[2])))\nPY",
+      "exit": 0,
+      "output": "files = 69 | pub functions = 53\nlib/std/Str.h.ct:33: [std:Str] pub Str str_from_len(const char *p, int n) \nlib/std/Str.h.ct:51: [std:Str] pub Str str_from(const char *s) \nlib/std/Str.h.ct:63: [std:Str] pub int str_len(Str s) \nlib/std/Str.h.ct:70: [std:Str] pub Str str_slice(Str s, int start, int n) \nlib/std/Str.h.ct:80: [std:Str] pub Str str_concat(Str a, Str b) \nlib/std/Str.h.ct:99: [std:Str] pub int str_compare(Str a, Str b) \nlib/std/Str.h.ct:117: [std:Str] pub char *str_c_str(Str s) \ntest/modules/ns_types/hal/uart.h.ct:22: [trait:Writer] pub Writer open_uart(void) \ntest/modules/p34_pub_bound/lib.h.ct:21: [generic] pub T id<T>(T x) \ntest/modules/p34_pub_bound/lib.h.ct:26: [generic] pub T max2<T: Compare>(T a, T b) \ntest/modules/p34_pub_generic/lib.h.ct:3: [generic] pub T id<T>(T x) \ntest/modules/xunit_box/net.h.ct:22: [trait:Stream] pub Stream stream_open(void) \nflagged = 12 | remainder = 41",
+      "reproduced": true,
+      "note": "独立复算（不走主张席的 grep）：53 / 12 / 41 余项；41 中含 3 个 Point 按值原型，故纯 C 兼容 = 38。分类逐行打印、可审计。与主张席 53/12/38/3 完全一致；与反对席 T2 的 54 差 1（见 V7）。"
+    },
+    {
+      "id": "V7",
+      "side": "counter",
+      "ref": "counter.md#E1-f",
+      "command": "cd /tmp/p39head/src && python3 /tmp/p39_counter/scan.py test/modules lib/std 2>&1; echo \"exit=$?\"; echo \"--- pub extern (claim 的 grep 排除，scan.py 未排除) ---\"; grep -rnE '^pub extern' --include='*.h.ct' lib/std test/modules",
+      "exit": 0,
+      "output": "test/modules/p34_pub_bound/lib.h.ct:21: [generic] pub T id<T>(T x)\ntest/modules/p34_pub_bound/lib.h.ct:26: [generic] pub T max2<T: Compare>(T a, T b)\ntest/modules/p34_pub_generic/lib.h.ct:3: [generic] pub T id<T>(T x)\nlib/std/Str.h.ct:33: [std:Str] pub Str str_from_len(const char *p, int n)\nlib/std/Str.h.ct:51: [std:Str] pub Str str_from(const char *s)\nlib/std/Str.h.ct:63: [std:Str] pub int str_len(Str s)\nlib/std/Str.h.ct:70: [std:Str] pub Str str_slice(Str s, int start, int n)\nlib/std/Str.h.ct:80: [std:Str] pub Str str_concat(Str a, Str b)\nlib/std/Str.h.ct:99: [std:Str] pub int str_compare(Str a, Str b)\nlib/std/Str.h.ct:117: [std:Str] pub char *str_c_str(Str s)\n-- pub top-level functions scanned: 54\nexit=0\n--- pub extern (claim 的 grep 排除，scan.py 未排除) ---\ntest/modules/extern_decl/lib.h.ct:6:pub extern int lib_fn(int x);",
+      "reproduced": true,
+      "note": "反对席自己的脚本仍在 /tmp/p39_counter/scan.py，复跑得 54（输出 exit=0）。差 1 的全部来源是 test/modules/extern_decl/lib.h.ct:6 `pub extern int lib_fn(int x);`：claim 的 grep 排除 `pub extern`，scan.py 没有排除。PH-39 §3.1/D39-2 明写 `pub extern` 不进导出面，故 54 的口径把一条不入导出面的声明算进了分母；按卡面口径应为 53。scan.py 只标 10 条（7 Str + 3 泛型），没有 trait 返回值判据，所以得到 10 而非 12。"
+    },
+    {
+      "id": "V8",
+      "side": "both",
+      "ref": "claim.md#4.2 A-1 / claim-r2.md#Q3 / counter.md#C5-1",
+      "command": "cd /tmp/p39head/src && grep -n '^pub ' lib/std/Str.h.ct; rm -rf /tmp/p39v/v8 /tmp/p39v/v8a /tmp/p39v/v8b && mkdir -p /tmp/p39v/v8/vendor/std /tmp/p39v/v8a /tmp/p39v/v8b && cd /tmp/p39v/v8 && echo \"A root=p34_pub_generic -> units loaded via find_builtin = $(CT_STD_DIR=/tmp/p39head/src/lib/std /tmp/p39head/ct build --emit-c /tmp/p39head/src/test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v/v8a 2>&1 | grep -c supersede)\"; echo \"B root=lib/std/Str.h.ct   -> units loaded via find_builtin = $(CT_STD_DIR=/tmp/p39head/src/lib/std /tmp/p39head/ct build --emit-c /tmp/p39head/src/lib/std/Str.h.ct --outdir /tmp/p39v/v8b 2>&1 | grep -c supersede)\"; echo \"B Str.h prototype lines = $(grep -cE '^(struct Str|int|char \\*|void) [a-zA-Z_]' /tmp/p39v/v8b/Str.h)\"",
+      "exit": 0,
+      "output": "18:pub struct Str {\n33:pub Str str_from_len(const char *p, int n)\n51:pub Str str_from(const char *s)\n63:pub int str_len(Str s)\n70:pub Str str_slice(Str s, int start, int n)\n80:pub Str str_concat(Str a, Str b)\n99:pub int str_compare(Str a, Str b)\n117:pub char *str_c_str(Str s)\nA root=p34_pub_generic -> units loaded via find_builtin = 4\nB root=lib/std/Str.h.ct   -> units loaded via find_builtin = 3\nB Str.h prototype lines = 9",
+      "reproduced": true,
+      "note": "Str.h.ct 的 7 个 pub 函数：str_from_len:33、str_from:51、str_len:63、str_slice:70、str_concat:80、str_compare:99、str_c_str:117（另有 pub struct Str:18）。`find_builtin` 只在 3 个候选处找 4 个固定 base（Vec/Option/Result/Str），且 `strcmp(cand,in)==0` 时跳过自身（Module.h.ct:411-448）。实测：root 在别处时载入 4 个内建单元（Str 在内建 → 按 A 规则 1『非内建』不进导出面）；root 就是 Str.h.ct 自身时只载入 3 个（Str 不是内建 → 是普通单元，7 条命中 A 的规则 3）。shadow 警告数 = find_builtin 载入的单元数，是内建判定的可观测代理。"
+    },
+    {
+      "id": "V9",
+      "side": "counter",
+      "ref": "counter.md#C5-1",
+      "command": "rm -rf /tmp/p39v/v9 && mkdir -p /tmp/p39v/v9/vendor/std && cd /tmp/p39v/v9 && cp /tmp/p39head/src/lib/std/*.h.ct vendor/std/ && cat > main.ct <<'EOF'\nimport std::str;\nint main(void)\n{\n    Str s = str_from(\"hi\");\n    int n = str_len(s);\n    Str_release(&s);\n    return n;\n}\nEOF\necho \"--- no -I ---\"; /tmp/p39head/ct build main.ct -o app 2>&1; echo \"exit=$?\"; echo \"--- with -I vendor ---\"; /tmp/p39head/ct build main.ct -I vendor -o app 2>&1; echo \"exit=$?\"; echo \"prototypes in .ctbuild/str.h = $(grep -cE '^(struct Str|int|char \\*|void) [a-zA-Z_]' .ctbuild/str.h)\"",
+      "exit": 1,
+      "output": "--- no -I ---\nctc: cannot resolve import 'std/str'\nexit=1\n--- with -I vendor ---\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '.ctbuild/str.c' '-o' 'app'\nexit=0\nprototypes in .ctbuild/str.h = 9",
+      "reproduced": false,
+      "note": "C5-1 的条件复现：exit 字段 = 默认路径（无 `-I`）的退出码 1。默认路径下 `vendor/std` 从不被读（Driver.h.ct:432 注释：「a project-local `vendor/std` is never read」），`import std::str` 直接失败 `ctc: cannot resolve import 'std/str'`；加 `-I vendor` 后它才作为普通单元载入（输出 `str.c` 小写基名），7 个按值 `Str` 原型全部进头 → 这才是 A 报 7 条 L39-1 的配置。故 C5-1 的机制在默认路径不成立、在 `-I vendor` 路径成立。"
+    },
+    {
+      "id": "V10",
+      "side": "claim",
+      "ref": "claim-r2.md#E1-r2-a（A′ 的符号依据）",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v/v10 && mkdir -p /tmp/p39v/v10/gen /tmp/p39v/v10/bound /tmp/p39v/v10/eco /tmp/p39v/v10/trait && for u in \"gen:test/modules/p34_pub_generic/lib.h.ct\" \"bound:test/modules/p34_pub_bound/lib.h.ct\" \"eco:examples/38_ecosystem_reuse/src/eco.h.ct\" \"trait:test/modules/xunit_box/net.h.ct\"; do d=\"${u%%:*}\"; f=\"${u#*:}\"; /tmp/p39head/ct build --emit-c \"$f\" --outdir \"/tmp/p39v/v10/$d\" >/dev/null 2>&1; done; cd /tmp/p39v/v10 && for pair in gen:lib bound:lib eco:eco trait:net; do d=\"${pair%%:*}\"; b=\"${pair##*:}\"; (cd $d && cc -c -I . $b.c -o $b.o); done; echo \"=== gen: pub T id<T> (instantiated in-unit) ===\"; nm gen/lib.o | grep -E '_from_lib|_id__ct1'; echo \"=== bound: pub T id<T> / pub T max2<T: Compare> (never instantiated) ===\"; nm bound/lib.o | grep -E 'id|max2' || echo \"(no id/max2 symbol at all)\"; echo \"=== eco: pub T twice<T> (never instantiated) ===\"; nm eco/eco.o | grep -i twice || echo \"(no twice symbol at all)\"; echo \"=== trait: pub Stream stream_open(void) ===\"; nm trait/net.o | grep -E '_stream_open'",
+      "exit": 0,
+      "output": "=== gen: pub T id<T> (instantiated in-unit) ===\n0000000000000000 T _from_lib\n0000000000000024 t _id__ct1\n=== bound: pub T id<T> / pub T max2<T: Compare> (never instantiated) ===\n(no id/max2 symbol at all)\n=== eco: pub T twice<T> (never instantiated) ===\n(no twice symbol at all)\n=== trait: pub Stream stream_open(void) ===\n000000000000003c T _stream_open",
+      "reproduced": true,
+      "note": "A′ 的关键机械依据复现：三个泛型 pub 站点（p34_pub_generic:3、p34_pub_bound:21,26、eco:24）在 nm 里都**没有外部符号**——被实例化的 `id` 是 `t _id__ct1`（local/static），未被实例化的 `id`/`max2`/`twice` 在目标文件里根本没有符号。对照项 `pub Stream stream_open(void)` 是 `T _stream_open`（external）。即『泛型跳过』不改变归档的外部符号面；A′ 的『跳过 + 诊断』在符号面成立。注意：诊断本身在 HEAD 不存在（V2 显示零诊断），A′ 的诊断是待实现项。"
+    },
+    {
+      "id": "V11",
+      "side": "both",
+      "ref": "claim-r2.md#E1-r2-b / question.md#J-5",
+      "command": "cd /tmp/p39head/src && echo \"--- ct check sig_mismatch ---\"; /tmp/p39head/ct check test/modules/sig_mismatch/prog.ct 2>&1; echo \"exit=$?\"; echo \"--- ct check leak ---\"; /tmp/p39head/ct check test/modules/leak/prog.ct 2>&1; echo \"exit=$?\"; echo \"--- ct build leak ---\"; /tmp/p39head/ct build test/modules/leak/prog.ct -o /tmp/p39v/leak_app 2>&1; echo \"exit=$?\"",
+      "exit": 0,
+      "output": "--- ct check sig_mismatch ---\ntest/modules/sig_mismatch/prog.ct:4:10: error: signature mismatch: 'f' in impl of 'T' for 'S': return type 'void' does not match the trait's 'int'\nexit=1\n--- ct check leak ---\ntest/modules/leak/prog.ct:6: error: potential leak: 'p' (S*) allocated but never deleted\nexit=1\n--- ct build leak ---\ntest/modules/leak/prog.ct:6: warning: potential leak: 'p' (S*) allocated but never deleted\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Option.c' '.ctbuild/Result.c' '.ctbuild/Str.c' '.ctbuild/prog.c' '-o' '/tmp/p39v/leak_app'\nexit=0",
+      "reproduced": true,
+      "note": "`ct check` 确实能给 `file:line:col`：sig_mismatch 输出 `test/modules/sig_mismatch/prog.ct:4:10: error: ...`，退出 1。但**不是无条件**：leak 那条是 `prog.ct:6: error:`，没有列号，因为 Diag.h.ct:388 的条件是 `self->strict && w->col > 0`，该警告 col=0。`ct build` 的同一警告是 `file:line:` 且退出 0。即 J-5 要求的 `file:line:col` 通道存在，但能否给出列号取决于该诊断记录是否带 col。"
+    },
+    {
+      "id": "V12",
+      "side": "claim",
+      "ref": "claim.md#E1-4（实例 2）",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v/v12 && mkdir -p /tmp/p39v/v12 && /tmp/p39head/ct build --emit-c test/modules/p34_pub_bound/lib.h.ct --outdir /tmp/p39v/v12 2>&1; echo \"exit=$?\"; sed -n '/^struct ct_buf/,$p' /tmp/p39v/v12/lib.h; echo \"prototypes of id/max2 in lib.h = $(grep -cE '\\b(id|max2)\\b\\(' /tmp/p39v/v12/lib.h)\"",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/p39v/v12 /tmp/p39v/v12/Vec.c /tmp/p39v/v12/Option.c /tmp/p39v/v12/Result.c /tmp/p39v/v12/Str.c /tmp/p39v/v12/lib.c -o a.out\nexit=0\nstruct ct_buf;\nstruct Str;\nstruct Num;\nstruct Compare_vtbl {\n    int (*cmp)(void *, void *);\n};\nstruct Compare_iface {\n    void *self;\n    struct Compare_vtbl *vt;\n};\n\nextern struct Compare_vtbl Num_Compare_vtable;\n\nstruct Num {\n    int v;\n    struct Compare_vtbl *__compare_vptr;\n};\n\n#endif\nprototypes of id/max2 in lib.h = 0",
+      "reproduced": true,
+      "note": "第三处『半截 ABI』复现：bound 的生成头把 `Compare_vtbl` / `Compare_iface` / `Num_Compare_vtable` / `struct Num` 都当导出类型发出，却没有任何 `id` / `max2` 原型（计数 0），exit 0、无诊断。与 claim E1-4 实例 2 逐字一致。"
+    },
+    {
+      "id": "V13",
+      "side": "counter",
+      "ref": "counter.md#C2",
+      "command": "cd /tmp/p39head/src && grep -rnE '^pub .*\\(' --include='*.h.ct' selfhost/ct-ast | grep -vE ':pub (struct|trait|enum|union|extern)\\b' > /tmp/p39v/selfhost_pub.txt; echo \"selfhost/ct-ast pub function declarations = $(wc -l < /tmp/p39v/selfhost_pub.txt)\"; echo \"with a bare uppercase (by-value) type = $(grep -cE '([ (])([A-Z][A-Za-z_]*) [a-z_]' /tmp/p39v/selfhost_pub.txt)\"",
+      "exit": 0,
+      "output": "selfhost/ct-ast pub function declarations =       72\nwith a bare uppercase (by-value) type = 0",
+      "reproduced": true,
+      "note": "反对席 C2 的 72 复现成功：selfhost/ct-ast 下 72 个顶层 pub 函数声明；按同一 grep 未发现按值大写类型参数（0），与 counter-r2 §5(b)『72 个全部 C 兼容』相符（他证；本席只做计数与按值类型粗筛）。"
+    },
+    {
+      "id": "V14",
+      "side": "counter",
+      "ref": "counter.md#E2-6",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && echo \"--- phase39-draft.md:5（E2-6 引的行） ---\"; git show HEAD:docs/design/phase39-draft.md | sed -n '5p'; echo \"--- 所引文字的实际位置 ---\"; git show HEAD:docs/design/phase39-draft.md | grep -n '用户批准三项决策'",
+      "exit": 0,
+      "output": "--- phase39-draft.md:5（E2-6 引的行） ---\n> **文档形态**：`phase39-draft.md`；design window 7/12，不触发归档。\n--- 所引文字的实际位置 ---\n3:> **状态：已立项**（2026-11-13，用户批准三项决策均取 A：导出面只收指针、禁用构造硬错、现在冻卡；卡已冻结）。",
+      "reproduced": false,
+      "note": "复现失败（锚点行号错）：exit 字段为 0 表示命令本身跑通，但被引的行号不成立。E2-6 称 `docs/design/phase39-draft.md:5` 写着『用户批准三项决策均取 A』。HEAD 的 :5 实为『> **文档形态**：phase39-draft.md；design window 7/12，不触发归档。』；该文字实际在 :3。行号偏移 2，内容存在。"
+    },
+    {
+      "id": "V15",
+      "side": "claim",
+      "ref": "claim.md#E1-6（f1 纯 C 兼容夹具）",
+      "command": "rm -rf /tmp/p39v/v15 && mkdir -p /tmp/p39v/v15/out && cat > /tmp/p39v/v15/lib.h.ct <<'EOF'\n/* F1: pure C-compatible library unit. */\npub int lib_add(int a, int b)\n{\n    return a + b;\n}\n\npub const char *lib_name(void)\n{\n    return \"f1\";\n}\nEOF\ncd /tmp/p39head/src && /tmp/p39head/ct build --emit-c /tmp/p39v/v15/lib.h.ct --outdir /tmp/p39v/v15/out 2>&1; echo \"exit=$?\"; sed -n '/^int /,$p' /tmp/p39v/v15/out/lib.h",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/p39v/v15/out /tmp/p39v/v15/out/Vec.c /tmp/p39v/v15/out/Option.c /tmp/p39v/v15/out/Result.c /tmp/p39v/v15/out/Str.c /tmp/p39v/v15/out/lib.c -o a.out\nexit=0\nint lib_add(int, int);\nconst char * lib_name(void);\n\n#endif",
+      "reproduced": true,
+      "note": "J-1 的通过侧夹具（源码取自 claim.md E1-6，原样重建）：纯 C 兼容单元的生成头恰有 2 个原型（`int lib_add(int, int);` / `const char * lib_name(void);`），2/2，无 `_iface`/`_vtbl`/`Vec_`/`Map_`。主张席的 f1 行复现成功。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 3,
+      "text": "> **状态：已立项**（2026-11-13，用户批准三项决策均取 A：导出面只收指针、禁用构造硬错、现在冻卡；卡已冻结）。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 16,
+      "text": "| 目标 | 给 `ct build` 增加 `--lib`：产出 `lib<base>.a` + `<base>.abi.h`，`.h.ct` 的 `pub` 函数即为 C ABI 导出面 |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 37,
+      "text": "| O2 | 导出面 = 本次构建所有非内建 `.h.ct` 单元的有定义 `pub` 函数；签名不 C 兼容即 L39-1 | 无导出面概念 |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 40,
+      "text": "> O3 的边界：**visibility 不改变静态归档的全局符号表**。v1 只承诺「导出函数带 default 可见性、其余标 hidden」；`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺（§3.3、E39-2）。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 45,
+      "text": "- 不导出 `pub` 全局变量；不导出泛型函数与 `pub extern`（定义在库外的 C 符号）——三者都不写进 `.abi.h`。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 60,
+      "text": "| D39-6 | v1 只收标量 / 指针 / 函数指针 / 数组参数 / 指向具名 struct 的指针；按值 struct、trait 值、泛型、std 容器类型一律 L39-1 | 不透明前置声明与按值传参不可兼得 |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 102,
+      "text": "3. 签名里没有按值 struct/union、trait/接口值（`*_iface`）、泛型参数、`Vec`/`Map`/`Option`/`Result`/`Str` 等 std 类型、`own`。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 104,
+      "text": "违反 2/3 报 L39-1（位置在声明行），不写任何产物。`pub extern` 不进导出面（D39-2）。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 134,
+      "text": "| L39-1 | 导出签名含按值 struct / trait 值 / 泛型 / std 类型 / `own` | `'<name>' cannot be exported: <reason>` |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 617,
+      "text": "  其它单元 `import` 后即可按名引用。`pub` 只表示导出：未标 `pub` 的全局仍只属于本单元。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "test/modules/p34_pub_generic/lib.h.ct",
+      "line": 3,
+      "text": "pub T id<T>(T x)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "test/modules/p34_pub_generic/main.ct",
+      "line": 9,
+      "text": "    int a = id<int>(3);",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 51,
+      "text": "pub Str str_from(const char *s)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "examples/38_ecosystem_reuse/src/eco.h.ct",
+      "line": 24,
+      "text": "pub T twice<T>(T x) {",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Parser.h.ct",
+      "line": 1405,
+      "text": "            /* Phase 34 (O1): L26-2 lifted — `pub T id<T>(T x)` is legal.",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/sym/Symbols.h.ct",
+      "line": 423,
+      "text": "pub int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2, int nargs, const char *p1, const char *p2, const char *use, int node, int owner, int line);",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 432,
+      "text": "                n = snprintf(cand, sizeof cand, \"lib/std/%s\", base);",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 453,
+      "text": "    int is_builtin_unit(int u)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 432,
+      "text": "        /* L29-W1: a project-local `vendor/std` is never read; the built-in",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 469,
+      "text": "2. **先确认后动手**：涉及行为变更（新增语法、改变命名、改变 CLI）必须先向用户说明方案并获得确认。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "test/modules/extern_decl/lib.h.ct",
+      "line": 6,
+      "text": "pub extern int lib_fn(int x);",
+      "supports": "claim",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "claim": "A 的导出集合 = 作者在 `.h.ct` 写下的 `pub` 意图；f1 全导出，f2/f3 判死是 C ABI 边界而非误杀",
+      "counter": "A 判死 f2/f3，违反 question.md:18『不把其余判死』；且今天的 `--emit-c` 已能只导出 from_lib 并被纯 C 消费",
+      "evidence": [
+        "V2",
+        "V4",
+        "V10",
+        "V12",
+        "V15"
+      ],
+      "fact": "复现：f1 头恰 2 个原型（2/2）；p34_pub_generic 头只有 `long from_lib(long);`，泛型实例是 local `t`；bound 头发出 Compare_vtbl/Num 等类型却 0 个 id/max2 原型；trait 单元发出 `struct Stream_iface stream_open(void);` 且 nm 为 `T`。按 §3.1 规则 1+3 与 :104 的文本，硬错版 A 会在 f2/f3 上中止且不写产物（`--lib` 未实现，本席无法实测该中止）；A′ 的『跳过泛型』与今天的静默剔除在符号面等价（都无外部符号），差别只在 A′ 追加一条诊断。"
+    },
+    {
+      "id": "J-2",
+      "claim": "零 `.ct` 语法改动即可构成 `--lib` 库；12 个非 C 兼容集中在 5 个单元，不要求改语法，只要求别把它们当 `--lib` 根",
+      "counter": "p34_pub_generic / p34_pub_bound 等『不改一行』在 A 下无法成库；J-2 的第二半句（统计非 C 兼容）正是失败面",
+      "evidence": [
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V12"
+      ],
+      "fact": "复算 53 个顶层 pub 函数 / 12 个非 C 兼容 / 5 个单元（Str.h.ct 7、p34_pub_bound 2、p34_pub_generic 1、ns_types/hal/uart.h.ct 1、xunit_box/net.h.ct 1）/ 3 个 Point 按值原型待定 / 69 个 .h.ct。lib/std 在自动载入路径是内建单元（不进导出面），但作为 root 或 `-I vendor` 引入时是普通单元 → 7 条命中规则 3。按规则文本，硬错 A 会让 p34_pub_generic、p34_pub_bound 中止，A′ 允许其成库（两者均未实现，本席未实测）。"
+    },
+    {
+      "id": "A′-1",
+      "claim": "A′ 的『泛型 pub 跳过』不改变归档的外部符号面（泛型实例是 static），故跳过+诊断在符号面安全",
+      "counter": "counter-r2 §5：跳过（无论是否诊断）已不再是本庭的 A（claim.md:347 自定『静默跳过即不是 A』）；且 (b) 跳过+诊断仍不满足 J-1 通用情形（C 兼容的内部 helper 仍被强制导出）",
+      "evidence": [
+        "V3",
+        "V10",
+        "V12"
+      ],
+      "fact": "nm 实测：三个泛型 pub 站点均无外部符号——被实例化的 `id` 是 `t _id__ct1`（local/static），未被实例化的 `id`/`max2`/`twice` 在目标文件里没有符号；对照的有符号非兼容签名是 `T _stream_open`（trait 值返回）与 7 个 `T _str_*`。即『跳过泛型』不改变归档符号面。A′ 的诊断文本本身在 HEAD 不存在（V2 显示零诊断），其 J-5 依赖尚未实现。"
+    },
+    {
+      "id": "J-2b",
+      "claim": "53 个 pub 函数声明、12 个非 C 兼容（7 Str + 3 泛型 + 2 trait 值）",
+      "counter": "T2 扫描为 54；counter-r2 接受 12 这个分类数字",
+      "evidence": [
+        "V5",
+        "V6",
+        "V7"
+      ],
+      "fact": "主张席 grep 逐字复跑 = 53/12/3/69；本席独立脚本（顶层 + 排除 pub struct/trait/enum/union/extern，显式 trait 返回值判定）= 53/12/41 余项（38 纯 C 兼容 + 3 Point）。反对席 scan.py 复跑 = 54，其唯一差额是 `test/modules/extern_decl/lib.h.ct:6 pub extern int lib_fn(int x);`（§3.1/D39-2 明写 pub extern 不进导出面）。scan.py 标 10 条（无 trait 返回值判据），与 §3.1 规则 3 的 12 相差 2 条 trait 值。"
+    },
+    {
+      "id": "J-3",
+      "claim": "A 只新增已立项的 `--lib` CLI，无新关键字、无新语法",
+      "counter": "承认 J-3 成立，不再争",
+      "evidence": [
+        "V1"
+      ],
+      "fact": "`--lib` 在 HEAD 不存在（exit 1，`unknown option`）；`git grep -- '--lib' HEAD -- selfhost/` 零命中，无任何实现。PH-39 卡 :16 把 `--lib` 列为目标、:3 记录用户已批三项决策。AGENTS.md:469 把『改变 CLI』与新增语法并列列入需先确认项。"
+    },
+    {
+      "id": "J-4",
+      "claim": "≤2 文件 / ≤80 行，G1/G3/G4 判据零改动",
+      "counter": "A 未落地（沉没成本 0）；替代方案估 50–70 行",
+      "evidence": [
+        "V1"
+      ],
+      "fact": "HEAD 无 `--lib`、无 `.abi.h` 任何实现（V1 + git grep 零命中），双方行数均为估算，本席无法实测；两侧估算相容。"
+    },
+    {
+      "id": "J-5",
+      "claim": "A 的拒绝是硬错 `'<name>' cannot be exported: <reason>` + 声明行位置；B 的未标记 `pub` 不导也不报错是静默丢弃",
+      "counter": "硬错版 A 上 J-5 成立；A′ 若跳过而不诊断则违反 J-5（并据此否掉静默跳过）",
+      "evidence": [
+        "V2",
+        "V11"
+      ],
+      "fact": "`ct check` 能输出 `file:line:col`（sig_mismatch → `prog.ct:4:10:`），但 leak 只有 `prog.ct:6:`（col=0，Diag.h.ct:388 条件 `w->col > 0`）；`ct build` 是 `file:line:` 且 exit 0。今天 `--emit-c` 省略 `id` 时零诊断（V2）。即：`file:line:col` 机制存在但依赖记录带 col；今天的库构建没有该诊断。"
+    }
+  ],
+  "unreproduced": [
+    {
+      "ref": "counter.md#E2-6（docs/design/phase39-draft.md:5）",
+      "reason": "锚点行号错：:5 实为『文档形态…design window 7/12』；所引『2026-11-13，用户批准三项决策均取 A』在 :3。内容存在、行号偏移 2。"
+    },
+    {
+      "ref": "claim.md#4.2 A-1（『lib/std/Str.h.ct 的 7 个 pub 函数在 A 下报 L39-1、std 不能做 --lib 根』）",
+      "reason": "无条件表述复现失败：仓库根构建时 lib/std 经 find_builtin 成为内建单元（实测 4 个内建单元），按 A 规则 1『非内建』不进导出面。仅在 Str.h.ct 自身作为 root（实测 3 个内建单元）或 `-I vendor` 引入时，它才是普通单元并命中 7 条。"
+    },
+    {
+      "ref": "claim.md#E3 / claim-r2.md#E3-r2 / counter.md#E3（对 A / A′ 落地后行为的可证伪预测）",
+      "reason": "`--lib` 与 L39-1 在 HEAD 均未实现（V1：unknown option，selfhost 零命中），所有『A/A′ 落地后应得到…』的预测今天无法执行；本席只能复现规则文本、符号面与现状产物，无法复现预测本身。"
+    },
+    {
+      "ref": "counter.md#C5-1（『vendor/std 是普通单元 → 7 个 Str pub 函数触发 L39-1』）",
+      "reason": "按默认路径复现失败：`vendor/std` 从不被读（Driver.h.ct:432 注释 + `import std::str` 报 `cannot resolve import 'std/str'`）。加 `-I vendor` 后条件成立（输出 str.c、9 个原型）。原文未写该条件。"
+    }
+  ]
+}

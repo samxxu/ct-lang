@@ -289,7 +289,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
 | 文档 snippet | 缺失（无 `docs/snippets/`） |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
-| 决策记录 | 缺失；现写在 `docs/design/*.md`（`D<phase>-<n>`） |
+| 决策记录 | `docs/decisions/D-<n>.md`（ADR）；phase 内决策仍写 `docs/design/*.md`（`D<phase>-<n>`） |
 | 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` 首行徽标、`docs/README.md`「当前版本」、`AGENTS.md`「当前版本」行、`docs/history/phase-log.md` 版本记录 |
 | 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`phase-tag-requires-user-approval`） |
 
