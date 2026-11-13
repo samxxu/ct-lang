@@ -1,6 +1,6 @@
 # Phase 42 — `impl` 方法可见性（方法级 `pub`，默认私有）
 
-> **状态：已冻结（2026-11-13；battle p42-1 C；v0.41.0 基线；实施中）。**
+> **状态：✅ 完成（2026-11-14；v0.42.0；battle p42-1 C；R1–R8、E42-1–E42-8 全绿）。**
 > **基线**：PH-41 收口提交 `de9ce1ab` / `v0.41.0`；S0 在该提交上冷构建并记录 `baseline: de9ce1ab`。
 > **文档形态**：`phase42-draft.md`；design window 7/12（门禁只数 `phaseN.md`，草案不计数）。
 > **前置**：[phase34-draft.md](phase34-draft.md)（`pub struct` / 固有方法）、[phase39-draft.md](phase39-draft.md)（导出面与 `ABI_HASH`）、[phase41-draft.md](phase41-draft.md)（收口基线）。
@@ -78,7 +78,7 @@
 
 ### 2.1 门禁基线
 
-参考值（历史量级）：`check-ast` 1329/0、`check-warnings` 600/0、`test/run` 148、`check-docs` 900+ links、design window 7/12。S0 在 PH-41 收口提交上冷构建 `ct` 并实测替换本节；不沿用 PH-40 的基线。
+实测（v0.42.0）：`check-ast` 1361/0、`check-warnings` 614/0、`test/run` 154、`check-docs` 987 links / 220 files、grammar 169/0、design window 7/12。
 
 ### 2.2 设计探针（2026-11-13，v0.40.1）
 
@@ -231,3 +231,19 @@ pub static Counter make() { … }  // 静态方法；`static` 可在 `pub` 前/�
 - 收口动作：11 道门禁绿、`p42/*` 全绿、`version-minor=42`、五处 `CTC_VERSION` 与全部版本落点同步到 `v0.42.0`、phase-log 与对照表落盘；tag 按 6.7 V-7，分支推送按 6.5。
 - 每个实现任务 ≤3 个源码文件；每个实现提交的父提交是它的 `test(visibility): <task-id> 红`；仓库任何时刻可构建。
 - 文档修正说明：`pub` 可见性表述的既有漂移已由 `ec806f59` 覆盖（`docs/` 三处），**不重复排期**；本卡 R8 只补「方法级 `pub` / 默认私有」的新语法、`pub impl` 收紧的迁移说明与 README 适用编译器标注。
+
+### 8.1 收口记录（2026-11-14）
+
+| 任务 | 验收命令 | 结果 |
+| --- | --- | --- |
+| R1 | `p42/pub-syntax` | 5/5；L42-1/2/3 |
+| R2/R3 | 52 条迁移（std 43 + 其它 9） | 52/52；既有 `.h`/链接不变 |
+| R4 | `p42/private` | 1/1；私有 static/无原型 |
+| R5 | `p42/cross-unit` | 2/2；L42-4/5 |
+| R6 | `p42/generic` | 1/1；模板私有/公开分流 |
+| R7 | `p42/regression` + full gate | 11/11；既有 ABI/回归不变 |
+| R8 | `check-docs` / `check-grammar` | 987 links / 220 files；169/0 |
+
+收口总量：check-ast 1361/0、check-warnings 614/0、test/run 154、goldens 82、docs 987/220、grammar 169/0、acceptance 20/0。
+
+tag/push：`v0.42.0` annotated tag 与分支自动 push。

@@ -2304,3 +2304,26 @@ if (!ct_atomic_cas(&hits, &expected, v + 1))
   无条件关键字，`atomic char` 报 L41-1，`atomic _Atomic(int)` 报 L41-8，原子返回类型 / typedef
   目标报 L41-6，`own atomic` 报 L41-3，by-value CAS 报 L41-5。
 - 原子类型只支持上述四种基类型；`atomic struct` / 原子容器元素 / 原子返回类型是开放项。
+
+### 4.60 `impl` 方法可见性：方法级 `pub`，默认私有（Phase 42，仅 ct-ast）
+
+`impl` 块里的固有方法默认**私有**；写 `pub` 才进 `.h`、才有外部链接、才允许跨单元调用：
+
+```ct
+pub struct Counter {
+    int n;
+}
+impl Counter {
+    pub int get() { return self.n; }
+    pub static Counter make(int n) { Counter c; c.n = n; return c; }
+    static pub int zero() { return 0; }
+    int secret() { return self.n; }       /* 私有：同单元可调 */
+}
+```
+
+- `pub` 只允许在 `.h.ct` 单元的 `pub struct` 固有 `impl` 方法上；`.ct` 单元 / 私有 struct 报 L42-1。
+- trait impl（`impl Trait for S`）的方法写 `pub` 报 L42-2；块级 `pub impl` 报 L42-3。
+- 私有方法：不进 `.h`，定义发 `static __attribute__((unused))`；同单元调用允许，跨单元调用 L42-4（实例）/ L42-5（静态）。
+- 模板固有方法同规则：`exported = 模板 pub && 属主 .h.ct && 方法 pub`；foreign-element 副本恒 `static`。
+- 元素协议 `retain` / `release` 不按名字自动公开；跨单元/foreign 元素调用未 `pub` 的方法报 L42-6。
+- `drop` / `handback` 是 trait impl / static，不参与方法可见性；字段可见性仍随 struct。

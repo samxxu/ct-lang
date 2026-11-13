@@ -1442,6 +1442,22 @@ while (!ct_atomic_load(&stop))
 - 完整样例：[examples/44_atomic_counter](../examples/44_atomic_counter)；并发夹具在
   `test/ast/p41_cancel_flag` / `p41_refcount`，TSan 见 `selfhost/check-tsan.sh`。
 
+### 10.16 方法级 `pub`：默认私有（Phase 42）
+
+`impl` 的固有方法默认私有，只有写 `pub` 才跨单元公开：
+
+```ct
+pub struct Counter { int n; }
+impl Counter {
+    pub int get() { return self.n; }
+    int secret() { return self.n; }
+}
+```
+
+同单元可以调用 `secret`；其它单元调用会报 `method is private to its unit`。私有方法不进 `.h`，
+定义发 `static`。`pub` 只能写在 `.h.ct` 的 `pub struct` 固有 impl 上；trait impl 方法、块级
+`pub impl` 都硬错。完整规则见 [language-spec §4.60](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
