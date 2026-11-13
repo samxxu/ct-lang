@@ -26,10 +26,16 @@ int main(void)
     printf("len = %d\n", calls.len());
     slot = calls.get(big);
     printf("get long: %d\n", slot == 0 ? -1 : *slot);
-    printf("overwrite: %d, len = %d\n", calls.put(big, 9), calls.len());
+    {
+        int overwritten = calls.put(big, 9);
+        printf("overwrite: %d, len = %d\n", overwritten, calls.len());
+    }
     printf("get long: %d\n", *calls.get(big));
     printf("missing: %d\n", calls.get(big + 2) == 0);
-    printf("remove: %d, len = %d\n", calls.remove(big + 1), calls.len());
+    {
+        int removed = calls.remove(big + 1);
+        printf("remove: %d, len = %d\n", removed, calls.len());
+    }
 
     names.h = 0;
     names.put(7, "seven");
