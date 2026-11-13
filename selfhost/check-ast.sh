@@ -3691,6 +3691,16 @@ if bash test/ast/p42_private.sh "$work/ct-ast"; then
 else
     bad "p42/private" "private method emission failed"
 fi
+if bash test/ast/p42_cross.sh "$work/ct-ast"; then
+    ok "p42/cross-unit"
+else
+    bad "p42/cross-unit" "cross-unit private diagnostics failed"
+fi
+if bash test/ast/p42_generic.sh "$work/ct-ast"; then
+    ok "p42/generic"
+else
+    bad "p42/generic" "generic visibility failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

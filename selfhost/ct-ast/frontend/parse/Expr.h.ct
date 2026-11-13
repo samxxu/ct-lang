@@ -3483,7 +3483,13 @@ impl ExprOps for Expr {
                 if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
                 for (m = self->arena->nodes[im[ii].node].a; m >= 0;
                      m = self->arena->nodes[m].next)
-                    if (strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+                    if (strcmp(self->arena->nodes[m].text2, fname) == 0) {
+                        if (self->arena->nodes[m].d != 1
+                            && strcmp(self->arena->nodes[im[ii].node].text3,
+                                      self->sup->mem->path) != 0)
+                            return -2;
+                        return m;
+                    }
             }
         }
         /* P34 S5a: a non-generic inherent impl `impl Name { … }` (S4) is an
@@ -3497,7 +3503,13 @@ impl ExprOps for Expr {
             if (strcmp(self->arena->nodes[ni].text, ibase) != 0) continue;
             for (m = self->arena->nodes[ni].a; m >= 0;
                  m = self->arena->nodes[m].next)
-                if (strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+                if (strcmp(self->arena->nodes[m].text2, fname) == 0) {
+                    if (self->arena->nodes[m].d != 1
+                        && strcmp(self->arena->nodes[ni].text3,
+                                  self->sup->mem->path) != 0)
+                        return -2;
+                    return m;
+                }
         }
         return -1;
     }
@@ -3523,7 +3535,13 @@ impl ExprOps for Expr {
                 for (m = self->arena->nodes[im[ii].node].a; m >= 0;
                      m = self->arena->nodes[m].next)
                     if (self->arena->nodes[m].c
-                        && strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+                        && strcmp(self->arena->nodes[m].text2, fname) == 0) {
+                        if (self->arena->nodes[m].d != 1
+                            && strcmp(self->arena->nodes[im[ii].node].text3,
+                                      self->sup->mem->path) != 0)
+                            return -2;
+                        return m;
+                    }
             }
         }
         /* P34 S5a: non-generic inherent static method (S4 `static` marker in
@@ -3537,7 +3555,13 @@ impl ExprOps for Expr {
             for (m = self->arena->nodes[ni].a; m >= 0;
                  m = self->arena->nodes[m].next)
                 if (self->arena->nodes[m].c
-                    && strcmp(self->arena->nodes[m].text2, fname) == 0) return m;
+                    && strcmp(self->arena->nodes[m].text2, fname) == 0) {
+                    if (self->arena->nodes[m].d != 1
+                        && strcmp(self->arena->nodes[ni].text3,
+                                  self->sup->mem->path) != 0)
+                        return -2;
+                    return m;
+                }
         }
         return -1;
     }
@@ -4165,7 +4189,10 @@ impl ExprOps for Expr {
                             self->arena->nodes[m].aux = arrow ? 8 : 7;
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
                                      self->in_generic_bound);
-                        } else if ((inm = self->inst_inherent_method(ibase, fname)) >= 0) {
+                        } else if ((inm = self->inst_inherent_method(ibase, fname)) == -2) {
+                            return tool::diag::ct_sem_error(mline, mcol,
+                                "method is private to its unit", self->sup->mem->path);
+                        } else if (inm >= 0) {
                             /* Phase 31 S23b (L31-22): the loop reads the very
                                container the body would mutate. */
                             if ((strcmp(fname, "clear") == 0
@@ -4877,10 +4904,16 @@ impl ExprOps for Expr {
                     return self->sup->fail("a static method call needs an argument list");
                 args = self->parse_args();
                 if (args < 0) return -1;
-                if (self->inst_static_method(ibase, sm) < 0) {
-                    snprintf(smsg, sizeof smsg, "'%s' has no static method '%s'",
-                             ibase, sm);
-                    return self->sup->fail(smsg);
+                {
+                    int smi = self->inst_static_method(ibase, sm);
+                    if (smi == -2)
+                        return tool::diag::ct_sem_error(id_line, id_col,
+                            "static method is private to its unit", self->sup->mem->path);
+                    if (smi < 0) {
+                        snprintf(smsg, sizeof smsg, "'%s' has no static method '%s'",
+                                 ibase, sm);
+                        return self->sup->fail(smsg);
+                    }
                 }
                 if (self->map_arity(id_line, id_col, ibase, sm,
                                     arg_count(self->arena, args)
@@ -4926,10 +4959,16 @@ impl ExprOps for Expr {
                             snprintf(sibase, sizeof sibase, "struct %s", stext2);
                             args = self->parse_args();
                             if (args < 0) return -1;
-                            if (self->inst_static_method(sibase, sm2) < 0) {
-                                snprintf(smsg2, sizeof smsg2, "'%s' has no static method '%s'",
-                                         stext2, sm2);
-                                return self->sup->fail(smsg2);
+                            {
+                                int smi2 = self->inst_static_method(sibase, sm2);
+                                if (smi2 == -2)
+                                    return tool::diag::ct_sem_error(id_line, id_col,
+                                        "static method is private to its unit", self->sup->mem->path);
+                                if (smi2 < 0) {
+                                    snprintf(smsg2, sizeof smsg2, "'%s' has no static method '%s'",
+                                             stext2, sm2);
+                                    return self->sup->fail(smsg2);
+                                }
                             }
                             if (self->map_arity(id_line, id_col, sibase, sm2,
                                                 arg_count(self->arena, args)
