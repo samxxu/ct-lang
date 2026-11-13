@@ -25,6 +25,7 @@ check_neg() {
 
 check_neg p38_goto_cross "a goto cannot cross a block with defer"
 check_neg p38_goto_sibling "a goto cannot cross a block with defer"
+check_neg p38_goto_in "a goto cannot cross a block with defer"
 check_neg p38_defer_control "a defer block cannot transfer control"
 check_neg p38_defer_break "a defer block cannot transfer control"
 check_neg p38_defer_continue "a defer block cannot transfer control"
@@ -32,6 +33,7 @@ check_neg p38_defer_nested "a defer block cannot transfer control"
 check_neg p38_defer_label "a defer block cannot declare a label"
 check_neg p38_defer_switch "defer is not allowed inside a switch"
 check_neg p38_defer_scope "defer is only allowed inside a function"
+check_neg p38_defer_header.h "defer is not allowed in a .h.ct unit"
 
 "$CT" compile "$root/test/ast/220_defer_order/prog.ct" -o "$tmp/220.c" >"$tmp/220.out" 2>"$tmp/220.err"
 rc=$?
