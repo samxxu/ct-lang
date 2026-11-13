@@ -55,6 +55,46 @@ else
     fi
 fi
 
+# battle p38-1 B′: an unstable receiver is rejected on (and accepted off).
+unstable="$root/test/ast/219_runtime_guard/unstable.ct"
+rm -rf "$tmp/unstable"
+mkdir -p "$tmp/unstable"
+if "$CT" build --runtime-checks --emit-c "$unstable" -o "$tmp/unstable" \
+        >"$tmp/unstable.out" 2>"$tmp/unstable.err"; then
+    echo "FAIL unstable: expected a rejection" >&2
+    fail=1
+elif ! grep -Fq 'runtime checks need a stable receiver' "$tmp/unstable.err"; then
+    echo "FAIL unstable: missing stable-receiver message" >&2
+    sed 's/^/  /' "$tmp/unstable.err" >&2
+    fail=1
+elif [ -f "$tmp/unstable/unstable.c" ]; then
+    echo "FAIL unstable: rejection left a .c" >&2
+    fail=1
+fi
+rm -rf "$tmp/unstable-off"
+mkdir -p "$tmp/unstable-off"
+if ! "$CT" build --emit-c "$unstable" -o "$tmp/unstable-off" >"$tmp/unstable-off.out" 2>"$tmp/unstable-off.err"; then
+    echo "FAIL unstable off: expected acceptance" >&2
+    sed 's/^/  /' "$tmp/unstable-off.err" >&2
+    fail=1
+fi
+# A stable subscript stays accepted and guarded.
+safe="$root/test/ast/219_runtime_guard/safe_index.ct"
+rm -rf "$tmp/safe" "$tmp/safe-bin"
+mkdir -p "$tmp/safe"
+if ! "$CT" build --runtime-checks --outdir "$tmp/safe" "$safe" -o "$tmp/safe-bin" \
+        >"$tmp/safe.out" 2>"$tmp/safe.err"; then
+    echo "FAIL safe_index: build failed" >&2
+    sed 's/^/  /' "$tmp/safe.err" >&2
+    fail=1
+else
+    "$tmp/safe-bin" >"$tmp/safe.run" 2>&1
+    if [ "$?" -ne 5 ]; then
+        echo "FAIL safe_index: expected rc=5" >&2
+        fail=1
+    fi
+fi
+
 # A warm cache must not reuse an artefact produced with the other flag: the
 # switch is a safety contract, so both directions are asserted.
 cache="$tmp/cache"

@@ -1,0 +1,10 @@
+trait Area { int area(); }
+struct Sq { int n; } use Area;
+impl Area for Sq { int area() { return self->n; } }
+
+int main(void)
+{
+    Sq arr[1];
+    arr[0].n = 5;
+    return arr[0].area();
+}

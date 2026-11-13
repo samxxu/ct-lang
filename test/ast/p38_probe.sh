@@ -33,6 +33,7 @@ check_neg p38_defer_continue "a defer block cannot transfer control"
 check_neg p38_defer_nested "a defer block cannot transfer control"
 check_neg p38_defer_label "a defer block cannot declare a label"
 check_neg p38_defer_switch "defer is not allowed inside a switch"
+check_neg p38_defer_switch_nested "defer is not allowed inside a switch"
 check_neg p38_defer_scope "defer is only allowed inside a function"
 check_neg p38_defer_header.h "defer is not allowed in a .h.ct unit"
 

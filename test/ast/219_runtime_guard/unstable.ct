@@ -1,0 +1,13 @@
+trait Area { int area(); }
+struct Sq { int n; } use Area;
+impl Area for Sq { int area() { return self->n; } }
+
+static int pick(void) { return 0; }
+
+int main(void)
+{
+    Sq arr[2];
+    arr[0].n = 3;
+    arr[1].n = 4;
+    return arr[pick()].area();
+}
