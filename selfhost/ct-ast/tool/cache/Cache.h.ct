@@ -22,7 +22,8 @@ namespace tool::cache;
 pub trait CacheOps {
     unsigned long digest(const char *s);
     int  key(const char *path, const char *imports, unsigned long dep,
-             int line_force, int diag_json, const char *nsroot, char *out, int cap);
+             int line_force, int diag_json, int runtime_checks,
+             const char *nsroot, char *out, int cap);
     int  paths(const char *outc, char *dir, int dcap, char *kf, int kcap);
     int  hit(const char *outc, const char *key, int need_h);
     void store(const char *outc, const char *key);
@@ -59,7 +60,8 @@ impl CacheOps for Cache {
        missing stamp must never be papered over). The spelling matches L2 byte
        for byte. */
     int key(const char *path, const char *imports, unsigned long dep,
-            int line_force, int diag_json, const char *nsroot, char *out, int cap)
+            int line_force, int diag_json, int runtime_checks,
+            const char *nsroot, char *out, int cap)
     {
         char stamp[64];
         struct stat st;
@@ -69,8 +71,8 @@ impl CacheOps for Cache {
         if (stat(path, &st) != 0) return -1;
         snprintf(stamp, sizeof stamp, "%lu.%lu",
                  (unsigned long)st.st_mtime, (unsigned long)st.st_size);
-        w = snprintf(out, (size_t)cap, "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
-                     self->version, line_force, diag_json, nsroot,
+        w = snprintf(out, (size_t)cap, "ctc %s L%d D%d R%d N%s P%s S%s I%lu K%lu",
+                     self->version, line_force, diag_json, runtime_checks, nsroot,
                      path, stamp, self->digest(imports), dep);
         if (w < 0 || w >= cap) return -1;
         return 0;

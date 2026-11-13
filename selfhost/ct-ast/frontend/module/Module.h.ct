@@ -1015,7 +1015,8 @@ impl ModuleOps for Module {
             dep = dep * (unsigned long)1099511628211
                 + self->units[self->units[u].depu[k]].digest;
         if (self->cache->key(self->units[u].path, ih, dep, self->line_force,
-                             self->diag_json, self->nsroot, out, cap) != 0)
+                             self->diag_json, self->runtime_checks,
+                             self->nsroot, out, cap) != 0)
             return -1;
         /* the unit's own digest is what its dependants fold next */
         self->units[u].digest = self->cache->digest(out);
