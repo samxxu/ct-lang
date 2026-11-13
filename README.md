@@ -1,6 +1,6 @@
 # ct — C with Traits 编译器
 
-> **v0.40.0** · 中文 · [English](README.en.md)
+> **v0.40.1** · 中文 · [English](README.en.md)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 编译路径（`ct compile` / `ct build`）不做类型检查、不做优化；可选的 `ct check` 只做受限语义检查

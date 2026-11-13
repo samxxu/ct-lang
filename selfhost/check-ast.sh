@@ -3675,7 +3675,8 @@ else
 fi
 
 # Phase 40 R6: docs/example/editor discoverability.
-if grep -Fq 'errdefer' docs/language-spec.md    && grep -Fq 'errdefer' docs/tutorial.md    && [ -f examples/43_errdefer/prog.expected.out ]; then
+if grep -Fq 'errdefer' docs/language-spec.md    && grep -Fq 'errdefer' docs/tutorial.md    && [ -f examples/43_errdefer/prog.ct ] \
+   && [ -f examples/43_errdefer/prog.expected.out ]; then
     ok "p40 docs"
 else
     bad "p40 docs" "missing errdefer docs or examples/43_errdefer"

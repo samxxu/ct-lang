@@ -1,0 +1,10 @@
+int f(int k)
+{
+    switch (k) {
+    case 1: {
+        int x = 1 errdefer { (void)$; };
+    }
+    break;
+    }
+    return 0;
+}

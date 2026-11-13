@@ -1888,11 +1888,12 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
   `got '0x'`（不静默按 0 处理），超出 `long` 报 `a range bound is out of range`，
   `..` 之后直接 `(` 报 `a range initializer needs both bounds`。因为边界是字面量，表达式解析器
   根本不参与边界，`0..13(` 不会被读成函数调用。
-- **`$` 只在这个初值的元素表达式里合法**：它按元素展开成 `((int)k)`。出现在别处
-  （`int x = $;`、`$ = 1`）走既有的 `unexpected token`；出现在数组维度里（`int a[$];`）报
-  `'$' cannot be used in an array dimension`；被取地址或自增（`&$`、`$++`、`++$`）报
-  `the range index '$' is not a variable`。**这几条都不是「未声明变量」**：`$` 不是标识符，
-  既不进符号表，也不会与 `loop` 的隐式 `i` 撞名，更不存在遮蔽。
+- **`$` 在 range 初值的元素表达式里是元素下标**：它按元素展开成 `((int)k)`。出现在数组维度里
+  （`int a[$];`）报 `'$' cannot be used in an array dimension`；被取地址或自增（`&$`、`$++`、`++$`）
+  报 `the range index '$' is not a variable`。在 range/into 之外的表达式位置（`int x = $;`）仍走既有的
+  `unexpected token`；语句首的 `$ = …` 按 Phase 40 的 L40-10 报 `'$' is read-only and only valid in
+  the trailing block`。**`$` 不是标识符**：不进符号表，也不会与 `loop` 的隐式 `i` 撞名。
+  尾随声明块里的 `$` 是声明名的只读别名（§4.58），与 range 的 `$` 按上下文区分。
 - **声明必须带 `[]`**：`int x = 0..3($);` 报 `a range initializer declares an array`；
   写了字面量维度就必须等于元素个数（`int a[4] = 0..3($);` 报
   `the array size '4' does not match the range (3 elements)`）。
@@ -2253,6 +2254,6 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **错误出口**：`return err: expr;` / `return err:;`（仅 void）/ `break err:;` / `continue err:;`。`err:` 只在 `return` / `break` / `continue` 之后识别；其它位置 `err` 仍是普通标识符。非 void 写 `return err:;` 报 `an error return needs a value`（L40-1），void 写值报 `a void function cannot return a value`（L40-2），循环外报 L40-3，`switch` 内 `break err:` 报 L40-4。
 - **errdefer**：`errdefer { … }` 与 `defer` 共用同一条块栈；条目带 `on_error`，只在错误出口执行。普通 `return` / `break` / `continue` / 落出只跑 `defer`，丢弃 `errdefer`。`return err` 跑函数内全部活跃条目，`break err` / `continue err` 只跑退出到的那层块；单栈 LIFO（不按种类分段）。
 - **边界**：`switch`、`.h.ct`、文件作用域禁止 errdefer（L40-5）；errdefer 内禁止控制转移和嵌套 `defer` / `errdefer`（L40-6）；`own` 变量出现在 errdefer 或 errdefer 内声明 `own` 都报 L40-7；`goto` 跨带 errdefer 的块报 L40-8。
-- **尾随声明**：`Type name = expr defer { … };` / `errdefer { … };` 只允许单声明符；`$` 是 `name` 的只读别名，块内可直接写名字。赋值形式、多声明符、`for` 初始化报 L40-9；`$` 出现在尾随块外或对 `$` 赋值报 L40-10。尾随块在初始值之后注册，初始值可能失败时由作者在块内 guard（如 `if ($) …`）。
+- **尾随声明**：`Type name = expr defer { … };` / `errdefer { … };` 只允许单声明符；`$` 是 `name` 的只读别名，块内可直接写名字。赋值形式、多声明符、`for` 初始化报 L40-9；语句首 `$ = …` 或对 `$` 赋值报 L40-10，range/into 之外的其它表达式位置仍沿用既有 `unexpected token`。尾随块在初始值之后注册，初始值可能失败时由作者在块内 guard（如 `if ($) …`）；尾随块内声明与 `$` 同名变量会报 `a trailing block cannot shadow the '$' name`。
 - **不做**：`Result` / `?` / 异常、`goto err:`、错误传播、函数级错误标志、赋值形式尾随、多声明符尾随（开放项 T40-1…T40-5）。
 

@@ -1404,9 +1404,9 @@ delete p;                    /* Drop 释放 buffer，再 free 结构体并置空
 ```ct
 static int load(void)
 {
-    int fd = open_db() errdefer { if ($) close_db($); };
-    int n = read_all(fd) errdefer { rollback($); };
-    defer { close_db(fd); }
+    int fd = open_db();
+    int n = read_all(fd) errdefer { if ($ < 0) rollback(fd); };
+    defer { if (fd) close_db(fd); }
     if (n < 0) {
         return err: -1;
     }

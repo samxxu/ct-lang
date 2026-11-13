@@ -368,6 +368,9 @@ pub struct Expr {
        accepted as a primary here and anywhere else reports the ordinary syntax
        error instead of an undeclared name. */
     int  dollar_ok;
+    /* Phase 40 R5: set while a range initialiser's element is parsed, so a
+       `$` node can be told apart from the trailing-declaration alias. */
+    int  range_ctx;
     /* Phase 30: `> 0` only while the expression at one of the allowed value
        positions (a declaration initialiser, an assignment's right side, a
        `return`, an expression statement) is parsed. A nested expression clears
@@ -4794,6 +4797,7 @@ impl ExprOps for Expr {
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", "$");
+            if (self->range_ctx) snprintf(self->arena->nodes[n].text3, MAX_TEXT, "range");
             self->sup->lex_next();
             return n;
         }

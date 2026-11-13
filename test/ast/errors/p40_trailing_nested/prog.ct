@@ -1,0 +1,8 @@
+int f(void)
+{
+    errdefer {
+        int x = 1 errdefer { (void)$; };
+        return 7;
+    }
+    return 0;
+}

@@ -1,0 +1,10 @@
+#include <stdio.h>
+int f(int fail)
+{
+    int x = 1 errdefer {
+        int x = 99;
+        printf("%d %d\n", x, $);
+    };
+    if (fail) return err: 0;
+    return 0;
+}

@@ -19,7 +19,11 @@ if [ "$?" -ne 0 ] || ! diff -u "$root/test/ast/p40_trailing/prog.expected.out" "
     fail=1
 fi
 neg() {
-    f="$root/test/ast/errors/$1/prog.ct"
+    if [ -f "$root/test/ast/errors/$1" ]; then
+        f="$root/test/ast/errors/$1"
+    else
+        f="$root/test/ast/errors/$1/prog.ct"
+    fi
     msg=$2
     "$CT" check "$f" >"$tmp/n.out" 2>"$tmp/n.err"
     if [ "$?" -eq 0 ] || ! grep -Fq -- "$msg" "$tmp/n.err"; then
@@ -32,5 +36,9 @@ neg p40_trailing_multi 'a trailing defer needs a single declaration'
 neg p40_trailing_assign 'a trailing defer needs a single declaration'
 neg p40_trailing_for 'a trailing defer needs a single declaration'
 neg p40_trailing_dollar "'\$' is read-only and only valid in the trailing block"
+neg p40_trailing_nested 'an errdefer block cannot transfer control'
+neg p40_trailing_header/prog.h.ct 'errdefer is not allowed here'
+neg p40_trailing_switch 'errdefer is not allowed here'
+neg p40_trailing_shadow "a trailing block cannot shadow the '\$' name"
 if [ "$fail" -eq 0 ]; then echo "p40_r5: OK"; fi
 exit "$fail"

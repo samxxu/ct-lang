@@ -225,6 +225,8 @@ C11 = "\n".join([
     "_Complex double z;",
     "__attribute__((aligned(32))) int a;",
 ])
+# Phase 40: errdefer and the err: marker.
+P40 = "int f(void) { errdefer { } return err: 1; }"
 # 2b.3 qualified instance host plus a recipe body; a plain C member call must
 # not be read as a recipe.
 MAP = "\n".join([
@@ -873,6 +875,16 @@ def main():
           str([by_line[9], by_line[10]]))
     check("`__attribute__` -> ct-attribute",
           "ct-attribute" in by_line[11], str(by_line[11]))
+
+    print()
+    print("synthetic Phase 40 -- errdefer and err: marker:")
+    rows = scan(P40, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`errdefer` / `err:` -> ct-errdefer + ct-err-colon",
+          "ct-errdefer" in by_line[1] and "ct-err-colon" in by_line[1],
+          str(by_line[1]))
 
     print()
     print("synthetic map host / recipe -- qualified path and `->` heuristic:")
