@@ -156,6 +156,7 @@ pub struct Module {
        `outdir` and the binary lands at `exe`. `cc` / `cflags` / `ldflags` are
        pass-through: composed into the line, never parsed or validated. */
     int  emit_c;
+    int  lib_mode;              /* Phase 39: ct build --lib */
     int  runtime_checks;        /* --runtime-checks: guard null vtables in build */
     const char *exe;
     const char *outdir_opt;
@@ -1048,6 +1049,7 @@ impl ModuleOps for Module {
         self->line_force = -1;
         self->have_map = 0;
         self->emit_c = 0;
+        self->lib_mode = 0;
         self->runtime_checks = 0;
         self->exe = NULL;
         self->outdir_opt = NULL;
@@ -1057,7 +1059,7 @@ impl ModuleOps for Module {
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
-                       "                 [--emit-c] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
+                       "                 [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
@@ -1070,6 +1072,10 @@ impl ModuleOps for Module {
             }
             if (strcmp(argv[i], "--emit-c") == 0) {
                 self->emit_c = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--lib") == 0) {
+                self->lib_mode = 1;
                 continue;
             }
             if (strcmp(argv[i], "--runtime-checks") == 0) {
@@ -1202,6 +1208,17 @@ impl ModuleOps for Module {
         }
         if (ninput == 0) {
             fprintf(stderr, "usage: %s build <input.ct>... [-o <exe>]\n", self->prog);
+            return 1;
+        }
+        if (self->lib_mode && self->emit_c) {
+            fprintf(stderr, "ctc: --lib and --emit-c are mutually exclusive\n");
+            return 1;
+        }
+        /* R1 skeleton: the export scan (R2) will decide whether the root has
+           candidates. Until then every --lib build has no exported functions. */
+        if (self->lib_mode) {
+            fprintf(stderr, "%s: no exported functions in '%s'\n",
+                    self->prog, ninput > 0 ? inputs[0] : "<input>");
             return 1;
         }
         /* A `.m.ct` unit is a compile-time mapping: it is loaded through

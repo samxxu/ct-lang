@@ -201,6 +201,17 @@ impl DriverOps for Driver {
                 break;
             }
         }
+        /* Phase 39: `--lib` is a build-only mode; reject it before the
+           compile/check argument loop turns it into an unknown option. */
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--lib") == 0) {
+                if (!(argc > 1 && strcmp(argv[1], "build") == 0)) {
+                    fprintf(stderr, "ctc: --lib is only valid with 'ct build'\n");
+                    return 1;
+                }
+                break;
+            }
+        }
         if (argc > 1 && strcmp(argv[1], "build") == 0)
             return self->m->build_main(argc - 1, argv + 1);
         /* `ct compile <file>` is the documented spelling, so the keyword is
