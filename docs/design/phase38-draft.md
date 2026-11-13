@@ -1,6 +1,6 @@
 # Phase 38 — `defer` 块级清理
 
-> **状态：实现完成**（2026-11-13；版本 bump / tag 待用户批准）。
+> **状态：实现完成（含独立评审 P0/P1 修复）**（2026-11-13；版本 bump / tag 待用户批准）。
 > **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
 > **文档形态**：`phase38-draft.md`；design window 12/12，转正时归档当时最老的一张。
 > **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
@@ -228,9 +228,22 @@ defer { log("done"); }      /* 显式清理 */
 | E38-1 | `220_defer_order`：`body` / `b` / `a`（LIFO） |
 | E38-2 | `221_defer_paths`：正常落出 / `return` / `break` / `continue` 四条路径 |
 | E38-3 | `222_defer_return`：`defer x=99` 后 `ret=1`（返回值先求值） |
-| E38-4 | `errors/p38_goto_cross.ct` 报 `a goto cannot cross a block with defer`；同块 goto 按 defer 深度放行 |
+| E38-4 | `errors/p38_goto_cross.ct` / `p38_goto_sibling.ct` 报 `a goto cannot cross a block with defer`；同块 goto 按顶层 defer 块 id 放行 |
 | E38-5 | `223_defer_own_order`：`defer` / `drop` 顺序 |
 | E38-6 | `errors/p38_defer_control.ct` 报 `a defer block cannot transfer control` |
 | E38-7 | `errors/p38_defer_scope.ct` 报 `defer is only allowed inside a function` |
-| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1318、check-warnings 599、check-docs 930 links、acceptance 20；样例 `examples/42_defer` |
+| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1325、check-warnings 600、check-docs 930 links、acceptance 20；样例 `examples/42_defer` |
 | 版本/tag | 版本仍 `v0.37.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.38.0` bump 与 tag/push 等用户批准 |
+
+### 9.1 独立评审与修复（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| 评审结论 | 初版 Phase 38 **不通过**；Phase 37 有条件通过 |
+| P0 修复 | 无括号 if/for/while/do 的 defer 上下文（`ac040d1`）；switch 内 defer v1 禁止；goto 改用顶层 defer 块 id，兄弟块跨跳不再漏清理 |
+| P1 修复 | defer 体内禁止 label（避免多出口重复发射）；`--runtime-checks` 进入缓存 key；guard 改为 `__ct_vt_guard`，vt 只求值一次，三种派发都覆盖 |
+| 新增测试 | 224 分支/循环/嵌套/同块 goto；p38_defer_switch / p38_defer_label / p38_goto_sibling / break / continue / nested；P37 warm-cache 双向 |
+| 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；`.h.ct` 函数体 defer 暂允许；非 hoist 接收者在 guard 下仍按既有两次求值（不再多第三次）；均记录为 v1 边界 |
+| 门禁 | `check-ast 1325/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
+| 版本/tag | 仍 `v0.37.0`；`v0.38.0` bump/tag 待用户批准；`v0.37.0` tag 仍含评审前的 runtime cache/guard 缺陷 |
+

@@ -425,9 +425,11 @@ int load(void)
 - **与 `own` 的顺序**：同一块内 defer 先于 `own` 的自动释放；两组各自 LIFO（D38-4）。既有
   `own` 的释放点不变。
 - **诊断**：`goto` 跨出/跨入带 defer 的块报 `a goto cannot cross a block with defer`；defer 内
-  `return` / `break` / `continue` / 嵌套 `defer` 报 `a defer block cannot transfer control`；
-  文件作用域或 `.h.ct` 内的 defer 报 `defer is only allowed inside a function`。
-- **不做**：`errdefer`、`try` / `?`、全局或头文件里的 defer、defer 内的控制转移（T38-1–T38-3）。
+  `return` / `break` / `continue` / 嵌套 `defer` 报 `a defer block cannot transfer control`；defer 内
+  label 报 `a defer block cannot declare a label`；`switch` 内 defer 报
+  `defer is not allowed inside a switch`（v1 不定义 case/fallthrough 语义）；文件作用域 defer 报
+  `defer is only allowed inside a function`。`.h.ct` 函数体内的 defer 在 v1 暂未拒绝，属已知边界。
+- **不做**：`errdefer`、`try` / `?`、全局或头文件里的 defer、defer 内的控制转移、`switch` 内 defer（T38-1–T38-4）。
 
 #### 4.10 `map`（Phase 11 新增 + SH-20 扩展，仅 ct-ast）
 

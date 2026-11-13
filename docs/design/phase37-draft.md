@@ -200,3 +200,5 @@ S0 先跑 `check-archive.sh` 与 `check-ast.sh` 的诊断对照片段，列出�
 | E37-3 | `219_runtime_guard`：on abort 带 `prog.ct:<行>`，off 无 guard |
 | E37-4 | 全量 11 道门禁绿：`test/run` 150、goldens 82、`check-ast` 1307、`check-warnings` 593、`check-docs` 930 links、acceptance 20 |
 | 版本/tag | `v0.37.0`；本地 annotated tag `v0.37.0`（不 push） |
+
+> **2026-11-13 独立评审后记**：审查发现 `v0.37.0` 的 `--runtime-checks` 缓存 key 与 guard 重复求值两项 P1 缺陷；修复已落在 PH-38 窗口的主线（`1b7eab4`、`0291b44`、`8427c7d`），但 **`v0.37.0` tag 仍含修复前实现**。若要对已发布 tag 出补丁，需另开 `v0.37.1` 并按 6.7 V-3/V-7 经用户批准；不得悄悄移动 v0.37.0。
