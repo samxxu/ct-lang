@@ -3,7 +3,7 @@
 | 项 | 值 |
 | --- | --- |
 | 状态 | **计划**（2026-11-12；只写方案与顺序，本轮不动手） |
-| 对象 | `ct-pkg/json`（本仓以 `packages/json` 子模块引入） |
+| 对象 | `ct-pkg/json`（仓库外维护；本仓不再引入子模块） |
 | 依据 | 生产可用性评估（只读实测，未入库：`2026-11-12/json-production-readiness/outputs/json-readiness.md`）；本文引用的行号已按包内 `json.ct` 复核 |
 | 已定决策 | 不实现可变 DOM；需要建树、改节点、深拷贝时直接用 cJSON（`docs/proposals/ct-pkg-agent-runtime.md`，2026-11-12） |
 | 不做 | 可变 DOM、流式/SAX、C ABI 导出（等 Phase 39 `ct build --lib`） |
