@@ -1,0 +1,18 @@
+#include <stdio.h>
+int main(void)
+{
+    atomic int i = 0;
+    atomic long l = 0;
+    atomic bool b = 0;
+    atomic void *slot = 0;
+    atomic int *p = &i;
+    ct_atomic_store(&i, 7);
+    ct_atomic_store(p, 8);
+    ct_atomic_store(&l, 9);
+    ct_atomic_store(&b, 1);
+    ct_atomic_store(&slot, &i);
+    printf("%d %d %ld %d %d\n", ct_atomic_load(&i), ct_atomic_load(p),
+           ct_atomic_load(&l), ct_atomic_load(&b),
+           ct_atomic_load(&slot) == (void *)&i);
+    return 0;
+}

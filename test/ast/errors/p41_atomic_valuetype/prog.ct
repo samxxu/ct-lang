@@ -1,0 +1,6 @@
+int main(void)
+{
+    atomic int x = 0;
+    ct_atomic_store(&x, 1.0);
+    return 0;
+}

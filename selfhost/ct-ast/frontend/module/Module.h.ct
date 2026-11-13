@@ -1199,7 +1199,7 @@ impl ModuleOps for Module {
                        "                 [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
-                       "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
+                       "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n",
                        self->prog);
                 return 0;
             }
@@ -1272,6 +1272,10 @@ impl ModuleOps for Module {
                 }
                 if (strcmp(v, "gnu99") == 0) {
                     self->std_flag = "-std=gnu99";
+                    continue;
+                }
+                if (strcmp(v, "c11") == 0) {
+                    self->std_flag = "-std=c11";
                     continue;
                 }
                 fprintf(stderr, "ctc: unknown C standard '%s'\n", v);
@@ -1528,7 +1532,14 @@ impl ModuleOps for Module {
                     char src[MAX_PATH], obj[MAX_PATH], cmd[MAX_CMD];
                     int ncmd = 0, code2, st2;
                     const char *ccp = self->cc;
+                    const char *cstd;
                     if (self->units[u].is_map) continue;
+                    /* Phase 41: _Atomic needs C11. Keep the user's explicit
+                       gnu99/c11 choice; lift the default c99 only when an
+                       atomic builtin was actually lowered. */
+                    cstd = self->std_flag ? self->std_flag : "-std=c99";
+                    if (self->sym->atomic_used && strcmp(cstd, "-std=c99") == 0)
+                        cstd = "-std=c11";
                     if (snprintf(src, sizeof src, "%s/%s.c", self->outdir, self->units[u].base)
                             >= (int)sizeof src
                         || snprintf(obj, sizeof obj, "%s/%s.o", self->outdir, self->units[u].base)
@@ -1537,7 +1548,7 @@ impl ModuleOps for Module {
                     if (!ccp || !ccp[0]) ccp = "cc";
                     if (ct_cmd_token(cmd, MAX_CMD, &ncmd, ccp) != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd,
-                                        self->std_flag ? self->std_flag : "-std=c99") != 0
+                                        cstd) != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-fvisibility=hidden") != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-I") != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0

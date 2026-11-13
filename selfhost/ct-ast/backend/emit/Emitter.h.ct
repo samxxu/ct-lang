@@ -1249,6 +1249,12 @@ static int emit_generic_defs(struct Emitter *self, int u)
     return 0;
 }
 
+/* Phase 41 R2: the 12 seq_cst helpers. They strip `_Atomic(T)` before calling
+   the builtin because Clang 21 rejects `__atomic_load_n(_Atomic(int) *, ...)`.
+   The parser only sets `atomic_used` after it has accepted a ct_atomic_* call;
+   the block is therefore absent from every non-atomic product. */
+
+
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
@@ -1300,6 +1306,62 @@ static int emit_unit_body(struct Emitter *self, int u)
 
     for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
         if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+    if (self->sym->atomic_used) {
+        fputs(
+"static inline int __ct_atomic_load_int(_Atomic(int) *p)\n"
+"{\n"
+"    return __atomic_load_n((int *)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_int(_Atomic(int) *p, int v)\n"
+"{\n"
+"    __atomic_store_n((int *)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_int(_Atomic(int) *p, int *e, int v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((int *)p, e, v, 0,\n"
+"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline long __ct_atomic_load_long(_Atomic(long) *p)\n"
+"{\n"
+"    return __atomic_load_n((long *)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_long(_Atomic(long) *p, long v)\n"
+"{\n"
+"    __atomic_store_n((long *)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_long(_Atomic(long) *p, long *e, long v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((long *)p, e, v, 0,\n"
+"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_load_bool(_Atomic(_Bool) *p)\n"
+"{\n"
+"    return __atomic_load_n((_Bool *)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_bool(_Atomic(_Bool) *p, _Bool v)\n"
+"{\n"
+"    __atomic_store_n((_Bool *)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_bool(_Atomic(_Bool) *p, _Bool *e, _Bool v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((_Bool *)p, e, v, 0,\n"
+"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void *__ct_atomic_load_ptr(_Atomic(void *) *p)\n"
+"{\n"
+"    return __atomic_load_n((void **)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_ptr(_Atomic(void *) *p, void *v)\n"
+"{\n"
+"    __atomic_store_n((void **)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_ptr(_Atomic(void *) *p, void **e, void *v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((void **)p, e, v, 0,\n"
+"                              __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+        , self->out);
+    }
 
     if (self->emit_struct_fwd() != 0) return -1;
     if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
@@ -2314,6 +2376,62 @@ impl EmitOps for Emitter {
         self->gprefix = self->sym->ns;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
             if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+        if (self->sym->atomic_used) {
+        fputs(
+"static inline int __ct_atomic_load_int(_Atomic(int) *p)\n"
+"{\n"
+"    return __atomic_load_n((int *)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_int(_Atomic(int) *p, int v)\n"
+"{\n"
+"    __atomic_store_n((int *)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_int(_Atomic(int) *p, int *e, int v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((int *)p, e, v, 0,\n"
+"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline long __ct_atomic_load_long(_Atomic(long) *p)\n"
+"{\n"
+"    return __atomic_load_n((long *)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_long(_Atomic(long) *p, long v)\n"
+"{\n"
+"    __atomic_store_n((long *)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_long(_Atomic(long) *p, long *e, long v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((long *)p, e, v, 0,\n"
+"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_load_bool(_Atomic(_Bool) *p)\n"
+"{\n"
+"    return __atomic_load_n((_Bool *)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_bool(_Atomic(_Bool) *p, _Bool v)\n"
+"{\n"
+"    __atomic_store_n((_Bool *)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_bool(_Atomic(_Bool) *p, _Bool *e, _Bool v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((_Bool *)p, e, v, 0,\n"
+"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void *__ct_atomic_load_ptr(_Atomic(void *) *p)\n"
+"{\n"
+"    return __atomic_load_n((void **)p, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline void __ct_atomic_store_ptr(_Atomic(void *) *p, void *v)\n"
+"{\n"
+"    __atomic_store_n((void **)p, v, __ATOMIC_SEQ_CST);\n"
+"}\n"
+"static inline _Bool __ct_atomic_cas_ptr(_Atomic(void *) *p, void **e, void *v)\n"
+"{\n"
+"    return __atomic_compare_exchange_n((void **)p, e, v, 0,\n"
+"                              __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
+"}\n"
+        , self->out);
+    }
 
         if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_decls() != 0) return -1;

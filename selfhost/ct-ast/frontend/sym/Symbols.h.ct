@@ -455,6 +455,9 @@ pub struct Symbols {
        into __DATA. Their caps stay literal, mirroring the MAX_* values above. */
     struct Fn   *funcs;
     int  nfunc;
+    /* Phase 41: any ct_atomic_* builtin was lowered in this program, so the
+       emitter must write the static inline helper block into each .c. */
+    int  atomic_used;
     /* P36 S4a2: functions registered by the built-in layer before the user
        program starts. `MAX_FUNCS` bounds the user's budget, so the check is
        `nfunc >= nfunc_base + MAX_FUNCS`; the table itself is allocated with

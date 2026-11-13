@@ -5208,6 +5208,159 @@ impl ExprOps for Expr {
                 }
                 args = self->parse_args();
                 if (args < 0) return -1;
+                {
+                    const char *an = self->arena->nodes[n].text2;
+                    if (strcmp(an, "ct_atomic_load") == 0
+                        || strcmp(an, "ct_atomic_store") == 0
+                        || strcmp(an, "ct_atomic_cas") == 0) {
+                        const char *aop;
+                        const char *asuf;
+                        char t[MAX_TEXT], base[MAX_TEXT], helper[MAX_TEXT];
+                        char *ap, *aq;
+                        size_t alen;
+                        int a1, a2, a3, got;
+                        static const char *at_ints[] = {
+                            "char", "signed char", "unsigned char", "short",
+                            "unsigned short", "int", "unsigned", "long",
+                            "unsigned long", "long long", "unsigned long long",
+                            "_Bool", NULL
+                        };
+                        got = arg_count(self->arena, args);
+                        a1 = args;
+                        a2 = a1 >= 0 ? self->arena->nodes[a1].next : -1;
+                        a3 = a2 >= 0 ? self->arena->nodes[a2].next : -1;
+                        if (strcmp(an, "ct_atomic_load") == 0) {
+                            if (got != 1)
+                                return tool::diag::ct_sem_error(id_line, id_col,
+                                    "ct_atomic_load takes one argument", self->sup->mem->path);
+                            aop = "load";
+                        } else if (strcmp(an, "ct_atomic_store") == 0) {
+                            if (got != 2)
+                                return tool::diag::ct_sem_error(id_line, id_col,
+                                    "ct_atomic_store takes two arguments", self->sup->mem->path);
+                            aop = "store";
+                        } else {
+                            if (got != 3)
+                                return tool::diag::ct_sem_error(id_line, id_col,
+                                    "ct_atomic_cas takes three arguments", self->sup->mem->path);
+                            aop = "cas";
+                        }
+                        t[0] = 0;
+                        if (!self->sup->expr_type(a1, t, sizeof t)) {
+                            if (self->arena->nodes[a1].kind == N_ADDR) {
+                                int ain = self->arena->nodes[a1].a;
+                                char vt[MAX_TEXT];
+                                if (!self->sup->expr_type(ain, vt, sizeof vt)
+                                    && self->arena->nodes[ain].kind == N_VAR
+                                    && self->sym->var_type(self->arena->nodes[ain].text2,
+                                                           vt, sizeof vt) == 0)
+                                    snprintf(t, sizeof t, "%s *", vt);
+                                else if (vt[0])
+                                    snprintf(t, sizeof t, "%s *", vt);
+                            } else if (self->arena->nodes[a1].kind == N_VAR) {
+                                self->sym->var_type(self->arena->nodes[a1].text2,
+                                                    t, sizeof t);
+                            }
+                        }
+                        ap = strstr(t, "_Atomic(");
+                        if (!ap)
+                            return tool::diag::ct_sem_error(id_line, id_col,
+                                "the first argument of 'ct_atomic_load' must be the address of an atomic variable",
+                                self->sup->mem->path);
+                        ap += 8;
+                        aq = strchr(ap, ')');
+                        if (!aq || (alen = (size_t)(aq - ap)) == 0
+                            || alen >= sizeof base)
+                            return tool::diag::ct_sem_error(id_line, id_col,
+                                "the first argument of 'ct_atomic_load' must be the address of an atomic variable",
+                                self->sup->mem->path);
+                        memcpy(base, ap, alen);
+                        base[alen] = 0;
+                        for (aq++; *aq == ' '; aq++)
+                            ;
+                        if (*aq != '*')
+                            return tool::diag::ct_sem_error(id_line, id_col,
+                                "the first argument of 'ct_atomic_load' must be the address of an atomic variable",
+                                self->sup->mem->path);
+                        if (strcmp(base, "int") == 0) asuf = "int";
+                        else if (strcmp(base, "long") == 0) asuf = "long";
+                        else if (strcmp(base, "_Bool") == 0) asuf = "bool";
+                        else if (strcmp(base, "void *") == 0) asuf = "ptr";
+                        else
+                            return tool::diag::ct_sem_error(id_line, id_col,
+                                "the first argument of 'ct_atomic_load' must be the address of an atomic variable",
+                                self->sup->mem->path);
+                        if (strcmp(aop, "store") == 0 || strcmp(aop, "cas") == 0) {
+                            int valarg = (strcmp(aop, "store") == 0) ? a2 : a3;
+                            char vt[MAX_TEXT];
+                            int ok = 0, vi;
+                            vt[0] = 0;
+                            if (!self->sup->expr_type(valarg, vt, sizeof vt)) {
+                                int vk = self->arena->nodes[valarg].kind;
+                                if (vk == N_NUM) {
+                                    const char *s = self->arena->nodes[valarg].text;
+                                    snprintf(vt, sizeof vt, "%s",
+                                             strcmp(s, "L") == 0 ? "long"
+                                             : strcmp(s, "U") == 0 ? "unsigned" : "int");
+                                } else if (vk == N_FNUM) {
+                                    snprintf(vt, sizeof vt, "double");
+                                } else if (vk == N_ADDR
+                                           && self->arena->nodes[self->arena->nodes[valarg].a].kind == N_VAR) {
+                                    char it[MAX_TEXT];
+                                    if (self->sym->var_type(self->arena->nodes[self->arena->nodes[valarg].a].text2,
+                                                            it, sizeof it) == 0)
+                                        snprintf(vt, sizeof vt, "%s *", it);
+                                }
+                            }
+                            if (vt[0]) {
+                                ok = strcmp(vt, base) == 0;
+                                if (!ok && strcmp(base, "void *") == 0 && strchr(vt, '*')) ok = 1;
+                                if (!ok && (strcmp(base, "int") == 0
+                                            || strcmp(base, "long") == 0
+                                            || strcmp(base, "_Bool") == 0))
+                                    for (vi = 0; at_ints[vi]; vi++)
+                                        if (strcmp(vt, at_ints[vi]) == 0) { ok = 1; break; }
+                            } else ok = 1;
+                            if (!ok)
+                                return tool::diag::ct_sem_error(id_line, id_col,
+                                    "atomic value type mismatch", self->sup->mem->path);
+                        }
+                        if (strcmp(aop, "cas") == 0) {
+                            char et[MAX_TEXT];
+                            int has_ptr = 0;
+                            size_t bl;
+                            et[0] = 0;
+                            if (!self->sup->expr_type(a2, et, sizeof et)
+                                && self->arena->nodes[a2].kind == N_ADDR
+                                && self->arena->nodes[self->arena->nodes[a2].a].kind == N_VAR) {
+                                char it[MAX_TEXT];
+                                if (self->sym->var_type(self->arena->nodes[self->arena->nodes[a2].a].text2,
+                                                        it, sizeof it) == 0)
+                                    snprintf(et, sizeof et, "%s *", it);
+                            }
+                            if (et[0]) {
+                                bl = strlen(base);
+                                has_ptr = strcmp(et, base) != 0
+                                          && strncmp(et, base, bl) == 0
+                                          && (et[bl] == ' ' || et[bl] == '*')
+                                          && strchr(et, '*') != 0;
+                            }
+                            if (!has_ptr)
+                                return tool::diag::ct_sem_error(id_line, id_col,
+                                    "pass &expected: a CAS needs the address of 'expected' to write the observed value back",
+                                    self->sup->mem->path);
+                        }
+                        snprintf(helper, sizeof helper, "__ct_atomic_%s_%s", aop, asuf);
+                        self->arena->nodes[n].kind = N_CALL;
+                        self->arena->nodes[n].a = args;
+                        self->arena->nodes[n].b = -1;
+                        self->arena->nodes[n].aux = 0;
+                        self->arena->nodes[n].text3[0] = 0;
+                        snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", helper);
+                        self->sym->atomic_used = 1;
+                        return n;
+                    }
+                }
                 self->sym->errmsg[0] = 0;
                 if (qc[0]) fi = self->sym->find_func(qc);
                 else fi = self->sym->resolve_func(self->arena->nodes[n].text2);

@@ -1,1 +1,1 @@
---std=c11 prog.ct -o prog.c
+--std=c17 prog.ct -o prog.c

@@ -4540,13 +4540,13 @@ if "$work/ct-ast" build --emit-c --std=gnu99 test/ast/11_map/prog.ct -o "$work/c
 else
     bad "build --std=gnu99" "$(cat "$work/cli-b.err") $(cat "$work/cli-b.out")"
 fi
-if "$work/ct-ast" --std=c11 test/ast/02_expr/prog.ct -o "$work/cli-std.c" \
+if "$work/ct-ast" --std=c17 test/ast/02_expr/prog.ct -o "$work/cli-std.c" \
         >"$work/cli-std.out" 2>"$work/cli-std.err"; then
-    bad "--std=c11" "expected a non-zero exit"
+    bad "--std=c17" "expected a non-zero exit"
 elif grep -q "unknown C standard" "$work/cli-std.err"; then
-    ok "--std=c11 is rejected"
+    ok "--std=c17 is rejected"
 else
-    bad "--std=c11" "wrong diagnostic: $(cat "$work/cli-std.err")"
+    bad "--std=c17" "wrong diagnostic: $(cat "$work/cli-std.err")"
 fi
 
 echo
@@ -4777,13 +4777,13 @@ elif grep -q -- "-I needs an argument" "$work/cli-bia.err"; then
 else
     bad "build: -I needs an argument" "wrong diagnostic: $(cat "$work/cli-bia.err")"
 fi
-if "$work/ct-ast" build --emit-c --std=c11 test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
+if "$work/ct-ast" build --emit-c --std=c17 test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
         >"$work/cli-bstd.out" 2>"$work/cli-bstd.err"; then
-    bad "build: --std=c11" "expected a non-zero exit"
-elif grep -q "unknown C standard 'c11'" "$work/cli-bstd.err"; then
+    bad "build: --std=c17" "expected a non-zero exit"
+elif grep -q "unknown C standard 'c17'" "$work/cli-bstd.err"; then
     ok "build: an unknown --std is rejected"
 else
-    bad "build: --std=c11" "wrong diagnostic: $(cat "$work/cli-bstd.err")"
+    bad "build: --std=c17" "wrong diagnostic: $(cat "$work/cli-bstd.err")"
 fi
 if "$work/ct-ast" build --emit-c --bogus test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
         >"$work/cli-bu.out" 2>"$work/cli-bu.err"; then

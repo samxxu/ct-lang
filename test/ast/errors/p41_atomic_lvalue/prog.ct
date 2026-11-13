@@ -1,0 +1,5 @@
+int main(void)
+{
+    int plain = 0;
+    return ct_atomic_load(&plain);
+}

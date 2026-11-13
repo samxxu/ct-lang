@@ -1,0 +1,13 @@
+#include <stdio.h>
+int main(void)
+{
+    atomic int x = 0;
+    int expected = 1;
+    int ok, bad;
+    ct_atomic_store(&x, 1);
+    ok = ct_atomic_cas(&x, &expected, 2);
+    expected = 0;
+    bad = ct_atomic_cas(&x, &expected, 3);
+    printf("%d %d %d %d %d\n", ok, bad, expected, ct_atomic_load(&x), x);
+    return 0;
+}
