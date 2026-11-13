@@ -1,5 +1,5 @@
 {
-  "compiler": "ct v0.35.0",
+  "compiler": "ct v0.36.0",
   "file": "prog.ct",
   "traits": [{"name":"hal_Writer","cname":"hal_Writer","file":"prog.ct","line":9,"methods":[{"name":"write","ret":"int","params":2}]}],
   "structs": [],

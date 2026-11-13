@@ -5,7 +5,7 @@
 | 模块 | docs / lang |
 | 严重度 | Low（纯文档措辞；实现正确） |
 | 锚点 | `v0.26.4`（Phase 24 实现，未 bump） |
-| 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#L1847-L1848)、[language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868)、[language-spec.md:4248](../../docs/language-spec.md#L4248)、[phase24.md:145-160](../../docs/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
+| 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#L1847-L1848)、[language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868)、[language-spec.md:4248](../../docs/language-spec.md#L4248)、[phase24.md:145-160](../../docs/history/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
 | 状态 | **open**（待改叙述；不改实现、不改诊断文案） |
 
 ## 触发场景
@@ -34,7 +34,7 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
 - [language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868) 与英文段
   [language-spec.md:4248](../../docs/language-spec.md#L4248) 的诊断文案
   `the range index '$' is not a variable` 把 `$` 命名为 index；
-- [phase24.md:160](../../docs/design/phase24.md#L160) 写「每个 `$` 都是同一个当前下标」；
+- [phase24.md:160](../../docs/history/design/phase24.md#L160) 写「每个 `$` 都是同一个当前下标」；
 - 发射器注释 [Emitter.h.ct:2020](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2020) 写 current index。
 
 正确表述应是：**`$` = 当前成员（当前语境的自身）**。在 `a..b(expr)` 中，成员是序列
@@ -58,7 +58,7 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
    在 spec 中注明它是历史措辞，`$` 并非标识符；
 4. [glossary.md](../../docs/glossary.md) 增加 `$` 条目：当前语境的自身／当前成员，
    并列出绑定语境（range 初值；将来的接收者语境块）与能力差异（range 中只读）；
-5. [phase24.md:160](../../docs/design/phase24.md#L160) 与发射器注释的「current index」
+5. [phase24.md:160](../../docs/history/design/phase24.md#L160) 与发射器注释的「current index」
    改为「current member」（注释改动可随下次实现提交，不单独立项）。
 
 ## 处置

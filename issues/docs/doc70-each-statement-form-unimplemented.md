@@ -5,7 +5,7 @@
 | 模块 | docs / lang |
 | 严重度 | Low（需求登记；现有库层 `each` 已可用，缺的是另一套形态） |
 | 锚点 | `v0.26.4`（Phase 27 实现，未 bump） |
-| 文件 | [phase24.md:45](../../docs/design/phase24.md#L45)、[phase24.md:462](../../docs/design/phase24.md#L462)、[phase25.md:63](../../docs/design/phase25.md#L63)、[phase25.md:283](../../docs/design/phase25.md#L283)、[phase27.md](../../docs/design/phase27.md) |
+| 文件 | [phase24.md:45](../../docs/history/design/phase24.md#L45)、[phase24.md:462](../../docs/history/design/phase24.md#L462)、[phase25.md:63](../../docs/design/phase25.md#L63)、[phase25.md:283](../../docs/design/phase25.md#L283)、[phase27.md](../../docs/design/phase27.md) |
 | 状态 | **closed**（Phase 27 在 ct-ast 落地数组形态；容器协议经 D27-4 延后） |
 
 > **命名现状（2026-11-10 用户确认）**：语句级迭代形态一律写 **`foreach (map) { … item … }`**；
@@ -42,9 +42,9 @@ each (map) {
 
 ## 设计侧原文
 
-- [phase24.md:45](../../docs/design/phase24.md#L45)：`each (nums) { … item … }` 语句形态「需要隐式名字与块参数，
+- [phase24.md:45](../../docs/history/design/phase24.md#L45)：`each (nums) { … item … }` 语句形态「需要隐式名字与块参数，
   属语言级语法糖；SHIM / 宏做不到。**方法形态 `a.each(n, closure)` 已由 Phase 25 落地**」。
-- [phase24.md:462](../../docs/design/phase24.md#L462)：「仍不做、不排期」。
+- [phase24.md:462](../../docs/history/design/phase24.md#L462)：「仍不做、不排期」。
 - [phase25.md:63](../../docs/design/phase25.md#L63)：「需要隐式名字、块参数与 `break`/`continue`，是语言级
   语法糖，未排期」。
 - [phase25.md:283](../../docs/design/phase25.md#L283)：D25-8「不做语句形态 `each (…) { … }`」。

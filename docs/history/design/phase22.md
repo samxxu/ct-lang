@@ -9,7 +9,7 @@
 > **版本口径：Phase 22 ↔ `v0.22.x`，收口 bump 到 `v0.22.0`。** 本文不写「当前版本」快照
 > （DOC-63：钉死的版本号会在下一次 bump 后过期）。
 > 前置：Phase 21 已收口；本相与 Phase 20 / 21 **无语义依赖**，仅共用 parser / emitter / diag 文件。
-> 关联：[phase21.md](../../design/phase21.md)、[phase23.md](phase23.md)、[roadmap.md](../../roadmap.md)、
+> 关联：[phase21.md](phase21.md)、[phase23.md](phase23.md)、[roadmap.md](../../roadmap.md)、
 > [language-spec.md](../../language-spec.md)。
 > 本相只新增一条语句级语法糖，**不改动现有语义、不新增运行时、不引入抽象类型**。
 
@@ -403,7 +403,7 @@ as-built：Phase 23 用逗号运算符定序（`i` 的单个初始化器），�
 8. `CTC_VERSION` 五处一致为 `0.22.0`；baseline 仅版本 token 变化。
 9. `docs/language-spec.md` / `docs/tutorial.md` 中英对称；`check-docs.py` OK。
 10. 编译器自身源码在 `v0.22.0` tag 前不使用 `loop`（自举纪律）；tag 后可选。
-11. `docs/design/phase21.md` 未被本相修改；`docs/design/phase23.md` 的双界设计未被本相预占。
+11. `docs/history/design/phase21.md` 未被本相修改；`docs/design/phase23.md` 的双界设计未被本相预占。
 
 ---
 

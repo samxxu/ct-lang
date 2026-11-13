@@ -9,9 +9,9 @@
 > **主题来源**：用户 2026-11-10「完善泛型，主要目标是让泛型能支持 Trait」；[phase26.md:39-51](phase26.md#L39-L51)
 > 把「泛型 trait / `impl` 方法 / 类型参数约束」一并列为非目标，本相收回其中**约束与派发**两项。
 > **路线位置**：Phase 28 约束泛型 → Phase 29 泛型 struct + 内置 `Vec`/`Map`（含 `foreach` 容器协议）。
-> `Callable` 内建按用户取舍**延后**，见 [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10)。
+> `Callable` 内建按用户取舍**延后**，见 [phase21.md §4.12](../history/design/phase21.md#callable-内建的延后记录2026-11-10)。
 > 关联：[phase26.md](phase26.md)（泛型函数）、[phase25.md](phase25.md)（静态映射与闭包实参）、
-> [phase21.md](phase21.md)（非逃逸闭包）、[phase27.md](phase27.md)（`foreach`，已完成）、
+> [phase21.md](../history/design/phase21.md)（非逃逸闭包）、[phase27.md](phase27.md)（`foreach`，已完成）、
 > [language-spec.md](../language-spec.md)、[AGENTS.md](../../AGENTS.md)。
 
 ---
@@ -74,7 +74,7 @@
 | 泛型 struct / union / enum（`Box<T>`） | 本相不做；**泛型 struct 已排期到 Phase 29 并对用户开放**（`struct Stack<T>` 可写），union/enum 仍不做（D26-2 在 29 被部分取代，见 [phase29.md §5](phase29.md#5-取代台账可审计不静默改写)） |
 | 多类型参数、类型推导、默认类型参数 | 沿用 D26-2/D26-3；29 只把 **struct** 放宽到 2 个参数，函数仍单参数 |
 | 内置 `Vec` / `Map` / 容器协议 | 由 Phase 29 交付；本相不定义容器、不改 `foreach` |
-| 可存储闭包 / 内置 `Callable` | 用户 2026-11-10 取舍**延后**；本相与 29 都不推翻 D21-5 / D21-7 / D21-13，见 [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10) |
+| 可存储闭包 / 内置 `Callable` | 用户 2026-11-10 取舍**延后**；本相与 29 都不推翻 D21-5 / D21-7 / D21-13，见 [phase21.md §4.12](../history/design/phase21.md#callable-内建的延后记录2026-11-10) |
 | 多约束（`T: A + B`）、约束继承（`trait Ord: Eq`） | 组合爆炸与解析歧义；先让单约束端到端可证 |
 | `Self` 类型 / trait 方法签名里出现类型参数 | vtable 类型在 trait 维度共享，`Self` 会迫使 vtable 按 (trait, struct) 分裂，等同参数化 trait |
 | 把 `T` 装箱进接口（`Trait i = x;`）、`T` 作接口字段/数组元素 | 装箱要 vptr 初始化与布局约定；本相只做静态派发 |

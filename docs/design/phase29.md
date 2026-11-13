@@ -24,7 +24,7 @@
 > **主题来源**：用户 2026-11-10「`Vec` 和 `Map` 应该作为内置的数据结构，从 ct-pkg 的 `std` 移到
 > 内置类型」「`foreach_statement.ct` 没有把 map 纳入进来」；同日的取舍「`Callable` 内建先不做」。
 > 关联：[phase28.md](phase28.md)（约束泛型函数）、[phase26.md](phase26.md)（泛型函数）、
-> [phase27.md](phase27.md)（`foreach` 语句形态与 D27-4）、[phase21.md](phase21.md)（闭包与
+> [phase27.md](phase27.md)（`foreach` 语句形态与 D27-4）、[phase21.md](../history/design/phase21.md)（闭包与
 > `Callable` 延后记录）、[map-options.md](map-options.md)（既有容器选型）、
 > [language-spec.md](../language-spec.md)、[AGENTS.md](../../AGENTS.md)。
 
@@ -103,7 +103,7 @@
 | 泛型 trait、参数化 trait（`trait Seq<T>`） | 要改已发布 vtable 命名与 vptr 布局，Phase 28 §4.2 已论证单相收不了 |
 | 泛型体内的泛型调用（函数调函数） | 沿用 D26-9；本相只允许**类型实参**嵌套，不允许实例化递归 |
 | 用户自定义可迭代类型 | `foreach` 协议只认内置 `Vec` / `Map`；结构性协议会误伤同名 `len/get`，放行需另立判据 |
-| 闭包逃逸、堆闭包、内置 `Callable` | `Callable` 已按用户 2026-11-10 取舍延后（见 [phase21.md](phase21.md#callable-内建的延后记录2026-11-10)）；本相不推翻 D21-5 / D21-13 |
+| 闭包逃逸、堆闭包、内置 `Callable` | `Callable` 已按用户 2026-11-10 取舍延后（见 [phase21.md](../history/design/phase21.md#callable-内建的延后记录2026-11-10)）；本相不推翻 D21-5 / D21-13 |
 | 容器自动析构（`Drop` 级联释放元素） | 需要泛型 `Drop` 合成与元素级 drop 钩子；先用手动 `release()` 把语义钉住 |
 | 容器持有 `own` / `borrow` 值 | 所有权移交与容器共享冲突；本相硬错，等自动析构落地再放开 |
 | 容器元素为接口值 / 含 vptr 的 struct | 值拷贝会丢 vptr 或制造悬垂，沿用 Phase 27 L27-4 的同类判断 |
@@ -459,7 +459,7 @@ Phase 29 拖进 Phase 28 §4.2 的 750–1350 行路线。白名单在 `parse_in
 - `Vec<Callable<...>>` 这类形态在本相**无法表达**（`Callable` 不存在）；容器元素也禁止内置容器，
   所以不会出现「容器持有闭包环境」的悬垂面。
 - 若未来重启 `Callable` 内建，前置条件是先接受逃逸/堆闭包；届时再评估容器元素与自动析构的联动，
-  见 [phase21.md 的延后记录](phase21.md#callable-内建的延后记录2026-11-10)。
+  见 [phase21.md 的延后记录](../history/design/phase21.md#callable-内建的延后记录2026-11-10)。
 
 ### 2.9 Phase 29 收口后的能力边界（写死，不留「待定」）
 
@@ -825,7 +825,7 @@ Phase 28 收口提交 `1c87fab733e0a02955bfcdeff668d10aec2017f3`。复现方式�
 ## 9. 本轮不做（自查）
 
 - 未创建 `phase30.md`；`Callable` 内建按用户 2026-11-10 取舍**延后**，记录在
-  [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10)，不保留空壳立项卡。
+  [phase21.md §4.12](../history/design/phase21.md#callable-内建的延后记录2026-11-10)，不保留空壳立项卡。
 - 未修改任何编译器源码、`lib/**`、测试、golden、版本串；未改 `docs/design/phase27.md` 的已收口内容。
 - 未 bump、未打 tag、未修改 `ct-pkg`。
 - 归档按实际 `check-docs.py` 规则执行：只 `git mv` `phase17.md`（`floor = 18`），`phase18.md` 保留。

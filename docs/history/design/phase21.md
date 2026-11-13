@@ -8,8 +8,8 @@
 > D21-8 并入 D21-3、D21-17 并入 D21-14；**D21-1–D21-17 全部有结论，无待确认**）。
 > **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.3`（`CTC_VERSION` 五处一致）。
 > 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无语义依赖）。
-> 关联：[borrow 设计](../history/design/borrow.md)、[language-spec](../language-spec.md)、
-> [std 能力缺口](../../issues/std/std1-markdown-readiness.md)、[roadmap](../roadmap.md)。
+> 关联：[borrow 设计](borrow.md)、[language-spec](../../language-spec.md)、
+> [std 能力缺口](../../../issues/std/std1-markdown-readiness.md)、[roadmap](../../roadmap.md)。
 
 ---
 
@@ -34,9 +34,9 @@ D17-1 已按此恢复编号）。据此：
 
 | Phase | 设计文档 | 状态 | 版本 |
 | --- | --- | --- | --- |
-| 17 | [phase17.md](../history/design/phase17.md) | ✅ 完成 | `v0.17.0` |
-| 18 | [phase18.md](../history/design/phase18.md) | ✅ 完成 | `v0.18.0` |
-| 19 | [phase19.md](../history/design/phase19.md) | ✅ 完成 | `v0.19.0`；其后 `v0.19.1` 为修复补丁 |
+| 17 | [phase17.md](phase17.md) | ✅ 完成 | `v0.17.0` |
+| 18 | [phase18.md](phase18.md) | ✅ 完成 | `v0.18.0` |
+| 19 | [phase19.md](phase19.md) | ✅ 完成 | `v0.19.0`；其后 `v0.19.1` 为修复补丁 |
 | 20 | [phase20.md](phase20.md) | ✅ 完成 | `v0.20.0`（包支持；P20-05 移出、P20-07 延后，与本相无依赖） |
 | 21 | 本文件 | ⬜ 规划中 | 收口 `v0.21.0`，阶段内 patch 位可用 |
 
@@ -63,7 +63,7 @@ D17-1 已按此恢复编号）。据此：
   不引入隐藏 `malloc` / 引用计数。
 - 逃逸判定与 `borrow` 共用同一套「更长寿命」判断；撞墙时**硬报错**并给出指向显式 `Callable` 的 hint。
 - 档③（通用逃逸闭包）**不做**：不是做不到，而是能力已在档①、缺的只是语法糖；按引用捕获需要生命周期，
-  本阶段不付这个价（见[评审](closure-proposal-review.md) §1.1）。`1.0.0` 前不引入泛型。
+  本阶段不付这个价（见[评审](../../design/closure-proposal-review.md) §1.1）。`1.0.0` 前不引入泛型。
 
 #### 非目标
 
@@ -90,7 +90,7 @@ D17-1 已按此恢复编号）。据此：
 | 4 | 官方 `Callable` | 全仓 **0 命中**；`Callable` 不存在，属绿地 | 提案 §9 不是「官方化」，是新建 |
 | 5 | 方言生成可作档①通路 | 编译器对 DSL **零感知**；方言只允许是 `examples/` 与 `test/ct-dialects/` 下的仓库外展开器（Phase 6.6 / D20） | 提案 §1 把「方言生成」列为档①基础机制 **不成立** |
 | 6 | `=>` 未被占用 | **确认**：398 个 `.ct` + 135 个 `.c/.h` 中 0 处；`ct-pkg` 55 个 `.ct` 中 0 处（详见 §8） | **成立** |
-| 7 | borrow 阶段一待做、建议与档②合并 | **已实现**：`borrow` 参数注解 + 变量声明 + 出口 `handback`（v0.16.0），SH-33/35/36/37/39/40/41 已修；探针 `test/ast/61_autodrop_return`、`62_borrow_handback`；[borrow.md](../history/design/borrow.md) §12 记录实现差异 | **前提已消失**，见 §3.2 |
+| 7 | borrow 阶段一待做、建议与档②合并 | **已实现**：`borrow` 参数注解 + 变量声明 + 出口 `handback`（v0.16.0），SH-33/35/36/37/39/40/41 已修；探针 `test/ast/61_autodrop_return`、`62_borrow_handback`；[borrow.md](borrow.md) §12 记录实现差异 | **前提已消失**，见 §3.2 |
 | 8 | 提案要求「错误码」 | CT **没有错误码体系**。硬错误统一走 `ct_sem_error(line, col, msg, path)` → `path:line:col: error: msg`；只有警告有 `Warn.kind` 分桶（0–6） | 需要换一种可钉住的契约（§4.6） |
 | 9 | 局部函数指针初始化式是否可用（原 R1） | **可用**：`Stmt.h.ct` 的声明路径对含 `(*` 的类型置 `fnval_ok`，`int (*p)(int) = strcmp;` 已被接受并发射 | **风险已消解**（§4.1 / §4.10） |
 
@@ -495,7 +495,7 @@ impl Callable1i for Adder { int call(int x) { … } }
 - 重启后的相位编号必须重新立项，**不沿用本轮曾讨论过的「Phase 30」编号**（该编号未登记、未建卡）。
 
 **与 D21-7 的关系**：D21-7「`Callable` 按签名一族、不内建」**继续有效**；本记录只说明未来可能重启，
-不构成取代。Phase 29 的 `Vec` / `Map` 也不得依赖 `Callable`（见 [phase29.md §2.8](phase29.md#28-与闭包--callable-的边界)）。
+不构成取代。Phase 29 的 `Vec` / `Map` 也不得依赖 `Callable`（见 [phase29.md §2.8](../../design/phase29.md#28-与闭包--callable-的边界)）。
 
 ---
 

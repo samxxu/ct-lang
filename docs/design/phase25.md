@@ -5,8 +5,8 @@
 > **状态：完成**（2026-11-09 收口，`v0.25.0`）。D25-1–D25-11 已定稿；§1–§9 是 as-planned 记录，
 > §10–§13 是 as-built 记录。25.1、25.2、25.4 与收口 25.5 已落地（25.3 的 `emit_closure_arg` 拆分
 > 并入 25.2），改动留在工作区，未提交。
-> 关联：[phase24.md](phase24.md)（数组 range 初值，本相前置但不依赖）、
-> [phase21.md](phase21.md)（非逃逸栈闭包）、
+> 关联：[phase24.md](../history/design/phase24.md)（数组 range 初值，本相前置但不依赖）、
+> [phase21.md](../history/design/phase21.md)（非逃逸栈闭包）、
 > [batch38-map-unit/spec.md](../history/design/batch38-map-unit/spec.md)（`.m.ct` 静态映射）、
 > [batch39-shim-layer/spec.md](../history/design/batch39-shim-layer/spec.md)（shim 层）、
 > [closure-conventions.md](../closure-conventions.md)、[roadmap.md](../roadmap.md)。

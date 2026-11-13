@@ -53,7 +53,7 @@
 
 **证据**：
 
-- [Parser.h.ct](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L789-L796) 的循环跑到 `T_EOF`，
+- [Parser.h.ct](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L789-L796) 的循环跑到 `T_EOF`，
   每遇到 `T_PP` 就检查 `unit_is_map`；白名单只有 `#include` / `#define`，其余直接
   `a .m.ct unit allows only #include and #define in its prologue`。因此 `.m.ct` 正文里写
   `#ct-raw` 同样被拒，报文说「prologue」但判定不限于前导区。
@@ -84,7 +84,7 @@
 - 探针：`a/A.m.ct` 与 `b/B.m.ct` 各写 `map trait ... for type char * { len() -> ...; }`，
   两个包一起构建**不报错**；消费方写 `s.len()` 才得到
   `ambiguous type-host map for method 'len' on type 'char *': './a/A.m.ct' and './b/B.m.ct'`。
-- [Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2765-L2771)：歧义在方法调用解析时产生，
+- [Emitter.h.ct](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2765-L2771)：歧义在方法调用解析时产生，
   报文已经带两个候选的路径。
 - 全仓无 re-export 机制（0 处）。
 
@@ -133,7 +133,7 @@ pub int add(int a, int b) { return a + b; }
 
 **证据**：
 
-- [Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct#L1055-L1098) 的 `cc` 行现在包含
+- [Module.h.ct](../../../selfhost/ct-ast/frontend/module/Module.h.ct#L1055-L1098) 的 `cc` 行现在包含
   `-I <outdir>`，注释写明它是 shim 包含生成类型头的根；打印给用户的命令也一致。
 - 该修复来自提交 `915c12c`（尚未打 tag，见 §6）。
 
@@ -155,7 +155,7 @@ pub int add(int a, int b) { return a + b; }
 
 **证据**：
 
-- [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1562-L1586)：arity 检查只在
+- [Expr.h.ct](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1562-L1586)：arity 检查只在
   `!traits[t].is_static` 时执行；`.m.ct` 的静态 trait 被显式豁免。
 - `issues/selfhost/sh56-map-method-arity-unchecked.md` 记录复现，状态「待修」。
 
@@ -175,7 +175,7 @@ pub int add(int a, int b) { return a + b; }
 
 **证据**：
 
-- [Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct#L243-L266) 的 `scan_imports` 遇到首个
+- [Module.h.ct](../../../selfhost/ct-ast/frontend/module/Module.h.ct#L243-L266) 的 `scan_imports` 遇到首个
   非 `T_PP` / 非 `import` token 就 `break`；其后的 `import` 不会被记入依赖，于是依赖不加载、
   限定名无法解析。解析主循环虽然还会跳过 `import` 语句，但依赖已经缺了。
 - `issues/selfhost/sh57-import-after-decl-silently-dropped.md` 记录两个最小复现，状态「待修」。
@@ -201,7 +201,7 @@ CT 本可以直接发直接调用，但没有这样做。
 
 **证据**：
 
-- [Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2789-L2806)：`use` 派发固定发
+- [Emitter.h.ct](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2789-L2806)：`use` 派发固定发
   `->__<trait>_vptr->method(...)` 或 `.__<trait>_vptr->method(&...)`，不区分接收者是不是具体 struct。
 - std 的实测数据（直接调用 vs vtable）与用户观测一致。
 
@@ -226,10 +226,10 @@ CT 本可以直接发直接调用，但没有这样做。
 
 **证据**：
 
-- [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1561-L1583)：函数头注释写明
+- [Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1561-L1583)：函数头注释写明
   「a mismatch is a warning, never a blocker」，不满足时只打印
   `ctc: package '%s' requires '%s', but this is v%s` 并 `return 0`。
-- [package-guide.md](../package-guide.md) 同样写明「不满足只告警，不拒绝安装」。
+- [package-guide.md](../../package-guide.md) 同样写明「不满足只告警，不拒绝安装」。
 - `requires` 的语法只接受 `ct <比较符> <版本>`，不承载包依赖；包依赖是 `dep`。
 
 **处置**：**进 P0**（P20-04）：不满足改为硬失败，新增 `--force` 降级为警告；
@@ -274,7 +274,7 @@ CT 本可以直接发直接调用，但没有这样做。
 
 **证据**：
 
-- [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1290-L1291)：`printf(" -I vendor/%s", lname[i])`。
+- [Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1290-L1291)：`printf(" -I vendor/%s", lname[i])`。
 - 目录事实：`ct-pkg/std/std/...`、`zlib/zlib/...`、`sqlite/sqlite/...`、`clib/clib/...` 都是加倍层；
   `net-posix/net/net.m.ct` 的 `namespace` 是 `net`（与包名不同，绕开了）；
   `png/Png.m.ct` 放在包根（与其余包不一致）。
@@ -438,7 +438,7 @@ C 名**（探针里是 `p_add`），而 `.m.ct` 的 recipe 是**逐字发射的 
 
 - **现象**：两个 `-I` 根各有一个 `Uart.h.ct`，导入时按根顺序先命中先用，无任何提示；
   只有**同一根内**的 `.h.ct` / `.m.ct` 同名才被判为歧义。
-- **证据**：[Module.h.ct](../../selfhost/ct-ast/frontend/module/Module.h.ct#L271-L276) 的两遍解析与注释。
+- **证据**：[Module.h.ct](../../../selfhost/ct-ast/frontend/module/Module.h.ct#L271-L276) 的两遍解析与注释。
 - **处置**：并入 P20-06（跨根同名单元命中两个包 → 报错）。
 
 ### N2 · `requires` 不满足只告警

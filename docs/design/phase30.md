@@ -15,7 +15,7 @@
 > **主题来源**：需求侧在「现代化 OO 差距评估」之后提出的语法糖提案——
 > `AppConfig::instance() into { .host = "0.0.0.0"; … }`，块内省略接收者名字。
 > 关联：[language-spec.md](../language-spec.md) §4.47（`$` 的既有绑定）、
-> [phase24.md](phase24.md)（range 初值）、[phase25.md](phase25.md)（静态映射链）、
+> [phase24.md](../history/design/phase24.md)（range 初值）、[phase25.md](phase25.md)（静态映射链）、
 > [polymorphism.md](../polymorphism.md)（胖指针与派发边界）、[roadmap.md](../roadmap.md)。
 
 ---

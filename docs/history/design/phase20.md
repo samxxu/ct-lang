@@ -5,13 +5,13 @@
 > **状态：完成**（2026-11-07；P20-01 / 02 / 03 / 04 / 06 / 08 落地，收口 `v0.20.0`；
 > P20-05 只把 **ct-pkg 侧的索引生成器**移出本轮（ct 侧 `pkg_index_lookup` 仍是本仓欠账），
 > P20-07 延后）。
-> **版本口径：Phase 20 ↔ `v0.20.x`，收口于 `v0.20.0`；后续补丁见 [roadmap](../roadmap.md)。**
+> **版本口径：Phase 20 ↔ `v0.20.x`，收口于 `v0.20.0`；后续补丁见 [roadmap](../../roadmap.md)。**
 > 主题不是「补功能」，而是：**凡是「包本该能做好、却被编译器或工具链挡住」的地方，都归本相。**
-> 关联：[package-guide](../package-guide.md)、[roadmap](../roadmap.md)、
+> 关联：[package-guide](../../package-guide.md)、[roadmap](../../roadmap.md)、
 > [争议清单（评审用）](phase20-disputes.md)、
-> [SH-56](../../issues/selfhost/sh56-map-method-arity-unchecked.md)、
-> [SH-57](../../issues/selfhost/sh57-import-after-decl-silently-dropped.md)、
-> [SH-58](../../issues/selfhost/sh58-mct-prologue-raw-rejected.md)。
+> [SH-56](../../../issues/selfhost/sh56-map-method-arity-unchecked.md)、
+> [SH-57](../../../issues/selfhost/sh57-import-after-decl-silently-dropped.md)、
+> [SH-58](../../../issues/selfhost/sh58-mct-prologue-raw-rejected.md)。
 > Phase 21（闭包）不在本相，两者无依赖。
 
 ---
@@ -41,12 +41,12 @@
 
 | # | 现象 | v0.19.1 实测 | 判定 |
 | --- | --- | --- | --- |
-| A1 | `.m.ct` 前导区只允许 `#include` / `#define`，`#ct-raw` 硬报错 | **成立**。复现得到 `a .m.ct unit allows only #include and #define in its prologue`；[SH-58](../../issues/selfhost/sh58-mct-prologue-raw-rejected.md) 已登记，结论是「保持（有意限制）」 | **不进**（改文案 + 文档） |
+| A1 | `.m.ct` 前导区只允许 `#include` / `#define`，`#ct-raw` 硬报错 | **成立**。复现得到 `a .m.ct unit allows only #include and #define in its prologue`；[SH-58](../../../issues/selfhost/sh58-mct-prologue-raw-rejected.md) 已登记，结论是「保持（有意限制）」 | **不进**（改文案 + 文档） |
 | A2 | 同名方法在同一类型宿主上 `ambiguous type-host map`，且无 re-export | **成立，且是硬阻塞**。两个包各给 `char *` 加 `len`，消费方调用报 `ambiguous type-host map for method 'len' on type 'char *': './a/A.m.ct' and './b/B.m.ct'`（`Emitter.h.ct:2767`）；全仓 0 处 re-export | **进 P0** |
 | A3 | `.h.ct` 不能出口 `pub fn` | **不成立**。探针：`p/foo.h.ct` 里写普通函数定义，生成的 `foo.h` 有原型、`foo.c` 有定义，消费方编译运行通过 | **不进**（纯 std 约定；改文档） |
 | B4 | `cc` 行缺 `-I <outdir>` | **已修**。`Module.h.ct:1069` 已发 `-I <outdir>`，注释说明它是 shim 包含生成类型头的根；来自提交 `915c12c` | **不进**（加回归探针） |
-| B5 | 映射方法不校验实参个数（SH-56） | **成立**。[SH-56](../../issues/selfhost/sh56-map-method-arity-unchecked.md) 待修；`Expr.h.ct:1562-1586` 明确豁免了静态映射 | **进 P0** |
-| B6 | 声明后的 `import` 静默丢弃（SH-57） | **成立**。[SH-57](../../issues/selfhost/sh57-import-after-decl-silently-dropped.md) 待修；`Module.h.ct:239-266` 遇到首个非预处理/非 import token 就停 | **进 P0** |
+| B5 | 映射方法不校验实参个数（SH-56） | **成立**。[SH-56](../../../issues/selfhost/sh56-map-method-arity-unchecked.md) 待修；`Expr.h.ct:1562-1586` 明确豁免了静态映射 | **进 P0** |
+| B6 | 声明后的 `import` 静默丢弃（SH-57） | **成立**。[SH-57](../../../issues/selfhost/sh57-import-after-decl-silently-dropped.md) 待修；`Module.h.ct:239-266` 遇到首个非预处理/非 import token 就停 | **进 P0** |
 | B7 | `use` 结构体方法永远走 vtable | **成立**。`Emitter.h.ct:2789-2800`：具体 struct 接收者仍发 `->__<trait>_vptr->method(...)`，无静态类型快路径 | **延后**（原 P2，接受 golden 重生成） |
 | C8 | `requires` 与 `dep` 两套语义易混 | **半成立**。写错 `requires` 会报 `has an unsupported requires`，不是全静默；但 `requires` 不满足**只告警**（`Pkg.h.ct:1562`，package-guide 也写明「不满足只告警」） | **进 P0**（改为硬失败）；文案并入 P2 |
 | C9 | 索引只收录每个仓库最高 tag | **成立**。`ct-pkg/index/tools/refresh-index.sh` 用 `sort -V \| tail -1`，每包只写一行；`ct-pkg/index/index` 即此形态 | **ct-pkg 侧生成器移出本轮**（原 P1；ct 侧 `pkg_index_lookup` 仍欠） |
