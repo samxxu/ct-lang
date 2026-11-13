@@ -109,8 +109,6 @@ pub trait StmtOps {
     int  defer_ahead(void);
     int  defer_add(int node);
     int  defer_active_depth(void);
-    int  defer_top_id(void);
-    int  defer_block_id(void);
     int  defer_mark_block(void);
     int  defer_run_node(int body, int line);
     int  defer_prepend(int node, int base);
@@ -203,12 +201,12 @@ pub struct Stmt {
     int  defer_cont_base[256];
     /* The defer depth at each label/goto, so `func_end` can reject a jump
        across a block that owns a defer while allowing a same-block jump. */
-    int  label_defer_depth[64];
-    int  goto_defer_depth[64];
-    int  label_block_id[64];
-    int  goto_block_id[64];
-    int  label_block_has[64];
-    int  goto_block_has[64];
+    int  label_path[64][256];
+    int  goto_path[64][256];
+    char label_path_has[64][256];
+    char goto_path_has[64][256];
+    int  label_path_depth[64];
+    int  goto_path_depth[64];
 } use StmtOps;
 
 /* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
@@ -1385,33 +1383,19 @@ impl StmtOps for Stmt {
         return n;
     }
 
-    int defer_top_id(void)
-    {
-        int i;
-        (void)self;
-        for (i = self->ndefer_blocks - 1; i >= 0; i--)
-            if (self->defer_head[i] >= 0) return self->defer_ids[i];
-        return 0;
-    }
-
-    int defer_block_id(void)
-    {
-        (void)self;
-        if (self->ndefer_blocks <= 0) return 0;
-        return self->defer_ids[self->ndefer_blocks - 1];
-    }
-
     int defer_mark_block(void)
     {
-        int b, i, id;
+        int b, i, j, id;
         (void)self;
         b = self->ndefer_blocks - 1;
         if (b < 0 || self->defer_head[b] < 0) return 0;
         id = self->defer_ids[b];
         for (i = 0; i < self->nlabels; i++)
-            if (self->label_block_id[i] == id) self->label_block_has[i] = 1;
+            for (j = 0; j < self->label_path_depth[i]; j++)
+                if (self->label_path[i][j] == id) self->label_path_has[i][j] = 1;
         for (i = 0; i < self->ngotos; i++)
-            if (self->goto_block_id[i] == id) self->goto_block_has[i] = 1;
+            for (j = 0; j < self->goto_path_depth[i]; j++)
+                if (self->goto_path[i][j] == id) self->goto_path_has[i][j] = 1;
         return 0;
     }
 
@@ -3065,7 +3049,7 @@ impl StmtOps for Stmt {
        empty chain is an error rather than an emitted `name: }`. */
     int parse_named_label(void)
     {
-        int s, c, head, tail, line;
+        int s, c, head, tail, line, i;
         char name[MAX_TEXT];
         char msg[MAX_TEXT];
         (void)self;
@@ -3083,8 +3067,11 @@ impl StmtOps for Stmt {
         if (s < 0) return -1;
         snprintf(self->label_names[self->nlabels], MAX_TEXT, "%s", name);
         self->label_lines[self->nlabels] = line;
-        self->label_defer_depth[self->nlabels] = self->defer_top_id();
-        self->label_block_id[self->nlabels] = self->defer_block_id();
+        self->label_path_depth[self->nlabels] = self->ndefer_blocks;
+        for (i = 0; i < self->ndefer_blocks; i++) {
+            self->label_path[self->nlabels][i] = self->defer_ids[i];
+            self->label_path_has[self->nlabels][i] = 0;
+        }
         self->nlabels = self->nlabels + 1;
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         self->sup->lex_next();
@@ -3114,7 +3101,7 @@ impl StmtOps for Stmt {
        be defined later in the same function (D-5). */
     int parse_goto(void)
     {
-        int s;
+        int s, i;
         char name[MAX_TEXT];
         (void)self;
 
@@ -3131,8 +3118,11 @@ impl StmtOps for Stmt {
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         snprintf(self->goto_names[self->ngotos], MAX_TEXT, "%s", name);
         self->goto_lines[self->ngotos] = self->arena->nodes[s].line;
-        self->goto_defer_depth[self->ngotos] = self->defer_top_id();
-        self->goto_block_id[self->ngotos] = self->defer_block_id();
+        self->goto_path_depth[self->ngotos] = self->ndefer_blocks;
+        for (i = 0; i < self->ndefer_blocks; i++) {
+            self->goto_path[self->ngotos][i] = self->defer_ids[i];
+            self->goto_path_has[self->ngotos][i] = 0;
+        }
         self->ngotos = self->ngotos + 1;
         self->sup->lex_next();
         if (self->sup->expect(";") != 0) return -1;
@@ -3141,14 +3131,7 @@ impl StmtOps for Stmt {
 
     int func_begin(void)
     {
-        int i;
         (void)self;
-        for (i = 0; i < 64; i++) {
-            self->label_block_id[i] = 0;
-            self->goto_block_id[i] = 0;
-            self->label_block_has[i] = 0;
-            self->goto_block_has[i] = 0;
-        }
         self->nlabels = 0;
         self->ngotos = 0;
         self->nbreak = 0;
@@ -3163,7 +3146,7 @@ impl StmtOps for Stmt {
        the whole body has been seen; the complaint points at the `goto` line. */
     int func_end(void)
     {
-        int i;
+        int i, j, k, gd, ld;
         char msg[MAX_TEXT];
         (void)self;
 
@@ -3173,18 +3156,22 @@ impl StmtOps for Stmt {
                 snprintf(msg, sizeof msg, "label '%s' is not defined", self->goto_names[i]);
                 return self->sup->fail_at(self->goto_lines[i], msg);
             }
-            if (self->goto_defer_depth[i] != self->label_defer_depth[li])
-                return self->sup->fail_at(self->goto_lines[i],
-                    "a goto cannot cross a block with defer");
-            /* A label can precede the block's defer declaration, so the top-id
-               check above cannot see it. Compare the owning block ids and ask
-               whether either block owns a defer (finalised at block close). */
-            if (self->goto_block_id[i] != self->label_block_id[li]
-                && self->goto_defer_depth[i] == 0
-                && self->label_defer_depth[li] == 0
-                && (self->goto_block_has[i] || self->label_block_has[li]))
-                return self->sup->fail_at(self->goto_lines[i],
-                    "a goto cannot cross a block with defer");
+            /* Only a path element below the label/goto LCA is a block boundary
+               the jump actually crosses. A defer on an ancestor common to both
+               sides is not crossed. */
+            gd = self->goto_path_depth[i];
+            ld = self->label_path_depth[li];
+            k = 0;
+            while (k < gd && k < ld
+                   && self->goto_path[i][k] == self->label_path[li][k]) k++;
+            for (j = k; j < gd; j++)
+                if (self->goto_path_has[i][j])
+                    return self->sup->fail_at(self->goto_lines[i],
+                        "a goto cannot cross a block with defer");
+            for (j = k; j < ld; j++)
+                if (self->label_path_has[li][j])
+                    return self->sup->fail_at(self->goto_lines[i],
+                        "a goto cannot cross a block with defer");
         }
         return 0;
     }
