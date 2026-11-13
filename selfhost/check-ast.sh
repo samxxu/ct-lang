@@ -3583,6 +3583,13 @@ else
     bad "p38 defer probe" "$(cat "$work/p38.out" "$work/p38.err")"
 fi
 
+# Phase 39 R1: --lib is build-only; empty root reports L39-2.
+if bash test/modules/p39_lib/r1_probe.sh "$work/ct-ast" >"$work/p39r1.out" 2>"$work/p39r1.err"; then
+    ok "p39 r1"
+else
+    bad "p39 r1" "$(cat "$work/p39r1.out" "$work/p39r1.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"
