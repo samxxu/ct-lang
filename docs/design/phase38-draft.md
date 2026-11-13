@@ -1,6 +1,6 @@
 # Phase 38 — `defer` 块级清理
 
-> **状态：已立项**（2026-11-13 用户授权自动完成；卡已冻结）。
+> **状态：实现完成**（2026-11-13；版本 bump / tag 待用户批准）。
 > **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
 > **文档形态**：`phase38-draft.md`；design window 12/12，转正时归档当时最老的一张。
 > **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
@@ -218,3 +218,19 @@ defer { log("done"); }      /* 显式清理 */
 - 编译器 260–520 = S1 50–100 + S2 40–80 + S3 60–120 + S4 80–160 + S5 30–60；夹具 60–120；文档 50–90。
 - 收口：S0 红证提交（`test(cleanup): P38 红`）；每片 ≤3 文件；仓库任何时刻可构建。
 - 收口动作：全量 11 道门禁绿、样例 `examples/42_defer` 进 `test/run.sh`、文档同步、`version-minor=38`；版本 bump 与 tag 按 0.3 `phase-tag-requires-user-approval` 等用户批准。
+
+## 9 收口记录（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| 红证 | `de16f54 test(cleanup): P38 红`；基线上 defer 被当未声明变量，三条负例文案不符 |
+| 实现 | `1015e39 feat(cleanup): P38 block defer`；解析期 defer 栈、退出物化 N_DEFER_RUN、return 临时量、defer 先于 own、L38-1–L38-3 |
+| E38-1 | `220_defer_order`：`body` / `b` / `a`（LIFO） |
+| E38-2 | `221_defer_paths`：正常落出 / `return` / `break` / `continue` 四条路径 |
+| E38-3 | `222_defer_return`：`defer x=99` 后 `ret=1`（返回值先求值） |
+| E38-4 | `errors/p38_goto_cross.ct` 报 `a goto cannot cross a block with defer`；同块 goto 按 defer 深度放行 |
+| E38-5 | `223_defer_own_order`：`defer` / `drop` 顺序 |
+| E38-6 | `errors/p38_defer_control.ct` 报 `a defer block cannot transfer control` |
+| E38-7 | `errors/p38_defer_scope.ct` 报 `defer is only allowed inside a function` |
+| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1318、check-warnings 599、check-docs 930 links、acceptance 20；样例 `examples/42_defer` |
+| 版本/tag | 版本仍 `v0.37.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.38.0` bump 与 tag/push 等用户批准 |
