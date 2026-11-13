@@ -52,7 +52,7 @@
 | Phase 36 | 泛型 Drop + Str | ✅ 完成 | v0.36.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase36-draft.md) |
 | Phase 37 | trait 签名硬错 + runtime checks | ✅ 完成 | v0.37.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase37-draft.md) |
 | Phase 38 | defer 块级清理 | ✅ 完成 | v0.38.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase38-draft.md) |
-| Phase 39 | C ABI 导出面（已立项） | ⬜ 已立项（待 PH-38 收口） | — | [卡](design/phase39-draft.md) |
+| Phase 39 | C ABI 导出面与库制品 | ✅ 完成 | v0.39.0 | [卡](design/phase39-draft.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布；Phase 31 / 33 未单独 bump。逐相细节与出口证据见
 > [流水账](history/phase-log.md#阶段总览详表)。

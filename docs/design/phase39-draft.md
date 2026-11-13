@@ -1,6 +1,6 @@
 # Phase 39 — C ABI 导出面与库制品
 
-> **状态：已立项**（2026-11-13，用户批准三项决策 A；同日批准 battle 裁定：B39-1 走 C 路径（B1+B3）、B39-2 取默认 A；卡已冻结，冻结变更见 §9）。
+> **状态：✅ 完成**（2026-11-13；v0.39.0；battle B39-1 C 路径 / B39-2 默认 A；收口记录见 §8.1）。
 > **基线**：PH-38 收口提交（`v0.38.0`）；S0 在该提交上重建并记录实际 sha 与门禁数字。
 > **文档形态**：`phase39-draft.md`；design window 7/12，不触发归档。
 > **前置**：[phase34-draft.md](phase34-draft.md)（`pub` 语义）、[phase36-draft.md](phase36-draft.md)（`Str` 的 ABI 边界）、[phase38-draft.md](phase38-draft.md)（收口基线）。
@@ -246,6 +246,17 @@ R1–R7 每项先提 `test(abi): <task-id> 红`（只含夹具与断言），实
 - 开工前 S0：PH-38 收口提交上重建 `ct`（`ct -v` = v0.38.0）、复跑 §2.2、写 §2.1 与 `baseline.sha`；不占任务行。
 - 收口动作：11 道门禁绿、`p39/*` 全绿、`version-minor=39`、五处 `CTC_VERSION` 与全部版本落点同步到 `v0.39.0`、phase-log 与对照表落盘；tag/push 按 0.3 `phase-tag-requires-user-approval` 等用户批准。
 - 每个实现任务 ≤3 个源码文件（夹具/文档任务按目录计）；每个实现提交的父提交是它的 `test(abi): <task-id> 红`；仓库任何时刻可构建。
+
+### 8.1 收口记录（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| version-minor | 39；五处 `CTC_VERSION` 与 README/docs/AGENTS 同步到 `v0.39.0` |
+| R1–R9 | 全部落地；R6/R7/R8 为验证任务（R8 `no-test:` 等价性证据） |
+| E39-1–E39-9 | `p39 r1`…`p39 r8` + `p39 docs` 全绿 |
+| 全量门禁 | `check-all: OK (11 hard gates green)`；check-ast 1338/0、check-warnings 600/0、test/run 152、docs 946 links / 197 files |
+| 产物 | `<base>.abi.h` + `lib<base>.a`；纯 C 消费者 `42 42` |
+| tag/push | 本地 tag `v0.39.0` 待用户批准（0.3 `phase-tag-requires-user-approval`）；不 push |
 
 ## 9 battle 裁定与冻结变更（2026-11-13，用户已批准）
 
