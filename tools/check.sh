@@ -47,7 +47,12 @@ g0() {
   echo "g0: OK (block $block_ver, session-map present)"
 }
 
+battle_selftest() {
+  bash "$root/test/battle/run.sh"
+}
+
 case "${1:-}" in
   g0) g0 ;;
-  *) echo "usage: tools/check.sh g0" >&2; exit 2 ;;
+  battle-selftest) battle_selftest ;;
+  *) echo "usage: tools/check.sh g0 | battle-selftest" >&2; exit 2 ;;
 esac
