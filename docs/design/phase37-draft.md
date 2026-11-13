@@ -118,6 +118,8 @@ S0 先跑 `check-archive.sh` 与 `check-ast.sh` 的诊断对照片段，列出�
 
 不允许「让 L2 保持 warning 但对照假装通过」。
 
+**2026-11-13 决定（S2）**：L2 保持 warning（冻结 oracle，不改行为）；`test/archive/errors/` 没有签名 mismatch fixture，`check-archive.sh` 的 diagnostics 组不比较这一严重度，已在脚本注释中记录排除；ct-ast 的 build/check 硬错由 `test/ast/p37_probe.sh` 断言。
+
 ## 4 切片（每片 ≤150 行）
 
 | 片 | 内容 | 主要文件 | 预估行 |

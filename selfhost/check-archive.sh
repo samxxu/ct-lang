@@ -360,6 +360,10 @@ for exp_c in test/archive/cases/*.expected.c; do
 done
 
 # ---------------------------------------------------------- 5) diagnostics
+# Phase 37 O3: L2 stays the frozen oracle and keeps signature mismatch as a
+# warning. The ct-ast build/check hard error is a new severity, and no
+# test/archive/errors fixture pins it, so this ratchet does not compare it;
+#   `test/ast/p37_probe.sh` is the authoritative assertion.
 banner "5) diagnostics (test/archive/errors/*.ct)"
 epass=0; enew=0; epending=0; eregress=0
 
