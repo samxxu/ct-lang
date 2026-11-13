@@ -241,11 +241,11 @@ L38-1/L38-2 各自一条断言；L38-3 分文件作用域与 `.h.ct` 两条文�
 
 | 项 | 结果 |
 | --- | --- |
-| 评审结论 | 初版 Phase 38 **不通过**；Phase 37 有条件通过 |
+| 评审结论 | 初版 Phase 38 **不通过**；Phase 37 有条件通过；guard/switch 边界经 battle p38-1（D-003）裁定 |
 | P0 修复 | 无括号 if/for/while/do 的 defer 上下文（`ac040d1`）；switch 内 defer v1 禁止；goto 改用顶层 defer 块 id，兄弟块跨跳不再漏清理 |
 | P1 修复 | defer 体内禁止 label（避免多出口重复发射）；`--runtime-checks` 进入缓存 key；guard 改为 `__ct_vt_guard`，vt 只求值一次，三种派发都覆盖 |
-| 新增测试 | 224 分支/循环/嵌套/同块 goto；p38_defer_switch / p38_defer_label / p38_goto_sibling / p38_goto_in / p38_defer_header / break / continue / nested；P37 warm-cache 双向 |
-| 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；switch 内 defer 连嵌套块也禁止；guard 下非 hoist 副作用接收者仍按既有两次求值（不新增第三次，但可绕过 guard）；均记录为 v1 边界 |
-| 门禁 | `check-ast 1328/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
+| 新增测试 | 224 分支/循环/嵌套/同块 goto；p38_defer_switch(_nested) / p38_defer_label / p38_goto_sibling / p38_goto_in / p38_goto_active / p38_defer_header / break / continue / nested；P37 warm-cache 与 unstable/safe_index |
+| 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；switch 内 defer 连嵌套块也禁止；guard 不稳定接收者已按 p38-1 B′ 拒绝（D-003）；均记录为 v1 边界 |
+| 门禁 | `check-ast 1329/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
 | 版本/tag | 仍 `v0.37.0`；`v0.38.0` bump/tag 待用户批准；`v0.37.0` tag 仍含评审前的 runtime cache/guard 缺陷 |
 
