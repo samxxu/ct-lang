@@ -639,11 +639,12 @@ recipe 替换（逐出现点）：
   `pub` 的顶层函数和全局只属于本单元；未标 `pub` 的类型只出现在本单元的生成物里。
 - 跨单元导出的顶层函数必须写在 `.h.ct` 里并标 `pub`；`.ct` 单元里的 `pub` 声明仍不能被 `import`
   （§4.51 的 `only a .h.ct unit can be imported`）。
-- `pub struct` 的 `impl` 块中，**所有方法当前一律自动对外**：固有 `impl Name { … }` 的方法随
-  `pub struct` 取外部链接，trait `impl T for S` 的方法随导出的 vtable 可达。没有任何语法能把单个
-  方法标成私有；`impl` 方法的方法级可见性目前不受 `pub` 控制，这是现状而非承诺。
-- 单元内私有 helper 的现实写法是 `.ct` 文件里的 `static` 自由函数；不要指望在 `impl` 里写一个
-  "私有方法"。
+- `pub struct` 的固有 `impl` 块中，方法**默认私有**：只在同单元可见，定义发 `static`，不进 `.h`；
+  写 `pub` 才进 `.h`、才有外部链接、才允许跨单元调用（§4.60，Phase 42）。`pub` 只允许出现在
+  `.h.ct` 单元的 `pub struct` 固有 `impl` 方法上；trait `impl T for S` 的方法随导出的 vtable 可达，
+  写 `pub` 报 L42-2。
+- 单元内私有 helper 既可以写成 `impl` 里不带 `pub` 的方法，也可以沿用 `.ct` 文件里的 `static`
+  自由函数。
 
 #### 4.12 函数指针（ct-ast）
 
@@ -2000,8 +2001,10 @@ int main(void) {
 
 ### 8. 明确不支持
 
-可见性修饰符的完整集合（`pub readonly` / `setter`）、继承、类型检查、嵌套定义。泛型**函数**已在
-Phase 26 落地（§4.48）；泛型结构体 / trait / 约束 / 推导 / 多类型参数仍不在范围内。
+可见性修饰符的完整集合（`pub readonly` / `setter`）、继承、默认编译路径上的全量类型检查、嵌套定义、
+模板参数推导、单参数多约束与 supertrait。泛型**函数**（§4.48）、**约束泛型**（§4.50）、
+**泛型 struct**（§4.51）、**有界泛型 struct**（§4.54）与**泛型 trait**（§4.55）均已落地，
+类型参数最多两个，但都不做推导。
 （错误恢复是 L0 的边界；CT 线会先收集多个错误再报告，见 §10。）
 
 ### 9. 诊断与退出码
@@ -2107,8 +2110,8 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `<S>_<Trait>_vtable.<m>(recv, …)`（指针接收者）——裸 C 调用，不读 `__<trait>_vptr`、不装箱、
   不改结构体布局。实例仍是 `static`，与 §4.48 的命名与可见性一致；跨单元时依赖单元的生成头只新增
   `extern struct <Trait>_vtbl <S>_<Trait>_vtable;`。
-- 不支持：参数化 trait、多约束、`Self`、约束方法签名里出现类型参数、
-  泛型函数 `pub`、跨单元实例共享、装箱。**`char *` 不能直接满足约束**（`impl` 只对 struct 生效）；
+- 不支持：多约束、`Self`、约束方法签名里出现类型参数、泛型函数 `pub`、跨单元实例共享、装箱；
+  参数化 trait 作约束由 §4.55 承接。**`char *` 不能直接满足约束**（`impl` 只对 struct 生效）；
   需要字符串语义时用一个 `struct` 包住指针，见 `examples/21_generic_bound` 的 `Word`。
   泛型 struct 见 §4.51。
 
@@ -2171,7 +2174,8 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `item`，它是 `MapEntry`，用 `item.key` / `item.value` 读写。长度在循环开始前取一次。对 `i`
   赋值 / 自增 / 取地址是硬错（L29-16），循环体内重声明 `item` 或 `i` 是硬错（L29-17），
   在 `Map` 体内使用 `i` 是硬错（L29-18）；容器元素与接口值不能按值拷贝（L29-15）。
-- **不支持**：参数化 trait、约束、默认类型实参、显式实例列表。已知偏差（`Map` 线性扫描、无哈希
+- **本节不涉及**：默认类型实参、显式实例列表；参数化 trait 见 §4.55，类型参数上的 bound 见 §4.54。
+  已知偏差（`Map` 线性扫描、无哈希
   索引）见 `docs/design/phase29.md` §10.2。
 
 ### 4.53 可选类型检查 `ct check --types`（Phase 32）

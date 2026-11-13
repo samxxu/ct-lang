@@ -30,12 +30,12 @@ hello/
 - `.m.ct`：零成本静态映射，不产 `.c` / `.h`；
 - binding 形式（`#include` 直通 + `map`）按 [test/bindings/README.md](../test/bindings/README.md)。
 
-`pub` 的作用范围只到**顶层声明**：顶层函数、`typedef`、`struct` / `trait` 与全局变量由 `pub` 决定是否
-跨单元可见；未标 `pub` 的顶层函数和全局只属于本单元。`impl` 块里的方法不按顶层规则判可见性：
-`pub struct` 的 `impl` 中**所有方法当前一律自动对外**（固有方法随结构体取外部链接，trait 方法随导出的
-vtable 可达），没有任何语法能把单个方法标成私有；`impl` 方法的方法级可见性目前不受 `pub` 控制，这是
-现状而非承诺。需要单元内私有 helper 时，写成 `.ct` 文件里的 `static` 自由函数，而不是在 `impl` 里加一个
-"私有方法"。
+`pub` 的作用范围：顶层声明（顶层函数、`typedef`、`struct` / `trait` 与全局变量）由 `pub` 决定是否
+跨单元可见；未标 `pub` 的顶层函数和全局只属于本单元。`impl` 里的固有方法**默认私有**——不进 `.h`、
+定义发 `static`、跨单元调用报错；写 `pub` 才公开。`pub` 只允许出现在 `.h.ct` 单元的 `pub struct`
+固有 `impl` 方法上，trait impl 的方法写 `pub` 是硬错（[language-spec §4.60](language-spec.md)，
+Phase 42）。单元内私有 helper 既可以是不带 `pub` 的固有方法，也可以是 `.ct` 文件里的 `static`
+自由函数。
 
 #### 单元目录 = 命名空间
 

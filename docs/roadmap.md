@@ -45,7 +45,7 @@
 | Phase 29 | 泛型 struct + Vec/Map | ✅ 完成 | v0.30.0（合并） | [流水账](history/phase-log.md#阶段总览详表) · [设计](design/phase29.md) |
 | Phase 30 | into 块 | ✅ 完成 | v0.30.0（合并） | [流水账](history/phase-log.md#阶段总览详表) · [设计](design/phase30.md) |
 | Phase 31 | 容器能力补齐 | ✅ 完成 | — | [流水账](history/phase-log.md#阶段总览详表) · [设计](design/phase31.md) |
-| Phase 32 | ct check --types（规划） | ⬜ 规划中 | — | [卡](design/phase32-draft.md) |
+| Phase 32 | `ct check --types` 类型安全检查网 | ✅ 完成 | v0.33.0（合并） | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase32-draft.md) |
 | Phase 33 | 有界泛型 struct + 嵌套 impl | ✅ 完成 | — | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase33-draft.md) |
 | Phase 34 | pub 泛型 / 固有 impl / Option/Result | ✅ 完成 | v0.34.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase34-draft.md) |
 | Phase 35 | 泛型 trait | ✅ 完成 | v0.35.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase35-draft.md) |
@@ -55,21 +55,10 @@
 | Phase 39 | C ABI 导出面与库制品 | ✅ 完成 | v0.39.0 | [卡](design/phase39-draft.md) |
 | Phase 40 | errdefer + err: 错误出口 + 尾随声明 | ✅ 完成 | v0.40.0 | [卡](design/phase40-draft.md) |
 | Phase 41 | 原子并发能力（`atomic T` + 内建原子操作） | ✅ 完成 | v0.41.0 | [卡](design/phase41-draft.md) · [D-004](decisions/D-004.md) |
-| Phase 42 | `impl` 方法可见性（方法级 `pub`，默认私有） | ⬜ 已定稿 / 待 PH-41 收口 | — | [卡](design/phase42-draft.md) |
+| Phase 42 | `impl` 方法可见性（方法级 `pub`，默认私有） | ✅ 完成 | v0.42.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase42-draft.md) |
 
-> Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布；Phase 31 / 33 未单独 bump。逐相细节与出口证据见
-> [流水账](history/phase-log.md#阶段总览详表)。
->
-> Phase 41 已按 battle p41-1（B′）冻卡、实施中；Phase 42 已完成独立评审与 battle p42-1（判决 C），
-> 卡已定稿，**待 PH-41 收口后立项/开工**（[phase41-draft](design/phase41-draft.md) /
-> [phase42-draft](design/phase42-draft.md)），状态以本表为准：
->
-> - **PH-41 原子并发能力**：`atomic T` 修饰符 + 内建 `atomic_load` / `atomic_store` / `atomic_cas`
->   （seq_cst、四种类型），并修 `atomic int x;` 今天发射非法 C 的缺口；工量 **600–1050**（±40%）。
-> - **PH-42 `impl` 方法可见性**：方法级 `pub`、默认私有；私有方法不进 `.h` 且发 `static`，跨单元调用硬错；
->   工量 **590–1030**（±40%），另含 52 条迁移；2026-11-13 独立评审 + battle p42-1 定稿（C：全部显式 `pub`）。
->
-> 两相都改 `Emitter.h.ct`，按 **41 → 42** 串行；工量区间只是草案估计，未校准。
+> Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
+> 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
 
 ### 未排期（治理项）
 

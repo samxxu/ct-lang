@@ -59,7 +59,9 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **diagnostics and tooling**: `#line` traceability, `--diagnostics=json|text`, multi-error recovery, incremental cache, `ct get` / `ct install`
 - **generic functions**: `T name<T>(…)` + `name<int>(…)`, monomorphised at compile time (Phase 26); **bounded generics** `T name<T: Trait>(…)` (Phase 28)
 - **generic structs and the built-in containers**: `struct Name<T, U>` + `impl<T> Name<Args>` with static dispatch (Phase 29); `Vec<T>` / `Map<K,V>` need no import, and `foreach` walks a `Map` in insertion order
-- **not done by design**: inheritance, type checking on the default compile path (`ct check` runs bounded checks only), optimisation (the language is not final until `1.0.0`); parameterised traits are not implemented and not scheduled
+- **generic traits**: `trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` bounds, with instances monomorphised from the type arguments (Phase 35)
+- **standard result types**: `Option<T>` / `Result<T, E>` ship in `lib/std`, with `is_some` / `is_ok` / `unwrap` and friends as inherent methods (Phase 34)
+- **not done by design**: inheritance, type checking on the default compile path (`ct check` runs bounded checks only), optimisation (the language is not final until `1.0.0`)
 
 The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idioms in
 [docs/patterns.md](docs/patterns.md); ownership conventions in [docs/memory-guide.md](docs/memory-guide.md).
