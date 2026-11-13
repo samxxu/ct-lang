@@ -1,0 +1,639 @@
+{
+  "battle": "p42-1",
+  "head": "1b14b63a",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "nm": "llvm-nm, compatible with GNU nm",
+    "binary": "/tmp/p42base/ct-ast (ct-ast v0.40.1, sha256 30f06dbf41bcd5b4940d1d84ce06796f3b51d9ed693e0eb1bd8a2cc47e8781bc)",
+    "source_baseline": "/tmp/p42base/src（关键文件 sha256 与 git show 1b14b63a:<path> 逐一相同：Emitter.h.ct / Expr.h.ct / Symbols.h.ct / Vec.h.ct / Str.h.ct / Option.h.ct / Result.h.ct）",
+    "date": "2026-11-13T23:46:28+08:00 (Asia/Shanghai)",
+    "note": "工作树 HEAD 为 989132b7 且有 PH-41 未提交改动；本席一律用 /tmp/p42base/src 与 git show 1b14b63a 取锚点，不用工作树。"
+  },
+  "rounds": 1,
+  "method": "只读复算与探针：计数脚本独立重写；行为实验用 /tmp/p42base/ct-ast v0.40.1 生成 C，再用后处理（把某单元的方法定义/原型改成 static）模拟 PH-42 的“方法默认私有”；不实现 A/B/C 任何方案，因此涉及“翻默认后”的预测只在生成物层面模拟并明确标注。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1-e / draft §3.4",
+      "command": "cd /tmp/p42base/src && for f in lib/std/*.h.ct examples/38_ecosystem_reuse/src/eco.h.ct test/modules/p29_generic_struct/shapes.h.ct test/modules/p31_cross_unit_owned/elem.h.ct test/modules/p34_inherent/lib.h.ct; do perl -0777 -pe 's{/\\*.*?\\*/}{}gs' \"$f\" | awk -v F=\"$f\" '/^impl .* for /{tr=1;next} /^}/{tr=0} !tr && !/^    (if|while|for|switch|return|else)[ (]/ && /^    (static )?[A-Za-z_*].*\\([^;]*\\)[[:space:]]*\\{?[[:space:]]*$/ {n++} END{print F, n+0}'; done | awk '{if ($1 ~ /^lib\\/std/) s+=$2; else o+=$2} END{print \"std\",s,\"other\",o,\"all\",s+o}'",
+      "exit": 0,
+      "output": "std 43 other 9 all 52",
+      "reproduced": true,
+      "note": "主张席 E1-e 脚本逐字复跑，数字完全一致：std 43、其它 9、合计 52。"
+    },
+    {
+      "id": "V2",
+      "side": "verify",
+      "ref": "question.md#逐条判据 J-3 / 本席独立复算",
+      "command": "cd /tmp/p42base/src && python3 - <<'PY'\nimport re, glob\nfiles = sorted(glob.glob('lib/std/*.h.ct')) + [\n  'examples/38_ecosystem_reuse/src/eco.h.ct',\n  'test/modules/p29_generic_struct/shapes.h.ct',\n  'test/modules/p31_cross_unit_owned/elem.h.ct',\n  'test/modules/p34_inherent/lib.h.ct']\ndef strip(t):\n    t = re.sub(r'/\\*.*?\\*/', lambda m: '\\n'*m.group(0).count('\\n'), t, flags=re.S)\n    t = re.sub(r'//[^\\n]*', '', t)\n    return t\nallrows=[]; per={}\nfor f in files:\n    lines = strip(open(f, encoding='utf-8').read()).split('\\n')\n    in_impl=False; trait=False; owner='?'; n=0\n    for i, ln in enumerate(lines, 1):\n        if not in_impl:\n            m = re.match(r'^impl\\b(.*)\\{', ln)\n            if m:\n                in_impl=True; hdr=m.group(1); trait = ' for ' in hdr\n                h = hdr.split(' for ')[0].strip()\n                h = re.sub(r'^<[^>]*>\\s*', '', h).strip()\n                mm = re.match(r'([A-Za-z_]\\w*)', h); owner = mm.group(1) if mm else '?'\n            continue\n        if re.match(r'^\\}\\s*$', ln):\n            in_impl=False; trait=False; owner='?'; continue\n        if trait: continue\n        if not ln.startswith('    ') or ln.startswith('     '): continue\n        s = ln.strip()\n        if not s or s.startswith('/*') or s.startswith('//'): continue\n        if ';' in s: continue\n        if re.match(r'^(if|while|for|switch|return|else)\\b', s): continue\n        m = re.match(r'^(.+?)\\(([^()]*)\\)\\s*\\{?\\s*$', s)\n        if not m: continue\n        head = m.group(1).strip()\n        if head.endswith('='): continue\n        nm = re.search(r'([A-Za-z_]\\w*)$', head)\n        if not nm: continue\n        name=nm.group(1); ret=head[:nm.start()].strip()\n        n+=1; allrows.append((f,i,owner,name,ret))\n    per[f]=n\nprint(\"PER-FILE:\")\nfor f in files: print(f\"  {f} = {per[f]}\")\nstd=sum(v for f,v in per.items() if f.startswith('lib/std/'))\noth=sum(v for f,v in per.items() if not f.startswith('lib/std/'))\nprint(f\"\\nSTD={std} OTHER={oth} ALL={std+oth}\")\nnames=[r[3] for r in allrows if r[3] in ('retain','release')]\nprint(f\"\\nNAME_MATCH retain|release = {len(names)} (retain={names.count('retain')}, release={names.count('release')})\")\nfor f,i,o,nm,rt in allrows:\n    if nm in ('retain','release'): print(f\"  {f}:{i} owner={o} {rt} {nm}()\")\nfrom collections import defaultdict\nby=defaultdict(lambda: {'rs':[],'rel':[]})\nfor f,i,owner,name,ret in allrows:\n    if name=='retain':\n        b=re.match(r'^(?:struct\\s+)?([A-Za-z_]\\w*)',ret)\n        if b and b.group(1)==owner: by[owner]['rs'].append(f\"{f}:{i}\")\n    elif name=='release': by[owner]['rel'].append(f\"{f}:{i}\")\nprot={o:v for o,v in by.items() if v['rs'] and v['rel']}\nprint(f\"\\nPROTOCOL owners={sorted(prot)} methods={sum(len(v['rs'])+len(v['rel']) for v in prot.values())}\")\nfor o in sorted(by):\n    print(f\"  {o}: retain_self={len(by[o]['rs'])} release={len(by[o]['rel'])} -> {'PROTOCOL' if by[o]['rs'] and by[o]['rel'] else 'NOT_PROTOCOL'}\")\nPY",
+      "exit": 0,
+      "output": "PER-FILE:\n  lib/std/Option.h.ct = 8\n  lib/std/Result.h.ct = 11\n  lib/std/Str.h.ct = 2\n  lib/std/Vec.h.ct = 22\n  examples/38_ecosystem_reuse/src/eco.h.ct = 3\n  test/modules/p29_generic_struct/shapes.h.ct = 1\n  test/modules/p31_cross_unit_owned/elem.h.ct = 2\n  test/modules/p34_inherent/lib.h.ct = 3\n\nSTD=43 OTHER=9 ALL=52\n\nNAME_MATCH retain|release = 10 (retain=4, release=6)\n  lib/std/Option.h.ct:77 owner=Option void release()\n  lib/std/Result.h.ct:104 owner=Result void release()\n  lib/std/Str.h.ct:132 owner=Str Str retain()\n  lib/std/Str.h.ct:138 owner=Str void release()\n  lib/std/Vec.h.ct:176 owner=Vec Vec<T> retain()\n  lib/std/Vec.h.ct:187 owner=Vec int release()\n  lib/std/Vec.h.ct:509 owner=Map Map<K, V> retain()\n  lib/std/Vec.h.ct:517 owner=Map int release()\n  test/modules/p31_cross_unit_owned/elem.h.ct:7 owner=Box Box<T> retain()\n  test/modules/p31_cross_unit_owned/elem.h.ct:12 owner=Box void release()\n\nPROTOCOL owners=['Box', 'Map', 'Str', 'Vec'] methods=8\n  Box: retain_self=1 release=1 -> PROTOCOL\n  Map: retain_self=1 release=1 -> PROTOCOL\n  Option: retain_self=0 release=1 -> NOT_PROTOCOL\n  Result: retain_self=0 release=1 -> NOT_PROTOCOL\n  Str: retain_self=1 release=1 -> PROTOCOL\n  Vec: retain_self=1 release=1 -> PROTOCOL",
+      "reproduced": true,
+      "note": "本席独立脚本（剥 /* */ 与 //、按列 0 的 } 结束 impl、跳过 impl … for、方法行不要求 { 同行——Vec/str 的定义把 { 放下一行）与主张席脚本独立实现，得同一组数：52/43/9、10 条名字匹配、8 条协议。协议口径：retain 返回 owner 自身类型且 release 同时存在；Option/Result 只有 release 无 retain → 不符合（counter 的 8 成立）。附带：按 impl 种类分，模板 impl 44 条、非模板固有 impl 8 条——与 B 的协议 44/8 是两套独立却同值的 44/8，勿混。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "ref": "claim.md#E1-a",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && git grep -hE '^    [A-Za-z_<>, *]+ (retain|release|drop|handback)\\(\\)' 1b14b63a -- '*.h.ct' | grep -oE '(retain|release|drop|handback)\\(\\)' | sort | uniq -c; echo '---'; git grep -nE '^    [A-Za-z_<>, *]+ (retain|release|drop|handback)\\(\\)' 1b14b63a -- '*.h.ct'",
+      "exit": 0,
+      "output": "   1 drop()\n   6 release()\n   4 retain()\n---\n1b14b63a:lib/std/Option.h.ct:77:    void release() {\n1b14b63a:lib/std/Result.h.ct:104:    void release() {\n1b14b63a:lib/std/Str.h.ct:24:    void drop() {\n1b14b63a:lib/std/Str.h.ct:132:    Str retain() {\n1b14b63a:lib/std/Str.h.ct:138:    void release() {\n1b14b63a:lib/std/Vec.h.ct:176:    Vec<T> retain()\n1b14b63a:lib/std/Vec.h.ct:187:    int release()\n1b14b63a:lib/std/Vec.h.ct:509:    Map<K, V> retain()\n1b14b63a:lib/std/Vec.h.ct:517:    int release()\n1b14b63a:test/modules/p31_cross_unit_owned/elem.h.ct:7:    Box<T> retain()\n1b14b63a:test/modules/p31_cross_unit_owned/elem.h.ct:12:    void release()",
+      "reproduced": true,
+      "note": "10 条 retain/release = 4 retain + 6 release；唯一的 drop() 在 lib/std/Str.h.ct:24，属于 Str.h.ct:23 的 `impl Drop for Str`（trait impl）；handback 在全部 .h.ct 里 0 条固有方法定义（上表无 handback 行）。主张席 E1-a 的名单结论成立；其『handback 在 .h.ct 里 0 处』的措辞不准（编译器源码 h.ct 的注释/代码里有 handback 字符串，但都不是 .h.ct 单元的固有方法定义）。"
+    },
+    {
+      "id": "V4",
+      "side": "claim",
+      "ref": "claim.md#E1-e（对草案 §6.1 脚本的指认）",
+      "command": "cd /tmp/p42base/src && python3 - <<'EOF'\nimport re, glob\nfor f in sorted(glob.glob('lib/std/*.h.ct')):\n    inside, n = False, 0\n    for line in open(f):\n        if re.match(r'^(pub )?impl\\b', line): inside = True; continue\n        if inside and re.match(r'^}\\s*$', line): inside = False; continue\n        if inside and re.match(r'^    (?:static )?\\S.*\\(', line): n += 1\n    print(f, n)\nEOF",
+      "exit": 0,
+      "output": "lib/std/Option.h.ct 8\nlib/std/Result.h.ct 11\nlib/std/Str.h.ct 3\nlib/std/Vec.h.ct 24",
+      "reproduced": true,
+      "note": "草案 §6.1 脚本实跑 = 46，不是 43。多出的 3 条：Vec.h.ct:175 与 :353 两条 4 空格缩进的注释行（含括号），以及 Str.h.ct:24 的 drop（trait impl）。主张席对 46 vs 43 的解释逐条成立。"
+    },
+    {
+      "id": "V5",
+      "side": "both",
+      "ref": "claim.md#E1-c / counter.md#2.1",
+      "command": "mkdir -p /tmp/p42v/f5 && cd /tmp/p42base/src\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast test/ast/227_vec_element_release/prog.ct -o /tmp/p42v/f5/a.c; echo \"ct_exit=$?\"\ngrep -nE '(Probe|Str)_(retain|release)\\(e\\)' /tmp/p42v/f5/a.c\ngrep -nE 'static struct Probe Probe_retain|static __attribute__\\(\\(unused\\)\\) void Probe_release' /tmp/p42v/f5/a.c",
+      "exit": 0,
+      "output": "ct_exit=0\n364:    *e = Probe_retain(e);\n369:    (void)Probe_release(e);\n374:    *e = Str_retain(e);\n379:    (void)Str_release(e);\n40:static struct Probe Probe_retain(struct Probe *);\n416:static __attribute__((unused)) void Probe_release(struct Probe *self) {",
+      "reproduced": true,
+      "note": "counter §2.1 的 364/369/374/379 四行逐字复现。test/ast/227 的 Probe 是私有 struct，方法 static（40/411/416），helper 在同一 TU 调用 static 方法 → 单单元不链接失败。这既是 claim E1-c 的『私有 struct 的方法已 static』证据，也是『L42-7 不能无条件触发』的反例：227 与 test/ast/errors/double_drop.ct 都是单单元私有元素。"
+    },
+    {
+      "id": "V6",
+      "side": "both",
+      "ref": "counter.md#2.2 / claim.md#0.3",
+      "command": "rm -rf /tmp/p42v/f6 && mkdir -p /tmp/p42v/f6/out && cd /tmp/p42v/f6\ncat > elem.h.ct <<'EOF'\npub struct Probe { int id; }\nimpl Probe {\n    Probe retain() { return *self; }\n    void release() { }\n}\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport elem;\nint main(void)\n{\n    struct Probe p;\n    p.id = 1;\n    Vec<Probe> v = {p};\n    printf(\"%d\\n\", v.len());\n    v.release();\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1; echo \"ct_exit=$?\"\ngrep -nE 'Probe_(retain|release)' out/elem.h out/elem.c out/main.c\ncd out && cc -std=c99 -I . -c main.c -o main.o && cc -std=c99 -I . -c elem.c -o elem.o \\\n  && echo \"--- nm main.o ---\" && nm -u main.o | grep Probe \\\n  && echo \"--- nm elem.o ---\" && nm -g elem.o | grep Probe \\\n  && cc main.o elem.o -o prog.bin && ./prog.bin; echo \"run_rc=$?\"",
+      "exit": 0,
+      "output": "ct_exit=0\nout/elem.h:20:struct Probe Probe_retain(struct Probe *);\nout/elem.h:21:void Probe_release(struct Probe *);\nout/elem.c:16:struct Probe Probe_retain(struct Probe *self) {\nout/elem.c:21:void Probe_release(struct Probe *self) {\nout/main.c:21:struct Probe Probe_retain(struct Probe *);\nout/main.c:22:void Probe_release(struct Probe *);\nout/main.c:149:static __attribute__((unused)) struct Vec_Probe Vec_Probe_retain(void *self) {\nout/main.c:159:static __attribute__((unused)) int Vec_Probe_release(void *self) {\nout/main.c:184:    *e = Probe_retain(e);\nout/main.c:189:    (void)Probe_release(e);\nout/main.c:203:    Vec_Probe_release(&v);\n--- nm main.o ---\n_Probe_release\n_Probe_retain\n--- nm elem.o ---\n0000000000000028 T _Probe_release\n0000000000000000 T _Probe_retain\n1\nrun_rc=0",
+      "reproduced": true,
+      "note": "counter §2.2 的跨单元形状复现（行号因 main.ct 内容略异）：生产者 elem.c 定义外部符号，消费者 main.c 自带原型并按名调用；nm 为 U/T，链接运行 rc=0。这同时证明：plain-struct 元素在消费者单元有自己的一份原型（1957 发射），所以 PH-42 若把方法改私有，消费者会得到 static 原型 → 见 V7。"
+    },
+    {
+      "id": "V7",
+      "side": "claim",
+      "ref": "claim.md#E1-d-3（本席用生成物后处理模拟 PH-42 翻默认）",
+      "command": "cd /tmp/p42v/f6 && rm -rf n1 && cp -r out n1 && cd n1\nperl -pi -e 's/^struct Probe Probe_retain/static struct Probe Probe_retain/; s/^void Probe_release/static void Probe_release/' elem.c elem.h\necho \"--- elem.h:20-21 ---\"; sed -n '20,21p' elem.h\necho \"--- main.c:21-22 ---\"; sed -n '21,22p' main.c\ncc -std=c99 -I . -c elem.c -o elem.o && cc -std=c99 -I . -c main.c -o main.o\ncc main.o elem.o -o priv.bin > ld.log 2>&1; rc=$?\ncat ld.log; echo \"link_rc=$rc\"; exit $rc",
+      "exit": 1,
+      "output": "--- elem.h:20-21 ---\nstatic struct Probe Probe_retain(struct Probe *);\nstatic void Probe_release(struct Probe *);\n--- main.c:21-22 ---\nstruct Probe Probe_retain(struct Probe *);\nvoid Probe_release(struct Probe *);\nIn file included from main.c:3:\n./elem.h:20:21: warning: function 'Probe_retain' has internal linkage but is not defined [-Wundefined-internal]\n   20 | static struct Probe Probe_retain(struct Probe *);\n      |                     ^\nmain.ct:175:10: note: used here\n  175 |     *e = Probe_retain(e);\n      |          ^\nIn file included from main.c:3:\n./elem.h:21:13: warning: function 'Probe_release' has internal linkage but is not defined [-Wundefined-internal]\n   21 | static void Probe_release(struct Probe *);\n      |             ^\nmain.ct:180:11: note: used here\n  180 |     (void)Probe_release(e);\n      |           ^\n2 warnings generated.\nUndefined symbols for architecture arm64:\n  \"_Probe_release\", referenced from:\n      _Vec_Probe__elem_release in main.o\n  \"_Probe_retain\", referenced from:\n      _Vec_Probe__elem_retain in main.o\nld: symbol(s) not found for architecture arm64\nclang: error: linker command failed with exit code 1 (use -v to see invocation)\nlink_rc=1",
+      "reproduced": true,
+      "note": "claim E1-d-3 的机制复现：生产者方法 static、消费者仍按名调用 → cc 警告 internal-linkage-undefined + ld 失败（rc=1）。显式 pub 的那一侧就是 V6 的未改动输出（外部定义 + 消费者原型）→ 链接运行成功。所以 C 的失败面真实存在；但注意这是生成物后处理模拟，不是 PH-42 编译器。 本实验复用 V6 的生成物（/tmp/p42v/f6/out），只对生成物做链接性后处理，不是 PH-42 编译器。"
+    },
+    {
+      "id": "V8",
+      "side": "verify",
+      "ref": "本席补充：模板实例元素（Box<int>）的同一模拟",
+      "command": "rm -rf /tmp/p42v/f8 && mkdir -p /tmp/p42v/f8/out && cd /tmp/p42v/f8\ncp /tmp/p42base/src/test/modules/p31_cross_unit_owned/elem.h.ct .\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport elem;\nint main(void)\n{\n    Vec<Box<int>> v;\n    Box<int> b;\n    v.h = 0;\n    b.v = 7;\n    v.push(b);\n    printf(\"%d %d\\n\", v.len(), v.get(0).v);\n    v.release();\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1; echo \"ct_exit=$?\"\ncd out && rm -rf ../priv && cp -r . ../priv && cd ../priv\nperl -pi -e 's/^struct Box_int Box_int_retain/static struct Box_int Box_int_retain/; s/^void Box_int_release/static void Box_int_release/' elem.c elem.h\ngrep -n 'Box_int_retain\\|Box_int_release' elem.c elem.h\necho \"--- main.c has no own Box_int prototype (only the call) ---\"\ngrep -n 'Box_int_retain' main.c\ncc -std=c99 -I . -c main.c -o main.o > cc-main.log 2>&1; echo \"cc_main_rc=$?\"; head -6 cc-main.log\ncc -std=c99 -I . -c elem.c -o elem.o\ncc main.o elem.o Vec.c Option.c Result.c Str.c -o priv.bin > ld.log 2>&1; rc=$?\nhead -7 ld.log; echo \"link_rc=$rc\"; exit $rc",
+      "exit": 1,
+      "output": "ct_exit=0\nelem.c:16:static struct Box_int Box_int_retain(void *self) {\nelem.c:21:static void Box_int_release(void *self) {\nelem.h:21:static struct Box_int Box_int_retain(void *self);\nelem.h:22:static void Box_int_release(void *self);\n--- main.c has no own Box_int prototype (only the call) ---\n182:    *e = Box_int_retain(e);\ncc_main_rc=0\nIn file included from main.c:3:\n./elem.h:21:23: warning: function 'Box_int_retain' has internal linkage but is not defined [-Wundefined-internal]\n   21 | static struct Box_int Box_int_retain(void *self);\n      |                       ^\nmain.ct:173:10: note: used here\n  173 |     *e = Box_int_retain(e);\nUndefined symbols for architecture arm64:\n  \"_Box_int_release\", referenced from:\n      _Vec_Box__int__elem_release in main.o\n  \"_Box_int_retain\", referenced from:\n      _Vec_Box__int__elem_retain in main.o\nld: symbol(s) not found for architecture arm64\nclang: error: linker command failed with exit code 1 (use -v to see invocation)\nlink_rc=1",
+      "reproduced": true,
+      "note": "模板实例元素（Box<T> 的 Box_int 实例）同样：私有后 elem.c 定义 static、elem.h 原型 static，消费者只从 elem.h 得到声明（main.c 自己不发射 Box_int 原型）→ internal-linkage-undefined + ld 失败。对照 V17：pub 时 elem.o 为 T、main.o 为 U、运行 1 7。"
+    },
+    {
+      "id": "V9",
+      "side": "claim",
+      "ref": "claim.md#E1-d-2",
+      "command": "rm -rf /tmp/p42v/e5 && mkdir -p /tmp/p42v/e5 && cd /tmp/p42v/e5 && printf '#include <stdio.h>\\nstruct C { int n; };\\nimpl C {\\n    pub int get() { return self->n; }\\n}\\nint main(void) { struct C c; c.n = 3; printf(\"%%d\\\\n\", c.get()); return 0; }\\n' > prog.ct && CT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast prog.ct -o prog.c; echo ct_rc=$?; grep -n 'C_get' prog.c; cc -std=c99 prog.c -o prog 2>&1 | head -4; echo cc_rc=${PIPESTATUS[0]}",
+      "exit": 0,
+      "output": "ct_rc=0\n59:static __attribute__((unused)) pub int C_get(struct C *self) {\n166:    printf(\"%d\\n\", C_get(&c));\nprog.c:59:32: error: unknown type name 'pub'\n   59 | static __attribute__((unused)) pub int C_get(struct C *self) {\n      |                                ^\n1 error generated.\ncc_rc=1",
+      "reproduced": true,
+      "note": "claim E1-d-2 逐字复现：impl 里的 pub 被当成返回类型名，生成非法 C。C 的 52 条注解必须先有 R1（parser 消费 pub），R5a『只补 pub、行为不变』不能独立成立；顺序必须是 R1 → R5a → R5b。"
+    },
+    {
+      "id": "V10",
+      "side": "claim",
+      "ref": "claim.md#E1-c（第二半）/ B 的泄漏面",
+      "command": "rm -rf /tmp/p42v/e4 && mkdir -p /tmp/p42v/e4/out && cd /tmp/p42v/e4 && printf 'pub struct Q {\\n    int n;\\n}\\nimpl Q {\\n    int get() { return self->n; }\\n    Q retain() { return *self; }\\n    void release() { }\\n}\\n' > q.h.ct && printf '#include <stdio.h>\\nimport q;\\nint main(void) { struct Q q; q.n = 5; printf(\"%%d\\\\n\", q.get()); return 0; }\\n' > main.ct && CT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out; echo ct_exit=$?; cat -n out/Q.h | sed -n '13,22p'; grep -nE 'Q_(get|retain|release)' out/Q.c out/main.c",
+      "exit": 0,
+      "output": "ct_exit=0\n    13\tstruct ct_buf;\n    14\tstruct Str;\n    15\tstruct Q;\n    16\tstruct Q {\n    17\t    int n;\n    18\t};\n    19\tint Q_get(struct Q *);\n    20\tstruct Q Q_retain(struct Q *);\n    21\tvoid Q_release(struct Q *);\nout/Q.c:15:int Q_get(struct Q *self) {\nout/Q.c:20:struct Q Q_retain(struct Q *self) {\nout/Q.c:25:void Q_release(struct Q *self) {\nout/main.c:25:    printf(\"%d\\n\", Q_get(&q));",
+      "reproduced": true,
+      "note": "claim E1-c 第二半逐字复现：Q 从未作为元素使用，retain/release 仍因 pub struct 而进 .h 且 external——今天的可见性完全按 struct，与名字无关。B 的谓词按类型结构判定，对 Q 会返回 1，故 B 无法关掉这份导出；C 只要 Q 的作者不写 pub 就能关掉。注意这也是 J-1『HEAD 今天不成立』的直接证据。"
+    },
+    {
+      "id": "V11",
+      "side": "counter",
+      "ref": "counter.md#2.4/2.5（B 的精确性边界）",
+      "command": "rm -rf /tmp/p42v/f11 && mkdir -p /tmp/p42v/f11/out && cd /tmp/p42v/f11\ncat > shapes.h.ct <<'EOF'\npub struct Protocol { int n; }\nimpl Protocol {\n    int get() { return self->n; }\n    Protocol retain() { return *self; }\n    void release() { }\n}\npub struct WrongRet { int n; }\nimpl WrongRet {\n    int get() { return self->n; }\n    int retain() { return self->n; }\n    void release() { }\n}\npub struct OnlyRel { int n; }\nimpl OnlyRel {\n    int get() { return self->n; }\n    void release() { }\n}\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport shapes;\nint main(void)\n{\n    struct Protocol p; p.n = 1;\n    struct WrongRet w; w.n = 2;\n    struct OnlyRel o; o.n = 3;\n    printf(\"%d %d %d\\n\", p.get(), w.get(), o.get());\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1\necho \"ct_exit=$?\"\ngrep -nE '(Protocol|WrongRet|OnlyRel)_(get|retain|release)\\(' out/shapes.h\ncd out && cc -std=c99 -I . -c shapes.c -o shapes.o && nm -g shapes.o | grep -E '(Protocol|WrongRet|OnlyRel)_(get|retain|release)'",
+      "exit": 0,
+      "output": "ct_exit=0\n27:int Protocol_get(struct Protocol *);\n28:struct Protocol Protocol_retain(struct Protocol *);\n29:void Protocol_release(struct Protocol *);\n30:int WrongRet_get(struct WrongRet *);\n31:int WrongRet_retain(struct WrongRet *);\n32:void WrongRet_release(struct WrongRet *);\n33:int OnlyRel_get(struct OnlyRel *);\n34:void OnlyRel_release(struct OnlyRel *);\n00000000000000b8 T _OnlyRel_get\n00000000000000d8 T _OnlyRel_release\n0000000000000000 T _Protocol_get\n0000000000000048 T _Protocol_release\n0000000000000020 T _Protocol_retain\n0000000000000060 T _WrongRet_get\n00000000000000a0 T _WrongRet_release\n0000000000000080 T _WrongRet_retain",
+      "reproduced": true,
+      "note": "今天三种同名方法全导出（T）。PH-42 之后：B 只自动公开 Protocol（retain 返回自身 + release）；WrongRet_retain（返回 int）与 OnlyRel_release（无 retain）不满足协议 → 必须作者手写 pub；A 会把 WrongRet_retain/OnlyRel_release 一起按名公开。这是 B 比 A 精确、比 C 多 8 条例外的可执行边界。"
+    },
+    {
+      "id": "V12",
+      "side": "counter",
+      "ref": "counter.md#2.5 / 本席独立 stdprobe",
+      "command": "rm -rf /tmp/p42v/f12 && mkdir -p /tmp/p42v/f12 && cd /tmp/p42v/f12\ncat > stdprobe.ct <<'EOF'\n#include <stdio.h>\nstruct WrongRet { int id; }\nimpl WrongRet {\n    int retain() { return self->id; }\n    void release() { }\n}\nstruct OnlyRel { int id; }\nimpl OnlyRel {\n    void release() { }\n}\nstruct Life { int id; }\nimpl Life {\n    Life retain() { return *self; }\n    void release() { }\n}\nint main(void)\n{\n    Option<int> o = { 1, 3 };\n    Result<int, int> r = { 1, 4, 0 };\n    Vec<int> vi;\n    Map<char *, int> m;\n    Str s = str_from(\"hi\");\n    WrongRet wr; wr.id = 1;\n    OnlyRel orl; orl.id = 2;\n    Life lf; lf.id = 3;\n    vi.h = 0; vi.push(1);\n    m.h = 0; m.put(\"a\", 1);\n    Vec<Option<int>> v1 = { o };\n    Vec<Result<int, int>> v2 = { r };\n    Vec<Vec<int>> v3 = { vi };\n    Vec<Map<char *, int>> v4 = { m };\n    Vec<Str> v5 = { s };\n    Vec<WrongRet> v6 = { wr };\n    Vec<OnlyRel> v7 = { orl };\n    Vec<Life> v8 = { lf };\n    v1.release(); v2.release(); v3.release(); v4.release();\n    v5.release(); v6.release(); v7.release(); v8.release();\n    printf(\"ok\\n\");\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast stdprobe.ct -o stdprobe.c; echo \"ct_exit=$?\"\ngrep -n -A2 -E '__elem_(retain|release)\\((struct )?(Vec_int|Map_char_p_int|Str|Option_int|Result_int_int|WrongRet|OnlyRel|Life) \\*e\\)$' stdprobe.c\necho '--- Option_int_release / Result_int_int_release outside the elem helpers ---'\ngrep -nE 'Option_int_release|Result_int_int_release' stdprobe.c | grep -v 'elem_' || echo '(none)'",
+      "exit": 0,
+      "output": "ct_exit=0\n1896:static void __attribute__((unused)) Vec_Option__int__elem_retain(struct Option_int *e)\n1897-{\n1898-    (void)e;\n--\n1901:static void __attribute__((unused)) Vec_Option__int__elem_release(struct Option_int *e)\n1902-{\n1903-    (void)e;\n--\n1906:static void __attribute__((unused)) Vec_Result__int__int__elem_retain(struct Result_int_int *e)\n1907-{\n1908-    (void)e;\n--\n1911:static void __attribute__((unused)) Vec_Result__int__int__elem_release(struct Result_int_int *e)\n1912-{\n1913-    (void)e;\n--\n1916:static void __attribute__((unused)) Vec_Vec__int__elem_retain(struct Vec_int *e)\n1917-{\n1918-    *e = Vec_int_retain(e);\n--\n1921:static void __attribute__((unused)) Vec_Vec__int__elem_release(struct Vec_int *e)\n1922-{\n1923-    if (e->h == 0) return;\n--\n1927:static void __attribute__((unused)) Vec_Map__char__p__int__elem_retain(struct Map_char_p_int *e)\n1928-{\n1929-    *e = Map_char_p_int_retain(e);\n--\n1932:static void __attribute__((unused)) Vec_Map__char__p__int__elem_release(struct Map_char_p_int *e)\n1933-{\n1934-    if (e->h == 0) return;\n--\n1938:static void __attribute__((unused)) Vec_Str__elem_retain(struct Str *e)\n1939-{\n1940-    *e = Str_retain(e);\n--\n1943:static void __attribute__((unused)) Vec_Str__elem_release(struct Str *e)\n1944-{\n1945-    (void)Str_release(e);\n--\n1948:static void __attribute__((unused)) Vec_WrongRet__elem_retain(struct WrongRet *e)\n1949-{\n1950-    (void)e;\n--\n1953:static void __attribute__((unused)) Vec_WrongRet__elem_release(struct WrongRet *e)\n1954-{\n1955-    (void)e;\n--\n1958:static void __attribute__((unused)) Vec_OnlyRel__elem_retain(struct OnlyRel *e)\n1959-{\n1960-    (void)e;\n--\n1963:static void __attribute__((unused)) Vec_OnlyRel__elem_release(struct OnlyRel *e)\n1964-{\n1965-    (void)e;\n--\n1968:static void __attribute__((unused)) Vec_Life__elem_retain(struct Life *e)\n1969-{\n1970-    *e = Life_retain(e);\n--\n1973:static void __attribute__((unused)) Vec_Life__elem_release(struct Life *e)\n1974-{\n1975-    (void)Life_release(e);\n--- Option_int_release / Result_int_int_release outside the elem helpers ---\n1796:static __attribute__((unused)) void Option_int_release(void *self) {\n1871:static __attribute__((unused)) void Result_int_int_release(void *self) {",
+      "reproduced": true,
+      "note": "counter §2.5 的结论逐条复现：Option/Result 作为元素时 elem helper 是 (void)e，生成代码从不调用 Option_int_release/Result_int_int_release（本次单单元 compile 模式里这两个名字只有 static 未使用定义 1796/1871，无调用点；build 模式下它们是 T/U，见 V18）。Str/Vec/Map/Life 满足协议 → 调用，WrongRet（retain 返回 int）与 OnlyRel（只有 release）也 (void)e。即协议集合 = 8 条；Option/Result 的协议判定为假不是口径问题。"
+    },
+    {
+      "id": "V13",
+      "side": "both",
+      "ref": "counter.md#2.3 / claim.md#0.2",
+      "command": "rm -rf /tmp/p42v/f13 && mkdir -p /tmp/p42v/f13 && cd /tmp/p42v/f13\ncat > drop.ct <<'EOF'\n#include <stdio.h>\n#include <stdlib.h>\nstruct R { int v; } use Drop;\nimpl Drop for R {\n    void drop() { printf(\"drop %d\\n\", self->v); }\n}\nint main(void)\n{\n    own R *p = malloc(sizeof(struct R));\n    p->v = 9;\n    return 0;\n}\nEOF\ncat > hb.ct <<'EOF'\n#include <stdio.h>\nstruct Conn { int fd; } use Handback;\nimpl Handback for Conn {\n    void handback() { printf(\"handback %d\\n\", self->fd); }\n}\nint peek(Conn *c) { return c->fd; }\nint main(void)\n{\n    Conn c; c.fd = 7;\n    borrow Conn *b = &c;\n    int fd = peek(b);\n    printf(\"%d\\n\", fd);\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast drop.ct -o drop.c; echo \"ct_drop=$?\"\ngrep -n 'R_Drop_drop' drop.c\ncc -std=c99 -c drop.c -o drop.o && nm drop.o | grep -i 'Drop_drop'\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast hb.ct -o hb.c; echo \"ct_hb=$?\"\ngrep -n 'Conn_Handback_handback' hb.c\ncc -std=c99 -c hb.c -o hb.o && nm hb.o | grep -i 'Handback_handback'\necho \"--- external? ---\"\nnm -g drop.o hb.o | grep -iE 'Drop_drop|Handback_handback' || echo '(none external)'",
+      "exit": 0,
+      "output": "ct_drop=0\n17:static void __attribute__((unused)) R_Drop_drop(void *self);\n49:static void __attribute__((unused)) R_Drop_drop(void *self) {\n168:    if (p) { R_Drop_drop(p); free(p); p = 0; }\n000000000000063c t _R_Drop_drop\nct_hb=0\n16:static void __attribute__((unused)) Conn_Handback_handback(void *self);\n49:static void __attribute__((unused)) Conn_Handback_handback(void *self) {\n174:    if (b) { Conn_Handback_handback(b); b = 0; }\n0000000000000668 t _Conn_Handback_handback\n--- external? ---\n(none external)",
+      "reproduced": true,
+      "note": "drop/handback 的定义与调用都是同一 TU 的 static（nm 小写 t），没有任何跨单元 external 需求（nm -g 无输出）；对应 Emitter.h.ct:2454/2459（前向声明恒 static）、2944/3578/3593（定义/调用）。这支持双方共同的 D42-8：drop/handback 不入方法可见性集合，A 把它们列入保留名对符号面没有作用。"
+    },
+    {
+      "id": "V14",
+      "side": "verify",
+      "ref": "跨单元 Drop（补充）",
+      "command": "rm -rf /tmp/p42v/f14 && mkdir -p /tmp/p42v/f14/out && cd /tmp/p42v/f14\ncat > r.h.ct <<'EOF'\npub struct R { int v; } use Drop;\nimpl Drop for R {\n    void drop() { }\n}\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\n#include <stdlib.h>\nimport r;\nint main(void)\n{\n    own R *p = malloc(sizeof(struct R));\n    p->v = 1;\n    printf(\"%d\\n\", p->v);\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1; echo \"ct_exit=$?\"\ngrep -nE 'R_Drop_drop' out/main.c out/r.c\ncd out && cc -std=c99 -I . -c main.c -o main.o && cc -std=c99 -I . -c r.c -o r.o\necho \"--- nm ---\"; nm main.o r.o | grep -i R_Drop_drop\necho \"--- external? ---\"; nm -g main.o r.o | grep -i R_Drop_drop || echo '(none external)'",
+      "exit": 0,
+      "output": "ct_exit=0\nout/main.c:16:static void __attribute__((unused)) R_Drop_drop(void *self);\nout/main.c:24:static void __attribute__((unused)) R_Drop_drop(void *self) {\nout/main.c:33:    if (p) { R_Drop_drop(p); free(p); p = 0; }\nout/r.c:14:static void __attribute__((unused)) R_Drop_drop(void *self);\nout/r.c:16:static void __attribute__((unused)) R_Drop_drop(void *self) {\n--- nm ---\n0000000000000078 t _R_Drop_drop\n--- external? ---\n(none external)",
+      "reproduced": true,
+      "note": "跨单元 Drop：消费方 main.c 自带一份 static 定义（r.c 也有一份），无 external 符号 → Drop 不需要 pub，也不受方法可见性影响。这是 D42-8 的正面证据。"
+    },
+    {
+      "id": "V15",
+      "side": "verify",
+      "ref": "本席发现的 HEAD 既有缺陷（与 p42 可见性无关，但影响『消费方自带 static 副本』的普适说法）",
+      "command": "rm -rf /tmp/p42v/f15 && mkdir -p /tmp/p42v/f15/out && cd /tmp/p42v/f15\ncat > conn.h.ct <<'EOF'\npub struct Conn { int fd; } use Handback;\nimpl Handback for Conn {\n    void handback() { }\n}\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport conn;\nint peek(Conn *c) { return c->fd; }\nint main(void)\n{\n    Conn c; c.fd = 7;\n    borrow Conn *b = &c;\n    printf(\"%d\\n\", peek(b));\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build main.ct -o out3 2>&1; rc=$?\necho \"BUILD_RC=$rc\"; exit $rc",
+      "exit": 1,
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Option.c' '.ctbuild/Result.c' '.ctbuild/Str.c' '.ctbuild/main.c' '.ctbuild/conn.c' '-o' 'out3'\nmain.ct:6:37: warning: function 'Conn_Handback_handback' has internal linkage but is not defined [-Wundefined-internal]\n    6 | static void __attribute__((unused)) Conn_Handback_handback(void *self);\n      |                                     ^\nmain.ct:23:14: note: used here\n   23 |     if (b) { Conn_Handback_handback(b); b = 0; }\n      |              ^\n1 warning generated.\nUndefined symbols for architecture arm64:\n  \"_Conn_Handback_handback\", referenced from:\n      _main in main-4792f6.o\nld: symbol(s) not found for architecture arm64\nclang: error: linker command failed with exit code 1 (use -v to see invocation)\nBUILD_RC=1",
+      "reproduced": true,
+      "note": "单元 conn.h.ct 定义 `pub struct Conn {…} use Handback; impl Handback for Conn`，消费单元 main.ct 只 import + borrow：ct build rc=1。生成的 .ctbuild/main.c:15 只有 static 前向声明、.ctbuild/conn.c:16 是 static 定义，链接失败（_Conn_Handback_handback）。counter §2.3 的 main.c:14 也是同一形状（只有声明），其『消费单元自带 static 副本』对 Handback 不成立。这是 HEAD 既有问题，B/C/A 都不因 pub 而修复；记录以免把链接失败误归给可见性。"
+    },
+    {
+      "id": "V16",
+      "side": "claim",
+      "ref": "claim.md#E1-b",
+      "command": "rm -rf /tmp/p42v/e6 && mkdir -p /tmp/p42v/e6/out && cd /tmp/p42v/e6 && printf '#include <stdio.h>\\nint main(void)\\n{\\n    Str s = str_from(\"hi\");\\n    Vec<Str> vs = {s};\\n    printf(\"%%d %%d\\\\n\", vs.len(), vs.get(0).len);\\n    vs.release();\\n    return 0;\\n}\\n' > main.ct && CT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1; grep -nHE 'Str_retain' out/main.c out/Str.h; grep -nE 'Str_release\\(e\\)' out/main.c; cd out && cc -std=c99 -I . main.c Vec.c Option.c Result.c Str.c -o app && ./app",
+      "exit": 0,
+      "output": "out/main.c:19:struct Str Str_retain(struct Str *);\nout/main.c:182:    *e = Str_retain(e);\nout/Str.h:28:struct Str Str_retain(struct Str *);\n187:    (void)Str_release(e);\n1 2",
+      "reproduced": true,
+      "note": "claim E1-b 的生成物与 stdout 逐字复现（除行号 19/182/187 与 claim 的 19/182/187 一致，Str.h:28 一致）。Str.h 无 Vec 时也有这两条原型（V18 的 Str.h 5 条含 2 条方法）：它们来自 Str 单元的 emit_inherent_protos（3385），与元素使用无关。"
+    },
+    {
+      "id": "V17",
+      "side": "counter",
+      "ref": "counter.md#1『B 必须含 .h』",
+      "command": "cd /tmp/p42v/f8/out\necho \"--- elem.h:13-24 ---\"; sed -n '13,24p' elem.h\necho \"--- main.c Box_int refs ---\"; grep -n 'Box_int_retain\\|Box_int_release' main.c\ncc -std=c99 -I . -c main.c -o main.o && cc -std=c99 -I . -c elem.c -o elem.o\necho \"--- nm main.o ---\"; nm main.o | grep -E 'Box_int_(retain|release)'\necho \"--- nm elem.o ---\"; nm elem.o | grep -E 'Box_int_(retain|release)'\ncc -std=c99 -I . main.c elem.c Vec.c Option.c Result.c Str.c -o prog && ./prog; echo \"run_rc=$?\"",
+      "exit": 0,
+      "output": "--- elem.h:13-24 ---\nstruct ct_buf;\nstruct Str;\nstruct Box_int;\nstruct Vec_Box__int;\nstruct Box_int {\n    int v;\n};\n\nstruct Box_int Box_int_retain(void *self);\nvoid Box_int_release(void *self);\n\n#endif\n--- main.c Box_int refs ---\n182:    *e = Box_int_retain(e);\n187:    (void)Box_int_release(e);\n--- nm main.o ---\n                 U _Box_int_release\n                 U _Box_int_retain\n--- nm elem.o ---\n0000000000000028 T _Box_int_release\n0000000000000000 T _Box_int_retain\n1 7\nrun_rc=0",
+      "reproduced": true,
+      "note": "counter §1 的硬证据复现：模板实例 Box<int> 的消费单元 main.c 里没有自己的 Box_int 原型（grep 只命中调用 181/186），原型只在 elem.h:21-22；main.o 为 U、elem.o 为 T，运行 1 7。故 B/C 的『公开』必须含 .h；external-only（删掉 elem.h 两条原型）会落到 C99 implicit declaration（本席另跑：error: call to undeclared function 'Box_int_retain'）。 本实验复用 V8 的 pub 基线生成物（/tmp/p42v/f8/out）。"
+    },
+    {
+      "id": "V18",
+      "side": "verify",
+      "ref": "claim.md#P4/E42-6 的事实前提（本席反证）",
+      "command": "rm -rf /tmp/p42v/f18 && mkdir -p /tmp/p42v/f18/out && cd /tmp/p42v/f18\ncat > main.ct <<'EOF'\n#include <stdio.h>\nint main(void)\n{\n    Vec<int> vi; vi.h = 0; vi.push(1);\n    Str s = str_from(\"hi\");\n    Vec<Str> vs = { s };\n    Map<char *, int> m; m.h = 0; m.put(\"a\", 1);\n    Option<int> o = { 1, 3 };\n    Result<int, int> r = { 1, 4, 0 };\n    printf(\"%d %d %d %d %d\\n\", vi.len(), vs.len(), m.len(), o.unwrap(), r.unwrap());\n    vi.release(); vs.release(); m.release(); o.release(); r.release();\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1; echo \"ct_exit=$?\"\necho -n \"Vec.h instance-method prototypes = \"; grep -cE '\\b(Vec_int|Map_char_p_int)_[a-z_]+\\(' out/Vec.h\necho -n \"Option.h instance-method prototypes = \"; grep -cE '\\bOption_int_[a-z_]+\\(' out/Option.h\necho -n \"Result.h instance-method prototypes = \"; grep -cE '\\bResult_int_int_[a-z_]+\\(' out/Result.h\ngrep -nE '(Vec_int|Map_char_p_int|Option_int|Result_int_int)_(retain|release)\\(' out/Vec.h out/Option.h out/Result.h\ncd out && cc -std=c99 -I . -c Option.c -o Option.o && cc -std=c99 -I . -c main.c -o main.o\nnm Option.o | grep Option_int_release; nm main.o | grep Option_int_release",
+      "exit": 0,
+      "output": "ct_exit=0\nVec.h instance-method prototypes = 18\nOption.h instance-method prototypes = 8\nResult.h instance-method prototypes = 11\nout/Vec.h:50:struct Vec_int Vec_int_retain(void *self);\nout/Vec.h:51:int Vec_int_release(void *self);\nout/Vec.h:59:struct Map_char_p_int Map_char_p_int_retain(void *self);\nout/Vec.h:60:int Map_char_p_int_release(void *self);\nout/Option.h:35:void Option_int_release(void *self);\nout/Result.h:39:void Result_int_int_release(void *self);\n0000000000000154 T _Option_int_release\n                 U _Option_int_release",
+      "reproduced": true,
+      "note": "反证 claim P4『Vec.h/Option.h/Result.h 本来就没有方法原型』：只要构建里用了 Vec<int>/Map<char*,int>/Option<int>/Result<int,int>，三个头分别有 18/8/11 条实例方法原型（含 retain/release），且 Option.c 是 T、消费者是 U。该句只在『只用 Vec<Str>』的构建里成立（外部元素实例被 2062 跳过）。J-5 的 .h 不变式因此必须覆盖实例相关原型，不能只看 Str.h。"
+    },
+    {
+      "id": "V19",
+      "side": "both",
+      "ref": "claim.md#E2 / counter.md#E2 行号锚点核对",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngit show 1b14b63a:selfhost/ct-ast/backend/emit/Emitter.h.ct | nl -ba | sed -n '1624p;1740p;1778p;1786p;1800,1806p;1815p;1822p;1957,1959p;1981p;2011p;2017p;2023p;2026p;2054,2056p;2454p;2459p;2847p;2944p;3385p;3578p;3593p'\necho '--- counter cited lines ---'\ngit show 1b14b63a:selfhost/ct-ast/backend/emit/Emitter.h.ct | nl -ba | sed -n '1687p;1729p;2020p;2910p;3448p;2517,2519p;2521p;2816p'",
+      "exit": 0,
+      "output": "  1624\t    exported = tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0\n  1740\tstatic int elem_ret_ctype(int inst, const char *text, char *out, int cap)\n  1778\tstatic int elem_has_life(struct Emitter *self, const char *elem)\n  1786\t    if (frontend::sym::ct_is_container_type(elem)) return 1;\n  1800\t                if (strcmp(self->arena->nodes[m].text2, \"release\") == 0) got_rel = 1;\n  1801\t                if (strcmp(self->arena->nodes[m].text2, \"retain\") == 0\n  1802\t                    && self->arena->nodes[m].text[0]\n  1803\t                    && elem_ret_ctype(inst, self->arena->nodes[m].text,\n  1804\t                                      ret, sizeof ret)\n  1805\t                    && strcmp(ret, want) == 0)\n  1806\t                    got_r = 1;\n  1815\t    si = self->sym->find_struct(base);\n  1822\t        if (self->arena->nodes[k].text2[0]) continue;  /* trait impl */\n  1957\t            if (!self->decl_is_pub(N_STRUCT, base))\n  1958\t                fputs(\"static \", self->out);\n  1959\t            fprintf(self->out, \"%s %s_%s(%s *);\\n\", rtype, base, mname, want);\n  1981\t    if (elem_has_life(self, elem) && inst_emit_elem_method_protos(self, elem) != 0)\n  2011\t    life = elem_has_life(self, elem);\n  2017\t    if (life) fprintf(self->out, \"    *e = %s_retain(e);\\n}\\n\\n\", ename);\n  2023\t        fprintf(self->out, \"    if (e->h == 0) return;\\n    (void)%s_release(e);\\n}\\n\\n\",\n  2026\t        fprintf(self->out, \"    (void)%s_release(e);\\n}\\n\\n\", ename);\n  2054\t            via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0\n  2055\t                      && self->units[tps[tmpl].owner].is_hdr;\n  2056\t            if (!via_hdr || tps[tmpl].owner != u) continue;\n  2454\t                fprintf(self->out, \"static void __attribute__((unused)) %s_Drop_drop(void *self);\\n\",\n  2459\t                fprintf(self->out, \"static void __attribute__((unused)) %s_Handback_handback(void *self);\\n\",\n  2847\t                if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name))\n  2944\t            fprintf(self->out, \"static void __attribute__((unused)) %s_Drop_drop(void *self) {\\n\",\n  3385\t            if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name)) continue;\n  3578\t                fprintf(self->out, \") { %s_Handback_handback(\", self->sym->structs[si].name);\n  3593\t                fprintf(self->out, \") { %s_Drop_drop(\", self->sym->structs[si].name);\n--- counter cited lines ---\n  1687\t        if (!self->node_mentions(body, self->arena->nodes[k].text2))\n  1729\t                        ins[ii].name, cuse, self->arena->nodes[m].text2);\n  2020\t            \"static void __attribute__((unused)) %s__elem_release(%s *e)\\n{\\n\",\n  2517\t       pipeline). Emitted only when such an array exists. */\n  2518\t    int emit_unit_init(int prog)\n  2519\t    {\n  2521\t        (void)self;\n  2816\t                    }\n  2910\t                else\n  3448\t                        fputs(\"__attribute__((visibility(\\\"default\\\"))) \", self->out);",
+      "reproduced": true,
+      "note": "claim 的锚点全部对得上（1957/2017/2023/2026/2454/2459/2847/2944/3385/3578/3593；另 1624 是模板实例方法定义侧的 exported，2054 是头原型侧——claim 的『4 个调用点』把 1604/2054 算一点，实际代码有 1624 与 2054 两处）。counter 引的 1687/1729/2020/2910/3448/2517-2519/2521/2816 在 1b14b63a 与 093198be（Emitter 同为 5437 行）里都不是它说的事件（2518 是 emit_unit_init）。counter 的机制结论仍成立，但行号锚点不可用。"
+    },
+    {
+      "id": "V20",
+      "side": "verify",
+      "ref": "question.md#5 / claim.md#E2 / counter.md#1",
+      "command": "cd /tmp/p42base/src\nsed -n '2215,2248p' selfhost/ct-ast/frontend/parse/Expr.h.ct\necho '--- N_METHOD creation ---'\nsed -n '3056,3068p;3191,3205p;3535,3550p' selfhost/ct-ast/frontend/parse/Parser.h.ct\necho '--- Arena d default ---'\nsed -n '93,97p' selfhost/ct-ast/runtime/arena/Arena.h.ct\necho '--- any write to N_METHOD.d ---'\ngrep -rn 'nodes\\[mnode\\]\\.d' selfhost/ct-ast/ || echo '(none)'",
+      "exit": 0,
+      "output": "       declaring-unit test (`StructDef.owner`). */\n    int container_elem_foreign(const char *ctype, int container_tmpl)\n    {\n        char base[MAX_TEXT];\n        char tr[MAX_TEXT];\n        int ip, ti, inst, k, ti2, tn, life;\n        struct StructInst *ins;\n        struct StructTmpl *tps;\n\n        tps = frontend::sym::ct_tmpls(&tn);\n        if (!tps || container_tmpl < 0) return 0;\n        if (self->sup->iface_ref_type(ctype, tr, sizeof tr, &ip)) {\n            ti = self->sym->find_trait(tr);\n            if (ti >= 0 && self->sym->traits[ti].path[0]\n                && strcmp(self->sym->traits[ti].path, tps[container_tmpl].path) != 0)\n                return 1;\n            return 0;\n        }\n        if (strncmp(ctype, \"struct \", 7) != 0) return 0;\n        snprintf(base, sizeof base, \"%s\", ctype + 7);\n        inst = frontend::sym::ct_inst_find(base);\n        if (inst < 0) return 0;\n        ins = frontend::sym::ct_insts(&k);\n        ti2 = frontend::sym::ct_tmpl_find(ins[inst].tmpl);\n        if (ti2 < 0 || tps[ti2].owner < 0) return 0;\n        if (tps[ti2].owner == tps[container_tmpl].owner) return 0;\n        /* A container element always needs the per-instance helpers; a plain\n           instance needs them only when it carries a lifecycle (`retain` and\n           `release`). Any other instance is copied by value and unaffected. */\n        if (frontend::sym::ct_is_container_type(ctype)) return 1;\n        life = self->inst_inherent_method(ctype, \"retain\") >= 0\n            && self->inst_inherent_method(ctype, \"release\") >= 0;\n        return life;\n    }\n--- N_METHOD creation ---\n            }\n            self->sup->pop_scope();\n            mnode = self->sup->new_node(N_METHOD);\n            if (mnode < 0) return -1;\n            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, \"%s\", ret);\n            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, \"%s\", mname);\n            /* The emitted function takes the trait's return type (L2 does the\n               same), so a mismatching impl still yields C that compiles; the\n               map keeps the impl's written type in `text`. */\n            if (ti >= 0 && tm_i < self->sym->traits[ti].nm)\n                snprintf(self->arena->nodes[mnode].text3, MAX_TEXT, \"%s\", self->sym->traits[ti].m[tm_i].ret);\n            self->arena->nodes[mnode].a = params;\n            self->arena->nodes[mnode].b = body;\n            self->sup->pop_scope();\n            (void)mline;\n            mnode = self->sup->new_node(N_METHOD);\n            if (mnode < 0) return -1;\n            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, \"%s\", ret);\n            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, \"%s\", mname);\n            self->arena->nodes[mnode].a = params;\n            self->arena->nodes[mnode].b = body;\n            self->arena->nodes[mnode].num = -1;   /* no trait */\n            self->arena->nodes[mnode].aux = si;\n            self->arena->nodes[mnode].c = is_static;\n            if (tail < 0) self->arena->nodes[node].a = mnode;\n            else self->arena->nodes[tail].next = mnode;\n            tail = mnode;\n        }\n            self->sup->pop_scope();\n            (void)mline;\n            mnode = self->sup->new_node(N_METHOD);\n            if (mnode < 0) return -1;\n            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, \"%s\", ret);\n            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, \"%s\", mname);\n            self->arena->nodes[mnode].a = params;\n            self->arena->nodes[mnode].b = body;\n            self->arena->nodes[mnode].num = ti;\n            self->arena->nodes[mnode].aux = -1;\n            /* P29-2: `c` marks a receiverless method; the emitter drops the\n               `void *self` parameter and the `_self` local. */\n            self->arena->nodes[mnode].c = is_static;\n            if (tail < 0) self->arena->nodes[node].a = mnode;\n            else self->arena->nodes[tail].next = mnode;\n            tail = mnode;\n--- Arena d default ---\n        self->nodes[n].b = -1;\n        self->nodes[n].c = -1;\n        self->nodes[n].d = -1;\n        self->nodes[n].next = -1;\n        self->nodes[n].aux = 0;\n--- any write to N_METHOD.d ---\n(none)",
+      "reproduced": true,
+      "note": "第二个协议谓词确实存在：Expr::container_elem_foreign 的 life 只查 retain/release 两个名字（2245-2246），不看返回类型；它的问题（foreign-element 副本）与可见性不同，B 复用 Emitter::elem_has_life 不会消灭它。N_METHOD 在 3 处创建（trait/inherent/template impl），只写 text/text2/a/b/num/aux/c，从不写 d；Arena 默认 d=-1 → C 的 ct_method_is_pub(node) 读 N_METHOD.d 之前必须先由 R1 写入。"
+    },
+    {
+      "id": "V21",
+      "side": "both",
+      "ref": "claim.md#P4 / draft §1.4 L42-7",
+      "command": "cd /tmp/p42base/src && echo '--- L42-7/L42-4 text at HEAD ---'; grep -rn \"element protocol\\|must be pub\" selfhost/ct-ast/; echo \"exit=$?\"; echo '--- claim P4 grep ---'; grep -rn 'is_reserved_name\\|\"retain\"' selfhost/ct-ast/; echo \"exit=$?\"",
+      "exit": 0,
+      "output": "--- L42-7/L42-4 text at HEAD ---\nexit=1\n--- claim P4 grep ---\nselfhost/ct-ast/frontend/parse/Expr.h.ct:2245:        life = self->inst_inherent_method(ctype, \"retain\") >= 0\nselfhost/ct-ast/backend/emit/Emitter.h.ct:1801:                if (strcmp(self->arena->nodes[m].text2, \"retain\") == 0\nselfhost/ct-ast/backend/emit/Emitter.h.ct:1826:            if (strcmp(self->arena->nodes[m].text2, \"retain\") == 0\nselfhost/ct-ast/backend/emit/Emitter.h.ct:1951:            if (strcmp(mname, \"retain\") != 0 && strcmp(mname, \"release\") != 0)\nexit=0",
+      "reproduced": true,
+      "note": "L42-7（`element protocol method '<m>' must be pub`）与 L42-4 在 HEAD 都不存在（grep 0 命中，exit 1）；`ct_method_is_pub`/`is_reserved_name` 也不存在。claim P4 说 `grep 'is_reserved_name|\"retain\"'` 只在元素 helper 发射处命中——实测 4 处，Expr.h.ct:2245 是解析器的名字-only 生命周期判定，不是 helper 发射处；该句不成立（claim 自己在 E2 承认了第二个谓词，P4 与之矛盾）。"
+    },
+    {
+      "id": "V22",
+      "side": "verify",
+      "ref": "question.md#J-5 / p39 expected.internal",
+      "command": "cd /tmp/p42base/src && /tmp/p42base/ct-ast build --lib 2>&1; echo exit=$?; echo '--- p39 expected.internal ---'; cat test/modules/p39_lib/expected.internal",
+      "exit": 1,
+      "output": "usage: ct-ast build <input.ct>... [-o <exe>]\nexit=1\n--- p39 expected.internal ---\nStr_release\nStr_retain\nstr_c_str\nstr_compare\nstr_concat\nstr_from\nstr_from_len\nstr_len\nstr_slice",
+      "reproduced": true,
+      "note": "J-5 提到的 expected.internal 是 PH-39 的 --lib 导出面清单，含 Str_retain/Str_release 两个内部符号；但 --lib 在 HEAD 不存在（exit 1 usage），所以『迁移后 expected.internal 不变』今天无法实测。ABI_HASH 只遍历 funcs（Emitter.h.ct:5185-5245），方法不参与。"
+    },
+    {
+      "id": "V23",
+      "side": "verify",
+      "ref": "question.md#4（B 的边界：按类型结构 vs 是否被当元素用）",
+      "command": "rm -rf /tmp/p42v/f23 && mkdir -p /tmp/p42v/f23/out && cd /tmp/p42v/f23\ncat > shapes.h.ct <<'EOF'\npub struct Protocol {\n    int n;\n}\nimpl Protocol {\n    int get() { return self->n; }\n    Protocol retain() { return *self; }\n    void release() { }\n}\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport shapes;\nint main(void)\n{\n    struct Protocol p; p.n = 1;\n    Vec<Protocol> v = { p };\n    printf(\"%d\\n\", v.len());\n    v.release();\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out >/dev/null 2>&1; echo \"ct_exit=$?\"\ngrep -n -A3 '^static void __attribute__((unused)) Vec_Protocol__elem_retain' out/main.c\ngrep -n -A3 '^static void __attribute__((unused)) Vec_Protocol__elem_release' out/main.c\necho \"--- Protocol 从未作元素时（V11/f11）仍在 .h ---\"\nsed -n '27,29p' /tmp/p42v/f11/out/shapes.h",
+      "exit": 0,
+      "output": "ct_exit=0\n182:static void __attribute__((unused)) Vec_Protocol__elem_retain(struct Protocol *e)\n183-{\n184-    *e = Protocol_retain(e);\n185-}\n187:static void __attribute__((unused)) Vec_Protocol__elem_release(struct Protocol *e)\n188-{\n189-    (void)Protocol_release(e);\n190-}\n--- Protocol 从未作元素时（V11/f11）仍在 .h ---\nint Protocol_get(struct Protocol *);\nstruct Protocol Protocol_retain(struct Protocol *);\nvoid Protocol_release(struct Protocol *);",
+      "reproduced": true,
+      "note": "elem_has_life 只看类型结构（1778-1835 遍历该类型的 impl，无『是否被当元素用』输入）：Protocol 一旦作为元素，helper 就调用 retain/release（life=1）；同一个 Protocol 从未作元素时（e11）retain/release 仍因 pub struct 导出。B 若在 owner 单元按此谓词自动公开，就会对『从未作元素用』的协议形状类型同样公开（counter §2.4 也承认『谓词不能分辨意图』）。B 的可辩护版本需要再加 owner pub 护栏；但护栏对模板实例（Box_int）要用 template 的 is_pub 而不是 decl_is_pub(N_STRUCT, 'Box_int')——counter §2.4 的公式只写了后者，模板 owner 会漏。 第二段复用 V11 的 never-element 构建（/tmp/p42v/f11/out）。"
+    },
+    {
+      "id": "V24",
+      "side": "counter",
+      "ref": "counter.md#5（E42-6 / ABI）",
+      "command": "cd /tmp/p42base/src && sed -n '5185,5245p' selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "exit": 0,
+      "output": "        for (i = 0; i < n; i++)\n            for (j = i + 1; j < n; j++)\n                if (strcmp(self->sym->funcs[order[i]].cname,\n                           self->sym->funcs[order[j]].cname) > 0) {\n                    k = order[i]; order[i] = order[j]; order[j] = k;\n                }\n        h = 2166136261UL;\n        for (i = 0; i < n; i++) {\n            const char *s = self->sym->funcs[order[i]].cname;\n            while (*s) {\n                h = (h ^ (unsigned char)*s) * 16777619UL;\n                h = h & 0xffffffffUL;\n                s++;\n            }\n        }\n        f = fopen(path, \"wb\");\n        if (!f) return self->fail(\"cannot write the ABI header\");\n        fprintf(f, \"/* Generated by ct v%s from %s -- ABI surface; do not edit. */\\n\",\n                self->version, self->path);\n        fputs(\"/* Only the declarations in this file are ABI; the archive nm surface may be larger. */\\n\", f);\n        fprintf(f, \"#ifndef %s_ABI_H\\n#define %s_ABI_H\\n\\n\", upper, upper);\n        fprintf(f, \"#define %s_ABI_VERSION 1\\n\", upper);\n        fprintf(f, \"#define %s_ABI_HASH 0x%08lx\\n\\n\", upper, h);\n        /* Opaque forwards for named structs used by the exported signatures. */\n        ns = 0;\n        for (i = 0; i < n; i++) {\n            int p;\n            for (p = -1; p < self->sym->funcs[order[i]].nparams; p++) {\n                const char *tp = p < 0 ? self->sym->funcs[order[i]].ret\n                                       : self->sym->funcs[order[i]].ptype[p];\n                char nm[MAX_TEXT];\n                int q = 0;\n                if (strncmp(tp, \"struct \", 7) != 0) continue;\n                tp += 7;\n                while (*tp && (isalnum((unsigned char)*tp) || *tp == '_') && q < MAX_TEXT - 1)\n                    nm[q++] = *tp++;\n                nm[q] = 0;\n                if (!q) continue;\n                for (j = 0; j < ns; j++) if (strcmp(fwd[j], nm) == 0) break;\n                if (j == ns && ns < 64) snprintf(fwd[ns++], MAX_TEXT, \"%s\", nm);\n            }\n        }\n        for (i = 0; i < ns; i++)\n            for (j = i + 1; j < ns; j++)\n                if (strcmp(fwd[i], fwd[j]) > 0) {\n                    char tmp[MAX_TEXT];\n                    snprintf(tmp, sizeof tmp, \"%s\", fwd[i]);\n                    snprintf(fwd[i], sizeof fwd[i], \"%s\", fwd[j]);\n                    snprintf(fwd[j], sizeof fwd[j], \"%s\", tmp);\n                }\n        for (i = 0; i < ns; i++) fprintf(f, \"struct %s;\\n\", fwd[i]);\n        if (ns > 0) fputs(\"\\n\", f);\n        for (i = 0; i < n; i++) {\n            fi = order[i];\n            fprintf(f, \"%s %s(\", self->sym->funcs[fi].ret, self->sym->funcs[fi].cname);\n            if (self->sym->funcs[fi].nparams == 0) fputs(\"void\", f);\n            for (j = 0; j < self->sym->funcs[fi].nparams; j++) {\n                if (j > 0) fputs(\", \", f);\n                fputs(self->sym->funcs[fi].ptype[j], f);\n            }\n            fputs(\");\\n\", f);",
+      "reproduced": true,
+      "note": "ABI 头/ABI_HASH 只遍历 sym->funcs（自由函数），不遍历 impl 方法；双方（claim E4 / counter §5）关于『方法可见性不改 ABI_HASH』的事实一致。"
+    },
+    {
+      "id": "V25",
+      "side": "verify",
+      "ref": "question.md#J-3（52 条是否完备）",
+      "command": "cd /tmp/p42base/src && python3 - <<'PY'\nimport re, glob\nfiles = sorted(glob.glob('**/*.h.ct', recursive=True))\ndef strip(t):\n    t = re.sub(r'/\\*.*?\\*/', lambda m: '\\n'*m.group(0).count('\\n'), t, flags=re.S)\n    t = re.sub(r'//[^\\n]*', '', t)\n    return t\nres={}\nfor f in files:\n    lines = strip(open(f, encoding='utf-8').read()).split('\\n')\n    in_impl=False; trait=False; n=0\n    for ln in lines:\n        if not in_impl:\n            m = re.match(r'^impl\\b(.*)\\{', ln)\n            if m: in_impl=True; trait=' for ' in m.group(1)\n            continue\n        if re.match(r'^\\}\\s*$', ln): in_impl=False; trait=False; continue\n        if trait: continue\n        if not ln.startswith('    ') or ln.startswith('     '): continue\n        s=ln.strip()\n        if not s or ';' in s: continue\n        if re.match(r'^(if|while|for|switch|return|else)\\b',s): continue\n        if not re.match(r'^(.+?)\\(([^()]*)\\)\\s*\\{?\\s*$',s): continue\n        head=s.split('(')[0].strip()\n        if head.endswith('=') or not re.search(r'([A-Za-z_]\\w*)$',head): continue\n        n+=1\n    if n: res[f]=n\nprint('total .h.ct =', len(files))\nprint('files with inherent methods =', len(res))\nfor f,n in sorted(res.items()): print(f'  {f} = {n}')\nprint('sum =', sum(res.values()))\nPY",
+      "exit": 0,
+      "output": "total .h.ct = 128\nfiles with inherent methods = 8\n  examples/38_ecosystem_reuse/src/eco.h.ct = 3\n  lib/std/Option.h.ct = 8\n  lib/std/Result.h.ct = 11\n  lib/std/Str.h.ct = 2\n  lib/std/Vec.h.ct = 22\n  test/modules/p29_generic_struct/shapes.h.ct = 1\n  test/modules/p31_cross_unit_owned/elem.h.ct = 2\n  test/modules/p34_inherent/lib.h.ct = 3\nsum = 52",
+      "reproduced": true,
+      "note": "全树扫描（不是只扫 5 个路径）：128 个 .h.ct 里只有 8 个有固有方法，合计 52；与 V1/V2 的分母一致。注意 selfhost/ct-ast/**/*.h.ct 全是 `impl Trait for Struct`（trait impl），无固有方法，故 PH-42 默认私有不会波及编译器自举源；p34_inherent.ct 等 .ct 夹具不是可导入单元（V26），故不在 52 内。"
+    },
+    {
+      "id": "V26",
+      "side": "verify",
+      "ref": "question.md#J-3（跨单元面）",
+      "command": "rm -rf /tmp/p42v/f26 && mkdir -p /tmp/p42v/f26 && cd /tmp/p42v/f26\ncat > q.ct <<'EOF'\npub struct Q { int n; }\nimpl Q { int get() { return self->n; } }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport q;\nint main(void) { struct Q q; q.n = 5; printf(\"%d\\n\", q.get()); return 0; }\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out 2>&1; rc=$?\necho \"ct_exit=$rc\"; exit $rc",
+      "exit": 1,
+      "output": "ctc: only a .h.ct unit can be imported: rename 'q.ct' to 'q.h.ct'\nct_exit=1",
+      "reproduced": true,
+      "note": "`import` 只接受 .h.ct：普通 .ct 单元不能作为被导入单元（ctc: only a .h.ct unit can be imported）。因此『需跨单元可见的方法』= 可导入 .h.ct 的固有方法，正是 52；test/probes/fixtures/p34_inherent.ct 这类 .ct 夹具不受影响。"
+    },
+    {
+      "id": "V27",
+      "side": "verify",
+      "ref": "claim.md#5.3（『test/ast/215/216 跨单元调用』）",
+      "command": "cd /tmp/p42base/src\necho \"--- 215/216 files ---\"; ls test/ast/215_option_basic/ test/ast/216_result_basic/\necho \"--- import count (0 = single unit) ---\"\ngrep -c 'import' test/ast/215_option_basic/prog.ct test/ast/216_result_basic/prog.ct || true\necho \"--- release call sites inside those files ---\"\ngrep -nE '\\.release\\(\\)' test/ast/215_option_basic/prog.ct test/ast/216_result_basic/prog.ct",
+      "exit": 0,
+      "output": "--- 215/216 files ---\ntest/ast/215_option_basic/:\nprog.ct\nprog.expected.out\n\ntest/ast/216_result_basic/:\nprog.ct\nprog.expected.out\n--- import count (0 = single unit) ---\ntest/ast/215_option_basic/prog.ct:0\ntest/ast/216_result_basic/prog.ct:0\n--- release call sites inside those files ---\ntest/ast/215_option_basic/prog.ct:23:    a.release();\ntest/ast/215_option_basic/prog.ct:24:    b.release();\ntest/ast/216_result_basic/prog.ct:26:    ok.release();\ntest/ast/216_result_basic/prog.ct:27:    bad.release();\ntest/ast/216_result_basic/prog.ct:28:    shifted.release();",
+      "reproduced": true,
+      "note": "test/ast/215_option_basic 与 216_result_basic 都只有 prog.ct + expected.out，源内无 import；它们对 Option/Result release 的调用发生在同一单元（compile 模式），不是跨单元调用。claim §5.3 的『必须 pub』结论仍对（跨单元的真实证据是 V18 的 build 模式消费者），但引用对象错误。"
+    },
+    {
+      "id": "V28",
+      "side": "verify",
+      "ref": "question.md#J-1（同名 drop/handback 不被自动公开）",
+      "command": "rm -rf /tmp/p42v/f28 && mkdir -p /tmp/p42v/f28/out && cd /tmp/p42v/f28\ncat > d.h.ct <<'EOF'\npub struct D { int n; }\nimpl D {\n    int get() { return self->n; }\n    void drop() { }\n    void handback() { }\n}\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport d;\nint main(void) { struct D d; d.n = 1; printf(\"%d\\n\", d.get()); return 0; }\nEOF\nCT_STD_DIR=/tmp/p42base/src/lib/std /tmp/p42base/ct-ast build --emit-c main.ct -o out 2>&1; echo \"ct_exit=$?\"\ngrep -n 'D_drop\\|D_handback' out/d.h out/d.c",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/Vec.c out/Option.c out/Result.c out/Str.c out/main.c out/d.c -o a.out\nct_exit=0\nout/d.h:20:void D_drop(struct D *);\nout/d.h:21:void D_handback(struct D *);\nout/d.c:20:void D_drop(struct D *self) {\nout/d.c:25:void D_handback(struct D *self) {",
+      "reproduced": true,
+      "note": "用户可以在固有 impl 里写与 trait 同名的 drop/handback（不 use Drop/Handback）：今天它们因 pub struct 而进 .h 且 external（D_drop/D_handback）。PH-42 之后：A 若把 drop/handback 列为保留名，会无条件公开这两个同名固有方法（泄漏）；B（D42-8 只收 retain/release）与 C（只认 pub）都不会自动公开。故 J-1 的这一子句 A=fail、B/C=pass，且它检验的正是『同名但非 trait impl』这一面——V13 只覆盖了 trait impl。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1740,
+      "text": "static int elem_ret_ctype(int inst, const char *text, char *out, int cap)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1778,
+      "text": "static int elem_has_life(struct Emitter *self, const char *elem)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1786,
+      "text": "if (frontend::sym::ct_is_container_type(elem)) return 1;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1801,
+      "text": "if (strcmp(self->arena->nodes[m].text2, \"retain\") == 0 && ... elem_ret_ctype(...) ... && strcmp(ret, want) == 0) got_r = 1;",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1822,
+      "text": "if (self->arena->nodes[k].text2[0]) continue;  /* trait impl */",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1957,
+      "text": "if (!self->decl_is_pub(N_STRUCT, base)) fputs(\"static \", ...)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2017,
+      "text": "if (life) fprintf(..., \"    *e = %s_retain(e);\\n}\\n\\n\", ename);",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2023,
+      "text": "(void)%s_release(e)（handle 分支）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2026,
+      "text": "(void)%s_release(e)（普通分支）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1624,
+      "text": "exported = tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0 && self->units[...].is_hdr",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2054,
+      "text": "via_hdr = tps[tmpl].is_pub && ...（模板实例头原型）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2454,
+      "text": "static void __attribute__((unused)) %s_Drop_drop(void *self);",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2459,
+      "text": "static void __attribute__((unused)) %s_Handback_handback(void *self);",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2847,
+      "text": "if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name)) fputs(\"static __attribute__((unused)) \", ...)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 3385,
+      "text": "if (!self->decl_is_pub(N_STRUCT, ...)) continue;（固有方法头原型）",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2944,
+      "text": "static void __attribute__((unused)) %s_Drop_drop(void *self) {",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 3578,
+      "text": ") { %s_Handback_handback(",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 3593,
+      "text": ") { %s_Drop_drop(",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 2245,
+      "text": "life = self->inst_inherent_method(ctype, \"retain\") >= 0 && ... \"release\" >= 0;（名字-only）",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Parser.h.ct",
+      "line": 3058,
+      "text": "mnode = self->sup->new_node(N_METHOD);（trait/inherent/template impl 三处都不写 d）",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/runtime/arena/Arena.h.ct",
+      "line": 95,
+      "text": "self->nodes[n].d = -1;（N_METHOD.d 默认 -1，今天无人写）",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 176,
+      "text": "Vec<T> retain()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 187,
+      "text": "int release()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 509,
+      "text": "Map<K, V> retain()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 517,
+      "text": "int release()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 24,
+      "text": "void drop()（在 :23 impl Drop for Str 内，唯一 drop）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 132,
+      "text": "Str retain()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Option.h.ct",
+      "line": 77,
+      "text": "void release()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Result.h.ct",
+      "line": 104,
+      "text": "void release()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "test/modules/p31_cross_unit_owned/elem.h.ct",
+      "line": 7,
+      "text": "Box<T> retain()",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "test/modules/p31_cross_unit_owned/elem.h.ct",
+      "line": 12,
+      "text": "void release()",
+      "supports": "both",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "未写 pub 的方法不得进 .h、不得 external；用户自定义同名 retain/release/drop/handback 不被自动公开",
+      "claim": "C：pub 是唯一开关；未写 pub → 不进 .h + static + 跨单元硬错；drop/handback 不入规则（D42-8）",
+      "counter": "B：只对 8 条元素协议自动公开（含 .h）；J-1 按字面冻结则 C 唯一合规（counter §7 自认）",
+      "evidence": [
+        "V5",
+        "V7",
+        "V8",
+        "V10",
+        "V11",
+        "V13",
+        "V14",
+        "V20",
+        "V21",
+        "V28"
+      ],
+      "verdict": "C=pass（按规则）；B=fail（按字面）；A=fail；HEAD=fail",
+      "fact": "HEAD 今天所有 pub struct 的方法都 external 且进 .h，与名字无关（Q/WrongRet/OnlyRel 实测 T，V10/V11）；只有私有 struct 的方法才 static（227 的 Probe，V5）。所以 J-1 是目标而非现状。B 的规则对 8 条 retain/release 无条件自动公开，按 J-1 字面不成立（counter 自认）；A 按名公开 10 条，其中 Option/Result release 生成代码从不调用（V12）。drop/handback 是 trait impl、定义与调用恒 static（V13/V14），三方都无需为它们破 J-1；A 把它们列入保留名对符号面对 trait impl 没有作用，但对固有 impl 里的同名 drop/handback（V28）会无条件公开，故 A 仍 fail J-1；B/C 不按名收这两个名字。C 的实现必须在 5 个发射点同时按方法判定（1624/1957/2054/2847/3385），否则 J-1 不成立；另：私有 struct 上的 pub 方法仍须 static，C 的规则文本没有写这一护栏（B 的规则写了 owner-pub 护栏）。"
+    },
+    {
+      "id": "J-2",
+      "question": "生成代码的跨单元元素调用可链接：Vec/Map/Option/Result/Str 的元素 retain/release 在消费者单元可解析",
+      "claim": "C：52 条 pub + L42-7；P1 预测 nm 仍 T/U、stdout 1 2、Map 2 2",
+      "counter": "B：8 条自动公开即可链接；Option/Result release 不被生成代码调用",
+      "evidence": [
+        "V6",
+        "V12",
+        "V16",
+        "V17",
+        "V23",
+        "V27"
+      ],
+      "verdict": "C/B/A=pass（真实调用面）；Option/Result 子句为空（不被调用）",
+      "fact": "生成代码按名调用只有 <Elem>_retain/<Elem>_release（V12/V23）。实测跨单元：两单元 Probe（V6，nm U/T，运行 1）、Vec<Str>（V16，stdout 1 2）、Vec<Box<int>>（V17，nm U/T，运行 1 7）。容器作为元素时（Vec<Vec<int>>、Vec<Map<char*,int>>）实例方法与 helper 都发射在容器模板所属单元（Vec.c/Vec.h），调用发生在同一 TU（nm 实测 Vec_int_retain 为 T、helper 在 Vec.c:346 调用）；真正跨单元的只有 Str（std 单元 → 消费者）与 Box（elem 单元 → 消费者）。Option/Result 的元素 helper 是 (void)e，从不调用 Option_release/Result_release（V12）。故 J-2 对 C（需 52 条 pub + L42-7）、B（8 条自动）、A（10 条按名）都成立；差别不在链接，而在谁被公开。claim §5.3 说『test/ast/215/216 跨单元调用 Option/Result release』不实：两夹具都是单单元、无 import（V27），真正跨单元的证据是 build 模式消费者（V18：main.o 为 U _Option_int_release）。"
+    },
+    {
+      "id": "J-3",
+      "question": "迁移可机械核对：每条需公开的方法都能在一个列表里列出并补 pub；不依赖名字特判",
+      "claim": "C：52 = std 43 + 其它 9，脚本产出，不依赖名字特判",
+      "counter": "B：52 = 44 手工 + 8 协议自动",
+      "evidence": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V25",
+        "V26"
+      ],
+      "verdict": "C=pass；B=pass（需结构谓词，非纯名字）；A=fail（纯名字特判）",
+      "fact": "独立脚本与主张席脚本都得 52（std 43 = Option 8/Result 11/Str 2/Vec 22；其它 9 = eco 3/shapes 1/elem 2/lib 3）。扫全部 128 个 .h.ct，只有这 8 个文件有固有方法，故 52 是全部可导入 .h.ct 的固有方法集合（完备；`.ct` 单元不可 import——`only a .h.ct unit can be imported`）。10 条名字匹配 = 4 retain + 6 release；按协议（retain 返回自身类型 + release 同时存在）为 8（Str/Vec/Map/Box 各一对），Option/Result 只有 release、无 retain → 不符合。于是 B 的 44+8 与 C 的 52 是同一集合的两种记账，算术均成立；A 的 42+10 也算术成立，但 10 全是 retain/release，drop/handback 在 .h.ct 里 0 条固有定义。B 的列表要结构谓词，不是纯名字特判；claim E1-d-1 的『B 宣称的 42』是笔误，B 主张 44（42 是 A 的数）。"
+    },
+    {
+      "id": "J-4",
+      "question": "实现代价与单一真源：不在 parser 与 emitter 复制两套协议谓词",
+      "claim": "B 要复用就得合并 Emitter(返回类型) 与 Expr(仅名字) 两套；C 零协议谓词",
+      "counter": "可把 elem_has_life+elem_ret_ctype 抽成共用层，一处判定",
+      "evidence": [
+        "V19",
+        "V20",
+        "V21",
+        "V9"
+      ],
+      "verdict": "C=pass；B=unresolved（可共享但非零成本，且 Expr 的第二谓词不会消失）",
+      "fact": "现存两套判定：Emitter::elem_has_life（1778-1835：retain 返回自身类型 + release，容器在 1786 短路）与 Expr::container_elem_foreign 内的 life（2245-2246：只查 retain/release 是否存在）——两者回答不同问题（可见性 vs foreign-element 副本），B 复用前者不必合并后者。Emitter 谓词依赖 self->arena/self->sym（可抽到共用层，counter 估 130 行）；若解析期 L42-4 也要考虑协议例外，parser 需要同一谓词或共享标志。C 的可见性只读 N_METHOD.d（今天无人写，V20），不新增协议谓词，但在 5 个发射点 + parser 三条 impl 路径都要改；且 C 的 52 条注解要求 parser 先消费 `pub`（今天 `pub int get()` 被当返回类型、cc 报 unknown type name 'pub'，V9），R1 必须先于 R5a 落地。claim 的『Expr 无法复用』过强（elem_ret_ctype 只用 frontend::sym 全局，elem_has_life 只用 arena/sym，可抽取）；counter 的『一处』在发射期成立，但不是零成本。"
+    },
+    {
+      "id": "J-5",
+      "question": "header/ABI 不变式：迁移后既有 .h 原型集合与 expected.internal 不变",
+      "claim": "52 条 pub 后 Str.h 两条仍在；Vec/Option/Result.h 本来无方法原型；ABI_HASH 只 hash pub 自由函数",
+      "counter": "B 含 .h，52 条原型集不变；ABI_HASH 只 hash pub 自由函数",
+      "evidence": [
+        "V10",
+        "V16",
+        "V17",
+        "V18",
+        "V22",
+        "V24"
+      ],
+      "verdict": ".h 部分 C/B/A=pass（前提：迁移完整）；expected.internal=unresolved；claim P4 的事实前提 fail",
+      "fact": "8 个文件的 impl owner 全是 pub struct/template（Option/Result/Str/ct_buf/Vec/Map/Pair/Box/Counter），所以今天只要对应 struct/实例被使用，方法就按 struct/template 的 pub 导出（V10/V11/V18 实测；私有 struct 才 static，V5）。故 52 条全补 pub 后 .h 原型集合不变，漏一条就少一条原型——这正是 J-5 的回归守卫。但 claim P4 的『Vec.h/Option.h/Result.h 本来就没有方法原型』只在只用 Vec<Str> 的构建里成立：用 Vec<int>/Map<char*,int>/Option<int>/Result<int,int> 的构建里，Vec.h/Option.h/Result.h 分别有 18/8/11 条实例方法原型（含 retain/release），Option_int_release 是 T、消费者是 U（V18）。B 的 8 条自动公开在这 8 个 owner 上本来就已经导出，故 .h 不变。expected.internal（p39）列有 Str_retain/Str_release，但 --lib 在 HEAD 不存在（exit 1 usage，V22），无法核对。ABI_HASH 只遍历 funcs（V24），方法不参与。"
+    }
+  ],
+  "findings": {
+    "counting": "52 成立且完备：std 43（Option 8 / Result 11 / Str 2 / Vec 22）+ 其它 9（eco 3 / shapes 1 / elem 2 / lib 3）；全部 128 个 .h.ct 中只有这 8 个文件有固有方法，且 .ct 单元不可 import。10 条名字匹配 = 4 retain + 6 release；协议集合 = 8（Str/Vec/Map/Box 各 retain+release），Option/Result release 不满足协议（只有 release、无 retain），生成代码对它们也是 (void)e。因此 B 的 44+8 与 C 的 52 是同一集合的两种记账；A 的 42+10 也算术成立但 10 条全是 retain/release，drop/handback 在 .h.ct 里 0 条固有定义（唯一的 drop 是 Str 的 impl Drop for Str，恒 static）。附带：按 impl 种类分也是 44 条模板 impl + 8 条非模板固有 impl——与协议 44/8 同值是巧合，不要混用。",
+    "call_surface": "生成代码按名跨单元调用的只有 <Elem>_retain / <Elem>_release（Emitter.h.ct:2017/2023/2026，由 1957 的原型配合；模板实例走 1624/2054）。drop/handback 虽然也按名拼，但定义与调用都在同一 TU 且恒 static（2454/2459/2944/3578/3593），nm 为 t，从无 external。elem_has_life 是 Emitter::static 方法（1778-1835）：容器类型在 1786 无条件为真；plain struct 走 1815-1833 的结构遍历；模板实例用 elem_ret_ctype（1740）代入后比较 retain 返回类型是否 'struct <inst>'；trait impl 在 1822 明确跳过。它不接收『是否被当元素用』这一输入。",
+    "c_feasibility": "跨单元私有元素方法的后处理模拟（V7 plain、V8 template）都得到 cc -Wundefined-internal + ld 'symbol(s) not found'（rc=1），而 pub 的未改动生成物链接运行（V6 '1'、V16 '1 2'、V17 '1 7'）。所以 C 的失败面真实。L42-7 的价值是把 cc/ld 的坏输出前移为指名到方法的 ct 错误。必要性的两种读法要分开：①对链接正确性——不是必要件（作者写 pub 就链接成功，52 条迁移本身全部 pub）；②对 C 自己承诺的『不把错误留给 cc』（草案 D42-2 第三段）——是必要件，因为元素方法只由生成代码按名调用，用户源码里没有这次调用，现有解析期诊断抓不到它（V21：HEAD 无 L42-7，只有 ld 报 _Probe_retain）。但它的触发条件必须是『跨单元/foreign 元素』，否则 test/ast/227 与 test/ast/errors/double_drop.ct 这类单单元私有元素会被误杀（V5）；claim §0.3 的『未 pub 在解析/发射期报 L42-7』没有写这个作用域，草案 D42-2 第三段写的是『跨单元』。",
+    "b_boundary": "B 的谓词是『类型结构』而非『是否被当元素用』：同一个 Protocol 一旦作元素，helper 调用 retain/release（V23）；从未作元素时它也照样因 pub struct 导出（V11），B 的自动公开会同样命中。B 的 8 条比 A 的 10 条精确：WrongRet.retain（返回 int）与 OnlyRel.release（无 retain）在 B 下保持 private，A 会公开（V11）。B 的 pub 护栏需要按 owner 种类分开：plain struct 用 decl_is_pub(N_STRUCT, owner)，模板实例（Box_int/Vec_int/Map_*）没有 N_STRUCT 行，要用 tps[tmpl].is_pub——counter §2.4 的单个公式没写这一分叉。谓词『一处』：发射期可只复用 elem_has_life，但 Expr::container_elem_foreign 的名字-only 判定仍会存在（用途不同），且解析期若要一致就得抽取共享。",
+    "migration_abi": "8 个文件的 owner 全是 pub struct/template；今天只要对应 struct/实例被使用，方法就按 struct/template 的 pub 导出（V10/V11/V18；私有 struct 才 static，V5）。所以『52 条全补 pub』在 .h 原型集合上不变（前提是迁移完整；漏一条少一条）。B 的 8 条自动公开不改变 .h（它们今天已导出）。Option/Result release 保持 private 在『生成代码』层面无害（生成代码从不调用，V12），但它们在 build 模式的真实消费者里是 T/U 的跨单元方法（V18：Option_int_release T，main.o U），用户源码跨单元调用时需要 pub；claim 用 215/216（单单元）作证据不成立。expected.internal 属 PH-39 --lib，HEAD 未实现（V22）。",
+    "side_observations": [
+      "counter 的行号锚点大面积不可用：1687/1729/2020/2910/3448/2517-2519/2521/2816 在 1b14b63a 与 093198be（Emitter 均 5437 行、锚点相同）都不是它说的事件；正确的 drop/handback/判定点是 2454/2459/2944/3578/3593 与 1624/1957/2054/2847/3385（V19）。其机制结论仍成立。",
+      "claim 的 E1-b/E1-c/E1-d-2/E1-d-3/E1-e、counter 的 §2.1/2.2/2.3/2.5 均复现；claim P4 的『Vec.h/Option.h/Result.h 本来无方法原型』只在 Vec<Str>-only 构建成立（V18 反证），claim 的『grep 只在 helper 发射处命中』也多了 Expr.h.ct:2245（V21）。",
+      "HEAD 既有缺陷：跨单元 use Handback 的消费单元只得到 static 前向声明、没有定义，ct build rc=1（Undefined symbols _Conn_Handback_handback，V15）。counter §2.3 的 main.c:14 也是只有声明；所以『消费单元自带 static 副本』对 Handback 不成立。该缺陷与 pub 无关，B/C/A 都不会因可见性修复它。",
+      "单单元 vs 跨单元：test/ast/227、test/ast/errors/double_drop.ct 的私有元素方法 static 且同 TU 调用，今天完全正常；任何『元素方法必须 pub』的规则若不加跨单元作用域都会破坏它们（V5）。"
+    ]
+  },
+  "unreproduced": [
+    {
+      "ref": "claim.md#P4 / #E42-6（『Vec.h/Option.h/Result.h 本来就没有方法原型』）",
+      "reason": "只在『只用 Vec<Str>』的构建成立。用 Vec<int>/Map<char*,int>/Option<int>/Result<int,int> 的 build 模式构建里，三头分别有 18/8/11 条实例方法原型（含 Vec_int_retain/release、Map_char_p_int_retain/release、Option_int_release、Result_int_int_release），且 Option.c 为 T、消费方 main.o 为 U（V18）。该句作为『不变式』的事实前提不成立；『迁移前后集合不变』的预测本身仍成立（前提是 52 条全 pub）。"
+    },
+    {
+      "ref": "counter.md#E2/#3（判定点 :1687/:1729、:2020、:2910、:3448；drop/handback :2517-2519/:2521/:2816）",
+      "reason": "在 1b14b63a 与 counter 自报基线 093198be 上，这些行都不是它说的事件（093198be 的 Emitter 与 1b14b63a 逐行相同、5437 行）：1687 是 node_mentions、1729 是 cname 拼装、2020 是 elem_release 前向声明、2518 是 emit_unit_init、2816 是右花括号（vtable 相关代码附近）、2910 是 else、3448 是 visibility 属性。正确锚点见 anchors。机制结论不受影响。"
+    },
+    {
+      "ref": "claim.md#E5-2（『elem_has_life 按实例求值，可见性却在声明单元发射时确定；lib/std 发射时还没有消费者实例』）",
+      "reason": "build 模式所有单元共享同一 sym/arena，实例在发射时已知：Vec<int> 的方法原型就在 Vec.h/Vec.c（V18），Box_int 的原型就在 elem.h/elem.c（V17）；只有 foreign-element 实例（如 Vec<Str>）才把方法副本移到消费方。Str 是 plain struct，elem_has_life('struct Str') 不需要任何实例（1815-1833 的 plain 分支）。因此『求值时机不成立』没有被复现；可复现的只是 foreign-element 这一特例。"
+    },
+    {
+      "ref": "claim.md#E1-d-1（『迁移 52 条 vs B 宣称的 42 条』）",
+      "reason": "B 主张 44 手工 + 8 自动（counter §1），42 是 A 的『52-10』数。claim 自己在 §5.3 又写『迁移量是 44 不是 42』，前后不一致；其括号里的『B 实算只有 8 条自动』正确。"
+    },
+    {
+      "ref": "claim.md#0.3 / #E5-5（『未 pub 在解析/发射期报 L42-7』的无条件表述）",
+      "reason": "若 L42-7 对所有元素方法无条件触发，test/ast/227（私有 struct Probe + Vec<Probe>，同单元 static 调用，今天正常，V5）与 test/ast/errors/double_drop.ct 会被误杀。草案 D42-2 第三段把硬错限定为『消费方解析到该方法且归属单元 ≠ 当前单元』；claim 的表述没有这个作用域，按字面不可实现。"
+    },
+    {
+      "ref": "question.md#J-5（expected.internal 不变）",
+      "reason": "--lib 在 HEAD 不存在（`ct-ast build --lib` → usage, exit 1，V22）；expected.internal 是 PH-39 的清单（含 Str_retain/Str_release），无法实测迁移前后是否不变。"
+    }
+  ]
+}
