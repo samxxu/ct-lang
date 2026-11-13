@@ -427,8 +427,9 @@ int load(void)
 - **诊断**：`goto` 跨出/跨入带 defer 的块报 `a goto cannot cross a block with defer`；defer 内
   `return` / `break` / `continue` / 嵌套 `defer` 报 `a defer block cannot transfer control`；defer 内
   label 报 `a defer block cannot declare a label`；`switch` 内 defer 报
-  `defer is not allowed inside a switch`（v1 不定义 case/fallthrough 语义）；文件作用域 defer 报
-  `defer is only allowed inside a function`。`.h.ct` 函数体内的 defer 在 v1 暂未拒绝，属已知边界。
+  `defer is not allowed inside a switch`（v1 不定义 case/fallthrough 语义，case 内嵌套块也禁止）；
+  文件作用域 defer 报 `defer is only allowed inside a function`；`.h.ct` 内（含函数体）defer 报
+  `defer is not allowed in a .h.ct unit`。
 - **不做**：`errdefer`、`try` / `?`、全局或头文件里的 defer、defer 内的控制转移、`switch` 内 defer（T38-1–T38-4）。
 
 #### 4.10 `map`（Phase 11 新增 + SH-20 扩展，仅 ct-ast）
