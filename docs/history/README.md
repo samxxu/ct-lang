@@ -1,9 +1,9 @@
 # 历史档案
 
-> 中文 · [English](#english)
+> 中文
 >
 > 这里保存**已关闭阶段**的设计记录与评审报告，只作历史索引，不描述现状。当前有效文档见
-> [../README.md](../README.md)，阶段总览见 [../roadmap.md](../roadmap.md)。
+> [../README.md](../README.md)，简要阶段表见 [../roadmap.md](../roadmap.md)，逐相流水账见 [phase-log.md](phase-log.md)。
 
 ---
 
@@ -13,6 +13,12 @@
 > 新阶段立项时，若序号低于 `max−11` 的 `design/phase*.md` 仍存在，必须在同一次改动里
 > `git mv` 到本目录的 `design/` 并在下表补一行；`test/docs/check-docs.py`（门禁 11）会拦截
 > 越界文件与同名重复归档。
+
+### phase-log.md —— 逐相流水账
+
+| 记录 | 内容 |
+| --- | --- |
+| [phase-log.md](phase-log.md) | Phase 0–36 的逐相详细记录、版本记录、已定设计决策与待定项；[../roadmap.md](../roadmap.md) 只做简要索引 |
 
 ### design/ —— 已关闭阶段的设计记录
 
@@ -62,65 +68,3 @@
 
 报告正文里的行号与路径是**当时 commit 的快照**；指向已删除的 `selfhost/ast/**`、`selfhost/src/**` 的链接
 按历史保留，不再改写（这是文档链接门禁唯一的豁免）。
-
----
-
-## English
-
-> **Retirement threshold (DOC-66 / D26-20)**: `../design/` keeps the newest 12 completed phases (the
-> phase in progress counts). When a new phase starts, any `design/phase*.md` below `max−11` must be
-> `git mv`-ed into `design/` here and added to the table below in the same change;
-> `test/docs/check-docs.py` (gate 11) rejects out-of-window files and duplicate archives.
-
-> Closed-phase design records and review reports; an index only, not a statement of the present.
-> Live documentation starts at [../README.md](../README.md); the phase overview is
-> [../roadmap.md](../roadmap.md).
-
-### design/ — records of closed phases
-
-| Record | Content |
-| --- | --- |
-| [bootstrap.md](design/bootstrap.md) | the bootstrap chain: target layout, layering rules and milestones (M1–M6) |
-| [restore.md](design/restore.md) | the Phase 2–4 recovery work (D1–D8) |
-| [phase5.md](design/phase5.md) | new features: AutoDrop / path-sensitive leak analysis / directory = namespace (D9–D14) |
-| [phase6.md](design/phase6.md) | ecosystem: `map`, the reverse mapping table, the incremental cache, multi-target, dialects (D15–D20) |
-| [phase8.md](design/phase8.md) | package management and distribution, `ct-pkg` (D21–D27) |
-| [phase9.md](design/phase9.md) | the AST compiler (D28–D37) |
-| [phase10.md](design/phase10.md) | the mainline switch to ct-ast (D38–D45) |
-| [phase12.md](design/phase12.md) | official bindings and dialect deepening (D46–D52) |
-| [phase17.md](design/phase17.md) | engineering quality and new capabilities: CI matrix, official `std`, raw passthrough, documentation layering, package-manager completion and one-step `ct build` (D17-1–D17-9; archived on 2026-11-10 under the design window) |
-| [phase18.md](design/phase18.md) | ecosystem build-out: the ct-pkg organisation, package conventions, the first package wave and index / CI reuse (D18-1–D18-11; archived on 2026-11-11 under the design window) |
-| [phase19.md](design/phase19.md) | bounded semantic checks: call-site arity, coarse argument-type compatibility, trait-method ambiguity, cross-unit signatures and `ct check` (D19-1–D19-5; archived on 2026-11-11 under the design window) |
-| [phase22.md](design/phase22.md) | `loop` sugar: `loop(<count>)` lowers to one `for` line, with a contextual keyword and a nested-shadowing warning (D22-1–D22-12; archived on 2026-11-13 under the design window) |
-| [phase23.md](design/phase23.md) | `loop(a..b)` ranges: a half-open range lowers to one `for` line, with each bound evaluated once, `a` before `b` (D23-1–D23-9; archived on 2026-11-13 under the design window) |
-| [borrow.md](design/borrow.md) | `borrow` + `Handback` design and landing record (D-A…D-D) |
-| [dialect.md](design/dialect.md) | the dialect system and the authoring guide |
-| [next-decisions.md](design/next-decisions.md) | capacity-limit policy and the batch-33 direction (decided and landed) |
-| [global-mangling.md](design/global-mangling.md) | global symbol naming and mangling |
-| [ns-host-map/](design/ns-host-map/spec.md) | namespaced static calls and type-hosted mapping |
-| `batch2-*` … `batch39-*` | the `spec` / `tasks` / `checklist` of batches 2–39 (one directory each) |
-
-These records are **snapshots**: line numbers, paths and open questions stay as written; the code and today's
-documents win on conflict.
-
-### reports/ — review reports
-
-| Report | Topic |
-| --- | --- |
-| [repo-review/](reports/repo-review/repo-review.md) | first repository review (at the Phase 4 close) |
-| [phase7-review/](reports/phase7-review/phase7-review.md) | Phase 7 review (`v0.7.0`) |
-| [phase9-review/](reports/phase9-review/phase9-review.md) | Phase 9 review (the single-file `selfhost/ast/main.ct` era) |
-| [review-2026-10-21/](reports/review-2026-10-21/review-2026-10-21.md) | Phase 12 review |
-| [review-2026-10-21-round2/](reports/review-2026-10-21-round2/review-2026-10-21-round2.md) | second round (a deeper scan of the same HEAD) |
-| [release-readiness-2026-10-21/](reports/release-readiness-2026-10-21/release-readiness-2026-10-21.md) | release-readiness check |
-| [audit-2026-10-31/](reports/audit-2026-10-31/audit-2026-10-31.md) | test-coverage and documentation audit (`v0.13.0`) |
-| [review-2026-10-31/](reports/review-2026-10-31/review-2026-10-31.md) | code and documentation review (`v0.15.1`) |
-| [review-2026-11-01/](reports/review-2026-11-01/review-2026-11-01.md) | `borrow` / `Handback` implementation review (`v0.15.1`) |
-| [review-2026-11-02/](reports/review-2026-11-02/review-2026-11-02.md) | Phase 18 ecosystem build-out and the `v0.18.0` close review |
-| [review-2026-11-03/](reports/review-2026-11-03/review-2026-11-03.md) | Phase 19 restricted semantic check and the `v0.19.0` review |
-| [ct-language-features/](reports/ct-language-features/ct-language-features.html) | a language-feature survey (self-contained HTML) |
-| [ctc-ct-analysis/](reports/ctc-ct-analysis/ctc-ct-analysis.html) | `ctc.c` versus the CT line (self-contained HTML) |
-| [selfhost-readiness/](reports/selfhost-readiness/selfhost-readiness.html) | self-hosting readiness summary (self-contained HTML) |
-
-Line numbers and paths inside the reports are **snapshots of the commit under review**; links into the deleted
-`selfhost/ast/**` and `selfhost/src/**` are kept as history (the only exemption of the documentation link gate).
