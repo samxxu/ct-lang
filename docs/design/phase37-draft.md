@@ -1,6 +1,6 @@
 # Phase 37 — trait 签名硬错与运行期契约
 
-> **状态：已立项**（2026-11-13 用户授权自动完成；卡已冻结）。
+> **状态：实现完成**（2026-11-13；版本 bump / tag 待用户批准）。
 > **基线**：`c6a276b`（Phase 36 收口后的文档治理提交；全量 11 道门禁绿）。S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
 > **文档形态**：`phase37-draft.md`；design window 7/12，不触发归档。
 > **前置**：[phase36-draft.md](phase36-draft.md)；签名检查独立，不依赖 P31–P36 的语义。
@@ -184,3 +184,19 @@ S0 先跑 `check-archive.sh` 与 `check-ast.sh` 的诊断对照片段，列出�
 - 编译器 100–220 = S1 40–80 + S2 20–60 + S3 40–80；夹具 50–100；文档 30–60。
 - 收口：S0 红证提交（`test(types): P37 红`，含原始输出与基线 sha）；每片 ≤3 文件；仓库任何时刻可构建。
 - 收口动作：全量 11 道门禁绿、文档同步、`version-minor=37`；版本 bump 与 tag 按 0.3 `phase-tag-requires-user-approval` 等用户批准，不在自动执行范围内。
+
+## 9 收口记录（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| 红证 | `89caabc test(types): P37 红`（build 三例退出 0）；`142df85 test(types): P37 runtime 红`（`--runtime-checks` unknown） |
+| S1 | `742b845`；`check-ast.sh` 1306/0 |
+| S2 | `270bc90`；L2 保持 warning，archive diagnostics 无该 fixture，已在脚本注释记录 |
+| S3 | `p37_missing` 进入 generic errors loop 与 `p37_probe`，零回归 |
+| S4 | `7b4dfc2`；`p37_rt_probe` 通过；guarded C 在 `-Wall -Wextra` 下零告警 |
+| S5 | `3e4d6fb`；language-spec / tutorial / README / gap 同步 |
+| E37-1 | `p37_sig_return/param/arity`：build/check 硬错、compile warning、不写 `.c` |
+| E37-2 | `p37_missing`：既有 `not implemented` 硬错零回归 |
+| E37-3 | `219_runtime_guard`：on abort 带 `prog.ct:<行>`，off 无 guard |
+| E37-4 | 全量 11 道门禁绿：`test/run` 150、goldens 82、`check-ast` 1307、`check-warnings` 593、`check-docs` 930 links、acceptance 20 |
+| 版本/tag | 版本仍 `v0.36.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.37.0` bump 与 tag/push 等用户批准 |
