@@ -1,0 +1,9 @@
+int main(void)
+{
+    {
+        defer { }
+        goto out;
+    }
+out:
+    return 0;
+}

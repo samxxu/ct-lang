@@ -1,0 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Probe { int id; } use Drop;
+
+impl Drop for Probe {
+    void drop() { printf("drop\n"); }
+}
+
+int main(void)
+{
+    own Probe *p = malloc(sizeof(struct Probe));
+    p->id = 1;
+    defer { printf("defer\n"); }
+    return 0;
+}

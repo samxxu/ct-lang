@@ -3576,6 +3576,13 @@ else
     bad "p37 example" "$(cat "$work/p37ex.err" "$work/p37ex.run.err" 2>/dev/null)"
 fi
 
+# Phase 38: defer diagnostics and the first positive defer program.
+if bash test/ast/p38_probe.sh "$work/ct-ast" >"$work/p38.out" 2>"$work/p38.err"; then
+    ok "p38 defer probe"
+else
+    bad "p38 defer probe" "$(cat "$work/p38.out" "$work/p38.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

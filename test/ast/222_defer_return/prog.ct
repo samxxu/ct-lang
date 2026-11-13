@@ -1,0 +1,14 @@
+#include <stdio.h>
+
+static int f(void)
+{
+    int x = 1;
+    defer { x = 99; printf("defer x=%d\n", x); }
+    return x;
+}
+
+int main(void)
+{
+    printf("ret=%d\n", f());
+    return 0;
+}
