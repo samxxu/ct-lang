@@ -1,0 +1,27 @@
+// E36-4 (P36): `Option<T> use Drop` makes the glue drop the payload. The glue
+// drops every `uses_drop` field unconditionally, so a none Option must carry a
+// zero-initialised payload (see `Option::none`) that is safe to drop. A present
+// Option drops the real payload; a none Option drops the zero payload (here a
+// Probe with id 0, whose `drop` is a harmless print).
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Probe { int id; } use Drop;
+impl Drop for Probe {
+    void drop() { printf("drop %d\n", self->id); }
+}
+
+int main(void)
+{
+    own Option<Probe> *a = malloc(sizeof(struct Option_Probe));
+    a->has = 1;
+    a->value.id = 7;
+    delete a;
+
+    own Option<Probe> *b = malloc(sizeof(struct Option_Probe));
+    *b = Option<Probe>::none();
+    delete b;
+
+    printf("done\n");
+    return 0;
+}

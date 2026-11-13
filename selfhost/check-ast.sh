@@ -7415,6 +7415,33 @@ else
     fi
 fi
 
+# Phase 36 S4c (E36-4): `Option<T> use Drop` makes the glue drop the payload.
+# The fixture loop checks that both a present and a none Option drop the
+# payload (none on the zero-initialised value); here we pin that the glue
+# emits exactly one `Option_Probe_Drop_drop` definition and that it calls
+# `Probe_Drop_drop` on the field (not a no-op).
+if ! "$work/ct-ast" test/ast/233_option_probe_drop/prog.ct -o "$work/p36s4c.c" \
+        >"$work/p36s4c.log" 2>&1; then
+    bad "p36 E36-4 (Option drop product)" "ct-ast failed: $(head -3 "$work/p36s4c.log")"
+else
+    if ! "$CC" -o "$work/p36s4c.bin" "$work/p36s4c.c" 2>"$work/p36s4c.cc"; then
+        bad "p36 E36-4 (build)" "$(cat "$work/p36s4c.cc")"
+    else
+        n="$(nm "$work/p36s4c.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Option_Probe_Drop_drop$/ { c++ } END { print c + 0 }')"
+        if [ "$n" = "1" ]; then
+            ok "p36 E36-4 (Option_Probe_Drop_drop: one definition)"
+        else
+            bad "p36 E36-4 (Option_Probe_Drop_drop count)" "got $n"
+        fi
+        if grep -q 'Probe_Drop_drop(&_self->value)' "$work/p36s4c.c"; then
+            ok "p36 E36-4 (Option glue drops the payload field)"
+        else
+            bad "p36 E36-4 (Option glue shape)" \
+                "$(grep 'Option_Probe_Drop_drop' "$work/p36s4c.c" | head -3)"
+        fi
+    fi
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

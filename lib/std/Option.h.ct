@@ -26,9 +26,17 @@
 pub struct Option<T> {
     int has;
     T value;
-}
+} use Drop;
 
 impl<T> Option<T> {
+    /* A none Option with a zero-initialised payload: the Drop glue drops every
+       `uses_drop` field unconditionally, so the unused payload must be in a
+       safe-to-drop state (e.g. a Str with data == 0). */
+    static Option<T> none() {
+        Option<T> o = { 0 };
+        return o;
+    }
+
     int is_some() {
         return self.has;
     }

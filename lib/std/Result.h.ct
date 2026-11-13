@@ -25,9 +25,27 @@ pub struct Result<T, E> {
     int ok;
     T value;
     E err;
-}
+} use Drop;
 
 impl<T, E> Result<T, E> {
+    /* A success Result: the error payload is zero-initialised so the Drop glue
+       (which drops every `uses_drop` field unconditionally) can drop it safely. */
+    static Result<T, E> ok(T v) {
+        Result<T, E> r = { 0 };
+        r.ok = 1;
+        r.value = v;
+        return r;
+    }
+
+    /* A failure Result: the value payload is zero-initialised for the same
+       reason as `ok`. */
+    static Result<T, E> err(E e) {
+        Result<T, E> r = { 0 };
+        r.ok = 0;
+        r.err = e;
+        return r;
+    }
+
     int is_ok() {
         return self.ok;
     }
