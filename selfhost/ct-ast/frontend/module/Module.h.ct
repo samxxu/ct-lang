@@ -145,6 +145,7 @@ pub struct Module {
     int  have_map;
     const char *prog;
     int  diag_json;             /* --diagnostics=json */
+    int  diag_emitted;          /* build: warnings already printed before emit */
     /* `ct check` (19.4): parse and report the semantic findings, write no C.
        The driver's compile path short-circuits on it after parsing. */
     int  check_mode;
@@ -1277,6 +1278,8 @@ impl ModuleOps for Module {
         self->lex->tokstart = 0;
         self->p->ncalls = 0;
         tool::diag::ct_diag_reset();
+        tool::diag::ct_diag_set_strict(2);
+        self->diag_emitted = 0;
         self->p->cur_func[0] = 0;
         frontend::parse::ct_parse_clear_error();
         self->build_mode = 1;
@@ -1339,6 +1342,12 @@ impl ModuleOps for Module {
             if (self->check_ns_dir(u) != 0) {
                 return frontend::parse::ct_parse_report();
             }
+        }
+        /* Phase 37 O1: a signature mismatch is a hard error in build; fail
+           before the cache/emit walk so no `.c` or `.h` is left behind. */
+        if (tool::diag::ct_diag_nwarn() > 0) {
+            if (tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
+            self->diag_emitted = 1;
         }
         /* A shim header is found by base name, so two mapping units with the
            same base in different directories would both put `<base>.shim.h` on
@@ -1431,7 +1440,7 @@ impl ModuleOps for Module {
         if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
             return frontend::parse::ct_parse_report();
         }
-        if (tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
+        if (!self->diag_emitted && tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
         if (self->emit_c) {
             /* The old shape, unchanged: print the suggested line, run nothing.
                The target C standard (Phase 6.4) is the only option it carries. */

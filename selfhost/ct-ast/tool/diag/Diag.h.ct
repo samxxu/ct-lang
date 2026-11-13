@@ -66,9 +66,13 @@ struct Diag {
     int  nwarns;
     int  nsem;
     /* `ct check` (19.4, D19-4): the same records are the entry's findings, so
-       text lines read `error:` and JSON objects carry a severity. Compile and
-       build keep the default 0 and stay byte-identical. */
+       text lines read `error:` and JSON objects carry a severity. Compile keeps
+       0; build uses 2 for signature-only hard errors (Phase 37). */
     int  strict;
+    /* Phase 37: `strict` is 0 (compile), 1 (check: all findings error) or
+       2 (build: only signature mismatches are errors). `sig_errs` counts the
+       signature records so build can fail before writing any `.c`. */
+    int  sig_errs;
 } use DiagStore;
 
 impl DiagStore for Diag {
@@ -105,6 +109,7 @@ impl DiagStore for Diag {
         snprintf(w->stype, sizeof w->stype, "%s", stype);
         snprintf(w->msg, sizeof w->msg, "%s", msg);
         self->nwarns++;
+        if (self->strict == 2) self->sig_errs++;
         return 0;
     }
 
@@ -273,7 +278,8 @@ impl DiagStore for Diag {
         FILE *jf;
         FILE *tf;
         /* `ct check` turns these into findings; compile and build keep `warning` */
-        const char *sev = self->strict ? "error" : "warning";
+        const char *sev = self->strict == 1 ? "error" : "warning";
+        const char *sigsev = (self->strict == 1 || self->strict == 2) ? "error" : "warning";
         (void)self;
         jf = to_stderr ? stderr : stdout;
         tf = stderr;
@@ -284,7 +290,8 @@ impl DiagStore for Diag {
                 struct Warn *w = &self->warns[i];
                 if (i) fputc(',', jf);
                 fputc('{', jf);
-                if (self->strict) fputs("\"severity\":\"error\",", jf);
+                if (self->strict == 1 || (w->kind == 1 && self->strict == 2))
+                    fputs("\"severity\":\"error\",", jf);
                 if (w->kind == 1) {
                     fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -384,7 +391,7 @@ impl DiagStore for Diag {
                     snprintf(loc, sizeof loc, "%s:%d:", w->file, w->line);
                 if (w->kind == 1)
                     fprintf(tf, "%s %s: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
-                            loc, sev, w->var, w->tname, w->stype, w->msg);
+                            loc, sigsev, w->var, w->tname, w->stype, w->msg);
                 else if (w->kind == 2)
                     fprintf(tf, "%s %s: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
                             loc, sev, w->var, w->tname, w->path_line);
@@ -416,7 +423,7 @@ impl DiagStore for Diag {
                             loc, sev, w->var, w->tname);
             }
         }
-        return 0;
+        return self->strict == 2 ? self->sig_errs : 0;
     }
 
     int nsem(void)
@@ -442,6 +449,7 @@ impl DiagStore for Diag {
         (void)self;
         self->nwarns = 0;
         self->nsem = 0;
+        self->sig_errs = 0;
     }
 }
 

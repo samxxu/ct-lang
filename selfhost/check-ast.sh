@@ -5052,9 +5052,10 @@ int main(void)
 XMEOF
 mkdir -p "$work/xu-out"
 if "$work/ct-ast" build --emit-c -I "$work" "$work/xu_main.ct" -o "$work/xu-out" \
-        >"$work/xu.out" 2>"$work/xu.err" \
-   && grep -q "warning: signature mismatch: 'put' in impl of 'xu_W' for 'P': parameter 1 type 'struct P \*' does not match the trait's 'int'" "$work/xu.err"; then
-    ok "cross-unit: a local impl drifting from an imported trait's parameter type warns"
+        >"$work/xu.out" 2>"$work/xu.err"; then
+    bad "cross-unit: impl drift" "expected a hard error; got success"
+elif grep -q "error: signature mismatch: 'put' in impl of 'xu_W' for 'P': parameter 1 type 'struct P \*' does not match the trait's 'int'" "$work/xu.err"; then
+    ok "cross-unit: a local impl drifting from an imported trait's parameter type is a hard error"
 else
     bad "cross-unit: impl drift" "$(cat "$work/xu.err")"
 fi
