@@ -111,6 +111,7 @@ pub trait StmtOps {
     int  defer_active_depth(void);
     int  defer_top_id(void);
     int  defer_block_id(void);
+    int  defer_mark_block(void);
     int  defer_run_node(int body, int line);
     int  defer_prepend(int node, int base);
     int  defer_flush_block(int blk, int *tail);
@@ -197,7 +198,6 @@ pub struct Stmt {
     int  defer_head[256];
     int  defer_tail[256];
     int  defer_ids[257];
-    int  defer_id_has[257];
     int  ndefer_next_id;
     int  defer_break_base[256];
     int  defer_cont_base[256];
@@ -207,6 +207,8 @@ pub struct Stmt {
     int  goto_defer_depth[64];
     int  label_block_id[64];
     int  goto_block_id[64];
+    int  label_block_has[64];
+    int  goto_block_has[64];
 } use StmtOps;
 
 /* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
@@ -1399,13 +1401,26 @@ impl StmtOps for Stmt {
         return self->defer_ids[self->ndefer_blocks - 1];
     }
 
+    int defer_mark_block(void)
+    {
+        int b, i, id;
+        (void)self;
+        b = self->ndefer_blocks - 1;
+        if (b < 0 || self->defer_head[b] < 0) return 0;
+        id = self->defer_ids[b];
+        for (i = 0; i < self->nlabels; i++)
+            if (self->label_block_id[i] == id) self->label_block_has[i] = 1;
+        for (i = 0; i < self->ngotos; i++)
+            if (self->goto_block_id[i] == id) self->goto_block_has[i] = 1;
+        return 0;
+    }
+
     int defer_add(int node)
     {
         int b, t;
         (void)self;
         b = self->ndefer_blocks - 1;
         if (b < 0) return -1;
-        self->defer_id_has[self->defer_ids[b]] = 1;
         t = self->defer_tail[b];
         if (t < 0) self->defer_head[b] = node;
         else self->arena->nodes[t].next = node;
@@ -1610,6 +1625,7 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        (void)self->defer_mark_block();
         self->ndefer_blocks = self->ndefer_blocks - 1;
         return blk;
     }
@@ -2227,6 +2243,7 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        (void)self->defer_mark_block();
         self->ndefer_blocks = self->ndefer_blocks - 1;
         return b;
     }
@@ -2298,6 +2315,7 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        (void)self->defer_mark_block();
         self->ndefer_blocks = self->ndefer_blocks - 1;
         return blk;
     }
@@ -3125,7 +3143,12 @@ impl StmtOps for Stmt {
     {
         int i;
         (void)self;
-        for (i = 0; i < 257; i++) self->defer_id_has[i] = 0;
+        for (i = 0; i < 64; i++) {
+            self->label_block_id[i] = 0;
+            self->goto_block_id[i] = 0;
+            self->label_block_has[i] = 0;
+            self->goto_block_has[i] = 0;
+        }
         self->nlabels = 0;
         self->ngotos = 0;
         self->nbreak = 0;
@@ -3157,8 +3180,9 @@ impl StmtOps for Stmt {
                check above cannot see it. Compare the owning block ids and ask
                whether either block owns a defer (finalised at block close). */
             if (self->goto_block_id[i] != self->label_block_id[li]
-                && (self->defer_id_has[self->goto_block_id[i]]
-                    || self->defer_id_has[self->label_block_id[li]]))
+                && self->goto_defer_depth[i] == 0
+                && self->label_defer_depth[li] == 0
+                && (self->goto_block_has[i] || self->label_block_has[li]))
                 return self->sup->fail_at(self->goto_lines[i],
                     "a goto cannot cross a block with defer");
         }
