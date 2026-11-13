@@ -176,18 +176,3 @@ pub char *callback_copy(Arena *a, const char *data, int n);
 1. `result` 是**再导出** `lib/std` 的类型，还是包内自带实现？`string` 已决定由本包定义（`Str` 是 shim 句柄，见 §2.4），不再走再导出。
 2. `arena` 是否提供 `ArenaVec`（arena 上分配的动态数组）？提供会更顺手，但要自己实现扩容与释放规则。
 3. `sync` 的线程 API 用 `pthread` 还是 C11 `thrd_*`？前者成熟，后者更标准；ct 两条都能 `#include`。
-
----
-
-## English summary
-
-A proposal for ct-pkg `std` to add four runtime modules plus one callback contract for a long-session agent kernel:
-
-- `arena`: a session-scoped bump allocator with `alloc / reset / release`; pointers never outlive the arena (a documented rule, not a compiler check).
-- `sync`: thin wrappers over `pthread` and C11 `_Atomic`; shared state goes through an explicit `Mutex`; no `Send`/`Sync` compile-time checking.
-- `result`: re-export the `Option` / `Result` types from ct Phase 34 and add helpers; no `?` or `try` syntax.
-- `string`: define the length-carrying `Str` in this package as an opaque shim handle; ct Phase 34 adds inherent methods and Phase 36 adds `Drop` / element protocol. No buffer rewrite, no implicit concatenation.
-- `callback`: a five-rule ownership contract for C callbacks (arguments are borrowed until return; copy into an arena to retain; use `(fn, env)` pairs rather than closure literals at trait-method boundaries).
-
-The proposal deliberately does **not** ask for a borrow checker, a GC, exceptions or hidden allocation. It documents lifetime rules and relies on ct's explicit `retain` / `release`. Delivery order: `arena`, `sync`, `callback` today; `result` after Phase 34; `string` after Phase 34 + 36; ABI packaging after Phase 39.
-

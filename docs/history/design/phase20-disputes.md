@@ -1,6 +1,6 @@
 # Phase 20 争议清单（评审用）
 
-> 中文 · [English](#english)
+> 中文
 >
 > **用途**：把 Phase 20 立项时的十项候选逐条摊开，供评审逐条裁决。本文不复述
 > [phase20.md](phase20.md) 的任务设计，只记录**原始主张、核实结论、证据、处置、待裁决点**。
@@ -483,37 +483,3 @@ C 名**（探针里是 `p_add`），而 `.m.ct` 的 recipe 是**逐字发射的 
 | C10 → P1（`namespace =` + 双路径回退） | ☐ | ☐ | |
 | N1 → P1（并入 P20-06） | ☐ | ☐ | |
 | N3 发布前置（`v0.20.0` 含 `915c12c`） | ☐ | ☐ | |
-
----
-
-## English
-
-### Verdicts
-
-| # | Claim | Verdict | Action |
-| --- | --- | --- | --- |
-| A1 | `.m.ct` rejects `#ct-raw` | true, but the check covers the whole unit, not just the prologue | dispute §4; keep for now |
-| A2 | same-named type-host methods are ambiguous | **partly true** (packages coexist; only the call is ambiguous) | P0 |
-| A3 | `.h.ct` cannot export `pub` functions | **false** (probe compiles and runs) | docs only |
-| B4 | the `cc` line lacks `-I <outdir>` | **false** (fixed in `915c12c`) | regression probe |
-| B5 | map-method arity unchecked | true (SH-56) | P0 |
-| B6 | late `import` silently dropped | true (SH-57) | P0 |
-| B7 | `use` calls always go through the vtable | true (wording "never inlined" is imprecise) | P2 |
-| C8 | `requires` vs `dep` confusion | **partly true** (unsatisfied `requires` only warns) | P0 + docs |
-| C9 | the index keeps only the highest tag | true | P1 |
-| C10 | the namespace root is forced to be the package root | **partly true** (the cause is directory-based import resolution, not `-I`) | P1 |
-
-### Three disputes
-
-1. **A3**: the compiler does allow `.h.ct` to export functions. std's shims are not caused by that
-   restriction: a recipe is emitted as a raw C call and can only name unmangled C symbols, while CT
-   functions are namespace-mangled. Keeping std as is costs nothing.
-2. **A1**: "deliberate" is not an argument. Lifting the ban would collapse two files into one, but it
-   requires defining emission semantics (one copy per consumer vs one copy overall) and the audit
-   boundary. Recommendation: keep it in this phase; if wanted, option B as a separate P2 item.
-3. **A2**: qualified calls solve the blocker, not the ergonomics. Packages coexist; a colliding
-   method must be called as `a::ALen::len(s)`. That is explicit by design; the alternative is silent
-   shadowing.
-
-**Release prerequisite (N3)**: `v0.20.0` must include `915c12c`, because `ct-pkg/std` already
-declares `requires = ct >= 0.20.0` and its examples need string-literal receivers.

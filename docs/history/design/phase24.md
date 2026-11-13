@@ -1,6 +1,6 @@
 # Phase 24 · 数组 range 初值（`int a[] = 0..n(expr)`）
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：完成**（as-built，2026-11-09）。S1–S5 全部落地，收口到 **`v0.24.0`**。
 > D24-1–D24-13 已定稿；实现与设计的偏差集中在 §12，正文已按 as-built 校正。
@@ -540,74 +540,3 @@ Phase 25 要补的缺口。依据如下（全部来自 Phase 25 之前的实现�
 遗留项（**不属于**本相出口判据）：全局作用域一行多声明符仍不支持
 （A4，ct-ast 既有边界，`117` 因此落在块作用域）；`ct check` 的诊断种类表未变，range 初值的
 语义错误仍走编译路径。
-
----
-
-## English
-
-### Status
-
-**Implemented (as-built, 2026-11-09)**. S1–S5 have landed and the phase is closed at
-**`v0.24.0`**. D24-1–D24-13 are final and the deviations from the plan are collected in §12
-(Chinese; the numbered rows A1–A5 are the authoritative list).
-**Revised 2026-11-09**: the index placeholder is `$` instead of `i` (it is not an identifier, so it
-can never be shadowed or collide); D24-4 / L24-8 are revoked and no `range_shadow` kind is
-introduced; bound literals get explicit spelling and overflow validation.
-
-### Positioning
-
-`loop(a..b)` iterates; this phase writes the same sequence **declaratively, as an initializer**:
-
-```c
-int odd[] = 0..13($ * 2 + 1);            /* 1, 3, 5, …, 25 */
-static const int sq[] = 0..11($ * $);    /* 0, 1, 4, …, 100 */
-```
-
-It expands to a braced initializer list, never to a loop:
-
-```c
-int odd[] = { ((((int)0) * 2) + 1), ((((int)1) * 2) + 1), …, ((((int)12) * 2) + 1) };
-```
-
-Because the output is an initializer and not a statement, file scope, `static` and `const` all
-work — the one thing a `for`-based lowering could never deliver.
-
-### Rules
-
-- **Bounds are integer literals** (optional unary `-`), evaluated at parse time; `count = end - start`.
-  `count <= 0` is a hard error; `count > 1024` is a hard error. No macro / `enum` / expression
-  bounds: the symbol table records `is_const`, not values, and CT never folds constants. The bound
-  reader re-validates the literal's original spelling (at least one digit, `U` / `L` suffix only)
-  and checks `LONG_MAX`, because the shared lexer does neither; the lexer itself is left untouched.
-- `$` is a new punctuation token, **not an identifier**. It is accepted only inside the range
-  initializer's element expression and rendered as `((int)k)` per element. There is no scope, no
-  symbol registration and no shadowing: `$` outside the element expression is a syntax error, and
-  `$ = 1` / `&$` / `$++` / `++$` are hard errors ("the range index '$' is not a variable"), never
-  "undeclared variable". `$` may appear several times in one element expression.
-- Elements must be scalars; `struct` / `union` / interface / array elements are hard errors.
-  `[]` is left to C; a literal extent must equal `count`; any other extent is emitted as written.
-  A `$` in the extent is rejected (L24-10) rather than leaking into C.
-- Element expressions are re-evaluated **once per element, in unspecified order** (C99 §6.7.8), so
-  the documented rule is "no side effects". At file scope and for `static` objects C additionally
-  requires a constant expression.
-- The element AST is stored once (`N_INIT_RANGE`, kind 61) and re-emitted with `$` substituted at
-  emission time; the node count does not grow with `count`.
-
-### Diagnostics
-
-`L24-1` missing bound, `L24-2` non-literal or malformed bound (including `0x`), `L24-3` empty range,
-`L24-4` over the 1024 cap, `L24-5` on a declaration without a dimension, `L24-6` non-scalar element,
-`L24-7` literal extent mismatch, `L24-9` bound out of `long` range, `L24-10` `$` in a dimension,
-`L24-11` assignment / address-of / increment on `$` — all errors. `L24-8` is retired and its number
-is not reused; no new warning kind is added and `ct check` is unchanged.
-
-### Non-goals
-
-Runtime bounds / VLAs, `Vec` / generics / custom containers, `each` in this phase, standalone
-`a..b` expressions, step / closed ranges, CT-side constant folding, and `.m.ct` involvement.
-§10 records where `each` went: the **method form** `a.each(n, closure)` is Phase 25,
-which extends the `(fn, env)` expansion to static mapping calls; the **statement form**
-`each (nums) { … }` is still unplanned, because C macros cannot take a block. Note that a decayed
-`int *` still cannot know its length and `int *p` matches the same type host as `int a[4]`, so the
-element count stays explicit in Phase 25 as well. The old placeholder keyword `each` was voided by
-D25-12; the statement form is now named `foreach`.

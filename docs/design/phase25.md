@@ -1,6 +1,6 @@
 # Phase 25 · 静态映射调用的闭包实参（`array.each(closure)`）
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：完成**（2026-11-09 收口，`v0.25.0`）。D25-1–D25-11 已定稿；§1–§9 是 as-planned 记录，
 > §10–§13 是 as-built 记录。25.1、25.2、25.4 与收口 25.5 已落地（25.3 的 `emit_closure_arg` 拆分
@@ -493,57 +493,3 @@ recipe 的每个实参都带一层子表达式括号，与既有 recipe 产物�
 - `selfhost/check-all.sh`：退出 0，11 道硬门禁全绿；`check-warnings` **243 ok / 0 failed**；
   `check-docs: OK (826 relative links, v0.25.0, 11 hard gates, 9 phase status)`。
 - 25.1–25.4 的生成物基线保持：既有 7 组静态映射夹具与 4 组闭包夹具逐字节不变。
-
----
-
-## English
-
-### Status
-
-**Closed** (2026-11-09, `v0.25.0`). D25-1–D25-11 are final. 25.1, 25.2, 25.4 and the
-25.5 close-out are implemented in the working tree (§10–§13); the 25.3
-`emit_closure_arg` split folded into 25.2.
-
-### Positioning
-
-Phase 21 closures can only fill a `(fn, env)` parameter pair of a **plain function call**,
-because only that site has a parsed signature. This phase extends the same rule to **static
-mapping calls** (`.m.ct` recipes), so a C type host such as `int *` can accept a closure:
-
-```c
-a.each(4, (int x) => { printf("%d\n", x + base); });
-/* -> ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ .base = base }); */
-```
-
-The output is a bare C call; no new runtime object, no boxing, no vtable.
-
-### Four gaps in today's implementation
-
-1. `map_arity` counts the closure as one actual (`got = arg_count`), while the host method has
-   three formals (`n`, `fn`, `env`).
-2. Static traits skip `argtype_check`, so the `(fn, env)` pair is never compared for a closure.
-3. `map_actual_at` maps one index to one actual; a closure must occupy two recipe slots.
-4. `emit_closure_arg` writes both `tramp` and `&env` in one go, while a recipe needs them in
-   two separate slots.
-
-Today the call fails loudly (arity warning + `a map call has fewer arguments than its binding`),
-never silently.
-
-### Rules
-
-- Only static mapping calls, and only at a `(fn, env)` formal pair; every other position is a
-  hard error (`L25-1`).
-- `got = arg_count + closure_arg_count`, the same formula the plain-call path uses.
-- A closure actual fills the `fn` slot with the trampoline and the `env` slot with the address
-  of its stack environment; a closure variable fills them from its own instance.
-- The recipe must use both halves exactly once (`L25-2` / `L25-4`); `...` tails cannot carry a
-  closure (`L25-3`).
-- The environment lives until the end of the enclosing block, so a shim entry that accepts a
-  closure must consume it synchronously. The compiler cannot check this; it is a documented rule.
-
-### Non-goals
-
-Statement-level `each (…) { … }`, automatic element counts (a decayed `int *` cannot know its
-length, and `int *p` matches the same host as `int a[4]`), `Vec` / generics (Phase 26), closures
-as method receivers, and closures through dynamic dispatch. The old placeholder keyword `each`
-was voided by D25-12; the statement form is now named `foreach`.

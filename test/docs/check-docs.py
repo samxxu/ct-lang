@@ -15,9 +15,9 @@ Standard library only. It asserts seven invariants:
      machine-readable `<!-- gates:N -->` marker (its dated records quote
      historical counts, so prose scanning is not usable there); ci.yml job
      step labels may not name a stale count;
-  4. the status line of every docs/design/phase*.md matches the phase table
-     in docs/roadmap.md (done -> check, in progress -> half, planned -> white),
-     in both the Chinese and the English table;
+  4. the status line of every docs/design/phase*.md matches the Chinese phase
+     table in docs/roadmap.md (done -> check, in progress -> half, planned ->
+     white); the English table was removed by the docs-language policy;
   5. an "适用版本" header under docs/*.md names the compiler line, never a
      fixed version: the number goes stale at the next bump (DOC-63);
   6. G9: AGENTS.md pins the methodology's `spec-version` and `spec-sha256`
