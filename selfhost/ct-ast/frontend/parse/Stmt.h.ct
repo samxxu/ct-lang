@@ -1663,7 +1663,8 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             look = self->lex->tok == T_ID
                    && (self->ex->is_type_word(self->lex->toktext)
-                       || strcmp(self->lex->toktext, "_Atomic") == 0);
+                       || strcmp(self->lex->toktext, "_Atomic") == 0
+                       || strcmp(self->lex->toktext, "own") == 0);
             self->lex->tok = save_tok;
             self->lex->toknum = save_num;
             self->lex->tokfloat = save_float;

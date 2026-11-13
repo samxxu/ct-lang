@@ -124,7 +124,7 @@ for d in test/ast/*/; do
         bad "$name" "ct-ast emitted a sanitizer report"
         continue
     fi
-    if ! "$SANCC" -Wall -Wextra -std=c99 "$c" -o "$exe" 2>"$work/$name.cc"; then
+    if ! "$SANCC" -Wall -Wextra -std=c99 -pthread "$c" -o "$exe" 2>"$work/$name.cc"; then
         bad "$name" "generated C did not build: $(cat "$work/$name.cc")"
         continue
     fi

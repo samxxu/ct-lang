@@ -58,6 +58,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26）；**约束泛型** `T name<T: Trait>(…)`（Phase 28）
 - **泛型 struct 与内置容器**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map`
 - **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39）
+- **原子并发**：`atomic int` / `atomic long` / `atomic bool` / `atomic void *` + `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`（seq_cst，C11；`ct build` 自动切 `-std=c11`）（Phase 41）
 - **明确不做**：继承、默认编译路径的类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）；泛型 trait（参数化 trait）未实现，未排期
 
 每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准；写法范例见 [docs/patterns.md](docs/patterns.md)，

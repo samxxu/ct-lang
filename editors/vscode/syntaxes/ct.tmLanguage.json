@@ -53,6 +53,7 @@
     { "include": "#ct-alignof-type" },
     { "include": "#ct-alignof" },
     { "include": "#ct-atomic" },
+    { "include": "#ct-atomic-op" },
     { "include": "#ct-generic-select" },
     { "include": "#ct-noreturn" },
     { "include": "#ct-thread-local" },
@@ -526,8 +527,12 @@
       "name": "keyword.operator.alignof.ct"
     },
     "ct-atomic": {
-      "match": "\\b_Atomic\\b",
+      "match": "\\b(_Atomic|atomic)\\b",
       "name": "storage.modifier.atomic.ct"
+    },
+    "ct-atomic-op": {
+      "match": "\\bct_atomic_(load|store|cas)\\b",
+      "name": "support.function.atomic.ct"
     },
     "ct-generic-select": {
       "match": "\\b_Generic\\b",

@@ -1418,6 +1418,30 @@ static int load(void)
 
 完整样例：[43_errdefer](../examples/43_errdefer)。细节见 [language-spec §4.58](language-spec.md)。
 
+### 10.15 原子并发：`atomic T` 与 `ct_atomic_*`（Phase 41）
+
+```ct
+atomic int hits = 0;
+atomic bool stop = 0;
+int expected = 0;
+
+ct_atomic_store(&hits, 1);
+if (!ct_atomic_cas(&hits, &expected, 2))
+    return 1;
+while (!ct_atomic_load(&stop))
+    ;
+```
+
+- 四种基类型：`atomic int` / `atomic long` / `atomic bool` / `atomic void *`；映射 C11 `_Atomic(T)`。
+- 操作：`ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`，全部 seq_cst；CAS 的 `expected`
+  必须传地址。
+- `atomic int *` 是“指向原子 int 的指针”，`atomic void *` 才是“原子空指针”。
+- `atomic` 是上下文修饰：`int atomic = 1;` 仍是普通变量；`<stdatomic.h>` 的 `atomic_load/store`
+  也仍是普通调用。
+- 原子单元用 C11：`ct build` 自动用 `-std=c11`；`ct compile` 的生成 C 请自行 `-std=c11`。
+- 完整样例：[examples/44_atomic_counter](../examples/44_atomic_counter)；并发夹具在
+  `test/ast/p41_cancel_flag` / `p41_refcount`，TSan 见 `selfhost/check-tsan.sh`。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |

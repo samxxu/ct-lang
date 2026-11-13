@@ -2269,3 +2269,38 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **尾随声明**：`Type name = expr defer { … };` / `errdefer { … };` 只允许单声明符；`$` 是 `name` 的只读别名，块内可直接写名字。赋值形式、多声明符、`for` 初始化报 L40-9；语句首 `$ = …` 或对 `$` 赋值报 L40-10，range/into 之外的其它表达式位置仍沿用既有 `unexpected token`。尾随块在初始值之后注册，初始值可能失败时由作者在块内 guard（如 `if ($) …`）；尾随块内声明与 `$` 同名变量会报 `a trailing block cannot shadow the '$' name`。
 - **不做**：`Result` / `?` / 异常、`goto err:`、错误传播、函数级错误标志、赋值形式尾随、多声明符尾随（开放项 T40-1…T40-5）。
 
+### 4.59 `atomic` 原子修饰符与 `ct_atomic_*`（Phase 41，仅 ct-ast）
+
+`atomic` 是**上下文类型修饰**：只有后跟 `int` / `long` / `void *` / `bool` 时才是类型；`int atomic = 1;`
+和单独的 `atomic;` 仍是普通标识符。四种写法映射到 C11 `_Atomic(T)`：
+
+| CT | 生成 C |
+| --- | --- |
+| `atomic int` | `_Atomic(int)` |
+| `atomic long` | `_Atomic(long)` |
+| `atomic bool` | `_Atomic(_Bool)` |
+| `atomic void *` | `_Atomic(void *)` |
+| `atomic int *` | `_Atomic(int) *`（指向原子 int 的普通指针） |
+
+原子操作是内建名 `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`，一律 seq_cst：
+
+```ct
+atomic int hits = 0;
+int expected = 0;
+
+ct_atomic_store(&hits, 1);
+int v = ct_atomic_load(&hits);
+if (!ct_atomic_cas(&hits, &expected, v + 1))
+    return 1;
+```
+
+- 第一实参的静态类型必须是 `_Atomic(T) *`；`&x` 与 `_Atomic(T) *p` 都接受。
+- `ct_atomic_cas(&x, &expected, desired)` 的 `expected` 必须按地址传入；失败时写回实际值。
+- 生成物带 CT 自带的 12 个 `static inline` 助手（仅在实际用到原子操作时发射），内部调用
+  `__atomic_*`；不注入 `<stdatomic.h>`。
+- **C11 要求**：`_Atomic` 是 C11 类型。`ct build` 在存在原子单元时使用 `-std=c11`；`ct compile`
+  的用户需自行以 `-std=c11` 编译生成的 C。
+- `atomic_load` / `atomic_store` / `<stdatomic.h>` 仍按普通 C 调用直通，不被占用；`atomic` 不是
+  无条件关键字，`atomic char` 报 L41-1，`atomic _Atomic(int)` 报 L41-8，原子返回类型 / typedef
+  目标报 L41-6，`own atomic` 报 L41-3，by-value CAS 报 L41-5。
+- 原子类型只支持上述四种基类型；`atomic struct` / 原子容器元素 / 原子返回类型是开放项。

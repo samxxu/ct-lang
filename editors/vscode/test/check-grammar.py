@@ -227,6 +227,8 @@ C11 = "\n".join([
 ])
 # Phase 40: errdefer and the err: marker.
 P40 = "int f(void) { errdefer { } return err: 1; }"
+# Phase 41: contextual atomic and the ct_atomic_* builtins.
+P41 = "int f(void) { atomic int n = 0; ct_atomic_store(&n, 1); return ct_atomic_load(&n); }"
 # 2b.3 qualified instance host plus a recipe body; a plain C member call must
 # not be read as a recipe.
 MAP = "\n".join([
@@ -884,6 +886,16 @@ def main():
         print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
     check("`errdefer` / `err:` -> ct-errdefer + ct-err-colon",
           "ct-errdefer" in by_line[1] and "ct-err-colon" in by_line[1],
+          str(by_line[1]))
+
+    print()
+    print("synthetic Phase 41 -- atomic modifier and ct_atomic_*:")
+    rows = scan(P41, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`atomic` / `ct_atomic_*` -> ct-atomic + ct-atomic-op",
+          "ct-atomic" in by_line[1] and "ct-atomic-op" in by_line[1],
           str(by_line[1]))
 
     print()

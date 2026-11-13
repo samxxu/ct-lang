@@ -505,7 +505,7 @@ for d in test/ast/*/; do
     name="$(basename "$d")"
     # Phase 37: this fixture deliberately dispatches a null iface; the
     # dedicated p37 runtime probe runs it with --runtime-checks.
-    case "$name" in 219_runtime_guard) continue;; esac
+    case "$name" in 219_runtime_guard|p41_cancel_flag|p41_refcount) continue;; esac
     src="$d/prog.ct"
     [ -f "$src" ] || continue
     out="$work/$name.c"
@@ -3670,6 +3670,17 @@ fi
 # Phase 40 R5: trailing declaration binding.
 if bash test/ast/p40_trailing.sh "$work/ct-ast" >"$work/p40r5.out" 2>"$work/p40r5.err"; then
     ok "p40 r5"
+
+if bash test/ast/p41_runtime.sh "$work/ct-ast" "$CC" "$work"; then
+    ok "p41/runtime"
+else
+    bad "p41/runtime" "threaded atomic fixtures failed"
+fi
+if bash test/ast/p41_errors.sh "$work/ct-ast"; then
+    ok "p41/errors"
+else
+    bad "p41/errors" "L41 diagnostics failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

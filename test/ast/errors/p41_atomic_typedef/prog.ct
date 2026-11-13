@@ -1,0 +1,2 @@
+typedef atomic int atom_int;
+int main(void) { return 0; }

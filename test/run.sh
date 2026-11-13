@@ -176,7 +176,7 @@ ast_example_status() {
         printf 'ct-ast rejected %s: %s\n' "$ast_dir/$ast_name.ct" "$(cat "$ast_base.err")"
         return 2
     fi
-    if ! $CC $CFLAGS "$ast_base.c" -o "$ast_base.bin" 2>"$ast_base.log"; then
+    if ! $CC $CFLAGS -std=c11 -pthread "$ast_base.c" -o "$ast_base.bin" 2>"$ast_base.log"; then
         printf 'generated C does not build:\n'
         sed 's/^/    /' "$ast_base.log"
         return 3

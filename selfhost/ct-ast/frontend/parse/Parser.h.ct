@@ -515,10 +515,17 @@ impl ParseDeclOps for Parser {
             return self->sup->fail(self->sym->last_error());
         self->sup->lex_next();                       /* consume `=` */
         self->sym->alias_decl++;
+        self->ex->saw_atomic = 0;
         if (self->ex->parse_type(target, sizeof target) != 0) {
             self->sym->alias_decl--;
             self->sym->abort_type_alias();
             return -1;
+        }
+        if (self->ex->saw_atomic) {
+            self->sym->alias_decl--;
+            self->sym->abort_type_alias();
+            return tool::diag::ct_sem_error(line, col,
+                "an atomic value cannot be a typedef target", self->mem->path);
         }
         self->sym->alias_decl--;
         if (self->ex->saw_trait) {
@@ -1387,6 +1394,7 @@ impl ParseOps for Parser {
                 "errdefer is not allowed here", self->mem->path);
         func_line = self->lex->tokline;
         func_col = self->lex->tokstart - self->lex->lstart + 1;
+        self->ex->saw_atomic = 0;
         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
         if (self->ex->fnptr_state) {
             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
@@ -1581,6 +1589,9 @@ impl ParseOps for Parser {
             if (self->sup->expect(";") != 0) return -1;
             return g;
         }
+        if (self->ex->saw_atomic)
+            return tool::diag::ct_sem_error(func_line, func_col,
+                "an atomic value cannot be a return type", self->mem->path);
         if (self->sup->push_scope() != 0) return -1;
         /* Parameter types written bare `T` must read as the type parameter,
            even when a struct/union/enum with that tag exists (SH-63). */
@@ -2482,7 +2493,11 @@ impl ParseOps for Parser {
             }
             return t;
         }
+        self->ex->saw_atomic = 0;
         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+        if (self->ex->saw_atomic)
+            return tool::diag::ct_sem_error(td_line, 1,
+                "an atomic value cannot be a typedef target", self->mem->path);
         if (self->ex->fnptr_state) {
             /* `typedef int (*BinOp)(int, int);`: the alias came with the type */
             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);

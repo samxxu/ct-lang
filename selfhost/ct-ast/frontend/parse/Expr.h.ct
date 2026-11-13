@@ -288,6 +288,10 @@ pub struct Expr {
        declaration entries copy them into the node's `text3` (D-5). */
     char fnptr_dims[160];
     int  fnptr_state;
+    /* Phase 41: the type just read used the contextual `atomic` modifier.
+       Contexts that cannot hold an atomic value (return type, typedef) reset
+       this before parse_type and reject it afterwards. */
+    int  saw_atomic;
     /* Set when the type just read named a trait. `parse_type` turns a trait
        into its `struct T_iface`, which is right everywhere except a type
        alias: a synonym must name a concrete spelling, so the alias parser
@@ -1636,10 +1640,14 @@ impl ExprOps for Expr {
                bases follows; `int atomic = 1;` never reaches this branch. */
             if (n == 0 && self->lex->tok == T_ID
                 && strcmp(self->lex->toktext, "atomic") == 0) {
+                self->saw_atomic = 1;
                 self->sup->lex_next();
                 if (self->lex->tok == T_ID
                     && strcmp(self->lex->toktext, "_Atomic") == 0)
                     return self->sup->fail("use one atomic spelling, not both");
+                if (self->lex->tok == T_ID
+                    && strcmp(self->lex->toktext, "own") == 0)
+                    return self->sup->fail("'own' must precede the type; an owned pointer cannot be atomic");
                 if (self->lex->tok == T_ID
                     && strcmp(self->lex->toktext, "int") == 0) {
                     if (self->type_append(out, cap, &n, "_Atomic(int)") != 0) return -1;

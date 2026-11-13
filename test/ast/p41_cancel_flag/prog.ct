@@ -1,0 +1,22 @@
+#include <pthread.h>
+#include <sched.h>
+#include <stdio.h>
+atomic bool stop = 0;
+void *worker(void *arg)
+{
+    (void)arg;
+    while (!ct_atomic_load(&stop))
+        sched_yield();
+    return 0;
+}
+int main(void)
+{
+    pthread_t t1, t2;
+    pthread_create(&t1, 0, worker, 0);
+    pthread_create(&t2, 0, worker, 0);
+    ct_atomic_store(&stop, 1);
+    pthread_join(t1, 0);
+    pthread_join(t2, 0);
+    printf("stopped=%d\n", ct_atomic_load(&stop));
+    return 0;
+}

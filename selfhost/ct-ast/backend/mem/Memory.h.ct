@@ -85,6 +85,10 @@ impl MemoryOps for Memory {
             const char *tp = self->arena->nodes[d].text;
             size_t bl;
             int si, vi;
+            if (strncmp(tp, "_Atomic(", 8) == 0)
+                return tool::diag::ct_sem_error(line, 1,
+                    "an owned value cannot be atomic: 'own' needs a struct that uses Drop",
+                    self->path);
             if (self->arena->nodes[d].text3[0] != 0)
                 return tool::diag::ct_sem_error(line, 1, "'own' does not support arrays", self->path);
             if (!self->expr_alloc(self->arena->nodes[d].a))
