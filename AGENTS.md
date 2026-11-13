@@ -285,21 +285,21 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | 项 | 值 |
 | --- | --- |
 | 对话清单 | 单会话（lead）；三类常驻对话未建，按 `deviation: single-session-workflow`；phase 对话=PH-37 |
-| 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（已建；单会话，见 deviation） |
+| 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话，见 deviation） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
 | 文档 snippet | 缺失：无 `docs/snippets/`，G4 未接通 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | 缺失：无 `docs/decisions/`；现写在 `docs/design/*.md`（`D<phase>-<n>`） |
 | 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` 首行徽标、`docs/README.md`「当前版本」、`AGENTS.md`「当前版本」行、`docs/history/phase-log.md` 版本记录 |
-| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`） |
+| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`phase-tag-requires-user-approval`） |
 
 #### 0.2 话术路由
 
 | 触发话术（用户或角色说） | 动作 | 产物 |
 | --- | --- | --- |
-| "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1，派发报三要素 | `docs/phases/PH-<n>/card.md`、`docs/session-map.md` |
+| "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1 报三要素 | `docs/design/phase<NN>-draft.md`、`docs/session-map.md` |
 | "现在你是 <角色>" / 切换角色 | 先落 handoff，再按新角色落笔 | `handoff/<id>.md` |
-| "打 tag" / "发版" | 只出提案，不执行；等用户显式指令（6.5） | tag 提案、发布清单 |
+| "打 tag" / "发版" | 只出提案，不执行；等用户显式指令（6.5；见 0.3 deviation） | tag 提案、发布清单 |
 | "放宽一下" / "跳过门禁" | 拒绝；改走 `deviation:` 或先改主规范（S7） | `deviation:` 条目 + 用户签字 |
 | "先这样" / "算历史遗留" | 不接；按 6.7 V-6 立案 | `issues/<id>.md` |
 | "修一下 <X>" | 先复现、先红后绿；一处缺陷一次 fix，PATCH +1（6.7） | 红证提交 + 修复提交 |
@@ -312,7 +312,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
     条款: §6.7 V-1
     现状: v0.36.0 五处一致；PH-36 已收口，MINOR=phase=36，d=0。Phase 27–29 属 V-1 在途不追溯。
     理由: 历史 tag 不可回改；Phase 27–29 在 v0.30.0 合并发布，重编号会跳号并留 CHANGELOG 空段。
-    收敛: 无需补偿；每个 phase 收口时 MINOR = PH-<n>。
+    收敛: 无需补偿；收口时 MINOR = PH-<n>。
     签字: 用户已批准（2026-11-12）
 
 `deviation: single-session-workflow`
@@ -321,8 +321,17 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
     条款: §9.1 / §9.3 / G0 `g0-landing`
     现状: 单会话；三类常驻对话未建，phase 对话未按 9.3 命名。
     理由: 单人项目 + DSH 单会话；拆三个会话无协作收益且丢失上下文。
-    收敛: 多人协作或 1.0 前按 9.3 建三类会话并回填 session-map。
+    收敛: 多人协作或 1.0 前建三类会话并回填 session-map。
     签字: 用户已批准（2026-11-13，本轮指示）
+
+`deviation: phase-tag-requires-user-approval`
+
+    日期: 2026-11-13
+    条款: §6.7 V-7
+    现状: V-7 要求 phase 收口自动建并推 tag；0.2 要求只出提案、等用户指令。
+    理由: 单人项目，tag/push 是发布动作，保留人工闸。
+    收敛: 用户授权自动推送后撤销。
+    签字: 用户已批准（2026-11-13，选 A）
 
 #### 0.4 文档语言（项目加严）
 
