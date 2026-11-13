@@ -17,7 +17,10 @@ int main(void)
     printf("miss %d\n", m.get("zz") == 0);
 
     /* a duplicate key keeps its position and overwrites the value */
-    printf("dup %d, value %d\n", m.put("amy", 20), *m.get("amy"));
+    {
+        int dup = m.put("amy", 20);
+        printf("dup %d, value %d\n", dup, *m.get("amy"));
+    }
 
     e = m.entry(1);
     printf("entry %s %d\n", e.key, e.value);
@@ -25,7 +28,10 @@ int main(void)
     printf("oob %d\n", e.value);
 
     /* remove shifts the tail left, so the insertion order survives */
-    printf("remove %d %d\n", m.remove("bo"), m.len());
+    {
+        int removed = m.remove("bo");
+        printf("remove %d %d\n", removed, m.len());
+    }
     e = m.entry(0);
     printf("shift %s %d\n", e.key, e.value);
 

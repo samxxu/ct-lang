@@ -7,12 +7,20 @@ int main(void)
     int left;
 
     v.h = 0;
-    printf("push %d %d %d\n", v.push(4), v.push(5), v.push(6));
+    {
+        int p1 = v.push(4);
+        int p2 = v.push(5);
+        int p3 = v.push(6);
+        printf("push %d %d %d\n", p1, p2, p3);
+    }
     printf("len %d, oob %d\n", v.len(), v.get(9) == 0);
 
     v.set(1, 50);
     printf("set %d %d %d\n", v.get(0), v.get(1), v.get(2));
-    printf("pop %d, len %d\n", v.pop(), v.len());
+    {
+        int popped = v.pop();
+        printf("pop %d, len %d\n", popped, v.len());
+    }
 
     /* bounds: get answers a zero value, set is a no-op */
     v.set(9, 1);
