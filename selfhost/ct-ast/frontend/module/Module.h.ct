@@ -95,6 +95,7 @@ pub trait ModuleOps {
     int  check_ns_dir(int u);
     int  cache_order(int u, int *state, int *order, int *n);
     int  cache_key_of(int u, char *out, int cap);
+    int  lib_scan(int root_u);
     int  build_main(int argc, char **argv);
     int  emit_program(int prog);
     int  emit_unit(int u);
@@ -1024,6 +1025,132 @@ impl ModuleOps for Module {
         return 0;
     }
 
+    /* Phase 39 R2: classify the root unit's exports and enforce the L39-*
+       rules. R3/R5 consume the same rules when they write the ABI header and
+       the archive; this method only decides whether the build may continue. */
+    int lib_scan(int root_u)
+    {
+        int u, fi, gi, count, nonroot, bad;
+        const char *root_path;
+        char msg[MAX_TEXT];
+
+        if (root_u < 0 || root_u >= self->nunits) {
+            fprintf(stderr, "%s: no exported functions in '<input>'\n", self->prog);
+            return 1;
+        }
+        root_path = self->units[root_u].path;
+        if (!self->units[root_u].is_hdr) {
+            fprintf(stderr, "%s: no exported functions in '%s'\n", self->prog, root_path);
+            return 1;
+        }
+        /* L39-3 / L39-5 / L39-4: things that make the archive uncontrollable. */
+        for (u = 0; u < self->nunits; u++) {
+            if (self->units[u].is_map && self->units[u].has_shim) {
+                snprintf(msg, sizeof msg,
+                         "a --lib build cannot include the C shim of '%s'",
+                         self->units[u].path);
+                return tool::diag::ct_sem_error(1, 1, msg, root_path);
+            }
+            for (fi = self->units[u].fn_start; fi < self->units[u].fn_end; fi++) {
+                if (strcmp(self->sym->funcs[fi].name, "main") == 0
+                    && self->sym->funcs[fi].body >= 0) {
+                    return tool::diag::ct_sem_error(self->sym->funcs[fi].line, 1,
+                        "a --lib build cannot contain 'main'", self->units[u].path);
+                }
+            }
+            for (gi = self->arena->nodes[self->units[u].prog].a; gi >= 0;
+                 gi = self->arena->nodes[gi].next) {
+                if (self->arena->nodes[gi].kind != N_GLOBAL
+                    || self->arena->nodes[gi].d != 1) continue;
+                snprintf(msg, sizeof msg,
+                         "'%s' cannot be exported: pub globals are not supported",
+                         self->arena->nodes[gi].text2);
+                return tool::diag::ct_sem_error(self->arena->nodes[gi].line, 1,
+                                                msg, self->units[u].path);
+            }
+        }
+        count = 0;
+        nonroot = 0;
+        for (u = 0; u < self->nunits; u++) {
+            if (self->is_builtin_unit(u)) continue;
+            for (fi = self->units[u].fn_start; fi < self->units[u].fn_end; fi++) {
+                int k, is_root_candidate;
+                if (!self->sym->funcs[fi].is_pub) continue;
+                is_root_candidate = (u == root_u && self->sym->funcs[fi].body >= 0);
+                if (!is_root_candidate) {
+                    nonroot++;
+                    continue;
+                }
+                count++;
+                if (self->sym->funcs[fi].ntparams > 0) {
+                    snprintf(msg, sizeof msg,
+                             "'%s' not exported: generic template has no external symbol",
+                             self->sym->funcs[fi].name);
+                    if (tool::diag::ct_type_warn(self->sym->funcs[fi].line, 1, "", msg, root_path) != 0)
+                        return 1;
+                    continue;
+                }
+                bad = 0;
+                snprintf(msg, sizeof msg, "'%s' cannot be exported: ", self->sym->funcs[fi].name);
+                {
+                    int tn = 0;
+                    char types[17][MAX_TEXT];
+                    snprintf(types[tn++], MAX_TEXT, "%s", self->sym->funcs[fi].ret);
+                    for (k = 0; k < self->sym->funcs[fi].nparams && tn < 17; k++)
+                        snprintf(types[tn++], MAX_TEXT, "%s", self->sym->funcs[fi].ptype[k]);
+                    for (k = 0; k < tn; k++) {
+                        const char *tp = types[k];
+                        const char *base = tp;
+                        if (strncmp(base, "struct ", 7) == 0) base += 7;
+                        else if (strncmp(base, "union ", 6) == 0) base += 6;
+                        if (strstr(tp, "own ")) {
+                            strncat(msg, "own", sizeof msg - strlen(msg) - 1);
+                            bad = 1;
+                            break;
+                        }
+                        if (strstr(tp, "_iface") || self->sym->find_trait(base) >= 0) {
+                            strncat(msg, "trait value", sizeof msg - strlen(msg) - 1);
+                            bad = 1;
+                            break;
+                        }
+                        if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
+                            || strncmp(base, "Option_", 7) == 0
+                            || strncmp(base, "Result_", 7) == 0
+                            || (strncmp(base, "Str", 3) == 0
+                                && (base[3] == 0 || base[3] == ' '
+                                    || base[3] == '*' || base[3] == '['))) {
+                            strncat(msg, "std type", sizeof msg - strlen(msg) - 1);
+                            bad = 1;
+                            break;
+                        }
+                        if ((strncmp(tp, "struct ", 7) == 0
+                             || strncmp(tp, "union ", 6) == 0)
+                            && strchr(tp, '*') == 0) {
+                            strncat(msg, "by-value struct", sizeof msg - strlen(msg) - 1);
+                            bad = 1;
+                            break;
+                        }
+                    }
+                }
+                if (bad)
+                    return tool::diag::ct_sem_error(self->sym->funcs[fi].line, 1, msg, root_path);
+            }
+        }
+        if (count == 0) {
+            snprintf(msg, sizeof msg, "no exported functions in '%s'", root_path);
+            return tool::diag::ct_sem_error(1, 1, msg, root_path);
+        }
+        if (nonroot > 0) {
+            snprintf(msg, sizeof msg,
+                     "%d pub function(s) are not part of the ABI surface (imported or extern)",
+                     nonroot);
+            if (tool::diag::ct_type_warn(1, 1, "", msg, root_path) != 0) return 1;
+        }
+        if (tool::diag::ct_diag_nwarn() > 0
+            && tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
+        return 0;
+    }
+
     int build_main(int argc, char **argv)
     {
         const char *inputs[MAX_UNITS];
@@ -1214,13 +1341,6 @@ impl ModuleOps for Module {
             fprintf(stderr, "ctc: --lib and --emit-c are mutually exclusive\n");
             return 1;
         }
-        /* R1 skeleton: the export scan (R2) will decide whether the root has
-           candidates. Until then every --lib build has no exported functions. */
-        if (self->lib_mode) {
-            fprintf(stderr, "%s: no exported functions in '%s'\n",
-                    self->prog, ninput > 0 ? inputs[0] : "<input>");
-            return 1;
-        }
         /* A `.m.ct` unit is a compile-time mapping: it is loaded through
            `import`, never as a build input, and it never writes an artefact. */
         for (i = 0; i < ninput; i++) {
@@ -1355,11 +1475,19 @@ impl ModuleOps for Module {
            user program's `MAX_FUNCS` budget. */
         self->sym->nfunc_base = self->sym->nfunc;
 
-        for (i = 0; i < ninput; i++) {
-            if (self->load_unit(inputs[i]) < 0) {
-                if (tool::diag::ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
-                else frontend::parse::ct_parse_report();
-                return 1;
+        {
+            int root_u = -1;
+            for (i = 0; i < ninput; i++) {
+                int lu = self->load_unit(inputs[i]);
+                if (i == 0) root_u = lu;
+                if (lu < 0) {
+                    if (tool::diag::ct_diag_nsem()) fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
+                    else frontend::parse::ct_parse_report();
+                    return 1;
+                }
+            }
+            if (self->lib_mode) {
+                return self->lib_scan(root_u);
             }
         }
         for (u = 0; u < self->nunits; u++) {
