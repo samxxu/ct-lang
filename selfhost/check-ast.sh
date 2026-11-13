@@ -3604,6 +3604,13 @@ else
     bad "p39 r3" "$(cat "$work/p39r3.out" "$work/p39r3.err")"
 fi
 
+# Phase 39 R4: static non-exports, export visibility, hidden compile.
+if bash test/modules/p39_lib/r4_probe.sh "$work/ct-ast" >"$work/p39r4.out" 2>"$work/p39r4.err"; then
+    ok "p39 r4"
+else
+    bad "p39 r4" "$(cat "$work/p39r4.out" "$work/p39r4.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"
