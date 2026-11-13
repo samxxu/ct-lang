@@ -1,6 +1,6 @@
 # Phase 38 — `defer` 块级清理
 
-> **状态：实现完成（含独立评审 P0/P1 修复）**（2026-11-13；版本 bump / tag 待用户批准）。
+> **状态：✅ 完成**（2026-11-13；v0.38.0，本地 tag v0.38.0）。
 > **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
 > **文档形态**：`phase38-draft.md`；design window 7/12，转正时归档当时最老的一张。
 > **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
@@ -234,7 +234,7 @@ L38-1/L38-2 各自一条断言；L38-3 分文件作用域与 `.h.ct` 两条文�
 | E38-5 | `223_defer_own_order`：`defer` / `drop` 顺序 |
 | E38-6 | `errors/p38_defer_control.ct` 报 `a defer block cannot transfer control` |
 | E38-7 | `errors/p38_defer_scope.ct` 报 `defer is only allowed inside a function` |
-| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1328、check-warnings 600、check-docs 944 links、acceptance 20；样例 `examples/42_defer` |
+| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1328、check-warnings 600、check-docs 945 links、acceptance 20；样例 `examples/42_defer` |
 | 版本/tag | 版本仍 `v0.37.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.38.0` bump 与 tag/push 等用户批准 |
 
 ### 9.1 独立评审与修复（2026-11-13）
@@ -247,5 +247,5 @@ L38-1/L38-2 各自一条断言；L38-3 分文件作用域与 `.h.ct` 两条文�
 | 新增测试 | 224 分支/循环/嵌套/同块 goto；p38_defer_switch(_nested) / p38_defer_label / p38_goto_sibling / p38_goto_in / p38_goto_active / p38_defer_header / break / continue / nested；P37 warm-cache 与 unstable/safe_index |
 | 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；switch 内 defer 连嵌套块也禁止；guard 不稳定接收者已按 p38-1 B′ 拒绝（D-003）；均记录为 v1 边界 |
 | 门禁 | `check-ast 1329/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
-| 版本/tag | 仍 `v0.37.0`；`v0.38.0` bump/tag 待用户批准；`v0.37.0` tag 仍含评审前的 runtime cache/guard 缺陷 |
+| 版本/tag | `v0.38.0`；本地 annotated tag `v0.38.0`（不 push）；`v0.37.0` tag 仍含评审前的 runtime cache/guard 缺陷 |
 

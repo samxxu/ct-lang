@@ -287,10 +287,10 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-38 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
-| 文档 snippet | 缺失（无 `docs/snippets/`） |
+| 文档 snippet | 缺失 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
-| 决策记录 | `docs/decisions/D-<n>.md`（ADR）；phase 内决策仍写 `docs/design/*.md`（`D<phase>-<n>`） |
-| 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` 首行徽标、`docs/README.md`「当前版本」、`AGENTS.md`「当前版本」行、`docs/history/phase-log.md` 版本记录 |
+| 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
+| 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` / `docs/README.md` / `AGENTS.md` 当前版本与 `docs/history/phase-log.md` 版本记录 |
 | 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`phase-tag-requires-user-approval`） |
 
 #### 0.2 话术路由
@@ -299,8 +299,8 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | --- | --- | --- |
 | "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1 报三要素 | `docs/design/phase<NN>-draft.md`、`docs/session-map.md` |
 | "现在你是 <角色>" / 切换角色 | 先落 handoff，再按新角色落笔 | `handoff/<id>.md` |
-| "打 tag" / "发版" | 只出提案，不执行；等用户显式指令（6.5；见 0.3 deviation） | tag 提案、发布清单 |
-| "放宽一下" / "跳过门禁" | 拒绝；改走 `deviation:` 或先改主规范（S7） | `deviation:` 条目 + 用户签字 |
+| "打 tag" / "发版" | 只出提案，等指令（6.5；0.3 deviation） | tag 提案、发布清单 |
+| "放宽一下" / "跳过门禁" | 拒绝；走 `deviation:` 或改主规范（S7） | `deviation:` 条目 + 用户签字 |
 | "先这样" / "算历史遗留" | 不接；按 6.7 V-6 立案 | `issues/<id>.md` |
 | "修一下 <X>" | 先复现、先红后绿；一处缺陷一次 fix，PATCH +1（6.7） | 红证提交 + 修复提交 |
 
@@ -323,7 +323,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
     条款: §9.1 / §9.3 / G0 `g0-landing`
     现状: 单会话；三类常驻对话未建，phase 对话未按 9.3 命名。
     理由: 单人项目 + DSH 单会话；拆三个会话无协作收益且丢失上下文。
-    收敛: 多人协作或 1.0 前建三类会话并回填 session-map。
+    收敛: 多人协作或 1.0 前建会话并回填 session-map。
     签字: 用户已批准（2026-11-13，本轮指示）
 
 `deviation: phase-tag-requires-user-approval`
@@ -331,7 +331,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
     日期: 2026-11-13
     条款: §6.7 V-7
     现状: V-7 要求自动建并推 tag；0.2 要求只出提案、等指令。
-    理由: 单人项目，tag/push 是发布动作，保留人工闸。
+    理由: 单人项目，tag/push 保留人工闸。
     收敛: 用户授权自动推送后撤销。
     签字: 用户已批准（2026-11-13，选 A）
 
@@ -350,7 +350,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | --- | --- |
 | roadmap 只做索引 | `docs/roadmap.md` 只放阶段号、主题、状态、收口版本、详情链接；不写逐相叙述/证据/决策全文 |
 | 详细记录 | 逐相细节、版本记录、已定决策、待定项在 `docs/history/phase-log.md`；roadmap 不得复制其正文 |
-| 新增/更新 phase | roadmap 加一行；详情写流水账；两处同步但不得重复 |
+| 新增/更新 phase | roadmap 加行；详情写流水账；同步不重复 |
 | 判据 | roadmap 单元格不得多段叙述；`docs/README.md` 与 `docs/history/README.md` 均有入口 |
 
 ### 1. 项目画像
@@ -362,9 +362,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.37.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.38.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.37.0；Phase 38 实现完成（版本/tag 待批准）。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.38.0；Phase 38 已收口。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
