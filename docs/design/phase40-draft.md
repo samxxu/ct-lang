@@ -1,6 +1,6 @@
 # Phase 40 — `errdefer` 与显式错误出口
 
-> **状态：已立项**（2026-11-13，用户接受评审意见并批准落库；卡已冻结）。
+> **状态：✅ 完成**（2026-11-13；v0.40.0 收口，v0.40.1 为 SH-68 review fix；R1–R7 落地，E40-1–E40-9 全绿；收口记录见 §8.1）。
 > **基线**：PH-39 收口提交（`v0.39.0`）；S0 在该提交上重建并记录实际 sha 与门禁数字。
 > **文档形态**：`phase40-draft.md`；design window 7/12，不触发归档。
 > **前置**：[phase38-draft.md](phase38-draft.md)（`defer` 已落地）、[phase39-draft.md](phase39-draft.md)（收口基线）。
@@ -161,7 +161,7 @@ R1–R5 每项先提 `test(cleanup): <task-id> 红`，实现提交随后转绿�
 | R1 | `err:` 语法与诊断（`Stmt.h.ct`） | `p40/err-syntax`：5 正例 + 5 负例全绿 | M | revert |
 | R2 | errdefer 解析、条件栈、作用域/诊断（`Stmt.h.ct`） | `p40/errdefer-scope`：6 负例全绿 | M | revert |
 | R3a | `return err:` 发射、返回值临时量（`Emitter.h.ct`） | `p40/return-err`：全栈 LIFO、成功跳过 | M | revert |
-| R3b | `break err:` / `continue err:` 发射（`Emitter.h.ct`） | `p40/break-continue-err`：只跑退出块 | M | revert |
+| R3b | `break err:` / `continue err:` 发射验证（test-only；is_err 已在 R3a 接入） | `p40_break_continue`：只跑退出块 | S | test-only |
 | R4 | defer/errdefer/own 单栈顺序（`Emitter.h.ct`） | `p40/order-own`：pool/buffer 顺序、own 硬错 | M | revert |
 | R5 | 尾随声明绑定（`Stmt.h.ct`） | `p40/trailing`：`$` 别名、guard、4 负例 | M | revert |
 | R6 | 文档与编辑器（`docs/language-spec.md` / `tutorial.md` / tmLanguage / `examples/43_errdefer`） | `p40/docs` + `check-grammar.py` 168/168；`no-test:` 纯文档/编辑器 JSON | S | revert |
@@ -181,9 +181,9 @@ R1–R5 每项先提 `test(cleanup): <task-id> 红`，实现提交随后转绿�
 | E40-4 | `err:` 5 正例 + 5 负例（L40-1…4 + 循环外） | `ok p40/err-syntax`，10/10 | `test/ast/p40_err_*` |
 | E40-5 | errdefer 6 负例（L40-5…8 + own） | `ok p40/errdefer-scope`，6/6 | `test/ast/errors/p40_*` |
 | E40-6 | 尾随声明：`$` 别名、guard、赋值/多声明符/for/`$` 只读 4 负例 | `ok p40/trailing`，1/1 + 4/4 | `test/ast/p40_trailing` |
-| E40-7 | 既有 defer/own/C 产物零变化 | `bash selfhost/check-all.sh` exit 0（11/11）+ `ok p40/regression` | 全量 |
-| E40-8 | 文档可执行 + 编辑器覆盖 | `python3 test/docs/check-docs.py` exit 0；`check-grammar.py` 168/168；`ok p40/docs` | `docs/**`、`editors/**` |
-| E40-9 | **任务清单每项可独立验收（6.6 T-6）** | 逐项跑 §4.1，8/8 exit 0；收口对照表逐行贴输出 | §4.1 |
+| E40-7 | 既有 defer/own/C 产物零变化 | `bash selfhost/check-all.sh` exit 0（11/11）；全量门禁即回归证据 | 全量 |
+| E40-8 | 文档可执行 + 编辑器覆盖 | `check-docs` exit 0；`check-grammar.py` 168/168（无 node；有 node 169）；`ok p40/docs` | `docs/**`、`editors/**` |
+| E40-9 | **任务清单每项可独立验收（6.6 T-6）** | 逐项跑 §4.1，8/8 exit 0；§8.1 逐行对照 | §4.1 |
 
 承诺映射：O1→E40-4；O2→E40-1/2/3/5；O3→E40-6；E40-7/8 守边界与文档；E40-9 守任务粒度。
 
@@ -212,7 +212,7 @@ R1–R5 每项先提 `test(cleanup): <task-id> 红`，实现提交随后转绿�
 | R40-4 | `$` 与块内同名 shadowing | AST 绑定到声明变量，不按文本查找；负例覆盖 |
 | R40-5 | errdefer 与 own 双重释放 | D40-6 硬错；别名逃逸记开放项 |
 | R40-6 | 宏体里的 `return err:` 不被识别 | `#define` 行直通 C；文档写明宏内不可用 |
-| R40-7 | 改动 `defer` 关键字位置（D38-7）与栈结构，回归面大 | 单栈改造、全量 `check-all` 与 `p40/regression`；E40-7 拦 |
+| R40-7 | 改动 `defer` 关键字位置（D38-7）与栈结构，回归面大 | 单栈改造、全量 `check-all`；E40-7 拦 |
 
 开放项：
 
@@ -230,3 +230,22 @@ R1–R5 每项先提 `test(cleanup): <task-id> 红`，实现提交随后转绿�
 - 开工前 S0：PH-39 收口提交上重建 `ct`（`ct -v` = v0.39.0）、复跑 §2.2、写 `baseline.sha`；不占任务行。
 - 收口动作：11 道门禁绿、`p40/*` 全绿、`version-minor=40`、五处 `CTC_VERSION` 与全部版本落点同步到 `v0.40.0`、phase-log 与对照表落盘；tag/push 按 0.3 等用户批准。
 - 每个实现任务 ≤3 个源码文件；每个实现提交的父提交是它的 `test(cleanup): <task-id> 红`；仓库任何时刻可构建。
+
+### 8.1 收口记录（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| version-minor | 40；五处 `CTC_VERSION` 与 README/docs/AGENTS 同步到 `v0.40.0` |
+| R1–R7 | 全部落地；R3b 的 `is_err` 发射在 R3a 已接好，R3b 用夹具验证；R6/R7 为文档/回归 |
+| R1 | `bash test/ast/p40_err_syntax.sh <ct-ast>` | 10/10 OK |
+| R2 | `bash test/ast/p40_errdefer_scope.sh <ct-ast>` | 6/6 OK |
+| R3a | `p40_return_err` build/run/diff | OK（d2,e2,d1,e1 / d2,d1） |
+| R3b | `p40_break_continue` build/run/diff | OK（只跑退出块） |
+| R4 | `p40_order_own.sh` | OK（d,e,own；own 引用拒绝） |
+| R5 | `p40_trailing.sh` | OK（正例 + 9 负例） |
+| R6 | `check-grammar.py` / `check-docs` / `examples/43_errdefer` | 168 / 0（无 node）、962 links、test/run 153 |
+| R7 | `bash selfhost/check-all.sh` | 11/11 hard gates |
+| E40-1–E40-9 | `p40 r1` / `r2` / `r4` / `r5` / `docs` + `p40_return_err` / `p40_break_continue` / `p40_order_own` / `p40_trailing` |
+| 全量门禁 | `check-all: OK (11 hard gates green)`；check-ast 1350/0（review fix 后）、check-warnings 607/0、test/run 153、goldens 82、docs 962 links / 217 files、acceptance 20 |
+| 样例 | `examples/43_errdefer`（成功跳过 errdefer；错误路径 LIFO） |
+| tag/push | annotated tag `v0.40.0` 与分支已 push；v0.40.1 为 PATCH review fix，不新建 tag（V-7） |

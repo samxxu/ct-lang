@@ -3497,10 +3497,20 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_RET) {
             char tmp[MAX_TEXT];
-            int r, rtv;
+            int r, rtv, wrap;
             rtv = -1;
+            wrap = (self->arena->nodes[n].aux == 1 && self->arena->nodes[n].a >= 0
+                    && self->arena->nodes[n].text[0]);
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
+            /* A label (case/default) may not be followed by a declaration.
+               Wrapping the temp, releases and return in a block keeps the
+               product valid C99 even when the return is the first statement
+               after a label. */
+            if (wrap) {
+                fputs("{\n", self->out);
+                ind++;
+            }
             /* SH-45: the expression reads a value the releases below would
                free, so materialise it first and return the temporary */
             if (self->arena->nodes[n].aux == 1 && self->arena->nodes[n].a >= 0
@@ -3525,11 +3535,21 @@ impl EmitOps for Emitter {
             if (rtv >= 0) {
                 snprintf(tmp, sizeof tmp, "return __ct_ret%d;\n", rtv);
                 fputs(tmp, self->out);
+                if (wrap) {
+                    ind--;
+                    self->emit_indent(ind);
+                    fputs("}\n", self->out);
+                }
                 return 0;
             }
             fputs("return ", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(";\n", self->out);
+            if (wrap) {
+                ind--;
+                self->emit_indent(ind);
+                fputs("}\n", self->out);
+            }
             return 0;
         }
         if (self->arena->nodes[n].kind == N_DELETE) {

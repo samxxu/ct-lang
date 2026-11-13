@@ -1,0 +1,21 @@
+#include <stdio.h>
+
+int f(int fail)
+{
+    errdefer { printf("e1\n"); }
+    defer { printf("d1\n"); }
+    errdefer { printf("e2\n"); }
+    defer { printf("d2\n"); }
+    if (fail) {
+        return err: 7;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    printf("fail=%d\n", f(1));
+    printf("---\n");
+    printf("ok=%d\n", f(0));
+    return 0;
+}

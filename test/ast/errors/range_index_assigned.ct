@@ -1,5 +1,5 @@
-/* `$` is not assignable: it is a placeholder, not a variable. The existing
-   expression grammar rejects the assignment here. */
+/* `$` is not assignable: it is a placeholder, not a variable. A leading
+   `$ = ...` is now diagnosed as the Phase 40 read-only alias (L40-10). */
 int main(void)
 {
     $ = 1;

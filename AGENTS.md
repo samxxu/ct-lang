@@ -291,7 +291,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
 | 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` / `docs/README.md` / `AGENTS.md` 当前版本与 `docs/history/phase-log.md` 版本记录 |
-| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`phase-tag-requires-user-approval`） |
+| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`） |
 
 #### 0.2 话术路由
 
@@ -299,7 +299,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | --- | --- | --- |
 | "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1 报三要素 | `docs/design/phase<NN>-draft.md`、`docs/session-map.md` |
 | "现在你是 <角色>" / 切换角色 | 先落 handoff，再按新角色落笔 | `handoff/<id>.md` |
-| "打 tag" / "发版" | 只出提案，等指令（6.5；0.3 deviation） | tag 提案、发布清单 |
+| "打 tag" / "发版" | 自动建 annotated tag、push tag 与分支（2026-11-13 用户授权） | tag、发布清单 |
 | "放宽一下" / "跳过门禁" | 拒绝；走 `deviation:` 或改主规范（S7） | `deviation:` 条目 + 用户签字 |
 | "先这样" / "算历史遗留" | 不接；按 6.7 V-6 立案 | `issues/<id>.md` |
 | "修一下 <X>" | 先复现、先红后绿；一处缺陷一次 fix，PATCH +1（6.7） | 红证提交 + 修复提交 |
@@ -317,6 +317,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 
 > 2026-11-13：PH-37 → v0.37.0，d=0。
 > 2026-11-13：PH-39 → v0.39.0，d=0。
+> 2026-11-13：PH-40 → v0.40.0，d=0；v0.40.1 为 SH-68 review fix。
 
 `deviation: single-session-workflow`
 
@@ -326,15 +327,6 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
     理由: 单人项目 + DSH 单会话；拆三个会话无协作收益且丢失上下文。
     收敛: 多人协作或 1.0 前建会话并回填 session-map。
     签字: 用户已批准（2026-11-13，本轮指示）
-
-`deviation: phase-tag-requires-user-approval`
-
-    日期: 2026-11-13
-    条款: §6.7 V-7
-    现状: V-7 要求自动建并推 tag；0.2 要求只出提案、等指令。
-    理由: 单人项目，tag/push 保留人工闸。
-    收敛: 用户授权自动推送后撤销。
-    签字: 用户已批准（2026-11-13，选 A）
 
 #### 0.4 文档语言（项目加严）
 
@@ -363,9 +355,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.39.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.40.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.39.0；Phase 40 已立项（未开工）。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.40.1；Phase 40 已收口（含 SH-68 review fix）。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

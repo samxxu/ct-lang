@@ -1,0 +1,33 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Res {
+    int id;
+} use Drop;
+
+impl Drop for Res {
+    void drop()
+    {
+        printf("own%d\n", self->id);
+    }
+}
+
+int f(int fail)
+{
+    own struct Res *r = malloc(sizeof(struct Res));
+    r->id = 7;
+    errdefer { printf("e\n"); }
+    defer { printf("d\n"); }
+    if (fail) {
+        return err: 1;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    printf("fail=%d\n", f(1));
+    printf("---\n");
+    printf("ok=%d\n", f(0));
+    return 0;
+}

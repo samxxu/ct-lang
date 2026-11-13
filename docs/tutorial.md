@@ -1397,6 +1397,27 @@ delete p;                    /* Drop 释放 buffer，再 free 结构体并置空
 完整样例：[40_str_ownership](../examples/40_str_ownership)。细节见
 [language-spec §4.56](language-spec.md)。
 
+### 10.14 `errdefer` 与显式错误出口（Phase 40）
+
+`defer` 无条件清理；`errdefer` 只在**显式错误出口**执行。错误由语法标记，不由返回类型猜：
+
+```ct
+static int load(void)
+{
+    int fd = open_db();
+    int n = read_all(fd) errdefer { if ($ < 0) rollback(fd); };
+    defer { if (fd) close_db(fd); }
+    if (n < 0) {
+        return err: -1;
+    }
+    return n;
+}
+```
+
+`return err: …` / `break err:` / `continue err:` 是三种错误出口；普通 `return` / `break` / `continue` 只跑 `defer`，丢弃 `errdefer`。尾随声明里的 `$` 是左侧变量名的只读别名；`errdefer` 块必须自己 guard 可能失败的值。
+
+完整样例：[43_errdefer](../examples/43_errdefer)。细节见 [language-spec §4.58](language-spec.md)。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |

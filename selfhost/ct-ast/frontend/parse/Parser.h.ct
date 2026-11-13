@@ -1381,6 +1381,10 @@ impl ParseOps for Parser {
            declaration's and must not leak into a later one */
         lead = self->pending_attr ? self->pending_attr - 1 : -1;
         self->pending_attr = 0;
+        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "errdefer") == 0
+            && self->st->errdefer_ahead())
+            return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                "errdefer is not allowed here", self->mem->path);
         func_line = self->lex->tokline;
         func_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;

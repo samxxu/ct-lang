@@ -30,6 +30,8 @@
     { "include": "#ct-delete" },
     { "include": "#ct-own" },
     { "include": "#ct-defer" },
+    { "include": "#ct-errdefer" },
+    { "include": "#ct-err-colon" },
     { "include": "#ct-borrow" },
     { "include": "#ct-borrow-param" },
     { "include": "#ct-trait-builtin" },
@@ -387,6 +389,18 @@
       "match": "\\b(defer)\\b(?=\\s*\\{)",
       "captures": {
         "1": { "name": "keyword.control.defer.ct" }
+      }
+    },
+    "ct-errdefer": {
+      "match": "\\b(errdefer)\\b(?=\\s*\\{)",
+      "captures": {
+        "1": { "name": "keyword.control.errdefer.ct" }
+      }
+    },
+    "ct-err-colon": {
+      "match": "\\b(err)\\b(?=\\s*:)",
+      "captures": {
+        "1": { "name": "keyword.control.err.ct" }
       }
     },
     "ct-borrow": {

@@ -1,0 +1,14 @@
+#include <stdlib.h>
+
+struct Res { int id; } use Drop;
+
+impl Drop for Res {
+    void drop() { }
+}
+
+int f(void)
+{
+    own struct Res *r = malloc(sizeof(struct Res));
+    errdefer { r->id = 1; }
+    return err: 0;
+}

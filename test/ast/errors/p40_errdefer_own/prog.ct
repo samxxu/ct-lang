@@ -1,0 +1,4 @@
+int f(void) {
+    errdefer { own int *p = 0; }
+    return 0;
+}

@@ -3646,6 +3646,42 @@ else
     bad "p39 docs" "docs/package-guide.md lacks --lib or the nm caveat"
 fi
 
+# Phase 40 R1: err: syntax and L40-1..4.
+if bash test/ast/p40_err_syntax.sh "$work/ct-ast" >"$work/p40r1.out" 2>"$work/p40r1.err"; then
+    ok "p40 r1"
+else
+    bad "p40 r1" "$(cat "$work/p40r1.out" "$work/p40r1.err")"
+fi
+
+# Phase 40 R2: errdefer scope/control/own/goto.
+if bash test/ast/p40_errdefer_scope.sh "$work/ct-ast" >"$work/p40r2.out" 2>"$work/p40r2.err"; then
+    ok "p40 r2"
+else
+    bad "p40 r2" "$(cat "$work/p40r2.out" "$work/p40r2.err")"
+fi
+
+# Phase 40 R4: defer/errdefer/own order and own conflict.
+if bash test/ast/p40_order_own.sh "$work/ct-ast" >"$work/p40r4.out" 2>"$work/p40r4.err"; then
+    ok "p40 r4"
+else
+    bad "p40 r4" "$(cat "$work/p40r4.out" "$work/p40r4.err")"
+fi
+
+# Phase 40 R5: trailing declaration binding.
+if bash test/ast/p40_trailing.sh "$work/ct-ast" >"$work/p40r5.out" 2>"$work/p40r5.err"; then
+    ok "p40 r5"
+else
+    bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
+fi
+
+# Phase 40 R6: docs/example/editor discoverability.
+if grep -Fq 'errdefer' docs/language-spec.md    && grep -Fq 'errdefer' docs/tutorial.md    && [ -f examples/43_errdefer/prog.ct ] \
+   && [ -f examples/43_errdefer/prog.expected.out ]; then
+    ok "p40 docs"
+else
+    bad "p40 docs" "missing errdefer docs or examples/43_errdefer"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"
@@ -6231,7 +6267,7 @@ rng_neg() {
 }
 rng_neg range_index_outside "unexpected token"
 rng_neg range_index_in_dim "'\$' cannot be used in an array dimension"
-rng_neg range_index_assigned "unexpected token"
+rng_neg range_index_assigned "'\$' is read-only and only valid in the trailing block"
 rng_neg range_index_address "the range index '\$' is not a variable"
 rng_neg range_index_address_post "the range index '\$' is not a variable"
 rng_neg range_index_address_pre "the range index '\$' is not a variable"
