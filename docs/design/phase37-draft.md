@@ -1,13 +1,28 @@
 # Phase 37 — trait 签名硬错与运行期契约
 
-> **状态：规划中**（2026-11-12 立项草案；不写实现）。
-> **基线**：Phase 36 收口提交；S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
-> **文档形态**：`phase37-draft.md`；design window 12/12，转正时归档当时最老的一张。
-> **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的释放点）；签名检查本身独立，不依赖 P31–P36 的语义。
-> **红证**：§2.2（2026-11-12，HEAD `bd91bfe`，`v0.30.0` 重建的 `ct-ast`）。
+> **状态：已立项**（2026-11-13 用户授权自动完成；卡已冻结）。
+> **基线**：`c6a276b`（Phase 36 收口后的文档治理提交；全量 11 道门禁绿）。S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
+> **文档形态**：`phase37-draft.md`；design window 7/12，不触发归档。
+> **前置**：[phase36-draft.md](phase36-draft.md)；签名检查独立，不依赖 P31–P36 的语义。
+> **红证**：§2.2 为 2026-11-12 历史探针；S0 在基线 `c6a276b` 上重跑并替换。
 > **关联**：[phase32-draft.md](phase32-draft.md)、[SH-67](../../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md)、[modern-oo-gap.md](../modern-oo-gap.md) §6.1。
-> **规模**：编译器 100–220；夹具 60–120；文档 30–60；合计 **190–400**（±40%）。
-> **纪律**：不 bump、不打 tag、不 push；只暂存本相文件。
+> **规模**：编译器 100–220；夹具 60–120；文档 30–60；合计 190–400（±40%）。
+> **纪律**：不 bump、不打 tag、不 push；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
+
+## 0 卡片字段（冻结）
+
+| 项 | 值 |
+| --- | --- |
+| 编号 | PH-37 |
+| 目标 | impl 签名不一致在 `ct build` / `ct check` 硬错；`--runtime-checks` 提供可关闭的空 vtable 断言 |
+| 范围 | O1/O2/O3；不做完整类型系统、不改 `ct compile` warning、不改缺方法检查、不新增 trait 语法 |
+| 交付物 | `Parser.h.ct` / `Diag.h.ct` / `main.ct` / `Emitter.h.ct`；`test/ast/errors/p37_*`；`ast/219_runtime_guard`；文档 |
+| 任务清单 | §4.1（S0–S6） |
+| 退出判据 | E37-1…E37-4（§5） |
+| 依赖 | Phase 36 收口；全量门禁基线 `c6a276b` |
+| 规范版本 | 1.9.0 |
+| version-minor | 37 |
+| 已知风险 | R37-1…R37-4（§7） |
 
 ## 1 目标与边界
 
@@ -116,17 +131,30 @@ S0 先跑 `check-archive.sh` 与 `check-ast.sh` 的诊断对照片段，列出�
 
 依赖：S0→S1→S2；S3 可与 S2 并行；S4 依赖 S1/S3；S5 最后。
 
+### 4.1 任务清单（冻结）
+
+| 任务 | 交付物 | 验收 | effort | 回滚 |
+| --- | --- | --- | --- | --- |
+| S0 | §2.2 红证 + p37 夹具的失败输出 | `bash selfhost/check-ast.sh` 在 p37 段失败；`baseline: c6a276b` | S | 删除夹具/断言 |
+| S1 | `ct_sig_warn` 模式参数与 build/check 升级 | `check-ast.sh` 的 `p37_sig_*` 全绿 | M | revert |
+| S2 | L2 同步或带注释排除 | `check-archive.sh` / `check-ast.sh` 对差 | S | revert |
+| S3 | 缺方法/拼错回归夹具 | `p37_missing` 全绿 | S | 删除夹具 |
+| S4 | `--runtime-checks` + 空 vtable 断言 | `ast/219_runtime_guard` 双向断言 | M | revert |
+| S5 | 全量门禁与收口记录 | `check-all.sh` 11 绿 | S | 回退记录 |
+| S6 | 文档 | `check-docs.py` | S | revert |
+
+映射：S1→E37-1；S2 为 E37-1 的前置对差；S3→E37-2；S4→E37-3；S5→E37-4；S0/S6 无退出判据。
+
 ## 5 退出判据（E37-n）
 
 | ID | 断言 | 夹具 | 门禁 |
 | --- | --- | --- | --- |
-| E37-1 | 返回类型不匹配：`ct build` 退出 1，恰一条 `error: signature mismatch`，位置为方法行，且不写 `.c` | `test/ast/errors/p37_sig_return.ct` | `check-ast` |
-| E37-2 | 参数类型不匹配：同上 | `errors/p37_sig_param.ct` | `check-ast` |
-| E37-3 | 参数个数不匹配：同上 | `errors/p37_sig_arity.ct` | `check-ast` |
-| E37-4 | `ct compile` 对三例仍退出 0 且 warning 文案逐字不变；`ct check` 退出 1 | 同上 | `check-ast` |
-| E37-5 | 缺方法与拼错仍走既有 `not implemented` 硬错，零回归 | `errors/p37_missing.ct` | `check-ast` |
-| E37-6 | `--runtime-checks` 下空接口值派发 abort，stderr 含 `prog.ct:<行>` 与 `null vtable`；不带开关时产物无 `runtime check` 且逐字节不变 | `ast/219_runtime_guard` | `check-ast` |
-| E37-7 | 全量门禁绿，golden 零变化（除新增夹具） | 全量 | `check-all` |
+| E37-1 | 返回类型 / 参数类型 / 参数个数三类签名错在 `ct build` 与 `ct check` 硬错（退出 1、恰一条 `error: signature mismatch`、位置为方法行、不写 `.c`）；`ct compile` 三例仍退出 0 且 warning 文案逐字不变 | `test/ast/errors/p37_sig_return.ct` / `p37_sig_param.ct` / `p37_sig_arity.ct` | `check-ast` |
+| E37-2 | 缺方法与拼错仍走既有 `not implemented` 硬错，零回归 | `errors/p37_missing.ct` | `check-ast` |
+| E37-3 | `--runtime-checks` 下空接口值派发 abort，stderr 含 `prog.ct:<行>` 与 `null vtable`；不带开关时产物无 `runtime check` 且逐字节不变 | `ast/219_runtime_guard` | `check-ast` |
+| E37-4 | 全量门禁绿，golden 零变化（除新增夹具） | 全量 | `check-all` |
+
+> 旧草案的 E37-1…E37-5 是同一 `ct_sig_warn` 改动的四类签名错 + 缺方法回归；按 T-5「一条任务不得覆盖 ≥2 条退出判据」，四类签名错合并为 E37-1，缺方法回归保留为 E37-2，运行期/全量顺延为 E37-3/E37-4（2026-11-13 冻结）。
 
 ## 6 负例台账（L37-n）
 
@@ -153,3 +181,4 @@ S0 先跑 `check-archive.sh` 与 `check-ast.sh` 的诊断对照片段，列出�
 
 - 编译器 100–220 = S1 40–80 + S2 20–60 + S3 40–80；夹具 50–100；文档 30–60。
 - 收口：S0 红证提交（`test(types): P37 红`，含原始输出与基线 sha）；每片 ≤3 文件；仓库任何时刻可构建。
+- 收口动作：全量 11 道门禁绿、文档同步、`version-minor=37`；版本 bump 与 tag 按 0.3 `phase-tag-requires-user-approval` 等用户批准，不在自动执行范围内。
