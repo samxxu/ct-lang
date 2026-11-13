@@ -1,0 +1,51 @@
+#include <stdio.h>
+
+static void branch(void)
+{
+    if (1) defer { printf("if-defer\n"); }
+    printf("after-if\n");
+}
+
+static void sw(void)
+{
+    switch (1) {
+    case 1:
+        defer { printf("switch-defer\n"); }
+        break;
+    default:
+        break;
+    }
+    printf("after-switch\n");
+}
+
+static void loopfn(void)
+{
+    int i;
+    defer { printf("func-defer\n"); }
+    for (i = 0; i < 2; i++) {
+        defer { printf("loop-defer%d\n", i); }
+        if (i == 0) continue;
+        break;
+    }
+    printf("after-loop\n");
+}
+
+static void nested(void)
+{
+    defer { printf("outer\n"); }
+    {
+        defer { printf("inner\n"); }
+        return;
+    }
+}
+
+int main(void)
+{
+    int defer = 1;
+    branch();
+    sw();
+    loopfn();
+    nested();
+    printf("defer=%d\n", defer);
+    return 0;
+}
