@@ -22,6 +22,12 @@
 | `json` | 纯 CT 的 JSON 读写：零分配只读视图 + 写出；取值按 kind 经 `trait` ops 对象分派 | ct-ast（`loop`） | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `wave1-demo` | Wave 1 包（`hal` / `hal-posix` / `std`）合用 | 外部 ct-pkg 索引 | **仅 CI** |
 
+## 块级清理
+
+| 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
+| --- | --- | --- | --- |
+| `42_defer` | 块级 `defer { … }`：后进先出，`return` 路径也执行；返回表达式先求值再跑 defer | ct-ast | `test/run.sh` |
+
 ## 类型宿主（type host）
 
 `map trait ... for type <C 拼写>` 把方法直接挂到 C 类型上：无包装、无 vtable、无分配，
