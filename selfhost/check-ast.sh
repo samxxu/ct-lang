@@ -3646,6 +3646,13 @@ else
     bad "p39 docs" "docs/package-guide.md lacks --lib or the nm caveat"
 fi
 
+# Phase 40 R1: err: syntax and L40-1..4.
+if bash test/ast/p40_err_syntax.sh "$work/ct-ast" >"$work/p40r1.out" 2>"$work/p40r1.err"; then
+    ok "p40 r1"
+else
+    bad "p40 r1" "$(cat "$work/p40r1.out" "$work/p40r1.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"
