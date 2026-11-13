@@ -3597,6 +3597,13 @@ else
     bad "p39 r2" "$(cat "$work/p39r2.out" "$work/p39r2.err")"
 fi
 
+# Phase 39 R3: ABI header contract.
+if bash test/modules/p39_lib/r3_probe.sh "$work/ct-ast" >"$work/p39r3.out" 2>"$work/p39r3.err"; then
+    ok "p39 r3"
+else
+    bad "p39 r3" "$(cat "$work/p39r3.out" "$work/p39r3.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

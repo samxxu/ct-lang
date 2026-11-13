@@ -1,0 +1,5 @@
+struct Point { int x; int y; }
+
+pub int add(int a, int b) { return a + b; }
+pub const char *name(void) { return "lib"; }
+pub int point_x(struct Point *p) { return p->x; }
