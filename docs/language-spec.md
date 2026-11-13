@@ -2237,3 +2237,14 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **`Str`**：内建于 `lib/std/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
 - **所有权形态**：`Str` 是值句柄，按值传递浅拷贝指针（不自动深拷贝，需显式 `retain()`）；`own Str *p = malloc(sizeof(struct Str)); ...; delete p;` 由 `Drop` 释放 buffer 再 free 结构体并置空指针。`Option<T>` / `Result<T,E>` 已加 `use Drop`，其 `none()` / `ok()` / `err()` 工厂零初始化未使用的 payload，使无条件胶水安全释放。
 - **字符串契约归属**：ct-pkg 的 `std/string`（外部包）提供高层次字符串契约；本仓内建 `Str` 是长度前缀的低层句柄，二者不重复。
+
+### 4.57 C ABI 静态库（`ct build --lib`，Phase 39，仅 ct-ast）
+
+- **入口**：`ct build --lib [-o <archive>] [--outdir <dir>] <root.h.ct>`；`--lib` 只允许 `build`，与 `--emit-c` 互斥，`compile` / `check` 下报 usage 错误。
+- **导出面**：只取根 `.h.ct` 单元内有定义、带 `pub` 的函数。签名只允许内建标量、`void`、指针（含具名 struct 指针 / 函数指针）、数组参数（decay 成指针）；按值 struct/union、trait/接口值、`Vec`/`Map`/`Option`/`Result`/`Str`、`own` 报 `'<name>' cannot be exported: <reason>`（L39-1）。泛型模板不导出，报 `'<name>' not exported: generic template has no external symbol`（L39-1w），构建继续。
+- **硬错**：根不是 `.h.ct` 或没有候选（L39-2）；含 `main`（L39-3）；含 `pub` 全局（L39-4）；含带 C shim 的 `.m.ct`（L39-5）。L39-1/2/3/4/5 都带 `文件:行:列`，不写 `.a` / `.abi.h`。
+- **非根 `pub`**：被 import 单元的 `pub` 与根内 `pub extern` 不进入 ABI，只给 `<n> pub function(s) are not part of the ABI surface (imported or extern)` 汇总警告（L39-6）。
+- **产物**：`<outdir>/<base>.abi.h` 含 banner、`<BASE>_ABI_VERSION 1`、导出名排序后的 FNV-1a `<BASE>_ABI_HASH`、导出签名用到的 `struct X;` 前置声明与 C 符号原型；`-o` 指定归档，缺省 `<outdir>/lib<base>.a`。ABI 头不出现 `_iface` / `_vtbl` / `Vec_` / `Map_` / `Str_`。
+- **可见性**：`--lib` 下非 `pub` 顶层函数/全局发 `static`；根导出定义前恰一个 `__attribute__((visibility("default")))`；中间对象以 `-fvisibility=hidden` 编译。
+- **契约边界**：归档 `nm -g` 面可能大于导出面（内建 `Str_*`、vtable 等内部符号）；**只有 `.abi.h` 的声明是 ABI**。归档确定性由 `ar rcsD` / `ZERO_AR_DATE=1 ar rcs` 回退保证。
+

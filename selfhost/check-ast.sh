@@ -3639,6 +3639,13 @@ else
     bad "p39 r8" "$(cat "$work/p39r8.out" "$work/p39r8.err")"
 fi
 
+# Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
+if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
+    ok "p39 docs"
+else
+    bad "p39 docs" "docs/package-guide.md lacks --lib or the nm caveat"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

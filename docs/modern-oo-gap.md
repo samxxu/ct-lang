@@ -198,6 +198,8 @@ prog.ct:6:9: error: incompatible pointer to integer conversion initializing 'int
 
 现状：`pub` 只有「导出/不导出」一档；`.h.ct` 才能被 `import`；类型别名只在头单元；跨单元泛型只能靠「泛型 struct 在 `.h.ct` 里 + 实例在消费单元用」——而这正好被 §2.2 的容器缺陷挡住（泛型电商包无法服务用户类型）。这一条是 O1/C2 的工程投影，不单独计一次工作量。
 
+Phase 39 已补上 **C ABI 静态库**这一半：根 `.h.ct` 的 C 兼容 `pub` 函数可导出为 `.abi.h` + `lib<base>.a`（`ct build --lib`），纯 C 工程可直接链接。仍缺的是函数级导出选择（T39-5）、按值 struct / `pub` 全局（T39-1）与泛型导出（T39-2）。
+
 ### 3.9 并发与异步
 
 无语言级线程、原子、`async`。判定：**明确不做**（Z1、Z2）；`pthread` 走 `bindings`，与 CT 的 OO 表达力无关。
