@@ -54,7 +54,7 @@
 | Phase 38 | defer 块级清理 | ✅ 完成 | v0.38.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase38-draft.md) |
 | Phase 39 | C ABI 导出面与库制品 | ✅ 完成 | v0.39.0 | [卡](design/phase39-draft.md) |
 | Phase 40 | errdefer + err: 错误出口 + 尾随声明 | ✅ 完成 | v0.40.0 | [卡](design/phase40-draft.md) |
-| Phase 41 | 原子并发能力（`atomic T` + 内建原子操作） | 🚧 实施中（B′ 冻结） | — | [卡](design/phase41-draft.md) · [D-004](decisions/D-004.md) |
+| Phase 41 | 原子并发能力（`atomic T` + 内建原子操作） | ✅ 完成 | v0.41.0 | [卡](design/phase41-draft.md) · [D-004](decisions/D-004.md) |
 | Phase 42 | `impl` 方法可见性（方法级 `pub`，默认私有） | ⬜ 已定稿 / 待 PH-41 收口 | — | [卡](design/phase42-draft.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布；Phase 31 / 33 未单独 bump。逐相细节与出口证据见

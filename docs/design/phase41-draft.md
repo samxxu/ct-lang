@@ -1,6 +1,6 @@
 # Phase 41 — 原子并发能力（`atomic T` 与内建原子操作）
 
-> **状态：已冻结（2026-11-13；battle p41-1 B′；S0/R1 开工）。**
+> **状态：✅ 完成（2026-11-13；v0.41.0；B′；R1–R9、E41-1–E41-10 全绿）。**
 > **基线**：PH-40 收口提交（`v0.40.1`；含 SH-68 review fix）；S0 在 `v0.40.1` 上重建 `ct`。
 > **文档形态**：`phase41-draft.md`；design window 7/12（门禁只数 `phaseN.md`，草案不计数）。
 > **前置**：[phase40-draft.md](phase40-draft.md)（收口基线）、[phase32-draft.md](phase32-draft.md)（表达式静态类型求值）、[phase39-draft.md](phase39-draft.md)（导出面与产物）。
@@ -79,7 +79,7 @@
 
 ### 2.1 门禁基线
 
-参考值（**历史量级参考**，v0.40.1）：`check-ast` 1350/0、`check-warnings` 607/0、`test/run` 153、`check-docs` 962 links / 217 files、design window 7/12。S0 在 `v0.40.1` 上重建 `ct` 并实测替换本节。
+实测（**v0.41.0**）：`check-ast` 1357/0、`check-warnings` 614/0、`test/run` 154、`check-docs` 985 links / 220 files、`check-grammar` 169/0、TSan 2/2、design window 7/12。
 
 ### 2.2 红证探针
 
@@ -310,3 +310,21 @@ R1–R7 每项先提 `test(atomic): <task-id> 红`，实现提交随后转绿；
 - 收口动作：11 道门禁绿、`p41/*` 全绿、`check-tsan.sh` 绿、`version-minor=41`、五处 `CTC_VERSION` 与全部版本落点同步到 `v0.41.0`、phase-log 与对照表落盘；tag/push 按当前自动策略执行。
 - 每个实现任务 ≤3 个源码文件；每个实现提交的父提交是它的 `test(atomic): <task-id> 红`；仓库任何时刻可构建。
 - 与 PH-42 的关系：两相都改 `Emitter.h.ct` 的方法/类型发射，**串行执行**（41 → 42）。PH-40 也要改 `Emitter.h.ct`，建议 40 先收口；只做 R1（解析器）时可与 40 并行。
+
+### 8.1 收口记录（2026-11-13）
+
+| 任务 | 验收命令 | 结果 |
+| --- | --- | --- |
+| R1 | `p41/atomic-types` / `p41_atomic_ident` | 正例 2/2；L41-1/8 负例；上下文 `int atomic` 保持 |
+| R2 | `p41/load-store`、`p41/cas`、`p41_atomic_types` | 12 helpers；`cc -std=c11` 零告警；无 `<stdatomic.h>` |
+| R3 | `p41/load-store` | load/store 四类型 + 指针变量 1/1 |
+| R4 | `p41/cas` | 成功/失败回写/重试 1/1 |
+| R5 | `p41/errors` | 9/9（L41-1/2/3/5/6/7/8/9/type） |
+| R6 | `p41/runtime` | 2/2（取消标志/引用计数，pthread） |
+| R7 | `check-tsan.sh` | 2/2；nightly Linux job |
+| R8 | `check-docs` / `check-grammar` | 985 links / 220 files；169/0；tmLanguage p41 |
+| R9 | `bash selfhost/check-all.sh` | **11/11 hard gates green** |
+
+收口总量：check-ast 1357/0、check-warnings 614/0、test/run 154、goldens 82、docs 985 links / 220 files、grammar 169/0、TSan 2/2、acceptance 20/0。
+
+tag/push：`v0.41.0` annotated tag 与分支自动 push（2026-11-13 用户授权）。
