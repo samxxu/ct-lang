@@ -6259,7 +6259,7 @@ rng_neg() {
 }
 rng_neg range_index_outside "unexpected token"
 rng_neg range_index_in_dim "'\$' cannot be used in an array dimension"
-rng_neg range_index_assigned "unexpected token"
+rng_neg range_index_assigned "'\$' is read-only and only valid in the trailing block"
 rng_neg range_index_address "the range index '\$' is not a variable"
 rng_neg range_index_address_post "the range index '\$' is not a variable"
 rng_neg range_index_address_pre "the range index '\$' is not a variable"

@@ -1855,7 +1855,8 @@ impl StmtOps for Stmt {
         }
         /* `;` is a statement of its own (C's empty statement): it keeps
            `for (...) ;` and `case 1: ;` on the ordinary path and emits nothing */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0)
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0
+            && !self->ex->dollar_ok && self->ex->into_node < 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "'$' is read-only and only valid in the trailing block",
