@@ -1,6 +1,6 @@
 # Phase 31 立项卡第四轮复核
 
-- **对象**：`docs/design/phase31.md` @ `b3bfc18`（1008 行；提交只含此文件，+97/−69）
+- **对象**：`docs/history/design/phase31.md` @ `b3bfc18`（1008 行；提交只含此文件，+97/−69）
 - **范围**：仅此卡。Phase 32–36 卡片未评审、未改动；`docs/design/phase34-draft.md`、`phase36-draft.md` 等其他会话在途文件未触碰、未提交。
 - **方式**：只读。所有实测在独立 worktree `/tmp/wt-bd`（`bd91bfe`）与 `/tmp/p31base`（`1564938` 副本）完成，产物写 `/tmp`；未跑 `check-all.sh`；主工作区只新增本报告目录。
 - **结论：NO-GO**（2 High / 2 Medium / 4 Low）

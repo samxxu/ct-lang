@@ -17,13 +17,13 @@
 | P5 | PASS | `design window: ok (10/12)`；13 个 design 文件 → 红；恰好 12 个 → 绿；再加 phase15 → 只报 phase15；双存 → duplicate 红；README 缺声明 → 红 |
 | P6 | PASS | `check-all: OK (11 hard gates green)`；`834 passed, 0 failed`；`check-warnings: 253 ok, 0 failed`；`check-goldens: OK`；single 3 / multi 4 均 `0 regression`；`check-docs: OK (875 links / 174 files)`。不低于基线 830 |
 | P7 | PASS | 五处 `CTC_VERSION`（`l0` / `l1` / `l2/core` / `l2/driver` / `ct-ast/main`）一致（`0.26.4`）；剔除版本串后 `8c88211..HEAD` 在 `selfhost/{l0,l1,l2,ct-ast}` 无语义改动；发布提交的 74 个 golden 仅版本 token 变化 |
-| P8 | 发布前不可判 | 复核时 `origin/main` 停在 `8c88211`；树干净、门禁全绿 → **release-ready**。tag 与推送状态见 [phase26.md §9.1](../../design/phase26.md) |
+| P8 | 发布前不可判 | 复核时 `origin/main` 停在 `8c88211`；树干净、门禁全绿 → **release-ready**。tag 与推送状态见 [phase26.md §9.1](../../history/design/phase26.md) |
 
 ## 2. 评审发现与处置
 
 | # | 严重度 | 发现 | 处置 |
 | --- | --- | --- | --- |
-| 1 | minor | 扫描器 fail-open：实例体提取要求 `__ctN(` 与 `{` 同行、类型参数声明在列 1；自检只覆盖 K&R | 记入 [phase26.md §2.7](../../design/phase26.md) 的「扫描器的书写形态假设」行，附触发信号与届时改法（按花括号深度匹配 + Allman 自检样本）。当前发射器恒为 K&R + 列 1，不构成现存风险 |
+| 1 | minor | 扫描器 fail-open：实例体提取要求 `__ctN(` 与 `{` 同行、类型参数声明在列 1；自检只覆盖 K&R | 记入 [phase26.md §2.7](../../history/design/phase26.md) 的「扫描器的书写形态假设」行，附触发信号与届时改法（按花括号深度匹配 + Allman 自检样本）。当前发射器恒为 K&R + 列 1，不构成现存风险 |
 | 2 | minor | 文档称实例体在 `extra/lib.c`，实际 `-o` 扁平化为 `lib.c` | 已更正 `phase26.md` §9 与 TEST-18 处置段 |
 | 3 | minor | design-window 红证记「两条错误」，实测 15 条（max=99 时全部既有阶段与 80 越界，另加 duplicate 与两条缺状态行） | 已按实测改写 `phase26.md` §9 |
 | 4 | minor | `spec pin:` 状态行只在成功路径打印，失败时只剩笼统 `FAIL` | `fix(check-docs): print the spec pin state before the failure summary` 把两条状态行移到失败分支之前 |
@@ -37,4 +37,4 @@
 
 ## 4. 放行
 
-`release: GO`。P8 的完成由发布后的远端 hash 核对回写（见 [phase26.md §9](../../design/phase26.md)）。
+`release: GO`。P8 的完成由发布后的远端 hash 核对回写（见 [phase26.md §9](../../history/design/phase26.md)）。

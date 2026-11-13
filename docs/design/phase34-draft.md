@@ -3,7 +3,7 @@
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：**Phase 33 落地并推送后确定**（P33 是硬前置；不预钉 `v0.30.0` 或 `bd91bfe`）；S0 在**实现提交的父提交**上重建二进制并复跑 §2.2 探针，红证必须记录 `baseline: <sha>`，复跑结果与父提交不一致时不得开工。
 > **文档形态**：`phase34-draft.md`；design window 12/12，**每次转正归档当时最老的一张**（32 → phase20，33 → phase21，34 → phase22，35 → phase23，36 → phase24）。
-> **前置**：[phase31.md](phase31.md)（容器）、[phase33.md](phase33-draft.md)（泛型 struct 与跨单元实例归属）、[phase26.md](phase26.md)（L26-2 的来源）。**P33 是硬前置**：P33 未落地则本相暂停，不提供降级分支。
+> **前置**：[phase31.md](../history/design/phase31.md)（容器）、[phase33.md](phase33-draft.md)（泛型 struct 与跨单元实例归属）、[phase26.md](../history/design/phase26.md)（L26-2 的来源）。**P33 是硬前置**：P33 未落地则本相暂停，不提供降级分支。
 > **排序理由**：没有 `pub` 泛型函数与非泛型固有方法，`Option`/`Result` 只能停留在模板所属单元，Phase 31/33 的成果无法被包复用。
 
 ## 1 目标与范围
@@ -33,7 +33,7 @@
 
 ### 1.4 L26-2 变更（独立提交、独立评审、可回滚）
 
-当前判据（[phase26.md](phase26.md)）：**L26-2** `pub` 泛型函数 → `generic functions cannot be pub`。
+当前判据（[phase26.md](../history/design/phase26.md)）：**L26-2** `pub` 泛型函数 → `generic functions cannot be pub`。
 
 变更内容：允许 `pub T name<T>(...)`；模板体必须写在 `.h.ct`（源码头）中；消费方为每个 `(模板, 具体类型)` 发 `static` 实例，实例名沿用 `<name>__ct<N>`；生成 `.h` 仍只放类型；定义单元与消费方各发同名 `static` 副本不产生重复全局符号；其他 L26 规则不变。
 
@@ -47,11 +47,11 @@
 | 可执行断言 | `selfhost/check-ast.sh:5859` | E29-13/B6 期望旧文案 |
 | 夹具 | `test/ast/errors/generic_pub.ct` | 位于 `errors/`，必须转正 |
 | 夹具 | `test/modules/errors/generic_struct_pub_fn.ct` | 位于 `errors/`，必须转正 |
-| 规范文档 | `docs/design/phase26.md:186` | 表格行不动；superseding 块加在 DOC-67 补充段之后、§2.6 之前 |
-| 规范文档 | `docs/design/phase26.md:262-265` | TEST-18 的「`pub` 泛型已被 L26-2 拒绝」理由已假；改写理由，并在同一提交给 TEST-18 加 `test/modules/p34_*` 扫描钩子（否则 `tparam_residue` 扫不到新实例） |
-| 规范文档 | `docs/design/phase26.md:537` | v0.25.0 vs v0.26.0 历史对照表：**只加脚注，不改写** |
+| 规范文档 | `docs/history/design/phase26.md:186` | 表格行不动；superseding 块加在 DOC-67 补充段之后、§2.6 之前 |
+| 规范文档 | `docs/history/design/phase26.md:262-265` | TEST-18 的「`pub` 泛型已被 L26-2 拒绝」理由已假；改写理由，并在同一提交给 TEST-18 加 `test/modules/p34_*` 扫描钩子（否则 `tparam_residue` 扫不到新实例） |
+| 规范文档 | `docs/history/design/phase26.md:537` | v0.25.0 vs v0.26.0 历史对照表：**只加脚注，不改写** |
 | 规范文档 | `docs/language-spec.md:1913-1914`、`:4349-4350` | 两处 L26-2 码行与文案 |
-| 规范文档 | `docs/design/phase29.md:912`、`:920`、`:987` | 三处合并计 1 个影响点；**Phase 29 文件一字不动**，只在 P34 卡内加「P34 覆盖」说明 |
+| 规范文档 | `docs/history/design/phase29.md:912`、`:920`、`:987` | 三处合并计 1 个影响点；**Phase 29 文件一字不动**，只在 P34 卡内加「P34 覆盖」说明 |
 | 规范文档 | `docs/modern-oo-gap.md:90` | 改为标注「已在 P34 关闭（`pub` 泛型 + 跨单元固有方法）」 |
 
 `docs/history/reports/review-phase26.md:96` 是冻结的历史报告，**不参与回滚**。

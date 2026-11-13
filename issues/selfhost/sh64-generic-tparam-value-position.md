@@ -89,7 +89,7 @@ if (all_caps || strcmp(nm, "stderr") == 0 ...) {
 这样后续六条出口（包括 `T(0)`、`T::x`、`p = T`、`p = &T`）全部被同一守卫覆盖。
 诊断走与未声明变量相同的 `file:line:col: error:` 通道。
 
-**全路径枚举**：`docs/design/phase26.md` §2.7 逐条列出 11 组标识符 / 类型名解析路径及类型参数行为，
+**全路径枚举**：`docs/history/design/phase26.md` §2.7 逐条列出 11 组标识符 / 类型名解析路径及类型参数行为，
 作为这条根因的收口证据。
 
 **负例与红证**（`v0.26.2` 基线 vs `v0.26.3`）：
@@ -102,7 +102,7 @@ if (all_caps || strcmp(nm, "stderr") == 0 ...) {
 | `generic_tparam_value_add.ct`（`sizeof T + T`） | 退出 0，发射 `(sizeof(int) + T)` | 退出 1，`6:30: ...` |
 
 四条负例各有一条 `p26_diag`（退出码 + 位置 + 文案）与一条 `p26_chk`（`ct check` 同文案）；
-在 `v0.26.2` 基线上 `p26_diag` 会因退出 0 而红。门禁数字见 `docs/design/phase26.md` §6.3.4。
+在 `v0.26.2` 基线上 `p26_diag` 会因退出 0 而红。门禁数字见 `docs/history/design/phase26.md` §6.3.4。
 
 `verified` 留给独立评审。
 

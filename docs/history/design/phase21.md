@@ -495,7 +495,7 @@ impl Callable1i for Adder { int call(int x) { … } }
 - 重启后的相位编号必须重新立项，**不沿用本轮曾讨论过的「Phase 30」编号**（该编号未登记、未建卡）。
 
 **与 D21-7 的关系**：D21-7「`Callable` 按签名一族、不内建」**继续有效**；本记录只说明未来可能重启，
-不构成取代。Phase 29 的 `Vec` / `Map` 也不得依赖 `Callable`（见 [phase29.md §2.8](../../design/phase29.md#28-与闭包--callable-的边界)）。
+不构成取代。Phase 29 的 `Vec` / `Map` 也不得依赖 `Callable`（见 [phase29.md §2.8](../../history/design/phase29.md#28-与闭包--callable-的边界)）。
 
 ---
 

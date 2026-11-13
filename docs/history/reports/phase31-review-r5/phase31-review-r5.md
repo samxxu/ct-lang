@@ -1,6 +1,6 @@
 # Phase 31 立项卡第五轮窄范围复核
 
-- **对象**：`docs/design/phase31.md` @ `9e4e255`（1037 行；提交只含此文件，+48/−19）
+- **对象**：`docs/history/design/phase31.md` @ `9e4e255`（1037 行；提交只含此文件，+48/−19）
 - **范围**：仅此卡，只验本轮修的 2 High + 2 Medium + Low；Phase 32–36 卡片未评审、未改动；`phase34/36-draft.md` 等他人文件未触碰、未提交。
 - **方式**：只读。未改卡片、未 commit、未改 golden/版本号/门禁；未跑 `check-all.sh`；无新增仓库产物。
 - **结论：GO**（0 High / 2 Medium / 5 Low；两条 High 均闭合，Medium 为落地时的排序与断言补全，不阻断开工）

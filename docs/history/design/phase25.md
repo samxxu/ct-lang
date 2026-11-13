@@ -5,11 +5,11 @@
 > **状态：完成**（2026-11-09 收口，`v0.25.0`）。D25-1–D25-11 已定稿；§1–§9 是 as-planned 记录，
 > §10–§13 是 as-built 记录。25.1、25.2、25.4 与收口 25.5 已落地（25.3 的 `emit_closure_arg` 拆分
 > 并入 25.2），改动留在工作区，未提交。
-> 关联：[phase24.md](../history/design/phase24.md)（数组 range 初值，本相前置但不依赖）、
-> [phase21.md](../history/design/phase21.md)（非逃逸栈闭包）、
-> [batch38-map-unit/spec.md](../history/design/batch38-map-unit/spec.md)（`.m.ct` 静态映射）、
-> [batch39-shim-layer/spec.md](../history/design/batch39-shim-layer/spec.md)（shim 层）、
-> [closure-conventions.md](../closure-conventions.md)、[roadmap.md](../roadmap.md)。
+> 关联：[phase24.md](phase24.md)（数组 range 初值，本相前置但不依赖）、
+> [phase21.md](phase21.md)（非逃逸栈闭包）、
+> [batch38-map-unit/spec.md](batch38-map-unit/spec.md)（`.m.ct` 静态映射）、
+> [batch39-shim-layer/spec.md](batch39-shim-layer/spec.md)（shim 层）、
+> [closure-conventions.md](../../closure-conventions.md)、[roadmap.md](../../roadmap.md)。
 
 ---
 
@@ -77,9 +77,9 @@ ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ .base = base });
 
 | # | 位置 | 现状 |
 | --- | --- | --- |
-| 1 | `map_arity`（[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)） | `got = arg_count(args)`，闭包只算 1 个实参 → 与 `want = 3` 不符 |
+| 1 | `map_arity`（[Expr.h.ct](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct)） | `got = arg_count(args)`，闭包只算 1 个实参 → 与 `want = 3` 不符 |
 | 2 | `argtype_check` 的调用点 | 静态 trait 被 `!is_static` 跳过，闭包的 `(fn, env)` 配对检查不生效 |
-| 3 | `map_actual_at`（[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)） | 一个索引对应一个实参；闭包要占两个 recipe 参数位 |
+| 3 | `map_actual_at`（[Emitter.h.ct](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct)） | 一个索引对应一个实参；闭包要占两个 recipe 参数位 |
 | 4 | `emit_closure_arg` | 一口气输出「trampoline, &env」两个 C 实参；recipe 需要分两次单独落位 |
 
 结果就是 arity 警告 + `a map call has fewer arguments than its binding` 硬错。
@@ -104,7 +104,7 @@ ct_each_int(a, 4, __ct_cl_tramp_0, &(struct __ct_cl_env_0){ .base = base });
 
 `a.each(4, closure)` → `arg_count = 2`、`closure_arg_count = 1`、`got = 3`；
 宿主方法的 `nparams` 是 `3`（`n` / `fn` / `env`，接收者不计入，见
-[MapBuild.h.ct](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct) 的
+[MapBuild.h.ct](../../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct) 的
 `want = nparams + (type_host ? 1 : 0)`）。两者相等，`map_arity` 不再报。
 
 ### 3.3 实参到 recipe 参数的映射（D25-4）
@@ -134,7 +134,7 @@ recipe 的绑定参数序是 `[接收者, 方法形参…]`。闭包实参在**�
 环境是栈上的复合字面量（D21-14），生命周期到**所在块结束**。因此：
 
 - shim 的函数必须**同步**消费回调，调用返回后不得再使用 `env`；
-- 编译器无法验证这一点（与 E8 同类，见 [closure-conventions.md](../closure-conventions.md)）；
+- 编译器无法验证这一点（与 E8 同类，见 [closure-conventions.md](../../closure-conventions.md)）；
 - 命名约定：能接闭包的 shim 入口统一用 `ct_<verb>_<type>`，文档里标注「同步回调」；
 - 逃逸检测仍由 Phase 21 的既有规则负责：闭包进 `.h.ct`、作返回值 / 字段 / 元素依旧硬错。
 
@@ -284,7 +284,7 @@ for (i = 0; i < b->nparams; i++) {
 | D25-9 | 闭包作接收者的既有语义不变（`81_closure_no_typehost` 为守护用例） |
 | D25-10 | 仅 ct-ast；L0 / L1 / L2 不改 |
 | D25-11 | 收口 bump `v0.25.0`；功能层既有 golden 零变化 |
-| D25-12 | 命名定案（2026-11-10 battle，后经用户确认）：**语句级迭代形态一律写 `foreach (map) { … item … }`**；旧规划中的 `each(map){…}` 关键字名**作废，不得再作为关键字使用**。`each` 这个标识符只保留给库层——trait / 静态映射的方法名（示例 17、19）与泛型自由函数名（示例 18）。把 `each` 升为语句关键字会与 `each<T>(...)` 调用歧义并破坏既有代码；判据与探针见 [DOC-70](../../issues/docs/doc70-each-statement-form-unimplemented.md) |
+| D25-12 | 命名定案（2026-11-10 battle，后经用户确认）：**语句级迭代形态一律写 `foreach (map) { … item … }`**；旧规划中的 `each(map){…}` 关键字名**作废，不得再作为关键字使用**。`each` 这个标识符只保留给库层——trait / 静态映射的方法名（示例 17、19）与泛型自由函数名（示例 18）。把 `each` 升为语句关键字会与 `each<T>(...)` 调用歧义并破坏既有代码；判据与探针见 [DOC-70](../../../issues/docs/doc70-each-statement-form-unimplemented.md) |
 
 ---
 
@@ -473,7 +473,7 @@ recipe 的每个实参都带一层子表达式括号，与既有 recipe 产物�
 
 | 文件 | 改动 |
 | --- | --- |
-| `docs/design/phase25.md` | 状态行 → 完成；新增本节；英文 Status → Closed |
+| `docs/history/design/phase25.md` | 状态行 → 完成；新增本节；英文 Status → Closed |
 | `docs/language-spec.md` | §4.10（静态映射）与 §4.44（闭包）各补一段，中英文 |
 | `docs/tutorial.md` | §10.1 补「闭包进静态映射调用」一段与 `a.each` 示例，中英文 |
 | `docs/roadmap.md` | Phase 25 行 → ✅ 完成；版本记录加 `v0.25.0` |

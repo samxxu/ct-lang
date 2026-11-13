@@ -1,6 +1,6 @@
 # Phase 31 立项卡第三轮独立评审
 
-- **评审对象**：`docs/design/phase31.md`（提交 `37b710a`，980 行；工作区与 `37b710a` 逐字节一致，`git diff 37b710a -- docs/design/phase31.md` 为空）
+- **评审对象**：`docs/history/design/phase31.md`（提交 `37b710a`，980 行；工作区与 `37b710a` 逐字节一致，`git diff 37b710a -- docs/history/design/phase31.md` 为空）
 - **评审范围**：仅这张卡及其与 `docs/roadmap.md` Phase 31 行的对应关系。Phase 32–36 卡片不在范围内，未评审、未改动。
 - **评审性质**：只读。未修改卡片、golden、版本号、门禁脚本；未执行 `bash selfhost/check-all.sh`；所有实测产物写在 `/tmp/p31base`、`/tmp/p31bd`，未写入仓库。
 - **工作区纪律**：`docs/design/phase32-draft.md` 的他人在途改动未触碰、未 `git add`、未提交。

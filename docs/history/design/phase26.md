@@ -4,9 +4,9 @@
 >
 > **状态：完成**（退出判据于 2026-11-09、首个实现提交前冻结；收口记录见 §6/§7；v0.26.4 补丁见 §9）。
 > **主题来源**：[phase25.md:65](phase25.md#L65) 与 [phase25.md:261](phase25.md#L261) 明确写「泛型是 Phase 26」；
-> 立项时 [roadmap.md](../roadmap.md) 尚无 Phase 26 行，本相同时补入；需求池中「类型检查 / 泛型」一项被本相拆出实现。
-> 关联：[phase25.md](phase25.md)（静态映射闭包实参）、[phase19.md](../history/design/phase19.md)（受限语义检查）、
-> [language-spec.md](../language-spec.md)、[roadmap.md](../roadmap.md)、[AGENTS.md](../../AGENTS.md)。
+> 立项时 [roadmap.md](../../roadmap.md) 尚无 Phase 26 行，本相同时补入；需求池中「类型检查 / 泛型」一项被本相拆出实现。
+> 关联：[phase25.md](phase25.md)（静态映射闭包实参）、[phase19.md](phase19.md)（受限语义检查）、
+> [language-spec.md](../../language-spec.md)、[roadmap.md](../../roadmap.md)、[AGENTS.md](../../../AGENTS.md)。
 
 ---
 
@@ -54,7 +54,7 @@
 
 | # | 路径 | 作用 |
 | --- | --- | --- |
-| D1 | `docs/design/phase26.md` | 本文件：立项、语义、切片、决策、battle、退出判据 |
+| D1 | `docs/history/design/phase26.md` | 本文件：立项、语义、切片、决策、battle、退出判据 |
 | D2 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct` | `Fn` 增加 `ntparams/tparam`；`GenericInst` 表与 `add_generic_inst` |
 | D3 | `selfhost/ct-ast/frontend/parse/Parser.h.ct` | 声明语法 `T name<T>(...)`；模板标记；`pub`/多参数/递归诊断 |
 | D4 | `selfhost/ct-ast/frontend/parse/Expr.h.ct` | 调用语法 `name<int>(...)`；实例化登记、实参检查、类型替换辅助 |
@@ -201,7 +201,7 @@ struct Point q = id<struct Point>(p0);
 > **P34 覆盖（Phase 34，未发版）**：L26-2 已解禁——`pub T name<T>(...)` 合法，模板体必须写在 `.h.ct` 中，
 > 消费方为每个 `(模板, 具体类型)` 发 `static` 实例（实例名沿用 `<name>__ct<N>`，按 owner 各自从 1 编号）。
 > §2.5 的表格行保留 P26 当时的状态作为历史；L26-1 / L26-3–L26-5 不变。变更面与回滚方式见
-> [phase34-draft.md](phase34-draft.md) §1.4；`generic_pub` 夹具已转正为 `test/ast/228_pub_generic_fn/`。
+> [phase34-draft.md](../../design/phase34-draft.md) §1.4；`generic_pub` 夹具已转正为 `test/ast/228_pub_generic_fn/`。
 
 ### 2.6 类型操作数的解析分支（v0.26.2 根因修复，D26-14）
 
@@ -544,7 +544,7 @@ TEST-18 ×2）；文件数仍 173，阶段状态仍 10，硬门禁仍 11。
 | `generic_void_arg` | `2:5: error: unexpected token` | `9:19: error: 'void' cannot be a generic type argument` |
 | `generic_recursive` | `3:8: error: unexpected token` | `10:17: error: recursive generic calls are not supported` |
 
-[^p34-l26-2]: 该行是 v0.26.0 的历史对照。Phase 34 已解禁 L26-2（`pub` 泛型函数），见 §2.5 的「P34 覆盖」与 [phase34-draft.md](phase34-draft.md) §1.4。
+[^p34-l26-2]: 该行是 v0.26.0 的历史对照。Phase 34 已解禁 L26-2（`pub` 泛型函数），见 §2.5 的「P34 覆盖」与 [phase34-draft.md](../../design/phase34-draft.md) §1.4。
 
 旧编译器在**声明处**就失败，新断言要求的行、列与文案全部不同，说明断言不是空转。
 
@@ -558,7 +558,7 @@ TEST-18 ×2）；文件数仍 173，阶段状态仍 10，硬门禁仍 11。
 
 | 交付物 | 判据 | 证据 / 锚点 |
 | --- | --- | --- |
-| D1 `docs/design/phase26.md` | E1–E8 的规范来源；状态与 roadmap 一致 | `python3 test/docs/check-docs.py` → `v0.26.4, 10 phase status`；本文件 §1.5 冻结 |
+| D1 `docs/history/design/phase26.md` | E1–E8 的规范来源；状态与 roadmap 一致 | `python3 test/docs/check-docs.py` → `v0.26.4, 10 phase status`；本文件 §1.5 冻结 |
 | D2 `Symbols.h.ct` | E1 / E3 | `GenericInst`、`ginsts/nginsts`、`Fn.ntparams/tparam/body`、`ct_generic_subst` |
 | D3 `Parser.h.ct` | E1 / E3 | `T name<T>(...)` 解析；L26-2/L26-3；模板标记 `N_FUNC.text3` |
 | D4 `Expr.h.ct` | E1 / E3 / E8 | `name<type>(...)`；`generic_instance` 缓存与命名；L26-1/L26-4/L26-5 |
@@ -625,7 +625,7 @@ B26-2 判决：两方案（真实现替换 / 改成硬错误）都能满足验�
 | --- | --- | --- | --- |
 | SH-64（根因） | `fix(parse): reject a type parameter in a value position at the identifier entry`（`Expr.h.ct` 的 `T_ID` 入口守卫） | 4 个 `generic_tparam_value_*` 负例的 `p26_diag` / `p26_chk`；基线对照见 §6.3.1 | v0.26.2 四个探针均退出 0 并发射裸 `T`；v0.26.3 分别报 `6:13` / `11:15` / `6:30` / `6:30` 的 `type parameter 'T' cannot be used as a value`，`ct check` 同文案 |
 | 防线假阳 | `test(gate): scope the residue scan to instance bodies`（`tparam_residue()` 只读 `<name>__ctN`；新增 129 正例） | 非模板函数含 `int T = 5;` 的探针：整文件扫描 `T(2)`、实例体扫描空；`bash selfhost/check-ast.sh` | 假阳消失；v0.26.1 坏产物仍 `T(1)`；123–129 产物为空 |
-| 防线盲区 | `docs(phase26): enumerate identifier paths and record the residue blind spots`（TEST-18）→ v0.26.4 收口 | `docs/design/phase26.md` §2.7；`issues/testing/test18-...`；`bash selfhost/check-ast.sh` | v0.26.4 / TEST-18：`build` 的每个 `.c` 产物纳入扫描、`.h` 产物断言无 `<name>__ctN` 实例定义、新增夹具 `130_generic_build_mode` 与扫描器红/绿自检；`test/ast/errors/**`、`test/modules/**` / `examples/**` 与语料仍不扫，理由与触发条件见 §2.7 |
+| 防线盲区 | `docs(phase26): enumerate identifier paths and record the residue blind spots`（TEST-18）→ v0.26.4 收口 | `docs/history/design/phase26.md` §2.7；`issues/testing/test18-...`；`bash selfhost/check-ast.sh` | v0.26.4 / TEST-18：`build` 的每个 `.c` 产物纳入扫描、`.h` 产物断言无 `<name>__ctN` 实例定义、新增夹具 `130_generic_build_mode` 与扫描器红/绿自检；`test/ast/errors/**`、`test/modules/**` / `examples/**` 与语料仍不扫，理由与触发条件见 §2.7 |
 | 发布 | `chore(release): v0.26.3`（五处 `CTC_VERSION` + 74 个 golden 的版本 token） | `grep -n 'CTC_VERSION'` 五处；`bash selfhost/check-all.sh` | 五处均 `0.26.3`；`check-all: OK (11 hard gates green)` |
 
 ## 9. v0.26.4 补丁（工程可信度四项收口，2026-11-09）
@@ -707,7 +707,7 @@ B26-2 判决：两方案（真实现替换 / 改成硬错误）都能满足验�
 
 ### 9.7 独立评审
 
-[review-phase26-v0.26.4.md](../history/reports/review-phase26-v0.26.4.md)：P1–P7 全部 PASS、P8 判为 release-ready，最终 `release: GO`。评审自建自举链并独立复现跨单元盲区；5 条 minor 中 3 条放行前修复，2 条记录接受（扫描器的书写形态假设、提交顺序）。
+[review-phase26-v0.26.4.md](../reports/review-phase26-v0.26.4.md)：P1–P7 全部 PASS、P8 判为 release-ready，最终 `release: GO`。评审自建自举链并独立复现跨单元盲区；5 条 minor 中 3 条放行前修复，2 条记录接受（扫描器的书写形态假设、提交顺序）。
 
 ### 9.8 lessons
 
@@ -735,4 +735,4 @@ B26-2 判决：两方案（真实现替换 / 改成硬错误）都能满足验�
   tag 对象 hash 与本地逐一相同：`v0.26.0 f91ba25a`、`v0.26.1 d45269ac`、`v0.26.2 1be16400`、
   `v0.26.3 3a894b6d`、`v0.26.4 76d18e05`。P8 的「远端 hash 一致」自此成立。
 - **判据覆盖缺口**：E1–E8 未覆盖 v0.26.4 的 TEST-18 / CI-8 / DOC-66 / DOC-68，已登记
-  [DOC-69](../../issues/docs/doc69-phase26-exit-criteria-patch-gap.md)；不为让结论好看而回溯扩写 E1–E8。
+  [DOC-69](../../../issues/docs/doc69-phase26-exit-criteria-patch-gap.md)；不为让结论好看而回溯扩写 E1–E8。

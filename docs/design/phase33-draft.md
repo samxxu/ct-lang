@@ -5,7 +5,7 @@
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与原始输出随红证提交入库。
 > **文档形态**：`phase33-draft.md`。转正按「每次转正归档当时最老的一张」：32→phase20、33→phase21，依此类推；本卡不抢跑。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载两块语义、T31 处置、跨单元与判据/负例台账，约 412 行。按自裁 **waiver** 保留单卡（两块语义与跨单元判据必须同卡对照），不再寻求需求提出方签字。
-> 关联：[phase31.md](phase31.md)（T31/ D31-5 来源）、[phase28.md](phase28.md)（泛型函数 bound）、[phase29.md](phase29.md)（泛型 struct / 容器）、[phase35-draft.md](phase35-draft.md)（泛型 trait，B 块已拆出）、[phase32-draft.md](phase32-draft.md)
+> 关联：[phase31.md](../history/design/phase31.md)（T31/ D31-5 来源）、[phase28.md](../history/design/phase28.md)（泛型函数 bound）、[phase29.md](../history/design/phase29.md)（泛型 struct / 容器）、[phase35-draft.md](phase35-draft.md)（泛型 trait，B 块已拆出）、[phase32-draft.md](phase32-draft.md)
 
 ## 1 目标与范围
 
@@ -408,7 +408,7 @@ L 编号是卡片标签，不是源码前缀；每行的 `error:` 之后必须�
 - **T-7**：S0 在 Phase 31 收口提交上重建二进制，提交 `test(generics): P33 红证`（含脚本与 D31-5 原始输出）；该提交必须是第一个实现提交的父提交。
 - 每片 ≤150 行；发现超限就再拆。仓库任何时刻可构建。
 - 不改判据、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push。
-- 只暂存本相文件；`editors/vscode/**`、`docs/design/phase31.md` 与其他会话在改的文件一律不碰。
+- 只暂存本相文件；`editors/vscode/**`、`docs/history/design/phase31.md` 与其他会话在改的文件一律不碰。
 - 收口跑 `bash selfhost/check-all.sh`，贴末行 VERDICT 与关键计数；未满足的判据必须回退状态。
 
 ## 14 实施期变更记录

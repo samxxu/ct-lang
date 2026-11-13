@@ -42,7 +42,7 @@
 ## 关闭条件
 
 `build` 与 `.h` 产物的实例体也被同一个机械扫描覆盖，或明确决定永久不覆盖并在
-`docs/design/phase26.md` §2.7 写明理由。
+`docs/history/design/phase26.md` §2.7 写明理由。
 
 ## 处置（实现方，v0.26.4 补丁）
 
@@ -57,7 +57,7 @@
   `-o` 目录扁平化——入口无泛型）。`check-warnings.sh` 的 build 触发条件同步扩到 `.h.ct`。
 
 残余盲区（`test/modules/**` 独立构建、`test/cases` / `examples` 语料）按关闭条件后半处理：
-理由与触发条件写在 [phase26.md §2.7](../../docs/design/phase26.md#L252) 的覆盖表里。
+理由与触发条件写在 [phase26.md §2.7](../../docs/history/design/phase26.md#L252) 的覆盖表里。
 
 验证：
 

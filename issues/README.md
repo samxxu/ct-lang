@@ -1324,7 +1324,7 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 （09/10/12 的 OO 化根因），按「现状 / 复现 / 影响 / 建议方向」落账，语言侧本轮不动。
 
 同轮登记判据缺口 [DOC-69](docs/doc69-phase26-exit-criteria-patch-gap.md)：Phase 26 的 E1–E8 冻结时
-未覆盖 v0.26.4 补丁交付物；映射写在 `docs/design/phase26.md` §9.9，冻结原文不动。
+未覆盖 v0.26.4 补丁交付物；映射写在 `docs/history/design/phase26.md` §9.9，冻结原文不动。
 
 同轮登记 [DOC-70](docs/doc70-each-statement-form-unimplemented.md)：语句级 `foreach (…) { … item … }`
 未实现、未排期；命名上不把库层 `each` 升为语句关键字，语句形态定名 `foreach`，旧名 `each(map){…}`

@@ -1,6 +1,6 @@
 # lib/std — 内置容器层（随编译器发行）
 
-> 中文。范围与判据见 [phase29.md](../../docs/design/phase29.md) §2.7、[language-spec §4.51](../../docs/language-spec.md)。
+> 中文。范围与判据见 [phase29.md](../../docs/history/design/phase29.md) §2.7、[language-spec §4.51](../../docs/language-spec.md)。
 
 ## 这是什么
 

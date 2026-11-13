@@ -14,9 +14,9 @@
 > 覆盖矩阵，修订后约 670 行，经需求提出方 2026-11-11 签字保留单卡、不拆分。
 > **主题来源**：需求侧在「现代化 OO 差距评估」之后提出的语法糖提案——
 > `AppConfig::instance() into { .host = "0.0.0.0"; … }`，块内省略接收者名字。
-> 关联：[language-spec.md](../language-spec.md) §4.47（`$` 的既有绑定）、
-> [phase24.md](../history/design/phase24.md)（range 初值）、[phase25.md](phase25.md)（静态映射链）、
-> [polymorphism.md](../polymorphism.md)（胖指针与派发边界）、[roadmap.md](../roadmap.md)。
+> 关联：[language-spec.md](../../language-spec.md) §4.47（`$` 的既有绑定）、
+> [phase24.md](phase24.md)（range 初值）、[phase25.md](phase25.md)（静态映射链）、
+> [polymorphism.md](../../polymorphism.md)（胖指针与派发边界）、[roadmap.md](../../roadmap.md)。
 
 ---
 
@@ -72,7 +72,7 @@
 
 | # | 路径 | 作用 |
 | --- | --- | --- |
-| D1 | `docs/design/phase30.md` | 本卡 |
+| D1 | `docs/history/design/phase30.md` | 本卡 |
 | D2 | `selfhost/ct-ast/frontend/parse/Stmt.h.ct` | 语句形态与 `into` 识别 |
 | D3 | `selfhost/ct-ast/frontend/parse/Expr.h.ct` | 值位置接入、接收者边界、`.name` 与 `$` 节点 |
 | D4 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct` | 接收者静态类型查询（复用 trait 派发的类型判定） |

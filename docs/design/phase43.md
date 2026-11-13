@@ -1,6 +1,6 @@
 # Phase 43 — 错误出口类型契约（`return err:` 载荷检查）
 
-> **状态：已定稿，待项目组签字。**（定稿 2026-11-14；未实施；本轮只写卡与文档，不改代码）
+> **状态：规划中**（已定稿，待项目组签字；定稿 2026-11-14；未实施；本轮只写卡与文档，不改代码）
 > **基线**：`/Users/samxx/trae-ws/ct-lang`，HEAD `5f23cc34`（`ct-ast v0.42.1`）；工作树仅有既有的未跟踪 `packages/`。
 > **依赖**：无前置相。判据输入 = [v043-split-plan.md](v043-split-plan.md) §3 与两份 battle 材料
 > （`/Users/samxx/.trae-cn/assistant/2026-11-14/ct-43-44-battle/outputs/design.md`、`.../rebuttal.md`）。

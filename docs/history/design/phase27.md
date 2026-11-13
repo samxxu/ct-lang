@@ -4,9 +4,9 @@
 >
 > **状态：完成**（判据冻结于 2026-11-10、首个实现提交之前；版本仍为 `v0.26.4`，未 bump）。
 > **冻结口径**：D27-1–D27-11 全部裁决完毕（§4），E27-1–E27-7 与 L27-1–L27-5 的文案、夹具清单在本文件落定后不再为通过而改写；此后的实现、夹具与文档只能向判据靠拢。
-> **主题来源**：[D25-12](phase25.md#L287) 保留库层 `each`、为语句形态预留 `foreach`；[DOC-70](../../issues/docs/doc70-each-statement-form-unimplemented.md) 记录了命名判据与探针。
-> Phase 22 / 24 / 25 曾把集合遍历列为非目标：[phase22.md:60](../history/design/phase22.md#L60)（`for x in xs` 无泛型，另议）、[phase24.md:45](../history/design/phase24.md#L45)（SHIM/宏做不到）、[phase25.md:61-64](phase25.md#L61-L64)（隐式名、块参数、`break`/`continue`，未排期）。
-> 关联：[phase21.md](../history/design/phase21.md)（非逃逸闭包）、[phase25.md](phase25.md)（静态映射闭包实参）、[phase26.md](phase26.md)（泛型函数）、[language-spec.md](../language-spec.md)、[roadmap.md](../roadmap.md)。
+> **主题来源**：[D25-12](phase25.md#L287) 保留库层 `each`、为语句形态预留 `foreach`；[DOC-70](../../../issues/docs/doc70-each-statement-form-unimplemented.md) 记录了命名判据与探针。
+> Phase 22 / 24 / 25 曾把集合遍历列为非目标：[phase22.md:60](phase22.md#L60)（`for x in xs` 无泛型，另议）、[phase24.md:45](phase24.md#L45)（SHIM/宏做不到）、[phase25.md:61-64](phase25.md#L61-L64)（隐式名、块参数、`break`/`continue`，未排期）。
+> 关联：[phase21.md](phase21.md)（非逃逸闭包）、[phase25.md](phase25.md)（静态映射闭包实参）、[phase26.md](phase26.md)（泛型函数）、[language-spec.md](../../language-spec.md)、[roadmap.md](../../roadmap.md)。
 
 ---
 

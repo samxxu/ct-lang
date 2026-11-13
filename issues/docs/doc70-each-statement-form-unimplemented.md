@@ -5,7 +5,7 @@
 | 模块 | docs / lang |
 | 严重度 | Low（需求登记；现有库层 `each` 已可用，缺的是另一套形态） |
 | 锚点 | `v0.26.4`（Phase 27 实现，未 bump） |
-| 文件 | [phase24.md:45](../../docs/history/design/phase24.md#L45)、[phase24.md:462](../../docs/history/design/phase24.md#L462)、[phase25.md:63](../../docs/design/phase25.md#L63)、[phase25.md:283](../../docs/design/phase25.md#L283)、[phase27.md](../../docs/design/phase27.md) |
+| 文件 | [phase24.md:45](../../docs/history/design/phase24.md#L45)、[phase24.md:462](../../docs/history/design/phase24.md#L462)、[phase25.md:63](../../docs/history/design/phase25.md#L63)、[phase25.md:283](../../docs/history/design/phase25.md#L283)、[phase27.md](../../docs/history/design/phase27.md) |
 | 状态 | **closed**（Phase 27 在 ct-ast 落地数组形态；容器协议经 D27-4 延后） |
 
 > **命名现状（2026-11-10 用户确认）**：语句级迭代形态一律写 **`foreach (map) { … item … }`**；
@@ -45,9 +45,9 @@ each (map) {
 - [phase24.md:45](../../docs/history/design/phase24.md#L45)：`each (nums) { … item … }` 语句形态「需要隐式名字与块参数，
   属语言级语法糖；SHIM / 宏做不到。**方法形态 `a.each(n, closure)` 已由 Phase 25 落地**」。
 - [phase24.md:462](../../docs/history/design/phase24.md#L462)：「仍不做、不排期」。
-- [phase25.md:63](../../docs/design/phase25.md#L63)：「需要隐式名字、块参数与 `break`/`continue`，是语言级
+- [phase25.md:63](../../docs/history/design/phase25.md#L63)：「需要隐式名字、块参数与 `break`/`continue`，是语言级
   语法糖，未排期」。
-- [phase25.md:283](../../docs/design/phase25.md#L283)：D25-8「不做语句形态 `each (…) { … }`」。
+- [phase25.md:283](../../docs/history/design/phase25.md#L283)：D25-8「不做语句形态 `each (…) { … }`」。
 
 以上引文均成文于 D25-12 之前，原文中的 `each` 指当时的暂定名；该名已作废，语句形态现为 `foreach`。
 
@@ -74,7 +74,7 @@ each (map) {
 | 进化空间 | 两套机制永久耦合在一个词上 | 方法链 `seq.each(fn)` 与块构造 `foreach` 各自演进 |
 
 **代决：B（分名）**。向后兼容与「不把 `each` 升成关键字」是决定性判据；「同名直观」不足以抵消
-破坏既有 `each<T>` / `a.each(...)` 的代价。已写入 [phase25.md](../../docs/design/phase25.md) D25-12。
+破坏既有 `each<T>` / `a.each(...)` 的代价。已写入 [phase25.md](../../docs/history/design/phase25.md) D25-12。
 **本轮不改任何现有样例或方法名**；命名一旦要动，是独立一次改动。
 
 ## 建议收口
@@ -85,7 +85,7 @@ each (map) {
 
 ## 处置（2026-11-10，Phase 27）
 
-- 语法与语义：[language-spec §4.49](../../docs/language-spec.md)、[tutorial 10.6](../../docs/tutorial.md)、[phase27.md](../../docs/design/phase27.md)（D27-1–D27-11）。
+- 语法与语义：[language-spec §4.49](../../docs/language-spec.md)、[tutorial 10.6](../../docs/tutorial.md)、[phase27.md](../../docs/history/design/phase27.md)（D27-1–D27-11）。
 - 实现只在 `selfhost/ct-ast/**`：`foreach` 为上下文关键字；展开为单个 `for`，长度取
   `sizeof(x) / sizeof((x)[0])`；`item` 按值拷贝、块内可见；`break` / `continue` / `return` 直通。
 - 容器协议（`len()` + `get(int)` / `entry(int)`）按 D27-4 **延后**：本仓没有 std 容器，
@@ -98,4 +98,4 @@ each (map) {
 - 正例 `test/ast/132`–`135`，负例 `test/ast/errors/foreach_*.ct`（10 条）；
 - `selfhost/check-ast.sh` 断言覆盖逐条文案、生成 C 形状、与手写 `for` 的逐字节一致、
   `ct check` 下遮蔽升为 error；
-- `docs/design/phase25.md` D25-12 与本文的命名结论一致。
+- `docs/history/design/phase25.md` D25-12 与本文的命名结论一致。

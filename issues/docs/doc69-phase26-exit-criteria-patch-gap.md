@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | Low（判据设计缺口；不影响 v0.26.4 的实际交付与门禁结果） |
 | 锚点 | `v0.26.4` / `7c58192`（HEAD = `main`） |
-| 文件 | [phase26.md §1.4](../../docs/design/phase26.md#L53-L79)、[phase26.md §1.5](../../docs/design/phase26.md#L81-L93)、[phase26.md §9.2](../../docs/design/phase26.md#L631-L643) |
+| 文件 | [phase26.md §1.4](../../docs/history/design/phase26.md#L53-L79)、[phase26.md §1.5](../../docs/history/design/phase26.md#L81-L93)、[phase26.md §9.2](../../docs/history/design/phase26.md#L631-L643) |
 | 状态 | **open**（判据设计缺口，待下一轮判据冻结时收口；不事后扩写冻结判据） |
 
 ## 现象
@@ -28,7 +28,7 @@ v0.26.0 的泛型实现本体。v0.26.4 补丁新增了四项交付（TEST-18 / 
 §9.2 补丁判据：P1–P8（S1/TEST-18、S2/DOC-68、S3/CI-8、S4/DOC-66、收口）
 ```
 
-`grep -n '^| D2[0-9]' docs/design/phase26.md` 无 D23 及以后；`§9.5` 的补丁交付物也未回填到 §1.4。
+`grep -n '^| D2[0-9]' docs/history/design/phase26.md` 无 D23 及以后；`§9.5` 的补丁交付物也未回填到 §1.4。
 2026-11-10 的只读核对即卡在此处：按 §1.5 原文判，v0.26.4 的四项工作不在出口内。
 
 ## 影响
@@ -47,5 +47,5 @@ v0.26.0 的泛型实现本体。v0.26.4 补丁新增了四项交付（TEST-18 / 
 ## 验证
 
 - `python3 test/docs/check-docs.py` 通过；
-- `docs/design/phase26.md` §9.9 存在且映射到 §9.2 P8；
+- `docs/history/design/phase26.md` §9.9 存在且映射到 §9.2 P8；
 - 不涉及代码与门禁改动。

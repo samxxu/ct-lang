@@ -2126,7 +2126,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   构建里只有一份定义，由**模板所在单元**发布到生成头，其他单元只引用。
 - **固有方法**：`impl<T> Name<Args> { … }` 给实例加方法，落码 `<Instance>_<method>`，调用点
   **静态派发**（`v.push(3)` → `Vec_int_push(&v, 3)`），不生成 vtable、不装箱；同一实例可同时有
-  多个 `impl` 块。实参只检查元数、不检查类型，是已知限制（`docs/design/phase29.md` §10.2）。
+  多个 `impl` 块。实参只检查元数、不检查类型，是已知限制（`docs/history/design/phase29.md` §10.2）。
 - **带 `use` 的泛型 impl**：`impl<T> Stack<T> use Show { … }` 落码 `<Instance>_<Trait>_<method>`
   与 `<Instance>_<Trait>_vtable`，沿用既有 trait / vptr 路径；固有方法优先于 trait 方法。
 - **静态固有方法与 range 初值构造（Phase 29 P29 补丁）**：`impl` 体内可写
@@ -2137,7 +2137,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `a..b { expr }` 与 Phase 24 的 `a..b(expr)` 同义；当声明类型是 `Vec<T>` 时，range 是
   「产物为静态数组」的表达式，降级为 `Vec_<enc>_from((T[n]){ … }, n)`，因此
   `Vec<int> v = 4..8 { $ * $ };` 合法。编译器只知道入口名与元素 C 类型，**不认识 `Vec` 的字段**
-  （`docs/design/phase29.md` §11）。`v[i]`、`m["k"]` 与 `Map` 的 `{ "k": 1 }` **仍不支持**，但不再是
+  （`docs/history/design/phase29.md` §11）。`v[i]`、`m["k"]` 与 `Map` 的 `{ "k": 1 }` **仍不支持**，但不再是
   静默放行：三条都在编译期报可读错误（`a Vec is not subscriptable: use get(i) / set(i, v)`、
   `a Map is not subscriptable: use get(key)`、`a Map cannot be initialized from a brace list: use
   put(key, value)`），不会把非法 C 交给 `cc`。
@@ -2176,7 +2176,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   在 `Map` 体内使用 `i` 是硬错（L29-18）；容器元素与接口值不能按值拷贝（L29-15）。
 - **本节不涉及**：默认类型实参、显式实例列表；参数化 trait 见 §4.55，类型参数上的 bound 见 §4.54。
   已知偏差（`Map` 线性扫描、无哈希
-  索引）见 `docs/design/phase29.md` §10.2。
+  索引）见 `docs/history/design/phase29.md` §10.2。
 
 ### 4.53 可选类型检查 `ct check --types`（Phase 32）
 

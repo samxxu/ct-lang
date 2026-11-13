@@ -5,7 +5,7 @@
 | 模块 | selfhost（`Expr` 的类型实参/值位置解析、`Emitter` 的单态化替换） |
 | 严重度 | **High**（编译器退出 0 并写出 `cc` 必拒的 C，与已修的 SH-62 / SH-64 同类） |
 | 锚点 | `v0.26.4`（HEAD `48d793f`，2026-11-10 只读审计） |
-| 文件 | [language-spec.md:1907-1925](../../docs/language-spec.md#L1907-L1925)（§4.48 的替换点与「这些都在源码处硬报错」）；[phase26.md:149-165](../../docs/design/phase26.md#L149-L165)（D26-6 只列 7 个类型位）；[phase26.md:50](../../docs/design/phase26.md#L50)（非目标：类型参数用于数组维度） |
+| 文件 | [language-spec.md:1907-1925](../../docs/language-spec.md#L1907-L1925)（§4.48 的替换点与「这些都在源码处硬报错」）；[phase26.md:149-165](../../docs/history/design/phase26.md#L149-L165)（D26-6 只列 7 个类型位）；[phase26.md:50](../../docs/history/design/phase26.md#L50)（非目标：类型参数用于数组维度） |
 | 状态 | **已修**（2026-11-10，`v0.26.4` + 本补丁，随 `fix(selfhost)` 提交落地；红/绿对照与门禁见文末「修复」；`verified` 留给独立评审） |
 
 ## 现象
@@ -116,7 +116,7 @@ D26-6 的替换点只有 7 个类型位；要把数组维度纳入替换，必�
 | `test/ast/errors/generic_template_value.ct` | 新负例：`int (*p)(int) = id;` |
 | `selfhost/check-ast.sh` | 两条 `p26_diag`（退出码 + 位置 + 文案）与两条 `p26_chk`（`ct check` 同文案） |
 | `docs/language-spec.md` §4.48（中英） | 写明这两条诊断与位置口径 |
-| `docs/design/phase26.md` §2.3 | 记录数组维度不是替换点、裸模板名按 L26-1 拒绝 |
+| `docs/history/design/phase26.md` §2.3 | 记录数组维度不是替换点、裸模板名按 L26-1 拒绝 |
 
 **红证（变异前，`fa480e8` 构建的 `v0.26.4`）**
 

@@ -62,3 +62,60 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 ### 方案草案
 
 - [custom-index-protocol.md](../proposals/custom-index-protocol.md)（未立项；PH-40 已由 errdefer 占用，等待 AN 与排期）。
+
+## REQ-ABI-1 — 用 ABI 哈希做导出面校验（评估后不采纳）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-ABI-1` |
+| `what` | 评估「新增只读子命令：重算导出面 FNV-1a，与此前生成的 `.abi.h` 里的 `<BASE>_ABI_HASH` 比对」这一消费端校验方案。 |
+| `why` | 结论**不采纳**。`<BASE>_ABI_HASH` 只折叠导出函数名（[Emitter.h.ct:5321-5329](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5321-L5329)），返回类型 / 参数类型 / 参数个数 / `const` 变化都不改变其值；名字直接首尾相接、没有分隔符，存在构造性碰撞。真正拦住导出面变更的是 `.abi.h` 与 golden 的逐字节比对，已在硬门禁内（[check-ast.sh:3600-3605](../../selfhost/check-ast.sh#L3600-L3605) → [r3_probe.sh:32-37](../../test/modules/p39_lib/r3_probe.sh#L32-L37)）。 |
+| `priority` | `P2` |
+| `status` | `rejected` |
+| `owner` | REQ（2026-11-14 评估） |
+| `last-touched` | 2026-11-14 |
+| `block` | 空（未阻塞） |
+
+### 结论
+
+- 不新增子命令，不占相号。
+- 需要比对导出面时用「重新生成头文件 + 归一化 diff」：两次 `.abi.h` 逐行 diff，忽略 banner 里的版本号行。
+
+## REQ-ABI-2 — `ABI_HASH` 的折叠对象改为签名
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-ABI-2` |
+| `what` | 把 `<BASE>_ABI_HASH` 的折叠对象从「导出函数名」改为「返回类型 + 函数名 + 参数类型」。 |
+| `why` | 现状只哈希名字（[Emitter.h.ct:5321-5329](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5321-L5329)），签名变化不可见；改为签名后，返回类型 / 参数类型 / 参数个数 / `const` 变化都能改变哈希值。改动约 10 行 + 1 个 golden。**仅当需要下游用 `#if` 做编译期 pin 时才做**，否则以 `REQ-ABI-1` 的「重新生成 + 归一化 diff」为准。 |
+| `priority` | `P2` |
+| `status` | `open` |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-14 |
+| `block` | 空（未阻塞；触发条件 = 出现下游 `#if` 编译期 pin 需求） |
+
+## REQ-ABI-3 — 枚举类型作形参导出时 `.abi.h` 构建失败
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-ABI-3` |
+| `what` | `--lib` 生成 `.abi.h` 时，导出签名里出现的枚举标签没有声明，消费方编译该头文件失败；需要为枚举形参补上等价的前置声明（`enum X;` 一类的写法需按 C 标准确认）。 |
+| `why` | 前置声明循环只识别 `struct ` 前缀（[Emitter.h.ct:5347](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5347)），`enum` 形参被跳过。实测 `void f(enum E e);` 在 clang 下只给 `-Wvisibility`（标签只在参数表内可见），换 gcc / 开 `-Werror` 时构建失败；枚举按值传参必须完整类型。 |
+| `priority` | `P2` |
+| `status` | `open` |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-14 |
+| `block` | 空（未阻塞） |
+
+## REQ-ABI-4 — `union *` 形参缺前置声明
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-ABI-4` |
+| `what` | 导出签名里出现 `union *` 形参时，`.abi.h` 没有对应的 `union X;` 前置声明。 |
+| `why` | 同一处前缀判断只认 `struct `（[Emitter.h.ct:5347](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5347)），`union` 被跳过。实测 `void f(union U *p);` 在 clang 下给 `-Wvisibility`，参数表内的标签与消费方的实际 `union U` 不是同一标签，调用点会出现不兼容指针诊断。 |
+| `priority` | `P3` |
+| `status` | `open` |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-14 |
+| `block` | 空（未阻塞） |

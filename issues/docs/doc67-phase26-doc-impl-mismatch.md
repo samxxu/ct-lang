@@ -4,7 +4,7 @@
 | --- | --- |
 | 严重度 | **P2（Medium）**（行为缺陷本体见 SH-62 / SH-63；本条只记文档侧） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
-| 文件 | [language-spec.md](../../docs/language-spec.md#L1900-L1914)、[language-spec.md](../../docs/language-spec.md#L4163-L4174)、[phase26.md](../../docs/design/phase26.md#L151-L158)、[phase26.md](../../docs/design/phase26.md#L181)、[phase26.md](../../docs/design/phase26.md#L265)、[roadmap.md](../../docs/roadmap.md#L105)、[check-ast.sh](../../selfhost/check-ast.sh#L1159-L1160)、[AGENTS.md](../../AGENTS.md#L92) |
+| 文件 | [language-spec.md](../../docs/language-spec.md#L1900-L1914)、[language-spec.md](../../docs/language-spec.md#L4163-L4174)、[phase26.md](../../docs/history/design/phase26.md#L151-L158)、[phase26.md](../../docs/history/design/phase26.md#L181)、[phase26.md](../../docs/history/design/phase26.md#L265)、[roadmap.md](../../docs/roadmap.md#L105)、[check-ast.sh](../../selfhost/check-ast.sh#L1159-L1160)、[AGENTS.md](../../AGENTS.md#L92) |
 | 状态 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；四项逐条核对见「评审复核」） |
 
 ## 1. `language-spec` §4.48 的 S4 承诺不成立（中英同错）
@@ -14,7 +14,7 @@
   其中 `sizeof(T)` 还是退出 0 的静默坏产物（SH-62）。
 - 中 [L1913-1914](../../docs/language-spec.md#L1913-L1914) 说“这些都在源码处硬报错，不静默降级”。
   `sizeof(T)` 恰恰是静默降级，两种语言版本的同一句都需要改。
-- [phase26.md §2.3](../../docs/design/phase26.md#L151-L158) / [§2.4 L169](../../docs/design/phase26.md#L169)
+- [phase26.md §2.3](../../docs/history/design/phase26.md#L151-L158) / [§2.4 L169](../../docs/history/design/phase26.md#L169)
   把 `N_CAST` / `N_SIZEOF` / `N_OFFSETOF` 列为替换点；解析器从未为 `T` 生成这三类节点，
   这三个替换点目前是死代码。§6.2 的偏差清单也没有登记这一条，违反 §7.1 的第 10 条教训。
 
@@ -22,14 +22,14 @@
 
 | 文档 | 文档说法 | 实测 |
 | --- | --- | --- |
-| [phase26.md:181](../../docs/design/phase26.md#L181)、[language-spec:1901-1902](../../docs/language-spec.md#L1901-L1902) | 函数指针类型实参报 `'<type>' cannot be a generic type argument` | `id<int (*)(int)>(fp)` → `error: expected a name in the function-pointer declarator` |
+| [phase26.md:181](../../docs/history/design/phase26.md#L181)、[language-spec:1901-1902](../../docs/language-spec.md#L1901-L1902) | 函数指针类型实参报 `'<type>' cannot be a generic type argument` | `id<int (*)(int)>(fp)` → `error: expected a name in the function-pointer declarator` |
 | 同上 | `T` 作类型实参报 L26-4 | 在泛型体内先撞 L26-5；在非泛型上下文 `T` 未注册 → 走 `parse_type` 的其他错误。L26-4 的 `strcmp(targ, tparam)` 分支不可达 |
-| [phase26.md:265](../../docs/design/phase26.md#L265) 与 [§2.5](../../docs/design/phase26.md#L181) | 空 `< >` 列表“由 `parse_params` 的既有空参数诊断先行处理” | `T f<T>()` 正常；`f<>` 报 `expected a type parameter name`，不是空参数诊断 |
+| [phase26.md:265](../../docs/history/design/phase26.md#L265) 与 [§2.5](../../docs/history/design/phase26.md#L181) | 空 `< >` 列表“由 `parse_params` 的既有空参数诊断先行处理” | `T f<T>()` 正常；`f<>` 报 `expected a type parameter name`，不是空参数诊断 |
 | [roadmap.md:105](../../docs/roadmap.md#L105) | “L26-4 `void`/函数指针/`T` 作实参” | 只有 `void` 走该文案；另两类不走（见上两行） |
 
 ## 3. E1 的命令描述与门禁脚本不一致
 
-[phase26.md](../../docs/design/phase26.md) E1 写“`! grep -E '\bT\b'` 作用于生成 C 的函数段”，
+[phase26.md](../../docs/history/design/phase26.md) E1 写“`! grep -E '\bT\b'` 作用于生成 C 的函数段”，
 但 [check-ast.sh:1160](../../selfhost/check-ast.sh#L1159-L1160) 实际作用于**整个** `prog.c`：
 
 ```sh

@@ -4,7 +4,7 @@
 > **基线**：`v0.30.0` @ `bd91bfe`（`test(release): regenerate the goldens for v0.30.0`；`1564938` 只改版本常量，50 个 golden 到 `bd91bfe` 才重生成），不 bump 版本、不打 tag。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载范围裁决、语义表、battle、
 > 判据/负例台账、样例矩阵与估算，约 1,040 行，需需求提出方签字保留单卡、不拆分。
-> 关联：[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（接收者语境块）、[modern-oo-gap.md](../modern-oo-gap.md)（需求侧缺口评估）
+> 关联：[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（接收者语境块）、[modern-oo-gap.md](../../modern-oo-gap.md)（需求侧缺口评估）
 
 ## 1 目标与范围
 
@@ -16,10 +16,10 @@
 
 | 编号 | 范围 | 当前 blocker（实测） |
 | --- | --- | --- |
-| O1 | `Vec<Show>` / `Map<char *, Show>` 装**接口值**；元素与源对象的寿命规则 | `interface and vptr-bearing values cannot be stored in a container`（[Expr.h.ct:1912-1915](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1912-L1915)） |
-| O2 | `Vec<Vec<int>>` / `Map<char *, Vec<int>>` 嵌套容器；逐元素 `retain`/`release` 级联 | `a built-in container cannot be an element of another container`（[Expr.h.ct:1905-1908](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1905-L1908)） |
-| O3 | `v[i]` → `v.get(i)`、`m[k]` → `m.get(k)` 语法糖；写形态硬错 | `a Vec is not subscriptable: use get(i) / set(i, v)`（[Expr.h.ct:3261-3273](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3261-L3273)） |
-| O4 | `Vec<T> v = {…}` 与 `Map<K, V> m = {k: v, …}` 花括号初值：空表、单元素、嵌套拒绝、1024 上限、重复键（可静态判定的常量键硬错 / 运行时按内联插入覆盖） | `a Vec cannot be initialized from a brace list` / `a Map cannot be initialized from a brace list`（[Expr.h.ct:3278-3286](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3278-L3286)） |
+| O1 | `Vec<Show>` / `Map<char *, Show>` 装**接口值**；元素与源对象的寿命规则 | `interface and vptr-bearing values cannot be stored in a container`（[Expr.h.ct:1912-1915](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1912-L1915)） |
+| O2 | `Vec<Vec<int>>` / `Map<char *, Vec<int>>` 嵌套容器；逐元素 `retain`/`release` 级联 | `a built-in container cannot be an element of another container`（[Expr.h.ct:1905-1908](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1905-L1908)） |
+| O3 | `v[i]` → `v.get(i)`、`m[k]` → `m.get(k)` 语法糖；写形态硬错 | `a Vec is not subscriptable: use get(i) / set(i, v)`（[Expr.h.ct:3261-3273](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3261-L3273)） |
+| O4 | `Vec<T> v = {…}` 与 `Map<K, V> m = {k: v, …}` 花括号初值：空表、单元素、嵌套拒绝、1024 上限、重复键（可静态判定的常量键硬错 / 运行时按内联插入覆盖） | `a Vec cannot be initialized from a brace list` / `a Map cannot be initialized from a brace list`（[Expr.h.ct:3278-3286](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3278-L3286)） |
 
 ### 1.3 非目标（本相明确不做）
 
@@ -30,7 +30,7 @@
 - 不做嵌套 impl pattern（`impl<T> Vec<Vec<T>>`）；本相不需要，见 B31-2。
 - 不动 `l0/l1/l2` 冻结层；不动 `editors/vscode/**` 与 `docs/modern-oo-gap.md`（其他会话在改）。
 - 不做 `Vec<Show *>`（裁决见 D31-1）。
-- 不做“不同枚举成员但数值相等”（`Color.RED` 与 `Color.CRIMSON`）的静态判等：符号表只保存 cname，不保存枚举值（[Parser.h.ct:1997](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1997) `declare_const(mname, cname, nsbuf, 0)`），单列 T31-8，运行时仍按 `put` 覆盖。
+- 不做“不同枚举成员但数值相等”（`Color.RED` 与 `Color.CRIMSON`）的静态判等：符号表只保存 cname，不保存枚举值（[Parser.h.ct:1997](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1997) `declare_const(mname, cname, nsbuf, 0)`），单列 T31-8，运行时仍按 `put` 覆盖。
 - 不做通用常量折叠引擎：只实现重复检测所需的整数求值器，正常代码生成仍不折叠（D-6 不变）。
 
 ### 1.4 与既有冻结决策的冲突与处置
@@ -106,8 +106,8 @@ python3 test/docs/check-docs.py     → 1021 links / 180 files, v0.30.0, 11 hard
 | P20 | `char *s = "a" "b";` / `m.put("a" "b", 1)` / 跨行 `m.put("a"\n"b", 1)` | rc=0，产物 `char * s = "a""b";` / `Map_char_p_int_put(&m, "a""b", 1)`：相邻字符串字面量（含跨行）由解析器接受，键位置同样可用 |
 | P23 | `m.put("\x61", 1); m.put("a", 2);` | 编译运行输出 `1 2`：运行期 `strcmp` 把 `"\x61"` 与 `"a"` 视为同键（静态重复检测必须按解码字节判等，不能比原始拼写） |
 | P24 | 两个 impl 块各声明同名 `static from`（`impl<V> P<char *, V>` 与 `impl<K,V> P<K,V>`），实例化 `P<char *, int>::from` | rc=0；产物只有一份 `P_char_p_int_from`（char* 块），泛型块的 `from` 被现有 shadow 规则跳过：静态构造器也能按同样规则分块 |
-| P21 | 枚举定义与成员引用 | 枚举成员只存 cname、不存值（[Parser.h.ct:1997](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1997) `declare_const(mname, cname, nsbuf, 0)`）：同一成员可按 cname 判等，不同成员数值相等无法静态判等（T31-8） |
-| P22 | 代码定位 | `static_ctype` 已有 `N_MCALL` 分支（[Expr.h.ct:3230-3252](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3230-L3252)），但它对固有方法只 `ctype_expand` **模板声明的返回类型**；`Vec<T>::get` 的 `T` 没有实例绑定，链式取类型会失败。缺三块：`N_MCALL` 返回类型按实例绑定替换；发射器固有方法分支（[Emitter.h.ct:3925](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925)）与 trait 值派发（[Emitter.h.ct:3994](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994)）对接收者无条件写 `&`，而 `hoist_scan` 只认 `N_CALL` 根（[Emitter.h.ct:1755](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755)），`N_MCALL` 必须材料化；二级下标重写 |
+| P21 | 枚举定义与成员引用 | 枚举成员只存 cname、不存值（[Parser.h.ct:1997](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1997) `declare_const(mname, cname, nsbuf, 0)`）：同一成员可按 cname 判等，不同成员数值相等无法静态判等（T31-8） |
+| P22 | 代码定位 | `static_ctype` 已有 `N_MCALL` 分支（[Expr.h.ct:3230-3252](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3230-L3252)），但它对固有方法只 `ctype_expand` **模板声明的返回类型**；`Vec<T>::get` 的 `T` 没有实例绑定，链式取类型会失败。缺三块：`N_MCALL` 返回类型按实例绑定替换；发射器固有方法分支（[Emitter.h.ct:3925](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925)）与 trait 值派发（[Emitter.h.ct:3994](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994)）对接收者无条件写 `&`，而 `hoist_scan` 只认 `N_CALL` 根（[Emitter.h.ct:1755](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755)），`N_MCALL` 必须材料化；二级下标重写 |
 
 > 补充实测：`Vec<Show *> v;` 只写 `push`/`release` 时可通过，但**不给 `v.h` 置 0** 会段错误（rc 139）。这是 `Vec<T> v;` 未零初始化导致，不是 `Vec<Show *>` 独有；本相样例一律用 `v.h = 0;` 或 O4 的 `= {}`。
 
@@ -115,8 +115,8 @@ python3 test/docs/check-docs.py     → 1021 links / 180 files, v0.30.0, 11 hard
 
 需求侧判断“真正要解决的是 `ct_impl_matches` 不支持嵌套 pattern”，实测与代码都不支持这个判断：
 
-- `ct_impl_matches`（[Symbols.h.ct:1648-1678](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L1648-L1678)）对 pattern 里的类型参数只做**整体绑定**，不解析实参内部结构；`impl<T> Vec<T>` 对 `Vec<Vec<int>>` 会把 `T` 绑成 `Vec<int>` 的规范拼写。
-- `inst_register_nested`（[Expr.h.ct:1976-2004](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1976-L2004)）已经递归注册内层实例，深度上限 4。
+- `ct_impl_matches`（[Symbols.h.ct:1648-1678](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L1648-L1678)）对 pattern 里的类型参数只做**整体绑定**，不解析实参内部结构；`impl<T> Vec<T>` 对 `Vec<Vec<int>>` 会把 `T` 绑成 `Vec<int>` 的规范拼写。
+- `inst_register_nested`（[Expr.h.ct:1976-2004](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1976-L2004)）已经递归注册内层实例，深度上限 4。
 - Phase 29 的 `Box<Box<int>>` 夹具已证明嵌套类型实参可实例化、可静态调用其实例方法；它不证明容器元素的生命周期协议，后者由本相 O2 补。
 
 因此 O2 的改动只在**守卫 + 元素所有权**，不动 `ct_impl_matches`。嵌套 pattern 只在写 `impl<T> Vec<Vec<T>>` 时才需要，本相不写这种 impl。省下 200–400 行匹配器改动。
@@ -152,11 +152,11 @@ a container of interface pointers is not supported; store the interface value it
 
 #### 3.1.4 实参装箱
 
-当前只有**自由函数调用**做实参装箱（[Expr.h.ct:4482-4495](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4482-L4495)）；固有方法调用分支只做 arity 检查（[Expr.h.ct:3514-3520](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3514-L3520)）。本相把 `push(T)`、`set(int, T)`、`put(K, V)`、`Map` 的两个 `put` 块以及 O4 的元素列表纳入同一装箱路径，使 `v.push(circle)` 直接可用。
+当前只有**自由函数调用**做实参装箱（[Expr.h.ct:4482-4495](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4482-L4495)）；固有方法调用分支只做 arity 检查（[Expr.h.ct:3514-3520](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3514-L3520)）。本相把 `push(T)`、`set(int, T)`、`put(K, V)`、`Map` 的两个 `put` 块以及 O4 的元素列表纳入同一装箱路径，使 `v.push(circle)` 直接可用。
 
 #### 3.1.5 跨单元边界（重要）
 
-实测 P11：`Vec<UserStruct>` 在 `ct build` 下**已经**因容器模板单元看不到元素完整类型而失败。接口值元素同理：`struct Show_iface` 定义在 trait 所属单元，`Vec` 的实例方法在 `lib/std` 单元发射（[Emitter.h.ct:1666-1706](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1666-L1706)），看不到该定义。
+实测 P11：`Vec<UserStruct>` 在 `ct build` 下**已经**因容器模板单元看不到元素完整类型而失败。接口值元素同理：`struct Show_iface` 定义在 trait 所属单元，`Vec` 的实例方法在 `lib/std` 单元发射（[Emitter.h.ct:1666-1706](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1666-L1706)），看不到该定义。
 
 处置（D31-5）：
 
@@ -231,15 +231,15 @@ static void Vec_Vec_int__elem_release(struct Vec_int *e) {
 
 | 方法 | 位置 | 动作 |
 | --- | --- | --- |
-| `from` | [Vec.h.ct:61](../../lib/std/Vec.h.ct#L61) | `memcpy` 后逐元素 `__ct_elem_retain`（调用方原数组仍各自持有引用）；**`n <= 0` 或 `items == 0` 也分配 `ct_buf` header**（`refs=1, len=0, cap=0, data=0`），保证返回的句柄一定可 `release`；header 或数据分配失败都直接 abort，绝不返回不可释放句柄（D31-21）；数据写入 `h->data`（D31-24） |
-| `len` | [Vec.h.ct:86](../../lib/std/Vec.h.ct#L86) | 不改：只读 `h->len`，D31-24 后仍只经 `h` |
-| `get` | [Vec.h.ct:93](../../lib/std/Vec.h.ct#L93) | **不改**：借用视图，不 retain；经 `h->data` 读 |
-| `set` | [Vec.h.ct:102](../../lib/std/Vec.h.ct#L102) | 先对入参 `retain`，再 `release` 旧元素，再赋值（别名安全：`v.set(0, v.get(0))` 不悬垂） |
-| `push` | [Vec.h.ct:109](../../lib/std/Vec.h.ct#L109) | 先确保容量（`realloc(self->h->data)` 成功后写回 `h->data`），再 retain 入参，再赋值；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
-| `pop` | [Vec.h.ct:136](../../lib/std/Vec.h.ct#L136) | 所有权移出，不 release，也不额外 retain；读取改经 `h->data`（D31-24）；`v.pop().release()` 合法（拥有型临时） |
-| `clear` | [Vec.h.ct:146](../../lib/std/Vec.h.ct#L146) | 逐元素 `release` 后 `len = 0`（缓冲区保留） |
-| `retain` | [Vec.h.ct:152](../../lib/std/Vec.h.ct#L152) | 只复制 `h` 并递增 `refs`，不复制数据指针、不碰元素（D31-24）；零句柄 retain 仍得零句柄 |
-| `release` | [Vec.h.ct:164](../../lib/std/Vec.h.ct#L164) | **仅 `refs` 归零分支**逐元素 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（D29-12/V29-2 不变）；空句柄由 `from` 分配非零 header 保证可释放 |
+| `from` | [Vec.h.ct:61](../../../lib/std/Vec.h.ct#L61) | `memcpy` 后逐元素 `__ct_elem_retain`（调用方原数组仍各自持有引用）；**`n <= 0` 或 `items == 0` 也分配 `ct_buf` header**（`refs=1, len=0, cap=0, data=0`），保证返回的句柄一定可 `release`；header 或数据分配失败都直接 abort，绝不返回不可释放句柄（D31-21）；数据写入 `h->data`（D31-24） |
+| `len` | [Vec.h.ct:86](../../../lib/std/Vec.h.ct#L86) | 不改：只读 `h->len`，D31-24 后仍只经 `h` |
+| `get` | [Vec.h.ct:93](../../../lib/std/Vec.h.ct#L93) | **不改**：借用视图，不 retain；经 `h->data` 读 |
+| `set` | [Vec.h.ct:102](../../../lib/std/Vec.h.ct#L102) | 先对入参 `retain`，再 `release` 旧元素，再赋值（别名安全：`v.set(0, v.get(0))` 不悬垂） |
+| `push` | [Vec.h.ct:109](../../../lib/std/Vec.h.ct#L109) | 先确保容量（`realloc(self->h->data)` 成功后写回 `h->data`），再 retain 入参，再赋值；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
+| `pop` | [Vec.h.ct:136](../../../lib/std/Vec.h.ct#L136) | 所有权移出，不 release，也不额外 retain；读取改经 `h->data`（D31-24）；`v.pop().release()` 合法（拥有型临时） |
+| `clear` | [Vec.h.ct:146](../../../lib/std/Vec.h.ct#L146) | 逐元素 `release` 后 `len = 0`（缓冲区保留） |
+| `retain` | [Vec.h.ct:152](../../../lib/std/Vec.h.ct#L152) | 只复制 `h` 并递增 `refs`，不复制数据指针、不碰元素（D31-24）；零句柄 retain 仍得零句柄 |
+| `release` | [Vec.h.ct:164](../../../lib/std/Vec.h.ct#L164) | **仅 `refs` 归零分支**逐元素 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（D29-12/V29-2 不变）；空句柄由 `from` 分配非零 header 保证可释放 |
 | range 初值 | `Stmt.h.ct:2180-2250` | 元素有生命周期 → 硬错 L31-12（临时数组的元素引用无处释放）；`from` 本身仍允许 |
 
 > 表内行号基于基线 `bd91bfe`；S27a/S27b 把数据指针移进 `ct_buf` 后方法体整体下移，锚点以落地前的基线为准，不在本卡追写。访问点分两笔：`grep -c "self->data\|self->entries" lib/std/Vec.h.ct` 实测 **37 处**（`self->data` 10 + `self->entries` 27），加 `Vec::from` 里 4 行 `v.data`（67 `v.data = 0`、71 data 分配、78 `v.data = nd`、79 `memcpy`）才是 **41 行**；S27b 逐方法替换，`from` 的这 4 行单独处理（67/78 删除或改 `v.h->data`，71/79 的 `sizeof(v.data[0])` 改 `sizeof(items[0])`，`memcpy` 目标改 `v.h->data`）。表内“不改”仅指生命周期语义不变，数据访问仍统一改经 `h->data`。
@@ -248,17 +248,17 @@ static void Vec_Vec_int__elem_release(struct Vec_int *e) {
 
 | 方法 | 位置 | 动作 |
 | --- | --- | --- |
-| `put(char *, V)` | [Vec.h.ct:192](../../lib/std/Vec.h.ct#L192) | 覆盖：先确保容量（`realloc(self->h->data)` 成功后），再 retain 新值，再 release 旧值，再赋值；追加：确保容量后 retain 新值再写入；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
-| `remove(char *)` | [Vec.h.ct:236](../../lib/std/Vec.h.ct#L236) | 找到后 release 值，再搬移（经 `h->data`）；搬移使该键的 `V *` 与后续 `entry` 视图失效（L31-23） |
-| `get` | [Vec.h.ct:227](../../lib/std/Vec.h.ct#L227) | 不改：返回内部指针（经 `h->data`），借用视图；下一次 `put`/`remove`/`clear`/`release` 后失效 |
-| `put(K, V)` | [Vec.h.ct:263](../../lib/std/Vec.h.ct#L263) | 同 char* 块 |
-| `get(K)` | [Vec.h.ct:299](../../lib/std/Vec.h.ct#L299) | 同 char* 块：返回内部指针，借用视图 |
-| `remove(K)` | [Vec.h.ct:311](../../lib/std/Vec.h.ct#L311) | 同 char* 块 |
-| `clear` | [Vec.h.ct:327](../../lib/std/Vec.h.ct#L327) | 逐值 `release` 后 `len = 0`；使所有 `get` 指针与 `entry` 借用视图失效 |
-| `len` | [Vec.h.ct:253](../../lib/std/Vec.h.ct#L253) | 不改：只读 `h->len` |
-| `entry` | [Vec.h.ct:333](../../lib/std/Vec.h.ct#L333) | 不改：返回 `MapEntry` 副本，值句柄是借用视图；下一次变更后失效 |
-| `retain` | [Vec.h.ct:341](../../lib/std/Vec.h.ct#L341) | 只复制 `h` 并递增 `refs`，不复制 `entries`（D31-24） |
-| `release` | [Vec.h.ct:350](../../lib/std/Vec.h.ct#L350) | 仅 `refs` 归零分支逐值 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（V29-2 不变）；空 `Map` 由 `from(0,0)` 分配 header |
+| `put(char *, V)` | [Vec.h.ct:192](../../../lib/std/Vec.h.ct#L192) | 覆盖：先确保容量（`realloc(self->h->data)` 成功后），再 retain 新值，再 release 旧值，再赋值；追加：确保容量后 retain 新值再写入；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
+| `remove(char *)` | [Vec.h.ct:236](../../../lib/std/Vec.h.ct#L236) | 找到后 release 值，再搬移（经 `h->data`）；搬移使该键的 `V *` 与后续 `entry` 视图失效（L31-23） |
+| `get` | [Vec.h.ct:227](../../../lib/std/Vec.h.ct#L227) | 不改：返回内部指针（经 `h->data`），借用视图；下一次 `put`/`remove`/`clear`/`release` 后失效 |
+| `put(K, V)` | [Vec.h.ct:263](../../../lib/std/Vec.h.ct#L263) | 同 char* 块 |
+| `get(K)` | [Vec.h.ct:299](../../../lib/std/Vec.h.ct#L299) | 同 char* 块：返回内部指针，借用视图 |
+| `remove(K)` | [Vec.h.ct:311](../../../lib/std/Vec.h.ct#L311) | 同 char* 块 |
+| `clear` | [Vec.h.ct:327](../../../lib/std/Vec.h.ct#L327) | 逐值 `release` 后 `len = 0`；使所有 `get` 指针与 `entry` 借用视图失效 |
+| `len` | [Vec.h.ct:253](../../../lib/std/Vec.h.ct#L253) | 不改：只读 `h->len` |
+| `entry` | [Vec.h.ct:333](../../../lib/std/Vec.h.ct#L333) | 不改：返回 `MapEntry` 副本，值句柄是借用视图；下一次变更后失效 |
+| `retain` | [Vec.h.ct:341](../../../lib/std/Vec.h.ct#L341) | 只复制 `h` 并递增 `refs`，不复制 `entries`（D31-24） |
+| `release` | [Vec.h.ct:350](../../../lib/std/Vec.h.ct#L350) | 仅 `refs` 归零分支逐值 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（V29-2 不变）；空 `Map` 由 `from(0,0)` 分配 header |
 
 两个 `impl` 块都必须加调用（E31-6 专门覆盖 char* 键）。两个块的数据访问一律经 `h->data`（D31-24）：`struct MapEntry<K, V> *e = self->h->data;`，`put` 的扩容写回 `h->data`；句柄拷贝因此不会在兄弟扩容后悬垂。
 
@@ -318,26 +318,26 @@ Vec<Box<int>> v;              // 与 Vec<Vec<int>> 走同一套助手
 
 #### 3.3.1 重写规则
 
-在 postfix `[` 处替换 [container_index_check](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3261)：
+在 postfix `[` 处替换 [container_index_check](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3261)：
 
 - `static_ctype(base)` 为 `struct Vec_*` → 构造 `N_MCALL`，`aux = 9`（值接收者）、`text = 实例名`、`text2 = "get"`、`a = base`、`b = index`。
 - 为 `struct Map_*` → 同上，`get(key)`，结果类型是 `V *`。
 - 其它类型 → 保持 C 数组下标。
-- **链式结果**：`static_ctype` 已有 `N_MCALL` 分支（[Expr.h.ct:3230-3252](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3230-L3252)，P22），但固有方法只 `ctype_expand` 模板声明的返回类型；`Vec<T>::get` 的 `T` 必须先按实例绑定替换成 `int` / `struct Vec_int` 等具体 C 类型，`g[i][j]` 的第一层才能得到 `struct Vec_int`，第二层 `[j]` 再走同一重写。
-- **临时接收者（修正）**：固有方法 `aux == 9` 在发射时**无条件写 `&`**（[Emitter.h.ct:3925](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925)），trait 值派发也写 `&`（[Emitter.h.ct:3994](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994)）；而材料化只认自由函数调用根（[Emitter.h.ct:1755](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755) `root->kind == N_CALL`），`N_MCALL` 不在其中。因此 `N_MCALL` 结果作接收者时**必须先落临时再取址**，且 hoist 之后**不得再发射一次原调用**。两个落点缺一不可（S21a）：
+- **链式结果**：`static_ctype` 已有 `N_MCALL` 分支（[Expr.h.ct:3230-3252](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3230-L3252)，P22），但固有方法只 `ctype_expand` 模板声明的返回类型；`Vec<T>::get` 的 `T` 必须先按实例绑定替换成 `int` / `struct Vec_int` 等具体 C 类型，`g[i][j]` 的第一层才能得到 `struct Vec_int`，第二层 `[j]` 再走同一重写。
+- **临时接收者（修正）**：固有方法 `aux == 9` 在发射时**无条件写 `&`**（[Emitter.h.ct:3925](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925)），trait 值派发也写 `&`（[Emitter.h.ct:3994](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994)）；而材料化只认自由函数调用根（[Emitter.h.ct:1755](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755) `root->kind == N_CALL`），`N_MCALL` 不在其中。因此 `N_MCALL` 结果作接收者时**必须先落临时再取址**，且 hoist 之后**不得再发射一次原调用**。两个落点缺一不可（S21a）：
 
   **(a) 让方法调用进得了 hoist——入口判定与类型来源都按节点 kind 分支**：
 
-  - `hoist_scan`（[Emitter.h.ct:1749-1767](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1767)）现在用 `root->kind == N_CALL && !text3[0] && find_func(text2) >= 0` 判根；`N_MCALL` 的 `text2` 是方法名（`get`/`len`），`find_func` 必然返回 < 0。改为**按 kind 分支**（两种 kind 都保留 `!text3[0]`）：`N_CALL` 仍走 `find_func(text2) >= 0`；`N_MCALL` 走 `(aux == 9 || aux == 10) && find_struct(<text 去掉 "struct " 前缀>) >= 0 && structs[si].is_inst`（与发射分支 [Emitter.h.ct:3917-3921](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3917-L3921) 同一判定），**不再调用 `find_func`**。两种 kind 命中后**共用**现有的 `!top` 检查（[Emitter.h.ct:1758-1759](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1758-L1759)）与 `MAX_HOISTS` 上限。两处判定必须同步改：只改 `emit_hoists` 不会报错，而是 `hoist_scan` 根本不记录，调用照旧原样发射。
+  - `hoist_scan`（[Emitter.h.ct:1749-1767](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1767)）现在用 `root->kind == N_CALL && !text3[0] && find_func(text2) >= 0` 判根；`N_MCALL` 的 `text2` 是方法名（`get`/`len`），`find_func` 必然返回 < 0。改为**按 kind 分支**（两种 kind 都保留 `!text3[0]`）：`N_CALL` 仍走 `find_func(text2) >= 0`；`N_MCALL` 走 `(aux == 9 || aux == 10) && find_struct(<text 去掉 "struct " 前缀>) >= 0 && structs[si].is_inst`（与发射分支 [Emitter.h.ct:3917-3921](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3917-L3921) 同一判定），**不再调用 `find_func`**。两种 kind 命中后**共用**现有的 `!top` 检查（[Emitter.h.ct:1758-1759](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1758-L1759)）与 `MAX_HOISTS` 上限。两处判定必须同步改：只改 `emit_hoists` 不会报错，而是 `hoist_scan` 根本不记录，调用照旧原样发射。
   - **分片边界**：S21a 落 `N_MCALL` 固有方法（aux 9/10）的入口与类型；trait 值派发（aux 4/3/2/else）的同一入口与类型判定归 S21c（同样不得调 `find_func`，用 `static_ctype` 判接收者结果类型），S21c 复用 (b) 的 `text3` 短路。
-  - `emit_hoists`（[Emitter.h.ct:1781-1792](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1781-L1792)）现在无条件 `find_func(hoist_calls[i]->text2)` 取 `funcs[f].ret`，取不到就 `fail_from("cannot infer the type of a hoisted receiver")`。改为**按 kind 取类型**：`N_CALL` 维持 `funcs[f].ret`；`N_MCALL` 用 `frontend::parse::expr_get()->static_ctype(hoist_calls[i], buf, sizeof buf, &depth, 0)` 取该调用的结果 C 类型。`static_ctype` 是 `struct Expr` 的方法，`struct Emitter` 没有 `Expr` 字段，必须经单例 `frontend::parse::expr_get()` 调用（[Expr.h.ct:4956](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4956)；现成用法 [MapBuild.h.ct:886](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct#L886)）。
+  - `emit_hoists`（[Emitter.h.ct:1781-1792](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1781-L1792)）现在无条件 `find_func(hoist_calls[i]->text2)` 取 `funcs[f].ret`，取不到就 `fail_from("cannot infer the type of a hoisted receiver")`。改为**按 kind 取类型**：`N_CALL` 维持 `funcs[f].ret`；`N_MCALL` 用 `frontend::parse::expr_get()->static_ctype(hoist_calls[i], buf, sizeof buf, &depth, 0)` 取该调用的结果 C 类型。`static_ctype` 是 `struct Expr` 的方法，`struct Emitter` 没有 `Expr` 字段，必须经单例 `frontend::parse::expr_get()` 调用（[Expr.h.ct:4956](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4956)；现成用法 [MapBuild.h.ct:886](../../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct#L886)）。
   - **仅对已材料化的 `N_MCALL` 根：查不到就硬错，不退化成原样发射**：`hoist_scan` 已把该根记入 `hoist_calls` 后，`emit_hoists` 调 `static_ctype` 返回 0 时才报 `cannot infer the type of a hoisted receiver`；未被材料化的 `N_MCALL`（含 aux 5/6/11）不经过这条判断，按各自原路径发射。退化成原样发射会重新产生 `&Vec_*_(` 的非法 C，违反本卡红线，也会让 E31-24 的产物断言变红；这是编译器内部不变量，不是用户可恢复错误。
 
   **(b) hoist 之后不得重复发射——`N_MCALL` 分支加与 `N_CALL` 同构的短路**：
 
   - 字段复用 `text3`，不新增字段。写入者与读取者：`hoist_scan` 在记入 `hoist_calls` 的同一节点上写 `text3 = "__ct_tmp<N>"` 并 `ntmp++`；`emit_hoists` 在写声明右值期间置 `raw_call = hoist_calls[i]`、发完复位 `-1`；`emit_expr` 读 `text3`。
-  - 在**两个接收者分支的入口**分别插入与 [Emitter.h.ct:4025-4028](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4025-L4028) 同构的短路：`if (nodes[n].text3[0] && n != raw_call) { fputs(nodes[n].text3); return 0; }`。落点是 (i) `aux == 9/10` 固有方法分支入口（[Emitter.h.ct:3910](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3910)，S21a）；(ii) trait 值派发链入口（[Emitter.h.ct:3963](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3963) 的接收者检查之前、静态分支之后，S21c）。**不能放在 `case N_MCALL:` 首行**：`aux == 5` 的静态映射调用把 `text3` 复用为映射实例名（[Emitter.h.ct:3784](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3784)），无条件短路会把实例名当成调用打印；`aux == 6`（Phase 30 `into` 接收者）的 `text3` 保存接收者原文，被 `hoist_scan` 外层 `aux != 6`（[Emitter.h.ct:1749-1750](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1750)）与“根仅 aux 9/10”双重排除，短路落在两个接收者分支入口也天然不碰它。`n == raw_call` 的那一次是 `emit_hoists` 写声明右值，必须打印真实调用；此后所有对同一节点的发射都只打印临时名。
-  - **先后关系**：语句发射固定为 `hoist_rvalue`/`hoist_scan` → `emit_hoists(ind)`（写临时声明）→ `emit_expr(语句)`（用临时名），见 [Emitter.h.ct:2838-2843](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2838-L2843) 与 [Emitter.h.ct:3057](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3057)；`emit_hoists` 对每个根先置 `raw_call` 再 `emit_expr`，保证声明行只发真实调用一次。
+  - 在**两个接收者分支的入口**分别插入与 [Emitter.h.ct:4025-4028](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4025-L4028) 同构的短路：`if (nodes[n].text3[0] && n != raw_call) { fputs(nodes[n].text3); return 0; }`。落点是 (i) `aux == 9/10` 固有方法分支入口（[Emitter.h.ct:3910](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3910)，S21a）；(ii) trait 值派发链入口（[Emitter.h.ct:3963](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3963) 的接收者检查之前、静态分支之后，S21c）。**不能放在 `case N_MCALL:` 首行**：`aux == 5` 的静态映射调用把 `text3` 复用为映射实例名（[Emitter.h.ct:3784](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3784)），无条件短路会把实例名当成调用打印；`aux == 6`（Phase 30 `into` 接收者）的 `text3` 保存接收者原文，被 `hoist_scan` 外层 `aux != 6`（[Emitter.h.ct:1749-1750](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1750)）与“根仅 aux 9/10”双重排除，短路落在两个接收者分支入口也天然不碰它。`n == raw_call` 的那一次是 `emit_hoists` 写声明右值，必须打印真实调用；此后所有对同一节点的发射都只打印临时名。
+  - **先后关系**：语句发射固定为 `hoist_rvalue`/`hoist_scan` → `emit_hoists(ind)`（写临时声明）→ `emit_expr(语句)`（用临时名），见 [Emitter.h.ct:2838-2843](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2838-L2843) 与 [Emitter.h.ct:3057](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3057)；`emit_hoists` 对每个根先置 `raw_call` 再 `emit_expr`，保证声明行只发真实调用一次。
 
   产物是
 
@@ -348,7 +348,7 @@ Vec<Box<int>> v;              // 与 Vec<Vec<int>> 走同一套助手
 
   `g[i][j]` 同形：`struct Vec_int __ct_tmp0 = Vec_int_get(&g, 0); Vec_int_get(&__ct_tmp0, j);`。`b.mv()[0]`、`v.get(0).show()` 同样先材料化；“同一接收者一次表达式只求值一次”由 (b) 的 `text3` 短路保证，不是只靠 `hoist_scan` 记录。
 - **合法 C 的边界**：`f()[i]`、`(*pv)[i]`、`arr_of_vec[i][j]`、`h.v[i]` 不需要 `N_MCALL` 临时；`g.get(0).len()`、`g[i][j]`、`b.mv()[0]` 必须走上面的材料化。E31-24 的产物断言禁止出现紧贴调用的 `&Vec_*_(` / `&Map_*_(`，并要求出现 `__ct_tmp`。
-- **位置边界（`top`）**：材料化只在语句的求值起点生效——语句表达式、赋值右值、声明初值、`return` 表达式（`hoist_rvalue` 对这些传 `top = 1`，[Emitter.h.ct:1702-1716](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1702-L1716) 与 [Emitter.h.ct:3053-3057](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3053-L3057)）。作为实参、二元运算一侧等子表达式时 `hoist_scan` 以 `top = 0` 进入，按既有文案报 `a method call on a temporary is only allowed at the start of a statement or of an assignment`（[Emitter.h.ct:1758-1759](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1758-L1759)），不静默重排；§7 的链式夹具全部写成语句 / 初值 / `return` 形态。
+- **位置边界（`top`）**：材料化只在语句的求值起点生效——语句表达式、赋值右值、声明初值、`return` 表达式（`hoist_rvalue` 对这些传 `top = 1`，[Emitter.h.ct:1702-1716](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1702-L1716) 与 [Emitter.h.ct:3053-3057](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3053-L3057)）。作为实参、二元运算一侧等子表达式时 `hoist_scan` 以 `top = 0` 进入，按既有文案报 `a method call on a temporary is only allowed at the start of a statement or of an assignment`（[Emitter.h.ct:1758-1759](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1758-L1759)），不静默重排；§7 的链式夹具全部写成语句 / 初值 / `return` 形态。
 - 因为构造的就是 `.get(...)` / `.len(...)` 的节点形态，**解析与发射共用同一套节点**；`ct check` 与编译共用解析器，诊断自动一致。链式访问不是“发射器特例”，但确实要动 `hoist_scan` / `emit_hoists`，成本按 D31-18 拆成 S21a–S21c 计入。
 
 #### 3.3.2 语义边界
@@ -377,10 +377,10 @@ Vec<Box<int>> v;              // 与 Vec<Vec<int>> 走同一套助手
 `selfhost/check-ast.sh` 现有 **19 条**会被 O1/O2/O3/O4 直接推翻的断言：
 
 - **15 条下标负例**（`test/ast/errors/` 下 15 个文件，断言在 `check-ast.sh` 6036–6062 之间的 15 行）；
-- `map_brace_init`（[check-ast.sh:6038](../../selfhost/check-ast.sh#L6038)）；
-- `container_element`（[check-ast.sh:5759](../../selfhost/check-ast.sh#L5759)，`Vec<Vec<int>>`）；
-- `container_element_map`（[check-ast.sh:5760](../../selfhost/check-ast.sh#L5760)，`Map<char *, Vec<int>>`）；
-- `container_iface`（[check-ast.sh:6040](../../selfhost/check-ast.sh#L6040)，`Vec<Show>`）。
+- `map_brace_init`（[check-ast.sh:6038](../../../selfhost/check-ast.sh#L6038)）；
+- `container_element`（[check-ast.sh:5759](../../../selfhost/check-ast.sh#L5759)，`Vec<Vec<int>>`）；
+- `container_element_map`（[check-ast.sh:5760](../../../selfhost/check-ast.sh#L5760)，`Map<char *, Vec<int>>`）；
+- `container_iface`（[check-ast.sh:6040](../../../selfhost/check-ast.sh#L6040)，`Vec<Show>`）。
 
 **保留**（不被本相推翻，删了会丢覆盖）：`generic_impl_missing_method`（6039）、`container_vptr_struct`（6041）、`foreach_container_element`（5753）。
 
@@ -439,7 +439,7 @@ Vec<Vec<int>> g = {row1, row2};   /* 元素有生命周期时 from 逐元素 ret
 
 降级为 `Vec_<Inst>_from((T[]){e1, e2, …}, n)`；空表降级为 `Vec_<Inst>_from(0, 0)`。**结构化解析**，不走 raw 文本，因此不受 `MAX_TEXT 160` 截断（现有 `initializer is too long` 路径不适用）。
 
-`Vec<T>::from` 现有实现在 `n <= 0` 时直接返回 `h = 0`（[Vec.h.ct:68](../../lib/std/Vec.h.ct#L68)），而 `release` 对 `h == 0` abort（P18），所以 `Vec<int> v = {}; v.release();` 当前必崩。本相把 `from` 改成：
+`Vec<T>::from` 现有实现在 `n <= 0` 时直接返回 `h = 0`（[Vec.h.ct:68](../../../lib/std/Vec.h.ct#L68)），而 `release` 对 `h == 0` abort（P18），所以 `Vec<int> v = {}; v.release();` 当前必崩。本相把 `from` 改成：
 
 - **空表/空源**（`items == 0 || n <= 0`）：仍分配 `ct_buf` header（`refs=1, len=0, cap=0, h->data=0`），保证返回句柄一定可释放；
 - **header 分配失败**：`abort()`，绝不返回 `h == 0`；
@@ -496,9 +496,9 @@ self->h->cap = nc;
 | 空列表 `{}` | **允许**，得到空 Vec（推荐用它替代 `v.h = 0;` 的裸零初始化） | 正例 33 |
 | 单元素 `{x}` | 允许，`from((T[]){x}, 1)` 语义 | 正例 33 |
 | 元素类型不匹配 | 可判定时硬错 L31-6 `initializer element N has type 'A', expected 'B'`；不可判定时硬错 L31-7 `cannot determine the type of initializer element N`（绝不发射非法 C 交给 cc） | 负例 |
-| 元素数量 > 1024 | 硬错 L31-8 `too many initializer elements (limit 1024)`，与 range 的 1024 上限一致（[Stmt.h.ct:2201-2202](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L2201-L2202)） | 负例（1025 项生成夹具） |
+| 元素数量 > 1024 | 硬错 L31-8 `too many initializer elements (limit 1024)`，与 range 的 1024 上限一致（[Stmt.h.ct:2201-2202](../../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L2201-L2202)） | 负例（1025 项生成夹具） |
 
-**L31-7 的触发表达式**（M3）：`int a = 1, b = 2; Vec<int> v = {a + b};` —— `static_ctype` 对二元 `+` 没有分支（[Expr.h.ct:3253-3254](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3253-L3254) `default: return 0;`），元素类型判不出，按 B31-7 硬错。可用写法是先绑局部：`int t = a + b; Vec<int> v = {t};`（`N_VAR` 有类型）。字面量（`N_NUM` / `N_STR`）由初值解析器的快路径直接给定类型，不走 L31-7；完整最小复现见 §8 L31-7。
+**L31-7 的触发表达式**（M3）：`int a = 1, b = 2; Vec<int> v = {a + b};` —— `static_ctype` 对二元 `+` 没有分支（[Expr.h.ct:3253-3254](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3253-L3254) `default: return 0;`），元素类型判不出，按 B31-7 硬错。可用写法是先绑局部：`int t = a + b; Vec<int> v = {t};`（`N_VAR` 有类型）。字面量（`N_NUM` / `N_STR`）由初值解析器的快路径直接给定类型，不走 L31-7；完整最小复现见 §8 L31-7。
 
 其他边界：
 
@@ -583,7 +583,7 @@ static Map<char *, V> from(struct MapEntry<char *, V> *items, int n)
 - **可静态判定的重复键**（D31-14：覆盖可判定的同源重复；不同枚举成员等值单列 T31-8，已获授权接受）：
   - **整数字面量与常量折叠**：键表达式是整数常量时，用一个小型整数求值器（`N_NUM` / 一元 `- + ~ !` / 二元 `+ - * / % << >> & | ^` / 括号）算出值；`1`、`01`、`0x1`、`1L`、`1+1`、`(2)` 都归一为同一值。求值溢出或遇到不支持的算子时**放弃静态判断**，运行期覆盖。
   - **字符串字面量**：按 C 转义解码后比较字节，`"\x61"` 与 `"a"` 判等，八进制/`\n`/`\\`/`\"` 同样归一；相邻字面量（`"a" "b"`，可跨行）先拼接再比较；比较在**第一个 NUL 处截断**，与运行期 `strcmp` 一致（P20 已证相邻字面量被解析器接受，产物保留 `"a""b"`）。
-  - **枚举成员**：同一成员（解析后的 cname 相同）重复 → L31-16；不同成员数值相等（`Color.RED` vs `Color.CRIMSON`）**不做**静态判等，因为符号表只存 cname、不存值（P21，[Parser.h.ct:1997](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1997)），单列 T31-8，运行时按 `put` 覆盖。
+  - **枚举成员**：同一成员（解析后的 cname 相同）重复 → L31-16；不同成员数值相等（`Color.RED` vs `Color.CRIMSON`）**不做**静态判等，因为符号表只存 cname、不存值（P21，[Parser.h.ct:1997](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1997)），单列 T31-8，运行时按 `put` 覆盖。
   - 命中即在**第二个键**的位置报 L31-16 `duplicate key 'a' in a Map initializer (first at line N)`；整数按值、字符串按解码内容、枚举按 cname。
 - **运行期重复**：键不是上述可判定形态（变量、调用结果、`sizeof`、cast、宏、不同枚举成员等值）时不做编译期判断，按 `from` 的内联循环覆盖，**不 abort**（P14 已证 `put` 不终止程序）。
 - **键的寿命**：`char *` 键仍是**非拥有借用**，`from` 不复制键字符串；调用方必须保证键在表生命周期内有效（与 `put` 一致）。字符串字面量天然满足；局部缓冲区键的超期失效不额外检查，写进 language-spec。
@@ -881,7 +881,7 @@ int a = 1, b = 2;
 Vec<int> v = {a + b};   /* L31-7: cannot determine the type of initializer element 1 */
 ```
 
-`static_ctype` 对二元 `+` 走 `default: return 0;`（[Expr.h.ct:3253-3254](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3253-L3254)），因此这里判不出元素类型；先绑 `int t = a + b;` 再用 `{t}` 是可用写法（`N_VAR` 有类型）。字面量 `{7}` / `{"s"}` 由初值解析器的 `N_NUM` / `N_STR` 快路径给定类型，不触发 L31-7。
+`static_ctype` 对二元 `+` 走 `default: return 0;`（[Expr.h.ct:3253-3254](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3253-L3254)），因此这里判不出元素类型；先绑 `int t = a + b;` 再用 `{t}` 是可用写法（`N_VAR` 有类型）。字面量 `{7}` / `{"s"}` 由初值解析器的 `N_NUM` / `N_STR` 快路径给定类型，不触发 L31-7。
 
 ---
 

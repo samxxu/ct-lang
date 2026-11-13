@@ -3,7 +3,7 @@
 > **状态：已完成（2026-11-13 收口，`v0.35.0`）**（2026-11-11 立项草案；2026-11-12 范围变更：supertrait 移出本相；实现与门禁见 §13）。
 > **基线**：**Phase 34 落地并推送后确定**（P34 是硬前置）；S0 在**实现提交的父提交**上重建并复跑 §2.2，红证记录 `baseline: <sha>`。
 > **文档形态**：`phase35-draft.md`；design window 12/12，每次转正归档当时最老的一张。
-> **前置**：[phase33.md](phase33-draft.md)（bound 校验函数）、[phase34.md](phase34-draft.md)（跨单元导出）、[phase29.md](phase29.md)（泛型 struct / 容器）。
+> **前置**：[phase33.md](phase33-draft.md)（bound 校验函数）、[phase34.md](phase34-draft.md)（跨单元导出）、[phase29.md](../history/design/phase29.md)（泛型 struct / 容器）。
 
 ## 1 目标与范围
 

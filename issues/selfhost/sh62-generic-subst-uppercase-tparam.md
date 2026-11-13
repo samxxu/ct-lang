@@ -9,7 +9,7 @@
 
 ## 现象
 
-`docs/design/phase26.md` §2.3（L151–158）与 §2.4（L169）把 `N_CAST` / `N_SIZEOF` / `N_OFFSETOF`
+`docs/history/design/phase26.md` §2.3（L151–158）与 §2.4（L169）把 `N_CAST` / `N_SIZEOF` / `N_OFFSETOF`
 列为“替换点”，`docs/language-spec.md` §4.48（中 L1905–1906、英 L4166–4168）明确承诺：
 
 > 实例体内的返回类型、形参、局部声明、`(T)` 转型、`sizeof(T)` / `_Alignof(T)`、`offsetof(T, …)` 都按实例的具体类型写出。
@@ -107,12 +107,12 @@ $ /tmp/p26-lower
 1. 解析泛型模板体期间，把当前类型参数登记为“类型名”（或让 `next_is_type_name()` 先于
    ALL_CAPS 启发式识别 `in_generic` 的 `tparam`），使 `sizeof(T)` / `(T)` 走类型分支；
    `offsetof(T, …)` 需要在模板体内允许 tparam，或直接给出明确“本相不支持”的诊断。
-2. 若决定不实现，必须删除 §4.48 与 phase26 §2.3/§2.4 的承诺，并在 `docs/design/phase26.md` §6.2 登记偏差。
+2. 若决定不实现，必须删除 §4.48 与 phase26 §2.3/§2.4 的承诺，并在 `docs/history/design/phase26.md` §6.2 登记偏差。
 3. 无论选哪条，都要补上“局部声明 / `(T)` / `sizeof(T)` / `offsetof`”四类夹具（TEST-17）。
 
 ## 修复（`v0.26.1`，`87b03ec` + `4995dff`）
 
-按 [phase26.md §5 B26-2](../../docs/design/phase26.md) 的 battle 判决采用**方案 A：真实现替换**（两方案成本差 < 2×，判据见该节 E1–E5 与 §8）。
+按 [phase26.md §5 B26-2](../../docs/history/design/phase26.md) 的 battle 判决采用**方案 A：真实现替换**（两方案成本差 < 2×，判据见该节 E1–E5 与 §8）。
 
 - `next_is_type_name()`：`in_generic && toktext == in_generic_tparam` 时先于 ALL_CAPS 启发式返回 1，`sizeof(T)` / `(T)` 走类型分支。
 - `parse_type()`：同一条件把裸 `T` 当类型参数收下（局部声明、形参、返回类型）；`offsetof(T, …)` 在模板体内允许 tparam 并保留 `T` 待发射期替换。
@@ -217,7 +217,7 @@ cannot be used inside _Generic`）。这是安全方向的过度拒绝（标签�
 
 门禁：`bash selfhost/check-ast.sh` → `== summary: 817 passed, 0 failed ==`（v0.26.1 为 815，+2 来自
 主夹具循环的 128 与专用 `p26_generic_type_operands` 块；产物层 `tparam_residue()` 是红/绿判定，
-不新增 `ok` 条数）。分支矩阵与防线规则见 `docs/design/phase26.md` §2.6 / §6.3.1。
+不新增 `ok` 条数）。分支矩阵与防线规则见 `docs/history/design/phase26.md` §2.6 / §6.3.1。
 
 `verified` 留给独立评审。
 

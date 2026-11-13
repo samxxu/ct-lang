@@ -3,7 +3,7 @@
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：**依赖落地后的提交**（Phase 31/33/34 收口并推送后确定），不预钉 `v0.30.0` 或 `bd91bfe`；S0 在**实现提交的父提交**上重建二进制并复跑 §2.2 探针，红证必须记录 `baseline: <sha>`。
 > **文档形态**：`phase36-draft.md`；design window 12/12，**每次转正归档当时最老的一张**。
-> **前置**：[phase31.md](phase31.md)（元素 `retain`/`release` 协议）、[phase33.md](phase33-draft.md)（泛型 struct）、[phase34.md](phase34-draft.md)（`Option`/`Result`、跨单元方法）。**三者均为硬前置**。
+> **前置**：[phase31.md](../history/design/phase31.md)（元素 `retain`/`release` 协议）、[phase33.md](phase33-draft.md)（泛型 struct）、[phase34.md](phase34-draft.md)（`Option`/`Result`、跨单元方法）。**三者均为硬前置**。
 > **定位**：泛型 `Drop` 是所有权轴的收口；带长度字符串是它的第一个真实消费者。
 
 ## 1 目标与范围
@@ -64,7 +64,7 @@
 | `delete` 释放路径 | `Emitter.h.ct:2909-2925`（`X_Drop_drop(p); free(p); p = 0`） |
 | `own` 规则 | `backend/mem/Memory.h.ct:76-115`（必须是 malloc/calloc + struct 指针 + struct `use Drop`）；`Memory.h.ct:89` 数组拒绝 |
 | 泛型 impl 解析 | `Parser.h.ct:2671-2760` |
-| Phase 31 元素协议 | [phase31.md](phase31.md) §3.2.1：`__ct_elem_retain`/`__ct_elem_release` 按元素类型方法集生成 |
+| Phase 31 元素协议 | [phase31.md](../history/design/phase31.md) §3.2.1：`__ct_elem_retain`/`__ct_elem_release` 按元素类型方法集生成 |
 | 容器 release | `lib/std/Vec.h.ct:164`（`refs` 归零后逐元素 `release`） |
 | 泛型实例与 `uses_drop` | `Symbols.h.ct:861-864`（实例行 `is_inst=1`）；`Expr.h.ct:1931-1962`（`add_struct_inst` 只复制字段与 `use`，不复制 `uses_drop`）；`Parser.h.ct:2179-2180`（模板行置 `uses_drop=1`）；`Emitter.h.ct:2333-2339`（循环不跳 `is_template`） |
 

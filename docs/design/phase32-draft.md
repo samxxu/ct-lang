@@ -5,7 +5,7 @@
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与基线清单随红证提交入库。
 > **文档形态**：`phase32-draft.md`。转正按「每次转正归档当时最老的一张」：32 转正时归档 `phase20`，33 转正时归档 `phase21`，依此类推；本卡不抢跑。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载判定内核、三处挂点、精确覆盖率集合与判据/负例台账，约 446 行。按自裁 **waiver** 保留单卡（判定内核、矩阵、判据、负例必须同卡才能互相对照），不再寻求需求提出方签字。
-> 关联：[phase31.md](phase31.md)（容器能力，O3 前置）、[phase29.md](phase29.md)（泛型 struct / 内置容器）、[phase30.md](phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../modern-oo-gap.md) §6.1/§7
+> 关联：[phase31.md](../history/design/phase31.md)（容器能力，O3 前置）、[phase29.md](../history/design/phase29.md)（泛型 struct / 内置容器）、[phase30.md](../history/design/phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../modern-oo-gap.md) §6.1/§7
 
 ## 1 目标与范围
 
@@ -442,7 +442,7 @@ assign    arithmetic    pointer       L32-1   check_errors/check_init_ptr.ct  in
 - **T-7**：S0 在 Phase 31 收口提交上重建二进制，提交 `test(check): P32 红证`（含探针脚本与基线输出，不含 209/210/211 正式夹具）；该提交必须是第一个实现提交的父提交。实现提交随后转绿。
 - 每片 ≤150 行；发现超限就再拆。仓库任何时刻可构建。
 - 不改判据、不改 golden、不改版本号凑绿；不 bump、不打 tag、不 push。
-- 只暂存本相文件；`editors/vscode/**`、`docs/design/phase31.md` 与其他会话在改的文件一律不碰。
+- 只暂存本相文件；`editors/vscode/**`、`docs/history/design/phase31.md` 与其他会话在改的文件一律不碰。
 - 收口跑 `bash selfhost/check-all.sh`，贴末行 VERDICT 与关键计数；未满足的判据必须回退状态。
 
 ## 14 实施期变更记录

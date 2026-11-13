@@ -9,10 +9,10 @@
 > **主题来源**：用户 2026-11-10「完善泛型，主要目标是让泛型能支持 Trait」；[phase26.md:39-51](phase26.md#L39-L51)
 > 把「泛型 trait / `impl` 方法 / 类型参数约束」一并列为非目标，本相收回其中**约束与派发**两项。
 > **路线位置**：Phase 28 约束泛型 → Phase 29 泛型 struct + 内置 `Vec`/`Map`（含 `foreach` 容器协议）。
-> `Callable` 内建按用户取舍**延后**，见 [phase21.md §4.12](../history/design/phase21.md#callable-内建的延后记录2026-11-10)。
+> `Callable` 内建按用户取舍**延后**，见 [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10)。
 > 关联：[phase26.md](phase26.md)（泛型函数）、[phase25.md](phase25.md)（静态映射与闭包实参）、
-> [phase21.md](../history/design/phase21.md)（非逃逸闭包）、[phase27.md](phase27.md)（`foreach`，已完成）、
-> [language-spec.md](../language-spec.md)、[AGENTS.md](../../AGENTS.md)。
+> [phase21.md](phase21.md)（非逃逸闭包）、[phase27.md](phase27.md)（`foreach`，已完成）、
+> [language-spec.md](../../language-spec.md)、[AGENTS.md](../../../AGENTS.md)。
 
 ---
 
@@ -74,7 +74,7 @@
 | 泛型 struct / union / enum（`Box<T>`） | 本相不做；**泛型 struct 已排期到 Phase 29 并对用户开放**（`struct Stack<T>` 可写），union/enum 仍不做（D26-2 在 29 被部分取代，见 [phase29.md §5](phase29.md#5-取代台账可审计不静默改写)） |
 | 多类型参数、类型推导、默认类型参数 | 沿用 D26-2/D26-3；29 只把 **struct** 放宽到 2 个参数，函数仍单参数 |
 | 内置 `Vec` / `Map` / 容器协议 | 由 Phase 29 交付；本相不定义容器、不改 `foreach` |
-| 可存储闭包 / 内置 `Callable` | 用户 2026-11-10 取舍**延后**；本相与 29 都不推翻 D21-5 / D21-7 / D21-13，见 [phase21.md §4.12](../history/design/phase21.md#callable-内建的延后记录2026-11-10) |
+| 可存储闭包 / 内置 `Callable` | 用户 2026-11-10 取舍**延后**；本相与 29 都不推翻 D21-5 / D21-7 / D21-13，见 [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10) |
 | 多约束（`T: A + B`）、约束继承（`trait Ord: Eq`） | 组合爆炸与解析歧义；先让单约束端到端可证 |
 | `Self` 类型 / trait 方法签名里出现类型参数 | vtable 类型在 trait 维度共享，`Self` 会迫使 vtable 按 (trait, struct) 分裂，等同参数化 trait |
 | 把 `T` 装箱进接口（`Trait i = x;`）、`T` 作接口字段/数组元素 | 装箱要 vptr 初始化与布局约定；本相只做静态派发 |
@@ -88,7 +88,7 @@
 
 | # | 路径 | 作用 |
 | --- | --- | --- |
-| D1 | `docs/design/phase28.md` | 本文件 |
+| D1 | `docs/history/design/phase28.md` | 本文件 |
 | D2 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct` | `Fn.bound`（约束 trait 名 + 行号）；约束查询辅助 |
 | D3 | `selfhost/ct-ast/frontend/parse/Parser.h.ct` | `<T: Trait>` 解析、单约束/合法性校验、模板标记 |
 | D4 | `selfhost/ct-ast/frontend/parse/Expr.h.ct` | 模板体内 `T` 接收者方法解析（新 `aux` 分支）、arity/实参检查、L28 诊断 |
@@ -105,10 +105,10 @@
 
 > **门禁现状（2026-11-10，Phase 29 立项后）**：`design window` 的 `floor = 29 - 12 + 1 = 18`，
 > `phase17.md` 已 `git mv` 到 `docs/history/design/`，保留阶段为 `phase18.md`–`phase29.md`（12 份）。
-> 中英 roadmap 行都含状态符号 `⬜` 并链接 `design/phase28.md`；`check-docs` 的原始输出贴在 §10。
+> 中英 roadmap 行都含状态符号 `⬜` 并链接 `history/design/phase28.md`；`check-docs` 的原始输出贴在 §10。
 
 > **归档记录（已执行）**：`design window` 原为 `phase17.md`–`phase28.md`（12/12）。Phase 29 立项卡
-> 使其成为第 13 份编号文档，按 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../test/docs/check-docs.py#L264-L296)），
+> 使其成为第 13 份编号文档，按 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../../test/docs/check-docs.py#L264-L296)），
 > `phase17.md` 越窗并被 `git mv docs/design/phase17.md docs/history/design/`；`phase18.md` 未越窗，
 > 保留在 `docs/design/`。索引与所有相对链接已同步，本相只记录该事实，不再重复执行。
 
@@ -268,11 +268,11 @@ Point m = max2<Point>(p, q);
 
 | 环节 | 现状 | 锚点 |
 | --- | --- | --- |
-| 类型参数解析 | 只吃 `T`，遇 `:` 即要求 `>` | [Parser.h.ct:1002-1022](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1002-L1022) |
-| `Fn` 元数据 | 只有 `ntparams/tparam/body`，无约束字段 | [Symbols.h.ct:91-99](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L91-L99) |
-| 方法解析 | 按接收者**静态类型拼写**查 `StructDef.use`；`T` 查不到 → 落 `aux==6` 静态映射兜底 | [Expr.h.ct:2415-2520](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2415-L2520)、[Symbols.h.ct:729-767](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L729-L767) |
-| 方法落码 | 只认已解析 trait（`__<trait>_vptr->m`）、接口（`.vt->m`）与静态映射三种 | [Emitter.h.ct:3336-3356](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3336-L3356) |
-| 约束满足性 | `impl`/`use` 是解析期符号，发射期只扫 `N_IMPL` 做 vtable 去重 | [Emitter.h.ct:247-258](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L247-L258)、[Symbols.h.ct:212-216](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L212-L216) |
+| 类型参数解析 | 只吃 `T`，遇 `:` 即要求 `>` | [Parser.h.ct:1002-1022](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1002-L1022) |
+| `Fn` 元数据 | 只有 `ntparams/tparam/body`，无约束字段 | [Symbols.h.ct:91-99](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L91-L99) |
+| 方法解析 | 按接收者**静态类型拼写**查 `StructDef.use`；`T` 查不到 → 落 `aux==6` 静态映射兜底 | [Expr.h.ct:2415-2520](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2415-L2520)、[Symbols.h.ct:729-767](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L729-L767) |
+| 方法落码 | 只认已解析 trait（`__<trait>_vptr->m`）、接口（`.vt->m`）与静态映射三种 | [Emitter.h.ct:3336-3356](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3336-L3356) |
+| 约束满足性 | `impl`/`use` 是解析期符号，发射期只扫 `N_IMPL` 做 vtable 去重 | [Emitter.h.ct:247-258](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L247-L258)、[Symbols.h.ct:212-216](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L212-L216) |
 
 ### 3.2 分层依赖链
 
@@ -451,7 +451,7 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 | --- | --- |
 | 主张 | **解析期按约束解析方法**（`aux==7`），把 trait 名与方法签名固定进节点 |
 | 反对 | 发射期按 `gtarg` 反查 struct 的 `use`，再推断方法 |
-| 证据 | E1：发射期反查需要把每个方法调用的接收者表达式类型重新推导一遍，而局部变量在发射期已出作用域（[Expr.h.ct:2421-2424](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2421-L2424) 的注释即此约束）；E2：解析期已有 `MethodSig` 与 `method_trait`，arity/实参检查也只在此处有一份实现；E3：若发射期推断，`tparam_residue` 与 `ct check` 的文案将分叉，违反 E28-7；E4：解析期方案新增面仅一个 `aux` 分支与一次签名查找。 |
+| 证据 | E1：发射期反查需要把每个方法调用的接收者表达式类型重新推导一遍，而局部变量在发射期已出作用域（[Expr.h.ct:2421-2424](../../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2421-L2424) 的注释即此约束）；E2：解析期已有 `MethodSig` 与 `method_trait`，arity/实参检查也只在此处有一份实现；E3：若发射期推断，`tparam_residue` 与 `ct check` 的文案将分叉，违反 E28-7；E4：解析期方案新增面仅一个 `aux` 分支与一次签名查找。 |
 | 裁判 | **upheld（解析期）**。生效范围：所有带约束的模板体；若出现「同一调用点在不同实例下解析到不同 trait」，退回并重开（单约束下不可能）。 |
 
 ### B28-2 · 派发形态：vtable 槽 / 直呼 static 方法 / 装箱
@@ -460,7 +460,7 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 | --- | --- |
 | 主张 | **vtable 槽调用** `S_T_vtable.m(&x, …)` |
 | 反对 | 同单元直呼 `S_T_m(&x, …)`（更短、可内联），跨单元再退化 |
-| 证据 | E1：impl 方法一律 `static`（[Emitter.h.ct:1754-1762](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1754-L1762)），跨单元不可见；若做「同单元直呼 + 跨单元 vtable」就有两条路径与两套测试；E2：vtable 已有前向声明（[Emitter.h.ct:1497-1531](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1497-L1531)），且实例函数在其后发射；E3：装箱需要构造 `Trait_iface` 并保证 vptr 已初始化，额外引入布局要求。 |
+| 证据 | E1：impl 方法一律 `static`（[Emitter.h.ct:1754-1762](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1754-L1762)），跨单元不可见；若做「同单元直呼 + 跨单元 vtable」就有两条路径与两套测试；E2：vtable 已有前向声明（[Emitter.h.ct:1497-1531](../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1497-L1531)），且实例函数在其后发射；E3：装箱需要构造 `Trait_iface` 并保证 vptr 已初始化，额外引入布局要求。 |
 | 裁判 | **upheld（vtable 槽）**。代价是一次间接调用，换来单一落码路径与零布局要求；若后续有性能判据（内联收益可测），再开 battle 增加同单元直呼快路径。 |
 
 ---
@@ -497,12 +497,12 @@ trait 声明先于 struct，方法签名只能写具体类型；`Self` 若进签
 
 ## 10. 本轮不做（自查）
 
-- 未修改任何编译器源码、测试、golden、版本串；未改 `docs/design/phase27.md`；未 bump、未 push、未打 tag。
+- 未修改任何编译器源码、测试、golden、版本串；未改 `docs/history/design/phase27.md`；未 bump、未 push、未打 tag。
 - 本轮新增本文件，并只按约定在 `docs/roadmap.md`（中英各一行）与 `docs/README.md`（中英各一行）
   登记索引。§3.1 的探针放在 `/tmp/p28probe`，构建产物放在 `/tmp/p28build`，均不入仓。
 - **2026-11-10（Phase 29 立项同批）**：补充 §1.5.1 样例覆盖矩阵（A1–A8）与 E28-9；把
   `docs/design/phase17.md` 归档到 `docs/history/design/`（design window `floor = 18`），
-  并新增 `docs/design/phase29.md` 的索引。
+  并新增 `docs/history/design/phase29.md` 的索引。
 - 门禁原始输出（实测）：
 
 ```text

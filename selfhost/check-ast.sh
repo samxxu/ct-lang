@@ -423,7 +423,7 @@ ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 # The scan also runs over every product of a build-mode fixture
 # and every `.h` product is checked for instance bodies. `test/modules/p34_pub_*`
 # products are scanned in the module section (P34 S3a); the remaining blind spots
-# (`test/ast/errors/`, the corpus) are argued in docs/design/phase26.md §2.7.
+# (`test/ast/errors/`, the corpus) are argued in docs/history/design/phase26.md §2.7.
 fixture_sources() {
     find "$1" -name '*.ct' -type f | sort
 }
@@ -6421,7 +6421,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # Phase 29: generic structs, inherent impls and the built-in containers.
-# The diagnostics are the ones docs/design/phase29.md 2.6 freezes; the shape
+# The diagnostics are the ones docs/history/design/phase29.md 2.6 freezes; the shape
 # assertions pin the C names (D29-7) and the container loop expansion (D29-13).
 # ---------------------------------------------------------------------------
 p29_diag() {

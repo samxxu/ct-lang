@@ -24,9 +24,9 @@
 > **主题来源**：用户 2026-11-10「`Vec` 和 `Map` 应该作为内置的数据结构，从 ct-pkg 的 `std` 移到
 > 内置类型」「`foreach_statement.ct` 没有把 map 纳入进来」；同日的取舍「`Callable` 内建先不做」。
 > 关联：[phase28.md](phase28.md)（约束泛型函数）、[phase26.md](phase26.md)（泛型函数）、
-> [phase27.md](phase27.md)（`foreach` 语句形态与 D27-4）、[phase21.md](../history/design/phase21.md)（闭包与
-> `Callable` 延后记录）、[map-options.md](map-options.md)（既有容器选型）、
-> [language-spec.md](../language-spec.md)、[AGENTS.md](../../AGENTS.md)。
+> [phase27.md](phase27.md)（`foreach` 语句形态与 D27-4）、[phase21.md](phase21.md)（闭包与
+> `Callable` 延后记录）、[map-options.md](../../design/map-options.md)（既有容器选型）、
+> [language-spec.md](../../language-spec.md)、[AGENTS.md](../../../AGENTS.md)。
 
 ---
 
@@ -103,7 +103,7 @@
 | 泛型 trait、参数化 trait（`trait Seq<T>`） | 要改已发布 vtable 命名与 vptr 布局，Phase 28 §4.2 已论证单相收不了 |
 | 泛型体内的泛型调用（函数调函数） | 沿用 D26-9；本相只允许**类型实参**嵌套，不允许实例化递归 |
 | 用户自定义可迭代类型 | `foreach` 协议只认内置 `Vec` / `Map`；结构性协议会误伤同名 `len/get`，放行需另立判据 |
-| 闭包逃逸、堆闭包、内置 `Callable` | `Callable` 已按用户 2026-11-10 取舍延后（见 [phase21.md](../history/design/phase21.md#callable-内建的延后记录2026-11-10)）；本相不推翻 D21-5 / D21-13 |
+| 闭包逃逸、堆闭包、内置 `Callable` | `Callable` 已按用户 2026-11-10 取舍延后（见 [phase21.md](phase21.md#callable-内建的延后记录2026-11-10)）；本相不推翻 D21-5 / D21-13 |
 | 容器自动析构（`Drop` 级联释放元素） | 需要泛型 `Drop` 合成与元素级 drop 钩子；先用手动 `release()` 把语义钉住 |
 | 容器持有 `own` / `borrow` 值 | 所有权移交与容器共享冲突；本相硬错，等自动析构落地再放开 |
 | 容器元素为接口值 / 含 vptr 的 struct | 值拷贝会丢 vptr 或制造悬垂，沿用 Phase 27 L27-4 的同类判断 |
@@ -122,7 +122,7 @@
 
 | # | 路径 | 作用 |
 | --- | --- | --- |
-| D1 | `docs/design/phase29.md` | 本文件 |
+| D1 | `docs/history/design/phase29.md` | 本文件 |
 | D2 | `selfhost/ct-ast/frontend/parse/Parser.h.ct` | `struct Name<T, U>` 解析、类型实参解析（含 `>>` 拆分）、保留名与深度检查 |
 | D3 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct` | `StructDef` 的模板标记与类型参数；`StructInst` 表；编码/去重 |
 | D4 | `selfhost/ct-ast/frontend/type/TypeCheck.h.ct` | 实例化后的字段类型替换与 `sizeof` / 字段访问检查 |
@@ -217,7 +217,7 @@
 
 ### 1.8 design window 与归档（本轮必须执行）
 
-`check-docs.py` 的规则是 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../test/docs/check-docs.py#L264-L296)）。
+`check-docs.py` 的规则是 `floor = 最新编号 - 12 + 1`（[check-docs.py:264-296](../../../test/docs/check-docs.py#L264-L296)）。
 本轮只新增**一份**编号文档 `phase29.md`：
 
 - `max = 29`，`floor = 29 - 12 + 1 = 18`；
@@ -449,7 +449,7 @@ Phase 29 拖进 Phase 28 §4.2 的 750–1350 行路线。白名单在 `parse_in
 | 索引 | `ct-pkg/index` 的 `std` 条目**保留为在用**，只更新到「已移除 `Vec`/`Map`」的版本；**不标 superseded**（std 其余模块仍由它供） |
 | 版本对齐 | 内置 `Vec` / `Map` 的 API 版本 = 编译器版本（`v0.29.0`）；`ct-pkg/std` 其余模块继续走自己的包版本。`lib/std/README.md` 记录「编译器版本 → 内置容器 API」 |
 | 重复导入 | 内置层优先；`vendor/std` 存在时 L29-W1 告警并忽略其同名模块；不把两者同时编入 |
-| 跨仓动作 | **本轮不做**。需要 ct-pkg 仓授权后才能删除 `Vec`/`Map` 并发布新版本；本仓只记录对齐方案与验收口径，待删清单写在 [lib/std/README.md](../../lib/std/README.md) |
+| 跨仓动作 | **本轮不做**。需要 ct-pkg 仓授权后才能删除 `Vec`/`Map` 并发布新版本；本仓只记录对齐方案与验收口径，待删清单写在 [lib/std/README.md](../../../lib/std/README.md) |
 | 迁入原则 | **只搬 `Vec` / `Map`（最小直接依赖随迁），不搬 `str` / `io` / `math`**；原处删除与版本发布在同一跨仓动作里完成，禁止两份实现并存 |
 
 ### 2.8 与闭包 / `Callable` 的边界
@@ -459,7 +459,7 @@ Phase 29 拖进 Phase 28 §4.2 的 750–1350 行路线。白名单在 `parse_in
 - `Vec<Callable<...>>` 这类形态在本相**无法表达**（`Callable` 不存在）；容器元素也禁止内置容器，
   所以不会出现「容器持有闭包环境」的悬垂面。
 - 若未来重启 `Callable` 内建，前置条件是先接受逃逸/堆闭包；届时再评估容器元素与自动析构的联动，
-  见 [phase21.md 的延后记录](../history/design/phase21.md#callable-内建的延后记录2026-11-10)。
+  见 [phase21.md 的延后记录](phase21.md#callable-内建的延后记录2026-11-10)。
 
 ### 2.9 Phase 29 收口后的能力边界（写死，不留「待定」）
 
@@ -756,7 +756,7 @@ Phase 28 收口提交 `1c87fab733e0a02955bfcdeff668d10aec2017f3`。复现方式�
 | D26-9（范围收窄） | 泛型体内禁止递归/嵌套泛型调用 | 「避免实例化循环与缓存键递归」 | 对**函数调用**仍成立；对**类型实参**不成立——`Vec<Vec<int> >` 是有限的类型嵌套，不是调用递归 | D29-7：类型实参可嵌套，深度 ≤ 4；泛型函数体仍不得调用泛型函数 | 新增深度检查与 `>>` 拆分 |
 | D27-1 / D27-2（部分） | 数组 `foreach` 只绑定 `item` | 「单个隐式绑定足够；索引可自行计数」 | **不再成立**：用户 2026-11-10 要求数组 / `Vec` 同时提供 `i` 与 `item` | D29-14：数组与 `Vec` 都绑定 `item` + 只读 `i` | 数组 `foreach` 体里原先声明局部 `i` 的写法现在命中 L29-17；需在 spec/教程写迁移说明，既有夹具若声明 `i` 要改名 |
 | D27-4 | 容器协议 `len()+get(int)` / `len()+entry(int)` **本相不做** | 「本仓无 std 容器；无夹具即无红证；容器元素落码无既有夹具」 | **不再成立**：本相把 `Vec`/`Map` 变为内置并有真实样例，红证可写 | D29-8 / §2.5：协议解冻，只对内置 `Vec`/`Map` 生效 | `foreach` 解析/落码新增分支；Phase 27 的数组路径不变 |
-| D17-7 / [map-options.md](map-options.md) §2 | `std::map` 是有界、不可增长的唯一推荐容器，位于 ct-pkg | 「单态类型为主、有界开放寻址、不用 `delete`」 | 对**旧编译器**仍成立；`ct-pkg/std` 只移除 `Vec`/`Map`，其余模块不动。对新编译器，内置 `Map` 提供增长与遍历，`std::map` 不再是唯一选择 | D29-9 / D29-10：内置 `Map<K,V>`；旧 `std::map` 随 `ct-pkg/std` 的其余模块保留 | 文档口径变更；不得声称旧决策「错误」 |
+| D17-7 / [map-options.md](../../design/map-options.md) §2 | `std::map` 是有界、不可增长的唯一推荐容器，位于 ct-pkg | 「单态类型为主、有界开放寻址、不用 `delete`」 | 对**旧编译器**仍成立；`ct-pkg/std` 只移除 `Vec`/`Map`，其余模块不动。对新编译器，内置 `Map` 提供增长与遍历，`std::map` 不再是唯一选择 | D29-9 / D29-10：内置 `Map<K,V>`；旧 `std::map` 随 `ct-pkg/std` 的其余模块保留 | 文档口径变更；不得声称旧决策「错误」 |
 
 **明确不取代**：
 
@@ -825,8 +825,8 @@ Phase 28 收口提交 `1c87fab733e0a02955bfcdeff668d10aec2017f3`。复现方式�
 ## 9. 本轮不做（自查）
 
 - 未创建 `phase30.md`；`Callable` 内建按用户 2026-11-10 取舍**延后**，记录在
-  [phase21.md §4.12](../history/design/phase21.md#callable-内建的延后记录2026-11-10)，不保留空壳立项卡。
-- 未修改任何编译器源码、`lib/**`、测试、golden、版本串；未改 `docs/design/phase27.md` 的已收口内容。
+  [phase21.md §4.12](phase21.md#callable-内建的延后记录2026-11-10)，不保留空壳立项卡。
+- 未修改任何编译器源码、`lib/**`、测试、golden、版本串；未改 `docs/history/design/phase27.md` 的已收口内容。
 - 未 bump、未打 tag、未修改 `ct-pkg`。
 - 归档按实际 `check-docs.py` 规则执行：只 `git mv` `phase17.md`（`floor = 18`），`phase18.md` 保留。
 - 门禁输出以实际运行 `python3 test/docs/check-docs.py` 为准，贴在提交说明与 §10。

@@ -6,7 +6,7 @@
 | 适用版本 | ct 主线 `ct-ast`（版本以 `ct -v` 为准）；首轮 `v0.26.0`，复核 `v0.26.1`，收尾复核 `v0.26.2`，最终复核 `v0.26.3` |
 | 版本 | **`v0.26.0`（首轮）+ `v0.26.1`（复核）+ `v0.26.2`（收尾）+ `v0.26.3`（最终复核）**；四轮五处 `CTC_VERSION` 均同步 |
 | 工作树 | 首轮干净；复核轮、收尾轮与最终复核轮工作树仅评审产物（issue 状态回写 + 本报告），未改代码/测试 |
-| 审查对象 | `docs/design/phase26.md` 立项节 §1（六字段）与 E1–E8；实现提交 `f3be73e`、`c6b1220`、`7287044`、`ac1c7cd`；复核提交 `87b03ec`、`f5f1092`、`4995dff`、`5762f1e`、`d29de8f`；收尾提交 `5b43fac`；最终复核提交 `a2600f9`、`14bbcb4`、`02999c4` |
+| 审查对象 | `docs/history/design/phase26.md` 立项节 §1（六字段）与 E1–E8；实现提交 `f3be73e`、`c6b1220`、`7287044`、`ac1c7cd`；复核提交 `87b03ec`、`f5f1092`、`4995dff`、`5762f1e`、`d29de8f`；收尾提交 `5b43fac`；最终复核提交 `a2600f9`、`14bbcb4`、`02999c4` |
 | 基线 | 首轮：`check-ast.sh` **803 passed**；复核：**815 passed**；收尾：**817 passed**；最终复核：**830 passed**；四轮均 **11 hard gates green**、`check-docs` OK |
 | 结论 | 首轮**有条件放行**；`v0.26.1` 复核**未通过**（见 §11）；`v0.26.2` 收尾：SH-62 / TEST-17 `verified`，但新立 **[SH-64](../../../issues/selfhost/sh64-generic-tparam-value-position.md)（P1）**（见 §12）；`v0.26.3` 最终复核：**SH-64 `verified`，Phase 26 可收口**（见 §13） |
 
@@ -41,14 +41,14 @@
 ## 1. 方法与基线
 
 1. **固定锚点**：`git log e9576b0..HEAD` 得到 4 个提交（`f3be73e` → `c6b1220` → `7287044` → `ac1c7cd`），
-   先读 `docs/design/phase26.md` 与 `git show --stat`，再按“功能 / 夹具 / 文档 / 发布”拆分。
+   先读 `docs/history/design/phase26.md` 与 `git show --stat`，再按“功能 / 夹具 / 文档 / 发布”拆分。
 2. **先跑门禁再读代码**：`check-ast.sh`（803）、`check-all.sh`（11 关）、`check-docs.py`（OK）三项全绿，
    避免把既有回归误记为新发现。
 3. **候选发现一律实测**：把四层自举链（`ctc.c` → L1 → L2 → `ct-ast`）建到 `/tmp/p26rev/b`，
    另在 `/tmp/p26rev/repo` 的副本上做“删守卫”变异，重新构建 `ct-ast`，不靠读注释下结论。
 4. **反假完成**：对五条负例的断言做变异测试（§3），对 S4 的每个替换点写 `/tmp` 探针（§4）。
 
-自举链构建（与 `docs/design/phase26.md` §6.3 同法）：
+自举链构建（与 `docs/history/design/phase26.md` §6.3 同法）：
 
 ```console
 $ cc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /tmp/p26rev/b/ctc
@@ -616,7 +616,7 @@ v0.26.3 126 product   -> []        # 7 处 `T` 全为 `struct T` 标签，豁免
 
 盲区与 §12.3 一致，并已由 [TEST-18](../../../issues/testing/test18-residue-scan-coverage.md)（`open`，Medium）
 逐项登记：`.h` 产物、`test/ast/errors/`、module `build` 产物、`test/cases` 与 `examples` 语料、
-`build` 模式任意夹具。`check-ast.sh` 的注释与 `docs/design/phase26.md` §2.7 均限定为“编译模式夹具的实例体”，
+`build` 模式任意夹具。`check-ast.sh` 的注释与 `docs/history/design/phase26.md` §2.7 均限定为“编译模式夹具的实例体”，
 没有过度声称。
 
 ### 13.6 门禁数字与 +13 构成
@@ -649,7 +649,7 @@ $ bash selfhost/check-ast.sh | tail -1
 | `p26_chk`（`ct check` 同文案） | +4 | `1416`–`1419` |
 
 无其他计分点变化；`check-docs` 的 850→866 链接、172→173 文件同样只来自本轮新增的
-`docs/design/phase26.md` §2.7、SH-64 / TEST-18 条目与 §12/§13 交叉引用。评审回写 §13 与 SH-64
+`docs/history/design/phase26.md` §2.7、SH-64 / TEST-18 条目与 §12/§13 交叉引用。评审回写 §13 与 SH-64
 复核段后再跑 `python3 test/docs/check-docs.py` → `869 relative links in 173 files`（新增 3 条链接），
 仍为 OK。
 
