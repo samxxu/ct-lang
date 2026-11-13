@@ -38,13 +38,13 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | single-file compile: a plain `.ct` writes `.c`, a `.h.ct` also writes its sibling `.h`; **single-file units only**, so `import` needs `ct build` (`-I` only applies to build too and is reported as ignored here) |
 | `ct <in.ct> -o <out.c>` | write to the given path |
-| `ct build <in.ct>… [-o <exe>]` | multi-file build: the generated `.c` goes into `.ctbuild/` (or `--outdir`), then the local C compiler produces an executable (`-o` names it, default `a.out`); `--emit-c` only emits the `.c` (plus `.h` for `.h.ct`), and then `-o` is the output directory |
+| `ct build <in.ct>… [-o <exe>]` | multi-file build: the generated `.c` goes into `.ctbuild/` (or `--outdir`), then the local C compiler produces an executable (`-o` names it, default `a.out`); `--emit-c` only emits the `.c` (plus `.h` for `.h.ct`), and then `-o` is the output directory; `--runtime-checks` guards a null vtable before iface dispatch (off by default; off keeps the output unchanged) |
 | `ct check <in.ct>` | run the bounded semantic checks only, writing no `.c` (single-file units only; `import` is not accepted): call-site arity / argument types / trait-method ambiguity / impl signature drift (plus the existing leak / borrow findings) are all reported as `error:`, exit `1` on any finding and `0` when clean (`--diagnostics=json` tags each object with `"severity":"error"` and `"col"`) |
 | `ct … --emit-map <file\|->` | also write the reverse-mapping JSON (trait / struct / function / impl → generated C symbols) |
 | `ct get` / `ct update` / `ct install` / `ct verify` | package management: fetch into `vendor/`, write `ct.lock`; re-resolve or verify offline and print one build command (a bare name may resolve through `--index` / `CT_INDEX`; authors see [docs/package-guide.md](docs/package-guide.md)); the official packages live under [ct-pkg](https://github.com/ct-pkg): `hal` (contract), `hal-posix` (platform), `std` (standard library, including the C mappings) |
 | `ct -v` / `ct -h` | version / usage |
 
-Exit code `0` on success, `1` on syntax or I/O errors (and on any `ct check` finding). Source diagnostics use `file:line:col: error: message`;
+Exit code `0` on success, `1` on syntax or I/O errors (on any `ct check` finding, or on an impl signature drift in `ct build`). Source diagnostics use `file:line:col: error: message`;
 driver-level errors keep the `ctc:` prefix even when the binary is named `ct`, so logs and existing assertions
 stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `--ns-root`) is in the
 [tutorial §11](docs/tutorial.md#11-cli-cheat-sheet).

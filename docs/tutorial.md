@@ -1387,6 +1387,7 @@ delete p;                    /* Drop 释放 buffer，再 free 结构体并置空
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（仅单文件单元，`import` 不被接受）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（及既有 leak / 借用类发现）以 `error:` 报告，有任何发现退出 `1`，干净退出 `0` |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`，再调用 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`） |
 | `ct build --emit-c … -o <dir>` | 只发 C：每单元一份 `.c`/`.h`，`-o` 是输出目录，并打印建议的 `cc` 行；带增量缓存 |
+| `ct build … --runtime-checks` | 在接口派发前检查空 vtable，空则带 `文件:行` abort；默认关闭，关闭时产物不变 |
 | `ct build … --outdir <dir>` | 默认形态下改中间产物目录（默认 `.ctbuild/`） |
 | `ct build … --cc <path>` / `--cflags <s>` / `--ldflags <s>` | 透传 C 编译器与编译/链接参数（可重复，也可空格分隔）；标志值按 shell 片段原样拼进命令，**不要传入不可信内容** |
 | `ct build … -I <dir>` | 追加导入搜索根（可重复） |
@@ -1402,8 +1403,9 @@ delete p;                    /* Drop 释放 buffer，再 free 结构体并置空
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
 退出码：成功 `0`，语法或 I/O 错误 `1`。**源码诊断**（解析期与语义期）格式为 `文件:行:列: error: 描述`；
-语义类记录（调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移）在 `ct build` / `ct compile` 下按
-`warning:` 打印、**不改变退出码**（编译期放行），只有 `ct check` 把同一批记录升为 `error:` 并退出 `1`；
+语义类记录（调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移）中，`ct build` 只把
+**impl 签名漂移**当硬错（退出 `1`、不写 `.c`），其余仍是 `warning:`；`ct compile` 全部保持 warning；
+`ct check` 把同一批记录升为 `error:` 并退出 `1`；
 **驱动层**错误（输入打不开、参数不对、超过上限）以 `ctc: ` 开头，不假装指向某一行。
 
 ## 12. 会踩的坑

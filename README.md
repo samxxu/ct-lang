@@ -36,13 +36,13 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | --- | --- |
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h`；只接受**单文件单元**，`import` 需改用 `ct build`（`-I` 同理只对 build 生效，compile 下会提示被忽略） |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
-| `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`（`--outdir` 可改），再调用本地 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`）；`--emit-c` 只发射 `.c`（`.h.ct` 另写 `.h`），此时 `-o` 是输出目录 |
+| `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`（`--outdir` 可改），再调用本地 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`）；`--emit-c` 只发射 `.c`（`.h.ct` 另写 `.h`），此时 `-o` 是输出目录；`--runtime-checks` 在接口派发前检查空 vtable（默认关闭，关闭时产物不变） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（仅单文件单元，`import` 不被接受）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（以及既有的 leak / 借用类发现）一律以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`，并带 `"col"`） |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
 | `ct get` / `ct update` / `ct install` / `ct verify` | 包管理：拉包到 `vendor/`、写 `ct.lock`；离线重解 / 校验并打印一条构建命令（裸名可经 `--index` / `CT_INDEX` 查显式索引；包作者见 [docs/package-guide.md](docs/package-guide.md)）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`std`（标准库，含 C 映射） |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
-退出码：成功 `0`，语法或 I/O 错误 `1`（`ct check` 有任何语义发现也是 `1`）。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
+退出码：成功 `0`，语法或 I/O 错误 `1`（`ct check` 有任何语义发现，或 `ct build` 遇到 impl 签名漂移，也是 `1`）。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
 （二进制改名为 `ct` 也不变，以保持日志与断言稳定）。完整开关（`-I` / `--std` / `--line` / `--diagnostics` /
 `--ns-root`）见[教程 §11](docs/tutorial.md#11-命令行速查)。
 

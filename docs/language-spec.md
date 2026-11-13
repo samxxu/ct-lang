@@ -1969,12 +1969,15 @@ Phase 26 落地（§4.48）；泛型结构体 / trait / 约束 / 推导 / 多类
 - **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；L0 **遇错即 `exit(1)`**，
   CT 线则先收集多个错误（§10）。
 - **L0 不产生任何警告**；CT 线会输出泄漏警告与签名不一致告警，`--diagnostics` 可切 JSON（§10）。
-- **语义类记录的严重级**：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移在
-  `ct build` / `ct compile` 下按 `warning:` 打印且**不改变退出码**（编译期放行）；`ct check` 把同一批
-  记录升为 `error:`，有任何一条即退出 `1`。**例外**：静态映射调用点的实参类型（SH-60）是硬错——
+- **语义类记录的严重级**：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移中，
+  `ct build` 只把 **impl 签名漂移**当硬错（退出 `1`、不写 `.c`），其余记录仍是 `warning:`、不改变退出码；
+  `ct compile` 全部保持 `warning:`；`ct check` 把同一批记录升为 `error:`，有任何一条即退出 `1`。
+  **例外**：静态映射调用点的实参类型（SH-60）是硬错——
   映射单元通常被 `import`，而 `ct check` 只吃单单元，看不到这些调用点；recipe 又会把实参直接拼进
   生成的 C 调用，放行等于把类型错误留给 C 或运行期。
-- 退出码：`0` 成功；`1` 语法 / I/O 错误，或 `ct check` 下的语义发现。
+- **运行期契约（Phase 37）**：`ct build --runtime-checks` 在接口派发前检查 vtable；空则带
+  `<file>:<line>: runtime check: null vtable in call to '<method>'` abort。默认关闭，关闭时产物不变。
+- 退出码：`0` 成功；`1` 语法 / I/O 错误、`ct check` 下的语义发现，或 `ct build` 的 impl 签名漂移。
 
 ### 10. L2 独有：模块系统与诊断（本文不描述其语法）
 

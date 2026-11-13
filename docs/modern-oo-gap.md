@@ -322,6 +322,9 @@ prog.ct:6:9: error: incompatible pointer to integer conversion initializing 'int
 | O1 + O3 + C2（一条链） | A | 「对象集合」与「分组 / 邻接表」是 OO 的基本用法，现在分别被 L29-13、L29-11 硬拒。O1 放开守卫、按值浅拷贝即可先用；O3 是 O1/C2 的**验收条件**，不是独立条目——元素不参与 retain/release，放开后默认就是悬垂或泄漏（证据见 §2.4）；C2 依赖 O3，且还要过 `ct_impl_matches` 无嵌套 pattern 或发射器私有分支这一关 | 900–1,600（O1 单独 320–680；O3 与 C2 共享元素助手，不重复计） |
 | 安全网（B1 的边界） | B（高优先值得补） | `int x = "s"` 能过 `check`，要等 `cc` 才报；不挡程序，但措辞是 C 的，且单文件模式下位置指向生成的 `.c`（§2.4）。若目标是「看起来像现代语言」，应排在最前；按 A 档标准它不够 | 500–1,000 |
 
+> **2026-11-13（P37）**：impl 签名漂移已在 `ct build` / `ct check` 升为硬错；`ct build --runtime-checks`
+> 提供可选的空 vtable 断言。安全网条目因此收窄为「未启用运行期开关时的派发风险」。
+
 ### 6.2 值得补（显著提升表达力，不阻塞）
 
 T3 泛型 struct 约束（C 档：不挡常见程序，只挡「方法语法 + 约束」的组合；绕法是写成有界泛型自由函数，实测 `any_area<struct Circle>(&b.v)` 返回 9）、T1 泛型 trait、T2 supertrait、T4 非泛型固有方法、C1 下标糖、O4 泛型 Drop、O5 RTTI、F1 `pub` 泛型函数、F2 函数返回函数指针、F3 闭包作方法实参、T5 类型别名、D3 字符串类型、D1 `Option`/`Result` 库。
