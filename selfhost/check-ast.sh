@@ -7321,6 +7321,21 @@ else
     fi
 fi
 
+# Phase 36 S1b (L36-1): a `drop` body may not `release()` the same `self`
+# field twice. The diagnostic names the offending field and points at the
+# second call.
+p36_diag() {
+    if "$work/ct-ast" "test/ast/errors/$1.ct" -o "$work/p36d.c" \
+            >"$work/p36d.out" 2>"$work/p36d.err"; then
+        bad "p36_diag_$1" "expected a non-zero exit"
+    elif grep -qF "test/ast/errors/$1.ct:$2: error: $3" "$work/p36d.err"; then
+        ok "p36_diag_$1"
+    else
+        bad "p36_diag_$1" "$(head -2 "$work/p36d.err")"
+    fi
+}
+p36_diag double_drop 14:0 "field 'p' is released more than once in drop()"
+
 # Phase 36 S1a (E36-1): an explicit `impl<T> Drop for Box<T>` is instantiated
 # per concrete type: one `<S>_Drop_drop` definition per instance, no template
 # `Box_Drop_drop` and no vtable. The explicit body owns the drop; no field glue.

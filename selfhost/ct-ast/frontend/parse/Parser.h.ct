@@ -67,6 +67,8 @@ import tool::diag::Diag;
 #define N_TYPEDEF 21
 #define N_UNION 48
 #define N_VAR 10
+#define N_MEMBER 24
+#define N_ARROW 25
 #define T_EOF 0
 #define T_ID 1
 #define T_NUM 2
@@ -97,6 +99,10 @@ pub trait ParseOps {
     int  parse_impl_inherent(const char *rname, int si, int impl_line);
     int  parse_pat_arg(char *out, int cap, int base, int *l4line, int *l4col, int *deep, int *bad);
     int  parse_use_list(int sindex);
+    /* L36-1 (S1b): walk a `drop` body and reject a second `release()` on the
+       same `self` field. Syntax-level, no flow analysis. */
+    int  drop_release_scan(int body);
+    int  drop_release_walk(int n, char *seen, int *nseen);
 }
 
 /* The translation-unit passes: top-level declarations, namespaces, imports and
@@ -3076,6 +3082,18 @@ impl ParseOps for Parser {
                 }
             }
         }
+        /* L36-1 (S1b): a `drop` body may not `release()` the same `self` field
+           twice. Walk the `drop` method's body and report the first duplicate. */
+        if (strcmp(rtrait, "Drop") == 0) {
+            int mi;
+            for (mi = self->arena->nodes[node].a; mi >= 0;
+                 mi = self->arena->nodes[mi].next) {
+                if (strcmp(self->arena->nodes[mi].text2, "drop") != 0) continue;
+                if (self->drop_release_scan(self->arena->nodes[mi].b) != 0)
+                    return -1;
+                break;
+            }
+        }
         return node;
     }
 
@@ -3521,7 +3539,74 @@ impl ParseOps for Parser {
         self->ex->in_generic_tparam2[0] = 0;
         self->ex->in_generic_bound[0] = 0;
         if (self->sup->expect("}") != 0) return -1;
+        /* L36-1 (S1b): a `drop` body may not `release()` the same `self` field
+           twice. Walk the `drop` method's body and report the first duplicate. */
+        if (strcmp(use, "Drop") == 0) {
+            int mi;
+            for (mi = self->arena->nodes[node].a; mi >= 0;
+                 mi = self->arena->nodes[mi].next) {
+                if (strcmp(self->arena->nodes[mi].text2, "drop") != 0) continue;
+                if (self->drop_release_scan(self->arena->nodes[mi].b) != 0)
+                    return -1;
+                break;
+            }
+        }
         return node;
+    }
+
+    /* L36-1 (S1b): recursive walk of a `drop` body. Every `self->field.release()`
+       (or `self.field.release()`) records the field name; a second call on the
+       same field is an error. The released-field set is shared across the whole
+       body via the output parameters so sibling statements see each other's
+       releases. */
+    int drop_release_walk(int n, char *seen, int *nseen)
+    {
+        int k;
+        for (; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].a >= 0
+                && self->drop_release_walk(self->arena->nodes[n].a, seen, nseen) != 0)
+                return -1;
+            if (self->arena->nodes[n].kind != N_MCALL) continue;
+            if (strcmp(self->arena->nodes[n].text2, "release") != 0) continue;
+            {
+                int recv = self->arena->nodes[n].a;
+                int rkind;
+                const char *field;
+                if (recv < 0) continue;
+                rkind = self->arena->nodes[recv].kind;
+                if (rkind != N_ARROW && rkind != N_MEMBER) continue;
+                if (self->arena->nodes[recv].a < 0) continue;
+                if (self->arena->nodes[self->arena->nodes[recv].a].kind != N_VAR)
+                    continue;
+                if (strcmp(self->arena->nodes[self->arena->nodes[recv].a].text2,
+                           "self") != 0)
+                    continue;
+                field = self->arena->nodes[recv].text2;
+                for (k = 0; k < *nseen; k++)
+                    if (strcmp(seen + k * MAX_TEXT, field) == 0) {
+                        char msg[MAX_TEXT];
+                        snprintf(msg, sizeof msg,
+                            "field '%s' is released more than once in drop()",
+                            field);
+                        return tool::diag::ct_sem_error(
+                            self->arena->nodes[n].line,
+                            (int)self->arena->nodes[n].num, msg,
+                            self->mem->path);
+                    }
+                if (*nseen < 32) {
+                    snprintf(seen + (*nseen) * MAX_TEXT, MAX_TEXT, "%s", field);
+                    (*nseen)++;
+                }
+            }
+        }
+        return 0;
+    }
+
+    int drop_release_scan(int body)
+    {
+        char seen[32 * MAX_TEXT];
+        int nseen = 0;
+        return self->drop_release_walk(body, seen, &nseen);
     }
 
 }

@@ -1,0 +1,18 @@
+// L36-1 (S1b): calling `release()` twice on the same `self` field inside a
+// `drop` body is a hard error. A drop owns its fields' resources; releasing a
+// field twice would be a use-after-free.
+struct Probe { int id; }
+impl Probe {
+    Probe retain() { return *self; }
+    void release() {}
+}
+
+struct P { Probe p; } use Drop;
+impl Drop for P {
+    void drop() {
+        self->p.release();
+        self->p.release();
+    }
+}
+
+int main(void) { return 0; }
