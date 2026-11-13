@@ -1,0 +1,9 @@
+Str_release
+Str_retain
+str_c_str
+str_compare
+str_concat
+str_from
+str_from_len
+str_len
+str_slice

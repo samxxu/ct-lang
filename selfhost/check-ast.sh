@@ -3611,6 +3611,13 @@ else
     bad "p39 r4" "$(cat "$work/p39r4.out" "$work/p39r4.err")"
 fi
 
+# Phase 39 R5: archive + nm surface.
+if bash test/modules/p39_lib/r5_probe.sh "$work/ct-ast" >"$work/p39r5.out" 2>"$work/p39r5.err"; then
+    ok "p39 r5"
+else
+    bad "p39 r5" "$(cat "$work/p39r5.out" "$work/p39r5.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"
