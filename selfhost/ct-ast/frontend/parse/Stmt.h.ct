@@ -109,6 +109,7 @@ pub trait StmtOps {
     int  defer_ahead(void);
     int  err_ahead(void);
     int  errdefer_ahead(void);
+    int  errdefer_own_refs(int n);
     int  defer_add(int node);
     int  defer_active_depth(void);
     int  defer_mark_block(void);
@@ -1406,6 +1407,32 @@ impl StmtOps for Stmt {
         return *p == '{';
     }
 
+    /* Phase 40 R4: an `own` object must not be rolled back by errdefer; the
+       cleanup chain already owns its release. Names are matched against the
+       active own list; aliasing remains an accepted limitation. */
+    int errdefer_own_refs(int n)
+    {
+        int d;
+        for (; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind == N_VAR) {
+                for (d = 0; d < self->mem->nowner; d++) {
+                    int vi = self->mem->own_var[d];
+                    if (vi >= 0
+                        && strcmp(self->sym->vars[vi].name,
+                                  self->arena->nodes[n].text2) == 0)
+                        return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
+                            "an own object cannot be rolled back by errdefer",
+                            self->mem->path);
+                }
+            }
+            if (self->errdefer_own_refs(self->arena->nodes[n].a) != 0) return -1;
+            if (self->errdefer_own_refs(self->arena->nodes[n].b) != 0) return -1;
+            if (self->errdefer_own_refs(self->arena->nodes[n].c) != 0) return -1;
+            if (self->errdefer_own_refs(self->arena->nodes[n].d) != 0) return -1;
+        }
+        return 0;
+    }
+
     int defer_active_depth(void)
     {
         int i, n;
@@ -1717,6 +1744,7 @@ impl StmtOps for Stmt {
             self->in_defer = 0;
             self->in_errdefer = 0;
             if (body < 0) return -1;
+            if (self->errdefer_own_refs(body) != 0) return -1;
             self->arena->nodes[s].a = body;
             if (self->defer_add(s) != 0) return -1;
             self->defer_block_err[self->ndefer_blocks - 1] = 1;
