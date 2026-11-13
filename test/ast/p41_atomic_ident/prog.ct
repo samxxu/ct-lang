@@ -1,0 +1,8 @@
+#include <stdio.h>
+int main(void)
+{
+    int atomic = 1;
+    atomic += 2;
+    printf("%d\n", atomic);
+    return 0;
+}

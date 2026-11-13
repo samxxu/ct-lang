@@ -1,0 +1,5 @@
+int main(void)
+{
+    atomic _Atomic(int) x = 0;
+    return x;
+}

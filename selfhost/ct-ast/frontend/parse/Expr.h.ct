@@ -1631,6 +1631,45 @@ impl ExprOps for Expr {
         self->fnptr_dims[0] = 0;
         self->last_bare_tag[0] = 0;
         for (;;) {
+            /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
+               keyword. It only enters the type when one of the four supported
+               bases follows; `int atomic = 1;` never reaches this branch. */
+            if (n == 0 && self->lex->tok == T_ID
+                && strcmp(self->lex->toktext, "atomic") == 0) {
+                self->sup->lex_next();
+                if (self->lex->tok == T_ID
+                    && strcmp(self->lex->toktext, "_Atomic") == 0)
+                    return self->sup->fail("use one atomic spelling, not both");
+                if (self->lex->tok == T_ID
+                    && strcmp(self->lex->toktext, "int") == 0) {
+                    if (self->type_append(out, cap, &n, "_Atomic(int)") != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
+                if (self->lex->tok == T_ID
+                    && strcmp(self->lex->toktext, "long") == 0) {
+                    if (self->type_append(out, cap, &n, "_Atomic(long)") != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
+                if (self->lex->tok == T_ID
+                    && strcmp(self->lex->toktext, "bool") == 0) {
+                    if (self->type_append(out, cap, &n, "_Atomic(_Bool)") != 0) return -1;
+                    self->sup->lex_next();
+                    continue;
+                }
+                if (self->lex->tok == T_ID
+                    && strcmp(self->lex->toktext, "void") == 0) {
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_PUNCT
+                        && strcmp(self->lex->toktext, "*") == 0) {
+                        if (self->type_append(out, cap, &n, "_Atomic(void *)") != 0) return -1;
+                        self->sup->lex_next();
+                        continue;
+                    }
+                }
+                return self->sup->fail("atomic supports only int, long, void * and bool");
+            }
             /* C11 `_Alignas(…)` and `_Atomic(…)`: the specifier is copied into
                the type spelling and handed to the C compiler as written (the
                argument may be a type name or a constant expression), so every
