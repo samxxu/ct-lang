@@ -90,7 +90,7 @@ pub trait ParseOps {
     int  record_body_ahead(void);
     int  register_field(int m);
     int  parse_trait(int is_pub);
-    int  parse_impl(void);
+    int  parse_impl(int is_pub);
     /* Phase 29: `impl<T> Name<Args> [use Trait] { … }`, the template form.
        `have_name` is 0 when the caller already read the template name. */
     int  parse_impl_inst(const char *tmpl, int have_name);
@@ -806,7 +806,7 @@ impl ParseDeclOps for Parser {
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0) {
             n = self->parse_trait(is_pub);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "impl") == 0) {
-            n = self->parse_impl();
+            n = self->parse_impl(is_pub);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "map") == 0) {
             n = mapbuild_get()->parse(self->cur_unit);
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "enum") == 0) {
@@ -2244,7 +2244,10 @@ impl ParseOps for Parser {
         }
         if (qname[0]) {
             int di = self->sym->find_struct(qname);
-            if (di >= 0) self->sym->structs[di].defined = 1;
+            if (di >= 0) {
+                self->sym->structs[di].defined = 1;
+                self->sym->structs[di].is_pub = self->decl_pub;
+            }
             /* Phase 33 O3: remember the declaring unit, so a container named by
                another unit can tell whether the element's definition is visible
                in the container template's own unit. */
@@ -2851,7 +2854,7 @@ impl ParseOps for Parser {
     }
 
     /* `impl T for S { methods }` -- one N_IMPL node carrying N_METHOD children. */
-    int parse_impl(void)
+    int parse_impl(int is_pub)
     {
         int ti, si, node, mnode, params, body, tail, impl_line;
         int mline, mcol, nimpl, tm_i, k2, brace_line, brace_col, found, dup_i;
@@ -2866,6 +2869,10 @@ impl ParseOps for Parser {
         (void)self;
 
         impl_line = self->lex->tokline;
+        if (is_pub)
+            return tool::diag::ct_sem_error(impl_line, 1,
+                "a pub impl block is not supported; mark methods",
+                self->mem->path);
         self->sup->lex_next();
         /* Phase 29: `impl<T> Name<Args> [use Trait] { … }` writes against a
            template, so it has no struct row of its own. A `<` after a generic
@@ -2968,6 +2975,10 @@ impl ParseOps for Parser {
                `static` cannot fill it. Reading it as a return-type qualifier used
                to only warn about the signature and still ship the method in the
                vtable (docs/language-spec.md L29-3 promises a hard error). */
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0)
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "a trait impl method cannot be pub", self->mem->path);
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0)
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
@@ -3134,7 +3145,7 @@ impl ParseOps for Parser {
        about the trait machinery (`ti`, vtable slots) applies here. */
     int parse_impl_inherent(const char *rname, int si, int impl_line)
     {
-        int node, mnode, params, body, tail, mline, is_static;
+        int node, mnode, params, body, tail, mline, is_static, is_pub;
         char ret[MAX_TEXT];
         char mname[MAX_TEXT];
         char stype[MAX_TEXT];
@@ -3157,12 +3168,29 @@ impl ParseOps for Parser {
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             mline = self->lex->tokline;
             /* P29-2: a receiverless method (`static Counter make()`) is written
-               as `<Struct>_<method>` and takes no `self`. */
+               as `<Struct>_<method>` and takes no `self`. Phase 42: a method
+               is private by default; `pub`/`pub static` opt in. */
             is_static = 0;
+            is_pub = 0;
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+                is_pub = 1;
+                self->sup->lex_next();
+            }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
                 is_static = 1;
                 self->sup->lex_next();
+                if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+                    if (is_pub) return self->sup->fail("duplicate pub on one method");
+                    is_pub = 1;
+                    self->sup->lex_next();
+                }
+            } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+                return self->sup->fail("duplicate pub on one method");
             }
+            if (is_pub && (!self->unit_is_hdr || !self->sym->structs[si].is_pub))
+                return tool::diag::ct_sem_error(mline, 1,
+                    "a pub method needs a pub struct in a .h.ct unit",
+                    self->mem->path);
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
@@ -3214,6 +3242,7 @@ impl ParseOps for Parser {
             self->arena->nodes[mnode].num = -1;   /* no trait */
             self->arena->nodes[mnode].aux = si;
             self->arena->nodes[mnode].c = is_static;
+            self->arena->nodes[mnode].d = is_pub;
             if (tail < 0) self->arena->nodes[node].a = mnode;
             else self->arena->nodes[tail].next = mnode;
             tail = mnode;
@@ -3238,7 +3267,7 @@ impl ParseOps for Parser {
         char ret[MAX_TEXT];
         char mname[MAX_TEXT];
         char htype[MAX_TEXT];
-        int nt, nargs, line, node, tail, mnode, params, body, ti, mline, is_static;
+        int nt, nargs, line, node, tail, mnode, params, body, ti, mline, is_static, is_pub;
 
         nt = 0;
         nargs = 0;
@@ -3501,11 +3530,33 @@ impl ParseOps for Parser {
                trait block fills vtable slots, which a receiverless function
                cannot do, so `use` rejects it. */
             is_static = 0;
+            is_pub = 0;
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+                is_pub = 1;
+                self->sup->lex_next();
+                if (use[0])
+                    return tool::diag::ct_sem_error(mline, 1,
+                        "a trait impl method cannot be pub", self->mem->path);
+            }
             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
                 if (use[0])
                     return self->sup->fail("a static method cannot implement a trait");
                 is_static = 1;
                 self->sup->lex_next();
+                if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+                    if (is_pub) return self->sup->fail("duplicate pub on one method");
+                    is_pub = 1;
+                    self->sup->lex_next();
+                }
+            } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "pub") == 0) {
+                return self->sup->fail("duplicate pub on one method");
+            }
+            if (is_pub) {
+                int tsi = self->sym->find_struct(tmpl);
+                if (!self->unit_is_hdr || tsi < 0 || !self->sym->structs[tsi].is_pub)
+                    return tool::diag::ct_sem_error(mline, 1,
+                        "a pub method needs a pub struct in a .h.ct unit",
+                        self->mem->path);
             }
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->ex->fnptr_state)
@@ -3557,6 +3608,7 @@ impl ParseOps for Parser {
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = ti;
             self->arena->nodes[mnode].aux = -1;
+            self->arena->nodes[mnode].d = is_pub;
             /* P29-2: `c` marks a receiverless method; the emitter drops the
                `void *self` parameter and the `_self` local. */
             self->arena->nodes[mnode].c = is_static;
