@@ -2090,6 +2090,26 @@ static int hoist_ctype(int n, char *out, int cap, int *depth)
     return ex->static_ctype(n, out, cap, depth, 0);
 }
 
+/* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
+   can observe a different value. Calls are stable once the hoist pass has
+   materialised them (text3); post/pre/assignment and calls buried inside a
+   subscript/member base are not. */
+static int expr_unstable(struct Emitter *self, int n)
+{
+    int k;
+    if (n < 0) return 0;
+    k = self->arena->nodes[n].kind;
+    if (k == N_CALL) return self->arena->nodes[n].text3[0] ? 0 : 1;
+    if (k == N_POST || k == N_PRE || k == N_ASSIGN) return 1;
+    if (k == N_INDEX || k == N_BIN)
+        return expr_unstable(self, self->arena->nodes[n].a)
+            || expr_unstable(self, self->arena->nodes[n].b);
+    if (k == N_MEMBER || k == N_ARROW || k == N_UNARY
+        || k == N_ADDR || k == N_DEREF)
+        return expr_unstable(self, self->arena->nodes[n].a);
+    return 0;
+}
+
 impl EmitOps for Emitter {
     int emit_indent(int n)
     {
@@ -4607,6 +4627,12 @@ impl EmitOps for Emitter {
                 && rk != N_MEMBER && rk != N_ARROW && rk != N_INTO_SELF
                 && rk != N_INTO)
                 return self->fail_from(n, "method receiver must be a variable, an element, a call or a field chain");
+            /* battle p38-1 B′: a runtime guard needs a stable receiver; a
+               side-effectful receiver would guard one value and call another. */
+            if (self->runtime_checks && *self->runtime_checks
+                && expr_unstable(self, self->arena->nodes[n].a))
+                return self->fail_from(n,
+                    "runtime checks need a stable receiver; bind it to a local first");
             if (!self->arena->nodes[n].text[0])
                 return self->fail_from(n, "cannot resolve the method trait (unknown receiver type)");
             snprintf(tname, sizeof tname, "%s", self->arena->nodes[n].text);
