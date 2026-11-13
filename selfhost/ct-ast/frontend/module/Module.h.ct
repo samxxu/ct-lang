@@ -156,6 +156,7 @@ pub struct Module {
        `outdir` and the binary lands at `exe`. `cc` / `cflags` / `ldflags` are
        pass-through: composed into the line, never parsed or validated. */
     int  emit_c;
+    int  runtime_checks;        /* --runtime-checks: guard null vtables in build */
     const char *exe;
     const char *outdir_opt;
     const char *cc;
@@ -1046,6 +1047,7 @@ impl ModuleOps for Module {
         self->line_force = -1;
         self->have_map = 0;
         self->emit_c = 0;
+        self->runtime_checks = 0;
         self->exe = NULL;
         self->outdir_opt = NULL;
         self->cc = NULL;
@@ -1054,7 +1056,7 @@ impl ModuleOps for Module {
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
-                       "                 [--emit-c] [--outdir <dir>] [--cc <path>]\n"
+                       "                 [--emit-c] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99]\n",
@@ -1067,6 +1069,10 @@ impl ModuleOps for Module {
             }
             if (strcmp(argv[i], "--emit-c") == 0) {
                 self->emit_c = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--runtime-checks") == 0) {
+                self->runtime_checks = 1;
                 continue;
             }
             if (strcmp(argv[i], "--outdir") == 0) {

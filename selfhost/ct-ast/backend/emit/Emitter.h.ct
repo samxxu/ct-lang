@@ -213,6 +213,7 @@ struct Emitter {
     struct Call *calls;  int *ncalls;
     int  *build_mode;
     int  *line_mode;
+    int  *runtime_checks;  /* Phase 37 O2: guard a null vtable before iface dispatch */
     char *outdir;
     const char *prog;
     /* parse-time scratch owned by the driver */
@@ -1250,6 +1251,16 @@ static int emit_unit_body(struct Emitter *self, int u)
             self->version, self->path);
     fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
           self->out);
+    if (self->runtime_checks && *self->runtime_checks) {
+        fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
+        fputs("static void __attribute__((unused)) __ct_runtime_null_vtable(const char *file, int line, const char *method)\n"
+              "{\n"
+              "    fprintf(stderr, \"%s:%d: runtime check: null vtable in call to '%s'\\n\", file, line, method);\n"
+              "    abort();\n"
+              "}\n"
+              "#define __CT_VT_GUARD(vt, m, ln) ((vt) ? (vt) : (__ct_runtime_null_vtable(__FILE__, (ln), (m)), (vt)))\n\n",
+              self->out);
+    }
     /* The imported `.m.ct` prologue leads the unit: the recipes call C
        functions whose declarations (and macros) come from those lines. */
     if (emit_map_prologues(self, u) != 0) return -1;
@@ -4598,15 +4609,39 @@ impl EmitOps for Emitter {
             }
             low[i] = 0;
             if (self->arena->nodes[n].aux == 4) {
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out, "->vt->%s(", self->arena->nodes[n].text2);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fputs("->self", self->out);
+                if (self->runtime_checks && *self->runtime_checks) {
+                    fputs("__CT_VT_GUARD((", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(")->vt, \"", self->out);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fprintf(self->out, "\", %d)->", self->arena->nodes[n].line);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fputs("((", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(")->self", self->out);
+                } else {
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fprintf(self->out, "->vt->%s(", self->arena->nodes[n].text2);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs("->self", self->out);
+                }
             } else if (self->arena->nodes[n].aux == 3) {
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out, ".vt->%s(", self->arena->nodes[n].text2);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fputs(".self", self->out);
+                if (self->runtime_checks && *self->runtime_checks) {
+                    fputs("__CT_VT_GUARD((", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(").vt, \"", self->out);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fprintf(self->out, "\", %d)->", self->arena->nodes[n].line);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fputs("((", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(").self", self->out);
+                } else {
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fprintf(self->out, ".vt->%s(", self->arena->nodes[n].text2);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(".self", self->out);
+                }
             } else if (self->arena->nodes[n].aux == 2) {
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fprintf(self->out, "->__%s_vptr->%s(", low, self->arena->nodes[n].text2);
@@ -5089,9 +5124,10 @@ void ct_emit_bind(void *arena, void *sym, void *ty, void *lex,
     g_emit.init = init_get();
 }
 
-pub void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps, void *calls, int *ncalls, int *build_mode, int *line_mode);
+pub void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps, void *calls, int *ncalls, int *build_mode, int *line_mode, int *runtime_checks);
 void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
-                         void *calls, int *ncalls, int *build_mode, int *line_mode)
+                         void *calls, int *ncalls, int *build_mode, int *line_mode,
+                         int *runtime_checks)
 {
     g_emit.units = (struct Unit *)units;
     g_emit.nunits = nunits;
@@ -5101,6 +5137,7 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
     g_emit.ncalls = ncalls;
     g_emit.build_mode = build_mode;
     g_emit.line_mode = line_mode;
+    g_emit.runtime_checks = runtime_checks;
 }
 
 pub void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend);
