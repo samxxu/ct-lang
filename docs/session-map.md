@@ -6,5 +6,6 @@
 | --- | --- | --- | --- |
 | 文档治理（1.9.0 落库 / 语言 / roadmap） | 当前 DSH 会话（lead） | REQ / DEV | — |
 | PH-38 立项与实现 | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-38 |
+| PH-39 立项（卡已冻结，S0 等 PH-38 收口） | 当前 DSH 会话（lead） | EDITOR / REQ | PH-39 |
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
