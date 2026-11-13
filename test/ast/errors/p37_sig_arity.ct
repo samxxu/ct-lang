@@ -1,0 +1,16 @@
+trait Shape {
+    int area(int k);
+}
+
+struct Box { int n; } use Shape;
+
+impl Shape for Box {
+    int area() { return self->n; }
+}
+
+int main(void)
+{
+    struct Box b;
+    b.n = 1;
+    return b.area(2);
+}

@@ -3541,6 +3541,9 @@ echo "== negative cases (test/ast/errors/*.ct) =="
 for f in test/ast/errors/*.ct; do
     [ -f "$f" ] || continue
     b="$(basename "$f" .ct)"
+    # Phase 37: signature fixtures must exit 0 in compile mode (warning);
+    # their build/check severity is asserted by the dedicated probe below.
+    case "$b" in p37_sig_*) continue;; esac
     if "$work/ct-ast" "$f" -o "$work/bad-$b.c" \
             >"$work/bad-$b.out" 2>"$work/bad-$b.err"; then
         bad "$b" "expected a non-zero exit"
@@ -3550,6 +3553,14 @@ for f in test/ast/errors/*.ct; do
         bad "$b" "no positioned diagnostic on stderr: $(cat "$work/bad-$b.err")"
     fi
 done
+
+# Phase 37: signature mismatch is a hard error for build/check and a warning
+# for compile; the missing-method path stays a hard error (E37-1 / E37-2).
+if bash test/ast/p37_probe.sh "$work/ct-ast" >"$work/p37.out" 2>"$work/p37.err"; then
+    ok "p37 signature severity"
+else
+    bad "p37 signature severity" "$(cat "$work/p37.out" "$work/p37.err")"
+fi
 
 # Phase 21 S4: closure escape / capture / arity diagnostics are stable text,
 # and every one is followed by the tier-1 hint through the independent `note:`
