@@ -9,4 +9,6 @@ outer
 goto-label
 goto-defer
 goto-n=1
+nested-label
+nested-defer
 defer=1

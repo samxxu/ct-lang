@@ -39,6 +39,14 @@ static void gotosame(void)
     printf("goto-n=%d\n", n);
 }
 
+static void gotonested(void)
+{
+    defer { printf("nested-defer\n"); }
+    if (1) goto N;
+N:
+    printf("nested-label\n");
+}
+
 int main(void)
 {
     int defer = 1;
@@ -46,6 +54,7 @@ int main(void)
     loopfn();
     nested();
     gotosame();
+    gotonested();
     printf("defer=%d\n", defer);
     return 0;
 }
