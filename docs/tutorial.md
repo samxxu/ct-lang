@@ -346,6 +346,25 @@ $ ct --diagnostics=json leak.ct -o leak.c    # 机器可读，写 stdout
 
 逃逸判定是**保守**的（宁可漏放，不可错放）。要让它闭嘴就真的释放，不要指望它猜。
 
+### 8.1 块级 `defer`
+
+`defer { … }` 在块退出时按后进先出执行，覆盖正常落出、`return`、`break`、`continue`；
+同一块内它先于 `own` 的自动释放。只收块形态，且只能在函数体内使用。
+
+```c
+int read_file(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    defer { fclose(f); }
+    return parse(f);
+}
+```
+
+`return expr` 会先把值存进临时量再跑 defer，所以 defer 里改写局部变量不会改变返回值。
+`goto` 跨出带 defer 的块是硬错；defer 内禁止 `return` / `break` / `continue` / 嵌套 defer。
+可运行样例见 `examples/42_defer`。
+
 ## 9. `map` 与 bindings：把 trait 绑到已有的 C 库
 
 不想为了用 C 库而改库的代码，就用 `map` 把一个**已声明的全局实例**绑定成 trait 实现。

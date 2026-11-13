@@ -324,6 +324,9 @@ prog.ct:6:9: error: incompatible pointer to integer conversion initializing 'int
 
 > **2026-11-13（P37）**：impl 签名漂移已在 `ct build` / `ct check` 升为硬错；`ct build --runtime-checks`
 > 提供可选的空 vtable 断言。安全网条目因此收窄为「未启用运行期开关时的派发风险」。
+>
+> **2026-11-13（P38）**：块级 `defer { … }` 已落地，覆盖正常落出 / `return` / `break` / `continue`，
+> 同块内先于 `own` 的自动释放；「清理套路」从手写 goto cleanup 收窄为显式 defer。
 
 ### 6.2 值得补（显著提升表达力，不阻塞）
 

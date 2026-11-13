@@ -52,7 +52,7 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 ### 3. Capabilities
 
 - **traits**: `trait` / `impl` / `use`, dispatch, traits as types (interface values / arrays / fields / boxing), trait default methods
-- **memory**: `Drop` / `delete`, `own` (AutoDrop), path-sensitive leak warnings, `borrow` + `Handback`
+- **memory**: `Drop` / `delete`, `own` (AutoDrop), block-level `defer` (Phase 38), path-sensitive leak warnings, `borrow` + `Handback`
 - **modules**: `namespace` / `import` / `pub` / multi-file `ct build` / directory = namespace
 - **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `bindings/` for C libraries
 - **passthrough**: `#ct-raw` / `#ct-endraw` raw blocks (macros and hand-written C land in the generated `.c` byte for byte)

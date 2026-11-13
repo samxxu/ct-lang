@@ -49,7 +49,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 3. 能力一览
 
 - **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法
-- **内存**：`Drop` / `delete`、`own`（AutoDrop）、路径敏感泄漏告警、`borrow` + `Handback`
+- **内存**：`Drop` / `delete`、`own`（AutoDrop）、块级 `defer`（Phase 38）、路径敏感泄漏告警、`borrow` + `Handback`
 - **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace
 - **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`bindings/` 声明式 C 库对接
 - **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`）

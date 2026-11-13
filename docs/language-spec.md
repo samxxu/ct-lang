@@ -405,6 +405,30 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 - 逃逸判定是**保守**的：变量以独立值形式出现在赋值右值或 `return` 行上即取消 autodrop；漏放（内存泄漏）
   优于错放（重复释放 / 释放借用对象）。
 
+#### 4.9.1 块级 `defer`（Phase 38，仅 ct-ast）
+
+```c
+int load(void)
+{
+    int fd = open_db();
+    defer { close_db(fd); }
+    defer { flush_db(fd); }   /* 先 flush，再 close */
+    return use_db(fd);        /* 返回值先求值，再跑 defer */
+}
+```
+
+- **语法**：`defer { … }` 只能出现在函数体内的语句位置，后面必须紧跟 `{`；其它位置的 `defer`
+  仍是普通标识符（D38-7）。只收块形态，没有 `defer expr;`。
+- **顺序**：同一块内按源码逆序执行（LIFO），内层块先于外层块。
+- **四条出口**：正常落出、`return`、`break`、`continue` 都执行对应块的 defer。`return expr` 先把
+  返回值放进临时量，再跑 defer，最后返回该临时量，所以 defer 改写局部变量不影响返回值。
+- **与 `own` 的顺序**：同一块内 defer 先于 `own` 的自动释放；两组各自 LIFO（D38-4）。既有
+  `own` 的释放点不变。
+- **诊断**：`goto` 跨出/跨入带 defer 的块报 `a goto cannot cross a block with defer`；defer 内
+  `return` / `break` / `continue` / 嵌套 `defer` 报 `a defer block cannot transfer control`；
+  文件作用域或 `.h.ct` 内的 defer 报 `defer is only allowed inside a function`。
+- **不做**：`errdefer`、`try` / `?`、全局或头文件里的 defer、defer 内的控制转移（T38-1–T38-3）。
+
 #### 4.10 `map`（Phase 11 新增 + SH-20 扩展，仅 ct-ast）
 
 `map` 把一个 trait 的方法绑定到一处具体的 C 调用，并为该绑定发射包装函数与一张 vtable。宿主有两种
