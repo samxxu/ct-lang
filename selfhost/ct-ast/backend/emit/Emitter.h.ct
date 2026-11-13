@@ -2384,7 +2384,9 @@ impl EmitOps for Emitter {
 
         /* a generic template is never a C symbol of its own (Phase 26) */
         if (self->sym->funcs[i].ntparams > 0) return 0;
-        if (self->sym->funcs[i].is_static) fputs("static ", self->out);
+        if (self->sym->funcs[i].is_static
+            || (self->abi_mode && *self->abi_mode && !self->sym->funcs[i].is_pub))
+            fputs("static ", self->out);
         fprintf(self->out, "%s %s(", self->sym->funcs[i].ret, self->sym->funcs[i].cname);
         if (self->sym->funcs[i].nparams == 0) {
             fputs("void", self->out);
@@ -3429,7 +3431,24 @@ impl EmitOps for Emitter {
             /* a new body starts with no closure variable bound (Phase 21 S3) */
             self->nclvar = 0;
             self->closure_ci = 0;
-            if (self->arena->nodes[n].aux) fputs("static ", self->out);
+            if (self->arena->nodes[n].aux
+                || (self->abi_mode && *self->abi_mode
+                    && self->arena->nodes[n].d == 0))
+                fputs("static ", self->out);
+            /* Phase 39 R4: exactly one visibility attribute on each root
+               export definition; non-exports stay hidden by the compiler flag. */
+            if (self->abi_mode && *self->abi_mode && self->abi_root
+                && self->abi_exports && self->abi_n
+                && self->cur_unit == *self->abi_root
+                && self->arena->nodes[n].d == 1) {
+                int ai;
+                for (ai = 0; ai < *self->abi_n; ai++)
+                    if (strcmp(self->sym->funcs[self->abi_exports[ai]].cname,
+                               self->arena->nodes[n].text2) == 0) {
+                        fputs("__attribute__((visibility(\"default\"))) ", self->out);
+                        break;
+                    }
+            }
             /* `num` carries the `inline` specifier (0 = plain function) */
             if (self->arena->nodes[n].num) fputs("inline ", self->out);
             /* Phase 26: an active instance substitutes the return type and

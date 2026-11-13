@@ -1516,6 +1516,49 @@ impl ModuleOps for Module {
                 }
                 self->abi_mode = 1;
                 if (backend::emit::ct_emit_header(hp) != 0) return 1;
+                /* R4 intermediate: emit every unit first (headers may
+                   reference each other), then compile each object with hidden
+                   visibility; R5 folds these objects into the archive. */
+                for (u = 0; u < self->nunits; u++) {
+                    if (self->units[u].is_map) continue;
+                    if (self->emit_unit(u) != 0) return 1;
+                    if (self->units[u].is_hdr && self->write_unit_header(u) != 0) return 1;
+                }
+                for (u = 0; u < self->nunits; u++) {
+                    char src[MAX_PATH], obj[MAX_PATH], cmd[MAX_CMD];
+                    int ncmd = 0, code2, st2;
+                    const char *ccp = self->cc;
+                    if (self->units[u].is_map) continue;
+                    if (snprintf(src, sizeof src, "%s/%s.c", self->outdir, self->units[u].base)
+                            >= (int)sizeof src
+                        || snprintf(obj, sizeof obj, "%s/%s.o", self->outdir, self->units[u].base)
+                            >= (int)sizeof obj)
+                        return 1;
+                    if (!ccp || !ccp[0]) ccp = "cc";
+                    if (ct_cmd_token(cmd, MAX_CMD, &ncmd, ccp) != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd,
+                                        self->std_flag ? self->std_flag : "-std=c99") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-fvisibility=hidden") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-I") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-c") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, src) != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-o") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0) {
+                        fprintf(stderr, "ctc: the cc command line is too long\n");
+                        return 1;
+                    }
+                    printf("%s\n", cmd);
+                    fflush(stdout);
+                    st2 = system(cmd);
+                    if (st2 < 0) {
+                        fprintf(stderr, "ctc: cannot run '%s'\n", ccp);
+                        return 1;
+                    }
+                    if (st2 & 0x7f) code2 = 128 + (st2 & 0x7f);
+                    else code2 = (st2 >> 8) & 0xff;
+                    if (code2 != 0) return 1;
+                }
                 return 0;
             }
         }
