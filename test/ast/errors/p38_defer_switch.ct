@@ -1,0 +1,11 @@
+int main(void)
+{
+    switch (1) {
+    case 1:
+        defer { }
+        break;
+    default:
+        break;
+    }
+    return 0;
+}

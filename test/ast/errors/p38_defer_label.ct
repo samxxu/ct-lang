@@ -1,0 +1,8 @@
+int main(void)
+{
+    defer {
+    L:
+        ;
+    }
+    return 0;
+}

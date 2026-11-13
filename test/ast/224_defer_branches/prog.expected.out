@@ -1,7 +1,5 @@
 if-defer
 after-if
-switch-defer
-after-switch
 loop-defer0
 loop-defer1
 after-loop

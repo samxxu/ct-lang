@@ -1,0 +1,14 @@
+int main(void)
+{
+    int x = 0;
+    {
+        defer { x = x + 1; }
+        goto L;
+    }
+    {
+        defer { x = x + 2; }
+    L:
+        ;
+    }
+    return x;
+}
