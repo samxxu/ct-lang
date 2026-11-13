@@ -27,12 +27,25 @@ static void nested(void)
     }
 }
 
+static void gotosame(void)
+{
+    int n = 0;
+    {
+        defer { printf("goto-defer\n"); n = 1; }
+        goto L;
+    L:
+        printf("goto-label\n");
+    }
+    printf("goto-n=%d\n", n);
+}
+
 int main(void)
 {
     int defer = 1;
     branch();
     loopfn();
     nested();
+    gotosame();
     printf("defer=%d\n", defer);
     return 0;
 }

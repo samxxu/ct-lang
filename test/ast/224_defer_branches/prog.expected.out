@@ -6,4 +6,7 @@ after-loop
 func-defer
 inner
 outer
+goto-label
+goto-defer
+goto-n=1
 defer=1
