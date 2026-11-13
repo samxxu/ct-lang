@@ -1,6 +1,6 @@
 # Phase 20 计划（已完成）：包支持 —— 不让包作者做二等公民
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：完成**（2026-11-07；P20-01 / 02 / 03 / 04 / 06 / 08 落地，收口 `v0.20.0`；
 > P20-05 只把 **ct-pkg 侧的索引生成器**移出本轮（ct 侧 `pkg_index_lookup` 仍是本仓欠账），
@@ -227,52 +227,3 @@
 | D20-8 | 去虚拟化范围 | 仅具体 struct 接收者；iface 不动 | 延后，随 P20-07 |
 | D20-9 | 去虚拟化的 golden churn | 接受，单独提交重生成 | 延后，随 P20-07 |
 | D20-10 | 版本 | Phase 20 ↔ `v0.20.x`，收口 `v0.20.0`，必须含 `915c12c` | 已确认（`v0.20.0` 已收口） |
-
----
-
-## English
-
-### Summary
-
-**Status: done** (2026-11-07). **Phase 20 ↔ `v0.20.x`, closed at `v0.20.0`.** P20-01 / 02 / 03 / 04 /
-06 / 08 landed; for P20-05 only the **ct-pkg-side index generator** was moved out of this round (the
-ct-side `pkg_index_lookup` is still owed in this repo), and P20-07 was deferred — so neither is an exit
-criterion. The theme is package support: any place where a package author is forced into a second-class
-design by the compiler or the toolchain. A restriction counts only when it forces the package's *design*
-to change for reasons unrelated to its domain.
-
-### Verified findings
-
-- **Real and blocking**: type-host method collisions on a shared receiver type (`char *`) with no
-  qualified-call escape hatch (`Emitter.h.ct:2767`, probe reproduces); late `import` silently dropped
-  (SH-57); map-method arity unchecked (SH-56); `requires` mismatch only warns (`Pkg.h.ct:1562`); the
-  package index records only the highest tag (`ct-pkg/index/tools/refresh-index.sh`).
-- **Real but structural**: package-scoped imports are faked with a directory prefix, so `std`, `zlib`,
-  `sqlite` and `clib` all carry a doubled path level; duplicate unit names across `-I` roots shadow
-  silently (`Module.h.ct:272-276`).
-- **Not real**: `.h.ct` can export functions (probe compiles and runs); `-I <outdir>` is already emitted
-  (`915c12c`); `#ct-raw` in `.m.ct` is a deliberate boundary (SH-58), not an accident.
-
-### Work items
-
-| ID | Priority | Item | Round status |
-| --- | --- | --- | --- |
-| P20-01 | P0 | Trait-qualified call `Trait::method(recv, …)`; ambiguity hint prints both spellings | landed |
-| P20-02 | P0 | Reject `import` outside the prologue | landed |
-| P20-03 | P0 | Check map-method arity at the call site | landed |
-| P20-04 | P0 | Make an unsatisfied `requires` a hard failure (`--force` overrides) | landed |
-| P20-05 | P1 | Keep all tags in the index; resolve by range + `requires` | **ct-pkg-side generator moved out** (ct-side `pkg_index_lookup` still owed) |
-| P20-06 | P1 | Optional `namespace =` in `ct.pkg`; reject duplicate unit names across roots | landed |
-| P20-07 | P2 | Devirtualize `use` calls on concrete struct receivers (golden regeneration expected) | **deferred** |
-| P20-08 | P2 | Diagnostics and docs: shim path in the `.m.ct` error, `dep` hint, `.h.ct` clarification | landed |
-
-Out of scope: lifting the `.m.ct` raw-C restriction, re-export, a `ct test` command, generics, and any
-Phase 21 closure work.
-
-**Release prerequisite:** `v0.20.0` must ship `915c12c` (string-literal receivers); `ct-pkg/std` already
-declares `requires = ct >= 0.20.0` because of it.
-
-**Exit:** 11 hard gates plus the new probes green; all seven ct-pkg packages build with zero new failures;
-old layouts still resolve (the new `namespace =` layout coexists); `CTC_VERSION` bumped to `0.20.0`.
-The ct-pkg-side P20-05 index generator and P20-07 are explicitly not part of this exit; the ct-side
-`pkg_index_lookup` range resolution remains owed in this repo.

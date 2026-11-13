@@ -1,13 +1,28 @@
 # Phase 38 — `defer` 块级清理
 
-> **状态：规划中**（2026-11-12 立项草案；不写实现）。
-> **基线**：Phase 37 收口提交；S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
-> **文档形态**：`phase38-draft.md`；design window 12/12，转正时归档当时最老的一张。
+> **状态：✅ 完成**（2026-11-13；v0.38.0，本地 tag v0.38.0）。
+> **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
+> **文档形态**：`phase38-draft.md`；design window 7/12，转正时归档当时最老的一张。
 > **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
 > **红证**：§2.2（2026-11-12，HEAD `bd91bfe`，`v0.30.0` 重建的 `ct-ast`）。
 > **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §6.2。
 > **规模**：编译器 260–520；夹具 100–180；文档 50–90；合计 **410–790**（±40%）。
-> **纪律**：不 bump、不打 tag、不 push；只暂存本相文件。
+> **纪律**：收口时 bump `v0.38.0`；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
+
+## 0 卡片字段（冻结）
+
+| 项 | 值 |
+| --- | --- |
+| 编号 | PH-38 |
+| 目标 | 块级 `defer { … }`：语句块退出时按 LIFO 执行清理，覆盖正常落出 / `return` / `break` / `continue` |
+| 范围 | O1/O2/O3；不做 errdefer / try / 单语句 defer / 全局或 `.h.ct` defer |
+| 交付物 | `Stmt.h.ct` / `Emitter.h.ct` 的 defer 解析/发射/诊断；`test/ast/**` 与负例；`examples/42_defer`；文档 |
+| 任务清单 | §4.1（S0–S7） |
+| 退出判据 | E38-1…E38-8（§5） |
+| 依赖 | Phase 37 收口；全量门禁基线 `5e395e9` |
+| 规范版本 | 1.9.0 |
+| version-minor | 38 |
+| 已知风险 | R38-1…R38-4（§7） |
 
 ## 1 目标与边界
 
@@ -141,6 +156,23 @@ defer { log("done"); }      /* 显式清理 */
 
 依赖：S1→S2→S3→S4→S5；S6 依赖 S4/S5；S7 最后。
 
+### 4.1 任务清单（冻结）
+
+| 任务 | 交付物 | 验收 | effort | 回滚 |
+| --- | --- | --- | --- | --- |
+| S0 | §2.2 红证 + p38 夹具的失败输出 | `bash selfhost/check-ast.sh` 在 p38 段失败；`baseline: 5e395e9` | S | 删除夹具/断言 |
+| S1 | `defer { … }` 解析 + 块级 LIFO 栈 | `ast/220_defer_order` 输出顺序正确 | M | revert |
+| S2a | `goto` 跨出/跨入带 defer 的块诊断 | `errors/p38_goto_cross.ct` 报 L38-1 | S | revert |
+| S2b | defer 内控制转移 / 嵌套 defer 诊断 | `errors/p38_defer_control.ct` 报 L38-2 | S | revert |
+| S2c | 文件作用域 / `.h.ct` defer 诊断 | `errors/p38_defer_scope.ct` 报 L38-3 | S | revert |
+| S3 | 正常落出 / `break` / `continue` 的逆序发射 | `ast/221_defer_paths` 四条路径输出正确 | M | revert |
+| S4 | `return` 临时量 + 全层逆序发射、void 分支 | `ast/222_defer_return` 返回值先求值 | M | revert |
+| S5 | defer 先于同块 `own` drop（各自 LIFO） | `ast/223_defer_own_order` 输出顺序正确 | S | revert |
+| S6 | 正负例、样例与全量门禁 | `check-ast.sh` / `check-all.sh` 绿 | M | revert |
+| S7 | 文档：language-spec、tutorial、gap、`examples/42_defer` | `check-docs.py` + 样例运行 | S | revert |
+
+映射：S1→E38-1；S2a→E38-4；S2b→E38-6；S2c→E38-7；S3→E38-2；S4→E38-3；S5→E38-5；S6→E38-8；S0/S7 无退出判据。
+
 ## 5 退出判据（E38-n）
 
 | ID | 断言 | 夹具 | 门禁 |
@@ -148,10 +180,10 @@ defer { log("done"); }      /* 显式清理 */
 | E38-1 | 两个 defer 按后进先出执行，输出顺序逐字节正确 | `ast/220_defer_order` | `check-ast` |
 | E38-2 | 正常落出、`return`、`break`、`continue` 四条路径都执行对应 defer | `ast/221_defer_paths` | `check-ast` |
 | E38-3 | `return f()` 的返回值在 defer 之前求值；defer 修改局部变量不影响返回值 | `ast/222_defer_return` | `check-ast` |
-| E38-4 | `goto` 跨出带 defer 的块报 L38-1，不写产物；同一块内 `goto` 仍可用 | `errors/p38_goto_cross.ct` | `check-ast` |
+| E38-4 | `goto` 跨出/跨入带 defer 的块报 L38-1，不写产物；同一块内 `goto` 仍可用 | `errors/p38_goto_cross.ct` / `p38_goto_sibling.ct` / `p38_goto_in.ct` / `p38_goto_active.ct` | `check-ast` |
 | E38-5 | 同块内 defer 先于 `own` drop，输出顺序正确 | `ast/223_defer_own_order` | `check-ast` |
-| E38-6 | defer 内 `return`/`break`/`continue`/嵌套 defer 各报 L38-2 | `errors/p38_defer_control.ct` | `check-ast` |
-| E38-7 | 文件作用域 / `.h.ct` 的 defer 报 L38-3 | `errors/p38_defer_scope.ct` | `check-ast` |
+| E38-6 | defer 内 `return`/`break`/`continue`/嵌套 defer 各报 L38-2 | `errors/p38_defer_control.ct` / `p38_defer_break.ct` / `p38_defer_continue.ct` / `p38_defer_nested.ct` | `check-ast` |
+| E38-7 | 文件作用域的 defer 报 L38-3；`.h.ct` 内（含函数体）报 `defer is not allowed in a .h.ct unit` | `errors/p38_defer_scope.ct` / `p38_defer_header.h.ct` | `check-ast` |
 | E38-8 | 既有 corpus 与 golden 零变化；自举链在 L0/L1/L2 上可构建 | 全量 | `check-all` + fixpoint |
 
 ## 6 负例台账（L38-n）
@@ -160,9 +192,11 @@ defer { log("done"); }      /* 显式清理 */
 | --- | --- | --- | --- |
 | L38-1 | `goto` 跨出/跨入带 defer 的块 | `errors/p38_goto_cross.ct` | `a goto cannot cross a block with defer` |
 | L38-2 | defer 内控制转移或嵌套 defer | `errors/p38_defer_control.ct` | `a defer block cannot transfer control` |
-| L38-3 | 文件作用域 / `.h.ct` 的 defer | `errors/p38_defer_scope.ct` | `defer is only allowed inside a function` |
+| L38-3 | 文件作用域 / `.h.ct` 的 defer | `errors/p38_defer_scope.ct` / `p38_defer_header.h.ct` | `defer is only allowed inside a function` / `defer is not allowed in a .h.ct unit` |
+| L38-4 | `switch` 内 defer（含 case 内嵌套块） | `errors/p38_defer_switch.ct` | `defer is not allowed inside a switch` |
+| L38-5 | defer 体内 label | `errors/p38_defer_label.ct` | `a defer block cannot declare a label` |
 
-三条均为新诊断，各自恰一条断言并钉位置。
+L38-1/L38-2 各自一条断言；L38-3 分文件作用域与 `.h.ct` 两条文案；L38-4/L38-5 为评审后新增。
 
 ## 7 风险与开放项
 
@@ -185,3 +219,33 @@ defer { log("done"); }      /* 显式清理 */
 
 - 编译器 260–520 = S1 50–100 + S2 40–80 + S3 60–120 + S4 80–160 + S5 30–60；夹具 60–120；文档 50–90。
 - 收口：S0 红证提交（`test(cleanup): P38 红`）；每片 ≤3 文件；仓库任何时刻可构建。
+- 收口动作：全量 11 道门禁绿、样例 `examples/42_defer` 进 `test/run.sh`、文档同步、`version-minor=38`；版本 bump 与 tag 按 0.3 `phase-tag-requires-user-approval` 等用户批准。
+
+## 9 收口记录（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| 红证 | `de16f54 test(cleanup): P38 红`；基线上 defer 被当未声明变量，三条负例文案不符 |
+| 实现 | `1015e39 feat(cleanup): P38 block defer`；解析期 defer 栈、退出物化 N_DEFER_RUN、return 临时量、defer 先于 own、L38-1–L38-3 |
+| E38-1 | `220_defer_order`：`body` / `b` / `a`（LIFO） |
+| E38-2 | `221_defer_paths`：正常落出 / `return` / `break` / `continue` 四条路径 |
+| E38-3 | `222_defer_return`：`defer x=99` 后 `ret=1`（返回值先求值） |
+| E38-4 | `p38_goto_cross/sibling/in/active` 报 `a goto cannot cross a block with defer`；同块 goto 与 future-defer 祖先/后代按路径 LCA 放行 |
+| E38-5 | `223_defer_own_order`：`defer` / `drop` 顺序 |
+| E38-6 | `errors/p38_defer_control.ct` 报 `a defer block cannot transfer control` |
+| E38-7 | `errors/p38_defer_scope.ct` 报 `defer is only allowed inside a function` |
+| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1328、check-warnings 600、check-docs 945 links、acceptance 20；样例 `examples/42_defer` |
+| 版本/tag | 版本仍 `v0.37.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.38.0` bump 与 tag/push 等用户批准 |
+
+### 9.1 独立评审与修复（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| 评审结论 | 初版 Phase 38 **不通过**；Phase 37 有条件通过；guard/switch 边界经 battle p38-1（D-003）裁定 |
+| P0 修复 | 无括号 if/for/while/do 的 defer 上下文（`ac040d1`）；switch 内 defer v1 禁止；goto 改用顶层 defer 块 id，兄弟块跨跳不再漏清理 |
+| P1 修复 | defer 体内禁止 label（避免多出口重复发射）；`--runtime-checks` 进入缓存 key；guard 改为 `__ct_vt_guard`，vt 只求值一次，三种派发都覆盖 |
+| 新增测试 | 224 分支/循环/嵌套/同块 goto；p38_defer_switch(_nested) / p38_defer_label / p38_goto_sibling / p38_goto_in / p38_goto_active / p38_defer_header / break / continue / nested；P37 warm-cache 与 unstable/safe_index |
+| 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；switch 内 defer 连嵌套块也禁止；guard 不稳定接收者已按 p38-1 B′ 拒绝（D-003）；均记录为 v1 边界 |
+| 门禁 | `check-ast 1329/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
+| 版本/tag | `v0.38.0`；本地 annotated tag `v0.38.0`（不 push）；`v0.37.0` tag 仍含评审前的 runtime cache/guard 缺陷 |
+

@@ -29,6 +29,7 @@
     { "include": "#ct-self" },
     { "include": "#ct-delete" },
     { "include": "#ct-own" },
+    { "include": "#ct-defer" },
     { "include": "#ct-borrow" },
     { "include": "#ct-borrow-param" },
     { "include": "#ct-trait-builtin" },
@@ -380,6 +381,12 @@
       "match": "^[ \\t]*(own)\\b",
       "captures": {
         "1": { "name": "storage.modifier.own.ct" }
+      }
+    },
+    "ct-defer": {
+      "match": "\\b(defer)\\b(?=\\s*\\{)",
+      "captures": {
+        "1": { "name": "keyword.control.defer.ct" }
       }
     },
     "ct-borrow": {

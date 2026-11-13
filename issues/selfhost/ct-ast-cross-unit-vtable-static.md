@@ -72,7 +72,7 @@ main.ct:10:44: error: use of undeclared identifier 'Conn_Stream_vtable'
 5. 顺带更新两处已过时的注释：
    [test/modules/split/impl_dog.ct](../../test/modules/split/impl_dog.ct#L5-L6) 的
    "no other unit can name them"，
-   [bindings/mock-hal/uart.ct](../../bindings/mock-hal/uart.ct#L8-L9) 的
+   [bindings/mock-hal/uart.ct](../../test/bindings/mock-hal/uart.ct#L8-L9) 的
    "boxing a mapped instance is unit-private"。
 
 ## 验证

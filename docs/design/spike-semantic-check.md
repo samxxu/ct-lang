@@ -1,6 +1,6 @@
 # 受限语义检查 · 设计 spike
 
-> 中文 · [English](#english)
+> 中文
 > 状态：**spike 完成，结论 GO（限定范围）** · 2026-11-02
 > 锚点：工作树 `v0.16.3`；行为探针用已安装的 `ct v0.16.2`
 > 落点：[history/design/phase19.md](../history/design/phase19.md)
@@ -65,44 +65,3 @@ CLI 探针：`ct --help` 只有 `compile` 形态，**没有 `check` 模式**。
 - 383 个 `.ct` 文件、9,649 行语料（`test` / `examples` / `std` / `bindings`）上**零误报**；
 - 能捕获上表 4 个探针（缺少方法已捕获，其余三类在 19.1 后捕获）；
 - 11 道硬门禁与 `ct compile` / `ct build` 产物不变。
-
----
-
-## English
-
-### 1. Question
-
-Is a bounded semantic-check layer feasible? Three sub-questions: is the data present, what is already covered, and how high is the false-positive risk?
-
-### 2. Method
-
-Four black-box probes with `ct compile` plus a code review. Probe files live in `/tmp` and never enter the repository.
-
-| Probe | Input | Observed | Meaning |
-| --- | --- | --- | --- |
-| missing method | `struct S s; s.missing();` | `no method 'missing' for type 'struct S'`, exit 1 | **already checked** |
-| impl/trait signature mismatch | trait `f(int)`, impl `f()` | `warning: signature mismatch …`, **exit 0** | checked, but only a warning |
-| call-site arity | impl `f(int)`, call `s.f()` | exit 0, emits `s.__t_vptr->f(&s);` | **gap** |
-| function arity | `add(int,int)`, call `add(1)` | exit 0 | **gap** |
-
-`ct --help` exposes no `check` mode.
-
-### 3. Already covered
-
-Method existence ([Emitter.h.ct:2693](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2693)), impl/trait signature mismatch ([Parser.h.ct:2056](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2056)), field existence ([Expr.h.ct:1438](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1438)), impl completeness ([Parser.h.ct:2123](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2123)), map-binding arity ([MapBuild.h.ct:735](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct#L735)). Parameter types and counts are already stored in `Fn` and `MethodSig`.
-
-### 4. Gaps
-
-Call-site arity; coarse argument-type compatibility; trait-method ambiguity (SH-46); cross-unit signature drift; a separate `ct check` entry point and severity policy.
-
-### 5. Risks
-
-Pass-through C, macros, `.m.ct` recipes and raw blocks must be treated as `unknown` and skipped. Types are strings today; only decidable arguments are compared. The checker must live in `ct-ast` and must not require new syntax in `ct-ast` sources.
-
-### 6. Verdict
-
-**GO, bounded.** Roughly **+700–1,300 lines (4–8%)** across four slices. No full type system, no generics, no change to `ct compile` / `ct build` output or default exit codes. Plan: [phase19.md](../history/design/phase19.md).
-
-### 7. Exit
-
-Zero false positives on the 383-file / 9,649-line corpus; the four probes are caught; the 11 hard gates and generated artifacts stay unchanged.

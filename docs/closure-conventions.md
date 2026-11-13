@@ -1,6 +1,6 @@
 # 闭包与容器回调约定（Phase 21 S0）
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：S0 约定**（2026-11-08，Phase 21 的第一片）。本文只写约定，不改编译器；档② 闭包（`=>`）在
 > S3 之后才可用，今天能照着写的是**档①**（`struct` + `trait` + 适配函数）。
@@ -164,100 +164,3 @@ t.ct:4:9: note: tier 1: trait Op { int call(int x); } ...
 | 需要写回捕获的变量 | 捕获指针并在闭包内显式解引用（D21-2）；或档① |
 | 同一回调要跨单元按符号引用 | 档① 并自写 `pub` 包装 |
 | C 回调签名没有 `void *` 槽（`qsort` 等） | 都不行；改签名或写全局状态 |
-
----
-
-## English
-
-### 0. One-page summary
-
-| # | Convention | Rule |
-| --- | --- | --- |
-| 1 | One callback shape only | `(fn, env)`: `env` is the callback's **first** parameter; do not pack a struct |
-| 2 | Containers never retain callbacks | Use the pair for the call only; store neither word |
-| 3 | A closure is a binding, not a value | No copy, no reassignment, no field / element / return value, no container ownership |
-| 4 | C callbacks without an env slot | `qsort`-style signatures take neither tier; not a closure gap |
-| 5 | Escape errors stay at the source position | The only uncaught case is handing `env` out as `void *` (E8, §6) |
-
-### 1. Container callback signature
-
-A container or algorithm that takes a callback accepts exactly one shape:
-
-```c
-int ring_each(struct IntRing *r, int (*fn)(void *env, int x), void *env);
-```
-
-- `env` is always the callback's first parameter; `fn` and `env` are **adjacent** in the callee's parameter
-  list, `fn` first.
-- The caller owns `env` and guarantees its lifetime; the container only forwards it.
-- Element types are concrete: without generics each element type needs its own container function.
-  Closures remove the **call-site** adapter, not the container function.
-- A closure argument is one source-level argument that expands to two C arguments over the `(fn, env)` pair;
-  arity counts it as two. The recognition rule is narrow: an adjacent `ret (*P)(void *self, …)` + `void *E`
-  pair, with the closure filling the start of that pair.
-- **A container must not retain `env`**: a stack environment dies with the frame. Long-lived callbacks use
-  tier 1 and manage their own lifetime.
-- C callbacks with no env slot (`qsort`) accept neither tier. That is the signature talking, not a missing
-  closure feature.
-
-### 2. Tier 1 today
-
-Tier 1 is an explicit `struct` + `trait`: the object is the `env`, an adapter function is the `fn`.
-See [../examples/09_callback/callback.ct](../examples/09_callback/callback.ct) for a runnable version.
-
-The generated impl wrapper `<Struct>_<Trait>_<method>(void *self, …)` already has the shape, but it is
-emitted `static` and **cannot be named in source**; write the two-line adapter when you need its address
-or a cross-unit reference.
-
-### 3. Tier 2 once it lands (after S3)
-
-`int (*add)(int x) = (int x) => x + n;` — the left-hand function pointer supplies the return type, with no
-`auto` and no inference (D21-1). Captures are by value, evaluated at creation, read-only (D21-2); a closure
-variable is a binding, not a value — it may be called, and the binding as a whole may fill a `(fn, env)`
-parameter (R03), but it cannot be copied, reassigned, stored in a field / element or returned
-(D21-13 / D21-16); the environment lives on the stack and a closure value cannot be held by a container. A
-literal passed directly as an argument is compared against the host `(fn, env)` pair from S5 on, with the
-return type taken from the host `fn` (D21-14); a declared binding may fill the pair too (R03), with its
-parameter tail compared and its declared return type left alone. Block bodies and nested literals also land
-in S5, and an inner capture copies a value out of the outer environment field.
-
-### 4. Generated names (frozen at S3)
-
-The shape below is frozen when tier 2 lands (S3):
-
-`__ct_cl_env_<N>` (struct tag), `__ct_cl_tramp_<N>` (`static` trampoline) and `__ct_cl_env_v_<N>` (stack
-instance) share one unit-level counter `N`. They live at `.c` file scope, never in `.h`; no function name
-and no namespace prefix (D21-3 / D21-8). The emitter pre-scans each owner function and emits the products
-right before its body (D21-15); a unit without closures keeps byte-identical output. `__ct_` stays reserved.
-
-### 5. Frozen ABI and diagnostics
-
-`(fn, env)` order, naming and call-site expansion are frozen at **S3**; direct literal arguments are excluded
-from the freeze and land in S5 (D21-14). Diagnostics are stable English text with a separate `note:` line
-carrying a copy-pasteable tier-1 recipe (the channel ships in S4; the contract is pinned here).
-`note:` does not count toward `MAX_ERRORS`, does not enter
-`--diagnostics=json`, and does not change `ct check`'s exit code or the `N` in `ctc: N error(s) generated`.
-The full message list lives in [history/design/phase21.md](history/design/phase21.md) §4.6.
-
-### 6. Known unprotected surfaces
-
-- **E8 (unchecked)**: `env` handed to an opaque C function, or to **another CT function** (including a
-  future std `each(v, fn, env)`), and then stored in a global / field / container. The callee sees a plain
-  `void *`; there is no cross-procedure analysis. Only the API convention and documentation guard this.
-  A declared binding is exposed to E8 exactly like an inline literal: the env is still a stack object, so
-  a receiver that keeps it dangles (R03 only allows the pair to be passed; it does not change lifetimes).
-- **E9 (unchecked)**: `goto` jumping over a closure declaration behaves like `own` / `borrow` today.
-- **Forbidden by design** (not holes): a closure type in `.h.ct`, as a return value, as a field or array
-  element, or a closure variable in another unit.
-- **Allowed across units**: passing a trampoline / impl wrapper **address** to another unit's function;
-  `static` only blocks reference by symbol name.
-
-### 7. Which tier
-
-| Situation | Choice |
-| --- | --- |
-| Callback used only for this call (local loop, immediate argument) | tier 2 after S3; tier 1 today |
-| Callback retained by a container / global / field | tier 1, caller manages lifetime |
-| Need to write back a captured variable | capture a pointer and dereference explicitly (D21-2), or use tier 1 |
-| Callback referenced by symbol across units | tier 1 plus a `pub` wrapper |
-| C callback with no `void *` slot (`qsort`) | neither; change the signature or use global state |

@@ -1,0 +1,24 @@
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static int open_db(void)
+{
+    printf("open db\n");
+    return 1;
+}
+
+static int load(void)
+{
+    int fd = open_db();
+    defer { printf("close db\n"); }
+    defer { printf("flush db\n"); }
+    printf("use db\n");
+    return fd;
+}
+
+int main(void)
+{
+    int r = load();
+    printf("r=%d\n", r);
+    return 0;
+}

@@ -1,0 +1,17 @@
+trait Shape {
+    int area(char *k);
+}
+
+struct Box { int n; } use Shape;
+
+impl Shape for Box {
+    int area(int k) { return k; }
+}
+
+int main(void)
+{
+    struct Box b;
+    char *s = "x";
+    b.n = 1;
+    return b.area(s);
+}

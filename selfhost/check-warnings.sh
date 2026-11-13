@@ -16,7 +16,7 @@
 #     expanded by its plugins first, as in check-ast.sh);
 #   - test/modules/*/main.ct or main.h.ct (build mode, all units);
 #   - examples/*/src/main.ct       (build mode; the src-layout demos 08, 13, 14);
-#   - bindings/*/demo.ct            (build mode, with the roots the build prints).
+#   - test/bindings/*/demo.ct            (build mode, with the roots the build prints).
 #
 # The gate is strict on purpose. `_self` / vtable / Drop helpers used to warn
 # when unused (issue SH-10); the emitter now silences them at the source
@@ -272,7 +272,7 @@ done
 
 echo
 echo "== bindings (Phase 12) =="
-for bd in bindings/*/; do
+for bd in test/bindings/*/; do
     bd="${bd%/}"
     bname="$(basename "$bd")"
     [ -f "$bd/demo.ct" ] || continue
@@ -280,13 +280,13 @@ for bd in bindings/*/; do
     mkdir -p "$work/bind"
     if ! "$work/ct-ast" build --emit-c "$bd/demo.ct" -o "$work/bind" \
             >"$work/bind.out" 2>"$work/bind.err"; then
-        bad "bindings/$bname" "ct-ast failed: $(cat "$work/bind.err")"
+        bad "test/bindings/$bname" "ct-ast failed: $(cat "$work/bind.err")"
         continue
     fi
     roots=$(grep '^cc ' "$work/bind.out" 2>/dev/null \
         | awk '{ for (i = 2; i <= NF; i++) if ($i == "-I") printf " -I %s", $(i + 1) }')
     for f in "$work/bind"/*.c; do
-        scan_one "bindings/$bname/$(basename "$f")" "$f" -I "$bd" $roots
+        scan_one "test/bindings/$bname/$(basename "$f")" "$f" -I "$bd" $roots
     done
 done
 

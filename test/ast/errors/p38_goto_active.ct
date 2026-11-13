@@ -1,0 +1,12 @@
+int main(void)
+{
+    {
+        defer { }
+        goto L;
+        {
+        L:
+            defer { }
+        }
+    }
+    return 0;
+}

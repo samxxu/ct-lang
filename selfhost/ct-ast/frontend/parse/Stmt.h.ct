@@ -71,6 +71,10 @@ import tool::diag::Diag;
 /* Phase 31 S14a: one `key: value` pair of a `Map` brace initializer. `a` is the
    key expression, `b` the value expression, and pairs chain through `next`. */
 #define N_INIT_ITEM 66
+/* Phase 38: a parsed `defer { … }` block (`a` = body). It is not a statement in
+   the emitted chain; the parser materialises N_DEFER_RUN wrappers at exits. */
+#define N_DEFER 69
+#define N_DEFER_RUN 70
 /* Phase 31 S14a: a `Map` brace initializer. `text` is the nested `MapEntry`
    struct spelling, `text2` the encoded `Map` name, `aux` the item count and `a`
    the first `N_INIT_ITEM` (items chain through `next`). */
@@ -102,6 +106,13 @@ namespace frontend::parse;
 pub trait StmtOps {
     int  is_decl_start(void);
     int  parse_block(void);
+    int  defer_ahead(void);
+    int  defer_add(int node);
+    int  defer_active_depth(void);
+    int  defer_mark_block(void);
+    int  defer_run_node(int body, int line);
+    int  defer_prepend(int node, int base);
+    int  defer_flush_block(int blk, int *tail);
     int  parse_stmt(void);
     int  parse_branch(void);
     int  parse_decl_node(void);
@@ -177,6 +188,25 @@ pub struct Stmt {
     int  nbreak;
     int  cont_base[256];
     int  ncont;
+    /* Phase 38: one defer stack per open block. `parse_block` pushes an entry;
+       `defer_add` appends at parse time, and the exits materialise wrappers.
+       `in_defer` rejects control transfer inside a defer body. */
+    int  in_defer;
+    int  ndefer_blocks;
+    int  defer_head[256];
+    int  defer_tail[256];
+    int  defer_ids[257];
+    int  ndefer_next_id;
+    int  defer_break_base[256];
+    int  defer_cont_base[256];
+    /* The defer depth at each label/goto, so `func_end` can reject a jump
+       across a block that owns a defer while allowing a same-block jump. */
+    int  label_path[64][256];
+    int  goto_path[64][256];
+    char label_path_has[64][256];
+    char goto_path_has[64][256];
+    int  label_path_depth[64];
+    int  goto_path_depth[64];
 } use StmtOps;
 
 /* AutoDrop: append `delete v;` for the `own` declarations recorded since `base`,
@@ -295,9 +325,11 @@ static int jump_push(struct Stmt *self, int brk, int cont)
     if (self->nbreak >= 256 || (cont >= 0 && self->ncont >= 256))
         return self->sup->fail("loops are nested too deeply");
     self->break_base[self->nbreak] = brk;
+    self->defer_break_base[self->nbreak] = self->ndefer_blocks;
     self->nbreak = self->nbreak + 1;
     if (cont < 0) return 0;
     self->cont_base[self->ncont] = cont;
+    self->defer_cont_base[self->ncont] = self->ndefer_blocks;
     self->ncont = self->ncont + 1;
     return 0;
 }
@@ -1328,6 +1360,122 @@ static int kw_paren_ahead(struct Stmt *self, const char *kw)
 }
 
 impl StmtOps for Stmt {
+    /* Phase 38: `defer` is only the keyword when the next non-space source
+       character is `{`; otherwise it stays an ordinary identifier (D38-7). */
+    int defer_ahead(void)
+    {
+        const char *p;
+        (void)self;
+        if (self->lex->tok != T_ID) return 0;
+        if (strcmp(self->lex->toktext, "defer") != 0) return 0;
+        p = self->lex->src + self->lex->tokstart + 5;
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        return *p == '{';
+    }
+
+    int defer_active_depth(void)
+    {
+        int i, n;
+        (void)self;
+        n = 0;
+        for (i = 0; i < self->ndefer_blocks; i++)
+            if (self->defer_head[i] >= 0) n++;
+        return n;
+    }
+
+    int defer_mark_block(void)
+    {
+        int b, i, j, id;
+        (void)self;
+        b = self->ndefer_blocks - 1;
+        if (b < 0 || self->defer_head[b] < 0) return 0;
+        id = self->defer_ids[b];
+        for (i = 0; i < self->nlabels; i++)
+            for (j = 0; j < self->label_path_depth[i]; j++)
+                if (self->label_path[i][j] == id) self->label_path_has[i][j] = 1;
+        for (i = 0; i < self->ngotos; i++)
+            for (j = 0; j < self->goto_path_depth[i]; j++)
+                if (self->goto_path[i][j] == id) self->goto_path_has[i][j] = 1;
+        return 0;
+    }
+
+    int defer_add(int node)
+    {
+        int b, t;
+        (void)self;
+        b = self->ndefer_blocks - 1;
+        if (b < 0) return -1;
+        t = self->defer_tail[b];
+        if (t < 0) self->defer_head[b] = node;
+        else self->arena->nodes[t].next = node;
+        self->defer_tail[b] = node;
+        self->arena->nodes[node].next = -1;
+        return 0;
+    }
+
+    int defer_run_node(int body, int line)
+    {
+        int r;
+        (void)self;
+        r = self->sup->new_node(N_DEFER_RUN);
+        if (r < 0) return -1;
+        self->arena->nodes[r].a = body;
+        self->arena->nodes[r].line = line;
+        return r;
+    }
+
+    int defer_prepend(int node, int base)
+    {
+        int i, k, n, head, tail, ids[256];
+        (void)self;
+        head = -1;
+        tail = -1;
+        for (i = self->ndefer_blocks - 1; i >= base; i--) {
+            n = 0;
+            for (k = self->defer_head[i]; k >= 0; k = self->arena->nodes[k].next) {
+                if (n >= 256) return -1;
+                ids[n] = k;
+                n++;
+            }
+            for (k = n - 1; k >= 0; k--) {
+                int r = self->defer_run_node(self->arena->nodes[ids[k]].a,
+                                             self->arena->nodes[ids[k]].line);
+                if (r < 0) return -1;
+                if (head < 0) head = r;
+                else self->arena->nodes[tail].next = r;
+                tail = r;
+            }
+        }
+        if (head >= 0) {
+            self->arena->nodes[tail].next = self->arena->nodes[node].b;
+            self->arena->nodes[node].b = head;
+        }
+        return 0;
+    }
+
+    int defer_flush_block(int blk, int *tail)
+    {
+        int i, k, n, ids[256];
+        (void)self;
+        i = self->ndefer_blocks - 1;
+        if (i < 0) return 0;
+        n = 0;
+        for (k = self->defer_head[i]; k >= 0; k = self->arena->nodes[k].next) {
+            if (n >= 256) return -1;
+            ids[n] = k;
+            n++;
+        }
+        for (k = n - 1; k >= 0; k--) {
+            int r = self->defer_run_node(self->arena->nodes[ids[k]].a,
+                                         self->arena->nodes[ids[k]].line);
+            if (r < 0) return -1;
+            if (*tail < 0) self->arena->nodes[blk].a = r;
+            else self->arena->nodes[*tail].next = r;
+            *tail = r;
+        }
+        return 0;
+    }
+
     /* Does the current token start a declaration? A short name has to be
        resolved first: the type table only holds the mangled spelling, so
        `Arena *p` would otherwise look like an expression statement. */
@@ -1399,6 +1547,15 @@ impl StmtOps for Stmt {
 
         if (self->sup->expect("{") != 0) return -1;
         if (self->sup->push_scope() != 0) return -1;
+        if (self->ndefer_blocks >= 256) {
+            self->sup->pop_scope();
+            return self->sup->fail("blocks are nested too deeply");
+        }
+        self->defer_head[self->ndefer_blocks] = -1;
+        self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_next_id = self->ndefer_next_id + 1;
+        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
+        self->ndefer_blocks = self->ndefer_blocks + 1;
         base = self->mem->own_base[self->sym->nscope - 1];
         blk = self->sup->new_node(N_BLOCK);
         if (blk < 0) {
@@ -1415,6 +1572,12 @@ impl StmtOps for Stmt {
             if (tail < 0) self->arena->nodes[blk].a = s;
             else self->arena->nodes[tail].next = s;
             tail = s;
+        }
+        /* Phase 38: a block's defers run (reverse source order) before its
+           implicit `own` releases; both groups keep their own LIFO order. */
+        if (self->defer_flush_block(blk, &tail) != 0) {
+            self->sup->pop_scope();
+            return -1;
         }
         /* AutoDrop: append `delete v;` for this scope's `own` declarations, in
            reverse order, just before the closing brace (L2's line rewrite does
@@ -1446,6 +1609,8 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        (void)self->defer_mark_block();
+        self->ndefer_blocks = self->ndefer_blocks - 1;
         return blk;
     }
 
@@ -1484,6 +1649,43 @@ impl StmtOps for Stmt {
             if (self->sup->expect(";") != 0) return -1;
             return s;
         }
+        /* Phase 38: `defer { … }` at statement position. The body is parsed as
+           an ordinary block; a nested defer or a control transfer inside it is
+           rejected here, before any code is emitted. */
+        if (self->defer_ahead()) {
+            int dline = self->lex->tokline;
+            int dcol = self->lex->tokstart - self->lex->lstart + 1;
+            int body;
+            if (self->in_defer)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "a defer block cannot transfer control", self->mem->path);
+            if (self->switch_depth > 0)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "defer is not allowed inside a switch", self->mem->path);
+            {
+                size_t pl = strlen(self->mem->path);
+                if (pl > 5 && strcmp(self->mem->path + pl - 5, ".h.ct") == 0)
+                    return tool::diag::ct_sem_error(dline, dcol,
+                        "defer is not allowed in a .h.ct unit", self->mem->path);
+            }
+            if (self->ndefer_blocks == 0)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "defer is only allowed inside a function", self->mem->path);
+            s = self->sup->new_node(N_DEFER);
+            if (s < 0) return -1;
+            self->arena->nodes[s].line = dline;
+            self->sup->lex_next();
+            self->in_defer = 1;
+            body = self->parse_block();
+            self->in_defer = 0;
+            if (body < 0) return -1;
+            self->arena->nodes[s].a = body;
+            if (self->defer_add(s) != 0) return -1;
+            /* the deferred body runs at an exit, never in sequence */
+            s = self->sup->new_node(N_EMPTY);
+            if (s < 0) return -1;
+            return s;
+        }
         /* `;` is a statement of its own (C's empty statement): it keeps
            `for (...) ;` and `case 1: ;` on the ordinary path and emits nothing */
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
@@ -1496,6 +1698,9 @@ impl StmtOps for Stmt {
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
             int rline = self->lex->tokline, rcol = self->lex->tokstart - self->lex->lstart + 1, at_start = 1, rp, cond;
             int eline = 0, ecol = 0;
+            if (self->in_defer)
+                return tool::diag::ct_sem_error(rline, rcol,
+                    "a defer block cannot transfer control", self->mem->path);
             for (rp = self->lex->lstart; rp < self->lex->tokstart; rp++)
                 if (self->lex->src[rp] != ' ' && self->lex->src[rp] != '\t' && self->lex->src[rp] != '\r') at_start = 0;
             /* a return nested in a block (or written mid-line) may be skipped
@@ -1528,6 +1733,8 @@ impl StmtOps for Stmt {
                     s = retire_before_return(self, s, !cond);
                     if (s < 0) return -1;
                 }
+                if (self->defer_active_depth() > 0
+                    && self->defer_prepend(s, 0) != 0) return -1;
                 return s;
             }
             self->ex->into_ok = 1;
@@ -1591,6 +1798,17 @@ impl StmtOps for Stmt {
                 s = retire_before_return(self, s, !cond);
                 if (s < 0) return -1;
             }
+            if (self->defer_active_depth() > 0) {
+                /* D38-3: the value is evaluated before the defers run, so a
+                   defer that rewrites a local cannot change what is returned */
+                if (self->arena->nodes[s].a >= 0 && self->sym->ret_type[0]
+                    && strcmp(self->sym->ret_type, "void") != 0) {
+                    self->arena->nodes[s].aux = 1;
+                    snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s",
+                             self->sym->ret_type);
+                }
+                if (self->defer_prepend(s, 0) != 0) return -1;
+            }
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "delete") == 0) {
@@ -1630,21 +1848,33 @@ impl StmtOps for Stmt {
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "break") == 0) {
+            int bcol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->in_defer)
+                return tool::diag::ct_sem_error(self->lex->tokline, bcol,
+                    "a defer block cannot transfer control", self->mem->path);
             s = self->sup->new_node(N_BREAK);
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect(";") != 0) return -1;
             if (self->nbreak > 0
                 && retire_before_jump(self, s, self->break_base[self->nbreak - 1]) < 0) return -1;
+            if (self->nbreak > 0
+                && self->defer_prepend(s, self->defer_break_base[self->nbreak - 1]) != 0) return -1;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
+            int ccol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->in_defer)
+                return tool::diag::ct_sem_error(self->lex->tokline, ccol,
+                    "a defer block cannot transfer control", self->mem->path);
             s = self->sup->new_node(N_CONT);
             if (s < 0) return -1;
             self->sup->lex_next();
             if (self->sup->expect(";") != 0) return -1;
             if (self->ncont > 0
                 && retire_before_jump(self, s, self->cont_base[self->ncont - 1]) < 0) return -1;
+            if (self->ncont > 0
+                && self->defer_prepend(s, self->defer_cont_base[self->ncont - 1]) != 0) return -1;
             return s;
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "goto") == 0) return self->parse_goto();
@@ -1960,6 +2190,15 @@ impl StmtOps for Stmt {
 
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->sup->push_scope() != 0) return -1;
+        if (self->ndefer_blocks >= 256) {
+            self->sup->pop_scope();
+            return self->sup->fail("blocks are nested too deeply");
+        }
+        self->defer_head[self->ndefer_blocks] = -1;
+        self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_next_id = self->ndefer_next_id + 1;
+        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
+        self->ndefer_blocks = self->ndefer_blocks + 1;
         base = self->mem->own_base[self->sym->nscope - 1];
         s = self->parse_stmt();
         if (s < 0) {
@@ -1973,6 +2212,10 @@ impl StmtOps for Stmt {
         }
         self->arena->nodes[b].a = s;
         tail = s;
+        if (self->defer_flush_block(b, &tail) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         /* a braceless branch is still a scope: its `own` has to be released, or
            it leaks with no warning (`parse_block` does the same before its `}`) */
         if (self->mem->nowner > base && autodrop_append(self, b, base, &tail) != 0) {
@@ -1984,6 +2227,8 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        (void)self->defer_mark_block();
+        self->ndefer_blocks = self->ndefer_blocks - 1;
         return b;
     }
 
@@ -2011,6 +2256,17 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
+        /* Push the switch body's defer entry *after* the jump baseline: a
+           `break` must run this body's defers, just like a loop body's. */
+        if (self->ndefer_blocks >= 256) {
+            self->sup->pop_scope();
+            return self->sup->fail("blocks are nested too deeply");
+        }
+        self->defer_head[self->ndefer_blocks] = -1;
+        self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_next_id = self->ndefer_next_id + 1;
+        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
+        self->ndefer_blocks = self->ndefer_blocks + 1;
         self->switch_depth = self->switch_depth + 1;
         tail = -1;
         while (self->lex->tok != T_EOF
@@ -2030,6 +2286,12 @@ impl StmtOps for Stmt {
             else self->arena->nodes[tail].next = s;
             tail = s;
         }
+        if (self->defer_flush_block(blk, &tail) != 0) {
+            self->switch_depth = self->switch_depth - 1;
+            jump_pop(self, 0);
+            self->sup->pop_scope();
+            return -1;
+        }
         self->switch_depth = self->switch_depth - 1;
         jump_pop(self, 0);
         if (self->sup->expect("}") != 0) {
@@ -2037,6 +2299,8 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        (void)self->defer_mark_block();
+        self->ndefer_blocks = self->ndefer_blocks - 1;
         return blk;
     }
 
@@ -2052,6 +2316,8 @@ impl StmtOps for Stmt {
         int s, c, head, tail, is_def, val;
         (void)self;
 
+        if (self->in_defer)
+            return self->sup->fail("a defer block cannot declare a label");
         s = self->sup->new_node(N_CASE);
         if (s < 0) return -1;
         is_def = strcmp(self->lex->toktext, "default") == 0;
@@ -2783,11 +3049,13 @@ impl StmtOps for Stmt {
        empty chain is an error rather than an emitted `name: }`. */
     int parse_named_label(void)
     {
-        int s, c, head, tail, line;
+        int s, c, head, tail, line, i;
         char name[MAX_TEXT];
         char msg[MAX_TEXT];
         (void)self;
 
+        if (self->in_defer)
+            return self->sup->fail("a defer block cannot declare a label");
         line = self->lex->tokline;
         snprintf(name, sizeof name, "%s", self->lex->toktext);
         if (self->nlabels >= MAX_LABELS) return self->sup->fail("too many labels in one function");
@@ -2799,6 +3067,11 @@ impl StmtOps for Stmt {
         if (s < 0) return -1;
         snprintf(self->label_names[self->nlabels], MAX_TEXT, "%s", name);
         self->label_lines[self->nlabels] = line;
+        self->label_path_depth[self->nlabels] = self->ndefer_blocks;
+        for (i = 0; i < self->ndefer_blocks; i++) {
+            self->label_path[self->nlabels][i] = self->defer_ids[i];
+            self->label_path_has[self->nlabels][i] = 0;
+        }
         self->nlabels = self->nlabels + 1;
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         self->sup->lex_next();
@@ -2828,10 +3101,14 @@ impl StmtOps for Stmt {
        be defined later in the same function (D-5). */
     int parse_goto(void)
     {
-        int s;
+        int s, i;
         char name[MAX_TEXT];
         (void)self;
 
+        if (self->in_defer)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1,
+                "a defer block cannot transfer control", self->mem->path);
         s = self->sup->new_node(N_GOTO);
         if (s < 0) return -1;
         self->sup->lex_next();
@@ -2841,6 +3118,11 @@ impl StmtOps for Stmt {
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         snprintf(self->goto_names[self->ngotos], MAX_TEXT, "%s", name);
         self->goto_lines[self->ngotos] = self->arena->nodes[s].line;
+        self->goto_path_depth[self->ngotos] = self->ndefer_blocks;
+        for (i = 0; i < self->ndefer_blocks; i++) {
+            self->goto_path[self->ngotos][i] = self->defer_ids[i];
+            self->goto_path_has[self->ngotos][i] = 0;
+        }
         self->ngotos = self->ngotos + 1;
         self->sup->lex_next();
         if (self->sup->expect(";") != 0) return -1;
@@ -2854,6 +3136,9 @@ impl StmtOps for Stmt {
         self->ngotos = 0;
         self->nbreak = 0;
         self->ncont = 0;
+        self->ndefer_blocks = 0;
+        self->ndefer_next_id = 0;
+        self->in_defer = 0;
         return 0;
     }
 
@@ -2861,15 +3146,32 @@ impl StmtOps for Stmt {
        the whole body has been seen; the complaint points at the `goto` line. */
     int func_end(void)
     {
-        int i;
+        int i, j, k, gd, ld;
         char msg[MAX_TEXT];
         (void)self;
 
         for (i = 0; i < self->ngotos; i++) {
-            if (self->label_find(self->goto_names[i]) < 0) {
+            int li = self->label_find(self->goto_names[i]);
+            if (li < 0) {
                 snprintf(msg, sizeof msg, "label '%s' is not defined", self->goto_names[i]);
                 return self->sup->fail_at(self->goto_lines[i], msg);
             }
+            /* Only a path element below the label/goto LCA is a block boundary
+               the jump actually crosses. A defer on an ancestor common to both
+               sides is not crossed. */
+            gd = self->goto_path_depth[i];
+            ld = self->label_path_depth[li];
+            k = 0;
+            while (k < gd && k < ld
+                   && self->goto_path[i][k] == self->label_path[li][k]) k++;
+            for (j = k; j < gd; j++)
+                if (self->goto_path_has[i][j])
+                    return self->sup->fail_at(self->goto_lines[i],
+                        "a goto cannot cross a block with defer");
+            for (j = k; j < ld; j++)
+                if (self->label_path_has[li][j])
+                    return self->sup->fail_at(self->goto_lines[i],
+                        "a goto cannot cross a block with defer");
         }
         return 0;
     }

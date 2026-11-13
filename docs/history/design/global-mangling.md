@@ -1,6 +1,6 @@
 # 全局变量 mangling 与限定引用
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：已获用户批准（2026-10-22），本文件是该批次的实现依据。**
 > 锚点：commit `c554d10`（v0.12.0，2026-10-22）。
@@ -54,49 +54,3 @@ Batch 2 的 2b.3 规定 `map trait T for instance A::B::h` 的 C 名是 `A_B_h`�
 | 歧义 | `test/modules/ambig_global` 必须非零退出，诊断含 `exported by more than one namespace` |
 | map | `test/modules/map_ns` 的 vtable 名为 `hal_uart1_hal_Writer_vtable`，包装函数体引用 `hal_uart1` |
 | 回归 | `bash selfhost/check-all.sh` 九关全绿、零 `FAIL`；`git status` 不出现 `test/cases/**`、`examples/**` 的 `.expected.*` 变化 |
-
----
-
-## English
-
-**Status: approved by the user (2026-10-22); this file is the implementation baseline.**
-Anchor: `c554d10` (v0.12.0, 2026-10-22). Prerequisite: Batch 2 has landed.
-
-### 1. Problem
-
-2b.3 asked for the C name `A_B_h` for `map trait T for instance A::B::h`, but the implementation did not
-mangle globals at all: the qualified spelling was accepted and reduced to its last segment. Two things
-follow: two namespaces cannot each declare `h` (both emit `int h;`, a duplicate symbol), and the map's
-derived names (`<inst>_<Trait>_vtable`, wrappers) carry no namespace, so same-named instances collide.
-
-### 2. Rules
-
-1. A global inside a namespace is **mangled** by that namespace: `namespace A::B; int h;` emits `A_B_h`,
-   the same prefix rule types and `pub` functions follow.
-2. **`extern` is exempt**: `extern int lib_flag;` names a symbol the C library owns, so it keeps its own
-   spelling and an empty namespace.
-3. **Qualified references**: `a::h` in an expression resolves to that namespace's exported global; a bare
-   name still works while only one candidate exists. Two imported namespaces exporting one name make the
-   bare reference an error that asks for the qualified form.
-4. **`map` follows the instance's C name**: the vtable is `<inst-cname>_<Trait>_vtable` and a wrapper is
-   `<inst-cname>_<Trait>_<method>`; globals named in a wrapper body are rewritten to their C spelling,
-   skipping member names after `.` / `->` and literals.
-
-### 3. Implementation notes
-
-`Var` gains `cname` / `ns` / `is_global` / `imported` / `ambiguous` (source name, emitted spelling,
-underscore-form namespace, provenance). An importing unit registers its dependencies' `pub` globals under
-the same mangling; two imports with different C names mark the name ambiguous. `N_VAR.text3` carries the
-C spelling for the emitter, `emit_global_decl` composes `<prefix><name>` for file-scope declarations, and
-each `Unit` records its mangled `nsprefix`, which the build writers hand to the emitter.
-
-### 4. Non-goals
-
-Qualified **type** names, a change to the linkage of `static` globals, and any new capacity limit.
-
-### 5. Acceptance
-
-`test/modules/ns_globals` (mangled exports, qualified reads and writes, correct output),
-`test/modules/ambig_global` (non-zero exit with the ambiguity diagnostic), `test/modules/map_ns`
-(`hal_uart1_hal_Writer_vtable` plus `hal_uart1` in the wrapper body), and nine hard gates green with no
-change under `test/cases/**` or `examples/**`.

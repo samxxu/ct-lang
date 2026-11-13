@@ -1,0 +1,2 @@
+trait T { int f(); }
+pub T identity(T x) { return x; }

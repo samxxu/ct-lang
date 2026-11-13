@@ -1,0 +1,5 @@
+static int f(void)
+{
+    defer { }
+    return 0;
+}

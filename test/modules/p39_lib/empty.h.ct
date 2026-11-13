@@ -1,0 +1,2 @@
+/* R1: a header unit with no pub functions. */
+static int helper(void) { return 0; }

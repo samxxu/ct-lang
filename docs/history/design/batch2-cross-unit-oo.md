@@ -1,6 +1,6 @@
 # Batch 2 需求规格：跨单元 OO（已实现）
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：已实现（2026-10-22，出口验证见本节末）。** 本文件是经用户批准的原始需求规格，
 > 保留作实现依据与历史记录。
@@ -167,7 +167,7 @@ struct 非 pub 时消费单元连变量都声明不了，导出了也没用，�
 
 - [test/modules/split/impl_dog.ct](../../../test/modules/split/impl_dog.h.ct#L5-L6) 的
   "no other unit can name them"；
-- [bindings/mock-hal/uart.ct](../../../bindings/mock-hal/uart.h.ct#L8-L9) 的
+- [bindings/mock-hal/uart.ct](../../../test/bindings/mock-hal/uart.h.ct#L8-L9) 的
   "boxing a mapped instance is unit-private"。
 
 ### 6. 验收标准
@@ -195,110 +195,3 @@ struct 非 pub 时消费单元连变量都声明不了，导出了也没用，�
    vtable 的外部链接边界，以及 map 两级绑定与直绑的签名约定（首参 `void *`）。
 5. 工作树可按提交规约拆分：`fix`（2a.2 / 2c.1 / 2c.2）、`feat`（2a.1 / 2a.3 / 2a.4 / 2b.1–2b.4）、
    `docs` 分开。
-
----
-
-## English
-
-### 1. Goal
-
-Make CT's object model usable **across compilation units**. Trigger: a third party writing a
-network library in CT needs bindings that expose a C function-style API as CT traits, with the
-interface values crossing unit boundaries.
-
-| Capability | Today | Target |
-| --- | --- | --- |
-| Interface value across units | only by boxing in the owning unit (works, undocumented) | any unit can box |
-| `pub` global variable | **unusable** (symbol is dropped) | `extern` in `.h`, definition in `.c` |
-| `extern` declaration only | unsupported | supported, for bindings |
-| `map` bound to a C function | always emits a wrapper | bare-name binding emits nothing |
-| Function pointers | unsupported | declare, assign, call, use as field / parameter |
-
-### 2. Evidence
-
-Every "Today" claim above was measured with a locally built four-layer chain (L0 → L1 → L2 →
-ct-ast), not inferred from reading code:
-
-| # | Case | Result |
-| --- | --- | --- |
-| S1 | unit B boxes `Conn`, whose impl lives in unit A | ct-ast accepts; C fails with `use of undeclared identifier 'Conn_Stream_vtable'` |
-| S2 | A boxes and `pub Stream stream_open(void)` returns the interface | passes, correct output, no warnings |
-| S3 | `pub int g_counter = 5;` | absent from `.h`, skipped in `.c`; the same unit fails to compile |
-| S4 | `void *h;` as a `map` instance | passes (no dummy struct needed) |
-| S5 | `map` argument `g_base + v * 2` | `map argument 'g_base + v * 2' is not allowed` |
-| S6 | an impl method that ignores a parameter | generated C warns `-Wunused-parameter`; `(void)_self;` sits after `return` |
-| S7 | `struct net::Conn *c;` / `net::Conn *c;` | `expected a variable name` / `no function of that name in that namespace` |
-| S8 | three `import` lines naming one unit | three `#include "conn.h"` lines |
-
-So the third party's request (1) reduces to a single `static`; (2)'s "no dummy struct" and (3)'s
-`#include` **already work**; (4) is half a bug (S3) and half a real gap (function pointers).
-
-### 3. Requirements
-
-**3.1 Linkage (2a).** (2a.1) When a `pub trait` meets a `pub struct`, drop `static` and
-`__attribute__((unused))` from the vtable definition and its tentative forward declaration, and
-emit `extern struct <Trait>_vtbl <Struct>_<Trait>_vtable;` in the implementing unit's header; the
-same applies to a `map` vtable whose instance is a `pub` global. (2a.2) Fix `pub` globals:
-non-static definition in `.c`, `extern` declaration in `.h`. (2a.3) Support
-`extern <type> <name>;` as declaration-only. (2a.4) Reject a second `impl` for the same
-`(struct, trait)` and a second `map` for the same `(instance, trait)`, across units — this is the
-prerequisite for 2a.1, since external linkage turns a duplicate into a duplicate symbol.
-
-**3.2 Syntax (2b).** (2b.1) Two-tier `map` binding: `-> f;` (bare name, no parentheses) emits no
-wrapper and initialises the slot with `f` directly; the target must take `void *` first, matching
-the slot type `ret (*)(void *self, params...)`. No signature checking on the CT side — the C
-compiler reports mismatches. An API that uses `int fd` as its handle needs a hand-written
-`void *`-first C shim, after which the generated code still contains no adapter function.
-(2b.2) Parenthesised CALLs keep the wrapper; relax argument validation to "every identifier
-resolves" (binding parameter, this map's instance, declared variable, ALL_CAPS macro, `A::B`
-qualified name). (2b.3) A `map` instance may be namespace-qualified (`A::B::h` → `A_B_h`).
-(2b.4) Function pointers, minimal surface: `ret (*name)(params)` at declaration positions;
-assignment from `handler` and `&handler`; calls as `(*p)(args)` and `p(args)`. No typedef'ed
-function-pointer types, no returning function pointers, no nesting.
-(2b.5) `--emit-map`'s `maps[].bindings[]` gains `"wrapper": true|false`.
-
-**3.3 Defect fixes (2c).** (2c.1) Emit `(void)<param>;` for an unused impl parameter, and move
-every `(void)x;` to the top of the body (`(void)_self;` currently lands after `return`, which is
-unreachable). (2c.2) De-duplicate `units[u].dep` so one unit's header is included once.
-
-**3.4 Non-goals.** No golden changes under `test/cases/**` or `examples/**`; no edits to L0 / L1 /
-L2; no `CTC_VERSION` bump; no renaming of generated symbols; no namespace-qualified **type** names
-in declarations (use `import net::conn::Conn as Conn;`); no receiver-in-trait-signature redesign;
-no compile-time devirtualisation; no generics, field-level visibility or type checking.
-
-### 4. Decisions
-
-- **D-1** The `extern` declaration lives in the **implementing unit's header**; consumers must
-  import that unit. Zero new syntax; matches C practice (`test/modules/split` already has this shape).
-- **D-2** Export only for `pub trait` × `pub struct` (map: `pub trait` × `pub` instance); a
-  non-public struct cannot be named by a consumer anyway, so keeping it `static` is encapsulation.
-- **D-3** Direct binding is not signature-checked: prototypes pulled in by `#include` are invisible
-  to ct-ast. Mismatches surface in the generated C.
-- **D-4** Expression arguments and zero generation are mutually exclusive: receiver substitution and
-  arithmetic can only live in a function body. Hence two tiers, with the JSON flag for auditing.
-- **D-5** `N_GLOBAL.aux` becomes `0 = plain / 1 = static / 2 = extern`; `d` keeps meaning `pub`.
-- **D-6** Uniqueness diagnostics use `file:line:col: error: ...`, naming both definition sites.
-- **D-7** Function-pointer types spell as `ret (*name)(params)`; calls emit `(*p)(args)`.
-  Parameters count against the existing `MAX_PARAMS`; no new cap.
-- **D-8** Trait syntax and impl dispatch are untouched apart from the `(void)` emission in 2c.1.
-
-### 5. Order and acceptance
-
-Implement in this order, running `bash selfhost/check-all.sh` and
-`bash selfhost/check-warnings.sh` after every slice: 2a.2 → 2c.1/2c.2 → 2a.4 → 2a.1 → 2a.3 →
-2b.5/2b.1 → 2b.2 → 2b.3 → 2b.4 → docs and the final gate run.
-
-Acceptance mirrors section 6 of the Chinese half: one fixture per slice (`test/modules/xunit_box`,
-`pub_global`, `extern_decl`, `dup_impl`, `map_ns`; `test/ast/20_map_expr`, `21_fnptr`,
-`22_map_direct`), each pinned by `check-ast.sh` assertions, with `check-all.sh` reporting
-`9 hard gates green` and no `FAIL`. Golden files under `test/cases/**` and `examples/**` must stay
-untouched.
-
-### 6. Exit criteria
-
-1. Nine hard gates green, zero `FAIL`.
-2. The S1 / S3 / S5 spikes above now compile.
-3. Every new fixture's generated C is warning-free.
-4. `language-spec.md` documents `extern`, function pointers, `pub` global export, the external
-   linkage boundary of vtables, and the direct-binding signature convention (`void *` first).
-5. The work tree splits cleanly into `fix`, `feat` and `docs` commits.

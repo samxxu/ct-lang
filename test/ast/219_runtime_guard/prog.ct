@@ -1,0 +1,19 @@
+#include <string.h>
+
+trait Area {
+    int area();
+}
+
+struct Square { int n; } use Area;
+
+impl Area for Square {
+    int area() { return self->n; }
+}
+
+int main(void)
+{
+    Square s = { .n = 1 };
+    Area a = s;
+    memset(&a, 0, sizeof a);
+    return a.area();
+}

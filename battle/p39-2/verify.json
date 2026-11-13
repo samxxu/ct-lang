@@ -1,0 +1,368 @@
+{
+  "battle": "p39-2",
+  "head": "ac040d1",
+  "environment": {
+    "os": "macOS 27.2 (Darwin 27.2.0 arm64, build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "nm": "llvm-nm, compatible with GNU nm (Apple LLVM version 21.0.0)",
+    "ld": "@(#)PROGRAM:ld PROJECT:ld-27106.1 (BUILD 19:06:34 Oct 19 2026)",
+    "date": "2026-11-13 (Asia/Shanghai; 编译器 ct v0.37.0)"
+  },
+  "rounds": 2,
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1.1; counter.md#E1-4",
+      "command": "rm -rf /tmp/p39v/boxsrc && mkdir -p /tmp/p39v/boxsrc/out\ncp /tmp/p39head/src/test/modules/split/shapes.h.ct /tmp/p39head/src/test/modules/split/impl_dog.h.ct /tmp/p39v/boxsrc/\ncat > /tmp/p39v/boxsrc/main.ct <<'EOF'\nimport shapes;\nimport impl_dog;\n\nint main(void)\n{\n    Dog d;\n    d.n = 3;\n    Speak s = d;\n    s.hi();\n    return 0;\n}\nEOF\ncd /tmp/p39head/src && /tmp/p39head/ct build --emit-c --outdir /tmp/p39v/boxsrc/out /tmp/p39v/boxsrc/main.ct\ncd /tmp/p39v/boxsrc/out && for c in *.c; do cc -std=c99 -I. -c \"$c\" -o \"${c%.c}.o\"; done\nZERO_AR_DATE=1 ar rcs /tmp/p39v/libbox.a *.o\necho '--- ar t'; ar t /tmp/p39v/libbox.a\necho '--- nm -g --defined-only'; nm -g --defined-only /tmp/p39v/libbox.a\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/p39v/boxsrc/out /tmp/p39v/boxsrc/out/Vec.c /tmp/p39v/boxsrc/out/Option.c /tmp/p39v/boxsrc/out/Result.c /tmp/p39v/boxsrc/out/Str.c /tmp/p39v/boxsrc/out/main.c /tmp/p39v/boxsrc/out/shapes.c /tmp/p39v/boxsrc/out/impl_dog.c -o a.out\n--- ar t\n__.SYMDEF SORTED\nimpl_dog.o\nmain.o\nshapes.o\nOption.o\nResult.o\nStr.o\nVec.o\n--- nm -g --defined-only\n\nimpl_dog.o:\n0000000000000050 D _Dog_Speak_vtable\n0000000000000040 T _dog_get\n\nmain.o:\n0000000000000000 T _main\n\nshapes.o:\n\nOption.o:\n\nResult.o:\n\nStr.o:\n0000000000000134 T _Str_release\n0000000000000000 T _Str_retain\n000000000000052c T _str_c_str\n00000000000003f8 T _str_compare\n00000000000002cc T _str_concat\n0000000000000178 T _str_from\n0000000000000048 T _str_from_len\n00000000000001f0 T _str_len\n0000000000000208 T _str_slice\n\nVec.o:",
+      "reproduced": true,
+      "note": "12 个 defined global：`D _Dog_Speak_vtable` + 9 个 `Str_*`（2 个 `Str_` + 7 个 `str_`）+ `T _dog_get` + `T _main`。`shapes.o` 无链接期全局。与 claim.md:210 的计数一致。关键条件：cwd 必须含 `lib/std`（此处 `/tmp/p39head/src`）才会连带发射 Vec/Option/Result/Str；在只有夹具的目录里重跑只发 3 个单元。`ar t` 成员顺序与 claim 的记录不同（取决于 `*.o` 传入顺序），符号集合相同。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "ref": "claim.md#E1.2; counter.md#E1-3",
+      "command": "rm -rf /tmp/p39v/v2out && mkdir -p /tmp/p39v/v2out\ncd /tmp/p39head/src && /tmp/p39head/ct build --emit-c -I lib lib/std/Str.h.ct --outdir /tmp/p39v/v2out --cc true\ncd /tmp/p39v/v2out && cc -std=c99 -I. -c Str.c -o Str.o && cc -std=c99 -fvisibility=hidden -I. -c Str.c -o Str_hidden.o\necho '--- nm -g --defined-only Str.o'; nm -g --defined-only Str.o\necho '--- nm -g --defined-only Str_hidden.o'; nm -g --defined-only Str_hidden.o\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/p39v/v2out /tmp/p39v/v2out/Vec.c /tmp/p39v/v2out/Option.c /tmp/p39v/v2out/Result.c /tmp/p39v/v2out/Str.c -o a.out\n--- nm -g --defined-only Str.o\n0000000000000134 T _Str_release\n0000000000000000 T _Str_retain\n000000000000052c T _str_c_str\n00000000000003f8 T _str_compare\n00000000000002cc T _str_concat\n0000000000000178 T _str_from\n0000000000000048 T _str_from_len\n00000000000001f0 T _str_len\n0000000000000208 T _str_slice\n--- nm -g --defined-only Str_hidden.o\n0000000000000134 T _Str_release\n0000000000000000 T _Str_retain\n000000000000052c T _str_c_str\n00000000000003f8 T _str_compare\n00000000000002cc T _str_concat\n0000000000000178 T _str_from\n0000000000000048 T _str_from_len\n00000000000001f0 T _str_len\n0000000000000208 T _str_slice",
+      "reproduced": true,
+      "note": "`-fvisibility=hidden` 后 `nm -g` 的 9 个 `Str_*` 逐字节相同（连地址都相同）：Mach-O 静态归档的 external 名不受 visibility 影响。与 claim E1.2、counter E1-3 一致。"
+    },
+    {
+      "id": "V3",
+      "side": "counter",
+      "ref": "counter.md#E1-2; counter.md#E1-3; claim.md:283 (A3)",
+      "command": "rm -rf /tmp/p39v/misuse && mkdir -p /tmp/p39v/misuse/out && cd /tmp/p39v/misuse\ncp /tmp/p39head/src/test/modules/split/shapes.h.ct /tmp/p39head/src/test/modules/split/impl_dog.h.ct .\ncat > main.ct <<'EOF'\nimport shapes;\nimport impl_dog;\nint main(void) { Dog d; d.n = 3; Speak s = d; s.hi(); return 0; }\nEOF\n/tmp/p39head/ct build --emit-c --outdir out main.ct\ncd out && for c in shapes.c impl_dog.c main.c; do cc -std=c99 -I. -c \"$c\" -o \"${c%.c}.o\"; done\ncd ..\ncc -std=c99 -I out -c out/shapes.c -o shapes.o\ncc -std=c99 -I out -c out/impl_dog.c -o impl_dog.o\nZERO_AR_DATE=1 ar rcs libimpl.a shapes.o impl_dog.o\ncat > consumer.c <<'EOF'\n#include <stdio.h>\nstruct Dog { int n; };\nstruct Speak_vtbl { void (*hi)(void *); };\nextern struct Speak_vtbl Dog_Speak_vtable;   /* NOT in any .abi.h */\nint main(void) {\n    struct Dog d = { 42 };\n    Dog_Speak_vtable.hi(&d);\n    return 0;\n}\nEOF\ncc -std=c99 consumer.c libimpl.a -o misuse; echo \"link rc=$?\"\n./misuse; echo \"run rc=$?\"\ncc -std=c99 -fvisibility=hidden -I out -c out/impl_dog.c -o impl_dog.hid.o\necho '--- hidden: nm -g --defined-only impl_dog.hid.o'; nm -g --defined-only impl_dog.hid.o\nZERO_AR_DATE=1 ar rcs libhid.a shapes.o impl_dog.hid.o\ncc -std=c99 consumer.c libhid.a -o misuse_hid; echo \"hidden-misuse link rc=$?\"\n./misuse_hid; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c out/shapes.c out/impl_dog.c -o a.out\nlink rc=0\nwoof 42\nrun rc=0\n--- hidden: nm -g --defined-only impl_dog.hid.o\n0000000000000050 D _Dog_Speak_vtable\n0000000000000040 T _dog_get\nhidden-misuse link rc=0\nwoof 42\nrun rc=0",
+      "reproduced": true,
+      "note": "消费者不 include 任何头，手抄 `struct Dog`/`struct Speak_vtbl` 布局并 `extern` 内部 vtable，链接与运行均成功（F-1）。同一消费者对 `-fvisibility=hidden` 编译的归档同样成功，证明 hidden 不构成静态归档隔离。与 counter E1-2/E1-3 一致（含地址 0x50/0x40）。"
+    },
+    {
+      "id": "V4",
+      "side": "claim",
+      "ref": "claim.md:283 (A3); counter.md#E1-2",
+      "command": "rm -rf /tmp/p39v/strmisuse && mkdir -p /tmp/p39v/strmisuse/out && cd /tmp/p39v/strmisuse\ncd /tmp/p39head/src && /tmp/p39head/ct build --emit-c -I lib lib/std/Str.h.ct --outdir /tmp/p39v/strmisuse/out --cc true >/dev/null\ncd /tmp/p39v/strmisuse && cc -std=c99 -I out -c out/Str.c -o Str.o\nZERO_AR_DATE=1 ar rcs libstr.a Str.o\ncat > cons.c <<'EOF'\n#include <stdio.h>\n/* NOT from any .abi.h: hand-mirrored internal Str layout + a non-ABI std symbol */\nstruct Str { char *data; int len; };\nint str_len(struct Str);\nint main(void) {\n    struct Str s = { (char *)\"abcd\", 4 };\n    printf(\"str_len=%d\\n\", str_len(s));\n    return 0;\n}\nEOF\ncc -std=c99 cons.c libstr.a -o strmisuse; echo \"link rc=$?\"\n./strmisuse; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "link rc=0\nstr_len=4\nrun rc=0",
+      "reproduced": true,
+      "note": "消费者手抄 `Str` 布局并直接链接内部 `str_len`（不在任何 `.abi.h`）成功运行，复现 claim.md:283 自认的 A3 风险：A 不能从链接层阻止误用。"
+    },
+    {
+      "id": "V5",
+      "side": "counter",
+      "ref": "counter-r2.md#E1-r2",
+      "command": "rm -rf /tmp/p39v/interpose && mkdir -p /tmp/p39v/interpose/out && cd /tmp/p39v/interpose\ncat > helper.h.ct <<'EOF'\npub int helper(const char *s) { int n = 0; while (s[n]) n++; return n; }\nEOF\ncat > api.h.ct <<'EOF'\nimport helper;\npub int api(void) { return helper(\"abc\"); }\nEOF\n/tmp/p39head/ct build --emit-c -I . api.h.ct --outdir out --cc true\nfor c in out/*.c; do cc -std=c99 -I out -c \"$c\" -o \"${c%.c}.o\"; done\necho '--- nm -g --defined-only'; nm -g --defined-only out/*.o\nZERO_AR_DATE=1 ar rcs libapi2.a out/api.o out/helper.o\ncat > cons_ok.c <<'EOF'\n#include <stdio.h>\nint api(void);\nint main(void) { printf(\"api=%d\\n\", api()); return 0; }\nEOF\ncat > cons_i.c <<'EOF'\n#include <stdio.h>\nint helper(const char *s) { (void)s; return 999; }   /* innocent-looking name */\nint api(void);\nint main(void) { printf(\"api=%d\\n\", api()); return 0; }\nEOF\ncc -std=c99 cons_ok.c libapi2.a -o ok; echo \"ok link rc=$?\"; ./ok; echo \"run rc=$?\"\ncc -std=c99 cons_i.c libapi2.a -o interposed; echo \"interposed link rc=$?\"; ./interposed; echo \"run rc=$?\"\necho '--- archive nm unchanged'; nm -g --defined-only libapi2.a\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/api.c out/helper.c -o a.out\n--- nm -g --defined-only\n\nout/api.o:\n0000000000000000 T _api\n\nout/helper.o:\n0000000000000000 T _helper\nok link rc=0\napi=3\nrun rc=0\ninterposed link rc=0\napi=999\nrun rc=0\n--- archive nm unchanged\n\napi.o:\n0000000000000000 T _api\n\nhelper.o:\n0000000000000000 T _helper",
+      "reproduced": true,
+      "note": "消费者只定义同名 `helper`（不 include 任何库头）即把库内部调用替换为返回 999；归档字节与 `nm -g` 完全不变（仍只有 `_api`/`_helper`），`expected.nm` 类快照不可能变红。与 counter-r2 E1-r2 一致（api=3 / api=999）。"
+    },
+    {
+      "id": "V6",
+      "side": "both",
+      "ref": "claim.md#E1.3",
+      "command": "rm -rf /tmp/p39v/split && mkdir -p /tmp/p39v/split/out && cd /tmp/p39v/split\ncp /tmp/p39head/src/test/modules/split/main.ct /tmp/p39head/src/test/modules/split/shapes.h.ct /tmp/p39head/src/test/modules/split/impl_dog.h.ct .\n/tmp/p39head/ct build --emit-c --outdir out main.ct\ncd out && for c in *.c; do cc -std=c99 -I. -c \"$c\" -o \"${c%.c}.o\"; done\nZERO_AR_DATE=1 ar rcs /tmp/p39v/libsplit.a *.o\necho '--- nm -g libsplit'; nm -g --defined-only /tmp/p39v/libsplit.a\necho '--- nm -u main.o'; nm -u main.o\nprintf '_dog_get\\n' > /tmp/p39v/exp.txt\nld -r -o /tmp/p39v/split_r.o -exported_symbols_list /tmp/p39v/exp.txt impl_dog.o shapes.o; echo \"ld rc=$?\"\necho '--- nm -g split_r.o'; nm -g --defined-only /tmp/p39v/split_r.o\necho '--- nm -m split_r.o first 8'; nm -m /tmp/p39v/split_r.o | head -8\nZERO_AR_DATE=1 ar rcs /tmp/p39v/libB.a /tmp/p39v/split_r.o\necho '--- ar t libB'; ar t /tmp/p39v/libB.a\ncc main.o /tmp/p39v/libB.a -o /tmp/p39v/consumer2; echo \"link rc=$?\"\n/tmp/p39v/consumer2; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c out/shapes.c out/impl_dog.c -o a.out\n--- nm -g libsplit\n\nimpl_dog.o:\n0000000000000050 D _Dog_Speak_vtable\n0000000000000040 T _dog_get\n\nmain.o:\n0000000000000000 T _main\n\nshapes.o:\n--- nm -u main.o\n_dog_get\nld rc=0\n--- nm -g split_r.o\n0000000000000040 T _dog_get\n--- nm -m split_r.o first 8\n000000000000004c (__TEXT,__cstring) non-external (was a private external) LC1\n0000000000000000 (__TEXT,__text) non-external _Dog_Speak_hi\n0000000000000058 (__DATA,__data) non-external (was a private external) _Dog_Speak_vtable\n0000000000000040 (__TEXT,__text) external _dog_get\n0000000000000060 (__DATA,__data) non-external _g_dog\n                 (undefined) external _printf\n--- ar t libB\n__.SYMDEF SORTED\nsplit_r.o\nlink rc=0\nwoof 7\nrun rc=0",
+      "reproduced": true,
+      "note": "claim E1.3 的 B 探针逐行复现（含 `nm -m` 的 `LC1`、`non-external (was a private external)` 与 `ar t` 1 成员）。注意 `split/main.o` 只含 `U _dog_get`（按指针派发），不含 `U _Dog_Speak_vtable`；含 `U` vtable 的是装箱单元，见 V10。"
+    },
+    {
+      "id": "V7",
+      "side": "counter",
+      "ref": "counter.md#E1-6",
+      "command": "rm -rf /tmp/p39v/mergebox && mkdir -p /tmp/p39v/mergebox/out && cd /tmp/p39v/mergebox\ncp /tmp/p39head/src/test/modules/split/shapes.h.ct /tmp/p39head/src/test/modules/split/impl_dog.h.ct .\ncat > box.h.ct <<'EOF'\nimport shapes;\nimport impl_dog;\n\npub void via_vtable(void)\n{\n    Dog d = *dog_get();\n    Speak s = d;\n    s.hi();\n}\nEOF\n/tmp/p39head/ct build --emit-c -I . box.h.ct --outdir out --cc true\ncd out && for c in *.c; do cc -std=c99 -I. -c \"$c\" -o \"${c%.c}.o\"; done\nprintf '_via_vtable\\n_dog_get\\n' > exp_box.txt\nld -r -exported_symbols_list exp_box.txt shapes.o impl_dog.o box.o -o merged.o; echo \"merge rc=$?\"\necho '--- nm -g merged'; nm -g --defined-only merged.o\necho '--- nm merged | grep -i dog'; nm merged.o | grep -i dog\necho '--- nm -u merged'; nm -u merged.o\nZERO_AR_DATE=1 ar rcs libmerged2.a merged.o\necho '--- ar t'; ar t libmerged2.a\ncd .. && cat > cons.c <<'EOF'\nvoid via_vtable(void);\nint main(void) { via_vtable(); return 0; }\nEOF\ncc -std=c99 cons.c out/libmerged2.a -o mergedbin; echo \"link rc=$?\"; ./mergedbin; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/box.c out/shapes.c out/impl_dog.c -o a.out\nmerge rc=0\n--- nm -g merged\n0000000000000040 T _dog_get\n000000000000004c T _via_vtable\n--- nm merged | grep -i dog\n0000000000000000 t _Dog_Speak_hi\n00000000000000a0 d _Dog_Speak_vtable\n0000000000000040 T _dog_get\n00000000000000a8 d _g_dog\n--- nm -u merged\n_printf\n--- ar t\n__.SYMDEF SORTED\nmerged.o\nlink rc=0\nwoof 7\nrun rc=0",
+      "reproduced": true,
+      "note": "counter E1-6 逐字复现：三单元 `ld -r` 合并后 `nm -g` 恰为两个导出 `T`，vtable 变本地 `d`，消费者运行输出 `woof 7`，归档 1 个成员。与 claim E1.3 的 3→1 成员数一致。前提：所有引用内部 vtable 的单元都必须一起合并（此处含 `box.o`）；只合并部分单元则见 V10。"
+    },
+    {
+      "id": "V8",
+      "side": "both",
+      "ref": "claim-r2.md#E1-r2-b; question.md:18 (J-1)",
+      "command": "rm -rf /tmp/p39v/merge3 && mkdir /tmp/p39v/merge3 && cd /tmp/p39v/merge3\ncat > greetlib.ct <<'EOF'\n#include <stdio.h>\n\npub trait Greeter {\n    void greet();\n}\n\npub struct Person {\n    char *name;\n} use Greeter;\n\nimpl Greeter for Person {\n    void greet() { printf(\"hi %s\\n\", self->name); }\n}\n\nstatic Person ps[2];\n\npub void run_lib(void)\n{\n    ps[0].name = \"A\";\n    ps[1].name = \"B\";\n    ps[0].greet();\n    ps[1].greet();\n}\nEOF\n/tmp/p39head/ct greetlib.ct -o greetlib.c; echo \"emit rc=$?\"\ngrep -n \"__ct_init\" greetlib.c\ncc -std=c99 -c greetlib.c -o greetlib.o\necho '--- nm -g unit'; nm -g --defined-only greetlib.o\necho '--- nm -m unit | init'; nm -m greetlib.o | grep -Ei 'init|vtable'\nprintf '_run_lib\\n' > exp.txt\nld -r -exported_symbols_list exp.txt -o merged.o greetlib.o; echo \"ld -r rc=$?\"\necho '--- nm -g merged'; nm -g --defined-only merged.o\necho '--- nm -m merged init'; nm -m merged.o | grep -Ei 'init|run_lib|vtable'\nZERO_AR_DATE=1 ar rcs libmerged.a merged.o\necho '--- ar t'; ar t libmerged.a\ncat > cons.c <<'EOF'\nvoid run_lib(void);\nint main(void) { run_lib(); return 0; }\nEOF\ncc -std=c99 cons.c libmerged.a -o mergbin; echo \"consumer link rc=$?\"\n./mergbin; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "emit rc=0\n36:static void __ct_init(void) __attribute__((constructor));\n37:static void __ct_init(void) {\n--- nm -g unit\n0000000000000100 D _Person_Greeter_vtable\n0000000000000040 T _run_lib\n--- nm -m unit | init\n0000000000000100 (__DATA,__data) external _Person_Greeter_vtable\n00000000000000a8 (__TEXT,__text) non-external ___ct_init\n0000000000000118 (__DATA,__mod_init_func) non-external ltmp4\nld -r rc=0\n--- nm -g merged\n0000000000000040 T _run_lib\n--- nm -m merged init\n0000000000000110 (__DATA,__data) non-external (was a private external) _Person_Greeter_vtable\n00000000000000a8 (__TEXT,__text) non-external ___ct_init\n0000000000000040 (__TEXT,__text) external _run_lib\n0000000000000108 (__DATA,__mod_init_func) non-external [no dead strip] ltmp4\n--- ar t\n__.SYMDEF SORTED\nmerged.o\nconsumer link rc=0\nhi A\nhi B\nrun rc=0",
+      "reproduced": true,
+      "note": "用 **ct 生成的真实 `__ct_init`**（单文件发射，见 V13）验证：`ld -r -exported_symbols_list` 后 `nm -g` 恰剩 `T _run_lib`，`__ct_init` 仍在 `__mod_init_func` 中；消费者运行输出 `hi A`/`hi B`，证明 constructor 执行、`static Person ps[2]` 的 vptr 已写入。归档 1 个成员。claim-r2 E1-r2-b 的手写 external 构造器探针见 V14。"
+    },
+    {
+      "id": "V9",
+      "side": "both",
+      "ref": "question.md:18 (J-1 字面); docs/design/phase39-draft.md:62",
+      "command": "rm -rf /tmp/p39v/merge4 && mkdir /tmp/p39v/merge4 && cd /tmp/p39v/merge4\ncat > greetlib.ct <<'EOF'\n#include <stdio.h>\n\npub trait Greeter {\n    void greet();\n}\n\npub struct Person {\n    char *name;\n} use Greeter;\n\nimpl Greeter for Person {\n    void greet() { printf(\"hi %s\\n\", self->name); }\n}\n\nPerson ps[2];\n\npub void run_lib(void)\n{\n    ps[0].name = \"A\";\n    ps[1].name = \"B\";\n    ps[0].greet();\n    ps[1].greet();\n}\nEOF\n/tmp/p39head/ct greetlib.ct -o greetlib.c; echo \"emit rc=$?\"\necho '--- grep -n Person ps greetlib.ct'; grep -n \"Person ps\" greetlib.ct\necho '--- __ct_init count'; grep -c '__ct_init' greetlib.c\ncc -std=c99 -c greetlib.c -o greetlib.o\necho '--- nm -g unit'; nm -g --defined-only greetlib.o\nprintf '_run_lib\\n' > exp.txt\nld -r -exported_symbols_list exp.txt -o merged.o greetlib.o; echo \"ld rc=$?\"\necho '--- nm -g merged'; nm -g --defined-only merged.o\necho '--- nm -m merged ps'; nm -m merged.o | grep -E '_ps$|common'\nZERO_AR_DATE=1 ar rcs libmerged.a merged.o; ar t libmerged.a\ncat > cons.c <<'EOF'\nvoid run_lib(void);\nint main(void) { run_lib(); return 0; }\nEOF\ncc -std=c99 cons.c libmerged.a -o mergbin; echo \"link rc=$?\"; ./mergbin; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "emit rc=0\n--- grep -n Person ps greetlib.ct\n15:Person ps[2];\n--- __ct_init count\n2\n--- nm -g unit\n00000000000000f8 D _Person_Greeter_vtable\n0000000000000020 C _ps\n0000000000000040 T _run_lib\nld rc=0\n--- nm -g merged\n0000000000000020 C _ps\n0000000000000040 T _run_lib\n--- nm -m merged ps\n0000000000000020 (common) (alignment 2^3) private external _ps\n__.SYMDEF SORTED\nmerged.o\nlink rc=0\nhi A\nhi B\nrun rc=0",
+      "reproduced": true,
+      "note": "边界事实：当库里有**非 static 的 tentative 全局**（HEAD 的默认形态；D39-8 尚未实现）时，`ld -r -exported_symbols_list` 在 `nm -m` 里把它标成 `private external`，但 `nm -g` **仍列出 `C _ps`**。即 J-1 字面的“恰只剩导出集合”在合并+本地化下并非无条件成立；若 `--lib` 按 D39-8 把非 pub 全局发成 `static`，该反例消失（HEAD 无 `--lib`，最终形态无法验证）。"
+    },
+    {
+      "id": "V10",
+      "side": "counter",
+      "ref": "counter.md#E1-5; claim.md:74-80 (J-3)",
+      "command": "rm -rf /tmp/p39v/perunit && mkdir -p /tmp/p39v/perunit/out && cd /tmp/p39v/perunit\ncp /tmp/p39head/src/test/modules/split/shapes.h.ct /tmp/p39head/src/test/modules/split/impl_dog.h.ct .\ncat > box.h.ct <<'EOF'\nimport shapes;\nimport impl_dog;\n\npub void via_vtable(void)\n{\n    Dog d = *dog_get();\n    Speak s = d;\n    s.hi();\n}\nEOF\n/tmp/p39head/ct build --emit-c -I . box.h.ct --outdir out --cc true\nfor c in out/*.c; do cc -std=c99 -I out -c \"$c\" -o \"${c%.c}.o\"; done\necho '--- nm -g --defined-only per-unit objects'; nm -g --defined-only out/*.o\necho '--- nm -u box.o'; nm -u out/box.o\nprintf '_dog_get\\n' > exp_only.txt\nnmedit -s exp_only.txt out/impl_dog.o -o out/impl_dog.loc.o; echo \"nmedit rc=$?\"\necho '--- nm -g localised impl_dog'; nm -g --defined-only out/impl_dog.loc.o\nZERO_AR_DATE=1 ar rcs libperunit.a out/shapes.o out/impl_dog.loc.o out/box.o\necho '--- ar t'; ar t libperunit.a\ncat > cons.c <<'EOF'\nvoid via_vtable(void);\nint main(void) { via_vtable(); return 0; }\nEOF\ncc -std=c99 cons.c libperunit.a -o perunit 2>&1; echo \"consumer link rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/box.c out/shapes.c out/impl_dog.c -o a.out\n--- nm -g --defined-only per-unit objects\n\nout/box.o:\n0000000000000000 T _via_vtable\n\nout/impl_dog.o:\n0000000000000050 D _Dog_Speak_vtable\n0000000000000040 T _dog_get\n\nout/shapes.o:\n--- nm -u box.o\n_Dog_Speak_vtable\n_dog_get\nnmedit rc=0\n--- nm -g localised impl_dog\n0000000000000040 T _dog_get\n--- ar t\n__.SYMDEF SORTED\nshapes.o\nimpl_dog.loc.o\nbox.o\nUndefined symbols for architecture arm64:\n  \"_Dog_Speak_vtable\", referenced from:\n      _via_vtable in libperunit.a[4](box.o)\nld: symbol(s) not found for architecture arm64\nclang: error: linker command failed with exit code 1 (use -v to see invocation)\nconsumer link rc=1",
+      "reproduced": true,
+      "note": "逐单元本地化断链逐字复现：`box.o` 的 `nm -u` 有 `U _Dog_Speak_vtable`，`nmedit` 只留 `_dog_get` 后消费者链接报 `Undefined symbols ... _Dog_Speak_vtable`。同时复现 counter E1-7 的约束：`nmedit -s` 的清单必须按对象过滤（`_via_vtable` 不在 `impl_dog.o`，混入会 rc=1）。"
+    },
+    {
+      "id": "V11",
+      "side": "both",
+      "ref": "claim.md#E1.0; counter.md#E1-7",
+      "command": "rm -rf /tmp/p39v/toolprobe && mkdir -p /tmp/p39v/toolprobe && cd /tmp/p39v/toolprobe\ncat > d.c <<'EOF'\nint dog_get(void) { return 7; }\nint internal_vtable = 1;\nEOF\ncc -c d.c -o d.o\necho '=== command -v ==='\nfor t in objcopy llvm-objcopy nmedit ld ar nm cc strip; do printf '%-14s ' \"$t\"; command -v \"$t\" || echo MISSING; done\necho '=== ld -r with missing symbol ==='\nprintf '_no_such_symbol\\n' > bad.txt\nld -r -exported_symbols_list bad.txt -o bad.o d.o; echo \"ld rc=$?\"\necho '--- nm -g --defined-only bad.o'; nm -g --defined-only bad.o; echo \"(end)\"\nprintf '_dog_get\\n_no_such_symbol\\n' > bad2.txt\nld -r -exported_symbols_list bad2.txt -o bad2.o d.o; echo \"ld rc=$?\"\necho '--- nm -g --defined-only bad2.o'; nm -g --defined-only bad2.o\necho '=== nmedit with missing symbol ==='\nnmedit -s bad.txt d.o -o bad_nm.o 2>&1; echo \"nmedit rc=$?\"\n",
+      "exit": 0,
+      "output": "=== command -v ===\nobjcopy        MISSING\nllvm-objcopy   MISSING\nnmedit         /usr/bin/nmedit\nld             /usr/bin/ld\nar             /usr/bin/ar\nnm             /usr/bin/nm\ncc             /usr/bin/cc\nstrip          /usr/bin/strip\n=== ld -r with missing symbol ===\nld rc=0\n--- nm -g --defined-only bad.o\n(end)\nld rc=0\n--- nm -g --defined-only bad2.o\n0000000000000000 T _dog_get\n=== nmedit with missing symbol ===\n/Library/Developer/CommandLineTools/usr/bin/nmedit: error: symbols names listed in: bad.txt not in: /private/tmp/p39v/toolprobe/d.o\n_no_such_symbol\nnmedit rc=1",
+      "reproduced": true,
+      "note": "`objcopy`/`llvm-objcopy` 在 macOS 默认工具链 MISSING；`nmedit`/`ld`/`ar`/`nm` 存在。`ld -r -exported_symbols_list` 对清单里不存在的符号 **rc=0 静默成功**（bad.txt 时 `nm -g` 空；bad2.txt 时只剩 `_dog_get`），因此 B 必须以 `nm` 自校验兜底（与 counter E1-7 自认一致）；`nmedit` 对缺失符号 rc=1 硬错。"
+    },
+    {
+      "id": "V12",
+      "side": "both",
+      "ref": "question.md:5; docs/design/phase39-draft.md:59,62,127; claim.md#P1",
+      "command": "rm -rf /tmp/p39v/libprobe && mkdir /tmp/p39v/libprobe && cd /tmp/p39v/libprobe\nprintf 'int main(void) { return 0; }\\n' > m.ct\ncd /tmp/p39head/src\n/tmp/p39head/ct build --lib --emit-c --outdir /tmp/p39v/libprobe /tmp/p39v/libprobe/m.ct 2>&1; echo \"rc=$?\"\necho '--- grep -n p39 selfhost/check-ast.sh'; grep -n p39 selfhost/check-ast.sh; echo \"grep rc=$?\"\necho '--- ls test/modules | grep -i p39'; ls test/modules | grep -i p39; echo \"grep rc=$?\"\n",
+      "exit": 0,
+      "output": "ctc: unknown option '--lib'\nrc=1\n--- grep -n p39 selfhost/check-ast.sh\ngrep rc=1\n--- ls test/modules | grep -i p39\ngrep rc=1",
+      "reproduced": false,
+      "note": "HEAD `ac040d1` **没有 `--lib`**（`unknown option '--lib'`，rc=1），也没有 `test/modules/p39_lib`，`check-ast.sh` 无 p39 段。因此 claim/counter 依赖的 `.abi.h`、`<BASE>_ABI_VERSION`、`expected.nm` 快照、p39 门禁全部无法在本机验证；本席只能复现其底层的 `nm`/`ar`/`ld` 事实。此条 `reproduced=false`。"
+    },
+    {
+      "id": "V13",
+      "side": "both",
+      "ref": "claim-r2.md#E1-r2-b; question.md:18 (J-3)",
+      "command": "rm -rf /tmp/p39v/initprobe && mkdir /tmp/p39v/initprobe && cd /tmp/p39v/initprobe\ncat > v2.ct <<'EOF'\n#include <stdio.h>\npub trait Greeter { void greet(); }\npub struct Person { char *name; } use Greeter;\nimpl Greeter for Person { void greet() { printf(\"hi %s\\n\", self->name); } }\nPerson ps[2];\npub void run_lib(void) { ps[0].name = \"A\"; ps[1].name = \"B\"; ps[0].greet(); ps[1].greet(); }\nEOF\n/tmp/p39head/ct v2.ct -o v2_single.c; echo \"single-file rc=$?\"\necho \"single-file __ct_init count:\"; grep -c '__ct_init' v2_single.c\nrm -rf o2b && mkdir o2b\n/tmp/p39head/ct build --emit-c --outdir o2b v2.ct >/dev/null 2>&1; echo \"build rc=$?\"\necho \"build-mode __ct_init count:\"; grep -c '__ct_init' o2b/v2.c; echo \"grep rc=$?\"\n",
+      "exit": 0,
+      "output": "single-file rc=0\nsingle-file __ct_init count:\n2\nbuild rc=0\nbuild-mode __ct_init count:\n0\ngrep rc=1",
+      "reproduced": true,
+      "note": "与 constructor 证据来源有关的事实：同一 HEAD 上，单文件 `ct <in> -o <c>` 会为 file-scope 数组发射 `__ct_init`（2 处：声明+定义），而 `ct build --emit-c` 多文件路径**完全不发射** `__ct_init`（V8/V9 的 ctor 测试因此用单文件发射）。若 PH-39 `--lib` 复用 build 发射路径，file-scope 数组的 vptr 初始化会缺失；本席不裁该缺陷归属，仅记录。"
+    },
+    {
+      "id": "V14",
+      "side": "both",
+      "ref": "claim-r2.md#E1-r2-b",
+      "command": "rm -rf /tmp/p39v/r2ctor && mkdir /tmp/p39v/r2ctor && cd /tmp/p39v/r2ctor\ncat > a2.c <<'EOF'\n#include <stdio.h>\n__attribute__((constructor)) void a2_init(void) { puts(\"A-init\"); }\nint a2_fn(void) { return 1; }\nEOF\ncat > b2.c <<'EOF'\n#include <stdio.h>\n__attribute__((constructor)) void b2_init(void) { puts(\"B-init\"); }\nint b2_fn(void) { return 2; }\nEOF\ncat > m.c <<'EOF'\nint a2_fn(void); int b2_fn(void);\nint main(void) { return a2_fn() + b2_fn() - 3; }\nEOF\ncc -c a2.c b2.c\nprintf '_a2_fn\\n_b2_fn\\n' > exp2.txt\nld -r -exported_symbols_list exp2.txt -o merged2.o a2.o b2.o; echo \"ld rc=$?\"\necho '--- nm -m merged2.o | grep init'; nm -m merged2.o | grep -i init\ncc m.c merged2.o -o m2; echo \"link rc=$?\"; ./m2; echo \"run rc=$?\"\necho '--- nm -g --defined-only merged2.o'; nm -g --defined-only merged2.o\n",
+      "exit": 0,
+      "output": "ld rc=0\n--- nm -m merged2.o | grep init\n0000000000000000 (__TEXT,__text) non-external (was a private external) _a2_init\n0000000000000024 (__TEXT,__text) non-external (was a private external) _b2_init\n0000000000000058 (__DATA,__mod_init_func) non-external [no dead strip] ltmp2\n0000000000000060 (__DATA,__mod_init_func) non-external [no dead strip] ltmp2\nlink rc=0\nA-init\nB-init\nrun rc=0\n--- nm -g --defined-only merged2.o\n000000000000001c T _a2_fn\n0000000000000040 T _b2_fn",
+      "reproduced": true,
+      "note": "claim-r2 E1-r2-b 的手写 external 构造器探针逐字复现（`non-external (was a private external)`、两条 `__mod_init_func`、`A-init`/`B-init`、`nm -g` 只剩两个导出），证明 `ld -r -exported_symbols_list` 不丢弃 constructor。ct 生成的真实 `__ct_init` 版本见 V8。"
+    },
+    {
+      "id": "V15",
+      "side": "counter",
+      "ref": "counter.md#E1-4; counter-r2.md#1.4 (F-3)",
+      "command": "rm -rf /tmp/p39v/std2 && mkdir -p /tmp/p39v/std2/lib && cp -R /tmp/p39head/src/lib/std /tmp/p39v/std2/lib/ && cd /tmp/p39v/std2\nmkdir -p out1 out2\n/tmp/p39head/ct build --emit-c -I lib lib/std/Str.h.ct --outdir out1 --cc true >/dev/null 2>&1\ncc -std=c99 -I out1 -c out1/Str.c -o Str_before.o\nnm -g --defined-only Str_before.o | awk '{print $3}' | sed 's/^_//' | sort > before.txt\necho \"before count:\"; wc -l < before.txt\nprintf '\\npub int str_extra(Str s) { return str_len(s) + 1; }\\n' >> lib/std/Str.h.ct\n/tmp/p39head/ct build --emit-c -I lib lib/std/Str.h.ct --outdir out2 --cc true >/dev/null 2>&1\ncc -std=c99 -I out2 -c out2/Str.c -o Str_after.o\nnm -g --defined-only Str_after.o | awk '{print $3}' | sed 's/^_//' | sort > after.txt\necho \"after count:\"; wc -l < after.txt\necho '--- diff before after'; diff before.txt after.txt\necho '--- abi artifacts:'; find . -name '*.abi.h' -o -name '*ABI_VERSION*' | head\n",
+      "exit": 0,
+      "output": "before count:\n       9\nafter count:\n      10\n--- diff before after\n5a6\n> str_extra\n--- abi artifacts:",
+      "reproduced": true,
+      "note": "在 `/tmp` 的 std 副本里给 `Str` 加一个 `pub` 函数，归档对象（单个 `.o`）的 defined global 从 9 增至 10（新增 `str_extra`）；HEAD 不产生任何 `.abi.h`/`ABI_VERSION` 类产物，所以“符号面扩大而 ABI 版本不动”只能复现到符号面这一半（见 unreproduced）。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 36,
+      "text": "| O1 | `--lib` 产出 `lib<base>.a` + `<base>.abi.h` + 逐单元 `.o`；纯 C 消费者可链接运行 | ... |",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 40,
+      "text": "> O3 的边界：**visibility 不改变静态归档的全局符号表**……`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 44,
+      "text": "- 不导出按值 struct / union：`<base>.abi.h` 只放不透明前置声明，按值传参消费者无法编译（D39-6）。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 46,
+      "text": "- 不做 Windows/MSVC、`.dll` / `.dylib` / `.so`、ABI 版本协商运行时；v1 只覆盖 macOS/Linux 的 `cc` + `ar`。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 59,
+      "text": "| D39-5 | 导出定义注入 `visibility(\"default\")`，中间对象加 `-fvisibility=hidden`；符号面用 `nm` 快照锁定 | 静态归档无法靠 visibility 藏符号，只能锁快照 |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 62,
+      "text": "| D39-8 | `--lib` 下非 `pub` 顶层函数与全局一律发射 `static`；`pub` 函数保持 external | ... `static` 后才不会混进 `nm -g` |",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 118,
+      "text": "`<base>.abi.h` 内容固定为：……**不出现** `_iface` / `_vtbl` / `Vec_` / `Map_`。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 126,
+      "text": "- trait vtable 仍 external（跨单元装箱要用），不加 attribute → hidden；它**不是** ABI，由 `expected.nm` 快照锁定。",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 127,
+      "text": "- `nm -g --defined-only` 归一化（去前导 `_`）后的集合必须逐行等于 `test/modules/p39_lib/expected.nm`。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 136,
+      "text": "| L39-3 | `--lib` 构建包含 `main` | `a --lib build cannot contain 'main'` |",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 181,
+      "text": "| E39-6 | `.abi.h` 契约：版本宏、不透明前置、原型集合 = 导出集合、无禁用符号 | ... `_iface` / `_vtbl` / `Vec_` / `Map_` 命中 0 | ...",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2392,
+      "text": "if (self->vtable_exported(si, tname))",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 3304,
+      "text": "fprintf(self->out, \"extern struct %s_vtbl %s_%s_vtable;\\n\", ...)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2496,
+      "text": "fputs(\"static void __ct_init(void) __attribute__((constructor));\\n\", self->out);",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 33,
+      "text": "pub Str str_from_len(const char *p, int n)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "test/modules/split/main.ct",
+      "line": 1,
+      "text": "/* this unit sees only the type (from shapes.h) and the accessor (from impl_dog.h); ... the impl's static vtable stays invisible */",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 391,
+      "text": "- 不引入任何第三方库、构建系统、代码生成脚本。**例外（安装脚本）**：仓库根只有**一个** `install.sh`，",
+      "supports": "claim",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "claim": "A：J-1 按目标读成立（ABI 面由 `.abi.h` 定义、`expected.nm` 快照钉住）；按字面读 J-1 归 B（claim.md:50,56-64,352）。",
+      "counter": "`nm -g` 确有 vtable/`Str_*`，消费者可 extern 并运行（F-1）；`ld -r` 合并+本地化后 `nm -g` 只剩导出（E1-6）。",
+      "evidence": [
+        "V1",
+        "V3",
+        "V4",
+        "V6",
+        "V7",
+        "V8",
+        "V9"
+      ],
+      "fact": "V1 在 HEAD 产物上得 12 个 defined global（9 个 `Str_*`、`D _Dog_Speak_vtable`、`_dog_get`、`_main`）；V3/V4 消费者显式 extern 内部 vtable / `str_len` 后链接运行成功；V6/V7/V8 合并+本地化后 `nm -g` 恰为导出集合且消费者运行成功（V8 的 `__ct_init` 仍执行）；V9 显示非 static tentative 全局 `_ps` 在本地化后仍以 `C` 留在 `nm -g`。字面读下 B 能做到“只剩导出”，但有 V9 的边界；A 做不到字面洁净。"
+    },
+    {
+      "id": "J-2",
+      "claim": "A：只需 `ct build --emit-c` + `cc` + `ar rcs` + `nm`，macOS/Linux 默认工具链都有；B 是两套工具/两套语义（claim.md:68-70）。",
+      "counter": "macOS 无 `objcopy`/`llvm-objcopy`，但有系统自带 `nmedit` 与 `ld -r`；Linux 分支本机只能 skip（counter.md:30,177-183,234）。",
+      "evidence": [
+        "V11"
+      ],
+      "fact": "V11：`objcopy`、`llvm-objcopy` MISSING；`nmedit`(/usr/bin)、`ld`、`ar`、`nm`、`cc` 存在。Linux 的 GNU nm/objcopy/`--localize-hidden` 未实测（见 unreproduced）。"
+    },
+    {
+      "id": "J-3",
+      "claim": "A：vtable 跨单元引用真实（`nm -u` 有 `U _Dog_Speak_vtable`），逐单元本地化断链，B 只能整档 `ld -r`，破坏“逐单元 .o”（claim.md:74-80）。",
+      "counter": "整档 `ld -r` 后消费者链接运行正常、vtable 就地解析；`__ct_init` 不被藏掉（counter.md:149-172；claim-r2.md#2）。",
+      "evidence": [
+        "V10",
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V14"
+      ],
+      "fact": "V10：`box.o` 的 `nm -u` 有 `U _Dog_Speak_vtable`，逐单元 `nmedit` 后消费者链接报 `Undefined symbols: _Dog_Speak_vtable`；V6/V7/V8：整档 `ld -r` 后消费者链接运行成功（`woof 7` / `hi A,hi B`），`__ct_init` 仍执行；V7/V8 归档 1 个成员（`ar t` 2 行含 `__.SYMDEF`）。V9 是本地化对 common 符号的边界。"
+    },
+    {
+      "id": "J-4",
+      "claim": "A 约 2 文件 / 40-45 行；B ≥3 文件 / 150-220 行，且平台分支+工具缺失硬错（claim.md:307-326）。",
+      "counter": "B 约 2 文件 / 35-45 行（未计 O1 与夹具改写），双方均在预算内（counter.md:224-231,234）。",
+      "evidence": [
+        "V12",
+        "V11"
+      ],
+      "fact": "HEAD 无 `--lib` 实现（V12），双方的文件数/行数都无法在本机从真实实现实测；本席只验证到链接步骤本身各 1 条 `ld -r` 命令（V6/V7/V8）与工具存在性/失败模式（V11）。改动量不可由现有证据判定。"
+    },
+    {
+      "id": "J-5",
+      "claim": "A 同一命令 + 归一化后单快照可复现；B 两套工具、工具缺失只能硬错或 skip（claim.md:54）。",
+      "counter": "macOS 侧可复现；Linux 侧只能 skip；`ld -r` 对缺失符号静默成功，须 `nm` 自校验（counter.md:194,231,234）。",
+      "evidence": [
+        "V11",
+        "V12",
+        "V14"
+      ],
+      "fact": "macOS 上 V1–V11、V13 均可重跑；V11 证实 `ld -r` 对缺失符号 rc=0（静默）而 `nmedit` rc=1，故 B 必须以 `nm` 断言兜底；Linux 全部 skip；V12 证实 `expected.nm`/p39 门禁在 HEAD 不存在，A 的 P1 与 A′ 的 `<base>.nm`/`ABI_VERSION` 无法复现。"
+    }
+  ],
+  "unreproduced": [
+    {
+      "ref": "claim.md#P1；claim-r2.md:28（A′）；docs/design/phase39-draft.md:59,62,127",
+      "reason": "HEAD `ac040d1` 未实现 `--lib`（`ct build --lib` 报 unknown option，rc=1；无 test/modules/p39_lib，check-ast.sh 无 p39 段）。`.abi.h`、`<BASE>_ABI_VERSION`、`expected.nm` 快照与 p39 门禁的“加符号变红”实验无法执行；只复现了其底层 nm/ar/ld 事实。"
+    },
+    {
+      "ref": "counter.md#E1-4 后半 / F-3（std 增 pub 函数不触发 ABI 版本）",
+      "reason": "HEAD 不发射 `.abi.h`/`ABI_VERSION`，无法验证“只需改 expected.nm 即绿”。仅复现符号面扩张（V15）：`Str.c` 的 defined global 从 9 个增至 10 个（新增 `str_extra`），且仓内无 `.abi.h` 类产物。"
+    },
+    {
+      "ref": "claim.md#P3；counter.md#F-4 / P-5（Linux 与跨平台快照）",
+      "reason": "本机仅 macOS arm64；GNU nm、`objcopy --localize-hidden`、Linux 前缀/排序差异一律 skip，未实测。"
+    },
+    {
+      "ref": "claim.md#E1.1 的命令本身（cwd 未写）",
+      "reason": "仅当 cwd 含 `lib/std`（如 /tmp/p39head/src 或仓库根）时才发射 Vec/Option/Result/Str 与 9 个 `Str_*`；在只有夹具的目录重跑只发射 3 个单元。V1 已固定 cwd=/tmp/p39head/src。"
+    },
+    {
+      "ref": "claim.md#E1.1 的 `/tmp/libbox.a` 7 成员作为 --lib 形态证据",
+      "reason": "该归档含 main.o；按 L39-3（phase39-draft.md:136）不是合法 `--lib` 产物。7 个成员本身可复现，但不能用来论证 --lib 的归档形态；合法形态见 V6/V7/V8（1 个合并成员）。"
+    }
+  ]
+}

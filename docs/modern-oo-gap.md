@@ -198,6 +198,8 @@ prog.ct:6:9: error: incompatible pointer to integer conversion initializing 'int
 
 现状：`pub` 只有「导出/不导出」一档；`.h.ct` 才能被 `import`；类型别名只在头单元；跨单元泛型只能靠「泛型 struct 在 `.h.ct` 里 + 实例在消费单元用」——而这正好被 §2.2 的容器缺陷挡住（泛型电商包无法服务用户类型）。这一条是 O1/C2 的工程投影，不单独计一次工作量。
 
+Phase 39 已补上 **C ABI 静态库**这一半：根 `.h.ct` 的 C 兼容 `pub` 函数可导出为 `.abi.h` + `lib<base>.a`（`ct build --lib`），纯 C 工程可直接链接。仍缺的是函数级导出选择（T39-5）、按值 struct / `pub` 全局（T39-1）与泛型导出（T39-2）。
+
 ### 3.9 并发与异步
 
 无语言级线程、原子、`async`。判定：**明确不做**（Z1、Z2）；`pthread` 走 `bindings`，与 CT 的 OO 表达力无关。
@@ -321,6 +323,12 @@ prog.ct:6:9: error: incompatible pointer to integer conversion initializing 'int
 | --- | --- | --- | --- |
 | O1 + O3 + C2（一条链） | A | 「对象集合」与「分组 / 邻接表」是 OO 的基本用法，现在分别被 L29-13、L29-11 硬拒。O1 放开守卫、按值浅拷贝即可先用；O3 是 O1/C2 的**验收条件**，不是独立条目——元素不参与 retain/release，放开后默认就是悬垂或泄漏（证据见 §2.4）；C2 依赖 O3，且还要过 `ct_impl_matches` 无嵌套 pattern 或发射器私有分支这一关 | 900–1,600（O1 单独 320–680；O3 与 C2 共享元素助手，不重复计） |
 | 安全网（B1 的边界） | B（高优先值得补） | `int x = "s"` 能过 `check`，要等 `cc` 才报；不挡程序，但措辞是 C 的，且单文件模式下位置指向生成的 `.c`（§2.4）。若目标是「看起来像现代语言」，应排在最前；按 A 档标准它不够 | 500–1,000 |
+
+> **2026-11-13（P37）**：impl 签名漂移已在 `ct build` / `ct check` 升为硬错；`ct build --runtime-checks`
+> 提供可选的空 vtable 断言。安全网条目因此收窄为「未启用运行期开关时的派发风险」。
+>
+> **2026-11-13（P38）**：块级 `defer { … }` 已落地，覆盖正常落出 / `return` / `break` / `continue`，
+> 同块内先于 `own` 的自动释放；「清理套路」从手写 goto cleanup 收窄为显式 defer。
 
 ### 6.2 值得补（显著提升表达力，不阻塞）
 

@@ -1,0 +1,60 @@
+{
+  "battle": "p38-1",
+  "head": "0c9320c",
+  "environment": {
+    "os": "Darwin arm64 / macOS",
+    "cc": "Apple clang (system cc)",
+    "binary": "/tmp/p38b/ct-ast (ct v0.37.0)",
+    "date": "2026-11-13"
+  },
+  "rounds": 1,
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1-b / counter.md#E1-2",
+      "command": "ct-ast build --runtime-checks --emit-c side.ct -o out && cc out/side.c -o side && ./side",
+      "exit": 139,
+      "output": "Segmentation fault: 11; stderr empty",
+      "reproduced": true,
+      "note": "arr[pick()].area() 被接受且无 runtime 消息：A 的 J-1 反例。"
+    },
+    {
+      "id": "V2",
+      "side": "counter",
+      "ref": "counter.md#E1-3",
+      "command": "ct-ast build --runtime-checks --emit-c safe_index.ct -o out && cc out/safe_index.c -o bin && ./bin",
+      "exit": 7,
+      "output": "rc=7",
+      "reproduced": true,
+      "note": "arr[0].area() 安全；B 的一刀切 N_INDEX 会误伤。"
+    },
+    {
+      "id": "V3",
+      "side": "claim",
+      "ref": "claim.md#E1-c",
+      "command": "1-file prototype: reject N_INDEX root / unhoisted N_CALL under --runtime-checks",
+      "exit": 1,
+      "output": ":21:1: error: runtime checks need a stable receiver; bind it to a local first",
+      "reproduced": true,
+      "note": "B 可 1 文件落地；列号 1 是既有 fail_from 限制。"
+    },
+    {
+      "id": "V4",
+      "side": "both",
+      "ref": "claim.md#E1-e / counter.md#E1-8",
+      "command": "grep -c __ct_vt_guard out/prog.c (off vs on)",
+      "exit": 0,
+      "output": "off=0, on=2",
+      "reproduced": true,
+      "note": "off 产物不变；开关边界只在 on 分支。"
+    }
+  ],
+  "checks": [
+    {"id": "J-1", "result": "A red; B-redirect needs side-effect scan", "v": ["V1", "V2", "V3"]},
+    {"id": "J-2", "result": "A/B both require full check-all; B adds one test", "v": ["V4"]},
+    {"id": "J-3", "result": "off unchanged", "v": ["V4"]},
+    {"id": "J-4", "result": "B 1 file if no new column", "v": ["V3"]},
+    {"id": "J-5", "result": "file:line:1; column limitation", "v": ["V3"]}
+  ]
+}

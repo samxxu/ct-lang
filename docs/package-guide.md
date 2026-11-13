@@ -1,10 +1,10 @@
 # 包作者指南
 
-> 中文 · [English](#english)
+> 中文
 >
 > 状态：v1（Phase 18.1，2026-11-02）。工具实现见
 > [`selfhost/ct-ast/tool/pkg/`](../selfhost/ct-ast/tool/pkg/)；binding 写法见
-> [bindings/README.md](../bindings/README.md)；首批官方包见
+> [test/bindings/README.md](../test/bindings/README.md)；首批官方包见
 > [phase18.md](history/design/phase18.md) 的 18.3–18.5。
 
 ---
@@ -28,7 +28,7 @@ hello/
   std 把实现放在 `.ct` 只是风格选择。`pub` 才跨单元可见；
 - `.ct`：普通实现单元（`pub` 函数），不发布接口；
 - `.m.ct`：零成本静态映射，不产 `.c` / `.h`；
-- binding 形式（`#include` 直通 + `map`）按 [bindings/README.md](../bindings/README.md)。
+- binding 形式（`#include` 直通 + `map`）按 [test/bindings/README.md](../test/bindings/README.md)。
 
 #### 单元目录 = 命名空间
 
@@ -114,13 +114,30 @@ acme/
    零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
    的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
 
-### 5. 许可证
+### 5. C ABI 静态库（`ct build --lib`）
+
+包作者可以把根 `.h.ct` 的 C 兼容 `pub` 函数做成静态库，供纯 C 工程直接链接：
+
+```sh
+ct build --lib mylib.h.ct --outdir .ctbuild
+# .ctbuild/mylib.abi.h
+# .ctbuild/libmylib.a
+cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
+```
+
+- 只有**根 `.h.ct`** 内有定义、且签名只含 C 标量 / `void` / 指针 / 数组参数（decay）/ 函数指针的 `pub` 函数进入导出面；按值 struct、trait 值、`Vec`/`Map`/`Option`/`Result`/`Str`、`own` 一律硬错。
+- 泛型模板不导出，给 `L39-1w`；根单元内的 `main`、`pub` 全局、带 C shim 的 `.m.ct` 分别 `L39-3/4/5`；被 import 单元的 `pub` 只给 `L39-6` 汇总，不进 ABI。
+- 归档里还会出现 `Str_*`、vtable 等**内部符号**；`nm -g` 面 ⊋ 导出面，**只有 `.abi.h` 的声明是 ABI**。不要把 `nm` 输出当公开契约。
+- 非 `pub` 顶层函数/全局在 `--lib` 下是 `static`；导出定义是 `visibility("default")`，其余以 `-fvisibility=hidden` 编译。
+- 不做按值 struct / `pub` 全局 / 泛型函数 / dylib / MSVC；这些是 T39-1–T39-3 的开放项（见 [phase39 卡](design/phase39-draft.md) §7）。
+
+### 6. 许可证
 
 - 官方纯 `.ct` 包：**MIT**。
 - C 库映射包：沿用上游许可证，并在 `ct.pkg` 的 `licence` 标注。
 - 每个包必须有 `LICENSE` 文件；`licence` 键只是约定，工具不校验文件内容。
 
-### 6. 常见失败
+### 7. 常见失败
 
 | 现象 | 原因 | 处置 |
 | --- | --- | --- |
@@ -130,142 +147,3 @@ acme/
 | `digest ... does not match ct.lock` | `vendor/` 被改动或锁过期 | 重新 `ct get` / `ct update` |
 | `requires 'ct >= …'` 报错 | 编译器版本偏旧 | 升级编译器；确需继续时用 `ct get --force` / `ct install --force` |
 | 索引读不到 | `--index` / `CT_INDEX` 路径错 | 检查路径；无索引时裸名无法解析 |
-
----
-
-## English
-
-### 1. What a package looks like
-
-The repository root **is** the package root: `ct.pkg`, `LICENSE` and the source units sit side by side,
-with no nested subdirectory.
-
-```
-hello/
-├── ct.pkg          # the manifest (the only file the tool enforces)
-├── LICENSE         # the licence (required by convention; the tool does not check it, see §5)
-└── hello.h.ct      # a source unit; there may be several
-```
-
-Source units follow "one unit, one primary type" from [AGENTS.md](../AGENTS.md) §2:
-
-- `.h.ct`: `trait` / `struct` declarations, global instances, and `pub fn` functions — a `.h.ct`
-  **can** export functions; std keeping implementations in `.ct` is only a style choice. Only `pub`
-  crosses a unit;
-- `.ct`: an ordinary implementation unit (`pub` functions), publishing no interface;
-- `.m.ct`: zero-cost static mappings, emitting no `.c` / `.h`;
-- binding form (`#include` passthrough + `map`) per [bindings/README.md](../bindings/README.md).
-
-#### Unit directory = namespace
-
-A unit that declares a file-scoped namespace must live in the matching directory: a unit with
-`namespace a::b;` sits in `<package-root>/a/b/`.
-
-```
-acme/
-├── ct.pkg
-├── acme/
-│   ├── Uart.h.ct        # namespace acme;
-│   └── uart.m.ct        # namespace acme;
-└── examples/
-    └── main.ct          # import acme::Uart;  no namespace, so no directory rule
-```
-
-- This is existing compiler semantics (D13 option A: validation, not derivation). With
-  `--ns-root <package-root>`, `ct build` checks every input unit that declares a namespace and reports
-  `namespace 'a::b' does not match the directory '...'` on a mismatch.
-- Without `--ns-root` the check does not run. `--ns-root` only inspects units that fall under the root
-  (files outside it are skipped silently), so a self-check must pass the package root and the package's
-  units as inputs.
-- Units without a `namespace` declaration are exempt (C mapping units and their `.m.ct` shims usually
-  are); their location is decided only by `import a::b::Unit` resolution. Adding a namespace to such a
-  unit would change its exported symbols, which is a breaking change.
-- This repository (ct-pkg) also ships `tools/check-layout.sh`, which walks every package's `*.ct`,
-  reads the namespace and compares it with the relative directory; it is CI-ready:
-  `tools/check-layout.sh` (or name package roots: `tools/check-layout.sh hal sqlite`).
-
-### 2. The keys of `ct.pkg`
-
-A line-oriented manifest: `key = value`, `#` starts a comment, `dep` may repeat, and unknown keys are
-**ignored** (forward compatibility).
-
-| Key | Required | Meaning |
-| --- | --- | --- |
-| `name` | yes | the package name, see §3 |
-| `version` | yes | `x.y.z` (the tool reads the first three numbers; pre-release / build metadata are out of scope) |
-| `dep` | no, repeatable | a dependency, `name` or `name@range`; the Phase 8 format |
-| `cflags` | no | extra compiler flags for consumers; `ct install` folds them into the printed command |
-| `ldflags` | no | link flags (e.g. `-lm` for a C mapping package); same |
-| `requires` | no | a compiler-version constraint; **a mismatch fails `ct get` and `ct install`**; `--force` downgrades it to a warning |
-| `licence` | no | the licence identifier (SPDX style, e.g. `MIT`). **A convention only; the tool does not parse it** |
-
-Conventions, not tool enforcement: the tool only requires a non-empty `name` and `version`; a missing or
-empty one makes `ct get` report `cannot read '<dir>/ct.pkg'`. Naming, tags, layout and `licence` are
-checked when the index accepts a package and by CI.
-
-`cflags` / `ldflags` / `requires` are read by `ct install`, which folds every package's `cflags` /
-`ldflags` into **one** `ct build` command; an unsatisfied `requires` fails the install, and only
-`ct install --force` continues (printing the reason to stderr). `requires` is checked by `ct get` too,
-**before `ct.lock` is written**: a mismatch fails that `get` and leaves an existing `ct.lock`
-byte-identical (`ct get --force` continues with a warning).
-
-### 3. Names, versions and tags
-
-- Package name: `[a-z0-9][a-z0-9-]*` (lowercase letters, digits, hyphens; no leading hyphen).
-- **Repository name = package name**: `github.com/ct-pkg/<name>`.
-- Tag: `v<version>`; the index's `tag` field records the actual tag (with or without the `v`).
-- `dep` ranges keep the Phase 8 subset: `^x.y.z`, `~x.y.z`, `>=` / `>` / `<` / `<=` / `=`, a bare
-  version (exact) or `*`; several conditions separated by spaces mean AND. Resolution is MVS (the
-  lowest satisfying version).
-- A breaking change must move the major number; the transitive-update policy is out of scope here.
-
-### 4. Publishing, the index and consuming
-
-1. **Publish**: put `ct.pkg` and the sources at the repository root, tag `v<version>` and push.
-2. **Indexing**: append one line to the `index` file of `ct-pkg/index`, five whitespace-separated
-   fields:
-
-   ```
-   name version git-url tag sha256:<64 hex>
-   ```
-
-   The digest uses `ct.lock`'s algorithm (sorted relative paths, each path and its bytes folded into
-   one SHA-256 stream). The index is generated and committed by CI (18.2); locally, `CT_INDEX=<file>`
-   or `--index <file>` points at any plain-text index.
-3. **Consuming**:
-
-   ```sh
-   ct get <name>@<range>        # a bare name resolves through the index; a local dir is ./path or file://
-   ct verify                    # offline: check vendor/ against the ct.lock digests
-   ct install                   # offline: check digests and dependency coverage, print one ct build command
-   ct update                    # offline: re-resolve ct.pkg and rewrite ct.lock
-   ```
-
-   `ct verify` checks digests only and **does not read `ct.pkg`**; whether every `dep` in the manifest
-   is covered by `ct.lock` is decided by `ct install` (a missing one reports
-   `dependency '<spec>' is not satisfied by ct.lock`).
-   `ct get` resolves one spec per run, but it keeps the `ct.lock` rows it did not resolve again;
-   re-getting the same package replaces its row instead of duplicating it. Getting a new package
-   therefore cannot unpin an older one, and a later `ct update` still resolves from the locked commit.
-   `ct get` may use git — it is the only subprocess call site on the **package-management path**;
-   `ct update` / `ct verify` / `ct install` are network-free and subprocess-free. On the compiler side
-   `ct compile` / `ct build --emit-c` are network-free and subprocess-free, but the default form of
-   `ct build` spawns `$CC` to link (`--cc` > `$CC` > `cc`).
-
-### 5. Licensing
-
-- Official pure-.ct packages: **MIT**.
-- C-library mapping packages: inherit the upstream licence and state it in `ct.pkg`'s `licence`.
-- Every package must carry a `LICENSE` file; the `licence` key is a convention and the tool does not
-  verify the file.
-
-### 6. Common failures
-
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `cannot read '<dir>/ct.pkg'` | missing manifest, or an empty `name` / `version` | add the key; values may not be blank |
-| `... does not satisfy '<range>'` | the version is outside the range | widen the `dep` range or release a new version |
-| `no tag of '<name>' satisfies '<range>'` | no matching tag on the git source | tag `v<version>` |
-| `digest ... does not match ct.lock` | `vendor/` was edited or the lock is stale | re-run `ct get` / `ct update` |
-| a `requires 'ct >= …'` error | the compiler is older than the package wants | upgrade; use `ct get --force` / `ct install --force` if you must continue |
-| the index cannot be read | a wrong `--index` / `CT_INDEX` path | fix the path; without an index a bare name cannot resolve |

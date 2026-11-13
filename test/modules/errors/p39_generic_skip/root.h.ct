@@ -1,0 +1,2 @@
+pub T id<T>(T x) { return x; }
+pub int id_int(int x) { return id<int>(x); }

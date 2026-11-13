@@ -51,7 +51,7 @@
 # argument may now be a bare visible name or a member path rooted at the
 # instance (test/ast/15_map_args).
 #
-# 12.1 adds the bindings section: `bindings/mock-hal/` is a declarative binding
+# 12.1 adds the bindings section: `test/bindings/mock-hal/` is a declarative binding
 # to a fake HAL (pass-through include + mirrored trait / struct + a declared
 # global instance + `map`), built end to end and compared with expected output.
 # It also pins the fix that emits map wrappers in build mode.
@@ -178,7 +178,7 @@
 # the consumer's generated C and its directory joins the printed `cc` line as an
 # include root, while an existing `<base>.shim.c` joins that line as a source.
 # test/modules/map_unit_shim pins the wiring, the cold/warm cache and the
-# touching of the shim header; bindings/posix-socket is the real-library demo
+# touching of the shim header; test/bindings/posix-socket is the real-library demo
 # (a header-only shim over socketpair / write / read / errno). A shim source
 # without its header is rejected by name, a shim header that is not a regular
 # file is rejected too, a shim header under any other base name is never
@@ -503,6 +503,9 @@ for d in test/ast/*/; do
     [ -d "$d" ] || continue
     d="${d%/}"
     name="$(basename "$d")"
+    # Phase 37: this fixture deliberately dispatches a null iface; the
+    # dedicated p37 runtime probe runs it with --runtime-checks.
+    case "$name" in 219_runtime_guard) continue;; esac
     src="$d/prog.ct"
     [ -f "$src" ] || continue
     out="$work/$name.c"
@@ -781,22 +784,22 @@ echo "== bindings (Phase 12: the fake HAL demo) =="
 # declared global instance and a `map` - so no language feature is involved.
 # Build mode must emit the wrappers and the vtable into the unit that declares
 # the map (12.1 fixed a gap where they were only emitted in compile mode).
-bd=bindings/mock-hal
+bd=test/bindings/mock-hal
 rm -rf "$work/bind"
 mkdir -p "$work/bind"
 if ! "$work/ct-ast" build --emit-c "$bd/demo.ct" -o "$work/bind" >"$work/bind.out" 2>"$work/bind.err"; then
-    bad "bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
+    bad "test/bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
 elif ! grep -q "uart1_Controller_vtable" "$work/bind/uart.c"; then
-    bad "bindings/mock-hal" "the map vtable was not emitted into the declaring unit"
+    bad "test/bindings/mock-hal" "the map vtable was not emitted into the declaring unit"
 elif ! "$CC" -Wall -Wextra -std=c99 -I "$bd" "$work/bind"/*.c "$bd/mock_hal_impl.c" \
         -o "$work/bind.bin" 2>"$work/bind.cc"; then
-    bad "bindings/mock-hal" "generated C did not build warning-free: $(cat "$work/bind.cc")"
+    bad "test/bindings/mock-hal" "generated C did not build warning-free: $(cat "$work/bind.cc")"
 elif ! "$work/bind.bin" >"$work/bind.stdout" 2>&1; then
-    bad "bindings/mock-hal" "the program exited non-zero"
+    bad "test/bindings/mock-hal" "the program exited non-zero"
 elif ! cmp -s "$work/bind.stdout" "$bd/demo.expected.out"; then
-    bad "bindings/mock-hal" "program output differs: $(cat "$work/bind.stdout")"
+    bad "test/bindings/mock-hal" "program output differs: $(cat "$work/bind.stdout")"
 else
-    ok "bindings/mock-hal"
+    ok "test/bindings/mock-hal"
 fi
 
 echo
@@ -2325,15 +2328,15 @@ fi
 # out-parameter and the `errno` accessor. Header-only, so no `.shim.c` is listed.
 rm -rf "$work/mpsock"
 mkdir -p "$work/mpsock"
-if "$work/ct-ast" build --emit-c bindings/posix-socket/demo.ct -o "$work/mpsock" \
+if "$work/ct-ast" build --emit-c test/bindings/posix-socket/demo.ct -o "$work/mpsock" \
         >"$work/mpsock.out" 2>"$work/mpsock.err" \
    && grep -qF '#include "socket.shim.h"' "$work/mpsock/demo.c" \
-   && grep -qF -- '-I bindings/posix-socket/posix' "$work/mpsock.out" \
+   && grep -qF -- '-I test/bindings/posix-socket/posix' "$work/mpsock.out" \
    && ! grep -qF '.shim.c' "$work/mpsock.out" \
-   && "$CC" -Wall -Wextra -std=c99 -I bindings/posix-socket/posix "$work/mpsock"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I test/bindings/posix-socket/posix "$work/mpsock"/*.c \
         -o "$work/mpsock.bin" 2>"$work/mpsock.cc" \
    && "$work/mpsock.bin" >"$work/mpsock.stdout" 2>&1 \
-   && cmp -s "$work/mpsock.stdout" bindings/posix-socket/demo.expected.out; then
+   && cmp -s "$work/mpsock.stdout" test/bindings/posix-socket/demo.expected.out; then
     ok "posix-socket binding (shim casts + errno accessor; header-only)"
 else
     bad "posix-socket binding" "$(cat "$work/mpsock.err" "$work/mpsock.cc" "$work/mpsock.stdout" 2>/dev/null | head -5)"
@@ -3541,6 +3544,9 @@ echo "== negative cases (test/ast/errors/*.ct) =="
 for f in test/ast/errors/*.ct; do
     [ -f "$f" ] || continue
     b="$(basename "$f" .ct)"
+    # Phase 37: signature fixtures must exit 0 in compile mode (warning);
+    # their build/check severity is asserted by the dedicated probe below.
+    case "$b" in p37_sig_*) continue;; esac
     if "$work/ct-ast" "$f" -o "$work/bad-$b.c" \
             >"$work/bad-$b.out" 2>"$work/bad-$b.err"; then
         bad "$b" "expected a non-zero exit"
@@ -3550,6 +3556,102 @@ for f in test/ast/errors/*.ct; do
         bad "$b" "no positioned diagnostic on stderr: $(cat "$work/bad-$b.err")"
     fi
 done
+
+# Phase 37: signature mismatch is a hard error for build/check and a warning
+# for compile; the missing-method path stays a hard error (E37-1 / E37-2).
+if bash test/ast/p37_probe.sh "$work/ct-ast" >"$work/p37.out" 2>"$work/p37.err"; then
+    ok "p37 signature severity"
+else
+    bad "p37 signature severity" "$(cat "$work/p37.out" "$work/p37.err")"
+fi
+
+# Phase 37 example: --runtime-checks on a valid program keeps the output.
+if "$work/ct-ast" build --runtime-checks --outdir "$work/p37ex" \
+        examples/41_runtime_checks/prog.ct -o "$work/p37ex.bin" \
+        >"$work/p37ex.out" 2>"$work/p37ex.err" \
+   && "$work/p37ex.bin" >"$work/p37ex.stdout" 2>"$work/p37ex.run.err" \
+   && cmp -s "$work/p37ex.stdout" examples/41_runtime_checks/prog.expected.out; then
+    ok "p37 example (--runtime-checks keeps the valid path)"
+else
+    bad "p37 example" "$(cat "$work/p37ex.err" "$work/p37ex.run.err" 2>/dev/null)"
+fi
+
+# Phase 38: defer diagnostics and the first positive defer program.
+if bash test/ast/p38_probe.sh "$work/ct-ast" >"$work/p38.out" 2>"$work/p38.err"; then
+    ok "p38 defer probe"
+else
+    bad "p38 defer probe" "$(cat "$work/p38.out" "$work/p38.err")"
+fi
+
+# Phase 39 R1: --lib is build-only; empty root reports L39-2.
+if bash test/modules/p39_lib/r1_probe.sh "$work/ct-ast" >"$work/p39r1.out" 2>"$work/p39r1.err"; then
+    ok "p39 r1"
+else
+    bad "p39 r1" "$(cat "$work/p39r1.out" "$work/p39r1.err")"
+fi
+
+# Phase 39 R2: root export classification.
+if bash test/modules/p39_lib/r2_probe.sh "$work/ct-ast" >"$work/p39r2.out" 2>"$work/p39r2.err"; then
+    ok "p39 r2"
+else
+    bad "p39 r2" "$(cat "$work/p39r2.out" "$work/p39r2.err")"
+fi
+
+# Phase 39 R3: ABI header contract.
+if bash test/modules/p39_lib/r3_probe.sh "$work/ct-ast" >"$work/p39r3.out" 2>"$work/p39r3.err"; then
+    ok "p39 r3"
+else
+    bad "p39 r3" "$(cat "$work/p39r3.out" "$work/p39r3.err")"
+fi
+
+# Phase 39 R4: static non-exports, export visibility, hidden compile.
+if bash test/modules/p39_lib/r4_probe.sh "$work/ct-ast" >"$work/p39r4.out" 2>"$work/p39r4.err"; then
+    ok "p39 r4"
+else
+    bad "p39 r4" "$(cat "$work/p39r4.out" "$work/p39r4.err")"
+fi
+
+# Phase 39 R5: archive + nm surface.
+if bash test/modules/p39_lib/r5_probe.sh "$work/ct-ast" >"$work/p39r5.out" 2>"$work/p39r5.err"; then
+    ok "p39 r5"
+else
+    bad "p39 r5" "$(cat "$work/p39r5.out" "$work/p39r5.err")"
+fi
+
+# Phase 39 R6: C consumer link/run.
+if bash test/modules/p39_lib/r6_probe.sh "$work/ct-ast" >"$work/p39r6.out" 2>"$work/p39r6.err"; then
+    ok "p39 r6"
+else
+    bad "p39 r6" "$(cat "$work/p39r6.out" "$work/p39r6.err")"
+fi
+
+# Phase 39 R7: deterministic archive.
+if bash test/modules/p39_lib/r7_probe.sh "$work/ct-ast" >"$work/p39r7.out" 2>"$work/p39r7.err"; then
+    ok "p39 r7"
+else
+    bad "p39 r7" "$(cat "$work/p39r7.out" "$work/p39r7.err")"
+fi
+
+# Phase 39 R8: --emit-c zero regression against the S0 baseline.
+if bash test/modules/p39_lib/r8_probe.sh "$work/ct-ast" >"$work/p39r8.out" 2>"$work/p39r8.err"; then
+    ok "p39 r8"
+else
+    bad "p39 r8" "$(cat "$work/p39r8.out" "$work/p39r8.err")"
+fi
+
+# Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
+if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
+    ok "p39 docs"
+else
+    bad "p39 docs" "docs/package-guide.md lacks --lib or the nm caveat"
+fi
+
+# Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
+if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
+    ok "p37 runtime guard"
+else
+    bad "p37 runtime guard" "$(cat "$work/p37rt.out" "$work/p37rt.err")"
+fi
 
 # Phase 21 S4: closure escape / capture / arity diagnostics are stable text,
 # and every one is followed by the tier-1 hint through the independent `note:`
@@ -5041,9 +5143,10 @@ int main(void)
 XMEOF
 mkdir -p "$work/xu-out"
 if "$work/ct-ast" build --emit-c -I "$work" "$work/xu_main.ct" -o "$work/xu-out" \
-        >"$work/xu.out" 2>"$work/xu.err" \
-   && grep -q "warning: signature mismatch: 'put' in impl of 'xu_W' for 'P': parameter 1 type 'struct P \*' does not match the trait's 'int'" "$work/xu.err"; then
-    ok "cross-unit: a local impl drifting from an imported trait's parameter type warns"
+        >"$work/xu.out" 2>"$work/xu.err"; then
+    bad "cross-unit: impl drift" "expected a hard error; got success"
+elif grep -q "error: signature mismatch: 'put' in impl of 'xu_W' for 'P': parameter 1 type 'struct P \*' does not match the trait's 'int'" "$work/xu.err"; then
+    ok "cross-unit: a local impl drifting from an imported trait's parameter type is a hard error"
 else
     bad "cross-unit: impl drift" "$(cat "$work/xu.err")"
 fi

@@ -1,0 +1,266 @@
+{
+  "battle": "p39-2-c",
+  "head": "ac040d1",
+  "environment": {
+    "os": "macOS 27.2 (Darwin 27.2.0 arm64, build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "nm": "llvm-nm, compatible with GNU nm (Apple LLVM version 21.0.0)",
+    "ld": "@(#)PROGRAM:ld PROJECT:ld-27106.1 (BUILD 19:06:34 Oct 19 2026)",
+    "date": "2026-11-13 (Asia/Shanghai; 编译器 ct v0.37.0)"
+  },
+  "rounds": 3,
+  "evidence": [
+    {
+      "id": "VC1",
+      "side": "both",
+      "ref": "C-proposal.md:64 (macOS §3.2); C-proposal.md:12",
+      "command": "rm -rf /tmp/p39c/lib1 && mkdir -p /tmp/p39c/lib1/d1 /tmp/p39c/lib1/d2 && cd /tmp/p39c/lib1\ncat > greetlib.ct <<'EOF'\n#include <stdio.h>\n\npub trait Greeter {\n    void greet();\n}\n\npub struct Person {\n    char *name;\n} use Greeter;\n\nimpl Greeter for Person {\n    void greet() { printf(\"hi %s\\n\", self->name); }\n}\n\nstatic Person ps[2];\n\npub void run_lib(void)\n{\n    ps[0].name = \"A\";\n    ps[1].name = \"B\";\n    ps[0].greet();\n    ps[1].greet();\n}\nEOF\n/tmp/p39head/ct greetlib.ct -o greetlib.c\nsed 's/^void run_lib(void) {/__attribute__((visibility(\"default\"))) void run_lib(void) {/' greetlib.c > greetlib_attr.c\ncc -std=c99 -fvisibility=hidden -c greetlib_attr.c -o greetlib_attr.o\nprintf '_run_lib\\n' > exports.txt\ncc -r -Wl,-exported_symbols_list,/tmp/p39c/lib1/exports.txt -o d1/sealed.o greetlib_attr.o 2>d1/stderr.txt; echo \"cc -r #1 rc=$?\"\nsleep 2\ncc -r -Wl,-exported_symbols_list,/tmp/p39c/lib1/exports.txt -o d2/sealed.o greetlib_attr.o 2>d2/stderr.txt; echo \"cc -r #2 rc=$?\"\necho '--- stderr #1'; cat d1/stderr.txt\nZERO_AR_DATE=1 ar rcs d1/libg.a d1/sealed.o\nZERO_AR_DATE=1 ar rcs d2/libg.a d2/sealed.o\necho '--- sha256'; shasum -a 256 d1/sealed.o d2/sealed.o d1/libg.a d2/libg.a\ncmp d1/sealed.o d2/sealed.o && echo 'sealed IDENTICAL'\ncmp d1/libg.a d2/libg.a && echo 'archive IDENTICAL'\necho '--- nm -g sealed'; nm -g --defined-only d1/sealed.o\necho '--- nm -m sealed'; nm -m d1/sealed.o | grep -E '_Person_Greeter_vtable|___ct_init|__mod_init_func|_run_lib'\necho '--- ar t'; ar t d1/libg.a\ncat > cons.c <<'EOF'\nvoid run_lib(void);\nint main(void) { run_lib(); return 0; }\nEOF\ncc -std=c99 cons.c d1/libg.a -o consbin; echo \"consumer link rc=$?\"\n./consbin; echo \"consumer run rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -r #1 rc=0\ncc -r #2 rc=0\n--- stderr #1\nld: warning: ignoring unexpected dylib '/Library/Developer/CommandLineTools/SDKs/MacOSX27.2.sdk/usr/lib/libSystem.B.tbd'\n--- sha256\nb9581b302fe44e71e958e47b7eaee2c106d7563f3c310b4887ea38373975f9cc  d1/sealed.o\nb9581b302fe44e71e958e47b7eaee2c106d7563f3c310b4887ea38373975f9cc  d2/sealed.o\na90d9eabc203dec954d7979154a0fe7a699081aa6849f6ef121f36c8c93280a2  d1/libg.a\na90d9eabc203dec954d7979154a0fe7a699081aa6849f6ef121f36c8c93280a2  d2/libg.a\nsealed IDENTICAL\narchive IDENTICAL\n--- nm -g sealed\n0000000000000040 T _run_lib\n--- nm -m sealed\n0000000000000110 (__DATA,__data) non-external (was a private external) _Person_Greeter_vtable\n00000000000000a8 (__TEXT,__text) non-external ___ct_init\n0000000000000040 (__TEXT,__text) external _run_lib\n0000000000000108 (__DATA,__mod_init_func) non-external [no dead strip] ltmp4\n--- ar t\n__.SYMDEF SORTED\nsealed.o\nconsumer link rc=0\nhi A\nhi B\nconsumer run rc=0",
+      "reproduced": true,
+      "note": "密封路径（模拟 D39-5：对导出定义注入 `visibility(\"default\")` 后再 `-fvisibility=hidden` 编译）两次构建间隔 2s：`sealed.o` 与 `libg.a` 的 sha256 均相同、`cmp` 逐字节相同。`nm -g --defined-only` 恰为 `_run_lib`；`nm -m` 中 vtable 与 `__ct_init` 为 non-external、`_run_lib` external；`ar t` 仅 1 个成员。消费者链接运行输出 `hi A`/`hi B`，证明 `__ct_init` 在密封后仍执行（vptr 由它写入）。"
+    },
+    {
+      "id": "VC2",
+      "side": "counter",
+      "ref": "C-proposal.md:48; docs/design/phase39-draft.md:59",
+      "command": "rm -rf /tmp/p39c/lib1h && mkdir -p /tmp/p39c/lib1h/hid && cd /tmp/p39c/lib1h\ncat > greetlib.ct <<'EOF'\n#include <stdio.h>\n\npub trait Greeter {\n    void greet();\n}\n\npub struct Person {\n    char *name;\n} use Greeter;\n\nimpl Greeter for Person {\n    void greet() { printf(\"hi %s\\n\", self->name); }\n}\n\nstatic Person ps[2];\n\npub void run_lib(void)\n{\n    ps[0].name = \"A\";\n    ps[1].name = \"B\";\n    ps[0].greet();\n    ps[1].greet();\n}\nEOF\n/tmp/p39head/ct greetlib.ct -o greetlib.c\nprintf '_run_lib\\n' > exports.txt\ncc -std=c99 -fvisibility=hidden -c greetlib.c -o greetlib_hid.o\ncc -r -Wl,-exported_symbols_list,/tmp/p39c/lib1h/exports.txt -o hid/sealed.o greetlib_hid.o 2>hid/stderr.txt; echo \"cc -r rc=$?\"\necho '--- nm -g sealed'; nm -g --defined-only hid/sealed.o; echo '(empty)'\necho '--- nm -m run_lib'; nm -m hid/sealed.o | grep _run_lib\n",
+      "exit": 0,
+      "output": "cc -r rc=0\n--- nm -g sealed\n(empty)\n--- nm -m run_lib\n0000000000000040 (__TEXT,__text) non-external (was a private external) _run_lib",
+      "reproduced": true,
+      "note": "阻断项：HEAD 的 Emitter 尚未注入 `visibility(\"default\")`（D39-5 未实现）。对 HEAD 原样生成的 C 以 `-fvisibility=hidden` 编译后，即使导出清单写了 `_run_lib`，`cc -r` 仍把 `_run_lib` 本地化，`nm -g` 为空、消费者无法链接。C 的密封路径依赖 D39-5 先落地；本探针证明“只加 `-fvisibility=hidden`”不够。"
+    },
+    {
+      "id": "VC3",
+      "side": "counter",
+      "ref": "C-proposal.md:69; C-proposal.md:152 (未验证项 6)",
+      "command": "rm -rf /tmp/p39c/warn && mkdir /tmp/p39c/warn && cd /tmp/p39c/warn\nprintf 'int f(void) { return 0; }\\n' > w.c\ncc -c w.c -o w.o\nprintf '_f\\n' > exports.txt\ncc -r -Wl,-exported_symbols_list,/tmp/p39c/warn/exports.txt -o sealed.o w.o 2>&1; echo \"rc=$?\"\n",
+      "exit": 0,
+      "output": "ld: warning: ignoring unexpected dylib '/Library/Developer/CommandLineTools/SDKs/MacOSX27.2.sdk/usr/lib/libSystem.B.tbd'\nrc=0",
+      "reproduced": true,
+      "note": "`cc -r` 在 rc=0 时 stderr 非空：`ld: warning: ignoring unexpected dylib .../libSystem.B.tbd`。原因是 clang 驱动给 `-r` 也加了 `-lSystem` 与 libclang_rt（`cc -###` 可见）。该 warning 是否计入零警告门禁未验证；若计入，C 默认形态不能通过零警告。"
+    },
+    {
+      "id": "VC4",
+      "side": "both",
+      "ref": "C-proposal.md:149 (未验证项 3)",
+      "command": "rm -rf /tmp/p39c/ctor && mkdir /tmp/p39c/ctor && cd /tmp/p39c/ctor\ncat > a.c <<'EOF'\n#include <stdio.h>\n__attribute__((constructor)) void a_init(void) { puts(\"A-init\"); }\nint a_fn(void) { return 1; }\nEOF\ncat > b.c <<'EOF'\n#include <stdio.h>\n__attribute__((constructor)) void b_init(void) { puts(\"B-init\"); }\nint b_fn(void) { return 2; }\nEOF\ncat > m.c <<'EOF'\nint a_fn(void); int b_fn(void);\nint main(void) { return a_fn() + b_fn() - 3; }\nEOF\ncc -c a.c b.c\nprintf '_a_fn\\n_b_fn\\n' > exports.txt\ncc -r -Wl,-exported_symbols_list,/tmp/p39c/ctor/exports.txt -o sealed.o a.o b.o 2>stderr.txt; echo \"cc -r rc=$?\"\necho '--- stderr'; cat stderr.txt\necho '--- nm -g'; nm -g --defined-only sealed.o\necho '--- nm -m init'; nm -m sealed.o | grep -i init\ncc m.c sealed.o -o mbin; echo \"link rc=$?\"\n./mbin; echo \"run rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -r rc=0\n--- stderr\nld: warning: ignoring unexpected dylib '/Library/Developer/CommandLineTools/SDKs/MacOSX27.2.sdk/usr/lib/libSystem.B.tbd'\n--- nm -g\n000000000000001c T _a_fn\n0000000000000040 T _b_fn\n--- nm -m init\n0000000000000000 (__TEXT,__text) non-external (was a private external) _a_init\n0000000000000024 (__TEXT,__text) non-external (was a private external) _b_init\n0000000000000058 (__DATA,__mod_init_func) non-external [no dead strip] ltmp2\n0000000000000060 (__DATA,__mod_init_func) non-external [no dead strip] ltmp2\nlink rc=0\nA-init\nB-init\nrun rc=0",
+      "reproduced": true,
+      "note": "手写 `__attribute__((constructor))` 经 `cc -r -Wl,-exported_symbols_list` 密封后仍执行（`A-init`/`B-init`），`nm -m` 显示两条 `__mod_init_func`；`nm -g` 恰为 `_a_fn`/`_b_fn`。与 V14 的 `ld -r` 结论一致。"
+    },
+    {
+      "id": "VC5",
+      "side": "both",
+      "ref": "C-proposal.md:18; C-proposal.md:35 (逐单元 .o 保留)",
+      "command": "rm -rf /tmp/p39c/lib3 && mkdir -p /tmp/p39c/lib3/units && cd /tmp/p39c/lib3\ncp /tmp/p39head/src/test/modules/split/shapes.h.ct /tmp/p39head/src/test/modules/split/impl_dog.h.ct .\ncat > box.h.ct <<'EOF'\nimport shapes;\nimport impl_dog;\n\npub void via_vtable(void)\n{\n    Dog d = *dog_get();\n    Speak s = d;\n    s.hi();\n}\nEOF\n/tmp/p39head/ct build --emit-c -I . box.h.ct --outdir units --cc true >/dev/null 2>&1\ncd units && for c in *.c; do cc -std=c99 -I. -c \"$c\" -o \"${c%.c}.o\"; done; cd ..\necho '--- unit objects before seal'; ls units/*.o\necho '--- nm before seal'; nm -g --defined-only units/*.o\nprintf '_via_vtable\\n_dog_get\\n' > exports.txt\ncc -r -Wl,-exported_symbols_list,/tmp/p39c/lib3/exports.txt -o units/sealed.o units/shapes.o units/impl_dog.o units/box.o 2>units/stderr.txt; echo \"cc -r rc=$?\"\necho '--- stderr'; cat units/stderr.txt\necho '--- unit objects after seal'; ls units/*.o\necho '--- nm unit box.o still works'; nm -u units/box.o\nZERO_AR_DATE=1 ar rcs lib3.a units/sealed.o\necho '--- ar t'; ar t lib3.a\necho '--- nm -g archive'; nm -g --defined-only lib3.a\ncat > cons.c <<'EOF'\nvoid via_vtable(void);\nint main(void) { via_vtable(); return 0; }\nEOF\ncc -std=c99 cons.c lib3.a -o consbin; echo \"consumer link rc=$?\"\n./consbin; echo \"consumer run rc=$?\"\n",
+      "exit": 0,
+      "output": "--- unit objects before seal\nunits/box.o\nunits/impl_dog.o\nunits/shapes.o\n--- nm before seal\n\nunits/box.o:\n0000000000000000 T _via_vtable\n\nunits/impl_dog.o:\n0000000000000050 D _Dog_Speak_vtable\n0000000000000040 T _dog_get\n\nunits/shapes.o:\ncc -r rc=0\n--- stderr\nld: warning: ignoring unexpected dylib '/Library/Developer/CommandLineTools/SDKs/MacOSX27.2.sdk/usr/lib/libSystem.B.tbd'\n--- unit objects after seal\nunits/box.o\nunits/impl_dog.o\nunits/sealed.o\nunits/shapes.o\n--- nm unit box.o still works\n_Dog_Speak_vtable\n_dog_get\n--- ar t\n__.SYMDEF SORTED\nsealed.o\n--- nm -g archive\n\nsealed.o:\n0000000000000040 T _dog_get\n000000000000004c T _via_vtable\nconsumer link rc=0\nwoof 7\nconsumer run rc=0",
+      "reproduced": true,
+      "note": "逐单元 `units/<unit>.o` 在 `cc -r` 后仍存在且可 `nm`（`nm -u units/box.o` 仍见 `U _Dog_Speak_vtable`/`U _dog_get`）；归档 `lib3.a` 只有 1 个 `sealed.o` 成员；`nm -g` 恰为 `_dog_get`/`_via_vtable`，消费者运行 `woof 7`。即 C 的“逐单元 .o 保留但归档单成员”在文件层面成立。"
+    },
+    {
+      "id": "VC6",
+      "side": "counter",
+      "ref": "C-proposal.md:71-81; C-proposal.md:147",
+      "command": "echo '--- tools'; for t in docker podman colima lima; do printf '%-8s ' \"$t\"; command -v \"$t\" || echo MISSING; done\necho '--- host'; uname -s\necho '--- podman version'; timeout 20 podman version >podman_v.txt 2>&1; echo \"rc=$?\"; head -3 podman_v.txt\necho '--- podman info'; timeout 25 podman info --format '{{.Host.OS}} {{.Host.Arch}}' >podman_i.txt 2>&1; echo \"rc=$?\"; head -3 podman_i.txt\n",
+      "exit": 0,
+      "output": "--- tools\ndocker   MISSING\npodman   /opt/homebrew/bin/podman\ncolima   MISSING\nlima     MISSING\n--- host\nDarwin\n--- podman version\nrc=1\nstat /Users/samxx/.config: no such file or directory\n--- podman info\nrc=1\nstat /Users/samxx/.config: no such file or directory",
+      "reproduced": true,
+      "note": "Linux 分支：`docker`/`colima`/`lima` MISSING；`podman` 二进制存在（/opt/homebrew/bin/podman）但不可用——`podman version`/`info` 均 rc=1，报 `stat /Users/samxx/.config: no such file or directory`。无法在本机启动 Linux 容器，GNU ld 的 `-r --localize-hidden`/`--retain-symbols-file` 一律 **skip**，不得默绿。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 48,
+      "text": "#    内部：逐单元 .c -> cc -std=c99 -fvisibility=hidden -I <outdir> -c <unit>.c -o <unit>.o",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 51,
+      "text": "cc -r <平台 -Wl 参数> -o <outdir>/<base>.sealed.o <unit>.o...",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 64,
+      "text": "cc -r -Wl,-exported_symbols_list,<outdir>/<base>.exports \\",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 69,
+      "text": "- 本席在 `/tmp` 做过一次最小探针……并处理 `ld: warning: ignoring unexpected dylib .../libSystem.B.tbd` 是否进零警告门禁。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 25,
+      "text": "C 的让步（必须写明）：归档成员从「N 个逐单元 `.o`」变为「1 个密封对象」。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 35,
+      "text": "| 逐单元对象 | `<outdir>/<unit>.o` | O1 保留；**不入归档**；文档注明「构建产物，非 ABI，消费者应链接 `.a`」 |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 71,
+      "text": "### 3.3 Linux（未实测，C 的阻断项）",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 75,
+      "text": "1. `cc -r -Wl,--localize-hidden -o <outdir>/<base>.sealed.o <unit>.o...`",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/C-proposal.md",
+      "line": 152,
+      "text": "6. **`cc -r` 的 warning**：本席探针见 `ld: warning: ignoring unexpected dylib .../libSystem.B.tbd`；须消除或证明不进零警告门禁。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 36,
+      "text": "| O1 | `--lib` 产出 `lib<base>.a` + `<base>.abi.h` + 逐单元 `.o`；纯 C 消费者可链接运行 | ... |",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 59,
+      "text": "| D39-5 | 导出定义注入 `visibility(\"default\")`，中间对象加 `-fvisibility=hidden`；符号面用 `nm` 快照锁定 | ... |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 40,
+      "text": "> O3 的边界：**visibility 不改变静态归档的全局符号表**。……`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "battle/p39-2/question.md",
+      "line": 18,
+      "text": "| J-1 | **ABI 洁净**：`nm -g --defined-only` 是否只剩导出函数；若 B 能做到而 A 不能，J-1 归 B | 命令输出 |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 391,
+      "text": "- 不引入任何第三方库、构建系统、代码生成脚本。",
+      "supports": "claim",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "C-1",
+      "claim": "C：`cc -r` 密封对象与 `ZERO_AR_DATE=1 ar` 归档的两次构建 sha256 相同（D39-4/E39-5）。",
+      "counter": "Mach-O 可能带 UUID/时间戳，`cc -r` 可能不确定。",
+      "evidence": [
+        "VC1"
+      ],
+      "fact": "两次构建间隔 2s，`sealed.o` 与 `libg.a` 的 sha256 分别相同，`cmp` 逐字节相同（VC1）。本机 macOS arm64、同输入、同工具链；跨平台/跨机器未测。"
+    },
+    {
+      "id": "C-2",
+      "claim": "C：密封后 `nm -g --defined-only` 恰为导出集合，内部 vtable/`__ct_init` 变 non-external。",
+      "counter": "V9 的 common 符号边界；HEAD 无 D39-5 attribute 时导出会被一起本地化。",
+      "evidence": [
+        "VC1",
+        "VC2",
+        "VC5"
+      ],
+      "fact": "VC1（注入 visibility(default) 后）：`nm -g` 仅 `T _run_lib`，`nm -m` vtable/`__ct_init` 为 non-external；VC5：`nm -g` 仅 `_dog_get`/`_via_vtable`。VC2：无 attribute 时 `nm -g` 为空、`_run_lib` 被本地化。VC1 的 fixture 无 V9 的非 static tentative 全局，故未覆盖 common 边界。"
+    },
+    {
+      "id": "C-3",
+      "claim": "C：工具集只有 `cc`/`ar`/`nm`，不引入新依赖。",
+      "counter": "`cc -r` 仍调用平台链接器并附带 `-lSystem`/libclang_rt；stderr 有 warning。",
+      "evidence": [
+        "VC1",
+        "VC3"
+      ],
+      "fact": "VC1/VC3/VC4/VC5 的每次 `cc -r` 均 rc=0 但 stderr 有 `ld: warning: ignoring unexpected dylib .../libSystem.B.tbd`。该 warning 是否进零警告门禁未测；工具层面确实只调 `cc`，但 `cc` 内部调 `ld` 是事实。"
+    },
+    {
+      "id": "C-4",
+      "claim": "C：密封后 `__ct_init` 与手写 constructor 仍执行。",
+      "counter": "`-exported_symbols_list` 可能丢弃 constructor。",
+      "evidence": [
+        "VC1",
+        "VC4"
+      ],
+      "fact": "VC1：ct 生成的 `__ct_init` 在密封后仍位于 `__mod_init_func`，消费者运行 `hi A`/`hi B`；VC4：手写 a/b constructor 运行 `A-init`/`B-init`。两者均成立。"
+    },
+    {
+      "id": "C-5",
+      "claim": "C：逐单元 `.o` 保留为构建产物，仅归档改为单成员。",
+      "counter": "O1 若要求“归档成员逐单元”，C 不成立（C-proposal.md:25 自认）。",
+      "evidence": [
+        "VC5"
+      ],
+      "fact": "VC5：密封前后 `units/{box,impl_dog,shapes}.o` 都在且可 `nm`；`ar t lib3.a` 只有 `__.SYMDEF SORTED` + `sealed.o`，1 个成员；消费者链接运行 `woof 7`。"
+    },
+    {
+      "id": "C-6",
+      "claim": "C：Linux 与 macOS 只差一个 `-Wl` 参数。",
+      "counter": "Linux 分支未实测，C 自认阻断（C-proposal.md:71-81,147）。",
+      "evidence": [
+        "VC6"
+      ],
+      "fact": "本机 docker/colima/lima 缺失；podman 存在但不可用（stat ~/.config 报错）。Linux 的 GNU ld `-r --localize-hidden` / `--retain-symbols-file` 全部 skip，未实测，不作胜证。"
+    },
+    {
+      "id": "C-7",
+      "claim": "C：中间对象以 `-fvisibility=hidden` 编译（C-proposal.md:48）。",
+      "counter": "HEAD 无 D39-5 的 `visibility(\"default\")` 注入，导出会被本地化。",
+      "evidence": [
+        "VC2",
+        "VC1"
+      ],
+      "fact": "VC2：HEAD 原样 C + `-fvisibility=hidden` → `cc -r` rc=0 但 `nm -g` 空；VC1：先注入 `visibility(\"default\")` 后同一命令得到 `nm -g = T _run_lib`。C 的 §3.1 前提在 HEAD 尚不成立，需 D39-5 实现。"
+    }
+  ],
+  "unreproduced": [
+    {
+      "ref": "C-proposal.md:71-81,147（Linux）",
+      "reason": "本机仅 macOS arm64；docker/colima/lima 缺失，podman 二进制存在但 `podman version`/`info` 报 `stat /Users/samxx/.config: no such file or directory`，无法启动 Linux 容器。GNU ld 的 `-r --localize-hidden` 与 `--retain-symbols-file` 全部 skip。"
+    },
+    {
+      "ref": "C-proposal.md:12,46-64（真实 `--lib` 路径）",
+      "reason": "HEAD ac040d1 未实现 `--lib`（`ct build --lib` → unknown option，rc=1；无 test/modules/p39_lib、check-ast.sh 无 p39 段，见 verify.json V12）。本文件用 ct 单文件发射的最小 trait 库模拟单元，无法验证 `--lib` 自身的单元选择、`.abi.h`、`<base>.nm`、`<BASE>_ABI_VERSION` 与 p39 门禁红绿。"
+    },
+    {
+      "ref": "C-proposal.md:48 与 docs/design/phase39-draft.md:59（D39-5）",
+      "reason": "HEAD Emitter 尚未注入 `visibility(\"default\")`。VC1 用 `sed` 在生成的 C 上模拟该属性后才得到预期 `nm -g`；VC2 证明未注入时 `-fvisibility=hidden` 会让导出也被本地化。C 的正式实现必须先落 D39-5。"
+    },
+    {
+      "ref": "C-proposal.md:152（warning 与零警告门禁）",
+      "reason": "`ld: warning: ignoring unexpected dylib .../libSystem.B.tbd` 已复现（rc=0、stderr 非空），但仓库零警告门禁是否把链接器 stderr 计入失败，HEAD 无 p39 门禁可测；只能记为风险，不能判定红/绿。"
+    },
+    {
+      "ref": "C-proposal.md:148（跨平台确定性）",
+      "reason": "sha256 相同只在同机、同输入、同 Apple clang 21 下复现；Linux 侧与跨机器/跨 SDK 的确定性未测（Linux skip）。"
+    }
+  ]
+}

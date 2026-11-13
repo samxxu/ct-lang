@@ -1,6 +1,6 @@
 # Phase 19 · 受限语义检查
 
-> 中文 · [English](#english)
+> 中文
 > **状态：完成**（2026-11-03，19.0–19.4 全部完成） · 版本：`v0.19.0`
 > 前置：[spike-semantic-check.md](../../design/spike-semantic-check.md)（GO）；Phase 17 / 18 不阻塞本阶段
 
@@ -84,57 +84,3 @@
 | 字符串类型表示 | 中 | 只比可判定项；19.2 不做推断 |
 | 实例级 `map` 与静态映射 | 中 | 歧义检查区分 trait 声明与 map 绑定 |
 | 自举约束 | 中 | 检查器只落 `ct-ast`；`ct-ast` 源码不用新语法 |
-
----
-
-## English
-
-### 1. Goal
-
-Add **resolution and signature** checks for CT-declared entities without changing the source-to-source, zero-runtime, zero-optimization positioning: call-site arity for functions and trait methods; coarse argument-type compatibility (exact name / pointer depth / struct / interface, no inference); trait-method ambiguity (SH-46); cross-unit signature drift; and a separate `ct check` entry point.
-
-### 2. Non-goals
-
-No full type system, inference, implicit conversions, or generics; no checks over C passthrough, macros, `.m.ct` recipes or raw blocks (always `unknown`, skipped); no change to `ct compile` / `ct build` output or default exit codes.
-
-### 3. Current state
-
-The spike proved that method existence, impl/trait signature mismatch (warning), field existence, impl completeness and map-binding arity are already checked. The gaps are call-site arity, argument types, ambiguity and cross-unit signatures. Parameter types and counts are already stored in `Fn` and `MethodSig`; types are strings today, so only decidable arguments are compared.
-
-### 4. Slices
-
-| Slice | Content | Touch points | Exit | Risk |
-| --- | --- | --- | --- | --- |
-| **19.0** | prerequisite: emit a `for`-init `static` as a declaration inside its own block (standard C99, no GNU extension) | `backend/emit/Emitter` | `37_empty_stmt` passes under `gcc -std=c99`; program output unchanged | scope/indent regressions |
-| **19.1** | call-site arity for functions and trait methods; variadics; no duplicate map-binding checks | `Parser` / `Expr` / `TypeCheck` / `Diag` | both arity probes caught; zero false positives on 383 files | false positives; need `unknown` skip |
-| **19.2** | coarse argument-type compatibility | `TypeCheck` / `Symbols` | clear mismatches caught; no false positives | string-based types |
-| **19.3** | ambiguity (SH-46) and cross-unit signature drift | `Symbols` / `Module` / `Parser` | SH-46 case errors; cross-unit negative case passes | instance-level `map` edges |
-| **19.4** | `ct check`, `--diagnostics=json`, docs, gate | `Driver` / `Diag` / docs / `test/semantics` | CLI works; 12th gate wired; bilingual docs | entry duplication, exit codes |
-
-### 5. Order
-
-19.0 → 19.1 → 19.2 → 19.3 → 19.4. 19.0 first removes the standard-C hazard so a stricter gcc cannot trip it; each slice is independently revertible.
-
-> **How 19.1 lands**: a call-site arity mismatch is reported as a **warning** (`warning: arity mismatch: '<callee>' takes N argument(s), M given`) so `ct compile` / `ct build` keep their artifacts and default exit codes; `ct check` (19.4) raises the same record to an error. Only a callee whose signature resolved is compared — function pointers, undeclared C library names, `map` recipes and static type hosts stay unknown and pass; a variadic function checks only the lower bound of its named parameters. Probes: `add(1)` and `s.area()` (a trait method with a missing argument).
-
-> **How 19.2 lands**: an argument type is compared positionally against the resolved signature and reported as a **warning** (`warning: type mismatch: '<callee>' argument K: expected '<formal>', got '<actual>'`), same severity policy as 19.1 (D19-4). The coarse rules: qualifier- and whitespace-normalised equality passes; numerics (including `enum`) always pass; pointer depths must match, with `void *` accepted both ways; a struct pointer is reported only when both tags resolve in the unit's own table to *different* structs. Typedefs, unions, function-pointer spellings, interface formals (boxing already errors), arrays on either side (decay), cast arguments and underivable arguments stay unknown and pass (D19-3). At most the first mismatching position is reported per call. Probes: `setp(&q)` (function) and `s.put(&q)` (trait method), each handed the wrong struct pointer.
-
-> **How 19.3 lands**: both checks report **warnings** (D19-4), so `ct compile` / `ct build` keep their artifacts and default exit codes. **Ambiguity (SH-46)**: when a trait other than the resolved one also declares the method on the receiver's struct, the bare call warns `warning: ambiguous method: '<m>' declared by '<A>' and '<B>'; '<A>' is used` (`Symbols.method_trait_amb`); resolution still takes the first match in `use` order -- `test/cases/06_name_collision.ct` pins that behaviour, so the corpus gate asserts *exactly one* ambiguity warning, from that file, rather than zero. Interface-variable dispatch and static type hosts / `map` bindings never pass through `method_trait` and stay out of the check. **Cross-unit signature drift**: the existing impl/trait comparison (return type, parameter count; wording byte-identical to L2) now also compares **parameter types** positionally, reusing 19.2's `arg_class` rules (`Expr.decl_type_compat`), and reports `warning: signature mismatch: '<m>' in impl of '<T>' for '<S>': parameter K type '<impl>' does not match the trait's '<decl>'`. The trait lives in the shared table, so an imported unit and the local unit take the same path -- which is what "import/export consistency" means here. Array parameters (decay) and undecidable spellings pass as unknown (D19-3); at most the first mismatching position is reported per method.
-
-> **How 19.4 lands**: `ct check <file>` walks compile's parse path and **returns right after parsing**, reporting the findings and writing no `.c` (even when handed `-o`); the exit code is 1 on any finding and 0 when clean. D19-4's severity takes effect here: `Diag.set_strict` makes the same records read `error:` in text mode and carry `"severity":"error"` as each JSON object's first field, while `ct compile` / `ct build` never set strict -- their text stays `warning:` and their JSON is byte-identical. `--diagnostics=json` reuses the existing switch (compile to stdout, build to stderr, check to stdout). The 12th hard gate, [check-semantics.sh](../../../selfhost/check-semantics.sh), builds the bootstrap chain and asserts 8 items: a clean unit exits 0 silently; each of the four finding classes (arity, argument type, ambiguity, impl parameter drift) exits 1 and reads `error:`; the JSON document parses and carries severity/type; the same unit through compile still exits 0, warns, and writes its C; and check produces no C artefact.
-
-### 6. Version
-
-Phase 19 ↔ `v0.19.0`, bumped at close; patches use `v0.19.n`.
-
-### 7. Global DoD
-
-zero false positives on the 383-file / 9,649-line corpus; all four probes diagnosed; `ct check` exits 1 on errors and 0 when clean; `ct compile` / `ct build` artifacts and default exit codes unchanged; 12 hard gates green; `check-ast` behavioral equivalence unaffected; no L0 / L1 / L2 changes; bilingual docs.
-
-### 8. Decisions
-
-D19-1 bounded resolution/signature scope only; D19-2 `ct check` optional, compile/build unchanged; D19-3 unknown constructs skipped; D19-4 errors in `ct check` only; D19-5 no generics in Phase 19. All confirmed.
-
-### 9. Risks
-
-False positives (mitigated by `unknown` skip and the zero-false-positive gate), string-based types (only decidable cases compared), instance-level `map` edges (ambiguity checks distinguish trait declarations from map bindings), and the self-hosting constraint (checker lives in `ct-ast`, no new syntax in its own sources).

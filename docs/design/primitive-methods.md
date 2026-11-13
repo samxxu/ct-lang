@@ -1,6 +1,6 @@
 # 基本类型方法 · 设计与实施记录
 
-> 中文 · [English](#english)
+> 中文
 > 状态：**已完成（P0 / P1 / P2 全部落地并验证）** · 2026-11-06
 > 锚点：工作树 `v0.19.1`（未 bump 版本、未打 tag）；P0 用现装 `ct v0.19.1` 自举并对拍
 > 关联：同级仓库 `ct-pkg` 的 `std` 包（落点：`std::str` / `std::num`；仓库外路径，不在此仓库内链）· `std` 包（`ct get std` 后为 `vendor/std/std/README.md`，对照约定）
@@ -160,84 +160,3 @@ shim 文件 `<base>.shim.h` 必须与 `.m.ct` **同名同目录**，否则不会
 
 `selfhost/check-ast.sh` 新增一条：`lib.m.ct` 旁放 `Wrong.shim.h` → CT 层构建成功但生成 C 不含该头，
 `cc` 报 `call to undeclared function`。断言同时检查「未包含」和「C 构建失败」，避免依赖具体编译器措辞。
-
----
-
-## English
-
-### 1. Goal
-
-Give primitive types method spellings — `(5).toString()`, `a.cmd.compare("status")`, `s.len()`,
-`d.sqrt()` — while the generated C stays hand-written quality: no wrapper, no vtable, no indirect call.
-
-Out of scope: generics, operator overloading, a generic `void *` host (it would collide with the
-`png` package), automatic memory management.
-
-### 2. Approved trade-offs (user, 2026-11-06)
-
-1. Location: **`ct-pkg/clib`**, beside `String` / `Math` / `Stdio`; the `std` package keeps its free-function shape.
-2. Stringification: `toStr(buf, cap)` is the correct path; `toString()` is a four-slot ring-buffer
-   convenience, documented as non-thread-safe and alias-prone.
-3. Type keys: minimal normalisation inside `map_type_key` — drop `const` / `volatile` wherever they
-   appear (a lossy key used only for host matching), merge integer aliases (`unsigned` = `unsigned
-   int`, `long` = `long int`, …).
-4. No generic `void *` host (the `png` `Handle` map owns that type).
-5. Keep `compare` (`strcmp(receiver, argument)`) and add `equals`.
-
-### 3. P0 — compiler prerequisites
-
-| # | Site | Change | Unblocks |
-| --- | --- | --- | --- |
-| P0-1 | `expr_type` | add `N_NUM` / `N_FNUM` / `N_STR` | `(5).toString()`, `(1.5).sqrt()`, `"x".equals(y)` |
-| P0-2 | `expr_type`, member branch | decay an array field to `type + " *"` only when its `dims` hold exactly one `[`; a multi-dimensional field stays unknown | `a.cmd.compare(...)` on `char[16]` |
-| P0-3 | driver `check` branch | set `unit_is_map` from the `.m.ct` suffix | `ct check foo.m.ct` false positive |
-| P0-4 | `map_type_key` | drop `const` / `volatile` at any position, merge integer aliases | `const char *` receivers, `unsigned` / `long` vs their long spellings (`size_t` is **not** folded — §7) |
-
-### 4–5. P1 / P2
-
-P1 is pure `map ... for type` (A class: `strlen`, `strcmp`, `atoi`, `abs`, `sqrt`, `floor`, `isnan`, …).
-P2 adds `<base>.shim.h` with `static inline` helpers for everything a single C call cannot express
-(`equals`, `startsWith`, `contains`, `clamp`, `toStr`, ring-buffer `toString`, `toBase`).
-A shim must share the base name of its `.m.ct` or it is never included.
-
-### 6. Verification
-
-Byte-identical output over the whole corpus for P0; one minimal example per method plus `-Wall
--Wextra` and `-O2` disassembly (no `blr`) for P1/P2; a negative test for a misnamed shim.
-
-### 7. Known limits
-
-`5.toString()` does not lex (`5.` is a float literal) — always parenthesise numeric literal receivers.
-A recipe is one top-level call whose arguments may only mention binding parameters and literals, so
-anything needing a second call lives in a shim. Type hosts match declared text exactly, with only the
-normalisation of §2.3: every `const` / `volatile` is dropped regardless of position (a lossy key, never
-written back into a declaration), and `size_t` is **not** folded — the host must spell `unsigned long`,
-and a `size_t` variable is not a receiver. A multi-dimensional array field (`char names[2][8]`) decays to
-`char (*)[8]`, which no host spells, so it stays unknown instead of becoming `char *`; the build fails
-with `cannot resolve the method trait (unknown receiver type)`, while `sizeof s.names` still comes from
-`N_SIZEOF` and is unaffected.
-
-### 8. Implementation record
-
-Compiler (`selfhost/ct-ast/**`, no version bump): `TypeCheck.h.ct` gained the three literal branches and
-the member-array decay plus the `type_key` normalisation; `Emitter.h.ct`'s `map_type_key` carries the
-identical table; `Driver.h.ct` sets `unit_is_map` from the `.m.ct` suffix; `Expr.h.ct` accepts a literal
-`0` for a pointer parameter (without it the literal's new static type turned three self-hosting calls
-into false warnings and broke the warning-free gate).
-
-`clib` gained six files: `Str.m.ct` / `Num.m.ct` / `Real.m.ct` and their same-named `.shim.h`.
-`len` is `unsigned long` (it expands to `strlen`), `toUpper` / `toLower` return `int`, and each
-`toString()` ring is four static 32-byte slots — not thread-safe, and the fifth live result reuses the
-first slot. `png`'s `void *` host was left untouched.
-
-Verification: 182 single-file cases and 105 module builds byte-identical to the installed `ct`;
-`selfhost/check-ast.sh` 465 passed / 0 failed; `-Wall -Wextra` clean and zero `blr` at `-O2` on the
-generated C. The misnamed-shim negative now lives in `selfhost/check-ast.sh`; batch 40 adds
-`test/ast/66_type_host_literals` (suffixes, float spellings, `const` / alias keys, one- vs
-two-dimensional fields), `test/modules/map_unit_literals` (literal receiver + shim + two ring slots in
-one expression) and two `ct check` assertions (a valid `.m.ct` exits 0, a drifted signature does not).
-
-Those counts — **182 / 105 / 465 — have no script that reproduces them today**. The first two came from
-a throwaway diff harness (paths, cache keys and mtimes normalised before comparing) that was not kept in
-the tree; 465 is whatever `selfhost/check-ast.sh` reported at the time and moves as assertions are added.
-The diff harness is a separate batch; this one does not build it.

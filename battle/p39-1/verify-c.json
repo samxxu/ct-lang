@@ -1,0 +1,272 @@
+{
+  "battle": "p39-1-c",
+  "head": "ac040d1",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "nm": "llvm-nm, compatible with GNU nm",
+    "binary": "/tmp/p39head/ct (ct v0.37.0, sha256 080650f62e4fa894efc672c10a14a615bdaa531bdef5f24470e99fb37e59dd10)",
+    "date": "2026-11-13T14:31:50+08:00 (Asia/Shanghai)"
+  },
+  "rounds": 3,
+  "evidence": [
+    {
+      "id": "W1",
+      "side": "claim",
+      "ref": "C-proposal.md#C-1 / §5（fn_start/fn_end 复用）",
+      "command": "cd /tmp/p39head/src && grep -n 'fn_start = \\|fn_end = ' selfhost/ct-ast/frontend/module/Module.h.ct; echo '--- Unit.h.ct:27-28 ---'; sed -n '27,28p' selfhost/ct-ast/frontend/module/Unit.h.ct; echo '--- Module.h.ct:713-724 ---'; sed -n '713,724p' selfhost/ct-ast/frontend/module/Module.h.ct; echo '--- Module.h.ct:740-743 ---'; sed -n '740,743p' selfhost/ct-ast/frontend/module/Module.h.ct",
+      "exit": 0,
+      "output": "723:        self->units[u].fn_start = self->sym->nfunc;\n742:        self->units[u].fn_end = self->sym->nfunc;\n--- Unit.h.ct:27-28 ---\n    int  fn_start;\n    int  fn_end;\n--- Module.h.ct:713-724 ---\n        /* `scan_imports` counted this unit's imports into `rels`, but the\n           recursive loads above left the counter at a dependency's value, and\n           parsing skips the same `import` lines again -- start that pass from\n           zero so a unit is never charged for its dependencies' imports. */\n        self->p->nrels = 0;\n        self->p->scan_only = 0;\n        self->path = path;\n        self->mem->path = self->path;\n        self->sym->path = self->mem->path;\n        backend::emit::ct_emit_set_path(self->path);\n        self->units[u].fn_start = self->sym->nfunc;\n        self->units[u].tr_start = self->sym->ntraits;\n--- Module.h.ct:740-743 ---\n        if (self->sym->resolve_exported_type_aliases(u) != 0)\n            return self->fail(self->sym->last_error());\n        self->units[u].fn_end = self->sym->nfunc;\n        self->units[u].tr_end = self->sym->ntraits;",
+      "reproduced": true,
+      "note": "读码结论：`fn_start` 在 Module.h.ct:723 = 本单元 parse 前的 `sym->nfunc`，`fn_end` 在 :742 = parse 后；:715-716 注释与 :717-721 的复位（nrels/scan_only/path）表明依赖单元已在本单元之前递归 parse 完毕。故 `funcs[units[root].fn_start .. fn_end)` 恰好是本根单元自己的顶层函数，C-1『只扫根』不需要新字段（Unit.h.ct:27-28 已声明）。限制：泛型单态化实例在 parse 期间追加，可能落在同一区间，需再用 is_pub/ntparams 过滤（本席未实测实例的区间归属）。"
+    },
+    {
+      "id": "W2",
+      "side": "claim",
+      "ref": "C-proposal.md#C-1.1（非根 pub 必须保持 external）",
+      "command": "cd /tmp/p39head/src && cat test/modules/hdr/shapes.h.ct; rm -rf /tmp/p39v3/hdr && mkdir -p /tmp/p39v3/hdr && /tmp/p39head/ct build --emit-c test/modules/hdr/main.h.ct --outdir /tmp/p39v3/hdr 2>&1; echo \"exit=$?\"; echo '--- main.c 调用点（main.c 内无 add 的定义）---'; grep -n 'add' /tmp/p39v3/hdr/main.c; cd /tmp/p39v3/hdr && cc -c -I . main.c -o main.o && echo '--- nm -u main.o ---' && nm -u main.o; cc -c -I . shapes.c -o shapes.o && echo '--- nm shapes.o ---' && nm shapes.o | grep add",
+      "exit": 0,
+      "output": "/* a header unit: the `foo.h.ct` basename publishes `foo.h` next to `foo.c` */\npub int add(int a, int b);\nint add(int a, int b) { return a + b; }\n\npub struct Point { int x; int y; };\ncc -std=c99 -I /tmp/p39v3/hdr /tmp/p39v3/hdr/Vec.c /tmp/p39v3/hdr/Option.c /tmp/p39v3/hdr/Result.c /tmp/p39v3/hdr/Str.c /tmp/p39v3/hdr/main.c /tmp/p39v3/hdr/shapes.c -o a.out\nexit=0\n--- main.c 调用点（main.c 内无 add 的定义）---\n25:    printf(\"%d %d %d\\n\", p.x, p.y, add(2, 3));\n--- nm -u main.o ---\n_add\n_printf\n--- nm shapes.o ---\n0000000000000000 T _add",
+      "reproduced": true,
+      "note": "跨单元调用的机械证据：根 main.h.ct import shapes 并调用 `add(2,3)`；生成的 main.c 只有调用（:25），`nm -u main.o` 列出未定义 `_add`，`shapes.o` 里是 `T _add`。即被 import 单元的 pub 函数在链接期必须保持 external —— C-1『非根不进候选面、但符号仍是 external』与 HEAD 行为一致，不是新要求。"
+    },
+    {
+      "id": "W3",
+      "side": "claim",
+      "ref": "C-proposal.md#C-3（复核 verify.json V2）",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v3/gen && mkdir -p /tmp/p39v3/gen && /tmp/p39head/ct build --emit-c test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v3/gen 2>&1; echo \"exit=$?\"; sed -n '/^struct ct_buf/,$p' /tmp/p39v3/gen/lib.h",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/p39v3/gen /tmp/p39v3/gen/Vec.c /tmp/p39v3/gen/Option.c /tmp/p39v3/gen/Result.c /tmp/p39v3/gen/Str.c /tmp/p39v3/gen/lib.c -o a.out\nexit=0\nstruct ct_buf;\nstruct Str;\nlong from_lib(long);\n\n#endif",
+      "reproduced": true,
+      "note": "C-3 的符号面等价（复核 V2）：`--emit-c` exit 0，生成头只有 `long from_lib(long);`，泛型 `pub T id<T>`（lib.h.ct:3）无一字、零诊断。与 verify.json V2 逐字一致。"
+    },
+    {
+      "id": "W4",
+      "side": "claim",
+      "ref": "C-proposal.md#C-3（复核 verify.json V3）",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v3/gen2 && mkdir -p /tmp/p39v3/gen2 && /tmp/p39head/ct build --emit-c test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v3/gen2 >/dev/null 2>&1; cd /tmp/p39v3/gen2 && cc -c -I . lib.c -o lib.o && nm lib.o | grep -E 'id__ct1|from_lib'; echo \"exit=$?\"",
+      "exit": 0,
+      "output": "0000000000000000 T _from_lib\n0000000000000024 t _id__ct1\nexit=0",
+      "reproduced": true,
+      "note": "C-3 续（复核 V3）：`id` 的实例是 `t _id__ct1`（local/static），`from_lib` 是 `T`。泛型模板无外部符号，故『跳过泛型』不改变归档符号面；C-3 的机械依据与 verify.json V3/V10 一致。"
+    },
+    {
+      "id": "W5",
+      "side": "counter",
+      "ref": "C-proposal.md#§5 列号来源（b）",
+      "command": "cd /tmp/p39head/src && sed -n '80,116p' selfhost/ct-ast/frontend/sym/Symbols.h.ct; echo '--- lines containing col inside struct Fn (80-116) ---'; awk 'NR>=80&&NR<=116 && /col/' selfhost/ct-ast/frontend/sym/Symbols.h.ct; echo '--- sem_error ---'; sed -n '43p;82,86p' selfhost/ct-ast/tool/diag/Diag.h.ct; echo '--- set_strict / strict ---'; sed -n '60p;71,73p' selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "exit": 0,
+      "output": "pub struct Fn {\n    char name[160];\n    /* the C spelling: a `pub` function inside a namespace is mangled with its\n       prefix, a static helper keeps the plain name */\n    char cname[160];\n    char ret[160];\n    char ptype[16][160];\n    /* array dims are kept apart from the type: the prototype must spell them\n       (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the\n       call side still compares bare types for boxing */\n    char pdim[16][160];\n    int  nparams;\n    int  is_static;\n    int  is_pub;\n    int  variadic;      /* `int f(int n, ...)`: the prototype needs the `...` */\n    /* Phase 26: a generic function carries exactly one type parameter. The\n       template itself is never emitted; every call site that names a concrete\n       type argument gets a monomorphised instance in `ginsts`. */\n    int  ntparams;\n    char tparam[160];\n    /* Phase 28: the one trait bound of a generic template (`T name<T: Trait>`),\n       empty when the parameter is unbounded. Instances inherit it through the\n       template row, so the satisfaction check reads it off `funcs[ginst.func]`. */\n    char bound[160];\n    /* Phase 26: the template's N_FUNC node, so the emitter can monomorphise it\n       once per instance without a second AST copy (-1 for a plain row). */\n    int  body;\n    int  line;\n    int  ret_owned;     /* 1 when it may hand back an allocation it owns (10.3) */\n    /* A GNU `__attribute__((…))` on the declaration: -1 when it carried none,\n       otherwise the offset of its captured spelling in the string pool. The\n       prototype re-emits it after the parameter list (the C compiler owns the\n       meaning). */\n    int  attr;\n}\n\npub struct Var {\n--- lines containing col inside struct Fn (80-116) ---\n--- sem_error ---\n    int  sem_error(int line, int col, const char *msg, const char *path);\n    int sem_error(int line, int col, const char *msg, const char *path)\n    {\n        (void)self;\n        fprintf(stderr, \"%s:%d:%d: error: %s\\n\", path, line, col, msg);\n        self->nsem++;\n--- set_strict / strict ---\n    void set_strict(int on);\n    int  strict;\n    /* Phase 37: `strict` is 0 (compile), 1 (check: all findings error) or\n       2 (build: only signature mismatches are errors). `sig_errs` counts the",
+      "reproduced": true,
+      "note": "读码结论：`struct Fn`（Symbols.h.ct:80-116，含 `attr`）只有 `int line`，全 37 行无任何 `col` 字段（同命令内的 awk 检查无输出）；`sem_error(line, col, msg, path)`（Diag.h.ct:43）在 :85 无条件打印 `%s:%d:%d: error:`，即列号由调用方给。警告路径的列号受 `self->strict && w->col > 0`（:388）约束，而 `set_strict(on)` 是既有 API（:60）。所以 (b) 可以在 Module.h.ct 内自算列号后直接传给 sem_error/告警记录，**确实不需要改 Symbols.h.ct**；(b) 的成本不是『加字段』，而是『回读源码』。"
+    },
+    {
+      "id": "W6",
+      "side": "claim",
+      "ref": "C-proposal.md#§5 列号来源（b）实测",
+      "command": "cd /tmp/p39head/src && for spec in \"test/modules/p34_pub_generic/lib.h.ct:3\" \"test/modules/p34_pub_bound/lib.h.ct:26\" \"test/modules/hdr/shapes.h.ct:2\"; do f=\"${spec%:*}\"; n=\"${spec##*:}\"; awk -v n=\"$n\" 'NR==n{pre=$0; sub(/\\(.*/,\"\",pre); sub(/<[^>]*>/,\"\",pre); k=split(pre,w,\" \"); name=w[k]; sub(/^\\*+/,\"\",name); printf \"%s:%d name=%s col=%d\\n\", FILENAME, NR, name, index($0,name)}' \"$f\"; done; echo '--- 朴素变体（不剥 <...>）在 max2 上失败 ---'; awk 'NR==26{pre=$0; sub(/\\(.*/,\"\",pre); k=split(pre,w,\" \"); name=w[k]; sub(/^\\*+/,\"\",name); print \"name=\"name\" col=\"index($0,name)}' test/modules/p34_pub_bound/lib.h.ct",
+      "exit": 0,
+      "output": "test/modules/p34_pub_generic/lib.h.ct:3 name=id col=7\ntest/modules/p34_pub_bound/lib.h.ct:26 name=max2 col=7\ntest/modules/hdr/shapes.h.ct:2 name=add col=9\n--- 朴素变体（不剥 <...>）在 max2 上失败 ---\nname=Compare> col=15",
+      "reproduced": true,
+      "note": "(b) 实测可行、但有一个必须实现的细节：先剥掉模板参数表 `<...>` 再取 `(` 前最后一个词，才能得到 `max2` 的 col=7；朴素实现会把 `Compare>` 当函数名、输出 col=15（同一命令的最后两行）。三者都是 1-based 列，与源码目视一致（`pub T id` 的 id 在第 7 列、`pub int add` 的 add 在第 9 列）。"
+    },
+    {
+      "id": "W7",
+      "side": "claim",
+      "ref": "C-proposal.md#P-C5（零回归基线）",
+      "command": "cd /tmp/p39head/src && rm -rf /tmp/p39v3/pc5 && mkdir -p /tmp/p39v3/pc5 && /tmp/p39head/ct build --emit-c test/modules/p34_pub_generic/lib.h.ct --outdir /tmp/p39v3/pc5 >/dev/null 2>&1; shasum -a 256 /tmp/p39v3/pc5/lib.h /tmp/p39v3/pc5/lib.c",
+      "exit": 0,
+      "output": "dd7c6d755323432f39d144320a37a678cbeb168a6df567c6150b20e9732fee2b  /tmp/p39v3/pc5/lib.h\n7f3ed1bf59871beba51d607e739c940f905bd9f60b9563d28b4e34fa52a1dee3  /tmp/p39v3/pc5/lib.c",
+      "reproduced": true,
+      "note": "P-C5 是六条预测里唯一能在 HEAD 上取到基线的一条：`--emit-c` 的 lib.h/lib.c sha256 已记录。落地后『sha256 与 HEAD 相同』只能在 R2 提交上比对；HEAD 上无法验证『未变』本身。"
+    },
+    {
+      "id": "W8",
+      "side": "counter",
+      "ref": "C-proposal.md#§7（P-C1…P-C6 的前置）",
+      "command": "cd /tmp/p39head/src && /tmp/p39head/ct build --lib test/modules/p34_pub_generic/lib.h.ct 2>&1; echo \"exit=$?\"",
+      "exit": 1,
+      "output": "ctc: unknown option '--lib'\nexit=1",
+      "reproduced": true,
+      "note": "`--lib` 在 HEAD 仍不存在（exit 1，`unknown option '--lib'`），这是 P-C1/P-C2/P-C3/P-C4/P-C6 无法执行的原因。本席不伪造任何落地后输出。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 723,
+      "text": "        self->units[u].fn_start = self->sym->nfunc;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 742,
+      "text": "        self->units[u].fn_end = self->sym->nfunc;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Unit.h.ct",
+      "line": 13,
+      "text": "    char path[1024];",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Unit.h.ct",
+      "line": 27,
+      "text": "    int  fn_start;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/sym/Symbols.h.ct",
+      "line": 107,
+      "text": "    int  line;",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Parser.h.ct",
+      "line": 1624,
+      "text": "            self->sym->funcs[fi].line = func_line;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "line": 60,
+      "text": "    void set_strict(int on);",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "line": 85,
+      "text": "        fprintf(stderr, \"%s:%d:%d: error: %s\\n\", path, line, col, msg);",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "line": 388,
+      "text": "                if (self->strict && w->col > 0)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 45,
+      "text": "- 不导出 `pub` 全局变量；不导出泛型函数与 `pub extern`（定义在库外的 C 符号）——三者都不写进 `.abi.h`。",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 60,
+      "text": "| D39-6 | v1 只收标量 / 指针 / 函数指针 / 数组参数 / 指向具名 struct 的指针；按值 struct、trait 值、泛型、std 容器类型一律 L39-1 | 不透明前置声明与按值传参不可兼得 |",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 102,
+      "text": "3. 签名里没有按值 struct/union、trait/接口值（`*_iface`）、泛型参数、`Vec`/`Map`/`Option`/`Result`/`Str` 等 std 类型、`own`。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase39-draft.md",
+      "line": 134,
+      "text": "| L39-1 | 导出签名含按值 struct / trait 值 / 泛型 / std 类型 / `own` | `'<name>' cannot be exported: <reason>` |",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "test/modules/p34_pub_generic/lib.h.ct",
+      "line": 3,
+      "text": "pub T id<T>(T x)",
+      "supports": "claim",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "C-1",
+      "claim": "导出候选面 = `--lib` 根单元；用既有 `fn_start/fn_end` 扫描即可只扫根",
+      "counter": "（本轮无独立反证书；风险点：区间是否含依赖/实例，is_pub 是否跨声明-定义继承）",
+      "evidence": [
+        "W1",
+        "W2"
+      ],
+      "fact": "`fn_start`(Module.h.ct:723)/`fn_end`(:742) 夹住本单元自身的 parse，依赖在其前递归 parse（:715-716 注释 + :717-721 复位），Unit.h.ct:27-28 已声明该字段；跨单元调用侧 `nm -u main.o` 有 `_add`、`shapes.o` 有 `T _add`，说明被 import 的 pub 函数必须保持 external，与 C-1『非根不进 .abi.h 但符号不动』相容。未实测：单态化实例是否落在区间内（需 is_pub/ntparams 过滤）。"
+    },
+    {
+      "id": "C-3",
+      "claim": "根单元内泛型模板跳过 + L39-1w，不改变归档外部符号面",
+      "counter": "（counter-r2 §5：跳过+诊断已是新机制；但符号面等价未被反驳）",
+      "evidence": [
+        "W3",
+        "W4"
+      ],
+      "fact": "复核 verify.json V2/V3 完全一致：头只有 from_lib、`id` 为 `t _id__ct1`、零诊断。故 C-3 的『跳过』在符号面与 HEAD 现状等价；它新增的是诊断与 - 卡片语义，不是符号面。"
+    },
+    {
+      "id": "C-5",
+      "claim": "列号走 (b)：Module.h.ct 回读声明行算 1-based 列，不破 2 文件、不改 Symbols.h.ct",
+      "counter": "（判决 §4 U-2：Fn/Node 只存 line，列号是实现风险）",
+      "evidence": [
+        "W5",
+        "W6"
+      ],
+      "fact": "`struct Fn` 确实没有 col（Symbols.h.ct:80-116，awk 检查无输出），`sem_error(line,col,…)` 的列号由调用方给（Diag.h.ct:43/:85）；`set_strict` 是既有 API（:60）。实测回读声明行可得正确列：id=7、max2=7、add=9；但必须剥 `<...>`，否则 max2 得 15。结论：(b) 不碰 Symbols.h.ct 成立，代价是回读文件 + 处理模板参数表。"
+    },
+    {
+      "id": "C-4",
+      "claim": "非模板的非兼容签名仍 L39-1 硬错，位置在声明行",
+      "counter": "（D39-6 :60 逐字含 trait 值/按值 struct/泛型一律 L39-1；C 对泛型申请 B1）",
+      "evidence": [
+        "W5",
+        "W8"
+      ],
+      "fact": "硬错通道 `sem_error` 无条件带 `file:line:col`（Diag.h.ct:85），C-4 复用即可；但 `--lib` 未实现（W8），C-4 的实际触发无法实测。C-3 的告警若要带列，需让 `--lib` 走 `strict`/`col>0` 分支（Diag.h.ct:388 + set_strict:60）。"
+    },
+    {
+      "id": "P-C",
+      "claim": "P-C1…P-C6 六条可证伪预测在 R2 上一次性判",
+      "counter": "（无可执行对象）",
+      "evidence": [
+        "W7",
+        "W8"
+      ],
+      "fact": "P-C1/P-C2/P-C3/P-C4/P-C6 需要 `--lib`，HEAD 上不可执行（W8：unknown option，exit 1），已列 unreproduced。P-C5 只能在 HEAD 取基线（lib.h sha256 dd7c6d75…、lib.c 7f3ed1bf…），『与 HEAD 相同』须在 R2 上比对。本席不判定任何 P-C 成立与否。"
+    }
+  ],
+  "unreproduced": [
+    {
+      "ref": "C-proposal.md#P-C1",
+      "reason": "`--lib` 未实现（W8：unknown option '--lib'，exit 1）；`lib.abi.h` 与『原型集合 = {from_lib}』无法执行。"
+    },
+    {
+      "ref": "C-proposal.md#P-C2",
+      "reason": "同上；且需先有 B2/默认的 C-4 实现才能观测 exit 1 与 `trait value` 文案。"
+    },
+    {
+      "ref": "C-proposal.md#P-C3",
+      "reason": "同上；需实现 C-1 的根限定 + C-5 汇总行。"
+    },
+    {
+      "ref": "C-proposal.md#P-C4",
+      "reason": "依赖 P-C1 产出的 `.abi.h` 与 `nm -g` 期望文件 `expected.nm`（仓库中不存在该夹具）。"
+    },
+    {
+      "ref": "C-proposal.md#P-C6",
+      "reason": "同上；且『只有泛型 pub 的根单元』夹具尚不存在。"
+    },
+    {
+      "ref": "C-proposal.md#P-C5",
+      "reason": "只能取 HEAD 基线（W7 的 sha256）；『落地后与 HEAD 相同』这一断言本身需 R2 产物，HEAD 上不可判。"
+    }
+  ]
+}

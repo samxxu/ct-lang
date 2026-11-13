@@ -1,0 +1,5 @@
+open db
+use db
+flush db
+close db
+r=1

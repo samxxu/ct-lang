@@ -1,0 +1,2 @@
+import helper;
+pub int root_fn(void) { return helper(1); }

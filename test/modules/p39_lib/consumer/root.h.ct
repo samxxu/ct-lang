@@ -1,0 +1,4 @@
+import helper;
+
+pub int answer(void) { return helper(41); }
+pub int mul(int a, int b) { return a * b; }

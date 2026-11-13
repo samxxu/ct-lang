@@ -1,6 +1,6 @@
 # Phase 18 计划（已确认，已收口）：生态建设
 
-> 中文 · [English](#english)
+> 中文
 >
 > **状态：完成（2026-11-02；18.0–18.6 全部落地，四个外部仓库已推送（`hal-posix` 1.0.1），第九轮评审的 6 条已全部处置；`v0.18.0` tag 打在收口提交上）。**
 > 本文件把 roadmap 中「生态建设」一行落成可执行的切片：**ct-pkg 组织、包规范、首批包
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | 包工具 | `ct get` / `ct install` / `ct update` / `ct verify`、比较器范围、显式索引、`cflags` / `ldflags` / `requires` 均已落地（Phase 17.5） | 无组织化的包、无包规范、无首批包 |
 | 组织 | GitHub org `ct-pkg` 已创建，且是 `ct get` 的默认 registry（[Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) 第 658 行） | 无仓库命名约定、无索引仓库 |
-| binding | [`bindings/mock-hal/`](../../../bindings/mock-hal/) 是示例；binding 规约见 [`bindings/README.md`](../../../bindings/README.md) | 无 `hal` 契约包、无平台实现包、无 C 库映射包 |
+| binding | [`bindings/mock-hal/`](../../../test/bindings/mock-hal/) 是示例；binding 规约见 [`bindings/README.md`](../../../test/bindings/README.md) | 无 `hal` 契约包、无平台实现包、无 C 库映射包 |
 | 索引 | 五字段纯文本格式（`name version git-url tag sha256:<hex>`）已定，`CT_INDEX` / `--index` 可用 | 无索引生成脚本、无托管、无 CI 产出与校验 |
 | CI | `.github/workflows/{ci,nightly}.yml` 三个 job；11 道本地硬门禁 | 无包门禁 job、无目标机 job |
 | 容量 | L2 建 ct-ast：`MAX_FUNCS 128`（111 已用）、`MAX_MAP_IMPLS 256`（253 已用）；17.5 靠 static 助手绕开 | 再加一个 impl 方法即失败；下一次功能开发就会被卡住 |
@@ -97,7 +97,7 @@
 
 - `ct-pkg/hal`：纯 `.h.ct`，namespace `hal`，四个 trait：`Uart`（`send` / `recv`）、`Gpio`（`read` / `write`）、
   `Clock`（`now_ms`）、`Log`（`write`）；不含 impl、不发 `.c`。
-- 与 [`bindings/mock-hal/`](../../../bindings/mock-hal/) 对齐：`Controller` 的 `send` 语义保留为 `Uart.send`；
+- 与 [`bindings/mock-hal/`](../../../test/bindings/mock-hal/) 对齐：`Controller` 的 `send` 语义保留为 `Uart.send`；
   mock-hal 继续作为示例，不要求同步改名（D18-6）。
 - 版本：`hal 1.0.0` 冻结；破坏性变更走 `2.0.0`。
 
@@ -174,189 +174,3 @@
 | **D18-9** | licence 政策 | 官方 `.ct` 包 MIT；C 映射包沿用上游；包内必须有 `LICENSE` | ✅ 用户确认 |
 | **D18-10** | 与 Phase 19 的顺序 | 先 Phase 18，后 Phase 19 | ✅ 用户确认 |
 | **D18-11** | 18.0 容量 | 只改 L2：`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`，四张定长表改 `calloc`；L0 / L1 不动（冻结层例外已授权） | ✅ 用户确认 |
-
----
-
-## English
-
-### 1. Goal and exit
-
-| Item | Content |
-| --- | --- |
-| Goal | Move package management from "fetch and install" to "organised, specified, with a first reusable wave": the ct-pkg organisation and naming, package conventions and an author guide, the `hal` contract package, a platform implementation package, a C-library mapping package, and an index plus package gates produced by CI; at the same time remove the L2 ceiling on ct-ast's source size |
-| Exit | Wave-1 packages run end to end on the **host and the target** (`ct get` → `ct verify` → the command `ct install` prints → compile and run); the index and package gates are produced by CI; the local hard gates stay at 11; closed at `v0.18.0` |
-| Version | **Phase 18 ↔ `v0.18.0`** (D18-1); no bump mid-phase, then all five `CTC_VERSION` sites move in lockstep at close and the 71 goldens change by the version token only |
-| Rollback | 18.0 is self-contained (restore 128 / 256 and the static tables); every package and the index are additive top-level artefacts, so rollback removes them without touching compiler behaviour |
-
-### 2. Non-goals
-
-- No language features, no type checking, no optimisation; `1.0.0` is a separate milestone.
-- No HTTP registry, no hosting, no network inside the compiler; the index stays **plain text, git-hosted**.
-- No full SemVer (pre-release / build metadata / `!=` stay out).
-- No `provides` / `conflicts` (D18-3); package exclusivity is checked by a CI combination matrix.
-- `std` is not published as a package (D18-4); it stays built in.
-- No real-hardware acceptance; the Wave-1 target is Linux aarch64 cross-compiled and run under QEMU (D18-5).
-
-### 3. Current state and gaps (measured 2026-11-02)
-
-| Area | State | Gap |
-| --- | --- | --- |
-| Package tool | `ct get` / `ct install` / `ct update` / `ct verify`, comparator ranges, an explicit index and `cflags` / `ldflags` / `requires` all landed (Phase 17.5) | No organised packages, no conventions, no first wave |
-| Organisation | The GitHub org `ct-pkg` exists and is `ct get`'s default registry ([Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) line 658) | No repository naming rule, no index repository |
-| Bindings | [`bindings/mock-hal/`](../../../bindings/mock-hal/) is a sample; the rules live in [`bindings/README.md`](../../../bindings/README.md) | No `hal` contract, no platform package, no C-library mapping package |
-| Index | The five-field plain-text format (`name version git-url tag sha256:<hex>`) is defined and `CT_INDEX` / `--index` work | No generator, no hosting, no CI output or verification |
-| CI | `.github/workflows/{ci,nightly}.yml` with three jobs; 11 local hard gates | No package job, no target-machine job |
-| Capacity | L2 builds ct-ast with `MAX_FUNCS 128` (111 used) and `MAX_MAP_IMPLS 256` (253 used); 17.5 worked around it with static helpers | One more impl method fails; the next feature is blocked |
-| Docs | No package author guide; `bindings/README.md` covers bindings only | No "how to write a ct package" specification or example |
-
-### 4. Slices
-
-| Slice | Content | Main surface | Exit |
-| --- | --- | --- | --- |
-| **18.0** | **Capacity release** | [`core.ct`](../../../selfhost/l2/core.ct): `MAX_FUNCS 128→256`, `MAX_MAP_IMPLS 256→512`; the four fixed tables (functions / traits / structs / reverse map) move to `calloc` | L2 builds a 256-function ct-ast; 257 still fails at ct-ast's own cap; BSS / binary deltas recorded; `check-archive.sh` and all 11 gates green |
-| **18.1** | **Package conventions and author guide** | New `docs/package-guide.md` (bilingual); `ct.pkg` keys, naming / version / tag / layout / licence / dependency rules | The rules are checkable by CI and by hand; `test/pkg/run.sh` gains positive and negative manifest assertions |
-| **18.2** | **Index and CI** | The external `ct-pkg/index` repository (its `index` file and generator); a new `.github/workflows/packages.yml` with a nightly target job | Packages resolve through the index; `ct verify` green; the index is produced and committed by CI; the local gates stay at 11 |
-| **18.3** | **`hal` contract** | `ct-pkg/hal`: four traits `Uart` / `Gpio` / `Clock` / `Log`, pure `.h.ct`, no impl | Platform packages can `use` the contract; naming aligned with `bindings/mock-hal` (D18-6) |
-| **18.4** | **Platform package** | `ct-pkg/hal-posix`: a binding + `map` implementing `hal`; one source tree covers macOS / Linux x86_64 / Linux aarch64 | Links and runs on host and target; the `ct install` command runs as printed |
-| **18.5** | **C-library mapping package** | `ct-pkg/clib`: `.m.ct` static mappings for string / stdio / math; `ct.pkg` carries `ldflags = -lm` | Calls expand to plain C; no wrapper / vtable; `-lm` reaches the `ct install` command |
-| **18.6** | **End to end and close** | `examples/wave1-demo` in this repository; CI package gate runs `ct get` → `ct verify` → compile and run; docs sync; closing bump | Host + target end-to-end green; `v0.18.0` tag pushed |
-
-#### 18.0 capacity release
-
-- Only [`selfhost/l2/core.ct`](../../../selfhost/l2/core.ct) changes: `MAX_FUNCS` 128 → **256** (aligned with
-  ct-ast's [`Symbols.h.ct`](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)), `MAX_MAP_IMPLS` 256 → **512**.
-- The four fixed tables (function signatures, traits, structs, the reverse map) move to `calloc` so the doubled
-  caps do not inflate BSS; allocation failure follows the existing `exit(1)` convention.
-- L0 / L1 are untouched and no parse or emit semantics change: **artefacts stay byte-identical on the existing
-  corpus**, and the goldens only move when the version token changes at close.
-- Assertions: the `check-ast.sh` bootstrap chain (L0 → L1 → L2 → ct-ast) stays green; the existing cap probes
-  target ct-ast's 256 and stay unchanged; add a boundary probe (256 functions compile, 257 reports
-  `too many functions`) against ct-ast, with L2 used only as the builder.
-- Record the before / after binary size and `__DATA` in the roadmap release notes.
-- **Measured (2026-11-02, macOS arm64 / Apple clang)**: the L2 binary went **13,403,192 B → 918,712 B**
-  and `__DATA` **13,107,200 B → 720,896 B**; the L0 → L1 → L2 → ct-ast chain, all 11 hard gates and the
-  existing corpus artefacts are unchanged.
-
-#### 18.1 package conventions
-
-- `ct.pkg` keys: `name` (required), `version` (required, `x.y.z`), `dep` (repeatable), `cflags` / `ldflags` /
-  `requires` (optional, as in 17.5) and `licence` (optional, convention only, not parsed); unknown keys stay ignored.
-- Naming: `[a-z0-9][a-z0-9-]*`, repository name = package name, tag = `v<version>` (the index records the real tag).
-- Layout: the package repository root is the package root (`ct.pkg`, `LICENSE`, source units); units follow the
-  one-unit-one-main-type rule in `AGENTS.md` §2.
-- Licence: official `.ct` packages are MIT; C mapping packages inherit the upstream licence; every package ships a
-  `LICENSE` (D18-9).
-- Dependencies: `dep` keeps the Phase-8 line format (`name` or `name@range`); no transitive-update research here.
-- The author guide [docs/package-guide.md](../../package-guide.md) covers publishing, index inclusion, the correct `ct get` / `ct verify` /
-  `ct install` usage and common failures (digest mismatch, missing tag, `requires` mismatch warns only).
-
-#### 18.2 index and CI
-
-- Host: `github.com/ct-pkg/index`, a single `index` file with `name version git-url tag sha256:<64 hex>` per line.
-- Generation: a script in that repository appends or updates a line when a package releases a tag; generation is
-  not part of this repository's hard gates.
-- This repository's CI: `.github/workflows/packages.yml` runs on push / PR (when package or index files change)
-  and nightly: `ct get --index` → `ct update` → `ct verify` → `ct build` for the Wave-1 packages; a target job runs
-  the same set with `aarch64-linux-gnu-gcc` + `qemu-aarch64`.
-- No 12th local hard gate (D18-8); `test/pkg/run.sh` only gains offline manifest / index-parsing assertions.
-
-#### 18.3 `hal` contract
-
-- `ct-pkg/hal`: pure `.h.ct`, namespace `hal`, four traits: `Uart` (`send` / `recv`), `Gpio` (`read` / `write`),
-  `Clock` (`now_ms`) and `Log` (`write`); no impl, no `.c` output.
-- Aligned with [`bindings/mock-hal/`](../../../bindings/mock-hal/): `Controller.send` keeps its semantics as
-  `Uart.send`; mock-hal stays a sample and is not forced to rename (D18-6).
-- Version: `hal 1.0.0` is frozen; a breaking change goes to `2.0.0`.
-
-#### 18.4 platform package
-
-- `ct-pkg/hal-posix`: binding form (`#include` pass-through + mirrored trait / struct + a global instance + `map`)
-  implementing UART (file descriptor), GPIO (sysfs or a stub), `Clock` (`clock_gettime`) and `Log` (`write`) on
-  macOS and Linux.
-- One source tree serves host and target; platform differences live in prologue `#ifdef`s, not duplicated repos.
-- Exit: the demo runs once on the host (macOS / Linux x86_64) and once on the target (Linux aarch64 + QEMU).
-
-#### 18.5 C-library mapping package
-
-- `ct-pkg/clib`: `.m.ct` static mappings under namespace `clib`, covering `string` (`strlen` / `strcmp` / `memcpy`),
-  `stdio` (`puts` / a minimal `printf`) and `math` (`sqrt` / `fabs`).
-- `ct.pkg`: `ldflags = -lm`; no wrapper / `_iface` / vtable; `sizeof` semantics follow batches 38 / 39.
-- Exit: the call site emits a plain C call; the `ct install` command carries `-I vendor/clib` and `-lm`.
-
-#### 18.6 end to end and close
-
-- New `examples/wave1-demo/`: uses both `hal` and `clib` and prints fixed text on host and target.
-- Close: sync the docs (this file's status, the roadmap release notes in both languages, README's package section,
-  the glossary's new terms, `bindings/README.md` pointing at the contract), the five `CTC_VERSION` sites, the 71
-  goldens, and push the `v0.18.0` tag.
-
-#### Progress (2026-11-02)
-
-- **18.3 `hal`**: the package is final — four pure `.h.ct` units, `ct.pkg`, an MIT `LICENSE` and a bilingual
-  README; a consumer declaring interface values against it compiles locally.
-- **18.4 `hal-posix`**: one unit with the implementation and the four `map`s, so a single `posix_hal` instance
-  boxes into all four traits; the host leg (macOS arm64) runs end to end — `ct get` → `ct install` → the printed
-  command → the fixed output. glibc hides the POSIX declarations under `-std=c99`, so `ct.pkg` carries
-  `cflags = -D_POSIX_C_SOURCE=200809L`; the target leg (Linux aarch64) is covered by the CI cross + QEMU job
-  because this machine has no cross toolchain.
-- **18.5 `clib`**: three `.m.ct` units (`clib::String` / `clib::Stdio` / `clib::Math`); the call site expands to
-  the plain C call (zero `clib_` symbols in the generated C). `strlen` keeps `size_t` spelled `unsigned long`
-  so a `printf` format check agrees with the real type, and `ldflags = -lm` reaches the command `ct install` prints.
-- **18.2 index and CI**: the index repository skeleton (`index`, `tools/gen-index.sh`, `tools/refresh-index.sh`,
-  `packages.txt`, the nightly refresh workflow) is verified locally — `ct get --index` resolves
-  `hal-posix → hal` recursively and `ct update` / `ct verify` are green; this repository's `packages.yml`
-  (host job + aarch64/QEMU job) is in place and the local gates stay at 11.
-- **18.6 close**: `examples/wave1-demo` and `packages.yml` (host + aarch64/QEMU) are in place, with the first CI
-  run to be watched after the push; all six findings of the ninth review are addressed; `hal-posix` ships `1.0.1`
-  after the PKG-1 fix and the index has been rebuilt to three lines; the five `CTC_VERSION` sites read `0.18.0`
-  and the 71 goldens differ by the version token only.
-
-### 5. Order and dependencies
-
-| Order | Slice | Rationale |
-| --- | --- | --- |
-| 1 | 18.0 capacity | Lift the hard ceiling first so new code is not forced back into static helpers; it does not change artefacts |
-| 2 | 18.1 conventions | The rules come first so 18.3–18.5 and the 18.2 index share one format |
-| 3 | 18.2 index / CI | Can run in parallel with 18.3; the skeleton lets every package be verified continuously once it lands |
-| 4 | 18.3 `hal` contract | A prerequisite for the platform package and the demo |
-| 5 | 18.4 platform package | Depends on the contract and exercises both host and target |
-| 6 | 18.5 `clib` | Disjoint from 18.4, can run in parallel |
-| 7 | 18.6 end to end and close | Aggregate acceptance, docs and the version bump |
-
-### 6. Version and release
-
-- **Phase 18 ↔ `v0.18.0`**; no mid-phase bump. 18.0 only moves caps and allocation, so it produces no golden change.
-- At close: all five `CTC_VERSION` sites (`ctc.c` / L1 / `l2/{core,driver}.ct` / `ast/main.ct`) move in lockstep
-  and the 71 goldens change by the version token only.
-- Intermediate milestones use non-version tags (e.g. `phase18-capacity`, `phase18-hal`) so tags never disagree with
-  `CTC_VERSION`.
-
-### 7. Global definition of done
-
-1. `bash selfhost/check-all.sh` is green and **still runs 11 gates** (no new local hard gate, D18-8).
-2. The three existing CI jobs plus the new `packages.yml` (with its target job) and nightly are green.
-3. 18.0: L2 builds a 256-function ct-ast; 257 fails at ct-ast's own cap; BSS / binary deltas measured;
-   `check-archive.sh` green.
-4. The Wave-1 packages and the demo run end to end on the host (macOS / Linux x86_64) and the target
-   (Linux aarch64 + QEMU): `ct get` → `ct verify` → the printed `ct install` command → compile and run with
-   identical output.
-5. The index is produced and committed by CI to `ct-pkg/index`; package gates live in CI, not locally.
-6. Docs are bilingual; `docs/package-guide.md`, README, roadmap, glossary, `bindings/README.md` and AGENTS (if a new
-   top-level directory appears) move in lockstep.
-7. Compiler behaviour is unchanged (except 18.0's caps); the network-free and subprocess-free contracts hold.
-
-### 8. Confirmed decisions
-
-| ID | Topic | Decision | Status |
-| --- | --- | --- | --- |
-| **D18-1** | Number and version | Phase 18 ↔ `v0.18.0`; no mid-phase bump, one lockstep sync at close | ✅ user-confirmed |
-| **D18-2** | Hosting and naming | Official packages live in the GitHub org `ct-pkg` (the default registry); repository name = package name; package names match `[a-z0-9][a-z0-9-]*` | ✅ user-confirmed |
-| **D18-3** | `ct.pkg` extensions | No `provides` / `conflicts`; exclusivity is checked by a CI combination matrix; add an optional `licence` (convention only, not parsed) | ✅ user-confirmed |
-| **D18-4** | Official `std` | Stays built in; not published as a package (avoids bootstrap cycles and version coupling) | ✅ user-confirmed |
-| **D18-5** | Wave-1 list | `hal` (contract), `hal-posix` (platform), `clib` (C mappings) plus `examples/wave1-demo` in this repository; the target is Linux aarch64 under QEMU | ✅ user-confirmed |
-| **D18-6** | `hal` contract | Four traits `Uart` / `Gpio` / `Clock` / `Log`, `hal 1.0.0` frozen; semantics aligned with `bindings/mock-hal`, no forced rename | ✅ user-confirmed |
-| **D18-7** | Index host and generation | The `ct-pkg/index` repository, five-field plain text; CI appends or updates one line per release | ✅ user-confirmed |
-| **D18-8** | Gate placement | No 12th local hard gate; package gates run in CI and nightly | ✅ user-confirmed |
-| **D18-9** | Licence policy | Official `.ct` packages are MIT; C mappings inherit upstream; every package ships a `LICENSE` | ✅ user-confirmed |
-| **D18-10** | Order against Phase 19 | Phase 18 first, then Phase 19 | ✅ user-confirmed |
-| **D18-11** | 18.0 capacity | L2 only: `MAX_FUNCS 128→256`, `MAX_MAP_IMPLS 256→512`, the four fixed tables move to `calloc`; L0 / L1 untouched (frozen-layer exception authorised) | ✅ user-confirmed |
