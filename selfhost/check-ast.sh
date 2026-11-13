@@ -3565,6 +3565,17 @@ else
     bad "p37 signature severity" "$(cat "$work/p37.out" "$work/p37.err")"
 fi
 
+# Phase 37 example: --runtime-checks on a valid program keeps the output.
+if "$work/ct-ast" build --runtime-checks --outdir "$work/p37ex" \
+        examples/41_runtime_checks/prog.ct -o "$work/p37ex.bin" \
+        >"$work/p37ex.out" 2>"$work/p37ex.err" \
+   && "$work/p37ex.bin" >"$work/p37ex.stdout" 2>"$work/p37ex.run.err" \
+   && cmp -s "$work/p37ex.stdout" examples/41_runtime_checks/prog.expected.out; then
+    ok "p37 example (--runtime-checks keeps the valid path)"
+else
+    bad "p37 example" "$(cat "$work/p37ex.err" "$work/p37ex.run.err" 2>/dev/null)"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

@@ -1,0 +1,19 @@
+#include <stdio.h>
+
+trait Shape {
+    int area();
+}
+
+struct Square { int n; } use Shape;
+
+impl Shape for Square {
+    int area() { return self->n * self->n; }
+}
+
+int main(void)
+{
+    Square s = { .n = 3 };
+    Shape shape = s;
+    printf("area=%d\n", shape.area());
+    return 0;
+}
