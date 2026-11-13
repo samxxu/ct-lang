@@ -3667,6 +3667,13 @@ else
     bad "p40 r4" "$(cat "$work/p40r4.out" "$work/p40r4.err")"
 fi
 
+# Phase 40 R5: trailing declaration binding.
+if bash test/ast/p40_trailing.sh "$work/ct-ast" >"$work/p40r5.out" 2>"$work/p40r5.err"; then
+    ok "p40 r5"
+else
+    bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

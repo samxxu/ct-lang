@@ -1,0 +1,6 @@
+int f(void)
+{
+    int a = 1;
+    a = 2 errdefer { (void)a; };
+    return a;
+}
