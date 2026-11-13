@@ -1256,12 +1256,14 @@ static int emit_unit_body(struct Emitter *self, int u)
           self->out);
     if (self->runtime_checks && *self->runtime_checks) {
         fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
-        fputs("static void __attribute__((unused)) __ct_runtime_null_vtable(const char *file, int line, const char *method)\n"
+        fputs("static void *__attribute__((unused)) __ct_vt_guard(void *vt, const char *file, int line, const char *method)\n"
               "{\n"
-              "    fprintf(stderr, \"%s:%d: runtime check: null vtable in call to '%s'\\n\", file, line, method);\n"
-              "    abort();\n"
-              "}\n"
-              "#define __CT_VT_GUARD(vt, m, ln) ((vt) ? (vt) : (__ct_runtime_null_vtable(__FILE__, (ln), (m)), (vt)))\n\n",
+              "    if (!vt) {\n"
+              "        fprintf(stderr, \"%s:%d: runtime check: null vtable in call to '%s'\\n\", file, line, method);\n"
+              "        abort();\n"
+              "    }\n"
+              "    return vt;\n"
+              "}\n\n",
               self->out);
     }
     /* The imported `.m.ct` prologue leads the unit: the recipes call C
@@ -4616,11 +4618,13 @@ impl EmitOps for Emitter {
             low[i] = 0;
             if (self->arena->nodes[n].aux == 4) {
                 if (self->runtime_checks && *self->runtime_checks) {
-                    fputs("__CT_VT_GUARD((", self->out);
+                    fputs("((struct ", self->out);
+                    fputs(tname, self->out);
+                    fputs("_vtbl *)__ct_vt_guard((void *)(", self->out);
                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                    fputs(")->vt, \"", self->out);
+                    fprintf(self->out, ")->vt, __FILE__, %d, \"", self->arena->nodes[n].line);
                     fputs(self->arena->nodes[n].text2, self->out);
-                    fprintf(self->out, "\", %d)->", self->arena->nodes[n].line);
+                    fputs("\"))->", self->out);
                     fputs(self->arena->nodes[n].text2, self->out);
                     fputs("((", self->out);
                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
@@ -4633,11 +4637,13 @@ impl EmitOps for Emitter {
                 }
             } else if (self->arena->nodes[n].aux == 3) {
                 if (self->runtime_checks && *self->runtime_checks) {
-                    fputs("__CT_VT_GUARD((", self->out);
+                    fputs("((struct ", self->out);
+                    fputs(tname, self->out);
+                    fputs("_vtbl *)__ct_vt_guard((void *)(", self->out);
                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                    fputs(").vt, \"", self->out);
+                    fprintf(self->out, ").vt, __FILE__, %d, \"", self->arena->nodes[n].line);
                     fputs(self->arena->nodes[n].text2, self->out);
-                    fprintf(self->out, "\", %d)->", self->arena->nodes[n].line);
+                    fputs("\"))->", self->out);
                     fputs(self->arena->nodes[n].text2, self->out);
                     fputs("((", self->out);
                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
@@ -4649,13 +4655,41 @@ impl EmitOps for Emitter {
                     fputs(".self", self->out);
                 }
             } else if (self->arena->nodes[n].aux == 2) {
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out, "->__%s_vptr->%s(", low, self->arena->nodes[n].text2);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                if (self->runtime_checks && *self->runtime_checks) {
+                    fputs("((struct ", self->out);
+                    fputs(tname, self->out);
+                    fputs("_vtbl *)__ct_vt_guard((void *)(", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fprintf(self->out, ")->__%s_vptr, __FILE__, %d, \"", low, self->arena->nodes[n].line);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fputs("\"))->", self->out);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fputs("((", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(")", self->out);
+                } else {
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fprintf(self->out, "->__%s_vptr->%s(", low, self->arena->nodes[n].text2);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                }
             } else {
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out, ".__%s_vptr->%s(&", low, self->arena->nodes[n].text2);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                if (self->runtime_checks && *self->runtime_checks) {
+                    fputs("((struct ", self->out);
+                    fputs(tname, self->out);
+                    fputs("_vtbl *)__ct_vt_guard((void *)(", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fprintf(self->out, ").__%s_vptr, __FILE__, %d, \"", low, self->arena->nodes[n].line);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fputs("\"))->", self->out);
+                    fputs(self->arena->nodes[n].text2, self->out);
+                    fputs("(&(", self->out);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fputs(")", self->out);
+                } else {
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                    fprintf(self->out, ".__%s_vptr->%s(&", low, self->arena->nodes[n].text2);
+                    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                }
             }
             c2 = self->arena->nodes[n].b;
             while (c2 >= 0) {
