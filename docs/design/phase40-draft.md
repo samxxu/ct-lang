@@ -1,6 +1,6 @@
 # Phase 40 — `errdefer` 与显式错误出口
 
-> **状态：已立项**（2026-11-13，用户接受评审意见并批准落库；卡已冻结）。
+> **状态：✅ 完成**（2026-11-13；v0.40.0；R1–R7 落地，E40-1–E40-9 全绿；收口记录见 §8.1）。
 > **基线**：PH-39 收口提交（`v0.39.0`）；S0 在该提交上重建并记录实际 sha 与门禁数字。
 > **文档形态**：`phase40-draft.md`；design window 7/12，不触发归档。
 > **前置**：[phase38-draft.md](phase38-draft.md)（`defer` 已落地）、[phase39-draft.md](phase39-draft.md)（收口基线）。
@@ -230,3 +230,14 @@ R1–R5 每项先提 `test(cleanup): <task-id> 红`，实现提交随后转绿�
 - 开工前 S0：PH-39 收口提交上重建 `ct`（`ct -v` = v0.39.0）、复跑 §2.2、写 `baseline.sha`；不占任务行。
 - 收口动作：11 道门禁绿、`p40/*` 全绿、`version-minor=40`、五处 `CTC_VERSION` 与全部版本落点同步到 `v0.40.0`、phase-log 与对照表落盘；tag/push 按 0.3 等用户批准。
 - 每个实现任务 ≤3 个源码文件；每个实现提交的父提交是它的 `test(cleanup): <task-id> 红`；仓库任何时刻可构建。
+
+### 8.1 收口记录（2026-11-13）
+
+| 项 | 结果 |
+| --- | --- |
+| version-minor | 40；五处 `CTC_VERSION` 与 README/docs/AGENTS 同步到 `v0.40.0` |
+| R1–R7 | 全部落地；R3b 的 `is_err` 发射在 R3a 已接好，R3b 用夹具验证；R6/R7 为文档/回归 |
+| E40-1–E40-9 | `p40 r1` / `r2` / `r4` / `r5` / `docs` + `p40_return_err` / `p40_break_continue` / `p40_order_own` / `p40_trailing` |
+| 全量门禁 | `check-all: OK (11 hard gates green)`；check-ast 1348/0、check-warnings 605/0、test/run 153、goldens 82、docs 962 links / 217 files、acceptance 20 |
+| 样例 | `examples/43_errdefer`（成功跳过 errdefer；错误路径 LIFO） |
+| tag/push | 本地 annotated tag `v0.40.0`；push 按 0.3 等用户批准 |
