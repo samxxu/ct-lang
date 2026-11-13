@@ -368,7 +368,7 @@ int read_file(const char *path)
 ## 9. `map` 与 bindings：把 trait 绑到已有的 C 库
 
 不想为了用 C 库而改库的代码，就用 `map` 把一个**已声明的全局实例**绑定成 trait 实现。
-这是把假 HAL 接进 CT 的官方做法（[bindings/mock-hal/uart.h.ct](../bindings/mock-hal/uart.h.ct)）：
+这是把假 HAL 接进 CT 的官方做法（[test/bindings/mock-hal/uart.h.ct](../test/bindings/mock-hal/uart.h.ct)）：
 
 ```c
 #include "mock_hal.h"          /* 直通，让你看见库的真实声明 */
@@ -458,7 +458,7 @@ map trait Socket for namespace posix {
 
 消费者的生成 `.c` 自动带上 `#include "socket.shim.h"`，`ct build` 组出的 `cc` 命令行自动加
 `-I <shim 目录>`（有 `.shim.c` 时同时把它列为源文件）。`posix::Socket.err()` 于是展开成
-`ct_sock_errno()`。完整例子见 `bindings/posix-socket/`；改了 shim 会让消费者重建。
+`ct_sock_errno()`。完整例子见 `test/bindings/posix-socket/`；改了 shim 会让消费者重建。
 有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
 C 头文件里的 `enum` 常量 CT 也不认识（全大写拼写只是撞上宏启发式，不算解析），同样用这层 shim
 包成函数再绑定；判据与各类符号见 [language-spec §4.43](language-spec.md)。

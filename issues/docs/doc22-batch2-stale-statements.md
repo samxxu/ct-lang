@@ -13,8 +13,8 @@ Batch 2 把「命名空间全局 mangling」与「跨单元装箱」都打通了
 
 | # | 文件 | 现文 | 实际 |
 | --- | --- | --- | --- |
-| 1 | [bindings/mock-hal/uart.ct](../../bindings/mock-hal/uart.ct#L8) | `v1 limitation: boxing a mapped instance is unit-private` | `pub` trait + `pub` 实例时 vtable 已导出（`test/modules/xunit_box`、消费者装箱实测通过） |
-| 2 | [bindings/README.md](../../bindings/README.md#L192) | `mapped instance is unit-private anyway` | 同上；跨单元消费已可行 |
+| 1 | [bindings/mock-hal/uart.ct](../../test/bindings/mock-hal/uart.ct#L8) | `v1 limitation: boxing a mapped instance is unit-private` | `pub` trait + `pub` 实例时 vtable 已导出（`test/modules/xunit_box`、消费者装箱实测通过） |
+| 2 | [bindings/README.md](../../test/bindings/README.md#L192) | `mapped instance is unit-private anyway` | 同上；跨单元消费已可行 |
 | 3 | [test/modules/map_ns/hal/uart.ct](../../test/modules/map_ns/hal/uart.ct#L3) | `Globals are not mangled by this compiler yet` | 全局已按命名空间 mangling 为 `hal_uart1`（`a758fa4`） |
 | 4 | [docs/design/batch2-cross-unit-oo.md](../../docs/history/design/batch2-cross-unit-oo.md#L5) | `状态：已获用户批准…本文件是本批次的实现依据` | 本批次已实现并提交，状态应改为「已实现」并标注出口验证 |
 

@@ -4,7 +4,7 @@
 >
 > 状态：v1（Phase 18.1，2026-11-02）。工具实现见
 > [`selfhost/ct-ast/tool/pkg/`](../selfhost/ct-ast/tool/pkg/)；binding 写法见
-> [bindings/README.md](../bindings/README.md)；首批官方包见
+> [test/bindings/README.md](../test/bindings/README.md)；首批官方包见
 > [phase18.md](history/design/phase18.md) 的 18.3–18.5。
 
 ---
@@ -28,7 +28,7 @@ hello/
   std 把实现放在 `.ct` 只是风格选择。`pub` 才跨单元可见；
 - `.ct`：普通实现单元（`pub` 函数），不发布接口；
 - `.m.ct`：零成本静态映射，不产 `.c` / `.h`；
-- binding 形式（`#include` 直通 + `map`）按 [bindings/README.md](../bindings/README.md)。
+- binding 形式（`#include` 直通 + `map`）按 [test/bindings/README.md](../test/bindings/README.md)。
 
 #### 单元目录 = 命名空间
 

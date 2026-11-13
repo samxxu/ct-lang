@@ -86,7 +86,7 @@ recipe 写不出的形状（宏 / 语句宏、`errno` 这类全局量、需要�
 ### 3. 目录与命名
 
 ```
-bindings/<lib>/
+test/bindings/<lib>/
 ├── <lib>.h           库的声明（真实库=头文件；假 HAL=仓库内自带）
 ├── <lib>_impl.c      假 HAL 的实现（真实库不需要）
 ├── <unit>.ct         binding 本体
@@ -151,23 +151,23 @@ binding **不是**编译器的构建步骤：`gcc selfhost/l0/ctc.c` 与 `test/r
 演示由 `selfhost/check-ast.sh` 的 bindings 小节驱动：
 
 ```
-ct-ast build --emit-c bindings/mock-hal/demo.ct -o <out>
-cc -Wall -Wextra -std=c99 -I bindings/mock-hal <out>/*.c bindings/mock-hal/mock_hal_impl.c -o demo
+ct-ast build --emit-c test/bindings/mock-hal/demo.ct -o <out>
+cc -Wall -Wextra -std=c99 -I test/bindings/mock-hal <out>/*.c test/bindings/mock-hal/mock_hal_impl.c -o demo
 ./demo   # 与 demo.expected.out 比对
 ```
 
 手工复现：
 
 ```bash
-mkdir -p /tmp/bind && ./ct build --emit-c bindings/mock-hal/demo.ct -o /tmp/bind
-gcc -Wall -Wextra -std=c99 -I bindings/mock-hal /tmp/bind/*.c \
-    bindings/mock-hal/mock_hal_impl.c -o /tmp/bind/demo && /tmp/bind/demo
+mkdir -p /tmp/bind && ./ct build --emit-c test/bindings/mock-hal/demo.ct -o /tmp/bind
+gcc -Wall -Wextra -std=c99 -I test/bindings/mock-hal /tmp/bind/*.c \
+    test/bindings/mock-hal/mock_hal_impl.c -o /tmp/bind/demo && /tmp/bind/demo
 # 7
 ```
 
 ### 7. 新增一个 binding 的检查清单
 
-- [ ] `bindings/<lib>/` 目录；binding 单元名 ≠ 库头名
+- [ ] `test/bindings/<lib>/` 目录；binding 单元名 ≠ 库头名
 - [ ] 直通 `#include` 能看见全部被绑定的符号
 - [ ] 镜像 struct 的布局与库实现一致（不透明句柄优先）
 - [ ] `trait` 的每个方法都在 `map` 里**恰好绑定一次**（漏绑=空槽崩溃，重复=重定义）

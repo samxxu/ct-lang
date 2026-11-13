@@ -51,7 +51,7 @@
 # argument may now be a bare visible name or a member path rooted at the
 # instance (test/ast/15_map_args).
 #
-# 12.1 adds the bindings section: `bindings/mock-hal/` is a declarative binding
+# 12.1 adds the bindings section: `test/bindings/mock-hal/` is a declarative binding
 # to a fake HAL (pass-through include + mirrored trait / struct + a declared
 # global instance + `map`), built end to end and compared with expected output.
 # It also pins the fix that emits map wrappers in build mode.
@@ -178,7 +178,7 @@
 # the consumer's generated C and its directory joins the printed `cc` line as an
 # include root, while an existing `<base>.shim.c` joins that line as a source.
 # test/modules/map_unit_shim pins the wiring, the cold/warm cache and the
-# touching of the shim header; bindings/posix-socket is the real-library demo
+# touching of the shim header; test/bindings/posix-socket is the real-library demo
 # (a header-only shim over socketpair / write / read / errno). A shim source
 # without its header is rejected by name, a shim header that is not a regular
 # file is rejected too, a shim header under any other base name is never
@@ -784,22 +784,22 @@ echo "== bindings (Phase 12: the fake HAL demo) =="
 # declared global instance and a `map` - so no language feature is involved.
 # Build mode must emit the wrappers and the vtable into the unit that declares
 # the map (12.1 fixed a gap where they were only emitted in compile mode).
-bd=bindings/mock-hal
+bd=test/bindings/mock-hal
 rm -rf "$work/bind"
 mkdir -p "$work/bind"
 if ! "$work/ct-ast" build --emit-c "$bd/demo.ct" -o "$work/bind" >"$work/bind.out" 2>"$work/bind.err"; then
-    bad "bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
+    bad "test/bindings/mock-hal" "ct-ast failed: $(cat "$work/bind.err")"
 elif ! grep -q "uart1_Controller_vtable" "$work/bind/uart.c"; then
-    bad "bindings/mock-hal" "the map vtable was not emitted into the declaring unit"
+    bad "test/bindings/mock-hal" "the map vtable was not emitted into the declaring unit"
 elif ! "$CC" -Wall -Wextra -std=c99 -I "$bd" "$work/bind"/*.c "$bd/mock_hal_impl.c" \
         -o "$work/bind.bin" 2>"$work/bind.cc"; then
-    bad "bindings/mock-hal" "generated C did not build warning-free: $(cat "$work/bind.cc")"
+    bad "test/bindings/mock-hal" "generated C did not build warning-free: $(cat "$work/bind.cc")"
 elif ! "$work/bind.bin" >"$work/bind.stdout" 2>&1; then
-    bad "bindings/mock-hal" "the program exited non-zero"
+    bad "test/bindings/mock-hal" "the program exited non-zero"
 elif ! cmp -s "$work/bind.stdout" "$bd/demo.expected.out"; then
-    bad "bindings/mock-hal" "program output differs: $(cat "$work/bind.stdout")"
+    bad "test/bindings/mock-hal" "program output differs: $(cat "$work/bind.stdout")"
 else
-    ok "bindings/mock-hal"
+    ok "test/bindings/mock-hal"
 fi
 
 echo
@@ -2328,15 +2328,15 @@ fi
 # out-parameter and the `errno` accessor. Header-only, so no `.shim.c` is listed.
 rm -rf "$work/mpsock"
 mkdir -p "$work/mpsock"
-if "$work/ct-ast" build --emit-c bindings/posix-socket/demo.ct -o "$work/mpsock" \
+if "$work/ct-ast" build --emit-c test/bindings/posix-socket/demo.ct -o "$work/mpsock" \
         >"$work/mpsock.out" 2>"$work/mpsock.err" \
    && grep -qF '#include "socket.shim.h"' "$work/mpsock/demo.c" \
-   && grep -qF -- '-I bindings/posix-socket/posix' "$work/mpsock.out" \
+   && grep -qF -- '-I test/bindings/posix-socket/posix' "$work/mpsock.out" \
    && ! grep -qF '.shim.c' "$work/mpsock.out" \
-   && "$CC" -Wall -Wextra -std=c99 -I bindings/posix-socket/posix "$work/mpsock"/*.c \
+   && "$CC" -Wall -Wextra -std=c99 -I test/bindings/posix-socket/posix "$work/mpsock"/*.c \
         -o "$work/mpsock.bin" 2>"$work/mpsock.cc" \
    && "$work/mpsock.bin" >"$work/mpsock.stdout" 2>&1 \
-   && cmp -s "$work/mpsock.stdout" bindings/posix-socket/demo.expected.out; then
+   && cmp -s "$work/mpsock.stdout" test/bindings/posix-socket/demo.expected.out; then
     ok "posix-socket binding (shim casts + errno accessor; header-only)"
 else
     bad "posix-socket binding" "$(cat "$work/mpsock.err" "$work/mpsock.cc" "$work/mpsock.stdout" 2>/dev/null | head -5)"

@@ -51,7 +51,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法
 - **内存**：`Drop` / `delete`、`own`（AutoDrop）、块级 `defer`（Phase 38）、路径敏感泄漏告警、`borrow` + `Handback`
 - **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace
-- **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`bindings/` 声明式 C 库对接
+- **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`test/bindings/` 声明式 C 库对接
 - **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`）
 - **诊断与工具**：`#line` 溯源、`--diagnostics=json|text`、多错误恢复、增量缓存、`ct get` / `ct install`
 - **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26）；**约束泛型** `T name<T: Trait>(…)`（Phase 28）
@@ -64,7 +64,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 4. 仓库结构
 
 `selfhost/` 是自举链：`l0/`（C 种子）→ `l1/`（冻结）→ `l2/`（回归 oracle）→ `ct-ast/`（主线，提供 `ct` 安装入口）；
-`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `std`（`ct get std` 获取，不随仓库发布）；`bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
+`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `std`（`ct get std` 获取，不随仓库发布）；`test/bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
 目录级说明见 [selfhost/README.md](selfhost/README.md)、[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
 
 ### 5. 文档与测试

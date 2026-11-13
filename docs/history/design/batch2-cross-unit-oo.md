@@ -167,7 +167,7 @@ struct 非 pub 时消费单元连变量都声明不了，导出了也没用，�
 
 - [test/modules/split/impl_dog.ct](../../../test/modules/split/impl_dog.h.ct#L5-L6) 的
   "no other unit can name them"；
-- [bindings/mock-hal/uart.ct](../../../bindings/mock-hal/uart.h.ct#L8-L9) 的
+- [bindings/mock-hal/uart.ct](../../../test/bindings/mock-hal/uart.h.ct#L8-L9) 的
   "boxing a mapped instance is unit-private"。
 
 ### 6. 验收标准

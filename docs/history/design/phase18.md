@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | 包工具 | `ct get` / `ct install` / `ct update` / `ct verify`、比较器范围、显式索引、`cflags` / `ldflags` / `requires` 均已落地（Phase 17.5） | 无组织化的包、无包规范、无首批包 |
 | 组织 | GitHub org `ct-pkg` 已创建，且是 `ct get` 的默认 registry（[Pkg.h.ct](../../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) 第 658 行） | 无仓库命名约定、无索引仓库 |
-| binding | [`bindings/mock-hal/`](../../../bindings/mock-hal/) 是示例；binding 规约见 [`bindings/README.md`](../../../bindings/README.md) | 无 `hal` 契约包、无平台实现包、无 C 库映射包 |
+| binding | [`bindings/mock-hal/`](../../../test/bindings/mock-hal/) 是示例；binding 规约见 [`bindings/README.md`](../../../test/bindings/README.md) | 无 `hal` 契约包、无平台实现包、无 C 库映射包 |
 | 索引 | 五字段纯文本格式（`name version git-url tag sha256:<hex>`）已定，`CT_INDEX` / `--index` 可用 | 无索引生成脚本、无托管、无 CI 产出与校验 |
 | CI | `.github/workflows/{ci,nightly}.yml` 三个 job；11 道本地硬门禁 | 无包门禁 job、无目标机 job |
 | 容量 | L2 建 ct-ast：`MAX_FUNCS 128`（111 已用）、`MAX_MAP_IMPLS 256`（253 已用）；17.5 靠 static 助手绕开 | 再加一个 impl 方法即失败；下一次功能开发就会被卡住 |
@@ -97,7 +97,7 @@
 
 - `ct-pkg/hal`：纯 `.h.ct`，namespace `hal`，四个 trait：`Uart`（`send` / `recv`）、`Gpio`（`read` / `write`）、
   `Clock`（`now_ms`）、`Log`（`write`）；不含 impl、不发 `.c`。
-- 与 [`bindings/mock-hal/`](../../../bindings/mock-hal/) 对齐：`Controller` 的 `send` 语义保留为 `Uart.send`；
+- 与 [`bindings/mock-hal/`](../../../test/bindings/mock-hal/) 对齐：`Controller` 的 `send` 语义保留为 `Uart.send`；
   mock-hal 继续作为示例，不要求同步改名（D18-6）。
 - 版本：`hal 1.0.0` 冻结；破坏性变更走 `2.0.0`。
 

@@ -377,7 +377,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | `.github/**` | CI 配置：GitHub Actions 工作流（`ci.yml` 平台矩阵、`nightly.yml` 消毒器 + fuzz，Phase 17.1 起） | ✅ Phase 17 起新增；只放工作流配置，不进入编译路径、不成为构建步骤 |
 | `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
 | `selfhost/**` | 源码：自举编译器 —— **L0 C 种子** `selfhost/l0/ctc.c` ＋ 冻结种子 `selfhost/l1/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/ct-ast/**`（`main.ct` = 只做绑定与分派的驱动入口，`runtime/arena/` = 节点池 + 字面量池（`namespace runtime::arena`），`frontend/lex/` = 词法器（源码游标 + 当前 token，`namespace frontend::lex`），`frontend/module/` = 单元表与 `map` 记录的取值类型 ＋ build 驱动（`namespace frontend::module`），`frontend/parse/` = 解析器、其共享原语、表达式与类型文法及 `map` 构造的构建器（`namespace frontend::parse`），`frontend/sym/` = 符号表（函数/变量/作用域/类型/trait/struct，`namespace frontend::sym`），`frontend/type/` = 类型推断与装箱判定（`namespace frontend::type`），`tool/diag/` = 告警存储（`namespace tool::diag`），`tool/cache/` = 增量缓存（`namespace tool::cache`），`tool/pkg/` = 包管理器（`namespace tool::pkg`），`tool/driver/` = compile 模式驱动（`namespace tool::driver`），`backend/mem/` = AutoDrop 与泄漏分析（`namespace backend::mem`），`backend/emit/` = 代码发射器（`.c`/`.h`/map JSON，`namespace backend::emit`）；Phase 9 的 AST 版编译器，ct-ast）＋ **冻结归档** `selfhost/l2/**`（`core.ct` + `driver.ct`，Phase 3–8 的旧管线 L2；只修 bug，不再加能力） | ✅ Phase 1 起新增；放编译器源码（含 L0 C 种子）与门禁脚本，生成物不入库 |
-| `bindings/**` | 源码：C 库的**声明式 binding**（Phase 12 起）—— 直通 `#include "<lib>.h"` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`；仓库内假 HAL 自带其头与实现 | ✅ Phase 12 起新增；只放 binding 源与（假 HAL 的）最小 C 头 / 实现，**不 vendored、不下载**、不成为编译器构建步骤；生成物不入库 |
+| `test/bindings/**` | 源码：C 库的**声明式 binding**（Phase 12 起；2026-11-13 由顶层 `bindings/` 迁入 `test/`，作为测试夹具）—— 直通 `#include "<lib>.h"` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`；仓库内假 HAL 自带其头与实现 | ✅ Phase 12 起新增；只放 binding 源与（假 HAL 的）最小 C 头 / 实现，**不 vendored、不下载**、不成为编译器构建步骤；生成物不入库 |
 | `ct-pkg/std` | 标准库（原 Phase 17.2 的仓库内 `std/`）：已迁为独立 ct-pkg 包 `std` v0.1.0，`ct get std` 拉入项目的 `vendor/std`，namespace 仍 `std::<mod>`；本仓库不再保存内置库，`test/std/` 同时移除 | ❌ 不在本仓库维护 |
 | `install.sh` | 源码：**唯一的安装脚本**——下载 GitHub 源码归档 → 本地四级自举 → 安装 `ct` 与 `ctc` 软链 | ✅ 可改；只准维护「下载 + 现有自举步骤 + 安装」三件事，不得演变成构建系统，不得进入编译路径 |
 | `LICENSE`、`LICENSE.EXCEPTION` | 许可全文与输出例外 | ❌ 仅限用户明确要求时修改 |
@@ -412,7 +412,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
   （`$CC` / `--cc`，默认 `cc`）产出可执行文件——用户 2026-11-02 授权的受控子进程例外。**零网络**不变；
   `ct compile` 与 `ct build --emit-c` 仍**零子进程**；`ct build` 不解析 `cc` 的诊断、不做增量链接、
   不内置构建系统，路径与参数一律按单引号规则转义。见 [design/phase17.md](docs/history/design/phase17.md)（D17-9）。
-- **例外（Phase 12 bindings）**：仓库内新增顶层 `bindings/**`，承载对既有 C 库的**声明式 binding**
+- **例外（Phase 12 bindings）**：仓库内 `test/bindings/**`（Phase 12 时在顶层，2026-11-13 迁入 `test/`），承载对既有 C 库的**声明式 binding**
   （`selfhost` 之外的第二类源码目录）。binding 只是 CT 源——直通 `#include` ＋ 镜像声明 ＋ `map`，
   **只声明外部符号，不 vendored、不下载、不链接**；仓库内假 HAL 的 C 头 / 实现仅作**演示与测试**，
   **绝不**成为编译器构建步骤（`gcc selfhost/l0/ctc.c`、`./test/run.sh` 的编译相关层与 CT 线关卡都不得依赖它）。

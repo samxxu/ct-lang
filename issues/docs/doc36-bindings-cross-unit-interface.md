@@ -5,7 +5,7 @@
 | 模块 | docs（binding 指南） |
 | 严重度 | **High** |
 | 锚点 | commit `524ba99`（2026-10-31） |
-| 文件 | [bindings/README.md:110-113](../../bindings/README.md#L110-L113)、[:129](../../bindings/README.md#L129)、[:157](../../bindings/README.md#L157)（中文）；对照 [:253-271](../../bindings/README.md#L253-L271)（英文） |
+| 文件 | [bindings/README.md:110-113](../../test/bindings/README.md#L110-L113)、[:129](../../test/bindings/README.md#L129)、[:157](../../test/bindings/README.md#L157)（中文）；对照 [:253-271](../../test/bindings/README.md#L253-L271)（英文） |
 | 状态 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
 
 ## 现象

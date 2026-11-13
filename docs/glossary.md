@@ -210,7 +210,7 @@
 | --- | --- | --- |
 | 平台映射头 | `ct_platform.h` | 厂商提供；宏只出现在这里 |
 | 标准外设 trait | `Logger` / `Clock` / `Allocator` / `Readable` / `Writable` / `Random` / `Connectable` | 覆盖 80% 平台差异需求 |
-| 绑定（bindings） | `bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
+| 绑定（bindings） | `test/bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `test/bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引，Phase 18 建组织（`github.com/ct-pkg`）并发布首批官方包 |
 | 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires` |

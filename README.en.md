@@ -54,7 +54,7 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **traits**: `trait` / `impl` / `use`, dispatch, traits as types (interface values / arrays / fields / boxing), trait default methods
 - **memory**: `Drop` / `delete`, `own` (AutoDrop), block-level `defer` (Phase 38), path-sensitive leak warnings, `borrow` + `Handback`
 - **modules**: `namespace` / `import` / `pub` / multi-file `ct build` / directory = namespace
-- **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `bindings/` for C libraries
+- **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `test/bindings/` for C libraries
 - **passthrough**: `#ct-raw` / `#ct-endraw` raw blocks (macros and hand-written C land in the generated `.c` byte for byte)
 - **diagnostics and tooling**: `#line` traceability, `--diagnostics=json|text`, multi-error recovery, incremental cache, `ct get` / `ct install`
 - **generic functions**: `T name<T>(…)` + `name<int>(…)`, monomorphised at compile time (Phase 26); **bounded generics** `T name<T: Trait>(…)` (Phase 28)
@@ -68,7 +68,7 @@ The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idio
 
 `selfhost/` is the bootstrap chain: `l0/` (the C seed) → `l1/` (frozen) → `l2/` (regression oracle) → `ct-ast/`
 (the mainline that provides the installed `ct`); `test/` holds tests and goldens; `docs/` holds documentation;
-`bindings/` holds declarative C-library bindings; the standard library is the separate ct-pkg package `std`
+`test/bindings/` holds declarative C-library bindings; the standard library is the separate ct-pkg package `std`
 (`ct get std`; it is no longer shipped with this repository); `issues/` is the review ledger; `AGENTS.md` is
 the change contract.
 Directory-level notes are in [selfhost/README.md](selfhost/README.md), [test/README.md](test/README.md) and

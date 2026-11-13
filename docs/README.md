@@ -47,7 +47,7 @@
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 
 目录级说明：[../selfhost/README.md](../selfhost/README.md)（四代编译器与门禁脚本）、
-[../test/README.md](../test/README.md)（测试分层）、[../bindings/README.md](../bindings/README.md)（binding 规约）。
+[../test/README.md](../test/README.md)（测试分层）、[../test/bindings/README.md](../test/bindings/README.md)（binding 规约）。
 
 ### 文档约定（由 `test/docs/check-docs.py` 校验）
 
