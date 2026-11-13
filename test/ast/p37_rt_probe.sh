@@ -55,6 +55,41 @@ else
     fi
 fi
 
+# A warm cache must not reuse an artefact produced with the other flag: the
+# switch is a safety contract, so both directions are asserted.
+cache="$tmp/cache"
+rm -rf "$cache"
+mkdir -p "$cache"
+if ! "$CT" build --emit-c "$src" -o "$cache" >"$tmp/cache-off.out" 2>"$tmp/cache-off.err"; then
+    echo "FAIL cache: off build failed" >&2
+    fail=1
+elif grep -q '__CT_VT_GUARD' "$cache/prog.c"; then
+    echo "FAIL cache: off build unexpectedly guarded" >&2
+    fail=1
+elif ! "$CT" build --runtime-checks --emit-c "$src" -o "$cache" >"$tmp/cache-on.out" 2>"$tmp/cache-on.err"; then
+    echo "FAIL cache: on build after off failed" >&2
+    fail=1
+elif ! grep -q '__CT_VT_GUARD' "$cache/prog.c"; then
+    echo "FAIL cache: on after off reused the unguarded artefact" >&2
+    fail=1
+fi
+cache="$tmp/cache2"
+rm -rf "$cache"
+mkdir -p "$cache"
+if ! "$CT" build --runtime-checks --emit-c "$src" -o "$cache" >"$tmp/cache2-on.out" 2>"$tmp/cache2-on.err"; then
+    echo "FAIL cache: on build failed" >&2
+    fail=1
+elif ! grep -q '__CT_VT_GUARD' "$cache/prog.c"; then
+    echo "FAIL cache: on build has no guard" >&2
+    fail=1
+elif ! "$CT" build --emit-c "$src" -o "$cache" >"$tmp/cache2-off.out" 2>"$tmp/cache2-off.err"; then
+    echo "FAIL cache: off build after on failed" >&2
+    fail=1
+elif grep -q '__CT_VT_GUARD' "$cache/prog.c"; then
+    echo "FAIL cache: off after on reused the guarded artefact" >&2
+    fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "p37_rt_probe: OK"
 fi
