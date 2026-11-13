@@ -1559,6 +1559,76 @@ impl ModuleOps for Module {
                     else code2 = (st2 >> 8) & 0xff;
                     if (code2 != 0) return 1;
                 }
+                /* R5: archive every object of this build. `ar rcsD` is the
+                   deterministic form; macOS ar has no -D, so fall back to
+                   ZERO_AR_DATE=1 + rcs (R7 asserts two runs hash equal). */
+                {
+                    char archive[MAX_PATH], cmd[MAX_CMD];
+                    int ncmd = 0, code2, st2;
+                    const char *arp = getenv("AR");
+                    if (!arp || !arp[0]) arp = "ar";
+                    if (oarg) {
+                        if (snprintf(archive, sizeof archive, "%s", oarg)
+                            >= (int)sizeof archive) {
+                            fprintf(stderr, "ctc: archive path is too long\n");
+                            return 1;
+                        }
+                    } else if (snprintf(archive, sizeof archive, "%s/lib%s.a",
+                                        self->outdir, self->units[root_u].base)
+                               >= (int)sizeof archive) {
+                        fprintf(stderr, "ctc: archive path is too long\n");
+                        return 1;
+                    }
+                    remove(archive);
+                    if (ct_cmd_token(cmd, MAX_CMD, &ncmd, arp) != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "rcsD") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, archive) != 0) {
+                        fprintf(stderr, "ctc: the ar command line is too long\n");
+                        return 1;
+                    }
+                    for (u = 0; u < self->nunits; u++) {
+                        char obj[MAX_PATH];
+                        if (self->units[u].is_map) continue;
+                        if (snprintf(obj, sizeof obj, "%s/%s.o", self->outdir,
+                                     self->units[u].base) >= (int)sizeof obj
+                            || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0) {
+                            fprintf(stderr, "ctc: the ar command line is too long\n");
+                            return 1;
+                        }
+                    }
+                    {
+                        char qcmd[MAX_CMD + 16];
+                        snprintf(qcmd, sizeof qcmd, "%s 2>/dev/null", cmd);
+                        st2 = system(qcmd);
+                    }
+                    if (st2 < 0 || ((st2 & 0x7f) ? 128 + (st2 & 0x7f) : ((st2 >> 8) & 0xff)) != 0) {
+                        /* fallback: non-deterministic ar, fixed timestamp via env */
+                        setenv("ZERO_AR_DATE", "1", 1);
+                        ncmd = 0;
+                        if (ct_cmd_token(cmd, MAX_CMD, &ncmd, arp) != 0
+                            || ct_cmd_token(cmd, MAX_CMD, &ncmd, "rcs") != 0
+                            || ct_cmd_token(cmd, MAX_CMD, &ncmd, archive) != 0)
+                            return 1;
+                        for (u = 0; u < self->nunits; u++) {
+                            char obj[MAX_PATH];
+                            if (self->units[u].is_map) continue;
+                            if (snprintf(obj, sizeof obj, "%s/%s.o", self->outdir,
+                                         self->units[u].base) >= (int)sizeof obj
+                                || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0)
+                                return 1;
+                        }
+                        st2 = system(cmd);
+                        if (st2 < 0) return 1;
+                        if (st2 & 0x7f) code2 = 128 + (st2 & 0x7f);
+                        else code2 = (st2 >> 8) & 0xff;
+                        if (code2 != 0) {
+                            fprintf(stderr, "ctc: ar failed\n");
+                            return 1;
+                        }
+                        printf("%s\n", cmd);
+                        fflush(stdout);
+                    }
+                }
                 return 0;
             }
         }
