@@ -3632,6 +3632,13 @@ else
     bad "p39 r7" "$(cat "$work/p39r7.out" "$work/p39r7.err")"
 fi
 
+# Phase 39 R8: --emit-c zero regression against the S0 baseline.
+if bash test/modules/p39_lib/r8_probe.sh "$work/ct-ast" >"$work/p39r8.out" 2>"$work/p39r8.err"; then
+    ok "p39 r8"
+else
+    bad "p39 r8" "$(cat "$work/p39r8.out" "$work/p39r8.err")"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"
