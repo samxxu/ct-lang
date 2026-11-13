@@ -284,12 +284,12 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 单会话（lead）；三类常驻对话未建，按 `deviation: single-session-workflow`；phase 对话=PH-37 |
-| 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话，见 deviation） |
+| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-37 |
+| 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
-| 文档 snippet | 缺失：无 `docs/snippets/`，G4 未接通 |
+| 文档 snippet | 缺失（无 `docs/snippets/`） |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
-| 决策记录 | 缺失：无 `docs/decisions/`；现写在 `docs/design/*.md`（`D<phase>-<n>`） |
+| 决策记录 | 缺失；现写在 `docs/design/*.md`（`D<phase>-<n>`） |
 | 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` 首行徽标、`docs/README.md`「当前版本」、`AGENTS.md`「当前版本」行、`docs/history/phase-log.md` 版本记录 |
 | 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`phase-tag-requires-user-approval`） |
 
@@ -315,6 +315,8 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
     收敛: 无需补偿；收口时 MINOR = PH-<n>。
     签字: 用户已批准（2026-11-12）
 
+> 2026-11-13：PH-37 → v0.37.0，d=0。
+
 `deviation: single-session-workflow`
 
     日期: 2026-11-13
@@ -328,7 +330,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 
     日期: 2026-11-13
     条款: §6.7 V-7
-    现状: V-7 要求 phase 收口自动建并推 tag；0.2 要求只出提案、等用户指令。
+    现状: V-7 要求自动建并推 tag；0.2 要求只出提案、等指令。
     理由: 单人项目，tag/push 是发布动作，保留人工闸。
     收敛: 用户授权自动推送后撤销。
     签字: 用户已批准（2026-11-13，选 A）
@@ -346,7 +348,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 
 | 规则 | 判据 |
 | --- | --- |
-| roadmap 只做索引 | `docs/roadmap.md` 只放阶段号、主题一句话、状态、收口版本、详情链接；不写逐相叙述、出口证据、决策全文 |
+| roadmap 只做索引 | `docs/roadmap.md` 只放阶段号、主题、状态、收口版本、详情链接；不写逐相叙述/证据/决策全文 |
 | 详细记录 | 逐相细节、版本记录、已定决策、待定项在 `docs/history/phase-log.md`；roadmap 不得复制其正文 |
 | 新增/更新 phase | roadmap 加一行；详情写流水账；两处同步但不得重复 |
 | 判据 | roadmap 单元格不得多段叙述；`docs/README.md` 与 `docs/history/README.md` 均有入口 |
@@ -360,9 +362,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.36.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.37.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.36.0；Phase 36（泛型 Drop + Str）已收口。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史阶段与版本记录见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.37.0；Phase 37 已收口。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

@@ -1,6 +1,6 @@
 # Phase 37 — trait 签名硬错与运行期契约
 
-> **状态：实现完成**（2026-11-13；版本 bump / tag 待用户批准）。
+> **状态：✅ 完成**（2026-11-13；v0.37.0，本地 tag v0.37.0）。
 > **基线**：`c6a276b`（Phase 36 收口后的文档治理提交；全量 11 道门禁绿）。S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
 > **文档形态**：`phase37-draft.md`；design window 7/12，不触发归档。
 > **前置**：[phase36-draft.md](phase36-draft.md)；签名检查独立，不依赖 P31–P36 的语义。
@@ -199,4 +199,4 @@ S0 先跑 `check-archive.sh` 与 `check-ast.sh` 的诊断对照片段，列出�
 | E37-2 | `p37_missing`：既有 `not implemented` 硬错零回归 |
 | E37-3 | `219_runtime_guard`：on abort 带 `prog.ct:<行>`，off 无 guard |
 | E37-4 | 全量 11 道门禁绿：`test/run` 150、goldens 82、`check-ast` 1307、`check-warnings` 593、`check-docs` 930 links、acceptance 20 |
-| 版本/tag | 版本仍 `v0.36.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.37.0` bump 与 tag/push 等用户批准 |
+| 版本/tag | `v0.37.0`；本地 annotated tag `v0.37.0`（不 push） |
