@@ -17,7 +17,7 @@ GitHub Actions 的 `ubuntu-gcc` / `ubuntu-clang-smoke` / `macos-clang` 在 v0.42
 
 ## 处置
 
-- `Module.h.ct` 增加 `_POSIX_C_SOURCE 200809L`。
+- `ar` 的 `ZERO_AR_DATE` fallback 改为 shell 环境赋值，去掉对 `setenv` / POSIX feature macro 的依赖（`_POSIX_C_SOURCE` 在 Fedora clang 的 generated-C include 顺序下仍太晚）。
 - 空 label 后发射 `;`，避免 C99 label-at-end。
 - `fwd` 排序改用两个临时量，消除 GCC `-Wrestrict`。
 - example 32 改为 `missing == 0 ? "null" : "non-null"`。
@@ -28,7 +28,7 @@ GitHub Actions 的 `ubuntu-gcc` / `ubuntu-clang-smoke` / `macos-clang` 在 v0.42
 ## 验证
 
 - 本机 macOS `check-all: OK (11/11)`（v0.42.1）。
-- Podman Ubuntu 20.04 GCC 9 `check-all: OK (11/11)`。
+- Podman Ubuntu 20.04 GCC 9 `check-all: OK (11/11)`；Fedora clang `check-ast: 1361/0`。
 - Podman Ubuntu 20.04 clang `check-all: OK (11/11)`。
 - Podman Alpine musl `install.sh` + `ct build examples/01_greeter` 成功。
 - 版本 `v0.42.1`；fix 不打 tag（V-7）。

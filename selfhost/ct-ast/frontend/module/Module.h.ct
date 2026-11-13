@@ -16,7 +16,6 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1614,8 +1613,8 @@ impl ModuleOps for Module {
                         st2 = system(qcmd);
                     }
                     if (st2 < 0 || ((st2 & 0x7f) ? 128 + (st2 & 0x7f) : ((st2 >> 8) & 0xff)) != 0) {
-                        /* fallback: non-deterministic ar, fixed timestamp via env */
-                        setenv("ZERO_AR_DATE", "1", 1);
+                        /* fallback: non-deterministic ar, fixed timestamp via
+                           the shell's environment assignment (C99 has no setenv) */
                         ncmd = 0;
                         if (ct_cmd_token(cmd, MAX_CMD, &ncmd, arp) != 0
                             || ct_cmd_token(cmd, MAX_CMD, &ncmd, "rcs") != 0
@@ -1629,7 +1628,11 @@ impl ModuleOps for Module {
                                 || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0)
                                 return 1;
                         }
-                        st2 = system(cmd);
+                        {
+                            char envcmd[MAX_CMD + 32];
+                            snprintf(envcmd, sizeof envcmd, "ZERO_AR_DATE=1 %s", cmd);
+                            st2 = system(envcmd);
+                        }
                         if (st2 < 0) return 1;
                         if (st2 & 0x7f) code2 = 128 + (st2 & 0x7f);
                         else code2 = (st2 >> 8) & 0xff;
