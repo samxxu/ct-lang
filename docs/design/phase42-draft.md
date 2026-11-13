@@ -1,7 +1,7 @@
 # Phase 42 — `impl` 方法可见性（方法级 `pub`，默认私有）
 
-> **状态：已定稿**（2026-11-13，独立评审 + battle p42-1 判决 C；待 PH-41 收口后立项/开工）。
-> **基线**：PH-41 收口提交（`v0.41.0`）；当前 `v0.40.1`，PH-41 实施中，**不据此开工**；S0 在 41 收口后记录 `baseline: <sha>`。
+> **状态：已冻结（2026-11-13；battle p42-1 C；v0.41.0 基线；实施中）。**
+> **基线**：PH-41 收口提交 `de9ce1ab` / `v0.41.0`；S0 在该提交上冷构建并记录 `baseline: de9ce1ab`。
 > **文档形态**：`phase42-draft.md`；design window 7/12（门禁只数 `phaseN.md`，草案不计数）。
 > **前置**：[phase34-draft.md](phase34-draft.md)（`pub struct` / 固有方法）、[phase39-draft.md](phase39-draft.md)（导出面与 `ABI_HASH`）、[phase41-draft.md](phase41-draft.md)（收口基线）。
 > **关联**：[language-spec.md](../language-spec.md) 的 `pub` 节、[bindings-and-patterns.md](../bindings-and-patterns.md)、[modern-oo-gap.md](../modern-oo-gap.md)、[battle/p42-1](../../battle/p42-1/verdict.md)。
@@ -22,6 +22,7 @@
 | 规范版本 | 1.9.0 |
 | version-minor | 42 |
 | 已知风险 | R42-1…R42-7（§7） |
+| 冻结 | 2026-11-13；用户指令 PH-42 定稿后自动进入；battle p42-1 C |
 
 ## 1 需求与边界
 
