@@ -2155,6 +2155,13 @@ impl StmtOps for Stmt {
 
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
         if (self->sup->push_scope() != 0) return -1;
+        if (self->ndefer_blocks >= 256) {
+            self->sup->pop_scope();
+            return self->sup->fail("blocks are nested too deeply");
+        }
+        self->defer_head[self->ndefer_blocks] = -1;
+        self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_blocks = self->ndefer_blocks + 1;
         base = self->mem->own_base[self->sym->nscope - 1];
         s = self->parse_stmt();
         if (s < 0) {
@@ -2168,6 +2175,10 @@ impl StmtOps for Stmt {
         }
         self->arena->nodes[b].a = s;
         tail = s;
+        if (self->defer_flush_block(b, &tail) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         /* a braceless branch is still a scope: its `own` has to be released, or
            it leaks with no warning (`parse_block` does the same before its `}`) */
         if (self->mem->nowner > base && autodrop_append(self, b, base, &tail) != 0) {
@@ -2179,6 +2190,7 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        self->ndefer_blocks = self->ndefer_blocks - 1;
         return b;
     }
 
@@ -2206,6 +2218,15 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
+        /* Push the switch body's defer entry *after* the jump baseline: a
+           `break` must run this body's defers, just like a loop body's. */
+        if (self->ndefer_blocks >= 256) {
+            self->sup->pop_scope();
+            return self->sup->fail("blocks are nested too deeply");
+        }
+        self->defer_head[self->ndefer_blocks] = -1;
+        self->defer_tail[self->ndefer_blocks] = -1;
+        self->ndefer_blocks = self->ndefer_blocks + 1;
         self->switch_depth = self->switch_depth + 1;
         tail = -1;
         while (self->lex->tok != T_EOF
@@ -2225,6 +2246,12 @@ impl StmtOps for Stmt {
             else self->arena->nodes[tail].next = s;
             tail = s;
         }
+        if (self->defer_flush_block(blk, &tail) != 0) {
+            self->switch_depth = self->switch_depth - 1;
+            jump_pop(self, 0);
+            self->sup->pop_scope();
+            return -1;
+        }
         self->switch_depth = self->switch_depth - 1;
         jump_pop(self, 0);
         if (self->sup->expect("}") != 0) {
@@ -2232,6 +2259,7 @@ impl StmtOps for Stmt {
             return -1;
         }
         self->sup->pop_scope();
+        self->ndefer_blocks = self->ndefer_blocks - 1;
         return blk;
     }
 
