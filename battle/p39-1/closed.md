@@ -8,5 +8,6 @@
 | 判决 | A `rejected`；C `rejected`；B 未过庭 |
 | ADR | [`docs/decisions/D-001.md`](../../docs/decisions/D-001.md) |
 | 未决 | OQ-1：owner REQ；默认 C 路径（B1+B3 待用户批准）；截止 2026-12-01 或 R2 前 |
+| 用户裁定 | 用户 2026-11-13 批准 C 路径（B1+B3），OQ-1 关闭 |
 | 关联 Issue | 无（PH-39） |
 | 归档人 | EDITOR（2026-11-13） |

@@ -8,5 +8,6 @@
 | 判决 | A `rejected`；B 部分成立；C `rejected` |
 | ADR | [`docs/decisions/D-002.md`](../../docs/decisions/D-002.md) |
 | 未决 | OQ-2：owner REQ；默认 A（逐单元 `.o` + `.abi.h` 明写 `nm -g` 面 ⊋ 导出面）；截止 2026-12-01 或 R5 前 |
+| 用户裁定 | 用户 2026-11-13 接受默认 A（文档化契约），OQ-2 关闭 |
 | 关联 Issue | 无（PH-39） |
 | 归档人 | EDITOR（2026-11-13） |
