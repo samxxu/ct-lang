@@ -2004,6 +2004,7 @@ Phase 26 落地（§4.48）；泛型结构体 / trait / 约束 / 推导 / 多类
   生成的 C 调用，放行等于把类型错误留给 C 或运行期。
 - **运行期契约（Phase 37）**：`ct build --runtime-checks` 在接口派发前检查 vtable；空则带
   `<file>:<line>: runtime check: null vtable in call to '<method>'` abort。默认关闭，关闭时产物不变。
+  guard 不改变派发次数；接收者表达式可能被求值两次（与关闭时相同），**不要把有副作用的表达式当接收者**。
 - 退出码：`0` 成功；`1` 语法 / I/O 错误、`ct check` 下的语义发现，或 `ct build` 的 impl 签名漂移。
 
 ### 10. L2 独有：模块系统与诊断（本文不描述其语法）

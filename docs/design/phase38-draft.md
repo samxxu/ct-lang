@@ -2,7 +2,7 @@
 
 > **状态：实现完成（含独立评审 P0/P1 修复）**（2026-11-13；版本 bump / tag 待用户批准）。
 > **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
-> **文档形态**：`phase38-draft.md`；design window 12/12，转正时归档当时最老的一张。
+> **文档形态**：`phase38-draft.md`；design window 7/12，转正时归档当时最老的一张。
 > **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
 > **红证**：§2.2（2026-11-12，HEAD `bd91bfe`，`v0.30.0` 重建的 `ct-ast`）。
 > **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §6.2。
@@ -180,7 +180,7 @@ defer { log("done"); }      /* 显式清理 */
 | E38-1 | 两个 defer 按后进先出执行，输出顺序逐字节正确 | `ast/220_defer_order` | `check-ast` |
 | E38-2 | 正常落出、`return`、`break`、`continue` 四条路径都执行对应 defer | `ast/221_defer_paths` | `check-ast` |
 | E38-3 | `return f()` 的返回值在 defer 之前求值；defer 修改局部变量不影响返回值 | `ast/222_defer_return` | `check-ast` |
-| E38-4 | `goto` 跨出带 defer 的块报 L38-1，不写产物；同一块内 `goto` 仍可用 | `errors/p38_goto_cross.ct` | `check-ast` |
+| E38-4 | `goto` 跨出/跨入带 defer 的块报 L38-1，不写产物；同一块内 `goto` 仍可用 | `errors/p38_goto_cross.ct` / `p38_goto_sibling.ct` / `p38_goto_in.ct` / `p38_goto_active.ct` | `check-ast` |
 | E38-5 | 同块内 defer 先于 `own` drop，输出顺序正确 | `ast/223_defer_own_order` | `check-ast` |
 | E38-6 | defer 内 `return`/`break`/`continue`/嵌套 defer 各报 L38-2 | `errors/p38_defer_control.ct` / `p38_defer_break.ct` / `p38_defer_continue.ct` / `p38_defer_nested.ct` | `check-ast` |
 | E38-7 | 文件作用域的 defer 报 L38-3；`.h.ct` 内（含函数体）报 `defer is not allowed in a .h.ct unit` | `errors/p38_defer_scope.ct` / `p38_defer_header.h.ct` | `check-ast` |
@@ -230,11 +230,11 @@ L38-1/L38-2 各自一条断言；L38-3 分文件作用域与 `.h.ct` 两条文�
 | E38-1 | `220_defer_order`：`body` / `b` / `a`（LIFO） |
 | E38-2 | `221_defer_paths`：正常落出 / `return` / `break` / `continue` 四条路径 |
 | E38-3 | `222_defer_return`：`defer x=99` 后 `ret=1`（返回值先求值） |
-| E38-4 | `errors/p38_goto_cross.ct` / `p38_goto_sibling.ct` 报 `a goto cannot cross a block with defer`；同块 goto 按顶层 defer 块 id 放行 |
+| E38-4 | `p38_goto_cross/sibling/in/active` 报 `a goto cannot cross a block with defer`；同块 goto 与 future-defer 祖先/后代按路径 LCA 放行 |
 | E38-5 | `223_defer_own_order`：`defer` / `drop` 顺序 |
 | E38-6 | `errors/p38_defer_control.ct` 报 `a defer block cannot transfer control` |
 | E38-7 | `errors/p38_defer_scope.ct` 报 `defer is only allowed inside a function` |
-| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1327、check-warnings 600、check-docs 944 links、acceptance 20；样例 `examples/42_defer` |
+| E38-8 | 全量 11 道门禁绿：test/run 152、goldens 82、check-ast 1328、check-warnings 600、check-docs 944 links、acceptance 20；样例 `examples/42_defer` |
 | 版本/tag | 版本仍 `v0.37.0`；按 0.3 `phase-tag-requires-user-approval`，`v0.38.0` bump 与 tag/push 等用户批准 |
 
 ### 9.1 独立评审与修复（2026-11-13）
@@ -245,7 +245,7 @@ L38-1/L38-2 各自一条断言；L38-3 分文件作用域与 `.h.ct` 两条文�
 | P0 修复 | 无括号 if/for/while/do 的 defer 上下文（`ac040d1`）；switch 内 defer v1 禁止；goto 改用顶层 defer 块 id，兄弟块跨跳不再漏清理 |
 | P1 修复 | defer 体内禁止 label（避免多出口重复发射）；`--runtime-checks` 进入缓存 key；guard 改为 `__ct_vt_guard`，vt 只求值一次，三种派发都覆盖 |
 | 新增测试 | 224 分支/循环/嵌套/同块 goto；p38_defer_switch / p38_defer_label / p38_goto_sibling / p38_goto_in / p38_defer_header / break / continue / nested；P37 warm-cache 双向 |
-| 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；switch 内 defer 连嵌套块也禁止；非 hoist 接收者在 guard 下仍按既有两次求值（不再多第三次）；均记录为 v1 边界 |
-| 门禁 | `check-ast 1327/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
+| 剩余已知项 | 同块 goto 跨过 defer 声明仍保守拒绝；switch 内 defer 连嵌套块也禁止；guard 下非 hoist 副作用接收者仍按既有两次求值（不新增第三次，但可绕过 guard）；均记录为 v1 边界 |
+| 门禁 | `check-ast 1328/0`、`test/run 152`、P37 warm-cache probe OK、aux2 清零值接收者 abort |
 | 版本/tag | 仍 `v0.37.0`；`v0.38.0` bump/tag 待用户批准；`v0.37.0` tag 仍含评审前的 runtime cache/guard 缺陷 |
 
