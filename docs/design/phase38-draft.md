@@ -1,13 +1,28 @@
 # Phase 38 — `defer` 块级清理
 
-> **状态：规划中**（2026-11-12 立项草案；不写实现）。
-> **基线**：Phase 37 收口提交；S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
+> **状态：已立项**（2026-11-13 用户授权自动完成；卡已冻结）。
+> **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
 > **文档形态**：`phase38-draft.md`；design window 12/12，转正时归档当时最老的一张。
 > **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
 > **红证**：§2.2（2026-11-12，HEAD `bd91bfe`，`v0.30.0` 重建的 `ct-ast`）。
 > **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §6.2。
 > **规模**：编译器 260–520；夹具 100–180；文档 50–90；合计 **410–790**（±40%）。
-> **纪律**：不 bump、不打 tag、不 push；只暂存本相文件。
+> **纪律**：收口时 bump `v0.38.0`；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
+
+## 0 卡片字段（冻结）
+
+| 项 | 值 |
+| --- | --- |
+| 编号 | PH-38 |
+| 目标 | 块级 `defer { … }`：语句块退出时按 LIFO 执行清理，覆盖正常落出 / `return` / `break` / `continue` |
+| 范围 | O1/O2/O3；不做 errdefer / try / 单语句 defer / 全局或 `.h.ct` defer |
+| 交付物 | `Stmt.h.ct` / `Emitter.h.ct` 的 defer 解析/发射/诊断；`test/ast/**` 与负例；`examples/42_defer`；文档 |
+| 任务清单 | §4.1（S0–S7） |
+| 退出判据 | E38-1…E38-8（§5） |
+| 依赖 | Phase 37 收口；全量门禁基线 `5e395e9` |
+| 规范版本 | 1.9.0 |
+| version-minor | 38 |
+| 已知风险 | R38-1…R38-4（§7） |
 
 ## 1 目标与边界
 
@@ -141,6 +156,23 @@ defer { log("done"); }      /* 显式清理 */
 
 依赖：S1→S2→S3→S4→S5；S6 依赖 S4/S5；S7 最后。
 
+### 4.1 任务清单（冻结）
+
+| 任务 | 交付物 | 验收 | effort | 回滚 |
+| --- | --- | --- | --- | --- |
+| S0 | §2.2 红证 + p38 夹具的失败输出 | `bash selfhost/check-ast.sh` 在 p38 段失败；`baseline: 5e395e9` | S | 删除夹具/断言 |
+| S1 | `defer { … }` 解析 + 块级 LIFO 栈 | `ast/220_defer_order` 输出顺序正确 | M | revert |
+| S2a | `goto` 跨出/跨入带 defer 的块诊断 | `errors/p38_goto_cross.ct` 报 L38-1 | S | revert |
+| S2b | defer 内控制转移 / 嵌套 defer 诊断 | `errors/p38_defer_control.ct` 报 L38-2 | S | revert |
+| S2c | 文件作用域 / `.h.ct` defer 诊断 | `errors/p38_defer_scope.ct` 报 L38-3 | S | revert |
+| S3 | 正常落出 / `break` / `continue` 的逆序发射 | `ast/221_defer_paths` 四条路径输出正确 | M | revert |
+| S4 | `return` 临时量 + 全层逆序发射、void 分支 | `ast/222_defer_return` 返回值先求值 | M | revert |
+| S5 | defer 先于同块 `own` drop（各自 LIFO） | `ast/223_defer_own_order` 输出顺序正确 | S | revert |
+| S6 | 正负例、样例与全量门禁 | `check-ast.sh` / `check-all.sh` 绿 | M | revert |
+| S7 | 文档：language-spec、tutorial、gap、`examples/42_defer` | `check-docs.py` + 样例运行 | S | revert |
+
+映射：S1→E38-1；S2a→E38-4；S2b→E38-6；S2c→E38-7；S3→E38-2；S4→E38-3；S5→E38-5；S6→E38-8；S0/S7 无退出判据。
+
 ## 5 退出判据（E38-n）
 
 | ID | 断言 | 夹具 | 门禁 |
@@ -185,3 +217,4 @@ defer { log("done"); }      /* 显式清理 */
 
 - 编译器 260–520 = S1 50–100 + S2 40–80 + S3 60–120 + S4 80–160 + S5 30–60；夹具 60–120；文档 50–90。
 - 收口：S0 红证提交（`test(cleanup): P38 红`）；每片 ≤3 文件；仓库任何时刻可构建。
+- 收口动作：全量 11 道门禁绿、样例 `examples/42_defer` 进 `test/run.sh`、文档同步、`version-minor=38`；版本 bump 与 tag 按 0.3 `phase-tag-requires-user-approval` 等用户批准。
