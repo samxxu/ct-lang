@@ -1,0 +1,36 @@
+// E36-2 (P36): without an explicit `impl Drop`, the generated glue drops the
+// fields in declaration order. A generic `impl<T> Drop` declared after the
+// first use of an instance still takes effect (impls are resolved at emit
+// time, after the whole unit is parsed).
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Probe { int id; } use Drop;
+impl Drop for Probe {
+    void drop() { printf("drop %d\n", self->id); }
+}
+
+// No explicit Drop: glue recurses into `first` then `second`.
+struct Pair<T> { T first; T second; } use Drop;
+
+// Box is used before its generic Drop impl is declared; the impl still binds.
+struct Box<T> { T value; } use Drop;
+
+int main(void)
+{
+    own Pair<Probe> *p = malloc(sizeof(struct Pair_Probe));
+    p->first.id = 1;
+    p->second.id = 2;
+    delete p;
+
+    own Box<int> *b = malloc(sizeof(struct Box_int));
+    b->value = 7;
+    delete b;
+    printf("done\n");
+    return 0;
+}
+
+// Declared after the first `Box<int>` use above; must still apply.
+impl<T> Drop for Box<T> {
+    void drop() { printf("box drop\n"); }
+}

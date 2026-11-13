@@ -7321,6 +7321,85 @@ else
     fi
 fi
 
+# Phase 36 S1a (E36-1): an explicit `impl<T> Drop for Box<T>` is instantiated
+# per concrete type: one `<S>_Drop_drop` definition per instance, no template
+# `Box_Drop_drop` and no vtable. The explicit body owns the drop; no field glue.
+if ! "$work/ct-ast" test/ast/225_generic_drop/prog.ct -o "$work/p36s1a.c" \
+        >"$work/p36s1a.log" 2>&1; then
+    bad "p36 E36-1 (generic Drop product)" "ct-ast failed: $(head -3 "$work/p36s1a.log")"
+else
+    if ! "$CC" -o "$work/p36s1a.bin" "$work/p36s1a.c" 2>"$work/p36s1a.cc"; then
+        bad "p36 E36-1 (build)" "$(cat "$work/p36s1a.cc")"
+    else
+        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_int_Drop_drop$/ { c++ } END { print c + 0 }')"
+        if [ "$n" = "1" ]; then
+            ok "p36 E36-1 (Box_int_Drop_drop: one definition)"
+        else
+            bad "p36 E36-1 (Box_int_Drop_drop count)" "got $n"
+        fi
+        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_Str_Drop_drop$/ { c++ } END { print c + 0 }')"
+        if [ "$n" = "1" ]; then
+            ok "p36 E36-1 (Box_Str_Drop_drop: one definition)"
+        else
+            bad "p36 E36-1 (Box_Str_Drop_drop count)" "got $n"
+        fi
+        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_Drop_drop$/ { c++ } END { print c + 0 }')"
+        if [ "$n" = "0" ]; then
+            ok "p36 E36-1 (no template Box_Drop_drop)"
+        else
+            bad "p36 E36-1 (template Box_Drop_drop leaked)" "got $n"
+        fi
+        if nm "$work/p36s1a.bin" 2>/dev/null | grep -q '_Box_.*_vtable'; then
+            bad "p36 E36-1 (Drop has no vtable)" "$(nm "$work/p36s1a.bin" | grep vtable | head -2)"
+        else
+            ok "p36 E36-1 (Drop emits no vtable)"
+        fi
+    fi
+fi
+
+# Phase 36 S1a (E36-2): without an explicit `impl Drop`, the glue drops fields
+# in declaration order; a generic `impl<T> Drop` declared after the first use
+# still binds. The fixture loop already checks the stdout order; here we pin
+# that each instance owns exactly one drop definition (no duplicate glue).
+if ! "$work/ct-ast" test/ast/226_drop_order/prog.ct -o "$work/p36s1a2.c" \
+        >"$work/p36s1a2.log" 2>&1; then
+    bad "p36 E36-2 (drop order product)" "ct-ast failed: $(head -3 "$work/p36s1a2.log")"
+else
+    if ! "$CC" -o "$work/p36s1a2.bin" "$work/p36s1a2.c" 2>"$work/p36s1a2.cc"; then
+        bad "p36 E36-2 (build)" "$(cat "$work/p36s1a2.cc")"
+    else
+        n="$(nm "$work/p36s1a2.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_int_Drop_drop$/ { c++ } END { print c + 0 }')"
+        if [ "$n" = "1" ]; then
+            ok "p36 E36-2 (Box_int drop: one definition, impl-after-use binds)"
+        else
+            bad "p36 E36-2 (Box_int drop count)" "got $n"
+        fi
+        n="$(nm "$work/p36s1a2.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Pair_Probe_Drop_drop$/ { c++ } END { print c + 0 }')"
+        if [ "$n" = "1" ]; then
+            ok "p36 E36-2 (Pair_Probe glue: one definition)"
+        else
+            bad "p36 E36-2 (Pair_Probe drop count)" "got $n"
+        fi
+    fi
+fi
+
+# Phase 36 S1a (E36-3): a container whose element type has a lifecycle releases
+# each live element. The fixture loop checks that `Vec<Probe>` calls
+# `Probe_release` three times; here we pin that the `Vec<Str>` product binds the
+# element helper to `Str_release` (not a no-op).
+if ! "$work/ct-ast" test/ast/227_vec_element_release/prog.ct -o "$work/p36s1a3.c" \
+        >"$work/p36s1a3.log" 2>&1; then
+    bad "p36 E36-3 (element release product)" "ct-ast failed: $(head -3 "$work/p36s1a3.log")"
+else
+    if grep -q 'Vec_Str__elem_release' "$work/p36s1a3.c" \
+       && grep -q 'Str_release' "$work/p36s1a3.c"; then
+        ok "p36 E36-3 (Vec<Str> element helper calls Str_release)"
+    else
+        bad "p36 E36-3 (Vec<Str> element helper shape)" \
+            "$(grep 'elem_release' "$work/p36s1a3.c" | head -3)"
+    fi
+fi
+
 echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"

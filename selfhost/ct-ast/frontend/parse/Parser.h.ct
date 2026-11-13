@@ -2254,6 +2254,10 @@ impl ParseOps for Parser {
                 snprintf(self->sym->structs[di].tparam[0], MAX_TEXT, "%s", tparam[0]);
                 snprintf(self->sym->structs[di].tparam[1], MAX_TEXT, "%s", tparam[1]);
                 self->sym->structs[di].is_pub = self->decl_pub;
+                /* P36 S2a2: the built-in Drop/Handback flags travel with the
+                   template so consumer units can copy them onto instances. */
+                tps[ti4].uses_drop = self->sym->structs[di].uses_drop;
+                tps[ti4].uses_handback = self->sym->structs[di].uses_handback;
             }
         }
         /* `struct S { … } __attribute__((packed));`: either after the body or,
@@ -3242,6 +3246,26 @@ impl ParseOps for Parser {
                 return self->sup->fail("expected a struct name");
             snprintf(tmpl, sizeof tmpl, "%s", self->lex->toktext);
             self->sup->lex_next();
+            /* P36 S1a: `impl<T> Drop for Box<T>` -- the built-in trait name comes
+               first, then `for`, then the struct and its type arguments. The
+               built-in `Drop`/`Handback` need no trait lookup; everything else
+               must resolve. */
+            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0) {
+                char tname[MAX_TEXT];
+                snprintf(tname, sizeof tname, "%s", tmpl);
+                self->sup->lex_next();
+                if (self->lex->tok != T_ID)
+                    return self->sup->fail("expected a struct name after 'for'");
+                snprintf(tmpl, sizeof tmpl, "%s", self->lex->toktext);
+                self->sup->lex_next();
+                if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0) {
+                    ti = -1;
+                } else {
+                    ti = self->sym->find_trait(tname);
+                    if (ti < 0) return self->sup->fail("impl of an unknown trait");
+                }
+                snprintf(use, sizeof use, "%s", tname);
+            }
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
             self->sup->lex_next();
@@ -3306,7 +3330,7 @@ impl ParseOps for Parser {
             self->sup->lex_next();
         }
         ti = -1;
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
+        if (!use[0] && self->lex->tok == T_ID && strcmp(self->lex->toktext, "use") == 0) {
             self->sup->lex_next();
             if (self->lex->tok != T_ID)
                 return self->sup->fail("expected a trait name after 'use'");
@@ -3314,7 +3338,8 @@ impl ParseOps for Parser {
             if (self->sup->resolve_type(use, ruse, sizeof ruse) != 0) return -1;
             snprintf(use, sizeof use, "%s", ruse);
             ti = self->sym->find_trait(use);
-            if (ti < 0) return self->sup->fail("impl of an unknown trait");
+            if (ti < 0 && strcmp(use, "Drop") != 0 && strcmp(use, "Handback") != 0)
+                return self->sup->fail("impl of an unknown trait");
             self->sup->lex_next();
             /* Phase 35 S5b (D35-6): a template impl may adopt a generic trait
                only in the one-to-one shape `impl<T> MyVec<T> use Iter<T>`. The
@@ -3368,12 +3393,25 @@ impl ParseOps for Parser {
         if (use[0] && self->arena->nodes[node].num >= 0) {
             /* Instances that already exist adopt the trait now; the ones that
                appear later adopt it in `parse_inst_type`. Both fill the use
-               list the vptr field, the initialiser and the dispatch read. */
+               list the vptr field, the initialiser and the dispatch read.
+               P36 S2a: the built-in `Drop`/`Handback` have no vptr, so instead
+               of adopting them we mark the matched instance rows. */
+            int is_builtin = (strcmp(use, "Drop") == 0 || strcmp(use, "Handback") == 0)
+                             && self->sym->find_trait(use) < 0;
             int ii2, nins2;
             struct StructInst *ins2 = frontend::sym::ct_insts(&nins2);
             for (ii2 = 0; ii2 < nins2; ii2++)
-                if (frontend::sym::ct_impl_matches(self->arena->nodes[node].num, ii2))
-                    self->sup->adopt_use(ins2[ii2].name, use);
+                if (frontend::sym::ct_impl_matches(self->arena->nodes[node].num, ii2)) {
+                    if (is_builtin) {
+                        if (strcmp(use, "Drop") == 0) {
+                            int si_d = self->sym->find_struct(ins2[ii2].name);
+                            if (si_d >= 0)
+                                self->sym->structs[si_d].has_drop_impl = 1;
+                        }
+                    } else {
+                        self->sup->adopt_use(ins2[ii2].name, use);
+                    }
+                }
         }
         tail = -1;
         snprintf(self->ex->in_generic_tparam, MAX_TEXT, "%s", tn[0]);

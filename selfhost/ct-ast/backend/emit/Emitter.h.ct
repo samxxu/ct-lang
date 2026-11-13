@@ -1687,20 +1687,26 @@ static int impl_emit_one(struct Emitter *self, int ki, int ii)
         if (impl_emit_method(self, ki, ii, m, 0) != 0) return -1;
     if (im[ki].use[0]) {
         int first = 1;
-        if (self->sym->impl_use_concrete(im[ki].use, ins[ii].nargs,
-                                 ins[ii].carg[0], ins[ii].carg[1],
-                                 ins[ii].ctype[0], ins[ii].ctype[1], -1,
-                                 cuse, sizeof cuse) != 0)
-            return -1;
-        fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
-                cuse, ins[ii].name, cuse);
-        for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
-            if (!first) fputs(",\n", self->out);
-            fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
-                    ins[ii].name, cuse, self->arena->nodes[m].text2);
-            first = 0;
+        int builtin = (strcmp(im[ki].use, "Drop") == 0 || strcmp(im[ki].use, "Handback") == 0)
+                      && self->sym->find_trait(im[ki].use) < 0;
+        /* P36 S1a: the built-in `Drop`/`Handback` have no vptr, no vtable and
+           no vtable type, so a generic impl of them emits only the methods. */
+        if (!builtin) {
+            if (self->sym->impl_use_concrete(im[ki].use, ins[ii].nargs,
+                                     ins[ii].carg[0], ins[ii].carg[1],
+                                     ins[ii].ctype[0], ins[ii].ctype[1], -1,
+                                     cuse, sizeof cuse) != 0)
+                return -1;
+            fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+                    cuse, ins[ii].name, cuse);
+            for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
+                if (!first) fputs(",\n", self->out);
+                fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
+                        ins[ii].name, cuse, self->arena->nodes[m].text2);
+                first = 0;
+            }
+            fputs("\n};\n\n", self->out);
         }
-        fputs("\n};\n\n", self->out);
     }
     return 0;
 }
@@ -1739,35 +1745,64 @@ static int elem_ret_ctype(int inst, const char *text, char *out, int cap)
 /* Phase 31 O3 (S5b): a user element type owns a resource when it declares both
    `retain` (returning its own type) and `release`. The built-in containers
    always qualify. The return-type test keeps an unrelated `retain` from being
-   mistaken for this protocol. */
+   mistaken for this protocol.
+
+   Phase 36 S1a: a plain (non-generic) struct is not in the instance table, so
+   when `ct_inst_find` misses we fall back to the struct row and match inherent
+   impls by their N_IMPL `aux` (the struct row index). Without this,
+   `Vec<Probe>` / `Vec<Str>` would never release their elements. */
 static int elem_has_life(struct Emitter *self, const char *elem)
 {
     char base[MAX_TEXT];
     char want[MAX_TEXT];
     char ret[MAX_TEXT];
-    int inst, k, n, m, got_r, got_rel;
+    int inst, si, k, n, m, got_r, got_rel;
     struct StructImpl *im;
 
     if (frontend::sym::ct_is_container_type(elem)) return 1;
     if (strncmp(elem, "struct ", 7) != 0) return 0;
     snprintf(base, sizeof base, "%s", elem + 7);
-    inst = frontend::sym::ct_inst_find(base);
-    if (inst < 0) return 0;
     snprintf(want, sizeof want, "struct %s", base);
     im = frontend::sym::ct_impls(&n);
+    inst = frontend::sym::ct_inst_find(base);
+    if (inst >= 0) {
+        got_r = 0;
+        got_rel = 0;
+        for (k = 0; im && k < n; k++) {
+            if (im[k].use[0]) continue;
+            if (!frontend::sym::ct_impl_matches(k, inst)) continue;
+            for (m = self->arena->nodes[im[k].node].a; m >= 0;
+                 m = self->arena->nodes[m].next) {
+                if (strcmp(self->arena->nodes[m].text2, "release") == 0) got_rel = 1;
+                if (strcmp(self->arena->nodes[m].text2, "retain") == 0
+                    && self->arena->nodes[m].text[0]
+                    && elem_ret_ctype(inst, self->arena->nodes[m].text,
+                                      ret, sizeof ret)
+                    && strcmp(ret, want) == 0)
+                    got_r = 1;
+            }
+            if (got_r && got_rel) return 1;
+        }
+        return 0;
+    }
+    /* Plain struct: inherent impls are N_IMPL nodes in the arena (they are not
+       registered in the global ct_impls table, which only holds generic
+       impls). Walk the arena for N_IMPL nodes whose aux is this struct row. */
+    si = self->sym->find_struct(base);
+    if (si < 0) return 0;
     got_r = 0;
     got_rel = 0;
-    for (k = 0; im && k < n; k++) {
-        if (im[k].use[0]) continue;
-        if (!frontend::sym::ct_impl_matches(k, inst)) continue;
-        for (m = self->arena->nodes[im[k].node].a; m >= 0;
+    for (k = 0; k < self->arena->nnode; k++) {
+        if (self->arena->nodes[k].kind != N_IMPL) continue;
+        if (self->arena->nodes[k].aux != si) continue;
+        if (self->arena->nodes[k].text2[0]) continue;  /* trait impl */
+        for (m = self->arena->nodes[k].a; m >= 0;
              m = self->arena->nodes[m].next) {
             if (strcmp(self->arena->nodes[m].text2, "release") == 0) got_rel = 1;
             if (strcmp(self->arena->nodes[m].text2, "retain") == 0
                 && self->arena->nodes[m].text[0]
-                && elem_ret_ctype(inst, self->arena->nodes[m].text,
-                                  ret, sizeof ret)
-                && strcmp(ret, want) == 0)
+                && (strcmp(self->arena->nodes[m].text, base) == 0
+                    || strcmp(self->arena->nodes[m].text, want) == 0))
                 got_r = 1;
         }
         if (got_r && got_rel) return 1;
@@ -1866,6 +1901,43 @@ static int inst_writes_helpers(struct Emitter *self, int u, int ii)
     return ins[ii].owner == u;
 }
 
+/* Phase 36 S1a: forward-declare a plain-struct element's retain/release so the
+   elem helpers (emitted before the inherent method bodies) compile. The return
+   type is read straight off the method node, the same spelling the definition
+   uses. */
+static int inst_emit_elem_method_protos(struct Emitter *self, const char *elem)
+{
+    char base[MAX_TEXT];
+    char want[MAX_TEXT];
+    int si, k, m;
+
+    if (frontend::sym::ct_is_container_type(elem)) return 0;
+    if (strncmp(elem, "struct ", 7) != 0) return 0;
+    snprintf(base, sizeof base, "%s", elem + 7);
+    si = self->sym->find_struct(base);
+    if (si < 0) return 0;
+    snprintf(want, sizeof want, "struct %s", base);
+    for (k = 0; k < self->arena->nnode; k++) {
+        if (self->arena->nodes[k].kind != N_IMPL) continue;
+        if (self->arena->nodes[k].aux != si) continue;
+        if (self->arena->nodes[k].text2[0]) continue;
+        for (m = self->arena->nodes[k].a; m >= 0; m = self->arena->nodes[m].next) {
+            const char *mname = self->arena->nodes[m].text2;
+            const char *rtype;
+            if (strcmp(mname, "retain") != 0 && strcmp(mname, "release") != 0)
+                continue;
+            rtype = self->arena->nodes[m].text[0]
+                    ? self->arena->nodes[m].text : "void";
+            /* Match the definition's linkage: private structs emit static
+               methods, pub structs emit external-linkage ones. */
+            if (!self->decl_is_pub(N_STRUCT, base))
+                fputs("static ", self->out);
+            fprintf(self->out, "%s %s_%s(%s *);\n", rtype, base, mname, want);
+        }
+    }
+    return 0;
+}
+
 /* Phase 31 O3: the definitions live after the instance methods, so a prototype
    pair must precede every body that calls them (compile mode has no header). */
 static int inst_emit_elem_protos(struct Emitter *self, int ii)
@@ -1879,6 +1951,11 @@ static int inst_emit_elem_protos(struct Emitter *self, int ii)
     if (strcmp(ins[ii].tmpl, "Vec") == 0) elem = ins[ii].ctype[0];
     else if (strcmp(ins[ii].tmpl, "Map") == 0) elem = ins[ii].ctype[1];
     else return 0;
+    /* Phase 36 S1a: a plain-struct element's retain/release are inherent
+       methods emitted after the elem helpers, so forward-declare them.
+       Container elements get their methods from the instance impls above. */
+    if (elem_has_life(self, elem) && inst_emit_elem_method_protos(self, elem) != 0)
+        return -1;
     fprintf(self->out, "static void %s__elem_retain(%s *e);\n",
             ins[ii].name, elem);
     fprintf(self->out, "static void %s__elem_release(%s *e);\n",
@@ -2326,7 +2403,7 @@ impl EmitOps for Emitter {
         }
         /* a `delete` in a function body runs before the drop definition below */
         for (si = 0; si < self->sym->nstructs; si++)
-            if (self->sym->structs[si].uses_drop)
+            if (self->sym->structs[si].uses_drop && !self->sym->structs[si].is_template)
                 fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
                         self->sym->structs[si].name);
         /* a `borrow` release runs before the handback definition below */
@@ -2808,9 +2885,14 @@ impl EmitOps for Emitter {
         for (si = 0; si < self->sym->nstructs; si++) {
             int has = 0, fi, used = 0;
             if (!self->sym->structs[si].uses_drop) continue;
-            for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-                if (self->arena->nodes[n].kind == N_IMPL && self->arena->nodes[n].aux == si
-                    && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
+            /* P36 S2a2: a template row (`struct Box<T>`) has no concrete C type,
+               so no glue is emitted for it; instances carry the flag instead. */
+            if (self->sym->structs[si].is_template) continue;
+            has = self->sym->structs[si].has_drop_impl;
+            if (!has)
+                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+                    if (self->arena->nodes[n].kind == N_IMPL && self->arena->nodes[n].aux == si
+                        && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
             if (has) continue;
             fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n",
                     self->sym->structs[si].name);

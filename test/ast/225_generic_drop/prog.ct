@@ -1,0 +1,28 @@
+// E36-1 (P36): an explicit `impl<T> Drop for Box<T>` is instantiated per
+// concrete type and produces one `<S>_Drop_drop` definition per instance, no
+// template `Box_Drop_drop` and no vtable. The explicit body takes full
+// responsibility and the field glue does not run.
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box<T> { T value; } use Drop;
+
+impl<T> Drop for Box<T> {
+    void drop() {
+        // explicit: no field glue is generated for Box<T>
+    }
+}
+
+int main(void)
+{
+    own Box<int> *a = malloc(sizeof(struct Box_int));
+    a->value = 42;
+    own Box<Str> *b = malloc(sizeof(struct Box_Str));
+    b->value.data = malloc(1);
+    b->value.data[0] = 0;
+    b->value.len = 0;
+    delete a;
+    delete b;
+    printf("ok %d\n", a == 0);
+    return 0;
+}

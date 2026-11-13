@@ -1,0 +1,26 @@
+// E36-3 (P36): a container whose element type has a lifecycle (retain +
+// release) releases each live element on `release()`. `Vec<Probe>` with three
+// elements calls `Probe_release` three times; the generated C for `Vec<Str>`
+// binds the element helper to `Str_release`.
+#include <stdio.h>
+
+struct Probe { int id; }
+impl Probe {
+    Probe retain() { return *self; }
+    void release() { printf("release %d\n", self->id); }
+}
+
+int main(void)
+{
+    Probe a; a.id = 1;
+    Probe b; b.id = 2;
+    Probe c; c.id = 3;
+    Vec<Probe> v = {a, b, c};
+    v.release();
+
+    Str s = str_from("hi");
+    Vec<Str> vs = {s};
+    vs.release();
+    printf("done\n");
+    return 0;
+}

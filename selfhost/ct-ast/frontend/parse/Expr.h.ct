@@ -2344,6 +2344,10 @@ impl ExprOps for Expr {
         self->sym->structs[si2].defined = 1;
         self->sym->structs[si2].is_pub = tp[ti2].is_pub;
         self->sym->structs[si2].declared_here = carried2;
+        /* P36 S2a2: the built-in `Drop`/`Handback` flags copy with the template;
+           the glue loop skips templates and reads these flags on instances. */
+        self->sym->structs[si2].uses_drop = tp[ti2].uses_drop;
+        self->sym->structs[si2].uses_handback = tp[ti2].uses_handback;
         /* a `use` clause on a template impl adopts the trait for every matching
            instance, whichever was written first */
         {
@@ -2351,14 +2355,24 @@ impl ExprOps for Expr {
             struct StructImpl *im3 = frontend::sym::ct_impls(&nimpls3);
             for (ii3 = 0; im3 && ii3 < nimpls3; ii3++)
                 if (im3[ii3].use[0] && frontend::sym::ct_impl_matches(ii3, k)) {
+                    int is_builtin = (strcmp(im3[ii3].use, "Drop") == 0
+                                      || strcmp(im3[ii3].use, "Handback") == 0)
+                                     && self->sym->find_trait(im3[ii3].use) < 0;
                     /* Phase 35 S5a: `use Iter<T>` becomes the instance row this
                        struct's argument names (`Iter_int`). */
                     char cuse[MAX_TEXT];
-                    if (self->sym->impl_use_concrete(im3[ii3].use,
+                    if (is_builtin) {
+                        if (strcmp(im3[ii3].use, "Drop") == 0)
+                            self->sym->structs[si2].has_drop_impl = 1;
+                        /* Handback has no vptr either; the flag is read by the
+                           prototype emission like for non-generic impls. */
+                    } else if (self->sym->impl_use_concrete(im3[ii3].use,
                             nargs, a1, a2, c1, c2, self->cur_unit,
-                            cuse, sizeof cuse) != 0)
+                            cuse, sizeof cuse) != 0) {
                         return self->sup->fail("type is too long");
-                    self->sup->adopt_use(enc, cuse);
+                    } else {
+                        self->sup->adopt_use(enc, cuse);
+                    }
                 }
         }
         if (self->sup->add_type(enc, 1) != 0) return -1;

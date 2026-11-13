@@ -249,6 +249,7 @@ pub struct StructDef {
     int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
     int  uses_handback;         /* built-in `Handback`: no vptr, no vtable, `borrow` calls it */
     int  has_handback_impl;     /* this unit parsed `impl Handback for S` */
+    int  has_drop_impl;         /* P36 S2a: parsed an `impl Drop` (incl. generic) */
     /* Phase 29: a generic struct template (`struct Stack<T>`) emits no C of its
        own; every `(template, type arguments)` pair gets one instance row whose
        fields are the template's with `T`/`U` replaced. `is_inst` marks that row,
@@ -372,6 +373,8 @@ pub struct StructTmpl {
     int  nfields;
     char use[64][160];
     int  nuse;
+    int  uses_drop;              /* P36 S2a2: built-in Drop flag, copied to instances */
+    int  uses_handback;          /* P36 S2a2: built-in Handback flag, copied to instances */
     int  is_pub;
     int  owner;                 /* unit index; -1 outside `build` */
     char path[1024];
@@ -900,6 +903,7 @@ impl SymbolOps for Symbols {
         self->structs[self->nstructs].uses_drop = 0;
         self->structs[self->nstructs].uses_handback = 0;
         self->structs[self->nstructs].has_handback_impl = 0;
+        self->structs[self->nstructs].has_drop_impl = 0;
         self->structs[self->nstructs].ntparams = 0;
         self->structs[self->nstructs].tparam[0][0] = 0;
         self->structs[self->nstructs].tparam[1][0] = 0;
@@ -1733,6 +1737,8 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
     snprintf(t[n].bound[1], MAX_TEXT, "%s", b2);
     t[n].nfields = 0;
     t[n].nuse = 0;
+    t[n].uses_drop = 0;
+    t[n].uses_handback = 0;
     t[n].is_pub = is_pub;
     t[n].owner = owner;
     snprintf(t[n].path, 1024, "%s", path);
