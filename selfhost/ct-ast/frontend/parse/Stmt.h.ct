@@ -108,6 +108,7 @@ pub trait StmtOps {
     int  parse_block(void);
     int  defer_ahead(void);
     int  err_ahead(void);
+    int  errdefer_ahead(void);
     int  defer_add(int node);
     int  defer_active_depth(void);
     int  defer_mark_block(void);
@@ -194,10 +195,12 @@ pub struct Stmt {
        `defer_add` appends at parse time, and the exits materialise wrappers.
        `in_defer` rejects control transfer inside a defer body. */
     int  in_defer;
+    int  in_errdefer;
     int  ndefer_blocks;
     int  defer_head[256];
     int  defer_tail[256];
     int  defer_ids[257];
+    int  defer_block_err[256];
     int  ndefer_next_id;
     int  defer_break_base[256];
     int  defer_cont_base[256];
@@ -1390,6 +1393,19 @@ impl StmtOps for Stmt {
         return *p == ':' && p[1] != ':';
     }
 
+    /* Phase 40 R2: `errdefer` is a keyword only when followed by `{`; the
+       same D38-7 boundary as defer keeps it an ordinary identifier otherwise. */
+    int errdefer_ahead(void)
+    {
+        const char *p;
+        (void)self;
+        if (self->lex->tok != T_ID) return 0;
+        if (strcmp(self->lex->toktext, "errdefer") != 0) return 0;
+        p = self->lex->src + self->lex->tokstart + 8;
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        return *p == '{';
+    }
+
     int defer_active_depth(void)
     {
         int i, n;
@@ -1570,6 +1586,7 @@ impl StmtOps for Stmt {
         }
         self->defer_head[self->ndefer_blocks] = -1;
         self->defer_tail[self->ndefer_blocks] = -1;
+        self->defer_block_err[self->ndefer_blocks] = 0;
         self->ndefer_next_id = self->ndefer_next_id + 1;
         self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
         self->ndefer_blocks = self->ndefer_blocks + 1;
@@ -1666,6 +1683,45 @@ impl StmtOps for Stmt {
             if (self->sup->expect(";") != 0) return -1;
             return s;
         }
+        /* Phase 40 R2: errdefer is a conditional defer. It shares the single
+           block stack; the on_error marker is on the N_DEFER node. */
+        if (self->errdefer_ahead()) {
+            int eline = self->lex->tokline;
+            int ecol = self->lex->tokstart - self->lex->lstart + 1;
+            int body;
+            if (self->in_defer || self->in_errdefer)
+                return tool::diag::ct_sem_error(eline, ecol,
+                    "an errdefer block cannot transfer control", self->mem->path);
+            if (self->switch_depth > 0)
+                return tool::diag::ct_sem_error(eline, ecol,
+                    "errdefer is not allowed here", self->mem->path);
+            {
+                size_t pl = strlen(self->mem->path);
+                if (pl > 5 && strcmp(self->mem->path + pl - 5, ".h.ct") == 0)
+                    return tool::diag::ct_sem_error(eline, ecol,
+                        "errdefer is not allowed here", self->mem->path);
+            }
+            if (self->ndefer_blocks == 0)
+                return tool::diag::ct_sem_error(eline, ecol,
+                    "errdefer is not allowed here", self->mem->path);
+            s = self->sup->new_node(N_DEFER);
+            if (s < 0) return -1;
+            self->arena->nodes[s].line = eline;
+            self->arena->nodes[s].aux = 1;   /* on_error */
+            self->sup->lex_next();
+            self->in_defer = 1;
+            self->in_errdefer = 1;
+            body = self->parse_block();
+            self->in_defer = 0;
+            self->in_errdefer = 0;
+            if (body < 0) return -1;
+            self->arena->nodes[s].a = body;
+            if (self->defer_add(s) != 0) return -1;
+            self->defer_block_err[self->ndefer_blocks - 1] = 1;
+            s = self->sup->new_node(N_EMPTY);
+            if (s < 0) return -1;
+            return s;
+        }
         /* Phase 38: `defer { … }` at statement position. The body is parsed as
            an ordinary block; a nested defer or a control transfer inside it is
            rejected here, before any code is emitted. */
@@ -1673,6 +1729,9 @@ impl StmtOps for Stmt {
             int dline = self->lex->tokline;
             int dcol = self->lex->tokstart - self->lex->lstart + 1;
             int body;
+            if (self->in_errdefer)
+                return tool::diag::ct_sem_error(dline, dcol,
+                    "an errdefer block cannot transfer control", self->mem->path);
             if (self->in_defer)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "a defer block cannot transfer control", self->mem->path);
@@ -1715,6 +1774,9 @@ impl StmtOps for Stmt {
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
             int rline = self->lex->tokline, rcol = self->lex->tokstart - self->lex->lstart + 1, at_start = 1, rp, cond;
             int eline = 0, ecol = 0, is_err = 0;
+            if (self->in_errdefer)
+                return tool::diag::ct_sem_error(rline, rcol,
+                    "an errdefer block cannot transfer control", self->mem->path);
             if (self->in_defer)
                 return tool::diag::ct_sem_error(rline, rcol,
                     "a defer block cannot transfer control", self->mem->path);
@@ -1882,6 +1944,9 @@ impl StmtOps for Stmt {
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "break") == 0) {
             int bcol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->in_errdefer)
+                return tool::diag::ct_sem_error(self->lex->tokline, bcol,
+                    "an errdefer block cannot transfer control", self->mem->path);
             if (self->in_defer)
                 return tool::diag::ct_sem_error(self->lex->tokline, bcol,
                     "a defer block cannot transfer control", self->mem->path);
@@ -1908,6 +1973,9 @@ impl StmtOps for Stmt {
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
             int ccol = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->in_errdefer)
+                return tool::diag::ct_sem_error(self->lex->tokline, ccol,
+                    "an errdefer block cannot transfer control", self->mem->path);
             if (self->in_defer)
                 return tool::diag::ct_sem_error(self->lex->tokline, ccol,
                     "a defer block cannot transfer control", self->mem->path);
@@ -2128,6 +2196,10 @@ impl StmtOps for Stmt {
         }
         if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0) {
             int own_line = self->lex->tokline;
+            if (self->in_errdefer)
+                return tool::diag::ct_sem_error(own_line,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "an own object cannot be rolled back by errdefer", self->mem->path);
             if (self->switch_depth > 0) return self->sup->fail("own is not supported inside a switch");
             self->sup->lex_next();
             s = self->parse_decl_node();
@@ -2248,6 +2320,7 @@ impl StmtOps for Stmt {
         }
         self->defer_head[self->ndefer_blocks] = -1;
         self->defer_tail[self->ndefer_blocks] = -1;
+        self->defer_block_err[self->ndefer_blocks] = 0;
         self->ndefer_next_id = self->ndefer_next_id + 1;
         self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
         self->ndefer_blocks = self->ndefer_blocks + 1;
@@ -2316,6 +2389,7 @@ impl StmtOps for Stmt {
         }
         self->defer_head[self->ndefer_blocks] = -1;
         self->defer_tail[self->ndefer_blocks] = -1;
+        self->defer_block_err[self->ndefer_blocks] = 0;
         self->ndefer_next_id = self->ndefer_next_id + 1;
         self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
         self->ndefer_blocks = self->ndefer_blocks + 1;
@@ -3157,6 +3231,10 @@ impl StmtOps for Stmt {
         char name[MAX_TEXT];
         (void)self;
 
+        if (self->in_errdefer)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1,
+                "an errdefer block cannot transfer control", self->mem->path);
         if (self->in_defer)
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
@@ -3191,6 +3269,7 @@ impl StmtOps for Stmt {
         self->ndefer_blocks = 0;
         self->ndefer_next_id = 0;
         self->in_defer = 0;
+        self->in_errdefer = 0;
         return 0;
     }
 
@@ -3217,13 +3296,25 @@ impl StmtOps for Stmt {
             while (k < gd && k < ld
                    && self->goto_path[i][k] == self->label_path[li][k]) k++;
             for (j = k; j < gd; j++)
-                if (self->goto_path_has[i][j])
+                if (self->goto_path_has[i][j]) {
+                    int b, has_err = 0;
+                    for (b = 0; b < 256; b++)
+                        if (self->defer_ids[b] == self->goto_path[i][j])
+                            has_err = self->defer_block_err[b];
                     return self->sup->fail_at(self->goto_lines[i],
-                        "a goto cannot cross a block with defer");
+                        has_err ? "a goto cannot cross a block with errdefer"
+                                : "a goto cannot cross a block with defer");
+                }
             for (j = k; j < ld; j++)
-                if (self->label_path_has[li][j])
+                if (self->label_path_has[li][j]) {
+                    int b, has_err = 0;
+                    for (b = 0; b < 256; b++)
+                        if (self->defer_ids[b] == self->label_path[li][j])
+                            has_err = self->defer_block_err[b];
                     return self->sup->fail_at(self->goto_lines[i],
-                        "a goto cannot cross a block with defer");
+                        has_err ? "a goto cannot cross a block with errdefer"
+                                : "a goto cannot cross a block with defer");
+                }
         }
         return 0;
     }
