@@ -284,14 +284,14 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 需求池=未建；技术池=未建；评审=未建；phase 对话=未建（本仓库当前为单会话工作，未按主规范 9.3 命名） |
-| 任务-对话映射 | 缺失：`docs/session-map.md` 不存在 |
-| 门禁入口 | `tools/check.sh` 缺失；现行入口为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（文档链接 + G9） |
-| 文档 snippet | 缺失：无 `docs/snippets/`，文档代码块未由 snippet 渲染，G4 未接通 |
+| 对话清单 | 单会话（lead）；三类常驻对话未建，按 `deviation: single-session-workflow`；phase 对话=PH-37 |
+| 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（已建；单会话，见 deviation） |
+| 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
+| 文档 snippet | 缺失：无 `docs/snippets/`，G4 未接通 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
-| 决策记录 | 缺失：无 `docs/decisions/`；现行决策写在 `docs/design/*.md`，用 `D<phase>-<n>` 编号 |
-| 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`（当前均 `0.36.0`）；另 `README.md` 首行徽标、`docs/README.md`「当前版本」、`AGENTS.md`「当前版本」行、`docs/history/phase-log.md` 版本记录 |
-| 偏离项 | 见 0.3（`version-minor-offset`） |
+| 决策记录 | 缺失：无 `docs/decisions/`；现写在 `docs/design/*.md`（`D<phase>-<n>`） |
+| 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` 首行徽标、`docs/README.md`「当前版本」、`AGENTS.md`「当前版本」行、`docs/history/phase-log.md` 版本记录 |
+| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`） |
 
 #### 0.2 话术路由
 
@@ -310,10 +310,19 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 
     日期: 2026-11-12
     条款: §6.7 V-1
-    现状: 产品版本 v0.36.0（`README.md`、`docs/README.md`、五处 `CTC_VERSION` 一致），PH-36 已收口，MINOR 已等于 phase（36 == 36），偏移 d = 0。Phase 27–29 未逐相 bump，属 V-1「在途 phase 不追溯」。
-    理由: 历史 tag 已发布且不可回改；Phase 27–29 在 v0.30.0 一次性合并发布，重新编号会产生跳号与 CHANGELOG 空段，且该段属 V-1「在途 phase 不追溯」。
+    现状: v0.36.0 五处一致；PH-36 已收口，MINOR=phase=36，d=0。Phase 27–29 属 V-1 在途不追溯。
+    理由: 历史 tag 不可回改；Phase 27–29 在 v0.30.0 合并发布，重编号会跳号并留 CHANGELOG 空段。
     收敛: 无需补偿；每个 phase 收口时 MINOR = PH-<n>。
     签字: 用户已批准（2026-11-12）
+
+`deviation: single-session-workflow`
+
+    日期: 2026-11-13
+    条款: §9.1 / §9.3 / G0 `g0-landing`
+    现状: 单会话；三类常驻对话未建，phase 对话未按 9.3 命名。
+    理由: 单人项目 + DSH 单会话；拆三个会话无协作收益且丢失上下文。
+    收敛: 多人协作或 1.0 前按 9.3 建三类会话并回填 session-map。
+    签字: 用户已批准（2026-11-13，本轮指示）
 
 #### 0.4 文档语言（项目加严）
 
@@ -330,8 +339,8 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | --- | --- |
 | roadmap 只做索引 | `docs/roadmap.md` 只放阶段号、主题一句话、状态、收口版本、详情链接；不写逐相叙述、出口证据、决策全文 |
 | 详细记录 | 逐相细节、版本记录、已定决策、待定项在 `docs/history/phase-log.md`；roadmap 不得复制其正文 |
-| 新增/更新 phase | roadmap 加一行；详情写流水账；设计卡仍放 `docs/design/phase<NN>-draft.md`；两处同步但不得重复 |
-| 判据 | roadmap 的单行单元格不得出现多段叙述；`docs/README.md` 与 `docs/history/README.md` 均有流水账入口 |
+| 新增/更新 phase | roadmap 加一行；详情写流水账；两处同步但不得重复 |
+| 判据 | roadmap 单元格不得多段叙述；`docs/README.md` 与 `docs/history/README.md` 均有入口 |
 
 ### 1. 项目画像
 
