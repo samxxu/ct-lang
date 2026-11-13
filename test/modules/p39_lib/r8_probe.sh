@@ -32,7 +32,7 @@ fail=0
 run_one split test/modules/split/main.ct || fail=1
 run_one p34_pub_generic test/modules/p34_pub_generic/main.ct || fail=1
 run_one ns_dir --ns-root test/modules/ns_dir/src test/modules/ns_dir/src/main.ct test/modules/ns_dir/src/plain/extra.h.ct || fail=1
-sort -o "$actual" "$actual"
+LC_ALL=C sort -o "$actual" "$actual"
 if [ "${WRITE:-0}" = "1" ]; then
     cp "$actual" "$base"
     echo "wrote $base"
