@@ -994,9 +994,9 @@ if "$work/ct-ast" build --emit-c "$work/cache-src/main.ct" -o "$mod-cache-a" \
     else
         bad "p34_cache_header" "$hdr_bad"
     fi
-    before="$(stat -f %m "$work/cache-src/lib.h.ct")"
+    before="$(stat -c %Y "$work/cache-src/lib.h.ct" 2>/dev/null || stat -f %m "$work/cache-src/lib.h.ct")"
     touch -m -t 203001010000 "$work/cache-src/lib.h.ct"
-    after="$(stat -f %m "$work/cache-src/lib.h.ct")"
+    after="$(stat -c %Y "$work/cache-src/lib.h.ct" 2>/dev/null || stat -f %m "$work/cache-src/lib.h.ct")"
     if [ "$before" != "$after" ]; then
         ok "p34_cache_mtime (touch moved the source stamp)"
     else

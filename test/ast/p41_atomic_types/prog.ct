@@ -3,7 +3,7 @@ int main(void)
 {
     atomic int i = 0;
     atomic long l = 1;
-    atomic void *slot = 0;
+    atomic void *slot = (void *)0;
     atomic bool ready = 0;
     atomic int *p = &i;
     *p = 2;

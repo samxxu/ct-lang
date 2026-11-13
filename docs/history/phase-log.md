@@ -141,6 +141,7 @@
 | v0.40.1 | PH-40 评审修复（SH-68，2026-11-13） | 修尾随清理嵌套守卫/标志恢复、range `$` 与尾随别名冲突、`case` 后 return err 的 C99 合法性、`$` shadow、own shadow 误报、`.h.ct`/switch 尾随绕过；补 review 夹具/文档/grammar；check-ast 1350/0、check-warnings 607/0；PATCH fix，不新建 tag。 |
 | v0.41.0 | Phase 41 原子并发能力（2026-11-13） | `atomic int/long/bool/void *` → `_Atomic(T)`；`ct_atomic_load/store/cas`（seq_cst）；12 个 static inline 运行头；C11 构建；L41 诊断；pthread 取消/引用计数；TSan nightly；tmLanguage/grammar；`CTC_VERSION` 五处同步到 `0.41.0`；72 个 golden/expected 仅版本 token 变化；check-ast 1357/0、check-warnings 614/0、test/run 154、docs 985/220、grammar 169/0；tag `v0.41.0`。 |
 | v0.42.0 | Phase 42 impl 方法可见性（2026-11-14） | 方法级 `pub`（默认私有）；私有方法不进 `.h` + `static` + 跨单元 L42-4/5；52 条迁移；trait impl/`pub impl` 硬错；L42-1–7；check-ast 1361/0、check-warnings 614/0、test/run 154、docs 987/220、grammar 169/0；tag `v0.42.0`。 |
+| v0.42.1 | CI 可移植性修复（2026-11-14） | `_POSIX_C_SOURCE` 暴露 `setenv`；空 label 后补 `;`；`-Wrestrict` 临时量；示例 32 的 `%p` 改为 null 判定；p41 指针初值 `(void *)0`；shim 宏去逗号告警；`stat -c/-f` 兼容；check-all 在 Ubuntu GCC/clang 与 Alpine musl 下绿。 |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。
 

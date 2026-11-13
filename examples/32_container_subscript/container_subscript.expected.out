@@ -8,5 +8,5 @@ g.get(0).len() = 2
 b.mv()[0] = 9
 v[9] = 0
 *m["k"] = 7
-m["missing"] = 0x0
+m["missing"] = null
 after *m[k] = 42: 42

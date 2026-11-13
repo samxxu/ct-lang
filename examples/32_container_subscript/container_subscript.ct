@@ -81,7 +81,7 @@ int main(void)
     void *missing = m["missing"];
     printf("v[9] = %d\n", oob);
     printf("*m[\"k\"] = %d\n", mkval);
-    printf("m[\"missing\"] = %p\n", missing);
+    printf("m[\"missing\"] = %s\n", missing == 0 ? "null" : "non-null");
 
     /* writing through the Map get pointer is the existing get() semantics. */
     *m["k"] = 42;

@@ -3781,6 +3781,11 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_LABEL) {
             self->emit_indent(ind);
             fprintf(self->out, "%s:\n", self->arena->nodes[n].text2);
+            /* C99 forbids a label at the end of a compound statement. A
+               statement after the label is always legal, and an empty one is
+               harmless when the label already owns statements. */
+            self->emit_indent(ind + 1);
+            fputs(";\n", self->out);
             for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
                 if (self->emit_node(c, ind + 1) != 0) return -1;
             return 0;
@@ -5352,9 +5357,10 @@ impl EmitOps for Emitter {
         for (i = 0; i < ns; i++)
             for (j = i + 1; j < ns; j++)
                 if (strcmp(fwd[i], fwd[j]) > 0) {
-                    char tmp[MAX_TEXT];
+                    char tmp[MAX_TEXT], tmp2[MAX_TEXT];
                     snprintf(tmp, sizeof tmp, "%s", fwd[i]);
-                    snprintf(fwd[i], sizeof fwd[i], "%s", fwd[j]);
+                    snprintf(tmp2, sizeof tmp2, "%s", fwd[j]);
+                    snprintf(fwd[i], sizeof fwd[i], "%s", tmp2);
                     snprintf(fwd[j], sizeof fwd[j], "%s", tmp);
                 }
         for (i = 0; i < ns; i++) fprintf(f, "struct %s;\n", fwd[i]);

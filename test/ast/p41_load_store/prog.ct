@@ -4,7 +4,7 @@ int main(void)
     atomic int i = 0;
     atomic long l = 0;
     atomic bool b = 0;
-    atomic void *slot = 0;
+    atomic void *slot = (void *)0;
     atomic int *p = &i;
     ct_atomic_store(&i, 7);
     ct_atomic_store(p, 8);
