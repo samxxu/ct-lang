@@ -3674,6 +3674,13 @@ else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi
 
+# Phase 40 R6: docs/example/editor discoverability.
+if grep -Fq 'errdefer' docs/language-spec.md    && grep -Fq 'errdefer' docs/tutorial.md    && [ -f examples/43_errdefer/prog.expected.out ]; then
+    ok "p40 docs"
+else
+    bad "p40 docs" "missing errdefer docs or examples/43_errdefer"
+fi
+
 # Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
 if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
     ok "p37 runtime guard"

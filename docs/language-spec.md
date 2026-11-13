@@ -2248,3 +2248,11 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **可见性**：`--lib` 下非 `pub` 顶层函数/全局发 `static`；根导出定义前恰一个 `__attribute__((visibility("default")))`；中间对象以 `-fvisibility=hidden` 编译。
 - **契约边界**：归档 `nm -g` 面可能大于导出面（内建 `Str_*`、vtable 等内部符号）；**只有 `.abi.h` 的声明是 ABI**。归档确定性由 `ar rcsD` / `ZERO_AR_DATE=1 ar rcs` 回退保证。
 
+### 4.58 `errdefer`、`err:` 错误出口与尾随声明（Phase 40，仅 ct-ast）
+
+- **错误出口**：`return err: expr;` / `return err:;`（仅 void）/ `break err:;` / `continue err:;`。`err:` 只在 `return` / `break` / `continue` 之后识别；其它位置 `err` 仍是普通标识符。非 void 写 `return err:;` 报 `an error return needs a value`（L40-1），void 写值报 `a void function cannot return a value`（L40-2），循环外报 L40-3，`switch` 内 `break err:` 报 L40-4。
+- **errdefer**：`errdefer { … }` 与 `defer` 共用同一条块栈；条目带 `on_error`，只在错误出口执行。普通 `return` / `break` / `continue` / 落出只跑 `defer`，丢弃 `errdefer`。`return err` 跑函数内全部活跃条目，`break err` / `continue err` 只跑退出到的那层块；单栈 LIFO（不按种类分段）。
+- **边界**：`switch`、`.h.ct`、文件作用域禁止 errdefer（L40-5）；errdefer 内禁止控制转移和嵌套 `defer` / `errdefer`（L40-6）；`own` 变量出现在 errdefer 或 errdefer 内声明 `own` 都报 L40-7；`goto` 跨带 errdefer 的块报 L40-8。
+- **尾随声明**：`Type name = expr defer { … };` / `errdefer { … };` 只允许单声明符；`$` 是 `name` 的只读别名，块内可直接写名字。赋值形式、多声明符、`for` 初始化报 L40-9；`$` 出现在尾随块外或对 `$` 赋值报 L40-10。尾随块在初始值之后注册，初始值可能失败时由作者在块内 guard（如 `if ($) …`）。
+- **不做**：`Result` / `?` / 异常、`goto err:`、错误传播、函数级错误标志、赋值形式尾随、多声明符尾随（开放项 T40-1…T40-5）。
+
