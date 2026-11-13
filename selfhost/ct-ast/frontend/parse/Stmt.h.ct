@@ -110,6 +110,8 @@ pub trait StmtOps {
     int  err_ahead(void);
     int  errdefer_ahead(void);
     int  errdefer_own_refs(int n);
+    int  parse_trailing_defer(int decl);
+    int  trailing_alias(int n, const char *name);
     int  defer_add(int node);
     int  defer_active_depth(void);
     int  defer_mark_block(void);
@@ -1433,6 +1435,65 @@ impl StmtOps for Stmt {
         return 0;
     }
 
+    /* Phase 40 R5: rewrite `$` to the declared name inside a trailing block;
+       an assignment to `$` is rejected before the rewrite. */
+    int trailing_alias(int n, const char *name)
+    {
+        for (; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind == N_VAR
+                && strcmp(self->arena->nodes[n].text2, "$") == 0) {
+                snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
+            }
+            if (self->arena->nodes[n].kind == N_ASSIGN
+                && self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
+                && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "$") == 0)
+                return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
+                    "'$' is read-only and only valid in the trailing block",
+                    self->mem->path);
+            if (self->trailing_alias(self->arena->nodes[n].a, name) != 0) return -1;
+            if (self->trailing_alias(self->arena->nodes[n].b, name) != 0) return -1;
+            if (self->trailing_alias(self->arena->nodes[n].c, name) != 0) return -1;
+            if (self->trailing_alias(self->arena->nodes[n].d, name) != 0) return -1;
+        }
+        return 0;
+    }
+
+    /* Phase 40 R5: `Type name = expr defer/errdefer { … };`. The block is
+       registered after the declaration initialiser, so it sees the variable. */
+    int parse_trailing_defer(int decl)
+    {
+        int d, body, is_err;
+        is_err = self->errdefer_ahead();
+        if (!is_err && !self->defer_ahead()) return 0;
+        if (self->arena->nodes[decl].kind == N_DECLS)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1,
+                "a trailing defer needs a single declaration", self->mem->path);
+        d = self->sup->new_node(N_DEFER);
+        if (d < 0) return -1;
+        self->arena->nodes[d].line = self->lex->tokline;
+        self->arena->nodes[d].aux = is_err ? 1 : 0;
+        self->sup->lex_next();
+        {
+            int save_dollar = self->ex->dollar_ok;
+            self->in_defer = 1;
+            self->in_errdefer = is_err;
+            self->ex->dollar_ok = 1;
+            body = self->parse_block();
+            self->ex->dollar_ok = save_dollar;
+            self->in_defer = 0;
+            self->in_errdefer = 0;
+        }
+        if (body < 0) return -1;
+        if (self->trailing_alias(body, self->arena->nodes[decl].text2) != 0) return -1;
+        if (is_err && self->errdefer_own_refs(body) != 0) return -1;
+        self->arena->nodes[d].a = body;
+        if (self->defer_add(d) != 0) return -1;
+        if (is_err) self->defer_block_err[self->ndefer_blocks - 1] = 1;
+        return 0;
+    }
+
     int defer_active_depth(void)
     {
         int i, n;
@@ -1794,6 +1855,11 @@ impl StmtOps for Stmt {
         }
         /* `;` is a statement of its own (C's empty statement): it keeps
            `for (...) ;` and `case 1: ;` on the ordinary path and emits nothing */
+        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0)
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1,
+                "'$' is read-only and only valid in the trailing block",
+                self->mem->path);
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
             self->sup->lex_next();
             s = self->sup->new_node(N_EMPTY);
@@ -2105,6 +2171,12 @@ impl StmtOps for Stmt {
                     self->sup->pop_scope();
                     return -1;
                 }
+                if (self->defer_ahead() || self->errdefer_ahead()) {
+                    self->sup->pop_scope();
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "a trailing defer needs a single declaration", self->mem->path);
+                }
                 self->arena->nodes[s].a = e;
             } else {
                 e = self->parse_expr_stmt_node();
@@ -2330,11 +2402,16 @@ impl StmtOps for Stmt {
         if (self->is_decl_start()) {
             s = self->parse_decl_node();
             if (s < 0) return -1;
+            if (self->parse_trailing_defer(s) != 0) return -1;
             if (self->sup->expect(";") != 0) return -1;
             return s;
         }
         s = self->parse_expr_stmt_node();
         if (s < 0) return -1;
+        if (self->defer_ahead() || self->errdefer_ahead())
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1,
+                "a trailing defer needs a single declaration", self->mem->path);
         if (self->sup->expect(";") != 0) return -1;
         return s;
     }
