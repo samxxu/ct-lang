@@ -503,6 +503,9 @@ for d in test/ast/*/; do
     [ -d "$d" ] || continue
     d="${d%/}"
     name="$(basename "$d")"
+    # Phase 37: this fixture deliberately dispatches a null iface; the
+    # dedicated p37 runtime probe runs it with --runtime-checks.
+    case "$name" in 219_runtime_guard) continue;; esac
     src="$d/prog.ct"
     [ -f "$src" ] || continue
     out="$work/$name.c"
@@ -3560,6 +3563,13 @@ if bash test/ast/p37_probe.sh "$work/ct-ast" >"$work/p37.out" 2>"$work/p37.err";
     ok "p37 signature severity"
 else
     bad "p37 signature severity" "$(cat "$work/p37.out" "$work/p37.err")"
+fi
+
+# Phase 37 O2: --runtime-checks guards a null vtable; off is unchanged.
+if bash test/ast/p37_rt_probe.sh "$work/ct-ast" >"$work/p37rt.out" 2>"$work/p37rt.err"; then
+    ok "p37 runtime guard"
+else
+    bad "p37 runtime guard" "$(cat "$work/p37rt.out" "$work/p37rt.err")"
 fi
 
 # Phase 21 S4: closure escape / capture / arity diagnostics are stable text,
