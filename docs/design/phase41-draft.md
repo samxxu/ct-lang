@@ -1,7 +1,7 @@
 # Phase 41 — 原子并发能力（`atomic T` 与内建原子操作）
 
-> **状态：已按 battle p41-1（B′）修订，待重新评审/冻结**（2026-11-13）。
-> **基线**：PH-40 收口提交（`v0.40.1`；含 SH-68 review fix）。
+> **状态：已冻结（2026-11-13；battle p41-1 B′；S0/R1 开工）。**
+> **基线**：PH-40 收口提交（`v0.40.1`；含 SH-68 review fix）；S0 在 `v0.40.1` 上重建 `ct`。
 > **文档形态**：`phase41-draft.md`；design window 7/12（门禁只数 `phaseN.md`，草案不计数）。
 > **前置**：[phase40-draft.md](phase40-draft.md)（收口基线）、[phase32-draft.md](phase32-draft.md)（表达式静态类型求值）、[phase39-draft.md](phase39-draft.md)（导出面与产物）。
 > **关联**：[language-spec.md](../language-spec.md) §4、[bindings-and-patterns.md](../bindings-and-patterns.md) 的「C11 原子」节、[modern-oo-gap.md](../modern-oo-gap.md)。
@@ -23,6 +23,7 @@
 | 规范版本 | 1.9.0 |
 | version-minor | 41 |
 | 已知风险 | R41-1…R41-9（§7） |
+| 冻结 | 2026-11-13；用户指令“下一步冻卡和开工”；B′ 口径，`v0.40.1` 基线 |
 
 ## 1 需求与边界
 
