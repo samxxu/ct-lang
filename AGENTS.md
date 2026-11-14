@@ -291,7 +291,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
 | 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` / `docs/README.md` / `AGENTS.md` 当前版本与 `docs/history/phase-log.md` 版本记录 |
-| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`） |
+| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`fix-tags`） |
 
 #### 0.2 话术路由
 
@@ -322,6 +322,15 @@ AI_ENGINEERING_SPEC=<主规范路径> ...          # 覆盖默认主规范位置
 > 2026-11-14：PH-42 → v0.42.1，d=0。
 > 2026-11-14：PH-43 → v0.43.0，d=0。
 > 2026-11-14：PH-44 → v0.44.1，d=0。
+
+`deviation: fix-tags`
+
+    日期: 2026-11-14
+    条款: §6.7 V-7「fix 不打 tag」
+    现状: 从 v0.44.1 起，fix 收口也创建并推送 annotated tag `v<MAJOR>.<MINOR>.<PATCH>`。
+    理由: 用户 2026-11-14 明确要求「fix 也打 tag」，便于按 PATCH 定位与回滚。
+    收敛: 长期有效；每个 fix 一个 tag，tag 指向该 fix 的提交。
+    签字: 用户已批准（2026-11-14）
 
 `deviation: single-session-workflow`
 
