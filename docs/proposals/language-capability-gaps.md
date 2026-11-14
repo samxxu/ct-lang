@@ -69,27 +69,32 @@
 
 | 项 | 数量 |
 | --- | --- |
-| 条目总数 | **22** |
-| 规范缺口 | **15** |
-| 实现缺陷 | **7** |
-| 其中 P0 | 4（B-3、B-4、**C-4**、G-4） |
-| 其中 P1 | 6（A-1、B-1、E-2、E-4、G-2、G-3） |
-| 其中 P2 | 8（A-3、B-2、C-2、C-3、D-1、E-3、F-1、G-1） |
-| 其中 P3 | 4（A-2、C-1、E-1、F-2） |
+| 条目总数 | **26** |
+| 规范缺口 | **16** |
+| 实现缺陷 | **10** |
+| 其中 P0 | 5（B-3、B-4、**C-4**、G-4、**G-8**） |
+| 其中 P1 | 7（A-1、B-1、E-2、E-4、G-2、G-3、**G-7**） |
+| 其中 P2 | 9（A-3、B-2、C-2、C-3、D-1、E-3、F-1、G-1、**G-5**） |
+| 其中 P3 | 5（A-2、C-1、E-1、F-2、**G-6**） |
 | **真卡住（无绕法、且绕法必然牺牲核心能力）** | **3**：E-2、B-3、B-4；后两条 HEAD 已修 |
+
+G-5–G-8 是 RILL 的 CT 实现撞到的四条 `ct build` 前端限制（2026-11 补录，探针
+`/tmp/ctgap3`）。其中 G-8 是唯一「`ct` 通过、生成文本与源码不一致且无诊断」的缺陷（G-4 是生成
+逻辑错，不是文本截断）；具体修复单见 [ct-build-frontend-defects.md](ct-build-frontend-defects.md)。
 
 另外，输入材料里有 **8 条**旧结论在 v0.44.1 上**复现不出来或只在特定条件下成立**（6 条完全不成立、
 2 条部分不成立，见 §9.1）。这 6 条不是"已修"，是当时就判错了或已在更早版本落地——这部分对评估
 同样重要：**照抄旧清单会把已经不成立的缺口当成待办。**
 
-### 1.2 最该先看的三条
+### 1.2 最该先看的五条
 
 | # | 条目 | 理由（一句话） |
 | --- | --- | --- |
-| 1 | **C-4** `Map<char *, 用户 struct>` 在 `ct build` 下生成不可编译的头 | 覆盖所有「记录/对象用 `Map` 按值装」的包，且**单文件模式通过、build 模式失败**——包方在单文件探针上验不出来，装进工程才炸；根因（`MapEntry` 按值进共享头）与 `Vec` 的既有做法不一致，改法明确 |
-| 2 | **G-4** 指针字段的自动 Drop 胶水把 `T**` 当 `T*` | 唯一一条「静默读错值 + 无诊断 + 任何父子指针结构都会撞」的实现缺陷；生成物里一行就能看出，修复面小，但拖着会让所有 `own` 树型包在运行时读到垃圾 |
-| 3 | **E-2 + E-4** `Map` 键只收 int/long/char\*，且键不复制 | 数据保真类包（JSON/序列化）真正的硬阻塞：含 `\0` 的键写不出来，键的生命周期又没人定义；它同时是规范决策（要不要给容器加键协议）而不是修 bug |
-| 4 | **G-2** 跨单元 `delete` 不执行 Drop 体 | 多单元资源包的**默认写法**就在泄漏：消费者编译出空桩并调用它，定义单元的真实体是 `static`，链接不上也不报错。它不是"少数包"的问题，而是多单元布局的通用陷阱 |
+| 1 | **G-8** 超过 159 字节的预处理行被静默截断 | 唯一「`ct` rc=0、无诊断、生成 C 与源码不一致」的缺陷；任何用长宏的包都会撞，截断点合法时编译通过但语义被改（实测 6→3），无声、最难查；修法明确（切片存储或至少越界报错） |
+| 2 | **C-4** `Map<char *, 用户 struct>` 在 `ct build` 下生成不可编译的头 | 覆盖所有「记录/对象用 `Map` 按值装」的包，且**单文件模式通过、build 模式失败**——包方在单文件探针上验不出来，装进工程才炸；根因（`MapEntry` 按值进共享头）与 `Vec` 的既有做法不一致，改法明确 |
+| 3 | **G-4** 指针字段的自动 Drop 胶水把 `T**` 当 `T*` | 唯一一条「静默读错值 + 无诊断 + 任何父子指针结构都会撞」的实现缺陷；生成物里一行就能看出，修复面小，但拖着会让所有 `own` 树型包在运行时读到垃圾 |
+| 4 | **E-2 + E-4** `Map` 键只收 int/long/char\*，且键不复制 | 数据保真类包（JSON/序列化）真正的硬阻塞：含 `\0` 的键写不出来，键的生命周期又没人定义；它同时是规范决策（要不要给容器加键协议）而不是修 bug |
+| 5 | **G-2** 跨单元 `delete` 不执行 Drop 体 | 多单元资源包的**默认写法**就在泄漏：消费者编译出空桩并调用它，定义单元的真实体是 `static`，链接不上也不报错。它不是"少数包"的问题，而是多单元布局的通用陷阱 |
 
 **第 4 件事（不是条目）**：把 HEAD 上已经修好的 4 项（A-1、B-1、B-3、B-4）发出去。
 在 `v0.44.1` 上，「函数返回接口值」这条路径**整体不安全**——B-3 与 B-4 都是静默 UB。留着不发，
@@ -1240,6 +1245,240 @@ done
 
 ---
 
+### G-5 前向 typedef（`typedef struct JVal JVal;`）被拒
+
+| 项 | 值 |
+| --- | --- |
+| 定性 | **实现缺陷**（前端未实现「裸标签 + 别名」这一分支） |
+| 优先级 | **P2**（有便宜绕法，但 C 迁移代码的默认写法会撞） |
+| 卡住的项目 | RILL 的 CT 实现；任何相互递归类型 |
+| 有无绕法 | 有（`struct JVal;` 前置声明 + 一律写 `struct JVal *`） |
+
+**触发条件**：`typedef struct Tag Alias;` / `typedef union Tag Alias;`——即记录定义**没有体**、
+标签后面直接跟别名的写法。ct-ast 前端在单文件与 `ct build` 两种模式下都拒（同一套 parser）。
+
+**最小代码**：
+
+```c
+typedef struct JVal JVal;
+
+struct JVal {
+    int tag;
+}
+
+int main(void) {
+    JVal v;
+    v.tag = 1;
+    return v.tag;
+}
+```
+
+**命令与退出码**（实测，探针 `/tmp/ctgap3/l1_typedef.ct`）：
+
+```text
+$ ct l1_typedef.ct -o l1_typedef.c
+l1_typedef.ct:1:21: error: unexpected token
+$ echo $?
+1
+$ ct build l1_typedef.ct -o out
+l1_typedef.ct:1:1: error: unexpected token
+$ echo $?
+1
+```
+
+**这是规范缺口还是实现缺陷**：**实现缺陷**。规约说 `typedef` 可用、别名可作局部/参数/字段
+（[language-spec.md:732-733](../language-spec.md#L732-L733)），没有「记录 typedef 必须带体」的条款；
+`struct JVal;` 前向声明本身是支持的。缺的是 `parse_typedef` 的「标签 + 别名 + `;`」分支：
+`Parser.h.ct:2432` 直接进 `parse_record_def`，而后者只认下一个 token 是 `;` 的前向形式
+（`Parser.h.ct:2178-2184`），否则走 `parse_record_body` 的 `expect("{")`（`Parser.h.ct:1927`），
+于是把别名当成缺失的 `{` 报错。坐标见修复单
+[ct-build-frontend-defects.md](ct-build-frontend-defects.md) 的 DF-3。
+
+**替代盘**：`struct JVal;` 前置声明 + 全部写 `struct JVal *`（实测 `l1b`/`l1d`：`ct`、`cc`、运行
+rc 全 0）；`.h.ct`/`.m.ct` 里规约另给了 `pub type JVal = struct JVal;`（§4.19，未实测）。代价是
+把 `struct` 关键字漏到 API 拼写上、改动面随使用点扩散；整体退回单文件 `ctc` 的代价见 G-8。
+
+**影响面**：相互递归类型、想用 typedef 名组织公开 API 的包。**卡的是写法，不是能力**——
+报错明确，改拼写即可过。
+
+**放开的风险**：只加一个解析分支与一条 `typedef struct Tag Alias;` 发射；要重跑 typedef 夹具、
+`.h.ct` 导出夹具与重复类型诊断（别名与标签同名的情形）。
+
+---
+
+### G-6 `impl` 块尾分号被拒
+
+| 项 | 值 |
+| --- | --- |
+| 定性 | **规范缺口**（语法宽容度未定义；规约的 `impl-def` 没有尾 `;`） |
+| 优先级 | **P3**（删一个字符即可，无能力损失） |
+| 卡住的项目 | RILL 的 CT 实现（C 习惯写法） |
+| 有无绕法 | 有（删掉 `;`） |
+
+**触发条件**：在 `impl Trait for T { … }` 或 `impl T { … }` 的 `}` 后写 `;`。
+
+**最小代码**：
+
+```c
+struct J {
+    int n;
+}
+
+impl J {
+    int get(int i) {
+        return self->n + i;
+    }
+};
+
+int main(void) {
+    struct J j;
+    j.n = 1;
+    return j.get(2);
+}
+```
+
+**命令与退出码**（实测，探针 `/tmp/ctgap3/l2_impl_semicolon.ct`；单文件与 build 同）：
+
+```text
+$ ct l2_impl_semicolon.ct -o l2.c
+l2_impl_semicolon.ct:9:2: error: expected a type (tok 4 ';')
+$ echo $?
+1
+```
+
+**这是规范缺口还是实现缺陷**：**规范缺口**。语法定义是
+`impl-def ::= "impl" IDENT "for" IDENT "{" { method-def } "}"`（[language-spec.md:75](../language-spec.md#L75)），
+没有尾分号；而 `struct` / `enum` 的定义后分号是可选的（`top_decl` 对两者都 `accept(";")`，
+`Parser.h.ct:816-825`），`impl` 分支（`Parser.h.ct:808-809`）没有。所以这是**宽容度不一致**，
+不是「已定义却没做到」。要么把 grammar 改成与 `struct` 一致的可选 `;` 再补实现，要么维持拒绝
+但把诊断改成「`impl` 块后不写分号」。
+
+**替代盘**：删掉 `;`，代价一个字符。注意不要用「退回 `ctc`」绕这一条：实测 `ctc` 不接受固有 impl
+（`error: expected 'for' in impl of 'J'`），反而更差。
+
+**影响面**：从 C 迁移、习惯在块后加分号的代码。**不影响语义**，只影响书写。
+
+**放开的风险**：只加 `accept(";")`；要重跑 impl 夹具与 `--emit-c` 一致性。规约需先写明可选 `;`。
+
+---
+
+### G-7 `#define` 的反斜杠续行被当成独立语句
+
+| 项 | 值 |
+| --- | --- |
+| 定性 | **实现缺陷**（词法层的预处理行拼接未实现） |
+| 优先级 | **P1**（撞上的是用多行长宏的包；压成单行后会撞 G-8，等于无绕法） |
+| 卡住的项目 | RILL 的 CT 实现；任何用多行宏（关键字表、前缀判断）的包 |
+| 有无绕法 | 勉强有（把宏拆成多条短宏，或压成一行且 < 159 字节） |
+
+**触发条件**：一行以 `#` 开头、行尾是 `\` 的预处理行，续行被当作普通 C 代码继续解析。
+
+**最小代码**：
+
+```c
+#define ADD(a, b) \
+    ((a) + (b))
+
+int main(void) {
+    return ADD(1, 2);
+}
+```
+
+**命令与退出码**（实测，探针 `/tmp/ctgap3/l3_macro_continuation.ct`）：
+
+```text
+$ ct l3_macro_continuation.ct -o l3.c
+l3_macro_continuation.ct:2:6: error: expected a type (tok 4 '(')
+$ echo $?
+1
+```
+
+**这是规范缺口还是实现缺陷**：**实现缺陷**。规约的模型是「顶层构造展开，其余 C 代码原样透传」
+（[language-spec.md:40-41](../language-spec.md#L40-L41)），续行是 C 预处理的标准写法
+（换行在翻译阶段 2 就被删除）；规约里的「逐行」描述的是扫描粒度，不是禁止拼接。实现上
+`Lexer.h.ct:90-97` 的 T_PP 分支一路读到 `\n` 就返回，不检查行尾 `\`，于是续行进入顶层声明解析，
+报错还指在第二行——用户很难联想到上一行的反斜杠。坐标见修复单 DF-2。
+
+**替代盘**：拆成多条短宏（每条 < 159 字节）再组合；或把宏压成一行。两者都改变宏的结构，
+且单行超过 159 字节时必然撞 G-8；整体退回单文件 `ctc`（实测三条都能过，代价见 G-8）。
+
+**影响面**：所有多行宏。**卡的是写法**，报错明确（但位置误导）。
+
+**放开的风险**：`#include` / `#define` 的「按整行去重」单位会从物理行变成逻辑行
+（[language-spec.md:591](../language-spec.md#L591)），同一宏的两种换行写法可能从两条变一条；
+要重跑 prologue 夹具，并把「`\` 后带空格不算续行」的负例写进规约。
+
+---
+
+### G-8 超过 159 字节的预处理行被静默截断（生成 C 与源码不一致）
+
+| 项 | 值 |
+| --- | --- |
+| 定性 | **实现缺陷（静默错误）**——`ct` rc=0、无诊断，生成物与源码不一致 |
+| 优先级 | **P0**（任何 package 的长宏都会撞；不报错，最危险） |
+| 卡住的项目 | RILL 的 CT 实现；任何 `#define` / `#include` 长于 159 字节的包 |
+| 有无绕法 | 有（把宏压到 159 字节内，或退回单文件 `ctc`），都要放弃一部分能力 |
+
+**触发条件**：任一行首 `#` 的预处理行超过 159 字节（`MAX_TEXT` 为 160，留一个 NUL）。
+单文件与 `ct build` 同样截断；`ct build` 的整体 rc 由随后的 `cc` 给出，前端本身不报错。
+
+**最小代码**（510 字节的宏，探针 `/tmp/ctgap3/l4_long_macro.ct`）：
+
+```c
+#define is_kw(x) (strcmp((x),"if")==0 || strcmp((x),"else")==0 || strcmp((x),"while")==0 || strcmp((x),"for")==0 || strcmp((x),"return")==0 || strcmp((x),"struct")==0 || strcmp((x),"union")==0 || strcmp((x),"enum")==0 || strcmp((x),"switch")==0 || strcmp((x),"case")==0 || strcmp((x),"default")==0 || strcmp((x),"break")==0 || strcmp((x),"continue")==0 || strcmp((x),"sizeof")==0 || strcmp((x),"typedef")==0 || strcmp((x),"static")==0 || strcmp((x),"const")==0 || strcmp((x),"void")==0 || strcmp((x),"int")==0)
+
+#include <string.h>
+
+int main(void) {
+    return is_kw("if") ? 0 : 1;
+}
+```
+
+**命令与退出码**：
+
+```text
+$ ct l4_long_macro.ct -o l4.c
+$ echo $?                              # 编译本身通过
+0
+$ grep '^#define is_kw' l4.c | awk '{print length($0)}'
+159                                    # 源 510 字节，生成物只剩 159
+$ cc -std=c99 l4.c -o l4
+l4.c:11:155: warning: missing terminating '"' character [-Winvalid-pp-token]
+l4.c:156:13: error: expected expression
+1 warning and 3 errors generated.
+$ echo $?
+1
+```
+
+`ct build` 同样在 `cc` 阶段失败（rc=1），报错位置经 `#line` 映回源文件第 1 行第 155 列。
+
+更坏的情形是截断点正好落在合法边界：探针 `/tmp/ctgap3/l6_valid_trunc.ct` 把 `* 2` 放在第 160
+字节之后，`ct` rc=0、`cc` rc=0，运行返回 **3**（源码语义是 6）——**编译通过，行为被改掉**。
+
+**这是规范缺口还是实现缺陷**：**实现缺陷**。规约明文要求「所有固定容量上限……越界一律 `die`
+报错，**不静默截断**」（[language-spec.md:55](../language-spec.md#L55)），标识符的超长处理也是报
+`identifier is too long`（[language-spec.md:60-61](../language-spec.md#L60-L61)）。预处理行是唯一
+被漏掉的入口：`Lexer.h.ct:90-97` 的 T_PP 分支超出即丢字符、且不置 `toktrunc`
+（标识符分支在 `Lexer.h.ct:108-110` 会置位），`Parser.h.ct:1313` 再把已经截断的文本用
+`snprintf(…, MAX_TEXT, …)` 拷进 `Arena::Node.text`（`char text[160]`）。发射端只原样打印
+（`Emitter.h.ct:1339`、`:545`），不是它吞的。坐标见修复单 DF-1。
+
+**替代盘**：把宏压到 159 字节内（丢表达力，且必须人工数字节）；整体退回单文件 `ctc`——实测
+`l1`/`l3`/`l4` 在 `ctc` 下 rc=0，长宏原样保留、`cc` 与运行都通过。代价是**失去多单元组织与增量
+构建**（这正是 RILL 这次的兜底），且 `ctc` 不接受固有 `impl`（G-6 的实测），`namespace` / `pub`
+/ `import` 也不可用。
+
+**影响面**：所有用长宏的包；**超过 159 字节的 `#include` 路径**同理。后果分两档：截断点不合法 → `cc`
+报错，但位置指向生成物；截断点合法 → 静默改变宏的语义（`l6`：6 变 3）。第二档没有任何诊断，
+是本清单里唯一「`ct` 通过、生成文本与源码不一致」的 P0（G-4 是生成的逻辑错，不是文本截断）。
+
+**放开的风险**：正确的修法是把预处理行改为源码切片存储（`(offset, len)`）并按切片发射，或至少
+在越界时 `die`。前者动 `Arena` 节点表示与 prologue 去重，后者只把静默错误变成显式错误。
+共同风险：此前「能过」的被截断代码会变成失败或产物变化，需要 release note；要重跑全部夹具
+（`grep` 出 `test/` 里所有 `#` 行并量长度）、`--emit-c` 一致性与 `.m.ct` prologue 去重夹具。
+
+---
+
 ## 9 核对后的修正
 
 ### 9.1 在 v0.44.1 上**复现不出来**的旧结论
@@ -1312,6 +1551,10 @@ done
 | G-2 | 其他 | **实现缺陷** | ct-http、多单元资源包 | 有（显式清理） | P1 | 未修 |
 | G-3 | 其他 | 规范缺口 | ct-json、工厂 API | 有（手写 malloc） | P1 | 明文限制 |
 | G-4 | 其他 | **实现缺陷** | JSON 树 / AST / 链表 | 有（手写 impl Drop） | P0 | 未修 |
+| G-5 | 其他 | **实现缺陷** | RILL、相互递归类型 | 有（`struct T *` 拼写） | P2 | 未修 |
+| G-6 | 其他 | 规范缺口 | RILL（C 书写习惯） | 有（删 `;`） | P3 | 未定义 |
+| G-7 | 其他 | **实现缺陷** | RILL、多行长宏的包 | 勉强（拆宏 / 压一行） | P1 | 未修 |
+| G-8 | 其他 | **实现缺陷** | RILL、所有长宏 / 长 `#include` 的包 | 有（压到 159 字节 / 退回 `ctc`） | P0 | 未修 |
 
 ---
 
@@ -1384,11 +1627,30 @@ done
 | `j2`（树类型进 `.h.ct`） | 同上 | 与 `j10b` 同根因：`field has incomplete type` |
 | `j3`（`pub enum` 进 `.m.ct`） | 同上 | `a .m.ct unit cannot declare a type`，rc=1 |
 
+### 11.3 RILL 四条（`/tmp/ctgap3`，`ct v0.44.1`，`CT_STD_DIR=<repo>/lib/std`）
+
+| 探针 | 命令 | 原始结果 |
+| --- | --- | --- |
+| `l1_typedef`（G-5） | `ct l1_typedef.ct -o l1.c` | `l1_typedef.ct:1:21: error: unexpected token`，rc=1 |
+| `l1_typedef`（build） | `ct build l1_typedef.ct -o out` | `l1_typedef.ct:1:1: error: unexpected token`，rc=1 |
+| `l1b_struct_fwd`（G-5 绕法） | `ct` + `cc` + run | rc 全 0（`struct JVal;` 前向声明可用） |
+| `l1c_typedef_body`（G-5 绕法） | 同上 | rc 全 0（`typedef struct JVal { … } JVal;` 可用） |
+| `l1d_mutual`（G-5 绕法） | 同上 | rc 全 0（两个类型互相引用，写 `struct B *`） |
+| `l2_impl_semicolon`（G-6） | `ct l2.ct -o l2.c` | `l2_impl_semicolon.ct:9:2: error: expected a type (tok 4 ';')`，rc=1 |
+| `l3_macro_continuation`（G-7） | 同上 | `l3_macro_continuation.ct:2:6: error: expected a type (tok 4 '(')`，rc=1 |
+| `l4_long_macro`（G-8） | `ct l4.ct -o l4.c` | rc=0；生成 C 第 11 行 159 字节（源 510）；`cc` → `l4.c:156:13: error: expected expression`，rc=1 |
+| `l4_long_macro`（build） | `ct build l4.ct -o out` | `ct` 侧 rc=0，`cc` 侧 rc=1（报错经 `#line` 映回源文件 1:155） |
+| `l5_num_macro`（G-8） | `ct` + `cc` | `ct` rc=0；`cc`：`integer literal is too large to represent`（截断成 159 位数字） |
+| `l6_valid_trunc`（G-8，静默改行为） | `ct` + `cc` + run | rc 全 0；返回 `3`（源码语义 `6`；`* 2` 落在第 160 字节后被丢） |
+| `ctc` 对照（G-5/G-7/G-8） | `ctc <file>.ct -o <file>.c` | `l1`/`l3`/`l4` rc=0；`l4` 生成物保留 510 字节宏，`cc` + run rc=0 |
+| `ctc` 对照（G-6） | 同上 | `l2_impl_semicolon.ct:5:8: error: expected 'for' in impl of 'J'`，rc=1（L0 不接受固有 impl） |
+
 ---
 
 ## 12 事实与推断的边界
 
-- **事实**：§2–§8 的「当前行为」全部来自 §11 的实测，或明确标注的提交/夹具/规约原文。
+- **事实**：§2–§8 的「当前行为」全部来自 §11 的实测，或明确标注的提交/夹具/规约原文；
+  G-5–G-8 的四条另由 §11.3 的 `l1`–`l6` 与 `ctc` 对照支撑（`ct v0.44.1`，2026-11-15 重跑）。
 - **推断（需证据确认）**：
   1. A-1 放开后「构建产物顺序不变、缓存键稳定」——来自 `fb55985c` 的提交说明与 SH-71 记录，
      **本文未重跑 HEAD**（工作区 `selfhost/` 由另一会话占用）。要确认需在干净 clone 上跑
