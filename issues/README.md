@@ -330,6 +330,10 @@
 | SH-65 | Medium | trait / impl 方法收不了闭包实参：常规 `.method(...)` 未计 `closure_arg_count` / 未走 `closure_arg_check`，pair 形报 arity、单函数指针形 check 静默而 compile 落 `unknown expression node`；L0 也不能解析带函数指针参数的 trait 方法（**open**，09/10/12 的 OO 化根因） | [sh65-closure-as-method-arg.md](selfhost/sh65-closure-as-method-arg.md) |
 | SH-66 | **High** | 泛型仍有两条退出 0 的静默坏产物：数组维度里的 `sizeof(T)` 与裸模板名作值都不替换、不诊断，`cc` 才报 `'T'` / `'id'` undeclared（**已修**，2026-11-10，`v0.26.4` + 补丁：`parse_array_dims` 的维度守卫 + `parse_primary` 未声明名字分支的模板检查，各 1 条负例并配 `p26_diag`/`p26_chk`；`verified` 留独立评审） | [sh66-generic-silent-bad-output.md](selfhost/sh66-generic-silent-bad-output.md) |
 | SH-67 | **High** | 闭包先绑变量再传 trait 方法：`check` / `compile` 都退出 0，生成的 C 只发射 trampoline / env、不声明该函数指针，`cc` 才报 `use of undeclared identifier 'f'`（**open**；与 SH-65 同入口族，建议先硬错、codegen 并入 F3） | [sh67-closure-method-arg-silent-invalid-c.md](selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
+| SH-71 | Info | 类型宿主映射的单元限制：`.h.ct` 不许放 `map`、`.m.ct` 看不见接口（保持：有意边界；A-2 拒绝、A-1 延后） | [sh71-host-map-unit-boundary.md](selfhost/sh71-host-map-unit-boundary.md) |
+| SH-72 | Medium | 接口方法返回接口值在调用点报 `cannot infer the type to box`，但 vtable 槽已给出返回类型（**open**；P1，需与 SH-74 同批） | [sh72-iface-method-return-box.md](selfhost/sh72-iface-method-return-box.md) |
+| SH-73 | Info | 动态派发的临时值接收者被拒：`a.m().n()` 不能作下一跳（保持：有意边界；延后） | [sh73-temp-receiver-dynamic-dispatch.md](selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
+| SH-74 | **High** | impl 方法返回接口值时生成 `&_self`：指向被调栈帧且多一层间接，`.self` 逃逸后 exit 0 读到错误值（**open**；P0，须先于 SH-72/SH-73） | [sh74-impl-iface-return-self-codegen.md](selfhost/sh74-impl-iface-return-self-codegen.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -1335,5 +1339,26 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 `p26_diag` / `p26_chk` 断言，红/绿对照见条目「修复」段。
 
 门禁：`./test/run.sh`、`bash selfhost/check-all.sh`、`python3 test/docs/check-docs.py` 全绿。
+
+## 外部报告复核（2026-11-15，`v0.44.1` / `13db6cad`，ct-http 0.1.0 阻塞清单）
+
+来源：`ct-http/docs/review/ct-http-0.1.0-blockers.md` §2–§5（仓库外文档，按外部报告处理）。
+探针在 `/tmp/ctr/**`，未写入仓库树；四组最小用例均独立复现，`ct` 与 `cc` 都跑过。
+
+| 组 | 结论 | 编号 | 建议 |
+| --- | --- | --- | --- |
+| §2 类型宿主映射的单元限制 | 有意的语言边界（规约 §4.10 / §4.10.1 已载） | [SH-71](selfhost/sh71-host-map-unit-boundary.md) | A-2 拒绝；A-1 延后；0.1.0 走静态宿主或自由函数工厂 |
+| §3 接口方法返回接口值不能装箱 | 实现缺口（类型可推，报错与事实不符） | [SH-72](selfhost/sh72-iface-method-return-box.md) | **现在修（P1）**，须与 SH-74 同批 |
+| §4 动态派发的临时值接收者被拒 | 有意的实现边界（用限制换求值顺序 / 单次求值） | [SH-73](selfhost/sh73-temp-receiver-dynamic-dispatch.md) | 延后；0.1.0 多行或静态宿主 |
+| §5 impl 返回接口值生成 `&_self` | codegen 缺陷（静默 UB，可经 `.self` 逃逸触发） | [SH-74](selfhost/sh74-impl-iface-return-self-codegen.md) | **现在修（P0）**，先于 SH-72/SH-73 |
+
+复现与报告一致性的两处偏差：
+
+1. **§2 的报错取决于 `-I`**：不加 `-I` 时为 `cannot resolve import`；加了 `-I` 才出现规约所写的
+   `a .m.ct unit can only import another .m.ct unit`。§4.10.1 应把两条失败拆开写。
+2. **报告 §1.1「rc=0，输出 201」未复现**：同一形态（`.h.ct` 自由函数内 `HttpRequestImpl x; return x;`）
+   `ct` / `cc` 均 rc=0，但运行返回 16——接口值 `self` 指向已返回的局部栈帧。属「接口只借用对象」
+   语义下的悬垂，与 SH-74 的 `&_self` 不同源，本轮不另立案（仅在此记录）。
+
 
 
