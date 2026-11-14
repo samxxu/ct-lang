@@ -42,7 +42,7 @@
 | [history/design/phase30.md](history/design/phase30.md) | 已完成的阶段计划（Phase 30）：接收者语境块 `<receiver> into { … }`——块内 `.name` 访问接收者成员/方法、`$` 指代自身；`into` 为后置上下文关键字，块结束后仍返回接收者、可继续接后缀链或连续多段 `into`；语句形态与值形态（初始化器 / 赋值 / `return`，结果为接收者本身）；接收者只求值一次并按 value category 提升；`.m.ct` 类型宿主（含 shim）可作接收者、`$ =` 可接链（D30-1–D30-19 见正文） |
 | [history/design/phase31.md](history/design/phase31.md) | 已完成的阶段计划（Phase 31）：接口值进容器（`Vec<Show>` / `Map<char *, Show>`）与嵌套容器的元素寿命与所有权、`v[i]` / `m[k]` 仅展开为 `get`、`Vec` / `Map` 花括号初值（E31-1–E31-23、L31-1–L31-21、D31-1–D31-17 见正文） |
 | [design/phase32-draft.md](design/phase32-draft.md) – [design/phase42-draft.md](design/phase42-draft.md) | 阶段草案（Phase 32–42，均已完成）：类型安全网 / 有界泛型 struct / 生态可用性 / 泛型 trait / 泛型 Drop 与 `Str` / trait 签名硬错与运行期契约 / `defer` / C ABI 与库制品 / `errdefer` 错误出口 / 原子并发（`atomic T`）/ `impl` 方法可见性；状态以 [roadmap.md](roadmap.md) 为准 |
-| [design/phase43.md](design/phase43.md) · [design/phase44.md](design/phase44.md) | 已定稿待实施（Phase 43–44）：错误出口类型契约（`return err:` 载荷检查）/ `?` 错误传播运算符；状态以 [roadmap.md](roadmap.md) 为准 |
+| [design/phase43.md](design/phase43.md) · [design/phase44.md](design/phase44.md) · [design/phase45.md](design/phase45.md) | 已定稿待实施（Phase 43–45）：错误出口类型契约（`return err:` 载荷检查）/ `?` 错误传播运算符 / 类型契约一致性（闭包 `return` 与指针基类型判据）；状态以 [roadmap.md](roadmap.md) 为准；未立项评估结论与门禁欠账见 [planning/requirements-pool.md](planning/requirements-pool.md) |
 | [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md) | ct-pkg `std` 的 Agent 内核运行库提案：`arena` / `sync` / `result` / `string` / `callback` 契约与交付顺序 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |

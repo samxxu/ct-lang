@@ -58,6 +58,7 @@
 | Phase 42 | `impl` 方法可见性（方法级 `pub`，默认私有） | ✅ 完成 | v0.42.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase42-draft.md) |
 | Phase 43 | 错误出口类型契约（`return err:` 载荷检查） | ✅ 完成 | v0.43.0 | [卡](design/phase43.md) |
 | Phase 44 | `?` 错误传播运算符（后缀 `?`，同 `E`） | 🟨 实施中 | — | [卡](design/phase44.md) |
+| Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ⬜ 已定稿 / 待实施 | — | [卡](design/phase45.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。

@@ -1922,7 +1922,8 @@ for (int __ct_loop_n_K, __ct_loop_hi_K,
 
 #### 4.48 泛型函数（Phase 26，仅 ct-ast）
 
-CT 的泛型只覆盖**函数**、**单个类型参数**、**显式实例化**、**编译期单态化**：
+本节只记述**泛型函数**（Phase 26）的形态；泛型 struct、有界泛型、泛型 trait 与类型参数上的 bound
+分别见 §4.51、§4.54、§4.55、§4.50：
 
 ```c
 T id<T>(T x) {
@@ -1957,9 +1958,9 @@ int main(void) {
   （空列表 `<>` 由类型参数解析报 `expected a type parameter name`）；`L26-4` 非法类型实参
   `'<type>' cannot be a generic type argument`；`L26-5` 泛型体内调用泛型
   `recursive generic calls are not supported`。
-- 不支持：泛型结构体 / union / trait / impl、约束（trait bound）、类型推导（`id(42)` 不会推成 `int`）、
-  多个类型参数、`pub` 泛型、递归或嵌套泛型调用、跨单元实例共享、类型参数用于数组维度。这些都在源码处
-  硬报错，不静默降级；被替换的类型位置（上一条）若拼写不完整，同样在解析期报错而不是原样发射。
+- 不支持：泛型 union / enum、类型推导（`id(42)` 不会推成 `int`）、泛型函数多个类型参数、递归或嵌套
+  泛型调用、跨单元实例共享、类型参数用于数组维度。这些都在源码处硬报错，不静默降级；被替换的类型
+  位置（上一条）若拼写不完整，同样在解析期报错而不是原样发射。
   `_Generic(...)` 的选择体是原样透传，因此模板体内 `_Generic` 出现裸类型参数会硬报错
   `type parameter cannot be used inside _Generic`，绝不把它发射成未声明的名字；紧邻 `struct` / `union` /
   `enum` 的标签选择器（`_Generic(x, struct T: 1, default: 0)`）是合法标签，放行。类型参数是类型而非值：
