@@ -6,7 +6,7 @@
 | 严重度 | **High / P0**（静默 UB：`ct`、`cc`、运行全部 rc=0，读到的值是错的） |
 | 锚点 | `v0.44.1`（`fb55985c` 之后复核，2026-11-15） |
 | 文件 | [Stmt.h.ct:2070-2092](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L2070-L2092)、[Emitter.h.ct:3707-3740](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3707-L3740)、[Emitter.h.ct:4818-4827](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4818-L4827) |
-| 状态 | **已修复**（本地提交；见「修复」） |
+| 状态 | **fixed**（`b5797cbf`，2026-11-15；回归 `test/ast/239_local_iface_return` + ASAN UAR 用例） |
 
 ## 现象
 

@@ -147,6 +147,7 @@
 | v0.43.0 | Phase 43 错误出口类型契约（2026-11-14） | `return err:` 载荷四入口硬检查；L43-1；普通 return 仍 opt-in；正/负例与 examples/45；check-ast 1364/0、test/run 155、warnings 616/0、docs 1035/224；tag `v0.43.0`。 |
 | v0.44.0 | Phase 44 后缀 `?` 错误传播（2026-11-14） | 后缀 `?` + `N_TRY`；L44-1/2/3/4；`Outer::err` 失败返回；临时量 move+zero；errdefer/defer/own 清理；22 例消歧、9 例诊断、7 例 ASAN；check-ast 1370/0、test/run 156、warnings 620/0；tag `v0.44.0`。 |
 | v0.44.1 | Phase 44 位置/门禁修复（2026-11-14） | 三目条件与 `into` 中的 `?` 改 L44-4；`p44/drop` 接入 check-ast；新增 2 个位置负例；check-ast 1371/0。 | tag `v0.44.1`。
+| v0.44.2 | 接口值返回四条静默 UB / 边界修复（2026-11-15） | A-1 `.m.ct` 可 import `.h.ct`（`fb55985c`）；SH-72 动态派发按 trait 签名给返回类型（`5ff69ac3`）；SH-74 impl 内 `return self` 发 `(void *)_self`（`d6e82e25`）；SH-75 局部 struct 返回接口改堆拷贝（`b5797cbf`）；新夹具 `238_iface_ret_value` / `237_iface_ret_self` / `239_local_iface_return` + `sh71_map_import_hdr`，SH-75 另配 ASAN use-after-return；check-ast 1376/0、test/run 156、warnings 631/0、docs 1205/239。已知限制：接口无析构槽，堆上装箱对象随进程存活。 | tag `v0.44.2`。
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。
 

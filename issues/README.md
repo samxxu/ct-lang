@@ -330,10 +330,11 @@
 | SH-65 | Medium | trait / impl 方法收不了闭包实参：常规 `.method(...)` 未计 `closure_arg_count` / 未走 `closure_arg_check`，pair 形报 arity、单函数指针形 check 静默而 compile 落 `unknown expression node`；L0 也不能解析带函数指针参数的 trait 方法（**open**，09/10/12 的 OO 化根因） | [sh65-closure-as-method-arg.md](selfhost/sh65-closure-as-method-arg.md) |
 | SH-66 | **High** | 泛型仍有两条退出 0 的静默坏产物：数组维度里的 `sizeof(T)` 与裸模板名作值都不替换、不诊断，`cc` 才报 `'T'` / `'id'` undeclared（**已修**，2026-11-10，`v0.26.4` + 补丁：`parse_array_dims` 的维度守卫 + `parse_primary` 未声明名字分支的模板检查，各 1 条负例并配 `p26_diag`/`p26_chk`；`verified` 留独立评审） | [sh66-generic-silent-bad-output.md](selfhost/sh66-generic-silent-bad-output.md) |
 | SH-67 | **High** | 闭包先绑变量再传 trait 方法：`check` / `compile` 都退出 0，生成的 C 只发射 trampoline / env、不声明该函数指针，`cc` 才报 `use of undeclared identifier 'f'`（**open**；与 SH-65 同入口族，建议先硬错、codegen 并入 F3） | [sh67-closure-method-arg-silent-invalid-c.md](selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
-| SH-71 | Info | 类型宿主映射的单元限制：`.h.ct` 不许放 `map`、`.m.ct` 看不见接口（保持：有意边界；A-2 拒绝、A-1 延后） | [sh71-host-map-unit-boundary.md](selfhost/sh71-host-map-unit-boundary.md) |
-| SH-72 | Medium | 接口方法返回接口值在调用点报 `cannot infer the type to box`，但 vtable 槽已给出返回类型（**open**；P1，需与 SH-74 同批） | [sh72-iface-method-return-box.md](selfhost/sh72-iface-method-return-box.md) |
+| SH-71 | Info | 类型宿主映射的单元限制：`.h.ct` 不许放 `map`、`.m.ct` 看不见接口（**A-1 已修** `fb55985c`：`.m.ct` 可 import `.h.ct`；A-2 维持拒绝） | [sh71-host-map-unit-boundary.md](selfhost/sh71-host-map-unit-boundary.md) |
+| SH-72 | Medium | 接口方法返回接口值在调用点报 `cannot infer the type to box`，但 vtable 槽已给出返回类型（**已修** `5ff69ac3`，2026-11-15；回归 `test/ast/238_iface_ret_value`） | [sh72-iface-method-return-box.md](selfhost/sh72-iface-method-return-box.md) |
 | SH-73 | Info | 动态派发的临时值接收者被拒：`a.m().n()` 不能作下一跳（保持：有意边界；延后） | [sh73-temp-receiver-dynamic-dispatch.md](selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
-| SH-74 | **High** | impl 方法返回接口值时生成 `&_self`：指向被调栈帧且多一层间接，`.self` 逃逸后 exit 0 读到错误值（**open**；P0，须先于 SH-72/SH-73） | [sh74-impl-iface-return-self-codegen.md](selfhost/sh74-impl-iface-return-self-codegen.md) |
+| SH-74 | **High** | impl 方法返回接口值时生成 `&_self`：指向被调栈帧且多一层间接，`.self` 逃逸后 exit 0 读到错误值（**已修** `d6e82e25`，2026-11-15；回归 `test/ast/237_iface_ret_self`） | [sh74-impl-iface-return-self-codegen.md](selfhost/sh74-impl-iface-return-self-codegen.md) |
+| SH-75 | **High** | 非 `self` 的局部 struct 返回接口值：装箱取局部地址，悬垂栈帧静默读错值（**已修** `b5797cbf`，2026-11-15；回归 `test/ast/239_local_iface_return` + ASAN UAR） | [sh75-local-iface-return-dangling.md](selfhost/sh75-local-iface-return-dangling.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
