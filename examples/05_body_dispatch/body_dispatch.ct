@@ -2,6 +2,9 @@
 // field chain (`self->lhs->m()`), a parameter (`o->m()`) and a local variable
 // (`one.m()`) all dispatch through the trait vtable. This is the recursion
 // pattern the compiler needs to walk its own AST.
+//
+// `num()` / `add()` are the only constructors: node layout stays inside the
+// implementation, `main` only states which expression it wants.
 // License: MIT; see LICENSE.EXCEPTION
 #include <stdio.h>
 
@@ -46,14 +49,26 @@ impl Node for Add {
     }
 }
 
+/* 工厂放在 impl 之后：返回带 `use Node` 的 struct 时，生成的 C 会在函数体里
+   引用该 trait 的 vtable 定义，vtable 必须先出现。 */
+static struct Num num(int v) {
+    struct Num n = { .v = v };
+    return n;
+}
+
+static struct Add add(struct Num *lhs, struct Num *rhs) {
+    struct Add a = { .lhs = lhs, .rhs = rhs };
+    return a;
+}
+
 int main() {
-    struct Num a = { .v = 3 };
-    struct Num b = { .v = 4 };
-    struct Add sum = { .lhs = &a, .rhs = &b };
+    struct Num a = num(3);
+    struct Num b = num(4);
+    struct Add sum = add(&a, &b);
     sum.emit();
     printf("\n");
 
-    struct Num acc = { .v = 0 };
+    struct Num acc = num(0);
     sum.addto(&acc);
     printf("%d\n", acc.v);
     return 0;

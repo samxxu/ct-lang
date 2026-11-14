@@ -10,12 +10,13 @@
 //   Shop   有 Shelf（货架）、Purse、Reporter 能力
 // 同一个 trait 在两个类型上给出不同实现（Shop 的 spend 永远拒绝），这正是 trait 的用途。
 //
-// 对象间的交互写在普通 C 代码里（main）：取货 -> 按货架价格扣款 -> 店家入账，
-// 返回值在对象之间流转，并包含嵌套调用 `bob.earn(alice.spend(6))`。
+// 一笔交易属于货架，不属于 main：`fruit.sell_to(alice, 2)` 自己在对象层完成
+// 「按货架价格收款 → 出货 → 入账」，main 只表达业务意图。`sell_to` 的参数是
+// `Purse` 接口值，所以货架不需要知道对面是 Trader 还是另一个 Shop。
 //
 // 注意：impl 方法体内部的 `self->m()` 也会被重写成 vptr 调用（见 docs/language-spec.md 4.3）；
-// 这里把对象间的相互调用写在 main 这类普通 C 代码里，是为了演示跨对象的 `对象.方法()` 重写。
-// License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
+// 这里把对象间的相互调用留在对象层，而不是摊在 main 里。
+// License: MIT; see LICENSE.EXCEPTION
 #include <stdio.h>
 
 trait Purse {
@@ -28,6 +29,7 @@ trait Shelf {
     int price();
     int stock();
     int take(int n);
+    int sell_to(Purse buyer, int n);
 }
 
 trait Reporter {
@@ -45,6 +47,17 @@ struct Shop {
     int units;
     int coins;
 } use Shelf, Purse, Reporter;
+
+/* 构造入口：字段布局与初始值属于实现，调用点只给业务参数。 */
+static Trader trader(char *name, int coins) {
+    Trader t = { .name = name, .coins = coins };
+    return t;
+}
+
+static Shop shop(char *name, int price, int units) {
+    Shop s = { .name = name, .price = price, .units = units, .coins = 0 };
+    return s;
+}
 
 impl Purse for Trader {
     int balance() {
@@ -84,6 +97,17 @@ impl Shelf for Shop {
         printf("shop %s sells %d\n", self->name, n);
         return n;
     }
+    /* 交易归货架：先向买家收款（失败就整笔取消），再出货、入账。
+       `buyer` 是接口值，所以这里对 Trader 和 Shop 是同一条路径。 */
+    int sell_to(Purse buyer, int n) {
+        int paid = buyer.spend(self->price * n);
+        if (paid == 0) {
+            return 0;
+        }
+        self->take(n);
+        self->earn(paid);
+        return paid;
+    }
 }
 
 impl Purse for Shop {
@@ -113,27 +137,28 @@ static void broadcast(Reporter r) {
 }
 
 int main() {
-    Trader alice = { .name = "alice", .coins = 20 };
-    Trader bob = { .name = "bob", .coins = 3 };
-    Shop fruit = { .name = "fruit", .price = 4, .units = 5, .coins = 0 };
+    Trader alice = trader("alice", 20);
+    Trader bob = trader("bob", 3);
+    Shop fruit = shop("fruit", 4, 5);
+    Purse payer;
 
     alice.report();
     bob.report();
     fruit.report();
 
-    // 一笔交易：取货 -> 按货架价格扣款 -> 货款进店家钱包
-    int n = fruit.take(2);
-    int paid = alice.spend(fruit.price() * n);
-    fruit.earn(paid);
+    /* 一笔成功的交易：取货、扣款、入账都在货架内部完成。
+       接口实参必须在调用点先装箱——impl 方法的接口参数不会自动装箱。 */
+    payer = alice;
+    fruit.sell_to(payer, 2);
 
-    // bob 想买 3 件，但钱不够，扣款被拒绝并返回 0
-    bob.spend(fruit.price() * 3);
+    /* bob 想买 3 件，但钱不够：整笔取消，货架不出货 */
+    payer = bob;
+    fruit.sell_to(payer, 3);
 
-    // alice 借给 bob 6 枚，bob 再买 1 件：结果从一个对象喂给另一个对象
+    /* 对象之间直接转账：alice 借给 bob 6 枚，bob 再买 1 件 */
     bob.earn(alice.spend(6));
-    n = fruit.take(1);
-    paid = bob.spend(fruit.price() * n);
-    fruit.earn(paid);
+    payer = bob;
+    fruit.sell_to(payer, 1);
 
     alice.report();
     bob.report();

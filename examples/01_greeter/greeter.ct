@@ -1,5 +1,8 @@
-// greeter.ct — 最小可运行示例：一个 trait、一个 struct、一次实现、两个调用
-// 展开规则见 docs/language-spec.md；运行方式见 examples/../README.md
+// greeter.ct — 最小可运行示例：一个 trait、一个 struct、一个工厂、两个调用
+//
+// `person()` 是唯一的构造入口：字段顺序、默认值属于实现，main 只描述
+// 「拿到一个 Greeter 能做什么」，不描述对象长什么样。
+// 展开规则见 docs/language-spec.md；运行方式见 examples/README.md
 // License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,8 +26,14 @@ impl Greeter for Person {
     }
 }
 
+/* 工厂：调用点只给业务参数。以后 Person 加字段，只改这里。 */
+static Person person(char *name, int age) {
+    Person p = { .name = name, .age = age };
+    return p;
+}
+
 int main() {
-    Person p = { .name = "Tom", .age = 36 };
+    Person p = person("Tom", 36);
     p.greet();
     p.greet_name("Jerry");
     return 0;

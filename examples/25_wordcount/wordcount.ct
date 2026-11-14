@@ -1,76 +1,116 @@
 // 25_wordcount - a real program on top of `Map` (Phase 29)
 //
-// A fixed word list is counted into `Map<char *, int>` -- a `char *` key and an
-// `int` value, the pair a word count actually needs. The first walk prints the
-// map in insertion order, the second copies the entries and sorts them by count
-// (ties alphabetical), which is what an ordered report looks like without any
-// iteration-order promise from the map itself.
+// 统计与报表都属于 `WordCounter`：`add()` 维护词频，两种输出各是一个方法。
+// main 只准备词表并按业务顺序调用，排序用的临时数组与交换逻辑留在实现里。
+//
+// 报表需要按计数降序，而 map 只承诺插入序：`show_by_count()` 把条目复制出来后
+// 自己排序（同计数按字典序），不改动 map 本身，也不依赖它给出别的顺序。
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+trait WordReport {
+    void add(char *word);
+    void show_insertion_order();
+    void show_by_count();
+    void dispose();
+}
+
+struct WordCounter {
+    Map<char *, int> counts;
+} use WordReport;
+
+/* 唯一的构造入口：空表的初始化方式属于实现细节。 */
+static WordCounter word_counter(void) {
+    WordCounter c;
+    c.counts.h = 0;
+    return c;
+}
+
+impl WordReport for WordCounter {
+    void add(char *word) {
+        int *slot = self->counts.get(word);
+
+        if (slot != 0) {
+            *slot = *slot + 1;
+        } else {
+            self->counts.put(word, 1);
+        }
+    }
+
+    void show_insertion_order() {
+        /* foreach 只接受普通变量，不接受成员表达式；这里复制的是句柄，
+           别名不释放、也不改变 map 的引用计数。 */
+        Map<char *, int> entries = self->counts;
+
+        printf("in insertion order:\n");
+        foreach (entries) {
+            printf("  %s %d\n", item.key, item.value);
+        }
+    }
+
+    void show_by_count() {
+        int n = self->counts.len();
+        char **keys = malloc(sizeof(char *) * n);
+        int *values = malloc(sizeof(int) * n);
+        int a;
+        int b;
+        int k;
+        int swap;
+        char *tk;
+        int tv;
+
+        for (k = 0; k < n; k++) {
+            keys[k] = self->counts.entry(k).key;
+            values[k] = self->counts.entry(k).value;
+        }
+
+        for (a = 1; a < n; a++) {
+            b = a;
+            while (b > 0) {
+                swap = 0;
+                if (values[b - 1] < values[b]) {
+                    swap = 1;
+                } else if (values[b - 1] == values[b] && strcmp(keys[b - 1], keys[b]) > 0) {
+                    swap = 1;
+                }
+                if (swap == 0) break;
+                tk = keys[b - 1];
+                keys[b - 1] = keys[b];
+                keys[b] = tk;
+                tv = values[b - 1];
+                values[b - 1] = values[b];
+                values[b] = tv;
+                b = b - 1;
+            }
+        }
+
+        printf("by count:\n");
+        for (a = 0; a < n; a++) {
+            printf("  %s %d\n", keys[a], values[a]);
+        }
+        free(keys);
+        free(values);
+    }
+
+    void dispose() {
+        self->counts.release();
+    }
+}
 
 int main(void)
 {
     char *words[9] = {"the", "cat", "sat", "on", "the", "mat", "the", "dog", "sat"};
-    Map<char *, int> counts;
-    char *keys[9];
-    int values[9];
-    int n;
-    int a;
-    int b;
+    WordCounter tally = word_counter();
 
-    counts.h = 0;
     foreach (words) {
-        int *slot;
-        slot = counts.get(item);
-        if (slot != 0) {
-            *slot = *slot + 1;
-        } else {
-            counts.put(item, 1);
-        }
+        tally.add(item);
     }
-    printf("in insertion order:\n");
-    foreach (counts) {
-        printf("  %s %d\n", item.key, item.value);
-    }
-
-    n = 0;
-    foreach (counts) {
-        keys[n] = item.key;
-        values[n] = item.value;
-        n = n + 1;
-    }
-
-    for (a = 1; a < n; a++) {
-        b = a;
-        while (b > 0) {
-            int swap;
-            char *tk;
-            int tv;
-            swap = 0;
-            if (values[b - 1] < values[b]) {
-                swap = 1;
-            } else if (values[b - 1] == values[b] && strcmp(keys[b - 1], keys[b]) > 0) {
-                swap = 1;
-            }
-            if (swap == 0) break;
-            tk = keys[b - 1];
-            keys[b - 1] = keys[b];
-            keys[b] = tk;
-            tv = values[b - 1];
-            values[b - 1] = values[b];
-            values[b] = tv;
-            b = b - 1;
-        }
-    }
-
-    printf("by count:\n");
-    for (a = 0; a < n; a++) {
-        printf("  %s %d\n", keys[a], values[a]);
-    }
-
-    counts.release();
+    tally.show_insertion_order();
+    tally.show_by_count();
+    tally.dispose();
     return 0;
 }
