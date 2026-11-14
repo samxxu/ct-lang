@@ -8,6 +8,228 @@
 > 读完你会知道：怎么装、怎么编译第一个程序、生成物长什么样、方法派发怎么写、接口怎么装箱、
 > 多文件怎么组织、内存怎么管、`map` 怎么把 trait 绑到已有 C 库，以及哪些写法会直接报错。
 
+## 核心范式：字符串起手 → 工厂藏构建 → 对象方法链
+
+CT 最主要的编程范式只有一句话，三段顺序固定：
+
+1. **起点是字符串**，不是构造器。
+2. **通过 factory 创建由 trait 定义的对象类型**，不是 struct；struct 是实现细节，不出现在使用者代码里。
+3. **链式调用挂在接口上**，配置方法返回同一接口类型。
+
+这三段、两档路径的判断依据、0.44.1 的逐段边界都只在
+[language-spec §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径) 完整讲一次，本节不重复，
+只按它走读样例。
+
+**先选档，再看样例**（判断依据同见 §4.10.1）：
+
+| 你的对象 | 走哪档 | 本教程样例 |
+| --- | --- | --- |
+| 无状态、单一实现、调用方不需要面向接口 | 轻量：基本类型直接挂方法，方法返回自身类型 | [最小机制](#最小机制轻量路径字符串切分) |
+| 有状态、多种实现、调用方要面向接口 | 完整：字符串 → factory → trait 对象 → 接口链 | 下面的 HTTP 走读 |
+
+轻量路径不是错写法；简单转换套接口只是绕。
+
+**注意**：本节 HTTP 走读展示的是完整路径的**目标形态**。在 0.44.1 上它不能原样跑：第 2 段被
+单元矩阵挡住（语言限制），第 3 段能「接口值落变量后逐跳」调用、但不能一条表达式连跳，且返回
+局部接口值会悬垂（实现限制；逐条报错见 §4.10.1）。所以可运行版
+[examples/47_chain_factory](../examples/47_chain_factory/src/main.ct) 是**静态宿主形态**：宿主在映射单元
+内部是 struct，使用者代码里看不到它。先看调用点：
+
+```c
+//@ct-requires: ct-ast
+import http::http;              /* 工厂与对象方法都由这个映射单元提供 */
+
+#include <stdio.h>
+
+int main(void)
+{
+    /* 1. 字符串起手：接收者还是 char *，method("GET") 是挂在 char * 上的工厂。 */
+    /* 2. 从 .method("GET") 返回开始，接收者已经是请求对象；                   */
+    /*    header()/timeout() 都按值返回对象本身，所以能继续链。                */
+    int status = "https://api.example.com/users"
+                     .method("GET")
+                     .header("Accept", "application/json")
+                     .timeout(3000)
+                     .send()
+                     .status();     /* 3. send() 返回响应对象；status() 在它上面收口 */
+
+    /* 4. 同一条入口再走一次：工厂每次都产出一个新请求对象，链之间互不影响。 */
+    char *body = "https://api.example.com/users"
+                     .method("GET")
+                     .header("Accept", "application/json")
+                     .send()
+                     .body();
+
+    printf("%d %s\n", status, body);   /* 200 {"users":3} */
+    return 0;
+}
+```
+
+这段代码没有把「请求对象怎么搭」泄漏到调用点。三层接收者与三个文件的分工是：
+
+**第 1 层：`char *` 只挂工厂。** `http.m.ct` 里的映射把 `method()` 绑到 C 函数
+`http_request_new()`：
+
+```c
+pub type CRequest = struct HttpRequest;
+pub type CResponse = struct HttpResponse;
+
+pub trait HttpEntry {
+    CRequest method(char *verb);
+}
+
+map trait HttpEntry for type char * {
+    method(s, verb) -> http_request_new(s, verb);
+}
+```
+
+**第 2 层：请求对象的配置方法都返回宿主本身。** `CRequest` 是内部宿主别名（实现细节，调用点
+看不到它）；`header()` / `timeout()` 的返回类型就是它，所以每一跳之后接收者仍是同一个对象类型，
+链不会断：
+
+```c
+pub trait RequestBuilder {
+    CRequest header(char *name, char *value);
+    CRequest timeout(int ms);
+    CResponse send();
+}
+
+map trait RequestBuilder for type CRequest {
+    header(r, name, value) -> http_request_header(r, name, value);
+    timeout(r, ms)         -> http_request_timeout(r, ms);
+    send(r)                -> http_request_send(r);
+}
+```
+
+**第 3 层：`send()` 换成响应对象。** 响应宿主上只挂收口方法：
+
+```c
+pub trait ResponseView {
+    int status();
+    char *body();
+}
+
+map trait ResponseView for type CResponse {
+    status(r) -> http_response_status(r);
+    body(r)   -> http_response_body(r);
+}
+```
+
+**构建与 stub 在 `http.shim.h`（普通 C）。** 工厂把字段一次填好；`send()` 是唯一将来接
+curl 的位置，当前固定返回 200 + JSON：
+
+```c
+struct HttpRequest { char *url; char *verb; char *accept; int timeout_ms; int headers; };
+struct HttpResponse { int status; char *body; };
+
+static inline struct HttpRequest http_request_new(const char *url, const char *verb)
+{
+    struct HttpRequest r;
+    r.url = (char *)url;
+    r.verb = (char *)verb;
+    r.accept = "";
+    r.timeout_ms = 0;
+    r.headers = 0;
+    return r;
+}
+
+/* stub：不发网络。接 curl 时把这里换成 curl_easy_perform。 */
+static inline struct HttpResponse http_request_send(struct HttpRequest r)
+{
+    struct HttpResponse resp;
+    if (r.timeout_ms < 0) {
+        resp.status = 408;
+        resp.body = "stub: timeout";
+    } else {
+        resp.status = 200;
+        resp.body = "{\"users\":3}";
+    }
+    return resp;
+}
+```
+
+完整 shim 与其余三个函数见
+[examples/47_chain_factory/src/http/http.shim.h](../examples/47_chain_factory/src/http/http.shim.h)。
+
+生成物是一条嵌套 C 调用，没有 wrapper、vtable 或接口值：
+
+```c
+int status = http_response_status((http_request_send((http_request_timeout(
+    (http_request_header((http_request_new(("https://api.example.com/users"), ("GET"))),
+                         ("Accept"), ("application/json"))), (3000))))));
+```
+
+跑一遍：
+
+```sh
+ct build examples/47_chain_factory/src/main.ct -o /tmp/http47
+/tmp/http47
+# 200 {"users":3}
+```
+
+### 最小机制（轻量路径：字符串切分）
+
+上面那条是有状态的请求对象，必须走完整路径。如果只是对字符串做几次无状态转换，不需要对象，也
+不需要 vtable——直接把方法挂到 `char *` 上，方法返回 `char *`，链就成立（完整程序见
+[examples/48_string_steps](../examples/48_string_steps/src/main.ct)）：
+
+```c
+import text::text;
+
+int main(void)
+{
+    int n = "alpha,beta,gamma".split_once(',').split_once(',').len();
+    char *last = "alpha,beta,gamma".split_once(',').split_once(',');
+    printf("%s %d\n", last, n);   /* gamma 5 */
+    return 0;
+}
+```
+
+映射单元只有两张表，没有状态、没有接口值：
+
+```c
+pub trait TextSteps {
+    char *split_once(char sep);
+    int len();
+}
+
+map trait TextSteps for type char * {
+    split_once(s, sep) -> text_split_once(s, sep);
+    len(s)            -> text_len(s);
+}
+```
+
+生成物同样是嵌套裸 C 调用，`char *` 一路进、`char *` 一路出：
+
+```c
+int n = text_len((text_split_once((text_split_once(("alpha,beta,gamma"), (','))), (','))));
+```
+
+```sh
+ct build examples/48_string_steps/src/main.ct -o /tmp/text48
+/tmp/text48
+# gamma 5
+```
+
+**两档差在哪**：这一档没有对象、没有多实现、也没有接口值；一旦字符串要承载状态、或有多种实现、
+或调用方要面向接口，就必须回到完整路径。判断依据见 [§4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径)。
+
+### 两个常见误读
+
+**误读一：把「impl 方法不能作接收者」读成「CT 不支持链式」。**
+正确读法是：**两条路径要分开看**。类型宿主静态映射（本节）的每一跳都是 recipe 替换，
+接收者可以是字面量、变量、CT 已声明函数的调用结果，链任意长；经典 `impl` / 固有 `impl`
+走派发路径，方法结果不能再作下一跳接收者，第二跳会报
+`method receiver must be a variable, an element, a call or a field chain`。
+所以「链式」是支持的，限制在**动态派发那条路径**上。边界与报错原文见
+[实测记录](history/reports/chain-builder-paradigm/probe.md)。
+
+**误读二：把「`char *` 上挂工厂」读成「给字符串加状态」。**
+正确读法是：`char *` 宿主上**只挂工厂**，它没有字段、也不存状态；状态在工厂返回的
+请求对象里（内部是 struct，属于实现细节）。`char *` 也不支持 `impl`（`impl Trait for char *` 报
+`impl for undefined struct 'char'`）；方法只来自被导入的 `.m.ct` 映射单元，
+没有导入就不存在，调用会报 `no method 'get' for type 'char *'`。
+
 ---
 
 ## 0. 安装

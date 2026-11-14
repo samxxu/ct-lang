@@ -1,0 +1,15 @@
+namespace text;
+
+#include "text.shim.h"
+
+/* 轻量路径：char * 上直接挂静态方法。
+   这里没有对象状态，也不产生接口值；trait 只是绑定表。 */
+pub trait TextSteps {
+    char *split_once(char sep);
+    int len();
+}
+
+map trait TextSteps for type char * {
+    split_once(s, sep) -> text_split_once(s, sep);
+    len(s)            -> text_len(s);
+}

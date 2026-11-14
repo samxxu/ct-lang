@@ -45,6 +45,8 @@
 | 静态 trait（static trait） | `.m.ct` 里的 `pub trait T { …; }` | 无 `_iface` / `_vtbl` / vtable；不能 `impl`、`use`、作类型、装箱，也不能带默认体 |
 | 命名空间静态调用 | `libc::Env.get("HOME")` | 静态 trait 的限定调用，直接展开成 recipe 的 C 调用（无 `self`） |
 | 类型宿主（type host） | `map trait CStr for type char * { … }` | 接收者由调用点表达式的静态类型决定（数组先 decay）；`a.toInt()` → `atoi((a))` |
+| 链式构建器范式（chain builder） | 字符串起手 → factory → 由 trait 定义的对象类型 → 接口上的链式调用 | 唯一权威定义、两档判断依据与 0.44.1 边界见 [language-spec](language-spec.md) §4.10.1；轻量样例 [examples/48_string_steps](../examples/48_string_steps/src/main.ct) |
+| 轻量路径 / 完整路径 | 基本类型直接挂方法 / 字符串 → factory → trait 对象 → 接口链 | 按「有没有状态、要不要多实现、调用方是否面向接口」选档，判断表见 §4.10.1；轻量不是错写法 |
 | recipe | `-> memset(s, value, count)` | `->` 右侧的 C 调用模板；绑定参数按出现点替换，`&p` 用 C99 compound literal，未求值参数加 `(void)(…)` 前缀 |
 | prologue | `.m.ct` 里的 `#include` / `#define` | 按整行去重展开进消费者 `.c` 顶部；消费者 `.h` 不含它 |
 | 伴随 C shim（sibling shim） | `posix/socket.shim.h`（+ 可选 `socket.shim.c`） | 与 `<base>.m.ct` 同目录同名的 C 适配层：shim 头自动被消费者 `.c` include、其目录进 `cc` 行的 `-I`，shim 源直接进 `cc` 行；承接宏 / 全局量 / 转换 / 变参 / 回调（第三十九批，仅 ct-ast） |

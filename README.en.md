@@ -55,6 +55,7 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **memory**: `Drop` / `delete`, `own` (AutoDrop), block-level `defer` (Phase 38), path-sensitive leak warnings, `borrow` + `Handback`
 - **modules**: `namespace` / `import` / `pub` / multi-file `ct build` / directory = namespace
 - **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `test/bindings/` for C libraries
+- **chained construction (the idiomatic shape)**: a string start → a factory → an object type defined by a trait → method chaining on the interface. The authoritative three-part definition and the light / full two-track guidance live only in [language-spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)
 - **passthrough**: `#ct-raw` / `#ct-endraw` raw blocks (macros and hand-written C land in the generated `.c` byte for byte)
 - **diagnostics and tooling**: `#line` traceability, `--diagnostics=json|text`, multi-error recovery, incremental cache, `ct get` / `ct install`
 - **generic functions**: `T name<T>(…)` + `name<int>(…)`, monomorphised at compile time (Phase 26); **bounded generics** `T name<T: Trait>(…)` (Phase 28)

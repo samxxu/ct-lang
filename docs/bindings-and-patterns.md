@@ -505,3 +505,250 @@ int main(void)
 
 **门禁**：`test/ast/p41_*` 覆盖 load/store/CAS/取消标志/引用计数；`selfhost/check-tsan.sh`
 在 nightly Linux job 跑 TSan。它不是第 12 道硬门禁，本地无 TSan 时打印 `SKIP`。
+
+## 8 链式构建器：字符串工厂 + 对象方法链（HTTP 请求）
+
+范式定义是所有文档共用的同一句话，三段顺序固定：
+
+1. **起点是字符串**，不是构造器。
+2. **通过 factory 创建由 trait 定义的对象类型**，不是 struct；struct 是实现细节，不出现在使用者代码里。
+3. **链式调用挂在接口上**，配置方法返回同一接口类型。
+
+完整解释、两档路径的判断依据、0.44.1 的逐段边界与报错原文只在
+[language-spec §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径) 讲一次，本节只给配方。
+
+**先选档**：对象无状态、单一实现、调用方不需要面向接口 → 轻量路径，基本类型直接挂方法
+（见本节末尾的字符串切分配方，完整程序在 [examples/48_string_steps](../examples/48_string_steps/src/main.ct)）；
+有状态、多实现、调用方要面向接口 → 完整路径，也就是本节主配方。轻量不是错写法。
+
+**适用场景**：请求、配置这类「从一段文本起手、配置几项、取一个结果」的构造。目标是让调用点
+不出现构造细节，也不出现一长串局部变量。这里的主配方是 HTTP 请求（完整路径的目标形态；0.44.1
+上接口段还不成立，实际可运行的是静态宿主形态，见 §4.10.1）：
+
+```c
+int status = "https://api.example.com/users"
+                 .method("GET")                    /* char * 上的工厂 */
+                 .header("Accept", "application/json")
+                 .timeout(3000)
+                 .send()                           /* 请求对象 → 响应对象 */
+                 .status();
+```
+
+三层接收者：`char *`（只挂工厂）→ 请求对象（配置方法返回宿主本身）→ 响应对象（收口方法）。
+使用者只看到这三个位置，看不到宿主的具体类型名。可运行版（静态宿主，不是 trait 对象）见
+[examples/47_chain_factory](../examples/47_chain_factory/src/main.ct)；完整路径的 0.44.1 断点在
+[language-spec §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径)。
+
+`http.shim.h`——普通 C 适配层（**stub**，不碰网络）：
+
+```c
+#ifndef HTTP_SHIM_H
+#define HTTP_SHIM_H
+
+struct HttpRequest {
+    char *url;
+    char *verb;
+    char *accept;
+    int timeout_ms;
+    int headers;
+};
+
+struct HttpResponse {
+    int status;
+    char *body;
+};
+
+static inline struct HttpRequest http_request_new(const char *url, const char *verb)
+{
+    struct HttpRequest r;
+    r.url = (char *)url;
+    r.verb = (char *)verb;
+    r.accept = "";
+    r.timeout_ms = 0;
+    r.headers = 0;
+    return r;
+}
+
+static inline struct HttpRequest http_request_header(struct HttpRequest r,
+                                                     const char *name,
+                                                     const char *value)
+{
+    if (name != 0 && value != 0) {
+        r.headers = r.headers + 1;
+        if (name[0] == 'A' && name[1] == 'c') r.accept = (char *)value;
+    }
+    return r;
+}
+
+static inline struct HttpRequest http_request_timeout(struct HttpRequest r, int ms)
+{
+    r.timeout_ms = ms;
+    return r;
+}
+
+/* 唯一会“发请求”的位置。stub；接 curl 时改成 curl_easy_perform。 */
+static inline struct HttpResponse http_request_send(struct HttpRequest r)
+{
+    struct HttpResponse resp;
+    if (r.timeout_ms < 0) {
+        resp.status = 408;
+        resp.body = "stub: timeout";
+    } else {
+        resp.status = 200;
+        resp.body = "{\"users\":3}";
+    }
+    return resp;
+}
+
+static inline int http_response_status(struct HttpResponse r) { return r.status; }
+static inline char *http_response_body(struct HttpResponse r) { return r.body; }
+
+#endif
+```
+
+`http.m.ct`——三层方法分别绑在哪个宿主上：
+
+```c
+namespace http;
+
+#include "http.shim.h"
+
+pub type CRequest = struct HttpRequest;
+pub type CResponse = struct HttpResponse;
+
+pub trait HttpEntry {
+    CRequest method(char *verb);
+}
+
+pub trait RequestBuilder {
+    CRequest header(char *name, char *value);
+    CRequest timeout(int ms);
+    CResponse send();
+}
+
+pub trait ResponseView {
+    int status();
+    char *body();
+}
+
+map trait HttpEntry for type char * {
+    method(s, verb) -> http_request_new(s, verb);
+}
+
+map trait RequestBuilder for type CRequest {
+    header(r, name, value) -> http_request_header(r, name, value);
+    timeout(r, ms)         -> http_request_timeout(r, ms);
+    send(r)                -> http_request_send(r);
+}
+
+map trait ResponseView for type CResponse {
+    status(r) -> http_response_status(r);
+    body(r)   -> http_response_body(r);
+}
+```
+
+`main.ct`：
+
+```c
+//@ct-requires: ct-ast
+import http::http;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int status = "https://api.example.com/users"
+                     .method("GET")
+                     .header("Accept", "application/json")
+                     .timeout(3000)
+                     .send()
+                     .status();
+
+    char *body = "https://api.example.com/users"
+                     .method("GET")
+                     .header("Accept", "application/json")
+                     .send()
+                     .body();
+
+    printf("%d %s\n", status, body);
+    return 0;
+}
+```
+
+```sh
+ct build examples/47_chain_factory/src/main.ct -o /tmp/http47 && /tmp/http47
+# 200 {"users":3}
+```
+
+**为什么成立**：
+
+- 每一跳都是类型宿主静态映射（定义见 [language-spec §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径)），
+  展开成一次裸 C 调用：
+  `http_response_status(http_request_send(http_request_timeout(http_request_header(http_request_new("https://api.example.com/users", "GET"), "Accept", "application/json"), 3000)))`。
+  没有 vtable、装箱或临时对象。
+- `char *` 宿主只做工厂，不存状态；状态在工厂产出的宿主里，调用点看不到它。
+- `header()` / `timeout()` 按值返回宿主本身，所以下一跳还能继续 `.`。
+
+**轻量配方（无状态、单一实现）**：同样从字符串起手，但不引入对象。把方法直接挂到 `char *`，
+方法返回 `char *` 就能继续链，最后 `len()` 收口（完整程序见
+[examples/48_string_steps](../examples/48_string_steps/src/main.ct)）：
+
+```c
+import text::text;
+
+int n = "alpha,beta,gamma".split_once(',').split_once(',').len();   /* 5 */
+```
+
+```c
+/* text.m.ct */
+map trait TextSteps for type char * {
+    split_once(s, sep) -> text_split_once(s, sep);
+    len(s)            -> text_len(s);
+}
+```
+
+生成物同样是嵌套裸 C 调用，没有 vtable、没有接口值。这一档不解决多态；需要多实现时回到上面的完整配方。
+
+**常见误读**
+
+1. **「impl 方法不能作接收者」≠「CT 不支持链式」。** 链式走的是类型宿主静态映射；经典
+   `impl` / 固有 `impl` 走派发路径，方法结果不能再作接收者，第二跳报
+   `method receiver must be a variable, an element, a call or a field chain`。两条路径要分开看。
+2. **「`char *` 上挂方法」≠「给字符串加状态」。** `char *` 上只有工厂，没有字段；也不能写
+   `impl Trait for char *`（报 `impl for undefined struct 'char'`）。方法只来自被 `import` 的
+   `.m.ct` 映射单元；没有导入就不存在，调用报 `no method 'get' for type 'char *'`。
+
+**边界**
+
+完整边界（含 0.44.1 第 2、3 段为何不成立）只在
+[language-spec §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径)；这里只列写配方时最容易踩的两条：
+
+- `map trait … for type …` 只能写在 `.m.ct` 里；写在普通 `.ct` 报
+  `a type host is only allowed in a .m.ct unit`。
+- 不透明 C shim 函数的调用结果不能直接起手（CT 没有它的返回类型）；先落到变量，或包一层带
+  显式返回类型的 CT 函数。
+
+`send()` 当前是 stub，不发网络；接真 curl 时只替换 `http.shim.h` 里的 `http_*` 实现，
+CT 链路与 `http.m.ct` 不变。逐条实跑证据（退出码与报错原文）见
+[history/reports/chain-builder-paradigm/probe.md](history/reports/chain-builder-paradigm/probe.md)。
+
+**负例（预期红）**
+
+```c
+/* char * 上没有 impl；方法也不会凭空出现 */
+trait UrlOps { char *get(); }
+impl UrlOps for char * { char *get() { return self; } }
+```
+
+```text
+error: impl for undefined struct 'char'
+```
+
+```c
+/* 没有 import 映射单元时，字符串上直接调方法 */
+"https://example.com".get();
+```
+
+```text
+error: no method 'get' for type 'char *'
+```

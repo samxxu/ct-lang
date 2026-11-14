@@ -1,0 +1,21 @@
+// 48_string_steps — 轻量路径：基本类型直接挂静态方法
+//
+// 起点是字符串；split_once 返回的还是 char *，所以能继续链，
+// 最后 len() 收口成 int。全程没有对象、没有接口值、没有 vtable。
+// 适合：无状态、单一实现、调用方不需要面向接口的转换。
+//@ct-requires: ct-ast
+import text::text;
+
+#include <stdio.h>
+
+int main(void)
+{
+    /* 两次 split_once 都返回 char *（指向原字符串内部），所以能一路 . 下去。 */
+    int n = "alpha,beta,gamma".split_once(',').split_once(',').len();
+
+    /* 同一条链也可以在中途落成 char *，不强制收口成 int。 */
+    char *last = "alpha,beta,gamma".split_once(',').split_once(',');
+
+    printf("%s %d\n", last, n);
+    return 0;
+}

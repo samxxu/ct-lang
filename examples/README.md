@@ -42,10 +42,12 @@
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
 | `08_map_binding/src/type_bridge` | `pub type FileHandle = struct ct_file *;` + `map ... for type FileHandle`，消费端 `f.read()` 原地展开 | ct-ast + `ct build` 多单元 | `check-warnings.sh` 的 src-layout build 段 |
-| `13_builder_chain` | 宿主方法返回宿主本身，形成真正的 `b.add(1).add(2).value()` 链 | ct-ast + `ct build` 多单元 | `check-warnings.sh`（本文件新增段） |
+| `13_builder_chain` | 字符串起手 → `.builder()` 工厂 → 宿主方法三跳链 `"10".builder().add(1).add(2).value()`；使用者代码无 struct 名、无自由函数 | ct-ast + `ct build` 多单元 | `check-warnings.sh`（本文件新增段） |
 | `14_scalar_host` | 给 `int` / `char *` / `double` / `unsigned long` 加方法，含链式调用 | ct-ast + `ct build` 多单元 | 同上 |
+| `47_chain_factory` | 完整路径的目标形态；本样例可跑的是**静态宿主**：URL 字符串起手 → `char *` 上的 `method("GET")` 工厂 → 请求对象的 header/timeout 链 → `send()` 收口；`send()` 为 stub，接 curl 只换 shim。宿主是 struct，不是 trait 对象（完整路径在 0.44.1 上的三条断点见 language-spec §4.10.1） | ct-ast + `ct build` 多单元 | `check-warnings.sh` 的 src-layout build 段 |
+| `48_string_steps` | 轻量路径：`char *` 上直接挂 `split_once` / `len`，方法返回 `char *` 继续链；无对象、无接口值、无 vtable | ct-ast + `ct build` 多单元 | 同上 |
 
-`08_map_binding/src`、`13`、`14` 都带 `.m.ct` 映射单元与 `import`，只能用 `ct build`
+`08_map_binding/src`、`13`、`14`、`47` 都带 `.m.ct` 映射单元与 `import`，只能用 `ct build`
 的多单元模式，因此入口放在 `examples/<dir>/src/main.ct`（三层），而不是会被单文件编译的
 `examples/<dir>/*.ct`。`wave1-demo` 采用同一种 `src/` 布局。
 

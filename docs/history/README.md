@@ -57,6 +57,7 @@
 | [review-2026-10-21-round2/](reports/review-2026-10-21-round2/review-2026-10-21-round2.md) | 第二轮复审（同一 HEAD 的更深扫描） |
 | [release-readiness-2026-10-21/](reports/release-readiness-2026-10-21/release-readiness-2026-10-21.md) | 发布就绪核对 |
 | [audit-2026-10-31/](reports/audit-2026-10-31/audit-2026-10-31.md) | 测试覆盖度与文档一致性审计（`v0.13.0`） |
+| [chain-builder-paradigm/](reports/chain-builder-paradigm/probe.md) | 链式构建器范式的逐条实测（CT 0.44.1）：`char *` 上 `impl` 的六种形态、类型宿主映射、链式边界与报错原文 |
 | [review-2026-10-31/](reports/review-2026-10-31/review-2026-10-31.md) | 代码审查 + 文档一致性审查（`v0.15.1`） |
 | [review-2026-11-01/](reports/review-2026-11-01/review-2026-11-01.md) | `borrow` / `Handback` 实现审查（`v0.15.1`） |
 | [review-2026-11-02/](reports/review-2026-11-02/review-2026-11-02.md) | Phase 18 生态建设与 `v0.18.0` 收口审查 |

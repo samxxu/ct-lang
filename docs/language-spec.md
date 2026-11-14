@@ -252,7 +252,7 @@ p.__greeter_vptr->greet_name(&p, "Jerry");
   `__ct_tmp<N>`，且**只允许**在语句行首或赋值 / 声明初始化式的右值行首物化（位置与语义条件见下条）。
   接收者本身是一次**方法调用**的形态（`a.m().n()`，AST 里是 `N_MCALL`）当前一律拒绝，不会静默产出坏 C；
   L0 / L2 的行重写管线同样拒绝「方法结果再调方法」的链（`c.inc()->inc()`），因为没有临时量承载方法返回值。
-  类型宿主（§4.10）不走这条路径，不受此限。
+  类型宿主（§4.10）不走这条路径，不受此限；链式构建器的合法形态与边界见 §4.10.1。
 - **右值接收者**（条件 1′）：接收者先被提升为一个临时变量，求值**恰好一次**，再按上面同一规则派发。
   临时变量名为 `__ct_tmp<N>`（`N` 在单个文件内递增，从 0 开始）：
   - 值返回：`f().m(a)` → 前一行 `struct S __ct_tmp0 = f();`，本行 `__ct_tmp0.__t_vptr->m(&__ct_tmp0, a)`；
@@ -613,6 +613,79 @@ recipe 替换（逐出现点）：
 `"type": "<ctype>"`，每个 binding 带 `"inline": true`、`"wrapper": false` 与 `"symbol": <callee>`；
 带 shim 的静态条目还带 `"shim": {"header": "<path>", "source": "<path>"}`（无 `.shim.c` 时省略
 `source`）。动态 `map` 的字段与取值不变。
+
+#### 4.10.1 链式构建器范式：权威定义与两档路径
+
+本节是这条范式的**唯一权威定义**；README、tutorial、bindings §8 只引用本节，不再各自解释。
+
+**范式定义（三段，顺序固定）：**
+
+1. 以字符串为起点，不是构造器。
+2. 通过 factory 创建由 trait 定义的对象类型，不是 struct；struct 是实现细节，不出现在使用者代码里。
+3. 链式调用挂在接口上，配置方法返回同一接口类型。
+
+**两档路径与判断依据**（紧邻定义，就近可查）：
+
+| 判断项 | 轻量路径 | 完整路径 |
+| --- | --- | --- |
+| 对象有没有状态 | 没有 | 有 |
+| 要不要多实现 | 不要 | 要 |
+| 调用方是否需要面向接口 | 不需要 | 需要 |
+| 写法 | 基本类型直接挂寄生方法 / 类型宿主映射；方法返回自身类型即可继续链 | 字符串 → factory → 由 trait 定义的对象类型 → 接口上链式 |
+| 代表样例 | [examples/48_string_steps](../examples/48_string_steps/src/main.ct) | 目标形态见本节；当前可运行形态见 [examples/47_chain_factory](../examples/47_chain_factory/src/main.ct) |
+| 代价 | 无 vtable、无装箱 | 有装箱；当前链式段受限 |
+
+轻量路径不是「不完整的错写法」：无状态、单一实现的转换直接挂方法就够了，套 trait 只会多一层绕。
+反过来，只有对象有状态、需要多个实现、调用方要面向接口时，才值得走完整路径。
+
+**0.44.1 实测状态（逐段）：**
+
+- **第 1 段成立**：`char *` 上的 `.m.ct` factory 可用，字面量可以起手。`map trait … for type char *`
+  只能写在 `.m.ct`，消费单元 `import` 该映射单元后方法才存在。
+- **第 2 段不成立（语言限制）**：能放类型宿主的单元看不见接口，能看见接口的单元不许放类型宿主。
+  - `map trait … for type char *` 写进 `.h.ct` → `error: a type host is only allowed in a .m.ct unit`（rc=1）。
+  - 改写在 `.m.ct` 并 `import` 接口所在的 `.h.ct`：未给 `-I` 时
+    `ctc: cannot resolve import 'http/http'`；给了 `-I` 时
+    `error: a .m.ct unit can only import another .m.ct unit`（rc=1）。反方向 `.h.ct` import `.m.ct`
+    同样报 `ctc: cannot resolve import`。
+  - `.m.ct` 自身也不能承载接口：`error: a .m.ct unit cannot declare a type` /
+    `error: a .m.ct unit cannot contain an impl`。三个位置都试过，**没有**同时满足两个约束的位置。
+  - 因此字符串 factory 只能接到 C shim 函数（静态宿主），或把 factory 写成 `.h.ct` 的自由函数
+    （起点不再是字符串）。
+- **第 3 段部分成立，但不能连跳**：
+  - 接口值**落变量后逐跳调用**成立：`HttpRequest r = x; HttpRequest r2 = r.header(...); int s = r2.send();`
+    编译、`cc`、运行全部通过（实测 `status=201`，rc=0）。
+  - 方法调用的结果不能直接作下一跳接收者：
+    `error: method receiver must be a variable, an element, a call or a field chain`（SH-73，未修）。
+    所以 `.header(...).timeout(...)`、`.send().status()` 这类连跳写不出来，每个中间结果都必须落变量。
+  - 返回接口值的**调用点推断已修（SH-72）**：`HttpResponse res = req.send();` 不再报
+    `cannot infer the type to box`，可以编译。
+  - `return self;` 的装箱自 **SH-74** 起发射 `(void *)_self`（此前误发 `&_self`，指向已返回的栈帧）。
+  - **仍未修**：impl 方法或自由函数返回**局部**接口值时，装箱仍取局部地址
+    （`return (struct Resp_iface){ (void *)&s, … };`），返回后悬垂。该形态可编译、可执行，
+    但读到的状态是错的（实测 `200`，期望 `201`；悬垂读，结果未定义）。
+
+因此在 0.44.1 上，完整三段**不能原样写出来**：第 2 段被单元矩阵挡住（语言限制），第 3 段被
+SH-73 与「返回局部接口值悬垂」挡住（本版实现限制）。可运行形态只有两条，必须按实际能力标注：
+
+- **A. 轻量静态映射链**（[examples/48_string_steps](../examples/48_string_steps/src/main.ct)）：
+  满足第 1 段与链式，不满足第 2 段（没有 trait 对象）。
+- **B. 带状态的静态宿主链**（[examples/47_chain_factory](../examples/47_chain_factory/src/main.ct)）：
+  满足第 1 段与链式，宿主在映射单元内部是 struct，不满足第 2、3 段。
+
+**当前可运行形态的约束：**
+
+- `map trait … for type …` 只能出现在 `.m.ct`；消费方必须 `import` 该单元，方法才存在。
+- 配置方法按值返回宿主；每一跳展开成裸 C 调用，无 vtable、无装箱。
+- 经典 `impl` / 固有 `impl` 的方法结果不能作下一跳接收者（§4.5）；返回 struct 的 trait 方法还会
+  发射未加 `struct` 限定的非法 C。不要把「`impl` 方法返回 `self` 的链」写成标准路径。
+- 不透明 C shim 函数的调用结果没有 CT 侧静态类型，不能直接起手；先落到变量，或包一层带显式
+  返回类型的 CT 函数。
+- `impl char *` 不存在：`impl` 的属主必须是已声明 struct 名；`impl Trait for char *` 报
+  `impl for undefined struct 'char'`，裸 `impl char *` 报 `impl of an unknown trait`。
+
+逐条实跑证据（六种 `impl` 形态、接口返回、生成 C 对比、逐层对照表）见
+[history/reports/chain-builder-paradigm/probe.md](history/reports/chain-builder-paradigm/probe.md)。
 
 #### 4.11 跨单元链接：`pub` 全局与 `extern`（ct-ast）
 

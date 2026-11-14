@@ -6,10 +6,19 @@ namespace builder;
    `struct Builder`; no typedef is emitted. */
 pub type CBuilder = struct Builder;
 
-/* Every method returns the host, so a call site can keep chaining. */
+/* 第 1 层：char * 只挂工厂。 */
+pub trait Entry {
+    CBuilder builder();
+}
+
+/* 第 2 层：每个方法返回宿主本身，所以调用点可以继续链。 */
 pub trait Steps {
     CBuilder add(int by);
     int value();
+}
+
+map trait Entry for type char * {
+    builder(s) -> builder_from(s);
 }
 
 map trait Steps for type CBuilder {

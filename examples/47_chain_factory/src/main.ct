@@ -1,0 +1,43 @@
+// 47_chain_factory — 一条完整的 HTTP 请求链（静态宿主形态）
+//
+// 注意边界：这是完整路径的「当前最接近可跑形态」，不是完整路径本身。
+// 宿主在 http.m.ct 里是 struct，由 map trait 绑到 C 函数；没有接口值、没有 vtable。
+// 完整路径（字符串 factory → trait 定义的对象 → 接口链）在 0.44.1 上被单元矩阵
+// 与方法结果接收者两条限制挡住，逐条报错见 docs/language-spec.md §4.10.1。
+//
+// 三层接收者：
+//   第 1 层 char *：字符串起手。method("GET") 是挂在 char * 上的工厂；
+//   第 2 层 请求对象：method() 之后接收者变成请求对象，header()/timeout()
+//                    都按值返回对象本身，所以能继续链；
+//   第 3 层 响应对象：send() 返回响应对象，status()/body() 在它上面收口。
+//
+// 使用者不需要知道请求对象有哪些字段，也看不到它的具体类型名（那是实现细节）。
+// send() 当前是 stub，不发真实网络；
+// 接 curl 时只替换 src/http/http.shim.h 里的 http_* 实现，这条链与 http.m.ct 不变。
+//@ct-requires: ct-ast
+import http::http;
+
+#include <stdio.h>
+
+int main(void)
+{
+    /* 第 1 层是字符串；method("GET") 之后接收者变成请求对象。 */
+    /* header()/timeout() 各返回对象本身，所以链没有断。        */
+    /* send() 返回响应对象，status() 在它上面收口。             */
+    int status = "https://api.example.com/users"
+                     .method("GET")
+                     .header("Accept", "application/json")
+                     .timeout(3000)
+                     .send()
+                     .status();
+
+    /* 同一条链再走一次，这次取响应体；工厂每次都产出新请求对象。 */
+    char *body = "https://api.example.com/users"
+                     .method("GET")
+                     .header("Accept", "application/json")
+                     .send()
+                     .body();
+
+    printf("%d %s\n", status, body);
+    return 0;
+}

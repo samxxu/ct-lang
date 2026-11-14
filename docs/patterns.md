@@ -47,7 +47,7 @@
 | Facade | 一个 `namespace` 导出少量 `pub` 函数，隐藏内部单元 |
 | Singleton | 命名空间里的 `pub` 全局实例（bindings 的实例写法），或文件作用域对象 |
 | Iterator | trait（`next` / `done`）+ 结构体保存游标状态 |
-| Builder | 结构体累积字段，构建函数返回对象或接口 |
+| Builder | 字符串起手 → factory → trait 定义的对象类型 → 接口链；完整定义与两档判断见 [language-spec §4.10.1](language-spec.md)，HTTP 配方见 [bindings-and-patterns §8](bindings-and-patterns.md)，无状态转换走轻量路径（[examples/48_string_steps](../examples/48_string_steps/src/main.ct)） |
 | Prototype | trait 的 `clone` 方法返回接口，各实现复制自身 |
 | Abstract Factory | 一个工厂结构体，成员是一组接口（产品族） |
 | Memento | 普通结构体保存快照，由发起者自行存取 |

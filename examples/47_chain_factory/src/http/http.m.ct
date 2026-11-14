@@ -1,0 +1,39 @@
+namespace http;
+
+#include "http.shim.h"
+
+/* 第 1 层：char * 只做工厂。接收者是字符串，产物是 HttpRequest。 */
+pub type CRequest = struct HttpRequest;
+pub type CResponse = struct HttpResponse;
+
+pub trait HttpEntry {
+    CRequest method(char *verb);
+}
+
+/* 第 2 层：HttpRequest 的配置方法都返回 CRequest（宿主本身），所以能继续链。 */
+pub trait RequestBuilder {
+    CRequest header(char *name, char *value);
+    CRequest timeout(int ms);
+    CResponse send();
+}
+
+/* 第 3 层：HttpResponse 上的收口方法。 */
+pub trait ResponseView {
+    int status();
+    char *body();
+}
+
+map trait HttpEntry for type char * {
+    method(s, verb) -> http_request_new(s, verb);
+}
+
+map trait RequestBuilder for type CRequest {
+    header(r, name, value) -> http_request_header(r, name, value);
+    timeout(r, ms)         -> http_request_timeout(r, ms);
+    send(r)                -> http_request_send(r);
+}
+
+map trait ResponseView for type CResponse {
+    status(r) -> http_response_status(r);
+    body(r)   -> http_response_body(r);
+}
