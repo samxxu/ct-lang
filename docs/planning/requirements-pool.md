@@ -128,7 +128,7 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 | **现象** | `--types` 只对 `ct check` 有效；`ct build` / `ct compile` 不进入 §4.53 的三类判定，`ct compile` 可以 rc=0 写出 `cc` 拒收的 C。把它做成默认不是开关问题：CLI 语义、严重级、全部 golden 与 archive ratchet 会一起变。 |
 | **证据锚点** | [language-spec.md:2206-2207](../language-spec.md#L2206-L2207)（「`ct build` / `ct compile` 不进入这些判定」）；[check-goldens.sh:1-26](../../selfhost/check-goldens.sh#L1-L26)（逐字节 golden）；[check-archive.sh:1-20](../../selfhost/check-archive.sh#L1-L20)（归档 oracle 逐字节 compare）；已知假阳性 `examples/18_generic_string_table/generic_string_table.ct:103`（由 `docs/design/phase45.md` S1 先修）。 |
 | **影响** | 461 语料 rc 与 `test/cases/*.expected.c` 全量重生成；`check-archive` 的 ratchet 口径变化；仓库方法论从「opt-in 检查」改为「默认严格」。 |
-| **建议做法** | 等 `docs/design/phase45.md` S1 落地、`--types` 在 40 个 example 上干净后，再按「CLI / 严重级 / golden 重生成 / 语料平价」拆 3–5 个切片评估；不在 43 / 45 内夹带。 |
+| **建议做法** | 等 `docs/design/phase45.md` S1 落地、`--types` 在 40 个 example 上干净后，再按「CLI / 严重级 / golden 重生成 / 语料平价」拆 3–5 个切片评估；不在 43 / 45 内夹带。**同一要求另有一半已被覆盖**：默认路径不得以 rc=0 写出 `cc` 拒收的 C、`--types` 判得出的错必须与默认路径同判据——这是对 PH-43 收口（`v0.43.0`）复查后确认的既有事实，`err:` 分支已硬错；剩余面是普通赋值 / `return` / 容器的全量判定。见 `docs/design/phase45.md` §0.3。 |
 | **当前判定** | **本期不做**。 |
 | `priority` | `P2` |
 | `status` | `open` |

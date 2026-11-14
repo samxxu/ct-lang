@@ -41,6 +41,27 @@
 **判定**：同一条 `chk_assignable` 内核在两个调用点两套判据，内部不自洽。S2 让 `:6120` 复用
 `:1402-1414` 已有的 `r == 2` 解析逻辑（不新建第二个兼容内核），把四个位置拉到与调用实参同一判据。
 
+### 0.3 出口一致性：v0.43.0 已覆盖，本条为回归约束
+
+**要求**：错误出口在**默认路径**（`ct build` / `ct compile` / 不带 `--types` 的 `ct check`）上不得以
+rc=0 写出 `cc` 拒收的 C；`ct check --types` 判得出的错误必须与默认路径同判据（同文案、同位置、rc=1）。
+
+**核查（2026-11-14，`ct-ast v0.43.0`，探针在 `/tmp/ctv`）**：`Result<int, char *> f(void) { return err: 1; }`
+
+```console
+$ ct-ast compile p43a.ct -o p43a.c
+p43a.ct:3:17: error: return: expected 'struct Result_int_char_p', got 'int'
+ctc: 1 error(s) generated          rc=1；未写出 p43a.c
+
+$ ct-ast check p43a.ct             -> 同一行，rc=1
+$ ct-ast check --types p43a.ct     -> 同一行，rc=1（不重复报告）
+$ ct-ast compile p43b.ct（`char *` 载荷）-> ... got 'char *'，rc=1，未写出 .c
+```
+
+**结论**：**已被 v0.43.0 覆盖，本条仅为回归约束**，PH-45 不重复实现出口判定。S2 改动
+`chk_assignable` 的指针短路后，`err:` 载荷走同一内核，必须复跑上述探针，确保默认路径仍 rc=1 且不写 `.c`
+（列入 E45-5）。本相与 S2 的关系仅此一条：**S2 收窄指针豁免，不得让已覆盖的 `err:` 出口退回 rc=0**。
+
 ## 1 目标 / 非目标
 
 ### 1.1 目标
@@ -50,6 +71,7 @@
 | O1 | 闭包块体内的 `return` 不再按外层 `ret_type` 判，恢复 §4.53「闭包一律静默」；`--types` 在 40 个 example 上不再出现该假阳性 |
 | O2 | 指针基类型 / 层数在初值 / 赋值 / `return` / 容器实参四个位置与调用实参同判据；`void *` ↔ 任意对象指针、裸 `0`、typedef、数组、闭包、函数指针的跳过面不变 |
 | O3 | 零回归：正例语料 `--types` 输出除该假阳性消失外逐字不变；461 语料 rc 平价（新增负例除外）；生成 C 与既有 golden 不变 |
+| O4 | 错误出口回归约束：默认路径不得以 rc=0 写出 `cc` 拒收的 C，`--types` 判得出的错与默认路径同判据（v0.43.0 已覆盖，本相不重复实现，只守回归，见 §0.3） |
 
 ### 1.2 非目标
 
@@ -116,6 +138,7 @@ golden 变化必须是重生成后的逐字节核对结果，且提交正文写�
 | **E45-2** | 四位置负例全报 L45-1：初值 / 赋值 / `return` / 容器实参 | 4/4，stderr 逐字匹配 |
 | **E45-3** | 层数负例报 L45-2；`void *` / 裸 `0` / typedef / 数组 / 闭包 / fnptr 仍静默 | 正负例各一组 |
 | **E45-4** | 零回归：461 语料 rc 平价（新增负例除外）；`check-warnings` 零告警；生成 C 与 golden 不变 | `rc_diff=0`、`check-all` 绿 |
+| **E45-5** | 出口回归：`return err:` 载荷与返回类型不符时，`ct compile` / `ct check` / `ct check --types` 均 rc=1、同文案，且不写 `.c`（S2 后复跑 §0.3 探针） | 两条最小用例 × 三入口 |
 
 ## 7 风险与不做项
 
