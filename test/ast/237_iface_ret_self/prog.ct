@@ -1,0 +1,53 @@
+/* SH-74: an impl method returning its own interface type must hand back the
+   object `self` points at, not the address of the emitter's local `_self`
+   slot.  `header()` returns `self`; `x` outlives the call, so both lines below
+   must see `x` itself. */
+#include <stdio.h>
+
+trait HttpResponse {
+    int status();
+}
+
+trait HttpRequest {
+    HttpRequest header(char *k, char *v);
+    HttpResponse send();
+}
+
+struct Req {
+    int s;
+} use HttpRequest;
+
+struct Res {
+    int s;
+} use HttpResponse;
+
+impl HttpRequest for Req {
+    HttpRequest header(char *k, char *v) {
+        (void)k;
+        (void)v;
+        return self;
+    }
+    HttpResponse send() {
+        Res r;
+        r.s = 200;
+        return r;
+    }
+}
+
+impl HttpResponse for Res {
+    int status() {
+        return self->s;
+    }
+}
+
+int main(void)
+{
+    Req x;
+    void *p;
+    x.s = 42;
+    HttpRequest req = x;
+    p = req.header("Accept", "application/json").self;
+    printf("%d\n", p == (void *)&x);
+    printf("%d\n", *(int *)p);
+    return 0;
+}
