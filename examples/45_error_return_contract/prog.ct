@@ -1,0 +1,15 @@
+//@ct-requires: ct-ast
+#include <stdio.h>
+Result<int, char *> load(int n)
+{
+    errdefer { printf("rollback\n"); }
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "negative" };
+    return (Result<int, char *>){ 1, n, 0 };
+}
+int main(void)
+{
+    Result<int, char *> ok = load(7);
+    Result<int, char *> bad = load(-1);
+    printf("%d %s\n", ok.ok ? ok.value : -1, bad.ok ? "ok" : bad.err);
+    return 0;
+}

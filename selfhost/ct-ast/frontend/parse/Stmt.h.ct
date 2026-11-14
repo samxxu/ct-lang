@@ -1990,8 +1990,12 @@ impl StmtOps for Stmt {
             /* Phase 32 S5 (L32-3/L32-5): the returned expression against the
                function's return type. A void function may not return a value,
                and the judged value is compared through the shared kernel. */
-            if (self->ex->types_mode && *self->ex->types_mode
-                && self->sym->ret_type[0]) {
+            /* Phase 43: an `err:` payload is judged on every path, not only
+               under `--types`. The `is_err` branch uses the hard-error diag
+               channel (7), so `ct compile` also refuses to write bad C; the
+               ordinary return keeps the opt-in warning path. */
+            if (self->sym->ret_type[0]
+                && (is_err || (self->ex->types_mode && *self->ex->types_mode))) {
                 if (strcmp(self->sym->ret_type, "void") == 0) {
                     char msg[MAX_TEXT];
                     snprintf(msg, sizeof msg,
@@ -2006,8 +2010,12 @@ impl StmtOps for Stmt {
                         self->ex->chk_line = eline;
                         self->ex->chk_col = ecol;
                         self->ex->chk_arg = 0;
-                        if (self->ex->chk_assignable(self->sym->ret_type, out,
-                                                     is_zero, 3) != 0)
+                        if (is_err) {
+                            if (self->ex->chk_assignable(self->sym->ret_type, out,
+                                                         is_zero, 7) != 0)
+                                return -1;
+                        } else if (self->ex->chk_assignable(self->sym->ret_type, out,
+                                                            is_zero, 3) != 0)
                             return -1;
                     }
                 }

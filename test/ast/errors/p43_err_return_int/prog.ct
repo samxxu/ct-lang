@@ -1,0 +1,4 @@
+Result<int, char *> f(void)
+{
+    return err: 1;
+}

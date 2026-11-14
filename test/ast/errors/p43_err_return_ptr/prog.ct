@@ -1,0 +1,4 @@
+Result<int, char *> f(char *p)
+{
+    return err: p;
+}

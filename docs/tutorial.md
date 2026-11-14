@@ -1458,6 +1458,21 @@ impl Counter {
 定义发 `static`。`pub` 只能写在 `.h.ct` 的 `pub struct` 固有 impl 上；trait impl 方法、块级
 `pub impl` 都硬错。完整规则见 [language-spec §4.60](language-spec.md)。
 
+### 10.17 `return err:` 的载荷类型（Phase 43）
+
+`return err: expr;` 的载荷必须能赋给函数返回类型。返回 `Result<int, char *>` 时：
+
+```ct
+Result<int, char *> f(int n)
+{
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "bad" };
+    return (Result<int, char *>){ 1, n, 0 };
+}
+```
+
+写 `return err: 1;` 会报 `return: expected 'struct Result_int_char_p', got 'int'`，
+`ct compile` 不会写出坏 C。`break err:` / `continue err:` 无载荷，不受影响。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |

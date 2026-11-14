@@ -1,0 +1,4 @@
+Result<int, char *> f(Result<long, int> other)
+{
+    return err: other;
+}

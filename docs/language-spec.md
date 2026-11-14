@@ -2331,3 +2331,23 @@ impl Counter {
 - 模板固有方法同规则：`exported = 模板 pub && 属主 .h.ct && 方法 pub`；foreign-element 副本恒 `static`。
 - 元素协议 `retain` / `release` 不按名字自动公开；跨单元/foreign 元素调用未 `pub` 的方法报 L42-6。
 - `drop` / `handback` 是 trait impl / static，不参与方法可见性；字段可见性仍随 struct。
+
+### 4.61 `return err:` 载荷类型契约（Phase 43，仅 ct-ast）
+
+`return err: expr;` 的 `expr` 必须可赋给当前函数的返回类型；不一致是 **L43-1 硬错**，
+`ct build` / `ct compile` / `ct check` / `ct check --types` 四入口一致，且 `ct compile` 不写 `.c`：
+
+```ct
+Result<int, char *> f(int n)
+{
+    if (n < 0) return err: 1;              /* L43-1: expected struct Result_int_char_p, got int */
+    return (Result<int, char *>){ 1, n, 0 };
+}
+```
+
+- 文案：`return: expected '<T>', got '<U>'`，位置在载荷表达式起点。
+- 只判 `err:` 分支；普通 `return` 仍只在 `--types` 下检查（避免闭包 `ret_type` 的既有假阳性）。
+- 复用 PH-32 的豁免：接口槽、裸 `0` 填指针、任意两指针不比较基类型（D32-6）。
+- 判不出的形态（数组 / 闭包 / 函数指针 / `sizeof` / `_Generic` / 宏）仍交 `cc`；闭包体
+  `return err:` 的 `ret_type` 缺陷按 PH-43 §0.2 另案记录。
+- 发射与清理不变：仍走 PH-40 的临时量、errdefer/defer 单栈 LIFO。

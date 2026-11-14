@@ -1,0 +1,6 @@
+struct S { int a; }
+struct T { int b; }
+struct S f(struct T t)
+{
+    return err: t;
+}

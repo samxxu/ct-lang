@@ -3701,6 +3701,11 @@ if bash test/ast/p42_generic.sh "$work/ct-ast"; then
 else
     bad "p42/generic" "generic visibility failed"
 fi
+if bash test/ast/p43_err_return_type.sh "$work/ct-ast"; then
+    ok "p43/errors"
+else
+    bad "p43/errors" "err: payload contract failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

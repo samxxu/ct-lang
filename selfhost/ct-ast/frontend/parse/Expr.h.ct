@@ -6130,10 +6130,14 @@ impl ExprTypes for Expr {
             snprintf(msg, sizeof msg, "argument %d: expected '%s', got '%s'",
                      self->chk_arg, formal, actual);
         } else {
-            label = diag == 2 ? "assignment" : (diag == 3 ? "return" : "initializer");
+            label = diag == 2 ? "assignment"
+                    : ((diag == 3 || diag == 7) ? "return" : "initializer");
             snprintf(msg, sizeof msg, "%s: expected '%s', got '%s'",
                      label, formal, actual);
         }
+        if (diag == 7)
+            return tool::diag::ct_sem_error(self->chk_line, self->chk_col, msg,
+                                            self->sup->mem->path);
         return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
                                         self->sup->mem->path);
     }

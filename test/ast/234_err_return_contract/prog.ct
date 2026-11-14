@@ -1,0 +1,16 @@
+#include <stdio.h>
+int f(int n)
+{
+    if (n > 0) return err: n;
+    return 0;
+}
+char *g(void)
+{
+    static char s[] = "x";
+    return err: (char *)s;
+}
+int main(void)
+{
+    printf("%d %s\n", f(3), g());
+    return 0;
+}
