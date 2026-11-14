@@ -1,0 +1,42 @@
+/* SH-71 A-1: the request object lives in a .h.ct unit, so the string factory
+   (a type host, which only a .m.ct may declare) can name its interface type. */
+#include <stdio.h>
+
+pub trait HttpRequest {
+    HttpRequest header(char *k, char *v);
+    int status();
+}
+
+pub struct Req {
+    int n;
+} use HttpRequest;
+
+impl HttpRequest for Req {
+    HttpRequest header(char *k, char *v) {
+        (void)k;
+        (void)v;
+        self->n = self->n + 1;
+        return self;
+    }
+    int status() {
+        return 200 + self->n;
+    }
+}
+
+/* The trait the type host binds. Its signature gives the call site both the
+   arity and the static return type (`HttpRequest`). */
+pub trait Entry {
+    HttpRequest method(char *verb);
+}
+
+static struct Req g_req;
+
+/* The factory the recipe expands to. A global backing object keeps the
+   returned interface value alive past the call (no local `&r`). */
+pub HttpRequest entry_new(char *url, char *verb)
+{
+    (void)url;
+    (void)verb;
+    g_req.n = 0;
+    return g_req;
+}

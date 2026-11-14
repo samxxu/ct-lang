@@ -2014,6 +2014,28 @@ else
     bad "map_unit_cross" "$(cat "$work/mmuc.err" "$work/mmuc.cc" "$work/mmuc.stdout" 2>/dev/null | head -5)"
 fi
 
+# SH-71 A-1: a mapping unit may import the `.h.ct` that owns the interface type
+# its type host returns. The first hop ("str".method(...)) carries the trait
+# signature's static type; the next hop is a variable, so dynamic dispatch
+# applies (SH-72). The `.h.ct` emits `entry.c/.h`; the `.m.ct` emits nothing.
+rm -rf "$mod-s71"
+mkdir -p "$mod-s71"
+if "$work/ct-ast" build --emit-c \
+        test/modules/sh71_map_import_hdr/main.ct -o "$mod-s71" \
+        >"$work/s71.out" 2>"$work/s71.err" \
+   && [ -f "$mod-s71/entry.c" ] && [ -f "$mod-s71/entry.h" ] \
+   && [ ! -f "$mod-s71/host.c" ] && [ ! -f "$mod-s71/host.h" ] \
+   && grep -qF 'entry_new(' "$mod-s71/main.c" \
+   && grep -qF 'r.vt->header(r.self' "$mod-s71/main.c" \
+   && "$CC" -Wall -Wextra -std=c99 -I "$mod-s71" "$mod-s71"/*.c \
+        -o "$work/s71.bin" 2>"$work/s71.cc" \
+   && "$work/s71.bin" >"$work/s71.stdout" 2>&1 \
+   && cmp -s "$work/s71.stdout" test/modules/sh71_map_import_hdr/expected.out; then
+    ok "sh71_map_import_hdr (.m.ct imports the .h.ct; type host returns its interface)"
+else
+    bad "sh71_map_import_hdr" "$(cat "$work/s71.err" "$work/s71.cc" "$work/s71.stdout" 2>/dev/null | head -5)"
+fi
+
 # A chain of mapping units: `lib.m.ct` imports `base.m.ct`, so one consumer sees
 # both maps and both prologues, and a change to the deeper unit still reaches
 # the consumer's cache (the `.m` dependency digest follows the chain).
@@ -3202,7 +3224,9 @@ else
     bad "batch 38: compile_map" "$(head -2 "$work/mc.err")"
 fi
 
-# A `.m.ct` unit may import only another `.m.ct` unit.
+# SH-71 A-1: a `.m.ct` unit may import a `.h.ct` unit. The header's `pub`
+# declarations join the mapping unit's bare-name table (its type host can name
+# them), and the header still emits its own `.c`/`.h`.
 rm -rf "$work/mbimp"
 mkdir -p "$work/mbimp/lib/x" "$work/mbimp/out"
 printf 'pub int h(void);\nint h(void) { return 1; }\n' >"$work/mbimp/lib/x/plain.h.ct"
@@ -3210,12 +3234,11 @@ printf '%b' 'import x::plain;\n#include <stdlib.h>\nnamespace lib;\npub trait T 
     >"$work/mbimp/lib/lib.m.ct"
 printf 'import lib::lib;\n\nint main(void) { return 0; }\n' >"$work/mbimp/main.ct"
 if "$work/ct-ast" build --emit-c "$work/mbimp/main.ct" -o "$work/mbimp/out" \
-        >"$work/mbimp/out.txt" 2>"$work/mbimp/err.txt"; then
-    bad "batch 38: map_imports_plain" "expected a non-zero exit"
-elif grep -qF 'a .m.ct unit can only import another .m.ct unit' "$work/mbimp/err.txt"; then
-    ok "batch 38 (map_imports_plain)"
+        >"$work/mbimp/out.txt" 2>"$work/mbimp/err.txt" \
+   && [ -f "$work/mbimp/out/plain.c" ] && [ -f "$work/mbimp/out/plain.h" ]; then
+    ok "batch 38 (map_imports_hdr)"
 else
-    bad "batch 38: map_imports_plain" "$(head -2 "$work/mbimp/err.txt")"
+    bad "batch 38: map_imports_hdr" "$(cat "$work/mbimp/err.txt" 2>/dev/null | head -2)"
 fi
 
 # A circular import must be a diagnostic, not a crash. A unit still on the
@@ -3258,6 +3281,27 @@ elif grep -Eq "circular import: '[^']+' imports '[^']+'" "$work/cyc3.err"; then
     ok "circular_import_3 (A->B->C->A, exit $circ_rc)"
 else
     bad "circular_import_3" "$(head -3 "$work/cyc3.err")"
+fi
+
+# SH-71 A-1 makes `m.ct -> h.ct` legal, so a cycle can now close through the
+# new edge: a mapping unit imports a header unit that imports the mapping unit
+# back. It must still be the named diagnostic, not a crash.
+rm -rf "$work/cyc4"
+mkdir -p "$work/cyc4/out" "$work/cyc4/x"
+printf 'import x::host;\n#include <stdio.h>\nint main(void) { return 0; }\n' >"$work/cyc4/main.ct"
+printf 'import x::user;\npub trait T { int m(); }\n' >"$work/cyc4/x/host.m.ct"
+printf 'import x::host;\npub struct S { int n; }\n' >"$work/cyc4/x/user.h.ct"
+"$work/ct-ast" build --emit-c -I "$work/cyc4" "$work/cyc4/main.ct" -o "$work/cyc4/out" \
+    >"$work/cyc4.out" 2>"$work/cyc4.err"
+circ_rc=$?
+if [ "$circ_rc" -eq 0 ]; then
+    bad "circular_import_m_h" "expected a non-zero exit"
+elif [ "$circ_rc" -eq 139 ]; then
+    bad "circular_import_m_h" "crashed with 139 instead of a diagnostic"
+elif grep -Eq "circular import: '[^']+' imports '[^']+'" "$work/cyc4.err"; then
+    ok "circular_import_m_h (.m.ct <-> .h.ct through the new edge, exit $circ_rc)"
+else
+    bad "circular_import_m_h" "$(head -3 "$work/cyc4.err")"
 fi
 
 rm -rf "$work/cycs"

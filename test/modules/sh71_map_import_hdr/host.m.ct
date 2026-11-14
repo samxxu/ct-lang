@@ -1,0 +1,8 @@
+/* SH-71 A-1: a mapping unit imports the .h.ct that owns the interface type the
+   field host method returns. Before A-1 this import was refused by the unit
+   matrix (`a .m.ct unit can only import another .m.ct unit`). */
+import entry;
+
+map trait Entry for type char * {
+    method(s, verb) -> entry_new(s, verb);
+}

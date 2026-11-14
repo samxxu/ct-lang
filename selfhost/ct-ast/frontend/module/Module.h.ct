@@ -554,10 +554,14 @@ impl ModuleOps for Module {
         for (i = 0; i < nrels; i++) {
             if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr, &dep_is_map,
                                     lines[i]) != 0) return -1;
-            if (is_map && !dep_is_map) {
-                return tool::diag::ct_sem_error(lines[i], 1,
-                    "a .m.ct unit can only import another .m.ct unit", path);
-            }
+            /* SH-71 A-1: a mapping unit may also import a header unit. The
+               type host's trait signature has to name the interface type it
+               returns, and only a `.h.ct` unit publishes one; the header
+               unit's `pub` types and traits are registered as bare names for
+               this unit like any other dependency. The other direction stays
+               as it was (`map_unit_cross` pins a `.h.ct` importing a `.m.ct`),
+               and a plain `.ct` unit is still not importable at all --
+               `resolve_import` refuses that by name. */
             d = self->load_unit(dep);
             if (d < 0) return -1;
             /* A unit still on the depth-first stack has no program yet

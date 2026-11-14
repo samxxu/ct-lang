@@ -1,0 +1,17 @@
+import entry;
+import host;
+
+#include <stdio.h>
+
+int main(void)
+{
+    /* First hop: a type host on `char *`, whose signature (declared in the
+       imported .h.ct) gives the call both its arity and its static type. */
+    HttpRequest r = "https://example.com/users".method("GET");
+    int before = r.status();
+    /* Second hop: the interface value is a variable, so the dynamic dispatch
+       is allowed; the call returns the same interface type. */
+    HttpRequest r2 = r.header("Accept", "application/json");
+    printf("%d %d\n", before, r2.status());
+    return 0;
+}
