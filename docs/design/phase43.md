@@ -1,12 +1,28 @@
 # Phase 43 — 错误出口类型契约（`return err:` 载荷检查）
 
-> **状态：规划中**（已定稿，待项目组签字；定稿 2026-11-14；未实施；本轮只写卡与文档，不改代码）
-> **基线**：`/Users/samxx/trae-ws/ct-lang`，HEAD `5f23cc34`（`ct-ast v0.42.1`）；工作树仅有既有的未跟踪 `packages/`。
-> **依赖**：无前置相。判据输入 = [v043-split-plan.md](v043-split-plan.md) §3 与两份 battle 材料
+> **状态：规划中**（已定稿，2026-11-14；G1 修订；实施由主编安排；本轮只改文稿，不改代码）。
+> **基线**：当前 HEAD `e086fa09`（`ct-ast v0.42.1`）；S0 在开工时复核并记录 `baseline: e086fa09`。
+> **依赖**：无前置相；PH-44 依赖本相收口。判据输入 = [v043-split-plan.md](v043-split-plan.md) §3 与两份 battle 材料
 > （`/Users/samxx/.trae-cn/assistant/2026-11-14/ct-43-44-battle/outputs/design.md`、`.../rebuttal.md`）。
 > **规模**：编译器 20–40；夹具 100–180；文档 40–70；门禁 20–30；合计 **180–320**（±40%）。
-> **版本**：收口 bump `v0.43.0`（五处 `CTC_VERSION` + 两处 README + 受影响 golden 重生成）；tag / push 需用户单独授权。
+> **版本**：收口 bump `v0.43.0`（五处 `CTC_VERSION` + 两处 README + 受影响 golden 重生成）；phase tag 按 6.7 V-7，分支推送按 6.5。
 > **纪律**：只做 `err:` 分支；闭包返回类型缺陷**记录不修**（§0.2）；不改 `ctc.c` / L1 / L2；不动 PH-32 的 D32-6 指针豁免。
+> **实施**：任务清单与排期由主编安排；本卡只冻结语义、判据与任务粒度。
+
+## 0 卡片字段（冻结）
+
+| 项 | 值 |
+| --- | --- |
+| 编号 | PH-43 |
+| 目标 | `return err: expr;` 的载荷在所有入口判「可赋给当前函数返回类型」；不一致硬错、不写 `.c`；发射与清理不变 |
+| 范围 | O1/O2/O3；只做 `err:` 分支；不做普通 `return`、闭包 `ret_type`、新类型内核、指针基类型 |
+| 交付物 | `Stmt.h.ct` / `Expr.h.ct`；`test/ast/p43_*` 与 `test/ast/errors/p43_*`；`examples/45_*`；文档 |
+| 任务清单 | §6（R1–R6，共 6 项） |
+| 退出判据 | E43-1…E43-6（§7.1） |
+| 依赖 | 无前置相；PH-44 依赖本相 |
+| 规范版本 | 1.9.0 |
+| version-minor | 43 |
+| 已知风险 | R43-1…R43-8（§9） |
 
 ## 0 背景与解决的问题
 
@@ -138,20 +154,20 @@
 | 明确仍不判 | 数组、闭包、函数指针、`sizeof` / `_Generic` / 宏；指针返回形态的基类型；闭包块体内的 `return err:`（§0.2）。全部写进 §9，不在实现里偷偷放宽 |
 | 为什么指针形态不判 | PH-32 D32-6 已冻结「任意两个指针互转均跳过」；本相不能改，只能在规范里写明「指针返回形态不在契约保证内」 |
 
-## 6 任务切分（S 粒度）
+## 6 任务切分
 
-| 切片 | 内容（一句话） | 先后 |
-| --- | --- | --- |
-| **S0** | 只读核查：复核 §0 行号、461 语料基线、8 个站点清单、四入口现状；写进卡，不产提交 | 起点 |
-| **S1** | 红证：新增 `test/ast/p43_err_return_type.sh`（正 2 / 负 4 / 四入口 / 不写 `.c`）与负例目录 `test/ast/errors/p43_*`；提交只含夹具，正文带 `red: rc=<N>, "<文案未出现>"` 与 `baseline: 5f23cc34` | S0 后 |
-| **S2** | 实现：`Stmt.h.ct` 门槛收窄 + 调用点传新 diag 码；`Expr.h.ct` 新 diag 码走 `ct_sem_error`；≤3 文件、≤150 行 | S1 后 |
-| **S3** | 去重与入口一致性：`--types` 单次报告；`ct compile` / `ct build` 失败不写 `.c` | S2 后 |
-| **S4** | 回归：461 语料 rc 平价、8 站点、`test/ast/p40_*` 6 目录 + 4 探针、`examples/43_errdefer` | S3 后 |
-| **S5** | 样例：`examples/45_error_return_contract/`（`//@ct-requires: ct-ast`）接入 `test/run.sh` | S2 后即可并行 |
-| **S6** | 文档：`language-spec.md` §4.53（把「逐字节不变」限定为其余检查点）+ §4.58（载荷契约）、`tutorial.md` 错误出口节、`README.md` / `README.en.md` 的「明确不做」行、`glossary.md`（如需） | S4 后 |
-| **S7** | 门禁与收口：探针注册 `check-ast.sh`、`check-warnings` 零告警、`check-docs` 绿、`check-all` 11 道全绿、bump `0.43.0` | 最后 |
+**S0（不占任务行）**：只读核查 §0 行号、461 语料基线、8 个站点与四入口现状；在 `e086fa09` 上冷构建并记录 `baseline.sha`；不产提交。
 
-依赖关系：S1 → S2 → S3 → S4 → S6 → S7；S5 可在 S2 后插入。每片 ≤150 行、≤3 文件，仓库随时可构建。
+| 任务 | 交付物（路径） | 验收命令 | effort | 回滚 |
+| --- | --- | --- | --- | --- |
+| R1 | 负例夹具 + 探针（`test/ast/p43_err_return_type.sh`、`test/ast/errors/p43_*`） | `ok p43/errors`，4/4；stderr 逐字匹配 | M | revert |
+| R2 | 正例夹具 + 样例（`test/ast/234_err_return_contract/`、`examples/45_*`、`test/run.sh` 接线） | `ok p43/positive`，4/4 + 样例运行；`no-test:` 正向夹具在实现前已绿（3.9 test-fix） | S | revert |
+| R3 | 实现：门槛收窄 + L43-1 走 `ct_sem_error`（`Stmt.h.ct` / `Expr.h.ct`） | `ok p43/diag`，1/1；≤3 文件、≤150 行 | S | revert |
+| R4 | 四入口一致 + `--types` 去重（同两文件 + p43 探针） | `ok p43/entry`，1/1；单点只报一行；`ct compile` 不写 `.c` | S | revert |
+| R5 | 461 语料平价 + 8 个既有站点 + p40 回归 | `ok p43/corpus`，461/461 + 8/8；`p43/regression` 11/11 | S | revert |
+| R6 | 文档四件套 + 样例接线（`language-spec` / `tutorial` / `README*` / `glossary`） | `python3 test/docs/check-docs.py` rc=0；`ok p43/docs`；`no-test:` 纯文档 | S | revert |
+
+依赖：R1/R2 → R3 → R4 → R5 → R6；R2 可与 R1 并行。每项至多覆盖 1 条退出判据（6.6 T-5）；每笔实现提交的父提交是它的 `test(p43): <task-id> 红`。
 
 ## 7 验收
 
@@ -161,10 +177,10 @@
 | --- | --- | --- | --- |
 | **E43-1** | L43-1 覆盖四种负例，文案与位置精确；四入口 rc=1；`ct compile` 不写 `.c` | `ok p43/errors`，4/4；stderr 逐字匹配 | `test/ast/errors/p43_*` |
 | **E43-2** | 正例通过并运行：`int`→`int`、`char *`→`char *`、Result 值→Result 返回、带 errdefer 的正确路径 | `ok p43/positive`，4/4；rc=0 且输出匹配 | `test/ast/234_err_return_contract/`、`examples/45_*` |
-| **E43-3** | 461 语料 rc 平价 0 差异；8 个既有站点全绿 | 逐文件比对，`rc_diff=0` | §0.1 清单 |
-| **E43-4** | `--types` 不重复报告；`p40_*` 6 目录 + 4 探针 + `examples/43` 全绿 | `ok p43/regression`，11/11 | §0.1 清单 |
-| **E43-5** | 文档四件套同步；`check-docs` 绿；样例进 `test/run.sh` | `python3 test/docs/check-docs.py` rc=0；样例 ok | `docs/**`、`examples/45_*` |
-| **E43-6** | 11 道硬门禁全绿；版本 `0.43.0` 五处一致 + 两处 README + golden 重生成 | `bash selfhost/check-all.sh` rc=0 | 全量 |
+| **E43-3** | 461 语料 rc 平价 0 差异；8 个既有站点全绿 | `ok p43/corpus`，461/461 + 8/8；`rc_diff=0` | §0.1 清单 |
+| **E43-4** | `--types` 不重复报告；`p40_*` 6 目录 + 4 探针 + `examples/43` 全绿 | `ok p43/entry`，1/1；`ok p43/regression`，11/11 | §0.1 清单 |
+| **E43-5** | 文档四件套同步；`check-docs` 绿；样例进 `test/run.sh` | `python3 test/docs/check-docs.py` rc=0；`ok p43/docs` | `docs/**`、`examples/45_*` |
+| **E43-6** | **任务清单每项可独立验收（6.6 T-6）** | 逐项跑 §6，6/6 exit 0；收口对照表逐行贴输出 | §6 |
 
 ### 7.2 正向夹具
 
@@ -203,7 +219,7 @@
 | 实现 | 门槛收窄 + `ct_sem_error` 通道 + `--types` 去重；无 TODO、无「暂不支持」分支 | ✓ |
 | 诊断 | L43-1 四负例、精确文案与位置、四入口一致、`ct compile` 不写 `.c` | ✓ |
 | 文档 | `language-spec.md` §4.53 / §4.58、`tutorial.md`、`README.md` / `README.en.md`、`glossary.md`（如需）；`check-docs` 绿 | ✓ |
-| 门禁 | 夹具进入 `test/run.sh` / `check-ast.sh`；`check-all.sh` 11 道全绿；红证按 T-7 提交 | ✓ |
+| 门禁 | 夹具进入 `test/run.sh` / `check-ast.sh`；`check-warnings` 零告警；`check-all` 11 道全绿；收口 bump `0.43.0`；红证按 T-7 提交 | ✓ |
 
 ## 9 风险与不做项
 
@@ -213,7 +229,7 @@
 | R43-2 | 指针返回形态（`Result<...> *`）接受任意指针载荷 | D32-6 冻结；写进 spec「不在契约保证内」，不借机改 |
 | R43-3 | 判不出的形态（数组 / 闭包 / 函数指针 / `sizeof` / `_Generic` / 宏）仍 rc=0 交 `cc` | 沿用 §4.53 边界；写进 non-goals 与 spec，不静默声称覆盖 |
 | R43-4 | 文案用 C 拼写（`struct Result_int_char_p`）而非源码拼写 | 内核口径；反查 `carg` 是可选改进，不进本相 |
-| R43-5 | `--types` 重复报告回归 | S3 专项断言；同一调用点只允许一行 |
-| R43-6 | 文档漂移：§4.53 的「逐字节不变」必须限定为其余三类检查点 | S6 逐句改，不整段重写；与其他文档线按句协作 |
+| R43-5 | `--types` 重复报告回归 | R4 专项断言；同一调用点只允许一行 |
+| R43-6 | 文档漂移：§4.53 的「逐字节不变」必须限定为其余三类检查点 | R6 逐句改，不整段重写；与其他文档线按句协作 |
 | R43-7 | 改到 PH-32 D32-6 / PH-40 清理语义 | 冻结项；任何改动停下来报用户 |
 | R43-8 | 闭包返回类型的真修法（给闭包独立 `ret_type`）被误当本相范围 | 明确另案；本相任务表与验收表都不含闭包项 |
