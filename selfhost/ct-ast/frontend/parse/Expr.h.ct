@@ -2915,6 +2915,12 @@ impl ExprOps for Expr {
         }
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "?") == 0) {
             int a, b;
+            /* L44-4: the condition is evaluated before either arm and an
+               early return there would skip the arm selection. */
+            if (self->arena->nodes[left].kind == N_TRY)
+                return tool::diag::ct_sem_error(self->arena->nodes[left].line,
+                    (int)self->arena->nodes[left].num,
+                    "'?' is not allowed here", self->sup->mem->path);
             self->sup->lex_next();
             /* L44-4: both arms are conditionally evaluated. */
             self->try_ban++;
@@ -4607,7 +4613,8 @@ impl ExprOps for Expr {
                    body would change control flow; a file-scope `?` has no
                    function to return from. `ret_type` (not `cur_func`) is the
                    test: a trait default body is a function too (PH-44 §3.3). */
-                if (self->try_ban > 0 || !self->sym->ret_type[0])
+                if (self->try_ban > 0 || !self->sym->ret_type[0]
+                    || self->into_node >= 0)
                     return tool::diag::ct_sem_error(qline, qcol,
                         "'?' is not allowed here", self->sup->mem->path);
                 self->sup->lex_next();

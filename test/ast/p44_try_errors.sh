@@ -42,5 +42,7 @@ check p44_pos_ternary "'?' is not allowed here" 4:25
 check p44_pos_errdefer "'?' is not allowed here" 4:20
 check p44_pos_closure "'?' is not allowed here" 4:37
 check p44_pos_file "'?' is not allowed here" 2:29
+check p44_pos_terncond "'?' is not allowed here" 2:42
+check p44_pos_into "'?' is not allowed here" 2:62
 echo "p44/errors: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

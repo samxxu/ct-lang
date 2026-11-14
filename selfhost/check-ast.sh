@@ -3716,6 +3716,11 @@ if bash test/ast/p44_try_errors.sh "$work/ct-ast"; then
 else
     bad "p44/errors" "postfix '?' diagnostics failed"
 fi
+if bash test/ast/p44_try_drop.sh "$work/ct-ast"; then
+    ok "p44/drop"
+else
+    bad "p44/drop" "postfix '?' temporary lifetime failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

@@ -146,6 +146,7 @@
 | v0.42.1 | CI 可移植性修复（2026-11-14） | `_POSIX_C_SOURCE` 暴露 `setenv`；空 label 后补 `;`；`-Wrestrict` 临时量；示例 32 的 `%p` 改为 null 判定；p41 指针初值 `(void *)0`；shim 宏去逗号告警；`stat -c/-f` 兼容；check-all 在 Ubuntu GCC/clang 与 Alpine musl 下绿。 |
 | v0.43.0 | Phase 43 错误出口类型契约（2026-11-14） | `return err:` 载荷四入口硬检查；L43-1；普通 return 仍 opt-in；正/负例与 examples/45；check-ast 1364/0、test/run 155、warnings 616/0、docs 1035/224；tag `v0.43.0`。 |
 | v0.44.0 | Phase 44 后缀 `?` 错误传播（2026-11-14） | 后缀 `?` + `N_TRY`；L44-1/2/3/4；`Outer::err` 失败返回；临时量 move+zero；errdefer/defer/own 清理；22 例消歧、9 例诊断、7 例 ASAN；check-ast 1370/0、test/run 156、warnings 620/0；tag `v0.44.0`。 |
+| v0.44.1 | Phase 44 位置/门禁修复（2026-11-14） | 三目条件与 `into` 中的 `?` 改 L44-4；`p44/drop` 接入 check-ast；新增 2 个位置负例；check-ast 1371/0。 |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。
 
