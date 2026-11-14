@@ -1,0 +1,9 @@
+struct A { int x; };
+#include <stdio.h>
+int main(void) {
+    struct A *a = 0;
+    void *v = a;
+    struct A *b = v;
+    printf("%d\n", a == b);
+    return 0;
+}

@@ -1714,6 +1714,12 @@ Result<long, char *> twice(int n)
 `?` 只用于返回 `Result` 的函数；外层 `void` 时失败直接 `return;`。
 `a ? b : c` 仍是三目；后缀 `?` 只在后面不能开始表达式时成立。
 
+### 10.19 指针与闭包的类型契约（Phase 45）
+
+`ct check --types` 现在会比较指针的基类型与星数：`struct A *` 不能直接赋给 `char *` 或
+`struct B *`；`void *`、裸 `0`、typedef、数组、闭包和函数指针仍跳过。闭包块体内的
+`return` 不再按外层函数返回类型检查，避免 `examples/18_generic_string_table` 的假阳性。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |

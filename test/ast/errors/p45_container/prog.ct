@@ -1,0 +1,3 @@
+struct A { int x; };
+struct B { int y; };
+int main(void) { Vec<A> v; v.h = 0; struct B *b = 0; v.push(*b); return 0; }

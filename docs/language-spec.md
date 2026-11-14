@@ -2258,11 +2258,13 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `.field = expr`）、`return`、容器与泛型固有方法的实参。不带 `--types` 的 `ct check`、以及
   `ct build` / `ct compile` 的输出、诊断和 golden 逐字节不变。`--types` 与别的子命令组合报
   `ctc: --types is only valid with 'ct check'` 并退出 1；这是 CLI 诊断（L32-7），不是源码诊断。
-- **判定内核**：复用 19.2 的 `arg_class`。两侧都是指针时不比较基类型与层数；算术类内部一律
-  兼容（`int x = 1.5`、`long n = 1` 不报）；接口槽仍走既有装箱路径，本开关不新增接口诊断；
-  裸 `0` 可以填任何指针槽。不同 struct 之间、算术类与实际为指针之间是硬错。
-- **判不出就跳过**：数组、闭包、函数指针、`void` 实际值，以及 `sizeof` / `_Generic` / 宏等
-  静态类型判不出的位置一律静默，交给 `cc`；跨单元函数体与 `import` 单元不检查。
+- **判定内核**：复用 19.2 的 `arg_class`。两侧都是指针时比较**基类型与层数**：同层不同基类型、
+  不同星数是硬错；`void *` ↔ 任意对象指针、裸 `0`、typedef、数组、闭包、函数指针仍跳过。
+  算术类内部一律兼容（`int x = 1.5`、`long n = 1` 不报）；接口槽仍走既有装箱路径；
+  不同 struct 之间、算术类与实际为指针之间是硬错。
+- **判不出就跳过**：数组、函数指针、`void` 实际值，以及 `sizeof` / `_Generic` / 宏等
+  静态类型判不出的位置一律静默；闭包块体内的 `return` 按 §4.53 契约静默（闭包没有自己的
+  `ret_type`，不按外层函数判）；跨单元函数体与 `import` 单元不检查。
 - **文案**（统一 `file:line:col`，列指向表达式起点；L32-6 指向出错实参的起点）：
 
   | 编号 | 文案 |
@@ -2421,7 +2423,7 @@ Result<int, char *> f(int n)
 
 - 文案：`return: expected '<T>', got '<U>'`，位置在载荷表达式起点。
 - 只判 `err:` 分支；普通 `return` 仍只在 `--types` 下检查（避免闭包 `ret_type` 的既有假阳性）。
-- 复用 PH-32 的豁免：接口槽、裸 `0` 填指针、任意两指针不比较基类型（D32-6）。
+- 复用 PH-32 的豁免：接口槽、裸 `0` 填指针；指针基类型/层数按 §4.53 判（PH-45 起）。
 - 判不出的形态（数组 / 闭包 / 函数指针 / `sizeof` / `_Generic` / 宏）仍交 `cc`；闭包体
   `return err:` 的 `ret_type` 缺陷按 PH-43 §0.2 另案记录。
 - 发射与清理不变：仍走 PH-40 的临时量、errdefer/defer 单栈 LIFO。
@@ -2449,3 +2451,12 @@ Result<long, char *> twice(int n)
 - 诊断：L44-1 外层不是 `Result`；L44-2 `E` 不同；L44-3 操作数不是 `Result`。
 - 禁止位置：`if`/`while`/`for`/`switch` 条件、`&&`/`||` 右操作数、三目两侧、闭包体、`defer`/`errdefer` 块、文件作用域（L44-4）。
 - 失败分支走既有清理链：`errdefer` → `defer` → `own` release；临时量 move 后清零，丢弃的 payload 调 `release`/Drop glue（ASAN 夹具 `p44_try_drop.sh`）。同一表达式多个 `?` 各求值一次，但顺序仍受 C 操作数顺序约束（PH-44 §9 记录）。
+
+### 4.63 类型契约一致性（Phase 45，仅 ct-ast）
+
+- 闭包块体内的 `return` 不再读外层 `ret_type`；`ct check --types` 对闭包体保持静默
+  （闭包返回类型推断仍是独立缺陷，见 PH-43 §0.2）。
+- 指针初值 / 赋值 / `return` / 容器实参与普通实参共用同一条判据：同层不同基类型、
+  不同星数报 L45-1 / L45-2；`void *` ↔ 任意对象指针、裸 `0`、typedef、数组、闭包、
+  函数指针仍保持跳过。
+- 文案沿用 `initializer:` / `assignment:` / `return:` / `argument <n>:`。

@@ -1994,6 +1994,7 @@ impl StmtOps for Stmt {
                 /* Phase 32 S5 (L32-4): a value-returning function may not
                    `return;`. The position is the `return` keyword. */
                 if (self->ex->types_mode && *self->ex->types_mode
+                    && self->ex->ncl_stack == 0
                     && self->sym->ret_type[0]
                     && strcmp(self->sym->ret_type, "void") != 0) {
                     char msg[MAX_TEXT];
@@ -2035,7 +2036,7 @@ impl StmtOps for Stmt {
                under `--types`. The `is_err` branch uses the hard-error diag
                channel (7), so `ct compile` also refuses to write bad C; the
                ordinary return keeps the opt-in warning path. */
-            if (self->sym->ret_type[0]
+            if (self->ex->ncl_stack == 0 && self->sym->ret_type[0]
                 && (is_err || (self->ex->types_mode && *self->ex->types_mode))) {
                 if (strcmp(self->sym->ret_type, "void") == 0) {
                     char msg[MAX_TEXT];
