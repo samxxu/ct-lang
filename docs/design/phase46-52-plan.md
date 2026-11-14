@@ -335,6 +335,8 @@ cc -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast"
 
 ## 11 已知缺陷与绕法（外部 harness 会撞上的集中表）
 
+### 11.1 未修项与绕法
+
 「绕法」只用于**在对应相交付前让其他相不被卡死**；不得把绕法写进语言语义、不得据此改判据。
 每条绕法都必须在卡的 §8 复现段落里留一条反例（红证），证明缺陷当时确实存在。
 
@@ -345,13 +347,50 @@ cc -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast"
 | 3 | `Map` 键只收 `int/long/char *` 且不复制 | `Str` 键硬错；含 `\0` 键碰撞；改缓冲后查不到 | **47**（正题）、52 的 JSON 单层 | 键拷到长寿命缓冲；含 NUL 用 `int` 序号键 | E-2 / E-4 / J-2 |
 | 4 | 指针字段 Drop 胶水传 `T**` | `leaf drop 22792752`，rc=0 无诊断 | **48**（正题）、49（AutoDrop） | 手写 `release()` 显式释放，不依赖自动胶水 | G-4 |
 | 5 | 跨单元 Drop 调空桩 | `delete` 后真实 Drop 体不跑（只打印 `done`） | **48**（正题）、49 | 在消费单元本地释放；不得假定跨单元可用 | G-2 / J-3 |
-| 6 | `own` 不接工厂返回值 | `'own' requires a malloc or calloc initialiser` | **49**（正题）、ct-json 解码 | 普通指针 + 显式 `free`，错误路径手工清理 | G-3 / J-4 |
+| 6 | `own` 不接工厂返回值 | `'own' requires a malloc or calloc initialiser` | **49**（正题）、ct-json 解码 | 普通指针 + **显式失败分支释放**；`.h.ct` 内不能用 `defer`/`errdefer`（见 #13），每个失败返回点重复释放代码 | G-3 / J-4 |
 | 7 | 容器越界/缺键退零值 | `missing=0x0`、`oob=0` 与真值不可分 | **50**（正题）、ct-json | `Map` 用哨兵值 + 自维护存在性；`Vec` 用伴随 `found` 数组 | C-2 / C-3 / J-7 |
 | 8 | 自定义下标未实现 | `ct` rc=0，`cc` 报 `subscripted value is not an array` | **52**（正题）、ct-json 访问 | 显式 `get("k")`；多级逐层 `get` | F-1 / REQ-L1 |
 | 9 | 方法结果不能作接收者 | 链式第二跳报无法解析 | 任何链式方案（52） | 逐跳落局部变量 | B-2 / SH-73 |
 | 10 | 跨 union 成员字段链 | `cannot resolve the method trait` | ct-json（非本波） | 先落局部变量再调用 | N-9 |
 | 11 | 同单元同名函数只告警 | `cc` 报 conflicting types | 非本波 | 改名 | G-1 |
 | 12 | `#define` 不导出到生成头 | 宏在消费单元不可见 | 非本波 | 用 `pub` 常量 / `pub enum` | D-1 |
+| 13 | `.h.ct` 内 `defer` / `errdefer` 不可用 | `defer is not allowed in a .h.ct unit`；`errdefer is not allowed here` | 所有包实现（含 49、ct-json） | **只能显式失败分支释放**：每个 `return err` 前手写释放；无法用「defer + 成功标志」统一收口。代价：重复代码、漏释放风险随失败点线性上升 | `language-spec.md:432`；PH-38 L38-3 / PH-40 L40-5 |
 
+> **逐条核对**：§11 其余绕法均**不依赖** `defer` / `errdefer`（#6 已改为显式失败分支释放）。
+> 规范里 `.h.ct` 的禁用是明文限制，不是实现缺陷；不要试图在 PH-49 里「顺手放开」。
+>
 > 撞表原则：**先确认自己在哪一相**。属于本相的缺陷必须在本相修掉并留红证；不属于本相的，
 > 按「绕法」列走，并在交付报告里注明「受 #N 限制，绕法为 …」。禁止为了让本相夹具变绿而改判据。
+
+### 11.2 已撤销 / 降级结论
+
+| 旧结论 | 现状 | 复现版本与形态 | 处置 |
+| --- | --- | --- | --- |
+| 「带泛型字段的 struct 不能进 `.h.ct`」（提案 N-3 / H-03 / P-03） | **不成立（降级）**：v0.44.1 上 `pub struct Holder { Vec<int> *v; }` 导出、构建、运行 **rc=0**；`Vec<int> v`（按值）与 `Vec<JsonRef> *arr` 同样通过 | v0.44.1；三种形态均为单单元 + `ct build` | 从「缺陷/冲突」移除；**唯一**仍失败的是 `Map<char *, 用户 struct>`，归 C-4 / PH-46，不是导出问题。实现方不得按「泛型字段不能进 `.h.ct`」做规避设计 |
+
+> 归属证据：`docs/proposals/ct-json-capability-blockers.md:108`、`:450`（N-3 已标「部分不成立」）；
+> `docs/proposals/language-capability-gaps.md:1252`（探针 `a3` / `a3b` / `j16` / `j10b`）。
+
+### 11.3 规范文本待更新（本计划不越界改正文）
+
+- `docs/language-spec.md:664` 仍写「**仍未修**：impl 方法或自由函数返回局部接口值时，装箱仍取局部地址」。
+  A-1（`fb55985c`）、SH-74（`d6e82e25`）、SH-75（`b5797cbf`）均已修完，该句**待更新**。
+  是否现在改由 `language-spec.md` 文档线决定；本计划只登记，不改规范正文。
+
+---
+
+## 12 实战限制（包实现撞到的原文报错，2026-11-15）
+
+来源：实际写一个 `ct-pkg` 包时撞到，均带原文报错。**外部 harness 按本条做设计预案，不要当成本波要修的缺陷**，
+除非卡里明确把它列为正题。命令统一用 §10.2 构建的 `$work/ct-ast`；退出码与报错位置以 harness
+在本机复跑为准（原文由包实现提供）。
+
+| # | 触发条件 | 最小代码 | 命令 | 退出码 | 原文报错 | 定性 | 绕法及代价 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `.h.ct` 里 `union` 未写 `pub`，且被导出 struct 按值使用 | `lib.h.ct`：`union JsonPayload { int i; };` + `pub struct D { union JsonPayload p; };` | `"$work/ct-ast" build main.ct -o out` | `ct` 侧不报错；`cc` rc=1 | `error: field has incomplete type 'union JsonPayload'` | 规范空白 + 诊断缺失（`.h.ct` 的 union 导出可见性没写；`ct` 不提示，`cc` 才发现） | 给 union 加 `pub`。代价：零；但**必须写进包模板**，否则每次新建包都踩 |
+| 2 | 包内直接读 `errno` | `func main() { int e = errno; }` | `"$work/ct-ast" x.ct -o x.c` | 1 | `error: use of an undeclared variable` | 规范空白（未定义 `errno` / 系统错误码互操作） | 在绑定层或手写 C 胶水里读 `errno`，转成返回值；代价：每处多一层胶水，跨平台语义要自己写 |
+| 3 | 同一单元同时有：全局计数 + 一个 `check()` 函数 + 任意带 `char *` 参数并被调用的函数 | `var g: int;` + `func check() { g = g + 1; }` + `func use(char *s) { check(); }` | `"$work/ct-ast" probe.ct -o probe.c` | 1 | `a borrowed view is invalidated by a later mutation of its container; copy it with retain() first`（报错位置落在 `char *` 参数与 `int` 参数上） | **疑似实现缺陷，未确认**：该单元内没有任何 `get` / `entry`；去掉 `check()` 或去掉全局即不报。最小复现尚待确认 | 暂按「拆单元」或「去掉全局计数」规避；代价：多一个 `.ct` 单元或改数据结构。**不得据此改判据** |
+| 4 | `.h.ct` 内（含函数体）使用 `defer` / `errdefer` | `lib.h.ct`：`pub func f() { defer { } }` | `"$work/ct-ast" x.ct -o x.c` | 1 | `error: defer is not allowed in a .h.ct unit`（`errdefer` 报 `error: errdefer is not allowed here`） | **规范限制**（`language-spec.md:432`；PH-38 L38-3 / PH-40 L40-5），不是 bug | 显式失败分支释放（同 §11 #13）；代价：重复代码、漏释放风险，不能用「成功标志 + defer」统一收口 |
+
+> #3 的处置口径：在最小复现确认前，**只记录为风险**，不进任何卡的退出判据；若确认是实现缺陷，
+> 由本仓库另立 Issue 并决定是否单列相，不并入 PH-46–52。

@@ -138,3 +138,4 @@ mkdir -p /tmp/p49 && cd /tmp/p49
 | fixpoint 与全量 | `check-goldens.sh` fixpoint 段 rc=0；`check-all.sh` 末行 `OK (11 hard gates green)` | 重生成受影响 golden（逐字节核对） | 手改 golden、改门禁 |
 
 撞上 §11：本相是 #6 的正题；跨单元释放依赖 #5 已由 PH-48 关闭，若未关闭则本相只交付单单元夹具并注明。
+`.h.ct` 侧夹具不得使用 `defer` / `errdefer`（[计划 §11](phase46-52-plan.md) #13、§12 #4），失败分支只能显式释放。
