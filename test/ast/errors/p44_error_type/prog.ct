@@ -1,0 +1,2 @@
+Result<int, char *> f(void) { return (Result<int, char *>){ 1, 1, 0 }; }
+Result<long, int> g(void) { long v = f()?; return (Result<long, int>){ 1, v, 0 }; }

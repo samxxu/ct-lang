@@ -1,0 +1,20 @@
+//@ct-requires: ct-ast
+#include <stdio.h>
+Result<int, char *> parse(int n)
+{
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "negative" };
+    return (Result<int, char *>){ 1, n * 2, 0 };
+}
+Result<long, char *> twice(int n)
+{
+    long v = parse(n)?;
+    return (Result<long, char *>){ 1, v + 1, 0 };
+}
+int main(void)
+{
+    Result<long, char *> ok = twice(5);
+    Result<long, char *> bad = twice(-1);
+    printf("%d %ld\n", ok.ok, ok.ok ? ok.value : -1);
+    printf("%d %s\n", bad.ok, bad.ok ? "ok" : bad.err);
+    return 0;
+}

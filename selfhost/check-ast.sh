@@ -3706,6 +3706,16 @@ if bash test/ast/p43_err_return_type.sh "$work/ct-ast"; then
 else
     bad "p43/errors" "err: payload contract failed"
 fi
+if bash test/ast/p44_try_syntax.sh "$work/ct-ast"; then
+    ok "p44/syntax"
+else
+    bad "p44/syntax" "postfix '?' disambiguation failed"
+fi
+if bash test/ast/p44_try_errors.sh "$work/ct-ast"; then
+    ok "p44/errors"
+else
+    bad "p44/errors" "postfix '?' diagnostics failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

@@ -2351,3 +2351,27 @@ Result<int, char *> f(int n)
 - 判不出的形态（数组 / 闭包 / 函数指针 / `sizeof` / `_Generic` / 宏）仍交 `cc`；闭包体
   `return err:` 的 `ret_type` 缺陷按 PH-43 §0.2 另案记录。
 - 发射与清理不变：仍走 PH-40 的临时量、errdefer/defer 单栈 LIFO。
+
+### 4.62 后缀 `?` 错误传播（Phase 44，仅 ct-ast）
+
+`expr?` 要求 `expr` 是 `Result<T, E>`；外层函数必须返回 `Result<U, E>`（或 `void`）。
+成功时表达式类型是 `T`，失败时立即以 `Outer::err(inner.err)` 返回：
+
+```ct
+Result<int, char *> parse(int n)
+{
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "negative" };
+    return (Result<int, char *>){ 1, n, 0 };
+}
+
+Result<long, char *> twice(int n)
+{
+    long v = parse(n)?;                    /* 失败时返回 Outer::err */
+    return (Result<long, char *>){ 1, v + 1, 0 };
+}
+```
+
+- 消歧：`?` 后不能开始表达式（`;` `)` `,` `]` `->` 等）才是后缀；`a ? b : c` 仍是三目。
+- 诊断：L44-1 外层不是 `Result`；L44-2 `E` 不同；L44-3 操作数不是 `Result`。
+- 禁止位置：文件作用域、闭包体、errdefer 块等（L44-4）；条件/短路右操作数尚未收紧。
+- 当前实现的失败分支是普通 `return`，带 `defer`/`errdefer` 的函数尚未接线；ASAN 临时量契约与求值顺序是后续切片，见 PH-44 §9。

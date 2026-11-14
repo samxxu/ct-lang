@@ -119,6 +119,8 @@ import runtime::arena::Arena;
 /* Phase 38: a materialised `defer` body at a block exit (`a` = N_BLOCK). */
 #define N_DEFER_RUN 70
 #define N_DEFER 69
+/* Phase 44: the postfix `?` error-propagation node (`a` = operand). */
+#define N_TRY 71
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -193,6 +195,11 @@ trait EmitOps {
     int  emit_map_brace_init(int n);
     int  write_header(const char *outc);
     int  write_abi_header(const char *path);
+    /* Phase 44: the `Result<T, E>` instance behind a C type spelling and its
+       payload types, so a postfix `?` can name the operand, compare the error
+       parameter and spell the outer `<Inst>_err(...)` call. */
+    int  try_result_tag(const char *ctype, char *tag, int cap);
+    int  try_result_cols(int inst, char *val, int vcap, char *err, int ecap);
     int  fail(const char *msg);
     int  fail_from(int n, const char *msg);
 }
@@ -241,6 +248,10 @@ struct Emitter {
     int  raw_call;
     int  failline;              /* the source line of the node that failed, 0 = none */
     char errmsg[160];
+    /* Phase 44: the C return type of the function or method whose body is being
+       written, so a postfix `?` knows its propagation target. Empty outside a
+       function body (a file-scope `?` has no outer Result to return). */
+    char cur_ret[160];
     /* The mangled prefix of the unit being written (`a_b_`, empty at the root).
        A namespaced global is emitted as `<prefix><name>`; `emit_program` sets
        this from `sym->ns`, the build writers from `units[u].nsprefix`. */
@@ -423,6 +434,9 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
         ai++;
     }
     if (!e->node_mentions(sig->body, "self")) fputs("    (void)_self;\n", e->out);
+    /* Phase 44: a postfix `?` in a default body propagates the method's own
+       return type. */
+    snprintf(e->cur_ret, sizeof e->cur_ret, "%s", sig->ret);
     k = e->arena->nodes[sig->body].a;
     while (k >= 0) {
         if (e->emit_node(k, 1) != 0) {
@@ -1049,6 +1063,7 @@ static int closure_var_lookup(struct Emitter *self, const char *name)
 static int emit_closures(struct Emitter *self, const char *owner, int restore_line)
 {
     int ci, k, wrote, pass, base_cl;
+    char save_ret[MAX_TEXT];
 
     wrote = 0;
     for (pass = 0; pass < 3; pass++) {
@@ -1097,6 +1112,11 @@ static int emit_closures(struct Emitter *self, const char *owner, int restore_li
                     fprintf(self->out, "    (void)%s;\n", c->pname[k]);
             self->closure_ci = ci + 1;
             base_cl = self->nclvar;
+            /* Phase 44 (D44-10): a closure body has no Result return target of
+               its own, so a postfix `?` there is refused rather than emitted as
+               a `return` inside the trampoline. */
+            snprintf(save_ret, sizeof save_ret, "%s", self->cur_ret);
+            self->cur_ret[0] = 0;
             if (c->is_block) {
                 int s;
                 for (s = self->arena->nodes[c->body].a; s >= 0;
@@ -1111,6 +1131,7 @@ static int emit_closures(struct Emitter *self, const char *owner, int restore_li
                 if (self->emit_expr(c->body) != 0) { self->nclvar = base_cl; self->closure_ci = 0; return -1; }
                 fputs(";\n", self->out);
             }
+            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", save_ret);
             self->nclvar = base_cl;
             self->closure_ci = 0;
             fputs("}\n", self->out);
@@ -1712,6 +1733,15 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     else
         snprintf(cname, sizeof cname, "%s_%s", iname, self->arena->nodes[m].text2);
     impl_inst_bind(self, ki, ii);
+    /* Phase 44: a postfix `?` in the body propagates the (instance-bound)
+       return type of the method. */
+    {
+        char rb[MAX_TEXT];
+        if (emit_gsub_type(self, mret, rb, sizeof rb) == 0)
+            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", rb);
+        else
+            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", mret);
+    }
     /* P29-2: `c` marks a static (receiverless) method -- `Vec_int_from` takes
        only its own parameters and gets no `_self` local. */
     statik = self->arena->nodes[m].c;
@@ -2884,6 +2914,9 @@ impl EmitOps for Emitter {
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 self->sym->self_mode = 1;
+                /* Phase 44: a postfix `?` in an impl body propagates the
+                   method's declared return type. */
+                snprintf(self->cur_ret, sizeof self->cur_ret, "%s", mret);
                 /* The trait fixes the signature, so an implementation may ignore
                    a parameter. The cast to void has to lead the body: a trailing
                    one would sit after the `return` and be dead code. */
@@ -2986,6 +3019,9 @@ impl EmitOps for Emitter {
                 if (!is_static)
                     fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 self->sym->self_mode = is_static ? 0 : 1;
+                /* Phase 44: a postfix `?` in an inherent method body
+                   propagates the method's declared return type. */
+                snprintf(self->cur_ret, sizeof self->cur_ret, "%s", mret);
                 body = self->arena->nodes[m].b;
                 for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
                     if (!self->node_mentions(body, self->arena->nodes[k].text2))
@@ -3337,6 +3373,9 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_GLOBAL) {
+            /* Phase 44: a file-scope initialiser has no outer function, so a
+               `?` there has no error target (L44-4). */
+            self->cur_ret[0] = 0;
             self->emit_indent(ind);
             if (self->arena->nodes[n].aux == 1) fputs("static ", self->out);
             if (self->emit_global_decl(n) != 0) return -1;
@@ -3604,6 +3643,9 @@ impl EmitOps for Emitter {
             /* a GNU attribute rides between the parameter list and the body */
             if (self->arena->nodes[n].attr >= 0)
                 fprintf(self->out, "%s ", self->arena->str_at(self->arena->nodes[n].attr));
+            /* Phase 44: remember the (substituted) return type for a postfix
+               `?` in the body. */
+            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", rname);
             return self->emit_node(self->arena->nodes[n].b, ind);
         }
         if (self->arena->nodes[n].kind == N_DEFER_RUN)
@@ -4254,7 +4296,16 @@ impl EmitOps for Emitter {
             fputs(aop, self->out);
             return self->emit_expr(self->arena->nodes[n].b);
         }
-        if (self->arena->nodes[n].kind == N_EXPR) return self->emit_expr(self->arena->nodes[n].a);
+        if (self->arena->nodes[n].kind == N_EXPR) {
+            /* Phase 44: a statement-shaped `expr?` discards the statement
+               expression's value, and clang reports that last inner expression
+               under -Wunused-value; the `(void)` cast keeps the gate's
+               warning-free build. */
+            if (self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_TRY)
+                fputs("(void)", self->out);
+            return self->emit_expr(self->arena->nodes[n].a);
+        }
         if (self->arena->nodes[n].kind == N_POST) {
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
@@ -4466,6 +4517,69 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_PRE) {
             fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
             return self->emit_expr(self->arena->nodes[n].a);
+        }
+        /* Phase 44 (D44-3 / D44-4): `expr?` propagates a `Result` failure. A
+           GNU statement expression evaluates the operand exactly once; on
+           success it yields the operand's `value`, on failure it returns the
+           outer function's `Result<U, E>` built from the inner `err`.
+
+           The operand is hoisted into a private local that is never registered
+           with AutoDrop, so exactly one owner leaves the expression: the
+           `value` copy on success, the `err` copy on failure. There is no
+           second drop to double-free, and the unused payload of an `ok` / `err`
+           construction is already zero (lib/std/Result.h.ct). */
+        if (self->arena->nodes[n].kind == N_TRY) {
+            char opty[MAX_TEXT];
+            char otag[MAX_TEXT];
+            char oval[MAX_TEXT];
+            char oerr[MAX_TEXT];
+            char rtag[MAX_TEXT];
+            char rval[MAX_TEXT];
+            char rerr[MAX_TEXT];
+            char msg[2 * MAX_TEXT + 64];
+            int od = 0;
+            int q;
+
+            if (self->arena->nodes[n].text[0]) {
+                /* the parser stamped the operand type while its locals were in
+                   scope; the emitter runs after the scopes are popped */
+                snprintf(opty, sizeof opty, "%s", self->arena->nodes[n].text);
+            } else if (!hoist_ctype(self->arena->nodes[n].a, opty, sizeof opty, &od)
+                       || od != 0) {
+                return self->fail_from(n, "'?' needs a Result operand");
+            }
+            if (!self->try_result_tag(opty, otag, sizeof otag)
+                || !self->try_result_cols(frontend::sym::ct_inst_find(otag),
+                                          oval, sizeof oval, oerr, sizeof oerr))
+                return self->fail_from(n, "'?' needs a Result operand");
+            if (!self->cur_ret[0])
+                return self->fail_from(n, "'?' is not allowed here");
+            q = self->ntmp;
+            self->ntmp++;
+            if (strcmp(self->cur_ret, "void") == 0) {
+                /* D44-5: a void function has no payload to carry, so a failure
+                   is a bare return (errdefer / defer are a later slice). */
+                fprintf(self->out, "({ %s __ct_q%d = ", opty, q);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out,
+                        "; if (!__ct_q%d.ok) return; __ct_q%d.value; })", q, q);
+                return 0;
+            }
+            if (!self->try_result_tag(self->cur_ret, rtag, sizeof rtag)
+                || !self->try_result_cols(frontend::sym::ct_inst_find(rtag),
+                                          rval, sizeof rval, rerr, sizeof rerr))
+                return self->fail_from(n, "postfix '?' needs a function returning Result");
+            if (strcmp(oerr, rerr) != 0) {
+                snprintf(msg, sizeof msg,
+                         "'?': expected error type '%s', got '%s'", rerr, oerr);
+                return self->fail_from(n, msg);
+            }
+            fprintf(self->out, "({ %s __ct_q%d = ", opty, q);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fprintf(self->out, "; if (!__ct_q%d.ok) { return %s_err(__ct_q%d.err); } ",
+                    q, rtag, q);
+            fprintf(self->out, "__ct_q%d.value; })", q);
+            return 0;
         }
         if (self->arena->nodes[n].kind == N_TERN) {
             fputs("(", self->out);
@@ -5418,6 +5532,52 @@ impl EmitOps for Emitter {
         fputs("#endif\n", f);
         if (fclose(f) != 0) return self->fail("cannot write the header");
         return 0;
+    }
+
+    /* Phase 44: the `Result<T, E>` instance behind a C type spelling. `tag`
+       is the bare instance name, which is also the prefix of every static
+       method (`Result_int_char_p_err`); a pointer to a Result is not a Result
+       value, so a trailing `*` answers 0 (L44-1). */
+    int try_result_tag(const char *ctype, char *tag, int cap)
+    {
+        char buf[MAX_TEXT];
+        size_t n;
+        int inst, ninst;
+        struct StructInst *ins;
+
+        (void)self;
+        if (!ctype || !ctype[0]) return 0;
+        if (snprintf(buf, sizeof buf, "%s", ctype) >= (int)sizeof buf) return 0;
+        n = strlen(buf);
+        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {
+            if (buf[n - 1] == '*') return 0;
+            buf[--n] = 0;
+        }
+        if (strncmp(buf, "struct ", 7) == 0) memmove(buf, buf + 7, strlen(buf + 7) + 1);
+        else if (strncmp(buf, "union ", 6) == 0 || strncmp(buf, "enum ", 5) == 0) return 0;
+        inst = frontend::sym::ct_inst_find(buf);
+        if (inst < 0) return 0;
+        ins = frontend::sym::ct_insts(&ninst);
+        if (!ins || inst >= ninst) return 0;
+        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
+        if (snprintf(tag, (size_t)cap, "%s", buf) >= cap) return 0;
+        return 1;
+    }
+
+    /* `value` is the C spelling `T`; `err` is the canonical source spelling of
+       `E`, the identity D44-2 compares. */
+    int try_result_cols(int inst, char *val, int vcap, char *err, int ecap)
+    {
+        int ninst;
+        struct StructInst *ins;
+
+        (void)self;
+        ins = frontend::sym::ct_insts(&ninst);
+        if (!ins || inst < 0 || inst >= ninst) return 0;
+        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
+        if (snprintf(val, (size_t)vcap, "%s", ins[inst].ctype[0]) >= vcap) return 0;
+        if (snprintf(err, (size_t)ecap, "%s", ins[inst].carg[1]) >= ecap) return 0;
+        return 1;
     }
 
     /* A failure is recorded without a position; the driver's facade wraps the

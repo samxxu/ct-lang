@@ -1,0 +1,18 @@
+#include <stdio.h>
+Result<int, char *> f(int n)
+{
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "neg" };
+    return (Result<int, char *>){ 1, n, 0 };
+}
+Result<long, char *> g(int n)
+{
+    long v = f(n)?;
+    return (Result<long, char *>){ 1, v + 1, 0 };
+}
+int main(void)
+{
+    Result<long, char *> a = g(4);
+    Result<long, char *> b = g(-1);
+    printf("%ld %s\n", a.value, b.err);
+    return 0;
+}

@@ -1473,6 +1473,25 @@ Result<int, char *> f(int n)
 写 `return err: 1;` 会报 `return: expected 'struct Result_int_char_p', got 'int'`，
 `ct compile` 不会写出坏 C。`break err:` / `continue err:` 无载荷，不受影响。
 
+### 10.18 用 `?` 传播错误（Phase 44）
+
+```ct
+Result<int, char *> parse(int n)
+{
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "negative" };
+    return (Result<int, char *>){ 1, n * 2, 0 };
+}
+
+Result<long, char *> twice(int n)
+{
+    long v = parse(n)?;                    // 失败时直接返回外层 Result
+    return (Result<long, char *>){ 1, v + 1, 0 };
+}
+```
+
+`?` 只用于返回 `Result` 的函数；外层 `void` 时失败直接 `return;`。
+`a ? b : c` 仍是三目；后缀 `?` 只在后面不能开始表达式时成立。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
