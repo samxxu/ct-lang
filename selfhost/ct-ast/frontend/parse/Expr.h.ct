@@ -409,8 +409,10 @@ pub struct Expr {
     int  postfix_seed;
     /* Phase 21 S5: a block body (`=> { … }`) is the statement layer's, and the
        expression object may not import it (that would close a cycle), so the
-       parser installs a hook after both sub-objects are bound. */
-    int (*body_hook)(void);
+       parser installs a hook after both sub-objects are bound. Phase 44 reuses
+       the same hook for the postfix `?`: op 0 parses a block body, op 1
+       snapshots the defer / `own` failure cleanup of the `?` node in `arg`. */
+    int (*st_hook)(int op, int arg);
     /* Enclosing closures while a literal's body is being parsed. An inner
        literal's captures are copied up into every enclosing environment whose
        frame is outside this literal, so the inner environment can be built
@@ -434,6 +436,15 @@ pub struct Expr {
        `foreach`, so a mutation call on it inside the body is refused. */
     int  niter;
     char iter[8][160];
+    /* Phase 44: inside a condition, a short-circuit right operand, a ternary
+       arm, a closure body or a defer body a postfix `?` is refused (L44-4). */
+    int  try_ban;
+    /* Phase 44: per-`?` failure cleanup, captured when the node is built (the
+       defer stack and the `own` list are live only during parsing) and read by
+       the emitter through `expr_get`. A node with no cleanup records -1. */
+    int  ntry_cleanup;
+    int  try_cleanup_node[512];
+    int  try_cleanup_head[512];
 } use ExprOps, ExprTypes, ExprTraitInst, ExprTry;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
@@ -2863,7 +2874,11 @@ impl ExprOps for Expr {
         if (left < 0) return -1;
         while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
             self->sup->lex_next();
+            /* L44-4: the right operand is short-circuited, so an early return
+               there would be skipped on some paths. */
+            self->try_ban++;
             right = self->parse_bitor();
+            self->try_ban--;
             if (right < 0) return -1;
             n = self->sup->new_node(N_BIN);
             if (n < 0) return -1;
@@ -2874,11 +2889,15 @@ impl ExprOps for Expr {
         }
         while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "||") == 0) {
             self->sup->lex_next();
+            self->try_ban++;
             right = self->parse_bitor();
+            self->try_ban--;
             if (right < 0) return -1;
             while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
                 self->sup->lex_next();
+                self->try_ban++;
                 inner = self->parse_bitor();
+                self->try_ban--;
                 if (inner < 0) return -1;
                 n = self->sup->new_node(N_BIN);
                 if (n < 0) return -1;
@@ -2897,10 +2916,15 @@ impl ExprOps for Expr {
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "?") == 0) {
             int a, b;
             self->sup->lex_next();
+            /* L44-4: both arms are conditionally evaluated. */
+            self->try_ban++;
             a = self->parse_expr();
+            self->try_ban--;
             if (a < 0) return -1;
             if (self->sup->expect(":") != 0) return -1;
+            self->try_ban++;
             b = self->parse_expr();
+            self->try_ban--;
             if (b < 0) return -1;
             c = self->sup->new_node(N_TERN);
             if (c < 0) return -1;
@@ -3109,7 +3133,7 @@ impl ExprOps for Expr {
         snprintf(self->arena->nodes[selfn].text, MAX_TEXT, "%s", type);
         save = self->into_node;
         self->into_node = n;
-        blk = self->body_hook();
+        blk = self->st_hook(0, 0);
         self->into_node = save;
         if (blk < 0) return -1;
         self->arena->nodes[n].b = self->arena->nodes[blk].a;
@@ -4578,6 +4602,14 @@ impl ExprOps for Expr {
                 if (!self->q_suffix_ahead()) break;
                 qline = self->lex->tokline;
                 qcol = self->lex->tokstart - self->lex->lstart + 1;
+                /* L44-4: the expansion returns from the function, so a `?`
+                   inside an unevaluated / condition position or a deferred
+                   body would change control flow; a file-scope `?` has no
+                   function to return from. `ret_type` (not `cur_func`) is the
+                   test: a trait default body is a function too (PH-44 §3.3). */
+                if (self->try_ban > 0 || !self->sym->ret_type[0])
+                    return tool::diag::ct_sem_error(qline, qcol,
+                        "'?' is not allowed here", self->sup->mem->path);
                 self->sup->lex_next();
                 m = self->sup->new_node(N_TRY);
                 if (m < 0) return -1;
@@ -4589,6 +4621,12 @@ impl ExprOps for Expr {
                    cannot resolve a variable operand on its own. */
                 if (self->static_ctype(n, qty, sizeof qty, &qad, 0) && qad == 0)
                     snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", qty);
+                /* Capture the failure cleanup now, while the defer stack and
+                   the `own` list still describe this point (the emitter runs
+                   after the scopes are gone). */
+                if (!self->st_hook)
+                    return self->sup->fail("the statement parser is not bound");
+                if (self->st_hook(1, m) != 0) return -1;
                 n = m;
                 continue;
             }
@@ -4681,10 +4719,12 @@ impl ExprOps for Expr {
         self->ncl_stack++;
         /* S5: `=> { … }` is a block body; the statement layer owns blocks and
            this object cannot import it, so the parser installed a hook. */
+        /* L44-4: a closure has no outer Result return target (D44-10). */
+        self->try_ban++;
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
-            if (!self->body_hook)
+            if (!self->st_hook)
                 return self->sup->fail("a block-bodied closure needs the statement parser");
-            body = self->body_hook();
+            body = self->st_hook(0, 0);
             self->sym->closures[ci].is_block = 1;
         } else {
             save_assign = self->assign_ok;
@@ -4692,6 +4732,7 @@ impl ExprOps for Expr {
             body = self->parse_expr();
             self->assign_ok = save_assign;
         }
+        self->try_ban--;
         if (body < 0) return -1;
         self->sym->closures[ci].body = body;
         if (closure_walk(self, ci, body, pstart) != 0) return -1;
@@ -6340,9 +6381,13 @@ impl ExprTry for Expr {
             r = 0;
         } else if (self->lex->tok == T_PUNCT) {
             const char *t = self->lex->toktext;
+            /* `&&` / `||` cannot start an expression either, but the design's
+               disambiguation table rules them ternary (a missing `:` is the
+               report a user sees, not a silently shifted operator). */
             if (strcmp(t, "(") == 0 || strcmp(t, "-") == 0 || strcmp(t, "!") == 0
                 || strcmp(t, "~") == 0 || strcmp(t, "&") == 0 || strcmp(t, "*") == 0
-                || strcmp(t, "++") == 0 || strcmp(t, "--") == 0)
+                || strcmp(t, "++") == 0 || strcmp(t, "--") == 0
+                || strcmp(t, "&&") == 0 || strcmp(t, "||") == 0)
                 r = 0;
         }
         self->lex->pos = sp;

@@ -3705,9 +3705,11 @@ static struct Field   g_pend_fields[64];
 
 /* Phase 21 S5: a block-bodied closure needs `parse_block`, which lives in the
    statement layer; the expression object cannot import that layer (the edge
-   would close a cycle), so it calls back through this hook. */
-static int parser_closure_block(void)
+   would close a cycle), so it calls back through this one hook. Phase 44 op 1
+   reuses it to snapshot the failure cleanup of a postfix `?` node. */
+static int parser_st_hook(int op, int arg)
 {
+    if (op == 1) return g_parse.st->try_attach(arg);
     return g_parse.st->parse_block();
 }
 
@@ -3751,7 +3753,7 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
        through the same primitives */
     ct_stmt_bind(arena, lex, sym, g_parse.mem, g_parse.sup, g_parse.ex);
     g_parse.st = stmt_get();
-    g_parse.ex->body_hook = parser_closure_block;
+    g_parse.ex->st_hook = parser_st_hook;
 }
 
 pub struct Parser *parse_get(void);

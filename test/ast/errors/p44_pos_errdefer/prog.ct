@@ -1,0 +1,6 @@
+Result<int, char *> f(int n) { return (Result<int, char *>){ 1, n, 0 }; }
+Result<int, char *> g(int n)
+{
+    errdefer { f(n)?; }
+    return (Result<int, char *>){ 1, n, 0 };
+}

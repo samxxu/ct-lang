@@ -2374,5 +2374,5 @@ Result<long, char *> twice(int n)
 
 - 消歧：`?` 后不能开始表达式（`;` `)` `,` `]` `->` 等）才是后缀；`a ? b : c` 仍是三目。
 - 诊断：L44-1 外层不是 `Result`；L44-2 `E` 不同；L44-3 操作数不是 `Result`。
-- 禁止位置：文件作用域、闭包体、errdefer 块等（L44-4）；条件/短路右操作数尚未收紧。
-- 当前实现的失败分支是普通 `return`，带 `defer`/`errdefer` 的函数尚未接线；ASAN 临时量契约与求值顺序是后续切片，见 PH-44 §9。
+- 禁止位置：`if`/`while`/`for`/`switch` 条件、`&&`/`||` 右操作数、三目两侧、闭包体、`defer`/`errdefer` 块、文件作用域（L44-4）。
+- 失败分支走既有清理链：`errdefer` → `defer` → `own` release；临时量 move 后清零，丢弃的 payload 调 `release`/Drop glue（ASAN 夹具 `p44_try_drop.sh`）。同一表达式多个 `?` 各求值一次，但顺序仍受 C 操作数顺序约束（PH-44 §9 记录）。

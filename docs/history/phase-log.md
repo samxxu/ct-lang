@@ -54,7 +54,8 @@
 
 | Phase 41 | **原子并发能力**：`atomic int/long/bool/void *` → `_Atomic(T)`；`ct_atomic_load/store/cas`（seq_cst）；12 个 static inline 运行头；C11 构建；L41 诊断；pthread 取消/引用计数；TSan nightly；tmLanguage/grammar | 新增 | ✅ 完成（2026-11-13；R1–R9；收口 `v0.41.0`；battle p41-1 / D-004；[design/phase41-draft.md](../design/phase41-draft.md)） | `check-ast.sh` **1357 passed / 0 failed**、`check-warnings.sh` **614 ok / 0 failed**、`test/run.sh` **154 passed**、goldens 82、`check-docs` **985 links / 220 files**、grammar **169/0**、TSan 2/2；样例 `examples/44_atomic_counter`；`p41/runtime` + `p41/errors` 全绿 |
 | Phase 42 | **`impl` 方法可见性**：方法级 `pub`，默认私有；私有 = 不进 `.h` + `static` + 跨单元硬错；52 条显式 `pub`；trait impl / 块级 `pub impl` 拒绝；L42-1–L42-7 | 新增 | ✅ 完成（2026-11-14；R1–R8；收口 `v0.42.0`；battle p42-1 C；[design/phase42-draft.md](../design/phase42-draft.md)） | `check-ast.sh` **1361 passed / 0 failed**、`check-warnings.sh` **614 ok / 0 failed**、`test/run.sh` **154 passed**、goldens 82、`check-docs` **987 links / 220 files**、grammar 169/0；`p42/pub-syntax` / `private` / `cross-unit` / `generic` 全绿 |
-| Phase 43 | **`return err:` 载荷类型契约**：`err:` 载荷必须可赋给函数返回类型；L43-1 硬错、四入口一致、不写坏 C；普通 return 保持 `--types` 可选 | 新增 | ✅ 完成（2026-11-14；R1–R6；收口 `v0.43.0`；[design/phase43.md](../design/phase43.md)） | check-ast **1364/0**、test/run 155、warnings 616/0、docs **1010 links / 223 files**；`p43/errors` 4/4；样例 `examples/45_error_return_contract` |
+| Phase 43 | **`return err:` 载荷类型契约**：`err:` 载荷必须可赋给函数返回类型；L43-1 硬错、四入口一致、不写坏 C；普通 return 保持 `--types` 可选 | 新增 | ✅ 完成（2026-11-14；R1–R6；收口 `v0.43.0`；[design/phase43.md](../design/phase43.md)） | check-ast **1364/0**、test/run 155、warnings 616/0、docs **1035 links / 224 files**；`p43/errors` 4/4；样例 `examples/45_error_return_contract` |
+| Phase 44 | **后缀 `?` 错误传播**：`Result<T,E>` 的失败以 `Outer::err` 返回，成功取 `value`；`?:` 消歧；L44-1..4；临时量清理 | 新增 | ✅ 完成（2026-11-14；S1–S9；收口 `v0.44.0`；[design/phase44.md](../design/phase44.md)） | `p44/syntax` 22/22、`p44/errors` 9/9、`p44/drop` 7/7；check-ast **1370/0**、test/run 156、warnings 620/0、docs 1035/224 |
 
 > **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)。
 
@@ -143,7 +144,8 @@
 | v0.41.0 | Phase 41 原子并发能力（2026-11-13） | `atomic int/long/bool/void *` → `_Atomic(T)`；`ct_atomic_load/store/cas`（seq_cst）；12 个 static inline 运行头；C11 构建；L41 诊断；pthread 取消/引用计数；TSan nightly；tmLanguage/grammar；`CTC_VERSION` 五处同步到 `0.41.0`；72 个 golden/expected 仅版本 token 变化；check-ast 1357/0、check-warnings 614/0、test/run 154、docs 985/220、grammar 169/0；tag `v0.41.0`。 |
 | v0.42.0 | Phase 42 impl 方法可见性（2026-11-14） | 方法级 `pub`（默认私有）；私有方法不进 `.h` + `static` + 跨单元 L42-4/5；52 条迁移；trait impl/`pub impl` 硬错；L42-1–7；check-ast 1361/0、check-warnings 614/0、test/run 154、docs 987/220、grammar 169/0；tag `v0.42.0`。 |
 | v0.42.1 | CI 可移植性修复（2026-11-14） | `_POSIX_C_SOURCE` 暴露 `setenv`；空 label 后补 `;`；`-Wrestrict` 临时量；示例 32 的 `%p` 改为 null 判定；p41 指针初值 `(void *)0`；shim 宏去逗号告警；`stat -c/-f` 兼容；check-all 在 Ubuntu GCC/clang 与 Alpine musl 下绿。 |
-| v0.43.0 | Phase 43 错误出口类型契约（2026-11-14） | `return err:` 载荷四入口硬检查；L43-1；普通 return 仍 opt-in；正/负例与 examples/45；check-ast 1364/0、test/run 155、warnings 616/0、docs 1010/223；tag `v0.43.0`。 |
+| v0.43.0 | Phase 43 错误出口类型契约（2026-11-14） | `return err:` 载荷四入口硬检查；L43-1；普通 return 仍 opt-in；正/负例与 examples/45；check-ast 1364/0、test/run 155、warnings 616/0、docs 1035/224；tag `v0.43.0`。 |
+| v0.44.0 | Phase 44 后缀 `?` 错误传播（2026-11-14） | 后缀 `?` + `N_TRY`；L44-1/2/3/4；`Outer::err` 失败返回；临时量 move+zero；errdefer/defer/own 清理；22 例消歧、9 例诊断、7 例 ASAN；check-ast 1370/0、test/run 156、warnings 620/0；tag `v0.44.0`。 |
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。
 

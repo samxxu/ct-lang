@@ -1,0 +1,6 @@
+Result<int, char *> f(int n) { return (Result<int, char *>){ 1, n, 0 }; }
+Result<int, char *> g(int n)
+{
+    int v = n > 0 ? f(n)? : 0;
+    return (Result<int, char *>){ 1, v, 0 };
+}

@@ -117,6 +117,11 @@ pub trait StmtOps {
     int  defer_mark_block(void);
     int  defer_run_node(int body, int line);
     int  defer_prepend(int node, int base, int on_error);
+    /* Phase 44: capture the failure cleanup (defer / errdefer bodies, then the
+       `own` releases, exactly the order a source `return err:` takes) of the
+       postfix `?` node `n`. Called from the expression layer through the
+       parser's hook while the defer stack and the owned list are still live. */
+    int  try_attach(int n);
     int  defer_flush_block(int blk, int *tail);
     int  parse_stmt(void);
     int  parse_branch(void);
@@ -1502,7 +1507,11 @@ impl StmtOps for Stmt {
             self->in_defer = 1;
             self->in_errdefer = is_err;
             self->ex->dollar_ok = 1;
+            /* L44-4: a deferred body runs at an exit; an early return inside
+               it would recurse into the same cleanup. */
+            self->ex->try_ban++;
             body = self->parse_block();
+            self->ex->try_ban--;
             self->ex->dollar_ok = save_dollar;
             self->in_defer = save_defer;
             self->in_errdefer = save_err;
@@ -1594,6 +1603,34 @@ impl StmtOps for Stmt {
             self->arena->nodes[tail].next = self->arena->nodes[node].b;
             self->arena->nodes[node].b = head;
         }
+        return 0;
+    }
+
+    int try_attach(int n)
+    {
+        int blk, tail, head;
+        struct Expr *ex;
+
+        ex = self->ex;
+        if (ex->ntry_cleanup >= 512)
+            return self->sup->fail("too many postfix '?' in one program (limit 512)");
+        /* The releases are built into a scratch block (only its head is kept,
+           so the fall-through path's own exit release is untouched). */
+        blk = self->sup->new_node(N_BLOCK);
+        if (blk < 0) return -1;
+        tail = -1;
+        if (autodrop_append(self, blk, 0, &tail) != 0) return -1;
+        head = (tail >= 0) ? self->arena->nodes[blk].a : -1;
+        /* Park the release chain on the node's `b` for one call: `defer_prepend`
+           prepends the defer bodies before it, and the chain is moved to the
+           side table right after, so no generic AST walk sees it. */
+        self->arena->nodes[n].b = head;
+        if (self->defer_prepend(n, 0, 1) != 0) return -1;
+        head = self->arena->nodes[n].b;
+        self->arena->nodes[n].b = -1;
+        ex->try_cleanup_node[ex->ntry_cleanup] = n;
+        ex->try_cleanup_head[ex->ntry_cleanup] = head;
+        ex->ntry_cleanup++;
         return 0;
     }
 
@@ -1854,7 +1891,9 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             self->in_defer = 1;
             self->in_errdefer = 1;
+            self->ex->try_ban++;
             body = self->parse_block();
+            self->ex->try_ban--;
             self->in_defer = 0;
             self->in_errdefer = 0;
             if (body < 0) return -1;
@@ -1896,7 +1935,9 @@ impl StmtOps for Stmt {
             self->arena->nodes[s].line = dline;
             self->sup->lex_next();
             self->in_defer = 1;
+            self->ex->try_ban++;
             body = self->parse_block();
+            self->ex->try_ban--;
             self->in_defer = 0;
             if (body < 0) return -1;
             self->arena->nodes[s].a = body;
@@ -2164,7 +2205,11 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             self->ex->assign_ok = 1;
+            /* L44-4: the condition chooses which branch runs, so an early
+               return there would change control flow. */
+            self->ex->try_ban++;
             c = self->ex->parse_expr();
+            self->ex->try_ban--;
             self->ex->assign_ok = 0;
             if (c < 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
@@ -2186,7 +2231,9 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             self->ex->assign_ok = 1;
+            self->ex->try_ban++;
             c = self->ex->parse_expr();
+            self->ex->try_ban--;
             self->ex->assign_ok = 0;
             if (c < 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
@@ -2256,7 +2303,10 @@ impl StmtOps for Stmt {
                 self->arena->nodes[s].b = -1;
             } else {
                 self->ex->assign_ok = 1;
+                /* L44-4: a `for` condition is judged before each iteration. */
+                self->ex->try_ban++;
                 c = self->ex->parse_expr();
+                self->ex->try_ban--;
                 self->ex->assign_ok = 0;
                 if (c < 0) {
                     self->sup->pop_scope();
@@ -2302,7 +2352,9 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             self->ex->assign_ok = 1;
+            self->ex->try_ban++;
             e = self->ex->parse_expr();
+            self->ex->try_ban--;
             self->ex->assign_ok = 0;
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;
@@ -2328,7 +2380,9 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             self->ex->assign_ok = 1;
+            self->ex->try_ban++;
             e = self->ex->parse_expr();
+            self->ex->try_ban--;
             self->ex->assign_ok = 0;
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;

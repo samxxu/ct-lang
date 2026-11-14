@@ -1,0 +1,25 @@
+/* Phase 44: a failed `?` takes the same exit a source `return err:` does:
+   the block's errdefer and defer bodies run, in LIFO order, exactly once. */
+#include <stdio.h>
+
+Result<int, char *> f(int n)
+{
+    if (n < 0) return err: (Result<int, char *>){ 0, 0, "neg" };
+    return (Result<int, char *>){ 1, n, 0 };
+}
+
+Result<int, char *> g(int n)
+{
+    defer { printf("defer\n"); }
+    errdefer { printf("errdefer\n"); }
+    int v = f(n)?;
+    return (Result<int, char *>){ 1, v + 1, 0 };
+}
+
+int main(void)
+{
+    Result<int, char *> a = g(1);
+    Result<int, char *> b = g(-1);
+    printf("%d %d\n", a.value, b.ok);
+    return 0;
+}

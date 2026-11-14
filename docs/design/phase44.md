@@ -1,7 +1,7 @@
 # Phase 44 — `?` 错误传播运算符（后缀 `?`，同 `E`，临时量失效化）
 
-> **状态：实施中**（2026-11-14；定稿；PH-43 v0.43.0 已收口，S1 红证待落）
-> **基线**：`v0.43.0` / `dce8db7e`。
+> **状态：完成（2026-11-14；v0.44.0；S1–S9 全绿；E44-6 求值顺序列为已知限制 §9）**
+> **基线**：`v0.43.0` / `dce8db7e`；收口 `v0.44.0`。
 > **依赖**：[phase43.md](phase43.md)（`?` 的失败分支写作 `return err:`，需要 PH-43 的载荷契约；建议在 `v0.43.0` 收口后开工）。
 > **规模**：编译器 280–450；夹具 150–260；文档 60–110；门禁 30–60；合计 **520–880**（±40%）。
 > **评审来源**：[v043-split-plan.md](v043-split-plan.md) §4 与两份 battle 材料
@@ -250,3 +250,19 @@ errdefer 块内的 `?` 归 L44-4（复用既有 errdefer 深度状态），不�
 | R44-7 | 闭包路径：`?` 禁止，但闭包 `return` 的既有缺陷仍在（PH-43 §0.2） | L44-4 拒绝闭包体；不借机修闭包 `ret_type` |
 | R44-8 | 自举：编译器源码含三目，新前瞻若误判会让 `check-ast` fixpoint 红 | S2 后立刻跑自举；红则回退前瞻规则，不改判据 |
 | R44-9 | 范围膨胀到 `Option` / `From` / 自动装箱 / ADT | §1.2 明确不做；任何扩展停下来报用户 |
+
+### 7.6 收口记录（2026-11-14）
+
+| 切片 | 验收 | 结果 |
+| --- | --- | --- |
+| S1 | `p44/syntax` | 22/22；消歧矩阵 |
+| S2 | 后缀 / `N_TRY` | `f()?`、`f()?;`、实参/赋值可用 |
+| S3 | L44-1/2/3 | 3 类负例，精确文案 |
+| S4 | 发射 | `Outer::err(inner.err)` / `value`；临时量 move+zero |
+| S5 | `p44/drop` | 7/7 ASAN/UBSAN；Str/Str、Str/ptr、丢弃 release |
+| S6 | `236_result_try_defer` | errdefer → defer → own 各一次 |
+| S7 | `examples/46_result_try` | 成功/失败运行匹配 |
+| S8 | docs | spec §4.62 / tutorial §10.18 / README |
+| S9 | full gate | check-ast 1370/0、test/run 156、warnings 620/0、docs 1035/224 |
+
+tag/push：`v0.44.0` annotated tag 与分支自动 push。

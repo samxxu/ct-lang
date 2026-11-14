@@ -200,6 +200,13 @@ trait EmitOps {
        parameter and spell the outer `<Inst>_err(...)` call. */
     int  try_result_tag(const char *ctype, char *tag, int cap);
     int  try_result_cols(int inst, char *val, int vcap, char *err, int ecap);
+    /* Phase 44: the failure cleanup the parser captured for the `?` node `n`
+       (defer / errdefer bodies and `own` releases), or -1. */
+    int  try_cleanup(int n);
+    /* Phase 44: dispose of a payload the statement discards, through its
+       `release` method when one is callable and otherwise its local Drop glue.
+       0 even when the type owns nothing (a scalar or a pointer). */
+    int  try_release_payload(const char *ctype, const char *tmp, const char *field);
     int  fail(const char *msg);
     int  fail_from(int n, const char *msg);
 }
@@ -252,6 +259,9 @@ struct Emitter {
        written, so a postfix `?` knows its propagation target. Empty outside a
        function body (a file-scope `?` has no outer Result to return). */
     char cur_ret[160];
+    /* Phase 44: set while a statement discards an expression's value, so a
+       postfix `?` releases the payload it would otherwise leak. */
+    int  try_discard;
     /* The mangled prefix of the unit being written (`a_b_`, empty at the root).
        A namespaced global is emitted as `<prefix><name>`; `emit_program` sets
        this from `sym->ns`, the build writers from `units[u].nsprefix`. */
@@ -4184,6 +4194,17 @@ impl EmitOps for Emitter {
     {
         (void)self;
 
+        /* Phase 44: `emit_inline` only serves statement-shaped contexts, so a
+           postfix `?` reached here has its value discarded and must release
+           the payload it would otherwise leak. */
+        if (self->arena->nodes[n].kind == N_TRY) {
+            int save, r;
+            save = self->try_discard;
+            self->try_discard = 1;
+            r = self->emit_expr(n);
+            self->try_discard = save;
+            return r;
+        }
         if (self->arena->nodes[n].kind == N_DECLS) {
             /* a `for` initialiser: one shared type, then bare declarators */
             int c = self->arena->nodes[n].a, first = 1;
@@ -4297,13 +4318,11 @@ impl EmitOps for Emitter {
             return self->emit_expr(self->arena->nodes[n].b);
         }
         if (self->arena->nodes[n].kind == N_EXPR) {
-            /* Phase 44: a statement-shaped `expr?` discards the statement
-               expression's value, and clang reports that last inner expression
-               under -Wunused-value; the `(void)` cast keeps the gate's
-               warning-free build. */
+            /* Phase 44: route a discarded `expr?` through the discard-aware
+               branch above. */
             if (self->arena->nodes[n].a >= 0
                 && self->arena->nodes[self->arena->nodes[n].a].kind == N_TRY)
-                fputs("(void)", self->out);
+                return self->emit_inline(self->arena->nodes[n].a);
             return self->emit_expr(self->arena->nodes[n].a);
         }
         if (self->arena->nodes[n].kind == N_POST) {
@@ -4457,9 +4476,21 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_CAST) {
             char tbuf[160];
             const char *ct = self->arena->nodes[n].text;
+            int save_disc;
             if (emit_gsub_type(self, ct, tbuf, sizeof tbuf) == 0) ct = tbuf;
             fprintf(self->out, "(%s)(", ct);
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            /* Phase 44: `(void)f()?` discards the payload, so the `?` must
+               release it. Only the direct operand qualifies: `(void)(f()? + 1)`
+               uses the value before the cast drops the sum. */
+            save_disc = self->try_discard;
+            if (strcmp(ct, "void") == 0 && self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_TRY)
+                self->try_discard = 1;
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) {
+                self->try_discard = save_disc;
+                return -1;
+            }
+            self->try_discard = save_disc;
             fputs(")", self->out);
             return 0;
         }
@@ -4518,16 +4549,21 @@ impl EmitOps for Emitter {
             fputs(self->arena->nodes[n].aux == P_INC ? "++" : "--", self->out);
             return self->emit_expr(self->arena->nodes[n].a);
         }
-        /* Phase 44 (D44-3 / D44-4): `expr?` propagates a `Result` failure. A
-           GNU statement expression evaluates the operand exactly once; on
-           success it yields the operand's `value`, on failure it returns the
-           outer function's `Result<U, E>` built from the inner `err`.
+        /* Phase 44 (D44-3 / D44-4 / D44-5): `expr?` propagates a `Result`
+           failure. A GNU statement expression evaluates the operand exactly
+           once and keeps it in a private local that AutoDrop never sees:
 
-           The operand is hoisted into a private local that is never registered
-           with AutoDrop, so exactly one owner leaves the expression: the
-           `value` copy on success, the `err` copy on failure. There is no
-           second drop to double-free, and the unused payload of an `ok` / `err`
-           construction is already zero (lib/std/Result.h.ct). */
+             - success copies `value` out and zeroes the temporary, so the
+               copy is the only owner;
+             - failure runs the parser-captured cleanup (defer / errdefer
+               bodies, then the `own` releases -- the same order a source
+               `return err:` takes) and returns the outer `Result<U, E>`
+               built from the inner `err`;
+             - a discarded value (`f()?;`) releases its payload through
+               `release()` / the Drop glue instead of leaking it.
+
+           The temporary is never registered with AutoDrop, so no path can
+           drop the same payload twice. */
         if (self->arena->nodes[n].kind == N_TRY) {
             char opty[MAX_TEXT];
             char otag[MAX_TEXT];
@@ -4536,9 +4572,12 @@ impl EmitOps for Emitter {
             char rtag[MAX_TEXT];
             char rval[MAX_TEXT];
             char rerr[MAX_TEXT];
+            char vty[MAX_TEXT];
+            char ety[MAX_TEXT];
+            char qt[MAX_TEXT];
             char msg[2 * MAX_TEXT + 64];
             int od = 0;
-            int q;
+            int q, si, fi, h, save_disc;
 
             if (self->arena->nodes[n].text[0]) {
                 /* the parser stamped the operand type while its locals were in
@@ -4554,31 +4593,92 @@ impl EmitOps for Emitter {
                 return self->fail_from(n, "'?' needs a Result operand");
             if (!self->cur_ret[0])
                 return self->fail_from(n, "'?' is not allowed here");
+            /* the instance's field spellings, used for the move and the
+               zero that invalidates the temporary */
+            vty[0] = 0;
+            ety[0] = 0;
+            si = self->sym->find_struct(otag);
+            for (fi = 0; si >= 0 && fi < self->sym->structs[si].nfields; fi++) {
+                if (strcmp(self->sym->structs[si].fields[fi].name, "value") == 0)
+                    snprintf(vty, sizeof vty, "%s", self->sym->structs[si].fields[fi].type);
+                else if (strcmp(self->sym->structs[si].fields[fi].name, "err") == 0)
+                    snprintf(ety, sizeof ety, "%s", self->sym->structs[si].fields[fi].type);
+            }
+            if (strcmp(self->cur_ret, "void") != 0) {
+                if (!self->try_result_tag(self->cur_ret, rtag, sizeof rtag)
+                    || !self->try_result_cols(frontend::sym::ct_inst_find(rtag),
+                                              rval, sizeof rval, rerr, sizeof rerr))
+                    return self->fail_from(n,
+                        "postfix '?' needs a function returning Result");
+                if (strcmp(oerr, rerr) != 0) {
+                    snprintf(msg, sizeof msg,
+                             "'?': expected error type '%s', got '%s'", rerr, oerr);
+                    return self->fail_from(n, msg);
+                }
+            }
             q = self->ntmp;
             self->ntmp++;
-            if (strcmp(self->cur_ret, "void") == 0) {
-                /* D44-5: a void function has no payload to carry, so a failure
-                   is a bare return (errdefer / defer are a later slice). */
-                fprintf(self->out, "({ %s __ct_q%d = ", opty, q);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fprintf(self->out,
-                        "; if (!__ct_q%d.ok) return; __ct_q%d.value; })", q, q);
-                return 0;
-            }
-            if (!self->try_result_tag(self->cur_ret, rtag, sizeof rtag)
-                || !self->try_result_cols(frontend::sym::ct_inst_find(rtag),
-                                          rval, sizeof rval, rerr, sizeof rerr))
-                return self->fail_from(n, "postfix '?' needs a function returning Result");
-            if (strcmp(oerr, rerr) != 0) {
-                snprintf(msg, sizeof msg,
-                         "'?': expected error type '%s', got '%s'", rerr, oerr);
-                return self->fail_from(n, msg);
-            }
-            fprintf(self->out, "({ %s __ct_q%d = ", opty, q);
+            snprintf(qt, sizeof qt, "__ct_q%d", q);
+            fprintf(self->out, "({ %s %s = ", opty, qt);
+            /* the operand is an ordinary value context, so an inner `?` must
+               not inherit the outer statement's discard */
+            save_disc = self->try_discard;
+            self->try_discard = 0;
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fprintf(self->out, "; if (!__ct_q%d.ok) { return %s_err(__ct_q%d.err); } ",
-                    q, rtag, q);
-            fprintf(self->out, "__ct_q%d.value; })", q);
+            self->try_discard = save_disc;
+            fputs(";\n", self->out);
+            fprintf(self->out, "if (!%s.ok) {\n", qt);
+            h = self->try_cleanup(n);
+            while (h >= 0) {
+                if (self->arena->nodes[h].kind == N_DEFER_RUN)
+                    self->emit_indent(1);
+                if (self->emit_node(h, 1) != 0) return -1;
+                h = self->arena->nodes[h].next;
+            }
+            if (strcmp(self->cur_ret, "void") == 0) {
+                /* D44-5: a void function carries no payload; the error is
+                   discarded (released when the type owns something). */
+                self->emit_indent(1);
+                if (self->try_release_payload(ety, qt, "err") != 0) return -1;
+                fputs("\n", self->out);
+                self->emit_indent(1);
+                fprintf(self->out, "%s = (%s){0};\n", qt, opty);
+                self->emit_indent(1);
+                fputs("return;\n", self->out);
+            } else if (ety[0]) {
+                self->emit_indent(1);
+                fprintf(self->out, "%s __ct_e%d = %s.err;\n", ety, q, qt);
+                self->emit_indent(1);
+                fprintf(self->out, "%s = (%s){0};\n", qt, opty);
+                self->emit_indent(1);
+                fprintf(self->out, "return %s_err(__ct_e%d);\n", rtag, q);
+            } else {
+                self->emit_indent(1);
+                fprintf(self->out, "return %s_err(%s.err);\n", rtag, qt);
+            }
+            fputs("}\n", self->out);
+            if (self->try_discard) {
+                self->emit_indent(1);
+                if (self->try_release_payload(vty, qt, "value") != 0) return -1;
+                fputs("\n", self->out);
+                self->emit_indent(1);
+                fprintf(self->out, "%s = (%s){0};\n", qt, opty);
+                self->emit_indent(1);
+                fputs("(void)0;\n", self->out);
+            } else if (vty[0]) {
+                self->emit_indent(1);
+                fprintf(self->out, "%s __ct_v%d = %s.value;\n", vty, q, qt);
+                self->emit_indent(1);
+                fprintf(self->out, "%s = (%s){0};\n", qt, opty);
+                self->emit_indent(1);
+                fprintf(self->out, "__ct_v%d;\n", q);
+            } else {
+                self->emit_indent(1);
+                fprintf(self->out, "%s = (%s){0};\n", qt, opty);
+                self->emit_indent(1);
+                fprintf(self->out, "%s.value;\n", qt);
+            }
+            fputs("})", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_TERN) {
@@ -5578,6 +5678,76 @@ impl EmitOps for Emitter {
         if (snprintf(val, (size_t)vcap, "%s", ins[inst].ctype[0]) >= vcap) return 0;
         if (snprintf(err, (size_t)ecap, "%s", ins[inst].carg[1]) >= ecap) return 0;
         return 1;
+    }
+
+    /* Phase 44: the failure cleanup captured at the `?` (defer bodies first,
+       then the `own` releases, the same order a source `return err:` takes). */
+    int try_cleanup(int n)
+    {
+        struct Expr *ex;
+        int i;
+
+        (void)self;
+        ex = frontend::parse::expr_get();
+        for (i = 0; i < ex->ntry_cleanup; i++)
+            if (ex->try_cleanup_node[i] == n) return ex->try_cleanup_head[i];
+        return -1;
+    }
+
+    /* Phase 44: a discarded payload still owns its resources. `release` is the
+       type's own exported invalidation (Str, Vec, Map, a user type that writes
+       one); otherwise the Drop glue of this unit is the only available path, so
+       use it (it is a no-op in a unit that never parsed the explicit impl, and
+       never a double free because the temporary owns the only copy). */
+    int try_release_payload(const char *ctype, const char *tmp, const char *field)
+    {
+        char base[MAX_TEXT];
+        int si, inst, ninst, n, m;
+        struct StructInst *ins;
+
+        (void)self;
+        if (!ctype || strncmp(ctype, "struct ", 7) != 0) return 0;
+        snprintf(base, sizeof base, "%s", ctype + 7);
+        {
+            size_t bl = strlen(base);
+            while (bl > 0 && (base[bl - 1] == ' ' || base[bl - 1] == '*')) {
+                if (base[bl - 1] == '*') return 0;
+                bl--;
+                base[bl] = 0;
+            }
+        }
+        si = self->sym->find_struct(base);
+        if (si < 0) return 0;
+        inst = frontend::sym::ct_inst_find(base);
+        ins = frontend::sym::ct_insts(&ninst);
+        for (n = 0; n < self->arena->nnode; n++) {
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            if (self->arena->nodes[n].text2[0]) continue;   /* trait impl */
+            if (self->arena->nodes[n].aux == si) {
+                /* a concrete inherent impl for this struct */
+            } else if (self->arena->nodes[n].aux == -1 && inst >= 0 && inst < ninst
+                       && strcmp(self->arena->nodes[n].text, ins[inst].tmpl) == 0) {
+                /* the template's inherent impl, applied to this instance */
+            } else {
+                continue;
+            }
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                if (strcmp(self->arena->nodes[m].text2, "release") != 0) continue;
+                /* an instance method: 0 (the empty chain) or -1 means no
+                   parameters beyond the receiver */
+                if (self->arena->nodes[m].a > 0 || self->arena->nodes[m].c) continue;
+                /* an exported method is callable from another unit; a private
+                   one only when its struct lives in this unit */
+                if (!(self->arena->nodes[m].d == 1 || self->cur_unit == -1
+                      || self->sym->structs[si].owner == self->cur_unit))
+                    continue;
+                fprintf(self->out, "%s_release(&%s.%s); ", base, tmp, field);
+                return 0;
+            }
+        }
+        if (self->sym->structs[si].uses_drop)
+            fprintf(self->out, "%s_Drop_drop(&%s.%s); ", base, tmp, field);
+        return 0;
     }
 
     /* A failure is recorded without a position; the driver's facade wraps the
