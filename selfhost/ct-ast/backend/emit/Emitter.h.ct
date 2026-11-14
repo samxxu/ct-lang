@@ -4767,6 +4767,24 @@ impl EmitOps for Emitter {
                bit 2 = a namespace host (SH-20): no operand, self is NULL,
                bit 3 = the value reached an interface context (see maybe_box) */
             int a = self->arena->nodes[n].aux;
+            int src = self->arena->nodes[n].a;
+            /* SH-74: inside an impl body `self` is spelled `_self` -- a
+               pointer to the receiver object -- whatever the source type
+               says. Boxing it must hand the interface that pointer, not the
+               address of the local `_self` slot (`&_self`), which dies with
+               the method frame. `&self` names the object itself, so it is
+               the same pointer. */
+            if (self->sym->self_mode && !(a & 4) && src >= 0) {
+                int inner = src;
+                if (self->arena->nodes[inner].kind == N_ADDR
+                    && self->arena->nodes[inner].a >= 0)
+                    inner = self->arena->nodes[inner].a;
+                if (self->arena->nodes[inner].kind == N_VAR
+                    && strcmp(self->arena->nodes[inner].text2, "self") == 0) {
+                    src = inner;
+                    a |= 1;
+                }
+            }
             if (a & 4) {
                 int i, found, bar;
                 char dmsg[512];
@@ -4800,10 +4818,10 @@ impl EmitOps for Emitter {
             if (a & 2) fputs("&", self->out);
             fprintf(self->out, "(struct %s_iface){ (void *)", self->arena->nodes[n].text);
             if (a & 1) {
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                if (self->emit_expr(src) != 0) return -1;
             } else {
                 fputs("&", self->out);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                if (self->emit_expr(src) != 0) return -1;
             }
             fprintf(self->out, ", &%s_%s_vtable }", self->arena->nodes[n].text2, self->arena->nodes[n].text);
             return 0;
