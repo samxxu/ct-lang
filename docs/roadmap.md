@@ -59,9 +59,20 @@
 | Phase 43 | 错误出口类型契约（`return err:` 载荷检查） | ✅ 完成 | v0.43.0 | [卡](design/phase43.md) |
 | Phase 44 | `?` 错误传播运算符（后缀 `?`，同 `E`） | ✅ 完成 | v0.44.0 | [卡](design/phase44.md) |
 | Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ⬜ 已定稿 / 待实施 | — | [卡](design/phase45.md) |
+| Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ⬜ 规划中 | — | [卡](design/phase46.md) |
+| Phase 47 | 容器键协议与键所有权（`Str` 键 + `put_owned`） | ⬜ 规划中 | — | [卡](design/phase47.md) |
+| Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ⬜ 规划中 | — | [卡](design/phase48.md) |
+| Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ⬜ 规划中 | — | [卡](design/phase49.md) |
+| Phase 50 | 容器取用契约（`has` / `try_get`，越界与缺键可判） | ⬜ 规划中 | — | [卡](design/phase50.md) |
+| Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ⬜ 规划中（影响面待 S0） | — | [卡](design/phase51.md) |
+| Phase 52 | 自定义类型下标 `[]`（REQ-L1，方案 A，单层） | ⬜ 规划中（方向已裁定） | — | [卡](design/phase52.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
+>
+> **Phase 46–52 是规划，不是承诺**：七张卡均为草案，未评审、未立项；总排期、依赖、裁定状态与
+> 「本波不覆盖」清单见 [phase46-52-plan.md](design/phase46-52-plan.md)。其中 Phase 51 的修法
+> （硬错 vs 自动解引用）需 S0 统计后由用户裁定；`?.` 可选链按现形态已驳回、**不占相号**。
 
 ### 未排期（治理项）
 
