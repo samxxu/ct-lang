@@ -370,6 +370,25 @@ impl TypeOps for TypeCheck {
                 }
                 return -1;
             }
+            /* SH-72: a call through an interface value's vtable (aux 3/4)
+               returns what the receiver trait's signature says, the same way
+               the static mapping branch above reads it. Without this branch a
+               call such as `HttpResponse res = req.send();` had no static type
+               and the boxing decision reported `cannot infer the type to box`
+               even though both sides name the same interface. */
+            if (self->arena->nodes[n].aux == 3 || self->arena->nodes[n].aux == 4) {
+                int ti = self->sym->find_trait(self->arena->nodes[n].text);
+                int mi;
+                if (ti < 0) return -1;
+                for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
+                    if (strcmp(self->sym->traits[ti].m[mi].name,
+                               self->arena->nodes[n].text2) == 0) {
+                        if (snprintf(out, (size_t)cap, "%s",
+                                     self->sym->traits[ti].m[mi].ret) >= cap) return -1;
+                        return 0;
+                    }
+                return -1;
+            }
             /* Phase 31: an inherent method of an instantiated struct (aux 9/10).
                The template's type parameters are bound to the instance's C
                arguments so an interface element read types correctly. */
