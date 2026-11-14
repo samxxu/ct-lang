@@ -46,9 +46,10 @@
 | [design/phase43.md](design/phase43.md) · [design/phase44.md](design/phase44.md) · [design/phase45.md](design/phase45.md) | 已定稿待实施（Phase 43–45）：错误出口类型契约（`return err:` 载荷检查）/ `?` 错误传播运算符 / 类型契约一致性（闭包 `return` 与指针基类型判据）；状态以 [roadmap.md](roadmap.md) 为准；未立项评估结论与门禁欠账见 [planning/requirements-pool.md](planning/requirements-pool.md) |
 | [design/phase46-52-plan.md](design/phase46-52-plan.md) | 下一波分期方案（Phase 46–52）：排序依据、相间依赖、硬阻塞前置、裁定状态、本波不覆盖清单；**§10 交接说明、§11 缺陷与绕法、§12 实战限制、§13 裁决落地** |
 | [design/phase46-52-handoff.md](design/phase46-52-handoff.md) | 施工手册（给外部实现方）：施工顺序、每卡入口条件与出口证据、门禁命令、禁止事项、收口五样证据 |
-| [reviews/phase46-52-freeze-verdict.md](reviews/phase46-52-freeze-verdict.md) | 定稿裁决：四组实测、73 条输入逐条结论（采纳 67 / 部分 6 / 不采纳 1）、5 条待用户裁定 |
-| [design/phase46.md](design/phase46.md) · [design/phase47.md](design/phase47.md) · [design/phase48.md](design/phase48.md) · [design/phase49.md](design/phase49.md) · [design/phase50.md](design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 定稿候选（Phase 46–52，待签字）：`Map` 元素完整性 / `Str` 键深拷贝 / Drop 语义闭环 / `own` 所有权转移 / 容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键）；状态以 [roadmap.md](roadmap.md) 为准 |
+| [reviews/phase46-52-freeze-verdict.md](reviews/phase46-52-freeze-verdict.md) | 定稿裁决：四组实测、73 条输入逐条结论（采纳 67 / 部分 6 / 不采纳 1）、5 条已于 2026-11-15 按建议值签字 |
+| [design/phase46.md](design/phase46.md) · [design/phase47.md](design/phase47.md) · [design/phase48.md](design/phase48.md) · [design/phase49.md](design/phase49.md) · [design/phase50.md](design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 规划中·已定稿（Phase 46–52，2026-11-15 签字，未实施）：`Map` 元素完整性 / `Str` 键深拷贝 / Drop 语义闭环 / `own` 所有权转移 / 容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md) | ct-pkg `std` 的 Agent 内核运行库提案：`arena` / `sync` / `result` / `string` / `callback` 契约与交付顺序 |
+| [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 记录（记录 / 待商定 / 暂不排期）：`?.` 是纯语法糖，最小版本只收指针接收者 + 字段访问；后续格与三个卡点留 battle |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 

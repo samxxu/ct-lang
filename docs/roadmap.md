@@ -59,22 +59,26 @@
 | Phase 43 | 错误出口类型契约（`return err:` 载荷检查） | ✅ 完成 | v0.43.0 | [卡](design/phase43.md) |
 | Phase 44 | `?` 错误传播运算符（后缀 `?`，同 `E`） | ✅ 完成 | v0.44.0 | [卡](design/phase44.md) |
 | Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ⬜ 已定稿 / 待实施 | — | [卡](design/phase45.md) |
-| Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ⬜ 定稿候选（待签字） | — | [卡](design/phase46.md) |
-| Phase 47 | 容器键协议（`Str` 键深拷贝；`put_owned` 已删） | ⬜ 定稿候选（待签字） | — | [卡](design/phase47.md) |
-| Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ⬜ 定稿候选（待签字） | — | [卡](design/phase48.md) |
-| Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ⬜ 定稿候选（待签字） | — | [卡](design/phase49.md) |
-| Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ⬜ 定稿候选（待签字） | — | [卡](design/phase50.md) |
-| Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ⬜ 定稿候选（待签字） | — | [卡](design/phase51.md) |
-| Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ⬜ 定稿候选（待签字） | — | [卡](design/phase52.md) |
+| Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase46.md) |
+| Phase 47 | 容器键协议（`Str` 键深拷贝；`put_owned` 已删） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase47.md) |
+| Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase48.md) |
+| Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase49.md) |
+| Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase50.md) |
+| Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase51.md) |
+| Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase52.md) |
+| Phase 53 | `?.` 语法糖记录（待商定、暂不排期） | ⬜ 记录 / 待商定 / 暂不排期 | — | [记录](proposals/phase53-optional-chain-draft.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
 >
-> **Phase 46–52 已过裁决，定为「定稿候选（待签字）」**：七张卡的结构、修法与可执行判据已按
+> **Phase 46–52 已于 2026-11-15 签字定稿**：七张卡的结构、修法与可执行判据已按
 > [裁决记录](reviews/phase46-52-freeze-verdict.md)改定（73 条输入：采纳 67 / 部分 6 / 不采纳 1），
-> 总排期与依赖见 [phase46-52-plan.md](design/phase46-52-plan.md)，施工入口见
-> [phase46-52-handoff.md](design/phase46-52-handoff.md)。实施由外部 harness 执行；PH-52 去留、
-> Drop 符号可见性等 5 条仍待用户裁定。`?.` 可选链按现形态已驳回、**不占相号**。
+> 五条待裁项全部按建议值签字。总排期与依赖见 [phase46-52-plan.md](design/phase46-52-plan.md)，
+> 施工入口见 [phase46-52-handoff.md](design/phase46-52-handoff.md)。实施由外部 harness 执行；
+> 数字下标（`v[0]`）的参数类型匹配登记为 [REQ-JSACCESS-1](planning/requirements-pool.md)，
+> 属「JS 风格访问」长期目标，**不占相号、不得砍掉**。`?.` 可选链按现形态已驳回；
+> 以 **Phase 53 记录**占位（待商定、暂不排期、不承诺实现），见
+> [phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md)。
 
 ### 未排期（治理项）
 

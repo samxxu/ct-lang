@@ -63,6 +63,40 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 
 - [custom-index-protocol.md](../proposals/custom-index-protocol.md)（未立项；PH-40 已由 errdefer 占用，等待 AN 与排期）。
 
+## REQ-JSACCESS-1 — 自定义下标的参数类型匹配（支持 `v[0]`）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-JSACCESS-1` |
+| `what` | 自定义下标的协议匹配从「方法名 + 参数个数」扩展到「方法名 + 参数类型」：同一类型可并存 `get(char *)` 与 `get(int)`，`v["k"]` 与 `v[0]` 各选其版；无匹配时编译期硬错并列出候选签名。 |
+| `why` | 「JS 风格访问」长期目标（`doc["a"]["b"]`、`doc[0]["k"]`）的组成部分。PH-52 的方案 A 只覆盖单层字符串键；实测 `v[0]` 会展开成 `get(0)` 并静默返回空（PH-52 D52-6）。用户 2026-11-15 明确：等语言特性更新完成后要完整实现该目标，**不得砍掉**。 |
+| `priority` | `P1` |
+| `status` | `open` |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-15 |
+| `block` | 空（等 PH-52 收口后评估；**不占相号**） |
+
+### 验收判据（实现后生效）
+
+| # | 判据 | 命令 / 锚点（实现后可用） |
+| --- | --- | --- |
+| A1 | 同类型并存 `get(char *)` / `get(int)`：`v["k"]` 与 `v[0]` 各展开为对应版本 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    jsaccess_overload_both"` |
+| A2 | 只有 `get(char *)` 时 `v[0]` 是编译期硬错（不再是静默空） | `./selfhost/check-ast.sh 2>&1 \| grep -F "JSACCESS_1_no_int_get"` |
+| A3 | 实参类型无匹配时硬错，并列出候选签名 | `./selfhost/check-ast.sh 2>&1 \| grep -F "JSACCESS_2_no_candidate"` |
+| A4 | PH-52 的单层字符串键（`v["k"]`）零回归 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    24x_custom_index_read"` |
+| A5 | 多级连写 `v["a"]["b"]` 仍由包层承担，本条不主张 | 文档句 + `p52` 夹具不回归 |
+
+### 范围外
+
+- 多级连写、指针接收者进协议、其他运算符重载。
+- 跨单元导出面的重载可见性（另案）。
+- 不占相号：排期时另立，不得在 PH-52 内扩面。
+
+### 来源
+
+裁决记录 U-1 A（2026-11-15 签字）+ 用户原话「等 CT 完成了语言特性的更新之后，要完整实现这个目标」。
+PH-52 的 D52-6 指向本条。
+
 ## REQ-ABI-1 — 用 ABI 哈希做导出面校验（评估后不采纳）
 
 | 字段 | 值 |
