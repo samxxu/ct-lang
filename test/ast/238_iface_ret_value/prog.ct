@@ -1,0 +1,54 @@
+/* SH-72: a method on an interface value returns an interface value, so the
+   call site can bind that result to a variable.  `header()` returns the same
+   interface (`HttpRequest`), `send()` another one (`HttpResponse`); both
+   static types are knowable from the receiver's trait signature. */
+#include <stdio.h>
+
+trait HttpResponse {
+    int status();
+}
+
+trait HttpRequest {
+    HttpRequest header(char *k, char *v);
+    HttpResponse send();
+}
+
+struct Req {
+    int s;
+} use HttpRequest;
+
+struct Res {
+    int s;
+} use HttpResponse;
+
+static struct Res g_res;
+
+impl HttpRequest for Req {
+    HttpRequest header(char *k, char *v) {
+        (void)k;
+        (void)v;
+        return self;
+    }
+    HttpResponse send() {
+        g_res.s = 200;
+        return g_res;
+    }
+}
+
+impl HttpResponse for Res {
+    int status() {
+        return self->s;
+    }
+}
+
+int main(void)
+{
+    Req x;
+    x.s = 42;
+    HttpRequest req = x;
+    HttpRequest r2 = req.header("Accept", "application/json");
+    HttpResponse res = r2.send();
+    printf("%d\n", r2.self == (void *)&x);
+    printf("%d\n", res.status());
+    return 0;
+}
