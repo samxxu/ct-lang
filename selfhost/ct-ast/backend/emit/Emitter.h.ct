@@ -3704,6 +3704,40 @@ impl EmitOps for Emitter {
                return's own indentation, before the value leaves (SH-33) */
             for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
                 if (self->emit_node(r, ind) != 0) return -1;
+            /* SH-75: a block-scope struct must not be boxed by address -- the
+               frame dies as this return leaves. The parser marks that box
+               (bit 3); copy the value into a heap object the interface points
+               at. The box has program lifetime (there is no owner handle to
+               release it), which LeakSanitizer can report. */
+            if (self->arena->nodes[n].a >= 0) {
+                int b = self->arena->nodes[n].a;
+                if (self->arena->nodes[b].kind == N_BOX
+                    && self->arena->nodes[b].aux == 8
+                    && self->arena->nodes[b].text2[0]) {
+                    int v = self->arena->nodes[b].a;
+                    fputs("{\n", self->out);
+                    ind++;
+                    self->emit_indent(ind);
+                    fputs("extern void *malloc(__SIZE_TYPE__);\n", self->out);
+                    self->emit_indent(ind);
+                    snprintf(tmp, sizeof tmp,
+                             "struct %s *__ct_box = (struct %s *)malloc(sizeof *__ct_box);\n",
+                             self->arena->nodes[b].text2, self->arena->nodes[b].text2);
+                    fputs(tmp, self->out);
+                    self->emit_indent(ind);
+                    fputs("*__ct_box = ", self->out);
+                    if (self->emit_expr(v) != 0) return -1;
+                    fputs(";\n", self->out);
+                    self->emit_indent(ind);
+                    fprintf(self->out, "return (struct %s_iface){ (void *)__ct_box, &%s_%s_vtable };\n",
+                            self->arena->nodes[b].text, self->arena->nodes[b].text2,
+                            self->arena->nodes[b].text);
+                    ind--;
+                    self->emit_indent(ind);
+                    fputs("}\n", self->out);
+                    return 0;
+                }
+            }
             self->emit_indent(ind);
             if (self->arena->nodes[n].a < 0) {
                 fputs("return;\n", self->out);

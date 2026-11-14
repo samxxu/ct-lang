@@ -2071,8 +2071,24 @@ impl StmtOps for Stmt {
                 char tr[MAX_TEXT];
                 int ip = 0;
                 if (self->sup->iface_ref_type(self->sym->ret_type, tr, sizeof tr, &ip)) {
+                    int src = e;
                     e = self->sup->maybe_box(e, tr, ip);
                     if (e < 0) return -1;
+                    /* SH-75: a block-scope struct value cannot be boxed by its
+                       address -- that frame ends at this return. Mark the fresh
+                       plain box (bit 3) so the emitter copies the value into a
+                       heap object instead; the local's row is only reachable
+                       while its scope is still open. */
+                    if (e != src && self->arena->nodes[e].text2[0]
+                        && (self->arena->nodes[e].aux & 7) == 0
+                        && src >= 0 && self->arena->nodes[src].kind == N_VAR
+                        && strcmp(self->arena->nodes[src].text2, "self") != 0) {
+                        int vi = self->sym->find_var(self->arena->nodes[src].text2);
+                        if (vi >= 0 && !self->sym->vars[vi].is_global
+                            && !self->sym->vars[vi].is_param
+                            && !self->sym->vars[vi].is_static)
+                            self->arena->nodes[e].aux |= 8;
+                    }
                 }
             }
             self->arena->nodes[s].a = e;

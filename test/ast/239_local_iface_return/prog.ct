@@ -1,0 +1,39 @@
+/* SH-75: a block-scope struct returned as an interface value must not be boxed
+   by its address -- that address is the returned frame. `make` reports the
+   local's address; while the box is dangling, `res.self` equals it and the
+   stale slot can be overwritten, so the status must not be 200. */
+#include <stdio.h>
+
+trait Resp {
+    int status();
+}
+
+struct Res {
+    int s;
+} use Resp;
+
+impl Resp for Res {
+    int status() {
+        return self->s;
+    }
+}
+
+Resp make(int v, void **slot)
+{
+    Res r;
+    r.s = v;
+    *slot = (void *)&r;
+    return r;
+}
+
+int main(void)
+{
+    void *slot = 0;
+    struct Res *stale;
+    Resp res = make(201, &slot);
+    stale = (struct Res *)slot;
+    if (res.self == slot)
+        stale->s = 200;
+    printf("%d %d\n", res.self == slot, res.status());
+    return 0;
+}

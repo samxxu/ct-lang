@@ -141,6 +141,24 @@ for d in test/ast/*/; do
         continue
     fi
     ok "$name"
+
+    # SH-75: the default ASAN options cannot see a stack dangling (REQ-CI-2),
+    # so the fixture that used to return a local struct as an interface value
+    # is also built with clang's compile-time use-after-return instrumentation
+    # and must stay clean.
+    if [ "$name" = "239_local_iface_return" ] \
+       && "$CC" --version 2>/dev/null | grep -qi clang; then
+        if ! "$CC" -std=c99 -O0 -fsanitize-address-use-after-return=always \
+                "$c" -o "$work/$name.uar" 2>"$work/$name.uarc"; then
+            bad "$name" "the UAR build failed: $(cat "$work/$name.uarc")"
+        elif ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1" \
+                "$work/$name.uar" >"$work/$name.uar.out" 2>"$work/$name.uar.err" \
+             && ! sanitizer_report "$work/$name.uar.err"; then
+            ok "$name (use-after-return instrumented)"
+        else
+            bad "$name" "a stack-use-after-return is still reachable"
+        fi
+    fi
 done
 
 echo

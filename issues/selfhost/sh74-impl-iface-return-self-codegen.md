@@ -128,6 +128,9 @@ deref as int     = 1861411328 (expected 42)
 
 ## 残留：返回非 `self` 的局部接口值
 
+**已由 [SH-75](sh75-local-iface-return-dangling.md) 修复**（`Stmt.h.ct` 在解析期标记、`Emitter.h.ct`
+在 `return` 处改发堆拷贝），本条保留原因与旧产物做对照。
+
 `d6e82e25` 只把 impl 内的 `self` 识别为已是指针。同一条装箱路径遇到**普通局部**时仍取地址：
 
 ```c
@@ -147,7 +150,10 @@ return (struct Resp_iface){ (void *)&s, &S_Resp_vtable };
 
 `ct compile` rc=0、`cc` rc=0、运行 rc=0，但 `res.status()` 读到悬垂栈帧：实测输出
 `status=200`（期望 `201`；UB，值不保证稳定）。自由函数工厂 `HttpRequest f(void) { … return req; }`
-同样发射 `return (…){ (void *)&req, … };`。与 `self` 的修复同源，但不在本次改动范围。
+同样发射 `return (…){ (void *)&req, … };`。
+
+**现状**：SH-75（`test/ast/239_local_iface_return`）已把这一半改成堆拷贝，夹具输出
+`0 201`；`test/ast/237_iface_ret_self` 里的 `send()` 因此在全量对比中成为另一处预期变化。
 
 ## 关联
 
